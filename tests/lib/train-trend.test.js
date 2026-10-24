@@ -220,9 +220,11 @@ test('probe.trend: whole-session stage-1 runs on the loop\'s trader; its days pr
   const base = { replay: curated, windows: [{ from: '2022-03-07', to: '2022-03-19' }] };
   const tuning = [{ from: '2022-10-03', to: '2022-10-15' }];
   const go = (t, over = {}) => PC.resolveProbe({ ...base, trend: t }, { read: x => x, readCensus: () => set, modelScore: { account: 'a' }, autotrader: trader, tuningWindows: tuning, ...over });
-  const ok = go({ replay: { stage: 1 }, census: 'c.json', from: '2021-05-03', to: '2022-09-01', regression: { days: ['2021-05-04', '2021-05-03'] } });
+  const ok = go({ replay: { stage: 1 }, census: 'c.json', from: '2021-05-03', to: '2022-09-01', regression: { days: ['2021-05-04', '2021-05-04'] } });
   const TB = require('../../scripts/lib/tunables').training().trendBatch;
-  assert.deepStrictEqual(ok.trend, { replay: { stage: 1, autotrader: trader }, set: { file: 'c.json', fingerprint: 'fp', from: '2021-05-03', to: '2022-09-01', days: ['2022-03-07', '2022-03-08'], legs: ['2022-03-07|long|a', '2022-03-08|short|b'], spans: Object.fromEntries(order.slice(0, 3).map(g => [g.id, span(g)])) }, batch: TB, regression: { days: ['2021-05-03', '2021-05-04'] } });
+  assert.deepStrictEqual(ok.trend, { replay: { stage: 1, autotrader: trader }, set: { file: 'c.json', fingerprint: 'fp', from: '2021-05-03', to: '2022-09-01', days: ['2022-03-07', '2022-03-08'], legs: ['2022-03-07|long|a', '2022-03-08|short|b'], spans: Object.fromEntries(order.slice(0, 3).map(g => [g.id, span(g)])) }, batch: TB, regression: { days: ['2021-05-04'] } });
+  // A regression day the census holds no leg on would never run (its runs step windows around legs): refused.
+  assert.throws(() => go({ replay: { stage: 1 }, census: 's', from: '2021-05-03', to: '2022-09-01', regression: { days: ['2021-05-04', '2021-05-03'] } }), /probe.trend.regression 2021-05-03: the census holds no leg that day/);
   // The loop sets each trend run's stepped windows: a config's own is refused.
   assert.throws(() => go({ replay: { stage: 1, stepWindows: { kind: 'trend-set', windows: [] } }, census: 's', from: '2021-05-03', to: '2022-09-01' }), /probe.trend.replay.stepWindows: set by the loop/);
   // The batch: config/training.json trendBatch, its start, max and half overridable by the loop config, within bounds.
@@ -313,12 +315,16 @@ test('the batch size: start, kept after one round without an improvement, double
 test('the learning curve: each round\'s confirm half as the champion after its keep; pooled; a plateau and memorization flagged, never judged', () => {
   const champion = { legs: 50, caught: 10, netR: 0.2 };
   const composed = { capture: { b: 8, c: 2, pairs: 50 }, netR: { diff: 0.3 } };
-  assert.deepStrictEqual(TC.curvePoint({ round: 1, size: 100, champion, composed, kept: false }), { round: 1, batch: 100, legs: 50, caught: 10, rate: 0.2, lo: 0.1235, hi: 0.3073, netR: 0.2, firstTry: null, selection: null, source: 'champion' });
+  assert.deepStrictEqual(TC.curvePoint({ round: 1, size: 100, champion, composed, kept: false }), { round: 1, batch: 100, legs: 50, caught: 10, rate: 0.2, lo: 0.1235, hi: 0.3073, netR: 0.2, firstTry: null, selection: null, source: 'champion', unit: 'window' });
   const k = TC.curvePoint({ round: 2, size: 100, champion, composed, kept: true });
   assert.deepStrictEqual([k.caught, k.rate, k.netR, k.source], [16, 0.32, 0.5, 'kept change'], 'the kept change\'s legs: the champion\'s, plus fixed, minus broken');
   const pt = (round, caught, legs = 50) => TC.curvePoint({ round, size: 100, champion: { legs, caught, netR: 0 } });
   const flat = TC.curveOf([pt(1, 10), pt(2, 11), pt(3, 12), pt(4, 11)], { plateauRounds: 3 });
-  assert.deepStrictEqual([flat.pooled, flat.plateau], [{ legs: 200, caught: 44, rate: 0.22 }, true]);
+  assert.deepStrictEqual([flat.pooled, flat.plateau, flat.excluded], [{ legs: 200, caught: 44, rate: 0.22, rounds: 4 }, true, undefined]);
+  // A point from before the stepped windows (no unit: whole sessions) never pools with them: kept, flagged, left out.
+  const old = { round: 0, batch: 100, legs: 80, caught: 40, rate: 0.5, lo: 0.4, hi: 0.6, netR: 0, source: 'champion' };
+  const mixed = TC.curveOf([old, pt(1, 10), pt(2, 11), pt(3, 12), pt(4, 11)], { plateauRounds: 3 });
+  assert.deepStrictEqual([mixed.points.length, mixed.pooled, mixed.plateau, mixed.excluded], [5, { legs: 200, caught: 44, rate: 0.22, rounds: 4 }, true, 1]);
   assert.strictEqual(TC.curveOf([pt(1, 10), pt(2, 11), pt(3, 25), pt(4, 11)], { plateauRounds: 3 }).plateau, false, 'round 3 beat every earlier round beyond its interval');
   assert.strictEqual(TC.curveOf([pt(1, 10), pt(2, 11), pt(3, 12)], { plateauRounds: 3 }).plateau, false, 'too few rounds to say');
   assert.strictEqual(TC.curveOf([pt(1, 10), pt(2, 25), pt(3, 25), pt(4, 25), pt(5, 25)], { plateauRounds: 3 }).plateau, true, 'no new gain in the last three');

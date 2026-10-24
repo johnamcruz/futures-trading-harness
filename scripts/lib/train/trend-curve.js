@@ -30,9 +30,10 @@
  *   outcomeOf({ probes, composed, kept })      the round's outcome
  *   planBatch(history, { pool, cfg })          { size, trigger: start | restart | keep | grow | cap, why }; history: the
  *                                              earlier rounds' [{ size, outcome }], oldest first
- *   curvePoint({ round, size, champion, composed, kept })   { round, batch, legs, caught, rate, lo, hi, netR, firstTry, selection,
+ *   curvePoint({ round, size, champion, composed, kept })   { round, batch, legs, caught, rate, lo, hi, netR, firstTry, selection, unit,
  *                                              source }
- *   curveOf(points, { plateauRounds })         { points, pooled: { legs, caught, rate }, plateau }
+ *   curveOf(points, { plateauRounds })         { points, pooled: { legs, caught, rate, rounds }, plateau, excluded }: only the
+ *                                              points of unit 'window' pool and judge the plateau; excluded counts the rest
  *   memorizationOf(probes, composed)           [{ id, probe, regression, confirm }]: the edits flagged
  */
 
@@ -40,6 +41,8 @@ const { wilson } = require('../prop/stats');
 
 const OUTCOMES = Object.freeze(['kept', 'improved', 'no-improvement', 'neutral']);
 const CFG = () => require('../tunables').training().trendBatch;
+// A curve point's unit: the stepped window (trend-windows.js). Only points of one unit pool (curveOf).
+const UNIT = 'window';
 const LEVEL = () => require('../tunables').training().keepRule.level;
 
 function outcomeOf({ probes = [], composed = null, kept = false } = {}) {
@@ -79,16 +82,20 @@ function curvePoint({ round, size, champion, composed = null, kept = false }) {
   const firstTry = useKept && composed.firstTry ? composed.firstTry.probe : champion.firstTry || null;
   // Selection value (selection.js): the kept change's own when it was kept, else the champion's.
   const selection = useKept && composed.selection ? composed.selection : champion.selection || null;
-  return { round, batch: size, legs: champion.legs, caught, rate: w.rate, lo: w.lo, hi: w.hi, netR: netR === null ? null : Math.round(netR * 10000) / 10000, firstTry, selection, source: useKept ? 'kept change' : 'champion' };
+  return { round, batch: size, legs: champion.legs, caught, rate: w.rate, lo: w.lo, hi: w.hi, netR: netR === null ? null : Math.round(netR * 10000) / 10000, firstTry, selection, source: useKept ? 'kept change' : 'champion', unit: UNIT };
 }
 
-function curveOf(points, { plateauRounds = CFG().plateauRounds } = {}) {
+function curveOf(all, { plateauRounds = CFG().plateauRounds } = {}) {
+  // Only points of stepped windows pool and judge the plateau (unit 'window'): a point from before them (whole sessions)
+  // measured something else. It stays in `points`, flagged by `excluded`.
+  const points = all.filter(p => p && p.unit === UNIT);
   const legs = points.reduce((s, p) => s + p.legs, 0);
   const caught = points.reduce((s, p) => s + p.caught, 0);
   // A round improved when its interval's lower bound is above every earlier round's rate.
   const improved = points.map((p, i) => i > 0 && p.lo !== null && p.lo > Math.max(...points.slice(0, i).map(q => (q.rate === null ? 0 : q.rate))));
   const plateau = points.length > plateauRounds && !improved.slice(-plateauRounds).some(Boolean);
-  return { points, pooled: { legs, caught, rate: legs ? Math.round((caught / legs) * 10000) / 10000 : null }, plateau, plateauRounds };
+  const excluded = all.length - points.length;
+  return { points: all, pooled: { legs, caught, rate: legs ? Math.round((caught / legs) * 10000) / 10000 : null, rounds: points.length }, plateau, plateauRounds, ...(excluded ? { excluded } : {}) };
 }
 
 /** The edits whose legs caught rose on the probe half and the regression days, but whose combined change didn't gain on confirm. */

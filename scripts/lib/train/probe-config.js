@@ -181,6 +181,11 @@ function resolveTrend(raw, { read, readCensus, resolvePath = p => p, tuningWindo
   // Every census leg of the pool's and the regression days (its day, side, start, end, points): the windows a trend run
   // steps around its legs and the control windows clear of every leg (trend-windows.js) are built from them.
   const spanDays = new Set([...setDays, ...(regression ? regression.days : [])]);
+  // A regression day is stepped around its census legs only: one with none would never run, so it is refused.
+  if (census && regression && Array.isArray(census.order)) {
+    const withLegs = new Set(census.order.map(x => x.day));
+    for (const d of regression.days.filter(x => !withLegs.has(x))) errors.push(`probe.trend.regression ${d}: the census holds no leg that day; a trend run steps windows around its legs, so it would never run: leave it out`);
+  }
   const spans = census && Array.isArray(census.order) ? Object.fromEntries(census.order.filter(x => spanDays.has(x.day)).map(x => [x.id, { day: x.day, side: x.side, start: x.start, end: x.end, points: x.points }])) : {};
   return census ? { replay, ...(moments ? { moments } : {}), set: { file: raw.census, fingerprint: census.fingerprint, from: period.from, to: period.to, days: setDays, legs, spans }, batch, regression } : null;
 }

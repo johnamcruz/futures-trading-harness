@@ -141,7 +141,7 @@ function trendData({ runDir, legs = null, windows = null }) {
   const byDay = require('./trend-screen').sessionsOf({ days, combine: require('../replay/combine-run').readLog(runDir), fronts });
   // A windowed run: each window stepped to its end or not, its day's roll-month flag kept.
   const roll = new Map(byDay.map(s => [s.day, s.rollMonth]));
-  const sessions = windows ? require('./trend-windows').windowStates({ days, windows }).map(s => ({ ...s, rollMonth: roll.get(s.day) || false })) : byDay;
+  const sessions = windows ? require('./trend-windows').windowStates({ days, windows, minutes: Number(trader.timeframe) }).map(s => ({ ...s, rollMonth: roll.get(s.day) || false })) : byDay;
   // The model's entries (the run home's entry orders), for the selection value (selection.js), and the decision times
   // the run stepped (only the reactions it stepped count).
   const entries = require('./selection').entriesOf(readJson(path.join(home, 'entry-orders.json'), []) || []);
@@ -258,11 +258,12 @@ async function probeRound(ctx, { n, champion, api }) {
   const trendSide = async (side, tree, share, which, withFindings = false) => {
     const days = trendDays(which);
     if (!days.length) return null;
-    const out = { legs: [], dayR: {}, blows: 0, cycles: 0, fresh: 0, captures: [], first: [], sessions: [], entries: [], stepped: [], windows: 0, dropped: [] };
+    const out = { legs: [], dayR: {}, blows: 0, cycles: 0, fresh: 0, captures: [], first: [], sessions: [], entries: [], stepped: [], windows: 0, dropped: [], noWindows: [] };
     for (const day of days) {
       const built = windowsOn(which, day);
       out.dropped.push(...built.dropped);
-      if (!built.windows.length) continue;
+      // A day none of whose legs has a window (each outside the runner's sessions, or a holiday): never run, and said so.
+      if (!built.windows.length) { out.noWindows.push(day); continue; }
       const h = require('crypto').createHash('sha256').update(JSON.stringify(TW.asConfig(built.windows))).digest('hex').match(/^[0-9a-f]{8}/)[0]; // the run id's tag (its length capped)
       const tag = `t${day.replace(/-/g, '')}.${h}.`;
       const key = `trend-day:${side}:${day}:${h}`;
@@ -346,6 +347,17 @@ async function probeRound(ctx, { n, champion, api }) {
     return SEL.reactionsOf(lines, { days: trendDays('confirm'), sessions: traderCfg.sessions });
   }) : null;
   if (trendBase) report.cycles.champion.trend = trendBase.fresh + (regBase ? regBase.fresh : 0) + (trendConfirm ? trendConfirm.fresh : 0);
+  // What the windows left out, never silently: each half's legs and controls with no window, and the days with none
+  // (never run). The same windows for every side, so the champion's say it for all.
+  if (trend) {
+    const left = s => (s ? { dropped: s.dropped, noWindows: s.noWindows } : { dropped: [], noWindows: [] });
+    report.trend.windows = { probe: left(trendBase), confirm: left(trendConfirm), regression: left(regBase) };
+    for (const [which, x] of Object.entries(report.trend.windows)) {
+      if (x.noWindows.length) ctx.log(`iteration ${n}: trend ${which}: no windows on ${x.noWindows.join(', ')} (never run): ${x.dropped.filter(d => x.noWindows.includes(d.id.split('|')[0])).map(d => d.why).filter((w, i, a) => a.indexOf(w) === i).join('; ')}`);
+      const rest = x.dropped.filter(d => !x.noWindows.includes(d.id.split('|')[0]));
+      if (rest.length) ctx.log(`iteration ${n}: trend ${which}: ${rest.length} leg or control window(s) left out: ${rest.map(d => `${d.id} (${d.why})`).join('; ')}`);
+    }
+  }
   if (trendConfirm) {
     // The learning curve's champion: its finished units only (the screens' guard, one side), never a window it left early.
     const fin = TSC.finishedOf(trendConfirm.side);
