@@ -94,7 +94,7 @@ const REPLAY = {
   curatedMoments: { leadSetup: int(0), firstBar: int(0) },
   windowBars: int(1),
   setupLibrary: { minRR: pos() },
-  trendCapture: { minMoveAtr: pos(), catchShare: pos(1), messageChars: int(1), curationSessions: list(str(), { min: 1 }) },
+  trendCapture: { minMoveAtr: pos(), catchShare: pos(1), messageChars: int(1), curationSessions: list(str(), { min: 1 }), censusBatch: int(1) },
   setupMoments: { setupTf: int(1), quietSample: frac(), seed: int(), levels: str(['key', 'wide']), setupTfs: list(int(1), { min: 1 }) },
   accountStates: { seed: int(), count: int(1), meanBlock: int(1), perBucket: int(1), oversample: record(pos()), cutoffs: { nearMll: frac(), nearTarget: frac() } },
   driver: { eodRetries: int(1) },

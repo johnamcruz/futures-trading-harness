@@ -351,6 +351,10 @@ decide whether to trade.
   <tf> fvg high|low <price>`: an open gap's edges, a partly filled one's
   unfilled part), or a named key level, floored toward the entry. A prior
   candle's side the candle forming has already taken is spent: no target.
+  With no level named the trade's way (`targetsAhead` empty), the target is
+  the 2R mark (`target 2r`): `risk.min_rr` times the stop from the entry, on
+  the tick the trade's way (the owner, 2026-10-23: "2R minimum, but trail it so
+  it can ride the full trend"); a named level short of 2R is still no room.
   The `take-profit` skill teaches how the model picks the swing and
   prior-candle targets (an off-tick mid's distance to the tick toward price,
   as the briefing's `ticks`); no skill teaches a gap's edge as a target yet.

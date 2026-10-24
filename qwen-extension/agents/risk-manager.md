@@ -115,8 +115,8 @@ strategy-library skill, "The priority order"): a hard step's no trade is
 a VETO; then (`confluence-counting`): compose OK (its R:R the record's,
 never an estimate) → APPROVE, full size, half on serious against; VETO
 only on a 1h CHoCH against the side or a failed hard step. In a prop
-attempt, full is the translated size your request names, half its cut;
-under min_contracts: VETO.
+attempt, full is the translated size your request names, half its cut,
+floored at min_contracts.
 The checks below say where to read its facts.
 
 1. The trend rule (the briefing's `m3` `trendRule`; without a current
@@ -143,7 +143,7 @@ The checks below say where to read its facts.
    strategy's size follows position-sizing, and a composed entry's the
    record's (order_plan refuses it over its cap or verdict); in a prop
    attempt, the translated size your request names (never the record's;
-   under min_contracts: VETO); then risk $ = risk per contract ×
+   floored at min_contracts); then risk $ = risk per contract ×
    the plan's size. Approve the plan's numbers as order_plan shows them; never
    supply tick numbers of your own. Its refusal (not a candidate now, the other side, a
    verdict the gate would refuse) is a VETO; a tick-spec refusal: `get_contract`,

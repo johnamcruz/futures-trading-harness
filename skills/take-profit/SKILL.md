@@ -38,7 +38,7 @@ only:
 
 **Read forms** (the target step): `target <tf> swing high|low <price>`,
 `target prior 1h|4h high|mid|low <price>` (a taken side reads false),
-`target <5m|15m|1h> fvg high|low <price>`.
+`target <5m|15m|1h> fvg high|low <price>`. None named: `target 2r`.
 
 **Timeframe weight** (hypothesis, not measured): a higher timeframe's
 level holds more resting orders and reacts more often; a lower one's is

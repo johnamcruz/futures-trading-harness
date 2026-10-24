@@ -21,7 +21,7 @@
  * Limits (config/analysis.json composeHints): perStep reads listed a step, maxTries combinations tried.
  */
 
-const { STEPS, ENTRY_PATTERNS, SETUP_CANDLE, TF_ORDER, TF_MIN, levelIndex, candleClose, setupClose, levelName, parseRead, checkRead, checkReads } = require('./composed-reads');
+const { STEPS, ENTRY_PATTERNS, SETUP_CANDLE, TF_ORDER, TF_MIN, targetsAhead, levelIndex, candleClose, setupClose, levelName, parseRead, checkRead, checkReads } = require('./composed-reads');
 const { planOf } = require('./trade-lifecycle');
 const { trendRuleOf } = require('./reasons');
 const { MARKET_TZ } = require('./clock');
@@ -103,7 +103,7 @@ function candidatesOf(b, side, { tick, stopRule = null } = {}) {
       .sort((x, y) => (y.close ?? -Infinity) - (x.close ?? -Infinity) || TF_ORDER.indexOf(y.tf) - TF_ORDER.indexOf(x.tf)),
     entry: verified(entries, b, side, tick, true),
     stop: nearestStops(verified(stops, b, side, tick, true), b, side, tick, stopRule),
-    target: verified(targetForms(m3, side, b), b, side, tick, true),
+    target: targetsOf(b, side, tick),
   };
 }
 
@@ -119,26 +119,15 @@ function nearestStops(list, b, side, tick, rule) {
   return list.filter(x => num(x.price) !== null && !floored(x)).sort((x, y) => Math.abs(ref - x.price) - Math.abs(ref - y.price));
 }
 
-/** The target forms the briefing names on the winning side, nearest first (the price each read states). */
-function targetForms(m3, side, b = null) {
-  const ref = num(m3.price);
-  const long = side === 'long';
-  const out = [];
-  const t = isObj(m3.swingTargets) ? m3.swingTargets : {};
-  for (const x of (long ? t.above : t.below) || []) if (isObj(x) && num(x.price) !== null && x.frame) out.push({ read: `target ${levelName(x.frame)} swing ${long ? 'high' : 'low'} ${x.price}`, at: x.price });
-  for (const [name, prices] of b ? levelIndex(b) : []) for (const p of prices) out.push({ read: `target ${name} ${p}`, at: p });
-  for (const tf of ['1h', '4h']) {
-    const r = isObj(m3.rangeTargets) ? m3.rangeTargets[tf] : null;
-    for (const part of ['high', 'mid', 'low']) if (isObj(r) && isObj(r[part]) && num(r[part].price) !== null) out.push({ read: `target prior ${tf} ${part} ${r[part].price}`, at: r[part].price });
-  }
-  for (const [tf, v] of Object.entries(isObj(m3.fvgs) ? m3.fvgs : {})) {
-    for (const g of Array.isArray(v) ? v : []) {
-      const left = isObj(g) && g.state === 'open' ? [g.low, g.high] : isObj(g) && g.state === 'partly' && Array.isArray(g.unfilled) ? g.unfilled : null;
-      if (left) [['low', left[0]], ['high', left[1]]].forEach(([edge, p]) => { if (num(p) !== null) out.push({ read: `target ${tf} fvg ${edge} ${p}`, at: p }); });
-    }
-  }
-  if (ref === null) return [];
-  return out.filter(x => (long ? x.at > ref : x.at < ref)).sort((a, b) => Math.abs(a.at - ref) - Math.abs(b.at - ref) || a.read.localeCompare(b.read));
+/**
+ * The targets a plan can take the side's way: the named ones (composed-reads.js targetsAhead), else the 2R mark
+ * (`target 2r`, TRUE then: checkRead with the side).
+ */
+function targetsOf(b, side, tick) {
+  const named = targetsAhead(b, side, { tick });
+  if (named.length) return named;
+  const c = checkRead(parseRead('target 2r'), b, { tick, side });
+  return c.check === true ? [{ read: 'target 2r', price: null, mark: true }] : [];
 }
 
 /** What fails in each step of a checked combination: { step: [reason] } (missing, a read not TRUE or against, none pointing, timing). */
@@ -166,8 +155,8 @@ const goodOf = (checked, step) => (checked.reads || []).filter(r => r.step === s
 
 /** The plan's R:R for a stop and a target read on the bar (planOf's arithmetic), or null. */
 function rrOf(stop, target, checked, b, side, tick, plan) {
-  const r = planOf({ checked: { reference: checked.reference, stop: { source: 'x', level: stop.price }, target: { source: 'x', level: target.price } }, briefing: b, side, size: 1, tick, tickValue: plan.tickValue, minRR: plan.minRR, maxRiskUsd: plan.maxRiskUsd, stopRule: plan.stopRule, suggestion: true });
-  return r.plan ? { rr: r.plan.rr, ok: !r.problems.some(p => !/^size/.test(p)), stopTicks: r.plan.stop.ticks, problems: r.problems } : null;
+  const r = planOf({ checked: { reference: checked.reference, stop: { source: 'x', level: stop.price }, target: target.mark ? { source: '2r', level: null, mark: true } : { source: 'x', level: target.price } }, briefing: b, side, size: 1, tick, tickValue: plan.tickValue, minRR: plan.minRR, maxRiskUsd: plan.maxRiskUsd, stopRule: plan.stopRule, suggestion: true });
+  return r.plan ? { rr: r.plan.rr, price: r.plan.target.price, ok: !r.problems.some(p => !/^size/.test(p)), stopTicks: r.plan.stop.ticks, problems: r.problems } : null;
 }
 
 /**
@@ -297,6 +286,7 @@ function targetHint(checked, cand, b, side, tick, plan) {
   const min = plan.minRR;
   const enough = rated.filter(x => x.r.ok);
   const from = `from the stop at ${stop.price}`;
+  if (enough.length && enough[0].mark) return `target: no named level the trade's way: "target 2r", the ${min}R mark ${enough[0].r.price} ${from}; past it the runner trails`;
   if (enough.length) return `target: named levels at ${min}R or more ${from}: ${enough.slice(0, n).map(x => `"${x.read}" (${x.r.rr}R)`).join(', ')}`;
   return `target: no named level reaches ${min}R ${from} (nearest: ${rated.slice(0, n).map(x => `"${x.read}" ${x.r.rr}R`).join(', ') || 'none'}): pass, or a setup with a nearer stop`;
 }
@@ -304,4 +294,4 @@ function targetHint(checked, cand, b, side, tick, plan) {
 /** The hints as text lines for the model. */
 const renderHints = lines => lines.map(l => `- HINT ${l}`).join('\n');
 
-module.exports = { candidatesOf, repairOf, hintsFor, renderHints, failingSteps, targetForms };
+module.exports = { candidatesOf, repairOf, hintsFor, renderHints, failingSteps, targetsOf };

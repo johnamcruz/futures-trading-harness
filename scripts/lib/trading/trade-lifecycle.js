@@ -23,7 +23,8 @@
  *            max(risk.stop_floor_ticks, risk.stop_floor_atr x ATR(20) of the base bars, half the briefing's 0.5 x
  *            ATR(20) reference stop); a closer stop is refused, never widened (a wider stop would not be the level the
  *            model named). The three numbers' one home is the strategy's STRATEGY.md (stopRuleOf); none: no plan
- *   target   the verified level, floored toward the entry on the tick
+ *   target   the verified level, floored toward the entry on the tick; the 2R mark (`target 2r`, only when the briefing
+ *            names no target the trade's way) at risk.min_rr times the stop from the entry, on the tick the trade's way
  *   R:R      target ticks over stop ticks, at least the strategy's risk.min_rr
  *   size     the model's stated size (contracts, from the sizing skills); its dollar risk at most the strategy's
  *            risk.max_risk_usd (required); maxSize the most that cap allows
@@ -154,7 +155,10 @@ function planOf({ checked, briefing, side, size, tick, tickValue, minRR = null, 
   const long = side === 'long';
   const stopPrice = long ? t.at(Math.floor(checked.stop.level / tick + 1e-9) - buffer) : t.at(Math.ceil(checked.stop.level / tick - 1e-9) + buffer);
   const stopTicks = Math.ceil(Math.abs(ref - stopPrice) / tick - 1e-9);
-  const targetPrice = long ? t.down(checked.target.level) : t.up(checked.target.level);
+  // The 2R mark (composed-reads.js `target 2r`): the strategy's minimum R from the entry, on the tick the trade's way.
+  if (checked.target.mark && num(minRR) === null) return { plan: null, problems: ['the 2R mark needs the strategy\'s risk.min_rr'] };
+  const markAt = () => (long ? t.up(ref + minRR * (ref - stopPrice)) : t.down(ref - minRR * (stopPrice - ref)));
+  const targetPrice = checked.target.mark ? markAt() : long ? t.down(checked.target.level) : t.up(checked.target.level);
   const targetTicks = Math.round(Math.abs(targetPrice - ref) / tick);
   if ((long ? stopPrice >= ref : stopPrice <= ref)) problems.push(`the stop ${stopPrice} is not on the losing side of the entry ${ref}`);
   if (!(targetTicks > 0) || (long ? targetPrice <= ref : targetPrice >= ref)) problems.push(`the target ${targetPrice} is not on the winning side of the entry ${ref}`);
@@ -181,7 +185,7 @@ function planOf({ checked, briefing, side, size, tick, tickValue, minRR = null, 
     plan: {
       entry: { type: 'limit', price: ref },
       stop: { source: checked.stop.source, level: checked.stop.level, price: stopPrice, ticks: stopTicks, bufferTicks: buffer, floorTicks: floor },
-      target: { source: checked.target.source, level: checked.target.level, price: targetPrice, ticks: targetTicks },
+      target: { source: checked.target.source, level: checked.target.mark ? targetPrice : checked.target.level, price: targetPrice, ticks: targetTicks, ...(checked.target.mark ? { mark: true } : {}) },
       rr, inTheWay: way ? { name: way.name, price: way.price, R: round2(Math.abs(way.price - ref) / (stopTicks * tick)) } : null,
       size: Number.isInteger(size) ? size : null, riskUsd, perContractUsd: perContract,
       maxSize: num(maxRiskUsd) !== null && perContract > 0 ? Math.floor(maxRiskUsd / perContract) : null, tick, tickValue,

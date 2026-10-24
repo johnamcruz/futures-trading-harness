@@ -572,6 +572,10 @@
    "value": 200,
    "from": "new in fix/trend-moves-compose (a blocker line's message, cut)"
   },
+  "trendCapture.censusBatch": {
+   "value": 200,
+   "from": "new in fix/trend-moves-compose (the moments a leg-census batch draws, one curated list document's: the owner's 200)"
+  },
   "trendCapture.curationSessions": {
    "value": [
     "09:30-12:00@America/New_York"

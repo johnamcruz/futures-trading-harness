@@ -71,7 +71,7 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const { buildBriefing, sessionWindow } = require('../trading/briefing');
-const { checkReads, parseRead } = require('../trading/composed-reads');
+const { checkReads, checkRead, parseRead } = require('../trading/composed-reads');
 const { STRATEGY: LIFECYCLE, planOf, stopRuleOf, expiryOf } = require('../trading/trade-lifecycle');
 const { limitOutcome } = require('./experience-log');
 const { setupMoment, DEFAULTS } = require('./setup-moments');
@@ -136,7 +136,7 @@ function targetCandidates(m3, side, ref) {
  * The standard's reads and plan at one confirmation bar: { status, reads, checked, plan, why }. status: traded
  * (a plan), not-composable, stop-under-floor, no-room.
  */
-function composeAt(b, reaction, { side, tick, setupTf = DEFAULTS.setupTf, stopRule = strategyStopRule() }) {
+function composeAt(b, reaction, { side, tick, setupTf = DEFAULTS.setupTf, stopRule = strategyStopRule(), mark = false }) {
   const m3 = m3Of(b);
   const base = tfLabel(b.minutes);
   const stf = tfLabel(setupTf);
@@ -155,7 +155,10 @@ function composeAt(b, reaction, { side, tick, setupTf = DEFAULTS.setupTf, stopRu
     { step: 'stop', skill: SKILL.stop, read: stopRead }, { step: 'target', skill: SKILL.target, read: target },
   ];
   const ref = num(m3.price);
-  const targets = targetCandidates(m3, side, ref);
+  // The 2R mark (composed-reads.js `target 2r`) when asked (the briefing's standard plan, as compose_check plans it) and
+  // the briefing names no target the side's way; the library's own scan keeps the named levels only.
+  const markTrue = mark && checkRead(parseRead('target 2r'), b, { tick, side }).check === true;
+  const targets = [...targetCandidates(m3, side, ref), ...(markTrue ? [{ read: 'target 2r', price: null }] : [])];
   if (!targets.length) return { status: 'no-room', why: 'no level on the winning side' };
   // The first bias and location that are true (the target aside), then the nearest target at 2:1 or more.
   let pair = null;
@@ -439,7 +442,7 @@ function standardPlans(b, { setupTf = DEFAULTS.setupTf } = {}) {
       const reaction = mo.reactions.find(r => sideOf(r.dir) === side);
       if (!reaction) continue;
       if (rule[side] === false) { out.push({ side, reaction, status: 'against', why: 'against the trend rule: only as a reversal (its 1h CHoCH tier)', plan: null, reads: [] }); continue; }
-      const r = composeAt(b, reaction, { side, tick, setupTf });
+      const r = composeAt(b, reaction, { side, tick, setupTf, mark: true });
       out.push({ side, reaction, status: r.status, why: r.why || null, plan: r.plan || null, reads: r.reads || [] });
     }
     return out.length ? out : null;

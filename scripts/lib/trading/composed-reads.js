@@ -57,6 +57,8 @@
  *   stop <source> <price>                   step stop only: <tf> low|high (a completed candle), [<tf>] swing
  *                                           low|high (m3.swings, m3.liquidity, m3.htfLevels), or <level>; the
  *                                           source's price within one tick of <price>    below price long
+ *   target 2r                               step target only: the 2R mark, TRUE only when the briefing names no target
+ *                                           the side's way (targetsAhead); the plan puts it at the minimum R (planOf)  its side
  *   target <source> <price>                 step target only: <tf> swing [high|low] (m3.swingTargets), prior 1h|4h
  *                                           high|mid|low (m3.rangeTargets: the prior completed candle; an off-tick
  *                                           mid is the price on the tick toward price; a side the candle forming
@@ -204,6 +206,8 @@ function parseRead(text) {
   if (tf && b === 'absorption' && c === 'at' && w.length >= 5 && ['up', 'down'].includes(w[w.length - 1])) {
     return out('absorption', { tf, level: w.slice(3, -1).join(' '), value: w[w.length - 1] });
   }
+  // The 2R mark: no named level on the winning side, the target is the strategy's minimum R from the entry.
+  if (form === 'target 2r') return out('target', { source: '2r', price: null, mark: true }, ['2r']);
   if ((a === 'stop' || a === 'target') && w.length >= 3 && isNum(w[w.length - 1])) {
     const source = w.slice(1, -1);
     if (source.some(isNum) && !(source.length >= 3 && source.slice(0, -1).every(x => !isNum(x)))) return unknown;
@@ -317,6 +321,41 @@ function sourcePrices(kind, source, b, base, { tick = 0.25, ref = null } = {}) {
 }
 
 /**
+ * The target reads the briefing names on the side's winning side, nearest first: the swing targets, the levels it names,
+ * the prior 1h and 4h candle's high, mid and low, the gaps' edges; each checked TRUE (checkRead) and on that side.
+ * [{ read, price }]. The 2R mark is TRUE only when this is empty.
+ */
+function targetsAhead(b, side, { tick }) {
+  const m3 = data(b, 'm3');
+  const ref = m3 ? num(m3.price) : null;
+  if (ref === null || !SIDES.includes(side)) return [];
+  const long = side === 'long';
+  const forms = [];
+  const t = isObj(m3.swingTargets) ? m3.swingTargets : {};
+  for (const x of (long ? t.above : t.below) || []) if (isObj(x) && num(x.price) !== null && x.frame) forms.push(`target ${levelName(x.frame)} swing ${long ? 'high' : 'low'} ${x.price}`);
+  for (const [name, prices] of levelIndex(b)) for (const p of prices) forms.push(`target ${name} ${p}`);
+  for (const tf of ['1h', '4h']) {
+    const r = isObj(m3.rangeTargets) ? m3.rangeTargets[tf] : null;
+    for (const part of ['high', 'mid', 'low']) if (isObj(r) && isObj(r[part]) && num(r[part].price) !== null) forms.push(`target prior ${tf} ${part} ${r[part].price}`);
+  }
+  for (const [tf, v] of Object.entries(isObj(m3.fvgs) ? m3.fvgs : {})) {
+    for (const g of Array.isArray(v) ? v : []) {
+      const left = leftOf(g);
+      if (left) for (const [edge, p] of [['low', left[0]], ['high', left[1]]]) if (num(p) !== null) forms.push(`target ${tf} fvg ${edge} ${p}`);
+    }
+  }
+  const out = [];
+  const seen = new Set();
+  for (const read of forms) {
+    if (seen.has(read)) continue;
+    seen.add(read);
+    const c = checkRead(parseRead(read), b, { tick });
+    if (c.check === true && c.dir === side) out.push({ read, price: c.price });
+  }
+  return out.sort((x, y) => Math.abs(x.price - ref) - Math.abs(y.price - ref) || x.read.localeCompare(y.read));
+}
+
+/**
  * At a timeframe's fair value gap now (m3.fvgs[tf], what is left of each unfilled gap): the trigger bar's range overlaps
  * one, or the base timeframe's candle or the next one up overlapped it and it lies within one ATR(14) of price (inside
  * it: 0). The `at <level>` rule with a zone for the level.
@@ -397,7 +436,7 @@ function relationsOf(c, tf, level) {
  * One parsed read checked against the briefing: { check: true | false | 'unchecked', fact, field, value, dir }. dir:
  * the side the read points to (null: none). A stop or target carries the briefing's price for it (`price`).
  */
-function checkRead(p, b, { tick = 0.25 } = {}) {
+function checkRead(p, b, { tick = 0.25, side = null } = {}) {
   const res = (check, fact, extra = {}) => ({ check, fact, field: null, value: null, dir: null, ...extra });
   if (p.kind === 'ambiguous') return res(false, 'a negation, a bracket or a character outside plain ASCII: state each read plainly');
   if (p.kind === 'unknown') return res('unchecked', p.why || 'not a form this check knows (the forms: trading/composed-reads.js)');
@@ -585,6 +624,14 @@ function checkRead(p, b, { tick = 0.25 } = {}) {
     case 'stop':
     case 'target': {
       const ref = num(m3.price);
+      if (p.mark) {
+        // TRUE only when the briefing names no target the side's way at all: a named level ahead is the target (the first
+        // at the minimum R or more), and one short of it in the way is no room, never the mark.
+        if (!SIDES.includes(side)) return res('unchecked', 'the 2R mark is the side\'s: no side given', { field: 'm3 targets' });
+        const ahead = targetsAhead(b, side, { tick });
+        if (ahead.length) return res(false, `the briefing names ${ahead[0].read.replace(/^target /, '')} ${side === 'long' ? 'above' : 'below'} price ${ref}: the target is the first named level at the minimum R or more; the 2R mark only with none named`, { field: 'm3 targets', value: ahead[0].price });
+        return res(true, `no named level ${side === 'long' ? 'above' : 'below'} price ${ref}: the target is the 2R mark (the plan's entry plus the minimum R times its stop)`, { field: 'm3 targets', value: '2r', price: null, dir: side, mark: true });
+      }
       const { field, prices, why, spent, note = '' } = sourcePrices(p.kind, p.source, b, base, { tick, ref });
       if (spent) return res(false, spent, { field });
       if (!prices.length) return res('unchecked', why || `the briefing has no ${p.source} for a ${p.kind}`, { field });
@@ -618,7 +665,7 @@ function readSignature(reads, { targetR = null, reference = null } = {}) {
   const stop = reads.find(r => r.step === 'stop' && r.kind === 'stop');
   const target = reads.find(r => r.step === 'target' && r.kind === 'target');
   const R = num(targetR) !== null ? targetR : targetROf(reference, stop && stop.price, target && target.price);
-  const slug = r => (r.kind === 'target' ? `${r.slug}-${rBucket(R)}` : r.slug || levelName(r.read).replace(/ /g, '-'));
+  const slug = r => (r.kind === 'target' ? (r.mark ? r.slug : `${r.slug}-${rBucket(R)}`) : r.slug || levelName(r.read).replace(/ /g, '-'));
   const items = reads.map(r => ({ step: r.step, skill: r.skill, key: `${r.step}:${slug(r)}` }))
     .sort((x, y) => stepOrder(x, y) || x.key.localeCompare(y.key));
   return [...new Set(items.map(x => x.key))].join('+');
@@ -683,7 +730,7 @@ function checkReads({ reads, side, briefing, skills = null, tick = 0.25 } = {}) 
     if (entryPattern && !ENTRY_PATTERNS[p.value]) return bad(`an entry pattern is one of ${Object.keys(ENTRY_PATTERNS).join(', ')}`);
     if (p.form && seen.has(p.form)) return bad('the same read twice: each read is stated once, in one step');
     if (p.form) seen.add(p.form);
-    const c = checkRead(p, briefing, { tick });
+    const c = checkRead(p, briefing, { tick, side });
     return { ...row, ...c, agrees: true };
   });
   // Side agreement (D12), with D2's verified reversal: a trend or break read against the side stands when the reads
@@ -737,7 +784,7 @@ function checkReads({ reads, side, briefing, skills = null, tick = 0.25 } = {}) 
   return {
     ok, side, reference, reads: checked, problems, missingSteps,
     stop: stopRead ? { source: stopRead.slug, level: stopRead.price } : null,
-    target: targetRead ? { source: targetRead.slug, level: targetRead.price } : null,
+    target: targetRead ? { source: targetRead.slug, level: targetRead.mark ? null : targetRead.price, ...(targetRead.mark ? { mark: true } : {}) } : null,
     signature: readSignature(signed, { reference }), skillSignature: skillSignature(signed),
     context: SIDES.includes(side) ? contextOf(briefing, side) : null,
   };
@@ -758,4 +805,4 @@ function renderCheck(r) {
   return `${out.join('\n')}\n`;
 }
 
-module.exports = { STEPS, FLOW_STEPS, STEP_KINDS, D2_TIERS, d2TierMet, SETUP_CANDLE, ENTRY_PATTERNS, levelIndex, candleClose, setupClose, TF_ORDER, TF_MIN, MAX_READS, WHY_MAX, MOMENTUM, VOLUME_HIGH, ABSORPTION, netAtrOf, parseRead, checkRead, checkReads, readSignature, skillSignature, contextOf, targetROf, rBucket, levelName, renderCheck };
+module.exports = { STEPS, FLOW_STEPS, STEP_KINDS, D2_TIERS, d2TierMet, SETUP_CANDLE, ENTRY_PATTERNS, levelIndex, targetsAhead, candleClose, setupClose, TF_ORDER, TF_MIN, MAX_READS, WHY_MAX, MOMENTUM, VOLUME_HIGH, ABSORPTION, netAtrOf, parseRead, checkRead, checkReads, readSignature, skillSignature, contextOf, targetROf, rBucket, levelName, renderCheck };

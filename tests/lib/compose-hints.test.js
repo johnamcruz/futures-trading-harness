@@ -85,9 +85,11 @@ test('compose hints: a target under the minimum R:R with no named level reaching
   allTrue(r);
 });
 
-test('compose hints: no level on the winning side at all: no target for the side', () => {
+test('compose hints: no named level on the winning side: the hint names the 2R mark, and the whole passes with it', () => {
   const r = hints(swap('target', 'target 1h swing 21598'), { b: brief(b => { b.sections.m3.data.swingTargets.above = []; b.keyLevels = b.keyLevels.filter(x => x[1] < 21540); }) });
-  assert.ok(r.lines.includes('target: the briefing names no level on the winning side: no target for the long'), r.lines.join('\n'));
+  assert.ok(r.lines.includes('target: no named level the trade\'s way: "target 2r", the 2R mark 21595.75 from the stop at 21512.75; past it the runner trails'), r.lines.join('\n'));
+  const whole = r.lines.find(l => l.startsWith('these reads pass together'));
+  assert.ok(whole && whole.includes('"target 2r"') && passes(whole, r.b, 'long'), whole);
 });
 
 test('compose hints: a setup on the base candle: no later candle can confirm it; the higher candles\' reactions that a later close confirms', () => {
