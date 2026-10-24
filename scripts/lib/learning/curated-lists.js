@@ -203,13 +203,20 @@ function labelLegs(moments, legs) {
 
 /**
  * The trend legs of a scan's base bars (replay/trend-capture.js legsOf) in a session spec (default: config/replay.json
- * trendCapture.curationSessions): { detector, legs }, for buildLists' `legs`.
+ * trendCapture.curationSessions): { detector, legs }, for buildLists' `legs`. use (practice or validate): only the bars of
+ * that use's split window (config/schedule.json, ROLE), so no leg of another window, sealed or not, is ever found.
  */
-function legsFor(bars, { session = null } = {}) {
+function legsFor(bars, { session = null, use = null } = {}) {
   const tc = require('../replay/trend-capture');
   const T = require('../tunables').replay().trendCapture;
   const spec = session || T.curationSessions.join(',');
-  return { detector: { version: tc.DETECTOR, minMoveAtr: T.minMoveAtr, catchShare: T.catchShare, session: spec }, legs: tc.legsOf(bars, { session: spec }) };
+  let list = bars;
+  if (use !== null && use !== undefined) {
+    if (!ROLE[use]) throw new Error(`legs refused: use ${String(use)}; legs are found for ${Object.keys(ROLE).join(' or ')} only (test and final are sealed)`);
+    const [from, to] = require('./splits').WINDOWS[ROLE[use]];
+    list = (Array.isArray(bars) ? bars : []).filter(b => b && Number.isFinite(Date.parse(b.t)) && (d => d >= from && d < to)(sessionDate(Date.parse(b.t))));
+  }
+  return { detector: { version: tc.DETECTOR, minMoveAtr: T.minMoveAtr, catchShare: T.catchShare, session: spec }, legs: tc.legsOf(list, { session: spec }) };
 }
 
 /** Each leg's first moment (by its decision bar) among labelled moments. */

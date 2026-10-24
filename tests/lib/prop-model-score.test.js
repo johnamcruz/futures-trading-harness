@@ -644,3 +644,11 @@ test('keepOne takes one micro, never a whole mini; the risk record refuses an at
   assert.strictEqual(r.base.passRate, 0);
   assert.throws(() => rr({ states: {}, cells: [], role: 'test' }), /judged, never shown/);
 });
+
+test('pairRuns never reads a stepped-windows run (the training loop\'s trend set: stretches of days, never whole ones)', () => {
+  const home = require('fs').mkdtempSync(path.join(require('os').tmpdir(), 'fth-stepped-'));
+  const dir = path.join(home, 'replay', 'run1');
+  require('fs').mkdirSync(dir, { recursive: true });
+  require('fs').writeFileSync(path.join(dir, 'manifest.json'), JSON.stringify({ runId: 'run1', stepWindows: { kind: 'trend-set', hash: 'h', windows: 2 } }));
+  assert.throws(() => pairRuns(dir, dir, { account: ACCOUNT, policy: POLICY, paths: 10, reps: 10 }), /run1 steps windows of its sessions only \(the training loop's trend set\): a paired judge reads full-day runs only/);
+});

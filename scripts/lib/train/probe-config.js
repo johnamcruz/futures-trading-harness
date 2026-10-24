@@ -109,8 +109,9 @@ const nextDate = d => new Date(Date.parse(`${d}T00:00:00Z`) + 86400000).toISOStr
 
 /**
  * probe.trend (trend-set.js, trend-screen.js): { replay, census, from, to, batch, regression }. replay: a stage-1 replay
- * config of whole sessions (no curated list, no practice, no combine or account states: every bar of the runner's
- * session, as live), the loop's autotrader. census: the trend-leg census file (learning/leg-census.js, scripts/
+ * config (no curated list, no practice, no combine or account states, no stepWindows: the loop sets each run's stepped
+ * windows around its legs and the control windows, trend-windows.js; each bar of them as a whole session's, as live),
+ * the loop's autotrader; its runs carry the loop's trend-set role (the training preflight's loop-role check). census: the trend-leg census file (learning/leg-census.js, scripts/
  * curated-lists.js census); from..to (session dates, to exclusive): the screen period its pool is read from, in
  * practice-train and sharing no session date with the tuning windows (a round's batch, its size and halves:
  * config/training.json trendBatch, trend-curve.js; batch: { start, max, half }, each optional, overrides those three for
@@ -125,7 +126,8 @@ function resolveTrend(raw, { read, readCensus, resolvePath = p => p, tuningWindo
   try { replay = read(raw.replay); } catch (err) { errors.push(`probe.trend.replay: ${err.message}`); }
   if (replay) {
     if (replay.stage !== 1) errors.push('probe.trend.replay.stage: 1 (learn to trade): whole sessions, as the keep rule\'s runs');
-    for (const k of ['curatedList', 'practice', 'combine', 'accountStates']) if (replay[k] !== undefined) errors.push(`probe.trend.replay.${k}: not here (the trend set replays every bar of its sessions)`);
+    for (const k of ['curatedList', 'practice', 'combine', 'accountStates']) if (replay[k] !== undefined) errors.push(`probe.trend.replay.${k}: not here (the trend set replays the bars of its windows as a whole session would)`);
+    if (replay.stepWindows !== undefined) errors.push('probe.trend.replay.stepWindows: set by the loop for each run (trend-windows.js), never in the config');
     if (replay.learning === false) errors.push('probe.trend.replay.learning: a probe is a practice-train learning run');
     if (parallel > 1 && replay.latency !== false) errors.push('probe.parallel: more than 1 only with probe.trend.replay.latency false too');
   }
@@ -176,7 +178,16 @@ function resolveTrend(raw, { read, readCensus, resolvePath = p => p, tuningWindo
   if (!(typeof batch.half === 'number' && batch.half > 0 && batch.half < 1)) errors.push('probe.trend.batch.half: the probe half\'s share of a batch, between 0 and 1 (the confirm half holds the rest)');
   if (raw.moments !== undefined && !(typeof raw.moments === 'string' && raw.moments)) errors.push('probe.trend.moments: the curated scan\'s moments file (curated-lists.js scan), for the selection value');
   const moments = typeof raw.moments === 'string' && raw.moments ? resolvePath(raw.moments) : null;
-  return census ? { replay, ...(moments ? { moments } : {}), set: { file: raw.census, fingerprint: census.fingerprint, from: period.from, to: period.to, days: setDays, legs }, batch, regression } : null;
+  // Every census leg of the pool's and the regression days (its day, side, start, end, points): the windows a trend run
+  // steps around its legs and the control windows clear of every leg (trend-windows.js) are built from them.
+  const spanDays = new Set([...setDays, ...(regression ? regression.days : [])]);
+  // A regression day is stepped around its census legs only: one with none would never run, so it is refused.
+  if (census && regression && Array.isArray(census.order)) {
+    const withLegs = new Set(census.order.map(x => x.day));
+    for (const d of regression.days.filter(x => !withLegs.has(x))) errors.push(`probe.trend.regression ${d}: the census holds no leg that day; a trend run steps windows around its legs, so it would never run: leave it out`);
+  }
+  const spans = census && Array.isArray(census.order) ? Object.fromEntries(census.order.filter(x => spanDays.has(x.day)).map(x => [x.id, { day: x.day, side: x.side, start: x.start, end: x.end, points: x.points }])) : {};
+  return census ? { replay, ...(moments ? { moments } : {}), set: { file: raw.census, fingerprint: census.fingerprint, from: period.from, to: period.to, days: setDays, legs, spans }, batch, regression } : null;
 }
 
 module.exports = { PROBE_KEYS, TREND_KEYS, BATCH_KEYS, PROBE_LIMITS, resolveProbe, overlaps };

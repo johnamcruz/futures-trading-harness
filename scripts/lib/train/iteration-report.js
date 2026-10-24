@@ -60,6 +60,8 @@ function build({ probeReport = null, entries = [], previous = [] } = {}) {
     trend: r.trend ? trendOf(r, kept) : null,
     ...(r.trend ? curveFields(r, kept, previous) : {}),
     cycles: r.cycles || null,
+    // Each side's bars skipped while a cycle ran (latency, as live; probe.js): a slower edit shows here.
+    skipped: r.skipped || null,
     why: r.why || null,
   };
 }
@@ -71,14 +73,18 @@ function line(x) {
   const edits = Object.values(c.edits || {}).reduce((s, v) => s + (Number(v) || 0), 0);
   const ch = c.champion || {};
   const cost = `cycles: champion ${(ch.probe || 0) + (ch.confirm || 0) + (ch.trend || 0)}, edits ${edits}, combined ${c.composed || 0}`;
+  // The trend windows' bars skipped while a cycle ran (latency): each side's share, so a slower edit is visible.
+  const sk = x.skipped;
+  const share = s => (s && s.share !== null && s.share !== undefined ? `${s.share}${s.legWindows ? ` (${s.legWindows} leg window(s))` : ''}` : 'n/a');
+  const skipped = sk ? `; skipped bars: champion ${share(sk.champion)}${Object.entries(sk.edits || {}).map(([id, s]) => `, ${id} ${share(s)}`).join('')}${sk.composed ? `, combined ${share(sk.composed)}` : ''}` : '';
   const d = x.deltas;
-  const deltas = d ? `; confirm deltas: reads ${d.reads ? `+${d.reads.fixed}/-${d.reads.broken} of ${d.reads.pairs}` : 'n/a'}, process ${d.process ? `+${d.process.fixed}/-${d.process.broken} of ${d.process.pairs}` : 'n/a'}, R/decision ${d.rPerDecision && d.rPerDecision.diff !== null && d.rPerDecision.diff !== undefined ? d.rPerDecision.diff : 'n/a'}${d.capture ? `, legs caught +${d.capture.fixed}/-${d.capture.broken} of ${d.capture.pairs} (${d.capture.rate.champion} -> ${d.capture.rate.probe}), net R/session ${d.capture.netR.diff === null ? 'n/a' : d.capture.netR.diff}` : ''}` : '';
+  const deltas = d ? `; confirm deltas: reads ${d.reads ? `+${d.reads.fixed}/-${d.reads.broken} of ${d.reads.pairs}` : 'n/a'}, process ${d.process ? `+${d.process.fixed}/-${d.process.broken} of ${d.process.pairs}` : 'n/a'}, R/decision ${d.rPerDecision && d.rPerDecision.diff !== null && d.rPerDecision.diff !== undefined ? d.rPerDecision.diff : 'n/a'}${d.capture ? `, legs caught +${d.capture.fixed}/-${d.capture.broken} of ${d.capture.pairs} (${d.capture.rate.champion} -> ${d.capture.rate.probe}), net R/window ${d.capture.netR.diff === null ? 'n/a' : d.capture.netR.diff}` : ''}` : '';
   return `iteration ${x.iteration}: proposed ${x.proposed.length} (${x.proposed.filter(p => p.refused).length} refused), screened ${screened}`
     + `${x.trend ? `; trend batch ${x.trend.batch.index} (probe ${x.trend.probe.legs} legs on ${x.trend.probe.days} day(s), confirm ${x.trend.confirm.legs} on ${x.trend.confirm.days})` : ''}`
     + `${x.trend ? `, ${x.trend.batch.trigger} (${x.trend.outcome})` : ''}`
-    + `${x.curvePoint ? `; confirm capture ${x.curvePoint.rate} [${x.curvePoint.lo}, ${x.curvePoint.hi}] net R/session ${x.curvePoint.netR}${x.curvePoint.firstTry ? `, first-try reads ${x.curvePoint.firstTry.readAccuracy} OK ${x.curvePoint.firstTry.okRate} hint-rescued ${x.curvePoint.firstTry.rescueRate}` : ''}${x.curvePoint.selection ? `, selection value ${x.curvePoint.selection.value} (taken ${x.curvePoint.selection.taken.n} at ${x.curvePoint.selection.taken.meanR}R, passed ${x.curvePoint.selection.passed.n} at ${x.curvePoint.selection.passed.meanR}R)` : ''} (${x.curvePoint.source}), pooled ${x.curve.pooled.rate} over ${x.curve.points.length} round(s)${x.curve.plateau ? `, PLATEAU (no gain in ${x.curve.plateauRounds} rounds)` : ''}` : ''}`
+    + `${x.curvePoint ? `; confirm capture ${x.curvePoint.rate} [${x.curvePoint.lo}, ${x.curvePoint.hi}] net R/window ${x.curvePoint.netR}${x.curvePoint.firstTry ? `, first-try reads ${x.curvePoint.firstTry.readAccuracy} OK ${x.curvePoint.firstTry.okRate} hint-rescued ${x.curvePoint.firstTry.rescueRate}` : ''}${x.curvePoint.selection ? `, selection value ${x.curvePoint.selection.value} (taken ${x.curvePoint.selection.taken.n} at ${x.curvePoint.selection.taken.meanR}R, passed ${x.curvePoint.selection.passed.n} at ${x.curvePoint.selection.passed.meanR}R)` : ''} (${x.curvePoint.source}), pooled ${x.curve.pooled.rate} over ${x.curve.pooled.rounds ?? x.curve.points.length} round(s)${x.curve.excluded ? ` (${x.curve.excluded} earlier round(s) of whole sessions left out)` : ''}${x.curve.plateau ? `, PLATEAU (no gain in ${x.curve.plateauRounds} rounds)` : ''}` : ''}`
     + `${x.memorization && x.memorization.length ? `; MEMORIZATION: ${x.memorization.map(m => m.id).join(', ')}` : ''}`
-    + `; combined ${x.composed ? `${x.composed.id} ${x.composed.verdict}` : 'none'}; keep rule ${x.kept ? `${x.kept.verdict}` : 'not run'}${deltas}; ${cost}${x.why ? `; ${x.why}` : ''}`;
+    + `; combined ${x.composed ? `${x.composed.id} ${x.composed.verdict}` : 'none'}; keep rule ${x.kept ? `${x.kept.verdict}` : 'not run'}${deltas}; ${cost}${skipped}${x.why ? `; ${x.why}` : ''}`;
 }
 
 module.exports = { build, line };

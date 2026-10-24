@@ -13,7 +13,13 @@
  *   blows     decisions the run's scorecard records at or past the account's floor
  *   firstTry  the model's first compose_check of each decision point, before any hint (first-try.js): paired, a harm
  *             when significantly worse under the loop's decision rule, whatever the legs caught; never a gain
- * Only sessions both runs stepped to their end pair (sessionsOf: the day's end-of-day step ran). A session a run left
+ * The units: a trend run steps windows around its legs (trend-windows.js), so each unit is a window: a leg pairs only when
+ * its window was stepped to its end on both sides (trend-windows.js windowStates), net R is per window (each round trip
+ * to the window it followed; control windows, with no leg, carry the entries made where there was nothing to catch),
+ * and first tries are the windows' bars'. The rules read the same with "window" for "session": the harms (net R per
+ * window worse on at least minPairs windows, legs broken, first tries worse, a blow) and the gain (legs fixed, a fix only
+ * when its window's net R got no worse). A run without windows pairs whole sessions:
+ * only sessions both runs stepped to their end pair (sessionsOf: the day's end-of-day step ran). A session a run left
  * early (a call limit, a crash or failed cycles, its combine attempt ending) holds fewer legs than the market had, so
  * its legs, net R and first tries count neither as a miss nor as a catch: they are dropped, and each side's report says
  * which and why. A session in its front contract's expiry month (rollMonth: the month the front contract expires or
@@ -28,8 +34,10 @@
  *   dayR(days)                                  { day: net R } of a run's day records (every round trip with an R)
  *   sessionsOf({ days, combine, fronts })       [{ day, complete, why, rollMonth }]: days a run's day records; combine
  *                                               its combine log; fronts { day: the front contract's YYYY-MM }
- *   sideOfTrend({ captures, days, scorecard, first, sessions })   { legs: Map id -> { day, captured, availableR }, dayR, blows,
- *                                               first, sessions } (sessions: sessionsOf; none: no session known finished, none pairs)
+ *   sideOfTrend({ captures, days, scorecard, first, sessions, windows, minutes })   { legs: Map id -> { day, captured,
+ *                                               availableR, unit }, dayR (per unit), blows, first, sessions } (sessions: sessionsOf,
+ *                                               or windowStates with windows; none: no unit known finished, none pairs)
+ *   finishedOf(side)                            { legs, units, netR, first }: one side's finished units alone (the learning curve)
  *   measureTrend(champion, probe)               { capture, netR, legs, rate: { champion, probe }, blows }
  *   trendHarms(m, { rule }), regressionHarms(champion, probe)   [harm] (rule: the loop's decision rule, for first tries)
  *   screenTrend(m, { target, rule })            { verdict, pass, harms, gain }: target false judges harm only
@@ -82,30 +90,41 @@ function rollMonth(day, front) {
   return require('../tunables').training().trendScreen.rollFlagGaps.some(g => monthOn(g) === front);
 }
 
-function sideOfTrend({ captures = [], days = {}, scorecard = [], first = [], sessions = null } = {}) {
+function sideOfTrend({ captures = [], days = {}, scorecard = [], first = [], sessions = null, windows = null, minutes = null } = {}) {
+  const TW = require('./trend-windows');
+  // Stepped windows (trend-windows.js): each leg's unit is the window it was stepped in, net R per window, and only the
+  // first tries on the windows' bars.
+  const unitOfLeg = new Map((Array.isArray(windows) ? windows : []).flatMap(w => (w.legs || []).map(id => [id, w.id])));
   const legs = new Map();
-  for (const doc of captures) for (const l of (isObj(doc) && Array.isArray(doc.legs) ? doc.legs : [])) legs.set(l.id, { day: l.day, captured: l.captured === true, availableR: num(l.availableR) });
-  return { legs, dayR: dayR(days), blows: (scorecard || []).filter(d => d && d.blow === true).length, first: Array.isArray(first) ? first : [], sessions: Array.isArray(sessions) ? sessions : null };
+  for (const doc of captures) for (const l of (isObj(doc) && Array.isArray(doc.legs) ? doc.legs : [])) legs.set(l.id, { day: l.day, captured: l.captured === true, availableR: num(l.availableR), ...(windows ? { unit: unitOfLeg.get(l.id) || null } : {}) });
+  const tries = Array.isArray(first) ? first : [];
+  return {
+    legs, dayR: windows ? TW.unitR({ days, windows }) : dayR(days), blows: (scorecard || []).filter(d => d && d.blow === true).length,
+    first: windows ? tries.map(p => ({ ...p, unit: TW.unitOfBar(windows, p.bar, minutes) })).filter(p => p.unit) : tries, sessions: Array.isArray(sessions) ? sessions : null,
+  };
 }
 
+/** A leg's, a state's or a first try's unit: its window (a stepped-windows run) or its session date. */
+const unitOf = x => (x.unit !== undefined ? x.unit : x.day);
+
 function measureTrend(champion, probe) {
-  // Only sessions both sides stepped to their end (an incomplete session is neither a miss nor a catch).
-  // No session state: none known finished (fail closed), so nothing pairs.
-  const done = s => new Set((Array.isArray(s.sessions) ? s.sessions : []).filter(x => x && x.complete).map(x => x.day));
+  // Only units (sessions, or a windowed run's windows) both sides stepped to their end (an incomplete one is neither a
+  // miss nor a catch). No state: none known finished (fail closed), so nothing pairs.
+  const done = s => new Set((Array.isArray(s.sessions) ? s.sessions : []).filter(x => x && x.complete).map(unitOf));
   const a = done(champion);
   const b = done(probe);
-  const ok = d => a.has(d) && b.has(d);
-  const ids = [...champion.legs.keys()].filter(id => probe.legs.has(id) && ok(champion.legs.get(id).day));
+  const ok = d => d !== null && a.has(d) && b.has(d);
+  const ids = [...champion.legs.keys()].filter(id => probe.legs.has(id) && ok(unitOf(champion.legs.get(id))));
   const sameDays = Object.keys(champion.dayR).filter(d => d in probe.dayR && ok(d));
   // No session state at all: nothing paired from that side, and the report says why (never an empty, silent list).
-  const dropped = s => (Array.isArray(s.sessions) ? s.sessions.filter(x => !ok(x.day)).map(x => ({ day: x.day, why: x.complete ? 'the other side did not finish it' : x.why })) : [{ day: null, why: 'the step reported no session state' }]);
-  const onDays = list => (list || []).filter(p => ok(dayOfBar(p.bar)));
+  const dropped = s => (Array.isArray(s.sessions) ? s.sessions.filter(x => !ok(unitOf(x))).map(x => ({ day: unitOf(x), why: x.complete ? 'the other side did not finish it' : x.why })) : [{ day: null, why: 'the step reported no session state' }]);
+  const onDays = list => (list || []).filter(p => ok(p.unit !== undefined ? p.unit : dayOfBar(p.bar)));
   const worseDay = d => (probe.dayR[d] ?? 0) < (champion.dayR[d] ?? 0);
-  // A leg caught only by the edit is fixed only when its session's net R got no worse.
+  // A leg caught only by the edit is fixed only when its unit's net R got no worse.
   const pairs = ids.map(id => {
     const a = champion.legs.get(id);
     const b = probe.legs.get(id);
-    return { base: { category: a.captured ? 'right' : 'missed' }, cand: { category: b.captured && !(worseDay(a.day) && !a.captured) ? 'right' : 'missed' } };
+    return { base: { category: a.captured ? 'right' : 'missed' }, cand: { category: b.captured && !(worseDay(unitOf(a)) && !a.captured) ? 'right' : 'missed' } };
   });
   const t = tally(pairs, r => r.category !== 'right');
   const iv = pairedInterval(sameDays.map(d => probe.dayR[d] - champion.dayR[d]), 'trend:netR');
@@ -123,6 +142,19 @@ function measureTrend(champion, probe) {
   };
 }
 
+/**
+ * One side's finished units alone (the learning curve's champion: the screens' own guard, one side): its legs whose unit
+ * it stepped to its end, those units, and their mean net R.
+ */
+function finishedOf(side) {
+  const done = new Set((Array.isArray(side.sessions) ? side.sessions : []).filter(x => x && x.complete).map(unitOf));
+  const legs = [...side.legs.values()].filter(l => done.has(unitOf(l)));
+  const units = Object.keys(side.dayR || {}).filter(u => done.has(u));
+  const netR = units.length ? Math.round((units.reduce((s, u) => s + side.dayR[u], 0) / units.length) * 10000) / 10000 : null;
+  const first = (side.first || []).filter(p => done.has(p.unit !== undefined ? p.unit : dayOfBar(p.bar)));
+  return { legs, units, netR, first };
+}
+
 const harmful = t => t && t.n >= SCREEN.minDiscordant && t.c > t.b && t.pWorse <= SCREEN.harmAlpha;
 const gained = t => t && t.n >= SCREEN.minDiscordant && t.b > t.c && t.pBetter <= SCREEN.gainAlpha && t.pairs > 0 && (t.b - t.c) / t.pairs >= SCREEN.minEffect;
 
@@ -132,7 +164,7 @@ function trendHarms(m, { rule } = {}) {
   if (ft) out.push(`trend set: ${ft}`);
   if (m.blows > 0) out.push(`trend set: ${m.blows} blow(s) on the probe's side`);
   if (harmful(m.capture)) out.push(`trend set: legs caught worse (broken ${m.capture.c}, fixed ${m.capture.b}, p ${m.capture.pWorse})`);
-  if (m.netR.pairs >= SCREEN.minPairs && m.netR.hi !== null && m.netR.hi < 0) out.push(`trend set: net R per session worse (${m.netR.diff} [${m.netR.lo}, ${m.netR.hi}])`);
+  if (m.netR.pairs >= SCREEN.minPairs && m.netR.hi !== null && m.netR.hi < 0) out.push(`trend set: net R per window worse (${m.netR.diff} [${m.netR.lo}, ${m.netR.hi}])`);
   return out;
 }
 
@@ -152,4 +184,4 @@ function screenTrend(m, { target = true, rule } = {}) {
   return { verdict, pass: verdict === 'helped', harms, gain: Boolean(gain) };
 }
 
-module.exports = { dayR, sessionsOf, rollMonth, sideOfTrend, measureTrend, trendHarms, regressionHarms, screenTrend, gained, harmful };
+module.exports = { dayR, sessionsOf, rollMonth, sideOfTrend, finishedOf, measureTrend, trendHarms, regressionHarms, screenTrend, gained, harmful };

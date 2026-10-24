@@ -358,7 +358,10 @@ async function replayLoop({ run, baseEnv = process.env, root, deps = defaultDeps
     info: { source: 'replay', schedule: require('../schedule').fingerprint(), configFiles: require('../tunables').fingerprints(), broker: run.broker, start: run.start.toISOString(), end: run.end.toISOString(), harness: cfg.harness, model: cfg.model || null, command: harnessCommand(run, baseEnv), autotraderFile: run.autotraderFile, latency: run.latency === true,
       // The exit its composed trades are managed by, recorded at seed time: its experience lines are tagged by it,
       // never by the repository's exit when they are written (learning/run-experience.js manifestExit).
-      exit: require('../learning/experience-log').exitRecord(require('../learning/run-experience').runExit(root || run.root, baseEnv)) },
+      exit: require('../learning/experience-log').exitRecord(require('../learning/run-experience').runExit(root || run.root, baseEnv)),
+      // The training loop's stepped windows (replay/step-windows.js), named only when set: a scorer reads them to
+      // refuse the run (its days are stretches, not the market's whole days).
+      ...(run.stepWindows ? { stepWindows: { kind: run.stepWindows.kind, hash: run.stepWindows.hash, windows: run.stepWindows.windows.length } } : {}) },
   });
   // A curated run (learning/curated-lists.js) steps its list's windows and their days' premarket and end of day; every
   // other time from the first window on (later days included) is stepped only while a position or working order is
@@ -366,7 +369,9 @@ async function replayLoop({ run, baseEnv = process.env, root, deps = defaultDeps
   // window; the broker's fills and brackets work through the gaps.
   const all = decisionPoints(cfg, { start: run.start, end: run.end, everyNth: run.everyNth });
   // A combine run: only its attempts' days (the days between them have no step).
-  const points = run.curated ? curatedPoints(all, run.curated, (cfg.barDelaySeconds || 0) * 1000) : run.combine ? all.filter(p => combineRun.attemptOf(run.combine, p.day) !== -1) : all;
+  // The training loop's stepped windows (replay/step-windows.js): stepped as a curated list's windows are, nothing else.
+  const windowed = run.curated || run.stepWindows || null;
+  const points = windowed ? curatedPoints(all, windowed, (cfg.barDelaySeconds || 0) * 1000) : run.combine ? all.filter(p => combineRun.attemptOf(run.combine, p.day) !== -1) : all;
   const combineCtx = { root: root || run.root, manifest, save: () => writeJsonAtomic(paths.manifest, manifest), log };
   const recorded = store.recordedTimes(paths.runDir);
   // The run's prop attempt (config `prop`), started at the window's first moment before any decision: every trade of

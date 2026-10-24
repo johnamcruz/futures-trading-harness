@@ -6,7 +6,9 @@
  *   loopId          [A-Za-z0-9][A-Za-z0-9._-]{0,47}: the loop's name (its state, archive and branches carry it)
  *   replay          a replay config (replay/config.js; an object or a path relative to this file): the runner
  *                   config, broker and workDir every run of the loop uses; its runId, start and end are the
- *                   loop's (one run per window), and its workDir holds <loopId>/ (runs, checkpoints, trees, points)
+ *                   loop's (one run per window), and its workDir holds <loopId>/ (runs, checkpoints, trees, points).
+ *                   A replay config given as a path names its autotrader relative to its own folder (as replay.js
+ *                   run reads it); so do the probe's replay configs
  *   tuningWindows   [{ from, to }] session dates (YYYY-MM-DD, `to` exclusive), each inside one tuning unit of the
  *                   schedule (Train, or a walk-forward tuning quarter): the only months the loop runs on
  *   heldOutWindows  [{ from, to }] for `judge --held-out-look` only (judging looks, budgeted; never shown to the proposer)
@@ -59,6 +61,16 @@ function readSpec(spec, baseDir, what) {
   return JSON.parse(fs.readFileSync(path.resolve(baseDir, expandHome(spec)), 'utf8'));
 }
 
+/**
+ * A replay config (an object or a path): read as readSpec does; from a file, its `autotrader` path resolved against that
+ * file's own folder (as replay.js run resolves it), never the loop config's.
+ */
+function readReplaySpec(spec, baseDir, what) {
+  const obj = readSpec(spec, baseDir, what);
+  if (typeof spec !== 'string' || typeof obj.autotrader !== 'string') return obj;
+  return { ...obj, autotrader: path.resolve(path.dirname(path.resolve(baseDir, expandHome(spec))), expandHome(obj.autotrader)) };
+}
+
 /** Session date D starts at 18:00 New York time the evening before (clock.tradingDayStart). */
 const sessionStart = d => tradingDayStart(new Date(`${d}T12:00:00Z`));
 const windowRange = w => ({ start: sessionStart(w.from), end: sessionStart(w.to) });
@@ -96,7 +108,7 @@ function resolveLoop(raw, { baseDir = process.cwd() } = {}) {
   if (r.heldOutWindows !== undefined) errors.push(...windowsErrors(r.heldOutWindows, 'heldOutWindows'));
   let replay = null;
   let proposer = null;
-  try { replay = readSpec(r.replay, baseDir, 'replay'); } catch (err) { errors.push(`replay: ${err.message}`); }
+  try { replay = readReplaySpec(r.replay, baseDir, 'replay'); } catch (err) { errors.push(`replay: ${err.message}`); }
   try { proposer = validateConfig(readSpec(r.proposer, baseDir, 'proposer')); } catch (err) { errors.push(`proposer: ${err.message}`); }
   if (replay && !(typeof replay.workDir === 'string' && /^(\/|~\/)/.test(replay.workDir))) errors.push('replay.workDir: an absolute path or ~/...');
   const repeats = int(r.repeats, triple(LOOP.repeats), 'repeats', errors);
@@ -116,7 +128,7 @@ function resolveLoop(raw, { baseDir = process.cwd() } = {}) {
   // The probe round runs the loop's own model and runner config (its replay's autotrader, a path resolved as below).
   let trader = replay ? replay.autotrader : null;
   try { if (typeof trader === 'string') trader = readSpec(trader, baseDir, 'replay.autotrader'); } catch (_err) { trader = null; }
-  try { probe = resolveProbe(r.probe, { read: spec => readSpec(spec, baseDir, 'probe.replay'), readCensus: file => require('../learning/leg-census').readCensus(path.resolve(baseDir, expandHome(String(file)))), resolvePath: p => path.resolve(baseDir, expandHome(String(p))), modelScore: r.modelScore, autotrader: trader, tuningWindows: r.tuningWindows }); } catch (err) { errors.push(err.message); }
+  try { probe = resolveProbe(r.probe, { read: spec => readReplaySpec(spec, baseDir, 'probe.replay'), readCensus: file => require('../learning/leg-census').readCensus(path.resolve(baseDir, expandHome(String(file)))), resolvePath: p => path.resolve(baseDir, expandHome(String(p))), modelScore: r.modelScore, autotrader: trader, tuningWindows: r.tuningWindows }); } catch (err) { errors.push(err.message); }
   let modelScore = null;
   try { modelScore = MV.resolveModelScore(r.modelScore); } catch (err) { errors.push(err.message); }
   if (modelScore) {
@@ -127,7 +139,8 @@ function resolveLoop(raw, { baseDir = process.cwd() } = {}) {
     if (replay && replay.curatedList) errors.push('replay.curatedList: the model-scored loop judges full-day windows; a curated run never judges a change (its moments are outcome-balanced and its rebuilt days drawn, so nothing pairs): remove it');
   }
   if (errors.length) throw new Error(`invalid training-loop config:\n- ${errors.join('\n- ')}`);
-  // A replay config's autotrader given as a path resolves against this file's folder.
+  // A replay config's autotrader given as a path: against the replay file's own folder (readReplaySpec, already absolute
+  // then), or this file's folder when the replay config is inline here.
   if (typeof replay.autotrader === 'string') replay = { ...replay, autotrader: readSpec(replay.autotrader, baseDir, 'replay.autotrader') };
   const loop = {
     loopId: r.loopId, replay, proposer, tuningWindows: r.tuningWindows, heldOutWindows: r.heldOutWindows || null,

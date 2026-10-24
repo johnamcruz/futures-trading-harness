@@ -7,7 +7,9 @@
  * stored in the document (its seed recorded), hashed. Built once, in the user's experience folder like the curated
  * documents, never committed. Every consumer draws the next batch in that order: the curated practice build takes
  * batch k (`build --census <doc> --batch <k>`: one hashed list document per batch, old pins untouched), and the
- * learning loop reads batches with a date filter. Outcomes stay in the moments, as in the curated documents: only the
+ * learning loop reads batches with a date filter. A census holds its use's split window only (config/schedule.json:
+ * practice, practice-train): a leg outside it, sealed or not, refuses the build (curated-lists.js legsFor { use } finds
+ * the legs in that window's bars alone). Outcomes stay in the moments, as in the curated documents: only the
  * choice of practice moments reads them, never a prompt (a run pins its windows alone).
  *
  *   buildCensus(moments, { legs, detector }, { use, seed, sources })   the document: { v, kind, use, seed, detector,
@@ -40,6 +42,17 @@ function buildCensus(moments, { legs, detector }, { use, seed, sources = [], now
   if (!Number.isSafeInteger(seed)) throw new Error('leg census refused: seed is an integer (the shuffle\'s, recorded)');
   if (!Array.isArray(legs)) throw new Error('leg census refused: legs from the detector (curated-lists.js legsFor)');
   const C = require('./curated-lists');
+  // A census holds its role's split window only (config/schedule.json): a leg of another window, sealed or not, refuses
+  // the build (curated-lists.js legsFor finds legs for one use's window only).
+  const role = C.ROLE[use];
+  if (!role) throw new Error(`leg census refused: use ${String(use)}; a census is built for ${Object.keys(C.ROLE).join(' or ')} only (test and final are sealed)`);
+  const { roleOf, SEALED } = require('./splits');
+  const roleAt = d => { try { return roleOf(d); } catch (_err) { return null; } };
+  const outside = legs.filter(g => roleAt(g.day) !== role);
+  if (outside.length) {
+    const sealed = outside.filter(g => SEALED.includes(roleAt(g.day)));
+    throw new Error(`leg census refused: ${outside.length} leg(s) outside ${role} (the first on ${outside[0].day}, ${roleAt(outside[0].day) || 'no role'})${sealed.length ? `, ${sealed.length} in a sealed window` : ''}: a ${use} census holds ${role} legs only; find them for its window (curated-lists.js legsFor { use })`);
+  }
   const labelled = C.labelLegs((Array.isArray(moments) ? moments : []).filter(m => isObj(m) && m.use === use), legs);
   const first = new Map(C.legFirsts(labelled).map(m => [m.leg.id, m]));
   const order = legs.map(g => {

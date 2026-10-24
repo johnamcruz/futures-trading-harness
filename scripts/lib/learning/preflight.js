@@ -13,7 +13,7 @@
  *   ctx.read      the injected readers (defaultReaders: the repository, the bar files, the ledger), so the checks are pure
  *
  * Learning to trade: strategy, strategy-valid-bars, skills-crosswalk, head-prompt, head-composed-reads, head-delivery, role-prompts,
- * adapters-in-sync, no-web-in-replay (no agent reaches the web: replay/web-access.js), facts, curated-list, curated-source (its moments' prices against the run's bars), schedule, split-window, latency, practice-mode, library-display, experience-index,
+ * adapters-in-sync, no-web-in-replay (no agent reaches the web: replay/web-access.js), facts, curated-list, curated-source (its moments' prices against the run's bars), schedule, split-window, latency, loop-role (the training loop's keep-rule and trend-set runs: LOOP_ROLES), practice-mode, library-display, experience-index,
  * risk-record (N/A when off), ledger-look, stage (the replay config's preset: replay/stage.js), scorecard-composed. Passing the prop firm:
  * prop-portfolio, rulebook-values, rulebook-missing, account-states, combine (stage 2's continuous combine), account-facts, monte-carlo, broker-limits (the replay broker's limits against the account's). The fine-tuning adapter
  * the runner config declares: adapter (N/A with none; learning/adapter.js adapterCheck). A check of a feature
@@ -361,11 +361,46 @@ function latency(ctx) {
   return r('latency', PASS, 'charged');
 }
 
+/**
+ * The training loop's run roles (train/loop.js sets one on a run's learning gate, in code: no replay config or CLI flag
+ * sets it). On practice-train each reads the market's whole days by design, so neither needs a practice mode or a
+ * curated list, and only in that role (an ordinary practice-train or stage-1 run still needs them):
+ *   keep-rule   the keep rule's runs (the loop's own replay under modelScore): full days, its real score (a replay config
+ *               that sets practice still may: its score is then labelled diagnostic, prop/model-score.js); never curated
+ *   trend-set   the probe round's trend-set runs (train/probe.js): each bar of its stepped windows (replay/step-windows.js)
+ *               as a whole session's, stage 1, never curated, practice, a combine, account states or a prop attempt
+ * The loop-role check verifies the run is what its role says; practice-mode and stage accept the role's whole days.
+ */
+const LOOP_ROLES = Object.freeze(['keep-rule', 'trend-set']);
+const loopRoleOf = ctx => (LOOP_ROLES.includes(ctx.gate.loopRole) ? ctx.gate.loopRole : null);
+
+function loopRole(ctx) {
+  const lr = ctx.gate.loopRole;
+  if (lr === undefined || lr === null) {
+    if (ctx.run.stepWindows) return r('loop-role', FAIL, 'stepped windows (stepWindows) are the training loop\'s trend-set runs only: a run of its own steps whole sessions or a curated list');
+    return r('loop-role', NA, 'not a training-loop run of its own role');
+  }
+  if (!LOOP_ROLES.includes(lr)) return r('loop-role', FAIL, `${JSON.stringify(lr)}: the loop's roles are ${LOOP_ROLES.join(', ')}`);
+  const bad = [];
+  if (ctx.run.curated) bad.push('no curated list');
+  if (lr === 'trend-set') {
+    if (ctx.run.practice) bad.push('no practice mode');
+    if (roleOf(ctx) !== 'practice-train') bad.push(`practice-train only (this run: ${roleOf(ctx) || 'no role'})`);
+    if (ctx.run.stage !== 1) bad.push('stage 1');
+    for (const k of ['combine', 'accountStates', 'prop']) if (ctx.run[k]) bad.push(`no ${k}`);
+    if (ctx.run.stepWindows && ctx.run.stepWindows.kind !== 'trend-set') bad.push(`trend-set windows, not ${ctx.run.stepWindows.kind}`);
+  } else if (ctx.run.stepWindows) bad.push('no stepped windows (whole days)');
+  if (bad.length) return r('loop-role', FAIL, `the loop's ${lr} run: ${bad.join('; ')}`);
+  return r('loop-role', PASS, lr === 'keep-rule' ? `the keep rule's run: ${ctx.run.practice ? 'setup-focused (its score diagnostic: prop/model-score.js)' : 'whole days'}, no curated list` : `the trend set's run: stage 1, ${ctx.run.stepWindows ? `${ctx.run.stepWindows.windows.length} stepped window(s)` : 'whole sessions'}, each bar as a whole session's`);
+}
+
 function practiceMode(ctx) {
   const role = roleOf(ctx);
   if (role !== 'practice-train') return r('practice-mode', PASS, `not practice (${role || 'no role'}): not needed`);
   // A continuous combine steps every decision time of its attempts' days (the config refuses practice with it).
   if (ctx.run.combine) return r('practice-mode', PASS, 'continuous combine: every decision time of the attempts\' days, no setup focus');
+  // The loop's whole-day roles (loop-role checks the run is one): no setup focus by design.
+  if (loopRoleOf(ctx) && !ctx.run.practice) return r('practice-mode', PASS, `the training loop's ${loopRoleOf(ctx)} run: no setup focus (each bar as a whole session's)`);
   if (!ctx.run.practice) return r('practice-mode', FAIL, 'a practice-train run sets its practice mode (the replay config\'s practice)');
   return r('practice-mode', PASS, `${ctx.run.practice.mode}, ${ctx.run.practice.setupTf}m setups`);
 }
@@ -443,7 +478,9 @@ function stage(ctx) {
   if (!req.roles.includes(role)) bad.push(`a stage ${st} run is practice or validate (${req.roles.join(' or ')}), not ${role || 'no role'}`);
   const combineMode = Boolean(ctx.run.combine);
   if (combineMode && req.combine === 'none') bad.push(`no continuous combine in stage ${st} (it is stage 2's)`);
-  if (role === req.curatedOn && !ctx.run.curated && !combineMode) bad.push('a stage practice run replays a curated list (curatedList)');
+  // The loop's whole-day roles take no curated list (loop-role checks the run is one).
+  const wholeDays = Boolean(loopRoleOf(ctx)) && !ctx.run.curated;
+  if (role === req.curatedOn && !ctx.run.curated && !combineMode && !wholeDays) bad.push('a stage practice run replays a curated list (curatedList)');
   if (ctx.run.latency !== req.latency) bad.push('latency is charged');
   if (ctx.run.libraryDisplay !== req.libraryDisplay) bad.push('the history library stays hidden (libraryDisplay off)');
   if (ctx.run.riskRecordDisplay === true && req.riskRecordDisplay === 'off') bad.push('the risk record stays hidden (riskRecordDisplay off)');
@@ -461,6 +498,7 @@ function stage(ctx) {
   if (bad.length) return r('stage', FAIL, `stage ${st}: ${bad.join('; ')}`);
   const own = st === 2 ? `${ctx.run.accountStates ? `, days from account states ${ctx.run.accountStates.hash.slice(0, 12)}` : ''}, the prop risk rules and the Monte Carlo` : ', no prop';
   if (combineMode) return r('stage', PASS, `stage ${st} on ${role}: continuous combine (${ctx.run.combine.attempts.length} attempt(s) on ${ctx.run.combine.account}), latency charged, library hidden${own}`);
+  if (wholeDays && role === req.curatedOn) return r('stage', PASS, `stage ${st} on ${role}: the training loop's ${loopRoleOf(ctx)} run (no curated list by design), latency charged, library hidden${own}`);
   return r('stage', PASS, `stage ${st} on ${role}: curated list${role === req.curatedOn ? '' : ' (practice only)'}, latency charged, library hidden${own}`);
 }
 
@@ -643,7 +681,7 @@ function adapter(ctx) {
 
 const CHECKS = Object.freeze([
   strategy, strategyValidBars, skillsCrosswalk, headPromptCheck, headComposedReads, headDelivery, rolePrompts, adaptersInSync, noWebInReplay, facts, curatedList,
-  curatedSource, scheduleCheck, splitWindow, latency, practiceMode, libraryDisplay, experienceIndex, riskRecord, ledgerLook, stage,
+  curatedSource, scheduleCheck, splitWindow, latency, loopRole, practiceMode, libraryDisplay, experienceIndex, riskRecord, ledgerLook, stage,
   scorecardComposed, propPortfolio, rulebookValues, rulebookMissing, accountStates, combineCheck, accountFacts, monteCarlo, brokerLimits, adapter,
 ]);
 
@@ -925,9 +963,9 @@ function preflightForRun(run, gate, { root, env = process.env, barsFiles = {}, n
 }
 
 module.exports = {
-  PASS, FAIL, NA, WARN, NEEDS, CHECKS, RECORD, FRAMES,
+  PASS, FAIL, NA, WARN, NEEDS, CHECKS, RECORD, FRAMES, LOOP_ROLES,
   strategy, strategyValidBars, skillsCrosswalk, headPromptCheck, headComposedReads, headDelivery, rolePrompts, adaptersInSync, facts, curatedList,
-  curatedSource, scheduleCheck, splitWindow, latency, practiceMode, libraryDisplay, experienceIndex, riskRecord, ledgerLook, stage,
+  curatedSource, scheduleCheck, splitWindow, latency, loopRole, practiceMode, libraryDisplay, experienceIndex, riskRecord, ledgerLook, stage,
   scorecardComposed, propPortfolio, rulebookValues, rulebookMissing, accountStates, combineCheck, accountFacts, monteCarlo, noWebInReplay, brokerLimits, adapter,
   crosswalkOf, attemptLine, runChecks, formatReport, defaultReaders, sampleBriefing, gateOptions, trainingMode, preflightForRun,
 };

@@ -38,8 +38,15 @@ const dayOfT = t => t.slice(0, 10);
 // The trend set's days in the stub world, and its one regression day (never in the set).
 const REG_DAY = '2022-03-17';
 const SET_DAYS = DAYS.filter(d => d !== REG_DAY);
-// The trend pool: two legs a session (the stub capture's ids), and the legs a round draws.
-const POOL = SET_DAYS.flatMap(d => [`${d}|long|x`, `${d}|short|x`]);
+// The trend pool: two legs a session, both from 14:30Z to 14:51Z (the census's ids: day|side|start), and the legs a
+// round draws. Their windows (trend-windows.js: four bars before the start through the first half) merge into one,
+// 14:18Z to 14:42Z, which holds the session's four decision times; each leg's control window lies elsewhere.
+const legId = (d, side) => `${d}|${side}|${d}T14:30:00.000Z`;
+const POOL = SET_DAYS.flatMap(d => [legId(d, 'long'), legId(d, 'short')]);
+// A trend run's id: <side>-t<yyyymmdd>.<its windows' hash>.0 (probe.js); its day.
+const TREND_RUN = /-t\d{8}\.[0-9a-f]{8}\.\d+$/;
+const dayOfRun = id => /-t(\d{4})(\d{2})(\d{2})\./.exec(id).slice(1).join('-');
+const SPANS =Object.fromEntries(DAYS.flatMap(d => ['long', 'short'].map(side => [legId(d, side), { day: d, side, start: `${d}T14:30:00.000Z`, end: `${d}T14:51:00.000Z`, points: 10 }])));
 const BATCH = 13; // odd: a batch ends inside a session, whose other leg is not the round's
 // Round 1's halves (trend-set.js), the loop's seed 3.
 const ROUND1 = require('../../scripts/lib/train/trend-set').splitBatch(require('../../scripts/lib/train/trend-set').drawRound(POOL, { seed: 3, round: 1, per: BATCH }).items, { seed: 3, half: 0.5 });
@@ -425,11 +432,12 @@ function world({ proposals, verdict = 'kept', loop: over = {}, trend = false, tr
     limits: { maxIterations: 1, maxModelCalls: 10000, maxWallMinutes: 30 }, ...over,
   });
   loop.probe = { ...loop.probe, replay: { ...replay, latency: false, practice: { mode: 'setup-focus', setupTf: 15, quietSample: 0.15, seed: 7 } } };
-  const calls = { proposeProbes: [], runs: [], probeData: [], verifier: [], branches: [], propose: 0, halves: [], trendData: [] };
+  const calls = { proposeProbes: [], runs: [], probeData: [], verifier: [], branches: [], propose: 0, halves: [], trendData: [], preflight: [] };
   const trees = new Map();
   const textOf = dir => fs.readFileSync(path.join(dir, SKILL), 'utf8');
   const steps = {
-    preflight: () => ({ ok: true, results: [], record: () => null }),
+    // The preflight's own tests run it for real (train-trend-windows.test.js); here each run's loop role is recorded.
+    preflight: (run, gate) => { calls.preflight.push({ runId: run.runId, loopRole: gate.loopRole || null }); return { ok: true, results: [], record: () => null }; },
     makeTree: dir => { fs.mkdirSync(path.join(dir, 'skills', 'a'), { recursive: true }); fs.writeFileSync(path.join(dir, SKILL), TEXT); fs.mkdirSync(path.join(dir, 'workspace')); return 'c0ffee'; },
     prepareTree: (dir, { proposal }) => { if (proposal) require('../../scripts/lib/train/proposal').applyProposal(proposal, dir); },
     seedRunHome: run => {
@@ -443,8 +451,10 @@ function world({ proposals, verdict = 'kept', loop: over = {}, trend = false, tr
       // A probe half's run (its label: -p0 the probe half, -q0 the confirm half) steps that half's moments only, as the
       // half's curated list does (probe-halves.js); every other run steps them all.
       const half = /-p\d+$/.test(run.runId) ? 'probe' : /-q\d+$/.test(run.runId) ? 'confirm' : null;
-      // A trend run (one a session: -t<yyyymmdd>0) steps its own session only: the times inside its window.
-      const inRun = t => !/-t\d{8}\d+$/.test(run.runId) || (Date.parse(t) >= run.start.getTime() && Date.parse(t) < run.end.getTime());
+      // A trend run (one a day: -t<yyyymmdd>.<windows hash>.0) steps its own day's stepped windows only, as the driver
+      // does (curatedPoints: a time whose bar closed in a window).
+      const sw = run.stepWindows;
+      const inRun = t => !sw || sw.windows.some(x => Date.parse(t) - 2000 > x.from && Date.parse(t) - 2000 <= x.to);
       const todo = TIMES.filter(t => !done.has(t) && inRun(t) && (!half || SC.halfOf(dayOfT(t), w.loop.seed) === half));
       trees.set(run.paths.runDir, root);
       for (const t of todo) {
@@ -476,21 +486,24 @@ function world({ proposals, verdict = 'kept', loop: over = {}, trend = false, tr
     // TREND catches every leg; GREEDY catches every leg and loses 1R a session; REGLOSE catches every leg but the
     // regression day's. A missed leg: blocked at entry by a
     // refused read of skill a.
-    trendData: ({ runDir }) => {
+    // The step reads the legs and windows the loop gives it (the census's legs, trend-windows.js), as the real one does.
+    trendData: ({ runDir, legs: given, windows }) => {
       const text = textOf(trees.get(runDir));
-      calls.trendData.push(path.basename(runDir));
-      const days = Object.keys(store.readRun(runDir).days).sort();
-      const legs = days.flatMap(day => ['long', 'short'].map(side => {
+      calls.trendData.push({ run: path.basename(runDir), legs: given.map(g => g.id), windows });
+      const recorded = store.readRun(runDir).days;
+      const days = Object.keys(recorded).sort();
+      const legs = given.filter(g => days.includes(g.day)).map(({ id, day, side }) => {
         const lucky = /LUCKYLEGS/.test(text) && (ROUND1.probe.days.includes(day) || day === REG_DAY);
         const caught = lucky || (/TREND|GREEDY|SLOPPY/.test(text) || (/REGLOSE/.test(text) && day !== REG_DAY)) || (!/REGLOSE/.test(text) && side === 'long' && DAYS.indexOf(day) % 2 === 0);
-        return { id: `${day}|${side}|x`, day, side, captured: caught, availableR: 2, blocker: caught ? null : { step: 'entry', code: 'entry:momentum', by: 'compose_check' }, cycles: caught ? [] : [{ code: 'entry:momentum', by: 'compose_check', step: 'entry', message: 'momentum: weak', reads: [{ step: 'entry', read: 'x', skill: 'a', verified: false }] }] };
-      }));
+        return { id, day, side, captured: caught, availableR: 2, blocker: caught ? null : { step: 'entry', code: 'entry:momentum', by: 'compose_check' }, cycles: caught ? [] : [{ code: 'entry:momentum', by: 'compose_check', step: 'entry', message: 'momentum: weak', reads: [{ step: 'entry', read: 'x', skill: 'a', verified: false }] }] };
+      });
       // The first tries: one decision point a side a session; SLOPPY reads wrong first and is rescued by the hint.
       const first = days.flatMap(day => ['long', 'short'].map(side => ({ key: `MNQ|${day}T14:33:00.000Z|${side}`, root: 'MNQ', bar: `${day}T14:33:00.000Z`, side, first: { ok: !/SLOPPY/.test(text), reads: [{ step: 'entry', skill: 'a', check: !/SLOPPY/.test(text) }], failed: /SLOPPY/.test(text) ? ['entry'] : [] }, tries: /SLOPPY/.test(text) ? 2 : 1, rescued: /SLOPPY/.test(text), finalOk: true })));
       // Entries: the champion takes each session's long reaction (14:33Z); TREND takes both.
       const entries = days.flatMap(day => [{ at: `${day}T14:36:30.000Z`, side: 'long' }, ...(/TREND/.test(text) ? [{ at: `${day}T14:36:30.000Z`, side: 'short' }] : [])]);
-      const sessions = days.map(day => ({ day, complete: true, why: null, rollMonth: false }));
-      return { capture: { legs }, days: Object.fromEntries(days.map(d => [d, [{ trades: [{ roundTrip: { r: /GREEDY/.test(text) ? -1 : 0 } }] }]])), first, entries, sessions };
+      // Each window stepped to its end or not, from the run's own records (the leg window's last time is 14:42:02Z).
+      const sessions = require('../../scripts/lib/train/trend-windows').windowStates({ days: recorded, windows, minutes: 3 }).map(s => ({ ...s, rollMonth: false }));
+      return { capture: { legs }, days: Object.fromEntries(days.map(d => [d, [{ t: `${d}T14:42:02.000Z`, trades: [{ roundTrip: { r: /GREEDY/.test(text) ? -1 : 0 } }] }]])), first, entries, sessions, stepped: Object.values(recorded).flat().map(l => l.t), minutes: 3 };
     },
     // proposals: a list, or a function of the round (1, 2, ...) giving that round's list.
     proposeProbes: async opts => { calls.proposeProbes.push(opts); return { proposals: (typeof proposals === 'function' ? proposals(calls.proposeProbes.length) : proposals).map(p => ({ ...p })) }; },
@@ -501,8 +514,9 @@ function world({ proposals, verdict = 'kept', loop: over = {}, trend = false, tr
   };
   // The scan's reactions: a long that won and a short that lost, each session at 14:33Z.
   const momentsFile = path.join(user, 'moments.jsonl');
-  fs.writeFileSync(momentsFile, DAYS.flatMap(day => [['long', 2], ['short', -1]].map(([side, R]) => JSON.stringify({ day, bar: `${day}T14:33:00.000Z`, side, minutes: 3, validBars: 2, standard: { status: 'traded' }, outcome: { R } }))).join('\n'));
-  if (trend) loop.probe = { ...loop.probe, trend: { moments: momentsFile, replay: { ...replay, latency: false }, set: { file: 'set.json', fingerprint: 'f', days: SET_DAYS, legs: POOL }, batch: { ...require('../../scripts/lib/tunables').training().trendBatch, start: BATCH, max: POOL.length, half: 0.5, ...trendBatch }, regression: { days: [REG_DAY] } } };
+  // And one after the runner's session (21:00Z, 16:00 New York time), which no run could act on: never counted.
+  fs.writeFileSync(momentsFile, DAYS.flatMap(day => [[`${day}T14:33:00.000Z`, 'long', 2], [`${day}T14:33:00.000Z`, 'short', -1], [`${day}T21:00:00.000Z`, 'long', 9]].map(([bar, side, R]) => JSON.stringify({ day, bar, side, minutes: 3, validBars: 2, standard: { status: 'traded' }, outcome: { R } }))).join('\n'));
+  if (trend) loop.probe = { ...loop.probe, trend: { moments: momentsFile, replay: { ...replay, latency: false }, set: { file: 'set.json', fingerprint: 'f', days: SET_DAYS, legs: POOL, spans: SPANS }, batch: { ...require('../../scripts/lib/tunables').training().trendBatch, start: BATCH, max: POOL.length, half: 0.5, ...trendBatch }, regression: { days: [REG_DAY] } } };
   const w = { user, env, loop, steps, calls, paths: S.loopPaths(env, 'l1') };
   return w;
 }
@@ -620,17 +634,24 @@ test('with a trend set: its missed legs are findings first; an edit that catches
   assert.deepStrictEqual(report.probes.map(p => p.target.pairs), [probeLegs.length, probeLegs.length, 28, probeLegs.length], 'a trend edit judged on the batch\'s probe-half legs, the curated one on its decisions');
   // Runs, one a session: the champion's probe half, regression day and confirm half; each edit its probe half and the
   // regression day; the combined change the confirm half and the regression day. Never an edit on a confirm day.
-  const trendRuns = w.calls.runs.filter(r => /-t\d{8}\d+$/.test(r.runId)).map(r => ({ side: r.runId.replace(/-t\d{8}\d+$/, ''), day: /-t(\d{4})(\d{2})(\d{2})\d+$/.exec(r.runId).slice(1).join('-') }));
+  const trendRuns = w.calls.runs.filter(r => TREND_RUN.test(r.runId)).map(r => ({ side: r.runId.replace(TREND_RUN, ''), day: dayOfRun(r.runId) }));
   const daysOf = side => trendRuns.filter(r => r.side === side).map(r => r.day).sort();
   assert.deepStrictEqual(daysOf('l1-pc'), [...split.probe.days, REG_DAY, ...split.confirm.days].sort());
   for (const p of report.probes) assert.deepStrictEqual(daysOf(`l1-p-${p.id}`), [...split.probe.days, REG_DAY].sort(), p.id);
   assert.deepStrictEqual(daysOf(`l1-k-${report.composed.id}`), [...split.confirm.days, REG_DAY].sort());
   assert.strictEqual(report.composed.verdict, 'helped');
+  // The keep rule's runs (the champion's tuning replays and the challenger's) carry the loop's keep-rule role; the trend runs trend-set.
+  const roles = re => [...new Set(w.calls.preflight.filter(p => re.test(p.runId)).map(p => p.loopRole))];
+  assert.deepStrictEqual([roles(/-(champion|c-[0-9a-f]+)-t\d+$/), roles(TREND_RUN)], [['keep-rule'], ['trend-set']]);
   assert.strictEqual(report.composition.parts.length, 2, 'the trend edit and the curated one, on different lines');
   const rec = JSON.parse(fs.readFileSync(path.join(w.paths.iter(1), 'iteration-report.json'), 'utf8'));
   assert.deepStrictEqual([rec.deltas.capture.broken, rec.deltas.capture.rate.probe, rec.deltas.capture.pairs], [0, 1, split.confirm.legs.length]);
   assert.ok(rec.deltas.capture.fixed > 0);
   assert.match(IR.line(rec), /legs caught \+\d+\/-0 of \d+ \([\d.]+ -> 1\)/);
+  // Each side's share of skipped bars (latency; none in the stub world), the champion's, each edit's and the combined change's.
+  assert.deepStrictEqual(rec.skipped.champion, { skipped: 0, bars: rec.skipped.champion.bars, share: 0, legWindows: 0 });
+  assert.ok(rec.skipped.champion.bars > 0 && Object.keys(rec.skipped.edits).length === report.probes.length && rec.skipped.composed);
+  assert.match(IR.line(rec), new RegExp(`; skipped bars: champion 0, ${report.probes[0].id} 0, .*combined 0`));
   // Selection value on the confirm half: the champion took the winning longs and passed the losing shorts.
   const n = split.confirm.days.length;
   assert.deepStrictEqual(report.trend.champion.selection, { reactions: n * 2, taken: { n, meanR: 2 }, passed: { n, meanR: -1 }, value: 3 });
@@ -669,7 +690,7 @@ test('the trend batch adapts: it doubles after two rounds without an improvement
   assert.deepStrictEqual(recs.map(r => r.curve.points.length), [1, 2, 3, 4, 5]);
   assert.ok(recs.every(r => r.curvePoint.source === 'champion' && r.curvePoint.legs > 0));
   assert.strictEqual(recs[4].curve.pooled.legs, recs.reduce((s, r) => s + r.curvePoint.legs, 0));
-  assert.match(IR.line(recs[4]), /confirm capture [\d.]+ \[[\d.]+, [\d.]+\] net R\/session 0, first-try reads 1 OK 1 hint-rescued 0, selection value 3 \(taken \d+ at 2R, passed \d+ at -1R\) \(champion\), pooled [\d.]+ over 5 round\(s\)/);
+  assert.match(IR.line(recs[4]), /confirm capture [\d.]+ \[[\d.]+, [\d.]+\] net R\/window 0, first-try reads 1 OK 1 hint-rescued 0, selection value 3 \(taken \d+ at 2R, passed \d+ at -1R\) \(champion\), pooled [\d.]+ over 5 round\(s\)/);
 });
 
 test('first-try reasoning is a harm check: an edit that catches every leg only after the hints is hurt, never a gain', async () => {
@@ -701,18 +722,20 @@ test('with a trend pool, each round draws the next batch; the champion replays a
   assert.notDeepStrictEqual(legsOf(reports[0]), legsOf(reports[1]), 'the draw changes with the round');
   // Rounds 1 and 2 hold 24 draws of an 18-leg pool: every leg once before any twice.
   assert.deepStrictEqual([...new Set([...legsOf(reports[0]), ...legsOf(reports[1])])].sort(), [...POOL].sort());
-  // The champion's sessions: each replayed once in the loop, however many rounds drew it.
-  const champ = w.calls.runs.filter(r => /^l1-pc-t\d{8}\d+$/.test(r.runId)).map(r => r.runId);
+  // The champion's day runs: each (day, windows) replayed once in the loop, however many rounds stepped it.
+  const champ = w.calls.runs.filter(r => TREND_RUN.test(r.runId) && r.runId.startsWith('l1-pc-')).map(r => r.runId);
   assert.strictEqual(champ.length, new Set(champ).size);
-  // A round's champion cost counts only the sessions it replayed fresh (4 decision times each in the stub world).
-  const ran = new Set([...reports[0].trend.probe.days, ...reports[0].trend.confirm.days, REG_DAY]);
-  const fresh = [...reports[1].trend.probe.days, ...reports[1].trend.confirm.days].filter(d => !ran.has(d));
+  // A round's champion cost counts only the days it replayed fresh (4 decision times each in the stub world): a day's
+  // windows are its legs' of the round's half, so a day drawn again with the same legs (the regression day) is reused.
+  const legsByDay = r => new Map([...r.trend.probe.days, ...r.trend.confirm.days].map(d => [d, [...r.trend.probe.legs, ...r.trend.confirm.legs].filter(id => id.startsWith(d)).join()]));
+  const before = legsByDay(reports[0]);
+  const fresh = [...legsByDay(reports[1])].filter(([d, legs]) => before.get(d) !== legs);
   assert.strictEqual(reports[1].cycles.champion.trend, fresh.length * 4);
   // Each round's edit replays that round's probe half (and the regression day), never another round's.
   for (const [i, r] of reports.entries()) {
     const id = r.edits[0].id;
     if (r.edits[0].probedBefore) continue;
-    const days = w.calls.runs.filter(x => x.runId.startsWith(`l1-p-${id}-t`)).map(x => /-t(\d{4})(\d{2})(\d{2})\d+$/.exec(x.runId).slice(1).join('-')).sort();
+    const days = w.calls.runs.filter(x => x.runId.startsWith(`l1-p-${id}-t`)).map(x => dayOfRun(x.runId)).sort();
     assert.deepStrictEqual(days, [...r.trend.probe.days, REG_DAY].sort(), `round ${i + 1}`);
   }
 });
@@ -919,5 +942,57 @@ test('review: a trend step that reports no session state pairs nothing (fail clo
   const r1 = JSON.parse(fs.readFileSync(path.join(one.paths.iter(1), 'probe-report.json'), 'utf8'));
   assert.match(r1.why, /^inconclusive: no (probe|confirm) days in the trend batch \(2 leg\(s\) on 1 day\(s\)\)$/);
   assert.strictEqual(one.calls.proposeProbes.length, 0);
-  assert.deepStrictEqual(one.calls.runs.filter(r => /-t\d{8}\d+$/.test(r.runId)), [], 'no trend session replayed');
+  assert.deepStrictEqual(one.calls.runs.filter(r => TREND_RUN.test(r.runId)), [], 'no trend session replayed');
+});
+
+test('the learning curve reads only the windows the champion finished; the champion and every edit step the same windows', async () => {
+  const w = world({ trend: true, proposals: [tagged('a', 'F1', 'rule', '- line one', '- line one\n- TREND → enter on the pullback', 'more legs')] });
+  const step = w.steps.trendData;
+  // The champion leaves its first confirm day's windows unfinished (a call limit, say).
+  const left = ROUND1.confirm.days[0];
+  w.steps.trendData = opts => {
+    const got = step(opts);
+    if (!/^l1-pc-t/.test(path.basename(opts.runDir))) return got;
+    return { ...got, sessions: got.sessions.map(s => (s.day === left ? { ...s, complete: false, why: 'stopped before the window ended' } : s)) };
+  };
+  await run(w);
+  const report = JSON.parse(fs.readFileSync(path.join(w.paths.iter(1), 'probe-report.json'), 'utf8'));
+  const finishedLegs = ROUND1.confirm.legs.filter(id => !id.startsWith(left));
+  assert.ok(finishedLegs.length < ROUND1.confirm.legs.length);
+  assert.strictEqual(report.trend.champion.legs, finishedLegs.length, 'the unfinished day\'s legs are no part of the curve');
+  assert.strictEqual(report.trend.champion.caught, finishedLegs.filter(id => id.includes('|long|') && DAYS.indexOf(id.slice(0, 10)) % 2 === 0).length);
+  assert.ok(report.trend.champion.windows > report.trend.champion.sessions, 'the unfinished windows counted, not curved');
+  // Its first tries: the finished windows' only (one a side a day in the stub world).
+  assert.strictEqual(report.trend.champion.firstTry.points, (ROUND1.confirm.days.length - 1) * 2);
+  // Pairing: on each probe day the champion's run and the edit's step the same windows.
+  const edit = report.probes[0].id;
+  for (const day of ROUND1.probe.days) {
+    const of = side => w.calls.trendData.find(c => c.run.startsWith(`l1-${side}`) && c.legs.some(id => id.startsWith(day)));
+    assert.deepStrictEqual(of(`p-${edit}-t`).windows, of('pc-t').windows, day);
+  }
+  // Each run's loop role, set by the loop: the trend runs trend-set, the curated probe runs none (they need their
+  // practice mode and curated list as any stage-1 run); the keep rule's runs: the trend set's test above.
+  const roleOf = re => [...new Set(w.calls.preflight.filter(p => re.test(p.runId)).map(p => p.loopRole))];
+  assert.deepStrictEqual(roleOf(TREND_RUN), ['trend-set']);
+  assert.deepStrictEqual(roleOf(/-[pq]\d+$/), [null]);
+  // The round's reactions: inside the runner's sessions only (the 21:00Z ones, after 15:50 New York time, never).
+  const reactions = JSON.parse(fs.readFileSync(path.join(w.paths.iter(1), 'trend-reactions.json'), 'utf8'));
+  assert.ok(reactions.length > 0 && reactions.every(r => r.bar.endsWith('T14:33:00.000Z')));
+});
+
+test('a day whose legs have no window is never run, and the report and the log say so; never a silent skip', async () => {
+  const w = world({ trend: true, proposals: [tagged('a', 'F1', 'rule', '- line one', '- line one\n- TREND → enter on the pullback', 'more legs')] });
+  // The first probe day's legs after the runner's session (16:30 New York time): no decision time in their windows.
+  const day = ROUND1.probe.days[0];
+  const spans = { ...w.loop.probe.trend.set.spans };
+  for (const side of ['long', 'short']) spans[legId(day, side)] = { ...spans[legId(day, side)], start: `${day}T21:30:00.000Z`, end: `${day}T21:51:00.000Z` };
+  w.loop.probe.trend.set = { ...w.loop.probe.trend.set, spans };
+  const lines = [];
+  await run(w, { log: m => lines.push(m) });
+  const report = JSON.parse(fs.readFileSync(path.join(w.paths.iter(1), 'probe-report.json'), 'utf8'));
+  assert.deepStrictEqual(report.trend.windows.probe.noWindows, [day]);
+  assert.deepStrictEqual(report.trend.windows.probe.dropped.filter(d => d.id.startsWith(day)).map(d => d.why), ['no decision time of the runner\'s sessions (outside them, or an exchange holiday)', 'no decision time of the runner\'s sessions (outside them, or an exchange holiday)']);
+  assert.deepStrictEqual([report.trend.windows.confirm.noWindows, report.trend.windows.regression.noWindows], [[], []]);
+  assert.ok(lines.some(l => l.includes(`trend probe: no windows on ${day} (never run)`)), lines.join('\n'));
+  assert.ok(!w.calls.runs.some(r => TREND_RUN.test(r.runId) && dayOfRun(r.runId) === day), 'never run');
 });

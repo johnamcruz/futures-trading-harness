@@ -139,7 +139,7 @@ function readMoments(files) {
   return { sources, moments };
 }
 
-const legsArg = (argv, moments) => C.legsFor(baseBars(loadBars(path.resolve(opt(argv, '--legs-bars'))), (moments[0] || {}).minutes), { session: opt(argv, '--legs-sessions') });
+const legsArg = (argv, moments) => C.legsFor(baseBars(loadBars(path.resolve(opt(argv, '--legs-bars'))), (moments[0] || {}).minutes), { session: opt(argv, '--legs-sessions'), use: opt(argv, '--use') });
 const outDir = argv => (opt(argv, '--out') ? path.resolve(opt(argv, '--out')) : path.join(harnessHome(), 'experience'));
 
 function census(argv) {
