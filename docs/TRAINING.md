@@ -411,7 +411,13 @@ iteration of the loop then runs these steps (`scripts/lib/train/probe.js`):
    full-day tuning windows, zero blows, the pooled interval, then held-out
    judging as its own step. A kept change is a local branch and a PR body
    that lists its parts. Nothing merges, and no skill is edited on main:
-   edits exist only in the probe trees and the PR.
+   edits exist only in the probe trees and the PR. The keep rule judges
+   inside the loop's iteration, which needs a panel: with `probe` on, a
+   combined change reaches the keep rule only while the champion's tuning
+   scorecard still holds flagged decisions not targeted before (the loop's
+   panel, `maxFlagged`). Once the champion's tuning replays have run and
+   nothing flagged is left, the loop stops before a round's probes ("nothing
+   flagged left to work on"), however well its screen did.
 
 **What no model's proposal edits.** Code (the order gate, the promotion
 gate, the tunables, `harness-sync.js`), `config/`, `ACCOUNT.md`, `rules/`,
@@ -441,12 +447,54 @@ screen period. In the loop config:
 }
 ```
 
-`replay` is a stage-1 replay config of whole sessions (no curated list, no
-practice, no combine or account states), on the loop's runner config. The
-pool is the census's legs of `from` to `to`, every leg whether a curated
-moment marks it or not (the round replays whole sessions), without the
-regression days. Both lie in practice-train and outside the tuning windows
-(the config refuses either).
+`replay` is a stage-1 replay config (no curated list, no practice, no
+combine or account states, no `stepWindows`: the loop sets those), on the
+loop's runner config. The pool is the census's legs of `from` to `to`,
+every leg whether a curated moment marks it or not, without the regression
+days. Both lie in practice-train and outside the tuning windows (the config
+refuses either).
+
+A census holds its role's split window only: `curated-lists.js census
+--use practice` finds legs in practice-train's bars alone, and a census with
+a leg outside practice-train (practice-validate, or a sealed test or final
+day) is refused when it is built (`leg-census.js buildCensus`). A census
+built before this rule may hold such legs. The loop's pool never uses them
+(the screen period lies in practice-train), but rebuild it to keep sealed
+days out of the file: run `census` again from the same moments and bars and
+point `trend.census` at the new file. Its fingerprint changes, so a loop on
+the new file is a new loop.
+
+**Stepped windows** (`scripts/lib/train/trend-windows.js`). A trend run
+steps only around each leg, not whole sessions, as a curated run steps its
+list's windows. For each leg of a batch half (every census leg on a
+regression day):
+
+- **The leg window**: the decision bars from `leadBars` bars before the
+  leg's start bar (`config/training.json` `trendWindows`, 4) through its
+  catch window (its first `catchShare`, the span a catch counts in), clipped
+  to the runner's sessions. Legs whose windows touch merge into one window.
+- **Control windows**: `controlPerLeg` (1) windows a leg, of the same
+  length, in the same session, sharing no bar with any census leg's window
+  that day (the batch's or not) or another window, chosen by the loop's
+  seed. They give the screen the entries made where there is nothing to
+  catch.
+- **Management**: a position or working order still open after a window is
+  managed bar by bar until flat, and every window day's end of day runs.
+
+The run's replay config carries the windows (`stepWindows`,
+`scripts/lib/replay/step-windows.js`); the driver steps them with the curated
+runs' own stepping. The champion and every edit of a round step the same
+windows (the same legs, seed and runner config give the same windows), one
+run a day; a day's windows are a phase of their own, so the champion's run
+of the same windows (the regression days every round) is reused. No look
+ahead reaches the model: the windows are chosen from the census, which
+read later bars to find each leg, but nothing of them reaches the runner
+config, the environment or the run home. Each bar's cycle sees exactly what
+a whole-session run sees at that bar; only which bars run differs. A
+stepped run is never scored by the keep rule (`model-score.js` refuses it).
+The trend set's runs carry the loop's `trend-set` role, which the training
+preflight requires for a run with `stepWindows` (see "The loop's run roles"
+below).
 
 **A round's batch.** Each round takes the pool's next legs in the census's
 order (its seeded order, its fingerprint recorded). The draw is without replacement
@@ -471,14 +519,19 @@ trigger (start, keep, grow, cap, restart) and why.
 **The learning curve** (`scripts/lib/train/trend-curve.js`). The champion
 replays each round's confirm half too, so each round has a point: the
 confirm half's capture rate (with a Wilson interval at the keep rule's
-level) and net R per session, as the champion after that round's keep
-stands (the kept change's numbers when one was kept). Beside it are the
+level) and net R per window, as the champion after that round's keep
+stands (the kept change's numbers when one was kept). The point reads only
+the windows the champion stepped to their end, the screens' own guard: a
+window it left early adds no leg, no R and no first try. Beside it are the
 round's first-try read accuracy, first-try compose OK rate and hint-rescue
 rate (OK only after a hint), and, with `trend.moments` (the curated scan's
 moments file), the **selection value** (`scripts/lib/train/selection.js`).
 Each traded scan reaction on the confirm half carries the standard trade's
-own R. It is taken when the model placed an entry its side within the
-reaction's entry window, else passed. The value is the taken reactions' mean R
+own R. Only the reactions the model could act on count: their bar closed
+inside the runner's sessions (the scan covers wider hours, and a reaction
+outside them could only count as passed), on a bar the run stepped. One is
+taken when the model placed an entry its side within the reaction's entry
+window, else passed. The value is the taken reactions' mean R
 minus the passed ones'. About 0 means no selection skill, which is what a
 first baseline measured; moving it above 0 on fresh batches is the target. The iteration's record holds the curve across
 rounds and its pooled rate, and `train-loop.js status` prints them. Two flags report
@@ -491,8 +544,8 @@ only, and never keep or reject a change:
   confirm half. The
 probe half gives the findings and screens each edit; the confirm half judges
 the combined change, which counts only if it helps there too. The champion
-and every edit of a round replay the same days, one run a session, and
-each screens the batch's own legs only. The round's `probe-report.json`
+and every edit of a round step the same windows, one run a day, and each
+screens the batch's own legs only. The round's `probe-report.json`
 records the batch's index, the census's fingerprint, and each half's days
 and leg ids; the lessons lines record the batch too.
 
@@ -507,19 +560,26 @@ and leg ids; the lessons lines record the batch too.
   head trader's pass, names no owner. A rule (the clock, the account's
   stops, news), a bar outside the session and a position already open are
   never findings: those are code and the rulebook.
-- **The screen** (`scripts/lib/train/trend-screen.js`). Legs are paired by
-  id: caught or not, a one-sided McNemar test. A catch counts as fixed only
-  when its session's net R got no worse, so catching more by trading more
-  and losing more never gains. Harms are fewer legs caught, net R per
-  session worse (on at least `minPairs` sessions) and a blow. These use the
-  `SCREEN` thresholds above. On the regression days fewer of the champion's
-  legs caught, net, is a harm. They never show a gain.
-- **Finished sessions only.** A session pairs only when both runs stepped it
-  to its end (its end-of-day step ran). A session a run left early (a call
-  limit, a crash or failed cycles, its combine attempt ending) holds fewer
-  legs than the market had. Its legs, net R and first tries count neither as
-  a miss nor as a catch: they are dropped. Each side's report gives the batch
-  legs its captures found, the legs paired, and the sessions dropped and why.
+- **The screen** (`scripts/lib/train/trend-screen.js`). Its units are the
+  stepped windows. Legs are paired by id: caught or not, a one-sided McNemar
+  test. A catch counts as fixed only when its window's net R got no worse,
+  so catching more by trading more and losing more never gains. Net R is per
+  window: each round trip goes to the window it followed (a trade closed
+  while managing after a window, or at the day's end of day, is that
+  window's), and the control windows carry the entries made where there was
+  no leg. Harms are fewer legs caught, net R per window worse (on at least
+  `minPairs` windows), first tries worse and a blow. These use the `SCREEN`
+  thresholds above, and they mean what they meant per session: a looser
+  rule's losses show on the control windows as they showed on the days with
+  nothing to catch. On the regression days fewer of the champion's legs
+  caught, net, is a harm. They never show a gain.
+- **Finished windows only.** A window pairs only when both runs stepped it
+  to its end (a record at or after its last bar, the day's end of day
+  included, and its last cycle not failed). A window a run left early (a
+  call limit, a crash or failed cycles) holds fewer bars than the other
+  side's. Its legs, net R and first tries count neither as a miss nor as a
+  catch: they are dropped. Each side's report gives the batch legs its
+  captures found, the legs paired, and the windows dropped and why.
 - **Contract rolls are unverified.** Leg ids are `day|side|start` and never
   a price, so a constant back-adjustment offset leaves them as they are. On
   a roll day, though, a back-adjusted roll gap could shift a leg's start, and
@@ -564,7 +624,7 @@ edit's screen verdict and n, the combined change and its confirm verdict,
 the keep rule's verdict, the combined change's deltas on the confirm half
 (net reads, process and target decisions fixed, R per decision; with a
 trend set the legs caught, fixed and broken, each side's capture rate and
-the net R per session), and the cycles each side's runs recorded. `train-loop.js status` prints it as one
+the net R per window), and the cycles each side's runs recorded. `train-loop.js status` prints it as one
 line per iteration.
 
 **The screen's thresholds** are `SCREEN` in `scripts/lib/train/screen.js`,
@@ -984,7 +1044,28 @@ refuses a curated run), each at least 90 sessions:
 "heldOutWindows": [{ "from": "2024-07-01", "to": "2025-01-01" }]
 ```
 
-These hold 103, 106 and 128 sessions. A curated run is never paired: its
+These hold 103, 106 and 128 sessions.
+
+**The loop's run roles** (the training preflight's `loop-role` check,
+`scripts/lib/learning/preflight.js` `LOOP_ROLES`). Two kinds of the loop's
+runs are practice-train runs that read the market's whole days by design,
+so the preflight takes them without a practice mode or a curated list, in
+that role only. The loop sets the role in code on the run's learning gate;
+no replay config or `replay.js` flag sets it, and an ordinary practice-train
+or stage-1 run still needs its practice mode and its curated list.
+
+- `keep-rule`: the keep rule's runs, the loop's own `replay` under
+  `modelScore` (the champion's tuning replays and each challenger's). Give
+  that replay no `practice` and no `stage`: its runs are then full days and
+  their score is real. A replay that sets `practice` still runs, but its
+  score is `diagnostic (setup-focused)`: it can keep a change on tuning,
+  labelled so, and never judges held-out months. Never a curated list.
+- `trend-set`: the probe round's trend runs (`probe.trend.replay`): stage 1,
+  the stepped windows the loop sets, never a curated list, practice, a
+  combine, account states or a prop attempt. A run with `stepWindows` in any
+  other role is refused.
+
+A curated run is never paired: its
 moments are picked outcome-balanced, so even at natural rates its outcomes are
 the list's, not the market's, and its rebuilt days are drawn, so it has no
 real start days to pair.
