@@ -17,7 +17,7 @@
  *
  * The learning curve: each round's confirm half, as the champion after that round's keep stands: the kept change's
  * numbers when it was kept, the champion's otherwise. Its capture rate (legs caught of the half's legs, with a Wilson
- * interval at the keep rule's level), net R per session and the first-try reasoning summary (first-try.js: read accuracy,
+ * interval at the keep rule's level), net R per window (its finished windows only) and the first-try reasoning summary (first-try.js: read accuracy,
  * compose OK rate, hint-rescue rate) and the selection value (selection.js: taken minus passed scan reactions' mean R);
  * the curve across rounds and its pooled rate. Two flags,
  * reported only:

@@ -178,6 +178,13 @@ function refuseCurated(runDir) {
   if (loadPinnedCurated(path.resolve(runDir, '..', '..'))) {
     throw new Error(`${path.basename(path.resolve(runDir))} is a curated run: a paired judge never reads one (its moments are outcome-balanced, its rebuilt days drawn, not paired); replay full-day windows of at least 3 x the account's sessions`);
   }
+  // A stepped-windows run (the training loop's trend set, replay/step-windows.js): stretches of days, never whole days.
+  if (steppedWindows(runDir)) throw new Error(`${path.basename(path.resolve(runDir))} steps windows of its sessions only (the training loop's trend set): a paired judge reads full-day runs only`);
+}
+
+/** Whether a run's manifest says it stepped windows only (replay/driver.js records them). */
+function steppedWindows(runDir) {
+  try { return Boolean(JSON.parse(fs.readFileSync(path.join(runDir, 'manifest.json'), 'utf8')).stepWindows); } catch (_err) { return false; }
 }
 
 function pairRuns(runDirA, runDirB, { root = null, rootB = null, account, policy = null, accountB, policyB, candidateB = false, barsFiles = {}, seed = 1, paths = MC_SIZE.paths, reps = MC_SIZE.reps, faults = {}, env = process.env, now = new Date() } = {}) {

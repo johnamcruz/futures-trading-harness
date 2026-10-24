@@ -47,6 +47,11 @@
  *                  prop attempt, each window holding a decision time; with `practice` only: the run steps the list's
  *                  windows and those days' premarket and end of day, and manages whatever is open after one bar by bar
  *                  until flat (any later day included); pinned at its start (learning/curated-lists.js) (default: none)
+ *   stepWindows    the training loop's trend-set runs only (replay/step-windows.js; the preflight refuses it elsewhere):
+ *                  { kind: 'trend-set', windows: [{ from, to }] } bar-close bounds (ISO, from exclusive); the run steps
+ *                  those windows' trade times and those days' premarket and end of day, and manages what is open after
+ *                  one bar by bar until flat (curatedPoints); nothing of them reaches the runner config or the prompt;
+ *                  never with curatedList, practice, combine, accountStates or prop (default: none)
  *   accountStates  a stage-2 curated run's account states (prop/account-states.js, scripts/account-states.js draw):
  *                  { file }. Each window day starts from a drawn state (assignStates): the run seeds its attempt record
  *                  (prop-state seedAttempt) and the replay broker's balance (the balance schedule, brokerEnv
@@ -108,6 +113,7 @@ const { decisionPoints } = require('./schedule');
 const { applyStage, stageRequirements } = require('./stage');
 const { validateCombineConfig, combineForRun } = require('./combine-run');
 const { adapterTag } = require('../learning/adapter');
+const { validateStepWindows, stepWindowsForRun } = require('./step-windows');
 
 const RUN_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d{1,3})?)?Z$/;
@@ -230,6 +236,13 @@ function resolveReplay(raw, { baseDir = process.cwd(), env = process.env, home =
     if (!curatedCfg.curated) errors.push('accountStates: each curated window day starts from a drawn state; set curatedList too');
     if (r.prop !== undefined) errors.push('accountStates: not with prop (the run\'s attempt is seeded from the drawn states)');
   }
+  // The training loop's stepped windows (replay/step-windows.js): a whole-session run's bars, only these stretches stepped.
+  const stepCfg = validateStepWindows(r.stepWindows);
+  errors.push(...stepCfg.errors);
+  if (stepCfg.stepWindows) {
+    for (const k of ['curatedList', 'practice', 'combine', 'accountStates', 'prop']) if (r[k] !== undefined) errors.push(`stepWindows: not with ${k} (the windows are stepped as a whole-session run steps its bars, nothing else chosen)`);
+    if (everyNth !== 1) errors.push('stepWindows: every bar of its windows runs (everyNthBar 1)');
+  }
   // Stage 2's continuous combine: one stage-2 mode or the other (drawn states on curated days), never both.
   const combineCfg = validateCombineConfig(r.combine);
   errors.push(...combineCfg.errors);
@@ -297,6 +310,17 @@ function resolveReplay(raw, { baseDir = process.cwd(), env = process.env, home =
       throw new Error(`invalid replay config:\n- ${err.message}`, { cause: err });
     }
   }
+  // The stepped windows: inside the run, each holding a decision time of the run's sessions (as a curated list's).
+  let stepWindows = null;
+  if (stepCfg.stepWindows) {
+    try {
+      stepWindows = stepWindowsForRun(stepCfg.stepWindows, { start, end });
+      const missed = emptyWindows(decisionPoints(cfg, { start, end }), stepWindows, (cfg.barDelaySeconds || 0) * 1000);
+      if (missed.length) throw new Error(`stepWindows: ${missed.length} window(s) hold no decision time of the run's sessions, the first ${new Date(missed[0].from).toISOString()}`);
+    } catch (err) {
+      throw new Error(`invalid replay config:\n- ${err.message}`, { cause: err });
+    }
+  }
   // The continuous combine: each attempt's window on the run's trading days, inside the run and one split window.
   let combineRun = null;
   if (combineCfg.combine && combineAccount) {
@@ -353,6 +377,8 @@ function resolveReplay(raw, { baseDir = process.cwd(), env = process.env, home =
     latencyPinnedResume: pinnedResume,
     // The curated list the run replays (learning/curated-lists.js curatedForRun), or null: every window bar, as practice runs.
     curated,
+    // The training loop's stepped windows (replay/step-windows.js), or null: every decision time of the run's sessions.
+    stepWindows,
     // A combine replay's broker stops the day at the account's own daily loss limit, as the firm does (not the
     // server's default): the agents size from the room it reports. 0 (none) turns the server's limit off.
     propDailyLoss: propAccount || statesAccount || combineAccount ? Number((propAccount || statesAccount || combineAccount).daily_loss_limit) || 0 : null,
@@ -526,6 +552,8 @@ function configHash(run, base = process.env) {
     harness: run.root ? treeDigest(run.root, HARNESS_DIRS) : null,
     // The curated list a run replays (its decision times are the list's): named only when there is one.
     ...(run.curated ? { curated: { fingerprint: run.curated.fingerprint, list: run.curated.list } } : {}),
+    // The stepped windows (its decision times are the windows'): named only when there are some.
+    ...stepPart(run),
     // The account states its days start from (the draw and its assignment): named only when there are some.
     ...statesPart(run),
     ...combinePart(run),
@@ -534,6 +562,8 @@ function configHash(run, base = process.env) {
   return crypto.createHash('sha256').update(JSON.stringify(body)).digest('hex');
 }
 
+/** A run's stepped windows in its hashes: their kind and hash (named only when set, so every other run keeps its hash). */
+const stepPart = run => (run.stepWindows ? { stepWindows: { kind: run.stepWindows.kind, hash: run.stepWindows.hash } } : {});
 /** A run's account states in its hashes: the document's hash (seed, weights, buckets, draws) and the days' assignment. */
 const statesPart = run => (run.accountStates ? { accountStates: { hash: run.accountStates.hash, assignment: run.accountStates.assignment.hash } } : {});
 /** A run's continuous combine in its hashes: its account, attempt length and attempts' starts (named only when set). */
@@ -570,6 +600,7 @@ function setupHash(run, { code = true } = {}) {
     ...(run.riskRecord && run.riskRecordDisplay === true ? { riskRecordDisplay: require('../learning/risk-record-index').readRiskIndex(run.riskRecord).hash } : {}),
     // The curated list the run replays, by its fingerprint (named only when there is one, as the library).
     ...(run.curated ? { curated: { fingerprint: run.curated.fingerprint, list: run.curated.list } } : {}),
+    ...stepPart(run),
     // The account states its days start from: named only when there are some.
     ...statesPart(run),
     ...combinePart(run),

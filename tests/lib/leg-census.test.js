@@ -81,3 +81,22 @@ test('leg census: written and read back by its fingerprint; a batch builds one h
   assert.notStrictEqual(l0.fingerprint, l1.fingerprint);
   assert.ok(!l1.mix.some(id => l0.mix.includes(id)), 'batches disjoint');
 });
+
+test('leg census: its role\'s split window only; legs found for a use never leave it; a census across sealed windows is refused', () => {
+  // The same bars four years on (2025: the test window, sealed), beside the 2021 ones (practice-train).
+  const SHIFT = 1456 * 86400000; // 208 weeks: the same weekdays, both in daylight time
+  const later = bars.m3.map(b => ({ ...b, t: new Date(Date.parse(b.t) + SHIFT).toISOString() }));
+  const NY = '09:30-12:00@America/New_York';
+  const all = C.legsFor([...bars.m3, ...later], { session: NY });
+  assert.ok(all.legs.some(g => g.day >= '2025-01-01'), 'without a use: the sealed days\' legs too');
+  const practice = C.legsFor([...bars.m3, ...later], { session: NY, use: 'practice' });
+  assert.deepStrictEqual(practice.legs, legs.legs, 'for practice: practice-train\'s only');
+  assert.deepStrictEqual(C.legsFor([...bars.m3, ...later], { session: NY, use: 'validate' }).legs, [], 'none in practice-validate');
+  assert.throws(() => C.legsFor(bars.m3, { use: 'test' }), /legs refused: use test/);
+  // A census of legs outside its role: refused, the sealed ones named.
+  assert.throws(() => LC.buildCensus(moments, all, { use: 'practice', seed: 1, now: NOW }), /leg census refused: \d+ leg\(s\) outside practice-train \(the first on 2025-\d\d-\d\d, test\), \d+ in a sealed window/);
+  const validateDay = { ...legs.legs[0], day: '2024-08-05' };
+  assert.throws(() => LC.buildCensus(moments, { ...legs, legs: [...legs.legs, validateDay] }, { use: 'practice', seed: 1, now: NOW }), /1 leg\(s\) outside practice-train \(the first on 2024-08-05, practice-validate\): a practice census/);
+  assert.throws(() => LC.buildCensus(moments, legs, { use: 'final', seed: 1 }), /a census is built for practice or validate only/);
+  assert.ok(LC.buildCensus(moments, practice, { use: 'practice', seed: 1, now: NOW }).legs > 0);
+});

@@ -29,7 +29,8 @@
  *   legsOf(bars, { session, minMoveAtr })    [{ day, side, start, end, from, to, points, pct, scale }] (pure; session:
  *                                            a runner session spec, '09:30-12:00@America/New_York'; bars sorted, base tf)
  *   classifyCycle(cycle, { side, records, gate })   { bar, planned, side, step, by, code, message, reads, role }
- *   captureReport({ runDir, home, days, manifest })   the trend-capture document (see writeCapture)
+ *   captureReport({ runDir, home, days, manifest, legs })   the trend-capture document (see writeCapture); legs: given
+ *                                            ones (the census's, for a stepped-windows run) instead of the detector's
  *   writeCapture(runDir, doc), readCapture(runDir)   trend-capture.json in the run's folder
  *   reportLines(doc)                          its text lines, for the replay report
  * The follow-up for training (the learning loop's findings): a census of these legs over practice-train, split by
@@ -153,19 +154,32 @@ function servedBars(runDir, minutes) {
   return [...byT.values()].sort((a, b) => Date.parse(a.t) - Date.parse(b.t));
 }
 
+/**
+ * A given leg ({ day, side, start, end, points }, the census's) as legsOf's: from the start bar's low (a long) or high
+ * (a short) when that bar was served, its other end the move's points away; else no prices (its available R unknown).
+ */
+function givenLeg(g, bars) {
+  const b = bars.find(x => x.t === g.start);
+  const from = num(g.from) !== null ? g.from : b ? (g.side === 'long' ? b.l : b.h) : null;
+  const to = num(g.to) !== null ? g.to : from !== null && num(g.points) !== null ? from + (g.side === 'long' ? g.points : -g.points) : null;
+  return { day: g.day, side: g.side, start: g.start, end: g.end, from, to, points: num(g.points), pct: from ? round2((Math.abs(to - from) / from) * 100) : null };
+}
+
 const stageOf = c => STAGE.indexOf(c.code === 'outside-session' ? 'outside-session' : c.by === 'rule' ? 'rule' : c.code === 'position-open' ? 'position-open' : c.by === 'compose_check' ? 'compose' : c.step === 'risk' ? 'risk' : c.step === 'execution' ? 'execution' : 'no-plan');
 
 /**
  * The trend-capture document for a run (see the header): { v, runId, treeDigest, barsDigest, detector, legs, totals,
  * noLegDays }. runDir: the run's folder (its served bars, autotrader.json, day records); home: the run home.
  */
-function captureReport({ runDir, home = path.resolve(runDir, '..', '..'), days = {}, manifest = {} }) {
+function captureReport({ runDir, home = path.resolve(runDir, '..', '..'), days = {}, manifest = {}, legs: given = null }) {
   const cfg = readJson(path.join(runDir, 'autotrader.json')) || {};
   const minutes = Number(cfg.timeframe) || null;
   const session = (Array.isArray(cfg.sessions) && cfg.sessions.length ? cfg.sessions : SESSION_DEFAULTS.sessions).join(',');
   const bars = minutes ? servedBars(runDir, minutes) : [];
   const stepMs = (minutes || 0) * 60000;
-  const legs = legsOf(bars, { session, minMoveAtr: TUN.minMoveAtr });
+  // Given legs (the training loop's stepped windows: the census's legs, found on the whole session's bars, which a
+  // windowed run never serves in full): their move's ends from the start bar when it was served.
+  const legs = Array.isArray(given) ? given.map(g => givenLeg(g, bars)) : legsOf(bars, { session, minMoveAtr: TUN.minMoveAtr });
   const records = new Map(require('../trading/trade-lifecycle').readRecords(home).map(r => [r.id, r]));
   const onBar = new Map();
   for (const r of records.values()) { const k = Date.parse(r.bar) + stepMs; if (!onBar.has(k)) onBar.set(k, []); onBar.get(k).push(r); }
@@ -194,7 +208,7 @@ function captureReport({ runDir, home = path.resolve(runDir, '..', '..'), days =
     const stop = plannedStopPts ?? runStop;
     // From the first bar an entry could be on (two closes into the leg: the setup's, then its confirmation) to the end.
     const firstEntry = bars.find(b => Date.parse(b.t) === t0 + stepMs);
-    const availPts = firstEntry ? Math.abs(g.to - firstEntry.c) : null;
+    const availPts = firstEntry && num(g.to) !== null ? Math.abs(g.to - firstEntry.c) : null;
     const entered = orders.filter(o => isObj(o.composed) && o.composed.side === g.side && Date.parse(o.at) >= t0 && Date.parse(o.at) <= until);
     const fill = entered.map(o => ({ o, f: filled(o.orderId) })).find(x => x.f) || (entered[0] ? { o: entered[0], f: null } : null);
     const trip = fill && fill.f ? tripOf(fill.f) : null;

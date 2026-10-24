@@ -359,6 +359,14 @@
   "trendBatch.plateauRounds": {
    "value": 3,
    "from": "new in ppc/flow-learning (owner-approved 2026-10-23: the learning curve flags a plateau after 3 rounds with no gain beyond the interval)"
+  },
+  "trendWindows.leadBars": {
+   "value": 4,
+   "from": "new in fix/ppc-trend-runs (owner-approved 2026-10-24: the trend probe steps around each leg, from a few bars before its start, e.g. 4, through its catch window)"
+  },
+  "trendWindows.controlPerLeg": {
+   "value": 1,
+   "from": "new in fix/ppc-trend-runs (owner-approved 2026-10-24: control windows for false entries, e.g. 1 a leg, of the same length from the same sessions)"
   }
  },
  "replay": {

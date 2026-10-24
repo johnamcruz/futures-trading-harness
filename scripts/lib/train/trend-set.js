@@ -6,8 +6,8 @@
  * day lies in the loop's screen period, every leg with a moment or not (the round replays whole sessions). Each round
  * takes the next batch in that order (drawBatches: the census's order first; once the pool is used up, a fresh shuffle
  * by the loop's seed), so over the rounds every leg is screened; the batch splits by session date into a probe half and
- * a confirm half of about the configured share each (splitBatch: no day in both), and each side replays the batch's
- * sessions in full in the runner's session, the champion and every edit the same ones.
+ * a confirm half of about the configured share each (splitBatch: no day in both), and each side steps windows around
+ * the batch's legs and their control windows (trend-windows.js), the champion and every edit the same ones.
  *
  * The regression days (the trend-move set's: tests/fixtures/trend-moves) are left out of the pool: they judge only harm,
  * never a gain (trend-screen.js), so a skill is never tuned to them.

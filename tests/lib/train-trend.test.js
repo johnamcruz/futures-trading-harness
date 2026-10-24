@@ -111,7 +111,7 @@ test('the trend screen: legs caught, paired; a catch counts only when its sessio
   // The same catches on sessions that lost more: no fix counts.
   const greedy = TSC.measureTrend(champ, tside({ caught: i => i % 2 === 0, r: () => -1 }));
   assert.strictEqual(greedy.capture.b, 0);
-  assert.match(TSC.screenTrend(greedy).harms.join(), /net R per session worse/);
+  assert.match(TSC.screenTrend(greedy).harms.join(), /net R per window worse/);
   assert.strictEqual(TSC.screenTrend(greedy).verdict, 'hurt');
   // Fewer caught: a harm; a blow: a harm.
   const worse = TSC.measureTrend(tside({ caught: i => i % 2 === 0 }), tside({ caught: () => false }));
@@ -213,14 +213,18 @@ test('the merged ranking: trend findings first by cost, then the curated ones; n
 test('probe.trend: whole-session stage-1 runs on the loop\'s trader; its days practice-train, outside the tuning windows; regression apart', () => {
   const trader = { harness: 'custom', command: ['x', '{prompt}'], symbols: ['MNQ'], timeframe: 3 };
   const curated = { stage: 1, curatedList: { file: 'c.json', list: 'mix' }, practice: { mode: 'setup-focus' } };
-  const order = [{ id: '2022-03-07|long|a', day: '2022-03-07' }, { id: '2022-03-08|short|b', day: '2022-03-08' }, { id: '2021-05-04|long|c', day: '2021-05-04' }, { id: '2022-09-07|long|d', day: '2022-09-07' }];
+  const leg = (id, day, side) => ({ id, day, side, start: `${day}T14:30:00.000Z`, end: `${day}T14:51:00.000Z`, points: 10 });
+  const order = [leg('2022-03-07|long|a', '2022-03-07', 'long'), leg('2022-03-08|short|b', '2022-03-08', 'short'), leg('2021-05-04|long|c', '2021-05-04', 'long'), leg('2022-09-07|long|d', '2022-09-07', 'long')];
+  const span = g => ({ day: g.day, side: g.side, start: g.start, end: g.end, points: g.points });
   const set = { kind: 'leg-census', fingerprint: 'fp', order };
   const base = { replay: curated, windows: [{ from: '2022-03-07', to: '2022-03-19' }] };
   const tuning = [{ from: '2022-10-03', to: '2022-10-15' }];
   const go = (t, over = {}) => PC.resolveProbe({ ...base, trend: t }, { read: x => x, readCensus: () => set, modelScore: { account: 'a' }, autotrader: trader, tuningWindows: tuning, ...over });
   const ok = go({ replay: { stage: 1 }, census: 'c.json', from: '2021-05-03', to: '2022-09-01', regression: { days: ['2021-05-04', '2021-05-03'] } });
   const TB = require('../../scripts/lib/tunables').training().trendBatch;
-  assert.deepStrictEqual(ok.trend, { replay: { stage: 1, autotrader: trader }, set: { file: 'c.json', fingerprint: 'fp', from: '2021-05-03', to: '2022-09-01', days: ['2022-03-07', '2022-03-08'], legs: ['2022-03-07|long|a', '2022-03-08|short|b'] }, batch: TB, regression: { days: ['2021-05-03', '2021-05-04'] } });
+  assert.deepStrictEqual(ok.trend, { replay: { stage: 1, autotrader: trader }, set: { file: 'c.json', fingerprint: 'fp', from: '2021-05-03', to: '2022-09-01', days: ['2022-03-07', '2022-03-08'], legs: ['2022-03-07|long|a', '2022-03-08|short|b'], spans: Object.fromEntries(order.slice(0, 3).map(g => [g.id, span(g)])) }, batch: TB, regression: { days: ['2021-05-03', '2021-05-04'] } });
+  // The loop sets each trend run's stepped windows: a config's own is refused.
+  assert.throws(() => go({ replay: { stage: 1, stepWindows: { kind: 'trend-set', windows: [] } }, census: 's', from: '2021-05-03', to: '2022-09-01' }), /probe.trend.replay.stepWindows: set by the loop/);
   // The batch: config/training.json trendBatch, its start, max and half overridable by the loop config, within bounds.
   assert.deepStrictEqual(go({ replay: { stage: 1 }, census: 's', from: '2021-05-03', to: '2022-09-01', batch: { start: 10, max: 40, half: 0.4 } }).trend.batch, { ...TB, start: 10, max: 40, half: 0.4 });
   assert.throws(() => go({ replay: { stage: 1 }, census: 's', from: '2021-05-03', to: '2022-09-01', batch: { growAfter: 1 } }), /probe.trend.batch.growAfter: not a setting \(start, max, half\)/);
@@ -267,6 +271,13 @@ test('the default trendData step: a run\'s capture report from its own folder, w
   fs.writeFileSync(path.join(runDir, 'autotrader.json'), JSON.stringify({ timeframe: 3, sessions: [NY], symbols: ['MNQ'] }));
   fs.appendFileSync(path.join(runDir, '2022-03-07.jsonl'), `${JSON.stringify({ t: '2022-03-07T20:50:00.000Z', day: '2022-03-07', kind: 'eod' })}\n`);
   assert.deepStrictEqual(PR.trendData({ runDir }).sessions, [{ day: '2022-03-07', complete: true, why: null, rollMonth: true }]);
+  // A windowed run (the loop's legs and windows given): the census's legs, each window's state, the stepped times.
+  const legs = [{ id: '2022-03-07|long|2022-03-07T14:42:00.000Z', day: '2022-03-07', side: 'long', start: '2022-03-07T14:42:00.000Z', end: '2022-03-07T15:30:00.000Z', points: 30 }];
+  const windows = [{ id: '2022-03-07|leg|2022-03-07T14:30:00.000Z', day: '2022-03-07', kind: 'leg', legs: [legs[0].id], from: Date.parse('2022-03-07T14:30:00Z'), to: Date.parse('2022-03-07T15:06:00Z') }];
+  const w = PR.trendData({ runDir, legs, windows });
+  assert.deepStrictEqual(w.capture.legs.map(l => [l.id, l.captured, l.availableR]), [[legs[0].id, false, null]], 'the given leg (no bar served: its available R unknown)');
+  assert.deepStrictEqual(w.sessions, [{ unit: windows[0].id, day: '2022-03-07', kind: 'leg', complete: true, why: null, rollMonth: true }]);
+  assert.deepStrictEqual([w.stepped, w.minutes], [['2022-03-07T14:33:02.000Z', '2022-03-07T20:50:00.000Z'], 3]);
 });
 
 // --- the batch size and the learning curve --------------------------------------------------------------------------
@@ -456,6 +467,25 @@ test('selection value: the scan reactions the model took minus those it passed, 
   assert.deepStrictEqual(SEL.selectionOf(reactions, entries), { reactions: 4, taken: { n: 1, meanR: 2 }, passed: { n: 3, meanR: -0.3333 }, value: 2.3333 });
   assert.deepStrictEqual(SEL.selectionOf(reactions, []), { reactions: 4, taken: { n: 0, meanR: null }, passed: { n: 4, meanR: 0.25 }, value: null }, 'nothing taken: no value');
   assert.strictEqual(SEL.selectionOf(reactions, [{ at: '2022-03-07T14:30:00.000Z', side: 'long' }]).taken.n, 0, 'before the bar closed is not taking it');
+});
+
+test('selection value counts only reactions the model could act on: inside the runner\'s sessions, on bars the run stepped', () => {
+  const m = (bar, side, R) => ({ day: '2022-03-07', bar, side, minutes: 3, validBars: 2, standard: { status: 'traded' }, outcome: { R } });
+  // 09:30 to 12:00 ET (EST: 14:30Z to 17:00Z): the 14:30Z bar closes 09:33 ET, inside; 13:00Z (08:00 ET) and 17:30Z outside.
+  const moments = [m('2022-03-07T14:30:00.000Z', 'long', 2), m('2022-03-07T13:00:00.000Z', 'long', -1), m('2022-03-07T17:30:00.000Z', 'short', -1), m('2022-03-07T15:00:00.000Z', 'short', 1)];
+  const NY = ['09:30-12:00@America/New_York'];
+  const inside = SEL.reactionsOf(moments, { days: ['2022-03-07'], sessions: NY });
+  assert.deepStrictEqual(inside.map(r => r.bar), ['2022-03-07T14:30:00.000Z', '2022-03-07T15:00:00.000Z'], 'outside the sessions: never counted (it could only count as passed)');
+  assert.strictEqual(SEL.reactionsOf(moments, { days: ['2022-03-07'], sessions: NY.join(',') }).length, 2, 'a spec string too');
+  assert.strictEqual(SEL.reactionsOf(moments, { days: ['2022-03-07'] }).length, 4, 'no sessions given: every hour');
+  assert.throws(() => SEL.reactionsOf(moments, { days: ['2022-03-07'], sessions: 'nonsense' }), /no session in nonsense/);
+  // Stepped: a decision time from the reaction bar's close until the next bar's; a reaction on a bar the run never
+  // stepped (a windowed run's gap) is not counted.
+  const stepped = ['2022-03-07T14:33:02.000Z'];
+  assert.deepStrictEqual(SEL.selectionOf(inside, [], { stepped }), { reactions: 1, taken: { n: 0, meanR: null }, passed: { n: 1, meanR: 2 }, value: null });
+  assert.strictEqual(SEL.selectionOf(inside, [], { stepped: ['2022-03-07T14:36:00.000Z'] }).reactions, 0, 'the next bar\'s close is another bar');
+  assert.strictEqual(SEL.selectionOf(inside, [], { stepped: [] }).reactions, 0);
+  assert.strictEqual(SEL.selectionOf(inside, []).reactions, 2, 'none given: every reaction');
 });
 
 test('the curve carries the selection value: the kept change\'s when kept', () => {

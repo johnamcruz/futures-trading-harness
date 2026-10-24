@@ -111,20 +111,25 @@ function probeData({ runDir, tree, barsFiles = {}, keep = null }) {
   };
 }
 
-/** The default step: a whole-session trend run's capture report (replay/trend-capture.js), written to its folder, its days and its first tries. */
-function trendData({ runDir }) {
+/**
+ * The default step: a trend run's capture report (replay/trend-capture.js), written to its folder, its days and its first
+ * tries. legs, windows: a stepped-windows run's (trend-windows.js): the capture reads those legs (the census's), and each
+ * window's state replaces the session's (stepped to its end or not).
+ */
+function trendData({ runDir, legs = null, windows = null }) {
   const tc = require('../replay/trend-capture');
   const { readRun } = require('../replay/store');
   const { readJson } = require('../harness-run');
   const days = readRun(runDir).days;
-  const capture = tc.captureReport({ runDir, days, manifest: readJson(path.join(runDir, 'manifest.json'), {}) || {} });
+  const capture = tc.captureReport({ runDir, days, manifest: readJson(path.join(runDir, 'manifest.json'), {}) || {}, legs });
   tc.writeCapture(runDir, capture);
   // The first tries of the run's compose records (first-try.js): its own home's, one session's.
   const home = path.resolve(runDir, '..', '..');
   const first = require('./first-try').firstTries(require('../trading/trade-lifecycle').readRecords(home));
   // Each session: stepped to its end or not, and why; near a contract roll or not (the translator's day files: their
   // standard front month for the run's root).
-  const rootOf = (readJson(path.join(runDir, 'autotrader.json'), {}) || {}).symbols;
+  const trader = readJson(path.join(runDir, 'autotrader.json'), {}) || {};
+  const rootOf = trader.symbols;
   const fronts = {};
   for (const f of fs.readdirSync(home)) {
     const m = /^contracts-[a-z0-9_-]+\.(\d{4}-\d{2}-\d{2})\.json$/i.exec(f);
@@ -133,10 +138,14 @@ function trendData({ runDir }) {
     const front = doc && doc.front && Array.isArray(rootOf) && rootOf.length ? doc.front[String(rootOf[0]).toUpperCase()] : null;
     if (front && front.month) fronts[m[1]] = front.month;
   }
-  const sessions = require('./trend-screen').sessionsOf({ days, combine: require('../replay/combine-run').readLog(runDir), fronts });
-  // The model's entries (the run home's entry orders), for the selection value (selection.js).
+  const byDay = require('./trend-screen').sessionsOf({ days, combine: require('../replay/combine-run').readLog(runDir), fronts });
+  // A windowed run: each window stepped to its end or not, its day's roll-month flag kept.
+  const roll = new Map(byDay.map(s => [s.day, s.rollMonth]));
+  const sessions = windows ? require('./trend-windows').windowStates({ days, windows }).map(s => ({ ...s, rollMonth: roll.get(s.day) || false })) : byDay;
+  // The model's entries (the run home's entry orders), for the selection value (selection.js), and the decision times
+  // the run stepped (only the reactions it stepped count).
   const entries = require('./selection').entriesOf(readJson(path.join(home, 'entry-orders.json'), []) || []);
-  return { capture, days, first, sessions, entries };
+  return { capture, days, first, sessions, entries, stepped: [...recordedTimes(runDir)].sort(), minutes: Number(trader.timeframe) || null };
 }
 
 /**
@@ -223,30 +232,58 @@ async function probeRound(ctx, { n, champion, api }) {
   // combined change), about trend.half of the legs each, no day in both.
   const split = draw ? TS.splitBatch(draw.items, { seed, half: trend.batch.half }) : null;
   const trendDays = which => (which === 'regression' ? (trend.regression ? trend.regression.days : []) : split[which].days);
-  // One side's runs of a trend half's sessions (or the regression days), one run a session, each session's capture
-  // report reduced for the screen. A session is its own phase: the champion's, replayed once in a loop (its tree never
-  // changes inside one), is reused by every later round that draws it.
+  // The windows a trend run steps (trend-windows.js): around each leg of the half's batch legs that day (the regression
+  // days: every census leg), and the control windows clear of every census leg that day. Code only, from the census and
+  // the runner config, before any run: the champion and every edit of a round step the same windows.
+  const TW = require('./trend-windows');
+  const traderCfg = trend ? require('../autotrader').validateConfig(trend.replay.autotrader) : null;
+  const spanOf = id => {
+    const s = trend.set.spans && trend.set.spans[id];
+    if (!s) throw new Error(`the trend set has no span for leg ${id}: resolve the loop config again (probe-config.js)`);
+    return { id, ...s };
+  };
+  const windowsOn = (which, day) => {
+    const all = Object.keys(trend.set.spans || {}).filter(id => trend.set.spans[id].day === day);
+    const mine = which === 'regression' ? all : split[which].legs.filter(id => TS.dayOfLeg(id) === day);
+    const W = require('../tunables').training().trendWindows;
+    return TW.windowsFor({
+      day, legs: mine.map(spanOf), others: all.filter(id => !mine.includes(id)).map(spanOf), closes: TW.dayCloses(traderCfg, day), minutes: traderCfg.timeframe, seed,
+      leadBars: W.leadBars, controlPerLeg: W.controlPerLeg, catchShare: require('../tunables').replay().trendCapture.catchShare,
+    });
+  };
+  // One side's runs of a trend half's days (or the regression days), one run a day stepping that day's windows, each
+  // run's capture report reduced for the screen. A day's windows are their own phase (keyed by their hash): the
+  // champion's, replayed once in a loop (its tree never changes inside one), is reused by every later round that steps
+  // the same windows (the regression days every round).
   const trendSide = async (side, tree, share, which, withFindings = false) => {
     const days = trendDays(which);
     if (!days.length) return null;
-    const out = { legs: [], dayR: {}, blows: 0, cycles: 0, fresh: 0, captures: [], first: [], sessions: [], entries: [] };
+    const out = { legs: [], dayR: {}, blows: 0, cycles: 0, fresh: 0, captures: [], first: [], sessions: [], entries: [], stepped: [], windows: 0, dropped: [] };
     for (const day of days) {
-      const tag = `t${day.replace(/-/g, '')}`;
-      const key = `trend-day:${side}:${day}`;
+      const built = windowsOn(which, day);
+      out.dropped.push(...built.dropped);
+      if (!built.windows.length) continue;
+      const h = require('crypto').createHash('sha256').update(JSON.stringify(TW.asConfig(built.windows))).digest('hex').match(/^[0-9a-f]{8}/)[0]; // the run id's tag (its length capped)
+      const tag = `t${day.replace(/-/g, '')}.${h}.`;
+      const key = `trend-day:${side}:${day}:${h}`;
       const reused = Boolean(ctx.state.done[key]);
-      const runs = await api.windowRuns(ctx, { side, tag, windows: TS.dayWindows([day]), tree, look, replay: trend.replay, share });
-      const one = await api.phase(ctx, key, path.join(ctx.paths.dir, 'probes', 'trend', `${side}-${day}.json`), async () => {
-        const got = await (ctx.steps.trendData || trendData)({ runDir: runs.runs[0].runDir });
-        const x = TSC.sideOfTrend({ captures: [got.capture], days: got.days, scorecard: runs.decisions, first: got.first || [], sessions: got.sessions || null });
-        return { legs: [...x.legs], dayR: x.dayR, blows: x.blows, first: x.first, sessions: x.sessions, entries: got.entries || [], cycles: stepsOf(runs.runs[0].runDir), ...(side === 'pc' ? { capture: got.capture } : {}) };
+      const replay = { ...trend.replay, stepWindows: TW.asConfig(built.windows) };
+      const runs = await api.windowRuns(ctx, { side, tag, windows: TS.dayWindows([day]), tree, look, replay, share, role: 'trend-set' });
+      const one = await api.phase(ctx, key, path.join(ctx.paths.dir, 'probes', 'trend', `${side}-${day}-${h}.json`), async () => {
+        const legs = built.windows.flatMap(w => w.legs).map(spanOf);
+        const got = await (ctx.steps.trendData || trendData)({ runDir: runs.runs[0].runDir, legs, windows: built.windows });
+        const x = TSC.sideOfTrend({ captures: [got.capture], days: got.days, scorecard: runs.decisions, first: got.first || [], sessions: got.sessions || null, windows: built.windows, minutes: got.minutes || traderCfg.timeframe });
+        return { legs: [...x.legs], dayR: x.dayR, blows: x.blows, first: x.first, sessions: x.sessions, entries: got.entries || [], stepped: got.stepped || [], windows: built.windows.length, cycles: stepsOf(runs.runs[0].runDir), ...(side === 'pc' ? { capture: got.capture } : {}) };
       });
       out.legs.push(...one.legs);
       Object.assign(out.dayR, one.dayR);
       out.blows += one.blows;
       out.first.push(...(one.first || []));
       out.entries.push(...(one.entries || []));
-      // A session the step reported nothing of: never taken as finished (fail closed: it pairs nothing).
-      out.sessions.push(...(one.sessions || [{ day, complete: false, why: 'the step reported no session state', rollMonth: false }]));
+      out.stepped.push(...(one.stepped || []));
+      out.windows += one.windows || 0;
+      // A day the step reported nothing of: none of its windows taken as finished (fail closed: they pair nothing).
+      out.sessions.push(...(one.sessions || built.windows.map(w => ({ unit: w.id, day, complete: false, why: 'the step reported no session state', rollMonth: false }))));
       out.cycles += one.cycles;
       if (!reused) out.fresh += one.cycles;
       if (withFindings && one.capture) out.captures.push(one.capture);
@@ -305,13 +342,14 @@ async function probeRound(ctx, { n, champion, api }) {
   // The scan's traded reactions on the round's confirm days (selection.js), read once a round from the moments file.
   const reactions = trend && trend.moments ? await api.phase(ctx, `${n}:trend-reactions`, path.join(dir, 'trend-reactions.json'), async () => {
     const lines = fs.readFileSync(trend.moments, 'utf8').split('\n').filter(Boolean).flatMap(l => { try { return [JSON.parse(l)]; } catch (_err) { return []; } });
-    return SEL.reactionsOf(lines, { days: trendDays('confirm') });
+    // Only the reactions inside the runner's sessions (the scan covers wider hours); each side then counts those it stepped.
+    return SEL.reactionsOf(lines, { days: trendDays('confirm'), sessions: traderCfg.sessions });
   }) : null;
   if (trendBase) report.cycles.champion.trend = trendBase.fresh + (regBase ? regBase.fresh : 0) + (trendConfirm ? trendConfirm.fresh : 0);
   if (trendConfirm) {
-    const legs = [...trendConfirm.side.legs.values()];
-    const days = Object.values(trendConfirm.side.dayR);
-    report.trend.champion = { selection: reactions ? SEL.selectionOf(reactions, trendConfirm.entries) : null, firstTry: FT.summarize(trendConfirm.side.first), legs: legs.length, caught: legs.filter(l => l.captured).length, netR: days.length ? Math.round((days.reduce((a, b) => a + b, 0) / days.length) * 10000) / 10000 : null, sessions: days.length };
+    // The learning curve's champion: its finished units only (the screens' guard, one side), never a window it left early.
+    const fin = TSC.finishedOf(trendConfirm.side);
+    report.trend.champion = { selection: reactions ? SEL.selectionOf(reactions, trendConfirm.entries, { stepped: trendConfirm.stepped }) : null, firstTry: FT.summarize(fin.first), legs: fin.legs.length, caught: fin.legs.filter(l => l.captured).length, netR: fin.netR, sessions: fin.units.length, windows: trendConfirm.windows };
   }
   const exists = s => fs.existsSync(path.join(champion.dir, 'skills', s, 'SKILL.md'));
   const findings = await api.phase(ctx, `${n}:findings`, path.join(dir, 'findings.json'), async () => F.mergeFindings(
@@ -417,7 +455,7 @@ async function probeRound(ctx, { n, champion, api }) {
     const cancelled = [...s.cancelled, ...lostTrend];
     const verdict = harms.length ? 'hurt' : cancelled.length ? 'no effect' : 'helped';
     const targets = [...s.targets, ...trendParts.map(p => ({ id: p.id, target: tm ? tm.capture : { pairs: 0, b: 0, c: 0 } }))];
-    const selection = ts && reactions ? SEL.selectionOf(reactions, ts.entries) : null;
+    const selection = ts && reactions ? SEL.selectionOf(reactions, ts.entries, { stepped: ts.stepped }) : null;
     return { verdict, pass: verdict === 'helped', harms, cancelled, targets, measures: { ...compact(cm), ...(tm ? { trend: { ...tm, selection } } : {}) }, cycles: side.cycles + (ts ? ts.cycles : 0) + (rs ? rs.cycles : 0) };
   });
   report.cycles.composed = composed.cycles === undefined ? null : composed.cycles;

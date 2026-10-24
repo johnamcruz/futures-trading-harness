@@ -149,6 +149,18 @@ test('trend capture: the run\'s document: a caught leg, a missed one with its bl
   assert.ok(lines.some(l => /CAUGHT/.test(l)) && lines.some(l => /missed: no step news \(rule, 1 cycle\(s\)\)/.test(l)));
 });
 
+test('trend capture: given legs (a windowed run\'s, the census\'s) replace the detector\'s; their move from the start bar served', () => {
+  const { runDir, days } = runFixture();
+  const found = tc.captureReport({ runDir, days });
+  const up = found.legs[0];
+  // The same leg given as the census holds it (no prices): caught the same, its available R from the start bar's low.
+  const given = tc.captureReport({ runDir, days, legs: [{ day: up.day, side: up.side, start: up.start, end: up.end, points: up.move.points }] });
+  assert.deepStrictEqual(given.legs.map(l => [l.id, l.captured, l.availableR, l.move.from, l.move.to]), [[up.id, true, up.availableR, up.move.from, up.move.to]]);
+  // A given leg whose start bar was never served: caught or not as before, its available R unknown (never a guess).
+  const unserved = tc.captureReport({ runDir, days, legs: [{ day: up.day, side: 'short', start: '2026-04-23T18:00:00.000Z', end: '2026-04-23T18:30:00.000Z', points: 20 }] });
+  assert.deepStrictEqual([unserved.legs.length, unserved.legs[0].availableR, unserved.legs[0].move.from], [1, null, null]);
+});
+
 test('trend capture: an entry that never filled is the leg\'s execution blocker (unfilled), never a catch', () => {
   const { runDir, days } = runFixture({ fill: false });
   const doc = tc.captureReport({ runDir, days });
