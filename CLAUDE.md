@@ -222,7 +222,7 @@ the review found and fixed (`.github/pull_request_template.md`).
 ## Rules for changes
 
 - CommonJS, Node 22+ (`.nvmrc`), no runtime dependencies (plugin installs don't run npm install).
-- Hooks and the gateway read only local state; no network. Hook scripts stay under 200 lines.
+- Hooks read only local state. The gateway has no network of its own: it reads the broker only through the server it wraps (positions, orders, fills, bars, server config), and fails closed when a read it needs fails. Hook scripts stay under 200 lines.
 - The order gate fails closed in both the hook (`FAIL_CLOSED_HOOKS` in
   `run-with-flags.js`) and the gateway, and can't be disabled when
   `FTH_AUTONOMOUS=1`. The gateway (with `account-gate.js`) is authoritative.

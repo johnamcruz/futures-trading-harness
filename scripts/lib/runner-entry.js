@@ -402,7 +402,7 @@ async function runEntry(deps, c) {
     if (late) {
       info.timing.orderMs = sinceClose(wallNow());
       // The skip, logged with the plan's prices and the price at the skip (the replay report's counterfactual reads it).
-      info.late = { ...late.late, root: c.symbol, at: now().toISOString() };
+      info.late = { ...late.late, root: c.symbol, at: now().toISOString(), record: rec.id };
       stop = { outcome: 'late', why: late.message };
       return { stop: stop.why };
     }
@@ -419,8 +419,9 @@ async function runEntry(deps, c) {
     }
     return { ctx: { args: order.args, verdict: line } };
   };
-  // The latest price before the executor runs: the newest closed 1m bar through the adapter, recorded locally (the gate
-  // reads only local state); a failed read leaves the local bars to decide. The check is the gate's own.
+  // The latest price before the executor runs: the newest closed 1m bar through the adapter, recorded locally (the hook
+  // reads only local state; the gateway reads the broker's bar again at the order); a failed read here leaves the local
+  // bars to decide. The check is the gate's own.
   const lateCheck = async (o, roleEnv) => {
     const root = c.symbol;
     if (client && typeof client.closedBars === 'function') {

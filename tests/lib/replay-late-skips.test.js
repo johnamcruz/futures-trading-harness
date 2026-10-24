@@ -22,6 +22,12 @@ test('firstHit: target or stop first from the bars after the skip; a bar reachin
   assert.strictEqual(LS.firstHit(s, [bar('2026-10-07T14:31:00Z', 13845, 13838.75), bar('2026-10-07T14:32:00Z', 13900, 13850)]), 'stop');
   assert.strictEqual(LS.firstHit(s, [bar('2026-10-07T14:31:00Z', 13900, 13830)]), 'stop', 'both in one bar: the stop (conservative)');
   assert.strictEqual(LS.firstHit(s, [bar('2026-10-07T14:31:00Z', 13860, 13845)]), 'neither');
+  // The bar the skip fell in (opened 14:30, before the skip at 14:30:05) traded its stop before the skip: never counted.
+  assert.strictEqual(LS.firstHit(s, [bar('2026-10-07T14:30:00Z', 13850, 13838), bar('2026-10-07T14:31:00Z', 13896, 13850)]), 'target', 'from the bar after the skip');
+  assert.strictEqual(LS.firstHit(s, [bar('2026-10-07T14:30:00Z', 13850, 13838)]), 'unknown', 'only the skip\'s own bar: none after it');
+  // Within the skip's trading day only (2026-10-07's ends 16:00 CT, 21:00Z): the next day's stop is not the plan's.
+  assert.strictEqual(LS.firstHit(s, [bar('2026-10-07T20:59:00Z', 13860, 13845), bar('2026-10-07T22:00:00Z', 13860, 13830), bar('2026-10-08T14:00:00Z', 13900, 13850)]), 'neither', 'neither within its trading day');
+  assert.strictEqual(LS.firstHit(s, [bar('2026-10-07T22:00:00Z', 13860, 13830)]), 'unknown', 'no bar in its trading day');
   assert.strictEqual(LS.firstHit(s, null), 'unknown');
   assert.strictEqual(LS.firstHit(s, [bar('2026-10-07T14:20:00Z', 13860, 13845)]), 'unknown', 'no bar after the skip');
   assert.strictEqual(LS.firstHit({ ...s, target: null }, [bar('2026-10-07T14:31:00Z', 13900, 13845)]), 'unknown');
@@ -48,7 +54,7 @@ test('lateSkipReport: the runner\'s skips and the gate\'s (the gateway\'s alone 
   assert.deepStrictEqual([r.total, r.byKind, r.target, r.stop, r.neither, r.unknown], [2, { 'missed-entry': 2 }, 1, 1, 0, 0]);
   assert.deepStrictEqual(r.rows.map(x => [x.from, x.side, x.first]), [['runner', 'long', 'target'], ['gate', 'short', 'stop']]);
   const lines = LS.reportLines(r);
-  assert.match(lines[0], /^late-entry skips: 2 \(missed-entry 2\); after the skip the plan's target traded first 1, its stop first 1, neither 0, unknown 0/);
+  assert.match(lines[0], /^late-entry skips: 2 \(missed-entry 2\); after the skip the plan's target traded first 1, its stop first 1, neither within its trading day 0, unknown 0/);
   assert.match(lines[1], /long entry 13853 stop 13838\.75 target 13895\.5: price 13840\.75 \(86% of the risk toward the stop\), missed-entry; then target/);
   // Without bars: unknown, never guessed.
   assert.strictEqual(LS.lateSkipReport(home).unknown, 2);
@@ -62,6 +68,18 @@ test('lateSkipReport: the runner\'s skips and the gate\'s (the gateway\'s alone 
   assert.deepStrictEqual([summary.late.total, summary.late.target, summary.late.stop], [2, 1, 1]);
   assert.match(toText(summary), /late-entry skips: 2 .*target traded first 1, its stop first 1/);
   assert.match(toMarkdown(summary), /## Late-entry skips\n\n- late-entry skips: 2/);
+  // The live case: the hook ran with the role's cycle id, the gateway without one; both name the compose record: one skip.
+  const home2 = tmpDir();
+  fs.mkdirSync(path.join(home2, 'logs'), { recursive: true });
+  const rv = { ...v, late: { ...v.late, record: 'rec-1' } };
+  fs.writeFileSync(path.join(home2, 'logs', 'gate-log.jsonl'), [
+    { ts: '2026-10-07T15:00:04.000Z', source: 'hook', decision: 'blocked', contractId: 'MNQ', cycle: 'c2', violations: [rv] },
+    { ts: '2026-10-07T15:00:05.000Z', source: 'gateway', decision: 'blocked', contractId: 'MNQ', violations: [rv] },
+    // Another record's skip at the same prices: its own.
+    { ts: '2026-10-07T15:20:05.000Z', source: 'gateway', decision: 'blocked', contractId: 'MNQ', violations: [{ ...v, late: { ...v.late, record: 'rec-2' } }] },
+  ].map(x => JSON.stringify(x)).join('\n'));
+  const skips = LS.readSkips(home2);
+  assert.deepStrictEqual(skips.map(x => [x.at, x.record]), [['2026-10-07T15:00:05.000Z', 'rec-1'], ['2026-10-07T15:20:05.000Z', 'rec-2']], 'the gateway\'s kept; each record once');
   // A run with no skip: no section (the report as before).
   assert.strictEqual(summarize({}, { runDir: path.join(tmpDir(), 'replay', 'r') }).late, undefined);
 });

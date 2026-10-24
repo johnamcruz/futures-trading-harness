@@ -582,7 +582,7 @@ function composedPropWorld(home, size) {
   const rec = LC.writeScenario(home, { size });
   const spec = { tickSize: 0.25, tickValue: 0.5 };
   require('../../scripts/lib/prop/composed-verdict').composedVerdict({ home, policy, component: 'trade_lifecycle', account, record: rec, plan: rec.plan, briefing: LC.briefing(), root: 'MNQ', spec, specOf: () => spec, now });
-  return { order: n => LC.order({ size: n, rationale: 'setup:prop_portfolio long trade_lifecycle, stop 21512.50, target 21598.00' }), env: { FTH_STRATEGIES_DIRS: path.join(REPO, 'strategies'), FTH_ACCOUNTS_DIRS: path.join(REPO, 'accounts'), FTH_TEST_NOW: now.toISOString(), FTH_CYCLE_BARS: JSON.stringify({ MNQ: LC.BAR }), FTH_SYMBOLS: 'MNQ' } };
+  return { record: rec.id, order: n => LC.order({ size: n, rationale: 'setup:prop_portfolio long trade_lifecycle, stop 21512.50, target 21598.00' }), env: { FTH_STRATEGIES_DIRS: path.join(REPO, 'strategies'), FTH_ACCOUNTS_DIRS: path.join(REPO, 'accounts'), FTH_TEST_NOW: now.toISOString(), FTH_CYCLE_BARS: JSON.stringify({ MNQ: LC.BAR }), FTH_SYMBOLS: 'MNQ' } };
 }
 
 /**
@@ -628,7 +628,8 @@ test('MCP gateway: a composed entry is judged late on the price at order time (t
   const w = composedPropWorld(home, 5);
   const { env } = setup([{ ts: '2026-10-07T13:59:30.000Z', kind: 'plan', contractId: 'MNQ', text: 'plan' }], { FTH_HOME: home, ...w.env });
   LE.recordPrice(home, 'MNQ', { price: 21540.25, closedAt: '2026-10-07T13:59:00.000Z', minutes: 1, source: 'runner-entry' }, { now: new Date('2026-10-07T14:00:02Z') });
-  const bars = JSON.stringify({ bars: [{ t: '2026-10-07T13:58:00Z', o: 21540, h: 21541, l: 21530, c: 21531 }, { t: '2026-10-07T13:59:00Z', o: 21531, h: 21532, l: 21519, c: 21520 }] });
+  // The 14:00 bar is still forming at 14:00:02 (a server that sends a partial bar anyway): at the stop, it is no price yet.
+  const bars = JSON.stringify({ bars: [{ t: '2026-10-07T13:58:00Z', o: 21540, h: 21541, l: 21530, c: 21531 }, { t: '2026-10-07T13:59:00Z', o: 21531, h: 21532, l: 21519, c: 21520 }, { t: '2026-10-07T14:00:00Z', o: 21520, h: 21521, l: 21512, c: 21512 }] });
   const r = await gatewayRun({ ...env, FAKE_BARS: bars }, [call(1, 'place_order', w.order(5))]);
   const text = r.byId[1].result.content[0].text;
   assert.ok(r.byId[1].result.isError, text);
@@ -636,12 +637,42 @@ test('MCP gateway: a composed entry is judged late on the price at order time (t
   assert.match(text, /the gateway price at 2026-10-07T14:00:00\.000Z/);
   // The skip is logged with the plan's prices and the price at the skip (the replay report's counterfactual reads it).
   const logged = D_gateLog(env).filter(e => e.source === 'gateway').flatMap(e => e.violations || []).find(v => v.check === 'late-entry');
-  assert.deepStrictEqual([logged.late.kind, logged.late.entry, logged.late.stop, logged.late.target, logged.late.price, logged.late.movedR], ['missed-entry', 21540.25, 21512.5, 21598, 21520, 0.73]);
+  assert.deepStrictEqual([logged.late.kind, logged.late.entry, logged.late.stop, logged.late.target, logged.late.price, logged.late.movedR, logged.late.record], ['missed-entry', 21540.25, 21512.5, 21598, 21520, 0.73, w.record]);
   // The broker's bar at the plan's entry: no late refusal.
   const fresh = await gatewayRun({ ...env, FAKE_BARS: JSON.stringify({ bars: [{ t: '2026-10-07T13:59:00Z', o: 21540, h: 21541, l: 21539, c: 21540.25 }] }) }, [call(2, 'place_order', w.order(5))]);
   assert.doesNotMatch(fresh.byId[2].result.content[0].text, /\[late-entry\]/);
 });
 const D_gateLog = env => fs.readFileSync(env.FTH_GATE_LOG, 'utf8').trim().split('\n').filter(Boolean).map(l => JSON.parse(l));
+
+test('MCP gateway: a composed entry whose price at order time can\'t be read (a bad reply, a broker error, a timeout, no closed bar) is refused [late-entry], never judged on the runner\'s older price; an exit right behind it is forwarded, not held past the read\'s timeout', { timeout: 120000 }, async () => {
+  const LE = require('../../scripts/lib/trading/late-entry');
+  const waitMs = require('../../scripts/lib/tunables').runner().gate.freshPriceTimeoutMs;
+  const home = tmpDir();
+  const w = composedPropWorld(home, 5);
+  const { env } = setup([{ ts: '2026-10-07T13:59:30.000Z', kind: 'plan', contractId: 'MNQ', text: 'plan' }], { FTH_HOME: home, ...w.env });
+  // The runner's price is at the plan's entry: judged on it, the entry would pass the late check.
+  LE.recordPrice(home, 'MNQ', { price: 21540.25, closedAt: '2026-10-07T13:59:00.000Z', minutes: 1, source: 'runner-entry' }, { now: new Date('2026-10-07T14:00:02Z') });
+  const exit = { ...EXIT_BASE, contractId: 'MNQ', side: 'sell', size: 1, rationale: '[exit] flatten' };
+  const faults = [
+    ['a bad reply', { FAKE_BARS: 'not json' }, /get_bars/],
+    ['a broker error', { FAKE_ERROR: 'get_bars' }, /get_bars/],
+    ['a timeout', { FAKE_DROP: 'get_bars' }, /get_bars timed out/],
+    ['no bars', { FAKE_BARS: JSON.stringify({ bars: [] }) }, /no closed 1-minute bar in the reply/],
+    ['only a bar still forming', { FAKE_BARS: JSON.stringify({ bars: [{ t: '2026-10-07T14:00:00Z', o: 21540, h: 21541, l: 21539, c: 21540.25 }] }) }, /no closed 1-minute bar in the reply/],
+  ];
+  for (const [label, fault, why] of faults) {
+    const r = await gatewayRun({ ...env, FAKE_POSITIONS: LONG1, ...fault }, [call(1, 'place_order', w.order(5)), call(2, 'place_order', exit)]);
+    const text = r.byId[1].result.content[0].text;
+    assert.ok(r.byId[1].result.isError, `${label}: ${text}`);
+    assert.match(text, /\[late-entry\] the price at order time could not be read \(.*\): no entry \(fails closed\)/, label);
+    const logged = D_gateLog(env).filter(e => e.source === 'gateway' && e.decision === 'blocked').at(-1);
+    assert.match(logged.violations.find(v => v.check === 'late-entry').message, why, `${label} (gate log)`);
+    assert.match(r.stderr, /the price at order time for MNQ could not be read .*: the composed entry is refused/, `${label} (stderr)`);
+    assert.strictEqual(r.byId[2].result.content[0].text, 'forwarded:tools/call:place_order', `${label}: the exit goes`);
+    // The exit queued behind the read waits at most the read's own timeout (gate.freshPriceTimeoutMs), not a call's 15 s.
+    assert.ok(r.ms[2] < waitMs + 4000, `${label}: the exit answered at ${r.ms[2]} ms`);
+  }
+});
 
 test('order gate, hook and gateway: a composed prop entry whose all-in loss can\'t be worked out (no fee for the root, no tick spec, no stop bracket) is refused [max-risk], never read as no risk', { timeout: 120000 }, async () => {
   // No fee, or no stop bracket (the stop's risk alone known from the rationale's stop price): the all-in check's own
@@ -1232,7 +1263,15 @@ async function gatewayRun(extraEnv, messages, { gapMs = 0, dir = tmpDir() } = {}
   };
   const gw = spawn(process.execPath, [path.join(REPO, 'scripts', 'mcp-gateway.js'), '--', process.execPath, path.join(REPO, 'tests', 'fixtures', 'fake-mcp-server.js')], { env });
   let out = '';
-  gw.stdout.on('data', c => { out += c; });
+  let err = '';
+  // `ms`: when each reply reached the client, by request id, in ms from the first message sent.
+  const t0 = Date.now();
+  const ms = {};
+  gw.stdout.on('data', c => {
+    out += c;
+    for (const l of out.split('\n').slice(0, -1)) { try { const id = JSON.parse(l).id; if (!(id in ms)) ms[id] = Date.now() - t0; } catch { /* partial */ } }
+  });
+  gw.stderr.on('data', c => { err += c; });
   for (const m of messages) {
     gw.stdin.write(`${JSON.stringify(m)}\n`);
     if (gapMs) await new Promise(r => setTimeout(r, gapMs));
@@ -1240,7 +1279,7 @@ async function gatewayRun(extraEnv, messages, { gapMs = 0, dir = tmpDir() } = {}
   gw.stdin.end();
   await new Promise(resolve => gw.on('close', resolve));
   const all = out.trim().split('\n').filter(Boolean).map(l => JSON.parse(l));
-  return { byId: Object.fromEntries(all.map(r => [r.id, r])), all, dir };
+  return { byId: Object.fromEntries(all.map(r => [r.id, r])), all, dir, ms, stderr: err };
 }
 
 const call = (id, name, args) => ({ jsonrpc: '2.0', id, method: 'tools/call', params: { name, arguments: args } });
@@ -3692,7 +3731,9 @@ test('MCP gateway wiring, replay: a trade_lifecycle entry on its record goes to 
       PATH: process.env.PATH, HOME: dir, FTH_GATE_LOG: path.join(dir, 'gate.jsonl'), FTH_NO_ENTRY_WINDOWS: '', FTH_ENTRY_HOURS: '', NODE_ENV: 'test',
       SIM_ALLOWED_ACCOUNTS: '1,7', FAKE_ARGS: argsFile, FTH_REPLAY_NOW: LC_AT, FTH_CYCLE_BARS: JSON.stringify({ MNQ: LC.BAR }),
       FAKE_SERVER_CONFIG: JSON.stringify({ tradingEnabled: true, maxOrderSize: 5, serverTime: LC_AT, replay: true }),
-      FAKE_CONTRACTS: JSON.stringify([{ id: 'sim-Z6', name: 'MNQZ6', tickSize: 0.25, tickValue: 0.5, activeContract: true }]), ...extra,
+      FAKE_CONTRACTS: JSON.stringify([{ id: 'sim-Z6', name: 'MNQZ6', tickSize: 0.25, tickValue: 0.5, activeContract: true }]),
+      // The broker's newest closed 1m bar at the record's entry (the gateway reads it at the order: the price at order time).
+      FAKE_BARS: JSON.stringify({ bars: [{ t: '2026-10-07T13:59:00Z', o: 21540, h: 21541, l: 21539, c: 21540.25 }] }), ...extra,
     } });
     let out = '';
     gw.stdout.on('data', c => { out += c; });
@@ -3729,7 +3770,9 @@ test('MCP gateway wiring, replay: a trade_lifecycle entry on its record goes to 
   // decision time with the wall clock, as the replay broker's does. Four minutes into the cycle the record (two 3m bars
   // after its 14:00 close) still stands; seven minutes in it has expired and the entry never reaches the broker.
   const late = minutes => ({ FTH_REPLAY_WALL_START: String(Date.now() - minutes * 60000),
-    FAKE_SERVER_CONFIG: JSON.stringify({ tradingEnabled: true, maxOrderSize: 5, serverTime: new Date(Date.parse(LC_AT) + minutes * 60000).toISOString(), replay: true }) });
+    FAKE_SERVER_CONFIG: JSON.stringify({ tradingEnabled: true, maxOrderSize: 5, serverTime: new Date(Date.parse(LC_AT) + minutes * 60000).toISOString(), replay: true }),
+    // The broker's newest closed 1m bar then, at the record's entry.
+    FAKE_BARS: JSON.stringify({ bars: [{ t: new Date(Date.parse('2026-10-07T13:59:00Z') + minutes * 60000).toISOString(), o: 21540, h: 21541, l: 21539, c: 21540.25 }] }) });
   const four = await run(home => LC.writeScenario(home), msgs(LC.order()), late(4));
   assert.strictEqual(four.sent.length, 1, four.texts[1]);
   const seven = await run(home => LC.writeScenario(home), msgs(LC.order()), late(7));
@@ -3742,7 +3785,9 @@ test('MCP gateway wiring, replay: a trade_lifecycle entry on its record goes to 
   // entry never reaches the broker; an exit at that price goes.
   const LE = require('../../scripts/lib/trading/late-entry');
   const latePrice = home => LE.recordPrice(home, 'MNQ', { price: 21500, closedAt: '2026-10-07T14:00:00Z', minutes: 1, source: 'runner-entry' });
-  const gone = await run(home => { LC.writeScenario(home); latePrice(home); }, msgs(LC.order()));
+  // (the broker's newest closed bar there too: the gateway reads it at the order)
+  const goneBars = { FAKE_BARS: JSON.stringify({ bars: [{ t: '2026-10-07T13:59:00Z', o: 21510, h: 21511, l: 21499, c: 21500 }] }) };
+  const gone = await run(home => { LC.writeScenario(home); latePrice(home); }, msgs(LC.order()), goneBars);
   assert.deepStrictEqual(gone.sent, []);
   assert.match(gone.texts[1], /\[late-entry\] setup:trade_lifecycle: the setup was invalidated before the order went \(price 21500 beyond the plan's stop 21512\.5\): no late entry/);
   const out = await run(home => { LC.writeScenario(home); latePrice(home); }, msgs({ ...EXIT_BASE, side: 'sell', type: 'market', rationale: '[exit] flatten the composed long' }), { FAKE_POSITIONS: JSON.stringify([{ contractId: 'sim-Z6', type: 1, size: 1 }]) });

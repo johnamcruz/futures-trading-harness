@@ -6,9 +6,11 @@
  * buy limit above the market (a sell limit below it) fills at once as a marketable order, away from the plan's entry,
  * and the broker's brackets are distances from the fill, so its stop lands off the structure level the plan named.
  *
- * The latest price comes from local state only (hooks and the gateway read no network): the newest of
- *   - the price the runner recorded just before its entry's order (runner-entry.js: the newest closed 1m bar it read
- *     through the adapter), kept per family root in <home>/latest-price.json (recordPrice);
+ * This module reads only local state (the hook calls it): the newest of
+ *   - the price recorded for the order: by the gateway at the order itself (account-gate.js freshEntryPrice: the
+ *     broker's newest closed 1m bar, read through the server it wraps; a failed read refuses the entry there), and by
+ *     the runner just before its entry's order (runner-entry.js: the newest closed 1m bar it read through the adapter),
+ *     kept per family root in <home>/latest-price.json (recordPrice);
  *   - the cycle bar briefing's own close (its `price` at its `closedAt`).
  * The newest of them is judged alone (a stale newest never falls back to an older one), within the signal age limit of its own bars (signal-state.js signalMaxAgeMin, the rule the gate's
  * briefing-age check uses) and not dated after now (beyond the gate's future tolerance); none that counts: refused (fails closed). Entries only: exits,

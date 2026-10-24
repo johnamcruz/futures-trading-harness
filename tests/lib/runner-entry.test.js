@@ -487,7 +487,7 @@ test('runEntry: the live smoke\'s long (entry 13853.00, stop 13838.75) with the 
   assert.match(r.result, /missed the plan's entry 13853 \(price 13840\.75 is 12\.25 points past it against the long: 86% of the 14\.25-point risk toward the stop, over 0\.25R/);
   assert.deepStrictEqual(s.calls.map(c => c.role), ['phase2'], 'no trade-executor: nothing sent');
   const { at, ...late } = r.entry.late;
-  assert.deepStrictEqual(late, { side: 'long', entry: 13853, stop: 13838.75, target: 13895.5, share: 0.25, kind: 'missed-entry', price: 13840.75, closedAt: '2026-10-07T13:57:00.000Z', source: 'runner-entry', movedR: 0.86, root: 'MNQ' });
+  assert.deepStrictEqual(late, { side: 'long', entry: 13853, stop: 13838.75, target: 13895.5, share: 0.25, kind: 'missed-entry', price: 13840.75, closedAt: '2026-10-07T13:57:00.000Z', source: 'runner-entry', movedR: 0.86, root: 'MNQ', record: 'rec0000000000001' });
   assert.ok(Number.isFinite(Date.parse(at)));
   // The mirror short (entry 13853.00, stop 13867.25, the market at 13865.25): skipped the same way.
   const short = { ...plan, side: 'short', stopPrice: 13867.25, targetPrice: 13810.5 };

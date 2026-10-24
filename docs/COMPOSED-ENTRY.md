@@ -334,8 +334,9 @@ decide whether to trade.
   level the model named.
 - **The fill and the level.** The bracket is in ticks from the fill, and a
   market order fills away from the last close, so the stop could land short
-  of the level. The gate reads only local state (no quote), so it can't
-  measure that at send time. The entry is therefore a limit order at the
+  of the level. The gate reads no quote, so it can't measure the fill at
+  send time (the gateway's newest closed bar, below, judges a late entry,
+  not the fill). The entry is therefore a limit order at the
   entry reference, valid until the record expires (D13): it fills at the
   reference or better, so the stop lands at the level or beyond it.
   `composed-reads` requires `type: limit` with `limitPrice` equal to the
@@ -442,11 +443,15 @@ is gone. The price the trade's way past the entry is no refusal (the limit
 rests at the plan's price and expires with its record). The runner checks it
 before the trade-executor runs, and the gateway again at the order, on the
 broker's newest closed 1-minute bar it reads then (`account-gate.js
-freshEntryPrice`): a price read before the executor's run is minutes old by
-the order. Every skip is logged with the plan's prices and the price at the
+freshEntryPrice`, waiting at most `gate.freshPriceTimeoutMs`): a price read
+before the executor's run is minutes old by the order. A read there that
+fails, times out or holds no closed bar refuses the entry (fails closed);
+exits never wait on it past that timeout. Every skip is logged with the plan's prices and the price at the
 skip (the entry record's `late`, the gate log's `late-entry` violation), and
 the replay report counts them with what traded first after each, the plan's
-target or its stop (`replay/late-skips.js`), so the threshold is tuned from
+target or its stop within the skip's trading day, from the bar after the
+skip, on the plan's own prices (a live fill's brackets would sit as far
+from the fill) (`replay/late-skips.js`), so the threshold is tuned from
 data. It applies to composed entries in every mode.
 Code changes
 this needs:
