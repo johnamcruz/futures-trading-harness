@@ -559,6 +559,24 @@
   "scorecard.giveBackShare": {
    "value": 0.5,
    "from": "replay/scorecard.js earlyClose give-back: closed at most mfeR / 2"
+  },
+  "trendCapture.minMoveAtr": {
+   "value": 2.25,
+   "from": "new in fix/trend-moves-compose (the trend-capture report's leg threshold: times the session's mean true range of its base bars)"
+  },
+  "trendCapture.catchShare": {
+   "value": 0.5,
+   "from": "new in fix/trend-moves-compose (a leg is caught by an entry in its first half)"
+  },
+  "trendCapture.messageChars": {
+   "value": 200,
+   "from": "new in fix/trend-moves-compose (a blocker line's message, cut)"
+  },
+  "trendCapture.curationSessions": {
+   "value": [
+    "09:30-12:00@America/New_York"
+   ],
+   "from": "new in fix/trend-moves-compose (the curated lists' leg labels: the NY morning by default)"
   }
  },
  "runner": {
@@ -971,7 +989,11 @@
    "from": "new in fix/role-loops (before it, no role had a step cap)"
   },
   "limits.repeatReminderAt": {
-   "value": [3, 5, 8],
+   "value": [
+    3,
+    5,
+    8
+   ],
    "from": "new in fix/tool-name-and-repeat-guard (before it, no repeat reminder)"
   },
   "limits.repeatSameStepMs": {
@@ -1395,6 +1417,14 @@
   "evaluator.windowBars": {
    "value": 500,
    "from": "trading/evaluator.js DEFAULT_WINDOW (and backtest/engine.js DEFAULTS.window); backtest/engine.js DEFAULTS.window"
+  },
+  "composeHints.perStep": {
+   "value": 3,
+   "from": "new in fix/trend-moves-compose (the reads a refusal hint lists a step)"
+  },
+  "composeHints.maxTries": {
+   "value": 2000,
+   "from": "new in fix/trend-moves-compose (the combinations the hints try for a whole that passes)"
   }
  }
 }

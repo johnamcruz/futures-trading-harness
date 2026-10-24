@@ -183,8 +183,44 @@ function fingerprintOf(doc) {
   return hashOf(JSON.stringify(rest));
 }
 
+/**
+ * The trend legs' labels (replay/trend-capture.js legsOf, the capture report's detector): a moment the leg's way whose
+ * decision bar lies in the first catchShare (config/replay.json trendCapture) of the leg is that leg's: list trend-up (a
+ * long leg) or trend-down, whatever its 1h/4h trend (kept in `trend`; its list by that trend in `trendList`). Only the
+ * choice of practice moments reads it: a run pins its windows alone (pinCurated), never a label. Pure: copies.
+ */
+function labelLegs(moments, legs) {
+  const share = require('../tunables').replay().trendCapture.catchShare;
+  const spans = (Array.isArray(legs) ? legs : []).map(g => ({ g, from: Date.parse(g.start), to: Date.parse(g.start) + (Date.parse(g.end) - Date.parse(g.start)) * share }));
+  return moments.map(m => {
+    const t = Date.parse(m.bar);
+    const hit = spans.find(x => x.g.side === m.side && t >= x.from && t <= x.to);
+    if (!hit) return m;
+    const leg = { id: `${hit.g.day}|${hit.g.side}|${hit.g.start}`, start: hit.g.start, end: hit.g.end, points: hit.g.points };
+    return { ...m, list: m.side === 'long' ? 'trend-up' : 'trend-down', trendList: m.list, leg };
+  });
+}
+
+/**
+ * The trend legs of a scan's base bars (replay/trend-capture.js legsOf) in a session spec (default: config/replay.json
+ * trendCapture.curationSessions): { detector, legs }, for buildLists' `legs`.
+ */
+function legsFor(bars, { session = null } = {}) {
+  const tc = require('../replay/trend-capture');
+  const T = require('../tunables').replay().trendCapture;
+  const spec = session || T.curationSessions.join(',');
+  return { detector: { version: tc.DETECTOR, minMoveAtr: T.minMoveAtr, catchShare: T.catchShare, session: spec }, legs: tc.legsOf(bars, { session: spec }) };
+}
+
+/** Each leg's first moment (by its decision bar) among labelled moments. */
+function legFirsts(moments) {
+  const first = new Map();
+  for (const m of moments) if (m.leg && (!first.has(m.leg.id) || Date.parse(m.bar) < Date.parse(first.get(m.leg.id).bar))) first.set(m.leg.id, m);
+  return [...first.values()];
+}
+
 /** The lists, the mix and their coverage from scanned moments (see the header). */
-function buildLists(moments, { use, seed = DEFAULTS.seed, total = DEFAULTS.total, mix = DEFAULTS.mix, minSkill = DEFAULTS.minSkill, passShare = DEFAULTS.passShare, sources = [], now = new Date() } = {}) {
+function buildLists(moments, { use, seed = DEFAULTS.seed, total = DEFAULTS.total, mix = DEFAULTS.mix, minSkill = DEFAULTS.minSkill, passShare = DEFAULTS.passShare, sources = [], now = new Date(), legs = null } = {}) {
   if (!ROLE[use]) throw new Error(`curated lists refused: use ${String(use)}; a list is built for ${Object.keys(ROLE).join(' or ')} only (test and final are sealed)`);
   if (!Number.isSafeInteger(seed)) throw new Error('curated lists refused: seed is an integer');
   checkOptions({ total, mix, minSkill, passShare });
@@ -207,11 +243,21 @@ function buildLists(moments, { use, seed = DEFAULTS.seed, total = DEFAULTS.total
   const coverage = {};
   const short = {};
   const sizes = listSizes(total, mix);
+  // The trend legs' labels (labelLegs), when legs are given: each leg's first moment the leg's way is chosen first.
+  const labelled = legs ? labelLegs(all, legs.legs) : all;
   for (const name of LISTS) {
     const size = sizes[name];
-    const cands = all.filter(m => m.list === name);
-    lists[name] = size > 0 ? selectList(cands, { name, size, seed, minSkill, passShare: passShare[name] ?? null }) : [];
+    const cands = labelled.filter(m => m.list === name);
+    const firsts = legs ? legFirsts(cands) : [];
+    const reserved = size > 0 && firsts.length ? selectList(firsts, { name, size, seed, minSkill, passShare: passShare[name] ?? null }) : [];
+    const taken = new Set(reserved.map(m => m.id));
+    const rest = size > reserved.length ? selectList(cands.filter(m => !taken.has(m.id)), { name, size: size - reserved.length, seed, minSkill, passShare: passShare[name] ?? null }) : [];
+    lists[name] = [...reserved, ...rest].sort((a, b) => Date.parse(a.reactionAt) - Date.parse(b.reactionAt) || (a.id < b.id ? -1 : 1));
     coverage[name] = coverageOf(lists[name], cands, { minSkill });
+    if (legs && name.startsWith('trend-')) {
+      const dir = name === 'trend-up' ? 'long' : 'short';
+      coverage[name].legs = { detected: legs.legs.filter(g => g.side === dir).length, withMoment: firsts.length, covered: new Set(lists[name].map(m => m.leg && m.leg.id).filter(Boolean)).size };
+    }
     if (lists[name].length < size) short[name] = size - lists[name].length;
   }
   const chosen = LISTS.flatMap(n => lists[n]);
@@ -220,7 +266,7 @@ function buildLists(moments, { use, seed = DEFAULTS.seed, total = DEFAULTS.total
   const hashes = sources.map(s => s.sha256).filter(Boolean);
   if (new Set(hashes).size !== hashes.length) throw new Error('curated lists refused: the same moments file given twice (its sha256 repeats)');
   const doc = {
-    v: VERSION, kind: KIND, builtAt: now.toISOString(), use, role: ROLE[use], market, seed, options: { total, mix, minSkill, passShare },
+    v: VERSION, kind: KIND, builtAt: now.toISOString(), use, role: ROLE[use], market, seed, options: { total, mix, minSkill, passShare, ...(legs ? { legs: { detector: legs.detector, count: legs.legs.length } } : {}) },
     sources: sources.map(s => ({ file: s.file ? path.basename(s.file) : null, sha256: s.sha256 || null })),
     lists, mix: order, short, coverage,
   };
@@ -395,6 +441,6 @@ function curatedSelect({ windows, barClose, open, select }) {
 
 module.exports = {
   VERSION, KIND, DEFAULTS, LISTS, OUTCOMES, ROLE, YEAR_CAP, skillsOf,
-  buildLists, selectList, listSizes, accountOpen, coverageOf, coverageText, fingerprintOf, writeLists, readLists,
+  buildLists, labelLegs, legFirsts, legsFor, selectList, listSizes, accountOpen, coverageOf, coverageText, fingerprintOf, writeLists, readLists,
   validateCuratedConfig, windowsOf, curatedForRun, curatedPoints, emptyWindows, assertWithinData, dayChunks, pinCurated, loadPinnedCurated, curatedSelect,
 };

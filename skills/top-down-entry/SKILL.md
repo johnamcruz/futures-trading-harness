@@ -26,7 +26,7 @@ points to the read it uses.
 2. **15m: the setup there.** A rejection or a breakout with acceptance
    (`rejection`, `breakout`), a CISD (`cisd`), a pullback or a
    reversal (`pullback-vs-reversal`, `bos-vs-choch`).
-3. **3m/5m: the trigger.** A completed candle closing the setup's way, with
+3. **3m/5m: the trigger.** A candle closed after the setup's, its way, with
    momentum (`candle-reading`, `momentum-and-volume`): the entry reads.
 4. **Where the idea is wrong.** Beyond the reaction's LTF structure
    (`invalidation`): check that the strategy's stop sits beyond it.

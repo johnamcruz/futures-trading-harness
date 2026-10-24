@@ -11,8 +11,10 @@
  *       scans whole session dates in N processes at once (the same moments, in order)
  *   node scripts/curated-lists.js build <moments.jsonl> ... --use practice|validate [--total 200] [--seed 1]
  *       [--min-skill 3] [--mix trend-up=0.35,trend-down=0.35,trend-end=0.1,chop=0.1,counter-trend=0.1]
- *       [--pass-share trend-end=0.6,chop=0.7,counter-trend=0.7] [--out dir]
- *       the lists, the mix and their coverage -> <out>/curated-<use>-<fingerprint>.json (default <FTH_HOME>/experience)
+ *       [--pass-share trend-end=0.6,chop=0.7,counter-trend=0.7] [--legs-bars <file> [--legs-sessions spec]] [--out dir]
+ *       the lists, the mix and their coverage -> <out>/curated-<use>-<fingerprint>.json (default <FTH_HOME>/experience);
+ *       --legs-bars: the scan's bars, its trend legs (the capture report's detector, in --legs-sessions, by default
+ *       config/replay.json trendCapture.curationSessions) label the trend lists and each leg gets a moment first
  *   node scripts/curated-lists.js show <lists file>       the coverage report
  */
 
@@ -28,8 +30,8 @@ const { baseBars, runnerClock } = require('./lib/learning/setup-library');
 const M = require('./lib/learning/curated-moments');
 const C = require('./lib/learning/curated-lists');
 
-const USAGE = 'usage: curated-lists.js scan --bars <file> --root <ROOT> --from YYYY-MM-DD --to YYYY-MM-DD --use practice|validate --out <moments.jsonl> [--minutes 3] [--tick 0.25] [--setup-tf 15] [--window-bars N] [--jobs N] | build <moments.jsonl> ... --use practice|validate [--total N] [--seed N] [--min-skill N] [--mix list=share,...] [--pass-share list=share,...] [--out dir] | show <lists file>';
-const VALUE_FLAGS = ['--bars', '--root', '--from', '--to', '--use', '--out', '--minutes', '--tick', '--setup-tf', '--window-bars', '--total', '--seed', '--min-skill', '--mix', '--pass-share', '--jobs'];
+const USAGE = 'usage: curated-lists.js scan --bars <file> --root <ROOT> --from YYYY-MM-DD --to YYYY-MM-DD --use practice|validate --out <moments.jsonl> [--minutes 3] [--tick 0.25] [--setup-tf 15] [--window-bars N] [--jobs N] | build <moments.jsonl> ... --use practice|validate [--total N] [--seed N] [--min-skill N] [--mix list=share,...] [--pass-share list=share,...] [--legs-bars <file> [--legs-sessions spec]] [--out dir] | show <lists file>';
+const VALUE_FLAGS = ['--bars', '--root', '--from', '--to', '--use', '--out', '--minutes', '--tick', '--setup-tf', '--window-bars', '--total', '--seed', '--min-skill', '--mix', '--pass-share', '--jobs', '--legs-bars', '--legs-sessions'];
 
 function opt(argv, name) {
   const i = argv.indexOf(name);
@@ -135,6 +137,7 @@ function build(argv) {
     seed: numberOpt(argv, '--seed', C.DEFAULTS.seed, { integer: true, min: -Number.MAX_SAFE_INTEGER }),
     total: numberOpt(argv, '--total', C.DEFAULTS.total, { integer: true, min: 1 }),
     minSkill: numberOpt(argv, '--min-skill', C.DEFAULTS.minSkill, { integer: true }),
+    legs: opt(argv, '--legs-bars') ? C.legsFor(baseBars(loadBars(path.resolve(opt(argv, '--legs-bars'))), (moments[0] || {}).minutes), { session: opt(argv, '--legs-sessions') }) : null,
   });
   const out = C.writeLists(opt(argv, '--out') ? path.resolve(opt(argv, '--out')) : path.join(harnessHome(), 'experience'), doc);
   process.stdout.write(C.coverageText(doc));

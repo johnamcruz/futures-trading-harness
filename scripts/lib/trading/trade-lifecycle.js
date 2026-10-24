@@ -46,7 +46,8 @@
  *   readRecords(home, root, { days })            the records of a root's family (every family: root null), oldest
  *                                                first; `days`: only those days' shards (and the old file's records
  *                                                of those days); throws on a file that can't be read
- *   renderRecord(record)                         the record as text, for the model
+ *   renderRecord(record, checked, hints)         the record as text, for the model (hints: a refusal's compose-hints.js
+ *                                                lines, shown only when the record is not OK)
  */
 
 const crypto = require('crypto');
@@ -271,7 +272,7 @@ function readRecords(home, root = null, { days = null } = {}) {
 }
 
 /** The record as text: the checked reads, the plan and what stands. */
-function renderRecord(r, checked = null) {
+function renderRecord(r, checked = null, hints = []) {
   const out = [`compose_check ${r.root} ${r.side || '?'} on the bar at ${r.bar || 'unknown'} (record ${r.id}, expires ${r.expiresAt || 'unknown'}):`];
   if (checked) out.push(renderCheck(checked).trimEnd());
   const p = r.plan;
@@ -279,6 +280,8 @@ function renderRecord(r, checked = null) {
     out.push(`Plan (code's arithmetic): entry limit ${p.entry.price}; stop ${p.stop.price} (${p.stop.source} ${p.stop.level}, ${p.stop.bufferTicks} tick beyond: ${p.stop.ticks} ticks, minimum ${p.stop.floorTicks ?? 'unknown'}); target ${p.target.price} (${p.target.source} ${p.target.level}: ${p.target.ticks} ticks); R:R ${p.rr}; first level ahead: ${p.inTheWay ? `${p.inTheWay.name} ${p.inTheWay.price} at ${p.inTheWay.R}R (a read; no edge in the census)` : 'none found'}; size ${p.size ?? '?'} risking $${p.riskUsd ?? '?'} ($${p.perContractUsd} a contract, at most ${p.maxSize ?? '?'} by risk.max_risk_usd).`);
   }
   for (const x of r.problems.filter(x => !(checked && checked.problems.includes(x)))) out.push(`- PROBLEM: ${x}`);
+  // A refusal's hints (compose-hints.js): what is TRUE on this bar, per flow step; never on an OK record.
+  if (!r.ok) for (const h of Array.isArray(hints) ? hints : []) out.push(`- HINT ${h}`);
   out.push(r.ok ? `OK: every read verified and the plan stands (signature ${r.signature}). A calculator and a checker, not advice: whether to trade is yours.`
     : 'NOT OK: no entry on this record. Fix each read or problem named above, or pass.');
   return `${out.join('\n')}\n`;

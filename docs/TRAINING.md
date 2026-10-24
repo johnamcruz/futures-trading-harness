@@ -422,6 +422,27 @@ server more than the champion's probe run, which runs alone. Raise it only
 when your local model server serves that many prompts at once (its own
 concurrency setting, in your local config).
 
+### Trend capture
+
+`node scripts/replay.js report` writes `trend-capture.json` beside
+`report.md` (`scripts/lib/replay/trend-capture.js`): every trend leg in the
+run's sessions (a zigzag on the base bars, `config/replay.json`
+`trendCapture.minMoveAtr` times the session's mean true range), whether an
+entry the leg's way filled in its first `catchShare`, and for a missed leg
+one line per decision cycle with its first blocker by flow step (bias,
+location, setup, entry, stop, target, then risk and execution) and who
+blocked it (compose_check, phase 2, the gate, the executor, the head
+trader, a rule). It reads outcomes, so it is analysis after the run only,
+never shown to the model. The curated lists can take the same legs
+(`curated-lists.js build --legs-bars`): a moment at a leg's start its way
+is a trend moment, and each leg's first moment is chosen first.
+
+The twelve legs of `tests/fixtures/trend-moves` are a regression and
+diagnosis set, never a tuning target. The follow-up for the training loop's
+findings is a census of these legs over practice-train, split by session
+date with the loop's seeded split, so an edit tuned on one half is
+confirmed on dates it never saw; it is not built yet.
+
 ## 5. Stage 2: pass prop
 
 The `stage: 2` preset is stage 1 plus:

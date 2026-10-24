@@ -91,6 +91,9 @@
 const { trendRuleOf } = require('./reasons');
 
 const STEPS = ['bias', 'location', 'setup', 'entry', 'stop', 'target'];
+// The flow's steps as the hints, the trend-capture report and the learning loop name them: the six compose steps, then
+// risk (phase 2, sizing) and execution (the gate, the executor, a late or unfilled entry) for what blocks past the check.
+const FLOW_STEPS = Object.freeze([...STEPS, 'risk', 'execution']);
 const SIDES = ['long', 'short'];
 // The step each kind of read belongs to (the design's read vocabulary); stop and target are checked on their own.
 // A pattern is a setup read, or the entry's confirming candle (ENTRY_PATTERNS only).
@@ -755,4 +758,4 @@ function renderCheck(r) {
   return `${out.join('\n')}\n`;
 }
 
-module.exports = { STEPS, STEP_KINDS, D2_TIERS, d2TierMet, SETUP_CANDLE, ENTRY_PATTERNS, MAX_READS, WHY_MAX, MOMENTUM, VOLUME_HIGH, ABSORPTION, netAtrOf, parseRead, checkRead, checkReads, readSignature, skillSignature, contextOf, targetROf, rBucket, levelName, renderCheck };
+module.exports = { STEPS, FLOW_STEPS, STEP_KINDS, D2_TIERS, d2TierMet, SETUP_CANDLE, ENTRY_PATTERNS, levelIndex, candleClose, setupClose, TF_ORDER, TF_MIN, MAX_READS, WHY_MAX, MOMENTUM, VOLUME_HIGH, ABSORPTION, netAtrOf, parseRead, checkRead, checkReads, readSignature, skillSignature, contextOf, targetROf, rBucket, levelName, renderCheck };
