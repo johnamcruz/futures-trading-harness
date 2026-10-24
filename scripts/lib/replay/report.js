@@ -122,7 +122,8 @@ function summarize(days, { runDir = null, barsFiles = {} } = {}) {
   const practice = practiceSummary(days);
   const combine = runDir ? combineOf(runDir, days) : null;
   const late = runDir ? lateOf(runDir, barsFiles) : null;
-  return { months: [...months.values()].map(finish), total: finish(total), timing: timingReport(ran), ...(practice ? { practice } : {}), ...(combine ? { combine } : {}), ...(late && late.total ? { late } : {}) };
+  const capture = runDir ? captureOf(runDir, days) : null;
+  return { months: [...months.values()].map(finish), total: finish(total), timing: timingReport(ran), ...(practice ? { practice } : {}), ...(combine ? { combine } : {}), ...(late && late.total ? { late } : {}), ...(capture ? { capture } : {}) };
 }
 
 /**
@@ -140,6 +141,25 @@ function lateOf(runDir, barsFiles = {}) {
     return cache.get(root);
   };
   return require('./late-skips').lateSkipReport(path.resolve(runDir, '..', '..'), { barsFor });
+}
+
+/**
+ * The run's trend capture (trend-capture.js): its legs and why each missed one was missed, written to the run's folder
+ * (trend-capture.json); null when the run has no served bars or it can't be built (the report goes on without it).
+ */
+function captureOf(runDir, days) {
+  try {
+    const path = require('path');
+    const tc = require('./trend-capture');
+    let manifest = {};
+    try { manifest = JSON.parse(require('fs').readFileSync(path.join(runDir, 'manifest.json'), 'utf8')); } catch (_err) { /* none */ }
+    const doc = tc.captureReport({ runDir, days, manifest });
+    if (!doc.legs.length && !doc.barsDigest) return null;
+    tc.writeCapture(runDir, doc);
+    return doc;
+  } catch (_err) {
+    return null;
+  }
 }
 
 /** A combine run's attempts (combine-run.js combineReport), labelled with the run's learning role; null for any other run. */
@@ -203,13 +223,15 @@ function toMarkdown(summary, manifest = {}) {
     ...practiceMarkdown(summary.practice || null),
     ...(summary.combine ? ['## Continuous combine', '', ...require('./combine-run').reportLines(summary.combine).map(l => `- ${l.trim()}`), ''] : []),
     ...(summary.late ? ['## Late-entry skips', '', ...require('./late-skips').reportLines(summary.late).map(l => `- ${l.trim()}`), ''] : []),
+    ...(summary.capture ? ['## Trend capture', '', ...require('./trend-capture').reportLines(summary.capture).map(l => `- ${l.trim()}`), '', 'After the run only (the market\'s moves), never shown to the model; the legs and every cycle\'s blocker in trend-capture.json.', ''] : []),
   ].join('\n');
 }
 
 function toText(summary) {
   const combine = summary.combine ? `${require('./combine-run').reportLines(summary.combine).join('\n')}\n` : '';
   const late = summary.late ? `${require('./late-skips').reportLines(summary.late).join('\n')}\n` : '';
-  const main = table(HEAD, [...summary.months, summary.total].map(r => cells(r).map(String))) + practiceText(summary.practice || null) + combine + late;
+  const capture = summary.capture ? `trend capture: ${require('./trend-capture').reportLines(summary.capture).join('\n')}\n` : '';
+  const main = table(HEAD, [...summary.months, summary.total].map(r => cells(r).map(String))) + practiceText(summary.practice || null) + combine + late + capture;
   if (!hasTiming(summary)) return main;
   const kind = clockKind(summary.timing.all);
   const note = kind === 'charged' ? ' (replay: latency charged, as live)' : kind === 'mixed' ? ' (replay: latency charged on some cycles, projected on others)' : kind ? ' (replay: projected live latency)' : '';

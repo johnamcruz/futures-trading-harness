@@ -1,0 +1,2755 @@
+{
+ "version": 1,
+ "symbol": "MNQ",
+ "legs": [
+  {
+   "id": "leg-01",
+   "day": "2021-05-03",
+   "side": "short",
+   "start": "2021-05-03T13:30:00.000Z",
+   "extreme": "2021-05-03T13:45:00.000Z",
+   "from": 13916.25,
+   "to": 13851,
+   "points": 65.25,
+   "moments": [
+    {
+     "bar": "2021-05-03T13:30:00.000Z",
+     "window": "none",
+     "trendRule": "reversal-only",
+     "validPlan": false
+    },
+    {
+     "bar": "2021-05-03T13:33:00.000Z",
+     "window": "allowed",
+     "trendRule": "reversal-only",
+     "validPlan": false
+    },
+    {
+     "bar": "2021-05-03T13:36:00.000Z",
+     "window": "allowed",
+     "trendRule": "reversal-only",
+     "validPlan": false
+    }
+   ],
+   "plans": []
+  },
+  {
+   "id": "leg-02",
+   "day": "2021-05-03",
+   "side": "long",
+   "start": "2021-05-03T13:45:00.000Z",
+   "extreme": "2021-05-03T14:18:00.000Z",
+   "from": 13851,
+   "to": 13947.5,
+   "points": 96.5,
+   "moments": [
+    {
+     "bar": "2021-05-03T13:45:00.000Z",
+     "window": "allowed",
+     "trendRule": "allowed",
+     "validPlan": false
+    },
+    {
+     "bar": "2021-05-03T13:48:00.000Z",
+     "window": "allowed",
+     "trendRule": "allowed",
+     "validPlan": false
+    },
+    {
+     "bar": "2021-05-03T13:51:00.000Z",
+     "window": "allowed",
+     "trendRule": "allowed",
+     "validPlan": true
+    },
+    {
+     "bar": "2021-05-03T13:54:00.000Z",
+     "window": "allowed",
+     "trendRule": "allowed",
+     "validPlan": true
+    },
+    {
+     "bar": "2021-05-03T13:57:00.000Z",
+     "window": "allowed",
+     "trendRule": "allowed",
+     "validPlan": false
+    },
+    {
+     "bar": "2021-05-03T14:00:00.000Z",
+     "window": "allowed",
+     "trendRule": "allowed",
+     "validPlan": true
+    }
+   ],
+   "plans": [
+    {
+     "bar": "2021-05-03T13:48:00.000Z",
+     "side": "long",
+     "reads": [
+      {
+       "step": "bias",
+       "skill": "htf-to-ltf",
+       "read": "read long mixed"
+      },
+      {
+       "step": "location",
+       "skill": "vwap-volume-profile",
+       "read": "vwap above"
+      },
+      {
+       "step": "setup",
+       "skill": "rejection",
+       "read": "15m rejected 15m fvg low up"
+      },
+      {
+       "step": "entry",
+       "skill": "candle-reading",
+       "read": "3m close top"
+      },
+      {
+       "step": "stop",
+       "skill": "invalidation",
+       "read": "stop 3m low 13854.5"
+      },
+      {
+       "step": "target",
+       "skill": "take-profit",
+       "read": "target 1h swing 13914.5"
+      }
+     ],
+     "problems": []
+    },
+    {
+     "bar": "2021-05-03T13:51:00.000Z",
+     "side": "long",
+     "reads": [
+      {
+       "step": "bias",
+       "skill": "multi-timeframe-analysis",
+       "read": "trend rule none"
+      },
+      {
+       "step": "location",
+       "skill": "vwap-volume-profile",
+       "read": "vwap above"
+      },
+      {
+       "step": "setup",
+       "skill": "rejection",
+       "read": "3m rejected vwap up"
+      },
+      {
+       "step": "entry",
+       "skill": "candle-reading",
+       "read": "3m close top"
+      },
+      {
+       "step": "entry",
+       "skill": "momentum-and-volume",
+       "read": "3m volume high"
+      },
+      {
+       "step": "stop",
+       "skill": "invalidation",
+       "read": "stop 3m vwap 13875"
+      },
+      {
+       "step": "target",
+       "skill": "take-profit",
+       "read": "target round 13899.75"
+      }
+     ],
+     "problems": [
+      "the setup has no read pointing up (long): state the reaction the trade's way"
+     ]
+    },
+    {
+     "bar": "2021-05-03T13:51:00.000Z",
+     "side": "long",
+     "reads": [
+      {
+       "step": "bias",
+       "skill": "multi-timeframe-analysis",
+       "read": "trend rule"
+      },
+      {
+       "step": "location",
+       "skill": "vwap-volume-profile",
+       "read": "vwap above"
+      },
+      {
+       "step": "setup",
+       "skill": "rejection",
+       "read": "3m rejected session poc up"
+      },
+      {
+       "step": "entry",
+       "skill": "candle-reading",
+       "read": "3m close top"
+      },
+      {
+       "step": "entry",
+       "skill": "momentum-and-volume",
+       "read": "3m volume high"
+      },
+      {
+       "step": "stop",
+       "skill": "invalidation",
+       "read": "stop 3m low 13866.75"
+      },
+      {
+       "step": "target",
+       "skill": "take-profit",
+       "read": "target 3m swing 13910"
+      }
+     ],
+     "problems": [
+      "no entry read pointing long is on a candle that closed after the setup's (2021-05-03T13:54:00.000Z): the confirmation is the next closed candle, not the reaction's own"
+     ]
+    },
+    {
+     "bar": "2021-05-03T13:54:00.000Z",
+     "side": "long",
+     "reads": [
+      {
+       "step": "bias",
+       "skill": "trend-vs-range",
+       "read": "5m momentum up"
+      },
+      {
+       "step": "location",
+       "skill": "vwap-volume-profile",
+       "read": "vwap above"
+      },
+      {
+       "step": "setup",
+       "skill": "breakout",
+       "read": "3m broke 1h range low 13885 up"
+      },
+      {
+       "step": "entry",
+       "skill": "candle-reading",
+       "read": "3m close top"
+      },
+      {
+       "step": "entry",
+       "skill": "momentum-and-volume",
+       "read": "3m volume high"
+      },
+      {
+       "step": "stop",
+       "skill": "invalidation",
+       "read": "stop 1h low 13884.75"
+      },
+      {
+       "step": "target",
+       "skill": "take-profit",
+       "read": "target 3m swing 13910"
+      }
+     ],
+     "problems": [
+      "read 1 (\"5m momentum up\"): a momentum read belongs to the entry step, not bias",
+      "the setup has no read pointing up (long): state the reaction the trade's way"
+     ]
+    },
+    {
+     "bar": "2021-05-03T14:00:00.000Z",
+     "side": "long",
+     "reads": [
+      {
+       "step": "bias",
+       "skill": "multi-timeframe-analysis",
+       "read": "trend rule"
+      },
+      {
+       "step": "location",
+       "skill": "vwap-volume-profile",
+       "read": "vwap above"
+      },
+      {
+       "step": "setup",
+       "skill": "rejection",
+       "read": "15m rejected opening range low up"
+      },
+      {
+       "step": "entry",
+       "skill": "candle-reading",
+       "read": "3m close top"
+      },
+      {
+       "step": "stop",
+       "skill": "invalidation",
+       "read": "stop 5m low 13867.5"
+      },
+      {
+       "step": "target",
+       "skill": "take-profit",
+       "read": "target 1h high 13916.25"
+      }
+     ],
+     "problems": []
+    },
+    {
+     "bar": "2021-05-03T13:48:00.000Z",
+     "side": "long",
+     "reads": [
+      {
+       "step": "bias",
+       "skill": "cisd",
+       "read": "3m cisd bullish"
+      },
+      {
+       "step": "location",
+       "skill": "vwap-volume-profile",
+       "read": "vwap above"
+      },
+      {
+       "step": "setup",
+       "skill": "rejection",
+       "read": "3m rejected 3m swing low up"
+      },
+      {
+       "step": "entry",
+       "skill": "candle-reading",
+       "read": "3m close top"
+      },
+      {
+       "step": "stop",
+       "skill": "invalidation",
+       "read": "stop 5m low 13876"
+      },
+      {
+       "step": "target",
+       "skill": "take-profit",
+       "read": "target 1h swing 13899"
+      }
+     ],
+     "problems": [
+      "the setup has no read pointing up (long): state the reaction the trade's way"
+     ]
+    },
+    {
+     "bar": "2021-05-03T13:51:00.000Z",
+     "side": "long",
+     "reads": [
+      {
+       "step": "bias",
+       "skill": "multi-timeframe-analysis",
+       "read": "trend rule"
+      },
+      {
+       "step": "location",
+       "skill": "vwap-volume-profile",
+       "read": "vwap above"
+      },
+      {
+       "step": "setup",
+       "skill": "rejection",
+       "read": "3m rejected vwap up"
+      },
+      {
+       "step": "entry",
+       "skill": "candle-reading",
+       "read": "3m close top"
+      },
+      {
+       "step": "entry",
+       "skill": "momentum-and-volume",
+       "read": "3m momentum up"
+      },
+      {
+       "step": "stop",
+       "skill": "invalidation",
+       "read": "stop 3m low 13866.75"
+      },
+      {
+       "step": "target",
+       "skill": "take-profit",
+       "read": "target 3m swing 13910"
+      }
+     ],
+     "problems": [
+      "the setup has no read pointing up (long): state the reaction the trade's way"
+     ]
+    },
+    {
+     "bar": "2021-05-03T13:54:00.000Z",
+     "side": "long",
+     "reads": [
+      {
+       "step": "bias",
+       "skill": "multi-timeframe-analysis",
+       "read": "read 3m cisd bullish"
+      },
+      {
+       "step": "location",
+       "skill": "vwap-volume-profile",
+       "read": "vwap above"
+      },
+      {
+       "step": "setup",
+       "skill": "breakout",
+       "read": "3m broke session poc up"
+      },
+      {
+       "step": "entry",
+       "skill": "candle-reading",
+       "read": "3m close top"
+      },
+      {
+       "step": "entry",
+       "skill": "momentum-and-volume",
+       "read": "3m momentum up"
+      },
+      {
+       "step": "stop",
+       "skill": "invalidation",
+       "read": "stop 3m low 13882.25"
+      },
+      {
+       "step": "target",
+       "skill": "take-profit",
+       "read": "target 3m swing 13910"
+      }
+     ],
+     "problems": [
+      "no entry read pointing long is on a candle that closed after the setup's (2021-05-03T13:57:00.000Z): the confirmation is the next closed candle, not the reaction's own"
+     ]
+    },
+    {
+     "bar": "2021-05-03T14:00:00.000Z",
+     "side": "long",
+     "reads": [
+      {
+       "step": "bias",
+       "skill": "multi-timeframe-analysis",
+       "read": "15m bos up"
+      },
+      {
+       "step": "location",
+       "skill": "rejection",
+       "read": "at session VAL"
+      },
+      {
+       "step": "setup",
+       "skill": "rejection",
+       "read": "3m rejected session VAL up"
+      },
+      {
+       "step": "entry",
+       "skill": "candle-reading",
+       "read": "3m close top"
+      },
+      {
+       "step": "stop",
+       "skill": "invalidation",
+       "read": "stop 3m low 13858.5"
+      },
+      {
+       "step": "target",
+       "skill": "take-profit",
+       "read": "target 3m swing 13893.25"
+      }
+     ],
+     "problems": [
+      "no entry read pointing long is on a candle that closed after the setup's (2021-05-03T14:03:00.000Z): the confirmation is the next closed candle, not the reaction's own",
+      "R:R 0.489 is under the strategy's min 2"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "leg-03",
+   "day": "2021-05-03",
+   "side": "short",
+   "start": "2021-05-03T14:18:00.000Z",
+   "extreme": "2021-05-03T15:24:00.000Z",
+   "from": 13947.5,
+   "to": 13775.75,
+   "points": 171.75,
+   "moments": [
+    {
+     "bar": "2021-05-03T14:18:00.000Z",
+     "window": "allowed",
+     "trendRule": "reversal-only",
+     "validPlan": false
+    },
+    {
+     "bar": "2021-05-03T14:21:00.000Z",
+     "window": "allowed",
+     "trendRule": "reversal-only",
+     "validPlan": false
+    },
+    {
+     "bar": "2021-05-03T14:24:00.000Z",
+     "window": "allowed",
+     "trendRule": "reversal-only",
+     "validPlan": false
+    },
+    {
+     "bar": "2021-05-03T14:27:00.000Z",
+     "window": "allowed",
+     "trendRule": "reversal-only",
+     "validPlan": false
+    },
+    {
+     "bar": "2021-05-03T14:30:00.000Z",
+     "window": "allowed",
+     "trendRule": "reversal-only",
+     "validPlan": false
+    },
+    {
+     "bar": "2021-05-03T14:33:00.000Z",
+     "window": "allowed",
+     "trendRule": "reversal-only",
+     "validPlan": false
+    },
+    {
+     "bar": "2021-05-03T14:36:00.000Z",
+     "window": "allowed",
+     "trendRule": "reversal-only",
+     "validPlan": false
+    },
+    {
+     "bar": "2021-05-03T14:39:00.000Z",
+     "window": "allowed",
+     "trendRule": "reversal-only",
+     "validPlan": false
+    },
+    {
+     "bar": "2021-05-03T14:42:00.000Z",
+     "window": "allowed",
+     "trendRule": "allowed",
+     "validPlan": true
+    },
+    {
+     "bar": "2021-05-03T14:45:00.000Z",
+     "window": "allowed",
+     "trendRule": "allowed",
+     "validPlan": true
+    },
+    {
+     "bar": "2021-05-03T14:48:00.000Z",
+     "window": "allowed",
+     "trendRule": "allowed",
+     "validPlan": true
+    },
+    {
+     "bar": "2021-05-03T14:51:00.000Z",
+     "window": "allowed",
+     "trendRule": "allowed",
+     "validPlan": true
+    }
+   ],
+   "plans": [
+    {
+     "bar": "2021-05-03T14:42:00.000Z",
+     "side": "short",
+     "reads": [
+      {
+       "step": "bias",
+       "skill": "bos-vs-choch",
+       "read": "3m choch down"
+      },
+      {
+       "step": "location",
+       "skill": "vwap-volume-profile",
+       "read": "vwap below"
+      },
+      {
+       "step": "setup",
+       "skill": "breakout",
+       "read": "15m broke overnight high down"
+      },
+      {
+       "step": "entry",
+       "skill": "candle-reading",
+       "read": "3m close bottom"
+      },
+      {
+       "step": "stop",
+       "skill": "invalidation",
+       "read": "stop 3m high 13936.75"
+      },
+      {
+       "step": "target",
+       "skill": "take-profit",
+       "read": "target 3m swing 13858.5"
+      }
+     ],
+     "problems": [
+      "no entry read pointing short is on a candle that closed after the setup's (2021-05-03T14:45:00.000Z): the confirmation is the next closed candle, not the reaction's own"
+     ]
+    },
+    {
+     "bar": "2021-05-03T14:51:00.000Z",
+     "side": "short",
+     "reads": [
+      {
+       "step": "bias",
+       "skill": "trend-vs-range",
+       "read": "regime trend down"
+      },
+      {
+       "step": "location",
+       "skill": "vwap-volume-profile",
+       "read": "vwap below"
+      },
+      {
+       "step": "setup",
+       "skill": "breakout",
+       "read": "3m broke previous 3m low down"
+      },
+      {
+       "step": "entry",
+       "skill": "candle-reading",
+       "read": "3m close bottom"
+      },
+      {
+       "step": "stop",
+       "skill": "invalidation",
+       "read": "stop 3m high 13891.5"
+      },
+      {
+       "step": "target",
+       "skill": "take-profit",
+       "read": "target 1h swing 13800"
+      }
+     ],
+     "problems": [
+      "no entry read pointing short is on a candle that closed after the setup's (2021-05-03T14:54:00.000Z): the confirmation is the next closed candle, not the reaction's own"
+     ]
+    },
+    {
+     "bar": "2021-05-03T14:51:00.000Z",
+     "side": "short",
+     "reads": [
+      {
+       "step": "bias",
+       "skill": "multi-timeframe-analysis",
+       "read": "15m range"
+      },
+      {
+       "step": "location",
+       "skill": "vwap-volume-profile",
+       "read": "vwap below"
+      },
+      {
+       "step": "setup",
+       "skill": "breakout",
+       "read": "15m broke overnight high down"
+      },
+      {
+       "step": "entry",
+       "skill": "candle-reading",
+       "read": "3m close bottom"
+      },
+      {
+       "step": "stop",
+       "skill": "invalidation",
+       "read": "stop 15m high 13916.25"
+      },
+      {
+       "step": "target",
+       "skill": "take-profit",
+       "read": "target 1h swing 13800"
+      }
+     ],
+     "problems": []
+    },
+    {
+     "bar": "2021-05-03T14:51:00.000Z",
+     "side": "short",
+     "reads": [
+      {
+       "step": "bias",
+       "skill": "multi-timeframe-analysis",
+       "read": "15m range"
+      },
+      {
+       "step": "location",
+       "skill": "levels-and-reactions",
+       "read": "vwap below"
+      },
+      {
+       "step": "setup",
+       "skill": "breakout",
+       "read": "3m broke opening range low down"
+      },
+      {
+       "step": "entry",
+       "skill": "candle-reading",
+       "read": "3m close bottom"
+      },
+      {
+       "step": "stop",
+       "skill": "invalidation",
+       "read": "stop 3m high 13855"
+      },
+      {
+       "step": "target",
+       "skill": "take-profit",
+       "read": "target round 13800"
+      }
+     ],
+     "problems": [
+      "the setup has no read pointing down (short): state the reaction the trade's way"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "leg-04",
+   "day": "2021-05-04",
+   "side": "short",
+   "start": "2021-05-04T13:30:00.000Z",
+   "extreme": "2021-05-04T14:15:00.000Z",
+   "from": 13696.5,
+   "to": 13493,
+   "points": 203.5,
+   "moments": [
+    {
+     "bar": "2021-05-04T13:30:00.000Z",
+     "window": "none",
+     "trendRule": "allowed",
+     "validPlan": false
+    },
+    {
+     "bar": "2021-05-04T13:33:00.000Z",
+     "window": "allowed",
+     "trendRule": "allowed",
+     "validPlan": false
+    },
+    {
+     "bar": "2021-05-04T13:36:00.000Z",
+     "window": "allowed",
+     "trendRule": "allowed",
+     "validPlan": true
+    },
+    {
+     "bar": "2021-05-04T13:39:00.000Z",
+     "window": "allowed",
+     "trendRule": "allowed",
+     "validPlan": true
+    },
+    {
+     "bar": "2021-05-04T13:42:00.000Z",
+     "window": "allowed",
+     "trendRule": "allowed",
+     "validPlan": true
+    },
+    {
+     "bar": "2021-05-04T13:45:00.000Z",
+     "window": "allowed",
+     "trendRule": "allowed",
+     "validPlan": true
+    },
+    {
+     "bar": "2021-05-04T13:48:00.000Z",
+     "window": "allowed",
+     "trendRule": "allowed",
+     "validPlan": true
+    },
+    {
+     "bar": "2021-05-04T13:51:00.000Z",
+     "window": "allowed",
+     "trendRule": "allowed",
+     "validPlan": true
+    }
+   ],
+   "plans": [
+    {
+     "bar": "2021-05-04T13:33:00.000Z",
+     "side": "short",
+     "reads": [
+      {
+       "step": "bias",
+       "skill": "multi-timeframe-analysis",
+       "read": "15m down"
+      },
+      {
+       "step": "bias",
+       "skill": "htf-to-ltf",
+       "read": "read short aligned"
+      },
+      {
+       "step": "location",
+       "skill": "levels-and-reactions",
+       "read": "vwap below"
+      },
+      {
+       "step": "location",
+       "skill": "levels-and-reactions",
+       "read": "value below"
+      },
+      {
+       "step": "setup",
+       "skill": "rejection",
+       "read": "3m rejected overnight low down"
+      },
+      {
+       "step": "setup",
+       "skill": "rejection",
+       "read": "3m rejected vwap down"
+      },
+      {
+       "step": "entry",
+       "skill": "momentum-and-volume",
+       "read": "3m volume high"
+      },
+      {
+       "step": "stop",
+       "skill": "invalidation",
+       "read": "stop 3m high 13653.5"
+      },
+      {
+       "step": "target",
+       "skill": "take-profit",
+       "read": "target 1h swing 13623.25"
+      }
+     ],
+     "problems": [
+      "the entry has no read pointing down (short): state the reaction's confirmation the trade's way"
+     ]
+    },
+    {
+     "bar": "2021-05-04T13:36:00.000Z",
+     "side": "short",
+     "reads": [
+      {
+       "step": "bias",
+       "skill": "multi-timeframe-analysis",
+       "read": "15m down"
+      },
+      {
+       "step": "location",
+       "skill": "levels-and-reactions",
+       "read": "vwap below"
+      },
+      {
+       "step": "setup",
+       "skill": "rejection",
+       "read": "3m rejected overnight low down"
+      },
+      {
+       "step": "entry",
+       "skill": "momentum-and-volume",
+       "read": "3m volume high"
+      },
+      {
+       "step": "stop",
+       "skill": "invalidation",
+       "read": "stop 3m high 13655.25"
+      },
+      {
+       "step": "target",
+       "skill": "take-profit",
+       "read": "target 3m swing 13623.25"
+      }
+     ],
+     "problems": [
+      "the entry has no read pointing down (short): state the reaction's confirmation the trade's way"
+     ]
+    },
+    {
+     "bar": "2021-05-04T13:39:00.000Z",
+     "side": "short",
+     "reads": [
+      {
+       "step": "bias",
+       "skill": "multi-timeframe-analysis",
+       "read": "15m down"
+      },
+      {
+       "step": "location",
+       "skill": "vwap-volume-profile",
+       "read": "vwap below"
+      },
+      {
+       "step": "setup",
+       "skill": "rejection",
+       "read": "5m rejected vwap down"
+      },
+      {
+       "step": "entry",
+       "skill": "candle-reading",
+       "read": "3m close bottom"
+      },
+      {
+       "step": "entry",
+       "skill": "momentum-and-volume",
+       "read": "3m volume high"
+      },
+      {
+       "step": "stop",
+       "skill": "invalidation",
+       "read": "stop 3m high 13649"
+      },
+      {
+       "step": "target",
+       "skill": "take-profit",
+       "read": "target day low 13604"
+      }
+     ],
+     "problems": [
+      "the setup has no read pointing down (short): state the reaction the trade's way",
+      "R:R 0.191 is under the strategy's min 2"
+     ]
+    },
+    {
+     "bar": "2021-05-04T13:45:00.000Z",
+     "side": "short",
+     "reads": [
+      {
+       "step": "bias",
+       "skill": "multi-timeframe-analysis",
+       "read": "15m down"
+      },
+      {
+       "step": "location",
+       "skill": "levels-and-reactions",
+       "read": "at overnight low"
+      },
+      {
+       "step": "setup",
+       "skill": "breakout",
+       "read": "15m broke overnight low down"
+      },
+      {
+       "step": "entry",
+       "skill": "candle-reading",
+       "read": "3m close bottom"
+      },
+      {
+       "step": "entry",
+       "skill": "momentum-and-volume",
+       "read": "3m momentum down"
+      },
+      {
+       "step": "stop",
+       "skill": "invalidation",
+       "read": "stop 3m high 13602.5"
+      },
+      {
+       "step": "target",
+       "skill": "take-profit",
+       "read": "target round number 13500"
+      }
+     ],
+     "problems": []
+    },
+    {
+     "bar": "2021-05-04T13:48:00.000Z",
+     "side": "short",
+     "reads": [
+      {
+       "step": "bias",
+       "skill": "multi-timeframe-analysis",
+       "read": "15m down"
+      },
+      {
+       "step": "location",
+       "skill": "vwap-volume-profile",
+       "read": "vwap below"
+      },
+      {
+       "step": "setup",
+       "skill": "breakout",
+       "read": "5m broke opening range low down"
+      },
+      {
+       "step": "setup",
+       "skill": "breakout",
+       "read": "15m broke overnight low down"
+      },
+      {
+       "step": "entry",
+       "skill": "candle-reading",
+       "read": "3m close bottom"
+      },
+      {
+       "step": "entry",
+       "skill": "momentum-and-volume",
+       "read": "3m volume high"
+      },
+      {
+       "step": "stop",
+       "skill": "invalidation",
+       "read": "stop 3m high 13598"
+      },
+      {
+       "step": "target",
+       "skill": "take-profit",
+       "read": "target round 13500"
+      }
+     ],
+     "problems": []
+    },
+    {
+     "bar": "2021-05-04T13:51:00.000Z",
+     "side": "short",
+     "reads": [
+      {
+       "step": "bias",
+       "skill": "multi-timeframe-analysis",
+       "read": "15m down"
+      },
+      {
+       "step": "bias",
+       "skill": "multi-timeframe-analysis",
+       "read": "trend rule short"
+      },
+      {
+       "step": "location",
+       "skill": "levels-and-reactions",
+       "read": "at 13600"
+      },
+      {
+       "step": "location",
+       "skill": "vwap-volume-profile",
+       "read": "vwap below"
+      },
+      {
+       "step": "setup",
+       "skill": "rejection",
+       "read": "5m rejected 13600 down"
+      },
+      {
+       "step": "entry",
+       "skill": "candle-reading",
+       "read": "3m close bottom"
+      },
+      {
+       "step": "entry",
+       "skill": "momentum-and-volume",
+       "read": "3m momentum down"
+      },
+      {
+       "step": "entry",
+       "skill": "momentum-and-volume",
+       "read": "3m volume high"
+      },
+      {
+       "step": "stop",
+       "skill": "invalidation",
+       "read": "stop 3m high 13587.25"
+      },
+      {
+       "step": "target",
+       "skill": "take-profit",
+       "read": "target round 13500"
+      }
+     ],
+     "problems": [
+      "the setup has no read pointing down (short): state the reaction the trade's way"
+     ]
+    },
+    {
+     "bar": "2021-05-04T13:30:00.000Z",
+     "side": "short",
+     "reads": [
+      {
+       "step": "bias",
+       "skill": "multi-timeframe-analysis",
+       "read": "15m down"
+      },
+      {
+       "step": "location",
+       "skill": "vwap-volume-profile",
+       "read": "vwap below"
+      },
+      {
+       "step": "setup",
+       "skill": "rejection",
+       "read": "15m rejected 15m swing high up"
+      },
+      {
+       "step": "entry",
+       "skill": "candle-reading",
+       "read": "3m close bottom"
+      },
+      {
+       "step": "stop",
+       "skill": "invalidation",
+       "read": "stop 3m high 13696.5"
+      },
+      {
+       "step": "target",
+       "skill": "take-profit",
+       "read": "target round number 13600"
+      }
+     ],
+     "problems": [
+      "the setup has no read pointing down (short): state the reaction the trade's way"
+     ]
+    },
+    {
+     "bar": "2021-05-04T13:33:00.000Z",
+     "side": "short",
+     "reads": [
+      {
+       "step": "bias",
+       "skill": "multi-timeframe-analysis",
+       "read": "15m down"
+      },
+      {
+       "step": "location",
+       "skill": "vwap-volume-profile",
+       "read": "vwap below"
+      },
+      {
+       "step": "setup",
+       "skill": "rejection",
+       "read": "3m rejected vwap down"
+      },
+      {
+       "step": "stop",
+       "skill": "invalidation",
+       "read": "stop 3m high 13653.5"
+      },
+      {
+       "step": "target",
+       "skill": "take-profit",
+       "read": "target 3m swing 13623.25"
+      }
+     ],
+     "problems": [
+      "steps not stated: entry (every step needs a read, D7)",
+      "the setup has no read pointing down (short): state the reaction the trade's way"
+     ]
+    },
+    {
+     "bar": "2021-05-04T13:36:00.000Z",
+     "side": "short",
+     "reads": [
+      {
+       "step": "bias",
+       "skill": "multi-timeframe-analysis",
+       "read": "15m down"
+      },
+      {
+       "step": "location",
+       "skill": "levels-and-reactions",
+       "read": "vwap below"
+      },
+      {
+       "step": "setup",
+       "skill": "rejection",
+       "read": "3m rejected vwap down"
+      },
+      {
+       "step": "setup",
+       "skill": "rejection",
+       "read": "3m rejected overnight low down"
+      },
+      {
+       "step": "entry",
+       "skill": "momentum-and-volume",
+       "read": "3m volume high"
+      },
+      {
+       "step": "stop",
+       "skill": "invalidation",
+       "read": "stop 3m high 13655.25"
+      },
+      {
+       "step": "target",
+       "skill": "take-profit",
+       "read": "target session low 13623.25"
+      }
+     ],
+     "problems": [
+      "the entry has no read pointing down (short): state the reaction's confirmation the trade's way"
+     ]
+    },
+    {
+     "bar": "2021-05-04T13:39:00.000Z",
+     "side": "short",
+     "reads": [
+      {
+       "step": "bias",
+       "skill": "multi-timeframe-analysis",
+       "read": "15m down"
+      },
+      {
+       "step": "bias",
+       "skill": "trend-vs-range",
+       "read": "regime trend down"
+      },
+      {
+       "step": "location",
+       "skill": "levels-and-reactions",
+       "read": "vwap below"
+      },
+      {
+       "step": "setup",
+       "skill": "rejection",
+       "read": "5m rejected overnight low down"
+      },
+      {
+       "step": "entry",
+       "skill": "candle-reading",
+       "read": "3m close bottom"
+      },
+      {
+       "step": "entry",
+       "skill": "momentum-and-volume",
+       "read": "3m momentum down"
+      },
+      {
+       "step": "stop",
+       "skill": "invalidation",
+       "read": "stop 5m high 13655.25"
+      },
+      {
+       "step": "target",
+       "skill": "take-profit",
+       "read": "target 3m swing 13604"
+      }
+     ],
+     "problems": []
+    },
+    {
+     "bar": "2021-05-04T13:45:00.000Z",
+     "side": "short",
+     "reads": [
+      {
+       "step": "bias",
+       "skill": "multi-timeframe-analysis",
+       "read": "15m down"
+      },
+      {
+       "step": "location",
+       "skill": "levels-and-reactions",
+       "read": "vwap below"
+      },
+      {
+       "step": "setup",
+       "skill": "breakout",
+       "read": "15m broke overnight low down"
+      },
+      {
+       "step": "entry",
+       "skill": "candle-reading",
+       "read": "3m close bottom third"
+      },
+      {
+       "step": "stop",
+       "skill": "invalidation",
+       "read": "stop 3m high 13602.5"
+      },
+      {
+       "step": "target",
+       "skill": "take-profit",
+       "read": "target round 13500"
+      }
+     ],
+     "problems": [
+      "the entry has no read pointing down (short): state the reaction's confirmation the trade's way"
+     ]
+    },
+    {
+     "bar": "2021-05-04T13:48:00.000Z",
+     "side": "short",
+     "reads": [
+      {
+       "step": "bias",
+       "skill": "multi-timeframe-analysis",
+       "read": "15m down"
+      },
+      {
+       "step": "bias",
+       "skill": "trend-vs-range",
+       "read": "regime trend down"
+      },
+      {
+       "step": "location",
+       "skill": "vwap-volume-profile",
+       "read": "vwap below"
+      },
+      {
+       "step": "setup",
+       "skill": "breakout",
+       "read": "5m broke opening range low down"
+      },
+      {
+       "step": "entry",
+       "skill": "candle-reading",
+       "read": "3m close bottom"
+      },
+      {
+       "step": "entry",
+       "skill": "momentum-and-volume",
+       "read": "3m volume high"
+      },
+      {
+       "step": "stop",
+       "skill": "invalidation",
+       "read": "stop 5m high 13602.5"
+      },
+      {
+       "step": "target",
+       "skill": "take-profit",
+       "read": "target round 13500"
+      }
+     ],
+     "problems": []
+    },
+    {
+     "bar": "2021-05-04T13:51:00.000Z",
+     "side": "short",
+     "reads": [
+      {
+       "step": "bias",
+       "skill": "multi-timeframe-analysis",
+       "read": "15m down"
+      },
+      {
+       "step": "location",
+       "skill": "vwap-volume-profile",
+       "read": "vwap below"
+      },
+      {
+       "step": "setup",
+       "skill": "breakout",
+       "read": "5m broke opening range low down"
+      },
+      {
+       "step": "entry",
+       "skill": "candle-reading",
+       "read": "3m close bottom"
+      },
+      {
+       "step": "entry",
+       "skill": "momentum-and-volume",
+       "read": "3m momentum down"
+      },
+      {
+       "step": "stop",
+       "skill": "invalidation",
+       "read": "stop 3m high 13587.25"
+      },
+      {
+       "step": "target",
+       "skill": "take-profit",
+       "read": "target 3m swing 13562.25"
+      }
+     ],
+     "problems": []
+    }
+   ]
+  },
+  {
+   "id": "leg-05",
+   "day": "2021-05-04",
+   "side": "long",
+   "start": "2021-05-04T14:15:00.000Z",
+   "extreme": "2021-05-04T14:27:00.000Z",
+   "from": 13493,
+   "to": 13552.5,
+   "points": 59.5,
+   "moments": [
+    {
+     "bar": "2021-05-04T14:15:00.000Z",
+     "window": "allowed",
+     "trendRule": "allowed",
+     "validPlan": true
+    },
+    {
+     "bar": "2021-05-04T14:18:00.000Z",
+     "window": "allowed",
+     "trendRule": "allowed",
+     "validPlan": true
+    },
+    {
+     "bar": "2021-05-04T14:21:00.000Z",
+     "window": "allowed",
+     "trendRule": "allowed",
+     "validPlan": true
+    }
+   ],
+   "plans": [
+    {
+     "bar": "2021-05-04T14:12:00.000Z",
+     "side": "long",
+     "reads": [
+      {
+       "step": "bias",
+       "skill": "multi-timeframe-analysis",
+       "read": "trend rule long allowed"
+      },
+      {
+       "step": "location",
+       "skill": "levels-and-reactions",
+       "read": "at round number 13500"
+      },
+      {
+       "step": "setup",
+       "skill": "rejection",
+       "read": "15m rejected round number 13500 up"
+      },
+      {
+       "step": "entry",
+       "skill": "candle-reading",
+       "read": "3m close top"
+      },
+      {
+       "step": "stop",
+       "skill": "invalidation",
+       "read": "stop 3m low 13495.5"
+      },
+      {
+       "step": "target",
+       "skill": "take-profit",
+       "read": "target vwap 13581.1"
+      }
+     ],
+     "problems": [
+      "no entry read pointing long is on a candle that closed after the setup's (2021-05-04T14:15:00.000Z): the confirmation is the next closed candle, not the reaction's own"
+     ]
+    },
+    {
+     "bar": "2021-05-04T14:15:00.000Z",
+     "side": "long",
+     "reads": [
+      {
+       "step": "bias",
+       "skill": "multi-timeframe-analysis",
+       "read": "trend rule long allowed"
+      },
+      {
+       "step": "location",
+       "skill": "levels-and-reactions",
+       "read": "at 13500"
+      },
+      {
+       "step": "setup",
+       "skill": "rejection",
+       "read": "3m rejected round 13500 up"
+      },
+      {
+       "step": "entry",
+       "skill": "candle-reading",
+       "read": "3m close top"
+      },
+      {
+       "step": "stop",
+       "skill": "invalidation",
+       "read": "stop 3m low 13493"
+      },
+      {
+       "step": "target",
+       "skill": "take-profit",
+       "read": "target 15m swing 13696.5"
+      }
+     ],
+     "problems": [
+      "the setup has no read pointing up (long): state the reaction the trade's way"
+     ]
+    },
+    {
+     "bar": "2021-05-04T14:15:00.000Z",
+     "side": "long",
+     "reads": [
+      {
+       "step": "bias",
+       "skill": "multi-timeframe-analysis",
+       "read": "read long mixed"
+      },
+      {
+       "step": "location",
+       "skill": "levels-and-reactions",
+       "read": "at round number"
+      },
+      {
+       "step": "setup",
+       "skill": "rejection",
+       "read": "5m rejected round number up"
+      },
+      {
+       "step": "entry",
+       "skill": "candle-reading",
+       "read": "3m close top"
+      },
+      {
+       "step": "stop",
+       "skill": "invalidation",
+       "read": "stop 3m low 13493"
+      },
+      {
+       "step": "target",
+       "skill": "take-profit",
+       "read": "target 15m swing 13696.5"
+      }
+     ],
+     "problems": [
+      "the setup has no read pointing up (long): state the reaction the trade's way"
+     ]
+    },
+    {
+     "bar": "2021-05-04T14:15:00.000Z",
+     "side": "long",
+     "reads": [
+      {
+       "step": "bias",
+       "skill": "multi-timeframe-analysis",
+       "read": "read long mixed"
+      },
+      {
+       "step": "location",
+       "skill": "levels-and-reactions",
+       "read": "at session low"
+      },
+      {
+       "step": "setup",
+       "skill": "rejection",
+       "read": "3m rejected prior 3m low up"
+      },
+      {
+       "step": "entry",
+       "skill": "candle-reading",
+       "read": "3m close top"
+      },
+      {
+       "step": "stop",
+       "skill": "invalidation",
+       "read": "stop 3m low 13493"
+      },
+      {
+       "step": "target",
+       "skill": "take-profit",
+       "read": "target 15m swing 13696.5"
+      }
+     ],
+     "problems": [
+      "the setup has no read pointing up (long): state the reaction the trade's way"
+     ]
+    },
+    {
+     "bar": "2021-05-04T14:15:00.000Z",
+     "side": "long",
+     "reads": [
+      {
+       "step": "bias",
+       "skill": "multi-timeframe-analysis",
+       "read": "read long mixed"
+      },
+      {
+       "step": "location",
+       "skill": "levels-and-reactions",
+       "read": "at session low"
+      },
+      {
+       "step": "setup",
+       "skill": "breakout-vs-fakeout",
+       "read": "3m swept prior low"
+      },
+      {
+       "step": "entry",
+       "skill": "candle-reading",
+       "read": "3m close top"
+      },
+      {
+       "step": "stop",
+       "skill": "invalidation",
+       "read": "stop 3m low 13493"
+      },
+      {
+       "step": "target",
+       "skill": "take-profit",
+       "read": "target 15m swing 13696.5"
+      }
+     ],
+     "problems": [
+      "the setup has no read pointing up (long): state the reaction the trade's way"
+     ]
+    },
+    {
+     "bar": "2021-05-04T14:15:00.000Z",
+     "side": "long",
+     "reads": [
+      {
+       "step": "bias",
+       "skill": "multi-timeframe-analysis",
+       "read": "read long mixed"
+      },
+      {
+       "step": "location",
+       "skill": "levels-and-reactions",
+       "read": "at session low"
+      },
+      {
+       "step": "setup",
+       "skill": "rejection",
+       "read": "3m rejected session low up"
+      },
+      {
+       "step": "entry",
+       "skill": "candle-reading",
+       "read": "3m close top"
+      },
+      {
+       "step": "stop",
+       "skill": "invalidation",
+       "read": "stop 3m low 13493"
+      },
+      {
+       "step": "target",
+       "skill": "take-profit",
+       "read": "target 15m swing 13696.5"
+      }
+     ],
+     "problems": [
+      "the setup has no read pointing up (long): state the reaction the trade's way"
+     ]
+    },
+    {
+     "bar": "2021-05-04T14:21:00.000Z",
+     "side": "long",
+     "reads": [
+      {
+       "step": "bias",
+       "skill": "multi-timeframe-analysis",
+       "read": "read long mixed"
+      },
+      {
+       "step": "location",
+       "skill": "levels-and-reactions",
+       "read": "at 13500"
+      },
+      {
+       "step": "setup",
+       "skill": "rejection",
+       "read": "15m rejected 13500 up"
+      },
+      {
+       "step": "entry",
+       "skill": "candle-reading",
+       "read": "3m close top"
+      },
+      {
+       "step": "stop",
+       "skill": "invalidation",
+       "read": "stop 3m low 13521.5"
+      },
+      {
+       "step": "target",
+       "skill": "take-profit",
+       "read": "target session val 13570.75"
+      }
+     ],
+     "problems": [
+      "the setup has no read pointing up (long): state the reaction the trade's way"
+     ]
+    },
+    {
+     "bar": "2021-05-04T14:21:00.000Z",
+     "side": "long",
+     "reads": [
+      {
+       "step": "bias",
+       "skill": "multi-timeframe-analysis",
+       "read": "read long mixed"
+      },
+      {
+       "step": "location",
+       "skill": "levels-and-reactions",
+       "read": "at 13500"
+      },
+      {
+       "step": "setup",
+       "skill": "rejection",
+       "read": "5m rejected 13500 up"
+      },
+      {
+       "step": "entry",
+       "skill": "candle-reading",
+       "read": "3m close top"
+      },
+      {
+       "step": "stop",
+       "skill": "invalidation",
+       "read": "stop 3m low 13521.5"
+      },
+      {
+       "step": "target",
+       "skill": "take-profit",
+       "read": "target session val 13570.75"
+      }
+     ],
+     "problems": [
+      "the setup has no read pointing up (long): state the reaction the trade's way"
+     ]
+    },
+    {
+     "bar": "2021-05-04T14:12:00.000Z",
+     "side": "long",
+     "reads": [
+      {
+       "step": "setup",
+       "skill": "rejection",
+       "read": "5m rejected round number up"
+      },
+      {
+       "step": "setup",
+       "skill": "breakout-vs-fakeout",
+       "read": "3m swept previous low"
+      },
+      {
+       "step": "entry",
+       "skill": "candle-reading",
+       "read": "3m close top"
+      },
+      {
+       "step": "stop",
+       "skill": "invalidation",
+       "read": "stop 3m low 13495.5"
+      },
+      {
+       "step": "target",
+       "skill": "take-profit",
+       "read": "target 3m swing 13544.75"
+      }
+     ],
+     "problems": [
+      "steps not stated: bias, location (every step needs a read, D7)",
+      "the setup has no read pointing up (long): state the reaction the trade's way",
+      "R:R 0.941 is under the strategy's min 2"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "leg-06",
+   "day": "2021-05-04",
+   "side": "short",
+   "start": "2021-05-04T14:27:00.000Z",
+   "extreme": "2021-05-04T15:54:00.000Z",
+   "from": 13552.5,
+   "to": 13380.75,
+   "points": 171.75,
+   "moments": [
+    {
+     "bar": "2021-05-04T14:27:00.000Z",
+     "window": "allowed",
+     "trendRule": "allowed",
+     "validPlan": true
+    },
+    {
+     "bar": "2021-05-04T14:30:00.000Z",
+     "window": "allowed",
+     "trendRule": "allowed",
+     "validPlan": false
+    },
+    {
+     "bar": "2021-05-04T14:33:00.000Z",
+     "window": "allowed",
+     "trendRule": "allowed",
+     "validPlan": false
+    },
+    {
+     "bar": "2021-05-04T14:36:00.000Z",
+     "window": "allowed",
+     "trendRule": "allowed",
+     "validPlan": false
+    },
+    {
+     "bar": "2021-05-04T14:39:00.000Z",
+     "window": "allowed",
+     "trendRule": "allowed",
+     "validPlan": true
+    },
+    {
+     "bar": "2021-05-04T14:42:00.000Z",
+     "window": "allowed",
+     "trendRule": "allowed",
+     "validPlan": false
+    },
+    {
+     "bar": "2021-05-04T14:45:00.000Z",
+     "window": "allowed",
+     "trendRule": "allowed",
+     "validPlan": false
+    },
+    {
+     "bar": "2021-05-04T14:48:00.000Z",
+     "window": "allowed",
+     "trendRule": "allowed",
+     "validPlan": true
+    },
+    {
+     "bar": "2021-05-04T14:51:00.000Z",
+     "window": "allowed",
+     "trendRule": "allowed",
+     "validPlan": false
+    },
+    {
+     "bar": "2021-05-04T14:54:00.000Z",
+     "window": "allowed",
+     "trendRule": "allowed",
+     "validPlan": false
+    },
+    {
+     "bar": "2021-05-04T14:57:00.000Z",
+     "window": "allowed",
+     "trendRule": "allowed",
+     "validPlan": false
+    },
+    {
+     "bar": "2021-05-04T15:00:00.000Z",
+     "window": "allowed",
+     "trendRule": "allowed",
+     "validPlan": false
+    },
+    {
+     "bar": "2021-05-04T15:03:00.000Z",
+     "window": "allowed",
+     "trendRule": "allowed",
+     "validPlan": false
+    },
+    {
+     "bar": "2021-05-04T15:06:00.000Z",
+     "window": "allowed",
+     "trendRule": "allowed",
+     "validPlan": false
+    },
+    {
+     "bar": "2021-05-04T15:09:00.000Z",
+     "window": "allowed",
+     "trendRule": "allowed",
+     "validPlan": false
+    }
+   ],
+   "plans": [
+    {
+     "bar": "2021-05-04T14:30:00.000Z",
+     "side": "short",
+     "reads": [
+      {
+       "step": "bias",
+       "skill": "trend-vs-range",
+       "read": "regime trend-down"
+      },
+      {
+       "step": "location",
+       "skill": "vwap-volume-profile",
+       "read": "vwap below"
+      },
+      {
+       "step": "setup",
+       "skill": "breakout",
+       "read": "3m broke 1h low down"
+      },
+      {
+       "step": "entry",
+       "skill": "candle-reading",
+       "read": "3m close bottom"
+      },
+      {
+       "step": "stop",
+       "skill": "invalidation",
+       "read": "stop 3m high 13544.75"
+      },
+      {
+       "step": "target",
+       "skill": "take-profit",
+       "read": "target 3m swing 13493"
+      }
+     ],
+     "problems": [
+      "the setup has no read pointing down (short): state the reaction the trade's way"
+     ]
+    },
+    {
+     "bar": "2021-05-04T14:36:00.000Z",
+     "side": "short",
+     "reads": [
+      {
+       "step": "bias",
+       "skill": "trend-vs-range",
+       "read": "regime trend down"
+      },
+      {
+       "step": "location",
+       "skill": "vwap-volume-profile",
+       "read": "vwap below"
+      },
+      {
+       "step": "setup",
+       "skill": "rejection",
+       "read": "3m rejected session poc"
+      },
+      {
+       "step": "entry",
+       "skill": "candle-reading",
+       "read": "3m close bottom"
+      },
+      {
+       "step": "stop",
+       "skill": "invalidation",
+       "read": "stop 3m high 13534.5"
+      },
+      {
+       "step": "target",
+       "skill": "take-profit",
+       "read": "target 3m swing 13493"
+      }
+     ],
+     "problems": [
+      "the setup has no read pointing down (short): state the reaction the trade's way"
+     ]
+    },
+    {
+     "bar": "2021-05-04T14:36:00.000Z",
+     "side": "short",
+     "reads": [
+      {
+       "step": "bias",
+       "skill": "trend-vs-range",
+       "read": "regime trend down"
+      },
+      {
+       "step": "location",
+       "skill": "vwap-volume-profile",
+       "read": "vwap below"
+      },
+      {
+       "step": "setup",
+       "skill": "rejection",
+       "read": "3m rejected session poc down"
+      },
+      {
+       "step": "entry",
+       "skill": "candle-reading",
+       "read": "3m close bottom"
+      },
+      {
+       "step": "stop",
+       "skill": "invalidation",
+       "read": "stop 3m high 13534"
+      },
+      {
+       "step": "target",
+       "skill": "take-profit",
+       "read": "target 3m swing 13493"
+      }
+     ],
+     "problems": [
+      "no entry read pointing short is on a candle that closed after the setup's (2021-05-04T14:39:00.000Z): the confirmation is the next closed candle, not the reaction's own",
+      "R:R 1.426 is under the strategy's min 2"
+     ]
+    },
+    {
+     "bar": "2021-05-04T14:42:00.000Z",
+     "side": "short",
+     "reads": [
+      {
+       "step": "bias",
+       "skill": "multi-timeframe-analysis",
+       "read": "15m bos down"
+      },
+      {
+       "step": "location",
+       "skill": "vwap-volume-profile",
+       "read": "vwap below"
+      },
+      {
+       "step": "setup",
+       "skill": "breakout",
+       "read": "3m broke cisd down"
+      },
+      {
+       "step": "entry",
+       "skill": "candle-reading",
+       "read": "3m close bottom"
+      },
+      {
+       "step": "stop",
+       "skill": "invalidation",
+       "read": "stop 3m high 13544.25"
+      },
+      {
+       "step": "target",
+       "skill": "take-profit",
+       "read": "target session low 13493"
+      }
+     ],
+     "problems": [
+      "the setup has no read pointing down (short): state the reaction the trade's way",
+      "R:R 0.661 is under the strategy's min 2"
+     ]
+    },
+    {
+     "bar": "2021-05-04T14:45:00.000Z",
+     "side": "short",
+     "reads": [
+      {
+       "step": "bias",
+       "skill": "multi-timeframe-analysis",
+       "read": "1h bos down"
+      },
+      {
+       "step": "location",
+       "skill": "vwap-volume-profile",
+       "read": "vwap below"
+      },
+      {
+       "step": "setup",
+       "skill": "rejection",
+       "read": "3m rejected session POC up"
+      },
+      {
+       "step": "entry",
+       "skill": "candle-reading",
+       "read": "3m close bottom"
+      },
+      {
+       "step": "stop",
+       "skill": "invalidation",
+       "read": "stop 3m high 13552.5"
+      },
+      {
+       "step": "target",
+       "skill": "take-profit",
+       "read": "target session low 13493"
+      }
+     ],
+     "problems": [
+      "the setup has no read pointing down (short): state the reaction the trade's way"
+     ]
+    },
+    {
+     "bar": "2021-05-04T14:48:00.000Z",
+     "side": "short",
+     "reads": [
+      {
+       "step": "bias",
+       "skill": "trend-vs-range",
+       "read": "regime trend down"
+      },
+      {
+       "step": "location",
+       "skill": "levels-and-reactions",
+       "read": "broke session val down"
+      },
+      {
+       "step": "setup",
+       "skill": "breakout",
+       "read": "3m broke session val down"
+      },
+      {
+       "step": "entry",
+       "skill": "candle-reading",
+       "read": "3m close bottom"
+      },
+      {
+       "step": "stop",
+       "skill": "invalidation",
+       "read": "stop 3m high 13544.25"
+      }
+     ],
+     "problems": [
+      "steps not stated: target (every step needs a read, D7)",
+      "no entry read pointing short is on a candle that closed after the setup's (2021-05-04T14:51:00.000Z): the confirmation is the next closed candle, not the reaction's own"
+     ]
+    },
+    {
+     "bar": "2021-05-04T14:51:00.000Z",
+     "side": "short",
+     "reads": [
+      {
+       "step": "bias",
+       "skill": "multi-timeframe-analysis",
+       "read": "regime trend down"
+      },
+      {
+       "step": "location",
+       "skill": "vwap-volume-profile",
+       "read": "vwap below"
+      },
+      {
+       "step": "setup",
+       "skill": "rejection",
+       "read": "3m rejected ib low down"
+      },
+      {
+       "step": "entry",
+       "skill": "candle-reading",
+       "read": "3m close bottom"
+      },
+      {
+       "step": "stop",
+       "skill": "invalidation",
+       "read": "stop 3m high 13498.5"
+      },
+      {
+       "step": "target",
+       "skill": "take-profit",
+       "read": "target round number 13400"
+      }
+     ],
+     "problems": [
+      "no entry read pointing short is on a candle that closed after the setup's (2021-05-04T14:54:00.000Z): the confirmation is the next closed candle, not the reaction's own"
+     ]
+    },
+    {
+     "bar": "2021-05-04T15:09:00.000Z",
+     "side": "short",
+     "reads": [
+      {
+       "step": "bias",
+       "skill": "trend-vs-range",
+       "read": "regime trend down"
+      },
+      {
+       "step": "location",
+       "skill": "vwap-volume-profile",
+       "read": "vwap below"
+      },
+      {
+       "step": "setup",
+       "skill": "rejection",
+       "read": "3m rejected previous 3m high down"
+      },
+      {
+       "step": "entry",
+       "skill": "candle-reading",
+       "read": "3m close bottom"
+      },
+      {
+       "step": "stop",
+       "skill": "invalidation",
+       "read": "stop 3m high 13490.25"
+      }
+     ],
+     "problems": [
+      "steps not stated: target (every step needs a read, D7)",
+      "no entry read pointing short is on a candle that closed after the setup's (2021-05-04T15:12:00.000Z): the confirmation is the next closed candle, not the reaction's own"
+     ]
+    },
+    {
+     "bar": "2021-05-04T14:30:00.000Z",
+     "side": "short",
+     "reads": [
+      {
+       "step": "bias",
+       "skill": "trend-vs-range",
+       "read": "regime trend down"
+      },
+      {
+       "step": "location",
+       "skill": "vwap-volume-profile",
+       "read": "vwap below"
+      },
+      {
+       "step": "setup",
+       "skill": "breakout",
+       "read": "3m broke session poc down"
+      },
+      {
+       "step": "entry",
+       "skill": "candle-reading",
+       "read": "3m close bottom"
+      },
+      {
+       "step": "stop",
+       "skill": "invalidation",
+       "read": "stop 3m high 13544.75"
+      },
+      {
+       "step": "target",
+       "skill": "take-profit",
+       "read": "target 3m swing 13493"
+      }
+     ],
+     "problems": [
+      "no entry read pointing short is on a candle that closed after the setup's (2021-05-04T14:33:00.000Z): the confirmation is the next closed candle, not the reaction's own"
+     ]
+    },
+    {
+     "bar": "2021-05-04T14:36:00.000Z",
+     "side": "short",
+     "reads": [
+      {
+       "step": "bias",
+       "skill": "trend-vs-range",
+       "read": "regime trend down"
+      },
+      {
+       "step": "location",
+       "skill": "vwap-volume-profile",
+       "read": "below vwap"
+      },
+      {
+       "step": "setup",
+       "skill": "rejection",
+       "read": "3m rejected session poc down"
+      },
+      {
+       "step": "entry",
+       "skill": "candle-reading",
+       "read": "3m close bottom"
+      },
+      {
+       "step": "stop",
+       "skill": "invalidation",
+       "read": "stop 3m high 13534"
+      },
+      {
+       "step": "target",
+       "skill": "take-profit",
+       "read": "target 3m swing 13493"
+      }
+     ],
+     "problems": [
+      "no entry read pointing short is on a candle that closed after the setup's (2021-05-04T14:39:00.000Z): the confirmation is the next closed candle, not the reaction's own",
+      "R:R 1.426 is under the strategy's min 2"
+     ]
+    },
+    {
+     "bar": "2021-05-04T14:42:00.000Z",
+     "side": "short",
+     "reads": [
+      {
+       "step": "bias",
+       "skill": "bos-vs-choch",
+       "read": "15m bos down"
+      },
+      {
+       "step": "bias",
+       "skill": "trend-vs-range",
+       "read": "3m trend down"
+      },
+      {
+       "step": "location",
+       "skill": "levels-and-reactions",
+       "read": "at session poc"
+      },
+      {
+       "step": "setup",
+       "skill": "rejection",
+       "read": "3m rejected session poc down"
+      },
+      {
+       "step": "entry",
+       "skill": "candle-reading",
+       "read": "3m close bottom"
+      },
+      {
+       "step": "stop",
+       "skill": "invalidation",
+       "read": "stop 3m high 13544.75"
+      },
+      {
+       "step": "target",
+       "skill": "take-profit",
+       "read": "target session val 13496"
+      }
+     ],
+     "problems": [
+      "the setup has no read pointing down (short): state the reaction the trade's way"
+     ]
+    },
+    {
+     "bar": "2021-05-04T14:48:00.000Z",
+     "side": "short",
+     "reads": [
+      {
+       "step": "bias",
+       "skill": "trend-vs-range",
+       "read": "regime trend down"
+      },
+      {
+       "step": "bias",
+       "skill": "bos-vs-choch",
+       "read": "3m choch down"
+      },
+      {
+       "step": "location",
+       "skill": "vwap-volume-profile",
+       "read": "vwap below"
+      },
+      {
+       "step": "setup",
+       "skill": "breakout",
+       "read": "15m broke 1h low down"
+      },
+      {
+       "step": "setup",
+       "skill": "breakout",
+       "read": "3m broke session val down"
+      },
+      {
+       "step": "entry",
+       "skill": "candle-reading",
+       "read": "3m close bottom"
+      },
+      {
+       "step": "stop",
+       "skill": "invalidation",
+       "read": "stop 3m swing low 13503.75"
+      },
+      {
+       "step": "target",
+       "skill": "take-profit",
+       "read": "target round number 13400"
+      }
+     ],
+     "problems": [
+      "no entry read pointing short is on a candle that closed after the setup's (2021-05-04T14:51:00.000Z): the confirmation is the next closed candle, not the reaction's own"
+     ]
+    },
+    {
+     "bar": "2021-05-04T15:03:00.000Z",
+     "side": "short",
+     "reads": [
+      {
+       "step": "bias",
+       "skill": "multi-timeframe-analysis",
+       "read": "regime trend down"
+      },
+      {
+       "step": "location",
+       "skill": "levels-and-reactions",
+       "read": "vwap below"
+      },
+      {
+       "step": "setup",
+       "skill": "rejection",
+       "read": "5m rejected ib low down"
+      },
+      {
+       "step": "entry",
+       "skill": "candle-reading",
+       "read": "3m close bottom"
+      },
+      {
+       "step": "stop",
+       "skill": "invalidation",
+       "read": "stop 5m high 13497.5"
+      },
+      {
+       "step": "target",
+       "skill": "take-profit",
+       "read": "target round 13400"
+      }
+     ],
+     "problems": []
+    }
+   ]
+  },
+  {
+   "id": "leg-07",
+   "day": "2021-05-05",
+   "side": "short",
+   "start": "2021-05-05T13:33:00.000Z",
+   "extreme": "2021-05-05T13:36:00.000Z",
+   "from": 13665.5,
+   "to": 13604.5,
+   "points": 61,
+   "moments": [
+    {
+     "bar": "2021-05-05T13:33:00.000Z",
+     "window": "allowed",
+     "trendRule": "reversal-only",
+     "validPlan": false
+    }
+   ],
+   "plans": []
+  },
+  {
+   "id": "leg-08",
+   "day": "2021-05-05",
+   "side": "long",
+   "start": "2021-05-05T13:36:00.000Z",
+   "extreme": "2021-05-05T13:45:00.000Z",
+   "from": 13604.5,
+   "to": 13662.25,
+   "points": 57.75,
+   "moments": [
+    {
+     "bar": "2021-05-05T13:36:00.000Z",
+     "window": "allowed",
+     "trendRule": "allowed",
+     "validPlan": true
+    },
+    {
+     "bar": "2021-05-05T13:39:00.000Z",
+     "window": "allowed",
+     "trendRule": "allowed",
+     "validPlan": false
+    }
+   ],
+   "plans": [
+    {
+     "bar": "2021-05-05T13:36:00.000Z",
+     "side": "long",
+     "reads": [
+      {
+       "step": "bias",
+       "skill": "multi-timeframe-analysis",
+       "read": "trend rule long"
+      },
+      {
+       "step": "location",
+       "skill": "levels-and-reactions",
+       "read": "at 13611.25"
+      },
+      {
+       "step": "setup",
+       "skill": "rejection",
+       "read": "3m swept 13611.25 up"
+      },
+      {
+       "step": "entry",
+       "skill": "candle-reading",
+       "read": "3m close top"
+      },
+      {
+       "step": "stop",
+       "skill": "invalidation",
+       "read": "stop 3m low 13604.5"
+      },
+      {
+       "step": "target",
+       "skill": "take-profit",
+       "read": "target 15m swing 13653.25"
+      }
+     ],
+     "problems": [
+      "the setup has no read pointing up (long): state the reaction the trade's way"
+     ]
+    },
+    {
+     "bar": "2021-05-05T13:36:00.000Z",
+     "side": "long",
+     "reads": [
+      {
+       "step": "bias",
+       "skill": "multi-timeframe-analysis",
+       "read": "15m up"
+      },
+      {
+       "step": "location",
+       "skill": "levels-and-reactions",
+       "read": "at last 3m swing low"
+      },
+      {
+       "step": "setup",
+       "skill": "rejection",
+       "read": "3m rejected previous 3m low up"
+      },
+      {
+       "step": "entry",
+       "skill": "candle-reading",
+       "read": "3m close top"
+      },
+      {
+       "step": "stop",
+       "skill": "invalidation",
+       "read": "stop 3m low 13604.5"
+      },
+      {
+       "step": "target",
+       "skill": "take-profit",
+       "read": "target overnight high 13653.25"
+      }
+     ],
+     "problems": [
+      "no entry read pointing long is on a candle that closed after the setup's (2021-05-05T13:39:00.000Z): the confirmation is the next closed candle, not the reaction's own",
+      "R:R 1.450 is under the strategy's min 2"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "leg-09",
+   "day": "2021-05-05",
+   "side": "short",
+   "start": "2021-05-05T13:45:00.000Z",
+   "extreme": "2021-05-05T14:21:00.000Z",
+   "from": 13662.25,
+   "to": 13529.25,
+   "points": 133,
+   "moments": [
+    {
+     "bar": "2021-05-05T13:45:00.000Z",
+     "window": "allowed",
+     "trendRule": "reversal-only",
+     "validPlan": false
+    },
+    {
+     "bar": "2021-05-05T13:48:00.000Z",
+     "window": "allowed",
+     "trendRule": "reversal-only",
+     "validPlan": false
+    },
+    {
+     "bar": "2021-05-05T13:51:00.000Z",
+     "window": "allowed",
+     "trendRule": "reversal-only",
+     "validPlan": false
+    },
+    {
+     "bar": "2021-05-05T13:54:00.000Z",
+     "window": "allowed",
+     "trendRule": "reversal-only",
+     "validPlan": false
+    },
+    {
+     "bar": "2021-05-05T13:57:00.000Z",
+     "window": "allowed",
+     "trendRule": "allowed",
+     "validPlan": false
+    },
+    {
+     "bar": "2021-05-05T14:00:00.000Z",
+     "window": "allowed",
+     "trendRule": "allowed",
+     "validPlan": true
+    },
+    {
+     "bar": "2021-05-05T14:03:00.000Z",
+     "window": "allowed",
+     "trendRule": "allowed",
+     "validPlan": true
+    }
+   ],
+   "plans": [
+    {
+     "bar": "2021-05-05T14:03:00.000Z",
+     "side": "short",
+     "reads": [
+      {
+       "step": "bias",
+       "skill": "multi-timeframe-analysis",
+       "read": "read short mixed"
+      },
+      {
+       "step": "location",
+       "skill": "vwap-volume-profile",
+       "read": "vwap below"
+      },
+      {
+       "step": "setup",
+       "skill": "rejection",
+       "read": "15m rejected overnight high down"
+      },
+      {
+       "step": "entry",
+       "skill": "candle-reading",
+       "read": "3m close bottom"
+      },
+      {
+       "step": "stop",
+       "skill": "invalidation",
+       "read": "stop 3m high 13582.25"
+      },
+      {
+       "step": "target",
+       "skill": "take-profit",
+       "read": "target 1h swing 13527.25"
+      }
+     ],
+     "problems": [
+      "the entry has no read pointing down (short): state the reaction's confirmation the trade's way",
+      "R:R 1.402 is under the strategy's min 2"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "leg-10",
+   "day": "2021-05-05",
+   "side": "long",
+   "start": "2021-05-05T14:21:00.000Z",
+   "extreme": "2021-05-05T15:51:00.000Z",
+   "from": 13529.25,
+   "to": 13630,
+   "points": 100.75,
+   "moments": [
+    {
+     "bar": "2021-05-05T14:21:00.000Z",
+     "window": "allowed",
+     "trendRule": "allowed",
+     "validPlan": true
+    },
+    {
+     "bar": "2021-05-05T14:24:00.000Z",
+     "window": "allowed",
+     "trendRule": "allowed",
+     "validPlan": true
+    },
+    {
+     "bar": "2021-05-05T14:27:00.000Z",
+     "window": "allowed",
+     "trendRule": "allowed",
+     "validPlan": true
+    },
+    {
+     "bar": "2021-05-05T14:30:00.000Z",
+     "window": "allowed",
+     "trendRule": "allowed",
+     "validPlan": true
+    },
+    {
+     "bar": "2021-05-05T14:33:00.000Z",
+     "window": "allowed",
+     "trendRule": "allowed",
+     "validPlan": true
+    },
+    {
+     "bar": "2021-05-05T14:36:00.000Z",
+     "window": "allowed",
+     "trendRule": "allowed",
+     "validPlan": true
+    },
+    {
+     "bar": "2021-05-05T14:39:00.000Z",
+     "window": "allowed",
+     "trendRule": "allowed",
+     "validPlan": true
+    },
+    {
+     "bar": "2021-05-05T14:42:00.000Z",
+     "window": "allowed",
+     "trendRule": "allowed",
+     "validPlan": true
+    },
+    {
+     "bar": "2021-05-05T14:45:00.000Z",
+     "window": "allowed",
+     "trendRule": "allowed",
+     "validPlan": true
+    },
+    {
+     "bar": "2021-05-05T14:48:00.000Z",
+     "window": "allowed",
+     "trendRule": "allowed",
+     "validPlan": true
+    },
+    {
+     "bar": "2021-05-05T14:51:00.000Z",
+     "window": "allowed",
+     "trendRule": "allowed",
+     "validPlan": true
+    },
+    {
+     "bar": "2021-05-05T14:54:00.000Z",
+     "window": "allowed",
+     "trendRule": "allowed",
+     "validPlan": true
+    },
+    {
+     "bar": "2021-05-05T14:57:00.000Z",
+     "window": "allowed",
+     "trendRule": "allowed",
+     "validPlan": true
+    },
+    {
+     "bar": "2021-05-05T15:00:00.000Z",
+     "window": "allowed",
+     "trendRule": "allowed",
+     "validPlan": true
+    },
+    {
+     "bar": "2021-05-05T15:03:00.000Z",
+     "window": "allowed",
+     "trendRule": "allowed",
+     "validPlan": true
+    },
+    {
+     "bar": "2021-05-05T15:06:00.000Z",
+     "window": "allowed",
+     "trendRule": "allowed",
+     "validPlan": true
+    }
+   ],
+   "plans": [
+    {
+     "bar": "2021-05-05T14:45:00.000Z",
+     "side": "long",
+     "reads": [
+      {
+       "step": "bias",
+       "skill": "multi-timeframe-analysis",
+       "read": "15m up"
+      },
+      {
+       "step": "location",
+       "skill": "vwap-volume-profile",
+       "read": "vwap above"
+      },
+      {
+       "step": "setup",
+       "skill": "breakout",
+       "read": "15m broke vwap up"
+      },
+      {
+       "step": "entry",
+       "skill": "candle-reading",
+       "read": "3m close top"
+      },
+      {
+       "step": "stop",
+       "skill": "invalidation",
+       "read": "stop 1h low 13590"
+      },
+      {
+       "step": "target",
+       "skill": "take-profit",
+       "read": "target 15m swing 13665.5"
+      }
+     ],
+     "problems": [
+      "the setup has no read pointing up (long): state the reaction the trade's way",
+      "the entry has no read pointing up (long): state the reaction's confirmation the trade's way"
+     ]
+    }
+   ]
+  },
+  {
+   "id": "leg-11",
+   "day": "2021-05-06",
+   "side": "short",
+   "start": "2021-05-06T13:30:00.000Z",
+   "extreme": "2021-05-06T13:33:00.000Z",
+   "from": 13487.5,
+   "to": 13424.5,
+   "points": 63,
+   "moments": [
+    {
+     "bar": "2021-05-06T13:30:00.000Z",
+     "window": "none",
+     "trendRule": "allowed",
+     "validPlan": false
+    }
+   ],
+   "plans": []
+  },
+  {
+   "id": "leg-12",
+   "day": "2021-05-06",
+   "side": "long",
+   "start": "2021-05-06T13:33:00.000Z",
+   "extreme": "2021-05-06T13:39:00.000Z",
+   "from": 13424.5,
+   "to": 13509,
+   "points": 84.5,
+   "moments": [
+    {
+     "bar": "2021-05-06T13:33:00.000Z",
+     "window": "allowed",
+     "trendRule": "reversal-only",
+     "validPlan": false
+    },
+    {
+     "bar": "2021-05-06T13:36:00.000Z",
+     "window": "allowed",
+     "trendRule": "reversal-only",
+     "validPlan": false
+    }
+   ],
+   "plans": []
+  }
+ ]
+}

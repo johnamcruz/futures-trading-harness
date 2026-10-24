@@ -1,9 +1,9 @@
 'use strict';
 
 /**
- * The lessons record (Propose-Probe-Compose, docs/TRAINING.md): what probing skill edits has shown, written by code,
- * append-only (<loop dir>/lessons.jsonl). One line per probed edit (and one per combined change): the skill it
- * changed, its kind, the finding it addressed, the paired measures, the screen's verdict (helped, no effect, hurt) and
+ * The lessons record (Propose-Probe-Compose, docs/TRAINING.md): what probing skill and role edits has shown, written by code,
+ * append-only (<loop dir>/lessons.jsonl). One line per probed edit (and one per combined change): the skill (or the role,
+ * `agent`) it changed, its kind, the finding it addressed, the paired measures, the screen's verdict (helped, no effect, hurt) and
  * n, the paired decisions its target was judged on.
  *
  * A combined change that went to the keep rule gets one more line, its verdict (appendKeep: kept, rejected,
@@ -54,7 +54,7 @@ function appendLesson(file, entry) {
   const errors = [];
   if (typeof e.proposalId !== 'string' || !Number.isInteger(e.iteration)) errors.push('proposalId and iteration');
   if (!VERDICTS.includes(e.verdict)) errors.push(`verdict: one of ${VERDICTS.join(', ')}`);
-  if (!(e.composed === true || (typeof e.skill === 'string' && KINDS.includes(e.kind)))) errors.push(`skill and kind (${KINDS.join(', ')})`);
+  if (!(e.composed === true || ((typeof e.skill === 'string' || typeof e.agent === 'string') && KINDS.includes(e.kind)))) errors.push(`skill (or agent) and kind (${KINDS.join(', ')})`);
   if (!Number.isInteger(e.n) || e.n < 0) errors.push('n: the paired decisions its target was judged on');
   if (!practiceOnly(e.windows)) errors.push('windows: practice-train only (a lesson never holds validate, test or final outcomes)');
   if (errors.length) throw new Error(`a lesson names ${errors.join('; ')}`);
@@ -105,7 +105,7 @@ function summarize(entries, { maxLines = MAX_LINES, maxChars = MAX_CHARS } = {})
   if (!usable.length) return 'none yet';
   const groups = new Map();
   usable.forEach((e, i) => {
-    const key = e.composed ? `combined changes (${e.parts || '?'} parts)` : `${e.skill}, ${e.kind}${e.findingKind ? ` (${e.findingKind})` : ''}`;
+    const key = e.composed ? `combined changes (${e.parts || '?'} parts)` : `${e.skill || `agent ${e.agent}`}, ${e.kind}${e.findingKind ? ` (${e.findingKind})` : ''}`;
     const g = groups.get(key) || { key, helped: 0, 'no effect': 0, hurt: 0, ns: [], last: 0, keep: new Map() };
     g[e.verdict] += 1;
     g.ns.push(e.n);

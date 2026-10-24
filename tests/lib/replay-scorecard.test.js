@@ -404,7 +404,9 @@ test('scoreRun: every decision of a run scored from its own records', () => {
   // the model passed without compose_check: the pass disagrees (fix/confluence-not-vetoes: compose first).
   // A composable-looking reaction whose standard plan is refused (the briefing's line says so): the pass the skills
   // prescribe, never no compose (the adversarial review, fix/confluence-not-vetoes).
-  assert.deepStrictEqual([R[4].agrees, R[4].facts.composable.valid, R[4].facts.composable.reason], [true, false, '15m broke overnight high (+2), confirmation: long plan refused (no level on the winning side)']);
+  // With no level named on the winning side the standard plan targets the 2R mark (fix/trend-moves-compose, the owner's
+  // "2R minimum, trail it"): it is OK, so the pass without compose_check disagrees.
+  assert.deepStrictEqual([R[4].agrees, R[4].facts.composable.valid, R[4].facts.composable.reason], [false, true, '15m broke overnight high (+2), confirmation, plan OK']);
   assert.match(R[4].reasons.claims.find(c => c.kind === 'no-entry-window').why, /opening drive window allows entries/);
   // 5: a skip verdict (step 1); "no prop attempt running" while it runs.
   assert.deepStrictEqual([R[5].expected.decision, R[5].expected.decidedBy, R[5].category], ['no-trade', 1, 'wrong stated reason']);
@@ -417,7 +419,7 @@ test('scoreRun: every decision of a run scored from its own records', () => {
 
   // The summary.
   assert.deepStrictEqual(summary.categories, { right: 3, 'wrong-side entry': 0, 'bad size': 0, 'early close': 1, 'excessive abstention': 1, 'wrong stated reason': 2, 'risk-rule rejection': 1, unchecked: 1 });
-  assert.deepStrictEqual(summary.agreement.overall, { decisions: 9, agree: 5, disagree: 3, unchecked: 1, rate: 0.625 });
+  assert.deepStrictEqual(summary.agreement.overall, { decisions: 9, agree: 4, disagree: 4, unchecked: 1, rate: 0.5 });
   assert.deepStrictEqual(Object.keys(summary.agreement.byStep), ['1 hard stops', 'in a trade', 'no setup', 'take']);
   assert.deepStrictEqual(summary.agreement.byStep.take, { decisions: 3, agree: 1, disagree: 2, unchecked: 0, rate: 0.3333 });
   assert.strictEqual(summary.agreement.byStrategy.orb.decisions, 4);
@@ -425,7 +427,7 @@ test('scoreRun: every decision of a run scored from its own records', () => {
   assert.strictEqual(summary.skipped.n, 1);
   assert.strictEqual(summary.reasons.byKind['no-attempt'].false, 1);
   assert.deepStrictEqual([summary.reasons.falseIncidental, summary.reasons.byKind['trend-blocks'].incidentalFalse, summary.reasons.incidentalWrongRate], [1, 1, 1]);
-  assert.deepStrictEqual(summary.days, [{ day: DAY, decisions: 9, agree: 5, disagree: 3, balance: 100000, dayPnl: -500, floor: 97000, cushion: 3000, dailyHeadroom: 1500, balanceCheck: 'ok' }]);
+  assert.deepStrictEqual(summary.days, [{ day: DAY, decisions: 9, agree: 4, disagree: 4, balance: 100000, dayPnl: -500, floor: 97000, cushion: 3000, dailyHeadroom: 1500, balanceCheck: 'ok' }]);
   // Deterministic.
   assert.deepStrictEqual(scoreRun(runDir, { strategies: STRATS, accounts: ACCOUNTS }), { records, summary });
 });
@@ -439,7 +441,7 @@ test('a reasoning-fix look hides every market outcome: no P&L, no counterfactual
   // The reasoning and fact failures stay; the exit judged without its excursion is unchecked, not early close.
   assert.deepStrictEqual(records.map(r => r.category), shown.records.map(r => (r.category === 'early close' ? 'unchecked' : r.category)));
   assert.deepStrictEqual(records[2].why, ['the plan or the trade\'s excursion is unknown']);
-  assert.deepStrictEqual([summary.trades, summary.skipped, summary.days[0], summary.labels], [{ n: 1 }, { n: 1 }, { day: DAY, decisions: 9, agree: 5, disagree: 2 }, { noCycleWithCandidates: summary.labels.noCycleWithCandidates }]);
+  assert.deepStrictEqual([summary.trades, summary.skipped, summary.days[0], summary.labels], [{ n: 1 }, { n: 1 }, { day: DAY, decisions: 9, agree: 4, disagree: 3 }, { noCycleWithCandidates: summary.labels.noCycleWithCandidates }]);
   assert.deepStrictEqual(records[0].facts.attempt, { account: ATTEMPT.account, status: 'active', entryBlock: null });
   // Nothing in what it writes carries an outcome field.
   const out = path.join(tmpDir(), 'sc-hidden');
@@ -830,9 +832,9 @@ test('scoreRun and labels: a composed limit entry at its record is right with no
   const { runDir } = makeRun({ steps });
   const { records } = scoreRun(runDir, { strategies, accounts: ACCOUNTS });
   // k 3: a pass on its OK record (a valid setup) with no decisive reason is excessive abstention (fix/confluence-not-vetoes).
-  // k 4: another bar's record is no setup of this bar, and its briefing's reaction has its standard plan refused: the
-  // pass is right (no compose is only a pass on a plan OK).
-  assert.deepStrictEqual(records.map(r => r.category), ['right', 'bad size', 'right', 'excessive abstention', 'right', 'right', 'bad size', 'bad size', 'right', 'bad size', 'right', 'bad size', 'right', 'right', 'right', 'bad size', 'right', 'right', 'right']);
+  // k 4: another bar's record is no setup of this bar; its briefing's reaction names no level on the winning side, so its
+  // standard plan targets the 2R mark and is OK (fix/trend-moves-compose): the pass is excessive abstention.
+  assert.deepStrictEqual(records.map(r => r.category), ['right', 'bad size', 'right', 'excessive abstention', 'excessive abstention', 'right', 'bad size', 'bad size', 'right', 'bad size', 'right', 'bad size', 'right', 'right', 'right', 'bad size', 'right', 'right', 'right']);
   assert.deepStrictEqual(records[18].expected.composed, 'rec19');
   assert.deepStrictEqual([records[16].expected.composed, records[17].expected.composed], ['rec17', 'rec18']);
   assert.deepStrictEqual([records[14].expected.composed, records[15].expected.decidedBy, records[15].why], ['rec15', 1, ['the order says no trade (step 1)']]);

@@ -640,6 +640,32 @@ test('decision path, trade_lifecycle: the model composes the whole trade with co
   assert.strictEqual(r.state.history.at(-1).action, D.RESULT_ACTION.executed);
 });
 
+// The guided retry (compose-hints.js): the scripted model states a directionless entry ("3m volume high"), compose_check
+// refuses it and its hint lists the TRUE confirmations; the model composes again with the first one listed, which is
+// OK, and the entry goes through the gate. The refusal is the check's own (unchanged); only its text says what is true.
+test('decision path, trade_lifecycle: a refused directionless entry, the hint\'s listed read composed again, OK and entered', async () => {
+  const w = D.world();
+  const steps = composedCycle(w);
+  const at = steps.findIndex(s => s.harness === 'compose_check');
+  const listed = ctx => {
+    const line = String(ctx.results.compose_check).split('\n').find(l => l.startsWith('- HINT entry:'));
+    return line ? /true here: "([^"]+)"/.exec(line)[1] : null;
+  };
+  let first = null;
+  steps.splice(at, 1,
+    { harness: 'compose_check', args: { symbol: 'MNQ', side: 'long', reads: lcSwap('entry', '3m volume high'), size: 1 } },
+    { act: ctx => { first = ctx.results.compose_check; } },
+    { harness: 'compose_check', args: ctx => ({ symbol: 'MNQ', side: 'long', reads: lcSwap('entry', listed(ctx) || '3m volume high'), size: 1 }) });
+  const r = await D.pass(w, decisionAt(FIRED_BAR), steps);
+  assert.match(first, /PROBLEM: the entry has no read pointing up \(long\)/);
+  assert.match(first, /- HINT entry: volume and participation point no side, so they never confirm alone; [^\n]*true here: "3m/);
+  assert.match(first, /\nNOT OK: no entry on this record/);
+  assert.match(r.ctx.results.compose_check, /\nOK: every read verified and the plan stands/);
+  const recs = TL.readRecords(w.home, 'MNQ');
+  assert.deepStrictEqual(recs.slice(-2).map(x => x.ok), [false, true]);
+  assert.deepStrictEqual(lastEntry(w), { decision: 'allowed', checks: [], messages: '' });
+});
+
 // The same valid setup on the Claude Code harness path (the in-session flow: the head trader launches phase 2 and the
 // executor itself; the runner's entry workflow is opencode's), its transcript Claude Code's stream-json, the role skills
 // full (the runner's mode for every harness but opencode): the head trader loads its skills with the Skill tool.

@@ -5,7 +5,7 @@ const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
 const { tmpDir } = require('../helpers');
-const { FAILURES, LOCKED_KEYS, parseProposals, validateProposal, applyProposal, proposalId, isMechanical, kindOf } = require('../../scripts/lib/train/proposal');
+const { FAILURES, LOCKED_KEYS, parseProposals, validateProposal, applyProposal, proposalId, isMechanical, kindOf, authorOf } = require('../../scripts/lib/train/proposal');
 
 function tree() {
   const root = tmpDir();
@@ -99,6 +99,12 @@ test('proposalId: the same change is the same id; isMechanical: a strategy or ru
   assert.strictEqual(kindOf('accounts/test_50k/RULEBOOK.md'), 'rulebook');
   assert.strictEqual(kindOf('accounts/test_50k/ACCOUNT.md'), null);
   assert.strictEqual(kindOf('rulebooks/test_50k/RULEBOOK.md'), null);
-  assert.strictEqual(kindOf('agents/risk-manager.md'), null);
+  // A desk role's body (agent-edit.js); never the reviewer, the researcher or the calendar analyst.
+  assert.strictEqual(kindOf('agents/risk-manager.md'), 'agent');
+  assert.strictEqual(kindOf('agents/trade-executor.md'), 'agent');
+  for (const r of ['trade-reviewer', 'strategy-researcher', 'news-calendar-analyst', 'head-trader']) assert.strictEqual(kindOf(`agents/${r}.md`), null, r);
+  assert.strictEqual(isMechanical(ok({ edits: [{ file: 'agents/risk-manager.md', find: 'a', replace: 'b' }] })), false);
+  assert.strictEqual(authorOf('manual, approved by J'), 'person');
+  for (const s of ['proposer', 'propose-probe-compose', undefined, 'a manual']) assert.strictEqual(authorOf(s), 'model', String(s));
   assert.ok(FAILURES.includes('wrong stated reason') && !FAILURES.includes('right') && !FAILURES.includes('unchecked'));
 });

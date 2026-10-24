@@ -11,8 +11,15 @@
  *       scans whole session dates in N processes at once (the same moments, in order)
  *   node scripts/curated-lists.js build <moments.jsonl> ... --use practice|validate [--total 200] [--seed 1]
  *       [--min-skill 3] [--mix trend-up=0.35,trend-down=0.35,trend-end=0.1,chop=0.1,counter-trend=0.1]
- *       [--pass-share trend-end=0.6,chop=0.7,counter-trend=0.7] [--out dir]
- *       the lists, the mix and their coverage -> <out>/curated-<use>-<fingerprint>.json (default <FTH_HOME>/experience)
+ *       [--pass-share trend-end=0.6,chop=0.7,counter-trend=0.7] [--legs-bars <file> [--legs-sessions spec]] [--out dir]
+ *       the lists, the mix and their coverage -> <out>/curated-<use>-<fingerprint>.json (default <FTH_HOME>/experience);
+ *       --legs-bars: the scan's bars, its trend legs (the capture report's detector, in --legs-sessions, by default
+ *       config/replay.json trendCapture.curationSessions) label the trend lists and each leg gets a moment first
+ *   node scripts/curated-lists.js census <moments.jsonl> ... --use practice --legs-bars <file> [--legs-sessions spec]
+ *       [--seed N] [--out dir]   the trend-leg census (learning/leg-census.js): every leg, its first with-leg moment, one
+ *       seeded order -> <out>/leg-census-<use>-<fingerprint>.json (default <FTH_HOME>/experience)
+ *   node scripts/curated-lists.js build --census <file> --batch <k> --use practice [--out dir]   batch k of a census as
+ *       the trend lists of one hashed list document
  *   node scripts/curated-lists.js show <lists file>       the coverage report
  */
 
@@ -27,9 +34,10 @@ const { loadBars } = require('./lib/backtest/data');
 const { baseBars, runnerClock } = require('./lib/learning/setup-library');
 const M = require('./lib/learning/curated-moments');
 const C = require('./lib/learning/curated-lists');
+const LC = require('./lib/learning/leg-census');
 
-const USAGE = 'usage: curated-lists.js scan --bars <file> --root <ROOT> --from YYYY-MM-DD --to YYYY-MM-DD --use practice|validate --out <moments.jsonl> [--minutes 3] [--tick 0.25] [--setup-tf 15] [--window-bars N] [--jobs N] | build <moments.jsonl> ... --use practice|validate [--total N] [--seed N] [--min-skill N] [--mix list=share,...] [--pass-share list=share,...] [--out dir] | show <lists file>';
-const VALUE_FLAGS = ['--bars', '--root', '--from', '--to', '--use', '--out', '--minutes', '--tick', '--setup-tf', '--window-bars', '--total', '--seed', '--min-skill', '--mix', '--pass-share', '--jobs'];
+const USAGE = 'usage: curated-lists.js scan --bars <file> --root <ROOT> --from YYYY-MM-DD --to YYYY-MM-DD --use practice|validate --out <moments.jsonl> [--minutes 3] [--tick 0.25] [--setup-tf 15] [--window-bars N] [--jobs N] | build <moments.jsonl> ... --use practice|validate [--total N] [--seed N] [--min-skill N] [--mix list=share,...] [--pass-share list=share,...] [--legs-bars <file> [--legs-sessions spec]] [--out dir] | census <moments.jsonl> ... --use practice --legs-bars <file> [--seed N] [--out dir] | build --census <file> --batch <k> --use practice [--out dir] | show <lists file>';
+const VALUE_FLAGS = ['--bars', '--root', '--from', '--to', '--use', '--out', '--minutes', '--tick', '--setup-tf', '--window-bars', '--total', '--seed', '--min-skill', '--mix', '--pass-share', '--jobs', '--legs-bars', '--legs-sessions', '--census', '--batch'];
 
 function opt(argv, name) {
   const i = argv.indexOf(name);
@@ -119,10 +127,8 @@ function mixOpt(argv, name = '--mix', dflt = C.DEFAULTS.mix) {
   return mix;
 }
 
-function build(argv) {
-  const files = positional(argv.slice(1));
-  const use = opt(argv, '--use');
-  if (!files.length || !use) throw new Error(USAGE);
+/** The moments files given: { sources, moments }. */
+function readMoments(files) {
   const sources = [];
   const moments = [];
   for (const f of files.map(x => path.resolve(x))) {
@@ -130,13 +136,37 @@ function build(argv) {
     sources.push({ file: f, sha256: crypto.createHash('sha256').update(text).digest('hex') });
     moments.push(...text.split('\n').filter(Boolean).map(l => JSON.parse(l)));
   }
+  return { sources, moments };
+}
+
+const legsArg = (argv, moments) => C.legsFor(baseBars(loadBars(path.resolve(opt(argv, '--legs-bars'))), (moments[0] || {}).minutes), { session: opt(argv, '--legs-sessions') });
+const outDir = argv => (opt(argv, '--out') ? path.resolve(opt(argv, '--out')) : path.join(harnessHome(), 'experience'));
+
+function census(argv) {
+  const { sources, moments } = readMoments(positional(argv.slice(1)));
+  if (!sources.length || !opt(argv, '--use') || !opt(argv, '--legs-bars')) throw new Error(USAGE);
+  const doc = LC.buildCensus(moments, legsArg(argv, moments), { use: opt(argv, '--use'), seed: numberOpt(argv, '--seed', C.DEFAULTS.seed, { integer: true, min: -Number.MAX_SAFE_INTEGER }), sources });
+  say(`${doc.legs} leg(s), ${doc.withMoment} with a moment; seed ${doc.seed}; fingerprint ${doc.fingerprint}`);
+  say(`wrote ${LC.writeCensus(outDir(argv), doc)}`);
+  return 0;
+}
+
+function build(argv) {
+  const use = opt(argv, '--use');
+  const cen = opt(argv, '--census') ? LC.readCensus(path.resolve(opt(argv, '--census'))) : null;
+  const k = cen ? numberOpt(argv, '--batch', 0, { integer: true }) : null;
+  const read = cen ? { sources: [{ file: opt(argv, '--census'), sha256: cen.fingerprint }], moments: LC.batch(cen, k).map(e => e.moment) } : readMoments(positional(argv.slice(1)));
+  const { sources, moments } = read;
+  if (!sources.length || !use) throw new Error(USAGE);
   const doc = C.buildLists(moments, {
     use, sources, mix: mixOpt(argv), passShare: mixOpt(argv, '--pass-share', C.DEFAULTS.passShare),
     seed: numberOpt(argv, '--seed', C.DEFAULTS.seed, { integer: true, min: -Number.MAX_SAFE_INTEGER }),
     total: numberOpt(argv, '--total', C.DEFAULTS.total, { integer: true, min: 1 }),
     minSkill: numberOpt(argv, '--min-skill', C.DEFAULTS.minSkill, { integer: true }),
+    legs: !cen && opt(argv, '--legs-bars') ? legsArg(argv, moments) : null,
+    census: cen ? { fingerprint: cen.fingerprint, seed: cen.seed, batch: k, size: moments.length } : null,
   });
-  const out = C.writeLists(opt(argv, '--out') ? path.resolve(opt(argv, '--out')) : path.join(harnessHome(), 'experience'), doc);
+  const out = C.writeLists(outDir(argv), doc);
   process.stdout.write(C.coverageText(doc));
   say(`${doc.mix.length} moment(s) from ${sources.length} file(s); fingerprint ${doc.fingerprint.slice(0, 16)}`);
   say(`wrote ${out}`);
@@ -154,6 +184,7 @@ function main(argv) {
   const cmd = argv[0];
   if (cmd === 'scan') return scan(argv);
   if (cmd === 'build') return build(argv);
+  if (cmd === 'census') return census(argv);
   if (cmd === 'show') return show(argv);
   throw new Error(USAGE);
 }

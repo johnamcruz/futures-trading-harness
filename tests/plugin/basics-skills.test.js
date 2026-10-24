@@ -176,7 +176,7 @@ const PINS = {
     'It is a setup read (`<tf> cisd up|down`), never a trade of its own',
     'A CISD after a sweep of a key level is stronger confluence; one without is still a CISD.',
     'A doji, a small body or a mid-range close is weak: no zone, no fib',
-    'price pulls back to a level, then a CISD back in the trend\'s direction ends the pullback; the OTE bounce is the entry.',
+    'price pulls back to a level, then a CISD back in the trend\'s direction ends the pullback; a later close is the entry.',
     'a CISD back toward the middle, aiming at the other side.',
     'a 3m or 5m CISD in the 15m/1h trend\'s direction is the pullback ending',
     'Never anticipate the bounce.',

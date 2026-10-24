@@ -58,8 +58,9 @@ If no document change would help, reply: NO PROPOSAL
 ### The probe prompt
 
 With the loop's `probe` setting (Propose-Probe-Compose, `docs/TRAINING.md`)
-the loop uses this prompt instead. `{{FINDINGS}}` is one line per finding
-of a practice replay's skill-usage report, `{{LESSONS}}` a short summary of
+the loop uses this prompt instead. `{{FLOW}}` is the trading flow's steps
+in order, `{{FINDINGS}}` the round's findings grouped by the step they
+block (in rank order inside a step), `{{LESSONS}}` a short summary of
 what earlier probes showed, with sample sizes, `{{K}}` the number of edits.
 Each edit is tested alone on the same practice moments, then the ones that
 helped are combined by code.
@@ -67,7 +68,7 @@ helped are combined by code.
 ```text
 You review your own trading decisions. You do not trade now: no orders, no broker tools.
 
-A practice replay checked how you used your skills. These are the problems it found, most frequent first, each with an id:
+A trade is built in this order: {{FLOW}}. A practice replay checked how you built yours. These are the problems it found, grouped by the step they block, each with an id:
 
 {{FINDINGS}}
 
@@ -75,25 +76,28 @@ What earlier tests of edits showed (evidence only; n is how many decisions each 
 
 {{LESSONS}}
 
-Read the skills in your working directory. Propose at most {{K}} small edits. Each edit fixes one finding above, in one skill, and works without the others: each is tested alone. Edit only these files:
+Read the skills and the desk roles in your working directory. Propose at most {{K}} small edits. Fix the earliest step first: a later step can't work while an earlier one blocks it. Each edit fixes one finding above, in one file, and works without the others: each is tested alone. Edit only these files:
 
 {{FILES}}
 
 Rules:
-- Edit the skill the finding names. A finding with no skill: edit the skill whose text misled you.
+- Edit the skill or the role the finding names. A finding with neither: edit the skill or role whose text misled you.
+- An edit helps you read the facts better. It never makes you take a trade the facts don't support.
 - Write rules as short lines (at most 120 characters), condition then action: "- <when this holds> → <do this>".
 - Add no numbers, in digits or words ("three", "half").
-- Never edit the skill's frontmatter (its name and description).
-- Keep the skill small: never make it longer than it needs to be.
+- Never edit the frontmatter (a skill's name and description; a role's tools and skill lists).
+- In a role: never edit its "Load the skills" sentence, its headings, its report formats or its VERDICT, FACTS, EXECUTED or ABORTED lines.
+- Keep the file small: never make it longer than it needs to be.
 - "find" is text copied exactly from the file. It must appear exactly once in that file.
 - "kind" is one of: {{KINDS}}.
 - "targets" lists the failure categories the edit fixes, from: {{CATEGORIES}}.
 - You propose. Code tests each edit on the same decisions. Do not claim it works.
 
-Reply with one line per edit, and nothing else on that line:
+Reply with one line per edit, and nothing else on that line. For a skill:
 PROPOSAL {"tag":{"skill":"<skill>","finding":"<id>","kind":"<kind>"},"targets":["<category>"],"expects":"<the effect, one sentence>","why":"<what misled you>","edits":[{"file":"skills/<skill>/SKILL.md","find":"<exact text>","replace":"<new text>"}]}
+For a role, the tag names it ("agent" in place of "skill") and the file is agents/<role>.md.
 
-If no skill change would help, reply: NO PROPOSAL
+If no change would help, reply: NO PROPOSAL
 ```
 
 ## Examples

@@ -27,6 +27,8 @@ const { specFor } = require('../trading/contracts');
 const { cycleId } = require('../trading/check-order');
 const { briefingAfterClock } = require('../trading/look-ahead');
 const { attemptPolicy } = require('../trading/lifecycle-order');
+const { hintsFor } = require('../trading/compose-hints');
+const { standardPlans } = require('../learning/setup-library');
 
 /** A running prop attempt whose policy trades the composed strategy: its size is a suggestion, translated at entry. */
 const inAttempt = (home, doc, strategies, root) => { try { return Boolean(attemptPolicy(home, doc, strategies, root)); } catch (_err) { return true; } };
@@ -61,13 +63,23 @@ function composeCheck({ symbol = null, side = null, reads = null, size = null } 
   const spec = specFor(symbol);
   const tick = spec ? spec.tickSize : null;
   const checked = checkReads({ reads, side, briefing: got.briefing, skills: skillCatalog(c.root).map(k => k.name), tick: tick || 0.25 });
-  const planned = checked.stop && checked.target
-    ? planOf({ checked, briefing: got.briefing, side, size, tick, tickValue: spec ? spec.tickValue : null, minRR: doc.risk.min_rr, maxRiskUsd: doc.risk.max_risk_usd, stopRule: stopRuleOf(doc.risk), suggestion: inAttempt(home, doc, all, symbol) })
-    : null;
+  const plan = { size, tickValue: spec ? spec.tickValue : null, minRR: doc.risk.min_rr, maxRiskUsd: doc.risk.max_risk_usd, stopRule: stopRuleOf(doc.risk), suggestion: inAttempt(home, doc, all, symbol) };
+  const planned = checked.stop && checked.target ? planOf({ checked, briefing: got.briefing, side, tick, ...plan }) : null;
   const record = buildRecord({ at, root: symbol, symbol, side, briefing: got.briefing, checked, planned, cycleId: cycleId(c.env), validBars: doc.valid_bars });
   appendRecord(home, record);
-  // A record that is not OK is an answer, not a failure: the text says what stands.
-  return { text: renderRecord(record, checked) };
+  // A record that is not OK is an answer, not a failure: the text says what stands, then what is TRUE on this bar
+  // (compose-hints.js: never a verdict; a hint that can't be worked out is left out, the record unchanged).
+  return { text: renderRecord(record, checked, record.ok ? [] : hintsOf({ checked, planned, briefing: got.briefing, side, tick, plan, spec })) };
+}
+
+/** A refusal's hints (compose-hints.js), with the briefing's standard plan for the side when it passes; none on any error. */
+function hintsOf({ checked, planned, briefing, side, tick, plan, spec }) {
+  try {
+    const standard = (standardPlans(briefing) || []).find(p => p.side === side && p.status === 'traded') || null;
+    return hintsFor({ checked, planned, briefing, side, tick, plan: spec ? plan : null, standard });
+  } catch (_err) {
+    return [];
+  }
 }
 
 /** argv to { symbol, side, reads, size }. */

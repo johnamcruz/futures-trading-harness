@@ -22,13 +22,23 @@ function tree() {
 }
 
 const prop = (find, replace) => ({ targets: ['bad size'], expects: 'x', edits: [{ file: FILE, find, replace }] });
-const errs = (t, find, replace) => validateProposal(prop(find, replace), { root: t.root }).join('\n');
+// A rulebook edit only ever comes from a person (import-proposal): the guard below judges those.
+const errs = (t, find, replace) => validateProposal(prop(find, replace), { root: t.root, by: 'person' }).join('\n');
 const line = (t, re) => t.text.match(re)[0];
 
 test('every sizing limit has a direction; the fixture rulebook is valid as written', () => {
   assert.deepStrictEqual([...SIZING_KEYS].sort(), Object.keys(G.DIRECTION).filter(k => !['daily_loss_soft', 'loss_streak_stop'].includes(k)).sort());
   const t = tree();
   assert.deepStrictEqual(errs(t, 'learned: none', 'learned: none '), '', 'a no-op on the numbers passes');
+});
+
+test('a model never proposes a rulebook: even a tightening is refused unless a person brought it', () => {
+  const t = tree();
+  for (const by of [undefined, 'model']) {
+    assert.match(validateProposal(prop('daily_loss_soft: 500', 'daily_loss_soft: 400'), { root: t.root, ...(by ? { by } : {}) }).join('\n'), /a rulebook is the owner's to change; only a proposal a person brings/);
+  }
+  assert.strictEqual(errs(t, 'daily_loss_soft: 500', 'daily_loss_soft: 400'), '');
+  assert.match(validateProposal(prop('daily_loss_soft: 500', 'daily_loss_soft: 400'), { root: t.root, by: 'anyone' }).join('\n'), /by: one of model, person/);
 });
 
 test('the soft daily stop: lower passes; higher, off or removed is refused, naming the key', () => {

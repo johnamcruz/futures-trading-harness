@@ -14,7 +14,7 @@ change is (CLAUDE.md, "Before a pull request").
 
 ## When to Use
 
-- The user wants the agent's skills, strategies or rulebook improved from
+- The user wants the agent's skills, strategies or desk roles improved from
   its own replays, or wants to resume, read or judge a loop.
 - Not inside an autonomous cycle: the loop, like a replay, is the user's to
   start. An agent may explain it and prepare the config.
@@ -93,11 +93,14 @@ proposal.json --approved-by <name>`, and it is judged like any other.
 
 **Safety.** One loop at a time (`<FTH_HOME>/training/loop.lock`). It
 refuses to run while a live runner holds the account. The limits stop it
-between model calls; a re-run resumes where it stopped. Proposals may edit
-only skills, strategies (never a `name:` or `status:` line, nor a policy's
-account, sizing, contracts or exit) and rulebooks
-(`accounts/<account>/RULEBOOK.md`): never code, account profiles
-(`ACCOUNT.md`), agents, rules, or the loop's own skills. The proposer runs
+between model calls; a re-run resumes where it stopped. A model's proposals
+may edit only skills, strategies (never a `name:` or `status:` line, nor a
+policy's account, sizing, contracts or exit) and the desk roles' bodies
+(the analysts, `risk-manager`, `trade-executor`: never a role's
+frontmatter, its "Load the skills" sentence or its report formats). A
+rulebook (`accounts/<account>/RULEBOOK.md`) only a person brings, by
+the import-proposal command. Never code (the gate, promotion, tunables), config,
+account profiles (`ACCOUNT.md`), rules, or the loop's own skills. The proposer runs
 with its kill switch on and every live broker disabled. A trade either
 side opens at a decision point is followed to its end, so a candidate that
 enters where the champion stayed flat is judged on that trade too.

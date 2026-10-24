@@ -31,6 +31,7 @@ const { loopPaths, readLedger, lockHolder } = require('./lib/train/state');
 const { readArchive, leaders } = require('./lib/train/archive');
 const { parseProposals } = require('./lib/train/proposal');
 const { checkLook } = require('./lib/prop/looks');
+const { line } = require('./lib/train/iteration-report');
 
 const ROOT = path.resolve(__dirname, '..');
 const USAGE = 'usage: train-loop.js plan|run|status --config <loop.json> [--dry-run] [--steps <steps.js>] | judge --config <loop.json> --proposal <id> --held-out-look | import-proposal --config <loop.json> --file <proposal> --approved-by <name>';
@@ -78,6 +79,10 @@ function plan(loop) {
   return 0;
 }
 
+const readJsonOr = file => {
+  try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch (_err) { return null; }
+};
+
 function status(loop) {
   const paths = loopPaths(process.env, loop.loopId);
   let state = null;
@@ -90,6 +95,11 @@ function status(loop) {
   say(`${holder ? `running (pid ${holder.pid}, ${holder.loopId})` : 'not running'}; ${state.iterations.filter(i => i.done).length} iteration(s) done; ${state.modelCalls} model call(s)${state.stopped ? `; last stop: ${state.stopped}` : ''}`);
   const archive = readArchive(paths.archive);
   for (const e of archive) say(`${e.phase === 'held-out' ? 'held-out' : `iteration ${e.iteration}`}: ${e.proposalId} ${e.verdict}: ${(e.reasons || []).join('; ')}${e.promotion && e.promotion.branch ? ` (branch ${e.promotion.branch})` : ''}`);
+  // Propose-Probe-Compose: each iteration in one line (lib/train/iteration-report.js), from its iteration-report.json.
+  for (const it of state.iterations) {
+    const rec = readJsonOr(path.join(paths.iter(it.n), 'iteration-report.json'));
+    if (rec) say(line(rec));
+  }
   for (const l of leaders(archive)) say(`leader for ${l.category}: ${l.proposalId} (iteration ${l.iteration}, effect ${l.effect})`);
   return 0;
 }

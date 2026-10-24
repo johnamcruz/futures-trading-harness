@@ -492,7 +492,7 @@ test('runEntry in a prop attempt: the record suggests 1, the order is the transl
   };
   // Phase 2's request names the translated 5 as the size to approve; phase 2 approving the size its request names: 5.
   let { s, r } = await run(request => `APPROVE - size ${/The entry's size is (\d+) MNQ/.exec(request)[1]}, risk $277.50`);
-  assert.match(s.calls[0].request, /The entry's size is 5 MNQ: code's translation of the record's suggested 1 under the account rulebook \(the rulebook's size at this stop: 5 MNQ \(risk.max_risk_usd \$300.00 at \$56.74 a contract all in\)\)\. Approve that size \(your VERDICT line's size 5\), or cut it, never under 3 \(under it: veto instead\); the record's size is a suggestion, never the one to approve\./);
+  assert.match(s.calls[0].request, /The entry's size is 5 MNQ: code's translation of the record's suggested 1 under the account rulebook \(the rulebook's size at this stop: 5 MNQ \(risk.max_risk_usd \$300.00 at \$56.74 a contract all in\)\)\. Approve that size \(your VERDICT line's size 5\), or cut it, never under 3 MNQ \(a cut below it is 3, never a veto\); the record's size is a suggestion, never the one to approve\. State only the final size \(already floored\) on your VERDICT and Size lines; never write the number before the floor or the cut arithmetic: every size on them binds\./);
   assert.deepStrictEqual([r.entry.outcome, r.entry.size], ['executed', { suggested: 1, translated: 5, approved: 5, record: 5, ordered: 5 }]);
   assert.strictEqual(JSON.parse(/built by the runner from this bar's compose record: (\{.*\})\. Send them as given/.exec(s.calls[1].request)[1]).size, 5);
   assert.match(s.journal[0].text, /size 5: phase 2 approved the translated 5 \(the record suggested 1\)/);

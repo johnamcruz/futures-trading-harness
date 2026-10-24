@@ -12,33 +12,29 @@ description: Use before a trade_lifecycle entry - compose the trade as reads wit
 
 ## How It Works
 
-1. **Compose.** Reason through `trader-process`, each step with the skill
-   that fits; trend side, a reaction at a level, the trigger closed →
-   compose (`confluence-counting`); the plan, never you, works out R:R. Call
-   `compose_check` with one true read per step at least, each for your
-   side (the against stay in the count), and your size.
-   The record is for this bar and side; it expires `valid_bars` base bars
-   after its bar's close (two: 6 minutes on the 3m).
+1. **Compose: the flow, a with-trend pullback** (`trader-process`).
+   trend side, a reaction at a level, the trigger closed → compose (`confluence-counting`); the plan, never you, works out R:R. Call
+   `compose_check` with one true read per step at least, each your side's
+   way (the against stay in the count), and your size. The standard plan
+   says OK → compose with its reads. The record is for this bar and side;
+   it expires `valid_bars` base bars after its bar's close (6 min on 3m).
 
-   | Step | Read forms | The skill for the fact |
+   | Step | The read, your side's way | The skill for the fact |
    | --- | --- | --- |
-   | bias | the side, by the side rule (`htf-to-ltf`): trend (`1h up`), regime (`regime trend up`), bos/choch, prior RTH range, trend rule, read, day type | `multi-timeframe-analysis`, `trend-vs-range`, `daily-bias`, `bos-vs-choch` |
-   | location | the pullback into a key level in that trend (`htf-to-ltf`): `at <level>`, `at 15m fvg`, vwap, value | `levels-and-reactions`, `vwap-volume-profile`, `fair-value-gaps` |
-   | setup | the reaction ending the pullback, a "Setups to check" read: rejected/broke/touched a level or gap edge (a bullish gap holds `15m rejected 15m fvg high up`, fails `15m broke 15m fvg low down`, a close inside: `15m touched 15m fvg high`, it reached the high edge; bearish mirrored), pattern, cisd, ote, swept | `rejection`, `breakout`, `fair-value-gaps`, `pullback-vs-reversal`, `breakout-vs-fakeout`, `cisd`, `candle-reading` |
-   | entry | confirmation on a later close: close location, momentum, pattern (hammer, bullish engulfing long; shooting star, bearish engulfing short), `3m volume high`, `participation high`, `3m absorption at <level> up` (short: down) | `candle-reading`, `momentum-and-volume`, `absorption` |
-   | stop | `stop <tf> low <price>` (short: high): where the trend thesis fails | `invalidation` |
-   | target | `target <tf> swing <price>`: the next swing; past it the runner trails | `take-profit` |
+   | bias | the 15m/1h trend gives the side (`htf-to-ltf`): `15m down`, `1h bos up`, `trend long allowed`, regime, prior RTH range, read, day type; against it only by step 4 | `multi-timeframe-analysis`, `trend-vs-range`, `daily-bias`, `bos-vs-choch` |
+   | location | the pullback into a key level: `at <level>`, `at 15m fvg`, `vwap above`, `value below` | `levels-and-reactions`, `vwap-volume-profile`, `fair-value-gaps` |
+   | setup | the reaction ending it, the trend's way, on a closed candle above the base: `15m rejected prior vah up`, a gap edge, pattern, `15m cisd down`, or a breakout the trend's way; never 3m: nothing later confirms it | `rejection`, `breakout`, `fair-value-gaps`, `pullback-vs-reversal`, `breakout-vs-fakeout`, `cisd`, `candle-reading` |
+   | entry | continuation on a candle closed after the setup's: `3m close top` (short: bottom), `3m momentum up`, pattern (hammer, bullish engulfing; short: shooting star, bearish engulfing), absorption | `candle-reading`, `momentum-and-volume`, `absorption` |
+   | stop | beyond the pullback's extreme: `stop 15m low <price>` (short: high), `stop swing low <price>` | `invalidation` |
+   | target | the first swing or level named at 2R or more, beyond any at price or broken: `target 1h swing high <price>`, `target <level> <price>`; none: `target 2r`; past it the runner trails the trend | `take-profit` |
    | size | contracts | `position-sizing`, `prop-challenge-pacing`, `prop-pacing-judgment` |
    | management | once filled: the record's stop and target are the exit; the policy's exit mode (in an attempt or not) may let it run past the target, the code trailing the stop; never widen it or close early by feel | `manage-position` |
 
-   The setup is the reaction on a closed candle (often 15m); an entry read
-   your way must be on a candle that closed after it (often the next 3m).
-   A CISD setup is timed from its confirming candle
-   (`m3.cisd.<tf>.confirmedClose`): the entry read closes after it; a CISD
-   with no close time is refused.
-   Each needs a true read your way; `at`, `touched`, `swept`, volume,
-   participation and a setup `in ote` only support it. Both true and the
-   count for → compose now.
+   Support only, never the setup or entry read: `at`, `touched`, `swept`,
+   `in ote`, `3m volume high`, `participation high`; a CISD setup is timed
+   from its confirming candle. A refusal's `HINT`
+   lines list what is TRUE per step; `HINT these reads pass together` →
+   compose them if they are your trade, else pass.
 
    A normal trade risks about $200-300 (less, or a pass, is fine; never
    over $300). Aim the target at the first real level at 2:1 to 3:1 (about
@@ -89,7 +85,7 @@ never a forecast for this trade. A rule from code always overrides it.
 ```text
 compose_check {"symbol": "MNQ", "side": "long", "size": 5, "reads": [
 {"step": "bias", "skill": "multi-timeframe-analysis", "read": "1h up"},
-{"step": "location", "skill": "vwap-volume-profile", "read": "vwap above"},
+{"step": "location", "skill": "levels-and-reactions", "read": "at prior vah"},
 {"step": "setup", "skill": "rejection", "read": "15m rejected prior vah up"},
 {"step": "entry", "skill": "candle-reading", "read": "3m close top"},
 {"step": "stop", "skill": "invalidation", "read": "stop 15m low 21512.75"},
@@ -97,4 +93,5 @@ compose_check {"symbol": "MNQ", "side": "long", "size": 5, "reads": [
 -> ok, entry 21540.25, stop 111 ticks ($277.50), target 231 ticks ($577.50, 2.08R).
 -> place_order MNQ buy 5 limit 21540.25, stopLossBracket.ticks 111,
    takeProfitBracket.ticks 231, rationale "setup:trade_lifecycle long ...".
+Entry "3m volume high" instead -> NOT OK; HINT entry: ... "3m close top".
 ```

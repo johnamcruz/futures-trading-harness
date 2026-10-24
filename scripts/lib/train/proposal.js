@@ -12,12 +12,17 @@
  *
  * Only these files: a skill's SKILL.md (not the loop's own skills), a strategy's STRATEGY.md (never its
  * `name:` or `status:` line, nor any LOCKED_KEYS value however the edit is worded: a status flip is the owner's
- * decision, R33), a rulebook (accounts/<account>/RULEBOOK.md; never ACCOUNT.md).
- * Never code, accounts (firm rules), agents, rules, commands, generated adapters, or the promotion gate.
+ * decision, R33), a desk role's body (agents/<role>.md, agent-edit.js: never its frontmatter, its load sentence or its
+ * report formats), and a rulebook (accounts/<account>/RULEBOOK.md; never ACCOUNT.md) only in a proposal a person
+ * brought (`by: 'person'`, train-loop.js import-proposal): the rulebook's numbers are the owner's, never a model's.
+ * Never code (the order gate, the promotion gate, the tunables), config, accounts (firm rules), rules, commands, or
+ * generated adapters.
  *
  *   parseProposals(output)              [{ proposal } | { error, line }] from PROPOSAL lines
- *   validateProposal(p, { root })       [error]: empty when it may be applied to the tree at root
- *   applyProposal(p, dir)               edits applied in the tree at dir (validated first); returns the files changed
+ *   validateProposal(p, { root, by })   [error]: empty when it may be applied to the tree at root. by: 'model' (the
+ *                                       default: the proposer's, a probe's, a composed change's) or 'person' (imported)
+ *   authorOf(source)                    'person' for a proposal a person imported (source 'manual, ...'), else 'model'
+ *   applyProposal(p, dir, { by })       edits applied in the tree at dir (validated first); returns the files changed
  *   proposalId(p)                       a short digest of its targets and edits: the same change is the same id
  *   isMechanical(p)                     it touches a strategy or a rulebook (screened by the evaluator first, R28)
  */
@@ -28,6 +33,7 @@ const path = require('path');
 const { CATEGORIES } = require('../replay/scorecard');
 const { parseFrontmatter } = require('../frontmatter');
 const { rulebookErrors } = require('./rulebook-guard');
+const AE = require('./agent-edit');
 
 const FAILURES = Object.freeze(CATEGORIES.filter(c => c !== 'right' && c !== 'unchecked'));
 const PROP = require('../tunables').training().proposal; // config/training.json proposal (each only falls)
@@ -41,7 +47,10 @@ const ALLOWED = Object.freeze([
   { re: /^strategies\/([a-z0-9_]+)\/STRATEGY\.md$/, kind: 'strategy' },
   // The rulebook beside its account (section 10 step 7): never the account's ACCOUNT.md (firm rules).
   { re: /^accounts\/([a-z0-9_]+)\/RULEBOOK\.md$/, kind: 'rulebook' },
+  // A desk role's body (agent-edit.js EDITABLE_ROLES): the analysts, the risk manager and the executor.
+  { re: AE.AGENT_FILE, kind: 'agent' },
 ]);
+const AUTHORS = Object.freeze(['model', 'person']);
 const LOCKED_KEY = /^\s*(name|status)\s*:/m;
 // A strategy's keys a proposal never changes: its identity, status and kind, and a policy's account, sizing,
 // contracts, exit, markets, timeframe and component list, the regime gate and the risk block (the owner's, or the rulebook's, R1).
@@ -89,7 +98,7 @@ function kindOf(file) {
   if (typeof file !== 'string' || file.includes('\\') || path.isAbsolute(file) || file.split('/').some(p => p === '..' || p === '.' || p === '')) return null;
   for (const a of ALLOWED) {
     const m = a.re.exec(file);
-    if (m && !(a.kind === 'skill' && LOOP_SKILLS.includes(m[1]))) return a.kind;
+    if (m && !(a.kind === 'skill' && LOOP_SKILLS.includes(m[1])) && !(a.kind === 'agent' && !AE.roleOfFile(file))) return a.kind;
   }
   return null;
 }
@@ -101,8 +110,21 @@ function countOf(text, find) {
 }
 
 /** Errors in the proposal against the tree at root (each edit applied in order, as applyProposal does). */
-function validateProposal(p, { root }) {
+/** Who wrote a proposal, from its source: a person's import ('manual, approved by ...') or a model's (anything else). */
+const authorOf = source => (/^manual\b/.test(String(source || '')) ? 'person' : 'model');
+
+/** The skills of the tree at root (skills/<name>/SKILL.md). */
+function skillNamesIn(root) {
+  try {
+    return fs.readdirSync(path.join(root, 'skills')).filter(n => fs.existsSync(path.join(root, 'skills', n, 'SKILL.md')));
+  } catch (_err) {
+    return [];
+  }
+}
+
+function validateProposal(p, { root, by = 'model' }) {
   const errors = [];
+  if (!AUTHORS.includes(by)) return [`by: one of ${AUTHORS.join(', ')}`];
   if (!isObj(p)) return ['a proposal is a JSON object'];
   const extra = Object.keys(p).filter(k => !['targets', 'expects', 'why', 'edits'].includes(k));
   if (extra.length) errors.push(`unknown keys: ${extra.join(', ')}`);
@@ -117,7 +139,9 @@ function validateProposal(p, { root }) {
     const at = `edits[${i}]`;
     if (!isObj(e) || Object.keys(e).some(k => !['file', 'find', 'replace'].includes(k))) { errors.push(`${at}: { file, find, replace }`); return; }
     const kind = kindOf(e.file);
-    if (!kind) { errors.push(`${at}.file: ${String(e.file)} is not a document a proposal may edit (a skill, a strategy or a rulebook; not the loop's own skills, never code)`); return; }
+    if (!kind) { errors.push(`${at}.file: ${String(e.file)} is not a document a proposal may edit (a skill, a strategy, a desk role's body, or a rulebook a person brought; not the loop's own skills, never code)`); return; }
+    // The rulebook's numbers are the owner's: a model never proposes them (a person may bring one, import-proposal).
+    if (kind === 'rulebook' && by !== 'person') { errors.push(`${at}.file: ${e.file}: a rulebook is the owner's to change; only a proposal a person brings (import-proposal) may edit it`); return; }
     if (!str(e.find, MAX_TEXT) || typeof e.replace !== 'string' || e.replace.length > MAX_TEXT) { errors.push(`${at}: find (non-empty) and replace, up to ${MAX_TEXT} characters each`); return; }
     if (e.find === e.replace) { errors.push(`${at}: replace equals find`); return; }
     if (kind === 'strategy' && (LOCKED_KEY.test(e.find) || LOCKED_KEY.test(e.replace))) { errors.push(`${at}: a strategy's name or status line is the owner's to change, never a proposal's`); return; }
@@ -145,6 +169,8 @@ function validateProposal(p, { root }) {
   for (const [file, after] of texts) {
     // A rulebook: valid after the edit, and only tightened, key by key (train/rulebook-guard.js).
     if (kindOf(file) === 'rulebook') { errors.push(...rulebookErrors(file, originals.get(file), after)); continue; }
+    // A role's body: never its frontmatter, its load sentence, its report formats, nor a skill it doesn't load.
+    if (kindOf(file) === 'agent') { errors.push(...AE.agentEditErrors(file, originals.get(file), after, { skillNames: skillNamesIn(root) })); continue; }
     if (kindOf(file) !== 'strategy') continue;
     let a;
     let b;
@@ -161,8 +187,8 @@ function validateProposal(p, { root }) {
   return errors;
 }
 
-function applyProposal(p, dir) {
-  const errors = validateProposal(p, { root: dir });
+function applyProposal(p, dir, { by = 'model' } = {}) {
+  const errors = validateProposal(p, { root: dir, by });
   if (errors.length) throw new Error(`proposal refused:\n- ${errors.join('\n- ')}`);
   const files = [];
   for (const e of p.edits) {
@@ -180,4 +206,4 @@ function proposalId(p) {
 
 const isMechanical = p => (p.edits || []).some(e => ['strategy', 'rulebook'].includes(kindOf(e.file)));
 
-module.exports = { FAILURES, MAX_EDITS, LOOP_SKILLS, LOCKED_KEYS, parseProposals, validateProposal, applyProposal, proposalId, isMechanical, kindOf };
+module.exports = { FAILURES, MAX_EDITS, LOOP_SKILLS, LOCKED_KEYS, AUTHORS, parseProposals, validateProposal, applyProposal, proposalId, isMechanical, kindOf, authorOf };

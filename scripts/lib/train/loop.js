@@ -70,6 +70,7 @@ const { readLedger: readLedgerFile } = require('../prop/ledger-file');
 const { probeRound } = require('./probe');
 const { compositionLines } = require('./compose');
 const LS = require('./lessons');
+const IR = require('./iteration-report');
 
 class Stop extends Error {}
 
@@ -137,6 +138,10 @@ function defaultSteps({ root, env = process.env }) {
     propose: opts => proposer.propose(opts),
     // The probe round (train/probe.js): k tagged skill edits from one model call, and each probe run's data.
     proposeProbes: opts => proposer.proposeProbes(opts),
+    // A probe half as a curated list of its own (train/probe-halves.js): each side replays only the half it is judged on.
+    halfReplay: opts => require('./probe-halves').halfReplay(opts),
+    // A trend-set run's capture report and days (train/probe.js trendData, replay/trend-capture.js).
+    trendData: opts => require('./probe').trendData(opts),
     probeData: opts => require('./probe').probeData(opts),
     writeBranch: (opts) => T.writeBranch(root, opts),
   };
@@ -342,12 +347,12 @@ function verdictOf(ctx, { proposal, baseline, decisions, evaluator, model }) {
   return { ...v, tests: panel.tests, panel: { verdict: panel.verdict, reasons: panel.reasons }, model };
 }
 
-async function candidateTree(ctx, { dir, id, proposal, champion }) {
+async function candidateTree(ctx, { dir, id, proposal, champion, by = 'model' }) {
   const treeDir = path.join(dir, 'trees', id);
   const owned = path.join(dir, 'trees');
   if (fs.existsSync(treeDir)) T.removeTree(treeDir, owned);
   await ctx.steps.makeTree(treeDir, champion.baseCommit);
-  await ctx.steps.prepareTree(treeDir, { proposal });
+  await ctx.steps.prepareTree(treeDir, { proposal, by });
   // The candidate is the champion plus the proposal and the adapters generated from it; anything else fails closed.
   const files = T.changedFiles(champion.dir, treeDir);
   const stray = files.filter(f => !proposal.edits.some(e => e.file === f) && !T.GENERATED.test(f));
@@ -427,7 +432,7 @@ async function iteration(ctx, n, { champion, champOf }) {
       // The same change twice in one reply is one proposal.
       if (ids.includes(id)) return null;
       ids.push(id);
-      const errors = P.validateProposal(x.proposal, { root: champion.dir });
+      const errors = P.validateProposal(x.proposal, { root: champion.dir, by: P.authorOf(x.source) });
       const before = A.judgedBefore(archive, id);
       return { id, source: x.source, proposal: x.proposal, errors, duplicateOf: before ? before.iteration : null, imported: x.imported, ...(x.composition ? { composition: x.composition } : {}) };
     }).filter(Boolean);
@@ -446,7 +451,7 @@ async function iteration(ctx, n, { champion, champOf }) {
   const verdicts = unjudged ? runnable.map(x => ({ x, cand: { files: [] }, v: { verdict: 'blocked', reasons: [`not judged: ${NOTHING}`] } })) : [];
   for (const x of judged) {
     const cand = await phase(ctx, `${n}:candidate:${x.id}`, path.join(dir, `candidate-${x.id}.json`), async () => {
-      const tree = await candidateTree(ctx, { dir: work, id: x.id, proposal: x.proposal, champion });
+      const tree = await candidateTree(ctx, { dir: work, id: x.id, proposal: x.proposal, champion, by: P.authorOf(x.source) });
       return { tree: tree.dir, files: tree.files, decisions: await sideRuns(ctx, { side: x.id, dir: work, tree: tree.dir, panel, runs: champ.runs, baselineSide: 'champion' }) };
     });
     const v = await phase(ctx, `${n}:verdict:${x.id}`, path.join(dir, `verdict-${x.id}.json`), async () => {
@@ -477,10 +482,22 @@ async function iteration(ctx, n, { champion, champOf }) {
     }
     return { at: new Date().toISOString() };
   });
+  // The iteration in one record (iteration-report.js): proposed, screened, composed, kept, the deltas and the cycles.
+  if (ctx.loop.probe) writeIterationReport(ctx, n);
   it.done = true;
   if (unjudged) it.nothing = true;
   ctx.save();
   if (unjudged) throw new Stop(NOTHING);
+}
+
+/** <iteration dir>/iteration-report.json from the round's probe report and the archive's lines of the iteration. */
+function writeIterationReport(ctx, n) {
+  const probeReport = readJson(path.join(ctx.paths.iter(n), 'probe-report.json'), null);
+  const entries = A.readArchive(ctx.paths.archive).filter(e => e.iteration === n && e.phase !== 'held-out');
+  // The earlier iterations' records: the learning curve runs across the loop's rounds.
+  const previous = [];
+  for (let i = 1; i < n; i += 1) previous.push(readJson(path.join(ctx.paths.iter(i), 'iteration-report.json'), null));
+  writeJsonAtomic(path.join(ctx.paths.iter(n), 'iteration-report.json'), IR.build({ probeReport, entries, previous: previous.filter(Boolean) }));
 }
 
 /** The keep rule's verdict on a combined change, in the lessons record (lessons.js appendKeep), once. */
@@ -606,7 +623,7 @@ async function judgeHeldOut({ loop, env = process.env, root, steps, proposalId, 
     const panel = withRuns(D.choosePanel({ decisions: champ.decisions.filter(d => all.includes(d.category)), maxFlagged: ctx.loop.maxFlagged, control: ctx.loop.controlPoints, seed: `${loop.seed}|${tag}`, failures: P.FAILURES }), champ.decisions);
     const baseline = await phase(ctx, `${tag}baseline`, path.join(dir, 'baseline.json'), () => sideRuns(ctx, { side: 'champion', dir: work, tree: champion.dir, panel, runs: champ.runs }));
     const cand = await phase(ctx, `${tag}candidate`, path.join(dir, 'candidate.json'), async () => {
-      const tree = await candidateTree(ctx, { dir: work, id: proposalId, proposal: entry.proposal, champion });
+      const tree = await candidateTree(ctx, { dir: work, id: proposalId, proposal: entry.proposal, champion, by: P.authorOf(entry.source) });
       return { tree: tree.dir, files: tree.files, decisions: await sideRuns(ctx, { side: proposalId, dir: work, tree: tree.dir, panel, runs: champ.runs, baselineSide: 'champion' }) };
     });
     // The candidate alone, a judging look the evaluator logs before it reads a bar (each scoring is a look).
@@ -633,7 +650,7 @@ async function judgeHeldOut({ loop, env = process.env, root, steps, proposalId, 
 /** Tier 3: a proposal a person brings (from any source they chose), validated now and queued for the next iteration. */
 function importProposal({ loop, env = process.env, root, proposal, approvedBy }) {
   if (typeof approvedBy !== 'string' || !approvedBy.trim()) throw new Error('--approved-by <name>: a person approves every imported proposal');
-  const errors = P.validateProposal(proposal, { root });
+  const errors = P.validateProposal(proposal, { root, by: 'person' });
   if (errors.length) throw new Error(`proposal refused:\n- ${errors.join('\n- ')}`);
   const paths = S.loopPaths(env, loop.loopId);
   const id = P.proposalId(proposal);

@@ -20,7 +20,8 @@
  *                                                 proposer's own copy (its working directory), home its scratch home
  *   readProbeTemplate(root), probePrompt({ template, findings, lessons, files, k })   the probe round's prompt (the
  *                                                 skill's "### The probe prompt"; Propose-Probe-Compose, probe.js)
- *   proposeProbes({ cfg, tree, findings, lessons, home, baseEnv, k, run })   up to k tagged skill edits, one call
+ *   findingsByStep(findings)                      the findings grouped by flow step (flow.js), for {{FINDINGS}}
+ *   proposeProbes({ cfg, tree, findings, lessons, home, baseEnv, k, run })   up to k tagged skill or role edits, one call
  */
 
 const fs = require('fs');
@@ -64,15 +65,18 @@ function selfReviewPrompt({ template, flagged, files, maxProposals }) {
     .replace('{{MAX}}', String(maxProposals))}`;
 }
 
-/** The documents a proposal may edit in the tree, as the prompt lists them. */
+/**
+ * The documents a model's proposal may edit in the tree, as the prompt lists them: skills, strategies and the desk
+ * roles' bodies (agent-edit.js). Never a rulebook: its numbers are the owner's (proposal.js, by 'person' only).
+ */
 function editableFiles(tree) {
   const { kindOf } = require('./proposal');
   const out = [];
-  for (const dir of ['skills', 'strategies', 'accounts']) {
+  for (const dir of ['skills', 'strategies', 'agents']) {
     let names;
     try { names = fs.readdirSync(path.join(tree, dir)).sort(); } catch (_err) { continue; }
     for (const n of names) {
-      const rel = `${dir}/${n}/${dir === 'skills' ? 'SKILL' : dir === 'strategies' ? 'STRATEGY' : 'RULEBOOK'}.md`;
+      const rel = dir === 'agents' ? `agents/${n}` : `${dir}/${n}/${dir === 'skills' ? 'SKILL' : 'STRATEGY'}.md`;
       if (kindOf(rel) && fs.existsSync(path.join(tree, rel))) out.push(rel);
     }
   }
@@ -102,15 +106,23 @@ function readProbeTemplate(root) {
   const text = fs.readFileSync(path.join(root, SKILL), 'utf8');
   const m = /### The probe prompt\n[^#]*?```text\n([\s\S]*?)\n```/.exec(text);
   if (!m) throw new Error(`${SKILL}: no "### The probe prompt" section with a text block`);
-  for (const k of ['{{FINDINGS}}', '{{LESSONS}}', '{{FILES}}', '{{CATEGORIES}}', '{{KINDS}}', '{{K}}']) if (!m[1].includes(k)) throw new Error(`${SKILL}: the probe prompt has no ${k}`);
+  for (const k of ['{{FLOW}}', '{{FINDINGS}}', '{{LESSONS}}', '{{FILES}}', '{{CATEGORIES}}', '{{KINDS}}', '{{K}}']) if (!m[1].includes(k)) throw new Error(`${SKILL}: the probe prompt has no ${k}`);
   return m[1];
 }
 
-function probePrompt({ template, findings, lessons, files, k }) {
+/** The findings grouped by the flow step they block (flow.js byStep), in flow order; each keeps its rank's id. */
+function findingsByStep(findings) {
   const { findingLine } = require('./findings');
+  const { byStep } = require('./flow');
+  return byStep(findings).map(g => `${g.step ? `Step ${g.step}:` : 'No step (no read at the bar):'}\n${g.findings.map(findingLine).join('\n')}`).join('\n\n');
+}
+
+function probePrompt({ template, findings, lessons, files, k }) {
   const { KINDS } = require('./probe-edit');
+  const { flowLine } = require('./flow');
   return `${MARKER}\n${template
-    .replace('{{FINDINGS}}', findings.map(findingLine).join('\n'))
+    .replace('{{FLOW}}', flowLine())
+    .replace('{{FINDINGS}}', findingsByStep(findings))
     .replace('{{LESSONS}}', lessons || 'none yet')
     .replace('{{FILES}}', files.join('\n'))
     .replace('{{CATEGORIES}}', FAILURES.join(', '))
@@ -124,7 +136,7 @@ function probePrompt({ template, findings, lessons, files, k }) {
  */
 async function proposeProbes({ cfg, tree, findings, lessons, home, baseEnv = process.env, k = 4, run = runHarness }) {
   const { splitTagged } = require('./probe-edit');
-  const prompt = probePrompt({ template: readProbeTemplate(tree), findings, lessons, files: editableFiles(tree).filter(f => f.startsWith('skills/')), k });
+  const prompt = probePrompt({ template: readProbeTemplate(tree), findings, lessons, files: editableFiles(tree).filter(f => f.startsWith('skills/') || f.startsWith('agents/')), k });
   const env = proposerEnv(baseEnv, home);
   const argv = buildCommand(cfg, prompt, tree, env);
   const res = await run(argv, { cwd: tree, env, timeoutMs: (cfg.cycleTimeoutMinutes || 10) * 60000 });
@@ -144,4 +156,4 @@ async function propose({ cfg, tree, flagged, home, baseEnv = process.env, maxPro
   return { proposals: parseProposals(res.output).filter(x => !prompt.includes(x.raw)).slice(0, maxProposals), output: String(res.output || ''), code: res.code, prompt };
 }
 
-module.exports = { MARKER, SKILL, readTemplate, selfReviewPrompt, editableFiles, proposerEnv, propose, flaggedLine, readProbeTemplate, probePrompt, proposeProbes };
+module.exports = { MARKER, SKILL, readTemplate, selfReviewPrompt, editableFiles, proposerEnv, propose, flaggedLine, readProbeTemplate, probePrompt, findingsByStep, proposeProbes };

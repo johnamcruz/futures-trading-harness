@@ -331,6 +331,34 @@
   "skillUsage.top": {
    "value": 3,
    "from": "learning/skill-usage.js TOP"
+  },
+  "trendBatch.start": {
+   "value": 100,
+   "from": "new in ppc/flow-learning (owner-approved 2026-10-23: a loop starts at 100 trend legs a round, 50 probe and 50 confirm)"
+  },
+  "trendBatch.max": {
+   "value": 400,
+   "from": "new in ppc/flow-learning (owner-approved 2026-10-23: the batch grows to at most 400 legs)"
+  },
+  "trendBatch.half": {
+   "value": 0.5,
+   "from": "new in ppc/flow-learning (owner-approved 2026-10-23: the probe half holds half of a batch, the confirm half the rest)"
+  },
+  "trendBatch.growAfter": {
+   "value": 2,
+   "from": "new in ppc/flow-learning (owner-approved 2026-10-23: the batch grows after 2 rounds in a row without an improvement)"
+  },
+  "trendBatch.growFactor": {
+   "value": 2,
+   "from": "new in ppc/flow-learning (owner-approved 2026-10-23: it doubles)"
+  },
+  "trendScreen.rollFlagGaps": {
+   "value": [0, 3],
+   "from": "new in ppc/flow-learning (owner-approved 2026-10-23: flag the sessions near a contract roll, months from the session to its front contract: 0, the expiry month; 3, the month after a quarterly roll, until a roll-spanning run confirms leg ids pair there)"
+  },
+  "trendBatch.plateauRounds": {
+   "value": 3,
+   "from": "new in ppc/flow-learning (owner-approved 2026-10-23: the learning curve flags a plateau after 3 rounds with no gain beyond the interval)"
   }
  },
  "replay": {
@@ -559,6 +587,28 @@
   "scorecard.giveBackShare": {
    "value": 0.5,
    "from": "replay/scorecard.js earlyClose give-back: closed at most mfeR / 2"
+  },
+  "trendCapture.minMoveAtr": {
+   "value": 2.25,
+   "from": "new in fix/trend-moves-compose (the trend-capture report's leg threshold: times the session's mean true range of its base bars)"
+  },
+  "trendCapture.catchShare": {
+   "value": 0.5,
+   "from": "new in fix/trend-moves-compose (a leg is caught by an entry in its first half)"
+  },
+  "trendCapture.messageChars": {
+   "value": 200,
+   "from": "new in fix/trend-moves-compose (a blocker line's message, cut)"
+  },
+  "trendCapture.censusBatch": {
+   "value": 200,
+   "from": "new in fix/trend-moves-compose (the moments a leg-census batch draws, one curated list document's: the owner's 200)"
+  },
+  "trendCapture.curationSessions": {
+   "value": [
+    "09:30-12:00@America/New_York"
+   ],
+   "from": "new in fix/trend-moves-compose (the curated lists' leg labels: the NY morning by default)"
   }
  },
  "runner": {
@@ -971,7 +1021,11 @@
    "from": "new in fix/role-loops (before it, no role had a step cap)"
   },
   "limits.repeatReminderAt": {
-   "value": [3, 5, 8],
+   "value": [
+    3,
+    5,
+    8
+   ],
    "from": "new in fix/tool-name-and-repeat-guard (before it, no repeat reminder)"
   },
   "limits.repeatSameStepMs": {
@@ -1395,6 +1449,22 @@
   "evaluator.windowBars": {
    "value": 500,
    "from": "trading/evaluator.js DEFAULT_WINDOW (and backtest/engine.js DEFAULTS.window); backtest/engine.js DEFAULTS.window"
+  },
+  "composedReads.roomIgnoreR": {
+   "value": 0.25,
+   "from": "new in fix/trend-moves-compose (the room rule: a named level within this many R of the entry is no level in the way and no target; the owner's \"loosen it\", 2026-10-23)"
+  },
+  "composedReads.roomIgnoreTicks": {
+   "value": 8,
+   "from": "new in fix/trend-moves-compose (the room band's absolute cap in ticks: min(roomIgnoreR x the stop distance, this), so a wider stop can't wave a real obstacle through; the review, 2026-10-24)"
+  },
+  "composeHints.perStep": {
+   "value": 3,
+   "from": "new in fix/trend-moves-compose (the reads a refusal hint lists a step)"
+  },
+  "composeHints.maxTries": {
+   "value": 2000,
+   "from": "new in fix/trend-moves-compose (the combinations the hints try for a whole that passes)"
   }
  }
 }

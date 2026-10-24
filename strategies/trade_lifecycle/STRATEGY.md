@@ -51,7 +51,10 @@ Code, never the model's arithmetic: a limit entry at the bar's close, the
 stop `risk.stop_buffer_ticks` beyond the named level (at least the larger
 of `risk.stop_floor_ticks` and `risk.stop_floor_atr` x ATR(20), refused if
 closer, never widened), the target on the named
-level, R:R at least `risk.min_rr`, and the stated size within
+level (or, with no level named the trade's way, the 2R mark `target 2r`:
+`risk.min_rr` times the stop from the entry, on the tick the trade's way;
+a level named short of it is no room, never the mark; past the target the
+policy's exit trails), R:R at least `risk.min_rr`, and the stated size within
 `risk.max_risk_usd`. The record expires `valid_bars` base bars after its
 bar's close (two: 6 minutes on the 3m), so a cycle that runs past the next
 close can still enter on the facts of its own bar; the runner cancels a limit

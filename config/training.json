@@ -58,5 +58,7 @@
   "compose": { "maxExpects": 300, "maxWhy": 1000 },
   "lessons": { "maxLines": 8, "maxChars": 1200 },
   "probeEdit": { "maxLine": 120, "growBytes": 150 },
-  "skillUsage": { "top": 3 }
+  "skillUsage": { "top": 3 },
+  "trendBatch": { "start": 100, "max": 400, "half": 0.5, "growAfter": 2, "growFactor": 2, "plateauRounds": 3 },
+  "trendScreen": { "rollFlagGaps": [0, 3] }
 }

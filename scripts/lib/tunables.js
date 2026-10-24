@@ -81,6 +81,8 @@ const TRAINING = {
   lessons: { maxLines: int(1), maxChars: int(1) },
   probeEdit: { maxLine: int(1), growBytes: int(0) },
   skillUsage: { top: int(1) },
+  trendBatch: { start: int(2), max: int(2), half: num({ min: 0.1, max: 0.9 }), growAfter: int(1), growFactor: int(2), plateauRounds: int(1) },
+  trendScreen: { rollFlagGaps: list(int(0)) },
 };
 
 // A stage preset's refused value: true or false (that value refused), or 'set' (any value refused).
@@ -94,6 +96,7 @@ const REPLAY = {
   curatedMoments: { leadSetup: int(0), firstBar: int(0) },
   windowBars: int(1),
   setupLibrary: { minRR: pos() },
+  trendCapture: { minMoveAtr: pos(), catchShare: pos(1), messageChars: int(1), curationSessions: list(str(), { min: 1 }), censusBatch: int(1) },
   setupMoments: { setupTf: int(1), quietSample: frac(), seed: int(), levels: str(['key', 'wide']), setupTfs: list(int(1), { min: 1 }) },
   accountStates: { seed: int(), count: int(1), meanBlock: int(1), perBucket: int(1), oversample: record(pos()), cutoffs: { nearMll: frac(), nearTarget: frac() } },
   driver: { eodRetries: int(1) },
@@ -168,7 +171,8 @@ const ANALYSIS = {
   levelCloses: { maxCloses: int(1) },
   structure: { sweepBars: int(1), swingLevels: int(1), m5Recent: int(1) },
   momentum: { rangeAtr: nonneg(), volRatio: nonneg() },
-  composedReads: { volumeHigh: pos(), absorptionProgressAtr: nonneg() },
+  composedReads: { volumeHigh: pos(), absorptionProgressAtr: nonneg(), roomIgnoreR: nonneg(), roomIgnoreTicks: int(0) },
+  composeHints: { perStep: int(1), maxTries: int(1) },
   fvg: { frames: list(int(1), { min: 1 }), window: int(1), max: int(1) },
   briefing: { equalK: int(1), cisdFrames: list(int(1), { min: 1 }) },
   evaluator: { windowBars: int(1) },
@@ -289,7 +293,8 @@ const BUILT_IN = deepFreeze({
     levelCloses: { maxCloses: 20 },
     structure: { sweepBars: 10, swingLevels: 3, m5Recent: 3 },
     momentum: { rangeAtr: 1, volRatio: 1 },
-    composedReads: { volumeHigh: 1.5, absorptionProgressAtr: 0.5 },
+    composedReads: { volumeHigh: 1.5, absorptionProgressAtr: 0.5, roomIgnoreR: 0.25, roomIgnoreTicks: 8 },
+    composeHints: { perStep: 3, maxTries: 2000 },
     fvg: { frames: [5, 15, 60], window: 60, max: 3 },
     briefing: { equalK: 2, cisdFrames: [3, 5, 15, 60] },
     evaluator: { windowBars: 500 },

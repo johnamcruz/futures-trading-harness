@@ -40,7 +40,7 @@ a completed candle reacting there (`candle-reading`), momentum
 (`momentum-and-volume`) and the other reads; a 15m gap outweighs a 5m one;
 gaps are among `levels-and-reactions`' levels.
 After a sweep (`breakout-vs-fakeout`) and displacement (`cisd`), the
-retest of its gap is the liquidity-grab entry read: it lives here.
+retest of its gap is the liquidity-grab setup read: it lives here.
 
 **The read forms**, on the `m3.fvgs` gaps (the base bars' own: none):
 location `at 15m fvg`; setup `15m rejected 15m fvg high up` (a bullish gap

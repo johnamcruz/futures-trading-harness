@@ -10,7 +10,7 @@
  *                                         HEAD, refusing a
  *                                         repository with uncommitted changes, so the baseline is HEAD exactly
  *   copyTree(root, dir)                   the working tree's files in dir (no .git, node_modules): tests' copier
- *   prepareTree(dir, { proposal, run })   the proposal applied (if any), adapters synced, strategies validated
+ *   prepareTree(dir, { proposal, by, run })   the proposal applied (if any; by: its author, proposal.js), adapters synced, strategies validated
  *   changedFiles(baseDir, candDir)        [rel] that differ (content, or a link's target), added or removed
  *   writeBranch(root, { branch, base, fromDir, files, message, git })   a local branch: base plus those files
  *                                         from fromDir, committed without a checkout; refuses an existing branch
@@ -64,8 +64,8 @@ function runNode(dir, args) {
 }
 
 /** Applies the proposal (if any), then regenerates the adapters and validates the strategies, in the tree. */
-function prepareTree(dir, { proposal = null, run = runNode } = {}) {
-  const files = proposal ? applyProposal(proposal, dir) : [];
+function prepareTree(dir, { proposal = null, by = 'model', run = runNode } = {}) {
+  const files = proposal ? applyProposal(proposal, dir, { by }) : [];
   run(dir, [path.join(dir, 'scripts', 'sync-harness.js')]);
   run(dir, [path.join(dir, 'scripts', 'strategies.js'), 'validate']);
   return files;
