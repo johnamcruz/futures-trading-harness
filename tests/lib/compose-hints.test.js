@@ -193,3 +193,29 @@ test('compose hints: the skill\'s entry row lists only reads the check counts as
     assert.strictEqual(c.dir, null, `${read} points no side`);
   }
 });
+
+test('compose hints: the bias hint lists only reads pointing the side (a range regime is TRUE but no bias for it)', () => {
+  // Scenario 1 with a range regime, read for the short: of the bias forms only "regime range" is TRUE, and it points no side.
+  const b = brief(x => { x.sections.m3.data.regime = { ...(x.sections.m3.data.regime || {}), primary: 'range' }; });
+  assert.deepStrictEqual(H.candidatesOf(b, 'short', { tick: 0.25 }).bias.map(x => [x.read, x.dir]), [['regime range', null]]);
+  const checked = checkReads({ reads: [{ step: 'bias', skill: 'x', read: '15m down' }], side: 'short', briefing: b });
+  const lines = H.hintsFor({ checked, planned: null, briefing: b, side: 'short', tick: 0.25, plan: PLAN });
+  assert.ok(lines.includes('bias: no bias read for the short is true on this bar'), lines.join('\n'));
+  assert.ok(!lines.some(l => l.includes('regime range')), lines.join('\n'));
+  // The long's bias hint still lists its side's reads.
+  const long = hints(swap('bias', '4h down'), { b });
+  assert.match(long.lines[0], /^bias: true for the long here: "15m up", "1h up", "15m bos up"$/);
+});
+
+test('compose hints: no setup read yet: the entry hint says a confirmation counts only on a candle closed after the setup\'s', () => {
+  const b = brief(x => {
+    const d = x.sections.m3.data;
+    for (const tf of Object.keys(d.candles)) Object.assign(d.candles[tf], { relations: [], fvgRelations: [], patterns: [] });
+    d.cisd = {};
+  });
+  assert.deepStrictEqual(H.candidatesOf(b, 'long', { tick: 0.25 }).setup, []);
+  const checked = checkReads({ reads: SCENARIO_1.filter(r => !['setup', 'entry'].includes(r.step)), side: 'long', briefing: b });
+  const lines = H.hintsFor({ checked, planned: null, briefing: b, side: 'long', tick: 0.25, plan: PLAN });
+  assert.ok(lines.includes('entry: no setup read for the long is true yet; a confirmation counts only on a candle closed after the setup\'s: the setup first'), lines.join('\n'));
+  assert.ok(!lines.some(l => /^entry: .*true here/.test(l)), 'no confirmation listed before a setup');
+});

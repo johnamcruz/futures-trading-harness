@@ -40,7 +40,7 @@ line). Phase 1 writes no PLAN line; its output below stays as it is.
    by `prop-pacing-judgment`; no cushion cap, never $0; the other caps bound
    size, a ceiling (a policy strategy's entries need an attempt: the gate).
 6. Approve a policy strategy's entry only as its verdict says: that contract
-   (the selected one) and side, at most its size (the priority order (the strategy-library skill) may halve or skip it; a verdict is a ceiling), with its stop ticks. Never one
+   (the selected one) and side, at most its size (the priority order may halve or skip it; a verdict is a ceiling), with its stop ticks. Never one
    it skipped, or one for an older bar than the last one recorded (the gate
    refuses it). The verdict's size replaces the position-sizing caps; its
    budget is the attempt's, and the gate enforces it. While an attempt runs,
@@ -120,8 +120,7 @@ The checks below say where to read its facts.
    policy verdict's entry is at most order_plan's size, a rules
    strategy's size follows position-sizing, and a composed entry's the
    record's (order_plan refuses it over its cap or verdict); in a prop
-   attempt, the translated size your request names (never the record's;
-   floored at min_contracts); then risk $ = risk per contract ×
+   attempt, the translated size your request names (never the record's); then risk $ = risk per contract ×
    the plan's size. Approve the plan's numbers as order_plan shows them; never
    supply tick numbers of your own. Its refusal (not a candidate now, the other side, a
    verdict the gate would refuse) is a VETO; a tick-spec refusal: `get_contract`,
@@ -199,6 +198,7 @@ The code reads your report; anything else reads as a veto:
 - Size → its own `Size:` line, e.g. `Size: 1 (record 8 cut to 1: no
   reviewed trades yet)`; never "sizing decision" or "sizing verdict". To
   cut, approve the smaller size: the order is exactly it.
+- Write only the final size: every size and "cut to" binds.
 - These read as a veto: `Decision: cut to size 1`, `8 Decision: valid
   yes`, `The verdict priority order: ...`, `Sizing verdict: skip x0.5`.
 

@@ -63,7 +63,7 @@
   "levelCloses": { "maxCloses": 20 },
   "structure": { "sweepBars": 10, "swingLevels": 3, "m5Recent": 3 },
   "momentum": { "rangeAtr": 1, "volRatio": 1 },
-  "composedReads": { "volumeHigh": 1.5, "absorptionProgressAtr": 0.5, "roomIgnoreR": 0.25 },
+  "composedReads": { "volumeHigh": 1.5, "absorptionProgressAtr": 0.5, "roomIgnoreR": 0.25, "roomIgnoreTicks": 8 },
   "composeHints": { "perStep": 3, "maxTries": 2000 },
   "fvg": { "frames": [5, 15, 60], "window": 60, "max": 3 },
   "briefing": { "equalK": 2, "cisdFrames": [3, 5, 15, 60] },

@@ -1454,6 +1454,10 @@
    "value": 0.25,
    "from": "new in fix/trend-moves-compose (the room rule: a named level within this many R of the entry is no level in the way and no target; the owner's \"loosen it\", 2026-10-23)"
   },
+  "composedReads.roomIgnoreTicks": {
+   "value": 8,
+   "from": "new in fix/trend-moves-compose (the room band's absolute cap in ticks: min(roomIgnoreR x the stop distance, this), so a wider stop can't wave a real obstacle through; the review, 2026-10-24)"
+  },
   "composeHints.perStep": {
    "value": 3,
    "from": "new in fix/trend-moves-compose (the reads a refusal hint lists a step)"

@@ -608,14 +608,29 @@ function verdictBarProblem(home, strategy, root, v) {
  * sizing.min_contracts), or null. Counted in micro-equivalents, as combine.contractPlan sizes: a mini is its family's
  * ratio of micros, a contract with no family one. Fails closed: a sizing without a whole floor of 1 or more refuses.
  */
+/** What one `root` contract counts toward the floor (micro-equivalents): a mini its family's ratio, else 1. */
+function floorRatio(account, root, specOf = specFor) {
+  const fam = familyOf(root);
+  // No account (missing or invalid): the family's own ratio, never a throw (the account check refuses it on its own).
+  return fam && root === fam.mini ? (account ? legsFor(account, root, specOf).ratio : fam.ratio) : 1;
+}
+
+/**
+ * The floor in the order's own contracts: ceil(sizing.min_contracts / what one counts), e.g. 3 micro-equivalents is
+ * 1 mini at a ratio of 10. null without a whole floor of 1 or more (minContractsRefusal refuses then).
+ */
+function minContractsIn(strategy, account, root, specOf = specFor) {
+  const min = strategy && strategy.sizing ? strategy.sizing.min_contracts : undefined;
+  if (!(Number.isInteger(min) && min >= 1)) return null;
+  return Math.ceil(min / floorRatio(account, root, specOf));
+}
+
 function minContractsRefusal(strategy, account, root, size, specOf = specFor) {
   const min = strategy && strategy.sizing ? strategy.sizing.min_contracts : undefined;
   if (!(Number.isInteger(min) && min >= 1)) {
     return `setup:${strategy && strategy.name}: its account's rulebook states no sizing.min_contracts (${JSON.stringify(min)}), so no floor can be checked: no entry (fails closed). Exits and protective stops still go.`;
   }
-  const fam = familyOf(root);
-  // No account (missing or invalid): the family's own ratio, never a throw (the account check refuses it on its own).
-  const ratio = fam && root === fam.mini ? (account ? legsFor(account, root, specOf).ratio : fam.ratio) : 1;
+  const ratio = floorRatio(account, root, specOf);
   const n = Number(size);
   if (size !== null && size !== undefined && Number.isInteger(n) && n >= 1 && n * ratio >= min) return null;
   if (size === null || size === undefined || size === '') {
@@ -765,5 +780,5 @@ function readVerdicts(home) {
 module.exports = {
   dayEndMs, closeBefore, balanceCheck, reconciled, orderSince, BALANCE_TOLERANCE,
   SNAPSHOT_MAX_AGE_MS, combineFile, verdictsFile, readAttempt, startAttempt, seedAttempt, carriedOf, carriedLossState, endAttempt, runningAttempts, stateFrom, tradesFromFills, sessionLossStreak, snapshot, dayCounts, attemptCounts, recordEndOfDay, combineBlock, entrySinceSnapshot, feeOf,
-  legOf, legsFor, budgetPlan, minContractsRefusal, latestVerdict, propViolations, appendVerdict, readVerdicts, ENTRY_ACTIONS, verdictMultiplier, verdictUsed, openEntryVerdicts,
+  legOf, legsFor, budgetPlan, minContractsRefusal, minContractsIn, latestVerdict, propViolations, appendVerdict, readVerdicts, ENTRY_ACTIONS, verdictMultiplier, verdictUsed, openEntryVerdicts,
 };

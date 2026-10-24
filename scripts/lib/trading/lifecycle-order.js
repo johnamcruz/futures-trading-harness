@@ -125,7 +125,7 @@ function composedOrder({ home, root, side, now = new Date(), cycleBars = {}, str
     ...(strategy.status === 'active' ? [] : [`status ${strategy.status}: plan only, the gate refuses an entry`]),
     ...(paper ? ['paper run: plan only'] : []),
   ].join(' | ');
-  const sizes = policy ? { suggestedSize: stated, translatedSize: translated, minContracts: policy.sizing ? policy.sizing.min_contracts : null, translation: baseWhy } : {};
+  const sizes = policy ? { suggestedSize: stated, translatedSize: translated, minContracts: prop.minContractsIn(policy, account, root, specOf), translation: baseWhy } : {};
   return { args, line, plan: { strategy: strategy.name, side, contract: root, size: ordered, ...(cutWhy ? { recordSize: base } : {}), ...sizes, entry: p.entry.price, stopPrice: p.stop.price, stopTicks: p.stop.ticks, targetPrice: p.target.price, targetTicks: p.target.ticks, riskUsd: Number(risk.toFixed(2)), record: rec.id }, policy, account, verdict };
 }
 

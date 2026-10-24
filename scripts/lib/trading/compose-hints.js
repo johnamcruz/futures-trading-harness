@@ -58,7 +58,7 @@ function verified(forms, b, side, tick, pointing) {
     const c = checkRead(p, b, { tick });
     if (c.check !== true) continue;
     if (pointing ? c.dir !== side : c.dir && c.dir !== side) continue;
-    out.push({ ...(typeof f === 'string' ? {} : f), read, kind: p.kind, form: p.form, price: c.price });
+    out.push({ ...(typeof f === 'string' ? {} : f), read, kind: p.kind, form: p.form, price: c.price, dir: c.dir || null });
   }
   return out;
 }
@@ -233,7 +233,9 @@ function hintsFor({ checked, planned = null, briefing, side, tick, plan = null, 
   const out = [];
   const rule = trendRuleOf(m3.trendRule)[side];
   for (const step of STEPS.filter(s => fail[s])) {
-    if (step === 'bias') out.push(cand.bias.length ? `bias: true for the ${side} here: ${quote(cand.bias.slice(0, n))}` : `bias: no bias read for the ${side} is true on this bar`);
+    // Only the reads pointing the side: a direction-less one (a range regime) is no bias for it.
+    const sided = cand.bias.filter(x => x.dir === side);
+    if (step === 'bias') out.push(sided.length ? `bias: true for the ${side} here: ${quote(sided.slice(0, n))}` : `bias: no bias read for the ${side} is true on this bar`);
     if (step === 'location') out.push(cand.location.length ? `location: true here: ${quote(cand.location.slice(0, n))}` : 'location: no location read is true on this bar');
     if (step === 'setup') {
       const s = cand.setup.slice(0, n).map(x => `"${x.read}" (closed ${et(x.close)})`).join(', ');
@@ -268,6 +270,8 @@ function entryHint(checked, cand, b, side) {
   const directionless = (checked.reads || []).some(r => r.step === 'entry' && ['volume', 'participation'].includes(r.kind));
   const lead = directionless ? 'volume and participation point no side, so they never confirm alone; ' : '';
   const since = after !== null ? ` on a candle closed after the setup's (${et(after)})` : '';
+  // No setup read yet: a confirmation counts only on a candle closed after the setup's, so name the order.
+  if (after === null) return `entry: ${lead}no setup read for the ${side} is true yet; a confirmation counts only on a candle closed after the setup's: the setup first`;
   if (later.length) return `entry: ${lead}the confirmation your way${since}, true here: ${quote(later.slice(0, n))}`;
   const base = baseOf(b);
   // A setup read on the base candle is this bar's own candle: no later candle is in the briefing, and on the next bar
@@ -283,7 +287,8 @@ function targetHint(checked, cand, b, side, tick, plan) {
   const n = LIMITS.perStep;
   const stopRead = (checked.reads || []).find(r => r.kind === 'stop' && r.check === true && r.agrees);
   const stop = stopRead ? { price: stopRead.price } : cand.stop[0] ? { price: cand.stop[0].price } : null;
-  // With a stop, the room rule's R is its distance: the levels within roomIgnoreR of the entry are none of the candidates.
+  // With a stop, the room rule's R is its distance: the levels within the room band of the entry (composed-reads.js
+  // targetsAhead: roomIgnoreR of it, at most roomIgnoreTicks) are none of the candidates.
   const ref = num(checked.reference);
   const targets = stop && ref !== null ? targetsOf(b, side, tick, Math.abs(ref - stop.price)) : cand.target;
   if (!targets.length) return `target: the briefing names no level on the winning side: no target for the ${side}`;

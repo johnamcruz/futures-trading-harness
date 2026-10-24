@@ -134,24 +134,44 @@ test('room rule: the running day high a long extends, mirrored', () => {
   assert.deepStrictEqual(targetsAhead(b, 'long', { tick: 0.25 }).map(x => x.read), ['target day high 21541', 'target session high 21541']);
 });
 
-test('room rule: a named level within roomIgnoreR (0.25R) of the entry is ignored; one past it refuses the mark; long and short', () => {
-  assert.strictEqual(require('../../scripts/lib/tunables').analysis().composedReads.roomIgnoreR, 0.25);
-  // Long from 21540.25, the stop read at the 15m low 21512.75: R = 27.5 points. 0.2R ahead: 21545.75; 0.3R: 21548.5.
+test('room rule: the band is min(roomIgnoreR x the stop distance, roomIgnoreTicks): a level at the price is ignored, a real one stands; long and short', () => {
+  const cfg = require('../../scripts/lib/tunables').analysis().composedReads;
+  assert.deepStrictEqual([cfg.roomIgnoreR, cfg.roomIgnoreTicks], [0.25, 8]);
+  // Long from 21540.25, the stop read at the 15m low 21512.75: R = 27.5 points, 0.25R = 6.875, capped at 8 ticks = 2 points.
   const at = price => bare(b => { b.sections.m3.data.swingTargets.above = [{ frame: '15m', price }]; });
   const mark = b => checkReads({ reads: withTarget('target 2r'), side: 'long', briefing: b, tick: 0.25 }).reads.find(r => r.step === 'target').check;
-  assert.strictEqual(mark(at(21545.75)), true, '0.2R: ignored');
+  assert.strictEqual(mark(at(21540.5)), true, '1 tick ahead: at the price, ignored');
+  assert.strictEqual(mark(at(21542.25)), true, '8 ticks ahead: the cap, ignored');
+  assert.strictEqual(mark(at(21542.5)), false, '9 ticks ahead (0.08R): past the cap, in the way');
   assert.strictEqual(mark(at(21548.5)), false, '0.3R: in the way');
-  // Without a stop's R nothing is ignored by distance.
-  assert.deepStrictEqual(targetsAhead(at(21545.75), 'long', { tick: 0.25 }).map(x => x.price), [21545.75]);
-  assert.deepStrictEqual(targetsAhead(at(21545.75), 'long', { tick: 0.25, riskPts: 27.5 }), []);
-  // Short mirrored: from 21540.25 with R = 27.5, a level 0.2R below is ignored, one 0.3R below stands.
+  // Without a stop's R (or a tick) nothing is ignored by distance.
+  assert.deepStrictEqual(targetsAhead(at(21540.5), 'long', { tick: 0.25 }).map(x => x.price), [21540.5]);
+  assert.deepStrictEqual(targetsAhead(at(21540.5), 'long', { tick: null, riskPts: 27.5 }).map(x => x.price), [21540.5]);
+  assert.deepStrictEqual(targetsAhead(at(21540.5), 'long', { tick: 0.25, riskPts: 27.5 }), []);
+  // A tight stop's R band is under the cap and binds: R = 4 points, 0.25R = 1 point: 5 ticks ahead stands.
+  assert.deepStrictEqual(targetsAhead(at(21541.5), 'long', { tick: 0.25, riskPts: 4 }).map(x => x.price), [21541.5]);
+  assert.deepStrictEqual(targetsAhead(at(21541.25), 'long', { tick: 0.25, riskPts: 4 }), []);
+  // Short mirrored: from 21540.25 with R = 27.5, a level 1 tick below is ignored, one 9 ticks below stands.
   const b = scenario1();
   b.keyLevels = [];
   b.sections.m3.data.candles['3m'].relations = [];
   b.sections.m3.data.candles['15m'].relations = [];
   b.sections.m3.data.liquidity.equalLows = [];
-  b.sections.m3.data.swingTargets.below = [{ frame: '15m', price: 21534.75 }];
+  b.sections.m3.data.swingTargets.below = [{ frame: '15m', price: 21540 }];
   assert.deepStrictEqual(targetsAhead(b, 'short', { tick: 0.25, riskPts: 27.5 }), []);
-  b.sections.m3.data.swingTargets.below = [{ frame: '15m', price: 21532 }];
-  assert.deepStrictEqual(targetsAhead(b, 'short', { tick: 0.25, riskPts: 27.5 }).map(x => x.price), [21532]);
+  b.sections.m3.data.swingTargets.below = [{ frame: '15m', price: 21538 }];
+  assert.deepStrictEqual(targetsAhead(b, 'short', { tick: 0.25, riskPts: 27.5 }).map(x => x.price), [21538]);
+});
+
+test('room rule: a wider verified stop can\'t wave a real obstacle through (the review\'s case)', () => {
+  // Long from 21540.25 with a 15m swing high 10 points ahead: 0.36R from the 15m-low stop (R 27.5), 0.2R from the 1h-low
+  // stop (R 50.25). Under both stops the swing is in the way and the 2R mark is refused.
+  const b = () => bare(x => { x.sections.m3.data.swingTargets.above = [{ frame: '15m', price: 21550.25 }]; });
+  for (const stop of ['stop 15m low 21512.75', 'stop 1h low 21490']) {
+    const reads = withTarget('target 2r').map(r => (r.step === 'stop' ? { ...r, read: stop } : r));
+    const checked = checkReads({ reads, side: 'long', briefing: b(), tick: 0.25 });
+    assert.strictEqual(checked.reads.find(r => r.step === 'stop').check, true, `${stop} verified`);
+    assert.strictEqual(checked.reads.find(r => r.step === 'target').check, false, `${stop}: the swing 10 points ahead is in the way`);
+    assert.strictEqual(checked.ok, false);
+  }
 });

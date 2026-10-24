@@ -87,8 +87,10 @@ test('trend-move set: the refusals\' hints list only TRUE reads; each listed who
     wholes += 1;
     assert.match(compose(p.bar, p.side, asReads(whole)), /\nOK: every read verified and the plan stands/, `${p.leg} ${p.bar}: ${whole}`);
   }
-  // The guided retries that pass (pinned: a change that loses one is a regression, one that adds one says why).
-  assert.strictEqual(wholes, 40);
+  // The guided retries that pass (pinned: a change that loses one is a regression, one that adds one says why). 40
+  // before the room band's tick cap (2026-10-24): 6 passed only through the uncapped 0.25R band, a level more than
+  // 8 ticks ahead skipped by a wide stop; such a level is in the way now, whatever the stop.
+  assert.strictEqual(wholes, 34);
 });
 
 test('trend-move set: per leg, a valid trend-following plan in its first half where the set says, and every such leg caught by a guided retry', () => {

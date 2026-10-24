@@ -59,7 +59,8 @@
  *                                           source's price within one tick of <price>    below price long
  *   target 2r                               step target only: the 2R mark, TRUE only when the briefing names no target
  *                                           the side's way (targetsAhead: past the running extreme the trade extends
- *                                           and the levels within roomIgnoreR of the entry, by the stop read's R); the plan puts it at the minimum R (planOf)  its side
+ *                                           and the levels within roomIgnoreR of the entry by the stop read's R, at most
+ *                                           roomIgnoreTicks); the plan puts it at the minimum R (planOf)  its side
  *   target <source> <price>                 step target only: <tf> swing [high|low] (m3.swingTargets), prior 1h|4h
  *                                           high|mid|low (m3.rangeTargets: the prior completed candle; an off-tick
  *                                           mid is the price on the tick toward price; a side the candle forming
@@ -120,6 +121,11 @@ const VOLUME_HIGH = require('../tunables').analysis().composedReads.volumeHigh;
 // The room rule's band (the owner, 2026-10-23: "loosen it"): a named level within this many R of the entry (R: the
 // combination's own stop distance) is no level in the way and no target candidate (config/analysis.json composedReads).
 const ROOM_IGNORE_R = require('../tunables').analysis().composedReads.roomIgnoreR;
+// The band's absolute cap in ticks (the review, 2026-10-24): the R band alone grew with the stop, so a wider verified
+// stop could wave a real obstacle through; the cap keeps it to levels genuinely at the price, whatever the stop.
+const ROOM_IGNORE_TICKS = require('../tunables').analysis().composedReads.roomIgnoreTicks;
+/** The room band in points: min(ROOM_IGNORE_R x the stop distance, ROOM_IGNORE_TICKS ticks); 0 without both (nothing ignored). */
+const roomBand = (riskPts, tick) => (num(riskPts) !== null && riskPts > 0 && num(tick) !== null && tick > 0 ? Math.min(ROOM_IGNORE_R * riskPts, ROOM_IGNORE_TICKS * tick) : 0);
 // The running extremes a trade extends: the day's and the session's own low (a short) or high (a long), when the bar
 // traded at or through them; neither is in the way of the move making it. The overnight extremes are not: in RTH they
 // are the finished overnight session's, a real level.
@@ -332,8 +338,8 @@ function sourcePrices(kind, source, b, base, { tick = 0.25, ref = null } = {}) {
  * The target reads the briefing names on the side's winning side, nearest first: the swing targets, the levels it names,
  * the prior 1h and 4h candle's high, mid and low, the gaps' edges; each checked TRUE (checkRead) and on that side.
  * [{ read, price }]. Never counted (the room rule): the running day or session extreme the trade extends (RUNNING, the
- * bar at or through it), and with `riskPts` (the combination's stop distance) any level within ROOM_IGNORE_R of the entry.
- * The 2R mark is TRUE only when this is empty.
+ * bar at or through it), and with `riskPts` (the combination's stop distance) any level within the room band of the
+ * entry (roomBand). The 2R mark is TRUE only when this is empty.
  */
 function targetsAhead(b, side, { tick, riskPts = null }) {
   const m3 = data(b, 'm3');
@@ -362,7 +368,7 @@ function targetsAhead(b, side, { tick, riskPts = null }) {
     if (seen.has(read)) continue;
     seen.add(read);
     const c = checkRead(parseRead(read), b, { tick });
-    const near = num(riskPts) !== null && riskPts > 0 && Math.abs(c.price - ref) <= ROOM_IGNORE_R * riskPts;
+    const near = Math.abs(c.price - ref) <= roomBand(riskPts, tick);
     if (c.check === true && c.dir === side && !near) out.push({ read, price: c.price });
   }
   return out.sort((x, y) => Math.abs(x.price - ref) - Math.abs(y.price - ref) || x.read.localeCompare(y.read));

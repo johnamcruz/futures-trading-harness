@@ -37,7 +37,7 @@ const deskData = (role, precollected) => (precollected && Object.prototype.hasOw
  * In a prop attempt, the entry's size as code translated it (prop/size-translate.js, through order_plan: runner-entry.js),
  * the size phase 2 approves or cuts; the record's is a suggestion. None (outside an attempt): nothing, the request as before.
  */
-const sizeText = s => (s && Number.isInteger(s.size) ? ` The entry's size is ${s.size} ${s.contract}: code's translation of the record's suggested ${s.suggested} under the account rulebook (${s.reason}). Approve that size (your VERDICT line's size ${s.size}), or cut it${Number.isInteger(s.floor) ? `, never under ${s.floor} (a cut below it is ${s.floor}, never a veto)` : ''}; the record's size is a suggestion, never the one to approve.` : '');
+const sizeText = s => (s && Number.isInteger(s.size) ? ` The entry's size is ${s.size} ${s.contract}: code's translation of the record's suggested ${s.suggested} under the account rulebook (${s.reason}). Approve that size (your VERDICT line's size ${s.size}), or cut it${Number.isInteger(s.floor) ? `, never under ${s.floor} ${s.contract} (a cut below it is ${s.floor}, never a veto)` : ''}; the record's size is a suggestion, never the one to approve. State only the final size (already floored) on your VERDICT and Size lines; never write the number before the floor or the cut arithmetic: every size on them binds.` : '');
 const reportName = role => (role === RISK_MANAGER ? 'risk-manager phase 1 report' : `${role} report`);
 
 const REQUESTS = Object.freeze({

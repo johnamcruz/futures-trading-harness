@@ -717,7 +717,7 @@
      "bar": "2021-05-04T13:33:00.000Z",
      "window": "allowed",
      "trendRule": "allowed",
-     "validPlan": true
+     "validPlan": false
     },
     {
      "bar": "2021-05-04T13:36:00.000Z",
@@ -1768,7 +1768,7 @@
      "bar": "2021-05-04T14:45:00.000Z",
      "window": "allowed",
      "trendRule": "allowed",
-     "validPlan": true
+     "validPlan": false
     },
     {
      "bar": "2021-05-04T14:48:00.000Z",
@@ -1780,19 +1780,19 @@
      "bar": "2021-05-04T14:51:00.000Z",
      "window": "allowed",
      "trendRule": "allowed",
-     "validPlan": true
+     "validPlan": false
     },
     {
      "bar": "2021-05-04T14:54:00.000Z",
      "window": "allowed",
      "trendRule": "allowed",
-     "validPlan": true
+     "validPlan": false
     },
     {
      "bar": "2021-05-04T14:57:00.000Z",
      "window": "allowed",
      "trendRule": "allowed",
-     "validPlan": true
+     "validPlan": false
     },
     {
      "bar": "2021-05-04T15:00:00.000Z",
@@ -1804,19 +1804,19 @@
      "bar": "2021-05-04T15:03:00.000Z",
      "window": "allowed",
      "trendRule": "allowed",
-     "validPlan": true
+     "validPlan": false
     },
     {
      "bar": "2021-05-04T15:06:00.000Z",
      "window": "allowed",
      "trendRule": "allowed",
-     "validPlan": true
+     "validPlan": false
     },
     {
      "bar": "2021-05-04T15:09:00.000Z",
      "window": "allowed",
      "trendRule": "allowed",
-     "validPlan": true
+     "validPlan": false
     }
    ],
    "plans": [
