@@ -621,16 +621,19 @@ and leg ids; the lessons lines record the batch too.
 
 **The cost.** A run steps a leg's window and its control windows, not the
 leg's whole session: on the 3-minute morning session (about 50 cycles a
-session), a leg's window and its control window were about 17 cycles
-together in the dry run below, plus the day's end of day and any
-management. The champion steps each
+session), a leg's window is about 10 cycles, plus its control window's
+when one fits, the day's end of day and any management. On that session
+most control windows find no free stretch: the census's legs, each from
+its lead-in to its end, cover most of the morning (in the dry run below
+about four in five were left out, each listed in the report). The
+champion steps each
 round's windows, both halves (a day's same windows, such as the regression
 days', are reused), then every edit steps the probe half's windows and the
 regression days, on top of its curated half, and the combined change the
 confirm half's. A model-free dry run of a 50-leg batch (25 probe legs on 25
 days, 24 confirm on 24, 4 regression days, three edits and the combined
-change) stepped 2,994 trend cycles in all: 850 for the champion, 559 for each
-edit, 467 for the combined change. The same days in whole sessions are 8,466
+change) stepped 2,319 trend cycles in all: 658 for the champion, 425 for each
+edit, 386 for the combined change. The same days in whole sessions are 8,466
 cycles, and the earlier whole-session screen of a 100-leg batch was 15,096.
 The keep rule's runs are unchanged (full days, the strict judge): about 5,300
 cycles a tuning window a side. A smaller `batch` costs less and screens with
