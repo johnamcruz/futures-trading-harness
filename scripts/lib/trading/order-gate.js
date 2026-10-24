@@ -39,7 +39,7 @@ const { brokerSpecs, contractsFileFor, whyNoSpec, brokerOrderLimit, dayFrontMiss
 const { checkOrderSize, checkRiskLimit } = require('./order-limits');
 const { lockGateRefusal } = require('../account-lock');
 const { composedName, composedRefusal, reversalAllowed } = require('./lifecycle-gate');
-const { lateEntryRefusal, ageLimitOf } = require('./late-entry');
+const { lateEntryCheck, ageLimitOf } = require('./late-entry');
 const GATE = require('../tunables').runner().gate; // config/runner.json: the bracket tolerances (tighten-only)
 
 const RISK_REDUCING = /^\s*\[(exit|protect)\]/i;
@@ -430,8 +430,9 @@ function evaluateOrder({ input = {}, entries = [], now = new Date(), config, bla
     // it by more than the configured share of the stop distance, it is a pass; no current price, refused (fails closed).
     if (!composedCheck.message) {
       const p = composedCheck.plan;
-      const late = lateEntryRefusal({ home: config.home, root: contractRoot(input.contractId), side: { buy: 'long', sell: 'short' }[String(input.side || '').toLowerCase()], entry: p.entry.price, stop: p.stop.price, briefing: composedCheck.briefing, now, share: GATE.lateEntryDriftShare, maxAgeMin: ageLimitOf(config) });
-      if (late) violations.push({ check: 'late-entry', message: `setup:${composed}: ${late}. Exits, protective stops and stop moves still go.` });
+      const late = lateEntryCheck({ home: config.home, root: contractRoot(input.contractId), side: { buy: 'long', sell: 'short' }[String(input.side || '').toLowerCase()], entry: p.entry.price, stop: p.stop.price, target: p.target.price, briefing: composedCheck.briefing, now, share: GATE.lateEntryDriftShare, maxAgeMin: ageLimitOf(config) });
+      // `late`: the skip as logged (the plan's prices, the price at the skip): the replay report's counterfactual reads it.
+      if (late) violations.push({ check: 'late-entry', message: `setup:${composed}: ${late.message}. Exits, protective stops and stop moves still go.`, late: late.late });
     }
   }
   // D2 (the owner's "CHoCH at or above the trend"): a trade_lifecycle entry against the prevailing trend stands only on

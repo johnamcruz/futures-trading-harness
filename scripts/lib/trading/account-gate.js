@@ -562,11 +562,42 @@ function ledgerName(args) {
   return checked;
 }
 
+/**
+ * The price at order time, for the gate's late-entry check (late-entry.js): before an entry is judged, the gateway reads
+ * the broker's newest closed 1-minute bar for the order's contract and records its close as the latest price
+ * (late-entry.js recordPrice: the newest kept wins). A runner's price read before its trade-executor ran is minutes old
+ * by the time the order goes; the market can have moved most of the risk toward the stop since (two composed longs in
+ * the live smoke filled a few ticks over their stops). Exits and protective orders read nothing. A read that fails or
+ * returns no closed bar records nothing: the local prices decide, as before (none current: refused).
+ * Only a composed entry (its setup tag names a composed strategy, or a policy listing one: the late-entry rule is theirs).
+ * `home`: the harness home; `now`: the gateway's clock (a replay's replayed time); `strategies`: the registry. Never throws.
+ */
+async function freshEntryPrice(args, caller, { home, now, strategies = [] }) {
+  if (!args || isRiskReducing(args.rationale) || typeof args.contractId !== 'string' || !home) return null;
+  const m = SETUP.exec(String(args.rationale || ''));
+  const named = m ? (strategies || []).find(x => x && x.name === m[1].toLowerCase()) : null;
+  const composed = n => (strategies || []).some(x => x && x.name === n && x.signal === 'composed');
+  if (!named || !(named.signal === 'composed' || (named.signal === 'policy' && (named.strategies || []).some(composed)))) return null;
+  try {
+    const { MINUTE } = require('../backtest/data');
+    const bars1m = require('../tunables').runner().gate.signalMaxAgeBars; // the bars the runner's entry reads too
+    const got = parseToolJson(await caller.call('get_bars', { contractId: args.contractId, unit: 'minute', unitNumber: 1, limit: bars1m, includePartialBar: false }), 'get_bars');
+    const bars = normalizeBars(Array.isArray(got) ? got : got.bars || []);
+    const at = now.getTime();
+    const last = bars.filter(b => Date.parse(b.t) + MINUTE <= at).at(-1);
+    if (!last || !Number.isFinite(Number(last.c))) return null;
+    const { recordPrice } = require('./late-entry');
+    return recordPrice(home, rootOf(args.contractId), { price: Number(last.c), closedAt: new Date(Date.parse(last.t) + MINUTE).toISOString(), minutes: 1, source: 'gateway' }, { now });
+  } catch (_err) {
+    return null;
+  }
+}
+
 /** The gate's ledger named as the call was (NAMES, set by accountFacts), else as given. */
 const ledgerNamed = (input, ledger) => (input && typeof input[NAMES] === 'function' && Array.isArray(ledger)
   ? ledger.map(e => (e && typeof e.contractId === 'string' ? { ...e, contractId: input[NAMES](e.contractId) } : e)) : ledger);
 
 module.exports = {
   RENAME, renamed, ledgerName, accountFacts, parseToolJson, netPosition, contractNet, openPositions, pendingState, pendingNet, closingFills, fillLossState, evaluateAccount, evaluateCancel,
-  evaluateModifyAccount, evaluatePartialClose, evaluateAccountChange, barsRequest, regimeGatedStrategy, regimeViolation, STOP_TYPES,
+  evaluateModifyAccount, evaluatePartialClose, evaluateAccountChange, barsRequest, regimeGatedStrategy, regimeViolation, STOP_TYPES, freshEntryPrice,
 };

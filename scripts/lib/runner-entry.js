@@ -401,7 +401,9 @@ async function runEntry(deps, c) {
     const late = await lateCheck(order, roleEnv);
     if (late) {
       info.timing.orderMs = sinceClose(wallNow());
-      stop = { outcome: 'late', why: late };
+      // The skip, logged with the plan's prices and the price at the skip (the replay report's counterfactual reads it).
+      info.late = { ...late.late, root: c.symbol, at: now().toISOString() };
+      stop = { outcome: 'late', why: late.message };
       return { stop: stop.why };
     }
     try {
@@ -436,7 +438,7 @@ async function runEntry(deps, c) {
     const G = require('./tunables').runner().gate;
     const maxAgeMin = LE.ageLimitOf(config || { signalMaxAgeBars: G.signalMaxAgeBars, signalMaxAgeCeilingMin: G.signalMaxAgeCeilingMin });
     const { readBriefing } = require('./trading/briefing');
-    return LE.lateEntryRefusal({ home, root, side: rec.side, entry: o.plan.entry, stop: o.plan.stopPrice, briefing: readBriefing(home, root), now: now(), share: G.lateEntryDriftShare, maxAgeMin });
+    return LE.lateEntryCheck({ home, root, side: rec.side, entry: o.plan.entry, stop: o.plan.stopPrice, target: o.plan.targetPrice ?? null, briefing: readBriefing(home, root), now: now(), share: G.lateEntryDriftShare, maxAgeMin });
   };
   const sentAt = Date.now();
   let res;

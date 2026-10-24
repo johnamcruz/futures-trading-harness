@@ -23,10 +23,14 @@
  *                                  maxAgeMin(minutes): the age limit of a price from bars of that many minutes
  *   lateEntry({ side, entry, stop, price, share })   null (the plan stands at this price) or { kind, message }:
  *                                  kind `beyond-stop` (short: price >= stop; long: price <= stop) or `missed-entry`
- *                                  (price past the entry against the trade by more than `share` of the stop distance)
+ *                                  (price past the entry against the trade by more than `share` of the stop distance:
+ *                                  movedR, the share of the plan's risk moved toward the stop, the same for a long and a
+ *                                  short; share: config/runner.json gate.lateEntryDriftShare, tighten-only)
  *                                  A price the trade's way past the entry is no refusal: the limit rests at the plan's
  *                                  price and expires with its record (lifecycle-runner.js dueComposed); never chased.
- *   lateEntryRefusal({ home, root, side, entry, stop, briefing, now, share, maxAgeMin })   the refusal's message or null
+ *   lateEntryCheck({ home, root, side, entry, stop, target, briefing, now, share, maxAgeMin })   null or { message, late }
+ *                                  (late: the skip as logged: the plan's prices, the price at the skip, movedR)
+ *   lateEntryRefusal({ ... })      the refusal's message or null
  *   ageLimitOf(config)             maxAgeMin from the gate's config (loadConfig): its signal age bars, cap and ceiling
  */
 
@@ -91,24 +95,37 @@ function lateEntry({ side, entry, stop, price, share }) {
   if (!sign || ![e, s, p, share].every(Number.isFinite) || !(sign * (e - s) > 0)) return { kind: 'unreadable', message: `the plan (a ${side} at ${entry}, stop ${stop}) or the price ${price} can't be checked` };
   if (sign * (p - s) <= 0) return { kind: 'beyond-stop', message: `the setup was invalidated before the order went (price ${p} beyond the plan's stop ${s}): no late entry` };
   const against = sign * (e - p);
-  const allowed = share * sign * (e - s);
-  if (against > allowed) {
-    return { kind: 'missed-entry', message: `missed the plan's entry ${e} (price ${p} is ${against} points past it against the ${side}, over ${share} of the ${sign * (e - s)}-point stop): the limit would fill away from the plan: no late entry` };
+  const risk = sign * (e - s);
+  // The share of the plan's risk (entry to stop) price has moved toward the stop, symmetric for a long and a short.
+  const movedR = Math.round((against / risk) * 1000) / 1000;
+  if (against > share * risk) {
+    return { kind: 'missed-entry', movedR, message: `missed the plan's entry ${e} (price ${p} is ${Math.round(against * 1e6) / 1e6} points past it against the ${side}: ${Math.round(movedR * 100)}% of the ${risk}-point risk toward the stop, over ${share}R; the setup's premise is in question): the limit would fill away from the plan: no late entry` };
   }
   return null;
 }
 
-function lateEntryRefusal({ home, root, side, entry, stop, briefing = null, now = new Date(), share, maxAgeMin }) {
+/**
+ * The late-entry check with what a skip is logged with: null (the plan stands) or { message, late: { kind, side,
+ * entry, stop, target, price, closedAt, source, movedR, share } } (kind: beyond-stop, missed-entry, no-price, failed).
+ */
+function lateEntryCheck({ home, root, side, entry, stop, target = null, briefing = null, now = new Date(), share, maxAgeMin }) {
+  const base = { side, entry: Number(entry), stop: Number(stop), target: target === null ? null : Number(target), share };
   try {
     const got = latestPrice({ home, root, briefing, now, maxAgeMin });
-    if (got.price === null) return `no current price for ${keyOf(root)} from local bars (${got.why}): the plan's entry and stop can't be checked against the market, so no entry (fails closed)`;
+    if (got.price === null) return { message: `no current price for ${keyOf(root)} from local bars (${got.why}): the plan's entry and stop can't be checked against the market, so no entry (fails closed)`, late: { ...base, kind: 'no-price', price: null, closedAt: null, source: null, movedR: null } };
     const late = lateEntry({ side, entry, stop, price: got.price, share });
-    return late ? `${late.message} (the ${got.source} price at ${got.closedAt}). Pass; the next bar composes on its own facts` : null;
+    if (!late) return null;
+    return { message: `${late.message} (the ${got.source} price at ${got.closedAt}). Pass; the next bar composes on its own facts`, late: { ...base, kind: late.kind, price: got.price, closedAt: got.closedAt, source: got.source, movedR: late.movedR ?? null } };
   } catch (err) {
-    return `the late-entry check failed (${err.message}): no entry (fails closed)`;
+    return { message: `the late-entry check failed (${err.message}): no entry (fails closed)`, late: { ...base, kind: 'failed', price: null, closedAt: null, source: null, movedR: null } };
   }
+}
+
+function lateEntryRefusal(args) {
+  const r = lateEntryCheck(args);
+  return r ? r.message : null;
 }
 
 const ageLimitOf = config => minutes => signalMaxAgeMin(`${minutes}m`, { bars: config.signalMaxAgeBars, capMin: config.signalMaxAgeCapMin, ceilingMin: config.signalMaxAgeCeilingMin });
 
-module.exports = { FILE, recordPrice, readPrice, latestPrice, lateEntry, lateEntryRefusal, ageLimitOf };
+module.exports = { FILE, recordPrice, readPrice, latestPrice, lateEntry, lateEntryCheck, lateEntryRefusal, ageLimitOf };

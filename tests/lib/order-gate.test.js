@@ -3139,7 +3139,7 @@ test('trade_lifecycle, no late entry ([late-entry], late-entry.js): the latest l
   const late = r => r.violations.filter(v => v.check === 'late-entry').map(v => v.message);
   assert.deepStrictEqual(checks(at(21512.5)), ['late-entry'], 'at the stop');
   assert.match(late(at(21500))[0], /^setup:trade_lifecycle: the setup was invalidated before the order went \(price 21500 beyond the plan's stop 21512\.5\): no late entry \(the runner-entry price at 2026-10-07T14:00:00\.000Z\)\. Pass; the next bar composes on its own facts\. Exits, protective stops and stop moves still go\.$/);
-  assert.match(late(at(21533.25))[0], /missed the plan's entry 21540\.25 \(price 21533\.25 is 7 points past it against the long, over 0\.25 of the 27\.75-point stop\)/);
+  assert.match(late(at(21533.25))[0], /missed the plan's entry 21540\.25 \(price 21533\.25 is 7 points past it against the long: 25% of the 27\.75-point risk toward the stop, over 0\.25R/);
   assert.deepStrictEqual(at(21533.5).violations, [], '6.75 points: within the share');
   assert.deepStrictEqual(at(21570).violations, [], 'the trade\'s way: the limit rests at the plan\'s price');
   // Not skippable.

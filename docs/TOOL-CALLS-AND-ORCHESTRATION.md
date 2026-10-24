@@ -374,7 +374,13 @@ head trader's run, before the cycle log; per role `config/runner.json`
    `contractId`) goes through the broker adapter (`journalAdd`); the gate's
    `plan-required` takes, in a runner's cycle, only a plan written since the
    cycle bar's close (a composed entry: its record's bar, never another lane's).
-   A record that expired first is its own outcome, `expired`.
+   A record that expired first is its own outcome, `expired`. Just before the
+   executor, no late entry: the newest closed 1-minute bar's price against the
+   plan in R (the share of its risk moved toward the stop, the same for a long
+   and a short; over `gate.lateEntryDriftShare` it is the outcome `late`,
+   logged with the plan's prices and the price: the entry record's `late`);
+   the gateway checks it again on the broker's bar at the order
+   (`account-gate.js freshEntryPrice`).
 5. **`execute`.** The trade-executor with those exact arguments and phase 2's
    verdict line (the `execute` request), `orders: true` and `retries: 0`: only
    a workflow's last phase may run the order role, once. Accepted on

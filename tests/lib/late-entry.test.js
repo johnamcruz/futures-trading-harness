@@ -25,12 +25,46 @@ test('lateEntry: beyond the plan\'s stop refuses, short and long (the replay\'s 
   assert.strictEqual(LE.lateEntry({ ...LONG, price: 21485.25, share: SHARE }).kind, 'beyond-stop');
 });
 
+test('lateEntry in R, symmetric: long and short at 0.3, 0.5 and 0.9 of the risk toward the stop, at a share of 0.5 and the shipped one; the trade\'s way is no refusal', () => {
+  // The live smoke's long: entry 13853.00, stop 13838.75 (14.25 points of risk); its mirror short above.
+  const L = { side: 'long', entry: 13853, stop: 13838.75 };
+  const S = { side: 'short', entry: 13853, stop: 13867.25 };
+  const risk = 14.25;
+  const at = (plan, r) => plan.entry - (plan.side === 'long' ? 1 : -1) * r * risk; // r of the risk toward the stop
+  for (const plan of [L, S]) {
+    // A share of 0.5: 0.3 and 0.5 stand (at the share is not over it), 0.9 is missed, its R stated.
+    assert.strictEqual(LE.lateEntry({ ...plan, price: at(plan, 0.3), share: 0.5 }), null, `${plan.side} 0.3`);
+    assert.strictEqual(LE.lateEntry({ ...plan, price: at(plan, 0.5), share: 0.5 }), null, `${plan.side} 0.5`);
+    const r9 = LE.lateEntry({ ...plan, price: at(plan, 0.9), share: 0.5 });
+    assert.deepStrictEqual([r9.kind, r9.movedR], ['missed-entry', 0.9], plan.side);
+    assert.match(r9.message, new RegExp(`against the ${plan.side}: 90% of the 14.25-point risk toward the stop, over 0.5R`));
+    // The shipped share (0.25R): every one of them is missed.
+    for (const r of [0.3, 0.5, 0.9]) assert.strictEqual(LE.lateEntry({ ...plan, price: at(plan, r), share: SHARE }).kind, 'missed-entry', `${plan.side} ${r} at ${SHARE}`);
+    // The trade's way past the entry (a long's price above it, a short's below): no refusal (the limit rests, never chased).
+    assert.strictEqual(LE.lateEntry({ ...plan, price: at(plan, -0.9), share: SHARE }), null, `${plan.side} the trade's way`);
+  }
+  // The live smoke's fill: 13840.75 on the long, 12.25 of 14.25 points toward the stop: 86%.
+  assert.strictEqual(LE.lateEntry({ ...L, price: 13840.75, share: SHARE }).movedR, 0.86);
+});
+
+test('lateEntryCheck: the skip as logged (the plan, the price, its R); no current price fails closed with the reason', () => {
+  const home = tmpDir();
+  LE.recordPrice(home, 'MNQ', { price: 13840.75, closedAt: '2021-08-18T17:37:00Z', minutes: 1, source: 'gateway' }, { now: NOW });
+  const r = LE.lateEntryCheck({ home, root: 'MNQ', side: 'long', entry: 13853, stop: 13838.75, target: 13895.5, now: NOW, share: SHARE, maxAgeMin: AGE });
+  assert.match(r.message, /missed the plan's entry 13853 \(price 13840\.75 is 12\.25 points past it against the long: 86% of the 14\.25-point risk toward the stop/);
+  assert.deepStrictEqual(r.late, { side: 'long', entry: 13853, stop: 13838.75, target: 13895.5, share: SHARE, kind: 'missed-entry', price: 13840.75, closedAt: '2021-08-18T17:37:00.000Z', source: 'gateway', movedR: 0.86 });
+  const none = LE.lateEntryCheck({ home: tmpDir(), root: 'MNQ', side: 'long', entry: 13853, stop: 13838.75, now: NOW, share: SHARE, maxAgeMin: AGE });
+  assert.match(none.message, /no current price for MNQ from local bars \(no local bar\).*no entry \(fails closed\)/);
+  assert.deepStrictEqual([none.late.kind, none.late.price], ['no-price', null]);
+  assert.strictEqual(LE.lateEntryRefusal({ home, root: 'MNQ', side: 'long', entry: 13853, stop: 13838.75, now: NOW, share: SHARE, maxAgeMin: AGE }), r.message, 'the refusal is the check\'s message');
+});
+
 test('lateEntry: drift against the entry over the share refuses (missed the entry); at or under it the plan stands', () => {
   // Short: 7-point stop, 0.25 of it = 1.75 points (7 ticks) above the 14979.5 limit.
   assert.strictEqual(LE.lateEntry({ ...SHORT, price: 14981.25, share: SHARE }), null, 'exactly 7 ticks: stands');
   const over = LE.lateEntry({ ...SHORT, price: 14981.5, share: SHARE });
   assert.strictEqual(over.kind, 'missed-entry');
-  assert.match(over.message, /^missed the plan's entry 14979\.5 \(price 14981\.5 is 2 points past it against the short, over 0\.25 of the 7-point stop\).*no late entry$/);
+  assert.match(over.message, /^missed the plan's entry 14979\.5 \(price 14981\.5 is 2 points past it against the short: 29% of the 7-point risk toward the stop, over 0\.25R; the setup's premise is in question\).*no late entry$/);
   // Long: 10-point stop, 2.5 points below 21500.
   assert.strictEqual(LE.lateEntry({ ...LONG, price: 21497.5, share: SHARE }), null);
   assert.strictEqual(LE.lateEntry({ ...LONG, price: 21497.25, share: SHARE }).kind, 'missed-entry');

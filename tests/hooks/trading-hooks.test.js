@@ -618,6 +618,31 @@ function noFeePropWorld(home, size) {
   return { order: n => LC.order({ size: n, rationale: 'setup:pmc_policy long trade_lifecycle, stop 21512.50, target 21598.00' }), env: { ...env, FTH_TEST_NOW: now.toISOString(), FTH_CYCLE_BARS: JSON.stringify({ MNQ: LC.BAR }), FTH_SYMBOLS: 'MNQ' } };
 }
 
+test('MCP gateway: a composed entry is judged late on the price at order time (the broker\'s newest closed 1m bar, read by the gateway), not on the runner\'s price from before the trade-executor ran', { timeout: 60000 }, async () => {
+  // The live smoke: the runner read its price before the trade-executor's run; by the order the market had fallen most of
+  // the risk toward the stop, and the long filled a few ticks over its stop. Here: the plan's long at 21540.25, stop
+  // 21512.50 (27.75 points); the runner's recorded price is the entry, the broker's newest closed bar 21520.00: 20.25
+  // points against the long, 73% of the risk toward the stop, over 0.25R.
+  const LE = require('../../scripts/lib/trading/late-entry');
+  const home = tmpDir();
+  const w = composedPropWorld(home, 5);
+  const { env } = setup([{ ts: '2026-10-07T13:59:30.000Z', kind: 'plan', contractId: 'MNQ', text: 'plan' }], { FTH_HOME: home, ...w.env });
+  LE.recordPrice(home, 'MNQ', { price: 21540.25, closedAt: '2026-10-07T13:59:00.000Z', minutes: 1, source: 'runner-entry' }, { now: new Date('2026-10-07T14:00:02Z') });
+  const bars = JSON.stringify({ bars: [{ t: '2026-10-07T13:58:00Z', o: 21540, h: 21541, l: 21530, c: 21531 }, { t: '2026-10-07T13:59:00Z', o: 21531, h: 21532, l: 21519, c: 21520 }] });
+  const r = await gatewayRun({ ...env, FAKE_BARS: bars }, [call(1, 'place_order', w.order(5))]);
+  const text = r.byId[1].result.content[0].text;
+  assert.ok(r.byId[1].result.isError, text);
+  assert.match(text, /\[late-entry\] setup:trade_lifecycle: missed the plan's entry 21540\.25 \(price 21520 is 20\.25 points past it against the long: 73% of the 27\.75-point risk toward the stop, over 0\.25R/);
+  assert.match(text, /the gateway price at 2026-10-07T14:00:00\.000Z/);
+  // The skip is logged with the plan's prices and the price at the skip (the replay report's counterfactual reads it).
+  const logged = D_gateLog(env).filter(e => e.source === 'gateway').flatMap(e => e.violations || []).find(v => v.check === 'late-entry');
+  assert.deepStrictEqual([logged.late.kind, logged.late.entry, logged.late.stop, logged.late.target, logged.late.price, logged.late.movedR], ['missed-entry', 21540.25, 21512.5, 21598, 21520, 0.73]);
+  // The broker's bar at the plan's entry: no late refusal.
+  const fresh = await gatewayRun({ ...env, FAKE_BARS: JSON.stringify({ bars: [{ t: '2026-10-07T13:59:00Z', o: 21540, h: 21541, l: 21539, c: 21540.25 }] }) }, [call(2, 'place_order', w.order(5))]);
+  assert.doesNotMatch(fresh.byId[2].result.content[0].text, /\[late-entry\]/);
+});
+const D_gateLog = env => fs.readFileSync(env.FTH_GATE_LOG, 'utf8').trim().split('\n').filter(Boolean).map(l => JSON.parse(l));
+
 test('order gate, hook and gateway: a composed prop entry whose all-in loss can\'t be worked out (no fee for the root, no tick spec, no stop bracket) is refused [max-risk], never read as no risk', { timeout: 120000 }, async () => {
   // No fee, or no stop bracket (the stop's risk alone known from the rationale's stop price): the all-in check's own
   // refusal. No tick spec: the stop's risk itself can't be computed, so the cap's stop check refuses first. [max-risk]

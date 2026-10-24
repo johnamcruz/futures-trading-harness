@@ -25,7 +25,8 @@
  * A continuous combine run (replay/combine-run.js): each attempt's start, sessions, outcome, profit, lowest cushion, worst
  * day and trades, the totals and the promotion gate's numbers, labelled practice (combineReport, from the run's folder).
  *
- *   summarize(days, { runDir })   { months: [row], total: row, timing, combine? } (runDir: the run's folder, for a combine run)
+ *   summarize(days, { runDir, barsFiles })   { months: [row], total: row, timing, combine?, late? } (runDir: the run's folder, for a
+ *                                 combine run and the late-entry skips, late-skips.js; barsFiles: their counterfactual's bars)
  *   toMarkdown(summary, manifest)   report.md
  *   toText(summary)            the terminal table
  */
@@ -79,7 +80,7 @@ function finish(row) {
   };
 }
 
-function summarize(days, { runDir = null } = {}) {
+function summarize(days, { runDir = null, barsFiles = {} } = {}) {
   const months = new Map();
   const total = blankRow('total');
   const open = new Map();
@@ -120,7 +121,25 @@ function summarize(days, { runDir = null } = {}) {
   }
   const practice = practiceSummary(days);
   const combine = runDir ? combineOf(runDir, days) : null;
-  return { months: [...months.values()].map(finish), total: finish(total), timing: timingReport(ran), ...(practice ? { practice } : {}), ...(combine ? { combine } : {}) };
+  const late = runDir ? lateOf(runDir, barsFiles) : null;
+  return { months: [...months.values()].map(finish), total: finish(total), timing: timingReport(ran), ...(practice ? { practice } : {}), ...(combine ? { combine } : {}), ...(late && late.total ? { late } : {}) };
+}
+
+/**
+ * The run's late-entry skips with their counterfactual (late-skips.js): from the run home's entry records and gate log,
+ * against the run's 1-minute bars (`barsFiles`: { SYMBOL: file }, the --bars the run replayed; none: unknown).
+ */
+function lateOf(runDir, barsFiles = {}) {
+  const path = require('path');
+  const { readBarsArg } = require('../backtest/data');
+  const cache = new Map();
+  const barsFor = root => {
+    const file = barsFiles[root];
+    if (!file) return null;
+    if (!cache.has(root)) { try { cache.set(root, readBarsArg(file)); } catch (_err) { cache.set(root, null); } }
+    return cache.get(root);
+  };
+  return require('./late-skips').lateSkipReport(path.resolve(runDir, '..', '..'), { barsFor });
 }
 
 /** A combine run's attempts (combine-run.js combineReport), labelled with the run's learning role; null for any other run. */
@@ -183,12 +202,14 @@ function toMarkdown(summary, manifest = {}) {
     ...timingMarkdown(summary),
     ...practiceMarkdown(summary.practice || null),
     ...(summary.combine ? ['## Continuous combine', '', ...require('./combine-run').reportLines(summary.combine).map(l => `- ${l.trim()}`), ''] : []),
+    ...(summary.late ? ['## Late-entry skips', '', ...require('./late-skips').reportLines(summary.late).map(l => `- ${l.trim()}`), ''] : []),
   ].join('\n');
 }
 
 function toText(summary) {
   const combine = summary.combine ? `${require('./combine-run').reportLines(summary.combine).join('\n')}\n` : '';
-  const main = table(HEAD, [...summary.months, summary.total].map(r => cells(r).map(String))) + practiceText(summary.practice || null) + combine;
+  const late = summary.late ? `${require('./late-skips').reportLines(summary.late).join('\n')}\n` : '';
+  const main = table(HEAD, [...summary.months, summary.total].map(r => cells(r).map(String))) + practiceText(summary.practice || null) + combine + late;
   if (!hasTiming(summary)) return main;
   const kind = clockKind(summary.timing.all);
   const note = kind === 'charged' ? ' (replay: latency charged, as live)' : kind === 'mixed' ? ' (replay: latency charged on some cycles, projected on others)' : kind ? ' (replay: projected live latency)' : '';

@@ -432,7 +432,23 @@ the broker's max allow, never under the floor), which `order_plan` builds and
 the gate's composed-reads check accepts exactly, or phase 2's smaller cut (a
 cut under the floor is no trade). The runner's entry reads the translated size
 before phase 2 and names it in phase 2's request as the size to approve or
-cut. Outside an attempt the record's size stands. Code changes
+cut. Outside an attempt the record's size stands.
+The entry's freshness (no late entry, `trading/late-entry.js`): one rule,
+the same for a long and a short, in R: the share of the plan's risk (entry
+to stop) the price has moved toward the stop when the order goes. Over
+`gate.lateEntryDriftShare` (config/runner.json, 0.25R, tighten-only) it is
+a pass, never a re-priced order or a shrunk stop; beyond the stop, the setup
+is gone. The price the trade's way past the entry is no refusal (the limit
+rests at the plan's price and expires with its record). The runner checks it
+before the trade-executor runs, and the gateway again at the order, on the
+broker's newest closed 1-minute bar it reads then (`account-gate.js
+freshEntryPrice`): a price read before the executor's run is minutes old by
+the order. Every skip is logged with the plan's prices and the price at the
+skip (the entry record's `late`, the gate log's `late-entry` violation), and
+the replay report counts them with what traded first after each, the plan's
+target or its stop (`replay/late-skips.js`), so the threshold is tuned from
+data. It applies to composed entries in every mode.
+Code changes
 this needs:
 
 - `strategies.js` (the policy component check after the load) and

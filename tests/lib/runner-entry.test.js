@@ -479,6 +479,23 @@ test('runEntry in a prop attempt: the record suggests 1, the order is the transl
   }
 });
 
+test('runEntry: the live smoke\'s long (entry 13853.00, stop 13838.75) with the market at 13840.75 (86% of the risk toward the stop) is skipped late, never sent; the skip is logged with the plan\'s prices and the price', async () => {
+  const plan = { strategy: 'trade_lifecycle', side: 'long', contract: 'MNQ', size: 1, entry: 13853, stopPrice: 13838.75, stopTicks: 57, targetPrice: 13895.5, targetTicks: 170, riskUsd: 28.5, record: 'rec0000000000001' };
+  const s = setup({ plan: () => ({ args: { ...ARGS, limitPrice: 13853, stopLossBracket: { ticks: 57, type: 'stop' }, takeProfitBracket: { ticks: 170, type: 'limit' } }, plan }), market: 13840.75 });
+  const r = await E.runEntry(s.deps, s.cycle());
+  assert.strictEqual(r.entry.outcome, 'late');
+  assert.match(r.result, /missed the plan's entry 13853 \(price 13840\.75 is 12\.25 points past it against the long: 86% of the 14\.25-point risk toward the stop, over 0\.25R/);
+  assert.deepStrictEqual(s.calls.map(c => c.role), ['phase2'], 'no trade-executor: nothing sent');
+  const { at, ...late } = r.entry.late;
+  assert.deepStrictEqual(late, { side: 'long', entry: 13853, stop: 13838.75, target: 13895.5, share: 0.25, kind: 'missed-entry', price: 13840.75, closedAt: '2026-10-07T13:57:00.000Z', source: 'runner-entry', movedR: 0.86, root: 'MNQ' });
+  assert.ok(Number.isFinite(Date.parse(at)));
+  // The mirror short (entry 13853.00, stop 13867.25, the market at 13865.25): skipped the same way.
+  const short = { ...plan, side: 'short', stopPrice: 13867.25, targetPrice: 13810.5 };
+  const s2 = setup({ records: [record({ side: 'short' })], plan: () => ({ args: { ...ARGS, side: 'sell', limitPrice: 13853 }, plan: short }), market: 13865.25 });
+  const r2 = await E.runEntry(s2.deps, s2.cycle({ result: 'CYCLE RESULT: planned - trade_lifecycle short 1' }));
+  assert.deepStrictEqual([r2.entry.outcome, r2.entry.late.movedR], ['late', 0.86]);
+});
+
 test('runEntry: phase 2 failing (a timeout, no FACTS line), order_plan refusing, or the plan unjournaled: no executor, logged, a no-trade naming it; a phase 2 that reads no data doesn\'t count', async () => {
   const cases = [
     [{ roles: { phase2: { ok: false, timedOut: true, text: '', tools: [], output: '' } } }, /risk-manager phase 2 timed_out \(timed out\)/, 2],

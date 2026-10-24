@@ -27,7 +27,7 @@ const path = require('path');
 const { spawn } = require('child_process');
 const { checkOrder, logDecision, createGatewayClock } = require('./lib/trading/check-order');
 const { DEFAULT_LANE_TIMEOUT_MS, sayCritical, handleClientLine, childCaller, lineSplitter, isLaneCall, blockedResponse, canonicalArgs, closeLedgerEntry, closeRefused, resultJson } = require('./lib/trading/mcp-gateway');
-const { accountFacts, ledgerName, parseToolJson, netPosition, contractNet, evaluateAccount, evaluateAccountChange, barsRequest, regimeGatedStrategy, regimeViolation } = require('./lib/trading/account-gate');
+const { accountFacts, ledgerName, parseToolJson, netPosition, contractNet, evaluateAccount, evaluateAccountChange, barsRequest, regimeGatedStrategy, regimeViolation, freshEntryPrice } = require('./lib/trading/account-gate');
 const { isRiskReducing, marketClosed, formatBlock } = require('./lib/trading/order-gate');
 const { contractRoot } = require('./lib/trading/journal');
 const { loadStrategies } = require('./lib/trading/strategies');
@@ -119,7 +119,7 @@ function main(argv) {
   };
 
   const check = async (sentArgs, tool, id) => {
-    const args = canon(sentArgs); // one name per contract for the gate and its ledger
+    const args = canon(sentArgs); if (tool === 'place_order') await freshEntryPrice(args, caller, { home: loadConfig(process.env).home, now: (await clock.ready()).now(), strategies: loadStrategies(ROOT, process.env).strategies }); // the name; the price at order time
     const base = checkOrder(args, { env: process.env, pluginRoot: ROOT, tool, clock: await clock.ready() });
     if (tool === 'place_order' && base.violations.some(v => v.check === 'config-critical')) return base; // a refused config: no entry
     const now = base.now;
