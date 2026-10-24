@@ -12,7 +12,7 @@
  *     windows    [{ from, to }] session dates, each inside practice-train: the curated moments the probes replay
  *                (split by session date into a probe half and a confirm half: screen.js halfOf)
  *     k          edits the proposer writes per round (1-8, default 4)
- *     trend      optional: { replay, set, regression } (resolveTrend below): the trend set's whole sessions, screened on
+ *     trend      optional: { replay, census, from, to, batch, regression } (resolveTrend below): the census's legs, screened on
  *                the legs caught (trend-screen.js), and the regression days (harm only)
  *     parallel   probes replayed at once (1-4, default 1: one after another). More than 1 only with
  *                `replay.latency: false`: a replay that charges each cycle's real time would charge probes queued at
@@ -24,7 +24,7 @@
  * screen alone.
  *
  *   PROBE_KEYS, PROBE_LIMITS
- *   resolveProbe(raw, { read, readSet, modelScore, autotrader, tuningWindows })   the resolved setting, or null without one; throws
+ *   resolveProbe(raw, { read, readCensus, modelScore, autotrader, tuningWindows })   the resolved setting, or null without one; throws
  *                                             with every error. autotrader: the loop's replay's, resolved. tuningWindows:
  *                                             the keep rule's; a probe window that shares a session date with one is
  *                                             refused (the dates edits are chosen on never judge them)
@@ -35,7 +35,7 @@ const { rolesBetween } = require('../learning/splits');
 const { tradingDayStart } = require('../trading/clock');
 
 const PROBE_KEYS = Object.freeze(['replay', 'windows', 'k', 'parallel', 'trend']);
-const TREND_KEYS = Object.freeze(['replay', 'set', 'batch', 'regression']);
+const TREND_KEYS = Object.freeze(['replay', 'census', 'from', 'to', 'batch', 'regression']);
 // The batch settings a loop config may set for itself (the rest, and every default: config/training.json trendBatch).
 const BATCH_KEYS = Object.freeze(['start', 'max', 'half']);
 // [default, min, max] of each (config/training.json probe).
@@ -48,7 +48,7 @@ const canonical = x => JSON.stringify(x, (_k, v) => (v && typeof v === 'object' 
 
 const overlaps = (a, b) => a.from < b.to && b.from < a.to;
 
-function resolveProbe(raw, { read, readSet = () => { throw new Error('no trend-set reader'); }, modelScore = null, autotrader = null, tuningWindows = [] } = {}) {
+function resolveProbe(raw, { read, readCensus = () => { throw new Error('no census reader'); }, modelScore = null, autotrader = null, tuningWindows = [] } = {}) {
   if (raw === undefined || raw === null) return null;
   if (typeof raw !== 'object' || Array.isArray(raw)) throw new Error(`probe: { ${PROBE_KEYS.join(', ')} }`);
   const errors = [];
@@ -96,7 +96,7 @@ function resolveProbe(raw, { read, readSet = () => { throw new Error('no trend-s
     return { ...cfg, autotrader: own };
   };
   replay = sameTrader(replay, 'probe.replay');
-  const trend = raw.trend === undefined ? null : resolveTrend(raw.trend, { read, readSet, tuningWindows, errors, sameTrader, parallel });
+  const trend = raw.trend === undefined ? null : resolveTrend(raw.trend, { read, readCensus, tuningWindows, errors, sameTrader, parallel });
   if (errors.length) throw new Error(errors.join('\n- '));
   return { replay, windows, k, parallel, ...(trend ? { trend } : {}) };
 }
@@ -108,14 +108,16 @@ const roleOf = d => {
 const nextDate = d => new Date(Date.parse(`${d}T00:00:00Z`) + 86400000).toISOString().split('T')[0];
 
 /**
- * probe.trend (trend-set.js, trend-screen.js): { replay, set, batch, regression }. replay: a stage-1 replay config
- * of whole sessions (no curated list, no practice, no combine or account states: every bar of the runner's session, as
- * live), the loop's autotrader. set: a trend pool file (scripts/trend-set.js build), its days in practice-train and
- * sharing no session date with the tuning windows (a round's batch, its size and halves: config/training.json trendBatch,
- * trend-curve.js; batch: { start, max, half }, each optional, overrides those three for this loop). regression: { days:
- * [YYYY-MM-DD] } (the trend-move set's), harm only: in practice-train, outside the tuning windows and the pool's days.
+ * probe.trend (trend-set.js, trend-screen.js): { replay, census, from, to, batch, regression }. replay: a stage-1 replay
+ * config of whole sessions (no curated list, no practice, no combine or account states: every bar of the runner's
+ * session, as live), the loop's autotrader. census: the trend-leg census file (learning/leg-census.js, scripts/
+ * curated-lists.js census); from..to (session dates, to exclusive): the screen period its pool is read from, in
+ * practice-train and sharing no session date with the tuning windows (a round's batch, its size and halves:
+ * config/training.json trendBatch, trend-curve.js; batch: { start, max, half }, each optional, overrides those three for
+ * this loop). regression: { days: [YYYY-MM-DD] } (the trend-move set's), harm only: in practice-train, outside the
+ * tuning windows, and never in the pool (left out of it).
  */
-function resolveTrend(raw, { read, readSet, tuningWindows, errors, sameTrader, parallel }) {
+function resolveTrend(raw, { read, readCensus, tuningWindows, errors, sameTrader, parallel }) {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) { errors.push(`probe.trend: { ${TREND_KEYS.join(', ')} }`); return null; }
   for (const k of Object.keys(raw)) if (!TREND_KEYS.includes(k)) errors.push(`probe.trend.${k}: not a setting (${TREND_KEYS.join(', ')})`);
   let replay = null;
@@ -127,8 +129,10 @@ function resolveTrend(raw, { read, readSet, tuningWindows, errors, sameTrader, p
     if (parallel > 1 && replay.latency !== false) errors.push('probe.parallel: more than 1 only with probe.trend.replay.latency false too');
   }
   replay = sameTrader(replay, 'probe.trend.replay');
-  let set = null;
-  try { set = readSet(raw.set); } catch (err) { errors.push(`probe.trend.set: ${err.message}`); }
+  let census = null;
+  try { census = readCensus(raw.census); } catch (err) { errors.push(`probe.trend.census: ${err.message}`); }
+  const period = { from: raw.from, to: raw.to };
+  if (!(DATE.test(String(period.from)) && DATE.test(String(period.to)) && period.from < period.to)) errors.push('probe.trend.from, to: the screen period the pool is read from (YYYY-MM-DD session dates, to exclusive)');
   const tuning = (Array.isArray(tuningWindows) ? tuningWindows : []).filter(x => x && DATE.test(x.from) && DATE.test(x.to));
   const checkDays = (days, key) => {
     for (const d of days) {
@@ -138,23 +142,26 @@ function resolveTrend(raw, { read, readSet, tuningWindows, errors, sameTrader, p
       if (t) errors.push(`${key} ${d}: inside the tuning window ${t.from}..${t.to}; the dates edits are found and screened on never judge them`);
     }
   };
-  const setDays = set ? set.days.map(d => d.day) : [];
-  checkDays(setDays, 'probe.trend.set');
   let regression = null;
   if (raw.regression !== undefined) {
     const days = raw.regression && Array.isArray(raw.regression.days) ? raw.regression.days : null;
     if (!days || !days.length || !days.every(d => DATE.test(String(d))) || Object.keys(raw.regression).some(k => k !== 'days')) errors.push('probe.trend.regression: { days: [YYYY-MM-DD, ...] }');
     else {
       checkDays(days, 'probe.trend.regression');
-      const both = days.filter(d => setDays.includes(d));
-      if (both.length) errors.push(`probe.trend.regression: ${both.join(', ')} also in the trend set: the regression days judge harm only, never a gain`);
       regression = { days: [...new Set(days)].sort() };
     }
   }
-  const legs = set ? set.legs.map(l => l.id) : [];
+  // The pool: the census's legs of the screen period, the regression days left out (they judge harm only, never a gain).
+  let legs = [];
+  if (census && !errors.some(e => e.startsWith('probe.trend.from'))) {
+    try { legs = require('./trend-set').poolOf(census, { ...period, exclude: regression ? regression.days : [] }); } catch (err) { errors.push(`probe.trend.census: ${err.message}`); }
+  }
+  const setDays = [...new Set(legs.map(id => require('./trend-set').dayOfLeg(id)))].sort();
+  checkDays(setDays, 'probe.trend.census');
+  for (const t of tuning) if (DATE.test(String(period.from)) && overlaps(period, t)) errors.push(`probe.trend.from..to ${period.from}..${period.to}: shares session dates with the tuning window ${t.from}..${t.to}; the dates edits are found and screened on never judge them`);
   // A batch splits into the screen's two halves (screen.js HALVES): one leg each at the least.
   const halves = require('./screen').HALVES.length;
-  if (set && legs.length < halves) errors.push('probe.trend.set: a pool of two legs or more (a batch splits into two halves)');
+  if (census && legs.length < halves) errors.push(`probe.trend.census: ${legs.length} leg(s) in ${period.from}..${period.to}; a pool of two legs or more (a batch splits into two halves)`);
   const batch = { ...require('../tunables').training().trendBatch };
   if (raw.batch !== undefined) {
     if (!raw.batch || typeof raw.batch !== 'object' || Array.isArray(raw.batch)) errors.push(`probe.trend.batch: { ${BATCH_KEYS.join(', ')} } (each optional; config/training.json trendBatch otherwise)`);
@@ -166,7 +173,7 @@ function resolveTrend(raw, { read, readSet, tuningWindows, errors, sameTrader, p
   if (!(Number.isInteger(batch.start) && batch.start >= halves)) errors.push('probe.trend.batch.start: a whole number of legs, two or more (a batch splits into two halves)');
   if (!(Number.isInteger(batch.max) && batch.max >= batch.start)) errors.push('probe.trend.batch.max: a whole number of legs, at least start');
   if (!(typeof batch.half === 'number' && batch.half > 0 && batch.half < 1)) errors.push('probe.trend.batch.half: the probe half\'s share of a batch, between 0 and 1 (the confirm half holds the rest)');
-  return set ? { replay, set: { file: raw.set, fingerprint: set.fingerprint, days: setDays, legs }, batch, regression } : null;
+  return census ? { replay, set: { file: raw.census, fingerprint: census.fingerprint, from: period.from, to: period.to, days: setDays, legs }, batch, regression } : null;
 }
 
 module.exports = { PROBE_KEYS, TREND_KEYS, BATCH_KEYS, PROBE_LIMITS, resolveProbe, overlaps };

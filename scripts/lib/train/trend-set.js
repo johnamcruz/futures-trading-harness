@@ -1,27 +1,22 @@
 'use strict';
 
 /**
- * The probe round's trend pool (Propose-Probe-Compose, docs/TRAINING.md): every trend leg of a practice-train screen
- * period (replay/trend-capture.js legsOf, the capture report's own detector), built once from the period's base bars and
- * pinned to a file with a fingerprint. Each round takes the next batch of legs (drawRound: without replacement across
- * rounds, reshuffled by the loop's seed once the pool is used up), so over the rounds every leg is screened; the batch
- * splits by session date into a probe half and a confirm half of about the configured share each (splitBatch: no day in
- * both), and each side replays the batch's sessions in full in the runner's session, the champion and every edit the
- * same ones.
+ * The probe round's trend pool (Propose-Probe-Compose, docs/TRAINING.md): the trend-leg census's legs (learning/
+ * leg-census.js: every leg of practice-train by the capture report's detector, in one seeded, hashed order) whose session
+ * day lies in the loop's screen period, every leg with a moment or not (the round replays whole sessions). Each round
+ * takes the next batch in that order (drawBatches: the census's order first; once the pool is used up, a fresh shuffle
+ * by the loop's seed), so over the rounds every leg is screened; the batch splits by session date into a probe half and
+ * a confirm half of about the configured share each (splitBatch: no day in both), and each side replays the batch's
+ * sessions in full in the runner's session, the champion and every edit the same ones.
  *
  * The regression days (the trend-move set's: tests/fixtures/trend-moves) are left out of the pool: they judge only harm,
  * never a gain (trend-screen.js), so a skill is never tuned to them.
  *
- *   VERSION, KIND
- *   sessionDays(bars, session)                 the trading days the bars hold a bar in the session (sorted)
- *   buildTrendSet({ bars, session, from, to, exclude })   the pool: { v, kind, detector, from, to, exclude, sessions,
- *                                              days: [{ day, legs }], legs: [{ id, day, side, start }], fingerprint };
- *                                              from..to session dates (to exclusive)
- *   writeTrendSet(dir, doc), readTrendSet(file)   <dir>/trend-set-<fingerprint>.json; read checks its kind, version (v)
- *                                              and fingerprint
- *   drawBatches(items, { seed, sizes })        every round's batch, sizes[i] items for round i + 1: without replacement
- *                                              across rounds, reshuffled when the pool is used up: [{ items, cycles, from }]
- *   drawRound(items, { seed, round, per })     round n's batch when every round draws per: { items, cycles }
+ *   poolOf(census, { from, to, exclude })      [leg id] in the census's order: the legs of [from, to) (session dates),
+ *                                              none of an excluded day
+ *   drawBatches(pool, { seed, sizes })         every round's batch, sizes[i] legs for round i + 1, from one sequence (the
+ *                                              pool's order, then seeded shuffles): [{ items, cycles, from }]
+ *   drawRound(pool, { seed, round, per })      round n's batch when every round draws per: { items, cycles }
  *   dayOfLeg(id)                               a leg id's session date (its first field: day|side|start)
  *   splitBatch(ids, { seed, half })            { probe: { days, legs }, confirm: { days, legs } }: whole days, ordered by a
  *                                              seeded hash, to the probe half until it holds half of the legs
@@ -29,82 +24,29 @@
  */
 
 const crypto = require('crypto');
-const fs = require('fs');
-const path = require('path');
-const { legsOf, DETECTOR } = require('../replay/trend-capture');
-const { parseWindows, inWindow, tradingDayKey } = require('../trading/clock');
+const LC = require('../learning/leg-census');
 
-const VERSION = 'v2';
-const KIND = 'trend-set';
-const DATE = /^\d{4}-\d{2}-\d{2}$/;
 const hash = s => crypto.createHash('sha256').update(s).digest('hex');
-const isObj = x => Boolean(x) && typeof x === 'object' && !Array.isArray(x);
 const nextDate = d => new Date(Date.parse(`${d}T00:00:00Z`) + 86400000).toISOString().split('T')[0];
 const dayOfLeg = id => String(id).split('|')[0];
 
-function sessionDays(bars, session) {
-  const { windows } = parseWindows(session);
-  const out = new Set();
-  for (const b of Array.isArray(bars) ? bars : []) {
-    const t = Date.parse(b && b.t);
-    if (!Number.isFinite(t)) continue;
-    const at = new Date(t);
-    if (windows.length && windows.some(w => inWindow(at, w))) out.add(tradingDayKey(at));
-  }
-  return [...out].sort();
+/** The pool: the census's legs of the screen period, in its order (its reader, every leg: none needs a moment here). */
+function poolOf(census, { from, to, exclude = [] }) {
+  const out = new Set(exclude);
+  return LC.batch(census, 0, { from, to, size: Infinity, withMoment: false }).filter(x => !out.has(x.day)).map(x => x.id);
 }
 
-const fingerprintOf = doc => {
-  const { fingerprint: _f, ...rest } = doc;
-  return hash(JSON.stringify(rest));
-};
-
-function buildTrendSet({ bars, session, from, to, exclude = [] }) {
-  const errors = [];
-  if (!(DATE.test(String(from)) && DATE.test(String(to)) && from < to)) errors.push('from, to: YYYY-MM-DD session dates, from before to');
-  if (!(typeof session === 'string' && parseWindows(session).windows.length)) errors.push('session: a runner session spec (e.g. 09:30-12:00@America/New_York)');
-  if (!Array.isArray(exclude) || !exclude.every(d => DATE.test(String(d)))) errors.push('exclude: YYYY-MM-DD dates');
-  if (errors.length) throw new Error(`trend set refused:\n- ${errors.join('\n- ')}`);
-  const days = sessionDays(bars, session).filter(d => d >= from && d < to && !exclude.includes(d));
-  if (!days.length) throw new Error(`trend set refused: no session of ${from}..${to} in the bars (outside the excluded days)`);
-  const keep = new Set(days);
-  // The capture report's own leg ids (day|side|start), so a run's report pairs with the pool leg by leg.
-  const legs = legsOf(bars, { session }).filter(l => keep.has(l.day)).map(l => ({ id: `${l.day}|${l.side}|${l.start}`, day: l.day, side: l.side, start: l.start }));
-  const doc = {
-    v: VERSION, kind: KIND, detector: { version: DETECTOR, minMoveAtr: require('../tunables').replay().trendCapture.minMoveAtr, session },
-    from, to, exclude: [...exclude].sort(), sessions: days.length,
-    days: days.map(day => ({ day, legs: legs.filter(l => l.day === day).length })), legs,
-  };
-  return { ...doc, fingerprint: fingerprintOf(doc) };
-}
-
-function writeTrendSet(dir, doc) {
-  fs.mkdirSync(dir, { recursive: true });
-  const file = path.join(dir, `trend-set-${doc.fingerprint}.json`);
-  fs.writeFileSync(file, `${JSON.stringify(doc)}\n`);
-  return file;
-}
-
-function readTrendSet(file) {
-  const doc = JSON.parse(fs.readFileSync(file, 'utf8'));
-  if (!isObj(doc) || doc.kind !== KIND) throw new Error(`${file}: not a trend set (scripts/trend-set.js build)`);
-  if (doc.v !== VERSION) throw new Error(`${file}: a trend set of version ${doc.v}, not ${VERSION}: rebuild it`);
-  if (fingerprintOf(doc) !== doc.fingerprint) throw new Error(`${file}: its content doesn't match its fingerprint (changed after it was built)`);
-  if (!Array.isArray(doc.legs) || !doc.legs.every(l => isObj(l) && typeof l.id === 'string' && DATE.test(dayOfLeg(l.id)))) throw new Error(`${file}: legs: [{ id: day|side|start }]`);
-  return doc;
-}
-
-/** Cycle c's order of the pool: a seeded shuffle (by hash), the same for the same seed and cycle. */
-const orderOf = (pool, seed, c) => [...pool].sort((a, b) => hash(`${seed}|${c}|${a}`).localeCompare(hash(`${seed}|${c}|${b}`)) || a.localeCompare(b));
+/** Cycle c's order: the pool's own (the census's) first, then seeded shuffles (by hash), the same for the same seed. */
+const orderOf = (pool, seed, c) => (c === 0 ? [...pool] : [...pool].sort((a, b) => hash(`${seed}|${c}|${a}`).localeCompare(hash(`${seed}|${c}|${b}`)) || a.localeCompare(b)));
 
 /**
  * The rounds' batches, round by round (sizes[i]: round i + 1's), from one sequence: the pool's cycles one after another,
- * each a seeded shuffle, so every item comes once a cycle, without replacement until the pool is used up. A round never
- * holds an item twice: a round that spans two cycles takes the next cycle's first items among those it doesn't hold yet
- * (that cycle's order moves its own copies of them later). [{ items, cycles, from }].
+ * so every leg comes once a cycle, without replacement until the pool is used up. A round never holds a leg twice: a
+ * round that spans two cycles takes the next cycle's first legs among those it doesn't hold yet (that cycle's order
+ * moves its own copies of them later). [{ items, cycles, from }].
  */
 function drawBatches(pool, { seed, sizes }) {
-  const items = [...new Set(pool)].sort();
+  const items = [...new Set(pool)];
   const N = items.length;
   if (!Array.isArray(sizes) || !sizes.length) throw new Error('drawBatches: sizes, one a round');
   for (const per of sizes) if (!(Number.isInteger(per) && per >= 1 && per <= N)) throw new Error(`drawBatches: a batch is 1 to the pool's ${N}, not ${per}`);
@@ -127,7 +69,7 @@ function drawBatches(pool, { seed, sizes }) {
   return bounds.map(([x, y]) => ({ items: seq.slice(x, y).sort(), cycles: [...new Set(seq.slice(x, y).map((_d, i) => Math.floor((x + i) / N)))].sort((p, q) => p - q), from: x }));
 }
 
-/** Round n's batch (n from 1) when every round draws per items: drawBatches with equal sizes. { items, cycles }. */
+/** Round n's batch (n from 1) when every round draws per legs: drawBatches with equal sizes. { items, cycles }. */
 function drawRound(pool, { seed, round, per }) {
   if (!(Number.isInteger(round) && round >= 1)) throw new Error(`drawRound: round is 1 or more, not ${round}`);
   const N = new Set(pool).size;
@@ -164,4 +106,4 @@ function dayWindows(days) {
   return out;
 }
 
-module.exports = { VERSION, KIND, sessionDays, buildTrendSet, writeTrendSet, readTrendSet, drawBatches, drawRound, dayOfLeg, splitBatch, dayWindows, fingerprintOf };
+module.exports = { poolOf, drawBatches, drawRound, dayOfLeg, splitBatch, dayWindows };

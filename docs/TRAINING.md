@@ -414,35 +414,32 @@ probe round's and the single-shot proposer's alike.
 **The trend pool** (`probe.trend`, optional). The curated list holds few of
 the market's trend legs (a 200-moment list covers about 140 of
 practice-train's thousands), so the round can also screen on the legs
-themselves. Build the pool once from the screen period's base bars:
-
-```bash
-node scripts/trend-set.js build --bars <MNQ 3m or 1m bars> --from 2021-05-07 --to 2022-09-01 \
-  --minutes 3 --exclude 2021-05-03,2021-05-04,2021-05-05,2021-05-06
-```
-
-It holds every trend leg of the period (`scripts/lib/train/trend-set.js`),
-found by the capture report's own detector and identified by its ids, in a
-fingerprinted file. `--exclude` keeps the regression days out. Then, in the
-loop config:
+themselves. Their pool is the trend-leg census (`curated-lists.js census`,
+`scripts/lib/learning/leg-census.js`: every leg of practice-train by the
+capture report's own detector, in one seeded, hashed order), read for the
+screen period. In the loop config:
 
 ```json
 "trend": {
   "replay": "s1-sessions.json",
-  "set": "~/fth-train/trend-set-<fingerprint>.json",
+  "census": "~/fth-train/leg-census-practice-<fingerprint>.json",
+  "from": "2021-05-03",
+  "to": "2022-09-01",
   "regression": { "days": ["2021-05-03", "2021-05-04", "2021-05-05", "2021-05-06"] }
 }
 ```
 
 `replay` is a stage-1 replay config of whole sessions (no curated list, no
 practice, no combine or account states), on the loop's runner config. The
-pool's days and the regression days lie in practice-train, outside the
-tuning windows, and never in both lists (the config refuses each).
+pool is the census's legs of `from` to `to`, every leg whether a curated
+moment marks it or not (the round replays whole sessions), without the
+regression days. Both lie in practice-train and outside the tuning windows
+(the config refuses either).
 
-**A round's batch.** Each round takes the pool's next legs, seeded by the
-loop's seed. The draw is without replacement
-until the pool is used up, then reshuffled, so over the rounds every leg is
-screened, as often as any other. The batch splits by session date into a
+**A round's batch.** Each round takes the pool's next legs in the census's
+order (its seeded order, its fingerprint recorded). The draw is without replacement
+until the pool is used up, then reshuffled by the loop's seed, so over the
+rounds every leg is screened, as often as any other. The batch splits by session date into a
 probe half and a confirm half: whole days, in a seeded order, go to the
 probe half until it holds `half` of the legs, and no day is in both.
 
@@ -476,8 +473,8 @@ probe half gives the findings and screens each edit; the confirm half judges
 the combined change, which counts only if it helps there too. The champion
 and every edit of a round replay the same days, one run a session, and
 each screens the batch's own legs only. The round's `probe-report.json`
-records the batch's index, the pool's fingerprint, and each half's days and
-leg ids; the lessons lines record the batch too.
+records the batch's index, the census's fingerprint, and each half's days
+and leg ids; the lessons lines record the batch too.
 
 - **Findings.** The champion's missed legs on the probe half
   (`scripts/lib/train/trend-findings.js`, kind `trend-blocker`) are grouped

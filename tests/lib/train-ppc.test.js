@@ -40,7 +40,7 @@ const REG_DAY = '2022-03-17';
 const SET_DAYS = DAYS.filter(d => d !== REG_DAY);
 // The trend pool: two legs a session (the stub capture's ids), and the legs a round draws.
 const POOL = SET_DAYS.flatMap(d => [`${d}|long|x`, `${d}|short|x`]);
-const BATCH = 12;
+const BATCH = 13; // odd: a batch ends inside a session, whose other leg is not the round's
 // Round 1's halves (trend-set.js), the loop's seed 3.
 const ROUND1 = require('../../scripts/lib/train/trend-set').splitBatch(require('../../scripts/lib/train/trend-set').drawRound(POOL, { seed: 3, round: 1, per: BATCH }).items, { seed: 3, half: 0.5 });
 const WINDOW = [{ from: '2022-03-07', to: '2022-03-19' }];
@@ -682,8 +682,8 @@ test('with a trend pool, each round draws the next batch; the champion replays a
   const champ = w.calls.runs.filter(r => /^l1-pc-t\d{8}\d+$/.test(r.runId)).map(r => r.runId);
   assert.strictEqual(champ.length, new Set(champ).size);
   // A round's champion cost counts only the sessions it replayed fresh (4 decision times each in the stub world).
-  const ran = new Set([...reports[0].trend.probe.days, REG_DAY]);
-  const fresh = reports[1].trend.probe.days.filter(d => !ran.has(d));
+  const ran = new Set([...reports[0].trend.probe.days, ...reports[0].trend.confirm.days, REG_DAY]);
+  const fresh = [...reports[1].trend.probe.days, ...reports[1].trend.confirm.days].filter(d => !ran.has(d));
   assert.strictEqual(reports[1].cycles.champion.trend, fresh.length * 4);
   // Each round's edit replays that round's probe half (and the regression day), never another round's.
   for (const [i, r] of reports.entries()) {

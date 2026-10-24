@@ -185,9 +185,9 @@ async function probeRound(ctx, { n, champion, api }) {
       };
     });
   };
-  // This round's draw from the trend pool (trend-set.js drawRound): per days without replacement across rounds,
-  // reshuffled once the pool is used up; the champion and every edit of the round replay the same days, split into the
-  // probe and confirm halves by the loop's seed. The regression days are the same every round.
+  // This round's batch from the trend pool (trend-set.js drawBatches: the census's order, without replacement across
+  // rounds, reshuffled once the pool is used up); the champion and every edit of the round replay the same days, split
+  // into the probe and confirm halves by the loop's seed. The regression days are the same every round.
   // This round's batch size (trend-curve.js planBatch, config/training.json trendBatch): from the earlier rounds' sizes and
   // outcomes (their iteration reports), frozen once planned; then its batch, the pool's next legs after theirs.
   const plan = trend ? await api.phase(ctx, `${n}:trend-plan`, path.join(dir, 'trend-plan.json'), async () => {

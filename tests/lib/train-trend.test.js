@@ -8,7 +8,6 @@ const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
-const { spawnSync } = require('child_process');
 const { tmpDir } = require('../helpers');
 const TS = require('../../scripts/lib/train/trend-set');
 const TSC = require('../../scripts/lib/train/trend-screen');
@@ -16,42 +15,33 @@ const TF = require('../../scripts/lib/train/trend-findings');
 const F = require('../../scripts/lib/train/findings');
 const SC = require('../../scripts/lib/train/screen');
 const PC = require('../../scripts/lib/train/probe-config');
+const LC = require('../../scripts/lib/learning/leg-census');
 const PR = require('../../scripts/lib/train/probe');
 const { FLOW_STEPS } = require('../../scripts/lib/trading/composed-reads');
 const FL = require('../../scripts/lib/train/flow');
 const moves = require('../fixtures/trend-moves');
 
-const ROOT = path.resolve(__dirname, '..', '..');
 const NY = '09:30-12:00@America/New_York';
 
 test('the flow\'s steps are the harness\'s one list (composed-reads.js FLOW_STEPS)', () => {
   assert.strictEqual(FL.FLOW_STEPS, FLOW_STEPS);
 });
 
-test('the trend pool: every leg of the screen period, by the capture report\'s detector and ids; excluded days never in it; pinned', () => {
+/** A census of the trend-move fixture's legs (learning/leg-census.js), seed 1. */
+function fixtureCensus() {
   const { bars } = moves.load();
-  const all = TS.sessionDays(bars.m3, NY);
-  assert.deepStrictEqual(all, ['2021-05-03', '2021-05-04', '2021-05-05', '2021-05-06']);
-  const legs = require('../../scripts/lib/replay/trend-capture').legsOf(bars.m3, { session: NY });
-  const a = TS.buildTrendSet({ bars: bars.m3, session: NY, from: '2021-05-03', to: '2021-05-07' });
-  assert.deepStrictEqual(a, TS.buildTrendSet({ bars: bars.m3, session: NY, from: '2021-05-03', to: '2021-05-07' }));
-  assert.deepStrictEqual(a.legs.map(l => l.id), legs.map(l => `${l.day}|${l.side}|${l.start}`), 'the capture report\'s own leg ids');
-  assert.strictEqual(a.days.reduce((n, d) => n + d.legs, 0), legs.length);
-  assert.deepStrictEqual(a.detector, { version: 'zigzag-session-tr-v1', minMoveAtr: require('../../scripts/lib/tunables').replay().trendCapture.minMoveAtr, session: NY });
-  // The regression days are left out; to is exclusive.
-  const x = TS.buildTrendSet({ bars: bars.m3, session: NY, from: '2021-05-03', to: '2021-05-06', exclude: ['2021-05-04'] });
-  assert.deepStrictEqual(x.days.map(d => d.day), ['2021-05-03', '2021-05-05']);
-  assert.ok(x.legs.every(l => ['2021-05-03', '2021-05-05'].includes(TS.dayOfLeg(l.id))));
-  assert.throws(() => TS.buildTrendSet({ bars: bars.m3, session: NY, from: '2021-05-03', to: '2021-05-07', exclude: all }), /no session/);
-  assert.throws(() => TS.buildTrendSet({ bars: bars.m3, session: NY, from: '2021-05-07', to: '2021-05-03', exclude: 'x' }), /from, to[\s\S]*exclude/);
-  // Pinned: written, read back, a changed one refused.
-  const dir = tmpDir();
-  const file = TS.writeTrendSet(dir, a);
-  assert.deepStrictEqual(TS.readTrendSet(file), a);
-  const t = JSON.parse(fs.readFileSync(file, 'utf8'));
-  t.legs.pop();
-  fs.writeFileSync(file, JSON.stringify(t));
-  assert.throws(() => TS.readTrendSet(file), /doesn't match its fingerprint/);
+  const tc = require('../../scripts/lib/replay/trend-capture');
+  return LC.buildCensus([], { legs: tc.legsOf(bars.m3, { session: NY }), detector: { version: tc.DETECTOR } }, { use: 'practice', seed: 1 });
+}
+
+test('the trend pool: the census\'s legs of the screen period, in its order, every leg (with a moment or not), the excluded days out', () => {
+  const census = fixtureCensus();
+  const all = TS.poolOf(census, { from: '2021-05-03', to: '2021-05-07' });
+  assert.deepStrictEqual(all, census.order.map(x => x.id), 'the census\'s own order, every leg (none has a moment here)');
+  const x = TS.poolOf(census, { from: '2021-05-03', to: '2021-05-06', exclude: ['2021-05-04'] });
+  assert.deepStrictEqual(x, census.order.filter(e => ['2021-05-03', '2021-05-05'].includes(e.day)).map(e => e.id), 'to is exclusive; an excluded day is out');
+  // Round 1's batch is the census's next legs in its order; later cycles reshuffle.
+  assert.deepStrictEqual(TS.drawBatches(all, { seed: 9, sizes: [5] })[0].items, [...all.slice(0, 5)].sort());
 });
 
 const POOL = Array.from({ length: 40 }, (_, i) => `2022-03-${String(1 + Math.floor(i / 4)).padStart(2, '0')}|${i % 2 ? 'short' : 'long'}|${i}`);
@@ -59,7 +49,8 @@ const POOL = Array.from({ length: 40 }, (_, i) => `2022-03-${String(1 + Math.flo
 test('a round\'s batch: deterministic from the seed, a new one each round, without replacement until the pool is used up', () => {
   const r1 = TS.drawRound(POOL, { seed: 3, round: 1, per: 12 });
   assert.deepStrictEqual(r1, TS.drawRound(POOL, { seed: 3, round: 1, per: 12 }), 'the same seed and round, the same batch');
-  assert.notDeepStrictEqual(r1.items, TS.drawRound(POOL, { seed: 4, round: 1, per: 12 }).items, 'another seed, another batch');
+  assert.deepStrictEqual(r1.items, [...POOL.slice(0, 12)].sort(), 'the first cycle is the pool\'s own order (the census\'s)');
+  assert.notDeepStrictEqual(TS.drawRound(POOL, { seed: 3, round: 5, per: 10 }).items, TS.drawRound(POOL, { seed: 4, round: 5, per: 10 }).items, 'after it, another seed, another shuffle');
   const rounds = Array.from({ length: 10 }, (_, i) => TS.drawRound(POOL, { seed: 3, round: i + 1, per: 12 }));
   assert.notDeepStrictEqual(rounds[0].items, rounds[1].items, 'it changes with the round');
   for (const r of rounds) assert.strictEqual(new Set(r.items).size, 12, 'never twice in a round');
@@ -96,20 +87,6 @@ test('a batch\'s halves: whole session dates, about the share each, deterministi
   assert.deepStrictEqual([two.probe.days.length, two.confirm.days.length], [1, 1], 'a share near one still leaves a confirm day');
   assert.throws(() => TS.splitBatch(batch, { seed: 3, half: 1 }), /half is a share between 0 and 1/);
   assert.deepStrictEqual(TS.dayWindows(['2022-03-09', '2022-03-07', '2022-03-08', '2022-03-11', '2022-03-11']), [{ from: '2022-03-07', to: '2022-03-10' }, { from: '2022-03-11', to: '2022-03-12' }]);
-});
-
-test('the trend-set CLI builds and shows a pool from a bars file', () => {
-  const { bars } = moves.load();
-  const dir = tmpDir();
-  const file = path.join(dir, 'm3.json');
-  fs.writeFileSync(file, JSON.stringify(bars.m3));
-  const r = spawnSync(process.execPath, [path.join(ROOT, 'scripts', 'trend-set.js'), 'build', '--bars', file, '--from', '2021-05-03', '--to', '2021-05-07', '--minutes', '3', '--exclude', '2021-05-04', '--out', dir], { encoding: 'utf8' });
-  assert.strictEqual(r.status, 0, r.stderr);
-  assert.match(r.stdout, /leg\(s\) in 3 session\(s\) of 2021-05-03\.\.2021-05-07/);
-  assert.match(r.stdout, /excluded: 2021-05-04/);
-  const bad = spawnSync(process.execPath, [path.join(ROOT, 'scripts', 'trend-set.js'), 'build', '--bars', file], { encoding: 'utf8' });
-  assert.strictEqual(bad.status, 1);
-  assert.match(bad.stderr, /required/);
 });
 
 // --- the screen ------------------------------------------------------------------------------------------------------
@@ -234,37 +211,41 @@ test('the merged ranking: trend findings first by cost, then the curated ones; n
 test('probe.trend: whole-session stage-1 runs on the loop\'s trader; its days practice-train, outside the tuning windows; regression apart', () => {
   const trader = { harness: 'custom', command: ['x', '{prompt}'], symbols: ['MNQ'], timeframe: 3 };
   const curated = { stage: 1, curatedList: { file: 'c.json', list: 'mix' }, practice: { mode: 'setup-focus' } };
-  const set = { kind: 'trend-set', fingerprint: 'fp', days: [{ day: '2022-03-07' }, { day: '2022-03-08' }], legs: [{ id: '2022-03-07|long|a' }, { id: '2022-03-08|short|b' }] };
+  const order = [{ id: '2022-03-07|long|a', day: '2022-03-07' }, { id: '2022-03-08|short|b', day: '2022-03-08' }, { id: '2021-05-04|long|c', day: '2021-05-04' }, { id: '2022-09-07|long|d', day: '2022-09-07' }];
+  const set = { kind: 'leg-census', fingerprint: 'fp', order };
   const base = { replay: curated, windows: [{ from: '2022-03-07', to: '2022-03-19' }] };
-  const tuning = [{ from: '2022-06-06', to: '2022-06-18' }];
-  const go = (t, over = {}) => PC.resolveProbe({ ...base, trend: t }, { read: x => x, readSet: () => set, modelScore: { account: 'a' }, autotrader: trader, tuningWindows: tuning, ...over });
-  const ok = go({ replay: { stage: 1 }, set: 'set.json', regression: { days: ['2021-05-04', '2021-05-03'] } });
+  const tuning = [{ from: '2022-10-03', to: '2022-10-15' }];
+  const go = (t, over = {}) => PC.resolveProbe({ ...base, trend: t }, { read: x => x, readCensus: () => set, modelScore: { account: 'a' }, autotrader: trader, tuningWindows: tuning, ...over });
+  const ok = go({ replay: { stage: 1 }, census: 'c.json', from: '2021-05-03', to: '2022-09-01', regression: { days: ['2021-05-04', '2021-05-03'] } });
   const TB = require('../../scripts/lib/tunables').training().trendBatch;
-  assert.deepStrictEqual(ok.trend, { replay: { stage: 1, autotrader: trader }, set: { file: 'set.json', fingerprint: 'fp', days: ['2022-03-07', '2022-03-08'], legs: ['2022-03-07|long|a', '2022-03-08|short|b'] }, batch: TB, regression: { days: ['2021-05-03', '2021-05-04'] } });
+  assert.deepStrictEqual(ok.trend, { replay: { stage: 1, autotrader: trader }, set: { file: 'c.json', fingerprint: 'fp', from: '2021-05-03', to: '2022-09-01', days: ['2022-03-07', '2022-03-08'], legs: ['2022-03-07|long|a', '2022-03-08|short|b'] }, batch: TB, regression: { days: ['2021-05-03', '2021-05-04'] } });
   // The batch: config/training.json trendBatch, its start, max and half overridable by the loop config, within bounds.
-  assert.deepStrictEqual(go({ replay: { stage: 1 }, set: 's', batch: { start: 10, max: 40, half: 0.4 } }).trend.batch, { ...TB, start: 10, max: 40, half: 0.4 });
-  assert.throws(() => go({ replay: { stage: 1 }, set: 's', batch: { growAfter: 1 } }), /probe.trend.batch.growAfter: not a setting \(start, max, half\)/);
-  assert.throws(() => go({ replay: { stage: 1 }, set: 's', batch: { start: 1 } }), /probe.trend.batch.start: a whole number of legs, two or more/);
-  assert.throws(() => go({ replay: { stage: 1 }, set: 's', batch: { start: 50, max: 40 } }), /probe.trend.batch.max: a whole number of legs, at least start/);
-  for (const half of [0, 1, '0.5']) assert.throws(() => go({ replay: { stage: 1 }, set: 's', batch: { half } }), /probe.trend.batch.half: the probe half's share/, String(half));
-  assert.throws(() => go({ replay: { stage: 1 }, set: 's' }, { readSet: () => ({ ...set, legs: [{ id: '2022-03-07|long|a' }] }) }), /a pool of two legs or more/);
+  assert.deepStrictEqual(go({ replay: { stage: 1 }, census: 's', from: '2021-05-03', to: '2022-09-01', batch: { start: 10, max: 40, half: 0.4 } }).trend.batch, { ...TB, start: 10, max: 40, half: 0.4 });
+  assert.throws(() => go({ replay: { stage: 1 }, census: 's', from: '2021-05-03', to: '2022-09-01', batch: { growAfter: 1 } }), /probe.trend.batch.growAfter: not a setting \(start, max, half\)/);
+  assert.throws(() => go({ replay: { stage: 1 }, census: 's', from: '2021-05-03', to: '2022-09-01', batch: { start: 1 } }), /probe.trend.batch.start: a whole number of legs, two or more/);
+  assert.throws(() => go({ replay: { stage: 1 }, census: 's', from: '2021-05-03', to: '2022-09-01', batch: { start: 50, max: 40 } }), /probe.trend.batch.max: a whole number of legs, at least start/);
+  for (const half of [0, 1, '0.5']) assert.throws(() => go({ replay: { stage: 1 }, census: 's', from: '2021-05-03', to: '2022-09-01', batch: { half } }), /probe.trend.batch.half: the probe half's share/, String(half));
+  assert.throws(() => go({ replay: { stage: 1 }, census: 's', from: '2021-05-03', to: '2022-09-01' }, { readCensus: () => ({ ...set, order: [order[0]] }) }), /a pool of two legs or more/);
   assert.strictEqual(go(undefined).trend, undefined, 'none without it');
-  assert.throws(() => go({ replay: { stage: 1, curatedList: {} }, set: 's' }), /probe.trend.replay.curatedList: not here/);
-  assert.throws(() => go({ replay: { stage: 1, practice: {} }, set: 's' }), /probe.trend.replay.practice/);
-  assert.throws(() => go({ replay: { stage: 2 }, set: 's' }), /probe.trend.replay.stage: 1/);
-  assert.throws(() => go({ replay: { stage: 1, autotrader: { ...trader, timeframe: 1 } }, set: 's' }), /probe.trend.replay.autotrader: the loop's replay.autotrader/);
-  assert.throws(() => go({ replay: { stage: 1 }, set: 's', extra: 1 }), /probe.trend.extra: not a setting/);
-  assert.throws(() => go({ replay: { stage: 1 }, set: 's' }, { readSet: () => { throw new Error('no such file'); } }), /probe.trend.set: no such file/);
-  // Days inside a tuning window, outside practice-train, or in both the set and the regression days: refused.
-  assert.throws(() => go({ replay: { stage: 1 }, set: 's' }, { tuningWindows: [{ from: '2022-03-08', to: '2022-03-09' }] }), /probe.trend.set 2022-03-08: inside the tuning window 2022-03-08..2022-03-09/);
-  assert.throws(() => go({ replay: { stage: 1 }, set: 's' }, { readSet: () => ({ ...set, days: [{ day: '2024-08-05' }] }) }), /probe.trend.set 2024-08-05: probes run on practice-train only/);
-  assert.throws(() => go({ replay: { stage: 1 }, set: 's', regression: { days: ['2022-03-07'] } }), /also in the trend set: the regression days judge harm only/);
-  assert.throws(() => go({ replay: { stage: 1 }, set: 's', regression: { days: ['2022-06-07'] } }), /probe.trend.regression 2022-06-07: inside the tuning window/);
-  assert.throws(() => go({ replay: { stage: 1 }, set: 's', regression: { days: [] } }), /probe.trend.regression: \{ days/);
+  assert.throws(() => go({ replay: { stage: 1, curatedList: {} }, census: 's', from: '2021-05-03', to: '2022-09-01' }), /probe.trend.replay.curatedList: not here/);
+  assert.throws(() => go({ replay: { stage: 1, practice: {} }, census: 's', from: '2021-05-03', to: '2022-09-01' }), /probe.trend.replay.practice/);
+  assert.throws(() => go({ replay: { stage: 2 }, census: 's', from: '2021-05-03', to: '2022-09-01' }), /probe.trend.replay.stage: 1/);
+  assert.throws(() => go({ replay: { stage: 1, autotrader: { ...trader, timeframe: 1 } }, census: 's', from: '2021-05-03', to: '2022-09-01' }), /probe.trend.replay.autotrader: the loop's replay.autotrader/);
+  assert.throws(() => go({ replay: { stage: 1 }, census: 's', from: '2021-05-03', to: '2022-09-01', extra: 1 }), /probe.trend.extra: not a setting/);
+  assert.throws(() => go({ replay: { stage: 1 }, census: 's', from: '2021-05-03', to: '2022-09-01' }, { readCensus: () => { throw new Error('no such file'); } }), /probe.trend.census: no such file/);
+  // The regression days are left out of the pool (2021-05-04's leg); the period's end is exclusive (2022-09-07's out).
+  assert.ok(!ok.trend.set.legs.includes('2021-05-04|long|c') && !ok.trend.set.legs.includes('2022-09-07|long|d'));
+  assert.ok(go({ replay: { stage: 1 }, census: 's', from: '2021-05-03', to: '2022-09-01' }).trend.set.legs.includes('2021-05-04|long|c'), 'without regression days it stays');
+  // A screen period inside a tuning window, or outside practice-train: refused.
+  assert.throws(() => go({ replay: { stage: 1 }, census: 's', from: '2021-05-03', to: '2022-09-01' }, { tuningWindows: [{ from: '2022-03-08', to: '2022-03-09' }] }), /probe.trend.census 2022-03-08: inside the tuning window 2022-03-08..2022-03-09[\s\S]*probe.trend.from..to 2021-05-03..2022-09-01: shares session dates with the tuning window/);
+  assert.throws(() => go({ replay: { stage: 1 }, census: 's', from: '2021-05-03', to: '2024-09-01' }, { readCensus: () => ({ ...set, order: [...order, { id: '2024-08-05|long|e', day: '2024-08-05' }] }) }), /probe.trend.census 2024-08-05: probes run on practice-train only/);
+  assert.throws(() => go({ replay: { stage: 1 }, census: 's', from: '2022-09-01', to: '2021-05-03' }), /probe.trend.from, to: the screen period/);
+  assert.throws(() => go({ replay: { stage: 1 }, census: 's', from: '2021-05-03', to: '2022-09-01', regression: { days: ['2022-10-04'] } }), /probe.trend.regression 2022-10-04: inside the tuning window/);
+  assert.throws(() => go({ replay: { stage: 1 }, census: 's', from: '2021-05-03', to: '2022-09-01', regression: { days: [] } }), /probe.trend.regression: \{ days/);
   // parallel above 1: no latency charged on the trend runs either.
-  const par = t => PC.resolveProbe({ ...base, replay: { ...curated, latency: false }, parallel: 2, trend: t }, { read: x => x, readSet: () => set, modelScore: { account: 'a' }, autotrader: trader, tuningWindows: tuning });
-  assert.throws(() => par({ replay: { stage: 1 }, set: 's' }), /probe.parallel: more than 1 only with probe.trend.replay.latency false/);
-  assert.strictEqual(par({ replay: { stage: 1, latency: false }, set: 's' }).parallel, 2);
+  const par = t => PC.resolveProbe({ ...base, replay: { ...curated, latency: false }, parallel: 2, trend: t }, { read: x => x, readCensus: () => set, modelScore: { account: 'a' }, autotrader: trader, tuningWindows: tuning });
+  assert.throws(() => par({ replay: { stage: 1 }, census: 's', from: '2021-05-03', to: '2022-09-01' }), /probe.parallel: more than 1 only with probe.trend.replay.latency false/);
+  assert.strictEqual(par({ replay: { stage: 1, latency: false }, census: 's', from: '2021-05-03', to: '2022-09-01' }).parallel, 2);
 });
 
 test('the default trendData step: a run\'s capture report from its own folder, written there, with its days', () => {
