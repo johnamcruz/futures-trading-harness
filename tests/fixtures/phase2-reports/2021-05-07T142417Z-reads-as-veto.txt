@@ -1,0 +1,9 @@
+Checks are done. Room is a judgment read (the 13810.5 day high is 0.28R on the record's own stop), so I'm dropping the unconfirmable room fact from FACTS rather than approving on it.
+
+Size: 4 (the record's 1, translated by code under the rulebook)
+Risk: $254.00 before fees, $262.00 with a one-tick stop slippage, against the $749.14 attempt budget and the $300 cap. Stop 127 ticks, target 583 ticks (4.59R), entry limit 13801.75.
+
+Priority order: no hard stop; trend long allowed (1h up); 15m up with long aligned; price above RTH VWAP and prior value. The 3m trigger is weak (bottom-third close, doji), and the against reads (thin 3m participation, 2.83 ATR extension from VWAP, overhead 13810.5/13818) are minor, so no half. The restricted 15m-bearish-displacement-below-VWAP case doesn't apply: the 15m is up and price is above VWAP. Size stays at the verdict's 4, not stepped up, per the phase 1 restriction on trade_lifecycle MNQ.
+
+VERDICT: APPROVE - size 4, risk $254.00, trade_lifecycle long limit 13801.75 with stop 13770.00 (127 ticks) and target 13947.50 (4.59R, 1h swing high); 15m up, price above RTH VWAP, long aligned, opening drive window
+FACTS: window opening drive; entries allowed; news clear; trend long allowed; read long aligned; 15m up; vwap above; value above

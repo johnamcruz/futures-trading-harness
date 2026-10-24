@@ -178,7 +178,7 @@ test('review: the Size line and its format rule, plain skill names, a second ---
   const lower = synth('size: within the cap, always.\n');
   assert.deepStrictEqual(AE.agentEditErrors(RM, lower, lower.replace('within the cap, always.', 'within the cap.')), [], 'case-sensitive: a prose line starting "size:" is no Size line');
   assert.match(AE.agentEditErrors(RM, withSize, withSize.replace('Judge the facts.', 'Judge the facts.\n\nSize: half on doubt.')).join('\n'), /report formats/, 'no Size line added');
-  assert.match(errs(root, RM, '- Size → its own `Size:` line, e.g. `Size: 1 (record 8 cut to 1: no', '- Size → a line of its own, e.g. `Size: 1 (record 8 cut to 1: no'), /report formats/, 'the repository role\'s own rule');
+  assert.match(errs(root, RM, '- Size → its own `Size:` line, final size first, e.g. `Size: 1 (record', '- Size → a line of its own, final size first, e.g. `Size: 1 (record'), /report formats/, 'the repository role\'s own rule');
   // Plain skill names the role doesn't load: a hyphenated name anywhere, a one-word name after a load verb.
   assert.match(errs(root, RM, PROSE, `${PROSE}\n   Read absorption first.`), /doesn't load \(absorption\)/);
   assert.match(errs(root, RM, PROSE, `${PROSE}\n   Use the absorption read.`), /doesn't load \(absorption\)/, 'with "the"');

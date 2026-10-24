@@ -1,0 +1,11 @@
+## Phase 2: Plan verdict, MNQ long at 2021-05-03 10:54 ET
+
+PLAN 2 Context: window opening drive until 11:00 ET, entries allowed, news clear. Trend rule: no trend on 4h, 1h or 15m, so both sides are open. Regime trend-down, high volatility. Account test_100k: cushion $2,867.04, one loss today, streak 1.
+
+PLAN 5 Confluence: for 3 (location at the day low, the 5m overnight-low sweep closed back above, the 3m close in the top third). Against 3 (3m CHoCH down at 13915, 5m CHoCH down at 13858.5, 15m displacement down at 3.07x volume, price below RTH VWAP). Against is serious (2+ categories), so half size. No decisive against: the 1h CISD is bullish, not a CHoCH against.
+
+PLAN 7 Risk: order_plan confirms limit 13853, stop 13838.75 (57 ticks, 1 tick beyond the 5m low at 13839), target 13884 (124 ticks, 2.18R), $0.50 per tick per MNQ. The translated size is 10 and risks $285.00. Half of it is 5, which risks $142.50, well inside the $860.11 attempt budget and the $300 cap. Total exposure stays under the 28-MNQ verdict ceiling.
+
+Size: 5 (the translated 10 cut to 5 for serious against; the record's suggested 1 is not the basis)
+VERDICT: APPROVE - size 5, risk $142.50, trade_lifecycle long on the overnight-low sweep, 2.18R, serious against halves the translated 10
+FACTS: window opening drive; entries allowed; news clear; trend long allowed; read long mixed; vwap below

@@ -3072,6 +3072,39 @@ test('order gate wiring: phase2-size, in the hook and the gateway: an autonomous
   assert.doesNotMatch(text(g.byId[1]), /phase2-size/);
 });
 
+test('order gate wiring: phase2-size on the replay\'s real phase-2 reports (fix/phase2-verdict-parsing), in the hook and the gateway: each approval goes at its size and is refused over it', async () => {
+  const content = c => JSON.stringify({ type: 'assistant', message: { content: [c] } });
+  const skills = ['trade-session', 'multi-timeframe-analysis', 'strategy-library', 'strategy-scan', 'strategy-gate-checks', 'setup-judgment', 'trade-plan'].map(skill => content({ type: 'tool_use', name: 'Skill', input: { skill } }));
+  const role = (id, subagent_type, text) => [content({ type: 'tool_use', id, name: 'Task', input: { subagent_type, prompt: 'p' } }),
+    JSON.stringify({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: id, content: text } ] } })];
+  const cycle = p2 => [...skills, ...['market-structure-analyst', 'trend-momentum-analyst', 'volume-liquidity-analyst', 'risk-manager'].flatMap((t, i) => role(`a${i}`, t, 'report')), ...role('p2', 'risk-manager', p2)].join('\n');
+  const dir0 = path.join(__dirname, '..', 'fixtures', 'phase2-reports');
+  // The report's own FACTS line replaced by none (no briefing here): its verdict and Size lines as phase 2 wrote them.
+  const report = name => `${fs.readFileSync(path.join(dir0, name), 'utf8').split('\n').filter(l => !/^FACTS:/.test(l)).join('\n').trimEnd()}\nFACTS: none`;
+  const cases = [['2021-05-12T135121Z-reads-as-veto.txt', 5], ['2021-05-14T141202Z-size-unreadable.txt', 5], ['2021-05-10T142415Z-size-unreadable.txt', 3]];
+  const { env, dir } = setup([{ ts: minutesAgo(5), kind: 'plan', contractId: entryOrder().contractId, text: 'plan' }],
+    { FTH_AUTONOMOUS: '1', FTH_ROLE_SKILLS: 'full', FTH_CYCLE: 'full', FTH_SYMBOLS: 'MNQ' });
+  const transcript = path.join(dir, 'session.jsonl');
+  const gdir = tmpDir();
+  const stream = path.join(gdir, 'cycle-transcript.jsonl');
+  const auto = { FTH_AUTONOMOUS: '1', FTH_ROLE_SKILLS: 'full', FTH_CYCLE: 'full', FTH_SYMBOLS: 'MNQ', FTH_CYCLE_TRANSCRIPT: stream, FAKE_POSITIONS: LONG1 };
+  const text = r => r.result.content[0].text;
+  for (const [name, size] of cases) {
+    // The hook.
+    fs.writeFileSync(transcript, cycle(report(name)));
+    const over = gate({ ...orderPayload({ ...ORDER, size: size + 1 }), transcript_path: transcript }, env).stderr;
+    assert.match(over, new RegExp(`\\[phase2-size\\] size ${size + 1} is over the ${size} risk-manager phase 2 approved`), name);
+    assert.doesNotMatch(over, /\[roles-ran\]/, `${name}: the approval is read as one`);
+    const at = gate({ ...orderPayload({ ...ORDER, size }), transcript_path: transcript }, env).stderr;
+    assert.doesNotMatch(at, /phase2-size|\[roles-ran\]/, name);
+    // The gateway.
+    fs.writeFileSync(stream, cycle(report(name)));
+    const g = await gatewayRun(auto, [call(1, 'place_order', { ...ORDER, size: size + 1 }), call(2, 'place_order', { ...ORDER, size })], { dir: gdir });
+    assert.match(text(g.byId[1]), new RegExp(`\\[phase2-size\\] size ${size + 1} is over the ${size} risk-manager phase 2 approved`), name);
+    assert.doesNotMatch(text(g.byId[2]), /phase2-size|\[roles-ran\]/, name);
+  }
+});
+
 test('order gate hook: a live entry needs the broker\'s allow-list holding its account; exits and protective stops go without one; a paper run is exempt', () => {
   const { env } = setup([{ ts: minutesAgo(5, new Date(TEST_NOW)), kind: 'plan', contractId: entryOrder().contractId, text: 'plan' }]);
   for (const [list, why] of [['', /FAKE_BROKER_ALLOWED_ACCOUNT_IDS is empty/], ['any', /never empty or "any"/], ['7', /account 1 is not in FAKE_BROKER_ALLOWED_ACCOUNT_IDS \(7\)/]]) {

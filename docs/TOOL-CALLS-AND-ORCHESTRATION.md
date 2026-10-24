@@ -366,7 +366,14 @@ head trader's run, before the cycle log; per role `config/runner.json`
    line, by the gate's own readers) and `lookups`; retried once. Recorded with
    its wall-clock times, so the gate orders it after phase 1 and the analysts.
 4. **Between the phases, in code.** Anything but APPROVE stops the entry (a
-   VETO is the cycle's no-trade with its line). The order comes from
+   VETO is the cycle's no-trade with its line). The reading is the gate's
+   (`roles-ran.js verdictOf`): "verdict" or "decision" decides only where it
+   starts its line (after list markers, numbering, quotes, markup and the labels
+   plan, step, final, phase, risk, overall) or labels a value (`Sizing verdict:
+   skip`, refusing only); mid-line prose ("the verdict's size") decides
+   nothing. The size is the smallest the approving VERDICT line's `size <n>`
+   and the Size line state (`approvedSize`): a Size line opening with a word is
+   prose that binds only by its cuts (owner-approved 2026-10-24). The order comes from
    `order_plan`'s own operation (`harness-tools/order-plan.js` ->
    `trading/lifecycle-order.js composedOrder`; in a prop attempt the policy
    verdict it records), so its rationale and brackets are what

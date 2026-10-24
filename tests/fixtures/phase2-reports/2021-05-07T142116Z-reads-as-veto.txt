@@ -1,0 +1,16 @@
+Phase 2 check for MNQ long, trade_lifecycle, record 5636e2e15c6588b2, at the 3m bar closed 10:21 ET.
+
+- **Trigger (0):** The record is a composed trade_lifecycle entry, and `order_plan` plans it for this bar's long. It is the trigger the desk is acting on, and the record is current until 14:27Z.
+- **Trend and alignment (1, 4):** 1h up, LONG allowed. 15m and the long read are aligned. The 1h closed mid-range with a BOS up, not a CHoCH down, so no decisive against.
+- **Context (2):** Opening drive window, entries allowed until 11:00 ET. No news blackout. Account flat, no working orders, cushion $2,497.14, budget $749.14.
+- **Numbers (3, 4, 5):** `order_plan` gives limit 13807.25, stop 13776.75 (122 ticks, below the 3m low 13777), target 13947.50 (561 ticks, 4.6R). Tick spacing is correct and the sides are right. Risk is 4 × 122 ticks × $0.50 = $244.00 before fees, $248.96 with fees at $62.24 a contract. That is under the $300 trade_lifecycle cap, and under 10% of the cushion (~$249.7).
+- **Strategy (6):** trade_lifecycle is active, 4.6R is above min_rr, and the size is within the verdict's ceiling of 12 MNQ.
+- **Lessons (7):** The 15m bearish-displacement lesson does not apply: price is above RTH VWAP and the 15m closed top third. The trade_lifecycle MNQ size note says keep at the verdict's size, so I am not cutting below the translated size.
+- **Confluence (5, 8):** Structure, location, trigger and context are for. Participation is thin (3m volume 0.96x, last 3 bars 0.45x opening range) and the entry is 3.01 ATR above VWAP. Those are minor reads under the rules, and the 1h has no CHoCH against. So full size, no cut.
+- **Room:** The day high (13808.25) sits 0.08R above, and 13818 at 0.81R. Those are reads, not blockers, and the record's compose check already passed.
+
+Condition for the executor: order 26 earlier today was a working entry with no visible stop leg, and the cause is unexplained. After the fill, confirm the 122-tick stop bracket is working at the exchange before anything else. If it is missing, the protective stop goes in at once.
+
+Size: 4 (the record's 1 translated to the rulebook's 4; not cut, since the cut floor is 3 and no check calls for it)
+VERDICT: APPROVE - size 4, risk $244.00, trade_lifecycle long at the record's 13807.25 limit with the 3m-low stop 122 ticks and the 1h-swing target 4.6R
+FACTS: window opening drive; entries allowed; news clear; trend long allowed; read long aligned; 15m up; vwap above; value above

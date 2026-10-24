@@ -201,11 +201,17 @@ function rolesInTranscript(text) {
  */
 const NOT_APPROVED = 'risk-manager phase 2 approving the plan (its latest verdict is not "VERDICT: APPROVE")';
 // Decision lines, the one definition the approval (verdictOf) and the gate (verdictProblem) both use. A line is read
-// plain: format characters dropped (markup, quotes and emoji are separators like any other). EVERY occurrence of the word "verdict" or
-// "decision" on a line is read: after it, qualifier tokens (final, phase, risk, overall, a number) and anything in (),
-// [] or \u00ab\u00bb are skipped, then the first token after any separators (':', '-', '|', '/', '=', arrows, ellipses, spaces) is
-// the decision. "is", "was", "to", "says" or "said" right after the word is prose: that occurrence isn't read (the veto
-// rule still reads its line). Nothing after it: the
+// plain: format characters dropped (markup, quotes and emoji are separators like any other). The word "verdict" or
+// "decision" decides where it STARTS its line: only list markers, numbering, quote marks, markup, emoji, spaces and the
+// labels plan, step, final, phase, risk and overall before it ("VERDICT:", "**Verdict:**", "- Decision:", "8 Decision:",
+// "PLAN 8 Decision:", "**Step 8, decision:**", "Phase 2 VERDICT:"). Anywhere else on a line it is prose ("the verdict's
+// size", "the verdict ceiling", "a decision on ...") and decides nothing, unless a label separator follows it right away
+// (':', '=', '|', an arrow or a spaced dash, after any markup or bracket: "Sizing verdict: skip", "| final decision: skip"): such a
+// label refuses like a decision line and never approves. Owner-approved 2026-10-24 (a replay's approvals read as vetoes
+// by prose naming the verdict). A decision occurrence: after it, qualifier tokens (final, phase, risk, overall, a
+// number) and anything in (), [] or \u00ab\u00bb are skipped, then the first token after any separators (':', '-', '|', '/', '=',
+// arrows, ellipses, spaces) is the decision. "is", "was", "to", "says" or "said" right after the word is prose: that
+// occurrence isn't read (the veto rule still reads its line). Nothing after it: the
 // next non-empty line's first token (a heading), unless that line holds the word itself. Only brackets after it: the
 // bracketed token is the decision; only numbers: the number is (no letters, so it refuses). The order's own setup,
 // side and size are what the gate checks, so several APPROVE lines are one approval, whatever else they say.
@@ -219,6 +225,12 @@ const NOT_APPROVED = 'risk-manager phase 2 approving the plan (its latest verdic
 const AGREE = new Set(['approve', 'approved', 'full', 'take']);
 const APPROVE_WORDS = new Set(['approve', 'approved', 'full']);
 const KEYWORD_ALL = /\b(verdict|decision)\b/gi;
+// The keyword that starts its line: nothing but non-letters (markers, numbering, quotes, markup, emoji, spaces) and the
+// labels before it. The index of that keyword, or -1.
+const LINE_START = /^(?:[^\p{L}]|\b(?:plan|step|final|phase|risk|overall)\b)*?\b(?:verdict|decision)\b/iu;
+const startIndex = l => { const m = LINE_START.exec(l); return m ? m[0].length - /(?:verdict|decision)$/i.exec(m[0])[0].length : -1; };
+// A label separator right after a keyword elsewhere on the line (markup, spaces and one bracket between).
+const LABEL = /^[\s*_]*(?:\([^)\n]*\)|\[[^\]\n]*\])?[\s*_]*(?:[:=|→⇒]|->|[-–—](?=\s))/;
 const QUALIFIERS = new Set(['final', 'phase', 'risk', 'overall']);
 const PROSE = new Set(['is', 'was', 'to', 'says', 'said']);
 const BRACKETS = { '(': ')', '[': ']', '\u00ab': '\u00bb' };
@@ -303,12 +315,16 @@ function decisionLines(text) {
   for (let i = 0; i < lines.length; i += 1) {
     // A markdown heading ("## Phase 2: Plan verdict, MNQ short") never approves: it counts only when it refuses.
     const heading = HEADING.test(lines[i]);
+    const start = startIndex(lines[i]);
     for (const m of lines[i].matchAll(KEYWORD_ALL)) {
       if (heading) {
         const refused = headingRefusal(lines, i, lines[i].slice(m.index + m[0].length));
         if (refused) out.push({ keyword: m[1].toLowerCase(), word: refused.word, line: refused.line });
         continue;
       }
+      // Not at the line's start: prose, unless a label separator follows (then it refuses, never approves).
+      const label = m.index !== start;
+      if (label && !LABEL.test(lines[i].slice(m.index + m[0].length))) continue;
       const d = decisionAfter(lines[i].slice(m.index + m[0].length));
       if (d === null) continue;
       let { word } = d;
@@ -320,6 +336,7 @@ function decisionLines(text) {
         word = j === -1 ? '' : decisionAfter(`:${lines[j]}`).word;
         line = `${lines[i]} ${j === -1 ? '' : lines[j]}`;
       }
+      if (label && AGREE.has(word)) continue;
       out.push({ keyword: m[1].toLowerCase(), word, line });
     }
   }
@@ -385,12 +402,33 @@ function decisiveLine(text) {
 const SIZE_SAID = /\bsize\s*[:=]?\s*([^\s,;)]+)/gi;
 const SIZE_LINE = /^[ \t>]*(?:(?:[-*+]|\d+[.)])[ \t]+)?[*_]*Size[*_]*[ \t]*[:=][*_ \t]*([^\s,;(]+)(.*)$/gim;
 const CUT_TO = /(?:\b(?:cut(?:\s+back)?|trimmed|reduced|lowered|down)\s+to(?:\s+size)?|\u2192|\u21d2|->|=>)\s*([^\s,;):]+)/gi;
+// A prose Size line's words that state a size without a number: no size the gate can read (fails closed).
+const SIZE_WORDS = new Set(['half', 'quarter', 'third', 'double', 'twice', 'zero', 'none', 'nil', 'no', 'one', 'two', 'three', 'four', 'five', 'six',
+  'seven', 'eight', 'nine', 'ten', 'min', 'minimum', 'max', 'maximum', 'floor']);
+const CUT_VERB = /\b(?:cut(?:s|ting)?|trim(?:s|med|ming)?|reduc(?:e|es|ed|ing)|lower(?:s|ed|ing)?|halv(?:e|es|ed|ing)|scal(?:e|es|ed|ing)\s+down)\b/gi;
+/**
+ * The sizes a prose Size line cuts to beyond CUT_TO's adjacent forms: in each sentence holding a cut verb, every
+ * "to [size] <token>" after the verb ("I cut the translated 17 to 5": 5). A token that is no whole number (a word, "to
+ * fit") is returned as it is, so it reads as an error: a cut the reader can't size fails closed.
+ */
+function proseCuts(line) {
+  const out = [];
+  for (const sentence of String(line).split(/[.;!?](?=\s|$)/)) {
+    const verb = [...sentence.matchAll(CUT_VERB)][0];
+    if (!verb) continue;
+    for (const m of sentence.slice(verb.index + verb[0].length).matchAll(/\bto\s+(?:size\s+)?([^\s,;):]+)/gi)) out.push(m[1]);
+  }
+  return out;
+}
 
 /**
  * The size an approving report approves: { size } (a whole number, 1 or more), or { error }. Each approving VERDICT line
  * must say `size <n>` (agents/risk-manager.md); a `Size: <n>` line counts too, and every size and cut on either; the
  * smallest of them binds. A size that can't be read (none, 0, a fraction, a placeholder, a range, a word, markup before
- * it) is an error, never a size (fails closed).
+ * it) is an error, never a size (fails closed). A Size line opening with a word is prose (owner-approved 2026-10-24:
+ * "Size: order_plan gives 4 MNQ ... I cut to 3"): it states no size, and every cut in it binds (CUT_TO's, and proseCuts'
+ * "cut ... to <n>"); a size word first ("half", "one", "none") or a cut to no whole number is an error. The VERDICT
+ * line's size still binds, so a prose line only ever lowers the size.
  */
 function approvedSize(text) {
   const sizes = [];
@@ -408,7 +446,19 @@ function approvedSize(text) {
     for (const m of said) read(m[1], l.line.trim());
     cuts(l.line, l.line.trim());
   }
-  for (const m of String(text || '').matchAll(SIZE_LINE)) { read(m[1], m[0].trim()); cuts(m[2], m[0].trim()); }
+  for (const m of String(text || '').matchAll(SIZE_LINE)) {
+    const shown = m[0].trim();
+    // A Size line opening with a word is prose ("Size: order_plan gives 4 ..."), not a size: every cut in it still
+    // binds, CUT_TO's and "cut ... to <n>" (proseCuts); a size word ("half", "one", "none") is no size (an error).
+    if (word(m[1])) {
+      if (SIZE_WORDS.has(m[1].replace(/[^A-Za-z]+$/, '').toLowerCase())) bad.push(shown);
+      cuts(`${m[1]}${m[2]}`, shown);
+      for (const t of proseCuts(`${m[1]}${m[2]}`)) read(t, shown);
+      continue;
+    }
+    read(m[1], shown);
+    cuts(m[2], shown);
+  }
   if (bad.length) return { error: `no whole size of 1 or more in "${bad[0].replace(/\s+/g, ' ')}"` };
   return { size: Math.min(...sizes) };
 }
