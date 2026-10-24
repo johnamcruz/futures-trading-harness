@@ -26,6 +26,10 @@ const { loadStrategies } = require('../trading/strategies');
 const { specFor } = require('../trading/contracts');
 const { cycleId } = require('../trading/check-order');
 const { briefingAfterClock } = require('../trading/look-ahead');
+const { attemptPolicy } = require('../trading/lifecycle-order');
+
+/** A running prop attempt whose policy trades the composed strategy: its size is a suggestion, translated at entry. */
+const inAttempt = (home, doc, strategies, root) => { try { return Boolean(attemptPolicy(home, doc, strategies, root)); } catch (_err) { return true; } };
 
 const USAGE = 'usage: compose-check.js --symbol MNQ --side long|short --size <contracts> --reads <JSON array of { step, skill, read, why }>';
 const ROOT = /^[A-Z0-9]{1,8}$/;
@@ -51,13 +55,14 @@ function composeCheck({ symbol = null, side = null, reads = null, size = null } 
   // Under a replay clock, never a briefing of a bar that closed after it (no look-ahead).
   const later = briefingAfterClock(got.briefing, c.replayAt());
   if (later) return refused([later]);
-  const doc = loadStrategies(c.root, c.env).strategies.find(s => s.name === STRATEGY);
+  const all = loadStrategies(c.root, c.env).strategies;
+  const doc = all.find(s => s.name === STRATEGY);
   if (!doc || !doc.valid) return refused([`strategies/${STRATEGY}/STRATEGY.md is ${doc ? `invalid (${(doc.errors || [])[0]})` : 'missing'}`]);
   const spec = specFor(symbol);
   const tick = spec ? spec.tickSize : null;
   const checked = checkReads({ reads, side, briefing: got.briefing, skills: skillCatalog(c.root).map(k => k.name), tick: tick || 0.25 });
   const planned = checked.stop && checked.target
-    ? planOf({ checked, briefing: got.briefing, side, size, tick, tickValue: spec ? spec.tickValue : null, minRR: doc.risk.min_rr, maxRiskUsd: doc.risk.max_risk_usd, stopRule: stopRuleOf(doc.risk) })
+    ? planOf({ checked, briefing: got.briefing, side, size, tick, tickValue: spec ? spec.tickValue : null, minRR: doc.risk.min_rr, maxRiskUsd: doc.risk.max_risk_usd, stopRule: stopRuleOf(doc.risk), suggestion: inAttempt(home, doc, all, symbol) })
     : null;
   const record = buildRecord({ at, root: symbol, symbol, side, briefing: got.briefing, checked, planned, cycleId: cycleId(c.env), validBars: doc.valid_bars });
   appendRecord(home, record);

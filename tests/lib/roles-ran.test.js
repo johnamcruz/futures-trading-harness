@@ -394,6 +394,23 @@ test('sizeRefusal: no phase 2 required, nothing; an unreadable report or size re
   for (const s of [3, null, undefined, '', '1', [1], true, 0, -1, 1.5, NaN]) assert.match(sizeRefusal(R, s) || '', /is over the 2 risk-manager phase 2 approved/, JSON.stringify(s));
 });
 
+test('decisiveLine: the line verdictOf decided on, the one approvedSize sizes: the approving VERDICT line, never a heading naming a verdict; a veto\'s refusing line; none: \'\'', () => {
+  const { decisiveLine, verdictOf, approvedSize } = require('../../scripts/lib/trading/roles-ran');
+  const HEAD = '## Phase 2 verdict: MNQ long, 3m bar closed 11:00 ET (15:00 UTC)';
+  const V = 'VERDICT: APPROVE - size 5, risk $100';
+  for (const text of [`${HEAD}\n${V}\nFACTS: x`, `${V}\n${HEAD}\nFACTS: x`, `${HEAD}\n### Verdict notes\n${V}`, `**VERDICT:** APPROVE - size 5, risk $100`]) {
+    assert.strictEqual(verdictOf(text), 'APPROVE', text);
+    assert.deepStrictEqual(approvedSize(text), { size: 5 }, text);
+    assert.strictEqual(decisiveLine(text).replace(/\*/g, ''), V, text);
+  }
+  // A heading, then "VERDICT:" alone with the decision on the next line: both, as read.
+  assert.strictEqual(decisiveLine(`${HEAD}\nVERDICT:\nAPPROVE - size 5`), 'VERDICT: APPROVE - size 5');
+  assert.strictEqual(decisiveLine(`${HEAD}\nVERDICT: VETO - room\nFACTS: x`), 'VERDICT: VETO - room');
+  assert.strictEqual(decisiveLine(`${V}\nDecision: skip`), 'Decision: skip', 'the refusing line, not the approval it overrides');
+  assert.strictEqual(decisiveLine(`${HEAD}\nNo call yet.`), '');
+  assert.strictEqual(decisiveLine(''), '');
+});
+
 test('approvalReadAsVeto: an APPROVE line the reading takes as a veto gives the reason and the line; an approval, a plain veto or no verdict is null', () => {
   const { approvalReadAsVeto, verdictProblem } = require('../../scripts/lib/trading/roles-ran');
   const V = 'VERDICT: APPROVE - size 1, risk $20.00, orb long';

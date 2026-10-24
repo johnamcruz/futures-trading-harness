@@ -140,16 +140,19 @@ test('stage 2, combine: two attempts from zero; a model entry fills, the first a
   // can't meet consistency); as much again the next day, so its second close passes under the consistency rule.
   const big = ACCOUNT.profit_target + 200;
   const blowAt = '2022-04-21T16:40:00Z';
-  const w = world({ scriptedFills: [{ at: blowAt, pnl: -(ACCOUNT.max_loss + 100) }, { at: '2022-04-28T13:34:00Z', pnl: big }, { at: '2022-04-29T13:34:00Z', pnl: big }] });
+  const w = world({ scriptedFills: [{ at: blowAt, pnl: -(ACCOUNT.max_loss + 1000) }, { at: '2022-04-28T13:34:00Z', pnl: big }, { at: '2022-04-29T13:34:00Z', pnl: big }] });
   const moments = scanMoments(w);
   const entry = moments.find(m => m.bar === '2022-04-21T16:21:00.000Z');
   assert.ok(entry, moments.map(m => m.bar).join(', '));
   const exitBar = iso(Date.parse(entry.bar) + D.STEP);
   const refusedBar = iso(Date.parse(entry.bar) + 7 * 86400000); // the same bar a week later (the second week's Thursday)
-  const compose = m => ({ do: 'compose', scenario: scenarioOf(m), size: 1, policy: 'prop_portfolio', rationale: `setup:prop_portfolio ${m.side}, composed from its reads` });
+  // The model suggests 1 (as a small model does) and says planned: the runner's entry translates the size to the
+  // rulebook's (prop/size-translate.js, through order_plan) before phase 2, names it in phase 2's request, phase 2 (its
+  // own run) approves the size its request names, and the trade-executor sends order_plan's order at it.
+  const compose = m => ({ do: 'compose', scenario: scenarioOf(m), size: 1, policy: 'prop_portfolio', planned: true, rationale: `setup:prop_portfolio ${m.side}, composed from its reads` });
   playScript(w, {
-    [entry.bar]: compose(entry),
-    [exitBar]: { do: 'exit', side: entry.side, review: { result: 'win', setup: 'prop_portfolio', r: 1 } },
+    [entry.bar]: { do: 'plan', scenario: scenarioOf(entry), size: 1 },
+    [exitBar]: { do: 'exit', side: entry.side, size: 'position', review: { result: 'win', setup: 'prop_portfolio', r: 1 } },
     [refusedBar]: { ...compose(entry), result: 'CYCLE RESULT: blocked - the order gate refused the entry' },
   });
   const config = replayConfig(w, 'combine-e2e', {
@@ -168,8 +171,24 @@ test('stage 2, combine: two attempts from zero; a model entry fills, the first a
   const days = recordsOf(w, 'combine-e2e');
   // The model's entry went through the gate and filled, and its exit closed it.
   const entered = days['2022-04-21'].find(x => barOf(x) === entry.bar);
-  assert.match(entered.ran[0].result, new RegExp(`^CYCLE RESULT: executed - trade_lifecycle ${entry.side} MNQ`), JSON.stringify(entered.ran));
+  assert.match(entered.ran[0].result, new RegExp(`^CYCLE RESULT: executed - trade_lifecycle ${entry.side} \\d+ MNQ \\(the runner's entry`), JSON.stringify(entered.ran));
   assert.deepStrictEqual(entered.refusals, []);
+  // The record suggested 1; the order the gate allowed is the translated size, at or over the floor (min_contracts 3).
+  const gateLog = fs.readFileSync(path.join(runHomeOf(w, 'combine-e2e'), 'logs', 'gate-log.jsonl'), 'utf8').trim().split('\n').map(l => JSON.parse(l));
+  const allowed = gateLog.filter(e => e.decision === 'allowed' && e.tool === 'place_order' && /^setup:prop_portfolio/.test(String(e.rationale || '')));
+  assert.strictEqual(allowed.length, 1, JSON.stringify(allowed));
+  assert.ok(allowed[0].size >= 3, `the translated size ${allowed[0].size}`);
+  const recs = require('../../scripts/lib/trading/trade-lifecycle').readRecords(runHomeOf(w, 'combine-e2e'), 'MNQ').filter(x => x.bar === entry.bar);
+  assert.deepStrictEqual(recs.map(x => x.plan.size), [1], 'the record keeps the suggestion');
+  assert.match(entered.ran[0].result, new RegExp(`trade_lifecycle ${entry.side} ${allowed[0].size} MNQ`));
+  // Phase 2's own run was asked to approve the translated size (its request names it), and approved exactly it.
+  const logs = path.join(runHomeOf(w, 'combine-e2e'), 'logs');
+  const cycleFiles = fs.readdirSync(logs).filter(f => /^cycles-.*\.jsonl$/.test(f)).flatMap(f => fs.readFileSync(path.join(logs, f), 'utf8').trim().split('\n').map(l => JSON.parse(l)))
+    .filter(l => l.file && fs.existsSync(l.file)).map(l => JSON.parse(fs.readFileSync(l.file, 'utf8')));
+  const entryLog = cycleFiles.find(l => l.entry && l.entry.translated);
+  assert.ok(entryLog, 'the entry record keeps the translation');
+  assert.deepStrictEqual([entryLog.entry.translated.size, entryLog.entry.translated.suggested, entryLog.entry.size.approved, entryLog.entry.size.ordered], [allowed[0].size, 1, allowed[0].size, allowed[0].size]);
+  assert.match(entryLog.entry.phase2.text, new RegExp(`VERDICT: APPROVE - size ${allowed[0].size}`));
   const out = days['2022-04-21'].find(x => barOf(x) === exitBar);
   assert.match(out.ran[0].result, /^CYCLE RESULT: managed - out/);
   const fills = days['2022-04-21'].flatMap(x => x.trades || []).filter(f => !(f.creationTimestamp || '').startsWith(blowAt.slice(0, 16)));
@@ -206,6 +225,11 @@ test('stage 2, combine: two attempts from zero; a model entry fills, the first a
   const gated = fs.readFileSync(path.join(runHomeOf(w, 'combine-e2e'), 'logs', 'gate-log.jsonl'), 'utf8').trim().split('\n').map(l => JSON.parse(l)).filter(e => e.decision !== 'allowed');
   assert.strictEqual(gated.length, 1, JSON.stringify(gated));
   assert.match(gated[0].violations.find(v => v.check === 'combine').message, /past the profit target with today the best day .*more today can't meet consistency/);
+  // order_plan refused it (the attempt blocks entries), so the executor sent the record's suggested 1: refused on the
+  // floor and on the translation too, never sized up.
+  const floor = gated[0].violations.find(v => v.check === 'min-contracts');
+  assert.ok(floor, JSON.stringify(gated[0].violations));
+  assert.match(floor.message, /size 1 MNQ is under the floor of 3 contracts/);
   // The stage report's attempt lines, then the Monte Carlo of the finished run.
   assert.match(r.out, /stage 2 \(pass prop\) report:/);
   assert.match(r.out, /continuous combine: 2 attempt\(s\), each from zero at the starting balance/);

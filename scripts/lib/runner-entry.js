@@ -20,9 +20,9 @@
  *      VETO is the cycle's no-trade with its line; an APPROVE line the reading still takes as a veto, the same outcome
  *      with the reading's reason: roles-ran.js approvalReadAsVeto); phase 2's report kept in the entry record
  *      (`phase2`: { chars, text cut at prompt.reportMaxText, cut }); phase 2's approved size (roles-ran.js approvedSize:
- *      none readable is a no-trade) sets the order's: exactly the smaller of it and the record's (a cut is built by
+ *      none readable is a no-trade) sets the order's: exactly the smaller of it and the record's (in a prop attempt the translated size's: prop/size-translate.js; a cut is built by
  *      order_plan at it, as the gate's composed-reads takes it), never more than phase 2 approved
- *      (`size`: { approved, record, ordered }); the order by order_plan's own path (harness-tools/order-plan.js:
+ *      (`size`: { approved, record, ordered }, and in an attempt suggested and translated); the order by order_plan's own path (harness-tools/order-plan.js:
  *      trading/lifecycle-order.js composedOrder, and in a prop attempt the policy verdict it records), so its
  *      rationale and brackets are exactly what the gate checks; the journal plan for this bar (kind plan, contractId)
  *      through the broker adapter (journalAdd), which the gate's plan-required check reads;
@@ -37,12 +37,13 @@
  *      entry (entry-orders.json); else, when the
  *      gate let a place_order of this cycle through (its log, this cycle's id, the hook's records and the gateway's),
  *      the order's (a later refused retry never hides it); else blocked with the gate's refusal (the same log) or the
- *      executor's own BLOCKED or ABORTED report; else a failed
+ *      executor's own BLOCKED or ABORTED report (an ABORTED with no order call at all is the executor's own abort: a
+ *      no-trade, outcome `aborted`, never a broker's refusal); else a failed
  *      run, a no-trade with why. A lost or late broker reply never sends a second entry: nothing here retries the order.
  *
  *   entryDue(records)        { run: true, record } | { run: false, why }: the latest record on the bar, OK or not
  *   plannedDrift(result, rec)  why the head trader's planned line (its side, its size) isn't the record's, or null
- *   verdictLine(text)        phase 2's VERDICT line, as written
+ *   verdictLine(text)        phase 2's decisive VERDICT line (roles-ran.js decisiveLine), never a heading
  *   entryOutcome({ ... })    { outcome, result, why } from the after-order facts
  *   runEntry(deps, cycle)    null (the result isn't `planned`: nothing for the runner) or { result, entry }
  *     deps:  { workflow, runRole, client, home, cfg, root, env, log, wallNow, now, perRoleMs, childEnv, lookups, orderPlan }
@@ -56,7 +57,7 @@
 
 const fs = require('fs');
 const { outcomeOf } = require('./autotrader');
-const { verdictOf, approvalReadAsVeto, approvedSize } = require('./trading/roles-ran');
+const { verdictOf, approvalReadAsVeto, approvedSize, decisiveLine } = require('./trading/roles-ran');
 const { recordsAt } = require('./trading/lifecycle-gate');
 const { renderRecord } = require('./trading/trade-lifecycle');
 const { skillsInTranscript, claudeLookupsInTranscript } = require('./trading/skills-loaded');
@@ -128,8 +129,11 @@ function plannedDrift(result, rec) {
   return null;
 }
 
-/** Phase 2's VERDICT line, as written (the first line stating a verdict: "VERDICT: ..." or "Verdict - ..."), or ''. */
-const verdictLine = text => (String(text || '').split('\n').find(l => /\bverdict\b[*_`\s]*[:-]/i.test(l)) || '').trim();
+/**
+ * Phase 2's decisive VERDICT line (roles-ran.js decisiveLine: the line verdictOf and approvedSize decided on; never a
+ * heading or another line that names a verdict), or ''.
+ */
+const verdictLine = text => decisiveLine(text);
 
 /**
  * The gate's last refusal of a place_order in this cycle (the gate log, stamped with the cycle's id: check-order.js
@@ -194,7 +198,8 @@ function placeOrderDecisions(env, id, sinceMs) {
 }
 
 /**
- * The cycle's outcome after the executor's run: { outcome: executed | blocked | no-trade, result, why }.
+ * The cycle's outcome after the executor's run: { outcome: executed | unknown | blocked | aborted | no-trade, result, why }
+ * (aborted: the executor's ABORTED with no order call made, let through or refused: a no-trade, said as its abort).
  *   entered   the account shows a position on the family, or the gateway recorded this record's entry
  *   refusal   the gate's refusal this cycle ({ checks, message }) or null
  *   report    the executor's report (its BLOCKED or ABORTED line), or ''
@@ -227,6 +232,10 @@ function entryOutcome({ entered, filled = false, working = null, refusal = null,
   // A place_order call was made, never completed, and the gate log holds no decision of it (none can be read): unknown.
   if (attempted && !sent && !allowed && !refusal) return { outcome: 'unknown', result: `CYCLE RESULT: executed - ${label}: unknown, the order's outcome couldn't be read (a place_order call was made, its reply never came and the gate log has no decision of it): treat it as possibly placed`, why: short(report) || 'no reply' };
   const said = ORDER_REFUSED.exec(String(report || ''));
+  // An ABORTED report with no order call at all (none made, none let through, none refused): the trade-executor stopped
+  // itself before any order, so neither the gate nor the broker refused anything. No order: a no-trade (`blocked` is a
+  // refused order), its entry outcome `aborted`, said as the executor's abort, never as a broker's refusal.
+  if (said && said[1] === 'ABORTED' && !attempted && !sent && !allowed) return { outcome: 'aborted', result: `CYCLE RESULT: no-trade - the trade-executor aborted the ${label} with no order sent (no order call in its run, none in the gate log): ${short(report)}`, why: short(report) };
   // A BLOCKED report after the gate let an order through is a refused retry's: the order's outcome decides.
   if (said && !(allowed && said[1] === 'BLOCKED')) return { outcome: 'blocked', result: `CYCLE RESULT: blocked - the ${label} was ${said[1] === 'BLOCKED' ? 'blocked' : 'refused by the broker'}: ${short(report)}`, why: short(report) };
   // Its order call went (the gate let it through) and the account shows nothing of it: the broker took no order.
@@ -323,6 +332,25 @@ async function runEntry(deps, c) {
     strategy: STRATEGY, side: rec.side, accountId: Number.isInteger(c.accountId) ? c.accountId : null,
     record: renderRecord(rec), reports: c.reports || [],
   };
+  // In a prop attempt the entry's size is code's translation (order_plan's own path: prop/size-translate.js), read
+  // before phase 2 so its request names the size to approve or cut; the record's size is a suggestion. Outside an
+  // attempt nothing is read and the request is as before. order_plan refusing here: phase 2 runs on the record and the
+  // order is refused after it, as before.
+  if (require('./trading/prop-state').runningAttempts(home).length) {
+    // The broker's max order size, read through the adapter (its translator records it for this day, as the gateway's
+    // own read does before the gate), so order_plan's translation and the gate's see the same limit. Unread: as it is.
+    try { if (client && typeof client.serverConfig === 'function') await client.serverConfig(); } catch (_err) { /* the gate reads its own */ }
+    try {
+      const pre = orderPlan({ file: c.bars, symbol: c.symbol, strategy: STRATEGY, side: rec.side, ...(Number.isInteger(c.accountId) ? { accountId: c.accountId } : {}) }, { env: childEnv(cfg, root, env, roleContext), root, tool: true });
+      const p = pre && pre.plan;
+      if (p && Number.isInteger(p.translatedSize)) {
+        ctx.entrySize = { size: p.translatedSize, contract: p.contract, suggested: p.suggestedSize, reason: p.translation, floor: p.minContracts };
+        info.translated = ctx.entrySize;
+      }
+    } catch (err) {
+      log(`the entry: order_plan before phase 2 refused (${short(err.message)}); phase 2 sees the record's size`, 'warn');
+    }
+  }
   let stop = null;
   let order = null;
   // 4. Between the phases: the verdict, the order built in code, the journal plan.
@@ -357,7 +385,7 @@ async function runEntry(deps, c) {
     const recSize = rec.plan && Number.isInteger(rec.plan.size) ? rec.plan.size : null;
     const cutTo = recSize !== null && approved.size < recSize ? approved.size : null;
     try {
-      order = orderPlan({ file: c.bars, symbol: c.symbol, strategy: STRATEGY, side: rec.side, ...(Number.isInteger(c.accountId) ? { accountId: c.accountId } : {}), ...(cutTo !== null ? { size: cutTo } : {}) }, { env: roleEnv, root, tool: true });
+      order = orderPlan({ file: c.bars, symbol: c.symbol, strategy: STRATEGY, side: rec.side, ...(Number.isInteger(c.accountId) ? { accountId: c.accountId } : {}), ...(cutTo !== null ? { size: cutTo } : {}), approved: approved.size }, { env: roleEnv, root, tool: true });
     } catch (err) {
       // Only an expired record's refusal is timed as the order's moment (the record ran out by then).
       if (/\bexpired\b/.test(err.message)) info.timing.orderMs = sinceClose(wallNow());
@@ -369,16 +397,22 @@ async function runEntry(deps, c) {
     const ordered = order && order.args ? order.args.size : undefined;
     const recordSize = order && order.plan && Number.isInteger(order.plan.recordSize) ? order.plan.recordSize : ordered;
     if (!(Number.isInteger(ordered) && ordered >= 1)) { stop = { outcome: 'no-trade', why: `order_plan gave no size (${JSON.stringify(ordered)})` }; return { stop: stop.why }; }
-    info.size = { approved: approved.size, record: recordSize, ordered: ordered <= approved.size ? ordered : null };
+    // In a prop attempt the record's size is a suggestion, translated to the rulebook's (prop/size-translate.js): both kept.
+    const translated = order && order.plan && Number.isInteger(order.plan.translatedSize) ? order.plan.translatedSize : null;
+    const base = translated !== null ? 'the translated' : "the record's";
+    info.size = { ...(translated !== null ? { suggested: order.plan.suggestedSize, translated } : {}), approved: approved.size, record: recordSize, ordered: ordered <= approved.size ? ordered : null };
     if (ordered > approved.size) { stop = { outcome: 'no-trade', why: `order_plan's size ${ordered} is over the ${approved.size} risk-manager phase 2 approved` }; return { stop: stop.why }; }
-    if (ordered < recordSize) label = `${STRATEGY} ${rec.side} ${ordered} ${rec.symbol || c.symbol} (phase 2 cut the record's ${recordSize})`;
-    const sizeWhy = `size ${ordered}: ${ordered < recordSize ? `phase 2 cut the record's ${recordSize}` : approved.size > ordered ? `phase 2 approved ${approved.size}, capped at the record's ${ordered}` : `phase 2 approved the record's ${ordered}`}`;
+    if (ordered < recordSize) label = `${STRATEGY} ${rec.side} ${ordered} ${rec.symbol || c.symbol} (phase 2 cut ${base} ${recordSize})`;
+    else if (translated !== null) label = `${STRATEGY} ${rec.side} ${ordered} ${rec.symbol || c.symbol}`; // the size ordered, never the suggestion
+    const sizeWhy = `size ${ordered}: ${ordered < recordSize ? `phase 2 cut ${base} ${recordSize}` : approved.size > ordered ? `phase 2 approved ${approved.size}, capped at ${base} ${ordered}` : `phase 2 approved ${base} ${ordered}`}${translated !== null ? ` (the record suggested ${order.plan.suggestedSize})` : ''}`;
     // No late entry (late-entry.js): the market at the order's moment, from the newest closed 1m bar read now and
     // recorded for the gate, else the local bars; left the plan (or no current price): a pass, no executor run.
     const late = await lateCheck(order, roleEnv);
     if (late) {
       info.timing.orderMs = sinceClose(wallNow());
-      stop = { outcome: 'late', why: late };
+      // The skip, logged with the plan's prices and the price at the skip (the replay report's counterfactual reads it).
+      info.late = { ...late.late, root: c.symbol, at: now().toISOString(), record: rec.id };
+      stop = { outcome: 'late', why: late.message };
       return { stop: stop.why };
     }
     try {
@@ -394,8 +428,9 @@ async function runEntry(deps, c) {
     }
     return { ctx: { args: order.args, verdict: line } };
   };
-  // The latest price before the executor runs: the newest closed 1m bar through the adapter, recorded locally (the gate
-  // reads only local state); a failed read leaves the local bars to decide. The check is the gate's own.
+  // The latest price before the executor runs: the newest closed 1m bar through the adapter, recorded locally (the hook
+  // reads only local state; the gateway reads the broker's bar again at the order); a failed read here leaves the local
+  // bars to decide. The check is the gate's own.
   const lateCheck = async (o, roleEnv) => {
     const root = c.symbol;
     if (client && typeof client.closedBars === 'function') {
@@ -413,7 +448,7 @@ async function runEntry(deps, c) {
     const G = require('./tunables').runner().gate;
     const maxAgeMin = LE.ageLimitOf(config || { signalMaxAgeBars: G.signalMaxAgeBars, signalMaxAgeCeilingMin: G.signalMaxAgeCeilingMin });
     const { readBriefing } = require('./trading/briefing');
-    return LE.lateEntryRefusal({ home, root, side: rec.side, entry: o.plan.entry, stop: o.plan.stopPrice, briefing: readBriefing(home, root), now: now(), share: G.lateEntryDriftShare, maxAgeMin });
+    return LE.lateEntryCheck({ home, root, side: rec.side, entry: o.plan.entry, stop: o.plan.stopPrice, target: o.plan.targetPrice ?? null, briefing: readBriefing(home, root), now: now(), share: G.lateEntryDriftShare, maxAgeMin });
   };
   const sentAt = Date.now();
   let res;

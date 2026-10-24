@@ -34,6 +34,7 @@ const DIRECTION = Object.freeze({
   min_size_guard: 'lower', // one contract may risk up to this many budgets: lower skips sooner
   drawdown_halve_usd: 'lower', // halve the budget this far below the peak: sooner is stricter
   stop_slippage_ticks: 'higher', // a stop's expected slippage counted in the risk: more is stricter
+  min_contracts: 'higher', // the floor of contracts: a higher one skips sooner (never sizes past the budget)
 });
 
 const isMap = x => Boolean(x) && typeof x === 'object' && !Array.isArray(x);

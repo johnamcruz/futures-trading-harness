@@ -57,7 +57,8 @@ description: Use before a trade_lifecycle entry - compose the trade as reads wit
    `setup:trade_lifecycle long|short ...`
    (in an attempt, `setup:prop_portfolio`); `order_plan` gives these and
    refuses a size over code's caps ($300, the broker's max, in an attempt
-   the verdict). No priority order halves a composed trade.
+   the verdict). In an attempt it translates the size to the rulebook's:
+   yours is a suggestion. No priority order halves a composed trade.
 4. **Against the trend**: a true CHoCH read your way at or above its frame
    (15m trend: 15m or 1h; 1h: 1h; 4h: 1h plus `4h rejected <level> up|down`
    your way, a key level, not a gap edge); else the trend rule refuses it.

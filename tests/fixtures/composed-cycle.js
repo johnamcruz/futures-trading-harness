@@ -48,8 +48,20 @@ function expectedPlan(reads, side, ref) {
   return { ref, stop, target, stopTicks: Math.round(Math.abs(ref - stop) / TICK), targetTicks: Math.round(Math.abs(target - ref) / TICK) };
 }
 
-/** The composed cycle on the scenario's bar: the round, the lookups, compose_check, the plan, phase 2, the executor. */
-function composedCycle(w, s, { reads = s.reads, size = 1, result = null, order = null, rationale = null, policy = null } = {}) {
+/** order_plan's place_order arguments in this cycle (its last call's text), or null. */
+function plannedArgs(ctx) {
+  const c = ctx.calls.filter(x => /order_plan$/.test(x.tool)).at(-1);
+  const m = c && /place_order arguments[^:]*: (\{.*\})/.exec(c.text);
+  return m ? JSON.parse(m[1]) : null;
+}
+
+/**
+ * The composed cycle on the scenario's bar: the round, the lookups, compose_check, the plan, phase 2, the executor.
+ * `planned` (inside a policy): phase 2 approves and the executor sends order_plan's own arguments (in a prop attempt its
+ * size is the translated one, prop/size-translate.js, whatever `size` the record suggests).
+ */
+function composedCycle(w, s, { reads = s.reads, size = 1, result = null, order = null, rationale = null, policy = null, planned = false } = {}) {
+  const sized = ctx => (planned && plannedArgs(ctx) ? plannedArgs(ctx).size : size);
   return () => [
     ...D.roundSteps(w, { lookups: roleLookups(w) }),
     ...D.entryLoads(w).map(x => ({ load: x })),
@@ -60,11 +72,11 @@ function composedCycle(w, s, { reads = s.reads, size = 1, result = null, order =
     // Inside a policy (an account's attempt): order_plan sizes the record into the policy's verdict, which the gate reads.
     ...(policy ? [{ harness: 'order_plan', args: ctx => ({ bars: path.join(ctx.env.FTH_BARS_DIR, 'MNQ-3m.json'), symbol: 'MNQ', strategy: policy, side: s.side, accountId: 7 }) }] : []),
     { broker: 'journal_add', args: { kind: 'plan', contractId: 'MNQ', tags: ['setup:trade_lifecycle', 'MNQ'], text: `composed ${s.side}, the ${s.skill} read` } },
-    { role: 'risk-manager', lookups: [], report: () => `Phase 2 on the trade_lifecycle ${s.side} plan for MNQ.\nVERDICT: APPROVE - size ${size}\nFACTS: ${facts(w)}` },
-    { executor: [{ broker: 'place_order', args: () => order || { ...orderOf(s.side, size, expectedPlan(s.reads, s.side, D.m3Of(w).price)), ...(rationale ? { rationale } : {}) } }] },
-    { result: result || `CYCLE RESULT: executed - trade_lifecycle ${s.side} MNQ ${size}` },
+    { role: 'risk-manager', lookups: [], report: ctx => `Phase 2 on the trade_lifecycle ${s.side} plan for MNQ.\nVERDICT: APPROVE - size ${sized(ctx)}\nFACTS: ${facts(w)}` },
+    { executor: [{ broker: 'place_order', args: ctx => order || (planned && plannedArgs(ctx)) || { ...orderOf(s.side, size, expectedPlan(s.reads, s.side, D.m3Of(w).price)), ...(rationale ? { rationale } : {}) } }] },
+    { result: ctx => result || `CYCLE RESULT: executed - trade_lifecycle ${s.side} MNQ ${sized(ctx)}` },
   ];
 }
 
 
-module.exports = { TICK, asReads, priceOf, facts, roleLookups, headLookups, orderOf, expectedPlan, composedCycle };
+module.exports = { TICK, asReads, priceOf, facts, roleLookups, headLookups, orderOf, expectedPlan, plannedArgs, composedCycle };

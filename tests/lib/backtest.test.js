@@ -647,6 +647,29 @@ test('a prop run sizes with the policy strategy\'s own stop_slippage_ticks, as l
   assert.deepStrictEqual(first(testSizing({ stop_slippage_ticks: 3 })), [21, 14]);
 });
 
+test('a prop run never sizes under the rulebook\'s floor (min_contracts), as the live verdict: fewer fit is a skip', () => {
+  const bars = propSeries(40);
+  const { tradingDays } = require('../../scripts/lib/prop/trade-stream');
+  const start = tradingDays([{ bars: bars.map(b => ({ ms: Date.parse(b.t) })) }]).find(d => d >= Date.parse('2026-01-08T00:00:00Z'));
+  // The account allows 2 MNQ at most: a floor of 2 trades at 2; a floor of 3 never trades (never sized up to it).
+  const acct = propAccount({ max_contracts: { MNQ: 2 } });
+  const run = min => runEngine([propMarket(bars)], [propStrategy()], { ...propEngine, account: acct, sizing: testSizing({ min_contracts: min }), start }).trades;
+  assert.ok(run(2).length > 0 && run(2).every(t => t.size === 2), JSON.stringify(run(2).map(t => t.size)));
+  assert.deepStrictEqual(run(3), []);
+  // The first trade at 24 MNQ (a $200 budget, 14-tick stop): a floor of 24 takes it, 25 skips it.
+  const wide = propAccount({ max_contracts: { MNQ: 100 } });
+  const first = min => runEngine([propMarket(bars)], [propStrategy()], { ...propEngine, account: wide, sizing: testSizing({ min_contracts: min }), start }).trades[0];
+  assert.strictEqual(first(24).size, 24);
+  assert.ok(!first(25) || first(25).size >= 25, 'never under the floor');
+  // The live entry's limits where the run states them (prop.limits, as prop/size-translate.js limits it): a $140 cap at
+  // the 14-tick stop all in ((14 + 1) x $0.50 + $0.74 = $8.24 a contract) is floor(140 / 8.24) = 16, under the budget's
+  // 24; the broker's max 6 under that.
+  const limited = (limits, min = 1) => runEngine([propMarket(bars)], [propStrategy()], { ...propEngine, account: wide, sizing: testSizing({ min_contracts: min }), start, prop: { limits } }).trades[0];
+  assert.strictEqual(limited({ capUsd: 140, orderMax: null }).size, 16);
+  assert.strictEqual(limited({ capUsd: 140, orderMax: 6 }).size, 6);
+  assert.ok(!limited({ capUsd: 140, orderMax: 6 }, 7) || limited({ capUsd: 140, orderMax: 6 }, 7).size >= 7, 'under the floor after the limits: never sized up');
+});
+
 test('a prop run folds the rulebook\'s multiplier items in, as the live verdict does: one whose fact it lacks skips every setup', () => {
   // (Moved from the retired backtester prop-run test: the engine computes no facts, so an enforced item fails closed.)
   const bars = propSeries(30);

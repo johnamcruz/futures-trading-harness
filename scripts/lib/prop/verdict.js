@@ -33,10 +33,13 @@ function setupPlan({ account, cs, strategy, symbol, rawBars, spec, scan, specOf 
   const stopTicks = Math.max(1, roundHalfEven(scan.stopDistance / spec.tickSize)); // as the engine
   const z = strategy.sizing || {}; // the rulebook's, every key (combine.sizingErrors): an incomplete one sizes nothing
   const { legs, ratio, mode } = legsFor(account, symbol, specOf, selected);
-  const plan = fraction => combine.contractPlan({
-    dollars: combine.budget(cs, z), room: combine.room(cs), stopTicks, legs, mode: mode || strategy.contracts || 'auto', guard: z.min_size_guard, fraction, ratio, slipTicks: z.stop_slippage_ticks,
+  const args = fraction => ({
+    dollars: combine.budget(cs, z), room: combine.room(cs), stopTicks, legs, mode: mode || strategy.contracts || 'auto', guard: z.min_size_guard, fraction, ratio, slipTicks: z.stop_slippage_ticks, minContracts: z.min_contracts,
   });
-  return { bars, i, tf, closeAt, stopTicks, plan, cp: plan(1), sizing: z };
+  const plan = fraction => combine.contractPlan(args(fraction));
+  // Why the floor (the rulebook's min_contracts) sized nothing at this fraction, or null.
+  const floorWhy = fraction => combine.floorReason(args(fraction));
+  return { bars, i, tf, closeAt, stopTicks, plan, floorWhy, cp: plan(1), sizing: z };
 }
 
 /**
@@ -49,7 +52,7 @@ function setupPlan({ account, cs, strategy, symbol, rawBars, spec, scan, specOf 
  * items are computed from ({ <fact>: { value, at } }); a missing one skips.
  */
 function decideSetup({ account, cs, strategy, component, symbol, contractId, rawBars, spec, scan, now = new Date(), specOf = specFor, selected = null, facts = {} }) {
-  const { bars, i, tf, closeAt, stopTicks, plan, cp, sizing: z } = setupPlan({ account, cs, strategy, symbol, rawBars, spec, scan, specOf, selected });
+  const { bars, i, tf, closeAt, stopTicks, plan, floorWhy, cp, sizing: z } = setupPlan({ account, cs, strategy, symbol, rawBars, spec, scan, specOf, selected });
   const base = {
     at: now.toISOString(), expiresAt: new Date(closeAt.getTime() + tf).toISOString(), strategy: strategy.name, component, symbol, contractId,
     bar: bars[i].t, direction: scan.direction, stopTicks, account: account.name, combine: combine.summary(cs),
@@ -60,11 +63,11 @@ function decideSetup({ account, cs, strategy, component, symbol, contractId, raw
   const fam = familyOf(symbol);
   const noFee = [fam ? fam.micro : symbol, ...(fam ? [fam.mini] : [])].find(x => account.max_contracts && account.max_contracts[x] > 0 && feePerSide(account, x) === null);
   if (noFee) return skip(`no fees_per_side.${noFee} in the ${account.name} profile (ACCOUNT.md): a fee is never assumed, so no size`);
-  if (!cp) return skip(combine.entryBlock(cs) || `the size budget ($${combine.budget(cs, z)}) is below one contract at this stop; with a cushion of $${Math.round(combine.cushion(cs))} the attempt can only trade setups with tighter stops`);
+  if (!cp) return skip(combine.entryBlock(cs) || floorWhy(1) || `the size budget ($${combine.budget(cs, z)}) is below one contract at this stop; with a cushion of $${Math.round(combine.cushion(cs))} the attempt can only trade setups with tighter stops`);
   const { multiplier, why } = ceiling(strategy.multipliers, facts, now);
   if (!(multiplier > 0)) return skip(`the rulebook's enforced items allow no size (${why.join('; ') || 'multiplier 0'})`);
   const sized = multiplier < 1 ? plan(multiplier) : cp;
-  if (!sized) return skip(`at the rulebook's multiplier (${multiplier}) no contract fits`);
+  if (!sized) return skip(`at the rulebook's multiplier (${multiplier}) no contract fits${floorWhy(multiplier) ? `: ${floorWhy(multiplier)}` : ''}`);
   return { ...base, action: 'full', multiplier, contract: sized.root, maxSize: sized.size, riskPerContract: sized.riskPerContract };
 }
 

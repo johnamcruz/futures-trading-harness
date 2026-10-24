@@ -69,12 +69,24 @@ test('entryDue: the latest compose record on the bar decides; it must be OK and 
 
 test('verdictLine and entryOutcome: the line as written; executed on the account or the gateway\'s record, else the gate\'s refusal, else the executor\'s own BLOCKED or ABORTED, else no order', () => {
   assert.strictEqual(E.verdictLine('Phase 2\nVERDICT: VETO - room\nFACTS: x'), 'VERDICT: VETO - room');
-  assert.strictEqual(E.verdictLine('no verdict'), '');
+  assert.strictEqual(E.verdictLine('Phase 2 notes only'), '');
   const label = 'trade_lifecycle long 1 MNQ';
   assert.match(E.entryOutcome({ entered: true, filled: true, label }).result, /^CYCLE RESULT: executed - trade_lifecycle long 1 MNQ \(the runner's entry: phase 2 approved, the order filled\)$/);
   assert.match(E.entryOutcome({ entered: true, label }).result, /the order went\)$/);
   assert.strictEqual(E.entryOutcome({ entered: false, refusal: { checks: ['briefing-age'], message: '[briefing-age] Stale data' }, label }).outcome, 'blocked');
-  assert.match(E.entryOutcome({ entered: false, report: 'ABORTED\nOrderRejected', label }).result, /^CYCLE RESULT: blocked - the trade_lifecycle long 1 MNQ was refused by the broker: ABORTED OrderRejected$/);
+  // ABORTED after its order went (the gate let it through, the broker refused): the broker's refusal.
+  for (const went of [{ allowed: true, sent: true }, { sent: true }, { attempted: true, sent: true }]) {
+    const o = E.entryOutcome({ entered: false, report: 'ABORTED\nOrderRejected', label, ...went });
+    assert.deepStrictEqual([o.outcome, o.result], ['blocked', 'CYCLE RESULT: blocked - the trade_lifecycle long 1 MNQ was refused by the broker: ABORTED OrderRejected'], JSON.stringify(went));
+  }
+  // ABORTED with no order call at all: the executor's own abort, no broker and no gate in it; a no-trade.
+  const aborted = E.entryOutcome({ entered: false, report: 'ABORTED\nThe precondition for an entry is not met.', label });
+  assert.deepStrictEqual([aborted.outcome, aborted.result], ['aborted', 'CYCLE RESULT: no-trade - the trade-executor aborted the trade_lifecycle long 1 MNQ with no order sent (no order call in its run, none in the gate log): ABORTED The precondition for an entry is not met.']);
+  assert.doesNotMatch(aborted.result, /refused/);
+  // The gate's refusal is its own wording.
+  assert.match(E.entryOutcome({ entered: false, refusal: { checks: ['briefing-age'], message: '[briefing-age] Stale data' }, report: 'BLOCKED', label }).result, /^CYCLE RESULT: blocked - the order gate refused the trade_lifecycle long 1 MNQ: \[briefing-age\] Stale data$/);
+  // The decisive line: a heading naming a verdict is never it.
+  assert.strictEqual(E.verdictLine('## Phase 2 verdict: MNQ long\nVERDICT: VETO - room\nFACTS: x'), 'VERDICT: VETO - room');
   assert.match(E.entryOutcome({ entered: false, report: '**BLOCKED**\nBlocked by trading harness', label }).result, /was blocked: /);
   // Its order call went and the account shows nothing: the broker took none, whatever the executor said.
   const took = E.entryOutcome({ entered: false, report: 'EXECUTED (it says)', sent: true, label });
@@ -241,7 +253,7 @@ test('entryOutcome and runEntry: the order went and the account can\'t be read: 
   const o = E.entryOutcome({ entered: false, allowed: true, sent: true, unread: true, report: 'ABORTED\nUnknownError: no answer', label });
   assert.deepStrictEqual([o.outcome, /couldn't be read \(the order went and the account can't be read after it\)/.test(o.result)], ['unknown', true]);
   assert.strictEqual(E.entryOutcome({ entered: false, refusal: { checks: ['x'], message: '[x] no' }, unread: true, label }).outcome, 'blocked');
-  assert.strictEqual(E.entryOutcome({ entered: false, unread: true, report: 'ABORTED\nOrderRejected', label }).outcome, 'blocked', 'no order went: the report stands');
+  assert.strictEqual(E.entryOutcome({ entered: false, unread: true, report: 'ABORTED\nOrderRejected', label }).outcome, 'aborted', 'no order went: the executor\'s own abort');
   const s = setup({ roles: { 'trade-executor': { ok: true, timedOut: false, text: 'ABORTED\nUnknownError: no answer', tools: ['broker_place_order'], output: '' } }, readFails: true });
   const id = require('../../scripts/lib/trading/check-order').cycleId(s.cycle().headEnv);
   fs.writeFileSync(s.deps.env.FTH_GATE_LOG, `${JSON.stringify({ ts: new Date(Date.now() + 5000).toISOString(), source: 'gateway', tool: 'place_order', decision: 'allowed', cycle: id, violations: [] })}\n`);
@@ -273,7 +285,8 @@ test('runEntry: a place_order call made with no gate decision of it and no reply
   const r = await E.runEntry(s.deps, s.cycle());
   assert.deepStrictEqual([r.entry.outcome, /a place_order call was made, its reply never came and the gate log has no decision of it/.test(r.result)], ['unknown', true]);
   const t = setup({ roles: { 'trade-executor': { ok: true, timedOut: false, text: 'ABORTED\nno reply', tools: [], output: JSON.stringify({ type: 'assistant', message: { content: [{ type: 'text', text: 'none' }] } }) } }, state: { positions: [], orders: [] } });
-  assert.strictEqual((await E.runEntry(t.deps, t.cycle())).entry.outcome, 'blocked', 'no call: the report as today');
+  const tr = await E.runEntry(t.deps, t.cycle());
+  assert.deepStrictEqual([tr.entry.outcome, /^CYCLE RESULT: no-trade - the trade-executor aborted /.test(tr.result)], ['aborted', true], 'no call: the executor\'s own abort, a no-trade');
   // A call its harness stopped itself (opencode: an unavailable tool) never reached a tool: no call.
   const stopped = JSON.stringify({ type: 'tool_use', timestamp: 1, sessionID: 's', part: { type: 'tool', tool: 'broker_place_order', state: { status: 'error', input: ARGS, error: 'Model tried to call unavailable tool broker_place_order' } } });
   const v = setup({ roles: { 'trade-executor': { ok: true, timedOut: false, text: '', tools: [], output: stopped } }, state: { positions: [], orders: [] } });
@@ -382,6 +395,26 @@ test('runEntry: an APPROVE line the gate\'s reading takes as a veto stops as vet
   assert.deepStrictEqual([r.entry.phase2.chars, r.entry.phase2.text.length, r.entry.phase2.cut], [long.length, max, true]);
 });
 
+test('runEntry: the trade-executor gets the decisive VERDICT line phase 2 approved on, never a markdown heading naming a verdict (the live smoke: "## Phase 2 verdict: MNQ long ..." handed over, the approved trade lost)', async () => {
+  const p2 = text => ({ roles: { phase2: { ok: true, timedOut: false, text, tools: ['harness_order_plan'], lookups: [], output: '' } } });
+  const FACTS = 'FACTS: window opening drive; trend long allowed';
+  const HEAD = '## Phase 2 verdict: MNQ long, 3m bar closed 11:00 ET (15:00 UTC)';
+  const APPROVE = 'VERDICT: APPROVE - size 5, risk $100';
+  for (const [label, text] of [
+    ['the heading first', `${HEAD}\n\nThe plan checks out.\n${APPROVE}\n${FACTS}`],
+    ['the heading after the line', `${APPROVE}\n${HEAD}\n${FACTS}`],
+    ['two headings', `${HEAD}\n## Verdict check: plan vs briefing\n${APPROVE}\n${FACTS}`],
+  ]) {
+    const s = setup(p2(text));
+    const r = await E.runEntry(s.deps, s.cycle());
+    assert.deepStrictEqual(s.calls.map(c => c.role), ['phase2', 'trade-executor'], label);
+    assert.strictEqual(r.entry.outcome, 'executed', label);
+    assert.ok(s.calls[1].request.includes(`The risk manager's line: ${APPROVE}.`), `${label}: ${s.calls[1].request}`);
+    assert.ok(!s.calls[1].request.includes('## '), `${label}: no heading handed over`);
+    assert.strictEqual(E.verdictLine(text), APPROVE, label);
+  }
+});
+
 test('runEntry: phase 2\'s approved size sets the order: exactly the smaller of it and the record\'s (a cut built by order_plan); no readable size, or order_plan over it, no order', async () => {
   const p2 = text => ({ roles: { phase2: { ok: true, timedOut: false, text, tools: ['harness_order_plan'], lookups: [], output: '' } } });
   const FACTS = 'FACTS: window opening drive; trend long allowed';
@@ -437,6 +470,65 @@ test('runEntry: phase 2\'s approved size sets the order: exactly the smaller of 
   }
 });
 
+test('runEntry in a prop attempt: the record suggests 1, the order is the translated size; phase 2\'s cut to 3 is 3; a cut under the floor (min_contracts) is no trade, nothing sent', async () => {
+  // order_plan's own composed path (lifecycle-order.js composedOrder) on a prop attempt whose policy has a floor of 3:
+  // the record suggests 1; the translation (prop/size-translate.js) is 5 (the $300 cap at 111 ticks, $55.50 a contract).
+  const P = require('../fixtures/lifecycle-prop');
+  const LC = require('../fixtures/lifecycle');
+  const { composedOrder } = require('../../scripts/lib/trading/lifecycle-order');
+  const strategies = P.registry({ sizing: require('../helpers').testSizing({ min_contracts: 3 }) });
+  const real = () => {
+    const { home } = P.propHome({ size: 1 });
+    return a => composedOrder({ home, root: 'MNQ', side: 'long', now: P.NOW, cycleBars: { MNQ: LC.BAR }, strategy: P.LC_DOC, strategies, accounts: [P.MINI], specOf: () => ({ tickSize: 0.25, tickValue: 0.5 }), accountId: 7, selected: ['MNQ'], size: a.size ?? null, approved: a.approved ?? null });
+  };
+  const FACTS = 'FACTS: window opening drive; trend long allowed';
+  const p2 = text => ({ ok: true, timedOut: false, text, tools: ['harness_order_plan'], lookups: [], output: '' });
+  // The runner's home runs the attempt too: the runner reads the translated size before phase 2 (order_plan's path).
+  const run = async (verdict, before = '') => {
+    const s = setup({ roles: { phase2: typeof verdict === 'function' ? (request => p2(`${before}VERDICT: ${verdict(request)}\n${FACTS}`)) : p2(`${before}VERDICT: ${verdict}\n${FACTS}`) }, records: [record({ plan: { ...PLAN, size: 1 } })], plan: real(), market: 21540.25 });
+    require('../../scripts/lib/trading/prop-state').startAttempt(s.home, P.MINI);
+    const r = await E.runEntry(s.deps, s.cycle({ result: 'CYCLE RESULT: planned - trade_lifecycle long 1' }));
+    return { s, r };
+  };
+  // Phase 2's request names the translated 5 as the size to approve; phase 2 approving the size its request names: 5.
+  let { s, r } = await run(request => `APPROVE - size ${/The entry's size is (\d+) MNQ/.exec(request)[1]}, risk $277.50`);
+  assert.match(s.calls[0].request, /The entry's size is 5 MNQ: code's translation of the record's suggested 1 under the account rulebook \(the rulebook's size at this stop: 5 MNQ \(risk.max_risk_usd \$300.00 at \$56.74 a contract all in\)\)\. Approve that size \(your VERDICT line's size 5\), or cut it, never under 3 \(under it: veto instead\); the record's size is a suggestion, never the one to approve\./);
+  assert.deepStrictEqual([r.entry.outcome, r.entry.size], ['executed', { suggested: 1, translated: 5, approved: 5, record: 5, ordered: 5 }]);
+  assert.strictEqual(JSON.parse(/built by the runner from this bar's compose record: (\{.*\})\. Send them as given/.exec(s.calls[1].request)[1]).size, 5);
+  assert.match(s.journal[0].text, /size 5: phase 2 approved the translated 5 \(the record suggested 1\)/);
+  assert.match(r.result, /^CYCLE RESULT: executed - trade_lifecycle long 5 MNQ \(the runner's entry/);
+  // Phase 2's cut to 3: exactly 3.
+  ({ r } = await run('APPROVE - size 3, risk $166.50', 'Size: 3 (cut to 3)\n'));
+  assert.deepStrictEqual([r.entry.outcome, r.entry.size], ['executed', { suggested: 1, translated: 5, approved: 3, record: 5, ordered: 3 }]);
+  assert.match(r.result, /^CYCLE RESULT: executed - trade_lifecycle long 3 MNQ \(phase 2 cut the translated 5\)/);
+  // A cut to 2, or phase 2 echoing the record's 1 although its request named 5: a cut under the floor, no trade,
+  // nothing sent or journaled.
+  for (const n of [2, 1]) {
+    ({ s, r } = await run(`APPROVE - size ${n}, risk $${(55.5 * n).toFixed(2)}`));
+    assert.strictEqual(r.entry.outcome, 'no-trade', String(n));
+    assert.match(r.result, new RegExp(`order_plan refused the composed plan: \\[min-contracts\\] setup:prop_portfolio: size ${n} MNQ is under the floor of 3 contracts`));
+    assert.deepStrictEqual(s.calls.map(c => c.role), ['phase2'], 'no trade-executor run: nothing sent');
+    assert.deepStrictEqual(s.journal, [], 'no plan journaled');
+  }
+});
+
+test('runEntry: the live smoke\'s long (entry 13853.00, stop 13838.75) with the market at 13840.75 (86% of the risk toward the stop) is skipped late, never sent; the skip is logged with the plan\'s prices and the price', async () => {
+  const plan = { strategy: 'trade_lifecycle', side: 'long', contract: 'MNQ', size: 1, entry: 13853, stopPrice: 13838.75, stopTicks: 57, targetPrice: 13895.5, targetTicks: 170, riskUsd: 28.5, record: 'rec0000000000001' };
+  const s = setup({ plan: () => ({ args: { ...ARGS, limitPrice: 13853, stopLossBracket: { ticks: 57, type: 'stop' }, takeProfitBracket: { ticks: 170, type: 'limit' } }, plan }), market: 13840.75 });
+  const r = await E.runEntry(s.deps, s.cycle());
+  assert.strictEqual(r.entry.outcome, 'late');
+  assert.match(r.result, /missed the plan's entry 13853 \(price 13840\.75 is 12\.25 points past it against the long: 86% of the 14\.25-point risk toward the stop, over 0\.25R/);
+  assert.deepStrictEqual(s.calls.map(c => c.role), ['phase2'], 'no trade-executor: nothing sent');
+  const { at, ...late } = r.entry.late;
+  assert.deepStrictEqual(late, { side: 'long', entry: 13853, stop: 13838.75, target: 13895.5, share: 0.25, kind: 'missed-entry', price: 13840.75, closedAt: '2026-10-07T13:57:00.000Z', source: 'runner-entry', movedR: 0.86, root: 'MNQ', record: 'rec0000000000001' });
+  assert.ok(Number.isFinite(Date.parse(at)));
+  // The mirror short (entry 13853.00, stop 13867.25, the market at 13865.25): skipped the same way.
+  const short = { ...plan, side: 'short', stopPrice: 13867.25, targetPrice: 13810.5 };
+  const s2 = setup({ records: [record({ side: 'short' })], plan: () => ({ args: { ...ARGS, side: 'sell', limitPrice: 13853 }, plan: short }), market: 13865.25 });
+  const r2 = await E.runEntry(s2.deps, s2.cycle({ result: 'CYCLE RESULT: planned - trade_lifecycle short 1' }));
+  assert.deepStrictEqual([r2.entry.outcome, r2.entry.late.movedR], ['late', 0.86]);
+});
+
 test('runEntry: phase 2 failing (a timeout, no FACTS line), order_plan refusing, or the plan unjournaled: no executor, logged, a no-trade naming it; a phase 2 that reads no data doesn\'t count', async () => {
   const cases = [
     [{ roles: { phase2: { ok: false, timedOut: true, text: '', tools: [], output: '' } } }, /risk-manager phase 2 timed_out \(timed out\)/, 2],
@@ -462,10 +554,15 @@ test('runEntry: the executor is never run again; its failure, a refusal it repor
   let r = await E.runEntry(s.deps, s.cycle());
   assert.deepStrictEqual(s.calls.map(c => c.role), ['phase2', 'trade-executor']);
   assert.deepStrictEqual([r.entry.outcome, r.result], ['no-trade', 'CYCLE RESULT: no-trade - the runner\'s entry: the trade-executor timed_out (timed out): no order']);
-  // It reports the broker's refusal: blocked.
+  // It reports the broker's refusal of the order it sent (its place_order call completed): blocked, the broker's refusal.
+  s = setup({ roles: { 'trade-executor': { ok: true, timedOut: false, text: 'ABORTED\nOrderRejected', tools: ['broker_place_order'], output: '' } }, state: flat });
+  r = await E.runEntry(s.deps, s.cycle());
+  assert.deepStrictEqual([r.entry.outcome, s.calls.length, /was refused by the broker: ABORTED OrderRejected/.test(r.result)], ['blocked', 2, true], r.result);
+  // The same report with no order call in its run and none in the gate log: the executor's own abort, a no-trade.
   s = setup({ roles: { 'trade-executor': { ok: true, timedOut: false, text: 'ABORTED\nOrderRejected', tools: [], output: '' } }, state: flat });
   r = await E.runEntry(s.deps, s.cycle());
-  assert.deepStrictEqual([r.entry.outcome, s.calls.length], ['blocked', 2]);
+  assert.deepStrictEqual([r.entry.outcome, s.calls.length], ['aborted', 2]);
+  assert.match(r.result, /^CYCLE RESULT: no-trade - the trade-executor aborted the .* with no order sent/);
   // The broker lost the reply but took it (a position shows): executed, never sent again.
   s = setup({ roles: { 'trade-executor': { ok: true, timedOut: false, text: 'ABORTED\nno reply: the outcome is unknown', tools: [], output: '' } } });
   r = await E.runEntry(s.deps, s.cycle());

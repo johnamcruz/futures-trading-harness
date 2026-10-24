@@ -1034,6 +1034,10 @@
    "value": 0.25,
    "from": "new in fix/no-late-entry (a composed entry's adverse drift past its limit, as a share of its stop distance)"
   },
+  "gate.freshPriceTimeoutMs": {
+   "value": 3000,
+   "from": "new in feat/prop-min-contracts (the gateway's wait for the broker's newest bar before a composed entry; a timeout refuses it)"
+  },
   "runner.calendarWarnDays": {
    "value": 30,
    "from": "trading/exchange-calendar.js WARN_DAYS"

@@ -23,6 +23,8 @@ const { entriesSince, entryTime, hasTag, reviewResult, contractRoot, mayBeRoot, 
 const fs = require('fs');
 const { checkStrategyForOrder } = require('./strategies');
 const { propViolations, runningAttempts, latestVerdict, carriedLossState } = require('./prop-state');
+const { translatorFor, allInRisk } = require('../prop/size-translate');
+const { feePerSide } = require('./accounts');
 const { checkTrend } = require('./mtf-state');
 const { checkTrigger, retiredLaneRefusal, retiredLaneRefusalAny, signalMaxAgeMin } = require('./signal-state');
 const { readBriefing } = require('./briefing');
@@ -37,7 +39,7 @@ const { brokerSpecs, contractsFileFor, whyNoSpec, brokerOrderLimit, dayFrontMiss
 const { checkOrderSize, checkRiskLimit } = require('./order-limits');
 const { lockGateRefusal } = require('../account-lock');
 const { composedName, composedRefusal, reversalAllowed } = require('./lifecycle-gate');
-const { lateEntryRefusal, ageLimitOf } = require('./late-entry');
+const { lateEntryCheck, ageLimitOf } = require('./late-entry');
 const GATE = require('../tunables').runner().gate; // config/runner.json: the bracket tolerances (tighten-only)
 
 const RISK_REDUCING = /^\s*\[(exit|protect)\]/i;
@@ -403,7 +405,19 @@ function evaluateOrder({ input = {}, entries = [], now = new Date(), config, bla
   if (composed) {
     const doc = strategies ? strategies.find(x => x.name === composed && x.valid !== false) || null : null;
     // The bar the briefing is on (several lanes: FTH_CYCLE_BRIEFING_BARS over FTH_CYCLE_BARS), as compose_check reads it.
-    composedCheck = composedRefusal({ name: composed, strategy: doc, home: config.home, root: contractRoot(input.contractId), input, now, cycleBars: { ...(config.cycleBars || {}), ...(config.cycleBriefingBars || {}) }, entries, specOf, approvedSize: p2Size() });
+    // Inside a policy (a prop attempt's account layer), the record's size is a suggestion: the order is the translated
+    // size (prop/size-translate.js, the one place), from the policy's latest verdict and the attempt's snapshot, as
+    // order_plan built it; any other size is refused. Only the verdict sized on this record translates it: none (null),
+    // and the [policy] check below refuses the entry.
+    const translate = named && named.signal === 'policy' && named.account && doc ? (plan, spec, stated, rec) => {
+      const v = latestVerdict(config.home, named.name, contractRoot(input.contractId));
+      if (!v || !rec || v.record !== rec.id) return null;
+      return translatorFor({
+        home: config.home, root: contractRoot(input.contractId), policy: named, account: accounts.find(a => a.name === named.account) || null, strategy: doc,
+        verdict: v, specOf, selected: config.selection ? config.selection.symbols : null, orderMax: brokerOrderLimit(contractsFile).maxOrderSize,
+      })(plan, spec, stated);
+    } : null;
+    composedCheck = composedRefusal({ name: composed, strategy: doc, home: config.home, root: contractRoot(input.contractId), input, now, cycleBars: { ...(config.cycleBars || {}), ...(config.cycleBriefingBars || {}) }, entries, specOf, approvedSize: p2Size(), translate });
     // `expired`: the record's time ran out (the cycle-timing count of entries lost to expiry: cycle-timing.js).
     if (composedCheck.message) violations.push({ check: 'composed-reads', message: composedCheck.message, ...(composedCheck.expired ? { expired: true } : {}) });
     // Inside a policy (the prop attempt's account layer): its verdict is the one sized on this very record.
@@ -416,8 +430,9 @@ function evaluateOrder({ input = {}, entries = [], now = new Date(), config, bla
     // it by more than the configured share of the stop distance, it is a pass; no current price, refused (fails closed).
     if (!composedCheck.message) {
       const p = composedCheck.plan;
-      const late = lateEntryRefusal({ home: config.home, root: contractRoot(input.contractId), side: { buy: 'long', sell: 'short' }[String(input.side || '').toLowerCase()], entry: p.entry.price, stop: p.stop.price, briefing: composedCheck.briefing, now, share: GATE.lateEntryDriftShare, maxAgeMin: ageLimitOf(config) });
-      if (late) violations.push({ check: 'late-entry', message: `setup:${composed}: ${late}. Exits, protective stops and stop moves still go.` });
+      const late = lateEntryCheck({ home: config.home, root: contractRoot(input.contractId), side: { buy: 'long', sell: 'short' }[String(input.side || '').toLowerCase()], entry: p.entry.price, stop: p.stop.price, target: p.target.price, briefing: composedCheck.briefing, now, share: GATE.lateEntryDriftShare, maxAgeMin: ageLimitOf(config) });
+      // `late`: the skip as logged (the plan's prices, the price at the skip): the replay report's counterfactual reads it.
+      if (late) violations.push({ check: 'late-entry', message: `setup:${composed}: ${late.message}. Exits, protective stops and stop moves still go.`, late: { ...late.late, record: composedCheck.record ? composedCheck.record.id : null } });
     }
   }
   // D2 (the owner's "CHoCH at or above the trend"): a trade_lifecycle entry against the prevailing trend stands only on
@@ -461,6 +476,22 @@ function evaluateOrder({ input = {}, entries = [], now = new Date(), config, bla
   const stopPrices = [...rationale.matchAll(new RegExp(STOP_PRICE.source, 'gi'))].map(m => Number(m[1].replace(/,/g, '')));
   const riskMsg = checkRiskLimit({ input, stopPrices, strategy: named, specOf });
   if (riskMsg) violations.push({ check: 'max-risk', message: riskMsg });
+  // A composed entry under a policy (setup:prop_portfolio): the composed strategy's own risk.max_risk_usd binds on the
+  // size ordered too (the translation's cap, checked again here: defence in depth).
+  const composedDoc = composed && strategies ? strategies.find(x => x.name === composed && x.valid !== false) || null : null;
+  // Under a policy the cap is measured all in, as the translation sizes it (prop/size-translate.js allInRisk: the stop
+  // plus the rulebook's slippage ticks at the tick value, plus the account's fees both ways, per contract).
+  const composedRisk = !riskMsg && composedDoc && composedDoc !== named ? checkRiskLimit({ input, stopPrices, strategy: composedDoc, specOf }) : null;
+  if (composedRisk) violations.push({ check: 'max-risk', message: composedRisk });
+  else if (!riskMsg && composedDoc && named && named.signal === 'policy' && composedDoc.risk && composedDoc.risk.max_risk_usd > 0) {
+    const spec = specOf(contractRoot(input.contractId));
+    const acct = accounts.find(a => a.name === named.account) || null;
+    const per = spec && acct && input.stopLossBracket ? allInRisk({ stopTicks: Number(input.stopLossBracket.ticks), tickValue: spec.tickValue, slipTicks: named.sizing ? named.sizing.stop_slippage_ticks : null, feePerSide: feePerSide(acct, contractRoot(input.contractId)) }) : NaN;
+    const all = Number(input.size) * per;
+    if (!(all <= composedDoc.risk.max_risk_usd + 1e-9)) {
+      violations.push({ check: 'max-risk', message: `setup:${composed}: ${input.size} ${contractRoot(input.contractId)} risk ${Number.isFinite(all) ? `$${all.toFixed(2)} all in (the stop, a tick of slippage and fees both ways)` : 'an all-in loss that can\'t be worked out'}, over its risk.max_risk_usd $${composedDoc.risk.max_risk_usd}: order_plan gives the size.` });
+    }
+  }
   if (named && named.account) {
     violations.push(...propViolations(config.home, { strategy: named, account: accounts.find(a => a.name === named.account), input, now, entries: dayEntries, journal: entries, specOf, selected: config.selection ? config.selection.symbols : null, strategies }));
   } else {

@@ -21,7 +21,7 @@ const KINDS = {
 const book = (extra = {}) => ({ name: 'acct', description: 'a rulebook for a test account', learned: 'none', daily_loss_soft: 500, loss_streak_stop: 2, ...KINDS, ...extra });
 const errorsOf = (extra, body = BODY) => RB.validateRulebook(book(extra), body, 'acct');
 /** A complete policy entry: every sizing key and the trail stated. */
-const SIZING = { cushion_frac: 0.1, cap_usd: 500, clock_k: 'off', r_per_session: 0.3, min_size_guard: 1.5, drawdown_halve_usd: 'off', stop_slippage_ticks: 1 };
+const SIZING = { cushion_frac: 0.1, cap_usd: 500, clock_k: 'off', r_per_session: 0.3, min_size_guard: 1.5, drawdown_halve_usd: 'off', stop_slippage_ticks: 1, min_contracts: 3 };
 const OFFS = { trail_activate_r: 'off', trail_giveback_r: 'off', lock_giveback_r: 'off', trail_by: 'off', trail_r: 'off', swing_tf: 'off' };
 const ENTRY = { sizing: SIZING, exit: { ...OFFS, mode: 'trail', trail_activate_r: 2, trail_giveback_r: 1 }, multipliers: [] };
 const TARGET = { ...OFFS, mode: 'target' };
@@ -108,12 +108,15 @@ test('validateRulebook: a policy entry states every sizing key, the trail and it
   assert.match(errorsOf(p({ sizing: { ...SIZING, stop_slippage_ticks: 0 } })).join(), /sizing.stop_slippage_ticks: 0 is not ticks, at least 1/);
   assert.match(errorsOf(p({ sizing: { ...SIZING, min_size_guard: -1 } })).join(), /sizing.min_size_guard: -1 is not a multiple of the budget/);
   assert.match(errorsOf(p({ sizing: { ...SIZING, cushion: 0.1 } })).join(), /sizing.cushion: unknown key/);
+  // The floor (min_contracts): a whole number of contracts, 1 or more; 0, a fraction, a negative, text or off refused.
+  for (const v of [0, -1, 2.5, '3', null, true]) assert.match(errorsOf(p({ sizing: { ...SIZING, min_contracts: v } })).join(), /sizing.min_contracts: .* is not a whole number of contracts, 1 or more/, String(v));
+  for (const v of [1, 3, 10]) assert.deepStrictEqual(errorsOf(p({ sizing: { ...SIZING, min_contracts: v } })), [], String(v));
   assert.match(errorsOf(p({ exit: { ...ENTRY.exit, trail_activate_r: 0 } })).join(), /exit.trail_activate_r: 0 is not R above 0, at most 50/);
   assert.match(errorsOf(p({ exit: { ...ENTRY.exit, target_r: 3 } })).join(), /exit.target_r: unknown key/);
   // The bounds at their edges: a trail up to 50R, `off` only where a limit can be off, a policy's name as a strategy's.
   assert.deepStrictEqual(errorsOf(p({ exit: { ...ENTRY.exit, trail_activate_r: 50 } })), []);
   assert.match(errorsOf(p({ exit: { ...ENTRY.exit, trail_activate_r: 51 } })).join(), /exit.trail_activate_r: 51 is not R above 0, at most 50/);
-  for (const k of ['cushion_frac', 'min_size_guard', 'r_per_session', 'stop_slippage_ticks']) {
+  for (const k of ['cushion_frac', 'min_size_guard', 'r_per_session', 'stop_slippage_ticks', 'min_contracts']) {
     assert.match(errorsOf(p({ sizing: { ...SIZING, [k]: 'off' } })).join(), new RegExp(`sizing.${k}: "off" is not`), k);
   }
   for (const name of ['Prop_A', 'prop a', '-prop', '']) {

@@ -23,7 +23,8 @@
     "bracketSpanToleranceTicks": 2,
     "factsMinChecked": 2,
     "factsMaxItems": 20,
-    "lateEntryDriftShare": 0.25
+    "lateEntryDriftShare": 0.25,
+    "freshPriceTimeoutMs": 3000
   },
   "lifecycle": { "maxSize": 100 },
   "account": {

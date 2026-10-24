@@ -44,6 +44,33 @@ test('the sizing verdict says only full or skip; a stop too wide for the budget 
   for (const stop of [1, 2.5, 10, 40, 400, 4000]) assert.ok(['full', 'skip'].includes(decideSetup(args({ scan: { direction: 'long', stopDistance: stop } })).action));
 });
 
+test('the sizing verdict under the rulebook\'s floor (min_contracts): fewer than the floor fit at the stop is a skip that says so, never sized up; the guard never lets one through', () => {
+  const floored = { ...strategy, sizing: testSizing({ min_contracts: 3 }) };
+  // A 40-tick stop: 18 MNQ, over the floor: full as before.
+  assert.deepStrictEqual([decideSetup(args({ strategy: floored })).action, decideSetup(args({ strategy: floored })).maxSize], ['full', 18]);
+  // A 300-tick stop (75 points): 301 x $0.50 + $0.74 = $151.24 a micro, 2 within the $400 budget; 3 would be $453.72.
+  const wide = decideSetup(args({ strategy: floored, scan: { direction: 'long', stopDistance: 75 } }));
+  assert.deepStrictEqual([wide.action, wide.maxSize, wide.multiplier, wide.contract], ['skip', 0, 0, null]);
+  assert.strictEqual(wide.reason, '3 MNQ at this stop risk $453.72, over the $400.00 budget (the rulebook\'s min_contracts 3; 2 MNQ would fit): skip; never a tighter stop');
+  // At a floor of 1 the same stop is full at 2.
+  assert.deepStrictEqual([decideSetup(args({ scan: { direction: 'long', stopDistance: 75 } })).action, decideSetup(args({ scan: { direction: 'long', stopDistance: 75 } })).maxSize], ['full', 2]);
+  // One micro over the budget but within min_size_guard (1.5x): taken at a floor of 1, a skip at 3.
+  // A 220-point stop: 881 x $0.50 + $0.74 = $441.24 a micro, over $400, under $600.
+  const guarded = { direction: 'long', stopDistance: 220 };
+  assert.deepStrictEqual([decideSetup(args({ scan: guarded })).action, decideSetup(args({ scan: guarded })).maxSize], ['full', 1]);
+  const g = decideSetup(args({ strategy: floored, scan: guarded }));
+  assert.strictEqual(g.action, 'skip');
+  assert.match(g.reason, /^3 MNQ at this stop risk \$1323\.72, over the \$400\.00 budget .*1 MNQ would fit\): skip; never a tighter stop$/);
+  // No whole floor in the sizing (no rulebook value): no size (fails closed).
+  const none = decideSetup(args({ strategy: { ...strategy, sizing: testSizing({ min_contracts: undefined }) } }));
+  assert.strictEqual(none.action, 'skip');
+  assert.match(none.reason, /sizing.min_contracts: missing; the policy's rulebook states it \(no code default\)/);
+  for (const min of [0, 2.5]) {
+    const bad = decideSetup(args({ strategy: { ...strategy, sizing: testSizing({ min_contracts: min }) } }));
+    assert.match(bad.reason, new RegExp(`sizing.min_contracts: ${min}; a whole number of contracts, 1 or more`), String(min));
+  }
+});
+
 test('setupPlan: the stop in ticks (half to even, as the engine) and a plan per size fraction', () => {
   const p = setupPlan(args({ scan: { direction: 'long', stopDistance: 10.125 } }));
   assert.strictEqual(p.stopTicks, 40, '40.5 ticks rounds to even');

@@ -27,7 +27,7 @@ const path = require('path');
 const { spawn } = require('child_process');
 const { checkOrder, logDecision, createGatewayClock } = require('./lib/trading/check-order');
 const { DEFAULT_LANE_TIMEOUT_MS, sayCritical, handleClientLine, childCaller, lineSplitter, isLaneCall, blockedResponse, canonicalArgs, closeLedgerEntry, closeRefused, resultJson } = require('./lib/trading/mcp-gateway');
-const { accountFacts, ledgerName, parseToolJson, netPosition, contractNet, evaluateAccount, evaluateAccountChange, barsRequest, regimeGatedStrategy, regimeViolation } = require('./lib/trading/account-gate');
+const { accountFacts, ledgerName, parseToolJson, netPosition, contractNet, evaluateAccount, evaluateAccountChange, barsRequest, regimeGatedStrategy, regimeViolation, freshEntryPrice, freshRefusal } = require('./lib/trading/account-gate');
 const { isRiskReducing, marketClosed, formatBlock } = require('./lib/trading/order-gate');
 const { contractRoot } = require('./lib/trading/journal');
 const { loadStrategies } = require('./lib/trading/strategies');
@@ -119,7 +119,7 @@ function main(argv) {
   };
 
   const check = async (sentArgs, tool, id) => {
-    const args = canon(sentArgs); // one name per contract for the gate and its ledger
+    const args = canon(sentArgs); const fresh = tool === 'place_order' ? await freshEntryPrice(args, caller, { home: loadConfig(process.env).home, now: (await clock.ready()).now(), strategies: loadStrategies(ROOT, process.env).strategies, log: logErr }) : null; // the name; the price at order time
     const base = checkOrder(args, { env: process.env, pluginRoot: ROOT, tool, clock: await clock.ready() });
     if (tool === 'place_order' && base.violations.some(v => v.check === 'config-critical')) return base; // a refused config: no entry
     const now = base.now;
@@ -144,7 +144,7 @@ function main(argv) {
     const violations = [...base.violations, ...extra.violations];
     if (!entry) tracker.annotateExposure(violations, unknown, now);
     if (entry && unknown.length) violations.push(tracker.pendingViolation(unknown, now, lookupFailed));
-    if (entry) violations.push(...await attest.violations(args, (await clock.ready()).replay === true, violations));
+    if (entry) violations.push(...freshRefusal(fresh), ...await attest.violations(args, (await clock.ready()).replay === true, violations));
     // The account reads take time: an entry checked just before the close
     // must still be inside the session when it is sent.
     const late = isRiskReducing(args.rationale) ? null : marketClosed(clock.now(), loadConfig(process.env));

@@ -122,14 +122,16 @@ function childCaller(writeToChild, { timeoutMs = CALL_TIMEOUT_MS, nonce = requir
   let seq = 0;
   const pending = new Map();
   return {
-    call(name, args) {
+    // `opts.timeoutMs`: this call's own wait (a shorter one than the caller's default: the fresh price read).
+    call(name, args, opts = {}) {
       seq += 1;
       const id = `${prefix}${nonce}-${seq}`;
+      const wait = Number.isInteger(opts.timeoutMs) && opts.timeoutMs > 0 ? opts.timeoutMs : timeoutMs;
       return new Promise((resolve, reject) => {
         const timer = setTimeout(() => {
           pending.delete(id);
           reject(new Error(`${name} timed out`));
-        }, timeoutMs);
+        }, wait);
         pending.set(id, { resolve, reject, timer, name });
         writeToChild(JSON.stringify({ jsonrpc: '2.0', id, method: 'tools/call', params: { name, arguments: args } }));
       });
@@ -144,7 +146,8 @@ function childCaller(writeToChild, { timeoutMs = CALL_TIMEOUT_MS, nonce = requir
         return false;
       }
       const p = msg && typeof msg.id === 'string' ? pending.get(msg.id) : null;
-      if (!p) return false;
+      // A late reply to one of this caller's own calls (it timed out): consumed, never shown to the client.
+      if (!p) return Boolean(msg && typeof msg.id === 'string' && msg.id.startsWith(`${prefix}${nonce}-`));
       pending.delete(msg.id);
       clearTimeout(p.timer);
       if (msg.error) p.reject(new Error(`${p.name}: ${msg.error.message || 'error'}`));

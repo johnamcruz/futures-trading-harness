@@ -67,7 +67,7 @@ function withComponents(doc, components = ['fx_break', 'fx_cross']) {
  * 2026-10-14 (a limit turned off says `off`): listPolicies' `from: 'prop_flow_1m'`, for a policy with no cap.
  */
 const FLOW_POLICY = Object.freeze({
-  sizing: Object.freeze({ cushion_frac: 0.2, min_size_guard: 1.5, cap_usd: 'off', drawdown_halve_usd: 'off', stop_slippage_ticks: 1, clock_k: 'off', r_per_session: 0.3 }),
+  sizing: Object.freeze({ cushion_frac: 0.2, min_size_guard: 1.5, cap_usd: 'off', drawdown_halve_usd: 'off', stop_slippage_ticks: 1, clock_k: 'off', r_per_session: 0.3, min_contracts: 1 }),
   exit: Object.freeze({ mode: 'trail', trail_activate_r: 2, trail_giveback_r: 0.5, lock_giveback_r: 'off', trail_by: 'off', trail_r: 'off', swing_tf: 'off' }),
 });
 
@@ -260,7 +260,7 @@ function rootWithPolicies(policies = {}, opts = {}) {
  * A whole sizing for tests that size a prop attempt (combine.js SIZING_KEYS): the code has no default (a policy's
  * rulebook entry holds the real values), so a test states every key. Fixture numbers, not a shipped rulebook's.
  */
-const TEST_SIZING = Object.freeze({ cushion_frac: 0.2, cap_usd: 0, clock_k: 0, r_per_session: 0.3, min_size_guard: 1.5, drawdown_halve_usd: 0, stop_slippage_ticks: 1 });
+const TEST_SIZING = Object.freeze({ cushion_frac: 0.2, cap_usd: 0, clock_k: 0, r_per_session: 0.3, min_size_guard: 1.5, drawdown_halve_usd: 0, stop_slippage_ticks: 1, min_contracts: 1 });
 const testSizing = (extra = {}) => ({ ...TEST_SIZING, ...extra });
 /** A plain backtest's fee per contract per side in tests: a fee is never assumed (no account, no contract-table fee). */
 const TEST_FEE = 0.37;

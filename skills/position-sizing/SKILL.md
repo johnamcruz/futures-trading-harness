@@ -57,8 +57,11 @@ description: Use when sizing a trade plan - risk per contract, the budget, the c
    allows, not what the moment deserves: after a loss, near
    `daily_loss_soft` or one loss short of `loss_streak_stop`, size under it
    or pass on anything marginal (`prop-challenge-pacing`).
+   In a prop attempt, the size you state is a suggestion: code translates it
+   at entry to the rulebook's size (min_contracts and the budget); read the
+   size it returns.
 7. **Half size** wherever the priority order (strategy-library) halves a
-   trade, computed as it says there. Never round a half up. A composed
+   trade, computed as it says there. Never round a half up. In a prop attempt the half is phase 2's cut of the translated size (never under min_contracts). A composed
    trade: `confluence-counting` sizes it, under the caps.
 8. **The arithmetic from `order_plan`** (the `order-plan` skill): steps 2
    and 4 for a compose record (refused over its cap), a policy verdict or a

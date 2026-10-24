@@ -334,8 +334,9 @@ decide whether to trade.
   level the model named.
 - **The fill and the level.** The bracket is in ticks from the fill, and a
   market order fills away from the last close, so the stop could land short
-  of the level. The gate reads only local state (no quote), so it can't
-  measure that at send time. The entry is therefore a limit order at the
+  of the level. The gate reads no quote, so it can't measure the fill at
+  send time (the gateway's newest closed bar, below, judges a late entry,
+  not the fill). The entry is therefore a limit order at the
   entry reference, valid until the record expires (D13): it fills at the
   reference or better, so the stop lands at the level or beyond it.
   `composed-reads` requires `type: limit` with `limitPrice` equal to the
@@ -420,7 +421,39 @@ unchanged: `accounts/<account>/RULEBOOK.md` holds them, the one place (R1).
 Today `prop_portfolio` lists no strategies (`strategies: []`, allowed
 since 2026-10-14: no component, no setup, no verdict, so every entry is
 refused). The model states its size in the record from the sizing skills;
-the verdict is the ceiling and the gate holds the order to it. Code changes
+the verdict is the ceiling and the gate holds the order to it. The floor
+(the owner, 2026-10-23): the rulebook's `sizing.min_contracts` (3) is the
+fewest contracts a prop entry trades, in micro-equivalents (a mini counts as
+its family's ratio). A verdict that fits fewer at the record's stop is a
+skip, and the gate refuses an entry under it (`[min-contracts]`);
+risk-reducing orders always go. In an attempt the record's size is a
+suggestion: the order is the translated size (`prop/size-translate.js`, the
+one place: the largest the verdict, the size budget now, the dollar cap and
+the broker's max allow, never under the floor), which `order_plan` builds and
+the gate's composed-reads check accepts exactly, or phase 2's smaller cut (a
+cut under the floor is no trade). The runner's entry reads the translated size
+before phase 2 and names it in phase 2's request as the size to approve or
+cut. Outside an attempt the record's size stands.
+The entry's freshness (no late entry, `trading/late-entry.js`): one rule,
+the same for a long and a short, in R: the share of the plan's risk (entry
+to stop) the price has moved toward the stop when the order goes. Over
+`gate.lateEntryDriftShare` (config/runner.json, 0.25R, tighten-only) it is
+a pass, never a re-priced order or a shrunk stop; beyond the stop, the setup
+is gone. The price the trade's way past the entry is no refusal (the limit
+rests at the plan's price and expires with its record). The runner checks it
+before the trade-executor runs, and the gateway again at the order, on the
+broker's newest closed 1-minute bar it reads then (`account-gate.js
+freshEntryPrice`, waiting at most `gate.freshPriceTimeoutMs`): a price read
+before the executor's run is minutes old by the order. A read there that
+fails, times out or holds no closed bar refuses the entry (fails closed);
+exits never wait on it past that timeout. Every skip is logged with the plan's prices and the price at the
+skip (the entry record's `late`, the gate log's `late-entry` violation), and
+the replay report counts them with what traded first after each, the plan's
+target or its stop within the skip's trading day, from the bar after the
+skip, on the plan's own prices (a live fill's brackets would sit as far
+from the fill) (`replay/late-skips.js`), so the threshold is tuned from
+data. It applies to composed entries in every mode.
+Code changes
 this needs:
 
 - `strategies.js` (the policy component check after the load) and

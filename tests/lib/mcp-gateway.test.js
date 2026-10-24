@@ -88,6 +88,24 @@ test('childCaller correlates its own responses and leaves others alone', async (
   await assert.rejects(q, /server exited/);
 });
 
+test('childCaller: a call\'s own timeoutMs is its wait (shorter than the default); a late reply to a timed-out call is consumed, never shown to the client', async () => {
+  const sent = [];
+  const caller = childCaller(line => sent.push(JSON.parse(line)), { timeoutMs: 5000, nonce: 'abc' });
+  const t0 = Date.now();
+  await assert.rejects(caller.call('get_bars', {}, { timeoutMs: 30 }), /get_bars timed out/);
+  assert.ok(Date.now() - t0 < 2000, 'the call\'s own 30 ms, not the default 5 s');
+  // Its reply after the timeout: this caller's id, so consumed (true), not passed on to the client.
+  assert.strictEqual(caller.consume(JSON.stringify({ jsonrpc: '2.0', id: sent[0].id, result: { late: 1 } })), true);
+  // Another caller's id, or a client's: not this caller's.
+  assert.strictEqual(caller.consume(JSON.stringify({ jsonrpc: '2.0', id: 'fth-gw-zzz-1', result: {} })), false);
+  assert.strictEqual(caller.consume(JSON.stringify({ jsonrpc: '2.0', id: 'abc-1', result: {} })), false);
+  // A bad timeoutMs falls back to the default.
+  const p = caller.call('x', {}, { timeoutMs: -1 });
+  await new Promise(r => setTimeout(r, 60));
+  assert.strictEqual(caller.consume(JSON.stringify({ jsonrpc: '2.0', id: sent[1].id, result: { ok: 1 } })), true);
+  assert.deepStrictEqual(await p, { ok: 1 });
+});
+
 test('a hung contract lookup outlasts every caller\'s timeout: the caller fails closed first, never a tie of equal timers', async () => {
   const { CALL_TIMEOUT_MS, LOOKUP_TIMEOUT_MS, DEFAULT_LANE_TIMEOUT_MS } = require('../../scripts/lib/trading/mcp-gateway');
   const { DEFAULT_TIMEOUT_MS } = require('../../scripts/lib/broker/mcp-client');

@@ -14,6 +14,7 @@ policies:                       # each policy strategy that trades this account 
       stop_slippage_ticks: 1    # a stop's expected slippage, counted in each contract's risk
       clock_k: off              # pacing: a number k caps the risk at k x what the pass still needs per session left; off: none
       r_per_session: 0.3        # the R a session is expected to make, for clock_k
+      min_contracts: 3          # the floor: fewer micro-equivalents than this (a mini counts as 10) at the stop is a skip
     exit:
       mode: target_then_trail   # target: out at the trade's own target; target_then_trail: past it, trailed; trail: the R trail below, no target
       trail_activate_r: off     # mode trail (or a trail on top of target): hold the stop until this many R ...
@@ -100,6 +101,36 @@ R at `r_per_session`), so a lead slows the attempt and a deficit can't push
 the size past the budget. It is `off` today, and it works the same for the
 composed trade (its verdict and the gate size from these values).
 
+**The floor.** `min_contracts` (the owner's, 2026-10-23: a trade too small
+can't pass in 30 sessions) is the fewest contracts a prop entry trades, in
+micro-equivalents: a mini counts as its family's ratio (10 micros), so in
+`micro` and `auto` mode it is 3 micros and any whole mini clears it. When
+the budget or the room fits fewer at the setup's stop, the verdict is
+`skip` ("3 MNQ at this stop risk $X, over the $Y budget ...: skip; never
+a tighter stop"); the size is never rounded up past the budget. The gate
+refuses an entry below it (`[min-contracts]`); a phase-2 cut below it is no
+trade. Exits,
+protective stops, stop moves, cancels and closes always go. The one-contract
+guard (`min_size_guard`) only matters with a floor of 1: above it, the one
+contract the guard allows is under the floor. The backtester and the attempt
+simulator skip the same setups, so the Monte Carlo is sized as live.
+
+**The size at entry.** In an attempt the size the model states (its compose
+record) is a suggestion: `prop/size-translate.js`, the one place, translates
+it at entry to the correct size from these values alone: the largest the
+verdict, the size budget now, the composed strategy's dollar cap and the
+broker's max order size allow, never under the floor (under it: no trade)
+and never with a tighter stop. `order_plan` builds the order at it, the gate
+accepts exactly it (or phase 2's smaller cut) and refuses any other size.
+The cap is counted all in, as the budget is: a contract's stop plus
+`stop_slippage_ticks` at its tick value, plus the fees both ways. With the
+floor at 3 and the composed $300 cap, a stop wider than 197 ticks on MNQ
+((197 + 1) x $0.50 + $0.74 = $99.74 a contract) or 78 ticks on MES
+((78 + 1) x $1.25 + $0.74 = $99.49) can't be traded: 3 contracts would risk
+over $300 all in, so those setups skip. The run's Monte Carlo
+(prop/model-score.js) sizes with the same limits (the cap, the broker's max
+order size, the contract the run traded).
+
 **Evidence (R3).** Nothing here is learned yet. Each value is today's,
 carried over unchanged when the rulebook was created; the search and the
 calibration (docs/LEARNED-RULEBOOK.md, sections 5 and 6) will replace each
@@ -112,6 +143,7 @@ one with its evidence.
 | `policies.prop_portfolio.sizing` | `prop_portfolio`'s STRATEGY.md | not measured | not measured | not learned |
 | `policies.prop_portfolio.exit` | starting value, not learned; the 30-day Monte Carlo decides between the modes (phase 2) | not measured | not measured | not learned |
 | `policies.prop_portfolio.sizing.clock_k` | starting value, not learned; tuned by the 30-day Monte Carlo (phase 2) | not measured | not measured | not learned |
+| `policies.prop_portfolio.sizing.min_contracts` | the owner's floor (2026-10-23), not learned | not measured | not measured | not learned |
 
 `prop_portfolio` lists no strategies since 2026-10-14 (every rules strategy
 retired, strategies/README.md): it has no setups, so it sizes nothing until

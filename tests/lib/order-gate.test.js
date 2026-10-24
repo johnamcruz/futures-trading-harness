@@ -934,6 +934,77 @@ test('combine: minis and micros, by the policy strategy\'s contract mode', () =>
   assert.match(run('auto', entryOrder({ contractId: NQ, size: 2 }), { contract: 'NQ', maxSize: 1 }).map(v => v.message).join(), /2 NQ is not within/);
 });
 
+test('min-contracts: a prop entry under the rulebook\'s floor is refused (hard, unskippable); at it, it goes; exits and protective stops at any size go', () => {
+  const floored = (min, extra = {}) => propStrategy({ sizing: testSizing({ min_contracts: min }), ...extra });
+  const ev = (input, { strategy = floored(3), balance = 50000, days = [], verdict = {} } = {}) => {
+    const home = trendHome();
+    prop.startAttempt(home, MINI, new Date(NOW.getTime() - (days.length + 1) * 86400000));
+    for (const [day, close] of days) prop.recordEndOfDay(home, MINI, close, day);
+    prop.snapshot(home, MINI, balance, new Date(NOW.getTime() - 60000));
+    prop.appendVerdict(home, {
+      strategy: 'orb', component: 'ema_cross', contractId: CONTRACT, symbol: 'MNQ', contract: 'MNQ', direction: 'long', action: 'full', multiplier: 1, stopTicks: 40,
+      maxSize: 18, bar: BAR, at: '2026-10-07T13:59:30Z', expiresAt: new Date(NOW.getTime() + 120000).toISOString(), ...verdict,
+    });
+    return evaluateOrder({ input, entries: [plan()], now: NOW, config: { ...config, home, skipChecks: new Set(['combine', 'policy', 'strategy', 'min-contracts']) }, strategies: [strategy, EMA_CROSS], accounts: [MINI] }).violations;
+  };
+  for (const size of [1, 2]) {
+    const v = ev(entryOrder({ size }));
+    assert.deepStrictEqual(v.map(x => x.check), ['min-contracts'], JSON.stringify(v));
+    assert.match(v[0].message, new RegExp(`setup:orb: size ${size} MNQ is under the floor of 3 contracts \\(its account's rulebook, sizing.min_contracts\\): trade 3 or more within the size budget, or no trade; never a tighter stop`));
+  }
+  assert.deepStrictEqual(ev(entryOrder({ size: 3 })), []);
+  assert.deepStrictEqual(ev(entryOrder({ size: 18 })), []);
+  // A floor of 1 changes nothing.
+  assert.deepStrictEqual(ev(entryOrder({ size: 1 }), { strategy: floored(1) }), []);
+  // Risk-reducing orders are never held by the floor: an exit, a flatten, a protective stop, at 1 or 2.
+  for (const size of [1, 2]) {
+    for (const rationale of ['[exit] close the long', '[exit] flatten', '[protect] stop for the open long']) {
+      assert.deepStrictEqual(ev(entryOrder({ size, side: 'sell', stopLossBracket: undefined, rationale })), [], `${rationale} ${size}`);
+    }
+  }
+  // Fails closed: a sizing without a whole floor (no rulebook value) refuses, never read as 1.
+  for (const min of [undefined, 0, 2.5, '3', null]) {
+    const v = ev(entryOrder({ size: 18 }), { strategy: floored(min) });
+    assert.match(v.map(x => `[${x.check}] ${x.message}`).join(' '), /\[min-contracts\] setup:orb: its account's rulebook states no sizing.min_contracts .*no entry \(fails closed\)/, String(min));
+  }
+  // A budget that fits fewer than the floor: the budget check names the floor; the entry under it is refused on both.
+  // A $250 cushion (balance $48,250, yesterday's close): 0.2 x $250 = $50, 2 micros at $21.24; 3 would risk $63.72.
+  const thin = ev(entryOrder({ size: 2 }), { balance: 48250, days: [['2026-10-06', 48250]] });
+  assert.deepStrictEqual(thin.map(x => x.check), ['combine', 'min-contracts']);
+  assert.match(thin[0].message, /2 MNQ is not within the account's size budget for a 40-tick stop \(nothing: 3 MNQ at this stop risk \$63\.72, over the \$50\.00 budget \(the rulebook's min_contracts 3; 2 MNQ would fit\): skip; never a tighter stop/);
+  // An entry block (the soft daily limit) and a size under the floor: both refuse, the floor checked whatever the block.
+  const blocked = ev(entryOrder({ size: 2 }), { balance: 49400 });
+  assert.deepStrictEqual(blocked.map(x => x.check), ['combine', 'min-contracts'], JSON.stringify(blocked));
+  assert.match(blocked[0].message, /soft daily limit/);
+  // No size stated: refused, saying so (never "size undefined").
+  const { size: _s, ...noSize } = entryOrder();
+  assert.match(ev(noSize).find(x => x.check === 'min-contracts').message, /setup:orb: no size stated on MNQ; the floor is 3 contracts/);
+  // No account (missing or invalid) on a mini: a refusal, never a throw; the family's ratio counts.
+  const floor3 = floored(3);
+  assert.strictEqual(prop.minContractsRefusal(floor3, null, 'NQ', 1), null, '1 NQ is 10 micro-equivalents');
+  assert.match(prop.minContractsRefusal(floored(12), null, 'NQ', 1), /size 1 NQ is under the floor of 12 contracts \(a NQ counts as 10\)/);
+  // A strategy that trades no account (no attempt's policy) is never held by a floor.
+  const rules = { ...EMA_CROSS, name: 'orb', signal: 'rules' };
+  const free = evaluateOrder({ input: entryOrder({ size: 1 }), entries: [plan()], now: NOW, config: { ...config, home: trendHome() }, strategies: [rules], accounts: [MINI] }).violations;
+  assert.ok(!free.some(x => x.check === 'min-contracts'), JSON.stringify(free));
+});
+
+test('min-contracts: counted in micro-equivalents - a mini counts as its family\'s ratio, so 1 NQ clears a floor of 3 and not one of 12', () => {
+  const acct = { ...MINI, max_contracts: { MNQ: 50, NQ: 5 }, fees_per_side: { MNQ: 0.37, NQ: 1.4 } };
+  const run = (min, input, verdict) => {
+    const home = trendHome();
+    prop.startAttempt(home, acct, new Date(NOW.getTime() - 86400000));
+    prop.snapshot(home, acct, 50000, new Date(NOW.getTime() - 60000));
+    prop.appendVerdict(home, { bar: BAR, strategy: 'orb', component: 'ema_cross', contractId: CONTRACT, direction: 'long', action: 'full', multiplier: 1, stopTicks: 40, at: new Date(NOW.getTime() - 30000).toISOString(), expiresAt: new Date(NOW.getTime() + 60000).toISOString(), ...verdict });
+    return evaluateOrder({ input, entries: [plan(5, { contractId: input.contractId })], now: NOW, config: { ...config, home }, strategies: [propStrategy({ contracts: 'mini', sizing: testSizing({ min_contracts: min }) }), EMA_CROSS], accounts: [acct] }).violations;
+  };
+  assert.deepStrictEqual(run(3, entryOrder({ contractId: 'NQ', size: 1 }), { contract: 'NQ', maxSize: 1 }), []);
+  // A floor of 12 micros: 1 NQ (10) is under it, and the budget's 1 NQ is too, so it sizes nothing.
+  const v = run(12, entryOrder({ contractId: 'NQ', size: 1 }), { contract: 'NQ', maxSize: 1 });
+  assert.match(v.find(x => x.check === 'min-contracts').message, /size 1 NQ is under the floor of 12 contracts \(a NQ counts as 10\)/);
+  assert.match(v.find(x => x.check === 'combine').message, /1 NQ is not within the account's size budget .*\(nothing/);
+});
+
 test('combine: a selected leg is the only one a policy strategy trades and is sized in, whatever its contract mode', () => {
   // As above: $400 budget, a 40-tick stop. MNQ selected: 18 MNQ under auto (never 1 NQ); NQ selected: 1 NQ under micro.
   const acct = { ...MINI, max_contracts: { MNQ: 50, NQ: 5 }, fees_per_side: { MNQ: 0.37, NQ: 1.4 } };
@@ -3068,7 +3139,7 @@ test('trade_lifecycle, no late entry ([late-entry], late-entry.js): the latest l
   const late = r => r.violations.filter(v => v.check === 'late-entry').map(v => v.message);
   assert.deepStrictEqual(checks(at(21512.5)), ['late-entry'], 'at the stop');
   assert.match(late(at(21500))[0], /^setup:trade_lifecycle: the setup was invalidated before the order went \(price 21500 beyond the plan's stop 21512\.5\): no late entry \(the runner-entry price at 2026-10-07T14:00:00\.000Z\)\. Pass; the next bar composes on its own facts\. Exits, protective stops and stop moves still go\.$/);
-  assert.match(late(at(21533.25))[0], /missed the plan's entry 21540\.25 \(price 21533\.25 is 7 points past it against the long, over 0\.25 of the 27\.75-point stop\)/);
+  assert.match(late(at(21533.25))[0], /missed the plan's entry 21540\.25 \(price 21533\.25 is 7 points past it against the long: 25% of the 27\.75-point risk toward the stop, over 0\.25R/);
   assert.deepStrictEqual(at(21533.5).violations, [], '6.75 points: within the share');
   assert.deepStrictEqual(at(21570).violations, [], 'the trade\'s way: the limit rests at the plan\'s price');
   // Not skippable.
@@ -3523,23 +3594,67 @@ test('trade_lifecycle in an attempt: setup:prop_portfolio on the record\'s verdi
   assert.ok(checks(lcPropEval(home, args)).includes('composed-reads'));
 });
 
-test('trade_lifecycle in an attempt: over the verdict\'s size is refused even when the record states it; a verdict not sized on this record is refused', () => {
-  // The record states 4 ($222.00, under $300); a $1,000 cushion's verdict sized it at 3: the gate refuses 4.
+test('trade_lifecycle in an attempt: the record\'s size is a suggestion: the translated size goes, the record\'s and any other are refused; a verdict not sized on this record is refused', () => {
+  // The record suggests 4 ($222.00, under $300); a $1,000 cushion's verdict sized it at 3: the gate refuses 4 (the
+  // record's, over the verdict and not the translated 3) and takes 3.
   const { home, rec } = LCP.propHome({ size: 4, account: LCP.THIN });
   require('../../scripts/lib/prop/composed-verdict').composedVerdict({ home, policy: LCP.policy(), component: 'trade_lifecycle', account: LCP.THIN, record: rec, plan: rec.plan, briefing: LC.briefing(), root: 'MNQ', spec: lcSpec('MNQ'), specOf: lcSpec, now: LCP.NOW });
   const four = LC.order({ accountId: 1, size: 4, rationale: 'setup:prop_portfolio long trade_lifecycle, stop 21512.50, target 21598.00' });
   const r = lcPropEval(home, four, { accounts: [LCP.THIN] });
   assert.ok(checks(r).includes('policy') && checks(r).includes('combine'), JSON.stringify(r.violations));
   assert.ok(r.violations.some(v => /size 4 is over the verdict's 3 MNQ/.test(v.message)));
-  assert.ok(!checks(r).includes('composed-reads'), 'the size is the record\'s');
+  assert.match(r.violations.find(v => v.check === 'composed-reads').message, /size 4 is not the translated size 3 \(the rulebook's size at this stop: 3 MNQ \(the verdict's 3, the size budget's 3\); the record suggested 4\): order_plan gives it/);
+  assert.deepStrictEqual(lcPropEval(home, { ...four, size: 3 }, { accounts: [LCP.THIN] }).violations, [], 'the translated size goes');
+  assert.deepStrictEqual(checks(lcPropEval(home, { ...four, size: 2 }, { accounts: [LCP.THIN] })), ['composed-reads'], 'any other size is refused');
   // A verdict sized on another record (the same bar and stop): refused.
   const p = LCP.propHome({ size: 2 });
   prop.appendVerdict(p.home, { strategy: 'prop_portfolio', component: 'trade_lifecycle', contract: 'MNQ', contractId: 'MNQ', symbol: 'MNQ', direction: 'long', action: 'full', multiplier: 1, stopTicks: 111, maxSize: 7, bar: LC.BAR, at: '2026-10-07T13:59:55Z', expiresAt: '2026-10-07T14:06:00Z', record: 'another' });
-  const two = lcPropEval(p.home, LC.order({ accountId: 1, size: 2, rationale: 'setup:prop_portfolio long trade_lifecycle, stop 21512.50, target 21598.00' }));
+  // (the translated 5: the $300 cap at $55.50, the other record's verdict at 7)
+  const two = lcPropEval(p.home, LC.order({ accountId: 1, size: 5, rationale: 'setup:prop_portfolio long trade_lifecycle, stop 21512.50, target 21598.00' }));
   assert.deepStrictEqual(checks(two), ['policy']);
+  // Only this record's verdict translates it: any size on another record's verdict is refused on the verdict ([policy]) alone.
+  assert.deepStrictEqual(checks(lcPropEval(p.home, LC.order({ accountId: 1, size: 2, rationale: 'setup:prop_portfolio long trade_lifecycle, stop 21512.50, target 21598.00' }))), ['policy']);
   assert.match(two.violations[0].message, /the latest verdict is not the one sized on the compose record/);
   // An exit under the policy goes with nothing.
   assert.deepStrictEqual(lcPropEval(trendHome(), { accountId: 1, contractId: 'MNQ', side: 'sell', type: 'market', size: 2, rationale: '[exit] flatten the prop_portfolio long' }).violations, []);
+});
+
+test('trade_lifecycle in an attempt: the model\'s raw 1 is refused and order_plan\'s translated size (the rulebook\'s) goes; phase 2\'s cut under the floor refuses; a skip refuses every size; stage 1 is unchanged', () => {
+  // The record suggests 1; the $400 budget's verdict is 7, the $300 cap 5 (all in: (111 + 1) x $0.50 + $0.74 = $56.74 a
+  // contract, floor(300 / 56.74) = 5): the order is 5.
+  const { home } = LCP.propHome({ size: 1 });
+  const args = lcPropPlan(home);
+  assert.strictEqual(args.size, 5);
+  assert.deepStrictEqual(lcPropEval(home, args).violations, []);
+  const one = lcPropEval(home, { ...args, size: 1 });
+  assert.deepStrictEqual(checks(one), ['composed-reads']);
+  assert.match(one.violations[0].message, /size 1 is not the translated size 5 \(the rulebook's size at this stop: 5 MNQ \(risk.max_risk_usd \$300.00 at \$56.74 a contract all in\); the record suggested 1\)/);
+  for (const size of [4, 6, 7]) assert.ok(checks(lcPropEval(home, { ...args, size })).includes('composed-reads'), String(size));
+  // Over the composed $300 cap (6 x $55.50 = $333): the gate's own max-risk check refuses it too (the composed strategy's cap, not the policy's).
+  assert.match(lcPropEval(home, { ...args, size: 6 }).violations.find(v => v.check === 'max-risk').message, /setup:trade_lifecycle/);
+  assert.ok(!checks(lcPropEval(home, args)).includes('max-risk'), 'the translated 5 is under it');
+  // The cap all in under a policy: 27 at a 22-tick stop is $297 at the stop alone, but (22 + 1) x $0.50 + $0.74 = $12.24 a
+  // contract all in: $330.48, over $300: refused ([max-risk], whatever else refuses it); 24 ($293.76) is not.
+  const at22 = n => lcPropEval(home, { ...args, size: n, stopLossBracket: { ticks: 22, type: 'stop' }, rationale: 'setup:prop_portfolio long trade_lifecycle' }).violations.filter(v => v.check === 'max-risk');
+  assert.match(at22(27).map(v => v.message).join(), /27 MNQ risk \$330\.48 all in \(the stop, a tick of slippage and fees both ways\), over its risk.max_risk_usd \$300/);
+  assert.deepStrictEqual(at22(24), []);
+  // A floor of 3: phase 2's approved 2 (its cut) is under it: refused on the floor; 3 goes.
+  const floored = LCP.registry({ sizing: testSizing({ min_contracts: 3 }) });
+  const f3 = LCP.propHome({ size: 1 });
+  const fargs = composedOrder({ home: f3.home, root: 'MNQ', side: 'long', now: LCP.NOW, cycleBars: { MNQ: LC.BAR }, strategy: LCP.LC_DOC, strategies: floored, accounts: [LCP.MINI], specOf: lcSpec, accountId: 1, selected: ['MNQ'], approved: 3 }).args;
+  assert.strictEqual(fargs.size, 3);
+  assert.ok(checks(lcPropEval(f3.home, { ...fargs, size: 2 }, { registry: floored })).includes('min-contracts'));
+  // A skip (the verdict on this record says skip): every size refused by composed-reads, with the reason.
+  const sk = LCP.propHome({ size: 3 });
+  const a3 = lcPropPlan(sk.home);
+  const v = prop.latestVerdict(sk.home, 'prop_portfolio', 'MNQ');
+  prop.appendVerdict(sk.home, { ...v, action: 'skip', maxSize: 0, multiplier: 0, reason: 'cushion' });
+  assert.match(lcPropEval(sk.home, a3).violations.find(x => x.check === 'composed-reads').message, /no size: prop_portfolio skipped the setup \(cushion\)/);
+  // Stage 1 (no attempt, setup:trade_lifecycle): no translation, the record's own size, as before.
+  const free = trendHome();
+  LC.writeScenario(free, { size: 1 });
+  const ev1 = composedOrder({ home: free, root: 'MNQ', side: 'long', now: LCP.NOW, cycleBars: { MNQ: LC.BAR }, strategy: LCP.LC_DOC, strategies: [LCP.LC_DOC], accounts: [], specOf: lcSpec, accountId: 1, selected: ['MNQ'] });
+  assert.deepStrictEqual([ev1.args.size, 'translatedSize' in ev1.plan], [1, false]);
 });
 
 test('trade_lifecycle: modify_order never reprices a working composed entry worse than its record\'s entry; better, stops, targets and exits move freely', () => {

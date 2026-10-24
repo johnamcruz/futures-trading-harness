@@ -479,6 +479,20 @@ isn't the policy's. Narrower sessions are fine.
 The combine block is in both run hashes. The preflight's `combine` check shows
 the account, `maxSessions` and every attempt's window.
 
+Each attempt's entries are sized as live: the policy's verdict from the
+account's rulebook, never under its floor (`sizing.min_contracts`, in
+micro-equivalents: a mini counts as its family's ratio). A setup that fits
+fewer at its stop is a skip, and the gate refuses an entry under it
+(`[min-contracts]`). The size the model states is a suggestion: the order
+is the translated size (`prop/size-translate.js`: the largest the verdict,
+the budget, the composed cap and the broker's max order size allow), in a
+combine run as live. The run's prop Monte Carlo (`prop/model-score.js`)
+sizes its attempt simulator the same way: the rulebook's sizing and floor,
+then the composed cap and the broker's max order size recorded in the run's
+home (`prop/size-translate.js limitPlan`), in the contract the run traded
+(its runner's symbols). A backtest applies those limits only when its run
+config states them (`prop.limits`).
+
 What the run does:
 
 1. **Each attempt is a real combine from zero.** Before its first step, with

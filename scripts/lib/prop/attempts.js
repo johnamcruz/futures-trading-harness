@@ -30,18 +30,24 @@ const { loadConfig } = require('../trading/config');
 const { tradingDayStart } = require('../trading/clock');
 const { trailStep } = require('../trading/trail');
 const { SWING_TFS, afterTargetStep } = require('../trading/exit-trail');
+const { limitPlan } = require('./size-translate');
 
 const round6 = x => Math.round(x * 1e6) / 1e6;
 
 /** The verdict today: every setup the budget sizes is `full` (verdict.js); the rulebook's multiplier replaces it. */
 const fullVerdict = () => 1;
 
-/** Today's sizing (verdict.js, the engine, the gate): combine.contractPlan from the budget and the room. */
-function defaultSize({ cs, trade, sizing, legs, mode, ratio, fraction }) {
-  return combine.contractPlan({
+/**
+ * Today's sizing (verdict.js, the engine, the gate): combine.contractPlan from the budget and the room, then the live
+ * entry's limits over it (prop/size-translate.js limitPlan, as translateSize: the composed strategy's risk.max_risk_usd
+ * and the broker's max order size; `limits` null: none) and the floor again.
+ */
+function defaultSize({ cs, trade, sizing, legs, mode, ratio, fraction, limits = null }) {
+  const plan = combine.contractPlan({
     dollars: combine.budget(cs, sizing), room: combine.room(cs), stopTicks: trade.stopTicks, legs, mode,
-    guard: sizing.min_size_guard, fraction, ratio, slipTicks: sizing.stop_slippage_ticks,
+    guard: sizing.min_size_guard, fraction, ratio, slipTicks: sizing.stop_slippage_ticks, minContracts: sizing.min_contracts,
   });
+  return limitPlan(plan, { limits, minContracts: sizing.min_contracts, ratio, miniRoot: legs.mini ? legs.mini.root : null });
 }
 
 /**
@@ -114,7 +120,7 @@ function gateRefusal(gate, day, t) {
  * Returns { status, sessions, profit, taken, skipped }.
  */
 function runAttempt(days, ctx) {
-  const { account, sizing, size = defaultSize, multiplier = fullVerdict, mode = 'auto', legsOf, maxDailyLoss = 0, variant = null, outageDay = null, onDay = null, onTrade = null, onSkip = null } = ctx;
+  const { account, sizing, size = defaultSize, multiplier = fullVerdict, mode = 'auto', legsOf, maxDailyLoss = 0, variant = null, outageDay = null, onDay = null, onTrade = null, onSkip = null, limits = null } = ctx;
   const gate = ctx.gate === undefined ? gateLimits() : ctx.gate;
   let cs = combine.start(account);
   let taken = 0;
@@ -141,7 +147,7 @@ function runAttempt(days, ctx) {
       const m = Number(multiplier(t0, { cs, counters: counters() }));
       if (!(m > 0)) { skip(t0, 'multiplier'); continue; }
       const { legs, ratio } = legsOf(t0);
-      const plan = size({ cs, trade: t0, sizing, legs, mode, ratio, fraction: Math.min(1, m) });
+      const plan = size({ cs, trade: t0, sizing, legs, mode, ratio, fraction: Math.min(1, m), limits });
       if (!plan || !(plan.size >= 1)) { skip(t0, 'no-size'); continue; }
       const before = cs;
       const counted = counters();

@@ -8,10 +8,10 @@
  *
  *   SMOKE_MODEL_SCRIPT  a JSON file { bars: { "<bar open time>": step } }, the bar the cycle decides (FTH_CYCLE_BARS) its key;
  *                       a bar with no step is a quiet one: the model answers at once. A step is one of
- *       { do: 'compose', scenario: { side, skill, reads: [[step, skill, read], ...] }, size, order?, rationale?, policy?, result? }   the composed
+ *       { do: 'compose', scenario: { side, skill, reads: [[step, skill, read], ...] }, size, order?, rationale?, policy?, planned?, result? }   the composed
  *            entry (composed-cycle.js); `order`: place_order's arguments instead of the plan's, `rationale` the plan order's, `policy` the
- *            policy strategy whose order_plan sizes it (an attempt's account layer)
- *       { do: 'exit', side, review? }             closes the position with a market order (manage-position); review:
+ *            policy strategy whose order_plan sizes it (an attempt's account layer), `planned` phase 2 and the order at order_plan's size
+ *       { do: 'exit', side, size?, review? }      closes the position (size: its size, 'position' the broker's, 1 by default) with a market order; review:
  *                                                 { result, setup, r? }, the trade's review journaled after it
  *       { do: 'pass', why }                       the model reads the bar (the roles' round) and passes
  */
@@ -24,17 +24,32 @@ function stepsFor(script, bar, w) {
   const C = require('./composed-cycle');
   const step = (script.bars || {})[bar];
   if (step.do === 'compose') {
-    const cycle = C.composedCycle(w, step.scenario, { size: step.size || 1, order: step.order || null, rationale: step.rationale || null, policy: step.policy || null, result: step.result || null });
+    const cycle = C.composedCycle(w, step.scenario, { size: step.size || 1, order: step.order || null, rationale: step.rationale || null, policy: step.policy || null, result: step.result || null, planned: Boolean(step.planned) });
     // A live cycle takes minutes before its order; the replay broker's clock moves in ticks of a second (latency.js TICK_MS),
     // so a scripted one waits for a tick: the order fills after the compose record it follows, as the experience log reads it.
     const steps = cycle();
     steps.splice(steps.findIndex(s => s.executor), 0, { act: () => new Promise(resolve => setTimeout(resolve, 900)) });
     return steps;
   }
+  if (step.do === 'plan') {
+    // The head trader composes and says planned: the runner's entry runs phase 2 and the trade-executor (roleScript).
+    const steps = C.composedCycle(w, step.scenario, { size: step.size || 1 })();
+    const at = steps.findIndex(s => s.harness === 'compose_check');
+    return [...steps.slice(0, at + 1), { result: `CYCLE RESULT: planned - trade_lifecycle ${step.scenario.side} ${step.size || 1}` }];
+  }
   if (step.do === 'exit') {
     const side = step.side === 'long' ? 'sell' : 'buy';
+    // size 'position': the open position's own size, read from the broker first (an entry the code sized).
+    const held = ctx => {
+      const c = ctx.calls.filter(x => x.tool === 'list_open_positions').at(-1);
+      let list = [];
+      try { list = JSON.parse(c.text); } catch (_err) { /* none */ }
+      const p = (Array.isArray(list) ? list : list.positions || []).find(x => /MNQ/.test(String(x.contractId)));
+      return p ? Math.abs(p.size) : 1;
+    };
     return [
-      { executor: [{ broker: 'place_order', args: { accountId: 7, contractId: 'MNQ', side, type: 'market', size: 1, rationale: '[exit] the composed trade out' } }] },
+      ...(step.size === 'position' ? [{ broker: 'list_open_positions', args: { accountId: 7 } }] : []),
+      { executor: [{ broker: 'place_order', args: ctx => ({ accountId: 7, contractId: 'MNQ', side, type: 'market', size: step.size === 'position' ? held(ctx) : step.size || 1, rationale: '[exit] the composed trade out' }) }] },
       // `review`: the trade's review journaled after it (its result and setup tags), as the head trader writes one.
       ...(step.review ? [{ broker: 'journal_add', args: { kind: 'review', contractId: 'MNQ', tags: [`result:${step.review.result}`, `setup:${step.review.setup}`, ...(step.review.r !== undefined ? [`r:${step.review.r}`] : [])], text: `${step.side} out: ${step.review.result}` } }] : []),
       { result: 'CYCLE RESULT: managed - out' },
@@ -54,10 +69,49 @@ function roleRun(role) {
   ev('text', { type: 'text', text: risk ? '## Risk state: account 7 @ the bar\nTradable: yes' : `## ${role}: MNQ\nData: bar_briefing m3@the bar\nBias: neutral`, time: { start: Date.now(), end: Date.now() } });
 }
 
+/**
+ * The runner's entry roles (runner-entry.js), each its own run: risk-manager phase 2 approves the size its request
+ * names ("The entry's size is <n>": in a prop attempt code's translation; else the record's), and the trade-executor
+ * sends the place_order arguments its request gives, once. Null: not one of them (a desk run: roleRun).
+ */
+function roleScript(role, prompt, w) {
+  const C = require('./composed-cycle');
+  if (role === 'risk-manager' && /^Phase 2, plan verdict/.test(prompt)) {
+    const named = /The entry's size is (\d+) /.exec(prompt) || /size (\d+) risking/.exec(prompt);
+    const side = (/trade_lifecycle (long|short)/.exec(prompt) || [])[1] || 'long';
+    const bars = (/are in (\S+) \(get_bars format\)/.exec(prompt) || [])[1];
+    return [
+      { harness: 'bar_briefing', args: { symbol: 'MNQ', json: true } },
+      ...(bars ? [{ harness: 'order_plan', args: { bars, symbol: 'MNQ', strategy: 'trade_lifecycle', side, accountId: 7 } }] : []),
+      { result: () => `Phase 2 on the trade_lifecycle ${side} plan for MNQ.\nVERDICT: APPROVE - size ${named ? named[1] : 1}, the composed ${side}\nFACTS: ${C.facts(w)}` },
+    ];
+  }
+  if (role === 'trade-executor') {
+    const m = /built by the runner from this bar's compose record: (\{.*\})\. Send them as given/.exec(prompt);
+    if (!m) return null;
+    return [
+      { broker: 'get_account_snapshot', args: { accountId: 7 } },
+      // The replay broker's clock moves in ticks of a second: the order fills after the compose record it follows (as
+      // the head trader's own cycle waits, stepsFor above).
+      { act: () => new Promise(resolve => setTimeout(resolve, 900)) },
+      { broker: 'place_order', args: JSON.parse(m[1]) },
+      { result: ctx => { const c = ctx.calls.filter(x => x.tool === 'place_order').at(-1); return c && c.ok ? `EXECUTED\nOrders: ${c.text.slice(0, 120)}` : `BLOCKED\n${c ? c.text.slice(0, 600) : 'no reply'}`; } },
+    ];
+  }
+  return null;
+}
+
 async function main() {
   const env = process.env;
   const agent = process.argv[process.argv.indexOf('--agent') + 1];
-  if (process.argv.includes('--agent') && agent && agent !== 'fth-head-trader') { roleRun(agent); return; }
+  if (process.argv.includes('--agent') && agent && agent !== 'fth-head-trader') {
+    const w = { home: env.FTH_HOME, env, mode: env.FTH_ROLE_SKILLS === 'full' ? 'full' : 'index' };
+    const steps = roleScript(agent, process.argv[process.argv.length - 1], w);
+    if (!steps) { roleRun(agent); return; }
+    const model = require('./scripted-model').scriptedModel(() => steps);
+    await model(process.argv.slice(2), { env, liveFile: null, stream: line => process.stdout.write(line) });
+    return;
+  }
   const script = JSON.parse(fs.readFileSync(env.SMOKE_MODEL_SCRIPT, 'utf8'));
   const bar = (JSON.parse(env.FTH_CYCLE_BARS || '{}')).MNQ || null;
   // A bar with no step is quiet: the model answers at once, as opencode prints a final message (nothing else loads).
