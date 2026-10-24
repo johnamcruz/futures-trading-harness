@@ -474,12 +474,17 @@ regression day):
   catch window (its first `catchShare`, the span a catch counts in), clipped
   to the runner's sessions. Legs whose windows touch merge into one window.
 - **Control windows**: `controlPerLeg` (1) windows a leg, of the same
-  length, in the same session, sharing no bar with any census leg's window
-  that day (the batch's or not) or another window, chosen by the loop's
-  seed. They give the screen the entries made where there is nothing to
-  catch.
+  length, in the same session, sharing no bar with any census leg that day
+  (the batch's or not, from its lead-in to its end, its tail past the catch
+  window included) or another window, chosen by the loop's seed. They give
+  the screen the entries made where there is nothing to catch.
 - **Management**: a position or working order still open after a window is
   managed bar by bar until flat, and every window day's end of day runs.
+- **Nothing left out silently**: a leg or control with no window (outside
+  the runner's sessions, an exchange holiday, no free stretch) and a day
+  with no window at all (never run) are listed in the round's
+  `probe-report.json` (`trend.windows`) and in the log. A regression day the
+  census holds no leg on would never run, so the config refuses it.
 
 The run's replay config carries the windows (`stepWindows`,
 `scripts/lib/replay/step-windows.js`); the driver steps them with the curated
@@ -522,7 +527,13 @@ confirm half's capture rate (with a Wilson interval at the keep rule's
 level) and net R per window, as the champion after that round's keep
 stands (the kept change's numbers when one was kept). The point reads only
 the windows the champion stepped to their end, the screens' own guard: a
-window it left early adds no leg, no R and no first try. Beside it are the
+window it left early adds no leg, no R and no first try. Each point
+carries its unit (`unit: "window"`), and only window points pool or judge
+the plateau: a point from before the stepped windows (whole sessions, no
+unit) stays in the record, flagged (`excluded`), and never pools. A loop
+started before this change has whole-session rounds and a different trend
+set (its loop hash differs): start it again as a new loop (a new `loopId`).
+Beside it are the
 round's first-try read accuracy, first-try compose OK rate and hint-rescue
 rate (OK only after a hint), and, with `trend.moments` (the curated scan's
 moments file), the **selection value** (`scripts/lib/train/selection.js`).
@@ -564,20 +575,24 @@ and leg ids; the lessons lines record the batch too.
   stepped windows. Legs are paired by id: caught or not, a one-sided McNemar
   test. A catch counts as fixed only when its window's net R got no worse,
   so catching more by trading more and losing more never gains. Net R is per
-  window: each round trip goes to the window it followed (a trade closed
-  while managing after a window, or at the day's end of day, is that
-  window's), and the control windows carry the entries made where there was
-  no leg. Harms are fewer legs caught, net R per window worse (on at least
+  window: each round trip goes to the window it was opened in (by its
+  opening fill's time), so a trade opened in a leg window and closed during
+  the next window, while managing, or at the day's end of day stays the leg
+  window's; one whose opening isn't known goes to the window its close
+  followed. The control windows carry the entries made where there was no
+  leg. Harms are fewer legs caught, net R per window worse (on at least
   `minPairs` windows), first tries worse and a blow. These use the `SCREEN`
   thresholds above, and they mean what they meant per session: a looser
   rule's losses show on the control windows as they showed on the days with
   nothing to catch. On the regression days fewer of the champion's legs
   caught, net, is a harm. They never show a gain.
 - **Finished windows only.** A window pairs only when both runs stepped it
-  to its end (a record at or after its last bar, the day's end of day
-  included, and its last cycle not failed). A window a run left early (a
-  call limit, a crash or failed cycles) holds fewer bars than the other
-  side's. Its legs, net R and first tries count neither as a miss nor as a
+  to its end: a record at or after its last bar, at least one trade cycle
+  on its own bars (the day's end of day reaching it is not enough), no
+  decision time inside it passed without a step (with latency charged, a
+  slow cycle skips the bars that close during it), and its last cycle not
+  failed. A window a run left early (a call limit, a crash, failed cycles,
+  skipped bars) holds fewer bars than the other side's. Its legs, net R and first tries count neither as a miss nor as a
   catch: they are dropped. Each side's report gives the batch legs its
   captures found, the legs paired, and the windows dropped and why.
 - **Contract rolls are unverified.** Leg ids are `day|side|start` and never
@@ -1060,7 +1075,10 @@ no replay config or `replay.js` flag sets it, and an ordinary practice-train
 or stage-1 run still needs its practice mode and its curated list.
 
 - `keep-rule`: the keep rule's runs, the loop's own `replay` under
-  `modelScore` (the champion's tuning replays and each challenger's). Give
+  `modelScore`: the champion's tuning replays and each challenger's, and
+  held-out judging's runs of `heldOutWindows`, the champion's and the
+  challenger's (outside practice-train the role changes nothing the
+  preflight checks: no practice mode is needed there). Give
   that replay no `practice` and no `stage`: its runs are then full days and
   their score is real. A replay that sets `practice` still runs, but its
   score is `diagnostic (setup-focused)`: it can keep a change on tuning,
