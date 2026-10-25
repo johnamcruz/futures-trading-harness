@@ -34,10 +34,12 @@ description: Use when a position is open - its stop, the plan's management, the 
   you are exiting; never close early by feel; never loosen the stop.
 - **Past its target** the runner locks the stop at a small R and trails it
   behind 15m swings, so an ordinary pullback doesn't close a trend leg.
-  - Structure turns against it (a 3m or 15m CHoCH against, a close beyond
-    the last swing) → tighten the stop behind that confirmed swing.
-  - A pullback inside the trend, structure intact → hold; never tighten on
-    one candle or by feel.
+  Read the move against it top-down with `pullback-vs-reversal`.
+  - A pullback while the 15m trend holds (a 3m CHoCH against included) →
+    hold; tightening here is what stops a winner before the leg runs on.
+  - Momentum ends (a 15m CHoCH against, or 15m momentum turned against after
+    a failed new extreme) → tighten behind the last confirmed 15m swing.
+  - Never tighten on one candle or by feel.
 - **An open trade** (the prompt's "Open trade" line) is managed before any
   new entry: its setup, initial stop and risk, the working stop and target in
   R, where it stands now, its best and worst so far, and bars held. "NO
@@ -54,5 +56,6 @@ description: Use when a position is open - its stop, the plan's management, the 
 
 ```text
 trade_lifecycle long +2.1R, past its target, stop trailed by the runner -> hold; journal
-trade_lifecycle short +2.6R, 3m CHoCH up closed above the last swing high -> stop to just above that swing
+trade_lifecycle short +2.6R, 3m CHoCH up, 15m still down -> hold (a pullback)
+trade_lifecycle short +3.1R, 15m CHoCH up after a failed new low -> stop just above the last 15m swing high
 ```
