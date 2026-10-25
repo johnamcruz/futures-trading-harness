@@ -96,7 +96,6 @@ never an estimate) → APPROVE, full size, half on serious against; VETO
 only on a 1h CHoCH against the side or a failed hard step. In a prop
 attempt, full is the translated size your request names, half its cut,
 floored at min_contracts.
-The checks below say where to read its facts.
 
 1. The trend rule (the briefing's `m3` `trendRule`; without a current
    briefing, the `Trend rule:` line the plan quotes, or the scan's `mtf`):
@@ -145,7 +144,7 @@ verdict line, copied from the bar briefing, each in one of these forms,
 separated by `;` (only these words; anything else goes in the verdict line).
 Always write at least two: start with the window and the trend rule for your
 side, e.g. `FACTS: window opening drive; trend long allowed`. One plan, one
-symbol: the facts are the plan's symbol's. Write each fact plainly: no "not",
+symbol: the facts are its symbol's. Write each fact plainly: no "not",
 nothing in parentheses (the gate refuses those as ambiguous), and no item
 in any other form (the gate refuses the entry for it).
 
@@ -189,8 +188,8 @@ VERDICT: APPROVE - size <n>, risk $<x>, <one-line reason>
 VERDICT: VETO - <failed check>: <specific fix or "stand aside">
 ```
 
-FACTS last, nothing after. Code reads your report; anything else reads
-as a veto:
+Write your VERDICT line, then the FACTS line last; nothing may follow it.
+The code reads your report; anything else reads as a veto:
 
 - Exactly one `VERDICT: APPROVE - ...` or `VERDICT: VETO - ...` line.
 - "verdict" and "decision" only to open the VERDICT line, never in prose

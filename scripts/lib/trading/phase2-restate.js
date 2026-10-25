@@ -33,7 +33,7 @@ const quoted = err => { const s = String(err || ''); const a = s.indexOf('"'); c
 
 function restateDue(text) {
   const v = verdictOf(text);
-  let due = null;
+  let due;
   if (v === 'VETO') {
     if (!approvalReadAsVeto(text)) return null;
     const line = decisiveLine(text);

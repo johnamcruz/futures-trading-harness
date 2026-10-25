@@ -77,6 +77,11 @@ test('readRestatement: the same readers; the size at most the first VERDICT line
   for (const answer of ['Restated as asked.', 'Size: 4', 'Size: four\nVERDICT: APPROVE - size 4', 'VERDICT: APPROVE - size <n>', 'Decision: cut to size 1\nVERDICT: APPROVE - size 1', '', '   ']) {
     assert.strictEqual(P.readRestatement(first, answer, 4).outcome, 'unreadable', JSON.stringify(answer));
   }
+  // The decisive record is read again: a first report whose FACTS block itself reads as a veto never makes one.
+  const vetoFacts = 'Size: 2\nVERDICT: APPROVE - size 2, risk $40\nFACTS: window asia; no VETO rule fired';
+  assert.strictEqual(P.restateDue(vetoFacts).kind, 'reads-as-veto');
+  r = P.readRestatement(vetoFacts, 'Size: 2\nVERDICT: APPROVE - size 2, risk $40', 2);
+  assert.deepStrictEqual(r, { outcome: 'unreadable', why: 'the restatement with the first report\'s facts is no single approval of its size' });
   for (const bad of [null, 0, 1.5, '4']) assert.strictEqual(P.readRestatement(first, 'Size: 4\nVERDICT: APPROVE - size 4', bad).outcome, 'unreadable', String(bad));
 });
 
