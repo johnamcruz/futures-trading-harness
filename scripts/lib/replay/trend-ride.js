@@ -14,7 +14,8 @@
  *   rideShare     (exit - entry) / (to - entry): of what was left after the entry, how much was kept; null when the
  *                 entry was at or past the extreme (nothing left)
  *   peakR         the best R reached while open: the round trip's mfeR (the broker's), else the closed bars held
- *                 (opened at or after the entry fill, closed by the exit) at the trade's risk; never below the exit's R
+ *                 (opened at or after the entry fill, closed before the exit: the exit's own
+ *                 bar may hold its high after a stop filled in it) at the trade's risk; never below the exit's R
  *   givebackR     peakR - r (r: the round trip's R, as trend-capture's entry.r)
  * An entry still open at the run's end (no round trip): open, and every exit measure null.
  *
@@ -50,11 +51,11 @@ const MEASURES = Object.freeze([
   Object.freeze({ key: 'givebackR', says: 'peakR - the trade\'s realized R' }),
 ]);
 
-/** The best R of the closed bars held (opened at or after `from`, closed by `to`), side-aware; null without any. */
+/** The best R of the closed bars held (opened at or after `from`, closed before `to`), side-aware; null without any. */
 function peakFromBars({ side, entry, riskPts, bars = [], from, to, stepMs = 0 }) {
   if (num(entry) === null || !(num(riskPts) > 0)) return null;
   const s = sign(side);
-  const held = (Array.isArray(bars) ? bars : []).filter(b => isObj(b) && Date.parse(b.t) >= from && Date.parse(b.t) + stepMs <= to);
+  const held = (Array.isArray(bars) ? bars : []).filter(b => isObj(b) && Date.parse(b.t) >= from && Date.parse(b.t) + stepMs < to);
   if (!held.length) return null;
   return Math.max(...held.map(b => (s > 0 ? b.h - entry : entry - b.l))) / riskPts;
 }
@@ -168,7 +169,7 @@ const signed = x => (num(x) === null ? '-' : `${x > 0 ? '+' : ''}${x}`);
 function rideLine(t) {
   if (!isObj(t)) return 'n/a';
   const e = t.entries || {};
-  return `${t.legs} leg(s), ${t.caught} caught (${pct(t.catchRate)}), R caught ${t.rCaught} / R available ${t.rAvailable}${t.rAvailableUnknown ? ` (${t.rAvailableUnknown} unknown)` : ''}`
+  return `${t.legs} leg(s), ${t.caught} caught (${pct(t.catchRate)}), R caught ${t.rCaught}${t.rCaughtUnknown ? ` (${t.rCaughtUnknown} unknown)` : ''} / R available ${t.rAvailable}${t.rAvailableUnknown ? ` (${t.rAvailableUnknown} unknown)` : ''}`
     + `, median capture share ${med(t.captureShare)}, ride share ${med(t.rideShare)}, entry lag ${med(t.entryLag)}, giveback ${med(t.givebackR, 'R')}`
     + `${t.open ? `, ${t.open} still open` : ''}, in-trend entries ${e.inTrend ? e.inTrend.n : 0} of ${e.filled || 0} (${pct(e.inTrendShare)})`;
 }
@@ -178,7 +179,7 @@ function rideLines(t) {
   if (!isObj(t)) return [];
   const mean = (s, unit = '') => (isObj(s) && num(s.mean) !== null ? `${s.mean}${unit}` : '-');
   const e = t.entries;
-  const kind = (label, k) => `${label} ${k.n} (${signed(k.r)}R${k.rUnknown ? `, ${k.rUnknown} open` : ''})`;
+  const kind = (label, k) => `${label} ${k.n} (${signed(k.r)}R${k.rUnknown ? `, ${k.rUnknown} R unknown` : ''})`;
   return [
     `Trend catch & ride: ${rideLine(t)}`,
     `  means: capture share ${mean(t.captureShare)}, ride share ${mean(t.rideShare)}, entry lag ${mean(t.entryLag)}, peak ${mean(t.peakR, 'R')}, giveback ${mean(t.givebackR, 'R')} (n ${t.captureShare.n})`,

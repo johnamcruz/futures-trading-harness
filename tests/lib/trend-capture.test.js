@@ -208,11 +208,12 @@ function legScale(runDir) {
 }
 
 test('trend capture: no round-trip peak: the peak from the closed bars held; a loss inside the leg shares negative', () => {
-  // Out at 21510 at at(9) (bars[10]'s open), -0.6R: the bars held, bars[5]..bars[9], top at bars[9]'s high 21532.25.
+  // Out at 21510 at at(9) (bars[9]'s close), -0.6R: the bars closed before it, bars[5]..bars[8], top at bars[8]'s high
+  // 21528.25 (bars[9], the exit's own bar, may hold its high after the stop filled in it).
   const trades = at => [OPEN(at), { orderId: 8, profitAndLoss: -12, roundTripId: 1, roundTrip: { r: -0.6, entryPrice: 21516, exitPrice: 21510, exitTime: at(9), risk: 10 } }];
   const { runDir, days } = runFixture({ trades });
   const up = tc.captureReport({ runDir, days }).legs[0];
-  assert.deepStrictEqual(up.ride, { entryLag: 0.4, captureShare: -0.15, rideShare: -0.25, peakR: 1.63, peakFrom: 'bars', givebackR: 2.23, r: -0.6, open: false });
+  assert.deepStrictEqual(up.ride, { entryLag: 0.4, captureShare: -0.15, rideShare: -0.25, peakR: 1.23, peakFrom: 'bars', givebackR: 1.83, r: -0.6, open: false });
 });
 
 test('trend capture: a trade still open at the run\'s end: caught, open, no exit measure; its R unknown in the totals', () => {
@@ -240,6 +241,20 @@ test('trend capture: the run\'s filled entries: in a leg its way, against one, o
   assert.ok(tc.reportLines(doc).includes('  entries: in-trend 1 (+2R), counter 1 (-1R), no leg 1 (-0.5R)'));
   // The legs' catch is unchanged by the other entries.
   assert.deepStrictEqual(doc.legs.map(l => l.captured), [true, false]);
+});
+
+test('trend capture: the day\'s other known legs (context) classify the entries only: an entry in a lead-in bar is in its leg, never none', () => {
+  const trades = at => [OPEN(at), { orderId: 8, profitAndLoss: 40, roundTripId: 1, roundTrip: { r: 2, entryPrice: 21516, exitPrice: 21536, exitTime: at(9), mfeR: 2, risk: 10 } },
+    { orderId: 9, profitAndLoss: null, roundTripId: 2, price: 21520, creationTimestamp: at(5) }, { orderId: 10, profitAndLoss: -20, roundTripId: 2, roundTrip: { r: -1 } }];
+  const { runDir, days } = runFixture({ trades, orders: [{ orderId: 9, bar: 5, composed: { record: 'c1', side: 'short', entry: 21520 } }] });
+  const [up, down] = tc.captureReport({ runDir, days }).legs;
+  const g = l => ({ id: l.id, day: l.day, side: l.side, start: l.start, end: l.end, points: l.move.points });
+  // Only the down leg given (a windowed run's drawn leg): the up leg's long and short read none without it.
+  const alone = tc.captureReport({ runDir, days, legs: [g(down)] });
+  assert.deepStrictEqual(alone.entries.map(e => e.kind), ['none', 'none']);
+  const withContext = tc.captureReport({ runDir, days, legs: [g(down)], context: [g(up)] });
+  assert.deepStrictEqual(withContext.entries.map(e => [e.kind, e.leg]), [['in-trend', up.id], ['counter', up.id]]);
+  assert.deepStrictEqual(withContext.legs.map(l => l.id), [down.id], 'a context leg is never a leg of the document');
 });
 
 test('trend capture: given legs carry no session scale unless given one: their size is unknown', () => {

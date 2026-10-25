@@ -806,8 +806,8 @@ down):
   or past the extreme).
 - `peakR`: the best R reached while open, the round trip's `mfeR` when the
   broker sends it, else the closed bars held (opened at or after the entry
-  fill, closed by the exit) at the trade's risk; never below the exit's own
-  R. `givebackR` = `peakR` − the trade's R.
+  fill, closed before the exit: the exit's own bar may make its high after
+  a stop filled in it) at the trade's risk; never below the exit's own R. `givebackR` = `peakR` − the trade's R.
 - A trade still open at the run's end is caught and `open`, with no exit
   measure.
 
@@ -815,12 +815,15 @@ The totals (`totals.ride`): the legs (the trends that happened), the caught
 ones and the catch rate, also by leg size (the leg's points over its
 threshold, bucketed by `trendCapture.sizeEdges`, `[2, 4]`: 1–2×, 2–4×, 4×+,
 so the big trends show; a given leg without its session's scale is
-`unknown`); the median and mean of each measure over the caught legs; the
+`unknown`, so the training loop, whose census legs carry no scale, has no
+size split); the median and mean of each measure over the caught legs; the
 R the caught legs banked against the available R of every leg (R caught /
 R available; the available R is at the planned stop, the banked at the
 trade's own); and the run's filled entries by kind: in-trend (inside a leg
 its way, its start bar to its extreme bar's close), counter (inside one the
-other way only) or none, each with its R, so the false entries show. The
+other way only) or none, each with its R, so the false entries show (a
+training-loop run classifies them against every census leg of its day, its
+windows' own and the others). The
 replay report prints them as a "Trend catch & ride" block. The training
 loop's round report carries the same totals for the champion's confirm and
 probe halves, each edit's probe half and the combined change's confirm half

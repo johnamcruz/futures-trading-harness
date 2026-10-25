@@ -487,9 +487,9 @@ function world({ proposals, verdict = 'kept', loop: over = {}, trend = false, tr
     // regression day's. A missed leg: blocked at entry by a
     // refused read of skill a.
     // The step reads the legs and windows the loop gives it (the census's legs, trend-windows.js), as the real one does.
-    trendData: ({ runDir, legs: given, windows }) => {
+    trendData: ({ runDir, legs: given, windows, context = [] }) => {
       const text = textOf(trees.get(runDir));
-      calls.trendData.push({ run: path.basename(runDir), legs: given.map(g => g.id), windows });
+      calls.trendData.push({ run: path.basename(runDir), legs: given.map(g => g.id), windows, context: context.map(g => g.id) });
       const recorded = store.readRun(runDir).days;
       const days = Object.keys(recorded).sort();
       const legs = given.filter(g => days.includes(g.day)).map(({ id, day, side }) => {
@@ -670,6 +670,9 @@ test('with a trend set: its missed legs are findings first; an edit that catches
   // The round's catch & ride (trend-ride.js), report only: the champion's confirm half over the same finished legs as its
   // curve point, its probe half, each edit's probe half, the combined change's confirm half; the status block.
   const ride = report.trend.champion.ride;
+  // Each run's capture is given the day's other census legs to classify its entries, never its own legs.
+  assert.ok(w.calls.trendData.some(c => c.context.length), "some day holds legs outside the run's windows");
+  assert.ok(w.calls.trendData.every(c => c.context.every(id => !c.legs.includes(id) && c.legs.every(l => l.split('|')[0] === id.split('|')[0]))), JSON.stringify(w.calls.trendData.map(c => c.context)));
   assert.deepStrictEqual([ride.legs, ride.caught], [report.trend.champion.legs, report.trend.champion.caught]);
   assert.ok(ride.caught > 0 && ride.captureShare.median === 0.5 && ride.entries.filled > 0 && ride.entries.inTrendShare === 1, JSON.stringify(ride));
   assert.ok(report.trend.probeRide && report.trend.probeRide.legs === split.probe.legs.length, JSON.stringify(report.trend.probeRide));

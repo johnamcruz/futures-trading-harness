@@ -47,6 +47,9 @@ test('trend ride: a loss inside a leg: negative shares; the peak from the closed
   // A peak below the exit's own R (bars that never reached the exit price): the exit's R.
   const low = TR.rideOf(LONG, { entry: 110, exit: 125, r: 1.5, riskPts: 10, bars: [{ t: at(2), h: 112, l: 109 }], from: Date.parse(at(2)), to: Date.parse(at(9)), stepMs: MIN3 });
   assert.deepStrictEqual([low.peakR, low.givebackR, low.peakFrom], [1.5, 0, 'bars']);
+  // Stopped inside its own bar (the fill stamped at that bar's close): that bar's high may come after the stop, never held.
+  const stopped = TR.rideOf(LONG, { entry: 100, exit: 90, r: -1, riskPts: 10, bars: [{ t: at(1), h: 104, l: 99 }, { t: at(2), h: 115, l: 89 }], from: Date.parse(at(1)), to: Date.parse(at(3)), stepMs: MIN3 });
+  assert.deepStrictEqual([stopped.peakR, stopped.givebackR], [0.4, 1.4]);
   // No round-trip peak and no bar held: unknown, never a guess.
   const none = TR.rideOf(LONG, { entry: 110, exit: 105, r: -0.5, riskPts: 10, bars: [], from: 0, to: 1 });
   assert.deepStrictEqual([none.peakR, none.peakFrom, none.givebackR, none.captureShare], [null, null, null, -0.12]);
@@ -109,12 +112,12 @@ test('trend ride: the totals: legs, caught, by size; medians and means over the 
 
 test('trend ride: the report\'s block and the one line', () => {
   const t = TR.summarize({ legs: LEGS, entries: ENTRIES, edges: [2, 4] });
-  assert.strictEqual(TR.rideLine(t), '5 leg(s), 3 caught (60%), R caught 1.2 / R available 14.5 (1 unknown), median capture share 0.15, ride share 0.14, entry lag 0.25, giveback 1.05R, 1 still open, in-trend entries 3 of 5 (60%)');
+  assert.strictEqual(TR.rideLine(t), '5 leg(s), 3 caught (60%), R caught 1.2 (1 unknown) / R available 14.5 (1 unknown), median capture share 0.15, ride share 0.14, entry lag 0.25, giveback 1.05R, 1 still open, in-trend entries 3 of 5 (60%)');
   assert.deepStrictEqual(TR.rideLines(t), [
     `Trend catch & ride: ${TR.rideLine(t)}`,
     '  means: capture share 0.15, ride share 0.14, entry lag 0.28, peak 1.65R, giveback 1.05R (n 2)',
     '  by size (x the leg threshold): 1-2x 1/1, 2-4x 1/1, 4x+ 1/2, unknown 0/1',
-    '  entries: in-trend 3 (+1.2R, 1 open), counter 1 (-1R), no leg 1 (-0.5R)',
+    '  entries: in-trend 3 (+1.2R, 1 R unknown), counter 1 (-1R), no leg 1 (-0.5R)',
   ]);
   const empty = TR.summarize({ legs: [], entries: [], edges: [2, 4] });
   assert.strictEqual(TR.rideLine(empty), '0 leg(s), 0 caught (-), R caught 0 / R available 0, median capture share -, ride share -, entry lag -, giveback -, in-trend entries 0 of 0 (-)');

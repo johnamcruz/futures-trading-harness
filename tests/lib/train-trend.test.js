@@ -533,4 +533,8 @@ test('a side\'s trend catch & ride: only its own legs in finished windows, each 
   // A run whose ride is unknown (a phase kept before rides were recorded): the side's total unknown, never partial.
   assert.strictEqual(TSC.rideOfSide(side, [...rides, { windows, ride: null }]), null);
   assert.strictEqual(TSC.rideOfSide(side, []), null);
+  // A resumed loop: a phase kept before rides were recorded has none, and the champion's capture of then has no entries.
+  const old = { legs: rides[0].ride.legs.map(l => ({ id: l.id, captured: l.captured, availableR: l.availableR })) };
+  assert.strictEqual(TSC.rideOfSide(side, [{ windows, ride: require('../../scripts/lib/replay/trend-ride').compact(old) }]), null);
+  assert.strictEqual(TSC.rideOfSide(side, [{ windows, ride: undefined }]), null);
 });

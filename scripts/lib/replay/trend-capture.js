@@ -33,7 +33,7 @@
  *   legsOf(bars, { session, minMoveAtr })    [{ day, side, start, end, from, to, points, pct, scale }] (pure; session:
  *                                            a runner session spec, '09:30-12:00@America/New_York'; bars sorted, base tf)
  *   classifyCycle(cycle, { side, records, gate })   { bar, planned, side, step, by, code, message, reads, role }
- *   captureReport({ runDir, home, days, manifest, legs })   the trend-capture document (see writeCapture); legs: given
+ *   captureReport({ runDir, home, days, manifest, legs, context })   the trend-capture document (see writeCapture); legs: given
  *                                            ones (the census's, for a stepped-windows run) instead of the detector's
  *   cyclesOf(home)                            the run home's trade and manage cycle logs (the trend facts read them too)
  *   writeCapture(runDir, doc), readCapture(runDir)   trend-capture.json in the run's folder
@@ -177,7 +177,7 @@ const stageOf = c => STAGE.indexOf(c.code === 'outside-session' ? 'outside-sessi
  * The trend-capture document for a run (see the header): { v, runId, treeDigest, barsDigest, detector, legs, totals,
  * noLegDays }. runDir: the run's folder (its served bars, autotrader.json, day records); home: the run home.
  */
-function captureReport({ runDir, home = path.resolve(runDir, '..', '..'), days = {}, manifest = {}, legs: given = null }) {
+function captureReport({ runDir, home = path.resolve(runDir, '..', '..'), days = {}, manifest = {}, legs: given = null, context = [] }) {
   const cfg = readJson(path.join(runDir, 'autotrader.json')) || {};
   const minutes = Number(cfg.timeframe) || null;
   const session = (Array.isArray(cfg.sessions) && cfg.sessions.length ? cfg.sessions : SESSION_DEFAULTS.sessions).join(',');
@@ -250,10 +250,12 @@ function captureReport({ runDir, home = path.resolve(runDir, '..', '..'), days =
     byStep[s].legs += 1;
     byStep[s].missedR = round2(byStep[s].missedR + (l.availableR || 0));
   }
+  // The day's other known legs (a windowed run's undrawn census legs): they classify entries only, never a leg here.
+  const kindLegs = (Array.isArray(context) ? context : []).filter(g => isObj(g) && g.start && g.end && g.side).map(g => ({ id: g.id || `${g.day}|${g.side}|${g.start}`, side: g.side, start: g.start, end: g.end }));
   // The run's filled entries, each in a leg its way, against one, or in none (trend-ride.js entryKind), with its R.
   const entries = orders.filter(o => isObj(o.composed) && filled(o.orderId)).map(o => {
     const t = tripOf(filled(o.orderId));
-    return { at: o.at, side: o.composed.side, record: o.composed.record || null, ...TR.entryKind({ side: o.composed.side, at: o.at }, out, stepMs), r: t ? num(t.roundTrip.r) : null };
+    return { at: o.at, side: o.composed.side, record: o.composed.record || null, ...TR.entryKind({ side: o.composed.side, at: o.at }, [...out, ...kindLegs], stepMs), r: t ? num(t.roundTrip.r) : null };
   });
   const legDays = new Set(out.map(l => l.day));
   const noLegDays = [...new Set(cycles.map(c => tradingDayKey(new Date(Date.parse(c.timing.barClose) - 1))))].filter(d => !legDays.has(d)).sort().map(day => {

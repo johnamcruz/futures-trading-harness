@@ -118,12 +118,12 @@ function probeData({ runDir, tree, barsFiles = {}, keep = null }) {
  * tries. legs, windows: a stepped-windows run's (trend-windows.js): the capture reads those legs (the census's), and each
  * window's state replaces the session's (stepped to its end or not).
  */
-function trendData({ runDir, legs = null, windows = null }) {
+function trendData({ runDir, legs = null, windows = null, context = [] }) {
   const tc = require('../replay/trend-capture');
   const { readRun } = require('../replay/store');
   const { readJson } = require('../harness-run');
   const days = readRun(runDir).days;
-  const capture = tc.captureReport({ runDir, days, manifest: readJson(path.join(runDir, 'manifest.json'), {}) || {}, legs });
+  const capture = tc.captureReport({ runDir, days, manifest: readJson(path.join(runDir, 'manifest.json'), {}) || {}, legs, context });
   tc.writeCapture(runDir, capture);
   // The first tries of the run's compose records (first-try.js): its own home's, one session's.
   const home = path.resolve(runDir, '..', '..');
@@ -274,7 +274,9 @@ async function probeRound(ctx, { n, champion, api }) {
       const runs = await api.windowRuns(ctx, { side, tag, windows: TS.dayWindows([day]), tree, look, replay, share, role: 'trend-set' });
       const one = await api.phase(ctx, key, path.join(ctx.paths.dir, 'probes', 'trend', `${side}-${day}-${h}.json`), async () => {
         const legs = built.windows.flatMap(w => w.legs).map(spanOf);
-        const got = await (ctx.steps.trendData || trendData)({ runDir: runs.runs[0].runDir, legs, windows: built.windows });
+        // The day's other census legs classify the run's entries only (an entry in a lead-in bar is in its leg, never "none").
+        const context = Object.keys(trend.set.spans || {}).filter(id => trend.set.spans[id].day === day && !legs.some(l => l.id === id)).map(spanOf);
+        const got = await (ctx.steps.trendData || trendData)({ runDir: runs.runs[0].runDir, legs, windows: built.windows, context });
         const x = TSC.sideOfTrend({ captures: [got.capture], days: got.days, scorecard: runs.decisions, first: got.first || [], sessions: got.sessions || null, windows: built.windows, minutes: got.minutes || traderCfg.timeframe });
         return { legs: [...x.legs], dayR: x.dayR, blows: x.blows, first: x.first, sessions: x.sessions, entries: got.entries || [], stepped: got.stepped || [], windows: built.windows.length, cycles: stepsOf(runs.runs[0].runDir), ride: TR.compact(got.capture), ...(side === 'pc' ? { capture: got.capture } : {}) };
       });
