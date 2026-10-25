@@ -26,7 +26,8 @@
  *          high, mid and low as targets (and the side the candle forming since has taken), the half of the session's
  *          range price is in, the unfilled FVGs on 5m, 15m and 1h candles with the last candle's retest
  *          (fvg-frames.js), and the 5m structure (the latest BOS or CHoCH on 5m candles, from 1m bars when the base
- *          bars can't: m5-structure.js)                                   until the next base-bar close
+ *          bars can't: m5-structure.js), and per timeframe (3m, 5m, 15m, 1h) the compression box and its turn into
+ *          expansion with the key levels it sits at (compression.js)       until the next base-bar close
  *   m15    the 15m read (trend, structure, swings, the latest BOS or CHoCH), the alignment per side,
  *          and the 15m candles' indicators (regime, EMAs, ADX and its slope,
  *          SuperTrend, Keltner, ATR), all from completed 15m candles
@@ -102,6 +103,7 @@ const { brokerFieldsAt, brokerFieldsText } = require('./broker-fields');
 const { fvgFrames, fvgLine, fvgEdgesAt } = require('./fvg-frames');
 const { VOLUME_HIGH, netAtrOf } = require('./composed-reads');
 const { structure5m, structureLine } = require('./m5-structure');
+const { compressionFrames, compressionLine } = require('./compression');
 const { GLOBEX_OPEN_MIN, RTH_OPEN_MIN, RTH_CLOSE_MIN } = require('./clock'); // the session boundaries' one home
 
 const SECTIONS = ['m3', 'm15', 'h1', 'day'];
@@ -363,6 +365,27 @@ function computeSections({ bars, fine = null, c15, c60, snap, snap15, read, read
     if (!zones.has(key)) zones.set(key, fvgEdgesAt({ bars, base: minutes, fine, at: k, until }));
     return zones.get(key);
   };
+  // The key levels a box sits at: those that stood when it began (its first candle's open, `from`: levelsAt on the last
+  // base bar closed by then, the rule a completed candle is read by) and still stand at the same value now (this bar's
+  // `levels`, by name, within a tick), so never one the box made or moved, and one value per level in the briefing: a
+  // moving level (VWAP, the developing profile) or a forming one (overnight, IB, opening range) that changed since is
+  // none of them. A swing's name carries its price (holdingSwingsAt); it stands while this bar names that swing.
+  const boxLevels = from => {
+    const t = Date.parse(from);
+    let k = bars.length - 1;
+    while (k >= 0 && Date.parse(bars[k].t) + step > t) k -= 1;
+    if (!(k >= 0 && k + 1 < bars.length)) return [];
+    const nowByName = new Map();
+    for (const [name, p] of levels) if (Number.isFinite(p)) nowByName.set(name, [...(nowByName.get(name) || []), p]);
+    // Its value now when it still stands (within a tick of its value then), else null.
+    const nowOf = (name, p) => {
+      const swing = /^(.* swing (?:high|low)) -?\d+(?:\.\d+)?$/.exec(name);
+      const q = (nowByName.get(swing ? swing[1] : name) || []).find(x => Math.abs(x - p) <= tick + 1e-9);
+      return q === undefined ? null : q;
+    };
+    // At its value now, shown on the contract's tick as every other level (level()); the box's edges read the exact one.
+    return levelsAt(k, k, k + 1).map(([name, p]) => [name, Number.isFinite(p) ? nowOf(name, p) : null]).filter(([, q]) => q !== null).map(([name, q]) => [name, q, level(q)]);
+  };
   const news = newsState(blackouts, closedAt);
   // In a no-entry window, the window itself (its name, scope and end) is the reason a candidate is blocked.
   const noEntry = win.entries === 'none' ? win.text : false;
@@ -458,6 +481,9 @@ function computeSections({ bars, fine = null, c15, c60, snap, snap15, read, read
         // The latest BOS or CHoCH and the last swings on completed 5m candles: base bars that divide 5m, else a 1m
         // lane's bars; without them unavailable, with why (m5-structure.js).
         structure5m: own ? null : structure5m({ bars, base: minutes, fine }),
+        // Per timeframe, compression and its turn into expansion on completed candles, with the key levels its box sits
+        // at as they stood when the box began (compression.js; boxLevels: the candles' levelsAt, never one the box made).
+        compression: own ? null : compressionFrames({ bars, base: minutes, fine, price, levels: boxLevels }),
       },
     },
     m15: {
@@ -735,6 +761,9 @@ function summaryLines(b, et) {
   if (s5) out.push(s5);
   const cisd = cisdLine(m3.cisd, et);
   if (cisd) out.push(cisd);
+  // Compression only when a timeframe is compressing or broke out of a box in its last candles (compression.js).
+  const comp = compressionLine(m3.compression, et);
+  if (comp) out.push(comp);
   // The setup moment (learning/setup-moments.js): the reactions the model composes on, said as facts.
   const check = m3.bar ? require('../learning/setup-moments').checkLine(m3.candles, { barClose: Date.parse(m3.bar.t) + b.minutes * 60000, et, entries: m3.windowEntries }) : null;
   if (check) out.push(check);
@@ -796,7 +825,7 @@ const targets = list => list.reduce((out, x) => {
 }, []).map(target).join(', ');
 
 // The m3 fields the summary says in full (one line each), left out of the detail whole.
-const SUMMARY_FIELDS = ['swingTargets', 'rangeTargets', 'fvgs', 'structure5m'];
+const SUMMARY_FIELDS = ['swingTargets', 'rangeTargets', 'fvgs', 'structure5m', 'compression'];
 // What the summary's "This bar's close" line says in full, left out of the detail (only present when it happened).
 const SUMMARY_ONLY = { vwap: ['crossed'], today: ['openingRangeCrossed'], location: ['closesBeyondValue', 'backInsideValue'] };
 
@@ -875,10 +904,11 @@ function candleLines(m3, et, roomOf = 'R = the reference stop', closedAt = null)
     // The levels it met, strongest first as listed (candle-facts.js: at most MAX_LEVELS, the rest counted).
     const met = Object.entries(c.levels || {}).map(([name, r]) => (r.startsWith('rejected') ? `rejected ${name} (${r.replace('rejected: ', '')})` : `${r} ${name}`));
     if (c.moreLevels) met.push(`+${c.moreLevels} more`);
-    // The entry reads' extras (the net move, the gap relation): on the lines the entry reads from, not the
+    // The entry reads' extras (the net move, the gap relation, the inside-bar stack): on the lines the entry reads from, not the
     // event-driven ones (4h), which keep their own byte budget.
     const extras = !(tf in EVENT_FRAMES);
-    const shapeText = [`${c.pattern}${c.dir ? ` ${c.dir}` : ''}`, c.closeLocation ? `close ${c.closeLocation} third` : null,
+    const shapeText = [`${c.pattern}${c.dir ? ` ${c.dir}` : ''}`, extras && c.insideStack && c.mother ? `${c.insideStack} in a row inside the ${et(c.mother.t)} candle ${c.mother.l}-${c.mother.h}` : null,
+      c.closeLocation ? `close ${c.closeLocation} third` : null,
       c.rangeAtr !== null ? `range ${c.rangeAtr} ATR` : null, c.volRatio !== null ? `vol ${c.volRatio}x` : null,
       // On high volume, the net move (absorption's "little progress", composed-reads.js netAtrOf).
       extras && c.volRatio >= VOLUME_HIGH && netAtrOf(c) !== null ? `net ${netAtrOf(c)} ATR` : null,
@@ -976,6 +1006,7 @@ function buildFrameBriefing({ symbol, contractId = null, bars, minutes, first, l
   data.candles = `in the runner's ${first.minutes}m bar briefing (bar_briefing without a timeframe): each timeframe's last completed candle and the levels it met, the next swing targets and the prior 1h and 4h candle's range targets, one value per level`;
   delete data.swingTargets;
   delete data.rangeTargets;
+  delete data.compression;
   if (!lane) {
     delete data.candidates;
     delete data.scanError;

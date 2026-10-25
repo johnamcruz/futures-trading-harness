@@ -81,6 +81,12 @@ const SCENARIOS = [
     reads: [['bias', 'daily-bias', 'inside prior rth range'], ['location', 'levels-and-reactions', 'at session high'], ['setup', 'candle-reading', '15m pattern bearish engulfing'], ['entry', 'candle-reading', '3m close bottom'], ['stop', 'invalidation', 'stop 3m high 27042'], ['target', 'take-profit', 'target 3m swing 26932.75']],
   },
   {
+    // A 3m expansion candle closed 08:39 UTC above an inside-bar box (its mother's range, on the prior POC), the 1h trend
+    // up; the 08:39 bar's close (top third) is the confirmation on a later candle; the stop beyond the box's low.
+    skill: 'compression', bar: '2026-04-27T08:39:00.000Z', side: 'long', read: '3m compression break up', false: '3m compression break down',
+    reads: [['bias', 'multi-timeframe-analysis', '1h up'], ['location', 'levels-and-reactions', 'at previous 3m high'], ['setup', 'compression', '3m compression break up'], A[3], ['stop', 'invalidation', 'stop 3m box low 27413'], ['target', 'take-profit', 'target prior rth high 27462.5']],
+  },
+  {
     // The reversal shape: a true 1h CHoCH the side's way (the trend breaking, not a pullback in it).
     skill: 'pullback-vs-reversal', bar: '2026-04-23T18:06:00.000Z', side: 'short', read: '1h choch down', false: '1h choch up',
     reads: [['bias', 'pullback-vs-reversal', '1h choch down'], ['location', 'levels-and-reactions', 'at previous 3m high'], ['setup', 'breakout', '1h broke opening range high down'], ['entry', 'candle-reading', '3m close bottom'], ['stop', 'invalidation', 'stop 3m high 26939'], ['target', 'take-profit', 'target 3m swing 26681.75']],

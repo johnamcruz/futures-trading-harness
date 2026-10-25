@@ -1496,6 +1496,53 @@
   "composeHints.maxTries": {
    "value": 2000,
    "from": "new in fix/trend-moves-compose (the combinations the hints try for a whole that passes)"
+  },
+  "compression.frames": {
+   "value": [
+    3,
+    5,
+    15,
+    60
+   ],
+   "from": "new in feat/compression (the timeframes the compression facts are read on (3m, 5m, 15m, 1h; 5m from a 1m lane); the owner's \"Create this new compression skill and let's use it\", 2026-10-24)"
+  },
+  "compression.nr": {
+   "value": [
+    7
+   ],
+   "from": "new in feat/compression (the narrow-range lengths a box candle is the narrowest of: the classic NR7; NR4 left out on the tuning half, where it measured +0.08R against NR7's +0.27R (not searched beyond the two classic lengths); the owner's \"Create this new compression skill and let's use it\", 2026-10-24)"
+  },
+  "compression.poleBars": {
+   "value": 3,
+   "from": "new in feat/compression (how many candles before a box a displacement pole may close; the owner's \"Create this new compression skill and let's use it\", 2026-10-24)"
+  },
+  "compression.expandAtr": {
+   "value": 1,
+   "from": "new in feat/compression (an expansion candle's least range, in the ATR(14) before the box; the owner's \"Create this new compression skill and let's use it\", 2026-10-24)"
+  },
+  "compression.minBeyondAtr": {
+   "value": 0.1,
+   "from": "new in feat/compression (an expansion candle's least close beyond the box's edge, in the ATR(14) before the box: a poke of a tick or two is none; the owner's \"Create this new compression skill and let's use it\", 2026-10-24)"
+  },
+  "compression.recentBars": {
+   "value": 3,
+   "from": "new in feat/compression (how many candles after the expansion candle the read still holds; the owner's \"Create this new compression skill and let's use it\", 2026-10-24)"
+  },
+  "compression.maxRunAtr": {
+   "value": 1,
+   "from": "new in feat/compression (late: price past the expansion candle's close by more than this many ATR; the owner's \"Create this new compression skill and let's use it\", 2026-10-24)"
+  },
+  "compression.levelBandAtr": {
+   "value": 0.25,
+   "from": "new in feat/compression (a key level at the box: inside it or within this many ATR of an edge; the owner's \"Create this new compression skill and let's use it\", 2026-10-24)"
+  },
+  "compression.maxLevels": {
+   "value": 3,
+   "from": "new in feat/compression (the most key levels a box names; the owner's \"Create this new compression skill and let's use it\", 2026-10-24)"
+  },
+  "compression.maxWidthAtr": {
+   "value": 2,
+   "from": "new in feat/compression (a box's widest range, in the ATR(14) before it: narrow; 2 picked on the tuning half from 1, 1.5, 2, 3 and none, where 2 and 3 tied at +0.26R and the narrower was kept; the review, 2026-10-25)"
   }
  }
 }

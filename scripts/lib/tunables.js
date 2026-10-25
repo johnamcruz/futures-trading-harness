@@ -176,6 +176,10 @@ const ANALYSIS = {
   composedReads: { volumeHigh: pos(), absorptionProgressAtr: nonneg(), roomIgnoreR: nonneg(), roomIgnoreTicks: int(0) },
   composeHints: { perStep: int(1), maxTries: int(1) },
   fvg: { frames: list(int(1), { min: 1 }), window: int(1), max: int(1) },
+  compression: {
+    frames: list(int(1), { min: 1 }), nr: list(int(2), { min: 1 }), maxWidthAtr: pos(), poleBars: int(0), expandAtr: nonneg(), minBeyondAtr: nonneg(), recentBars: int(0),
+    maxRunAtr: nonneg(), levelBandAtr: nonneg(), maxLevels: int(1),
+  },
   briefing: { equalK: int(1), cisdFrames: list(int(1), { min: 1 }) },
   evaluator: { windowBars: int(1) },
 };
@@ -298,6 +302,7 @@ const BUILT_IN = deepFreeze({
     composedReads: { volumeHigh: 1.5, absorptionProgressAtr: 0.5, roomIgnoreR: 0.25, roomIgnoreTicks: 8 },
     composeHints: { perStep: 3, maxTries: 2000 },
     fvg: { frames: [5, 15, 60], window: 60, max: 3 },
+    compression: { frames: [3, 5, 15, 60], nr: [7], maxWidthAtr: 2, poleBars: 3, expandAtr: 1, minBeyondAtr: 0.1, recentBars: 3, maxRunAtr: 1, levelBandAtr: 0.25, maxLevels: 3 },
     briefing: { equalK: 2, cisdFrames: [3, 5, 15, 60] },
     evaluator: { windowBars: 500 },
   },

@@ -423,9 +423,15 @@ test('trade-session split: no head-trader path reads more than the base\'s every
 // that the size stated in an attempt is a suggestion translated at entry, and its half; the agent's translated size to
 // approve, half its cut, under min_contracts a VETO), the market-structure, trend-momentum analysts and the strategy
 // researcher +96 (strategy-library's half in an attempt); every other role unchanged.
+// Then the compression setup (feat/compression, the owner's "Create this new compression skill and let's use it",
+// 2026-10-24): the market-structure analyst carries it in its index (looked up as needed in index mode, one line there:
+// +286 with its load sentence and its step-3 pointer; embedded in full mode: +3630), candle-reading's displacement line
+// and inside-bar stack held to its size (trimmed to fit), breakout's pointer within those; the risk manager +64 each mode
+// (invalidation's box stop source, the one home of stops); every other role unchanged or
+// shrank a few bytes.
 const ROLE_PROMPTS = {
-  full: { 'market-structure-analyst': 86548, 'news-calendar-analyst': 10182, 'risk-manager': 92698, 'strategy-researcher': 25650, 'trade-executor': 29967, 'trade-reviewer': 9454, 'trend-momentum-analyst': 54540, 'volume-liquidity-analyst': 48495 },
-  index: { 'market-structure-analyst': 42889, 'news-calendar-analyst': 10182, 'risk-manager': 78575, 'strategy-researcher': 25650, 'trade-executor': 29956, 'trade-reviewer': 9454, 'trend-momentum-analyst': 40023, 'volume-liquidity-analyst': 32975 },
+  full: { 'market-structure-analyst': 90178, 'news-calendar-analyst': 10182, 'risk-manager': 92762, 'strategy-researcher': 25650, 'trade-executor': 29967, 'trade-reviewer': 9454, 'trend-momentum-analyst': 54540, 'volume-liquidity-analyst': 48495 },
+  index: { 'market-structure-analyst': 43175, 'news-calendar-analyst': 10182, 'risk-manager': 78639, 'strategy-researcher': 25650, 'trade-executor': 29956, 'trade-reviewer': 9454, 'trend-momentum-analyst': 40023, 'volume-liquidity-analyst': 32975 },
 };
 
 test('trade-session split: no role prompt grows, in full or index mode, and no role lists a piece', () => {

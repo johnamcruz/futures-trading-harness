@@ -11,6 +11,19 @@ const CF = require('../../scripts/lib/trading/candle-facts');
 const c = (o, h, l, cl, v = 100) => ({ o, h, l, c: cl, v });
 const MIN = 60000;
 
+test('insideStackOf: the candles in a row inside one mother candle (the inside rule: within it, a smaller range), and the mother', () => {
+  const k = (h, l, t) => ({ t, h, l });
+  const cs = [k(110, 90, 'a'), k(108, 92, 'b'), k(106, 94, 'c'), k(109, 91, 'd'), k(111, 95, 'e')];
+  // c is inside b, b inside a: a stack of 2 under mother a.
+  assert.deepStrictEqual(CF.insideStackOf(cs, 2), { insideStack: 2, mother: { t: 'a', h: 110, l: 90 } });
+  // d is outside c but inside a with b and c: the stack under a is 3.
+  assert.deepStrictEqual(CF.insideStackOf(cs, 3), { insideStack: 3, mother: { t: 'a', h: 110, l: 90 } });
+  // e trades above a: not inside.
+  assert.deepStrictEqual(CF.insideStackOf(cs, 4), {});
+  // An equal range is not inside (the inside pattern's rule).
+  assert.deepStrictEqual(CF.insideStackOf([k(110, 90, 'a'), k(110, 90, 'b')], 1), {});
+});
+
 /** Bars of `step` minutes from `start` (ISO), price drifting by a pattern, volume 100. */
 function bars(start, count, step = 3, fn = i => 100 + (i % 7) - (i % 3)) {
   const t0 = Date.parse(start);

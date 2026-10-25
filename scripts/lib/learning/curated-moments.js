@@ -95,8 +95,8 @@ const FIRST_BAR = CM.firstBar;
 /** The trade-lifecycle crosswalk's skill for each kind of read, per step (its table, skills/trade-lifecycle/SKILL.md). */
 const READ_SKILL = Object.freeze({
   bias: Object.freeze({ trend: 'multi-timeframe-analysis', trendRule: 'multi-timeframe-analysis', alignment: 'multi-timeframe-analysis', break: 'bos-vs-choch', priorRth: 'daily-bias', dayType: 'daily-bias', regime: 'trend-vs-range' }),
-  location: Object.freeze({ at: 'levels-and-reactions', atFvg: 'fair-value-gaps', vwap: 'vwap-volume-profile', value: 'vwap-volume-profile' }),
-  setup: Object.freeze({ rejected: 'rejection', broke: 'breakout', fvg: 'fair-value-gaps', pattern: 'candle-reading', cisd: 'cisd', ote: 'cisd', swept: 'breakout-vs-fakeout' }),
+  location: Object.freeze({ at: 'levels-and-reactions', atFvg: 'fair-value-gaps', vwap: 'vwap-volume-profile', value: 'vwap-volume-profile', boxAt: 'compression' }),
+  setup: Object.freeze({ rejected: 'rejection', broke: 'breakout', fvg: 'fair-value-gaps', pattern: 'candle-reading', cisd: 'cisd', ote: 'cisd', swept: 'breakout-vs-fakeout', compression: 'compression' }),
   entry: Object.freeze({ close: 'candle-reading', pattern: 'candle-reading', momentum: 'momentum-and-volume', volume: 'momentum-and-volume', participation: 'momentum-and-volume', absorption: 'absorption' }),
   stop: Object.freeze({ stop: 'invalidation' }),
   target: Object.freeze({ target: 'take-profit' }),

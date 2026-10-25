@@ -50,12 +50,19 @@
  *   <tf> cisd up|down                       m3.cisd.<tf>.dir, a live one (void, expired or weak: false)   up long, down short
  *   [<tf>] in ote                           m3.cisd.<tf>.priceInOte of a live CISD (no tf: any; zones both ways:
  *                                           false)                                        the CISD's way
+ *   <tf> compression break up|down          m3.compression.<tf>: state expanding the read's way (compression.js: an
+ *                                           expansion candle closed out of an NR7 or inside box in the last recentBars
+ *                                           candles, not back inside, price still beyond, not late); timed from that
+ *                                           candle                                        up long, down short
+ *   <tf> box at <level>                     m3.compression.<tf>.box.levels (a live box: compressing or expanding),
+ *                                           the level within one ATR(14) of price (m3.atr14), as `at`  none
  *   swept <level>                           m3.sweeps (by name)                           none
  *   <tf> close top|middle|bottom            m3.candles.<tf>.closeLocation                 top long, bottom short
  *   <tf> momentum up|down                   D4's bar read on m3.candles.<tf>: rangeAtr >= 1, volRatio >= 1, close in
  *                                           the far third (top up, bottom down)            up long, down short
  *   stop <source> <price>                   step stop only: <tf> low|high (a completed candle), [<tf>] swing
- *                                           low|high (m3.swings, m3.liquidity, m3.htfLevels), or <level>; the
+ *                                           low|high (m3.swings, m3.liquidity, m3.htfLevels), <tf> box low|high (a
+ *                                           live box's far side: m3.compression.<tf>.box), or <level>; the
  *                                           source's price within one tick of <price>    below price long
  *   target 2r                               step target only: the 2R mark, TRUE only when the briefing names no target
  *                                           the side's way (targetsAhead: past the running extreme the trade extends
@@ -75,7 +82,8 @@
  * shares, lifecycle-gate.js reversalAllowed): a trend or break read against the side stands when the combination
  * holds its frame's tier, the side's way: a 15m frame (or one under it) a true 15m or 1h CHoCH, a 1h frame a 1h CHoCH,
  * a 4h frame a 1h CHoCH plus a 4h candle that rejected a key level (a gap's edge is none). Each step takes its own kinds of read (STEP_KINDS: bias the trend, break, prior-range, trend-rule, alignment,
- * regime and day-type reads; location at, vwap and value; setup the candle relations, patterns, CISD, OTE and sweeps;
+ * regime and day-type reads; location at, box at, vwap and value; setup the candle relations, patterns, CISD, OTE, sweeps
+ * and the compression break;
  * entry close, momentum, volume, participation, absorption and the confirming pattern), and no read is stated twice
  * (the same pattern in setup and entry counts once). The combination is ok when every read is true and agrees,
  * every step is stated, the setup and the entry each hold a true read pointing to the side (a setup OTE zone is none),
@@ -103,8 +111,8 @@ const SIDES = ['long', 'short'];
 // A pattern is a setup read, or the entry's confirming candle (ENTRY_PATTERNS only).
 const STEP_KINDS = {
   trend: ['bias'], break: ['bias'], priorRth: ['bias'], trendRule: ['bias'], alignment: ['bias'], regime: ['bias'], dayType: ['bias'],
-  at: ['location'], vwap: ['location'], value: ['location'],
-  relation: ['setup'], pattern: ['setup', 'entry'], cisd: ['setup'], ote: ['setup'], swept: ['setup'],
+  at: ['location'], vwap: ['location'], value: ['location'], boxAt: ['location'],
+  relation: ['setup'], pattern: ['setup', 'entry'], cisd: ['setup'], ote: ['setup'], swept: ['setup'], compression: ['setup'],
   close: ['entry'], momentum: ['entry'], volume: ['entry'], participation: ['entry'], absorption: ['entry'],
 };
 // The confirming candle patterns the entry step takes, and the side each confirms.
@@ -212,6 +220,10 @@ function parseRead(text) {
   if (tf && b === 'pattern' && w.length >= 3) return out('pattern', { tf, value: w.slice(2).join(' ') });
   if (tf && b === 'cisd' && w.length === 3 && ['up', 'down'].includes(c)) return out('cisd', { tf, value: c });
   if (form === 'in ote' || (tf && w.length === 3 && b === 'in' && c === 'ote')) return out('ote', { tf });
+  const comp = tf ? /^\S+ compression break (up|down)$/.exec(form) : null;
+  if (comp) return out('compression', { tf, value: comp[1] });
+  const boxAt = tf ? /^\S+ box at (.+)$/.exec(form) : null;
+  if (boxAt) return out('boxAt', { tf, level: boxAt[1] });
   if (a === 'swept' && w.length >= 2) return out('swept', { level: w.slice(1).join(' ') });
   if (tf && b === 'close' && w.length === 3 && ['top', 'middle', 'bottom'].includes(c)) return out('close', { tf, value: c });
   if (tf && b === 'momentum' && w.length === 3 && ['up', 'down'].includes(c)) return out('momentum', { tf, value: c });
@@ -260,6 +272,15 @@ function recentFrames(m3, base) {
 
 // A CISD whose zone is gone (cisd.js DEAD): no longer a live read.
 const DEAD_CISD = new Set(['void', 'expired', 'weak']);
+// A box a read stands on (compression.js): compressing, or the one an expansion just left.
+const LIVE_BOX = new Set(['compressing', 'expanding']);
+/** A timeframe's compression facts (m3.compression.<tf>): { x } or { why } (unavailable, unknown). */
+function compressionOf(m3, tf) {
+  const x = isObj(m3.compression) ? m3.compression[tf] : undefined;
+  if (typeof x === 'string') return { why: `the ${tf} compression is ${x}` };
+  if (!isObj(x)) return { why: `no ${tf} compression in the briefing` };
+  return { x };
+}
 
 // What is left of a gap (m3.fvgs): an open gap's low and high, a partly filled one's unfilled part; else null.
 const leftOf = g => (!isObj(g) ? null : g.state === 'open' ? [g.low, g.high] : g.state === 'partly' && Array.isArray(g.unfilled) ? g.unfilled : null);
@@ -286,6 +307,15 @@ function sourcePrices(kind, source, b, base, { tick = 0.25, ref = null } = {}) {
     if (w.length === 2 && TFS.has(w[0]) && ['low', 'high'].includes(w[1])) {
       const c = candles[w[0]];
       return { field: `m3.candles.${w[0]}.${w[1] === 'low' ? 'l' : 'h'}`, prices: isObj(c) && !c.unavailable && num(c[w[1] === 'low' ? 'l' : 'h']) !== null ? [c[w[1] === 'low' ? 'l' : 'h']] : [] };
+    }
+    // A live box's far side (compression.js): its low under a long, its high over a short.
+    const box = /^(\S+) box (low|high)$/.exec(source);
+    if (box && TFS.has(box[1])) {
+      const field = `m3.compression.${box[1]}.box.${box[2]}`;
+      const got = compressionOf(m3, box[1]);
+      if (!got.x) return { field, prices: [], why: got.why };
+      if (!LIVE_BOX.has(got.x.state) || !isObj(got.x.box)) return { field, prices: [], why: `no live ${box[1]} box (the ${box[1]} compression is ${got.x.state})` };
+      return { field, prices: [num(got.x.box[box[2]])].filter(x => x !== null) };
     }
     const swing = /^(?:(\S+) )?swing (low|high)$/.exec(source);
     if (swing && (!swing[1] || TFS.has(swing[1]))) {
@@ -418,8 +448,9 @@ function netAtrOf(c) {
 const CANDLE_KINDS = new Set(['relation', 'pattern', 'close', 'momentum', 'absorption']);
 // The reads that name a candle as a setup, timed for reaction, then confirmation: the candle reads (of which a setup
 // takes a relation or a pattern; close, momentum and absorption are entry-only), and a CISD read (its confirming
-// candle). An OTE zone and a sweep name none, and point no side as a setup (they only support it).
-const SETUP_CANDLE = new Set([...CANDLE_KINDS, 'cisd']);
+// candle), and a compression break (its expansion candle). An OTE zone and a sweep name none, and point no side as a
+// setup (they only support it).
+const SETUP_CANDLE = new Set([...CANDLE_KINDS, 'cisd', 'compression']);
 const TF_MIN = { '1m': 1, '3m': 3, '5m': 5, '15m': 15, '1h': 60, '4h': 240 };
 
 /** When a timeframe's completed candle in the briefing closed (ms): its closedAt, else its open plus its length; null. */
@@ -434,10 +465,16 @@ function candleClose(m3, tf) {
 
 /**
  * When a setup read's candle closed (ms): a CISD read's confirming candle (m3.cisd.<tf>.confirmedClose, the bar it was
- * known complete on), any other the timeframe's completed candle (candleClose); null when the briefing doesn't hold it.
+ * known complete on), a compression break's expansion candle (m3.compression.<tf>.break.closedAt), any other the
+ * timeframe's completed candle (candleClose); null when the briefing doesn't hold it.
  */
 function setupClose(m3, r) {
   const tf = String(r.form || '').split(' ')[0];
+  if (r.kind === 'compression') {
+    const x = isObj(m3) && isObj(m3.compression) ? m3.compression[tf] : null;
+    const at = isObj(x) && isObj(x.break) ? Date.parse(x.break.closedAt) : NaN;
+    return Number.isFinite(at) ? at : null;
+  }
   if (r.kind !== 'cisd') return candleClose(m3, tf);
   const x = isObj(m3) && isObj(m3.cisd) ? m3.cisd[tf] : null;
   const at = isObj(x) ? Date.parse(x.confirmedClose) : NaN;
@@ -620,6 +657,33 @@ function checkRead(p, b, { tick = 0.25, side = null, riskPts = null } = {}) {
       if (dirs.length > 1) return res(false, `${fact}: they point both ways, name the timeframe (<tf> in ote)`, { field: 'm3.cisd.<tf>.priceInOte' });
       return res(inIt.length > 0 && dirs[0] !== null, fact, { field: 'm3.cisd.<tf>.priceInOte', value: inIt.map(([tf]) => tf).join(', ') || null, dir: dirs[0] || null });
     }
+    case 'compression': {
+      // The turn from compression to expansion, verified by code (compression.js): only while it is the state.
+      const got = compressionOf(m3, p.tf);
+      if (!got.x) return res('unchecked', got.why);
+      const { state, box: bx, break: k } = got.x;
+      const boxText = isObj(bx) ? ` the box ${bx.low}-${bx.high}` : '';
+      const fact = state === 'expanding' && isObj(k) ? `the ${p.tf} expansion candle closed ${k.dir} out of${boxText} (range ${k.rangeAtr} ATR, ${k.beyondAtr} ATR beyond), ${k.barsAgo} candle(s) ago`
+        : isObj(k) ? `the ${p.tf} compression is ${state}: its last break ${k.dir} is ${!k.expansion ? 'no expansion (a small candle or a poke)' : k.backInside ? 'closed back inside the box' : k.beyondNow === false ? 'undone: price is back inside the box' : k.late ? `late (price ${k.runAtr} ATR past its close)` : 'not recent'}`
+          : `the ${p.tf} compression is ${state}: no break out of a box`;
+      return res(state === 'expanding' && isObj(k) && k.dir === p.value, fact, { field: `m3.compression.${p.tf}`, value: isObj(k) ? `${state} ${k.dir}` : state, dir: dirSide(p.value) });
+    }
+    case 'boxAt': {
+      const got = compressionOf(m3, p.tf);
+      if (!got.x) return res('unchecked', got.why);
+      const bx = got.x.box;
+      if (!LIVE_BOX.has(got.x.state) || !isObj(bx)) return res(false, `no live ${p.tf} box (the ${p.tf} compression is ${got.x.state})`, { field: `m3.compression.${p.tf}.box` });
+      const list = Array.isArray(bx.levels) ? bx.levels : [];
+      const l = list.find(x => isObj(x) && levelName(x.name) === p.level);
+      // A location is where price is now: the level within one ATR(14) of price, as `at <level>` holds it.
+      const price = num(m3.price);
+      const atr = num(m3.atr14);
+      const near = Boolean(l) && price !== null && atr > 0 && num(l.price) !== null && Math.abs(l.price - price) <= atr;
+      const fact = !l ? `the ${p.tf} box ${bx.low}-${bx.high} is at ${list.length ? list.map(x => x.name).join(', ') : 'no key level'}`
+        : near ? `the ${p.tf} box ${bx.low}-${bx.high} sits at ${l.name} ${l.price} (${l.edge}), within one ATR(14) ${atr} of price ${price}`
+          : `the ${p.tf} box sits at ${l.name} ${l.price}, but it is ${atr > 0 && price !== null ? `more than one ATR(14) ${atr} from price ${price}` : 'at an unknown distance from price'}`;
+      return res(near, fact, { field: `m3.compression.${p.tf}.box.levels, m3.atr14`, value: l ? l.name : null });
+    }
     case 'swept': {
       if (!Array.isArray(m3.sweeps)) return res('unchecked', 'the sweeps are unknown');
       const s = m3.sweeps.find(x => isObj(x) && levelName(x.name) === p.level);
@@ -659,6 +723,9 @@ function checkRead(p, b, { tick = 0.25, side = null, riskPts = null } = {}) {
       const hit = prices.find(x => within(x, p.price, tick));
       if (hit === undefined) return res(false, `${p.source} is ${prices.join(', ')}${note}, not ${p.price} (within one tick, ${tick})`, { field, value: prices[0] });
       const dir = ref === null || hit === ref ? null : (p.kind === 'stop') === (hit < ref) ? 'long' : 'short';
+      // A box's stop is its far side: its low under a long, its high over a short (never the near edge).
+      const edge = p.kind === 'stop' ? /^\S+ box (low|high)$/.exec(p.source) : null;
+      if (edge && dir && edge[1] !== (dir === 'long' ? 'low' : 'high')) return res(false, `${p.source} is the near side of the box for a ${dir}: the stop is beyond its far side (${dir === 'long' ? 'low' : 'high'})`, { field, value: hit });
       return res(true, `${p.source} is ${hit}${note}; price ${ref}`, { field, value: hit, price: hit, dir });
     }
     default:
@@ -830,4 +897,4 @@ function renderCheck(r) {
   return `${out.join('\n')}\n`;
 }
 
-module.exports = { STEPS, FLOW_STEPS, STEP_KINDS, D2_TIERS, d2TierMet, SETUP_CANDLE, ENTRY_PATTERNS, levelIndex, targetsAhead, roomBand, candleClose, setupClose, TF_ORDER, TF_MIN, MAX_READS, WHY_MAX, MOMENTUM, VOLUME_HIGH, ABSORPTION, netAtrOf, parseRead, checkRead, checkReads, readSignature, skillSignature, contextOf, targetROf, rBucket, levelName, renderCheck };
+module.exports = { STEPS, FLOW_STEPS, STEP_KINDS, D2_TIERS, d2TierMet, SETUP_CANDLE, LIVE_BOX, ENTRY_PATTERNS, levelIndex, targetsAhead, roomBand, candleClose, setupClose, TF_ORDER, TF_MIN, MAX_READS, WHY_MAX, MOMENTUM, VOLUME_HIGH, ABSORPTION, netAtrOf, parseRead, checkRead, checkReads, readSignature, skillSignature, contextOf, targetROf, rBucket, levelName, renderCheck };

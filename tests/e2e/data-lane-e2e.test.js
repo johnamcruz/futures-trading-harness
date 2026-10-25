@@ -40,7 +40,13 @@ test('data lane: the 3m cycle\'s briefing gains the 5m structure, 5m FVGs and 5m
   const bars3 = D.BARS.filter(x => Date.parse(x.t) + D.STEP <= close);
   assert.deepStrictEqual(s, structure5m({ bars: bars3.slice(-laned.cfg.bars), base: 3, fine: cut.slice(-laned.cfg.bars) }));
   // Every other fact is the one-lane briefing's.
-  const rest = d => { const { structure5m: _s, fvgs: _f, candles: _c, ...o } = d; return o; };
+  // The 5m compression too: built from the 1m bars with the lane, unavailable without it; the other frames' the same.
+  assert.match(String(m3(plain).compression['5m']), /^unavailable/);
+  assert.ok(m3(laned).compression['5m'] && m3(laned).compression['5m'].state, JSON.stringify(m3(laned).compression['5m']));
+  const { '5m': _p5, ...plainComp } = m3(plain).compression;
+  const { '5m': _l5, ...lanedComp } = m3(laned).compression;
+  assert.deepStrictEqual(lanedComp, plainComp);
+  const rest = d => { const { structure5m: _s, fvgs: _f, candles: _c, compression: _k, ...o } = d; return o; };
   assert.deepStrictEqual(rest(m3(laned)), rest(m3(plain)));
   // One cycle each, with the one-lane prompt, context and budget: the data lane adds no lane to the cycle.
   assert.strictEqual(a.ran.length, 1);
