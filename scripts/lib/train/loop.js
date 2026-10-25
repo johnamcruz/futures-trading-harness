@@ -43,7 +43,7 @@ const { readJson, writeJsonAtomic, dirDigest, fileDigest } = require('../harness
 const { harnessHome } = require('../paths');
 const { liveRunner } = require('../runner-lock');
 const { withAdapter } = require('../broker/adapter');
-const { resolveReplay } = require('../replay/config');
+const { resolveReplay, policyAccount } = require('../replay/config');
 const driver = require('../replay/driver');
 const { scoreRun, lookAt } = require('../replay/scorecard');
 const { readRun } = require('../replay/store');
@@ -230,6 +230,12 @@ function learningGate(ctx, run, look, label, loopRole = null) {
     validate: looked && l.validate === true, reasoningFix: false, endOfDay: run.endOfDay, practice: run.practice || null, runDir: run.paths.runDir, arm: 'without', config: ctx.loop.hash, env: ctx.env,
     // Set by the loop's code only (never by a replay config or the replay CLI): the preflight reads it (loop-role).
     ...(loopRole ? { loopRole } : {}),
+    // Every loop run (code only, as loopRole): the preflight's day-attempts check requires its day attempts, and refuses
+    // them on any run without it.
+    loopRun: true,
+    // Its look names the mode (as a stage-2 mode's does: learning/looks.js validateRuns), so its pools never mix with runs
+    // sized outside an attempt.
+    ...(run.dayAttempts ? { mode: 'day-attempts' } : {}),
   };
 }
 
@@ -242,10 +248,19 @@ function learningGate(ctx, run, look, label, loopRole = null) {
  * One window's run as windowRuns resolves it, and its learning gate: replay, another replay config (the probe round's),
  * else the loop's. role: the run's loop role (the training preflight's loop-role check, learning/preflight.js): the
  * keep rule's runs (the loop's own replay, judged by modelScore) or the trend set's (probe.js); none for a curated probe.
+ * Every run trades inside a fresh attempt each session day on the account the tree's active policy strategy trades
+ * (replay/day-attempts.js), so its entries are sized as live sizes them in an attempt; a tree without one gets none, and
+ * the preflight refuses the run (day-attempts; one declared not learning has no preflight: windowRuns refuses it). A
+ * replay config with an attempt of its own (prop, accountStates, combine: never stage 1's, and refused in a model-scored
+ * loop's replay, train/config.js) keeps it: its entries are sized in it, and its days are that attempt's.
  */
 function windowRun(ctx, { label, window, tree, look, replay = null, role = undefined }) {
   const loopRole = role !== undefined ? role : !replay && ctx.loop.modelScore ? 'keep-rule' : null;
-  const run = resolveReplay(replayFor(replay ? { ...ctx.loop, replay } : ctx.loop, { label, window }), { baseDir: ctx.root, env: ctx.env, root: tree });
+  const raw = replayFor(replay ? { ...ctx.loop, replay } : ctx.loop, { label, window });
+  let policy = null;
+  try { policy = policyAccount(tree, ctx.env); } catch (_err) { /* more than one: the replay config refuses it below */ }
+  const own = ['prop', 'accountStates', 'combine'].some(k => raw[k] !== undefined);
+  const run = resolveReplay(policy && !own ? { ...raw, dayAttempts: { account: policy.name } } : raw, { baseDir: ctx.root, env: ctx.env, root: tree });
   return { run, gate: learningGate(ctx, run, look, label, loopRole) };
 }
 
@@ -277,6 +292,9 @@ async function windowRuns(ctx, { side = 'champion', tag, windows, tree, look, re
     const learned = (ctx.steps.startLearningRun || startLearningRun)(run.paths.runHome, gate);
     // The loop reads every outcome (scorecards, the paired test): a run whose outcomes are hidden never runs in it.
     if (learned.hideOutcomes) throw new Error(`${label}: a reasoning-fix look hides its outcomes, and the training loop reads them: refused`);
+    // A run declared not learning gets no preflight: one that would trade outside any attempt is refused here (fails
+    // closed), after its learning gate's own refusals and before any step.
+    if (run.learning === false && !run.dayAttempts && !['prop', 'accountStates', 'combine'].some(k => run[k])) throw new Error(`${label}: no active policy strategy in the tree names an account, so the run can't trade inside the day's attempt (sized as live): refused`);
     ctx.check();
     // share: runs replayed at once (the probe round's `parallel`) split the calls left, so together they stay in the limit.
     const left = Math.floor((ctx.loop.limits.maxModelCalls - ctx.state.modelCalls) / share);
@@ -672,4 +690,4 @@ function importProposal({ loop, env = process.env, root, proposal, approvedBy })
   return { id, file };
 }
 
-module.exports = { Stop, checkedScorecard, defaultSteps, scorecardDecisions, runLoop, judgeHeldOut, importProposal, refuseIfLive, windowRun };
+module.exports = { Stop, checkedScorecard, defaultSteps, scorecardDecisions, runLoop, judgeHeldOut, importProposal, refuseIfLive, windowRun, windowRuns };

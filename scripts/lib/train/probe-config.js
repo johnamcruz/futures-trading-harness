@@ -73,6 +73,7 @@ function resolveProbe(raw, { read, resolvePath = p => p, readCensus = () => { th
   if (replay) {
     if (replay.stage !== 1) errors.push('probe.replay.stage: 1 (learn to trade): the probe screen reads stage-1 decisions');
     if (!replay.curatedList || typeof replay.curatedList !== 'object') errors.push('probe.replay.curatedList: the curated practice list the probes replay');
+    if (replay.dayAttempts !== undefined) errors.push('probe.replay.dayAttempts: set by the loop for each run (replay/day-attempts.js), never in the config');
     if (!replay.practice || typeof replay.practice !== 'object') errors.push('probe.replay.practice: a curated run runs through setup-focused practice');
     if (replay.learning === false) errors.push('probe.replay.learning: a probe is a practice-train learning run');
   }
@@ -128,6 +129,7 @@ function resolveTrend(raw, { read, readCensus, resolvePath = p => p, tuningWindo
     if (replay.stage !== 1) errors.push('probe.trend.replay.stage: 1 (learn to trade): whole sessions, as the keep rule\'s runs');
     for (const k of ['curatedList', 'practice', 'combine', 'accountStates']) if (replay[k] !== undefined) errors.push(`probe.trend.replay.${k}: not here (the trend set replays the bars of its windows as a whole session would)`);
     if (replay.stepWindows !== undefined) errors.push('probe.trend.replay.stepWindows: set by the loop for each run (trend-windows.js), never in the config');
+    if (replay.dayAttempts !== undefined) errors.push('probe.trend.replay.dayAttempts: set by the loop for each run (replay/day-attempts.js), never in the config');
     if (replay.learning === false) errors.push('probe.trend.replay.learning: a probe is a practice-train learning run');
     if (parallel > 1 && replay.latency !== false) errors.push('probe.parallel: more than 1 only with probe.trend.replay.latency false too');
   }
