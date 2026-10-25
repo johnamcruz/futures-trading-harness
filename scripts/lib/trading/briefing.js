@@ -365,6 +365,14 @@ function computeSections({ bars, fine = null, c15, c60, snap, snap15, read, read
     if (!zones.has(key)) zones.set(key, fvgEdgesAt({ bars, base: minutes, fine, at: k, until }));
     return zones.get(key);
   };
+  // The key levels as they stood when a box began (its first candle's open, `from`): levelsAt on the last base bar
+  // closed by then (fixed levels then, moving ones at that bar's close), the same rule a completed candle is read by.
+  const boxLevels = from => {
+    const t = Date.parse(from);
+    let k = bars.length - 1;
+    while (k >= 0 && Date.parse(bars[k].t) + step > t) k -= 1;
+    return k >= 0 && k + 1 < bars.length ? levelsAt(k, k, k + 1) : [];
+  };
   const news = newsState(blackouts, closedAt);
   // In a no-entry window, the window itself (its name, scope and end) is the reason a candidate is blocked.
   const noEntry = win.entries === 'none' ? win.text : false;
@@ -461,8 +469,8 @@ function computeSections({ bars, fine = null, c15, c60, snap, snap15, read, read
         // lane's bars; without them unavailable, with why (m5-structure.js).
         structure5m: own ? null : structure5m({ bars, base: minutes, fine }),
         // Per timeframe, compression and its turn into expansion on completed candles, with the key levels its box sits
-        // at (compression.js; the session's and higher timeframes' levels, never the base bars' own last swings).
-        compression: own ? null : compressionFrames({ bars, base: minutes, fine, price, levels: levels.filter(([name]) => !/^last \S+ swing/.test(name)) }),
+        // at as they stood when the box began (compression.js; boxLevels: the candles' levelsAt, never one the box made).
+        compression: own ? null : compressionFrames({ bars, base: minutes, fine, price, levels: boxLevels }),
       },
     },
     m15: {

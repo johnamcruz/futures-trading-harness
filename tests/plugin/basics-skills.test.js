@@ -186,10 +186,10 @@ const PINS = {
     '5 to 30 back-to-back candles, width at most 3 x ATR (`widthAtr`), mean range at most 1 x ATR (`meanRangeAtr`).',
     'Not one: a single inside bar, wide drifting candles, a run wider than 3 x ATR, a gap.',
     'the first candle after the box CLOSES beyond it by 0.1 x ATR or more (`beyondAtr`), its range at least 2 x the box\'s candles (`rangeVsBox`) and 1 x ATR (`rangeAtr`).',
-    '`state` `expanding` while within 3 candles (`barsAgo`), no close back inside (`backInside`), price still beyond it (`accepted`) and under 1 x ATR past its close (`late`).',
-    'Entry: a candle closed after it (`trade-lifecycle`). Never anticipate.',
-    'Stop beyond the box\'s far side: `stop <tf> box low|high <price>`, not just past the last candle (stops there get run; `invalidation`).',
-    'Runway: a named level at 2R or more past the box (`take-profit`), else the plan refuses.',
+    '`state` `expanding` while within 3 candles (`barsAgo`), no close back inside (`backInside`), price still beyond it (`beyondNow`; acceptance by closes: `breakout-vs-fakeout`) and under 1 x ATR past its close (`late`).',
+    'The expansion candle closes out of the box the HTF bias\'s way.',
+    'Side, entry and runway: `trade-lifecycle`, `take-profit`. Never anticipate.',
+    'Stop: the box\'s far side, `stop <tf> box low|high <price>` (`invalidation`).',
     'Signs, defined elsewhere: inside bars (`candle-reading`), the Keltner squeeze (`trend-momentum-indicators`), `volContract` under 1 (volume falling as it forms: `momentum-and-volume`).',
     'closed back inside: fakeout (`breakout-vs-fakeout`); a break against the HTF bias (the trend rule\'s); a small candle; late.',
     'a box pressing a key level the bias\'s way, the expansion closing through it: location `<tf> box at <level>`, setup the break.',
@@ -618,8 +618,9 @@ test('compression: the skill states the code\'s numbers (config/analysis.json co
   const CR = require('../../scripts/lib/trading/composed-reads');
   const reads = /Reads: (.+?) \(\d+\.\d+R\): runway/.exec(t)[1].split(', ');
   assert.deepStrictEqual(reads.map(x => CR.parseRead(x).kind), ['compression', 'close', 'stop', 'target'], reads.join('; '));
-  // A changed number fails.
-  assert.ok(!flat(read(file('compression')).replace(`${P.boxAtr} x ATR (\`widthAtr\`)`, `${P.boxAtr + 1} x ATR (\`widthAtr\`)`)).includes(`width at most ${P.boxAtr} x ATR`));
+  // A changed number in the config fails the check (the check reads the config, not the text).
+  const states = q => flat(read(file('compression'))).includes(`${q.minBars} to ${q.maxBars} back-to-back candles, width at most ${q.boxAtr} x ATR`);
+  assert.ok(states(P) && !states({ ...P, boxAtr: P.boxAtr + 1 }) && !states({ ...P, minBars: P.minBars + 1 }));
   // candle-reading's displacement and breakout point to it.
   assert.match(flat(read(file('candle-reading'))), /it starts a leg, out of a box \(`compression`\)/);
   assert.match(flat(read(file('breakout'))), /Out of a tight box: `compression`\./);

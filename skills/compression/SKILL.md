@@ -30,18 +30,15 @@ hypotheses (config/analysis.json `compression`); a missing field is `unknown`.
 by 0.1 x ATR or more (`beyondAtr`), its range at least 2 x the box's
 candles (`rangeVsBox`) and 1 x ATR (`rangeAtr`). `state` `expanding` while
 within 3 candles (`barsAgo`), no close back inside (`backInside`), price
-still beyond it (`accepted`) and under 1 x ATR past its close (`late`).
+still beyond it (`beyondNow`; acceptance by closes: `breakout-vs-fakeout`)
+and under 1 x ATR past its close (`late`).
 
 **How to detect it**, the setup (`<tf> compression break up|down`):
 
 1. `state` `compressing`: the box, its edges and `levels`.
-2. The HTF bias (`trade-lifecycle` step bias) gives the side.
-3. The expansion candle closes out of the box the bias's way.
-4. Entry: a candle closed after it (`trade-lifecycle`). Never anticipate.
-5. Stop beyond the box's far side: `stop <tf> box low|high <price>`, not
-   just past the last candle (stops there get run; `invalidation`).
-6. Runway: a named level at 2R or more past the box (`take-profit`), else
-   the plan refuses.
+2. The expansion candle closes out of the box the HTF bias's way.
+3. Side, entry and runway: `trade-lifecycle`, `take-profit`. Never anticipate.
+4. Stop: the box's far side, `stop <tf> box low|high <price>` (`invalidation`).
 
 **Strongest**: a box pressing a key level the bias's way, the expansion
 closing through it: location `<tf> box at <level>`, setup the break.
@@ -52,9 +49,9 @@ break against the HTF bias (the trend rule's); a small candle; late.
 **Flag, pennant**: a displacement pole (`candle-reading`), then a box
 drifting against it (flag) or `converging` (pennant), the break its way.
 
-**Evidence** (practice-train halves, n 106/94): aligned 3m expansions
-+0.11R/+0.15R net, intervals straddling zero; volume falling in the box
-+0.34R/+0.30R (n 47/44). Not a finding.
+**Evidence** (practice-train halves, n 93/84): aligned 3m expansions
++0.00R/+0.06R net, intervals straddling zero; against the HTF +0.03R.
+No edge alone: the count and the plan decide. Not a finding.
 
 ## Examples
 

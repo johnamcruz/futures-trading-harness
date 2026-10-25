@@ -23,7 +23,8 @@ mirror.
 
 **The stop read** (step stop) names that level: `stop <tf> low|high
 <price>` (a completed candle's), `stop <tf> swing low|high <price>` (a
-confirmed swing, tf optional: `m3.swings`, `m3.liquidity`, `m3.htfLevels`) or `stop
+confirmed swing, tf optional: `m3.swings`, `m3.liquidity`, `m3.htfLevels`), `stop
+<tf> box low|high <price>` (a box's far side: `compression`) or `stop
 <level> <price>`. Code places the stop one tick beyond it, at least the
 larger of 8 ticks and 0.25 x ATR(20); a closer one is refused, never
 widened: name a farther level, or pass. This skill never moves, widens or

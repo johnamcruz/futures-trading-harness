@@ -53,7 +53,8 @@
  *   <tf> compression break up|down          m3.compression.<tf>: state expanding the read's way (compression.js: an
  *                                           expansion candle closed out of the box in the last recentBars candles,
  *                                           not back inside, not late); timed from that candle   up long, down short
- *   <tf> box at <level>                     m3.compression.<tf>.box.levels (a live box: compressing or expanding)   none
+ *   <tf> box at <level>                     m3.compression.<tf>.box.levels (a live box: compressing or expanding),
+ *                                           the level within one ATR(14) of price (m3.atr14), as `at`  none
  *   swept <level>                           m3.sweeps (by name)                           none
  *   <tf> close top|middle|bottom            m3.candles.<tf>.closeLocation                 top long, bottom short
  *   <tf> momentum up|down                   D4's bar read on m3.candles.<tf>: rangeAtr >= 1, volRatio >= 1, close in
@@ -662,7 +663,7 @@ function checkRead(p, b, { tick = 0.25, side = null, riskPts = null } = {}) {
       const { state, box: bx, break: k } = got.x;
       const boxText = isObj(bx) ? ` the box ${bx.low}-${bx.high}` : '';
       const fact = state === 'expanding' && isObj(k) ? `the ${p.tf} expansion candle closed ${k.dir} out of${boxText} (range ${k.rangeVsBox}x the box's candles, ${k.rangeAtr} ATR), ${k.barsAgo} candle(s) ago`
-        : isObj(k) ? `the ${p.tf} compression is ${state}: its last break ${k.dir} is ${!k.expansion ? 'a small candle, no expansion' : k.backInside ? 'back inside the box (a fakeout)' : k.late ? `late (price ${k.runAtr} ATR past its close)` : 'not recent'}`
+        : isObj(k) ? `the ${p.tf} compression is ${state}: its last break ${k.dir} is ${!k.expansion ? 'no expansion (a small candle or a poke)' : k.backInside ? 'closed back inside the box' : k.beyondNow === false ? 'undone: price is back inside the box' : k.late ? `late (price ${k.runAtr} ATR past its close)` : 'not recent'}`
           : `the ${p.tf} compression is ${state}: no break out of a box`;
       return res(state === 'expanding' && isObj(k) && k.dir === p.value, fact, { field: `m3.compression.${p.tf}`, value: isObj(k) ? `${state} ${k.dir}` : state, dir: dirSide(p.value) });
     }
@@ -673,8 +674,14 @@ function checkRead(p, b, { tick = 0.25, side = null, riskPts = null } = {}) {
       if (!LIVE_BOX.has(got.x.state) || !isObj(bx)) return res(false, `no live ${p.tf} box (the ${p.tf} compression is ${got.x.state})`, { field: `m3.compression.${p.tf}.box` });
       const list = Array.isArray(bx.levels) ? bx.levels : [];
       const l = list.find(x => isObj(x) && levelName(x.name) === p.level);
-      return res(Boolean(l), l ? `the ${p.tf} box ${bx.low}-${bx.high} sits at ${l.name} ${l.price} (${l.edge})` : `the ${p.tf} box ${bx.low}-${bx.high} is at ${list.length ? list.map(x => x.name).join(', ') : 'no key level'}`,
-        { field: `m3.compression.${p.tf}.box.levels`, value: l ? l.name : null });
+      // A location is where price is now: the level within one ATR(14) of price, as `at <level>` holds it.
+      const price = num(m3.price);
+      const atr = num(m3.atr14);
+      const near = Boolean(l) && price !== null && atr > 0 && num(l.price) !== null && Math.abs(l.price - price) <= atr;
+      const fact = !l ? `the ${p.tf} box ${bx.low}-${bx.high} is at ${list.length ? list.map(x => x.name).join(', ') : 'no key level'}`
+        : near ? `the ${p.tf} box ${bx.low}-${bx.high} sits at ${l.name} ${l.price} (${l.edge}), within one ATR(14) ${atr} of price ${price}`
+          : `the ${p.tf} box sits at ${l.name} ${l.price}, but it is ${atr > 0 && price !== null ? `more than one ATR(14) ${atr} from price ${price}` : 'at an unknown distance from price'}`;
+      return res(near, fact, { field: `m3.compression.${p.tf}.box.levels, m3.atr14`, value: l ? l.name : null });
     }
     case 'swept': {
       if (!Array.isArray(m3.sweeps)) return res('unchecked', 'the sweeps are unknown');

@@ -13,10 +13,11 @@ const { scenario1 } = require('../fixtures/trade-lifecycle-scenario');
 
 // The scenario's 15m candle closed 14:45 and its 3m candle 15:00 (price 21540.25): a 15m box 21514-21530 under the prior
 // VAH, left by a 15m expansion candle that closed 14:45 above it.
-const BOX = { high: 21530, low: 21514, width: 16, widthAtr: 1.2, bars: 6, meanRangeAtr: 0.6, insideBars: 2, shape: 'flat', atr: 13.33, from: '2026-04-23T13:00:00.000Z', to: '2026-04-23T14:30:00.000Z', levels: [{ name: 'prior VAH', price: 21530.13, edge: 'top' }] };
-const BREAK = { dir: 'up', closedAt: '2026-04-23T14:45:00.000Z', close: 21541, rangeAtr: 2.4, rangeVsBox: 4, expansion: true, barsAgo: 0, backInside: false, runAtr: 0, late: false };
+const BOX = { high: 21530, low: 21514, width: 16, widthAtr: 1.2, bars: 6, meanRangeAtr: 0.6, volContract: 0.8, shape: 'flat', atr: 13.33, from: '2026-04-23T13:00:00.000Z', to: '2026-04-23T14:30:00.000Z', levels: [{ name: 'prior VAH', price: 21530.13, edge: 'top' }] };
+const BREAK = { dir: 'up', closedAt: '2026-04-23T14:45:00.000Z', close: 21541, rangeAtr: 2.4, rangeVsBox: 4, beyondAtr: 0.83, volVsBox: 2.1, expansion: true, barsAgo: 0, backInside: false, beyondNow: true, runAtr: 0, late: false };
 function briefing(c15 = { state: 'expanding', box: BOX, break: BREAK }, c3 = { state: 'neither', box: null, break: null }) {
   const b = scenario1();
+  b.sections.m3.data.atr14 = 13.33;
   b.sections.m3.data.compression = { '3m': c3, '5m': 'unavailable (not whole 3m bars; no 1m bars configured)', '15m': c15, '1h': { state: 'neither', box: null, break: null } };
   return b;
 }
@@ -46,8 +47,8 @@ test('compression break: TRUE only while expanding the read\'s way; compressing,
   assert.deepStrictEqual([t.check, t.dir, t.field], [true, 'long', 'm3.compression.15m']);
   assert.strictEqual(one('15m compression break down').check, false);
   assert.strictEqual(one('15m compression break down').dir, 'short');
-  for (const [state, brk, why] of [['compressing', null, /no break out of a box/], ['neither', { ...BREAK, expansion: false }, /a small candle, no expansion/],
-    ['compressing', { ...BREAK, backInside: true }, /fakeout/], ['neither', { ...BREAK, late: true, runAtr: 1.4 }, /late/]]) {
+  for (const [state, brk, why] of [['compressing', null, /no break out of a box/], ['neither', { ...BREAK, expansion: false }, /no expansion/],
+    ['compressing', { ...BREAK, backInside: true }, /closed back inside the box/], ['neither', { ...BREAK, late: true, runAtr: 1.4 }, /late/], ['neither', { ...BREAK, beyondNow: false }, /price is back inside the box/]]) {
     const x = one('15m compression break up', briefing({ state, box: BOX, break: brk }));
     assert.strictEqual(x.check, false, state);
     assert.match(x.fact, why);
@@ -57,8 +58,16 @@ test('compression break: TRUE only while expanding the read\'s way; compressing,
   assert.strictEqual(CR.checkRead(CR.parseRead('15m compression break up'), b).check, 'unchecked', 'no compression in the briefing');
 });
 
-test('box at: a key level of a live box (compressing or expanding), by name; none, another or a dead box is FALSE', () => {
+test('box at: a key level of a live box (compressing or expanding), by name, within one ATR(14) of price; none, another, a far one or a dead box is FALSE', () => {
   assert.deepStrictEqual([one('15m box at prior vah').check, one('15m box at prior vah').dir], [true, null]);
+  // The prior VAH 21530.13 is 10.12 from price 21540.25: within one ATR(14) 13.33. With an ATR of 10 it is not.
+  const far = briefing();
+  far.sections.m3.data.atr14 = 10;
+  assert.strictEqual(one('15m box at prior vah', far).check, false);
+  assert.match(one('15m box at prior vah', far).fact, /more than one ATR\(14\) 10 from price 21540.25/);
+  const noAtr = briefing();
+  delete noAtr.sections.m3.data.atr14;
+  assert.strictEqual(one('15m box at prior vah', noAtr).check, false);
   assert.strictEqual(one('15m box at prior val').check, false);
   assert.strictEqual(one('15m box at prior vah', briefing({ state: 'neither', box: BOX, break: { ...BREAK, backInside: true } })).check, false);
   assert.strictEqual(one('15m box at prior vah', briefing({ state: 'compressing', box: BOX, break: null })).check, true);

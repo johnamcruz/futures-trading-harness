@@ -81,17 +81,47 @@ test('compression: a poke of a tick or two beyond the box is no expansion; accep
   const p = C.compressionAt(poke, poke.length - 1, { params: P });
   assert.deepStrictEqual([p.state === 'expanding', p.break.beyondAtr, p.break.expansion], [false, 0.05, false]);
   assert.strictEqual(C.compressionAt(poke, poke.length - 1, { params: { ...P, minBeyondAtr: 0 } }).state, 'expanding');
-  // Accepted: price (the latest base close) still above the box high; back inside it is not, and the read is off.
+  // Price (the latest base close) still above the box high; back inside it, on the expansion candle's own bar, the
+  // transition is undone, and the line says why.
   const brk = candles([...PRE, ...BOX, [102, 112.5, 101.75, 112]]);
-  assert.strictEqual(C.compressionAt(brk, 21, { params: P, price: 104 }).break.accepted, true);
+  assert.strictEqual(C.compressionAt(brk, 21, { params: P, price: 104 }).break.beyondNow, true);
   const back = C.compressionAt(brk, 21, { params: P, price: 102.5 });
-  assert.deepStrictEqual([back.break.accepted, back.state], [false, 'neither']);
+  assert.deepStrictEqual([back.break.beyondNow, back.break.barsAgo, back.state], [false, 0, 'neither']);
+  assert.match(C.compressionLine({ '3m': back }), /0 bars ago, price back inside\.$/);
   // Volume: the break candle's against the box's mean; the box's second half against its first (falling: under 1).
   const withVol = (rows, vols) => candles(rows).map((x, i) => ({ ...x, v: vols[i] }));
   const v = withVol([...PRE, ...BOX, [102, 112.5, 101.75, 112]], [...PRE.map(() => 100), 60, 60, 60, 30, 30, 30, 180]);
   const x = C.compressionAt(v, v.length - 1, { params: P });
   assert.deepStrictEqual([x.box.volContract, x.break.volVsBox], [0.5, 4]);
   assert.strictEqual(C.compressionAt(brk, 21, { params: P }).box.volContract, null, 'no volume: unknown');
+});
+
+test('compression: no box holds a displacement candle (the pole is the move before it); a zero-range run is none', () => {
+  // A displacement candle (body 0.85 of a 20-point range, over 1.5 ATR) as the box's third candle: the box can't run through
+  // it, so the 3 candles after it are too few.
+  const pole = candles([...PRE, [101, 103, 100, 102], [102, 103, 100, 101], [101, 121, 101, 118], [113, 114.5, 112, 113.5], [113.5, 114.5, 112, 113], [113, 114.5, 112.5, 114]]);
+  assert.strictEqual(C.compressionAt(pole, pole.length - 1, { params: P }).state, 'neither');
+  // Without it (a small candle in its place), the same run is a box.
+  const quiet = candles([...PRE, [101, 103, 100, 102], [102, 103, 100, 101], [101, 103, 100, 102], [102, 103, 100.5, 101], [101, 102.5, 100.5, 102], [102, 103, 101, 102.5]]);
+  assert.strictEqual(C.compressionAt(quiet, quiet.length - 1, { params: P }).state, 'compressing');
+  const flat = candles([...PRE, ...Array.from({ length: 6 }, () => [100, 100, 100, 100])]);
+  assert.strictEqual(C.compressionAt(flat, flat.length - 1, { params: P }).state, 'neither');
+});
+
+test('compression: at the config\'s own values, a box and what is not one', () => {
+  const Q = C.PARAMS;
+  assert.strictEqual(C.compressionAt(candles([...PRE, ...BOX]), 20, { params: Q }).state, 'compressing');
+  // Candles stepping 8 points with a range of 3: 43 wide after 6 (about 3.8 ATR, over the config's boxAtr).
+  const step = candles([...PRE, ...Array.from({ length: 6 }, (_, i) => [100 + 8 * i, 103 + 8 * i, 100 + 8 * i, 103 + 8 * i])]);
+  assert.ok(43 / 11.4 > Q.boxAtr, 'the run is wider than the config allows');
+  assert.strictEqual(C.compressionAt(step, step.length - 1, { params: Q }).state, 'neither');
+  // Each candle a range of 14 (over the config's barAtr x the ATR before it).
+  const wide = candles([...PRE, ...Array.from({ length: 6 }, (_, i) => [100 + i, 107 + i, 93 + i, 101 + i])]);
+  assert.strictEqual(C.compressionAt(wide, wide.length - 1, { params: Q }).state, 'neither');
+  const one = candles([...PRE, [101, 103, 97, 102], [101, 102, 98, 101]]);
+  assert.strictEqual(C.compressionAt(one, one.length - 1, { params: Q }).state, 'neither');
+  const brk = candles([...PRE, ...BOX, [102, 112.5, 101.75, 112]]);
+  assert.strictEqual(C.compressionAt(brk, brk.length - 1, { params: Q }).state, 'expanding');
 });
 
 test('compression: what is not a box: a single inside bar, wide drifting candles, a run wider than boxAtr, a feed gap', () => {
@@ -150,6 +180,18 @@ test('compression: the key levels the box sits at, with the edge; the base bars\
   assert.deepStrictEqual(C.compressionAt(cs, cs.length - 1, { params: P, levels: own }).box.levels.map(l => l.name), ['day low']);
 });
 
+test('compression: the briefing block (compressionFrames): a swing on the box\'s timeframe or lower is never its level; levels as of the box\'s start', () => {
+  // 1h bars from 18:00 ET (23:00 UTC in March), the PRE candles then the box: one 1h box.
+  const t0 = Date.parse('2022-03-01T23:00:00Z');
+  const bars = [...PRE, ...BOX].map(([o, h, l, c], i) => ({ t: new Date(t0 + i * 3600000).toISOString(), o, h, l, c, v: 100 }));
+  const levels = [['untested 1h swing high', 103.25], ['1h swing low 100', 100], ['15m swing high 103', 103], ['4h swing high 103.5', 103.5], ['prior RTH high', 101.5]];
+  let asked = null;
+  const out = C.compressionFrames({ bars, base: 60, frames: [60], params: P, levels: from => { asked = from; return levels; } });
+  assert.strictEqual(out['1h'].state, 'compressing');
+  assert.strictEqual(asked, bars[15].t, 'levels as they stood at the box\'s first candle');
+  assert.deepStrictEqual(out['1h'].box.levels.map(l => l.name).sort(), ['4h swing high 103.5', 'prior RTH high']);
+});
+
 test('compression: the summary line only for a timeframe compressing or with a recent break', () => {
   const cs = candles([...PRE, ...BOX, [102, 112.5, 101.75, 112]]);
   const block = { '3m': C.compressionAt(cs, cs.length - 1, { params: P, levels: [['prior RTH high', 103.5]] }), '15m': { state: 'neither', box: null, break: null }, '5m': 'unavailable (x)' };
@@ -158,8 +200,9 @@ test('compression: the summary line only for a timeframe compressing or with a r
   assert.strictEqual(C.compressionLine({ '15m': { state: 'neither', box: null, break: null } }), null);
   // A small candle out is left out; a fakeout of an expansion is said; a box compressing is compact.
   const small = candles([...PRE, ...BOX, [102.5, 104.5, 100.5, 104.25]]);
-  assert.strictEqual(C.compressionLine({ '3m': { ...C.compressionAt(small, small.length - 1, { params: P }), state: 'neither' } }), null);
+  const smallState = C.compressionAt(small, small.length - 1, { params: P });
+  assert.doesNotMatch(String(C.compressionLine({ '3m': smallState })), /expansion|small candle/);
   const fake = candles([...PRE, ...BOX, [102, 112.5, 101.75, 112], [112, 112.5, 101, 102]]);
-  assert.match(C.compressionLine({ '3m': C.compressionAt(fake, fake.length - 1, { params: P }) }), /3m no expansion: box 100-103 .*, 1 bar ago, closed back inside: fakeout\.$/);
+  assert.match(C.compressionLine({ '3m': C.compressionAt(fake, fake.length - 1, { params: P }) }), /3m no expansion: box 100-103 .*, 1 bar ago, closed back inside\.$/);
   assert.match(C.compressionLine({ '15m': C.compressionAt(candles([...PRE, ...BOX]), 20, { params: P }) }), /: 15m compressing 6 bars in 100-103 \(0\.3 ATR, flat\)\.$/);
 });

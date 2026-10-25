@@ -9,10 +9,12 @@
  * candles never shrink the yardstick it is measured with).
  *
  *   box          a run of at least minBars and at most maxBars back-to-back completed candles (none across the daily
- *                break, a weekend or a feed gap) whose high-to-low width is at most boxAtr x ATR and whose mean candle
- *                range is at most barAtr x ATR; the longest such run ending on a candle is that candle's box. NOT a
- *                box: fewer than minBars candles (a single inside bar), a drift whose candles are wide (mean range
- *                over barAtr), or a run wider than boxAtr (a slow trend of small candles).
+ *                break, a weekend or a feed gap) whose high-to-low width is above 0 and at most boxAtr x ATR, whose
+ *                mean candle range is at most barAtr x ATR, and that holds no displacement candle (candle-facts.js
+ *                patternsOf, the candle-reading skill's: a pole is the move before the box, never in it); the longest
+ *                such run ending on a candle is that candle's box. NOT a box: fewer than minBars candles (a single
+ *                inside bar), a drift whose candles are wide (mean range over barAtr), a run wider than boxAtr (a trend
+ *                long enough to widen it), or one with a displacement candle in it.
  *   shape        'converging' (the second half's high-low at most convergeShare of the first half's, its high no
  *                higher and its low no lower: a pennant's box), else 'drifting up' | 'drifting down' (last close minus
  *                first open at least driftShare of the width: a flag's counter-drift), else 'flat'
@@ -22,27 +24,30 @@
  *                ATR, its close at least minBeyondAtr x ATR beyond the edge (a poke of a tick or two is none); a close
  *                out on a small candle is a drift out, not an expansion. `volVsBox`: its volume over the box's mean
  *                (support only, momentum-and-volume's), `beyondAtr` how far it closed beyond
- *   accepted     price now (the latest base close) still beyond the broken edge: acceptance, not a poke
+ *   beyondNow    price now (the latest base close) still beyond the broken edge (acceptance by closes is the
+ *                breakout-vs-fakeout skill's; this is only where price is)
  *   volContract  the box's second half's mean volume over its first half's (under 1: volume falling as it forms)
- *   backInside   a later completed candle closed back inside the box (high to low): a fakeout
+ *   backInside   a later completed candle closed back inside the box (high to low)
  *   runAtr       how far price has run past the expansion candle's close, its way, in ATR (late past maxRunAtr: the
  *                leg already left; the entry is the next closed candle, never a chase)
- *   levels       the key levels the box sits at (the briefing's named levels, never one its own candles made: the
- *                base timeframe's last swings, a swing on its own timeframe or lower, nor the day's or session's
- *                extreme on its own edge): a level inside it
+ *   levels       the key levels the box sits at: the briefing's levels as they stood when the box began (the caller's
+ *                `levels(from)`, so never one its own candles made), less a swing on its own timeframe or lower and
+ *                the day's or session's extreme on its own edge: a level inside it
  *                or within levelBandAtr x ATR of an edge, with that
  *                edge: 'top' (the box pressing under it), 'bottom' (resting on it) or 'inside'; at most maxLevels,
  *                nearest an edge first
- *   state        'expanding': the latest break within recentBars candles is an expansion, not back inside, accepted, not
- *                late;
+ *   state        'expanding': the latest break within recentBars candles is an expansion, not back inside, price still
+ *                beyond it, not late;
  *                else 'neither' while an expansion in those candles failed (back inside or late: its box shown); else
  *                'compressing': a box ends on the last completed candle; else 'neither'
  *
  *   PARAMS                                     the config's values (frozen)
- *   boxesOf(candles, atr, params)              per candle the longest box ending on it, or null (O(n x maxBars))
+ *   boxEndingAt(candles, atr, e, params)       the longest box ending on candle e, or null (O(maxBars))
+ *   boxesOf(candles, atr, params)              boxEndingAt for every candle (the census)
  *   compressionAt(candles, j, { price, params })   { state, box, break } as of candle j (null fields when none)
  *   compressionFrames({ bars, base, fine, frames, at, price, levels })   the briefing's `compression` (levels: the
- *                                              briefing's named levels, [name, price, shown?]): { '3m': {...} |
+ *                                              briefing's named levels, [name, price, shown?], or a function of a
+ *                                              box's start time giving them as they stood then): { '3m': {...} |
  *                                              'unavailable (...)', ... } (candle-facts.js completedCandlesAt: the
  *                                              briefing's candle rule)
  *   compressionLine(block, et)                 the summary's line: a timeframe expanding, an expansion that failed (a
@@ -50,7 +55,7 @@
  */
 
 const ind = require('./indicators');
-const { completedCandlesAt, label } = require('./candle-facts');
+const { completedCandlesAt, label, patternsOf } = require('./candle-facts');
 
 const PARAMS = require('../tunables').analysis().compression; // config/analysis.json
 const RUNNING = /^(day|session) (high|low)$/;
@@ -60,33 +65,37 @@ const num = x => (typeof x === 'number' && Number.isFinite(x) ? x : null);
 /** Whether candle b opens where candle a closed (back to back: no break, weekend or feed gap between). */
 const adjacent = (a, b) => Boolean(a && b) && Date.parse(a.closedAt) === Date.parse(b.t);
 
-/** Per candle index, the longest box ending on it (see the header), or null. */
-function boxesOf(cs, atr, P = PARAMS) {
-  const out = new Array(cs.length).fill(null);
-  for (let e = 0; e < cs.length; e += 1) {
-    let hi = -Infinity;
-    let lo = Infinity;
-    let sum = 0;
-    let best = null;
-    for (let k = 1; k <= P.maxBars; k += 1) {
-      const s = e - k + 1;
-      if (s < 1) break;
-      if (k > 1 && !adjacent(cs[s], cs[s + 1])) break;
-      const c = cs[s];
-      hi = Math.max(hi, c.h);
-      lo = Math.min(lo, c.l);
-      sum += c.h - c.l;
-      if (k < P.minBars) continue;
-      const ref = atr[s - 1];
-      if (!(ref > 0)) continue;
-      const width = hi - lo;
-      const mean = sum / k;
-      if (width <= P.boxAtr * ref && mean <= P.barAtr * ref) best = { s, e, high: hi, low: lo, width, meanRange: mean, atr: ref };
-    }
-    out[e] = best;
+/** Whether candle i is a displacement candle (candle-facts.js patternsOf, ATR as of the candle before it). */
+const displacementAt = (cs, atr, i) => i > 0 && patternsOf(cs[i], cs[i - 1], atr[i - 1]).includes('displacement');
+
+/** The longest box ending on candle e (see the header), or null. Reads candles up to e only. */
+function boxEndingAt(cs, atr, e, P = PARAMS) {
+  let hi = -Infinity;
+  let lo = Infinity;
+  let sum = 0;
+  let best = null;
+  for (let k = 1; k <= P.maxBars; k += 1) {
+    const s = e - k + 1;
+    if (s < 1) break;
+    if (k > 1 && !adjacent(cs[s], cs[s + 1])) break;
+    // A displacement candle is the move, never the rest: no box holds one (nor any longer run through it).
+    if (displacementAt(cs, atr, s)) break;
+    const c = cs[s];
+    hi = Math.max(hi, c.h);
+    lo = Math.min(lo, c.l);
+    sum += c.h - c.l;
+    if (k < P.minBars) continue;
+    const ref = atr[s - 1];
+    if (!(ref > 0)) continue;
+    const width = hi - lo;
+    const mean = sum / k;
+    if (width > 0 && width <= P.boxAtr * ref && mean <= P.barAtr * ref) best = { s, e, high: hi, low: lo, width, meanRange: mean, atr: ref };
   }
-  return out;
+  return best;
 }
+
+/** boxEndingAt for every candle index (the census). */
+const boxesOf = (cs, atr, P = PARAMS) => cs.map((_, e) => boxEndingAt(cs, atr, e, P));
 
 /** The box's shape (see the header). */
 function shapeOf(cs, box, P) {
@@ -105,7 +114,7 @@ function boxFact(cs, box, P, levels = []) {
   return {
     high: box.high, low: box.low, width: r2(box.width), widthAtr: r2(box.width / box.atr), bars: box.e - box.s + 1,
     meanRangeAtr: r2(box.meanRange / box.atr), volContract: r2(volContractOf(cs, box)), shape: shapeOf(cs, box, P), atr: r2(box.atr),
-    from: cs[box.s].t, to: cs[box.e].closedAt, levels: levelsAt(box, levels, P),
+    from: cs[box.s].t, to: cs[box.e].closedAt, levels: levelsAt(box, typeof levels === 'function' ? levels(cs[box.s].t) : levels, P),
   };
 }
 
@@ -145,15 +154,17 @@ function compressionAt(cs, j, { price = null, params = PARAMS, atr = null, boxes
   const none = { state: 'neither', box: null, break: null };
   if (!Array.isArray(cs) || !(j >= 0 && j < cs.length)) return none;
   const a = atr || ind.atr(cs, ind.ATR_PERIOD);
-  // Only candles up to j are read: a box or break after it changes nothing.
-  const bx = boxes || boxesOf(cs.slice(0, j + 1), a, P);
+  // Only candles up to j are read (boxEndingAt reads up to its own e): a box or break after it changes nothing. Only the
+  // boxes the breaks and the state need: those ending in the last recentBars + 1 candles.
+  const memo = new Map();
+  const bx = { at: e => { if (boxes) return boxes[e]; if (!memo.has(e)) memo.set(e, e >= 0 && e <= j ? boxEndingAt(cs, a, e, P) : null); return memo.get(e); } };
   const now = num(price) !== null ? price : cs[j].c;
   // The breaks in the last recentBars candles, latest first: a candle closing beyond the box that ended on the candle
   // before it. The latest expansion among them is the transition (a small candle after it, closing beyond a box that
   // took the expansion candle in, is its follow-through, not a new break); else the latest break.
   const breaks = [];
   for (let b = j; b >= Math.max(1, j - P.recentBars); b -= 1) {
-    const box = bx[b - 1];
+    const box = bx.at(b - 1);
     const c = cs[b];
     if (!box || !adjacent(cs[b - 1], c)) continue;
     const dir = c.c > box.high ? 'up' : c.c < box.low ? 'down' : null;
@@ -172,17 +183,17 @@ function compressionAt(cs, j, { price = null, params = PARAMS, atr = null, boxes
       box, dir, closedAt: c.closedAt, close: c.c, rangeAtr: r2(rangeAtr), rangeVsBox: r2(rangeVsBox),
       beyondAtr: r2(beyondAtr), volVsBox: r2(volVsBox),
       expansion: rangeVsBox >= P.expandRange && rangeAtr >= P.expandAtr && beyondAtr >= P.minBeyondAtr, barsAgo: j - b, backInside,
-      // Accepted: price now (the latest base close) still beyond the broken edge, not back in the box.
-      accepted: dir === 'up' ? now > box.high : now < box.low, runAtr: r2(runAtr), late: runAtr > P.maxRunAtr,
+      // Price now (the latest base close) still beyond the broken edge, not back in the box.
+      beyondNow: dir === 'up' ? now > box.high : now < box.low, runAtr: r2(runAtr), late: runAtr > P.maxRunAtr,
     });
   }
   const brk = breaks.find(x => x.expansion) || breaks[0] || null;
-  const breakFact = x => ({ dir: x.dir, closedAt: x.closedAt, close: x.close, rangeAtr: x.rangeAtr, rangeVsBox: x.rangeVsBox, beyondAtr: x.beyondAtr, volVsBox: x.volVsBox, expansion: x.expansion, barsAgo: x.barsAgo, backInside: x.backInside, accepted: x.accepted, runAtr: x.runAtr, late: x.late });
-  if (brk && brk.expansion && !brk.backInside && brk.accepted && !brk.late) return { state: 'expanding', box: boxFact(cs, brk.box, P, levels), break: breakFact(brk) };
+  const breakFact = x => ({ dir: x.dir, closedAt: x.closedAt, close: x.close, rangeAtr: x.rangeAtr, rangeVsBox: x.rangeVsBox, beyondAtr: x.beyondAtr, volVsBox: x.volVsBox, expansion: x.expansion, barsAgo: x.barsAgo, backInside: x.backInside, beyondNow: x.beyondNow, runAtr: x.runAtr, late: x.late });
+  if (brk && brk.expansion && !brk.backInside && brk.beyondNow && !brk.late) return { state: 'expanding', box: boxFact(cs, brk.box, P, levels), break: breakFact(brk) };
   // An expansion that failed (back inside: a fakeout; or late) in the last recentBars candles: the transition is spent,
   // with the box it left (never a wider box that took the expansion candle in).
   if (brk && brk.expansion) return { state: 'neither', box: boxFact(cs, brk.box, P, levels), break: breakFact(brk) };
-  if (bx[j]) return { state: 'compressing', box: boxFact(cs, bx[j], P, levels), break: brk ? breakFact(brk) : null };
+  if (bx.at(j)) return { state: 'compressing', box: boxFact(cs, bx.at(j), P, levels), break: brk ? breakFact(brk) : null };
   return brk ? { state: 'neither', box: boxFact(cs, brk.box, P, levels), break: breakFact(brk) } : none;
 }
 
@@ -195,8 +206,9 @@ function compressionFrames({ bars, base, fine = null, frames = PARAMS.frames, at
     const cs = c.candles.slice(0, c.j + 1).map(({ t, closedAt, o, h, l, c: cl, v }) => ({ t, closedAt, o, h, l, c: cl, v }));
     // A swing on the box's timeframe or a lower one may be the box's own candles' (its high or low): never a key level
     // it sits at; a higher timeframe's swing is.
-    const own = ([name]) => { const k = /^(\d+)(m|h) swing\b/.exec(name); return Boolean(k) && Number(k[1]) * (k[2] === 'h' ? 60 : 1) <= m; };
-    out[label(m)] = compressionAt(cs, c.j, { price, params, levels: (levels || []).filter(x => !own(x)) });
+    const own = ([name]) => { const k = /^(?:untested )?(\d+)(m|h) swing\b/.exec(name); return Boolean(k) && Number(k[1]) * (k[2] === 'h' ? 60 : 1) <= m; };
+    const mine = list => (list || []).filter(x => !own(x));
+    out[label(m)] = compressionAt(cs, c.j, { price, params, levels: typeof levels === 'function' ? from => mine(levels(from)) : mine(levels) });
   }
   return out;
 }
@@ -217,7 +229,7 @@ function compressionLine(block, et = x => x) {
     const b = x.box;
     const k = x.break && x.break.expansion ? x.break : null;
     const boxText = `box ${b.low}-${b.high} (${b.width} pts, ${b.widthAtr} ATR, ${b.bars} bars, ${b.shape}${at(b)})`;
-    const brk = k ? `expansion closed ${et(k.closedAt)} ${k.dir === 'up' ? 'above' : 'below'} it (range ${k.rangeVsBox}x the box's candles, ${k.rangeAtr} ATR), ${k.barsAgo} ${k.barsAgo === 1 ? 'bar' : 'bars'} ago${k.backInside ? ', closed back inside: fakeout' : ''}${k.late ? `, late: ${k.runAtr} ATR past its close` : ''}` : '';
+    const brk = k ? `expansion closed ${et(k.closedAt)} ${k.dir === 'up' ? 'above' : 'below'} it (range ${k.rangeVsBox}x the box's candles, ${k.rangeAtr} ATR), ${k.barsAgo} ${k.barsAgo === 1 ? 'bar' : 'bars'} ago${k.backInside ? ', closed back inside' : !k.beyondNow ? ', price back inside' : ''}${k.late ? `, late: ${k.runAtr} ATR past its close` : ''}` : '';
     if (x.state === 'expanding') parts.push(`${tf} expanding ${k.dir}: ${boxText}, ${brk}`);
     else if (k) parts.push(`${tf} no expansion: ${boxText}, ${brk}`);
     // Compressing: compact (the JSON holds the rest).
