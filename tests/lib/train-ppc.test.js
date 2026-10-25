@@ -505,6 +505,8 @@ function world({ proposals, verdict = 'kept', loop: over = {}, trend = false, tr
       const sessions = require('../../scripts/lib/train/trend-windows').windowStates({ days: recorded, windows, minutes: 3 }).map(s => ({ ...s, rollMonth: false }));
       return { capture: { legs }, days: Object.fromEntries(days.map(d => [d, [{ t: `${d}T14:42:02.000Z`, trades: [{ roundTrip: { r: /GREEDY/.test(text) ? -1 : 0 } }] }]])), first, entries, sessions, stepped: Object.values(recorded).flat().map(l => l.t), minutes: 3 };
     },
+    // The trend facts (trend-facts.js attachFacts on the run's files): every missed leg here had a valid plan (learnable).
+    trendFacts: (capture, { runDir }) => { calls.trendFacts = [...(calls.trendFacts || []), path.basename(runDir)]; return { ...capture, legs: capture.legs.map(l => (l.captured ? l : { ...l, facts: { learnable: true, why: 'the standard plan passes', bars: [], owner: null } })) }; },
     // proposals: a list, or a function of the round (1, 2, ...) giving that round's list.
     proposeProbes: async opts => { calls.proposeProbes.push(opts); return { proposals: (typeof proposals === 'function' ? proposals(calls.proposeProbes.length) : proposals).map(p => ({ ...p })) }; },
     propose: async () => { calls.propose += 1; return { proposals: [] }; },
@@ -627,6 +629,11 @@ test('with a trend set: its missed legs are findings first; an edit that catches
   const report = JSON.parse(fs.readFileSync(path.join(w.paths.iter(1), 'probe-report.json'), 'utf8'));
   assert.deepStrictEqual(report.trend.batch, { index: 0, size: BATCH, from: 0, cycles: [0], trigger: 'start', why: `the loop's first round: ${BATCH} legs` });
   assert.deepStrictEqual([report.trend.probe.legs, report.trend.confirm.legs], [split.probe.legs, split.confirm.legs]);
+  // The probe half's missed legs counted (every one learnable here: the trendFacts step's), the facts worked out only
+  // for the champion's probe-half runs (the findings' half), never a confirm, regression or edit run.
+  assert.deepStrictEqual(report.trend.missed, { missed, learnable: missed, noValidPlan: 0, unknown: 0 });
+  const probeDay = r => split.probe.days.some(d => r.includes(`t${d.replace(/-/g, '')}.`));
+  assert.ok(w.calls.trendFacts.length && w.calls.trendFacts.every(r => r.startsWith('l1-pc') && probeDay(r)), w.calls.trendFacts.join());
   assert.deepStrictEqual(report.trend.probe.days.filter(d => report.trend.confirm.days.includes(d)), [], 'no day in both halves');
   assert.deepStrictEqual(report.trend.regression, [REG_DAY]);
   assert.deepStrictEqual(report.probes.map(p => p.verdict), ['helped', 'no effect', 'helped', 'hurt'], 'the greedy edit\'s catches on losing sessions never count; a leg lost on the regression day hurts');

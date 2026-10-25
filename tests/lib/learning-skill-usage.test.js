@@ -273,6 +273,9 @@ test('skill usage: never shown to the model: only the replay report (and the sta
     // outcome) go to the design-time proposer, never to a trading cycle; probe.js reads each probe run's report for the code screen.
     'scripts/lib/train/findings.js',
     'scripts/lib/train/probe.js',
+    // The trend facts (train/trend-facts.js) rebuild a past bar's briefing with briefingFrom alone, after the run, for
+    // the proposer's findings (a test there keeps it out of every trading prompt and tool).
+    'scripts/lib/train/trend-facts.js',
     'scripts/replay.js',
     'scripts/skill-usage.js',
   ]);

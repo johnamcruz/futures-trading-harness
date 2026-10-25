@@ -58,6 +58,7 @@ const { recordedTimes } = require('../replay/store');
 const TS = require('./trend-set');
 const TSC = require('./trend-screen');
 const TF = require('./trend-findings');
+const TFX = require('./trend-facts');
 const TC = require('./trend-curve');
 const FT = require('./first-try');
 const SEL = require('./selection');
@@ -287,7 +288,9 @@ async function probeRound(ctx, { n, champion, api }) {
       out.sessions.push(...(one.sessions || built.windows.map(w => ({ unit: w.id, day, complete: false, why: 'the step reported no session state', rollMonth: false }))));
       out.cycles += one.cycles;
       if (!reused) out.fresh += one.cycles;
-      if (withFindings && one.capture) out.captures.push(one.capture);
+      // The findings' half: each missed leg's facts at its start (trend-facts.js), from the run's own files, after the
+      // run and outside its home; never in the capture the run's folder holds, never in a phase a trading run reads.
+      if (withFindings && one.capture) out.captures.push((ctx.steps.trendFacts || TFX.attachFacts)(one.capture, { runDir: runs.runs[0].runDir, tree, barsFiles }));
     }
     // A half screens the batch's own legs only (a replayed session can hold legs of another round's batch); the
     // regression days screen every leg they hold.
@@ -336,6 +339,12 @@ async function probeRound(ctx, { n, champion, api }) {
   report.cycles.champion.probe = base.cycles;
   // The trend set's probe half and the regression days, the champion's (the findings read the probe half only).
   const trendBase = trend ? await trendSide('pc', champion.dir, 1, 'probe', true) : null;
+  // The probe half's missed legs: those a valid plan existed for (findings), those with none (a correct pass), unknown.
+  if (trendBase) {
+    report.trend.missed = TF.missedTally(trendBase.captures);
+    const t = report.trend.missed;
+    ctx.log(`iteration ${n}: trend probe half: ${t.missed} missed leg(s): ${t.learnable} learnable, ${t.noValidPlan} no valid plan at the time (a correct pass), ${t.unknown} facts unknown`);
+  }
   const regBase = trend ? await trendSide('pc', champion.dir, 1, 'regression') : null;
   // The champion's confirm half too, every round: the learning curve reads it (trend-curve.js); nothing of it reaches the
   // proposer, and no edit runs it.

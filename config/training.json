@@ -61,5 +61,6 @@
   "skillUsage": { "top": 3 },
   "trendBatch": { "start": 100, "max": 400, "half": 0.5, "growAfter": 2, "growFactor": 2, "plateauRounds": 3 },
   "trendScreen": { "rollFlagGaps": [0, 3] },
-  "trendWindows": { "leadBars": 4, "controlPerLeg": 1 }
+  "trendWindows": { "leadBars": 4, "controlPerLeg": 1 },
+  "trendFindings": { "examples": 2, "exampleChars": 900, "saidChars": 160 }
 }

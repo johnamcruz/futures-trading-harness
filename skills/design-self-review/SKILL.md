@@ -60,7 +60,9 @@ If no document change would help, reply: NO PROPOSAL
 With the loop's `probe` setting (Propose-Probe-Compose, `docs/TRAINING.md`)
 the loop uses this prompt instead. `{{FLOW}}` is the trading flow's steps
 in order, `{{FINDINGS}}` the round's findings grouped by the step they
-block (in rank order inside a step), `{{LESSONS}}` a short summary of
+block (in rank order inside a step; a trend finding lists a few of its
+legs, each with the reads code verified at its start, what you said and
+any contradiction, never a date, time or price), `{{LESSONS}}` a short summary of
 what earlier probes showed, with sample sizes, `{{K}}` the number of edits.
 Each edit is tested alone on the same practice moments, then the ones that
 helped are combined by code.
@@ -83,6 +85,9 @@ Read the skills and the desk roles in your working directory. Propose at most {{
 Rules:
 - Edit the skill or the role the finding names. A finding with neither: edit the skill or role whose text misled you.
 - An edit helps you read the facts better. It never makes you take a trade the facts don't support.
+- A trend leg lists the facts code verified at its start and what you said → fix the read or rule that hid them.
+- A leg's contradiction → edit how that step's read is read, in the skill the finding names.
+- Never add a rule that takes a trade on a read the facts don't list.
 - Write rules as short lines (at most 120 characters), condition then action: "- <when this holds> → <do this>".
 - Add no numbers, in digits or words ("three", "half").
 - Never edit the frontmatter (a skill's name and description; a role's tools and skill lists).

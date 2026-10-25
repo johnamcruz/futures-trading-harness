@@ -571,6 +571,48 @@ and leg ids; the lessons lines record the batch too.
   head trader's pass, names no owner. A rule (the clock, the account's
   stops, news), a bar outside the session and a position already open are
   never findings: those are code and the rulebook.
+- **Learnable legs only** (`scripts/lib/train/trend-facts.js`). After the
+  probe half's champion runs, code works out each missed leg's facts at its
+  entry-able bars: the trade cycles of its catch window, less those a rule
+  blocked. The briefing at each bar is rebuilt from the run's own bars, as
+  the skill-usage report rebuilds it. A timeframe the rebuild lacks (the 5m
+  without the run's 1m bars) is `unknown`. Where the run recorded a
+  compose_check call on the bar, its reads are checked again: if the record
+  and the rebuild disagree, the bar is `unknown`. At each bar code lists the
+  reads TRUE on the leg's side per step (compose-hints' candidates). It
+  also says whether a valid with-trend plan existed: the window allows
+  entries, the trend rule allows the side (not only as a reversal), and the
+  standard plan or a combination of those reads passes compose_check and the
+  plan (R:R, room, the stop floor). Under a prop attempt a size must fit the
+  attempt's budget and room as that cycle's attempt line stated them, at the
+  rulebook's floor. The model's own OK record that way counts too, unless
+  the floor refused it. A leg with a valid plan at any bar is learnable and
+  can be a finding. A leg every bar of which was known, with none, had no
+  valid plan at the time: a correct pass, counted, never a finding. Any
+  other leg's facts are unknown, also counted. `probe-report.json`
+  (`trend.missed`), the round's log and `train-loop.js status` give the
+  three counts.
+- **What the proposer sees.** Each trend finding lists up to `examples`
+  of its legs (`config/training.json` `trendFindings`), the costliest
+  first, each clipped to `exampleChars`. Each example gives the side, what
+  the model said (its CYCLE RESULT line, clipped to `saidChars`, and for a
+  refused plan its reads), and any contradiction. It then gives the reads
+  code verified at the leg's start (bias to entry), and the passing plan or
+  why none passed. A contradiction is flagged only when the same machinery
+  shows a stated step-claim false. "No setup" or "no rejection" is false
+  beside a verified setup read. "No entry" is false beside a verified
+  confirmation on a candle closed after it. "Not at a level" is false beside
+  a verified `at` read. "Against the trend" is false when the trend rule
+  allows the side. A 15m, 1h or 4h direction the checker finds FALSE is
+  flagged, and so is every claim the reason check finds false. A no-plan
+  leg is filed under the first flow step where its reason and the facts
+  disagree, owned by that read's skill (the crosswalk); else no owner.
+- **No leak.** The examples name reads by timeframe and level name only:
+  dates, clock times, prices, numbers, ids and account names are removed,
+  and tests scan the proposer's prompt for the legs' dates and prices. The
+  facts are worked out after the run, outside the run home: the capture in
+  the run's folder is unchanged, and no trading prompt or tool requires the
+  module. The trading model never sees them.
 - **The screen** (`scripts/lib/train/trend-screen.js`). Its units are the
   stepped windows. Legs are paired by id: caught or not, a one-sided McNemar
   test. A catch counts as fixed only when its window's net R got no worse,
@@ -1260,7 +1302,7 @@ through `scripts/lib/tunables.js` (the schedule through
 | File | What it holds | Tighten-only keys |
 | --- | --- | --- |
 | `config/schedule.json` | The learning split, the prop schedule, look budgets, recorded looks, data dates (above) | look budgets, validate cap (down); reserve months (up); final needs a test pass |
-| `config/training.json` | The stage-1 exit test, the experience index and risk record minimums, the keep rule, the paired decision rule, the probe screen, probe and loop ranges, A/B levels, proposal, compose, lesson and probe-edit limits, skill byte caps, the learning report, the field studies | the exit test's bars, the sample floors and levels, the keep rule (its primary pinned), the decision rule, the screen, the loop's budget maxima, proposal limits, arms per evaluation, skill byte caps |
+| `config/training.json` | The stage-1 exit test, the experience index and risk record minimums, the keep rule, the paired decision rule, the probe screen, probe and loop ranges, A/B levels, proposal, compose, lesson and probe-edit limits, skill byte caps, the learning report, the field studies, the trend findings' example legs | the exit test's bars, the sample floors and levels, the keep rule (its primary pinned), the decision rule, the screen, the loop's budget maxima, proposal limits, arms per evaluation, skill byte caps |
 | `config/replay.json` | Latency, the stage presets, curated lists and moments, setup moments, the account-state draw, driver retries, decision labels, the scorecard's give-back rule, the backtester's plain-run defaults | the stage presets (pinned) |
 | `config/runner.json` | The order gate's limits and timing, the trade lifecycle's size cap, the account snapshot, the replay clock, cycles, bars, prompt sizes, the live session, alerts, read caps and page sizes, the Monte Carlo's size | the gate's timing (pinned), its loss, entry, age and confluence limits, the bracket tolerances, the facts check, the size cap, the snapshot and clock tolerances, the kill switch's error count, bar staleness, the close settle time, the kill graces and the gate slack (pinned), the Monte Carlo maximum |
 | `config/analysis.json` | The reads' parameters: indicators, the snapshot, regime, CISD, CRT, volume profile, candles, the multi-timeframe read, day context, structure, momentum, fair value gaps, the briefing's frames, the rules evaluator's window | none |
