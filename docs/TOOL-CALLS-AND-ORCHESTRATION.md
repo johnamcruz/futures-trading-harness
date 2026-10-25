@@ -380,12 +380,15 @@ head trader's run, before the cycle log; per role `config/runner.json`
    setup to the reading; `trading/phase2-restate.js`): a report whose approving
    VERDICT line the reading still refuses (`approvalReadAsVeto`, or no size
    `approvedSize` can read) is restated once. Never a real veto (a VERDICT line
-   that refuses or says veto, beside an approving one or not:
-   `verdictLineRefuses`), no approving VERDICT line, a failed run, an approval
+   whose decision refuses, beside an approving one or not, or a line starting
+   with a veto: `verdictLineRefuses`; a negated veto word on an approving
+   VERDICT line, "no veto needed", is restated, decided in review
+   2026-10-24), no approving VERDICT line, a failed run, an approval
    that read fine, or a report that stated no size (a Size line of 0, none,
    n/a; no VERDICT size). The bound is every size the report stated, the
    smallest (`restateCeiling`: the VERDICT size, each number-led Size line and
-   its cuts, each prose Size line's cuts; an unmade cut lowers nothing). No
+   its cuts, each prose Size line's cuts, a spelled size after "to" anywhere
+   on a Size line; an unmade cut lowers nothing). No
    harness here resumes a role's session, so it is a fresh phase-2 run given
    its first report (`requests.js restate`: what couldn't be read, in the
    report's words; the two lines `Size: <n>` and its VERDICT line, or its VETO
@@ -393,8 +396,10 @@ head trader's run, before the cycle log; per role `config/runner.json`
    unreadable, or a failed run, leaves the first report's outcome. Approved,
    its size is at most the bound, and the role record gets the decisive record
    after the first report: the answer, `Size: <the bound>` and the first
-   report's FACTS block whole (from its first FACTS line to its end, its
-   VERDICT and Size lines out), read again as one approval of exactly that
+   report's FACTS block whole (from its first FACTS line to its end, only its
+   approving VERDICT line and Size lines stating a size out; any other
+   VERDICT- or Size-led line in it, "Size: vwap above": no restatement), read
+   again as one approval of exactly that
    size. Its facts (decided in review, 2026-10-24): the first report must have
    one FACTS line, be about the order's symbol (no other cycle symbol named
    without it), and the decisive record's fact items must equal the first

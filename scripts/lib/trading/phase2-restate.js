@@ -16,7 +16,8 @@
  *                 never the reader's internals: what the request names
  *       ceiling   the most the restatement may approve (roles-ran.js restateCeiling: the VERDICT line's size and every
  *                 size and cut its Size lines state, the smallest); none stated: null (no restatement)
- *     null: a VERDICT line that refuses or says veto (a real veto, roles-ran.js verdictLineRefuses), no approving
+ *     null: a VERDICT line whose decision refuses, or a line starting with a veto (a real veto, roles-ran.js
+ *     verdictLineRefuses; a negated veto word on an approving VERDICT line is restated), no approving
  *     VERDICT line, an approval that reads fine, a report that states no size to bound it
  *   readRestatement(first, answer, ceiling, { root, symbols })
  *       { outcome: 'approved', size, line, text }   size = min(the answer's size, ceiling); `line` the VERDICT line the
@@ -28,10 +29,12 @@
  *                                                   exactly the first report's
  *       { outcome: 'vetoed', line }                 a veto in the answer is a veto (its decisive line)
  *       { outcome: 'unreadable', why }              anything else: no trade; also a first report with no single FACTS
- *                                                   line, or about another cycle symbol (`symbols`) than `root`
+ *                                                   line, about another cycle symbol (`symbols`) than `root`, or whose
+ *                                                   FACTS block holds a VERDICT- or Size-led line that isn't its
+ *                                                   approving VERDICT line or a Size line stating a size
  */
 
-const { verdictOf, approvalReadAsVeto, approvedSize, restateCeiling, verdictLineRefuses, decisiveLine } = require('./roles-ran');
+const { verdictOf, approvalReadAsVeto, approvedSize, restateCeiling, verdictLineRefuses, decisiveLine, statesSize, approvingVerdictLines } = require('./roles-ran');
 const { factsFrom, factsLines, dropFactsLabels, checkFacts, otherSymbols } = require('./fact-claims');
 
 // The line an approvedSize error names, in its own quotes (the error's last quoted span), else ''.
@@ -77,11 +80,20 @@ function readRestatement(first, answer, ceiling, { root = null, symbols = [] } =
   const a = approvedSize(said);
   if (a.error) return { outcome: 'unreadable', why: `the restatement states no size that can be read (${a.error})` };
   const size = Math.min(a.size, ceiling);
-  const facts = withoutVerdictOrSize(factsFrom(first));
+  // The FACTS block loses only the lines the readers read as its verdict and size (an approving VERDICT line, a Size
+  // line stating a size); any other VERDICT- or Size-led line in it ("Size: vwap above") is an item the gate would
+  // refuse: no restatement.
+  const block = factsFrom(first);
+  const verdicts = approvingVerdictLines(first);
+  const stray = String(block || '').split('\n').find(l => VERDICT_OR_SIZE.test(l.replace(/\p{Cf}/gu, '')) && !verdicts.includes(l.trim()) && !statesSize(l));
+  if (stray !== undefined) return { outcome: 'unreadable', why: `the first report's FACTS block holds "${stray.trim()}", neither a fact nor its verdict or size` };
+  const facts = withoutVerdictOrSize(block);
   const text = [said, `Size: ${ceiling}`, facts].join('\n');
   // The decisive record is read again as the gate reads it: one approval, exactly the bound size, the first report's facts.
   const back = verdictOf(text) === 'APPROVE' ? approvedSize(text) : { error: 'not an approval' };
   if (back.error || back.size !== size) return { outcome: 'unreadable', why: 'the restatement with the first report\'s facts is no single approval of its size' };
+  // A construction guard (the block is built from the same lines, so it can't fail today): kept so a change to how the
+  // record is built can never drop, add or edit a fact unnoticed.
   if (JSON.stringify(factsLines(text)) !== JSON.stringify(factsLines(withoutVerdictOrSize(first)))) return { outcome: 'unreadable', why: 'the decisive record\'s facts are not the first report\'s' };
   const said1 = decisiveLine(said);
   const line = a.size === size ? said1 : `VERDICT: APPROVE - size ${size}, restated (it said ${a.size}; at most the ${ceiling} the first report stated)`;

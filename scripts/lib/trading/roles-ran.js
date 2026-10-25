@@ -611,14 +611,33 @@ function verdictSize(text) {
 }
 
 /**
- * A VERDICT-keyword decision line that refuses (its decision not approve/take: "the verdict is veto" too, which the
- * reader takes as one) or says veto ("VERDICT: APPROVE - size 2, not a veto"): the report's own verdict refuses. The runner never restates such a
- * report (phase2-restate.js: a real veto is never retried), whatever else it approves.
+ * The report's own verdict refuses: a VERDICT-keyword decision line whose decision is no approval (decisionLines'
+ * reading, its sentence-refusal rule too: "VERDICT: VETO - room", "The verdict is veto", "Sizing verdict: skip"), or a
+ * line that starts with a veto ("VETO - room"). A veto word elsewhere on an approving VERDICT line ("size 3, no veto
+ * needed", "(veto-free)") doesn't: such a report is restated and the answer read strictly (owner's goal, 2026-10-24:
+ * never lose a good setup to the reading). The runner never restates a refusing report (phase2-restate.js).
  */
+const STARTS_VETO = /^[\s>#*_`|+\-\u2022]*(?:\d+[.)][\s>#*_`|]*)?veto(?:ed|es)?\b/i;
 function verdictLineRefuses(text) {
-  return decisionLines(text).some(l => l.keyword === 'verdict' && (!AGREE.has(l.word) || VETO_WORD.test(l.line)));
+  if (decisionLines(text).some(l => l.keyword === 'verdict' && !AGREE.has(l.word))) return true;
+  return String(text || '').replace(/\r\n|[\r\u2028\u2029\u0085]/g, '\n').split('\n').some(l => STARTS_VETO.test(plainLine(l)));
 }
 
+/**
+ * A Size line that states a size (approvedSize reads it as one: a number first, or a count, a spelled number or a
+ * size word in it), not prose that only opens with "Size:" ("Size: vwap above"). The runner's decisive record leaves
+ * such Size lines out of a FACTS block, and no other (phase2-restate.js).
+ */
+const SIZE_STATED = new RegExp(`\\d|\\b(?:${[...SIZE_WORDS].map(w => w.replace('/', '\\/')).join('|')}|${'eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty'})\\b`, 'i');
+function statesSize(line) {
+  const m = SIZE_ONE.exec(String(line || ''));
+  return Boolean(m) && SIZE_STATED.test(`${m[1]}${m[2]}`);
+}
+
+/** The approving VERDICT lines as written, trimmed (the ones verdictOf approves on and approvedSize sizes). */
+const approvingVerdictLines = text => approvingLines(text).map(l => l.line.trim());
+
+const SPELLED_CUT = new RegExp(`(?:\\bto(?:\\s+size)?|\u2192|\u21d2|->|=>)\\s*(${SPELLED.join('|')})\\b`, 'gi');
 // A Size line's first word stating no size: the report stated none (no restatement).
 const NO_SIZE = new Set(['zero', 'none', 'nil', 'no', 'n/a', 'na', 'unknown', 'tbd', 'tba']);
 /**
@@ -642,6 +661,8 @@ function restateCeiling(text) {
     const tok = String(m[1] || '').replace(/[.*_]+$/, '');
     const low = tok.toLowerCase().replace(/[^a-z/]+$/, '');
     if (NO_SIZE.has(low) || /^0+$/.test(tok)) return { error: `a Size line states no size ("${shown}")` };
+    // A spelled size after "to" or an arrow anywhere on the line or its continuation ("three, cut to two"): it binds.
+    for (const c of `${m[1]}${m[2]} ${continuation(lines, i)}`.matchAll(SPELLED_CUT)) sizes.push(SPELLED.indexOf(c[1].toLowerCase()) + 1);
     if (/^[A-Za-z]/.test(tok)) {
       if (SPELLED.includes(low)) sizes.push(SPELLED.indexOf(low) + 1);
       for (const t of proseCuts(`${m[1]}${m[2]} ${continuation(lines, i)}`).sizes) if (whole(t)) sizes.push(Number(t));
@@ -821,4 +842,4 @@ function checkRolesRan(transcriptPath, cycle, cached = [], lookups = null, roles
     : null;
 }
 
-module.exports = { ANALYSTS, roleCalls, withRunnerRuns, cycleCalls, rolesInTranscript, missingRoles, checkRolesRan, approvedPhase2, assessRound, round, latestPhase2, verdictOf, approvalReadAsVeto, decisiveLine, approvedSize, verdictSize, verdictLineRefuses, restateCeiling, sizeRefusal, verdictMatches, verdictLines, decisionLines, verdictProblem };
+module.exports = { ANALYSTS, roleCalls, withRunnerRuns, cycleCalls, rolesInTranscript, missingRoles, checkRolesRan, approvedPhase2, assessRound, round, latestPhase2, verdictOf, approvalReadAsVeto, decisiveLine, approvedSize, verdictSize, verdictLineRefuses, restateCeiling, statesSize, approvingVerdictLines, sizeRefusal, verdictMatches, verdictLines, decisionLines, verdictProblem };

@@ -125,10 +125,16 @@ test('restateDue never retries a real veto (review finding 2): a VETO VERDICT li
   for (const t of [
     'VERDICT: VETO - room: stand aside\nVERDICT: APPROVE - size 2, risk $40\nFACTS: window asia',
     'VERDICT: APPROVE - size 2, risk $40\nVERDICT: VETO - room: stand aside\nFACTS: window asia',
-    'VERDICT: APPROVE - size 2, not a veto of the side\nFACTS: window asia',
+    'VETO - room: stand aside\nVERDICT: APPROVE - size 2, risk $40\nFACTS: window asia',
+    '**VETO**: the 1h CHoCH\nVERDICT: APPROVE - size 2\nFACTS: window asia',
     'The verdict is veto.\nVERDICT: APPROVE - size 2\nFACTS: window asia',
     'Sizing verdict: skip x0.5\nVERDICT: APPROVE - size 2\nFACTS: window asia',
   ]) assert.strictEqual(P.restateDue(t), null, t);
+  // A negated veto word on an approving VERDICT line is no veto (review L1): restated, the answer read strictly.
+  for (const v of ['size 3, no veto needed', 'size 3, not a veto', 'size 3, no hard stop or veto applies', 'size 3 (no veto)', 'size 3, vetoes: none', 'size 3 (veto-free)']) {
+    const d = P.restateDue(`VERDICT: APPROVE - ${v}\nFACTS: window asia`);
+    assert.deepStrictEqual([d && d.kind, d && d.ceiling], ['reads-as-veto', 3], v);
+  }
   // A refusal from a non-VERDICT decision line or prose is restated.
   assert.strictEqual(P.restateDue('Decision: cut to size 1\nVERDICT: APPROVE - size 2\nFACTS: window asia').kind, 'reads-as-veto');
   assert.strictEqual(P.restateDue('No VETO rules apply.\nVERDICT: APPROVE - size 2\nFACTS: window asia').kind, 'reads-as-veto');
@@ -200,4 +206,26 @@ test('config: entry.phase2RestateRetries is 1 (on), 0 turns it off, and more tha
   const at = v => { const c = JSON.parse(JSON.stringify(T.runner())); c.entry.phase2RestateRetries = v; return T.SPECS.runner.validate(c); };
   assert.deepStrictEqual(at(0), []);
   for (const v of [2, -1, 0.5, '1']) assert.ok(at(v).length > 0, String(v));
+});
+
+test('the ceiling counts a spelled cut anywhere on a Size line (review N1)', () => {
+  assert.deepStrictEqual(R.restateCeiling('Size: three, cut to two\nVERDICT: APPROVE - size 3'), { size: 2 });
+  assert.deepStrictEqual(R.restateCeiling('Size: 3 -> two on serious against\nVERDICT: APPROVE - size 3'), { size: 2 });
+  assert.deepStrictEqual(R.restateCeiling('Size: the translated 4, trimmed down to size one\nVERDICT: APPROVE - size 4'), { size: 1 });
+  assert.strictEqual(P.restateDue('Size: three, cut to two\nVERDICT: APPROVE - size 3\nFACTS: window asia').ceiling, 2);
+});
+
+test('a Size- or VERDICT-led line in the FACTS block that the readers don\'t read as its size or verdict is never dropped (review N2): unreadable', () => {
+  const A = 'Size: 2\nVERDICT: APPROVE - size 2, risk $40';
+  const head = 'Size: the record\'s 2, 1 category against\nVERDICT: APPROVE - size 2, risk $40\n';
+  for (const stray of ['Size: vwap above', 'VERDICT: see above', 'Size: as the briefing reads it']) {
+    const first = `${head}FACTS: window asia;\n${stray}`;
+    const r = P.readRestatement(first, A, 2);
+    assert.deepStrictEqual([r.outcome, r.why], ['unreadable', `the first report's FACTS block holds "${stray}", neither a fact nor its verdict or size`], stray);
+  }
+  // Its real VERDICT and Size lines after FACTS are still taken out (the 05-04 shape).
+  const ok = P.readRestatement('Size: the record\'s 2, 1 category against\nFACTS: window asia; trend long allowed\nSize: 2\nVERDICT: APPROVE - size 2, risk $40', A, 2);
+  assert.deepStrictEqual([ok.outcome, F.factsLines(ok.text)], ['approved', ['window asia', 'trend long allowed']]);
+  assert.strictEqual(R.statesSize('Size: vwap above'), false);
+  assert.strictEqual(R.statesSize('Size: the record\'s 2'), true);
 });
