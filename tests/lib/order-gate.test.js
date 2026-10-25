@@ -4028,6 +4028,12 @@ test('the floor stretch in an attempt: [max-risk] takes exactly the stretched fl
   const args = composedOrder({ home, root: 'MNQ', side: 'long', now: LCP.NOW, cycleBars: { MNQ: LC.BAR }, strategy: doc, strategies: reg(500), accounts: [LCP.MINI], specOf: lcSpec, accountId: 1, selected: ['MNQ'] }).args;
   assert.strictEqual(args.size, 3);
   assert.deepStrictEqual(lcPropEval(home, args, { registry: reg(500) }).violations, [], 'the stretched floor goes');
+  // The stretch is priced at the farther of the bracket and the rationale's `stop <price>` (never under-counted): a
+  // rationale stop 600 ticks under the 21540.25 entry (21390.25: (600 + 1) x $0.50 + $0.74 = $301.24, 3 = $903.72) is
+  // over the stretch: refused [max-risk], though the 111-tick bracket alone would pass.
+  assert.match(args.rationale, /stop 21512\.50/);
+  const far = lcPropEval(home, { ...args, rationale: args.rationale.replace('stop 21512.50', 'stop 21390.25') }, { registry: reg(500) });
+  assert.match(far.violations.find(v => v.check === 'max-risk').message, /^risk \$900\.00 \(size 3 x 600-tick stop .*the floor of 3 at \$301\.24 all in is \$903\.72, over the floor stretch's \$500\.00 too/);
   // 4 over the cap ($226.96): refused [max-risk] (only exactly the floor) and [composed-reads] (not the translated 3).
   const four = lcPropEval(home, { ...args, size: 4 }, { registry: reg(500) });
   assert.ok(checks(four).includes('composed-reads'));

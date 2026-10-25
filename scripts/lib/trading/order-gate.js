@@ -36,7 +36,7 @@ const { familyRoot } = require('./contracts');
 const { attestedSkills, parseAttestation, claudeAttested } = require('../head-prompt');
 const { gateRefusal: factsRefusal } = require('./fact-claims');
 const { brokerSpecs, contractsFileFor, whyNoSpec, brokerOrderLimit, dayFrontMissing } = require('./broker-specs');
-const { checkOrderSize, checkRiskLimit } = require('./order-limits');
+const { checkOrderSize, checkRiskLimit, entryStopTicks } = require('./order-limits');
 const { lockGateRefusal } = require('../account-lock');
 const { composedName, composedRefusal, reversalAllowed } = require('./lifecycle-gate');
 const { lateEntryCheck, ageLimitOf } = require('./late-entry');
@@ -488,9 +488,13 @@ function evaluateOrder({ input = {}, entries = [], now = new Date(), config, bla
   // The floor stretch (prop/size-translate.js stretchedEntry, the translation's own rule): exactly the floor may go over
   // the composed cap, at most the rulebook's floor_stretch_max_usd all in, while the attempt is healthy (its snapshot);
   // any other size over the cap, or the floor when the attempt isn't healthy or it costs more, is refused as before.
-  // Only on a whole-tick stop bracket (anything else: no stretch, the cap's own checks refuse it).
-  const stretched = policyCap && Number.isInteger(Number(input.stopLossBracket && input.stopLossBracket.ticks))
-    ? stretchedEntry({ home: config.home, policy: named, account: capAcct, root: contractRoot(input.contractId), size: input.size, perContract: per, capUsd: composedDoc.risk.max_risk_usd, specOf }) : null;
+  // Only on a whole-tick stop bracket (anything else: no stretch, the cap's own checks refuse it), priced at the farther
+  // of the bracket and any `stop <price>` in the rationale, as the cap's own check counts it (order-limits.js
+  // entryStopTicks: risk is never under-counted).
+  const stretchTicks = policyCap && capSpec && Number.isInteger(Number(input.stopLossBracket && input.stopLossBracket.ticks)) ? entryStopTicks(input, stopPrices, capSpec).ticks : null;
+  const stretchPer = Number.isInteger(stretchTicks) && capAcct ? allInRisk({ stopTicks: stretchTicks, tickValue: capSpec.tickValue, slipTicks: named.sizing ? named.sizing.stop_slippage_ticks : null, feePerSide: feePerSide(capAcct, contractRoot(input.contractId)) }) : NaN;
+  const stretched = Number.isInteger(stretchTicks)
+    ? stretchedEntry({ home: config.home, policy: named, account: capAcct, root: contractRoot(input.contractId), size: input.size, perContract: stretchPer, capUsd: composedDoc.risk.max_risk_usd, specOf }) : null;
   const stretchOk = Boolean(stretched && stretched.ok);
   const stretchWhy = stretched && stretched.why ? ` (${stretched.why})` : '';
   const composedRisk = !riskMsg && composedDoc && composedDoc !== named && !stretchOk ? checkRiskLimit({ input, stopPrices, strategy: composedDoc, specOf }) : null;

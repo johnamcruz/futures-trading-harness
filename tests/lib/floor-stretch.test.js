@@ -163,7 +163,7 @@ test('limitPlan (the attempt simulator and the backtester): the same stretch on 
 });
 
 test('stretchedEntry (the gate\'s [max-risk]): exactly the floor within the stretch on a healthy attempt; any other size, an unhealthy attempt or over the stretch refused; null where the cap binds as before', () => {
-  const E = (o = {}) => stretchedEntry({ home: o.home || home(), policy: o.policy || policy(), account: BIG, root: 'MNQ', size: o.size ?? 3, perContract: per('MNQ', o.ticks ?? 198), capUsd: 300, specOf });
+  const E = (o = {}) => stretchedEntry({ home: 'home' in o ? o.home : home(), policy: 'policy' in o ? o.policy : policy(), account: 'account' in o ? o.account : BIG, root: 'MNQ', size: o.size ?? 3, perContract: per('MNQ', o.ticks ?? 198), capUsd: 300, specOf });
   assert.deepStrictEqual(E(), { ok: true });
   assert.deepStrictEqual(E({ ticks: 330 }), { ok: true });
   assert.match(E({ size: 4 }).why, /only exactly the floor of 3 MNQ may go over the cap/);
@@ -173,7 +173,18 @@ test('stretchedEntry (the gate\'s [max-risk]): exactly the floor within the stre
   assert.match(E({ home: home(100000, { streak: 1 }) }).why, /1 losing trade in a row/);
   assert.strictEqual(E({ ticks: 197 }), null, 'the cap fits the floor');
   assert.strictEqual(E({ policy: policy({ floor_stretch_max_usd: 0 }) }), null, 'off');
-  assert.match(E({ home: trendHome() }).why, /the attempt state is unreadable/, 'no attempt: not healthy');
+  // No stretch at all (the cap binds as before) without a policy, a valid account and a running attempt.
+  const h = home();
+  assert.strictEqual(E({ home: trendHome() }), null, 'no attempt running');
+  assert.strictEqual(E({ home: null }), null, 'no home');
+  assert.strictEqual(E({ home: h, account: { ...BIG, valid: false } }), null, 'an invalid account');
+  assert.strictEqual(E({ home: h, account: null }), null, 'no account');
+  assert.strictEqual(E({ home: h, policy: null }), null, 'no policy');
+  assert.deepStrictEqual(E({ home: h }), { ok: true }, 'the same home, healthy');
+  // A running attempt whose snapshot state is gone: not healthy, refused.
+  const bare = trendHome();
+  prop.startAttempt(bare, BIG, new Date(NOW.getTime() - 86400000));
+  assert.match(E({ home: bare }).why, /the attempt state is unreadable/);
 });
 
 test('parity: the floor stretch in the simulator (prop/attempts.js defaultSize), compose_check (noSizeFits) and the live translation, stop by stop, healthy and not', () => {

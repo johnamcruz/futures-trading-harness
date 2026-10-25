@@ -158,7 +158,8 @@ function translateSize({ suggested = null, home, root, policy, account, verdict,
  * from its snapshot); else { ok: false, why }. The verdict, the budget and the broker's max are the gate's own checks.
  */
 function stretchedEntry({ home, policy, account, root, size, perContract, capUsd, specOf }) {
-  if (!policy || !account) return null;
+  // Only a policy on a valid account in a running attempt: anything else is no stretch (the cap binds as before).
+  if (!policy || !account || account.valid === false || !home || !prop.readAttempt(home, account.name)) return null;
   const floor = prop.minContractsIn(policy, account, root, specOf);
   const stretchUsd = stretchOf(policy);
   if (!Number.isInteger(floor) || !(capUsd > 0) || !(perContract > 0) || !(stretchUsd > capUsd)) return null;
