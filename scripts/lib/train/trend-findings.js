@@ -11,11 +11,14 @@
  * neither: both are counted (missedTally), never findings. One finding per (flow step, owner): the legs it blocked
  * (count), the R they left (cost: the sum of each leg's availableR, its move from the first bar an entry could be on to
  * its end, in its planned stop or the run's; legs with no R counted as none), its codes, and up to `examples` legs
- * (config/training.json trendFindings), the costliest first, each as trend-facts.js exampleLine gives it (the reads
- * code verified at its start, what the model said, the contradiction: no date, time or price). The owner:
+ * (config/training.json trendFindings), the costliest first, each as trend-facts.js exampleLine gives it (what the model
+ * said, the contradiction, the plan that passed: no date, time or price); a late or unfilled entry's legs (the runner's
+ * execution, not a read) give no example. The owner:
  *   compose_check   the skill of the blocking cycle's first unverified read at the failing step (the read the check
  *                   refused); none when no read names a skill there
- *   phase2          agents/risk-manager.md (a veto, the sizing floor, an unread verdict)
+ *   phase2          agents/risk-manager.md (a veto, an unread verdict)
+ *   min-contracts   the floor refused the model's stop (phase 2 or the gate): the head's stop choice, flow step `stop`
+ *                   and the skill of its plan's stop read (trend-facts.js owner); the floor itself is the rulebook's
  *   executor        agents/trade-executor.md (an abort, a block)
  *   no-plan         the step where the model's stated reason and the verified reads first disagree (trend-facts.js
  *                   owner) and the skill of that read; none without a disagreement
@@ -26,7 +29,7 @@
  *
  *   KIND
  *   ownerOf(leg, { exists })                   { skill } | { agent } | {} for a missed leg's blocker
- *   stepOfLeg(leg)                             the flow step a finding files the leg under
+ *   stepOfLeg(leg)                             the flow step a finding files the leg under (the floor's: stop)
  *   trendFindings(captures, { exists, max })   [{ kind, step, skill?, agent?, code, count, cost, of, detail, examples }],
  *                                              ranked by cost, then count, then step order and owner; at most max (none:
  *                                              all); its detail clipped where the round merges it (findings.js mergeFindings)
@@ -50,18 +53,27 @@ const isObj = x => Boolean(x) && typeof x === 'object' && !Array.isArray(x);
 const num = x => (typeof x === 'number' && Number.isFinite(x) ? x : 0);
 const r2 = x => Math.round(x * 100) / 100;
 
+const FLOOR = 'min-contracts';
+// The codes of the runner's own execution (a late or unfilled entry): no reading to show in an example.
+const EXECUTION_CODES = new Set(['late-entry', 'unfilled']);
+
+/** The skill trend-facts.js credits a leg to (its owner's), when the tree holds it and it reads; else none. */
+function ownSkill(leg, exists) {
+  const o = isObj(leg.facts) && isObj(leg.facts.owner) ? leg.facts.owner : null;
+  return o && o.skill && !NOT_OWNED.has(o.skill) && exists(o.skill) ? { skill: o.skill } : {};
+}
+
 /** The leg's blocking cycle: the last of its cycles with the blocker's code. */
 const blockingCycle = leg => [...(leg.cycles || [])].reverse().find(c => c && c.code === leg.blocker.code) || null;
 
 function ownerOf(leg, { exists = () => true } = {}) {
   const b = leg && leg.blocker;
   if (!isObj(b)) return {};
+  // A size under the floor at the model's stop is its stop choice (the stop read's skill), never the floor's role.
+  if (b.code === FLOOR) return ownSkill(leg, exists);
   if (b.by === 'phase2') return { agent: 'risk-manager' };
   if (b.by === 'executor') return { agent: 'trade-executor' };
-  if (b.code === 'no-plan') {
-    const o = isObj(leg.facts) && isObj(leg.facts.owner) ? leg.facts.owner : null;
-    return o && o.skill && !NOT_OWNED.has(o.skill) && exists(o.skill) ? { skill: o.skill } : {};
-  }
+  if (b.code === 'no-plan') return ownSkill(leg, exists);
   if (b.by !== 'compose_check') return {};
   const c = blockingCycle(leg);
   const read = c ? (c.reads || []).find(r => r && r.step === b.step && r.verified !== true && r.skill) : null;
@@ -71,6 +83,7 @@ function ownerOf(leg, { exists = () => true } = {}) {
 /** The flow step a leg is filed under: its blocker's; a no-plan leg's, where its reason and the facts disagree. */
 function stepOfLeg(leg) {
   const b = leg.blocker;
+  if (b.code === FLOOR) return 'stop';
   const o = b.code === 'no-plan' && isObj(leg.facts) && isObj(leg.facts.owner) ? leg.facts.owner.step : null;
   const step = o || b.step;
   return FLOW_STEPS.includes(step) ? step : null;
@@ -114,7 +127,7 @@ function trendFindings(captures, { exists = () => true, max } = {}) {
       const codes = [...g.codes].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, TOP);
       // The costliest legs first (the id breaks a tie): what the proposer reads of each, clipped.
       const examples = [...g.members].sort((a, b) => num(b.availableR) - num(a.availableR) || String(a.id).localeCompare(String(b.id)))
-        .map(l => exampleLine(l)).filter(Boolean).slice(0, EX.examples).map(x => (x.length > EX.exampleChars ? `${x.slice(0, EX.exampleChars - 3)}...` : x));
+        .filter(l => !EXECUTION_CODES.has(l.blocker.code)).map(l => exampleLine(l)).filter(Boolean).slice(0, EX.examples).map(x => (x.length > EX.exampleChars ? `${x.slice(0, EX.exampleChars - 3)}...` : x));
       return {
         kind: KIND, step: g.step, ...(g.skill ? { skill: g.skill } : g.agent ? { agent: g.agent } : { skill: null }), code: codes[0][0], count: g.legs, cost: r2(g.cost), of: legs,
         detail: codes.map(([c, n]) => `${c} (${n})`).join('; '), examples,

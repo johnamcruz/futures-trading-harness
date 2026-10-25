@@ -18,10 +18,11 @@
  *   proposerEnv(base, scratch)                    the proposer's environment
  *   propose({ cfg, tree, flagged, home, baseEnv, maxProposals, run })   { proposals, output, code }: tree is the
  *                                                 proposer's own copy (its working directory), home its scratch home
- *   readProbeTemplate(root), probePrompt({ template, findings, lessons, files, k })   the probe round's prompt (the
+ *   readProbeTemplate(root), probePrompt({ template, findings, lessons, files, k, controls })   the probe round's prompt (the
  *                                                 skill's "### The probe prompt"; Propose-Probe-Compose, probe.js)
- *   findingsByStep(findings)                      the findings grouped by flow step (flow.js), for {{FINDINGS}}
- *   proposeProbes({ cfg, tree, findings, lessons, home, baseEnv, k, run })   up to k tagged skill or role edits, one call
+ *   findingsByStep(findings, controls)            the findings grouped by flow step (flow.js), then the trend base rate
+ *                                                 and balancing examples, for {{FINDINGS}}
+ *   proposeProbes({ cfg, tree, findings, controls, lessons, home, baseEnv, k, run })   up to k tagged skill or role edits, one call
  */
 
 const fs = require('fs');
@@ -110,19 +111,23 @@ function readProbeTemplate(root) {
   return m[1];
 }
 
-/** The findings grouped by the flow step they block (flow.js byStep), in flow order; each keeps its rank's id. */
-function findingsByStep(findings) {
+/**
+ * The findings grouped by the flow step they block (flow.js byStep), in flow order; each keeps its rank's id. controls:
+ * the trend findings' base rate and balancing examples (trend-facts.js controlsText), after them.
+ */
+function findingsByStep(findings, controls = '') {
   const { findingLine } = require('./findings');
   const { byStep } = require('./flow');
-  return byStep(findings).map(g => `${g.step ? `Step ${g.step}:` : 'No step (no read at the bar):'}\n${g.findings.map(findingLine).join('\n')}`).join('\n\n');
+  const text = byStep(findings).map(g => `${g.step ? `Step ${g.step}:` : 'No step (no read at the bar):'}\n${g.findings.map(findingLine).join('\n')}`).join('\n\n');
+  return controls ? `${text}\n\n${controls}` : text;
 }
 
-function probePrompt({ template, findings, lessons, files, k }) {
+function probePrompt({ template, findings, lessons, files, k, controls = '' }) {
   const { KINDS } = require('./probe-edit');
   const { flowLine } = require('./flow');
   return `${MARKER}\n${template
     .replace('{{FLOW}}', flowLine())
-    .replace('{{FINDINGS}}', findingsByStep(findings))
+    .replace('{{FINDINGS}}', findingsByStep(findings, controls))
     .replace('{{LESSONS}}', lessons || 'none yet')
     .replace('{{FILES}}', files.join('\n'))
     .replace('{{CATEGORIES}}', FAILURES.join(', '))
@@ -134,9 +139,9 @@ function probePrompt({ template, findings, lessons, files, k }) {
  * Up to k tagged skill edits (probe-edit.js): { proposals: [{ proposal, tag } | { error, line }], output, code, prompt }.
  * One model call. The proposer proposes; the probe screen (screen.js) and the keep rule judge.
  */
-async function proposeProbes({ cfg, tree, findings, lessons, home, baseEnv = process.env, k = 4, run = runHarness }) {
+async function proposeProbes({ cfg, tree, findings, lessons, home, baseEnv = process.env, k = 4, run = runHarness, controls = '' }) {
   const { splitTagged } = require('./probe-edit');
-  const prompt = probePrompt({ template: readProbeTemplate(tree), findings, lessons, files: editableFiles(tree).filter(f => f.startsWith('skills/') || f.startsWith('agents/')), k });
+  const prompt = probePrompt({ template: readProbeTemplate(tree), findings, controls, lessons, files: editableFiles(tree).filter(f => f.startsWith('skills/') || f.startsWith('agents/')), k });
   const env = proposerEnv(baseEnv, home);
   const argv = buildCommand(cfg, prompt, tree, env);
   const res = await run(argv, { cwd: tree, env, timeoutMs: (cfg.cycleTimeoutMinutes || 10) * 60000 });

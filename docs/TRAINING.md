@@ -567,52 +567,88 @@ and leg ids; the lessons lines record the batch too.
   ranks by that move; the proposer's line names what blocked the plan and
   how many legs, never the move, a price or an R. The owner is the skill of
   the read compose_check refused at that step, `risk-manager` for a phase-2
-  veto, or `trade-executor` for an abort. A late or unfilled entry, or the
-  head trader's pass, names no owner. A rule (the clock, the account's
-  stops, news), a bar outside the session and a position already open are
-  never findings: those are code and the rulebook.
+  veto, or `trade-executor` for an abort. A size under the rulebook's floor
+  at the model's stop (`min-contracts`, phase 2's or the gate's) is the head
+  trader's stop choice. It is filed under the flow step `stop` and owned by the
+  skill of its plan's stop read, never by the risk manager: the floor is the
+  rulebook's. A late or unfilled entry, or the head trader's pass, names no
+  owner. A rule (the clock, the account's stops, news), a bar outside the
+  session and a position already open are never findings: those are code
+  and the rulebook.
 - **Learnable legs only** (`scripts/lib/train/trend-facts.js`). After the
   probe half's champion runs, code works out each missed leg's facts at its
   entry-able bars: the trade cycles of its catch window, less those a rule
   blocked. The briefing at each bar is rebuilt from the run's own bars, as
-  the skill-usage report rebuilds it. A timeframe the rebuild lacks (the 5m
-  without the run's 1m bars) is `unknown`. Where the run recorded a
-  compose_check call on the bar, its reads are checked again: if the record
-  and the rebuild disagree, the bar is `unknown`. At each bar code lists the
-  reads TRUE on the leg's side per step (compose-hints' candidates). It
-  also says whether a valid with-trend plan existed: the window allows
-  entries, the trend rule allows the side (not only as a reversal), and the
-  standard plan or a combination of those reads passes compose_check and the
-  plan (R:R, room, the stop floor). Under a prop attempt a size must fit the
-  attempt's budget and room as that cycle's attempt line stated them, at the
-  rulebook's floor. The model's own OK record that way counts too, unless
-  the floor refused it. A leg with a valid plan at any bar is learnable and
-  can be a finding. A leg every bar of which was known, with none, had no
-  valid plan at the time: a correct pass, counted, never a finding. Any
-  other leg's facts are unknown, also counted. `probe-report.json`
-  (`trend.missed`), the round's log and `train-loop.js status` give the
-  three counts.
+  the skill-usage report rebuilds it. A frame the rebuild can't make though
+  the run had it (the 5m without the run's 1m bars) is `unknown`. Its reads
+  are never counted, and neither is an `at` read when it is the frame above
+  the base: the check would fall back past it to a higher candle. Where the
+  run recorded a compose_check call on the bar, its reads are checked again:
+  if the record and the rebuild disagree, the bar is `unknown`. The model's
+  own OK record that way (passed on, vetoed, late, refused at the gate,
+  unfilled) shows a plan passed whatever the rebuild, unless the floor
+  refused it. At each bar code says whether a valid with-trend plan existed:
+  the window allows entries, the trend rule allows the side (not only as a
+  reversal), and the standard plan or a combination of the reads TRUE on the
+  leg's side (compose-hints' candidates) passes compose_check and the plan
+  (R:R, room, the stop floor). Under a prop attempt a size must fit by the
+  entry's own size chain (`prop/size-translate.js`): the policy's budget plan
+  at the budget and room that cycle's attempt line stated, at the full
+  multiplier (an upper bound on the verdict's). Then comes the composed
+  strategy's `risk.max_risk_usd` at the contract's all-in risk (`capsOf`,
+  `allInRisk`), and the floor on the capped size (`minContractsRefusal`). A
+  leg with a valid plan at any bar is learnable and can be a finding. A leg
+  every bar of which was known, with none, had no valid plan at the time: a
+  correct pass, counted, never a finding. Any other leg's facts are unknown,
+  also counted. `probe-report.json` (`trend.missed`), the round's log and
+  `train-loop.js status` give the three counts.
+- **The base rate.** A valid plan exists on most bars, legs or not, so a
+  leg's verified reads alone would teach over-trading. Code runs the same
+  plan check, either side, on the champion's control-window bars (no leg).
+  `probe-report.json` (`trend.baseRate`) and `status` give the share with a
+  valid plan beside the share of the missed legs' entry bars. The proposer
+  reads both. It also reads up to `examples` control bars, a day each in
+  turn, where a valid plan existed and lost: its stop was hit before its
+  minimum R:R mark on the run's later bars that session, the stop first when
+  one bar holds both. They are labelled "valid plan, it lost: what tells
+  these apart from the legs?". The probe prompt says an edit must tell the
+  legs from the losers, never just enter more.
 - **What the proposer sees.** Each trend finding lists up to `examples`
   of its legs (`config/training.json` `trendFindings`), the costliest
-  first, each clipped to `exampleChars`. Each example gives the side, what
-  the model said (its CYCLE RESULT line, clipped to `saidChars`, and for a
-  refused plan its reads), and any contradiction. It then gives the reads
-  code verified at the leg's start (bias to entry), and the passing plan or
-  why none passed. A contradiction is flagged only when the same machinery
-  shows a stated step-claim false. "No setup" or "no rejection" is false
-  beside a verified setup read. "No entry" is false beside a verified
-  confirmation on a candle closed after it. "Not at a level" is false beside
-  a verified `at` read. "Against the trend" is false when the trend rule
-  allows the side. A 15m, 1h or 4h direction the checker finds FALSE is
-  flagged, and so is every claim the reason check finds false. A no-plan
-  leg is filed under the first flow step where its reason and the facts
-  disagree, owned by that read's skill (the crosswalk); else no owner.
+  first, each clipped to `exampleChars` at a clause boundary. A late or
+  unfilled entry's legs (the runner's execution) give none. Each example
+  gives the side, what the model said (its CYCLE RESULT line, clipped to
+  `saidChars`; the runner's own words labelled "the runner") and, for a
+  refused plan, its reads. Then it gives any contradiction and the passing
+  plan's reads, or why none passed. It never gives the whole list of TRUE
+  reads. A contradiction is flagged only for the high-confidence claims,
+  when the same machinery shows them false:
+  - "no rejection" (or a named setup kind, or "no setup" with a timeframe)
+    for the leg's side, beside a verified setup read on the timeframe it
+    names;
+  - "no entry" naming the side, beside a verified confirmation on a candle
+    closed after the setup, when the reason states no other failing step;
+  - "not at a level" beside a verified `at` read;
+  - "against the trend" when the trend rule allows the side;
+  - a 15m, 1h or 4h direction the checker finds FALSE;
+  - every claim the reason check finds false.
+
+  A clause that names no side takes the last side its sentence named. These
+  say nothing: a clause about the other side or both, the runner's entry,
+  the model's own action ("no composed setup"), the tool's verdict ("per
+  the tool"), a level named by its price, and a location, target or setup
+  claim in a sentence about R:R. A no-plan leg is filed under the first flow
+  step where its reason and the facts disagree, owned by that read's skill
+  (the crosswalk); else no owner. Measured by hand on the two stage-2 runs
+  these rules were written on (in sample): 6 contradictions, none false. A
+  looser parser had flagged 21 there, 13 of them false.
 - **No leak.** The examples name reads by timeframe and level name only:
-  dates, clock times, prices, numbers, ids and account names are removed,
-  and tests scan the proposer's prompt for the legs' dates and prices. The
-  facts are worked out after the run, outside the run home: the capture in
-  the run's folder is unchanged, and no trading prompt or tool requires the
-  module. The trading model never sees them.
+  dates, months, weekdays, clock times, prices, numbers (digits, words,
+  fractions), ids, `#` tags and account names are removed. Tests scan the
+  proposer's prompt for the legs' dates and prices. The facts are worked out
+  after the run, outside the run home: the capture in the run's folder is
+  unchanged, and no trading prompt or tool requires the module. The trading
+  model never sees them.
 - **The screen** (`scripts/lib/train/trend-screen.js`). Its units are the
   stepped windows. Legs are paired by id: caught or not, a one-sided McNemar
   test. A catch counts as fixed only when its window's net R got no worse,
