@@ -16,9 +16,11 @@
  *   build({ probeReport, entries, previous })   the iteration's record (entries: the archive's lines of the iteration;
  *                                     previous: the earlier iterations' records, oldest first, for the learning curve)
  *   line(record)                      one line for status
+ *   rideLines(record)                 the round's "Trend catch & ride" block for status (none without a trend set)
  */
 
 const TC = require('./trend-curve');
+const TR = require('../replay/trend-ride');
 
 const net = t => (t && Number.isInteger(t.pairs) ? { fixed: t.b, broken: t.c, pairs: t.pairs } : null);
 const targetLabel = tag => (tag ? (tag.agent ? `agent ${tag.agent}` : tag.skill || '?') : '?');
@@ -35,6 +37,15 @@ function curveFields(r, kept, previous) {
   if (!r.trend.champion) return { curve: curveOfPrevious(previous), memorization: [] };
   const point = TC.curvePoint({ round: r.iteration, size: r.trend.batch.size, champion: r.trend.champion, composed: r.composed && r.composed.trend ? r.composed.trend : null, kept: Boolean(kept && kept.verdict === 'kept') });
   return { curvePoint: point, curve: TC.curveOf([...previousPoints(previous), point]), memorization: TC.memorizationOf(r.probes || [], r.composed || null) };
+}
+
+/** The round's catch & ride totals by side (see build). */
+function rideOf(r) {
+  const edits = Object.fromEntries((r.probes || []).filter(p => p && p.ride).map(p => [p.id, p.ride]));
+  return {
+    champion: r.trend.champion && r.trend.champion.ride ? r.trend.champion.ride : null, championProbe: r.trend.probeRide || null, edits,
+    composed: r.composed && r.composed.trend && r.composed.trend.ride ? { id: r.composed.id, ...r.composed.trend.ride } : null,
+  };
 }
 
 const previousPoints = previous => (previous || []).map(x => x && x.curvePoint).filter(Boolean);
@@ -59,6 +70,9 @@ function build({ probeReport = null, entries = [], previous = [] } = {}) {
     deltas: m ? { reads: net(m.reads), process: net(m.process), target: net(m.target), rPerDecision: m.r ? { diff: m.r.diff, lo: m.r.lo, hi: m.r.hi, pairs: m.r.pairs } : null, capture: m.trend ? { ...net(m.trend.capture), rate: m.trend.rate, netR: m.trend.netR } : null } : null,
     // The round's trend batch: its index in the pool's draw, the pool's fingerprint, each half's days and legs.
     trend: r.trend ? trendOf(r, kept) : null,
+    // The round's trend catch & ride (replay/trend-ride.js), report only: the champion's confirm and probe halves, each
+    // edit's probe half, the combined change's confirm half; null where a side recorded none.
+    ride: r.trend ? rideOf(r) : null,
     ...(r.trend ? curveFields(r, kept, previous) : {}),
     cycles: r.cycles || null,
     // Each side's bars skipped while a cycle ran (latency, as live; probe.js): a slower edit shows here.
@@ -95,4 +109,16 @@ function line(x) {
     + `; combined ${x.composed ? `${x.composed.id} ${x.composed.verdict}` : 'none'}; keep rule ${x.kept ? `${x.kept.verdict}` : 'not run'}${deltas}; ${cost}${skipped}${x.why ? `; ${x.why}` : ''}`;
 }
 
-module.exports = { build, line };
+/** The round's "Trend catch & ride" block: a line per side that recorded one (trend-ride.js rideLine). */
+function rideLines(x) {
+  const r = x && x.ride;
+  if (!r) return [];
+  const sides = [
+    ['champion confirm', r.champion], ['champion probe', r.championProbe],
+    ...Object.entries(r.edits || {}).map(([id, t]) => [`edit ${id} probe`, t]),
+    ...(r.composed ? [[`combined ${r.composed.id} confirm`, r.composed]] : []),
+  ].filter(([, t]) => t);
+  return sides.length ? [`  Trend catch & ride (iteration ${x.iteration}):`, ...sides.map(([k, t]) => `    ${k}: ${TR.rideLine(t)}`)] : [];
+}
+
+module.exports = { build, line, rideLines };

@@ -25,11 +25,15 @@
  * records: the compose records of the cycle's bar (any side; the leg's way's are read). The leg's blocker: the cycle that came closest to an entry (the furthest stage: no plan, rule, compose, risk,
  * execution), the latest among equals, with how many cycles it blocked.
  *
+ * The catch and the ride (trend-ride.js): each leg's size (its points over its threshold, bucketed), each caught leg's
+ * ride (entry lag, capture and ride share, peak and giveback R), the run's filled entries (in-trend, counter or none,
+ * with their R: `entries`), and totals.ride, the run's catch & ride totals.
+ *
  *   FLOW_STEPS, DETECTOR, FILE
  *   legsOf(bars, { session, minMoveAtr })    [{ day, side, start, end, from, to, points, pct, scale }] (pure; session:
  *                                            a runner session spec, '09:30-12:00@America/New_York'; bars sorted, base tf)
  *   classifyCycle(cycle, { side, records, gate })   { bar, planned, side, step, by, code, message, reads, role }
- *   captureReport({ runDir, home, days, manifest, legs })   the trend-capture document (see writeCapture); legs: given
+ *   captureReport({ runDir, home, days, manifest, legs, context })   the trend-capture document (see writeCapture); legs: given
  *                                            ones (the census's, for a stepped-windows run) instead of the detector's
  *   cyclesOf(home)                            the run home's trade and manage cycle logs (the trend facts read them too)
  *   writeCapture(runDir, doc), readCapture(runDir)   trend-capture.json in the run's folder
@@ -44,6 +48,7 @@ const crypto = require('crypto');
 const { FLOW_STEPS } = require('../trading/composed-reads');
 const { failingSteps } = require('../trading/compose-hints');
 const { parseWindows, inWindow, tradingDayKey, SESSION_DEFAULTS, MARKET_TZ } = require('../trading/clock');
+const TR = require('./trend-ride');
 
 const TUN = require('../tunables').replay().trendCapture; // config/replay.json
 const DETECTOR = 'zigzag-session-tr-v1';
@@ -163,7 +168,7 @@ function givenLeg(g, bars) {
   const b = bars.find(x => x.t === g.start);
   const from = num(g.from) !== null ? g.from : b ? (g.side === 'long' ? b.l : b.h) : null;
   const to = num(g.to) !== null ? g.to : from !== null && num(g.points) !== null ? from + (g.side === 'long' ? g.points : -g.points) : null;
-  return { day: g.day, side: g.side, start: g.start, end: g.end, from, to, points: num(g.points), pct: from ? round2((Math.abs(to - from) / from) * 100) : null };
+  return { day: g.day, side: g.side, start: g.start, end: g.end, from, to, points: num(g.points), pct: from ? round2((Math.abs(to - from) / from) * 100) : null, scale: num(g.scale) };
 }
 
 const stageOf = c => STAGE.indexOf(c.code === 'outside-session' ? 'outside-session' : c.by === 'rule' ? 'rule' : c.code === 'position-open' ? 'position-open' : c.by === 'compose_check' ? 'compose' : c.step === 'risk' ? 'risk' : c.step === 'execution' ? 'execution' : 'no-plan');
@@ -172,7 +177,7 @@ const stageOf = c => STAGE.indexOf(c.code === 'outside-session' ? 'outside-sessi
  * The trend-capture document for a run (see the header): { v, runId, treeDigest, barsDigest, detector, legs, totals,
  * noLegDays }. runDir: the run's folder (its served bars, autotrader.json, day records); home: the run home.
  */
-function captureReport({ runDir, home = path.resolve(runDir, '..', '..'), days = {}, manifest = {}, legs: given = null }) {
+function captureReport({ runDir, home = path.resolve(runDir, '..', '..'), days = {}, manifest = {}, legs: given = null, context = [] }) {
   const cfg = readJson(path.join(runDir, 'autotrader.json')) || {};
   const minutes = Number(cfg.timeframe) || null;
   const session = (Array.isArray(cfg.sessions) && cfg.sessions.length ? cfg.sessions : SESSION_DEFAULTS.sessions).join(',');
@@ -214,6 +219,16 @@ function captureReport({ runDir, home = path.resolve(runDir, '..', '..'), days =
     const fill = entered.map(o => ({ o, f: filled(o.orderId) })).find(x => x.f) || (entered[0] ? { o: entered[0], f: null } : null);
     const trip = fill && fill.f ? tripOf(fill.f) : null;
     const captured = Boolean(fill && fill.f);
+    // Its ride (trend-ride.js): the fills' prices, the round trip's R and peak, the trade's risk (the round trip's, else
+    // its record's planned stop, else the leg's).
+    const rt = trip ? trip.roundTrip : null;
+    const plan = captured ? records.get(fill.o.composed.record) : null;
+    const riskPts = rt && num(rt.risk) > 0 ? rt.risk : plan && isObj(plan.plan) && isObj(plan.plan.stop) && num(plan.plan.stop.ticks) !== null ? plan.plan.stop.ticks * plan.plan.tick : stop;
+    const entryPx = rt ? num(rt.averageEntryPrice) ?? num(rt.entryPrice) ?? num(Number(fill.f.price)) : captured ? num(Number(fill.f.price)) : null;
+    const exitPx = rt && rt.open !== true ? num(rt.averageExitPrice) ?? num(rt.exitPrice) : null;
+    const ride = captured ? TR.rideOf(g, { entry: entryPx, exit: exitPx, r: rt ? num(rt.r) : null, peakR: rt ? num(rt.mfeR) : null, riskPts, bars, from: Date.parse(fill.f.creationTimestamp), to: trip ? Date.parse(rt.exitTime || trip.creationTimestamp) : null, stepMs }) : null;
+    const threshold = num(g.scale) !== null ? TUN.minMoveAtr * g.scale : null;
+    const sizeX = threshold && num(g.points) !== null ? round2(g.points / threshold) : null;
     // An entry placed that never filled blocked the leg at execution: its limit went unfilled.
     for (const c of legCycles) if (c.code === 'entered' && !(captured && fill.o.composed.record === c.record)) c.code = entered.some(o => o.composed.record === c.record && filled(o.orderId)) ? 'entered' : 'unfilled';
     const blocking = legCycles.filter(c => c.code !== 'entered' || !captured);
@@ -221,6 +236,7 @@ function captureReport({ runDir, home = path.resolve(runDir, '..', '..'), days =
     return {
       id: `${g.day}|${g.side}|${g.start}`, day: g.day, side: g.side, start: g.start, end: g.end, move: { points: g.points, pct: g.pct, from: g.from, to: g.to },
       plannedStopPts: round2(plannedStopPts), availableR: stop && availPts !== null ? round2(availPts / stop) : null, estimated: plannedStopPts === null,
+      size: { x: sizeX, bucket: TR.sizeBucket(sizeX) }, ride,
       captured, entry: fill ? { at: fill.o.at, price: fill.o.composed.entry, filled: Boolean(fill.f), r: trip ? num(trip.roundTrip.r) : null, outcome: trip ? trip.exitReason || null : null } : null,
       cycles: legCycles,
       blocker: captured || !best ? null : { step: best.step, code: best.code, by: best.by, role: best.role, skills: [...new Set(best.reads.map(r => r.skill).filter(Boolean))], cycles: legCycles.filter(c => c.code === best.code).length },
@@ -234,6 +250,13 @@ function captureReport({ runDir, home = path.resolve(runDir, '..', '..'), days =
     byStep[s].legs += 1;
     byStep[s].missedR = round2(byStep[s].missedR + (l.availableR || 0));
   }
+  // The day's other known legs (a windowed run's undrawn census legs): they classify entries only, never a leg here.
+  const kindLegs = (Array.isArray(context) ? context : []).filter(g => isObj(g) && g.start && g.end && g.side).map(g => ({ id: g.id || `${g.day}|${g.side}|${g.start}`, side: g.side, start: g.start, end: g.end }));
+  // The run's filled entries, each in a leg its way, against one, or in none (trend-ride.js entryKind), with its R.
+  const entries = orders.filter(o => isObj(o.composed) && filled(o.orderId)).map(o => {
+    const t = tripOf(filled(o.orderId));
+    return { at: o.at, side: o.composed.side, record: o.composed.record || null, ...TR.entryKind({ side: o.composed.side, at: o.at }, [...out, ...kindLegs], stepMs), r: t ? num(t.roundTrip.r) : null };
+  });
   const legDays = new Set(out.map(l => l.day));
   const noLegDays = [...new Set(cycles.map(c => tradingDayKey(new Date(Date.parse(c.timing.barClose) - 1))))].filter(d => !legDays.has(d)).sort().map(day => {
     const placed = orders.filter(o => tradingDayKey(new Date(o.at)) === day);
@@ -245,7 +268,8 @@ function captureReport({ runDir, home = path.resolve(runDir, '..', '..'), days =
     v: 1, runId: manifest.runId || path.basename(runDir), treeDigest: isObj(manifest.fingerprints) ? manifest.fingerprints.harness || null : null, barsDigest: hash,
     detector: { version: DETECTOR, minMove: { atr: TUN.minMoveAtr, scale: 'the session\'s mean true range of its base bars' }, session, catchShare: TUN.catchShare },
     legs: out,
-    totals: { legs: out.length, captured: out.filter(l => l.captured).length, captureRate: out.length ? round2(out.filter(l => l.captured).length / out.length) : null, missedR: round2(missed.reduce((a, l) => a + (l.availableR || 0), 0)), byStep },
+    entries,
+    totals: { legs: out.length, captured: out.filter(l => l.captured).length, captureRate: out.length ? round2(out.filter(l => l.captured).length / out.length) : null, missedR: round2(missed.reduce((a, l) => a + (l.availableR || 0), 0)), byStep, ride: TR.summarize({ legs: out, entries }) },
     noLegDays,
   };
 }
@@ -266,6 +290,7 @@ function reportLines(doc) {
   for (const l of doc.legs) for (const c of l.cycles) codes[`${c.step || '-'} ${c.code}`] = (codes[`${c.step || '-'} ${c.code}`] || 0) + 1;
   lines.push(`  blockers by cycle: ${Object.entries(codes).sort((a, b) => b[1] - a[1]).map(([k, n]) => `${k} ${n}`).join(', ') || 'none'}`);
   lines.push(`  by step: ${Object.entries(t.byStep).map(([s, x]) => `${s} ${x.legs} leg(s) ${x.missedR}R`).join(', ') || 'none'}`);
+  if (isObj(t.ride)) lines.push(...TR.rideLines(t.ride));
   if (doc.noLegDays.length) lines.push(`  days with no leg: ${doc.noLegDays.map(d => `${d.day} ${d.entries} entr${d.entries === 1 ? 'y' : 'ies'} ${d.netR}R`).join(', ')}`);
   return lines;
 }

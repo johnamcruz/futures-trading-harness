@@ -38,6 +38,7 @@
  *                                               availableR, unit }, dayR (per unit), blows, first, sessions } (sessions: sessionsOf,
  *                                               or windowStates with windows; none: no unit known finished, none pairs)
  *   finishedOf(side)                            { legs, units, netR, first }: one side's finished units alone (the learning curve)
+ *   rideOfSide(side, rides)                     its finished units' trend catch & ride totals (replay/trend-ride.js), or null
  *   measureTrend(champion, probe)               { capture, netR, legs, rate: { champion, probe }, blows }
  *   trendHarms(m, { rule }), regressionHarms(champion, probe)   [harm] (rule: the loop's decision rule, for first tries)
  *   screenTrend(m, { target, rule })            { verdict, pass, harms, gain }: target false judges harm only
@@ -155,6 +156,28 @@ function finishedOf(side) {
   return { legs, units, netR, first };
 }
 
+/**
+ * One side's trend catch & ride (replay/trend-ride.js summarize) on its finished units only (finishedOf's guard): rides
+ * [{ ride: trend-ride.js compact(capture), windows }], one per run; only the side's own legs (side.legs: the half's), and
+ * each filled entry to the window it was placed in (trend-windows.js unitOfRecord; a run without windows: its session
+ * date). null without rides, or when a run's ride is unknown (an earlier phase that kept none): never a partial total.
+ */
+function rideOfSide(side, rides) {
+  const list = Array.isArray(rides) ? rides : [];
+  if (!side || !list.length || list.some(x => !isObj(x) || !isObj(x.ride))) return null;
+  const TW = require('./trend-windows');
+  const { tradingDayKey } = require('../trading/clock');
+  const done = new Set((Array.isArray(side.sessions) ? side.sessions : []).filter(x => x && x.complete).map(unitOf));
+  const legs = [];
+  const entries = [];
+  for (const { ride, windows } of list) {
+    legs.push(...(ride.legs || []).filter(l => side.legs.has(l.id) && done.has(unitOf(side.legs.get(l.id)))));
+    const unit = e => (Array.isArray(windows) && windows.length ? TW.unitOfRecord(windows, e.at) : tradingDayKey(new Date(e.at)));
+    entries.push(...(ride.entries || []).filter(e => done.has(unit(e))));
+  }
+  return require('../replay/trend-ride').summarize({ legs, entries });
+}
+
 const harmful = t => t && t.n >= SCREEN.minDiscordant && t.c > t.b && t.pWorse <= SCREEN.harmAlpha;
 const gained = t => t && t.n >= SCREEN.minDiscordant && t.b > t.c && t.pBetter <= SCREEN.gainAlpha && t.pairs > 0 && (t.b - t.c) / t.pairs >= SCREEN.minEffect;
 
@@ -184,4 +207,4 @@ function screenTrend(m, { target = true, rule } = {}) {
   return { verdict, pass: verdict === 'helped', harms, gain: Boolean(gain) };
 }
 
-module.exports = { dayR, sessionsOf, rollMonth, sideOfTrend, finishedOf, measureTrend, trendHarms, regressionHarms, screenTrend, gained, harmful };
+module.exports = { dayR, sessionsOf, rollMonth, sideOfTrend, finishedOf, rideOfSide, measureTrend, trendHarms, regressionHarms, screenTrend, gained, harmful };

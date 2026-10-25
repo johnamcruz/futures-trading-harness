@@ -31,7 +31,7 @@ const { loopPaths, readLedger, lockHolder } = require('./lib/train/state');
 const { readArchive, leaders } = require('./lib/train/archive');
 const { parseProposals } = require('./lib/train/proposal');
 const { checkLook } = require('./lib/prop/looks');
-const { line } = require('./lib/train/iteration-report');
+const { line, rideLines } = require('./lib/train/iteration-report');
 
 const ROOT = path.resolve(__dirname, '..');
 const USAGE = 'usage: train-loop.js plan|run|status --config <loop.json> [--dry-run] [--steps <steps.js>] | judge --config <loop.json> --proposal <id> --held-out-look | import-proposal --config <loop.json> --file <proposal> --approved-by <name>';
@@ -99,7 +99,7 @@ function status(loop) {
   // Propose-Probe-Compose: each iteration in one line (lib/train/iteration-report.js), from its iteration-report.json.
   for (const it of state.iterations) {
     const rec = readJsonOr(path.join(paths.iter(it.n), 'iteration-report.json'));
-    if (rec) say(line(rec));
+    if (rec) { say(line(rec)); rideLines(rec).forEach(l => say(l)); }
   }
   for (const l of leaders(archive)) say(`leader for ${l.category}: ${l.proposalId} (iteration ${l.iteration}, effect ${l.effect})`);
   return 0;
