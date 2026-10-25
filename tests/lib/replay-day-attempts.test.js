@@ -218,7 +218,7 @@ test('the probe config refuses day attempts in its replay configs (the loop sets
   assert.throws(() => PC.resolveProbe({ ...ok, trend: { replay: { stage: 1, dayAttempts: { account: ACCOUNT.name } } } }, o), /probe\.trend\.replay\.dayAttempts: set by the loop for each run/);
 });
 
-test('the loop refuses what would trade outside a day\'s attempt: a model-scored loop\'s replay with an attempt across days; a run declared not learning with no policy account', () => {
+test('the loop refuses what would trade outside a day\'s attempt: a model-scored loop\'s replay with an attempt across days; a run declared not learning with no policy account', async () => {
   const ctx = loopCtx();
   const cfg = o => () => resolveLoop({ loopId: 'da', replay: { ...ctx.loop.replay, ...o }, tuningWindows: [{ from: '2022-09-01', to: '2023-02-01' }], proposer: TRADER, modelScore: { account: 'acct_a' } }, { baseDir: ctx.user });
   assert.throws(cfg({ prop: ACCOUNT.name }), /replay\.prop: the model-scored loop's runs trade inside a fresh attempt each session day/);
@@ -228,7 +228,11 @@ test('the loop refuses what would trade outside a day\'s attempt: a model-scored
   const bare = tmp();
   for (const d of ['strategies', 'accounts', 'skills', 'agents']) fs.mkdirSync(path.join(bare, d));
   const window = { from: '2022-03-07', to: '2022-03-08' };
-  assert.throws(() => L.windowRun(ctx, { label: 'nl', window, tree: bare, look: {}, replay: { ...ctx.loop.replay, learning: false } }), /nl: no active policy strategy in the tree names an account, so the run can't trade inside the day's attempt/);
+  assert.strictEqual(L.windowRun(ctx, { label: 'nl', window, tree: bare, look: {}, replay: { ...ctx.loop.replay, learning: false } }).run.dayAttempts, null);
+  let replayed = false;
+  const run = { ...ctx, state: { done: {}, modelCalls: 0 }, save() {}, log() {}, paths: { dir: ctx.user, ledger: path.join(ctx.user, 'ledger.jsonl') }, steps: { preflight: () => null, seedRunHome: () => {}, startLearningRun: () => ({}), runReplay: async () => { replayed = true; return { done: true }; } } };
+  await assert.rejects(L.windowRuns(run, { side: 'x', tag: 'n', windows: [window], tree: bare, look: {}, replay: { ...ctx.loop.replay, learning: false } }), /x-n0: no active policy strategy in the tree names an account, so the run can't trade inside the day's attempt/);
+  assert.strictEqual(replayed, false, 'refused before any step');
 });
 
 test('startDay: a start cut short today is started again, never ending (and overwriting) the earlier day\'s record', async () => {
