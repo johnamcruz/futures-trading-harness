@@ -37,9 +37,10 @@ description: Use when a position is open - its stop, the plan's management, the 
   Read the move against it top-down with `pullback-vs-reversal`.
   - A pullback while the 15m trend holds (a 3m CHoCH against included) →
     hold; tightening here is what stops a winner before the leg runs on.
-  - Momentum ends (15m momentum turned against after a failed new extreme,
-    or a 15m CHoCH against) → exit (`[exit]`), or move the stop just beyond
-    the extreme of the 15m candle that turned it, on the far side of price.
+  - Momentum ends (15m momentum turned against after a failed new extreme)
+    → exit (`[exit]`), or move the stop just beyond the extreme of the 15m
+    candle that turned it, on the far side of price. A 15m CHoCH against
+    is the runner's stop: it has taken the trade out.
   - Never tighten on one candle or by feel.
 - **An open trade** (the prompt's "Open trade" line) is managed before any
   new entry: its setup, initial stop and risk, the working stop and target in
