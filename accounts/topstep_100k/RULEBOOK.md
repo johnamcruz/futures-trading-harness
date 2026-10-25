@@ -137,12 +137,15 @@ takes them. The run's Monte Carlo
 order size, the contract the run traded, the floor stretch).
 
 **The floor stretch.** `floor_stretch_max_usd` (the owner's, 2026-10-24:
-"up to $500 if healthy", so a setup isn't missed) is part of `sizing`, so
-it is `enforced`: where the composed cap fits fewer than the floor at the
-stop, the order is exactly the floor (3 micros; 1 mini) when the floor
-risks at most this all in and the attempt is healthy; never more than the
-floor, never above this. Healthy: the balance at or above the attempt's
-starting balance (no deficit), and the session's loss streak 0 (the
+"up to $500 if healthy") is part of `sizing`, so it is `enforced`: where
+the composed cap fits fewer than the floor at the stop, the order is
+exactly the floor when the floor risks at most this all in and the attempt
+is healthy; never more than the floor, never above this. The floor is in
+the order's own contracts: 3 micros, or 1 mini (a mini counts as 10
+micros, so its floor is 1 contract), and a mini's floor may stretch too
+(the owner's, 2026-10-24: "Allow 1 mini too"). Healthy (the owner's: "No
+deficit, no loss today"): the balance at or above the attempt's starting
+balance (no deficit), and the session's loss streak 0 (the
 `loss_streak_stop` count: a loss extends it, a win ends it, a scratch
 neither; each session starts at 0). An attempt state that can't be read is
 not healthy. Every other limit still holds: the verdict, the size budget
