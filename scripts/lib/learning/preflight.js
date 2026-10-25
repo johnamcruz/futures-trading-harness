@@ -15,7 +15,8 @@
  * Learning to trade: strategy, strategy-valid-bars, skills-crosswalk, head-prompt, head-composed-reads, head-delivery, role-prompts,
  * adapters-in-sync, no-web-in-replay (no agent reaches the web: replay/web-access.js), facts, curated-list, curated-source (its moments' prices against the run's bars), schedule, split-window, latency, loop-role (the training loop's keep-rule and trend-set runs: LOOP_ROLES), practice-mode, library-display, experience-index,
  * risk-record (N/A when off), ledger-look, stage (the replay config's preset: replay/stage.js), scorecard-composed. Passing the prop firm:
- * prop-portfolio, rulebook-values, rulebook-missing, account-states, combine (stage 2's continuous combine), account-facts, monte-carlo, broker-limits (the replay broker's limits against the account's). The fine-tuning adapter
+ * prop-portfolio, rulebook-values, rulebook-missing, account-states, combine (stage 2's continuous combine), day-attempts (the
+ * training loop's runs trade inside a fresh attempt each session day: replay/day-attempts.js), account-facts, monte-carlo, broker-limits (the replay broker's limits against the account's). The fine-tuning adapter
  * the runner config declares: adapter (N/A with none; learning/adapter.js adapterCheck). A check of a feature
  * on another branch (NEEDS) says "not available (needs <branch>)" until that branch is merged; the merged ones are
  * judged, and a run or prompt without them FAILs. Stage 2's own requirements (stage): one of its two modes on a
@@ -496,7 +497,7 @@ function stage(ctx) {
     if (!f.monteCarlo) bad.push(`the Monte Carlo is needed (${NEEDS.monteCarlo})`);
   }
   if (bad.length) return r('stage', FAIL, `stage ${st}: ${bad.join('; ')}`);
-  const own = st === 2 ? `${ctx.run.accountStates ? `, days from account states ${ctx.run.accountStates.hash.slice(0, 12)}` : ''}, the prop risk rules and the Monte Carlo` : ', no prop';
+  const own = st === 2 ? `${ctx.run.accountStates ? `, days from account states ${ctx.run.accountStates.hash.slice(0, 12)}` : ''}, the prop risk rules and the Monte Carlo` : ctx.run.dayAttempts ? ', no prop attempt of its own (the loop\'s day attempts size its entries as live)' : ', no prop';
   if (combineMode) return r('stage', PASS, `stage ${st} on ${role}: continuous combine (${ctx.run.combine.attempts.length} attempt(s) on ${ctx.run.combine.account}), latency charged, library hidden${own}`);
   if (wholeDays && role === req.curatedOn) return r('stage', PASS, `stage ${st} on ${role}: the training loop's ${loopRoleOf(ctx)} run (no curated list by design), latency charged, library hidden${own}`);
   return r('stage', PASS, `stage ${st} on ${role}: curated list${role === req.curatedOn ? '' : ' (practice only)'}, latency charged, library hidden${own}`);
@@ -602,6 +603,26 @@ function combineCheck(ctx) {
   return r('combine', PASS, `continuous combine on ${c.account}, up to ${c.maxSessions} session(s) an attempt, each from zero: ${c.attempts.map(a => `${a.n} ${a.start}..${a.last}`).join(', ')}`);
 }
 
+/**
+ * The training loop's day attempts (replay/day-attempts.js): every loop run (its gate's `loopRun`, set by the loop's code
+ * only) trades inside a fresh attempt each session day, on the account the policy strategy trades, so its entries are
+ * sized as live sizes them in an attempt (or, its replay config's own attempt: prop, account states, a combine); and no
+ * other learning run has them (a replay config of its own never sets them). N/A for a run that is neither.
+ */
+function dayAttemptsCheck(ctx) {
+  const d = ctx.run.dayAttempts;
+  const loop = ctx.gate.loopRun === true;
+  if (!d && !loop) return r('day-attempts', NA, 'not a training-loop run: no day attempts');
+  if (!loop) return r('day-attempts', FAIL, 'day attempts (dayAttempts) are the training loop\'s runs only (its code sets them): a run of its own trades as its stage says');
+  const p = policyOf(ctx);
+  // An attempt of the run's own (prop, account states, a combine: stage 2's or a non-stage run's): its entries are sized in it.
+  const own = ['prop', 'accountStates', 'combine'].find(k => ctx.run[k]);
+  if (!d && own) return r('day-attempts', PASS, `the run trades inside an attempt of its own (${own}): entries sized as live in an attempt`);
+  if (!d) return r('day-attempts', FAIL, `a training-loop run trades inside a fresh attempt each session day on the account ${POLICY} trades (${p && p.account ? p.account : 'none'}), sized as live: the run has none (no active policy strategy names an account)`);
+  if (!p || p.account !== d.account) return r('day-attempts', FAIL, `dayAttempts.account ${d.account}: ${POLICY} trades ${p ? p.account : 'no account'}`);
+  return r('day-attempts', PASS, `a fresh ${d.account} attempt each session day at its starting balance: entries sized as live in an attempt (the rulebook's verdict, size budget, cap, floor and floor stretch)`);
+}
+
 /** Words that would tell the model its account state was drawn: never in the attempt line. */
 const DRAWN = /\b(drawn|draws?|sampl\w*|bucket\w*|weight\w*|seed\w*|oversampl\w*)\b/i;
 
@@ -682,7 +703,7 @@ function adapter(ctx) {
 const CHECKS = Object.freeze([
   strategy, strategyValidBars, skillsCrosswalk, headPromptCheck, headComposedReads, headDelivery, rolePrompts, adaptersInSync, noWebInReplay, facts, curatedList,
   curatedSource, scheduleCheck, splitWindow, latency, loopRole, practiceMode, libraryDisplay, experienceIndex, riskRecord, ledgerLook, stage,
-  scorecardComposed, propPortfolio, rulebookValues, rulebookMissing, accountStates, combineCheck, accountFacts, monteCarlo, brokerLimits, adapter,
+  scorecardComposed, propPortfolio, rulebookValues, rulebookMissing, accountStates, combineCheck, dayAttemptsCheck, accountFacts, monteCarlo, brokerLimits, adapter,
 ]);
 
 function runChecks(ctx, checks = CHECKS) {
@@ -966,6 +987,6 @@ module.exports = {
   PASS, FAIL, NA, WARN, NEEDS, CHECKS, RECORD, FRAMES, LOOP_ROLES,
   strategy, strategyValidBars, skillsCrosswalk, headPromptCheck, headComposedReads, headDelivery, rolePrompts, adaptersInSync, facts, curatedList,
   curatedSource, scheduleCheck, splitWindow, latency, loopRole, practiceMode, libraryDisplay, experienceIndex, riskRecord, ledgerLook, stage,
-  scorecardComposed, propPortfolio, rulebookValues, rulebookMissing, accountStates, combineCheck, accountFacts, monteCarlo, noWebInReplay, brokerLimits, adapter,
+  scorecardComposed, propPortfolio, rulebookValues, rulebookMissing, accountStates, combineCheck, dayAttemptsCheck, accountFacts, monteCarlo, noWebInReplay, brokerLimits, adapter,
   crosswalkOf, attemptLine, runChecks, formatReport, defaultReaders, sampleBriefing, gateOptions, trainingMode, preflightForRun,
 };

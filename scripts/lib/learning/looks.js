@@ -242,7 +242,7 @@ function recordLook(file, look, { create = false, now = new Date() } = {}) {
         kind: 'look', evaluation: look.evaluation, candidate: look.candidate, purpose: look.purpose, runId: look.runId, arm: look.arm || null, config: look.config || null,
         ...(look.base && look.base !== look.config ? { base: look.base } : {}),
         ...(look.setup ? { setup: look.setup } : {}),
-        // A stage-2 mode's run (gateOptions mode: combine, account-states) names it, so pools never mix the modes.
+        // A training mode's run (gateOptions mode: combine, account-states; the loop's day-attempts) names it, so pools never mix the modes.
         ...(look.mode ? { mode: look.mode } : {}),
         from: sessionDate(look.from), to: sessionDate(look.to), role: r.role, at: now.toISOString(),
       });

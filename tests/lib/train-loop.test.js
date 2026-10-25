@@ -505,8 +505,15 @@ test('the learning gate: each window run checks it as replay.js run does, before
   // On a test or final day a replay cannot declare itself not learning.
   const fresh = world().loop.replay;
   await assert.rejects(run(world({ proposals: [], loop: { tuningWindows: Q3, replay: { ...fresh, learning: false } } })), /"learning": false on a practice-validate, test or final day/);
-  // After the split (2027-H2's tuning quarter), a replay declared not learning runs, and never teaches.
-  const off = world({ proposals: [], loop: { tuningWindows: [{ from: '2027-07-06', to: '2027-07-07' }], replay: { ...fresh, learning: false } } });
+  // After the split (2027-H2's tuning quarter), a replay declared not learning runs, and never teaches. It has no
+  // preflight, so the loop itself refuses it outside any attempt (a tree with no policy account: replay/day-attempts.js).
+  const offLoop = { tuningWindows: [{ from: '2027-07-06', to: '2027-07-07' }], replay: { ...fresh, learning: false } };
+  const bare = world({ proposals: [], loop: offLoop });
+  await assert.rejects(run(bare), /champion-t0: no active policy strategy in the tree names an account, so the run can't trade inside the day's attempt/);
+  assert.strictEqual(bare.calls.replay, 0);
+  const off = world({ proposals: [], loop: offLoop });
+  const make = off.steps.makeTree;
+  off.steps.makeTree = dir => { const c = make(dir); for (const d of ['strategies', 'accounts']) fs.cpSync(path.join(ROOT, d), path.join(dir, d), { recursive: true }); return c; };
   await run(off);
   assert.strictEqual(off.calls.replay, 1);
   assert.strictEqual(JSON.parse(fs.readFileSync(path.join(off.loop.workDir, 'runs', 'l1-champion-t0', 'learning-run.json'), 'utf8')).learning, false);

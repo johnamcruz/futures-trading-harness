@@ -38,8 +38,8 @@
  *       without), `+library:<hash>` when it is shown the history library (looks.js ARM); config: the run setup's hash
  *       (replay/config.js setupHash), so the arms differ in their index only; base: the setup without the library
  *       display (replay/config.js setupBase), which a library-display pair shares; setup: the setup without its code
- *       (replay/config.js setupFixed), which a resume keeps; mode: a stage-2 mode's name (combine, account-states), in
- *       its look so pools never mix the modes
+ *       (replay/config.js setupFixed), which a resume keeps; mode: a training mode's name (stage 2's combine,
+ *       account-states; the training loop's day-attempts), in its look so pools never mix the modes
  *       { learning, role, look, hideOutcomes, taken }; throws when refused
  *   readLearningRun(dir)        the decision kept in a run dir or a run home, or null (a run started before the gate)
  */
