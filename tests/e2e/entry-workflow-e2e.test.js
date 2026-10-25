@@ -92,6 +92,12 @@ function roles(w, at, o = {}) {
   const format = w.harness === 'claude' ? 'claude' : 'opencode';
   const runRole = async (role, request, limits) => {
     const isPhase2 = role === 'risk-manager' && /^Phase 2, plan verdict/.test(request);
+    // Phase 2's restatement (runner-entry.js: its approval unreadable), played by `o.restate` through the same glue.
+    if (role === 'risk-manager' && o.restate && /^Phase 2, restate/.test(request)) {
+      runs.push({ role: 'risk-manager restate', request, context: limits.context, timeoutMs: limits.timeoutMs });
+      const model = scriptedModel(o.restate, { format });
+      return realRunRole(w.cfg, role, request, limits, { root: D.ROOT, home: w.home, env: D.passEnv(w, at), run: (argv, opts) => model(argv, opts) });
+    }
     runs.push({ role: isPhase2 ? 'risk-manager phase 2' : role, request, context: limits.context, timeoutMs: limits.timeoutMs });
     const failed = o.fail && o.fail[isPhase2 ? 'phase2' : role];
     if (failed) return failed;
@@ -258,6 +264,28 @@ test('entry workflow: an APPROVE line the gate\'s reading takes as a veto ("Deci
   const rec = JSON.parse(fs.readFileSync(line.file, 'utf8')).entry;
   assert.strictEqual(rec.why, 'phase 2\'s report reads as a veto: a decision line decides cut, not APPROVE ("Decision: cut to size 1")');
   assert.match(rec.phase2.text, /^Phase 2 on the trade_lifecycle long plan for MNQ\.\nDecision: cut to size 1\nVERDICT: APPROVE/);
+});
+
+test('entry workflow: phase 2 restated (its Size line in prose): one restatement through the same glue, the order at the restated size through the real gateway and gate; a restated size over the VERDICT line\'s is bound to it', async () => {
+  for (const [restated, sent] of [[2, 2], [5, 2]]) {
+    const w = D.world();
+    const at = decisionAt(FIRED_BAR);
+    // Its VERDICT line approves 2; its Size line is a sentence holding a count under it: no size the reading takes.
+    const R = roles(w, at, {
+      phase2: phase2(w, { before: 'Size: the record\'s 2, since 1 category against is minor\n', verdict: 'APPROVE - size 2, risk $92.00, trade_lifecycle long with the trend' }),
+      restate: () => [{ result: `Size: ${restated}\nVERDICT: APPROVE - size ${restated}, risk $${46 * restated}.00` }],
+    });
+    const r = await D.pass(w, at, headPlanned(w, { size: 2 }), { runRole: R.runRole });
+    assert.deepStrictEqual(R.runs.map(x => x.role).filter(x => !/analyst|^risk-manager$/.test(x)), ['risk-manager phase 2', 'risk-manager restate', 'trade-executor'], String(restated));
+    assert.match(R.runs.find(x => x.role === 'risk-manager restate').request, /^Phase 2, restate, for MNQ .*your size can't be read as one whole number \(the line "Size: the record's 2, since 1 category against is minor"\)/);
+    assert.match(r.ran[0].result, /^CYCLE RESULT: executed - trade_lifecycle long 2 MNQ/, String(restated));
+    assert.deepStrictEqual(D.placedAtBroker(w).map(c => c.args.size), [sent], String(restated));
+    assert.deepStrictEqual(entries(w).map(e => [e.decision, e.size]), [['allowed', sent]], String(restated));
+    const line = D.cycleLines(w).at(-1);
+    assert.deepStrictEqual(line.entry.restated, { kind: 'size-unreadable', outcome: 'approved', size: sent }, String(restated));
+    const rec = JSON.parse(fs.readFileSync(line.file, 'utf8')).entry;
+    assert.deepStrictEqual([rec.restated.ceiling, rec.restated.outcome], [2, 'approved']);
+  }
 });
 
 test('entry workflow: phase 2\'s approved size sets the order: over the record\'s 2 the broker gets 2; at 1 (its cut) exactly 1, the gate allowing it', async () => {

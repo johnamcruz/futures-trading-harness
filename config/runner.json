@@ -139,6 +139,6 @@
   "broker": { "cacheKeepDays": 30, "siblingDays": 30 },
   "monteCarlo": { "paths": 2000, "reps": 2000, "max": 20000 },
   "desk": { "concurrency": 2, "timeoutMinutes": 8, "managedBudgetShare": 0.5 },
-  "entry": { "timeoutMinutes": 6 },
+  "entry": { "timeoutMinutes": 6, "phase2RestateRetries": 1 },
   "reviews": { "scratchR": 0.2 }
 }

@@ -70,6 +70,11 @@
  *   decisiveLine(text)                           the line verdictOf decided on (APPROVE: the first approving VERDICT line;
  *                                                VETO: the refusing one), trimmed, or '' (what the executor is handed)
  *   approvedSize(text)                           the size an approving report approves: { size } | { error } (fails closed)
+ *   verdictSize(text)                            the size its approving VERDICT lines alone state (every size and cut on
+ *                                                them binds): { size } | { error }
+ *   verdictLineRefuses(text)                     a VERDICT-keyword line refuses or says veto: never restated
+ *   restateCeiling(text)                         the most a restatement may approve: the VERDICT size and every Size line's
+ *                                                whole size and cut, the smallest; { size } | { error } (none stated)
  *   sizeRefusal(report, size)                    the gate's phase2-size check: an entry over phase 2's approved size (or none
  *                                                readable) refuses; null when no phase 2 is required (report null)
  */
@@ -594,6 +599,83 @@ function approvedSize(text) {
 }
 
 /**
+ * The size a report's approving VERDICT lines alone state, read as approvedSize reads them (every "size <n>" and cut on
+ * them binds; a VERDICT line with no whole size is an error), its Size lines and prose left out: { size } | { error }.
+ * The runner's bound when phase 2 restates a report it couldn't read (runner-entry.js, phase2-restate.js): a restated
+ * size never exceeds it.
+ */
+function verdictSize(text) {
+  const approving = approvingLines(text);
+  if (!approving.length) return { error: 'no approving VERDICT line' };
+  return approvedSize(approving.map(l => l.line.trim()).join('\n'));
+}
+
+/**
+ * The report's own verdict refuses: a VERDICT-keyword decision line whose decision is no approval (decisionLines'
+ * reading, its sentence-refusal rule too: "VERDICT: VETO - room", "The verdict is veto", "Sizing verdict: skip"), or a
+ * line that starts with a veto ("VETO - room"). A veto word elsewhere on an approving VERDICT line ("size 3, no veto
+ * needed", "(veto-free)") doesn't: such a report is restated and the answer read strictly (owner's goal, 2026-10-24:
+ * never lose a good setup to the reading). The runner never restates a refusing report (phase2-restate.js).
+ */
+const STARTS_VETO = /^[\s>#*_`|+\-\u2022]*(?:\d+[.)][\s>#*_`|]*)?veto(?:ed|es)?\b/i;
+function verdictLineRefuses(text) {
+  if (decisionLines(text).some(l => l.keyword === 'verdict' && !AGREE.has(l.word))) return true;
+  return String(text || '').replace(/\r\n|[\r\u2028\u2029\u0085]/g, '\n').split('\n').some(l => STARTS_VETO.test(plainLine(l)));
+}
+
+/**
+ * A Size line that states a size (approvedSize reads it as one: a number first, or a count, a spelled number or a
+ * size word in it), not prose that only opens with "Size:" ("Size: vwap above"). The runner's decisive record leaves
+ * such Size lines out of a FACTS block, and no other (phase2-restate.js).
+ */
+const SIZE_STATED = new RegExp(`\\d|\\b(?:${[...SIZE_WORDS].map(w => w.replace('/', '\\/')).join('|')}|${'eleven|twelve|thirteen|fourteen|fifteen|sixteen|seventeen|eighteen|nineteen|twenty'})\\b`, 'i');
+function statesSize(line) {
+  const m = SIZE_ONE.exec(String(line || ''));
+  return Boolean(m) && SIZE_STATED.test(`${m[1]}${m[2]}`);
+}
+
+/** The approving VERDICT lines as written, trimmed (the ones verdictOf approves on and approvedSize sizes). */
+const approvingVerdictLines = text => approvingLines(text).map(l => l.line.trim());
+
+const SPELLED_CUT = new RegExp(`(?:\\bto(?:\\s+size)?|\u2192|\u21d2|->|=>)\\s*(${SPELLED.join('|')})\\b`, 'gi');
+// A Size line's first word stating no size: the report stated none (no restatement).
+const NO_SIZE = new Set(['zero', 'none', 'nil', 'no', 'n/a', 'na', 'unknown', 'tbd', 'tba']);
+/**
+ * The most a restatement may approve (phase2-restate.js): the smallest of the approving VERDICT lines' size
+ * (verdictSize) and every whole size and cut the report's Size lines state, as approvedSize collects them (a
+ * number-led line's number and cuts; a prose line's cuts, proseCuts, and a spelled number first); { size } | { error }.
+ * A Size line stating no size (0, none, zero, nil, no, n/a, unknown) or one that isn't a whole size ("1.5", "<n>"): an
+ * error (no restatement: the report stated no size to bound it). A prose cut the report doesn't make or a share word
+ * ("I would cut to half") lowers nothing: the restatement says the size, never above this.
+ */
+function restateCeiling(text) {
+  const v = verdictSize(text);
+  if (v.error) return v;
+  const sizes = [v.size];
+  const whole = t => /^0*[1-9]\d*$/.test(String(t));
+  const lines = String(text || '').replace(/\r\n|[\r\u2028\u2029\u0085]/g, '\n').split('\n');
+  for (let i = 0; i < lines.length; i += 1) {
+    const m = SIZE_ONE.exec(lines[i]);
+    if (!m) continue;
+    const shown = m[0].trim().replace(/\s+/g, ' ');
+    const tok = String(m[1] || '').replace(/[.*_]+$/, '');
+    const low = tok.toLowerCase().replace(/[^a-z/]+$/, '');
+    if (NO_SIZE.has(low) || /^0+$/.test(tok)) return { error: `a Size line states no size ("${shown}")` };
+    // A spelled size after "to" or an arrow anywhere on the line or its continuation ("three, cut to two"): it binds.
+    for (const c of `${m[1]}${m[2]} ${continuation(lines, i)}`.matchAll(SPELLED_CUT)) sizes.push(SPELLED.indexOf(c[1].toLowerCase()) + 1);
+    if (/^[A-Za-z]/.test(tok)) {
+      if (SPELLED.includes(low)) sizes.push(SPELLED.indexOf(low) + 1);
+      for (const t of proseCuts(`${m[1]}${m[2]} ${continuation(lines, i)}`).sizes) if (whole(t)) sizes.push(Number(t));
+      continue;
+    }
+    if (!whole(tok)) return { error: `a Size line states no whole size ("${shown}")` };
+    sizes.push(Number(tok));
+    for (const t of sizeLineCuts(m[2])) if (whole(String(t).replace(/[.*_]+$/, ''))) sizes.push(Number(String(t).replace(/[.*_]+$/, '')));
+  }
+  return { size: Math.min(...sizes) };
+}
+
+/**
  * The gate's `phase2-size` check (tighten-only): an entry's size over the size its approving phase-2 report approved
  * (approvedSize), or none readable, refuses. `report`: approvedPhase2's answer (null: no phase 2 is required, none
  * checked; { error }: refused). The message, or null.
@@ -760,4 +842,4 @@ function checkRolesRan(transcriptPath, cycle, cached = [], lookups = null, roles
     : null;
 }
 
-module.exports = { ANALYSTS, roleCalls, withRunnerRuns, cycleCalls, rolesInTranscript, missingRoles, checkRolesRan, approvedPhase2, assessRound, round, latestPhase2, verdictOf, approvalReadAsVeto, decisiveLine, approvedSize, sizeRefusal, verdictMatches, verdictLines, decisionLines, verdictProblem };
+module.exports = { ANALYSTS, roleCalls, withRunnerRuns, cycleCalls, rolesInTranscript, missingRoles, checkRolesRan, approvedPhase2, assessRound, round, latestPhase2, verdictOf, approvalReadAsVeto, decisiveLine, approvedSize, verdictSize, verdictLineRefuses, restateCeiling, statesSize, approvingVerdictLines, sizeRefusal, verdictMatches, verdictLines, decisionLines, verdictProblem };

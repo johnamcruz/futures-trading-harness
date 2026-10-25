@@ -152,7 +152,7 @@ const RUNNER = {
   monteCarlo: { paths: int(0), reps: int(0), max: int(1) },
   // managedBudgetShare: the most of a managed cycle's time its desk may take (runner.js managedCycle), the rest the head trader's.
   desk: { concurrency: int(1), timeoutMinutes: int(1), managedBudgetShare: pos(1) },
-  entry: { timeoutMinutes: int(1) },
+  entry: { timeoutMinutes: int(1), phase2RestateRetries: int(0, 1) },
   reviews: { scratchR: nonneg() },
 };
 
@@ -269,7 +269,7 @@ const BUILT_IN = deepFreeze({
     broker: { cacheKeepDays: 30, siblingDays: 30 },
     monteCarlo: { paths: 2000, reps: 2000, max: 20000 },
     desk: { concurrency: 2, timeoutMinutes: 8, managedBudgetShare: 0.5 },
-    entry: { timeoutMinutes: 6 },
+    entry: { timeoutMinutes: 6, phase2RestateRetries: 1 },
     reviews: { scratchR: 0.2 },
   },
   analysis: {

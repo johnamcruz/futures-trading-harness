@@ -1092,6 +1092,10 @@
    "value": 6,
    "from": "new in feat/entry-workflow (one entry role's run: risk-manager phase 2, the trade-executor)"
   },
+  "entry.phase2RestateRetries": {
+   "value": 1,
+   "from": "new in feat/phase2-restate-retry (phase 2 restates an approval the runner can't read, once: 0 turns it off, at most 1)"
+  },
   "reviews.scratchR": {
    "value": 0.2,
    "from": "new in fix/runner-writes-reviews (the runner's factual review: a trade inside 0.2R is a scratch, as skills/trade-review/SKILL.md defines it)"

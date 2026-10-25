@@ -188,6 +188,8 @@ function cycleSummary(line) {
     orders: line.orders || [], missingSkills: line.missingSkills || [], file: line.file || null,
     // When it acted against its bar (cycle-timing.js), for the report's setup timing.
     ...(line.timing && typeof line.timing === 'object' ? { timing: line.timing } : {}),
+    // Phase 2 restated an approval the runner couldn't read (runner-entry.js): its outcome, for the report's count.
+    ...(line.entry && line.entry.restated && typeof line.entry.restated === 'object' ? { restated: line.entry.restated } : {}),
   };
 }
 

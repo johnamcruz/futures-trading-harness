@@ -18,6 +18,9 @@
  *              reason, floor }, the size code translated: the one to approve or cut) }
  *     execute  the trade-executor on the approved plan; ctx adds { args (order_plan's place_order arguments, built in
  *              code: runner-entry.js), verdict (phase 2's decisive VERDICT line: roles-ran.js decisiveLine) }
+ *   restate(role, ctx)   risk-manager phase 2's one restatement (trading/phase2-restate.js: its approval couldn't be read):
+ *              ctx { symbol, contractId, at, timeframe, why (what couldn't be read, in its report's words), ceiling (its
+ *              VERDICT line's size), report (its first report) }. Code's step, not a workflow phase: no `request:` names it.
  */
 
 const RISK_MANAGER = 'risk-manager';
@@ -59,4 +62,8 @@ const REQUESTS = Object.freeze({
   execute: (role, { symbol, contractId = null, at, timeframe, args, verdict }) => `Execute the approved plan for ${what(symbol, contractId)} at ${when(timeframe, at)}. The risk manager's line: ${String(verdict || '').trim()}. The place_order arguments from the harness tool order_plan, built by the runner from this bar's compose record: ${JSON.stringify(args)}. Send them as given (your Entry steps: the account read, then place_order with exactly these arguments, once; never resize, reprice or relabel them), read the reply, check the entry once, and report in your output format (EXECUTED, BLOCKED or ABORTED first).`,
 });
 
-module.exports = { REQUESTS, BRIEF };
+// Phase 2's restatement: the two lines only, read by the same readers; its size never above its VERDICT line's.
+const restate = (role, { symbol, contractId = null, at, timeframe, why, ceiling, report = '' }) => `Phase 2, restate, for ${what(symbol, contractId)} at ${when(timeframe, at)}. The runner can't read your phase 2 report below as an approval: ${String(why || '').trim()}. Restate it in two lines and nothing else (no tools, no reasoning): \`Size: <n>\` (the number alone, at most the ${ceiling} your VERDICT line approved), then your \`VERDICT: APPROVE - size <n>, ...\` line. If you don't approve the plan, write only your \`VERDICT: VETO - <reason>\` line.`
+  + block('your phase 2 report', report);
+
+module.exports = { REQUESTS, BRIEF, restate };
