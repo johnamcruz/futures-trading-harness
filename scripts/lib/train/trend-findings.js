@@ -12,7 +12,7 @@
  * (count), the R they left (cost: the sum of each leg's availableR, its move from the first bar an entry could be on to
  * its end, in its planned stop or the run's; legs with no R counted as none), its codes, and up to `examples` legs
  * (config/training.json trendFindings), the costliest first, each as trend-facts.js exampleLine gives it (what the model
- * said, the contradiction, the plan that passed: no date, time or price); a late or unfilled entry's legs (the runner's
+ * said beside the plan that passed: no date, time or price); a late or unfilled entry's legs (the runner's
  * execution, not a read) give no example. The owner:
  *   compose_check   the skill of the blocking cycle's first unverified read at the failing step (the read the check
  *                   refused); none when no read names a skill there
@@ -20,8 +20,8 @@
  *   min-contracts   the floor refused the model's stop (phase 2 or the gate): the head's stop choice, flow step `stop`
  *                   and the skill of its plan's stop read (trend-facts.js owner); the floor itself is the rulebook's
  *   executor        agents/trade-executor.md (an abort, a block)
- *   no-plan         the step where the model's stated reason and the verified reads first disagree (trend-facts.js
- *                   owner) and the skill of that read; none without a disagreement
+ *   no-plan         the earliest step where a read the model composed the leg's way was not verified (trend-facts.js
+ *                   owner) and that read's skill; none when it composed none
  *   anything else   none (the gate's late or unfilled entry, the head trader's pass): any skill or role may be edited
  * Never a finding: a leg blocked by a rule (the gate's clock, the account's stops, news: code and the rulebook, the
  * owner's), outside the session, or behind a position already open. A size or management skill (no read), the loop's
@@ -80,7 +80,7 @@ function ownerOf(leg, { exists = () => true } = {}) {
   return read && !NOT_OWNED.has(read.skill) && exists(read.skill) ? { skill: read.skill } : {};
 }
 
-/** The flow step a leg is filed under: its blocker's; a no-plan leg's, where its reason and the facts disagree. */
+/** The flow step a leg is filed under: its blocker's; a no-plan leg's, its owner's (trend-facts.js), else none. */
 function stepOfLeg(leg) {
   const b = leg.blocker;
   if (b.code === FLOOR) return 'stop';

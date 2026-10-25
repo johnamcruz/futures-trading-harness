@@ -59,11 +59,12 @@ function flaggedLine(d, i) {
 }
 
 function selfReviewPrompt({ template, flagged, files, maxProposals }) {
+  // Function replacers: a `$&` or `$\`` in a flagged decision's text is never read as a replacement pattern.
   return `${MARKER}\n${template
-    .replace('{{FLAGGED}}', flagged.map(flaggedLine).join('\n'))
-    .replace('{{CATEGORIES}}', FAILURES.join(', '))
-    .replace('{{FILES}}', files.join('\n'))
-    .replace('{{MAX}}', String(maxProposals))}`;
+    .replace('{{FLAGGED}}', () => flagged.map(flaggedLine).join('\n'))
+    .replace('{{CATEGORIES}}', () => FAILURES.join(', '))
+    .replace('{{FILES}}', () => files.join('\n'))
+    .replace('{{MAX}}', () => String(maxProposals))}`;
 }
 
 /**
@@ -125,14 +126,15 @@ function findingsByStep(findings, controls = '') {
 function probePrompt({ template, findings, lessons, files, k, controls = '' }) {
   const { KINDS } = require('./probe-edit');
   const { flowLine } = require('./flow');
+  // Function replacers: a `$&` or `$\`` in a finding, an example or a lesson is never read as a replacement pattern.
   return `${MARKER}\n${template
-    .replace('{{FLOW}}', flowLine())
-    .replace('{{FINDINGS}}', findingsByStep(findings, controls))
-    .replace('{{LESSONS}}', lessons || 'none yet')
-    .replace('{{FILES}}', files.join('\n'))
-    .replace('{{CATEGORIES}}', FAILURES.join(', '))
-    .replace('{{KINDS}}', KINDS.join(', '))
-    .replace('{{K}}', String(k))}`;
+    .replace('{{FLOW}}', () => flowLine())
+    .replace('{{FINDINGS}}', () => findingsByStep(findings, controls))
+    .replace('{{LESSONS}}', () => lessons || 'none yet')
+    .replace('{{FILES}}', () => files.join('\n'))
+    .replace('{{CATEGORIES}}', () => FAILURES.join(', '))
+    .replace('{{KINDS}}', () => KINDS.join(', '))
+    .replace('{{K}}', () => String(k))}`;
 }
 
 /**

@@ -26,27 +26,24 @@
  *              cycle's own attempt line) a size fits too, by the entry's own size chain (sizeForCycle). A bar whose
  *              cycle had an OK record the leg's way (passed on, vetoed, late, refused at the gate, unfilled) had one,
  *              whatever the rebuild, but for the floor's refusal (min-contracts)
- *   said       the model's stated reason: the cycle's CYCLE RESULT line (and, for a refused plan, its reads checked)
- *   contradictions   a stated claim about a step that the same facts show false (statedClaims, refute): "no setup" /
- *              "no rejection" (at a timeframe it names) against a verified setup read there; "no entry" against a
- *              verified confirmation on a candle closed after the setup, only when the reason states no other failing
- *              step; "not at a level" against a verified `at` read; "against the trend" when the trend rule allows the
- *              side; "no target" against a verified target; a 15m/1h/4h direction the checker finds FALSE; and every
- *              claim the reason check (reasons.js checkReasons on the bar's facts) finds FALSE. A clause takes its
- *              sentence's side when it names none; one about the other side, the runner's entry, or R:R says nothing
+ *   said       the model's stated reason: the cycle's CYCLE RESULT line (and, for a refused plan, its reads checked);
+ *              shown to the proposer beside the plan that passed, never parsed: the proposer reads the two together
  *
  * A leg is learnable when a valid plan existed at one of its bars; not learnable (a correct pass) when every bar was
- * known and none had one; unknown otherwise. A no-plan leg's owner: the first flow step where a stated claim and the
- * verified reads disagree, and the skill of that read (curated-moments.js skillOfRead, the crosswalk); none without. A
- * leg the floor refused (min-contracts) is the head's stop choice: flow step `stop`, the skill of its plan's stop read.
+ * known and none had one; unknown otherwise (a bar with a missing frame and no valid plan on its known reads is not
+ * known: the missing frame's reads might have made one). The owner: the earliest flow step where a read the model
+ * composed the leg's way was not verified, and that read's skill (the one it named, else curated-moments.js
+ * skillOfRead); none when it composed none (a no-plan leg). A leg the floor refused (min-contracts) is the head's stop
+ * choice: flow step `stop`, the skill of its plan's stop read.
  *
  * The control bars (controlFacts): the run's trade cycles in its control windows (trend-windows.js), else every trade
- * cycle on no leg's span; at each, either side, the same plan check. The base rate is the share with a valid plan; a
- * valid plan that lost (its stop hit before its minimum R:R mark on the run's later bars that session, the stop first
- * when one bar holds both) is a balancing example: never a finding, never shown to the trader.
+ * cycle on no leg's span; at each, each side on its own, the same plan check (a leg bar is checked on the leg's side, so
+ * the base rate counts control bar-sides, like with like). The base rate is the share with a valid plan, and each such
+ * plan's outcome on the run's later bars that session: lost (its stop hit before its minimum R:R mark, the stop first
+ * when one bar holds both), won, or undecided by the session's end. A plan that lost is a balancing example: never a
+ * finding, never shown to the trader.
  *
  *   entryBars(leg)                                the leg's entry-able cycles
- *   statedClaims(text, side)                      [{ step, clause, test }] the step-claims a reason states for the side
  *   barFacts({ briefing, side, tick, plan, said, reads, records, cycle, sizeFits, names, missing })   one bar's facts
  *   legFacts(leg, { briefingAt, cycleAt, recordsAt, tick, plan, sizeFor, names, missing })   { learnable, why, bars, owner }
  *   missingFrames({ minutes, fineBars }), dependsOnMissing(read, briefing, missing)   the frames a rebuild lacks
@@ -54,7 +51,7 @@
  *   outcomeOf({ side, entry, stop, minRR, after })   'lost' | 'won' | null from the bars after a plan's bar
  *   attachFacts(capture, { runDir, home, tree, barsFiles, controls })   the capture's missed legs with `facts`, and
  *                                                 its `controls` (read-only)
- *   controlsOf(captures)                          { legBars, controlBars, losers } over a round's captures
+ *   controlsOf(captures)                          { legBars, controlBars: { sides, valid, won, lost, undecided }, losers }
  *   scrub(text, { names, words })                 text without dates, months, days, clock times, prices, numbers (in
  *                                                 digits, words or fractions), ids or account names (for the proposer)
  *   exampleLine(leg), loserLine(x)                one example for the proposer (no date, time or price)
@@ -62,9 +59,9 @@
 
 const fs = require('fs');
 const path = require('path');
-const { STEPS, TF_ORDER, TF_MIN, parseRead, checkRead, checkReads, candleClose } = require('../trading/composed-reads');
+const { STEPS, TF_ORDER, TF_MIN, parseRead, checkReads } = require('../trading/composed-reads');
 const { candidatesOf, repairOf } = require('../trading/compose-hints');
-const { trendRuleOf, checkReasons, factsFromBriefing } = require('../trading/reasons');
+const { trendRuleOf } = require('../trading/reasons');
 const { standardPlans } = require('../learning/setup-library');
 const { skillOfRead } = require('../learning/curated-moments');
 const { NUMBER_WORDS, FRACTIONS } = require('./probe-edit');
@@ -84,9 +81,13 @@ const entryBars = leg => (isObj(leg) && Array.isArray(leg.cycles) ? leg.cycles :
 
 // --- the proposer's words --------------------------------------------------------------------------------------------
 
-const MONTHS = /\b(?:January|February|March|April|June|July|August|September|October|November|December|May|Jan|Feb|Mar|Apr|Jun|Jul|Aug|Sept?|Oct|Nov|Dec)\b\.?/g;
-const DAYS = /\b(?:Mon|Tues?|Wed(?:nes)?|Thu(?:rs)?|Fri|Sat(?:ur)?|Sun)(?:day)?\b|\b(?:monday|tuesday|wednesday|thursday|friday|saturday|sunday)\b/g;
-const WORDS = new RegExp(`\\b(?:${NUMBER_WORDS.join('|')})\\b`, 'gi');
+// Month and weekday names and their abbreviations, any case (a verb "may" goes too: the proposer loses nothing by it).
+const MONTHS = /\b(?:january|february|march|april|may|june|july|august|september|october|november|december|jan|feb|mar|apr|jun|jul|aug|sept?|oct|nov|dec)\b\.?/gi;
+const DAYS = /\b(?:mon|tues?|wed(?:nes)?|thu(?:rs?)?|fri|sat(?:ur)?|sun)(?:day)?\b\.?/gi;
+// probe-edit.js's number words and the ones it leaves out (a count or an order in words: "one", "fifteen", "first").
+const MORE_WORDS = ['zero', 'one', 'thirteen', 'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen', 'sixty', 'seventy', 'eighty', 'ninety',
+  'first', 'second', 'million'];
+const WORDS = new RegExp(`\\b(?:${[...NUMBER_WORDS, ...MORE_WORDS].join('|')})\\b`, 'gi');
 const escape = s => s.replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
 
 /**
@@ -104,8 +105,10 @@ function scrub(text, { names = [], words = true } = {}) {
     .replace(/#\w+/g, ' ')
     .replace(/\b[a-z]+_[a-z0-9_]*\d[a-z0-9_]*\b/gi, 'the account')
     .replace(FRACTIONS, ' ')
-    // A timeframe or a whole R multiple stays (15m, 1h, 2r: read names); every other number goes.
-    .replace(/\$?-?\d+(?:[.,]\d+)*(?:%|x\b|[mhr]\b)?/gi, m => (/^\d+[mhr]$/i.test(m) ? m : ' '));
+    // An ordinal (4th, 21st) whole, so no stub is left.
+    .replace(/\b\d+(?:st|nd|rd|th)\b/gi, ' ')
+    // A timeframe or a whole R multiple stays (15m, 1h, 2r: read names; "15m-1h" whole); every other number goes.
+    .replace(/(?<![\w-])\$?-?\d+(?:[.,]\d+)*(?:%|x\b|[mhr]\b)?|(?<=\w-)\d+(?:[.,]\d+)*(?:%|x\b|[mhr]\b)?/gi, m => (/^\d+[mhr]$/i.test(m) ? m : ' '));
   if (words) t = t.replace(WORDS, ' ');
   return t.replace(/\(\s*[-,;:/\s]*\)/g, ' ')
     .replace(/([,;])(?:\s*[,;])+/g, '$1')
@@ -125,119 +128,10 @@ function clip(t, n) {
   return `${cut || head}...`;
 }
 
-// --- the stated reason's claims --------------------------------------------------------------------------------------
-
-/** The sides a text names: 'long', 'short' (bullish and bearish describe candles, never the side the clause is about). */
-const sidesIn = c => [...new Set((String(c).match(/\b(longs?|shorts?)\b/gi) || []).map(x => (/^long/i.test(x) ? 'long' : 'short')))];
-// A clause about the runner's entry (a late or missed entry): the execution step's, never a claim about the reads.
-const EXECUTION = /late entry|runner'?s entry|missed the plan'?s entry|invalidated before the order/i;
-// R:R phrasings ("no level reaches 2R", "no target at 2R"): about the plan's arithmetic, never a location or target claim.
-const RR = /\bR:R\b|risk[- ]reward|\b\d+(?:\.\d+)?R\b|\breach(?:es)?\b|\bmin(?:imum)? (?:of )?\d/i;
-// A failing step other than the entry, stated anywhere in the reason: an entry claim beside it is not the ground.
-const OTHER_FAIL = /\bR:R\b|risk[- ]reward|\b\d+(?:\.\d+)?R\b|\broom\b|\bcap\b|max[_ ]risk|\bsize\b|\bfloor\b|\bstop\b|\btarget\b/i;
-const TF_WORD = /\b(1m|3m|5m|15m|1h|4h)\b/g;
-
-// The step-claims a stated reason makes, each with what would show it false. Claims only of absence or opposition: a
-// stated fact ("closed bottom third") is never read as a claim about the step.
-const CLAIMS = [
-  { step: 'bias', re: /against (?:the )?(?:trend(?: rule)?|prevailing|(?:15m|1h|4h)(?:\/(?:15m|1h|4h))* (?:up|down|trend))|counter[- ]?trend|trend rule (?:refuses|blocks|bars|forbids)|only as a reversal/i, test: 'rule' },
-  { step: 'location', re: /not at (?:a |any )?(?:key )?level|\bno (?:key )?level\b(?! (?:ahead|below|above|on the winning))|location not at|mid-?range/i, test: 'at', rr: true },
-  // "no entry candle closed after the rejection" is an entry claim (the rejection is granted), never a setup one.
-  { step: 'setup', re: /\bno (?:(?!entry|trigger|confirm|candle|close)[\w/-]+ ){0,6}?(setup|rejection|reaction|breakout|break|sweep|cisd|reclaim)s?\b/i, test: 'setup' },
-  { step: 'entry', re: /\bno (?:[\w/-]+ ){0,5}?(?:entry|trigger|confirm\w*)\b|\bunconfirmed\b|not confirmed/i, test: 'entry' },
-  { step: 'target', re: /\bno (?:named )?(?:level|target)s? (?:below|above|ahead|on the winning side)|\bno target\b/i, test: 'target', rr: true },
-];
-// A timeframe's direction ("15m bearish", "1h up"), never a candle or a structure named by it ("15m bearish CISD").
-const DIRECTION = /\b(15m|1h|4h) (?:trend )?(?:is )?(bullish|bearish|up|down|uptrend|downtrend)\b(?!-|\s+(?:displacement|candle|cisd|engulfing|fvg|bar|close|choch|bos|rejection|reaction|break|sweep|pattern|momentum|move|leg|wick))/i;
-
-/**
- * The reason's sentences, each split into clauses; a clause naming no side takes the last side its sentence named
- * before it ("no short trigger, and the long is against the trend, so the trend rule refuses it": the long's), and
- * keeps its sentence (for the sentence's own R:R).
- */
-function clausesWithSide(text) {
-  const body = String(text || '').replace(/^\s*CYCLE RESULT:\s*/i, '').replace(/^\s*[a-z][a-z-]*\s+[-–]\s+/i, '');
-  const out = [];
-  for (const sentence of body.split(/;|\.\s+|\s[-–]\s/)) {
-    let last = null;
-    for (const clause of sentence.split(/,|\(|\)|:|\bbut\b|\band\b(?= (?:no|the|a|its)\b)|\bso\b(?= the\b)/).map(x => x.trim()).filter(x => /[a-z]{3,}/i.test(x))) {
-      const own = sidesIn(clause);
-      out.push({ clause, sentence, own, sides: own.length ? own : last ? [last] : [] });
-      if (own.length) last = own[own.length - 1];
-    }
-  }
-  return out;
-}
-
-// What the model did, not what the market showed ("no composed setup", "no setup composed"); the tool's verdict
-// reported ("per the tool", a read FALSE): neither is a claim about the facts.
-const ACTION = /\bcompos(?:ed?|ing)\b/i;
-const TOOL = /per the tool|\bthe tool\b|\bFALSE\b|refused by/;
-// A setup word that names no kind ("setup", "reaction"): a claim only with the timeframe it is about.
-const GENERIC_SETUP = new Set(['setup', 'reaction']);
-
-/**
- * The step-claims a reason states that bear on the side, the high-confidence ones only: a clause about the other side
- * (or both), the runner's entry, the model's own action or the tool's verdict says nothing; a location, target or setup
- * claim in a sentence about R:R, a setup claim of no kind and no timeframe, and an entry claim that names no side or sits
- * beside another failing step are left out (too often the model's shorthand for something else).
- */
-function statedClaims(text, side) {
-  const out = [];
-  const other = OTHER_FAIL.test(String(text || ''));
-  for (const { clause, sentence, own, sides } of clausesWithSide(text)) {
-    if (EXECUTION.test(clause) || TOOL.test(clause)) continue;
-    // A timeframe's direction is a claim of fact whatever side it favours ("15m bullish" under a short).
-    const d = DIRECTION.exec(clause);
-    if (d) out.push({ step: 'bias', clause, test: 'direction', read: `${d[1].toLowerCase()} ${/bull|up/i.test(d[2]) ? 'up' : 'down'}` });
-    if (sides.length !== 1 || sides[0] !== side || ACTION.test(clause)) continue;
-    const rr = RR.test(sentence);
-    for (const c of CLAIMS) {
-      const m = c.re.exec(clause);
-      if (!m) continue;
-      const word = (m[1] || '').toLowerCase();
-      const tfs = [...new Set(clause.match(TF_WORD) || [])];
-      if ((c.rr || c.test === 'setup') && rr) continue;
-      if (c.test === 'setup' && GENERIC_SETUP.has(word) && !tfs.length) continue;
-      // "no rejection of <a price>": about that one level, which a read of another level never refutes.
-      if (c.test === 'setup' && /\d{3,}/.test(clause)) continue;
-      if (c.test === 'entry' && (other || !own.includes(side))) continue;
-      out.push({ step: c.step, clause, test: c.test, word, tfs });
-    }
-  }
-  return out;
-}
-
-/** A read's frame (its first word when a timeframe, else its second: `stop 15m low`), or null. */
-const frameOf = read => { const w = String(read || '').split(' '); return TF_MIN[w[0]] ? w[0] : TF_MIN[w[1]] ? w[1] : null; };
-
-/** The verified read (if any) that shows a stated claim false on this bar, or null. */
-function refute(claim, { verified, briefing, side, tick, rule }) {
-  if (claim.test === 'rule') return rule === true ? `trend ${side} allowed` : null;
-  if (claim.test === 'at') return (verified.location.find(x => x.kind === 'at') || {}).read || null;
-  if (claim.test === 'target') return (verified.target[0] || {}).read || null;
-  if (claim.test === 'direction') {
-    const c = checkRead(parseRead(claim.read), briefing, { tick });
-    return c.check === false ? `"${claim.read}" is false` : null;
-  }
-  if (claim.test === 'setup') {
-    const fit = { rejection: x => / rejected /.test(x.read), breakout: x => / broke /.test(x.read), break: x => / broke /.test(x.read), reclaim: x => / broke /.test(x.read), cisd: x => x.kind === 'cisd', sweep: x => x.kind === 'swept' }[claim.word] || (() => true);
-    // "no 4h rejection": only a 4h one refutes it.
-    const onTf = x => !claim.tfs || !claim.tfs.length || claim.tfs.includes(frameOf(x.read));
-    return (verified.setup.find(x => fit(x) && onTf(x)) || {}).read || null;
-  }
-  // An entry: a confirmation pointing the side on a candle closed after the latest verified setup's.
-  const s = verified.setup[0];
-  if (!s || num(s.close) === null) return null;
-  const m3 = m3Of(briefing);
-  const e = verified.entry.find(x => { const t = candleClose(m3, frameOf(x.read)); return t !== null && t > s.close; });
-  return e ? e.read : null;
-}
-
 // --- one bar ---------------------------------------------------------------------------------------------------------
 
 /**
- * The frames a rebuild can't make that the run had: the 5m (and any frame under the base's next) from 1m bars, when the
+ * The frames a rebuild can't make that the run had: the 5m, built from 1m bars, when the
  * run's 1m bars are not at hand and the base is under 5m. [] otherwise.
  */
 const missingFrames = ({ minutes, fineBars }) => (Number(minutes) < TF_MIN['5m'] && Number(minutes) !== TF_MIN['1m'] && !fineBars ? ['5m'] : []);
@@ -280,7 +174,7 @@ const planOfRepair = f => ({ via: 'together', reads: f.reads.map(r => r.read), s
  */
 function barFacts({ briefing, side, tick, plan, said = '', reads = [], records = [], cycle = null, sizeFits = () => null, names = [], missing = [] }) {
   const own = ownOk(cycle);
-  const base = { said: String(said || ''), shown: scrub(String(said || '').replace(/^\s*CYCLE RESULT:\s*/i, ''), { names }), reads: (reads || []).map(r => ({ step: r.step, read: r.read, verified: r.verified === true })), contradictions: [] };
+  const base = { said: String(said || ''), shown: scrub(String(said || '').replace(/^\s*CYCLE RESULT:\s*/i, ''), { names }), reads: (reads || []).map(r => ({ step: r.step, read: r.read, verified: r.verified === true })) };
   const ownWhy = 'your own plan passed compose_check';
   const m3 = m3Of(briefing);
   if (!m3) return { ...base, known: own, valid: own, why: own ? ownWhy : 'no briefing for the bar', via: own ? 'own' : null };
@@ -311,20 +205,15 @@ function barFacts({ briefing, side, tick, plan, said = '', reads = [], records =
     }
   }
   if (!valid && own) { valid = true; why = ownWhy; chosen = { via: 'own', reads: [] }; }
-  const sizeUnknown = !valid && why === 'the attempt\'s size can\'t be worked out';
-  const ctx = { verified: cand, briefing, side, tick, rule };
-  const contradictions = [];
-  for (const c of statedClaims(said, side)) {
-    const read = refute(c, ctx);
-    if (read && !contradictions.some(x => x.step === c.step && x.clause === c.clause)) contradictions.push({ step: c.step, clause: c.clause, read });
-  }
-  try {
-    for (const c of checkReasons(String(said || ''), factsFromBriefing(briefing)).claims.filter(x => x.check === false)) contradictions.push({ step: null, clause: c.clause, read: c.why });
-  } catch (_err) { /* the reason check can't read it: none flagged */ }
+  // No plan on the known reads while a frame is missing (the window and the trend rule aside, which no frame decides):
+  // the missing frame's reads might have made one, so the bar is not known.
+  const framesUnknown = !valid && unknown.length > 0 && m3.windowEntries === 'allowed' && rule === true;
+  if (framesUnknown) why = `${why}, on the known reads (${unknown.join(', ')} unknown)`;
+  const sizeUnknown = !valid && /the attempt's size can't be worked out/.test(why);
   return {
-    ...base, known: !sizeUnknown, valid, why, via: chosen ? chosen.via : null, planReads: chosen ? chosen.reads : null,
+    ...base, known: !sizeUnknown && !framesUnknown, valid, why, via: chosen ? chosen.via : null, planReads: chosen ? chosen.reads : null,
     entry: chosen ? chosen.entry ?? null : null, stop: chosen ? chosen.stop ?? null : null, stopTicks: chosen ? chosen.stopTicks ?? null : null, unknown,
-    verified: Object.fromEntries(STEPS.map(s => [s, cand[s].map(x => x.read)])), contradictions,
+    verified: Object.fromEntries(STEPS.map(s => [s, cand[s].map(x => x.read)])),
   };
 }
 
@@ -356,10 +245,11 @@ function legFacts(leg, { briefingAt, cycleAt = () => null, recordsAt = () => [],
     const skill = s ? skillOfRead('stop', s.stopRead.read) || s.stopRead.skill || null : null;
     owner = { step: 'stop', ...(skill ? { skill } : {}) };
   } else {
-    // The earliest flow step a stated claim and a verified read disagree at, and that read's skill.
-    const all = bars.flatMap(x => x.contradictions || []).filter(x => x.step);
-    const first = STEPS.map(s => all.find(x => x.step === s)).find(Boolean) || null;
-    const skill = first ? skillOfRead(first.step, first.read) || null : null;
+    // The earliest flow step a read the model composed the leg's way was not verified at, and that read's skill (the
+    // one it named, else the crosswalk's); none when it composed none.
+    const unverified = entryBars(leg).flatMap(c => (Array.isArray(c.reads) ? c.reads : [])).filter(r => isObj(r) && r.verified !== true && STEPS.includes(r.step));
+    const first = STEPS.map(s => unverified.find(r => r.step === s)).find(Boolean) || null;
+    const skill = first ? first.skill || skillOfRead(first.step, first.read) || null : null;
     owner = first ? { step: first.step, ...(skill ? { skill } : {}) } : null;
   }
   return { learnable, why, bars, owner };
@@ -422,20 +312,24 @@ function outcomeOf({ side, entry, stop, minRR, after }) {
   return null;
 }
 
-/** The control bars' facts: each bar's either-side plan check and, for a valid plan, its outcome. */
+/**
+ * The control bars' facts, one entry a bar and side (each side checked on its own, as a leg bar is on its leg's):
+ * [{ bar, side, known, valid, planReads?, shown?, outcome? }], a valid plan's outcome 'lost' | 'won' | null (undecided).
+ */
 function controlFacts(cycles, { briefingAt, tick, plan, minutes, sizeFor, names, laterBars, missing = [] }) {
   const out = [];
   for (const rec of cycles) {
     const close = Date.parse(rec.timing.barClose);
     const barT = new Date(close - minutes * 60000).toISOString();
     const b = (() => { try { return briefingAt(barT); } catch (_err) { return null; } })();
-    if (!m3Of(b)) { out.push({ bar: barT, known: false, valid: false }); continue; }
-    const sides = ['long', 'short'].map(side => ({ side, ...barFacts({ briefing: b, side, tick, plan, said: rec.result || '', sizeFits: sizeFor(rec), names, missing }) }));
-    const v = sides.find(x => x.valid) || null;
-    out.push({
-      bar: barT, known: sides.every(x => x.known) || Boolean(v), valid: Boolean(v),
-      ...(v ? { side: v.side, planReads: v.planReads, shown: v.shown, outcome: outcomeOf({ side: v.side, entry: v.entry, stop: v.stop, minRR: plan.minRR, after: laterBars(close) }) } : {}),
-    });
+    for (const side of ['long', 'short']) {
+      if (!m3Of(b)) { out.push({ bar: barT, side, known: false, valid: false }); continue; }
+      const f = barFacts({ briefing: b, side, tick, plan, said: rec.result || '', sizeFits: sizeFor(rec), names, missing });
+      out.push({
+        bar: barT, side, known: f.known, valid: f.valid,
+        ...(f.valid ? { planReads: f.planReads, shown: f.shown, outcome: outcomeOf({ side, entry: f.entry, stop: f.stop, minRR: plan.minRR, after: laterBars(close) }) } : {}),
+      });
+    }
   }
   return out;
 }
@@ -515,9 +409,9 @@ function attachFacts(capture, { runDir, home = path.resolve(runDir, '..', '..'),
 }
 
 /**
- * A round's base rate and balancing examples over its captures: { legBars: { bars, valid }, controlBars: { bars,
- * valid }, losers: [control bar] } (bars: those whose facts are known; losers: valid plans that lost, a day each in
- * turn, at most `examples`).
+ * A round's base rate and balancing examples over its captures: { legBars: { bars, valid } (each on its leg's side),
+ * controlBars: { sides, valid, won, lost, undecided } (each bar's sides on their own), losers: [control bar-side] }
+ * (only those whose facts are known; losers: valid plans that lost, a day each in turn, at most `examples`).
  */
 function controlsOf(captures, { examples = TUN.examples } = {}) {
   const docs = (Array.isArray(captures) ? captures : []).filter(isObj);
@@ -529,7 +423,9 @@ function controlsOf(captures, { examples = TUN.examples } = {}) {
   for (const x of lost) { const d = x.bar.split('T')[0]; byDay.set(d, [...(byDay.get(d) || []), x]); }
   const losers = [];
   for (let i = 0; losers.length < examples && [...byDay.values()].some(l => l.length > i); i += 1) for (const l of byDay.values()) if (l[i] && losers.length < examples) losers.push(l[i]);
-  return { legBars: { bars: legBars.length, valid: legBars.filter(x => x.valid).length }, controlBars: { bars: ctl.length, valid: ctl.filter(x => x.valid).length, lost: lost.length }, losers };
+  const valid = ctl.filter(x => x.valid);
+  const controlBars = { sides: ctl.length, valid: valid.length, won: valid.filter(x => x.outcome === 'won').length, lost: lost.length, undecided: valid.filter(x => x.outcome !== 'won' && x.outcome !== 'lost').length };
+  return { legBars: { bars: legBars.length, valid: legBars.filter(x => x.valid).length }, controlBars, losers };
 }
 
 // --- the proposer's text ---------------------------------------------------------------------------------------------
@@ -540,8 +436,9 @@ const RUNNER = /^\s*(?:CYCLE RESULT:\s*)?(?:[a-z-]+\s+-\s+)?(?:the runner'?s?\b|
 
 /**
  * One example leg: the bar a valid plan existed at (else the first known one); what was said (the runner's own words
- * labelled so), the plan composed there, the contradiction, and the passing plan's reads or why none passed. Never the
- * whole list of TRUE reads: a plan exists on most bars, legs or not (the base rate beside the findings).
+ * labelled so), the plan composed there, and the passing plan's reads or why none passed: the proposer reads what was
+ * said beside what passed. Never the whole list of TRUE reads: a plan exists on many bars, legs or not (the base rate
+ * beside the findings).
  */
 function exampleLine(leg, { saidChars = TUN.saidChars } = {}) {
   const f = isObj(leg) && isObj(leg.facts) ? leg.facts : null;
@@ -551,12 +448,9 @@ function exampleLine(leg, { saidChars = TUN.saidChars } = {}) {
   // Scrubbed again here: what reaches the proposer is scrubbed whatever the facts were built with.
   const said = clip(scrub(x.shown || x.said), saidChars);
   const tried = (x.reads || []).length ? `; you composed ${x.reads.map(r => `${r.step} "${scrub(r.read, { words: false })}" ${r.verified ? 'TRUE' : 'not verified'}`).join(', ')}` : '';
-  // One contradiction a step (the first): the read the facts show, beside the claim.
-  const contra = (x.contradictions || []).filter((c, i, list) => list.findIndex(y => y.step === c.step) === i)
-    .map(c => `${c.step || 'rule'}: you said "${clip(scrub(c.clause), saidChars)}", the facts: ${/^".*" is false$/.test(c.read) ? scrub(c.read, { words: false }) : `"${scrub(c.read, { words: false })}" TRUE`}`);
   const unknown = x.unknown && x.unknown.length ? ` (${x.unknown.join(', ')} reads unknown)` : '';
   const plan = x.valid ? (x.planReads && x.planReads.length ? `A plan that passed there${unknown}: ${quote(x.planReads)}` : `${scrub(x.why).replace(/^./, ch => ch.toUpperCase())}`) : `No valid plan (${scrub(x.why)})`;
-  return `${leg.side}: ${who}: "${said}"${tried}${contra.length ? `. Contradiction: ${contra.join('; ')}` : ''}. ${plan}`;
+  return `${leg.side}: ${who}: "${said}"${tried}. ${plan}`;
 }
 
 /** One balancing example: a control bar's valid plan that lost, and what was said there. */
@@ -566,11 +460,12 @@ function loserLine(x, { saidChars = TUN.saidChars } = {}) {
 
 /** The base rate and the balancing examples as the proposer's text, or '' without control bars. */
 function controlsText(c, { exampleChars = TUN.exampleChars } = {}) {
-  if (!isObj(c) || !c.controlBars || !c.controlBars.bars) return '';
+  if (!isObj(c) || !c.controlBars || !c.controlBars.sides) return '';
   const pct = (v, n) => (n ? `${Math.round((v / n) * 100)}%` : 'n/a');
-  const head = `Base rate: a valid with-trend plan existed on ${pct(c.legBars.valid, c.legBars.bars)} of the missed legs' entry bars (n=${c.legBars.bars}) and on ${pct(c.controlBars.valid, c.controlBars.bars)} of the control bars with no leg (n=${c.controlBars.bars}): a valid plan alone does not tell a leg.`;
+  const k = c.controlBars;
+  const head = `Base rate: a valid with-trend plan existed on ${pct(c.legBars.valid, c.legBars.bars)} of the missed legs' entry bars (the leg's side, n=${c.legBars.bars}) and on ${pct(k.valid, k.sides)} of the control bars with no leg (each side on its own, n=${k.sides}); of those control plans ${k.won} won, ${k.lost} lost, ${k.undecided} undecided by the session's end: a valid plan alone does not tell a leg.`;
   const lines = (c.losers || []).map(x => `   - ${clip(loserLine(x), exampleChars)}`);
   return `${head}${lines.length ? `\nValid plan, it lost (control bars, no leg): what tells these apart from the legs?\n${lines.join('\n')}` : ''}`;
 }
 
-module.exports = { entryBars, statedClaims, barFacts, legFacts, sizeForCycle, outcomeOf, controlFacts, attachFacts, controlsOf, controlsText, scrub, clip, exampleLine, loserLine, missingFrames, dependsOnMissing };
+module.exports = { entryBars, barFacts, legFacts, sizeForCycle, outcomeOf, controlFacts, attachFacts, controlsOf, controlsText, scrub, clip, exampleLine, loserLine, missingFrames, dependsOnMissing };

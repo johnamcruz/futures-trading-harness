@@ -26,39 +26,19 @@ const facts = (over = {}) => X.barFacts({ briefing: brief(), side: 'long', tick:
 const cyc = (code, by, extra = {}) => ({ bar: CLOSE, code, by, step: null, reads: [], message: 'why', ...extra });
 const legOf = (cycles, over = {}) => ({ id: `d|long|${BAR}`, day: 'd', side: 'long', start: BAR, captured: false, availableR: 2, blocker: { step: null, code: 'no-plan', by: 'head' }, cycles, ...over });
 const ctxOf = (b, over = {}) => ({ briefingAt: t => (t === BAR ? b : null), tick: 0.25, plan: PLAN, minutes: 3, ...over });
-const claims = (text, side) => X.statedClaims(text, side).map(x => [x.step, x.test, x.word || x.read || '']);
 
 test('trend facts: scrub leaves no date, month, weekday, clock time, price, number, id or account name; keeps timeframes and R marks', () => {
   const t = X.scrub('no-trade - 3m rejected session POC 21530.13 at 09:35 ET (2026-04-23T14:57:00.000Z) R:R 1.33 under the min 2, 1.5R, target 2r, 15m and 1h, 0.75x volume, $142.50, record 440961915c28a35f, acct_100k floor');
   assert.strictEqual(t, 'no-trade - 3m rejected session POC at R:R under the min, target 2r, 15m and 1h, volume, record, the account floor');
   assert.doesNotMatch(t, /\d{2}:\d{2}|\d{4}-\d{2}|\d+\.\d+/);
   const w = X.scrub('Tuesday, May 4: two bars ago, ½ size, #F4, eval_plain floor; it may hold', { names: ['eval_plain'] });
-  assert.doesNotMatch(w, /Tuesday|May|\btwo\b|½|#F4|eval_plain/);
-  assert.match(w, /the account floor; it may hold$/, 'the verb "may" stays; the account named goes');
+  assert.doesNotMatch(w, /Tuesday|May|\btwo\b|½|#F4|eval_plain/i);
+  assert.match(w, /the account floor; it hold$/, 'the account named goes (and "may", with the month)');
+  // Months and weekdays in any case and abbreviated, ordinals whole, every number word; "15m-1h" kept whole.
+  const m = X.scrub('the 15m-1h trend on tue, sept. 3, the 4th bar, one of fifteen, first touch, THURSDAY, mar 2, sixty points, zero room, 2r');
+  assert.strictEqual(m, 'the 15m-1h trend on, the bar, of, touch,, points, room, 2r'.replace(',,', ','));
   assert.strictEqual(X.scrub('3m pattern double top', { words: false }), '3m pattern double top', 'a read\'s own name keeps its words');
   assert.strictEqual(X.clip('a b c, d e f; g h', 12), 'a b c...', 'clipped at a clause boundary');
-});
-
-test('trend facts: the step-claims of a reason: the leg\'s side only (a clause takes its sentence\'s last side), high-confidence only', () => {
-  assert.deepStrictEqual(claims('no-trade - no short setup (no rejection at a key level, 15m bullish); the long has no confirming entry read', 'short'),
-    [['setup', 'setup', 'rejection'], ['bias', 'direction', '15m up']], 'a setup of no kind and no timeframe is no claim; the long\'s entry is not the short\'s');
-  // The side carried: "so the trend rule refuses it" is the long's, said after the long.
-  assert.deepStrictEqual(claims('no-trade - no short trigger, and the long is against the trend, so the trend rule refuses it', 'short'), [['entry', 'entry', '']]);
-  assert.deepStrictEqual(claims('no-trade - no short trigger, and the long is against the trend, so the trend rule refuses it', 'long').map(x => x[0]), ['bias', 'bias']);
-  for (const side of ['long', 'short']) assert.deepStrictEqual(claims('no-trade - no bullish trigger', side), [], 'bullish describes a candle, not the side');
-  assert.deepStrictEqual(claims('no-trade - no entry candle closed after the 15m rejection', 'short'), [], 'a clause with no side: no claim');
-  assert.deepStrictEqual(claims('no-trade - the short has no trigger', 'short'), [['entry', 'entry', '']]);
-  assert.deepStrictEqual(claims('no-trade - the short has no trigger; R:R 1.2 under the min', 'short'), [], 'an entry claim beside another failing step');
-  assert.deepStrictEqual(claims('no-trade - the runner\'s entry: no late entry for the long', 'long'), [], 'the execution step\'s');
-  assert.deepStrictEqual(claims('no-trade - the short under the 15m bearish CISD and a 15m bearish-displacement', 'short'), [], 'a candle named by its timeframe is no direction claim');
-  assert.deepStrictEqual(claims('no-trade - the long is not at a key level, the long target: no level ahead; the long is against the trend', 'long').map(x => x[0]), ['location', 'target', 'bias']);
-  // R:R phrasings, the model's own action, the tool's verdict, a level named by price: no claim.
-  for (const t of ['no-trade - the long: no level reaches 2R', 'no-trade - the long has no target at 2R', 'no-trade - no composed long setup', 'no-trade - the long: no setup composed', 'no-trade - no composed 15m rejection for the long',
-    'no-trade - the long: no 15m rejection up per the tool', 'no-trade - the long has no rejection of 21530.25', 'no-trade - compose_check refused the 3m breakout long (R:R 0.59 under min 2, no up reaction)']) {
-    assert.deepStrictEqual(claims(t, 'long').filter(x => x[0] !== 'bias'), [], t);
-  }
-  assert.deepStrictEqual(claims('no-trade - the long has no 4h rejection', 'long'), [['setup', 'setup', 'rejection']]);
-  assert.deepStrictEqual(X.statedClaims('no-trade - the long has no 4h rejection', 'long')[0].tfs, ['4h']);
 });
 
 test('trend facts: a bar with a valid with-trend plan (the standard plan); the verified reads per step, names only', () => {
@@ -98,6 +78,13 @@ test('trend facts: under a prop attempt a size must fit; unknown when it can\'t 
   assert.strictEqual(facts({ briefing: b, cycle: cyc('veto', 'phase2') }).why, 'your own plan passed compose_check');
   assert.strictEqual(facts({ briefing: b, cycle: cyc('min-contracts', 'phase2') }).valid, false);
   assert.strictEqual(facts({ briefing: b, cycle: cyc('min-contracts', 'gate') }).valid, false);
+  // A missing frame and no plan on the known reads: not known (its reads might have made one); the window and the
+  // trend rule decide whatever the frames.
+  const gap = facts({ missing: ['5m'], sizeFits: () => false });
+  assert.deepStrictEqual([gap.known, gap.valid], [false, false]);
+  assert.match(gap.why, /on the known reads \(5m unknown\)$/);
+  assert.strictEqual(facts({ missing: ['5m'], side: 'short' }).known, true, 'the trend rule refuses the short whatever the 5m');
+  assert.strictEqual(facts({ missing: ['5m'], briefing: brief(x => { x.sections.m3.data.windowEntries = 'none'; }) }).known, true);
   // The own OK record first: a bar whose briefing can't be rebuilt, or whose rebuild disagrees, still had its plan.
   const own = X.barFacts({ briefing: null, side: 'long', tick: 0.25, plan: PLAN, cycle: cyc('late-entry', 'gate') });
   assert.deepStrictEqual([own.known, own.valid, own.via], [true, true, 'own']);
@@ -149,20 +136,6 @@ test('trend facts: unknown, never guessed: no briefing, a frame the rebuild lack
   assert.strictEqual(facts({ missing: ['5m'], records: rec(false, 'at prior vah') }).known, true, 'a read leaning on a missing frame is not compared');
 });
 
-test('trend facts: a stated claim the verified reads show false is a contradiction; a true one is not', () => {
-  const f = facts({ said: 'CYCLE RESULT: no-trade - no long setup (no rejection at a key level); the long is against the trend' });
-  assert.deepStrictEqual(f.contradictions.map(c => [c.step, c.read]), [['setup', '15m rejected prior vah up'], ['bias', 'trend long allowed']]);
-  assert.deepStrictEqual(facts({ side: 'short', said: 'no-trade - the short is against the trend' }).contradictions, [], 'the trend rule does refuse the short');
-  assert.deepStrictEqual(facts({ said: 'no-trade - waiting for a cleaner bar' }).contradictions, []);
-  assert.deepStrictEqual(facts({ said: 'no-trade - 15m bearish' }).contradictions.map(c => [c.step, c.read]), [['bias', '"15m down" is false']]);
-  // The timeframe a claim names: only a read on it refutes it.
-  assert.deepStrictEqual(facts({ said: 'no-trade - the long has no 4h rejection' }).contradictions, []);
-  assert.deepStrictEqual(facts({ said: 'no-trade - the long has no 15m rejection' }).contradictions.map(c => c.read), ['15m rejected prior vah up']);
-  // A claim the reason check finds false (reasons.js on the bar's facts): the opening drive allows entries.
-  const open = brief(b => { b.sections.m3.data.windowUntil = '2026-04-23T15:30:00.000Z'; b.sections.m3.data.et = '11:00'; });
-  assert.ok(facts({ briefing: open, said: 'no-trade - opening print window' }).contradictions.some(c => c.step === null && /allows entries/.test(c.read)), 'the reason check\'s false claim kept');
-});
-
 test('trend facts: a leg is learnable at any bar with a valid plan; a correct pass when every bar is known and none; else unknown', () => {
   const b = brief();
   const yes = X.legFacts(legOf([cyc('no-plan', 'head')]), ctxOf(b));
@@ -179,18 +152,22 @@ test('trend facts: a leg is learnable at any bar with a valid plan; a correct pa
   assert.strictEqual(said.bars[0].said, 'CYCLE RESULT: no-trade - no long setup');
 });
 
-test('trend facts: a no-plan leg\'s owner is the first flow step its reason and the facts disagree at; a floor refusal is flow step stop\'s', () => {
+test('trend facts: a leg\'s owner is the earliest step a read it composed the leg\'s way was unverified; none for a no-plan leg; a floor refusal is flow step stop\'s', () => {
   const b = brief();
   const at = (result, leg = legOf([cyc('no-plan', 'head')]), over = {}) => X.legFacts(leg, ctxOf(b, { cycleAt: () => ({ result }), ...over }));
-  assert.deepStrictEqual(at('no-trade - the long has no entry trigger; no long rejection at a key level').owner, { step: 'setup', skill: 'rejection' });
-  assert.deepStrictEqual(at('no-trade - the long is against the trend').owner.step, 'bias');
-  assert.strictEqual(at('no-trade - nothing to do').owner, null);
+  // A no-plan leg composed nothing: no owner, whatever it said (what it said is never parsed).
+  assert.strictEqual(at('no-trade - the long has no rejection at a key level; the long is against the trend').owner, null);
   const leg = legOf([cyc('no-plan', 'head')]);
   leg.facts = at('no-trade - no long rejection at a key level');
-  assert.deepStrictEqual([TF.ownerOf(leg), TF.stepOfLeg(leg)], [{ skill: 'rejection' }, 'setup']);
-  assert.deepStrictEqual(TF.ownerOf(leg, { exists: () => false }), {}, 'a skill the tree lacks owns nothing');
-  leg.facts = at('no-trade - nothing');
   assert.deepStrictEqual([TF.ownerOf(leg), TF.stepOfLeg(leg)], [{}, null]);
+  // A refused plan the leg's way: the earliest unverified read's step and its skill (the one named, else the crosswalk's).
+  const read = (step, readText, verified, skill) => ({ step, read: readText, verified, ...(skill ? { skill } : {}) });
+  const refused = legOf([cyc('entry:false', 'compose_check', { reads: [read('bias', '1h up', true, 'mtf-bias-filter'), read('entry', '3m close top', false, 'candle-reading'), read('setup', '15m rejected prior vah up', false)] })], { blocker: { step: 'entry', code: 'entry:false', by: 'compose_check' } });
+  assert.deepStrictEqual(at('no-trade - refused', refused).owner, { step: 'setup', skill: 'rejection' });
+  const noPlanWithReads = legOf([cyc('no-plan', 'head', { reads: [read('location', 'at prior vah', false, 'vwap-volume-profile')] })]);
+  noPlanWithReads.facts = at('x', noPlanWithReads);
+  assert.deepStrictEqual([TF.ownerOf(noPlanWithReads), TF.stepOfLeg(noPlanWithReads)], [{ skill: 'vwap-volume-profile' }, 'location']);
+  assert.deepStrictEqual(TF.ownerOf(noPlanWithReads, { exists: () => false }), {}, 'a skill the tree lacks owns nothing');
   // The floor refused the model's stop: its stop choice, owned by its stop read's skill, never the risk manager.
   const floor = legOf([cyc('min-contracts', 'phase2')], { blocker: { step: 'risk', code: 'min-contracts', by: 'phase2' } });
   const rec = [{ side: 'long', ok: true, reads: [{ step: 'stop', skill: 'invalidation', read: 'stop 15m low 21512.75', check: true }] }];
@@ -221,13 +198,14 @@ test('trend findings: learnable legs only; the others counted as a correct pass 
   const doc = capture();
   assert.deepStrictEqual(TF.missedTally([doc]), { missed: 5, learnable: 2, noValidPlan: 1, unknown: 2 });
   const found = TF.trendFindings([doc]);
-  assert.deepStrictEqual(found.map(f => [f.step, f.skill, f.count, f.cost, f.code, f.of]), [['setup', 'rejection', 2, 4, 'no-plan', 7]]);
-  // Up to the configured examples, the costliest leg first: what was said, the contradiction, the plan that passed.
+  assert.deepStrictEqual(found.map(f => [f.step, f.skill, f.count, f.cost, f.code, f.of]), [[null, null, 2, 4, 'no-plan', 7]]);
+  // Up to the configured examples, the costliest leg first: what was said beside the plan that passed.
   const EX = require('../../scripts/lib/tunables').training().trendFindings;
   assert.strictEqual(found[0].examples.length, Math.min(2, EX.examples));
   assert.ok(found[0].examples.every(x => x.length <= EX.exampleChars));
-  assert.match(found[0].examples[0], /^long: what you said: "no-trade - the long at on: no rejection at a key level, price"\. Contradiction: setup: you said "no rejection at a key level", the facts: "15m rejected prior vah up" TRUE\. A plan that passed there: "1h up", "at prior vah", "15m rejected prior vah up", "3m close top", "stop 15m low", "target 1h swing high"$/);
+  assert.match(found[0].examples[0], /^long: what you said: "no-trade - the long at on: no rejection at a key level, price"\. A plan that passed there: "1h up", "at prior vah", "15m rejected prior vah up", "3m close top", "stop 15m low", "target 1h swing high"$/);
   assert.doesNotMatch(found[0].examples[0], /15m bos up|3m bos up/, 'never the whole list of TRUE reads');
+  assert.doesNotMatch(found[0].examples[0], /Contradiction/, 'what was said is never parsed');
   // A late or unfilled entry's legs (the runner's execution) give no example.
   const late = { legs: [{ ...doc.legs[0], blocker: { step: 'execution', code: 'late-entry', by: 'gate' } }] };
   assert.deepStrictEqual(TF.trendFindings([late])[0].examples, []);
@@ -251,12 +229,13 @@ test('trend facts: a plan\'s outcome on the later bars: its stop before its R:R 
 
 test('the base rate and the balancing examples: control bars with a valid plan, and those plans that lost, scrubbed, a day each in turn', () => {
   const lost = (bar, side) => ({ bar, known: true, valid: true, side, planReads: ['15m up', 'stop 15m low 21512.75'], shown: 'no-trade - waited at 10:45 on 2026-04-23 near 21530', outcome: 'lost' });
-  const doc = { legs: capture().legs, controls: [lost('2026-04-23T14:00:00.000Z', 'long'), lost('2026-04-23T14:03:00.000Z', 'short'), lost('2026-04-24T14:00:00.000Z', 'long'), { bar: 'x', known: true, valid: false }, { bar: 'y', known: false, valid: false }] };
+  const doc = { legs: capture().legs, controls: [lost('2026-04-23T14:00:00.000Z', 'long'), lost('2026-04-23T14:03:00.000Z', 'short'), lost('2026-04-24T14:00:00.000Z', 'long'),
+    { ...lost('2026-04-24T14:03:00.000Z', 'long'), outcome: 'won' }, { ...lost('2026-04-24T14:06:00.000Z', 'short'), outcome: null }, { bar: 'x', side: 'long', known: true, valid: false }, { bar: 'y', side: 'short', known: false, valid: false }] };
   const c = X.controlsOf([doc], { examples: 2 });
-  assert.deepStrictEqual([c.controlBars, c.legBars], [{ bars: 4, valid: 3, lost: 3 }, { bars: 3, valid: 2 }]);
+  assert.deepStrictEqual([c.controlBars, c.legBars], [{ sides: 6, valid: 5, won: 1, lost: 3, undecided: 1 }, { bars: 3, valid: 2 }]);
   assert.deepStrictEqual(c.losers.map(x => x.bar), ['2026-04-23T14:00:00.000Z', '2026-04-24T14:00:00.000Z'], 'a day each first');
   const text = X.controlsText(c);
-  assert.match(text, /^Base rate: a valid with-trend plan existed on 67% of the missed legs' entry bars \(n=3\) and on 75% of the control bars with no leg \(n=4\): a valid plan alone does not tell a leg\.\nValid plan, it lost \(control bars, no leg\): what tells these apart from the legs\?\n {3}- long: valid plan, it lost: "15m up", "stop 15m low"\. What you said: "no-trade - waited at on near"$/m);
+  assert.match(text, /^Base rate: a valid with-trend plan existed on 67% of the missed legs' entry bars \(the leg's side, n=3\) and on 83% of the control bars with no leg \(each side on its own, n=6\); of those control plans 1 won, 3 lost, 1 undecided by the session's end: a valid plan alone does not tell a leg\.\nValid plan, it lost \(control bars, no leg\): what tells these apart from the legs\?\n {3}- long: valid plan, it lost: "15m up", "stop 15m low"\. What you said: "no-trade - waited at on near"$/m);
   assert.doesNotMatch(text, /21512|10:45|2026/);
   assert.strictEqual(X.controlsText(X.controlsOf([{ legs: [] }])), '', 'no control bars: nothing');
   // In the proposer's prompt after the findings.
@@ -268,9 +247,14 @@ test('the base rate and the balancing examples: control bars with a valid plan, 
 test('the proposer\'s prompt: a trend finding\'s example legs, no date, clock time or price from the legs', () => {
   const findings = F.mergeFindings(TF.trendFindings([capture()]), [], { max: 8 });
   const line = F.findingLine(findings[0]);
-  assert.match(line, /^F1\. rejection: trend-blocker at setup: blocked 2 of 7 trend legs, each with a valid plan at the time\. Most often: no-plan \(2\)\n {3}- leg long: /);
+  assert.match(line, /^F1\. \(no skill or role named\): trend-blocker at no step: blocked 2 of 7 trend legs, each with a valid plan at the time\. Most often: no-plan \(2\)\n {3}- leg long: /);
   const prompt = P.probePrompt({ template: P.readProbeTemplate(ROOT), findings, lessons: null, files: ['skills/rejection/SKILL.md'], k: 2 });
   assert.ok(prompt.includes('a plan code verified there'), 'the template\'s words for the facts');
+  // A placeholder's text is put in as written: "$&" or "$`" in a finding or a lesson is no replacement pattern.
+  const odd = P.probePrompt({ template: P.readProbeTemplate(ROOT), findings: [{ ...findings[0], detail: 'cost $& and $` here' }], lessons: 'a $\' lesson', files: ['skills/rejection/SKILL.md'], k: 2 });
+  assert.ok(odd.includes('cost $& and $` here') && odd.includes('a $\' lesson'), 'literal');
+  const flagged = P.selfReviewPrompt({ template: P.readTemplate(ROOT), flagged: [{ day: 'd', t: 't', category: 'x', stated: 'paid $& for it' }], files: ['f'], maxProposals: 1 });
+  assert.ok(flagged.includes('paid $& for it'));
   assert.ok(prompt.includes('- leg long: what you said'));
   for (const bad of ['2026-04-23', '10:45', '14:57', '15:00', '21530', '21540', '21512', '21598']) assert.ok(!prompt.includes(bad), bad);
   assert.doesNotMatch(prompt.replace(/\{\{[A-Z]+\}\}/g, ''), /\b\d{4}-\d{2}-\d{2}\b|\b\d{1,2}:\d{2}\b|\b\d{4,}(?:\.\d+)?\b/);
@@ -280,17 +264,17 @@ test('the probe template: its placeholders and the facts lines (the proposer rea
   const t = P.readProbeTemplate(ROOT);
   for (const k of ['{{FLOW}}', '{{FINDINGS}}', '{{LESSONS}}', '{{FILES}}', '{{CATEGORIES}}', '{{KINDS}}', '{{K}}']) assert.ok(t.includes(k), k);
   assert.match(t, /^- A trend leg shows what you said and a plan code verified there → fix the read or rule that hid the plan\.$/m);
-  assert.match(t, /^- A leg's contradiction → fix how that step's read is read, in the skill the finding names\.$/m);
+  assert.doesNotMatch(t, /contradiction/i, 'the proposer reads what was said beside what passed');
   assert.match(t, /^- Plans that lost sit beside the legs → tell the legs from the losers; never just enter more\.$/m);
   assert.match(t, /It never makes you take a trade the facts don't support\./, 'the rule the trend lines stand under');
 });
 
 test('the iteration\'s status line counts the probe half\'s missed legs and the base rate', () => {
   const IR = require('../../scripts/lib/train/iteration-report');
-  const trend = { set: 'fp', batch: { index: 0, size: 4, trigger: 'start', why: '' }, probe: { days: ['d'], legs: ['a'] }, confirm: { days: ['e'], legs: ['b'] }, missed: { missed: 5, learnable: 2, noValidPlan: 1, unknown: 2 }, baseRate: { legBars: { bars: 10, valid: 6 }, controlBars: { bars: 20, valid: 11, lost: 4 } } };
+  const trend = { set: 'fp', batch: { index: 0, size: 4, trigger: 'start', why: '' }, probe: { days: ['d'], legs: ['a'] }, confirm: { days: ['e'], legs: ['b'] }, missed: { missed: 5, learnable: 2, noValidPlan: 1, unknown: 2 }, baseRate: { legBars: { bars: 10, valid: 6 }, controlBars: { sides: 20, valid: 11, won: 3, lost: 4, undecided: 4 } } };
   const rec = IR.build({ probeReport: { iteration: 1, trend, findings: [], edits: [], probes: [] } });
   assert.deepStrictEqual([rec.trend.missed, rec.trend.baseRate], [trend.missed, trend.baseRate]);
-  assert.match(IR.line(rec), /; probe missed legs 5: learnable 2, no valid plan 1 \(a correct pass\), unknown 2, valid plan on 60% \(n 10\) of leg bars vs 55% \(n 20\) of control bars/);
+  assert.match(IR.line(rec), /; probe missed legs 5: learnable 2, no valid plan 1 \(a correct pass\), unknown 2, valid plan on 60% \(n 10\) of leg bars vs 55% \(n 20\) of control bar-sides \(won 3, lost 4, undecided 4\)/);
   assert.doesNotMatch(IR.line(IR.build({ probeReport: { iteration: 1, trend: { ...trend, missed: undefined, baseRate: undefined }, findings: [], edits: [], probes: [] } })), /probe missed legs|control bars/);
 });
 
@@ -333,10 +317,11 @@ test('attachFacts: the run home\'s bars, cycles and records, read only; the capt
   assert.deepStrictEqual([got.legs[0].facts.learnable, got.legs[0].facts.bars[0].said], [true, `CYCLE RESULT: no-trade - no ${leg.side} setup`]);
   assert.deepStrictEqual(got.legs[0].facts.bars[0].unknown, [], 'the 1m bars give the 5m facts');
   // The control bars: every trade cycle on no leg's span (a managed one is none), or those in the windows given.
-  assert.deepStrictEqual(got.controls.map(x => x.bar), [new Date(Date.parse(later) - 180000).toISOString()]);
+  const ctlBar = new Date(Date.parse(later) - 180000).toISOString();
+  assert.deepStrictEqual(got.controls.map(x => [x.bar, x.side]), [[ctlBar, 'long'], [ctlBar, 'short']], 'each side on its own');
   assert.ok(got.controls.every(x => x.known), JSON.stringify(got.controls));
   assert.deepStrictEqual(X.attachFacts(doc, { runDir, home, tree: ROOT, controls: [] }).controls, []);
-  assert.strictEqual(X.attachFacts(doc, { runDir, home, tree: ROOT, controls: [{ from: Date.parse(later) - 1, to: Date.parse(later) }] }).controls.length, 1);
+  assert.strictEqual(X.attachFacts(doc, { runDir, home, tree: ROOT, controls: [{ from: Date.parse(later) - 1, to: Date.parse(later) }] }).controls.length, 2);
   // Without the 1m bars the 5m is missing: listed unknown.
   fs.rmSync(path.join(home, 'bars', 'MNQ-1m.json'));
   assert.deepStrictEqual(X.attachFacts(doc, { runDir, home, tree: ROOT }).legs[0].facts.bars[0].unknown, ['5m']);

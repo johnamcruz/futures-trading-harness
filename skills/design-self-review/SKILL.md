@@ -61,8 +61,7 @@ With the loop's `probe` setting (Propose-Probe-Compose, `docs/TRAINING.md`)
 the loop uses this prompt instead. `{{FLOW}}` is the trading flow's steps
 in order, `{{FINDINGS}}` the round's findings grouped by the step they
 block (in rank order inside a step; a trend finding lists a few of its
-legs, each with what you said, any contradiction and the plan that passed
-there, never a date, time or price, then the base rate of valid plans on
+legs, each with what you said and the plan that passed there, never a date, time or price, then the base rate of valid plans on
 bars with no leg and a few such plans that lost), `{{LESSONS}}` a short summary of
 what earlier probes showed, with sample sizes, `{{K}}` the number of edits.
 Each edit is tested alone on the same practice moments, then the ones that
@@ -87,7 +86,6 @@ Rules:
 - Edit the skill or the role the finding names. A finding with neither: edit the skill or role whose text misled you.
 - An edit helps you read the facts better. It never makes you take a trade the facts don't support.
 - A trend leg shows what you said and a plan code verified there → fix the read or rule that hid the plan.
-- A leg's contradiction → fix how that step's read is read, in the skill the finding names.
 - Plans that lost sit beside the legs → tell the legs from the losers; never just enter more.
 - Write rules as short lines (at most 120 characters), condition then action: "- <when this holds> → <do this>".
 - Add no numbers, in digits or words ("three", "half").

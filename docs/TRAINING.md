@@ -599,15 +599,18 @@ and leg ids; the lessons lines record the batch too.
   `allInRisk`), and the floor on the capped size (`minContractsRefusal`). A
   leg with a valid plan at any bar is learnable and can be a finding. A leg
   every bar of which was known, with none, had no valid plan at the time: a
-  correct pass, counted, never a finding. Any other leg's facts are unknown,
-  also counted. `probe-report.json` (`trend.missed`), the round's log and
+  correct pass, counted, never a finding. A bar with a missing frame and no
+  valid plan on its known reads is not known: the missing reads might have
+  made one. Any other leg's facts are unknown, also counted. `probe-report.json` (`trend.missed`), the round's log and
   `train-loop.js status` give the three counts.
 - **The base rate.** A valid plan exists on most bars, legs or not, so a
   leg's verified reads alone would teach over-trading. Code runs the same
-  plan check, either side, on the champion's control-window bars (no leg).
-  `probe-report.json` (`trend.baseRate`) and `status` give the share with a
-  valid plan beside the share of the missed legs' entry bars. The proposer
-  reads both. It also reads up to `examples` control bars, a day each in
+  plan check on the champion's control-window bars (no leg), each side on
+  its own, as a leg bar is checked on its leg's side: like with like.
+  `probe-report.json` (`trend.baseRate`) and `status` give the share of
+  control bar-sides with a valid plan, and how those plans did on the
+  session's later bars (won, lost, undecided by its end), beside the share
+  of the missed legs' entry bars. The proposer reads them all. It also reads up to `examples` control bars, a day each in
   turn, where a valid plan existed and lost: its stop was hit before its
   minimum R:R mark on the run's later bars that session, the stop first when
   one bar holds both. They are labelled "valid plan, it lost: what tells
@@ -619,29 +622,14 @@ and leg ids; the lessons lines record the batch too.
   unfilled entry's legs (the runner's execution) give none. Each example
   gives the side, what the model said (its CYCLE RESULT line, clipped to
   `saidChars`; the runner's own words labelled "the runner") and, for a
-  refused plan, its reads. Then it gives any contradiction and the passing
-  plan's reads, or why none passed. It never gives the whole list of TRUE
-  reads. A contradiction is flagged only for the high-confidence claims,
-  when the same machinery shows them false:
-  - "no rejection" (or a named setup kind, or "no setup" with a timeframe)
-    for the leg's side, beside a verified setup read on the timeframe it
-    names;
-  - "no entry" naming the side, beside a verified confirmation on a candle
-    closed after the setup, when the reason states no other failing step;
-  - "not at a level" beside a verified `at` read;
-  - "against the trend" when the trend rule allows the side;
-  - a 15m, 1h or 4h direction the checker finds FALSE;
-  - every claim the reason check finds false.
-
-  A clause that names no side takes the last side its sentence named. These
-  say nothing: a clause about the other side or both, the runner's entry,
-  the model's own action ("no composed setup"), the tool's verdict ("per
-  the tool"), a level named by its price, and a location, target or setup
-  claim in a sentence about R:R. A no-plan leg is filed under the first flow
-  step where its reason and the facts disagree, owned by that read's skill
-  (the crosswalk); else no owner. Measured by hand on the two stage-2 runs
-  these rules were written on (in sample): 6 contradictions, none false. A
-  looser parser had flagged 21 there, 13 of them false.
+  refused plan, its reads. Then it gives the passing plan's reads, or why
+  none passed. It never gives the whole list of TRUE reads, and code never
+  parses what was said: the proposer reads it beside the plan that passed
+  and sees for itself where they part. A leg is owned by the earliest step where
+  a read the model composed the leg's way was not verified, and that read's
+  skill; a no-plan leg (it composed none) has no owner. A parser of the model's stated
+  claims was tried and dropped: out of sample it was wrong about a third of
+  the time.
 - **No leak.** The examples name reads by timeframe and level name only:
   dates, months, weekdays, clock times, prices, numbers (digits, words,
   fractions), ids, `#` tags and account names are removed. Tests scan the
