@@ -671,7 +671,7 @@ strategy prop_portfolio: {
   "errors": [],
   "exit": {
     "mode": "target_then_trail",
-    "lock_giveback_r": 0.5,
+    "lock_giveback_r": 1.5,
     "trail_by": "structure",
     "trail_r": 1,
     "swing_tf": "15m"

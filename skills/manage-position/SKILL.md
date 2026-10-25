@@ -30,8 +30,14 @@ description: Use when a position is open - its stop, the plan's management, the 
 - **A composed trade** (`setup:trade_lifecycle`, in an attempt
   `setup:prop_portfolio`): its bracket holds the compose record's stop and
   target; the policy's exit mode (`trade-plan`), in an attempt or not, is
-  the runner's: it moves the stop. Don't touch it unless you are exiting;
-  never close early by feel; never loosen the stop.
+  the runner's: it moves the stop. Before its target, don't touch it unless
+  you are exiting; never close early by feel; never loosen the stop.
+- **Past its target** the runner locks the stop at a small R and trails it
+  behind 15m swings, so an ordinary pullback doesn't close a trend leg.
+  - Structure turns against it (a 3m or 15m CHoCH against, a close beyond
+    the last swing) → tighten the stop behind that confirmed swing.
+  - A pullback inside the trend, structure intact → hold; never tighten on
+    one candle or by feel.
 - **An open trade** (the prompt's "Open trade" line) is managed before any
   new entry: its setup, initial stop and risk, the working stop and target in
   R, where it stands now, its best and worst so far, and bars held. "NO
@@ -48,4 +54,5 @@ description: Use when a position is open - its stop, the plan's management, the 
 
 ```text
 trade_lifecycle long +2.1R, past its target, stop trailed by the runner -> hold; journal
+trade_lifecycle short +2.6R, 3m CHoCH up closed above the last swing high -> stop to just above that swing
 ```

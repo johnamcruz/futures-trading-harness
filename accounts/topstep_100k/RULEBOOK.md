@@ -19,7 +19,7 @@ policies:                       # each policy strategy that trades this account 
       mode: target_then_trail   # target: out at the trade's own target; target_then_trail: past it, trailed; trail: the R trail below, no target
       trail_activate_r: off     # mode trail (or a trail on top of target): hold the stop until this many R ...
       trail_giveback_r: off     # ... then trail this many R behind the best price
-      lock_giveback_r: 0.5      # target_then_trail: once the target is reached the stop locks at the target's R less this
+      lock_giveback_r: 1.5      # target_then_trail: once the target is reached the stop locks at the target's R less this
       trail_by: structure       # target_then_trail: structure (behind the last confirmed swing on swing_tf) or r (trail_r behind the best price)
       trail_r: 1                # target_then_trail: R behind the best price (trail_by r, and structure's fallback until a swing is confirmed)
       swing_tf: 15m             # target_then_trail with trail_by structure: the swings the stop trails behind
@@ -91,6 +91,9 @@ each trade from its recorded path, prop/attempts.js exitAs):
   structure trail's fallback until a swing is confirmed). Live, the runner
   cancels the entry's target order when it first manages the trade and moves
   the stop at each closed bar; a target reached before then fills there.
+  `lock_giveback_r` is 1.5 (the owner's, 2026-10-24): at a 2R target the
+  stop locks at +0.5R, room for an ordinary pullback in a trend; at 0.5 it
+  locked at +1.5R and closed winners on a 1R pullback before the leg ran on.
 - `trail`: hold the stop until `trail_activate_r`, then trail
   `trail_giveback_r` behind the best price, in place of the target. Kept only
   as a tunable: our research found this tight trail cut the edge.
