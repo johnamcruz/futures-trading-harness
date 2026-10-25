@@ -446,7 +446,7 @@ noSizeFits`, owner-approved 2026-10-24: `order_plan` could only skip it).
 The floor stretch (the owner, 2026-10-24): where the dollar cap alone fits
 fewer than the floor, the translation trades exactly the floor when it costs
 at most the rulebook's `sizing.floor_stretch_max_usd` all in and the attempt
-is healthy (no deficit, no loss in a row this session); every other limit
+is healthy (no deficit, no losing trade this trading day); every other limit
 still holds. `compose_check` is OK then, the gate's `[max-risk]` takes
 exactly that floor and nothing else over the cap, and the backtester and the
 attempt simulator size the same way (`prop/size-translate.js floorStretch`).

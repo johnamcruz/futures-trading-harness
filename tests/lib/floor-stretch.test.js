@@ -2,7 +2,7 @@
 
 // The floor stretch (scripts/lib/prop/size-translate.js floorStretch; owner-approved 2026-10-24): in a running prop
 // attempt, where the composed cap fits fewer than the rulebook's floor at the stop, exactly the floor goes when it
-// risks at most sizing.floor_stretch_max_usd all in and the attempt is healthy (no deficit, no loss in a row this
+// risks at most sizing.floor_stretch_max_usd all in and the attempt is healthy (no deficit, no losing trade today; this
 // session); every other limit still holds. The live translation, the simulator, compose_check and the gate's read.
 
 const test = require('node:test');
@@ -28,18 +28,29 @@ const policy = (sizing = {}, extra = {}) => ({
 });
 const verdict = (extra = {}) => ({ strategy: 'prop_portfolio', action: 'full', multiplier: 1, contract: 'MNQ', stopTicks: 198, maxSize: 50, ...extra });
 
-// The attempt as the runner records it: `eod` yesterday's close (none: the start), the snapshot at `balance`; `streak`
-// the session's loss streak written into the record and its snapshot's state ('missing': left out, unreadable).
-function home(balance = 100000, { eod = null, streak = 0 } = {}) {
+// The attempt as the runner records it: `eod` yesterday's close (none: the start), the day's first (anchor) snapshot at
+// `balance`; `trades`: today's round trips by their P&L (an opening and a closing fill each, $0.37 a fill), read by a
+// later flat snapshot from the broker's fills (prop-state.js snapshot: the balance reconciled, the day's counts and loss
+// streak from them); `counts: 'missing'`: the snapshot's day counts left out (unreadable).
+const FILL_FEE = 0.37;
+function home(balance = 100000, { eod = null, trades = [], counts = null } = {}) {
   const h = trendHome();
   prop.startAttempt(h, BIG, new Date(NOW.getTime() - 2 * 86400000));
   if (eod !== null) prop.recordEndOfDay(h, BIG, eod, '2026-10-06');
-  prop.snapshot(h, BIG, balance, new Date(NOW.getTime() - 60000));
-  if (streak !== 0) {
+  const anchor = NOW.getTime() - 20 * 60000;
+  prop.snapshot(h, BIG, balance, new Date(anchor));
+  if (trades.length) {
+    const fills = trades.flatMap((pnl, i) => [
+      { creationTimestamp: new Date(anchor + (2 * i + 1) * 60000).toISOString(), profitAndLoss: null, fees: FILL_FEE },
+      { creationTimestamp: new Date(anchor + (2 * i + 2) * 60000).toISOString(), profitAndLoss: pnl, fees: FILL_FEE },
+    ]);
+    const after = Math.round((balance + trades.reduce((a, p) => a + p, 0) - 2 * FILL_FEE * trades.length) * 100) / 100;
+    prop.snapshot(h, BIG, after, new Date(NOW.getTime() - 60000), { fills });
+  }
+  if (counts === 'missing') {
     const file = prop.combineFile(h, BIG.name);
     const r = JSON.parse(fs.readFileSync(file, 'utf8'));
-    if (streak === 'missing') delete r.snapshot.state.lossStreak; else r.snapshot.state.lossStreak = streak;
-    r.lossStreak = { ...r.lossStreak, count: streak === 'missing' ? null : streak };
+    delete r.snapshot.counts;
     fs.writeFileSync(file, JSON.stringify(r));
   }
   return h;
@@ -77,23 +88,39 @@ test('the floor stretch, by hand: MNQ, MES and NQ on both sides of the $300 cap 
   assert.match(S('NQ', 98, { home: h }).reason, /1 NQ \(the floor, stretched: \$497\.80 all in/);
 });
 
-test('the floor stretch needs a healthy attempt: a deficit, a loss in a row this session or an unreadable state skip as before; where the cap fits the floor it is never needed', () => {
+test('the floor stretch needs a healthy attempt: a deficit, any losing trade today (a win after it too) or an unreadable state skip as before; a new day allows it again; where the cap fits the floor it is never needed', () => {
   // A deficit: the balance $99,900 under the $100,000 start (yesterday closed there, so no loss today).
   const deficit = S('MNQ', 198, { home: home(99900, { eod: 99900 }) });
   assert.ok(deficit.skip);
-  assert.match(deficit.reason, /; the floor stretch to \$500\.00 applies only while the attempt is healthy \(no deficit, no loss in a row this session\): the balance \$99900\.00 is under the attempt's starting \$100000\.00\)$/);
+  assert.match(deficit.reason, /; the floor stretch to \$500\.00 applies only while the attempt is healthy \(no deficit, no loss today\): the balance \$99900\.00 is under the attempt's starting \$100000\.00\)$/);
   // At the start exactly, or above it: healthy.
   assert.strictEqual(S('MNQ', 198, { home: home(100000, { eod: 100000 }) }).size, 3);
   assert.strictEqual(S('MNQ', 198, { home: home(100400, { eod: 100400 }) }).size, 3);
-  // One loss in a row this session (under loss_streak_stop's 2, so entries still go): not healthy.
-  const streak = S('MNQ', 198, { home: home(100000, { streak: 1 }) });
-  assert.ok(streak.skip);
-  assert.match(streak.reason, /: 1 losing trade in a row this session\)$/);
-  // The streak unreadable (left out of the snapshot's state): not healthy (fails closed).
-  assert.match(S('MNQ', 198, { home: home(100000, { streak: 'missing' }) }).reason, /: the session's loss streak is unreadable\)$/);
+  // One loss today (under loss_streak_stop's 2, so entries still go): not healthy. The snapshot read the fills:
+  // -$25 and fees: $99,974.26, under the start too, so the gain day below isolates the loss.
+  const lost = S('MNQ', 198, { home: home(100400, { eod: 100400, trades: [-25] }) });
+  assert.ok(lost.skip);
+  assert.match(lost.reason, /: 1 losing trade today: the cap holds for the rest of the day\)$/);
+  // A loss then a win the same day: the streak is 0 again, but the day had a loss: no stretch for the rest of the day.
+  const h2 = home(100400, { eod: 100400, trades: [-25, 40] });
+  const r2 = prop.readAttempt(h2, BIG.name);
+  assert.deepStrictEqual([r2.snapshot.state.lossStreak, r2.snapshot.counts.losses, r2.snapshot.balanceCheck.diff], [0, 1, 0], 'as the runner recorded it');
+  assert.match(S('MNQ', 198, { home: h2 }).reason, /: 1 losing trade today: the cap holds for the rest of the day\)$/);
+  // Winning trades only: healthy.
+  assert.strictEqual(S('MNQ', 198, { home: home(100400, { eod: 100400, trades: [40, 10] }) }).size, 3);
+  // The next trading day (yesterday's loss recorded at the close, no deficit): its first snapshot counts no loss: allowed again.
+  const next = home(100400, { eod: 100400, trades: [-25, 40] });
+  const close = prop.readAttempt(next, BIG.name).snapshot.balance;
+  prop.recordEndOfDay(next, BIG, close, '2026-10-07');
+  const tomorrow = new Date(NOW.getTime() + 86400000);
+  prop.snapshot(next, BIG, close, new Date(tomorrow.getTime() - 60000));
+  assert.strictEqual(prop.readAttempt(next, BIG.name).snapshot.counts.losses, 0);
+  assert.strictEqual(S('MNQ', 198, { home: next }).size, 3);
+  // Today's counts unreadable (left out of the snapshot): not healthy (fails closed).
+  assert.match(S('MNQ', 198, { home: home(100000, { counts: 'missing' }) }).reason, /: today's losing trades are unreadable\)$/);
   // Where the cap fits the floor, health doesn't matter: sized as before (150 ticks: $76.24 a contract, the cap's 3).
   assert.strictEqual(S('MNQ', 197, { home: home(99900, { eod: 99900 }) }).size, 3);
-  assert.strictEqual(S('MNQ', 150, { home: home(100000, { streak: 1 }) }).size, 3);
+  assert.strictEqual(S('MNQ', 150, { home: home(100400, { eod: 100400, trades: [-25] }) }).size, 3);
 });
 
 test('the floor stretch never goes past another limit: the verdict, the size budget (its halving), the broker\'s max; off or not above the cap: as before, word for word; never more than the floor', () => {
@@ -123,14 +150,17 @@ test('the floor stretch never goes past another limit: the verdict, the size bud
 });
 
 test('attemptHealth and floorStretch: the definition; every unreadable state is not healthy; null where no stretch is in question', () => {
-  const st = (x = {}) => ({ balance: 100000, start: 100000, lossStreak: 0, ...x });
+  const st = (x = {}) => ({ balance: 100000, start: 100000, lossesToday: 0, ...x });
   assert.deepStrictEqual(attemptHealth(st()), { healthy: true });
   assert.deepStrictEqual(attemptHealth(st({ balance: 100000.01 })), { healthy: true });
-  for (const bad of [null, undefined, 5, st({ balance: '100000' }), st({ balance: NaN }), st({ start: undefined }), st({ lossStreak: -1 }), st({ lossStreak: 1.5 }), st({ lossStreak: null }), st({ lossStreak: '0' })]) {
+  for (const bad of [null, undefined, 5, st({ balance: '100000' }), st({ balance: NaN }), st({ start: undefined }), st({ lossesToday: -1 }), st({ lossesToday: 1.5 }), st({ lossesToday: null }), st({ lossesToday: undefined }), st({ lossesToday: '0' })]) {
     assert.strictEqual(attemptHealth(bad).healthy, false, JSON.stringify(bad));
   }
   assert.match(attemptHealth(st({ balance: 99999.99 })).why, /the balance \$99999\.99 is under the attempt's starting \$100000\.00/);
-  assert.match(attemptHealth(st({ lossStreak: 2 })).why, /2 losing trades in a row this session/);
+  assert.match(attemptHealth(st({ lossesToday: 2 })).why, /2 losing trades today/);
+  // The streak isn't what decides: a streak of 0 with a loss today is not healthy; a streak alone (no count) is unreadable.
+  assert.strictEqual(attemptHealth(st({ lossStreak: 0, lossesToday: 1 })).healthy, false);
+  assert.strictEqual(attemptHealth({ balance: 100000, start: 100000, lossStreak: 0 }).healthy, false);
   const f = (x = {}) => floorStretch({ floor: 3, perContract: 100.24, capUsd: 300, stretchUsd: 500, state: st(), ...x });
   assert.deepStrictEqual(f(), { size: 3, risk: 300.72 });
   assert.strictEqual(f({ perContract: 99.74 }), null, 'the cap fits the floor');
@@ -141,16 +171,16 @@ test('attemptHealth and floorStretch: the definition; every unreadable state is 
   assert.match(f({ perContract: 166.74 }).why, /over the floor stretch/);
   assert.deepStrictEqual(f({ perContract: 500 / 3 }), { size: 3, risk: 500 }, 'at the stretch exactly');
   assert.match(f({ allows: 2 }).why, /they allow 2/);
-  assert.match(f({ state: st({ lossStreak: 1 }) }).why, /only while the attempt is healthy/);
+  assert.match(f({ state: st({ lossesToday: 1 }) }).why, /only while the attempt is healthy/);
   assert.match(f({ state: null }).why, /the attempt state is unreadable/);
 });
 
 test('limitPlan (the attempt simulator and the backtester): the same stretch on the plan\'s own contract and the simulated attempt\'s health', () => {
-  const healthy = { balance: 100000, start: 100000, lossStreak: 0 };
+  const healthy = { balance: 100000, start: 100000, lossesToday: 0 };
   const L = (plan, o = {}) => limitPlan(plan, { limits: { capUsd: 300, orderMax: null, ...(o.limits || {}) }, minContracts: 3, ratio: 10, miniRoot: 'NQ', stretchUsd: 500, state: healthy, ...(o.opts || {}) });
   const mnq = { root: 'MNQ', size: 8, riskPerContract: 100.24 };
   assert.deepStrictEqual(L(mnq), { ...mnq, size: 3 });
-  assert.strictEqual(L(mnq, { opts: { state: { ...healthy, lossStreak: 1 } } }), null);
+  assert.strictEqual(L(mnq, { opts: { state: { ...healthy, lossesToday: 1 } } }), null);
   assert.strictEqual(L(mnq, { opts: { state: { ...healthy, balance: 99000 } } }), null);
   assert.strictEqual(L(mnq, { opts: { stretchUsd: 0 } }), null, 'off: as before');
   assert.strictEqual(L(mnq, { limits: { orderMax: 2 } }), null, 'the broker\'s max 2');
@@ -170,7 +200,7 @@ test('stretchedEntry (the gate\'s [max-risk]): exactly the floor within the stre
   assert.strictEqual(E({ size: '3' }).ok, false, 'a size that isn\'t a number: refused');
   assert.match(E({ ticks: 331 }).why, /over the floor stretch's \$500\.00 too/);
   assert.match(E({ home: home(99900, { eod: 99900 }) }).why, /applies only while the attempt is healthy .*under the attempt's starting/);
-  assert.match(E({ home: home(100000, { streak: 1 }) }).why, /1 losing trade in a row/);
+  assert.match(E({ home: home(100400, { eod: 100400, trades: [-25, 40] }) }).why, /1 losing trade today/);
   assert.strictEqual(E({ ticks: 197 }), null, 'the cap fits the floor');
   assert.strictEqual(E({ policy: policy({ floor_stretch_max_usd: 0 }) }), null, 'off');
   // No stretch at all (the cap binds as before) without a policy, a valid account and a running attempt.
@@ -194,7 +224,7 @@ test('parity: the floor stretch in the simulator (prop/attempts.js defaultSize),
   let compared = 0;
   let stretched = 0;
   const pol = policy();
-  for (const [label, h] of [['healthy', home()], ['deficit', home(99900, { eod: 99900 })], ['streak', home(100000, { streak: 1 })]]) {
+  for (const [label, h] of [['healthy', home()], ['deficit', home(99900, { eod: 99900 })], ['a loss then a win today', home(100400, { eod: 100400, trades: [-25, 40] })]]) {
     const r = prop.readAttempt(h, BIG.name);
     const cs = prop.stateFrom(BIG, r, r.snapshot.balance);
     for (const [root, lo, hi] of [['MNQ', 190, 340], ['MES', 74, 136]]) {
@@ -203,7 +233,7 @@ test('parity: the floor stretch in the simulator (prop/attempts.js defaultSize),
         const v = decideSetup({ account: BIG, cs, strategy: { ...pol, timeframe: '3m' }, component: 'trade_lifecycle', symbol: root, contractId: root, rawBars: bars, spec: specOf(root), scan: { direction: 'long', stopDistance: t * 0.25 }, now: NOW, specOf, selected: [root] });
         for (const orderMax of [null, 2]) {
           const live = translateSize({ suggested: 1, home: h, root, policy: pol, account: BIG, verdict: v, capUsd: 300, perContract: per(root, t), specOf, selected: [root], orderMax });
-          const sim = at.defaultSize({ cs, trade: { stopTicks: t }, sizing: pol.sizing, legs, mode: 'micro', ratio, fraction: 1, limits: { capUsd: 300, orderMax } });
+          const sim = at.defaultSize({ cs, trade: { stopTicks: t }, sizing: pol.sizing, legs, mode: 'micro', ratio, fraction: 1, limits: { capUsd: 300, orderMax }, lossesToday: r.snapshot.counts.losses });
           assert.strictEqual(sim ? sim.size : 0, live.skip ? 0 : live.size, `${label} ${root} ${t} ticks, max ${orderMax}: ${live.reason}`);
           if (orderMax === null) {
             const refused = noSizeFits({ policy: pol, account: BIG, capUsd: 300, stop: { ticks: t, floorTicks: 1 }, spec: specOf(root), root, strategy: 'trade_lifecycle', specOf, home: h });
@@ -226,15 +256,38 @@ test('noSizeFits with a stretch: OK while it takes the floor; else the problem s
   assert.strictEqual(one(198, home()), null, 'healthy, within the stretch: OK');
   assert.strictEqual(one(330, home()), null);
   // Not healthy: NOT OK with why; the hint: 197 ticks (49.25 points) under the cap, 330 (82.5 points) up to $500, only while healthy.
-  const sick = one(198, home(100000, { streak: 1 }));
-  assert.strictEqual(sick.problem, 'no size fits: the floor of 3 MNQ (prop_portfolio\'s rulebook, sizing.min_contracts) at $100.24 a contract all in (the 198-tick stop with its slippage, and fees both ways) is $300.72, over trade_lifecycle\'s risk.max_risk_usd $300; the floor stretch to $500.00 applies only while the attempt is healthy (no deficit, no loss in a row this session): 1 losing trade in a row this session');
-  assert.strictEqual(sick.hint, 'size: no size fits: 3 MNQ need a stop of 197 ticks (49.25 points) or less under the $300 cap; the floor at up to $500 (a stop of 330 ticks, 82.5 points, or less) only while the attempt is healthy (no deficit, no loss in a row); use a closer structural stop or skip');
+  const sick = one(198, home(100400, { eod: 100400, trades: [-25, 40] }));
+  assert.strictEqual(sick.problem, 'no size fits: the floor of 3 MNQ (prop_portfolio\'s rulebook, sizing.min_contracts) at $100.24 a contract all in (the 198-tick stop with its slippage, and fees both ways) is $300.72, over trade_lifecycle\'s risk.max_risk_usd $300; the floor stretch to $500.00 applies only while the attempt is healthy (no deficit, no loss today): 1 losing trade today: the cap holds for the rest of the day');
+  assert.strictEqual(sick.hint, 'size: no size fits: 3 MNQ need a stop of 197 ticks (49.25 points) or less under the $300 cap; the floor at up to $500 (a stop of 330 ticks, 82.5 points, or less) only while the attempt is healthy (no deficit, no loss today); use a closer structural stop or skip');
   // Over the stretch, healthy: NOT OK, the same hint.
   const wide = one(331, home());
   assert.match(wide.problem, /is \$500\.22, over trade_lifecycle's risk\.max_risk_usd \$300; the floor of 3 at \$166\.74 all in is \$500\.22, over the floor stretch's \$500\.00 too/);
   assert.strictEqual(wide.hint, sick.hint);
   // The cap's widest stop under the record's minimum stop: skip, the stretch's widest named the same way.
-  assert.strictEqual(one(331, home(), 200).hint, 'size: no size fits: 3 MNQ fit under the $300 cap only at a stop of 197 ticks or less, under the minimum stop of 200; the floor at up to $500 (a stop of 330 ticks, 82.5 points, or less) only while the attempt is healthy (no deficit, no loss in a row): skip');
+  assert.strictEqual(one(331, home(), 200).hint, 'size: no size fits: 3 MNQ fit under the $300 cap only at a stop of 197 ticks or less, under the minimum stop of 200; the floor at up to $500 (a stop of 330 ticks, 82.5 points, or less) only while the attempt is healthy (no deficit, no loss today): skip');
   // No attempt in the home (its state unreadable): not healthy, NOT OK.
   assert.match(one(198, trendHome()).problem, /the attempt state is unreadable$/);
+});
+
+test('the attempt simulator: a loss then a win today keeps the stretch off for the rest of the day; the next day takes it again', () => {
+  const at = require('../../scripts/lib/prop/attempts');
+  const pol = policy();
+  const day = (d, trades) => ({ day: d, trades: trades.map((x, i) => ({ symbol: 'MNQ', tickValue: 0.5, day: d, entryTime: `${d}T14:${10 + 10 * i}:00.000Z`, exitTime: `${d}T14:${15 + 10 * i}:00.000Z`, troughTicks: x.move < 0 ? [x.move] : [], ...x })) });
+  // 40-tick stops ($21.24 all in: the cap's 14): a loss of 40 ticks, then a win of 80; then a 198-tick setup (the stretch).
+  const lossWin = [{ stopTicks: 40, moveTicks: -40, move: -40 }, { stopTicks: 40, moveTicks: 80, move: 80 }, { stopTicks: 198, moveTicks: 10, move: 10 }];
+  const run = days => {
+    const taken = [];
+    const skipped = [];
+    at.runAttempt(days, { account: BIG, sizing: pol.sizing, mode: 'micro', gate: null, limits: { capUsd: 300, orderMax: null }, legsOf: () => at.legsFor(BIG, 'MNQ', { tickValue: 0.5 }),
+      onTrade: ({ trade, after }) => taken.push([trade.day, trade.stopTicks, after.balance >= after.start]), onSkip: ({ trade, why }) => skipped.push([trade.day, trade.stopTicks, why]) });
+    return { taken, skipped };
+  };
+  const r = run([day('2026-10-06', lossWin), day('2026-10-07', [{ stopTicks: 198, moveTicks: 10, move: 10 }])]);
+  // Day 1: the 198-tick setup skips (a loss today, though the streak is 0 again and the balance above the start).
+  assert.deepStrictEqual(r.skipped, [['2026-10-06', 198, 'no-size']]);
+  // Day 2: taken (no loss yet today, no deficit).
+  assert.deepStrictEqual(r.taken.map(t => t.slice(0, 2)), [['2026-10-06', 40], ['2026-10-06', 40], ['2026-10-07', 198]]);
+  assert.ok(r.taken[1][2], 'above the start after the win');
+  // Wins only: the 198-tick setup goes the same day.
+  assert.deepStrictEqual(run([day('2026-10-06', [lossWin[1], lossWin[2]])]).skipped, []);
 });

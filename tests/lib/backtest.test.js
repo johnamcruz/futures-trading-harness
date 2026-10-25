@@ -676,6 +676,22 @@ test('a prop run never sizes under the rulebook\'s floor (min_contracts), as the
   assert.deepStrictEqual([s30[0].size, s30[0].entryTime], [3, base.entryTime]);
   assert.ok(!stretched(24).some(t => t.entryTime === base.entryTime), 'over the stretch: that setup skips');
   assert.ok(!stretched(0).some(t => t.entryTime === base.entryTime), 'off: skips as before');
+  // Health as live: a losing trade earlier in the trading day (gross P&L under 0, as the gate counts it) keeps the
+  // stretch off for the rest of that day, a win after it or not. A $20 cap fits fewer than 3 at every stop over 11 ticks.
+  const { tradingDayStart } = require('../../scripts/lib/trading/clock');
+  const all = runEngine([propMarket(bars)], [propStrategy()], { ...propEngine, account: wide, sizing: testSizing({ min_contracts: 3, floor_stretch_max_usd: 1000 }), start, prop: { limits: { capUsd: 20, orderMax: null } } }).trades;
+  const dayOf = t => tradingDayStart(new Date(t.entryTime)).getTime();
+  let lossBefore = 0;
+  for (const t of all) {
+    const ticks = Math.round(t.risk / 0.25);
+    const isStretched = t.size === 3 && 3 * ((ticks + 1) * 0.5 + 0.74) > 20;
+    const earlier = all.filter(x => dayOf(x) === dayOf(t) && Date.parse(x.exitTime) <= Date.parse(t.entryTime));
+    if (earlier.some(x => x.pnl < 0)) { lossBefore += 1; assert.ok(!isStretched, `${t.entryTime}: stretched after a loss that day`); }
+  }
+  // Under the mutant that ignores the day's losses, those setups would have gone stretched: the run must hold one.
+  const loose = runEngine([propMarket(bars)], [propStrategy()], { ...propEngine, account: wide, sizing: testSizing({ min_contracts: 3, floor_stretch_max_usd: 1000 }), start, prop: { limits: { capUsd: 1000, orderMax: 3 } } }).trades;
+  assert.ok(loose.some(t => loose.some(x => dayOf(x) === dayOf(t) && Date.parse(x.exitTime) <= Date.parse(t.entryTime) && x.pnl < 0)), 'the series has a trade after a same-day loss');
+  assert.ok(all.length > 0, `${lossBefore} trades after a same-day loss, none stretched`);
 });
 
 test('a prop run folds the rulebook\'s multiplier items in, as the live verdict does: one whose fact it lacks skips every setup', () => {

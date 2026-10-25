@@ -4044,19 +4044,25 @@ test('the floor stretch in an attempt: [max-risk] takes exactly the stretched fl
   // Over the stretch ($170.22 over $160): refused, with why.
   const over = lcPropEval(home, args, { registry: reg(160) });
   assert.match(over.violations.find(v => v.check === 'max-risk').message, /the floor of 3 at \$56\.74 all in is \$170\.22, over the floor stretch's \$160\.00 too/);
-  // Not healthy: a loss in a row this session (the record as the runner writes it), then a deficit: refused.
+  // Not healthy: a loss today, then a win (the snapshot's day counts as the runner writes them: 2 trades, 1 losing; the
+  // streak 0 again), then a deficit: refused.
   const file = prop.combineFile(home, LCP.MINI.name);
   const r = JSON.parse(fs.readFileSync(file, 'utf8'));
-  fs.writeFileSync(file, JSON.stringify({ ...r, lossStreak: { ...r.lossStreak, count: 1 }, snapshot: { ...r.snapshot, state: { ...r.snapshot.state, lossStreak: 1 } } }));
+  assert.deepStrictEqual([r.snapshot.counts.losses, r.snapshot.counts.day], [0, r.snapshot.day]);
+  fs.writeFileSync(file, JSON.stringify({ ...r, snapshot: { ...r.snapshot, counts: { ...r.snapshot.counts, trades: 2, losses: 1 }, state: { ...r.snapshot.state, lossStreak: 0 } } }));
   const streak = lcPropEval(home, args, { registry: reg(500) });
-  assert.match(streak.violations.find(v => v.check === 'max-risk').message, /applies only while the attempt is healthy .*: 1 losing trade in a row this session/);
+  assert.match(streak.violations.find(v => v.check === 'max-risk').message, /applies only while the attempt is healthy \(no deficit, no loss today\): 1 losing trade today: the cap holds for the rest of the day/);
   assert.ok(checks(streak).includes('composed-reads'), 'the translation skips it too');
   fs.writeFileSync(file, JSON.stringify({ ...r, snapshot: { ...r.snapshot, state: { ...r.snapshot.state, balance: 49900 } } }));
   assert.match(lcPropEval(home, args, { registry: reg(500) }).violations.find(v => v.check === 'max-risk').message, /the balance \$49900\.00 is under the attempt's starting \$50000\.00/);
-  // Unreadable: the snapshot's state without its streak.
-  const { lossStreak: _ls, ...noStreak } = r.snapshot.state;
-  fs.writeFileSync(file, JSON.stringify({ ...r, snapshot: { ...r.snapshot, state: noStreak } }));
-  assert.match(lcPropEval(home, args, { registry: reg(500) }).violations.find(v => v.check === 'max-risk').message, /the session's loss streak is unreadable/);
+  // Unreadable: the snapshot without its day counts, or counts of another day.
+  const { counts: _c, ...noCounts } = r.snapshot;
+  fs.writeFileSync(file, JSON.stringify({ ...r, snapshot: noCounts }));
+  assert.match(lcPropEval(home, args, { registry: reg(500) }).violations.find(v => v.check === 'max-risk').message, /today's losing trades are unreadable/);
+  fs.writeFileSync(file, JSON.stringify({ ...r, snapshot: { ...r.snapshot, counts: { ...r.snapshot.counts, day: '2026-10-06' } } }));
+  assert.match(lcPropEval(home, args, { registry: reg(500) }).violations.find(v => v.check === 'max-risk').message, /today's losing trades are unreadable/);
+  fs.writeFileSync(file, JSON.stringify(r));
+  assert.deepStrictEqual(lcPropEval(home, args, { registry: reg(500) }).violations, [], 'restored: healthy again');
   // Risk-reducing orders are never refused, whatever the attempt's health.
   assert.deepStrictEqual(lcPropEval(home, { accountId: 1, contractId: 'MNQ', side: 'sell', type: 'market', size: 3, rationale: '[exit] flatten the prop_portfolio long' }, { registry: reg(500) }).violations, []);
 });

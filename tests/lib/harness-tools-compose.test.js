@@ -152,7 +152,7 @@ test('compose_check in a prop attempt: no size fits (the floor all in over the c
     const { r, acct } = pluginRoot(cap);
     const account = accountNamed(r, acct, {});
     if (attempt) prop.startAttempt(home, account, new Date('2026-04-23T13:00:00Z'));
-    // `healthy`: a snapshot at the starting balance, no loss in a row (the floor stretch's health); else none (unreadable).
+    // `healthy`: a snapshot at the starting balance, no loss today (the floor stretch's health); else none (unreadable).
     if (attempt === 'healthy') prop.snapshot(home, account, account.starting_balance, new Date('2026-04-23T13:01:00Z'));
     const out = composeCheck({ symbol: 'MNQ', side: 'long', reads: SCENARIO_1, size: 1 }, { ...ctx, root: r });
     return { text: out.text, rec: readRecords(home, 'MNQ').pop() };
@@ -165,9 +165,9 @@ test('compose_check in a prop attempt: no size fits (the floor all in over the c
   assert.match(tight.text, /- PROBLEM: no size fits: the floor of 3 MNQ \(prop_portfolio's rulebook, sizing.min_contracts\) at \$56\.74 a contract all in \(the 111-tick stop with its slippage, and fees both ways\) is \$170\.22, over trade_lifecycle's risk.max_risk_usd \$150/);
   // The rulebook's floor stretch would take the floor, but this attempt has no snapshot: its health can't be read, so
   // NOT OK, and the hint names the stretch's widest stop too ((500 / 3 - $1.24) / $0.50 = 330 ticks), only while healthy.
-  assert.match(tight.text, /\$150; the floor stretch to \$500\.00 applies only while the attempt is healthy \(no deficit, no loss in a row this session\): the attempt state is unreadable/);
-  assert.deepStrictEqual(tight.text.split('\n').filter(l => l.startsWith('- HINT')), ['- HINT size: no size fits: 3 MNQ need a stop of 97 ticks (24.25 points) or less under the $150 cap; the floor at up to $500 (a stop of 330 ticks, 82.5 points, or less) only while the attempt is healthy (no deficit, no loss in a row); use a closer structural stop or skip']);
-  // Healthy (a snapshot at the start, no loss in a row): the stretch takes the floor ($170.22 within $500): OK.
+  assert.match(tight.text, /\$150; the floor stretch to \$500\.00 applies only while the attempt is healthy \(no deficit, no loss today\): the attempt state is unreadable/);
+  assert.deepStrictEqual(tight.text.split('\n').filter(l => l.startsWith('- HINT')), ['- HINT size: no size fits: 3 MNQ need a stop of 97 ticks (24.25 points) or less under the $150 cap; the floor at up to $500 (a stop of 330 ticks, 82.5 points, or less) only while the attempt is healthy (no deficit, no loss today); use a closer structural stop or skip']);
+  // Healthy (a snapshot at the start, no loss today): the stretch takes the floor ($170.22 within $500): OK.
   const healthy = run(150, 'healthy');
   assert.strictEqual(healthy.rec.ok, true, healthy.text);
   assert.doesNotMatch(healthy.text, /no size fits/);

@@ -12,8 +12,8 @@
  *
  * The floor stretch (owner-approved 2026-10-24, so a setup isn't missed; its dollars are the rulebook's): where the composed
  * cap alone fits fewer than the floor at the stop, the order is exactly the floor when the floor risks at most the
- * rulebook's sizing.floor_stretch_max_usd all in, the attempt is healthy (attemptHealth: no deficit, no loss in a row
- * this session) and every other limit (the verdict, the size budget, the broker's max) allows the floor; else a skip
+ * rulebook's sizing.floor_stretch_max_usd all in, the attempt is healthy (attemptHealth: no deficit, no loss
+ * today) and every other limit (the verdict, the size budget, the broker's max) allows the floor; else a skip
  * as before. Never more than the floor on it. The simulators (limitPlan), compose_check (noSizeFits) and the gate's
  * [max-risk] (stretchedEntry) apply the same rule (floorStretch).
  *
@@ -54,21 +54,22 @@ function capsOf({ capUsd, perContract, orderMax = null }) {
 
 /**
  * Whether an attempt is healthy enough for the floor stretch (the rulebook's definition, accounts/<name>/RULEBOOK.md
- * "The floor stretch"): its balance at or above the attempt's starting balance (no deficit), and the session's loss
- * streak 0 (loss_streak_stop's count: a loss extends it, a win ends it, a scratch neither; each session starts at 0).
- * `state`: a combine state (live: the attempt snapshot's, which the runner writes from the broker's balance and closing
- * fills; the simulators: their own). Anything unreadable is not healthy (fails closed). { healthy: true } or
- * { healthy: false, why }.
+ * "The floor stretch"; the owner, 2026-10-24: "balance >= attempt start AND no loss yet this session. One loss today
+ * drops back to the $300 cap for the rest of the day"): its balance at or above the attempt's starting balance (no
+ * deficit), and no losing trade this trading day (`lossesToday` 0: a loss then a win the same day keeps it off; a new
+ * day starts at 0). `state`: { balance, start, lossesToday } (live: the attempt snapshot's state and its day's counts,
+ * which the runner writes from the broker's balance and closing fills, liveState; the simulators: their own). Anything
+ * unreadable is not healthy (fails closed). { healthy: true } or { healthy: false, why }.
  */
 function attemptHealth(state) {
   const no = why => ({ healthy: false, why });
   if (!state || typeof state !== 'object') return no('the attempt state is unreadable');
-  const { balance, start, lossStreak } = state;
+  const { balance, start, lossesToday } = state;
   const num = x => typeof x === 'number' && Number.isFinite(x);
   if (!num(balance) || !num(start)) return no('the balance or the attempt\'s starting balance is unreadable');
-  if (!(Number.isInteger(lossStreak) && lossStreak >= 0)) return no('the session\'s loss streak is unreadable');
+  if (!(Number.isInteger(lossesToday) && lossesToday >= 0)) return no('today\'s losing trades are unreadable');
   if (balance < start) return no(`the balance ${usd(balance)} is under the attempt's starting ${usd(start)}`);
-  if (lossStreak > 0) return no(`${lossStreak} losing trade${lossStreak === 1 ? '' : 's'} in a row this session`);
+  if (lossesToday > 0) return no(`${lossesToday} losing trade${lossesToday === 1 ? '' : 's'} today: the cap holds for the rest of the day`);
   return { healthy: true };
 }
 
@@ -86,14 +87,21 @@ function floorStretch({ floor, perContract, capUsd, stretchUsd, allows = Infinit
   if (!(floor * perContract <= stretchUsd + 1e-9)) return { why: `the floor of ${floor} at ${usd(perContract)} all in is ${usd(risk)}, over the floor stretch's ${usd(stretchUsd)} too (sizing.floor_stretch_max_usd)` };
   if (!(allows >= floor)) return { why: `the floor stretch never goes past another limit (they allow ${allows})` };
   const h = attemptHealth(state);
-  if (!h.healthy) return { why: `the floor stretch to ${usd(stretchUsd)} applies only while the attempt is healthy (no deficit, no loss in a row this session): ${h.why}` };
+  if (!h.healthy) return { why: `the floor stretch to ${usd(stretchUsd)} applies only while the attempt is healthy (no deficit, no loss today): ${h.why}` };
   return { size: floor, risk };
 }
 
-/** The attempt's combine state as the runner last wrote it (its snapshot's), or null. */
+/**
+ * The attempt's health state as the runner last wrote it: its snapshot's combine state, with `lossesToday` from the
+ * snapshot's day counts (prop-state.js dayCounts: the losing trades closed this trading day, the carried ones
+ * included) when they are for the snapshot's own day; else left out (unreadable: not healthy). null with no snapshot.
+ */
 function liveState(home, account) {
   const r = account && home ? prop.readAttempt(home, account.name) : null;
-  return r && r.snapshot && r.snapshot.state ? r.snapshot.state : null;
+  const s = r && r.snapshot;
+  if (!s || !s.state) return null;
+  const c = s.counts && s.counts.day === s.day ? s.counts : null;
+  return { ...s.state, lossesToday: c ? c.losses : undefined };
 }
 
 /** The policy's floor stretch in dollars (its rulebook's sizing.floor_stretch_max_usd; `off` reads as 0: none). */
@@ -104,7 +112,7 @@ const stretchOf = policy => (policy && policy.sizing && Number.isFinite(policy.s
  * verdict's multiplier, the floor inside it) limited as translateSize limits a live entry, by capsOf on the plan's
  * own contract at its all-in risk (the plan's riskPerContract: the stop, the slippage ticks and the fees, as live), then
  * held to the floor again (micro-equivalents: a mini counts as `ratio`), with the floor stretch as live (floorStretch:
- * `stretchUsd`, the rulebook's sizing.floor_stretch_max_usd; `state`, the simulated attempt's combine state; the
+ * `stretchUsd`, the rulebook's sizing.floor_stretch_max_usd; `state`, the simulated attempt's combine state with its lossesToday; the
  * budget's size and the broker's max its other limits). The plan, smaller, or null (under the floor: a skip).
  * limits: { capUsd, orderMax }.
  */
@@ -224,7 +232,7 @@ function noSizeFits({ policy, account, capUsd, stop, spec, root, strategy, specO
   const minStop = Number.isInteger(stop.floorTicks) ? stop.floorTicks : 1;
   const points = t => Number((t * spec.tickSize).toFixed(6));
   // With a stretch: the widest stop within it, which applies only while the attempt is healthy (never a stop to widen to).
-  const also = st ? `; the floor at up to ${money(stretchUsd)} (a stop of ${fit.maxStretchTicks} ticks, ${points(fit.maxStretchTicks)} points, or less) only while the attempt is healthy (no deficit, no loss in a row)` : '';
+  const also = st ? `; the floor at up to ${money(stretchUsd)} (a stop of ${fit.maxStretchTicks} ticks, ${points(fit.maxStretchTicks)} points, or less) only while the attempt is healthy (no deficit, no loss today)` : '';
   return {
     problem: `no size fits: the floor of ${n} (${policy.name}'s rulebook, sizing.min_contracts) at ${usd(fit.perContract)} a contract all in (the ${stop.ticks}-tick stop with its slippage, and fees both ways) is ${usd(fit.floor * fit.perContract)}, over ${strategy}'s risk.max_risk_usd ${money(capUsd)}${st ? `; ${st.why}` : ''}`,
     hint: max >= minStop

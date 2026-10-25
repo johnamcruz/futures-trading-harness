@@ -652,13 +652,13 @@ function stretchPropWorld(home, { stretch = null } = {}) {
   const rec = LC.writeScenario(home, { size: 6 });
   const spec = { tickSize: 0.25, tickValue: 0.5 };
   require('../../scripts/lib/prop/composed-verdict').composedVerdict({ home, policy, component: 'trade_lifecycle', account, record: rec, plan: rec.plan, briefing: LC.briefing(), root: 'MNQ', spec, specOf: () => spec, now });
-  // The session's loss streak written into the attempt's record as the runner writes it (its snapshot's state too).
-  const setStreak = n => {
+  // Today's losing trades in the snapshot's day counts, as the runner writes them (a win after them: the streak 0).
+  const setLosses = n => {
     const file = prop.combineFile(home, account.name);
     const r = JSON.parse(fs.readFileSync(file, 'utf8'));
-    fs.writeFileSync(file, JSON.stringify({ ...r, lossStreak: { ...r.lossStreak, count: n }, snapshot: { ...r.snapshot, state: { ...r.snapshot.state, lossStreak: n } } }));
+    fs.writeFileSync(file, JSON.stringify({ ...r, snapshot: { ...r.snapshot, counts: { ...r.snapshot.counts, trades: n + 1, losses: n }, state: { ...r.snapshot.state, lossStreak: 0 } } }));
   };
-  return { setStreak, order: n => LC.order({ size: n, rationale: 'setup:pmc_stretch long trade_lifecycle, stop 21512.50, target 21598.00' }), env: { ...env, FTH_TEST_NOW: now.toISOString(), FTH_CYCLE_BARS: JSON.stringify({ MNQ: LC.BAR }), FTH_SYMBOLS: 'MNQ' } };
+  return { setLosses, order: n => LC.order({ size: n, rationale: 'setup:pmc_stretch long trade_lifecycle, stop 21512.50, target 21598.00' }), env: { ...env, FTH_TEST_NOW: now.toISOString(), FTH_CYCLE_BARS: JSON.stringify({ MNQ: LC.BAR }), FTH_SYMBOLS: 'MNQ' } };
 }
 
 test('order gate wiring, hook and gateway: the floor stretch: the stretched floor passes [max-risk]; more than the floor, an unhealthy attempt or a floor over the stretch is refused [max-risk]; an exit goes', { timeout: 120000 }, async () => {
@@ -682,10 +682,10 @@ test('order gate wiring, hook and gateway: the floor stretch: the stretched floo
   }
   const seven = await both(env, w.order(7));
   for (const t of [seven.hook, seven.gw]) assert.match(t, /\[max-risk\] risk \$388\.50 \(size 7 .*only exactly the floor of 6 MNQ may go over the cap/);
-  // A loss in a row this session: the same 6 refused, in the hook and the gateway.
-  w.setStreak(1);
+  // A loss today, then a win: the same 6 refused for the rest of the day, in the hook and the gateway.
+  w.setLosses(1);
   const sick = await both(env, w.order(6));
-  for (const t of [sick.hook, sick.gw]) assert.match(t, /\[max-risk\] risk \$333\.00 \(size 6 x 111-tick stop.*applies only while the attempt is healthy .*1 losing trade in a row this session/);
+  for (const t of [sick.hook, sick.gw]) assert.match(t, /\[max-risk\] risk \$333\.00 \(size 6 x 111-tick stop.*applies only while the attempt is healthy \(no deficit, no loss today\): 1 losing trade today: the cap holds for the rest of the day/);
   // An exit goes, unhealthy or not.
   const exit = { ...EXIT_BASE, contractId: 'MNQ', side: 'sell', size: 1, rationale: '[exit] close the pmc_stretch long' };
   assert.strictEqual(gate(orderPayload(exit), env).code, 0);

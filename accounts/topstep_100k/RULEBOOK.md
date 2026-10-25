@@ -143,12 +143,14 @@ exactly the floor when the floor risks at most this all in and the attempt
 is healthy; never more than the floor, never above this. The floor is in
 the order's own contracts: 3 micros, or 1 mini (a mini counts as 10
 micros, so its floor is 1 contract), and a mini's floor may stretch too
-(the owner's, 2026-10-24: "Allow 1 mini too"). Healthy (the owner's: "No
-deficit, no loss today"): the balance at or above the attempt's starting
-balance (no deficit), and the session's loss streak 0 (the
-`loss_streak_stop` count: a loss extends it, a win ends it, a scratch
-neither; each session starts at 0). An attempt state that can't be read is
-not healthy. Every other limit still holds: the verdict, the size budget
+(the owner's, 2026-10-24: "Allow 1 mini too"). Healthy (the owner's:
+"balance ≥ attempt start AND no loss yet this session. One loss today drops
+back to the $300 cap for the rest of the day"): the balance at or above the
+attempt's starting balance (no deficit), and no losing trade yet this
+trading day (the snapshot's count of the day's losing trades is 0). A win
+after a loss doesn't bring it back: the cap holds for the rest of that day,
+and the next trading day starts at 0 again. An attempt state or a day's
+count that can't be read is not healthy. Every other limit still holds: the verdict, the size budget
 (the room to the floor and the daily limit, the drawdown halving), the
 broker's max order size; one that allows fewer than the floor is a skip,
 as before. All in, 3 MNQ fit $500 up to a 330-tick stop

@@ -43,13 +43,14 @@ const fullVerdict = () => 1;
  * and the broker's max order size; `limits` null: none) and the floor again, with the floor stretch (the rulebook's
  * floor_stretch_max_usd while the attempt is healthy, limitPlan).
  */
-function defaultSize({ cs, trade, sizing, legs, mode, ratio, fraction, limits = null }) {
+function defaultSize({ cs, trade, sizing, legs, mode, ratio, fraction, limits = null, lossesToday = null }) {
   const plan = combine.contractPlan({
     dollars: combine.budget(cs, sizing), room: combine.room(cs), stopTicks: trade.stopTicks, legs, mode,
     guard: sizing.min_size_guard, fraction, ratio, slipTicks: sizing.stop_slippage_ticks, minContracts: sizing.min_contracts,
   });
-  // The floor stretch as live: the rulebook's floor_stretch_max_usd, the attempt's health from its own state (cs).
-  return limitPlan(plan, { limits, minContracts: sizing.min_contracts, ratio, miniRoot: legs.mini ? legs.mini.root : null, stretchUsd: sizing.floor_stretch_max_usd, state: cs });
+  // The floor stretch as live: the rulebook's floor_stretch_max_usd, the attempt's health from its own state (cs) and the
+  // day's losing trades so far (runAttempt's counters, as live reads the snapshot's day counts).
+  return limitPlan(plan, { limits, minContracts: sizing.min_contracts, ratio, miniRoot: legs.mini ? legs.mini.root : null, stretchUsd: sizing.floor_stretch_max_usd, state: { ...cs, lossesToday } });
 }
 
 /**
@@ -149,7 +150,7 @@ function runAttempt(days, ctx) {
       const m = Number(multiplier(t0, { cs, counters: counters() }));
       if (!(m > 0)) { skip(t0, 'multiplier'); continue; }
       const { legs, ratio } = legsOf(t0);
-      const plan = size({ cs, trade: t0, sizing, legs, mode, ratio, fraction: Math.min(1, m), limits });
+      const plan = size({ cs, trade: t0, sizing, legs, mode, ratio, fraction: Math.min(1, m), limits, lossesToday });
       if (!plan || !(plan.size >= 1)) { skip(t0, 'no-size'); continue; }
       const before = cs;
       const counted = counters();
