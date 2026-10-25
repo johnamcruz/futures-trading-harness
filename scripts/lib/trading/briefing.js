@@ -365,13 +365,23 @@ function computeSections({ bars, fine = null, c15, c60, snap, snap15, read, read
     if (!zones.has(key)) zones.set(key, fvgEdgesAt({ bars, base: minutes, fine, at: k, until }));
     return zones.get(key);
   };
-  // The key levels as they stood when a box began (its first candle's open, `from`): levelsAt on the last base bar
-  // closed by then (fixed levels then, moving ones at that bar's close), the same rule a completed candle is read by.
+  // The key levels a box sits at: those that stood when it began (its first candle's open, `from`: levelsAt on the last
+  // base bar closed by then, the rule a completed candle is read by) and still stand at the same value now (this bar's
+  // `levels`, by name, within a tick), so never one the box made or moved, and one value per level in the briefing: a
+  // moving level (VWAP, the developing profile) or a forming one (overnight, IB, opening range) that changed since is
+  // none of them. A swing's name carries its price (holdingSwingsAt); it stands while this bar names that swing.
   const boxLevels = from => {
     const t = Date.parse(from);
     let k = bars.length - 1;
     while (k >= 0 && Date.parse(bars[k].t) + step > t) k -= 1;
-    return k >= 0 && k + 1 < bars.length ? levelsAt(k, k, k + 1) : [];
+    if (!(k >= 0 && k + 1 < bars.length)) return [];
+    const nowByName = new Map();
+    for (const [name, p] of levels) if (Number.isFinite(p)) nowByName.set(name, [...(nowByName.get(name) || []), p]);
+    const stands = (name, p) => {
+      const swing = /^(.* swing (?:high|low)) -?\d+(?:\.\d+)?$/.exec(name);
+      return (nowByName.get(swing ? swing[1] : name) || []).some(q => Math.abs(q - p) <= tick + 1e-9);
+    };
+    return levelsAt(k, k, k + 1).filter(([name, p]) => Number.isFinite(p) && stands(name, p));
   };
   const news = newsState(blackouts, closedAt);
   // In a no-entry window, the window itself (its name, scope and end) is the reason a candidate is blocked.

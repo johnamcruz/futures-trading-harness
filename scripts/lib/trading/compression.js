@@ -13,8 +13,8 @@
  *                mean candle range is at most barAtr x ATR, and that holds no displacement candle (candle-facts.js
  *                patternsOf, the candle-reading skill's: a pole is the move before the box, never in it); the longest
  *                such run ending on a candle is that candle's box. NOT a box: fewer than minBars candles (a single
- *                inside bar), a drift whose candles are wide (mean range over barAtr), a run wider than boxAtr (a trend
- *                long enough to widen it), or one with a displacement candle in it.
+ *                inside bar), a drift whose candles are wide (mean range over barAtr), a run wider than boxAtr (a slow
+ *                trend of small candles is a "drifting" box until it is that wide), or one with a displacement candle.
  *   shape        'converging' (the second half's high-low at most convergeShare of the first half's, its high no
  *                higher and its low no lower: a pennant's box), else 'drifting up' | 'drifting down' (last close minus
  *                first open at least driftShare of the width: a flag's counter-drift), else 'flat'

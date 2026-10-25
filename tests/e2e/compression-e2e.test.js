@@ -53,10 +53,22 @@ test('compression e2e: the briefing holds the transition as code-verified facts,
   const at = b.sections.m3.data.compression['3m'];
   assert.strictEqual(at.state, 'expanding');
   assert.deepStrictEqual([at.box.low, at.box.high, at.box.bars, at.break.dir, at.break.closedAt, at.break.expansion, at.break.beyondNow, at.break.barsAgo], [BOX_LOW, 27399.75, 30, 'up', '2026-04-27T00:03:00.000Z', true, true, 1]);
-  // The box's levels as they stood when it began: the session VAH then (inside it), not the value the box's own volume
-  // moved it to since.
-  const vah = at.box.levels.find(l => l.name === 'session VAH');
-  assert.ok(vah && vah.edge === 'inside' && vah.price !== b.sections.m3.data.sessionProfile.vah, JSON.stringify(at.box.levels));
+  // The box's levels: those that stood when it began and still stand at the same value (one value per level in the
+  // briefing). Here the session profile moved since the box began (its own volume built it): none of it is the box's.
+  assert.ok(!at.box.levels.some(l => /^session (POC|VAH|VAL)$/.test(l.name)), JSON.stringify(at.box.levels));
+  // Over the series, every session level a box names has the briefing's current value for that name (keyLevels).
+  let named = 0;
+  for (let n = 600; n <= 1400; n += 20) {
+    const bn = briefingAt(n);
+    const now = new Map(bn.keyLevels.map(([name, p]) => [name, p]));
+    for (const x of Object.values(bn.sections.m3.data.compression)) {
+      for (const l of (x && x.box ? x.box.levels : []).filter(y => now.has(y.name))) {
+        named += 1;
+        assert.ok(Math.abs(now.get(l.name) - l.price) <= 0.25, `${n} ${l.name}: ${l.price} vs ${now.get(l.name)}`);
+      }
+    }
+  }
+  assert.ok(named > 0, 'the check is not vacuous');
   // The bar before the expansion candle closed was compressing: the transition is a change on one closed candle.
   assert.strictEqual(briefingAt(954).sections.m3.data.compression['3m'].state, 'compressing');
   // A poke: 04-24 07:03 UTC closed 2 ticks above its box (0.06 ATR): no expansion, and the read is FALSE.
