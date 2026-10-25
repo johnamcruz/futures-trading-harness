@@ -381,7 +381,8 @@ function computeSections({ bars, fine = null, c15, c60, snap, snap15, read, read
       const swing = /^(.* swing (?:high|low)) -?\d+(?:\.\d+)?$/.exec(name);
       return (nowByName.get(swing ? swing[1] : name) || []).some(q => Math.abs(q - p) <= tick + 1e-9);
     };
-    // Shown on the contract's tick, as every other level (level()); the read and the edges use the exact price.
+    // Shown on the contract's tick, as every other level (level()); the stands() filter and the box's edges use the exact
+    // price (the box at read's one-ATR distance, the shown one: at most half a tick off).
     return levelsAt(k, k, k + 1).filter(([name, p]) => Number.isFinite(p) && stands(name, p)).map(([name, p]) => [name, p, level(p)]);
   };
   const news = newsState(blackouts, closedAt);
