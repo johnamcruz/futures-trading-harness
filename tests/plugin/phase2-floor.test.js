@@ -31,7 +31,7 @@ test('phase 2 floor: the request names the floor as where a cut stops, never a v
 
 test('phase 2 floor: the risk manager\'s shipped examples, and a report written as the request asks, read as their final size', () => {
   const rm = fs.readFileSync(path.join(ROOT, 'agents', 'risk-manager.md'), 'utf8');
-  assert.ok(flat(rm).includes('- Write only the final size: every size and "cut to" binds.'));
+  assert.ok(flat(rm).includes('- Write only the final size: every size and "cut to" binds; a smaller one with no cut is no trade.'));
   // The fenced example, as shipped.
   const example = /For example:\n\n```text\n([\s\S]*?)```/.exec(rm)[1];
   assert.deepStrictEqual([verdictOf(example), approvedSize(example)], ['APPROVE', { size: 5 }]);

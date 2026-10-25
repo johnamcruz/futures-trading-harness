@@ -146,8 +146,7 @@ Always write at least two: start with the window and the trend rule for your
 side, e.g. `FACTS: window opening drive; trend long allowed`. One plan, one
 symbol: the facts are the plan's symbol's. Write each fact plainly: no "not",
 nothing in parentheses (the gate refuses those as ambiguous), and no item
-in any other form (the gate refuses the entry for it). The FACTS line is the
-last line of your report: every line after it is read as facts.
+in any other form (the gate refuses the entry for it).
 
 - `window <name>` (the briefing's `m3` `window`, e.g. `window opening drive`), or `window rth`, `window overnight`
 - `entries allowed` or `entries none` (`m3` `windowEntries`)
@@ -194,12 +193,13 @@ The code reads your report; anything else reads as a veto:
 
 - Exactly one `VERDICT: APPROVE - ...` or `VERDICT: VETO - ...` line.
 - "verdict" and "decision" only to open the VERDICT line, never in prose
-  or headings: starting a line, or before a `:`, each decides.
+  or headings: one starting a line decides; elsewhere it can only veto.
 - "VETO" only when vetoing: never "VETO rules: none", "not a VETO".
 - Size → its own `Size:` line, final size first, e.g. `Size: 1 (record
   8 cut to 1: no reviewed trades yet)`. To cut, approve the smaller size:
   the order is exactly it.
-- Write only the final size: every size and "cut to" binds.
+- Write only the final size: every size and "cut to" binds; a smaller
+  one with no cut is no trade.
 - These read as a veto: `Decision: cut to size 1`, `8 Decision: valid
   yes`, `Sizing verdict: skip x0.5`.
 

@@ -102,10 +102,9 @@ function floorFit({ capUsd, floor, stopTicks, tickValue, slipTicks, feePerSide }
   const sizeAt = t => { const c = capsOf({ capUsd, perContract: at(t) }); return c.length ? c[0][0] : 0; };
   const perContract = at(stopTicks);
   if (!(capUsd > 0) || !(Number.isInteger(floor) && floor >= 1) || !(tickValue > 0) || !(perContract > 0)) return null;
-  // The widest stop: the closed form's estimate, then held to capsOf's own count (never a second formula).
-  let max = Math.floor((capUsd / floor - at(0)) / tickValue + 1e-9);
-  while (max >= 1 && sizeAt(max) < floor) max -= 1;
-  while (sizeAt(max + 1) >= floor) max += 1;
+  // The widest stop: allInRisk is linear in the ticks (at(0) + ticks x tickValue), so the floor fits up to this tick
+  // count (the parity test holds it to translateSize's own count, stop by stop).
+  const max = Math.floor((capUsd / floor - at(0)) / tickValue + 1e-9);
   const capSize = sizeAt(stopTicks);
   return { fits: capSize >= floor, floor, perContract, capSize, maxStopTicks: Math.max(0, max) };
 }

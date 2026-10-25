@@ -290,11 +290,11 @@ test('the risk-manager\'s phase-2 format: its example approves; each phrasing it
   assert.strictEqual(size, 'Size: 1 (record 8 cut to 1: no reviewed trades yet)');
   // A cut is an approval of the smaller size (runner-entry.js orders exactly it; the gate's composed-reads takes it).
   assert.ok(rm.replace(/\n\s*/g, ' ').includes('To cut, approve the smaller size: the order is exactly it.'));
-  assert.ok(rm.replace(/\n\s*/g, ' ').includes('- "verdict" and "decision" only to open the VERDICT line, never in prose or headings: starting a line, or before a `:`, each decides.'));
+  assert.ok(rm.replace(/\n\s*/g, ' ').includes('- "verdict" and "decision" only to open the VERDICT line, never in prose or headings: one starting a line decides; elsewhere it can only veto.'));
   assert.ok(rm.replace(/\n\s*/g, ' ').includes('- Size → its own `Size:` line, final size first,'));
   const V = 'VERDICT: APPROVE - size 1, risk $20.00, trade_lifecycle long with the 1h up trend, 2.08R\nFACTS: window opening drive; trend long allowed';
-  // A keyword in mid-line prose is prose now (owner-approved 2026-10-24): the agent no longer names it as a veto.
-  assert.strictEqual(verdictOf(`The verdict priority order: step 2 allows\n${V}`), 'APPROVE');
+  // Mid-line, a keyword then up to three words and a separator labels a decision: it still refuses (review of 2026-10-24).
+  assert.strictEqual(verdictOf(`The verdict priority order: step 2 allows\n${V}`), 'VETO');
   assert.strictEqual(verdictOf(`${size}\n${V}`), 'APPROVE');
   // The baseline's taught step line still approves (the parser keeps it).
   assert.strictEqual(verdictOf(`8 Decision: take - aligned continuation with room\n${V}`), 'APPROVE');

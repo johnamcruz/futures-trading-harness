@@ -64,6 +64,12 @@ test('a genuine veto beside each real approval still vetoes, in every form', () 
     '**Step 8, decision:** pass', 'PLAN 8 Decision: pass on the size check', '- Decision: wait', '> Final verdict: reject',
     '## Decision: skip', '# Verdict\nPASS', 'the plan was VETOED on room', 'Sizing verdict: skip x0.5', 'Room is short | final decision: skip',
     'the verdict is veto', 'Room is short, my verdict \u2014 skip', 'the final verdict - pass', 'overall decision \u2192 wait',
+    // Mid-line with words before the separator, or a refusal right after the keyword (review of 2026-10-24).
+    'My decision here: skip', 'The decision for this cycle: stand aside.', 'Our verdict for the bar: skip it.', 'My decision on this one: pass.',
+    'The decision stands: pass', 'Room is short; decision pass.', 'Sizing verdict skip x0.5', 'My final verdict skip', 'Net decision pass on room',
+    'My decision\u2014stand aside', 'My decision... pass', 'My decision\u2026 pass', 'Room is short, so the verdict\nPASS', 'as the verdict\n1. PASS, no room',
+    // An unspaced dash or an ellipsis labels the decision, whatever word follows (not only a refusal word).
+    'My decision\u2014later, on the next bar', 'My decision... maybe the next bar', 'My decision\u2026 hold off', 'the decision 0 contracts',
   ];
   for (const f of Object.keys(APPROVED)) {
     const t = withoutFacts(read(f));
@@ -90,7 +96,10 @@ test('a keyword mid-line is prose: it neither approves nor refuses; a line-start
     assert.deepStrictEqual(R.decisionLines(prose), [], prose);
   }
   // Mid-line, never an approval: no approving line, no trade.
-  for (const t of ['as the VERDICT: APPROVE - size 3 says', 'the plan, VERDICT: APPROVE - size 3']) assert.strictEqual(R.verdictOf(t), null, t);
+  // A quoted approval mid-line approved on main ("Head trader: VERDICT: APPROVE - size 8"): now no approval.
+  for (const t of ['as the VERDICT: APPROVE - size 3 says', 'the plan, VERDICT: APPROVE - size 3', 'Head trader: VERDICT: APPROVE - size 8']) assert.strictEqual(R.verdictOf(t), null, t);
+  // Prose after a keyword at a line's end: the next line decides only when it refuses; its numbering is no number.
+  for (const t of ['these don\'t change the sizing decision.\n2 Context: window rth', 'as the verdict\nroom to 2R']) assert.strictEqual(R.verdictOf(`${t}\n${V}`), 'APPROVE', t);
   // Line start after markers, numbering, quotes, markup and the labels: decides.
   for (const t of ['VERDICT: APPROVE - size 3', '**Verdict:** APPROVE - size 3', '- VERDICT: APPROVE - size 3', '8 VERDICT: APPROVE - size 3', '8. **Verdict:** APPROVE - size 3',
     '> "VERDICT: APPROVE - size 3"', 'Final VERDICT: APPROVE - size 3', 'Phase 2 VERDICT: APPROVE - size 3', 'PLAN 8 VERDICT: APPROVE - size 3', '| VERDICT | APPROVE | size 3 |']) {
@@ -110,9 +119,22 @@ test('a prose Size line: no error; every cut in it binds, the smaller of it and 
     [`Size: the translated 6 stands (no step)\n${A(6)}`, 6],
     [`Size: the record's 9 trimmed to 7, then reduced to 6\n${A(8)}`, 6],
     [`Size: 2 (the record's 2)\n${A(3)}`, 2], // a number first still reads as the size
+    // Only a whole number after a cut reads as a size: a distance, an amount or a word is no cut (review of 2026-10-24).
+    [`Size: cut to 3. The stop is cut to 1 tick beyond.\n${A(4)}`, 3],
+    [`Size: the record's 5 cut to 3, stop trimmed to 40 points\n${A(5)}`, 3],
+    [`Size: risk cut to $150 at the translated 3\n${A(3)}`, 3],
+    [`- **Size:** I cut it to fit the cap.\n${A(3)}`, 3],
+    // A number the floor names is the rulebook's, not a size: no error.
+    [`Size: the translated 4, not under the floor of 3.\n${A(4)}`, 4],
+    [`Size: halving leaves 2, which floors to 3.\n${A(3)}`, 3],
   ]) assert.deepStrictEqual(R.approvedSize(text), { size }, text);
   for (const text of [
-    `- **Size:** I cut it to fit the cap.\n${A(3)}`, // a cut to no number
+    `Size: n/a\n${A(1)}`, `Size: TBD\n${A(1)}`, `Size: unknown yet\n${A(1)}`, `Size: na\n${A(1)}`, `Size: I cut to half\n${A(2)}`,
+    // A cut the report doesn't make, or takes back (review of 2026-10-24): never a size.
+    `Size: I'd cut to 2 but the floor is 3, so 3\n${A(3)}`, `Size: I would cut to 2 on doubt, so 3\n${A(3)}`, `Size: cut to 2 but keep 3\n${A(3)}`,
+    `Size: if I cut to 2 the floor refuses it, 3\n${A(3)}`,
+    // A size stated under the binding one with no cut to it: two sizes, no trade.
+    `Size: order_plan gives 8. Half of 8 is 4, so 4.\n${A(8)}`, `Size: the translated 8; 4 MNQ on doubt\n${A(8)}`, `Size: the translated 6 is my 5.\n${A(6)}`,
     `- **Size:** half of the translated 8\n${A(4)}`, `Size: none\n${A(1)}`, `Size: one contract\n${A(1)}`,
     `Size: I cut to 0\n${A(1)}`, `Size: I cut the 8 to 1.5\n${A(1)}`, `Size: 0\n${A(1)}`, `Size: 1-2\n${A(1)}`,
     'Size: the translated 4\nVERDICT: APPROVE - risk $150', // the VERDICT line still states its size
