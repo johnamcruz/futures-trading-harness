@@ -694,6 +694,25 @@ test('a prop run never sizes under the rulebook\'s floor (min_contracts), as the
   assert.ok(all.length > 0, `${lossBefore} trades after a same-day loss, none stretched`);
 });
 
+test('the backtester\'s floor stretch counts the day\'s losing trades, not the loss streak: after a loss, a win the same day never brings the stretch back; the next day does', () => {
+  // Seed 13 over 30 days, a $25 cap (3 MNQ fit at stops of 14 ticks or less, (14 + 1) x $0.50 + $0.74 = $8.24, 3: $24.72;
+  // wider ones need the stretch), a $1,000 stretch, an account roomy enough to trade every day (no soft or firm stop).
+  const bars = propSeries(30, 13);
+  const { tradingDayStart } = require('../../scripts/lib/trading/clock');
+  const acct = propAccount({ profit_target: 100000, max_loss: 5000, daily_loss_soft: 0, sessions: 60, max_contracts: { MNQ: 100 } });
+  const trades = runEngine([propMarket(bars)], [propStrategy()], { ...propEngine, account: acct, sizing: testSizing({ min_contracts: 3, floor_stretch_max_usd: 1000 }), start: Date.parse('2026-01-08T00:00:00Z'), prop: { limits: { capUsd: 25, orderMax: null } } }).trades;
+  const dayOf = t => tradingDayStart(new Date(t.entryTime)).getTime();
+  const stretched = t => t.size === 3 && 3 * ((Math.round(t.risk / 0.25) + 1) * 0.5 + 0.74) > 25;
+  const before = t => trades.filter(x => dayOf(x) === dayOf(t) && Date.parse(x.exitTime) <= Date.parse(t.entryTime));
+  // No stretched trade after a same-day loss, whatever came between.
+  for (const t of trades) if (stretched(t)) assert.ok(!before(t).some(x => x.pnl < 0), `${t.entryTime}: stretched after a loss that day`);
+  // The series holds the case the streak would get wrong: a loss, then a win after it, the same day, then more trades.
+  const lossThenWin = trades.filter(t => { const b = before(t); const i = b.findIndex(x => x.pnl < 0); return i >= 0 && b.slice(i + 1).some(x => x.pnl > 0); });
+  assert.ok(lossThenWin.length > 0, 'a trade after a loss and a later win, the same day');
+  // And a stretch taken: the day's count starts at 0 again each trading day.
+  assert.ok(trades.some(t => stretched(t) && trades.some(x => dayOf(x) < dayOf(t) && x.pnl < 0)), 'a stretched trade on a later day than a loss');
+});
+
 test('a prop run folds the rulebook\'s multiplier items in, as the live verdict does: one whose fact it lacks skips every setup', () => {
   // (Moved from the retired backtester prop-run test: the engine computes no facts, so an enforced item fails closed.)
   const bars = propSeries(30);
