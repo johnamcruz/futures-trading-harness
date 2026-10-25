@@ -44,6 +44,27 @@ test('the fixtures are the replay\'s reports: every one has an approving VERDICT
   for (const f of files) assert.match(read(f), /^VERDICT: APPROVE - size \d+/m, f);
 });
 
+test('the taught format: reasoning on the lines before, then `Size: <n>` alone, then the VERDICT line, approves that size', () => {
+  const report = [
+    '7 Risk: order_plan gives stop 128 ticks, $65.24 a contract all in; the translated 8, halved to 4 on serious against, above the floor of 3',
+    'Size: 4',
+    'VERDICT: APPROVE - size 4, risk $260.96, trade_lifecycle short with the 15m down trend, 4.2R',
+    'FACTS: window opening drive; trend short allowed',
+  ].join('\n');
+  assert.strictEqual(R.verdictOf(report), 'APPROVE');
+  assert.deepStrictEqual(R.approvedSize(report), { size: 4 });
+  assert.strictEqual(R.sizeRefusal({ text: report }, 4), null);
+  assert.match(R.sizeRefusal({ text: report }, 5), /is over the 4 risk-manager phase 2 approved/);
+  // The three prose fixtures written that way (their prose moved to a line before, the Size line the number alone):
+  // each approves at its binding size.
+  for (const [f, size] of Object.entries(BROAD_REFUSED)) {
+    const t = read(f).replace(/^- \*\*Size:\*\* (.*)$/m, (_m, prose) => `- **Sizing:** ${prose}\nSize: ${size}`);
+    assert.match(t, new RegExp(`^Size: ${size}$`, 'm'), f);
+    assert.strictEqual(R.verdictOf(t), 'APPROVE', f);
+    assert.deepStrictEqual(R.approvedSize(t), { size }, f);
+  }
+});
+
 test('the three prose Size lines approve, but each holds a count under its size: no trade (the broad rule), the gate refusing any size', () => {
   for (const [f, size] of Object.entries(BROAD_REFUSED)) {
     const t = read(f);

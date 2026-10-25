@@ -217,18 +217,18 @@ The code reads your report; anything else reads as a veto:
 - "verdict" and "decision" only to open the VERDICT line, never in prose
   or headings: one starting a line decides; elsewhere it can only veto.
 - "VETO" only when vetoing: never "VETO rules: none", "not a VETO".
-- Size → its own `Size:` line, final size first, e.g. `Size: 1 (record
-  8 cut to 1: no reviewed trades yet)`. To cut, approve the smaller size:
-  the order is exactly it.
-- Write only the final size: every size and "cut to" binds; any smaller
-  count on the Size line is no trade.
+- Size → its own line, `Size: <n>`: the final size alone, reasoning on
+  the lines before (7 Risk). A Size line written as a sentence is no
+  trade. To cut, approve the smaller size: the order is exactly it.
+- Every size and "cut to" on the VERDICT and Size lines binds.
 - These read as a veto: `Decision: cut to size 1`, `8 Decision: valid
   yes`, `Sizing verdict: skip x0.5`.
 
 For example:
 
 ```text
-Size: 5 (the record's 5)
+7 Risk: 111 ticks, $55.50 a contract; the translated 5
+Size: 5
 VERDICT: APPROVE - size 5, risk $277.50, trade_lifecycle long with the 1h up trend, 2.08R
 FACTS: window opening drive; entries allowed; trend long allowed; read long aligned; room long enough; vwap above
 ```

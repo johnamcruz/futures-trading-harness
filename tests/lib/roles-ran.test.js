@@ -286,12 +286,13 @@ test('the risk-manager\'s phase-2 format: its example approves; each phrasing it
   assert.match(example, /^Size: /m);
   assert.strictEqual(verdictOf(example), 'APPROVE', example);
   // Its Size line, in the agent's own words, approves beside an APPROVE line.
-  const size = /e\.g\. `(Size: [^`]+)`/.exec(rm.replace(/\n\s*/g, ' '))[1];
-  assert.strictEqual(size, 'Size: 1 (record 8 cut to 1: no reviewed trades yet)');
+  const size = /^Size: .*$/m.exec(example)[0];
+  assert.strictEqual(size, 'Size: 5', 'the number alone, its reasoning on the line before');
+  assert.match(example, /^7 Risk: [^\n]+\nSize: 5\n/m);
   // A cut is an approval of the smaller size (runner-entry.js orders exactly it; the gate's composed-reads takes it).
   assert.ok(rm.replace(/\n\s*/g, ' ').includes('To cut, approve the smaller size: the order is exactly it.'));
   assert.ok(rm.replace(/\n\s*/g, ' ').includes('- "verdict" and "decision" only to open the VERDICT line, never in prose or headings: one starting a line decides; elsewhere it can only veto.'));
-  assert.ok(rm.replace(/\n\s*/g, ' ').includes('- Size → its own `Size:` line, final size first,'));
+  assert.ok(rm.replace(/\n\s*/g, ' ').includes('- Size → its own line, `Size: <n>`: the final size alone, reasoning on the lines before (7 Risk). A Size line written as a sentence is no trade.'));
   const V = 'VERDICT: APPROVE - size 1, risk $20.00, trade_lifecycle long with the 1h up trend, 2.08R\nFACTS: window opening drive; trend long allowed';
   // Mid-line, a keyword then up to three words and a separator labels a decision: it still refuses (review of 2026-10-24).
   assert.strictEqual(verdictOf(`The verdict priority order: step 2 allows\n${V}`), 'VETO');
