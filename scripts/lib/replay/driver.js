@@ -52,6 +52,10 @@
  * ends: no step runs for it after that (with a position open, only the day's end of day, the runner's flatten), and the
  * clock moves on to the next attempt's first time. An attempt still active after its last session ends unfinished.
  *
+ * A training-loop run's day attempts (replay/config.js dayAttempts, replay/day-attempts.js): before each day's first step
+ * (a managing step aside), flat, a fresh attempt at the profile's starting balance (the balance schedule, a fresh record,
+ * the broker's balance checked); a day that opens with a position or working order still open keeps the attempt it has.
+ *
  *   seedRunHome(run, { root, userEnv })         the fresh run home (or checks the one being resumed)
  *   runReplay({ run, baseEnv, root, deps, maxCycles, log, wall })   resolves { cycles, stopped, done } (wall: the wall
  *                                                clock a charged step's replay clock runs with, Date.now)
@@ -80,6 +84,7 @@ const combine = require('../trading/combine');
 const { accountNamed, requireFee } = require('../trading/accounts');
 const { isOpen, signedSize } = require('../trading/positions');
 const combineRun = require('./combine-run');
+const dayAttempts = require('./day-attempts');
 
 const EOD_RETRIES = require('../tunables').replay().driver.eodRetries; // config/replay.json
 // Minutes from the 18:00 ET open to the 16:00 ET close.
@@ -470,6 +475,8 @@ async function replayLoop({ run, baseEnv = process.env, root, deps = defaultDeps
     } else if (point.kind === 'trade') managing = true;
     // A run with account states: the day's drawn state, before its first step.
     if (run.accountStates && !point.manage) await seedDay(run, point, ranAt, env, deps, root, log);
+    // A training-loop run: the day's fresh attempt, before its first step (replay/day-attempts.js).
+    if (run.dayAttempts && !point.manage) await dayAttempts.startDay(run, point, ranAt, env, deps, { root, log });
     // A combine run: its attempt started before its first step, and no step once it passed or blew (combine-run.js).
     if (run.combine && !(await combineRun.beforeStep(run, point, ranAt, env, deps, combineCtx))) {
       const nextPoint = queue[0];

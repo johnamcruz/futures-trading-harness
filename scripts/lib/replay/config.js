@@ -66,8 +66,13 @@
  *                  prop or practice; every bar (everyNthBar 1); the account the active policy strategy's; each attempt's
  *                  window inside the run's, inside one learning split window, never overlapping another; part of both
  *                  hashes (default: none)
+ *   dayAttempts    the training loop's runs only (replay/day-attempts.js; set by its code, train/loop.js windowRun; the
+ *                  training preflight refuses it elsewhere): { account }, the active policy strategy's account. Each
+ *                  session day starts a fresh attempt at the profile's starting balance (the balance schedule) before its
+ *                  first step, so every entry is sized as live sizes it in a running attempt and no day's trades reach
+ *                  another day; never with prop, accountStates or combine; part of both hashes (default: none)
  *   brokerEnv      the broker server's variables the driver sets (defaults: backtester-mcp's); with `prop`,
- *                  `accountStates` or `combine`, its maxDailyLoss is the account's daily_loss_limit
+ *                  `accountStates`, `combine` or `dayAttempts`, its maxDailyLoss is the account's daily_loss_limit
  *   stage          a training preset (replay/stage.js; docs/TRAINING.md): 1 learn to trade, 2 pass prop. It sets
  *                  defaults and requirements only: an explicit value contradicting it is refused, never overridden;
  *                  the training preflight (learning/preflight.js) checks the rest; part of both hashes (default: none).
@@ -114,6 +119,7 @@ const { applyStage, stageRequirements } = require('./stage');
 const { validateCombineConfig, combineForRun } = require('./combine-run');
 const { adapterTag } = require('../learning/adapter');
 const { validateStepWindows, stepWindowsForRun } = require('./step-windows');
+const { validateDayAttempts } = require('./day-attempts');
 
 const RUN_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,63}$/;
 const ISO = /^\d{4}-\d{2}-\d{2}T\d{2}:\d{2}(:\d{2}(\.\d{1,3})?)?Z$/;
@@ -266,6 +272,21 @@ function resolveReplay(raw, { baseDir = process.cwd(), env = process.env, home =
       if (combineAccount && !(policy && policy.name === combineAccount.name)) errors.push(`combine.account: ${combineAccount.name} is not the account the active policy strategy trades (${policy ? policy.name : 'none'}): the runner keeps the attempt record of that account only`);
     }
   }
+  // The training loop's day attempts (replay/day-attempts.js): a fresh attempt each session day, on the policy's account.
+  const dayCfg = validateDayAttempts(r.dayAttempts);
+  errors.push(...dayCfg.errors);
+  let dayAccount = null;
+  if (r.dayAttempts !== undefined) {
+    for (const k of ['prop', 'accountStates', 'combine']) if (r[k] !== undefined) errors.push(`dayAttempts: not with ${k} (each day's attempt starts fresh; ${k} keeps an attempt of its own)`);
+    if (dayCfg.dayAttempts && !root) errors.push('dayAttempts: needs the harness root to load its account and the policy strategy (resolveReplay { root })');
+    if (dayCfg.dayAttempts && root) {
+      try { dayAccount = require('../trading/accounts').accountNamed(root, dayCfg.dayAttempts.account, env); } catch (err) { errors.push(`dayAttempts.account: ${err.message}`); }
+      // The runner snapshots and closes the days of the account its policy strategy trades: the attempts must be it.
+      let policy = null;
+      try { policy = policyAccount(root, env); } catch (err) { errors.push(`dayAttempts.account: ${String(err.message).split('\n').pop().replace(/^- /, '')}`); }
+      if (dayAccount && !(policy && policy.name === dayAccount.name)) errors.push(`dayAttempts.account: ${dayAccount.name} is not the account the active policy strategy trades (${policy ? policy.name : 'none'}): the runner keeps the attempt record of that account only`);
+    }
+  }
   if (r.overrides !== undefined && !(r.overrides && typeof r.overrides === 'object' && !Array.isArray(r.overrides))) errors.push('overrides: an object');
   const overrides = r.overrides || {};
   for (const k of OWNED) if (k in overrides) errors.push(`overrides.${k}: set by the replay driver (the run's own files)`);
@@ -283,7 +304,7 @@ function resolveReplay(raw, { baseDir = process.cwd(), env = process.env, home =
     runHome, runDir, workspace: path.join(runHome, 'workspace'), bars: path.join(runHome, 'bars'),
     brokerDir: path.join(runDir, 'broker'), clockFile: path.join(runDir, 'clock.json'), journal: path.join(runDir, 'broker', 'journal.jsonl'),
     autotrader: path.join(runDir, 'autotrader.json'), manifest: path.join(runDir, 'manifest.json'), stepsLog: path.join(runDir, 'steps.log'),
-    // A run with account states (or a combine): the balance each day (attempt) starts at (read by the replay broker), and what each day was given.
+    // A run with account states (or a combine, or day attempts): the balance each day (attempt) starts at (read by the replay broker), and what each day was given.
     balanceSchedule: path.join(runDir, 'broker', 'balance-schedule.json'), statesLog: path.join(runDir, 'account-states.jsonl'),
   };
   const pinnedResume = r.latency === undefined && startedPinned(paths.manifest);
@@ -350,7 +371,8 @@ function resolveReplay(raw, { baseDir = process.cwd(), env = process.env, home =
   }
   // The account whose limits the replay broker runs with: the run's own (prop, account states), else the policy
   // strategy's (the account a learning run trades for), else none.
-  const limitsAccount = propAccount || statesAccount || combineAccount || policyAccount(root, env);
+  const limitsAccount = propAccount || statesAccount || combineAccount || dayAccount || policyAccount(root, env);
+  const ownAccount = propAccount || statesAccount || combineAccount || dayAccount;
   return {
     runId: r.runId, broker: r.broker, start, end, everyNth, premarket: r.premarket !== false, endOfDay: r.endOfDay !== false,
     // A learning run unless declared otherwise (learning/run-gate.js): it lies in one window of the learning split.
@@ -383,7 +405,7 @@ function resolveReplay(raw, { baseDir = process.cwd(), env = process.env, home =
     stepWindows,
     // A combine replay's broker stops the day at the account's own daily loss limit, as the firm does (not the
     // server's default): the agents size from the room it reports. 0 (none) turns the server's limit off.
-    propDailyLoss: propAccount || statesAccount || combineAccount ? Number((propAccount || statesAccount || combineAccount).daily_loss_limit) || 0 : null,
+    propDailyLoss: ownAccount ? Number(ownAccount.daily_loss_limit) || 0 : null,
     // The account's limits the replay broker is run with (trading/accounts.js accountLimits), passed through the env names
     // of the broker's brokers.json `limits` (replayEnv), or null: a run with no account.
     limits: limitsAccount ? require('../trading/accounts').accountLimits(limitsAccount, cfg.symbols) : null,
@@ -391,6 +413,8 @@ function resolveReplay(raw, { baseDir = process.cwd(), env = process.env, home =
     accountStates,
     // Stage 2's continuous combine (replay/combine-run.js combineForRun): its account, maxSessions and attempts' windows, or null.
     combine: combineRun,
+    // The training loop's day attempts (replay/day-attempts.js): { account }, or null.
+    dayAttempts: dayCfg.dayAttempts && dayAccount ? { account: dayAccount.name } : null,
     brokerEnv, paths, derived, cfg, autotraderFile, root,
   };
 }
@@ -483,7 +507,7 @@ function replayEnv(base, run, { at }) {
   // entry names (`limits`); a limit the account states none for (a size) is not set.
   for (const [name, value] of Object.entries(limitsEnv(run, broker))) set(name, value);
   // The balance schedule is the driver's alone: set for a run with account states, never inherited by any other run.
-  if (run.accountStates || run.combine) set(run.brokerEnv.balanceSchedule, run.paths.balanceSchedule);
+  if (run.accountStates || run.combine || run.dayAttempts) set(run.brokerEnv.balanceSchedule, run.paths.balanceSchedule);
   else if (run.brokerEnv.balanceSchedule) delete env[run.brokerEnv.balanceSchedule];
   if (broker.replay === true) set(broker.journalEnv, run.paths.journal); // a live broker is refused by brokerErrors
   return env;
@@ -559,6 +583,7 @@ function configHash(run, base = process.env) {
     // The account states its days start from (the draw and its assignment): named only when there are some.
     ...statesPart(run),
     ...combinePart(run),
+    ...dayPart(run),
     ...adapterPart(run),
   };
   return crypto.createHash('sha256').update(JSON.stringify(body)).digest('hex');
@@ -570,6 +595,8 @@ const stepPart = run => (run.stepWindows ? { stepWindows: { kind: run.stepWindow
 const statesPart = run => (run.accountStates ? { accountStates: { hash: run.accountStates.hash, assignment: run.accountStates.assignment.hash } } : {});
 /** A run's continuous combine in its hashes: its account, attempt length and attempts' starts (named only when set). */
 const combinePart = run => (run.combine ? { combine: { account: run.combine.account, maxSessions: run.combine.maxSessions, attempts: run.combine.attempts.map(a => a.start) } } : {});
+/** A run's day attempts in its hashes: their account (named only when set, so every other run keeps its hash). */
+const dayPart = run => (run.dayAttempts ? { dayAttempts: { account: run.dayAttempts.account } } : {});
 /**
  * The fine-tuning adapter the runner config declares (learning/adapter.js adapterTag: its manifest's digest), named only
  * when one is, so a base run keeps its hash: a retrained adapter at the same path is another run and another setup.
@@ -606,6 +633,7 @@ function setupHash(run, { code = true } = {}) {
     // The account states its days start from: named only when there are some.
     ...statesPart(run),
     ...combinePart(run),
+    ...dayPart(run),
     ...adapterPart(run),
   };
   return crypto.createHash('sha256').update(JSON.stringify(body)).digest('hex');
@@ -629,4 +657,4 @@ function harnessCommand(run, base = process.env) {
   return buildCommand(run.cfg, '<prompt>', run.root || '', replayEnv(base, run, { at: run.start }));
 }
 
-module.exports = { resolveReplay, isolationErrors, replayEnv, limitsEnv, serverEnv, brokerErrors, configHash, runSettings, setupHash, setupFixed, setupBase, lookArm, harnessCommand, liveBrokerVars, DISABLED, BROKER_ENV, STRIPPED, GATE_ENV, PINNED };
+module.exports = { resolveReplay, policyAccount, isolationErrors, replayEnv, limitsEnv, serverEnv, brokerErrors, configHash, runSettings, setupHash, setupFixed, setupBase, lookArm, harnessCommand, liveBrokerVars, DISABLED, BROKER_ENV, STRIPPED, GATE_ENV, PINNED };
