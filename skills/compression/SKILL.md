@@ -19,7 +19,7 @@ hypotheses (config/analysis.json `compression`); a missing field is `unknown`.
 
 - `inside`: a candle inside its mother (`candle-reading`, `insideStack`
   in a row); the box is the mother's range. A displacement mother is a
-  pole, never a box: then the narrow candle's own range.
+  pole, never a box; not narrow (below): the NR7 candle's own range.
 - `nr7`: the narrowest range of the last 7 back-to-back candles (ties
   count); the box is its range.
 - Narrow: at most 2 x ATR wide, back-to-back candles, none a displacement.
@@ -52,8 +52,8 @@ break against the HTF bias (the trend rule's); a small candle; late.
 **Flag, pennant**: a displacement pole, then a narrow candle (flag) or an
 inside stack (pennant), the break the pole's way (`withPole`).
 
-**Evidence** (practice-train halves, 3m, with the HTF, n 452/406): +0.26R
-and +0.18R net, 90% intervals above zero; against it -0.05R/+0.09R; a pole
+**Evidence** (practice-train halves, 3m, with the HTF, n 466/420): +0.26R
+and +0.19R net, 90% intervals above zero; against it -0.04R/+0.11R; a pole
 added nothing measured. A census, not a finding: the count still decides.
 
 ## Examples

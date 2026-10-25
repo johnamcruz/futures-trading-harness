@@ -6,9 +6,9 @@
  * compositions the skill teaches, never their own facts. The classic narrow-range family:
  *
  *   box          a candle that is inside (candle-facts.js insideStacks, the candle-reading skill's inside rule: in a
- *                stack inside one mother candle that is no displacement candle) or NR7 (its range the narrowest of the
- *                last 7 back-to-back completed candles, ties included: `nr`, the config's lengths). An inside candle's
- *                box is its mother's range, an NR candle's its own. `flavor`: the box's ('inside' when the mother's,
+ *                stack inside one mother candle) or NR7 (its range the narrowest of the last 7 back-to-back completed
+ *                candles, ties included: `nr`, the config's lengths). An inside candle's box is its mother's range; when
+ *                that box is not narrow (below; a displacement mother is a pole, never a box) an NR candle's is its own. `flavor`: the box's ('inside' when the mother's,
  *                else 'nr7'); `flavors` all that hold; `insideStack` the stack's count. ATR is the timeframe's ATR(14)
  *                as of the candle before the box (the mother, for an inside stack). A box is narrow: no wider than
  *                maxWidthAtr x ATR, its candles back to back, none a displacement; one of zero width is none.
@@ -75,20 +75,25 @@ function boxAt(cs, k, series, P = PARAMS) {
   const { atr, stacks, nr } = series;
   const disp = q => q >= 1 && patternsOf(cs[q], cs[q - 1], atr[q - 1]).includes('displacement');
   const st = stacks[k] || {};
-  // Inside a mother candle that is no displacement: the pole is the move before the box, never the box itself (a narrow
-  // candle inside a pole is judged by its own range, as an NR candle).
-  const inside = Boolean(st.insideStack) && !disp(k - st.insideStack);
+  // Narrow: no wider than maxWidthAtr x ATR (as of the candle before it), every candle back to back (no feed gap,
+  // weekend or daily break inside it), and none of its candles a displacement (the move, never the rest).
+  const narrow = from => {
+    const ref = atr[from - 1];
+    const w = cs[from].h - cs[from].l;
+    if (!(from >= 1 && ref > 0 && w > 0 && w <= P.maxWidthAtr * ref)) return false;
+    for (let q = from; q <= k; q += 1) if ((q > from && !adjacent(cs[q - 1], cs[q])) || disp(q)) return false;
+    return true;
+  };
+  // The inside stack's mother's range when narrow; else (a displacement mother, the pole; or one too wide, across a gap
+  // or holding a displacement) the candle's own range when it is an NR candle and narrow.
+  const inside = Boolean(st.insideStack) && narrow(k - st.insideStack);
+  const nrs = nr[k].map(n => `nr${n}`);
+  if (!inside && !(nrs.length && narrow(k))) return null;
   const s = inside ? k - st.insideStack : k;
-  const flavors = [...(inside ? ['inside'] : []), ...nr[k].map(n => `nr${n}`)];
-  if (!flavors.length || s < 1) return null;
+  const flavors = inside ? ['inside', ...nrs] : nrs;
   const ref = atr[s - 1];
   const high = cs[s].h;
   const low = cs[s].l;
-  if (!(ref > 0) || !(high > low)) return null;
-  // Narrow: no wider than maxWidthAtr x ATR, every candle back to back (no feed gap, weekend or daily break inside it),
-  // and none of its candles a displacement (the move, never the rest).
-  if (high - low > P.maxWidthAtr * ref) return null;
-  for (let q = s; q <= k; q += 1) if ((q > s && !adjacent(cs[q - 1], cs[q])) || disp(q)) return null;
   // The pole: a displacement candle among the poleBars just before the box, back to back with it.
   let pole = null;
   for (let q = s - 1; q >= Math.max(1, s - P.poleBars) && !pole; q -= 1) {

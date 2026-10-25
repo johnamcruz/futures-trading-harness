@@ -116,10 +116,13 @@ test('compression: a poke, a small candle, a wick, a fakeout, price back inside 
 });
 
 test('compression: a box is narrow: no wider than maxWidthAtr x ATR, back to back, no displacement in it', () => {
-  // A mother 25 wide (2.5 ATR) with an inside candle: too wide for a box (maxWidthAtr 2); with 3 it is one.
+  // A mother 25 wide (2.5 ATR) with an inside candle: too wide for an inside box (maxWidthAtr 2), so the NR7 candle's own
+  // range (97-103); with 3 the mother's is the box.
   const wide = candles([...PRE, [100, 112.5, 87.5, 101], [101, 103, 97, 102]]);
-  assert.strictEqual(last(wide).state, 'neither');
-  assert.strictEqual(last(wide, { params: { ...P, maxWidthAtr: 3 } }).box.flavor, 'inside');
+  assert.deepStrictEqual([last(wide).box.flavor, last(wide).box.high, last(wide).box.low], ['nr7', 103, 97]);
+  assert.deepStrictEqual([last(wide, { params: { ...P, maxWidthAtr: 3 } }).box.flavor, last(wide, { params: { ...P, maxWidthAtr: 3 } }).box.high], ['inside', 112.5]);
+  // An NR7 candle wider than maxWidthAtr x ATR is no box either (here 0.6 ATR: a cap of 0.5 refuses it).
+  assert.strictEqual(last(wide, { params: { ...P, maxWidthAtr: 0.5 } }).state, 'neither');
   // An inside candle after a feed gap: the stack spans the gap, so no box.
   const gap = candles([...PRE, [101, 103, 97, 102]], { gapAt: 15 });
   assert.strictEqual(last(gap).state, 'neither');
@@ -128,6 +131,12 @@ test('compression: a box is narrow: no wider than maxWidthAtr x ATR, back to bac
   const disp = candles([...quiet, [100, 104, 96, 100], [96.5, 104, 96.5, 103.5]]);
   assert.ok(require('../../scripts/lib/trading/candle-facts').patternsOf({ o: 96.5, h: 104, l: 96.5, c: 103.5 }, { o: 100, h: 104, l: 96, c: 100 }, 4.5).includes('displacement'));
   assert.strictEqual(last(disp).state, 'neither');
+  // When the inside box isn't narrow, an NR candle falls back to its own range: inside a too-wide mother, and (a flag)
+  // after a displacement inside the mother, with that displacement as its pole.
+  const inWide = last(candles([...PRE, [100, 112.5, 87.5, 101], [101, 102, 100, 101.5]]));
+  assert.deepStrictEqual([inWide.state, inWide.box.flavor, inWide.box.high, inWide.box.low], ['compressing', 'nr7', 102, 100]);
+  const flag = last(candles([...quiet, [100, 104, 96, 100], [96.5, 104, 96.5, 103.5], [103, 103.5, 102.5, 103]]));
+  assert.deepStrictEqual([flag.state, flag.box.flavor, flag.box.high, flag.box.low, flag.box.pole && flag.box.pole.dir], ['compressing', 'nr7', 103.5, 102.5, 'up']);
 });
 
 test('compression: a close back inside after the expansion is a fakeout even when price is beyond again', () => {

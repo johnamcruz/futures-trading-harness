@@ -183,7 +183,7 @@ const PINS = {
   ],
   compression: [
     // The one definition (compression.js; the numbers are the config's: a test below holds them equal).
-    '`inside`: a candle inside its mother (`candle-reading`, `insideStack` in a row); the box is the mother\'s range. A displacement mother is a pole, never a box: then the narrow candle\'s own range.',
+    '`inside`: a candle inside its mother (`candle-reading`, `insideStack` in a row); the box is the mother\'s range. A displacement mother is a pole, never a box; not narrow (below): the NR7 candle\'s own range.',
     '`nr7`: the narrowest range of the last 7 back-to-back candles (ties count); the box is its range.',
     'Narrow: at most 2 x ATR wide, back-to-back candles, none a displacement.',
     '`pole`: a displacement candle (`candle-reading`) in the 3 candles just before the box, outside it.',
