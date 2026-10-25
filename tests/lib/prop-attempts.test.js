@@ -244,6 +244,22 @@ test('exitAs, target_then_trail: the stop holds to the trade\'s own target, then
   for (const bad of [ttt({ trail_by: 'atr' }), ttt({ lock_giveback_r: 0 }), ttt({ trail_by: 'structure', swing_tf: '4h' })]) { const x = pathed(run); assert.strictEqual(at.exitAs(x, bad, 1), x, JSON.stringify(bad)); }
 });
 
+test('exitAs, target_then_trail with the ratchet: on, the lock follows the best R less the giveback; off (or left out), as before; anything else kept as recorded', () => {
+  const ttt = (over = {}) => ({ mode: 'target_then_trail', lock_giveback_r: 0.5, trail_by: 'r', trail_r: 1, ...over });
+  // 1R = 20 ticks, its target 60 (3R). Bar 2 reaches 70 (3.5R): on, the lock is 3R (60), through the bar's low (52): out at its close, 65.
+  const run = [[0, -5, 30, 25], [52, 52, 70, 65], [82, 82, 100, 95], [95, 70, 96, 72]];
+  assert.strictEqual(at.exitAs(pathed(run), ttt({ ratchet: 'on' }), 1).moveTicks, 65);
+  // Off, stated or left out: the lock at 2.5R (50), the R trail to 80, out at 79.
+  for (const off of [ttt(), ttt({ ratchet: 'off' })]) assert.strictEqual(at.exitAs(pathed(run), off, 1).moveTicks, 79, JSON.stringify(off));
+  // A loose 3R trail, so past the target only the lock moves the stop. Armed at 62 (3.1R): on, the lock at 2.6R (52);
+  // at 100 (5R) it is 4.5R (90), through that bar's low (82): out at its close, 95. Off: the 2.5R lock (50) holds, out
+  // at the path's last close, 88.
+  const loose = [[0, -5, 30, 25], [62, 62, 62, 62], [82, 82, 100, 95], [95, 85, 96, 88]];
+  assert.strictEqual(at.exitAs(pathed(loose), ttt({ trail_r: 3, ratchet: 'on' }), 1).moveTicks, 95);
+  assert.strictEqual(at.exitAs(pathed(loose), ttt({ trail_r: 3 }), 1).moveTicks, 88);
+  for (const bad of [true, 'yes', 1]) { const x = pathed(run); assert.strictEqual(at.exitAs(x, ttt({ ratchet: bad }), 1), x, String(bad)); }
+});
+
 test('exitAs: a re-exited trade\'s exit time is its exit bar\'s close (pathEnds), else null; the gate\'s cooldown reads it', () => {
   const ends = ['14:05', '14:10', '14:15', '14:20'].map(x => Date.parse(`2022-03-01T${x}:00.000Z`));
   const up = [[0, -5, 30, 25], [25, 20, 50, 45], [45, 30, 70, 35], [35, -30, 40, -25]];

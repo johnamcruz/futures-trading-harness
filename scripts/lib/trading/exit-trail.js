@@ -4,7 +4,8 @@
  * The policy's target-then-trail exit (exit mode `target_then_trail`, the account's rulebook), the same rule live
  * (runner.js), in the backtester's broker (backtest/sim-broker.js) and in the attempt simulator (prop/attempts.js
  * exitAs): the trade holds its original stop until its own target is reached; from there it is not closed at the
- * target but trailed, the stop never below the lock (the target's R less `lockGivebackR`, never below the entry), and
+ * target but trailed, the stop never below the lock (the target's R less `lockGivebackR`, never below the entry; with
+ * the rulebook's `ratchet: on`, the best R reached, at least the target's, less it: a lock that rises with the peak), and
  * behind either the best price by `trailR` (trail_by r) or the last confirmed swing on `swingMinutes` candles (trail_by
  * structure; with no swing confirmed yet, the R trail: the fallback). The stop only ratchets toward the market, snapped
  * to the tick on the safe side; a bar whose adverse extreme already went through the new stop closes the trade at its
@@ -58,7 +59,7 @@ function swingSeries(bars, minutes, k = 2) {
 /**
  * One closed bar of a trade after its fill under a target-then-trail plan.
  * trade { sign (1 long, -1 short), entry, risk (price, 1R), stop, peakR, armed, target (price, or null: never arms) }
- * bar { h, l, c }; plan.afterTarget { lockGivebackR, trailBy ('r' | 'structure'), trailR }; swing: the structure
+ * bar { h, l, c }; plan.afterTarget { lockGivebackR, trailBy ('r' | 'structure'), trailR, ratchet (true: on) }; swing: the structure
  * level on the trade's side at this bar's close (a long's swing low, a short's swing high), or null.
  * Returns { stop, peakR, armed, close: null | { price, reason: 'trail' }, fellBack (structure with no swing: the R trail) }.
  */
@@ -71,7 +72,10 @@ function afterTargetStep(trade, bar, plan, tick, swing = null) {
   const armed = Boolean(trade.armed) || (target !== null && sign * (fav - target) >= 0);
   if (!armed || !a) return { stop: trade.stop, peakR, armed, close: null, fellBack: false };
   const targetR = (sign * (target - entry)) / risk;
-  const lock = entry + sign * Math.max(0, targetR - a.lockGivebackR) * risk;
+  // The lock: the target's R less lockGivebackR. With the ratchet on (opt in), the best R reached (closed bars'
+  // extremes, the peak the R trail reads) less it, so it rises with the peak. Never below the entry.
+  const lockR = a.ratchet === true ? Math.max(targetR, peakR) : targetR;
+  const lock = entry + sign * Math.max(0, lockR - a.lockGivebackR) * risk;
   const fellBack = a.trailBy === 'structure' && !Number.isFinite(swing);
   const trail = a.trailBy === 'structure' && !fellBack ? swing - sign * tick : entry + sign * (peakR - a.trailR) * risk;
   const best = sign > 0 ? Math.max(lock, trail) : Math.min(lock, trail);

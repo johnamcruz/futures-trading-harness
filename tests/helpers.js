@@ -68,7 +68,7 @@ function withComponents(doc, components = ['fx_break', 'fx_cross']) {
  */
 const FLOW_POLICY = Object.freeze({
   sizing: Object.freeze({ cushion_frac: 0.2, min_size_guard: 1.5, cap_usd: 'off', drawdown_halve_usd: 'off', stop_slippage_ticks: 1, clock_k: 'off', r_per_session: 0.3, min_contracts: 1, floor_stretch_max_usd: 'off' }),
-  exit: Object.freeze({ mode: 'trail', trail_activate_r: 2, trail_giveback_r: 0.5, lock_giveback_r: 'off', trail_by: 'off', trail_r: 'off', swing_tf: 'off' }),
+  exit: Object.freeze({ mode: 'trail', trail_activate_r: 2, trail_giveback_r: 0.5, lock_giveback_r: 'off', trail_by: 'off', trail_r: 'off', swing_tf: 'off', ratchet: 'off' }),
 });
 
 /**
@@ -242,7 +242,7 @@ function withExitBlock(text, exit) {
 }
 
 /** Every exit key at `off` but the ones given: an exit block for withExitBlock. */
-const exitBlock = (over = {}) => ({ mode: 'target', trail_activate_r: 'off', trail_giveback_r: 'off', lock_giveback_r: 'off', trail_by: 'off', trail_r: 'off', swing_tf: 'off', ...over });
+const exitBlock = (over = {}) => ({ mode: 'target', trail_activate_r: 'off', trail_giveback_r: 'off', lock_giveback_r: 'off', trail_by: 'off', trail_r: 'off', swing_tf: 'off', ratchet: 'off', ...over });
 
 /**
  * A plugin root for tests: the shipped strategies (linked) and a copy of the shipped accounts with their rulebooks,

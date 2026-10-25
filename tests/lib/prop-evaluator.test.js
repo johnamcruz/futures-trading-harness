@@ -314,7 +314,11 @@ for (const [label, bars] of [['plain bars', BARS], ['gapped bars', GAPPY]]) test
   const own = strategy({ exit: { target_r: 3 } });
   const from = Date.parse('2022-01-10T00:00:00Z');
   const modes = [{ mode: 'target' }, { mode: 'trail', trail_activate_r: 2, trail_giveback_r: 0.5 }, { mode: 'target', trail_activate_r: 1.5, trail_giveback_r: 1 },
-    { mode: 'target_then_trail', lock_giveback_r: 2, trail_by: 'r', trail_r: 1 }, { mode: 'target_then_trail', lock_giveback_r: 2, trail_by: 'structure', trail_r: 1, swing_tf: '15m' }];
+    { mode: 'target_then_trail', lock_giveback_r: 2, trail_by: 'r', trail_r: 1 }, { mode: 'target_then_trail', lock_giveback_r: 2, trail_by: 'structure', trail_r: 1, swing_tf: '15m' },
+    // The ratchet on and binding (a giveback under the R trail's): the engine and exitAs give back the same at most 0.5R /
+    // 1.5R from the best; and off stated: the same trades as the key left out (today's exit).
+    { mode: 'target_then_trail', lock_giveback_r: 0.5, trail_by: 'r', trail_r: 1, ratchet: 'on' }, { mode: 'target_then_trail', lock_giveback_r: 1.5, trail_by: 'structure', trail_r: 3, swing_tf: '15m', ratchet: 'on' },
+    { mode: 'target_then_trail', lock_giveback_r: 2, trail_by: 'r', trail_r: 1, ratchet: 'off' }, { mode: 'target_then_trail', lock_giveback_r: 0.5, trail_by: 'r', trail_r: 1 }];
   const streams = modes.map(exit => tradeStream({ markets: [market(bars)], strategies: [own], prop: { strategy: { ...own, signal: 'policy', exit }, components: ['trendy'], contracts: 'micro' }, engine, from, facts: false }));
   modes.forEach((exit, m) => {
     const s = streams[m];
@@ -336,6 +340,10 @@ for (const [label, bars] of [['plain bars', BARS], ['gapped bars', GAPPY]]) test
     if (exit.mode === 'target' && !exit.trail_activate_r) assert.ok(done.some(t => t.reason === 'target'), 'some trades reach their own target');
   });
   assert.notDeepStrictEqual(streams[3].trades.map(t => t.moveTicks), streams[4].trades.map(t => t.moveTicks), 'the structure trail is not the R trail');
+  // The ratchet reaches the engine: on the gapped bars some exits move against the same exit off (on the plain bars'
+  // smooth runs every trade exits alike either way).
+  if (label.startsWith('gapped')) assert.notDeepStrictEqual(streams[5].trades.map(t => t.moveTicks), streams[8].trades.map(t => t.moveTicks), 'the ratchet on moves exits (the same exit, off)');
+  assert.deepStrictEqual(streams[7].trades, streams[3].trades, 'ratchet off: the trades of the exit without the key');
   // Re-exited across modes: the target run's trades under the trail mode exit as the trail run's same trades did.
   const byEntry = new Map(streams[1].trades.map(t => [t.entryTime, t]));
   const shared = streams[0].trades.filter(t => t.reason !== 'end' && byEntry.has(t.entryTime) && byEntry.get(t.entryTime).reason !== 'end');

@@ -124,10 +124,17 @@ test('exits, policies and the enforced classification: never loosened or changed
   // Any valid change of the exit (its mode, its lock, its trail) is refused: the exit is searched, never a proposal's.
   const block = line(t, / {4}exit:\n(?: {6}.*\n)+/);
   for (const exit of [exitBlock({ mode: 'trail', trail_activate_r: 9, trail_giveback_r: 1 }), exitBlock({ mode: 'target' }),
-    exitBlock({ mode: 'target_then_trail', lock_giveback_r: 0.25, trail_by: 'r', trail_r: 1 })]) {
+    exitBlock({ mode: 'target_then_trail', lock_giveback_r: 0.25, trail_by: 'r', trail_r: 1 }),
+    exitBlock({ mode: 'target_then_trail', lock_giveback_r: 1.5, trail_by: 'r', trail_r: 1, ratchet: 'on' })]) {
     const now = withExitBlock(block, exit);
     assert.notStrictEqual(now, block);
     assert.match(errs(t, block, now), /policies\.p1\.exit: changed/, JSON.stringify(exit));
+  }
+  // The ratchet, either way (on keeps more of a winner, off more of a runner: neither is a limit's tightening), is an
+  // exit change: a person's, never a proposal's.
+  const ttt = r => ({ mode: 'target_then_trail', lock_giveback_r: 1.5, trail_by: 'structure', trail_r: 1, swing_tf: '15m', ratchet: r });
+  for (const [was, now] of [['off', 'on'], ['on', 'off']]) {
+    assert.match(G.loosenings({ policies: { p: { sizing: {}, exit: ttt(was), multipliers: [] } } }, { policies: { p: { sizing: {}, exit: ttt(now), multipliers: [] } } }).join(), /policies\.p\.exit: changed/, `${was} -> ${now}`);
   }
   assert.match(errs(t, '  p1:\n', '  p2:\n'), /policies\.p2: added|policies\.p1: removed/);
   assert.match(errs(t, 'enforced: [daily_loss_soft, ', 'enforced: ['), /daily_loss_soft: classified neither|moved out of enforced/);

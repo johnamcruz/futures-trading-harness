@@ -1,7 +1,7 @@
 'use strict';
 
 // The target-then-trail exit (scripts/lib/trading/exit-trail.js): the swings a structure trail stands behind, causal;
-// the per-bar rule (the hold to the target, the lock, the R and swing trails, the fallback, the ratchet); and the live
+// the per-bar rule (the hold to the target, the lock, the R and swing trails, the fallback, the ratchet, on and off); and the live
 // target the runner trails past.
 
 const test = require('node:test');
@@ -95,6 +95,97 @@ test('afterTargetStep: the structure trail stands a tick behind the last confirm
   const short = { sign: -1, entry: 100, risk: 10, stop: 85, peakR: 2.2, armed: true, target: 80 };
   assert.strictEqual(afterTargetStep(short, { h: 75, l: 70, c: 72 }, s, 0.25, 76).stop, 76.25);
   assert.strictEqual(afterTargetStep({ ...short, stop: 110, armed: false, peakR: 0 }, { h: 84, l: 79, c: 81 }, AFTER(), 0.25).stop, 85, 'a short\'s lock: 1.5R under the entry');
+});
+
+// The 2026-10-24 replay's MNQ short: entry 14530.5, 1R = 24.5 points (98 ticks), its own target at 2R (14481.5). A
+// 15m swing high far above (14525: its stop a tick over, 14525.25) so the swing trail never binds and the ratchet shows.
+const SHORT = (over = {}) => ({ sign: -1, entry: 14530.5, risk: 24.5, stop: 14555, peakR: 0, armed: false, target: 14481.5, ...over });
+// The rulebook's giveback (1.5R), the ratchet on.
+const ON = (over = {}) => AFTER({ lockGivebackR: 1.5, ratchet: true, ...over });
+const RATCHET = ON({ trailBy: 'structure', swingMinutes: 15 });
+const walkOf = (start, bars, plan, swing) => {
+  let t = start;
+  return bars.map(bar => { const r = afterTargetStep(t, bar, plan, 0.25, swing); t = { ...t, stop: r.stop, peakR: r.peakR, armed: r.armed }; return r; });
+};
+
+test('afterTargetStep, the ratchet: past the target the stop gives back at most the giveback (1.5R) from the best R reached', () => {
+  // At the target (2R): +0.5R, 14530.5 - 12.25 = 14518.25 (49 ticks, $24.50 a micro), as before the ratchet.
+  const [at] = walkOf(SHORT(), [{ h: 14490, l: 14481.5, c: 14485 }], RATCHET, 14525);
+  assert.deepStrictEqual([at.stop, at.armed, at.close], [14518.25, true, null]);
+  // On to 4.7R (14415.25: 115.25 points, 461 ticks): the stop at 4.7R - 1.5R = +3.2R, 78.5 points (314 ticks, $157 a
+  // micro) under the entry: 14452. The replay's trade closed at +2.29R; this stop keeps +3.2R.
+  const run = walkOf(SHORT(), [{ h: 14490, l: 14481.5, c: 14485 }, { h: 14440, l: 14415.25, c: 14420 }], RATCHET, 14525);
+  assert.deepStrictEqual(run.map(r => r.stop), [14518.25, 14452]);
+  assert.ok(Math.abs((14530.5 - run[1].stop) / 24.5 - (115.25 / 24.5 - 1.5)) < 1e-9, 'best R less 1.5R, exactly');
+  // At 5R (14408: 122.5 points): +3.5R, 85.75 points (343 ticks) under the entry: 14444.75.
+  assert.deepStrictEqual(walkOf(SHORT(), [{ h: 14490, l: 14481.5, c: 14485 }, { h: 14420, l: 14408, c: 14412 }], RATCHET, 14525).map(r => r.stop), [14518.25, 14444.75]);
+  // A pullback from 3R (14457) to 2R (14481.5) keeps +1.5R (36.75 points: 14493.75) and stays open.
+  const pb = walkOf(SHORT(), [{ h: 14490, l: 14481.5, c: 14485 }, { h: 14470, l: 14457, c: 14460 }, { h: 14481.5, l: 14465, c: 14480 }], RATCHET, 14525);
+  assert.deepStrictEqual(pb.map(r => [r.stop, r.close]), [[14518.25, null], [14493.75, null], [14493.75, null]]);
+  // A long mirrors it: entry 100, 1R 10, target 120; at 2R +0.5R (105), at 4.7R +3.2R (132), at 5R +3.5R (135); a
+  // pullback from 3R to 2R keeps +1.5R (115).
+  const L = ON({ trailBy: 'structure', swingMinutes: 15 });
+  assert.deepStrictEqual(walkOf(LONG(), [{ h: 120, l: 115, c: 119 }, { h: 147, l: 135, c: 145 }], L, 101).map(r => r.stop), [105, 132]);
+  assert.deepStrictEqual(walkOf(LONG(), [{ h: 120, l: 115, c: 119 }, { h: 150, l: 140, c: 148 }], L, 101).map(r => r.stop), [105, 135]);
+  assert.deepStrictEqual(walkOf(LONG(), [{ h: 120, l: 115, c: 119 }, { h: 130, l: 125, c: 128 }, { h: 121, l: 120, c: 120.5 }], L, 101).map(r => [r.stop, r.close]), [[105, null], [115, null], [115, null]]);
+  // A swing nearer the market than the ratchet still wins (the farther in profit of the two): a long's swing at 140.
+  assert.strictEqual(walkOf(LONG(), [{ h: 120, l: 115, c: 119 }, { h: 147, l: 141, c: 145 }], L, 140)[1].stop, 139.75);
+  // Under the target the ratchet is not armed: a 1.9R run moves nothing.
+  assert.strictEqual(walkOf(SHORT(), [{ h: 14500, l: 14484, c: 14490 }], RATCHET, 14525)[0].stop, 14555);
+});
+
+test('afterTargetStep, the ratchet: already through the price on the bar that set it, out at that bar\'s close (as the swing and R trails)', () => {
+  // A bar spiking to 4.7R (14415.25) and closing back at 14457 (3R): the ratchet (14452) is through its high (14460).
+  const [, spike] = walkOf(SHORT(), [{ h: 14490, l: 14481.5, c: 14485 }, { h: 14460, l: 14415.25, c: 14457 }], RATCHET, 14525);
+  assert.deepStrictEqual([spike.stop, spike.close], [14452, { price: 14457, reason: 'trail' }]);
+});
+
+test('afterTargetStep, the ratchet: on a random walk the stop never loosens, never gives back more than the giveback from the best, and stays on its side', () => {
+  const r = rng(11);
+  for (let n = 0; n < 200; n += 1) {
+    const sign = r() < 0.5 ? 1 : -1;
+    const entry = 15000;
+    const risk = 0.25 * (8 + Math.floor(r() * 120));
+    const g = [0.5, 1, 1.2, 1.5, 2][Math.floor(r() * 5)];
+    const plan = ON({ lockGivebackR: g, trailR: 0.5 + r() * 4, trailBy: r() < 0.5 ? 'r' : 'structure', swingMinutes: 15 });
+    let t = { sign, entry, risk, stop: entry - sign * risk, peakR: 0, armed: false, target: entry + sign * 2 * risk };
+    let px = entry;
+    for (let k = 0; k < 80; k += 1) {
+      const o = px;
+      const c = Math.round((px + sign * (r() - 0.35) * risk * 0.8) * 4) / 4;
+      const bar = { h: Math.max(o, c) + 0.25 * Math.floor(r() * 8), l: Math.min(o, c) - 0.25 * Math.floor(r() * 8), c };
+      const swing = r() < 0.3 ? null : Math.round((c - sign * r() * risk * 3) * 4) / 4;
+      const s = afterTargetStep(t, bar, plan, 0.25, swing);
+      assert.ok(sign * (s.stop - t.stop) >= 0, 'never loosened');
+      if (s.armed) {
+        const floor = entry + sign * Math.max(0, s.peakR - g) * risk;
+        assert.ok(sign * (s.stop - floor) >= -0.25 + 1e-9, `at least best R less ${g}R, to the tick: ${s.stop} vs ${floor}`);
+        assert.ok(Math.abs(s.stop * 4 - Math.round(s.stop * 4)) < 1e-9, 'on the tick');
+      }
+      if (!s.close) assert.ok(sign > 0 ? bar.l > s.stop || s.stop === t.stop : bar.h < s.stop || s.stop === t.stop, 'a stop it moved is on its side of the bar, else the bar closed it');
+      t = { ...t, stop: s.stop, peakR: s.peakR, armed: s.armed };
+      if (s.close || (sign > 0 ? bar.l <= t.stop : bar.h >= t.stop)) break;
+      px = c;
+    }
+  }
+});
+
+test('afterTargetStep, the ratchet off (the rulebook\'s default): the lock stays at the target\'s R less the giveback, as before', () => {
+  // The same 4.7R short: off, the stop locks once at +0.5R (14518.25) and only the trail moves it; on, +3.2R (14452).
+  const bars = [{ h: 14490, l: 14481.5, c: 14485 }, { h: 14440, l: 14415.25, c: 14420 }];
+  const off = AFTER({ lockGivebackR: 1.5, trailBy: 'structure', swingMinutes: 15 });
+  assert.deepStrictEqual(walkOf(SHORT(), bars, off, 14525).map(r => r.stop), [14518.25, 14518.25]);
+  assert.deepStrictEqual(walkOf(SHORT(), bars, { afterTarget: { ...off.afterTarget, ratchet: false } }, 14525).map(r => r.stop), [14518.25, 14518.25]);
+  assert.deepStrictEqual(walkOf(SHORT(), bars, RATCHET, 14525).map(r => r.stop), [14518.25, 14452]);
+  // Only true turns it on (the plan's flag, from the rulebook's `on`): anything else is off.
+  for (const v of ['on', 1, 'true']) assert.deepStrictEqual(walkOf(SHORT(), bars, { afterTarget: { ...off.afterTarget, ratchet: v } }, 14525).map(r => r.stop), [14518.25, 14518.25], String(v));
+  // On a random walk, off is step for step the plan without the key.
+  const r = rng(5);
+  for (let n = 0; n < 50; n += 1) {
+    const bar = () => { const c = 14400 + Math.round(r() * 400) / 4 * 1; return { h: c + 2, l: c - 2, c }; };
+    const seq = Array.from({ length: 40 }, bar);
+    assert.deepStrictEqual(walkOf(SHORT(), seq, off, null), walkOf(SHORT(), seq, { afterTarget: { ...off.afterTarget, ratchet: false } }, null));
+  }
 });
 
 test('liveTarget: the entry\'s own target from its bracket, and only the resting limit at it is cancelled (never a stop)', () => {
