@@ -40,7 +40,9 @@
  *
  *   factsLines(text)                    the FACTS items stated (every FACTS line), or null when none
  *   withoutFacts(text)                  the text without its FACTS lines
- *   factsBlock(text)                    its first FACTS line as written, with the item lines (bullets) right after it, or null
+ *   factsFrom(text)                     the text from its first FACTS line to its end, as written, or null
+ *   otherSymbols(text, root, symbols)   the cycle symbols (not the root's family) a report names when it doesn't name
+ *                                       the root's: the gate's one-symbol check ([] when none)
  *   dropFactsLabels(text)               the text without any FACTS line (its other lines as written)
  *   parseClaim(item)                    { type, text, side?, value, strategy? } (type 'unknown' when no form fits)
  *   checkClaim(claim, briefing)         the claim with check: true | false | 'unchecked' and fact (what the briefing says)
@@ -147,16 +149,14 @@ const withoutFacts = text => factsParts(text).rest.join('\n').trim();
 
 const linesOf = text => String(text || '').replace(/\r\n|[\r\u2028\u2029\u0085]/g, '\n').split('\n');
 /**
- * The first FACTS line as written and the item lines (bullets) right after it, trimmed, or null when there is none:
- * the facts a report stated, carried whole when the runner composes phase 2's decisive record (phase2-restate.js).
+ * The text from its first FACTS line to its end, as written, trimmed, or null when there is none: every line the gate's
+ * reading (factsParts) takes as the FACTS block, carried whole when the runner composes phase 2's decisive record
+ * (phase2-restate.js), so the gate checks the same items.
  */
-function factsBlock(text) {
+function factsFrom(text) {
   const lines = linesOf(text);
   const at = lines.findIndex(l => FACTS_LABEL.test(toAscii(l)));
-  if (at < 0) return null;
-  const out = [lines[at]];
-  for (let i = at + 1; i < lines.length && BULLET.test(lines[i]) && lines[i].replace(BULLET, '').trim(); i += 1) out.push(lines[i]);
-  return out.join('\n').trim();
+  return at < 0 ? null : lines.slice(at).join('\n').trim();
 }
 
 /** The text without any FACTS line (every other line as written), trimmed. */
@@ -355,6 +355,11 @@ function briefingFor(home, root, { cycleBar = null, now = new Date() } = {}) {
 const word = x => String(x).replace(/[^A-Za-z0-9]/g, '');
 /** Whether the text names the symbol (its root or its family's) as a word. */
 const names = (text, sym) => new RegExp(`\\b(?:${word(sym)}|${word(familyRoot(sym))})\\b`, 'i').test(String(text || ''));
+/** The cycle symbols (not the root's family) a report names, when it doesn't name the root's: about another plan. */
+function otherSymbols(text, root, symbols) {
+  const others = (Array.isArray(symbols) ? symbols : []).filter(k => k && familyRoot(k) !== familyRoot(root) && names(text, k));
+  return others.length && !names(text, root) ? others : [];
+}
 
 /**
  * The order gate's check of an autonomous entry: the phase-2 report that approved it (roles-ran approvedPhase2:
@@ -370,8 +375,8 @@ function gateRefusal({ report, home, root, cycleBars = null, now = new Date(), o
     const tail = 'The approval doesn\'t stand. This refused trade-executor call ends the round: report the block, naming the false fact, and end the cycle (trade-session step 6); the next entry needs risk-manager phase 2 to decide again from the briefing.';
     // One symbol per report (agents/risk-manager.md): a report naming another cycle symbol and not the order's is about
     // another plan, so its facts can't be this order's.
-    const others = Object.keys(isObj(cycleBars) ? cycleBars : {}).filter(k => familyRoot(k) !== familyRoot(root) && names(report.text, k));
-    if (others.length && !names(report.text, root)) return `The phase-2 report that approved this ${familyRoot(root)} entry names ${others.join(', ')}, not ${familyRoot(root)}: its facts can't be checked for this order (one symbol per report): no entry this cycle. ${tail}`;
+    const others = otherSymbols(report.text, root, Object.keys(isObj(cycleBars) ? cycleBars : {}));
+    if (others.length) return `The phase-2 report that approved this ${familyRoot(root)} entry names ${others.join(', ')}, not ${familyRoot(root)}: its facts can't be checked for this order (one symbol per report): no entry this cycle. ${tail}`;
     const cycleBar = (isObj(cycleBars) && cycleBars[familyRoot(root)]) || null;
     const got = briefingFor(home, root, { cycleBar, now });
     // The order's own setup: every room fact is about it (none named: no room fact can be matched).
@@ -438,4 +443,4 @@ function cycleFactChecks({ home, output, context = null, now = new Date() }) {
   }
 }
 
-module.exports = { MIN_CHECKED, VALUES, factsLines, withoutFacts, factsBlock, dropFactsLabels, parseClaim, checkClaim, checkFacts, renderFacts, briefingFor, gateRefusal, cycleFactChecks };
+module.exports = { MIN_CHECKED, VALUES, factsLines, withoutFacts, factsFrom, dropFactsLabels, otherSymbols, parseClaim, checkClaim, checkFacts, renderFacts, briefingFor, gateRefusal, cycleFactChecks };

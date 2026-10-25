@@ -379,24 +379,35 @@ head trader's run, before the cycle log; per role `config/runner.json`
    One restatement first (owner-approved 2026-10-24: never lose an approved
    setup to the reading; `trading/phase2-restate.js`): a report whose approving
    VERDICT line the reading still refuses (`approvalReadAsVeto`, or no size
-   `approvedSize` can read) and whose VERDICT line states a size (`verdictSize`)
-   is restated once, never for a plain veto, no approving VERDICT line, a failed
-   run or an approval that read fine. No harness here resumes a role's session,
-   so it is a fresh phase-2 run given its first report (`requests.js restate`:
-   what couldn't be read, in the report's words; the two lines `Size: <n>` and
-   its VERDICT line, or its VETO line). The answer is read by the same readers:
-   a veto is the cycle's veto; unreadable, or a failed run, leaves the first
-   report's outcome. Approved, its size is at most the first VERDICT line's,
-   and the role record gets the decisive record after the first report: the
-   answer, `Size: <that bound>` and the first report's FACTS block, read again
-   as one approval of exactly that size, so the gate's `roles-ran` and
-   `phase2-size` (the latest phase-2 call, the hook and the gateway alike) read
-   the bound. Its time is the entry's (the budget; a replay's charged clock),
-   and the late-entry check follows it. `config/runner.json`
-   `entry.phase2RestateRetries` (1; 0 turns it off; at most 1). The entry
-   record's `restated` ({ kind, why, ceiling, outcome, size }), the cycle log's
-   line, and the replay report's count of restatements by outcome (approved:
-   rescued). The order comes from
+   `approvedSize` can read) is restated once. Never a real veto (a VERDICT line
+   that refuses or says veto, beside an approving one or not:
+   `verdictLineRefuses`), no approving VERDICT line, a failed run, an approval
+   that read fine, or a report that stated no size (a Size line of 0, none,
+   n/a; no VERDICT size). The bound is every size the report stated, the
+   smallest (`restateCeiling`: the VERDICT size, each number-led Size line and
+   its cuts, each prose Size line's cuts; an unmade cut lowers nothing). No
+   harness here resumes a role's session, so it is a fresh phase-2 run given
+   its first report (`requests.js restate`: what couldn't be read, in the
+   report's words; the two lines `Size: <n>` and its VERDICT line, or its VETO
+   line). The answer is read by the same readers: a veto is the cycle's veto;
+   unreadable, or a failed run, leaves the first report's outcome. Approved,
+   its size is at most the bound, and the role record gets the decisive record
+   after the first report: the answer, `Size: <the bound>` and the first
+   report's FACTS block whole (from its first FACTS line to its end, its
+   VERDICT and Size lines out), read again as one approval of exactly that
+   size. Its facts (decided in review, 2026-10-24): the first report must have
+   one FACTS line, be about the order's symbol (no other cycle symbol named
+   without it), and the decisive record's fact items must equal the first
+   report's, item for item; the runner may move the block last (a report that
+   put FACTS before its VERDICT line), never drop, add or edit a fact. So the
+   gate's `roles-ran`, `phase2-facts` and `phase2-size` (the latest phase-2
+   call, the hook and the gateway alike) read the bound and the same facts.
+   The executor and the journal get a VERDICT line stating the bound. Its time
+   is the entry's (the budget; a replay's charged clock), and the late-entry
+   check follows it. `config/runner.json` `entry.phase2RestateRetries` (1; 0
+   turns it off; at most 1). The entry record's `restated` ({ kind, why,
+   ceiling, outcome, size }), the cycle log's line, and the replay report's
+   count of restatements by outcome (approved: rescued). The order comes from
    `order_plan`'s own operation (`harness-tools/order-plan.js` ->
    `trading/lifecycle-order.js composedOrder`; in a prop attempt the policy
    verdict it records), so its rationale and brackets are what

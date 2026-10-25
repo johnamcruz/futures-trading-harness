@@ -375,7 +375,7 @@ async function runEntry(deps, c) {
     if (first) times.set(role, first); // phase2Ms stays the first report's
     info.timing.restateMs = ran ? Math.max(0, ran.end - ran.start) : null;
     const text = res && typeof res.text === 'string' ? res.text : '';
-    let read = res && res.ok ? readRestatement(rev.text, text, due.ceiling) : { outcome: 'failed', why: res && res.timedOut ? 'timed out' : `the run failed${res && res.why ? ` (${res.why})` : ''}` };
+    let read = res && res.ok ? readRestatement(rev.text, text, due.ceiling, { root: c.symbol, symbols: ((c.context && Array.isArray(c.context.symbols)) ? c.context.symbols : []).map(x => x && x.symbol).filter(Boolean) }) : { outcome: 'failed', why: res && res.timedOut ? 'timed out' : `the run failed${res && res.why ? ` (${res.why})` : ''}` };
     if (ran) {
       try {
         RR.appendRoleRun(c.rolesFile, { role, ...ran, text: read.outcome === 'approved' ? read.text : text, lookups: Array.isArray(res.lookups) ? res.lookups.filter(x => typeof x === 'string') : [], ok: Boolean(res.ok && text.trim()) && (read.outcome === 'approved' || read.outcome === 'vetoed') });

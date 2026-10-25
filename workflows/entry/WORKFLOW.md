@@ -46,8 +46,9 @@ failure: logged, and nothing runs.
    for this bar (through the broker adapter). Before them, an approving
    VERDICT line the reading still refuses (it reads as a veto, or its size
    can't be read) is restated once by phase 2 (`Size: <n>` and its VERDICT
-   line), read by the same readers, its size at most the first VERDICT
-   line's (`trading/phase2-restate.js`; `entry.phase2RestateRetries`).
+   line), never a real veto, read by the same readers, its size at most
+   every size the first report stated, its facts exactly the first report's
+   (`trading/phase2-restate.js`; `entry.phase2RestateRetries`).
 3. `execute`: the trade-executor (the `execute` request: those arguments and
    phase 2's decisive VERDICT line, the one its approval was read from,
    `roles-ran.js decisiveLine`, never a heading). It counts if it called

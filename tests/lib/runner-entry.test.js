@@ -463,7 +463,7 @@ test('runEntry: phase 2\'s approved size sets the order: exactly the smaller of 
   // The Size line's smaller size binds too.
   s = setup(p2(`Size: 0 (none)\nVERDICT: APPROVE - size 1, risk $20\n${FACTS}`));
   r = await E.runEntry(s.deps, s.cycle());
-  assert.deepStrictEqual([r.entry.outcome, s.calls.map(c => c.role), r.entry.restated.outcome], ['no-trade', ['phase2', 'restate'], 'unreadable'], 'restated once, unreadable: no trade');
+  assert.deepStrictEqual([r.entry.outcome, s.calls.map(c => c.role), r.entry.restated], ['no-trade', ['phase2'], undefined], 'a Size line stating none: no restatement, no trade');
   // No readable size on the approval: no order built, no executor.
   for (const v of ['VERDICT: APPROVE - risk $20', 'VERDICT: APPROVE - size 0, risk $0', 'VERDICT: APPROVE - size 1.5', 'VERDICT: APPROVE - size <n>']) {
     let built = false;
@@ -807,6 +807,10 @@ test('runEntry restated: a restated size over the first VERDICT line\'s is bound
   assert.deepStrictEqual([r.entry.outcome, orderedSize(s), r.entry.restated.size], ['executed', 4, 4]);
   assert.deepStrictEqual(R2.approvedSize(s.seen.report.text), { size: 4 });
   assert.match(R2.sizeRefusal(s.seen.report, 7), /size 7 is over the 4 risk-manager phase 2 approved/);
+  // The executor and the journal are handed the bound, never the answer's 7.
+  assert.match(s.calls[2].request, /The risk manager's line: VERDICT: APPROVE - size 4, restated \(it said 7; at most the 4 the first report stated\)\./);
+  assert.match(s.journal[0].text, /phase 2 \(restated\): VERDICT: APPROVE - size 4, restated/);
+  assert.doesNotMatch(s.calls[2].request, /size 7\b(?!;)/);
   s = restateSetup(first, 'Size: 3\nVERDICT: APPROVE - size 3, risk $60');
   r = await E.runEntry(s.deps, cycle8(s));
   assert.deepStrictEqual([r.entry.outcome, orderedSize(s), R2.approvedSize(s.seen.report.text)], ['executed', 3, { size: 3 }]);
@@ -873,4 +877,26 @@ test('runEntry restated: the entry\'s budget bounds it (none left: a failed rest
   s.deps.runRole = (orig => async (role, request, limits) => { const out = await orig(role, request, limits); if (/^Phase 2, plan verdict/.test(request)) s.spend(); return out; })(s.deps.runRole);
   const r = await E.runEntry(s.deps, cycle8(s));
   assert.deepStrictEqual([r.entry.outcome, r.entry.restated.outcome, s.calls.map(c => c.role)], ['no-trade', 'failed', ['phase2']]);
+});
+
+test('runEntry restated: a first report about another cycle symbol (MES-named, an MNQ order, both in the cycle) is no restated approval: no order', async () => {
+  const first = 'Size: the record\'s 2 on MES, 1 category against\nVERDICT: APPROVE - size 2, MES long\nFACTS: window opening drive; trend long allowed';
+  const s = restateSetup(first, 'Size: 2\nVERDICT: APPROVE - size 2, risk $40');
+  const r = await E.runEntry(s.deps, s.cycle({ result: 'CYCLE RESULT: planned - trade_lifecycle long 8', context: { symbols: [{ symbol: 'MNQ', bar: { t: BAR } }, { symbol: 'MES', bar: { t: BAR } }], entry: true } }));
+  assert.deepStrictEqual([r.entry.outcome, r.entry.restated.outcome, r.entry.restated.reason, s.journal], ['no-trade', 'unreadable', 'the first report is about MES, not MNQ', []]);
+  assert.ok(!s.calls.some(c => c.role === 'trade-executor'));
+});
+
+test('runEntry restated: entry.phase2RestateRetries 0 turns it off (no restatement call; the first report\'s outcome)', async () => {
+  const T = require('../../scripts/lib/tunables');
+  const orig = T.runner;
+  const base = orig();
+  T.runner = () => ({ ...base, entry: { ...base.entry, phase2RestateRetries: 0 } });
+  try {
+    const s = restateSetup(fixture('2021-05-11T153914Z-size-unreadable.txt'), () => { throw new Error('no restatement may run'); });
+    const r = await E.runEntry(s.deps, cycle8(s));
+    assert.deepStrictEqual([s.calls.map(c => c.role), r.entry.outcome, r.entry.restated], [['phase2'], 'no-trade', undefined]);
+  } finally {
+    T.runner = orig;
+  }
 });

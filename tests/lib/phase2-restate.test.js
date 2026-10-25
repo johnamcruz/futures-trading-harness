@@ -50,7 +50,7 @@ test('restateDue: an approving VERDICT line the reading refuses (a prose Size li
 
 test('readRestatement: the same readers; the size at most the first VERDICT line\'s; a veto is a veto; anything else unreadable', () => {
   const first = read('2021-05-11T153914Z-size-unreadable.txt'); // VERDICT size 4
-  const facts = F.factsBlock(first);
+  const facts = F.factsFrom(first);
   // The two lines, at the bound: approved 4, the decisive record the answer, the bound and the first report's FACTS.
   let r = P.readRestatement(first, 'Size: 4\nVERDICT: APPROVE - size 4, risk $140', 4);
   assert.deepStrictEqual([r.outcome, r.size, r.line], ['approved', 4, 'VERDICT: APPROVE - size 4, risk $140']);
@@ -93,11 +93,78 @@ test('readRestatement on the approval read as a veto: its FACTS block (before it
   assert.strictEqual(R.verdictOf(r.text), 'APPROVE');
 });
 
-test('factsBlock and dropFactsLabels: the first FACTS line with its bullet items; the text without FACTS lines', () => {
-  assert.strictEqual(F.factsBlock('VERDICT: APPROVE - size 1\nFACTS: window asia; news clear'), 'FACTS: window asia; news clear');
-  assert.strictEqual(F.factsBlock('FACTS:\n- window asia\n- news clear\nVERDICT: APPROVE - size 1'), 'FACTS:\n- window asia\n- news clear');
-  assert.strictEqual(F.factsBlock('VERDICT: APPROVE - size 1'), null);
+test('factsFrom and dropFactsLabels: the text from the first FACTS line to the end; the text without FACTS lines', () => {
+  assert.strictEqual(F.factsFrom('VERDICT: APPROVE - size 1\nFACTS: window asia; news clear'), 'FACTS: window asia; news clear');
+  assert.strictEqual(F.factsFrom('FACTS: window asia;\ntrend long blocked\nVERDICT: APPROVE - size 1'), 'FACTS: window asia;\ntrend long blocked\nVERDICT: APPROVE - size 1');
+  assert.strictEqual(F.factsFrom('VERDICT: APPROVE - size 1'), null);
   assert.strictEqual(F.dropFactsLabels('Size: 1\nFACTS: x\nVERDICT: APPROVE - size 1\n**FACTS:** y'), 'Size: 1\nVERDICT: APPROVE - size 1');
+});
+
+test('readRestatement carries the first report\'s facts exactly (review finding 1): two FACTS lines, or a fact on a non-bullet continuation line, never pass through a restatement', () => {
+  const A = 'Size: 2\nVERDICT: APPROVE - size 2, risk $40';
+  // Two FACTS lines: the gate refuses the first report (labels > 1); no restatement makes it one.
+  const two = 'Size: the record\'s 2, 1 category against\nVERDICT: APPROVE - size 2, risk $40\nFACTS: window asia; trend long allowed\nFACTS: 15m up';
+  assert.ok(P.restateDue(two));
+  assert.deepStrictEqual(P.readRestatement(two, A, 2), { outcome: 'unreadable', why: 'the first report has no single FACTS line' });
+  // A non-bullet continuation holding a false fact: carried whole, so the gate checks it as on main.
+  const cont = 'Size: the record\'s 2, 1 category against\nVERDICT: APPROVE - size 2, risk $40\nFACTS: window asia;\ntrend long blocked; 15m range';
+  const r = P.readRestatement(cont, A, 2);
+  assert.strictEqual(r.outcome, 'approved');
+  assert.deepStrictEqual(F.factsLines(r.text), ['window asia', 'trend long blocked', '15m range']);
+  assert.deepStrictEqual(F.factsLines(r.text), F.factsLines(cont), 'the same items the gate read in the first report');
+  // FACTS before the VERDICT line (the 05-04 report): reordered, the VERDICT and Size lines out of the block, no fact changed.
+  const before = 'Size: the record\'s 2, 1 category against\nFACTS: window asia; trend long allowed\nVERDICT: APPROVE - size 2, risk $40\nSize: 2';
+  const b = P.readRestatement(before, A, 2);
+  assert.deepStrictEqual([b.outcome, F.factsLines(b.text)], ['approved', ['window asia', 'trend long allowed']]);
+  // A prose line after the FACTS line stays an item (the gate refuses it as no known form, as on main).
+  const prose = 'Size: the record\'s 2, 1 category against\nVERDICT: APPROVE - size 2, risk $40\nFACTS: window asia\nThat is all.';
+  assert.deepStrictEqual(F.factsLines(P.readRestatement(prose, A, 2).text), ['window asia', 'that is all']);
+});
+
+test('restateDue never retries a real veto (review finding 2): a VETO VERDICT line beside an approving one, either order; a VERDICT line saying veto', () => {
+  for (const t of [
+    'VERDICT: VETO - room: stand aside\nVERDICT: APPROVE - size 2, risk $40\nFACTS: window asia',
+    'VERDICT: APPROVE - size 2, risk $40\nVERDICT: VETO - room: stand aside\nFACTS: window asia',
+    'VERDICT: APPROVE - size 2, not a veto of the side\nFACTS: window asia',
+    'The verdict is veto.\nVERDICT: APPROVE - size 2\nFACTS: window asia',
+    'Sizing verdict: skip x0.5\nVERDICT: APPROVE - size 2\nFACTS: window asia',
+  ]) assert.strictEqual(P.restateDue(t), null, t);
+  // A refusal from a non-VERDICT decision line or prose is restated.
+  assert.strictEqual(P.restateDue('Decision: cut to size 1\nVERDICT: APPROVE - size 2\nFACTS: window asia').kind, 'reads-as-veto');
+  assert.strictEqual(P.restateDue('No VETO rules apply.\nVERDICT: APPROVE - size 2\nFACTS: window asia').kind, 'reads-as-veto');
+});
+
+test('the ceiling is every size the first report stated (review finding 3): the VERDICT size, number-led Size lines and their cuts, prose cuts; a Size line stating no size: no restatement', () => {
+  const ceiling = t => { const d = P.restateDue(t); return d ? d.ceiling : null; };
+  assert.strictEqual(ceiling('Size: 0 (none)\nVERDICT: APPROVE - size 1\nFACTS: window asia'), null);
+  assert.strictEqual(ceiling('Size: none\nVERDICT: APPROVE - size 2\nFACTS: window asia'), null);
+  assert.strictEqual(ceiling('Size: n/a\nVERDICT: APPROVE - size 2\nFACTS: window asia'), null);
+  // (It reads fine on its own, so no restatement; with a count under its cut it is unreadable, and its cut bounds it.)
+  assert.strictEqual(P.restateDue('Size: the translated 4, I cut to 2 on serious against\nVERDICT: APPROVE - size 4\nFACTS: window asia'), null);
+  assert.strictEqual(ceiling('Size: the translated 4, I cut to 2 on serious against, 1 category against\nVERDICT: APPROVE - size 4\nFACTS: window asia'), 2);
+  // A number-led Size line binds; an unmade prose cut ("I would cut to half") lowers nothing: the ceiling is 2.
+  assert.strictEqual(ceiling('Size: 2\nSize: I would cut to half\nVERDICT: APPROVE - size 4\nFACTS: window asia'), 2);
+  assert.strictEqual(ceiling('Size: 3 cut to 2\nSize: the 3 holds, 1 against\nVERDICT: APPROVE - size 4\nFACTS: window asia'), 2);
+  assert.strictEqual(ceiling('Size: one, at the floor of 3\nVERDICT: APPROVE - size 3\nFACTS: window asia'), 1);
+  assert.strictEqual(ceiling('Size: 1.5\nSize: the 2 holds, 1 against\nVERDICT: APPROVE - size 2\nFACTS: window asia'), null);
+  assert.deepStrictEqual(R.restateCeiling('Size: 4\nVERDICT: APPROVE - size 5'), { size: 4 });
+});
+
+test('readRestatement keeps to the order\'s symbol (review finding 5): a first report about another cycle symbol is unreadable', () => {
+  const first = 'Size: the record\'s 2 on MES, 1 against\nVERDICT: APPROVE - size 2, MES long\nFACTS: window asia';
+  const A = 'Size: 2\nVERDICT: APPROVE - size 2';
+  assert.deepStrictEqual(P.readRestatement(first, A, 2, { root: 'MNQ', symbols: ['MNQ', 'MES'] }), { outcome: 'unreadable', why: 'the first report is about MES, not MNQ' });
+  assert.strictEqual(P.readRestatement(first, A, 2, { root: 'MES', symbols: ['MNQ', 'MES'] }).outcome, 'approved');
+  assert.strictEqual(P.readRestatement(`${first} MNQ`, A, 2, { root: 'MNQ', symbols: ['MNQ', 'MES'] }).outcome, 'approved', 'naming the order\'s symbol too, as the gate reads it');
+  assert.deepStrictEqual(F.otherSymbols(first, 'MNQ', ['MNQ', 'MES']), ['MES']);
+});
+
+test('the handed line states the bound (review finding 6): an answer over it is rewritten to the bound, never "size 9"', () => {
+  const first = read('2021-05-11T153914Z-size-unreadable.txt');
+  const r = P.readRestatement(first, 'Size: 9\nVERDICT: APPROVE - size 9, risk $315', 4);
+  assert.strictEqual(r.line, 'VERDICT: APPROVE - size 4, restated (it said 9; at most the 4 the first report stated)');
+  assert.deepStrictEqual(R.approvedSize(r.line), { size: 4 });
+  assert.strictEqual(P.readRestatement(first, 'Size: 3\nVERDICT: APPROVE - size 3, risk $105', 4).line, 'VERDICT: APPROVE - size 3, risk $105');
 });
 
 test('the restate request: what couldn\'t be read, the two lines, the bound, the first report; nothing else asked', () => {
