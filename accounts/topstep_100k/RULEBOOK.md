@@ -101,8 +101,9 @@ each trade from its recorded path, prop/attempts.js exitAs):
   2026-10-24: opt in only). With `ratchet: on`, the lock rises with the
   trade: it is the best R reached (closed bars' extremes, as the R trail
   reads them; at least the target's R) less `lock_giveback_r`, never below
-  the entry, so `lock_giveback_r` is the most a trade past its target gives
-  back from its best. The stop is the farther in profit of that lock and
+  the entry, so past its target the stop stands at most `lock_giveback_r`
+  from the best R (the exit can give back more: a bar through the stop
+  closes at its close, and a live stop fills with slippage). The stop is the farther in profit of that lock and
   the trail and never loosens. A bar that sets a stop already through its
   own extreme closes the trade at its close, as the trail does. The owner
   asked for it after a short ran to +4.7R and closed at +2.29R behind a
@@ -110,14 +111,14 @@ each trade from its recorded path, prop/attempts.js exitAs):
   much when we caught 4.7r", with the giveback kept at 1.5: "3.2r is
   good". Worked on that MNQ short (entry 14530.50, 1R 24.50 points = 98
   ticks, $49.00 a micro; tick 0.25, $0.50 a tick; its target at 2R,
-  14481.50), with `ratchet: on`:
+  14481.50), with `ratchet: on` (R to 3 places; ticks and dollars exact):
 
   | Best reached | Best R | Ratchet stop | Locked |
   |---|---|---|---|
-  | 14481.50 (the target) | 2.00 | 14518.25 | +0.50R, 49 ticks, $24.50 a micro |
-  | 14457.00, then back to 14481.50 | 3.00 | 14493.75 | +1.50R, 147 ticks, $73.50 a micro |
-  | 14415.25 | 4.70 | 14452.00 | +3.20R, 314 ticks, $157.00 a micro |
-  | 14408.00 | 5.00 | 14444.75 | +3.50R, 343 ticks, $171.50 a micro |
+  | 14481.50 (the target) | 2.000 | 14518.25 | +0.500R, 49 ticks, $24.50 a micro |
+  | 14457.00, then back to 14481.50 | 3.000 | 14493.75 | +1.500R, 147 ticks, $73.50 a micro |
+  | 14415.25 | 4.704 | 14452.00 | +3.204R, 314 ticks, $157.00 a micro |
+  | 14408.00 | 5.000 | 14444.75 | +3.500R, 343 ticks, $171.50 a micro |
 
   A swing trail farther in profit than the ratchet still wins. With `off`
   the stop stays at 14518.25 past the target until the trail passes it.

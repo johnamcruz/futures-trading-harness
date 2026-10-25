@@ -8,6 +8,7 @@ const E = require('../../scripts/lib/learning/experience-log');
 const { fromLifecycleRecord } = require('../../scripts/lib/learning/lifecycle-record');
 const { writeRunExperience } = require('../../scripts/lib/learning/run-experience');
 const { M3, record, bars, runDir, tmpHome } = require('../fixtures/learning');
+const { afterTargetStep } = require('../../scripts/lib/trading/exit-trail');
 
 const T0 = '2023-03-15T14:00:00.000Z';
 const ms = Date.parse;
@@ -359,6 +360,38 @@ test('limitOutcome under the run\'s exit (target_then_trail): past the target tr
   // 1.5R on this bar: the stop to 102 (1R), the bar's low (101.5) already through it: out at its close.
   const r = E.limitOutcome({ ...plan({ rows: [rows[0], [100.25, 103, 101.5, 102.75], [102.75, 103, 101.5, 102]] }), plan: { trailActivateR: 1, trailGivebackR: 0.5 } });
   assert.deepStrictEqual([r.exitReason, r.exitPrice], ['trail', 102.75]);
+});
+
+test('limitOutcome under target_then_trail with the ratchet: on, the exit afterTargetStep gives on the same bars; off, the plan without the key', () => {
+  // Entry 100, stop 98 (1R = 2), target 104 (2R); filled inside the first bar (its prices after the fill unknown: no trail
+  // there), then each later bar: the resting stop first (a tick of slippage, or a worse open), then the step at its close.
+  const rows = [[100.5, 100.75, 99.75, 100.25], [100.25, 104.5, 103.5, 104.25], [104.25, 106, 104.5, 105.5], [105.5, 108, 105.25, 107.5], [107.5, 107.75, 104, 104.5]];
+  const oracle = afterTarget => {
+    const bs = bars(T0, rows);
+    let t = { sign: 1, entry: 100, risk: 2, stop: 98, peakR: 0, armed: false, target: 104 };
+    for (let j = 1; j < bs.length; j += 1) {
+      const b = bs[j];
+      if (b.l <= t.stop) return Math.min(t.stop - 0.25, b.o);
+      const st = afterTargetStep(t, b, { afterTarget }, 0.25, null);
+      if (st.close) return st.close.price;
+      t = { ...t, stop: st.stop, peakR: st.peakR, armed: st.armed };
+    }
+    return null;
+  };
+  for (const [g, tr] of [[0.5, 1], [1.5, 3]]) {
+    const on = { lockGivebackR: g, trailBy: 'r', trailR: tr, swingMinutes: null, ratchet: true };
+    const off = { lockGivebackR: g, trailBy: 'r', trailR: tr, swingMinutes: null };
+    const got = E.limitOutcome({ ...plan({ rows }), plan: { afterTarget: on } });
+    assert.strictEqual(got.exitPrice, oracle(on), `on ${g}/${tr}`);
+    assert.deepStrictEqual(E.limitOutcome({ ...plan({ rows }), plan: { afterTarget: { ...off, ratchet: false } } }), E.limitOutcome({ ...plan({ rows }), plan: { afterTarget: off } }), `off ${g}/${tr}`);
+    assert.strictEqual(E.limitOutcome({ ...plan({ rows }), plan: { afterTarget: off } }).exitPrice, oracle(off), `off ${g}/${tr}`);
+  }
+  // The values: 0.5R giveback, 1R trail: on, the target bar's 2.25R best puts the lock at 1.75R (103.5), through its low:
+  // out at its close, 104.25; off, the 1.5R lock (103), then the 1R trail: 3R behind the 4R best (106), through the 108
+  // bar's low (105.25): out at its close, 107.5. 1.5R giveback, 3R trail: on, the lock 1.5R behind the 4R best (105),
+  // stopped on the last bar at 104.75 (a tick of slippage).
+  const at = afterTarget => E.limitOutcome({ ...plan({ rows }), plan: { afterTarget: { trailBy: 'r', swingMinutes: null, ...afterTarget } } }).exitPrice;
+  assert.deepStrictEqual([at({ lockGivebackR: 0.5, trailR: 1, ratchet: true }), at({ lockGivebackR: 0.5, trailR: 1 }), at({ lockGivebackR: 1.5, trailR: 3, ratchet: true })], [104.25, 107.5, 104.75]);
 });
 
 test('buildDecisions: every line tagged with the run\'s exit mode; its passes held under that exit', () => {
