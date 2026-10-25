@@ -23,7 +23,7 @@ const { entriesSince, entryTime, hasTag, reviewResult, contractRoot, mayBeRoot, 
 const fs = require('fs');
 const { checkStrategyForOrder } = require('./strategies');
 const { propViolations, runningAttempts, latestVerdict, carriedLossState } = require('./prop-state');
-const { translatorFor, allInRisk } = require('../prop/size-translate');
+const { translatorFor, allInRisk, stretchedEntry } = require('../prop/size-translate');
 const { feePerSide } = require('./accounts');
 const { checkTrend } = require('./mtf-state');
 const { checkTrigger, retiredLaneRefusal, retiredLaneRefusalAny, signalMaxAgeMin } = require('./signal-state');
@@ -481,15 +481,24 @@ function evaluateOrder({ input = {}, entries = [], now = new Date(), config, bla
   const composedDoc = composed && strategies ? strategies.find(x => x.name === composed && x.valid !== false) || null : null;
   // Under a policy the cap is measured all in, as the translation sizes it (prop/size-translate.js allInRisk: the stop
   // plus the rulebook's slippage ticks at the tick value, plus the account's fees both ways, per contract).
-  const composedRisk = !riskMsg && composedDoc && composedDoc !== named ? checkRiskLimit({ input, stopPrices, strategy: composedDoc, specOf }) : null;
-  if (composedRisk) violations.push({ check: 'max-risk', message: composedRisk });
-  else if (!riskMsg && composedDoc && named && named.signal === 'policy' && composedDoc.risk && composedDoc.risk.max_risk_usd > 0) {
-    const spec = specOf(contractRoot(input.contractId));
-    const acct = accounts.find(a => a.name === named.account) || null;
-    const per = spec && acct && input.stopLossBracket ? allInRisk({ stopTicks: Number(input.stopLossBracket.ticks), tickValue: spec.tickValue, slipTicks: named.sizing ? named.sizing.stop_slippage_ticks : null, feePerSide: feePerSide(acct, contractRoot(input.contractId)) }) : NaN;
+  const policyCap = Boolean(!riskMsg && composedDoc && named && named.signal === 'policy' && composedDoc.risk && composedDoc.risk.max_risk_usd > 0);
+  const capSpec = policyCap ? specOf(contractRoot(input.contractId)) : null;
+  const capAcct = policyCap ? accounts.find(a => a.name === named.account) || null : null;
+  const per = capSpec && capAcct && input.stopLossBracket ? allInRisk({ stopTicks: Number(input.stopLossBracket.ticks), tickValue: capSpec.tickValue, slipTicks: named.sizing ? named.sizing.stop_slippage_ticks : null, feePerSide: feePerSide(capAcct, contractRoot(input.contractId)) }) : NaN;
+  // The floor stretch (prop/size-translate.js stretchedEntry, the translation's own rule): exactly the floor may go over
+  // the composed cap, at most the rulebook's floor_stretch_max_usd all in, while the attempt is healthy (its snapshot);
+  // any other size over the cap, or the floor when the attempt isn't healthy or it costs more, is refused as before.
+  // Only on a whole-tick stop bracket (anything else: no stretch, the cap's own checks refuse it).
+  const stretched = policyCap && Number.isInteger(Number(input.stopLossBracket && input.stopLossBracket.ticks))
+    ? stretchedEntry({ home: config.home, policy: named, account: capAcct, root: contractRoot(input.contractId), size: input.size, perContract: per, capUsd: composedDoc.risk.max_risk_usd, specOf }) : null;
+  const stretchOk = Boolean(stretched && stretched.ok);
+  const stretchWhy = stretched && stretched.why ? ` (${stretched.why})` : '';
+  const composedRisk = !riskMsg && composedDoc && composedDoc !== named && !stretchOk ? checkRiskLimit({ input, stopPrices, strategy: composedDoc, specOf }) : null;
+  if (composedRisk) violations.push({ check: 'max-risk', message: `${composedRisk}${stretchWhy}` });
+  else if (policyCap && !stretchOk) {
     const all = Number(input.size) * per;
     if (!(all <= composedDoc.risk.max_risk_usd + 1e-9)) {
-      violations.push({ check: 'max-risk', message: `setup:${composed}: ${input.size} ${contractRoot(input.contractId)} risk ${Number.isFinite(all) ? `$${all.toFixed(2)} all in (the stop, a tick of slippage and fees both ways)` : 'an all-in loss that can\'t be worked out'}, over its risk.max_risk_usd $${composedDoc.risk.max_risk_usd}: order_plan gives the size.` });
+      violations.push({ check: 'max-risk', message: `setup:${composed}: ${input.size} ${contractRoot(input.contractId)} risk ${Number.isFinite(all) ? `$${all.toFixed(2)} all in (the stop, a tick of slippage and fees both ways)` : 'an all-in loss that can\'t be worked out'}, over its risk.max_risk_usd $${composedDoc.risk.max_risk_usd}${stretchWhy}: order_plan gives the size.` });
     }
   }
   if (named && named.account) {

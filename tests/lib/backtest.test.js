@@ -668,6 +668,14 @@ test('a prop run never sizes under the rulebook\'s floor (min_contracts), as the
   assert.strictEqual(limited({ capUsd: 140, orderMax: null }).size, 16);
   assert.strictEqual(limited({ capUsd: 140, orderMax: 6 }).size, 6);
   assert.ok(!limited({ capUsd: 140, orderMax: 6 }, 7) || limited({ capUsd: 140, orderMax: 6 }, 7).size >= 7, 'under the floor after the limits: never sized up');
+  // The floor stretch, as live (prop/size-translate.js limitPlan): a $20 cap fits 2 at $8.24, under a floor of 3
+  // ($24.72 all in); a $30 stretch takes exactly 3 on the fresh (healthy) attempt's first trade; a $24 one doesn't.
+  const stretched = stretch => runEngine([propMarket(bars)], [propStrategy()], { ...propEngine, account: wide, sizing: testSizing({ min_contracts: 3, floor_stretch_max_usd: stretch }), start, prop: { limits: { capUsd: 20, orderMax: null } } }).trades;
+  const base = limited({ capUsd: 1000, orderMax: null });
+  const s30 = stretched(30);
+  assert.deepStrictEqual([s30[0].size, s30[0].entryTime], [3, base.entryTime]);
+  assert.ok(!stretched(24).some(t => t.entryTime === base.entryTime), 'over the stretch: that setup skips');
+  assert.ok(!stretched(0).some(t => t.entryTime === base.entryTime), 'off: skips as before');
 });
 
 test('a prop run folds the rulebook\'s multiplier items in, as the live verdict does: one whose fact it lacks skips every setup', () => {

@@ -40,14 +40,16 @@ const fullVerdict = () => 1;
 /**
  * Today's sizing (verdict.js, the engine, the gate): combine.contractPlan from the budget and the room, then the live
  * entry's limits over it (prop/size-translate.js limitPlan, as translateSize: the composed strategy's risk.max_risk_usd
- * and the broker's max order size; `limits` null: none) and the floor again.
+ * and the broker's max order size; `limits` null: none) and the floor again, with the floor stretch (the rulebook's
+ * floor_stretch_max_usd while the attempt is healthy, limitPlan).
  */
 function defaultSize({ cs, trade, sizing, legs, mode, ratio, fraction, limits = null }) {
   const plan = combine.contractPlan({
     dollars: combine.budget(cs, sizing), room: combine.room(cs), stopTicks: trade.stopTicks, legs, mode,
     guard: sizing.min_size_guard, fraction, ratio, slipTicks: sizing.stop_slippage_ticks, minContracts: sizing.min_contracts,
   });
-  return limitPlan(plan, { limits, minContracts: sizing.min_contracts, ratio, miniRoot: legs.mini ? legs.mini.root : null });
+  // The floor stretch as live: the rulebook's floor_stretch_max_usd, the attempt's health from its own state (cs).
+  return limitPlan(plan, { limits, minContracts: sizing.min_contracts, ratio, miniRoot: legs.mini ? legs.mini.root : null, stretchUsd: sizing.floor_stretch_max_usd, state: cs });
 }
 
 /**

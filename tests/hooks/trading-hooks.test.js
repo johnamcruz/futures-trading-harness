@@ -618,6 +618,86 @@ function noFeePropWorld(home, size) {
   return { order: n => LC.order({ size: n, rationale: 'setup:pmc_policy long trade_lifecycle, stop 21512.50, target 21598.00' }), env: { ...env, FTH_TEST_NOW: now.toISOString(), FTH_CYCLE_BARS: JSON.stringify({ MNQ: LC.BAR }), FTH_SYMBOLS: 'MNQ' } };
 }
 
+/**
+ * The same world with the floor stretch in question: `pmc_stretch` (prop_portfolio's document) on `stretch_100k` (the
+ * shipped profile and rulebook, renamed, its floor raised to 6 micros and its floor_stretch_max_usd at `stretch`, the
+ * shipped value when null), in folders of their own, and the shipped trade_lifecycle ($300): scenario 1's 111-tick stop
+ * is $56.74 a contract all in, so the floor of 6 is $340.44, over the cap ($333.00 at the stop alone).
+ */
+function stretchPropWorld(home, { stretch = null } = {}) {
+  const LC = require('../fixtures/lifecycle');
+  const prop = require('../../scripts/lib/trading/prop-state');
+  const shipped = require('../../scripts/lib/trading/strategies').loadStrategies(REPO, {}).strategies.find(s => s.name === 'prop_portfolio');
+  const dir = tmpDir();
+  const strategies = path.join(dir, 'strategies');
+  fs.mkdirSync(path.join(strategies, 'pmc_stretch'), { recursive: true });
+  fs.cpSync(path.join(REPO, 'strategies', 'trade_lifecycle'), path.join(strategies, 'trade_lifecycle'), { recursive: true });
+  fs.writeFileSync(path.join(strategies, 'pmc_stretch', 'STRATEGY.md'), fs.readFileSync(path.join(REPO, 'strategies', 'prop_portfolio', 'STRATEGY.md'), 'utf8')
+    .replace('name: prop_portfolio', 'name: pmc_stretch').replace(new RegExp(`^account: ${shipped.account}`, 'm'), 'account: stretch_100k'));
+  const accounts = path.join(dir, 'accounts', 'stretch_100k');
+  fs.mkdirSync(accounts, { recursive: true });
+  fs.writeFileSync(path.join(accounts, 'ACCOUNT.md'), fs.readFileSync(path.join(REPO, 'accounts', shipped.account, 'ACCOUNT.md'), 'utf8').replace(`name: ${shipped.account}`, 'name: stretch_100k'));
+  const rb = fs.readFileSync(path.join(REPO, 'accounts', shipped.account, 'RULEBOOK.md'), 'utf8');
+  assert.match(rb, /^ {6}floor_stretch_max_usd: \d+/m);
+  assert.match(rb, /^ {6}min_contracts: 3 /m);
+  fs.writeFileSync(path.join(accounts, 'RULEBOOK.md'), rb.replace(`name: ${shipped.account}`, 'name: stretch_100k').replace(/^ {2}prop_portfolio:$/m, '  pmc_stretch:')
+    .replace(/^( {6}min_contracts: )3 /m, '$16 ').replace(/^( {6}floor_stretch_max_usd: )\d+/m, m => (stretch === null ? m : m.replace(/\d+$/, String(stretch)))));
+  const env = { FTH_STRATEGIES_DIRS: strategies, FTH_ACCOUNTS_DIRS: path.dirname(accounts) };
+  const policy = require('../../scripts/lib/trading/strategies').loadStrategies(REPO, env).strategies.find(s => s.name === 'pmc_stretch');
+  assert.ok(policy && policy.valid !== false && policy.sizing.min_contracts === 6, JSON.stringify(policy && policy.errors));
+  const account = require('../../scripts/lib/trading/accounts').loadAccounts(REPO, env).accounts.find(a => a.name === 'stretch_100k');
+  const now = new Date('2026-10-07T14:00:02.000Z');
+  prop.startAttempt(home, account, new Date(now.getTime() - 86400000));
+  prop.snapshot(home, account, account.starting_balance, new Date(now.getTime() - 60000), { fills: [] });
+  const rec = LC.writeScenario(home, { size: 6 });
+  const spec = { tickSize: 0.25, tickValue: 0.5 };
+  require('../../scripts/lib/prop/composed-verdict').composedVerdict({ home, policy, component: 'trade_lifecycle', account, record: rec, plan: rec.plan, briefing: LC.briefing(), root: 'MNQ', spec, specOf: () => spec, now });
+  // The session's loss streak written into the attempt's record as the runner writes it (its snapshot's state too).
+  const setStreak = n => {
+    const file = prop.combineFile(home, account.name);
+    const r = JSON.parse(fs.readFileSync(file, 'utf8'));
+    fs.writeFileSync(file, JSON.stringify({ ...r, lossStreak: { ...r.lossStreak, count: n }, snapshot: { ...r.snapshot, state: { ...r.snapshot.state, lossStreak: n } } }));
+  };
+  return { setStreak, order: n => LC.order({ size: n, rationale: 'setup:pmc_stretch long trade_lifecycle, stop 21512.50, target 21598.00' }), env: { ...env, FTH_TEST_NOW: now.toISOString(), FTH_CYCLE_BARS: JSON.stringify({ MNQ: LC.BAR }), FTH_SYMBOLS: 'MNQ' } };
+}
+
+test('order gate wiring, hook and gateway: the floor stretch: the stretched floor passes [max-risk]; more than the floor, an unhealthy attempt or a floor over the stretch is refused [max-risk]; an exit goes', { timeout: 120000 }, async () => {
+  const plan = [{ ts: '2026-10-07T13:59:30.000Z', kind: 'plan', contractId: 'MNQ', text: 'plan' }];
+  const MAX_RISK = /\[max-risk\]/;
+  const text = r => r.result.content[0].text;
+  const both = async (env, input) => {
+    const hook = gate(orderPayload(input), env).stderr;
+    const g = await gatewayRun(env, [call(1, 'place_order', input)]);
+    return { hook, gw: text(g.byId[1]) };
+  };
+  // Healthy, within the shipped stretch: the floor of 6 ($340.44 all in) passes [max-risk] and is the translated size
+  // (whatever else this world refuses); 7 is refused.
+  const ok = tmpDir();
+  const w = stretchPropWorld(ok);
+  const { env } = setup(plan, { FTH_HOME: ok, ...w.env });
+  const six = await both(env, w.order(6));
+  for (const t of [six.hook, six.gw]) {
+    assert.doesNotMatch(t, MAX_RISK, t);
+    assert.doesNotMatch(t, /\[composed-reads\]/, t);
+  }
+  const seven = await both(env, w.order(7));
+  for (const t of [seven.hook, seven.gw]) assert.match(t, /\[max-risk\] risk \$388\.50 \(size 7 .*only exactly the floor of 6 MNQ may go over the cap/);
+  // A loss in a row this session: the same 6 refused, in the hook and the gateway.
+  w.setStreak(1);
+  const sick = await both(env, w.order(6));
+  for (const t of [sick.hook, sick.gw]) assert.match(t, /\[max-risk\] risk \$333\.00 \(size 6 x 111-tick stop.*applies only while the attempt is healthy .*1 losing trade in a row this session/);
+  // An exit goes, unhealthy or not.
+  const exit = { ...EXIT_BASE, contractId: 'MNQ', side: 'sell', size: 1, rationale: '[exit] close the pmc_stretch long' };
+  assert.strictEqual(gate(orderPayload(exit), env).code, 0);
+  const gx = await gatewayRun({ ...env, FAKE_POSITIONS: LONG1 }, [call(1, 'place_order', exit)]);
+  assert.strictEqual(text(gx.byId[1]), 'forwarded:tools/call:place_order');
+  // A stretch the floor costs more than ($340.44 over $340): refused in both.
+  const tight = tmpDir();
+  const t = stretchPropWorld(tight, { stretch: 340 });
+  const over = await both(setup(plan, { FTH_HOME: tight, ...t.env }).env, t.order(6));
+  for (const s of [over.hook, over.gw]) assert.match(s, /\[max-risk\] .*the floor of 6 at \$56\.74 all in is \$340\.44, over the floor stretch's \$340\.00 too/);
+});
+
 test('MCP gateway: a composed entry is judged late on the price at order time (the broker\'s newest closed 1m bar, read by the gateway), not on the runner\'s price from before the trade-executor ran', { timeout: 60000 }, async () => {
   // The live smoke: the runner read its price before the trade-executor's run; by the order the market had fallen most of
   // the risk toward the stop, and the long filled a few ticks over its stop. Here: the plan's long at 21540.25, stop

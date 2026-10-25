@@ -98,6 +98,7 @@ function restatements(key, v) {
   if (key === 'cap_usd') res.push(new RegExp(`(?:at most|capped at|a cap of|under the|cap) ${$}`, 'i'), new RegExp(`${$} cap\\b`));
   if (key === 'drawdown_halve_usd') res.push(new RegExp(`${$} or more below`), new RegExp(`${$} below (?:its|the) peak`));
   if (key === 'daily_loss_soft') res.push(new RegExp(`-${$} for the day`), new RegExp(`soft[^.\\n]{0,40}${$}`, 'i'));
+  if (key === 'floor_stretch_max_usd') res.push(new RegExp(`(?:floor|stretch)[^.\\n]{0,60}(?:up to|at most|within) ${$}`, 'i'), new RegExp(`${$}[^.\\n]{0,40}(?:if|while) (?:the attempt is )?healthy`, 'i'));
   if (key === 'loss_streak_stop') res.push(new RegExp(`(?:^|[^\\d.])${num} (?:losing trades|losses|losers) in a row[^\\n]{0,80}\\b(?:session|loss streak stop)`, 'i'));
   if (key === 'trail_activate_r') res.push(new RegExp(`(?:until|past|to|from) \\+${num}R\\b`));
   if (key === 'trail_giveback_r') res.push(new RegExp(`trail(?:s|ing)? ${num}R\\b`), new RegExp(`${num}R behind`));
@@ -158,6 +159,10 @@ test('R1: the scan catches each way a value can be restated (it would fail witho
   assert.ok(caught('loss_streak_stop', 2, 'loss_streak_stop: 2'));
   assert.ok(!caught('loss_streak_stop', 2, 'after `loss_streak_stop` losing trades in a row the session stops'));
   assert.ok(!caught('loss_streak_stop', 2, '- After 2 losses in a row: stop, write a review and a lesson, then wait out the cooldown'), 'the gate\'s timed cooldown is its own setting');
+  assert.ok(caught('floor_stretch_max_usd', 500, 'floor_stretch_max_usd: 500'));
+  assert.ok(caught('floor_stretch_max_usd', 500, 'code may trade the floor up to $500 while the attempt is healthy'));
+  assert.ok(caught('floor_stretch_max_usd', 500, 'Up to $500 if healthy'));
+  assert.ok(!caught('floor_stretch_max_usd', 500, 'code may trade just the floor over $300, up to the rulebook\'s floor stretch'));
   assert.ok(caught('mode', 'target', 'exit: { mode: target }'));
   assert.ok(caught('trail_activate_r', 2, 'hold the setup\'s own stop until +2R ...'));
   assert.ok(caught('trail_giveback_r', 0.5, '... then trail 0.5R behind the best price'));

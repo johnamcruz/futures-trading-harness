@@ -105,7 +105,18 @@ test('every key\'s direction: the looser way is refused and the stricter way pas
     assert.match(G.loosenings(at(k, 10), at(k, looser)).join(), new RegExp(`${k}: 10 -> ${looser} is looser`), `${k}: 10 -> ${looser}`);
   }
   // Pinned, so a flipped direction fails here.
-  assert.deepStrictEqual(G.DIRECTION, { daily_loss_soft: 'lower', loss_streak_stop: 'lower', cushion_frac: 'lower', cap_usd: 'lower', clock_k: 'lower', r_per_session: 'higher', min_size_guard: 'lower', drawdown_halve_usd: 'lower', stop_slippage_ticks: 'higher', min_contracts: 'higher' });
+  assert.deepStrictEqual(G.DIRECTION, { daily_loss_soft: 'lower', loss_streak_stop: 'lower', cushion_frac: 'lower', cap_usd: 'lower', clock_k: 'lower', r_per_session: 'higher', min_size_guard: 'lower', drawdown_halve_usd: 'lower', stop_slippage_ticks: 'higher', min_contracts: 'higher', floor_stretch_max_usd: 'lower' });
+});
+
+test('the floor stretch: off is its strictest value (no stretch at all), never the loosest; a stretch turned on or raised is refused', () => {
+  const at = v => ({ policies: { p: { sizing: { floor_stretch_max_usd: v }, exit: {}, multipliers: [] } } });
+  assert.deepStrictEqual(G.loosenings(at(500), at('off')), [], '500 -> off: no stretch, stricter');
+  assert.deepStrictEqual(G.loosenings(at(500), at(400)), [], '500 -> 400: stricter');
+  assert.match(G.loosenings(at('off'), at(500)).join(), /floor_stretch_max_usd: "off" -> 500 is looser/, 'off -> 500 turns the stretch on');
+  assert.match(G.loosenings(at(500), at(600)).join(), /floor_stretch_max_usd: 500 -> 600 is looser/);
+  assert.match(G.loosenings(at(500), at('5')).join(), /not comparable/);
+  // Any other limit's off is still the loosest.
+  assert.match(G.loosenings({ policies: { p: { sizing: { cap_usd: 1000 }, exit: {}, multipliers: [] } } }, { policies: { p: { sizing: { cap_usd: 'off' }, exit: {}, multipliers: [] } } }).join(), /turns a limit off \(looser\)/);
 });
 
 test('exits, policies and the enforced classification: never loosened or changed', () => {
