@@ -10,7 +10,8 @@
  * The deltas are the combined change's on the confirm half (net fixed minus broken decisions, of the pairs, for the
  * correct reads, process adherence and its parts' target; the paired mean difference of R per decision), and with a
  * trend set the legs caught on its confirm half (fixed, broken, pairs, each side's capture rate, the paired net R per
- * session: trend-screen.js); null without one.
+ * session: trend-screen.js); null without one. The trend batch's probe half also counts its missed legs: learnable (a
+ * valid plan existed: the findings), no valid plan at the time (a correct pass), unknown (trend-findings.js missedTally).
  *
  *   build({ probeReport, entries, previous })   the iteration's record (entries: the archive's lines of the iteration;
  *                                     previous: the earlier iterations' records, oldest first, for the learning curve)
@@ -26,7 +27,7 @@ const targetLabel = tag => (tag ? (tag.agent ? `agent ${tag.agent}` : tag.skill 
 function trendOf(r, kept) {
   const t = r.trend;
   const outcome = TC.outcomeOf({ probes: r.probes || [], composed: r.composed || null, kept: Boolean(kept && kept.verdict === 'kept') });
-  return { set: t.set, batch: t.batch, outcome, probe: { days: t.probe.days.length, legs: t.probe.legs.length }, confirm: { days: t.confirm.days.length, legs: t.confirm.legs.length } };
+  return { set: t.set, batch: t.batch, outcome, probe: { days: t.probe.days.length, legs: t.probe.legs.length }, confirm: { days: t.confirm.days.length, legs: t.confirm.legs.length }, missed: t.missed || null, baseRate: t.baseRate || null };
 }
 
 /** The learning curve to this round (trend-curve.js): this round's confirm-half point, the curve, its flags. */
@@ -66,7 +67,12 @@ function build({ probeReport = null, entries = [], previous = [] } = {}) {
   };
 }
 
+// A base rate's count: the leg bars' (bars), the control bar-sides' (sides).
+const countOf = b => (b ? b.bars ?? b.sides ?? 0 : 0);
+const rate = b => (countOf(b) ? `${Math.round((b.valid / countOf(b)) * 100)}%` : 'n/a');
+
 function line(x) {
+  const rateN = b => `${rate(b)} (n ${countOf(b)})`;
   const verdicts = x.screened.reduce((o, s) => ({ ...o, [s.verdict]: (o[s.verdict] || 0) + 1 }), {});
   const screened = Object.keys(verdicts).length ? Object.entries(verdicts).map(([v, c]) => `${v} ${c}`).join(', ') : 'none';
   const c = x.cycles || {};
@@ -82,6 +88,8 @@ function line(x) {
   return `iteration ${x.iteration}: proposed ${x.proposed.length} (${x.proposed.filter(p => p.refused).length} refused), screened ${screened}`
     + `${x.trend ? `; trend batch ${x.trend.batch.index} (probe ${x.trend.probe.legs} legs on ${x.trend.probe.days} day(s), confirm ${x.trend.confirm.legs} on ${x.trend.confirm.days})` : ''}`
     + `${x.trend ? `, ${x.trend.batch.trigger} (${x.trend.outcome})` : ''}`
+    + `${x.trend && x.trend.missed ? `; probe missed legs ${x.trend.missed.missed}: learnable ${x.trend.missed.learnable}, no valid plan ${x.trend.missed.noValidPlan} (a correct pass), unknown ${x.trend.missed.unknown}` : ''}`
+    + `${x.trend && x.trend.baseRate ? `, valid plan on ${rateN(x.trend.baseRate.legBars)} of leg bars vs ${rateN(x.trend.baseRate.controlBars)} of control bar-sides (won ${x.trend.baseRate.controlBars.won ?? '?'}, lost ${x.trend.baseRate.controlBars.lost ?? '?'}, undecided ${x.trend.baseRate.controlBars.undecided ?? '?'})` : ''}`
     + `${x.curvePoint ? `; confirm capture ${x.curvePoint.rate} [${x.curvePoint.lo}, ${x.curvePoint.hi}] net R/window ${x.curvePoint.netR}${x.curvePoint.firstTry ? `, first-try reads ${x.curvePoint.firstTry.readAccuracy} OK ${x.curvePoint.firstTry.okRate} hint-rescued ${x.curvePoint.firstTry.rescueRate}` : ''}${x.curvePoint.selection ? `, selection value ${x.curvePoint.selection.value} (taken ${x.curvePoint.selection.taken.n} at ${x.curvePoint.selection.taken.meanR}R, passed ${x.curvePoint.selection.passed.n} at ${x.curvePoint.selection.passed.meanR}R)` : ''} (${x.curvePoint.source}), pooled ${x.curve.pooled.rate} over ${x.curve.pooled.rounds ?? x.curve.points.length} round(s)${x.curve.excluded ? ` (${x.curve.excluded} earlier round(s) of whole sessions left out)` : ''}${x.curve.plateau ? `, PLATEAU (no gain in ${x.curve.plateauRounds} rounds)` : ''}` : ''}`
     + `${x.memorization && x.memorization.length ? `; MEMORIZATION: ${x.memorization.map(m => m.id).join(', ')}` : ''}`
     + `; combined ${x.composed ? `${x.composed.id} ${x.composed.verdict}` : 'none'}; keep rule ${x.kept ? `${x.kept.verdict}` : 'not run'}${deltas}; ${cost}${skipped}${x.why ? `; ${x.why}` : ''}`;

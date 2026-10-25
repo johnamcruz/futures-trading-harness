@@ -367,6 +367,18 @@
   "trendWindows.controlPerLeg": {
    "value": 1,
    "from": "new in fix/ppc-trend-runs (owner-approved 2026-10-24: control windows for false entries, e.g. 1 a leg, of the same length from the same sessions)"
+  },
+  "trendFindings.examples": {
+   "value": 2,
+   "from": "new in feat/ppc-trend-facts (owner-approved 2026-10-24, build A: a trend finding shows the proposer a few of its learnable legs, e.g. 2, each with the reads code verified at its start, what the model said and the contradiction; few, so a small model's prompt stays short)"
+  },
+  "trendFindings.exampleChars": {
+   "value": 900,
+   "from": "new in feat/ppc-trend-facts (owner-approved 2026-10-24, build A: each example leg's text is clipped, e.g. at 900 characters, so the findings stay within a small model's prompt)"
+  },
+  "trendFindings.saidChars": {
+   "value": 160,
+   "from": "new in feat/ppc-trend-facts (owner-approved 2026-10-24, build A: what the model said at an example leg, and each contradicting clause, clipped, e.g. at 160 characters, so the verified reads still fit the example)"
   }
  },
  "replay": {

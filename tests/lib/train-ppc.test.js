@@ -505,6 +505,14 @@ function world({ proposals, verdict = 'kept', loop: over = {}, trend = false, tr
       const sessions = require('../../scripts/lib/train/trend-windows').windowStates({ days: recorded, windows, minutes: 3 }).map(s => ({ ...s, rollMonth: false }));
       return { capture: { legs }, days: Object.fromEntries(days.map(d => [d, [{ t: `${d}T14:42:02.000Z`, trades: [{ roundTrip: { r: /GREEDY/.test(text) ? -1 : 0 } }] }]])), first, entries, sessions, stepped: Object.values(recorded).flat().map(l => l.t), minutes: 3 };
     },
+    // The trend facts (trend-facts.js attachFacts on the run's files): every missed leg here had a valid plan (learnable).
+    // Its control bars: one a run, a valid plan that lost (the balancing example the proposer reads).
+    trendFacts: (capture, { runDir, controls }) => {
+      calls.trendFacts = [...(calls.trendFacts || []), path.basename(runDir)];
+      calls.trendControls = [...(calls.trendControls || []), controls];
+      const lost = { bar: '2022-03-07T15:00:00.000Z', known: true, valid: true, side: 'long', planReads: ['15m up'], shown: 'no-trade - waiting', outcome: 'lost' };
+      return { ...capture, legs: capture.legs.map(l => (l.captured ? l : { ...l, facts: { learnable: true, why: 'the standard plan passes', bars: [{ known: true, valid: true }], owner: null } })), controls: [lost] };
+    },
     // proposals: a list, or a function of the round (1, 2, ...) giving that round's list.
     proposeProbes: async opts => { calls.proposeProbes.push(opts); return { proposals: (typeof proposals === 'function' ? proposals(calls.proposeProbes.length) : proposals).map(p => ({ ...p })) }; },
     propose: async () => { calls.propose += 1; return { proposals: [] }; },
@@ -627,6 +635,15 @@ test('with a trend set: its missed legs are findings first; an edit that catches
   const report = JSON.parse(fs.readFileSync(path.join(w.paths.iter(1), 'probe-report.json'), 'utf8'));
   assert.deepStrictEqual(report.trend.batch, { index: 0, size: BATCH, from: 0, cycles: [0], trigger: 'start', why: `the loop's first round: ${BATCH} legs` });
   assert.deepStrictEqual([report.trend.probe.legs, report.trend.confirm.legs], [split.probe.legs, split.confirm.legs]);
+  // The probe half's missed legs counted (every one learnable here: the trendFacts step's), the facts worked out only
+  // for the champion's probe-half runs (the findings' half), never a confirm, regression or edit run.
+  assert.deepStrictEqual(report.trend.missed, { missed, learnable: missed, noValidPlan: 0, unknown: 0 });
+  const probeDay = r => split.probe.days.some(d => r.includes(`t${d.replace(/-/g, '')}.`));
+  assert.ok(w.calls.trendFacts.length && w.calls.trendFacts.every(r => r.startsWith('l1-pc') && probeDay(r)), w.calls.trendFacts.join());
+  // Given the day's control windows; the base rate in the report; the base rate and the plan that lost in the prompt.
+  assert.ok(w.calls.trendControls.every(c => Array.isArray(c) && c.every(x => Number.isFinite(x.from) && Number.isFinite(x.to))), JSON.stringify(w.calls.trendControls));
+  assert.deepStrictEqual(report.trend.baseRate.controlBars, { sides: w.calls.trendFacts.length, valid: w.calls.trendFacts.length, won: 0, lost: w.calls.trendFacts.length, undecided: 0 });
+  assert.match(w.calls.proposeProbes[0].controls, /^Base rate: .*\nValid plan, it lost .*\n {3}- long: valid plan, it lost: "15m up"/);
   assert.deepStrictEqual(report.trend.probe.days.filter(d => report.trend.confirm.days.includes(d)), [], 'no day in both halves');
   assert.deepStrictEqual(report.trend.regression, [REG_DAY]);
   assert.deepStrictEqual(report.probes.map(p => p.verdict), ['helped', 'no effect', 'helped', 'hurt'], 'the greedy edit\'s catches on losing sessions never count; a leg lost on the regression day hurts');

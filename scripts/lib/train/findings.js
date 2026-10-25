@@ -19,7 +19,7 @@
  *                                              step: the flow step it blocks (flow.js stepOf)
  *   mergeFindings(trend, reads, { max })       the trend set's findings (trend-findings.js, by cost) then these, renumbered
  *   NOT_PROBED                                 the skills a finding never names (no read, the loop's own)
- *   findingLine(f)                             one line of the proposer's prompt
+ *   findingLine(f)                             one line of the proposer's prompt (a trend finding's example legs below it)
  */
 
 const { familyRoot } = require('../trading/contracts');
@@ -114,8 +114,10 @@ function findingLine(f) {
   if (f.kind === 'trend-blocker') {
     const owner = f.skill || (f.agent ? `agent ${f.agent}` : '(no skill or role named)');
     // Its rank is the move the legs left (code ranks by it); the line names no move, price or R: the proposer reads what
-    // blocked the plan, never what the market did after.
-    return `${f.id}. ${owner}: trend-blocker at ${f.step || 'no step'}: blocked ${f.count} of ${f.of} trend legs${f.detail ? `. Most often: ${f.detail}` : ''}`;
+    // blocked the plan, never what the market did after. Each example leg (trend-findings.js, trend-facts.js
+    // exampleLine): the reads code verified at its start beside what the model said, no date, time or price.
+    const legs = (Array.isArray(f.examples) ? f.examples : []).map(x => `\n   - leg ${x}`).join('');
+    return `${f.id}. ${owner}: trend-blocker at ${f.step || 'no step'}: blocked ${f.count} of ${f.of} trend legs, each with a valid plan at the time${f.detail ? `. Most often: ${f.detail}` : ''}${legs}`;
   }
   const what = f.kind === 'misread' ? `${f.count} of ${f.of} claimed reads refused` : f.kind === 'missed' ? `missed ${f.count} of ${f.of} times its read was true for the side` : `${f.count} refusal(s) for a reason the facts refute`;
   return `${f.id}. ${f.skill || (f.agent ? `agent ${f.agent}` : '(no skill read at the bar)')}: ${f.kind}: ${what}${f.detail ? `. Most often: ${f.detail}` : ''}`;
