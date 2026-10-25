@@ -256,7 +256,8 @@ function afterTargetExit(t, exit, slipTicks) {
   const own = t.ownExit || {};
   const minutes = exit.trail_by === 'structure' ? SWING_TFS[exit.swing_tf] : null;
   if (!(exit.lock_giveback_r > 0 && exit.trail_r > 0) || !['r', 'structure'].includes(exit.trail_by) || (exit.trail_by === 'structure' && !minutes)) return t;
-  const plan = { afterTarget: { lockGivebackR: exit.lock_giveback_r, trailBy: exit.trail_by, trailR: exit.trail_r, swingMinutes: minutes } };
+  if (![undefined, 'off', 'on'].includes(exit.ratchet)) return t;
+  const plan = { afterTarget: { lockGivebackR: exit.lock_giveback_r, trailBy: exit.trail_by, trailR: exit.trail_r, swingMinutes: minutes, ...(exit.ratchet === 'on' ? { ratchet: true } : {}) } };
   const swings = minutes && t.swingPath ? t.swingPath[exit.swing_tf] || [] : [];
   const trade = { sign: 1, entry: 0, risk: t.stopTicks, stop: -t.stopTicks, peakR: 0, armed: false, target: own.targetTicks > 0 ? own.targetTicks : null };
   let low = 0;

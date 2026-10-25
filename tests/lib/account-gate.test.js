@@ -299,6 +299,21 @@ test('a protective stop may move toward the market only', () => {
   assert.deepStrictEqual(run({ orderId: 9, trailPrice: 21470 }, long1, [{ ...sellStop, type: 5, stopPrice: null }]), ['modify-protection'], 'unknown level: refuse');
 });
 
+test('the target-then-trail ratchet\'s stop moves (one jump of several R toward the market, no reason) are accepted by the gateway and the hook', () => {
+  const { evaluateModify } = require('../../scripts/lib/trading/order-gate');
+  // The 2026-10-24 replay's short from 14530.5 (1R 24.5 points): its buy stop at +0.5R (14518.25) to +3.2R (14452).
+  const buyStop = { id: 9, contractId: CONTRACT, side: 0, type: 4, size: 1, stopPrice: 14518.25 };
+  const short1 = [{ contractId: CONTRACT, type: 2, size: 1 }];
+  const move = { orderId: 9, stopPrice: 14452 };
+  assert.deepStrictEqual(checks(evaluateModifyAccount({ input: move, positions: short1, orders: [buyStop], config })), []);
+  assert.deepStrictEqual(evaluateModify({ input: move, config }).violations, []);
+  // A long mirrored: its sell stop from +0.5R to +3.5R in one move.
+  const sellStop = { id: 9, contractId: CONTRACT, side: 1, type: 4, size: 1, stopPrice: 21512.25 };
+  assert.deepStrictEqual(checks(evaluateModifyAccount({ input: { orderId: 9, stopPrice: 21585.75 }, positions: long1, orders: [sellStop], config })), []);
+  // Back the other way (a loosened ratchet, never sent) is still refused.
+  assert.deepStrictEqual(checks(evaluateModifyAccount({ input: { orderId: 9, stopPrice: 14518.25 }, positions: short1, orders: [{ ...buyStop, stopPrice: 14452 }], config })), ['modify-protection']);
+});
+
 test('contract months: an exit must be in the month that is open, and a long and a short in two months are not flat', () => {
   const Z = CONTRACT;
   const H = 'MNQ:2027-03';

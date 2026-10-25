@@ -24,6 +24,7 @@ policies:                       # each policy strategy that trades this account 
       trail_by: structure       # target_then_trail: structure (behind the last confirmed swing on swing_tf) or r (trail_r behind the best price)
       trail_r: 1                # target_then_trail: R behind the best price (trail_by r, and structure's fallback until a swing is confirmed)
       swing_tf: 15m             # target_then_trail with trail_by structure: the swings the stop trails behind
+      ratchet: off              # target_then_trail: on lifts the lock to the best R reached less lock_giveback_r; off (opt in only): the lock above
     multipliers: []             # enforced size multipliers folded into the verdict: none yet
 enforced: [daily_loss_soft, loss_streak_stop, sizing, exit, multipliers, target_stop, consistency_stop, one_position, hard_stops, trend_rule]
 taught: [trend_fade, room, mtf_read, skip_rules, confluence, secondary_context, halving]
@@ -95,6 +96,31 @@ each trade from its recorded path, prop/attempts.js exitAs):
   `lock_giveback_r` is 1.5 (the owner's, 2026-10-24): at a 2R target the
   stop locks at +0.5R, room for an ordinary pullback in a trend; at 0.5 it
   locked at +1.5R and closed winners on a 1R pullback before the leg ran on.
+
+  `ratchet` (target_then_trail only) is off by default (the owner,
+  2026-10-24: opt in only). With `ratchet: on`, the lock rises with the
+  trade: it is the best R reached (closed bars' extremes, as the R trail
+  reads them; at least the target's R) less `lock_giveback_r`, never below
+  the entry, so `lock_giveback_r` is the most a trade past its target gives
+  back from its best. The stop is the farther in profit of that lock and
+  the trail and never loosens. A bar that sets a stop already through its
+  own extreme closes the trade at its close, as the trail does. The owner
+  asked for it after a short ran to +4.7R and closed at +2.29R behind a
+  15m swing: "implement that ratchet since we shouldn't have give back too
+  much when we caught 4.7r", with the giveback kept at 1.5: "3.2r is
+  good". Worked on that MNQ short (entry 14530.50, 1R 24.50 points = 98
+  ticks, $49.00 a micro; tick 0.25, $0.50 a tick; its target at 2R,
+  14481.50), with `ratchet: on`:
+
+  | Best reached | Best R | Ratchet stop | Locked |
+  |---|---|---|---|
+  | 14481.50 (the target) | 2.00 | 14518.25 | +0.50R, 49 ticks, $24.50 a micro |
+  | 14457.00, then back to 14481.50 | 3.00 | 14493.75 | +1.50R, 147 ticks, $73.50 a micro |
+  | 14415.25 | 4.70 | 14452.00 | +3.20R, 314 ticks, $157.00 a micro |
+  | 14408.00 | 5.00 | 14444.75 | +3.50R, 343 ticks, $171.50 a micro |
+
+  A swing trail farther in profit than the ratchet still wins. With `off`
+  the stop stays at 14518.25 past the target until the trail passes it.
 - `trail`: hold the stop until `trail_activate_r`, then trail
   `trail_giveback_r` behind the best price, in place of the target. Kept only
   as a tunable: our research found this tight trail cut the edge.

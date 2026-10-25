@@ -39,7 +39,8 @@ function timeframeMs(tf) {
  * target is risk.min_rr, as a bracket. A policy strategy whose exit is
  * in exit mode `target` sets no target of its own (`own`: each trade keeps its own
  * stop and target, tradeExitPlan), only the trail on top when it has one;
- * in mode `target_then_trail` its `afterTarget`: past the target the trade is trailed, not closed.
+ * in mode `target_then_trail` its `afterTarget`: past the target the trade is trailed, not closed (`ratchet: true` only
+ * with the rulebook's `ratchet: on`: off, the key is left out, so an off plan and its hash are as before).
  */
 function exitPlan(s) {
   const x = s.exit || {};
@@ -53,7 +54,7 @@ function exitPlan(s) {
     maxBars: x.max_bars ?? null,
     ...(own ? { own: true } : {}),
     // Exit mode target_then_trail: past its own target the trade is trailed, not closed (trading/exit-trail.js).
-    ...(x.mode === 'target_then_trail' ? { afterTarget: { lockGivebackR: x.lock_giveback_r, trailBy: x.trail_by, trailR: x.trail_r, swingMinutes: x.trail_by === 'structure' ? SWING_TFS[x.swing_tf] : null } } : {}),
+    ...(x.mode === 'target_then_trail' ? { afterTarget: { lockGivebackR: x.lock_giveback_r, trailBy: x.trail_by, trailR: x.trail_r, swingMinutes: x.trail_by === 'structure' ? SWING_TFS[x.swing_tf] : null, ...(x.ratchet === 'on' ? { ratchet: true } : {}) } } : {}),
   };
 }
 

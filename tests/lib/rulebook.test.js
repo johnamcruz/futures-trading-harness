@@ -22,7 +22,7 @@ const book = (extra = {}) => ({ name: 'acct', description: 'a rulebook for a tes
 const errorsOf = (extra, body = BODY) => RB.validateRulebook(book(extra), body, 'acct');
 /** A complete policy entry: every sizing key and the trail stated. */
 const SIZING = { cushion_frac: 0.1, cap_usd: 500, clock_k: 'off', r_per_session: 0.3, min_size_guard: 1.5, drawdown_halve_usd: 'off', stop_slippage_ticks: 1, min_contracts: 3, floor_stretch_max_usd: 'off' };
-const OFFS = { trail_activate_r: 'off', trail_giveback_r: 'off', lock_giveback_r: 'off', trail_by: 'off', trail_r: 'off', swing_tf: 'off' };
+const OFFS = { trail_activate_r: 'off', trail_giveback_r: 'off', lock_giveback_r: 'off', trail_by: 'off', trail_r: 'off', swing_tf: 'off', ratchet: 'off' };
 const ENTRY = { sizing: SIZING, exit: { ...OFFS, mode: 'trail', trail_activate_r: 2, trail_giveback_r: 1 }, multipliers: [] };
 const TARGET = { ...OFFS, mode: 'target' };
 const AFTER = { ...OFFS, mode: 'target_then_trail', lock_giveback_r: 0.5, trail_by: 'structure', trail_r: 1, swing_tf: '15m' };
@@ -99,6 +99,18 @@ test('validateRulebook: a policy entry states every sizing key, the trail and it
   assert.deepStrictEqual(RB.policyEntry({ policies: { prop_a: { ...ENTRY, exit: TARGET } } }, 'prop_a').exit, { mode: 'target' });
   assert.deepStrictEqual(RB.policyEntry({ policies: { prop_a: ENTRY } }, 'prop_a').exit, { mode: 'trail', trail_activate_r: 2, trail_giveback_r: 1 });
   assert.deepStrictEqual(RB.policyEntry({ policies: { prop_a: { ...ENTRY, exit: AFTER } } }, 'prop_a').exit, { mode: 'target_then_trail', lock_giveback_r: 0.5, trail_by: 'structure', trail_r: 1, swing_tf: '15m' });
+  // The ratchet (target_then_trail only): stated, on or off; anything else refused (fails closed); off is left out as
+  // the strategy loader reads it (today's lock), on is carried.
+  assert.deepStrictEqual(errorsOf(p({ exit: { ...AFTER, ratchet: 'on' } })), []);
+  const { ratchet: _r, ...noRatchet } = AFTER;
+  assert.match(errorsOf(p({ exit: noRatchet })).join(), /exit.ratchet: missing; state it/);
+  for (const v of [true, false, 'yes', 1, 0, '', null, 'ON']) assert.match(errorsOf(p({ exit: { ...AFTER, ratchet: v } })).join(), /exit.ratchet: .* is not on, or off/, String(v));
+  for (const mode of ['target', 'trail']) {
+    const base = mode === 'trail' ? ENTRY.exit : TARGET;
+    assert.match(errorsOf(p({ exit: { ...base, ratchet: 'on' } })).join(), new RegExp(`exit.ratchet: off in mode ${mode}`), mode);
+  }
+  assert.strictEqual(RB.policyEntry({ policies: { prop_a: { ...ENTRY, exit: { ...AFTER, ratchet: 'on' } } } }, 'prop_a').exit.ratchet, 'on');
+  assert.ok(!('ratchet' in RB.policyEntry({ policies: { prop_a: { ...ENTRY, exit: AFTER } } }, 'prop_a').exit));
   // A limit is off only by `off`: 0 would turn the cap or the halving off unseen, so it is refused.
   for (const k of ['cap_usd', 'drawdown_halve_usd', 'clock_k']) {
     for (const v of [0, -5, '', 'none', null]) assert.match(errorsOf(p({ sizing: { ...SIZING, [k]: v } })).join(), new RegExp(`sizing.${k}: .* is not .*or off`), `${k} ${v}`);

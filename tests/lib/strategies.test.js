@@ -85,6 +85,12 @@ test('a policy\'s exit mode: the shipped policy keeps each trade\'s own stop and
   assert.deepStrictEqual(pol({ mode: 'target_then_trail', lock_giveback_r: 0.5, trail_by: 'r', trail_r: 1 }), []);
   assert.ok(pol({ mode: 'target_then_trail', lock_giveback_r: 0.5, trail_by: 'structure', trail_r: 1 }).some(e => /exit.swing_tf: one of 5m, 15m, 1h/.test(e)));
   assert.ok(pol({ mode: 'target', lock_giveback_r: 0.5 }).some(e => /exit.lock_giveback_r: only for exit mode target_then_trail/.test(e)));
+  // The ratchet: on or off (left out: off), target_then_trail only; anything else refused.
+  for (const r of ['on', 'off']) assert.deepStrictEqual(pol({ mode: 'target_then_trail', lock_giveback_r: 0.5, trail_by: 'r', trail_r: 1, ratchet: r }), [], r);
+  for (const r of [true, 'yes', 1]) assert.ok(pol({ mode: 'target_then_trail', lock_giveback_r: 0.5, trail_by: 'r', trail_r: 1, ratchet: r }).some(e => /exit.ratchet: on or off/.test(e)), String(r));
+  assert.ok(pol({ mode: 'target', ratchet: 'on' }).some(e => /exit.ratchet: only for exit mode target_then_trail/.test(e)));
+  const plan = x => require('../../scripts/lib/trading/evaluator').exitPlan({ risk: { min_rr: 2 }, exit: { mode: 'target_then_trail', lock_giveback_r: 0.5, trail_by: 'r', trail_r: 1, ...x } }).afterTarget;
+  assert.deepStrictEqual([plan({ ratchet: 'on' }).ratchet, 'ratchet' in plan({}), 'ratchet' in plan({ ratchet: 'off' })], [true, false, false], 'on carried as true; off left out (the plan and its hash as before)');
   assert.ok(pol({ mode: 'trail' }).some(e => /mode trail needs trail_activate_r and trail_giveback_r/.test(e)));
   assert.ok(pol({ mode: 'own' }).some(e => /exit.mode: target, target_then_trail, trail/.test(e)));
   assert.ok(pol({}).some(e => /exit: mode target or target_then_trail .*or trail_activate_r and trail_giveback_r/.test(e)));

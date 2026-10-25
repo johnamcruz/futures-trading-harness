@@ -7,6 +7,7 @@ const test = require('node:test');
 const assert = require('node:assert');
 const { createRunner } = require('../../scripts/lib/runner');
 const { validateConfig } = require('../../scripts/lib/autotrader');
+const { afterTargetStep } = require('../../scripts/lib/trading/exit-trail');
 
 const DAY = Date.UTC(2026, 9, 7); // Wednesday; New York = UTC-4
 const et = (h, m, s = 0) => DAY + ((h + 4) * 60 + m) * 60000 + s * 1000;
@@ -507,6 +508,29 @@ test('exit mode target_then_trail, live: the target order is cancelled, the stop
   assert.ok(st.logs.some(l => /structure trail: no 15m swing confirmed yet; trailing 1R behind the best price \(the fallback\)/.test(l)), st.logs.join('\n'));
   const none = await trailSim({ tape, exit, until: et(10, 15) });
   assert.deepStrictEqual([none.modified, none.cancelled.includes(10)], [[21595, 21610], true], 'no bracket recorded: the one resting limit (21600) is its target');
+});
+
+test('exit mode target_then_trail, live: the ratchet moves the resting stop to the best R less the giveback, as exit-trail.js steps the same bars', async () => {
+  // The 2026-10-24 replay's MNQ short: from 14530.5, 1R = 98 ticks (24.5 points), its own target (the bracket, 196 ticks)
+  // at 14481.5 = 2R. Giveback 1.5R, a loose 3R trail, so the ratchet is the stop past the target.
+  const exit = { mode: 'target_then_trail', lock_giveback_r: 1.5, trail_by: 'r', trail_r: 3, ratchet: 'on' };
+  const tape = { 3: [14490, 14481.5, 14485], 6: [14440, 14415.25, 14420], 9: [14450, 14430, 14445] };
+  const base = [14531, 14530, 14530.5];
+  const r = await trailSim({ tape, short: true, base, fillPrice: 14530.5, stopAt: 14555, record: { stopTicks: 98, targetTicks: 196 }, exit, until: et(10, 15) });
+  // At the target +0.5R (14518.25); at 4.7R (14415.25) +3.2R (14452); the pullback moves nothing; never closed.
+  assert.deepStrictEqual([r.modified, r.closedIds], [[14518.25, 14452], []], r.logs.join('\n'));
+  // The same bars through exit-trail.js directly: the same stops (the runner adds nothing of its own).
+  let t = { sign: -1, entry: 14530.5, risk: 24.5, stop: 14555, peakR: 0, armed: false, target: 14481.5 };
+  const plan = { afterTarget: { lockGivebackR: 1.5, trailBy: 'r', trailR: 3, swingMinutes: null, ratchet: true } };
+  const stops = [3, 6, 9].map(m => { const [h, l, c] = tape[m]; const s = afterTargetStep(t, { h, l, c }, plan, 0.25); t = { ...t, ...s }; return s.stop; });
+  assert.deepStrictEqual([...new Set(stops)], r.modified);
+  // A long mirrors it: from 21500, 1R 10 points, target 21600 (10R); at 10.5R the ratchet is 9R (21590), at 12R 10.5R (21605).
+  const long = await trailSim({ tape: { 0: [21590, 21560, 21580], 3: [21605, 21598, 21603], 6: [21620, 21612, 21618], 9: [21616, 21611, 21614] }, exit, record: { targetTicks: 400 }, until: et(10, 15) });
+  assert.deepStrictEqual(long.modified, [21590, 21605]);
+  // Off (the key left out, as the rulebook's `off` reads): the lock once at 10R - 1.5R (21585), then the loose trail only.
+  const { ratchet: _on, ...offExit } = exit;
+  const off = await trailSim({ tape: { 0: [21590, 21560, 21580], 3: [21605, 21598, 21603], 6: [21620, 21612, 21618], 9: [21616, 21611, 21614] }, exit: offExit, record: { targetTicks: 400 }, until: et(10, 15) });
+  assert.deepStrictEqual(off.modified, [21585, 21590]);
 });
 
 test('a composed fill (the gate\'s stamp): beyond the plan\'s stop it is closed at once ([exit]); away from the plan\'s limit its stop goes to the plan\'s price ([protect]); at the limit nothing moves', async () => {

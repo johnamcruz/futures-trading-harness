@@ -105,10 +105,10 @@ const RISK_KEYS = ['stop', 'min_rr', 'max_risk_usd', ...COMPOSED_RISK_KEYS];
 // A composed record's validity in base bars after its bar's close: at most the gate's default briefing age (3 bars,
 // FTH_SIGNAL_MAX_AGE_BARS), which refuses an entry past it anyway.
 const MAX_VALID_BARS = 3;
-const EXIT_KEYS = ['target_r', 'target', 'trail_activate_r', 'trail_giveback_r', 'max_bars', 'mode', 'lock_giveback_r', 'trail_by', 'trail_r', 'swing_tf'];
+const EXIT_KEYS = ['target_r', 'target', 'trail_activate_r', 'trail_giveback_r', 'max_bars', 'mode', 'lock_giveback_r', 'trail_by', 'trail_r', 'swing_tf', 'ratchet'];
 /** A policy strategy's exit modes and its after-target keys (its rulebook's exit; trading/rulebook.js EXIT_MODES). */
 const POLICY_EXIT_MODES = ['target', 'target_then_trail', 'trail'];
-const AFTER_TARGET_KEYS = ['lock_giveback_r', 'trail_by', 'trail_r', 'swing_tf'];
+const AFTER_TARGET_KEYS = ['lock_giveback_r', 'trail_by', 'trail_r', 'swing_tf', 'ratchet'];
 const MAX_FILE_BYTES = 256 * 1024;
 const has = (obj, k) => Object.prototype.hasOwnProperty.call(obj, k);
 
@@ -173,6 +173,8 @@ function exitErrors(x) {
       for (const k of ['lock_giveback_r', 'trail_r']) req(typeof x[k] === 'number' && x[k] > 0 && x[k] <= 50, `exit.${k}: a number of R above 0`);
       req(['r', 'structure'].includes(x.trail_by), 'exit.trail_by: r or structure');
       req(x.trail_by !== 'structure' || Object.hasOwn(SWING_TFS, x.swing_tf), `exit.swing_tf: one of ${Object.keys(SWING_TFS).join(', ')} (a structure trail's swings)`);
+      // The ratchet: opt in (the rulebook's `ratchet: on`); off, or left out (the rulebook's `off` is), is today's lock.
+      req([undefined, 'off', 'on'].includes(x.ratchet), 'exit.ratchet: on or off (left out: off)');
     } else if (after.length) errors.push(`exit.${after[0]}: only for exit mode target_then_trail`);
     req(x.target_r !== undefined || x.target !== undefined || x.trail_activate_r !== undefined || x.mode === 'target' || x.mode === 'target_then_trail', 'exit: needs target_r, target, or trail_activate_r and trail_giveback_r');
     if (x.target_r !== undefined && x.trail_activate_r !== undefined) {

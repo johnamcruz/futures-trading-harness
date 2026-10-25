@@ -59,7 +59,7 @@ the champion is replaced only with the owner's approval.
 | Selection | which strategies are enabled per market; size multipliers per strategy and context (e.g. orb in a `mixed` read: half) | Calibration (section 6), then the search |
 | Priority order | the judgment calls in the `strategy-library` priority order: whether a mixed read halves the size or skips the setup, how much room is enough, which secondary context halves | Calibration, then the search |
 | Strategy parameters | stops, targets, filters (e.g. ORB's ADX gate), per market where they differ; the flow strategies' thresholds on their `field("...")` paths (R34) | Calibration |
-| Exits | `prop_portfolio` `exit`: its mode (`target`: each trade's own stop and target, a trail on top only when set; `target_then_trail`: the stop held to the trade's own target, then locked near it and trailed past it, behind swings or by R; `trail`: hold the stop, then trail in place of the target) | The search, jointly with sizing (R10) |
+| Exits | `prop_portfolio` `exit`: its mode (`target`: each trade's own stop and target, a trail on top only when set; `target_then_trail`: the stop held to the trade's own target, then locked near it and trailed past it, behind swings or by R, with `ratchet: on` (opt in, off today) never giving back more than `lock_giveback_r` from the best R reached; `trail`: hold the stop, then trail in place of the target) | The search, jointly with sizing (R10) |
 | Stand-down | stop entries when the cushion to the floor falls below an amount (headroom) | The search |
 
 **Units.**
@@ -519,7 +519,8 @@ search over sizing, exit and stand-down reached 0% blows at a 41.7% pass rate
 strategy and data). That is a reason to search exits widely, not evidence
 for any setting. Today's `prop_portfolio` exit (its rulebook's `exit`: exit
 mode `target_then_trail`, the stop held to the trade's own target, then a
-swing trail past it) is one candidate; the mode, the lock and the trail are
+swing trail past it; its opt-in `ratchet`, off today, lifts the lock to the
+best R reached less `lock_giveback_r`) is one candidate; the mode, the lock and the trail are
 searched, the attempt simulator re-exiting
 each trade from its recorded path under either (`prop/attempts.js` `exitAs`).
 The loss streak stop (`loss_streak_stop`) and the pacing clock (`clock_k`) are
