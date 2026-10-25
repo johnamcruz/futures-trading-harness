@@ -567,10 +567,76 @@ and leg ids; the lessons lines record the batch too.
   ranks by that move; the proposer's line names what blocked the plan and
   how many legs, never the move, a price or an R. The owner is the skill of
   the read compose_check refused at that step, `risk-manager` for a phase-2
-  veto, or `trade-executor` for an abort. A late or unfilled entry, or the
-  head trader's pass, names no owner. A rule (the clock, the account's
-  stops, news), a bar outside the session and a position already open are
-  never findings: those are code and the rulebook.
+  veto, or `trade-executor` for an abort. A size under the rulebook's floor
+  at the model's stop (`min-contracts`, phase 2's or the gate's) is the head
+  trader's stop choice. It is filed under the flow step `stop` and owned by the
+  skill of its plan's stop read, never by the risk manager: the floor is the
+  rulebook's. A late or unfilled entry, or the head trader's pass, names no
+  owner. A rule (the clock, the account's stops, news), a bar outside the
+  session and a position already open are never findings: those are code
+  and the rulebook.
+- **Learnable legs only** (`scripts/lib/train/trend-facts.js`). After the
+  probe half's champion runs, code works out each missed leg's facts at its
+  entry-able bars: the trade cycles of its catch window, less those a rule
+  blocked. The briefing at each bar is rebuilt from the run's own bars, as
+  the skill-usage report rebuilds it. A frame the rebuild can't make though
+  the run had it (the 5m without the run's 1m bars) is `unknown`. Its reads
+  are never counted, and neither is an `at` read when it is the frame above
+  the base: the check would fall back past it to a higher candle. Where the
+  run recorded a compose_check call on the bar, its reads are checked again:
+  if the record and the rebuild disagree, the bar is `unknown`. The model's
+  own OK record that way (passed on, vetoed, late, refused at the gate,
+  unfilled) shows a plan passed whatever the rebuild, unless the floor
+  refused it. At each bar code says whether a valid with-trend plan existed:
+  the window allows entries, the trend rule allows the side (not only as a
+  reversal), and the standard plan or a combination of the reads TRUE on the
+  leg's side (compose-hints' candidates) passes compose_check and the plan
+  (R:R, room, the stop floor). Under a prop attempt a size must fit by the
+  entry's own size chain (`prop/size-translate.js`): the policy's budget plan
+  at the budget and room that cycle's attempt line stated, at the full
+  multiplier (an upper bound on the verdict's). Then comes the composed
+  strategy's `risk.max_risk_usd` at the contract's all-in risk (`capsOf`,
+  `allInRisk`), and the floor on the capped size (`minContractsRefusal`). A
+  leg with a valid plan at any bar is learnable and can be a finding. A leg
+  every bar of which was known, with none, had no valid plan at the time: a
+  correct pass, counted, never a finding. A bar with a missing frame and no
+  valid plan on its known reads is not known: the missing reads might have
+  made one. Any other leg's facts are unknown, also counted. `probe-report.json` (`trend.missed`), the round's log and
+  `train-loop.js status` give the three counts.
+- **The base rate.** A valid plan exists on most bars, legs or not, so a
+  leg's verified reads alone would teach over-trading. Code runs the same
+  plan check on the champion's control-window bars (no leg), each side on
+  its own, as a leg bar is checked on its leg's side: like with like.
+  `probe-report.json` (`trend.baseRate`) and `status` give the share of
+  control bar-sides with a valid plan, and how those plans did on the
+  session's later bars (won, lost, undecided by its end), beside the share
+  of the missed legs' entry bars. The proposer reads them all. It also reads up to `examples` control bars, a day each in
+  turn, where a valid plan existed and lost: its stop was hit before its
+  minimum R:R mark on the run's later bars that session, the stop first when
+  one bar holds both. They are labelled "valid plan, it lost: what tells
+  these apart from the legs?". The probe prompt says an edit must tell the
+  legs from the losers, never just enter more.
+- **What the proposer sees.** Each trend finding lists up to `examples`
+  of its legs (`config/training.json` `trendFindings`), the costliest
+  first, each clipped to `exampleChars` at a clause boundary. A late or
+  unfilled entry's legs (the runner's execution) give none. Each example
+  gives the side, what the model said (its CYCLE RESULT line, clipped to
+  `saidChars`; the runner's own words labelled "the runner") and, for a
+  refused plan, its reads. Then it gives the passing plan's reads, or why
+  none passed. It never gives the whole list of TRUE reads, and code never
+  parses what was said: the proposer reads it beside the plan that passed
+  and sees for itself where they part. A leg is owned by the earliest step where
+  a read the model composed the leg's way was not verified, and that read's
+  skill; a no-plan leg (it composed none) has no owner. A parser of the model's stated
+  claims was tried and dropped: out of sample it was wrong about a third of
+  the time.
+- **No leak.** The examples name reads by timeframe and level name only:
+  dates, months, weekdays, clock times, prices, numbers (digits, words,
+  fractions), ids, `#` tags and account names are removed. Tests scan the
+  proposer's prompt for the legs' dates and prices. The facts are worked out
+  after the run, outside the run home: the capture in the run's folder is
+  unchanged, and no trading prompt or tool requires the module. The trading
+  model never sees them.
 - **The screen** (`scripts/lib/train/trend-screen.js`). Its units are the
   stepped windows. Legs are paired by id: caught or not, a one-sided McNemar
   test. A catch counts as fixed only when its window's net R got no worse,
@@ -1260,7 +1326,7 @@ through `scripts/lib/tunables.js` (the schedule through
 | File | What it holds | Tighten-only keys |
 | --- | --- | --- |
 | `config/schedule.json` | The learning split, the prop schedule, look budgets, recorded looks, data dates (above) | look budgets, validate cap (down); reserve months (up); final needs a test pass |
-| `config/training.json` | The stage-1 exit test, the experience index and risk record minimums, the keep rule, the paired decision rule, the probe screen, probe and loop ranges, A/B levels, proposal, compose, lesson and probe-edit limits, skill byte caps, the learning report, the field studies | the exit test's bars, the sample floors and levels, the keep rule (its primary pinned), the decision rule, the screen, the loop's budget maxima, proposal limits, arms per evaluation, skill byte caps |
+| `config/training.json` | The stage-1 exit test, the experience index and risk record minimums, the keep rule, the paired decision rule, the probe screen, probe and loop ranges, A/B levels, proposal, compose, lesson and probe-edit limits, skill byte caps, the learning report, the field studies, the trend findings' example legs | the exit test's bars, the sample floors and levels, the keep rule (its primary pinned), the decision rule, the screen, the loop's budget maxima, proposal limits, arms per evaluation, skill byte caps |
 | `config/replay.json` | Latency, the stage presets, curated lists and moments, setup moments, the account-state draw, driver retries, decision labels, the scorecard's give-back rule, the backtester's plain-run defaults | the stage presets (pinned) |
 | `config/runner.json` | The order gate's limits and timing, the trade lifecycle's size cap, the account snapshot, the replay clock, cycles, bars, prompt sizes, the live session, alerts, read caps and page sizes, the Monte Carlo's size | the gate's timing (pinned), its loss, entry, age and confluence limits, the bracket tolerances, the facts check, the size cap, the snapshot and clock tolerances, the kill switch's error count, bar staleness, the close settle time, the kill graces and the gate slack (pinned), the Monte Carlo maximum |
 | `config/analysis.json` | The reads' parameters: indicators, the snapshot, regime, CISD, CRT, volume profile, candles, the multi-timeframe read, day context, structure, momentum, fair value gaps, the briefing's frames, the rules evaluator's window | none |

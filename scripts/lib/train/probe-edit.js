@@ -18,7 +18,7 @@
  *   GROW_BYTES (a role has no cap of its own: its prompt is pinned by its tests, so it may only grow by the budget);
  * - the frontmatter is never edited: no find may reach into it, and it reads the same after.
  *
- *   KINDS, MAX_LINE, NUMBER_WORDS, GROW_BYTES
+ *   KINDS, MAX_LINE, NUMBER_WORDS, FRACTIONS, GROW_BYTES
  *   splitTagged(raw)                         { tag, proposal }: a PROPOSAL object split into its tag and the proposal
  *   targetOf(tag)                            { kind: 'skill' | 'agent', name, file, label } of a tag, or null
  *   tagErrors(tag, proposal, { findings })   [error]
@@ -158,4 +158,4 @@ function styleErrors(proposal, { root, kind = null } = {}) {
   return errors;
 }
 
-module.exports = { KINDS, MAX_LINE, GROW_BYTES, NUMBER_WORDS, splitTagged, targetOf, tagErrors, styleErrors, numbers, bodyBytes, frontmatterEnd };
+module.exports = { KINDS, MAX_LINE, GROW_BYTES, NUMBER_WORDS, FRACTIONS, splitTagged, targetOf, tagErrors, styleErrors, numbers, bodyBytes, frontmatterEnd };

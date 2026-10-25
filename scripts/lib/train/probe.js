@@ -58,6 +58,7 @@ const { recordedTimes } = require('../replay/store');
 const TS = require('./trend-set');
 const TSC = require('./trend-screen');
 const TF = require('./trend-findings');
+const TFX = require('./trend-facts');
 const TC = require('./trend-curve');
 const FT = require('./first-try');
 const SEL = require('./selection');
@@ -287,7 +288,10 @@ async function probeRound(ctx, { n, champion, api }) {
       out.sessions.push(...(one.sessions || built.windows.map(w => ({ unit: w.id, day, complete: false, why: 'the step reported no session state', rollMonth: false }))));
       out.cycles += one.cycles;
       if (!reused) out.fresh += one.cycles;
-      if (withFindings && one.capture) out.captures.push(one.capture);
+      // The findings' half: each missed leg's facts at its start (trend-facts.js), from the run's own files, after the
+      // run and outside its home; never in the capture the run's folder holds, never in a phase a trading run reads.
+      // The control windows' bars give the base rate (a valid plan where no leg was) and the plans that lost.
+      if (withFindings && one.capture) out.captures.push((ctx.steps.trendFacts || TFX.attachFacts)(one.capture, { runDir: runs.runs[0].runDir, tree, barsFiles, controls: built.windows.filter(w => w.kind === 'control') }));
     }
     // A half screens the batch's own legs only (a replayed session can hold legs of another round's batch); the
     // regression days screen every leg they hold.
@@ -336,6 +340,15 @@ async function probeRound(ctx, { n, champion, api }) {
   report.cycles.champion.probe = base.cycles;
   // The trend set's probe half and the regression days, the champion's (the findings read the probe half only).
   const trendBase = trend ? await trendSide('pc', champion.dir, 1, 'probe', true) : null;
+  // The probe half's missed legs: those a valid plan existed for (findings), those with none (a correct pass), unknown.
+  if (trendBase) {
+    report.trend.missed = TF.missedTally(trendBase.captures);
+    // The base rate beside them: the share of the missed legs' entry bars, and of the control bars, with a valid plan.
+    const c = TFX.controlsOf(trendBase.captures);
+    report.trend.baseRate = { legBars: c.legBars, controlBars: c.controlBars };
+    const t = report.trend.missed;
+    ctx.log(`iteration ${n}: trend probe half: ${t.missed} missed leg(s): ${t.learnable} learnable, ${t.noValidPlan} no valid plan at the time (a correct pass), ${t.unknown} facts unknown`);
+  }
   const regBase = trend ? await trendSide('pc', champion.dir, 1, 'regression') : null;
   // The champion's confirm half too, every round: the learning curve reads it (trend-curve.js); nothing of it reaches the
   // proposer, and no edit runs it.
@@ -389,7 +402,9 @@ async function probeRound(ctx, { n, champion, api }) {
     if (fs.existsSync(own)) T.removeTree(own, scratch);
     await ctx.steps.makeTree(own, champion.baseCommit);
     const guard = api.guarded(ctx, champion);
-    const res = await ctx.steps.proposeProbes({ cfg: ctx.loop.proposer, tree: own, findings, lessons: LS.summarize(lessons), home: path.join(scratch, 'home'), baseEnv: ctx.env, k: cfg.k });
+    // With trend findings, the base rate and the valid plans that lost on the control bars (balancing examples).
+    const controls = trendBase && findings.some(f => f.kind === TF.KIND) ? TFX.controlsText(TFX.controlsOf(trendBase.captures)) : '';
+    const res = await ctx.steps.proposeProbes({ cfg: ctx.loop.proposer, tree: own, findings, controls, lessons: LS.summarize(lessons), home: path.join(scratch, 'home'), baseEnv: ctx.env, k: cfg.k });
     if (api.guarded(ctx, champion) !== guard) throw new Error('the proposer\'s run changed the loop\'s state, the look ledger or the champion\'s tree: the loop stops; check them before resuming');
     const ids = [];
     return res.proposals.slice(0, cfg.k).map(x => {

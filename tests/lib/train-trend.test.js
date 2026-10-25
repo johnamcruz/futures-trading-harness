@@ -151,7 +151,8 @@ test('combinedScreen: a harm on either set hurts; the gain is the target set\'s 
 // --- the findings ----------------------------------------------------------------------------------------------------
 
 const cyc = (code, by, step, reads = [], message = 'why') => ({ code, by, step, reads, message });
-const leg = (id, { captured = false, availableR = 1, blocker = null, cycles = [] } = {}) => ({ id, day: id.slice(0, 10), captured, availableR, blocker, cycles });
+// Every leg here learnable (a valid plan existed: trend-facts.js); the not-learnable ones in train-trend-facts.test.js.
+const leg = (id, { captured = false, availableR = 1, blocker = null, cycles = [], facts = { learnable: true, bars: [], owner: null } } = {}) => ({ id, day: id.slice(0, 10), captured, availableR, blocker, cycles, facts });
 
 test('trend findings: missed legs grouped by step and owner, ranked by the R they left; rules and positions never', () => {
   const read = (skill, verified = false, step = 'entry') => ({ step, read: 'x', skill, verified });
@@ -172,7 +173,12 @@ test('trend findings: missed legs grouped by step and owner, ranked by the R the
     ['stop', null, 1, 1, 'stop:wide'], ['execution', 'trade-executor', 1, 0, 'executor-abort'],
   ]);
   assert.ok(found.every(f => f.kind === 'trend-blocker' && f.of === legs.length));
-  assert.match(found[0].detail, /entry:close \(1\); entry:momentum \(1\); e\.g\. /);
+  assert.strictEqual(found[0].detail, 'entry:close (1); entry:momentum (1)');
+  assert.deepStrictEqual(found[0].examples, [], 'no example without its facts\' bars');
+  // A leg no valid plan existed for (a correct pass) or whose facts are unknown is no finding.
+  for (const facts of [{ learnable: false, bars: [], owner: null }, { learnable: null, bars: [], owner: null }, undefined]) {
+    assert.deepStrictEqual(TF.trendFindings([{ legs: [{ ...legs[2], facts }] }]), [], JSON.stringify(facts));
+  }
   // A skill the tree doesn't hold owns nothing; the cap.
   assert.strictEqual(TF.trendFindings([{ legs }], { exists: s => s !== 'candle-reading' })[0].skill, null);
   assert.strictEqual(TF.trendFindings([{ legs }], { max: 2 }).length, 2);
@@ -203,7 +209,7 @@ test('the merged ranking: trend findings first by cost, then the curated ones; n
   const m = F.mergeFindings(trend, reads, { max: 8 });
   assert.deepStrictEqual(m.map(f => [f.id, f.kind, f.step]), [['F1', 'trend-blocker', 'risk'], ['F2', 'misread', 'target'], ['F3', 'wrong-reason refusal', null]]);
   assert.strictEqual(F.mergeFindings(trend, reads, { max: 2 }).length, 2);
-  assert.match(F.findingLine(m[0]), /^F1\. agent risk-manager: trend-blocker at risk: blocked 3 of 9 trend legs\. Most often: veto \(3\)$/);
+  assert.match(F.findingLine(m[0]), /^F1\. agent risk-manager: trend-blocker at risk: blocked 3 of 9 trend legs, each with a valid plan at the time\. Most often: veto \(3\)$/);
   assert.match(F.findingLine({ ...m[0], agent: undefined, skill: null }), /^F1\. \(no skill or role named\): trend-blocker/);
   assert.doesNotMatch(F.findingLine(m[0]), /\bR\b|left/, 'the proposer reads what blocked the plan, never the move');
 });
