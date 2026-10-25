@@ -45,7 +45,7 @@ test('trend facts: the step-claims of a reason: the leg\'s side only (a clause t
   // The side carried: "so the trend rule refuses it" is the long's, said after the long.
   assert.deepStrictEqual(claims('no-trade - no short trigger, and the long is against the trend, so the trend rule refuses it', 'short'), [['entry', 'entry', '']]);
   assert.deepStrictEqual(claims('no-trade - no short trigger, and the long is against the trend, so the trend rule refuses it', 'long').map(x => x[0]), ['bias', 'bias']);
-  assert.deepStrictEqual(claims('no-trade - no bullish trigger', 'long'), [], 'bullish describes a candle, not the side');
+  for (const side of ['long', 'short']) assert.deepStrictEqual(claims('no-trade - no bullish trigger', side), [], 'bullish describes a candle, not the side');
   assert.deepStrictEqual(claims('no-trade - no entry candle closed after the 15m rejection', 'short'), [], 'a clause with no side: no claim');
   assert.deepStrictEqual(claims('no-trade - the short has no trigger', 'short'), [['entry', 'entry', '']]);
   assert.deepStrictEqual(claims('no-trade - the short has no trigger; R:R 1.2 under the min', 'short'), [], 'an entry claim beside another failing step');
@@ -53,7 +53,7 @@ test('trend facts: the step-claims of a reason: the leg\'s side only (a clause t
   assert.deepStrictEqual(claims('no-trade - the short under the 15m bearish CISD and a 15m bearish-displacement', 'short'), [], 'a candle named by its timeframe is no direction claim');
   assert.deepStrictEqual(claims('no-trade - the long is not at a key level, the long target: no level ahead; the long is against the trend', 'long').map(x => x[0]), ['location', 'target', 'bias']);
   // R:R phrasings, the model's own action, the tool's verdict, a level named by price: no claim.
-  for (const t of ['no-trade - the long: no level reaches 2R', 'no-trade - the long has no target at 2R', 'no-trade - no composed long setup', 'no-trade - the long: no setup composed',
+  for (const t of ['no-trade - the long: no level reaches 2R', 'no-trade - the long has no target at 2R', 'no-trade - no composed long setup', 'no-trade - the long: no setup composed', 'no-trade - no composed 15m rejection for the long',
     'no-trade - the long: no 15m rejection up per the tool', 'no-trade - the long has no rejection of 21530.25', 'no-trade - compose_check refused the 3m breakout long (R:R 0.59 under min 2, no up reaction)']) {
     assert.deepStrictEqual(claims(t, 'long').filter(x => x[0] !== 'bias'), [], t);
   }
@@ -133,7 +133,7 @@ test('trend facts: unknown, never guessed: no briefing, a frame the rebuild lack
   assert.deepStrictEqual([none.known, none.valid, none.why], [false, false, 'no briefing for the bar']);
   assert.deepStrictEqual([X.missingFrames({ minutes: 3, fineBars: null }), X.missingFrames({ minutes: 3, fineBars: [{}] }), X.missingFrames({ minutes: 1, fineBars: null })], [['5m'], [], []]);
   const b = brief();
-  assert.deepStrictEqual(['at prior vah', '5m momentum up', '15m up', 'stop 5m low 1'].map(r => X.dependsOnMissing(r, b, ['5m'])), [true, true, false, true]);
+  assert.deepStrictEqual(['at prior vah', '5m momentum up', '15m up', 'stop 5m low 1', '15m rejected 5m fvg low up', '15m rejected prior vah up'].map(r => X.dependsOnMissing(r, b, ['5m'])), [true, true, false, true, true, false]);
   assert.strictEqual(X.dependsOnMissing('at prior vah', b, []), false);
   // The 5m missing: no `at` read (its check would fall back past the 5m to the 15m), so not the standard plan.
   const no5 = facts({ missing: ['5m'] });
@@ -235,8 +235,8 @@ test('trend findings: learnable legs only; the others counted as a correct pass 
 });
 
 test('trend facts: the runner\'s words are labelled the runner\'s', () => {
-  const leg = { side: 'long', facts: { bars: [{ valid: true, known: true, said: 'CYCLE RESULT: no-trade - the runner\'s entry: missed the plan\'s entry', shown: 'no-trade - the runner\'s entry: missed', planReads: ['1h up'] }] } };
-  assert.match(X.exampleLine(leg), /^long: the runner: "no-trade - the runner's entry: missed"\. A plan that passed there: "1h up"$/);
+  const leg = { side: 'long', facts: { bars: [{ valid: true, known: true, said: 'CYCLE RESULT: no-trade - the runner\'s entry: missed the plan\'s entry', shown: 'no-trade - the runner\'s entry: missed 21530.25 at 10:45', planReads: ['1h up'] }] } };
+  assert.match(X.exampleLine(leg), /^long: the runner: "no-trade - the runner's entry: missed at"\. A plan that passed there: "1h up"$/);
 });
 
 test('trend facts: a plan\'s outcome on the later bars: its stop before its R:R mark lost (the stop first on one bar), the mark first won', () => {
@@ -368,7 +368,9 @@ test('sizeWithin: budgetPlan\'s sizing at a budget and room given; budgetPlan wo
   // error, never a throw (the budget is worked out only once every check passes, as before the split).
   const home = tmpDir();
   fs.mkdirSync(path.join(home, 'combine'), { recursive: true });
-  fs.writeFileSync(path.join(home, 'combine', `${account.name}.json`), JSON.stringify({ account: account.name, days: [], snapshot: { state: { days: 5, balance: 1, start: 1, dayPnl: 0 } } }));
+  const state = { days: 5, balance: 100000, start: 100000, floor: 97000, peak: 100000, dayPnl: 0, target: 6000, sessions: 30, status: 'active', dailyLimit: 2000 };
+  fs.writeFileSync(path.join(home, 'combine', `${account.name}.json`), JSON.stringify({ account: account.name, days: [], snapshot: { state } }));
   const clocked = { ...policy, sizing: { ...policy.sizing, clock_k: 1 } };
+  assert.throws(() => require('../../scripts/lib/trading/combine').budget(state, clocked.sizing), /not iterable/, 'the case: working out this budget throws');
   assert.match(prop.budgetPlan(home, account, clocked, 'MNQ', 0).error, /stopLossBracket\.ticks/);
 });

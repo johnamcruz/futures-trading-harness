@@ -249,7 +249,8 @@ const missingFrames = ({ minutes, fineBars }) => (Number(minutes) < TF_MIN['5m']
  */
 function dependsOnMissing(read, b, unknown) {
   if (!unknown.length) return false;
-  if (unknown.includes(frameOf(read))) return true;
+  // A read on a missing frame's candle, or of a level the missing frame makes ("15m rejected 5m fvg low up").
+  if (String(read || '').split(' ').some(w => unknown.includes(w))) return true;
   const base = Object.keys(TF_MIN).find(tf => TF_MIN[tf] === Number(b.minutes));
   const next = TF_ORDER[TF_ORDER.indexOf(base) + 1];
   return parseRead(read).kind === 'at' && unknown.includes(next);
