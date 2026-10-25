@@ -94,7 +94,7 @@ test('trend capture: classifyCycle names each blocker by flow step and who block
 });
 
 /** A run home with the served bars, the runner config, cycle logs, compose records, an entry and its fill. */
-function runFixture({ fill = true } = {}) {
+function runFixture({ fill = true, trades: given = null, orders: more = [] } = {}) {
   const home = tmpDir();
   const runDir = path.join(home, 'replay', 'r1');
   fs.mkdirSync(runDir, { recursive: true });
@@ -115,8 +115,8 @@ function runFixture({ fill = true } = {}) {
     rec({ id: 'ok1', bar: bars[4].t, ok: true, plan: { stop: { ticks: 40 }, tick: 0.25 } }),
   ];
   fs.writeFileSync(path.join(lc, '2026-04-23.jsonl'), `${records.map(r => JSON.stringify(r)).join('\n')}\n`);
-  fs.writeFileSync(path.join(home, 'entry-orders.json'), JSON.stringify([{ orderId: 7, at: at(4), composed: { record: 'ok1', side: 'long', entry: 21516 } }]));
-  const trades = fill ? [{ orderId: 7, profitAndLoss: null, roundTripId: 1 }, { orderId: 8, profitAndLoss: 50, roundTripId: 1, exitReason: 'target', roundTrip: { r: 2.1 } }] : [];
+  fs.writeFileSync(path.join(home, 'entry-orders.json'), JSON.stringify([{ orderId: 7, at: at(4), composed: { record: 'ok1', side: 'long', entry: 21516 } }, ...more.map(o => ({ ...o, at: at(o.bar) }))]));
+  const trades = given ? given(at) : fill ? [{ orderId: 7, profitAndLoss: null, roundTripId: 1 }, { orderId: 8, profitAndLoss: 50, roundTripId: 1, exitReason: 'target', roundTrip: { r: 2.1 } }] : [];
   return { home, runDir, days: { '2026-04-23': [{ t: at(4), trades }] }, bars };
 }
 
@@ -176,4 +176,90 @@ test('trend capture: the replay report writes trend-capture.json beside report.m
   assert.ok(fs.existsSync(path.join(runDir, tc.FILE)));
   assert.match(toMarkdown(s, {}), /## Trend capture\n\n- 2 trend leg\(s\)/);
   assert.match(toText(s), /trend capture: 2 trend leg\(s\)/);
+});
+
+// The up leg as legsOf finds it: from bars[2]'s low 21499.75 to bars[11]'s high 21540.25, 40.5 points.
+const OPEN = at => ({ orderId: 7, profitAndLoss: null, roundTripId: 1, price: 21516, creationTimestamp: at(4) });
+
+test('trend capture: a caught leg\'s ride from its round trip: lag, capture and ride share, peak and giveback; its size bucket', () => {
+  // In at 21516 (16.25 of 40.5 points in), out at 21536.25 (20.25 banked of the 24.25 left), the round trip's best 2.5R.
+  const trades = at => [OPEN(at), { orderId: 8, profitAndLoss: 40.5, roundTripId: 1, roundTrip: { r: 2.1, entryPrice: 21516, exitPrice: 21536.25, exitTime: at(9), mfeR: 2.5, risk: 10, open: false } }];
+  const { runDir, days } = runFixture({ trades });
+  const doc = tc.captureReport({ runDir, days });
+  const [up, down] = doc.legs;
+  assert.deepStrictEqual(up.ride, { entryLag: 0.4, captureShare: 0.5, rideShare: 0.84, peakR: 2.5, peakFrom: 'round-trip', givebackR: 0.4, r: 2.1, open: false });
+  assert.strictEqual(up.ride.r, up.entry.r, 'the ride\'s R is the entry\'s');
+  assert.strictEqual(down.ride, null, 'a missed leg has no ride');
+  // Its size: its points over the threshold (minMoveAtr x the session's scale), bucketed.
+  const x = Math.round((up.move.points / (doc.detector.minMove.atr * legScale(runDir))) * 100) / 100;
+  assert.deepStrictEqual(up.size, { x, bucket: require('../../scripts/lib/replay/trend-ride').sizeBucket(x) });
+  assert.ok(x >= 1, String(x));
+  // The totals and the report's block.
+  assert.deepStrictEqual([doc.totals.ride.legs, doc.totals.ride.caught, doc.totals.ride.captureShare.median, doc.totals.ride.rCaught], [2, 1, 0.5, 2.1]);
+  const lines = tc.reportLines(doc);
+  assert.ok(lines.some(l => /^Trend catch & ride: 2 leg\(s\), 1 caught \(50%\), R caught 2.1 \/ R available [\d.]+, median capture share 0.5, ride share 0.84, entry lag 0.4, giveback 0.4R, in-trend entries 1 of 1 \(100%\)$/.test(l)), lines.join('\n'));
+});
+
+/** The session's scale as legsOf computes it (the served bars' mean true range in the session). */
+function legScale(runDir) {
+  const { readArchive } = require('../../scripts/lib/session/bars-archive');
+  const bars = readArchive(path.join(runDir, 'bars-2026-04-23.jsonl.gz')).map(x => x.bar);
+  return tc.legsOf(bars, { session: SESSION })[0].scale;
+}
+
+test('trend capture: no round-trip peak: the peak from the closed bars held; a loss inside the leg shares negative', () => {
+  // Out at 21510 at at(9) (bars[10]'s open), -0.6R: the bars held, bars[5]..bars[9], top at bars[9]'s high 21532.25.
+  const trades = at => [OPEN(at), { orderId: 8, profitAndLoss: -12, roundTripId: 1, roundTrip: { r: -0.6, entryPrice: 21516, exitPrice: 21510, exitTime: at(9), risk: 10 } }];
+  const { runDir, days } = runFixture({ trades });
+  const up = tc.captureReport({ runDir, days }).legs[0];
+  assert.deepStrictEqual(up.ride, { entryLag: 0.4, captureShare: -0.15, rideShare: -0.25, peakR: 1.63, peakFrom: 'bars', givebackR: 2.23, r: -0.6, open: false });
+});
+
+test('trend capture: a trade still open at the run\'s end: caught, open, no exit measure; its R unknown in the totals', () => {
+  const { runDir, days } = runFixture({ trades: at => [OPEN(at)] });
+  const doc = tc.captureReport({ runDir, days });
+  const up = doc.legs[0];
+  assert.deepStrictEqual([up.captured, up.ride.open, up.ride.captureShare, up.ride.givebackR, up.ride.entryLag], [true, true, null, null, 0.4]);
+  assert.deepStrictEqual([doc.totals.ride.open, doc.totals.ride.rCaught, doc.totals.ride.rCaughtUnknown, doc.totals.ride.entries.inTrend], [1, 0, 1, { n: 1, r: 0, rUnknown: 1 }]);
+});
+
+test('trend capture: the run\'s filled entries: in a leg its way, against one, or in none, each with its R; an unfilled one not counted', () => {
+  const trades = at => [
+    OPEN(at), { orderId: 8, profitAndLoss: 40, roundTripId: 1, roundTrip: { r: 2, entryPrice: 21516, exitPrice: 21536, exitTime: at(9), mfeR: 2, risk: 10 } },
+    { orderId: 9, profitAndLoss: null, roundTripId: 2, price: 21520, creationTimestamp: at(5) }, { orderId: 10, profitAndLoss: -20, roundTripId: 2, roundTrip: { r: -1 } },
+    { orderId: 11, profitAndLoss: null, roundTripId: 3, price: 21497, creationTimestamp: at(23) }, { orderId: 12, profitAndLoss: -5, roundTripId: 3, roundTrip: { r: -0.5 } },
+  ];
+  // A short during the up leg (counter), a long after the last leg (none), and a long placed that never filled.
+  const orders = [{ orderId: 9, bar: 5, composed: { record: 'c1', side: 'short', entry: 21520 } }, { orderId: 11, bar: 23, composed: { record: 'n1', side: 'long', entry: 21497 } }, { orderId: 13, bar: 24, composed: { record: 'u1', side: 'long', entry: 21490 } }];
+  const { runDir, days, bars } = runFixture({ trades, orders });
+  const doc = tc.captureReport({ runDir, days });
+  const up = doc.legs[0];
+  assert.deepStrictEqual(doc.entries.map(e => [e.side, e.kind, e.leg, e.r]), [['long', 'in-trend', up.id, 2], ['short', 'counter', up.id, -1], ['long', 'none', null, -0.5]]);
+  assert.deepStrictEqual(doc.entries.map(e => e.at), [4, 5, 23].map(i => new Date(Date.parse(bars[i].t) + MIN3).toISOString()));
+  assert.deepStrictEqual(doc.totals.ride.entries, { filled: 3, inTrend: { n: 1, r: 2, rUnknown: 0 }, counter: { n: 1, r: -1, rUnknown: 0 }, none: { n: 1, r: -0.5, rUnknown: 0 }, inTrendShare: 0.33 });
+  assert.ok(tc.reportLines(doc).includes('  entries: in-trend 1 (+2R), counter 1 (-1R), no leg 1 (-0.5R)'));
+  // The legs' catch is unchanged by the other entries.
+  assert.deepStrictEqual(doc.legs.map(l => l.captured), [true, false]);
+});
+
+test('trend capture: given legs carry no session scale unless given one: their size is unknown', () => {
+  const { runDir, days } = runFixture();
+  const up = tc.captureReport({ runDir, days }).legs[0];
+  const given = tc.captureReport({ runDir, days, legs: [{ day: up.day, side: up.side, start: up.start, end: up.end, points: up.move.points }] });
+  assert.deepStrictEqual(given.legs[0].size, { x: null, bucket: 'unknown' });
+  const scaled = tc.captureReport({ runDir, days, legs: [{ day: up.day, side: up.side, start: up.start, end: up.end, points: up.move.points, scale: 6 }] });
+  assert.deepStrictEqual(scaled.legs[0].size, { x: Math.round((up.move.points / (scaled.detector.minMove.atr * 6)) * 100) / 100, bucket: '2-4x' });
+});
+
+test('trend capture: the ride reads the fills, never the plan: the opening fill\'s price without a round-trip entry; an open round trip has no exit', () => {
+  // Filled a point worse than the plan's 21516 (21517), the round trip naming no entry price: the lag from the fill.
+  const slip = at => [{ ...OPEN(at), price: 21517 }, { orderId: 8, profitAndLoss: 30, roundTripId: 1, roundTrip: { r: 1.9, exitPrice: 21536, exitTime: at(9), mfeR: 2, risk: 10 } }];
+  let x = runFixture({ trades: slip });
+  const up = tc.captureReport({ runDir: x.runDir, days: x.days }).legs[0];
+  assert.deepStrictEqual([up.ride.entryLag, up.ride.captureShare], [0.43, 0.47], '17.25 and 19 of 40.5 points');
+  // A round trip still open (the broker's interim record, its last price as exitPrice): open, no exit measure.
+  const open = at => [OPEN(at), { orderId: 8, profitAndLoss: 0, roundTripId: 1, roundTrip: { r: 0.5, entryPrice: 21516, exitPrice: 21521, mfeR: 1, risk: 10, open: true } }];
+  x = runFixture({ trades: open });
+  const o = tc.captureReport({ runDir: x.runDir, days: x.days }).legs[0];
+  assert.deepStrictEqual([o.ride.open, o.ride.captureShare, o.ride.givebackR], [true, null, null]);
 });

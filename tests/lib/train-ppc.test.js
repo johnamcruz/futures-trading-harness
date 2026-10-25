@@ -495,7 +495,9 @@ function world({ proposals, verdict = 'kept', loop: over = {}, trend = false, tr
       const legs = given.filter(g => days.includes(g.day)).map(({ id, day, side }) => {
         const lucky = /LUCKYLEGS/.test(text) && (ROUND1.probe.days.includes(day) || day === REG_DAY);
         const caught = lucky || (/TREND|GREEDY|SLOPPY/.test(text) || (/REGLOSE/.test(text) && day !== REG_DAY)) || (!/REGLOSE/.test(text) && side === 'long' && DAYS.indexOf(day) % 2 === 0);
-        return { id, day, side, captured: caught, availableR: 2, blocker: caught ? null : { step: 'entry', code: 'entry:momentum', by: 'compose_check' }, cycles: caught ? [] : [{ code: 'entry:momentum', by: 'compose_check', step: 'entry', message: 'momentum: weak', reads: [{ step: 'entry', read: 'x', skill: 'a', verified: false }] }] };
+        // Its catch & ride (replay/trend-ride.js): a caught leg's trade banked half the leg; GREEDY's lost.
+        const ride = caught ? { entryLag: 0.25, captureShare: /GREEDY/.test(text) ? -0.25 : 0.5, rideShare: /GREEDY/.test(text) ? -0.33 : 0.67, peakR: 2, peakFrom: 'round-trip', givebackR: /GREEDY/.test(text) ? 3 : 1, r: /GREEDY/.test(text) ? -1 : 1, open: false } : null;
+        return { id, day, side, captured: caught, availableR: 2, size: { x: 2.5, bucket: '2-4x' }, ride, blocker: caught ? null : { step: 'entry', code: 'entry:momentum', by: 'compose_check' }, cycles: caught ? [] : [{ code: 'entry:momentum', by: 'compose_check', step: 'entry', message: 'momentum: weak', reads: [{ step: 'entry', read: 'x', skill: 'a', verified: false }] }] };
       });
       // The first tries: one decision point a side a session; SLOPPY reads wrong first and is rescued by the hint.
       const first = days.flatMap(day => ['long', 'short'].map(side => ({ key: `MNQ|${day}T14:33:00.000Z|${side}`, root: 'MNQ', bar: `${day}T14:33:00.000Z`, side, first: { ok: !/SLOPPY/.test(text), reads: [{ step: 'entry', skill: 'a', check: !/SLOPPY/.test(text) }], failed: /SLOPPY/.test(text) ? ['entry'] : [] }, tries: /SLOPPY/.test(text) ? 2 : 1, rescued: /SLOPPY/.test(text), finalOk: true })));
@@ -503,7 +505,7 @@ function world({ proposals, verdict = 'kept', loop: over = {}, trend = false, tr
       const entries = days.flatMap(day => [{ at: `${day}T14:36:30.000Z`, side: 'long' }, ...(/TREND/.test(text) ? [{ at: `${day}T14:36:30.000Z`, side: 'short' }] : [])]);
       // Each window stepped to its end or not, from the run's own records (the leg window's last time is 14:42:02Z).
       const sessions = require('../../scripts/lib/train/trend-windows').windowStates({ days: recorded, windows, minutes: 3 }).map(s => ({ ...s, rollMonth: false }));
-      return { capture: { legs }, days: Object.fromEntries(days.map(d => [d, [{ t: `${d}T14:42:02.000Z`, trades: [{ roundTrip: { r: /GREEDY/.test(text) ? -1 : 0 } }] }]])), first, entries, sessions, stepped: Object.values(recorded).flat().map(l => l.t), minutes: 3 };
+      return { capture: { legs, entries: entries.map(e => ({ ...e, kind: e.side === 'long' ? 'in-trend' : 'counter', leg: null, r: /GREEDY/.test(text) ? -1 : 0 })) }, days: Object.fromEntries(days.map(d => [d, [{ t: `${d}T14:42:02.000Z`, trades: [{ roundTrip: { r: /GREEDY/.test(text) ? -1 : 0 } }] }]])), first, entries, sessions, stepped: Object.values(recorded).flat().map(l => l.t), minutes: 3 };
     },
     // The trend facts (trend-facts.js attachFacts on the run's files): every missed leg here had a valid plan (learnable).
     // Its control bars: one a run, a valid plan that lost (the balancing example the proposer reads).
@@ -665,6 +667,23 @@ test('with a trend set: its missed legs are findings first; an edit that catches
   assert.deepStrictEqual([rec.deltas.capture.broken, rec.deltas.capture.rate.probe, rec.deltas.capture.pairs], [0, 1, split.confirm.legs.length]);
   assert.ok(rec.deltas.capture.fixed > 0);
   assert.match(IR.line(rec), /legs caught \+\d+\/-0 of \d+ \([\d.]+ -> 1\)/);
+  // The round's catch & ride (trend-ride.js), report only: the champion's confirm half over the same finished legs as its
+  // curve point, its probe half, each edit's probe half, the combined change's confirm half; the status block.
+  const ride = report.trend.champion.ride;
+  assert.deepStrictEqual([ride.legs, ride.caught], [report.trend.champion.legs, report.trend.champion.caught]);
+  assert.ok(ride.caught > 0 && ride.captureShare.median === 0.5 && ride.entries.filled > 0 && ride.entries.inTrendShare === 1, JSON.stringify(ride));
+  assert.ok(report.trend.probeRide && report.trend.probeRide.legs === split.probe.legs.length, JSON.stringify(report.trend.probeRide));
+  assert.ok(report.probes.every(p => p.ride && p.ride.legs === split.probe.legs.length), 'every edit\'s probe half');
+  assert.ok(report.composed.trend.ride && report.composed.trend.ride.legs === split.confirm.legs.length);
+  assert.deepStrictEqual(rec.ride.champion, ride);
+  const TR = require('../../scripts/lib/replay/trend-ride');
+  assert.deepStrictEqual(IR.rideLines(rec), [
+    '  Trend catch & ride (iteration 1):', `    champion confirm: ${TR.rideLine(ride)}`, `    champion probe: ${TR.rideLine(report.trend.probeRide)}`,
+    ...report.probes.map(p => `    edit ${p.id} probe: ${TR.rideLine(p.ride)}`), `    combined ${report.composed.id} confirm: ${TR.rideLine(report.composed.trend.ride)}`,
+  ]);
+  assert.match(IR.rideLines(rec)[1], /^ {4}champion confirm: \d+ leg\(s\), \d+ caught \(\d+%\), R caught [\d.-]+ \/ R available [\d.]+, median capture share 0.5, ride share 0.67, entry lag 0.25, giveback 1R, in-trend entries \d+ of \d+ \(100%\)$/);
+  // Without a trend set: no block.
+  assert.deepStrictEqual(IR.rideLines({ ...rec, ride: null }), []);
   // Each side's share of skipped bars (latency; none in the stub world), the champion's, each edit's and the combined change's.
   assert.deepStrictEqual(rec.skipped.champion, { skipped: 0, bars: rec.skipped.champion.bars, share: 0, legWindows: 0 });
   assert.ok(rec.skipped.champion.bars > 0 && Object.keys(rec.skipped.edits).length === report.probes.length && rec.skipped.composed);

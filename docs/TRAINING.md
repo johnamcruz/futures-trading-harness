@@ -789,6 +789,45 @@ never shown to the model. The curated lists can take the same legs
 (`curated-lists.js build --legs-bars`): a moment at a leg's start its way
 is a trend moment, and each leg's first moment is chosen first.
 
+**Trend catch & ride.** Catching a trend is half of it; riding it is the
+other. The same report measures both (`scripts/lib/replay/trend-ride.js`,
+its `MEASURES` the one list of definitions), from fills and closed bars
+only, after the run, never shown to the model. Each caught leg, in points
+of the leg's own move (from its start to its extreme, a short's counted
+down):
+
+- `entryLag`: (entry fill − leg start) / leg points: 0 the leg's start, 1
+  its extreme.
+- `captureShare`: (exit fill − entry fill) / leg points: the share of the
+  whole leg the trade banked. Not capped: negative on a loss, and more than
+  was left when the trade rode on past the detector's extreme.
+- `rideShare`: (exit − entry) / (leg extreme − entry): of what was left
+  after the entry, the share kept (not capped; none when the entry was at
+  or past the extreme).
+- `peakR`: the best R reached while open, the round trip's `mfeR` when the
+  broker sends it, else the closed bars held (opened at or after the entry
+  fill, closed by the exit) at the trade's risk; never below the exit's own
+  R. `givebackR` = `peakR` − the trade's R.
+- A trade still open at the run's end is caught and `open`, with no exit
+  measure.
+
+The totals (`totals.ride`): the legs (the trends that happened), the caught
+ones and the catch rate, also by leg size (the leg's points over its
+threshold, bucketed by `trendCapture.sizeEdges`, `[2, 4]`: 1–2×, 2–4×, 4×+,
+so the big trends show; a given leg without its session's scale is
+`unknown`); the median and mean of each measure over the caught legs; the
+R the caught legs banked against the available R of every leg (R caught /
+R available; the available R is at the planned stop, the banked at the
+trade's own); and the run's filled entries by kind: in-trend (inside a leg
+its way, its start bar to its extreme bar's close), counter (inside one the
+other way only) or none, each with its R, so the false entries show. The
+replay report prints them as a "Trend catch & ride" block. The training
+loop's round report carries the same totals for the champion's confirm and
+probe halves, each edit's probe half and the combined change's confirm half
+(their finished windows only, as the learning curve), and `train-loop.js
+status` prints them under the round's line. Nothing judges by them: no
+screen, keep rule or prompt reads them.
+
 The twelve legs of `tests/fixtures/trend-moves` are a regression and
 diagnosis set, never a tuning target. The follow-up for the training loop's
 findings is a census of these legs over practice-train, split by session

@@ -505,3 +505,32 @@ test('the curve carries the selection value: the kept change\'s when kept', () =
   assert.deepStrictEqual(TC.curvePoint({ round: 1, size: 10, champion }).selection, { value: 0 });
   assert.deepStrictEqual(TC.curvePoint({ round: 1, size: 10, champion, composed: { capture: { b: 1, c: 0 }, selection: { value: 0.5 } }, kept: true }).selection, { value: 0.5 });
 });
+
+test('a side\'s trend catch & ride: only its own legs in finished windows, each entry to the window it was placed in; unknown is null', () => {
+  const day = '2022-03-07';
+  const ms = s => Date.parse(`${day}T${s}Z`);
+  const windows = [{ id: 'w1', day, from: ms('14:30:00'), to: ms('15:00:00') }, { id: 'w2', day, from: ms('15:30:00'), to: ms('16:00:00') }];
+  const ride = r => ({ entryLag: 0.2, captureShare: r / 4, rideShare: r / 3, peakR: r + 1, peakFrom: 'round-trip', givebackR: 1, r, open: false });
+  const side = {
+    legs: new Map([['L1', { day, captured: true, unit: 'w1' }], ['L2', { day, captured: true, unit: 'w2' }]]),
+    sessions: [{ unit: 'w1', day, complete: true }, { unit: 'w2', day, complete: false, why: 'stopped' }],
+  };
+  const rides = [{
+    windows,
+    ride: {
+      legs: [
+        { id: 'L1', captured: true, availableR: 4, size: { bucket: '2-4x' }, ride: ride(2) },
+        { id: 'L2', captured: true, availableR: 6, size: { bucket: '4x+' }, ride: ride(3) }, // its window not finished
+        { id: 'OTHER', captured: false, availableR: 9, size: { bucket: '1-2x' }, ride: null }, // another half's leg
+      ],
+      entries: [{ at: `${day}T14:42:00.000Z`, side: 'long', kind: 'in-trend', r: 2 }, { at: `${day}T15:05:00.000Z`, side: 'short', kind: 'none', r: -1 }, { at: `${day}T15:45:00.000Z`, side: 'long', kind: 'in-trend', r: 3 }],
+    },
+  }];
+  const t = TSC.rideOfSide(side, rides);
+  assert.deepStrictEqual([t.legs, t.caught, t.rCaught, t.rAvailable, t.captureShare.median], [1, 1, 2, 4, 0.5]);
+  // The entry after w1's end follows w1 (the management after it, as unitOfRecord): counted; w2's is not.
+  assert.deepStrictEqual([t.entries.filled, t.entries.inTrend.n, t.entries.none.n], [2, 1, 1]);
+  // A run whose ride is unknown (a phase kept before rides were recorded): the side's total unknown, never partial.
+  assert.strictEqual(TSC.rideOfSide(side, [...rides, { windows, ride: null }]), null);
+  assert.strictEqual(TSC.rideOfSide(side, []), null);
+});

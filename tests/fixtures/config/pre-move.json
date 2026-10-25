@@ -629,6 +629,13 @@
     "09:30-12:00@America/New_York"
    ],
    "from": "new in fix/trend-moves-compose (the curated lists' leg labels: the NY morning by default)"
+  },
+  "trendCapture.sizeEdges": {
+   "value": [
+    2,
+    4
+   ],
+   "from": "new in feat/trend-catch-ride (the trend catch & ride report's leg size buckets, in multiples of the leg threshold: 1-2x, 2-4x, 4x+, so big trends are visible)"
   }
  },
  "runner": {
