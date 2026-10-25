@@ -52,8 +52,8 @@ prior candle, ATR(14) as of prev):
 - bullish engulfing: a bullish candle after a bearish one, its body
   covering prev's and larger; bearish engulfing: the mirror;
 - inside: within prev's high and low, a smaller range; `insideStack`
-  counts them in a row inside one `mother` (a box:
-  `compression`); outside: beyond both, a larger range;
+  counts candles in a row within a `mother`'s (a box: `compression`);
+  outside: beyond both, a larger range;
 - displacement: B at least 0.7 R and R at least 1.5 x ATR, `dir` its
   close vs open; it starts a leg, out of a box (`compression`) or a
   level.

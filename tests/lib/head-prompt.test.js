@@ -66,12 +66,11 @@ test('CORE: the composed bar\'s reads the gate requires (SITUATIONAL taught in t
   // with the owner's no-late-entry rule (2026-10-21) taught (fix/no-late-entry: trade-lifecycle's one [late-entry] line: +119, for the owner's OK),
   // then 74002 with the owner's size translation (feat/prop-min-contracts, 2026-10-23: in a prop attempt the size is translated
   // at entry; trade-lifecycle's line, the half as phase 2's cut in trade-session, confluence-counting, strategy-library: +278
-  // over main's 73724), then 74206 with the owner's compression setup taught where the head trader composes (feat/compression,
+  // over main's 73724), then 74227 with the owner's compression setup taught where the head trader composes (feat/compression,
   // the owner, 2026-10-24: "Make sure this skill is part of setup", taught in trade-lifecycle's setup list: its setup and stop
-  // reads and their timing, breakout's pointer and invalidation's box stop source: +204, the entry row's patterns
-  // tightened against it). It may shrink;
+  // reads and their timing, breakout's pointer and invalidation's box stop source: +225). It may shrink;
   // it grows only on an owner's OK.
-  assert.ok(Buffer.byteLength(prompt) <= 74206, `the head prompt is ${Buffer.byteLength(prompt)} bytes`);
+  assert.ok(Buffer.byteLength(prompt) <= 74227, `the head prompt is ${Buffer.byteLength(prompt)} bytes`);
   // Only the head trader's prompt grows: no other role's prompt embeds trade-lifecycle (the risk manager's embeds
   // confluence-counting and invalidation as before; its prompt is unchanged, pinned in trade-session-split.test.js).
   for (const [name, a] of Object.entries(index.agent)) if (name !== H.HEAD_AGENT && a.prompt) assert.ok(!a.prompt.includes('<skill name="trade-lifecycle">'), name);

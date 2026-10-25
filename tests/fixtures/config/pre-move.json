@@ -1539,6 +1539,10 @@
   "compression.maxLevels": {
    "value": 3,
    "from": "new in feat/compression (the most key levels a box names; the owner's \"Create this new compression skill and let's use it\", 2026-10-24)"
+  },
+  "compression.maxWidthAtr": {
+   "value": 2,
+   "from": "new in feat/compression (a box's widest range, in the ATR(14) before it: narrow; 2 picked on the tuning half from 1, 1.5, 2, 3 and none, where 2 and 3 tied at +0.26R and the narrower was kept; the review, 2026-10-25)"
   }
  }
 }

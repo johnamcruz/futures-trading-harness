@@ -185,6 +185,7 @@ const PINS = {
     // The one definition (compression.js; the numbers are the config's: a test below holds them equal).
     '`inside`: a candle inside its mother (`candle-reading`, `insideStack` in a row); the box is the mother\'s range. A displacement mother is a pole, never a box: then the narrow candle\'s own range.',
     '`nr7`: the narrowest range of the last 7 back-to-back candles (ties count); the box is its range.',
+    'Narrow: at most 2 x ATR wide, back-to-back candles, none a displacement.',
     '`pole`: a displacement candle (`candle-reading`) in the 3 candles just before the box, outside it.',
     'the next candle CLOSES beyond the box by 0.1 x ATR or more (`beyondAtr`: a poke of a tick or two is none), its range 1 x ATR or more (`rangeAtr`);',
     '`state` `expanding` while within 3 candles (`barsAgo`), no close back inside (`backInside`), price still beyond (`beyondNow`; acceptance by closes: `breakout-vs-fakeout`) and under 1 x ATR past its close (`late`).',
@@ -612,11 +613,12 @@ test('compression: the skill states the code\'s numbers (config/analysis.json co
   assert.deepStrictEqual(P.nr, [7], 'the skill teaches the config\'s NR length');
   const states = q => t.includes(`\`nr${q.nr[0]}\`: the narrowest range of the last ${q.nr[0]} back-to-back candles`)
     && t.includes(`in the ${q.poleBars} candles just before the box`)
+    && t.includes(`Narrow: at most ${q.maxWidthAtr} x ATR wide`)
     && t.includes(`CLOSES beyond the box by ${q.minBeyondAtr} x ATR or more`) && t.includes(`its range ${q.expandAtr} x ATR or more`)
     && t.includes(`within ${q.recentBars} candles`) && t.includes(`under ${q.maxRunAtr} x ATR past its close`);
   assert.ok(states(P), 'the skill states the config\'s numbers');
   // A changed number in the config fails the check (the check reads the config, not the text).
-  for (const k of ['poleBars', 'minBeyondAtr', 'expandAtr', 'recentBars', 'maxRunAtr']) assert.ok(!states({ ...P, [k]: P[k] + 1 }), k);
+  for (const k of ['poleBars', 'maxWidthAtr', 'minBeyondAtr', 'expandAtr', 'recentBars', 'maxRunAtr']) assert.ok(!states({ ...P, [k]: P[k] + 1 }), k);
   assert.ok(!states({ ...P, nr: [P.nr[0] + 1] }));
   // Each read the skill teaches parses into the checker's form and step.
   const CR = require('../../scripts/lib/trading/composed-reads');

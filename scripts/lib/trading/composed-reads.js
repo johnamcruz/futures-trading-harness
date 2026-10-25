@@ -723,6 +723,9 @@ function checkRead(p, b, { tick = 0.25, side = null, riskPts = null } = {}) {
       const hit = prices.find(x => within(x, p.price, tick));
       if (hit === undefined) return res(false, `${p.source} is ${prices.join(', ')}${note}, not ${p.price} (within one tick, ${tick})`, { field, value: prices[0] });
       const dir = ref === null || hit === ref ? null : (p.kind === 'stop') === (hit < ref) ? 'long' : 'short';
+      // A box's stop is its far side: its low under a long, its high over a short (never the near edge).
+      const edge = p.kind === 'stop' ? /^\S+ box (low|high)$/.exec(p.source) : null;
+      if (edge && dir && edge[1] !== (dir === 'long' ? 'low' : 'high')) return res(false, `${p.source} is the near side of the box for a ${dir}: the stop is beyond its far side (${dir === 'long' ? 'low' : 'high'})`, { field, value: hit });
       return res(true, `${p.source} is ${hit}${note}; price ${ref}`, { field, value: hit, price: hit, dir });
     }
     default:

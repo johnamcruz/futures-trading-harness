@@ -28,7 +28,7 @@ Summary (MNQ 1m, 20:11 ET):
 - Prior candle range (R = the 1m reference stop): 1h (closed 20:00) high 27099.75 (88.25 above, 24.48R), mid 27090.875 (79.25 above, 21.98R), low 27082 (70.5 above, 19.56R), low taken, closed below it.
 - 5m structure: CHoCH down through 27087 (known 20:05, 1 candle ago); swing high 27091.5, swing low 27087.
 - CISD (completed candles; a read, not a signal): 3m bearish at 27090.25 (closed 20:03, strong), no key-level sweep, OTE 27065.5-27080.5 (mid 27073), waiting; 5m bullish at 27093.75 (closed 19:50, strong, engulfing), no key-level sweep, zone void; 15m none; 1h none.
-- Compression (completed candles; a read, not a signal): 3m inside x1 box 27074.75-27091.25 (2.61 ATR); 5m no expansion: inside x2 box 27090-27098.75 (8.75 pts, 1.21 ATR), expansion closed 20:05 below it (range 3.21 ATR, 2.11 ATR beyond, volume 3.2x), 1 bar ago, late: 8.74 ATR past its close.
+- Compression (completed candles; a read, not a signal): 5m no expansion: inside x2 box 27090-27098.75 (8.75 pts, 1.21 ATR), expansion closed 20:05 below it (range 3.21 ATR, 2.11 ATR beyond, volume 3.2x), 1 bar ago, late: 8.74 ATR past its close.
 - Rules setups: none fired on this bar; a composed setup is yours to read and check (trade-lifecycle).
 
 Detail by timeframe:

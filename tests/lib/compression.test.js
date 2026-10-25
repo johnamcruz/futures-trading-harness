@@ -5,7 +5,7 @@ const assert = require('node:assert');
 const C = require('../../scripts/lib/trading/compression');
 
 // Hand-worked parameters (the config's may change; these pin the definition's arithmetic). NR7 and inside are the box.
-const P = { ...C.PARAMS, nr: [7], poleBars: 3, expandAtr: 1, minBeyondAtr: 0.1, recentBars: 3, maxRunAtr: 1, levelBandAtr: 0.25, maxLevels: 3 };
+const P = { ...C.PARAMS, nr: [7], maxWidthAtr: 2, poleBars: 3, expandAtr: 1, minBeyondAtr: 0.1, recentBars: 3, maxRunAtr: 1, levelBandAtr: 0.25, maxLevels: 3 };
 const T0 = Date.parse('2022-03-01T15:00:00Z');
 const STEP = 3 * 60000;
 
@@ -113,6 +113,32 @@ test('compression: a poke, a small candle, a wick, a fakeout, price back inside 
   // Mutations of the thresholds fail.
   assert.notStrictEqual(last(candles([...PRE, NR, UP]), { params: { ...P, expandAtr: 1.3 } }).state, 'expanding');
   assert.notStrictEqual(last(candles([...PRE, NR, UP]), { params: { ...P, minBeyondAtr: 1.1 } }).state, 'expanding');
+});
+
+test('compression: a box is narrow: no wider than maxWidthAtr x ATR, back to back, no displacement in it', () => {
+  // A mother 25 wide (2.5 ATR) with an inside candle: too wide for a box (maxWidthAtr 2); with 3 it is one.
+  const wide = candles([...PRE, [100, 112.5, 87.5, 101], [101, 103, 97, 102]]);
+  assert.strictEqual(last(wide).state, 'neither');
+  assert.strictEqual(last(wide, { params: { ...P, maxWidthAtr: 3 } }).box.flavor, 'inside');
+  // An inside candle after a feed gap: the stack spans the gap, so no box.
+  const gap = candles([...PRE, [101, 103, 97, 102]], { gapAt: 15 });
+  assert.strictEqual(last(gap).state, 'neither');
+  // A displacement candle inside the mother (body 7 of a 7.5 range, ATR about 4.6 after quiet candles): no box.
+  const quiet = Array.from({ length: 15 }, () => [100, 102.25, 97.75, 100]);
+  const disp = candles([...quiet, [100, 104, 96, 100], [96.5, 104, 96.5, 103.5]]);
+  assert.ok(require('../../scripts/lib/trading/candle-facts').patternsOf({ o: 96.5, h: 104, l: 96.5, c: 103.5 }, { o: 100, h: 104, l: 96, c: 100 }, 4.5).includes('displacement'));
+  assert.strictEqual(last(disp).state, 'neither');
+});
+
+test('compression: a close back inside after the expansion is a fakeout even when price is beyond again', () => {
+  // UP, a close back inside the box, then a close back above it with price beyond: still no expansion.
+  const cs = candles([...PRE, NR, UP, [116, 116.5, 104, 105], [105, 108, 104.5, 107.5]]);
+  const x = last(cs);
+  assert.deepStrictEqual([x.break && x.break.backInside, x.break && x.break.beyondNow, x.state === 'expanding'], [true, true, false]);
+  // A new box after the failed expansion is the state (compressing), not the failure.
+  const fresh = candles([...PRE, NR, UP, [116, 116.5, 104, 105], [105, 105.75, 104.5, 105.25]]);
+  const y = last(fresh);
+  assert.deepStrictEqual([y.state, y.box.to], ['compressing', fresh[fresh.length - 1].closedAt]);
 });
 
 test('compression: volume against the box candle\'s; a zero-range candle is no box', () => {

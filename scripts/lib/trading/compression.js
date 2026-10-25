@@ -10,7 +10,8 @@
  *                last 7 back-to-back completed candles, ties included: `nr`, the config's lengths). An inside candle's
  *                box is its mother's range, an NR candle's its own. `flavor`: the box's ('inside' when the mother's,
  *                else 'nr7'); `flavors` all that hold; `insideStack` the stack's count. ATR is the timeframe's ATR(14)
- *                as of the candle before the box (the mother, for an inside stack). A box of zero width is none.
+ *                as of the candle before the box (the mother, for an inside stack). A box is narrow: no wider than
+ *                maxWidthAtr x ATR, its candles back to back, none a displacement; one of zero width is none.
  *   pole         a displacement candle (candle-facts.js patternsOf, the candle-reading skill's) among the poleBars
  *                candles just before the box, back to back with it: { dir, closedAt, rangeAtr }; the pole stays
  *                outside the box (a flag: a pole, then a narrow candle or an inside stack, then the break its way)
@@ -28,8 +29,8 @@
  *                inside it or within levelBandAtr x ATR of an edge, with that edge ('top', 'bottom', 'inside'); at
  *                most maxLevels, nearest an edge first
  *   state        'expanding': the latest break within recentBars candles is an expansion, not back inside, price still
- *                beyond it, not late; else 'neither' while an expansion in those candles failed (its box shown); else
- *                'compressing': the last completed candle is a box; else 'neither'
+ *                beyond it, not late; else 'neither' while an expansion in those candles failed (its box shown) and no
+ *                box began after it; else 'compressing': the last completed candle is a box; else 'neither'
  *
  *   PARAMS                                     the config's values (frozen)
  *   seriesOf(candles, params)                  { atr, stacks, nr } per candle (one pass each): what boxAt reads
@@ -84,6 +85,10 @@ function boxAt(cs, k, series, P = PARAMS) {
   const high = cs[s].h;
   const low = cs[s].l;
   if (!(ref > 0) || !(high > low)) return null;
+  // Narrow: no wider than maxWidthAtr x ATR, every candle back to back (no feed gap, weekend or daily break inside it),
+  // and none of its candles a displacement (the move, never the rest).
+  if (high - low > P.maxWidthAtr * ref) return null;
+  for (let q = s; q <= k; q += 1) if ((q > s && !adjacent(cs[q - 1], cs[q])) || disp(q)) return null;
   // The pole: a displacement candle among the poleBars just before the box, back to back with it.
   let pole = null;
   for (let q = s - 1; q >= Math.max(1, s - P.poleBars) && !pole; q -= 1) {
@@ -158,8 +163,9 @@ function compressionAt(cs, j, { price = null, params = PARAMS, series = null, le
   const breakFact = x => ({ dir: x.dir, closedAt: x.closedAt, close: x.close, rangeAtr: x.rangeAtr, beyondAtr: x.beyondAtr, volVsBox: x.volVsBox, expansion: x.expansion, withPole: x.withPole, barsAgo: x.barsAgo, backInside: x.backInside, beyondNow: x.beyondNow, runAtr: x.runAtr, late: x.late });
   if (brk && brk.expansion && !brk.backInside && brk.beyondNow && !brk.late) return { state: 'expanding', box: boxFact(cs, brk.box, P, levels), break: breakFact(brk) };
   // An expansion that failed (back inside, price back in the box, or late) in the last recentBars candles: spent.
-  if (brk && brk.expansion) return { state: 'neither', box: boxFact(cs, brk.box, P, levels), break: breakFact(brk) };
   const last = boxAt(cs, j, sr, P);
+  // A box newer than the failed expansion (on a candle after it) is the state; else the failure, with the box it left.
+  if (brk && brk.expansion && !(last && last.s > j - brk.barsAgo)) return { state: 'neither', box: boxFact(cs, brk.box, P, levels), break: breakFact(brk) };
   if (last) return { state: 'compressing', box: boxFact(cs, last, P, levels), break: brk ? breakFact(brk) : null };
   return brk ? { state: 'neither', box: boxFact(cs, brk.box, P, levels), break: breakFact(brk) } : none;
 }

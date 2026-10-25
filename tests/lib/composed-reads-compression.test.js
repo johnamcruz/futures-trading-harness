@@ -77,7 +77,9 @@ test('stop beyond the box: a live box\'s far side, within a tick; a long\'s low,
   const s = one('stop 15m box low 21514');
   assert.deepStrictEqual([s.check, s.price, s.dir], [true, 21514, 'long']);
   assert.strictEqual(one('stop 15m box low 21513.50').check, false);
-  assert.strictEqual(one('stop 15m box high 21530').dir, 'long', 'under price either edge sits on the long side');
+  // The near side is no stop: under a long the box's high is refused (FALSE), its low stands.
+  assert.deepStrictEqual([one('stop 15m box high 21530').check, one('stop 15m box low 21514').check], [false, true]);
+  assert.match(one('stop 15m box high 21530').fact, /near side of the box for a long/);
   assert.strictEqual(one('stop 15m box low 21514', briefing({ state: 'neither', box: BOX, break: { ...BREAK, expansion: false } })).check, 'unchecked');
   assert.strictEqual(one('stop 5m box low 21514').check, 'unchecked');
 });
