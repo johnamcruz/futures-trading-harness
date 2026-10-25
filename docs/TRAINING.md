@@ -1178,7 +1178,10 @@ another day, so the champion and every edit size the same window from the
 same state. The loop sets `dayAttempts` in code for each run (a replay
 config that names it is refused); the training preflight's `day-attempts`
 check requires it on every loop run and refuses it on any other learning
-run. It is part of both run hashes and the loop's own, so a loop started
+run (a loop run declared not learning has no preflight: the loop refuses it
+itself). A model-scored loop's `replay` names no `prop`, `accountStates` or
+`combine` (refused: an attempt across days would carry losses); a loop
+without `modelScore` whose replay names one keeps that attempt instead. It is part of both run hashes and the loop's own, so a loop started
 before it is another loop, and its runs never pool with these. R is
 unchanged; dollar figures are at the translated size. The model sees only
 the attempt line a live attempt shows (day 1 of a fresh attempt each day).

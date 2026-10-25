@@ -209,9 +209,46 @@ test('the loop: every run (keep rule, trend set, a curated probe) trades in day 
 });
 
 test('the probe config refuses day attempts in its replay configs (the loop sets them)', () => {
-  const src = fs.readFileSync(path.join(REPO, 'scripts', 'lib', 'train', 'probe-config.js'), 'utf8');
-  assert.match(src, /probe\.replay\.dayAttempts: set by the loop for each run/);
-  assert.match(src, /probe\.trend\.replay\.dayAttempts: set by the loop for each run/);
+  const PC = require('../../scripts/lib/train/probe-config');
+  const replay = { stage: 1, curatedList: { file: 'c.json', list: 'mix' }, practice: { mode: 'setup-focus' } };
+  const o = { read: x => x, modelScore: { account: 'acct_a' }, tuningWindows: [{ from: '2022-09-01', to: '2023-02-01' }] };
+  const ok = { replay, windows: [{ from: '2022-03-07', to: '2022-03-12' }] };
+  assert.ok(PC.resolveProbe(ok, o));
+  assert.throws(() => PC.resolveProbe({ ...ok, replay: { ...replay, dayAttempts: { account: ACCOUNT.name } } }, o), /probe\.replay\.dayAttempts: set by the loop for each run/);
+  assert.throws(() => PC.resolveProbe({ ...ok, trend: { replay: { stage: 1, dayAttempts: { account: ACCOUNT.name } } } }, o), /probe\.trend\.replay\.dayAttempts: set by the loop for each run/);
+});
+
+test('the loop refuses what would trade outside a day\'s attempt: a model-scored loop\'s replay with an attempt across days; a run declared not learning with no policy account', () => {
+  const ctx = loopCtx();
+  const cfg = o => () => resolveLoop({ loopId: 'da', replay: { ...ctx.loop.replay, ...o }, tuningWindows: [{ from: '2022-09-01', to: '2023-02-01' }], proposer: TRADER, modelScore: { account: 'acct_a' } }, { baseDir: ctx.user });
+  assert.throws(cfg({ prop: ACCOUNT.name }), /replay\.prop: the model-scored loop's runs trade inside a fresh attempt each session day/);
+  assert.throws(cfg({ combine: { account: ACCOUNT.name, attempts: ['2022-09-01'] } }), /replay\.combine: the model-scored loop's runs/);
+  assert.throws(cfg({ accountStates: { file: 'x.json' } }), /replay\.accountStates: the model-scored loop's runs/);
+  // A tree with no policy account: a learning run resolves (the preflight refuses it); one declared not learning is refused here.
+  const bare = tmp();
+  for (const d of ['strategies', 'accounts', 'skills', 'agents']) fs.mkdirSync(path.join(bare, d));
+  const window = { from: '2022-03-07', to: '2022-03-08' };
+  assert.throws(() => L.windowRun(ctx, { label: 'nl', window, tree: bare, look: {}, replay: { ...ctx.loop.replay, learning: false } }), /nl: no active policy strategy in the tree names an account, so the run can't trade inside the day's attempt/);
+});
+
+test('startDay: a start cut short today is started again, never ending (and overwriting) the earlier day\'s record', async () => {
+  const H = require('../helpers');
+  const home = H.trendHome();
+  const sched = path.join(home, 'balance-schedule.json');
+  const run = { paths: { runHome: home, runDir: home, balanceSchedule: sched }, cfg: { account: '1' }, dayAttempts: { account: ACCOUNT.name }, brokerEnv: {}, root: REPO };
+  const at = new Date('2022-03-02T14:30:02Z');
+  let fail = true;
+  const deps = { open: async () => false, balance: async () => { if (fail) throw new Error('lost reply'); return ACCOUNT.starting_balance; } };
+  // The earlier day's attempt, with a closed day.
+  prop.startAttempt(home, ACCOUNT, new Date('2022-03-01T14:30:02Z'));
+  prop.recordEndOfDay(home, ACCOUNT, ACCOUNT.starting_balance - 400, '2022-03-01');
+  await assert.rejects(DA.startDay(run, { day: '2022-03-02' }, at, {}, deps, { root: REPO }), /can't read the account's balance for the day's attempt \(lost reply\)/);
+  fail = false;
+  assert.strictEqual(await DA.startDay(run, { day: '2022-03-02' }, at, {}, deps, { root: REPO }), 'start');
+  const ended = fs.readdirSync(path.join(home, 'combine')).filter(f => f.includes('.ended-'));
+  assert.strictEqual(ended.length, 1);
+  assert.deepStrictEqual(JSON.parse(fs.readFileSync(path.join(home, 'combine', ended[0]), 'utf8')).days.map(d => d.balance), [ACCOUNT.starting_balance - 400], 'the earlier day kept');
+  assert.strictEqual(prop.readAttempt(home, ACCOUNT.name).startDay, '2022-03-02');
 });
 
 /** The real training preflight on a run; only the replay broker server's own reply is given (limits the account's). */

@@ -250,8 +250,9 @@ function learningGate(ctx, run, look, label, loopRole = null) {
  * keep rule's runs (the loop's own replay, judged by modelScore) or the trend set's (probe.js); none for a curated probe.
  * Every run trades inside a fresh attempt each session day on the account the tree's active policy strategy trades
  * (replay/day-attempts.js), so its entries are sized as live sizes them in an attempt; a tree without one gets none, and
- * the preflight refuses the run (day-attempts). A replay config with an attempt of its own (prop, accountStates,
- * combine: never stage 1's, so never a probe's or a keep rule's stage-1 run) keeps it: its entries are sized in it.
+ * the preflight refuses the run (day-attempts; a run declared not learning, which has no preflight, is refused here). A
+ * replay config with an attempt of its own (prop, accountStates, combine: never stage 1's, and refused in a model-scored
+ * loop's replay, train/config.js) keeps it: its entries are sized in it, and its days are that attempt's.
  */
 function windowRun(ctx, { label, window, tree, look, replay = null, role = undefined }) {
   const loopRole = role !== undefined ? role : !replay && ctx.loop.modelScore ? 'keep-rule' : null;
@@ -259,6 +260,8 @@ function windowRun(ctx, { label, window, tree, look, replay = null, role = undef
   let policy = null;
   try { policy = policyAccount(tree, ctx.env); } catch (_err) { /* more than one: the replay config refuses it below */ }
   const own = ['prop', 'accountStates', 'combine'].some(k => raw[k] !== undefined);
+  // A run declared not learning gets no preflight, so its missing day attempts are refused here (fails closed).
+  if (!policy && !own && raw.learning === false) throw new Error(`${label}: no active policy strategy in the tree names an account, so the run can't trade inside the day's attempt (sized as live): refused`);
   const run = resolveReplay(policy && !own ? { ...raw, dayAttempts: { account: policy.name } } : raw, { baseDir: ctx.root, env: ctx.env, root: tree });
   return { run, gate: learningGate(ctx, run, look, label, loopRole) };
 }

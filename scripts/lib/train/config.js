@@ -137,6 +137,8 @@ function resolveLoop(raw, { baseDir = process.cwd() } = {}) {
     errors.push(...MV.windowErrors(Array.isArray(r.tuningWindows) ? r.tuningWindows : [], Array.isArray(r.heldOutWindows) ? r.heldOutWindows : []));
     // Held-out runs take learning looks (learning/run-gate.js), which need the evaluation id their arms share.
     if (r.heldOutWindows && !(learning && learning.evaluation)) errors.push('learning.evaluation: the model-scored loop judges held out through learning looks, which need an evaluation id');
+    // Its runs trade in a fresh attempt each day (train/loop.js windowRun): an attempt across days would carry losses.
+    if (replay) for (const k of ['prop', 'accountStates', 'combine']) if (replay[k] !== undefined) errors.push(`replay.${k}: the model-scored loop's runs trade inside a fresh attempt each session day (dayAttempts, set by the loop); an attempt across days would carry one day's loss into the next: remove it`);
     // The keep rule never pairs a curated run (prop/model-score.js refuseCurated): refused before any replay is spent.
     if (replay && replay.curatedList) errors.push('replay.curatedList: the model-scored loop judges full-day windows; a curated run never judges a change (its moments are outcome-balanced and its rebuilt days drawn, so nothing pairs): remove it');
   }

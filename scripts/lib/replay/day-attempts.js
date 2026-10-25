@@ -80,7 +80,9 @@ async function startDay(run, point, ranAt, env, deps, { root, log = () => {} } =
     schedule.push({ at, day: point.day, balance: account.starting_balance, dayPnl: 0 });
     writeJsonAtomic(balanceSchedule, schedule);
   }
-  if (ps.readAttempt(runHome, account.name)) ps.endAttempt(runHome, account.name, ranAt);
+  // An earlier day's record is ended (kept); one started today (a start cut short before its log line) is started again.
+  const prior = ps.readAttempt(runHome, account.name);
+  if (prior && prior.startDay !== point.day) ps.endAttempt(runHome, account.name, ranAt);
   ps.startAttempt(runHome, account, ranAt);
   const balance = await Promise.resolve().then(() => deps.balance(env, run.cfg.account)).then(Number, err => {
     throw refused(`can't read the account's balance for the day's attempt (${firstLine(err)})`);
