@@ -550,6 +550,16 @@ function budgetPlan(home, account, strategy, root, stopTicks, fraction = 1, spec
   const r = readAttempt(home, account.name);
   const state = r && r.snapshot && r.snapshot.state;
   if (!state) return { error: `no ${account.name} snapshot to size from` };
+  const z = strategy.sizing || {}; // the rulebook's, every key (combine.sizingErrors): an incomplete one sizes nothing
+  return sizeWithin({ dollars: combine.budget(state, z), room: combine.room(state) }, account, strategy, root, stopTicks, fraction, specOf, selected);
+}
+
+/**
+ * budgetPlan's sizing for a budget already known: { dollars } the attempt's size budget for the strategy
+ * (combine.budget) and { room } its dollars to the floor or the daily limit (combine.room), e.g. as an attempt line
+ * recorded them at a past cycle (the training loop's trend facts, train/trend-facts.js). The same checks and plan.
+ */
+function sizeWithin({ dollars, room }, account, strategy, root, stopTicks, fraction = 1, specOf = specFor, selected = null) {
   // Every contract the budget may pick (the micro and the mini of a family) needs its specs.
   const fam = familyOf(root);
   const missing = [fam ? fam.micro : root, ...(fam ? [fam.mini] : [])].find(x => !specOf(x));
@@ -566,7 +576,7 @@ function budgetPlan(home, account, strategy, root, stopTicks, fraction = 1, spec
   if (bad.length) return { error: `${strategy.name} has no whole sizing from its account's rulebook (${bad.join('; ')}): no size` };
   const { legs, ratio, mode } = legsFor(account, root, specOf, selected);
   const args = {
-    dollars: combine.budget(state, z), room: combine.room(state), stopTicks, legs, mode: mode || strategy.contracts || 'auto', guard: z.min_size_guard, fraction, ratio, slipTicks: z.stop_slippage_ticks, minContracts: z.min_contracts,
+    dollars, room, stopTicks, legs, mode: mode || strategy.contracts || 'auto', guard: z.min_size_guard, fraction, ratio, slipTicks: z.stop_slippage_ticks, minContracts: z.min_contracts,
   };
   const plan = combine.contractPlan(args);
   // None fits: `floor` says so when the rulebook's min_contracts alone sized it out.
@@ -780,5 +790,5 @@ function readVerdicts(home) {
 module.exports = {
   dayEndMs, closeBefore, balanceCheck, reconciled, orderSince, BALANCE_TOLERANCE,
   SNAPSHOT_MAX_AGE_MS, combineFile, verdictsFile, readAttempt, startAttempt, seedAttempt, carriedOf, carriedLossState, endAttempt, runningAttempts, stateFrom, tradesFromFills, sessionLossStreak, snapshot, dayCounts, attemptCounts, recordEndOfDay, combineBlock, entrySinceSnapshot, feeOf,
-  legOf, legsFor, budgetPlan, minContractsRefusal, minContractsIn, latestVerdict, propViolations, appendVerdict, readVerdicts, ENTRY_ACTIONS, verdictMultiplier, verdictUsed, openEntryVerdicts,
+  legOf, legsFor, budgetPlan, sizeWithin, minContractsRefusal, minContractsIn, latestVerdict, propViolations, appendVerdict, readVerdicts, ENTRY_ACTIONS, verdictMultiplier, verdictUsed, openEntryVerdicts,
 };

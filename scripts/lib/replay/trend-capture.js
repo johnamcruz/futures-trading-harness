@@ -31,6 +31,7 @@
  *   classifyCycle(cycle, { side, records, gate })   { bar, planned, side, step, by, code, message, reads, role }
  *   captureReport({ runDir, home, days, manifest, legs })   the trend-capture document (see writeCapture); legs: given
  *                                            ones (the census's, for a stepped-windows run) instead of the detector's
+ *   cyclesOf(home)                            the run home's trade and manage cycle logs (the trend facts read them too)
  *   writeCapture(runDir, doc), readCapture(runDir)   trend-capture.json in the run's folder
  *   reportLines(doc)                          its text lines, for the replay report
  * The follow-up for training (the learning loop's findings): a census of these legs over practice-train, split by
@@ -269,4 +270,4 @@ function reportLines(doc) {
   return lines;
 }
 
-module.exports = { FLOW_STEPS, DETECTOR, FILE, legsOf, classifyCycle, captureReport, writeCapture, readCapture, reportLines };
+module.exports = { FLOW_STEPS, DETECTOR, FILE, legsOf, classifyCycle, cyclesOf, captureReport, writeCapture, readCapture, reportLines };
