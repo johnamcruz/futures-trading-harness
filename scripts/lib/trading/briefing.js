@@ -377,13 +377,14 @@ function computeSections({ bars, fine = null, c15, c60, snap, snap15, read, read
     if (!(k >= 0 && k + 1 < bars.length)) return [];
     const nowByName = new Map();
     for (const [name, p] of levels) if (Number.isFinite(p)) nowByName.set(name, [...(nowByName.get(name) || []), p]);
-    const stands = (name, p) => {
+    // Its value now when it still stands (within a tick of its value then), else null.
+    const nowOf = (name, p) => {
       const swing = /^(.* swing (?:high|low)) -?\d+(?:\.\d+)?$/.exec(name);
-      return (nowByName.get(swing ? swing[1] : name) || []).some(q => Math.abs(q - p) <= tick + 1e-9);
+      const q = (nowByName.get(swing ? swing[1] : name) || []).find(x => Math.abs(x - p) <= tick + 1e-9);
+      return q === undefined ? null : q;
     };
-    // Shown on the contract's tick, as every other level (level()); the stands() filter and the box's edges use the exact
-    // price (the box at read's one-ATR distance, the shown one: at most half a tick off).
-    return levelsAt(k, k, k + 1).filter(([name, p]) => Number.isFinite(p) && stands(name, p)).map(([name, p]) => [name, p, level(p)]);
+    // At its value now, shown on the contract's tick as every other level (level()); the box's edges read the exact one.
+    return levelsAt(k, k, k + 1).map(([name, p]) => [name, Number.isFinite(p) ? nowOf(name, p) : null]).filter(([, q]) => q !== null).map(([name, q]) => [name, q, level(q)]);
   };
   const news = newsState(blackouts, closedAt);
   // In a no-entry window, the window itself (its name, scope and end) is the reason a candidate is blocked.

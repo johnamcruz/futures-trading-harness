@@ -183,17 +183,17 @@ const PINS = {
   ],
   compression: [
     // The one definition (compression.js; the numbers are the config's: a test below holds them equal).
-    '5 to 30 back-to-back candles, width at most 3 x ATR (`widthAtr`), mean range at most 1 x ATR (`meanRangeAtr`).',
-    'Not one: a single inside bar, wide drifting candles, a run wider than 3 x ATR, a gap.',
-    'the first candle after the box CLOSES beyond it by 0.1 x ATR or more (`beyondAtr`), its range at least 2 x the box\'s candles (`rangeVsBox`) and 1 x ATR (`rangeAtr`).',
-    '`state` `expanding` while within 3 candles (`barsAgo`), no close back inside (`backInside`), price still beyond it (`beyondNow`; acceptance by closes: `breakout-vs-fakeout`) and under 1 x ATR past its close (`late`).',
+    '`inside`: a candle inside its mother (`candle-reading`, `insideStack` in a row); the box is the mother\'s range. A displacement mother is a pole, never a box: then the narrow candle\'s own range.',
+    '`nr7`: the narrowest range of the last 7 back-to-back candles (ties count); the box is its range.',
+    '`pole`: a displacement candle (`candle-reading`) in the 3 candles just before the box, outside it.',
+    'the next candle CLOSES beyond the box by 0.1 x ATR or more (`beyondAtr`: a poke of a tick or two is none), its range 1 x ATR or more (`rangeAtr`);',
+    '`state` `expanding` while within 3 candles (`barsAgo`), no close back inside (`backInside`), price still beyond (`beyondNow`; acceptance by closes: `breakout-vs-fakeout`) and under 1 x ATR past its close (`late`).',
     'The expansion candle closes out of the box the HTF bias\'s way.',
     'Side, entry and runway: `trade-lifecycle`, `take-profit`. Never anticipate.',
     'Stop: the box\'s far side, `stop <tf> box low|high <price>` (`invalidation`).',
-    'Signs, defined elsewhere: inside bars (`candle-reading`), the Keltner squeeze (`trend-momentum-indicators`), `volContract` under 1 (volume falling as it forms: `momentum-and-volume`).',
     'closed back inside: fakeout (`breakout-vs-fakeout`); a break against the HTF bias (the trend rule\'s); a small candle; late.',
     'a box pressing a key level the bias\'s way, the expansion closing through it: location `<tf> box at <level>`, setup the break.',
-    'a displacement pole (`candle-reading`), then a box drifting against it (flag) or `converging` (pennant), the break its way.',
+    'a displacement pole, then a narrow candle (flag) or an inside stack (pennant), the break the pole\'s way (`withPole`).',
   ],
   'fib-retracement': [
     'The levels read: 0.5, 0.618, 0.705 and 0.79.',
@@ -609,18 +609,19 @@ test('bos-vs-choch: the timeframes are read top-down, the same logic in the setu
 test('compression: the skill states the code\'s numbers (config/analysis.json compression), and its reads are the checker\'s forms', () => {
   const P = require('../../scripts/lib/trading/compression').PARAMS;
   const t = flat(read(file('compression')));
-  assert.ok(t.includes(`${P.minBars} to ${P.maxBars} back-to-back candles, width at most ${P.boxAtr} x ATR`), 'box');
-  assert.ok(t.includes(`mean range at most ${P.barAtr} x ATR`) && t.includes(`a run wider than ${P.boxAtr} x ATR`), 'bars');
-  assert.ok(t.includes(`its range at least ${P.expandRange} x the box's candles`) && t.includes(`and ${P.expandAtr} x ATR (\`rangeAtr\`)`), 'expansion');
-  assert.ok(t.includes(`within ${P.recentBars} candles`) && t.includes(`under ${P.maxRunAtr} x ATR past its close`), 'recent, late');
-  assert.ok(t.includes(`CLOSES beyond it by ${P.minBeyondAtr} x ATR or more`), 'beyond');
+  assert.deepStrictEqual(P.nr, [7], 'the skill teaches the config\'s NR length');
+  const states = q => t.includes(`\`nr${q.nr[0]}\`: the narrowest range of the last ${q.nr[0]} back-to-back candles`)
+    && t.includes(`in the ${q.poleBars} candles just before the box`)
+    && t.includes(`CLOSES beyond the box by ${q.minBeyondAtr} x ATR or more`) && t.includes(`its range ${q.expandAtr} x ATR or more`)
+    && t.includes(`within ${q.recentBars} candles`) && t.includes(`under ${q.maxRunAtr} x ATR past its close`);
+  assert.ok(states(P), 'the skill states the config\'s numbers');
+  // A changed number in the config fails the check (the check reads the config, not the text).
+  for (const k of ['poleBars', 'minBeyondAtr', 'expandAtr', 'recentBars', 'maxRunAtr']) assert.ok(!states({ ...P, [k]: P[k] + 1 }), k);
+  assert.ok(!states({ ...P, nr: [P.nr[0] + 1] }));
   // Each read the skill teaches parses into the checker's form and step.
   const CR = require('../../scripts/lib/trading/composed-reads');
-  const reads = /Reads: (.+?) \(\d+\.\d+R\): runway/.exec(t)[1].split(', ');
+  const reads = /Reads: (.+?) \(\d+\.\d+R\); hit/.exec(t)[1].split(', ');
   assert.deepStrictEqual(reads.map(x => CR.parseRead(x).kind), ['compression', 'close', 'stop', 'target'], reads.join('; '));
-  // A changed number in the config fails the check (the check reads the config, not the text).
-  const states = q => flat(read(file('compression'))).includes(`${q.minBars} to ${q.maxBars} back-to-back candles, width at most ${q.boxAtr} x ATR`);
-  assert.ok(states(P) && !states({ ...P, boxAtr: P.boxAtr + 1 }) && !states({ ...P, minBars: P.minBars + 1 }));
   // candle-reading's displacement and breakout point to it.
   assert.match(flat(read(file('candle-reading'))), /it starts a leg, out of a box \(`compression`\)/);
   assert.match(flat(read(file('breakout'))), /Out of a tight box: `compression`\./);

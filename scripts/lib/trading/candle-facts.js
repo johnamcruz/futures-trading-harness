@@ -657,5 +657,5 @@ function completedCandlesAt({ bars, base, fine = null, minutes, at = bars.length
 module.exports = {
   TIMEFRAMES, DEF, LABELS, MAX_LEVELS, LEVEL_ORDER, label, completedSeries, shape, closeLocation, patternsOf, patternLabel, relation,
   candleSeries, relationSeries, swingTargetSeries, holdingSwingsAt, briefingCandles, briefingTargets, RELATION_TEXT,
-  prevSweep, RANGE_FRAMES, briefingRangeTargets, completedCandlesAt, gapRelation, insideStackOf,
+  prevSweep, RANGE_FRAMES, briefingRangeTargets, completedCandlesAt, gapRelation, insideStackOf, insideStacks,
 };

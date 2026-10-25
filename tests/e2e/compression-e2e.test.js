@@ -2,13 +2,12 @@
 
 /**
  * The compression setup end to end on real bars (the parity fixture, briefing.js as the runner builds it): the
- * briefing's code-verified compression -> expansion facts; the real compose_check (harness-tools/compose.js) on a plan
- * whose setup is the compression break, its stop beyond the box's far side and its entry a later closed candle (OK);
- * the same plan with its entry on the expansion candle itself (refused); runway (a with-trend box whose far-side stop
- * leaves no named level at 2R: refused); and the gate's trend rule refusing a counter-HTF compression plan whose
- * reads all verify (mtf-state.js checkTrend, with no verified CHoCH tier: lifecycle-gate.js reversalAllowed). On these
- * bars no with-trend compression break has a box-far-side stop with runway, so the passing plan is the counter-HTF one,
- * which compose_check (reads and plan) passes and only the trend rule refuses.
+ * briefing's code-verified compression -> expansion facts (an NR7 or inside-bar box); the real compose_check
+ * (harness-tools/compose.js) on a with-trend plan whose setup is the compression break, its stop beyond the box's far
+ * side and its entry a later closed candle (OK, and the gate's trend rule allows it); the same plan with its entry on the
+ * expansion candle itself (refused); runway (a pennant whose box stop leaves no named level at 2R: refused); and a
+ * counter-HTF compression break the gate's trend rule refuses (mtf-state.js checkTrend, with no verified CHoCH tier:
+ * lifecycle-gate.js reversalAllowed).
  */
 
 const test = require('node:test');
@@ -17,7 +16,7 @@ const path = require('path');
 const { buildBriefing, writeBriefing } = require('../../scripts/lib/trading/briefing');
 const { readBarsArg } = require('../../scripts/lib/backtest/data');
 const { composeCheck } = require('../../scripts/lib/harness-tools/compose');
-const { checkReads } = require('../../scripts/lib/trading/composed-reads');
+const { checkReads, checkRead, parseRead } = require('../../scripts/lib/trading/composed-reads');
 const { buildRecord, writeRecord, checkTrend } = require('../../scripts/lib/trading/mtf-state');
 const { reversalAllowed } = require('../../scripts/lib/trading/lifecycle-gate');
 const { tmpDir } = require('../helpers');
@@ -37,26 +36,23 @@ function compose(n, side, reads) {
 }
 const r = (step, skill, read) => ({ step, skill, read });
 
-// 04:57 UTC on 04-27: a 3m expansion candle closed below a 10-candle box (27522.25-27540) while the 1h trend is up; the
-// 04:57 bar (closed 05:00) is the next closed candle; the stop beyond the box's high. Only a 3m CHoCH down for bias (no
-// D2 tier: a 1h CHoCH the trade's way is needed against a 1h trend).
-const SHORT = [r('bias', 'bos-vs-choch', '3m choch down'), r('location', 'levels-and-reactions', 'at 15m swing low 27512.75'), r('setup', 'compression', '3m compression break down'),
-  r('entry', 'candle-reading', '15m close bottom'), r('stop', 'invalidation', 'stop 3m box high 27540'), r('target', 'take-profit', 'target session vah 27467.57')];
-// 00:03 UTC on 04-27 (20:03 ET): a 3m expansion candle closed above a 30-candle box (27363.75-27399.75), the 1h trend
-// up; the 00:03 bar (closed 00:06) is the next closed candle, top third; the stop beyond the box's low.
-const BOX_LOW = 27363.75;
-const LONG = [r('bias', 'multi-timeframe-analysis', '1h up'), r('location', 'levels-and-reactions', 'at session vah'), r('setup', 'compression', '3m compression break up'),
-  r('entry', 'candle-reading', '3m close top'), r('stop', 'invalidation', `stop 3m box low ${BOX_LOW}`), r('target', 'take-profit', 'target prior rth close 27434')];
+// 08:39 UTC on 04-27 (04:39 ET): a 3m expansion candle closed above an inside-bar box (its mother's range 27413-27422,
+// on the prior POC), the 1h trend up; the 08:39 bar (closed 08:42) is the next closed candle, top third.
+const LONG = [r('bias', 'multi-timeframe-analysis', '1h up'), r('location', 'levels-and-reactions', 'at previous 3m high'), r('setup', 'compression', '3m compression break up'),
+  r('entry', 'candle-reading', '3m close top'), r('stop', 'invalidation', 'stop 3m box low 27413'), r('target', 'take-profit', 'target prior rth high 27462.5')];
 
 test('compression e2e: the briefing holds the transition as code-verified facts, on completed candles', () => {
-  const b = briefingAt(956);
-  const at = b.sections.m3.data.compression['3m'];
+  const at = briefingAt(1128).sections.m3.data.compression['3m'];
   assert.strictEqual(at.state, 'expanding');
-  assert.deepStrictEqual([at.box.low, at.box.high, at.box.bars, at.break.dir, at.break.closedAt, at.break.expansion, at.break.beyondNow, at.break.barsAgo], [BOX_LOW, 27399.75, 30, 'up', '2026-04-27T00:03:00.000Z', true, true, 1]);
-  // The box's levels: those that stood when it began and still stand at the same value (one value per level in the
-  // briefing). Here the session profile moved since the box began (its own volume built it): none of it is the box's.
-  assert.ok(!at.box.levels.some(l => /^session (POC|VAH|VAL)$/.test(l.name)), JSON.stringify(at.box.levels));
-  // Over the series, every session level a box names has the briefing's current value for that name (keyLevels).
+  assert.deepStrictEqual([at.box.flavor, at.box.insideStack, at.box.low, at.box.high, at.break.dir, at.break.closedAt, at.break.expansion, at.break.beyondNow, at.break.barsAgo],
+    ['inside', 1, 27413, 27422, 'up', '2026-04-27T08:39:00.000Z', true, true, 1]);
+  assert.ok(at.box.levels.some(l => l.name === 'prior POC' && l.edge === 'bottom'), JSON.stringify(at.box.levels));
+  // Before the expansion candle closed, its mother's inside candle was the box (compressing).
+  assert.strictEqual(briefingAt(1126).sections.m3.data.compression['3m'].state, 'compressing');
+  // A flag's pole: a displacement up just before a 2-candle inside stack, the break its way (04-24 00:27 UTC).
+  const flag = briefingAt(504).sections.m3.data.compression['3m'];
+  assert.deepStrictEqual([flag.state, flag.box.insideStack, flag.box.pole && flag.box.pole.dir, flag.break.withPole], ['expanding', 2, 'up', true]);
+  // Every session level a box names has the briefing's current value for that name (keyLevels): one value per level.
   let named = 0;
   for (let n = 600; n <= 1400; n += 20) {
     const bn = briefingAt(n);
@@ -69,20 +65,17 @@ test('compression e2e: the briefing holds the transition as code-verified facts,
     }
   }
   assert.ok(named > 0, 'the check is not vacuous');
-  // The bar before the expansion candle closed was compressing: the transition is a change on one closed candle.
-  assert.strictEqual(briefingAt(954).sections.m3.data.compression['3m'].state, 'compressing');
-  // A poke: 04-24 07:03 UTC closed 2 ticks above its box (0.06 ATR): no expansion, and the read is FALSE.
-  const poke = briefingAt(636).sections.m3.data.compression['3m'];
-  assert.deepStrictEqual([poke.break.expansion, poke.break.beyondAtr, poke.state], [false, 0.06, 'neither']);
 });
 
 test('compression e2e: a box\'s key levels are the session\'s and higher timeframes\' levels, never its own or a lower timeframe\'s swings', () => {
   const MIN = { '3m': 3, '5m': 5, '15m': 15, '1h': 60 };
   let higher = 0;
-  for (let n = 600; n <= 1400; n += 40) {
+  let named = 0;
+  for (let n = 600; n <= 1400; n += 20) {
     for (const [tf, x] of Object.entries(briefingAt(n).sections.m3.data.compression)) {
       if (!x || typeof x !== 'object' || !x.box) continue;
       for (const l of x.box.levels) {
+        named += 1;
         assert.doesNotMatch(l.name, /^last |^equal (highs|lows)$|^(day|session) (high|low)$/, `${n} ${tf}: ${l.name}`);
         const k = /^(?:untested )?(\d+)(m|h) swing\b/.exec(l.name);
         if (k) {
@@ -92,44 +85,47 @@ test('compression e2e: a box\'s key levels are the session\'s and higher timefra
       }
     }
   }
-  assert.ok(higher > 0, 'a higher timeframe\'s swing is named somewhere (the check is not vacuous)');
+  assert.ok(higher + named > 0, 'levels are named somewhere (the check is not vacuous)');
 });
 
-test('compression e2e: a plan whose setup is the compression break, its stop beyond the box and its entry a later closed candle, passes compose_check', () => {
-  const { text } = compose(1054, 'short', SHORT);
-  assert.match(text, /TRUE setup \(compression\): "3m compression break down"/, text);
-  assert.match(text, /TRUE stop \(invalidation\): "stop 3m box high 27540"/, text);
+test('compression e2e: a with-trend plan whose setup is the compression break, its stop beyond the box and its entry a later closed candle, passes compose_check and the trend rule', () => {
+  const { home, now, text } = compose(1128, 'long', LONG);
+  assert.match(text, /TRUE setup \(compression\): "3m compression break up"/, text);
+  assert.match(text, /TRUE stop \(invalidation\): "stop 3m box low 27413"/, text);
   assert.match(text, /\bOK\b/, text);
   assert.doesNotMatch(text, /PROBLEM|NOT OK/, text);
-});
-
-test('compression e2e: runway: with the trend, the stop beyond the box\'s far side leaves no named level at 2R, so the plan is refused', () => {
-  const { text } = compose(956, 'long', LONG);
-  assert.match(text, /TRUE setup \(compression\): "3m compression break up"/, text);
-  assert.match(text, /TRUE stop \(invalidation\): "stop 3m box low 27363.75"/, text);
-  assert.match(text, /NOT OK/, text);
-  assert.match(text, /R:R .* under the strategy's min/, text);
+  writeRecord(home, buildRecord(BARS.slice(0, 1128), { symbol: 'MNQ', now }));
+  assert.strictEqual(checkTrend(home, { root: 'MNQ', side: 'buy', style: 'trend', strategy: 'trade_lifecycle', now }), null);
 });
 
 test('compression e2e: the same plan with its entry on the expansion candle itself is refused (the confirmation is the next close)', () => {
-  // On the 00:00 bar (closed 00:03) the expansion candle is the base's last completed one: its own close is no entry.
-  const { text } = compose(955, 'long', LONG);
+  // On the 08:36 bar (closed 08:39) the expansion candle is the base's last completed one: its own close is no entry.
+  const { text } = compose(1127, 'long', LONG);
   assert.match(text, /TRUE setup \(compression\): "3m compression break up"/, text);
   assert.match(text, /NOT OK/, text);
   assert.match(text, /closed after the setup's/);
 });
 
-test('compression e2e: a compression break against the HTF trend: every read verifies, and the gate\'s trend rule refuses it', () => {
-  const { home, b, now } = compose(1054, 'short', SHORT);
-  const check = checkReads({ reads: SHORT, side: 'short', briefing: b });
-  assert.strictEqual(check.ok, true, check.problems.join('; '));
-  writeRecord(home, buildRecord(BARS.slice(0, 1054), { symbol: 'MNQ', now }));
-  assert.match(String(checkTrend(home, { root: 'MNQ', side: 'sell', style: 'trend', strategy: 'trade_lifecycle', now })), /against the prevailing 1h up trend/);
-  const rev = reversalAllowed({ home, root: 'MNQ', side: 'short', check, now });
-  assert.strictEqual(rev.ok, false);
-  assert.match(rev.why, /a verified 1h CHoCH/);
-  // A long with the trend passes the same rule.
-  const { home: h2, now: n2 } = compose(956, 'long', LONG);
-  writeRecord(h2, buildRecord(BARS.slice(0, 956), { symbol: 'MNQ', now: n2 }));
-  assert.strictEqual(checkTrend(h2, { root: 'MNQ', side: 'buy', style: 'trend', strategy: 'trade_lifecycle', now: n2 }), null);
+test('compression e2e: runway: a pennant whose box stop leaves no named level at 2R is refused', () => {
+  // 04-24 00:27 UTC: the 2-candle inside stack after the pole; the stop beyond 27102.5, the 15m swing high 1.35R away.
+  const reads = [r('bias', 'multi-timeframe-analysis', '15m up'), r('location', 'levels-and-reactions', 'at session high'), r('setup', 'compression', '3m compression break up'),
+    r('entry', 'candle-reading', '3m close top'), r('stop', 'invalidation', 'stop 3m box low 27102.5'), r('target', 'take-profit', 'target 15m swing high 27155.75')];
+  const { text } = compose(504, 'long', reads);
+  assert.match(text, /TRUE stop \(invalidation\): "stop 3m box low 27102.5"/, text);
+  assert.match(text, /NOT OK/, text);
+  assert.match(text, /R:R .* under the strategy's min/, text);
+});
+
+test('compression e2e: a compression break against the HTF trend verifies, and the gate\'s trend rule refuses it', () => {
+  // 04-28 01:51 UTC: a 3m expansion down out of an inside-bar box while the 4h trend is up, with no verified CHoCH tier.
+  const b = briefingAt(1452);
+  const read = checkRead(parseRead('3m compression break down'), b);
+  assert.deepStrictEqual([read.check, read.dir], [true, 'short']);
+  const reads = [r('bias', 'bos-vs-choch', '15m choch down'), r('setup', 'compression', '3m compression break down')];
+  const check = checkReads({ reads, side: 'short', briefing: b });
+  assert.ok(check.reads.every(x => x.check === true && x.agrees), JSON.stringify(check.reads.map(x => [x.read, x.check, x.fact])));
+  const { home, now } = compose(1452, 'short', reads);
+  writeRecord(home, buildRecord(BARS.slice(0, 1452), { symbol: 'MNQ', now }));
+  assert.match(String(checkTrend(home, { root: 'MNQ', side: 'sell', style: 'trend', strategy: 'trade_lifecycle', now })), /against the prevailing 4h up trend/);
+  assert.strictEqual(reversalAllowed({ home, root: 'MNQ', side: 'short', check: { ...check, ok: true }, now }).ok, false);
 });

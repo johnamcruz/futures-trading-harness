@@ -1,41 +1,43 @@
 ---
 name: compression
-description: Trader-process step 4 - a tight box (compression) turning into expansion, code-verified per timeframe in m3.compression; the setup that starts a trend leg.
+description: Trader-process step 4 - a narrow candle (NR7, inside) as a box turning into expansion, code-verified in m3.compression; the setup that starts a leg.
 ---
 
 # Compression
 
 ## When to Use
 
-- Step 4 with the HTF bias set: is the trend resting in a box, and did a
-  closed candle expand out of it? `m3.compression` per timeframe.
+- Step 4 with the HTF bias set: is the trend resting on a narrow candle, and
+  did a closed candle expand out of it? `m3.compression` per timeframe.
 
 ## How It Works
 
 A read, never a veto: the count decides (`confluence-counting`). Thresholds are
 hypotheses (config/analysis.json `compression`); a missing field is `unknown`.
 
-**Compression** (`box`), completed candles only, ATR(14) the one before the box:
+**The box** (`box`), completed candles only, ATR(14) the one before the box:
 
-- 5 to 30 back-to-back candles, width at most 3 x ATR (`widthAtr`),
-  mean range at most 1 x ATR (`meanRangeAtr`).
-- Not one: a single inside bar, wide drifting candles, a run wider than
-  3 x ATR, a gap. `shape`: `converging`, `drifting up|down`, `flat`.
-- `levels`: key levels the box sits at, `edge` `top`, `bottom`, `inside`.
-- Signs, defined elsewhere: inside bars (`candle-reading`), the Keltner
-  squeeze (`trend-momentum-indicators`), `volContract` under 1 (volume
-  falling as it forms: `momentum-and-volume`).
+- `inside`: a candle inside its mother (`candle-reading`, `insideStack`
+  in a row); the box is the mother's range. A displacement mother is a
+  pole, never a box: then the narrow candle's own range.
+- `nr7`: the narrowest range of the last 7 back-to-back candles (ties
+  count); the box is its range.
+- `flavor` the box's, `flavors` all that hold; `levels` the key levels it
+  sits at, `edge` `top`, `bottom`, `inside`.
+- `pole`: a displacement candle (`candle-reading`) in the 3 candles just
+  before the box, outside it.
 
-**Expansion** (`break`): the first candle after the box CLOSES beyond it
-by 0.1 x ATR or more (`beyondAtr`), its range at least 2 x the box's
-candles (`rangeVsBox`) and 1 x ATR (`rangeAtr`). `state` `expanding` while
-within 3 candles (`barsAgo`), no close back inside (`backInside`), price
-still beyond it (`beyondNow`; acceptance by closes: `breakout-vs-fakeout`)
-and under 1 x ATR past its close (`late`).
+**Expansion** (`break`): the next candle CLOSES beyond the box by 0.1 x ATR
+or more (`beyondAtr`: a poke of a tick or two is none), its range 1 x ATR
+or more (`rangeAtr`); `withPole` the pole its way, `volVsBox` support only
+(`momentum-and-volume`). `state` `expanding` while within 3 candles
+(`barsAgo`), no close back inside (`backInside`), price still beyond
+(`beyondNow`; acceptance by closes: `breakout-vs-fakeout`) and under 1 x
+ATR past its close (`late`).
 
 **How to detect it**, the setup (`<tf> compression break up|down`):
 
-1. `state` `compressing`: the box, its edges and `levels`.
+1. `state` `compressing`: the narrow candle, its box and `levels`.
 2. The expansion candle closes out of the box the HTF bias's way.
 3. Side, entry and runway: `trade-lifecycle`, `take-profit`. Never anticipate.
 4. Stop: the box's far side, `stop <tf> box low|high <price>` (`invalidation`).
@@ -46,24 +48,23 @@ closing through it: location `<tf> box at <level>`, setup the break.
 **What fails**: closed back inside: fakeout (`breakout-vs-fakeout`); a
 break against the HTF bias (the trend rule's); a small candle; late.
 
-**Flag, pennant**: a displacement pole (`candle-reading`), then a box
-drifting against it (flag) or `converging` (pennant), the break its way.
+**Flag, pennant**: a displacement pole, then a narrow candle (flag) or an
+inside stack (pennant), the break the pole's way (`withPole`).
 
-**Evidence** (practice-train halves, n 93/84): aligned 3m expansions
-+0.00R/+0.06R net, intervals straddling zero; against the HTF +0.03R.
-No edge alone: the count and the plan decide. Not a finding.
+**Evidence** (practice-train halves, 3m, with the HTF, n 491/450): +0.25R
+and +0.16R net, 90% intervals above zero; against it -0.05R/+0.08R; a pole
+added nothing measured. A census, not a finding: the count still decides.
 
 ## Examples
 
 ```text
-Take: 4h up; 3m box 19316.25-19384.50 (9 candles, 2.59 ATR); 10:39 ET expansion closed 19413.25
-  (2.22x, volume 2.39x); 10:42 close 19421.25 top. Reads: 3m compression break up, 3m close top,
-  stop 3m box low 19316.25, target 1h swing high 19808.00 (3.67R): runway.
-Skip: 15m up; 3m box 27066.75-27092.25; the 03:03 ET close 27092.75 is 2 ticks beyond (0.06 ATR):
-  a poke, no expansion -> pass.
-Skip: 1h up; 3m box 27363.75-27399.75; expansion 27403.00, close 27404.75; stop 27363.50 is 41.25 pts;
-  1h swing high 27462.50 only 1.40R: no runway -> pass.
-Loser: 4h down; 3m box 15707.75-15774.25 under the prior RTH low; 10:33 ET expansion 15675.50;
-  short at 15647.00, stop 15774.50 (127.50 pts = 510 ticks, $255.00 on 1 MNQ), 2R 15392.00;
-  reversed overnight: -510 ticks, -$255.00. Take, Loser: back-adjusted prices.
+Take: 1h up; 3m inside box 27413.00-27422.00 on the prior POC; 04:39 ET expansion closed 27428.50
+  (1.13 ATR, 0.54 beyond, volume 2.69x); 04:42 close 27428.00 top. Reads: 3m compression break up,
+  3m close top, stop 3m box low 27413.00, target prior rth high 27462.50 (2.26R); hit at 05:51.
+Skip: pennant: a 20:09 ET pole up, then 2 candles inside 27102.50-27116.25; expansion 27118.50;
+  stop 27102.25, the 15m swing high 27155.75 only 1.35R: no runway -> pass.
+Skip: 4h up; 3m inside box 27475.00-27484.50; expansion down 27446.00: against the bias -> pass.
+Loser: 15m up; 3m inside x3 box 27066.75-27079.75 (prior VAH inside); 03:03 ET expansion 27092.75;
+  long at 27096.25, stop 27066.50 (29.75 pts = 119 ticks, $59.50 on 1 MNQ), 4h swing high 27155.75
+  (2.00R); back into the box, stopped 05:21 ET: -119 ticks, -$59.50.
 ```

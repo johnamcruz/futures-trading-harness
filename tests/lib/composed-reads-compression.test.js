@@ -13,8 +13,8 @@ const { scenario1 } = require('../fixtures/trade-lifecycle-scenario');
 
 // The scenario's 15m candle closed 14:45 and its 3m candle 15:00 (price 21540.25): a 15m box 21514-21530 under the prior
 // VAH, left by a 15m expansion candle that closed 14:45 above it.
-const BOX = { high: 21530, low: 21514, width: 16, widthAtr: 1.2, bars: 6, meanRangeAtr: 0.6, volContract: 0.8, shape: 'flat', atr: 13.33, from: '2026-04-23T13:00:00.000Z', to: '2026-04-23T14:30:00.000Z', levels: [{ name: 'prior VAH', price: 21530.13, edge: 'top' }] };
-const BREAK = { dir: 'up', closedAt: '2026-04-23T14:45:00.000Z', close: 21541, rangeAtr: 2.4, rangeVsBox: 4, beyondAtr: 0.83, volVsBox: 2.1, expansion: true, barsAgo: 0, backInside: false, beyondNow: true, runAtr: 0, late: false };
+const BOX = { high: 21530, low: 21514, width: 16, widthAtr: 1.2, flavor: 'inside', flavors: ['inside'], insideStack: 2, atr: 13.33, pole: null, from: '2026-04-23T13:00:00.000Z', to: '2026-04-23T14:30:00.000Z', levels: [{ name: 'prior VAH', price: 21530.13, edge: 'top' }] };
+const BREAK = { dir: 'up', closedAt: '2026-04-23T14:45:00.000Z', close: 21541, rangeAtr: 2.4, beyondAtr: 0.83, volVsBox: 2.1, expansion: true, withPole: false, barsAgo: 0, backInside: false, beyondNow: true, runAtr: 0, late: false };
 function briefing(c15 = { state: 'expanding', box: BOX, break: BREAK }, c3 = { state: 'neither', box: null, break: null }) {
   const b = scenario1();
   b.sections.m3.data.atr14 = 13.33;

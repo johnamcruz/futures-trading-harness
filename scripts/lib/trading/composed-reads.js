@@ -51,8 +51,9 @@
  *   [<tf>] in ote                           m3.cisd.<tf>.priceInOte of a live CISD (no tf: any; zones both ways:
  *                                           false)                                        the CISD's way
  *   <tf> compression break up|down          m3.compression.<tf>: state expanding the read's way (compression.js: an
- *                                           expansion candle closed out of the box in the last recentBars candles,
- *                                           not back inside, not late); timed from that candle   up long, down short
+ *                                           expansion candle closed out of an NR7 or inside box in the last recentBars
+ *                                           candles, not back inside, price still beyond, not late); timed from that
+ *                                           candle                                        up long, down short
  *   <tf> box at <level>                     m3.compression.<tf>.box.levels (a live box: compressing or expanding),
  *                                           the level within one ATR(14) of price (m3.atr14), as `at`  none
  *   swept <level>                           m3.sweeps (by name)                           none
@@ -662,7 +663,7 @@ function checkRead(p, b, { tick = 0.25, side = null, riskPts = null } = {}) {
       if (!got.x) return res('unchecked', got.why);
       const { state, box: bx, break: k } = got.x;
       const boxText = isObj(bx) ? ` the box ${bx.low}-${bx.high}` : '';
-      const fact = state === 'expanding' && isObj(k) ? `the ${p.tf} expansion candle closed ${k.dir} out of${boxText} (range ${k.rangeVsBox}x the box's candles, ${k.rangeAtr} ATR), ${k.barsAgo} candle(s) ago`
+      const fact = state === 'expanding' && isObj(k) ? `the ${p.tf} expansion candle closed ${k.dir} out of${boxText} (range ${k.rangeAtr} ATR, ${k.beyondAtr} ATR beyond), ${k.barsAgo} candle(s) ago`
         : isObj(k) ? `the ${p.tf} compression is ${state}: its last break ${k.dir} is ${!k.expansion ? 'no expansion (a small candle or a poke)' : k.backInside ? 'closed back inside the box' : k.beyondNow === false ? 'undone: price is back inside the box' : k.late ? `late (price ${k.runAtr} ATR past its close)` : 'not recent'}`
           : `the ${p.tf} compression is ${state}: no break out of a box`;
       return res(state === 'expanding' && isObj(k) && k.dir === p.value, fact, { field: `m3.compression.${p.tf}`, value: isObj(k) ? `${state} ${k.dir}` : state, dir: dirSide(p.value) });
