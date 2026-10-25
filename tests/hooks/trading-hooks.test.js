@@ -3081,7 +3081,7 @@ test('order gate wiring: phase2-size on the replay\'s real phase-2 reports (fix/
   const dir0 = path.join(__dirname, '..', 'fixtures', 'phase2-reports');
   // The report's own FACTS line replaced by none (no briefing here): its verdict and Size lines as phase 2 wrote them.
   const report = name => `${fs.readFileSync(path.join(dir0, name), 'utf8').split('\n').filter(l => !/^FACTS:/.test(l)).join('\n').trimEnd()}\nFACTS: none`;
-  const cases = [['2021-05-12T135121Z-reads-as-veto.txt', 5], ['2021-05-14T141202Z-size-unreadable.txt', 5], ['2021-05-10T142415Z-size-unreadable.txt', 3]];
+  const cases = [['2021-05-12T135121Z-reads-as-veto.txt', 5], ['2021-05-07T142116Z-reads-as-veto.txt', 4], ['2021-05-04T145418Z-reads-as-veto.txt', 3]];
   const { env, dir } = setup([{ ts: minutesAgo(5), kind: 'plan', contractId: entryOrder().contractId, text: 'plan' }],
     { FTH_AUTONOMOUS: '1', FTH_ROLE_SKILLS: 'full', FTH_CYCLE: 'full', FTH_SYMBOLS: 'MNQ' });
   const transcript = path.join(dir, 'session.jsonl');
@@ -3103,6 +3103,13 @@ test('order gate wiring: phase2-size on the replay\'s real phase-2 reports (fix/
     assert.match(text(g.byId[1]), new RegExp(`\\[phase2-size\\] size ${size + 1} is over the ${size} risk-manager phase 2 approved`), name);
     assert.doesNotMatch(text(g.byId[2]), /phase2-size|\[roles-ran\]/, name);
   }
+  // A prose Size line holding a count under its size (the broad rule): refused at any size, in the hook and the gateway.
+  const prose = report('2021-05-14T141202Z-size-unreadable.txt');
+  fs.writeFileSync(transcript, cycle(prose));
+  assert.match(gate({ ...orderPayload({ ...ORDER, size: 1 }), transcript_path: transcript }, env).stderr, /\[phase2-size\] Risk-manager phase 2's approval states no size the gate can read/);
+  fs.writeFileSync(stream, cycle(prose));
+  const gp = await gatewayRun(auto, [call(1, 'place_order', { ...ORDER, size: 1 })], { dir: gdir });
+  assert.match(text(gp.byId[1]), /\[phase2-size\] Risk-manager phase 2's approval states no size the gate can read/);
 });
 
 test('order gate hook: a live entry needs the broker\'s allow-list holding its account; exits and protective stops go without one; a paper run is exempt', () => {

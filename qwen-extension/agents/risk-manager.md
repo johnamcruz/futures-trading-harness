@@ -220,8 +220,8 @@ The code reads your report; anything else reads as a veto:
 - Size → its own `Size:` line, final size first, e.g. `Size: 1 (record
   8 cut to 1: no reviewed trades yet)`. To cut, approve the smaller size:
   the order is exactly it.
-- Write only the final size: every size and "cut to" binds; a smaller
-  one with no cut is no trade.
+- Write only the final size: every size and "cut to" binds; any smaller
+  count on the Size line is no trade.
 - These read as a veto: `Decision: cut to size 1`, `8 Decision: valid
   yes`, `Sizing verdict: skip x0.5`.
 

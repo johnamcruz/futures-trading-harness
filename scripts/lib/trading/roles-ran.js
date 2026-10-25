@@ -321,14 +321,27 @@ function headingRefusal(lines, i, rest) {
 function proseRefusal(lines, i, rest) {
   if (/[A-Za-z0-9]/.test(rest)) {
     const lead = /^\s+([A-Za-z]+)\b/.exec(rest);
-    if (lead && PROSE.has(lead[1].toLowerCase())) return null;
-    const word = firstWord(rest);
-    return REFUSALS.has(word) || /^\d/.test(word) ? { word, line: lines[i] } : null;
+    const word = lead && PROSE.has(lead[1].toLowerCase()) ? '' : firstWord(rest);
+    if (REFUSALS.has(word) || /^\d/.test(word)) return { word, line: lines[i] };
+    return sentenceRefusal(lines[i], rest);
   }
   const j = lines.findIndex((l, k) => k > i && l.trim());
   if (j === -1 || new RegExp(KEYWORD_ALL.source, 'i').test(lines[j])) return null;
   const word = firstWord(lines[j].replace(/^[^A-Za-z0-9]*(?:(?:plan|step)\s+)?\d+[.):]?\s+(?=[A-Za-z])/i, ''));
   return REFUSALS.has(word) || /^[^A-Za-z0-9]*\d+[^A-Za-z0-9]*$/.test(lines[j]) ? { word, line: `${lines[i]} ${lines[j]}` } : null;
+}
+
+// A refusal anywhere in a sentence ("Overall the decision here today is pass", "My decision is pass", "Our decision was
+// stand aside"). Narrower than REFUSALS: "not", "no", "cut", "half" and "hold" are ordinary sizing prose ("keep the
+// verdict's size, so I am not cutting", "the verdict's size with no size step").
+const SENTENCE_REFUSAL = /\b(?:pass(?:ed|ing)?|skip(?:ped|ping|s)?|stand(?:s|ing)?\s+aside|sit(?:ting)?\s+out|no[\s-]+(?:trade|entry|go)|nogo|veto(?:ed|es)?|reject(?:ed|s|ion)?|declin(?:e|ed|es|ing)|abort(?:ed|s)?|refus(?:e|ed|es)|den(?:y|ied|ies)|blocked)\b/i;
+/**
+ * The refusal a keyword's own sentence states after it, when its first word decides nothing: { word, line } or null.
+ * The sentence ends at '.' or ';' before a space or the line's end.
+ */
+function sentenceRefusal(line, rest) {
+  const m = SENTENCE_REFUSAL.exec(String(rest).split(/[.;](?=\s|$)/)[0]);
+  return m ? { word: m[0].toLowerCase().split(/[\s-]+/)[0], line } : null;
 }
 
 /** Every decision in a text: [{ keyword, word (lower case), line }], one per occurrence of the word. */
@@ -341,7 +354,7 @@ function decisionLines(text) {
     const start = startIndex(lines[i]);
     for (const m of lines[i].matchAll(KEYWORD_ALL)) {
       if (heading) {
-        const refused = headingRefusal(lines, i, lines[i].slice(m.index + m[0].length));
+        const refused = headingRefusal(lines, i, lines[i].slice(m.index + m[0].length)) || sentenceRefusal(lines[i], lines[i].slice(m.index + m[0].length));
         if (refused) out.push({ keyword: m[1].toLowerCase(), word: refused.word, line: refused.line });
         continue;
       }
@@ -357,7 +370,12 @@ function decisionLines(text) {
         continue;
       }
       const d = decisionAfter(sep ? ` :${after.slice(sep[0].length)}` : after);
-      if (d === null) continue;
+      if (d === null) {
+        // Prose after it ("Decision is skip", "the decision was to pass"): its sentence still refuses.
+        const refused = sentenceRefusal(lines[i], after);
+        if (refused) out.push({ keyword: m[1].toLowerCase(), word: refused.word, line: refused.line });
+        continue;
+      }
       let { word } = d;
       let line = lines[i];
       if (!word) {
@@ -471,17 +489,51 @@ function proseCuts(line) {
   return { sizes, bad };
 }
 
-// A whole number a prose Size line states as a size: not part of an amount, a decimal, a range or a timeframe
-// ("$65.24", "2.74R", "15m"), at a clause's end or before a contract word ("so 4.", "gives 4 MNQ"). A floor named
-// ("the floor of 3", "leaves 2, which floors to 3") is the rulebook's, not phase 2's size.
-const BARE_SIZE = /(?<![\w$.,\-−/])(\d+)(?![\d.,]\d)(?=\s*(?:[.,;:)!?]|$)|\s+(?:contracts?|lots?|micros?|minis?|[A-Z]{2,5})\b)/g;
-const FLOOR_BEFORE = /\b(?:floor(?:s|ed)?(?:\s+(?:of|at|to|is))?|min(?:imum)?(?:_contracts)?(?:\s+of)?|at\s+least)\s*$/i;
-const FLOOR_AFTER = /^[^.;!?]*\bfloor(?:s|ed)?\s+(?:to|at)\b/i;
-/** The sizes a prose Size line states (BARE_SIZE), the floor's excluded. */
-function bareSizes(line) {
+/**
+ * Every count a prose Size line holds (owner's review, 2026-10-24: broad, fail closed): each whole number that is no
+ * amount, decimal, range, time, id, timeframe or distance ("$65.24", "$6,000", "2.74R", "10%", "10:12", "15m",
+ * "x0.5", "40 ticks", "12 points"), and each number spelled one to twenty. Any of them under the binding size makes
+ * the report two sizes: no trade, whatever the number counts ("2 of the last 11 reviews" too).
+ */
+const NUMBER_RUN = /\d+(?:[.,:]\d+)*/g;
+const NOT_A_COUNT_AFTER = /^(?:[A-Za-z%]|[.,:]\d|\s*(?:ticks?|points?|pts?|R|x|ET|UTC|am|pm)\b|\s*%)/i;
+const SPELLED = ['one', 'two', 'three', 'four', 'five', 'six', 'seven', 'eight', 'nine', 'ten', 'eleven', 'twelve', 'thirteen',
+  'fourteen', 'fifteen', 'sixteen', 'seventeen', 'eighteen', 'nineteen', 'twenty'];
+const SPELLED_RE = new RegExp(`\\b(${SPELLED.join('|')})\\b`, 'gi');
+// A share of a size, or a reduction without its number: no size the reader can read unless a cut gives the number.
+const SHARE_WORD = /\b(?:half|halv(?:e|es|ed|ing)|quarter|third|fewer|minimum|reduc(?:e|es|ed|ing)\s+by)\b/i;
+function countsIn(line) {
   const text = String(line);
-  return [...text.matchAll(BARE_SIZE)].filter(m => !FLOOR_BEFORE.test(text.slice(0, m.index))
-    && !FLOOR_AFTER.test(text.slice(m.index + m[0].length))).map(m => Number(m[1]));
+  const out = [];
+  for (const m of text.matchAll(NUMBER_RUN)) {
+    if (/[.,:]/.test(m[0])) continue;
+    if (/[\w$#/.\-\u2212]/.test(text[m.index - 1] || '')) continue;
+    if (NOT_A_COUNT_AFTER.test(text.slice(m.index + m[0].length))) continue;
+    out.push(Number(m[0]));
+  }
+  for (const m of text.matchAll(SPELLED_RE)) out.push(SPELLED.indexOf(m[1].toLowerCase()) + 1);
+  return out;
+}
+/** A Size line's continuation: the lines after it up to a blank line, a bullet, a numbered item, a heading or a keyword line. */
+function continuation(lines, i) {
+  const out = [];
+  for (let j = i + 1; j < lines.length; j += 1) {
+    const l = lines[j];
+    if (!l.trim() || /^\s*(?:[-*+]|\d+[.)]|#{1,6})\s/.test(l) || /^[\s>*_]*(?:VERDICT|FACTS|Size|PLAN|Decision)\b/i.test(l)) break;
+    out.push(l);
+  }
+  return out.join(' ');
+}
+const SIZE_ONE = new RegExp(SIZE_LINE.source, 'i');
+/** A number-led Size line's cuts (CUT_TO): a dollar amount or a distance after a cut is no size ("risk cut to $150"). */
+function sizeLineCuts(line) {
+  const out = [];
+  for (const m of String(line).matchAll(CUT_TO)) {
+    const t = m[1];
+    if (/^[A-Za-z$]/.test(t) || UNIT_AFTER.test(line.slice(m.index + m[0].length))) continue;
+    out.push(t);
+  }
+  return out;
 }
 
 /**
@@ -491,8 +543,9 @@ function bareSizes(line) {
  * it) is an error, never a size (fails closed). A Size line opening with a word is prose (owner-approved 2026-10-24:
  * "Size: order_plan gives 4 MNQ ... I cut to 3"): it states no size, and every cut in it binds (CUT_TO's, and proseCuts'
  * "cut ... to <n>", a whole number only, never a distance or an amount); a size word first ("half", "one", "none",
- * "n/a"), a cut it doesn't make ("I'd cut to 2", "but keep") or a size it states under the binding one with no cut to it
- * ("Half of 8 is 4, so 4." beside "size 8") is an error. The VERDICT line's size still binds, so a prose line only ever
+ * "n/a"), a cut it doesn't make ("I'd cut to 2", "but keep"), any count it holds (or its continuation lines) under the
+ * binding size (countsIn: "go with 3 of the translated 8", "I take three") or a share word with no cut to read ("reduce
+ * by half") is an error. The VERDICT line's size still binds, so a prose line only ever
  * lowers the size or refuses.
  */
 function approvedSize(text) {
@@ -512,27 +565,31 @@ function approvedSize(text) {
     cuts(l.line, l.line.trim());
   }
   const prose = [];
-  for (const m of String(text || '').matchAll(SIZE_LINE)) {
+  const lines = String(text || '').replace(/\r\n|[\r\u2028\u2029\u0085]/g, '\n').split('\n');
+  for (let i = 0; i < lines.length; i += 1) {
+    const m = SIZE_ONE.exec(lines[i]);
+    if (!m) continue;
     const shown = m[0].trim();
     // A Size line opening with a word is prose ("Size: order_plan gives 4 ..."), not a size: every cut in it still
     // binds (proseCuts); a size word ("half", "one", "none", "n/a") or a cut it doesn't make is no size (an error).
     if (word(m[1])) {
       if (SIZE_WORDS.has(m[1].toLowerCase().replace(/[^a-z/]+$/, ''))) bad.push(shown);
-      const c = proseCuts(`${m[1]}${m[2]}`);
+      const body = `${m[1]}${m[2]} ${continuation(lines, i)}`;
+      const c = proseCuts(body);
       if (c.bad) bad.push(shown);
       for (const t of c.sizes) read(t, shown);
-      prose.push(`${m[1]}${m[2]}`);
+      prose.push({ body, cut: c.sizes.length > 0 });
       continue;
     }
     read(m[1], shown);
-    cuts(m[2], shown);
+    for (const t of sizeLineCuts(m[2])) read(t, shown);
   }
   if (bad.length) return { error: `no whole size of 1 or more in "${bad[0].replace(/\s+/g, ' ')}"` };
   const size = Math.min(...sizes);
-  // A prose Size line stating a size under the one that binds, with no cut to it the reader can read ("Half of 8 is
-  // 4, so 4." beside "size 8"): phase 2 said two sizes; no trade (fails closed).
-  const under = prose.find(l => bareSizes(l).some(n => n < size));
-  if (under) return { error: `a Size line states a size under the ${size} it binds, with no cut to it: "Size: ${under.replace(/\s+/g, ' ')}"` };
+  // A prose Size line holding any other count under the size that binds ("go with 3 of the translated 8", "I take
+  // three"), or a share of it with no cut to read ("reduce by half"): phase 2 said two sizes; no trade (fails closed).
+  const under = prose.find(p => countsIn(p.body).some(n => n < size) || (SHARE_WORD.test(p.body) && !p.cut));
+  if (under) return { error: `a Size line states a count under the ${size} it binds, or a share with no cut to it: "Size: ${under.body.replace(/\s+/g, ' ').trim()}"` };
   return { size };
 }
 

@@ -2134,7 +2134,7 @@ test('phase2-size on the replay\'s real phase-2 reports (fix/phase2-verdict-pars
   const dir = path.join(__dirname, '..', 'fixtures', 'phase2-reports');
   // Each report's approved size (tests/lib/phase2-reports.test.js); its FACTS line replaced by the briefing's own facts.
   const sizes = { '2021-05-03T145702Z-reads-as-veto.txt': 5, '2021-05-07T142116Z-reads-as-veto.txt': 4, '2021-05-12T135121Z-reads-as-veto.txt': 5,
-    '2021-05-10T142415Z-size-unreadable.txt': 3, '2021-05-11T153914Z-size-unreadable.txt': 4, '2021-05-14T141202Z-size-unreadable.txt': 5 };
+    '2021-05-04T145418Z-reads-as-veto.txt': 3, '2021-05-11T150314Z-reads-as-veto.txt': 3 };
   for (const [name, size] of Object.entries(sizes)) {
     const report = `${fs.readFileSync(path.join(dir, name), 'utf8').split('\n').filter(l => !/^FACTS:/.test(l)).join('\n').trimEnd()}\nFACTS: window opening drive; trend long allowed`;
     for (const s of [1, size]) assert.deepStrictEqual([of(run(report, s), 'roles-ran'), of(run(report, s), 'phase2-size')], [[], []], `${name} at ${s}`);
@@ -2144,6 +2144,11 @@ test('phase2-size on the replay\'s real phase-2 reports (fix/phase2-verdict-pars
     assert.strictEqual(of(run(none, 1), 'roles-ran').length, 1, `${name} without its VERDICT line`);
     // A refusing line-start decision beside it: refused.
     assert.strictEqual(of(run(`Decision: pass\n${report}`, 1), 'roles-ran').length, 1, `${name} with Decision: pass`);
+  }
+  // The three prose Size lines hold a count under their size (the broad rule, 2026-10-24): no size the gate reads, any size refused.
+  for (const name of ['2021-05-10T142415Z-size-unreadable.txt', '2021-05-11T153914Z-size-unreadable.txt', '2021-05-14T141202Z-size-unreadable.txt']) {
+    const report = `${fs.readFileSync(path.join(dir, name), 'utf8').split('\n').filter(l => !/^FACTS:/.test(l)).join('\n').trimEnd()}\nFACTS: window opening drive; trend long allowed`;
+    for (const s of [1, 3]) assert.match(of(run(report, s), 'phase2-size')[0] || '', /approval states no size the gate can read \(a Size line states a count under/, `${name} at ${s}`);
   }
 });
 
