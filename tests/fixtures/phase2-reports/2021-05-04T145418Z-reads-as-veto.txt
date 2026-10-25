@@ -1,0 +1,9 @@
+PLAN 2 Context: window opening drive until 11:00 ET, entries allowed, news clear. No trend on 4h, 1h or 15m, so both sides are open. Account 1 is flat with no working orders, and test_100k is active with a $934.18 budget and a short verdict up to 11 MNQ.
+
+PLAN 5 Confluence: the composed short has the 15m bearish BOS, the 3m shooting star at the session value, and price below RTH VWAP for it. Against reads are thin volume, the 3m CISD bounce and the level 0.12R below, which are minor by the rules. No 1h CHoCH up against.
+
+PLAN 7 Risk: order_plan gives 3 MNQ, limit 13481, stop 13522.5 (166 ticks), target 13398 (332 ticks, 2R). Risk is $249.00 before fees, $252.72 all-in, inside the $934.18 budget. The record's 1 is translated to 3, and 3 is the floor, so no half cut can go below it.
+
+Size: 3 (the record's 1 translated to the rulebook's 3 MNQ at this stop)
+VERDICT: APPROVE - size 3, risk $249.00, trade_lifecycle short composed on the 3m shooting star with price below RTH VWAP, 2R target 13398
+FACTS: window opening drive; entries allowed; news clear; trend short allowed; read short mixed; 15m range; vwap below; value below

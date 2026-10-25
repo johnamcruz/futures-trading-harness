@@ -1,0 +1,12 @@
+**Phase 2 check: MNQ short, trade_lifecycle, 3m bar 11:36 ET (record 62d9edf562e0992e)**
+
+- **Trigger:** the composed record is for this bar and is still valid (expires 11:45 ET). The briefing's own candidate list is empty, and its standard-plan line refuses a different 21-tick stop on the 15m FVG high. That is not the record's plan. I'm approving the record's 70-tick stop at 13326.25, which order_plan reproduces.
+- **Stop and target (order_plan):** entry limit 13308.75, stop 13326.25 (70 ticks, one tick above the 3m high and just above the day high 13326), target 13258 (203 ticks, 2.9R). Both sides are correct and the ticks match.
+- **Size:** the translated 8 is at risk $280 before fees, inside the $300 cap and the $600.60 budget. But the confluence count has four categories against (structure: 15m BOS up and 3m CHoCH up; location: price above RTH VWAP and session value; context; and the 1h bullish CISD). That is serious against, so the record's size is halved. Half of 8 is 4: $140 before fees, under the 10% of cushion ($200). I'm not cutting below the floor of 3.
+- **Hard steps:** no 1h CHoCH against (the last 1h break is BOS down 13140), so no decisive veto. Window is lunch lull, entries allowed, news clear, short allowed by the trend rule. Account is flat with one loss today, so this entry is the day's last if it loses.
+- **Executor:** send size 4, not the 8 in order_plan's arguments. Rationale should read "4 MNQ risks $140.00".
+
+Size: 4 (translated 8 halved: serious against, four categories against)
+
+VERDICT: APPROVE - size 4, risk $140, short trade_lifecycle on the 15m FVG high rejection with the 70-tick stop and 203-tick target, half size on serious against
+FACTS: window lunch lull; entries allowed; news clear; trend short allowed; read short mixed; 15m range; 1h down; vwap above

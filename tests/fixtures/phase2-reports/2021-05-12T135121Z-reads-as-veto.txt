@@ -1,0 +1,8 @@
+PLAN:
+2 Context: window opening drive until 11:00 ET, entries allowed, news clear, regime transition with high volatility; account test_100k, cushion $2,002, attempt budget $600.60; no losses today, streak 0.
+5 Confluence: for 4 (structure: 1h BOS down 13184.75 and 15m BOS down 13250; location: below prior VAL 13210; trigger: 3m close in the bottom third; liquidity: the 3m and 15m highs swept and closed back inside). Against 1 (context: price above RTH VWAP 13180.98 and session POC 13177.75). Neutral 1 (participation: 1.77x on the last three bars against the prior 20; the same-time prior-day comparison is 1.14x, not the 0.49x in the volume report). One category against is minor, so full size.
+7 Risk: order_plan gives stop 13218.00 (103 ticks: 15m high 13217.75 plus one tick), target 13121.75 (282 ticks, 2.74R), limit entry 13192.25. Size 5 is code's translation of the record's 4 under the rulebook. Risk $257.50 before fees (5 × 103 ticks × $0.50), $263.70 all in at $52.74 a contract. That is under the $300 cap and the $600.60 budget. Briefing room: the first level ahead is RTH VWAP 13180.98 at 0.69R. The record says 0.44R; the briefing governs, and room is a read. Trade_lifecycle on MNQ is unproven, but phase 1 says keep the verdict's size with no size step, and I'm not cutting it.
+
+Size: 5 (code's translation of the record's 4; the rulebook's size at this stop; no cut, since one category against is minor)
+VERDICT: APPROVE - size 5, risk $257.50 before fees ($263.70 all in), trade_lifecycle short with 1h and 15m down, 2.74R to session VAL, one category against (context)
+FACTS: window opening drive; entries allowed; news clear; trend short allowed; read short aligned; 1h down; 15m down; value below

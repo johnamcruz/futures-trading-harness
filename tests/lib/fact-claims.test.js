@@ -359,8 +359,8 @@ test('facts: the taught order - numbered step lines, then the VERDICT line, then
   const gate = text => F.gateRefusal({ report: { text }, home, root: 'MNQ', now: new Date('2026-06-10T13:58:00.000Z'), order: { strategy: 'orb', side: 'long' } });
   // The agent's example (its Size line, the VERDICT, the FACTS), alone and after a realistic block of the trader-process
   // step lines 2, 5 and 7 (phase 2's step 8 is its VERDICT line); the baseline's "8 Decision: take" line passes too.
-  const example = /```text\n(Size: [^\n]*\nVERDICT: APPROVE[^`\n]*\nFACTS: [^`]*?)```/.exec(rm)[1];
-  assert.deepStrictEqual(example.trim().split('\n').map(l => l.split(':')[0]), ['Size', 'VERDICT', 'FACTS']);
+  const example = /```text\n(7 Risk: [^\n]*\nSize: [^\n]*\nVERDICT: APPROVE[^`\n]*\nFACTS: [^`]*?)```/.exec(rm)[1];
+  assert.deepStrictEqual(example.trim().split('\n').map(l => l.split(':')[0]), ['7 Risk', 'Size', 'VERDICT', 'FACTS']);
   assert.strictEqual(gate(example), null);
   const steps = [
     '2 Context: window opening drive, entries allowed, news clear, regime trend-up, account budget $40, attempt none',

@@ -1,0 +1,11 @@
+Phase 2 check for MNQ, 3m bar 10:21 ET (14:21Z). The record's short holds mechanically, but the desk is about evenly split on the structure, so I cut the size.
+
+- **Trigger:** `order_plan` plans this bar's compose record for the short side, so the trigger is confirmed.
+- **Plan numbers (order_plan):** limit sell 13523, stop 13555 (128 ticks, one tick beyond the 5m high 13554.75), target 13388.75 (537 ticks, 4.2R). Ticks and sides check out at tick size 0.25.
+- **Size:** order_plan gives 4 MNQ at $65.24 all in per contract, which is $260.96, within the $300 max_risk and the $664.03 attempt budget. I cut to 3 on serious against. The briefing shows the 3m CISD bullish (weak, no zone), the 15m doji that swept the prior low on 5.13x volume and closed back inside, and the 1h and 4h lows taken and closed back inside. That is two or more categories against, and the halving leaves 2, which floors to 3. Three contracts at $65.24 all in is $195.72, also under the 10% cushion cap of $221.34.
+- **Room:** the first level ahead, the 3m swing low 13502.25, is 0.65R of this trade's stop. That is a read, not a veto.
+- **Restrictions:** the lesson against longs into 15m displacement does not apply to a short. The trade_lifecycle MNQ sample (n=6, E -0.35R) is too small to change size, so the cut comes from the confluence count, not from that record.
+
+Size: 3 (record's 1, translated to 4 under the rulebook, cut to 3 for serious against: 2+ categories against, the 15m doji swept the prior low on 5.13x and closed back inside, and the 1h and 4h lows were taken and closed back inside; floored at min_contracts 3)
+VERDICT: APPROVE - size 3, risk $195.72, trade_lifecycle short from the 15m down trend, stop 128 ticks above the 5m high, target 4.2R at the 4h swing low, cut from 4 for serious against
+FACTS: window opening drive; entries allowed; news clear; trend short allowed; 15m down; vwap below; value below; read short mixed

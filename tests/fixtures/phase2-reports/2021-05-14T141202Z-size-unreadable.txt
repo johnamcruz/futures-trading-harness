@@ -1,0 +1,17 @@
+Phase 2 checks, in order:
+
+- **Trigger:** the record (b664ed516f4cbc07) is for the 3m bar that closed at 10:12 ET, the bar the briefing reads. `order_plan` plans the same entry, stop and target for this bar.
+- **Trend and alignment:** 1h up, long allowed, 15m up, long aligned.
+- **Account:** flat, no working orders, cushion $1,707, remaining before daily limit $2,000.
+- **Stop and target:** the stop is 32 ticks (below the 3m swing high 13275, past the 20-tick minimum). The target is 89 ticks, 2.78R, at the 15m/3m/1h swing high 13305. Both sides are correct.
+- **Risk:** 5 × 32 ticks × $0.50 = $80 before fees, about $86 all in at $17.24 a contract. This is under the $512.11 attempt budget and the $300 cap.
+- **Size:** I cut the translated 17 to 5. The restricted-setup lesson says to keep this setup's size at the ceiling with no size step: the trade is unproven (6 trades, E −0.35R) and has a stop-placement mistake in 2 of the last 11 reviews. The attempt is at −$956 of $6,000 with 21 sessions left, and the rules say not to size up to catch up. At 17 the trade would risk $272 (about $293 all in), roughly 3.4 times the composed size.
+- **Stale reads:** the volume and trend reports were written at 10:00–10:09 and call price below VWAP at 13236. Price is now above VWAP at 13282.75 after the bullish 3m engulfing close. I weighted the current briefing over those reports.
+- **Restriction check:** the lesson against 15m bearish displacement below RTH VWAP does not apply. The 15m is bullish and price is above VWAP.
+- **Room:** the day high at 13283 sits 0.03R above entry, a minor read under the priority order. The target is 2.78R, above the 2R minimum.
+
+`reason_check` marked all eight FACTS claims TRUE. The remaining reasons are judgment items I've weighed above.
+
+Size: 5 (cut from the translated 17: restricted setup with no size step, attempt at −$956 with no size-up to catch up)
+VERDICT: APPROVE - size 5, risk $80.00 before fees, trade_lifecycle long limit 13282.75 with stop 13274.75 (32 ticks) and target 13305 (89 ticks, 2.78R) on the 1h up trend
+FACTS: window opening drive; entries allowed; news clear; trend long allowed; read long aligned; 1h up; vwap above; value above

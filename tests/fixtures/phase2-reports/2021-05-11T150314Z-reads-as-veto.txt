@@ -1,0 +1,13 @@
+Size: 3 (the record's 1 cut up to the rulebook's minimum of 3 MNQ at the 197-tick stop; order_plan shows $295.50 risk, under the $300 cap)
+
+Checks:
+- Trigger: the record and order_plan both show trade_lifecycle short at 13184.75, stop 13234 (197 ticks), target 13065.25 (478 ticks, 2.43R).
+- Trend: 1h down, so the short is allowed. The last 1h break is BOS down, not CHoCH up, so no decisive reversal.
+- Location: price 13184.75 is below RTH VWAP 13193.4 and below prior value. The 15m rejected the opening range high 13226.75.
+- Against: the 15m outside bar closed top third on 2.35x volume, and the 15m CHoCH is up. That is serious against, so half, but the attempt floors at 3, so it stays at 3.
+- Analysts' "vwap above" was the 11:00 bar's read. The current bar closed below VWAP.
+- Account: flat, no open orders, cushion $2,196, $0 P&L today, entries allowed. Budget $658.87, so $295.50 fits. The MNQ trade_lifecycle review lesson (n=6, negative) calls for keeping the verdict's size, and 3 is that size.
+- Stop is at the 15m high with a 197-tick distance, and the protective bracket is part of the entry.
+
+VERDICT: APPROVE - size 3, risk $295.50, trade_lifecycle short at the record's limit 13184.75 with the 15m rejected opening range high, 1h down, price below RTH VWAP; against is serious, half floors to 3
+FACTS: window late morning; entries allowed; news clear; trend short allowed; read short mixed; vwap below; value below

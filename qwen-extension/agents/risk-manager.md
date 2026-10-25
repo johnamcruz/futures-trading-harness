@@ -168,8 +168,7 @@ Always write at least two: start with the window and the trend rule for your
 side, e.g. `FACTS: window opening drive; trend long allowed`. One plan, one
 symbol: the facts are the plan's symbol's. Write each fact plainly: no "not",
 nothing in parentheses (the gate refuses those as ambiguous), and no item
-in any other form (the gate refuses the entry for it). The FACTS line is the
-last line of your report: every line after it is read as facts.
+in any other form (the gate refuses the entry for it).
 
 - `window <name>` (the briefing's `m3` `window`, e.g. `window opening drive`), or `window rth`, `window overnight`
 - `entries allowed` or `entries none` (`m3` `windowEntries`)
@@ -215,19 +214,21 @@ Write your VERDICT line, then the FACTS line last; nothing may follow it.
 The code reads your report; anything else reads as a veto:
 
 - Exactly one `VERDICT: APPROVE - ...` or `VERDICT: VETO - ...` line.
-- "verdict" and "decision" nowhere else in the report, headings included.
+- "verdict" and "decision" only to open the VERDICT line, never in prose
+  or headings: one starting a line decides; elsewhere it can only veto.
 - "VETO" only when vetoing: never "VETO rules: none", "not a VETO".
-- Size → its own `Size:` line, e.g. `Size: 1 (record 8 cut to 1: no
-  reviewed trades yet)`; never "sizing decision" or "sizing verdict". To
-  cut, approve the smaller size: the order is exactly it.
-- Write only the final size: every size and "cut to" binds.
+- Size → its own line, `Size: <n>`: the final size alone, reasoning on
+  the lines before (7 Risk). A Size line written as a sentence is no
+  trade. To cut, approve the smaller size: the order is exactly it.
+- Every size and "cut to" on the VERDICT and Size lines binds.
 - These read as a veto: `Decision: cut to size 1`, `8 Decision: valid
-  yes`, `The verdict priority order: ...`, `Sizing verdict: skip x0.5`.
+  yes`, `Sizing verdict: skip x0.5`.
 
 For example:
 
 ```text
-Size: 5 (the record's 5)
+7 Risk: 111 ticks, $55.50 a contract; the translated 5
+Size: 5
 VERDICT: APPROVE - size 5, risk $277.50, trade_lifecycle long with the 1h up trend, 2.08R
 FACTS: window opening drive; entries allowed; trend long allowed; read long aligned; room long enough; vwap above
 ```

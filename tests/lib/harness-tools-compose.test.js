@@ -131,6 +131,48 @@ test('the trade_lifecycle strategy: signal composed, active, max_risk_usd requir
   assert.strictEqual(checkStrategyForOrder([s], 'trade_lifecycle', 'MNQ', new Date('2026-04-23T15:00:05Z'), 'buy'), null);
 });
 
+test('compose_check in a prop attempt: no size fits (the floor all in over the cap) is NOT OK with one HINT; a floor that fits, or no attempt, is unchanged', () => {
+  const prop = require('../../scripts/lib/trading/prop-state');
+  const { accountNamed } = require('../../scripts/lib/trading/accounts');
+  // A plugin root with the shipped trade_lifecycle (its cap as given), the shipped prop_portfolio and its account.
+  const pluginRoot = cap => {
+    const r = tmpDir();
+    const lc = fs.readFileSync(path.join(ROOT, 'strategies', 'trade_lifecycle', 'STRATEGY.md'), 'utf8');
+    assert.match(lc, /^ {2}max_risk_usd: 300 /m);
+    fs.mkdirSync(path.join(r, 'strategies', 'trade_lifecycle'), { recursive: true });
+    fs.writeFileSync(path.join(r, 'strategies', 'trade_lifecycle', 'STRATEGY.md'), lc.replace(/^ {2}max_risk_usd: 300 /m, `  max_risk_usd: ${cap} `));
+    fs.cpSync(path.join(ROOT, 'strategies', 'prop_portfolio'), path.join(r, 'strategies', 'prop_portfolio'), { recursive: true });
+    const acct = loadStrategies(ROOT, {}).strategies.find(s => s.name === 'prop_portfolio').account;
+    fs.cpSync(path.join(ROOT, 'accounts', acct), path.join(r, 'accounts', acct), { recursive: true });
+    fs.symlinkSync(path.join(ROOT, 'skills'), path.join(r, 'skills'));
+    return { r, acct };
+  };
+  const run = (cap, attempt) => {
+    const { home, ctx } = setup();
+    const { r, acct } = pluginRoot(cap);
+    if (attempt) prop.startAttempt(home, accountNamed(r, acct, {}), new Date('2026-04-23T13:00:00Z'));
+    const out = composeCheck({ symbol: 'MNQ', side: 'long', reads: SCENARIO_1, size: 1 }, { ...ctx, root: r });
+    return { text: out.text, rec: readRecords(home, 'MNQ').pop() };
+  };
+  // Scenario 1's 111-tick stop, all in (the rulebook's floor 3, its 1 tick of slippage, $0.37 a side):
+  // (111 + 1) x $0.50 + $0.74 = $56.74 a contract, 3 of them $170.22. Under a $150 cap: (97 + 1) x $0.50 + $0.74 = $49.74
+  // (3: $149.22) fits, 98 ticks ($50.24; 3: $150.72) doesn't: the widest stop is 97 ticks, 24.25 points.
+  const tight = run(150, true);
+  assert.strictEqual(tight.rec.ok, false);
+  assert.match(tight.text, /- PROBLEM: no size fits: the floor of 3 MNQ \(prop_portfolio's rulebook, sizing.min_contracts\) at \$56\.74 a contract all in \(the 111-tick stop with its slippage, and fees both ways\) is \$170\.22, over trade_lifecycle's risk.max_risk_usd \$150/);
+  assert.deepStrictEqual(tight.text.split('\n').filter(l => l.startsWith('- HINT')), ['- HINT size: no size fits: 3 MNQ need a stop of 97 ticks (24.25 points) or less under the $150 cap; use a closer structural stop or skip']);
+  assert.match(tight.text, /NOT OK: no entry on this record/);
+  assert.ok(tight.rec.problems[0].startsWith('no size fits:'), 'recorded with the record');
+  // The shipped $300 cap: 3 at $170.22 fits: OK, as before.
+  const shipped = run(300, true);
+  assert.strictEqual(shipped.rec.ok, true, shipped.text);
+  assert.doesNotMatch(shipped.text, /no size fits/);
+  // No attempt: never this refusal (outside an attempt the stated size and the cap decide, unchanged).
+  const plain = run(150, false);
+  assert.strictEqual(plain.rec.ok, true, plain.text);
+  assert.doesNotMatch(plain.text, /no size fits/);
+});
+
 test('compose_check: the briefing\'s bar (FTH_CYCLE_BRIEFING_BARS) comes before the cycle\'s lane bar (FTH_CYCLE_BARS)', () => {
   const { home, ctx } = setup({ cycleBar: '2026-04-23T14:58:00.000Z' });
   ctx.env.FTH_CYCLE_BRIEFING_BARS = JSON.stringify({ MNQ: BAR });

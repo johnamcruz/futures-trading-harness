@@ -2114,6 +2114,44 @@ test('phase2-size: an autonomous entry over the size phase 2 approved is refused
   assert.match(size(evaluateOrder({ input: entryOrder(), entries: [plan(1)], now: NOW, config: { ...auto, cycleTranscript: `${file}.gone` } }))[0] || '', /The cycle's transcript can't be read \(ENOENT\), so the gate can't check the size risk-manager phase 2 approved/);
 });
 
+test('phase2-size on the replay\'s real phase-2 reports (fix/phase2-verdict-parsing): each approves now, and an entry over its approved size is still refused', () => {
+  const B = require('../../scripts/lib/trading/briefing');
+  const home = trendHome();
+  const file = path.join(home, 'logs', 'cycle-transcript.jsonl');
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const BAR = '2026-10-07T13:54:00.000Z';
+  B.writeBriefing(home, { symbol: 'MNQ', minutes: 3, asOf: BAR, closedAt: '2026-10-07T13:57:00.000Z', sections: {
+    m3: { version: 'a', validUntil: '2026-10-07T14:03:00.000Z', data: { window: 'opening drive', windowEntries: 'allowed', trendRule: 'Trend rule: prevailing trend 1h up; trend strategies may not go short; reversal strategies (mtf: reversal) may go short too.', vwap: { side: 'above' }, candidates: [{ name: 'orb', direction: 'long', stopPoints: 8, needR: 2, inTheWay: null }] } },
+    m15: { version: 'b', validUntil: '2026-10-07T14:15:00.000Z', data: { alignment: { long: 'aligned', short: 'counter' } } },
+  } });
+  const auto = { ...config, home, autonomous: true, cycle: 'full', cycleTranscript: file, cycleBars: { MNQ: BAR } };
+  const p2 = text => JSON.stringify({ type: 'tool_use', timestamp: 1, sessionID: 's', part: { type: 'tool', tool: 'task', state: { status: 'completed', input: { subagent_type: 'risk-manager' }, output: text } } });
+  const run = (report, size) => {
+    fs.writeFileSync(file, [...ocSkills, ...ocRoles.slice(0, 4), p2(report)].join('\n'));
+    return evaluateOrder({ input: entryOrder({ size }), entries: [plan(1)], now: NOW, config: auto });
+  };
+  const of = (r, check) => r.violations.filter(v => v.check === check).map(v => v.message);
+  const dir = path.join(__dirname, '..', 'fixtures', 'phase2-reports');
+  // Each report's approved size (tests/lib/phase2-reports.test.js); its FACTS line replaced by the briefing's own facts.
+  const sizes = { '2021-05-03T145702Z-reads-as-veto.txt': 5, '2021-05-07T142116Z-reads-as-veto.txt': 4, '2021-05-12T135121Z-reads-as-veto.txt': 5,
+    '2021-05-04T145418Z-reads-as-veto.txt': 3, '2021-05-11T150314Z-reads-as-veto.txt': 3 };
+  for (const [name, size] of Object.entries(sizes)) {
+    const report = `${fs.readFileSync(path.join(dir, name), 'utf8').split('\n').filter(l => !/^FACTS:/.test(l)).join('\n').trimEnd()}\nFACTS: window opening drive; trend long allowed`;
+    for (const s of [1, size]) assert.deepStrictEqual([of(run(report, s), 'roles-ran'), of(run(report, s), 'phase2-size')], [[], []], `${name} at ${s}`);
+    assert.deepStrictEqual(of(run(report, size + 1), 'phase2-size'), [`size ${size + 1} is over the ${size} risk-manager phase 2 approved: an entry is at most phase 2's size (it only ever cuts one).`], name);
+    // Its VERDICT line gone: no approval, the entry refused (roles-ran), whatever the size.
+    const none = report.split('\n').filter(l => !/^VERDICT:/.test(l)).join('\n');
+    assert.strictEqual(of(run(none, 1), 'roles-ran').length, 1, `${name} without its VERDICT line`);
+    // A refusing line-start decision beside it: refused.
+    assert.strictEqual(of(run(`Decision: pass\n${report}`, 1), 'roles-ran').length, 1, `${name} with Decision: pass`);
+  }
+  // The three prose Size lines hold a count under their size (the broad rule, 2026-10-24): no size the gate reads, any size refused.
+  for (const name of ['2021-05-10T142415Z-size-unreadable.txt', '2021-05-11T153914Z-size-unreadable.txt', '2021-05-14T141202Z-size-unreadable.txt']) {
+    const report = `${fs.readFileSync(path.join(dir, name), 'utf8').split('\n').filter(l => !/^FACTS:/.test(l)).join('\n').trimEnd()}\nFACTS: window opening drive; trend long allowed`;
+    for (const s of [1, 3]) assert.match(of(run(report, s), 'phase2-size')[0] || '', /approval states no size the gate can read \(a Size line states a count under/, `${name} at ${s}`);
+  }
+});
+
 test('phase2-facts: a soft read alone never refuses (the room short, the VWAP on the other side, a mixed read); a false trend fact still does (fix/confluence-not-vetoes)', () => {
   const B = require('../../scripts/lib/trading/briefing');
   const home = trendHome();

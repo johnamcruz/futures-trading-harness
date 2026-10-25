@@ -25,19 +25,20 @@ test('phase 2 floor: the risk manager cut floors at min_contracts, never a veto 
 test('phase 2 floor: the request names the floor as where a cut stops, never a veto, and asks for the final size alone', () => {
   const req = REQUESTS.review('risk-manager', { symbol: 'MNQ', at: '2026-10-07T14:27:00.000Z', timeframe: 3, strategy: 'prop_portfolio', side: 'long', entrySize: { size: 5, contract: 'MNQ', suggested: 1, reason: 'the rulebook\'s size at this stop', floor: 3 } });
   assert.match(req, /Approve that size \(your VERDICT line's size 5\), or cut it, never under 3 MNQ \(a cut below it is 3, never a veto\); the record's size is a suggestion/);
-  assert.match(req, /State only the final size \(already floored\) on your VERDICT and Size lines; never write the number before the floor or the cut arithmetic: every size on them binds\./);
+  assert.match(req, /State only the final size \(already floored\): "Size: <n>" alone, the arithmetic on the lines before; every size on the VERDICT and Size lines binds\./);
   assert.ok(!/veto instead/.test(req));
 });
 
 test('phase 2 floor: the risk manager\'s shipped examples, and a report written as the request asks, read as their final size', () => {
   const rm = fs.readFileSync(path.join(ROOT, 'agents', 'risk-manager.md'), 'utf8');
-  assert.ok(flat(rm).includes('- Write only the final size: every size and "cut to" binds.'));
+  assert.ok(flat(rm).includes('- Every size and "cut to" on the VERDICT and Size lines binds.'));
   // The fenced example, as shipped.
   const example = /For example:\n\n```text\n([\s\S]*?)```/.exec(rm)[1];
   assert.deepStrictEqual([verdictOf(example), approvedSize(example)], ['APPROVE', { size: 5 }]);
   assert.match(decisiveLine(example), /^VERDICT: APPROVE - size 5,/);
   // The Size line's example with its approval: its final size, 1.
-  const sizeEx = /e\.g\. `(Size: [^`]+)`/.exec(flat(rm))[1];
+  assert.ok(flat(rm).includes('`Size: <n>`: the final size alone'));
+  const sizeEx = 'Size: 1';
   const cut = `${sizeEx}\nVERDICT: APPROVE - size 1, risk $55.50, trade_lifecycle long\nFACTS: window opening drive; trend long allowed`;
   assert.deepStrictEqual([verdictOf(cut), approvedSize(cut)], ['APPROVE', { size: 1 }]);
   // A floored approval written as taught (the final size only): 3.
