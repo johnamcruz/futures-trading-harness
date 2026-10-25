@@ -30,12 +30,14 @@ function setup({ records = [record()], roles = {}, plan = null, journalFails = f
   const barReads = [];
   const journal = [];
   const runRole = async (role, request, limits) => {
-    const phase = /^Phase 2, plan verdict/.test(request) ? 'phase2' : role;
+    const phase = /^Phase 2, plan verdict/.test(request) ? 'phase2' : /^Phase 2, restate/.test(request) ? 'restate' : role;
     calls.push({ role: phase, request, limits });
     const scripted = roles[phase];
     if (typeof scripted === 'function') return scripted(request, limits);
     if (scripted) return scripted;
     if (phase === 'phase2') return { ok: true, timedOut: false, text: P2, tools: ['harness_order_plan'], lookups: [], output: '' };
+    // Phase 2's restatement (its approval unreadable): by default an answer the runner can't read either.
+    if (phase === 'restate') return { ok: true, timedOut: false, text: 'Restated as asked.', tools: [], lookups: [], output: '' };
     return { ok: true, timedOut: false, text: 'EXECUTED\nOrders: 1', tools: ['broker_place_order'], lookups: [], output: '' };
   };
   const client = {
@@ -367,7 +369,9 @@ test('runEntry: an APPROVE line the gate\'s reading takes as a veto stops as vet
   let built = false;
   let s = setup({ roles: { phase2: { ok: true, timedOut: false, text: misread, tools: ['harness_order_plan'], lookups: [], output: '' } }, plan: () => { built = true; return null; } });
   let r = await E.runEntry(s.deps, s.cycle());
-  assert.deepStrictEqual([s.calls.map(c => c.role), built, s.journal], [['phase2'], false, []]);
+  // Restated once (an approving VERDICT line the reading refuses); its answer unreadable: the first report's outcome.
+  assert.deepStrictEqual([s.calls.map(c => c.role), built, s.journal], [['phase2', 'restate'], false, []]);
+  assert.strictEqual(r.entry.restated.outcome, 'unreadable');
   assert.strictEqual(r.entry.outcome, 'vetoed', 'learning counts the same outcome');
   assert.strictEqual(r.entry.why, 'phase 2\'s report reads as a veto: a decision line decides cut, not APPROVE ("Decision: cut to size 1")');
   assert.strictEqual(r.result, 'CYCLE RESULT: no-trade - risk-manager phase 2\'s report reads as a veto (a decision line decides cut, not APPROVE): VERDICT: APPROVE - size 1, risk $20.00');
@@ -459,7 +463,7 @@ test('runEntry: phase 2\'s approved size sets the order: exactly the smaller of 
   // The Size line's smaller size binds too.
   s = setup(p2(`Size: 0 (none)\nVERDICT: APPROVE - size 1, risk $20\n${FACTS}`));
   r = await E.runEntry(s.deps, s.cycle());
-  assert.deepStrictEqual([r.entry.outcome, s.calls.length], ['no-trade', 1]);
+  assert.deepStrictEqual([r.entry.outcome, s.calls.map(c => c.role), r.entry.restated.outcome], ['no-trade', ['phase2', 'restate'], 'unreadable'], 'restated once, unreadable: no trade');
   // No readable size on the approval: no order built, no executor.
   for (const v of ['VERDICT: APPROVE - risk $20', 'VERDICT: APPROVE - size 0, risk $0', 'VERDICT: APPROVE - size 1.5', 'VERDICT: APPROVE - size <n>']) {
     let built = false;
@@ -739,4 +743,134 @@ test('runEntry: a Claude Code head trader the runner attested in index mode: its
   await E.runEntry(s.deps, s.cycle({ output, headEnv: { ...headEnv, FTH_HEAD_PROMPT: JSON.stringify({ config: '/w/opencode.json', sha256: 'a'.repeat(64), skills: ['trade-session'] }) } }));
   assert.deepStrictEqual(RR.readHeadSkills(s.rolesFile), ['trade-lifecycle']);
   assert.ok(!('headPrompt' in s.calls[1].limits.context));
+});
+
+// Phase 2's restatement (feat/phase2-restate-retry, owner-approved 2026-10-24), on the replay's real reports: an
+// approving VERDICT line the reading refuses is restated once, read by the same readers, bound by the first VERDICT size.
+const R2 = require('../../scripts/lib/trading/roles-ran');
+const FIX = path.join(__dirname, '..', 'fixtures', 'phase2-reports');
+const fixture = name => fs.readFileSync(path.join(FIX, name), 'utf8');
+const RESTATE_FIXTURES = { '2021-05-10T142415Z-size-unreadable.txt': 3, '2021-05-11T153914Z-size-unreadable.txt': 4, '2021-05-14T141202Z-size-unreadable.txt': 5, '2021-05-04T154822Z-reads-as-veto.txt': 3 };
+const answer = text => ({ ok: true, timedOut: false, text, tools: ['harness_order_plan'], lookups: [], output: '' });
+/** A setup whose record is 8 (order_plan building the cut), phase 2's first report `first`, its restatement `restated`. */
+function restateSetup(first, restated) {
+  const cut = a => { const n = a.size || 8; return { args: { ...ARGS, size: n }, plan: { strategy: 'trade_lifecycle', side: 'long', contract: 'MNQ', size: n, ...(n < 8 ? { recordSize: 8 } : {}), entry: 21500, stopPrice: 21490, stopTicks: 40, targetPrice: 21520, targetTicks: 80, riskUsd: 20 * n, record: 'rec0000000000001' } }; };
+  const s = setup({ records: [record({ plan: { ...PLAN, size: 8 } })], plan: cut, roles: { phase2: answer(first), restate: typeof restated === 'string' ? answer(restated) : restated } });
+  // The wall clock advances on every read (a real run takes seconds): the record orders the restatement after the first.
+  let wall = 1.7e12;
+  s.deps.wallNow = () => (wall += 10);
+  s.spend = () => { wall += 1e9; };
+  s.seen = null;
+  s.deps.runRole = (orig => async (role, request, limits) => {
+    if (role === 'trade-executor') {
+      // What the gate reads at the order: the latest phase-2 call in the role record (risk-manager phase 1 cached).
+      const found = R2.withRunnerRuns({ calls: [], launches: [] }, RR.readRoleRuns(s.rolesFile));
+      s.seen = { runs: RR.readRoleRuns(s.rolesFile), report: R2.assessRound(found, 'lean', ['risk-manager']).report };
+    }
+    return orig(role, request, limits);
+  })(s.deps.runRole);
+  return s;
+}
+const cycle8 = s => s.cycle({ result: 'CYCLE RESULT: planned - trade_lifecycle long 8' });
+const orderedSize = s => JSON.parse(/built by the runner from this bar's compose record: (\{.*\})\. Send them as given/.exec(s.calls.at(-1).request)[1]).size;
+
+test('runEntry restated: each real report the reading refused (three prose Size lines, one approval read as a veto) restated as `Size: <n>` and its VERDICT line is ordered at that size; the gate reads the restatement as the decisive report', async () => {
+  for (const [name, ceiling] of Object.entries(RESTATE_FIXTURES)) {
+    const first = fixture(name);
+    const s = restateSetup(first, `Size: ${ceiling}\nVERDICT: APPROVE - size ${ceiling}, risk $${20 * ceiling}`);
+    const r = await E.runEntry(s.deps, cycle8(s));
+    assert.deepStrictEqual(s.calls.map(c => c.role), ['phase2', 'restate', 'trade-executor'], name);
+    assert.deepStrictEqual([r.entry.outcome, orderedSize(s), r.entry.size.approved], ['executed', ceiling, ceiling], name);
+    assert.deepStrictEqual([r.entry.restated.kind, r.entry.restated.outcome, r.entry.restated.size, r.entry.restated.ceiling], [/veto/.test(name) ? 'reads-as-veto' : 'size-unreadable', 'approved', ceiling, ceiling], name);
+    // The request names what couldn't be read and the bound; the first report goes with it.
+    assert.ok(s.calls[1].request.includes(r.entry.restated.why) && s.calls[1].request.includes(`at most the ${ceiling} your VERDICT line approved`), name);
+    assert.ok(s.calls[1].request.includes(first.trim()), name);
+    // The executor gets the restated VERDICT line; the journal says it was restated.
+    assert.match(s.calls[2].request, new RegExp(`The risk manager's line: VERDICT: APPROVE - size ${ceiling}, risk`), name);
+    assert.match(s.journal[0].text, new RegExp(`phase 2 \\(restated\\): VERDICT: APPROVE - size ${ceiling}`), name);
+    // The role record keeps the first report (audit) and the decisive record after it; the gate's report is the latter.
+    assert.deepStrictEqual(s.seen.runs.map(x => [x.role, x.ok]), [['risk-manager', true], ['risk-manager', true]], name);
+    assert.strictEqual(s.seen.runs[0].text, first, name);
+    assert.ok(s.seen.runs[1].start > s.seen.runs[0].end, name);
+    assert.strictEqual(s.seen.report.text, s.seen.runs[1].text, name);
+    assert.deepStrictEqual(R2.approvedSize(s.seen.report.text), { size: ceiling }, name);
+    assert.match(R2.sizeRefusal(s.seen.report, ceiling + 1), new RegExp(`is over the ${ceiling} risk-manager phase 2 approved`), name);
+    assert.ok(s.logs.includes(`info the entry: phase 2 restated its size: approved ${ceiling}`), s.logs.join('\n'));
+    assert.strictEqual(typeof r.entry.timing.restateMs, 'number');
+  }
+});
+
+test('runEntry restated: a restated size over the first VERDICT line\'s is bound to it (the order and the gate\'s record); a smaller one binds', async () => {
+  const first = fixture('2021-05-11T153914Z-size-unreadable.txt'); // VERDICT size 4
+  let s = restateSetup(first, 'Size: 7\nVERDICT: APPROVE - size 7, risk $140');
+  let r = await E.runEntry(s.deps, cycle8(s));
+  assert.deepStrictEqual([r.entry.outcome, orderedSize(s), r.entry.restated.size], ['executed', 4, 4]);
+  assert.deepStrictEqual(R2.approvedSize(s.seen.report.text), { size: 4 });
+  assert.match(R2.sizeRefusal(s.seen.report, 7), /size 7 is over the 4 risk-manager phase 2 approved/);
+  s = restateSetup(first, 'Size: 3\nVERDICT: APPROVE - size 3, risk $60');
+  r = await E.runEntry(s.deps, cycle8(s));
+  assert.deepStrictEqual([r.entry.outcome, orderedSize(s), R2.approvedSize(s.seen.report.text)], ['executed', 3, { size: 3 }]);
+});
+
+test('runEntry restated: a VETO restated is the cycle\'s veto; garbage, an approval read as a veto again, or a failed run: the first report\'s outcome, never a second restatement', async () => {
+  const prose = fixture('2021-05-14T141202Z-size-unreadable.txt');
+  const misread = fixture('2021-05-04T154822Z-reads-as-veto.txt');
+  let s = restateSetup(prose, 'VERDICT: VETO - room: the day high 0.03R above, stand aside');
+  let r = await E.runEntry(s.deps, cycle8(s));
+  assert.deepStrictEqual([s.calls.map(c => c.role), r.entry.outcome, r.entry.restated.outcome, s.journal], [['phase2', 'restate'], 'vetoed', 'vetoed', []]);
+  assert.strictEqual(r.result, 'CYCLE RESULT: no-trade - risk-manager vetoed the trade_lifecycle long 8 MNQ: VERDICT: VETO - room: the day high 0.03R above, stand aside');
+  // The veto is the record's latest counted phase-2 call (the gate and the history read it so).
+  assert.deepStrictEqual(RR.readRoleRuns(s.rolesFile).map(x => [x.role, x.ok, R2.verdictOf(x.text)]), [['risk-manager', true, 'APPROVE'], ['risk-manager', true, 'VETO']]);
+  for (const [label, restated, run] of [
+    ['garbage', 'Restated as asked: the plan is fine.', null],
+    ['an approval read as a veto again', 'Decision: cut to size 2\nVERDICT: APPROVE - size 2', null],
+    ['a prose size again', 'Size: about half of the translated 8\nVERDICT: APPROVE - size 4', null],
+    ['a failed run', null, { ok: false, timedOut: true, text: '', tools: [], lookups: [], output: '' }],
+  ]) {
+    for (const [first, outcome] of [[prose, 'no-trade'], [misread, 'vetoed']]) {
+      s = restateSetup(first, run || restated);
+      r = await E.runEntry(s.deps, cycle8(s));
+      assert.deepStrictEqual([s.calls.map(c => c.role), r.entry.outcome, s.journal], [['phase2', 'restate'], outcome, []], `${label}: one restatement, no order`);
+      assert.strictEqual(r.entry.restated.outcome, run ? 'failed' : 'unreadable', label);
+      // Not counted: the first report stays the decisive one.
+      assert.deepStrictEqual(RR.readRoleRuns(s.rolesFile).filter(x => x.ok).length, 1, label);
+      if (outcome === 'vetoed') assert.match(r.result, /phase 2's report reads as a veto \(a decision line decides the, not APPROVE\)/, label);
+      else assert.match(r.result, /approved without a size the runner can read/, label);
+      assert.ok(s.logs.some(l => /^error the entry: phase 2 restated its size: (unreadable|failed) \(/.test(l)), s.logs.join('\n'));
+    }
+  }
+});
+
+test('runEntry restated: never for a plain veto, no verdict, an approval that reads fine, or one whose VERDICT line states no size', async () => {
+  for (const first of ['Phase 2.\nVERDICT: VETO - room: stand aside\nFACTS: window asia', 'Phase 2.\nVERDICT: maybe\nFACTS: none', fixture('2021-05-12T135121Z-reads-as-veto.txt'), 'Size: half\nVERDICT: APPROVE - risk $20\nFACTS: none']) {
+    const s = restateSetup(first, () => { throw new Error('no restatement may run'); });
+    const r = await E.runEntry(s.deps, cycle8(s));
+    assert.ok(!s.calls.some(c => c.role === 'restate'), first.slice(0, 40));
+    assert.strictEqual(r.entry.restated, undefined);
+  }
+});
+
+test('runEntry restated: its time is charged (the harness clock moves on), and the late-entry check after it still refuses a stale order', async () => {
+  let clock = NOW;
+  let price = 21500;
+  const s = restateSetup(fixture('2021-05-11T153914Z-size-unreadable.txt'), () => {
+    // The restatement takes a minute; the market fell through the plan's stop meanwhile.
+    clock = new Date(NOW.getTime() + 60000);
+    price = 21485;
+    return answer('Size: 4\nVERDICT: APPROVE - size 4, risk $80');
+  });
+  s.deps.now = () => clock;
+  s.deps.client.closedBars = async () => [{ t: new Date(clock.getTime() - 120000).toISOString(), o: price, h: price, l: price, c: price, v: 1 }];
+  const r = await E.runEntry(s.deps, cycle8(s));
+  assert.deepStrictEqual([r.entry.outcome, s.calls.map(c => c.role), r.entry.restated.outcome], ['late', ['phase2', 'restate'], 'approved']);
+  assert.match(r.result, /beyond the plan's stop 21490/);
+  assert.strictEqual(r.entry.late.at, clock.toISOString(), 'the skip at the clock after the restatement');
+});
+
+test('runEntry restated: the entry\'s budget bounds it (none left: a failed restatement, no order)', async () => {
+  const s = restateSetup(fixture('2021-05-11T153914Z-size-unreadable.txt'), answer('Size: 4\nVERDICT: APPROVE - size 4'));
+  // The first report uses the whole budget: the restatement gets none.
+  s.deps.runRole = (orig => async (role, request, limits) => { const out = await orig(role, request, limits); if (/^Phase 2, plan verdict/.test(request)) s.spend(); return out; })(s.deps.runRole);
+  const r = await E.runEntry(s.deps, cycle8(s));
+  assert.deepStrictEqual([r.entry.outcome, r.entry.restated.outcome, s.calls.map(c => c.role)], ['no-trade', 'failed', ['phase2']]);
 });

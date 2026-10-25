@@ -375,7 +375,28 @@ head trader's run, before the cycle log; per role `config/runner.json`
    nothing. The size is the smallest the approving VERDICT line's `size <n>`
    and the Size line state (`approvedSize`): a Size line opening with a word is
    prose that binds only by its cuts, and any count in it under the binding
-   size, or a share with no cut to read, is no trade (owner-approved 2026-10-24). The order comes from
+   size, or a share with no cut to read, is no trade (owner-approved 2026-10-24).
+   One restatement first (owner-approved 2026-10-24: never lose an approved
+   setup to the reading; `trading/phase2-restate.js`): a report whose approving
+   VERDICT line the reading still refuses (`approvalReadAsVeto`, or no size
+   `approvedSize` can read) and whose VERDICT line states a size (`verdictSize`)
+   is restated once, never for a plain veto, no approving VERDICT line, a failed
+   run or an approval that read fine. No harness here resumes a role's session,
+   so it is a fresh phase-2 run given its first report (`requests.js restate`:
+   what couldn't be read, in the report's words; the two lines `Size: <n>` and
+   its VERDICT line, or its VETO line). The answer is read by the same readers:
+   a veto is the cycle's veto; unreadable, or a failed run, leaves the first
+   report's outcome. Approved, its size is at most the first VERDICT line's,
+   and the role record gets the decisive record after the first report: the
+   answer, `Size: <that bound>` and the first report's FACTS block, read again
+   as one approval of exactly that size, so the gate's `roles-ran` and
+   `phase2-size` (the latest phase-2 call, the hook and the gateway alike) read
+   the bound. Its time is the entry's (the budget; a replay's charged clock),
+   and the late-entry check follows it. `config/runner.json`
+   `entry.phase2RestateRetries` (1; 0 turns it off; at most 1). The entry
+   record's `restated` ({ kind, why, ceiling, outcome, size }), the cycle log's
+   line, and the replay report's count of restatements by outcome (approved:
+   rescued). The order comes from
    `order_plan`'s own operation (`harness-tools/order-plan.js` ->
    `trading/lifecycle-order.js composedOrder`; in a prop attempt the policy
    verdict it records), so its rationale and brackets are what

@@ -1,0 +1,131 @@
+'use strict';
+
+// Phase 2's restatement (scripts/lib/trading/phase2-restate.js, feat/phase2-restate-retry, owner-approved 2026-10-24):
+// when its approving VERDICT line is refused by the strict reading, the runner asks once for `Size: <n>` and the
+// VERDICT line, reads the answer with the same readers, and binds its size to the first VERDICT line's. On the replay's
+// real reports (tests/fixtures/phase2-reports/).
+const test = require('node:test');
+const assert = require('node:assert');
+const fs = require('fs');
+const path = require('path');
+const P = require('../../scripts/lib/trading/phase2-restate');
+const R = require('../../scripts/lib/trading/roles-ran');
+const F = require('../../scripts/lib/trading/fact-claims');
+const { restate } = require('../../scripts/lib/orchestrate/requests');
+
+const DIR = path.join(__dirname, '..', 'fixtures', 'phase2-reports');
+const read = name => fs.readFileSync(path.join(DIR, name), 'utf8');
+// The three prose Size lines (no size the reading takes) and the one approval read as a veto, with their VERDICT sizes.
+const PROSE = { '2021-05-10T142415Z-size-unreadable.txt': 3, '2021-05-11T153914Z-size-unreadable.txt': 4, '2021-05-14T141202Z-size-unreadable.txt': 5 };
+const READ_AS_VETO = '2021-05-04T154822Z-reads-as-veto.txt';
+const READS_FINE = ['2021-05-03T145702Z-reads-as-veto.txt', '2021-05-04T145418Z-reads-as-veto.txt', '2021-05-07T142116Z-reads-as-veto.txt', '2021-05-07T142417Z-reads-as-veto.txt', '2021-05-11T150314Z-reads-as-veto.txt', '2021-05-12T135121Z-reads-as-veto.txt'];
+
+test('verdictSize: the approving VERDICT lines alone (their sizes and cuts), never the Size line or prose', () => {
+  for (const [f, size] of Object.entries(PROSE)) assert.deepStrictEqual(R.verdictSize(read(f)), { size }, f);
+  assert.deepStrictEqual(R.verdictSize(read(READ_AS_VETO)), { size: 3 });
+  assert.deepStrictEqual(R.verdictSize('Size: 1\nVERDICT: APPROVE - size 4, risk $80'), { size: 4 }, 'the Size line is not the VERDICT line');
+  assert.deepStrictEqual(R.verdictSize('VERDICT: APPROVE - size 4 cut to 2, risk $40'), { size: 2 }, 'a cut on it binds');
+  assert.match(R.verdictSize('VERDICT: APPROVE - risk $80').error, /no whole size/);
+  assert.deepStrictEqual(R.verdictSize('VERDICT: VETO - room'), { error: 'no approving VERDICT line' });
+});
+
+test('restateDue: an approving VERDICT line the reading refuses (a prose Size line, or a line read as a refusal), bounded by its VERDICT size; never a plain veto, no verdict, or an approval that reads fine', () => {
+  for (const [f, ceiling] of Object.entries(PROSE)) {
+    const d = P.restateDue(read(f));
+    assert.deepStrictEqual([d.kind, d.ceiling], ['size-unreadable', ceiling], f);
+    assert.match(d.why, /^your size can't be read as one whole number \(the line "Size: /, f);
+    // The report's own words, never the reader's internals.
+    assert.doesNotMatch(d.why, /binds|share with no cut|approvedSize|decides/, f);
+  }
+  const v = P.restateDue(read(READ_AS_VETO));
+  assert.deepStrictEqual([v.kind, v.ceiling], ['reads-as-veto', 3]);
+  assert.strictEqual(v.why, 'your VERDICT line approves, but the line "8 Decision: the composed trade passes every step of the priority order: no hard stop, no trend against, R:R at the 2.00 floor, the plan\'s stop and target on the correct sides." reads as a refusal');
+  assert.doesNotMatch(v.why, /decides the, not APPROVE/);
+  for (const f of READS_FINE) assert.strictEqual(P.restateDue(read(f)), null, f);
+  for (const t of ['VERDICT: VETO - room: stand aside\nFACTS: window asia', 'Phase 2 notes, no verdict', 'VERDICT: maybe', '']) assert.strictEqual(P.restateDue(t), null, t);
+  // An approval with no VERDICT size: nothing bounds a restatement, so none.
+  assert.strictEqual(P.restateDue('Size: half\nVERDICT: APPROVE - risk $20\nFACTS: none'), null);
+  assert.strictEqual(P.restateDue('Decision: cut to size 1\nVERDICT: APPROVE - risk $20\nFACTS: none'), null);
+});
+
+test('readRestatement: the same readers; the size at most the first VERDICT line\'s; a veto is a veto; anything else unreadable', () => {
+  const first = read('2021-05-11T153914Z-size-unreadable.txt'); // VERDICT size 4
+  const facts = F.factsBlock(first);
+  // The two lines, at the bound: approved 4, the decisive record the answer, the bound and the first report's FACTS.
+  let r = P.readRestatement(first, 'Size: 4\nVERDICT: APPROVE - size 4, risk $140', 4);
+  assert.deepStrictEqual([r.outcome, r.size, r.line], ['approved', 4, 'VERDICT: APPROVE - size 4, risk $140']);
+  assert.strictEqual(r.text, `Size: 4\nVERDICT: APPROVE - size 4, risk $140\nSize: 4\n${facts}`);
+  assert.deepStrictEqual([R.verdictOf(r.text), R.approvedSize(r.text)], ['APPROVE', { size: 4 }]);
+  assert.deepStrictEqual(F.factsLines(r.text), F.factsLines(first), 'its facts are the first report\'s');
+  assert.strictEqual(F.checkFacts(r.text, null).labels, 1, 'one FACTS line, last');
+  // A smaller size: it binds.
+  r = P.readRestatement(first, 'Size: 3\nVERDICT: APPROVE - size 3, risk $105', 4);
+  assert.deepStrictEqual([r.outcome, r.size, R.approvedSize(r.text)], ['approved', 3, { size: 3 }]);
+  // Larger than the first VERDICT line's: bound to it, in the record the gate reads too.
+  r = P.readRestatement(first, 'Size: 9\nVERDICT: APPROVE - size 9, risk $315', 4);
+  assert.deepStrictEqual([r.outcome, r.size, R.approvedSize(r.text)], ['approved', 4, { size: 4 }]);
+  assert.match(R.sizeRefusal({ text: r.text }, 5), /size 5 is over the 4 risk-manager phase 2 approved/);
+  assert.match(R.sizeRefusal({ text: r.text }, 9), /size 9 is over the 4/);
+  assert.strictEqual(R.sizeRefusal({ text: r.text }, 4), null);
+  // Its own FACTS line is dropped (one FACTS line: the first report's).
+  r = P.readRestatement(first, 'Size: 4\nVERDICT: APPROVE - size 4, risk $140\nFACTS: window asia', 4);
+  assert.deepStrictEqual([r.outcome, F.factsLines(r.text)], ['approved', F.factsLines(first)]);
+  // A veto.
+  r = P.readRestatement(first, 'VERDICT: VETO - room: stand aside', 4);
+  assert.deepStrictEqual(r, { outcome: 'vetoed', line: 'VERDICT: VETO - room: stand aside' });
+  // Unreadable: garbage, no verdict, a prose size again, an approval that reads as a veto again, nothing, no bound.
+  for (const answer of ['Restated as asked.', 'Size: 4', 'Size: four\nVERDICT: APPROVE - size 4', 'VERDICT: APPROVE - size <n>', 'Decision: cut to size 1\nVERDICT: APPROVE - size 1', '', '   ']) {
+    assert.strictEqual(P.readRestatement(first, answer, 4).outcome, 'unreadable', JSON.stringify(answer));
+  }
+  for (const bad of [null, 0, 1.5, '4']) assert.strictEqual(P.readRestatement(first, 'Size: 4\nVERDICT: APPROVE - size 4', bad).outcome, 'unreadable', String(bad));
+});
+
+test('readRestatement on the approval read as a veto: its FACTS block (before its VERDICT line) carried whole, last', () => {
+  const first = read(READ_AS_VETO);
+  const r = P.readRestatement(first, 'Size: 3\nVERDICT: APPROVE - size 3, risk $295.50', 3);
+  assert.deepStrictEqual([r.outcome, r.size], ['approved', 3]);
+  assert.ok(r.text.endsWith('FACTS: window lunch lull; entries allowed; news clear; trend short allowed; vwap below; read short mixed; 15m range; 1h range'), r.text);
+  assert.strictEqual(R.verdictOf(r.text), 'APPROVE');
+});
+
+test('factsBlock and dropFactsLabels: the first FACTS line with its bullet items; the text without FACTS lines', () => {
+  assert.strictEqual(F.factsBlock('VERDICT: APPROVE - size 1\nFACTS: window asia; news clear'), 'FACTS: window asia; news clear');
+  assert.strictEqual(F.factsBlock('FACTS:\n- window asia\n- news clear\nVERDICT: APPROVE - size 1'), 'FACTS:\n- window asia\n- news clear');
+  assert.strictEqual(F.factsBlock('VERDICT: APPROVE - size 1'), null);
+  assert.strictEqual(F.dropFactsLabels('Size: 1\nFACTS: x\nVERDICT: APPROVE - size 1\n**FACTS:** y'), 'Size: 1\nVERDICT: APPROVE - size 1');
+});
+
+test('the restate request: what couldn\'t be read, the two lines, the bound, the first report; nothing else asked', () => {
+  const d = P.restateDue(read(READ_AS_VETO));
+  const req = restate('risk-manager', { symbol: 'MNQ', contractId: 'MNQ', at: '2021-05-04T15:48:22.000Z', timeframe: 3, why: d.why, ceiling: d.ceiling, report: read(READ_AS_VETO) });
+  assert.match(req, /^Phase 2, restate, for MNQ \(contractId MNQ\) at the 3-minute bar that closed by 2021-05-04T15:48:22\.000Z\. The runner can't read your phase 2 report below as an approval: your VERDICT line approves, but the line "8 Decision: /);
+  assert.ok(req.includes('Restate it in two lines and nothing else (no tools, no reasoning): `Size: <n>` (the number alone, at most the 3 your VERDICT line approved), then your `VERDICT: APPROVE - size <n>, ...` line. If you don\'t approve the plan, write only your `VERDICT: VETO - <reason>` line.'), req);
+  assert.ok(req.includes(`--- your phase 2 report ---\n${read(READ_AS_VETO).trim()}\n--- end of your phase 2 report ---`));
+});
+
+test('the run report counts the restatements by outcome (approved: rescued), from the cycle log line through the replay store', () => {
+  const store = require('../../scripts/lib/replay/store');
+  const report = require('../../scripts/lib/replay/report');
+  const line = (outcome, extra = {}) => ({ action: 'trade', at: '2026-03-02T15:00:00.000Z', ok: true, result: 'CYCLE RESULT: no-trade - x', entry: { outcome: 'x', ran: [], restated: { kind: 'size-unreadable', outcome, ...extra } } });
+  const ran = [line('approved', { size: 4 }), line('approved', { size: 3 }), line('vetoed'), line('unreadable'), { action: 'trade', at: '2026-03-02T15:03:00.000Z', ok: true, result: 'CYCLE RESULT: no-trade - y' }].map(store.cycleSummary);
+  assert.deepStrictEqual(ran[0].restated, { kind: 'size-unreadable', outcome: 'approved', size: 4 });
+  assert.ok(!('restated' in ran[4]), 'none restated: nothing added');
+  const sum = report.summarize({ '2026-03-02': [{ kind: 'trade', ran, trades: [] }] });
+  assert.deepStrictEqual(sum.total.restated, { approved: 2, vetoed: 1, unreadable: 1 });
+  const text = 'Phase 2 restated 4 approvals the runner couldn\'t read (approved 2, unreadable 1, vetoed 1): 2 rescued.';
+  assert.strictEqual(report.restatedLine(sum.total), text);
+  assert.ok(report.toMarkdown(sum).includes(text) && report.toText(sum).includes(text));
+  // A run without any: no key, no line (the report as before).
+  const none = report.summarize({ '2026-03-02': [{ kind: 'trade', ran: [ran[4]], trades: [] }] });
+  assert.ok(!('restated' in none.total));
+  assert.strictEqual(report.restatedLine(none.total), null);
+  assert.ok(!/restated/.test(report.toText(none)));
+});
+
+test('config: entry.phase2RestateRetries is 1 (on), 0 turns it off, and more than one is refused', () => {
+  const T = require('../../scripts/lib/tunables');
+  assert.strictEqual(T.runner().entry.phase2RestateRetries, 1);
+  const at = v => { const c = JSON.parse(JSON.stringify(T.runner())); c.entry.phase2RestateRetries = v; return T.SPECS.runner.validate(c); };
+  assert.deepStrictEqual(at(0), []);
+  for (const v of [2, -1, 0.5, '1']) assert.ok(at(v).length > 0, String(v));
+});

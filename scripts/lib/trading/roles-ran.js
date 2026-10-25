@@ -70,6 +70,8 @@
  *   decisiveLine(text)                           the line verdictOf decided on (APPROVE: the first approving VERDICT line;
  *                                                VETO: the refusing one), trimmed, or '' (what the executor is handed)
  *   approvedSize(text)                           the size an approving report approves: { size } | { error } (fails closed)
+ *   verdictSize(text)                            the size its approving VERDICT lines alone state (every size and cut on
+ *                                                them binds): { size } | { error } (the runner's bound on a restatement)
  *   sizeRefusal(report, size)                    the gate's phase2-size check: an entry over phase 2's approved size (or none
  *                                                readable) refuses; null when no phase 2 is required (report null)
  */
@@ -594,6 +596,18 @@ function approvedSize(text) {
 }
 
 /**
+ * The size a report's approving VERDICT lines alone state, read as approvedSize reads them (every "size <n>" and cut on
+ * them binds; a VERDICT line with no whole size is an error), its Size lines and prose left out: { size } | { error }.
+ * The runner's bound when phase 2 restates a report it couldn't read (runner-entry.js, phase2-restate.js): a restated
+ * size never exceeds it.
+ */
+function verdictSize(text) {
+  const approving = approvingLines(text);
+  if (!approving.length) return { error: 'no approving VERDICT line' };
+  return approvedSize(approving.map(l => l.line.trim()).join('\n'));
+}
+
+/**
  * The gate's `phase2-size` check (tighten-only): an entry's size over the size its approving phase-2 report approved
  * (approvedSize), or none readable, refuses. `report`: approvedPhase2's answer (null: no phase 2 is required, none
  * checked; { error }: refused). The message, or null.
@@ -760,4 +774,4 @@ function checkRolesRan(transcriptPath, cycle, cached = [], lookups = null, roles
     : null;
 }
 
-module.exports = { ANALYSTS, roleCalls, withRunnerRuns, cycleCalls, rolesInTranscript, missingRoles, checkRolesRan, approvedPhase2, assessRound, round, latestPhase2, verdictOf, approvalReadAsVeto, decisiveLine, approvedSize, sizeRefusal, verdictMatches, verdictLines, decisionLines, verdictProblem };
+module.exports = { ANALYSTS, roleCalls, withRunnerRuns, cycleCalls, rolesInTranscript, missingRoles, checkRolesRan, approvedPhase2, assessRound, round, latestPhase2, verdictOf, approvalReadAsVeto, decisiveLine, approvedSize, verdictSize, sizeRefusal, verdictMatches, verdictLines, decisionLines, verdictProblem };

@@ -25,6 +25,10 @@
  * A continuous combine run (replay/combine-run.js): each attempt's start, sessions, outcome, profit, lowest cushion, worst
  * day and trades, the totals and the promotion gate's numbers, labelled practice (combineReport, from the run's folder).
  *
+ * Phase 2's restatements (runner-entry.js, trading/phase2-restate.js: an approving VERDICT line the reading refused,
+ * restated once): each row's `restated` by outcome (approved, vetoed, unreadable, failed), shown when there were any.
+ *
+ *   restatedLine(row)              that count as one line, or null
  *   summarize(days, { runDir, barsFiles })   { months: [row], total: row, timing, combine?, late? } (runDir: the run's folder, for a
  *                                 combine run and the late-entry skips, late-skips.js; barsFiles: their counterfactual's bars)
  *   toMarkdown(summary, manifest)   report.md
@@ -61,7 +65,7 @@ function tradesOf(fills, open) {
 }
 
 function blankRow(key) {
-  return { key, points: 0, cycles: 0, tradeCycles: 0, standAside: 0, failed: 0, trades: [], refusals: {}, replayClock: 0 };
+  return { key, points: 0, cycles: 0, tradeCycles: 0, standAside: 0, failed: 0, trades: [], refusals: {}, replayClock: 0, restated: {} };
 }
 
 function finish(row) {
@@ -77,6 +81,8 @@ function finish(row) {
     net: t.reduce((a, x) => a + x.net, 0), expectancy: mean(t.map(x => x.net)),
     meanR: mean(rs), tradesWithR: rs.length, meanMaeR: mean(maes), meanMfeR: mean(mfes),
     refusals: row.refusals, replayClockRefusals: row.replayClock,
+    // Phase 2's restatements by outcome (approved: an approval rescued), only when there were any.
+    ...(Object.keys(row.restated).length ? { restated: row.restated } : {}),
   };
 }
 
@@ -104,6 +110,7 @@ function summarize(days, { runDir = null, barsFiles = {} } = {}) {
           if (row === total) ran.push(c);
           row.cycles += 1;
           if (!c.ok) row.failed += 1;
+          if (c.restated && typeof c.restated.outcome === 'string') row.restated[c.restated.outcome] = (row.restated[c.restated.outcome] || 0) + 1;
           if (c.action === 'trade' || c.action === 'manage') {
             row.tradeCycles += 1;
             if (/^CYCLE RESULT:\s*no-trade\b/i.test(String(c.result || ''))) row.standAside += 1;
@@ -169,6 +176,17 @@ function combineOf(runDir, days) {
   return require('./combine-run').combineReport(runDir, { days, role: gate ? gate.role || null : null });
 }
 
+/**
+ * Phase 2's restatements (runner-entry.js: an approving VERDICT line the reading refused, restated once), as one line,
+ * or null with none: how many, by outcome, and the approvals rescued.
+ */
+function restatedLine(row) {
+  const r = row && row.restated;
+  if (!r) return null;
+  const n = Object.values(r).reduce((a, b) => a + b, 0);
+  return `Phase 2 restated ${n} approval${n === 1 ? '' : 's'} the runner couldn't read (${Object.entries(r).sort().map(([k, v]) => `${k} ${v}`).join(', ')}): ${r.approved || 0} rescued.`;
+}
+
 const pct = x => (x === null ? '-' : `${(x * 100).toFixed(1)}%`);
 const fix = (x, d = 2) => (x === null ? '-' : x.toFixed(d));
 const usd = x => (x === null ? '-' : `${x < 0 ? '-' : ''}$${Math.abs(x).toFixed(2)}`);
@@ -219,6 +237,7 @@ function toMarkdown(summary, manifest = {}) {
     `- Days done: ${(manifest.daysDone || []).length}; last decision time ${manifest.lastT || 'none'}`, '',
     `| ${HEAD.join(' | ')} |`, `| ${HEAD.map(() => '---').join(' | ')} |`, ...rows, '',
     'Stand-aside: trade cycles whose result was no-trade. Trades: closed round trips (net of fees); R from the initial stop. Refusals: the order gate\'s, by check; replay-clock refusals are the replay\'s own plumbing, not the trader\'s.', '',
+    ...(restatedLine(summary.total) ? [restatedLine(summary.total), ''] : []),
     ...timingMarkdown(summary),
     ...practiceMarkdown(summary.practice || null),
     ...(summary.combine ? ['## Continuous combine', '', ...require('./combine-run').reportLines(summary.combine).map(l => `- ${l.trim()}`), ''] : []),
@@ -231,11 +250,12 @@ function toText(summary) {
   const combine = summary.combine ? `${require('./combine-run').reportLines(summary.combine).join('\n')}\n` : '';
   const late = summary.late ? `${require('./late-skips').reportLines(summary.late).join('\n')}\n` : '';
   const capture = summary.capture ? `trend capture: ${require('./trend-capture').reportLines(summary.capture).join('\n')}\n` : '';
-  const main = table(HEAD, [...summary.months, summary.total].map(r => cells(r).map(String))) + practiceText(summary.practice || null) + combine + late + capture;
+  const restated = restatedLine(summary.total) ? `${restatedLine(summary.total)}\n` : '';
+  const main = table(HEAD, [...summary.months, summary.total].map(r => cells(r).map(String))) + restated + practiceText(summary.practice || null) + combine + late + capture;
   if (!hasTiming(summary)) return main;
   const kind = clockKind(summary.timing.all);
   const note = kind === 'charged' ? ' (replay: latency charged, as live)' : kind === 'mixed' ? ' (replay: latency charged on some cycles, projected on others)' : kind ? ' (replay: projected live latency)' : '';
   return `${main}\nsetup timing${note}\n${table(TIMING_HEAD, timingRows(summary.timing))}role median: ${roleText(summary.timing)}\n`;
 }
 
-module.exports = { summarize, tradesOf, toMarkdown, toText, formats: { usd, pct, fix } };
+module.exports = { restatedLine, summarize, tradesOf, toMarkdown, toText, formats: { usd, pct, fix } };

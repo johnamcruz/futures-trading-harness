@@ -210,8 +210,8 @@ VERDICT: APPROVE - size <n>, risk $<x>, <one-line reason>
 VERDICT: VETO - <failed check>: <specific fix or "stand aside">
 ```
 
-Write your VERDICT line, then the FACTS line last; nothing may follow it.
-The code reads your report; anything else reads as a veto:
+FACTS last, nothing after. Code reads your report; anything else reads
+as a veto:
 
 - Exactly one `VERDICT: APPROVE - ...` or `VERDICT: VETO - ...` line.
 - "verdict" and "decision" only to open the VERDICT line, never in prose
@@ -223,6 +223,7 @@ The code reads your report; anything else reads as a veto:
 - Every size and "cut to" on the VERDICT and Size lines binds.
 - These read as a veto: `Decision: cut to size 1`, `8 Decision: valid
   yes`, `Sizing verdict: skip x0.5`.
+- Asked to restate: only Size and VERDICT lines.
 
 For example:
 

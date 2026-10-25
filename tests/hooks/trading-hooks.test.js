@@ -3112,6 +3112,56 @@ test('order gate wiring: phase2-size on the replay\'s real phase-2 reports (fix/
   assert.match(text(gp.byId[1]), /\[phase2-size\] Risk-manager phase 2's approval states no size the gate can read/);
 });
 
+test('order gate wiring: phase 2 restated (feat/phase2-restate-retry), in the hook and the gateway: both read the same decisive record, the latest in the role record; its size never above the first VERDICT line\'s, however large the restatement says', async () => {
+  const RR = require('../../scripts/lib/trading/runner-roles');
+  const { restateDue, readRestatement } = require('../../scripts/lib/trading/phase2-restate');
+  const content = c => JSON.stringify({ type: 'assistant', message: { content: [c] } });
+  const skills = ['trade-session', 'multi-timeframe-analysis', 'strategy-library', 'strategy-scan', 'strategy-gate-checks', 'setup-judgment', 'trade-plan'].map(skill => content({ type: 'tool_use', name: 'Skill', input: { skill } })).join('\n');
+  const dir0 = path.join(__dirname, '..', 'fixtures', 'phase2-reports');
+  // The replay's prose-Size report (its VERDICT line approves 4), its FACTS line replaced by none (no briefing here).
+  const first = `${fs.readFileSync(path.join(dir0, '2021-05-11T153914Z-size-unreadable.txt'), 'utf8').split('\n').filter(l => !/^FACTS:/.test(l)).join('\n').trimEnd()}\nFACTS: none`;
+  const due = restateDue(first);
+  assert.deepStrictEqual([due.kind, due.ceiling], ['size-unreadable', 4]);
+  // The restatement says 9: the decisive record binds the first VERDICT line's 4.
+  const read = readRestatement(first, 'Size: 9\nVERDICT: APPROVE - size 9, risk $315', due.ceiling);
+  assert.deepStrictEqual([read.outcome, read.size], ['approved', 4]);
+  const T = 1.7e12;
+  const record = (file, withRestatement) => {
+    for (const r of ['market-structure-analyst', 'trend-momentum-analyst', 'volume-liquidity-analyst', 'risk-manager']) RR.appendRoleRun(file, { role: r, start: T, end: T + 1000, text: `## ${r}\nRisk state`, lookups: [], ok: true });
+    RR.appendRoleRun(file, { role: 'risk-manager', start: T + 2000, end: T + 3000, text: first, lookups: [], ok: true });
+    if (withRestatement) RR.appendRoleRun(file, { role: 'risk-manager', start: T + 4000, end: T + 5000, text: read.text, lookups: [], ok: true });
+  };
+  const { env, dir } = setup([{ ts: minutesAgo(5), kind: 'plan', contractId: entryOrder().contractId, text: 'plan' }],
+    { FTH_AUTONOMOUS: '1', FTH_ROLE_SKILLS: 'full', FTH_CYCLE: 'full', FTH_SYMBOLS: 'MNQ' });
+  const transcript = path.join(dir, 'session.jsonl');
+  fs.writeFileSync(transcript, skills);
+  const gdir = tmpDir();
+  const stream = path.join(gdir, 'cycle-transcript.jsonl');
+  fs.writeFileSync(stream, skills);
+  const text = r => r.result.content[0].text;
+  for (const withRestatement of [false, true]) {
+    const rolesFile = path.join(tmpDir(), 'cycle-roles.jsonl');
+    record(rolesFile, withRestatement);
+    const hookEnv = { ...env, FTH_CYCLE_ROLES: rolesFile };
+    const auto = { FTH_AUTONOMOUS: '1', FTH_ROLE_SKILLS: 'full', FTH_CYCLE: 'full', FTH_SYMBOLS: 'MNQ', FTH_CYCLE_TRANSCRIPT: stream, FTH_CYCLE_ROLES: rolesFile, FAKE_POSITIONS: LONG1 };
+    const g = await gatewayRun(auto, [call(1, 'place_order', { ...ORDER, size: 9 }), call(2, 'place_order', { ...ORDER, size: 5 }), call(3, 'place_order', { ...ORDER, size: 4 })], { dir: gdir });
+    if (!withRestatement) {
+      // The first report alone (no restatement): no size the gate can read, at any size, the hook and the gateway alike.
+      assert.match(gate({ ...orderPayload({ ...ORDER, size: 4 }), transcript_path: transcript }, hookEnv).stderr, /\[phase2-size\] Risk-manager phase 2's approval states no size the gate can read/);
+      assert.match(text(g.byId[3]), /\[phase2-size\] Risk-manager phase 2's approval states no size the gate can read/);
+      continue;
+    }
+    for (const size of [9, 5]) {
+      assert.match(gate({ ...orderPayload({ ...ORDER, size }), transcript_path: transcript }, hookEnv).stderr, new RegExp(`\\[phase2-size\\] size ${size} is over the 4 risk-manager phase 2 approved`), `hook ${size}`);
+    }
+    assert.match(text(g.byId[1]), /\[phase2-size\] size 9 is over the 4 risk-manager phase 2 approved/);
+    assert.match(text(g.byId[2]), /\[phase2-size\] size 5 is over the 4 risk-manager phase 2 approved/);
+    const at = gate({ ...orderPayload({ ...ORDER, size: 4 }), transcript_path: transcript }, hookEnv).stderr;
+    assert.doesNotMatch(at, /phase2-size|\[roles-ran\]|phase2-facts/, at);
+    assert.doesNotMatch(text(g.byId[3]), /phase2-size|\[roles-ran\]|phase2-facts/);
+  }
+});
+
 test('order gate hook: a live entry needs the broker\'s allow-list holding its account; exits and protective stops go without one; a paper run is exempt', () => {
   const { env } = setup([{ ts: minutesAgo(5, new Date(TEST_NOW)), kind: 'plan', contractId: entryOrder().contractId, text: 'plan' }]);
   for (const [list, why] of [['', /FAKE_BROKER_ALLOWED_ACCOUNT_IDS is empty/], ['any', /never empty or "any"/], ['7', /account 1 is not in FAKE_BROKER_ALLOWED_ACCOUNT_IDS \(7\)/]]) {

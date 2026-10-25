@@ -40,6 +40,8 @@
  *
  *   factsLines(text)                    the FACTS items stated (every FACTS line), or null when none
  *   withoutFacts(text)                  the text without its FACTS lines
+ *   factsBlock(text)                    its first FACTS line as written, with the item lines (bullets) right after it, or null
+ *   dropFactsLabels(text)               the text without any FACTS line (its other lines as written)
  *   parseClaim(item)                    { type, text, side?, value, strategy? } (type 'unknown' when no form fits)
  *   checkClaim(claim, briefing)         the claim with check: true | false | 'unchecked' and fact (what the briefing says)
  *   checkFacts(text, briefing, why)     { stated, status: none|confirmed|false|unchecked, claims, unavailable }
@@ -142,6 +144,23 @@ function factsLines(text) {
 
 /** The text without its FACTS lines (the free-text reasons alone). */
 const withoutFacts = text => factsParts(text).rest.join('\n').trim();
+
+const linesOf = text => String(text || '').replace(/\r\n|[\r\u2028\u2029\u0085]/g, '\n').split('\n');
+/**
+ * The first FACTS line as written and the item lines (bullets) right after it, trimmed, or null when there is none:
+ * the facts a report stated, carried whole when the runner composes phase 2's decisive record (phase2-restate.js).
+ */
+function factsBlock(text) {
+  const lines = linesOf(text);
+  const at = lines.findIndex(l => FACTS_LABEL.test(toAscii(l)));
+  if (at < 0) return null;
+  const out = [lines[at]];
+  for (let i = at + 1; i < lines.length && BULLET.test(lines[i]) && lines[i].replace(BULLET, '').trim(); i += 1) out.push(lines[i]);
+  return out.join('\n').trim();
+}
+
+/** The text without any FACTS line (every other line as written), trimmed. */
+const dropFactsLabels = text => linesOf(text).filter(l => !FACTS_LABEL.test(toAscii(l))).join('\n').trim();
 
 /**
  * An item in its plain words: quotes dropped, "15-min", "15 min" read as 15m (and "1-hour" as 1h), colons, '=' and
@@ -419,4 +438,4 @@ function cycleFactChecks({ home, output, context = null, now = new Date() }) {
   }
 }
 
-module.exports = { MIN_CHECKED, VALUES, factsLines, withoutFacts, parseClaim, checkClaim, checkFacts, renderFacts, briefingFor, gateRefusal, cycleFactChecks };
+module.exports = { MIN_CHECKED, VALUES, factsLines, withoutFacts, factsBlock, dropFactsLabels, parseClaim, checkClaim, checkFacts, renderFacts, briefingFor, gateRefusal, cycleFactChecks };
