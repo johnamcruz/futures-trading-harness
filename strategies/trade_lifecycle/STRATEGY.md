@@ -11,7 +11,7 @@ valid_bars: 2                 # a compose record, and its resting limit, stays v
 risk:
   stop: structure             # the stop is the verified invalidation level the model names, one tick beyond it
   min_rr: 2                   # compose_check refuses a plan under it
-  max_risk_usd: 300           # the hard cap per trade, inside and outside an attempt (the owner's: a normal trade risks about $200-300)
+  max_risk_usd: 300           # the hard cap per trade, inside and outside an attempt (the owner's: a normal trade risks about $200-300); in an attempt only the floor may go over it (the rulebook's floor stretch)
   stop_buffer_ticks: 1        # the stop goes this many ticks beyond the named level (D3)
   stop_floor_ticks: 8         # the closest stop: the larger of these ticks
   stop_floor_atr: 0.25        # and this multiple of ATR(20); a closer stop is refused, never widened (D13)
@@ -65,7 +65,9 @@ still resting then.
 A normal trade risks about $200-300, sized by the model from its sizing
 skills: smaller, or a pass, is always allowed; never above $300, the hard
 cap. In a prop attempt the ceiling is the lower of $300 and the account's
-verdict. The ideal trade aims for about $600: a target at a real level at
+verdict; where $300 fits fewer than the rulebook's floor at the stop, code
+may trade exactly the floor, up to the rulebook's floor stretch, while the
+attempt is healthy (its RULEBOOK.md). The ideal trade aims for about $600: a target at a real level at
 2:1 to 3:1 reward:risk. Prefer the first real level in that band; a level
 beyond 3:1 is allowed when it is the real one. The target is always a level
 the model reads, never a dollar amount; `min_rr` 2 is the code's floor.

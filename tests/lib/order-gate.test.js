@@ -4018,3 +4018,59 @@ test('claude head prompt (gateway): checkOrder counts the attestation for the he
     assert.ok(skillsOk(run(env, entryOrder({ side: 'sell', rationale: '[exit] flatten', stopLossBracket: undefined }))), `${label}: an exit`);
   }
 });
+
+test('the floor stretch in an attempt: [max-risk] takes exactly the stretched floor and nothing else over the cap; an unhealthy attempt or a floor over the stretch is refused; exits go', () => {
+  // Scenario 1's 111-tick stop, $56.74 a contract all in; a $150 composed cap fits 2, under the floor of 3 ($170.22),
+  // so the floor stretch ($500 here, the attempt healthy) takes exactly 3.
+  const doc = { ...LCP.LC_DOC, risk: { ...LCP.LC_DOC.risk, max_risk_usd: 150 } };
+  const reg = stretch => [LCP.policy({ sizing: testSizing({ min_contracts: 3, floor_stretch_max_usd: stretch }) }), doc];
+  const { home } = LCP.propHome({ size: 1 });
+  const args = composedOrder({ home, root: 'MNQ', side: 'long', now: LCP.NOW, cycleBars: { MNQ: LC.BAR }, strategy: doc, strategies: reg(500), accounts: [LCP.MINI], specOf: lcSpec, accountId: 1, selected: ['MNQ'] }).args;
+  assert.strictEqual(args.size, 3);
+  assert.deepStrictEqual(lcPropEval(home, args, { registry: reg(500) }).violations, [], 'the stretched floor goes');
+  // The stretch is priced at the farther of the bracket and the rationale's `stop <price>` (never under-counted): a
+  // rationale stop 600 ticks under the 21540.25 entry (21390.25: (600 + 1) x $0.50 + $0.74 = $301.24, 3 = $903.72) is
+  // over the stretch: refused [max-risk], though the 111-tick bracket alone would pass.
+  assert.match(args.rationale, /stop 21512\.50/);
+  const far = lcPropEval(home, { ...args, rationale: args.rationale.replace('stop 21512.50', 'stop 21390.25') }, { registry: reg(500) });
+  assert.match(far.violations.find(v => v.check === 'max-risk').message, /^risk \$900\.00 \(size 3 x 600-tick stop .*the floor of 3 at \$301\.24 all in is \$903\.72, over the floor stretch's \$500\.00 too/);
+  // 4 over the cap ($226.96): refused [max-risk] (only exactly the floor) and [composed-reads] (not the translated 3).
+  const four = lcPropEval(home, { ...args, size: 4 }, { registry: reg(500) });
+  assert.ok(checks(four).includes('composed-reads'));
+  assert.match(four.violations.find(v => v.check === 'max-risk').message, /^risk \$222\.00 \(size 4 .*over setup:trade_lifecycle's risk\.max_risk_usd \$150\.00.*\(only exactly the floor of 3 MNQ may go over the cap/);
+  // The stretch off: the cap binds as before ($166.50 at the stop alone, over $150).
+  const off = lcPropEval(home, args, { registry: reg(0) });
+  assert.match(off.violations.find(v => v.check === 'max-risk').message, /^risk \$166\.50 \(size 3 x 111-tick stop x \$0\.50 a tick on MNQ\) over setup:trade_lifecycle's risk\.max_risk_usd \$150\.00/);
+  // Over the stretch ($170.22 over $160): refused, with why.
+  const over = lcPropEval(home, args, { registry: reg(160) });
+  assert.match(over.violations.find(v => v.check === 'max-risk').message, /the floor of 3 at \$56\.74 all in is \$170\.22, over the floor stretch's \$160\.00 too/);
+  // Not healthy: a loss today, then a win (the snapshot's day counts as the runner writes them: 2 trades, 1 losing; the
+  // streak 0 again), then a deficit: refused.
+  const file = prop.combineFile(home, LCP.MINI.name);
+  const r = JSON.parse(fs.readFileSync(file, 'utf8'));
+  assert.deepStrictEqual([r.snapshot.counts.losses, r.snapshot.counts.day], [0, r.snapshot.day]);
+  fs.writeFileSync(file, JSON.stringify({ ...r, snapshot: { ...r.snapshot, counts: { ...r.snapshot.counts, trades: 2, losses: 1 }, state: { ...r.snapshot.state, lossStreak: 0 } } }));
+  const streak = lcPropEval(home, args, { registry: reg(500) });
+  assert.match(streak.violations.find(v => v.check === 'max-risk').message, /applies only while the attempt is healthy \(no deficit, no loss today\): 1 losing trade today: the cap holds for the rest of the day/);
+  assert.ok(checks(streak).includes('composed-reads'), 'the translation skips it too');
+  fs.writeFileSync(file, JSON.stringify({ ...r, snapshot: { ...r.snapshot, state: { ...r.snapshot.state, balance: 49900 } } }));
+  assert.match(lcPropEval(home, args, { registry: reg(500) }).violations.find(v => v.check === 'max-risk').message, /the balance \$49900\.00 is under the attempt's starting \$50000\.00/);
+  // Unreadable: the snapshot without its day counts, or counts of another day.
+  const { counts: _c, ...noCounts } = r.snapshot;
+  fs.writeFileSync(file, JSON.stringify({ ...r, snapshot: noCounts }));
+  assert.match(lcPropEval(home, args, { registry: reg(500) }).violations.find(v => v.check === 'max-risk').message, /today's losing trades are unreadable/);
+  fs.writeFileSync(file, JSON.stringify({ ...r, snapshot: { ...r.snapshot, counts: { ...r.snapshot.counts, day: '2026-10-06' } } }));
+  assert.match(lcPropEval(home, args, { registry: reg(500) }).violations.find(v => v.check === 'max-risk').message, /today's losing trades are unreadable/);
+  fs.writeFileSync(file, JSON.stringify(r));
+  assert.deepStrictEqual(lcPropEval(home, args, { registry: reg(500) }).violations, [], 'restored: healthy again');
+  // Risk-reducing orders are never refused, whatever the attempt's health.
+  assert.deepStrictEqual(lcPropEval(home, { accountId: 1, contractId: 'MNQ', side: 'sell', type: 'market', size: 3, rationale: '[exit] flatten the prop_portfolio long' }, { registry: reg(500) }).violations, []);
+});
+
+test('the floor stretch never applies outside an attempt: setup:trade_lifecycle over its cap is refused [max-risk] as before', () => {
+  const doc = { ...LCP.LC_DOC, risk: { ...LCP.LC_DOC.risk, max_risk_usd: 150 } };
+  const free = trendHome();
+  LC.writeScenario(free, { size: 3 });
+  const r = evaluateOrder({ input: LC.order({ accountId: 1, size: 3 }), entries: [plan(1, { ts: '2026-10-07T13:59:30Z' })], now: LCP.NOW, strategies: [LCP.policy({ sizing: testSizing({ min_contracts: 3, floor_stretch_max_usd: 500 }) }), doc], accounts: [LCP.MINI], config: { ...config, home: free, cycleBars: { MNQ: LC.BAR } } });
+  assert.match(r.violations.find(v => v.check === 'max-risk').message, /^risk \$166\.50 \(size 3 x 111-tick stop/);
+});

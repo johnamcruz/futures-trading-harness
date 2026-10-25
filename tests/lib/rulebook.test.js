@@ -21,7 +21,7 @@ const KINDS = {
 const book = (extra = {}) => ({ name: 'acct', description: 'a rulebook for a test account', learned: 'none', daily_loss_soft: 500, loss_streak_stop: 2, ...KINDS, ...extra });
 const errorsOf = (extra, body = BODY) => RB.validateRulebook(book(extra), body, 'acct');
 /** A complete policy entry: every sizing key and the trail stated. */
-const SIZING = { cushion_frac: 0.1, cap_usd: 500, clock_k: 'off', r_per_session: 0.3, min_size_guard: 1.5, drawdown_halve_usd: 'off', stop_slippage_ticks: 1, min_contracts: 3 };
+const SIZING = { cushion_frac: 0.1, cap_usd: 500, clock_k: 'off', r_per_session: 0.3, min_size_guard: 1.5, drawdown_halve_usd: 'off', stop_slippage_ticks: 1, min_contracts: 3, floor_stretch_max_usd: 'off' };
 const OFFS = { trail_activate_r: 'off', trail_giveback_r: 'off', lock_giveback_r: 'off', trail_by: 'off', trail_r: 'off', swing_tf: 'off' };
 const ENTRY = { sizing: SIZING, exit: { ...OFFS, mode: 'trail', trail_activate_r: 2, trail_giveback_r: 1 }, multipliers: [] };
 const TARGET = { ...OFFS, mode: 'target' };
@@ -124,7 +124,7 @@ test('validateRulebook: a policy entry states every sizing key, the trail and it
   }
   // `off` is read as the code's 0 ("no limit") only once stated.
   const book2 = { ...book(), policies: { prop_a: ENTRY } };
-  assert.deepStrictEqual(RB.policyEntry(book2, 'prop_a').sizing, { ...SIZING, clock_k: 0, drawdown_halve_usd: 0 });
+  assert.deepStrictEqual(RB.policyEntry(book2, 'prop_a').sizing, { ...SIZING, clock_k: 0, drawdown_halve_usd: 0, floor_stretch_max_usd: 0 });
   const m = (x = {}) => p({ multipliers: [{ item: 'multipliers', fact: 'mtf', values: { aligned: 1, mixed: 0.5 }, max_age_min: 10, ...x }] });
   assert.deepStrictEqual(errorsOf(m()), []);
   assert.match(errorsOf(p({ multipliers: {} })).join(), /multipliers: a list/);

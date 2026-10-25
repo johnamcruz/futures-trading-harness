@@ -17,7 +17,7 @@ description: Use before a trade_lifecycle entry - compose the trade as reads wit
    `compose_check` with one true read per step at least, each your side's
    way (the against stay in the count), and your size. The standard plan
    says OK → compose with its reads. The record is for this bar and side;
-   it expires `valid_bars` base bars after its bar's close (6 min on 3m).
+   it expires `valid_bars` base bars after its bar's close.
 
    | Step | The read, your side's way | The skill for the fact |
    | --- | --- | --- |
@@ -28,7 +28,7 @@ description: Use before a trade_lifecycle entry - compose the trade as reads wit
    | stop | beyond the pullback's extreme: `stop 15m low <price>` (short: high), `stop swing low <price>` | `invalidation` |
    | target | the first swing or level named at 2R or more, beyond any at price or broken: `target 1h swing high <price>`, `target <level> <price>`; none: `target 2r`; past it the runner trails the trend | `take-profit` |
    | size | contracts | `position-sizing`, `prop-challenge-pacing`, `prop-pacing-judgment` |
-   | management | once filled: the record's stop and target are the exit; the policy's exit mode (in an attempt or not) may let it run past the target, the code trailing the stop; never widen it or close early by feel | `manage-position` |
+   | management | once filled: the record's stop and target are the exit; the policy's exit mode may let it run past the target, the code trailing the stop; never widen it or close early by feel | `manage-position` |
 
    Support only, never the setup or entry read: `at`, `touched`, `swept`,
    `in ote`, `3m volume high`, `participation high`; a CISD setup is timed
@@ -38,8 +38,9 @@ description: Use before a trade_lifecycle entry - compose the trade as reads wit
 
    A normal trade risks about $200-300 (less, or a pass, is fine; never
    over $300). Aim the target at the first real level at 2:1 to 3:1 (about
-   $600 on that risk); beyond 3:1 only when that is the real level. In an
-   attempt, NOT OK `no size fits`: a closer stop, or pass.
+   $600 on that risk); beyond 3:1 only at the real level. In an
+   attempt, NOT OK `no size fits`: a closer stop, or pass (healthy, code may
+   stretch the floor; never widen a stop).
 
 2. **Then read** `confluence-counting` and `invalidation` whenever you
    composed on the bar, `rejection` when a read says a candle rejected a
@@ -54,7 +55,7 @@ description: Use before a trade_lifecycle entry - compose the trade as reads wit
    `setup:trade_lifecycle long|short ...`
    (in an attempt, `setup:prop_portfolio`); `order_plan` gives these and
    refuses a size over code's caps ($300, the broker's max, the verdict);
-   in an attempt it translates yours, a suggestion, to the rulebook's. No priority order halves a composed trade.
+   in an attempt it translates yours to the rulebook's. No priority order halves a composed trade.
 4. **Against the trend**: a true CHoCH read your way at or above its frame
    (15m trend: 15m or 1h; 1h: 1h; 4h: 1h plus `4h rejected <level> up|down`
    your way, a key level, not a gap edge); else the trend rule refuses it.

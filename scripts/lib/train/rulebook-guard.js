@@ -6,7 +6,7 @@
  * key by key against the rulebook as it is now:
  *
  * - every limit equal or stricter, by its direction (DIRECTION below); `off` (no limit) never where the current
- *   value is a limit;
+ *   value is a limit (except floor_stretch_max_usd, whose `off` is no stretch at all: its strictest, OFF_STRICTEST);
  * - multipliers, compared as the verdict applies them (effective): for every value of every fact, including the
  *   values no entry lists (0: the setup is skipped), the effective multiplier never rises, and a fact is never
  *   accepted staler; so a value added above 0 where it was unlisted, a raised value, or a removed entry is refused,
@@ -35,7 +35,10 @@ const DIRECTION = Object.freeze({
   drawdown_halve_usd: 'lower', // halve the budget this far below the peak: sooner is stricter
   stop_slippage_ticks: 'higher', // a stop's expected slippage counted in the risk: more is stricter
   min_contracts: 'higher', // the floor of contracts: a higher one skips sooner (never sizes past the budget)
+  floor_stretch_max_usd: 'lower', // dollars the floor may risk over a composed cap while healthy: less is stricter
 });
+/** Limits whose `off` is the strictest value, not the loosest (off: no floor stretch at all): compared as 0. */
+const OFF_STRICTEST = Object.freeze(['floor_stretch_max_usd']);
 
 const isMap = x => Boolean(x) && typeof x === 'object' && !Array.isArray(x);
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
@@ -43,6 +46,13 @@ const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 function limitLooser(key, at, was, now, out) {
   if (now === undefined) { out.push(`${at}: removed (a rulebook key is never removed)`); return; }
   if (same(was, now)) return;
+  if (OFF_STRICTEST.includes(key)) {
+    // `off` is none at all (the strictest); a number is compared as dollars, where less is stricter.
+    const n = v => (v === OFF ? 0 : v);
+    if (typeof n(was) !== 'number' || typeof n(now) !== 'number') { out.push(`${at}: ${JSON.stringify(was)} -> ${JSON.stringify(now)} is not comparable`); return; }
+    if (n(now) > n(was)) out.push(`${at}: ${JSON.stringify(was)} -> ${JSON.stringify(now)} is looser (only a lower value, or off, is stricter)`);
+    return;
+  }
   if (now === OFF) { if (was !== OFF) out.push(`${at}: ${JSON.stringify(was)} -> off turns a limit off (looser)`); return; }
   if (!DIRECTION[key]) { out.push(`${at}: ${JSON.stringify(was)} -> ${JSON.stringify(now)}: not a limit with a known direction, so never changed`); return; }
   if (was === OFF) return; // a limit where there was none: stricter

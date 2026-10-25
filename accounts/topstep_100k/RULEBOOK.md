@@ -15,6 +15,7 @@ policies:                       # each policy strategy that trades this account 
       clock_k: off              # pacing: a number k caps the risk at k x what the pass still needs per session left; off: none
       r_per_session: 0.3        # the R a session is expected to make, for clock_k
       min_contracts: 3          # the floor: fewer micro-equivalents than this (a mini counts as 10) at the stop is a skip
+      floor_stretch_max_usd: 500  # the composed cap fits fewer than the floor: exactly the floor, at most this all in, while the attempt is healthy
     exit:
       mode: target_then_trail   # target: out at the trade's own target; target_then_trail: past it, trailed; trail: the R trail below, no target
       trail_activate_r: off     # mode trail (or a trail on top of target): hold the stop until this many R ...
@@ -130,9 +131,37 @@ The cap is counted all in, as the budget is: a contract's stop plus
 floor at 3 and the composed $300 cap, a stop wider than 197 ticks on MNQ
 ((197 + 1) x $0.50 + $0.74 = $99.74 a contract) or 78 ticks on MES
 ((78 + 1) x $1.25 + $0.74 = $99.49) can't be traded: 3 contracts would risk
-over $300 all in, so those setups skip. The run's Monte Carlo
+over $300 all in, so those setups skip, unless the floor stretch below
+takes them. The run's Monte Carlo
 (prop/model-score.js) sizes with the same limits (the cap, the broker's max
-order size, the contract the run traded).
+order size, the contract the run traded, the floor stretch).
+
+**The floor stretch.** `floor_stretch_max_usd` (the owner's, 2026-10-24:
+"up to $500 if healthy") is part of `sizing`, so it is `enforced`: where
+the composed cap fits fewer than the floor at the stop, the order is
+exactly the floor when the floor risks at most this all in and the attempt
+is healthy; never more than the floor, never above this. The floor is in
+the order's own contracts: 3 micros, or 1 mini (a mini counts as 10
+micros, so its floor is 1 contract), and a mini's floor may stretch too
+(the owner's, 2026-10-24: "Allow 1 mini too"). Healthy (the owner's:
+"balance ≥ attempt start AND no loss yet this session. One loss today drops
+back to the $300 cap for the rest of the day"): the balance at or above the
+attempt's starting balance (no deficit), and no losing trade yet this
+trading day (the snapshot's count of the day's losing trades is 0). A win
+after a loss doesn't bring it back: the cap holds for the rest of that day,
+and the next trading day starts at 0 again. An attempt state or a day's
+count that can't be read is not healthy. Every other limit still holds: the verdict, the size budget
+(the room to the floor and the daily limit, the drawdown halving), the
+broker's max order size; one that allows fewer than the floor is a skip,
+as before. All in, 3 MNQ fit $500 up to a 330-tick stop
+((330 + 1) x $0.50 + $0.74 = $166.24, 3: $498.72; 331 ticks: $500.22,
+a skip), 3 MES up to 131 ticks ((131 + 1) x $1.25 + $0.74 = $165.74,
+3: $497.22; 132: $500.97), 1 NQ up to 98 ((98 + 1) x $5 + $2.80 =
+$497.80; 99: $502.80). The size translation, `order_plan`, compose_check,
+the gate (`[max-risk]` takes exactly the stretched floor, nothing else
+over the cap) and the backtester and the attempt simulator apply the one
+rule (`prop/size-translate.js` `floorStretch`). `off` turns it off. It
+never asks for a wider stop: the stop is the record's.
 
 **Evidence (R3).** Nothing here is learned yet. Each value is today's,
 carried over unchanged when the rulebook was created; the search and the
@@ -147,6 +176,7 @@ one with its evidence.
 | `policies.prop_portfolio.exit` | starting value, not learned; the 30-day Monte Carlo decides between the modes (phase 2) | not measured | not measured | not learned |
 | `policies.prop_portfolio.sizing.clock_k` | starting value, not learned; tuned by the 30-day Monte Carlo (phase 2) | not measured | not measured | not learned |
 | `policies.prop_portfolio.sizing.min_contracts` | the owner's floor (2026-10-23), not learned | not measured | not measured | not learned |
+| `policies.prop_portfolio.sizing.floor_stretch_max_usd` | the owner's stretch (2026-10-24), not learned | not measured | not measured | not learned |
 
 `prop_portfolio` lists no strategies since 2026-10-14 (every rules strategy
 retired, strategies/README.md): it has no setups, so it sizes nothing until

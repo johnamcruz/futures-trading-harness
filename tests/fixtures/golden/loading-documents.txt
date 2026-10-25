@@ -701,7 +701,8 @@ strategy prop_portfolio: {
     "stop_slippage_ticks": 1,
     "clock_k": 0,
     "r_per_session": 0.3,
-    "min_contracts": 3
+    "min_contracts": 3,
+    "floor_stretch_max_usd": 500
   },
   "source": "harness design (the prop challenge as a strategy); the learned-rulebook design (to come) will tune its numbers",
   "status": "active",
@@ -713,7 +714,7 @@ strategy prop_portfolio: {
   "version": 3
 }
 strategy trade_lifecycle: {
-  "body": "3324 chars sha256:80d9831e757ddad1",
+  "body": "3503 chars sha256:96f6088349301ee1",
   "compiledRules": null,
   "compiledStop": null,
   "compiledTarget": null,

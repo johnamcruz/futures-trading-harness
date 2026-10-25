@@ -59,7 +59,7 @@ const STEP = n => ({ skill: 'strategy-library', step: n });
 const ITEMS = Object.freeze({
   daily_loss_soft: { group: 'pacing', what: 'no new entries once the day is down this many dollars', enforcedBy: 'combine.entryBlock: the verdict skips and the gate refuses (combineBlock)' },
   loss_streak_stop: { group: 'pacing', what: 'no new entries for the rest of the session after this many losing trades in a row (a scratch neither ends nor extends the streak)', enforcedBy: "combine.entryBlock on the session's closed trades (live: the broker's closing fills, prop-state snapshot): the verdict skips, the gate refuses (combineBlock), the backtester and the attempt simulator skip" },
-  sizing: { group: 'pacing', what: "each policy's size budget: its share of the cushion, the cap, the drawdown halving, the one-contract guard, the stop's expected slippage, the floor of contracts", enforcedBy: 'combine.budget and contractPlan: the verdict, the gate (budgetPlan, min-contracts), the backtester and the attempt simulator' },
+  sizing: { group: 'pacing', what: "each policy's size budget: its share of the cushion, the cap, the drawdown halving, the one-contract guard, the stop's expected slippage, the floor of contracts, the floor stretch over a composed cap while the attempt is healthy", enforcedBy: 'combine.budget and contractPlan, prop/size-translate.js floorStretch: the verdict, the size translation, the gate (budgetPlan, min-contracts, max-risk), the backtester and the attempt simulator' },
   exit: { group: 'exits', what: "each policy's exit: the trade's own stop and target (mode target, an optional trail on top), the target then a trail past it with a lock (mode target_then_trail), or the trail in place of the target (mode trail)", enforcedBy: "evaluator.exitPlan and tradeExitPlan: the runner's trail live (none in mode target with the trail off: the entry's own brackets stand), the backtester's broker and the attempt simulator (prop/attempts.js exitAs)" },
   multipliers: { group: 'priority', what: "the enforced size multipliers folded into the verdict's ceiling", enforcedBy: 'rulebook.ceiling: the verdict (prop/verdict.js) and the gate (prop-state verdictMultiplier)' },
   target_stop: { group: 'pacing', what: "no new entries once today's close would pass the attempt", enforcedBy: 'combine.entryBlock' },
@@ -111,6 +111,7 @@ const SIZING_RULES = {
   drawdown_halve_usd: [offOrPositive, `dollars above 0, or ${OFF} (no drawdown halving)`],
   stop_slippage_ticks: [x => typeof x === 'number' && Number.isFinite(x) && x >= MIN_STOP_SLIPPAGE_TICKS, `ticks, at least ${MIN_STOP_SLIPPAGE_TICKS}`],
   min_contracts: [x => Number.isInteger(x) && positive(x),'a whole number of contracts, 1 or more (micro-equivalents: a mini counts as its family\'s ratio)'],
+  floor_stretch_max_usd: [offOrPositive, `dollars above 0, or ${OFF} (no floor stretch: under the composed cap's floor is a skip)`],
 };
 const EXIT_RULE = [x => x === OFF || (positive(x) && x <= 50), `R above 0, at most 50, or ${OFF} (no trail)`];
 /** A whole number of losing trades, at least 1, or off: 0 is refused (a slip of the pen would turn the stop off unseen). */

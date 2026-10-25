@@ -11,8 +11,9 @@
  * the call is refused, never checked against whatever briefing is current. The strategy document
  * (strategies/trade_lifecycle) gives risk.min_rr, risk.max_risk_usd and valid_bars (how many base bars after its bar's
  * close the record stays valid); one that is missing or invalid refuses. In a running prop attempt a record whose
- * stop no size fits (the rulebook's min_contracts all in over risk.max_risk_usd: size-translate.js noSizeFits) is NOT OK, with a HINT
- * naming the widest stop that fits (owner-approved 2026-10-24: order_plan could only skip it).
+ * stop no size fits (the rulebook's min_contracts all in over risk.max_risk_usd, and not within the floor stretch while
+ * the attempt is healthy: size-translate.js noSizeFits) is NOT OK, with a HINT naming the widest stop that fits
+ * (owner-approved 2026-10-24: order_plan could only skip it).
  *
  *   compose_check { symbol, side, reads: [{ step, skill, read, why }], size }
  */
@@ -91,7 +92,8 @@ function noSizeFitsHere({ c, home, doc, all, symbol, planned, spec }) {
   let policy = null;
   try { policy = attemptPolicy(home, doc, all, symbol); } catch (_err) { return null; }
   const account = policy ? loadAccounts(c.root, c.env).accounts.find(a => a.name === policy.account && a.valid) : null;
-  return account ? noSizeFits({ policy, account, capUsd: doc.risk.max_risk_usd, stop: p.stop, spec, root: symbol, strategy: STRATEGY }) : null;
+  // `home`: the attempt's snapshot, whose health the floor stretch reads (size-translate.js floorStretch).
+  return account ? noSizeFits({ policy, account, capUsd: doc.risk.max_risk_usd, stop: p.stop, spec, root: symbol, strategy: STRATEGY, home }) : null;
 }
 
 /** A refusal's hints (compose-hints.js), with the briefing's standard plan for the side when it passes; none on any error. */

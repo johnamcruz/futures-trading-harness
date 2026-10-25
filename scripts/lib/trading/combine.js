@@ -43,8 +43,11 @@
  *   drawdown_halve_usd  > 0: halve the budget while the balance is at least this far below its peak
  *   stop_slippage_ticks a stop's expected slippage, in ticks per contract, counted in each contract's risk: a full
  *                       stop plus this never reaches the floor or the daily limit
+ *   floor_stretch_max_usd  > 0: where a composed strategy's risk.max_risk_usd fits fewer than the floor, exactly the
+ *                       floor may go when it risks at most this all in and the attempt is healthy (0: none, the rulebook's
+ *                       `off`); prop/size-translate.js floorStretch, the one rule (never read here)
  */
-const SIZING_KEYS = Object.freeze(['cushion_frac', 'cap_usd', 'clock_k', 'r_per_session', 'min_size_guard', 'drawdown_halve_usd', 'stop_slippage_ticks', 'min_contracts']);
+const SIZING_KEYS = Object.freeze(['cushion_frac', 'cap_usd', 'clock_k', 'r_per_session', 'min_size_guard', 'drawdown_halve_usd', 'stop_slippage_ticks', 'min_contracts', 'floor_stretch_max_usd']);
 /**
  * The floor under a stop's expected slippage: the schema's (rulebook.js refuses less), not a value. A missing or
  * smaller slippage only ever sizes the same or down. The backtester's fill slippage (engine.js DEFAULTS.slippageTicks)

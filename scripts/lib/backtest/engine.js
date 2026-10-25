@@ -418,10 +418,12 @@ function runEngine(markets, strategies, opts = {}) {
       // Times the verdict's multiplier (the rulebook's enforced items, as prop/verdict.js): 0 skips the setup.
       const { multiplier } = ceiling(o.prop && o.prop.strategy ? o.prop.strategy.multipliers : [], {}, closeAt);
       // The live entry's limits over the sizing where the run states them (o.prop.limits: { capUsd, orderMax }; the
-      // composed cap and the broker's max, prop/size-translate.js limitPlan), then the floor again.
+      // composed cap and the broker's max, prop/size-translate.js limitPlan), then the floor again, with the floor
+      // stretch as live (the rulebook's floor_stretch_max_usd while the attempt, cs, is healthy: no deficit, no loss today).
       const cp = multiplier > 0 ? require('../prop/size-translate').limitPlan(sizeFor(multiplier), {
         limits: (o.prop && o.prop.limits) || null,
         minContracts: sizing.min_contracts, ratio: fam ? fam.ratio : 1, miniRoot: legs.mini ? legs.mini.root : null,
+        stretchUsd: sizing.floor_stretch_max_usd, state: { ...cs, lossesToday: closesToday.filter(c => c.pnl < 0).length },
       }) : null;
       if (!cp) return;
       size = cp.size;
