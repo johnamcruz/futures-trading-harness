@@ -7,6 +7,7 @@
  *   replay          a replay config (replay/config.js; an object or a path relative to this file): the runner
  *                   config, broker and workDir every run of the loop uses; its runId, start and end are the
  *                   loop's (one run per window), and its workDir holds <loopId>/ (runs, checkpoints, trees, points).
+ *                   Its day attempts are the loop's too (train/loop.js windowRun sets them: replay/day-attempts.js)
  *                   A replay config given as a path names its autotrader relative to its own folder (as replay.js
  *                   run reads it); so do the probe's replay configs
  *   tuningWindows   [{ from, to }] session dates (YYYY-MM-DD, `to` exclusive), each inside one tuning unit of the
@@ -111,6 +112,7 @@ function resolveLoop(raw, { baseDir = process.cwd() } = {}) {
   try { replay = readReplaySpec(r.replay, baseDir, 'replay'); } catch (err) { errors.push(`replay: ${err.message}`); }
   try { proposer = validateConfig(readSpec(r.proposer, baseDir, 'proposer')); } catch (err) { errors.push(`proposer: ${err.message}`); }
   if (replay && !(typeof replay.workDir === 'string' && /^(\/|~\/)/.test(replay.workDir))) errors.push('replay.workDir: an absolute path or ~/...');
+  if (replay && replay.dayAttempts !== undefined) errors.push('replay.dayAttempts: set by the loop for each run (replay/day-attempts.js), never in the config');
   const repeats = int(r.repeats, triple(LOOP.repeats), 'repeats', errors);
   const seed = int(r.seed, triple(LOOP.seed), 'seed', errors);
   const maxFlagged = int(r.maxFlagged, triple(LOOP.maxFlagged), 'maxFlagged', errors);
@@ -150,6 +152,9 @@ function resolveLoop(raw, { baseDir = process.cwd() } = {}) {
     ...(modelScore ? { modelScore } : {}),
     ...(probe ? { probe } : {}),
     workDir: path.join(path.resolve(expandHome(replay.workDir)), r.loopId),
+    // Every run trades inside a fresh attempt each session day, sized as live (train/loop.js windowRun,
+    // replay/day-attempts.js): in the hash, so a loop started before them is another loop (its runs never pool with these).
+    dayAttempts: true,
   };
   const { limits: _l, ...identity } = loop;
   loop.hash = crypto.createHash('sha256').update(JSON.stringify(identity)).digest('hex');

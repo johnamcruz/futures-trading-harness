@@ -448,8 +448,8 @@ screen period. In the loop config:
 ```
 
 `replay` is a stage-1 replay config (no curated list, no practice, no
-combine or account states, no `stepWindows`: the loop sets those), on the
-loop's runner config. The pool is the census's legs of `from` to `to`,
+combine or account states, no `stepWindows` or `dayAttempts`: the loop
+sets those), on the loop's runner config. The pool is the census's legs of `from` to `to`,
 every leg whether a curated moment marks it or not, without the regression
 days. Both lie in practice-train and outside the tuning windows (the config
 refuses either).
@@ -1161,6 +1161,27 @@ or stage-1 run still needs its practice mode and its curated list.
   the stepped windows the loop sets, never a curated list, practice, a
   combine, account states or a prop attempt. A run with `stepWindows` in any
   other role is refused.
+
+**The loop's day attempts** (`scripts/lib/replay/day-attempts.js`; the
+owner, 2026-10-24: "We should using translation on ppc as well as live").
+Every run of the loop (the keep rule's, the trend set's, the curated
+probes', held-out judging's) trades inside a combine attempt of the account
+the active policy strategy trades, started fresh at its starting balance
+before each session day's first step. A composed entry is then sized the way
+live sizes it in an attempt: the size translation (the rulebook's verdict,
+size budget, cap, floor and floor stretch), `order_plan`, phase 2's request,
+`compose_check`'s no-size-fits and the gate's checks. A model's suggested
+1 MNQ goes as the rulebook's size, at least its floor of 3. A day's own
+trades update its attempt as live, so the daily loss limit, the soft stop
+and the stretch's "no loss today" work; no day's loss or blow reaches
+another day, so the champion and every edit size the same window from the
+same state. The loop sets `dayAttempts` in code for each run (a replay
+config that names it is refused); the training preflight's `day-attempts`
+check requires it on every loop run and refuses it on any other learning
+run. It is part of both run hashes and the loop's own, so a loop started
+before it is another loop, and its runs never pool with these. R is
+unchanged; dollar figures are at the translated size. The model sees only
+the attempt line a live attempt shows (day 1 of a fresh attempt each day).
 
 A curated run is never paired: its
 moments are picked outcome-balanced, so even at natural rates its outcomes are

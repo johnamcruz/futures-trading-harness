@@ -30,13 +30,13 @@ function world() {
   const live = path.join(user, 'live-home');
   fs.mkdirSync(live);
   fs.writeFileSync(path.join(live, 'brokers.json'), JSON.stringify({
-    brokers: { replaymock: { command: [process.execPath, SERVER], replay: true, limits: { dailyLoss: 'MOCK_MAX_DAILY_LOSS', maxOrderSize: 'MOCK_MAX_ORDER_SIZE', maxPositionSize: 'MOCK_MAX_POSITION_SIZE' }, journalEnv: 'MOCK_JOURNAL', env: ['MOCK_STATE_DIR', 'MOCK_JOURNAL', 'MOCK_CLOCK_FILE', 'MOCK_REPLAY', 'MOCK_INIT'] } },
+    brokers: { replaymock: { command: [process.execPath, SERVER], replay: true, limits: { dailyLoss: 'MOCK_MAX_DAILY_LOSS', maxOrderSize: 'MOCK_MAX_ORDER_SIZE', maxPositionSize: 'MOCK_MAX_POSITION_SIZE' }, journalEnv: 'MOCK_JOURNAL', env: ['MOCK_STATE_DIR', 'MOCK_JOURNAL', 'MOCK_CLOCK_FILE', 'MOCK_REPLAY', 'MOCK_INIT', 'MOCK_BALANCE_SCHEDULE'] } },
   }));
   const trader = { harness: 'custom', command: [process.execPath, HARNESS, '{prompt}'], symbols: ['MNQ'], account: '7', timeframe: 3, sessions: ['09:30-10:28@America/New_York'], eodAt: '10:30@America/New_York' };
   const loop = {
     loopId: 'e2e-loop',
     // A practice-train run sets its practice mode (the training preflight); every quiet bar sampled, so every bar cycles.
-    replay: { workDir: path.join(user, 'train'), broker: 'replaymock', premarket: false, autotrader: trader, noWeb: true, practice: { mode: 'setup-focus', setupTf: 15, quietSample: 1, seed: 1 }, brokerEnv: { clockFile: 'MOCK_CLOCK_FILE', stateDir: 'MOCK_STATE_DIR', runId: null, start: null, end: null } },
+    replay: { workDir: path.join(user, 'train'), broker: 'replaymock', premarket: false, autotrader: trader, noWeb: true, practice: { mode: 'setup-focus', setupTf: 15, quietSample: 1, seed: 1 }, brokerEnv: { clockFile: 'MOCK_CLOCK_FILE', stateDir: 'MOCK_STATE_DIR', runId: null, start: null, end: null, balanceSchedule: 'MOCK_BALANCE_SCHEDULE' } },
     // Wednesday 2022-03-09, in Train: a trade decision every 3 minutes from 09:30 to 10:27 (each polled 2 s after its bar
     // closed), 20 in all, and end of day: the fewest decisions the paired test's frozen minimum allows (repeats are not independent pairs).
     tuningWindows: [{ from: '2022-03-09', to: '2022-03-10' }],
@@ -74,6 +74,12 @@ test('training loop e2e: the planted fix is kept and the planted harm rejected; 
   const champion = fs.readFileSync(path.join(w.loop.replay.workDir, 'e2e-loop', 'runs', 'e2e-loop-champion-t0', 'replay', 'e2e-loop-champion-t0', '2022-03-09.jsonl'), 'utf8').trim().split('\n').map(l => JSON.parse(l));
   const P = champion.filter(l => l.kind === 'trade').length;
   assert.strictEqual(P, 20, `${P} decisions`);
+  // The champion's run traded inside the day's fresh attempt (replay/day-attempts.js), the mock broker's balance set to it.
+  const runHome = path.join(w.loop.replay.workDir, 'e2e-loop', 'runs', 'e2e-loop-champion-t0');
+  const days = lines(path.join(runHome, 'replay', 'e2e-loop-champion-t0', 'day-attempts.jsonl'));
+  assert.deepStrictEqual(days.map(d => [d.kind, d.day]), [['start', '2022-03-09']]);
+  const attempt = JSON.parse(fs.readFileSync(path.join(runHome, 'combine', `${days[0].account}.json`), 'utf8'));
+  assert.deepStrictEqual([attempt.startDay, attempt.snapshot && attempt.snapshot.balance], ['2022-03-09', days[0].balance], 'the runner snapshotted the day\'s attempt');
   // Every call once: the champion's steps + 1 proposer + P points x 1 repeat x (champion + 2 candidates).
   assert.strictEqual(state.modelCalls, champion.length + 1 + P * 1 * 3, 'nothing ran twice across the stop');
   assert.deepStrictEqual(state.iterations.map(i => [i.n, i.done]), [[1, true]]);
