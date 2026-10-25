@@ -32,14 +32,14 @@ const read = rel => fs.readFileSync(path.join(ROOT, rel), 'utf8');
 const flat = t => t.replace(/\s+/g, ' ');
 
 const SKILLS = ['trend-vs-range', 'pullback-vs-reversal', 'breakout-vs-fakeout', 'levels-and-reactions', 'momentum-and-volume',
-  'absorption', 'invalidation', 'confluence-counting', 'candle-reading', 'rejection', 'breakout', 'bos-vs-choch', 'cisd', 'fib-retracement', 'fair-value-gaps'];
+  'absorption', 'invalidation', 'confluence-counting', 'candle-reading', 'rejection', 'breakout', 'bos-vs-choch', 'cisd', 'fib-retracement', 'fair-value-gaps', 'compression'];
 const SETUPS = [...SETUP_SKILLS];
 const file = s => `skills/${s}/SKILL.md`;
 
 // Who carries which (each role only what it uses, and the homes of the retired skills it loaded: skill-retire.test.js;
 // the executor and the news analyst none).
 const ROLES = {
-  'market-structure-analyst': ['trend-vs-range', 'bos-vs-choch', 'pullback-vs-reversal', 'breakout-vs-fakeout', 'levels-and-reactions', 'fair-value-gaps', 'candle-reading', 'rejection', 'breakout', 'cisd', 'fib-retracement'],
+  'market-structure-analyst': ['trend-vs-range', 'bos-vs-choch', 'pullback-vs-reversal', 'breakout-vs-fakeout', 'levels-and-reactions', 'fair-value-gaps', 'candle-reading', 'rejection', 'breakout', 'cisd', 'fib-retracement', 'compression'],
   'trend-momentum-analyst': ['trend-vs-range', 'bos-vs-choch', 'momentum-and-volume', 'pullback-vs-reversal'],
   'volume-liquidity-analyst': ['levels-and-reactions', 'fair-value-gaps', 'momentum-and-volume', 'absorption'],
   'risk-manager': ['confluence-counting', 'invalidation'],
@@ -180,6 +180,20 @@ const PINS = {
     'a CISD back toward the middle, aiming at the other side.',
     'a 3m or 5m CISD in the 15m/1h trend\'s direction is the pullback ending',
     'Never anticipate the bounce.',
+  ],
+  compression: [
+    // The one definition (compression.js; the numbers are the config's: a test below holds them equal).
+    '5 to 30 back-to-back candles, width at most 3 x ATR (`widthAtr`), mean range at most 1 x ATR (`meanRangeAtr`).',
+    'Not one: a single inside bar, wide drifting candles, a run wider than 3 x ATR, a gap.',
+    'the first candle after the box CLOSES beyond it by 0.1 x ATR or more (`beyondAtr`), its range at least 2 x the box\'s candles (`rangeVsBox`) and 1 x ATR (`rangeAtr`).',
+    '`state` `expanding` while within 3 candles (`barsAgo`), no close back inside (`backInside`), price still beyond it (`accepted`) and under 1 x ATR past its close (`late`).',
+    'Entry: a candle closed after it (`trade-lifecycle`). Never anticipate.',
+    'Stop beyond the box\'s far side: `stop <tf> box low|high <price>`, not just past the last candle (stops there get run; `invalidation`).',
+    'Runway: a named level at 2R or more past the box (`take-profit`), else the plan refuses.',
+    'Signs, defined elsewhere: inside bars (`candle-reading`), the Keltner squeeze (`trend-momentum-indicators`), `volContract` under 1 (volume falling as it forms: `momentum-and-volume`).',
+    'closed back inside: fakeout (`breakout-vs-fakeout`); a break against the HTF bias (the trend rule\'s); a small candle; late.',
+    'a box pressing a key level the bias\'s way, the expansion closing through it: location `<tf> box at <level>`, setup the break.',
+    'a displacement pole (`candle-reading`), then a box drifting against it (flag) or `converging` (pennant), the break its way.',
   ],
   'fib-retracement': [
     'The levels read: 0.5, 0.618, 0.705 and 0.79.',
@@ -590,6 +604,25 @@ test('bos-vs-choch: the timeframes are read top-down, the same logic in the setu
   for (const s of ['bos-vs-choch', 'rejection', 'breakout', 'invalidation']) {
     assert.match(flat(read(file(s))), /timeframe or higher/, s);
   }
+});
+
+test('compression: the skill states the code\'s numbers (config/analysis.json compression), and its reads are the checker\'s forms', () => {
+  const P = require('../../scripts/lib/trading/compression').PARAMS;
+  const t = flat(read(file('compression')));
+  assert.ok(t.includes(`${P.minBars} to ${P.maxBars} back-to-back candles, width at most ${P.boxAtr} x ATR`), 'box');
+  assert.ok(t.includes(`mean range at most ${P.barAtr} x ATR`) && t.includes(`a run wider than ${P.boxAtr} x ATR`), 'bars');
+  assert.ok(t.includes(`its range at least ${P.expandRange} x the box's candles`) && t.includes(`and ${P.expandAtr} x ATR (\`rangeAtr\`)`), 'expansion');
+  assert.ok(t.includes(`within ${P.recentBars} candles`) && t.includes(`under ${P.maxRunAtr} x ATR past its close`), 'recent, late');
+  assert.ok(t.includes(`CLOSES beyond it by ${P.minBeyondAtr} x ATR or more`), 'beyond');
+  // Each read the skill teaches parses into the checker's form and step.
+  const CR = require('../../scripts/lib/trading/composed-reads');
+  const reads = /Reads: (.+?) \(\d+\.\d+R\): runway/.exec(t)[1].split(', ');
+  assert.deepStrictEqual(reads.map(x => CR.parseRead(x).kind), ['compression', 'close', 'stop', 'target'], reads.join('; '));
+  // A changed number fails.
+  assert.ok(!flat(read(file('compression')).replace(`${P.boxAtr} x ATR (\`widthAtr\`)`, `${P.boxAtr + 1} x ATR (\`widthAtr\`)`)).includes(`width at most ${P.boxAtr} x ATR`));
+  // candle-reading's displacement and breakout point to it.
+  assert.match(flat(read(file('candle-reading'))), /it starts a leg, out of a box \(`compression`\)/);
+  assert.match(flat(read(file('breakout'))), /Out of a tight box: `compression`\./);
 });
 
 test('basics skills: the fib numbers have one home: fib-retracement states the code\'s, cisd restates none', () => {

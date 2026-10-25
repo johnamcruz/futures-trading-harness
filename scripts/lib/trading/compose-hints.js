@@ -74,7 +74,10 @@ function candidatesOf(b, side, { tick, stopRule = null } = {}) {
   const bias = [...['15m', '1h', '4h'].map(tf => `${tf} ${d}`), ...['15m', '1h', ...frames.slice(0, 1)].flatMap(tf => [`${tf} choch ${d}`, `${tf} bos ${d}`]),
     `trend ${side} allowed`, `regime trend ${d}`, side === 'long' ? 'above prior rth range' : 'below prior rth range', `regime ${levelName(isObj(m3.regime) ? m3.regime.primary : '')}`];
   const loc = [...levelIndex(b).keys()].map(k => `at ${k}`);
-  const location = [...frames.map(tf => `at ${tf} fvg`), ...loc, ...(isObj(m3.vwap) && m3.vwap.side ? [`vwap ${m3.vwap.side}`] : []),
+  // The compression boxes' key levels (compression.js), each as a location read on its box.
+  const comp = isObj(m3.compression) ? Object.entries(m3.compression).filter(([, x]) => isObj(x) && isObj(x.box)) : [];
+  const boxAt = comp.flatMap(([tf, x]) => (Array.isArray(x.box.levels) ? x.box.levels : []).map(l => `${tf} box at ${levelName(l.name)}`));
+  const location = [...frames.map(tf => `at ${tf} fvg`), ...loc, ...boxAt, ...(isObj(m3.vwap) && m3.vwap.side ? [`vwap ${m3.vwap.side}`] : []),
     ...(isObj(m3.location) && m3.location.priorValue ? [`value ${m3.location.priorValue}`] : [])];
   // Setups on the candles above the base, each with its candle's close: a base candle's reaction is this bar's own
   // candle, which no later close in a briefing can confirm (on the next bar its reads are of the next candle).
@@ -89,12 +92,21 @@ function candidatesOf(b, side, { tick, stopRule = null } = {}) {
     for (const pat of Array.isArray(c.patterns) ? c.patterns : []) setups.push({ read: `${tf} pattern ${levelName(pat)}`, tf, close: candleClose(m3, tf) });
     if (isObj(m3.cisd) && isObj(m3.cisd[tf])) setups.push({ read: `${tf} cisd ${d}`, tf, close: setupClose(m3, { kind: 'cisd', form: `${tf} cisd ${d}` }) });
   }
+  // The compression breaks (compression.js), timed from their expansion candle: on the base too when that candle closed
+  // before the base's last one (a later base close can confirm it; the base's own last candle can't).
+  const baseClose = candleClose(m3, baseOf(b));
+  for (const [tf] of comp) {
+    const close = setupClose(m3, { kind: 'compression', form: `${tf} compression break ${d}` });
+    if (tf !== baseOf(b) || (close !== null && baseClose !== null && close < baseClose)) setups.push({ read: `${tf} compression break ${d}`, tf, close });
+  }
   const pats = Object.keys(ENTRY_PATTERNS).filter(p => ENTRY_PATTERNS[p] === side);
   const entries = frames.flatMap(tf => [...pats.map(p => `${tf} pattern ${p}`), `${tf} momentum ${d}`, `${tf} close ${side === 'long' ? 'top' : 'bottom'}`]
     .map(read => ({ read, tf, close: candleClose(m3, tf) })));
   const lowHigh = side === 'long' ? 'low' : 'high';
   const stops = [...[...frames].reverse().map(tf => ({ read: `stop ${tf} ${lowHigh} ${candles[tf][side === 'long' ? 'l' : 'h']}`, tf })),
-    ...(isObj(m3.swings) && num(m3.swings[lowHigh]) !== null ? [{ read: `stop swing ${lowHigh} ${m3.swings[lowHigh]}` }] : [])];
+    ...(isObj(m3.swings) && num(m3.swings[lowHigh]) !== null ? [{ read: `stop swing ${lowHigh} ${m3.swings[lowHigh]}` }] : []),
+    // A live box's far side (compression.js): the compression setup's natural stop.
+    ...comp.filter(([, x]) => num(x.box[lowHigh]) !== null).map(([tf, x]) => ({ read: `stop ${tf} box ${lowHigh} ${x.box[lowHigh]}`, tf }))];
   return {
     bias: verified(bias, b, side, tick, false),
     location: verified(location, b, side, tick, false),

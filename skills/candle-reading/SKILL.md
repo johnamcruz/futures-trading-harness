@@ -25,8 +25,7 @@ progress: never judge a pattern on it.
 A read, never a veto: the count decides (`confluence-counting`). Thresholds are
 hypotheses; a missing field is `unknown`.
 
-**The stack**: each timeframe's last completed candle, named with its
-timeframe. 15m, 1h and 4h weigh more at a higher-timeframe level (a 1h
+**The stack**: each timeframe's last completed candle. 15m, 1h and 4h weigh more at a higher-timeframe level (a 1h
 rejection of the prior day's high outweighs a 3m one: `rejection`,
 `breakout`); 3m and 5m time the entry.
 
@@ -37,25 +36,27 @@ rejection of the prior day's high outweighs a 3m one: `rejection`,
   lane, is `unknown`.
 - The targets: `m3.swingTargets`, the next swing each side (base,
   15m, 1h, 4h).
-- In strategy rules the same candle is `htfd_*` (strategy-rules).
+- Strategy rules: `htfd_*` (strategy-rules).
 
 **Anatomy** (range = h - l; h = l is `unknown`): body and wick shares of
 the range; close location (c - l) / range: top third at least 2/3, bottom at most
 1/3, else middle (read `<tf> close top|middle|bottom`); size against ATR (`rangeAtr`).
 
 **Patterns**, as the code labels them (`pattern`, `patterns`; read
-`<tf> pattern <name>`; hypotheses; R range, B body, U and D the upper and lower wicks, prev the
+`<tf> pattern <name>`; R range, B body, U and D the upper and lower wicks, prev the
 prior candle, ATR(14) as of prev):
 
 - doji: B at most 0.1 R;
 - hammer: D at least 2 B and 0.6 R, U at most 0.15 R; shooting star: the
-  mirror (the pin bars);
+  mirror;
 - bullish engulfing: a bullish candle after a bearish one, its body
   covering prev's and larger; bearish engulfing: the mirror;
-- inside: within prev's high and low, a smaller range; outside: beyond
-  both, a larger range;
+- inside: within prev's high and low, a smaller range; `insideStack`
+  counts them in a row inside one `mother` (a box:
+  `compression`); outside: beyond both, a larger range;
 - displacement: B at least 0.7 R and R at least 1.5 x ATR, `dir` its
-  close vs its open.
+  close vs open; it starts a leg, out of a box (`compression`) or a
+  level.
 
 A CISD's strong displacement: `cisd`. **Context decides**: with the HTF
 read (`trend-vs-range`, `pullback-vs-reversal`) and momentum and volume
@@ -63,7 +64,7 @@ read (`trend-vs-range`, `pullback-vs-reversal`) and momentum and volume
 The stack counts once (`confluence-counting`, trigger).
 
 **Evidence**: standalone candlestick patterns have weak evidence in
-general, none measured in our data yet.
+general, none measured.
 
 ## Examples
 

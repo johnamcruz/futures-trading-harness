@@ -66,6 +66,7 @@
   "composedReads": { "volumeHigh": 1.5, "absorptionProgressAtr": 0.5, "roomIgnoreR": 0.25, "roomIgnoreTicks": 8 },
   "composeHints": { "perStep": 3, "maxTries": 2000 },
   "fvg": { "frames": [5, 15, 60], "window": 60, "max": 3 },
+  "compression": { "frames": [3, 5, 15, 60], "minBars": 5, "maxBars": 30, "boxAtr": 3, "barAtr": 1, "convergeShare": 0.6, "driftShare": 0.5, "expandRange": 2, "expandAtr": 1, "recentBars": 3, "maxRunAtr": 1, "levelBandAtr": 0.25, "maxLevels": 3, "minBeyondAtr": 0.1 },
   "briefing": { "equalK": 2, "cisdFrames": [3, 5, 15, 60] },
   "evaluator": { "windowBars": 500 }
 }

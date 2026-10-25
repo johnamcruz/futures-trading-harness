@@ -28,6 +28,8 @@
  *   shape(c)                               { body, upperWick, lowerWick, closeAt } shares of the range (null at zero range)
  *   closeLocation(c)                       'top' | 'middle' | 'bottom' (third of the range), null at zero range
  *   patternsOf(c, prev, atrPrev)           every pattern that holds, in label priority; patternLabel: the first, else 'none'
+ *   insideStackOf(candles, j)              { insideStack, mother } of candle j (the candles in a row inside one mother), or {}
+ *                                          (insideStacks(candles): every candle's, one pass)
  *   relation(c, level, prevClose)          { relation: 'rejected' | 'broke' | 'touched' | 'none', dir } or null (no level)
  *   candleSeries(bars, minutes, base)      per-bar facts (the rules language's htfd_* series), memoised on the bars
  *   relationSeries(bars, minutes, base, level, { at })   per-bar relation to a level series ('open', 'close', 'now')
@@ -55,7 +57,8 @@
  *   shooting star      R > 0, U >= 2 B, U >= 0.6 R and D <= 0.15 R
  *   bullish engulfing  close > open, prev close < prev open, the body covers prev's body and B > prev's B
  *   bearish engulfing  the mirror
- *   inside             high <= prev high, low >= prev low and R < prev R
+ *   inside             high <= prev high, low >= prev low and R < prev R; `insideStack` counts the candles in a row
+ *                      inside one mother candle (insideStacks), `mother` its range
  *   outside            high >= prev high, low <= prev low and R > prev R
  *   displacement       B >= 0.7 R and R >= 1.5 x ATR (direction: close against open)
  *   none               none of these; a zero-range candle (open = high = low = close) is always none
@@ -190,6 +193,9 @@ function closeLocation(c) {
   return closeAt >= 2 / 3 - 1e-9 ? 'top' : closeAt <= 1 / 3 + 1e-9 ? 'bottom' : 'middle';
 }
 
+/** The inside rule, one definition: c within m's high and low, with a smaller range (the pattern; a stack's mother). */
+const isInside = (c, m) => c.h <= m.h && c.l >= m.l && c.h - c.l < m.h - m.l;
+
 /** Every pattern that holds on candle c (prev: the candle before it; atrPrev: ATR as of prev), in label priority. */
 function patternsOf(c, prev = null, atrPrev = NaN) {
   const R = c.h - c.l;
@@ -205,7 +211,7 @@ function patternsOf(c, prev = null, atrPrev = NaN) {
     if (covers && c.c < c.o && prev.c > prev.o) out.add('bearish engulfing');
     const pR = prev.h - prev.l;
     if (c.h >= prev.h && c.l <= prev.l && R > pR) out.add('outside');
-    if (c.h <= prev.h && c.l >= prev.l && R < pR) out.add('inside');
+    if (isInside(c, prev)) out.add('inside');
   }
   if (B >= DEF.dispBody * R && atrPrev > 0 && R >= DEF.dispAtr * atrPrev) out.add('displacement');
   if (D >= DEF.wickBody * B && D >= DEF.wickRange * R && U <= DEF.otherWick * R) out.add('hammer');
@@ -253,6 +259,7 @@ function candleFactsList(bars, minutes, base) {
 
 function factsOf(cs) {
   const atr = cs.length ? atrOf(cs, ATR_LEN) : [];
+  const stacks = insideStacks(cs);
   return cs.map((c, j) => {
     const prev = j > 0 ? cs[j - 1] : null;
     const atrPrev = j > 0 ? atr[j - 1] : NaN;
@@ -263,10 +270,31 @@ function factsOf(cs) {
       ...shape(c), closeLocation: closeLocation(c), prev,
       rangeAtr: atrPrev > 0 ? (c.h - c.l) / atrPrev : NaN,
       volRatio: avg > 0 && Number.isFinite(c.v) ? c.v / avg : NaN,
-      patterns, pattern: patternLabel(patterns),
+      patterns, pattern: patternLabel(patterns), ...stacks[j],
     };
   });
 }
+
+/**
+ * The inside-bar stacks, per candle: { insideStack, mother } when the candle lies inside the mother candle of the stack
+ * the candle before it is in (the `inside` rule: high and low within the mother's, a smaller range; the stack grows),
+ * else inside the candle before it (a new stack of 1, that candle the mother); {} otherwise. The mother's range is the
+ * box the stack sits in. One pass, oldest first.
+ */
+function insideStacks(cs) {
+  const out = [];
+  let mother = -1;
+  let n = 0;
+  for (let j = 0; j < cs.length; j += 1) {
+    if (n && isInside(cs[j], cs[mother])) n += 1;
+    else if (j > 0 && isInside(cs[j], cs[j - 1])) { mother = j - 1; n = 1; } else n = 0;
+    out.push(n ? { insideStack: n, mother: { t: cs[mother].t, h: cs[mother].h, l: cs[mother].l } } : {});
+  }
+  return out;
+}
+
+/** The inside-bar stack of candle j (insideStacks). */
+const insideStackOf = (cs, j) => insideStacks(cs.slice(0, j + 1))[j] || {};
 
 const sign = (list, up, down) => (list.includes(up) ? 1 : list.includes(down) ? -1 : 0);
 
@@ -486,6 +514,8 @@ function briefingCandles({ bars, base, fine = null, levelsAt = () => [], zonesAt
       momentum: momentumRead({ rangeAtr: r2(f.rangeAtr), closeLocation: f.closeLocation, volRatio: r2(f.volRatio) }),
       ...(f.patterns.length > 1 ? { patterns: f.patterns } : {}),
       ...(f.pattern === 'displacement' ? { dir: c.c > c.o ? 'up' : 'down' } : {}),
+      // An inside bar's stack: how many candles in a row sit inside one mother candle, and the mother's range.
+      ...(f.insideStack ? { insideStack: f.insideStack, mother: f.mother } : {}),
       ...sweepField(m, c, prev),
       levels: Object.fromEntries(found.slice(0, MAX_LEVELS).map(x => [x.name, x.text])),
       ...(found.length > MAX_LEVELS ? { moreLevels: found.length - MAX_LEVELS } : {}),
@@ -627,5 +657,5 @@ function completedCandlesAt({ bars, base, fine = null, minutes, at = bars.length
 module.exports = {
   TIMEFRAMES, DEF, LABELS, MAX_LEVELS, LEVEL_ORDER, label, completedSeries, shape, closeLocation, patternsOf, patternLabel, relation,
   candleSeries, relationSeries, swingTargetSeries, holdingSwingsAt, briefingCandles, briefingTargets, RELATION_TEXT,
-  prevSweep, RANGE_FRAMES, briefingRangeTargets, completedCandlesAt, gapRelation,
+  prevSweep, RANGE_FRAMES, briefingRangeTargets, completedCandlesAt, gapRelation, insideStackOf,
 };

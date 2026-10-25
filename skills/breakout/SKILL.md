@@ -58,6 +58,7 @@ By PLAN step:
 
 **Paired with `rejection`**: a failed breakout (a close back inside)
 is the setup for a rejection the other way.
+Out of a tight box: `compression`.
 
 **Evidence** (Train, docs/research/mtf-setup-catalog.md): a first 3m close
 through the IB high lost after costs (F8A); its retest form (F8B) was

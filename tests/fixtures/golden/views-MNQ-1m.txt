@@ -20,14 +20,15 @@ Summary (MNQ 1m, 20:11 ET):
 - Room above (R = the 1m reference stop): 15m swing high / round number 27099.75 (88.25 pts, 24.48R).
 - Room below (R = the 1m reference stop): round number 27000 (11.5 pts, 3.19R).
 - Broker bar fields (last 3 bars, oldest first): ext.a 0.7/0.2/-0.3; ext.b.flag false/true/false; ext.b.n 5/6/0; flow.complete true/true/true; flow.ofiTrade -0.88/-0.332/-1; flow.windows.3.delta -64/-218/-827; +3 more.
-- 3m (closed 20:09): inside, close top third, range 0.89 ATR, vol 1.77x, net 0.61 ATR; touched CRT 1h range low.
-- 5m (closed 20:10): inside, close top third, range 1.1 ATR, vol 5.35x, net 0.83 ATR, momentum up; rejected CRT 1h range low (closed back below), touched previous 5m low.
+- 3m (closed 20:09): inside, 1 in a row inside the 20:03 candle 27074.75-27091.25, close top third, range 0.89 ATR, vol 1.77x, net 0.61 ATR; touched CRT 1h range low.
+- 5m (closed 20:10): inside, 1 in a row inside the 20:00 candle 27074.75-27098, close top third, range 1.1 ATR, vol 5.35x, net 0.83 ATR, momentum up; rejected CRT 1h range low (closed back below), touched previous 5m low.
 - 15m (closed 20:00): bullish engulfing, close top third, vol 1.08x; traded beyond the previous 15m high, closed above its high; touched previous 15m high.
 - 1h (closed 20:00): none, close top third.
 - Next swing above (R = the 1m reference stop): 3m 27098.25 (86.75 pts, 347 ticks, 24.07R), 15m 27099.75 (88.25 pts, 353 ticks, 24.48R); below: none found.
 - Prior candle range (R = the 1m reference stop): 1h (closed 20:00) high 27099.75 (88.25 above, 24.48R), mid 27090.875 (79.25 above, 21.98R), low 27082 (70.5 above, 19.56R), low taken, closed below it.
 - 5m structure: CHoCH down through 27087 (known 20:05, 1 candle ago); swing high 27091.5, swing low 27087.
 - CISD (completed candles; a read, not a signal): 3m bearish at 27090.25 (closed 20:03, strong), no key-level sweep, OTE 27065.5-27080.5 (mid 27073), waiting; 5m bullish at 27093.75 (closed 19:50, strong, engulfing), no key-level sweep, zone void; 15m none; 1h none.
+- Compression (completed candles; a read, not a signal): 3m no expansion: box 27080-27099.75 (19.75 pts, 2.9 ATR, 21 bars, flat, at 15m swing high 27099.75 (its top), round number 27100 (its top)), expansion closed 20:06 below it (range 3x the box's candles, 2.43 ATR), 1 bar ago, closed back inside: fakeout, late: 9.66 ATR past its close; 5m no expansion: box 27087-27098.75 (11.75 pts, 1.48 ATR, 6 bars, flat, at 15m swing high 27099.75 (its top), round number 27100 (its top)), expansion closed 20:05 below it (range 3.93x the box's candles, 2.92 ATR), 1 bar ago, late: 7.94 ATR past its close.
 - Rules setups: none fired on this bar; a composed setup is yours to read and check (trade-lifecycle).
 
 Detail by timeframe:
@@ -106,13 +107,14 @@ Summary (MNQ 1m, 08:47 ET):
 - Broker bar fields (last 3 bars, oldest first): ext.a 0.7/0.2/-0.3; ext.b.flag false/true/false; ext.b.n 5/6/0; flow.complete true/true/true; flow.ofiTrade 0.884/0.732/-0.819; flow.windows.3.delta 274/993/75; +3 more.
 - 3m (closed 08:45): none, close bottom third, range 0.58 ATR, vol 0.57x; swept the previous 3m high, closed back inside; rejected previous 3m high (closed back below).
 - 5m (closed 08:45): bullish engulfing, close middle third, range 0.67 ATR, vol 0.72x; swept the previous 5m high, closed back inside; rejected previous 5m high (closed back below).
-- 15m (closed 08:45): inside, close middle third, range 0.7 ATR, vol 1.52x, net 0.03 ATR; rejected CRT 1h range high (closed back below); rejected 5m fvg low down (27035.75).
-- 1h (closed 08:00): none, close top third, vol 1.66x; traded beyond the previous 1h high, closed above its high; broke above previous 1h high, broke above round number 27000, touched 1h swing high 27013.5, touched 15m swing high 27013.5, +1 more.
+- 15m (closed 08:45): inside, 1 in a row inside the 08:15 candle 27020.75-27062.25, close middle third, range 0.7 ATR, vol 1.52x, net 0.03 ATR; rejected CRT 1h range high (closed back below); rejected 5m fvg low down (27035.75).
+- 1h (closed 08:00): none, 11 in a row inside the 04-22 20:00 candle 26848-27098, close top third, vol 1.66x; traded beyond the previous 1h high, closed above its high; broke above previous 1h high, broke above round number 27000, touched 1h swing high 27013.5, touched 15m swing high 27013.5, +1 more.
 - 4h (closed 06:00); swept the previous 4h high, closed back inside.
 - Next swing above (R = the 1m reference stop): 3m/15m 27079.75 (123 pts, 492 ticks, 21.06R); below: 3m/15m 26941.75 (15 pts, 60 ticks, 2.57R), 1h 26890 (66.75 pts, 267 ticks, 11.43R).
 - Prior candle range (R = the 1m reference stop): 1h (closed 08:00) high 27048.5 (91.75 above, 15.71R), mid 26995.125 (38.25 above, 6.55R), low 26941.75 (15 below, 2.57R), high taken, closed back inside; 4h (closed 06:00) high 27013.5 (56.75 above, 9.72R), mid 26951.75 (5 below, 0.86R), low 26890 (66.75 below, 11.43R), high taken, closed back inside.
 - FVGs near price or retested (completed candles): 5m bearish 27035.75-27061.25 (08:15) filled to 27049.5, retest closed out.
 - CISD (completed candles; a read, not a signal): 3m bearish at 27032.5 (closed 08:24, weak), no key-level sweep, a weak displacement: no zone; 5m bullish at 27032.25 (closed 08:45, weak, engulfing), no key-level sweep, a weak displacement: no zone; 15m bullish at 26948.75 (closed 06:45, weak), no key-level sweep, a weak displacement: no zone; 1h none.
+- Compression (completed candles; a read, not a signal): 3m compressing 12 bars in 27020.75-27079.75 (2.95 ATR, converging, at 15m swing high); 5m compressing 11 bars in 27010.25-27079.75 (2.97 ATR, converging, at 15m swing high); 15m no expansion: box 26916.25-26995 (78.75 pts, 2.49 ATR, 9 bars, drifting up, at round number 27000 (its top)), expansion closed 08:00 above it (range 2.1x the box's candles, 2.04 ATR), 3 bars ago.
 - Setups to check (the 15m candle closed 08:45): "15m rejected 5m fvg low down" (short, 27035.75); a confirmation close: the entry reads from this bar. Compose and check each (trade-lifecycle, rejection, breakout); pass unless every read is true.
 - Standard plan (code, as compose_check plans it): short "15m rejected 5m fvg low down": against the trend rule: only as a reversal (its 1h CHoCH tier).
 - Setups:
@@ -199,6 +201,7 @@ Summary (MNQ 1m, 22:19 ET):
 - Next swing above (R = the 1m reference stop): 3m 27542.5 (4.5 pts, 18 ticks, 1.63R); below: 3m 27518.5 (19.5 pts, 78 ticks, 7.08R), 15m 27366.75 (171.25 pts, 685 ticks, 62.18R), 1h 27344.25 (193.75 pts, 775 ticks, 70.35R), 4h 26681.75 (856.25 pts, 3425 ticks, 310.91R).
 - Prior candle range (R = the 1m reference stop): 1h (closed 22:00) high 27540 (2 above, 0.73R), mid 27498 (40 below, 14.52R), low 27456 (82 below, 29.77R), high taken, closed back inside; 4h (closed 22:00) high 27540 (2 above, 0.73R), mid 27442.125 (95.75 below, 34.77R), low 27344.25 (193.75 below, 70.35R), high taken, closed back inside.
 - CISD (completed candles; a read, not a signal): 3m bullish at 27518.75 (closed 21:51, strong), no key-level sweep, OTE 27517.25-27522.75 (mid 27520), bounced; 5m bullish at 27377.25 (closed 20:00, weak), no key-level sweep, a weak displacement: no zone; 15m bearish at 27414.5 (closed 18:15, weak), no key-level sweep, a weak displacement: no zone; 1h bullish at 27403.25 (closed 21:00, strong), no key-level sweep, OTE 27386-27419.5 (mid 27402.75), waiting.
+- Compression (completed candles; a read, not a signal): 3m compressing 15 bars in 27501.75-27542.5 (2.62 ATR, drifting up, at overnight high, round number); 5m compressing 9 bars in 27490-27542.5 (2.61 ATR, drifting up, at overnight high, round number).
 - Setups to check (the 15m candle closed 22:15): "15m rejected overnight high down" (short, 27540); "15m rejected 5m fvg low up" (long, 27521.25); "15m rejected 5m fvg high up" (long, 27524.25); a confirmation close: the entry reads from this bar. Compose and check each (trade-lifecycle, rejection, breakout); pass unless every read is true.
 - Standard plan (code, as compose_check plans it): long "15m rejected 5m fvg low up": plan refused (no confirming entry read); short "15m rejected overnight high down": against the trend rule: only as a reversal (its 1h CHoCH tier).
 - Rules setups: none fired on this bar; a composed setup is yours to read and check (trade-lifecycle).

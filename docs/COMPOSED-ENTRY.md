@@ -223,6 +223,8 @@ and one comparison.
 | setup | `<tf> pattern <name>` | `m3.candles.<tf>.pattern(s)` | Field exists; form new |
 | setup | `<tf> cisd up\|down`, `[<tf>] in ote` | `m3.cisd` (`briefing.js:415`): a live CISD only (a `void`, `expired` or `weak` one is false); the OTE zone points its CISD's way | Field exists; form new |
 | setup | `swept <level name>` | `m3.sweeps` (`structure-events.js:71`) | Field exists; form new |
+| setup | `<tf> compression break up\|down` | `m3.compression.<tf>` (`compression.js`): `state` `expanding` the read's way, an expansion candle closed out of a box in the last `recentBars` candles, not back inside, not late; timed from that candle (`break.closedAt`), so the entry is a candle closed after it | Exists |
+| location | `<tf> box at <level name>` | `m3.compression.<tf>.box.levels`: a key level a live box (compressing or expanding) sits at. No direction | Exists |
 | bias | `regime <name>`, `day type <name>` | `m3.regime.primary`, `m3.today.dayType`; a hyphenated name reads as written (`regime trend-up` is `regime trend up`); trend-up points long, trend-down short | Exists |
 | location | `at <tf> fvg` (5m, 15m, 1h) | `m3.fvgs.<tf>`, what is left of each unfilled gap: it overlaps the trigger bar, or the base or next candle overlapped it and it lies within one ATR(14) of price (inside it: 0). No direction | Exists |
 | setup | `<tf> rejected\|broke <tf> fvg low\|high up\|down`, `<tf> touched <tf> fvg low\|high` | `m3.candles.<tf>.fvgRelations`: the completed candle against each gap's edge as the gap stood at the candle's open (an open gap's low and high, a partly filled one's unfilled part; `fvg-frames.js` `fvgEdgesAt`), the same relation rule as the key levels, read through the gap's side (`candle-facts.js` `gapRelation`): a bullish gap is rejected only up (the bounce) and broken only down through its low (the failure: a close beyond its far edge), a bearish gap the mirror; a close inside the gap is touched. A gap the candle fills still counts, so a failed gap is never a bounce. Uncapped; not a key level (no `levels` text, and no 4h rejection for D2's 4h tier); the candle line (not the event-driven 4h one) says its single strongest one in the read's word order (`; rejected 15m fvg high up (103)`) | Exists |
@@ -325,7 +327,9 @@ decide whether to trade.
 - **Stop.** The stated invalidation price must equal a briefing level on the
   losing side of the entry, within one tick: a completed candle's low or
   high on a named timeframe (`m3.candles.<tf>.l|h`), a confirmed swing
-  (`m3.swings`, `m3.liquidity.swingLows|swingHighs`), or a named key level.
+  (`m3.swings`, `m3.liquidity.swingLows|swingHighs`), a live compression
+  box's edge (`stop <tf> box low|high`, `m3.compression.<tf>.box`), or a
+  named key level.
   The stop is placed a buffer beyond it (D3). Stop ticks =
   ceil(|entry reference - stop| / tick), as `trade-plan` rounds today.
 - **Minimum stop.** The stop is at least a floor (D13), so a stop at the

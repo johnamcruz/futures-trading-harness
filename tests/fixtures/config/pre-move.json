@@ -1496,6 +1496,67 @@
   "composeHints.maxTries": {
    "value": 2000,
    "from": "new in fix/trend-moves-compose (the combinations the hints try for a whole that passes)"
+  },
+  "compression.frames": {
+   "value": [
+    3,
+    5,
+    15,
+    60
+   ],
+   "from": "new in feat/compression (the timeframes the compression facts are read on (3m, 5m, 15m, 1h; 5m from a 1m lane); the owner's \"Create this new compression skill and let's use it\", 2026-10-24)"
+  },
+  "compression.minBars": {
+   "value": 5,
+   "from": "new in feat/compression (the fewest back-to-back candles a box holds (a single inside bar is none); the owner's \"Create this new compression skill and let's use it\", 2026-10-24)"
+  },
+  "compression.maxBars": {
+   "value": 30,
+   "from": "new in feat/compression (the most candles a box looks back; the owner's \"Create this new compression skill and let's use it\", 2026-10-24)"
+  },
+  "compression.boxAtr": {
+   "value": 3,
+   "from": "new in feat/compression (a box's widest high-to-low, in the ATR(14) before it (picked on practice-train odd months, confirmed on even ones); the owner's \"Create this new compression skill and let's use it\", 2026-10-24)"
+  },
+  "compression.barAtr": {
+   "value": 1,
+   "from": "new in feat/compression (a box's widest mean candle range, in the ATR(14) before it (the same check); the owner's \"Create this new compression skill and let's use it\", 2026-10-24)"
+  },
+  "compression.convergeShare": {
+   "value": 0.6,
+   "from": "new in feat/compression (a converging (pennant) box: its second half's high-low at most this share of the first half's; the owner's \"Create this new compression skill and let's use it\", 2026-10-24)"
+  },
+  "compression.driftShare": {
+   "value": 0.5,
+   "from": "new in feat/compression (a drifting (flag) box: last close minus first open at least this share of its width; the owner's \"Create this new compression skill and let's use it\", 2026-10-24)"
+  },
+  "compression.expandRange": {
+   "value": 2,
+   "from": "new in feat/compression (an expansion candle's least range, in the box's mean candle range (the same check); the owner's \"Create this new compression skill and let's use it\", 2026-10-24)"
+  },
+  "compression.expandAtr": {
+   "value": 1,
+   "from": "new in feat/compression (an expansion candle's least range, in the ATR(14) before the box; the owner's \"Create this new compression skill and let's use it\", 2026-10-24)"
+  },
+  "compression.recentBars": {
+   "value": 3,
+   "from": "new in feat/compression (how many candles after the expansion candle the read still holds; the owner's \"Create this new compression skill and let's use it\", 2026-10-24)"
+  },
+  "compression.maxRunAtr": {
+   "value": 1,
+   "from": "new in feat/compression (late: price past the expansion candle's close by more than this many ATR; the owner's \"Create this new compression skill and let's use it\", 2026-10-24)"
+  },
+  "compression.levelBandAtr": {
+   "value": 0.25,
+   "from": "new in feat/compression (a key level at the box: inside it or within this many ATR of an edge; the owner's \"Create this new compression skill and let's use it\", 2026-10-24)"
+  },
+  "compression.maxLevels": {
+   "value": 3,
+   "from": "new in feat/compression (the most key levels a box names; the owner's \"Create this new compression skill and let's use it\", 2026-10-24)"
+  },
+  "compression.minBeyondAtr": {
+   "value": 0.1,
+   "from": "new in feat/compression (an expansion candle's least close beyond the box's edge, in the ATR(14) before the box: a poke of a tick or two is none; the owner's narrow-range reference, 2026-10-24)"
   }
  }
 }

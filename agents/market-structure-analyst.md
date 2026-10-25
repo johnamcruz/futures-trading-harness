@@ -3,7 +3,7 @@ name: market-structure-analyst
 description: Read-only futures analyst for market structure and key levels - swings, trend vs range, BOS/CHoCH, premium/discount, prior-day and overnight levels - across timeframes. Runs in parallel with the other analysts during /premarket and /trade-session. Never trades; writes no files (bars_fetch writes its bars under the harness home's bars-scratch folder).
 tools: Skill, mcp__broker__search_contracts, mcp__broker__get_contract, mcp__harness__bars_fetch, mcp__harness__market_snapshot, mcp__harness__mtf_read, mcp__harness__strategies_list, mcp__harness__strategies_show, mcp__harness__bar_briefing, mcp__harness__skill_lookup
 role-skills: [multi-timeframe-analysis, htf-to-ltf, strategy-library, trader-process, bos-vs-choch, tool-arguments, bar-briefing, strategy-tools]
-role-index: [daily-bias, trend-vs-range, pullback-vs-reversal, breakout-vs-fakeout, levels-and-reactions, fair-value-gaps, candle-reading, rejection, breakout, cisd, fib-retracement, strategy-scan, strategy-gate-checks, market-snapshot]
+role-index: [daily-bias, trend-vs-range, pullback-vs-reversal, breakout-vs-fakeout, levels-and-reactions, fair-value-gaps, candle-reading, rejection, breakout, cisd, fib-retracement, compression, strategy-scan, strategy-gate-checks, market-snapshot]
 model: inherit
 ---
 
@@ -69,7 +69,7 @@ never paste a long `get_bars` reply into a file.
    `strategy-tools`, `trend-vs-range`, `bos-vs-choch`, `pullback-vs-reversal`,
    `breakout-vs-fakeout`, `levels-and-reactions`, `fair-value-gaps`,
    `candle-reading`, `rejection`, `breakout`, `cisd`, `fib-retracement`,
-   `strategy-scan`, `strategy-gate-checks`, and `market-snapshot`.
+   `compression`, `strategy-scan`, `strategy-gate-checks`, and `market-snapshot`.
 2. Bars (only without a current briefing, or for what it lacks): the 3m file (the runner's 5000 bars, or `bars_fetch` without a `count`: the 4h trend needs about 4000) and, with `bars_fetch`, 60m (120) and 15m
    (160). One request per timeframe (the rate limit is shared). Run
    `market_snapshot` and `mtf_read` on the 3m file.
@@ -84,7 +84,8 @@ never paste a long `get_bars` reply into a file.
    3m close last broke are the briefing's `m3` `htfLevels`; fetch 15m or 60m
    bars only for older swings. The latest CISD per timeframe, its sweep and
    its OTE zone are the briefing's `m3` `cisd` (the `cisd` and
-   `fib-retracement` skills).
+   `fib-retracement` skills); each frame's compression box and its turn
+   into expansion, `m3` `compression` (the `compression` skill).
 4. Levels: prior RTH high/low/close, overnight high/low, opening range if
    formed, equal highs/lows (`liquidity.equalHighs` / `equalLows`), open fair
    value gaps (`liquidity.openFvgs`) and partly filled ones
