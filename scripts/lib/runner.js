@@ -894,7 +894,7 @@ function createRunner(deps) {
         continue;
       }
       const again = fresh.positions.find(x => x.contractId === p.contractId && isOpen(x));
-      let againNet = 0;
+      let againNet;
       try { againNet = again ? signedSize(again) : 0; } catch (_err) { continue; }
       if (againNet !== net || protectiveStops(fresh.orders, p.contractId, sign).reduce((n, o) => n + Number(o.size || 0), 0) !== covered) continue;
       acted = true;
