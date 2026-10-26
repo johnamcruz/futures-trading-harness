@@ -516,6 +516,24 @@ test('mock trading: always a bracket: the model may not cancel a leg or add a ta
   await runDay(w, { from: '2026-10-07T14:27:30Z', until: '2026-10-07T14:28:30Z', deps: { entryOrders: () => [rec] } });
   assert.deepStrictEqual(working(w), [], 'the runner cleaned the leg');
   assert.strictEqual(position(w), null);
+  // The runner's own adapter (its gateway: FTH_RUNNER_GATEWAY) may cancel a leg of an open position (a target_then_trail
+  // target, a close's leftovers); a model's gateway may not.
+  exchange.handle(w.state, 'place_order', { accountId: 7, contractId: MNQ_ID, side: 'buy', type: 'market', size: 1, stopLossBracket: { ticks: 40 }, takeProfitBracket: { ticks: 80 } }, {});
+  const targetLeg = working(w).find(o => o.type === 1);
+  const model = gatewayClient(w);
+  try {
+    assert.match((await attempt(model, 'cancel_order', { accountId: 7, orderId: targetLeg.id })).error, /\[bracket-leg\]/);
+  } finally {
+    model.close();
+  }
+  const runnerClient = openAdapter({ root: ROOT, env: w.env, timeoutMs: 20000 });
+  try {
+    await runnerClient.cancelOrder(7, targetLeg.id);
+  } finally {
+    runnerClient.close();
+  }
+  assert.ok(!working(w).some(o => o.id === targetLeg.id), 'the runner cancelled the target leg');
+  assert.ok(position(w) && working(w).some(o => o.type === 4), 'the position and its stop stay');
 });
 
 test('mock trading: the runner trails a winner\'s stop through the gateway (2R on, 0.5R back), and the trailed stop banks the profit', async () => {
