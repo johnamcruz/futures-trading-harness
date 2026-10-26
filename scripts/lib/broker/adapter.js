@@ -18,7 +18,7 @@
  *   accountBalance(accountId)              realized balance
  *   workingOrders(accountId, contractId)   working orders in the contract
  *   netPosition(accountId, contractId)     signed net size
- *   cancelOrder / modifyStop / closePosition
+ *   cancelOrder / modifyStop / resizeStop / closePosition
  *   fillsSince / ordersSince(accountId, start)   search_trades / search_orders since start
  *   journalAdd(entry)                      journal_add (the runner's plan and its factual reviews): the entry the server
  *                                          wrote, or throws
@@ -260,6 +260,11 @@ function createAdapter({ mcp, writeMcp = mcp }) {
      */
     async modifyStop(accountId, orderId, stopPrice, reason = null) {
       return outcome(await order('modify_order', { accountId: Number(accountId), orderId: Number(orderId), stopPrice, ...(reason ? { reason: String(reason) } : {}) }), `modify order ${orderId}`);
+    },
+
+    /** Cut a protective stop's size (only ever down: the gateway refuses more), so it can't reverse the position. */
+    async resizeStop(accountId, orderId, size, reason) {
+      return outcome(await order('modify_order', { accountId: Number(accountId), orderId: Number(orderId), size: Number(size), reason: String(reason) }), `modify order ${orderId}`);
     },
 
     /** Flatten a contract's position at market. */

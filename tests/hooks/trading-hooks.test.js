@@ -181,6 +181,55 @@ test('order gate wiring: a managed cycle (FTH_CYCLE_MANAGE, the runner\'s) refus
   assert.strictEqual(gate(orderPayload(), env).code, 0, 'unset: the same entry goes');
 });
 
+test('order gate wiring (hook): the bracket rule refuses a [protect] limit (a stand-alone target) [bracket-only]; a [protect] stop, a limit [exit] and a market [exit] go', () => {
+  const { env } = setup([]);
+  const r = gate(orderPayload({ ...EXIT_BASE, side: 'sell', type: 'limit', limitPrice: 21540, rationale: '[protect] target for the long' }), env);
+  assert.strictEqual(r.code, 2);
+  assert.match(r.stderr, /\[bracket-only\] A \[protect\] limit is a stand-alone target.*modify the bracket's stop\/target with modify_order/);
+  for (const input of [
+    { ...EXIT_BASE, side: 'sell', type: 'stop', stopPrice: 21480, rationale: '[protect] stop for the long at 21480' },
+    { ...EXIT_BASE, side: 'sell', type: 'limit', limitPrice: 21540, rationale: '[exit] take profit' },
+    { ...EXIT_BASE, side: 'sell', rationale: '[exit] flatten' },
+  ]) {
+    const ok = gate(orderPayload(input), env);
+    assert.strictEqual(ok.code, 0, `${input.rationale}: ${ok.stderr}`);
+  }
+});
+
+test('MCP gateway wiring: beside the working stop a [protect] target or a second [protect] stop is refused [bracket-only]; with no stop working (a lost bracket) the [protect] stop goes; [exit]s go', async () => {
+  const { spawn } = require('child_process');
+  const session = async (orders, calls) => {
+    const dir = tmpDir();
+    const env = {
+      PATH: process.env.PATH, HOME: dir, FAKE_POSITIONS: JSON.stringify([{ contractId: 'MNQ', type: 1, size: 1 }]), FAKE_ORDERS: JSON.stringify(orders),
+      FTH_BROKERS_FILE: FAKE_BROKERS, FAKE_BROKER_API_URL: 'https://api.fake-broker.test', FAKE_BROKER_ALLOWED_ACCOUNT_IDS: '1,7', FAKE_BROKER_JOURNAL: writeJournal(dir, []),
+      FTH_NO_ENTRY_WINDOWS: '', FTH_ENTRY_HOURS: '', FTH_TEST_NOW: TEST_NOW, NODE_ENV: 'test', FTH_GATE_LOG: path.join(dir, 'gate.jsonl'),
+    };
+    const gw = spawn(process.execPath, [path.join(REPO, 'scripts', 'mcp-gateway.js'), '--', process.execPath, path.join(REPO, 'tests', 'fixtures', 'fake-mcp-server.js')], { env });
+    let out = '';
+    gw.stdout.on('data', c => { out += c; });
+    gw.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: {} })}\n`);
+    calls.forEach((args, i) => gw.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id: i + 2, method: 'tools/call', params: { name: 'place_order', arguments: args } })}\n`));
+    gw.stdin.end();
+    await new Promise(resolve => gw.on('close', resolve));
+    const byId = Object.fromEntries(out.trim().split('\n').filter(Boolean).map(l => JSON.parse(l)).map(x => [x.id, x]));
+    return calls.map((_c, i) => byId[i + 2].result.content[0].text);
+  };
+  const stopOrder = { id: 9, contractId: 'MNQ', side: 1, type: 4, size: 1, stopPrice: 21480 };
+  const protectStop = { ...EXIT_BASE, side: 'sell', type: 'stop', stopPrice: 21485, rationale: '[protect] stop for the long at 21485' };
+  const exitLimit = { ...EXIT_BASE, side: 'sell', type: 'limit', limitPrice: 21540, rationale: '[exit] take profit' };
+  const exitMarket = { ...EXIT_BASE, side: 'sell', rationale: '[exit] flatten' };
+  // One session each for the exits: an [exit] the gateway forwards counts as pending for its position (pendingState).
+  const [stop2, target, exitL] = await session([stopOrder], [protectStop, { ...exitLimit, rationale: '[protect] target for the long' }, exitLimit]);
+  const [exitM] = await session([stopOrder], [exitMarket]);
+  assert.match(target, /\[bracket-only\] A \[protect\] limit is a stand-alone target/);
+  assert.match(stop2, /\[bracket-only\] The position \(1\) already has working stops for 1.*modify the bracket's stop\/target with modify_order/i);
+  assert.strictEqual(exitL, 'forwarded:tools/call:place_order', 'a limit [exit] beside the stop');
+  assert.strictEqual(exitM, 'forwarded:tools/call:place_order', 'a market [exit] beside the stop');
+  const [lost] = await session([], [protectStop]);
+  assert.strictEqual(lost, 'forwarded:tools/call:place_order', 'no working stop: the [protect] stop goes (risk reduction)');
+});
+
 test('order gate: a setup tag that is not first is refused with where it goes', () => {
   const { env } = setup([{ ts: minutesAgo(5, new Date(TEST_NOW)), kind: 'plan', contractId: entryOrder().contractId, text: 'plan' }]);
   const r = gate(orderPayload(entryOrder({ rationale: 'long setup:orb, stop 21480' })), env);

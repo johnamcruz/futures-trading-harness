@@ -28,6 +28,21 @@ test('[exit] and [protect] orders are never gated', () => {
   assert.deepStrictEqual(r.violations, []);
 });
 
+test('the bracket rule in the hook: a [protect] limit (a stand-alone target) is refused, hard; [protect] stops, [exit] limits and market exits go', () => {
+  const skipAll = { ...config, skipChecks: new Set(['bracket-only']) };
+  for (const type of ['limit', 'LIMIT', 'join_bid', 'join_ask', 1, 6, '7']) {
+    const r = evaluate(entryOrder({ side: 'sell', type, limitPrice: 21540, rationale: '[protect] target for the long', stopLossBracket: undefined }), []);
+    assert.strictEqual(r.intent, 'risk-reducing', String(type));
+    assert.deepStrictEqual(checks(r), ['bracket-only'], String(type));
+    assert.match(r.violations[0].message, /modify the bracket's stop\/target with modify_order/);
+    assert.deepStrictEqual(checks(evaluate(entryOrder({ side: 'sell', type, limitPrice: 21540, rationale: '[protect] t', stopLossBracket: undefined }), [], { config: skipAll })), ['bracket-only'], 'never skippable');
+  }
+  // The hook can't see the working stops: a [protect] stop goes here (the gateway judges it), as do exits of any type.
+  for (const [type, rationale] of [['stop', '[protect] stop'], ['trailing_stop', '[protect] trail'], ['market', '[protect] out now'], ['limit', '[exit] scale out'], ['market', '[exit] flatten']]) {
+    assert.deepStrictEqual(evaluate(entryOrder({ side: 'sell', type, stopPrice: 21480, limitPrice: 21540, rationale, stopLossBracket: undefined }), []).violations, [], `${type} ${rationale}`);
+  }
+});
+
 test('entry needs a setup tag, a stop, and a fresh plan', () => {
   const r = evaluate(entryOrder({ rationale: 'looks strong, going long here', stopLossBracket: undefined }), []);
   assert.deepStrictEqual(checks(r), ['plan-required', 'setup-tag', 'stop-defined']);

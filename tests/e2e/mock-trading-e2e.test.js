@@ -447,6 +447,46 @@ test('mock trading: a winner at its target: the stop goes with it (OCO), the pro
   assert.strictEqual(exit.profitAndLoss, 2 * t.risk * 2, '2R on MNQ at $2 a point');
 });
 
+test('mock trading: an orphan target (2021-05-11): a stand-alone [protect] target is refused up front; one already working when the stop fills after the session window is cancelled on the next bar, so no new position opens', async () => {
+  // A short with its bracket stop, 11:50 ET; the runner's session ends 12:00 ET (16:00Z).
+  const w = world('2026-10-07T15:50:00Z');
+  exchange.setPrice(w.state, MNQ_ID, 21500);
+  exchange.handle(w.state, 'place_order', { accountId: 7, contractId: MNQ_ID, side: 'sell', type: 'market', size: 1, stopLossBracket: { ticks: 40 } }, {});
+  const stop = working(w).find(o => o.type === 4);
+  assert.strictEqual(stop.stopPrice, 21510);
+  const gw = gatewayClient(w);
+  try {
+    // Up front, through the gateway: a [protect] target beside the bracket stop, and a second [protect] stop, are refused.
+    const target = await attempt(gw, 'place_order', { accountId: 7, contractId: 'MNQ', side: 'buy', type: 'limit', limitPrice: 21450, size: 1, rationale: '[protect] target for the short at 21450' });
+    assert.ok(!target.ok && /\[bracket-only\]/.test(target.error), target.error);
+    const second = await attempt(gw, 'place_order', { accountId: 7, contractId: 'MNQ', side: 'buy', type: 'stop', stopPrice: 21508, size: 1, rationale: '[protect] stop for the short at 21508' });
+    assert.ok(!second.ok && /\[bracket-only\].*modify the bracket's stop\/target with modify_order/i.test(second.error), second.error);
+    assert.ok(!exchange.read(w.state).calls.some(c => c.tool === 'place_order' && c.args.type !== 'market'), 'neither reached the broker');
+    // The bracket's own stop is adjusted with modify_order instead.
+    assert.ok((await attempt(gw, 'modify_order', { accountId: 7, orderId: stop.id, stopPrice: 21508 })).ok);
+  } finally {
+    gw.close();
+  }
+  // One got there anyway (placed before this rule, or outside the harness): a stand-alone buy limit, no OCO with the stop.
+  exchange.handle(w.state, 'place_order', { accountId: 7, contractId: MNQ_ID, side: 'buy', type: 'limit', limitPrice: 21450, size: 1 }, {});
+  const orphan = working(w).find(o => o.type === 1);
+  const r = await runDay(w, {
+    from: '2026-10-07T15:51:30Z', until: '2026-10-07T16:40:00Z', cfg: { sessions: ['09:30-12:00@America/New_York'] },
+    before: ms => {
+      // 12:02 ET: up through the stop (flat); 12:30 ET: down through the old target.
+      if (ms >= Date.parse('2026-10-07T16:02:00Z') && ms < Date.parse('2026-10-07T16:30:00Z')) exchange.setPrice(w.state, MNQ_ID, 21512);
+      if (ms >= Date.parse('2026-10-07T16:30:00Z')) exchange.setPrice(w.state, MNQ_ID, 21440);
+    },
+  });
+  assert.strictEqual(position(w), null, `no position opened: ${r.logs.filter(l => /ERROR|leftover/.test(l)).join(' | ')}`);
+  assert.deepStrictEqual(working(w), []);
+  const cancel = exchange.read(w.state).calls.find(c => c.tool === 'cancel_order' && Number(c.args.orderId) === orphan.id);
+  assert.ok(cancel, 'the runner cancelled the leftover target');
+  assert.ok(r.logs.some(l => new RegExp(`cancelled leftover order ${orphan.id} `).test(l)), r.logs.join('\n'));
+  assert.ok(!r.runs.some(x => (x[0] === 'trade' || x[0] === 'manage') && x[1] >= '2026-10-07T16:00:30'), 'housekeeping only after the window: no trade cycle');
+  assert.strictEqual(exchange.read(w.state).fills.length, 2, 'the entry and its stop: nothing else filled');
+});
+
 test('mock trading: the runner trails a winner\'s stop through the gateway (2R on, 0.5R back), and the trailed stop banks the profit', async () => {
   const at = new Date(Date.parse(FIRED_BAR) + STEP + 20000);
   const w = world(at.toISOString());

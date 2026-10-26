@@ -11,6 +11,7 @@
  * - Entries are refused while a position in the contract is open (no adds,
  *   no flips disguised as entries), or while orders are working in it.
  * - A protective stop may only be moved closer to the market, never away.
+ * - No separate `[protect]` order beside the position's working stops (bracket-rule.js): modify the bracket instead.
  * - Loss streak and daily loss count come from real closing fills
  *   (profitAndLoss), not from journal tags.
  */
@@ -23,6 +24,7 @@ const { positionSize, signedSize } = require('./positions');
 // entry waits while an NQ position is open, and the other way around.
 const contractRoot = id => familyRoot(rootOf(id));
 const { isRiskReducing } = require('./order-gate');
+const { protectRefusal } = require('./bracket-rule');
 const { normalizeBars } = require('./indicators');
 const { classifyRegime, regimeFits } = require('./regime');
 const { PENDING_ORDER_TTL_MS } = require('./gate-timing');
@@ -202,7 +204,12 @@ function evaluateAccount({ input = {}, positions, orders, trades, now = new Date
       } else {
         const typeId = ORDER_TYPE_IDS[String(input.type || '').toLowerCase()];
         const group = STOP_TYPES.has(typeId) ? STOP_TYPES : LIMIT_TYPES.has(typeId) ? LIMIT_TYPES : null;
-        if (group && restingSize(orders, input.contractId, sideSign, group) + size > Math.abs(net)) {
+        // The bracket rule first (bracket-rule.js): no separate [protect] beside the position's working stops; the
+        // agent modifies the bracket instead. Hard (never skippable); it says what to do where the stacking check
+        // below would only say no.
+        const why = protectRefusal({ rationale: input.rationale, type: input.type, covered: restingSize(orders, input.contractId, sideSign, STOP_TYPES), size: net });
+        if (why) violations.push({ check: 'bracket-only', message: why });
+        else if (group && restingSize(orders, input.contractId, sideSign, group) + size > Math.abs(net)) {
           add('exposure', `Resting ${group === STOP_TYPES ? 'stop' : 'limit'} orders plus this one would exceed the open ${root} position (${Math.abs(net)}); they could fill into a new position.`);
         }
       }

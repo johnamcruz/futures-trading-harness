@@ -18,13 +18,18 @@
  *   premarket  the config's premarketAt (when premarket runs);
  *   eod        end of day (eodAt, or earlyCloseEodAt on an early close).
  *
+ * With `manage` (the replay driver's), the bars outside the sessions from the day's first trade time to end of day are
+ * points too, marked `manage: true`: the live runner polls each of them for its housekeeping (leftover orders on a flat
+ * contract, trailing stops, protection: never a trade cycle), so the driver steps one while a position or working order
+ * is open, as live, and skips them once the account is flat with nothing working.
+ *
  * Exchange holidays and closed days (the harness calendar: the config's
  * closedDates, which validateConfig merges with the built-in CME calendar) and
  * days with no session (weekends) have none. Each point is
  * { t: Date, kind, day } with `day` the trading day (YYYY-MM-DD, the New York
  * date it ends on), sorted by time.
  *
- *   decisionPoints(cfg, { start, end, everyNth, delayMs })
+ *   decisionPoints(cfg, { start, end, everyNth, delayMs, manage })
  *   tradingDays(cfg, { start, end })   [{ day, start, skipped }] (skipped: why a day has no points)
  *   holidayDates(start, end)           { closed, early } from cmeHolidays for years the built-in calendar lacks
  *   isTradeTime(cfg, t)                whether t (a bar's close plus barDelaySeconds) is a trade decision time:
@@ -64,7 +69,7 @@ function laneCloses(lanes, from, to) {
   return [...closes.entries()].sort((a, b) => a[0] - b[0]);
 }
 
-function decisionPoints(cfg, { start, end, everyNth = 1, delayMs = (cfg.barDelaySeconds || 0) * 1000 }) {
+function decisionPoints(cfg, { start, end, everyNth = 1, delayMs = (cfg.barDelaySeconds || 0) * 1000, manage = false }) {
   const lanes = tradingLanes(cfg);
   const multi = lanes.length > 1;
   const windows = parseWindows(cfg.sessions.join(',')).windows;
@@ -79,7 +84,13 @@ function decisionPoints(cfg, { start, end, everyNth = 1, delayMs = (cfg.barDelay
       const t = new Date(close + delayMs);
       // At or after end of day the runner runs end of day, not a bar's cycle.
       if (sessionMinute(t) >= eodMin || tradingDayStart(t).getTime() !== d.getTime()) break;
-      if (!inMarketHours(t) || !windows.some(w => inWindow(t, w))) continue;
+      if (!inMarketHours(t)) continue;
+      if (!windows.some(w => inWindow(t, w))) {
+        // `manage`: a bar outside the sessions after the day's first trade time, which the live runner polls for its
+        // housekeeping (autotrader.js decide: 'housekeep'), stepped by the driver only while something is open.
+        if (manage && n > 0 && inside(t)) points.push(multi ? { t, kind: 'trade', day, lanes: tfs, manage: true } : { t, kind: 'trade', day, manage: true });
+        continue;
+      }
       n += 1;
       if ((n - 1) % everyNth !== 0) continue;
       if (inside(t)) points.push(multi ? { t, kind: 'trade', day, lanes: tfs } : { t, kind: 'trade', day });

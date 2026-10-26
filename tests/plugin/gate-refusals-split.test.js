@@ -40,6 +40,7 @@ const ALLOWED = [
 
 // Rows added since the split (a refusal the gate gained later), each with its reason: the only rows not in the old table.
 const ADDED_ROWS = [
+  { row: '`[bracket-only] …`', reason: 'fix/orphan-orders (owner-approved 2026-10-26: "always manage risk using stop loss brackets and adjust it accordingly using modify order"): a separate [protect] beside the brackets, a new refusal' },
   { row: '`[combine] <account>: N losing trades in a row this session, at the loss streak stop (loss_streak_stop N): no new entries until the next session`',
     reason: 'feat/prop-portfolio-missing (owner-approved): the account rulebook\'s loss streak stop, a new [combine] refusal' },
   { row: '`[prop-account-attempt] account <id> is a <profile> prop account and no <profile> attempt is running` (or its marker or profile is invalid)',
@@ -56,7 +57,7 @@ const ADDED_ROWS = [
 const ROWS = {
   'gate-refusals': ['Blocked by trading harness', 'order-pending', 'replay-clock', 'stop-defined', 'account-required', 'contract-specs', 'contract-specs', 'contract-specs', 'order-pending', 'loss-streak', 'briefing-age'],
   'gate-refusals-limits': ['combine', 'combine', 'combine', 'prop-account-attempt', 'policy', 'min-contracts', 'strategy', 'strategy', 'strategy', 'strategy', 'max-order-size', 'max-order-size', 'max-risk', 'max-risk'],
-  'gate-refusals-positions': ['exposure', 'order gate could not run', 'partial-close', '... once recent orders fill', 'modify-entry', 'order gate could not run', 'modify-size', 'composed-reprice'],
+  'gate-refusals-positions': ['exposure', 'order gate could not run', 'partial-close', '... once recent orders fill', 'modify-entry', 'order gate could not run', 'modify-size', 'bracket-only', 'composed-reprice'],
   'gate-refusals-cycle': ['roles-ran', 'phase2-facts', 'phase2-size'],
 };
 

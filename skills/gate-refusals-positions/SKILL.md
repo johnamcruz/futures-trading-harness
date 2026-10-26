@@ -23,6 +23,7 @@ description: Use when the gate refuses managing a position (an exit by contract 
 | `[modify-entry] ... once recent orders fill` | The position this stop or target worked was just closed (or is about to be) by a recent order | Don't move it; cancel the leftover order once the account reads flat. |
 | `order gate could not run (position … has no valid size …)` | The broker returned a position without a whole-number size: the account can't be read | No orders but `close_position` (never gated). Tell the user; it holds until the broker reports a size. |
 | `[modify-size] …` | A size change that isn't an `[exit]`/`[protect]` decrease, or a stop cut leaving part of the position unprotected | To add, a new order; to cut a stop, reduce the position first, then the stop. |
+| `[bracket-only] …` | A separate `[protect]` beside the brackets: a limit (a stand-alone target), or a second stop while stops cover the position. Hard | Modify the bracket's stop/target with `modify_order`; out now: `[exit]` or a close. No working stop: the `[protect]` stop goes. |
 | `[composed-reprice] …` | A composed entry's limit moved worse than its record's entry | Keep it, improve it, or cancel it. |
 
 ## Examples

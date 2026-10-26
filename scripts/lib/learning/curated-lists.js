@@ -374,7 +374,8 @@ const inside = (windows, ms) => windows.some(w => ms > w.from && ms <= w.to);
 function curatedPoints(points, curated, delayMs = 0) {
   if (!curated.windows.length) return [];
   const close = p => p.t.getTime() - delayMs;
-  const kept = p => p.kind === 'trade' && inside(curated.windows, close(p));
+  // A manage point (outside the runner's sessions: schedule.js decisionPoints) is never a window's trade time.
+  const kept = p => p.kind === 'trade' && !p.manage && inside(curated.windows, close(p));
   const days = new Set(points.filter(kept).map(p => p.day));
   const first = curated.windows[0].from;
   // Before the first window only its day's premarket and end of day run (no trade time: none closed in a window).

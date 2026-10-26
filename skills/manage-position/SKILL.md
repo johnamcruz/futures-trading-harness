@@ -14,7 +14,19 @@ description: Use when a position is open - its stop, the plan's management, the 
 - **If a position is open, manage it and end the cycle**: confirm the protective stop is working (`list_open_orders`); an entry order on the position's side (one that would add to it) still working without a stop bracket (one the gate never checked, e.g. placed outside the harness; tell by its `order_placed` record, as for a flat account below) is cancelled first, and the cancel confirmed, since a fill would add size beyond the stop. The position's own stop and target (bracket legs, `[protect]` and `[exit]` orders, on the opposite side) are never cancelled here; apply
   the plan's management (breakeven, trail, scale-out) through the
   trade-executor role, and journal any change. No new entries while a position
-  is open. Protective stops move toward the market only. A rules strategy
+  is open. Protective stops move toward the market only.
+- **Risk is the entry's brackets; adjust them, never add beside them**: the
+  stop (and the target, where the exit plan has one) are the entry's own
+  `stopLossBracket` / `takeProfitBracket` legs. Move or resize them with
+  `modify_order` on those orders. While a working stop covers the position,
+  no new `[protect]` stop, and never a `[protect]` limit (a stand-alone
+  target): nothing links it to the stop, so when one fills the other keeps
+  working and can open a new, unprotected position. Under a `trail` or
+  `target_then_trail` exit the runner owns the exit: no target order. The
+  gate refuses both (`[bracket-only]`). A `[protect]` stop goes only when no
+  working stop covers the position (a lost bracket), for the uncovered size.
+  To take profit or get out now: an `[exit]`, `partial_close_position` or
+  `close_position`. A rules strategy
   (none active) whose exit trails (`exit` in the scan): the runner already
   moved the stop on this bar: don't touch it unless you are exiting.
   **Interactive, no runner**: the brackets are the whole exit, a composed

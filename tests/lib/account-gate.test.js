@@ -37,9 +37,42 @@ test('[protect] stops and limits may not stack beyond the position (one of each 
   const stop = order({ side: 'sell', type: 'stop', stopPrice: 1, rationale: '[protect] stop' });
   const restingStop = [{ contractId: CONTRACT, side: 1, type: 4, size: 1 }];
   assert.deepStrictEqual(evaluateAccount({ input: stop, positions: long1, orders: [], config }), []);
-  assert.match(evaluateAccount({ input: stop, positions: long1, orders: restingStop, config })[0].message, /Resting stop/);
-  const target = order({ side: 'sell', type: 'limit', limitPrice: 2, rationale: '[protect] target' });
+  assert.match(evaluateAccount({ input: stop, positions: long1, orders: restingStop, config })[0].message, /already has working stops for 1/);
+  // A limit beside the stop is an [exit] (a [protect] limit is a stand-alone target: the bracket rule below).
+  const target = order({ side: 'sell', type: 'limit', limitPrice: 2, rationale: '[exit] target' });
   assert.deepStrictEqual(evaluateAccount({ input: target, positions: long1, orders: restingStop, config }), []);
+});
+
+test('the bracket rule: no separate [protect] beside the working stop (modify the bracket); a lost bracket still gets its stop', () => {
+  const stopIn = (extra = {}) => order({ side: 'sell', type: 'stop', stopPrice: 1, rationale: '[protect] stop', ...extra });
+  const stop1 = { contractId: CONTRACT, side: 1, type: 4, size: 1 };
+  const long2 = [{ contractId: CONTRACT, type: 1, size: 2 }];
+  const run = (input, positions, orders, cfg = config) => evaluateAccount({ input, positions, orders, config: cfg });
+  // A [protect] limit (a stand-alone target), by name or by the broker's numeric type, beside the stop: refused.
+  for (const type of ['limit', 'join_ask', 'join_bid', 1, '7']) {
+    const v = run(order({ side: 'sell', type, limitPrice: 2, rationale: '[protect] target' }), long1, [stop1]);
+    assert.deepStrictEqual(checks(v), ['bracket-only'], String(type));
+    assert.match(v[0].message, /modify the bracket's stop\/target with modify_order/);
+  }
+  // A second [protect] stop when the stops already cover the position: refused, and never skippable.
+  const skipAll = { ...config, skipChecks: new Set(['bracket-only', 'exposure']) };
+  for (const type of ['stop', 'trailing_stop']) assert.deepStrictEqual(checks(run(stopIn({ type }), long2, [{ ...stop1, size: 2 }])), ['bracket-only'], type);
+  assert.deepStrictEqual(checks(run(stopIn({ size: 1 }), long2, [{ ...stop1, size: 2 }], skipAll)), ['bracket-only'], 'hard');
+  assert.deepStrictEqual(checks(run(order({ side: 'sell', type: 'limit', limitPrice: 2, rationale: '[protect] t' }), long1, [stop1], skipAll)), ['bracket-only'], 'hard');
+  // Risk reduction always goes: a [protect] stop with no working stop (a lost bracket), or for the part no stop covers.
+  assert.deepStrictEqual(run(stopIn(), long1, []), [], 'no stop working');
+  assert.deepStrictEqual(run(stopIn(), long2, [stop1]), [], 'one of two uncovered');
+  // A stop on another month, or on the position's own side (an entry's), covers nothing here.
+  assert.deepStrictEqual(run(stopIn(), long1, [{ ...stop1, contractId: 'MNQ:2027-03' }]), [], 'another month');
+  assert.deepStrictEqual(run(stopIn(), long1, [{ ...stop1, side: 0 }]), [], 'not protective');
+  // An [exit] (market or limit, whole or part), and a market [protect], go beside the stop.
+  assert.deepStrictEqual(run(order({ side: 'sell', rationale: '[exit] out' }), long1, [stop1]), []);
+  assert.deepStrictEqual(run(order({ side: 'sell', type: 'limit', limitPrice: 2, rationale: '[exit] scale out' }), long2, [{ ...stop1, size: 2 }]), []);
+  assert.deepStrictEqual(run(order({ side: 'sell', rationale: '[protect] out at market' }), long1, [stop1]), []);
+  // A short: its buy-side stop covers it.
+  const short1 = [{ contractId: CONTRACT, type: 2, size: 1 }];
+  assert.deepStrictEqual(checks(run(order({ side: 'buy', type: 'stop', stopPrice: 9, rationale: '[protect] stop' }), short1, [{ ...stop1, side: 0 }])), ['bracket-only']);
+  assert.deepStrictEqual(run(order({ side: 'buy', type: 'stop', stopPrice: 9, rationale: '[protect] stop' }), short1, []), []);
 });
 
 test('a refused config file (config.configCritical): every entry is refused with the critical error, never skippable; exits and stops still go', () => {

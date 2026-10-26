@@ -43,6 +43,21 @@ test('decision points: every closed bar in the sessions, polled after the close,
   assert.deepStrictEqual(pre.map(p => `${p.kind}@${p.t.toISOString()}`), ['premarket@2026-10-07T12:00:00.000Z', 'trade@2026-10-07T12:00:00.000Z', 'trade@2026-10-07T12:03:00.000Z']);
 });
 
+test('decision points with manage (the driver\'s): the bars outside the sessions from the day\'s first trade time to end of day, marked manage', () => {
+  const cfg = cfgOf({ sessions: ['09:30-12:00@America/New_York'], barDelaySeconds: 2 });
+  const span = { start: iso('2026-10-06T23:00:00Z'), end: iso('2026-10-07T21:00:00Z') };
+  const plain = decisionPoints(cfg, span);
+  const all = decisionPoints(cfg, { ...span, manage: true });
+  assert.ok(!plain.some(p => p.manage), 'off by default: every other caller sees what it saw');
+  assert.deepStrictEqual(all.filter(p => !p.manage), plain, 'the trade, premarket and end of day points unchanged');
+  const managed = all.filter(p => p.manage);
+  assert.ok(managed.every(p => p.kind === 'trade' && p.day === '2026-10-07'));
+  assert.strictEqual(managed[0].t.toISOString(), '2026-10-07T16:00:02.000Z', 'the first poll outside the 09:30-12:00 window (the 11:57 bar, polled at 12:00:02)');
+  assert.strictEqual(managed.at(-1).t.toISOString(), '2026-10-07T19:48:02.000Z', 'the last before end of day');
+  assert.strictEqual(managed.length, (15 * 60 + 48 - 12 * 60) / 3 + 1);
+  assert.ok(!managed.some(p => p.t < iso('2026-10-07T13:30:00Z')), 'none before the day\'s first trade time (overnight)');
+});
+
 test('decision points: holidays, weekends and early closes from the harness calendar', () => {
   const cfg = cfgOf({});
   // Thanksgiving 2026-11-26 (closed) and the day after (early close: end of day 12:50 ET).
@@ -232,6 +247,32 @@ test('store: a step\'s cycle logs and gate refusals, from the run home\'s logs',
   assert.strictEqual(store.touchedSince(home, Date.now() + 1000), false);
   fs.writeFileSync(path.join(home, 'autotrader-state.json'), '{}');
   assert.strictEqual(store.touchedSince(home, Date.now() - 1000), true);
+});
+
+test('driver: after the session window, a bar is stepped (the live runner\'s housekeeping poll) while a position or working order is open; once flat with nothing working, none until end of day', async () => {
+  const w = userWorld({ start: '2026-10-07T15:50:00Z', end: '2026-10-07T19:53:00Z', autotrader: { ...replayConfig('/x').autotrader, sessions: ['09:30-12:00@America/New_York'] } });
+  seedRunHome(w.run, { root: ROOT, userEnv: w.env });
+  const calls = [];
+  // Open (the short and its stop, then the leftover target) until the runner's 12:06 step cancels the target.
+  let flatFrom = Infinity;
+  const opens = [];
+  const deps = {
+    serverCheck: async () => null,
+    async open(env) { const at = Date.parse(env.FTH_REPLAY_NOW); opens.push(at); return at < flatFrom; },
+    async step(point) {
+      calls.push(`${point.kind}${point.manage ? '(manage)' : ''}@${point.t.toISOString().slice(11, 19)}`);
+      if (point.t.toISOString().startsWith('2026-10-07T16:06')) flatFrom = point.t.getTime() + 1;
+      if (point.kind === 'eod') fs.writeFileSync(path.join(w.run.paths.runHome, 'autotrader-state.json'), JSON.stringify({ day: point.day, eodDone: true }));
+      return { code: 0, output: `REPLAY STEP ${JSON.stringify({ asked: point.kind, ran: point.kind === 'eod' ? [{ action: 'eod', ok: true, result: 'CYCLE RESULT: eod' }] : [] })}\n` };
+    },
+    async trades() { return []; },
+  };
+  const r = await runReplay({ run: w.run, baseEnv: w.env, root: ROOT, deps });
+  assert.strictEqual(r.done, true);
+  assert.deepStrictEqual(calls.filter(c => c.startsWith('trade(manage)')), ['trade(manage)@16:00:02', 'trade(manage)@16:03:02', 'trade(manage)@16:06:02'], `flat at 16:09: no more steps until end of day: ${calls.join(' ')}`);
+  assert.strictEqual(calls.at(-1), 'eod@19:50:00');
+  assert.ok(calls.some(c => c === 'trade@15:57:02'), 'the window\'s own bars as before');
+  assert.strictEqual(opens.filter(t => t >= iso('2026-10-07T16:09:00Z').getTime()).length, 1, 'one check finds it flat, then the day\'s manage points are skipped');
 });
 
 test('driver: one step per decision time at its time, a line each, end of day retried until flat, resume', async () => {

@@ -502,9 +502,29 @@ function createRunner(deps) {
     // When no cycle may run (kill switch, outside the sessions), a pending
     // entry that fills would have no one to manage it: cancel those too.
     const entries = noCycles ? new Set() : entryOrderIds();
+    // Each cancel on its own: one the broker refuses, loses or answers late never skips the others (or the rest of the
+    // housekeeping); the next bar reads the account again and retries what is still working.
     for (const o of orders.filter(x => famOf(x.contractId) === root && !entries.has(Number(x.id)))) {
-      await client.cancelOrder(cfg.account, o.id);
-      log(`${item.symbol}: cancelled leftover order ${o.id} (type ${o.type}, side ${o.side}, size ${o.size}) on a flat ${root} position`);
+      try {
+        await client.cancelOrder(cfg.account, o.id);
+        log(`${item.symbol}: cancelled leftover order ${o.id} (type ${o.type}, side ${o.side}, size ${o.size}) on a flat ${root} position`);
+      } catch (err) {
+        log(`${item.symbol}: could not cancel leftover order ${o.id} on a flat ${root} position (${err.message}); the next bar retries`, 'error');
+        emit('leftover_cancel_failed', { symbol: item.symbol, orderId: o.id, error: err.message });
+      }
+    }
+  }
+
+  /** After a refused stop move: the account read again; a flat root has its leftover orders cancelled now. */
+  async function reconcileAfterRefusedMove(item, err) {
+    try {
+      const fresh = await client.accountState(cfg.account);
+      const root = famOf(item.contractId);
+      if (fresh.positions.some(p => famOf(p.contractId) === root && isOpen(p))) return;
+      log(`${item.symbol}: the stop move was refused (${err.message}) and the ${root} position reads flat: its bracket filled or was cancelled; cancelling the leftovers`, 'error');
+      await cleanupFlat(item, fresh);
+    } catch (e) {
+      log(`${item.symbol}: could not re-read the account after a refused stop move (${e.message}); the next bar reconciles`, 'error');
     }
   }
 
@@ -664,6 +684,17 @@ function createRunner(deps) {
     if (sign * (target - resting) < tick - 1e-9) return;
     if (Number(stopOrder.size) > Number(p.size)) {
       log(`${item.symbol}: trail: stop ${stopOrder.id} (size ${stopOrder.size}) is bigger than the position (${p.size}); not moving it toward the market`, 'error');
+      // Anti-flip: a stop bigger than the position would reverse it when it fires. Cut to the position's size (the
+      // bracket order itself, with modify_order: never a new order); the move waits for the next bar's read.
+      if (typeof client.resizeStop === 'function' && Number(p.size) > 0) {
+        try {
+          await client.resizeStop(cfg.account, stopOrder.id, Number(p.size), `[protect] stop cut to the position's size ${p.size}`);
+          log(`${item.symbol}: trail: stop ${stopOrder.id} cut from ${stopOrder.size} to the position's size ${p.size}`);
+          emit('stop_resized', { symbol: item.symbol, contractId: cid, orderId: stopOrder.id, from: Number(stopOrder.size), to: Number(p.size) });
+        } catch (err) {
+          log(`${item.symbol}: trail: could not cut stop ${stopOrder.id} to ${p.size} (${err.message}); the next bar retries`, 'error');
+        }
+      }
       return;
     }
     // Never a stop that isn't a price (a broken exit plan gives NaN): the broker's stop stays where it is.
@@ -672,7 +703,14 @@ function createRunner(deps) {
       emit('stop_not_moved', { symbol: item.symbol, contractId: cid, setup: t.setup, resting, target: String(target) });
       return;
     }
-    await client.modifyStop(cfg.account, stopOrder.id, target);
+    try {
+      await client.modifyStop(cfg.account, stopOrder.id, target);
+    } catch (err) {
+      // A refused move ("order not found" or the like) may mean the bracket's stop filled or was cancelled: read the
+      // account again at once and, flat, cancel the leftovers now (never a dead order retried every bar).
+      await reconcileAfterRefusedMove(item, err);
+      throw err;
+    }
     emit('stop_moved', { symbol: item.symbol, contractId: cid, setup: t.setup, from: resting, to: target, peakR, barsHeld });
     save({ ...trails[item.contractId], stop: target });
     log(`${item.symbol}: trail: stop ${resting} -> ${target} (peak ${peakR.toFixed(2)}R)`);

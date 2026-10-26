@@ -372,7 +372,9 @@ async function replayLoop({ run, baseEnv = process.env, root, deps = defaultDeps
   // other time from the first window on (later days included) is stepped only while a position or working order is
   // open (managed every bar, as practice does), checked at each day's first, and skipped once flat until the next
   // window; the broker's fills and brackets work through the gaps.
-  const all = decisionPoints(cfg, { start: run.start, end: run.end, everyNth: run.everyNth });
+  // `manage`: the bars outside the sessions the live runner polls for housekeeping (a leftover target cancelled once its
+  // stop filled, a trailed stop), stepped below only while a position or working order is open.
+  const all = decisionPoints(cfg, { start: run.start, end: run.end, everyNth: run.everyNth, manage: true });
   // A combine run: only its attempts' days (the days between them have no step).
   // The training loop's stepped windows (replay/step-windows.js): stepped as a curated list's windows are, nothing else.
   const windowed = run.curated || run.stepWindows || null;
