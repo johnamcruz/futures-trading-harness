@@ -129,6 +129,9 @@ const MAX_CONSECUTIVE_LOSSES = G.maxConsecutiveLosses;
 
 function loadConfig(env = process.env) {
   return {
+    // The runner's own gateway (broker/adapter.js openAdapter sets FTH_RUNNER_GATEWAY on that process only): its
+    // cleanups may cancel bracket legs (account-gate.js evaluateCancel); a model's gateway never has it.
+    runnerGateway: String(env.FTH_RUNNER_GATEWAY || '').trim() === '1',
     planMaxAgeMin: intEnv(env, 'FTH_PLAN_MAX_AGE_MIN', G.planMaxAgeMin, { min: 1 }),
     // Tighten-only here too: the env may lower the streak, never raise it past the config's (pinned) value.
     maxConsecutiveLosses: Math.min(intEnv(env, 'FTH_MAX_CONSECUTIVE_LOSSES', MAX_CONSECUTIVE_LOSSES, { min: 1 }), MAX_CONSECUTIVE_LOSSES),

@@ -166,7 +166,7 @@ test('mock trading: a trade\'s whole life through the gateway, from a real signa
 
     // 3. Loosening the stop (away from the market) and removing it: refused. Tightening it: allowed.
     assert.match((await attempt(gw, 'modify_order', { accountId: 7, orderId: stopLeg.id, stopPrice: stop - 10 })).error, /modify-protection/);
-    assert.match((await attempt(gw, 'cancel_order', { accountId: 7, orderId: stopLeg.id })).error, /cancel-protection/);
+    assert.match((await attempt(gw, 'cancel_order', { accountId: 7, orderId: stopLeg.id })).error, /bracket-leg\] .*the runner manages the bracket/);
     const tighter = stop + 2;
     assert.ok((await attempt(gw, 'modify_order', { accountId: 7, orderId: stopLeg.id, stopPrice: tighter })).ok);
     assert.strictEqual(working(w).find(o => o.id === stopLeg.id).stopPrice, tighter);
@@ -487,6 +487,37 @@ test('mock trading: an orphan target (2021-05-11): a stand-alone [protect] targe
   assert.strictEqual(exchange.read(w.state).fills.length, 2, 'the entry and its stop: nothing else filled');
 });
 
+test('mock trading: always a bracket: the model may not cancel a leg or add a target, may tighten the stop and close; the runner restores a lost stop through the gateway and cleans the legs once flat', async () => {
+  // A long whose broker lost its bracket (no stop working), with the gateway's entry record of 40 ticks.
+  const w = world('2026-10-07T14:20:00Z', { keepLegs: true });
+  exchange.setPrice(w.state, MNQ_ID, 21500);
+  exchange.handle(w.state, 'place_order', { accountId: 7, contractId: MNQ_ID, side: 'buy', type: 'market', size: 1 }, {});
+  const rec = { orderId: 1, contractId: 'MNQ', setup: 'fx_break', side: 'buy', stopTicks: 40, at: '2026-10-07T14:19:59.000Z' };
+  const r = await runDay(w, { from: '2026-10-07T14:21:30Z', until: '2026-10-07T14:24:30Z', deps: { entryOrders: () => [rec] } });
+  const stop = working(w).find(o => o.type === 4);
+  assert.ok(stop && stop.stopPrice === 21490 && stop.size === 1, `restored at the plan's stop: ${r.logs.filter(l => /ALERT|ERROR/.test(l)).join(' | ')}`);
+  assert.ok(exchange.read(w.state).calls.some(c => c.tool === 'place_order' && c.args.type === 'stop' && /^\[protect\] runner/.test(c.args.rationale || '')), 'the runner\'s [protect] stop, through its gateway');
+  assert.ok(position(w), 'the position kept');
+  const gw = gatewayClient(w);
+  try {
+    // The model: no cancel of the leg, no separate target, no second stop; a tighter stop on the bracket goes.
+    assert.match((await attempt(gw, 'cancel_order', { accountId: 7, orderId: stop.id })).error, /\[bracket-leg\]/);
+    assert.match((await attempt(gw, 'place_order', { accountId: 7, contractId: 'MNQ', side: 'sell', type: 'limit', limitPrice: 21540, size: 1, rationale: '[protect] target for the long' })).error, /\[bracket-only\]/);
+    assert.match((await attempt(gw, 'place_order', { accountId: 7, contractId: 'MNQ', side: 'sell', type: 'stop', stopPrice: 21492, size: 1, rationale: '[protect] stop for the long' })).error, /\[bracket-only\]/);
+    assert.ok((await attempt(gw, 'modify_order', { accountId: 7, orderId: stop.id, stopPrice: 21495 })).ok, 'the model adjusts the bracket stop toward the market');
+    assert.match((await attempt(gw, 'modify_order', { accountId: 7, orderId: stop.id, stopPrice: 21480 })).error, /modify-protection/, 'never away');
+    // An [exit] close goes; the stop stays behind (keepLegs) until the runner's next poll cancels it.
+    assert.ok((await attempt(gw, 'close_position', { accountId: 7, contractId: 'MNQ' })).ok);
+  } finally {
+    gw.close();
+  }
+  assert.strictEqual(position(w), null);
+  assert.strictEqual(working(w).length, 1, 'the leg left behind');
+  await runDay(w, { from: '2026-10-07T14:27:30Z', until: '2026-10-07T14:28:30Z', deps: { entryOrders: () => [rec] } });
+  assert.deepStrictEqual(working(w), [], 'the runner cleaned the leg');
+  assert.strictEqual(position(w), null);
+});
+
 test('mock trading: the runner trails a winner\'s stop through the gateway (2R on, 0.5R back), and the trailed stop banks the profit', async () => {
   const at = new Date(Date.parse(FIRED_BAR) + STEP + 20000);
   const w = world(at.toISOString());
@@ -532,7 +563,7 @@ test('mock trading: a close the broker refuses frees its stop; one whose reply e
         assert.match(close.error, /HTTP 504/);
         assert.match(tighten.error, /modify-entry.*once recent orders fill/, 'an unknown outcome counts as a close');
         // ... but never to unprotect a position the account still shows.
-        assert.match((await attempt(gw, 'cancel_order', { accountId: 7, orderId: stopId })).error, /cancel-protection/);
+        assert.match((await attempt(gw, 'cancel_order', { accountId: 7, orderId: stopId })).error, /bracket-leg/);
         exchange.settle(w.state);
         assert.strictEqual(position(w), null, 'the broker had taken it');
       }

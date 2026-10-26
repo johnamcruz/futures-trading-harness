@@ -19,9 +19,12 @@ account: an [exit] with a bracket: REFUSED
   [exposure] [exit]/[protect] orders take no stopLossBracket/takeProfitBracket: their legs could open a new position once the trade is flat. Send the exit or stop alone.
 account: two losses from real fills: REFUSED
   [loss-streak] 2 losing closes in a row (from fills). Cooling down for 20 min more.
-cancel: the last protective stop: REFUSED
+cancel: the runner cancels the last protective stop: REFUSED
   [cancel-protection] Order 11 is the protective stop for the open MNQ position (net 1). Move it with modify_order, or close the position first ([exit]).
-cancel: a target, the stop stays (allowed): ALLOWED
+cancel: the runner cancels a target, the stop stays (allowed): ALLOWED
+cancel: the model cancels a bracket leg of an open position: REFUSED
+  [bracket-leg] Order 12 is a bracket leg (target) of the open MNQ position (net 1): the runner manages the bracket, and it stays while the position is open. Adjust it with modify_order (a stop toward the market only); to get out, send an [exit] or close_position, and the runner cancels the legs once flat.
+cancel: the model cancels a leftover on a flat contract (allowed): ALLOWED
 modify: a stop moved toward the market (allowed): ALLOWED
 modify: a stop moved away from the market: REFUSED
   [modify-protection] Order 11 protects the open MNQ position (net 1); move it toward the market only (now 21480, asked stopPrice 21470). To take more risk, don't; to get out, use an [exit] order.

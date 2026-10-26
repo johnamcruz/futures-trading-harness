@@ -15,18 +15,19 @@ description: Use when a position is open - its stop, the plan's management, the 
   the plan's management (breakeven, trail, scale-out) through the
   trade-executor role, and journal any change. No new entries while a position
   is open. Protective stops move toward the market only.
-- **Risk is the entry's brackets; adjust them, never add beside them**: the
-  stop (and the target, where the exit plan has one) are the entry's own
-  `stopLossBracket` / `takeProfitBracket` legs. Move or resize them with
-  `modify_order` on those orders. While a working stop covers the position,
-  no new `[protect]` stop, and never a `[protect]` limit (a stand-alone
-  target): nothing links it to the stop, so when one fills the other keeps
-  working and can open a new, unprotected position. Under a `trail` or
-  `target_then_trail` exit the runner owns the exit: no target order. The
-  gate refuses both (`[bracket-only]`). A `[protect]` stop goes only when no
-  working stop covers the position (a lost bracket), for the uncovered size.
-  To take profit or get out now: an `[exit]`, `partial_close_position` or
-  `close_position`. A rules strategy
+- **Always a bracket, never an orphan**: the stop (and the target, where
+  the exit plan has one) are the entry's own `stopLossBracket` /
+  `takeProfitBracket` legs. Adjust them with `modify_order` (the stop toward
+  the market only). Never cancel a leg while the position is open
+  (`[bracket-leg]`), and never add a separate `[protect]` stop or target
+  beside them (`[bracket-only]`): an unlinked order outlives the position
+  and can open a new, unprotected one. Under a `trail` or
+  `target_then_trail` exit the runner owns the exit: no target order. A lost
+  stop is the runner's to restore (every poll, at the plan's stop); the
+  gate takes a `[protect]` stop only while no working stop covers the
+  position. To take profit or get out now: an `[exit]`,
+  `partial_close_position` or `close_position`; the runner cancels the legs
+  once flat. A rules strategy
   (none active) whose exit trails (`exit` in the scan): the runner already
   moved the stop on this bar: don't touch it unless you are exiting.
   **Interactive, no runner**: the brackets are the whole exit, a composed

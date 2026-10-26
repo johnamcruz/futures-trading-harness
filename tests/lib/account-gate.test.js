@@ -257,7 +257,34 @@ test('ledger: an entry sent moments ago blocks a second entry and caps exits unt
   assert.match(evaluateAccount({ input: order({ side: 'sell', rationale: '[exit] x' }), positions: long1, ledger: exitLedger, now, config })[0].message, /no open/);
 });
 
+// The runner's own gateway (FTH_RUNNER_GATEWAY): its cancels are judged by cancel-protection; a model's never cancels a leg.
+const runnerConfig = { ...config, runnerGateway: true };
+
+test('cancel_order (the model): no leg of an open position\'s bracket, stop or target, is cancelled; hard; flat or closed, it may go', () => {
+  const stop = { id: 11, contractId: CONTRACT, side: 1, type: 4, size: 1 };
+  const target = { id: 12, contractId: CONTRACT, side: 1, type: 1, size: 1 };
+  for (const id of [11, 12]) {
+    const v = evaluateCancel({ input: { orderId: id }, positions: long1, orders: [stop, target], config: { ...config, skipChecks: new Set(['bracket-leg', 'cancel-protection']) } });
+    assert.deepStrictEqual(checks(v), ['bracket-leg'], String(id));
+    assert.match(v[0].message, /the runner manages the bracket.*modify_order/);
+  }
+  // Two stops: neither is the last, still a leg.
+  assert.deepStrictEqual(checks(evaluateCancel({ input: { orderId: 11 }, positions: long1, orders: [stop, { ...stop, id: 13 }], config })), ['bracket-leg']);
+  // The server's bracket role decides when given: a leg marked target of any type; absent, the type (never "no bracket").
+  assert.deepStrictEqual(checks(evaluateCancel({ input: { orderId: 14 }, positions: long1, orders: [stop, { id: 14, contractId: CONTRACT, side: 1, type: 2, size: 1, bracket: { role: 'target' } }], config })), ['bracket-leg']);
+  // A short's legs are buys.
+  const short1 = [{ contractId: CONTRACT, type: 2, size: 1 }];
+  assert.deepStrictEqual(checks(evaluateCancel({ input: { orderId: 11 }, positions: short1, orders: [{ ...stop, side: 0 }], config })), ['bracket-leg']);
+  // Flat, an order on the position's own side (an entry), another month, or a close the gateway sent: it may go.
+  assert.deepStrictEqual(evaluateCancel({ input: { orderId: 11 }, positions: [], orders: [stop], config }), []);
+  assert.deepStrictEqual(evaluateCancel({ input: { orderId: 15 }, positions: long1, orders: [stop, { id: 15, contractId: CONTRACT, side: 0, type: 1, size: 1 }], config }), []);
+  assert.deepStrictEqual(evaluateCancel({ input: { orderId: 16 }, positions: long1, orders: [stop, { ...target, id: 16, contractId: 'MNQ:2027-03' }], config }), []);
+  const closed = [{ contractId: CONTRACT, root: 'MNQ', sign: -1, size: 1, netBefore: 1, rootNetBefore: 1, at: NOW.getTime() - 1000 }];
+  assert.deepStrictEqual(evaluateCancel({ input: { orderId: 12 }, positions: long1, orders: [stop, target], config, ledger: closed, now: NOW }), []);
+});
+
 test('cancel_order may not remove the last protective stop of an open position', () => {
+  const config = runnerConfig;
   const stop = { id: 11, contractId: CONTRACT, side: 1, type: 4, size: 1 };
   const target = { id: 12, contractId: CONTRACT, side: 1, type: 1, size: 1 };
   assert.match(evaluateCancel({ input: { orderId: 11 }, positions: long1, orders: [stop, target], config })[0].message, /protective stop/);
@@ -280,6 +307,7 @@ test('cancel_order: a close the gateway sent and the server confirmed counts bef
 });
 
 test('cancel_order: a resting [exit] target in the ledger hasn\'t changed the position, so the only stop stays', () => {
+  const config = runnerConfig;
   const orders = [{ id: 9, contractId: CONTRACT, side: 1, type: 4, size: 1, stopPrice: 21480 }, { id: 55, contractId: CONTRACT, side: 1, type: 1, size: 1, limitPrice: 21600 }];
   const ledger = [{ contractId: CONTRACT, sign: -1, size: 1, netBefore: 1, at: NOW.getTime(), orderId: '55' }];
   assert.deepStrictEqual(checks(evaluateCancel({ input: { orderId: 9 }, positions: long1, orders, config, ledger, now: NOW })), ['cancel-protection']);
@@ -356,7 +384,8 @@ test('contract months: an exit must be in the month that is open, and a long and
   const hedged = [{ contractId: Z, type: 1, size: 1 }, { contractId: H, type: 2, size: 1 }];
   assert.deepStrictEqual(checks(evaluateAccount({ input: order(), positions: hedged, config })), ['position-open']);
   const stopZ = { id: 50, contractId: Z, side: 1, type: 4, size: 1, stopPrice: 21400 };
-  assert.match(evaluateCancel({ input: { orderId: 50 }, positions: hedged, orders: [stopZ], config })[0].message, /protective stop/);
+  assert.match(evaluateCancel({ input: { orderId: 50 }, positions: hedged, orders: [stopZ], config: runnerConfig })[0].message, /protective stop/);
+  assert.deepStrictEqual(checks(evaluateCancel({ input: { orderId: 50 }, positions: hedged, orders: [stopZ], config })), ['bracket-leg']);
 });
 
 test('modify_order: sizes may only shrink; every price field must keep a protective stop tightening', () => {

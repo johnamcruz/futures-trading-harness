@@ -58,6 +58,7 @@ const { contractRoot, contractMonthTag } = require('./trading/journal');
 const { familyRoot, familyOf } = require('./trading/contracts');
 const { specMismatch, validSpec, noSpecsMessage } = require('./trading/broker-specs');
 const { isOpen, signedSize } = require('./trading/positions');
+const { protectiveStops } = require('./trading/bracket-legs');
 const { coverageError } = require('./trading/exchange-calendar');
 const { writeReviews, tickValueFor } = require('./trading/runner-reviews');
 
@@ -817,6 +818,86 @@ function createRunner(deps) {
     return acted;
   }
 
+  /**
+   * The bracket invariant (the owner, 2026-10-26: "make sure we avoid orphan orders by ensuring we always have a
+   * bracket"), on every poll, in the sessions and out: every open position of this root has its protective stop
+   * (bracket-legs.js: the server's bracket role when it gives one, else the order's type), sized to the position.
+   *   - one stop bigger than the position: cut to its size (anti-flip; modify_order on that stop);
+   *   - several stops over its size: closed at market (they could reverse it), an alert;
+   *   - stops for less than its size (a lost bracket, a broker fault), once the position is older than the fill grace
+   *     (a fresh fill's leg may not be listed yet): the runner's own [protect] stop for the uncovered size at the plan's
+   *     stop (the trail's, else the entry record's), the one separate stop the gate lets through; at market instead
+   *     when that level is unknown or already through the last close, or the stop can't be placed. An alert either way.
+   * Returns true when it acted (the next poll reads the account again).
+   */
+  async function ensureProtected(item, { positions, orders }) {
+    if (typeof client.placeStop !== 'function') return false;
+    const root = famOf(item.contractId);
+    let acted = false;
+    for (const p of positions.filter(x => famOf(x.contractId) === root && isOpen(x))) {
+      const sign = p.type === 1 ? 1 : p.type === 2 ? -1 : 0;
+      const size = Math.abs(Number(p.size));
+      if (!sign || !(size > 0)) continue;
+      const stops = protectiveStops(orders, p.contractId, sign);
+      const covered = stops.reduce((n, o) => n + Number(o.size || 0), 0);
+      if (covered === size) continue;
+      const closeAt = async why => {
+        closedAt.set(p.contractId, clock.now().getTime());
+        log(`${item.symbol}: ALERT ${p.contractId} ${sign > 0 ? 'long' : 'short'} ${size}: ${why}; closed at market`, 'error');
+        emit('protection_closed', { symbol: item.symbol, contractId: p.contractId, size, covered, why });
+        await client.closePosition(cfg.account, p.contractId);
+      };
+      acted = true;
+      if (covered > size) {
+        if (stops.length === 1 && typeof client.resizeStop === 'function') {
+          await client.resizeStop(cfg.account, stops[0].id, size, `[protect] stop cut to the position's size ${size}`);
+          log(`${item.symbol}: ALERT stop ${stops[0].id} (${covered}) was bigger than the ${p.contractId} position (${size}); cut to its size`, 'error');
+          emit('stop_resized', { symbol: item.symbol, contractId: p.contractId, orderId: stops[0].id, from: covered, to: size });
+        } else await closeAt(`stops for ${covered} could reverse it`);
+        continue;
+      }
+      const opened = Date.parse(p.creationTimestamp);
+      if (Number.isFinite(opened) && clock.now().getTime() - opened < FILL_GRACE_MS) { acted = false; continue; }
+      if (closedAt.has(p.contractId) && clock.now().getTime() - closedAt.get(p.contractId) < ORDER_GRACE_MS) { acted = false; continue; }
+      const level = planStopOf(item, p, sign);
+      const bar = Array.isArray(item.bars) && item.bars.length ? item.bars[item.bars.length - 1] : null;
+      const last = bar ? Number(bar.c) : NaN;
+      if (!(level > 0) || !Number.isFinite(last) || sign * (last - level) <= 0) {
+        await closeAt(`stops cover ${covered} and the plan's stop ${level > 0 ? `${level} is through the last close ${last}` : 'is unknown'}`);
+        continue;
+      }
+      try {
+        await client.placeStop(cfg.account, p.contractId, sign > 0 ? 'sell' : 'buy', size - covered, level, `[protect] runner: the bracket's stop is missing; restored at the plan's stop ${level}`);
+        log(`${item.symbol}: ALERT ${p.contractId} had stops for ${covered} of ${size}: restored a stop for ${size - covered} at ${level}`, 'error');
+        emit('protection_restored', { symbol: item.symbol, contractId: p.contractId, size: size - covered, stop: level });
+      } catch (err) {
+        await closeAt(`its stop could not be restored (${err.message})`);
+      }
+    }
+    return acted;
+  }
+
+  /** The plan's stop for a position: the trail's current one for it, else its entry record's (price, or ticks from the fill). */
+  function planStopOf(item, p, sign) {
+    const t = (state.trails || {})[item.contractId];
+    const key = String(p.id ?? `${p.creationTimestamp}|${p.averagePrice}`);
+    if (t && t.key === key && !t.skip && Number(t.stop) > 0) return Number(t.stop);
+    const fillAt = Date.parse(p.creationTimestamp);
+    const side = sign > 0 ? 'buy' : 'sell';
+    const dayStart = tradingDayStart(new Date(Number.isFinite(fillAt) ? fillAt : clock.now().getTime())).getTime();
+    const rec = [...entryOrders()].reverse().find(e => {
+      const at = Date.parse(e.at);
+      return contractRoot(e.contractId) === contractRoot(p.contractId) && (!e.side || e.side === side) && at >= dayStart && (!Number.isFinite(fillAt) || at <= fillAt + ORDER_GRACE_MS);
+    });
+    if (!rec) return null;
+    if (Number(rec.stopPrice) > 0) return Number(rec.stopPrice);
+    const tick = Number(item.tickSize) || 0;
+    if (Number.isInteger(rec.stopTicks) && rec.stopTicks > 0 && tick > 0 && Number(p.averagePrice) > 0) {
+      return Math.round((Number(p.averagePrice) - sign * rec.stopTicks * tick) * 1e9) / 1e9;
+    }
+    return null;
+  }
+
   /** Account housekeeping before a cycle: leftover orders and trailing stops. */
   /**
    * Close every position of this root (any month) whose opposite-side stops
@@ -859,6 +940,8 @@ function createRunner(deps) {
       const account = await client.accountState(cfg.account);
       await expireComposed(item, account, { unrecorded: true });
       await cleanupFlat(item, account, { noCycles });
+      // Every open position keeps its bracket's stop, sized to it (in the sessions and out): restored or cut here.
+      if (await ensureProtected(item, account)) return;
       // No cycle will come to protect a position whose stops don't cover it
       // exactly (none, too small, or big enough to flip it): flatten it.
       if (noCycles && await flattenUncovered(item, account)) return;
