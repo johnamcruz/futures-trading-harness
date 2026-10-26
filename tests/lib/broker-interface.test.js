@@ -256,7 +256,8 @@ test('an order\'s bracket field is optional, and checked only where present', ()
   assert.deepStrictEqual(validateResult('list_open_orders', [o]), [], 'absent: unknown, not a problem');
   assert.deepStrictEqual(validateResult('list_open_orders', [{ ...o, bracket: { role: 'stop', entry: 'tag-1' } }]), []);
   assert.deepStrictEqual(validateResult('search_orders', [{ ...o, bracket: { role: 'target', entry: 7 } }]), []);
-  for (const bad of [null, 'stop', { role: 'sl', entry: 'tag-1' }, { role: 'stop' }, { role: 'stop', entry: '' }, { role: 'stop', entry: 1.5 }]) {
+  assert.deepStrictEqual(validateResult('list_open_orders', [{ ...o, bracket: { role: 'stop' } }]), [], 'entry is optional: unknown');
+  for (const bad of [null, 'stop', {}, { entry: 'tag-1' }, { role: 'sl', entry: 'tag-1' }, { role: 'stop', entry: '' }, { role: 'stop', entry: 1.5 }, { role: 'stop', entry: null }]) {
     assert.deepStrictEqual(validateResult('list_open_orders', [{ ...o, bracket: bad }]), ['list_open_orders: [0].bracket is malformed'], JSON.stringify(bad));
   }
   assert.strictEqual(TOOLS.list_open_orders.result['[].bracket'].required, false);

@@ -263,15 +263,17 @@ customTag, statusName, typeName, sideName }`.
 
 A bracket leg may also carry `bracket: { role: "stop" | "target", entry }`,
 in `list_open_orders`, `search_orders` and the snapshot's `openOrders` alike.
-`role` is `stop` for the leg a `stopLossBracket` attached (whatever its order
-type) and `target` for a `takeProfitBracket`'s; `entry` is its entry order's
-`customTag`, or that order's numeric `id` when it has none. A server sets it
-exactly for bracket legs and omits it on every other order; a server that
-can't tell which orders are legs omits it everywhere. Absent is unknown, never
-"not a bracket leg": the harness never reads a missing `bracket` as a position
-with no stop. Any other `role`, or an `entry` that is neither a non-empty
-string nor an integer, is malformed; the conformance check flags it on the
-orders it reads.
+`role` (required in `bracket`) is `stop` for the leg a `stopLossBracket`
+attached (whatever its order type) and `target` for a `takeProfitBracket`'s.
+`entry`, when the server knows it, is the entry order's `customTag`, or that
+order's numeric `id` when it has none; absent, the entry is unknown. A server
+sets `bracket` exactly on the legs it can tell are legs and omits it on every
+other order; a server that can tell only some legs (only stop legs, say) sets
+it on those alone. Absent is unknown, never "not a bracket leg": the harness
+never reads a missing `bracket` as a position with no stop, or a missing
+target leg as no target. Any other `role`, or an `entry` that is neither a
+non-empty string nor an integer, is malformed; the conformance check flags it
+on the orders it reads.
 
 #### `search_orders`
 
