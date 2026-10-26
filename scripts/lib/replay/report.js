@@ -98,7 +98,8 @@ function summarize(days, { runDir = null, barsFiles = {} } = {}) {
     for (const rec of days[day]) {
       const trades = tradesOf(rec.trades, open);
       for (const row of rows) {
-        row.points += 1;
+        // A housekeeping step outside the sessions (driver.js manage) is no decision time.
+        if (!rec.manage) row.points += 1;
         // A bar's pass that read no bar and ran no cycle while logging errors (driver.js counts it too).
         if (rec.kind === 'trade' && !(rec.ran || []).length && (rec.errors || []).length && (rec.bars || []).some(b => !b.lastBarT)) row.failed += 1;
         // A time's failed attempts before it ran (store.js foldAttempts): their cycles ran and failed; the time is one point.

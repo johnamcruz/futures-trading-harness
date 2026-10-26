@@ -271,6 +271,12 @@ test('driver: after the session window, a bar is stepped (the live runner\'s hou
   assert.strictEqual(r.done, true);
   assert.deepStrictEqual(calls.filter(c => c.startsWith('trade(manage)')), ['trade(manage)@16:00:02', 'trade(manage)@16:03:02', 'trade(manage)@16:06:02'], `flat at 16:09: no more steps until end of day: ${calls.join(' ')}`);
   assert.strictEqual(calls.at(-1), 'eod@19:50:00');
+  // Its lines say so: no trade time for the labels, no decision point for the report.
+  const lines = store.readRun(w.run.paths.runDir).days['2026-10-07'];
+  assert.deepStrictEqual(lines.filter(l => l.manage).map(l => l.t.slice(11, 19)), ['16:00:02', '16:03:02', '16:06:02']);
+  assert.ok(lines.filter(l => !l.manage).every(l => !('manage' in l)));
+  const rep = summarize(store.readRun(w.run.paths.runDir).days);
+  assert.strictEqual(rep.total.points, lines.length - 3, 'the housekeeping steps are no decision points');
   assert.ok(calls.some(c => c === 'trade@15:57:02'), 'the window\'s own bars as before');
   assert.strictEqual(opens.filter(t => t >= iso('2026-10-07T16:09:00Z').getTime()).length, 1, 'one check finds it flat, then the day\'s manage points are skipped');
 });

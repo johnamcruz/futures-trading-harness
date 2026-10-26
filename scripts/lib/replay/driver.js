@@ -546,6 +546,8 @@ async function replayLoop({ run, baseEnv = process.env, root, deps = defaultDeps
       lanes: point.lanes || null,
     });
     // Latency charged: when the time was due, when it ran (both only when later), and the trade times passed without a step.
+    // A bar outside the sessions stepped for the runner's housekeeping (schedule.js manage): no trade time.
+    if (point.manage) rec.manage = true;
     if (point.scheduled) rec.scheduled = point.scheduled.toISOString();
     if (ranAt.getTime() !== point.t.getTime()) rec.ranAt = ranAt.toISOString();
     // Latency charged: when the step ended on the replay clock (its own scans, orders and fills are up to then).
