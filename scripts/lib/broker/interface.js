@@ -15,9 +15,11 @@
  * validateResult(tool, data)      problems with a tool's parsed result
  */
 
-const field = (type, required = false, note = '') => ({ type, required, note });
+const field = (type, required = false, note = '', check = null) => ({ type, required, note, check });
+// A bracket leg's link to its entry: absent means unknown (never "no bracket"); present, it is checked.
+const bracketOk = b => b !== null && typeof b === 'object' && (b.role === 'stop' || b.role === 'target') && (b.entry === undefined || (typeof b.entry === 'string' && b.entry !== '') || Number.isInteger(b.entry));
 const outcome = { success: field('boolean', true), errorCode: field('number', true), errorName: field('string', true), errorMessage: field('string|null') };
-const order = { '[].id': field('number', true), '[].contractId': field('string', true), '[].type': field('number', true, 'order type code'), '[].side': field('number', true, '0 buy, 1 sell'), '[].size': field('number', true), '[].status': field('number', true), '[].stopPrice': field('number|null'), '[].limitPrice': field('number|null') };
+const order = { '[].id': field('number', true), '[].contractId': field('string', true), '[].type': field('number', true, 'order type code'), '[].side': field('number', true, '0 buy, 1 sell'), '[].size': field('number', true), '[].status': field('number', true), '[].stopPrice': field('number|null'), '[].limitPrice': field('number|null'), '[].bracket': field('object', false, '{ role: "stop" | "target", entry?: the entry order\'s customTag or id, when the server knows it }: present exactly for a bracket leg; absent is unknown, never "not a leg"', bracketOk) };
 const contract = { id: field('string', true), name: field('string', true, 'ticker, e.g. MNQZ6'), tickSize: field('number', true, 'above 0; the harness trades with the broker\'s tick specs'), tickValue: field('number', true, 'USD per tick per contract, 0.01 to 10,000'), activeContract: field('boolean', true, 'the front month') };
 const listOf = fields => Object.fromEntries([['[]', field('array', true)], ...Object.entries(fields).map(([k, f]) => [`[].${k}`, f])]);
 
@@ -161,8 +163,15 @@ function validateResult(name, data) {
   if (!spec) return [`unknown tool ${name}`];
   const problems = [];
   for (const [path, f] of Object.entries(spec.result)) {
-    if (!f.required) continue;
     const m = /^(\w*)\[\](?:\.(\w+))?$/.exec(path);
+    if (!f.required) {
+      // An optional field with a shape: checked only where present.
+      if (f.check && m && m[2]) {
+        const list = m[1] ? data && data[m[1]] : data;
+        if (Array.isArray(list)) list.forEach((el, i) => { if (el && el[m[2]] !== undefined && !f.check(el[m[2]])) problems.push(`${name}: ${m[1] || ''}[${i}].${m[2]} is malformed`); });
+      }
+      continue;
+    }
     if (m) {
       const list = m[1] ? data && data[m[1]] : data;
       if (!Array.isArray(list)) {
