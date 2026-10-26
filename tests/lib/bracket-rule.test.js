@@ -34,19 +34,11 @@ test('[exit]s, market [protect]s and entries are never this rule\'s', () => {
   assert.strictEqual(protectRefusal(), null);
 });
 
-test('a resting [exit] is refused: join orders always; a limit not through the price now; no price, fails closed', () => {
-  const r = o => restingExitRefusal({ rationale: '[exit] take profit', ...o });
-  for (const type of ['join_bid', 'JOIN_ASK', 6, '7']) assert.strictEqual(r({ type, side: 'sell' }), RESTING_REFUSAL, String(type));
-  assert.strictEqual(r({ type: 'limit', side: 'sell', limitPrice: 21540 }), null, 'the hook (no price read): the gateway decides');
-  assert.match(r({ type: 'limit', side: 'sell', limitPrice: 21540, price: { ok: true, price: 21500 } }), /Limit 21540 would rest: the price now is 21500/);
-  assert.strictEqual(r({ type: 1, side: 'sell', limitPrice: 21500, price: { ok: true, price: 21500 } }), null, 'at the price: fills now');
-  assert.strictEqual(r({ type: 'limit', side: 'buy', limitPrice: 21510, price: { ok: true, price: 21500 } }), null, 'a buy through it');
-  assert.ok(r({ type: 'limit', side: 'buy', limitPrice: 21490, price: { ok: true, price: 21500 } }), 'a buy under it rests');
-  assert.match(r({ type: 'limit', side: 'sell', limitPrice: 21490, price: { ok: false, why: 'timeout' } }), /can't be read \(timeout\).*fails closed/);
-  assert.match(r({ type: 'limit', side: 'sell', limitPrice: 21490, price: null }), /can't be read/);
-  assert.ok(r({ type: 'limit', side: 'sell', limitPrice: 'x', price: { ok: true, price: 21500 } }), 'no limit price: refused');
-  assert.ok(r({ type: 'limit', side: '', limitPrice: 21490, price: { ok: true, price: 21500 } }), 'no side: refused');
-  for (const type of ['market', 'stop']) assert.strictEqual(r({ type, side: 'sell', price: null }), null, type);
-  assert.strictEqual(restingExitRefusal({ rationale: '[protect] t', type: 'join_ask' }), null, 'a [protect] limit: protectRefusal\'s');
+test('a limit or join [exit] is refused (it can rest); market and stop exits, and [protect]s, are not this rule\'s', () => {
+  for (const type of ['limit', 'Limit', ' join_bid ', 'join_ask', 1, 6, 7, '1']) assert.strictEqual(restingExitRefusal({ rationale: '[exit] take profit', type }), RESTING_REFUSAL, String(type));
+  for (const type of ['market', 'stop', 'trailing_stop', 2, 4, undefined]) assert.strictEqual(restingExitRefusal({ rationale: '[exit] out', type }), null, String(type));
+  assert.strictEqual(restingExitRefusal({ rationale: '[protect] t', type: 'limit' }), null, 'a [protect] limit: protectRefusal\'s');
+  assert.strictEqual(restingExitRefusal({ rationale: 'setup:orb long [exit]', type: 'limit' }), null, 'an entry');
+  assert.strictEqual(restingExitRefusal(), null);
   assert.match(RESTING_REFUSAL, /trailing the bracket stop with modify_order.*market \[exit\]/);
 });

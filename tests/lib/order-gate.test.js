@@ -28,7 +28,7 @@ test('[exit] and [protect] orders are never gated', () => {
   assert.deepStrictEqual(r.violations, []);
 });
 
-test('the bracket rule in the hook: a [protect] limit (a stand-alone target) is refused, hard; [protect] stops, [exit] limits and market exits go', () => {
+test('the bracket rule in the hook: a [protect] limit (a stand-alone target) and a limit or join [exit] are refused, hard; [protect] stops and market exits go', () => {
   const skipAll = { ...config, skipChecks: new Set(['bracket-only']) };
   for (const type of ['limit', 'LIMIT', 'join_bid', 'join_ask', 1, 6, '7']) {
     const r = evaluate(entryOrder({ side: 'sell', type, limitPrice: 21540, rationale: '[protect] target for the long', stopLossBracket: undefined }), []);
@@ -38,7 +38,8 @@ test('the bracket rule in the hook: a [protect] limit (a stand-alone target) is 
     assert.deepStrictEqual(checks(evaluate(entryOrder({ side: 'sell', type, limitPrice: 21540, rationale: '[protect] t', stopLossBracket: undefined }), [], { config: skipAll })), ['bracket-only'], 'never skippable');
   }
   // The hook can't see the working stops: a [protect] stop goes here (the gateway judges it), as do exits of any type.
-  for (const [type, rationale] of [['stop', '[protect] stop'], ['trailing_stop', '[protect] trail'], ['market', '[protect] out now'], ['limit', '[exit] scale out'], ['market', '[exit] flatten']]) {
+  for (const type of ['limit', 'join_ask', 1, 7]) assert.deepStrictEqual(checks(evaluate(entryOrder({ side: 'sell', type, limitPrice: 21540, rationale: '[exit] scale out', stopLossBracket: undefined }), [], { config: skipAll })), ['bracket-only'], `a limit or join [exit]: ${type}`);
+  for (const [type, rationale] of [['stop', '[protect] stop'], ['trailing_stop', '[protect] trail'], ['market', '[protect] out now'], ['market', '[exit] flatten']]) {
     assert.deepStrictEqual(evaluate(entryOrder({ side: 'sell', type, stopPrice: 21480, limitPrice: 21540, rationale, stopLossBracket: undefined }), []).violations, [], `${type} ${rationale}`);
   }
 });
@@ -1805,7 +1806,7 @@ const capped = (cap, extra = {}) => ({ name: 'orb', valid: true, errors: [], sta
 const ALL_SKIPPED = new Set(['strategy', 'order-consistency', 'plan-required', 'stop-defined', 'setup-tag', 'time-window', 'blackout', 'skills-loaded', 'max-order-size', 'max-risk']);
 const RISK_REDUCING_ORDERS = [
   { rationale: '[exit] flatten the 27', side: 'sell', type: 'market', size: 27 },
-  { rationale: '[exit] scale out at the target', side: 'sell', type: 'limit', limitPrice: 21540, size: 27 },
+  { rationale: '[exit] scale out at market', side: 'sell', type: 'market', size: 27 },
   { rationale: '[protect] stop for the 27-lot long at 21480', side: 'sell', type: 'stop', stopPrice: 21480, size: 27 },
 ];
 

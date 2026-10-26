@@ -15,29 +15,24 @@
  *     for what is uncovered: that is risk reduction (the gateway's exposure check caps its size).
  *
  * No resting exit either (the owner, 2026-10-26: "Yes refuse resting limit exits while stop is working. Maybe just use
- * trailing stop"): an `[exit]` that would rest in the book is a target by another name. Resting means:
- *   - join_bid / join_ask: always (they join the passive side by definition);
- *   - limit: its price is not through the price now, on the exit's side: a sell above the last closed 1-minute bar's
- *     close, a buy below it (the gateway reads it at order time: exitPrice); a limit at or through it fills now
- *     (marketable) and goes. The price can't be read: refused (fail closed; a market [exit] always goes).
- * Refused with or without a working stop: under the bracket invariant a position has one (the runner restores a lost
- * one within a poll, and the resting exit would then sit beside it, unlinked). Profit is taken by trailing the
- * bracket's stop with modify_order; a discretionary close is a market `[exit]`.
+ * trailing stop"): an `[exit]` that can rest in the book is a target by another name. Every limit / join_bid /
+ * join_ask `[exit]` is refused, from the order alone (hook and gateway): whether a limit would fill at once can't be
+ * told reliably at order time (a closed bar's close is not the bid or ask the order meets, and it can be stale), and
+ * a market `[exit]` closes now without the doubt. Refused with or without a working stop: under the bracket invariant
+ * a position has one (the runner restores a lost one within a poll, and a resting exit would sit beside it, unlinked).
+ * Profit is taken by trailing the bracket's stop with modify_order; a discretionary close is a market `[exit]`.
  *
- * Never refused here: a market `[exit]` or a marketable limit `[exit]` (whole or part), partial_close_position,
- * close_position, cancels, stop moves. Hard (no skipChecks): an orphaned order can blow the account.
+ * Never refused here: a market `[exit]` (whole or part), a market `[protect]`, partial_close_position, close_position,
+ * cancels, stop moves. Hard (no skipChecks): an orphaned order can blow the account.
  *
  *   protectRefusal({ rationale, type, covered = null, size = null })   message | null
  *     covered: the working stops' size on the position's contract and protective side (the gateway's read), or null
  *     where it is unknown (the hook: no account read, so only the limit rule); size: the open position's size.
- *   restingExitRefusal({ rationale, type, side, limitPrice, price })   message | null
- *     price: undefined where it isn't read (the hook: only join_bid / join_ask), else { ok, price } (the gateway's).
+ *   restingExitRefusal({ rationale, type })   message | null
  */
 
 const PROTECT = /^\s*\[protect\]/i;
 const EXIT = /^\s*\[exit\]/i;
-const PASSIVE_TYPES = new Set(['join_bid', 'join_ask', '6', '7']);
-const LIMIT_TYPE = new Set(['limit', '1']);
 // By name (the interface's place_order types) or by the broker's numeric type ids the gate reads orders with.
 const LIMIT_TYPES = new Set(['limit', 'join_bid', 'join_ask', '1', '6', '7']);
 const STOP_TYPES = new Set(['stop', 'trailing_stop', 'stop_limit', '3', '4', '5']);
@@ -57,22 +52,13 @@ function protectRefusal({ rationale, type, covered = null, size = null } = {}) {
     + 'Modify the bracket\'s stop/target with modify_order (toward the market only). A [protect] stop goes only when no working stop covers the position (a lost bracket).';
 }
 
-const RESTING_REFUSAL = 'A resting [exit] (a limit not through the price now, or a join order) is a stand-alone target: it outlives the stop if the stop fills first. '
+const RESTING_REFUSAL = 'A limit or join [exit] can rest in the book: a stand-alone target that outlives the stop if the stop fills first. '
   + 'Take profit by trailing the bracket stop with modify_order (toward the market), or close now with a market [exit] (or partial_close_position / close_position).';
 
-function restingExitRefusal({ rationale, type, side, limitPrice, price } = {}) {
+function restingExitRefusal({ rationale, type } = {}) {
   if (!EXIT.test(String(rationale || ''))) return null;
   const t = String(type ?? '').trim().toLowerCase();
-  if (PASSIVE_TYPES.has(t)) return RESTING_REFUSAL;
-  if (!LIMIT_TYPE.has(t) || price === undefined) return null;
-  if (!price || price.ok !== true || !Number.isFinite(Number(price.price))) {
-    return `The price now can't be read (${(price && price.why) || 'no price'}), so it can't be told whether this limit [exit] would rest: refused (fails closed). Close now with a market [exit], partial_close_position or close_position.`;
-  }
-  const s = String(side || '').toLowerCase();
-  const lim = Number(limitPrice);
-  const now = Number(price.price);
-  const marketable = s === 'sell' ? lim <= now : s === 'buy' ? lim >= now : false;
-  return Number.isFinite(lim) && marketable ? null : `${RESTING_REFUSAL} (Limit ${limitPrice} would rest: the price now is ${now}.)`;
+  return LIMIT_TYPES.has(t) ? RESTING_REFUSAL : null;
 }
 
 module.exports = { protectRefusal, restingExitRefusal, LIMIT_REFUSAL, RESTING_REFUSAL };

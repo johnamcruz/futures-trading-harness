@@ -36,8 +36,6 @@ const POSITION_SIGN = { 1: 1, 2: -1 };
 // (accountFacts), for the ledger.
 const RENAME = Symbol.for('fth.gate.rename');
 const NAMES = Symbol.for('fth.gate.names');
-// A limit [exit]'s price at order time (accountFacts reads it; evaluateAccount judges whether it would rest).
-const EXIT_PRICE = Symbol.for('fth.gate.exitPrice');
 // The call's contract by its month (ROOT:YYYY-MM), set with NAMES: what its ledger entry and order record keep.
 const MONTH = Symbol.for('fth.gate.month');
 // Equity index families (by their micro root): one direction-correlated bet.
@@ -211,7 +209,7 @@ function evaluateAccount({ input = {}, positions, orders, trades, now = new Date
         // resting [exit]; the agent modifies the bracket instead. Hard (never skippable); it says what to do where the
         // stacking check below would only say no.
         const why = protectRefusal({ rationale: input.rationale, type: input.type, covered: coveredSize(orders, input.contractId, -sideSign), size: net })
-          || restingExitRefusal({ rationale: input.rationale, type: input.type, side: input.side, limitPrice: input.limitPrice, price: input[EXIT_PRICE] === undefined ? null : input[EXIT_PRICE] });
+          || restingExitRefusal({ rationale: input.rationale, type: input.type });
         if (why) violations.push({ check: 'bracket-only', message: why });
         else if (group && restingSize(orders, input.contractId, sideSign, group) + size > Math.abs(net)) {
           add('exposure', `Resting ${group === STOP_TYPES ? 'stop' : 'limit'} orders plus this one would exceed the open ${root} position (${Math.abs(net)}); they could fill into a new position.`);
@@ -554,22 +552,7 @@ async function accountFacts(args, caller, entry = !isRiskReducing(args.rationale
     const month = typeof args.contractId === 'string' && typeof r.names.month === 'function' ? { [MONTH]: r.names.month(args.contractId) } : {};
     Object.assign(args, { ...(typeof args.contractId === 'string' ? { contractId: r.args.contractId } : {}), [NAMES]: r.names, ...month });
   }
-  // A limit [exit]: the price now, for whether it would rest (bracket-rule.js restingExitRefusal).
-  if (/^\s*\[exit\]/i.test(String(args.rationale || '')) && ['limit', '1'].includes(String(args.type ?? '').trim().toLowerCase())) args[EXIT_PRICE] = await priceNow(args, caller);
   return { positions: r.positions, orders: r.orders, trades };
-}
-
-/** The last closed 1-minute bar's close for the call's contract: { ok, price } or { ok: false, why } (never throws). */
-async function priceNow(args, caller) {
-  try {
-    const G = require('../tunables').runner().gate;
-    // Closed bars only (includePartialBar false: the server's clock, a replay's too).
-    const got = parseToolJson(await caller.call('get_bars', { contractId: args.contractId, unit: 'minute', unitNumber: 1, limit: G.signalMaxAgeBars, includePartialBar: false }, { timeoutMs: G.freshPriceTimeoutMs }), 'get_bars');
-    const last = normalizeBars(Array.isArray(got) ? got : (got && got.bars) || []).at(-1);
-    return last && Number.isFinite(Number(last.c)) ? { ok: true, price: Number(last.c) } : { ok: false, why: 'no closed 1-minute bar in the reply' };
-  } catch (err) {
-    return { ok: false, why: (err && err.message) || String(err) };
-  }
 }
 
 /**

@@ -487,7 +487,7 @@ test('mock trading: an orphan target (2021-05-11): a stand-alone [protect] targe
   assert.strictEqual(exchange.read(w.state).fills.length, 2, 'the entry and its stop: nothing else filled');
 });
 
-test('mock trading: no resting exits: a resting limit [exit] is refused up front, a marketable one goes; with only the bracket working, the stop fills first and nothing outlives it', async () => {
+test('mock trading: no resting exits: a limit [exit] is refused up front, a market one goes; with only the bracket working, the stop fills first and nothing outlives it', async () => {
   const w = world('2026-10-07T15:50:00Z');
   exchange.setPrice(w.state, MNQ_ID, 21500);
   exchange.handle(w.state, 'place_order', { accountId: 7, contractId: MNQ_ID, side: 'sell', type: 'market', size: 2, stopLossBracket: { ticks: 40 } }, {});
@@ -495,9 +495,9 @@ test('mock trading: no resting exits: a resting limit [exit] is refused up front
   try {
     // A buy limit under the price now would rest: a target by another name.
     const resting = await attempt(gw, 'place_order', { accountId: 7, contractId: 'MNQ', side: 'buy', type: 'limit', limitPrice: 21450, size: 1, rationale: '[exit] take profit at 21450' });
-    assert.ok(!resting.ok && /\[bracket-only\] A resting \[exit\]/.test(resting.error), resting.error);
-    // At the price now it fills at once: one of the two closed.
-    const now = await attempt(gw, 'place_order', { accountId: 7, contractId: 'MNQ', side: 'buy', type: 'limit', limitPrice: 21500, size: 1, rationale: '[exit] scale out now' });
+    assert.ok(!resting.ok && /\[bracket-only\] A limit or join \[exit\] can rest/.test(resting.error), resting.error);
+    // A market [exit] closes one of the two now.
+    const now = await attempt(gw, 'place_order', { accountId: 7, contractId: 'MNQ', side: 'buy', type: 'market', size: 1, rationale: '[exit] scale out now' });
     assert.ok(now.ok, now.error);
   } finally {
     gw.close();

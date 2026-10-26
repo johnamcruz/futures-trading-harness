@@ -28,9 +28,8 @@ description: Use when a position is open - its stop, the plan's management, the 
   position. Profit is taken by the trail: the runner's, or your
   `modify_order` on the bracket stop toward the market. A discretionary
   close is a market `[exit]`, `partial_close_position` or `close_position`;
-  never a resting exit (a limit not through the price now, a join order:
-  `[bracket-only]`), which outlives the stop too. The runner cancels the
-  legs once flat. A rules strategy
+  never a limit or join `[exit]` (it can rest, and outlives the stop too:
+  `[bracket-only]`). The runner cancels the legs once flat. A rules strategy
   (none active) whose exit trails (`exit` in the scan): the runner already
   moved the stop on this bar: don't touch it unless you are exiting.
   **Interactive, no runner**: the brackets are the whole exit, a composed

@@ -24,7 +24,7 @@ description: Use when the gate refuses managing a position (an exit by contract 
 | `order gate could not run (position … has no valid size …)` | The broker returned a position without a whole-number size: the account can't be read | No orders but `close_position` (never gated). Tell the user; it holds until the broker reports a size. |
 | `[modify-size] …` | A size change that isn't an `[exit]`/`[protect]` decrease, or a stop cut leaving part of the position unprotected | To add, a new order; to cut a stop, reduce the position first, then the stop. |
 | `[bracket-leg] …` | `cancel_order` of a leg (stop or target) of an open position. Hard | Keep it: adjust it with `modify_order`; to get out, `[exit]` or a close (the runner cancels the legs once flat). |
-| `[bracket-only] …` | A separate order beside the brackets: a `[protect]` limit, a second `[protect]` stop while stops cover the position, or a resting `[exit]`. Hard | Trail the bracket stop with `modify_order`; out now: a market `[exit]` or a close. No working stop: the `[protect]` stop goes. |
+| `[bracket-only] …` | A separate order beside the brackets: a `[protect]` limit, a second `[protect]` stop while stops cover the position, or a limit or join `[exit]`. Hard | Trail the bracket stop with `modify_order`; out now: a market `[exit]` or a close. No working stop: the `[protect]` stop goes. |
 | `[composed-reprice] …` | A composed entry's limit moved worse than its record's entry | Keep it, improve it, or cancel it. |
 
 ## Examples

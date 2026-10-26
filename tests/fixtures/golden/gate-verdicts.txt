@@ -64,9 +64,10 @@ protect: with no tick specs (allowed): ALLOWED (intent risk-reducing)
 protect: with a bracket (allowed by this gate; the gateway refuses it): ALLOWED (intent risk-reducing)
 protect: a stand-alone [protect] target (a limit): REFUSED (intent risk-reducing)
   [bracket-only] A [protect] limit is a stand-alone target: no order links it to the stop, so whichever fills first leaves the other working to open a new, unprotected position. Risk is managed with the entry's brackets: modify the bracket's stop/target with modify_order (under a trail or target_then_trail exit the runner manages the exit and wants no target). To take profit or get out now, send an [exit] (market), partial_close_position or close_position.
-exit: a limit [exit] (allowed here; the gateway judges whether it rests): ALLOWED (intent risk-reducing)
+exit: a limit [exit] (it can rest): REFUSED (intent risk-reducing)
+  [bracket-only] A limit or join [exit] can rest in the book: a stand-alone target that outlives the stop if the stop fills first. Take profit by trailing the bracket stop with modify_order (toward the market), or close now with a market [exit] (or partial_close_position / close_position).
 exit: a join_ask [exit] (rests by definition): REFUSED (intent risk-reducing)
-  [bracket-only] A resting [exit] (a limit not through the price now, or a join order) is a stand-alone target: it outlives the stop if the stop fills first. Take profit by trailing the bracket stop with modify_order (toward the market), or close now with a market [exit] (or partial_close_position / close_position).
+  [bracket-only] A limit or join [exit] can rest in the book: a stand-alone target that outlives the stop if the stop fills first. Take profit by trailing the bracket stop with modify_order (toward the market), or close now with a market [exit] (or partial_close_position / close_position).
 modify: a size change without a reason: REFUSED (intent modify)
   [modify-size] modify_order may change prices only, unless the reason starts with [exit] or [protect] (cutting a protective order after a partial exit; the gateway checks it is a decrease). To add size, place a new order.
 modify: a size change with a [protect] reason (allowed): ALLOWED (intent modify)
