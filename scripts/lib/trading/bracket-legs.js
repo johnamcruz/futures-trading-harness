@@ -13,8 +13,10 @@
  *   coveredSize(orders, contractId, sign)     their total size
  */
 
-const STOP_TYPES = new Set([3, 4, 5]);
-const LIMIT_TYPES = new Set([1, 6, 7]);
+// The interface's order type ids (broker/interface.js ENUMS), by name: one home for them.
+const { orderType: T } = require('../broker/interface').ENUMS;
+const STOP_TYPES = new Set([T.stop_limit, T.stop, T.trailing_stop]);
+const LIMIT_TYPES = new Set([T.limit, T.join_bid, T.join_ask]);
 
 function legRole(o) {
   const r = o && o.bracket && typeof o.bracket === 'object' && typeof o.bracket.role === 'string' ? o.bracket.role.trim().toLowerCase() : null;

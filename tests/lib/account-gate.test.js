@@ -294,6 +294,7 @@ test('cancel_order may not remove the last protective stop of an open position',
 });
 
 test('cancel_order: a close the gateway sent and the server confirmed counts before the account shows it', () => {
+  const config = runnerConfig;
   const now = new Date('2026-10-07T14:00:00Z');
   const stop = { id: 11, contractId: 'MNQ', type: 4, side: 1, size: 1, stopPrice: 21480 };
   const long1 = [{ contractId: 'MNQ', type: 1, size: 1 }];

@@ -2849,7 +2849,8 @@ test('account gate: a ledger entry kept by its month (never a root) is not count
   const orders = [{ id: 9, contractId: 'MNQ', type: 4, side: 1, size: 1, stopPrice: 21480 }];
   const now = new Date('2026-10-08T14:30:00Z');
   const entry = c => [{ contractId: c, sign: -1, size: 1, netBefore: 1, rootNetBefore: 1, at: now.getTime(), sentAt: now.getTime() }];
-  const cancel = ledger => evaluateAccountChange('cancel_order', { input, positions, orders, config, now, ledger, cancelLedger: ledger }).map(v => v.check);
+  // The runner's gateway: cancel-protection judges its cancels (a model's never cancels a leg: [bracket-leg]).
+  const cancel = ledger => evaluateAccountChange('cancel_order', { input, positions, orders, config: { ...config, runnerGateway: true }, now, ledger, cancelLedger: ledger }).map(v => v.check);
   assert.deepStrictEqual(cancel([]), ['cancel-protection']);
   assert.deepStrictEqual(cancel(entry(kept)), ['cancel-protection'], 'kept by its month: December, not March');
   assert.deepStrictEqual(cancel(entry('MNQ')), [], 'the bare root it used to keep counted against March (the bug)');

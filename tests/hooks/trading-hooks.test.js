@@ -1298,7 +1298,8 @@ test('MCP gateway: a confirmed close lets the closed position\'s stop be cancell
   const run = async extra => {
     const dir = tmpDir();
     const env = {
-      PATH: process.env.PATH, HOME: dir, START_NET: '1', FILL_DELAY_MS: '1500', STOP_ORDER: '1', ...extra,
+      // The runner's gateway (FTH_RUNNER_GATEWAY): its cancels are judged by cancel-protection (a model's: [bracket-leg]).
+      PATH: process.env.PATH, HOME: dir, START_NET: '1', FILL_DELAY_MS: '1500', STOP_ORDER: '1', FTH_RUNNER_GATEWAY: '1', ...extra,
       FTH_BROKERS_FILE: FAKE_BROKERS, FAKE_BROKER_API_URL: 'https://api.fake-broker.test', FAKE_BROKER_ALLOWED_ACCOUNT_IDS: '1,7', FAKE_BROKER_JOURNAL: writeJournal(dir, []), FTH_GATE_LOG: path.join(dir, 'gate.jsonl'), FTH_NO_ENTRY_WINDOWS: '', FTH_ENTRY_HOURS: '', FTH_TEST_NOW: TEST_NOW, NODE_ENV: 'test',
     };
     const gw = spawn(process.execPath, [path.join(REPO, 'scripts', 'mcp-gateway.js'), '--', process.execPath, path.join(REPO, 'tests', 'fixtures', 'stateful-mcp-server.js')], { env });
@@ -1627,7 +1628,7 @@ test('MCP gateway wiring, live: an exit by the root answered just before 18:00 E
   // 17:59:58.5 ET, December the front month (looked up today); long 1 December and long 1 March, March's stop order 9.
   // The exit sell by MNQ (December) is allowed and answered; 3.5 s later, past 18:00 ET, March's stop is cancelled.
   const r = await liveRollRun({ now: '2026-10-07T21:59:58.500Z', front: { id: 'sim-Z6', day: '2026-10-07' }, active: 'sim-H7', position: ['sim-Z6', 'sim-H7'],
-    extra: { FAKE_ORDERS: JSON.stringify([{ id: 9, contractId: 'sim-H7', type: 4, side: 1, size: 1, stopPrice: 21480 }]) },
+    extra: { FAKE_ORDERS: JSON.stringify([{ id: 9, contractId: 'sim-H7', type: 4, side: 1, size: 1, stopPrice: 21480 }]), FTH_RUNNER_GATEWAY: '1' },
     gaps: { 2: 3500 }, messages: [rollExit(1, 'MNQ'), call(2, 'cancel_order', { accountId: 1, orderId: 9 })] });
   assert.deepStrictEqual(r.sent, ['place_order sim-Z6'], JSON.stringify(r.texts));
   assert.match(r.texts[2], /\[cancel-protection\]/, 'kept under the root, the December exit would count against March and let its only stop go');
@@ -1863,8 +1864,10 @@ test('MCP gateway: with an exit of unknown outcome, the stop can\'t be cancelled
   await gatewayRun({ FAKE_POSITIONS: LONG1, FAKE_DROP: 'place_order', FTH_LANE_TIMEOUT_MS: '300' }, [
     call(1, 'place_order', { ...EXIT_BASE, side: 'sell', type: 'limit', limitPrice: 21600, rationale: '[exit] target' }),
   ], { dir });
-  const withStop = await gatewayRun({ FAKE_POSITIONS: LONG1, FAKE_ORDERS: stop }, [call(2, 'cancel_order', { accountId: 1, orderId: 9 })], { dir });
+  const withStop = await gatewayRun({ FAKE_POSITIONS: LONG1, FAKE_ORDERS: stop, FTH_RUNNER_GATEWAY: '1' }, [call(2, 'cancel_order', { accountId: 1, orderId: 9 })], { dir });
   assert.match(withStop.byId[2].result.content[0].text, /\[cancel-protection\]/);
+  const model = await gatewayRun({ FAKE_POSITIONS: LONG1, FAKE_ORDERS: stop }, [call(4, 'cancel_order', { accountId: 1, orderId: 9 })], { dir });
+  assert.match(model.byId[4].result.content[0].text, /\[bracket-leg\]/, 'a model never cancels a leg of an open position');
   // No stop yet: a [protect] stop goes (the unknown target counts as resting, not as filled).
   const noStop = await gatewayRun({ FAKE_POSITIONS: LONG1 }, [call(3, 'place_order', { ...EXIT_BASE, side: 'sell', type: 'stop', stopPrice: 21480, rationale: '[protect] stop for the long at 21480' })], { dir });
   assert.strictEqual(noStop.byId[3].result.content[0].text, 'forwarded:tools/call:place_order');
@@ -1880,7 +1883,7 @@ test('MCP gateway: an entry of unknown outcome keeps its bracket stop from being
   writeUnknown(dir);
   // The account doesn't show the fill yet, but the bracket stop rests: it is the entry's protection.
   const stop = JSON.stringify([{ id: 9, contractId: 'MNQ', side: 1, type: 4, size: 1, stopPrice: 21480 }]);
-  const { byId } = await gatewayRun({ FAKE_ORDERS: stop, FAKE_SEARCH_ORDERS: '[]' }, [call(1, 'cancel_order', { accountId: 1, orderId: 9 })], { dir });
+  const { byId } = await gatewayRun({ FAKE_ORDERS: stop, FAKE_SEARCH_ORDERS: '[]', FTH_RUNNER_GATEWAY: '1' }, [call(1, 'cancel_order', { accountId: 1, orderId: 9 })], { dir });
   assert.match(byId[1].result.content[0].text, /\[cancel-protection\]/);
 });
 
@@ -1888,10 +1891,10 @@ test('MCP gateway: a limit entry of unknown outcome keeps its bracket stop too; 
   const dir = tmpDir();
   writeUnknown(dir, { type: 'limit' });
   const stop = JSON.stringify([{ id: 9, contractId: 'MNQ', side: 1, type: 4, size: 1, stopPrice: 21480 }]);
-  const { byId } = await gatewayRun({ FAKE_ORDERS: stop, FAKE_SEARCH_ORDERS: '[]' }, [call(1, 'cancel_order', { accountId: 1, orderId: 9 })], { dir });
+  const { byId } = await gatewayRun({ FAKE_ORDERS: stop, FAKE_SEARCH_ORDERS: '[]', FTH_RUNNER_GATEWAY: '1' }, [call(1, 'cancel_order', { accountId: 1, orderId: 9 })], { dir });
   assert.match(byId[1].result.content[0].text, /\[cancel-protection\]/);
   const withTarget = JSON.stringify([{ id: 9, contractId: 'MNQ', side: 1, type: 4, size: 1, stopPrice: 21480 }, { id: 55, contractId: 'MNQ', side: 1, type: 1, size: 1, limitPrice: 21600 }]);
-  const target = await gatewayRun({ FAKE_POSITIONS: LONG1, FAKE_ORDERS: withTarget }, [call(2, 'cancel_order', { accountId: 1, orderId: 9 })]);
+  const target = await gatewayRun({ FAKE_POSITIONS: LONG1, FAKE_ORDERS: withTarget, FTH_RUNNER_GATEWAY: '1' }, [call(2, 'cancel_order', { accountId: 1, orderId: 9 })]);
   assert.match(target.byId[2].result.content[0].text, /\[cancel-protection\]/);
 });
 

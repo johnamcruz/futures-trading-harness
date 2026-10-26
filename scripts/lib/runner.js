@@ -835,9 +835,11 @@ function createRunner(deps) {
     const root = famOf(item.contractId);
     let acted = false;
     for (const p of positions.filter(x => famOf(x.contractId) === root && isOpen(x))) {
-      const sign = p.type === 1 ? 1 : p.type === 2 ? -1 : 0;
-      const size = Math.abs(Number(p.size));
-      if (!sign || !(size > 0)) continue;
+      let net;
+      try { net = signedSize(p); } catch (_err) { continue; } // a size that can't be read: end of day and the gate fail closed on it
+      const sign = Math.sign(net);
+      const size = Math.abs(net);
+      if (!sign) continue;
       const stops = protectiveStops(orders, p.contractId, sign);
       const covered = stops.reduce((n, o) => n + Number(o.size || 0), 0);
       if (covered === size) continue;
@@ -849,10 +851,11 @@ function createRunner(deps) {
       };
       acted = true;
       if (covered > size) {
-        if (stops.length === 1 && typeof client.resizeStop === 'function') {
-          await client.resizeStop(cfg.account, stops[0].id, size, `[protect] stop cut to the position's size ${size}`);
-          log(`${item.symbol}: ALERT stop ${stops[0].id} (${covered}) was bigger than the ${p.contractId} position (${size}); cut to its size`, 'error');
-          emit('stop_resized', { symbol: item.symbol, contractId: p.contractId, orderId: stops[0].id, from: covered, to: size });
+        const [only, ...more] = stops;
+        if (!more.length && typeof client.resizeStop === 'function') {
+          await client.resizeStop(cfg.account, only.id, size, `[protect] stop cut to the position's size ${size}`);
+          log(`${item.symbol}: ALERT stop ${only.id} (${covered}) was bigger than the ${p.contractId} position (${size}); cut to its size`, 'error');
+          emit('stop_resized', { symbol: item.symbol, contractId: p.contractId, orderId: only.id, from: covered, to: size });
         } else await closeAt(`stops for ${covered} could reverse it`);
         continue;
       }
