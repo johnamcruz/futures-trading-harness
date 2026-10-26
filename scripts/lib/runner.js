@@ -58,7 +58,7 @@ const { contractRoot, contractMonthTag } = require('./trading/journal');
 const { familyRoot, familyOf } = require('./trading/contracts');
 const { specMismatch, validSpec, noSpecsMessage } = require('./trading/broker-specs');
 const { isOpen, signedSize } = require('./trading/positions');
-const { protectiveStops } = require('./trading/bracket-legs');
+const { protectiveStops, legRole } = require('./trading/bracket-legs');
 const { coverageError } = require('./trading/exchange-calendar');
 const { writeReviews, tickValueFor } = require('./trading/runner-reviews');
 
@@ -854,6 +854,8 @@ function createRunner(deps) {
         try {
           await client.closePosition(cfg.account, p.contractId);
         } catch (err) {
+          // Not counted as sent: the next poll closes again (close_position flattens whatever is open, never more).
+          closedAt.delete(p.contractId);
           log(`${item.symbol}: ALERT the close of ${p.contractId} failed (${err.message}); the next poll retries`, 'error');
         }
       };
@@ -870,7 +872,9 @@ function createRunner(deps) {
           }
           continue;
         }
-        const keep = stops.find(o => Number(o.size) === size);
+        // The bracket's own leg first (the server's role), else the oldest: never the stand-alone one beside it.
+        const sized = stops.filter(o => Number(o.size) === size).sort((a, b) => (legRole(b) === 'stop') - (legRole(a) === 'stop') || (Date.parse(a.creationTimestamp) || 0) - (Date.parse(b.creationTimestamp) || 0));
+        const keep = sized[0];
         try {
           if (!keep) throw new Error('no single stop of its size to keep');
           for (const o of stops.filter(x => x !== keep)) await client.cancelOrder(cfg.account, o.id);

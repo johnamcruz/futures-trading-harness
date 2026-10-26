@@ -801,6 +801,10 @@ test('the bracket invariant: the plan\'s stop already through the price, or a re
   assert.ok(through.logs.some(l => /ALERT MNQ long 1: stops cover 0 and the plan's stop 21490 is through the last close 21485; closed at market/.test(l)), through.logs.join('\n'));
   const refused = await trailSim({ tape: {}, noStop: true, restore: true, placeFails: true, until: et(10, 5) });
   assert.strictEqual(refused.closed.length, 1);
+  // A close the broker refuses is sent again on the next poll, never left alone.
+  const again = await trailSim({ tape: {}, noStop: true, restore: true, placeFails: true, closeFails: 1, until: et(10, 8) });
+  assert.strictEqual(again.closed.length, 2, JSON.stringify(again.closed));
+  assert.ok(again.logs.some(l => /ALERT the close of MNQ failed \(HTTP 503\); the next poll retries/.test(l)));
   assert.ok(refused.logs.some(l => /its stop could not be restored \(HTTP 503\); closed at market/.test(l)));
   // No plan stop known (no entry record of today): closed, never a guessed stop.
   const unknown = await trailSim({ tape: {}, noStop: true, restore: true, record: { at: new Date(et(10, 0) - 864e5).toISOString() }, until: et(10, 5) });
@@ -828,6 +832,11 @@ test('the bracket invariant, faults: a cut the broker refuses closes instead; su
   const dup = await trailSim({ tape: {}, restore: true, ordersOver: o => [...o, { id: 11, contractId: 'MNQ', type: 4, side: 1, size: 1, stopPrice: 21480 }], until: et(10, 5) });
   assert.deepStrictEqual([dup.closed, dup.cancelled], [[], [11]]);
   assert.ok(dup.events.some(e => e.kind === 'stops_trimmed' && e.kept === 9));
+  // The bracket's leg is kept over a stand-alone stop listed first (by its role, else the older).
+  const byRole = await trailSim({ tape: {}, restore: true, noStop: true, ordersOver: o => [{ id: 11, contractId: 'MNQ', type: 4, side: 1, size: 1, stopPrice: 21480, creationTimestamp: '2026-10-07T13:55:00Z' }, { id: 12, contractId: 'MNQ', type: 4, side: 1, size: 1, stopPrice: 21490, creationTimestamp: '2026-10-07T14:01:00Z', bracket: { role: 'stop' } }, ...o], until: et(10, 5) });
+  assert.deepStrictEqual(byRole.cancelled, [11]);
+  const byAge = await trailSim({ tape: {}, restore: true, noStop: true, ordersOver: o => [{ id: 11, contractId: 'MNQ', type: 4, side: 1, size: 1, stopPrice: 21480, creationTimestamp: '2026-10-07T14:02:00Z' }, { id: 12, contractId: 'MNQ', type: 4, side: 1, size: 1, stopPrice: 21490, creationTimestamp: '2026-10-07T14:00:00Z' }, ...o], until: et(10, 5) });
+  assert.deepStrictEqual(byAge.cancelled, [11]);
   // The second read finds it flat: no stray stop.
   // From the 10:03 pass (the first past the fill grace), its second read finds it flat.
   const filled = await trailSim({ tape: {}, noStop: true, restore: true, flatOnReread: et(10, 3), until: et(10, 4) });
