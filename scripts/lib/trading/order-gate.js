@@ -40,7 +40,7 @@ const { checkOrderSize, checkRiskLimit, entryStopTicks } = require('./order-limi
 const { lockGateRefusal } = require('../account-lock');
 const { composedName, composedRefusal, reversalAllowed } = require('./lifecycle-gate');
 const { lateEntryCheck, ageLimitOf } = require('./late-entry');
-const { protectRefusal } = require('./bracket-rule');
+const { protectRefusal, restingExitRefusal } = require('./bracket-rule');
 const GATE = require('../tunables').runner().gate; // config/runner.json: the bracket tolerances (tighten-only)
 
 const RISK_REDUCING = /^\s*\[(exit|protect)\]/i;
@@ -346,7 +346,7 @@ function evaluateOrder({ input = {}, entries = [], now = new Date(), config, bla
   if (isRiskReducing(input.rationale)) {
     // The bracket rule (bracket-rule.js): a [protect] limit is a stand-alone target, refused here from the order alone;
     // a second [protect] stop is judged by the gateway, which reads the working stops. Hard: never skippable.
-    const why = protectRefusal({ rationale: input.rationale, type: input.type });
+    const why = protectRefusal({ rationale: input.rationale, type: input.type }) || restingExitRefusal({ rationale: input.rationale, type: input.type });
     return { intent: 'risk-reducing', violations: why ? [{ check: 'bracket-only', message: why }] : [] };
   }
 

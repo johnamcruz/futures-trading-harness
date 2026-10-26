@@ -487,6 +487,31 @@ test('mock trading: an orphan target (2021-05-11): a stand-alone [protect] targe
   assert.strictEqual(exchange.read(w.state).fills.length, 2, 'the entry and its stop: nothing else filled');
 });
 
+test('mock trading: no resting exits: a resting limit [exit] is refused up front, a marketable one goes; with only the bracket working, the stop fills first and nothing outlives it', async () => {
+  const w = world('2026-10-07T15:50:00Z');
+  exchange.setPrice(w.state, MNQ_ID, 21500);
+  exchange.handle(w.state, 'place_order', { accountId: 7, contractId: MNQ_ID, side: 'sell', type: 'market', size: 2, stopLossBracket: { ticks: 40 } }, {});
+  const gw = gatewayClient(w);
+  try {
+    // A buy limit under the price now would rest: a target by another name.
+    const resting = await attempt(gw, 'place_order', { accountId: 7, contractId: 'MNQ', side: 'buy', type: 'limit', limitPrice: 21450, size: 1, rationale: '[exit] take profit at 21450' });
+    assert.ok(!resting.ok && /\[bracket-only\] A resting \[exit\]/.test(resting.error), resting.error);
+    // At the price now it fills at once: one of the two closed.
+    const now = await attempt(gw, 'place_order', { accountId: 7, contractId: 'MNQ', side: 'buy', type: 'limit', limitPrice: 21500, size: 1, rationale: '[exit] scale out now' });
+    assert.ok(now.ok, now.error);
+  } finally {
+    gw.close();
+  }
+  assert.strictEqual(position(w).size, 1);
+  // The bracket stop (sized 2, cut to the position as the runner would) fills first: flat, and nothing is left working.
+  exchange.update(w.state, s => { for (const o of s.orders) if (o.status === 1 && o.type === 4) o.size = 1; });
+  exchange.setPrice(w.state, MNQ_ID, 21515);
+  assert.strictEqual(position(w), null);
+  assert.deepStrictEqual(working(w), [], 'no resting exit to outlive the stop');
+  exchange.setPrice(w.state, MNQ_ID, 21440);
+  assert.strictEqual(position(w), null, 'nothing opens when the price comes back down');
+});
+
 test('mock trading: always a bracket: the model may not cancel a leg or add a target, may tighten the stop and close; the runner restores a lost stop through the gateway and cleans the legs once flat', async () => {
   // A long whose broker lost its bracket (no stop working), with the gateway's entry record of 40 ticks.
   const w = world('2026-10-07T14:20:00Z', { keepLegs: true });

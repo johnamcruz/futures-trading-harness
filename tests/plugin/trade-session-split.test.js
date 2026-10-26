@@ -430,11 +430,11 @@ test('trade-session split: no head-trader path reads more than the base\'s every
 // (invalidation's box stop source, the one home of stops); every other role unchanged or
 // shrank a few bytes.
 // Then the bracket rule (fix/orphan-orders, the owner's "always manage risk using stop loss brackets and adjust it
-// accordingly using modify order", 2026-10-26): the trade-executor +491 each mode (gate-refusals-positions'
+// accordingly using modify order", 2026-10-26): the trade-executor +505 each mode (gate-refusals-positions'
 // [bracket-leg] and [bracket-only] rows); every other role unchanged.
 const ROLE_PROMPTS = {
-  full: { 'market-structure-analyst': 90178, 'news-calendar-analyst': 10182, 'risk-manager': 92762, 'strategy-researcher': 25650, 'trade-executor': 30458, 'trade-reviewer': 9454, 'trend-momentum-analyst': 54540, 'volume-liquidity-analyst': 48495 },
-  index: { 'market-structure-analyst': 43175, 'news-calendar-analyst': 10182, 'risk-manager': 78639, 'strategy-researcher': 25650, 'trade-executor': 30447, 'trade-reviewer': 9454, 'trend-momentum-analyst': 40023, 'volume-liquidity-analyst': 32975 },
+  full: { 'market-structure-analyst': 90178, 'news-calendar-analyst': 10182, 'risk-manager': 92762, 'strategy-researcher': 25650, 'trade-executor': 30472, 'trade-reviewer': 9454, 'trend-momentum-analyst': 54540, 'volume-liquidity-analyst': 48495 },
+  index: { 'market-structure-analyst': 43175, 'news-calendar-analyst': 10182, 'risk-manager': 78639, 'strategy-researcher': 25650, 'trade-executor': 30461, 'trade-reviewer': 9454, 'trend-momentum-analyst': 40023, 'volume-liquidity-analyst': 32975 },
 };
 
 test('trade-session split: no role prompt grows, in full or index mode, and no role lists a piece', () => {

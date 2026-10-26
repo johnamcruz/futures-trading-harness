@@ -196,7 +196,7 @@ test('order gate wiring (hook): the bracket rule refuses a [protect] limit (a st
   }
 });
 
-test('MCP gateway wiring: beside the working stop a [protect] target or a second [protect] stop is refused [bracket-only]; with no stop working (a lost bracket) the [protect] stop goes; [exit]s go', async () => {
+test('MCP gateway wiring: beside the working stop a [protect] target, a second [protect] stop or a resting limit [exit] is refused [bracket-only]; with no stop working (a lost bracket) the [protect] stop goes; a market or marketable [exit] goes', async () => {
   const { spawn } = require('child_process');
   const session = async (orders, calls) => {
     const dir = tmpDir();
@@ -204,6 +204,8 @@ test('MCP gateway wiring: beside the working stop a [protect] target or a second
       PATH: process.env.PATH, HOME: dir, FAKE_POSITIONS: JSON.stringify([{ contractId: 'MNQ', type: 1, size: 1 }]), FAKE_ORDERS: JSON.stringify(orders),
       FTH_BROKERS_FILE: FAKE_BROKERS, FAKE_BROKER_API_URL: 'https://api.fake-broker.test', FAKE_BROKER_ALLOWED_ACCOUNT_IDS: '1,7', FAKE_BROKER_JOURNAL: writeJournal(dir, []),
       FTH_NO_ENTRY_WINDOWS: '', FTH_ENTRY_HOURS: '', FTH_TEST_NOW: TEST_NOW, NODE_ENV: 'test', FTH_GATE_LOG: path.join(dir, 'gate.jsonl'),
+      // The price now: 21500 (a sell limit [exit] above it would rest; at or under it, it fills now).
+      FAKE_BARS: JSON.stringify({ bars: [{ t: '2026-10-07T14:25:00.000Z', o: 21500, h: 21500, l: 21500, c: 21500, v: 1 }] }),
     };
     const gw = spawn(process.execPath, [path.join(REPO, 'scripts', 'mcp-gateway.js'), '--', process.execPath, path.join(REPO, 'tests', 'fixtures', 'fake-mcp-server.js')], { env });
     let out = '';
@@ -222,9 +224,13 @@ test('MCP gateway wiring: beside the working stop a [protect] target or a second
   // One session each for the exits: an [exit] the gateway forwards counts as pending for its position (pendingState).
   const [stop2, target, exitL] = await session([stopOrder], [protectStop, { ...exitLimit, rationale: '[protect] target for the long' }, exitLimit]);
   const [exitM] = await session([stopOrder], [exitMarket]);
+  const [exitNow] = await session([stopOrder], [{ ...exitLimit, limitPrice: 21500 }]);
+  const [restingNoStop] = await session([], [exitLimit]);
+  assert.strictEqual(exitNow, 'forwarded:tools/call:place_order', 'a marketable limit [exit] (at the price now) goes');
+  assert.match(restingNoStop, /\[bracket-only\] A resting \[exit\].*trailing the bracket stop with modify_order/, 'a resting [exit] with no stop working: refused too');
   assert.match(target, /\[bracket-only\] A \[protect\] limit is a stand-alone target/);
   assert.match(stop2, /\[bracket-only\] The position \(1\) already has working stops for 1.*modify the bracket's stop\/target with modify_order/i);
-  assert.strictEqual(exitL, 'forwarded:tools/call:place_order', 'a limit [exit] beside the stop');
+  assert.match(exitL, /\[bracket-only\] A resting \[exit\].*market \[exit\].*\(Limit 21540 would rest: the price now is 21500\.\)/, 'a resting limit [exit] beside the stop: refused');
   assert.strictEqual(exitM, 'forwarded:tools/call:place_order', 'a market [exit] beside the stop');
   const [lost] = await session([], [protectStop]);
   assert.strictEqual(lost, 'forwarded:tools/call:place_order', 'no working stop: the [protect] stop goes (risk reduction)');
@@ -1389,7 +1395,9 @@ async function gatewayRun(extraEnv, messages, { gapMs = 0, dir = tmpDir() } = {}
   const { spawn } = require('child_process');
   const env = {
     PATH: process.env.PATH, HOME: dir, FTH_BROKERS_FILE: FAKE_BROKERS, FAKE_BROKER_API_URL: 'https://api.fake-broker.test', FAKE_BROKER_ALLOWED_ACCOUNT_IDS: '1,7', FAKE_BROKER_JOURNAL: writeJournal(dir, []),
-    FTH_GATE_LOG: path.join(dir, 'gate.jsonl'), FTH_NO_ENTRY_WINDOWS: '', FTH_ENTRY_HOURS: '', FTH_TEST_NOW: TEST_NOW, NODE_ENV: 'test', ...extraEnv,
+    FTH_GATE_LOG: path.join(dir, 'gate.jsonl'), FTH_NO_ENTRY_WINDOWS: '', FTH_ENTRY_HOURS: '', FTH_TEST_NOW: TEST_NOW, NODE_ENV: 'test',
+    // The price now for a limit [exit] (the bracket rule: a limit at or through it is marketable): 21600.
+    FAKE_BARS: JSON.stringify({ bars: [{ t: '2026-10-07T14:25:00.000Z', o: 21600, h: 21600, l: 21600, c: 21600, v: 1 }] }), ...extraEnv,
   };
   const gw = spawn(process.execPath, [path.join(REPO, 'scripts', 'mcp-gateway.js'), '--', process.execPath, path.join(REPO, 'tests', 'fixtures', 'fake-mcp-server.js')], { env });
   let out = '';
@@ -1764,7 +1772,7 @@ test('MCP gateway wiring: an entry without its stopLossBracket is refused and ne
 });
 
 test('MCP gateway: an order call reusing an in-flight request id is refused', async () => {
-  const { all } = await gatewayRun({ FAKE_POSITIONS: LONG1, FAKE_DELAY_MS: '400' }, [
+  const { all } = await gatewayRun({ FAKE_POSITIONS: LONG1, FAKE_DELAY_MS: '400', FAKE_BARS: '' }, [
     call(7, 'get_bars', {}),
     call(7, 'place_order', { ...EXIT_BASE, side: 'sell', rationale: '[exit] flatten' }),
   ]);

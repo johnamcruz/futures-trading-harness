@@ -14,7 +14,9 @@ account: a [protect] target beside the working stop: REFUSED
   [bracket-only] A [protect] limit is a stand-alone target: no order links it to the stop, so whichever fills first leaves the other working to open a new, unprotected position. Risk is managed with the entry's brackets: modify the bracket's stop/target with modify_order (under a trail or target_then_trail exit the runner manages the exit and wants no target). To take profit or get out now, send an [exit] (market), partial_close_position or close_position.
 account: a [protect] stop with no working stop, a lost bracket (allowed): ALLOWED
 account: a [protect] stop for the part no stop covers (allowed): ALLOWED
-account: a limit [exit] beside the working stop (allowed): ALLOWED
+account: a resting limit [exit] beside the working stop: REFUSED
+  [bracket-only] A resting [exit] (a limit not through the price now, or a join order) is a stand-alone target: it outlives the stop if the stop fills first. Take profit by trailing the bracket stop with modify_order (toward the market), or close now with a market [exit] (or partial_close_position / close_position). (Limit 21540 would rest: the price now is 21500.)
+account: a marketable limit [exit] beside the working stop (allowed): ALLOWED
 account: an [exit] with a bracket: REFUSED
   [exposure] [exit]/[protect] orders take no stopLossBracket/takeProfitBracket: their legs could open a new position once the trade is flat. Send the exit or stop alone.
 account: two losses from real fills: REFUSED

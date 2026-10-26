@@ -39,7 +39,7 @@ test('[protect] stops and limits may not stack beyond the position (one of each 
   assert.deepStrictEqual(evaluateAccount({ input: stop, positions: long1, orders: [], config }), []);
   assert.match(evaluateAccount({ input: stop, positions: long1, orders: restingStop, config })[0].message, /already has working stops for 1/);
   // A limit beside the stop is an [exit] (a [protect] limit is a stand-alone target: the bracket rule below).
-  const target = order({ side: 'sell', type: 'limit', limitPrice: 2, rationale: '[exit] target' });
+  const target = order({ side: 'sell', type: 'limit', limitPrice: 2, rationale: '[exit] target', [Symbol.for('fth.gate.exitPrice')]: { ok: true, price: 3 } });
   assert.deepStrictEqual(evaluateAccount({ input: target, positions: long1, orders: restingStop, config }), []);
 });
 
@@ -67,7 +67,7 @@ test('the bracket rule: no separate [protect] beside the working stop (modify th
   assert.deepStrictEqual(run(stopIn(), long1, [{ ...stop1, side: 0 }]), [], 'not protective');
   // An [exit] (market or limit, whole or part), and a market [protect], go beside the stop.
   assert.deepStrictEqual(run(order({ side: 'sell', rationale: '[exit] out' }), long1, [stop1]), []);
-  assert.deepStrictEqual(run(order({ side: 'sell', type: 'limit', limitPrice: 2, rationale: '[exit] scale out' }), long2, [{ ...stop1, size: 2 }]), []);
+  assert.deepStrictEqual(run(order({ side: 'sell', type: 'limit', limitPrice: 2, rationale: '[exit] scale out', [Symbol.for('fth.gate.exitPrice')]: { ok: true, price: 2 } }), long2, [{ ...stop1, size: 2 }]), [], 'a marketable limit [exit]');
   assert.deepStrictEqual(run(order({ side: 'sell', rationale: '[protect] out at market' }), long1, [stop1]), []);
   // A short: its buy-side stop covers it.
   const short1 = [{ contractId: CONTRACT, type: 2, size: 1 }];
@@ -237,10 +237,32 @@ test('positions in another month of the same root count (no entry on H27 while l
   assert.deepStrictEqual(checks(evaluateAccount({ input: h27, positions: long1, config })), ['position-open']);
 });
 
-test('join_bid/join_ask exits count as resting limits', () => {
+test('join_bid/join_ask exits rest by definition: refused (the bracket rule)', () => {
   const restingJoins = [{ contractId: CONTRACT, side: 1, type: 7, size: 1 }];
   const join = order({ side: 'sell', type: 'join_ask', rationale: '[exit] scale out' });
-  assert.match(evaluateAccount({ input: join, positions: long1, orders: restingJoins, config })[0].message, /Resting limit/);
+  for (const orders of [restingJoins, []]) assert.deepStrictEqual(checks(evaluateAccount({ input: join, positions: long1, orders, config })), ['bracket-only']);
+});
+
+test('the bracket rule: a resting limit [exit] is refused, with or without a working stop; at or through the price now it goes; no price: refused', () => {
+  const P = Symbol.for('fth.gate.exitPrice');
+  const stop1 = [{ contractId: CONTRACT, side: 1, type: 4, size: 1 }];
+  const sell = (limitPrice, price) => order({ side: 'sell', type: 'limit', limitPrice, rationale: '[exit] take profit', [P]: price });
+  const run = (input, orders = stop1, positions = long1) => evaluateAccount({ input, positions, orders, config: { ...config, skipChecks: new Set(['bracket-only', 'exposure']) } });
+  const v = run(sell(21540, { ok: true, price: 21500 }));
+  assert.deepStrictEqual(checks(v), ['bracket-only'], 'a sell above the price now rests: hard');
+  assert.match(v[0].message, /trailing the bracket stop with modify_order.*market \[exit\].*Limit 21540 would rest: the price now is 21500/);
+  assert.deepStrictEqual(checks(run(sell(21540, { ok: true, price: 21500 }), [])), ['bracket-only'], 'no working stop: refused too');
+  assert.deepStrictEqual(run(sell(21500, { ok: true, price: 21500 })), [], 'at the price: marketable');
+  assert.deepStrictEqual(run(sell(21490, { ok: true, price: 21500 })), [], 'through it: marketable');
+  assert.match(run(sell(21490, { ok: false, why: 'HTTP 503' }))[0].message, /price now can't be read \(HTTP 503\).*fails closed/);
+  assert.deepStrictEqual(checks(run(sell(21490, undefined))), ['bracket-only'], 'never read: refused');
+  // A short's buy exit: below the price rests, at or above it fills.
+  const short1 = [{ contractId: CONTRACT, type: 2, size: 1 }];
+  const buy = (limitPrice, price) => order({ side: 'buy', type: 'limit', limitPrice, rationale: '[exit] take profit', [P]: price });
+  assert.deepStrictEqual(checks(run(buy(21450, { ok: true, price: 21500 }), [{ ...stop1[0], side: 0 }], short1)), ['bracket-only']);
+  assert.deepStrictEqual(run(buy(21500, { ok: true, price: 21500 }), [{ ...stop1[0], side: 0 }], short1), []);
+  // A market [exit] never needs a price.
+  assert.deepStrictEqual(run(order({ side: 'sell', rationale: '[exit] now' })), []);
 });
 
 test('ledger: an entry sent moments ago blocks a second entry and caps exits until the account reflects it', () => {
@@ -430,7 +452,7 @@ test('ledger: a marketable limit that filled counts until the account shows it; 
   assert.deepStrictEqual(checks(evaluateAccount({ input: limit, orders: resting, ledger: [sent], now, config })), ['working-orders']);
   // An [exit] limit that filled: a second one would flip the long.
   const exitSent = { contractId: CONTRACT, sign: -1, size: 1, netBefore: 1, rootNetBefore: 1, at: now.getTime(), orderId: '78' };
-  const exit = order({ side: 'sell', type: 'limit', limitPrice: 20990, rationale: '[exit] flatten' });
+  const exit = order({ side: 'sell', type: 'limit', limitPrice: 20990, rationale: '[exit] flatten', [Symbol.for('fth.gate.exitPrice')]: { ok: true, price: 21000 } });
   assert.deepStrictEqual(checks(evaluateAccount({ input: exit, positions: long1, ledger: [exitSent], now, config })), ['exposure']);
 });
 

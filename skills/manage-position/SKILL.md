@@ -25,9 +25,12 @@ description: Use when a position is open - its stop, the plan's management, the 
   `target_then_trail` exit the runner owns the exit: no target order. A lost
   stop is the runner's to restore (every poll, at the plan's stop); the
   gate takes a `[protect]` stop only while no working stop covers the
-  position. To take profit or get out now: a market `[exit]`,
-  `partial_close_position` or `close_position` (never a resting limit: it
-  outlives the stop too); the runner cancels the legs once flat. A rules strategy
+  position. Profit is taken by the trail: the runner's, or your
+  `modify_order` on the bracket stop toward the market. A discretionary
+  close is a market `[exit]`, `partial_close_position` or `close_position`;
+  never a resting exit (a limit not through the price now, a join order:
+  `[bracket-only]`), which outlives the stop too. The runner cancels the
+  legs once flat. A rules strategy
   (none active) whose exit trails (`exit` in the scan): the runner already
   moved the stop on this bar: don't touch it unless you are exiting.
   **Interactive, no runner**: the brackets are the whole exit, a composed
