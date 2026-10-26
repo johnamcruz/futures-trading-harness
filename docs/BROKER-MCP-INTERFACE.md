@@ -261,6 +261,18 @@ Result: list of `{ id, accountId, contractId, creationTimestamp, updateTimestamp
 status, type, side, size, limitPrice, stopPrice, fillVolume, filledPrice,
 customTag, statusName, typeName, sideName }`.
 
+A bracket leg may also carry `bracket: { role: "stop" | "target", entry }`,
+in `list_open_orders`, `search_orders` and the snapshot's `openOrders` alike.
+`role` is `stop` for the leg a `stopLossBracket` attached (whatever its order
+type) and `target` for a `takeProfitBracket`'s; `entry` is its entry order's
+`customTag`, or that order's numeric `id` when it has none. A server sets it
+exactly for bracket legs and omits it on every other order; a server that
+can't tell which orders are legs omits it everywhere. Absent is unknown, never
+"not a bracket leg": the harness never reads a missing `bracket` as a position
+with no stop. Any other `role`, or an `entry` that is neither a non-empty
+string nor an integer, is malformed; the conformance check flags it on the
+orders it reads.
+
 #### `search_orders`
 
 Input: **`accountId`**, **`startTimestamp`**, `endTimestamp`. Result: orders of
