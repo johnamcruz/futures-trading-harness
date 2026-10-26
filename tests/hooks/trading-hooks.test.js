@@ -226,6 +226,11 @@ test('MCP gateway wiring: beside the working stop a [protect] target, a second [
   // One session each for the exits: an [exit] the gateway forwards counts as pending for its position (pendingState).
   const [stop2, target, exitL] = await session([stopOrder], [protectStop, { ...exitLimit, rationale: '[protect] target for the long' }, exitLimit]);
   const [exitM] = await session([stopOrder], [exitMarket]);
+  const stopExit = { ...EXIT_BASE, side: 'sell', type: 'stop', stopPrice: 21485, rationale: '[exit] stop out at 21485' };
+  const [stopExitBeside] = await session([stopOrder], [stopExit]);
+  const [stopExitAlone] = await session([], [stopExit]);
+  assert.match(stopExitBeside, /\[bracket-only\] The position \(1\) already has working stops for 1: a second stop/, 'a stop [exit] beside the covering stop');
+  assert.strictEqual(stopExitAlone, 'forwarded:tools/call:place_order', 'a stop [exit] with no working stop: protection');
   const [restingNoStop] = await session([], [exitLimit]);
   assert.match(restingNoStop, /\[bracket-only\] A limit or join \[exit\] can rest/, 'a limit [exit] with no stop working: refused too');
   assert.match(target, /\[bracket-only\] A \[protect\] limit is a stand-alone target/);

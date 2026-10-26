@@ -24,9 +24,11 @@ test('a [protect] stop is refused only when the working stops cover the whole po
   assert.strictEqual(stop(1, NaN), null);
 });
 
-test('[exit]s, market [protect]s and entries are never this rule\'s', () => {
-  for (const type of ['limit', 'stop', 'market', 'join_bid']) {
+test('[exit]s other than a stop, market [protect]s and entries are never this rule\'s', () => {
+  for (const type of ['limit', 'market', 'join_bid']) {
     assert.strictEqual(protectRefusal({ rationale: '[exit] out', type, covered: 9, size: 1 }), null, type);
+  }
+  for (const type of ['limit', 'stop', 'market', 'join_bid']) {
     assert.strictEqual(protectRefusal({ rationale: 'setup:orb long, stop 1 [protect]', type, covered: 9, size: 1 }), null, type);
   }
   assert.strictEqual(protectRefusal({ rationale: '[protect] out now', type: 'market', covered: 1, size: 1 }), null);
@@ -41,4 +43,14 @@ test('a limit or join [exit] is refused (it can rest); market and stop exits, an
   assert.strictEqual(restingExitRefusal({ rationale: 'setup:orb long [exit]', type: 'limit' }), null, 'an entry');
   assert.strictEqual(restingExitRefusal(), null);
   assert.match(RESTING_REFUSAL, /trailing the bracket stop with modify_order.*market \[exit\]/);
+});
+
+test('a stop [exit] is a second stop: refused while the working stops cover the position, as a [protect] stop is; uncovered, it goes', () => {
+  const r = (covered, size, type = 'stop') => protectRefusal({ rationale: '[exit] stop out', type, covered, size });
+  assert.match(r(1, 1), /already has working stops for 1: a second stop \(\[protect\] or \[exit\]\)/);
+  assert.match(r(2, -2, 'trailing_stop'), /working stops for 2/);
+  assert.strictEqual(r(0, 1), null, 'no working stop: protection');
+  assert.strictEqual(r(1, 2), null, 'the uncovered part');
+  assert.strictEqual(r(null, 1), null, 'the hook: the gateway judges it');
+  for (const type of ['market', 'limit', 'join_ask']) assert.strictEqual(r(1, 1, type), null, `${type}: not this rule's`);
 });

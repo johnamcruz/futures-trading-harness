@@ -19,7 +19,7 @@ description: Use when a position is open - its stop, the plan's management, the 
   the exit plan has one) are the entry's own `stopLossBracket` /
   `takeProfitBracket` legs. Adjust them with `modify_order` (the stop toward
   the market only). Never cancel a leg while the position is open
-  (`[bracket-leg]`), and never add a separate `[protect]` stop or target
+  (`[bracket-leg]`), and never add a separate stop or target (`[protect]` or `[exit]`)
   beside them (`[bracket-only]`): an unlinked order outlives the position
   and can open a new, unprotected one. Under a `trail` or
   `target_then_trail` exit the runner owns the exit: no target order. A lost

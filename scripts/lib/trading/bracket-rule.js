@@ -10,7 +10,8 @@
  *     stop (no OCO), so when the stop fills first it keeps working and can open a new, unprotected position (and the
  *     other way around). The target is the entry's takeProfitBracket, moved with modify_order; under a runner-managed
  *     exit (trail, target_then_trail) the runner owns the exit and wants none.
- *   - a `[protect]` stop while the working stops already cover the whole position: modify that stop instead. A
+ *   - a `[protect]` stop, or a stop `[exit]` (a second stop by another name), while the working stops already cover the
+ *     whole position: modify that stop instead. A
  *     position with no working stop, or stops for less than its size (a broker fault, a lost bracket), still gets one
  *     for what is uncovered: that is risk reduction (the gateway's exposure check caps its size).
  *
@@ -42,14 +43,16 @@ const LIMIT_REFUSAL = 'A [protect] limit is a stand-alone target: no order links
   + 'To take profit or get out now, send an [exit] (market), partial_close_position or close_position.';
 
 function protectRefusal({ rationale, type, covered = null, size = null } = {}) {
-  if (!PROTECT.test(String(rationale || ''))) return null;
+  const protect = PROTECT.test(String(rationale || ''));
+  // A stop [exit] is a second stop too: judged as a [protect] stop (no limit here: an [exit] limit is restingExitRefusal's).
+  if (!protect && !EXIT.test(String(rationale || ''))) return null;
   const t = String(type ?? '').trim().toLowerCase();
-  if (LIMIT_TYPES.has(t)) return LIMIT_REFUSAL;
+  if (protect && LIMIT_TYPES.has(t)) return LIMIT_REFUSAL;
   if (!STOP_TYPES.has(t) || covered === null) return null;
   const need = Math.abs(Number(size));
   if (!(Number(covered) >= need) || !(need > 0)) return null;
-  return `The position (${need}) already has working stops for ${covered}: a second [protect] stop is a separate order beside its bracket. `
-    + 'Modify the bracket\'s stop/target with modify_order (toward the market only). A [protect] stop goes only when no working stop covers the position (a lost bracket).';
+  return `The position (${need}) already has working stops for ${covered}: a second stop ([protect] or [exit]) is a separate order beside its bracket. `
+    + 'Modify the bracket\'s stop/target with modify_order (toward the market only); out now: a market [exit] or a close. A separate stop goes only when no working stop covers the position (a lost bracket).';
 }
 
 const RESTING_REFUSAL = 'A limit or join [exit] can rest in the book: a stand-alone target that outlives the stop if the stop fills first. '
