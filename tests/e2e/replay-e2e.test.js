@@ -38,8 +38,10 @@ function setup() {
     autotrader: { harness: 'custom', command: [process.execPath, HARNESS, '{prompt}'], symbols: ['MNQ'], account: '7', timeframe: 3, sessions: ['09:30-15:50@America/New_York'], eodAt: '15:50@America/New_York' },
     brokerEnv: { clockFile: 'MOCK_CLOCK_FILE', stateDir: 'MOCK_STATE_DIR', runId: null, start: null, end: null },
   }));
-  // A long MNQ open at 21490 in the replay account; the exchange's price is 21500.
-  const init = { positions: [{ id: 1, accountId: 7, contractId: MNQ_ID, creationTimestamp: '2027-10-06T13:00:00.000Z', type: 1, size: 1, averagePrice: 21490 }] };
+  // A long MNQ open at 21490 in the replay account, with its stop working (the runner's bracket invariant would restore or
+  // close a long without one); the exchange's price is 21500.
+  const init = { positions: [{ id: 1, accountId: 7, contractId: MNQ_ID, creationTimestamp: '2027-10-06T13:00:00.000Z', type: 1, size: 1, averagePrice: 21490 }],
+    orders: [{ id: 2, accountId: 7, contractId: MNQ_ID, creationTimestamp: '2027-10-06T13:00:00.000Z', updateTimestamp: '2027-10-06T13:00:00.000Z', status: 1, type: 4, side: 1, size: 1, limitPrice: null, stopPrice: 21470, fillVolume: 0, filledPrice: null, customTag: null, parentId: 1 }] };
   const env = { PATH: process.env.PATH, HOME: user, FTH_HOME: live, MOCK_REPLAY: '1', MOCK_INIT: JSON.stringify(init), FAKE_HARNESS_ORDERS: '1' };
   return { user, live, config, env, runHome: path.join(user, 'replays', 'e2e'), runDir: path.join(user, 'replays', 'e2e', 'replay', 'e2e') };
 }

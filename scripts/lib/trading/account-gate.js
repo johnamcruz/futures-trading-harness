@@ -11,6 +11,7 @@
  * - Entries are refused while a position in the contract is open (no adds,
  *   no flips disguised as entries), or while orders are working in it.
  * - A protective stop may only be moved closer to the market, never away.
+ * - No separate `[protect]` order beside the position's working stops (bracket-rule.js): modify the bracket instead.
  * - Loss streak and daily loss count come from real closing fills
  *   (profitAndLoss), not from journal tags.
  */
@@ -23,6 +24,8 @@ const { positionSize, signedSize } = require('./positions');
 // entry waits while an NQ position is open, and the other way around.
 const contractRoot = id => familyRoot(rootOf(id));
 const { isRiskReducing } = require('./order-gate');
+const { protectRefusal, restingExitRefusal } = require('./bracket-rule');
+const { coveredSize, isStopLeg, isTargetLeg } = require('./bracket-legs');
 const { normalizeBars } = require('./indicators');
 const { classifyRegime, regimeFits } = require('./regime');
 const { PENDING_ORDER_TTL_MS } = require('./gate-timing');
@@ -202,7 +205,13 @@ function evaluateAccount({ input = {}, positions, orders, trades, now = new Date
       } else {
         const typeId = ORDER_TYPE_IDS[String(input.type || '').toLowerCase()];
         const group = STOP_TYPES.has(typeId) ? STOP_TYPES : LIMIT_TYPES.has(typeId) ? LIMIT_TYPES : null;
-        if (group && restingSize(orders, input.contractId, sideSign, group) + size > Math.abs(net)) {
+        // The bracket rule first (bracket-rule.js): no separate [protect] beside the position's working stops, and no
+        // resting [exit]; the agent modifies the bracket instead. Hard (never skippable); it says what to do where the
+        // stacking check below would only say no.
+        const why = protectRefusal({ rationale: input.rationale, type: input.type, covered: coveredSize(orders, input.contractId, -sideSign), size: net })
+          || restingExitRefusal({ rationale: input.rationale, type: input.type });
+        if (why) violations.push({ check: 'bracket-only', message: why });
+        else if (group && restingSize(orders, input.contractId, sideSign, group) + size > Math.abs(net)) {
           add('exposure', `Resting ${group === STOP_TYPES ? 'stop' : 'limit'} orders plus this one would exceed the open ${root} position (${Math.abs(net)}); they could fill into a new position.`);
         }
       }
@@ -272,6 +281,19 @@ function evaluateAccount({ input = {}, positions, orders, trades, now = new Date
   return violations;
 }
 
+/** A model's cancel of a working leg (a stop or target on the opposite side) of an open position: refused. */
+function bracketLegRefusal(order, positions, ledger, now, orders) {
+  if (!isStopLeg(order) && !isTargetLeg(order)) return null;
+  // As the account will be once the closes the gateway sent fill (as cancel-protection counts it): a closed position's
+  // legs may go. A resting exit on the leg's side hasn't reduced it.
+  const resting = new Set(orders.filter(o => Number(o.side) === Number(order.side)).map(o => String(o.id)));
+  const observed = contractNet(positions, order.contractId);
+  const net = observed === 0 ? 0 : pendingState(ledger, order.contractId, observed, now, undefined, { exact: true, resting }).projected;
+  const sign = Number(order.side) === 0 ? 1 : -1;
+  if (net === 0 || sign !== -Math.sign(net)) return null;
+  return { check: 'bracket-leg', message: `Order ${order.id} is a bracket leg (${isStopLeg(order) ? 'stop' : 'target'}) of the open ${contractRoot(order.contractId)} position (net ${net}): the runner manages the bracket, and it stays while the position is open. Adjust it with modify_order (a stop toward the market only); to get out, send an [exit] or close_position, and the runner cancels the legs once flat.` };
+}
+
 /**
  * cancel_order may not remove the last protective stop of an open position
  * (move it with modify_order instead, or close the position first).
@@ -281,8 +303,13 @@ function evaluateCancel({ input = {}, positions, orders, config, ledger = [], no
     if (!Array.isArray(v)) throw new Error(`${name} from the server is not a list`);
   }
   const skip = (config && config.skipChecks) || new Set();
-  if (skip.has('cancel-protection')) return [];
   const order = orders.find(o => Number(o.id) === Number(input.orderId));
+  // The bracket stays (the owner, 2026-10-26: "don't remove bracket and have orphan"): the model never cancels a leg of
+  // an open position (its stop or its target, bracket-legs.js); it adjusts them with modify_order. The runner's own
+  // gateway (config.runnerGateway) does: its cleanups and its exit plans' cancels. Hard: never skippable.
+  const leg = order && !(config && config.runnerGateway) ? bracketLegRefusal(order, positions, ledger, now, orders) : null;
+  if (leg) return [leg];
+  if (skip.has('cancel-protection')) return [];
   if (!order || !STOP_TYPES.has(Number(order.type))) return [];
   // A close the gateway sent moments ago (the ledger) counts though the account may not show it yet;
   // an exit still resting on the stop's side (a target) hasn't reduced the position. An entry still

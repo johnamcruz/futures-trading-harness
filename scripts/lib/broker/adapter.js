@@ -18,7 +18,7 @@
  *   accountBalance(accountId)              realized balance
  *   workingOrders(accountId, contractId)   working orders in the contract
  *   netPosition(accountId, contractId)     signed net size
- *   cancelOrder / modifyStop / closePosition
+ *   cancelOrder / modifyStop / resizeStop / placeStop / closePosition
  *   fillsSince / ordersSince(accountId, start)   search_trades / search_orders since start
  *   journalAdd(entry)                      journal_add (the runner's plan and its factual reviews): the entry the server
  *                                          wrote, or throws
@@ -262,6 +262,19 @@ function createAdapter({ mcp, writeMcp = mcp }) {
       return outcome(await order('modify_order', { accountId: Number(accountId), orderId: Number(orderId), stopPrice, ...(reason ? { reason: String(reason) } : {}) }), `modify order ${orderId}`);
     },
 
+    /**
+     * The runner's restore of a lost bracket: a [protect] stop for the size no working stop covers (the gateway lets it
+     * through only while no working stop covers the position: bracket-rule.js).
+     */
+    async placeStop(accountId, contractId, side, size, stopPrice, rationale) {
+      return outcome(await order('place_order', { accountId: Number(accountId), contractId, side, type: 'stop', size: Number(size), stopPrice, rationale: String(rationale) }), `protective stop on ${contractId}`);
+    },
+
+    /** Cut a protective stop's size (only ever down: the gateway refuses more), so it can't reverse the position. */
+    async resizeStop(accountId, orderId, size, reason) {
+      return outcome(await order('modify_order', { accountId: Number(accountId), orderId: Number(orderId), size: Number(size), reason: String(reason) }), `modify order ${orderId}`);
+    },
+
     /** Flatten a contract's position at market. */
     async closePosition(accountId, contractId) {
       return outcome(await order('close_position', { accountId: Number(accountId), contractId, reason: '[exit] runner' }), `close ${contractId}`);
@@ -310,9 +323,10 @@ function openAdapter({ root, env = process.env, timeoutMs } = {}) {
   // Behind the contract translator, like the gateway's: the runner sees standard contract names only.
   const [command, ...args] = translatedCommand(broker);
   const name = 'futures-trading-harness-runner';
-  // The gateway (a second copy of the server) starts on the first order call only: read-only CLIs never need it.
+  // The gateway (a second copy of the server) starts on the first order call only: read-only CLIs never need it. It is
+  // the runner's (FTH_RUNNER_GATEWAY, on that process only, never in a role's env): its cleanups may cancel bracket legs.
   let writes = null;
-  const gateway = () => writes || (writes = createMcpClient({ command: process.execPath, args: [path.join(root, 'scripts', 'mcp-gateway.js')], env, cwd: root, timeoutMs, clientName: name }));
+  const gateway = () => writes || (writes = createMcpClient({ command: process.execPath, args: [path.join(root, 'scripts', 'mcp-gateway.js')], env: { ...env, FTH_RUNNER_GATEWAY: '1' }, cwd: root, timeoutMs, clientName: name }));
   return createAdapter({
     mcp: createMcpClient({ command, args, env, cwd: root, timeoutMs, clientName: `${name}-reads` }),
     writeMcp: { call: (tool, a) => gateway().call(tool, a), close: () => { if (writes) writes.close(); } },

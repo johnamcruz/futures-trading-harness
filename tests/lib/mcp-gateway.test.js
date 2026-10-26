@@ -255,7 +255,7 @@ test('canonicalArgs for a call without a contract (cancel_order, modify_order): 
   const reply = data => ({ content: [{ type: 'text', text: JSON.stringify(data) }] });
   const caller = { call: async name => reply(name === 'list_open_positions' ? [{ contractId: 'MNQ:2026-12', type: 1, size: 1 }]
     : name === 'list_open_orders' ? [{ id: 9, contractId: 'MNQ', type: 4, side: 1, size: 1, stopPrice: 21480 }] : []) };
-  const config = loadConfig({});
+  const config = loadConfig({ FTH_RUNNER_GATEWAY: '1' }); // the runner's gateway: cancel-protection judges its cancels
   const now = new Date(env.FTH_TEST_NOW);
   const cancel = canonicalArgs({ accountId: 1, orderId: 9 }, env);
   assert.strictEqual('contractId' in cancel, false);

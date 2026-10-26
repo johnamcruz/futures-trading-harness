@@ -28,6 +28,22 @@ test('[exit] and [protect] orders are never gated', () => {
   assert.deepStrictEqual(r.violations, []);
 });
 
+test('the bracket rule in the hook: a [protect] limit (a stand-alone target) and a limit or join [exit] are refused, hard; [protect] stops and market exits go', () => {
+  const skipAll = { ...config, skipChecks: new Set(['bracket-only']) };
+  for (const type of ['limit', 'LIMIT', 'join_bid', 'join_ask', 1, 6, '7']) {
+    const r = evaluate(entryOrder({ side: 'sell', type, limitPrice: 21540, rationale: '[protect] target for the long', stopLossBracket: undefined }), []);
+    assert.strictEqual(r.intent, 'risk-reducing', String(type));
+    assert.deepStrictEqual(checks(r), ['bracket-only'], String(type));
+    assert.match(r.violations[0].message, /modify the bracket's stop\/target with modify_order/);
+    assert.deepStrictEqual(checks(evaluate(entryOrder({ side: 'sell', type, limitPrice: 21540, rationale: '[protect] t', stopLossBracket: undefined }), [], { config: skipAll })), ['bracket-only'], 'never skippable');
+  }
+  // The hook can't see the working stops: a [protect] stop goes here (the gateway judges it), as do exits of any type.
+  for (const type of ['limit', 'join_ask', 1, 7]) assert.deepStrictEqual(checks(evaluate(entryOrder({ side: 'sell', type, limitPrice: 21540, rationale: '[exit] scale out', stopLossBracket: undefined }), [], { config: skipAll })), ['bracket-only'], `a limit or join [exit]: ${type}`);
+  for (const [type, rationale] of [['stop', '[protect] stop'], ['trailing_stop', '[protect] trail'], ['market', '[protect] out now'], ['market', '[exit] flatten']]) {
+    assert.deepStrictEqual(evaluate(entryOrder({ side: 'sell', type, stopPrice: 21480, limitPrice: 21540, rationale, stopLossBracket: undefined }), []).violations, [], `${type} ${rationale}`);
+  }
+});
+
 test('entry needs a setup tag, a stop, and a fresh plan', () => {
   const r = evaluate(entryOrder({ rationale: 'looks strong, going long here', stopLossBracket: undefined }), []);
   assert.deepStrictEqual(checks(r), ['plan-required', 'setup-tag', 'stop-defined']);
@@ -1790,7 +1806,7 @@ const capped = (cap, extra = {}) => ({ name: 'orb', valid: true, errors: [], sta
 const ALL_SKIPPED = new Set(['strategy', 'order-consistency', 'plan-required', 'stop-defined', 'setup-tag', 'time-window', 'blackout', 'skills-loaded', 'max-order-size', 'max-risk']);
 const RISK_REDUCING_ORDERS = [
   { rationale: '[exit] flatten the 27', side: 'sell', type: 'market', size: 27 },
-  { rationale: '[exit] scale out at the target', side: 'sell', type: 'limit', limitPrice: 21540, size: 27 },
+  { rationale: '[exit] scale out at market', side: 'sell', type: 'market', size: 27 },
   { rationale: '[protect] stop for the 27-lot long at 21480', side: 'sell', type: 'stop', stopPrice: 21480, size: 27 },
 ];
 
@@ -2834,7 +2850,8 @@ test('account gate: a ledger entry kept by its month (never a root) is not count
   const orders = [{ id: 9, contractId: 'MNQ', type: 4, side: 1, size: 1, stopPrice: 21480 }];
   const now = new Date('2026-10-08T14:30:00Z');
   const entry = c => [{ contractId: c, sign: -1, size: 1, netBefore: 1, rootNetBefore: 1, at: now.getTime(), sentAt: now.getTime() }];
-  const cancel = ledger => evaluateAccountChange('cancel_order', { input, positions, orders, config, now, ledger, cancelLedger: ledger }).map(v => v.check);
+  // The runner's gateway: cancel-protection judges its cancels (a model's never cancels a leg: [bracket-leg]).
+  const cancel = ledger => evaluateAccountChange('cancel_order', { input, positions, orders, config: { ...config, runnerGateway: true }, now, ledger, cancelLedger: ledger }).map(v => v.check);
   assert.deepStrictEqual(cancel([]), ['cancel-protection']);
   assert.deepStrictEqual(cancel(entry(kept)), ['cancel-protection'], 'kept by its month: December, not March');
   assert.deepStrictEqual(cancel(entry('MNQ')), [], 'the bare root it used to keep counted against March (the bug)');

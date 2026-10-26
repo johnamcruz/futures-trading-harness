@@ -181,6 +181,66 @@ test('order gate wiring: a managed cycle (FTH_CYCLE_MANAGE, the runner\'s) refus
   assert.strictEqual(gate(orderPayload(), env).code, 0, 'unset: the same entry goes');
 });
 
+test('order gate wiring (hook): the bracket rule refuses a [protect] limit (a stand-alone target) and a limit or join [exit] (a resting exit) [bracket-only]; a [protect] stop and a market [exit] go', () => {
+  const { env } = setup([]);
+  const r = gate(orderPayload({ ...EXIT_BASE, side: 'sell', type: 'limit', limitPrice: 21540, rationale: '[protect] target for the long' }), env);
+  assert.strictEqual(r.code, 2);
+  assert.match(r.stderr, /\[bracket-only\] A \[protect\] limit is a stand-alone target.*modify the bracket's stop\/target with modify_order/);
+  for (const type of ['limit', 'join_ask']) {
+    const x = gate(orderPayload({ ...EXIT_BASE, side: 'sell', type, limitPrice: 21540, rationale: '[exit] take profit' }), env);
+    assert.strictEqual(x.code, 2, type);
+    assert.match(x.stderr, /\[bracket-only\] A limit or join \[exit\] can rest in the book.*trailing the bracket stop with modify_order.*market \[exit\]/, type);
+  }
+  for (const input of [
+    { ...EXIT_BASE, side: 'sell', type: 'stop', stopPrice: 21480, rationale: '[protect] stop for the long at 21480' },
+    { ...EXIT_BASE, side: 'sell', rationale: '[exit] flatten' },
+  ]) {
+    const ok = gate(orderPayload(input), env);
+    assert.strictEqual(ok.code, 0, `${input.rationale}: ${ok.stderr}`);
+  }
+});
+
+test('MCP gateway wiring: beside the working stop a [protect] target, a second [protect] stop or a limit [exit] is refused [bracket-only]; with no stop working (a lost bracket) the [protect] stop goes; a market [exit] goes', async () => {
+  const { spawn } = require('child_process');
+  const session = async (orders, calls) => {
+    const dir = tmpDir();
+    const env = {
+      PATH: process.env.PATH, HOME: dir, FAKE_POSITIONS: JSON.stringify([{ contractId: 'MNQ', type: 1, size: 1 }]), FAKE_ORDERS: JSON.stringify(orders),
+      FTH_BROKERS_FILE: FAKE_BROKERS, FAKE_BROKER_API_URL: 'https://api.fake-broker.test', FAKE_BROKER_ALLOWED_ACCOUNT_IDS: '1,7', FAKE_BROKER_JOURNAL: writeJournal(dir, []),
+      FTH_NO_ENTRY_WINDOWS: '', FTH_ENTRY_HOURS: '', FTH_TEST_NOW: TEST_NOW, NODE_ENV: 'test', FTH_GATE_LOG: path.join(dir, 'gate.jsonl'),
+    };
+    const gw = spawn(process.execPath, [path.join(REPO, 'scripts', 'mcp-gateway.js'), '--', process.execPath, path.join(REPO, 'tests', 'fixtures', 'fake-mcp-server.js')], { env });
+    let out = '';
+    gw.stdout.on('data', c => { out += c; });
+    gw.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: {} })}\n`);
+    calls.forEach((args, i) => gw.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id: i + 2, method: 'tools/call', params: { name: 'place_order', arguments: args } })}\n`));
+    gw.stdin.end();
+    await new Promise(resolve => gw.on('close', resolve));
+    const byId = Object.fromEntries(out.trim().split('\n').filter(Boolean).map(l => JSON.parse(l)).map(x => [x.id, x]));
+    return calls.map((_c, i) => byId[i + 2].result.content[0].text);
+  };
+  const stopOrder = { id: 9, contractId: 'MNQ', side: 1, type: 4, size: 1, stopPrice: 21480 };
+  const protectStop = { ...EXIT_BASE, side: 'sell', type: 'stop', stopPrice: 21485, rationale: '[protect] stop for the long at 21485' };
+  const exitLimit = { ...EXIT_BASE, side: 'sell', type: 'limit', limitPrice: 21540, rationale: '[exit] take profit' };
+  const exitMarket = { ...EXIT_BASE, side: 'sell', rationale: '[exit] flatten' };
+  // One session each for the exits: an [exit] the gateway forwards counts as pending for its position (pendingState).
+  const [stop2, target, exitL] = await session([stopOrder], [protectStop, { ...exitLimit, rationale: '[protect] target for the long' }, exitLimit]);
+  const [exitM] = await session([stopOrder], [exitMarket]);
+  const stopExit = { ...EXIT_BASE, side: 'sell', type: 'stop', stopPrice: 21485, rationale: '[exit] stop out at 21485' };
+  const [stopExitBeside] = await session([stopOrder], [stopExit]);
+  const [stopExitAlone] = await session([], [stopExit]);
+  assert.match(stopExitBeside, /\[bracket-only\] The position \(1\) already has working stops for 1: a second stop/, 'a stop [exit] beside the covering stop');
+  assert.strictEqual(stopExitAlone, 'forwarded:tools/call:place_order', 'a stop [exit] with no working stop: protection');
+  const [restingNoStop] = await session([], [exitLimit]);
+  assert.match(restingNoStop, /\[bracket-only\] A limit or join \[exit\] can rest/, 'a limit [exit] with no stop working: refused too');
+  assert.match(target, /\[bracket-only\] A \[protect\] limit is a stand-alone target/);
+  assert.match(stop2, /\[bracket-only\] The position \(1\) already has working stops for 1.*modify the bracket's stop\/target with modify_order/i);
+  assert.match(exitL, /\[bracket-only\] A limit or join \[exit\] can rest.*market \[exit\]/, 'a limit [exit] beside the stop: refused');
+  assert.strictEqual(exitM, 'forwarded:tools/call:place_order', 'a market [exit] beside the stop');
+  const [lost] = await session([], [protectStop]);
+  assert.strictEqual(lost, 'forwarded:tools/call:place_order', 'no working stop: the [protect] stop goes (risk reduction)');
+});
+
 test('order gate: a setup tag that is not first is refused with where it goes', () => {
   const { env } = setup([{ ts: minutesAgo(5, new Date(TEST_NOW)), kind: 'plan', contractId: entryOrder().contractId, text: 'plan' }]);
   const r = gate(orderPayload(entryOrder({ rationale: 'long setup:orb, stop 21480' })), env);
@@ -1249,7 +1309,8 @@ test('MCP gateway: a confirmed close lets the closed position\'s stop be cancell
   const run = async extra => {
     const dir = tmpDir();
     const env = {
-      PATH: process.env.PATH, HOME: dir, START_NET: '1', FILL_DELAY_MS: '1500', STOP_ORDER: '1', ...extra,
+      // The runner's gateway (FTH_RUNNER_GATEWAY): its cancels are judged by cancel-protection (a model's: [bracket-leg]).
+      PATH: process.env.PATH, HOME: dir, START_NET: '1', FILL_DELAY_MS: '1500', STOP_ORDER: '1', FTH_RUNNER_GATEWAY: '1', ...extra,
       FTH_BROKERS_FILE: FAKE_BROKERS, FAKE_BROKER_API_URL: 'https://api.fake-broker.test', FAKE_BROKER_ALLOWED_ACCOUNT_IDS: '1,7', FAKE_BROKER_JOURNAL: writeJournal(dir, []), FTH_GATE_LOG: path.join(dir, 'gate.jsonl'), FTH_NO_ENTRY_WINDOWS: '', FTH_ENTRY_HOURS: '', FTH_TEST_NOW: TEST_NOW, NODE_ENV: 'test',
     };
     const gw = spawn(process.execPath, [path.join(REPO, 'scripts', 'mcp-gateway.js'), '--', process.execPath, path.join(REPO, 'tests', 'fixtures', 'stateful-mcp-server.js')], { env });
@@ -1578,7 +1639,7 @@ test('MCP gateway wiring, live: an exit by the root answered just before 18:00 E
   // 17:59:58.5 ET, December the front month (looked up today); long 1 December and long 1 March, March's stop order 9.
   // The exit sell by MNQ (December) is allowed and answered; 3.5 s later, past 18:00 ET, March's stop is cancelled.
   const r = await liveRollRun({ now: '2026-10-07T21:59:58.500Z', front: { id: 'sim-Z6', day: '2026-10-07' }, active: 'sim-H7', position: ['sim-Z6', 'sim-H7'],
-    extra: { FAKE_ORDERS: JSON.stringify([{ id: 9, contractId: 'sim-H7', type: 4, side: 1, size: 1, stopPrice: 21480 }]) },
+    extra: { FAKE_ORDERS: JSON.stringify([{ id: 9, contractId: 'sim-H7', type: 4, side: 1, size: 1, stopPrice: 21480 }]), FTH_RUNNER_GATEWAY: '1' },
     gaps: { 2: 3500 }, messages: [rollExit(1, 'MNQ'), call(2, 'cancel_order', { accountId: 1, orderId: 9 })] });
   assert.deepStrictEqual(r.sent, ['place_order sim-Z6'], JSON.stringify(r.texts));
   assert.match(r.texts[2], /\[cancel-protection\]/, 'kept under the root, the December exit would count against March and let its only stop go');
@@ -1728,8 +1789,9 @@ test('MCP gateway: an order call reusing an in-flight request id is refused', as
 
 test('MCP gateway: an order of unknown outcome blocks new entries, not exits, stop moves or cancels', async () => {
   const stop = JSON.stringify([{ id: 9, contractId: 'MNQ', side: 1, type: 4, size: 1, stopPrice: 21480 }]);
-  const { byId } = await gatewayRun({ FAKE_POSITIONS: LONG1, FAKE_ORDERS: stop, FAKE_DELAY_MS: '1500', FTH_LANE_TIMEOUT_MS: '300' }, [
-    call(1, 'place_order', { ...EXIT_BASE, side: 'sell', type: 'limit', limitPrice: 21600, rationale: '[exit] target' }),
+  // An exit that rests (a stop [exit]: no limit [exit] rests, the bracket rule) whose reply comes late; long 2, so it fits beside the stop.
+  const { byId } = await gatewayRun({ FAKE_POSITIONS: JSON.stringify([{ contractId: 'MNQ', type: 1, size: 2 }]), FAKE_ORDERS: stop, FAKE_DELAY_MS: '1500', FTH_LANE_TIMEOUT_MS: '300' }, [
+    call(1, 'place_order', { ...EXIT_BASE, side: 'sell', type: 'stop', stopPrice: 21470, rationale: '[exit] stop out at 21470' }),
     call(2, 'modify_order', { accountId: 1, orderId: 9, stopPrice: 21490, reason: '[protect] tighten' }),
     call(3, 'cancel_order', { accountId: 1, orderId: 9 }),
     call(4, 'close_position', { accountId: 1, contractId: 'MNQ' }),
@@ -1791,7 +1853,7 @@ test('MCP gateway: a customTag carried by an order of unknown outcome can\'t be 
   const { byId } = await gatewayRun({ FAKE_POSITIONS: LONG1, FAKE_ARGS: argsFile, FTH_CYCLE_TRANSCRIPT: transcript }, [
     call(2, 'place_order', { ...ORDER, customTag: 'orb-1' }),
     // An exit reusing it still goes, under a fresh tag, so the first order's record survives.
-    call(3, 'place_order', { ...EXIT_BASE, side: 'sell', type: 'limit', limitPrice: 21600, rationale: '[exit] target', customTag: 'orb-1' }),
+    call(3, 'place_order', { ...EXIT_BASE, side: 'sell', type: 'market', rationale: '[exit] take profit at market', customTag: 'orb-1' }),
   ], { dir });
   assert.match(byId[2].result.content[0].text, /\[order-pending\]/);
   // The tracker's refusal is logged with the order's contract, side, size, type and rationale, and the runner cycle's
@@ -1814,8 +1876,10 @@ test('MCP gateway: with an exit of unknown outcome, the stop can\'t be cancelled
   await gatewayRun({ FAKE_POSITIONS: LONG1, FAKE_DROP: 'place_order', FTH_LANE_TIMEOUT_MS: '300' }, [
     call(1, 'place_order', { ...EXIT_BASE, side: 'sell', type: 'limit', limitPrice: 21600, rationale: '[exit] target' }),
   ], { dir });
-  const withStop = await gatewayRun({ FAKE_POSITIONS: LONG1, FAKE_ORDERS: stop }, [call(2, 'cancel_order', { accountId: 1, orderId: 9 })], { dir });
+  const withStop = await gatewayRun({ FAKE_POSITIONS: LONG1, FAKE_ORDERS: stop, FTH_RUNNER_GATEWAY: '1' }, [call(2, 'cancel_order', { accountId: 1, orderId: 9 })], { dir });
   assert.match(withStop.byId[2].result.content[0].text, /\[cancel-protection\]/);
+  const model = await gatewayRun({ FAKE_POSITIONS: LONG1, FAKE_ORDERS: stop }, [call(4, 'cancel_order', { accountId: 1, orderId: 9 })], { dir });
+  assert.match(model.byId[4].result.content[0].text, /\[bracket-leg\]/, 'a model never cancels a leg of an open position');
   // No stop yet: a [protect] stop goes (the unknown target counts as resting, not as filled).
   const noStop = await gatewayRun({ FAKE_POSITIONS: LONG1 }, [call(3, 'place_order', { ...EXIT_BASE, side: 'sell', type: 'stop', stopPrice: 21480, rationale: '[protect] stop for the long at 21480' })], { dir });
   assert.strictEqual(noStop.byId[3].result.content[0].text, 'forwarded:tools/call:place_order');
@@ -1831,7 +1895,7 @@ test('MCP gateway: an entry of unknown outcome keeps its bracket stop from being
   writeUnknown(dir);
   // The account doesn't show the fill yet, but the bracket stop rests: it is the entry's protection.
   const stop = JSON.stringify([{ id: 9, contractId: 'MNQ', side: 1, type: 4, size: 1, stopPrice: 21480 }]);
-  const { byId } = await gatewayRun({ FAKE_ORDERS: stop, FAKE_SEARCH_ORDERS: '[]' }, [call(1, 'cancel_order', { accountId: 1, orderId: 9 })], { dir });
+  const { byId } = await gatewayRun({ FAKE_ORDERS: stop, FAKE_SEARCH_ORDERS: '[]', FTH_RUNNER_GATEWAY: '1' }, [call(1, 'cancel_order', { accountId: 1, orderId: 9 })], { dir });
   assert.match(byId[1].result.content[0].text, /\[cancel-protection\]/);
 });
 
@@ -1839,10 +1903,10 @@ test('MCP gateway: a limit entry of unknown outcome keeps its bracket stop too; 
   const dir = tmpDir();
   writeUnknown(dir, { type: 'limit' });
   const stop = JSON.stringify([{ id: 9, contractId: 'MNQ', side: 1, type: 4, size: 1, stopPrice: 21480 }]);
-  const { byId } = await gatewayRun({ FAKE_ORDERS: stop, FAKE_SEARCH_ORDERS: '[]' }, [call(1, 'cancel_order', { accountId: 1, orderId: 9 })], { dir });
+  const { byId } = await gatewayRun({ FAKE_ORDERS: stop, FAKE_SEARCH_ORDERS: '[]', FTH_RUNNER_GATEWAY: '1' }, [call(1, 'cancel_order', { accountId: 1, orderId: 9 })], { dir });
   assert.match(byId[1].result.content[0].text, /\[cancel-protection\]/);
   const withTarget = JSON.stringify([{ id: 9, contractId: 'MNQ', side: 1, type: 4, size: 1, stopPrice: 21480 }, { id: 55, contractId: 'MNQ', side: 1, type: 1, size: 1, limitPrice: 21600 }]);
-  const target = await gatewayRun({ FAKE_POSITIONS: LONG1, FAKE_ORDERS: withTarget }, [call(2, 'cancel_order', { accountId: 1, orderId: 9 })]);
+  const target = await gatewayRun({ FAKE_POSITIONS: LONG1, FAKE_ORDERS: withTarget, FTH_RUNNER_GATEWAY: '1' }, [call(2, 'cancel_order', { accountId: 1, orderId: 9 })]);
   assert.match(target.byId[2].result.content[0].text, /\[cancel-protection\]/);
 });
 
@@ -1972,7 +2036,7 @@ test('MCP gateway: an [exit] right after close_position cannot flip the position
 
 test('MCP gateway: no request may reuse the id of an order call whose reply is overdue', async () => {
   const { all } = await gatewayRun({ FAKE_POSITIONS: LONG1, FAKE_DELAY_MS: '1500', FTH_LANE_TIMEOUT_MS: '300' }, [
-    call(1, 'place_order', { ...EXIT_BASE, side: 'sell', type: 'limit', limitPrice: 21600, rationale: '[exit] target' }),
+    call(1, 'place_order', { ...EXIT_BASE, side: 'sell', type: 'market', rationale: '[exit] take profit at market' }),
     call(1, 'list_open_positions', { accountId: 1 }),
   ]);
   const texts = all.map(r => (r.error ? r.error.message : r.result.content[0].text));
@@ -3141,7 +3205,7 @@ test('order gate wiring: phase2-size, in the hook and the gateway: an autonomous
   const auto = { FTH_AUTONOMOUS: '1', FTH_ROLE_SKILLS: 'full', FTH_CYCLE: 'full', FTH_SYMBOLS: 'MNQ', FTH_CYCLE_TRANSCRIPT: stream, FAKE_POSITIONS: LONG1 };
   const text = r => r.result.content[0].text;
   fs.writeFileSync(stream, cycle('VERDICT: APPROVE - size 1, risk $40\nFACTS: none'));
-  let g = await gatewayRun(auto, [call(1, 'place_order', { ...ORDER, size: 2 }), call(2, 'place_order', { ...EXIT_BASE, side: 'sell', type: 'limit', limitPrice: 21600, rationale: '[exit] target' })], { dir: gdir });
+  let g = await gatewayRun(auto, [call(1, 'place_order', { ...ORDER, size: 2 }), call(2, 'place_order', { ...EXIT_BASE, side: 'sell', type: 'market', rationale: '[exit] take profit at market' })], { dir: gdir });
   assert.match(text(g.byId[1]), /\[phase2-size\] size 2 is over the 1 risk-manager phase 2 approved/);
   assert.strictEqual(text(g.byId[2]), 'forwarded:tools/call:place_order', 'an exit goes');
   fs.writeFileSync(stream, cycle('VERDICT: APPROVE - size <n>, risk $40\nFACTS: none'));

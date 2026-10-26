@@ -82,7 +82,9 @@ Always on, every harness, every bar (the detail: `confluence-counting`).
 - Rationale convention (the order gate reads it):
   - New entry: `setup:<name> ... stop <price> ...` (and a plan in the journal).
   - Exit or scale-out: start with `[exit]`.
-  - Protective stop/target for an existing fill: start with `[protect]`.
+  - Protective stop for a fill no working stop covers: start with `[protect]`.
+    Otherwise adjust the entry's bracket with `modify_order`; a `[protect]`
+    limit (a stand-alone target) is refused.
   Labelling an entry `[exit]`/`[protect]` to dodge the gate is a rule
   violation the reviewer will flag.
 - One order per decision. If an order is blocked, read the reason and stand

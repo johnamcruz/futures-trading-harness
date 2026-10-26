@@ -37,9 +37,42 @@ test('[protect] stops and limits may not stack beyond the position (one of each 
   const stop = order({ side: 'sell', type: 'stop', stopPrice: 1, rationale: '[protect] stop' });
   const restingStop = [{ contractId: CONTRACT, side: 1, type: 4, size: 1 }];
   assert.deepStrictEqual(evaluateAccount({ input: stop, positions: long1, orders: [], config }), []);
-  assert.match(evaluateAccount({ input: stop, positions: long1, orders: restingStop, config })[0].message, /Resting stop/);
-  const target = order({ side: 'sell', type: 'limit', limitPrice: 2, rationale: '[protect] target' });
-  assert.deepStrictEqual(evaluateAccount({ input: target, positions: long1, orders: restingStop, config }), []);
+  assert.match(evaluateAccount({ input: stop, positions: long1, orders: restingStop, config })[0].message, /already has working stops for 1/);
+  // A limit beside the stop, [protect] or [exit], is a stand-alone target: the bracket rule below refuses it.
+  const target = order({ side: 'sell', type: 'limit', limitPrice: 2, rationale: '[exit] target' });
+  assert.deepStrictEqual(checks(evaluateAccount({ input: target, positions: long1, orders: restingStop, config })), ['bracket-only']);
+});
+
+test('the bracket rule: no separate [protect] beside the working stop (modify the bracket); a lost bracket still gets its stop', () => {
+  const stopIn = (extra = {}) => order({ side: 'sell', type: 'stop', stopPrice: 1, rationale: '[protect] stop', ...extra });
+  const stop1 = { contractId: CONTRACT, side: 1, type: 4, size: 1 };
+  const long2 = [{ contractId: CONTRACT, type: 1, size: 2 }];
+  const run = (input, positions, orders, cfg = config) => evaluateAccount({ input, positions, orders, config: cfg });
+  // A [protect] limit (a stand-alone target), by name or by the broker's numeric type, beside the stop: refused.
+  for (const type of ['limit', 'join_ask', 'join_bid', 1, '7']) {
+    const v = run(order({ side: 'sell', type, limitPrice: 2, rationale: '[protect] target' }), long1, [stop1]);
+    assert.deepStrictEqual(checks(v), ['bracket-only'], String(type));
+    assert.match(v[0].message, /modify the bracket's stop\/target with modify_order/);
+  }
+  // A second [protect] stop when the stops already cover the position: refused, and never skippable.
+  const skipAll = { ...config, skipChecks: new Set(['bracket-only', 'exposure']) };
+  for (const type of ['stop', 'trailing_stop']) assert.deepStrictEqual(checks(run(stopIn({ type }), long2, [{ ...stop1, size: 2 }])), ['bracket-only'], type);
+  assert.deepStrictEqual(checks(run(stopIn({ size: 1 }), long2, [{ ...stop1, size: 2 }], skipAll)), ['bracket-only'], 'hard');
+  assert.deepStrictEqual(checks(run(order({ side: 'sell', type: 'limit', limitPrice: 2, rationale: '[protect] t' }), long1, [stop1], skipAll)), ['bracket-only'], 'hard');
+  // Risk reduction always goes: a [protect] stop with no working stop (a lost bracket), or for the part no stop covers.
+  assert.deepStrictEqual(run(stopIn(), long1, []), [], 'no stop working');
+  assert.deepStrictEqual(run(stopIn(), long2, [stop1]), [], 'one of two uncovered');
+  // A stop on another month, or on the position's own side (an entry's), covers nothing here.
+  assert.deepStrictEqual(run(stopIn(), long1, [{ ...stop1, contractId: 'MNQ:2027-03' }]), [], 'another month');
+  assert.deepStrictEqual(run(stopIn(), long1, [{ ...stop1, side: 0 }]), [], 'not protective');
+  // An [exit] (market or limit, whole or part), and a market [protect], go beside the stop.
+  assert.deepStrictEqual(run(order({ side: 'sell', rationale: '[exit] out' }), long1, [stop1]), []);
+  assert.deepStrictEqual(checks(run(order({ side: 'sell', type: 'limit', limitPrice: 2, rationale: '[exit] scale out' }), long2, [{ ...stop1, size: 2 }])), ['bracket-only'], 'a limit [exit]: refused');
+  assert.deepStrictEqual(run(order({ side: 'sell', rationale: '[protect] out at market' }), long1, [stop1]), []);
+  // A short: its buy-side stop covers it.
+  const short1 = [{ contractId: CONTRACT, type: 2, size: 1 }];
+  assert.deepStrictEqual(checks(run(order({ side: 'buy', type: 'stop', stopPrice: 9, rationale: '[protect] stop' }), short1, [{ ...stop1, side: 0 }])), ['bracket-only']);
+  assert.deepStrictEqual(run(order({ side: 'buy', type: 'stop', stopPrice: 9, rationale: '[protect] stop' }), short1, []), []);
 });
 
 test('a refused config file (config.configCritical): every entry is refused with the critical error, never skippable; exits and stops still go', () => {
@@ -204,10 +237,33 @@ test('positions in another month of the same root count (no entry on H27 while l
   assert.deepStrictEqual(checks(evaluateAccount({ input: h27, positions: long1, config })), ['position-open']);
 });
 
-test('join_bid/join_ask exits count as resting limits', () => {
+test('join_bid/join_ask exits rest by definition: refused (the bracket rule)', () => {
   const restingJoins = [{ contractId: CONTRACT, side: 1, type: 7, size: 1 }];
   const join = order({ side: 'sell', type: 'join_ask', rationale: '[exit] scale out' });
-  assert.match(evaluateAccount({ input: join, positions: long1, orders: restingJoins, config })[0].message, /Resting limit/);
+  for (const orders of [restingJoins, []]) assert.deepStrictEqual(checks(evaluateAccount({ input: join, positions: long1, orders, config })), ['bracket-only']);
+});
+
+test('the bracket rule: every limit or join [exit] is refused, with or without a working stop, hard; a market [exit] goes', () => {
+  const stop1 = [{ contractId: CONTRACT, side: 1, type: 4, size: 1 }];
+  const run = (input, orders = stop1, positions = long1) => evaluateAccount({ input, positions, orders, config: { ...config, skipChecks: new Set(['bracket-only', 'exposure']) } });
+  for (const type of ['limit', 'join_bid', 'join_ask', 'LIMIT']) {
+    const v = run(order({ side: 'sell', type, limitPrice: 21490, rationale: '[exit] take profit' }));
+    assert.deepStrictEqual(checks(v), ['bracket-only'], type);
+    assert.match(v[0].message, /trailing the bracket stop with modify_order.*market \[exit\]/);
+    assert.deepStrictEqual(checks(run(order({ side: 'sell', type, limitPrice: 21490, rationale: '[exit] take profit' }), [])), ['bracket-only'], `${type}, no stop working`);
+  }
+  const short1 = [{ contractId: CONTRACT, type: 2, size: 1 }];
+  assert.deepStrictEqual(checks(run(order({ side: 'buy', type: 'limit', limitPrice: 21510, rationale: '[exit] out' }), [{ ...stop1[0], side: 0 }], short1)), ['bracket-only']);
+  assert.deepStrictEqual(run(order({ side: 'sell', rationale: '[exit] now' })), [], 'a market [exit] goes');
+  assert.deepStrictEqual(run(order({ side: 'sell', type: 'stop', stopPrice: 21480, rationale: '[exit] stop out' }), []), [], 'a stop [exit] with no working stop: protection');
+  // Beside a stop that covers the position: a second stop by another name, refused as a [protect] stop is (hard).
+  for (const type of ['stop', 'trailing_stop']) {
+    const v = run(order({ side: 'sell', type, stopPrice: 21480, rationale: '[exit] stop out' }));
+    assert.deepStrictEqual(checks(v), ['bracket-only'], type);
+    assert.match(v[0].message, /a second stop \(\[protect\] or \[exit\]\).*modify_order/);
+  }
+  const long2 = [{ contractId: CONTRACT, type: 1, size: 2 }];
+  assert.deepStrictEqual(run(order({ side: 'sell', type: 'stop', stopPrice: 21480, rationale: '[exit] stop out' }), stop1, long2), [], 'the part no stop covers');
 });
 
 test('ledger: an entry sent moments ago blocks a second entry and caps exits until the account reflects it', () => {
@@ -224,7 +280,34 @@ test('ledger: an entry sent moments ago blocks a second entry and caps exits unt
   assert.match(evaluateAccount({ input: order({ side: 'sell', rationale: '[exit] x' }), positions: long1, ledger: exitLedger, now, config })[0].message, /no open/);
 });
 
+// The runner's own gateway (FTH_RUNNER_GATEWAY): its cancels are judged by cancel-protection; a model's never cancels a leg.
+const runnerConfig = { ...config, runnerGateway: true };
+
+test('cancel_order (the model): no leg of an open position\'s bracket, stop or target, is cancelled; hard; flat or closed, it may go', () => {
+  const stop = { id: 11, contractId: CONTRACT, side: 1, type: 4, size: 1 };
+  const target = { id: 12, contractId: CONTRACT, side: 1, type: 1, size: 1 };
+  for (const id of [11, 12]) {
+    const v = evaluateCancel({ input: { orderId: id }, positions: long1, orders: [stop, target], config: { ...config, skipChecks: new Set(['bracket-leg', 'cancel-protection']) } });
+    assert.deepStrictEqual(checks(v), ['bracket-leg'], String(id));
+    assert.match(v[0].message, /the runner manages the bracket.*modify_order/);
+  }
+  // Two stops: neither is the last, still a leg.
+  assert.deepStrictEqual(checks(evaluateCancel({ input: { orderId: 11 }, positions: long1, orders: [stop, { ...stop, id: 13 }], config })), ['bracket-leg']);
+  // The server's bracket role decides when given: a leg marked target of any type; absent, the type (never "no bracket").
+  assert.deepStrictEqual(checks(evaluateCancel({ input: { orderId: 14 }, positions: long1, orders: [stop, { id: 14, contractId: CONTRACT, side: 1, type: 2, size: 1, bracket: { role: 'target' } }], config })), ['bracket-leg']);
+  // A short's legs are buys.
+  const short1 = [{ contractId: CONTRACT, type: 2, size: 1 }];
+  assert.deepStrictEqual(checks(evaluateCancel({ input: { orderId: 11 }, positions: short1, orders: [{ ...stop, side: 0 }], config })), ['bracket-leg']);
+  // Flat, an order on the position's own side (an entry), another month, or a close the gateway sent: it may go.
+  assert.deepStrictEqual(evaluateCancel({ input: { orderId: 11 }, positions: [], orders: [stop], config }), []);
+  assert.deepStrictEqual(evaluateCancel({ input: { orderId: 15 }, positions: long1, orders: [stop, { id: 15, contractId: CONTRACT, side: 0, type: 1, size: 1 }], config }), []);
+  assert.deepStrictEqual(evaluateCancel({ input: { orderId: 16 }, positions: long1, orders: [stop, { ...target, id: 16, contractId: 'MNQ:2027-03' }], config }), []);
+  const closed = [{ contractId: CONTRACT, root: 'MNQ', sign: -1, size: 1, netBefore: 1, rootNetBefore: 1, at: NOW.getTime() - 1000 }];
+  assert.deepStrictEqual(evaluateCancel({ input: { orderId: 12 }, positions: long1, orders: [stop, target], config, ledger: closed, now: NOW }), []);
+});
+
 test('cancel_order may not remove the last protective stop of an open position', () => {
+  const config = runnerConfig;
   const stop = { id: 11, contractId: CONTRACT, side: 1, type: 4, size: 1 };
   const target = { id: 12, contractId: CONTRACT, side: 1, type: 1, size: 1 };
   assert.match(evaluateCancel({ input: { orderId: 11 }, positions: long1, orders: [stop, target], config })[0].message, /protective stop/);
@@ -234,6 +317,7 @@ test('cancel_order may not remove the last protective stop of an open position',
 });
 
 test('cancel_order: a close the gateway sent and the server confirmed counts before the account shows it', () => {
+  const config = runnerConfig;
   const now = new Date('2026-10-07T14:00:00Z');
   const stop = { id: 11, contractId: 'MNQ', type: 4, side: 1, size: 1, stopPrice: 21480 };
   const long1 = [{ contractId: 'MNQ', type: 1, size: 1 }];
@@ -247,6 +331,7 @@ test('cancel_order: a close the gateway sent and the server confirmed counts bef
 });
 
 test('cancel_order: a resting [exit] target in the ledger hasn\'t changed the position, so the only stop stays', () => {
+  const config = runnerConfig;
   const orders = [{ id: 9, contractId: CONTRACT, side: 1, type: 4, size: 1, stopPrice: 21480 }, { id: 55, contractId: CONTRACT, side: 1, type: 1, size: 1, limitPrice: 21600 }];
   const ledger = [{ contractId: CONTRACT, sign: -1, size: 1, netBefore: 1, at: NOW.getTime(), orderId: '55' }];
   assert.deepStrictEqual(checks(evaluateCancel({ input: { orderId: 9 }, positions: long1, orders, config, ledger, now: NOW })), ['cancel-protection']);
@@ -323,7 +408,8 @@ test('contract months: an exit must be in the month that is open, and a long and
   const hedged = [{ contractId: Z, type: 1, size: 1 }, { contractId: H, type: 2, size: 1 }];
   assert.deepStrictEqual(checks(evaluateAccount({ input: order(), positions: hedged, config })), ['position-open']);
   const stopZ = { id: 50, contractId: Z, side: 1, type: 4, size: 1, stopPrice: 21400 };
-  assert.match(evaluateCancel({ input: { orderId: 50 }, positions: hedged, orders: [stopZ], config })[0].message, /protective stop/);
+  assert.match(evaluateCancel({ input: { orderId: 50 }, positions: hedged, orders: [stopZ], config: runnerConfig })[0].message, /protective stop/);
+  assert.deepStrictEqual(checks(evaluateCancel({ input: { orderId: 50 }, positions: hedged, orders: [stopZ], config })), ['bracket-leg']);
 });
 
 test('modify_order: sizes may only shrink; every price field must keep a protective stop tightening', () => {
@@ -367,7 +453,7 @@ test('ledger: a marketable limit that filled counts until the account shows it; 
   assert.deepStrictEqual(checks(evaluateAccount({ input: limit, orders: resting, ledger: [sent], now, config })), ['working-orders']);
   // An [exit] limit that filled: a second one would flip the long.
   const exitSent = { contractId: CONTRACT, sign: -1, size: 1, netBefore: 1, rootNetBefore: 1, at: now.getTime(), orderId: '78' };
-  const exit = order({ side: 'sell', type: 'limit', limitPrice: 20990, rationale: '[exit] flatten' });
+  const exit = order({ side: 'sell', rationale: '[exit] flatten' });
   assert.deepStrictEqual(checks(evaluateAccount({ input: exit, positions: long1, ledger: [exitSent], now, config })), ['exposure']);
 });
 

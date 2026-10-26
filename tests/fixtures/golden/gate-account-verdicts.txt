@@ -9,14 +9,27 @@ account: an [exit] larger than the position: REFUSED
   [exposure] [exit]/[protect] size 2 exceeds the open MNQ position (1).
 account: an [exit] that reduces it (allowed): ALLOWED
 account: a second resting [protect] stop: REFUSED
-  [exposure] Resting stop orders plus this one would exceed the open MNQ position (1); they could fill into a new position.
+  [bracket-only] The position (1) already has working stops for 1: a second stop ([protect] or [exit]) is a separate order beside its bracket. Modify the bracket's stop/target with modify_order (toward the market only); out now: a market [exit] or a close. A separate stop goes only when no working stop covers the position (a lost bracket).
+account: a [protect] target beside the working stop: REFUSED
+  [bracket-only] A [protect] limit is a stand-alone target: no order links it to the stop, so whichever fills first leaves the other working to open a new, unprotected position. Risk is managed with the entry's brackets: modify the bracket's stop/target with modify_order (under a trail or target_then_trail exit the runner manages the exit and wants no target). To take profit or get out now, send an [exit] (market), partial_close_position or close_position.
+account: a [protect] stop with no working stop, a lost bracket (allowed): ALLOWED
+account: a [protect] stop for the part no stop covers (allowed): ALLOWED
+account: a limit [exit] beside the working stop: REFUSED
+  [bracket-only] A limit or join [exit] can rest in the book: a stand-alone target that outlives the stop if the stop fills first. Take profit by trailing the bracket stop with modify_order (toward the market), or close now with a market [exit] (or partial_close_position / close_position).
+account: a stop [exit] beside the working stop: REFUSED
+  [bracket-only] The position (1) already has working stops for 1: a second stop ([protect] or [exit]) is a separate order beside its bracket. Modify the bracket's stop/target with modify_order (toward the market only); out now: a market [exit] or a close. A separate stop goes only when no working stop covers the position (a lost bracket).
+account: a stop [exit] with no working stop (allowed): ALLOWED
+account: a market [exit] beside the working stop (allowed): ALLOWED
 account: an [exit] with a bracket: REFUSED
   [exposure] [exit]/[protect] orders take no stopLossBracket/takeProfitBracket: their legs could open a new position once the trade is flat. Send the exit or stop alone.
 account: two losses from real fills: REFUSED
   [loss-streak] 2 losing closes in a row (from fills). Cooling down for 20 min more.
-cancel: the last protective stop: REFUSED
+cancel: the runner cancels the last protective stop: REFUSED
   [cancel-protection] Order 11 is the protective stop for the open MNQ position (net 1). Move it with modify_order, or close the position first ([exit]).
-cancel: a target, the stop stays (allowed): ALLOWED
+cancel: the runner cancels a target, the stop stays (allowed): ALLOWED
+cancel: the model cancels a bracket leg of an open position: REFUSED
+  [bracket-leg] Order 12 is a bracket leg (target) of the open MNQ position (net 1): the runner manages the bracket, and it stays while the position is open. Adjust it with modify_order (a stop toward the market only); to get out, send an [exit] or close_position, and the runner cancels the legs once flat.
+cancel: the model cancels a leftover on a flat contract (allowed): ALLOWED
 modify: a stop moved toward the market (allowed): ALLOWED
 modify: a stop moved away from the market: REFUSED
   [modify-protection] Order 11 protects the open MNQ position (net 1); move it toward the market only (now 21480, asked stopPrice 21470). To take more risk, don't; to get out, use an [exit] order.

@@ -58,6 +58,7 @@ const { contractRoot, contractMonthTag } = require('./trading/journal');
 const { familyRoot, familyOf } = require('./trading/contracts');
 const { specMismatch, validSpec, noSpecsMessage } = require('./trading/broker-specs');
 const { isOpen, signedSize } = require('./trading/positions');
+const { protectiveStops, legRole } = require('./trading/bracket-legs');
 const { coverageError } = require('./trading/exchange-calendar');
 const { writeReviews, tickValueFor } = require('./trading/runner-reviews');
 
@@ -502,9 +503,29 @@ function createRunner(deps) {
     // When no cycle may run (kill switch, outside the sessions), a pending
     // entry that fills would have no one to manage it: cancel those too.
     const entries = noCycles ? new Set() : entryOrderIds();
+    // Each cancel on its own: one the broker refuses, loses or answers late never skips the others (or the rest of the
+    // housekeeping); the next bar reads the account again and retries what is still working.
     for (const o of orders.filter(x => famOf(x.contractId) === root && !entries.has(Number(x.id)))) {
-      await client.cancelOrder(cfg.account, o.id);
-      log(`${item.symbol}: cancelled leftover order ${o.id} (type ${o.type}, side ${o.side}, size ${o.size}) on a flat ${root} position`);
+      try {
+        await client.cancelOrder(cfg.account, o.id);
+        log(`${item.symbol}: cancelled leftover order ${o.id} (type ${o.type}, side ${o.side}, size ${o.size}) on a flat ${root} position`);
+      } catch (err) {
+        log(`${item.symbol}: could not cancel leftover order ${o.id} on a flat ${root} position (${err.message}); the next bar retries`, 'error');
+        emit('leftover_cancel_failed', { symbol: item.symbol, orderId: o.id, error: err.message });
+      }
+    }
+  }
+
+  /** After a refused stop move: the account read again; a flat root has its leftover orders cancelled now. */
+  async function reconcileAfterRefusedMove(item, err) {
+    try {
+      const fresh = await client.accountState(cfg.account);
+      const root = famOf(item.contractId);
+      if (fresh.positions.some(p => famOf(p.contractId) === root && isOpen(p))) return;
+      log(`${item.symbol}: the stop move was refused (${err.message}) and the ${root} position reads flat: its bracket filled or was cancelled; cancelling the leftovers`, 'error');
+      await cleanupFlat(item, fresh);
+    } catch (e) {
+      log(`${item.symbol}: could not re-read the account after a refused stop move (${e.message}); the next bar reconciles`, 'error');
     }
   }
 
@@ -664,6 +685,17 @@ function createRunner(deps) {
     if (sign * (target - resting) < tick - 1e-9) return;
     if (Number(stopOrder.size) > Number(p.size)) {
       log(`${item.symbol}: trail: stop ${stopOrder.id} (size ${stopOrder.size}) is bigger than the position (${p.size}); not moving it toward the market`, 'error');
+      // Anti-flip: a stop bigger than the position would reverse it when it fires. Cut to the position's size (the
+      // bracket order itself, with modify_order: never a new order); the move waits for the next bar's read.
+      if (typeof client.resizeStop === 'function' && Number(p.size) > 0) {
+        try {
+          await client.resizeStop(cfg.account, stopOrder.id, Number(p.size), `[protect] stop cut to the position's size ${p.size}`);
+          log(`${item.symbol}: trail: stop ${stopOrder.id} cut from ${stopOrder.size} to the position's size ${p.size}`);
+          emit('stop_resized', { symbol: item.symbol, contractId: cid, orderId: stopOrder.id, from: Number(stopOrder.size), to: Number(p.size) });
+        } catch (err) {
+          log(`${item.symbol}: trail: could not cut stop ${stopOrder.id} to ${p.size} (${err.message}); the next bar retries`, 'error');
+        }
+      }
       return;
     }
     // Never a stop that isn't a price (a broken exit plan gives NaN): the broker's stop stays where it is.
@@ -672,7 +704,14 @@ function createRunner(deps) {
       emit('stop_not_moved', { symbol: item.symbol, contractId: cid, setup: t.setup, resting, target: String(target) });
       return;
     }
-    await client.modifyStop(cfg.account, stopOrder.id, target);
+    try {
+      await client.modifyStop(cfg.account, stopOrder.id, target);
+    } catch (err) {
+      // A refused move ("order not found" or the like) may mean the bracket's stop filled or was cancelled: read the
+      // account again at once and, flat, cancel the leftovers now (never a dead order retried every bar).
+      await reconcileAfterRefusedMove(item, err);
+      throw err;
+    }
     emit('stop_moved', { symbol: item.symbol, contractId: cid, setup: t.setup, from: resting, to: target, peakR, barsHeld });
     save({ ...trails[item.contractId], stop: target });
     log(`${item.symbol}: trail: stop ${resting} -> ${target} (peak ${peakR.toFixed(2)}R)`);
@@ -779,6 +818,134 @@ function createRunner(deps) {
     return acted;
   }
 
+  /**
+   * The bracket invariant (the owner, 2026-10-26: "make sure we avoid orphan orders by ensuring we always have a
+   * bracket"), on every poll, in the sessions and out: every open position of this root has its protective stop
+   * (bracket-legs.js: the server's bracket role when it gives one, else the order's type), sized to the position.
+   *   - one stop bigger than the position: cut to its size (anti-flip; modify_order on that stop);
+   *   - several stops over its size: the surplus cancelled (the runner's gateway may), keeping one stop of exactly its
+   *     size; none such, or a cancel that fails: closed at market (they could reverse it);
+   *   - stops for less than its size (a lost bracket, a broker fault), once the position is older than the fill grace
+   *     (a fresh fill's leg may not be listed yet) and still so on a second read of the account (a leg that just
+   *     filled, a positions view behind the orders'): the runner's own [protect] stop for the uncovered size at the
+   *     plan's stop (the trail's, else the entry record's), the one separate stop the gate lets through; at market
+   *     instead when that level is unknown or already through the last close, the position is in another month than
+   *     the bars read (their prices aren't its), or the stop can't be placed.
+   * Every action is an alert. A cut or close that fails is logged and the loop goes on (the next poll retries).
+   * Returns true when it acted (the next poll reads the account again).
+   */
+  async function ensureProtected(item, { positions, orders }) {
+    if (typeof client.placeStop !== 'function') return false;
+    const root = famOf(item.contractId);
+    let acted = false;
+    for (const p of positions.filter(x => famOf(x.contractId) === root && isOpen(x))) {
+      let net;
+      try { net = signedSize(p); } catch (_err) { continue; } // a size that can't be read: end of day and the gate fail closed on it
+      const sign = Math.sign(net);
+      const size = Math.abs(net);
+      if (!sign) continue;
+      const stops = protectiveStops(orders, p.contractId, sign);
+      const covered = stops.reduce((n, o) => n + Number(o.size || 0), 0);
+      if (covered === size) continue;
+      const closeAt = async why => {
+        closedAt.set(p.contractId, clock.now().getTime());
+        log(`${item.symbol}: ALERT ${p.contractId} ${sign > 0 ? 'long' : 'short'} ${size}: ${why}; closed at market`, 'error');
+        emit('protection_closed', { symbol: item.symbol, contractId: p.contractId, size, covered, why });
+        try {
+          await client.closePosition(cfg.account, p.contractId);
+        } catch (err) {
+          // Not counted as sent: the next poll closes again (close_position flattens whatever is open, never more).
+          closedAt.delete(p.contractId);
+          log(`${item.symbol}: ALERT the close of ${p.contractId} failed (${err.message}); the next poll retries`, 'error');
+        }
+      };
+      if (covered > size) {
+        acted = true;
+        const [only, ...more] = stops;
+        if (!more.length && typeof client.resizeStop === 'function') {
+          try {
+            await client.resizeStop(cfg.account, only.id, size, `[protect] stop cut to the position's size ${size}`);
+            log(`${item.symbol}: ALERT stop ${only.id} (${covered}) was bigger than the ${p.contractId} position (${size}); cut to its size`, 'error');
+            emit('stop_resized', { symbol: item.symbol, contractId: p.contractId, orderId: only.id, from: covered, to: size });
+          } catch (err) {
+            await closeAt(`its stop for ${covered} could reverse it and could not be cut (${err.message})`);
+          }
+          continue;
+        }
+        // The bracket's own leg first (the server's role), else the oldest: never the stand-alone one beside it.
+        const sized = stops.filter(o => Number(o.size) === size).sort((a, b) => (legRole(b) === 'stop') - (legRole(a) === 'stop') || (Date.parse(a.creationTimestamp) || 0) - (Date.parse(b.creationTimestamp) || 0));
+        const keep = sized[0];
+        try {
+          if (!keep) throw new Error('no single stop of its size to keep');
+          for (const o of stops.filter(x => x !== keep)) await client.cancelOrder(cfg.account, o.id);
+          log(`${item.symbol}: ALERT ${p.contractId} had stops for ${covered} of ${size}: kept stop ${keep.id}, cancelled the rest`, 'error');
+          emit('stops_trimmed', { symbol: item.symbol, contractId: p.contractId, kept: keep.id, covered, size });
+        } catch (err) {
+          await closeAt(`stops for ${covered} could reverse it (${err.message})`);
+        }
+        continue;
+      }
+      const opened = Date.parse(p.creationTimestamp);
+      if (Number.isFinite(opened) && clock.now().getTime() - opened < FILL_GRACE_MS) continue;
+      if (closedAt.has(p.contractId) && clock.now().getTime() - closedAt.get(p.contractId) < ORDER_GRACE_MS) continue;
+      // A second read: a leg that just filled (flat now) or a stop listed late is never answered with a stray stop.
+      let fresh;
+      try {
+        fresh = await client.accountState(cfg.account);
+      } catch (err) {
+        log(`${item.symbol}: ALERT ${p.contractId} reads unprotected and the account can't be read again (${err.message}); the next poll checks again`, 'error');
+        acted = true;
+        continue;
+      }
+      const again = fresh.positions.find(x => x.contractId === p.contractId && isOpen(x));
+      let againNet;
+      try { againNet = again ? signedSize(again) : 0; } catch (_err) { continue; }
+      if (againNet !== net || protectiveStops(fresh.orders, p.contractId, sign).reduce((n, o) => n + Number(o.size || 0), 0) !== covered) continue;
+      acted = true;
+      // Another month than the bars read: their prices aren't this position's (the old rule: closed).
+      if (contractMonthTag(p.contractId) !== contractMonthTag(item.contractId)) {
+        await closeAt(`stops cover ${covered}, in another month than the bars the runner reads`);
+        continue;
+      }
+      const level = planStopOf(item, p, sign);
+      const bar = Array.isArray(item.bars) && item.bars.length ? item.bars[item.bars.length - 1] : null;
+      const last = bar ? Number(bar.c) : NaN;
+      if (!(level > 0) || !Number.isFinite(last) || sign * (last - level) <= 0) {
+        await closeAt(`stops cover ${covered} and the plan's stop ${level > 0 ? `${level} is through the last close ${last}` : 'is unknown'}`);
+        continue;
+      }
+      try {
+        await client.placeStop(cfg.account, p.contractId, sign > 0 ? 'sell' : 'buy', size - covered, level, `[protect] runner: the bracket's stop is missing; restored at the plan's stop ${level}`);
+        log(`${item.symbol}: ALERT ${p.contractId} had stops for ${covered} of ${size}: restored a stop for ${size - covered} at ${level}`, 'error');
+        emit('protection_restored', { symbol: item.symbol, contractId: p.contractId, size: size - covered, stop: level });
+      } catch (err) {
+        await closeAt(`its stop could not be restored (${err.message})`);
+      }
+    }
+    return acted;
+  }
+
+  /** The plan's stop for a position: the trail's current one for it, else its entry record's (price, or ticks from the fill). */
+  function planStopOf(item, p, sign) {
+    const t = (state.trails || {})[item.contractId];
+    const key = String(p.id ?? `${p.creationTimestamp}|${p.averagePrice}`);
+    if (t && t.key === key && !t.skip && Number(t.stop) > 0) return Number(t.stop);
+    const fillAt = Date.parse(p.creationTimestamp);
+    const side = sign > 0 ? 'buy' : 'sell';
+    const dayStart = tradingDayStart(new Date(Number.isFinite(fillAt) ? fillAt : clock.now().getTime())).getTime();
+    const rec = [...entryOrders()].reverse().find(e => {
+      const at = Date.parse(e.at);
+      return contractRoot(e.contractId) === contractRoot(p.contractId) && (!e.side || e.side === side) && at >= dayStart && (!Number.isFinite(fillAt) || at <= fillAt + ORDER_GRACE_MS);
+    });
+    if (!rec) return null;
+    if (Number(rec.stopPrice) > 0) return Number(rec.stopPrice);
+    const tick = Number(item.tickSize) || 0;
+    if (Number.isInteger(rec.stopTicks) && rec.stopTicks > 0 && tick > 0 && Number(p.averagePrice) > 0) {
+      return Math.round((Number(p.averagePrice) - sign * rec.stopTicks * tick) * 1e9) / 1e9;
+    }
+    return null;
+  }
+
   /** Account housekeeping before a cycle: leftover orders and trailing stops. */
   /**
    * Close every position of this root (any month) whose opposite-side stops
@@ -821,6 +988,10 @@ function createRunner(deps) {
       const account = await client.accountState(cfg.account);
       await expireComposed(item, account, { unrecorded: true });
       await cleanupFlat(item, account, { noCycles });
+      // The kill switch on: no cycle will come, so a position whose stops don't cover it exactly is closed, as before.
+      if (noCycles && isKillSwitchOn() && await flattenUncovered(item, account)) return;
+      // Every open position keeps its bracket's stop, sized to it (in the sessions and out): restored or cut here.
+      if (await ensureProtected(item, account)) return;
       // No cycle will come to protect a position whose stops don't cover it
       // exactly (none, too small, or big enough to flip it): flatten it.
       if (noCycles && await flattenUncovered(item, account)) return;

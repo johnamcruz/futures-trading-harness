@@ -809,7 +809,8 @@ function labelRun(runDir, { budgetUsd = null, strategies = [], accounts = [], ou
       const fired = scan && !runnerPassed ? objs(scan.results).filter(r => r.candidate && r.direction && tradeable(r, cfg) && !(screen && screen.names && screen.names.includes(r.name))) : [];
       const candidates = fired.map(r => ({ name: r.name, direction: r.direction }));
       const refPrice = scan && scan.bar && num(scan.bar.c) !== null ? scan.bar.c : ctxSym && ctxSym.bar && num(ctxSym.bar.c) !== null ? ctxSym.bar.c : null;
-      const isTradeTime = rec.kind === 'trade';
+      // A housekeeping step outside the sessions (driver.js manage) is no trade time.
+      const isTradeTime = rec.kind === 'trade' && !rec.manage;
       const signal = { close: scan && scan.bar && num(scan.bar.c) !== null ? scan.bar.c : null, fired };
       const draft = { rec, t, symbol, fam, barT, candidates, refPrice, signal, cyc, ctx: cyc && cyc.ctx, cfg };
       if (!isTradeTime) draft.decision = 'housekeeping';
