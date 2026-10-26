@@ -371,7 +371,7 @@ async function trailSim({ tape, fillAt = et(10, 0) + 5000, record = {}, modifyFa
         (calls.accountReads = calls.accountReads || []).push(clockRef.t);
         if (accountFails) throw new Error('HTTP 502');
         // flatOnReread: the position goes flat between two reads of one pass (a leg that just filled).
-        if (flatOnReread && calls.accountReads.length >= 2 && calls.accountReads.at(-2) === clockRef.t) flat = true;
+        if (flatOnReread && clockRef.t >= flatOnReread && calls.accountReads.length >= 2 && calls.accountReads.at(-2) === clockRef.t) flat = true;
         if (fillsAt !== null && clockRef.t >= fillsAt) flat = true;
         // flatAt: the bracket's stop fills then (the position goes flat, the stop with it; any target keeps working).
         const stopFilled = flatAt !== null && clockRef.t >= flatAt;
@@ -829,10 +829,13 @@ test('the bracket invariant, faults: a cut the broker refuses closes instead; su
   assert.deepStrictEqual([dup.closed, dup.cancelled], [[], [11]]);
   assert.ok(dup.events.some(e => e.kind === 'stops_trimmed' && e.kept === 9));
   // The second read finds it flat: no stray stop.
-  const filled = await trailSim({ tape: {}, noStop: true, restore: true, flatOnReread: true, until: et(10, 4) });
+  // From the 10:03 pass (the first past the fill grace), its second read finds it flat.
+  const filled = await trailSim({ tape: {}, noStop: true, restore: true, flatOnReread: et(10, 3), until: et(10, 4) });
   assert.deepStrictEqual([filled.placed, filled.closed], [undefined, []]);
+  assert.strictEqual((await trailSim({ tape: {}, noStop: true, restore: true, until: et(10, 4) })).placed.length, 1, 'the control: restored on that pass');
   // An unprotected position in another month than the bars: closed (their prices aren't its).
-  const other = await trailSim({ tape: {}, restore: true, otherMonth: 'MNQ:2027-03', until: et(10, 5) });
+  // (March at 21600 with its plan stop under the front month's 21650 close: a level that reads valid, but isn't its.)
+  const other = await trailSim({ tape: {}, base: [21651, 21649, 21650], restore: true, otherMonth: 'MNQ:2027-03', until: et(10, 5) });
   assert.deepStrictEqual([other.placed, other.closedIds], [undefined, ['MNQ:2027-03']]);
 });
 

@@ -277,6 +277,8 @@ test('driver: after the session window, a bar is stepped (the live runner\'s hou
   assert.ok(lines.filter(l => !l.manage).every(l => !('manage' in l)));
   const rep = summarize(store.readRun(w.run.paths.runDir).days);
   assert.strictEqual(rep.total.points, lines.length - 3, 'the housekeeping steps are no decision points');
+  const { labels } = require('../../scripts/lib/replay/labels').labelRun(w.run.paths.runDir, { log: () => {} });
+  assert.deepStrictEqual(labels.filter(l => ['16:00:02', '16:03:02', '16:06:02'].includes(l.t.slice(11, 19))).map(l => l.decision), ['housekeeping', 'housekeeping', 'housekeeping'], 'no trade time for the labels');
   assert.ok(calls.some(c => c === 'trade@15:57:02'), 'the window\'s own bars as before');
   assert.strictEqual(opens.filter(t => t >= iso('2026-10-07T16:09:00Z').getTime()).length, 1, 'one check finds it flat, then the day\'s manage points are skipped');
 });
