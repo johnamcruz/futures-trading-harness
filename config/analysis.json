@@ -69,5 +69,6 @@
   "fvg": { "frames": [5, 15, 60], "window": 60, "max": 3 },
   "compression": { "frames": [3, 5, 15, 60], "nr": [7], "maxWidthAtr": 2, "poleBars": 3, "expandAtr": 1, "minBeyondAtr": 0.1, "recentBars": 3, "maxRunAtr": 1, "levelBandAtr": 0.25, "maxLevels": 3 },
   "briefing": { "equalK": 2, "cisdFrames": [3, 5, 15, 60] },
+  "tradeRead": { "frames": [15], "deepPullback": 0.618, "minSigns": 2 },
   "evaluator": { "windowBars": 500 }
 }

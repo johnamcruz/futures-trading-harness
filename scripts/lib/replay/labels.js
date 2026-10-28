@@ -145,7 +145,9 @@ const nearest = (x, set) => set.reduce((best, s) => (Math.abs(s - x) < Math.abs(
 const toolName = name => (ORDER_TOOL.exec(String(name || '')) || [])[1] || null;
 // The hook logs the tool it judged (place_order or modify_order); its older records name none: there an entry names a
 // contract and a rationale, a modify neither.
-const gateTool = e => toolName(e.tool) || (e.source === 'hook' ? (e.contractId || e.rationale ? 'place_order' : 'modify_order') : null);
+// The gateway's record of an ungated close (close_position, for the exit scorecard) is no judged order: the labels read
+// closes from the transcript, as before.
+const gateTool = e => (e.ungated ? null : toolName(e.tool) || (e.source === 'hook' ? (e.contractId || e.rationale ? 'place_order' : 'modify_order') : null));
 const sideOf = s => {
   const v = String(s ?? '').toLowerCase();
   return v === '0' || v === 'buy' || v === 'bid' ? 'buy' : v === '1' || v === 'sell' || v === 'ask' ? 'sell' : null;

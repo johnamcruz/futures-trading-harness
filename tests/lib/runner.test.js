@@ -1060,6 +1060,9 @@ test('every run\'s prompt states the account, read just before it; an unreadable
   assert.deepStrictEqual(r.cancelled, [9, 10], 'the leftovers are cancelled once the account reads flat');
   // The open position is described once, as a trade (open-trades.js), not listed again in the account line.
   assert.match(r.prompts.find(x => /trade-session/.test(x)), /Account 7 at .*: balance \$50,100; 1 open position \(below\); 2 working orders\. Open trade MNQ long 1 @ 21500 since 10:00 ET, 7 bars closed since \(setup unknown[^)]*\): risk 10 points = 40 ticks, measured to the working stop \(the initial stop is unknown\); working stop 21490 \(-1R\), target 21600 \(\+10R\); now \+0R at 21500/);
+  // A managed cycle's open trade carries its read facts (trade-read.js), measured from its entry: the pullback-vs-reversal
+  // read of an open trade, in the same line.
+  assert.match(r.prompts.find(x => /trade-session/.test(x)), /Open trade MNQ long 1 @ 21500 [^\n]*\. Trade read \(closed bars since entry; pullback-vs-reversal\): best [\d.]+; [^;]+; [^;]+; pullback [^;]+; close vs RTH VWAP [^;]+; structure against since entry: 3m [^;]+, 15m [^;]+; 15m displacement against: [^;]+; compression against: [^;]+; HTF bias at entry [^,]+, now [^(]+\([^)]+\)\. Weakening signs: \d of 5[^;]*, 2 needed; reversal: [^;]+; tighten at most to [^.]+\./);
   const bad = await trailSim({ tape: {}, until: et(10, 8), balanceFails: true });
   assert.match(bad.prompts.find(x => /trade-session/.test(x)), /Account 7: state unavailable \(HTTP 503\); read get_account_snapshot before deciding anything/);
 });

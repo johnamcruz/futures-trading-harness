@@ -15,6 +15,7 @@ const ORDER_TOOL = /(?:^|__)(place_order|modify_order|cancel_order|partial_close
 // Calls that change orders or positions: the gateway waits for the server's
 // answer to each before reading the next client message, so a check never
 // runs while an earlier order is still in flight.
+const CLOSE_TOOL = /(?:^|__)close_position$/;
 const LANE_TOOL = /(?:^|__)(place_order|modify_order|cancel_order|close_position|partial_close_position)$/;
 const INTERNAL_ID = /^fth-gw-/;
 
@@ -63,7 +64,15 @@ async function handleClientLine(line, check, log = () => {}) {
       return { blocked: { jsonrpc: '2.0', id: item.id, error: { code: -32600, message: 'request ids starting with fth-gw- are reserved by the gateway' } } };
     }
     const tool = orderTool(item);
-    if (!tool) return { item };
+    if (!tool) {
+      // close_position is never judged (a close always goes), but the gate log records it with the cycle, as every order
+      // call: the exit scorecard reads who closed (replay/exit-scorecard.js gateActions).
+      if (item && item.method === 'tools/call' && item.params && CLOSE_TOOL.test(String(item.params.name || ''))) {
+        const a = item.params.arguments || {};
+        log({ source: 'gateway', tool: 'close_position', decision: 'allowed', ungated: true, violations: [], contractId: a.contractId });
+      }
+      return { item };
+    }
     const args = item.params.arguments || {};
     let result;
     try {
@@ -71,7 +80,9 @@ async function handleClientLine(line, check, log = () => {}) {
     } catch (err) {
       result = { allowed: false, message: `Blocked by trading harness gateway: the order gate could not run (${err.message}). The order was not sent; close_position still flattens.`, violations: [{ check: 'gateway-error', message: err.message }] };
     }
-    log({ source: 'gateway', tool, decision: result.allowed ? 'allowed' : 'blocked', violations: result.violations || [], contractId: args.contractId, side: args.side, size: args.size, type: args.type, rationale: args.rationale });
+    // A modify_order names only its order: its id, the stop it asks for, and its contract as the gateway read it.
+    const extra = Object.fromEntries([['orderId', args.orderId], ['stopPrice', args.stopPrice]].filter(([, v]) => v !== undefined && v !== null));
+    log({ source: 'gateway', tool, decision: result.allowed ? 'allowed' : 'blocked', violations: result.violations || [], contractId: args.contractId ?? result.contractId, side: args.side, size: args.size, type: args.type, rationale: args.rationale, ...extra });
     if (result.allowed) return { item };
     // A notification (no id) can't receive a response; drop it.
     return { blocked: item.id === undefined ? null : blockedResponse(item.id, result.message) };

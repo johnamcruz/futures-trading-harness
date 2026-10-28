@@ -13,7 +13,7 @@
  *              comparison, the proposal, compose, lesson and probe-edit limits, the skills' byte caps, the learning
  *              report and the field studies
  *   replay     the replay's training presets and draws: latency, the stage presets, the curated lists and moments, the
- *              setup moments, the account-state draw, the driver's retries, the decision labels, the scorecard's
+ *              setup moments, the exit-decision scorecard's thresholds, the account-state draw, the driver's retries, the decision labels, the scorecard's
  *              give-back rule and the backtester's plain-run defaults
  *   runner     the live runner and the order gate: the gate's limits and timing, the trade lifecycle's stop floor and
  *              size cap, the account snapshot, the replay clock, cycles, bars, the prompt's sizes, the live session,
@@ -85,6 +85,7 @@ const TRAINING = {
   trendScreen: { rollFlagGaps: list(int(0)) },
   trendWindows: { leadBars: int(0), controlPerLeg: int(0) },
   trendFindings: { examples: int(1), exampleChars: int(80), saidChars: int(40) },
+  exitFindings: { examples: int(1), exampleChars: int(80) },
 };
 
 // A stage preset's refused value: true or false (that value refused), or 'set' (any value refused).
@@ -99,6 +100,7 @@ const REPLAY = {
   windowBars: int(1),
   setupLibrary: { minRR: pos() },
   trendCapture: { minMoveAtr: pos(), catchShare: pos(1), messageChars: int(1), curationSessions: list(str(), { min: 1 }), censusBatch: int(1), sizeEdges: list(num({ min: 1 }), { min: 1 }) },
+  exitScore: { cutR: pos(), rightR: pos(), lateGivebackR: pos(), horizonBars: int(1), matchBars: int(0) },
   setupMoments: { setupTf: int(1), quietSample: frac(), seed: int(), levels: str(['key', 'wide']), setupTfs: list(int(1), { min: 1 }) },
   accountStates: { seed: int(), count: int(1), meanBlock: int(1), perBucket: int(1), oversample: record(pos()), cutoffs: { nearMll: frac(), nearTarget: frac() } },
   driver: { eodRetries: int(1) },
@@ -181,6 +183,7 @@ const ANALYSIS = {
     maxRunAtr: nonneg(), levelBandAtr: nonneg(), maxLevels: int(1),
   },
   briefing: { equalK: int(1), cisdFrames: list(int(1), { min: 1 }) },
+  tradeRead: { frames: list(int(1), { min: 1 }), deepPullback: frac(), minSigns: int(1) },
   evaluator: { windowBars: int(1) },
 };
 
@@ -304,6 +307,7 @@ const BUILT_IN = deepFreeze({
     fvg: { frames: [5, 15, 60], window: 60, max: 3 },
     compression: { frames: [3, 5, 15, 60], nr: [7], maxWidthAtr: 2, poleBars: 3, expandAtr: 1, minBeyondAtr: 0.1, recentBars: 3, maxRunAtr: 1, levelBandAtr: 0.25, maxLevels: 3 },
     briefing: { equalK: 2, cisdFrames: [3, 5, 15, 60] },
+    tradeRead: { frames: [15], deepPullback: 0.618, minSigns: 2 },
     evaluator: { windowBars: 500 },
   },
 });

@@ -129,10 +129,10 @@ function main(argv) {
       if (tool === 'modify_order' && base.violations.length) return base;
       const { unknown } = await settle(args.accountId, now);
       const { positions, orders } = await accountFacts(args, caller, false);
-      return blocked(evaluateAccountChange(tool, {
+      return { ...blocked(evaluateAccountChange(tool, {
         input: args, positions, orders, config: loadConfig(process.env), now,
         ledger: [...ledger, ...tracker.exitLedger(unknown, now)], cancelLedger: [...ledger.filter(e => !e.unconfirmed), ...tracker.cancelLedger(unknown, now)],
-      }));
+      })), contractId: ((orders || []).find(o => o && args.orderId !== undefined && String(o.id) === String(args.orderId)) || {}).contractId }; // its order's, for the gate log
     }
     // An order of unknown outcome blocks new risk until the broker's orders settle it (hard: not
     // skippable); exits and stops still go, checked against the account as it would be if it filled.

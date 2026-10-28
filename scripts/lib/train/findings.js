@@ -8,7 +8,8 @@
  *
  * Kinds: `misread` (the skill's claimed reads the checker refused), `missed` (a read of the skill was true and pointed
  * the side's way, and the model claimed none), `wrong-reason refusal` (it passed for a reason the facts refute).
- * `trend-blocker` (the trend set's missed legs) comes from trend-findings.js and is merged ahead (mergeFindings).
+ * `trend-blocker` (the trend set's missed legs) comes from trend-findings.js and `exit-decision` (its exits that cut a
+ * trend or came late) from exit-findings.js; both are merged ahead, by cost (mergeFindings).
  * The skills with the most of the three together come first; a skill with no SKILL.md in the tree, a size or management
  * skill (no read), and the loop's own skills are left out. A refusal no compose read explains is listed unattributed.
  *
@@ -28,7 +29,7 @@ const { NO_READ_SKILLS } = require('../learning/skill-usage');
 const { LOOP_SKILLS } = require('./proposal');
 const { stepOf } = require('./flow');
 
-const FINDING_KINDS = Object.freeze(['misread', 'missed', 'wrong-reason refusal', 'trend-blocker']);
+const FINDING_KINDS = Object.freeze(['misread', 'missed', 'wrong-reason refusal', 'trend-blocker', 'exit-decision']);
 const NOT_PROBED = new Set([...Object.values(NO_READ_SKILLS).flat(), ...LOOP_SKILLS, 'unknown']);
 const ENTRY = new Set(['long', 'short']);
 
@@ -118,6 +119,13 @@ function findingLine(f) {
     // exampleLine): the reads code verified at its start beside what the model said, no date, time or price.
     const legs = (Array.isArray(f.examples) ? f.examples : []).map(x => `\n   - leg ${x}`).join('');
     return `${f.id}. ${owner}: trend-blocker at ${f.step || 'no step'}: blocked ${f.count} of ${f.of} trend legs, each with a valid plan at the time${f.detail ? `. Most often: ${f.detail}` : ''}${legs}`;
+  }
+  if (f.kind === 'exit-decision') {
+    // As a trend finding: the class and the facts code read at each example decision, never a price, time or R.
+    const ex = (Array.isArray(f.examples) ? f.examples : []).map(x => `\n   - exit ${x}`).join('');
+    const what = f.code === 'late-exit' ? 'exits that came late: open profit given back past the threshold before the exit'
+      : `exits that cut a trend: price went on the trade's way after the exit before turning against it${f.code === 'cut-trend-flip' ? ' (decided on an HTF bias flip against the trade)' : ''}`;
+    return `${f.id}. ${f.skill || '(no skill named)'}: exit-decision at ${f.step || 'no step'}: ${f.count} of ${f.of} scored exits were ${what}${f.detail ? `. By: ${f.detail}` : ''}${ex}`;
   }
   const what = f.kind === 'misread' ? `${f.count} of ${f.of} claimed reads refused` : f.kind === 'missed' ? `missed ${f.count} of ${f.of} times its read was true for the side` : `${f.count} refusal(s) for a reason the facts refute`;
   return `${f.id}. ${f.skill || (f.agent ? `agent ${f.agent}` : '(no skill read at the bar)')}: ${f.kind}: ${what}${f.detail ? `. Most often: ${f.detail}` : ''}`;
