@@ -394,6 +394,11 @@ iteration of the loop then runs these steps (`scripts/lib/train/probe.js`):
    when the decision's scorecard result got no worse. The targeted skill's
    used, correct and missed counts are shown beside them. The verdict is
    `helped`, `no effect` or `hurt`.
+   A read finding is left out of the round when fewer than the screen's
+   `minPairs` of the champion's probe-half decisions are in its target's
+   scope (`screen.js` `targetScope`): no edit of it could show a gain, so
+   no proposer slot or probe run goes to one. `probe-report.json`
+   `readFindingsOmitted` names each, with the count and why.
    Probing uses practice-train only and spends no looks: its tuning look
    is logged in the loop's ledger, as every loop look is, and counts
    against no budget.
@@ -403,9 +408,13 @@ iteration of the loop then runs these steps (`scripts/lib/train/probe.js`):
    would break the proposal's limits (3 edits, the diff size, a byte cap)
    is left out, with the reason. The combined change is probed once more
    and judged on the confirm half only, which no edit was chosen on: no
-   measure may be worse and every part's target must still gain there, so
-   its parts can't cancel and a gain found by chance on the probe half
-   doesn't carry it.
+   measure may be worse, every part's target harm included, and every
+   trend and exit part's target must still gain there, so its parts can't
+   cancel and a gain found by chance on the probe half doesn't carry it. A
+   read part beside a trend or an exit part is judged on harm only: the
+   curated confirm half is small, so its missing gain there never cancels
+   a change whose trend or exit parts gained. A change of read parts alone
+   still needs each one's gain.
 5. **Keep.** The combined change is the iteration's one proposal and goes
    through the full keep rule (section 6), unchanged: the challenger's
    full-day tuning windows, zero blows, the pooled interval, then held-out

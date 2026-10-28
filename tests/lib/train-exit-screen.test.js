@@ -131,6 +131,40 @@ test('composedScreen: an exit part\'s runner harm, though it is the second part,
   assert.deepStrictEqual(SC.composedScreen(champion, probe, parts).harms, []);
 });
 
+test('composedScreen: a read part beside an exit or a trend part is judged on harm only; alone, or beside none, it still needs its gain; an exit part always does', () => {
+  const d = { key: 'MNQ|1', day: '2021-06-01', R: 1, entered: true, side: 'long', relevant: ['rejection'], reads: [{ skill: 'rejection', check: true, ok: true }] };
+  const moments = Array.from({ length: 12 }, (_, i) => ({ ...d, key: `MNQ|${i}` }));
+  const same = side(moments);
+  const [a, b] = split([...better(8), ...better(4, 0)]);
+  const readPart = { id: 'P1', tag: { skill: 'rejection' }, finding: { kind: 'missed' } };
+  const exitPart = { id: 'P2', tag: { skill: 'manage-position' }, finding: { kind: EF.KIND } };
+  // The read part gains nothing on the confirm half (the same reads on both sides); the exit part gains.
+  const both = SC.composedScreen(same, same, [readPart, exitPart], { exits: exits(a, b) });
+  assert.deepStrictEqual([both.verdict, both.cancelled, both.harms], ['helped', [], []]);
+  // Beside a trend part (the caller's count): harm only too.
+  assert.deepStrictEqual(SC.composedScreen(same, same, [readPart], { trendParts: 1 }).verdict, 'helped');
+  // Alone: its gain is still needed (nothing else gained).
+  assert.deepStrictEqual([SC.composedScreen(same, same, [readPart]).verdict, SC.composedScreen(same, same, [readPart]).cancelled], ['no effect', ['P1']]);
+  // A harmful read part fails the change, whatever its partners gained.
+  const broken = side(moments.map(x => ({ ...x, reads: [{ skill: 'rejection', check: false, ok: false }] })));
+  const hurt = SC.composedScreen(same, broken, [readPart, exitPart], { exits: exits(a, b) });
+  assert.strictEqual(hurt.verdict, 'hurt', JSON.stringify(hurt));
+  assert.ok(hurt.harms.some(h => /^(reads|target|P1's target): worse/.test(h)), JSON.stringify(hurt.harms));
+  // An exit part without its gain cancels it, beside a read part or not.
+  const flat = SC.composedScreen(same, same, [readPart, exitPart], { exits: exits(a, a) });
+  assert.deepStrictEqual([flat.verdict, flat.cancelled], ['no effect', ['P2']]);
+});
+
+test('targetScope: a read finding\'s judged decisions on one side, as the read target test scopes them', () => {
+  const d = (key, x = {}) => ({ key, day: '2021-06-01', R: 0, entered: false, relevant: [], reads: [], ...x });
+  const s = { decisions: [d('a', { reads: [{ skill: 'rejection', check: true, ok: true }] }), d('b', { reads: [{ skill: 'rejection', check: false, ok: false }], relevant: ['rejection'] }), d('c', { relevant: ['rejection'] }), d('e', { reads: [{ skill: 'breakout', ok: true }] })],
+    scorecard: [{ category: 'right' }, { category: 'unchecked' }, { category: 'wrong stated reason' }], exitPlans: [], usage: [] };
+  assert.strictEqual(SC.targetScope(s, { skill: 'rejection', kind: 'misread' }), 2, 'claimed');
+  assert.strictEqual(SC.targetScope(s, { skill: 'rejection', kind: 'missed' }), 2, 'relevant');
+  assert.strictEqual(SC.targetScope(s, { skill: null, kind: 'wrong-reason refusal' }), 2, 'checked scorecard');
+  assert.strictEqual(SC.targetScope(null, { skill: 'rejection', kind: 'misread' }), 0);
+});
+
 test('exit screen: a read finding\'s edit keeps the read target test', () => {
   const d = { key: 'MNQ|1', day: '2021-06-01', R: 1, entered: true, side: 'long', relevant: ['rejection'], reads: [{ skill: 'rejection', check: true, ok: true }] };
   const m = SC.measure(side([{ ...d, reads: [] }]), side([d]), { skill: 'rejection', kind: 'missed', exits: exits(...split(better(12))) });

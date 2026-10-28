@@ -418,7 +418,7 @@ const behaviour = text => (text.includes('LUCKY') ? 'lucky' : text.includes('BAD
 const stateOf = (b, i) => (b === 'lucky' ? (i % 2 || SC.halfOf(dayOfT(TIMES[i]), 3) === 'probe' ? 'right' : 'misread') : b === 'bad' ? 'misread' : b === 'good' || i % 2 || (b === 'some' && i < 16) ? 'right' : 'misread');
 const categoryOf = (b, i) => (b === 'bad' ? 'wrong-side entry' : b === 'good' || b === 'reason' || i % 2 ? 'right' : 'wrong stated reason');
 
-function world({ proposals, verdict = 'kept', loop: over = {}, trend = false, trendBatch = {}, exits = false, incompleteDay = null } = {}) {
+function world({ proposals, verdict = 'kept', loop: over = {}, trend = false, trendBatch = {}, exits = false, incompleteDay = null, claimed = null } = {}) {
   const user = tmpDir();
   const env = { PATH: process.env.PATH, HOME: user, FTH_HOME: path.join(user, 'home') };
   fs.mkdirSync(env.FTH_HOME);
@@ -481,8 +481,9 @@ function world({ proposals, verdict = 'kept', loop: over = {}, trend = false, tr
     probeData: ({ runDir, tree: dir }) => {
       calls.probeData.push({ runDir: path.basename(runDir), tree: path.basename(dir) });
       const b = behaviour(textOf(dir));
-      const decisions = TIMES.map((t, i) => ({ root: 'MNQ', bar: t, decision: 'passed', outcome: { R: 0 }, reads: [{ step: 'zone', skill: 'a', read: 'y', check: stateOf(b, i) === 'right', agrees: true }] }));
-      const wrong = decisions.filter(d => !d.reads[0].check).length;
+      // claimed: only the first that many moments carry a read of skill a (none: every one).
+      const decisions = TIMES.map((t, i) => ({ root: 'MNQ', bar: t, decision: 'passed', outcome: { R: 0 }, reads: claimed !== null && i >= claimed ? [] : [{ step: 'zone', skill: 'a', read: 'y', check: stateOf(b, i) === 'right', agrees: true }] }));
+      const wrong = decisions.filter(d => d.reads.length && !d.reads[0].check).length;
       return { decisions, usage: { skills: [{ skill: 'a', reads: 20, correct: 20 - wrong, wrong, available: 20, used: 20, relevant: 20, missed: 0, topRefusals: wrong ? [{ what: 'false: y', count: wrong }] : [], topMissed: [] }] }, records: [] };
     },
     // Each half: the same replay config (the stub replays no list), its session dates and moments, as the real step reads them.
@@ -748,6 +749,24 @@ test('an exit finding\'s edit is screened on the trades both sides opened (the t
   await run(q);
   const short = JSON.parse(fs.readFileSync(path.join(q.paths.iter(1), 'probe-report.json'), 'utf8')).probes[0];
   assert.deepStrictEqual([short.target.pairs, short.target.unmatched, short.target.unfinished], [n - EXIT_TRADES, { champion: 0, probe: 0 }, { champion: EXIT_TRADES, probe: EXIT_TRADES }], 'the unfinished day\'s trades left out, counted apart');
+});
+
+test('a read finding whose skill has under minPairs judged decisions on the probe half is left out (said in the report); at minPairs it is kept', async () => {
+  // The probe half's moments in order: the first k of them claimed (the moments before the k-th probe one carry the read).
+  const probeIdx = TIMES.map((t, i) => (SC.halfOf(dayOfT(t), 3) === 'probe' ? i : -1)).filter(i => i >= 0);
+  const min = SC.SCREEN.minPairs;
+  const round = async k => {
+    const w = world({ claimed: probeIdx[k - 1] + 1, proposals: [] });
+    await run(w);
+    return { w, report: JSON.parse(fs.readFileSync(path.join(w.paths.iter(1), 'probe-report.json'), 'utf8')) };
+  };
+  const under = await round(min - 1);
+  assert.ok(!under.report.findings.some(f => f.kind === 'misread'), JSON.stringify(under.report.findings));
+  assert.deepStrictEqual(under.report.readFindingsOmitted.map(x => [x.skill, x.kind, x.judged]), [['a', 'misread', min - 1]]);
+  assert.match(under.report.readFindingsOmitted[0].why, new RegExp(`under the screen's minPairs ${min}: no edit of it could show a gain`));
+  const at = await round(min);
+  assert.ok(at.report.findings.some(f => f.kind === 'misread' && f.skill === 'a'), JSON.stringify(at.report.findings));
+  assert.ok(!(at.report.readFindingsOmitted || []).some(x => x.kind === 'misread'));
 });
 
 test('scored exits that name no trade (older code): the round shows no exit finding, so no edit is spent on one', async () => {

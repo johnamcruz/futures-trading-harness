@@ -66,7 +66,8 @@ bars with no leg, its split by setup type (small n) and a few such plans that lo
 what earlier probes showed, with sample sizes, `{{K}}` the number of edits.
 Each edit is tested alone on the same practice moments (an exit finding's on
 the R banked by the trades both sides opened), then the ones that helped are
-combined by code.
+combined by code: beside a trend or exit part, a read part need only do no
+harm. A read finding with too few judged moments is left out.
 
 ```text
 You review your own trading decisions. You do not trade now: no orders, no broker tools.

@@ -49,7 +49,10 @@
  *   exitTargetTest(champion, probe, exits)       { measure, pairs, b, c, n, pBetter, pWorse, meanDiff, enough, unmatched,
  *                                                classes, runners }: the trades both sides opened, paired
  *   screen(m)                                    { verdict, pass, harms, gain }
- *   composedScreen(champion, probe, parts)       the combined change against every part's target: { verdict, pass, harms, targets }
+ *   composedScreen(champion, probe, parts, { exits, trendParts })   the combined change against every part's target:
+ *                                                { verdict, pass, harms, cancelled, targets } (a read part harm-only
+ *                                                beside a trend or an exit part)
+ *   targetScope(side, { skill, kind })           a read finding's judged decisions on one side (its edit's pairs at most)
  */
 
 const crypto = require('crypto');
@@ -148,6 +151,18 @@ function skillState(d, skill) {
   const mine = (d.reads || []).filter(r => r.skill === skill);
   if (!mine.length) return 'missed';
   return mine.every(r => r.ok) ? 'right' : 'misread';
+}
+
+/**
+ * The champion's decisions a read finding's edit would be judged on (targetTest's scope, on one side): a misread, those
+ * where it claimed the skill; a miss, those where the skill was relevant; a wrong-reason refusal, its scorecard's
+ * checked decisions. Under minPairs, no edit of it could show a gain: the round leaves the finding out (probe.js).
+ */
+function targetScope(side, { skill, kind }) {
+  if (!side) return 0;
+  if (kind === 'wrong-reason refusal') return (side.scorecard || []).filter(d => d.category !== 'unchecked').length;
+  const decisions = side.decisions || [];
+  return kind === 'missed' ? decisions.filter(d => (d.relevant || []).includes(skill)).length : decisions.filter(d => skillState(d, skill) !== 'missed').length;
 }
 
 /** The decisions whose scorecard pair got worse: right on the champion's side, not right on the probe's. */
@@ -314,15 +329,22 @@ function screen(m) {
   return { verdict, pass: verdict === 'helped', harms, gain };
 }
 
-/** The combined change: no harm on any measure, and every part's target still a gain (its parts don't cancel). */
-function composedScreen(champion, probe, parts, { exits = null } = {}) {
+/**
+ * The combined change: no harm on any measure, every part's target harm included. Its exit parts' targets must still
+ * gain (they don't cancel); a read part's must too, unless the change has a trend or an exit part (`trendParts`: the
+ * caller's count of its trend parts): then a read part is judged on harm only, so a no-gain read part on the small
+ * confirm half never cancels a change whose trend or exit parts gained (theirs are checked: here, and the trend set's
+ * by the caller).
+ */
+function composedScreen(champion, probe, parts, { exits = null, trendParts = 0 } = {}) {
   const ms = parts.map(p => ({ id: p.id, m: measure(champion, probe, { skill: p.tag.skill, kind: p.finding.kind, exits }) }));
   const harms = ms.length ? harmsOf(ms[0].m) : [];
   for (const x of ms) if (harmful(x.m.target)) harms.push(`${x.id}'s target: worse (broken ${x.m.target.c}, fixed ${x.m.target.b})`);
   for (const x of ms.slice(1)) if (runnerHarm(x.m.target)) harms.push(`${x.id}'s target: ${runnerHarm(x.m.target)}`);
-  const lost = ms.filter(x => !gained(x.m.target)).map(x => x.id);
+  const readHarmOnly = trendParts > 0 || parts.some(p => p.finding.kind === EXIT_KIND);
+  const lost = ms.filter((x, i) => !gained(x.m.target) && !(readHarmOnly && parts[i].finding.kind !== EXIT_KIND)).map(x => x.id);
   const verdict = harms.length ? 'hurt' : lost.length ? 'no effect' : 'helped';
   return { verdict, pass: verdict === 'helped', harms, cancelled: lost, targets: ms.map(x => ({ id: x.id, target: x.m.target })), measures: ms.length ? ms[0].m : null };
 }
 
-module.exports = { SCREEN, VERDICTS, HALVES, sideOf, halfOf, half, momentKey, measure, exitTargetTest, screen, composedScreen, skillState };
+module.exports = { SCREEN, VERDICTS, HALVES, sideOf, halfOf, half, momentKey, measure, exitTargetTest, targetScope, screen, composedScreen, skillState };
