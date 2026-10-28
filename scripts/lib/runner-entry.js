@@ -472,7 +472,7 @@ async function runEntry(deps, c) {
       const p = order.plan;
       await client.journalAdd({
         kind: 'plan', contractId: order.args.contractId, ...(Number.isInteger(c.accountId) ? { accountId: c.accountId } : {}), tags: [`setup:${tag}`, contractRoot(order.args.contractId)],
-        text: `${tag} ${p.side} ${p.size} ${p.contract}: limit ${p.entry}, stop ${p.stopPrice}, target ${p.targetPrice}, risk $${p.riskUsd}; ${sizeWhy}; compose record ${p.record}; phase 2${restated && restated.outcome === 'approved' ? ' (restated)' : ''}: ${short(line)}`,
+        text: `${tag} ${p.side} ${p.size} ${p.contract}: ${p.entryType === 'market' ? `market from ${p.entry}` : `limit ${p.entry}`}, stop ${p.stopPrice}, target ${p.targetPrice}, risk $${p.riskUsd}; ${sizeWhy}; compose record ${p.record}; phase 2${restated && restated.outcome === 'approved' ? ' (restated)' : ''}: ${short(line)}`,
       });
     } catch (err) {
       stop = { outcome: 'no-trade', why: `the journal plan could not be written (${err.message})` };

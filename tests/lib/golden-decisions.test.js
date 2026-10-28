@@ -226,7 +226,8 @@ test('MNQ 3m with the fx fixtures: the compact scan, snapshot and briefing of se
   const s = SERIES.find(x => x.label === 'MNQ 3m');
   const text = [589, 1244].map(i => viewAt(s, s.broker, i, WITH_FX)).join('\n');
   assert.match(text, /fx_break long \| .*\| with: fx_cross; against: none/);
-  assert.match(text, /fx_orb short \| .*\| with: fx_break; against: none/);
+  // momentum_continuation (a shipped setup trade_lifecycle cites) fires short on that bar too: confluence counts it.
+  assert.match(text, /fx_orb short \| .*\| with: fx_break, momentum_continuation; against: none/);
   assert.match(text, /confluence: with fx_cross/);
   assertGolden('views-confluence.txt', text);
 });

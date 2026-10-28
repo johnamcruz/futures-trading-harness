@@ -24,7 +24,7 @@ const { liveSpecs, whyNoSpec } = require('../trading/broker-specs');
 const { isOpen } = require('../trading/positions');
 const state = require('../trading/prop-state');
 const { decideSetup } = require('./verdict');
-const { componentRefusal } = require('../trading/strategies');
+const { componentRefusal, composedOf } = require('../trading/strategies');
 const combine = require('../trading/combine');
 const { tradingDayKey } = require('../trading/clock');
 const { lanePolicies } = require('../lanes');
@@ -208,7 +208,10 @@ function createPropHooks({ root, env = process.env, home, client, accountId, str
       const out = (results || []).filter(r => !policies.some(s => s.name === r.name))
         .map(r => (owners.has(r.name) && r.candidate ? { ...r, candidate: false, note: ownedNote(r) } : r));
       for (const s of policies) {
-        const fired = s.strategies.map(n => byName.get(n)).filter(r => r && r.candidate && r.direction && r.stopDistance > 0);
+        // A policy listing a composed strategy screens no rules setup: its compose records cite them (strategies.js
+        // composedOf), and order_plan records the verdict on the record.
+        const cites = composedOf(s, registry).length > 0;
+        const fired = cites ? [] : s.strategies.map(n => byName.get(n)).filter(r => r && r.candidate && r.direction && r.stopDistance > 0);
         const pick = fired.find(r => !refusal(s, r.name));
         if (!pick) {
           const passed = fired.map(r => `${r.name} (${refusal(s, r.name)})`).join('; ');

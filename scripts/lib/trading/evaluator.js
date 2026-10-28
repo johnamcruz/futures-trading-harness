@@ -205,6 +205,8 @@ function createEvaluator(bars, { window = DEFAULT_WINDOW } = {}) {
       const d = terms ? valueAt(terms, rulesSource(s), i) : null;
       stopDistance = d !== null && d > 0 ? d : null;
     }
+    // The closest stop (risk.stop_min, points): a known distance closer than it is widened to it.
+    if (stopDistance !== null && Number.isFinite(s.risk.stop_min)) stopDistance = Math.max(stopDistance, s.risk.stop_min);
     let targetDistance = null;
     if (s.compiledTarget && direction) {
       const terms = Array.isArray(s.compiledTarget) ? s.compiledTarget : s.compiledTarget[direction];

@@ -62,7 +62,7 @@ const LIFECYCLE = 'trade_lifecycle';
 const POLICY = 'prop_portfolio';
 // The strategy's risk numbers and its valid_bars ceiling are read from the strategy and its schema (trading/strategies.js
 // MAX_VALID_BARS), never restated here: the preflight checks they are stated and reports them.
-const { MAX_VALID_BARS } = require('../trading/strategies');
+const { MAX_VALID_BARS, citedSetups } = require('../trading/strategies');
 const FRAMES = Object.freeze(['3m', '5m', '15m', '1h', '4h']);
 const FVG_FRAMES = Object.freeze(['5m', '15m', '1h']);
 const STEPS = Object.freeze(['bias', 'location', 'setup', 'entry', 'stop', 'target']);
@@ -520,12 +520,15 @@ function propPortfolio(ctx) {
   if (!p.valid) return r('prop-portfolio', FAIL, `${POLICY} is invalid: ${(p.errors || []).join('; ')}`);
   const bad = [];
   if (p.status !== 'active') bad.push(`status ${p.status}, not active`);
-  if (JSON.stringify(p.strategies) !== JSON.stringify([LIFECYCLE])) bad.push(`strategies ${JSON.stringify(p.strategies)}, not [${LIFECYCLE}]`);
+  // trade_lifecycle first, then only the setups its records may cite (strategies.js citedSetups: active rules strategies).
+  const cited = citedSetups(ctx.read.strategies() || [], LIFECYCLE);
+  const rest = Array.isArray(p.strategies) ? p.strategies.slice(1) : [];
+  if (!Array.isArray(p.strategies) || p.strategies[0] !== LIFECYCLE || !rest.every(n => cited.has(n))) bad.push(`strategies ${JSON.stringify(p.strategies)}, not [${LIFECYCLE}] and the setups it cites`);
   const book = ctx.read.rulebook(p.account);
   if (!book) bad.push(`its account ${p.account} has no rulebook`);
   else if (!book.valid) bad.push(`its account's rulebook is refused: ${(book.errors || []).join('; ')}`);
   if (bad.length) return r('prop-portfolio', FAIL, `${POLICY}: ${bad.join('; ')}`);
-  return r('prop-portfolio', PASS, `${POLICY} active on [${LIFECYCLE}]; account ${p.account}'s rulebook loads`);
+  return r('prop-portfolio', PASS, `${POLICY} active on [${LIFECYCLE}]${rest.length ? ` citing [${rest.join(', ')}]` : ''}; account ${p.account}'s rulebook loads`);
 }
 
 function rulebookValues(ctx) {

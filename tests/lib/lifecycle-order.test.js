@@ -120,3 +120,35 @@ test('the order_plan tool routes trade_lifecycle (and a policy listing it) to th
   // prop_portfolio with no running attempt: plan trade_lifecycle itself.
   assert.throws(() => plan({ file: 'x', symbol: 'MNQ', strategy: 'prop_portfolio', side: 'long' }, { env, now: () => P.NOW, replayAt: () => null }), /prop_portfolio has no running attempt: plan trade_lifecycle itself/);
 });
+
+// ---- A cited setup (momentum_continuation): the record citing it enters at market with its own stop and target ----
+const SHIPPED_ALL = require('../../scripts/lib/trading/strategies').loadStrategies(require('path').resolve(__dirname, '..', '..'), {}).strategies;
+const S2_DOC = SHIPPED_ALL.find(s => s.name === 'momentum_continuation');
+
+test('order_plan, a cited setup: the record citing momentum_continuation is a market order, its 46-tick stop one tick under the candle and its 2R target as brackets', () => {
+  const home = trendHome();
+  const rec = LC.writeS2(home);
+  assert.strictEqual(rec.ok, true, rec.problems.join('; '));
+  assert.deepStrictEqual([rec.plan.entry, rec.plan.stop.price, rec.plan.stop.ticks, rec.plan.target.price, rec.plan.target.ticks, rec.plan.rr, rec.plan.setup], [{ type: 'market', price: 21540.25 }, 21528.75, 46, 21563.25, 92, 2, 'momentum_continuation']);
+  const r = order(home, { strategies: SHIPPED_ALL });
+  assert.deepStrictEqual(r.args, {
+    accountId: 7, contractId: 'MNQ', side: 'buy', type: 'market', size: 1, stopLossBracket: { ticks: 46, type: 'stop' }, takeProfitBracket: { ticks: 92, type: 'limit' },
+    rationale: `setup:trade_lifecycle long at market from 21540.25 (the record's entry reference, momentum_continuation's entry), stop 21528.75 (46 ticks, 1 tick beyond 21529.00), target 21563.25 (92 ticks, 2R), 1 MNQ risks $23.00, record ${r.plan.record}`,
+  });
+  assert.strictEqual('limitPrice' in r.args, false, 'a market order names no limit price');
+  assert.strictEqual(r.plan.entryType, 'market');
+  assert.match(r.line, /^trade_lifecycle long: 1 MNQ at market from 21540\.25 \(momentum_continuation's entry; the brackets are ticks from the fill, valid until /);
+  // A registry where no policy lists both (nothing to cite): the gate's own re-check refuses it.
+  assert.throws(() => order(home, { strategies: SHIPPED_ALL.filter(s => s.name !== 'prop_portfolio') }), /\[composed-reads\] .*momentum_continuation is not a setup this trade cites/);
+});
+
+test('order_plan, a cited setup in an attempt: the policy sizes the record (its verdict on the record, 46 ticks); the order is the translated size at market, under the policy\'s tag', () => {
+  const { home, rec } = P.propHome({ size: 3, b: LC.s2Briefing(), reads: LC.S2_READS, cited: ['momentum_continuation'] });
+  const strategies = [P.policy({ strategies: ['trade_lifecycle', 'momentum_continuation'] }), P.LC_DOC, S2_DOC];
+  const r = order(home, { strategy: P.LC_DOC, strategies });
+  assert.deepStrictEqual([r.verdict.action, r.verdict.stopTicks, r.verdict.record, r.verdict.component], ['full', 46, rec.id, 'trade_lifecycle']);
+  assert.match(r.args.rationale, /^setup:prop_portfolio long trade_lifecycle at market from 21540\.25 /);
+  assert.deepStrictEqual([r.args.type, r.args.stopLossBracket.ticks, r.args.takeProfitBracket.ticks, 'limitPrice' in r.args], ['market', 46, 92, false]);
+  // The $300 cap all in: (46 + 1) x $0.50 + $0.74 = $24.24 a micro, 12 fit ($290.88); the record's 3 is a suggestion.
+  assert.deepStrictEqual([r.args.size, r.plan.suggestedSize, r.plan.translatedSize], [12, 3, 12]);
+});

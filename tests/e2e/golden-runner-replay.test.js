@@ -246,7 +246,15 @@ test('two lanes wired for the harness: each lane\'s bars file and signal record,
   assert.strictEqual(seen.briefing.asOf, seen.bars3.bars.at(-1).t);
   // The cache: a 1m-only cycle is keyed on the first lane's last bar (the briefing it rests on), so it reuses the
   // analysts' reports cached at that 3m bar.
-  for (const c of oneMin) assert.ok(c.served.includes(ANALYSTS[0]) && c.served.includes(ANALYSTS[1]), `${c.at}: ${c.served}`);
+  // After a 3m bar a setup fired on (momentum_continuation, shipped since 2026-10-28, fires short on the 10:36 bar), a role's
+  // lookups count only under that bar's facts key (report-cache.js lookupsKey), so the 1m cycles until the next 3m bar
+  // run the analyst whose lookups the setup required (market structure) again, and still reuse the other's.
+  const firedAt = run.cycles.filter(c => /3m \(every bar\)/.test(lanesOf(c) || '') && c.fired.length).map(c => Date.parse(c.at));
+  assert.ok(firedAt.length >= 1, 'a 3m setup fired in the window');
+  const nextThree = t => run.cycles.map(c => Date.parse(c.at)).filter(x => x > t && both.some(c => Date.parse(c.at) === x))[0] ?? Infinity;
+  const afterSetup = c => firedAt.some(t => Date.parse(c.at) > t && Date.parse(c.at) < nextThree(t));
+  assert.ok(oneMin.some(afterSetup) && oneMin.some(c => !afterSetup(c)), 'both kinds of 1m cycle are in the window');
+  for (const c of oneMin) assert.ok(c.served.includes(ANALYSTS[1]) && (afterSetup(c) || c.served.includes(ANALYSTS[0])), `${c.at}: ${c.served}`);
   // A 1m-only cycle names the 3m trend record the gate reads (written at the last 3m bar).
   for (const c of oneMin) assert.match(c.prompt, /MNQ: a 1-minute bar just closed .* MNQ [^.]*\(recorded for the order gate, which enforces it\)/);
 });

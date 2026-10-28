@@ -65,6 +65,7 @@
  *   htfd_close_loc(m)  where it closed: 1 top third, 0 middle, -1 bottom third
  *   htfd_range_atr(m)  its range in the timeframe's ATR(14) as of the candle before
  *   htfd_vol_ratio(m)  its volume against the 20 candles before it (average)
+ *   htfd_momentum(m)   its momentum read (momentum.js momentumRead): 1 up, -1 down, 0 none
  *   htfd_doji(m) htfd_hammer(m) htfd_shooting_star(m) htfd_inside(m) htfd_outside(m)
  *               1 when its pattern definition holds (candle-facts.js), else 0
  *   htfd_engulfing(m) htfd_displacement(m)   1 bullish, -1 bearish, 0
@@ -109,6 +110,8 @@
  *               before this bar: 1 up, -1 down, 0 range (scripts/lib/trading/mtf.js:
  *               close vs EMA20, EMA20 vs EMA50, swing structure; two of three).
  *               mtf_bias(240) >= 0 keeps a long out of a 4-hour downtrend
+ *   mtf_prevailing the trend rule's prevailing direction (mtf.js trendRule: the first of 4h, 1h, 15m with a
+ *               trend): 1 up, -1 down, 0 no trend on any frame; missing until the 4h has a read
  *   Volume profile (scripts/lib/trading/volume-profile.js; bar-based, each value
  *   from bars closed by this bar):
  *   prior_poc prior_vah prior_val   the last complete RTH day's point of control
@@ -152,7 +155,7 @@ const OPS = ['crosses_above', 'crosses_below', '>=', '<=', '>', '<'];
 const CISD_FUNCS = ['cisd_dir', 'cisd_level', 'cisd_sweep', 'ote_top', 'ote_bot', 'in_ote', 'cisd_entry', 'cisd_risk'];
 // The last completed candle (candle-facts.js): its OHLCV and facts, its relation to a level, the next swing targets.
 const HTFD = ['htfd_open', 'htfd_high', 'htfd_low', 'htfd_close', 'htfd_volume', 'htfd_prev_high', 'htfd_prev_low', 'htfd_body', 'htfd_upper_wick',
-  'htfd_lower_wick', 'htfd_close_loc', 'htfd_range_atr', 'htfd_vol_ratio', 'htfd_doji', 'htfd_hammer', 'htfd_shooting_star', 'htfd_inside',
+  'htfd_lower_wick', 'htfd_close_loc', 'htfd_range_atr', 'htfd_vol_ratio', 'htfd_momentum', 'htfd_doji', 'htfd_hammer', 'htfd_shooting_star', 'htfd_inside',
   'htfd_outside', 'htfd_engulfing', 'htfd_displacement'];
 const HTFD_TARGETS = { htfd_next_swing_high: 'high', htfd_next_swing_low: 'low' };
 const HTFD_REL = { htfd_rejected: 'rejected', htfd_broke: 'broke', htfd_touched: 'touched' };
@@ -182,7 +185,7 @@ const NAMES = new Set([
   'open', 'high', 'low', 'close', 'volume', 'supertrend', 'supertrend_dir',
   'keltner_upper', 'keltner_mid', 'keltner_lower', 'vwap_session', 'vwap_rth',
   'or_high', 'or_low', 'swing_high', 'swing_low', 'prior_high', 'prior_low',
-  'prior_close', 'overnight_high', 'overnight_low', 'rth_open', 'rth_high', 'rth_low', 'ib_high', 'ib_low', 'minute_et',
+  'prior_close', 'overnight_high', 'overnight_low', 'rth_open', 'rth_high', 'rth_low', 'ib_high', 'ib_low', 'minute_et', 'mtf_prevailing',
   ...VP_NAMES,
 ]);
 const MAX_RULES_PER_SIDE = 12;
@@ -557,6 +560,7 @@ function seriesSource(bars, params, { barMinutes = null } = {}) {
       case 'prior_high': case 'prior_low': case 'prior_close':
       case 'overnight_high': case 'overnight_low': case 'rth_open': case 'rth_high': case 'rth_low': return level(key);
       case 'ib_high': case 'ib_low': return dayOf(10)[key];
+      case 'mtf_prevailing': return mtf.prevailingSeries(bars);
       case 'minute_et': return bars.map(b => {
         const p = zonedParts(new Date(b.t), 'America/New_York');
         return p.hour * 60 + p.minute;

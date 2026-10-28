@@ -60,6 +60,9 @@
  *   <tf> close top|middle|bottom            m3.candles.<tf>.closeLocation                 top long, bottom short
  *   <tf> momentum up|down                   D4's bar read on m3.candles.<tf>: rangeAtr >= 1, volRatio >= 1, close in
  *                                           the far third (top up, bottom down)            up long, down short
+ *   <strategy> fired up|down                setup step only: a rules strategy's scan fired that way on this bar
+ *                                           (m3.candidates); a cited setup (`cited`) gives the plan its entry, stop
+ *                                           and target (trade-lifecycle.js planOf)          up long, down short
  *   stop <source> <price>                   step stop only: <tf> low|high (a completed candle), [<tf>] swing
  *                                           low|high (m3.swings, m3.liquidity, m3.htfLevels), <tf> box low|high (a
  *                                           live box's far side: m3.compression.<tf>.box), or <level>; the
@@ -115,6 +118,7 @@ const STEP_KINDS = {
   at: ['location'], vwap: ['location'], value: ['location'], boxAt: ['location'],
   relation: ['setup'], pattern: ['setup', 'entry'], cisd: ['setup'], ote: ['setup'], swept: ['setup'], compression: ['setup'],
   close: ['entry'], momentum: ['entry'], volume: ['entry'], participation: ['entry'], absorption: ['entry'],
+  fired: ['setup'],
 };
 // The confirming candle patterns the entry step takes, and the side each confirms.
 const ENTRY_PATTERNS = { hammer: 'long', 'bullish engulfing': 'long', 'shooting star': 'short', 'bearish engulfing': 'short' };
@@ -232,6 +236,9 @@ function parseRead(text) {
   if (tf && b === 'absorption' && c === 'at' && w.length >= 5 && ['up', 'down'].includes(w[w.length - 1])) {
     return out('absorption', { tf, level: w.slice(3, -1).join(' '), value: w[w.length - 1] });
   }
+  // A rules strategy's scan setup that fired on this bar (its name as the briefing's candidates name it).
+  const fired = /^([a-z0-9][a-z0-9_-]*) fired (up|down)$/.exec(form);
+  if (fired) return out('fired', { name: fired[1], value: fired[2] });
   // The 2R mark: no named level on the winning side, the target is the strategy's minimum R from the entry.
   if (form === 'target 2r') return out('target', { source: '2r', price: null, mark: true }, ['2r']);
   if ((a === 'stop' || a === 'target') && w.length >= 3 && isNum(w[w.length - 1])) {
@@ -706,6 +713,16 @@ function checkRead(p, b, { tick = 0.25, side = null, riskPts = null } = {}) {
       return res(ok, `the ${p.tf} candle: range ${rangeAtr} ATR, volume ${volRatio}x, close ${loc} third (momentum ${p.value}: range >= ${MOMENTUM.rangeAtr} ATR, volume >= ${MOMENTUM.volRatio}x, close ${far} third)`,
         { field: `m3.candles.${p.tf}`, value: `${rangeAtr} ATR, ${volRatio}x, ${loc}`, dir: dirSide(p.value) });
     }
+    case 'fired': {
+      // The scan's candidates on this bar (briefing.js candidate); null: the scan failed or the bar wasn't scanned.
+      if (!Array.isArray(m3.candidates)) return res('unchecked', `what fired on this bar is unknown (${m3.scanError || m3.setups || 'no scan'})`);
+      const want = dirSide(p.value);
+      const c = m3.candidates.find(x => isObj(x) && x.name === p.name && x.direction === want);
+      const other = m3.candidates.find(x => isObj(x) && x.name === p.name);
+      const fact = c ? `${p.name} fired ${want} on this bar (stop ${c.stopPoints} pts${c.target ? `, target ${c.target.R}R` : ''})`
+        : other ? `${p.name} fired ${other.direction}, not ${want}` : `${p.name} did not fire on this bar${m3.candidates.length ? ` (fired: ${m3.candidates.map(x => `${x.name} ${x.direction}`).join(', ')})` : ''}`;
+      return res(Boolean(c), fact, { field: 'm3.candidates', value: c ? `${c.name} ${c.direction}` : null, dir: want });
+    }
     case 'stop':
     case 'target': {
       const ref = num(m3.price);
@@ -787,7 +804,7 @@ function contextOf(b, side) {
  * folders that exist (a read naming another is refused); tick: the contract's (0.25 when not given); entryRule: the
  * policy's entry rule (entry-rule.js entryRuleOf; null: none), its problems refuse the combination.
  */
-function checkReads({ reads, side, briefing, skills = null, tick = 0.25, entryRule = null } = {}) {
+function checkReads({ reads, side, briefing, skills = null, tick = 0.25, entryRule = null, cited = null } = {}) {
   const problems = [];
   if (!SIDES.includes(side)) problems.push('side must be long or short');
   const list = Array.isArray(reads) ? reads : [];
@@ -840,6 +857,8 @@ function checkReads({ reads, side, briefing, skills = null, tick = 0.25, entryRu
       if (r.agrees) r.reversal = true;
     }
   }
+  // A cited setup (a TRUE `<strategy> fired` read of a strategy in `cited`): the plan takes its own entry, stop and target.
+  const setup = citedSetup({ checked, side, m3, cited, problems });
   const missingSteps = STEPS.filter(s => !checked.some(r => r.step === s));
   if (missingSteps.length) problems.push(`steps not stated: ${missingSteps.join(', ')} (every step needs a read, D7)`);
   // The reaction and its confirmation point the trade's way: the setup and the entry each need a true read whose
@@ -878,12 +897,46 @@ function checkReads({ reads, side, briefing, skills = null, tick = 0.25, entryRu
   const ok = !problems.length && checked.length > 0 && checked.every(r => r.check === true && r.agrees);
   const signed = checked.filter(r => STEPS.includes(r.step) && r.skill);
   return {
-    ok, side, reference, reads: checked, problems, missingSteps,
+    ok, side, reference, reads: checked, problems, missingSteps, ...(setup ? { setup } : {}),
     stop: stopRead ? { source: stopRead.slug, level: stopRead.price } : null,
     target: targetRead ? { source: targetRead.slug, level: targetRead.mark ? null : targetRead.price, ...(targetRead.mark ? { mark: true } : {}) } : null,
     signature: readSignature(signed, { reference }), skillSignature: skillSignature(signed),
     context: SIDES.includes(side) ? contextOf(briefing, side) : null,
   };
+}
+
+/**
+ * The cited setup of a combination: its TRUE `<strategy> fired` read, of a strategy in `cited` (strategies.js
+ * citedSetups: a rules strategy a policy listing the composed strategy lists), with that candidate's own plan from the
+ * briefing (m3.candidates: its stop in points, its fixed target in R): { name, stopPoints, targetR, entry: 'market' }, or
+ * null (none fired). Its target is its own, so the target read is the 2R mark, re-judged TRUE on its own target (the
+ * levels ahead stay the plan's inTheWay); a fired read that can't be cited, two of them, or a target that isn't its own
+ * add problems (the record is NOT OK).
+ */
+function citedSetup({ checked, side, m3, cited, problems }) {
+  const fired = checked.filter(r => r.kind === 'fired' && r.check === true);
+  if (!fired.length) return null;
+  if (fired.length > 1) { problems.push(`${fired.length} fired setups: a record cites one`); return null; }
+  const r = fired[0];
+  const name = String(r.form || '').split(' ')[0];
+  const allowed = cited instanceof Set ? cited.has(name) : Array.isArray(cited) && cited.includes(name);
+  if (!allowed) { problems.push(`"${r.read}": ${name} is not a setup this trade cites (an active rules strategy listed by a policy that lists it): no plan from it`); return null; }
+  if (r.dir !== side) return null;
+  const c = (Array.isArray(m3 && m3.candidates) ? m3.candidates : []).find(x => isObj(x) && x.name === name && x.direction === side);
+  const stopPoints = c ? num(c.stopPoints) : null;
+  const targetR = c && isObj(c.exit) ? num(c.exit.targetR) : null;
+  if (!(stopPoints > 0) || !(targetR > 0)) { problems.push(`"${r.read}": ${name} has no stop and fixed target (in R) on this bar, so no plan from it`); return null; }
+  const target = checked.find(x => x.step === 'target' && x.kind === 'target');
+  // The mark's R as its form names it (`target 2r`: 2), never restated here.
+  const markR = Number.parseFloat(parseRead('target 2r').slug);
+  const isMark = target && target.form === 'target 2r';
+  if (target && !isMark) problems.push(`${name} trades its own target (${targetR}R from its stop): state "target 2r"${targetR === markR ? '' : ' (its target is not 2R: it can\'t be cited)'}`);
+  else if (target) {
+    Object.assign(target, targetR === markR
+      ? { check: true, fact: `${name}'s own target: 2R from its stop (a level ahead is the plan's first level in the way)`, field: 'm3.candidates', value: '2r', dir: side, mark: true }
+      : { check: false, fact: `${name}'s own target is ${targetR}R, not the 2R mark`, field: 'm3.candidates', value: `${targetR}r`, dir: side });
+  }
+  return { name, stopPoints, targetR, entry: 'market' };
 }
 
 const WORD = { true: 'TRUE', false: 'FALSE', unchecked: 'UNCHECKED' };

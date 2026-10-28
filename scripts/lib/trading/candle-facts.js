@@ -316,6 +316,9 @@ function candleSeries(bars, minutes, base) {
       htfd_body: of((c, f) => num(f.body)), htfd_upper_wick: of((c, f) => num(f.upperWick)), htfd_lower_wick: of((c, f) => num(f.lowerWick)),
       htfd_close_loc: of((c, f) => (f.closeLocation === 'top' ? 1 : f.closeLocation === 'bottom' ? -1 : f.closeLocation ? 0 : NaN)),
       htfd_range_atr: of((c, f) => f.rangeAtr), htfd_vol_ratio: of((c, f) => f.volRatio),
+      // The momentum read (momentum.js momentumRead) on the unrounded facts, as htfd_range_atr and htfd_vol_ratio: 1 up,
+      // -1 down, 0 none, NaN unknown. A candle it fires on always shows `momentum` up or down in the briefing (rounded).
+      htfd_momentum: of((c, f) => { const m = momentumRead({ rangeAtr: f.rangeAtr, closeLocation: f.closeLocation, volRatio: f.volRatio }); return m === 'up' ? 1 : m === 'down' ? -1 : m === 'none' ? 0 : NaN; }),
       htfd_doji: of((c, f) => +f.patterns.includes('doji')), htfd_hammer: of((c, f) => +f.patterns.includes('hammer')),
       htfd_shooting_star: of((c, f) => +f.patterns.includes('shooting star')),
       htfd_inside: of((c, f) => +f.patterns.includes('inside')), htfd_outside: of((c, f) => +f.patterns.includes('outside')),

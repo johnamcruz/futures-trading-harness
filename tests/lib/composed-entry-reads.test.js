@@ -549,9 +549,10 @@ test('reaction, then confirmation for every setup form that names a candle: a CI
   const timing = r => r.problems.filter(p => /closed after the setup's|can't be timed/.test(p));
   // The setup forms: a relation, a pattern, a CISD and a compression break read name a candle and are timed (the last
   // on its expansion candle: composed-reads-compression.test.js); an OTE zone and a sweep name none and point no side as
-  // a setup. Every setup kind is one or the other.
+  // a setup. Every setup kind is one or the other; a cited setup's fired read is the scan's trigger on the bar itself, timed by
+  // nothing (its entry read is on that same candle: momentum_continuation's momentum candle).
   assert.deepStrictEqual([...CR.SETUP_CANDLE].filter(k => CR.STEP_KINDS[k].includes('setup')).sort(), ['cisd', 'compression', 'pattern', 'relation']);
-  assert.deepStrictEqual(Object.keys(CR.STEP_KINDS).filter(k => CR.STEP_KINDS[k].includes('setup') && !CR.SETUP_CANDLE.has(k)).sort(), ['ote', 'swept']);
+  assert.deepStrictEqual(Object.keys(CR.STEP_KINDS).filter(k => CR.STEP_KINDS[k].includes('setup') && !CR.SETUP_CANDLE.has(k)).sort(), ['fired', 'ote', 'swept']);
   // A 15m CISD up is the only setup read; the entry is the 3m candle closing 15:00.
   const cisd = SCENARIO_1.map(x => (x.step === 'setup' ? { ...x, skill: 'cisd', read: '15m cisd up' } : x));
   const at = confirmedClose => {

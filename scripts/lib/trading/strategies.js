@@ -68,7 +68,9 @@ const retiredNote = name => (Object.hasOwn(RETIRED, name) ? ` (retired on ${RETI
 const componentsNote = policy => {
   const list = (policy && Array.isArray(policy.strategies) && policy.strategies) || [];
   const rules = list.filter(n => n !== 'trade_lifecycle');
-  const notes = [...(list.includes('trade_lifecycle') ? ['order_plan records one on each trade_lifecycle compose record'] : []), ...(rules.length ? [`the runner records one at each setup of ${rules.join(', ')}`] : [])];
+  // Beside the composed trade, the others are setups its record cites (citingPolicies): no verdict of their own.
+  const cites = list.includes('trade_lifecycle');
+  const notes = [...(cites ? [`order_plan records one on each trade_lifecycle compose record${rules.length ? ` (which may cite ${rules.join(', ')})` : ''}`] : []), ...(rules.length && !cites ? [`the runner records one at each setup of ${rules.join(', ')}`] : [])];
   return notes.length ? notes.join('; ') : 'it lists no strategies, so it has no setups and no verdicts: no entry';
 };
 /**
@@ -101,7 +103,8 @@ const CONTRACT_MODES = ['micro', 'mini', 'auto'];
 const { SIZING_KEYS } = require('./combine'); // the sizing keys' one home (a policy's values: its account's rulebook)
 // A composed strategy's stop rule (signal: composed only): its buffer beyond the named level and its floor.
 const COMPOSED_RISK_KEYS = ['stop_buffer_ticks', 'stop_floor_ticks', 'stop_floor_atr'];
-const RISK_KEYS = ['stop', 'min_rr', 'max_risk_usd', ...COMPOSED_RISK_KEYS];
+// A rules strategy's closest stop, in price points: a closer distance from its stop rule is widened to it (stop_min).
+const RISK_KEYS = ['stop', 'min_rr', 'max_risk_usd', 'stop_min', ...COMPOSED_RISK_KEYS];
 // A composed record's validity in base bars after its bar's close: at most the gate's default briefing age (3 bars,
 // FTH_SIGNAL_MAX_AGE_BARS), which refuses an entry past it anyway.
 const MAX_VALID_BARS = 3;
@@ -332,6 +335,10 @@ function validateStrategy(data, body, folderName) {
     }
     req(typeof risk.min_rr === 'number' && risk.min_rr > 0, 'risk.min_rr: a positive number');
     if (risk.max_risk_usd !== undefined) req(typeof risk.max_risk_usd === 'number' && risk.max_risk_usd > 0, 'risk.max_risk_usd: a positive number');
+    if (risk.stop_min !== undefined) {
+      req(data.signal === 'rules', 'risk.stop_min: only for signal: rules (the closest stop its stop rule may give, widened to it)');
+      req(typeof risk.stop_min === 'number' && Number.isFinite(risk.stop_min) && risk.stop_min > 0, 'risk.stop_min: a distance in price points above 0');
+    }
   }
   if (data.exit !== undefined) errors.push(...exitErrors(data.exit));
   for (const h of REQUIRED_SECTIONS) req(body.includes(h), `body: missing section "${h}"`);
@@ -542,7 +549,10 @@ function scan(strategies, bars, { symbol, now = null, selected = null } = {}) {
     if (!s.valid || s.status === 'disabled') continue;
     if (root && !tradesRoot(s, root, selected)) continue;
     if (s.signal === 'policy') {
-      results.push({ name: s.name, status: s.status, signal: 'policy', candidate: false, note: s.strategies.length ? `a policy strategy: ${s.strategies.every(n => n === 'trade_lifecycle') ? 'its setups are the trade_lifecycle compose records (order_plan sizes each)' : `the runner screens the setups of ${s.strategies.join(', ')}`}` : 'a policy strategy with no strategies listed: no setups' });
+      // Beside a composed strategy its rules strategies are setups the compose record cites (composedOf): never screened.
+      const via = s.strategies.filter(n => n === 'trade_lifecycle' || composedOf(s, strategies).includes(n));
+      const cites = s.strategies.filter(n => !via.includes(n));
+      results.push({ name: s.name, status: s.status, signal: 'policy', candidate: false, note: s.strategies.length ? `a policy strategy: ${via.length ? `its setups are the ${via.join(', ')} compose records (order_plan sizes each)${cites.length ? `, which may cite ${cites.join(', ')}` : ''}` : `the runner screens the setups of ${s.strategies.join(', ')}`}` : 'a policy strategy with no strategies listed: no setups' });
       continue;
     }
     // The trade lifecycle has no trigger to scan: the model composes it (compose_check).
@@ -617,8 +627,37 @@ function componentRefusal(policy, registry, name, { paper = false } = {}) {
   if (!c) return `${name} is not a known strategy${retiredNote(name)}`;
   if (!c.valid) return `strategies/${name}/STRATEGY.md is invalid (${(c.errors || [])[0]})`;
   if (c.signal !== 'rules' && c.signal !== 'composed') return `${name} is signal: ${c.signal}; a policy trades rules strategies and composed ones only`;
+  // A setup the policy's composed trade cites: traded only through that trade's compose record, never on a verdict.
+  const via = c.signal === 'rules' ? composedOf(policy, registry) : [];
+  if (via.length) return `${name} is a setup ${via.join(', ')} cites in ${owner}: it is traded only through ${via[0]}'s compose record (the setup read "${name} fired up|down"), never on a verdict of its own`;
   if (c.status === 'active' || (paper && c.status !== 'disabled')) return null;
   return `${name} has status "${c.status}": ${owner} trades only its active strategies${paper ? '' : ' live'} (a ${c.status} strategy stays ${c.status} inside a policy)`;
+}
+
+/**
+ * Cited setups: a policy that lists a composed strategy (trade_lifecycle) trades its rules components only through that
+ * composed trade's record, which cites one as its setup read (`<name> fired up|down`, composed-reads.js) and takes its
+ * entry, stop and target from it (trade-lifecycle.js planOf); never on a verdict, or a setup tag, of their own.
+ *   composedOf(policy, registry)        the composed strategies the policy lists (valid ones), [] for none
+ *   citingPolicies(registry, name)      the valid policies citing rules strategy `name` that way, [] for none
+ *   citedSetups(registry, composed, { paper })   the names a record of composed strategy `composed` may cite: the
+ *                                       valid rules strategies a valid policy listing it lists, active (a paper run: not
+ *                                       disabled), as componentRefusal's status rule
+ */
+const composedOf = (policy, registry) => (policy && Array.isArray(policy.strategies) ? policy.strategies : [])
+  .filter(n => (registry || []).some(x => x && x.name === n && x.signal === 'composed' && x.valid !== false));
+const citingPolicies = (registry, name) => (registry || []).filter(p => p && p.valid !== false && p.signal === 'policy'
+  && (p.strategies || []).includes(name) && composedOf(p, registry).length > 0
+  && (registry || []).some(x => x && x.name === name && x.signal === 'rules'));
+function citedSetups(registry, composed, { paper = false } = {}) {
+  const out = new Set();
+  for (const p of (registry || []).filter(x => x && x.valid !== false && x.signal === 'policy' && (x.strategies || []).includes(composed) && composedOf(x, registry).includes(composed))) {
+    for (const n of p.strategies) {
+      const c = (registry || []).find(x => x && x.name === n);
+      if (c && c.valid && c.signal === 'rules' && (c.status === 'active' || (paper && c.status !== 'disabled'))) out.add(n);
+    }
+  }
+  return out;
 }
 
 /** Order-gate view: is `name` a tradable strategy for this contract right now? Returns an error message or null. */
@@ -666,6 +705,9 @@ module.exports = {
   withStyle,
   checkStrategyForOrder,
   componentRefusal,
+  composedOf,
+  citingPolicies,
+  citedSetups,
   tradesRoot,
   rootRefusal,
   barsStepMs,

@@ -22,7 +22,9 @@
  *   - match the plan worked out again from the re-checked reads (trade-lifecycle.js planOf: the D3 buffer, the D13
  *     minimum stop, risk.min_rr, the stated size within risk.max_risk_usd), equal to the record's plan:
  *     stopLossBracket.ticks and takeProfitBracket.ticks are its ticks;
- *   - be a limit at the record's entry price or better for its side;
+ *   - be a limit at the record's entry price or better for its side; a cited setup's record (its plan at market:
+ *     `cited`, the setups the composed trade may cite, strategies.js citedSetups; none: a fired read can't be cited) a
+ *     market order;
  *   - be the record's stated size, or, where phase 2's approved size is known and smaller (`approvedSize`), exactly that
  *     size (its cut). The ceilings over it are the gate's own checks (max-risk, max-order-size, and in a prop attempt
  *     the policy verdict's size): at or below, never above. In a prop attempt (`translate`: prop/size-translate.js,
@@ -37,6 +39,7 @@
  *   readsOf(record)                 the reads as the model stated them: [{ step, skill, read, why }]
  *   composedName({ setupName, named, strategies, home, root })   the composed strategy the order enters by, or null
  *   limitRefusal({ side, type, limitPrice, reference, tick })    why the entry isn't a limit at the reference or better
+ *   marketRefusal({ type, reference, setup })   why a cited setup's entry (its plan: at market) isn't a market order
  *   composedRefusal({ name, strategy, home, root, input, now, cycleBars, entries, specOf, pluginRoot, approvedSize, entryRule })
  *                                   { message: why it is refused | null, check, record, plan, room, expiresAt, briefing }
  *                                   (`briefing`: the cycle bar's, the one the reads were checked on)
@@ -120,6 +123,12 @@ function limitRefusal({ side, type, limitPrice, reference, tick } = {}) {
   return null;
 }
 
+/** Why a cited setup's entry (its plan: at market) isn't a market order, or null. */
+function marketRefusal({ type, reference, setup } = {}) {
+  if (String(type || '').toLowerCase() === 'market') return null;
+  return `the entry is ${type ? `a ${String(type).toLowerCase()}` : 'not a market'} order: ${setup || 'the cited setup'}'s entry is at market from the record's ${reference} (its stop and target are brackets in ticks from the fill)`;
+}
+
 const quote = r => `"${r.read}"`;
 
 function reversalAllowed({ home, root, side, check, now = new Date(), maxAgeMin = DEFAULT_MAX_AGE_MIN }) {
@@ -149,7 +158,7 @@ function reversalAllowed({ home, root, side, check, now = new Date(), maxAgeMin 
 /** The room a phase-2 room fact is checked against (fact-claims.js): the plan's first level in the way, in its R, against the R its target needs. */
 const roomOf = (p, tick) => ({ stopPoints: p.stop.ticks * tick, needR: p.rr, inTheWay: p.inTheWay ? { name: p.inTheWay.name, R: p.inTheWay.R } : null });
 
-function composedRefusal({ name, strategy = null, home, root, input = {}, now = new Date(), cycleBars = {}, entries = [], specOf = () => null, pluginRoot = PLUGIN_ROOT, approvedSize = null, translate = null, attempt = false, entryRule = null }) {
+function composedRefusal({ name, strategy = null, home, root, input = {}, now = new Date(), cycleBars = {}, entries = [], specOf = () => null, pluginRoot = PLUGIN_ROOT, approvedSize = null, translate = null, attempt = false, entryRule = null, cited = null }) {
   const say = (why, check = null) => ({ message: `setup:${name}: ${why}. Exits, protective stops and stop moves still go.`, check });
   try {
     const side = { buy: 'long', sell: 'short' }[String(input.side || '').toLowerCase()];
@@ -180,7 +189,7 @@ function composedRefusal({ name, strategy = null, home, root, input = {}, now = 
     const tick = spec && spec.tickSize > 0 ? spec.tickSize : null;
     if (!tick || !(spec.tickValue > 0)) return say('no tick specs for the contract, so the plan can\'t be checked');
     // The checker again, on the reads as stated, against this bar's briefing: never the record's `ok` or checks.
-    const check = checkReads({ reads: readsOf(rec), side, briefing: b, skills: skillFolders(pluginRoot), tick, entryRule });
+    const check = checkReads({ reads: readsOf(rec), side, briefing: b, skills: skillFolders(pluginRoot), tick, entryRule, cited });
     const wrong = check.reads.filter(r => r.check === false);
     const unchecked = check.reads.filter(r => r.check === 'unchecked');
     const against = check.reads.filter(r => r.check === true && !r.agrees);
@@ -200,12 +209,13 @@ function composedRefusal({ name, strategy = null, home, root, input = {}, now = 
     const planned = planOf({ checked: check, briefing: b, side, size: stated, tick, tickValue: spec.tickValue, minRR: risk.min_rr ?? null, maxRiskUsd: risk.max_risk_usd ?? null, stopRule: stopRuleOf(risk), suggestion: Boolean(translate || attempt) });
     if (!planned.plan || planned.problems.length) return say(`the plan doesn't stand: ${planned.problems.join('; ') || 'it can\'t be worked out'}`, check);
     const p = planned.plan;
-    const same = held && isObj(held.entry) && isObj(held.stop) && isObj(held.target) && held.entry.price === p.entry.price && held.stop.ticks === p.stop.ticks && held.target.ticks === p.target.ticks;
+    const same = held && isObj(held.entry) && isObj(held.stop) && isObj(held.target) && held.entry.price === p.entry.price && (held.entry.type || 'limit') === p.entry.type && held.stop.ticks === p.stop.ticks && held.target.ticks === p.target.ticks;
     if (!same) {
-      const show = x => (x && isObj(x.stop) && isObj(x.target) && isObj(x.entry) ? `${x.stop.ticks}-tick stop, ${x.target.ticks}-tick target from ${x.entry.price}` : 'none');
+      const show = x => (x && isObj(x.stop) && isObj(x.target) && isObj(x.entry) ? `${x.stop.ticks}-tick stop, ${x.target.ticks}-tick target from ${x.entry.price}${x.entry.type === 'market' ? ' at market' : ''}` : 'none');
       return say(`the compose record's plan (${show(held)}) is not the plan its reads give now (${show(p)})`, check);
     }
-    const limit = limitRefusal({ side, type: input.type, limitPrice: input.limitPrice, reference: p.entry.price, tick });
+    const limit = p.entry.type === 'market' ? marketRefusal({ type: input.type, reference: p.entry.price, setup: p.setup })
+      : limitRefusal({ side, type: input.type, limitPrice: input.limitPrice, reference: p.entry.price, tick });
     if (limit) return say(limit, check);
     const sl = isObj(input.stopLossBracket) ? input.stopLossBracket.ticks : undefined;
     const tp = isObj(input.takeProfitBracket) ? input.takeProfitBracket.ticks : undefined;
@@ -232,4 +242,4 @@ function composedRefusal({ name, strategy = null, home, root, input = {}, now = 
   }
 }
 
-module.exports = { D2_TIERS, reversalAllowed, isComposed, recordsAt, readsOf, skillFolders, composedName, limitRefusal, composedRefusal, recordUsed };
+module.exports = { D2_TIERS, reversalAllowed, isComposed, recordsAt, readsOf, skillFolders, composedName, limitRefusal, marketRefusal, composedRefusal, recordUsed };

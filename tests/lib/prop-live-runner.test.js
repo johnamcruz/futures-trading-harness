@@ -470,3 +470,21 @@ test('the attempt line\'s losing streak: prop-state.sessionLossStreak, the one s
   // The next session starts at 0; before its first snapshot the streak is unknown, never yesterday's shown as today's.
   assert.strictEqual(hooks.summaries(new Date('2026-10-08T14:30:00Z'))[0].facts.lossStreak, null);
 });
+
+test('a cited setup gets no verdict: a policy listing a composed strategy screens none of its rules setups (the compose record cites them, order_plan sizes it)', async () => {
+  const now = new Date('2026-10-07T23:00:00Z');
+  const { hooks, home, strategy, components } = setup();
+  // The same policy with a composed component first: its rules components are setups that trade cites.
+  Object.assign(strategy, { strategies: ['lifecycle_x', ...COMPONENTS] });
+  components.push({ name: 'lifecycle_x', valid: true, errors: [], status: 'active', signal: 'composed', instruments: ['MNQ', 'NQ'], timeframe: '3m' });
+  await hooks.snapshot(now);
+  const scan = [{ name: 'trendy', candidate: true, direction: 'long', stopDistance: 10 }, { name: 'prop_x', candidate: false, signal: 'policy' }];
+  const out = hooks.screen(scan, { symbol: 'MNQ', contractId: CONTRACT, bars: bars(), now });
+  assert.strictEqual(prop.latestVerdict(home, 'prop_x', 'MNQ'), null, 'no verdict recorded');
+  const mine = out.find(r => r.name === 'prop_x');
+  assert.deepStrictEqual([mine.candidate, mine.verdict, mine.component], [false, undefined, undefined]);
+  // Its own result is not an entry: owned, with why (the scan log's note).
+  const own = out.find(r => r.name === 'trendy');
+  assert.strictEqual(own.candidate, false);
+  assert.match(own.note, /^not traded through prop_x: trendy is a setup lifecycle_x cites in prop_x: it is traded only through lifecycle_x's compose record/);
+});

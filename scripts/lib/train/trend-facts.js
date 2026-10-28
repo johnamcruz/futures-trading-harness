@@ -157,7 +157,9 @@ function parityMiss(records, b, tick, unknown) {
     const reads = (rec.reads || []).filter(r => isObj(r) && typeof r.read === 'string' && (r.check === true || r.check === false) && !dependsOnMissing(r.read, b, unknown));
     if (!reads.length) continue;
     // Per-read parity (each read's own check), which the entry rule never changes.
-    const again = checkReads({ reads: reads.map(r => ({ step: r.step, skill: r.skill, read: r.read, why: r.why || null })), side: rec.side, briefing: b, tick });
+    // A record that cited a setup (its plan's `setup`) is re-checked citing it, as compose_check judged it.
+    const cited = isObj(rec.plan) && typeof rec.plan.setup === 'string' ? [rec.plan.setup] : null;
+    const again = checkReads({ reads: reads.map(r => ({ step: r.step, skill: r.skill, read: r.read, why: r.why || null })), side: rec.side, briefing: b, tick, cited });
     for (const r of reads) {
       const x = again.reads.find(y => y.step === r.step && y.read === r.read);
       if (!x || (x.check === true) !== (r.check === true)) return r.read;

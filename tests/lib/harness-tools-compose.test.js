@@ -141,7 +141,8 @@ test('compose_check in a prop attempt: no size fits (the floor all in over the c
     assert.match(lc, /^ {2}max_risk_usd: 300 /m);
     fs.mkdirSync(path.join(r, 'strategies', 'trade_lifecycle'), { recursive: true });
     fs.writeFileSync(path.join(r, 'strategies', 'trade_lifecycle', 'STRATEGY.md'), lc.replace(/^ {2}max_risk_usd: 300 /m, `  max_risk_usd: ${cap} `));
-    fs.cpSync(path.join(ROOT, 'strategies', 'prop_portfolio'), path.join(r, 'strategies', 'prop_portfolio'), { recursive: true });
+    // prop_portfolio and the setup it lists beside trade_lifecycle (without it the policy is invalid).
+    for (const n of ['prop_portfolio', 'momentum_continuation']) fs.cpSync(path.join(ROOT, 'strategies', n), path.join(r, 'strategies', n), { recursive: true });
     const acct = loadStrategies(ROOT, {}).strategies.find(s => s.name === 'prop_portfolio').account;
     fs.cpSync(path.join(ROOT, 'accounts', acct), path.join(r, 'accounts', acct), { recursive: true });
     fs.symlinkSync(path.join(ROOT, 'skills'), path.join(r, 'skills'));
@@ -191,7 +192,7 @@ test('compose_check in a prop attempt holds the policy\'s entry rule (its rulebo
     b.sections.m3.data.regime = { primary: regime, volatility: 'normal' };
     const { home, ctx } = setup({ briefing: b });
     const r = tmpDir();
-    for (const s of ['trade_lifecycle', 'prop_portfolio']) fs.cpSync(path.join(ROOT, 'strategies', s), path.join(r, 'strategies', s), { recursive: true });
+    for (const s of ['trade_lifecycle', 'prop_portfolio', 'momentum_continuation']) fs.cpSync(path.join(ROOT, 'strategies', s), path.join(r, 'strategies', s), { recursive: true });
     const acct = loadStrategies(ROOT, {}).strategies.find(s => s.name === 'prop_portfolio').account;
     fs.cpSync(path.join(ROOT, 'accounts', acct), path.join(r, 'accounts', acct), { recursive: true });
     fs.symlinkSync(path.join(ROOT, 'skills'), path.join(r, 'skills'));
