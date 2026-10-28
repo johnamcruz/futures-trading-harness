@@ -500,7 +500,7 @@ async function runEntry(deps, c) {
     const G = require('./tunables').runner().gate;
     const maxAgeMin = LE.ageLimitOf(config || { signalMaxAgeBars: G.signalMaxAgeBars, signalMaxAgeCeilingMin: G.signalMaxAgeCeilingMin });
     const { readBriefing } = require('./trading/briefing');
-    return LE.lateEntryCheck({ home, root, side: rec.side, entry: o.plan.entry, stop: o.plan.stopPrice, target: o.plan.targetPrice ?? null, briefing: readBriefing(home, root), now: now(), share: G.lateEntryDriftShare, maxAgeMin });
+    return LE.lateEntryCheck({ home, root, side: rec.side, entry: o.plan.entry, stop: o.plan.stopPrice, target: o.plan.targetPrice ?? null, briefing: readBriefing(home, root), now: now(), share: G.lateEntryDriftShare, maxAgeMin, market: o.plan.entryType === 'market' });
   };
   const sentAt = Date.now();
   let res;

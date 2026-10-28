@@ -28,8 +28,10 @@
  *                                  (price past the entry against the trade by more than `share` of the stop distance:
  *                                  movedR, the share of the plan's risk moved toward the stop, the same for a long and a
  *                                  short; share: config/runner.json gate.lateEntryDriftShare, tighten-only)
- *                                  A price the trade's way past the entry is no refusal: the limit rests at the plan's
- *                                  price and expires with its record (lifecycle-runner.js dueComposed); never chased.
+ *                                  A price the trade's way past the entry is no refusal for a limit: it rests at the plan's
+ *                                  price and expires with its record (lifecycle-runner.js dueComposed); never chased. For a
+ *                                  MARKET entry (`market: true`: a cited setup's, whose stop is a distance from the fill) it
+ *                                  is kind `chased-entry` when past the entry by more than the same share of the risk.
  *   lateEntryCheck({ home, root, side, entry, stop, target, briefing, now, share, maxAgeMin })   null or { message, late }
  *                                  (late: the skip as logged: the plan's prices, the price at the skip, movedR)
  *   lateEntryRefusal({ ... })      the refusal's message or null
@@ -89,7 +91,7 @@ function latestPrice({ home, root, briefing = null, now = new Date(), maxAgeMin 
   return { price: best.price, closedAt: best.closedAt, source: best.source };
 }
 
-function lateEntry({ side, entry, stop, price, share }) {
+function lateEntry({ side, entry, stop, price, share, market = false }) {
   const sign = side === 'long' ? 1 : side === 'short' ? -1 : 0;
   const e = Number(entry);
   const s = Number(stop);
@@ -103,19 +105,26 @@ function lateEntry({ side, entry, stop, price, share }) {
   if (against > share * risk) {
     return { kind: 'missed-entry', movedR, message: `missed the plan's entry ${e} (price ${p} is ${Math.round(against * 1e6) / 1e6} points past it against the ${side}: ${Math.round(movedR * 100)}% of the ${risk}-point risk toward the stop, over ${share}R; the setup's premise is in question): the limit would fill away from the plan: no late entry` };
   }
+  // A MARKET entry fills wherever price is, and the bracket's stop is a distance from that fill: price the trade's way
+  // past the reference by more than the same share of the risk moves the stop off the level the plan named (a chase).
+  const toward = sign * (p - e);
+  if (market === true && toward > share * risk) {
+    const chasedR = Math.round((toward / risk) * 1000) / 1000;
+    return { kind: 'chased-entry', movedR: null, message: `chased entry: the market order would fill away from the plan's entry ${e} (price ${p} is ${Math.round(toward * 1e6) / 1e6} points past it with the ${side}: ${Math.round(chasedR * 100)}% of the ${risk}-point risk, over ${share}R), and its stop, a distance from the fill, would land off the plan's stop ${s}: no late entry` };
+  }
   return null;
 }
 
 /**
  * The late-entry check with what a skip is logged with: null (the plan stands) or { message, late: { kind, side,
- * entry, stop, target, price, closedAt, source, movedR, share } } (kind: beyond-stop, missed-entry, no-price, failed).
+ * entry, stop, target, price, closedAt, source, movedR, share } } (kind: beyond-stop, missed-entry, chased-entry, no-price, failed).
  */
-function lateEntryCheck({ home, root, side, entry, stop, target = null, briefing = null, now = new Date(), share, maxAgeMin }) {
+function lateEntryCheck({ home, root, side, entry, stop, target = null, briefing = null, now = new Date(), share, maxAgeMin, market = false }) {
   const base = { side, entry: Number(entry), stop: Number(stop), target: target === null ? null : Number(target), share };
   try {
     const got = latestPrice({ home, root, briefing, now, maxAgeMin });
     if (got.price === null) return { message: `no current price for ${keyOf(root)} from local bars (${got.why}): the plan's entry and stop can't be checked against the market, so no entry (fails closed)`, late: { ...base, kind: 'no-price', price: null, closedAt: null, source: null, movedR: null } };
-    const late = lateEntry({ side, entry, stop, price: got.price, share });
+    const late = lateEntry({ side, entry, stop, price: got.price, share, market });
     if (!late) return null;
     return { message: `${late.message} (the ${got.source} price at ${got.closedAt}). Pass; the next bar composes on its own facts`, late: { ...base, kind: late.kind, price: got.price, closedAt: got.closedAt, source: got.source, movedR: late.movedR ?? null } };
   } catch (err) {

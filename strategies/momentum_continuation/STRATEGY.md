@@ -94,6 +94,12 @@ with `compose_check`; code takes its entry, stop and target from here.
 - Mean +0.08R and +0.06R a trade on the two halves, both intervals
   including 0: no proven edge alone. 30-session combine pass about 8% on
   both halves, 0 blows.
+- The census ran at a 240h trend window; the live scan uses the current
+  window. A model-free re-run at 504h (practice-train, split 2022-11-23)
+  still beat today's plans on both halves: R caught/available 18.2% vs 9.9%
+  (A) and 25.7% vs 10.0% (B); 30-session pass 10.85% vs 6.61% (A) and
+  8.38% vs 1.57% (B) on real starts; resampled paired-gain intervals above 0
+  on both halves; 0 blows. 2021 and 2024 H1 were weaker on mean R.
 
 ## Examples
 

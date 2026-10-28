@@ -4141,6 +4141,17 @@ test('a cited setup: a trade_lifecycle record citing momentum_continuation goes 
   assert.ok(only(lcEval(limitRec, LC.s2Order())).length, 'refused');
 });
 
+test('a cited setup, a market entry: the latest price the trade\'s way past the reference over the share is a chase ([late-entry]); at the reference or within the share, it goes', () => {
+  const LE = require('../../scripts/lib/trading/late-entry');
+  // Entry 21540.25, stop 21528.75 (11.5 points): 0.25 of it is 2.875 points above the reference.
+  const at = price => { const home = trendHome(); LC.writeS2(home); LE.recordPrice(home, 'MNQ', { price, closedAt: '2026-10-07T14:00:00Z', minutes: 1, source: 'runner-entry' }); return lcEval(home, LC.s2Order()); };
+  const late = r => r.violations.filter(v => v.check === 'late-entry').map(v => v.message);
+  assert.match(late(at(21543.25))[0], /chased entry: .*entry 21540\.25 \(price 21543\.25 is 3 points past it with the long/);
+  assert.deepStrictEqual(at(21543).violations, [], '2.75 points: within the share');
+  assert.deepStrictEqual(at(21540.25).violations, [], 'at the reference');
+  assert.match(late(at(21529))[0] || '', /missed the plan's entry/, 'adverse drift is still judged');
+});
+
 test('a cited setup never enters under its own tag ([cited-setup], hard: no skip list skips it); its exits and protective stops still go', () => {
   const home = trendHome();
   LC.writeS2(home);

@@ -661,7 +661,7 @@ strategy fx_vwap_reclaim: {
   "version": 1
 }
 strategy momentum_continuation: {
-  "body": "3768 chars sha256:6930abac591609cd",
+  "body": "4203 chars sha256:d4f884a2985d16f7",
   "compiledRules": "sha256:6ce0659e3a543e8f",
   "compiledStop": "sha256:54e436b332f2eef2",
   "compiledTarget": null,

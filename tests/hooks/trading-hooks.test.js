@@ -3895,6 +3895,24 @@ test('order gate (hook): no late entry ([late-entry]): the latest local price be
   assert.strictEqual(r.code, 0, r.stderr);
 });
 
+test('order gate (hook): a cited setup\'s market entry with the latest price over the share past its reference is refused [late-entry] (chased); at the reference it goes', () => {
+  const LE = require('../../scripts/lib/trading/late-entry');
+  const LC2 = require('../fixtures/lifecycle');
+  const { env } = setup([{ ts: '2026-10-07T13:59:30.000Z', kind: 'plan', contractId: 'MNQ', text: 'plan' }],
+    { FTH_STRATEGIES_DIRS: path.join(REPO, 'strategies'), FTH_ACCOUNTS_DIRS: path.join(REPO, 'accounts'), FTH_TEST_NOW: '2026-10-07T14:00:02.000Z', FTH_CYCLE_BARS: JSON.stringify({ MNQ: LC2.BAR }) });
+  LC2.writeS2(env.FTH_HOME);
+  const run = p => {
+    fs.rmSync(path.join(env.FTH_HOME, LE.FILE), { force: true });
+    LE.recordPrice(env.FTH_HOME, 'MNQ', { price: p, closedAt: '2026-10-07T14:00:00Z', minutes: 1, source: 'runner-entry' });
+    return gate(orderPayload(LC2.s2Order()), env);
+  };
+  const r = run(21544);
+  assert.strictEqual(r.code, 2);
+  assert.match(r.stderr, /\[late-entry\] .*chased entry/);
+  const ok = run(21540.25);
+  assert.doesNotMatch(ok.stderr, /\[late-entry\]/);
+});
+
 test('order gate (hook): a composed entry on the runner\'s cycle (opencode, index mode) needs no lookup of the composed bar\'s reads its attested head prompt embeds; a prompt without them is refused for them', () => {
   const H = require('../../scripts/lib/head-prompt');
   const home = trendHome();

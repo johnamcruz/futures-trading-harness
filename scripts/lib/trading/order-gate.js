@@ -441,7 +441,7 @@ function evaluateOrder({ input = {}, entries = [], now = new Date(), config, bla
     // it by more than the configured share of the stop distance, it is a pass; no current price, refused (fails closed).
     if (!composedCheck.message) {
       const p = composedCheck.plan;
-      const late = lateEntryCheck({ home: config.home, root: contractRoot(input.contractId), side: { buy: 'long', sell: 'short' }[String(input.side || '').toLowerCase()], entry: p.entry.price, stop: p.stop.price, target: p.target.price, briefing: composedCheck.briefing, now, share: GATE.lateEntryDriftShare, maxAgeMin: ageLimitOf(config) });
+      const late = lateEntryCheck({ home: config.home, root: contractRoot(input.contractId), side: { buy: 'long', sell: 'short' }[String(input.side || '').toLowerCase()], entry: p.entry.price, stop: p.stop.price, target: p.target.price, briefing: composedCheck.briefing, now, share: GATE.lateEntryDriftShare, maxAgeMin: ageLimitOf(config), market: p.entry.type === 'market' });
       // `late`: the skip as logged (the plan's prices, the price at the skip): the replay report's counterfactual reads it.
       if (late) violations.push({ check: 'late-entry', message: `setup:${composed}: ${late.message}. Exits, protective stops and stop moves still go.`, late: { ...late.late, record: composedCheck.record ? composedCheck.record.id : null } });
     }
