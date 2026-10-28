@@ -284,6 +284,13 @@ test('the control plans by setup type: grouped, sorted by n, the n floor and the
   ], 'the third type is past the cap, the two singles under the floor: all in other; invalid and unknown bars not counted');
   assert.strictEqual(c.bySetup.reduce((n, r) => n + r.n, 0), c.controlBars.valid, 'every valid control plan in one row');
   assert.deepStrictEqual(X.controlsOf([{ legs: [], controls }], { setupTypes: 5, setupMinN: 1 }).bySetup.map(r => r.type), ['rejected overnight low', 'compression break', 'momentum_continuation', 'cisd', 'swept prior day high']);
+  // The floor alone (the cap past every type): a type of two plans under setupMinN 3 is folded into other.
+  assert.deepStrictEqual(X.controlsOf([{ legs: [], controls: [...controls, plan('swept prior day high', 'won')] }], { setupTypes: 5, setupMinN: 3 }).bySetup, [
+    { type: 'rejected overnight low', n: 5, won: 2, lost: 2, undecided: 1 },
+    { type: 'compression break', n: 3, won: 1, lost: 2, undecided: 0 },
+    { type: 'momentum_continuation', n: 3, won: 2, lost: 1, undecided: 0 },
+    { type: 'other', n: 3, won: 1, lost: 1, undecided: 1 },
+  ], 'swept (n=2) and cisd (n=1) under the floor');
   // A capture from before planSetup: the plan's first setup-only read.
   assert.deepStrictEqual(X.controlsOf([{ legs: [], controls: [{ ...plan('15m compression break up', 'won'), planSetup: undefined }] }], { setupMinN: 1 }).bySetup, [{ type: 'compression break', n: 1, won: 1, lost: 0, undecided: 0 }]);
   assert.deepStrictEqual(X.controlsOf([{ legs: [], controls: [] }]).bySetup, []);

@@ -49,7 +49,8 @@ test('exit screen: too few pairs is no effect, however one-sided', () => {
 });
 
 test('exit screen: cutting the champion\'s runners fails whatever the mean', () => {
-  const runners = [0, 1].map(i => [trade(100 + i, { peakR: 4, r: 2 }), trade(100 + i, { peakR: 4, r: 2.6, cls: 'cut' })]);
+  // The probe's own MFE is no runner's: the champion's MFE decides (the probe cut it short).
+  const runners = [0, 1].map(i => [trade(100 + i, { peakR: 4, r: 2 }), trade(100 + i, { peakR: 1, r: 2.6, cls: 'cut' })]);
   const [a, b] = split([...better(8), ...better(4, 0), ...runners]);
   const { m, s } = run(a, b);
   assert.deepStrictEqual(m.target.runners, { pairs: 2, newCuts: 2, fixedCuts: 0 });
@@ -63,6 +64,12 @@ test('exit screen: cutting the champion\'s runners fails whatever the mean', () 
   const [c, d] = split([...better(8), ...better(4, 0), ...runners, [back[0], back[1]], [trade(201, { peakR: 5, cls: 'cut' }), trade(201, { peakR: 5, r: 1.6 })]]);
   assert.deepStrictEqual(run(c, d).m.target.runners, { pairs: 4, newCuts: 2, fixedCuts: 2 });
   assert.strictEqual(run(c, d).s.verdict, 'helped');
+  // An unclear or unresolved class offsets no new cut; a champion runner whose exit was unresolved is no runner.
+  const vague = [[trade(400, { peakR: 4, cls: 'cut' }), trade(400, { peakR: 4, cls: 'unclear' })], [trade(401, { peakR: 4, cls: 'cut' }), trade(401, { peakR: 4, cls: 'unresolved' })], [trade(402, { peakR: 4, cls: 'unresolved' }), trade(402, { peakR: 4, cls: 'cut' })]];
+  const [e, g] = split([...better(8), ...better(4, 0), ...runners, ...vague]);
+  const v = run(e, g);
+  assert.deepStrictEqual(v.m.target.runners, { pairs: 4, newCuts: 2, fixedCuts: 0 });
+  assert.strictEqual(v.s.verdict, 'hurt');
 });
 
 test('exit screen: trades whose entries differ are unmatched, reported, never paired', () => {
@@ -80,10 +87,37 @@ test('exit screen: trades whose entries differ are unmatched, reported, never pa
   assert.deepStrictEqual([near.pairs, near.meanDiff, near.unmatched], [1, 1, { champion: 0, probe: 1 }]);
   // The curated set: a moment both entered, the same side; a pass (never entered) and another side never pair.
   const cur = (key, R, x = {}) => ({ key, day: '2021-06-01', R, entered: true, side: 'long', reads: [], relevant: [], ...x });
-  const curated = [side([cur('MNQ|1', 1), cur('MNQ|2', 1), cur('MNQ|3', 0, { entered: false }), cur('MNQ|4', 1)]),
-    side([cur('MNQ|1', 2), cur('MNQ|2', 0.5), cur('MNQ|3', 2), cur('MNQ|4', 3, { side: 'short' }), cur('MNQ|5', 1)])];
+  const curated = [side([cur('MNQ|1', 1), cur('MNQ|2', 1), cur('MNQ|6', 1), cur('MNQ|3', 0, { entered: false }), cur('MNQ|4', 1)]),
+    side([cur('MNQ|1', 2), cur('MNQ|2', 0.5), cur('MNQ|6', 1.25), cur('MNQ|3', 2), cur('MNQ|4', 3, { side: 'short' }), cur('MNQ|5', 1)])];
   const t = run([], [], curated).m.target;
-  assert.deepStrictEqual([t.pairs, t.b, t.c, t.unmatched], [2, 1, 1, { champion: 1, probe: 3 }]);
+  assert.deepStrictEqual([t.pairs, t.b, t.c, t.meanDiff, t.unmatched], [3, 2, 1, 0.25, { champion: 1, probe: 3 }], 'the probe\'s minus the champion\'s');
+});
+
+test('exit screen: only the units both sides finished pair; unknown exits are never a gain', () => {
+  const [a, b] = split(better(12));
+  const unit = (list, f) => list.map((x, i) => ({ ...x, unit: f(i) }));
+  const m = SC.measure(side(), side(), { skill: 'manage-position', kind: EF.KIND, exits: { champion: unit(a, i => `w${i}`), probe: unit(b, i => `w${i}`), stepMs: STEP, done: ['w0', 'w1', 'w2'] } });
+  assert.deepStrictEqual([m.target.pairs, m.target.unmatched], [3, { champion: 0, probe: 0 }], 'a trade in an unfinished unit is no trade');
+  const u = SC.measure(side(), side(), { skill: 'manage-position', kind: EF.KIND, exits: { unknown: true } });
+  assert.deepStrictEqual([u.target.pairs, u.target.enough], [0, false]);
+  assert.match(u.target.why, /scored exits are unknown/);
+  assert.strictEqual(SC.screen(u).verdict, 'no effect');
+});
+
+test('composedScreen: an exit part\'s runner harm, though it is the second part, makes the combined change hurt', () => {
+  const d = { key: 'MNQ|1', day: '2021-06-01', R: 1, entered: true, side: 'long', relevant: ['rejection'], reads: [{ skill: 'rejection', check: true, ok: true }] };
+  const misses = Array.from({ length: 12 }, (_, i) => ({ ...d, key: `MNQ|${i}` }));
+  const champion = side(misses.map(x => ({ ...x, reads: [] })));
+  const probe = side(misses);
+  const runners = [0, 1].map(i => [trade(100 + i, { peakR: 4, r: 2 }), trade(100 + i, { peakR: 4, r: 2.6, cls: 'cut' })]);
+  const [a, b] = split([...better(8), ...better(4, 0), ...runners]);
+  const parts = [{ id: 'P1', tag: { skill: 'rejection' }, finding: { kind: 'missed' } }, { id: 'P2', tag: { skill: 'manage-position' }, finding: { kind: EF.KIND } }];
+  const s = SC.composedScreen(champion, probe, parts, { exits: exits(a, b) });
+  assert.strictEqual(s.verdict, 'hurt', JSON.stringify(s));
+  assert.deepStrictEqual(s.harms, ['P2\'s target: cut 2 runner(s) the champion rode (un-cut 0; MFE at least 3R)']);
+  assert.ok(s.targets[1].target.runners && s.targets[1].target.pairs === 26, 'the curated moments both entered and the trend trades');
+  // Without the trend set's exits the exit part has none of those trades: no harm, and no gain (no pairs).
+  assert.deepStrictEqual(SC.composedScreen(champion, probe, parts).harms, []);
 });
 
 test('exit screen: a read finding\'s edit keeps the read target test', () => {

@@ -204,7 +204,8 @@ function targetTest(champion, probe, { skill, kind }) {
  * its banked R moved by at least epsR (the probe's minus the champion's); the exact one-sided McNemar test on those, as
  * the read target's. Too few pairs (under minPairs): never a gain. Each trend pair's class change (cut, right, late, as
  * scored), tagged by who exited on the probe's side; runners: the champion's trades with an MFE of at least runnerMfeR,
- * newly cut by the probe or no longer cut. Trades on one side only: counted as unmatched, never paired.
+ * newly cut by the probe or no longer cut. Trades on one side only: counted as unmatched, never paired. exits.done: the
+ * units both sides finished (only their trades pair); exits.unknown: a side's scored exits unknown, never a gain.
  */
 function exitTargetTest(champion, probe, exits = null, { epsR = EXIT.epsR, runnerMfeR = EXIT.runnerMfeR, minPairs = SCREEN.minPairs } = {}) {
   const diffs = [];
@@ -224,9 +225,12 @@ function exitTargetTest(champion, probe, exits = null, { epsR = EXIT.epsR, runne
   const classes = {};
   const runners = { pairs: 0, newCuts: 0, fixedCuts: 0 };
   const label = x => (x.late ? 'late' : x.cls);
-  const tradeOf = x => (x && x.root && x.side && Number.isFinite(Date.parse(x.entryAt)) && isR(x.r) ? { ...x, ms: Date.parse(x.entryAt) } : null);
-  const mine = exits && Array.isArray(exits.champion) ? exits.champion.map(tradeOf).filter(Boolean) : [];
-  const theirs = exits && Array.isArray(exits.probe) ? exits.probe.map(tradeOf).filter(Boolean) : [];
+  // Only the units (stepped windows) both sides finished, when the caller names them (done), as the trend screen pairs.
+  const done = exits && Array.isArray(exits.done) ? new Set(exits.done) : null;
+  const tradeOf = x => (x && x.root && x.side && Number.isFinite(Date.parse(x.entryAt)) && isR(x.r) && (!done || done.has(x.unit)) ? { ...x, ms: Date.parse(x.entryAt) } : null);
+  const unknown = Boolean(exits && exits.unknown);
+  const mine = exits && !unknown && Array.isArray(exits.champion) ? exits.champion.map(tradeOf).filter(Boolean) : [];
+  const theirs = exits && !unknown && Array.isArray(exits.probe) ? exits.probe.map(tradeOf).filter(Boolean) : [];
   const near = MATCH_BARS * (exits && exits.stepMs > 0 ? exits.stepMs : 0);
   const free = new Set(theirs.keys());
   for (const base of mine) {
@@ -237,17 +241,19 @@ function exitTargetTest(champion, probe, exits = null, { epsR = EXIT.epsR, runne
     const d = theirs[i];
     diffs.push(d.r - base.r);
     if (label(base) !== label(d)) { const k = `${label(base)}->${label(d)} (${d.exitBy})`; classes[k] = (classes[k] || 0) + 1; }
-    if (isR(base.peakR) && base.peakR >= runnerMfeR) {
+    // A runner: the champion's trade, its MFE at least runnerMfeR and its exit resolved (cut or right). Only a cut
+    // turned right offsets a right turned cut (an unclear or unresolved class offsets nothing).
+    if (isR(base.peakR) && base.peakR >= runnerMfeR && (base.cls === 'cut' || base.cls === 'right')) {
       runners.pairs += 1;
-      if (d.cls === 'cut' && base.cls !== 'cut') runners.newCuts += 1;
-      if (base.cls === 'cut' && d.cls !== 'cut') runners.fixedCuts += 1;
+      if (base.cls === 'right' && d.cls === 'cut') runners.newCuts += 1;
+      if (base.cls === 'cut' && d.cls === 'right') runners.fixedCuts += 1;
     }
   }
   unmatched.probe += free.size;
   const b = diffs.filter(x => x >= epsR).length;
   const c = diffs.filter(x => x <= -epsR).length;
   const meanDiff = diffs.length ? round4(diffs.reduce((s, x) => s + x, 0) / diffs.length) : null;
-  return { measure: 'exit: R banked on the trades both sides opened', pairs: diffs.length, b, c, n: b + c, pBetter: round4(mcnemar(b, c)), pWorse: round4(mcnemar(c, b)), meanDiff, enough: diffs.length >= minPairs, unmatched, classes, runners };
+  return { measure: 'exit: R banked on the trades both sides opened', pairs: diffs.length, b, c, n: b + c, pBetter: round4(mcnemar(b, c)), pWorse: round4(mcnemar(c, b)), meanDiff, enough: !unknown && diffs.length >= minPairs, ...(unknown ? { why: 'the trend set\'s scored exits are unknown (a capture from before they named their trades)' } : {}), unmatched, classes, runners };
 }
 
 /** The runner guard's harm: an exit edit that cut more of the champion's runners than it stopped cutting. */

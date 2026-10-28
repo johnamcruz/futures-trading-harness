@@ -75,6 +75,9 @@ test('scoreExits: class, late, flip and the model\'s tightens; an open or riskle
   assert.strictEqual(s.decisions.length, 1);
   const d = s.decisions[0];
   assert.deepStrictEqual([d.exitBy, d.cls, d.leftR, d.late, d.givebackR, d.flip, d.decidedAt], ['model-stop', 'cut', 1.1, true, 1.4, true, new Date(T0 + 7 * STEP).toISOString()]);
+  // Its trade, as the probe screen pairs it (train/screen.js exitTargetTest): the family root, the side, the entry time.
+  assert.deepStrictEqual([d.root, d.side, d.entryAt], ['MNQ', 'long', new Date(T0).toISOString()]);
+  assert.strictEqual(ES.scoreExits({ trips: [trip({ contractId: 'NQ:2026-12' })], bars: after, stepMs: STEP, params: P }).decisions[0].root, 'MNQ', 'one family however the contract is named');
   // The facts are read at each decision's bar, never the exit's later one.
   assert.ok(seen.includes(T0 + 7 * STEP) && seen.includes(T0 + 3 * STEP));
   assert.deepStrictEqual(s.tightens.map(x => [x.stopped, x.cls]), [[false, null], [true, 'cut']]);

@@ -66,9 +66,17 @@ const FT = require('./first-try');
 const SEL = require('./selection');
 const { readJson } = require('../harness-run');
 
-/** A capture's scored exits as an exit edit's screen pairs them (exit-scorecard.js decisions; none without a capture). */
-const exitsOf = capture => (capture && capture.exits && Array.isArray(capture.exits.decisions) ? capture.exits.decisions : [])
-  .map(d => ({ root: d.root || null, side: d.side, entryAt: d.entryAt || null, exitBy: d.exitBy, cls: d.cls, late: d.late === true, r: d.r, peakR: d.peakR }));
+/**
+ * A capture's scored exits as an exit edit's screen pairs them (exit-scorecard.js decisions), each to the window it was
+ * opened in (unitOfRecord); none without a capture; null (unknown) when it has some but none names its trade (a capture
+ * from before they did).
+ */
+function exitsOf(capture, windows) {
+  const list = capture && capture.exits && Array.isArray(capture.exits.decisions) ? capture.exits.decisions : [];
+  if (list.length && !list.some(d => d && d.root && d.entryAt)) return null;
+  const TW = require('./trend-windows');
+  return list.map(d => ({ root: d.root || null, side: d.side, entryAt: d.entryAt || null, unit: d.entryAt && windows ? TW.unitOfRecord(windows, d.entryAt) : null, exitBy: d.exitBy, cls: d.cls, late: d.late === true, r: d.r, peakR: d.peakR }));
+}
 
 /** The steps (cycles) a run recorded; 0 for a run with no records. */
 function stepsOf(runDir) {
@@ -283,14 +291,16 @@ async function probeRound(ctx, { n, champion, api }) {
         const context = Object.keys(trend.set.spans || {}).filter(id => trend.set.spans[id].day === day && !legs.some(l => l.id === id)).map(spanOf);
         const got = await (ctx.steps.trendData || trendData)({ runDir: runs.runs[0].runDir, legs, windows: built.windows, context });
         const x = TSC.sideOfTrend({ captures: [got.capture], days: got.days, scorecard: runs.decisions, first: got.first || [], sessions: got.sessions || null, windows: built.windows, minutes: got.minutes || traderCfg.timeframe });
-        return { legs: [...x.legs], dayR: x.dayR, blows: x.blows, first: x.first, sessions: x.sessions, entries: got.entries || [], stepped: got.stepped || [], windows: built.windows.length, cycles: stepsOf(runs.runs[0].runDir), ride: TR.compact(got.capture), exits: exitsOf(got.capture), ...(side === 'pc' ? { capture: got.capture } : {}) };
+        return { legs: [...x.legs], dayR: x.dayR, blows: x.blows, first: x.first, sessions: x.sessions, entries: got.entries || [], stepped: got.stepped || [], windows: built.windows.length, cycles: stepsOf(runs.runs[0].runDir), ride: TR.compact(got.capture), exits: exitsOf(got.capture, built.windows), ...(side === 'pc' ? { capture: got.capture } : {}) };
       });
       // Its catch & ride (replay/trend-ride.js), report only: a phase kept before the ride was recorded has none (the
       // champion's keeps its capture, read instead), and the side's total is then unknown (trend-screen.js rideOfSide).
       out.rides.push({ ride: one.ride || TR.compact(one.capture), windows: built.windows });
       out.legs.push(...one.legs);
-      // Its scored exits, for an exit edit's screen (a phase kept before they were recorded: its capture's, when kept).
-      out.exits.push(...(one.exits || exitsOf(one.capture)));
+      // Its scored exits, for an exit edit's screen (a phase kept before they were recorded: its capture's, when kept;
+      // else unknown, and the side's exits with it).
+      const ex = one.exits !== undefined ? one.exits : one.capture ? exitsOf(one.capture, built.windows) : null;
+      out.exits = out.exits && ex ? [...out.exits, ...ex] : null;
       Object.assign(out.dayR, one.dayR);
       out.blows += one.blows;
       out.first.push(...(one.first || []));
@@ -314,7 +324,14 @@ async function probeRound(ctx, { n, champion, api }) {
     return { ...out, legs, side: { legs: new Map(legs), dayR: out.dayR, blows: out.blows, first: out.first, sessions: out.sessions } };
   };
   // An exit edit's trend-set pairs (screen.js exitTargetTest): the champion's and the edit's scored exits, one bar apart at most.
-  const exitPairs = (base, side) => (base && side ? { champion: base.exits, probe: side.exits, stepMs: traderCfg.timeframe * 60000 } : null);
+  // Only the units both sides finished pair (as measureTrend's); a side's exits unknown: no gain from them.
+  const exitPairs = (base, side) => {
+    if (!base || !side) return null;
+    if (!base.exits || !side.exits) return { unknown: true };
+    const finished = s => new Set((s.sessions || []).filter(x => x && x.complete).map(x => (x.unit !== undefined ? x.unit : x.day)));
+    const theirs = finished(side);
+    return { champion: base.exits, probe: side.exits, stepMs: traderCfg.timeframe * 60000, done: [...finished(base)].filter(u => theirs.has(u)) };
+  };
   const report = { iteration: n, windows: cfg.windows, seed, cycles: { champion: {}, edits: {} } };
   // A half of the trend batch with no session (a one-day batch): nothing to screen on one and judge on the other.
   const trendEmpty = trend && (!split.probe.days.length || !split.confirm.days.length);

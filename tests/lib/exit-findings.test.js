@@ -82,6 +82,16 @@ test('tagErrors: an exit finding takes an edit to any skill it lists, never anot
   assert.match(errs('take-profit', findings.find(f => f.kind === 'misread').id).join(';'), /is about manage-position, not take-profit/);
 });
 
+test('tagErrors: an exit finding with no owner skill in the tree takes no edit, of any skill or role', () => {
+  const PE = require('../../scripts/lib/train/probe-edit');
+  const findings = F.mergeFindings(EF.exitFindings([doc([d({ cls: 'cut', leftR: 2.5 })])], { exists: () => false }), []);
+  assert.deepStrictEqual([findings[0].skill, findings[0].skills], [null, []]);
+  for (const s of ['a', 'manage-position', 'pullback-vs-reversal']) {
+    assert.match(PE.tagErrors({ skill: s, finding: 'F1', kind: 'rule' }, { edits: [{ file: `skills/${s}/SKILL.md`, find: 'a', replace: 'b' }] }, { findings }).join(';'), /names no owner skill in the tree/, s);
+  }
+  assert.match(PE.tagErrors({ agent: 'risk-manager', finding: 'F1', kind: 'rule' }, { edits: [{ file: 'agents/risk-manager.md', find: 'a', replace: 'b' }] }, { findings }).join(';'), /names no owner skill in the tree/);
+});
+
 test('manage-position still never owns a read finding', () => {
   assert.ok(F.NOT_PROBED.has('manage-position'));
   const row = skill => ({ skill, wrong: 9, reads: 9, topRefusals: [], missed: 9, relevant: 9, topMissed: [] });

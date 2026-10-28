@@ -605,15 +605,21 @@ and leg ids; the lessons lines record the batch too.
   (`scripts/lib/train/screen.js` `exitTargetTest`), with the trend set's
   harms: the trades both sides opened, paired (a curated moment both
   entered on the same side; a trend-set exit of the same root and side with
-  the entries at most `exitScore.matchBars` bars apart), each better or
-  worse when its banked R moved by at least `exitScreen.epsR`
+  the entries at most `exitScore.matchBars` bars apart, in a window both
+  sides stepped to its end), each better or worse when its banked R moved
+  by at least `exitScreen.epsR` (tighten-only, pinned)
   (`config/training.json`), decided by the screen's own McNemar test,
   `minDiscordant` and `minEffect`, and never a gain under `minPairs` pairs.
   Each pair's class change (cut, right, late) is reported, tagged by who
   exited; trades on one side only are counted as unmatched, never paired.
-  An edit that newly cuts more of the champion's runners (an MFE of at
-  least `exitScreen.runnerMfeR`) than it stops cutting is a harm, whatever
-  the mean. A read finding's edit keeps the read target. The read
+  An edit that turns more of the champion's runners (an MFE of at least
+  `exitScreen.runnerMfeR`, its exit cut or right) from right to cut than
+  from cut to right is a harm, whatever the mean. A read finding's edit
+  keeps the read target. An exit finding with none of its owners in the
+  tree takes no edit. The trend set's exits pair only when their scores
+  name their trades: a loop whose champion runs were scored before that
+  (started on older code) gets no gain from them, so an exit edit needs a
+  loop started on this code. The read
   itself is held to an acceptance check (`tests/lib/read-mechanical.test.js`,
   `scripts/lib/replay/read-mechanical.js`): applied to the letter on a real
   trend it keeps at least what the runner's 15m structure trail keeps, and
