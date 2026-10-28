@@ -87,7 +87,7 @@ test('the Setups-to-check line: a compression break on an allowed side (at its k
     { kind: 'compression', tf: '15m', dir: 'up', side: 'long', read: '15m compression break up', level: 'overnight low' },
     { kind: 'cisd', tf: '5m', dir: 'up', side: 'long', read: '5m cisd up' },
   ], 'the short CISD is against the trend rule; an inside level is no edge');
-  assert.strictEqual(SM.checkLine({}, { barClose: 0, checks: SM.setupChecks(m3) }), '- Setups to check: "15m compression break up" (long, at overnight low); "5m cisd up" (long). Compose and check each (trade-lifecycle, compression, cisd); pass unless every read is true.');
+  assert.strictEqual(SM.checkLine({}, { barClose: 0, checks: SM.setupChecks(m3) }), '- Setups to check: "15m compression break up" (long, at overnight low); "5m cisd up" (long). Compose and check each (trade-lifecycle, compression, cisd); pass unless every read is true; SKIP each one you don\'t compose, with its reason.');
   assert.deepStrictEqual(SM.setupChecks({ ...m3, compression: expanding('up', [{ name: 'prior rth high', edge: 'inside' }]) }).map(c => c.level), [undefined, undefined], 'no level at an edge: none named');
   assert.deepStrictEqual(SM.setupChecks({ ...m3, windowEntries: 'refused' }), []);
   assert.deepStrictEqual(SM.setupChecks({ ...m3, trendRule: 'Trend rule: SHORT allowed (prevailing 4h down); long only as a reversal' }).map(c => c.read), ['3m cisd down']);

@@ -130,7 +130,7 @@ test('checkLine: the setup moment as the briefing says it: each reaction, the si
   // The reaction bar: the 15m candle closed with this bar, so an entry read needs a later close (the same-candle rule).
   // In the candle lines' read form ("15m rejected <level> <dir>"), so a read copied from it parses.
   assert.strictEqual(M.checkLine(candles, { barClose: CLOSE, et }),
-    '- Setups to check (the 15m candle closed 14:45): "15m rejected overnight high down" (short, 21650.25); "15m rejected 1h fvg low up" (long, 21600.5); this bar is the reaction: an entry read needs a later close. Compose and check each (trade-lifecycle, rejection, breakout); pass unless every read is true.');
+    '- Setups to check (the 15m candle closed 14:45): "15m rejected overnight high down" (short, 21650.25); "15m rejected 1h fvg low up" (long, 21600.5); this bar is the reaction: an entry read needs a later close. Compose and check each (trade-lifecycle, rejection, breakout); pass unless every read is true; SKIP each one you don\'t compose, with its reason.');
   // A broke reaction; a level whose name carries its price is priced once; a null direction states no side.
   const more = { '15m': candle({ relations: [{ name: '1h swing low 2264.2', price: 2264.2, rel: 'broke', dir: 'down' }, { name: 'IB high', price: 2290, rel: 'broke', dir: null }] }) };
   assert.match(M.checkLine(more, { barClose: CLOSE, et }), /: "15m broke 1h swing low 2264\.2 down" \(short\); this bar/);

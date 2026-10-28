@@ -100,6 +100,8 @@ const ADDED = [
   { now: '**Kill switch and account lock.** On `[kill-switch]`, `[allowed-accounts]` or `[account-lock]`: manage, protect or flatten only, end `blocked`, and never retry or trade another account: the user resolves it.',
     reason: 'kill-switch\'s reaction in one sentence, kept in the core so the head trader always has it; the details stay in kill-switch' },
   { now: 'The details: the `kill-switch` skill.', reason: 'pointer to kill-switch' },
+  { now: 'Each setup the briefing\'s Setups to check lists that you don\'t compose: one line before the result line, `SKIP "<its read>": <the deciding fact>` (`SKIP "15m rejected overnight low up": HTF prevailing down`).',
+    reason: 'the owner (feat/ppc-setup-rates): "I don\'t like skipping setups, so we need to make sure we have reasons on setup skips"; the runner reads the lines into the cycle record (setup-skips.js)' },
   { now: '`planned`: only when the prompt says the runner runs the entry; else you place it (`trade-session` 4-6).', reason: 'the runner\'s entry (feat/entry-workflow): planned is the head trader\'s result only in an entry cycle the prompt names; on a harness where the runner runs no entry (Claude Code), the head trader places it (fix/confluence-not-vetoes: a Sonnet replay composed, approved and ended planned, and no order was sent)' },
 ];
 

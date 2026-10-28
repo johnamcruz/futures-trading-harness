@@ -56,6 +56,7 @@
  *                                                 plans' outcomes by it (config/training.json setupTypes, setupMinN)
  *   scrub(text, { names, words })                 text without dates, months, days, clock times, prices, numbers (in
  *                                                 digits, words or fractions), ids or account names (for the proposer)
+ *   skipsOf(rec, side)                            a cycle record's listed setups skipped with a reason the side's way
  *   exampleLine(leg), loserLine(x)                one example for the proposer (no date, time or price)
  */
 
@@ -227,6 +228,13 @@ function barFacts({ briefing, side, tick, plan, said = '', reads = [], records =
 
 // --- one leg ---------------------------------------------------------------------------------------------------------
 
+/** A cycle record's listed setups skipped with a reason that point `side` (setup-skips.js): [{ setup, reason }]. */
+function skipsOf(rec, side) {
+  const list = isObj(rec) && isObj(rec.summary) && Array.isArray(rec.summary.setupSkips) ? rec.summary.setupSkips : [];
+  const dir = side === 'long' ? 'up' : 'down';
+  return list.filter(s => isObj(s) && typeof s.reason === 'string' && typeof s.setup === 'string' && parseRead(s.setup).value === dir).map(s => ({ setup: s.setup, reason: s.reason }));
+}
+
 /**
  * A leg's facts (see the header). briefingAt(barT) -> the briefing at a bar (its open time), or null; cycleAt(barClose)
  * -> the run's cycle record ({ result, context }) or null; recordsAt(barT) -> the compose records on the bar; sizeFor(rec)
@@ -242,7 +250,10 @@ function legFacts(leg, { briefingAt, cycleAt = () => null, recordsAt = () => [],
     const records = recordsAt(barT);
     // The plan's stop read at a bar the floor refused: the head's stop choice (its record's stop read and skill).
     const stopRead = c.code === FLOOR ? ((records.filter(r => r && r.side === leg.side && r.ok).pop() || {}).reads || []).find(r => r && r.step === 'stop') || null : null;
-    bars.push({ bar: barT, code: c.code, ...(stopRead ? { stopRead: { read: stopRead.read, skill: stopRead.skill || null } } : {}), ...barFacts({ briefing: b, side: leg.side, tick, plan, said, reads: c.reads, records, cycle: c, sizeFits: sizeFor(rec), names, missing, entryRule }) });
+    // The listed setups the leg's way the model skipped, with its stated reason (the cycle record's setupSkips:
+    // setup-skips.js), shown beside what it said.
+    const skipped = skipsOf(rec, leg.side);
+    bars.push({ bar: barT, code: c.code, ...(stopRead ? { stopRead: { read: stopRead.read, skill: stopRead.skill || null } } : {}), ...(skipped.length ? { skipped } : {}), ...barFacts({ briefing: b, side: leg.side, tick, plan, said, reads: c.reads, records, cycle: c, sizeFits: sizeFor(rec), names, missing, entryRule }) });
   }
   const learnable = bars.some(x => x.valid) ? true : bars.length && bars.every(x => x.known) ? false : null;
   const why = !bars.length ? 'no entry-able bar' : learnable === true ? bars.find(x => x.valid).why : learnable === false ? 'no valid plan at the time (a correct pass)' : 'facts unknown at a bar';
@@ -511,10 +522,12 @@ function exampleLine(leg, { saidChars = TUN.saidChars } = {}) {
   const who = RUNNER.test(x.said) ? 'the runner' : 'what you said';
   // Scrubbed again here: what reaches the proposer is scrubbed whatever the facts were built with.
   const said = clip(scrub(x.shown || x.said), saidChars);
+  // A listed setup it skipped, and its stated reason, scrubbed as what it said.
+  const skippedText = (x.skipped || []).length ? `; you skipped ${x.skipped.map(s => `"${scrub(s.setup, { words: false })}": "${clip(scrub(s.reason), saidChars)}"`).join(', ')}` : '';
   const tried = (x.reads || []).length ? `; you composed ${x.reads.map(r => `${r.step} "${scrub(r.read, { words: false })}" ${r.verified ? 'TRUE' : 'not verified'}`).join(', ')}` : '';
   const unknown = x.unknown && x.unknown.length ? ` (${x.unknown.join(', ')} reads unknown)` : '';
   const plan = x.valid ? (x.planReads && x.planReads.length ? `A plan that passed there${unknown}: ${quote(x.planReads)}` : `${scrub(x.why).replace(/^./, ch => ch.toUpperCase())}`) : `No valid plan (${scrub(x.why)})`;
-  return `${leg.side}: ${who}: "${said}"${tried}. ${plan}`;
+  return `${leg.side}: ${who}: "${said}"${skippedText}${tried}. ${plan}`;
 }
 
 /** One balancing example: a control bar's valid plan that lost, and what was said there. */
@@ -534,4 +547,4 @@ function controlsText(c, { exampleChars = TUN.exampleChars } = {}) {
   return `${head}${setups}${lines.length ? `\nValid plan, it lost (control bars, no leg): what tells these apart from the legs?\n${lines.join('\n')}` : ''}`;
 }
 
-module.exports = { entryBars, barFacts, legFacts, sizeForCycle, outcomeOf, controlFacts, attachFacts, controlsOf, controlsText, setupTypeOf, setupRates, scrub, clip, exampleLine, loserLine, missingFrames, dependsOnMissing };
+module.exports = { entryBars, barFacts, legFacts, skipsOf, sizeForCycle, outcomeOf, controlFacts, attachFacts, controlsOf, controlsText, setupTypeOf, setupRates, scrub, clip, exampleLine, loserLine, missingFrames, dependsOnMissing };

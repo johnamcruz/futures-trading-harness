@@ -2017,6 +2017,9 @@ function createRunner(deps) {
             ...(runsEntry ? { entry: true } : {}),
             // A managed cycle (managedCycle: this machine's opt-in only): FTH_CYCLE_MANAGE, the gate refuses every entry.
             ...(managedCycle ? { manage: true } : {}),
+            // The setups each symbol's briefing lists (setup-moments.js listedReads): the cycle composes or skips each with a
+            // reason; the cycle log records the skips (setup-skips.js).
+            setupsListed: attempt('the listed setups', () => [...new Set(items.map(x => x.symbol))].flatMap(s => require('./learning/setup-moments').listedReads(briefingFor(s))), []),
             // The situation's skills in the prompt (situational-skills.js): the run's environment writes and attests them
             // (FTH_CYCLE_SKILLS); the cycle log records the stages, skills, bytes and those past the budget.
             ...(situation ? { cycleSkills: situation.chosen } : {}),

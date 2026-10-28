@@ -68,9 +68,11 @@ test('CORE: the composed bar\'s reads the gate requires (SITUATIONAL taught in t
   // at entry; trade-lifecycle's line, the half as phase 2's cut in trade-session, confluence-counting, strategy-library: +278
   // over main's 73724), then 74227 with the owner's compression setup taught where the head trader composes (feat/compression,
   // the owner, 2026-10-24: "Make sure this skill is part of setup", taught in trade-lifecycle's setup list: its setup and stop
-  // reads and their timing, breakout's pointer and invalidation's box stop source: +225). It may shrink;
+  // reads and their timing, breakout's pointer and invalidation's box stop source: +225), then 74341 with the owner's skip
+  // reasons (feat/ppc-setup-rates, 2026-10-28: "we need to make sure we have reasons on setup skips": autonomous-trading's
+  // SKIP line, +177; trade-session's manage-position line, -3; compression is no CORE skill). It may shrink;
   // it grows only on an owner's OK.
-  assert.ok(Buffer.byteLength(prompt) <= 74227, `the head prompt is ${Buffer.byteLength(prompt)} bytes`);
+  assert.ok(Buffer.byteLength(prompt) <= 74341, `the head prompt is ${Buffer.byteLength(prompt)} bytes`);
   // Only the head trader's prompt grows: no other role's prompt embeds trade-lifecycle (the risk manager's embeds
   // confluence-counting and invalidation as before; its prompt is unchanged, pinned in trade-session-split.test.js).
   for (const [name, a] of Object.entries(index.agent)) if (name !== H.HEAD_AGENT && a.prompt) assert.ok(!a.prompt.includes('<skill name="trade-lifecycle">'), name);

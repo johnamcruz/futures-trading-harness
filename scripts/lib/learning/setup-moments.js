@@ -163,7 +163,7 @@ function checkLine(candles, { barClose, et = x => x, setupTf = DEFAULTS.setupTf,
   // The briefing's own setups (setupChecks: a compression break, a live CISD, on a side the trend rule allows), as reads.
   const extra = (checks || []).map(c => `"${c.read}" (${c.side}${c.level ? `, at ${c.level}` : ''})`);
   const extraSkills = [...new Set((checks || []).map(c => c.kind))];
-  if (!m.moment) return extra.length ? `- Setups to check: ${extra.join('; ')}. Compose and check each (trade-lifecycle, ${extraSkills.join(', ')}); pass unless every read is true.` : null;
+  if (!m.moment) return extra.length ? `- Setups to check: ${extra.join('; ')}. Compose and check each (trade-lifecycle, ${extraSkills.join(', ')}); pass unless every read is true; SKIP each one you don't compose, with its reason.` : null;
   const key = tfLabel(setupTf);
   // Each reaction as the compose read that states it, quoted, exactly as composed-reads.js parses and checks it
   // ("15m rejected overnight high down"): a copy is a TRUE read; its side and price outside the quotes (a bracket or a
@@ -173,11 +173,22 @@ function checkLine(candles, { barClose, et = x => x, setupTf = DEFAULTS.setupTf,
   const shown = m.reactions.filter(r => r.dir === 'up' || r.dir === 'down')
     .filter(r => { const k = `${r.rel}|${r.dir}|${r.price}`; return !seen.has(k) && seen.add(k); }).slice(0, max);
   if (!shown.length && !extra.length) return null;
-  if (!shown.length) return `- Setups to check: ${extra.join('; ')}. Compose and check each (trade-lifecycle, ${extraSkills.join(', ')}); pass unless every read is true.`;
+  if (!shown.length) return `- Setups to check: ${extra.join('; ')}. Compose and check each (trade-lifecycle, ${extraSkills.join(', ')}); pass unless every read is true; SKIP each one you don't compose, with its reason.`;
   const priced = r => (Number.isFinite(r.price) && !String(r.name).endsWith(String(r.price)) ? `, ${r.price}` : '');
   const what = shown.map(r => `"${key} ${r.rel} ${r.name} ${r.dir}" (${r.dir === 'up' ? 'long' : 'short'}${priced(r)})`).join('; ');
   const when = m.phase === 'reaction' ? 'this bar is the reaction: an entry read needs a later close' : 'a confirmation close: the entry reads from this bar';
-  return `- Setups to check (the ${key} candle closed ${et(m.candle.closedAt)}): ${[what, ...extra].join('; ')}; ${when}. Compose and check each (trade-lifecycle, ${['rejection', 'breakout', ...extraSkills].join(', ')}); pass unless every read is true.`;
+  return `- Setups to check (the ${key} candle closed ${et(m.candle.closedAt)}): ${[what, ...extra].join('; ')}; ${when}. Compose and check each (trade-lifecycle, ${['rejection', 'breakout', ...extraSkills].join(', ')}); pass unless every read is true; SKIP each one you don't compose, with its reason.`;
+}
+
+/**
+ * The setups a bar briefing's Setups-to-check line lists (briefing.js: checkLine with setupChecks), as their reads:
+ * what a cycle composes or skips with a reason (setup-skips.js). [] without the line.
+ */
+function listedReads(b) {
+  const m3 = b && b.sections && b.sections.m3 ? b.sections.m3.data : null;
+  if (!m3 || !m3.bar || !Number.isFinite(Date.parse(m3.bar.t))) return [];
+  const line = checkLine(m3.candles, { barClose: Date.parse(m3.bar.t) + (Number(b.minutes) || 0) * 60000, entries: m3.windowEntries, checks: setupChecks(m3) });
+  return line ? [...line.matchAll(/"([^"]+)"/g)].map(x => x[1]) : [];
 }
 
 // A live CISD: its OTE zone touched, or bounced from (cisd.js); waiting, weak, void or expired is no setup yet or any more.
@@ -212,4 +223,4 @@ function setupChecks(m3, { max = MAX_CHECKS } = {}) {
   return out.sort((a, b) => minutesOf(b.tf) - minutesOf(a.tf)).slice(0, max);
 }
 
-module.exports = { MODES, SETUP_TFS, LEVEL_SETS, REACTION_KINDS, DEFAULTS, KEY_LEVEL, MOVING_LEVEL, PREVIOUS_LEVEL, validatePractice, reactionsOf, setupMoment, quietPick, selectBar, practiceLine, tfLabel, checkLine, setupChecks };
+module.exports = { MODES, SETUP_TFS, LEVEL_SETS, REACTION_KINDS, DEFAULTS, KEY_LEVEL, MOVING_LEVEL, PREVIOUS_LEVEL, validatePractice, reactionsOf, setupMoment, quietPick, selectBar, practiceLine, tfLabel, checkLine, setupChecks, listedReads };

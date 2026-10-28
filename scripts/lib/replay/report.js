@@ -29,6 +29,7 @@
  * restated once): each row's `restated` by outcome (approved, vetoed, unreadable, failed), shown when there were any.
  *
  *   restatedLine(row)              that count as one line, or null
+ *   setupsLine(row)                the listed setups composed, skipped with a reason, or neither, as one line, or null
  *   summarize(days, { runDir, barsFiles })   { months: [row], total: row, timing, combine?, late? } (runDir: the run's folder, for a
  *                                 combine run and the late-entry skips, late-skips.js; barsFiles: their counterfactual's bars)
  *   toMarkdown(summary, manifest)   report.md
@@ -65,7 +66,7 @@ function tradesOf(fills, open) {
 }
 
 function blankRow(key) {
-  return { key, points: 0, cycles: 0, tradeCycles: 0, standAside: 0, failed: 0, trades: [], refusals: {}, replayClock: 0, restated: {} };
+  return { key, points: 0, cycles: 0, tradeCycles: 0, standAside: 0, failed: 0, trades: [], refusals: {}, replayClock: 0, restated: {}, setups: { listed: 0, skipped: 0, unexplained: 0 } };
 }
 
 function finish(row) {
@@ -83,6 +84,9 @@ function finish(row) {
     refusals: row.refusals, replayClockRefusals: row.replayClock,
     // Phase 2's restatements by outcome (approved: an approval rescued), only when there were any.
     ...(Object.keys(row.restated).length ? { restated: row.restated } : {}),
+    // The setups the briefings listed, those skipped with a reason, and those neither composed nor explained (a process
+    // miss: setup-skips.js), only when any were listed.
+    ...(row.setups.listed ? { setups: row.setups } : {}),
   };
 }
 
@@ -106,6 +110,12 @@ function summarize(days, { runDir = null, barsFiles = {} } = {}) {
         for (const c of (rec.retries || []).flatMap(a => a.ran || [])) {
           row.cycles += 1;
           if (!c.ok) row.failed += 1;
+        }
+        // The cycle log's record of each cycle (store.js cycleSummary): its listed setups and their skips.
+        for (const c of rec.cycles || []) {
+          if (!Number.isInteger(c.setupsListed)) continue;
+          row.setups.listed += c.setupsListed;
+          for (const x of Array.isArray(c.setupSkips) ? c.setupSkips : []) row.setups[x && typeof x.reason === 'string' ? 'skipped' : 'unexplained'] += 1;
         }
         for (const c of rec.ran || []) {
           if (row === total) ran.push(c);
@@ -181,6 +191,13 @@ function combineOf(runDir, days) {
  * Phase 2's restatements (runner-entry.js: an approving VERDICT line the reading refused, restated once), as one line,
  * or null with none: how many, by outcome, and the approvals rescued.
  */
+/** The listed setups as one line (setup-skips.js), or null when none were listed. */
+function setupsLine(row) {
+  const s = row && row.setups;
+  if (!s || !s.listed) return null;
+  return `Setups listed ${s.listed}: ${s.listed - s.skipped - s.unexplained} composed, ${s.skipped} skipped with a reason, ${s.unexplained} neither (a process miss).`;
+}
+
 function restatedLine(row) {
   const r = row && row.restated;
   if (!r) return null;
@@ -239,6 +256,7 @@ function toMarkdown(summary, manifest = {}) {
     `| ${HEAD.join(' | ')} |`, `| ${HEAD.map(() => '---').join(' | ')} |`, ...rows, '',
     'Stand-aside: trade cycles whose result was no-trade. Trades: closed round trips (net of fees); R from the initial stop. Refusals: the order gate\'s, by check; replay-clock refusals are the replay\'s own plumbing, not the trader\'s.', '',
     ...(restatedLine(summary.total) ? [restatedLine(summary.total), ''] : []),
+    ...(setupsLine(summary.total) ? [setupsLine(summary.total), ''] : []),
     ...timingMarkdown(summary),
     ...practiceMarkdown(summary.practice || null),
     ...(summary.combine ? ['## Continuous combine', '', ...require('./combine-run').reportLines(summary.combine).map(l => `- ${l.trim()}`), ''] : []),
@@ -259,4 +277,4 @@ function toText(summary) {
   return `${main}\nsetup timing${note}\n${table(TIMING_HEAD, timingRows(summary.timing))}role median: ${roleText(summary.timing)}\n`;
 }
 
-module.exports = { restatedLine, summarize, tradesOf, toMarkdown, toText, formats: { usd, pct, fix } };
+module.exports = { restatedLine, setupsLine, summarize, tradesOf, toMarkdown, toText, formats: { usd, pct, fix } };

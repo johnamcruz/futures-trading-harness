@@ -705,6 +705,14 @@ and leg ids; the lessons lines record the batch too.
   its box sits at one) and a live CISD on a side the trend rule allows,
   beside the setup moment's reactions. `node scripts/skill-coverage.js`
   prints how every skill reaches the model.
+- **Every listed setup composed or skipped with a reason**
+  (`scripts/lib/setup-skips.js`). A cycle that composes none of a listed
+  setup writes `SKIP "<read>": <the deciding fact>` before its result line
+  (`autonomous-trading` step 6). The cycle record keeps `setupSkips`; one
+  with neither a compose call nor a reason is a process miss, logged and
+  counted in the report ("Setups listed"), never a refusal. A missed leg's
+  example in the trend findings shows the stated skip reason the leg's way,
+  scrubbed as what was said.
 - **What the proposer sees.** Each trend finding lists up to `examples`
   of its legs (`config/training.json` `trendFindings`), the costliest
   first, each clipped to `exampleChars` at a clause boundary. A late or

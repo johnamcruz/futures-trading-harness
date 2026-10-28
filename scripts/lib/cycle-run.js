@@ -144,6 +144,9 @@ async function runCycle(cfg, action, prompt, opts, { timeoutMs = cfg.cycleTimeou
   const deskWarn = deskWarning(desk);
   if (deskWarn) err(`[autotrader] ${deskWarn}\n`);
   if (summary.missingSkills.length) err(`[autotrader] an entry was sent without loading ${summary.missingSkills.join(', ')}\n`);
+  // A listed setup neither composed nor skipped with a reason (setup-skips.js): a process miss, logged, never refused.
+  const unexplained = require('./setup-skips').misses(summary.setupSkips);
+  if (unexplained.length) err(`[autotrader] process miss: listed setup(s) neither composed nor skipped with a reason: ${unexplained.map(s => `"${s.setup}"`).join(', ')}\n`);
   if (deps.appendLog) deps.appendLog(now, `\n===== ${now.toISOString()} ${action} ${cfg.harness}\n$ ${argv.map(a => JSON.stringify(a)).join(' ')}\n${res.output}\n`);
   out(`[autotrader] ${result}\n`);
   const intact = guard(killSwitchFile, `during a ${action} run`);

@@ -286,6 +286,15 @@ function writeCycleLog(home, { at = new Date(), env = null, action, harness, pro
     const symbols = ((context && context.symbols) || []).map(x => x && x.symbol).filter(Boolean);
     composed = env ? require('./trading/lifecycle-runner').cycleComposed(home, require('./trading/check-order').cycleId(env), symbols, cycleAt) : [];
   } catch (_err) { composed = []; }
+  // Every listed setup composed or skipped with its reason (setup-skips.js): the final message's SKIP lines against the
+  // setups the briefing listed and the cycle's compose calls; one with neither is a process miss (reason null), logged,
+  // never a refusal.
+  if (action === 'trade' && context && Array.isArray(context.setupsListed) && context.setupsListed.length) {
+    let text;
+    try { text = harness === 'claude' ? require('./transcript').claudeRunResult(output).text : harness === 'opencode' ? require('./opencode').runResult(output).text : String(output || ''); } catch (_err) { text = String(output || ''); }
+    summary.setupsListed = context.setupsListed.length;
+    summary.setupSkips = require('./setup-skips').setupSkips({ listed: context.setupsListed, composed, text });
+  }
   const stamp = cycleAt.toISOString().slice(11, 19).replace(/:/g, '');
   const dir = path.join(home, 'logs', 'cycles', day);
   let file = path.join(dir, `${stamp}-${action}.json`);
