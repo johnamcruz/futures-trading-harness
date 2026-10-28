@@ -28,6 +28,7 @@ const { historyLines, marketOf } = require('./trading/decision-history');
 const { documents, isOpencodeEvent, unwrap } = require('./transcript');
 const opencode = require('./opencode');
 const headPrompt = require('./head-prompt');
+const exitSkills = require('./exit-skills');
 
 const PLUGIN_ROOT = path.resolve(__dirname, '..', '..');
 const { parseLanes, agentOverrideErrors } = require('./lanes');
@@ -676,6 +677,21 @@ function claudeHeadAttestation(cfg, root, base, context, env) {
     return null; // no attestation: the gate counts no embedded skill (the transcript decides)
   }
 }
+/**
+ * The attestation of a managed cycle's exit skills (exit-skills.js) for the head trader's run, or null: the section the
+ * runner put in its prompt (context.exitSkills), written to the run's harness home and attested for this cycle. A
+ * role's run (context.roleRun) none: its own session never had the prompt. A probe (no run) none, nothing written.
+ */
+function exitSkillsAttestation(root, base, context, env) {
+  const c = context || {};
+  if (c.exitSkills !== true || c.probe === true || (typeof c.roleRun === 'string' && c.roleRun)) return null;
+  try {
+    const { file, text } = exitSkills.writeExitSkills(harnessHome(base), root || PLUGIN_ROOT);
+    return exitSkills.exitAttestation({ file, text, root: root || PLUGIN_ROOT, cycle: require('./trading/check-order').cycleId(env) });
+  } catch (_err) {
+    return null; // no attestation: the gate counts neither (the transcript decides)
+  }
+}
 /** What the cycle's prompt says of the skills: load them, or (embedsSkills) they are in the head trader's prompt already. */
 const skillsText = (cfg, root, env = process.env) => (embedsSkills(cfg, root, env)
   ? `Your skills ${andList([...REQUIRED_FOR_ENTRY, ...ALSO_LOAD])} are in your prompt, already loaded (don't load them again): decide by them`
@@ -726,7 +742,7 @@ function prompts(cfg, now, root = '') {
      * One cycle for every symbol whose bar just closed. `items` is a symbol
      * string or a list of { symbol, bar } where bar = { t, c, file, contractId }.
      */
-    trade: (items, { manageOnly = false, recovered = false, state = null, history = [], lessons = [], trades = [], tradesSummary = null, news = null, unavailable = [], cyclesLeft = null, manageAlso = [], journalRead = true, cached = null, unreviewed = null, lanes = '', frames = [], entry = false, managedDesk = false, managedCycle = false } = {}) => {
+    trade: (items, { manageOnly = false, recovered = false, state = null, history = [], lessons = [], trades = [], tradesSummary = null, news = null, unavailable = [], cyclesLeft = null, manageAlso = [], journalRead = true, cached = null, unreviewed = null, lanes = '', frames = [], entry = false, managedDesk = false, managedCycle = false, exitSkills: exitText = '' } = {}) => {
       const list = (Array.isArray(items) ? items : [{ symbol: items }]);
       const sentence = t => { const x = String(t).trim(); return /[.!?…]$/.test(x) ? x : `${x}.`; };
       // `minutes`: the lane whose bar closed (none: the runner's timeframe); `repeat`: a further lane of a symbol
@@ -768,7 +784,7 @@ function prompts(cfg, now, root = '') {
       // A section that couldn't be built is named, so its absence isn't read as "nothing to say".
       const missing = unavailable.length ? ` Context unavailable this cycle (not "none"): ${unavailable.join('; ')}.` : '';
       const also = manageAlso.length ? `, and manage the open ${manageAlso.join(', ')} position${manageAlso.length === 1 ? '' : 's'} (no bar closed for ${manageAlso.length === 1 ? 'it' : 'them'} this cycle)` : '';
-      return `${head}${recover}${lanes}${bars.join('')}${news ? ` ${news}` : ''}${eodText}${capText}${account}${verdicts.join('')}${historyText(history, Boolean(lanes), marketOf(list, cfg.timeframe))}${unreviewed ? ` ${unreviewed}` : ''}${own}${lessons.length ? ` Your recurring mistakes and lessons (confidence; notes from your own past, not rules): ${lessons.join(' | ')}.` : ''}${missing} ${skillsText(cfg, root)}, then run the trade-session skill for ${symbols}${new Set(list.map(x => x.symbol)).size > 1 ? ' (one symbol at a time, open positions first)' : ''}${also}${acct}${mode ? ` in ${mode}` : ''}.${PLAN_TEXT}${manageOnly || cfg.paper ? '' : entry ? `${ENTRY_TEXT}${cachedText(cached)}` : managedDesk ? `${MANAGED_DESK_TEXT}${cachedText(cached)}` : `${roster(cfg, (cached && cached.roles) || [], frames)}${managedCycle ? MANAGED_NO_ENTRY_TEXT : ''}${cachedText(cached)}`}${RESULT_LINE}`;
+      return `${head}${recover}${lanes}${bars.join('')}${news ? ` ${news}` : ''}${eodText}${capText}${account}${verdicts.join('')}${historyText(history, Boolean(lanes), marketOf(list, cfg.timeframe))}${unreviewed ? ` ${unreviewed}` : ''}${own}${lessons.length ? ` Your recurring mistakes and lessons (confidence; notes from your own past, not rules): ${lessons.join(' | ')}.` : ''}${missing} ${skillsText(cfg, root)}, then run the trade-session skill for ${symbols}${new Set(list.map(x => x.symbol)).size > 1 ? ' (one symbol at a time, open positions first)' : ''}${also}${acct}${mode ? ` in ${mode}` : ''}.${PLAN_TEXT}${manageOnly || cfg.paper ? '' : entry ? `${ENTRY_TEXT}${cachedText(cached)}` : managedDesk ? `${MANAGED_DESK_TEXT}${cachedText(cached)}` : `${roster(cfg, (cached && cached.roles) || [], frames)}${managedCycle ? MANAGED_NO_ENTRY_TEXT : ''}${cachedText(cached)}`}${exitText}${RESULT_LINE}`;
     },
     eod: ({ state = null, day = null } = {}) => {
       const d = day || dayKey(now);
@@ -886,6 +902,12 @@ function childEnv(cfg, root, base = process.env, context = null) {
     const att = claudeHeadAttestation(cfg, root, base, context, env);
     if (att) env[headPrompt.ATTEST_ENV] = JSON.stringify(att);
   }
+  // A managed cycle's exit skills in the head trader's prompt (exit-skills.js; context.exitSkills: the runner put them
+  // there): written to the run's harness home and attested for this cycle, every harness. Never inherited, never a
+  // role run's (its own session).
+  delete env[exitSkills.ATTEST_ENV];
+  const exitAtt = exitSkillsAttestation(root, base, context, env);
+  if (exitAtt) env[exitSkills.ATTEST_ENV] = JSON.stringify(exitAtt);
   if (cfg.paper) {
     env.FTH_PAPER = '1';
     // The broker server's own switch, from the broker config (paperEnv): it refuses every order too.

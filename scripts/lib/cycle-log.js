@@ -260,7 +260,9 @@ function writeCycleLog(home, { at = new Date(), env = null, action, harness, pro
   // `env`: the cycle's environment (cycle-run.js), whose gate log holds the orders the cycle's calls sent through the
   // gateway, from its start to its end (`durationMs`, else now) and the log write's slack.
   const end = at.getTime() + (Number.isFinite(durationMs) ? durationMs : Math.max(0, Date.now() - at.getTime())) + GATE_SLACK_MS;
-  const summary = summarize(output, att ? att.skills : [], env ? gateOrders(env, at.getTime(), end) : []);
+  // And a managed cycle's exit skills in its prompt as the runner attested them (FTH_EXIT_SKILLS, exit-skills.js).
+  const exitAtt = env ? require('./exit-skills').parseExitAttestation(env.FTH_EXIT_SKILLS) : null;
+  const summary = summarize(output, [...new Set([...(att ? att.skills : []), ...(exitAtt ? exitAtt.skills : [])])], env ? gateOrders(env, at.getTime(), end) : []);
   let lookups = [];
   // The roles' own: a lookup the head trader made naming a role (sessionLookups) is never that role's, so it is never
   // stored with the role's cached report and credited on a later cycle (as the gate leaves it out: lookupRule).

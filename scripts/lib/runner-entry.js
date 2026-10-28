@@ -292,8 +292,13 @@ async function runEntry(deps, c) {
   // skill_lookup; those are its loads too. Without that attestation, as before.
   const headAtt = require('./head-prompt').parseAttestation((c.headEnv || {}).FTH_HEAD_PROMPT);
   const claudeHead = Boolean(headAtt && headAtt.harness === 'claude');
+  // A managed cycle's exit skills in the head trader's prompt (exit-skills.js): its loads too, only on the runner's
+  // attestation, checked now against its file, the skills' text and the head trader's own stream and cycle.
+  const ES = require('./exit-skills');
+  const he = c.headEnv || {};
+  const exitLoaded = ES.exitAttested(ES.parseExitAttestation(he[ES.ATTEST_ENV]), root, { stream: he.FTH_CYCLE_TRANSCRIPT || null, cycle: require('./trading/check-order').cycleId(he) });
   try {
-    RR.appendHeadSkills(c.rolesFile, [...skillsInTranscript(c.output), ...(claudeHead ? claudeLookupsInTranscript(c.output) : [])].filter(Boolean));
+    RR.appendHeadSkills(c.rolesFile, [...skillsInTranscript(c.output), ...(claudeHead ? claudeLookupsInTranscript(c.output) : []), ...exitLoaded].filter(Boolean));
   } catch (err) {
     log(`the entry: the head trader's skills could not be recorded (${err.message}): the gate sees none`, 'error');
   }
@@ -304,7 +309,9 @@ async function runEntry(deps, c) {
   // The roles' runs get the cycle's own context (its bars, lanes, cached roles, the role record) and its id.
   // A Claude Code head trader in index mode: its attestation goes with the cycle's id, so the executor's gate counts what
   // the head trader's prompt embedded (autotrader.js claudeHeadAttestation checks it is this cycle's).
-  const roleContext = { ...(c.context || {}), entry: false, rolesFile: c.rolesFile, ...(id ? { cycleId: id } : {}), ...(claudeHead && id ? { headPrompt: c.headEnv.FTH_HEAD_PROMPT } : {}) };
+  // Never the head trader's exit skills (a role's run is its own session: exit-skills.js).
+  const { exitSkills: _exitSkills, ...cycleContext } = c.context || {};
+  const roleContext = { ...cycleContext, entry: false, rolesFile: c.rolesFile, ...(id ? { cycleId: id } : {}), ...(claudeHead && id ? { headPrompt: c.headEnv.FTH_HEAD_PROMPT } : {}) };
   const deadline = wallNow() + Math.max(0, Number(c.budgetMs) || 0);
   // The budget's timings (the cycle log's entry.timing): from the bar's close, in the harness's time up to the cycle's
   // start (c.at), then the wall clock since the head trader's run began (c.startedWall).

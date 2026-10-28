@@ -598,7 +598,14 @@ and leg ids; the lessons lines record the batch too.
   (`scripts/lib/train/exit-findings.js` `OWNERS`): a cut trend by the open
   trade's read (`pullback-vs-reversal`) and the action on it
   (`manage-position`), a late exit by those and `take-profit`.
-  `manage-position` has no read, so it never owns a read finding. Each example is the facts code read at the
+  `manage-position` has no read, so it never owns a read finding. An edit
+  to either reaches every managed cycle: while a position or a working
+  entry is open, the runner puts `manage-position` and
+  `pullback-vs-reversal` whole in the cycle's prompt, said loaded
+  (`scripts/lib/exit-skills.js`; the order gate counts them only on the
+  runner's attestation for that cycle, `FTH_EXIT_SKILLS`, checked against
+  its file, the skills' text and the run's own transcript). A flat cycle's
+  prompt is unchanged. Each example is the facts code read at the
   decision (`scripts/lib/trading/trade-read.js` on the bars closed by
   then), no date, price or R. The round's report counts them (`probe
   exits`). An exit finding's edit is screened on its own target

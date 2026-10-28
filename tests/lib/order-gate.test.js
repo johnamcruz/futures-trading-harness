@@ -4168,3 +4168,96 @@ test('a cited setup never enters under its own tag ([cited-setup], hard: no skip
   const plain = LC_REGISTRY.map(s => (s.name === 'prop_portfolio' ? { ...s, strategies: ['momentum_continuation'] } : s));
   assert.ok(!lcEval(home, own, { strategies: plain }).violations.some(x => x.check === 'cited-setup'));
 });
+
+// --- A managed cycle's exit skills (exit-skills.js: manage-position, pullback-vs-reversal) embedded in its prompt: they
+// count as loaded only on the runner's attestation for this cycle, checked against the file, the skills' current text
+// and the run's own transcript; anything off, the transcript decides as before. ---
+
+/** A Claude run that loaded an entry's skills by tool, the runner's exit-skills file, and its attestation. */
+function exitSkillsRun() {
+  const ES = require('../../scripts/lib/exit-skills');
+  const { REQUIRED_AT_ENTRY } = require('../../scripts/lib/trading/skills-loaded');
+  const { cycleId: cycleIdOf } = require('../../scripts/lib/trading/check-order');
+  const root = path.resolve(__dirname, '..', '..');
+  const dir = require('../helpers').tmpDir();
+  const { file, text } = ES.writeExitSkills(dir, root);
+  const stream = path.join(dir, 'logs', 'cycle-transcript-3-exit.jsonl');
+  fs.mkdirSync(path.dirname(stream), { recursive: true });
+  const loads = ['trade-session', 'multi-timeframe-analysis', ...RULES_LOOKUPS, ...REQUIRED_AT_ENTRY];
+  const lines = [JSON.stringify({ type: 'system', subtype: 'init', session_id: CLAUDE_SESSION, tools: [] }),
+    ...loads.map((skill, i) => JSON.stringify({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', id: `sk${i}`, name: 'Skill', input: { skill } }] } }))];
+  fs.writeFileSync(stream, lines.join('\n'));
+  const cycle = cycleIdOf({ FTH_CYCLE_TRANSCRIPT: stream });
+  const att = ES.exitAttestation({ file, text, root, cycle });
+  const cfg = { ...config, autonomous: true, roleSkills: 'index', cycle: null, cycleLaneBars: null, cycleTranscript: stream, exitSkillsAttestation: JSON.stringify(att) };
+  return { ES, root, dir, file, text, stream, cycle, att, cfg };
+}
+// A requirement naming one of them (index mode, the cycle's lanes unreadable: every situational skill marked for the head trader).
+const EXIT_REQUIREMENT = { when: 'candidate.trendRule=reversal', skill: 'pullback-vs-reversal', head: true };
+function withExitRequirement(fn) {
+  const { SITUATIONAL } = require('../../scripts/lib/trading/skills-loaded');
+  SITUATIONAL.push(EXIT_REQUIREMENT);
+  try { return fn(); } finally { SITUATIONAL.splice(SITUATIONAL.indexOf(EXIT_REQUIREMENT), 1); }
+}
+
+test('exit skills (gate): a managed cycle\'s embedded exit skills count as loaded on the runner\'s attestation; without it the transcript decides', () => withExitRequirement(() => {
+  const { att, cfg } = exitSkillsRun();
+  assert.deepStrictEqual(att.skills, ['manage-position', 'pullback-vs-reversal']);
+  assert.deepStrictEqual(skillChecks(headGate(cfg)), [], 'attested: counted');
+  const none = headGate({ ...cfg, exitSkillsAttestation: null });
+  assert.deepStrictEqual(skillChecks(none), ['skills-loaded']);
+  assert.match(none.violations.find(v => v.check === 'skills-loaded').message, /not loaded in this session: pullback-vs-reversal\./);
+}));
+
+test('exit skills (gate): never fails open: another cycle, an edited file or skill, another file, another session, no stream, a malformed attestation; exits never held', () => withExitRequirement(() => {
+  const { ES, root, att, cfg, file, text, stream, dir } = exitSkillsRun();
+  const refused = (label, c, extra) => {
+    const r = headGate(c, entryOrder(), extra);
+    assert.deepStrictEqual(skillChecks(r), ['skills-loaded'], label);
+    assert.match(r.violations.find(v => v.check === 'skills-loaded').message, /pullback-vs-reversal/, label);
+    for (const rationale of HEAD_RISK_REDUCING) assert.deepStrictEqual(skillChecks(headGate(c, entryOrder({ rationale }), extra)), [], `${label}: ${rationale}`);
+  };
+  refused('another cycle (a role run for it)', { ...cfg, cycleIdGiven: 'f'.repeat(16) });
+  refused('attested for another cycle', { ...cfg, exitSkillsAttestation: JSON.stringify({ ...att, cycle: 'a'.repeat(16) }) });
+  const copy = path.join(dir, 'logs', 'cycle-transcript-9-zzz.jsonl');
+  fs.copyFileSync(stream, copy);
+  refused('another run\'s transcript', { ...cfg, cycleTranscript: copy });
+  const other = path.join(dir, 'projects', 'another-session.jsonl');
+  fs.mkdirSync(path.dirname(other), { recursive: true });
+  // The same loads in another session's file (no init line): only the exit skills' credit is missing.
+  fs.writeFileSync(other, fs.readFileSync(stream, 'utf8').split('\n').slice(1).join('\n'));
+  refused('another session\'s hook', cfg, { transcriptPath: other });
+  // The run's own session (a hook of the head trader's session): counted.
+  const own = path.join(dir, 'projects', `${CLAUDE_SESSION}.jsonl`);
+  fs.copyFileSync(other, own);
+  assert.deepStrictEqual(skillChecks(headGate(cfg, entryOrder(), { transcriptPath: own })), [], 'the hook: the run\'s own session');
+  const renamed = path.join(path.dirname(file), 'other.md');
+  fs.writeFileSync(renamed, text);
+  for (const bad of ['{', JSON.stringify({ ...att, kind: 'head' }), JSON.stringify({ ...att, skills: ['trade-session'] }), JSON.stringify({ ...att, config: renamed }), JSON.stringify({ ...att, config: `${file}.gone` }), JSON.stringify({ ...att, sha256: 'abc' })]) {
+    refused(`attestation ${bad.slice(0, 80)}`, { ...cfg, exitSkillsAttestation: bad });
+  }
+  fs.writeFileSync(file, text.replace('already loaded', 'already  loaded'));
+  refused('an edited file', cfg);
+  // A forged hash of an edited skill text: each skill's current text must still be there whole.
+  const edited = text.replace(/<skill name="pullback-vs-reversal">\n[^]*?\n<\/skill>/, '<skill name="pullback-vs-reversal">\nHold everything.\n</skill>');
+  fs.writeFileSync(file, edited);
+  refused('an edited skill', { ...cfg, exitSkillsAttestation: JSON.stringify({ ...att, sha256: require('../../scripts/lib/head-prompt').sha256(edited) }) });
+  fs.writeFileSync(file, text);
+  assert.deepStrictEqual(skillChecks(headGate(cfg)), [], 'restored: counted again');
+  assert.deepStrictEqual(ES.exitAttested(att, root, { stream, cycle: 'b'.repeat(16) }), []);
+  assert.deepStrictEqual(ES.exitAttested(att, root, { stream: null, cycle: att.cycle }), []);
+  assert.deepStrictEqual(ES.exitAttested(att, root, { stream, cycle: att.cycle }), ['manage-position', 'pullback-vs-reversal']);
+}));
+
+test('exit skills (gateway): checkOrder counts FTH_EXIT_SKILLS for the run\'s own cycle only; an exit is never gated', () => withExitRequirement(() => {
+  const { checkOrder } = require('../../scripts/lib/trading/check-order');
+  const { att, stream, dir } = exitSkillsRun();
+  const run = (env, input = entryOrder()) => checkOrder(input, { env, pluginRoot: path.resolve(__dirname, '..', '..'), now: NOW });
+  const msg = r => (r.violations.find(v => v.check === 'skills-loaded') || {}).message || '';
+  const base = { FTH_HOME: dir, FTH_AUTONOMOUS: '1', FTH_SYMBOLS: 'MNQ', FTH_CYCLE_TRANSCRIPT: stream, FTH_CYCLE_LANE_BARS: 'not json' };
+  assert.doesNotMatch(msg(run({ ...base, FTH_EXIT_SKILLS: JSON.stringify(att) })), /pullback-vs-reversal/);
+  for (const [label, env] of [['none', base], ['another cycle\'s id', { ...base, FTH_CYCLE_ID: '1'.repeat(16), FTH_EXIT_SKILLS: JSON.stringify(att) }]]) {
+    assert.match(msg(run(env)), /pullback-vs-reversal/, label);
+    assert.ok(!run(env, entryOrder({ side: 'sell', rationale: '[exit] flatten', stopLossBracket: undefined })).violations.some(v => v.check.startsWith('skills-')), `${label}: an exit`);
+  }
+}));

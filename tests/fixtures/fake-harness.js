@@ -20,7 +20,8 @@ if (process.env.FAKE_QWEN_SETTINGS_VERSION) {
 }
 // The headless probe prints only its transcript.
 if (!prompt.includes('FTH-HEADLESS-PROBE')) process.stdout.write(`cwd=${process.cwd()} FTH_ROOT=${process.env.FTH_ROOT}\nFTH_CYCLE_BARS=${process.env.FTH_CYCLE_BARS || ''}\nprompt=${prompt}\n`);
-if (prompt.includes('FAIL')) process.exit(3);
+// A test's FAIL marker, never a skill's own text a managed cycle's prompt embeds (exit-skills.js: "push FAILED").
+if (prompt.replace(/<skill name="[^"]+">[^]*?<\/skill>/g, '').includes('FAIL')) process.exit(3);
 
 async function orders() {
   const root = process.env.FTH_ROOT;

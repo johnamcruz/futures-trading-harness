@@ -53,6 +53,7 @@ const { workingEntryLines } = require('./trading/working-entries');
 const { zonedParts } = require('./trading/clock');
 const { decide, recordRun, prompts, signalDecision, dayKey, endOfDayAt, historyShownLines } = require('./autotrader');
 const CD = require('./cycle-data');
+const ES = require('./exit-skills');
 const { decisionEntry, marketOf, parseResult, withPositions, exitRecords, appendExit, fillsNeededSince } = require('./trading/decision-history');
 const { barStep, sleepMs } = require('./bar-clock');
 const { contractRoot, contractMonthTag } = require('./trading/journal');
@@ -1971,11 +1972,15 @@ function createRunner(deps) {
           // The recent decisions as the prompt shows them (its own call builds the same lines), for the session record.
           const historyShown = attempt('your recent decisions', () => historyShownLines(shownHistory, multi, marketOf(items, cfg.timeframe)), []);
           const runsEntry = entryCycle && Boolean(rolesFile);
+          // An open position or a working entry: the exit skills in full in the prompt (exit-skills.js), attested for the
+          // cycle by its run's environment (autotrader.js childEnv, context.exitSkills). A flat cycle's prompt: as before.
+          const exitText = ES.openOf(acct) ? attempt('your exit skills', () => ES.exitSkillsText(root), '') : '';
           const prompt = prompts(cfg, cycleNow, root).trade(items, {
             manageOnly, recovered: recover, state: acct, history: shownHistory,
             lessons: lessonLines, trades: tradeLines, tradesSummary: summary, news: newsLine, unavailable,
             cyclesLeft, entry: runsEntry, managedDesk, managedCycle,
             manageAlso, journalRead: entries !== null, cached: served, unreviewed: unreviewedText,
+            ...(exitText ? { exitSkills: exitText } : {}),
             ...(multi ? { lanes: lanesLine(closedLanes) } : {}),
             ...(analystFrames.length ? { frames: analystFrames.map(f => ({ role: f.role, timeframe: tfLabel(f.minutes) })) } : {}),
           });
@@ -2005,6 +2010,8 @@ function createRunner(deps) {
             ...(runsEntry ? { entry: true } : {}),
             // A managed cycle (managedCycle: this machine's opt-in only): FTH_CYCLE_MANAGE, the gate refuses every entry.
             ...(managedCycle ? { manage: true } : {}),
+            // The exit skills in the prompt (exit-skills.js): the run's environment writes and attests them (FTH_EXIT_SKILLS).
+            ...(exitText ? { exitSkills: true } : {}),
             // Index mode: each cached report's own lookups and their facts key, which the gate counts for that role under that
             // key only (FTH_CYCLE_CACHED_LOOKUPS).
             cachedLookups: cached ? Object.fromEntries(cached.reports.filter(x => Array.isArray(x.lookups) && x.lookups.length && x.lookupsKey).map(x => [x.role, { skills: x.lookups, key: x.lookupsKey }])) : {},

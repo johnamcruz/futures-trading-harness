@@ -4287,6 +4287,28 @@ test('order gate (hook): a Claude Code head trader in index mode (the runner\'s 
   assert.match(e2.stderr, /\[skills-loaded\][^\n]*trade-session/, 'another cycle\'s id');
 });
 
+test('order gate (hook): a managed cycle\'s attested exit skills (FTH_EXIT_SKILLS) credit only manage-position and pullback-vs-reversal: an entry without its own loads is still refused; an exit goes', () => {
+  const { env, dir } = setup([{ ts: minutesAgo(5, new Date(TEST_NOW)), kind: 'plan', contractId: entryOrder().contractId, text: 'plan' }]);
+  simBroker(env);
+  const ES = require('../../scripts/lib/exit-skills');
+  const { cycleId: cycleIdOf } = require('../../scripts/lib/trading/check-order');
+  const SESSION = '5b1d3c7f-claude-exit-hook';
+  const stream = path.join(dir, 'cycle-transcript-exit.jsonl');
+  fs.writeFileSync(stream, JSON.stringify({ type: 'system', subtype: 'init', session_id: SESSION }));
+  const session = path.join(dir, 'projects', `${SESSION}.jsonl`);
+  fs.mkdirSync(path.dirname(session), { recursive: true });
+  fs.writeFileSync(session, '');
+  const { file, text } = ES.writeExitSkills(env.FTH_HOME, REPO);
+  const att = ES.exitAttestation({ file, text, root: REPO, cycle: cycleIdOf({ FTH_CYCLE_TRANSCRIPT: stream }) });
+  assert.deepStrictEqual(ES.exitAttested(att, REPO, { stream, hook: session, cycle: att.cycle }), ES.SKILLS, 'the run\'s own session: both count');
+  const auto = { ...env, FTH_AUTONOMOUS: '1', FTH_SYMBOLS: 'MNQ', FTH_ROLE_SKILLS: 'full', FTH_REPLAY_NOW: TEST_NOW, FTH_CYCLE_TRANSCRIPT: stream, FTH_EXIT_SKILLS: JSON.stringify(att) };
+  const r = gate({ ...orderPayload(), transcript_path: session }, auto);
+  assert.strictEqual(r.code, 2);
+  assert.match(r.stderr, /\[skills-loaded\][^\n]*not loaded in this session: trade-session, multi-timeframe-analysis, strategy-library/);
+  const exit = gate({ ...orderPayload({ ...EXIT_BASE, contractId: entryOrder().contractId, size: 1, side: 'sell', rationale: '[exit] flatten' }), transcript_path: session }, auto);
+  assert.strictEqual(exit.code, 0, exit.stderr);
+});
+
 test('order gate hook: a cited setup (momentum_continuation) goes only on the record citing it, at market; a limit for it and its own tag are refused; its exit goes', () => {
   const LC = require('../fixtures/lifecycle');
   const { env } = setup([{ ts: '2026-10-07T13:59:30.000Z', kind: 'plan', contractId: 'MNQ', text: 'plan' }],

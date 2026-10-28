@@ -34,6 +34,7 @@ const { readHeadSkills } = require('./runner-roles');
 const { lookupRule, briefingFacts, PLUGIN_ROOT: HARNESS_ROOT } = require('./skill-lookups');
 const { familyRoot } = require('./contracts');
 const { attestedSkills, parseAttestation, claudeAttested } = require('../head-prompt');
+const { exitAttested, parseExitAttestation } = require('../exit-skills');
 const { gateRefusal: factsRefusal } = require('./fact-claims');
 const { brokerSpecs, contractsFileFor, whyNoSpec, brokerOrderLimit, dayFrontMissing } = require('./broker-specs');
 const { checkOrderSize, checkRiskLimit, entryStopTicks } = require('./order-limits');
@@ -566,7 +567,12 @@ function evaluateOrder({ input = {}, entries = [], now = new Date(), config, bla
   // count from the record. Only for the runner's own cycle transcript (a hook's is another harness's session); no
   // record, or none recorded: the transcript alone decides, as before.
   const headLoaded = config.autonomous && !transcriptPath && config.cycleRoles ? readHeadSkills(config.cycleRoles) : [];
-  const counted = [...new Set([...embedded, ...headLoaded, ...claudeHead, ...claudeLooked])];
+  // A managed cycle's exit skills (manage-position, pullback-vs-reversal) embedded in its prompt: counted only on the
+  // runner's attestation for this cycle, checked now against its file, the skills' current text and this run's own
+  // transcript (exit-skills.js exitAttested). Anything off: none, as before.
+  const exitEmbedded = config.autonomous && config.exitSkillsAttestation
+    ? exitAttested(parseExitAttestation(config.exitSkillsAttestation), HARNESS_ROOT, { stream: config.cycleTranscript, hook: transcriptPath, cycle: require('./check-order').cycleId({ FTH_CYCLE_ID: config.cycleIdGiven || '', FTH_CYCLE_TRANSCRIPT: config.cycleTranscript || '' }) }) : [];
+  const counted = [...new Set([...embedded, ...headLoaded, ...claudeHead, ...claudeLooked, ...exitEmbedded])];
   add('skills-loaded', checkSkillsLoaded(transcript, [...required, ...situational.filter(s => !required.includes(s))], counted));
   // And, read before an entry only, how to judge the setup and write its plan (REQUIRED_AT_ENTRY; unreadable: refused).
   add('skills-at-entry', checkSkillsAtEntry(transcript, undefined, counted));
