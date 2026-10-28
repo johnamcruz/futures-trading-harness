@@ -118,6 +118,8 @@ function createRunner(deps) {
     scanLog = () => {}, // the decision log: one record per scanned bar (trading/scan-log.js scanRecord)
     // The multi-timeframe record the order gate reads (trading/mtf-state.js); returns its trend-rule line.
     recordMtf = () => null,
+    // The composed plans walked forward, settled by this bar (trading/lesson-shadow.js): (sym, bars), the first lane's.
+    recordShadow = () => 0,
     // Several lanes: the multi-timeframe record's line as the first lane's bars wrote it (another lane's bar never
     // rewrites it); (sym) -> line or null.
     readMtf = () => null,
@@ -387,6 +389,12 @@ function createRunner(deps) {
       } catch (err) {
         // Without a fresh record the gate refuses trend strategies' entries (fail closed).
         log(`${sym.symbol}: could not record the multi-timeframe read (${err.message}); the gate refuses trend entries`, 'error');
+      }
+      try {
+        if (first) recordShadow(sym, bars);
+      } catch (err) {
+        // A lesson's record only: its lessons show without the newest composed plans.
+        log(`${sym.symbol}: could not record the composed plans' shadow outcomes (${err.message})`, 'error');
       }
       let day = null;
       let dayError = null;

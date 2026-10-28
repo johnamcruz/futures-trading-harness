@@ -94,6 +94,7 @@
     "reportMaxText": 8000,
     "phase1MaxAgeMs": 1800000,
     "trackRecordMinSlice": 10,
+    "lessonMinPlans": 10,
     "trackRecordLiveSlice": 5,
     "instinctsMinSetupTrades": 3,
     "instinctsRecentReviews": 30,

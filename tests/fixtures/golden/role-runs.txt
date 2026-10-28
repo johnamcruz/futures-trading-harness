@@ -63,7 +63,7 @@ env:
 home files: []
 === claude: desk risk-manager ===
 request: Phase 1, risk state, for MNQ (contractId MNQ) at the 3-minute bar that closed by 2026-10-07T14:30:05.000Z. Read the account and limits yourself (your phase 1 calls); no plan yet. Closed 3-minute bars, oldest first, are in /bars/MNQ-3m.json (get_bars format): pass that exact path where a tool takes a bars file; don't fetch 3-minute bars. Report in your phase 1 output format.
-argv: ["claude","-p","<request>","--plugin-dir","<root>","--agent","futures-trading-harness:risk-manager","--output-format","stream-json","--verbose","--permission-mode","dontAsk","--allowedTools","<611 chars, sha256 9f9dd24da83c71d8044f7ff706ef5c977a2ac6953f53ab4b58955a4c68fad5d1>","--disallowedTools","<747 chars, sha256 f68a0813b9916fafa562c28df9951eac0c8d13982f9c30cd44100f03eec9ffd1>"]
+argv: ["claude","-p","<request>","--plugin-dir","<root>","--agent","futures-trading-harness:risk-manager","--output-format","stream-json","--verbose","--permission-mode","dontAsk","--allowedTools","<633 chars, sha256 cc49c7f73a5774abf304e53ff970a6ae9a365a1540f7cdd3471b973f2da3d4b8>","--disallowedTools","<747 chars, sha256 f68a0813b9916fafa562c28df9951eac0c8d13982f9c30cd44100f03eec9ffd1>"]
 env:
   CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1
   FTH_AUTONOMOUS=1
@@ -90,7 +90,7 @@ record r1: long 27420.25
 --- risk-manager phase 1 report ---
 Phase 1: flat
 --- end of risk-manager phase 1 report ---
-argv: ["claude","-p","<request>","--plugin-dir","<root>","--agent","futures-trading-harness:risk-manager","--output-format","stream-json","--verbose","--permission-mode","dontAsk","--allowedTools","<611 chars, sha256 9f9dd24da83c71d8044f7ff706ef5c977a2ac6953f53ab4b58955a4c68fad5d1>","--disallowedTools","<747 chars, sha256 f68a0813b9916fafa562c28df9951eac0c8d13982f9c30cd44100f03eec9ffd1>"]
+argv: ["claude","-p","<request>","--plugin-dir","<root>","--agent","futures-trading-harness:risk-manager","--output-format","stream-json","--verbose","--permission-mode","dontAsk","--allowedTools","<633 chars, sha256 cc49c7f73a5774abf304e53ff970a6ae9a365a1540f7cdd3471b973f2da3d4b8>","--disallowedTools","<747 chars, sha256 f68a0813b9916fafa562c28df9951eac0c8d13982f9c30cd44100f03eec9ffd1>"]
 env:
   CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1
   FTH_AUTONOMOUS=1
@@ -153,7 +153,7 @@ env:
   FTH_ROOT=<root>
   FTH_SYMBOLS=MNQ
   HOME=<home>
-  OPENCODE_CONFIG_CONTENT=<16275 chars, sha256 8cd57602c9db6eaeb031c9b82e10cb70f6ac7997e8747acaa5b2b9d9d3e0807e>
+  OPENCODE_CONFIG_CONTENT=<16276 chars, sha256 b5c84fafd9319344280a4b3f29593844e2f722830ccd06f68bcb606cf215842b>
   OPENCODE_DISABLE_AUTOUPDATE=1
   OPENCODE_DISABLE_CLAUDE_CODE=1
   OPENCODE_DISABLE_EXTERNAL_SKILLS=1
@@ -182,7 +182,7 @@ env:
   FTH_ROOT=<root>
   FTH_SYMBOLS=MNQ
   HOME=<home>
-  OPENCODE_CONFIG_CONTENT=<16275 chars, sha256 8cd57602c9db6eaeb031c9b82e10cb70f6ac7997e8747acaa5b2b9d9d3e0807e>
+  OPENCODE_CONFIG_CONTENT=<16276 chars, sha256 b5c84fafd9319344280a4b3f29593844e2f722830ccd06f68bcb606cf215842b>
   OPENCODE_DISABLE_AUTOUPDATE=1
   OPENCODE_DISABLE_CLAUDE_CODE=1
   OPENCODE_DISABLE_EXTERNAL_SKILLS=1
@@ -211,7 +211,7 @@ env:
   FTH_ROOT=<root>
   FTH_SYMBOLS=MNQ
   HOME=<home>
-  OPENCODE_CONFIG_CONTENT=<16275 chars, sha256 8cd57602c9db6eaeb031c9b82e10cb70f6ac7997e8747acaa5b2b9d9d3e0807e>
+  OPENCODE_CONFIG_CONTENT=<16276 chars, sha256 b5c84fafd9319344280a4b3f29593844e2f722830ccd06f68bcb606cf215842b>
   OPENCODE_DISABLE_AUTOUPDATE=1
   OPENCODE_DISABLE_CLAUDE_CODE=1
   OPENCODE_DISABLE_EXTERNAL_SKILLS=1
@@ -240,7 +240,7 @@ env:
   FTH_ROOT=<root>
   FTH_SYMBOLS=MNQ
   HOME=<home>
-  OPENCODE_CONFIG_CONTENT=<16275 chars, sha256 8cd57602c9db6eaeb031c9b82e10cb70f6ac7997e8747acaa5b2b9d9d3e0807e>
+  OPENCODE_CONFIG_CONTENT=<16276 chars, sha256 b5c84fafd9319344280a4b3f29593844e2f722830ccd06f68bcb606cf215842b>
   OPENCODE_DISABLE_AUTOUPDATE=1
   OPENCODE_DISABLE_CLAUDE_CODE=1
   OPENCODE_DISABLE_EXTERNAL_SKILLS=1
@@ -276,7 +276,7 @@ env:
   FTH_ROOT=<root>
   FTH_SYMBOLS=MNQ
   HOME=<home>
-  OPENCODE_CONFIG_CONTENT=<16275 chars, sha256 8cd57602c9db6eaeb031c9b82e10cb70f6ac7997e8747acaa5b2b9d9d3e0807e>
+  OPENCODE_CONFIG_CONTENT=<16276 chars, sha256 b5c84fafd9319344280a4b3f29593844e2f722830ccd06f68bcb606cf215842b>
   OPENCODE_DISABLE_AUTOUPDATE=1
   OPENCODE_DISABLE_CLAUDE_CODE=1
   OPENCODE_DISABLE_EXTERNAL_SKILLS=1
@@ -306,7 +306,7 @@ env:
   FTH_ROOT=<root>
   FTH_SYMBOLS=MNQ
   HOME=<home>
-  OPENCODE_CONFIG_CONTENT=<16275 chars, sha256 8cd57602c9db6eaeb031c9b82e10cb70f6ac7997e8747acaa5b2b9d9d3e0807e>
+  OPENCODE_CONFIG_CONTENT=<16276 chars, sha256 b5c84fafd9319344280a4b3f29593844e2f722830ccd06f68bcb606cf215842b>
   OPENCODE_DISABLE_AUTOUPDATE=1
   OPENCODE_DISABLE_CLAUDE_CODE=1
   OPENCODE_DISABLE_EXTERNAL_SKILLS=1

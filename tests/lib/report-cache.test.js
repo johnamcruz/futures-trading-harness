@@ -315,3 +315,13 @@ test('a trade-executor the runner ran (its role record: the entry workflow) chan
   assert.strictEqual(RC.recordReports({ ...base, runs: [p2, exec] }).phase1, null);
   assert.strictEqual(RC.recordReports({ ...base, runs: [p2, { ...exec, ok: false }] }).phase1, null, 'a failed executor run may have sent it too');
 });
+
+test('phase 1\'s report is served only under the risk-manager body it was written under', () => {
+  const { a, b } = pair();
+  const output = task('risk-manager', 'Phase 1: budget 2 trades', [10, 15]);
+  const cache = RC.recordReports({ output, briefings: { MNQ: a }, symbols: sym(a), account: ACCT, day: DAY, now: new Date(a.closedAt), bodyKey: 'body-1' });
+  const serve = bodyKey => RC.serveReports({ cache, briefings: { MNQ: b }, symbols: sym(b), account: ACCT, day: DAY, now: soon(cache), bodyKey }).roles;
+  assert.deepStrictEqual(serve('body-1'), ['risk-manager']);
+  assert.deepStrictEqual(serve('body-2'), [], 'an edited role body runs the role again');
+  assert.deepStrictEqual(serve(null), [], 'a cache from before the key is not served under one');
+});

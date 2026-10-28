@@ -158,9 +158,9 @@ const TOOLS = [
   },
   {
     name: 'lessons', op: 'lessons', script: 'lessons',
-    description: 'What the journal has taught so far: the strongest instincts from reviewed trades and lessons.',
-    inputSchema: object({ top: { type: 'integer', minimum: 1, maximum: 1000, description: 'How many (default 10).' }, json: JSON_FLAG }),
-    args: i => ({ ...pick(i, { top: 'top' }), json: i.json === true }),
+    description: 'What the journal has taught so far: the strongest instincts from reviewed trades and lessons (kind lesson: the run\'s lessons only).',
+    inputSchema: object({ top: { type: 'integer', minimum: 1, maximum: 1000, description: 'How many (default 10).' }, kind: { type: 'string', enum: ['lesson'], description: 'lesson: only the lessons, newest last.' }, json: JSON_FLAG }),
+    args: i => ({ ...pick(i, { top: 'top', kind: 'kind' }), json: i.json === true }),
     narrow: 'lower top, or call it without json',
   },
   {
