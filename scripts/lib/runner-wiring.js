@@ -50,7 +50,7 @@ const { dayContextSeries, describeDay, describeOvernight } = require('./trading/
 const { premarketPlan, newsLine, unreviewedLine } = require('./trading/session-context');
 const { readBlackouts } = require('./trading/check-order');
 const { readRecord, liveRecord, describeRecord, excursionNote } = require('./trading/track-record');
-const { loadStrategies, scan, retiredCopies, composedExit } = require('./trading/strategies');
+const { loadStrategies, scan, retiredCopies, composedExit, citingPolicies } = require('./trading/strategies');
 const { lanesOf, laneStrategies, analystFrames, retireLanes } = require('./lanes');
 const { loadAgents } = require('./harness-sync');
 const { scanRecord, appendJsonl } = require('./trading/scan-log');
@@ -753,7 +753,8 @@ function wireRunner({ cfg, root, home, env = process.env, client, prop = null, d
       // A composed entry on these roots that may still be working: its expiry not passed when the cycle began, or no
       // expiry stamped and sent since then (an older one without an expiry was cancelled before the cycle).
       stamped: (roots, since) => LR.liveComposed({ entries: entryOrders(home), roots, since }),
-      onlyComposed: () => { const tags = LR.composedSetups(strategies()); const on = strategies().filter(s => s.valid && s.status !== 'disabled' && s.timeframe === `${cfg.timeframe}m`); return on.length > 0 && on.every(s => tags.has(s.name)); },
+      // A setup a composed trade cites (strategies.js citingPolicies) enters only through that trade's record: composed too.
+      onlyComposed: () => { const all = strategies(); const tags = LR.composedSetups(all); const on = all.filter(s => s.valid && s.status !== 'disabled' && s.timeframe === `${cfg.timeframe}m`); return on.length > 0 && on.every(s => tags.has(s.name) || citingPolicies(all, s.name).length > 0); },
       unrecorded: (orders, positions, contractId) => LR.unrecordedEntries({ entries: entryOrders(home), orders, positions, root: contractId }),
       forItem: item => recordsAt(home, item.symbol, item.bar && item.bar.t).map(LR.recordSummary),
       byOrder: () => Object.fromEntries(entryOrders(home).filter(e => e.composed && e.composed.record).map(e => [String(e.orderId), e.composed.record])),

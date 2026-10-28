@@ -18,7 +18,7 @@ const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
-const { loadStrategies } = require('../../scripts/lib/trading/strategies');
+const { loadStrategies, citingPolicies } = require('../../scripts/lib/trading/strategies');
 const { createEvaluator } = require('../../scripts/lib/trading/evaluator');
 const { readBarsArg } = require('../../scripts/lib/backtest/data');
 const { FAKE_BROKERS, FX_GOLDEN, tmpDir, writeJournal, recordBrokerSpecs } = require('../helpers');
@@ -28,7 +28,9 @@ const BARS = readBarsArg(path.join(ROOT, 'tests', 'fixtures', 'parity', 'NQ-3m.c
 const STEP = 180000;
 const CONTRACT = 'MNQ:2026-06';
 const ALL = loadStrategies(ROOT, { FTH_STRATEGIES_DIRS: FX_GOLDEN }).strategies;
-const ACTIVE_ALL = ALL.filter(s => s.valid && s.status === 'active' && s.signal === 'rules' && s.timeframe === '3m' && s.instruments.includes('MNQ'));
+// A cited setup (momentum_continuation: strategies.js citingPolicies) never enters under its own tag: it is driven
+// through the record citing it (tests/e2e/cited-setup-e2e.test.js), not here.
+const ACTIVE_ALL = ALL.filter(s => s.valid && s.status === 'active' && s.signal === 'rules' && s.timeframe === '3m' && s.instruments.includes('MNQ') && !citingPolicies(ALL, s.name).length);
 // Active strategies whose setup the 6-day NQ fixture never produces (checked below: they load, validate and scan);
 // the rest are driven end to end. A fixture where these fire would drive them too.
 const NOT_ON_FIXTURE = {

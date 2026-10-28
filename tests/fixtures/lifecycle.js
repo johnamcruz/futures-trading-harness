@@ -16,6 +16,8 @@
  *                              validBars: the strategy's valid_bars, 2 as shipped }) to home;
  *                              returns the record
  *   order(over)                the place_order the record gives: a limit buy 1 at 21540.25, 111 / 231 ticks
+ *   s2Briefing(), S2_READS, s2Order(over), writeS2(home, o)   the cited setup's (momentum_continuation) scenario on
+ *                              the same bar: a market buy 1, 46 / 92 ticks
  *   config(home, over)         an order-gate config on that home, in a cycle on BAR (FTH_CYCLE_BARS)
  */
 
@@ -62,9 +64,34 @@ const READS = [
   { step: 'target', skill: 'top-down-entry', read: 'target 1h swing 21598.00', why: 'the next 60m swing high' },
 ];
 
-/** The record compose_check writes for these reads on this briefing (harness-tools/compose.js, its steps). */
-function composeRecord({ reads = READS, side = 'long', size = 1, at = '2026-10-07T13:59:50.000Z', b = briefing(), minRR = 2, maxRiskUsd = 300, validBars = 2 } = {}) {
-  const checked = checkReads({ reads, side, briefing: b, tick: 0.25 });
+/**
+ * The cited setup (momentum_continuation) on the same bar: the 3m candle (21530, 21541, 21529, 21540.25) with momentum
+ * (1.2 ATR, 1.3x volume, close top) and the scan's candidate long: its stop 21540.25 - 21529 + 0.25 = 11.50 points = 46
+ * ticks (21528.75, one tick under the low; $23.00 an MNQ), its target 2R = 92 ticks (21563.25). S2_READS cite it.
+ */
+const S2_CANDIDATE = Object.freeze({ name: 'momentum_continuation', direction: 'long', status: 'active', entryRef: 21540.25, stopPoints: 11.5, minRR: 2, exit: { trailActivateR: null, trailGivebackR: null, targetR: 2, maxBars: null }, target: { level: null, points: 23, R: 2 }, trendRule: 'allows', facts: [] });
+const s2Briefing = () => {
+  const b = briefing({ m3: { candidates: [S2_CANDIDATE] } });
+  Object.assign(b.sections.m3.data.candles['3m'], { rangeAtr: 1.2, volRatio: 1.3 });
+  return b;
+};
+const S2_READS = [
+  { step: 'bias', skill: 'multi-timeframe-analysis', read: '1h up', why: 'the prevailing trend up' },
+  { step: 'location', skill: 'vwap-volume-profile', read: 'vwap above', why: 'above the VWAP' },
+  { step: 'setup', skill: 'momentum-and-volume', read: 'momentum_continuation fired up', why: 'the momentum candle with the trend' },
+  { step: 'entry', skill: 'momentum-and-volume', read: '3m momentum up', why: 'range, volume, close at the top' },
+  { step: 'stop', skill: 'invalidation', read: 'stop 3m low 21529', why: 'under the momentum candle' },
+  { step: 'target', skill: 'take-profit', read: 'target 2r', why: 'its own 2R' },
+];
+const s2Order = (over = {}) => ({
+  accountId: 1, contractId: 'MNQ', side: 'buy', type: 'market', size: 1,
+  stopLossBracket: { ticks: 46, type: 'stop' }, takeProfitBracket: { ticks: 92, type: 'limit' },
+  rationale: 'setup:trade_lifecycle long momentum_continuation at market from 21540.25, stop 21528.75, target 21563.25', ...over,
+});
+
+/** The record compose_check writes for these reads on this briefing (harness-tools/compose.js, its steps); `cited`: the setups it may cite. */
+function composeRecord({ reads = READS, side = 'long', size = 1, at = '2026-10-07T13:59:50.000Z', b = briefing(), minRR = 2, maxRiskUsd = 300, validBars = 2, cited = null } = {}) {
+  const checked = checkReads({ reads, side, briefing: b, tick: 0.25, cited });
   const planned = checked.stop && checked.target ? planOf({ checked, briefing: b, side, size, tick: 0.25, tickValue: 0.5, minRR, maxRiskUsd, stopRule: lifecycleStopRule() }) : null;
   return buildRecord({ at, root: 'MNQ', symbol: 'MNQ', side, briefing: b, checked, planned, validBars });
 }
@@ -82,4 +109,7 @@ const order = (over = {}) => ({
   rationale: 'setup:trade_lifecycle long, the 15m rejection with the 1h trend, stop 21512.50, target 21598.00', ...over,
 });
 
-module.exports = { BAR, CLOSE, NEXT_CLOSE, EXPIRES, briefing, READS, composeRecord, writeScenario, order };
+/** The cited setup's scenario: its briefing and the record citing it (writeScenario with S2's reads, cited). */
+const writeS2 = (home, o = {}) => writeScenario(home, { b: s2Briefing(), reads: S2_READS, cited: ['momentum_continuation'], ...o });
+
+module.exports = { BAR, CLOSE, NEXT_CLOSE, EXPIRES, briefing, READS, composeRecord, writeScenario, order, S2_CANDIDATE, s2Briefing, S2_READS, s2Order, writeS2 };

@@ -136,6 +136,8 @@ function fromLifecycleRecord(raw, { runId = null } = {}) {
     plan: {
       entry: price(plan.entry ?? plan.entryReference), stop: price(plan.stop ?? plan.stopPrice), target: price(plan.target ?? plan.targetPrice),
       size: num(plan.size ?? plan.maxSize), rr: num(plan.rr),
+      // A cited setup's record enters at market (trade-lifecycle.js planOf): its counterfactual fills at once.
+      ...(isObj(plan.entry) && plan.entry.type === 'market' ? { entryType: 'market' } : {}),
     },
     exploratory: raw.exploratory === true,
   };

@@ -34,13 +34,14 @@ const VALID = [
   'status: paper', 'instruments: [MES]', 'timeframe: 5m', 'signal: manual', 'risk:', '  stop: manual', '  min_rr: 1.5',
 ].join('\n');
 
-test('the shipped strategies: prop_portfolio alone, valid; an old detector signal is refused with a hint', () => {
+test('the shipped strategies: prop_portfolio, trade_lifecycle and the setup it cites, valid; an old detector signal is refused with a hint', () => {
   const { strategies, problems } = loadStrategies(ROOT, {});
   assert.deepStrictEqual(problems, []);
   for (const s of strategies) assert.deepStrictEqual(s.errors, [], `${s.name}: ${s.errors.join('; ')}`);
-  // Every rules strategy and prop_flow_1m retired on 2026-10-14: the policy strategy and the trade lifecycle (the
-  // model composes it: signal: composed) are all that ship.
-  assert.deepStrictEqual(strategies.map(s => s.name), ['prop_portfolio', 'trade_lifecycle']);
+  // Every rules strategy and prop_flow_1m retired on 2026-10-14: the policy strategy, the trade lifecycle (the model
+  // composes it: signal: composed) and, since 2026-10-28, momentum_continuation, a rules setup the lifecycle cites.
+  assert.deepStrictEqual(strategies.map(s => s.name), ['momentum_continuation', 'prop_portfolio', 'trade_lifecycle']);
+  assert.deepStrictEqual(strategies.filter(x => x.signal === 'rules').map(x => x.name), ['momentum_continuation']);
   assert.deepStrictEqual(strategies.filter(x => x.signal === 'composed').map(x => x.name), ['trade_lifecycle']);
   const portfolio = strategies.find(s => s.name === 'prop_portfolio');
   assert.strictEqual(portfolio.account, 'topstep_100k');
@@ -96,12 +97,12 @@ test('a policy\'s exit mode: the shipped policy keeps each trade\'s own stop and
   assert.ok(pol({}).some(e => /exit: mode target or target_then_trail .*or trail_activate_r and trail_giveback_r/.test(e)));
 });
 
-test('prop_portfolio ships active with trade_lifecycle, its one component, and is valid; a policy listing none has no setups', () => {
+test('prop_portfolio ships active with trade_lifecycle and the setup it cites, and is valid; a policy listing none has no setups', () => {
   const portfolio = loadStrategies(ROOT, {}).strategies.find(s => s.name === 'prop_portfolio');
   assert.strictEqual(portfolio.valid, true, portfolio.errors.join('; '));
   assert.strictEqual(portfolio.status, 'active');
   assert.strictEqual(portfolio.signal, 'policy');
-  assert.deepStrictEqual(portfolio.strategies, ['trade_lifecycle']);
+  assert.deepStrictEqual(portfolio.strategies, ['trade_lifecycle', 'momentum_continuation']);
   // A composed component trades inside it under the same status rule (active goes; paper only in a paper run).
   const { componentRefusal } = require('../../scripts/lib/trading/strategies');
   const shipped = loadStrategies(ROOT, {}).strategies;

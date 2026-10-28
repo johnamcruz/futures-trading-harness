@@ -4113,3 +4113,58 @@ test('the floor stretch never applies outside an attempt: setup:trade_lifecycle 
   const r = evaluateOrder({ input: LC.order({ accountId: 1, size: 3 }), entries: [plan(1, { ts: '2026-10-07T13:59:30Z' })], now: LCP.NOW, strategies: [LCP.policy({ sizing: testSizing({ min_contracts: 3, floor_stretch_max_usd: 500 }) }), doc], accounts: [LCP.MINI], config: { ...config, home: free, cycleBars: { MNQ: LC.BAR } } });
   assert.match(r.violations.find(v => v.check === 'max-risk').message, /^risk \$166\.50 \(size 3 x 111-tick stop/);
 });
+
+// ---- A cited setup (momentum_continuation, cited by trade_lifecycle under prop_portfolio): the gate's side ----
+test('a cited setup: a trade_lifecycle record citing momentum_continuation goes as a market order with its own brackets; the gate re-checks the fired read', () => {
+  const home = trendHome();
+  const rec = LC.writeS2(home);
+  const ok = lcEval(home, LC.s2Order());
+  assert.deepStrictEqual(ok.violations, []);
+  assert.deepStrictEqual(ok.composed, { record: rec.id, expiresAt: LC.EXPIRES, entry: 21540.25, stop: 21528.75, target: 21563.25, side: 'long' });
+  const only = r => r.violations.filter(v => v.check === 'composed-reads').map(v => v.message);
+  // Its entry is at market: a limit (at the reference or better) is refused, as a market order for a limit record is.
+  assert.match(only(lcEval(home, LC.s2Order({ type: 'limit', limitPrice: 21540.25 })))[0], /the entry is a limit order: momentum_continuation's entry is at market from the record's 21540\.25/);
+  // Its brackets are the record's: 46 and 92 ticks.
+  assert.match(only(lcEval(home, LC.s2Order({ stopLossBracket: { ticks: 40, type: 'stop' } })))[0], /stopLossBracket\.ticks 40 is not the record's 46/);
+  assert.match(only(lcEval(home, LC.s2Order({ takeProfitBracket: { ticks: 100, type: 'limit' } })))[0], /takeProfitBracket\.ticks 100 is not the record's 92/);
+  // Nothing to cite (no policy lists both): refused, the record's plan never trusted.
+  const lone = LC_REGISTRY.filter(s => s.name !== 'prop_portfolio');
+  assert.match(only(lcEval(home, LC.s2Order(), { strategies: lone }))[0], /momentum_continuation is not a setup this trade cites/);
+  // The scan's candidate gone from the cycle bar's briefing now: the fired read is false.
+  const gone = trendHome();
+  LC.writeS2(gone);
+  require('../../scripts/lib/trading/briefing').writeBriefing(gone, LC.briefing({ m3: { candidates: [] } }));
+  assert.match(only(lcEval(gone, LC.s2Order()))[0], /false by the briefing: "momentum_continuation fired up" \(momentum_continuation did not fire on this bar\)/);
+  // A record of the same reads composed with nothing cited (a limit plan) is not the plan the reads give now.
+  const limitRec = trendHome();
+  LC.writeScenario(limitRec, { b: LC.s2Briefing(), reads: LC.S2_READS, cited: null });
+  assert.ok(only(lcEval(limitRec, LC.s2Order())).length, 'refused');
+});
+
+test('a cited setup, a market entry: the latest price the trade\'s way past the reference over the share is a chase ([late-entry]); at the reference or within the share, it goes', () => {
+  const LE = require('../../scripts/lib/trading/late-entry');
+  // Entry 21540.25, stop 21528.75 (11.5 points): 0.25 of it is 2.875 points above the reference.
+  const at = price => { const home = trendHome(); LC.writeS2(home); LE.recordPrice(home, 'MNQ', { price, closedAt: '2026-10-07T14:00:00Z', minutes: 1, source: 'runner-entry' }); return lcEval(home, LC.s2Order()); };
+  const late = r => r.violations.filter(v => v.check === 'late-entry').map(v => v.message);
+  assert.match(late(at(21543.25))[0], /chased entry: .*entry 21540\.25 \(price 21543\.25 is 3 points past it with the long/);
+  assert.deepStrictEqual(at(21543).violations, [], '2.75 points: within the share');
+  assert.deepStrictEqual(at(21540.25).violations, [], 'at the reference');
+  assert.match(late(at(21529))[0] || '', /missed the plan's entry/, 'adverse drift is still judged');
+});
+
+test('a cited setup never enters under its own tag ([cited-setup], hard: no skip list skips it); its exits and protective stops still go', () => {
+  const home = trendHome();
+  LC.writeS2(home);
+  const own = { accountId: 1, contractId: 'MNQ', side: 'buy', type: 'market', size: 1, stopLossBracket: { ticks: 46, type: 'stop' }, takeProfitBracket: { ticks: 92, type: 'limit' }, rationale: 'setup:momentum_continuation long at market from 21540.25, stop 21528.75, target 21563.25' };
+  const r = lcEval(home, own, { config: { skipChecks: new Set(['cited-setup', 'strategy', 'trigger-fired']) } });
+  const v = r.violations.find(x => x.check === 'cited-setup');
+  assert.ok(v, JSON.stringify(r.violations));
+  assert.match(v.message, /^setup:momentum_continuation is a setup trade_lifecycle cites \(prop_portfolio\): compose it with compose_check \(the setup read "momentum_continuation fired up\|down"\) and enter on that record, never under setup:momentum_continuation\. Exits and protective stops still go\.$/);
+  for (const rationale of ['[exit] flatten the long', '[protect] stop for the long']) {
+    const x = lcEval(home, { accountId: 1, contractId: 'MNQ', side: 'sell', type: 'stop', stopPrice: 21528.75, size: 1, rationale });
+    assert.deepStrictEqual([x.intent, x.violations], ['risk-reducing', []], rationale);
+  }
+  // A rules strategy no composed trade cites is judged as before: no [cited-setup].
+  const plain = LC_REGISTRY.map(s => (s.name === 'prop_portfolio' ? { ...s, strategies: ['momentum_continuation'] } : s));
+  assert.ok(!lcEval(home, own, { strategies: plain }).violations.some(x => x.check === 'cited-setup'));
+});

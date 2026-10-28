@@ -41,7 +41,8 @@
  *   dates it so), frame (default: 1h bias, 15m reaction, 3m confirmation reads; else other: frameOf), writtenAt }. A round trip is split into legs, one per opening fill (legsOf). `role` is the bar's learning role (learning/splits.js);
  *   `id` is stable, so a log written twice for a run keeps each decision once (appendDecisions).
  *
- *   limitOutcome({ bars, tfMs, side, entry, stop, target, fromMs, expiresMs, eodMs, tick, plan })   the counterfactual
+ *   limitOutcome({ bars, tfMs, side, entry, stop, target, fromMs, expiresMs, eodMs, tick, plan, market })   the counterfactual
+ *                                         (`market`: a cited setup's market entry, filled at the open of the bar it was sent in)
  *   buildDecisions({ cycles, records, trips, stamps, gateRefusals, barsFor, tickOf, eodOf, runId, now, exit })   the lines
  *                                         (`exit`: { plan, mode, hash } the run's exit, BRACKETS by default)
  *   exitRecord(exit), exitHash(exit)      an exit as a manifest records it ({ mode, plan, hash }), its hash
@@ -90,7 +91,7 @@ function lowerBound(bars, t) {
 const resultOf = R => (R === null ? null : R > 0 ? 'win' : R < 0 ? 'loss' : 'scratch');
 
 /** The record's limit order on the bars after the decision (see the head). */
-function limitOutcome({ bars, tfMs, side, entry, stop, target, fromMs, expiresMs, eodMs = Infinity, tick, plan = null }) {
+function limitOutcome({ bars, tfMs, side, entry, stop, target, fromMs, expiresMs, eodMs = Infinity, tick, plan = null, market = false }) {
   const none = (reason, extra = {}) => ({ source: 'counterfactual', filled: false, entryPrice: null, exitPrice: null, exitTime: null, exitReason: reason, R: null, maeR: null, mfeR: null, ...extra });
   const s = sgn(side);
   if (!s || ![entry, stop].every(Number.isFinite) || !(tick > 0)) return none('no plan');
@@ -100,7 +101,16 @@ function limitOutcome({ bars, tfMs, side, entry, stop, target, fromMs, expiresMs
   if (i >= bars.length) return none('no bars after the decision');
   const day = tradingDayKey(new Date(bars[i].ms));
   let fill = null;
-  for (; i < bars.length && bars[i].ms < end; i += 1) {
+  // A market entry (a cited setup's record) fills at once: at the open of the bar in progress when it was sent (the
+  // next bar's, when it was sent in a gap), never later.
+  if (market) {
+    const k = lowerBound(bars, fromMs + 1) - 1;
+    if (k >= 0 && bars[k].ms + tfMs > fromMs) i = k;
+    const b = bars[i];
+    if (!(b.ms < end) || b.ms + tfMs > eodMs) return none('unfilled');
+    fill = b.o;
+  }
+  for (; fill === null && i < bars.length && bars[i].ms < end; i += 1) {
     const b = bars[i];
     if (tradingDayKey(new Date(b.ms)) !== day || b.ms + tfMs > eodMs) return none('unfilled');
     if (s > 0 ? b.l <= entry : b.h >= entry) { fill = s > 0 ? Math.min(entry, b.o) : Math.max(entry, b.o); break; }
@@ -374,7 +384,7 @@ function buildDecisions({ cycles = [], records = [], trips = [], stamps = {}, ga
       // A refusal names no side: it stays with the cycle's latest ok record (the one order_plan plans from).
       const refused = slot.latest && gateRefusals.find(g => Date.parse(g.cycleAt) === at && (!g.root || familyRoot(g.root) === familyRoot(root)));
       if (refused) { decision = 'refused'; refusal = refused.check || 'refused'; }
-      outcome = limitOutcome({ bars: barsFor(root), tfMs, side: ok.side, entry: ok.plan.entry, stop: ok.plan.stop, target: ok.plan.target, fromMs, expiresMs, eodMs: eodOf(fromMs), tick: tickOf(root), plan: exit.plan });
+      outcome = limitOutcome({ bars: barsFor(root), tfMs, side: ok.side, entry: ok.plan.entry, stop: ok.plan.stop, target: ok.plan.target, fromMs, expiresMs, eodMs: eodOf(fromMs), tick: tickOf(root), plan: exit.plan, market: ok.plan.entryType === 'market' });
     }
     out.push({
       ...base, id: idOf([runId, root, base.cycleAt, ok.bar, ok.side, ok.signatures.read]), contract: ok.contract, bar: ok.bar, day: tradingDayKey(new Date(Date.parse(ok.bar))),

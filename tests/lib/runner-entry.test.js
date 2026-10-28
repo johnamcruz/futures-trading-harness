@@ -691,6 +691,21 @@ test('runEntry: no late entry: the newest closed 1m bar, read just before the ex
   }
 });
 
+test('runEntry: a cited setup\'s MARKET plan with the market over the share past its entry is skipped as a chase (kind chased-entry), never sent; a limit plan at the same price goes', async () => {
+  // Entry 21500, stop 21490 (10 points): the market at 21503 is 30% of the risk past the entry.
+  const mk = type => () => ({ args: { ...ARGS, type }, plan: { strategy: 'trade_lifecycle', side: 'long', contract: 'MNQ', size: 1, entry: 21500, entryType: type, stopPrice: 21490, stopTicks: 40, targetPrice: 21520, targetTicks: 80, riskUsd: 20, record: 'rec0000000000001' } });
+  const s = setup({ plan: mk('market'), market: 21503 });
+  const r = await E.runEntry(s.deps, s.cycle());
+  assert.strictEqual(r.entry.outcome, 'late');
+  assert.strictEqual(r.entry.late.kind, 'chased-entry');
+  assert.match(r.result, /chased entry/);
+  assert.deepStrictEqual(s.calls.map(c => c.role), ['phase2'], 'no trade-executor: nothing sent');
+  const within = setup({ plan: mk('market'), market: 21502.5 });
+  assert.strictEqual((await E.runEntry(within.deps, within.cycle())).entry.outcome, 'executed', 'within the share');
+  const lim = setup({ plan: mk('limit'), market: 21503 });
+  assert.strictEqual((await E.runEntry(lim.deps, lim.cycle())).entry.outcome, 'executed', 'a limit rests');
+});
+
 test('runEntry: no late entry, the replay\'s short (2021-08-18): sell limit 14979.5, stop 14986.5, the market at 14997.5 when the order would go: refused, never sent', async () => {
   const BAR21 = '2021-08-18T17:33:00.000Z';
   const rec = record({ side: 'short', bar: BAR21, plan: { ...PLAN, entry: { price: 14979.5 }, stop: { ...PLAN.stop, price: 14986.5, ticks: 28 }, target: { ...PLAN.target, price: 14960, ticks: 78 } } });

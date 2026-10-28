@@ -28,7 +28,8 @@
  *   mixed     anything else
  *
  * biasSeries(bars, m) is the same bias per bar, causal (each bar sees only
- * candles completed before it), for the rules language: mtf_bias(m).
+ * candles completed before it), for the rules language: mtf_bias(m); prevailingSeries(bars) the trend rule's
+ * prevailing direction per bar: mtf_prevailing.
  *
  * The trend rule (trendRule, ruleSeries): the prevailing trend is the highest
  * of RULE_FRAMES (4h, 1h, 15m, built from the trigger bars) that has one. A
@@ -232,6 +233,19 @@ function ruleSeries(bars, opts = {}) {
 const biasesAt = (series, i) => Object.fromEntries(RULE_FRAMES.map(m => [m, series[m][i]]));
 
 /**
+ * Per bar: the prevailing trend's direction by the trend rule (trendRule: the first of RULE_FRAMES with a trend), 1 up,
+ * -1 down, 0 no trend on any frame, NaN while the highest frame has no read yet (the rule isn't ready): the rules
+ * language's mtf_prevailing, the one the gate enforces.
+ */
+function prevailingSeries(bars, opts = {}) {
+  const ser = ruleSeries(bars, opts);
+  return bars.map((_, i) => {
+    const r = trendRule(biasesAt(ser, i), 0);
+    return !r.ready ? NaN : r.prevailing ? (r.prevailing.trend === 'up' ? 1 : -1) : 0;
+  });
+}
+
+/**
  * The summary's reason, naming the side it is about: a reason with no side, shown next to a strategy that
  * fired the other way, reads as a refusal of that one ("against the prevailing 15m down trend" beside a
  * short). Not ready: both sides wait, said once.
@@ -372,4 +386,4 @@ function biasSeries(bars, minutes, opts = {}) {
   return out;
 }
 
-module.exports = { DEFAULTS, HISTORY_HOURS, RULE_FRAMES, STYLES, candles, closesCandle, stepOf, readTimeframe, alignment, mtfRead, biasSeries, label, trendRule, ruleSeries, biasesAt, ruleSummary, ruleLine };
+module.exports = { DEFAULTS, HISTORY_HOURS, RULE_FRAMES, STYLES, candles, closesCandle, stepOf, readTimeframe, alignment, mtfRead, biasSeries, label, trendRule, ruleSeries, biasesAt, prevailingSeries, ruleSummary, ruleLine };

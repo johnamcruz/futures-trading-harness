@@ -472,7 +472,7 @@ async function runEntry(deps, c) {
       const p = order.plan;
       await client.journalAdd({
         kind: 'plan', contractId: order.args.contractId, ...(Number.isInteger(c.accountId) ? { accountId: c.accountId } : {}), tags: [`setup:${tag}`, contractRoot(order.args.contractId)],
-        text: `${tag} ${p.side} ${p.size} ${p.contract}: limit ${p.entry}, stop ${p.stopPrice}, target ${p.targetPrice}, risk $${p.riskUsd}; ${sizeWhy}; compose record ${p.record}; phase 2${restated && restated.outcome === 'approved' ? ' (restated)' : ''}: ${short(line)}`,
+        text: `${tag} ${p.side} ${p.size} ${p.contract}: ${p.entryType === 'market' ? `market from ${p.entry}` : `limit ${p.entry}`}, stop ${p.stopPrice}, target ${p.targetPrice}, risk $${p.riskUsd}; ${sizeWhy}; compose record ${p.record}; phase 2${restated && restated.outcome === 'approved' ? ' (restated)' : ''}: ${short(line)}`,
       });
     } catch (err) {
       stop = { outcome: 'no-trade', why: `the journal plan could not be written (${err.message})` };
@@ -500,7 +500,7 @@ async function runEntry(deps, c) {
     const G = require('./tunables').runner().gate;
     const maxAgeMin = LE.ageLimitOf(config || { signalMaxAgeBars: G.signalMaxAgeBars, signalMaxAgeCeilingMin: G.signalMaxAgeCeilingMin });
     const { readBriefing } = require('./trading/briefing');
-    return LE.lateEntryCheck({ home, root, side: rec.side, entry: o.plan.entry, stop: o.plan.stopPrice, target: o.plan.targetPrice ?? null, briefing: readBriefing(home, root), now: now(), share: G.lateEntryDriftShare, maxAgeMin });
+    return LE.lateEntryCheck({ home, root, side: rec.side, entry: o.plan.entry, stop: o.plan.stopPrice, target: o.plan.targetPrice ?? null, briefing: readBriefing(home, root), now: now(), share: G.lateEntryDriftShare, maxAgeMin, market: o.plan.entryType === 'market' });
   };
   const sentAt = Date.now();
   let res;

@@ -30,10 +30,11 @@ const [BAR_MS, BAR_CLOSE] = [...REAL.barCloses('MNQ', 3)].find(([ms]) => ms >= D
 const MOMENT = { bar: new Date(BAR_MS).toISOString(), standard: { plan: { entry: BAR_CLOSE, stop: BAR_CLOSE - 10, target: BAR_CLOSE + 20, rr: 2 } } };
 
 /** A run that passes every check, with every feature merged; `over` patches the run, `gate` the gate, `read` the readers. */
-function ctx({ run = {}, gate = {}, read = {}, lifecycle = {}, policy = {}, book = {} } = {}) {
+function ctx({ run = {}, gate = {}, read = {}, lifecycle = {}, policy = {}, book = {}, extra = [] } = {}) {
   const strategies = [
     { name: 'trade_lifecycle', valid: true, errors: [], status: 'active', signal: 'composed', valid_bars: 2, risk: { stop: 'structure', min_rr: 2, max_risk_usd: 300 }, ...lifecycle },
     { name: 'prop_portfolio', valid: true, errors: [], status: 'active', signal: 'policy', strategies: ['trade_lifecycle'], account: 'acct', ...policy },
+    ...extra,
   ];
   const rulebook = { valid: true, errors: [], daily_loss_soft: 1000, loss_streak_stop: 2, policies: { prop_portfolio: { sizing: { cushion_frac: 0.3, cap_usd: 1000 }, exit: { mode: 'trail' } } }, ...book };
   const real = P.defaultReaders(ROOT, {}, { barsFiles: { MNQ: DAY_BARS } });
@@ -209,6 +210,11 @@ test('each check fails on a broken fixture', () => {
     [P.stage, { run: { prop: 'acct' } }, /no prop attempt in stage 1/],
     [P.propPortfolio, { policy: { strategies: [] } }, /strategies \[\], not \[trade_lifecycle\]/],
     [P.propPortfolio, { policy: { status: 'paper' } }, /not active/],
+    // Only the setups trade_lifecycle's records may cite follow it: an unregistered one, a rules strategy that is not
+    // active, and an order with trade_lifecycle second all fail.
+    [P.propPortfolio, { policy: { strategies: ['trade_lifecycle', 'ghost_setup'] } }, /not \[trade_lifecycle\] and the setups it cites/],
+    [P.propPortfolio, { policy: { strategies: ['trade_lifecycle', 'paper_setup'] }, extra: [{ name: 'paper_setup', valid: true, errors: [], status: 'paper', signal: 'rules' }] }, /not \[trade_lifecycle\] and the setups it cites/],
+    [P.propPortfolio, { policy: { strategies: ['momentum_continuation', 'trade_lifecycle'] }, extra: [{ name: 'momentum_continuation', valid: true, errors: [], status: 'active', signal: 'rules' }] }, /not \[trade_lifecycle\] and the setups it cites/],
     [P.propPortfolio, { book: { valid: false, errors: ['policies: refused'] } }, /rulebook is refused: policies: refused/],
     [P.propPortfolio, { policy: { account: 'none' } }, /has no rulebook/],
     [P.rulebookValues, { book: { daily_loss_soft: undefined } }, /missing daily_loss_soft/],

@@ -25,14 +25,19 @@ Each strategy is a folder with one `STRATEGY.md`, written like a skill:
 
 | Strategy | Signal | Status |
 |---|---|---|
-| `prop_portfolio` | policy: the prop account layer (sizing, exit, verdicts); lists no strategies until `trade_lifecycle` is built | active |
+| `prop_portfolio` | policy: the prop account layer (sizing, exit, verdicts) over `trade_lifecycle` and `momentum_continuation` | active |
+| `trade_lifecycle` | composed: the model composes the whole trade from its skills (docs/COMPOSED-ENTRY.md) | active |
+| `momentum_continuation` | rules: a closed 3m momentum candle the prevailing trend's way, 09:36-11:57 ET; a setup `trade_lifecycle` cites | active |
 
-No rules strategy ships: every one was retired (below). The one strategy to
-come is `trade_lifecycle` (docs/COMPOSED-ENTRY.md): the model composes the
-whole trade from its skills (read, set up, enter, state its size under the
-enforced ceiling, manage, exit), as `prop_portfolio`'s one component. Until
-it is built the order gate refuses every entry (no strategy, no setup, no
-verdict); exits and protective stops still go.
+The one rules strategy that ships is `momentum_continuation`, and it never
+trades under its own tag: a rules strategy listed by a policy beside a
+composed one (strategies.js `citingPolicies`) is a **cited setup**. Its
+scan fires as any rules strategy's (the briefing's Setups line), it gets no
+verdict of its own, and the model trades it only by composing a
+`trade_lifecycle` record whose setup read is `<name> fired up|down`: the
+record's plan takes the strategy's own entry (at market), stop and fixed-R
+target, and the gate re-checks that read on the cycle bar. Its own tag is
+refused (`[cited-setup]`). The others were retired (below).
 
 The code the retired strategies used stays and is tested through fixtures
 (`tests/fixtures/strategies-fx`, `strategies-golden`): the rules language
@@ -69,10 +74,8 @@ contract), or skipped, and every trade exits by its trail.
 
 - `prop_portfolio`: the account layer, on NQ, ES, YM, and RTY (micros or
   minis), one `topstep_100k` attempt and one position at a time across them.
-  It lists no strategies since 2026-10-14; its one component will be
-  `trade_lifecycle`. With none it has no setups, so it sizes nothing and
-  every entry is refused; it stays `active` (the owner's decision) so it is
-  ready when `trade_lifecycle` is.
+  Its trades are `trade_lifecycle`'s compose records (order_plan records
+  the verdict on each); a record may cite `momentum_continuation`.
 
 A policy strategy trades one timeframe. Within one runner (one harness home)
 the gate holds one cushion and one position at a time across the account.

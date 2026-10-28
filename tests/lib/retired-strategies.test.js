@@ -38,7 +38,7 @@ const FX_ENV = { FTH_STRATEGIES_DIRS: [FX_STRATEGIES, FX_GOLDEN].join(',') };
 const FX = loadStrategies(ROOT, FX_ENV).strategies;
 const RETIRED_RE = name => new RegExp(`${name} .*retired on ${DATE(name)}: strategies/README\\.md, "Retired strategies"`);
 
-test('the fifteen are retired: no folder ships them, the policies list none of them (prop_portfolio: trade_lifecycle alone), and each is named with its date', () => {
+test('the fifteen are retired: no folder ships them, the policies list none of them (prop_portfolio: trade_lifecycle and the setup it cites), and each is named with its date', () => {
   assert.deepStrictEqual(Object.keys(RETIRED).sort(), [...NAMES].sort());
   for (const n of NAMES) {
     assert.ok(!fs.existsSync(path.join(ROOT, 'strategies', n)), `strategies/${n} is gone`);
@@ -46,15 +46,17 @@ test('the fifteen are retired: no folder ships them, the policies list none of t
     assert.match(retiredNote(n), new RegExp(`retired on ${DATE(n)}`), n);
     assert.strictEqual(RETIRED[n], DATE(n), n);
   }
-  // prop_portfolio ships (active, valid, listing the trade lifecycle alone), and the trade lifecycle (signal: composed).
-  assert.deepStrictEqual(SHIPPED.map(s => s.name), ['prop_portfolio', 'trade_lifecycle']);
+  // prop_portfolio ships (active, valid, listing the trade lifecycle and the setup it cites), the trade lifecycle
+  // (signal: composed) and that setup, momentum_continuation (2026-10-28: a new name, never a retired one).
+  assert.deepStrictEqual(SHIPPED.map(s => s.name), ['momentum_continuation', 'prop_portfolio', 'trade_lifecycle']);
+  assert.strictEqual(retiredNote('momentum_continuation'), '');
   assert.strictEqual(retiredNote('prop_portfolio'), '', 'a shipped strategy is not retired');
   assert.strictEqual(retiredNote('fx_orb'), '', 'a fixture under another name is not retired');
   assert.strictEqual(retiredNote('toString'), '', 'no prototype name');
   for (const p of SHIPPED.filter(s => s.signal === 'policy')) {
     assert.ok(p.valid, `${p.name}: ${p.errors}`);
     assert.strictEqual(p.status, 'active', p.name);
-    assert.deepStrictEqual(p.strategies, ['trade_lifecycle'], p.name);
+    assert.deepStrictEqual(p.strategies, ['trade_lifecycle', 'momentum_continuation'], p.name);
   }
   // The README's table names each with the date (the gate's message points there).
   const readme = fs.readFileSync(path.join(ROOT, 'strategies', 'README.md'), 'utf8');
@@ -466,16 +468,16 @@ test('order_plan refuses each retired name, saying it was retired; a fixture und
   assert.throws(() => orderPlan({ file: path.join(home, 'none.json'), symbol: 'MNQ', strategy: 'fx_orb', side: 'long' }, ctx), err => !/retired|unknown strategy/.test(err.message));
 });
 
-test('the shipped prop_portfolio is active with trade_lifecycle alone: with no verdict on a compose record the gate refuses its entry; its exit and stop still go', () => {
+test('the shipped prop_portfolio is active with trade_lifecycle and the setup it cites: with no verdict on a compose record the gate refuses its entry; its exit and stop still go', () => {
   const policy = SHIPPED.find(s => s.name === 'prop_portfolio');
-  assert.deepStrictEqual([policy.valid, policy.status, policy.signal, policy.strategies], [true, 'active', 'policy', ['trade_lifecycle']]);
+  assert.deepStrictEqual([policy.valid, policy.status, policy.signal, policy.strategies], [true, 'active', 'policy', ['trade_lifecycle', 'momentum_continuation']]);
   const { accounts } = require('../../scripts/lib/trading/accounts').loadAccounts(ROOT, {});
   const account = accounts.find(a => a.name === policy.account);
   assert.ok(account && account.valid, `its account loads: ${policy.account}`);
   const home = trendHome();
   const config = { ...loadConfig({}), killSwitchFile: '/nonexistent/fth/STOP', home, mtfMaxAgeMin: 1e9, signalMaxAgeBars: 1e9, signalMaxAgeCeilingMin: 1e9 };
   const order = rationale => evaluateOrder({ input: entryOrder({ rationale }), entries: [plan()], now: NOW, config, strategies: SHIPPED, accounts });
-  const noVerdict = /setup:prop_portfolio: no verdict for MNQ \(order_plan records one on each trade_lifecycle compose record\)/;
+  const noVerdict = /setup:prop_portfolio: no verdict for MNQ \(order_plan records one on each trade_lifecycle compose record \(which may cite momentum_continuation\)\)/;
   const check = label => {
     const r = order('setup:prop_portfolio long, stop 40 ticks');
     assert.strictEqual(r.intent, 'entry');

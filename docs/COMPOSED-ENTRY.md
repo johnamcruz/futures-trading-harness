@@ -347,6 +347,14 @@ decide whether to trade.
   record's reference, or better for the side. The broker interface has no
   time in force (`broker/interface.js:74-76`), so the runner cancels a
   working composed limit at the record's `expiresAt`.
+  The one exception is a cited setup's entry (a scan-fired setup such as
+  `momentum_continuation`, cited by a `trade_lifecycle` record): it is a
+  market order whose stop is the scan's own distance from the fill, which the
+  scan's census modelled. A market order fills wherever price is, so the
+  guard is the late-entry band applied both ways (`late-entry.js`, kind
+  `chased-entry`): price past the reference in the trade's favor by more than
+  `gate.lateEntryDriftShare` of the risk is refused, as drift against it
+  already is.
 - **Target.** A real level on the winning side: a swing target
   (`m3.swingTargets`, `target <tf> swing [high|low] <price>`), the prior
   completed 1h or 4h candle's high, mid or low (`m3.rangeTargets`,

@@ -1,12 +1,12 @@
 ---
 name: prop_portfolio
-description: Prop-challenge policy strategy, the account layer - it sizes each setup of the strategies it lists on the Nasdaq, S&P, Dow, and Russell from the attempt's budget in the selected contract (or skips it), and exits each trade by its rulebook's exit (today the trade's own stop until its own target, then a trail past it). Its one component is trade_lifecycle.
+description: Prop-challenge policy strategy, the account layer - it sizes each setup of the strategies it lists on the Nasdaq, S&P, Dow, and Russell from the attempt's budget in the selected contract (or skips it), and exits each trade by its rulebook's exit (today the trade's own stop until its own target, then a trail past it). Its trades are trade_lifecycle's records, which may cite momentum_continuation.
 version: 3
 status: active                # the owner's call; its setups are trade_lifecycle's compose records; no live trading until the owner says trade_lifecycle is correct
 instruments: [MNQ, NQ, MES, ES, MYM, YM, M2K, RTY]   # four indexes, one shared account: bars from the micro (minis share its prices); trades the selected one (the micro or the mini; `contracts` only with none selected)
 timeframe: 3m                 # the one setting for the bar size: every listed strategy must trade it (see How It Works)
 signal: policy                # trades the setups of the strategies below on the account
-strategies: [trade_lifecycle] # the model's own composed trade, the one component since the rules strategies retired (2026-10-14)
+strategies: [trade_lifecycle, momentum_continuation] # the model's own composed trade, and the setup it may cite (traded only through its record)
 account: topstep_100k         # accounts/topstep_100k/ACCOUNT.md: $6,000 target, $3,000 trailing max loss, $2,000 daily limit
 contracts: auto               # micro | mini | auto (minis once the size reaches one mini = 10 micros); only with no contract selected
 # sizing, exit and the verdict's multipliers: in its account's rulebook (RULEBOOK.md beside ACCOUNT.md, policies.prop_portfolio), the one place for them
@@ -23,10 +23,12 @@ index futures (Nasdaq, S&P, Dow, Russell). It sizes each setup of the
 strategies it lists at the account's size budget, or skips one the budget
 can't fund, and exits every trade by its rulebook's exit.
 
-**Its one component is `trade_lifecycle`**, the composed trade the model
-builds from its skills (docs/COMPOSED-ENTRY.md, section 3.7); every rules
-strategy it traded was retired on 2026-10-14 (strategies/README.md,
-"Retired strategies"). Each compose record on an index is its setup:
+**Its trades are `trade_lifecycle`'s**, the composed trade the model
+builds from its skills (docs/COMPOSED-ENTRY.md, section 3.7). It also lists
+`momentum_continuation`, a setup that trade may cite (`<name> fired
+up|down`): a rules strategy listed beside a composed one gets no verdict of
+its own; the record citing it takes its entry (market), stop and target.
+Each compose record on an index is its setup:
 `order_plan` sizes the record here (the verdict, once per record) and the
 model's stated size goes at or under it. Both stay `active`; practice runs
 on the replay broker, and there is no live trading until the owner says

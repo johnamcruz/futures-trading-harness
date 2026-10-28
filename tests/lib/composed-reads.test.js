@@ -645,3 +645,57 @@ test('on briefings built from the fixture bars: every range target and gap edge 
   assert.ok(checked > 30, `checked ${checked} targets`);
   assert.ok(spent >= 3, `${spent} spent sides (bars 600 and 1200 have taken ones)`);
 });
+
+// ---- A cited setup: `<strategy> fired up|down`, checked against the scan's candidates (m3.candidates) ----
+const LCX = require('../fixtures/lifecycle');
+
+test('fired: "<strategy> fired up|down" parses as a setup read, TRUE only when the scan fired that way on this bar', () => {
+  const p = CR.parseRead('momentum_continuation fired up');
+  assert.deepStrictEqual([p.kind, p.name, p.value, p.slug], ['fired', 'momentum_continuation', 'up', 'momentum_continuation-fired-up']);
+  assert.deepStrictEqual(CR.STEP_KINDS.fired, ['setup']);
+  const b = LCX.s2Briefing();
+  const up = CR.checkRead(p, b);
+  assert.deepStrictEqual([up.check, up.dir, up.field], [true, 'long', 'm3.candidates']);
+  assert.match(up.fact, /^momentum_continuation fired long on this bar \(stop 11\.5 pts, target 2R\)$/);
+  const down = CR.checkRead(CR.parseRead('momentum_continuation fired down'), b);
+  assert.deepStrictEqual([down.check, down.dir, down.fact], [false, 'short', 'momentum_continuation fired long, not short']);
+  assert.match(CR.checkRead(CR.parseRead('momentum_continuation fired up'), LCX.briefing()).fact, /did not fire on this bar/);
+  // The scan failed or the bar wasn't scanned: unknown, never false or true.
+  const unscanned = LCX.briefing({ m3: { candidates: null, scanError: 'the scan failed this bar' } });
+  assert.strictEqual(CR.checkRead(p, unscanned).check, 'unchecked');
+  // Only in the setup step.
+  const wrongStep = CR.checkReads({ reads: LCX.S2_READS.map(r => (r.step === 'setup' ? { ...r, step: 'entry' } : r)), side: 'long', briefing: b, cited: ['momentum_continuation'] });
+  assert.ok(wrongStep.problems.some(x => /a fired read belongs to the setup step, not entry/.test(x)), wrongStep.problems.join('; '));
+});
+
+test('a cited setup: with the strategy in `cited`, the combination carries its own plan (stop points, 2R) and its target read is its own 2R; not cited, or a level target, NOT OK', () => {
+  const b = LCX.s2Briefing();
+  const r = CR.checkReads({ reads: LCX.S2_READS, side: 'long', briefing: b, cited: ['momentum_continuation'] });
+  assert.deepStrictEqual(r.problems, []);
+  assert.strictEqual(r.ok, true);
+  assert.deepStrictEqual(r.setup, { name: 'momentum_continuation', stopPoints: 11.5, targetR: 2, entry: 'market' });
+  // The 2R mark is its own target here, though the briefing names levels ahead (the 2R mark alone would be false).
+  const t = r.reads.find(x => x.step === 'target');
+  assert.deepStrictEqual([t.check, t.mark, t.dir], [true, true, 'long']);
+  assert.match(t.fact, /^momentum_continuation's own target: 2R from its stop/);
+  assert.strictEqual(CR.checkReads({ reads: LCX.S2_READS, side: 'long', briefing: b }).reads.find(x => x.step === 'target').check, false, 'uncited, the 2R mark is judged as ever');
+  // Not cited (no policy lists it beside the composed strategy): NOT OK, saying so.
+  for (const cited of [null, [], new Set(['other'])]) {
+    const no = CR.checkReads({ reads: LCX.S2_READS, side: 'long', briefing: b, cited });
+    assert.strictEqual(no.ok, false);
+    assert.ok(no.problems.some(x => /momentum_continuation is not a setup this trade cites/.test(x)), String(cited));
+    assert.strictEqual(no.setup, undefined);
+  }
+  assert.ok(CR.checkReads({ reads: LCX.S2_READS, side: 'long', briefing: b, cited: new Set(['momentum_continuation']) }).ok, 'a Set works as a list');
+  // A level target is not its target.
+  const level = LCX.S2_READS.map(x => (x.step === 'target' ? { ...x, read: 'target 1h swing 21598.00' } : x));
+  const lv = CR.checkReads({ reads: level, side: 'long', briefing: b, cited: ['momentum_continuation'] });
+  assert.ok(lv.problems.some(x => /momentum_continuation trades its own target \(2R from its stop\): state "target 2r"/.test(x)), lv.problems.join('; '));
+  // Two fired setups: one per record.
+  const two = { ...b, sections: { ...b.sections, m3: { ...b.sections.m3, data: { ...b.sections.m3.data, candidates: [LCX.S2_CANDIDATE, { ...LCX.S2_CANDIDATE, name: 'other_setup' }] } } } };
+  const both = [...LCX.S2_READS, { step: 'setup', skill: 'momentum-and-volume', read: 'other_setup fired up' }];
+  assert.ok(CR.checkReads({ reads: both, side: 'long', briefing: two, cited: ['momentum_continuation', 'other_setup'] }).problems.some(x => /2 fired setups: a record cites one/.test(x)));
+  // A candidate without a fixed target in R can't be cited.
+  const noR = { ...b, sections: { ...b.sections, m3: { ...b.sections.m3, data: { ...b.sections.m3.data, candidates: [{ ...LCX.S2_CANDIDATE, exit: { targetR: null } }] } } } };
+  assert.ok(CR.checkReads({ reads: LCX.S2_READS, side: 'long', briefing: noR, cited: ['momentum_continuation'] }).problems.some(x => /has no stop and fixed target \(in R\) on this bar/.test(x)));
+});

@@ -469,3 +469,20 @@ test('MAE and MFE: an entered trade and its counterfactual twin on the same bars
   // Their values: the held bars' low 99.25 (-0.375R) and high 103 (+1.5R), the exit's +2R or -1.125R.
   assert.deepStrictEqual([E.limitOutcome({ ...plan({ rows: [...rows, [102.5, 104.5, 102, 104]] }) }).maeR], [-0.375]);
 });
+
+test('limitOutcome, market (a cited setup\'s record): fills at once at the open of the bar it was sent in, never waits for the reference; the brackets from that fill', () => {
+  // Sent 20 s into the first bar: filled at its open 100.5 (above the 100 reference a limit would wait for), the stop
+  // and target the record's distances (2 and 4 points) from the fill: target 104.5 on the second bar.
+  const sent = { ...plan({ rows: [[100.5, 100.75, 100.25, 100.5], [100.5, 104.75, 100.25, 104.5]] }), fromMs: ms(T0) + 20000, market: true };
+  const m = E.limitOutcome(sent);
+  assert.deepStrictEqual([m.filled, m.entryPrice, m.entryTime, m.exitPrice, m.exitReason, m.R], [true, 100.5, T0, 104.5, 'target', 2]);
+  // The same as a limit: never traded back to 100 before it expired, unfilled.
+  assert.strictEqual(E.limitOutcome({ ...sent, market: false }).filled, false);
+  // Sent after the window: no fill; at the end of day: none either.
+  assert.strictEqual(E.limitOutcome({ ...sent, expiresMs: ms(T0) }).filled, false);
+  assert.strictEqual(E.limitOutcome({ ...sent, eodMs: ms(T0) + M3 - 1 }).filled, false);
+  // The record's market entry reaches the line: fromLifecycleRecord keeps its type (only when market).
+  const rec = fromLifecycleRecord({ id: 'x', side: 'long', root: 'MNQ', bar: T0, plan: { entry: { type: 'market', price: 100 }, stop: { price: 98 }, target: { price: 104 } } });
+  assert.deepStrictEqual([rec.plan.entry, rec.plan.entryType], [100, 'market']);
+  assert.strictEqual('entryType' in fromLifecycleRecord({ id: 'y', side: 'long', root: 'MNQ', bar: T0, plan: { entry: { type: 'limit', price: 100 } } }).plan, false);
+});

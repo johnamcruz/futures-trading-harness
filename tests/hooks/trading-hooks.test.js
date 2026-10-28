@@ -3895,6 +3895,24 @@ test('order gate (hook): no late entry ([late-entry]): the latest local price be
   assert.strictEqual(r.code, 0, r.stderr);
 });
 
+test('order gate (hook): a cited setup\'s market entry with the latest price over the share past its reference is refused [late-entry] (chased); at the reference it goes', () => {
+  const LE = require('../../scripts/lib/trading/late-entry');
+  const LC2 = require('../fixtures/lifecycle');
+  const { env } = setup([{ ts: '2026-10-07T13:59:30.000Z', kind: 'plan', contractId: 'MNQ', text: 'plan' }],
+    { FTH_STRATEGIES_DIRS: path.join(REPO, 'strategies'), FTH_ACCOUNTS_DIRS: path.join(REPO, 'accounts'), FTH_TEST_NOW: '2026-10-07T14:00:02.000Z', FTH_CYCLE_BARS: JSON.stringify({ MNQ: LC2.BAR }) });
+  LC2.writeS2(env.FTH_HOME);
+  const run = p => {
+    fs.rmSync(path.join(env.FTH_HOME, LE.FILE), { force: true });
+    LE.recordPrice(env.FTH_HOME, 'MNQ', { price: p, closedAt: '2026-10-07T14:00:00Z', minutes: 1, source: 'runner-entry' });
+    return gate(orderPayload(LC2.s2Order()), env);
+  };
+  const r = run(21544);
+  assert.strictEqual(r.code, 2);
+  assert.match(r.stderr, /\[late-entry\] .*chased entry/);
+  const ok = run(21540.25);
+  assert.doesNotMatch(ok.stderr, /\[late-entry\]/);
+});
+
 test('order gate (hook): a composed entry on the runner\'s cycle (opencode, index mode) needs no lookup of the composed bar\'s reads its attested head prompt embeds; a prompt without them is refused for them', () => {
   const H = require('../../scripts/lib/head-prompt');
   const home = trendHome();
@@ -4260,4 +4278,22 @@ test('order gate (hook): a Claude Code head trader in index mode (the runner\'s 
   assert.doesNotMatch(e1.stderr, skillsChecks, e1.stderr);
   const e2 = gate({ ...orderPayload(), transcript_path: path.join(dir, 'projects', 'executor-session.jsonl') }, { ...executor, FTH_CYCLE_ID: 'ab'.repeat(8) });
   assert.match(e2.stderr, /\[skills-loaded\][^\n]*trade-session/, 'another cycle\'s id');
+});
+
+test('order gate hook: a cited setup (momentum_continuation) goes only on the record citing it, at market; a limit for it and its own tag are refused; its exit goes', () => {
+  const LC = require('../fixtures/lifecycle');
+  const { env } = setup([{ ts: '2026-10-07T13:59:30.000Z', kind: 'plan', contractId: 'MNQ', text: 'plan' }],
+    // The shipped strategies and accounts: prop_portfolio (valid only with its account's rulebook) lists both.
+    { FTH_STRATEGIES_DIRS: path.join(REPO, 'strategies'), FTH_ACCOUNTS_DIRS: path.join(REPO, 'accounts'), FTH_TEST_NOW: '2026-10-07T14:00:02.000Z', FTH_CYCLE_BARS: JSON.stringify({ MNQ: LC.BAR }) });
+  LC.writeS2(env.FTH_HOME);
+  const ok = gate(orderPayload(LC.s2Order()), env);
+  assert.doesNotMatch(ok.stderr, /\[composed-reads\]|\[cited-setup\]/);
+  const limit = gate(orderPayload(LC.s2Order({ type: 'limit', limitPrice: 21540.25 })), env);
+  assert.strictEqual(limit.code, 2);
+  assert.match(limit.stderr, /\[composed-reads\] setup:trade_lifecycle: the entry is a limit order: momentum_continuation's entry is at market/);
+  const own = gate(orderPayload(LC.s2Order({ rationale: 'setup:momentum_continuation long at market from 21540.25, stop 21528.75, target 21563.25' })), env);
+  assert.strictEqual(own.code, 2);
+  assert.match(own.stderr, /\[cited-setup\] setup:momentum_continuation is a setup trade_lifecycle cites \(prop_portfolio\)/);
+  const exit = gate(orderPayload({ ...EXIT_BASE, side: 'sell', rationale: '[exit] close the momentum_continuation long' }), env);
+  assert.strictEqual(exit.code, 0, exit.stderr);
 });

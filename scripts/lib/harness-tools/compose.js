@@ -27,7 +27,7 @@ const { skillCatalog } = require('./skills');
 const { briefingFor } = require('../trading/fact-claims');
 const { checkReads } = require('../trading/composed-reads');
 const { STRATEGY, planOf, stopRuleOf, buildRecord, appendRecord, renderRecord } = require('../trading/trade-lifecycle');
-const { loadStrategies } = require('../trading/strategies');
+const { loadStrategies, citedSetups } = require('../trading/strategies');
 const { specFor } = require('../trading/contracts');
 const { cycleId } = require('../trading/check-order');
 const { briefingAfterClock } = require('../trading/look-ahead');
@@ -76,7 +76,9 @@ function composeCheck({ symbol = null, side = null, reads = null, size = null } 
   const spec = specFor(symbol);
   const tick = spec ? spec.tickSize : null;
   const entryRule = entryRuleHere(home, doc, all, symbol);
-  const checked = checkReads({ reads, side, briefing: got.briefing, skills: skillCatalog(c.root).map(k => k.name), tick: tick || 0.25, entryRule });
+  // The setups a record may cite (a `<strategy> fired` read: its plan, strategies.js citedSetups), as the gate's re-check.
+  const cited = citedSetups(all, STRATEGY, { paper: c.env.FTH_PAPER === '1' });
+  const checked = checkReads({ reads, side, briefing: got.briefing, skills: skillCatalog(c.root).map(k => k.name), tick: tick || 0.25, entryRule, cited });
   const plan = { size, tickValue: spec ? spec.tickValue : null, minRR: doc.risk.min_rr, maxRiskUsd: doc.risk.max_risk_usd, stopRule: stopRuleOf(doc.risk), suggestion: inAttempt(home, doc, all, symbol) };
   const planned = checked.stop && checked.target ? planOf({ checked, briefing: got.briefing, side, tick, ...plan }) : null;
   const fits = noSizeFitsHere({ c, home, doc, all, symbol, planned, spec });

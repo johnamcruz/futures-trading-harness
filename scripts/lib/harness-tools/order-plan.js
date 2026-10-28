@@ -40,7 +40,7 @@
  */
 
 const { readBarsArg } = require('../backtest/data');
-const { loadStrategies, scan, rootRefusal, retiredNote, componentsNote } = require('../trading/strategies');
+const { loadStrategies, scan, rootRefusal, retiredNote, componentsNote, citingPolicies, composedOf } = require('../trading/strategies');
 const { selectedSymbols } = require('../trading/contracts');
 const { loadAccounts } = require('../trading/accounts');
 const { exitPlan, tradeExitPlan, timeframeMs } = require('../trading/evaluator');
@@ -69,8 +69,11 @@ function candidateOf(results, name, root, want) {
   return r;
 }
 
-function rulesPlan(c, s, { results, root, want, home, specOf }) {
+function rulesPlan(c, s, { results, root, want, home, specOf, strategies = [] }) {
   if (s.signal !== 'rules') throw new Error(`${s.name} is a ${s.signal} strategy: order_plan plans a rules strategy's candidate or a policy strategy's verdict`);
+  // A setup a composed trade cites (strategies.js citingPolicies) is entered only on that trade's compose record.
+  const citing = citingPolicies(strategies, s.name);
+  if (citing.length) throw new Error(`${s.name} is a setup ${composedOf(citing[0], strategies).join(', ')} cites (${citing.map(x => x.name).join(', ')}): compose it with compose_check (the setup read "${s.name} fired up|down") and plan that record; no order under setup:${s.name}`);
   const running = prop.runningAttempts(home);
   if (running.length) {
     throw new Error(`a ${running.join(', ')} attempt is running: only the policy strategy that trades it may enter (order_plan with that strategy's name, for its verdict)`);

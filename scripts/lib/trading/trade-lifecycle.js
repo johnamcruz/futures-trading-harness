@@ -17,7 +17,10 @@
  *
  * The plan, in code, never the model's arithmetic:
  *   entry    a limit at the reference price (the briefing's last close), valid until the record expires (expiresAt:
- *            `validBars` base bars after its bar's close, the strategy's valid_bars: expiryOf)
+ *            `validBars` base bars after its bar's close, the strategy's valid_bars: expiryOf); a cited setup's
+ *            (composed-reads.js citedSetup: `<strategy> fired up|down`) at market from that price, its stop the scan's
+ *            (its stop points, ceil to ticks; the stop read the level it sits beyond) and its target its R times that
+ *            stop (plan.setup names it)
  *   stop     the verified invalidation level with D3's buffer: the strategy's risk.stop_buffer_ticks beyond it, on the
  *            tick (a long's below, a short's above). Stop ticks = ceil(|entry - stop| / tick). D13's floor: at least
  *            max(risk.stop_floor_ticks, risk.stop_floor_atr x ATR(20) of the base bars, half the briefing's 0.5 x
@@ -153,12 +156,19 @@ function planOf({ checked, briefing, side, size, tick, tickValue, minRR = null, 
   if (!checked.stop || !checked.target) return { plan: null, problems: ['no verified stop and target read'] };
   const t = ticker(tick);
   const long = side === 'long';
-  const stopPrice = long ? t.at(Math.floor(checked.stop.level / tick + 1e-9) - buffer) : t.at(Math.ceil(checked.stop.level / tick - 1e-9) + buffer);
+  // A cited setup (composed-reads.js citedSetup): its own stop (the scan's, in points: ceil to ticks from the entry) and
+  // its own target (its R times that stop), at market; the stop read is the level its stop sits beyond.
+  const own = isObj(checked.setup) ? checked.setup : null;
+  const ownTicks = own ? Math.ceil(own.stopPoints / tick - 1e-9) : null;
+  const stopPrice = own ? t.at(Math.round(ref / tick) - (long ? ownTicks : -ownTicks))
+    : long ? t.at(Math.floor(checked.stop.level / tick + 1e-9) - buffer) : t.at(Math.ceil(checked.stop.level / tick - 1e-9) + buffer);
   const stopTicks = Math.ceil(Math.abs(ref - stopPrice) / tick - 1e-9);
+  if (own && (long ? stopPrice > checked.stop.level + 1e-9 : stopPrice < checked.stop.level - 1e-9)) problems.push(`${own.name}'s stop ${stopPrice} is inside the level you named (${checked.stop.level}): its stop is its own; name the level it sits beyond (its candle's ${long ? 'low' : 'high'}), or pass`);
   // The 2R mark (composed-reads.js `target 2r`): the strategy's minimum R from the entry, on the tick the trade's way.
-  if (checked.target.mark && num(minRR) === null) return { plan: null, problems: ['the 2R mark needs the strategy\'s risk.min_rr'] };
+  if (checked.target.mark && num(minRR) === null && !own) return { plan: null, problems: ['the 2R mark needs the strategy\'s risk.min_rr'] };
   const markAt = () => (long ? t.up(ref + minRR * (ref - stopPrice)) : t.down(ref - minRR * (stopPrice - ref)));
-  const targetPrice = checked.target.mark ? markAt() : long ? t.down(checked.target.level) : t.up(checked.target.level);
+  const targetPrice = own ? t.at(Math.round(ref / tick) + (long ? 1 : -1) * Math.round(own.targetR * stopTicks))
+    : checked.target.mark ? markAt() : long ? t.down(checked.target.level) : t.up(checked.target.level);
   const targetTicks = Math.round(Math.abs(targetPrice - ref) / tick);
   if ((long ? stopPrice >= ref : stopPrice <= ref)) problems.push(`the stop ${stopPrice} is not on the losing side of the entry ${ref}`);
   if (!(targetTicks > 0) || (long ? targetPrice <= ref : targetPrice >= ref)) problems.push(`the target ${targetPrice} is not on the winning side of the entry ${ref}`);
@@ -183,12 +193,13 @@ function planOf({ checked, briefing, side, size, tick, tickValue, minRR = null, 
   return {
     problems,
     plan: {
-      entry: { type: 'limit', price: ref },
-      stop: { source: checked.stop.source, level: checked.stop.level, price: stopPrice, ticks: stopTicks, bufferTicks: buffer, floorTicks: floor },
+      entry: { type: own ? 'market' : 'limit', price: ref },
+      stop: { source: checked.stop.source, level: checked.stop.level, price: stopPrice, ticks: stopTicks, bufferTicks: own ? Math.round(Math.abs(checked.stop.level - stopPrice) / tick) : buffer, floorTicks: floor },
       target: { source: checked.target.source, level: checked.target.mark ? targetPrice : checked.target.level, price: targetPrice, ticks: targetTicks, ...(checked.target.mark ? { mark: true } : {}) },
       rr, inTheWay: way ? { name: way.name, price: way.price, R: round2(Math.abs(way.price - ref) / (stopTicks * tick)) } : null,
       size: Number.isInteger(size) ? size : null, riskUsd, perContractUsd: perContract,
       maxSize: num(maxRiskUsd) !== null && perContract > 0 ? Math.floor(maxRiskUsd / perContract) : null, tick, tickValue,
+      ...(own ? { setup: own.name } : {}),
     },
   };
 }
@@ -281,7 +292,7 @@ function renderRecord(r, checked = null, hints = []) {
   if (checked) out.push(renderCheck(checked).trimEnd());
   const p = r.plan;
   if (p) {
-    out.push(`Plan (code's arithmetic): entry limit ${p.entry.price}; stop ${p.stop.price} (${p.stop.source} ${p.stop.level}, ${p.stop.bufferTicks} tick beyond: ${p.stop.ticks} ticks, minimum ${p.stop.floorTicks ?? 'unknown'}); target ${p.target.price} (${p.target.source} ${p.target.level}: ${p.target.ticks} ticks); R:R ${p.rr}; first level ahead: ${p.inTheWay ? `${p.inTheWay.name} ${p.inTheWay.price} at ${p.inTheWay.R}R (a read; no edge in the census)` : 'none found'}; size ${p.size ?? '?'} risking $${p.riskUsd ?? '?'} ($${p.perContractUsd} a contract, at most ${p.maxSize ?? '?'} by risk.max_risk_usd).`);
+    out.push(`Plan (code's arithmetic${p.setup ? `, ${p.setup}'s own` : ''}): entry ${p.entry.type === 'market' ? `market from ${p.entry.price}` : `limit ${p.entry.price}`}; stop ${p.stop.price} (${p.stop.source} ${p.stop.level}, ${p.stop.bufferTicks} tick beyond: ${p.stop.ticks} ticks, minimum ${p.stop.floorTicks ?? 'unknown'}); target ${p.target.price} (${p.target.source} ${p.target.level}: ${p.target.ticks} ticks); R:R ${p.rr}; first level ahead: ${p.inTheWay ? `${p.inTheWay.name} ${p.inTheWay.price} at ${p.inTheWay.R}R (a read; no edge in the census)` : 'none found'}; size ${p.size ?? '?'} risking $${p.riskUsd ?? '?'} ($${p.perContractUsd} a contract, at most ${p.maxSize ?? '?'} by risk.max_risk_usd).`);
   }
   for (const x of r.problems.filter(x => !(checked && checked.problems.includes(x)))) out.push(`- PROBLEM: ${x}`);
   // A refusal's hints (compose-hints.js): what is TRUE on this bar, per flow step; never on an OK record.

@@ -56,9 +56,9 @@ test('cli: context defaults, options, and an OpError keeps the output before the
 });
 
 test('strategies: list, show, validate, scan, recent as operations', () => {
-  // The shipped tree lists prop_portfolio only (every rules strategy retired); the fixture strategies (FX_GOLDEN:
-  // the retired rules under fx_ names) give the scans something to fire.
-  assert.deepStrictEqual(JSON.parse(strategies.list({ json: true }, { env: {}, now: clock() }).text).map(r => r.name), ['prop_portfolio', 'trade_lifecycle']);
+  // The shipped tree: prop_portfolio, trade_lifecycle and the setup it cites (the other rules strategies retired); the
+  // fixture strategies (FX_GOLDEN: the retired rules under fx_ names) give the scans something to fire.
+  assert.deepStrictEqual(JSON.parse(strategies.list({ json: true }, { env: {}, now: clock() }).text).map(r => r.name), ['momentum_continuation', 'prop_portfolio', 'trade_lifecycle']);
   const ctx = { env: { FTH_STRATEGIES_DIRS: FX_GOLDEN }, now: clock() };
   const rows = JSON.parse(strategies.list({ json: true }, ctx).text);
   assert.ok(rows.some(r => r.name === 'fx_orb'));
