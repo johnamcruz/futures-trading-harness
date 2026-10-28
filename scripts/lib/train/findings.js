@@ -125,7 +125,8 @@ function findingLine(f) {
     const ex = (Array.isArray(f.examples) ? f.examples : []).map(x => `\n   - exit ${x}`).join('');
     const what = f.code === 'late-exit' ? 'exits that came late: open profit given back past the threshold before the exit'
       : `exits that cut a trend: price went on the trade's way after the exit before turning against it${f.code === 'cut-trend-flip' ? ' (decided on an HTF bias flip against the trade)' : ''}`;
-    return `${f.id}. ${f.skill || '(no skill named)'}: exit-decision at ${f.step || 'no step'}: ${f.count} of ${f.of} scored exits were ${what}${f.detail ? `. By: ${f.detail}` : ''}${ex}`;
+    const owners = Array.isArray(f.skills) && f.skills.length ? f.skills.join(' or ') : f.skill;
+    return `${f.id}. ${owners || '(no skill named)'}: exit-decision at ${f.step || 'no step'}: ${f.count} of ${f.of} scored exits were ${what}${f.detail ? `. By: ${f.detail}` : ''}${ex}`;
   }
   const what = f.kind === 'misread' ? `${f.count} of ${f.of} claimed reads refused` : f.kind === 'missed' ? `missed ${f.count} of ${f.of} times its read was true for the side` : `${f.count} refusal(s) for a reason the facts refute`;
   return `${f.id}. ${f.skill || (f.agent ? `agent ${f.agent}` : '(no skill read at the bar)')}: ${f.kind}: ${what}${f.detail ? `. Most often: ${f.detail}` : ''}`;

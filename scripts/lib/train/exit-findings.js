@@ -5,9 +5,11 @@
  * half that cut a trend or came late, read from each run's trend-capture report (`exits`: replay/exit-scorecard.js),
  * grouped by class and ranked by the R they cost, for the proposer to write edits to the read that decides them.
  *
- * Kind `exit-decision`, owned by the open trade's read (OWNER: pullback-vs-reversal; manage-position, the action, is a
- * management skill and is never probed: findings.js NOT_PROBED), on the flow's target step (where a trade's profit is
- * taken). Only what the MODEL decided is a finding (MODEL_DECIDED): its market exit (model-exit), the stop it tightened
+ * Kind `exit-decision`, on the flow's target step (where a trade's profit is taken), owned by the skills that decide its
+ * class (OWNERS, `skills`, any one an edit may change; `skill` the first): a cut trend by the open trade's read
+ * (pullback-vs-reversal) and the action on it (manage-position); a late exit by those and the profit-taking
+ * (take-profit). manage-position owns an exit finding only: it has no read, so it never owns a read finding (findings.js
+ * NOT_PROBED). Only what the MODEL decided is a finding (MODEL_DECIDED): its market exit (model-exit), the stop it tightened
  * that took the trade out (model-stop), or its hold to the initial stop with the runner's trail never armed (initial-stop:
  * the runner had not moved the stop, so the hold was the model's alone). The runner's own trail and close, and the target,
  * are the report's rows only, never findings: the runner's trail giving back is the rulebook's design (its lock_giveback_r,
@@ -24,8 +26,8 @@
  * (config/training.json exitFindings) of the costliest, as the facts code read at the decision (exit-scorecard.js
  * factsText: no date, time or price). The exits that were right are counted in `of`, never findings.
  *
- *   KIND, OWNER, MODEL_DECIDED
- *   exitFindings(captures, { exists, max })   [{ kind, step, skill, code, count, cost, of, detail, examples }], by cost
+ *   KIND, OWNER, OWNERS, MODEL_DECIDED
+ *   exitFindings(captures, { exists, max })   [{ kind, step, skill, skills, code, count, cost, of, detail, examples }], by cost
  *   exitTally(captures)                       the summed exit-scorecard totals of the captures (the round's report)
  */
 
@@ -33,6 +35,12 @@ const ES = require('../replay/exit-scorecard');
 
 const KIND = 'exit-decision';
 const OWNER = 'pullback-vs-reversal';
+// The skills an exit finding's edit may change, by its code: the read first, then the action, then the profit-taking.
+const OWNERS = Object.freeze({
+  'cut-trend': Object.freeze([OWNER, 'manage-position']),
+  'cut-trend-flip': Object.freeze([OWNER, 'manage-position']),
+  'late-exit': Object.freeze([OWNER, 'manage-position', 'take-profit']),
+});
 const STEP = 'target';
 const EX = require('../tunables').training().exitFindings; // examples per finding and their length (config/training.json)
 const MODEL = new Set(['model-exit', 'model-stop']);
@@ -65,13 +73,13 @@ function exitFindings(captures, { exists = () => true, max } = {}) {
     g.by.set(d.exitBy, (g.by.get(d.exitBy) || 0) + 1);
     groups.set(code, g);
   }
-  const owner = exists(OWNER) ? OWNER : null;
   return [...groups.values()].sort((a, b) => b.cost - a.cost || b.members.length - a.members.length || a.code.localeCompare(b.code)).slice(0, max).map(g => {
     const examples = [...g.members].sort((a, b) => costOf(b, g.code) - costOf(a, g.code))
       .map(d => `${d.exitBy}: ${d.facts ? ES.factsText(d.facts) : 'no facts at the decision'}`).slice(0, EX.examples)
       .map(x => (x.length > EX.exampleChars ? `${x.slice(0, EX.exampleChars - 3)}...` : x));
+    const skills = OWNERS[g.code].filter(s => exists(s));
     return {
-      kind: KIND, step: STEP, skill: owner, code: g.code, count: g.members.length, cost: r2(g.cost), of: all.length,
+      kind: KIND, step: STEP, skill: skills[0] || null, skills, code: g.code, count: g.members.length, cost: r2(g.cost), of: all.length,
       detail: [...g.by].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).map(([k, n]) => `${k} (${n})`).join('; '), examples,
     };
   });
@@ -84,4 +92,4 @@ function exitTally(captures) {
   });
 }
 
-module.exports = { KIND, OWNER, MODEL_DECIDED, exitFindings, exitTally };
+module.exports = { KIND, OWNER, OWNERS, MODEL_DECIDED, exitFindings, exitTally };

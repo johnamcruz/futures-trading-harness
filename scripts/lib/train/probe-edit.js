@@ -7,7 +7,8 @@
  * Code checks it before anything runs it:
  *
  * - the tag: exactly one target, the skill or the role the edit changes; a finding id the round listed (a finding that
- *   names a skill or a role: that one; a finding that names neither: any skill or editable role), and one of KINDS
+ *   names a skill or a role: that one; an exit finding: any of the skills it lists; a finding that names neither: any
+ *   skill or editable role), and one of KINDS
  *   (rewording, example, rule, removal);
  * - the edits: every one in that skill's SKILL.md or that role's agents/<role>.md (proposal.js validateProposal runs as
  *   well, with a role's own guards: agent-edit.js);
@@ -87,9 +88,13 @@ function tagErrors(tag, proposal, { findings = [] } = {}) {
     errors.push(tag.skill !== undefined && tag.agent !== undefined ? 'tag: one target, the skill or the agent the edit changes, not both'
       : tag.agent !== undefined ? `tag.agent: one of ${EDITABLE_ROLES.join(', ')}` : 'tag.skill: the skill the edit changes (or tag.agent: the desk role)');
   } else if (finding) {
-    // A finding that names its owner: only that skill or role. One that names neither: any of them.
+    // A finding that names its owner: only that skill or role. One that names neither: any of them. An exit finding
+    // names its owners (exit-findings.js OWNERS): any one of those skills.
+    const owners = finding.kind === 'exit-decision' && Array.isArray(finding.skills) && finding.skills.length ? finding.skills : null;
     const owner = finding.skill ? { kind: 'skill', name: finding.skill } : finding.agent ? { kind: 'agent', name: finding.agent } : null;
-    if (owner && !(owner.kind === target.kind && owner.name === target.name)) errors.push(`tag.${target.kind}: finding ${finding.id} is about ${owner.kind === 'agent' ? `agent ${owner.name}` : owner.name}, not ${target.label}`);
+    if (owners) {
+      if (!(target.kind === 'skill' && owners.includes(target.name))) errors.push(`tag.${target.kind}: finding ${finding.id} is about ${owners.join(' or ')}, not ${target.label}`);
+    } else if (owner && !(owner.kind === target.kind && owner.name === target.name)) errors.push(`tag.${target.kind}: finding ${finding.id} is about ${owner.kind === 'agent' ? `agent ${owner.name}` : owner.name}, not ${target.label}`);
   }
   const edits = isObj(proposal) && Array.isArray(proposal.edits) ? proposal.edits : [];
   const files = [...new Set(edits.map(e => (isObj(e) ? e.file : null)))];

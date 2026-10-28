@@ -594,8 +594,11 @@ and leg ids; the lessons lines record the batch too.
   trail, its close and the target are rows of the report only; an initial
   stop that then ran the trade's way is the report's stop-placement row.
   Findings rank by the R they cost with the trend findings, owned by the
-  open trade's read (`pullback-vs-reversal`; `manage-position` is a
-  management skill, never probed), each example the facts code read at the
+  skills that decide the class, any one of which an edit may change
+  (`scripts/lib/train/exit-findings.js` `OWNERS`): a cut trend by the open
+  trade's read (`pullback-vs-reversal`) and the action on it
+  (`manage-position`), a late exit by those and `take-profit`.
+  `manage-position` has no read, so it never owns a read finding. Each example is the facts code read at the
   decision (`scripts/lib/trading/trade-read.js` on the bars closed by
   then), no date, price or R. The round's report counts them (`probe
   exits`). An exit finding's edit is screened as a curated one, with the

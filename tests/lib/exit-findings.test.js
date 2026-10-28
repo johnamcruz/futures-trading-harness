@@ -27,6 +27,9 @@ test('exitFindings: only what the model decided: cut-trend, cut-trend-flip and l
   assert.deepStrictEqual(f.map(x => [x.code, x.count, x.cost, x.of]), [['cut-trend', 2, 4, 6], ['cut-trend-flip', 1, 4, 6], ['late-exit', 1, 2, 6]]);
   assert.deepStrictEqual(EF.MODEL_DECIDED, new Set(['model-exit', 'model-stop', 'initial-stop']));
   for (const x of f) assert.deepStrictEqual([x.kind, x.step, x.skill], [EF.KIND, 'target', EF.OWNER]);
+  // Owned by the skills that decide the class: a cut trend by the read and the action, a late exit by the profit-taking too.
+  assert.deepStrictEqual(f.map(x => x.skills), [['pullback-vs-reversal', 'manage-position'], ['pullback-vs-reversal', 'manage-position'], ['pullback-vs-reversal', 'manage-position', 'take-profit']]);
+  assert.deepStrictEqual(EF.exitFindings(captures, { exists: s => s !== 'pullback-vs-reversal' }).map(x => [x.skill, x.skills.length]), [['manage-position', 1], ['manage-position', 1], ['manage-position', 2]], 'a skill not in the tree is no owner');
   assert.strictEqual(f[0].detail, 'model-exit (1); model-stop (1)');
   assert.strictEqual(f[2].detail, 'initial-stop (1)');
   // Examples: the facts at the decision as words, the costliest first, no price.
@@ -34,7 +37,7 @@ test('exitFindings: only what the model decided: cut-trend, cut-trend-flip and l
   for (const x of f) for (const e of x.examples) assert.doesNotMatch(e, /\d{4,}/);
   // max, and no owner skill in the tree: the finding stays, unowned.
   assert.strictEqual(EF.exitFindings(captures, { max: 1 }).length, 1);
-  assert.strictEqual(EF.exitFindings(captures, { exists: () => false })[0].skill, null);
+  assert.deepStrictEqual([EF.exitFindings(captures, { exists: () => false })[0].skill, EF.exitFindings(captures, { exists: () => false })[0].skills], [null, []]);
   assert.deepStrictEqual(EF.exitFindings([]), []);
 });
 
@@ -50,8 +53,40 @@ test('findingLine: an exit-decision finding names its class and who exited, neve
   const [f] = F.mergeFindings(EF.exitFindings([doc([d({ cls: 'cut', leftR: 2.5, flip: true })])]), []);
   assert.strictEqual(F.FINDING_KINDS.includes('exit-decision'), true);
   const line = F.findingLine(f);
-  assert.match(line, /^F1\. pullback-vs-reversal: exit-decision at target: 1 of 1 scored exits were exits that cut a trend: price went on the trade's way after the exit before turning against it \(decided on an HTF bias flip against the trade\)\. By: model-exit \(1\)\n {3}- exit model-exit: /);
+  assert.match(line, /^F1\. pullback-vs-reversal or manage-position: exit-decision at target: 1 of 1 scored exits were exits that cut a trend: price went on the trade's way after the exit before turning against it \(decided on an HTF bias flip against the trade\)\. By: model-exit \(1\)\n {3}- exit model-exit: /);
   assert.doesNotMatch(line, /\dR\b|\d{4,}/);
   const late = F.findingLine(F.mergeFindings(EF.exitFindings([doc([d({ late: true, lateR: 1.5, r: 0, peakR: 3 })])]), [])[0]);
-  assert.match(late, /exits that came late: open profit given back past the threshold before the exit/);
+  assert.match(late, /^F1\. pullback-vs-reversal or manage-position or take-profit: exit-decision at target: .*exits that came late: open profit given back past the threshold before the exit/);
+});
+
+test('tagErrors: an exit finding takes an edit to any skill it lists, never another; read findings keep their one owner', () => {
+  const PE = require('../../scripts/lib/train/probe-edit');
+  const findings = F.mergeFindings(EF.exitFindings([doc([d({ cls: 'cut', leftR: 2.5 }), d({ late: true, lateR: 1.5, r: 0, peakR: 3 })])]), [
+    { kind: 'missed', skill: 'rejection', count: 2, of: 5 }, { kind: 'misread', skill: 'manage-position', skills: ['take-profit'], count: 1, of: 1 },
+  ]);
+  const byCode = c => findings.find(f => f.code === c).id;
+  const tag = (skill, finding) => ({ skill, finding, kind: 'rule' });
+  const prop = skill => ({ edits: [{ file: `skills/${skill}/SKILL.md`, find: 'a', replace: 'b' }] });
+  const errs = (skill, finding) => PE.tagErrors(tag(skill, finding), prop(skill), { findings });
+  for (const s of EF.OWNERS['late-exit']) assert.deepStrictEqual(errs(s, byCode('late-exit')), [], s);
+  for (const s of EF.OWNERS['cut-trend']) assert.deepStrictEqual(errs(s, byCode('cut-trend')), [], s);
+  assert.match(errs('take-profit', byCode('cut-trend')).join(';'), /is about pullback-vs-reversal or manage-position, not take-profit/, 'an unlisted skill refused');
+  assert.match(errs('rejection', byCode('late-exit')).join(';'), /is about pullback-vs-reversal or manage-position or take-profit, not rejection/);
+  assert.match(PE.tagErrors({ agent: 'risk-manager', finding: byCode('late-exit'), kind: 'rule' }, { edits: [{ file: 'agents/risk-manager.md', find: 'a', replace: 'b' }] }, { findings }).join(';'), /is about pullback-vs-reversal or manage-position or take-profit, not agent risk-manager/, 'never a role');
+  // One file per edit still.
+  assert.match(PE.tagErrors(tag('manage-position', byCode('late-exit')), { edits: [...prop('manage-position').edits, ...prop('take-profit').edits] }, { findings }).join(';'), /one document only/);
+  // A read finding: its one skill only (a list on a read finding is ignored).
+  const read = findings.find(f => f.kind === 'missed').id;
+  assert.deepStrictEqual(errs('rejection', read), []);
+  assert.match(errs('manage-position', read).join(';'), /is about rejection, not manage-position/);
+  assert.match(errs('take-profit', findings.find(f => f.kind === 'misread').id).join(';'), /is about manage-position, not take-profit/);
+});
+
+test('manage-position still never owns a read finding', () => {
+  assert.ok(F.NOT_PROBED.has('manage-position'));
+  const row = skill => ({ skill, wrong: 9, reads: 9, topRefusals: [], missed: 9, relevant: 9, topMissed: [] });
+  const usage = [row('manage-position'), row('rejection')];
+  const found = F.findingsFrom({ skills: usage, refusals: [{ skills: ['manage-position'], falseReasons: ['x'] }], max: 8, exists: () => true });
+  assert.ok(found.some(f => f.skill === 'rejection'), 'the read skill is found');
+  assert.ok(found.every(f => f.skill !== 'manage-position' && !(f.skills || []).includes('manage-position')), JSON.stringify(found));
 });
