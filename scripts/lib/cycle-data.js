@@ -311,7 +311,7 @@ const failed = why => ({ blocks: [], missing: [], note: `The runner's reads for 
  * What a desk role reads first every cycle, as its agent body says (agents/*.md), with its arguments as written there:
  * every analyst its bar briefing (`bar_briefing {"symbol"}`); market structure the live strategies (`strategies_list`),
  * volume and liquidity the live quote (`get_quote`, once); risk-manager phase 1 its steps 1 to 5 (the server's config,
- * the accounts, the account's snapshot, today's reviews and today's lessons, the attempts). An analyst on its own
+ * the accounts, the account's snapshot, today's reviews, the lessons (the harness tool), the attempts). An analyst on its own
  * timeframe reads its timeframe's briefing first (`timeframe`, its primary read: frameServed), and the runner's for its
  * session facts.
  */
@@ -324,8 +324,8 @@ function deskReads(role, { symbol, contractId = null, accountId = null, timefram
   if (role === RISK_MANAGER) {
     const account = Number.isInteger(accountId) && accountId >= 1 ? [{ tool: 'get_account_snapshot', args: { accountId } }] : [];
     // Today's reviews (since the trading day's start). The lessons through the harness tool `lessons`, never the raw
-    // journal: only those active on the role's own clock (written today, never after it: trading/lesson-expiry.js, so
-    // no earlier day's and no other run's), each as advice with its date, with the reviews' instincts.
+    // journal: the run's own (written by the role's clock, since a fresh attempt's start: trading/lesson-advice.js, so
+    // no other run's), each as advice with its date and record, with the reviews' instincts.
     const review = { tool: 'journal_read', args: { kind: 'review', ...(typeof since === 'string' && since ? { since } : {}) } };
     return [{ tool: 'get_server_config', args: {} }, { tool: 'list_accounts', args: {} }, ...account, review, { tool: 'lessons', args: {} }, { tool: 'combine_status', args: {} }];
   }

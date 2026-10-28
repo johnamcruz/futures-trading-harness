@@ -26,7 +26,7 @@ const shadowFile = home => path.join(home, 'lessons', 'shadow.jsonl');
 
 function readLines(file) {
   if (!fs.existsSync(file)) return [];
-  return fs.readFileSync(file, 'utf8').split('\n').filter(Boolean).flatMap(l => { try { return [JSON.parse(l)]; } catch (_err) { return []; } });
+  return fs.readFileSync(file, 'utf8').split('\n').filter(Boolean).flatMap(l => { try { const x = JSON.parse(l); return x && typeof x === 'object' && !Array.isArray(x) ? [x] : []; } catch (_err) { return []; } });
 }
 
 function readShadow(home, now) {

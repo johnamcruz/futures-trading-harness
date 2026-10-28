@@ -935,6 +935,10 @@
    "value": 10,
    "from": "trading/track-record.js MIN_SLICE"
   },
+  "prompt.lessonMinPlans": {
+   "value": 10,
+   "from": "new in feat/lesson-restrictions (the composed plans a lesson's record needs before it gets a verdict, trading/lesson-advice.js; the owner's \"It needs to learn from mistakes and improve\", 2026-10-27)"
+  },
   "prompt.trackRecordLiveSlice": {
    "value": 5,
    "from": "trading/track-record.js LIVE_SLICE"

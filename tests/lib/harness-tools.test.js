@@ -216,7 +216,7 @@ test('lessons and reconcile read the broker\'s journal and the day\'s decision l
   ]);
   // The lesson as advice with its date and record, the next day too; never before it was written (another run's).
   const next = JSON.parse(lessons.lessons({ json: true, top: 1 }, { env, now: () => new Date('2026-10-08T14:00:00.000Z') }).text);
-  assert.deepStrictEqual(next.map(x => x.text), ['lesson from 2026-10-07 (taken since n=0; composed plans since n=0; provisional; broad: names no condition the bars can check): advice, weigh it: Wait for the retest.']);
+  assert.deepStrictEqual(next.map(x => x.text), ['lesson from 2026-10-07 (taken since n=0; all composed plans since n=0; provisional; broad: names no condition the bars can check): advice, weigh it: Wait for the retest.']);
   assert.match(lessons.lessons({}, { env, now: () => new Date('2026-10-07T14:00:00.000Z') }).text, /^No instincts yet/);
   assert.throws(() => reconcile.reconcile({ day: '2026-10-07' }, { env }), /no decision log for 2026-10-07/);
   assert.throws(() => reconcile.reconcile({ day: '10/07' }, { env }), /--day YYYY-MM-DD/);

@@ -120,8 +120,8 @@ test('context e2e: the cycle prompt carries the day, the fired strategy\'s track
   assert.match(p, /Your last 1 reviewed trade\(s\) \(0W\/1L, E -1R\), oldest first: fx_value_area short loss -1R in range \[mistake:faded-trend\]/);
   assert.match(p, /Your recurring mistakes and lessons \(confidence; notes from your own past, not rules\): [^]*?\(0\.\d\) mistake:faded-trend/);
   // Each lesson as advice with its date and record, never a rule; the later run's lesson never.
-  assert.match(p, /\(0\.\d\) lesson from 2026-04-27 \(taken since n=0; composed plans since n=0; provisional\): advice, weigh it: fx_value_area shorts with the 15m trend up/);
-  assert.match(p, /lesson from 2026-04-24 \(taken since n=0; composed plans since n=0; provisional; broad: names no condition the bars can check\): advice, weigh it: Rule: no fx_value_area entry/);
+  assert.match(p, /\(0\.\d\) lesson from 2026-04-27 \(taken since n=0; all composed shorts since n=0; provisional\): advice, weigh it: fx_value_area shorts with the 15m trend up/);
+  assert.match(p, /lesson from 2026-04-24 \(taken since n=0; all composed plans since n=0; provisional; broad: names no condition the bars can check\): advice, weigh it: Rule: no fx_value_area entry/);
   assert.doesNotMatch(p, /another run/);
   assert.doesNotMatch(p, /\(form\)|\d+ trades, win \d+%, E/);
   assert.doesNotMatch(p, /open: CON/, 'the open position is described once, as a trade');

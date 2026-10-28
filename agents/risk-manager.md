@@ -30,7 +30,7 @@ line). Phase 1 writes no PLAN line; its output below stays as it is.
 3. `get_account_snapshot`: balance, open positions, working orders, today's
    realized P&L, `remainingBeforeLimit`.
 4. `journal_read` today's `review` entries: results, loss streak, losses today.
-   The harness tool `lessons`: advice, with each one's record.
+   The harness tool `lessons`: advice, with its record.
 5. If a policy strategy (`signal: policy`) is in play, call the harness
    tool `combine_status`: the attempt (floor, cushion, size budget,
    sessions left, any entry block) and the live verdicts. Report each attempt

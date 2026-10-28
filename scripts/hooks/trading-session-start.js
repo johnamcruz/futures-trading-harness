@@ -54,7 +54,8 @@ function buildBriefing(entries, now, config, root = null, home = null) {
   const today = entriesSince(entries, dayStart);
   // The run's own lessons (by now, since a fresh attempt's start), each as advice with its date and record.
   const from = home ? historyFrom(home) : null;
-  const shadow = home ? readShadow(home, now) : [];
+  let shadow = [];
+  try { shadow = home ? readShadow(home, now) : []; } catch (_err) { /* the lessons show without their composed plans */ }
   const lessons = scopedLessons(entries, { now, from }).slice(-MAX_LESSONS);
   const { streak, losses } = lossState(today);
   const placed = today.filter(e => e.kind === 'order_placed').length;
@@ -89,7 +90,7 @@ function buildBriefing(entries, now, config, root = null, home = null) {
     const reviews = graded(entries);
     for (const l of lessons) {
       const tags = Array.isArray(l.tags) && l.tags.length ? ` [${l.tags.join(', ')}]` : '';
-      lines.push(`- ${clip(adviceText(l, lessonRecord(l, { reviews, shadow })))}${tags}`);
+      lines.push(`- ${clip(adviceText(l, lessonRecord(l, { reviews, shadow, now, from })))}${tags}`);
     }
   }
   // The reviews' instincts; the lessons are above, each once.

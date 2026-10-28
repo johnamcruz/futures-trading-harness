@@ -120,7 +120,7 @@ function instincts(entries, { now = null, from = null, shadow = [] } = {}) {
     const n = Number((/(\d+)\s+(?:trades?|reviews?)/i.exec(String(l.text || '')) || [])[1] || 1);
     out.push({
       kind: 'lesson', key: (l.tags || []).join(' ') || 'lesson',
-      text: adviceText({ ...l, text: String(l.text || '').replace(/\s+/g, ' ').slice(0, 200) }, lessonRecord(l, { reviews, shadow })),
+      text: adviceText({ ...l, text: String(l.text || '').replace(/\s+/g, ' ').slice(0, 200) }, lessonRecord(l, { reviews, shadow, now, from })),
       confidence: round(confidenceFor(n)), evidence: n, at: new Date(entryTime(l)).toISOString(),
     });
   }

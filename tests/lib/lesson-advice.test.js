@@ -4,16 +4,17 @@ const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
-const { lessonDay, scopedLessons, lessonSide, isBroad, lessonRecord, adviceText } = require('../../scripts/lib/trading/lesson-advice');
+const { lessonDay, scopedLessons, lessonSide, lessonDirection, isBroad, lessonRecord, adviceText } = require('../../scripts/lib/trading/lesson-advice');
 const { instincts, digest, graded } = require('../../scripts/lib/trading/instincts');
 
 const ROOT = path.resolve(__dirname, '..', '..');
-const MIN = require('../../scripts/lib/tunables').runner().prompt.trackRecordMinSlice;
+const MIN = require('../../scripts/lib/tunables').runner().prompt.lessonMinPlans;
+const LATER = new Date('2024-07-01T14:00:00.000Z');
 const NOW = new Date('2024-06-11T14:00:00.000Z');
 const lesson = (ts, text, tags = ['setup:prop_portfolio', 'MNQ']) => ({ ts, kind: 'lesson', text, tags });
 const review = (ts, result, r, text) => ({ ts, kind: 'review', text, tags: [`result:${result}`, 'setup:prop_portfolio', `r:${r}`] });
 // A composed plan's shadow outcome: filled at `at` + 3 min, out 30 min later.
-const plan = (at, side, R) => ({ id: at, root: 'MNQ', side, at, bar: at, entryTime: new Date(Date.parse(at) + 180000).toISOString(), exitTime: new Date(Date.parse(at) + 1980000).toISOString(), exitReason: R > 0 ? 'target' : 'stop', R });
+const plan = (at, side, R, root = 'MNQ') => ({ id: at + root, root, side, at, bar: at, entryTime: new Date(Date.parse(at) + 180000).toISOString(), exitTime: new Date(Date.parse(at) + 1980000).toISOString(), exitReason: R > 0 ? 'target' : 'stop', R });
 
 test('scope: the run\'s own lessons only, written by now and since a fresh attempt\'s start; undated or no clock: none', () => {
   const old = lesson('2024-05-24T19:51:00.000Z', 'Rule: no prop_portfolio entry until the cause is journaled.');
@@ -37,6 +38,11 @@ test('a lesson names its side and is flagged broad when it names no condition th
   assert.strictEqual(isBroad(lesson('t', 'Rule for the next session: no prop_portfolio entry until the target-leg cancel cause is journaled')), true);
   assert.strictEqual(isBroad(lesson('t', 'longs with the 15m close below EMA20 and 3m SuperTrend down: 0W/2L')), false);
   assert.strictEqual(isBroad(lesson('t', 'require the 15m not in a fresh CHoCH down')), false);
+  assert.strictEqual(isBroad(lesson('t', 'shorts with the 3m trend up above VWAP: skip')), false);
+  // A timeframe or a common word alone is no condition.
+  assert.strictEqual(isBroad(lesson('t', 'No trading after a loss; the 5m chart was a mess, close everything')), true);
+  assert.strictEqual(isBroad(lesson('t', 'Stop taking longs: 1h high')), true);
+  assert.deepStrictEqual(['skip shorts with the 3m trend up', 'favour longs on the 3m trend up', 'the 15m EMA20 matters'].map(t => lessonDirection(lesson('t', t))), ['against', 'for', null]);
 });
 
 test('a lesson\'s record: the trades taken since and the composed plans walked forward since, repeats once; provisional, supported or contradicted', () => {
@@ -47,20 +53,34 @@ test('a lesson\'s record: the trades taken since and the composed plans walked f
     review('2024-06-05T17:00:00.000Z', 'loss', -1, 'prop_portfolio long 3 MNQ, stop'), // the other side
   ]);
   const few = [plan('2024-06-05T14:00:00.000Z', 'short', 2), plan('2024-06-05T14:03:00.000Z', 'short', 2), plan('2024-06-05T15:00:00.000Z', 'long', -1)];
-  const r = lessonRecord(l, { reviews, shadow: few });
+  const r = lessonRecord(l, { reviews, shadow: few, now: LATER });
   assert.deepStrictEqual(r.taken, { n: 1, wins: 1, losses: 0, R: 2.1 });
   assert.deepStrictEqual(r.shadow, { n: 1, wins: 1, losses: 0, R: 2 }, 'the short side only, the repeat while the first was open counted once');
   assert.strictEqual(r.status, 'provisional');
   const day = k => `2024-06-${String(5 + k).padStart(2, '0')}T14:00:00.000Z`;
   const winners = Array.from({ length: MIN }, (_, k) => plan(day(k), 'short', k % 3 === 0 ? -1 : 2));
-  assert.strictEqual(lessonRecord(l, { reviews, shadow: winners }).status, `contradicted by n=${MIN} since 2024-06-04`);
+  assert.strictEqual(lessonRecord(l, { reviews, shadow: winners, now: LATER }).status, `contradicted by n=${MIN} since 2024-06-04`);
   const losers = Array.from({ length: MIN }, (_, k) => plan(day(k), 'short', -1));
-  assert.strictEqual(lessonRecord(l, { reviews, shadow: losers }).status, `supported by n=${MIN}`);
+  assert.strictEqual(lessonRecord(l, { reviews, shadow: losers, now: LATER }).status, `supported by n=${MIN}`);
+  // A lesson for a setup: the same winners support it; a broad one, or one of no clear direction, gets no verdict.
+  const favour = lesson('2024-06-04T19:51:00.000Z', 'favour shorts with the 3m trend down');
+  assert.strictEqual(lessonRecord(favour, { shadow: winners, now: LATER }).status, `supported by n=${MIN}`);
+  assert.strictEqual(lessonRecord(lesson('2024-06-04T19:51:00.000Z', 'skip shorts entirely'), { shadow: winners, now: LATER }).status, 'no verdict');
+  // Another symbol's plans are not this lesson's (its symbol tag); untagged, every symbol's count.
+  const other = Array.from({ length: MIN }, (_, k) => plan(day(k), 'short', 2, 'MES'));
+  assert.strictEqual(lessonRecord(l, { shadow: other, now: LATER }).shadow.n, 0);
+  assert.strictEqual(lessonRecord({ ...l, tags: ['setup:prop_portfolio', 'lesson'] }, { shadow: other, now: LATER }).shadow.n, MIN);
+  // Nothing after now counts (a later review, a plan settled after the clock), nor before a fresh attempt's start.
+  const future = graded([review('2026-10-01T15:00:00.000Z', 'win', 2, 'prop_portfolio short 3 MNQ')]);
+  assert.strictEqual(lessonRecord(l, { reviews: future, now: NOW }).taken.n, 0);
+  assert.strictEqual(lessonRecord(l, { shadow: winners, now: NOW }).shadow.n, 6, 'only the plans settled by 2024-06-11 14:00 (06-05 to 06-10)');
+  assert.strictEqual(lessonRecord(l, { reviews, now: LATER, from: Date.parse('2024-06-05T16:00:00Z') }).taken.n, 0);
+  assert.strictEqual(lessonRecord(l, { reviews, shadow: winners }).taken.n, 0, 'no clock: nothing counts');
   // Unsettled or unfilled plans are no outcome.
-  assert.strictEqual(lessonRecord(l, { shadow: [{ ...plan(day(0), 'short', 2), R: null }] }).shadow.n, 0);
-  const text = adviceText(l, lessonRecord(l, { reviews, shadow: winners }));
-  assert.match(text, /^lesson from 2024-06-04 \(taken since n=1, 1W\/0L, \+2\.1R; composed plans since n=\d+, \d+W\/\d+L, \+[\d.]+R; contradicted by n=\d+ since 2024-06-04\): advice, weigh it: prop_portfolio shorts/);
-  assert.match(adviceText(lesson('2024-06-04T19:51:00.000Z', 'skip entries with no scan signal')), /taken since n=0; composed plans since n=0; provisional; broad: names no condition the bars can check\): advice, weigh it: /);
+  assert.strictEqual(lessonRecord(l, { shadow: [{ ...plan(day(0), 'short', 2), R: null }], now: LATER }).shadow.n, 0);
+  const text = adviceText(l, lessonRecord(l, { reviews, shadow: winners, now: LATER }));
+  assert.match(text, /^lesson from 2024-06-04 \(taken since n=1, 1W\/0L, \+2\.1R; all composed shorts since n=\d+, \d+W\/\d+L, \+[\d.]+R; contradicted by n=\d+ since 2024-06-04\): advice, weigh it: prop_portfolio shorts/);
+  assert.match(adviceText(lesson('2024-06-04T19:51:00.000Z', 'skip entries with no scan signal')), /taken since n=0; all composed plans since n=0; provisional; broad: names no condition the bars can check\): advice, weigh it: /);
 });
 
 test('instincts and the digest show the run\'s lessons with their record; no clock, no lesson; the reviews\' evidence stays', () => {
@@ -72,7 +92,7 @@ test('instincts and the digest show the run\'s lessons with their record; no clo
   const list = instincts(journal, { now: NOW, shadow: [plan('2024-06-05T14:00:00.000Z', 'long', 2)] });
   const ls = list.filter(x => x.kind === 'lesson');
   assert.strictEqual(ls.length, 1, 'the later run\'s lesson is not this run\'s');
-  assert.match(ls[0].text, /^lesson from 2024-06-04 \(taken since n=2, 0W\/2L, -2R; composed plans since n=1, 1W\/0L, \+2R; provisional; broad[^)]*\): advice, weigh it: Rule: a risk-manager restriction stands/);
+  assert.match(ls[0].text, /^lesson from 2024-06-04 \(taken since n=2, 0W\/2L, -2R; all composed plans since n=1, 1W\/0L, \+2R; provisional; broad[^)]*\): advice, weigh it: Rule: a risk-manager restriction stands/);
   assert.ok(list.some(x => x.kind === 'mistake') && list.some(x => x.kind === 'setup'));
   assert.ok(!instincts(journal).some(x => x.kind === 'lesson'), 'no clock, no lesson');
   const prompt = digest(journal, 10, { kinds: ['mistake', 'lesson'], form: false, now: NOW });
