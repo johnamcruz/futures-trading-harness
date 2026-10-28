@@ -645,7 +645,7 @@ test('with a trend set: its missed legs are findings first; an edit that catches
   // Given the day's control windows; the base rate in the report; the base rate and the plan that lost in the prompt.
   assert.ok(w.calls.trendControls.every(c => Array.isArray(c) && c.every(x => Number.isFinite(x.from) && Number.isFinite(x.to))), JSON.stringify(w.calls.trendControls));
   assert.deepStrictEqual(report.trend.baseRate.controlBars, { sides: w.calls.trendFacts.length, valid: w.calls.trendFacts.length, won: 0, lost: w.calls.trendFacts.length, undecided: 0 });
-  assert.match(w.calls.proposeProbes[0].controls, /^Base rate: .*\nValid plan, it lost .*\n {3}- long: valid plan, it lost: "15m up"/);
+  assert.match(w.calls.proposeProbes[0].controls, /^Base rate: .*\nThose control plans by setup type, from this round's control windows .*\n {3}- other: n=\d+, .*\nValid plan, it lost .*\n {3}- long: valid plan, it lost: "15m up"/);
   assert.deepStrictEqual(report.trend.probe.days.filter(d => report.trend.confirm.days.includes(d)), [], 'no day in both halves');
   assert.deepStrictEqual(report.trend.regression, [REG_DAY]);
   assert.deepStrictEqual(report.probes.map(p => p.verdict), ['helped', 'no effect', 'helped', 'hurt'], 'the greedy edit\'s catches on losing sessions never count; a leg lost on the regression day hurts');

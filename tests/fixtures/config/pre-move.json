@@ -380,6 +380,14 @@
    "value": 160,
    "from": "new in feat/ppc-trend-facts (owner-approved 2026-10-24, build A: what the model said at an example leg, and each contradicting clause, clipped, e.g. at 160 characters, so the verified reads still fit the example)"
   },
+  "trendFindings.setupTypes": {
+   "value": 5,
+   "from": "new in feat/ppc-setup-rates (owner-approved 2026-10-28, option A: the base rate's control plans split by setup type, at most a few types, e.g. 5, so the findings stay within a small model's prompt)"
+  },
+  "trendFindings.setupMinN": {
+   "value": 3,
+   "from": "new in feat/ppc-setup-rates (owner-approved 2026-10-28, option A: a setup type with fewer control plans, e.g. under 3, is folded into 'other', so no single plan reads as a type's rate)"
+  },
   "exitFindings.examples": {
    "value": 2,
    "from": "new in feat/ride-or-exit (P1 item F, the owner: \"The model needs to learn when to ride trend and when to exit\"): an exit finding shows the proposer a few of its costliest exits, e.g. 2, each as the facts code read at the decision"

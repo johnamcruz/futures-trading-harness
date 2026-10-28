@@ -40,8 +40,8 @@
  * cycle on no leg's span; at each, each side on its own, the same plan check (a leg bar is checked on the leg's side, so
  * the base rate counts control bar-sides, like with like). The base rate is the share with a valid plan, and each such
  * plan's outcome on the run's later bars that session: lost (its stop hit before its minimum R:R mark, the stop first
- * when one bar holds both), won, or undecided by the session's end. A plan that lost is a balancing example: never a
- * finding, never shown to the trader.
+ * when one bar holds both), won, or undecided by the session's end, in all and by the plan's setup type (its setup read's
+ * kind and level: setupRates). A plan that lost is a balancing example: never a finding, never shown to the trader.
  *
  *   entryBars(leg)                                the leg's entry-able cycles
  *   barFacts({ briefing, side, tick, plan, said, reads, records, cycle, sizeFits, names, missing })   one bar's facts
@@ -51,7 +51,9 @@
  *   outcomeOf({ side, entry, stop, minRR, after })   'lost' | 'won' | null from the bars after a plan's bar
  *   attachFacts(capture, { runDir, home, tree, barsFiles, controls })   the capture's missed legs with `facts`, and
  *                                                 its `controls` (read-only)
- *   controlsOf(captures)                          { legBars, controlBars: { sides, valid, won, lost, undecided }, losers }
+ *   controlsOf(captures)                          { legBars, controlBars: { sides, valid, won, lost, undecided }, bySetup, losers }
+ *   setupTypeOf(read), setupRates(valid)          a setup read's type (no timeframe, side or number); the control
+ *                                                 plans' outcomes by it (config/training.json setupTypes, setupMinN)
  *   scrub(text, { names, words })                 text without dates, months, days, clock times, prices, numbers (in
  *                                                 digits, words or fractions), ids or account names (for the proposer)
  *   exampleLine(leg), loserLine(x)                one example for the proposer (no date, time or price)
@@ -59,7 +61,7 @@
 
 const fs = require('fs');
 const path = require('path');
-const { STEPS, TF_ORDER, TF_MIN, parseRead, checkReads } = require('../trading/composed-reads');
+const { STEPS, STEP_KINDS, ENTRY_PATTERNS, TF_ORDER, TF_MIN, parseRead, checkReads } = require('../trading/composed-reads');
 const { entryRuleOf } = require('../trading/entry-rule');
 const { candidatesOf, repairOf } = require('../trading/compose-hints');
 const { trendRuleOf } = require('../trading/reasons');
@@ -67,7 +69,7 @@ const { standardPlans } = require('../learning/setup-library');
 const { skillOfRead } = require('../learning/curated-moments');
 const { NUMBER_WORDS, FRACTIONS } = require('./probe-edit');
 
-const TUN = require('../tunables').training().trendFindings; // config/training.json: examples, exampleChars, saidChars
+const TUN = require('../tunables').training().trendFindings; // config/training.json: examples, exampleChars, saidChars, setupTypes, setupMinN
 const isObj = x => Boolean(x) && typeof x === 'object' && !Array.isArray(x);
 const num = x => (typeof x === 'number' && Number.isFinite(x) ? x : null);
 const m3Of = b => (isObj(b) && isObj(b.sections) && isObj(b.sections.m3) && isObj(b.sections.m3.data) ? b.sections.m3.data : null);
@@ -169,8 +171,10 @@ function parityMiss(records, b, tick, unknown) {
 }
 
 /** A passing plan's entry and stop prices, its stop ticks and reads, from the standard plan or a repaired combination. */
-const planOfStandard = s => ({ via: 'standard', reads: (s.reads || []).map(r => (isObj(r) ? r.read : r)), stopTicks: s.plan && s.plan.stop ? num(s.plan.stop.ticks) : null, entry: s.plan && s.plan.entry ? num(s.plan.entry.price) : null, stop: s.plan && s.plan.stop ? num(s.plan.stop.price) : null });
-const planOfRepair = f => ({ via: 'together', reads: f.reads.map(r => r.read), stopTicks: num(f.planned.plan.stop.ticks), entry: num(f.planned.plan.entry.price), stop: num(f.planned.plan.stop.price) });
+// A plan's setup-step read (its first), for the base rate by setup type (controlsOf).
+const setupReadOf = reads => { const r = (reads || []).find(x => isObj(x) && x.step === 'setup'); return r ? r.read : null; };
+const planOfStandard = s => ({ via: 'standard', reads: (s.reads || []).map(r => (isObj(r) ? r.read : r)), setupRead: setupReadOf(s.reads), stopTicks: s.plan && s.plan.stop ? num(s.plan.stop.ticks) : null, entry: s.plan && s.plan.entry ? num(s.plan.entry.price) : null, stop: s.plan && s.plan.stop ? num(s.plan.stop.price) : null });
+const planOfRepair = f => ({ via: 'together', reads: f.reads.map(r => r.read), setupRead: setupReadOf(f.reads), stopTicks: num(f.planned.plan.stop.ticks), entry: num(f.planned.plan.entry.price), stop: num(f.planned.plan.stop.price) });
 
 /**
  * One bar's facts (see the header). plan: compose_check's plan arguments (size, tickValue, minRR, maxRiskUsd, stopRule,
@@ -215,7 +219,7 @@ function barFacts({ briefing, side, tick, plan, said = '', reads = [], records =
   if (framesUnknown) why = `${why}, on the known reads (${unknown.join(', ')} unknown)`;
   const sizeUnknown = !valid && /the attempt's size can't be worked out/.test(why);
   return {
-    ...base, known: !sizeUnknown && !framesUnknown, valid, why, via: chosen ? chosen.via : null, planReads: chosen ? chosen.reads : null,
+    ...base, known: !sizeUnknown && !framesUnknown, valid, why, via: chosen ? chosen.via : null, planReads: chosen ? chosen.reads : null, planSetup: chosen ? chosen.setupRead ?? null : null,
     entry: chosen ? chosen.entry ?? null : null, stop: chosen ? chosen.stop ?? null : null, stopTicks: chosen ? chosen.stopTicks ?? null : null, unknown,
     verified: Object.fromEntries(STEPS.map(s => [s, cand[s].map(x => x.read)])),
   };
@@ -318,7 +322,8 @@ function outcomeOf({ side, entry, stop, minRR, after }) {
 
 /**
  * The control bars' facts, one entry a bar and side (each side checked on its own, as a leg bar is on its leg's):
- * [{ bar, side, known, valid, planReads?, shown?, outcome? }], a valid plan's outcome 'lost' | 'won' | null (undecided).
+ * [{ bar, side, known, valid, planReads?, planSetup?, shown?, outcome? }], a valid plan's outcome 'lost' | 'won' | null
+ * (undecided); planSetup its setup-step read.
  */
 function controlFacts(cycles, { briefingAt, tick, plan, minutes, sizeFor, names, laterBars, missing = [], entryRule = null }) {
   const out = [];
@@ -331,7 +336,7 @@ function controlFacts(cycles, { briefingAt, tick, plan, minutes, sizeFor, names,
       const f = barFacts({ briefing: b, side, tick, plan, said: rec.result || '', sizeFits: sizeFor(rec), names, missing, entryRule });
       out.push({
         bar: barT, side, known: f.known, valid: f.valid,
-        ...(f.valid ? { planReads: f.planReads, shown: f.shown, outcome: outcomeOf({ side, entry: f.entry, stop: f.stop, minRR: plan.minRR, after: laterBars(close) }) } : {}),
+        ...(f.valid ? { planReads: f.planReads, planSetup: f.planSetup ?? null, shown: f.shown, outcome: outcomeOf({ side, entry: f.entry, stop: f.stop, minRR: plan.minRR, after: laterBars(close) }) } : {}),
       });
     }
   }
@@ -415,12 +420,64 @@ function attachFacts(capture, { runDir, home = path.resolve(runDir, '..', '..'),
   };
 }
 
+const OTHER = 'other';
+const isNumWord = w => /^[-$]?\d[\d.,]*$/.test(w);
+const levelWords = level => String(level || '').split(/\s+/).filter(w => w && !isNumWord(w)).join(' ');
+
+/**
+ * A setup read's setup type: its kind and level, no timeframe, side or number ("15m rejected overnight low up" ->
+ * "rejected overnight low", "15m compression break up" -> "compression break", "momentum_continuation fired up" ->
+ * "momentum_continuation"); 'other' for a read that is no setup.
+ */
+function setupTypeOf(read) {
+  const p = parseRead(read);
+  const named = t => t.trim() || OTHER;
+  if (p.kind === 'relation') return named(`${p.rel} ${levelWords(p.level)}`);
+  if (p.kind === 'swept') return named(`swept ${levelWords(p.level)}`);
+  if (p.kind === 'compression') return 'compression break';
+  if (p.kind === 'fired') return p.name;
+  if (p.kind === 'pattern') return named(levelWords(p.value));
+  if (p.kind === 'cisd' || p.kind === 'ote') return p.kind;
+  return OTHER;
+}
+
+// A control plan's setup read: the one it carries, else (a capture from before planSetup) its first read only the
+// setup step takes (a pattern only when it is no entry candle).
+function planSetupOf(x) {
+  if (typeof x.planSetup === 'string') return x.planSetup;
+  return (x.planReads || []).find(r => {
+    const p = parseRead(r);
+    return (STEP_KINDS[p.kind] || []).includes('setup') && !(p.kind === 'pattern' && ENTRY_PATTERNS[p.value]);
+  }) || null;
+}
+
+/**
+ * The control plans' outcomes by setup type: [{ type, n, won, lost, undecided }], by n (then name), at most `top` types
+ * of at least `minN` plans each; the rest folded into one 'other' row, last.
+ */
+function setupRates(valid, { top = TUN.setupTypes, minN = TUN.setupMinN } = {}) {
+  const by = new Map();
+  for (const x of valid) {
+    const type = setupTypeOf(planSetupOf(x));
+    const r = by.get(type) || { type, n: 0, won: 0, lost: 0, undecided: 0 };
+    r.n += 1;
+    r[x.outcome === 'won' || x.outcome === 'lost' ? x.outcome : 'undecided'] += 1;
+    by.set(type, r);
+  }
+  const sorted = [...by.values()].sort((a, b) => b.n - a.n || a.type.localeCompare(b.type));
+  const shown = sorted.filter(r => r.type !== OTHER && r.n >= minN).slice(0, top);
+  const rest = sorted.filter(r => !shown.includes(r));
+  if (rest.length) shown.push(rest.reduce((o, r) => ({ type: OTHER, n: o.n + r.n, won: o.won + r.won, lost: o.lost + r.lost, undecided: o.undecided + r.undecided }), { type: OTHER, n: 0, won: 0, lost: 0, undecided: 0 }));
+  return shown;
+}
+
 /**
  * A round's base rate and balancing examples over its captures: { legBars: { bars, valid } (each on its leg's side),
- * controlBars: { sides, valid, won, lost, undecided } (each bar's sides on their own), losers: [control bar-side] }
- * (only those whose facts are known; losers: valid plans that lost, a day each in turn, at most `examples`).
+ * controlBars: { sides, valid, won, lost, undecided } (each bar's sides on their own), bySetup: setupRates of the valid
+ * control plans, losers: [control bar-side] } (only those whose facts are known; losers: valid plans that lost, a day
+ * each in turn, at most `examples`). Every outcome is the round's own replay's (its control bars), never a census's.
  */
-function controlsOf(captures, { examples = TUN.examples } = {}) {
+function controlsOf(captures, { examples = TUN.examples, setupTypes = TUN.setupTypes, setupMinN = TUN.setupMinN } = {}) {
   const docs = (Array.isArray(captures) ? captures : []).filter(isObj);
   const legBars = docs.flatMap(d => (d.legs || []).filter(l => !l.captured && isObj(l.facts)).flatMap(l => l.facts.bars || [])).filter(x => x.known);
   const ctl = docs.flatMap(d => (Array.isArray(d.controls) ? d.controls : [])).filter(x => x.known);
@@ -432,7 +489,7 @@ function controlsOf(captures, { examples = TUN.examples } = {}) {
   for (let i = 0; losers.length < examples && [...byDay.values()].some(l => l.length > i); i += 1) for (const l of byDay.values()) if (l[i] && losers.length < examples) losers.push(l[i]);
   const valid = ctl.filter(x => x.valid);
   const controlBars = { sides: ctl.length, valid: valid.length, won: valid.filter(x => x.outcome === 'won').length, lost: lost.length, undecided: valid.filter(x => x.outcome !== 'won' && x.outcome !== 'lost').length };
-  return { legBars: { bars: legBars.length, valid: legBars.filter(x => x.valid).length }, controlBars, losers };
+  return { legBars: { bars: legBars.length, valid: legBars.filter(x => x.valid).length }, controlBars, bySetup: setupRates(valid, { top: setupTypes, minN: setupMinN }), losers };
 }
 
 // --- the proposer's text ---------------------------------------------------------------------------------------------
@@ -471,8 +528,10 @@ function controlsText(c, { exampleChars = TUN.exampleChars } = {}) {
   const pct = (v, n) => (n ? `${Math.round((v / n) * 100)}%` : 'n/a');
   const k = c.controlBars;
   const head = `Base rate: a valid with-trend plan existed on ${pct(c.legBars.valid, c.legBars.bars)} of the missed legs' entry bars (the leg's side, n=${c.legBars.bars}) and on ${pct(k.valid, k.sides)} of the control bars with no leg (each side on its own, n=${k.sides}); of those control plans ${k.won} won, ${k.lost} lost, ${k.undecided} undecided by the session's end: a valid plan alone does not tell a leg.`;
+  const rows = (c.bySetup || []).map(r => `   - ${scrub(r.type, { words: false }) || OTHER}: n=${r.n}, ${r.won} won, ${r.lost} lost, ${r.undecided} undecided`);
+  const setups = rows.length ? `\nThose control plans by setup type, from this round's control windows (small n: a hint, never a rate):\n${rows.join('\n')}` : '';
   const lines = (c.losers || []).map(x => `   - ${clip(loserLine(x), exampleChars)}`);
-  return `${head}${lines.length ? `\nValid plan, it lost (control bars, no leg): what tells these apart from the legs?\n${lines.join('\n')}` : ''}`;
+  return `${head}${setups}${lines.length ? `\nValid plan, it lost (control bars, no leg): what tells these apart from the legs?\n${lines.join('\n')}` : ''}`;
 }
 
-module.exports = { entryBars, barFacts, legFacts, sizeForCycle, outcomeOf, controlFacts, attachFacts, controlsOf, controlsText, scrub, clip, exampleLine, loserLine, missingFrames, dependsOnMissing };
+module.exports = { entryBars, barFacts, legFacts, sizeForCycle, outcomeOf, controlFacts, attachFacts, controlsOf, controlsText, setupTypeOf, setupRates, scrub, clip, exampleLine, loserLine, missingFrames, dependsOnMissing };

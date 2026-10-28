@@ -62,7 +62,7 @@ the loop uses this prompt instead. `{{FLOW}}` is the trading flow's steps
 in order, `{{FINDINGS}}` the round's findings grouped by the step they
 block (in rank order inside a step; a trend finding lists a few of its
 legs, each with what you said and the plan that passed there, never a date, time or price, then the base rate of valid plans on
-bars with no leg and a few such plans that lost), `{{LESSONS}}` a short summary of
+bars with no leg, its split by setup type (small n) and a few such plans that lost), `{{LESSONS}}` a short summary of
 what earlier probes showed, with sample sizes, `{{K}}` the number of edits.
 Each edit is tested alone on the same practice moments, then the ones that
 helped are combined by code.

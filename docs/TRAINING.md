@@ -639,7 +639,12 @@ and leg ids; the lessons lines record the batch too.
   `probe-report.json` (`trend.baseRate`) and `status` give the share of
   control bar-sides with a valid plan, and how those plans did on the
   session's later bars (won, lost, undecided by its end), beside the share
-  of the missed legs' entry bars. The proposer reads them all. It also reads up to `examples` control bars, a day each in
+  of the missed legs' entry bars. The proposer also reads those control
+  plans split by setup type (the setup read's kind and level, no timeframe,
+  side or number), labelled as from this round's control windows (small n):
+  the most common `setupTypes` types with at least `setupMinN` plans each,
+  the rest folded into "other" (`config/training.json` `trendFindings`).
+  Every outcome is the round's own replay's, never a census's. The proposer reads them all. It also reads up to `examples` control bars, a day each in
   turn, where a valid plan existed and lost: its stop was hit before its
   minimum R:R mark on the run's later bars that session, the stop first when
   one bar holds both. They are labelled "valid plan, it lost: what tells

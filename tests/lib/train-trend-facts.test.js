@@ -247,13 +247,62 @@ test('the base rate and the balancing examples: control bars with a valid plan, 
   assert.deepStrictEqual([c.controlBars, c.legBars], [{ sides: 6, valid: 5, won: 1, lost: 3, undecided: 1 }, { bars: 3, valid: 2 }]);
   assert.deepStrictEqual(c.losers.map(x => x.bar), ['2026-04-23T14:00:00.000Z', '2026-04-24T14:00:00.000Z'], 'a day each first');
   const text = X.controlsText(c);
-  assert.match(text, /^Base rate: a valid with-trend plan existed on 67% of the missed legs' entry bars \(the leg's side, n=3\) and on 83% of the control bars with no leg \(each side on its own, n=6\); of those control plans 1 won, 3 lost, 1 undecided by the session's end: a valid plan alone does not tell a leg\.\nValid plan, it lost \(control bars, no leg\): what tells these apart from the legs\?\n {3}- long: valid plan, it lost: "15m up", "stop 15m low"\. What you said: "no-trade - waited at on near"$/m);
+  assert.match(text, /^Base rate: a valid with-trend plan existed on 67% of the missed legs' entry bars \(the leg's side, n=3\) and on 83% of the control bars with no leg \(each side on its own, n=6\); of those control plans 1 won, 3 lost, 1 undecided by the session's end: a valid plan alone does not tell a leg\.\nThose control plans by setup type, from this round's control windows \(small n: a hint, never a rate\):\n {3}- other: n=5, 1 won, 3 lost, 1 undecided\nValid plan, it lost \(control bars, no leg\): what tells these apart from the legs\?\n {3}- long: valid plan, it lost: "15m up", "stop 15m low"\. What you said: "no-trade - waited at on near"$/m);
   assert.doesNotMatch(text, /21512|10:45|2026/);
   assert.strictEqual(X.controlsText(X.controlsOf([{ legs: [] }])), '', 'no control bars: nothing');
   // In the proposer's prompt after the findings.
   const findings = F.mergeFindings(TF.trendFindings([doc]), [], { max: 8 });
   const prompt = P.probePrompt({ template: P.readProbeTemplate(ROOT), findings, controls: text, lessons: null, files: ['skills/rejection/SKILL.md'], k: 2 });
   assert.ok(prompt.includes(text) && prompt.indexOf(text) > prompt.indexOf('F1.'), 'after the findings');
+});
+
+test('a setup read\'s type: its kind and level, no timeframe, side or number', () => {
+  assert.strictEqual(X.setupTypeOf('15m rejected overnight low up'), 'rejected overnight low');
+  assert.strictEqual(X.setupTypeOf('3m rejected overnight low down'), 'rejected overnight low', 'one type whatever the frame and side');
+  assert.strictEqual(X.setupTypeOf('15m compression break up'), 'compression break');
+  assert.strictEqual(X.setupTypeOf('momentum_continuation fired up'), 'momentum_continuation');
+  assert.strictEqual(X.setupTypeOf('15m touched round 21500'), 'touched round', 'no number');
+  assert.strictEqual(X.setupTypeOf('swept prior day high'), 'swept prior day high');
+  assert.strictEqual(X.setupTypeOf('15m cisd up'), 'cisd');
+  for (const r of ['1h up', 'stop 15m low 21512.75', '', null, 'not a read']) assert.strictEqual(X.setupTypeOf(r), 'other', String(r));
+});
+
+test('the control plans by setup type: grouped, sorted by n, the n floor and the cap folded into other, empty without plans', () => {
+  const plan = (setup, outcome, extra = {}) => ({ bar: '2026-04-23T14:00:00.000Z', side: 'long', known: true, valid: true, planReads: ['1h up', setup, 'stop 15m low 21512.75'], planSetup: setup, outcome, ...extra });
+  const controls = [
+    ...['won', 'lost', 'lost', null].map(o => plan('15m rejected overnight low up', o)), plan('3m rejected overnight low down', 'won'),
+    ...['lost', 'lost', 'won'].map(o => plan('15m compression break up', o)),
+    ...['won', 'won', 'lost'].map(o => plan('momentum_continuation fired up', o)),
+    plan('swept prior day high', 'lost'), plan('15m cisd up', null),
+    { bar: 'x', side: 'short', known: true, valid: false }, { ...plan('15m cisd up', 'won'), known: false },
+  ];
+  const c = X.controlsOf([{ legs: [], controls }], { setupTypes: 2, setupMinN: 2 });
+  assert.deepStrictEqual(c.bySetup, [
+    { type: 'rejected overnight low', n: 5, won: 2, lost: 2, undecided: 1 },
+    { type: 'compression break', n: 3, won: 1, lost: 2, undecided: 0 },
+    { type: 'other', n: 5, won: 2, lost: 2, undecided: 1 },
+  ], 'the third type is past the cap, the two singles under the floor: all in other; invalid and unknown bars not counted');
+  assert.strictEqual(c.bySetup.reduce((n, r) => n + r.n, 0), c.controlBars.valid, 'every valid control plan in one row');
+  assert.deepStrictEqual(X.controlsOf([{ legs: [], controls }], { setupTypes: 5, setupMinN: 1 }).bySetup.map(r => r.type), ['rejected overnight low', 'compression break', 'momentum_continuation', 'cisd', 'swept prior day high']);
+  // A capture from before planSetup: the plan's first setup-only read.
+  assert.deepStrictEqual(X.controlsOf([{ legs: [], controls: [{ ...plan('15m compression break up', 'won'), planSetup: undefined }] }], { setupMinN: 1 }).bySetup, [{ type: 'compression break', n: 1, won: 1, lost: 0, undecided: 0 }]);
+  assert.deepStrictEqual(X.controlsOf([{ legs: [], controls: [] }]).bySetup, []);
+  assert.deepStrictEqual(X.setupRates([]), []);
+  const text = X.controlsText(c);
+  assert.match(text, /\nThose control plans by setup type, from this round's control windows \(small n: a hint, never a rate\):\n {3}- rejected overnight low: n=5, 2 won, 2 lost, 1 undecided\n {3}- compression break: n=3, 1 won, 2 lost, 0 undecided\n {3}- other: n=5, 2 won, 2 lost, 1 undecided(\n|$)/);
+  assert.match(text, /^Base rate: a valid with-trend plan existed on n\/a of the missed legs' entry bars \(the leg's side, n=0\) and on 93% of the control bars with no leg \(each side on its own, n=14\); of those control plans 5 won, 6 lost, 2 undecided by the session's end: a valid plan alone does not tell a leg\.\n/, 'the pooled line unchanged');
+  assert.doesNotMatch(text, /21512|2026/);
+});
+
+test('the control plans by setup type read only the round\'s own control outcomes, never a census\'s or a moment\'s', () => {
+  const plan = { bar: '2026-04-23T14:00:00.000Z', side: 'long', known: true, valid: true, planReads: ['15m compression break up'], planSetup: '15m compression break up', outcome: 'lost' };
+  const base = X.controlsOf([{ legs: [], controls: [plan] }], { setupMinN: 1 }).bySetup;
+  // Outcomes a census or a moment might carry, beside the capture's controls: none counted.
+  const noisy = { legs: [], controls: [{ ...plan, census: { outcome: 'won', r: 3 }, moment: { outcome: 'won' } }], census: [{ setup: 'compression break', outcome: 'won' }], moments: [{ outcome: 'won' }] };
+  assert.deepStrictEqual(X.controlsOf([noisy], { setupMinN: 1 }).bySetup, base);
+  assert.deepStrictEqual(base, [{ type: 'compression break', n: 1, won: 0, lost: 1, undecided: 0 }]);
+  const src = fs.readFileSync(path.join(ROOT, 'scripts', 'lib', 'train', 'trend-facts.js'), 'utf8');
+  assert.doesNotMatch(src, /require\([^)]*(?:leg-census|setup-moments|edge-census)/, 'no census or moments module');
 });
 
 test('the proposer\'s prompt: a trend finding\'s example legs, no date, clock time or price from the legs', () => {
