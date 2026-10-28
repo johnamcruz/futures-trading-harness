@@ -69,7 +69,7 @@ function ctx({ run = {}, gate = {}, read = {}, lifecycle = {}, policy = {}, book
       gateLimits: () => ({ maxDailyLosses: 3, maxConsecutiveLosses: 2, lossCooldownMin: 30 }),
       accountProfile: () => ({ name: 'acct', daily_loss_limit: 2000, daily_loss_soft: 1000, max_contracts: { MNQ: 100 } }),
       brokerEntry: () => ({ name: 'sim', replay: true, limits: { dailyLoss: 'A', maxOrderSize: 'B', maxPositionSize: 'C' } }),
-      brokerConfig: () => ({ replay: true, maxOrderSize: 100, maxPositionSize: 100, maxDailyLoss: 2000 }),
+      brokerConfig: () => ({ replay: true, dataGaps: {}, maxOrderSize: 100, maxPositionSize: 100, maxDailyLoss: 2000 }),
       attemptLine: (_name, state) => attemptLineOf(state),
       ...read,
     },

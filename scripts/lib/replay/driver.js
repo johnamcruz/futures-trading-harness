@@ -56,6 +56,11 @@
  * (a managing step aside), flat, a fresh attempt at the profile's starting balance (the balance schedule, a fresh record,
  * the broker's balance checked); a day that opens with a position or working order still open keeps the attempt it has.
  *
+ * The replay server's days without source data (replay/data-gaps.js: its get_server_config `dataGaps`, replay only): read
+ * once at a fresh start (deps.dataGaps; none without it, as with a server that doesn't send the field), pinned in the
+ * manifest, and skipped: no decision time on them, no session of a combine attempt (its maxSessions count replayable
+ * days only), one log line each ("<day>: no source data on the replay server; skipped (not a session)").
+ *
  *   seedRunHome(run, { root, userEnv })         the fresh run home (or checks the one being resumed)
  *   runReplay({ run, baseEnv, root, deps, maxCycles, log, wall })   resolves { cycles, stopped, done } (wall: the wall
  *                                                clock a charged step's replay clock runs with, Date.now)
@@ -85,6 +90,7 @@ const { accountNamed, requireFee } = require('../trading/accounts');
 const { isOpen, signedSize } = require('../trading/positions');
 const combineRun = require('./combine-run');
 const dayAttempts = require('./day-attempts');
+const dataGaps = require('./data-gaps');
 
 const EOD_RETRIES = require('../tunables').replay().driver.eodRetries; // config/replay.json
 // Minutes from the 18:00 ET open to the 16:00 ET close.
@@ -157,6 +163,8 @@ function defaultDeps(run, root) {
       const why = replayUnattested(await withAdapter({ root, env }, a => a.serverConfig()), at);
       return why && `${why}: is ${run.brokerEnv.clockFile || 'its clock'} read by the server of broker "${run.broker}"?`;
     },
+    // The replay server's days without source data in the run's window (replay/data-gaps.js), read at a fresh start.
+    dataGaps: base => dataGaps.readGaps(run, root, base),
     // Whether the account holds a position or a working order (a curated run manages what is open after a window).
     async open(env, account) {
       return accountOpen(await withAdapter({ root, env }, a => a.accountState(account)));
@@ -359,6 +367,8 @@ async function replayLoop({ run, baseEnv = process.env, root, deps = defaultDeps
   const startEnv = replayEnv(baseEnv, run, { at: run.start });
   const problems = brokerErrors(startEnv, run);
   if (problems.length) throw new Error(`replay refused:\n- ${problems.join('\n- ')}`);
+  // The server's days without source data: read once at a fresh start, else the ones the run was started with (pinned).
+  await dataGaps.gapsForRun(run, { manifestFile: paths.manifest, read: deps.dataGaps ? () => deps.dataGaps(baseEnv) : null, root: root || run.root, env: baseEnv, log });
   const hash = configHash(run, baseEnv);
   const manifest = store.openRun(paths, {
     runId: run.runId, hash,
@@ -368,7 +378,9 @@ async function replayLoop({ run, baseEnv = process.env, root, deps = defaultDeps
       exit: require('../learning/experience-log').exitRecord(require('../learning/run-experience').runExit(root || run.root, baseEnv)),
       // The training loop's stepped windows (replay/step-windows.js), named only when set: a scorer reads them to
       // refuse the run (its days are stretches, not the market's whole days).
-      ...(run.stepWindows ? { stepWindows: { kind: run.stepWindows.kind, hash: run.stepWindows.hash, windows: run.stepWindows.windows.length } } : {}) },
+      ...(run.stepWindows ? { stepWindows: { kind: run.stepWindows.kind, hash: run.stepWindows.hash, windows: run.stepWindows.windows.length } } : {}),
+      // The days skipped for no source data (replay/data-gaps.js), named only when there are some: a resume keeps them.
+      ...dataGaps.manifestPart(run) },
   });
   // A curated run (learning/curated-lists.js) steps its list's windows and their days' premarket and end of day; every
   // other time from the first window on (later days included) is stepped only while a position or working order is
@@ -376,7 +388,7 @@ async function replayLoop({ run, baseEnv = process.env, root, deps = defaultDeps
   // window; the broker's fills and brackets work through the gaps.
   // `manage`: the bars outside the sessions the live runner polls for housekeeping (a leftover target cancelled once its
   // stop filled, a trailed stop), stepped below only while a position or working order is open.
-  const all = decisionPoints(cfg, { start: run.start, end: run.end, everyNth: run.everyNth, manage: true });
+  const all = decisionPoints(cfg, { start: run.start, end: run.end, everyNth: run.everyNth, manage: true, dataGaps: run.dataGaps });
   // A combine run: only its attempts' days (the days between them have no step).
   // The training loop's stepped windows (replay/step-windows.js): stepped as a curated list's windows are, nothing else.
   const windowed = run.curated || run.stepWindows || null;

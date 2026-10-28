@@ -10,6 +10,7 @@
  *              ones marked), and the result fields the harness reads
  *   OUTCOMES   the errorCode tables of the order tools
  *   ENUMS, JOURNAL, GUARDRAILS, TRANSPORT
+ *   dataGapsOk(v)   whether a replay server's get_server_config.dataGaps has its shape
  *
  * validateTools(tools)            problems with a tools/list answer
  * validateResult(tool, data)      problems with a tool's parsed result
@@ -21,13 +22,22 @@ const bracketOk = b => b !== null && typeof b === 'object' && (b.role === 'stop'
 const outcome = { success: field('boolean', true), errorCode: field('number', true), errorName: field('string', true), errorMessage: field('string|null') };
 const order = { '[].id': field('number', true), '[].contractId': field('string', true), '[].type': field('number', true, 'order type code'), '[].side': field('number', true, '0 buy, 1 sell'), '[].size': field('number', true), '[].status': field('number', true), '[].stopPrice': field('number|null'), '[].limitPrice': field('number|null'), '[].bracket': field('object', false, '{ role: "stop" | "target", entry?: the entry order\'s customTag or id, when the server knows it }: present exactly for a bracket leg; absent is unknown, never "not a leg"', bracketOk) };
 const contract = { id: field('string', true), name: field('string', true, 'ticker, e.g. MNQZ6'), tickSize: field('number', true, 'above 0; the harness trades with the broker\'s tick specs'), tickValue: field('number', true, 'USD per tick per contract, 0.01 to 10,000'), activeContract: field('boolean', true, 'the front month') };
+/**
+ * A replay server's dataGaps (get_server_config, optional, replay only): { <root>: [{ day: 'YYYY-MM-DD', bars, flow }] },
+ * per contract root the trading days of its replay window its data is missing a part of: `bars: false`, no bars at all
+ * (a dead day); `bars: true, flow: false`, bars without flow. Live servers never send it.
+ */
+const DATE = /^\d{4}-\d{2}-\d{2}$/;
+const dataGapsOk = v => v !== null && typeof v === 'object' && !Array.isArray(v)
+  && Object.entries(v).every(([root, days]) => /^[A-Z0-9]{1,8}$/.test(root) && Array.isArray(days) && days.every(g => g !== null && typeof g === 'object'
+    && typeof g.day === 'string' && DATE.test(g.day) && new Date(`${g.day}T00:00:00Z`).toISOString().startsWith(g.day) && typeof g.bars === 'boolean' && typeof g.flow === 'boolean'));
 const listOf = fields => Object.fromEntries([['[]', field('array', true)], ...Object.entries(fields).map(([k, f]) => [`[].${k}`, f])]);
 
 const TOOLS = {
   // Session and accounts.
   get_server_config: {
     role: 'read', input: {},
-    result: { tradingEnabled: field('boolean', true), allowedAccountIds: field('array|string', true, 'integer[] or "any"'), allowedSymbols: field('array|string', true, 'string[] or "any"'), maxOrderSize: field('number', true), maxPositionSize: field('number', true), maxDailyLoss: field('number|string', true, 'number or "off"'), journalPath: field('string', true), tradingDayStartedAt: field('string', true), serverTime: field('string', true), replay: field('boolean', false, 'true only for a replay server (serverTime is then the replayed time); live servers omit it') },
+    result: { tradingEnabled: field('boolean', true), allowedAccountIds: field('array|string', true, 'integer[] or "any"'), allowedSymbols: field('array|string', true, 'string[] or "any"'), maxOrderSize: field('number', true), maxPositionSize: field('number', true), maxDailyLoss: field('number|string', true, 'number or "off"'), journalPath: field('string', true), tradingDayStartedAt: field('string', true), serverTime: field('string', true), replay: field('boolean', false, 'true only for a replay server (serverTime is then the replayed time); live servers omit it'), dataGaps: field('object', false, 'replay only: { <root>: [{ day, bars, flow }] }, the trading days of the replay window missing bars (the replay driver skips them) or only flow; live servers omit it', dataGapsOk) },
   },
   list_accounts: {
     role: 'read', input: { onlyActiveAccounts: field('boolean', false, 'default true') },
@@ -170,6 +180,8 @@ function validateResult(name, data) {
         const list = m[1] ? data && data[m[1]] : data;
         if (Array.isArray(list)) list.forEach((el, i) => { if (el && el[m[2]] !== undefined && !f.check(el[m[2]])) problems.push(`${name}: ${m[1] || ''}[${i}].${m[2]} is malformed`); });
       }
+      // An optional field of the result itself with a shape: checked where present.
+      if (f.check && !m && data && typeof data === 'object' && data[path] !== undefined && !f.check(data[path])) problems.push(`${name}: ${path} is malformed`);
       continue;
     }
     if (m) {
@@ -184,4 +196,4 @@ function validateResult(name, data) {
   return [...new Set(problems)];
 }
 
-module.exports = { TRANSPORT, TOOLS, OUTCOMES, ENUMS, JOURNAL, GUARDRAILS, validateTools, validateResult };
+module.exports = { TRANSPORT, TOOLS, OUTCOMES, ENUMS, JOURNAL, GUARDRAILS, validateTools, validateResult, dataGapsOk };
