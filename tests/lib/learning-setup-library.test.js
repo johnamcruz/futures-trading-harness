@@ -381,6 +381,24 @@ test('planLine: the briefing states a setup\'s standard plan as code computes it
   assert.strictEqual(L.planLine({ minutes: 3, sections: { m3: { data: { bar: { t: 'x' }, windowEntries: 'allowed' } } } }), null);
 });
 
+test('standardPlans: with the policy\'s entry rule a plan it refuses is not-composable, not traded (the same bar, keys off: traded)', () => {
+  const { readBarsArg } = require('../../scripts/lib/backtest/data');
+  const { entryRuleOf } = require('../../scripts/lib/trading/entry-rule');
+  const bars = readBarsArg(path.join(__dirname, '..', 'fixtures', 'parity', 'NQ-3m.csv')).map(b => ({ t: b.t, o: b.o, h: b.h, l: b.l, c: b.c, v: b.v }));
+  const b = buildBriefing({ symbol: 'MNQ', bars: bars.slice(Math.max(0, 409 - 1399), 410), minutes: 3, now: new Date(Date.parse(bars[409].t) + 180000) });
+  const off = { bias_frames: 'off', regime_against: 'off', leg_turned: 'off' };
+  const traded = p => (L.standardPlans(b, p) || []).find(x => x.side === 'short');
+  assert.strictEqual(traded().status, 'traded');
+  assert.strictEqual(traded({ entryRule: entryRuleOf(off) }).status, 'traded', 'every key off: no rule');
+  // The 1h trending up (the short's bias frame against it) or the regime against: the entry the gate would refuse.
+  const up = JSON.parse(JSON.stringify(b));
+  up.sections.h1.data.h1.trend = 'up';
+  const refused = (L.standardPlans(up, { entryRule: entryRuleOf({ ...off, bias_frames: ['4h', '1h'] }) }) || []).find(x => x.side === 'short');
+  assert.notStrictEqual(refused.status, 'traded');
+  assert.match(refused.why, /checker refused|no true bias/);
+  assert.strictEqual(L.planLine(up).includes('plan OK'), true, 'the briefing\'s own line has no policy: pre-rule by design');
+});
+
 test('planLine: a side the trend rule allows only as a reversal gets no standard plan (its CHoCH tier), never "OK -> compose_check"', () => {
   const { readBarsArg } = require('../../scripts/lib/backtest/data');
   const bars = readBarsArg(path.join(__dirname, '..', 'fixtures', 'parity', 'NQ-3m.csv')).map(b => ({ t: b.t, o: b.o, h: b.h, l: b.l, c: b.c, v: b.v }));

@@ -26,6 +26,7 @@
 const { familyRoot } = require('./contracts');
 const { briefingFor } = require('./fact-claims');
 const { composedRefusal, recordsAt } = require('./lifecycle-gate');
+const { entryRuleOf } = require('./entry-rule');
 const prop = require('./prop-state');
 const { composedVerdict } = require('../prop/composed-verdict');
 const { translatorFor } = require('../prop/size-translate');
@@ -66,7 +67,9 @@ function composedOrder({ home, root, side, now = new Date(), cycleBars = {}, str
   const brackets = { limitPrice: held.entry && held.entry.price, stopLossBracket: { ticks: held.stop && held.stop.ticks, type: 'stop' }, takeProfitBracket: { ticks: held.target && held.target.ticks, type: 'limit' } };
   const draft = { ...(Number.isInteger(accountId) ? { accountId } : {}), contractId: root, side: sign > 0 ? 'buy' : 'sell', type: 'limit' };
   // The reads and the plan as the gate re-checks them, at the record's own size (its plan stands as written).
-  const first = composedRefusal({ name: strategy.name, strategy, home, root, input: { ...draft, size: stated, ...brackets }, now, cycleBars, entries: [], specOf, attempt: Boolean(policy) });
+  // The policy's entry rule (entry-rule.js), as the gate's re-check holds it.
+  const entryRule = policy ? entryRuleOf(policy.entry) : null;
+  const first = composedRefusal({ name: strategy.name, strategy, home, root, input: { ...draft, size: stated, ...brackets }, now, cycleBars, entries: [], specOf, attempt: Boolean(policy), entryRule });
   if (first.message) throw new Error(`the order gate would refuse it: [composed-reads] ${first.message}`);
   const p = first.plan;
   const tick = spec.tickSize;
@@ -106,7 +109,7 @@ function composedOrder({ home, root, side, now = new Date(), cycleBars = {}, str
   if (floor) throw new Error(`[min-contracts] ${floor}${cutWhy ? ` (${cutWhy} to ${ordered}: no trade)` : ''}`);
   if (policy || cutWhy) {
     // The gate's own composed-reads check on the exact size: the same translation, the cut, nothing else.
-    const again = composedRefusal({ name: strategy.name, strategy, home, root, input: { ...draft, size: ordered, ...brackets }, now, cycleBars, entries: [], specOf, approvedSize: cutWhy ? ordered : null, translate });
+    const again = composedRefusal({ name: strategy.name, strategy, home, root, input: { ...draft, size: ordered, ...brackets }, now, cycleBars, entries: [], specOf, approvedSize: cutWhy ? ordered : null, translate, entryRule });
     if (again.message) throw new Error(`the order gate would refuse it: [composed-reads] ${again.message}`);
   }
   const tag = policy ? `setup:${policy.name} ${side} ${strategy.name}` : `setup:${strategy.name} ${side}`;

@@ -6,7 +6,7 @@
  * beside its ACCOUNT.md. The frontmatter holds the values, the body the evidence that
  * set each one (R3). Nothing else states them: the account loader (accounts.js) takes
  * `daily_loss_soft` and `loss_streak_stop` from it and the strategy loader (strategies.js) each policy's
- * `sizing`, `exit` and `multipliers`, so the runner, the verdict, the gate and the
+ * `sizing`, `exit`, `multipliers` and `entry`, so the runner, the verdict, the gate and the
  * backtester all read them from here (R1). Every item is classified (R4): `enforced`
  * (the code or the gate holds it) or `taught` (a skill the agent loads teaches it).
  *
@@ -14,8 +14,9 @@
  *                                       it can be held (enforcedBy) or taught (taughtIn)
  *   validateRulebook(data, body, folder) problems (empty = valid)
  *   loadRulebookFile(file)              the parsed rulebook ({ ...data, file, body, valid, errors }), null when none
- *   policyEntry(rulebook, name)         that policy's { sizing, exit, multipliers }, or null (exit as the strategy
- *                                       loader reads it: { mode, trail_activate_r?, trail_giveback_r? }, `off` left out)
+ *   policyEntry(rulebook, name)         that policy's { sizing, exit, multipliers, entry }, or null (exit as the strategy
+ *                                       loader reads it: { mode, trail_activate_r?, trail_giveback_r? }, `off` left out;
+ *                                       entry: its entry rule block as written, entry-rule.js)
  *   ceiling(items, facts, now)          the verdict's multiplier from the enforced multiplier items
  *
  * Pure but for reading the file; no network.
@@ -26,6 +27,7 @@ const path = require('path');
 const { parseFrontmatter } = require('../frontmatter');
 const { SIZING_KEYS, MIN_STOP_SLIPPAGE_TICKS } = require('./combine');
 const { SWING_TFS } = require('./exit-trail');
+const { entryRuleErrors } = require('./entry-rule');
 
 /** The exit keys every policy entry states (its sizing keys: combine.js SIZING_KEYS, each key the sizing reads). */
 const EXIT_KEYS = Object.freeze(['mode', 'trail_activate_r', 'trail_giveback_r', 'lock_giveback_r', 'trail_by', 'trail_r', 'swing_tf', 'ratchet']);
@@ -46,7 +48,7 @@ const TRAIL_BY = Object.freeze(['r', 'structure']);
 
 const FILE = 'RULEBOOK.md';
 const KEYS = ['name', 'description', 'learned', 'daily_loss_soft', 'loss_streak_stop', 'policies', 'enforced', 'taught'];
-const POLICY_KEYS = ['sizing', 'exit', 'multipliers'];
+const POLICY_KEYS = ['sizing', 'exit', 'multipliers', 'entry'];
 const MULTIPLIER_KEYS = ['item', 'fact', 'values', 'max_age_min'];
 const REQUIRED_SECTIONS = ['## When to Use', '## How It Works', '## Examples'];
 const NAME = /^[a-z0-9][a-z0-9_-]*$/;
@@ -68,6 +70,7 @@ const ITEMS = Object.freeze({
   one_position: { group: 'pacing', what: 'one position at a time across the account', enforcedBy: 'prop-state combineBlock and entrySinceSnapshot' },
   hard_stops: { group: 'priority', what: 'a news blackout, a no-entry window, a gate refusal: no trade', enforcedBy: 'the order gate (blackout, no-entry window, every refusal)' },
   trend_rule: { group: 'priority', what: 'a trend strategy against the prevailing trend: no trade', enforcedBy: 'the scan and the order gate (checkTrend)' },
+  entry_rule: { group: 'priority', what: "each policy's entry rule on a composed entry: the bias frames that set the side, no entry while the regime trends against it, the leg turned back while it doesn't trend the side's way (each key off: no check)", enforcedBy: 'entry-rule.js entryProblems in the reads checker: compose_check and the order gate\'s re-check (composed-reads)' },
   trend_fade: { group: 'priority', what: 'a reversal fading the prevailing trend: only at a higher-timeframe level, smaller, nearest target', taughtIn: STEP(2) },
   room: { group: 'priority', what: 'the first level ahead before the target: a read weighed in the count, never a no trade alone (the R:R to the target stays at least min_rr)', taughtIn: STEP(3) },
   mtf_read: { group: 'priority', what: 'the multi-timeframe read for the side sets the size', taughtIn: STEP(4) },
@@ -197,7 +200,7 @@ function validateRulebook(data, body, folderName) {
     for (const k of taught) if (Object.hasOwn(ITEMS, k)) req(Boolean(ITEMS[k].taughtIn), `${k}: classified taught, but no skill teaches it (the code holds it)`);
   }
   if (data.policies !== undefined) {
-    if (!isMap(data.policies)) errors.push('policies: a map of policy strategy name -> { sizing, exit, multipliers }');
+    if (!isMap(data.policies)) errors.push('policies: a map of policy strategy name -> { sizing, exit, multipliers, entry }');
     else {
       for (const [name, p] of Object.entries(data.policies)) {
         const at = `policies.${name}`;
@@ -217,6 +220,7 @@ function validateRulebook(data, body, folderName) {
         else errors.push(...exitErrors(p.exit, at));
         if (p.multipliers === undefined) errors.push(`${at}.multipliers: missing; state it ([] for none)`);
         else errors.push(...multiplierErrors(p.multipliers, name, enforced || []));
+        errors.push(...entryRuleErrors(p.entry, at));
       }
     }
   }
@@ -239,7 +243,7 @@ function loadRulebookFile(file) {
 }
 
 /**
- * A policy's entry in a valid rulebook ({ sizing, exit, multipliers }, a sizing `off` read as 0), or null when it has
+ * A policy's entry in a valid rulebook ({ sizing, exit, multipliers, entry }, a sizing `off` read as 0), or null when it has
  * none. The exit as the strategy loader reads it: its mode, and the trail's two values only when they are R (`off`: no trail).
  */
 function policyEntry(rulebook, name) {
@@ -248,7 +252,7 @@ function policyEntry(rulebook, name) {
   const sizing = Object.fromEntries(Object.entries(p.sizing || {}).map(([k, v]) => [k, limit(v)]));
   const x = isMap(p.exit) ? p.exit : {};
   const exit = { mode: x.mode, ...Object.fromEntries(EXIT_KEYS.filter(k => k !== 'mode' && x[k] !== OFF && x[k] !== undefined).map(k => [k, x[k]])) };
-  return { sizing, exit, multipliers: p.multipliers };
+  return { sizing, exit, multipliers: p.multipliers, entry: isMap(p.entry) ? { ...p.entry } : null };
 }
 
 /**

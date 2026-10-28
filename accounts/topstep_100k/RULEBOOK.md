@@ -6,6 +6,10 @@ daily_loss_soft: 1000           # dollars: no new entries for the rest of the da
 loss_streak_stop: 2             # losing trades in a row: no new entries for the rest of the session (a scratch neither ends nor extends the streak)
 policies:                       # each policy strategy that trades this account (its STRATEGY.md names it; never restates these)
   prop_portfolio:
+    entry:                      # the entry rule on a composed entry (entry-rule.js), held by compose_check and the gate; off: no check
+      bias_frames: off          # off, or [4h, 1h], [4h] or [1h] only (never the 15m): the first that trends sets the side, none against it, none trending: no entry
+      regime_against: off       # on: no entry while the m3 regime trends against the side
+      leg_turned: off           # on: an m3 regime not trending the side's way needs a true 3m BOS, CHoCH or compression break its way
     sizing:                     # risk from the headroom above the floor
       cushion_frac: 0.3         # a trade risks at most this share of the cushion ...
       cap_usd: 1000             # ... and at most this many dollars
@@ -26,7 +30,7 @@ policies:                       # each policy strategy that trades this account 
       swing_tf: 15m             # target_then_trail with trail_by structure: the swings the stop trails behind
       ratchet: off              # target_then_trail: on lifts the lock to the best R reached less lock_giveback_r; off (opt in only): the lock above
     multipliers: []             # enforced size multipliers folded into the verdict: none yet
-enforced: [daily_loss_soft, loss_streak_stop, sizing, exit, multipliers, target_stop, consistency_stop, one_position, hard_stops, trend_rule]
+enforced: [daily_loss_soft, loss_streak_stop, sizing, exit, multipliers, target_stop, consistency_stop, one_position, hard_stops, trend_rule, entry_rule]
 taught: [trend_fade, room, mtf_read, skip_rules, confluence, secondary_context, halving]
 ---
 
@@ -190,6 +194,45 @@ over the cap) and the backtester and the attempt simulator apply the one
 rule (`prop/size-translate.js` `floorStretch`). `off` turns it off. It
 never asks for a wider stop: the stop is the record's.
 
+**The entry rule.** `entry` (`scripts/lib/trading/entry-rule.js`) holds
+the owner's top-down flow on a composed entry ("We stick to our top down
+flow - htf bias, location, setup, entry, stop and target"; "never trade
+against the HTF bias"), checked by the reads checker on the cycle bar's
+briefing, so `compose_check` says NOT OK and the gate's `[composed-reads]`
+re-check refuses the same entry. Every key is stated; `off` is no check,
+and with all three off an entry is checked as before (the trend rule, D2):
+
+- `bias_frames` (a list of 4h and/or 1h, highest first, e.g. `[4h, 1h]`; never the 15m): the first listed
+  frame that trends is the bias and the side must be its way; no listed
+  frame may trend against the side (the 15m never stands in against the
+  1h); none trending is no bias, so no entry. The frames are this file's,
+  never the model's pick.
+- `regime_against: on`: no entry while the `m3` regime (`regime.js`, the
+  `trend-vs-range` skill's) trends against the side.
+- `leg_turned: on`: while the `m3` regime doesn't trend the side's way, the
+  reads must state the leg turned back: a true `3m choch`, `3m bos` or
+  `3m compression break` the side's way (`pullback-vs-reversal`).
+
+A fact a key on needs and the briefing lacks refuses (it only ever refuses
+more). All three are `off`: the model-free census below did not support
+turning one on.
+
+Measured on the practice-train setup census (the standard plans today's
+gate takes, 2021-04 to 2024-06, the decision bar's briefing rebuilt; split
+at 2022-11-23, chosen on the first half, confirmed on the second,
+pre-registered), with the hybrid exit, per trade and in the 30-session
+combine (real starts, one position at a time): today 0.023R / 18.7% pass,
+then 0.000R / 10.8%. Only trends the side's way: 20% of the trades,
+-0.007R / 0% pass, then +0.046R / 10.3%. `regime_against` with
+`leg_turned`: 54% of the trades, 0.022R / 5.7%, then +0.038R (+0.038
+over today, interval +0.004 to +0.074) / 8.4%. `bias_frames: [4h, 1h]`: 66%, 0.011R / 13.0%,
+then -0.033R / 1.6%. The 1h not against: 96%, no change either half.
+No filter raised the pass rate on either half (fewer trades make fewer
+passes in 30 sessions); 0 blows everywhere. The regime's effect turned
+from cost to gain between the halves: a regime dependence, not an edge.
+The census measures standard plans, not the model's choices: the replay
+runs' losses against the regime (runs 1 and 3) are the model's.
+
 **Evidence (R3).** Nothing here is learned yet. Each value is today's,
 carried over unchanged when the rulebook was created; the search and the
 calibration (docs/LEARNED-RULEBOOK.md, sections 5 and 6) will replace each
@@ -201,6 +244,7 @@ one with its evidence.
 | `loss_streak_stop` | starting value, not learned; tuned by the 30-day Monte Carlo (phase 2) | not measured | not measured | not learned |
 | `policies.prop_portfolio.sizing` | `prop_portfolio`'s STRATEGY.md | not measured | not measured | not learned |
 | `policies.prop_portfolio.exit` | starting value, not learned; the 30-day Monte Carlo decides between the modes (phase 2) | not measured | not measured | not learned |
+| `policies.prop_portfolio.entry` | the owner's top-down flow (2026-10-27), every key off, not learned | the practice-train census above, two halves (model-free) | not measured | not learned |
 | `policies.prop_portfolio.sizing.clock_k` | starting value, not learned; tuned by the 30-day Monte Carlo (phase 2) | not measured | not measured | not learned |
 | `policies.prop_portfolio.sizing.min_contracts` | the owner's floor (2026-10-23), not learned | not measured | not measured | not learned |
 | `policies.prop_portfolio.sizing.floor_stretch_max_usd` | the owner's stretch (2026-10-24), not learned | not measured | not measured | not learned |

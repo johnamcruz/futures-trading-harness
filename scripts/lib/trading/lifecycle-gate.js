@@ -17,7 +17,8 @@
  *     cycle's bar and its briefing don't move while the cycle runs (the runner awaits it), so an entry after the next
  *     close is judged on the facts of the record's own bar; a later cycle has a later bar and composes on it;
  *   - pass the reads checker (composed-reads.js) run again on the record's reads against that briefing (the record's
- *     own `ok` and checks are never read): every read true, agreeing with the side, every step stated;
+ *     own `ok` and checks are never read): every read true, agreeing with the side, every step stated, and, under a
+ *     policy, its entry rule (`entryRule`: entry-rule.js, the rulebook's `entry`; null: none);
  *   - match the plan worked out again from the re-checked reads (trade-lifecycle.js planOf: the D3 buffer, the D13
  *     minimum stop, risk.min_rr, the stated size within risk.max_risk_usd), equal to the record's plan:
  *     stopLossBracket.ticks and takeProfitBracket.ticks are its ticks;
@@ -36,7 +37,7 @@
  *   readsOf(record)                 the reads as the model stated them: [{ step, skill, read, why }]
  *   composedName({ setupName, named, strategies, home, root })   the composed strategy the order enters by, or null
  *   limitRefusal({ side, type, limitPrice, reference, tick })    why the entry isn't a limit at the reference or better
- *   composedRefusal({ name, strategy, home, root, input, now, cycleBars, entries, specOf, pluginRoot, approvedSize })
+ *   composedRefusal({ name, strategy, home, root, input, now, cycleBars, entries, specOf, pluginRoot, approvedSize, entryRule })
  *                                   { message: why it is refused | null, check, record, plan, room, expiresAt, briefing }
  *                                   (`briefing`: the cycle bar's, the one the reads were checked on)
  *                                   (`expired: true` when the record's time ran out: the cycle-timing count)
@@ -148,7 +149,7 @@ function reversalAllowed({ home, root, side, check, now = new Date(), maxAgeMin 
 /** The room a phase-2 room fact is checked against (fact-claims.js): the plan's first level in the way, in its R, against the R its target needs. */
 const roomOf = (p, tick) => ({ stopPoints: p.stop.ticks * tick, needR: p.rr, inTheWay: p.inTheWay ? { name: p.inTheWay.name, R: p.inTheWay.R } : null });
 
-function composedRefusal({ name, strategy = null, home, root, input = {}, now = new Date(), cycleBars = {}, entries = [], specOf = () => null, pluginRoot = PLUGIN_ROOT, approvedSize = null, translate = null, attempt = false }) {
+function composedRefusal({ name, strategy = null, home, root, input = {}, now = new Date(), cycleBars = {}, entries = [], specOf = () => null, pluginRoot = PLUGIN_ROOT, approvedSize = null, translate = null, attempt = false, entryRule = null }) {
   const say = (why, check = null) => ({ message: `setup:${name}: ${why}. Exits, protective stops and stop moves still go.`, check });
   try {
     const side = { buy: 'long', sell: 'short' }[String(input.side || '').toLowerCase()];
@@ -179,7 +180,7 @@ function composedRefusal({ name, strategy = null, home, root, input = {}, now = 
     const tick = spec && spec.tickSize > 0 ? spec.tickSize : null;
     if (!tick || !(spec.tickValue > 0)) return say('no tick specs for the contract, so the plan can\'t be checked');
     // The checker again, on the reads as stated, against this bar's briefing: never the record's `ok` or checks.
-    const check = checkReads({ reads: readsOf(rec), side, briefing: b, skills: skillFolders(pluginRoot), tick });
+    const check = checkReads({ reads: readsOf(rec), side, briefing: b, skills: skillFolders(pluginRoot), tick, entryRule });
     const wrong = check.reads.filter(r => r.check === false);
     const unchecked = check.reads.filter(r => r.check === 'unchecked');
     const against = check.reads.filter(r => r.check === true && !r.agrees);

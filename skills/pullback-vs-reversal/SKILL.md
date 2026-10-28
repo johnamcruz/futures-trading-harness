@@ -7,8 +7,8 @@ description: Trader-process step 4, price moving against the higher-timeframe tr
 
 ## When to Use
 
-- Trader-process step 4, when price moves against the higher-frame trend
-  (`trend-vs-range`). The side stays `htf-to-ltf`'s side rule.
+- Step 4, price against the higher-frame trend
+  (`trend-vs-range`). Side: `htf-to-ltf`'s.
 
 ## How It Works
 
@@ -21,8 +21,8 @@ prompt's line (`V` and the `(c-o)` per bar).
 | HTF break | still with the trend | a CHoCH against it | `m15.lastBreak.last`, `h1.lastBreak.last` |
 | Depth | up to about 50-62% of the leg (hypothesis) | past the impulse origin | `m15.frame.range` (`high`, `low`, `mid`: last 20 15m candles) |
 | Swing | the leg's 15m/1h swing holds | a 3m close broke it | `m3.htfLevels` (`brokenAt`) |
-| Volume | falling | expanding against the trend | last 10 bars `V`, `m3.participation.relVolLast3VsPrior20` |
-| Bars | shrinking | wide bars closing at their extreme against the trend | last 10 bars, `m3.bar.rangeAtr` |
+| Volume | falling | expanding against it | last 10 bars `V`, `m3.participation.relVolLast3VsPrior20` |
+| Bars | shrinking | wide bars closing at their extreme against it | last 10 bars, `m3.bar.rangeAtr` |
 | Absorption | against the pullback (`absorption`) | none | last 10 bars |
 
 **Read the breaks top-down** (`bos-vs-choch`). A lower-timeframe CHoCH
@@ -31,13 +31,14 @@ stacking up the timeframes (3m, then 15m, then 1h) are a reversal
 developing. A 15m or 1h CHoCH against the trend weighs most: then the
 read is a reversal attempt. The pullback ends when its own minor
 structure breaks back: `m3.lastBreak.last` turns the trend's way (the
-shift or reclaim of `htf-to-ltf`): a lower-timeframe CHoCH
+shift or reclaim of `htf-to-ltf`; leg turned: `3m choch up`, `3m bos up`, `3m compression break up`):
+a lower-timeframe CHoCH
 back the HTF way at a level times the entry; the setup there: `rejection`,
 `breakout`, `fair-value-gaps`. A CISD (`cisd`) is an earlier
 sign than the CHoCH; depth in fib terms: `fib-retracement`.
 
 **Premium and discount** (`fib-retracement`): within a trend, pullbacks into discount
-(premium for shorts) are where continuation setups sit. `m15.frame.range`
+(premium for shorts) are where continuation setups sit.
 `mid` is the last 20 15m candles' 50%, not a swing-to-swing range.
 
 **Evidence** (Train, docs/research/mtf-setup-catalog.md): depth alone is no

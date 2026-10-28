@@ -11,7 +11,8 @@ description: Trader-process step 1 and the regime in step 2 - whether each timef
 
 ## How It Works
 
-A read, never a veto: the count decides (`confluence-counting`). Thresholds are the
+A read, never a veto: the count decides (`confluence-counting`). Code holds
+the regime only by a policy's entry rule (`entry`). Thresholds are the
 code's or hypotheses; a missing field is `unknown`.
 
 Each timeframe's trend is its votes (`multi-timeframe-analysis`; read
@@ -31,8 +32,8 @@ structure.
 - `range`: neither, and ADX under 18 or 5 or more crosses.
 - `transition`: everything else.
 
-`m3.vwap` counts each VWAP's crosses, labeled: `sessionCrossesLast30` is
-the regime's count; `rthCrossesLast30`, the RTH VWAP's, can differ from it.
+`m3.vwap.sessionCrossesLast30` is the regime's count (`rthCrossesLast30`
+can differ).
 
 **Structure.** Swing patterns (`HH/HL`, `LH/LL`, `mixed`, `unclear`)
 and the latest breaks per timeframe: `bos-vs-choch`. A stop belongs

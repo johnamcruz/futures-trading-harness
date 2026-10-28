@@ -39,6 +39,7 @@ const { brokerSpecs, contractsFileFor, whyNoSpec, brokerOrderLimit, dayFrontMiss
 const { checkOrderSize, checkRiskLimit, entryStopTicks } = require('./order-limits');
 const { lockGateRefusal } = require('../account-lock');
 const { composedName, composedRefusal, reversalAllowed } = require('./lifecycle-gate');
+const { entryRuleOf } = require('./entry-rule');
 const { lateEntryCheck, ageLimitOf } = require('./late-entry');
 const { protectRefusal, restingExitRefusal } = require('./bracket-rule');
 const GATE = require('../tunables').runner().gate; // config/runner.json: the bracket tolerances (tighten-only)
@@ -423,7 +424,9 @@ function evaluateOrder({ input = {}, entries = [], now = new Date(), config, bla
         verdict: v, specOf, selected: config.selection ? config.selection.symbols : null, orderMax: brokerOrderLimit(contractsFile).maxOrderSize,
       })(plan, spec, stated);
     } : null;
-    composedCheck = composedRefusal({ name: composed, strategy: doc, home: config.home, root: contractRoot(input.contractId), input, now, cycleBars: { ...(config.cycleBars || {}), ...(config.cycleBriefingBars || {}) }, entries, specOf, approvedSize: p2Size(), translate });
+    // Under a policy, its entry rule (its rulebook's `entry`, entry-rule.js) joins the re-check, as compose_check held it.
+    const entryRule = named && named.signal === 'policy' ? entryRuleOf(named.entry) : null;
+    composedCheck = composedRefusal({ name: composed, strategy: doc, home: config.home, root: contractRoot(input.contractId), input, now, cycleBars: { ...(config.cycleBars || {}), ...(config.cycleBriefingBars || {}) }, entries, specOf, approvedSize: p2Size(), translate, entryRule });
     // `expired`: the record's time ran out (the cycle-timing count of entries lost to expiry: cycle-timing.js).
     if (composedCheck.message) violations.push({ check: 'composed-reads', message: composedCheck.message, ...(composedCheck.expired ? { expired: true } : {}) });
     // Inside a policy (the prop attempt's account layer): its verdict is the one sized on this very record.

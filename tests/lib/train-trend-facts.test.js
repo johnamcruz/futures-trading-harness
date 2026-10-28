@@ -59,6 +59,18 @@ test('trend facts: no valid plan when the window allows no entries, or the trend
   assert.deepStrictEqual([rule.valid, rule.why], [false, 'the trend rule for the side is unknown']);
 });
 
+test('trend facts: with the policy\'s entry rule on, a bar it refuses has no valid plan (the finding counts only entries the gate allows)', () => {
+  const { entryRuleOf } = require('../../scripts/lib/trading/entry-rule');
+  const off = { bias_frames: 'off', regime_against: 'off', leg_turned: 'off' };
+  assert.strictEqual(facts({ entryRule: entryRuleOf(off) }).valid, true, 'every key off: as before');
+  const down = brief(b => { b.sections.h1.data.h1.trend = 'down'; });
+  assert.strictEqual(facts({ briefing: down }).valid, true, 'no rule: the same bar has a plan');
+  const f = facts({ briefing: down, entryRule: entryRuleOf({ ...off, bias_frames: ['4h', '1h'] }) });
+  assert.deepStrictEqual([f.known, f.valid], [true, false]);
+  const regime = brief(b => { b.sections.m3.data.regime = { primary: 'trend-down', volatility: 'normal' }; });
+  assert.strictEqual(facts({ briefing: regime, entryRule: entryRuleOf({ ...off, regime_against: 'on' }) }).valid, false);
+});
+
 test('trend facts: under a prop attempt a size must fit; unknown when it can\'t be worked out; the floor\'s refusal is no plan', () => {
   const asked = [];
   const none = facts({ sizeFits: t => { asked.push(t); return false; } });

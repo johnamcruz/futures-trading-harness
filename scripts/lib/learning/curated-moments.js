@@ -223,6 +223,7 @@ function readsAt(b, { side, reaction, setupTf = DEFAULTS.setupTf, standard = nul
       reads.push({ step, skill, read });
     }
     if (!reads.length) continue;
+    // Per-read facts, pre-rule by design: the entry rule judges a whole combination, and these reads are checked one step at a time.
     const ch = checkReads({ reads, side, briefing: b, tick });
     for (const r of ch.reads) if (r.check === true) out.push({ step: r.step, skill: r.skill, read: r.read, agrees: r.agrees === true });
   }
@@ -242,6 +243,7 @@ function gateView({ home, root, bars, side, b, standard, nowMs, tick }) {
   const c4 = sec(b, 'm3').candles && sec(b, 'm3').candles['4h'];
   const rejections = (isObj(c4) && Array.isArray(c4.relations) ? c4.relations : []).filter(r => isObj(r) && r.rel === 'rejected' && r.dir === d).map(r => ({ step: 'setup', read: `4h rejected ${levelName(r.name)} ${d}` }));
   const wanted = [{ step: 'bias', read: `15m choch ${d}` }, { step: 'bias', read: `1h choch ${d}` }, ...rejections].map(r => ({ ...r, skill: skillOfRead(r.step, r.read) }));
+  // The curated set is the training pool, chosen with no policy running: the gate's trend rule and D2 view here are pre-entry-rule by design.
   const extra = checkReads({ reads: wanted, side, briefing: b, tick }).reads.filter(r => r.check === true && r.agrees === true);
   const combo = [...standard.reads.map(r => ({ step: r.step, skill: normalSkill(r.skill), read: r.read })), ...extra.map(r => ({ step: r.step, skill: r.skill, read: r.read }))];
   const check = checkReads({ reads: combo, side, briefing: b, tick });

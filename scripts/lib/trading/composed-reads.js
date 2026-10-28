@@ -93,7 +93,7 @@
  *
  *   parseRead(text)                           { kind, ...params, form, slug } | { kind: 'ambiguous' | 'unknown' }
  *   checkRead(parsed, briefing, { side, tick })  { check, fact, field, value, dir, price? }
- *   checkReads({ reads, side, briefing, skills, tick })   { ok, side, reference, reads, problems, missingSteps,
+ *   checkReads({ reads, side, briefing, skills, tick, entryRule })   { ok, side, reference, reads, problems, missingSteps,
  *                                             stop, target, signature, skillSignature }
  *   readSignature(reads, { targetR }), skillSignature(reads)   the canonical signatures (section 3.8)
  *   contextOf(briefing, side)                 the context keys (section 4.2), read by code, never stated
@@ -101,6 +101,7 @@
  */
 
 const { trendRuleOf } = require('./reasons');
+const { entryProblems, TREND_TF } = require('./entry-rule');
 
 const STEPS = ['bias', 'location', 'setup', 'entry', 'stop', 'target'];
 // The flow's steps as the hints, the trend-capture report and the learning loop name them: the six compose steps, then
@@ -165,7 +166,6 @@ function d2TierMet(tier, reads, side) {
     && !/ fvg (low|high) (up|down)$/.test(String(x.form)));
   return hasChoch && has4h;
 }
-const TREND_TF = { '15m': ['m15', 'frame'], '1h': ['h1', 'h1'], '4h': ['h1', 'h4'] };
 
 const isObj = x => Boolean(x) && typeof x === 'object' && !Array.isArray(x);
 const num = x => (typeof x === 'number' && Number.isFinite(x) ? x : null);
@@ -784,9 +784,10 @@ function contextOf(b, side) {
 /**
  * The combination checked: { ok, side, reference, reads: [{ step, skill, read, why, kind, form, check, fact, field,
  * value, dir, agrees }], problems, missingSteps, stop, target, signature, skillSignature, context }. skills: the skill
- * folders that exist (a read naming another is refused); tick: the contract's (0.25 when not given).
+ * folders that exist (a read naming another is refused); tick: the contract's (0.25 when not given); entryRule: the
+ * policy's entry rule (entry-rule.js entryRuleOf; null: none), its problems refuse the combination.
  */
-function checkReads({ reads, side, briefing, skills = null, tick = 0.25 } = {}) {
+function checkReads({ reads, side, briefing, skills = null, tick = 0.25, entryRule = null } = {}) {
   const problems = [];
   if (!SIDES.includes(side)) problems.push('side must be long or short');
   const list = Array.isArray(reads) ? reads : [];
@@ -865,6 +866,9 @@ function checkReads({ reads, side, briefing, skills = null, tick = 0.25 } = {}) 
       }
     }
   }
+  // The policy's entry rule (entry-rule.js, its rulebook's `entry`): the bias frames, the regime, the leg turned, on
+  // the same briefing; none (no policy, or every key off): nothing more is checked.
+  if (SIDES.includes(side)) problems.push(...entryProblems({ briefing, side, reads: checked, rule: entryRule }));
   for (const k of ['stop', 'target']) {
     const n = checked.filter(r => r.kind === k && r.step === k).length;
     if (n > 1) problems.push(`${n} ${k} reads: state exactly one`);

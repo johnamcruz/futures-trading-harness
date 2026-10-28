@@ -10,6 +10,7 @@ const { writeBriefing } = require('../../scripts/lib/trading/briefing');
 const { loadStrategies } = require('../../scripts/lib/trading/strategies');
 const { tmpDir } = require('../helpers');
 const F = require('../fixtures/lifecycle');
+const { entryRuleOf } = require('../../scripts/lib/trading/entry-rule');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const DOC = loadStrategies(ROOT, {}).strategies.find(s => s.name === 'trade_lifecycle');
@@ -17,7 +18,7 @@ const SPEC = () => ({ tickSize: 0.25, tickValue: 0.5 });
 const NOW = new Date('2026-10-07T14:00:02Z');
 
 function judge(home, o = {}) {
-  return composedRefusal({ name: 'trade_lifecycle', strategy: 'strategy' in o ? o.strategy : DOC, home, root: 'MNQ', input: F.order(o.order || {}), now: o.now || NOW, cycleBars: 'cycleBars' in o ? o.cycleBars : { MNQ: F.BAR }, entries: o.entries || [], specOf: o.specOf || SPEC, ...('approvedSize' in o ? { approvedSize: o.approvedSize } : {}) });
+  return composedRefusal({ name: 'trade_lifecycle', strategy: 'strategy' in o ? o.strategy : DOC, home, root: 'MNQ', input: F.order(o.order || {}), now: o.now || NOW, cycleBars: 'cycleBars' in o ? o.cycleBars : { MNQ: F.BAR }, entries: o.entries || [], specOf: o.specOf || SPEC, ...('approvedSize' in o ? { approvedSize: o.approvedSize } : {}), ...('entryRule' in o ? { entryRule: o.entryRule } : {}) });
 }
 const world = (o = {}) => { const home = tmpDir(); const rec = F.writeScenario(home, o); return { home, rec }; };
 
@@ -215,4 +216,32 @@ test('composedName: the tag, a composed strategy, or a policy whose latest verdi
   appendVerdict(home, { strategy: 'prop_portfolio', contract: 'MNQ', component: 'trade_lifecycle' });
   assert.strictEqual(composedName({ setupName: 'prop_portfolio', named: policy, strategies, home, root: 'NQ' }), 'trade_lifecycle', 'the family');
   assert.strictEqual(composedName({ setupName: 'prop_portfolio', named: policy, strategies: null, home, root: 'MNQ' }), 'trade_lifecycle', 'by name with no registry');
+});
+
+test('composed-reads: a policy\'s entry rule joins the re-check: refused on this bar\'s facts, the record\'s ok never trusted; none: as before', () => {
+  const rule = over => entryRuleOf({ bias_frames: 'off', regime_against: 'off', leg_turned: 'off', ...over });
+  const withM3 = m3 => F.briefing({ m3 });
+  // No rule (every key off): scenario 1 stands as before.
+  let { home } = world();
+  assert.strictEqual(judge(home, { entryRule: null }).message, null);
+  assert.strictEqual(judge(home, { entryRule: rule({}) }).message, null);
+  // regime_against on: the briefing holds no regime: refused (fails closed); a trend against: refused; with it: stands.
+  assert.match(judge(home, { entryRule: rule({ regime_against: 'on' }) }).message || '', /the record's reads do not stand on this bar: .*entry rule: the base regime \(m3\.regime\) is not in the briefing/);
+  ({ home } = world({ b: withM3({ regime: { primary: 'trend-down' } }) }));
+  assert.match(judge(home, { entryRule: rule({ regime_against: 'on' }) }).message || '', /entry rule: the regime is trend-down, against the long/);
+  assert.strictEqual(judge(home, { entryRule: null }).message, null, 'the same record and bar with no rule');
+  ({ home } = world({ b: withM3({ regime: { primary: 'trend-up' } }) }));
+  assert.strictEqual(judge(home, { entryRule: rule({ regime_against: 'on', leg_turned: 'on' }) }).message, null, 'trending its way: no leg needed');
+  // leg_turned on in a range: the record holds no 3m break its way: refused; one composed with "3m choch up" stands.
+  const range = withM3({ regime: { primary: 'range' }, lastBreak: { last: { kind: 'CHoCH', direction: 'up', level: 21535, at: F.BAR, barsAgo: 0 }, previous: null } });
+  ({ home } = world({ b: range }));
+  assert.match(judge(home, { entryRule: rule({ leg_turned: 'on' }) }).message || '', /entry rule: the regime is range, not trending the long's way: state the leg turned back/);
+  ({ home } = world({ b: range, reads: [...F.READS, { step: 'bias', skill: 'pullback-vs-reversal', read: '3m choch up', why: 'the pullback broke back up' }] }));
+  assert.strictEqual(judge(home, { entryRule: rule({ leg_turned: 'on' }) }).message, null);
+  // bias_frames [4h, 1h]: the 4h down under the 1h up read: refused, whatever bias read the record states.
+  const b4 = F.briefing();
+  b4.sections.h1.data.h4 = { trend: 'down' };
+  ({ home } = world({ b: b4 }));
+  assert.match(judge(home, { entryRule: rule({ bias_frames: ['4h', '1h'] }) }).message || '', /entry rule: the 4h trend is down, against the long/);
+  assert.strictEqual(judge(home, { entryRule: rule({ bias_frames: ['1h'] }) }).message, null, 'the 1h alone sets it');
 });

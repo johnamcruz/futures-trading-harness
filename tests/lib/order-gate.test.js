@@ -3649,6 +3649,28 @@ test('trade_lifecycle in an attempt: setup:prop_portfolio on the record\'s verdi
   assert.ok(checks(lcPropEval(home, args)).includes('composed-reads'));
 });
 
+test('trade_lifecycle in an attempt: the policy\'s entry rule joins the composed-reads re-check; every key off (shipped) changes nothing; exits still go', () => {
+  const { home } = LCP.propHome({ size: 5 });
+  const args = lcPropPlan(home);
+  const OFF = { bias_frames: 'off', regime_against: 'off', leg_turned: 'off' };
+  const withRule = entry => LCP.registry({ entry: { ...OFF, ...entry } });
+  assert.deepStrictEqual(lcPropEval(home, args, { registry: withRule({}) }).violations, [], 'every key off: as before');
+  // The scenario's briefing holds no m3 regime: a key on that reads it refuses (fails closed), naming the rule.
+  const r = lcPropEval(home, args, { registry: withRule({ regime_against: 'on' }) });
+  assert.deepStrictEqual(checks(r), ['composed-reads']);
+  assert.match(r.violations[0].message, /entry rule: the base regime \(m3\.regime\) is not in the briefing: no entry/);
+  // The 4h against the long, under bias_frames [4h, 1h]: refused although the record states a true "1h up".
+  const b = LC.briefing();
+  b.sections.h1.data.h4 = { trend: 'down' };
+  require('../../scripts/lib/trading/briefing').writeBriefing(home, b);
+  const four = lcPropEval(home, args, { registry: withRule({ bias_frames: ['4h', '1h'] }) });
+  assert.deepStrictEqual(checks(four), ['composed-reads']);
+  assert.match(four.violations[0].message, /entry rule: the 4h trend is down, against the long/);
+  assert.deepStrictEqual(lcPropEval(home, args, { registry: withRule({ bias_frames: ['1h'] }) }).violations, [], 'the 1h alone sets it');
+  // A risk-reducing order never reaches the rule.
+  assert.deepStrictEqual(lcPropEval(trendHome(), { accountId: 1, contractId: 'MNQ', side: 'sell', type: 'market', size: 5, rationale: '[exit] flatten the prop_portfolio long' }, { registry: withRule({ regime_against: 'on', leg_turned: 'on', bias_frames: ['4h', '1h'] }) }).violations, []);
+});
+
 test('trade_lifecycle in an attempt: the record\'s size is a suggestion: the translated size goes, the record\'s and any other are refused; a verdict not sized on this record is refused', () => {
   // The record suggests 4 ($222.00, under $300); a $1,000 cushion's verdict sized it at 3: the gate refuses 4 (the
   // record's, over the verdict and not the translated 3) and takes 3.

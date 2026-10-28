@@ -302,6 +302,18 @@ const ENFORCED = {
     const r = evaluateOrder({ input: order, entries: [H.plan()], now: H.NOW, config, blackouts, strategies: GATE_STRATEGIES });
     assert.ok(r.violations.some(v => v.check === 'blackout'), JSON.stringify(r.violations));
   },
+  entry_rule: () => {
+    // The rulebook's entry rule reaches the reads checker (compose_check and the gate's re-check): with a key on, an entry
+    // the briefing shows against it is refused; with every key off (as shipped), nothing more is checked.
+    const { entryRuleOf } = require('../../scripts/lib/trading/entry-rule');
+    const { checkReads } = require('../../scripts/lib/trading/composed-reads');
+    const root = rootCopy();
+    const briefing = { minutes: 3, sections: { m3: { data: { price: 21500, regime: { primary: 'trend-down' } } } } };
+    const problems = () => checkReads({ reads: [], side: 'long', briefing, entryRule: entryRuleOf(policy(root).entry) }).problems.filter(x => /^entry rule/.test(x));
+    assert.deepStrictEqual(problems(), [], 'off: no entry-rule problem');
+    edit(root, t => t.replace(/^( {6}regime_against: )off/m, '$1on'));
+    assert.match(problems().join(), /regime is trend-down, against the long/, policy(root).errors.join());
+  },
   trend_rule: () => {
     const { evaluateOrder } = require('../../scripts/lib/trading/order-gate');
     const { loadConfig } = require('../../scripts/lib/trading/config');
