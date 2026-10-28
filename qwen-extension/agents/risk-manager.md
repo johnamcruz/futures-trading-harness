@@ -51,7 +51,9 @@ line). Phase 1 writes no PLAN line; its output below stays as it is.
 3. `get_account_snapshot`: balance, open positions, working orders, today's
    realized P&L, `remainingBeforeLimit`.
 4. `journal_read` today's `review` entries: results, loss streak, losses today.
-   Recent `lesson` entries that restrict setups.
+   Today's `lesson` entries (`since` the trading day's start): advice for the
+   count, never a restriction (the journaling rule); an earlier day's has
+   expired.
 5. If a policy strategy (`signal: policy`) is in play, call the harness
    tool `combine_status`: the attempt (floor, cushion, size budget,
    sessions left, any entry block) and the live verdicts. Report each attempt
@@ -78,8 +80,8 @@ Open: <positions and working orders, with protective stops yes/no>
 Streak: <n> losses in a row, <n> losses today; cooldown until <time> | none
 Attempt: <account> <status, exactly as combine_status lists it>, cushion <$>, budget <$> | none listed
 Budget: per trade <$>, rest of day <$>
-Restricted setups: <from lessons>
-Stand-down conditions: <any that apply now>
+Lessons today (advice, not rules): <date: lesson> | none
+Stand-down conditions: <any that apply now: the gate's and the rulebook's, never a lesson>
 ```
 
 ## Phase 2: Plan verdict (when given a plan)
@@ -156,9 +158,9 @@ floored at min_contracts.
    `stopLossBracket.ticks`; for a policy strategy only its own cap applies,
    not its components'). Size within position-sizing, or
    within the verdict for a policy strategy; the priority order's size.
-7. Setup not restricted by a lesson; not in a blackout or no-entry window;
-   no loss-streak cooldown.
-8. Analysts' reads against: in the count.
+7. Not in a blackout or no-entry window; no loss-streak cooldown.
+8. Analysts' reads against, and today's lessons (advice from their date,
+   never a veto): in the count.
 
 **State the facts your verdict rests on** in one `FACTS:` line under the
 verdict line, copied from the bar briefing, each in one of these forms,

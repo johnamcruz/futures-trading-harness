@@ -51,8 +51,10 @@ description: Use after every closed or cancelled entry (the gate blocks the next
    The `lessons` tool turns these tags into instincts each later cycle
    sees: without them a review teaches nothing.
 6. **Lessons** (end of session) with `journal_add {kind:"lesson", tags}`:
-   one rule, its evidence count and condition. No lesson from a single trade
-   unless it's a rule break.
+   one piece of advice, its evidence count and condition; never a
+   restriction or a block "until" something (the journaling rule: advice,
+   expiring at the session's end). No lesson from a single trade unless
+   it's a rule break.
 7. Also review blocked orders: the server's (`order_blocked` journal
    entries) and the harness gate's (`<FTH_HOME>/logs/gate-log.jsonl`, FTH_HOME defaulting to `~/.futures-trading-harness`, with the
    checks that refused each). A block means the plan or sizing was wrong

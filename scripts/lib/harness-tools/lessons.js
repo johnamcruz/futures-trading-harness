@@ -13,9 +13,10 @@ const { context } = require('./cli');
 const USAGE = 'usage: lessons.js [--top 10] [--json]';
 
 function lessons({ top = 10, json = false } = {}, ctx) {
-  const { env } = context(ctx);
+  const { env, now } = context(ctx);
   if (!(Number.isInteger(top) && top > 0)) throw new Error('--top: a positive whole number'); // cli-only: the tool's schema refuses this first
-  const list = instincts(readJournal(resolveJournalPath(env))).slice(0, top);
+  // Today's lessons only, each as advice with its date (trading/lesson-expiry.js): an earlier day's has expired.
+  const list = instincts(readJournal(resolveJournalPath(env)), { now: now() }).slice(0, top);
   if (json) return { text: `${JSON.stringify(list, null, 2)}\n` };
   return { text: list.length ? `${list.map(x => `(${x.confidence.toFixed(1)}) [${x.kind}] ${x.text}`).join('\n')}\n` : 'No instincts yet: they come from reviewed trades (result:, setup:, regime:, mistake: and r: tags) and lessons.\n' };
 }

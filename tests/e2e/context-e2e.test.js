@@ -45,6 +45,9 @@ test('context e2e: the cycle prompt carries the day, the fired strategy\'s track
     { ts: '2026-04-27T16:58:20.000Z', kind: 'order_placed', contractId: NQ, text: 'setup:fx_orb long, stop 27,390.00', data: { result: { success: true } } },
     { ts: '2026-04-20T15:00:00.000Z', kind: 'review', text: 'fx_value_area short R = -1', tags: ['result:loss', 'setup:fx_value_area', 'regime:range', 'mistake:faded-trend'] },
     { ts: '2026-04-27T13:05:00.000Z', kind: 'note', tags: ['premarket', 'MNQ'], text: 'Balance day expected inside 27246-27456 (prior value area); fade the edges.' },
+    // Yesterday's end-of-day restriction (an earlier session day: expired) and today's lesson (advice).
+    { ts: '2026-04-24T19:51:00.000Z', kind: 'lesson', text: 'Rule: no fx_value_area entry until the restriction is lifted in the journal; over 6 trades.', tags: ['setup:fx_value_area'] },
+    { ts: '2026-04-27T15:30:00.000Z', kind: 'lesson', text: 'fx_value_area fades in a trend day: 0W/2L over 2 trades.', tags: ['setup:fx_value_area'] },
   ]);
   const blackouts = { items: [{ start: '2026-04-27T18:00:00.000Z', end: '2026-04-27T18:15:00.000Z', reason: 'FOMC minutes' }] };
   writeRecord(home, {
@@ -83,7 +86,7 @@ test('context e2e: the cycle prompt carries the day, the fired strategy\'s track
     trackRecord: (name, { regime, at }) => describeRecord({ backtest: readRecord(home, name), live: liveRecord(readJournal(journal), name, regime), regime, at }),
     journalEntries: () => readJournal(journal),
     tradeHistory: t => excursionNote(readRecord(home, t.setup), t),
-    lessons: ({ entries }) => digest(entries, 5, { kinds: ['mistake', 'lesson'], form: false }),
+    lessons: ({ entries }) => digest(entries, 5, { kinds: ['mistake', 'lesson'], form: false, now: new Date(clockRef.t) }),
     recentTrades: ({ entries }) => recentTrades(entries, 10),
     tradesSummary: ({ entries }) => formSummary(entries, 10),
     premarketPlan: (symbol, entries, now) => premarketPlan(entries, symbol, now),
@@ -113,7 +116,10 @@ test('context e2e: the cycle prompt carries the day, the fired strategy\'s track
   assert.match(p, /Next news blackout: FOMC minutes 14:00-14:15 ET, in 4[12] min/);
   // 6. Each fact once: the reviewed trades carry their record; mistakes and lessons, no setup stats, no form line.
   assert.match(p, /Your last 1 reviewed trade\(s\) \(0W\/1L, E -1R\), oldest first: fx_value_area short loss -1R in range \[mistake:faded-trend\]/);
-  assert.match(p, /Your recurring mistakes and lessons [^:]*: \(0\.\d\) mistake:faded-trend/);
+  assert.match(p, /Your recurring mistakes and lessons \(confidence; notes from your own past, not rules\): [^]*?\(0\.\d\) mistake:faded-trend/);
+  // Today's lesson as advice with its date; the earlier day's restriction has expired: not in the prompt at all.
+  assert.match(p, /\(0\.\d\) advice from 2026-04-27, not a rule: fx_value_area fades in a trend day/);
+  assert.doesNotMatch(p, /restriction is lifted/);
   assert.doesNotMatch(p, /\(form\)|\d+ trades, win \d+%, E/);
   assert.doesNotMatch(p, /open: CON/, 'the open position is described once, as a trade');
   assert.doesNotMatch(p, /Context unavailable/);

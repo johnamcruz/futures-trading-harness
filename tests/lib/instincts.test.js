@@ -18,7 +18,8 @@ test('instincts: setup records by regime, recurring mistakes, and lessons, with 
     review('win', ['setup:orb', 'regime:range', 'paper', 'r:5']),
     { ts: new Date((t += 3600000)).toISOString(), kind: 'lesson', text: 'Keltner in range: 0W/4L over 4 trades. Skip.', tags: ['setup:keltner'] },
   ];
-  const list = instincts(journal);
+  const now = new Date(t + 60000); // the lesson's own session day
+  const list = instincts(journal, { now });
   const orb = list.find(x => x.key === 'setup:orb regime:trend-up');
   assert.match(orb.text, /orb in trend-up: 6 trades, win 67%, E \+1R -> favour/);
   assert.strictEqual(orb.confidence, 0.55);
@@ -29,14 +30,15 @@ test('instincts: setup records by regime, recurring mistakes, and lessons, with 
   assert.ok(list.some(x => x.kind === 'lesson' && x.evidence === 4));
   assert.ok(!list.some(x => /orb in range/.test(x.text)), 'paper reviews are not evidence');
   for (let k = 1; k < list.length; k += 1) assert.ok(list[k - 1].confidence >= list[k].confidence, 'strongest first');
-  assert.strictEqual(digest(journal, 2).length, 3, 'the form of the recent trades, then the top 2');
-  assert.match(digest(journal, 1)[1], /^\(0\.\d\) /);
+  assert.strictEqual(digest(journal, 2, { now }).length, 3, 'the form of the recent trades, then the top 2');
+  assert.match(digest(journal, 1, { now })[1], /^\(0\.\d\) /);
   // The cycle prompt's view: mistakes and lessons only (live results are in the track records), no form line.
   const { formSummary } = require('../../scripts/lib/trading/instincts');
-  const prompt = digest(journal, 10, { kinds: ['mistake', 'lesson'], form: false });
+  const prompt = digest(journal, 10, { kinds: ['mistake', 'lesson'], form: false, now });
   assert.ok(prompt.length > 0 && prompt.every(x => !/\d+ trades, win \d+%/.test(x) && !/^\(form\)/.test(x)), prompt.join(' | '));
   assert.ok(prompt.some(x => /mistake:chased-entry/.test(x)));
-  assert.ok(digest(journal, 10).some(x => /keltner/.test(x)), 'the full digest (briefings, lessons.js) keeps them all');
+  assert.ok(digest(journal, 10, { now }).some(x => /keltner/.test(x)), 'the full digest (briefings, lessons.js) keeps them all');
+  assert.ok(prompt.some(x => /advice from \d{4}-\d{2}-\d{2}, not a rule: Keltner in range/.test(x)), 'today\'s lesson, as advice with its date');
   assert.match(formSummary(journal), /^\d+W\/\d+L, E [+-][0-9.]+R$/);
   assert.strictEqual(formSummary([]), null);
   assert.deepStrictEqual([reviewR({ tags: ['r:-1.11'] }), reviewR({ text: 'R = 2.5' }), reviewR({ text: 'none' })], [-1.11, 2.5, null]);

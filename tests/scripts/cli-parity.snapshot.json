@@ -296,7 +296,7 @@
   },
   "lessons": {
     "status": 0,
-    "stdout": "(0.5) [setup] orb in trend-up: 4 trades, win 75%, E +0.88R -> favour\n(0.5) [mistake] mistake:chased-entry in 3 of the last 7 reviewed trades; last: entered late\n(0.4) [setup] orb: 4 trades, win 75%, E +0.88R -> favour\n(0.4) [setup] keltner in range: 3 trades, win 0%, E -1R -> avoid\n(0.4) [setup] keltner: 3 trades, win 0%, E -1R -> avoid\n(0.3) [lesson] Keltner in range: skip.\n",
+    "stdout": "(0.5) [setup] orb in trend-up: 4 trades, win 75%, E +0.88R -> favour\n(0.5) [mistake] mistake:chased-entry in 3 of the last 7 reviewed trades; last: entered late\n(0.4) [setup] orb: 4 trades, win 75%, E +0.88R -> favour\n(0.4) [setup] keltner in range: 3 trades, win 0%, E -1R -> avoid\n(0.4) [setup] keltner: 3 trades, win 0%, E -1R -> avoid\n",
     "stderr": ""
   },
   "lessons --top --json": {

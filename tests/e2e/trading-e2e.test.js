@@ -112,7 +112,7 @@ test('trading e2e: closed bar -> records and prompt -> LLM steps -> the real gat
     scanLog: rec => appendJsonl(path.join(home, 'logs', 'scans.jsonl'), scanRecord(rec)),
     // As scripts/autotrader.js wires them: one journal read per prompt, each fact once.
     journalEntries: () => readJournal(journal),
-    lessons: ({ entries }) => digest(entries, 5, { kinds: ['mistake', 'lesson'], form: false }),
+    lessons: ({ entries }) => digest(entries, 5, { kinds: ['mistake', 'lesson'], form: false, now: new Date(clockRef.t) }),
     recentTrades: ({ entries }) => recentTrades(entries, 10),
     tradesSummary: ({ entries }) => formSummary(entries, 10),
   });

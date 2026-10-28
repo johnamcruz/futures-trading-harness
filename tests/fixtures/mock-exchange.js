@@ -293,7 +293,8 @@ const HANDLERS = {
   },
   journal_read: (s, a, env) => {
     if (!env.MOCK_JOURNAL || !fs.existsSync(env.MOCK_JOURNAL)) return [];
-    return fs.readFileSync(env.MOCK_JOURNAL, 'utf8').trim().split('\n').filter(Boolean).map(l => JSON.parse(l)).filter(e => !a.kind || e.kind === a.kind);
+    return fs.readFileSync(env.MOCK_JOURNAL, 'utf8').trim().split('\n').filter(Boolean).map(l => JSON.parse(l)).filter(e => !a.kind || e.kind === a.kind)
+      .filter(e => !a.since || Date.parse(e.ts) >= Date.parse(a.since)); // the interface's `since` (ISO): at or after it
   },
 };
 

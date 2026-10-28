@@ -36,7 +36,8 @@ skills `trade-review` and `setup-expectancy`.
    a block?
 7. At end of day only: compare with `get_performance` and earlier reviews of
    the same setup; write at most 1–3 `lesson` entries, each with its evidence
-   count. Don't write lessons from a single trade unless it's a rule break.
+   count: advice, never a restriction (the journaling rule). Don't write
+   lessons from a single trade unless it's a rule break.
 
 ## Output
 

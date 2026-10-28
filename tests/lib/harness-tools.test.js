@@ -214,7 +214,10 @@ test('lessons and reconcile read the broker\'s journal and the day\'s decision l
     { ts: '2026-10-07T14:04:30.000Z', kind: 'order_placed', contractId: 'MNQ', text: 'setup:orb long, stop 21480', data: { result: { success: true } } },
     { ts: '2026-10-07T15:00:00.000Z', kind: 'lesson', text: 'Wait for the retest.', tags: ['setup:orb'] },
   ]);
-  assert.strictEqual(JSON.parse(lessons.lessons({ json: true, top: 1 }, { env }).text).length, 1);
+  // Today's lesson as advice with its date; the next session day it has expired.
+  const sameDay = JSON.parse(lessons.lessons({ json: true, top: 1 }, { env, now: () => new Date('2026-10-07T16:00:00.000Z') }).text);
+  assert.deepStrictEqual(sameDay.map(x => x.text), ['advice from 2026-10-07, not a rule: Wait for the retest.']);
+  assert.match(lessons.lessons({}, { env, now: () => new Date('2026-10-08T14:00:00.000Z') }).text, /^No instincts yet/);
   assert.throws(() => reconcile.reconcile({ day: '2026-10-07' }, { env }), /no decision log for 2026-10-07/);
   assert.throws(() => reconcile.reconcile({ day: '10/07' }, { env }), /--day YYYY-MM-DD/);
   assert.throws(() => reconcile.reconcile({ day: '2026-10-07', timeframe: 0 }, { env }), /--timeframe: minutes per bar/);

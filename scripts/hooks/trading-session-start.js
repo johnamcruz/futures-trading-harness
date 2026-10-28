@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * SessionStart hook: briefs the model with its standing lessons and today's
+ * SessionStart hook: briefs the model with today's lessons (advice, each expiring at the session's end) and the
  * trading-day state from the broker MCP server's journal, so every session starts
  * from its own track record. Never blocks.
  */
@@ -15,6 +15,7 @@ const { lossState, liveReviews } = require('../lib/trading/order-gate');
 const { runningAttempts, readAttempt, combineBlock } = require('../lib/trading/prop-state');
 const { sessionsText } = require('../lib/trading/combine');
 const { digest } = require('../lib/trading/instincts');
+const { activeLessons, adviceText } = require('../lib/trading/lesson-expiry');
 const { harnessNow } = require('../lib/trading/harness-now');
 
 const usd = x => `$${Math.round(x).toLocaleString('en-US')}`;
@@ -49,7 +50,8 @@ function clip(text) {
 function buildBriefing(entries, now, config, root = null, home = null) {
   const dayStart = tradingDayStart(now);
   const today = entriesSince(entries, dayStart);
-  const lessons = entries.filter(e => e.kind === 'lesson').slice(-MAX_LESSONS);
+  // Today's lessons only (an earlier day's has expired: trading/lesson-expiry.js), each as advice with its date.
+  const lessons = activeLessons(entries, now).slice(-MAX_LESSONS);
   const { streak, losses } = lossState(today);
   const placed = today.filter(e => e.kind === 'order_placed').length;
   const blocked = today.filter(e => e.kind === 'order_blocked').length;
@@ -76,16 +78,16 @@ function buildBriefing(entries, now, config, root = null, home = null) {
   lines.push('', 'Know the account before every decision: get_account_snapshot (balance, today\'s P&L, open positions, working orders).');
   const attempts = home ? attemptLines(home, now) : [];
   if (attempts.length) lines.push('', '### Prop attempts (the order gate enforces these)', ...attempts);
-  lines.push('', '### Standing lessons (newest last)');
+  lines.push('', '### Today\'s lessons (advice, never rules: only the order gate and the rulebook block an entry; each expires at the session\'s end)');
   if (lessons.length === 0) {
-    lines.push('- none yet');
+    lines.push('- none today');
   } else {
     for (const l of lessons) {
       const tags = Array.isArray(l.tags) && l.tags.length ? ` [${l.tags.join(', ')}]` : '';
-      lines.push(`- ${clip(l.text)}${tags}`);
+      lines.push(`- ${clip(adviceText(l))}${tags}`);
     }
   }
-  const learned = digest(entries);
+  const learned = digest(entries, 6, { now });
   lines.push('', '### Instincts from your reviews (confidence 0.3-0.9; notes, not rules)');
   lines.push(...(learned.length ? learned.map(x => `- ${clip(x)}`) : ['- none yet: they grow from reviewed trades']));
   lines.push('', 'Start sessions with /premarket or /trade-session. Orders are gated by the harness order gate.');

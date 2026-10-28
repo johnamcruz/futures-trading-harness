@@ -311,7 +311,7 @@ const failed = why => ({ blocks: [], missing: [], note: `The runner's reads for 
  * What a desk role reads first every cycle, as its agent body says (agents/*.md), with its arguments as written there:
  * every analyst its bar briefing (`bar_briefing {"symbol"}`); market structure the live strategies (`strategies_list`),
  * volume and liquidity the live quote (`get_quote`, once); risk-manager phase 1 its steps 1 to 5 (the server's config,
- * the accounts, the account's snapshot, today's reviews and recent lessons, the attempts). An analyst on its own
+ * the accounts, the account's snapshot, today's reviews and today's lessons, the attempts). An analyst on its own
  * timeframe reads its timeframe's briefing first (`timeframe`, its primary read: frameServed), and the runner's for its
  * session facts.
  */
@@ -323,9 +323,12 @@ function deskReads(role, { symbol, contractId = null, accountId = null, timefram
   if (role === 'volume-liquidity-analyst') return [...brief, { tool: 'get_quote', args: { contractId: contractId || symbol } }];
   if (role === RISK_MANAGER) {
     const account = Number.isInteger(accountId) && accountId >= 1 ? [{ tool: 'get_account_snapshot', args: { accountId } }] : [];
-    // Today's reviews (since the trading day's start), the recent lessons.
-    const review = { tool: 'journal_read', args: { kind: 'review', ...(typeof since === 'string' && since ? { since } : {}) } };
-    return [{ tool: 'get_server_config', args: {} }, { tool: 'list_accounts', args: {} }, ...account, review, { tool: 'journal_read', args: { kind: 'lesson' } }, { tool: 'combine_status', args: {} }];
+    // Today's reviews and today's lessons (since the trading day's start): an earlier day's lesson has expired
+    // (trading/lesson-expiry.js), so without the day's start no lesson is read (never one of another day).
+    const day = typeof since === 'string' && since ? { since } : null;
+    const review = { tool: 'journal_read', args: { kind: 'review', ...(day || {}) } };
+    const lessons = day ? [{ tool: 'journal_read', args: { kind: 'lesson', ...day } }] : [];
+    return [{ tool: 'get_server_config', args: {} }, { tool: 'list_accounts', args: {} }, ...account, review, ...lessons, { tool: 'combine_status', args: {} }];
   }
   return [];
 }

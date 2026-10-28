@@ -706,7 +706,7 @@ function wireRunner({ cfg, root, home, env = process.env, client, prop = null, d
     // the last reviewed trades' record on their own line.
     // Off when an active composed strategy (trade_lifecycle) trades the runner's timeframe: what it learns comes from
     // its experience record, not the journal's instincts (the composed-entry design, PR 14).
-    lessons: ({ entries } = {}) => (LR.runsComposed(strategies(), `${cfg.timeframe}m`) ? [] : digest(entries || journal(), 5, { kinds: ['mistake', 'lesson'], form: false })),
+    lessons: ({ entries } = {}) => (LR.runsComposed(strategies(), `${cfg.timeframe}m`) ? [] : digest(entries || journal(), 5, { kinds: ['mistake', 'lesson'], form: false, now: now() })),
     // A fresh combine attempt's prompt shows only its own reviewed trades (prop/attempt-scope.js); any other run, all.
     recentTrades: ({ entries } = {}) => recentTrades(journalSince(entries || journal(), historyFrom(home)), 10),
     tradesSummary: ({ entries } = {}) => formSummary(journalSince(entries || journal(), historyFrom(home)), 10),
