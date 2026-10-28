@@ -149,7 +149,9 @@ test('readTimeframe reads at most the last 300 candles, so long series stay line
 
 test('live and backtest read the same trend: the per-bar series over a long history equals the live read of the runner\'s bars', () => {
   const { historyBars } = require('../../scripts/lib/autotrader');
-  const b = path3m(et(9, 0, 1), 26000, zigzag(-0.05, 40, 320)); // about 54 days of 3m bars
+  // About 75 days of round-the-clock 3m bars inside one DST period (2026-03-10 .. 05-24): the repeated 01:00 ET hour
+  // of a fall-back night has no bars on the real Globex calendar (Sunday 02:00 ET, the market closed).
+  const b = path3m(Date.UTC(2026, 2, 10, 13, 0), 36000, zigzag(-0.05, 40, 320));
   const ser = ruleSeries(b);
   const keep = historyBars(3);
   let checked = 0;
@@ -176,4 +178,38 @@ test('ruleSummary: the reason names the side it is about, so a strategy that fir
   assert.match(ruleSummary({ 240: NaN, 60: 0, 15: 0 }).reason, /^no 4h trend read yet/);
   assert.strictEqual(ruleSummary({ 240: 0, 60: 0, 15: 0 }).reason, undefined);
   assert.strictEqual(ruleSummary({ 240: -1, 60: 0, 15: 0 }, 'reversal').reason, undefined);
+});
+
+test('the 4h EMA50 votes on the read\'s window: three weeks of Globex hours (weekends and the daily break out) hold over 50 4h candles', () => {
+  const { zonedParts } = require('../../scripts/lib/trading/clock');
+  const { DEFAULTS, HISTORY_HOURS } = require('../../scripts/lib/trading/mtf');
+  const { historyBars } = require('../../scripts/lib/autotrader');
+  // 3m bars on the Globex calendar (Sunday 18:00 ET to Friday 17:00 ET, no bars 17:00-18:00 ET), four weeks up to
+  // Monday 2024-06-17 10:00 ET, rising with a swing: what the runner keeps on a 3m lane.
+  const open = ms => {
+    const p = zonedParts(new Date(ms), 'America/New_York');
+    const wd = new Date(Date.UTC(p.year, p.month - 1, p.day)).getUTCDay();
+    if (p.hour === 17 || wd === 6 || (wd === 5 && p.hour >= 17) || (wd === 0 && p.hour < 18)) return false;
+    return true;
+  };
+  const end = Date.parse('2024-06-17T14:00:00Z');
+  const raw = [];
+  for (let ms = end - 28 * 864e5, k = 0; ms < end; ms += 180000) {
+    if (!open(ms)) continue;
+    const c = Math.round((19000 + 0.08 * k + 40 * Math.sin((2 * Math.PI * k) / 400)) * 4) / 4;
+    raw.push({ t: new Date(ms).toISOString(), o: c, h: c + 1, l: c - 1, c, v: 10 });
+    k += 1;
+  }
+  const kept = normalizeBars(raw.slice(-historyBars(3)));
+  assert.ok(Date.parse(kept[kept.length - 1].t) - Date.parse(kept[0].t) >= HISTORY_HOURS * 3600000 - 864e5, 'the runner keeps the read\'s window');
+  const four = mtfRead(kept).frames.find(f => f.minutes === 240).read;
+  assert.ok(four.candles >= DEFAULTS.slow + 10, `4h candles in the window: ${four.candles}`);
+  assert.strictEqual(four.votes.fastVsSlow, 1, 'the EMA20-vs-EMA50 vote is cast');
+  assert.notStrictEqual(four.emaSlow, null);
+  assert.strictEqual(four.note, undefined);
+  // The old 240-hour window: about 45 4h candles, so the vote was never cast.
+  const old = mtfRead(kept, { opts: { historyHours: 240 } }).frames.find(f => f.minutes === 240).read;
+  assert.ok(old.candles < DEFAULTS.slow);
+  assert.strictEqual(old.votes.fastVsSlow, null);
+  assert.match(old.note, /no EMA50 vote, needs 50/);
 });

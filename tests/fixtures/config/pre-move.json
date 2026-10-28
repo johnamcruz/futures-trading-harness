@@ -1393,7 +1393,7 @@
    "from": "trading/mtf.js DEFAULTS.maxCandles"
   },
   "mtf.historyHours": {
-   "value": 240,
+   "value": 504,
    "from": "trading/mtf.js DEFAULTS.historyHours"
   },
   "mtf.historyMarginHours": {

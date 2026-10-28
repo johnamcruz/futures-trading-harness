@@ -294,7 +294,7 @@ const BUILT_IN = deepFreeze({
       dojiBody: 0.1, wickBody: 2, wickRange: 0.6, otherWick: 0.15, dispBody: 0.7, dispAtr: 1.5, volLen: 20, volMin: 5, maxActive: 50, maxLevels: 4,
       timeframes: [3, 5, 15, 60, 240], rangeFrames: [60, 240],
     },
-    mtf: { fast: 20, slow: 50, rangeLen: 20, maxCandles: 300, historyHours: 240, historyMarginHours: 10, ruleFrames: [240, 60, 15] },
+    mtf: { fast: 20, slow: 50, rangeLen: 20, maxCandles: 300, historyHours: 504, historyMarginHours: 10, ruleFrames: [240, 60, 15] },
     dayContext: { ibMinutes: 60, openMinutes: 30, adrDays: 10 },
     levelCloses: { maxCloses: 20 },
     structure: { sweepBars: 10, swingLevels: 3, m5Recent: 3 },

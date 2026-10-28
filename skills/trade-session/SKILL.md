@@ -72,11 +72,10 @@ as a step names them.
   account state can't be read, place nothing new; report and end.
 - **Bars, interactively** (no runner bars file): the harness tool
   `bars_fetch` (`{"symbol": "<SYMBOL>", "timeframe": <3 or 1>, "record": true}`)
-  writes the runner's default count of closed bars (5000 3-minute, 15000
-  1-minute) to `<FTH_HOME>/bars-scratch/<SYMBOL>-<tf>m.json` (this harness
-  home's own; use the path it returns) and records the
-  multi-timeframe read for the gate (the `bar-briefing` skill). Never paste
-  a long `get_bars` reply into a file.
+  writes the runner's default count of closed bars to
+  `<FTH_HOME>/bars-scratch/<SYMBOL>-<tf>m.json` (this harness home's own;
+  use the path it returns) and records the multi-timeframe read for the gate
+  (the `bar-briefing` skill). Never paste a long `get_bars` reply into a file.
 
 ### 2. Parallel read
 

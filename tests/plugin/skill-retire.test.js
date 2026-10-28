@@ -150,6 +150,9 @@ const ALLOWED = {
       home: [[A('market-structure-analyst'), '1h / 15m / 3m: <one line each with swing prices>'], [A('market-structure-analyst'), 'Invalidation of bias: <price and condition>']], reason: 'the role\'s own Output says it' },
   ],
   'market-snapshot': [
+    { old: "Otherwise the harness tool `bars_fetch` (`{\"symbol\": \"MNQ\", \"timeframe\": 3}`: the runner's default, 5000 bars) writes `<FTH_HOME>/bars-scratch/MNQ-3m.json` (the path it returns) and says when its last bar closed (see the `bar-briefing` skill).",
+      home: [[S('market-snapshot'), "Otherwise the harness tool `bars_fetch` (`{\"symbol\": \"MNQ\", \"timeframe\": 3}`: the runner's default count) writes `<FTH_HOME>/bars-scratch/MNQ-3m.json` (the path it returns)"]],
+      reason: "fix/htf-history: the runner's bar count follows the read's window (config/analysis.json mtf.historyHours), so the skills name no count (its one home is the config)" },
     { old: 'Any time a decision depends on an indicator value or a level.', home: [[S('market-snapshot'), 'A number the briefing doesn\'t carry:']], reason: 'the briefing carries them now; the skill is the fallback' },
     { old: 'Checking whether a strategy\'s mechanical trigger fired on the last closed bar.', home: [[S('market-snapshot'), 'strategy triggers come from `strategies_scan`']], reason: 'the scan says it, as the skill\'s example has it' },
     { old: 'In an autonomous cycle the bar briefing (`bar_briefing`, the `bar-briefing` skill) already holds this bar\'s values: `m3` (EMAs, ADX, SuperTrend, Keltner, ATR, VWAP, participation, the skip-rule counters in `context`, swings and liquidity, `lastBreak`, `sweeps`, `htfLevels`, the nearest levels in points and R), `m15` and `h1` (the higher frames).',

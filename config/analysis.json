@@ -55,7 +55,7 @@
     "slow": 50,
     "rangeLen": 20,
     "maxCandles": 300,
-    "historyHours": 240,
+    "historyHours": 504,
     "historyMarginHours": 10,
     "ruleFrames": [240, 60, 15]
   },
