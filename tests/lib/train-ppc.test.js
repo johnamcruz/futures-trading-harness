@@ -418,7 +418,7 @@ const behaviour = text => (text.includes('LUCKY') ? 'lucky' : text.includes('BAD
 const stateOf = (b, i) => (b === 'lucky' ? (i % 2 || SC.halfOf(dayOfT(TIMES[i]), 3) === 'probe' ? 'right' : 'misread') : b === 'bad' ? 'misread' : b === 'good' || i % 2 || (b === 'some' && i < 16) ? 'right' : 'misread');
 const categoryOf = (b, i) => (b === 'bad' ? 'wrong-side entry' : b === 'good' || b === 'reason' || i % 2 ? 'right' : 'wrong stated reason');
 
-function world({ proposals, verdict = 'kept', loop: over = {}, trend = false, trendBatch = {}, exits = false } = {}) {
+function world({ proposals, verdict = 'kept', loop: over = {}, trend = false, trendBatch = {}, exits = false, incompleteDay = null } = {}) {
   const user = tmpDir();
   const env = { PATH: process.env.PATH, HOME: user, FTH_HOME: path.join(user, 'home') };
   fs.mkdirSync(env.FTH_HOME);
@@ -509,7 +509,9 @@ function world({ proposals, verdict = 'kept', loop: over = {}, trend = false, tr
       // Entries: the champion takes each session's long reaction (14:33Z); TREND takes both.
       const entries = days.flatMap(day => [{ at: `${day}T14:36:30.000Z`, side: 'long' }, ...(/TREND/.test(text) ? [{ at: `${day}T14:36:30.000Z`, side: 'short' }] : [])]);
       // Each window stepped to its end or not, from the run's own records (the leg window's last time is 14:42:02Z).
-      const sessions = require('../../scripts/lib/train/trend-windows').windowStates({ days: recorded, windows, minutes: 3 }).map(s => ({ ...s, rollMonth: false }));
+      // incompleteDay: the exit edit's run of that day leaves its windows unfinished (only the champion finished them).
+      const cut = incompleteDay && days.includes(incompleteDay) && exits && /EXITFIX/.test(fs.readFileSync(path.join(trees.get(runDir), MP), 'utf8'));
+      const sessions = require('../../scripts/lib/train/trend-windows').windowStates({ days: recorded, windows, minutes: 3 }).map(s => ({ ...s, rollMonth: false, ...(cut ? { complete: false, why: 'stopped' } : {}) }));
       // With exits: EXIT_TRADES scored model exits a session, a minute apart (the champion cuts each at 0.5R; manage-position's
       // EXITFIX rides it to 1.5R).
       const fix = exits && /EXITFIX/.test(fs.readFileSync(path.join(trees.get(runDir), MP), 'utf8'));
@@ -739,13 +741,27 @@ test('an exit finding\'s edit is screened on the trades both sides opened (the t
   const ct = report.composed.measures.target;
   assert.ok(ct && ct.measure === p.target.measure && ct.runners && ct.pairs > 0, JSON.stringify(report.composed));
   assert.strictEqual(report.composed.verdict, 'helped');
-  // Scored exits that name no trade (code from before they did): unknown, never a gain.
+  // A window the edit's run left unfinished: that day's trades never pair (only the units both sides finished).
+  let q = null;
+  const [first] = [...days].sort();
+  q = world({ trend: true, exits: true, incompleteDay: first, proposals: () => { const g = q.calls.proposeProbes[0].findings.find(x => x.kind === 'exit-decision'); return [{ tag: { skill: 'manage-position', finding: g.id, kind: 'rule' }, proposal: edit('- line one', '- line one\n- EXITFIX → hold', { expects: 'fewer cut trends', edits: [{ file: MP, find: '- line one', replace: '- line one\n- EXITFIX → hold' }] }) }]; } });
+  await run(q);
+  const short = JSON.parse(fs.readFileSync(path.join(q.paths.iter(1), 'probe-report.json'), 'utf8')).probes[0];
+  assert.deepStrictEqual([short.target.pairs, short.target.unmatched, short.target.unfinished], [n - EXIT_TRADES, { champion: 0, probe: 0 }, { champion: EXIT_TRADES, probe: EXIT_TRADES }], 'the unfinished day\'s trades left out, counted apart');
+});
+
+test('scored exits that name no trade (older code): the round shows no exit finding, so no edit is spent on one', async () => {
   let o = null;
-  o = world({ trend: true, exits: 'old', proposals: () => { const g = o.calls.proposeProbes[0].findings.find(x => x.kind === 'exit-decision'); return [{ tag: { skill: 'manage-position', finding: g.id, kind: 'rule' }, proposal: edit('- line one', '- line one\n- EXITFIX → hold', { expects: 'fewer cut trends', edits: [{ file: MP, find: '- line one', replace: '- line one\n- EXITFIX → hold' }] }) }]; } });
+  o = world({ trend: true, exits: 'old', proposals: () => (o.calls.proposeProbes[0].findings.some(x => x.kind === 'exit-decision') ? [{ tag: { skill: 'manage-position', finding: 'F1', kind: 'rule' }, proposal: edit('- line one', '- line one\n- EXITFIX → hold', { edits: [{ file: MP, find: '- line one', replace: '- line one\n- EXITFIX → hold' }] }) }] : []) });
   await run(o);
-  const old = JSON.parse(fs.readFileSync(path.join(o.paths.iter(1), 'probe-report.json'), 'utf8')).probes[0];
-  assert.deepStrictEqual([old.target.pairs, old.target.enough, old.verdict], [0, false, 'no effect']);
-  assert.match(old.target.why, /scored exits are unknown/);
+  assert.deepStrictEqual(o.calls.proposeProbes[0].findings.filter(x => x.kind === 'exit-decision'), []);
+  const report = JSON.parse(fs.readFileSync(path.join(o.paths.iter(1), 'probe-report.json'), 'utf8'));
+  assert.match(report.trend.exitFindings, /^none: the champion's scored exits name no trade/);
+  assert.ok(report.trend.exits.byExit['model-exit'].n > 0, 'the exits are still scored and reported');
+  // With exits that name their trades, the same round has its exit finding.
+  const k = world({ trend: true, exits: true, proposals: () => [] });
+  await run(k);
+  assert.ok(k.calls.proposeProbes[0].findings.some(x => x.kind === 'exit-decision'));
 });
 
 test('with a trend pool: a trend edit gains only on the trend batch; one that gains on the probe half alone never reaches the keep rule', async () => {

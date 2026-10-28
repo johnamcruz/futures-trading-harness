@@ -227,17 +227,27 @@ function exitTargetTest(champion, probe, exits = null, { epsR = EXIT.epsR, runne
   const label = x => (x.late ? 'late' : x.cls);
   // Only the units (stepped windows) both sides finished, when the caller names them (done), as the trend screen pairs.
   const done = exits && Array.isArray(exits.done) ? new Set(exits.done) : null;
-  const tradeOf = x => (x && x.root && x.side && Number.isFinite(Date.parse(x.entryAt)) && isR(x.r) && (!done || done.has(x.unit)) ? { ...x, ms: Date.parse(x.entryAt) } : null);
+  const tradeOf = x => (x && x.root && x.side && Number.isFinite(Date.parse(x.entryAt)) && isR(x.r) ? { ...x, ms: Date.parse(x.entryAt) } : null);
   const unknown = Boolean(exits && exits.unknown);
-  const mine = exits && !unknown && Array.isArray(exits.champion) ? exits.champion.map(tradeOf).filter(Boolean) : [];
-  const theirs = exits && !unknown && Array.isArray(exits.probe) ? exits.probe.map(tradeOf).filter(Boolean) : [];
+  // A trade in a unit the other side (or this one) left unfinished: counted apart, never paired.
+  const unfinished = { champion: 0, probe: 0 };
+  const listOf = who => {
+    const all = exits && !unknown && Array.isArray(exits[who]) ? exits[who].map(tradeOf).filter(Boolean) : [];
+    const kept = done ? all.filter(x => done.has(x.unit)) : all;
+    unfinished[who] = all.length - kept.length;
+    return kept;
+  };
+  const mine = listOf('champion');
+  const theirs = listOf('probe');
   const near = MATCH_BARS * (exits && exits.stepMs > 0 ? exits.stepMs : 0);
   const free = new Set(theirs.keys());
+  let trendPairs = 0;
   for (const base of mine) {
     const i = [...free].filter(j => theirs[j].root === base.root && theirs[j].side === base.side && Math.abs(theirs[j].ms - base.ms) <= near)
       .sort((x, y) => Math.abs(theirs[x].ms - base.ms) - Math.abs(theirs[y].ms - base.ms))[0];
     if (i === undefined) { unmatched.champion += 1; continue; }
     free.delete(i);
+    trendPairs += 1;
     const d = theirs[i];
     diffs.push(d.r - base.r);
     if (label(base) !== label(d)) { const k = `${label(base)}->${label(d)} (${d.exitBy})`; classes[k] = (classes[k] || 0) + 1; }
@@ -250,10 +260,13 @@ function exitTargetTest(champion, probe, exits = null, { epsR = EXIT.epsR, runne
     }
   }
   unmatched.probe += free.size;
+  // A trend set given but nothing of it to pair: no window both sides finished, or none of the champion's trades
+  // matched by the edit's. Never a gain, said why (as unknown exits are).
+  const empty = exits && !unknown ? (done && !done.size && (unfinished.champion || unfinished.probe) ? 'no window both sides stepped to its end' : mine.length && !trendPairs ? 'the edit opened none of the champion\'s trend trades' : null) : null;
   const b = diffs.filter(x => x >= epsR).length;
   const c = diffs.filter(x => x <= -epsR).length;
   const meanDiff = diffs.length ? round4(diffs.reduce((s, x) => s + x, 0) / diffs.length) : null;
-  return { measure: 'exit: R banked on the trades both sides opened', pairs: diffs.length, b, c, n: b + c, pBetter: round4(mcnemar(b, c)), pWorse: round4(mcnemar(c, b)), meanDiff, enough: !unknown && diffs.length >= minPairs, ...(unknown ? { why: 'the trend set\'s scored exits are unknown (a capture from before they named their trades)' } : {}), unmatched, classes, runners };
+  return { measure: 'exit: R banked on the trades both sides opened', pairs: diffs.length, b, c, n: b + c, pBetter: round4(mcnemar(b, c)), pWorse: round4(mcnemar(c, b)), meanDiff, enough: !unknown && !empty && diffs.length >= minPairs, ...(unknown ? { why: 'the trend set\'s scored exits are unknown (a capture from before they named their trades)' } : empty ? { why: empty } : {}), unmatched, unfinished, classes, runners };
 }
 
 /** The runner guard's harm: an exit edit that cut more of the champion's runners than it stopped cutting. */

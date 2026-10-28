@@ -619,7 +619,11 @@ and leg ids; the lessons lines record the batch too.
   tree takes no edit. The trend set's exits pair only when their scores
   name their trades: a loop whose champion runs were scored before that
   (started on older code) gets no gain from them, so an exit edit needs a
-  loop started on this code. The read
+  loop started on this code; until then the round shows no exit finding
+  (`trend.exitFindings` in `probe-report.json` says why), so no proposer
+  slot or probe run is spent on one. A trend set with no window both sides
+  finished, or none of the champion's trend trades matched by the edit's,
+  is no gain either, its reason stated. The read
   itself is held to an acceptance check (`tests/lib/read-mechanical.test.js`,
   `scripts/lib/replay/read-mechanical.js`): applied to the letter on a real
   trend it keeps at least what the runner's 15m structure trail keeps, and

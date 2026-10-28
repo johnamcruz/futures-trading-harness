@@ -102,6 +102,17 @@ test('exit screen: only the units both sides finished pair; unknown exits are ne
   assert.deepStrictEqual([u.target.pairs, u.target.enough], [0, false]);
   assert.match(u.target.why, /scored exits are unknown/);
   assert.strictEqual(SC.screen(u).verdict, 'no effect');
+  // No window both sides finished, or none of the champion's trend trades matched: never a gain, said why (the curated
+  // pairs alone, however many, decide nothing then).
+  const cur = Array.from({ length: 12 }, (_, i) => ({ key: `MNQ|${i}`, day: '2021-06-01', R: 1, entered: true, side: 'long', reads: [], relevant: [] }));
+  const curated = [side(cur), side(cur.map(x => ({ ...x, R: 2 })))];
+  const none = SC.measure(curated[0], curated[1], { skill: 'manage-position', kind: EF.KIND, exits: { champion: unit(a, i => `w${i}`), probe: unit(b, i => `w${i}`), stepMs: STEP, done: [] } });
+  assert.deepStrictEqual([none.target.pairs, none.target.b, none.target.enough, none.target.why], [12, 12, false, 'no window both sides stepped to its end']);
+  assert.strictEqual(SC.screen(none).verdict, 'no effect');
+  const missed = SC.measure(curated[0], curated[1], { skill: 'manage-position', kind: EF.KIND, exits: exits(a, b.map(x => ({ ...x, side: 'short' }))) });
+  assert.deepStrictEqual([missed.target.pairs, missed.target.enough, missed.target.why], [12, false, 'the edit opened none of the champion\'s trend trades']);
+  // The champion with no trend trade at all: the curated pairs decide.
+  assert.strictEqual(SC.measure(curated[0], curated[1], { skill: 'manage-position', kind: EF.KIND, exits: exits([], []) }).target.enough, true);
 });
 
 test('composedScreen: an exit part\'s runner harm, though it is the second part, makes the combined change hurt', () => {

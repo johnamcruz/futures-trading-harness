@@ -377,6 +377,12 @@ async function probeRound(ctx, { n, champion, api }) {
     report.trend.missed = TF.missedTally(trendBase.captures);
     // The champion's exits on the probe half, scored by what price did next (replay/exit-scorecard.js): the round's report.
     report.trend.exits = EF.exitTally(trendBase.captures);
+    // The champion's scored exits name no trade (a phase kept from older code): no exit edit could be screened, so the
+    // round shows no exit finding (no proposer slot or probe run spent on an edit that can only end 'no effect').
+    if (!trendBase.exits) {
+      report.trend.exitFindings = 'none: the champion\'s scored exits name no trade (scored by older code), so no exit edit can be screened';
+      ctx.log(`iteration ${n}: exit findings left out: ${report.trend.exitFindings}`);
+    }
     // The base rate beside them: the share of the missed legs' entry bars, and of the control bars, with a valid plan.
     const c = TFX.controlsOf(trendBase.captures);
     report.trend.baseRate = { legBars: c.legBars, controlBars: c.controlBars };
@@ -419,7 +425,7 @@ async function probeRound(ctx, { n, champion, api }) {
   const findings = await api.phase(ctx, `${n}:findings`, path.join(dir, 'findings.json'), async () => F.mergeFindings(
     // The trend set's findings, its missed legs and its exits that cut a trend or came late (exit-findings.js), by the R
     // each cost.
-    trendBase ? [...TF.trendFindings(trendBase.captures, { exists, max: cfg.k * 2 }), ...EF.exitFindings(trendBase.captures, { exists, max: cfg.k * 2 })]
+    trendBase ? [...TF.trendFindings(trendBase.captures, { exists, max: cfg.k * 2 }), ...(trendBase.exits ? EF.exitFindings(trendBase.captures, { exists, max: cfg.k * 2 }) : [])]
       .sort((a, b) => TF.findingCost(b) - TF.findingCost(a)) : [],
     F.findingsFrom({ skills: base.skills, refusals: base.refusals, max: cfg.k * 2, exists }),
     { max: cfg.k * 2 },
