@@ -251,7 +251,7 @@ user; numbers here are the harness defaults, not any firm's official limits.
 - `training-loop` (skills/training-loop/SKILL.md): Use when the user wants to plan, run, resume or read a training loop. User-run.
 - `training-verdict` (skills/training-verdict/SKILL.md): Use when reading why the training loop kept, rejected or blocked an edit. User-run.
 - `trend-momentum-indicators` (skills/trend-momentum-indicators/SKILL.md): Use when a read rests on ADX, an EMA, SuperTrend, Keltner or ATR - their settings and fields, and the volatility regime for sizing. Metrics, not the trend.
-- `trend-vs-range` (skills/trend-vs-range/SKILL.md): Trader-process step 1 and the regime in step 2 - whether each timeframe trends, ranges or is in transition, before any setup. A read, never a veto.
+- `trend-vs-range` (skills/trend-vs-range/SKILL.md): Trader-process steps 1-2 - whether each timeframe trends, ranges or is in transition, and whether the trend has declared itself. A read, never a veto.
 - `user-commands` (skills/user-commands/SKILL.md): Use when a person runs a script themselves.
 - `vwap-volume-profile` (skills/vwap-volume-profile/SKILL.md): Use when judging trend vs rotation day, a breakout's participation, pullback areas, targets, or the value area strategies - VWAP, value area, POC, nodes.
 
