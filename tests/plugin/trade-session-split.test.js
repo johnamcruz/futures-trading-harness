@@ -167,7 +167,7 @@ const { withLate } = require('./skill-split-late');
 const LATE = [
   { from: "**Bars, interactively** (no runner bars file): the harness tool `bars_fetch` (`{\"symbol\": \"<SYMBOL>\", \"timeframe\": <3 or 1>, \"record\": true}`) writes the runner's default count of closed bars (5000 3-minute, 15000 1-minute) to `<FTH_HOME>/bars-scratch/<SYMBOL>-<tf>m.json` (this harness home's own; use the path it returns) and records the multi-timeframe read for the gate (the `bar-briefing` skill).",
     to: "**Bars, interactively** (no runner bars file): the harness tool `bars_fetch` (`{\"symbol\": \"<SYMBOL>\", \"timeframe\": <3 or 1>, \"record\": true}`) writes the runner's default count of closed bars to `<FTH_HOME>/bars-scratch/<SYMBOL>-<tf>m.json` (this harness home's own; use the path it returns) and records the multi-timeframe read for the gate (the `bar-briefing` skill).",
-    reason: "fix/htf-history: the runner's bar count follows the read's window (config/analysis.json mtf.historyHours), so the skills name no count (its one home is the config)" },
+    reason: "feat/htf-history: the runner's bar count follows the read's window (config/analysis.json mtf.historyHours), so the skills name no count (its one home is the config)" },
   { from: "**Confluence.** Several strategies firing the same side on the bar (the scan's `confluence.with`, the prompt's \"fired on this bar\" line) is a stronger setup: say so in the plan, and prefer it over a lone signal.",
     to: "**Confluence.** A composed setup's: the count of `confluence-counting`.",
     reason: "review of #169: composed-correct, against the merged trade_lifecycle code: a composed setup counts confluence-counting's items; the strategies-firing rules are the rules strategies'" },

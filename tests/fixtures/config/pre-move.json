@@ -1400,6 +1400,10 @@
    "value": 10,
    "from": "trading/mtf.js HISTORY_MARGIN_HOURS"
   },
+  "mtf.legacyHistoryHours": {
+   "value": 240,
+   "from": "trading/mtf.js DEFAULTS.historyHours before the three-week window (the window runs recorded before it were handed)"
+  },
   "mtf.ruleFrames": {
    "value": [
     240,

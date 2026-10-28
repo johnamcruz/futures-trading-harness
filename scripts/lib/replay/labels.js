@@ -1024,7 +1024,9 @@ function labelRun(runDir, { budgetUsd = null, strategies = [], accounts = [], ou
     const archivePruned = Boolean(rec.day) && !fs.existsSync(archiveFile(dir, rec.day)) && wasPruned(dir, rec.day);
     const values = entry ? entry.strategies : null;
     // By contract when the line names it (a roll mid-day archives the new contract's window at the same times).
-    const archivedBar = d.barT && tfOf(d.cfg) ? archived.get(d.symbol, entry ? entry.contractId : null, tfOf(d.cfg), d.barT) : null;
+    // A no-entry decision names the day's contract from any values entry the line holds for the symbol; else the archive's first-archived bar at that time (the front's).
+    const frontId = entry ? entry.contractId : ((Array.isArray(rec.values) ? rec.values : []).find(x => isObj(x) && x.symbol === d.symbol && x.contractId) || {}).contractId || null;
+    const archivedBar = d.barT && tfOf(d.cfg) ? archived.get(d.symbol, frontId, tfOf(d.cfg), d.barT) : null;
     labels.push({
       v: VERSION,
       key: crypto.createHash('sha256').update(`${manifest.runId}|${rec.t}|${d.symbol}|${promptHash}`).digest('hex').slice(0, 24),

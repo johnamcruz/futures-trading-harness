@@ -44,7 +44,7 @@ test('archive: appended per call (never rewritten), only bars newer than the las
   // By contract: the roll's two bars at one time stay apart; without a contract, only a time one contract has.
   assert.deepStrictEqual(got.get('MNQ', 'C1', 1, bar(2).t), bar(2));
   assert.strictEqual(got.get('MNQ', 'C9', 1, bar(2).t).c, 9);
-  assert.strictEqual(got.get('MNQ', null, 1, bar(2).t), null, 'two contracts at that time: none');
+  assert.deepStrictEqual(got.get('MNQ', null, 1, bar(2).t), bar(2), 'two contracts at that time: the first archived (the front when the bar closed), never none');
   assert.deepStrictEqual(got.get('MNQ', null, 1, bar(3).t), bar(3));
   assert.strictEqual(got.get('MNQ', 'C1', 3, bar(3).t), null, 'another timeframe');
   assert.strictEqual(A.readArchive(path.join(dir, 'none.gz')).length, 0);

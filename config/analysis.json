@@ -57,6 +57,7 @@
     "maxCandles": 300,
     "historyHours": 504,
     "historyMarginHours": 10,
+    "legacyHistoryHours": 240,
     "ruleFrames": [240, 60, 15]
   },
   "dayContext": { "ibMinutes": 60, "openMinutes": 30, "adrDays": 10 },
