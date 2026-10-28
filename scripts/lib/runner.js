@@ -1362,7 +1362,7 @@ function createRunner(deps) {
         workingOrders: state ? state.orders.length : null,
         orders: state ? state.orders : null,
         // Each working entry's bracket from the runner's record (attaches on the fill): a fact, not a model claim.
-        entryLines: state ? workingEntryLines(state.orders, entryOrders()) : [],
+        entryLines: state ? workingEntryLines(state.orders, entryOrders(), now) : [],
         attempts,
       };
     } catch (err) {

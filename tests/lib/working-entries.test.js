@@ -26,3 +26,20 @@ test('the cycle prompt carries the working entry line', () => {
   const state = { id: '123', at: '2026-10-07T14:00:01.000Z', balance: 50000, positions: [], workingOrders: 1, attempts: [], entryLines: workingEntryLines([order], [rec]) };
   assert.match(p.trade([{ symbol: 'MNQ' }], { state }), /1 working order\. Working entry 10: sell limit 6 @ 13559.5, bracket attached on fill: stop 13582.5 \/ target 13508.25 \(runner record\)\./);
 });
+
+const NOW = new Date('2026-10-07T14:00:00.000Z');
+const fresh = { ...rec, contractId: 'MNQ', at: '2026-10-07T13:50:00.000Z' };
+
+test('an expired composed entry shows no line; a live one shows its expiry in ET', () => {
+  const exp = ms => ({ ...fresh, composed: { ...fresh.composed, expiresAt: new Date(NOW.getTime() + ms).toISOString() } });
+  assert.deepStrictEqual(workingEntryLines([order], [exp(0)], NOW), []);
+  assert.deepStrictEqual(workingEntryLines([order], [exp(-60000)], NOW), []);
+  assert.match(workingEntryLines([order], [exp(300000)], NOW)[0], /\(runner record\), expires 10:05 ET$/);
+});
+
+test('a record for another contract, another side, or an earlier trading day is not this order\'s', () => {
+  assert.strictEqual(workingEntryLines([order], [fresh], NOW).length, 1);
+  assert.deepStrictEqual(workingEntryLines([order], [{ ...fresh, contractId: 'MES' }], NOW), []);
+  assert.deepStrictEqual(workingEntryLines([order], [{ ...fresh, side: 'buy' }], NOW), []);
+  assert.deepStrictEqual(workingEntryLines([order], [{ ...fresh, at: '2026-10-05T13:50:00.000Z' }], NOW), []);
+});
