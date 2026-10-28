@@ -41,9 +41,12 @@
  *   sessionEnds(spec)                        ms => the end of the session window holding ms (the runner's sessions spec),
  *                                            ms itself outside every window
  *   lateThreshold(strategies, params)        the late threshold: config's, never below an active policy's lock_giveback_r
- *   scoreExits({ trips, moves, closes, bars, stepMs, factsAt, sessionEnd, orders, params })   { decisions, tightens,
- *                                            thresholds } (pure; sessionEnd(ms): the session's end, or null; orders:
- *                                            orderId -> contractId, for a move that names only its order)
+ *   scoreExits({ trips, moves, closes, bars, stepMs, factsAt, sessionEnd, orders, runnerKnown, params })   { decisions,
+ *                                            tightens, thresholds } (pure; sessionEnd(ms): the session's end, or null; orders:
+ *                                            orderId -> contractId, for a move that names only its order; runnerKnown
+ *                                            false: the runner's event log wasn't read, so an exit that isn't the model's
+ *                                            close or the target is 'unattributed', never guessed an initial stop)
+ *   resolveOrders(moves, orders)             the moves each with its order's contract (before two sources merge)
  *   summarize(scored)                        { byExit: { exitBy: { n, cut, right, unclear, unresolved, late, leftR, savedR,
  *                                            givebackR } }, flip, tightens, stopPlacement: { n, of, ranR }, thresholds }
  *   factsText(read)                          a decision's facts as words, no date, time or price (the proposer's view)
@@ -58,13 +61,23 @@
 
 const PARAMS = require('../tunables').replay().exitScore; // config/replay.json
 const { parseWindows, inWindow } = require('../trading/clock');
+const { parseStandardName } = require('../broker/translator');
+const { familyRoot } = require('../trading/contracts');
 
 const num = x => (typeof x === 'number' && Number.isFinite(x) ? x : null);
 const isObj = x => Boolean(x) && typeof x === 'object' && !Array.isArray(x);
 const r2 = x => (num(x) === null ? null : Math.round(x * 100) / 100);
 const sign = side => (side === 'short' ? -1 : 1);
 const CLASSES = Object.freeze(['cut', 'right', 'unclear', 'unresolved']);
-const EXIT_BY = Object.freeze(['model-exit', 'model-stop', 'runner-trail', 'runner-exit', 'initial-stop', 'target']);
+const EXIT_BY = Object.freeze(['model-exit', 'model-stop', 'runner-trail', 'runner-exit', 'initial-stop', 'target', 'unattributed']);
+
+/** A contract's family root (MNQ for MNQ, NQ, MNQ:2026-12): the one family however a record names the contract. */
+const famOf = id => (id ? familyRoot((parseStandardName(String(id)) || { root: String(id).toUpperCase() }).root) : null);
+
+/** The moves with a contract: one that names only its order (modify_order takes no contract) is its order's contract's. */
+function resolveOrders(given, orders = new Map()) {
+  return (Array.isArray(given) ? given : []).map(m => (m.contractId || m.orderId === undefined || m.orderId === null || !orders.has(String(m.orderId)) ? m : { ...m, contractId: orders.get(String(m.orderId)) }));
+}
 
 /** The class of an exit at `price` from `from` on (see the header). */
 function classify({ side, price, risk, bars = [], from, until = null, params = PARAMS }) {
@@ -126,19 +139,18 @@ function lateThreshold(strategies, params = PARAMS) {
 /** The last of `list` (by ms) at or before `ms` and after `since`. */
 const lastBefore = (list, since, ms) => list.filter(x => x.ms > since && x.ms <= ms).sort((a, b) => a.ms - b.ms).pop() || null;
 
-function scoreExits({ trips = [], moves: given = [], closes = [], bars = [], stepMs = 0, factsAt = null, sessionEnd = null, orders = new Map(), params = PARAMS }) {
+function scoreExits({ trips = [], moves: given = [], closes = [], bars = [], stepMs = 0, factsAt = null, sessionEnd = null, orders = new Map(), runnerKnown = true, params = PARAMS }) {
   const near = params.matchBars * stepMs;
-  // A move that names only its order (modify_order takes no contract) is its order's contract's.
-  const moves = given.map(m => (m.contractId || m.orderId === undefined || m.orderId === null || !orders.has(String(m.orderId)) ? m : { ...m, contractId: orders.get(String(m.orderId)) }));
+  const moves = resolveOrders(given, orders);
   const decisions = [];
   const tightens = [];
   for (const t of trips) {
     if (!isObj(t) || t.open || num(t.exitMs) === null || num(t.entryMs) === null || !(num(t.risk) > 0)) continue;
-    const same = x => !x.contractId || !t.contractId || x.contractId === t.contractId;
+    const same = x => !x.contractId || !t.contractId || famOf(x.contractId) === famOf(t.contractId);
     const close = closes.filter(same).filter(c => c.ms >= t.entryMs && Math.abs(c.ms - t.exitMs) <= near).sort((a, b) => Math.abs(a.ms - t.exitMs) - Math.abs(b.ms - t.exitMs))[0] || null;
     const move = lastBefore(moves.filter(same), t.entryMs, t.exitMs);
     const exitBy = close ? (close.by === 'model' ? 'model-exit' : 'runner-exit') : /target/i.test(String(t.reason || '')) ? 'target'
-      : move && move.by !== 'plan' ? (move.by === 'model' ? 'model-stop' : 'runner-trail') : 'initial-stop';
+      : !runnerKnown ? 'unattributed' : move && move.by !== 'plan' ? (move.by === 'model' ? 'model-stop' : 'runner-trail') : 'initial-stop';
     const until = typeof sessionEnd === 'function' ? sessionEnd(t.exitMs) : null;
     const { cls, leftR, savedR } = classify({ side: t.side, price: t.exitPrice, risk: t.risk, bars, from: t.exitMs, until, params });
     const peakR = num(t.mfeR);
@@ -251,22 +263,35 @@ function modelActions(cycles, { toolCalls }) {
 /**
  * The model's stop moves and market exits from the gateway's records (the gate log: every order call it passed), in each
  * cycle's wall-clock window (its start to its end plus slackMs), at the cycle's bar close: the trade-executor's calls in a
- * session of its own too, which the head trader's transcript never shows. `orders`: each order id the records name, with
+ * session of its own too, which the head trader's transcript never shows. A window ends at the next cycle's start (a
+ * record there is that cycle's). `toolCalls`: a cycle's transcript tells a close the broker refused (the gateway logs a
+ * close before forwarding it): such a logged close is not an exit. `orders`: each order id the records name, with
  * its contract (the gateway resolves a modify_order's contract from the open orders).
  */
-function gateActions(cycles, gateLog, { slackMs = 0 } = {}) {
+function gateActions(cycles, gateLog, { slackMs = 0, toolCalls = null } = {}) {
   const moves = [];
   const closes = [];
   const orders = new Map();
   const recs = (Array.isArray(gateLog) ? gateLog : []).filter(e => isObj(e) && e.source === 'gateway' && e.decision === 'allowed').map(e => ({ ...e, ms: Date.parse(e.ts) }));
   for (const e of recs) if (e.orderId !== undefined && e.orderId !== null && e.contractId) orders.set(String(e.orderId), e.contractId);
+  const starts = (Array.isArray(cycles) ? cycles : []).map(c => (isObj(c) ? Date.parse(c.at) : NaN)).filter(Number.isFinite).sort((a, b) => a - b);
   for (const c of Array.isArray(cycles) ? cycles : []) {
     const ms = isObj(c) && isObj(c.timing) ? Date.parse(c.timing.barClose) : NaN;
     const from = isObj(c) ? Date.parse(c.at) : NaN;
     if (!Number.isFinite(ms) || !Number.isFinite(from)) continue;
     const to = from + (num(c.durationMs) || 0) + slackMs;
-    for (const e of recs.filter(x => x.ms >= from && x.ms <= to)) {
+    const nextAt = starts.find(x => x > from);
+    // The close calls this cycle's transcript shows failed: one logged close each is dropped (same contract family).
+    let refused = [];
+    if (typeof toolCalls === 'function' && typeof c.transcript === 'string') {
+      try { refused = toolCalls(c.transcript).filter(k => k.failed && EXIT_CALL.test(k.name)).map(k => (k.input || {}).contractId || null); } catch (_err) { refused = []; }
+    }
+    for (const e of recs.filter(x => x.ms >= from && x.ms <= to && (nextAt === undefined || x.ms < nextAt))) {
       const tool = String(e.tool || '');
+      if (/(?:^|__)(close_position|partial_close_position)$/.test(tool)) {
+        const j = refused.findIndex(id => !id || !e.contractId || famOf(id) === famOf(e.contractId));
+        if (j >= 0) { refused.splice(j, 1); continue; }
+      }
       if (/modify_order$/.test(tool) && num(Number(e.stopPrice)) !== null) moves.push({ ms, by: 'model', to: Number(e.stopPrice), contractId: e.contractId || null, orderId: e.orderId ?? null });
       else if (/(?:^|__)(close_position|partial_close_position)$/.test(tool)) closes.push({ ms, by: 'model', contractId: e.contractId || null });
       else if (/place_order$/.test(tool) && /^\s*\[exit\]/i.test(String(e.rationale || '')) && /market|^2$/i.test(String(e.type))) closes.push({ ms, by: 'model', contractId: e.contractId || null });
@@ -279,7 +304,7 @@ function gateActions(cycles, gateLog, { slackMs = 0 } = {}) {
 function mergeActions(...lists) {
   const seen = new Set();
   return lists.flat().filter(a => {
-    const k = [a.by, a.ms, a.contractId || '', a.to ?? ''].join('|');
+    const k = [a.by, a.ms, famOf(a.contractId) || '', a.to ?? ''].join('|');
     if (seen.has(k)) return false;
     seen.add(k);
     return true;
@@ -314,4 +339,4 @@ function tripsOf(days) {
   return [...seen.values()];
 }
 
-module.exports = { PARAMS, CLASSES, EXIT_BY, barsClosedBy, classify, sessionEnds, lateThreshold, scoreExits, summarize, factsText, exitLines, modelActions, gateActions, mergeActions, runnerActions, tripsOf };
+module.exports = { PARAMS, CLASSES, EXIT_BY, famOf, resolveOrders, barsClosedBy, classify, sessionEnds, lateThreshold, scoreExits, summarize, factsText, exitLines, modelActions, gateActions, mergeActions, runnerActions, tripsOf };

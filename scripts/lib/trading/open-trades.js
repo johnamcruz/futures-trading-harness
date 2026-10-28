@@ -87,10 +87,10 @@ function openTrades({ positions = [], orders = [], entries = [], barsFor = () =>
  * The open trade's read facts as one line (trade-read.js), from its contract's closed bars (`base`-minute bars); a
  * failure is said in the line, never dropped.
  */
-function tradeReadText(t, { bars, base, tickSize = null }) {
+function tradeReadText(t, { bars, base, tickSize = null, exit = null }) {
   try {
     const level = tickSize ? x => levelOnTick(x, tickSize) : undefined;
-    return tradeReadLine(tradeRead({ side: t.side, entry: t.entry, openedAt: t.openedAt, bars, base, tick: tickSize }), level ? { level } : {});
+    return tradeReadLine(tradeRead({ side: t.side, entry: t.entry, openedAt: t.openedAt, bars, base, tick: tickSize, exit }), level ? { level } : {});
   } catch (err) {
     return `Trade read: unavailable (${err.message}).`;
   }

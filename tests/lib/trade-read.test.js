@@ -26,7 +26,8 @@ function legs(from, list) {
 const UP = [[40, 1], [20, -1], [40, 1], [20, -1], [40, 1], [20, -1], [40, 1], [4, -1]];
 const at = (bars, i) => bars[i].t;
 const mirror = (bars, m) => bars.map(b => ({ ...b, o: 2 * m - b.o, h: 2 * m - b.l, l: 2 * m - b.h, c: 2 * m - b.c }));
-const read = (bars, o = {}) => tradeRead({ side: 'long', entry: bars[20].c, openedAt: at(bars, 20), bars, base: 3, tick: 0.25, ...o });
+const EXIT = { trailBy: 'structure', swingMinutes: 15 }; // the policy's afterTarget plan, as the runner holds it
+const read = (bars, o = {}) => tradeRead({ side: 'long', entry: bars[20].c, openedAt: at(bars, 20), bars, base: 3, tick: 0.25, exit: EXIT, ...o });
 
 test('tradeRead: a long in a clean 15m trend up: pushes making new highs, nothing against it, healthy (no weakening, no reversal)', () => {
   const bars = mk(legs(21000, UP));
@@ -115,7 +116,7 @@ test('tradeRead: pushes fade when the last 15m push is smaller than the one befo
 test('tradeRead: a short reads the mirror of a long (every fact side-signed)', () => {
   const bars = mk(legs(21000, [...UP.slice(0, 7), [60, -1.5]]));
   const long = read(bars);
-  const short = tradeRead({ side: 'short', entry: 42000 - bars[20].c, openedAt: at(bars, 20), bars: mirror(bars, 21000), base: 3, tick: 0.25 });
+  const short = tradeRead({ side: 'short', entry: 42000 - bars[20].c, openedAt: at(bars, 20), bars: mirror(bars, 21000), base: 3, tick: 0.25, exit: EXIT });
   assert.strictEqual(short.extreme.best, 42000 - long.extreme.best);
   assert.strictEqual(short.pullback.depth, long.pullback.depth);
   assert.deepStrictEqual(short.pushes.map(p => [p.sizeAtr, p.momentum, 42000 - p.swing]), long.pushes.map(p => [p.sizeAtr, p.momentum, p.swing]));
@@ -154,7 +155,7 @@ test('tradeRead: unavailable without a side, an entry, a fill time or a bar sinc
   assert.strictEqual(tradeReadLine(r), 'Trade read: unavailable (no closed bar since the fill yet).');
   assert.strictEqual(tradeReadLine(null), 'Trade read: unavailable (not computed).');
   // No tick: the trail's stop is the swing itself.
-  const t = tradeRead({ side: 'long', entry: 21000, openedAt: at(mk(legs(21000, UP)), 20), bars: mk(legs(21000, UP)), base: 3 });
+  const t = tradeRead({ side: 'long', entry: 21000, openedAt: at(mk(legs(21000, UP)), 20), bars: mk(legs(21000, UP)), base: 3, exit: EXIT });
   assert.strictEqual(t.trail.stop, t.trail.swing);
 });
 
@@ -165,4 +166,20 @@ test('tradeRead: only the bars passed are read (no look-ahead): a decision\'s fa
   const crash = bars.map((b, i) => (i < k ? b : { ...b, o: b.o - 500, h: b.h - 500, l: b.l - 500, c: b.c - 500 }));
   assert.deepStrictEqual(read(crash.slice(0, k)), a);
   assert.strictEqual(a.close, bars[k - 1].c);
+});
+
+test('tradeRead: the trail level is the active policy\'s own (its swing timeframe, as the runner reads it), never the structure frame\'s', () => {
+  const bars = mk(legs(21000, UP));
+  const sw = require('../../scripts/lib/trading/exit-trail').swingSeries(bars, 5);
+  const r5 = read(bars, { exit: { trailBy: 'structure', swingMinutes: 5 } });
+  assert.strictEqual(r5.trail.swing, sw.low[bars.length - 1], 'the runner\'s swingSeries on the 5m candles');
+  assert.strictEqual(r5.trail.minutes, 5);
+  assert.match(tradeReadLine(r5), /tighten at most to the last confirmed 5m swing [\d.]+ \(stop [\d.]+, the runner's trail level\)\.$/);
+  // A trail by R has no swing level, and no plan given has none: the line says so.
+  const byR = read(bars, { exit: { trailBy: 'r', swingMinutes: null, trailR: 1.5 } });
+  assert.deepStrictEqual([byR.trail, byR.trailBy], [null, 'r']);
+  assert.match(tradeReadLine(byR), /tighten at most to no swing level: the runner trails this trade by R behind the best price\.$/);
+  const none = read(bars, { exit: null });
+  assert.deepStrictEqual([none.trail, none.trailBy], [null, 'none']);
+  assert.match(tradeReadLine(none), /no swing level: the runner holds no structure trail for this trade\.$/);
 });

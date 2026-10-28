@@ -1790,7 +1790,13 @@ function createRunner(deps) {
               tradeObjs = openTrades({ positions: acct.positions, orders: acct.orders || [], entries: journal, barsFor: p => (item(p) ? item(p).bars : null) });
               const history = t => { try { return t.setup ? tradeHistory(t) : null; } catch (err) { failed(`${t.setup}'s backtest excursions for the open trade`, err); return null; } };
               // Its read facts (trade-read.js) from its contract's bars: the pullback-vs-reversal read of an open trade.
-              const read = t => { const x = item({ contractId: t.contractId }); return x ? tradeReadText(t, { bars: x.bars, base: x.minutes || cfg.timeframe, tickSize: tickOf({ contractId: t.contractId }) }) : null; };
+              // The trail the runner holds for the trade (state.trails: its exit plan's afterTarget), read as the runner reads it.
+              const read = t => {
+                const x = item({ contractId: t.contractId });
+                const held = x ? (state.trails || {})[x.contractId] : null;
+                const exit = held && held.plan ? held.plan.afterTarget || null : null;
+                return x ? tradeReadText(t, { bars: x.bars, base: x.minutes || cfg.timeframe, tickSize: tickOf({ contractId: t.contractId }), exit }) : null;
+              };
               acct = { ...acct, openTrades: tradeObjs.map(t => describeOpenTrade(t, { tickSize: tickOf({ contractId: t.contractId }), et: etTime, history: history(t), read: read(t) })) };
               manageAlso = [...new Set(tradeObjs.filter(t => !item({ contractId: t.contractId })).map(t => (sym({ contractId: t.contractId }) || {}).symbol || contractRoot(t.contractId)))];
             } catch (err) {

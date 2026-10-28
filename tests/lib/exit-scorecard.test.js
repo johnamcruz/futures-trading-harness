@@ -196,11 +196,59 @@ test('gateActions and mergeActions: the gateway\'s records in each cycle\'s wind
   assert.deepStrictEqual(g.moves, [{ ms, by: 'model', to: 21450.25, contractId: 'MNQ', orderId: 9 }]);
   assert.deepStrictEqual(g.closes.map(c => c.contractId), ['MNQ', 'MNQ']);
   assert.strictEqual(g.orders.get('9'), 'MNQ');
-  // The same move from the transcript and the gate log counts once.
-  assert.strictEqual(ES.mergeActions(g.moves, [{ ms, by: 'model', to: 21450.25, contractId: 'MNQ', orderId: 9 }]).length, 1);
+  // The same move from the transcript (modify_order names no contract: the real shape) and the gate log counts once, and
+  // is one tighten in the score: its order's contract resolved before the two sources merge.
+  const fromTranscript = [{ ms, by: 'model', to: 21450.25, contractId: null, orderId: 9 }];
+  assert.strictEqual(ES.mergeActions(g.moves, ES.resolveOrders(fromTranscript, g.orders)).length, 1);
+  const merged = ES.mergeActions(g.moves, ES.resolveOrders(fromTranscript, g.orders));
+  const tr = trip({ entryMs: ms - 3 * STEP, exitMs: ms + 5 * STEP });
+  assert.strictEqual(ES.scoreExits({ trips: [tr], moves: merged, bars: after, stepMs: STEP, params: P, orders: g.orders }).tightens.length, 1);
   // A move that names only its order is its order's contract's: another contract's trade never takes it.
   const bare = [{ ms: T0 + 3 * STEP, by: 'model', to: 110, contractId: null, orderId: 9 }];
   const other = trip({ contractId: 'MES' });
   assert.strictEqual(ES.scoreExits({ trips: [other], moves: bare, bars: after, stepMs: STEP, params: P, orders: g.orders }).decisions[0].exitBy, 'initial-stop');
   assert.strictEqual(ES.scoreExits({ trips: [trip()], moves: bare, bars: after, stepMs: STEP, params: P, orders: g.orders }).decisions[0].exitBy, 'model-stop');
+});
+
+test('gateActions: a window ends at the next cycle\'s start: a record there is counted once, at its own cycle', () => {
+  const c1 = { at: '2026-10-05T18:00:00.000Z', durationMs: 30000, timing: { barClose: '2026-10-05T14:12:00.000Z' } };
+  const c2 = { at: '2026-10-05T18:00:31.000Z', durationMs: 30000, timing: { barClose: '2026-10-05T14:15:00.000Z' } };
+  // 18:00:31.500 is inside cycle 1's slack (to 18:00:32) and in cycle 2's window.
+  const log = [{ ts: '2026-10-05T18:00:31.500Z', source: 'gateway', tool: 'modify_order', decision: 'allowed', orderId: 9, stopPrice: 21450, contractId: 'MNQ' }];
+  const g = ES.gateActions([c1, c2], log, { slackMs: 2000 });
+  assert.deepStrictEqual(g.moves.map(m => m.ms), [Date.parse(c2.timing.barClose)]);
+});
+
+test('gateActions: a close the broker refused (its transcript shows the call failed) is not the model\'s exit', () => {
+  const cycle = { at: '2026-10-05T18:00:00.000Z', durationMs: 30000, timing: { barClose: '2026-10-05T14:12:00.000Z' }, transcript: 'x' };
+  const log = [{ ts: '2026-10-05T18:00:15.000Z', source: 'gateway', tool: 'close_position', decision: 'allowed', ungated: true, contractId: 'MNQ' }];
+  const calls = list => () => list;
+  const refused = calls([{ name: 'mcp__broker__close_position', input: { contractId: 'MNQ' }, failed: true }]);
+  assert.deepStrictEqual(ES.gateActions([cycle], log, { toolCalls: refused }).closes, []);
+  // One that went through, one of another contract's failing, or no transcript to say: still the model's.
+  assert.strictEqual(ES.gateActions([cycle], log, { toolCalls: calls([{ name: 'mcp__broker__close_position', input: { contractId: 'MNQ' } }]) }).closes.length, 1);
+  assert.strictEqual(ES.gateActions([cycle], log, { toolCalls: calls([{ name: 'mcp__broker__close_position', input: { contractId: 'MES' }, failed: true }]) }).closes.length, 1);
+  assert.strictEqual(ES.gateActions([{ ...cycle, transcript: undefined }], log, { toolCalls: refused }).closes.length, 1);
+  // Only the refused call's record goes: two logged closes, one failed call.
+  const two = [...log, { ...log[0], ts: '2026-10-05T18:00:16.000Z' }];
+  assert.strictEqual(ES.gateActions([cycle], two, { toolCalls: refused }).closes.length, 1);
+});
+
+test('scoreExits: contracts match by family (MNQ and MNQ:<month>), however the record names the contract', () => {
+  const tr = trip({ contractId: 'MNQ:2026-12' });
+  const mv = [{ ms: T0 + 3 * STEP, by: 'model', to: 110, contractId: 'MNQ' }];
+  assert.strictEqual(ES.scoreExits({ trips: [tr], moves: mv, bars: after, stepMs: STEP, params: P }).decisions[0].exitBy, 'model-stop');
+  const cl = [{ ms: tr.exitMs, by: 'model', contractId: 'MNQ' }];
+  assert.strictEqual(ES.scoreExits({ trips: [tr], closes: cl, bars: after, stepMs: STEP, params: P }).decisions[0].exitBy, 'model-exit');
+  assert.strictEqual(ES.scoreExits({ trips: [trip({ contractId: 'MES:2026-12' })], closes: cl, bars: after, stepMs: STEP, params: P }).decisions[0].exitBy, 'initial-stop', 'another family\'s close is not this trade\'s');
+  assert.strictEqual(ES.mergeActions([{ ms: 1, by: 'model', to: 5, contractId: 'MNQ' }], [{ ms: 1, by: 'model', to: 5, contractId: 'MNQ:2026-12' }]).length, 1);
+});
+
+test('scoreExits: with the runner\'s events unread, an exit that isn\'t the model\'s close or the target is unattributed (no finding)', () => {
+  const none = ES.scoreExits({ trips: [trip()], bars: after, stepMs: STEP, params: P, runnerKnown: false });
+  assert.strictEqual(none.decisions[0].exitBy, 'unattributed');
+  assert.ok(ES.EXIT_BY.includes('unattributed'));
+  assert.strictEqual(ES.scoreExits({ trips: [trip({ reason: 'target' })], bars: after, stepMs: STEP, params: P, runnerKnown: false }).decisions[0].exitBy, 'target');
+  const cl = [{ ms: trip().exitMs, by: 'model', contractId: 'MNQ' }];
+  assert.strictEqual(ES.scoreExits({ trips: [trip()], closes: cl, bars: after, stepMs: STEP, params: P, runnerKnown: false }).decisions[0].exitBy, 'model-exit');
 });

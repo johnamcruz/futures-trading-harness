@@ -14,13 +14,16 @@
  *   the end     an exit the trade really made (`exitAt`, ms, `exitPrice`) ends it there when nothing came first; else the
  *               last bar's close
  *
- *   applyRead({ side, entry, openedAt, stop, bars, base, tick, trail, read, exitAt, exitPrice })
+ *   applyRead({ side, entry, openedAt, stop, bars, base, tick, trail, read, exitAt, exitPrice, exit })
  *       { exit: { at, price, why }, points, moves, weakBars, bars }   points: the trade's way, from the entry
  */
 
 const { tradeRead } = require('../trading/trade-read');
 
-function applyRead({ side, entry, openedAt, stop: initial, bars, base, tick = null, trail = false, read = true, exitAt = null, exitPrice = null }) {
+// The runner's trail the check compares against: behind the structure frame's swings (config/analysis.json tradeRead.frames).
+const STRUCTURE = { trailBy: 'structure', swingMinutes: Math.max(...require('../tunables').analysis().tradeRead.frames) };
+
+function applyRead({ side, entry, openedAt, stop: initial, bars, base, tick = null, trail = false, read = true, exitAt = null, exitPrice = null, exit = STRUCTURE }) {
   const s = side === 'short' ? -1 : 1;
   const opened = Date.parse(openedAt);
   const stepMs = base * 60000;
@@ -36,7 +39,7 @@ function applyRead({ side, entry, openedAt, stop: initial, bars, base, tick = nu
     if (exitAt !== null && Date.parse(b.t) + stepMs > exitAt) return done(b, exitPrice, 'the trade\'s own exit');
     n += 1;
     if (Number.isFinite(stop) && (s > 0 ? b.l <= stop : b.h >= stop)) return done(b, stop, 'stop');
-    const r = tradeRead({ side, entry, openedAt, bars: bars.slice(0, k + 1), base, tick });
+    const r = tradeRead({ side, entry, openedAt, bars: bars.slice(0, k + 1), base, tick, exit });
     if (r.unavailable) continue;
     if (r.weakening) weakBars += 1;
     if (read && r.reversal) return done(b, b.c, `reversal: ${r.reversal}`);
