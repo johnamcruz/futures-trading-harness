@@ -8,7 +8,7 @@ description: Trader-process step 4 - a narrow candle (NR7, inside) as a box turn
 ## When to Use
 
 - Step 4 with the HTF bias set: is the trend resting on a narrow candle, and
-  did a closed candle expand out of it? `m3.compression` per timeframe.
+  did a closed candle expand out of it? `m3.compression`.
 
 ## How It Works
 
@@ -36,7 +36,7 @@ or more (`rangeAtr`); `withPole` the pole its way, `volVsBox` support only
 (`beyondNow`; acceptance by closes: `breakout-vs-fakeout`) and under 1 x
 ATR past its close (`late`).
 
-**How to detect it**, the setup (`<tf> compression break up|down`):
+**Detect it**, the setup (`<tf> compression break up|down`):
 
 1. `state` `compressing`: the narrow candle, its box and `levels`.
 2. The expansion candle closes out of the box the HTF bias's way.
@@ -44,7 +44,8 @@ ATR past its close (`late`).
 4. Stop: the box's far side, `stop <tf> box low|high <price>` (`invalidation`).
 
 **Strongest**: a box pressing a key level the bias's way, the expansion
-closing through it: location `<tf> box at <level>`, setup the break.
+closing through it: location `<tf> box at <level>`, setup the break. Read
+it with the level's reaction (`levels-and-reactions`).
 
 **What fails**: closed back inside: fakeout (`breakout-vs-fakeout`); a
 break against the HTF bias (the trend rule's); a small candle; late.
@@ -54,7 +55,7 @@ inside stack (pennant), the break the pole's way (`withPole`).
 
 **Evidence** (practice-train halves, 3m, with the HTF, n 466/420): +0.26R
 and +0.19R net, 90% intervals above zero; against it -0.04R/+0.11R; a pole
-added nothing measured. A census, not a finding: the count still decides.
+added nothing measured. A census.
 
 ## Examples
 

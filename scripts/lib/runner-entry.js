@@ -292,11 +292,11 @@ async function runEntry(deps, c) {
   // skill_lookup; those are its loads too. Without that attestation, as before.
   const headAtt = require('./head-prompt').parseAttestation((c.headEnv || {}).FTH_HEAD_PROMPT);
   const claudeHead = Boolean(headAtt && headAtt.harness === 'claude');
-  // A managed cycle's exit skills in the head trader's prompt (exit-skills.js): its loads too, only on the runner's
-  // attestation, checked now against its file, the skills' text and the head trader's own stream and cycle.
-  const ES = require('./exit-skills');
+  // The cycle's situational skills in the head trader's prompt (situational-skills.js): its loads too, only on the
+  // runner's attestation, checked now against its file, the skills' text and the head trader's own stream and cycle.
+  const SS = require('./cycle-skills-attest');
   const he = c.headEnv || {};
-  const exitLoaded = ES.exitAttested(ES.parseExitAttestation(he[ES.ATTEST_ENV]), root, { stream: he.FTH_CYCLE_TRANSCRIPT || null, cycle: require('./trading/check-order').cycleId(he) });
+  const exitLoaded = SS.attested(SS.parseAttestation(he[SS.ATTEST_ENV]), root, { stream: he.FTH_CYCLE_TRANSCRIPT || null, cycle: require('./trading/check-order').cycleId(he) });
   try {
     RR.appendHeadSkills(c.rolesFile, [...skillsInTranscript(c.output), ...(claudeHead ? claudeLookupsInTranscript(c.output) : []), ...exitLoaded].filter(Boolean));
   } catch (err) {
@@ -309,8 +309,8 @@ async function runEntry(deps, c) {
   // The roles' runs get the cycle's own context (its bars, lanes, cached roles, the role record) and its id.
   // A Claude Code head trader in index mode: its attestation goes with the cycle's id, so the executor's gate counts what
   // the head trader's prompt embedded (autotrader.js claudeHeadAttestation checks it is this cycle's).
-  // Never the head trader's exit skills (a role's run is its own session: exit-skills.js).
-  const { exitSkills: _exitSkills, ...cycleContext } = c.context || {};
+  // Never the head trader's situational skills (a role's run is its own session: situational-skills.js).
+  const { cycleSkills: _cycleSkills, ...cycleContext } = c.context || {};
   const roleContext = { ...cycleContext, entry: false, rolesFile: c.rolesFile, ...(id ? { cycleId: id } : {}), ...(claudeHead && id ? { headPrompt: c.headEnv.FTH_HEAD_PROMPT } : {}) };
   const deadline = wallNow() + Math.max(0, Number(c.budgetMs) || 0);
   // The budget's timings (the cycle log's entry.timing): from the bar's close, in the harness's time up to the cycle's

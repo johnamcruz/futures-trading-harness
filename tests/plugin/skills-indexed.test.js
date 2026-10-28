@@ -56,7 +56,6 @@ const ALLOWED = {
   'lean-cycle': 'trade-session step 2 points to it when the prompt says lean; not on the load list',
   'manage-position': 'trade-session steps 1 and 3 point to it while a position is open; not on the load list',
   'leftover-orders': 'trade-session step 1 points to it when flat with working orders; not on the load list',
-  'day-context': 'trade-session step 3 points to it for every decision (the premarket plan, the news, the day so far); not on the load list',
   'entry-outcome': 'trade-session step 6 points to it after an entry is placed; not on the load list',
   'gate-refusals-skills': 'the [skills-at-entry] refusal\'s row; the head trader finds it by its index line (workspace/AGENTS.md) when refused',
 };

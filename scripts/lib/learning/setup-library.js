@@ -481,7 +481,7 @@ function renderPlans(plans, stf) {
 }
 
 module.exports = { strategyValidBars, planLine, standardPlans,
-  baseBars, runnerClock,
+  baseBars, runnerClock, SKILL,
   VERSION, KIND, MIN_RR, STANDARD, scanLibrary, composeAt, entryRead, targetCandidates, setupKeyOf, buildLibraryIndex, libraryCellAt, noRoomBefore,
   libraryHash, writeLibrary, readLibrary, pinLibrary, loadPinnedLibrary, libraryShown,
 };

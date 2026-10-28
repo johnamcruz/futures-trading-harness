@@ -156,11 +156,14 @@ function practiceLine(p) {
  * select, so what the model is shown and what it is scored on agree. A setup to check, never a signal: the model
  * composes and checks it, and passes unless every read is true.
  */
-function checkLine(candles, { barClose, et = x => x, setupTf = DEFAULTS.setupTf, entries = 'allowed', max = MAX_CHECKS } = {}) {
+function checkLine(candles, { barClose, et = x => x, setupTf = DEFAULTS.setupTf, entries = 'allowed', max = MAX_CHECKS, checks = [] } = {}) {
   // No entries in this window: nothing to compose now (the gate refuses one), so no line.
   if (entries !== 'allowed') return null;
   const m = setupMoment(candles, { setupTf, barClose });
-  if (!m.moment) return null;
+  // The briefing's own setups (setupChecks: a compression break, a live CISD, on a side the trend rule allows), as reads.
+  const extra = (checks || []).map(c => `"${c.read}" (${c.side}${c.level ? `, at ${c.level}` : ''})`);
+  const extraSkills = [...new Set((checks || []).map(c => c.kind))];
+  if (!m.moment) return extra.length ? `- Setups to check: ${extra.join('; ')}. Compose and check each (trade-lifecycle, ${extraSkills.join(', ')}); pass unless every read is true.` : null;
   const key = tfLabel(setupTf);
   // Each reaction as the compose read that states it, quoted, exactly as composed-reads.js parses and checks it
   // ("15m rejected overnight high down"): a copy is a TRUE read; its side and price outside the quotes (a bracket or a
@@ -169,11 +172,44 @@ function checkLine(candles, { barClose, et = x => x, setupTf = DEFAULTS.setupTf,
   const seen = new Set();
   const shown = m.reactions.filter(r => r.dir === 'up' || r.dir === 'down')
     .filter(r => { const k = `${r.rel}|${r.dir}|${r.price}`; return !seen.has(k) && seen.add(k); }).slice(0, max);
-  if (!shown.length) return null;
+  if (!shown.length && !extra.length) return null;
+  if (!shown.length) return `- Setups to check: ${extra.join('; ')}. Compose and check each (trade-lifecycle, ${extraSkills.join(', ')}); pass unless every read is true.`;
   const priced = r => (Number.isFinite(r.price) && !String(r.name).endsWith(String(r.price)) ? `, ${r.price}` : '');
   const what = shown.map(r => `"${key} ${r.rel} ${r.name} ${r.dir}" (${r.dir === 'up' ? 'long' : 'short'}${priced(r)})`).join('; ');
   const when = m.phase === 'reaction' ? 'this bar is the reaction: an entry read needs a later close' : 'a confirmation close: the entry reads from this bar';
-  return `- Setups to check (the ${key} candle closed ${et(m.candle.closedAt)}): ${what}; ${when}. Compose and check each (trade-lifecycle, rejection, breakout); pass unless every read is true.`;
+  return `- Setups to check (the ${key} candle closed ${et(m.candle.closedAt)}): ${[what, ...extra].join('; ')}; ${when}. Compose and check each (trade-lifecycle, ${['rejection', 'breakout', ...extraSkills].join(', ')}); pass unless every read is true.`;
 }
 
-module.exports = { MODES, SETUP_TFS, LEVEL_SETS, REACTION_KINDS, DEFAULTS, KEY_LEVEL, MOVING_LEVEL, PREVIOUS_LEVEL, validatePractice, reactionsOf, setupMoment, quietPick, selectBar, practiceLine, tfLabel, checkLine };
+// A live CISD: its OTE zone touched, or bounced from (cisd.js); waiting, weak, void or expired is no setup yet or any more.
+const LIVE_CISD = new Set(['touched', 'bounced']);
+const minutesOf = tf => { const x = /^(\d+)([mh])$/.exec(String(tf)); return x ? Number(x[1]) * (x[2] === 'h' ? 60 : 1) : 0; };
+
+/**
+ * The briefing's setups beside the setup moment's reactions, on a side the trend rule allows (reasons.js trendRuleOf:
+ * true), while the window allows entries: each timeframe's compression expanding out of its box (compression.js, the
+ * read compose_check verifies: "<tf> compression break <dir>"), and its live CISD ("<tf> cisd <dir>"). The higher
+ * timeframe first, at most `max`: [{ kind, tf, dir, side, read, level? }] (level: a compression box at a key level, the
+ * name of the nearest at the break's edge, else at the other edge: the briefing's own fact, never inferred).
+ */
+function setupChecks(m3, { max = MAX_CHECKS } = {}) {
+  const isObj = x => Boolean(x) && typeof x === 'object' && !Array.isArray(x);
+  if (!isObj(m3) || m3.windowEntries !== 'allowed') return [];
+  const rule = require('../trading/reasons').trendRuleOf(m3.trendRule);
+  const sideOf = dir => (dir === 'up' ? 'long' : dir === 'down' ? 'short' : null);
+  const out = [];
+  for (const [tf, x] of Object.entries(isObj(m3.compression) ? m3.compression : {})) {
+    const dir = isObj(x) && x.state === 'expanding' && isObj(x.break) ? x.break.dir : null;
+    // At a key level: the box's levels (compression.js levelsAt: within its levelBandAtr of an edge, config), the break's
+    // edge first; one inside the box is no edge.
+    const edges = isObj(x) && isObj(x.box) && Array.isArray(x.box.levels) ? x.box.levels.filter(l => isObj(l) && (l.edge === 'top' || l.edge === 'bottom')) : [];
+    const at = edges.find(l => l.edge === (dir === 'up' ? 'top' : 'bottom')) || edges[0] || null;
+    if (sideOf(dir) && rule[sideOf(dir)] === true) out.push({ kind: 'compression', tf, dir, side: sideOf(dir), read: `${tf} compression break ${dir}`, ...(at ? { level: at.name } : {}) });
+  }
+  for (const [tf, x] of Object.entries(isObj(m3.cisd) ? m3.cisd : {})) {
+    const dir = isObj(x) && LIVE_CISD.has(x.status) ? (x.dir === 'bullish' ? 'up' : x.dir === 'bearish' ? 'down' : null) : null;
+    if (sideOf(dir) && rule[sideOf(dir)] === true) out.push({ kind: 'cisd', tf, dir, side: sideOf(dir), read: `${tf} cisd ${dir}` });
+  }
+  return out.sort((a, b) => minutesOf(b.tf) - minutesOf(a.tf)).slice(0, max);
+}
+
+module.exports = { MODES, SETUP_TFS, LEVEL_SETS, REACTION_KINDS, DEFAULTS, KEY_LEVEL, MOVING_LEVEL, PREVIOUS_LEVEL, validatePractice, reactionsOf, setupMoment, quietPick, selectBar, practiceLine, tfLabel, checkLine, setupChecks };

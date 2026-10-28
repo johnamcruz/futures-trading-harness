@@ -51,7 +51,9 @@ test('data lane: the 3m cycle\'s briefing gains the 5m structure, 5m FVGs and 5m
   // One cycle each, with the one-lane prompt, context and budget: the data lane adds no lane to the cycle.
   assert.strictEqual(a.ran.length, 1);
   assert.strictEqual(b.ran.length, 1);
-  const prompt = (w, r) => r.ran[0].prompt.split(w.home).join('<home>');
+  // The situational skills follow the briefing (situational-skills.js), which the data lane's 5m parts change by design:
+  // the prompts are compared without that section.
+  const prompt = (w, r) => r.ran[0].prompt.split(w.home).join('<home>').replace(/ This cycle's situation[^]*?(?= End with the cycle result)/, '');
   assert.strictEqual(prompt(laned, b), prompt(plain, a));
   assert.doesNotMatch(b.ran[0].prompt, /Lanes closed/);
   assert.ok(!('lanes' in b.ran[0].context));

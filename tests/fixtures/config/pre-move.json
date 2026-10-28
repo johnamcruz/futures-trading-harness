@@ -1211,6 +1211,10 @@
    "value": 48000,
    "from": "new in feat/cycle-data-in-prompt (the pre-collected cycle reads' section, in UTF-8 bytes: well under one argv string's 128 KB)"
   },
+  "prompt.situationalSkillBytes": {
+   "value": 24000,
+   "from": "new in feat/ppc-setup-rates (owner: every skill as context when its situation applies; UTF-8 bytes of embedded skill text a cycle: the exit skills about 12 KB, a listed setup with its entry and risk skills about 20 KB, so one stage decided now plus its location fits and context past it is named, not dropped)"
+  },
   "limits.probeOutputBytes": {
    "value": 67108864,
    "from": "headless-check.js runProbe maxBuffer (64 * 1024 * 1024)"

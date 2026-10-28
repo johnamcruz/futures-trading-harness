@@ -4287,10 +4287,10 @@ test('order gate (hook): a Claude Code head trader in index mode (the runner\'s 
   assert.match(e2.stderr, /\[skills-loaded\][^\n]*trade-session/, 'another cycle\'s id');
 });
 
-test('order gate (hook): a managed cycle\'s attested exit skills (FTH_EXIT_SKILLS) credit only manage-position and pullback-vs-reversal: an entry without its own loads is still refused; an exit goes', () => {
+test('order gate (hook): a managed cycle\'s attested situational skills (FTH_CYCLE_SKILLS) credit only those it embeds: an entry without its own loads is still refused; an exit goes', () => {
   const { env, dir } = setup([{ ts: minutesAgo(5, new Date(TEST_NOW)), kind: 'plan', contractId: entryOrder().contractId, text: 'plan' }]);
   simBroker(env);
-  const ES = require('../../scripts/lib/exit-skills');
+  const ES = require('../../scripts/lib/situational-skills');
   const { cycleId: cycleIdOf } = require('../../scripts/lib/trading/check-order');
   const SESSION = '5b1d3c7f-claude-exit-hook';
   const stream = path.join(dir, 'cycle-transcript-exit.jsonl');
@@ -4298,10 +4298,10 @@ test('order gate (hook): a managed cycle\'s attested exit skills (FTH_EXIT_SKILL
   const session = path.join(dir, 'projects', `${SESSION}.jsonl`);
   fs.mkdirSync(path.dirname(session), { recursive: true });
   fs.writeFileSync(session, '');
-  const { file, text } = ES.writeExitSkills(env.FTH_HOME, REPO);
-  const att = ES.exitAttestation({ file, text, root: REPO, cycle: cycleIdOf({ FTH_CYCLE_TRANSCRIPT: stream }) });
-  assert.deepStrictEqual(ES.exitAttested(att, REPO, { stream, hook: session, cycle: att.cycle }), ES.SKILLS, 'the run\'s own session: both count');
-  const auto = { ...env, FTH_AUTONOMOUS: '1', FTH_SYMBOLS: 'MNQ', FTH_ROLE_SKILLS: 'full', FTH_REPLAY_NOW: TEST_NOW, FTH_CYCLE_TRANSCRIPT: stream, FTH_EXIT_SKILLS: JSON.stringify(att) };
+  const { file, text } = ES.writeSituation(env.FTH_HOME, REPO, { skills: ['manage-position', 'pullback-vs-reversal', 'take-profit'], sections: [], over: [], why: ['a position or a working entry is open'] });
+  const att = ES.attestation({ file, text, root: REPO, cycle: cycleIdOf({ FTH_CYCLE_TRANSCRIPT: stream }) });
+  assert.deepStrictEqual(ES.attested(att, REPO, { stream, hook: session, cycle: att.cycle }), ['manage-position', 'pullback-vs-reversal', 'take-profit'], 'the run\'s own session: they count');
+  const auto = { ...env, FTH_AUTONOMOUS: '1', FTH_SYMBOLS: 'MNQ', FTH_ROLE_SKILLS: 'full', FTH_REPLAY_NOW: TEST_NOW, FTH_CYCLE_TRANSCRIPT: stream, FTH_CYCLE_SKILLS: JSON.stringify(att) };
   const r = gate({ ...orderPayload(), transcript_path: session }, auto);
   assert.strictEqual(r.code, 2);
   assert.match(r.stderr, /\[skills-loaded\][^\n]*not loaded in this session: trade-session, multi-timeframe-analysis, strategy-library/);

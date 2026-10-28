@@ -16,11 +16,524 @@ Autonomous cycle.
   End of day: the runner flattens every position at 15:50 ET (in 314 min); a trade must have room to work before then.
   Account 7 at 10:36 ET: balance $50,000; flat; 0 working orders.
   No reviewed trades in the journal yet, so no record of your own results, mistakes, or lessons.
-  Your skills trade-session, multi-timeframe-analysis, trade-lifecycle, htf-to-ltf, confluence-counting, setup-judgment, and trade-plan are in your prompt, already loaded (don't load them again): decide by them, then run the trade-session skill for MNQ on account 7.
+  Your skills trade-session, multi-timeframe-analysis, trade-lifecycle, htf-to-ltf, confluence-counting, setup-judgment, trade-plan, and day-context are in your prompt, already loaded (don't load them again): decide by them, then run the trade-session skill for MNQ on account 7.
   Write the trader-process skill's PLAN (1 HTF to 9 Manage) before the result line.
   Full cycle: market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst and risk-manager (phase 1) as parallel subagents, plan from their reports, then risk-manager phase 2 on your plan, if any; the gate refuses an entry until all report and phase 2 approves.
   Each analyst reads its own timeframe: give it that timeframe with the symbol: trend-momentum-analyst on 15m (bar_briefing with "timeframe": "15m"; its bars file is named there), volume-liquidity-analyst on 1h (bar_briefing with "timeframe": "1h"; its bars file is named there); the others read the 3-minute bars below.
   A report on an analyst's own timeframe holds until that timeframe's next bar close, so it may be up to one of its bars old.
+  This cycle's situation (a compression break on the Setups to check; a setup listed: its entry read; a setup listed: its stop, target and size) needs your skills `compression`, `candle-reading`, `momentum-and-volume`, `top-down-entry`, `take-profit`, and `position-sizing`: they are below, already loaded (don't load them again).
+
+<skill name="compression">
+# Compression
+
+## When to Use
+
+- Step 4 with the HTF bias set: is the trend resting on a narrow candle, and
+  did a closed candle expand out of it? `m3.compression`.
+
+## How It Works
+
+A read, never a veto: the count decides (`confluence-counting`).
+  Thresholds are
+hypotheses (config/analysis.json `compression`); a missing field is `unknown`.
+
+**The box** (`box`), completed candles only, ATR(14) the one before the box:
+
+- `inside`: a candle inside its mother (`candle-reading`, `insideStack`
+  in a row); the box is the mother's range.
+  A displacement mother is a
+  pole, never a box; not narrow (below): the NR7 candle's own range.
+- `nr7`: the narrowest range of the last 7 back-to-back candles (ties
+  count); the box is its range.
+- Narrow: at most 2 x ATR wide, back-to-back candles, none a displacement.
+- `flavor` the box's, `flavors` all that hold; `levels` the key levels it
+  sits at, `edge` `top`, `bottom`, `inside`.
+- `pole`: a displacement candle (`candle-reading`) in the 3 candles just
+  before the box, outside it.
+
+**Expansion** (`break`): the next candle CLOSES beyond the box by 0.1 x ATR
+or more (`beyondAtr`: a poke of a tick or two is none), its range 1 x ATR
+or more (`rangeAtr`); `withPole` the pole its way, `volVsBox` support only
+(`momentum-and-volume`).
+  `state` `expanding` while within 3 candles
+(`barsAgo`), no close back inside (`backInside`), price still beyond
+(`beyondNow`; acceptance by closes: `breakout-vs-fakeout`) and under 1 x
+ATR past its close (`late`).
+
+**Detect it**, the setup (`<tf> compression break up|down`):
+
+1.
+  `state` `compressing`: the narrow candle, its box and `levels`.
+2.
+  The expansion candle closes out of the box the HTF bias's way.
+3.
+  Side, entry and runway: `trade-lifecycle`, `take-profit`.
+  Never anticipate.
+4.
+  Stop: the box's far side, `stop <tf> box low|high <price>` (`invalidation`).
+
+**Strongest**: a box pressing a key level the bias's way, the expansion
+closing through it: location `<tf> box at <level>`, setup the break.
+  Read
+it with the level's reaction (`levels-and-reactions`).
+
+**What fails**: closed back inside: fakeout (`breakout-vs-fakeout`); a
+break against the HTF bias (the trend rule's); a small candle; late.
+
+**Flag, pennant**: a displacement pole, then a narrow candle (flag) or an
+inside stack (pennant), the break the pole's way (`withPole`).
+
+**Evidence** (practice-train halves, 3m, with the HTF, n 466/420): +0.26R
+and +0.19R net, 90% intervals above zero; against it -0.04R/+0.11R; a pole
+added nothing measured.
+  A census.
+
+## Examples
+
+```text
+Take: 1h up; 3m inside box 27413.00-27422.00 on the prior POC; 04:39 ET expansion closed 27428.50
+  (1.13 ATR, 0.54 beyond, volume 2.69x); 04:42 close 27428.00 top.
+  Reads: 3m compression break up,
+  3m close top, stop 3m box low 27413.00, target prior rth high 27462.50 (2.26R); hit at 05:51.
+Skip: pennant: a 20:09 ET pole up, then 2 candles inside 27102.50-27116.25; expansion 27118.50;
+  stop 27102.25, the 15m swing high 27155.75 only 1.35R: no runway -> pass.
+Skip: 4h up; 3m inside box 27475.00-27484.50; expansion down 27446.00: against the bias -> pass.
+Loser: 15m up; 3m inside x3 box 27066.75-27079.75 (prior VAH inside); 03:03 ET expansion 27092.75;
+  long at 27096.25, stop 27066.50 (29.75 pts = 119 ticks, $59.50 on 1 MNQ), 4h swing high 27155.75
+  (2.00R); back into the box, stopped 05:21 ET: -119 ticks, -$59.50.
+```
+</skill>
+
+<skill name="candle-reading">
+# Candle Reading
+
+## When to Use
+
+- A completed candle at a level (trader-process step 3), and the trigger
+  bar's timing (step 6).
+
+## How It Works
+
+**Confirmation only, at a level.** A candle counts only AT a level: the
+`levels-and-reactions` skill's list, plus the previous candle's high and
+low and a CRT range (`m3.candles` lists both).
+A pattern away from a level is not evidence.
+
+**Completed candles only.** Judge a pattern at its candle's close, on
+every timeframe.
+  Never judge the in-progress candle: a 15m hammer half
+formed is not a hammer.
+  In strategy rules `htfc_*` is the candle in
+progress: never judge a pattern on it.
+
+A read, never a veto: the count decides (`confluence-counting`).
+  Thresholds are
+hypotheses; a missing field is `unknown`.
+
+**The stack**: each timeframe's last completed candle.
+  15m, 1h and 4h weigh more at a higher-timeframe level (a 1h
+rejection of the prior day's high outweighs a 3m one: `rejection`,
+`breakout`); 3m and 5m time the entry.
+
+- 3m, 5m, 15m, 1h and 4h: `m3.candles` (fields: `bar-briefing`), its
+  `pattern` and the levels it
+  met (`rejected`, `broke`, `touched`: `rejection`, `breakout`), only
+  levels that existed before it opened.
+  5m, `unavailable` without a 1m
+  lane, is `unknown`.
+- The targets: `m3.swingTargets`, the next swing each side (base,
+  15m, 1h, 4h).
+- Strategy rules: `htfd_*` (strategy-rules).
+
+**Anatomy** (range = h - l; h = l is `unknown`): body and wick shares of
+the range; close location (c - l) / range: top third at least 2/3, bottom at most
+1/3, else middle (read `<tf> close top|middle|bottom`); size against ATR (`rangeAtr`).
+
+**Patterns**, as the code labels them (`pattern`, `patterns`; read
+`<tf> pattern <name>`; R range, B body, U and D the upper and lower wicks, prev the
+prior candle, ATR(14) as of prev):
+
+- doji: B at most 0.1 R;
+- hammer: D at least 2 B and 0.6 R, U at most 0.15 R; shooting star: the
+  mirror;
+- bullish engulfing: a bullish candle after a bearish one, its body
+  covering prev's and larger; bearish engulfing: the mirror;
+- inside: within prev's high and low, a smaller range; `insideStack`
+  counts candles in a row within a `mother`'s (a box: `compression`);
+  outside: beyond both, a larger range;
+- displacement: B at least 0.7 R and R at least 1.5 x ATR, `dir` its
+  close vs open; it starts a leg, out of a box (`compression`) or a
+  level.
+
+A CISD's strong displacement: `cisd`.
+  **Context decides**: with the HTF
+read (`trend-vs-range`, `pullback-vs-reversal`) and momentum and volume
+(`momentum-and-volume`, `absorption`).
+The stack counts once (`confluence-counting`, trigger).
+
+**Evidence**: standalone candlestick patterns have weak evidence in
+general, none measured.
+
+## Examples
+
+```text
+Take: at the prior RTH high 21615.00: on the 15m close a shooting star (H 21621.50, C 21608.25),
+  on the 1h close a rejection wick, then on the 3m close a bearish engulfing.
+  Stack agrees.
+  Reads: 1h rejected prior rth high down, 3m pattern bearish engulfing.
+  Priority order -> take.
+Skip: at the session POC 21522.00, on the 3m close a doji (body 0.25, range 5.50); 15m forming:
+  the entry read not in yet -> pass.
+  The session VAH 0.4R ahead is a read, not the reason.
+Loser: at the prior VAL 21480.00, on the 15m close a hammer (L 21474.50, C 21483.75).
+  long at 21483.75, stop 21474.25 (9.50 pts = 38 ticks, $19.00 on 1 MNQ);
+  closes below the VAL.
+  -38 ticks, -$19.00.
+```
+</skill>
+
+<skill name="momentum-and-volume">
+# Momentum and Volume
+
+## When to Use
+
+- Grading the trigger bar and the last few bars (trader-process steps 3
+  and 5).
+
+## How It Works
+
+A read, never a veto: the count decides (`confluence-counting`).
+  Thresholds are
+hypotheses; a missing field is `unknown`.
+
+**The bar.** `m3.bar.rangeAtr` = (h - l) / ATR(14); `m3.context.range5Atr`
+= the last 5 bars' high-to-low / ATR(14).
+  Close location: the 3m
+candle line's `close top|middle|bottom third`.
+
+**Participation** (`m3.participation`):
+
+- `m3.participation.relVolLast3VsPrior20`: the last 3 bars' mean volume
+  over the mean of the bars before them (the code takes 21);
+- `m3.participation.relVolLastVsOpeningRange`,
+  `m3.participation.relVolLast3VsOpeningRange`: over today's opening-range
+  bar average (null before it closes, and overnight);
+- `m3.participation.relVolVsSameTimePriorDay`: over the same ET minute's
+  bar the previous trading day; `m3.participation.lastBarVolume`.
+
+The code's note (under 1.0 thin, 1.5 or more strong) is a hypothesis.
+
+**Indicators confirm; price action at levels is primary.** As data, by
+timeframe:
+
+- 3m: `m3.trend.ema20`, `m3.trend.ema50`, `m3.regime.metrics.ema20SlopeAtr`
+  (EMA(20) now minus 5 bars ago, over ATR(14)), `m3.trend.adx` (ADX(14),
+  Wilder), `m3.trend.adxSlope` (now minus 5 bars ago),
+  `m3.context.adxFallingBars`, `m3.trend.supertrend.direction`,
+  `m3.trend.keltner.upper`, `m3.trend.keltner.lower`;
+- 15m: `m15.indicators.ema20`, `m15.indicators.adx`,
+  `m15.indicators.adxSlope`, `m15.indicators.supertrend.direction`;
+- 1h: `h1.h1.ema20`, `h1.h1.ema50`, `h1.h1.adx`.
+
+They confirm that a price-action read has momentum behind it (a 15m
+rejection with the trend while price holds the right side of a rising
+EMA20, ADX rising).
+  ADX has no side.
+  They never trigger an entry and never
+override the price-action read.
+  In the count they and the bar's momentum
+are structure (`confluence-counting`): all with its side FOR, all against
+AGAINST, mixed neutral.
+
+**The read.** Momentum (this skill owns it; read `<tf> momentum up|down`):
+the 3m candle line's `momentum up|down` (any timeframe's line alike):
+range ≥ 1 ATR, close in the far third, volume ≥ the mean of up to 20 prior
+candles, at least 5.
+  A line showing range and vol but no momentum: none.
+Trend (ADX, EMAs) is separate.
+  Fading: ADX falling, ranges shrinking,
+closes mid-range.
+  High volume with little range: `absorption`.
+
+**Evidence**: above-average volume on a first close through the IB high
+did not save it on Train (F8A, docs/research/mtf-setup-catalog.md).
+
+## Examples
+
+```text
+Take: bar H 21510.00 L 21499.75 C 21509.25: close top third; rangeAtr 1.40; vol 1.8x: momentum up.
+  Trend: adxSlope +3.2.
+  Reads: 3m momentum up, 3m close top.
+  Priority order: aligned; the count for -> take.
+Skip: close middle third, rangeAtr 0.60, relVolLast3VsPrior20 0.7, adxFallingBars 6.
+  Read: fading,
+  no close or momentum read its way; the priority order leaves it to judgement: skip.
+Loser: momentum up; long at 21512.50, stop 21508.00 (4.50 pts = 18 ticks, $9.00 on 1 MNQ);
+  the next bar reversed on the day's top volume.
+  -18 ticks, -$9.00.
+```
+</skill>
+
+<skill name="top-down-entry">
+# Top-Down Entry
+
+The fractal read: the higher timeframes give the side and the level, the
+15m the setup, the 3m or 5m the trigger (how the timeframes align:
+`htf-to-ltf`).
+
+## When to Use
+
+- Price is coming into a key level and a setup may form there.
+- Checking a composed setup's reads against the higher timeframes.
+
+## How It Works
+
+Completed candles only, on every timeframe.
+  The steps run in order; each
+points to the read it uses.
+
+1.
+  **HTF: side and level.** The side the trend rule allows
+   (`m3.trendRule`); today's bias (`daily-bias`) sets the confidence, never
+   a side the rule refuses.
+  The level price comes into
+   (`levels-and-reactions`) is the point of interest.
+2.
+  **15m: the setup there.** A rejection or a breakout with acceptance
+   (`rejection`, `breakout`), a CISD (`cisd`), a pullback or a
+   reversal (`pullback-vs-reversal`, `bos-vs-choch`).
+3.
+  **3m/5m: the trigger.** A candle closed after the setup's, its way, with
+   momentum (`candle-reading`, `momentum-and-volume`): the entry reads.
+4.
+  **Where the idea is wrong.** Beyond the reaction's LTF structure
+   (`invalidation`): check that the strategy's stop sits beyond it.
+5.
+  **Where it aims.** The next HTF swing (`m3.swingTargets`);
+   `candidate.inTheWay` is the first level ahead: a read to weigh, not a
+   pass.
+  Hard: R:R to the target at least `risk.min_rr`.
+
+When the timeframes disagree, the alignment label (`htf-to-ltf`) names it:
+the HTF gives the side, the LTF only the timing.
+
+A read: the trend rule (`multi-timeframe-analysis`) and the priority order
+(strategy-library) decide entries.
+  Against the prevailing trend, trend
+strategies wait.
+  The stop and exit stay the strategy's (the priority order,
+step 2: a reversal takes the nearest target).
+
+## Examples
+
+NQ, back-adjusted CSV prices:
+
+```text
+2022-06-22, trend rule 4h up, long aligned.
+  15m 12:45 candle rejects the prior
+POC 14942.75; the 3m 13:03 candle rejects it too and closes in its top third:
+long 14960.00, stop 14938.50 under the 15m low (21.50 pts = 86 ticks, $43.00 per MNQ);
+target the 15m swing high 15040.25 (80.25 pts, 3.73R), reached 14:15.
+2022-08-12, trend rule 4h up.
+  15m shooting star at the prior VAH 16809.25, 3m
+bearish engulfing: short 16789.25, stop 16814.00 (24.75 pts = 99 ticks, $49.50 per MNQ).
+Step 1: shorts are not the side the rule allows; only a reversal strategy may
+fade it, and step 2 of the priority order decides.
+  The stop was hit 12:12.
+```
+</skill>
+
+<skill name="take-profit">
+# Take Profit
+
+## When to Use
+
+- Trader-process step 7: where the trade's target sits and whether the
+  room to it pays for the stop.
+
+## How It Works
+
+A read of where price may stop, never a veto: the priority order
+(strategy-library) decides take, skip and size.
+  Which target goes with
+which setup is a strategy's, not this skill's.
+
+**Target levels**, on the winning side of the entry, completed candles
+only:
+
+- **Pivot highs and lows**: the next untaken confirmed swing per
+  timeframe, `m3.swingTargets.above` and `m3.swingTargets.below` (the
+  base bars, 15m, 1h and 4h; `frame`, `price`, `points`, `ticks`, `R`).
+  Stops rest beyond a swing (`levels-and-reactions`).
+- **The prior 1h and 4h candle's high, low and midpoint**:
+  `m3.rangeTargets`, per frame its `high`, `mid` and `low` (`side` of
+  price, `points`, `ticks`, `R`): where that candle's buyers and sellers
+  stopped, and its balance, where a move back into the range often
+  pauses.
+  The mid is exact ((high + low) / 2) and may sit between ticks;
+  its `points`, `ticks` and `R` are to the tick toward price.
+  A side the
+  candle forming has already taken (`taken`) is spent as a target; the
+  far side remains.
+- **Fair value gap edges**: the near edge of an open gap ahead of price;
+  a partly filled gap, its unfilled part only (`fair-value-gaps`).
+- **The candle forming**: its midpoint moves until it closes, so it is a
+  target only once completed.
+
+**Read forms** (the target step): `target <tf> swing high|low <price>`,
+`target prior 1h|4h high|mid|low <price>` (a taken side reads false),
+`target <5m|15m|1h> fvg high|low <price>`.
+  None named: `target 2r`.
+
+**Timeframe weight** (hypothesis, not measured): a higher timeframe's
+level holds more resting orders and reacts more often; a lower one's is
+usually the first in the way.
+  The nearest level is the conservative
+target, a higher-timeframe one beyond it the extended one.
+  Levels a few
+ticks apart act as one zone.
+
+**Room in R.** The briefing's `R` is against the reference stop
+(`m3.oneR`).
+  Against the trade's own stop (`order_plan`'s distance, the
+trade's 1R), a target's R is its points over the stop's points.
+  The first
+level ahead (`inTheWay`) is a read, not a cap: price often trades through it.
+A target under the strategy's `risk.min_rr` doesn't pay for the stop.
+Round a target toward the entry (`trade-plan`).
+
+**After the entry**: partial exits, runners and trailing are management's
+(`manage-position`); what ends the idea before the target is
+`invalidation`; the exit the plan states is `trade-plan`'s.
+
+## Examples
+
+MNQ (tick 0.25, $0.50 a tick), prices illustrative:
+
+```text
+Long 21540.25, stop 21528.75 (11.50 pts = 46 ticks, $23.00 per MNQ).
+15m swing high 21556.00: 15.75 pts = 63 ticks, $31.50, 1.37R (nearest).
+Prior 1h high 21562.75: 22.50 pts = 90 ticks, $45.00, 1.96R.
+1h swing high 21575.50: 35.25 pts = 141 ticks, $70.50, 3.07R (extended).
+
+Long 21545.50, stop 21537.25 (8.25 pts = 33 ticks, $16.50 per MNQ).
+Prior 1h high 21580.00, low 21540.25: mid 21560.125, between ticks;
+toward the entry: 21560.00 = 14.50 pts = 58 ticks, $29.00, 1.76R.
+
+Short 21490.00, stop 21501.25 (11.25 pts = 45 ticks, $22.50 per MNQ).
+Prior 1h low 21471.75: 18.25 pts = 73 ticks, $36.50, 1.62R.
+Prior 1h mid 21492.125 is above the entry: behind the trade, not a target.
+Prior 4h low 21440.50: 49.50 pts = 198 ticks, $99.00, 4.40R (extended).
+```
+</skill>
+
+<skill name="position-sizing">
+# Position Sizing
+
+## When to Use
+
+- Writing any trade plan.
+- After a loss (the allowance shrinks) or a volatility regime change.
+
+## How It Works
+
+1.
+  **Specs from the API, always.** `search_contracts` / `get_contract` return
+   `tickSize` and `tickValue`.
+  Micro and mini specs to sanity-check them: the
+   `micro-mini-specs` skill.
+2.
+  **Risk per contract** = |entry − stop| ÷ tickSize × tickValue (+ round-trip
+   fees from the account, if known).
+  A stop can fill a tick or more past its
+   price: when the room to the loss floor or the daily limit sets the size,
+   count a tick of slippage per contract too (a policy verdict already does).
+3.
+  **Risk budget** = the smallest of:
+   - the strategy / plan $ risk (a composed trade: at most its $300 cap),
+   - 25% of `remainingBeforeLimit` from `get_account_snapshot`, when known,
+   - 10% of the trailing-drawdown cushion (balance − loss floor), when shown.
+     None shown (no attempt): skip this cap, never $0.
+  Never ask when
+     autonomous.
+4.
+  **Size** = floor(budget ÷ risk per contract).
+  If it's 0, the stop is too
+   wide for the budget: skip, or find a tighter, structure-based stop.
+  Never
+   shrink the stop to make the size work.
+5.
+  **Caps:** the broker server's `maxOrderSize` and `maxPositionSize`
+   (`get_server_config`); size 1 on micros for a rules strategy until
+   its setup has 30+ reviewed trades with positive expectancy.
+  The order gate enforces two
+   of them on every entry: the size at most `maxOrderSize` (the harness
+   records it from `get_server_config`, and refuses entries until it has),
+   and, when the strategy sets `risk.max_risk_usd`, size × stop ticks ×
+   tickValue at most that cap.
+  It measures the stop from
+   `stopLossBracket.ticks`, which every entry carries (the gate refuses an
+   entry without one; always send it), and, for a limit or stop entry, from its price to the
+   rationale's stop price when that is farther (the farthest one on the
+   losing side; a part tick counts as a whole one).
+   Over a cap, reduce the size (never split the entry into several orders,
+   never shrink the stop to fit).
+  The cap is checked when the entry is
+   placed: a `[protect]` stop that later repairs the position's protection
+   goes where the rationale said, never farther.
+6.
+  **A policy verdict overrides steps 3-5.** While a prop attempt runs a
+   policy strategy, the verdict's contract (the selected one), size, and stop
+   ticks were sized from the attempt's budget (`combine_status`), each
+   contract's risk counting its stop plus a tick of expected slippage
+   (`sizing.stop_slippage_ticks`) and fees both ways; place at
+   most that size and don't apply the 25% / 10% / size-1 caps to it.
+  The gate
+   checks the verdict, not these caps; it still refuses a size over the
+   broker's `maxOrderSize`, and over the policy strategy's own
+   `risk.max_risk_usd` if it sets one (a rules component's caps don't apply;
+   `trade_lifecycle`'s cap does: the lower of it and the verdict).
+  Everything else (stop first, protective
+   stop always working) still applies.
+  The verdict is the most the account
+   allows, not what the moment deserves: after a loss, near
+   `daily_loss_soft` or one loss short of `loss_streak_stop`, size under it
+   or pass on anything marginal (`prop-challenge-pacing`).
+   In a prop attempt, the size you state is a suggestion: code translates it
+   at entry to the rulebook's size (min_contracts and the budget); read the
+   size it returns.
+7.
+  **Half size** wherever the priority order (strategy-library) halves a
+   trade, computed as it says there.
+  Never round a half up.
+  In a prop attempt the half is phase 2's cut of the translated size (never under min_contracts).
+  A composed
+   trade: `confluence-counting` sizes it, under the caps.
+8.
+  **The arithmetic from `order_plan`** (the `order-plan` skill): steps 2
+   and 4 for a compose record (refused over its cap), a policy verdict or a
+   rules candidate; use its numbers, never your own.
+  The budget (step 3)
+   and the caps stay your judgement: a budget below its risk is a skip; a
+   raised size (a rules setup with 30+ reviewed trades) changes only
+   `size`, the risk scaling with it.
+9.
+  Write entry, stop, size, and $ risk into the plan.
+
+## Examples
+
+```text
+MNQ long 21500.00, stop 21482.50 → 17.5 pts = 70 ticks × $0.50 = $35/contract
+remainingBeforeLimit $600 → 25% = $150; plan risk $75; cushion $1,800 → 10% = $180
+budget = $75 → size = floor(75 / 35) = 2 → capped to 1 (setup has 12 reviews)
+Plan: 1 MNQ, risk $35.
+
+compose record, a long on MNQ, stop 27.75 pts = 111 ticks ($55.50/MNQ contract):
+risk.max_risk_usd $300 -> maxSize 5; size 5, risk $277.50 = 5 x 111 ticks x $0.50/tick
+(the same stop on MES: 111 ticks x $1.25 = $138.75 a contract: maxSize 2, $277.50)
+```
+</skill>
+ Also relevant now, read with your skill tool: `levels-and-reactions`, `breakout-vs-fakeout`, `vwap-volume-profile`, `trend-vs-range`, `mtf-bias-filter`, `daily-bias`, and `bos-vs-choch`.
   End with the cycle result as plain text in your final message, never as a tool call.
   Your last line must be exactly: CYCLE RESULT: <no-trade | planned | executed | managed | flattened | blocked | error> - <reason>.
 === 2026-04-27T14:37:02.000Z trade 1m ===
@@ -43,7 +556,7 @@ Autonomous cycle.
   Your last 1 cycle(s) on the lanes that closed (with the first lane's last few, and those of the lane an open trade was entered on), oldest first, ET (not facts; "since" is from bars closed by now): 10:36 MNQ 3m no-trade @27389.5: golden replay; since -75t.
   Don't flip-flop without a new reason.
   No reviewed trades in the journal yet, so no record of your own results, mistakes, or lessons.
-  Your skills trade-session, multi-timeframe-analysis, trade-lifecycle, htf-to-ltf, confluence-counting, setup-judgment, and trade-plan are in your prompt, already loaded (don't load them again): decide by them, then run the trade-session skill for MNQ on account 7.
+  Your skills trade-session, multi-timeframe-analysis, trade-lifecycle, htf-to-ltf, confluence-counting, setup-judgment, trade-plan, and day-context are in your prompt, already loaded (don't load them again): decide by them, then run the trade-session skill for MNQ on account 7.
   Write the trader-process skill's PLAN (1 HTF to 9 Manage) before the result line.
   Full cycle: plan from their reports, then risk-manager phase 2 on your plan, if any; the gate refuses an entry until all report and phase 2 approves.
   Cached reports, still valid this bar (the runner's report cache: an analyst's report built on the bar briefing parts still current, risk-manager phase 1 on this account unchanged): don't launch market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst, risk-manager (phase 1) this cycle; the order gate counts them as returned.
@@ -65,5 +578,518 @@ Bias: long
 --- risk-manager phase 1 report (from 10:36 ET) ---
 Phase 1: flat, budget 2 trades
 --- end of risk-manager report ---
- End with the cycle result as plain text in your final message, never as a tool call.
+ This cycle's situation (a compression break on the Setups to check; a setup listed: its entry read; a setup listed: its stop, target and size) needs your skills `compression`, `candle-reading`, `momentum-and-volume`, `top-down-entry`, `take-profit`, and `position-sizing`: they are below, already loaded (don't load them again).
+
+<skill name="compression">
+# Compression
+
+## When to Use
+
+- Step 4 with the HTF bias set: is the trend resting on a narrow candle, and
+  did a closed candle expand out of it? `m3.compression`.
+
+## How It Works
+
+A read, never a veto: the count decides (`confluence-counting`).
+  Thresholds are
+hypotheses (config/analysis.json `compression`); a missing field is `unknown`.
+
+**The box** (`box`), completed candles only, ATR(14) the one before the box:
+
+- `inside`: a candle inside its mother (`candle-reading`, `insideStack`
+  in a row); the box is the mother's range.
+  A displacement mother is a
+  pole, never a box; not narrow (below): the NR7 candle's own range.
+- `nr7`: the narrowest range of the last 7 back-to-back candles (ties
+  count); the box is its range.
+- Narrow: at most 2 x ATR wide, back-to-back candles, none a displacement.
+- `flavor` the box's, `flavors` all that hold; `levels` the key levels it
+  sits at, `edge` `top`, `bottom`, `inside`.
+- `pole`: a displacement candle (`candle-reading`) in the 3 candles just
+  before the box, outside it.
+
+**Expansion** (`break`): the next candle CLOSES beyond the box by 0.1 x ATR
+or more (`beyondAtr`: a poke of a tick or two is none), its range 1 x ATR
+or more (`rangeAtr`); `withPole` the pole its way, `volVsBox` support only
+(`momentum-and-volume`).
+  `state` `expanding` while within 3 candles
+(`barsAgo`), no close back inside (`backInside`), price still beyond
+(`beyondNow`; acceptance by closes: `breakout-vs-fakeout`) and under 1 x
+ATR past its close (`late`).
+
+**Detect it**, the setup (`<tf> compression break up|down`):
+
+1.
+  `state` `compressing`: the narrow candle, its box and `levels`.
+2.
+  The expansion candle closes out of the box the HTF bias's way.
+3.
+  Side, entry and runway: `trade-lifecycle`, `take-profit`.
+  Never anticipate.
+4.
+  Stop: the box's far side, `stop <tf> box low|high <price>` (`invalidation`).
+
+**Strongest**: a box pressing a key level the bias's way, the expansion
+closing through it: location `<tf> box at <level>`, setup the break.
+  Read
+it with the level's reaction (`levels-and-reactions`).
+
+**What fails**: closed back inside: fakeout (`breakout-vs-fakeout`); a
+break against the HTF bias (the trend rule's); a small candle; late.
+
+**Flag, pennant**: a displacement pole, then a narrow candle (flag) or an
+inside stack (pennant), the break the pole's way (`withPole`).
+
+**Evidence** (practice-train halves, 3m, with the HTF, n 466/420): +0.26R
+and +0.19R net, 90% intervals above zero; against it -0.04R/+0.11R; a pole
+added nothing measured.
+  A census.
+
+## Examples
+
+```text
+Take: 1h up; 3m inside box 27413.00-27422.00 on the prior POC; 04:39 ET expansion closed 27428.50
+  (1.13 ATR, 0.54 beyond, volume 2.69x); 04:42 close 27428.00 top.
+  Reads: 3m compression break up,
+  3m close top, stop 3m box low 27413.00, target prior rth high 27462.50 (2.26R); hit at 05:51.
+Skip: pennant: a 20:09 ET pole up, then 2 candles inside 27102.50-27116.25; expansion 27118.50;
+  stop 27102.25, the 15m swing high 27155.75 only 1.35R: no runway -> pass.
+Skip: 4h up; 3m inside box 27475.00-27484.50; expansion down 27446.00: against the bias -> pass.
+Loser: 15m up; 3m inside x3 box 27066.75-27079.75 (prior VAH inside); 03:03 ET expansion 27092.75;
+  long at 27096.25, stop 27066.50 (29.75 pts = 119 ticks, $59.50 on 1 MNQ), 4h swing high 27155.75
+  (2.00R); back into the box, stopped 05:21 ET: -119 ticks, -$59.50.
+```
+</skill>
+
+<skill name="candle-reading">
+# Candle Reading
+
+## When to Use
+
+- A completed candle at a level (trader-process step 3), and the trigger
+  bar's timing (step 6).
+
+## How It Works
+
+**Confirmation only, at a level.** A candle counts only AT a level: the
+`levels-and-reactions` skill's list, plus the previous candle's high and
+low and a CRT range (`m3.candles` lists both).
+A pattern away from a level is not evidence.
+
+**Completed candles only.** Judge a pattern at its candle's close, on
+every timeframe.
+  Never judge the in-progress candle: a 15m hammer half
+formed is not a hammer.
+  In strategy rules `htfc_*` is the candle in
+progress: never judge a pattern on it.
+
+A read, never a veto: the count decides (`confluence-counting`).
+  Thresholds are
+hypotheses; a missing field is `unknown`.
+
+**The stack**: each timeframe's last completed candle.
+  15m, 1h and 4h weigh more at a higher-timeframe level (a 1h
+rejection of the prior day's high outweighs a 3m one: `rejection`,
+`breakout`); 3m and 5m time the entry.
+
+- 3m, 5m, 15m, 1h and 4h: `m3.candles` (fields: `bar-briefing`), its
+  `pattern` and the levels it
+  met (`rejected`, `broke`, `touched`: `rejection`, `breakout`), only
+  levels that existed before it opened.
+  5m, `unavailable` without a 1m
+  lane, is `unknown`.
+- The targets: `m3.swingTargets`, the next swing each side (base,
+  15m, 1h, 4h).
+- Strategy rules: `htfd_*` (strategy-rules).
+
+**Anatomy** (range = h - l; h = l is `unknown`): body and wick shares of
+the range; close location (c - l) / range: top third at least 2/3, bottom at most
+1/3, else middle (read `<tf> close top|middle|bottom`); size against ATR (`rangeAtr`).
+
+**Patterns**, as the code labels them (`pattern`, `patterns`; read
+`<tf> pattern <name>`; R range, B body, U and D the upper and lower wicks, prev the
+prior candle, ATR(14) as of prev):
+
+- doji: B at most 0.1 R;
+- hammer: D at least 2 B and 0.6 R, U at most 0.15 R; shooting star: the
+  mirror;
+- bullish engulfing: a bullish candle after a bearish one, its body
+  covering prev's and larger; bearish engulfing: the mirror;
+- inside: within prev's high and low, a smaller range; `insideStack`
+  counts candles in a row within a `mother`'s (a box: `compression`);
+  outside: beyond both, a larger range;
+- displacement: B at least 0.7 R and R at least 1.5 x ATR, `dir` its
+  close vs open; it starts a leg, out of a box (`compression`) or a
+  level.
+
+A CISD's strong displacement: `cisd`.
+  **Context decides**: with the HTF
+read (`trend-vs-range`, `pullback-vs-reversal`) and momentum and volume
+(`momentum-and-volume`, `absorption`).
+The stack counts once (`confluence-counting`, trigger).
+
+**Evidence**: standalone candlestick patterns have weak evidence in
+general, none measured.
+
+## Examples
+
+```text
+Take: at the prior RTH high 21615.00: on the 15m close a shooting star (H 21621.50, C 21608.25),
+  on the 1h close a rejection wick, then on the 3m close a bearish engulfing.
+  Stack agrees.
+  Reads: 1h rejected prior rth high down, 3m pattern bearish engulfing.
+  Priority order -> take.
+Skip: at the session POC 21522.00, on the 3m close a doji (body 0.25, range 5.50); 15m forming:
+  the entry read not in yet -> pass.
+  The session VAH 0.4R ahead is a read, not the reason.
+Loser: at the prior VAL 21480.00, on the 15m close a hammer (L 21474.50, C 21483.75).
+  long at 21483.75, stop 21474.25 (9.50 pts = 38 ticks, $19.00 on 1 MNQ);
+  closes below the VAL.
+  -38 ticks, -$19.00.
+```
+</skill>
+
+<skill name="momentum-and-volume">
+# Momentum and Volume
+
+## When to Use
+
+- Grading the trigger bar and the last few bars (trader-process steps 3
+  and 5).
+
+## How It Works
+
+A read, never a veto: the count decides (`confluence-counting`).
+  Thresholds are
+hypotheses; a missing field is `unknown`.
+
+**The bar.** `m3.bar.rangeAtr` = (h - l) / ATR(14); `m3.context.range5Atr`
+= the last 5 bars' high-to-low / ATR(14).
+  Close location: the 3m
+candle line's `close top|middle|bottom third`.
+
+**Participation** (`m3.participation`):
+
+- `m3.participation.relVolLast3VsPrior20`: the last 3 bars' mean volume
+  over the mean of the bars before them (the code takes 21);
+- `m3.participation.relVolLastVsOpeningRange`,
+  `m3.participation.relVolLast3VsOpeningRange`: over today's opening-range
+  bar average (null before it closes, and overnight);
+- `m3.participation.relVolVsSameTimePriorDay`: over the same ET minute's
+  bar the previous trading day; `m3.participation.lastBarVolume`.
+
+The code's note (under 1.0 thin, 1.5 or more strong) is a hypothesis.
+
+**Indicators confirm; price action at levels is primary.** As data, by
+timeframe:
+
+- 3m: `m3.trend.ema20`, `m3.trend.ema50`, `m3.regime.metrics.ema20SlopeAtr`
+  (EMA(20) now minus 5 bars ago, over ATR(14)), `m3.trend.adx` (ADX(14),
+  Wilder), `m3.trend.adxSlope` (now minus 5 bars ago),
+  `m3.context.adxFallingBars`, `m3.trend.supertrend.direction`,
+  `m3.trend.keltner.upper`, `m3.trend.keltner.lower`;
+- 15m: `m15.indicators.ema20`, `m15.indicators.adx`,
+  `m15.indicators.adxSlope`, `m15.indicators.supertrend.direction`;
+- 1h: `h1.h1.ema20`, `h1.h1.ema50`, `h1.h1.adx`.
+
+They confirm that a price-action read has momentum behind it (a 15m
+rejection with the trend while price holds the right side of a rising
+EMA20, ADX rising).
+  ADX has no side.
+  They never trigger an entry and never
+override the price-action read.
+  In the count they and the bar's momentum
+are structure (`confluence-counting`): all with its side FOR, all against
+AGAINST, mixed neutral.
+
+**The read.** Momentum (this skill owns it; read `<tf> momentum up|down`):
+the 3m candle line's `momentum up|down` (any timeframe's line alike):
+range ≥ 1 ATR, close in the far third, volume ≥ the mean of up to 20 prior
+candles, at least 5.
+  A line showing range and vol but no momentum: none.
+Trend (ADX, EMAs) is separate.
+  Fading: ADX falling, ranges shrinking,
+closes mid-range.
+  High volume with little range: `absorption`.
+
+**Evidence**: above-average volume on a first close through the IB high
+did not save it on Train (F8A, docs/research/mtf-setup-catalog.md).
+
+## Examples
+
+```text
+Take: bar H 21510.00 L 21499.75 C 21509.25: close top third; rangeAtr 1.40; vol 1.8x: momentum up.
+  Trend: adxSlope +3.2.
+  Reads: 3m momentum up, 3m close top.
+  Priority order: aligned; the count for -> take.
+Skip: close middle third, rangeAtr 0.60, relVolLast3VsPrior20 0.7, adxFallingBars 6.
+  Read: fading,
+  no close or momentum read its way; the priority order leaves it to judgement: skip.
+Loser: momentum up; long at 21512.50, stop 21508.00 (4.50 pts = 18 ticks, $9.00 on 1 MNQ);
+  the next bar reversed on the day's top volume.
+  -18 ticks, -$9.00.
+```
+</skill>
+
+<skill name="top-down-entry">
+# Top-Down Entry
+
+The fractal read: the higher timeframes give the side and the level, the
+15m the setup, the 3m or 5m the trigger (how the timeframes align:
+`htf-to-ltf`).
+
+## When to Use
+
+- Price is coming into a key level and a setup may form there.
+- Checking a composed setup's reads against the higher timeframes.
+
+## How It Works
+
+Completed candles only, on every timeframe.
+  The steps run in order; each
+points to the read it uses.
+
+1.
+  **HTF: side and level.** The side the trend rule allows
+   (`m3.trendRule`); today's bias (`daily-bias`) sets the confidence, never
+   a side the rule refuses.
+  The level price comes into
+   (`levels-and-reactions`) is the point of interest.
+2.
+  **15m: the setup there.** A rejection or a breakout with acceptance
+   (`rejection`, `breakout`), a CISD (`cisd`), a pullback or a
+   reversal (`pullback-vs-reversal`, `bos-vs-choch`).
+3.
+  **3m/5m: the trigger.** A candle closed after the setup's, its way, with
+   momentum (`candle-reading`, `momentum-and-volume`): the entry reads.
+4.
+  **Where the idea is wrong.** Beyond the reaction's LTF structure
+   (`invalidation`): check that the strategy's stop sits beyond it.
+5.
+  **Where it aims.** The next HTF swing (`m3.swingTargets`);
+   `candidate.inTheWay` is the first level ahead: a read to weigh, not a
+   pass.
+  Hard: R:R to the target at least `risk.min_rr`.
+
+When the timeframes disagree, the alignment label (`htf-to-ltf`) names it:
+the HTF gives the side, the LTF only the timing.
+
+A read: the trend rule (`multi-timeframe-analysis`) and the priority order
+(strategy-library) decide entries.
+  Against the prevailing trend, trend
+strategies wait.
+  The stop and exit stay the strategy's (the priority order,
+step 2: a reversal takes the nearest target).
+
+## Examples
+
+NQ, back-adjusted CSV prices:
+
+```text
+2022-06-22, trend rule 4h up, long aligned.
+  15m 12:45 candle rejects the prior
+POC 14942.75; the 3m 13:03 candle rejects it too and closes in its top third:
+long 14960.00, stop 14938.50 under the 15m low (21.50 pts = 86 ticks, $43.00 per MNQ);
+target the 15m swing high 15040.25 (80.25 pts, 3.73R), reached 14:15.
+2022-08-12, trend rule 4h up.
+  15m shooting star at the prior VAH 16809.25, 3m
+bearish engulfing: short 16789.25, stop 16814.00 (24.75 pts = 99 ticks, $49.50 per MNQ).
+Step 1: shorts are not the side the rule allows; only a reversal strategy may
+fade it, and step 2 of the priority order decides.
+  The stop was hit 12:12.
+```
+</skill>
+
+<skill name="take-profit">
+# Take Profit
+
+## When to Use
+
+- Trader-process step 7: where the trade's target sits and whether the
+  room to it pays for the stop.
+
+## How It Works
+
+A read of where price may stop, never a veto: the priority order
+(strategy-library) decides take, skip and size.
+  Which target goes with
+which setup is a strategy's, not this skill's.
+
+**Target levels**, on the winning side of the entry, completed candles
+only:
+
+- **Pivot highs and lows**: the next untaken confirmed swing per
+  timeframe, `m3.swingTargets.above` and `m3.swingTargets.below` (the
+  base bars, 15m, 1h and 4h; `frame`, `price`, `points`, `ticks`, `R`).
+  Stops rest beyond a swing (`levels-and-reactions`).
+- **The prior 1h and 4h candle's high, low and midpoint**:
+  `m3.rangeTargets`, per frame its `high`, `mid` and `low` (`side` of
+  price, `points`, `ticks`, `R`): where that candle's buyers and sellers
+  stopped, and its balance, where a move back into the range often
+  pauses.
+  The mid is exact ((high + low) / 2) and may sit between ticks;
+  its `points`, `ticks` and `R` are to the tick toward price.
+  A side the
+  candle forming has already taken (`taken`) is spent as a target; the
+  far side remains.
+- **Fair value gap edges**: the near edge of an open gap ahead of price;
+  a partly filled gap, its unfilled part only (`fair-value-gaps`).
+- **The candle forming**: its midpoint moves until it closes, so it is a
+  target only once completed.
+
+**Read forms** (the target step): `target <tf> swing high|low <price>`,
+`target prior 1h|4h high|mid|low <price>` (a taken side reads false),
+`target <5m|15m|1h> fvg high|low <price>`.
+  None named: `target 2r`.
+
+**Timeframe weight** (hypothesis, not measured): a higher timeframe's
+level holds more resting orders and reacts more often; a lower one's is
+usually the first in the way.
+  The nearest level is the conservative
+target, a higher-timeframe one beyond it the extended one.
+  Levels a few
+ticks apart act as one zone.
+
+**Room in R.** The briefing's `R` is against the reference stop
+(`m3.oneR`).
+  Against the trade's own stop (`order_plan`'s distance, the
+trade's 1R), a target's R is its points over the stop's points.
+  The first
+level ahead (`inTheWay`) is a read, not a cap: price often trades through it.
+A target under the strategy's `risk.min_rr` doesn't pay for the stop.
+Round a target toward the entry (`trade-plan`).
+
+**After the entry**: partial exits, runners and trailing are management's
+(`manage-position`); what ends the idea before the target is
+`invalidation`; the exit the plan states is `trade-plan`'s.
+
+## Examples
+
+MNQ (tick 0.25, $0.50 a tick), prices illustrative:
+
+```text
+Long 21540.25, stop 21528.75 (11.50 pts = 46 ticks, $23.00 per MNQ).
+15m swing high 21556.00: 15.75 pts = 63 ticks, $31.50, 1.37R (nearest).
+Prior 1h high 21562.75: 22.50 pts = 90 ticks, $45.00, 1.96R.
+1h swing high 21575.50: 35.25 pts = 141 ticks, $70.50, 3.07R (extended).
+
+Long 21545.50, stop 21537.25 (8.25 pts = 33 ticks, $16.50 per MNQ).
+Prior 1h high 21580.00, low 21540.25: mid 21560.125, between ticks;
+toward the entry: 21560.00 = 14.50 pts = 58 ticks, $29.00, 1.76R.
+
+Short 21490.00, stop 21501.25 (11.25 pts = 45 ticks, $22.50 per MNQ).
+Prior 1h low 21471.75: 18.25 pts = 73 ticks, $36.50, 1.62R.
+Prior 1h mid 21492.125 is above the entry: behind the trade, not a target.
+Prior 4h low 21440.50: 49.50 pts = 198 ticks, $99.00, 4.40R (extended).
+```
+</skill>
+
+<skill name="position-sizing">
+# Position Sizing
+
+## When to Use
+
+- Writing any trade plan.
+- After a loss (the allowance shrinks) or a volatility regime change.
+
+## How It Works
+
+1.
+  **Specs from the API, always.** `search_contracts` / `get_contract` return
+   `tickSize` and `tickValue`.
+  Micro and mini specs to sanity-check them: the
+   `micro-mini-specs` skill.
+2.
+  **Risk per contract** = |entry − stop| ÷ tickSize × tickValue (+ round-trip
+   fees from the account, if known).
+  A stop can fill a tick or more past its
+   price: when the room to the loss floor or the daily limit sets the size,
+   count a tick of slippage per contract too (a policy verdict already does).
+3.
+  **Risk budget** = the smallest of:
+   - the strategy / plan $ risk (a composed trade: at most its $300 cap),
+   - 25% of `remainingBeforeLimit` from `get_account_snapshot`, when known,
+   - 10% of the trailing-drawdown cushion (balance − loss floor), when shown.
+     None shown (no attempt): skip this cap, never $0.
+  Never ask when
+     autonomous.
+4.
+  **Size** = floor(budget ÷ risk per contract).
+  If it's 0, the stop is too
+   wide for the budget: skip, or find a tighter, structure-based stop.
+  Never
+   shrink the stop to make the size work.
+5.
+  **Caps:** the broker server's `maxOrderSize` and `maxPositionSize`
+   (`get_server_config`); size 1 on micros for a rules strategy until
+   its setup has 30+ reviewed trades with positive expectancy.
+  The order gate enforces two
+   of them on every entry: the size at most `maxOrderSize` (the harness
+   records it from `get_server_config`, and refuses entries until it has),
+   and, when the strategy sets `risk.max_risk_usd`, size × stop ticks ×
+   tickValue at most that cap.
+  It measures the stop from
+   `stopLossBracket.ticks`, which every entry carries (the gate refuses an
+   entry without one; always send it), and, for a limit or stop entry, from its price to the
+   rationale's stop price when that is farther (the farthest one on the
+   losing side; a part tick counts as a whole one).
+   Over a cap, reduce the size (never split the entry into several orders,
+   never shrink the stop to fit).
+  The cap is checked when the entry is
+   placed: a `[protect]` stop that later repairs the position's protection
+   goes where the rationale said, never farther.
+6.
+  **A policy verdict overrides steps 3-5.** While a prop attempt runs a
+   policy strategy, the verdict's contract (the selected one), size, and stop
+   ticks were sized from the attempt's budget (`combine_status`), each
+   contract's risk counting its stop plus a tick of expected slippage
+   (`sizing.stop_slippage_ticks`) and fees both ways; place at
+   most that size and don't apply the 25% / 10% / size-1 caps to it.
+  The gate
+   checks the verdict, not these caps; it still refuses a size over the
+   broker's `maxOrderSize`, and over the policy strategy's own
+   `risk.max_risk_usd` if it sets one (a rules component's caps don't apply;
+   `trade_lifecycle`'s cap does: the lower of it and the verdict).
+  Everything else (stop first, protective
+   stop always working) still applies.
+  The verdict is the most the account
+   allows, not what the moment deserves: after a loss, near
+   `daily_loss_soft` or one loss short of `loss_streak_stop`, size under it
+   or pass on anything marginal (`prop-challenge-pacing`).
+   In a prop attempt, the size you state is a suggestion: code translates it
+   at entry to the rulebook's size (min_contracts and the budget); read the
+   size it returns.
+7.
+  **Half size** wherever the priority order (strategy-library) halves a
+   trade, computed as it says there.
+  Never round a half up.
+  In a prop attempt the half is phase 2's cut of the translated size (never under min_contracts).
+  A composed
+   trade: `confluence-counting` sizes it, under the caps.
+8.
+  **The arithmetic from `order_plan`** (the `order-plan` skill): steps 2
+   and 4 for a compose record (refused over its cap), a policy verdict or a
+   rules candidate; use its numbers, never your own.
+  The budget (step 3)
+   and the caps stay your judgement: a budget below its risk is a skip; a
+   raised size (a rules setup with 30+ reviewed trades) changes only
+   `size`, the risk scaling with it.
+9.
+  Write entry, stop, size, and $ risk into the plan.
+
+## Examples
+
+```text
+MNQ long 21500.00, stop 21482.50 → 17.5 pts = 70 ticks × $0.50 = $35/contract
+remainingBeforeLimit $600 → 25% = $150; plan risk $75; cushion $1,800 → 10% = $180
+budget = $75 → size = floor(75 / 35) = 2 → capped to 1 (setup has 12 reviews)
+Plan: 1 MNQ, risk $35.
+
+compose record, a long on MNQ, stop 27.75 pts = 111 ticks ($55.50/MNQ contract):
+risk.max_risk_usd $300 -> maxSize 5; size 5, risk $277.50 = 5 x 111 ticks x $0.50/tick
+(the same stop on MES: 111 ticks x $1.25 = $138.75 a contract: maxSize 2, $277.50)
+```
+</skill>
+ Also relevant now, read with your skill tool: `levels-and-reactions`, `breakout-vs-fakeout`, `vwap-volume-profile`, `trend-vs-range`, `mtf-bias-filter`, `daily-bias`, and `bos-vs-choch`.
+  End with the cycle result as plain text in your final message, never as a tool call.
   Your last line must be exactly: CYCLE RESULT: <no-trade | planned | executed | managed | flattened | blocked | error> - <reason>.

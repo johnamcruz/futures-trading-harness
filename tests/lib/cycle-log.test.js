@@ -39,10 +39,10 @@ test('summarize: skills loaded, tool calls by name, shell commands, orders, and 
   const att = JSON.stringify({ config: '/w/opencode.json', sha256: '0'.repeat(64), skills: [...perCycle, 'setup-judgment', 'trade-plan'] });
   assert.deepStrictEqual(writeCycleLog(require('../helpers').tmpDir(), { action: 'trade', harness: 'opencode', prompt: 'p', output: claudeStream([]), headPrompt: att }).summary.missingSkills, []);
   assert.deepStrictEqual(writeCycleLog(require('../helpers').tmpDir(), { action: 'trade', harness: 'opencode', prompt: 'p', output: claudeStream([]), headPrompt: '{bad' }).summary.missingSkills.length, 7);
-  // A managed cycle's exit skills as the runner attested them (FTH_EXIT_SKILLS): recorded as embedded; none without it.
-  const exitAtt = JSON.stringify({ kind: 'exit-skills', config: '/h/head-prompt/exit-skills-x.md', sha256: '0'.repeat(64), skills: ['manage-position', 'pullback-vs-reversal'], cycle: '0123456789abcdef' });
-  assert.deepStrictEqual(writeCycleLog(require('../helpers').tmpDir(), { action: 'trade', harness: 'claude', prompt: 'p', output: claudeStream([]), env: { FTH_EXIT_SKILLS: exitAtt } }).summary.embeddedSkills, ['manage-position', 'pullback-vs-reversal']);
-  assert.ok(!('embeddedSkills' in writeCycleLog(require('../helpers').tmpDir(), { action: 'trade', harness: 'claude', prompt: 'p', output: claudeStream([]), env: { FTH_EXIT_SKILLS: '{bad' } }).summary));
+  // A cycle's situational skills as the runner attested them (FTH_CYCLE_SKILLS): recorded as embedded; none without it.
+  const exitAtt = JSON.stringify({ kind: 'cycle-skills', config: '/h/head-prompt/cycle-skills-x.md', sha256: '0'.repeat(64), skills: ['manage-position', 'pullback-vs-reversal'], cycle: '0123456789abcdef' });
+  assert.deepStrictEqual(writeCycleLog(require('../helpers').tmpDir(), { action: 'trade', harness: 'claude', prompt: 'p', output: claudeStream([]), env: { FTH_CYCLE_SKILLS: exitAtt } }).summary.embeddedSkills, ['manage-position', 'pullback-vs-reversal']);
+  assert.ok(!('embeddedSkills' in writeCycleLog(require('../helpers').tmpDir(), { action: 'trade', harness: 'claude', prompt: 'p', output: claudeStream([]), env: { FTH_CYCLE_SKILLS: '{bad' } }).summary));
   // Codex --json events.
   const codex = [JSON.stringify({ type: 'item.completed', item: { type: 'command_execution', command: 'node mtf.js x' } }), JSON.stringify({ type: 'item.completed', item: { type: 'mcp_tool_call', server: 'broker', tool: 'get_bars', arguments: {} } })].join('\n');
   assert.deepStrictEqual(toolCalls(codex).map(c => c.name), ['Bash', 'mcp__broker__get_bars']);

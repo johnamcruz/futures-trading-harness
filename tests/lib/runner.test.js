@@ -1067,18 +1067,21 @@ test('every run\'s prompt states the account, read just before it; an unreadable
   assert.match(bad.prompts.find(x => /trade-session/.test(x)), /Account 7: state unavailable \(HTTP 503\); read get_account_snapshot before deciding anything/);
 });
 
-test('a managed cycle\'s prompt holds the exit skills in full (exit-skills.js), and its context asks the run to attest them; a flat cycle\'s holds none', async () => {
-  const ES = require('../../scripts/lib/exit-skills');
+test('a managed cycle\'s prompt holds its situational skills in full (situational-skills.js), and its context asks the run to attest them; a flat cycle with no briefing holds none', async () => {
+  const SS = require('../../scripts/lib/situational-skills');
   const rootDir = require('path').resolve(__dirname, '..', '..');
   const r = await trailSim({ tape: {}, startAt: et(15, 40) + 2000, until: et(15, 52), rootDir });
   const managed = r.prompts.find(x => /trade-session/.test(x) && /1 open position/.test(x));
-  assert.ok(managed && managed.includes(ES.exitSkillsText(rootDir)), 'the open position\'s cycle');
   const i = r.prompts.indexOf(managed);
-  assert.strictEqual(r.contexts[i].exitSkills, true, 'its run writes and attests the section (autotrader.js childEnv)');
+  const chosen = r.contexts[i].cycleSkills;
+  assert.deepStrictEqual([chosen.stages, chosen.skills, chosen.over], [['management'], ['manage-position', 'pullback-vs-reversal', 'take-profit'], []]);
+  assert.ok(managed.includes(SS.situationText(rootDir, chosen)), 'the open position\'s cycle: its section, attested by its run (autotrader.js childEnv)');
+  const HP = require('../../scripts/lib/head-prompt');
+  assert.strictEqual(chosen.bytes, chosen.skills.reduce((n, s) => n + Buffer.byteLength(HP.block(s, HP.skillBody(rootDir, s))), 0), 'the bytes recorded: the embedded skill text');
   const flat = await trailSim({ tape: {}, startFlat: true, until: et(10, 8), rootDir });
   const flatPrompt = flat.prompts.find(x => /trade-session/.test(x));
   assert.ok(flatPrompt && /flat; 0 working orders/.test(flatPrompt) && !flatPrompt.includes('<skill name='), flatPrompt);
-  assert.ok(!('exitSkills' in (flat.contexts[flat.prompts.indexOf(flatPrompt)] || {})));
+  assert.ok(!('cycleSkills' in (flat.contexts[flat.prompts.indexOf(flatPrompt)] || {})));
 });
 
 test('a hung account read is cut off: the run still starts and says so', async () => {

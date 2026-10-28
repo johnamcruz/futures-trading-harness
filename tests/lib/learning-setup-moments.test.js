@@ -159,16 +159,17 @@ test('the bar briefing shows the setup moment practice selects, on the golden ba
     const b = buildBriefing({ symbol: 'MNQ', bars: BARS.slice(i - 500, i + 1), minutes: 3, now: new Date(closeOf(BARS, i)) });
     const moment = M.setupMoment(b.sections.m3.data.candles, { barClose: closeOf(BARS, i) }).moment;
     const line = renderBriefing(b).split('\n').find(l => l.startsWith('- Setups to check'));
-    assert.strictEqual(Boolean(line), moment, BARS[i].t);
+    // The setup moment's reactions, or the briefing's own setups (a compression break, a live CISD on an allowed side).
+    assert.strictEqual(Boolean(line), moment || M.setupChecks(b.sections.m3.data).length > 0, BARS[i].t);
     if (!line) continue;
     shown += 1;
-    // Every read it prints, copied verbatim into compose_check, parses as a relation and checks TRUE on this briefing.
+    // Every read it prints, copied verbatim into compose_check, parses as a setup read and checks TRUE on this briefing.
     const { parseRead, checkRead } = require('../../scripts/lib/trading/composed-reads');
     const reads = [...line.matchAll(/"([^"]+)"/g)].map(x => x[1]);
     assert.ok(reads.length > 0, line);
     for (const r of reads) {
       const p = parseRead(r);
-      assert.strictEqual(p.kind, 'relation', `${r}: ${JSON.stringify(p)}`);
+      assert.ok(['relation', 'compression', 'cisd'].includes(p.kind), `${r}: ${JSON.stringify(p)}`);
       assert.strictEqual(checkRead(p, b).check, true, `${r}: ${JSON.stringify(checkRead(p, b))}`);
     }
   }

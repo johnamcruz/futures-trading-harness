@@ -608,13 +608,8 @@ and leg ids; the lessons lines record the batch too.
   trade's read (`pullback-vs-reversal`) and the action on it
   (`manage-position`), a late exit by those and `take-profit`.
   `manage-position` has no read, so it never owns a read finding. An edit
-  to either reaches every managed cycle: while a position or a working
-  entry is open, the runner puts `manage-position` and
-  `pullback-vs-reversal` whole in the cycle's prompt, said loaded
-  (`scripts/lib/exit-skills.js`; the order gate counts them only on the
-  runner's attestation for that cycle, `FTH_EXIT_SKILLS`, checked against
-  its file, the skills' text and the run's own transcript). A flat cycle's
-  prompt is unchanged. Each example is the facts code read at the
+  to any of them reaches every managed cycle: the runner embeds the skills
+  a cycle's situation needs (below). Each example is the facts code read at the
   decision (`scripts/lib/trading/trade-read.js` on the bars closed by
   then), no date, price or R. The round's report counts them (`probe
   exits`). An exit finding's edit is screened on its own target
@@ -690,6 +685,26 @@ and leg ids; the lessons lines record the batch too.
   one bar holds both. They are labelled "valid plan, it lost: what tells
   these apart from the legs?". The probe prompt says an edit must tell the
   legs from the losers, never just enter more.
+- **The skills each cycle's situation needs** (`scripts/lib/situational-skills.js`).
+  One table maps each fact of the account and the bar briefing to the
+  skills that own it (from the crosswalk), by decision stage: management
+  (an open position or a working entry: `manage-position`,
+  `pullback-vs-reversal`, `take-profit`), the setups the Setups-to-check
+  line lists, their entry, their risk and target, location (a key level, a
+  sweep, VWAP) and bias (`daily-bias`, the trend rule's filter, the last
+  structure break, `session-timing` when the window refuses entries, and
+  the "Declared yet?" part of `trend-vs-range` for the Trend declared?
+  line). The runner embeds each skill whole, read from its file, in the
+  cycle's prompt, never one the prompt already holds, within a byte budget
+  (`config/runner.json` `prompt.situationalSkillBytes`) filled in that
+  order; past it a skill is named on an "Also relevant now" line. The cycle
+  record lists the stages, skills, bytes and the skills named. The order
+  gate counts them as loaded only on the runner's attestation for that
+  cycle (`FTH_CYCLE_SKILLS`, `scripts/lib/cycle-skills-attest.js`). The
+  Setups-to-check line now lists a compression break (at its key level when
+  its box sits at one) and a live CISD on a side the trend rule allows,
+  beside the setup moment's reactions. `node scripts/skill-coverage.js`
+  prints how every skill reaches the model.
 - **What the proposer sees.** Each trend finding lists up to `examples`
   of its legs (`config/training.json` `trendFindings`), the costliest
   first, each clipped to `exampleChars` at a clause boundary. A late or
