@@ -15,7 +15,8 @@
  *   model-stop     its stop filled, last moved by the model (modify_order)
  *   runner-trail   its stop filled, last moved by the runner's trail (stop_moved)
  *   initial-stop   its stop filled, never moved (or only to the plan's stop after the fill: stop_moved why 'plan stop')
- * The exit's class, from the exit price P on the bars from the exit on (at most horizonBars), in the trade's R:
+ * The exit's class, from the exit price P on the bars from the exit on (at most horizonBars, and never past the end of the
+ * session it exited in: `sessionEnd`), in the trade's R:
  *   cut            price went cutR further the trade's way before going rightR against: the exit cut a trend; leftR the
  *                  most it went the trade's way before that adverse rightR (or the horizon's end)
  *   right          it went rightR against first: the exit was right; savedR the most it went against before cutR the
@@ -23,7 +24,11 @@
  *   unclear        both on the same bar (its order inside the bar is unknown)
  *   unresolved     neither within the horizon (or no bars after the exit)
  * late: a hold that gave back more than lateGivebackR of open profit before the exit (peakR - max(r, 0): a loser that
- * never was in profit is not late), whoever exited; givebackR is peakR - r.
+ * never was in profit is not late), whoever exited; givebackR is peakR - r, lateR what it gave back past the threshold.
+ * The threshold is never below the runner's own lock (lateThreshold: the active policies' lock_giveback_r, the
+ * rulebook's), so the runner's trail giving back what it was built to give back is never late.
+ * stop placement: the initial-stop exits that then went cutR the trade's way (summarize): the stop's placement, a row of
+ * the report, never an exit decision.
  * flip: the model's decision came with the HTF bias flipped against the trade (trade-read.js bias.flipAgainst at the
  * decision bar), tagged so a round can measure whether flip exits cut trends (a mechanical flip exit cost runners in
  * the model-free detection study).
@@ -32,18 +37,27 @@
  *
  *   PARAMS                                   config/replay.json exitScore (frozen)
  *   barsClosedBy(bars, ms, stepMs)          the bars closed by ms: a decision's facts read only these (no look-ahead)
- *   classify({ side, price, risk, bars, from, params })   { cls, leftR, savedR } (pure; from: ms, bars sorted)
- *   scoreExits({ trips, moves, closes, bars, stepMs, factsAt, params })   { decisions, tightens } (pure; see the header)
+ *   classify({ side, price, risk, bars, from, until, params })   { cls, leftR, savedR } (pure; from, until: ms)
+ *   sessionEnds(spec)                        ms => the end of the session window holding ms (the runner's sessions spec),
+ *                                            ms itself outside every window
+ *   lateThreshold(strategies, params)        the late threshold: config's, never below an active policy's lock_giveback_r
+ *   scoreExits({ trips, moves, closes, bars, stepMs, factsAt, sessionEnd, orders, params })   { decisions, tightens,
+ *                                            thresholds } (pure; sessionEnd(ms): the session's end, or null; orders:
+ *                                            orderId -> contractId, for a move that names only its order)
  *   summarize(scored)                        { byExit: { exitBy: { n, cut, right, unclear, unresolved, late, leftR, savedR,
- *                                            givebackR } }, flip, tightens: { n, stopped, held, cut, right } }
+ *                                            givebackR } }, flip, tightens, stopPlacement: { n, of, ranR }, thresholds }
  *   factsText(read)                          a decision's facts as words, no date, time or price (the proposer's view)
  *   exitLines(summary)                       the report's "Exit decisions" lines
  *   modelActions(cycles, { toolCalls })      { moves, closes } of the model from the run's cycle logs (their transcripts)
+ *   gateActions(cycles, gateLog, { slackMs })   { moves, closes, orders } of the model from the gateway's records in each
+ *                                            cycle's window (a trade-executor in a session of its own included)
+ *   mergeActions(...lists)                   the actions once each (the same actor, bar, contract and price twice)
  *   runnerActions(events)                    { moves, closes } of the runner from its event log
  *   tripsOf(days)                            the closed round trips of the run's day records
  */
 
 const PARAMS = require('../tunables').replay().exitScore; // config/replay.json
+const { parseWindows, inWindow } = require('../trading/clock');
 
 const num = x => (typeof x === 'number' && Number.isFinite(x) ? x : null);
 const isObj = x => Boolean(x) && typeof x === 'object' && !Array.isArray(x);
@@ -53,10 +67,11 @@ const CLASSES = Object.freeze(['cut', 'right', 'unclear', 'unresolved']);
 const EXIT_BY = Object.freeze(['model-exit', 'model-stop', 'runner-trail', 'runner-exit', 'initial-stop', 'target']);
 
 /** The class of an exit at `price` from `from` on (see the header). */
-function classify({ side, price, risk, bars = [], from, params = PARAMS }) {
+function classify({ side, price, risk, bars = [], from, until = null, params = PARAMS }) {
   if (num(price) === null || !(num(risk) > 0)) return { cls: 'unresolved', leftR: null, savedR: null };
   const s = sign(side);
-  const after = bars.filter(b => Date.parse(b.t) >= from).slice(0, params.horizonBars);
+  // From the exit on, the horizon's bars, none opening at or past the session's end (unresolved beyond it).
+  const after = bars.filter(b => Date.parse(b.t) >= from && (until === null || Date.parse(b.t) < until)).slice(0, params.horizonBars);
   for (const b of after) {
     const f = (s > 0 ? b.h - price : price - b.l) / risk;
     const a = (s > 0 ? price - b.l : b.h - price) / risk;
@@ -87,11 +102,34 @@ function classify({ side, price, risk, bars = [], from, params = PARAMS }) {
 /** The bars closed by `ms` (opened at least a bar before it): what a decision at `ms` could read, never a later one. */
 const barsClosedBy = (bars, ms, stepMs) => (Array.isArray(bars) ? bars : []).filter(b => Date.parse(b.t) + stepMs <= ms);
 
+/** The end of the session window holding each moment (a minute's resolution), from a runner sessions spec. */
+function sessionEnds(spec) {
+  const { windows } = parseWindows(spec);
+  return ms => {
+    const holds = t => windows.some(w => inWindow(new Date(t), w));
+    if (!holds(ms)) return ms;
+    // Minute by minute (the windows' resolution) to the first minute outside, within a day.
+    const last = ms + 24 * 3600000;
+    let t = ms - (ms % 60000);
+    while (t < last && holds(t)) t += 60000;
+    return t;
+  };
+}
+
+/** The late threshold: the config's, never below an active policy's lock_giveback_r (its rulebook's exit). */
+function lateThreshold(strategies, params = PARAMS) {
+  const locks = (Array.isArray(strategies) ? strategies : []).filter(x => isObj(x) && x.valid && x.status === 'active' && isObj(x.exit))
+    .map(x => num(x.exit.lock_giveback_r)).filter(x => x !== null);
+  return Math.max(params.lateGivebackR, ...locks);
+}
+
 /** The last of `list` (by ms) at or before `ms` and after `since`. */
 const lastBefore = (list, since, ms) => list.filter(x => x.ms > since && x.ms <= ms).sort((a, b) => a.ms - b.ms).pop() || null;
 
-function scoreExits({ trips = [], moves = [], closes = [], bars = [], stepMs = 0, factsAt = null, params = PARAMS }) {
+function scoreExits({ trips = [], moves: given = [], closes = [], bars = [], stepMs = 0, factsAt = null, sessionEnd = null, orders = new Map(), params = PARAMS }) {
   const near = params.matchBars * stepMs;
+  // A move that names only its order (modify_order takes no contract) is its order's contract's.
+  const moves = given.map(m => (m.contractId || m.orderId === undefined || m.orderId === null || !orders.has(String(m.orderId)) ? m : { ...m, contractId: orders.get(String(m.orderId)) }));
   const decisions = [];
   const tightens = [];
   for (const t of trips) {
@@ -101,16 +139,19 @@ function scoreExits({ trips = [], moves = [], closes = [], bars = [], stepMs = 0
     const move = lastBefore(moves.filter(same), t.entryMs, t.exitMs);
     const exitBy = close ? (close.by === 'model' ? 'model-exit' : 'runner-exit') : /target/i.test(String(t.reason || '')) ? 'target'
       : move && move.by !== 'plan' ? (move.by === 'model' ? 'model-stop' : 'runner-trail') : 'initial-stop';
-    const { cls, leftR, savedR } = classify({ side: t.side, price: t.exitPrice, risk: t.risk, bars, from: t.exitMs, params });
+    const until = typeof sessionEnd === 'function' ? sessionEnd(t.exitMs) : null;
+    const { cls, leftR, savedR } = classify({ side: t.side, price: t.exitPrice, risk: t.risk, bars, from: t.exitMs, until, params });
     const peakR = num(t.mfeR);
     const givebackR = peakR !== null && num(t.r) !== null ? r2(peakR - t.r) : null;
     // The decision behind the exit: the model's close or its stop move (their bars), else the exit's own bar.
     const decision = exitBy === 'model-exit' ? close : exitBy === 'model-stop' ? move : null;
     // Its facts at the decision's bar (the exit's, when the model decided none): what the read had to go on.
     const facts = typeof factsAt === 'function' ? factsAt(t, decision ? decision.ms : t.exitMs) : null;
+    const handed = peakR !== null && num(t.r) !== null ? peakR - Math.max(t.r, 0) : null;
+    const late = handed !== null && handed > params.lateGivebackR;
     decisions.push({
       trip: t.id ?? null, side: t.side, exitBy, cls, leftR, savedR, r: num(t.r), peakR, givebackR,
-      late: peakR !== null && num(t.r) !== null && peakR - Math.max(t.r, 0) > params.lateGivebackR, at: new Date(t.exitMs).toISOString(),
+      late, ...(late ? { lateR: r2(handed - params.lateGivebackR) } : {}), at: new Date(t.exitMs).toISOString(),
       ...(decision ? { decidedAt: new Date(decision.ms).toISOString() } : {}),
       flip: decision && facts && isObj(facts.bias) ? facts.bias.flipAgainst === true : null, facts: facts || null,
     });
@@ -120,16 +161,16 @@ function scoreExits({ trips = [], moves = [], closes = [], bars = [], stepMs = 0
       tightens.push({ trip: t.id ?? null, side: t.side, at: new Date(m.ms).toISOString(), stopped, cls: stopped ? cls : null, leftR: stopped ? leftR : null, flip: f && isObj(f.bias) ? f.bias.flipAgainst === true : null, facts: f || null });
     }
   }
-  return { decisions, tightens };
+  return { decisions, tightens, thresholds: { cutR: params.cutR, rightR: params.rightR, lateGivebackR: params.lateGivebackR, horizonBars: params.horizonBars } };
 }
 
 const blank = () => ({ n: 0, cut: 0, right: 0, unclear: 0, unresolved: 0, late: 0, leftR: 0, savedR: 0, givebackR: 0 });
-function add(row, d, params = PARAMS) {
+function add(row, d) {
   row.n += 1;
   row[d.cls] += 1;
   if (d.cls === 'cut') row.leftR = r2(row.leftR + (d.leftR || 0));
   if (d.cls === 'right') row.savedR = r2(row.savedR + (d.savedR || 0));
-  if (d.late) { row.late += 1; row.givebackR = r2(row.givebackR + (d.peakR - Math.max(d.r, 0) - params.lateGivebackR)); }
+  if (d.late) { row.late += 1; row.givebackR = r2(row.givebackR + (d.lateR || 0)); }
 }
 
 function summarize(scored) {
@@ -140,26 +181,30 @@ function summarize(scored) {
   for (const d of (s.decisions || []).filter(x => x.flip === true)) add(flip, d);
   const tl = Array.isArray(s.tightens) ? s.tightens : [];
   const tightens = { n: tl.length, stopped: tl.filter(x => x.stopped).length, held: tl.filter(x => !x.stopped).length, cut: tl.filter(x => x.cls === 'cut').length, right: tl.filter(x => x.cls === 'right').length, flip: tl.filter(x => x.flip === true).length };
-  return { byExit, flip, tightens };
+  // The initial stops that then ran the trade's way: the stop's placement, never an exit decision.
+  const init = byExit['initial-stop'] || blank();
+  const stopPlacement = { n: init.cut, of: init.n, ranR: init.leftR };
+  return { byExit, flip, tightens, stopPlacement, thresholds: isObj(s.thresholds) ? s.thresholds : null };
 }
 
 /** A decision's facts as words: what code read at the decision, no date, time or price. */
 function factsText(t) {
   if (!isObj(t) || t.unavailable) return 'facts unavailable';
-  const e = t.extreme || {};
   const against = Object.entries(t.against || {}).map(([tf, x]) => `${tf} ${x ? `${x.kind} against` : 'none against'}`).join(', ');
   const d = t.displacement;
   const comp = Object.entries(t.compression || {}).filter(([, x]) => x).map(([tf, x]) => `${tf} ${x.kind}`).join(', ') || 'none';
   const sa = x => (num(x) === null ? 'n/a' : `${x >= 0 ? '+' : ''}${x} ATR`);
   return [
-    e.failed ? 'new extreme failed' : e.failed === false ? 'new extreme held' : 'no prior extreme',
+    t.failed ? 'the last push failed (a lower high or higher low)' : t.failed === false ? 'the last push made a new extreme' : 'under two pushes',
     `${(t.pushes || []).length} push(es)${t.fading ? ' fading' : ''}`,
     t.pullback && num(t.pullback.depth) !== null ? `pullback ${Math.round(t.pullback.depth * 100)}% of the impulse` : 'pullback ?',
     `RTH VWAP ${sa(t.vwap && t.vwap.distAtr)}, EMA20 ${sa(t.ema20 && t.ema20.distAtr)}`,
     against,
-    d ? `displacement against on ${d.tf}${d.throughSwing ? ' through the last swing' : ''}` : 'no displacement against',
+    d ? `displacement against on ${d.tf} through the last swing` : 'no displacement against',
     `compression against ${comp}`,
     t.bias && t.bias.flipAgainst ? 'HTF bias flipped against' : 'HTF bias not flipped against',
+    `weakening signs ${(t.signs || []).length}${(t.signs || []).length ? ` (${t.signs.join(', ')})` : ''}`,
+    `reversal ${t.reversal || 'none'}`,
   ].join('; ');
 }
 
@@ -169,11 +214,14 @@ function exitLines(sum) {
   const keys = EXIT_BY.filter(k => sum.byExit[k]);
   if (!keys.length && !sum.tightens.n) return [];
   const t = sum.tightens;
+  const th = sum.thresholds || PARAMS;
+  const sp = sum.stopPlacement;
   return [
-    `  Exit decisions (what price did next: ${PARAMS.cutR}R the trade's way first = cut, ${PARAMS.rightR}R against first = right; late = gave back over ${PARAMS.lateGivebackR}R of open profit):`,
+    `  Exit decisions (what price did next, to the session's end: ${th.cutR}R the trade's way first = cut, ${th.rightR}R against first = right; late = gave back over ${th.lateGivebackR}R of open profit):`,
     ...keys.map(k => row(k, sum.byExit[k])),
     ...(sum.flip.n ? [row('with the HTF bias flipped against (model decisions)', sum.flip)] : []),
     `    model stop tightens: ${t.n}: stopped the trade ${t.stopped} (cut ${t.cut}, right ${t.right}), held ${t.held}; with the HTF bias flipped against ${t.flip}`,
+    ...(sp && sp.of ? [`    stop placement (the initial stop, not an exit decision): ${sp.n} of ${sp.of} initial-stop exits then ran ${th.cutR}R the trade's way (${sp.ranR}R)`] : []),
   ];
 }
 
@@ -192,7 +240,7 @@ function modelActions(cycles, { toolCalls }) {
     try { calls = toolCalls(c.transcript); } catch (_err) { continue; }
     for (const k of calls.filter(x => !x.failed && !x.stopped)) {
       const i = k.input || {};
-      if (MODIFY.test(k.name) && num(Number(i.stopPrice)) !== null) moves.push({ ms, by: 'model', to: Number(i.stopPrice), contractId: i.contractId || null });
+      if (MODIFY.test(k.name) && num(Number(i.stopPrice)) !== null) moves.push({ ms, by: 'model', to: Number(i.stopPrice), contractId: i.contractId || null, orderId: i.orderId ?? null });
       else if (EXIT_CALL.test(k.name)) closes.push({ ms, by: 'model', contractId: i.contractId || null });
       else if (PLACE.test(k.name) && /^\s*\[exit\]/i.test(String(i.rationale || '')) && /market|^2$/i.test(String(i.type))) closes.push({ ms, by: 'model', contractId: i.contractId || null });
     }
@@ -200,12 +248,50 @@ function modelActions(cycles, { toolCalls }) {
   return { moves, closes };
 }
 
+/**
+ * The model's stop moves and market exits from the gateway's records (the gate log: every order call it passed), in each
+ * cycle's wall-clock window (its start to its end plus slackMs), at the cycle's bar close: the trade-executor's calls in a
+ * session of its own too, which the head trader's transcript never shows. `orders`: each order id the records name, with
+ * its contract (the gateway resolves a modify_order's contract from the open orders).
+ */
+function gateActions(cycles, gateLog, { slackMs = 0 } = {}) {
+  const moves = [];
+  const closes = [];
+  const orders = new Map();
+  const recs = (Array.isArray(gateLog) ? gateLog : []).filter(e => isObj(e) && e.source === 'gateway' && e.decision === 'allowed').map(e => ({ ...e, ms: Date.parse(e.ts) }));
+  for (const e of recs) if (e.orderId !== undefined && e.orderId !== null && e.contractId) orders.set(String(e.orderId), e.contractId);
+  for (const c of Array.isArray(cycles) ? cycles : []) {
+    const ms = isObj(c) && isObj(c.timing) ? Date.parse(c.timing.barClose) : NaN;
+    const from = isObj(c) ? Date.parse(c.at) : NaN;
+    if (!Number.isFinite(ms) || !Number.isFinite(from)) continue;
+    const to = from + (num(c.durationMs) || 0) + slackMs;
+    for (const e of recs.filter(x => x.ms >= from && x.ms <= to)) {
+      const tool = String(e.tool || '');
+      if (/modify_order$/.test(tool) && num(Number(e.stopPrice)) !== null) moves.push({ ms, by: 'model', to: Number(e.stopPrice), contractId: e.contractId || null, orderId: e.orderId ?? null });
+      else if (/(?:^|__)(close_position|partial_close_position)$/.test(tool)) closes.push({ ms, by: 'model', contractId: e.contractId || null });
+      else if (/place_order$/.test(tool) && /^\s*\[exit\]/i.test(String(e.rationale || '')) && /market|^2$/i.test(String(e.type))) closes.push({ ms, by: 'model', contractId: e.contractId || null });
+    }
+  }
+  return { moves, closes, orders };
+}
+
+/** The actions once each: the same actor, bar, contract and price from two sources (a transcript and the gate log). */
+function mergeActions(...lists) {
+  const seen = new Set();
+  return lists.flat().filter(a => {
+    const k = [a.by, a.ms, a.contractId || '', a.to ?? ''].join('|');
+    if (seen.has(k)) return false;
+    seen.add(k);
+    return true;
+  });
+}
+
 /** The runner's stop moves (by 'plan': its move to the plan's stop after the fill) and closes, from its event log. */
 function runnerActions(events) {
   const list = (Array.isArray(events) ? events : []).filter(e => isObj(e) && Number.isFinite(Date.parse(e.at)));
   return {
-    moves: list.filter(e => e.kind === 'stop_moved').map(e => ({ ms: Date.parse(e.at), by: e.why === 'plan stop' ? 'plan' : 'runner', to: num(e.to), contractId: null })),
-    closes: list.filter(e => e.kind === 'position_closed').map(e => ({ ms: Date.parse(e.at), by: 'runner', contractId: null })),
+    moves: list.filter(e => e.kind === 'stop_moved').map(e => ({ ms: Date.parse(e.at), by: e.why === 'plan stop' ? 'plan' : 'runner', to: num(e.to), contractId: e.contractId || null })),
+    closes: list.filter(e => e.kind === 'position_closed').map(e => ({ ms: Date.parse(e.at), by: 'runner', contractId: e.contractId || null })),
   };
 }
 
@@ -228,4 +314,4 @@ function tripsOf(days) {
   return [...seen.values()];
 }
 
-module.exports = { PARAMS, CLASSES, EXIT_BY, barsClosedBy, classify, scoreExits, summarize, factsText, exitLines, modelActions, runnerActions, tripsOf };
+module.exports = { PARAMS, CLASSES, EXIT_BY, barsClosedBy, classify, sessionEnds, lateThreshold, scoreExits, summarize, factsText, exitLines, modelActions, gateActions, mergeActions, runnerActions, tripsOf };

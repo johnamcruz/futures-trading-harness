@@ -7,33 +7,46 @@
  * bars closed by the last one are read (no look-ahead), so the post-hoc exit scorecard (replay/exit-scorecard.js)
  * computes the same facts at a past decision by passing the bars up to it.
  *
- * Every definition is an existing one (one home each), read on completed candles of the base timeframe and of config/analysis.json tradeRead.frames (15m)
- * (candle-facts.js completedCandlesAt, the briefing's candle rule):
+ * The trade's structure is read on the structure frame (the highest of config/analysis.json tradeRead.frames, 15m: the
+ * frame the runner's own structure trail stands behind), never on the base bars' 3m swings, which turn every few bars
+ * inside a trend. Every definition is an existing one (one home each), on completed candles (candle-facts.js
+ * completedCandlesAt, the briefing's candle rule):
  *
- *   extreme       the best price since entry (the highest high of a long's candles opened at or after the fill, the
- *                 lowest low of a short's), and `failed`: the candle that made it traded past the best before it and
- *                 CLOSED back at or inside that prior best (null when the first candle made it: no prior extreme)
- *   pushes        the trade's way's confirmed swings since entry (structure-events.js pivots, swingK): each push's size,
- *                 from the lowest low (a short: highest high) since the push before (or the entry candle) to its swing,
- *                 in base ATR(14) now, and its momentum candles (momentum.js momentumRead the trade's way); `fading`:
- *                 two or more pushes and the last smaller than the one before with no more momentum candles
- *   pullback      the last impulse: from the lowest low (a short: highest high) between the last confirmed swing
- *                 against before the best candle and the best candle, to the best; `depth` the share of it given back by
- *                 the last close (0 at the best, 1 back at the impulse's origin)
+ *   extreme       the best price since entry (a long's highest high on the base candles opened at or after the fill)
+ *   pushes        the trade's way's confirmed swings on the structure frame since entry (structure-events.js pivots,
+ *                 swingK): each push's swing price, its size from the lowest low (a short: highest high) since the push
+ *                 before (or the first candle since entry) in the frame's ATR(14) now, and its momentum candles (momentum.js
+ *                 momentumRead the trade's way)
+ *   failed        the last push's swing failed to exceed the one before (a long's lower high, a short's higher low): two
+ *                 pushes since entry needed, else null
+ *   fading        two or more pushes and the last smaller than the one before with no more momentum candles
+ *   pullback      the last impulse: from the extreme against between the last confirmed structure-frame swing against
+ *                 before the best and the best, to the best; `depth` the share of it the last close gave back
  *   vwap, ema20   the last close against the RTH VWAP (null outside 09:30-16:00 ET) and the base EMA20, side-signed in
- *                 base ATR(14): + is the trade's way (the market-snapshot's VWAP and EMA definitions)
- *   against       per timeframe (base, 15m), the latest structure break (structure-events.js breaksOf: BOS or CHoCH) when
+ *                 base ATR(14): + is the trade's way
+ *   against       per timeframe (base, structure frame), the latest structure break (structure-events.js breaksOf) when
  *                 it is against the trade, happened since entry, and stands (no break the trade's way after it)
- *   displacement  the latest displacement candle against the trade since entry (candle-facts.js patternsOf), base or
- *                 15m, and whether it closed through the last confirmed swing low (a short: high) before it
- *   compression   per timeframe (base, 15m) compression.js against the trade: expanding against it, or a box whose pole
- *                 is against it (a flag against); null otherwise
- *   bias          the higher-timeframe bias (entry-rule.js BIAS_FRAMES order: the first of 4h, 1h that trends, mtf.js
- *                 mtfRead) at entry (the bars closed by the fill) and now; `flipAgainst`: now against the trade, at
- *                 entry not
+ *   displacement  the latest structure-frame displacement candle against the trade since entry (candle-facts.js
+ *                 patternsOf), when it closed through the last confirmed structure-frame swing against before it and no
+ *                 break the trade's way (base or structure frame) came after it; else null
+ *   compression   per timeframe (base, structure frame) compression.js against the trade: expanding against it, or a
+ *                 box whose pole is against it; null otherwise
+ *   bias          the higher-timeframe bias (entry-rule.js BIAS_FRAMES order: the first of 4h, 1h that trends) at entry
+ *                 (the bars closed by the fill) and now; `flipAgainst`: now against the trade, at entry not
+ *   signs         the weakening signs that hold, each one independent sign (the count decides: weakening needs
+ *                 tradeRead.minSigns of them, one per kind of evidence): 'failed extreme', 'pushes fading', 'deep
+ *                 retrace' (one sign however it shows: depth past tradeRead.deepPullback, or the close against the EMA20
+ *                 and the RTH VWAP, or the EMA20 with no RTH VWAP), 'compression against', 'HTF flip' (a flip alone is
+ *                 one sign)
+ *   reversal      what confirms one, by structure only: the structure frame's break against (`against`), or its
+ *                 displacement through the last swing (`displacement`); null otherwise
+ *   trail         the level the runner's own structure trail stands behind (exit-trail.js swingSeries on the structure
+ *                 frame): the last confirmed swing low (a short: high) and the stop just beyond it (a tick, snapped as the
+ *                 runner snaps it, when the tick is known): the tightest a tighten may go, never tighter
  *
- *   tradeRead({ side, entry, openedAt, bars, base })   the facts above, or { unavailable } with why
+ *   tradeRead({ side, entry, openedAt, bars, base, tick })   the facts above, or { unavailable } with why
  *   tradeReadLine(read, { level })                     one line for the managed cycle's prompt (level: a price as shown)
+ *   SIGNS                                              the weakening signs' names, in order
  */
 
 const ind = require('./indicators');
@@ -43,12 +56,16 @@ const { momentumRead } = require('./momentum');
 const { compressionFrames } = require('./compression');
 const { mtfRead, label } = require('./mtf');
 const { BIAS_FRAMES } = require('./entry-rule');
+const { swingSeries } = require('./exit-trail');
+const { snapStop } = require('./trail');
 const { RTH_OPEN_MIN, RTH_CLOSE_MIN } = require('./clock');
 
-const AN = require('../tunables').analysis(); // config/analysis.json: the swing confirmation, the EMA, ATR
+const AN = require('../tunables').analysis(); // config/analysis.json: the swing confirmation, the EMA, the read's settings
 const K = AN.indicators.swingK;
 const EMA = AN.snapshot.emaSlow;
-const FRAMES = AN.tradeRead.frames; // the structure timeframes read above the base (config/analysis.json tradeRead)
+const TR = AN.tradeRead; // frames, deepPullback, minSigns
+const FRAME = Math.max(...TR.frames); // the structure frame
+const SIGNS = Object.freeze(['failed extreme', 'pushes fading', 'deep retrace', 'compression against', 'HTF flip']);
 /** A frame label's minutes ('15m' 15, '4h' 240). */
 const minutesOf = tf => { const m = /^(\d+)([mh])$/.exec(tf); return m ? Number(m[1]) * (m[2] === 'h' ? 60 : 1) : NaN; };
 
@@ -74,7 +91,7 @@ function biasOf(bars) {
   return { frame: null, dir: 'none' };
 }
 
-/** The latest break since `fromMs` against `way`, standing (the last break of all), on candles cs. */
+/** The latest break against `way`, since index `sinceIdx`, standing (the last break of all), on candles cs. */
 function againstOf(cs, way, sinceIdx) {
   const all = breaksOf(cs, K);
   const last = all[all.length - 1];
@@ -82,8 +99,11 @@ function againstOf(cs, way, sinceIdx) {
   return { kind: last.kind, direction: last.direction, level: last.level, at: last.at, barsAgo: cs.length - 1 - last.i };
 }
 
-/** The latest displacement candle against `way` since index `from` on cs, with whether it closed through the last swing. */
-function displacementOf(cs, way, from, tf) {
+/**
+ * The latest displacement candle against `way` since index `from` on cs that closed through the last confirmed swing
+ * against before it, unless a break the trade's way came after it (`undone(atMs)`): the fact is spent then.
+ */
+function displacementOf(cs, way, from, tf, undone) {
   if (!cs.length) return null;
   const facts = factsOf(cs);
   const sw = pivots(cs, K);
@@ -91,15 +111,37 @@ function displacementOf(cs, way, from, tf) {
     const c = cs[j];
     const dir = c.c > c.o ? 'up' : c.c < c.o ? 'down' : null;
     if (dir !== opp(way) || !facts[j].patterns.includes('displacement')) continue;
-    const type = way === 'up' ? 'low' : 'high';
-    const swing = [...sw].reverse().find(p => p.type === type && p.confirmedAt <= j);
-    const through = swing ? (way === 'up' ? c.c < swing.price : c.c > swing.price) : null;
-    return { tf, at: c.t, barsAgo: cs.length - 1 - j, throughSwing: through, swing: swing ? swing.price : null };
+    const swing = [...sw].reverse().find(p => p.type === (way === 'up' ? 'low' : 'high') && p.confirmedAt <= j);
+    if (!swing || !(way === 'up' ? c.c < swing.price : c.c > swing.price) || undone(Date.parse(c.t))) return null;
+    return { tf, at: c.t, barsAgo: cs.length - 1 - j, swing: swing.price };
   }
   return null;
 }
 
-function tradeRead({ side, entry, openedAt, bars, base }) {
+/** The pushes the trade's way on candles cs since index `from` (see the header), oldest first. */
+function pushesOf(cs, s, from, way) {
+  if (from < 0) return [];
+  const hi = c => (s > 0 ? c.h : -c.l);
+  const lo = c => (s > 0 ? c.l : -c.h);
+  const atr = lastOf(ind.atr(cs, ind.ATR_PERIOD));
+  const facts = factsOf(cs);
+  const out = [];
+  let start = from;
+  for (const p of pivots(cs, K).filter(x => x.type === (s > 0 ? 'high' : 'low') && x.i >= from)) {
+    let o = start;
+    for (let i = start; i <= p.i; i += 1) if (lo(cs[i]) < lo(cs[o])) o = i;
+    let mom = 0;
+    for (let i = o; i <= p.i; i += 1) {
+      const f = facts[i];
+      if (momentumRead({ rangeAtr: r2(f.rangeAtr), closeLocation: f.closeLocation, volRatio: r2(f.volRatio) }) === way) mom += 1;
+    }
+    out.push({ at: cs[p.i].t, swing: p.price, sizeAtr: atr > 0 ? r2((hi(cs[p.i]) - lo(cs[o])) / atr) : null, momentum: mom });
+    start = p.i;
+  }
+  return out;
+}
+
+function tradeRead({ side, entry, openedAt, bars, base, tick = null }) {
   const s = side === 'long' ? 1 : side === 'short' ? -1 : 0;
   const opened = Date.parse(openedAt);
   if (!s || !Number.isFinite(entry) || !Number.isFinite(opened)) return { unavailable: 'no side, entry or fill time' };
@@ -111,65 +153,44 @@ function tradeRead({ side, entry, openedAt, bars, base }) {
   const hi = c => (s > 0 ? c.h : -c.l); // the trade's way's extreme, as a number that grows the trade's way
   const lo = c => (s > 0 ? c.l : -c.h);
   const unsign = x => s * x;
-  const since = cs.slice(i0);
   const atr = lastOf(ind.atr(cs, ind.ATR_PERIOD));
   const now = cs[cs.length - 1].c;
 
-  // The best since entry, and whether the candle that made it closed back inside the best before it.
   let iBest = i0;
   for (let i = i0; i < cs.length; i += 1) if (hi(cs[i]) > hi(cs[iBest])) iBest = i;
-  let failed = null;
-  if (iBest > i0) {
-    let prior = -Infinity;
-    for (let i = i0; i < iBest; i += 1) prior = Math.max(prior, hi(cs[i]));
-    failed = s * cs[iBest].c <= prior ? { level: unsign(prior), at: cs[iBest].t, barsAgo: cs.length - 1 - iBest } : false;
-  }
-  const extreme = { best: unsign(hi(cs[iBest])), at: cs[iBest].t, barsAgo: cs.length - 1 - iBest, failed };
+  const extreme = { best: unsign(hi(cs[iBest])), at: cs[iBest].t, barsAgo: cs.length - 1 - iBest };
 
-  // The pushes: the trade's way's confirmed swings since entry, each from the low since the push before.
-  const facts = factsOf(cs);
-  const sw = pivots(cs, K);
-  const mine = sw.filter(p => p.type === (s > 0 ? 'high' : 'low') && p.i >= i0);
-  const pushes = [];
-  let from = i0;
-  for (const p of mine) {
-    let o = from;
-    for (let i = from; i <= p.i; i += 1) if (lo(cs[i]) < lo(cs[o])) o = i;
-    let mom = 0;
-    for (let i = o; i <= p.i; i += 1) {
-      const f = facts[i];
-      if (momentumRead({ rangeAtr: r2(f.rangeAtr), closeLocation: f.closeLocation, volRatio: r2(f.volRatio) }) === way) mom += 1;
-    }
-    pushes.push({ at: cs[p.i].t, sizeAtr: atr > 0 ? r2((hi(cs[p.i]) - lo(cs[o])) / atr) : null, momentum: mom });
-    from = p.i;
-  }
-  const a = pushes[pushes.length - 2];
-  const b = pushes[pushes.length - 1];
+  // The structure frame's candles since entry (a candle that closed after the fill), its pushes and their swings.
+  const hc = FRAME > base ? candlesOf(list, base, FRAME) : cs;
+  const j0 = FRAME > base ? hc.findIndex(c => Date.parse(c.closedAt) > opened) : i0;
+  const pushes = pushesOf(hc, s, j0, way);
+  const [a, b] = [pushes[pushes.length - 2], pushes[pushes.length - 1]];
+  const failed = pushes.length > 1 ? (s * b.swing <= s * a.swing ? { level: a.swing, swing: b.swing, at: b.at } : false) : null;
   const fading = pushes.length > 1 && a.sizeAtr !== null && b.sizeAtr !== null ? b.sizeAtr < a.sizeAtr && b.momentum <= a.momentum : null;
 
-  // The last impulse: from the extreme against since the last confirmed swing against before the best, to the best.
-  const back = [...sw].reverse().find(p => p.type === (s > 0 ? 'low' : 'high') && p.i < iBest);
-  let o = back ? back.i : i0;
-  for (let i = o; i <= iBest; i += 1) if (lo(cs[i]) < lo(cs[o])) o = i;
+  // The last impulse: from the extreme against since the last structure-frame swing against before the best, to the best.
+  const back = j0 >= 0 ? [...pivots(hc, K)].reverse().find(p => p.type === (s > 0 ? 'low' : 'high') && Date.parse(hc[p.i].t) < Date.parse(cs[iBest].t)) : null;
+  const fromMs = back ? Date.parse(hc[back.i].t) : opened;
+  let o = iBest;
+  for (let i = 0; i <= iBest; i += 1) if (Date.parse(cs[i].t) >= fromMs && lo(cs[i]) < lo(cs[o])) o = i;
   const span = hi(cs[iBest]) - lo(cs[o]);
   const pullback = { origin: unsign(lo(cs[o])), best: extreme.best, depth: span > 0 ? r2((hi(cs[iBest]) - s * now) / span) : null };
 
-  // The close against the RTH VWAP and the EMA20, side-signed in ATR (+ the trade's way).
   const vwap = lastOf(ind.anchoredVwap(cs, RTH_OPEN_MIN, RTH_CLOSE_MIN).slice(-1));
   const ema = lastOf(ind.ema(cs.map(c => c.c), EMA));
   const dist = v => (Number.isFinite(v) && atr > 0 ? r2((s * (now - v)) / atr) : null);
+  const vwapAtr = dist(vwap);
+  const emaAtr = dist(ema);
 
-  // Structure, displacement and compression against the trade, on the base and each higher frame's candles since entry
-  // (a candle that closed after the fill).
-  const tfs = [{ tf: label(base), cs, from: i0 }, ...FRAMES.filter(m => m > base).map(m => {
-    const hc = candlesOf(list, base, m);
-    return { tf: label(m), cs: hc, from: hc.findIndex(c => Date.parse(c.closedAt) > opened) };
-  })];
-  const against = Object.fromEntries(tfs.map(x => [x.tf, x.from >= 0 ? againstOf(x.cs, way, x.from) : null]));
-  const disp = tfs.map(x => (x.from >= 0 ? displacementOf(x.cs, way, x.from, x.tf) : null)).filter(Boolean)
-    .sort((x, y) => Date.parse(y.at) - Date.parse(x.at))[0] || null;
+  // Structure against: the base frame (a fact, a pullback inside intact structure) and the structure frame (a reversal).
+  const tfB = label(base);
+  const tfH = label(FRAME);
+  const against = { [tfB]: againstOf(cs, way, i0), ...(FRAME > base ? { [tfH]: j0 >= 0 ? againstOf(hc, way, j0) : null } : {}) };
+  // A displacement is spent once a break the trade's way (base or structure frame) followed it.
+  const ways = [...breaksOf(cs, K), ...(FRAME > base ? breaksOf(hc, K) : [])].filter(x => x.direction === way).map(x => Date.parse(x.at));
+  const displacement = j0 >= 0 ? displacementOf(hc, way, j0, tfH, ms => ways.some(t => t > ms)) : null;
   const comp = {};
-  const frames = compressionFrames({ bars: list, base, frames: [base, ...FRAMES.filter(m => m > base)] });
+  const frames = compressionFrames({ bars: list, base, frames: [...new Set([base, FRAME])] });
   for (const [tf, x] of Object.entries(frames)) {
     if (!x || typeof x !== 'object') { comp[tf] = null; continue; }
     if (x.state === 'expanding' && x.break && x.break.dir === opp(way)) comp[tf] = { kind: `expanding ${opp(way)}`, barsAgo: x.break.barsAgo };
@@ -177,16 +198,34 @@ function tradeRead({ side, entry, openedAt, bars, base }) {
     else comp[tf] = null;
   }
 
-  // The higher-timeframe bias at entry (the bars closed by the fill) and now.
   const stepMs = base * 60000;
   const atEntry = biasOf(list.filter(x => Date.parse(x.t) + stepMs <= opened));
   const nowBias = biasOf(list);
   const flipAgainst = atEntry && nowBias ? nowBias.dir === opp(way) && atEntry.dir !== opp(way) : null;
 
+  const held = {
+    'failed extreme': Boolean(failed),
+    'pushes fading': fading === true,
+    // One sign for the retrace, however it shows: its depth, or the close below the EMA20 and the RTH VWAP (they move
+    // together in a pullback: one piece of evidence, never two).
+    'deep retrace': (pullback.depth !== null && pullback.depth > TR.deepPullback) || (emaAtr !== null && emaAtr < 0 && (vwapAtr === null || vwapAtr < 0)),
+    'compression against': Object.values(comp).some(Boolean),
+    'HTF flip': flipAgainst === true,
+  };
+  const signs = SIGNS.filter(x => held[x]);
+  const brk = FRAME > base ? against[tfH] : against[tfB];
+  const reversal = brk ? `${tfH} ${brk.kind} ${brk.direction}` : displacement ? `${tfH} displacement through the swing` : null;
+
+  // The runner's own structure trail level: the tightest a tighten may go.
+  const sw = swingSeries(list, FRAME, K);
+  const swing = (s > 0 ? sw.low : sw.high)[list.length - 1];
+  const trail = Number.isFinite(swing) ? { swing, stop: tick > 0 ? snapStop(swing - s * tick, s, tick) : swing } : null;
+
   return {
-    side, entry, bars: since.length, atr: r2(atr), close: now, extreme, pushes, fading, pullback,
-    vwap: { rth: r2(vwap), distAtr: dist(vwap) }, ema20: { value: r2(ema), distAtr: dist(ema) },
-    against, displacement: disp, compression: comp, bias: { entry: atEntry, now: nowBias, flipAgainst },
+    side, entry, bars: cs.length - i0, atr: r2(atr), close: now, extreme, pushes, failed, fading, pullback,
+    vwap: { rth: r2(vwap), distAtr: vwapAtr }, ema20: { value: r2(ema), distAtr: emaAtr },
+    against, displacement, compression: comp, bias: { entry: atEntry, now: nowBias, flipAgainst },
+    signs, weakening: signs.length >= TR.minSigns, reversal, trail,
   };
 }
 
@@ -195,17 +234,18 @@ const biasText = b => (!b ? 'unknown' : b.dir === 'none' ? 'none' : `${b.frame} 
 
 function tradeReadLine(t, { level = r2 } = {}) {
   if (!t || t.unavailable) return `Trade read: unavailable (${t ? t.unavailable : 'not computed'}).`;
-  const e = t.extreme;
-  const failed = e.failed ? `new extreme FAILED (traded past ${level(e.failed.level)}, closed back inside, ${e.failed.barsAgo} bars ago)` : e.failed === false ? 'new extreme held (closed beyond the prior best)' : 'no prior extreme';
-  const pushes = t.pushes.length ? `pushes ${t.pushes.map(p => `${p.sizeAtr ?? '?'} ATR/${p.momentum} mom`).join(', ')}${t.fading ? ': fading' : t.fading === false ? ': not fading' : ''}` : 'no confirmed push';
+  const tf = label(FRAME);
+  const failed = t.failed ? `${tf} push FAILED (swing ${level(t.failed.swing)} short of ${level(t.failed.level)})` : t.failed === false ? `${tf} push made a new extreme` : `under two ${tf} pushes`;
+  const pushes = t.pushes.length ? `${tf} pushes ${t.pushes.map(p => `${p.sizeAtr ?? '?'} ATR/${p.momentum} mom`).join(', ')}${t.fading ? ': fading' : t.fading === false ? ': not fading' : ''}` : `no confirmed ${tf} push`;
   const depth = t.pullback.depth === null ? 'pullback ?' : `pullback ${Math.round(t.pullback.depth * 100)}% of the last impulse ${level(t.pullback.origin)}-${level(t.pullback.best)}`;
-  const brk = Object.entries(t.against).map(([tf, x]) => (x ? `${tf} ${x.kind} ${x.direction} ${level(x.level)} ${x.barsAgo} bars ago` : `${tf} none`)).join(', ');
+  const brk = Object.entries(t.against).map(([k, x]) => (x ? `${k} ${x.kind} ${x.direction} ${level(x.level)} ${x.barsAgo} bars ago` : `${k} none`)).join(', ');
   const d = t.displacement;
-  const disp = d ? `${d.tf} ${d.barsAgo} bars ago${d.throughSwing ? `, closed through the last swing ${level(d.swing)}` : d.throughSwing === false ? ', inside the last swing' : ''}` : 'none';
-  const comp = Object.entries(t.compression).filter(([, x]) => x).map(([tf, x]) => `${tf} ${x.kind}`).join(', ') || 'none';
+  const disp = d ? `${d.tf} ${d.barsAgo} bars ago, through the swing ${level(d.swing)}` : 'none';
+  const comp = Object.entries(t.compression).filter(([, x]) => x).map(([k, x]) => `${k} ${x.kind}`).join(', ') || 'none';
   const b = t.bias;
   const flip = b.flipAgainst ? 'FLIPPED against the trade' : b.flipAgainst === false ? 'no flip against' : 'flip unknown';
-  return `Trade read (closed bars since entry; pullback-vs-reversal): best ${level(e.best)}, ${failed}; ${pushes}; ${depth}; close vs RTH VWAP ${t.vwap.rth === null ? 'n/a' : sAtr(t.vwap.distAtr)}, vs EMA20 ${sAtr(t.ema20.distAtr)} (+ the trade's way); structure against since entry: ${brk}; displacement against: ${disp}; compression against: ${comp}; HTF bias at entry ${biasText(b.entry)}, now ${biasText(b.now)} (${flip}).`;
+  const trail = t.trail ? `the last confirmed ${tf} swing ${level(t.trail.swing)} (stop ${level(t.trail.stop)}, the runner's trail level)` : `no confirmed ${tf} swing`;
+  return `Trade read (closed bars since entry; pullback-vs-reversal): best ${level(t.extreme.best)}; ${failed}; ${pushes}; ${depth}; close vs RTH VWAP ${t.vwap.rth === null ? 'n/a' : sAtr(t.vwap.distAtr)}, vs EMA20 ${sAtr(t.ema20.distAtr)} (+ the trade's way); structure against since entry: ${brk}; ${tf} displacement against: ${disp}; compression against: ${comp}; HTF bias at entry ${biasText(b.entry)}, now ${biasText(b.now)} (${flip}). Weakening signs: ${t.signs.length} of ${SIGNS.length}${t.signs.length ? ` (${t.signs.join(', ')})` : ''}, ${TR.minSigns} needed; reversal: ${t.reversal || 'none'}; tighten at most to ${trail}.`;
 }
 
-module.exports = { tradeRead, tradeReadLine, biasOf };
+module.exports = { SIGNS, tradeRead, tradeReadLine, biasOf };

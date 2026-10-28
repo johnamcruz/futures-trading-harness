@@ -114,7 +114,8 @@ test('replay: the live runner, cycle by cycle at the replayed time, through the 
   const labels = lines(path.join(w.runDir, 'labels.jsonl'));
   assert.deepStrictEqual(labels.map(l => l.t), recs.map(r => r.t));
   // First: the replay account's long is open (the cycle's context): an entry on top of it, refused, keeps it out of cloning.
-  // The close (close_position, not gated) is in no gate record and the fake harness's text transcript names no tool calls.
+  // The close (close_position, not gated) is in no judged gate record (the gateway's ungated record of it, the exit
+  // scorecard's, is not read here) and the fake harness's text transcript names no tool calls.
   assert.deepStrictEqual([labels[0].decision, labels[0].position.side, labels[0].teacher.action, labels[0].clone.reasons], ['in-trade', 'long', 'hold', ['entry while in a trade']]);
   assert.deepStrictEqual([labels[0].outcome.result, labels[0].outcome.pnl, labels[0].outcome.openKnown], ['win', 20, false]);
   // Then flat: the teacher's long (setup:orb, stop 21495 from its rationale), refused with the gate's checks; its intent kept.

@@ -180,24 +180,32 @@ function givenLeg(g, bars) {
  * what price did next, each model decision with the facts code read at its bar (trade-read.js on the bars closed by then).
  * The model's actions from the cycle logs' transcripts, the runner's from its event log (<home>/logs/events-*.jsonl).
  */
-function exitsOf({ home, days, bars, minutes, cycles }) {
+function exitsOf({ home, days, bars, minutes, cycles, session }) {
   const { toolCalls } = require('../cycle-log');
   const { tradeRead } = require('../trading/trade-read');
+  const { loadStrategies } = require('../trading/strategies');
   const logs = path.join(home, 'logs');
   let names = [];
   try { names = fs.readdirSync(logs).filter(n => /^events-.*\.jsonl$/.test(n)).sort(); } catch (_err) { /* none */ }
   const events = names.flatMap(n => readLines(path.join(logs, n)));
-  const model = ES.modelActions(cycles, { toolCalls });
+  // The model's actions from its transcripts and from the gateway's records (a trade-executor's own session too).
+  const gated = ES.gateActions(cycles, readLines(path.join(logs, 'gate-log.jsonl')), { slackMs: require('../tunables').runner().session.gateSlackMs });
+  const fromCalls = ES.modelActions(cycles, { toolCalls });
+  const model = { moves: ES.mergeActions(gated.moves, fromCalls.moves), closes: ES.mergeActions(gated.closes, fromCalls.closes) };
   const runner = ES.runnerActions(events);
+  // The late threshold is never below the runner's own lock (the active policies' rulebook lock_giveback_r).
+  let strategies = [];
+  try { strategies = loadStrategies(path.resolve(__dirname, '..', '..', '..'), {}).strategies; } catch (_err) { /* the config's alone */ }
+  const params = { ...ES.PARAMS, lateGivebackR: ES.lateThreshold(strategies) };
   const stepMs = (minutes || 0) * 60000;
   const factsAt = (t, ms) => {
     try {
-      return tradeRead({ side: t.side, entry: t.entry, openedAt: new Date(t.entryMs).toISOString(), bars: ES.barsClosedBy(bars, ms, stepMs), base: minutes });
+      return tradeRead({ side: t.side, entry: t.entry, openedAt: new Date(t.entryMs).toISOString(), bars: ES.barsClosedBy(bars, ms, stepMs), base: minutes, tick: require('../trading/contracts').tickOf(t.contractId) });
     } catch (err) {
       return { unavailable: err.message };
     }
   };
-  const scored = ES.scoreExits({ trips: ES.tripsOf(days), moves: [...model.moves, ...runner.moves], closes: [...model.closes, ...runner.closes], bars, stepMs, factsAt });
+  const scored = ES.scoreExits({ trips: ES.tripsOf(days), moves: [...model.moves, ...runner.moves], closes: [...model.closes, ...runner.closes], bars, stepMs, factsAt, sessionEnd: ES.sessionEnds(session), orders: gated.orders, params });
   return { ...scored, totals: ES.summarize(scored) };
 }
 
@@ -301,7 +309,7 @@ function captureReport({ runDir, home = path.resolve(runDir, '..', '..'), days =
     entries,
     totals: { legs: out.length, captured: out.filter(l => l.captured).length, captureRate: out.length ? round2(out.filter(l => l.captured).length / out.length) : null, missedR: round2(missed.reduce((a, l) => a + (l.availableR || 0), 0)), byStep, ride: TR.summarize({ legs: out, entries }) },
     noLegDays,
-    exits: minutes ? exitsOf({ home, days, bars, minutes, cycles }) : null,
+    exits: minutes ? exitsOf({ home, days, bars, minutes, cycles, session }) : null,
   };
 }
 

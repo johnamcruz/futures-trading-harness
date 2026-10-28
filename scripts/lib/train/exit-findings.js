@@ -7,18 +7,24 @@
  *
  * Kind `exit-decision`, owned by the open trade's read (OWNER: pullback-vs-reversal; manage-position, the action, is a
  * management skill and is never probed: findings.js NOT_PROBED), on the flow's target step (where a trade's profit is
- * taken). Codes:
+ * taken). Only what the MODEL decided is a finding (MODEL_DECIDED): its market exit (model-exit), the stop it tightened
+ * that took the trade out (model-stop), or its hold to the initial stop with the runner's trail never armed (initial-stop:
+ * the runner had not moved the stop, so the hold was the model's alone). The runner's own trail and close, and the target,
+ * are the report's rows only, never findings: the runner's trail giving back is the rulebook's design (its lock_giveback_r,
+ * which the late threshold never goes below: exit-scorecard.js lateThreshold), not a lesson to exit before it. Codes:
  *   cut-trend        the model exited (or its tightened stop took the trade out) and price then went cutR further the
  *                    trade's way before rightR against; cost: the R it then went (leftR)
  *   cut-trend-flip   the same, decided with the HTF bias flipped against the trade (tagged apart: a flip alone is a
- *                    weakening, not a reversal)
- *   late-exit        any exit (the runner's trail included) after giving back more than lateGivebackR of open profit;
- *                    cost: the profit given back past it
- * Each finding: count, cost, of (the run's scored exits), the exits' split by who exited (detail), and up to `examples`
+ *                    weakening sign, not a reversal)
+ *   late-exit        a model-decided exit after giving back more than the late threshold of open profit; cost: the
+ *                    profit given back past it (lateR)
+ * An initial stop that then ran the trade's way is the stop's placement (the report's stop-placement row), never a
+ * finding here. Each finding: count, cost, of (the model-decided scored exits), the exits' split by who exited (detail),
+ * and up to `examples`
  * (config/training.json exitFindings) of the costliest, as the facts code read at the decision (exit-scorecard.js
  * factsText: no date, time or price). The exits that were right are counted in `of`, never findings.
  *
- *   KIND, OWNER
+ *   KIND, OWNER, MODEL_DECIDED
  *   exitFindings(captures, { exists, max })   [{ kind, step, skill, code, count, cost, of, detail, examples }], by cost
  *   exitTally(captures)                       the summed exit-scorecard totals of the captures (the round's report)
  */
@@ -30,6 +36,8 @@ const OWNER = 'pullback-vs-reversal';
 const STEP = 'target';
 const EX = require('../tunables').training().exitFindings; // examples per finding and their length (config/training.json)
 const MODEL = new Set(['model-exit', 'model-stop']);
+// The exits the model decided: its own, or its hold to the initial stop before the runner's trail armed.
+const MODEL_DECIDED = new Set([...MODEL, 'initial-stop']);
 const isObj = x => Boolean(x) && typeof x === 'object' && !Array.isArray(x);
 const num = x => (typeof x === 'number' && Number.isFinite(x) ? x : 0);
 const r2 = x => Math.round(x * 100) / 100;
@@ -40,13 +48,13 @@ const decisionsOf = captures => (Array.isArray(captures) ? captures : [])
 /** The code of a scored exit, or null (not a finding). */
 function codeOf(d) {
   if (MODEL.has(d.exitBy) && d.cls === 'cut') return d.flip === true ? 'cut-trend-flip' : 'cut-trend';
-  if (d.late) return 'late-exit';
+  if (MODEL_DECIDED.has(d.exitBy) && d.late) return 'late-exit';
   return null;
 }
-const costOf = (d, code) => (code === 'late-exit' ? num(d.peakR) - Math.max(num(d.r), 0) - ES.PARAMS.lateGivebackR : num(d.leftR));
+const costOf = (d, code) => (code === 'late-exit' ? num(d.lateR) : num(d.leftR));
 
 function exitFindings(captures, { exists = () => true, max } = {}) {
-  const all = decisionsOf(captures);
+  const all = decisionsOf(captures).filter(d => isObj(d) && MODEL_DECIDED.has(d.exitBy));
   const groups = new Map();
   for (const d of all) {
     const code = isObj(d) ? codeOf(d) : null;
@@ -76,4 +84,4 @@ function exitTally(captures) {
   });
 }
 
-module.exports = { KIND, OWNER, exitFindings, exitTally };
+module.exports = { KIND, OWNER, MODEL_DECIDED, exitFindings, exitTally };

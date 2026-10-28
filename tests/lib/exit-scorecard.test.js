@@ -86,10 +86,12 @@ test('scoreExits: class, late, flip and the model\'s tightens; an open or riskle
 test('summarize and exitLines: counts and R per who exited, the flip-decided ones apart, the tightens', () => {
   const decisions = [
     { exitBy: 'model-exit', cls: 'cut', leftR: 1.5, late: false, flip: true, r: 1, peakR: 1.2 },
-    { exitBy: 'model-exit', cls: 'right', savedR: 2, late: true, flip: false, r: 0.5, peakR: 2 },
-    { exitBy: 'runner-trail', cls: 'cut', leftR: 3, late: true, flip: null, r: 2, peakR: 4 },
+    { exitBy: 'model-exit', cls: 'right', savedR: 2, late: true, lateR: 0.5, flip: false, r: 0.5, peakR: 2 },
+    { exitBy: 'runner-trail', cls: 'cut', leftR: 3, late: true, lateR: 1, flip: null, r: 2, peakR: 4 },
+    { exitBy: 'initial-stop', cls: 'cut', leftR: 2.5, late: false, flip: null, r: -1, peakR: 0.2 },
+    { exitBy: 'initial-stop', cls: 'right', savedR: 1, late: false, flip: null, r: -1, peakR: 0.1 },
   ];
-  const sum = ES.summarize({ decisions, tightens: [{ stopped: true, cls: 'cut', flip: true }, { stopped: false, cls: null, flip: false }] });
+  const sum = ES.summarize({ decisions, tightens: [{ stopped: true, cls: 'cut', flip: true }, { stopped: false, cls: null, flip: false }], thresholds: { cutR: 1, rightR: 1, lateGivebackR: 1.5, horizonBars: 60 } });
   assert.deepStrictEqual(sum.byExit['model-exit'], { n: 2, cut: 1, right: 1, unclear: 0, unresolved: 0, late: 1, leftR: 1.5, savedR: 2, givebackR: 0.5 });
   assert.deepStrictEqual([sum.byExit['runner-trail'].late, sum.byExit['runner-trail'].givebackR], [1, 1]);
   assert.deepStrictEqual([sum.flip.n, sum.flip.cut], [1, 1]);
@@ -99,6 +101,10 @@ test('summarize and exitLines: counts and R per who exited, the flip-decided one
   assert.ok(lines.some(l => /model-exit: 2 exit\(s\): cut a trend 1 \(1\.5R left\), right 1 \(2R saved\)/.test(l)));
   assert.ok(lines.some(l => /with the HTF bias flipped against \(model decisions\): 1 exit/.test(l)));
   assert.ok(lines.some(l => /model stop tightens: 2: stopped the trade 1 \(cut 1, right 0\), held 1/.test(l)));
+  // The run's own thresholds (the late one never below the rulebook's lock), and the stop's placement as its own row.
+  assert.match(lines[0], /to the session's end: 1R the trade's way first = cut, 1R against first = right; late = gave back over 1\.5R of open profit/);
+  assert.deepStrictEqual(sum.stopPlacement, { n: 1, of: 2, ranR: 2.5 });
+  assert.ok(lines.some(l => /stop placement \(the initial stop, not an exit decision\): 1 of 2 initial-stop exits then ran 1R the trade's way \(2\.5R\)/.test(l)));
   assert.deepStrictEqual(ES.exitLines(ES.summarize({})), []);
   assert.deepStrictEqual(ES.exitLines(null), []);
 });
@@ -115,7 +121,7 @@ test('modelActions: modify_order with a stop, closes and market [exit] orders fr
   const cycles = [{ timing: { barClose: '2026-10-05T14:12:00.000Z' }, transcript: 'x' }, { timing: { barClose: null }, transcript: 'x' }, { timing: { barClose: '2026-10-05T14:15:00.000Z' } }];
   const a = ES.modelActions(cycles, { toolCalls: () => calls });
   const ms = Date.parse('2026-10-05T14:12:00.000Z');
-  assert.deepStrictEqual(a.moves, [{ ms, by: 'model', to: 21450.25, contractId: 'MNQ' }]);
+  assert.deepStrictEqual(a.moves, [{ ms, by: 'model', to: 21450.25, contractId: 'MNQ', orderId: 9 }]);
   assert.deepStrictEqual(a.closes, [{ ms, by: 'model', contractId: 'MNQ' }, { ms, by: 'model', contractId: 'MNQ' }]);
   // A transcript the parser can't read gives none, never a throw.
   assert.deepStrictEqual(ES.modelActions(cycles, { toolCalls: () => { throw new Error('bad'); } }), { moves: [], closes: [] });
@@ -123,13 +129,15 @@ test('modelActions: modify_order with a stop, closes and market [exit] orders fr
 
 test('runnerActions and tripsOf: the event log\'s moves (the plan stop apart) and closes; each closed round trip once', () => {
   const r = ES.runnerActions([
-    { at: '2026-10-05T14:00:02Z', kind: 'stop_moved', to: 15430, peakR: 2.6 },
+    { at: '2026-10-05T14:00:02Z', kind: 'stop_moved', to: 15430, peakR: 2.6, contractId: 'MNQ' },
     { at: '2026-10-05T13:51:02Z', kind: 'stop_moved', to: 15035, why: 'plan stop' },
     { at: '2026-10-05T14:30:00Z', kind: 'position_closed' },
     { at: 'bad', kind: 'stop_moved' },
   ]);
   assert.deepStrictEqual(r.moves.map(m => m.by), ['runner', 'plan']);
   assert.strictEqual(r.closes.length, 1);
+  // The runner's events name their contract: another contract's trail never attributes this trade's exit.
+  assert.deepStrictEqual(r.moves.map(m => m.contractId), ['MNQ', null]);
   const rt = { id: 5, contractId: 'MNQ', direction: 'short', open: false, entryTime: '2026-10-05T14:00:00Z', exitTime: '2026-10-05T14:30:00Z', averageEntryPrice: 100, exitPrice: 90, risk: 5, r: 2, mfeR: 3, reason: 'trail' };
   const trips = ES.tripsOf({ '2026-10-05': [{ trades: [{ roundTrip: rt }, { roundTrip: rt }, { price: 1 }] }], '2026-10-06': [{}] });
   assert.deepStrictEqual(trips, [{ id: 5, contractId: 'MNQ', side: 'short', open: false, entry: 100, entryMs: Date.parse(rt.entryTime), exitMs: Date.parse(rt.exitTime), exitPrice: 90, risk: 5, r: 2, mfeR: 3, reason: 'trail' }]);
@@ -137,12 +145,62 @@ test('runnerActions and tripsOf: the event log\'s moves (the plan stop apart) an
 
 test('factsText: the facts as words, no date, time or price', () => {
   const t = {
-    extreme: { best: 21455.25, failed: { level: 21450, barsAgo: 1 } }, pushes: [{}, {}], fading: true, pullback: { depth: 0.64 },
+    extreme: { best: 21455.25 }, failed: { level: 21450, swing: 21440 }, pushes: [{}, {}], fading: true, pullback: { depth: 0.64 },
     vwap: { distAtr: 0.4 }, ema20: { distAtr: -0.2 }, against: { '3m': { kind: 'CHoCH' }, '15m': null },
-    displacement: { tf: '3m', throughSwing: true }, compression: { '15m': { kind: 'nr7 box after a down pole' } }, bias: { flipAgainst: true },
+    displacement: { tf: '15m', swing: 21430 }, compression: { '15m': { kind: 'nr7 box after a down pole' } }, bias: { flipAgainst: true },
+    signs: ['failed extreme', 'pushes fading', 'HTF flip'], reversal: '15m displacement through the swing',
   };
   const s = ES.factsText(t);
-  assert.strictEqual(s, 'new extreme failed; 2 push(es) fading; pullback 64% of the impulse; RTH VWAP +0.4 ATR, EMA20 -0.2 ATR; 3m CHoCH against, 15m none against; displacement against on 3m through the last swing; compression against 15m nr7 box after a down pole; HTF bias flipped against');
+  assert.strictEqual(s, 'the last push failed (a lower high or higher low); 2 push(es) fading; pullback 64% of the impulse; RTH VWAP +0.4 ATR, EMA20 -0.2 ATR; 3m CHoCH against, 15m none against; displacement against on 15m through the last swing; compression against 15m nr7 box after a down pole; HTF bias flipped against; weakening signs 3 (failed extreme, pushes fading, HTF flip); reversal 15m displacement through the swing');
   assert.doesNotMatch(s, /\d{4,}/);
   assert.strictEqual(ES.factsText({ unavailable: 'x' }), 'facts unavailable');
+});
+
+test('classify and sessionEnds: the horizon ends with the session the exit was in (unresolved beyond it)', () => {
+  // Exit at 11:54 ET in a 09:30-12:00 session; the 1R move comes at 12:03, after the session's end.
+  const ends = ES.sessionEnds('09:30-12:00@America/New_York');
+  const exitMs = Date.parse('2026-10-05T15:54:00.000Z');
+  assert.strictEqual(ends(exitMs), Date.parse('2026-10-05T16:00:00.000Z'));
+  assert.strictEqual(ends(Date.parse('2026-10-05T17:00:00.000Z')), Date.parse('2026-10-05T17:00:00.000Z'), 'outside every window: itself');
+  const bars = mk([[121, 118], [121, 118], [131, 119]], exitMs);
+  assert.strictEqual(ES.classify({ side: 'long', price: 120, risk: 10, bars, from: exitMs, params: P }).cls, 'cut');
+  assert.strictEqual(ES.classify({ side: 'long', price: 120, risk: 10, bars, from: exitMs, until: ends(exitMs), params: P }).cls, 'unresolved');
+  // scoreExits passes each trip's session end.
+  const t = trip({ exitMs, exitPrice: 120 });
+  assert.strictEqual(ES.scoreExits({ trips: [t], bars, stepMs: STEP, params: P, sessionEnd: ends }).decisions[0].cls, 'unresolved');
+});
+
+test('lateThreshold: the config\'s late threshold, never below an active policy\'s lock_giveback_r', () => {
+  const pol = (x = {}) => ({ name: 'p', valid: true, status: 'active', exit: { mode: 'target_then_trail', lock_giveback_r: 1.5 }, ...x });
+  assert.strictEqual(ES.lateThreshold([pol()], P), 1.5);
+  assert.strictEqual(ES.lateThreshold([pol({ status: 'retired' }), pol({ valid: false })], P), 1);
+  assert.strictEqual(ES.lateThreshold([], { ...P, lateGivebackR: 2 }), 2);
+  // With the rulebook's 1.5, a trail that gave back 1.2R of open profit is not late; with the config's 1 it was.
+  const t = trip({ r: 1.3, mfeR: 2.5 });
+  assert.strictEqual(ES.scoreExits({ trips: [t], bars: after, stepMs: STEP, params: { ...P, lateGivebackR: ES.lateThreshold([pol()], P) } }).decisions[0].late, false);
+  assert.strictEqual(ES.scoreExits({ trips: [t], bars: after, stepMs: STEP, params: P }).decisions[0].late, true);
+});
+
+test('gateActions and mergeActions: the gateway\'s records in each cycle\'s window (a trade-executor\'s own session too), once each', () => {
+  const cycle = { at: '2026-10-05T18:00:00.000Z', durationMs: 30000, timing: { barClose: '2026-10-05T14:12:00.000Z' } };
+  const ms = Date.parse(cycle.timing.barClose);
+  const log = [
+    { ts: '2026-10-05T18:00:10.000Z', source: 'gateway', tool: 'modify_order', decision: 'allowed', orderId: 9, stopPrice: 21450.25, contractId: 'MNQ' },
+    { ts: '2026-10-05T18:00:12.000Z', source: 'gateway', tool: 'modify_order', decision: 'blocked', orderId: 9, stopPrice: 21300 },
+    { ts: '2026-10-05T18:00:15.000Z', source: 'gateway', tool: 'close_position', decision: 'allowed', ungated: true, contractId: 'MNQ' },
+    { ts: '2026-10-05T18:00:16.000Z', source: 'gateway', tool: 'place_order', decision: 'allowed', type: 'market', rationale: '[exit] reversal', contractId: 'MNQ' },
+    { ts: '2026-10-05T18:00:16.000Z', source: 'hook', tool: 'modify_order', decision: 'allowed', stopPrice: 1 },
+    { ts: '2026-10-05T18:05:00.000Z', source: 'gateway', tool: 'modify_order', decision: 'allowed', orderId: 9, stopPrice: 21460 }, // after the window
+  ];
+  const g = ES.gateActions([cycle, { at: 'x', timing: {} }], log, { slackMs: 1000 });
+  assert.deepStrictEqual(g.moves, [{ ms, by: 'model', to: 21450.25, contractId: 'MNQ', orderId: 9 }]);
+  assert.deepStrictEqual(g.closes.map(c => c.contractId), ['MNQ', 'MNQ']);
+  assert.strictEqual(g.orders.get('9'), 'MNQ');
+  // The same move from the transcript and the gate log counts once.
+  assert.strictEqual(ES.mergeActions(g.moves, [{ ms, by: 'model', to: 21450.25, contractId: 'MNQ', orderId: 9 }]).length, 1);
+  // A move that names only its order is its order's contract's: another contract's trade never takes it.
+  const bare = [{ ms: T0 + 3 * STEP, by: 'model', to: 110, contractId: null, orderId: 9 }];
+  const other = trip({ contractId: 'MES' });
+  assert.strictEqual(ES.scoreExits({ trips: [other], moves: bare, bars: after, stepMs: STEP, params: P, orders: g.orders }).decisions[0].exitBy, 'initial-stop');
+  assert.strictEqual(ES.scoreExits({ trips: [trip()], moves: bare, bars: after, stepMs: STEP, params: P, orders: g.orders }).decisions[0].exitBy, 'model-stop');
 });

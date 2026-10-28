@@ -299,3 +299,18 @@ test('trend capture: the run\'s exits: a model stop tighten from a cycle transcr
   const lines = tc.reportLines(doc);
   assert.ok(lines.some(l => /Exit decisions/.test(l)) && lines.some(l => /model-stop: 1 exit\(s\)/.test(l)), lines.join('\n'));
 });
+
+test('trend capture: the run\'s exits from the gateway\'s records: a trade-executor\'s own-session tighten (no transcript) is the model\'s', () => {
+  const trades = at => [OPEN(at), { orderId: 8, profitAndLoss: 16, roundTripId: 1, roundTrip: { id: 1, contractId: 'MNQ', direction: 'long', r: 0.8, entryTime: at(4), averageEntryPrice: 21516, exitPrice: 21524, exitTime: at(14), mfeR: 2.4, risk: 10, open: false, reason: 'stop' } }];
+  const { home, runDir, days, bars } = runFixture({ trades });
+  const at = i => new Date(Date.parse(bars[i].t) + MIN3).toISOString();
+  // The managed cycle at bar 8 ran 18:00:00-18:00:30 wall clock; the executor's modify_order reached the gateway at 18:00:10.
+  fs.writeFileSync(path.join(home, 'logs', 'cycles', '2026-04-23', 'e.json'), JSON.stringify(cycle({ action: 'manage', result: 'CYCLE RESULT: managed', at: '2026-10-27T18:00:00.000Z', durationMs: 30000, timing: { barClose: at(8) } })));
+  fs.writeFileSync(path.join(home, 'logs', 'gate-log.jsonl'), `${JSON.stringify({ ts: '2026-10-27T18:00:10.000Z', source: 'gateway', tool: 'modify_order', decision: 'allowed', violations: [], orderId: 9, stopPrice: 21524, contractId: 'MNQ' })}\n`);
+  const doc = tc.captureReport({ runDir, home, days });
+  const [d] = doc.exits.decisions;
+  assert.deepStrictEqual([d.exitBy, d.decidedAt], ['model-stop', at(8)]);
+  // The late threshold is the rulebook's lock (1.5), never the config's 1 below it: a 2.4R peak, 0.8R kept: 1.6R given.
+  assert.strictEqual(doc.exits.thresholds.lateGivebackR, 1.5);
+  assert.deepStrictEqual([d.late, d.lateR], [true, 0.1]);
+});

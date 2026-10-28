@@ -1577,6 +1577,14 @@
     15
    ],
    "from": "new in feat/ride-or-exit (P1 item F, the owner: \"The model needs to learn when to ride trend and when to exit\"): the structure timeframes above the base an open trade's read reads (the skill's 3m, then 15m)"
+  },
+  "tradeRead.deepPullback": {
+   "value": 0.618,
+   "from": "new in feat/ride-or-exit (P1 item F, the owner: \"The model needs to learn when to ride trend and when to exit\"): a pullback past this share of the last impulse is one weakening sign (the fib 0.618, a hypothesis)"
+  },
+  "tradeRead.minSigns": {
+   "value": 2,
+   "from": "new in feat/ride-or-exit (P1 item F, the owner: \"The model needs to learn when to ride trend and when to exit\"): weakening needs at least this many independent signs (the count decides; review round 2: one sign alone fired on most healthy trend bars)"
   }
  }
 }

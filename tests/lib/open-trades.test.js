@@ -106,7 +106,7 @@ test('the open trade\'s line ends with its read facts (trade-read.js); a read th
     barsFor: () => BARS,
   });
   const read = tradeReadText(t, { bars: BARS, base: 3, tickSize: 0.25 });
-  assert.match(read, /^Trade read \(closed bars since entry; pullback-vs-reversal\): best 21514, /);
+  assert.match(read, /^Trade read \(closed bars since entry; pullback-vs-reversal\): best 21514; /);
   const line = describeOpenTrade(t, { read });
   assert.ok(line.endsWith(` ${read}`), line);
   assert.ok(!describeOpenTrade(t).includes('Trade read'), 'no read given, none shown');

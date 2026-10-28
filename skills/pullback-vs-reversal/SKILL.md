@@ -37,18 +37,16 @@ sign than the CHoCH; depth in fib terms: `fib-retracement`.
 **Premium and discount** (`fib-retracement`): within a trend, pullbacks into discount
 (premium for shorts) are where continuation setups sit.
 
-**An open trade**:
+**An open trade** ("Trade read": 15m structure, never 3m swings):
 
-- Healthy pullback: no 15m `structure against`; depth to about 62% of the
-  last impulse; pushes not fading → hold.
-- Weakening: `new extreme FAILED`, pushes `fading`, depth past about 62%, a
-  negative RTH VWAP or EMA20 distance, `compression against`, or an HTF
-  flip alone → tighten.
-- Reversal: a 3m CHoCH against with a 15m CHoCH against or a `displacement
-  against` through the last swing; an HTF flip with one of them → exit.
+- Under 2 weakening signs, no reversal: a pullback → hold.
+- Weakening: 2+ signs, one per kind (`failed extreme`: a 15m lower high;
+  `pushes fading`; `deep retrace`; `compression against`; `HTF flip`).
+- Reversal: a 15m break against, or a 15m `displacement` through the swing.
 
 **Evidence** (docs/research/mtf-setup-catalog.md): depth alone is no
 edge; buying a 50% or 62% retrace with the 4h trend lost after costs (F5).
+The RTH VWAP pullback alone (F3A, F3B): no finding.
 
 ## Examples
 
@@ -59,5 +57,5 @@ Skip: m3, then 15m CHoCH down; 15m swing low broken; wide down bars, rising V: r
   A long: read long counter; the priority order (step 4) decided skip.
 Loser: read pullback; long at 21522.75, stop 21514.25 (8.50 pts = 34 ticks, $17.00 on 1 MNQ);
   15m CHoCH down, stopped: -34 ticks, -$17.00.
-Open: extreme FAILED, pushes fading, 15m none -> tighten.
+Open: 15m push FAILED, pushes fading, no 15m break -> weakening.
 ```

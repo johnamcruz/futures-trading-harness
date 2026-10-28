@@ -53,16 +53,15 @@ description: Use when a position is open - its stop, the plan's management, the 
 - **The read decides the action** (its definitions are there):
   - Healthy pullback → hold; tightening here stops a winner before the
     leg runs on.
-  - Trend weakening (an HTF bias flip alone is one) → tighten:
-    `modify_order` the bracket stop toward the market, just beyond the
-    last confirmed swing (price already past it → exit at market).
-    Stalling at a key level or opposing liquidity too → take the base hit
-    at market.
-  - Reversal → exit at market (`close_position`). An HTF bias flip
-    against the position confirmed by structure is one: exit, then let the
-    full top-down flow (HTF bias, location, setup, entry, stop, target)
-    decide any new direction. A 15m CHoCH against may already have taken
-    it out on the runner's stop.
+  - Weakening (2+ signs; an HTF bias flip alone is one sign) → tighten:
+    `modify_order` the bracket stop toward the market, at most to the
+    read's trail level (the last confirmed 15m swing, the runner's own),
+    never tighter. Price past that swing is the reversal read's question,
+    never an automatic exit. Weakening and stalling at a key level or
+    opposing liquidity → take the base hit at market.
+  - Reversal (the read's) → exit at market (`close_position`), then let
+    the full top-down flow (HTF bias, location, setup, entry, stop, target)
+    decide any new direction.
   - Never cancel a leg, and never add a stop, target or limit `[exit]`.
 - **An open trade** (the prompt's "Open trade" line) is managed before any
   new entry: its setup, initial stop and risk, the working stop and target in
@@ -81,6 +80,7 @@ description: Use when a position is open - its stop, the plan's management, the 
 ```text
 trade_lifecycle long +2.1R, past its target, stop trailed by the runner -> hold; journal
 trade_lifecycle short +2.6R, 3m CHoCH up, 15m still down -> hold (a pullback)
-trade_lifecycle short +3.1R, Trade read: new extreme FAILED, pushes fading -> weakening: modify_order the stop to just above the last swing high 21418.25
-trade_lifecycle long +1.4R, 15m CHoCH down and HTF bias FLIPPED -> reversal: close_position; then the top-down flow decides anew
+trade_lifecycle short +3.1R, Trade read: 15m push FAILED, pushes fading -> weakening: modify_order the stop to the trail level 21418.25
+trade_lifecycle long +1.4R, HTF bias FLIPPED, no 15m break -> one sign: hold
+trade_lifecycle long +1.4R, reversal: 15m CHoCH down -> close_position; then the top-down flow decides anew
 ```

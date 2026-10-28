@@ -90,7 +90,7 @@ function openTrades({ positions = [], orders = [], entries = [], barsFor = () =>
 function tradeReadText(t, { bars, base, tickSize = null }) {
   try {
     const level = tickSize ? x => levelOnTick(x, tickSize) : undefined;
-    return tradeReadLine(tradeRead({ side: t.side, entry: t.entry, openedAt: t.openedAt, bars, base }), level ? { level } : {});
+    return tradeReadLine(tradeRead({ side: t.side, entry: t.entry, openedAt: t.openedAt, bars, base, tick: tickSize }), level ? { level } : {});
   } catch (err) {
     return `Trade read: unavailable (${err.message}).`;
   }
