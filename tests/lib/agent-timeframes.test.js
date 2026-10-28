@@ -422,7 +422,7 @@ test('the runner\'s recorder with a missing sub-bar: the 1h bars file and the se
 // One value per fact: the session's facts (computed on the runner's bars) are never in a frame. On 1h bars they would
 // be wrong (no 1h bar opens at 09:30 ET: the 09:00 bar counted as overnight, no whole RTH day, the RTH VWAP without
 // its 09:00 bar), and on 15m bars another number (a VWAP or a profile on coarser bars).
-const SESSION_FIELDS = ['vwap', 'today', 'overnight', 'sessionProfile', 'priorProfileNodes', 'location'];
+const SESSION_FIELDS = ['vwap', 'today', 'overnight', 'sessionProfile', 'priorProfileNodes', 'location', 'declared'];
 const SESSION_NAMES = /\b(day high|day low|IB high|IB low|opening range|session high|session low|VWAP|prior RTH|overnight|prior VA[HL]|prior POC|session VA[HL]|session POC)\b/;
 // The fixture's 3m bars through the one closing at hh:mm ET on Monday 2026-04-27 (EDT).
 const upTo = (h, mi) => BARS.findIndex(b => Date.parse(b.t) + 180000 === ET(2026, 4, 27, h, mi, 4)) + 1;

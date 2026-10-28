@@ -27,7 +27,8 @@
  *          range price is in, the unfilled FVGs on 5m, 15m and 1h candles with the last candle's retest
  *          (fvg-frames.js), and the 5m structure (the latest BOS or CHoCH on 5m candles, from 1m bars when the base
  *          bars can't: m5-structure.js), and per timeframe (3m, 5m, 15m, 1h) the compression box and its turn into
- *          expansion with the key levels it sits at (compression.js)       until the next base-bar close
+ *          expansion with the key levels it sits at (compression.js), and in RTH whether the day's trend has
+ *          declared itself each side's way (side-signed, in ATR(14): trend-declared.js)   until the next base-bar close
  *   m15    the 15m read (trend, structure, swings, the latest BOS or CHoCH), the alignment per side,
  *          and the 15m candles' indicators (regime, EMAs, ADX and its slope,
  *          SuperTrend, Keltner, ATR), all from completed 15m candles
@@ -104,6 +105,7 @@ const { fvgFrames, fvgLine, fvgEdgesAt } = require('./fvg-frames');
 const { VOLUME_HIGH, netAtrOf } = require('./composed-reads');
 const { structure5m, structureLine } = require('./m5-structure');
 const { compressionFrames, compressionLine } = require('./compression');
+const { declaredFacts, declaredLine } = require('./trend-declared');
 const { GLOBEX_OPEN_MIN, RTH_OPEN_MIN, RTH_CLOSE_MIN } = require('./clock'); // the session boundaries' one home
 
 const SECTIONS = ['m3', 'm15', 'h1', 'day'];
@@ -193,7 +195,7 @@ const EQUAL_K = require('../tunables').analysis().briefing.equalK; // the snapsh
 // A frame's pointer for what it leaves out: the session's facts are the runner's briefing's, one value each.
 const SESSION_ELSEWHERE = 'is in the runner\'s bar briefing (bar_briefing without a timeframe)';
 // The m3 fields a frame leaves out: the session's facts (computed on the runner's bars only).
-const SESSION_FIELDS = ['vwap', 'today', 'overnight', 'sessionProfile', 'priorProfileNodes', 'location'];
+const SESSION_FIELDS = ['vwap', 'today', 'overnight', 'sessionProfile', 'priorProfileNodes', 'location', 'declared'];
 
 // The timeframes the CISD facts are read on (completed candles; one the bars can't build is unavailable).
 const CISD_FRAMES = require('../tunables').analysis().briefing.cisdFrames;
@@ -484,6 +486,9 @@ function computeSections({ bars, fine = null, c15, c60, snap, snap15, read, read
         // Per timeframe, compression and its turn into expansion on completed candles, with the key levels its box sits
         // at as they stood when the box began (compression.js; boxLevels: the candles' levelsAt, never one the box made).
         compression: own ? null : compressionFrames({ bars, base: minutes, fine, price, levels: boxLevels }),
+        // Whether the day's trend has declared itself each side's way (trend-declared.js): side-signed, in ATR(14), from
+        // this bar's close, the RTH VWAP distance (the VWAP line's), EMA20, the RTH open and the overnight range; in RTH on the runner's bars only.
+        declared: own || !rth ? null : declaredFacts({ price, atr: atr14, vwapAtr: (snap.vwap || {}).distanceAtr, ema20: t.emaSlow, open: day.open, overnight: day.overnight, regime: (snap.regime || {}).primary }),
       },
     },
     m15: {
@@ -764,6 +769,9 @@ function summaryLines(b, et) {
   // Compression only when a timeframe is compressing or broke out of a box in its last candles (compression.js).
   const comp = compressionLine(m3.compression, et);
   if (comp) out.push(comp);
+  // Whether the trend has declared itself each side's way, in RTH only (trend-declared.js declaredLine).
+  const declared = declaredLine(m3.declared, tf);
+  if (declared) out.push(declared);
   // The setup moment (learning/setup-moments.js): the reactions the model composes on, said as facts.
   const check = m3.bar ? require('../learning/setup-moments').checkLine(m3.candles, { barClose: Date.parse(m3.bar.t) + b.minutes * 60000, et, entries: m3.windowEntries }) : null;
   if (check) out.push(check);
@@ -825,7 +833,7 @@ const targets = list => list.reduce((out, x) => {
 }, []).map(target).join(', ');
 
 // The m3 fields the summary says in full (one line each), left out of the detail whole.
-const SUMMARY_FIELDS = ['swingTargets', 'rangeTargets', 'fvgs', 'structure5m', 'compression'];
+const SUMMARY_FIELDS = ['swingTargets', 'rangeTargets', 'fvgs', 'structure5m', 'compression', 'declared'];
 // What the summary's "This bar's close" line says in full, left out of the detail (only present when it happened).
 const SUMMARY_ONLY = { vwap: ['crossed'], today: ['openingRangeCrossed'], location: ['closesBeyondValue', 'backInsideValue'] };
 
