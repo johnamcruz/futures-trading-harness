@@ -66,6 +66,10 @@ const FT = require('./first-try');
 const SEL = require('./selection');
 const { readJson } = require('../harness-run');
 
+/** A capture's scored exits as an exit edit's screen pairs them (exit-scorecard.js decisions; none without a capture). */
+const exitsOf = capture => (capture && capture.exits && Array.isArray(capture.exits.decisions) ? capture.exits.decisions : [])
+  .map(d => ({ root: d.root || null, side: d.side, entryAt: d.entryAt || null, exitBy: d.exitBy, cls: d.cls, late: d.late === true, r: d.r, peakR: d.peakR }));
+
 /** The steps (cycles) a run recorded; 0 for a run with no records. */
 function stepsOf(runDir) {
   try {
@@ -261,7 +265,7 @@ async function probeRound(ctx, { n, champion, api }) {
   const trendSide = async (side, tree, share, which, withFindings = false) => {
     const days = trendDays(which);
     if (!days.length) return null;
-    const out = { legs: [], dayR: {}, blows: 0, cycles: 0, fresh: 0, captures: [], rides: [], first: [], sessions: [], entries: [], stepped: [], windows: 0, dropped: [], noWindows: [] };
+    const out = { legs: [], dayR: {}, blows: 0, cycles: 0, fresh: 0, exits: [], captures: [], rides: [], first: [], sessions: [], entries: [], stepped: [], windows: 0, dropped: [], noWindows: [] };
     for (const day of days) {
       const built = windowsOn(which, day);
       out.dropped.push(...built.dropped);
@@ -279,12 +283,14 @@ async function probeRound(ctx, { n, champion, api }) {
         const context = Object.keys(trend.set.spans || {}).filter(id => trend.set.spans[id].day === day && !legs.some(l => l.id === id)).map(spanOf);
         const got = await (ctx.steps.trendData || trendData)({ runDir: runs.runs[0].runDir, legs, windows: built.windows, context });
         const x = TSC.sideOfTrend({ captures: [got.capture], days: got.days, scorecard: runs.decisions, first: got.first || [], sessions: got.sessions || null, windows: built.windows, minutes: got.minutes || traderCfg.timeframe });
-        return { legs: [...x.legs], dayR: x.dayR, blows: x.blows, first: x.first, sessions: x.sessions, entries: got.entries || [], stepped: got.stepped || [], windows: built.windows.length, cycles: stepsOf(runs.runs[0].runDir), ride: TR.compact(got.capture), ...(side === 'pc' ? { capture: got.capture } : {}) };
+        return { legs: [...x.legs], dayR: x.dayR, blows: x.blows, first: x.first, sessions: x.sessions, entries: got.entries || [], stepped: got.stepped || [], windows: built.windows.length, cycles: stepsOf(runs.runs[0].runDir), ride: TR.compact(got.capture), exits: exitsOf(got.capture), ...(side === 'pc' ? { capture: got.capture } : {}) };
       });
       // Its catch & ride (replay/trend-ride.js), report only: a phase kept before the ride was recorded has none (the
       // champion's keeps its capture, read instead), and the side's total is then unknown (trend-screen.js rideOfSide).
       out.rides.push({ ride: one.ride || TR.compact(one.capture), windows: built.windows });
       out.legs.push(...one.legs);
+      // Its scored exits, for an exit edit's screen (a phase kept before they were recorded: its capture's, when kept).
+      out.exits.push(...(one.exits || exitsOf(one.capture)));
       Object.assign(out.dayR, one.dayR);
       out.blows += one.blows;
       out.first.push(...(one.first || []));
@@ -307,6 +313,8 @@ async function probeRound(ctx, { n, champion, api }) {
     if (withFindings && mine) out.captures = out.captures.map(c => ({ ...c, legs: (c.legs || []).filter(l => mine.has(l.id)) }));
     return { ...out, legs, side: { legs: new Map(legs), dayR: out.dayR, blows: out.blows, first: out.first, sessions: out.sessions } };
   };
+  // An exit edit's trend-set pairs (screen.js exitTargetTest): the champion's and the edit's scored exits, one bar apart at most.
+  const exitPairs = (base, side) => (base && side ? { champion: base.exits, probe: side.exits, stepMs: traderCfg.timeframe * 60000 } : null);
   const report = { iteration: n, windows: cfg.windows, seed, cycles: { champion: {}, edits: {} } };
   // A half of the trend batch with no session (a one-day batch): nothing to screen on one and judge on the other.
   const trendEmpty = trend && (!split.probe.days.length || !split.confirm.days.length);
@@ -440,8 +448,8 @@ async function probeRound(ctx, { n, champion, api }) {
     const share = Math.min(cfg.parallel, runnable.length);
     const side = await sideData(`p-${e.id}`, tree.dir, share, 'probe');
     // Screened on the probe half only: the confirm half stays unseen until the combined change.
-    const m = SC.measure(SC.half(base.side, 'probe', seed), SC.half(side.side, 'probe', seed), { skill: e.tag.skill || null, kind: e.finding.kind });
     const ts = trendBase ? await trendSide(`p-${e.id}`, tree.dir, share, 'probe') : null;
+    const m = SC.measure(SC.half(base.side, 'probe', seed), SC.half(side.side, 'probe', seed), { skill: e.tag.skill || null, kind: e.finding.kind, exits: exitPairs(trendBase, ts) });
     const rs = regBase ? await trendSide(`p-${e.id}`, tree.dir, share, 'regression') : null;
     const rm = rs ? TSC.measureTrend(regBase.side, rs.side) : null;
     const tm = ts ? TSC.measureTrend(trendBase.side, ts.side) : null;
@@ -487,10 +495,10 @@ async function probeRound(ctx, { n, champion, api }) {
     const parts = passed.filter(p => composition.parts.some(x => x.id === p.id));
     const champC = SC.half(confirmBase.side, 'confirm', seed);
     const probeC = SC.half(side.side, 'confirm', seed);
-    const s = SC.composedScreen(champC, probeC, parts.filter(p => p.finding.kind !== TF.KIND));
+    const ts = trendConfirm ? await trendSide(`k-${cid}`, tree.dir, 1, 'confirm') : null;
+    const s = SC.composedScreen(champC, probeC, parts.filter(p => p.finding.kind !== TF.KIND), { exits: exitPairs(trendConfirm, ts) });
     // The curated measures and harms even when every part is a trend part (no curated target then).
     const cm = s.measures || SC.measure(champC, probeC, {});
-    const ts = trendConfirm ? await trendSide(`k-${cid}`, tree.dir, 1, 'confirm') : null;
     const rs = regBase ? await trendSide(`k-${cid}`, tree.dir, 1, 'regression') : null;
     const tm = ts ? TSC.measureTrend(trendConfirm.side, ts.side) : null;
     const trendParts = parts.filter(p => p.finding.kind === TF.KIND);

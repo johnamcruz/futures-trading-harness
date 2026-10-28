@@ -144,6 +144,14 @@
    "value": 0.1,
    "from": "train/screen.js SCREEN.minEffect"
   },
+  "exitScreen.epsR": {
+   "value": 0.05,
+   "from": "new in feat/ppc-setup-rates (owner-approved 2026-10-28: an exit edit's screen pairs the trades both sides opened; a pair is discordant when its banked R differs by at least a small epsilon, e.g. 0.05R)"
+  },
+  "exitScreen.runnerMfeR": {
+   "value": 3,
+   "from": "new in feat/ppc-setup-rates (owner-approved 2026-10-28: an exit edit that cuts more of the trades that became runners, MFE of at least e.g. 3R on the champion's side, fails the screen whatever the mean)"
+  },
   "probe.k": {
    "value": {
     "default": 4,

@@ -64,8 +64,9 @@ block (in rank order inside a step; a trend finding lists a few of its
 legs, each with what you said and the plan that passed there, never a date, time or price, then the base rate of valid plans on
 bars with no leg, its split by setup type (small n) and a few such plans that lost), `{{LESSONS}}` a short summary of
 what earlier probes showed, with sample sizes, `{{K}}` the number of edits.
-Each edit is tested alone on the same practice moments, then the ones that
-helped are combined by code.
+Each edit is tested alone on the same practice moments (an exit finding's on
+the R banked by the trades both sides opened), then the ones that helped are
+combined by code.
 
 ```text
 You review your own trading decisions. You do not trade now: no orders, no broker tools.

@@ -25,6 +25,7 @@
   "keepRule": { "maxChallengerBlows": 0, "level": 0.9, "primary": "passRate", "minBlocks": 2, "minOverlap": 0.5 },
   "decisionRule": { "alpha": 0.05, "minPairs": 20, "minDiscordant": 6, "minEffect": 0.1, "harmTolerance": 0.02, "maxExcluded": 0.1 },
   "screen": { "gainAlpha": 0.1, "harmAlpha": 0.2, "minDiscordant": 4, "minPairs": 10, "minEffect": 0.1 },
+  "exitScreen": { "epsR": 0.05, "runnerMfeR": 3 },
   "probe": {
     "k": { "default": 4, "min": 1, "max": 8 },
     "parallel": { "default": 1, "min": 1, "max": 4 }

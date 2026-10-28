@@ -418,7 +418,7 @@ const behaviour = text => (text.includes('LUCKY') ? 'lucky' : text.includes('BAD
 const stateOf = (b, i) => (b === 'lucky' ? (i % 2 || SC.halfOf(dayOfT(TIMES[i]), 3) === 'probe' ? 'right' : 'misread') : b === 'bad' ? 'misread' : b === 'good' || i % 2 || (b === 'some' && i < 16) ? 'right' : 'misread');
 const categoryOf = (b, i) => (b === 'bad' ? 'wrong-side entry' : b === 'good' || b === 'reason' || i % 2 ? 'right' : 'wrong stated reason');
 
-function world({ proposals, verdict = 'kept', loop: over = {}, trend = false, trendBatch = {} } = {}) {
+function world({ proposals, verdict = 'kept', loop: over = {}, trend = false, trendBatch = {}, exits = false } = {}) {
   const user = tmpDir();
   const env = { PATH: process.env.PATH, HOME: user, FTH_HOME: path.join(user, 'home') };
   fs.mkdirSync(env.FTH_HOME);
@@ -505,7 +505,9 @@ function world({ proposals, verdict = 'kept', loop: over = {}, trend = false, tr
       const entries = days.flatMap(day => [{ at: `${day}T14:36:30.000Z`, side: 'long' }, ...(/TREND/.test(text) ? [{ at: `${day}T14:36:30.000Z`, side: 'short' }] : [])]);
       // Each window stepped to its end or not, from the run's own records (the leg window's last time is 14:42:02Z).
       const sessions = require('../../scripts/lib/train/trend-windows').windowStates({ days: recorded, windows, minutes: 3 }).map(s => ({ ...s, rollMonth: false }));
-      return { capture: { legs, entries: entries.map(e => ({ ...e, kind: e.side === 'long' ? 'in-trend' : 'counter', leg: null, r: /GREEDY/.test(text) ? -1 : 0 })) }, days: Object.fromEntries(days.map(d => [d, [{ t: `${d}T14:42:02.000Z`, trades: [{ roundTrip: { r: /GREEDY/.test(text) ? -1 : 0 } }] }]])), first, entries, sessions, stepped: Object.values(recorded).flat().map(l => l.t), minutes: 3 };
+      // With exits: one scored model exit a session (the champion cuts it at 0.5R; EXITFIX rides it to 1.5R).
+      const scored = exits ? { exits: { decisions: days.map(day => ({ root: 'MNQ', side: 'long', entryAt: `${day}T14:36:30.000Z`, exitBy: 'model-exit', cls: /EXITFIX/.test(text) ? 'right' : 'cut', leftR: 2, late: false, r: /EXITFIX/.test(text) ? 1.5 : 0.5, peakR: 2, facts: null })), tightens: [] } } : {};
+      return { capture: { legs, entries: entries.map(e => ({ ...e, kind: e.side === 'long' ? 'in-trend' : 'counter', leg: null, r: /GREEDY/.test(text) ? -1 : 0 })), ...scored }, days: Object.fromEntries(days.map(d => [d, [{ t: `${d}T14:42:02.000Z`, trades: [{ roundTrip: { r: /GREEDY/.test(text) ? -1 : 0 } }] }]])), first, entries, sessions, stepped: Object.values(recorded).flat().map(l => l.t), minutes: 3 };
     },
     // The trend facts (trend-facts.js attachFacts on the run's files): every missed leg here had a valid plan (learnable).
     // Its control bars: one a run, a valid plan that lost (the balancing example the proposer reads).
@@ -701,6 +703,25 @@ test('with a trend set: its missed legs are findings first; an edit that catches
   const lessons = LS.readLessons(path.join(w.paths.dir, LS.FILE)).filter(l => !l.composed);
   assert.deepStrictEqual(lessons.map(l => [l.findingKind, l.n]), [['trend-blocker', probeLegs.length], ['trend-blocker', probeLegs.length], ['misread', 28], ['trend-blocker', probeLegs.length]]);
   assert.ok(lessons.every(l => l.trendBatch && l.trendBatch.index === 0 && l.trendBatch.probe === probeLegs.length));
+});
+
+test('an exit finding\'s edit is screened on the trades both sides opened (the trend set\'s scored exits), never on read claims', async () => {
+  let w = null;
+  const exitEdit = () => {
+    const f = w.calls.proposeProbes[0].findings.find(x => x.kind === 'exit-decision');
+    return [tagged('a', f.id, 'rule', '- line one', '- line one\n- EXITFIX → hold the healthy pullback', 'fewer cut trends')];
+  };
+  w = world({ trend: true, exits: true, proposals: exitEdit });
+  await run(w);
+  const f = w.calls.proposeProbes[0].findings.find(x => x.kind === 'exit-decision');
+  assert.strictEqual(f.code, 'cut-trend');
+  const report = JSON.parse(fs.readFileSync(path.join(w.paths.iter(1), 'probe-report.json'), 'utf8'));
+  const [p] = report.probes;
+  const days = TS.splitBatch(TS.drawRound(POOL, { seed: 3, round: 1, per: BATCH }).items, { seed: 3, half: 0.5 }).probe.days;
+  assert.strictEqual(p.target.measure, 'exit: R banked on the trades both sides opened');
+  assert.deepStrictEqual([p.target.pairs, p.target.b, p.target.c], [days.length, days.length, 0], 'one trade a probe-half session, each 1R better');
+  assert.deepStrictEqual(p.target.classes, { [`cut->right (model-exit)`]: days.length });
+  assert.strictEqual(p.verdict, p.target.pairs >= SC.SCREEN.minPairs ? 'helped' : 'no effect');
 });
 
 test('with a trend pool: a trend edit gains only on the trend batch; one that gains on the probe half alone never reaches the keep rule', async () => {

@@ -66,6 +66,7 @@ const TRAINING = {
   keepRule: { maxChallengerBlows: int(0), level: num({ min: 0.5, max: 0.999 }), primary: str(['passRate']), minBlocks: int(1), minOverlap: frac() },
   decisionRule: { alpha: frac(), minPairs: int(1), minDiscordant: int(1), minEffect: frac(), harmTolerance: frac(), maxExcluded: frac() },
   screen: { gainAlpha: frac(), harmAlpha: frac(), minDiscordant: int(1), minPairs: int(1), minEffect: frac() },
+  exitScreen: { epsR: frac(), runnerMfeR: pos() },
   probe: { k: range(), parallel: range() },
   abCompare: { level: num({ min: 0.5, max: 0.999 }), reps: int(1) },
   loop: {

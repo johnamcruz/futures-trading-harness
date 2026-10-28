@@ -601,8 +601,19 @@ and leg ids; the lessons lines record the batch too.
   `manage-position` has no read, so it never owns a read finding. Each example is the facts code read at the
   decision (`scripts/lib/trading/trade-read.js` on the bars closed by
   then), no date, price or R. The round's report counts them (`probe
-  exits`). An exit finding's edit is screened as a curated one, with the
-  trend set's harms: no exit-specific gain test exists yet. The read
+  exits`). An exit finding's edit is screened on its own target
+  (`scripts/lib/train/screen.js` `exitTargetTest`), with the trend set's
+  harms: the trades both sides opened, paired (a curated moment both
+  entered on the same side; a trend-set exit of the same root and side with
+  the entries at most `exitScore.matchBars` bars apart), each better or
+  worse when its banked R moved by at least `exitScreen.epsR`
+  (`config/training.json`), decided by the screen's own McNemar test,
+  `minDiscordant` and `minEffect`, and never a gain under `minPairs` pairs.
+  Each pair's class change (cut, right, late) is reported, tagged by who
+  exited; trades on one side only are counted as unmatched, never paired.
+  An edit that newly cuts more of the champion's runners (an MFE of at
+  least `exitScreen.runnerMfeR`) than it stops cutting is a harm, whatever
+  the mean. A read finding's edit keeps the read target. The read
   itself is held to an acceptance check (`tests/lib/read-mechanical.test.js`,
   `scripts/lib/replay/read-mechanical.js`): applied to the letter on a real
   trend it keeps at least what the runner's 15m structure trail keeps, and

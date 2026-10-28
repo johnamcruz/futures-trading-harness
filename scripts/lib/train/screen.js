@@ -17,7 +17,11 @@
  *               nothing;
  *             - a wrong-reason refusal: a decision the champion refused for a false reason now right, against one it
  *               got right now not.
- *             A fix counts only when the decision's scorecard pair got no worse (right before, not right after)
+ *             A fix counts only when the decision's scorecard pair got no worse (right before, not right after);
+ *             - an exit decision (exit-findings.js: the open trade's read, its management, its profit-taking): the trades
+ *               both sides opened (exitTargetTest), the R banked better or worse by at least exitScreen.epsR, too few
+ *               pairs (under minPairs) never a gain; a cut on more of the champion's runners (MFE at least
+ *               exitScreen.runnerMfeR) than it un-cut is a harm whatever the mean
  *   skill     the target skill's used, correct and missed counts on each side (the skill-usage report): descriptive
  *   blows     decisions the probe's scorecard records at or past the account's floor
  *
@@ -35,12 +39,15 @@
  *   no effect  neither
  *
  *   SCREEN, VERDICTS, HALVES
- *   sideOf({ decisions, scorecard, usage, points })   a side reduced: { decisions: [{ key, day, R, reads, relevant }],
+ *   sideOf({ decisions, scorecard, usage, points })   a side reduced: { decisions: [{ key, day, R, entered, side?, reads, relevant }],
  *                                                      exitPlans, scorecard: [{ key, at, day, category, blow }], usage }
  *                                                      (measure refuses two sides whose exit plans differ)
  *   halfOf(day, seed)                            'probe' or 'confirm': a session date's half, by a seeded hash
  *   half(side, which, seed)                      the side's decisions and scorecard of one half (usage as given)
- *   measure(champion, probe, { skill, kind })    { reads, process, r, target, skill, blows }
+ *   measure(champion, probe, { skill, kind, exits })   { reads, process, r, target, skill, blows } (exits: the trend
+ *                                                set's scored exits, { champion, probe, stepMs }, for an exit finding)
+ *   exitTargetTest(champion, probe, exits)       { measure, pairs, b, c, n, pBetter, pWorse, meanDiff, enough, unmatched,
+ *                                                classes, runners }: the trades both sides opened, paired
  *   screen(m)                                    { verdict, pass, harms, gain }
  *   composedScreen(champion, probe, parts)       the combined change against every part's target: { verdict, pass, harms, targets }
  */
@@ -60,6 +67,9 @@ const { tradingDayKey } = require('../trading/clock');
  * significance (p about 0.22). The screen only filters; the keep rule is the real gate.
  */
 const SCREEN = require('../tunables').training().screen; // config/training.json screen (tighten-only)
+const EXIT = require('../tunables').training().exitScreen; // config/training.json exitScreen: epsR, runnerMfeR
+const MATCH_BARS = require('../tunables').replay().exitScore.matchBars; // config/replay.json: an exit's bar tolerance
+const EXIT_KIND = require('./exit-findings').KIND;
 const VERDICTS = Object.freeze(['helped', 'no effect', 'hurt']);
 const HALVES = Object.freeze(['probe', 'confirm']);
 
@@ -96,6 +106,8 @@ function sideOf({ decisions = [], scorecard = [], usage = [], points = [] } = {}
     for (const sk of p.relevant || []) set.add(sk);
     relevant.set(k, set);
   }
+  // An entered moment's side (the exit screen pairs the same side only).
+  const sides = new Map((decisions || []).filter(d => d && d.decision === 'entered' && (d.side === 'long' || d.side === 'short')).map(d => [`${d.root}|${d.bar}`, d.side]));
   const out = [];
   for (const x of decisionsByKey(decisions).values()) {
     if (!x.composed) continue;
@@ -103,7 +115,7 @@ function sideOf({ decisions = [], scorecard = [], usage = [], points = [] } = {}
     const key = momentKey(root, bar);
     if (!key) continue;
     out.push({
-      key, day: dayOf(key), R: isR(x.R) ? x.R : null, relevant: [...(relevant.get(key) || [])].sort(),
+      key, day: dayOf(key), R: isR(x.R) ? x.R : null, entered: x.entered === true, ...(sides.has(x.key) ? { side: sides.get(x.key) } : {}), relevant: [...(relevant.get(key) || [])].sort(),
       reads: (x.reads || []).map(r => ({ skill: skillOfRead(r.step, r.read) || r.skill || null, check: isTrue(r.check), ok: isTrue(r.check) && r.agrees !== false })),
     });
   }
@@ -185,7 +197,63 @@ function targetTest(champion, probe, { skill, kind }) {
   return { measure: `${skill}: ${label}`, pairs, b, c, n: b + c, pBetter: round4(mcnemar(b, c)), pWorse: round4(mcnemar(c, b)) };
 }
 
-function measure(champion, probe, { skill = null, kind = null } = {}) {
+/**
+ * An exit edit's target: the trades both sides opened, paired. The curated set: a moment both entered (its key), the same
+ * side (when both name one), each with its R. The trend set's scored exits (exit-scorecard.js decisions): the same root
+ * and side, the entries at most matchBars bars apart (the nearest first, each trade once). A pair is better or worse when
+ * its banked R moved by at least epsR (the probe's minus the champion's); the exact one-sided McNemar test on those, as
+ * the read target's. Too few pairs (under minPairs): never a gain. Each trend pair's class change (cut, right, late, as
+ * scored), tagged by who exited on the probe's side; runners: the champion's trades with an MFE of at least runnerMfeR,
+ * newly cut by the probe or no longer cut. Trades on one side only: counted as unmatched, never paired.
+ */
+function exitTargetTest(champion, probe, exits = null, { epsR = EXIT.epsR, runnerMfeR = EXIT.runnerMfeR, minPairs = SCREEN.minPairs } = {}) {
+  const diffs = [];
+  const unmatched = { champion: 0, probe: 0 };
+  // The curated set's moments: entered on both sides, each R known.
+  const entered = s => (s && Array.isArray(s.decisions) ? s.decisions : []).filter(d => d.entered === true && isR(d.R));
+  const a = new Map(entered(champion).map(d => [d.key, d]));
+  const seen = new Set();
+  for (const d of entered(probe)) {
+    const base = a.get(d.key);
+    if (!base || (base.side && d.side && base.side !== d.side)) { unmatched.probe += 1; continue; }
+    seen.add(d.key);
+    diffs.push(d.R - base.R);
+  }
+  unmatched.champion += [...a.keys()].filter(k => !seen.has(k)).length;
+  // The trend set's trades.
+  const classes = {};
+  const runners = { pairs: 0, newCuts: 0, fixedCuts: 0 };
+  const label = x => (x.late ? 'late' : x.cls);
+  const tradeOf = x => (x && x.root && x.side && Number.isFinite(Date.parse(x.entryAt)) && isR(x.r) ? { ...x, ms: Date.parse(x.entryAt) } : null);
+  const mine = exits && Array.isArray(exits.champion) ? exits.champion.map(tradeOf).filter(Boolean) : [];
+  const theirs = exits && Array.isArray(exits.probe) ? exits.probe.map(tradeOf).filter(Boolean) : [];
+  const near = MATCH_BARS * (exits && exits.stepMs > 0 ? exits.stepMs : 0);
+  const free = new Set(theirs.keys());
+  for (const base of mine) {
+    const i = [...free].filter(j => theirs[j].root === base.root && theirs[j].side === base.side && Math.abs(theirs[j].ms - base.ms) <= near)
+      .sort((x, y) => Math.abs(theirs[x].ms - base.ms) - Math.abs(theirs[y].ms - base.ms))[0];
+    if (i === undefined) { unmatched.champion += 1; continue; }
+    free.delete(i);
+    const d = theirs[i];
+    diffs.push(d.r - base.r);
+    if (label(base) !== label(d)) { const k = `${label(base)}->${label(d)} (${d.exitBy})`; classes[k] = (classes[k] || 0) + 1; }
+    if (isR(base.peakR) && base.peakR >= runnerMfeR) {
+      runners.pairs += 1;
+      if (d.cls === 'cut' && base.cls !== 'cut') runners.newCuts += 1;
+      if (base.cls === 'cut' && d.cls !== 'cut') runners.fixedCuts += 1;
+    }
+  }
+  unmatched.probe += free.size;
+  const b = diffs.filter(x => x >= epsR).length;
+  const c = diffs.filter(x => x <= -epsR).length;
+  const meanDiff = diffs.length ? round4(diffs.reduce((s, x) => s + x, 0) / diffs.length) : null;
+  return { measure: 'exit: R banked on the trades both sides opened', pairs: diffs.length, b, c, n: b + c, pBetter: round4(mcnemar(b, c)), pWorse: round4(mcnemar(c, b)), meanDiff, enough: diffs.length >= minPairs, unmatched, classes, runners };
+}
+
+/** The runner guard's harm: an exit edit that cut more of the champion's runners than it stopped cutting. */
+const runnerHarm = t => (t && t.runners && t.runners.newCuts > t.runners.fixedCuts ? `cut ${t.runners.newCuts} runner(s) the champion rode (un-cut ${t.runners.fixedCuts}; MFE at least ${EXIT.runnerMfeR}R)` : null);
+
+function measure(champion, probe, { skill = null, kind = null, exits = null } = {}) {
   // R and the counterfactuals pair only under one exit plan: an edit's run managed by another exit is not comparable.
   const plans = x => JSON.stringify(x.exitPlans || []);
   if (plans(champion) !== plans(probe)) throw new Error(`the probe's exit plan (${plans(probe)}) is not the champion's (${plans(champion)}): the two runs don't pair`);
@@ -202,19 +270,20 @@ function measure(champion, probe, { skill = null, kind = null } = {}) {
   const use = side => side.usage.find(s => s.skill === skill) || null;
   return {
     reads, process, r,
-    target: targetTest(champion, probe, { skill, kind }),
+    target: kind === EXIT_KIND ? exitTargetTest(champion, probe, exits) : targetTest(champion, probe, { skill, kind }),
     skill: skill ? { skill, champion: use(champion), probe: use(probe) } : null,
     blows: probe.scorecard.filter(d => d.blow).length,
   };
 }
 
 const harmful = t => t && t.n >= SCREEN.minDiscordant && t.c > t.b && t.pWorse <= SCREEN.harmAlpha;
-const gained = t => t && t.n >= SCREEN.minDiscordant && t.b > t.c && t.pBetter <= SCREEN.gainAlpha && t.pairs > 0 && (t.b - t.c) / t.pairs >= SCREEN.minEffect;
+const gained = t => t && t.enough !== false && t.n >= SCREEN.minDiscordant && t.b > t.c && t.pBetter <= SCREEN.gainAlpha && t.pairs > 0 && (t.b - t.c) / t.pairs >= SCREEN.minEffect;
 
 function harmsOf(m) {
   const out = [];
   if (m.blows > 0) out.push(`${m.blows} blow(s) on the probe's side`);
   for (const k of ['reads', 'process', 'target']) if (harmful(m[k])) out.push(`${k}: worse (broken ${m[k].c}, fixed ${m[k].b}, p ${m[k].pWorse})`);
+  if (runnerHarm(m.target)) out.push(`target: ${runnerHarm(m.target)}`);
   if (m.r.pairs >= SCREEN.minPairs && m.r.hi !== null && m.r.hi < 0) out.push(`R per decision: worse (${m.r.diff} [${m.r.lo}, ${m.r.hi}])`);
   return out;
 }
@@ -227,13 +296,14 @@ function screen(m) {
 }
 
 /** The combined change: no harm on any measure, and every part's target still a gain (its parts don't cancel). */
-function composedScreen(champion, probe, parts) {
-  const ms = parts.map(p => ({ id: p.id, m: measure(champion, probe, { skill: p.tag.skill, kind: p.finding.kind }) }));
+function composedScreen(champion, probe, parts, { exits = null } = {}) {
+  const ms = parts.map(p => ({ id: p.id, m: measure(champion, probe, { skill: p.tag.skill, kind: p.finding.kind, exits }) }));
   const harms = ms.length ? harmsOf(ms[0].m) : [];
   for (const x of ms) if (harmful(x.m.target)) harms.push(`${x.id}'s target: worse (broken ${x.m.target.c}, fixed ${x.m.target.b})`);
+  for (const x of ms.slice(1)) if (runnerHarm(x.m.target)) harms.push(`${x.id}'s target: ${runnerHarm(x.m.target)}`);
   const lost = ms.filter(x => !gained(x.m.target)).map(x => x.id);
   const verdict = harms.length ? 'hurt' : lost.length ? 'no effect' : 'helped';
   return { verdict, pass: verdict === 'helped', harms, cancelled: lost, targets: ms.map(x => ({ id: x.id, target: x.m.target })), measures: ms.length ? ms[0].m : null };
 }
 
-module.exports = { SCREEN, VERDICTS, HALVES, sideOf, halfOf, half, momentKey, measure, screen, composedScreen, skillState };
+module.exports = { SCREEN, VERDICTS, HALVES, sideOf, halfOf, half, momentKey, measure, exitTargetTest, screen, composedScreen, skillState };
