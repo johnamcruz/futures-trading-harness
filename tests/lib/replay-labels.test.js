@@ -1293,7 +1293,12 @@ test('labels: each decision joined to its recorded field values and its archived
   fs.writeFileSync(file, recs.map(r => `${JSON.stringify(r)}\n`).join(''));
   const rolled = labelRun(run.runDir, { strategies: STRATEGIES }).labels;
   assert.deepStrictEqual(rolled.find(l => l.t === recs[0].t).archivedBar, { ...archived[0], c: 7 });
-  assert.strictEqual(rolled.find(l => l.t === recs[1].t).archivedBar, null, 'two contracts at that time, none named');
+  assert.deepStrictEqual(rolled.find(l => l.t === recs[1].t).archivedBar, archived[1], 'two contracts at that time, none named: the front when the bar closed (first archived), never none');
+  // A no-entry decision (a line whose values name only another bar's contract): the line's contract for the symbol.
+  recs[1].values = [{ ...recs[0].values[0], contractId: 'NEW', barT: 'another' }];
+  fs.writeFileSync(file, recs.map(r => `${JSON.stringify(r)}\n`).join(''));
+  assert.deepStrictEqual(labelRun(run.runDir, { strategies: STRATEGIES }).labels.find(l => l.t === recs[1].t).archivedBar, { ...archived[1], c: 7 }, 'the day\'s contract from the line');
+  recs[1].values = undefined;
   recs[0].values = [{ ...recs[0].values[0], contractId: 'MNQ' }];
   fs.writeFileSync(file, recs.map(r => `${JSON.stringify(r)}\n`).join(''));
   assert.deepStrictEqual(labelRun(run.runDir, { strategies: STRATEGIES }).labels.find(l => l.t === recs[0].t).archivedBar, archived[0]);

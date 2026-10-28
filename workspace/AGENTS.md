@@ -103,9 +103,10 @@ formats matter.
   planned vs. actual, result in R, followed-plan yes/no, mistakes. Tags must
   include exactly one of `result:win`, `result:loss`, `result:scratch`
   (|R| < 0.2), `result:nofill`, plus `setup:<name>` and any `mistake:<kind>`.
-- **lesson** (end of session, at most 1–3): one short, evidence-backed rule
-  with the sample behind it, e.g. "ORB on MNQ before 09:45 ET: 2W/7L → skip
-  until retest". Tag it with the setup and symbol.
+- **lesson** (session end, 1–3): advice: sample, bars condition, "ORB on MNQ
+  before 09:45 ET: 2W/7L". Tag setup, symbol.
+  Never a rule or a block (only the gate and rulebook block): shown with its
+  record. Defying one is no mistake.
 - Grade the process, not the P&L. A losing trade that followed the plan is a
   good trade; a winner that broke the plan is a mistake.
 
@@ -138,15 +139,15 @@ user; numbers here are the harness defaults, not any firm's official limits.
 - Decide the stop before the entry. No stop, no trade.
 - Risk per trade = |entry − stop| ÷ tickSize × tickValue × size. Keep it at or
   below 25% of the remaining daily loss allowance (`remainingBeforeLimit` in
-  `get_account_snapshot`), and at or below the plan's stated $ risk.
+  `get_account_snapshot`), and at or below the plan's $ risk.
 - Every open position has a protective stop working at the exchange: the
   entry's `stopLossBracket`, checked as soon as the fill shows (the order's
   one status check, or the next cycle's read). A separate `[protect]` stop
   only repairs protection on an existing position (resized after a partial
-  exit, or a stop cancelled or missing), placed at once; never a way to
+  exit, or stop cancelled or missing), placed at once; never a way to
   enter without a bracket. If the stop can't be placed, close the position. A working entry
   without a stop bracket (one the gate never checked, e.g. placed outside
-  the harness) is cancelled, not waited on (the `order-mechanics` skill).
+  the harness) is cancelled, not waited on (the `order-mechanics` skill; "bracket attached on fill" in the prompt is one).
 - Never widen a stop, never average down, never add to a loser. You may
   tighten a stop or move it to breakeven.
 - Use micro contracts (MNQ, MES, MYM, M2K, MGC, MCL) and size 1 until the
@@ -217,7 +218,7 @@ user; numbers here are the harness defaults, not any firm's official limits.
 - `prop-challenge-pacing` (skills/prop-challenge-pacing/SKILL.md): Use when a policy strategy trades a harness-tracked prop attempt - its state, its verdicts, the gate's refusals.
 - `prop-evaluator` (skills/prop-evaluator/SKILL.md): Use when reading or reporting a replay run's prop score (pass, blow and timeout rates, days to pass).
 - `prop-pacing-judgment` (skills/prop-pacing-judgment/SKILL.md): Use when pacing a prop account with no running attempt (daily budget, pace, consistency, stand-downs).
-- `pullback-vs-reversal` (skills/pullback-vs-reversal/SKILL.md): Trader-process step 4, price moving against the higher-timeframe trend - a pullback (trend intact) or a reversal (a higher-frame CHoCH). A read, never a veto.
+- `pullback-vs-reversal` (skills/pullback-vs-reversal/SKILL.md): Trader-process step 4 and an open trade - price moving against the trend or the trade - a pullback, the trend weakening, or a reversal. A read, never a veto.
 - `reason-check` (skills/reason-check/SKILL.md): Use when checking stated reasons vs the facts.
 - `rejection` (skills/rejection/SKILL.md): Use when a completed candle, on any timeframe, may have rejected a key level - the setup read. A read, never an entry by itself.
 - `replay` (skills/replay/SKILL.md): Use when the user wants to set up, run or read a replay of the trader on history. User-run.
@@ -251,7 +252,7 @@ user; numbers here are the harness defaults, not any firm's official limits.
 - `training-loop` (skills/training-loop/SKILL.md): Use when the user wants to plan, run, resume or read a training loop. User-run.
 - `training-verdict` (skills/training-verdict/SKILL.md): Use when reading why the training loop kept, rejected or blocked an edit. User-run.
 - `trend-momentum-indicators` (skills/trend-momentum-indicators/SKILL.md): Use when a read rests on ADX, an EMA, SuperTrend, Keltner or ATR - their settings and fields, and the volatility regime for sizing. Metrics, not the trend.
-- `trend-vs-range` (skills/trend-vs-range/SKILL.md): Trader-process step 1 and the regime in step 2 - whether each timeframe trends, ranges or is in transition, before any setup. A read, never a veto.
+- `trend-vs-range` (skills/trend-vs-range/SKILL.md): Trader-process steps 1-2 - whether each timeframe trends, ranges or is in transition, and whether the trend has declared itself. A read, never a veto.
 - `user-commands` (skills/user-commands/SKILL.md): Use when a person runs a script themselves.
 - `vwap-volume-profile` (skills/vwap-volume-profile/SKILL.md): Use when judging trend vs rotation day, a breakout's participation, pullback areas, targets, or the value area strategies - VWAP, value area, POC, nodes.
 

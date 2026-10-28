@@ -5,7 +5,7 @@
  * tool reply. Credentials come from the user's .env (never printed).
  *
  *   node scripts/bars.js --symbol MNQ [--timeframe 3] [--count N] [--out <FTH_HOME>/bars-scratch/MNQ-3m.json] [--record]
- *   (default count: what the runner keeps, 250 hours of bars, enough for the 4h trend: 5000 3m bars)
+ *   (default count: what the runner keeps, 514 hours of bars, enough for the 4h trend: 10280 3m bars)
  *   node scripts/bars.js --symbol MNQ --daily [--count 60]          daily bars for mtf.js --daily
  *
  * --out takes a .json file under the harness home's bars scratch directory,

@@ -21,7 +21,7 @@
 const { tradingDayStart, entryClock, inMarketHours, tradingDayKey, EARLY_CLOSE_MIN, MARKET_HOURS_LABEL } = require('./clock');
 const { entriesSince, entryTime, hasTag, reviewResult, contractRoot, mayBeRoot, onePerOrder } = require('./journal');
 const fs = require('fs');
-const { checkStrategyForOrder } = require('./strategies');
+const { checkStrategyForOrder, citingPolicies, composedOf, citedSetups } = require('./strategies');
 const { propViolations, runningAttempts, latestVerdict, carriedLossState } = require('./prop-state');
 const { translatorFor, allInRisk, stretchedEntry } = require('../prop/size-translate');
 const { feePerSide } = require('./accounts');
@@ -426,7 +426,9 @@ function evaluateOrder({ input = {}, entries = [], now = new Date(), config, bla
     } : null;
     // Under a policy, its entry rule (its rulebook's `entry`, entry-rule.js) joins the re-check, as compose_check held it.
     const entryRule = named && named.signal === 'policy' ? entryRuleOf(named.entry) : null;
-    composedCheck = composedRefusal({ name: composed, strategy: doc, home: config.home, root: contractRoot(input.contractId), input, now, cycleBars: { ...(config.cycleBars || {}), ...(config.cycleBriefingBars || {}) }, entries, specOf, approvedSize: p2Size(), translate, entryRule });
+    composedCheck = composedRefusal({ name: composed, strategy: doc, home: config.home, root: contractRoot(input.contractId), input, now, cycleBars: { ...(config.cycleBars || {}), ...(config.cycleBriefingBars || {}) }, entries, specOf, approvedSize: p2Size(), translate, entryRule,
+      // The setups its record may cite (strategies.js citedSetups): no registry, none (a cited record is refused).
+      cited: strategies ? citedSetups(strategies, composed) : null });
     // `expired`: the record's time ran out (the cycle-timing count of entries lost to expiry: cycle-timing.js).
     if (composedCheck.message) violations.push({ check: 'composed-reads', message: composedCheck.message, ...(composedCheck.expired ? { expired: true } : {}) });
     // Inside a policy (the prop attempt's account layer): its verdict is the one sized on this very record.
@@ -439,7 +441,7 @@ function evaluateOrder({ input = {}, entries = [], now = new Date(), config, bla
     // it by more than the configured share of the stop distance, it is a pass; no current price, refused (fails closed).
     if (!composedCheck.message) {
       const p = composedCheck.plan;
-      const late = lateEntryCheck({ home: config.home, root: contractRoot(input.contractId), side: { buy: 'long', sell: 'short' }[String(input.side || '').toLowerCase()], entry: p.entry.price, stop: p.stop.price, target: p.target.price, briefing: composedCheck.briefing, now, share: GATE.lateEntryDriftShare, maxAgeMin: ageLimitOf(config) });
+      const late = lateEntryCheck({ home: config.home, root: contractRoot(input.contractId), side: { buy: 'long', sell: 'short' }[String(input.side || '').toLowerCase()], entry: p.entry.price, stop: p.stop.price, target: p.target.price, briefing: composedCheck.briefing, now, share: GATE.lateEntryDriftShare, maxAgeMin: ageLimitOf(config), market: p.entry.type === 'market' });
       // `late`: the skip as logged (the plan's prices, the price at the skip): the replay report's counterfactual reads it.
       if (late) violations.push({ check: 'late-entry', message: `setup:${composed}: ${late.message}. Exits, protective stops and stop moves still go.`, late: { ...late.late, record: composedCheck.record ? composedCheck.record.id : null } });
     }
@@ -468,6 +470,10 @@ function evaluateOrder({ input = {}, entries = [], now = new Date(), config, bla
     if (msg) violations.push({ check: 'mtf-trend', message: msg });
     // Hard rule: a rules strategy enters only on its own trigger, fired on the side ordered on a
     // recent bar (signal-state.js): no relabelled setup tag, no stale signal (age in bars of its own timeframe).
+    // Hard rule: a setup a composed trade cites (strategies.js citingPolicies) enters only through that trade's compose
+    // record (setup:trade_lifecycle, or its policy's tag), never under its own tag.
+    const citing = named.signal === 'rules' ? citingPolicies(strategies, named.name) : [];
+    if (citing.length) violations.push({ check: 'cited-setup', message: `setup:${named.name} is a setup ${composedOf(citing[0], strategies).join(', ')} cites (${citing.map(x => x.name).join(', ')}): compose it with compose_check (the setup read "${named.name} fired up|down") and enter on that record, never under setup:${named.name}. Exits and protective stops still go.` });
     if (named.signal === 'rules') {
       const fired = checkTrigger(config.home, { root, side: input.side, strategy: named.name, style: named.mtf || 'trend', timeframe: named.timeframe, now, maxAgeBars: config.signalMaxAgeBars, maxAgeCapMin: config.signalMaxAgeCapMin, maxAgeCeilingMin: config.signalMaxAgeCeilingMin, minConfluence: config.minConfluence });
       if (fired) violations.push({ check: 'trigger-fired', message: fired });

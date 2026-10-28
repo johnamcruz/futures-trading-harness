@@ -223,7 +223,7 @@ const NO_REPLY = { noReply: true };
 const REQUEST_FIELDS = ['side', 'type', 'size', 'limitPrice', 'stopPrice', 'trailPrice', 'stopLossBracket', 'takeProfitBracket'];
 
 const HANDLERS = {
-  get_server_config: (s, a, env) => ({ ...(env.MOCK_REPLAY === '1' ? { replay: true } : {}), tradingEnabled: true, maxOrderSize: Number(env.MOCK_MAX_ORDER_SIZE || 5), maxPositionSize: Number(env.MOCK_MAX_POSITION_SIZE || 5), maxDailyLoss: env.MOCK_MAX_DAILY_LOSS ? Number(env.MOCK_MAX_DAILY_LOSS) : 0, allowedAccountIds: [ACCOUNT], allowedSymbols: [], journalPath: env.MOCK_JOURNAL || null, tradingDayStartedAt: iso(s.nowMs - 3600000), serverTime: iso(s.nowMs) }),
+  get_server_config: (s, a, env) => ({ ...(env.MOCK_REPLAY === '1' ? { replay: true } : {}), ...(env.MOCK_DATA_GAPS ? { dataGaps: JSON.parse(env.MOCK_DATA_GAPS) } : {}), tradingEnabled: true, maxOrderSize: Number(env.MOCK_MAX_ORDER_SIZE || 5), maxPositionSize: Number(env.MOCK_MAX_POSITION_SIZE || 5), maxDailyLoss: env.MOCK_MAX_DAILY_LOSS ? Number(env.MOCK_MAX_DAILY_LOSS) : 0, allowedAccountIds: [ACCOUNT], allowedSymbols: [], journalPath: env.MOCK_JOURNAL || null, tradingDayStartedAt: iso(s.nowMs - 3600000), serverTime: iso(s.nowMs) }),
   list_accounts: s => {
     if (s.failBalance) throw new Error('HTTP 503 service unavailable');
     return [{ id: ACCOUNT, name: 'MOCK-50K', balance: s.balance, canTrade: true, mcpTradingAllowed: true }];
@@ -293,7 +293,8 @@ const HANDLERS = {
   },
   journal_read: (s, a, env) => {
     if (!env.MOCK_JOURNAL || !fs.existsSync(env.MOCK_JOURNAL)) return [];
-    return fs.readFileSync(env.MOCK_JOURNAL, 'utf8').trim().split('\n').filter(Boolean).map(l => JSON.parse(l)).filter(e => !a.kind || e.kind === a.kind);
+    return fs.readFileSync(env.MOCK_JOURNAL, 'utf8').trim().split('\n').filter(Boolean).map(l => JSON.parse(l)).filter(e => !a.kind || e.kind === a.kind)
+      .filter(e => !a.since || Date.parse(e.ts) >= Date.parse(a.since)); // the interface's `since` (ISO): at or after it
   },
 };
 

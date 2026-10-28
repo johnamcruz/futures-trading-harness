@@ -26,7 +26,11 @@ const BEFORE_SHA256 = 'ee331528e771e03321738ef5499cd91a7fa6db61c2e86adc0d77b6842
 const HOMES = ['order-mechanics', 'order-types'];
 
 // Deliberate differences, each with its reason. None: every unit moved unchanged.
-const ALLOWED = [];
+const ALLOWED = [
+  { old: "Still working (a limit or stop entry not reached, or a market order the broker hasn't filled yet; a replay broker may fill it only at the next bar, and live fills can lag) with its stop bracket attached: journal that it is working, with its order id and that its stop bracket is attached (an order list may not show the bracket until the entry fills; the next cycle tells by the entry's `order_placed` record, whose `data.request` carries `stopLossBracket`, and this note), and end the cycle (the bracket protects it once it fills).",
+    now: "Still working (a limit or stop entry not reached, or a market order the broker hasn't filled yet; a replay broker may fill it only at the next bar, and live fills can lag) with its stop bracket attached: journal that it is working, with its order id and that its stop bracket is attached (it attaches on the fill, so no stop leg shows first: not a reason to cancel; the next cycle tells by the entry's `order_placed` record, whose `data.request` carries `stopLossBracket`, or the prompt's \"attached on fill\" line), and end the cycle.",
+    reason: "fix/entry-keep: the model cancelled valid runner-placed entries as unbracketed (their bracket attaches on the fill, so a list shows none); the runner's record, listed in the prompt, decides first. Shorter than the old text: the risk manager and the trade executor load this skill and may not grow" },
+];
 
 // The units of the old skill each home holds, by their start, in order (the section headings aside): a unit moved to
 // the other home fails, though the coverage check alone still passes. order-mechanics holds every other old unit.
@@ -124,7 +128,7 @@ test('order-mechanics split: each role loads the piece its body uses', () => {
   for (const s of HOMES) assert.ok(roles['risk-manager'].includes(s), `risk-manager: ${s}`);
   assert.match(read('agents/risk-manager.md'), /`stopLossBracket\.ticks`/);
   assert.match(read('agents/risk-manager.md'), /working orders, with protective stops yes\/no/);
-  assert.match(read('skills/order-mechanics/SKILL.md').replace(/\s+/g, ' '), /an order list may not show the bracket until the entry fills/);
+  assert.match(read('skills/order-mechanics/SKILL.md').replace(/\s+/g, ' '), /attaches on the fill, so no stop leg shows first: not a reason to cancel/);
   // The head trader's pointers about checking an order once still name the skill that has it.
   // trade-session's pointers moved with their text (trade-session-split.test.js): its leftover orders and its step 6.
   for (const f of ['skills/leftover-orders/SKILL.md', 'skills/entry-outcome/SKILL.md', 'skills/autonomous-trading/SKILL.md', 'rules/trading/risk-management.md']) {

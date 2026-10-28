@@ -319,7 +319,7 @@ function checkLedger(records, gate) {
 function readSkillUsage(runDir, { barsFiles = {}, keep = null, perPoint = false } = {}) {
   const labels = require('../replay/labels');
   const { readLearningRun } = require('./run-gate');
-  const { historyBars } = require('../autotrader');
+  const { recordedBars } = require('../autotrader');
   const { readDecisions, logFile } = require('./experience-log');
   const dir = labels.realDir(runDir);
   const home = path.resolve(dir, '..', '..');
@@ -329,7 +329,7 @@ function readSkillUsage(runDir, { barsFiles = {}, keep = null, perPoint = false 
   let cfg;
   try { cfg = JSON.parse(fs.readFileSync(path.join(dir, 'autotrader.json'), 'utf8')) || {}; } catch (_err) { cfg = {}; }
   const minutes = Number(cfg.timeframe) || null;
-  const count = Number(cfg.bars) > 0 ? Number(cfg.bars) : minutes ? historyBars(minutes) : 0;
+  const count = recordedBars({ ...cfg, timeframe: minutes });
   const outcomeBars = minutes && Object.keys(barsFiles).length ? labels.outcomeBarsFor(dir, barsFiles) : null;
   const roundSteps = require('../trading/round-numbers').loadRoundSteps({ FTH_HOME: home });
   // The run's own news blackouts (seeded in its home, as the scorecard reads them).

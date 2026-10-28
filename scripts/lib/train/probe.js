@@ -58,6 +58,7 @@ const { recordedTimes } = require('../replay/store');
 const TS = require('./trend-set');
 const TSC = require('./trend-screen');
 const TF = require('./trend-findings');
+const EF = require('./exit-findings');
 const TFX = require('./trend-facts');
 const TC = require('./trend-curve');
 const TR = require('../replay/trend-ride');
@@ -349,6 +350,8 @@ async function probeRound(ctx, { n, champion, api }) {
   // The probe half's missed legs: those a valid plan existed for (findings), those with none (a correct pass), unknown.
   if (trendBase) {
     report.trend.missed = TF.missedTally(trendBase.captures);
+    // The champion's exits on the probe half, scored by what price did next (replay/exit-scorecard.js): the round's report.
+    report.trend.exits = EF.exitTally(trendBase.captures);
     // The base rate beside them: the share of the missed legs' entry bars, and of the control bars, with a valid plan.
     const c = TFX.controlsOf(trendBase.captures);
     report.trend.baseRate = { legBars: c.legBars, controlBars: c.controlBars };
@@ -389,7 +392,10 @@ async function probeRound(ctx, { n, champion, api }) {
   }
   const exists = s => fs.existsSync(path.join(champion.dir, 'skills', s, 'SKILL.md'));
   const findings = await api.phase(ctx, `${n}:findings`, path.join(dir, 'findings.json'), async () => F.mergeFindings(
-    trendBase ? TF.trendFindings(trendBase.captures, { exists, max: cfg.k * 2 }) : [],
+    // The trend set's findings, its missed legs and its exits that cut a trend or came late (exit-findings.js), by the R
+    // each cost.
+    trendBase ? [...TF.trendFindings(trendBase.captures, { exists, max: cfg.k * 2 }), ...EF.exitFindings(trendBase.captures, { exists, max: cfg.k * 2 })]
+      .sort((a, b) => TF.findingCost(b) - TF.findingCost(a)) : [],
     F.findingsFrom({ skills: base.skills, refusals: base.refusals, max: cfg.k * 2, exists }),
     { max: cfg.k * 2 },
   ));

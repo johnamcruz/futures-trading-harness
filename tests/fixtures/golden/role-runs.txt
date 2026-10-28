@@ -63,7 +63,7 @@ env:
 home files: []
 === claude: desk risk-manager ===
 request: Phase 1, risk state, for MNQ (contractId MNQ) at the 3-minute bar that closed by 2026-10-07T14:30:05.000Z. Read the account and limits yourself (your phase 1 calls); no plan yet. Closed 3-minute bars, oldest first, are in /bars/MNQ-3m.json (get_bars format): pass that exact path where a tool takes a bars file; don't fetch 3-minute bars. Report in your phase 1 output format.
-argv: ["claude","-p","<request>","--plugin-dir","<root>","--agent","futures-trading-harness:risk-manager","--output-format","stream-json","--verbose","--permission-mode","dontAsk","--allowedTools","<611 chars, sha256 9f9dd24da83c71d8044f7ff706ef5c977a2ac6953f53ab4b58955a4c68fad5d1>","--disallowedTools","<747 chars, sha256 f68a0813b9916fafa562c28df9951eac0c8d13982f9c30cd44100f03eec9ffd1>"]
+argv: ["claude","-p","<request>","--plugin-dir","<root>","--agent","futures-trading-harness:risk-manager","--output-format","stream-json","--verbose","--permission-mode","dontAsk","--allowedTools","<633 chars, sha256 cc49c7f73a5774abf304e53ff970a6ae9a365a1540f7cdd3471b973f2da3d4b8>","--disallowedTools","<747 chars, sha256 f68a0813b9916fafa562c28df9951eac0c8d13982f9c30cd44100f03eec9ffd1>"]
 env:
   CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1
   FTH_AUTONOMOUS=1
@@ -90,7 +90,7 @@ record r1: long 27420.25
 --- risk-manager phase 1 report ---
 Phase 1: flat
 --- end of risk-manager phase 1 report ---
-argv: ["claude","-p","<request>","--plugin-dir","<root>","--agent","futures-trading-harness:risk-manager","--output-format","stream-json","--verbose","--permission-mode","dontAsk","--allowedTools","<611 chars, sha256 9f9dd24da83c71d8044f7ff706ef5c977a2ac6953f53ab4b58955a4c68fad5d1>","--disallowedTools","<747 chars, sha256 f68a0813b9916fafa562c28df9951eac0c8d13982f9c30cd44100f03eec9ffd1>"]
+argv: ["claude","-p","<request>","--plugin-dir","<root>","--agent","futures-trading-harness:risk-manager","--output-format","stream-json","--verbose","--permission-mode","dontAsk","--allowedTools","<633 chars, sha256 cc49c7f73a5774abf304e53ff970a6ae9a365a1540f7cdd3471b973f2da3d4b8>","--disallowedTools","<747 chars, sha256 f68a0813b9916fafa562c28df9951eac0c8d13982f9c30cd44100f03eec9ffd1>"]
 env:
   CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1
   FTH_AUTONOMOUS=1
@@ -146,14 +146,14 @@ env:
   FTH_CYCLE_TRANSCRIPT=<home>/logs/cycle-transcript-<pid>-<rand>.jsonl
   FTH_DENIED_ROLES=strategy-researcher
   FTH_EARLY_CLOSE_DATES=2026-11-27,2026-12-24,2027-11-26
-  FTH_HEAD_PROMPT={"config":"<root>/workspace/opencode.json","sha256":"40379df834d565c60ad21fc72d176ae6a3b0cd3fe4a15c7e09ac9215b86ca6e3","skills":["trade-session","multi-timeframe-analysis","trade-lifecycle","setup-judgment","trade-plan","autonomous-trading","trader-process","htf-to-ltf","bar-briefing","role-round","day-context","confluence-counting","invalidation","rejection","breakout"]}
+  FTH_HEAD_PROMPT={"config":"<root>/workspace/opencode.json","sha256":"a48ef149926f4346ed29790d68d5a896509872d163e53ce972dc455b9b54f057","skills":["trade-session","multi-timeframe-analysis","trade-lifecycle","setup-judgment","trade-plan","autonomous-trading","trader-process","htf-to-ltf","bar-briefing","role-round","day-context","confluence-counting","invalidation","rejection","breakout"]}
   FTH_HOME=<home>
   FTH_ROLE_RUN=market-structure-analyst
   FTH_ROLE_SKILLS=index
   FTH_ROOT=<root>
   FTH_SYMBOLS=MNQ
   HOME=<home>
-  OPENCODE_CONFIG_CONTENT=<16275 chars, sha256 8cd57602c9db6eaeb031c9b82e10cb70f6ac7997e8747acaa5b2b9d9d3e0807e>
+  OPENCODE_CONFIG_CONTENT=<16276 chars, sha256 b5c84fafd9319344280a4b3f29593844e2f722830ccd06f68bcb606cf215842b>
   OPENCODE_DISABLE_AUTOUPDATE=1
   OPENCODE_DISABLE_CLAUDE_CODE=1
   OPENCODE_DISABLE_EXTERNAL_SKILLS=1
@@ -175,14 +175,14 @@ env:
   FTH_CYCLE_TRANSCRIPT=<home>/logs/cycle-transcript-<pid>-<rand>.jsonl
   FTH_DENIED_ROLES=strategy-researcher
   FTH_EARLY_CLOSE_DATES=2026-11-27,2026-12-24,2027-11-26
-  FTH_HEAD_PROMPT={"config":"<root>/workspace/opencode.json","sha256":"40379df834d565c60ad21fc72d176ae6a3b0cd3fe4a15c7e09ac9215b86ca6e3","skills":["trade-session","multi-timeframe-analysis","trade-lifecycle","setup-judgment","trade-plan","autonomous-trading","trader-process","htf-to-ltf","bar-briefing","role-round","day-context","confluence-counting","invalidation","rejection","breakout"]}
+  FTH_HEAD_PROMPT={"config":"<root>/workspace/opencode.json","sha256":"a48ef149926f4346ed29790d68d5a896509872d163e53ce972dc455b9b54f057","skills":["trade-session","multi-timeframe-analysis","trade-lifecycle","setup-judgment","trade-plan","autonomous-trading","trader-process","htf-to-ltf","bar-briefing","role-round","day-context","confluence-counting","invalidation","rejection","breakout"]}
   FTH_HOME=<home>
   FTH_ROLE_RUN=trend-momentum-analyst
   FTH_ROLE_SKILLS=index
   FTH_ROOT=<root>
   FTH_SYMBOLS=MNQ
   HOME=<home>
-  OPENCODE_CONFIG_CONTENT=<16275 chars, sha256 8cd57602c9db6eaeb031c9b82e10cb70f6ac7997e8747acaa5b2b9d9d3e0807e>
+  OPENCODE_CONFIG_CONTENT=<16276 chars, sha256 b5c84fafd9319344280a4b3f29593844e2f722830ccd06f68bcb606cf215842b>
   OPENCODE_DISABLE_AUTOUPDATE=1
   OPENCODE_DISABLE_CLAUDE_CODE=1
   OPENCODE_DISABLE_EXTERNAL_SKILLS=1
@@ -204,14 +204,14 @@ env:
   FTH_CYCLE_TRANSCRIPT=<home>/logs/cycle-transcript-<pid>-<rand>.jsonl
   FTH_DENIED_ROLES=strategy-researcher
   FTH_EARLY_CLOSE_DATES=2026-11-27,2026-12-24,2027-11-26
-  FTH_HEAD_PROMPT={"config":"<root>/workspace/opencode.json","sha256":"40379df834d565c60ad21fc72d176ae6a3b0cd3fe4a15c7e09ac9215b86ca6e3","skills":["trade-session","multi-timeframe-analysis","trade-lifecycle","setup-judgment","trade-plan","autonomous-trading","trader-process","htf-to-ltf","bar-briefing","role-round","day-context","confluence-counting","invalidation","rejection","breakout"]}
+  FTH_HEAD_PROMPT={"config":"<root>/workspace/opencode.json","sha256":"a48ef149926f4346ed29790d68d5a896509872d163e53ce972dc455b9b54f057","skills":["trade-session","multi-timeframe-analysis","trade-lifecycle","setup-judgment","trade-plan","autonomous-trading","trader-process","htf-to-ltf","bar-briefing","role-round","day-context","confluence-counting","invalidation","rejection","breakout"]}
   FTH_HOME=<home>
   FTH_ROLE_RUN=volume-liquidity-analyst
   FTH_ROLE_SKILLS=index
   FTH_ROOT=<root>
   FTH_SYMBOLS=MNQ
   HOME=<home>
-  OPENCODE_CONFIG_CONTENT=<16275 chars, sha256 8cd57602c9db6eaeb031c9b82e10cb70f6ac7997e8747acaa5b2b9d9d3e0807e>
+  OPENCODE_CONFIG_CONTENT=<16276 chars, sha256 b5c84fafd9319344280a4b3f29593844e2f722830ccd06f68bcb606cf215842b>
   OPENCODE_DISABLE_AUTOUPDATE=1
   OPENCODE_DISABLE_CLAUDE_CODE=1
   OPENCODE_DISABLE_EXTERNAL_SKILLS=1
@@ -233,14 +233,14 @@ env:
   FTH_CYCLE_TRANSCRIPT=<home>/logs/cycle-transcript-<pid>-<rand>.jsonl
   FTH_DENIED_ROLES=strategy-researcher
   FTH_EARLY_CLOSE_DATES=2026-11-27,2026-12-24,2027-11-26
-  FTH_HEAD_PROMPT={"config":"<root>/workspace/opencode.json","sha256":"40379df834d565c60ad21fc72d176ae6a3b0cd3fe4a15c7e09ac9215b86ca6e3","skills":["trade-session","multi-timeframe-analysis","trade-lifecycle","setup-judgment","trade-plan","autonomous-trading","trader-process","htf-to-ltf","bar-briefing","role-round","day-context","confluence-counting","invalidation","rejection","breakout"]}
+  FTH_HEAD_PROMPT={"config":"<root>/workspace/opencode.json","sha256":"a48ef149926f4346ed29790d68d5a896509872d163e53ce972dc455b9b54f057","skills":["trade-session","multi-timeframe-analysis","trade-lifecycle","setup-judgment","trade-plan","autonomous-trading","trader-process","htf-to-ltf","bar-briefing","role-round","day-context","confluence-counting","invalidation","rejection","breakout"]}
   FTH_HOME=<home>
   FTH_ROLE_RUN=risk-manager
   FTH_ROLE_SKILLS=index
   FTH_ROOT=<root>
   FTH_SYMBOLS=MNQ
   HOME=<home>
-  OPENCODE_CONFIG_CONTENT=<16275 chars, sha256 8cd57602c9db6eaeb031c9b82e10cb70f6ac7997e8747acaa5b2b9d9d3e0807e>
+  OPENCODE_CONFIG_CONTENT=<16276 chars, sha256 b5c84fafd9319344280a4b3f29593844e2f722830ccd06f68bcb606cf215842b>
   OPENCODE_DISABLE_AUTOUPDATE=1
   OPENCODE_DISABLE_CLAUDE_CODE=1
   OPENCODE_DISABLE_EXTERNAL_SKILLS=1
@@ -269,14 +269,14 @@ env:
   FTH_CYCLE_TRANSCRIPT=<home>/logs/cycle-transcript-<pid>-<rand>.jsonl
   FTH_DENIED_ROLES=strategy-researcher,market-structure-analyst,trend-momentum-analyst,volume-liquidity-analyst
   FTH_EARLY_CLOSE_DATES=2026-11-27,2026-12-24,2027-11-26
-  FTH_HEAD_PROMPT={"config":"<root>/workspace/opencode.json","sha256":"40379df834d565c60ad21fc72d176ae6a3b0cd3fe4a15c7e09ac9215b86ca6e3","skills":["trade-session","multi-timeframe-analysis","trade-lifecycle","setup-judgment","trade-plan","autonomous-trading","trader-process","htf-to-ltf","bar-briefing","role-round","day-context","confluence-counting","invalidation","rejection","breakout"]}
+  FTH_HEAD_PROMPT={"config":"<root>/workspace/opencode.json","sha256":"a48ef149926f4346ed29790d68d5a896509872d163e53ce972dc455b9b54f057","skills":["trade-session","multi-timeframe-analysis","trade-lifecycle","setup-judgment","trade-plan","autonomous-trading","trader-process","htf-to-ltf","bar-briefing","role-round","day-context","confluence-counting","invalidation","rejection","breakout"]}
   FTH_HOME=<home>
   FTH_ROLE_RUN=risk-manager
   FTH_ROLE_SKILLS=index
   FTH_ROOT=<root>
   FTH_SYMBOLS=MNQ
   HOME=<home>
-  OPENCODE_CONFIG_CONTENT=<16275 chars, sha256 8cd57602c9db6eaeb031c9b82e10cb70f6ac7997e8747acaa5b2b9d9d3e0807e>
+  OPENCODE_CONFIG_CONTENT=<16276 chars, sha256 b5c84fafd9319344280a4b3f29593844e2f722830ccd06f68bcb606cf215842b>
   OPENCODE_DISABLE_AUTOUPDATE=1
   OPENCODE_DISABLE_CLAUDE_CODE=1
   OPENCODE_DISABLE_EXTERNAL_SKILLS=1
@@ -299,14 +299,14 @@ env:
   FTH_CYCLE_TRANSCRIPT=<home>/logs/cycle-transcript-<pid>-<rand>.jsonl
   FTH_DENIED_ROLES=strategy-researcher,market-structure-analyst,trend-momentum-analyst,volume-liquidity-analyst
   FTH_EARLY_CLOSE_DATES=2026-11-27,2026-12-24,2027-11-26
-  FTH_HEAD_PROMPT={"config":"<root>/workspace/opencode.json","sha256":"40379df834d565c60ad21fc72d176ae6a3b0cd3fe4a15c7e09ac9215b86ca6e3","skills":["trade-session","multi-timeframe-analysis","trade-lifecycle","setup-judgment","trade-plan","autonomous-trading","trader-process","htf-to-ltf","bar-briefing","role-round","day-context","confluence-counting","invalidation","rejection","breakout"]}
+  FTH_HEAD_PROMPT={"config":"<root>/workspace/opencode.json","sha256":"a48ef149926f4346ed29790d68d5a896509872d163e53ce972dc455b9b54f057","skills":["trade-session","multi-timeframe-analysis","trade-lifecycle","setup-judgment","trade-plan","autonomous-trading","trader-process","htf-to-ltf","bar-briefing","role-round","day-context","confluence-counting","invalidation","rejection","breakout"]}
   FTH_HOME=<home>
   FTH_ROLE_RUN=trade-executor
   FTH_ROLE_SKILLS=index
   FTH_ROOT=<root>
   FTH_SYMBOLS=MNQ
   HOME=<home>
-  OPENCODE_CONFIG_CONTENT=<16275 chars, sha256 8cd57602c9db6eaeb031c9b82e10cb70f6ac7997e8747acaa5b2b9d9d3e0807e>
+  OPENCODE_CONFIG_CONTENT=<16276 chars, sha256 b5c84fafd9319344280a4b3f29593844e2f722830ccd06f68bcb606cf215842b>
   OPENCODE_DISABLE_AUTOUPDATE=1
   OPENCODE_DISABLE_CLAUDE_CODE=1
   OPENCODE_DISABLE_EXTERNAL_SKILLS=1

@@ -230,3 +230,42 @@ test('the record carries its contract, lane and exploratory flag (the learning l
   const none = TL.buildRecord({ at: 'x', root: 'MNQ', side: 'long', problems: ['no cycle bar'] });
   assert.deepStrictEqual([none.contract, none.lane, none.exploratory], [null, null, false]);
 });
+
+// ---- A cited setup's plan (momentum_continuation): its own stop and 2R target, at market ----
+const LCX = require('../fixtures/lifecycle');
+const s2Plan = (over = {}) => {
+  const briefing = over.briefing || LCX.s2Briefing();
+  const checked = checkReads({ reads: over.reads || LCX.S2_READS, side: 'long', briefing, cited: ['momentum_continuation'] });
+  return { checked, ...TL.planOf({ checked, briefing, side: 'long', size: 3, minRR: 2, maxRiskUsd: 300, stopRule: lifecycleStopRule(), ...MNQ }) };
+};
+
+test('a cited setup\'s plan: at market from the close, the scan\'s stop (11.50 points = 46 ticks, one tick under the candle\'s low) and its 2R target, tick-checked', () => {
+  const { plan: p, problems } = s2Plan();
+  assert.deepStrictEqual(problems, []);
+  assert.deepStrictEqual(p.entry, { type: 'market', price: 21540.25 });
+  assert.deepStrictEqual(p.stop, { source: '3m-low', level: 21529, price: 21528.75, ticks: 46, bufferTicks: 1, floorTicks: 24 });
+  assert.deepStrictEqual(p.target, { source: '2r', level: 21563.25, price: 21563.25, ticks: 92, mark: true });
+  assert.deepStrictEqual([p.rr, p.riskUsd, p.perContractUsd, p.maxSize, p.setup], [2, 69, 23, 13, 'momentum_continuation']);
+  const rec = TL.buildRecord({ at: '2026-10-07T13:59:50.000Z', root: 'MNQ', symbol: 'MNQ', side: 'long', briefing: LCX.s2Briefing(), checked: s2Plan().checked, planned: s2Plan(), validBars: 2 });
+  assert.strictEqual(rec.ok, true);
+  assert.match(TL.renderRecord(rec), /Plan \(code's arithmetic, momentum_continuation's own\): entry market from 21540\.25; stop 21528\.75 \(3m-low 21529, 1 tick beyond: 46 ticks, minimum 24\); target 21563\.25/);
+});
+
+test('a cited setup\'s plan: its 12-tick floor (stop_min 3.00 points) widens a closer stop; a named level beyond its stop is a problem, never moved to', () => {
+  // The candle's low 21539.50: 0.75 + 0.25 = 1.00 point, widened by the scan to 3.00 (12 ticks): 21537.25, 9 ticks beyond.
+  const b = LCX.s2Briefing();
+  const m3 = b.sections.m3.data;
+  Object.assign(m3.candles['3m'], { l: 21539.5 });
+  Object.assign(m3.bar, { l: 21539.5 });
+  m3.candidates = [{ ...LCX.S2_CANDIDATE, stopPoints: 3 }];
+  m3.referenceStop = { distance: 2, long: 21538.25, short: 21542.25 }; // ATR(20) 4: D13's floor is its 8 ticks
+  const reads = LCX.S2_READS.map(x => (x.step === 'stop' ? { ...x, read: 'stop 3m low 21539.5' } : x));
+  const { plan: p, problems } = s2Plan({ briefing: b, reads });
+  assert.deepStrictEqual(problems, []);
+  assert.deepStrictEqual([p.stop.price, p.stop.ticks, p.stop.bufferTicks, p.stop.floorTicks, p.target.price, p.target.ticks], [21537.25, 12, 9, 8, 21546.25, 24]);
+  // The 15m low (21512.75) is farther than its own stop: the plan never moves to it.
+  const far = LCX.S2_READS.map(x => (x.step === 'stop' ? { ...x, read: 'stop 15m low 21512.75' } : x));
+  const r = s2Plan({ reads: far });
+  assert.strictEqual(r.plan.stop.price, 21528.75);
+  assert.ok(r.problems.some(x => /momentum_continuation's stop 21528\.75 is inside the level you named \(21512\.75\): its stop is its own/.test(x)), r.problems.join('; '));
+});

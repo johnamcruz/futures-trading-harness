@@ -278,3 +278,58 @@ test('trend capture: the ride reads the fills, never the plan: the opening fill\
   const o = tc.captureReport({ runDir: x.runDir, days: x.days }).legs[0];
   assert.deepStrictEqual([o.ride.open, o.ride.captureShare, o.ride.givebackR], [true, null, null]);
 });
+
+test('trend capture: the run\'s exits: a model stop tighten from a cycle transcript took the trade out; scored by what came next, with its facts', () => {
+  // In at 21516 at at(4); the runner trailed at at(6) (its event log), the model tightened to 21524 at at(8) (its cycle's
+  // transcript); the stop filled at at(14), past the leg's top: price then fell on, so the exit was right.
+  const trades = at => [OPEN(at), { orderId: 8, profitAndLoss: 16, roundTripId: 1, roundTrip: { id: 1, contractId: 'MNQ', direction: 'long', r: 0.8, entryTime: at(4), averageEntryPrice: 21516, exitPrice: 21524, exitTime: at(14), mfeR: 2.4, risk: 10, open: false, reason: 'stop' } }];
+  const { home, runDir, days, bars } = runFixture({ trades });
+  const at = i => new Date(Date.parse(bars[i].t) + MIN3).toISOString();
+  const use = (name, input) => JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', name, input }] } });
+  fs.writeFileSync(path.join(home, 'logs', 'cycles', '2026-04-23', 'd.json'), JSON.stringify(cycle({ action: 'manage', result: 'CYCLE RESULT: managed', timing: { barClose: at(8) }, transcript: use('mcp__broker__modify_order', { orderId: 9, stopPrice: 21524 }) })));
+  fs.writeFileSync(path.join(home, 'logs', 'events-2026-04-23.jsonl'), `${JSON.stringify({ at: at(6), kind: 'stop_moved', to: 21510 })}\n`);
+  const doc = tc.captureReport({ runDir, home, days });
+  const [d] = doc.exits.decisions;
+  assert.deepStrictEqual([d.exitBy, d.cls, d.late, d.decidedAt], ['model-stop', 'right', true, at(8)]);
+  assert.strictEqual(d.facts.side, 'long');
+  // Its facts read only the bars closed by the decision: the last close is bar 8's.
+  assert.strictEqual(d.facts.close, bars[8].c);
+  assert.deepStrictEqual(doc.exits.tightens.map(x => [x.stopped, x.cls]), [[true, 'right']]);
+  assert.strictEqual(doc.exits.totals.byExit['model-stop'].right, 1);
+  const lines = tc.reportLines(doc);
+  assert.ok(lines.some(l => /Exit decisions/.test(l)) && lines.some(l => /model-stop: 1 exit\(s\)/.test(l)), lines.join('\n'));
+});
+
+test('trend capture: the run\'s exits from the gateway\'s records: a trade-executor\'s own-session tighten (no transcript) is the model\'s', () => {
+  const trades = at => [OPEN(at), { orderId: 8, profitAndLoss: 16, roundTripId: 1, roundTrip: { id: 1, contractId: 'MNQ', direction: 'long', r: 0.8, entryTime: at(4), averageEntryPrice: 21516, exitPrice: 21524, exitTime: at(14), mfeR: 2.4, risk: 10, open: false, reason: 'stop' } }];
+  const { home, runDir, days, bars } = runFixture({ trades });
+  const at = i => new Date(Date.parse(bars[i].t) + MIN3).toISOString();
+  // The managed cycle at bar 8 ran 18:00:00-18:00:30 wall clock; the executor's modify_order reached the gateway at 18:00:10.
+  fs.writeFileSync(path.join(home, 'logs', 'cycles', '2026-04-23', 'e.json'), JSON.stringify(cycle({ action: 'manage', result: 'CYCLE RESULT: managed', at: '2026-10-27T18:00:00.000Z', durationMs: 30000, timing: { barClose: at(8) } })));
+  fs.writeFileSync(path.join(home, 'logs', 'gate-log.jsonl'), `${JSON.stringify({ ts: '2026-10-27T18:00:10.000Z', source: 'gateway', tool: 'modify_order', decision: 'allowed', violations: [], orderId: 9, stopPrice: 21524, contractId: 'MNQ' })}\n`);
+  fs.writeFileSync(path.join(home, 'logs', 'events-2026-04-23.jsonl'), `${JSON.stringify({ at: at(2), kind: 'order_placed' })}\n`);
+  const doc = tc.captureReport({ runDir, home, days });
+  const [d] = doc.exits.decisions;
+  assert.deepStrictEqual([d.exitBy, d.decidedAt], ['model-stop', at(8)]);
+  // The late threshold is the rulebook's lock (1.5), never the config's 1 below it: a 2.4R peak, 0.8R kept: 1.6R given.
+  assert.strictEqual(doc.exits.thresholds.lateGivebackR, 1.5);
+  assert.deepStrictEqual([d.late, d.lateR], [true, 0.1]);
+});
+
+test('trend capture: the run\'s exits: the transcript and the gateway record of one modify_order are one tighten; no runner events read = unattributed, no finding', () => {
+  const trades = at => [OPEN(at), { orderId: 8, profitAndLoss: 16, roundTripId: 1, roundTrip: { id: 1, contractId: 'MNQ', direction: 'long', r: 0.8, entryTime: at(4), averageEntryPrice: 21516, exitPrice: 21524, exitTime: at(14), mfeR: 2.4, risk: 10, open: false, reason: 'stop' } }];
+  const { home, runDir, days, bars } = runFixture({ trades });
+  const at = i => new Date(Date.parse(bars[i].t) + MIN3).toISOString();
+  const use = (name, input) => JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', name, input }] } });
+  // The head trader's modify_order (no contract in its input) and the gateway's record of it (with the contract).
+  fs.writeFileSync(path.join(home, 'logs', 'cycles', '2026-04-23', 'd.json'), JSON.stringify(cycle({ action: 'manage', result: 'CYCLE RESULT: managed', at: '2026-10-27T18:00:00.000Z', durationMs: 30000, timing: { barClose: at(8) }, transcript: use('mcp__broker__modify_order', { orderId: 9, stopPrice: 21524 }) })));
+  fs.writeFileSync(path.join(home, 'logs', 'gate-log.jsonl'), `${JSON.stringify({ ts: '2026-10-27T18:00:10.000Z', source: 'gateway', tool: 'modify_order', decision: 'allowed', violations: [], orderId: 9, stopPrice: 21524, contractId: 'MNQ' })}\n`);
+  fs.writeFileSync(path.join(home, 'logs', 'events-2026-04-23.jsonl'), `${JSON.stringify({ at: at(6), kind: 'stop_moved', to: 21510 })}\n`);
+  const doc = tc.captureReport({ runDir, home, days });
+  assert.deepStrictEqual([doc.exits.decisions[0].exitBy, doc.exits.tightens.length], ['model-stop', 1]);
+  // No runner events: the stop's last mover is unknown, so it is not called the initial stop (a false late-exit finding).
+  fs.rmSync(path.join(home, 'logs', 'events-2026-04-23.jsonl'));
+  const blind = tc.captureReport({ runDir, home, days });
+  assert.strictEqual(blind.exits.decisions[0].exitBy, 'unattributed');
+  assert.strictEqual(require('../../scripts/lib/train/exit-findings').MODEL_DECIDED.has('unattributed'), false);
+});

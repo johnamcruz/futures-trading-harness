@@ -64,7 +64,7 @@ never paste a long `get_bars` reply into a file.
    `session-timing`, `tool-arguments`, `bar-briefing`, `levels-and-reactions`,
    `fair-value-gaps`, `momentum-and-volume`, `absorption`, `contract-roll`, and
    `market-snapshot`.
-2. Bars (only without a current briefing, or for what it lacks): the 3m file (the runner's 5000 bars, or `bars_fetch` without a `count`: the 4h trend needs about 4000) and, with `bars_fetch`, 15m (160); run
+2. Bars (only without a current briefing, or for what it lacks): the 3m file (the runner's bars, or `bars_fetch` without a `count`: the 4h trend needs about 4000) and, with `bars_fetch`, 15m (160); run
    `market_snapshot` on each.
    Always, once: `get_quote` for the live bid/ask/last.
 3. VWAP (the briefing's `m3` `vwap`): which applies (`rth` 09:30-16:00 ET,

@@ -1,6 +1,6 @@
 2026-04-27T14:36:01.000Z trade: phase1 miss, market-structure miss, trend-momentum miss, volume-liquidity miss; fired []
   cached after: market-structure m15@2026-04-27T14:36:00.000Z h1@2026-04-27T14:36:00.000Z day@2026-04-27T14:36:00.000Z; trend-momentum m15@2026-04-27T14:36:00.000Z h1@2026-04-27T14:36:00.000Z day@2026-04-27T14:36:00.000Z; phase1 2026-04-27 {"id":"7","balance":50000,"positions":[],"workingOrders":0,"orders":[],"attempts":[]}; symbols [["MNQ","MNQ"]]
-2026-04-27T14:39:02.000Z trade: phase1 HIT, market-structure HIT, trend-momentum HIT, volume-liquidity miss; fired []
+2026-04-27T14:39:02.000Z trade: phase1 HIT, market-structure miss, trend-momentum HIT, volume-liquidity miss; fired [momentum_continuation short]
   cached after: market-structure m15@2026-04-27T14:36:00.000Z h1@2026-04-27T14:36:00.000Z day@2026-04-27T14:36:00.000Z; trend-momentum m15@2026-04-27T14:36:00.000Z h1@2026-04-27T14:36:00.000Z day@2026-04-27T14:36:00.000Z; phase1 2026-04-27 {"id":"7","balance":50000,"positions":[],"workingOrders":0,"orders":[],"attempts":[]}; symbols [["MNQ","MNQ"]]
 2026-04-27T14:42:02.000Z trade: phase1 HIT, market-structure HIT, trend-momentum HIT, volume-liquidity miss; fired []
   cached after: market-structure m15@2026-04-27T14:36:00.000Z h1@2026-04-27T14:36:00.000Z day@2026-04-27T14:36:00.000Z; trend-momentum m15@2026-04-27T14:36:00.000Z h1@2026-04-27T14:36:00.000Z day@2026-04-27T14:36:00.000Z; phase1 2026-04-27 {"id":"7","balance":50000,"positions":[],"workingOrders":0,"orders":[],"attempts":[]}; symbols [["MNQ","MNQ"]]

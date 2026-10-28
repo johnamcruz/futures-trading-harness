@@ -570,3 +570,32 @@ test('the broker client: journalAdd writes a journal entry on the read connectio
   assert.deepStrictEqual([reads, writes], [[['journal_add', entry]], []]);
   await assert.rejects(() => createAdapter({ mcp: stub([], () => ({ ok: true })) }).journalAdd(entry), /journal_add returned no journal entry/);
 });
+
+test('closedBars: a limit over one get_bars call (the multi-timeframe window on a one-minute lane) is paged and covers it, never cut to the cap', async () => {
+  const { historyBars } = require('../../scripts/lib/autotrader');
+  const now = new Date('2026-10-07T14:00:00Z');
+  const minute = 60000;
+  const calls = [];
+  const mcp = {
+    call: async (name, args) => {
+      calls.push(args.limit);
+      // A continuous one-minute series 60 days back; a call returns the newest bars of its window, at most its limit.
+      const t0 = Date.parse(args.startTime);
+      const t1 = Math.min(Date.parse(args.endTime), now.getTime() - minute);
+      const got = [];
+      for (let t = Math.ceil(t0 / minute) * minute; t <= t1; t += minute) got.push({ t: new Date(t).toISOString(), o: 1, h: 2, l: 0, c: 1, v: 1 });
+      return { bars: got.slice(-args.limit) };
+    },
+  };
+  const want = historyBars(1);
+  assert.ok(want > 20000, `a one-minute lane's window is over the cap (${want})`);
+  const got = await createAdapter({ mcp }).closedBars('X', { minutes: 1, limit: want, now });
+  assert.strictEqual(got.length, want, 'the whole window');
+  assert.strictEqual(got[got.length - 1].t, new Date(now.getTime() - minute).toISOString());
+  assert.strictEqual(Date.parse(got[got.length - 1].t) - Date.parse(got[0].t), (want - 1) * minute, 'contiguous');
+  assert.ok(calls.length > 1, 'paged');
+  // Within one call: one call, as before.
+  calls.length = 0;
+  assert.strictEqual((await createAdapter({ mcp }).closedBars('X', { minutes: 1, limit: 500, now })).length, 500);
+  assert.strictEqual(calls.length, 1);
+});

@@ -1060,6 +1060,9 @@ test('every run\'s prompt states the account, read just before it; an unreadable
   assert.deepStrictEqual(r.cancelled, [9, 10], 'the leftovers are cancelled once the account reads flat');
   // The open position is described once, as a trade (open-trades.js), not listed again in the account line.
   assert.match(r.prompts.find(x => /trade-session/.test(x)), /Account 7 at .*: balance \$50,100; 1 open position \(below\); 2 working orders\. Open trade MNQ long 1 @ 21500 since 10:00 ET, 7 bars closed since \(setup unknown[^)]*\): risk 10 points = 40 ticks, measured to the working stop \(the initial stop is unknown\); working stop 21490 \(-1R\), target 21600 \(\+10R\); now \+0R at 21500/);
+  // A managed cycle's open trade carries its read facts (trade-read.js), measured from its entry: the pullback-vs-reversal
+  // read of an open trade, in the same line.
+  assert.match(r.prompts.find(x => /trade-session/.test(x)), /Open trade MNQ long 1 @ 21500 [^\n]*\. Trade read \(closed bars since entry; pullback-vs-reversal\): best [\d.]+; [^;]+; [^;]+; pullback [^;]+; close vs RTH VWAP [^;]+; structure against since entry: 3m [^;]+, 15m [^;]+; 15m displacement against: [^;]+; compression against: [^;]+; HTF bias at entry [^,]+, now [^(]+\([^)]+\)\. Weakening signs: \d of 5[^;]*, 2 needed; reversal: [^;]+; tighten at most to [^.]+\./);
   const bad = await trailSim({ tape: {}, until: et(10, 8), balanceFails: true });
   assert.match(bad.prompts.find(x => /trade-session/.test(x)), /Account 7: state unavailable \(HTTP 503\); read get_account_snapshot before deciding anything/);
 });
@@ -1106,6 +1109,23 @@ test('every closed bar records the multi-timeframe read for the gate, and the cy
   assert.ok(failed.cycles.length >= 1);
   assert.match(failed.cycles[0].prompt, /MNQ: no multi-timeframe record this bar, so the gate refuses trend strategies' entries/);
   assert.ok(logs.some(l => /error MNQ: could not record the multi-timeframe read \(disk full\)/.test(l)), logs.join('\n'));
+});
+
+test('every closed bar records the composed plans\' shadow outcomes (a lesson\'s record); a failure never stops the cycle', async () => {
+  const recorded = [];
+  const ok = await simulate({
+    cfg: { symbols: ['MNQ'], timeframe: 3 }, from: et(10, 0), to: et(10, 10), market: fakeMarket({ minutes: 3 }),
+    deps: { recordShadow: (sym, bars) => { recorded.push([sym.symbol, bars.length]); return 0; } },
+  });
+  assert.ok(recorded.length >= 3 && recorded.every(([sym, n]) => sym === 'MNQ' && n > 0));
+  assert.ok(ok.cycles.length >= 3);
+  const logs = [];
+  const failed = await simulate({
+    cfg: { symbols: ['MNQ'], timeframe: 3 }, from: et(10, 0), to: et(10, 4), market: fakeMarket({ minutes: 3 }),
+    deps: { recordShadow: () => { throw new Error('disk full'); }, log: (m, level = 'info') => logs.push(`${level} ${m}`) },
+  });
+  assert.ok(failed.cycles.length >= 1);
+  assert.ok(logs.some(l => /error MNQ: could not record the composed plans' shadow outcomes \(disk full\)/.test(l)), logs.join('\n'));
 });
 
 test('every scanned bar records its signals for the gate, also on the default bar trigger', async () => {
@@ -1440,6 +1460,17 @@ test('the Unreviewed line gets the account\'s positions and working orders as th
   assert.ok(calls.length >= 1);
   assert.deepStrictEqual(calls[0].positions, []);
   assert.deepStrictEqual(calls[0].orders.map(o => o.id), [9], 'the working order reaches it (an entry not filled yet is not "closed")');
+});
+
+test('the prompt shows a working entry\'s bracket from the runner\'s own entry record', async () => {
+  const order = { id: 9, contractId: 'MNQ', type: 1, side: 1, size: 3, limitPrice: 21400 };
+  const { cycles } = await simulate({
+    cfg: { symbols: ['MNQ'], timeframe: 3, account: '1' }, from: et(10, 0), to: et(10, 7),
+    market: fakeMarket({ minutes: 3, accountState: { positions: [], orders: [order] } }), positions: { net: 0, working: 1 },
+    deps: { journalEntries: () => [], entryOrders: () => [{ orderId: 9, contractId: 'MNQ', side: 'sell', stopTicks: 40, targetTicks: 80, composed: { stop: 21410, target: 21380 } }] },
+  });
+  const trade = cycles.filter(c => c.action === 'trade' || c.action === 'manage');
+  assert.ok(trade.some(c => /Working entry 9: sell limit 3 @ 21400, bracket attached on fill: stop 21410 \/ target 21380 \(runner record\)/.test(c.prompt)), trade.map(c => c.prompt.slice(0, 300)).join('\n'));
 });
 
 test('verifiedFlat: true only after a flatten pass read the account and found nothing open or working', async () => {

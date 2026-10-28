@@ -26,10 +26,11 @@
  *   reportVersions(text, current, parts)        { m15, h1, day } (or `parts`: [[key, version prefix]]) from a report's Data line, or null
  *   frameVersions(first, frame, minutes, now)   an own-timeframe analyst's current versions { bar, ...shared } and until, or null
  *   accountKey(account)                         the account facts phase 1 rests on, as text
- *   serveReports({ cache, briefings, symbols, account, day, now, frames, frameBriefings })  { roles, reports: [{ role, text, at, until, tf? }] }
+ *   serveReports({ cache, briefings, symbols, account, day, now, frames, frameBriefings, bodyKey })  { roles, reports: [{ role, text, at, until, tf? }] }
  *   deniesActiveAttempt(text, account)          a report claims no attempt runs, but one is active
  *   phase1Holds(text, account)                  phase 1 confirms every active attempt and denies none
- *   recordReports({ prev, output, served, fresh, runs, briefings, symbols, account, day, now, frames, frameBriefings, lookups })  the new cache
+ *   recordReports({ prev, output, served, fresh, runs, briefings, symbols, account, day, now, frames, frameBriefings, lookups, bodyKey })  the new cache
+ *                                               bodyKey: a hash of the phase-1 role's body; a report written under another is not served
  *                                               (`runs`: the runner's role record of the cycle, runner-roles.js readRoleRuns:
  *                                               a trade-executor the runner ran ends phase 1's cache as a launch does)
  *   cacheFile(home), readCache(home), writeCache(home, cache)
@@ -180,7 +181,7 @@ const lookupsOf = r => (Array.isArray(r.lookups) ? r.lookups.filter(s => typeof 
  * The cached reports still valid for this cycle, and the roles they stand for; each analyst's with the skills its
  * own call looked up (`lookups`: index mode serves it only when they cover what this bar requires, runner-wiring.js).
  */
-function serveReports({ cache, briefings, symbols, account, day, now = null, frames = {}, frameBriefings = {} }) {
+function serveReports({ cache, briefings, symbols, account, day, now = null, frames = {}, frameBriefings = {}, bodyKey = null }) {
   const none = { roles: [], reports: [] };
   if (!cache || !Array.isArray(symbols) || !symbols.length || !sameSymbols(cache, symbols)) return none;
   const reports = [];
@@ -201,7 +202,7 @@ function serveReports({ cache, briefings, symbols, account, day, now = null, fra
   const key = accountKey(account);
   // Without the clock its age can't be known: not served (fails closed, the role runs).
   const age = now ? now.getTime() - Date.parse(p1 && p1.at) : NaN;
-  if (p1 && key && p1.account === key && p1.day === day && age >= 0 && age < PHASE1_MAX_AGE_MS && phase1Holds(p1.text, account)) {
+  if (p1 && key && p1.account === key && p1.day === day && (p1.body ?? null) === bodyKey && age >= 0 && age < PHASE1_MAX_AGE_MS && phase1Holds(p1.text, account)) {
     reports.push({ role: PHASE1, text: p1.text, at: p1.at, until: null });
   }
   return { roles: reports.map(r => r.role), reports };
@@ -215,7 +216,7 @@ function serveReports({ cache, briefings, symbols, account, day, now = null, fra
  * skill-lookups.js; a call without times shows none), and `lookupsKey`, the facts key of the cycle that made them
  * (skill-lookups.js factsKey): they count again only under that key.
  */
-function recordReports({ prev, output, served = [], fresh = [], runs = [], briefings, symbols, account, day, now, frames = {}, frameBriefings = {}, lookups = [], lookupsKey = null }) {
+function recordReports({ prev, output, served = [], fresh = [], runs = [], briefings, symbols, account, day, now, frames = {}, frameBriefings = {}, lookups = [], lookupsKey = null, bodyKey = null }) {
   const { lookupsInCall } = require('./skill-lookups');
   const keep = prev && sameSymbols(prev, symbols) ? prev : null;
   const cache = { symbols: symbols.map(s => [s.symbol, s.contractId || null]), analysts: {}, phase1: null, at: now.toISOString() };
@@ -251,7 +252,7 @@ function recordReports({ prev, output, served = [], fresh = [], runs = [], brief
     const rm = ran(PHASE1) ? { text: ran(PHASE1).text } : calls.filter(c => c.role === PHASE1).sort((a, b) => a.start - b.start)[0];
     // A report with a verdict is a plan's review (phase 2), never the account's state: not cached as phase 1.
     // Nor one that doesn't confirm an active attempt (or denies it): served on every unchanged bar, it would block the day.
-    if (rm && key && fits(rm.text) && verdictOf(rm.text) === null && phase1Holds(rm.text, account)) cache.phase1 = { text: rm.text, account: key, day, at: now.toISOString() };
+    if (rm && key && fits(rm.text) && verdictOf(rm.text) === null && phase1Holds(rm.text, account)) cache.phase1 = { text: rm.text, account: key, day, body: bodyKey, at: now.toISOString() };
   }
   return cache;
 }

@@ -1114,15 +1114,22 @@ test('order gate reads the blackout file', () => {
   assert.match(r.stderr, /FOMC/);
 });
 
-test('session-start briefing lists lessons and day state', () => {
+test('session-start briefing lists the run\'s lessons as advice with their date and record, never a later run\'s, and day state', () => {
   const { env } = setup([
-    { ts: minutesAgo(60 * 24 * 3, new Date(TEST_NOW)), kind: 'lesson', text: 'Skip ORB before 09:45 ET', tags: ['setup:orb'] },
+    { ts: minutesAgo(60 * 24 * 3, new Date(TEST_NOW)), kind: 'lesson', text: 'Rule: no orb entry until the cause is journaled', tags: ['setup:orb'] },
+    { ts: '2026-10-06T19:51:00.000Z', kind: 'lesson', text: 'Yesterday at end of day: skip longs below the 15m EMA20', tags: ['setup:orb'] },
+    { ts: '2099-01-02T15:00:00.000Z', kind: 'lesson', text: 'another run: skip every short', tags: ['setup:orb'] },
+    { ts: minutesAgo(20, new Date(TEST_NOW)), kind: 'lesson', text: 'Wait for the ORB retest', tags: ['setup:orb'] },
     { ts: minutesAgo(1, new Date(TEST_NOW)), kind: 'note', text: 'n' },
   ]);
   const r = runHook('session-start:trading:briefing', 'scripts/hooks/trading-session-start.js', 'minimal,standard,strict', {}, env);
   assert.strictEqual(r.code, 0);
   assert.match(r.stdout, /Trading harness briefing/);
-  assert.match(r.stdout, /Skip ORB before 09:45 ET \[setup:orb\]/);
+  assert.match(r.stdout, /### Lessons \(advice with their record, never rules: rules\/trading\/journaling\.md\)/);
+  assert.match(r.stdout, /- lesson from 2026-10-07 \(taken since n=0; all composed plans since n=0; provisional; broad: names no condition the bars can check\): advice, weigh it: Wait for the ORB retest \[setup:orb\]/);
+  assert.match(r.stdout, /- lesson from 2026-10-04 \([^)]*broad[^)]*\): advice, weigh it: Rule: no orb entry until the cause is journaled/);
+  assert.match(r.stdout, /- lesson from 2026-10-06 \(taken since n=0; all composed longs since n=0, condition unchecked; provisional\): advice, weigh it: Yesterday at end of day: skip longs below the 15m EMA20/);
+  assert.doesNotMatch(r.stdout, /another run|Standing lessons/, 'a later run\'s lesson is never this run\'s');
   assert.match(r.stdout, /Harness root \(FTH_ROOT\): /);
   assert.match(r.stdout, /Know the account before every decision: get_account_snapshot/);
   assert.doesNotMatch(r.stdout, /Prop attempts/);
@@ -2080,6 +2087,41 @@ test('MCP gateway: a protective stop can be tightened but not widened', async ()
   ]);
   assert.match(byId[1].result.content[0].text, /\[modify-protection\]/);
   assert.strictEqual(byId[2].result.content[0].text, 'forwarded:tools/call:modify_order');
+});
+
+test('MCP gateway: the open trade\'s read acts only through the bracket: tighten and market exit go; widen, a leg cancel and a limit [exit] are refused', async () => {
+  // manage-position (feat/ride-or-exit): weakening -> modify_order the bracket stop toward the market; reversal ->
+  // close_position; never a cancelled leg or a separate stop, target or limit exit.
+  const legs = JSON.stringify([{ id: 9, contractId: 'MNQ', side: 1, type: 4, size: 1, stopPrice: 21480 }, { id: 10, contractId: 'MNQ', side: 1, type: 1, size: 1, limitPrice: 21600 }]);
+  const { byId } = await gatewayRun({ FAKE_POSITIONS: LONG1, FAKE_ORDERS: legs }, [
+    call(1, 'modify_order', { accountId: 1, orderId: 9, stopPrice: 21495.25 }),
+    call(2, 'modify_order', { accountId: 1, orderId: 9, stopPrice: 21470 }),
+    call(3, 'cancel_order', { accountId: 1, orderId: 9 }),
+    call(4, 'cancel_order', { accountId: 1, orderId: 10 }),
+    call(5, 'place_order', { ...EXIT_BASE, side: 'sell', type: 'limit', limitPrice: 21590, rationale: '[exit] take the base hit' }),
+  ]);
+  assert.strictEqual(byId[1].result.content[0].text, 'forwarded:tools/call:modify_order', 'a tighten toward the market goes');
+  assert.match(byId[2].result.content[0].text, /\[modify-protection\]/, 'a widen is refused');
+  assert.match(byId[3].result.content[0].text, /\[bracket-leg\]/, 'the stop leg is never cancelled');
+  assert.match(byId[4].result.content[0].text, /\[bracket-leg\]/, 'the target leg is never cancelled');
+  assert.match(byId[5].result.content[0].text, /\[bracket-only\]/, 'a limit [exit] beside the legs is refused');
+  const exit = await gatewayRun({ FAKE_POSITIONS: LONG1, FAKE_ORDERS: legs }, [call(6, 'close_position', { accountId: 1, contractId: 'MNQ' })]);
+  assert.strictEqual(exit.byId[6].result.isError, undefined, 'a reversal exits at market');
+});
+
+test('MCP gateway: the gate log records a modify_order\'s order, stop and contract, and every close_position, with the cycle id', async () => {
+  // The exit scorecard reads them (replay/exit-scorecard.js gateActions): a trade-executor's calls in a session of its own,
+  // which the head trader's transcript never shows.
+  const legs = JSON.stringify([{ id: 9, contractId: 'MNQ', side: 1, type: 4, size: 1, stopPrice: 21480 }]);
+  const env = { FAKE_POSITIONS: LONG1, FAKE_ORDERS: legs, FTH_CYCLE_ID: '0123456789abcdef' };
+  const tight = await gatewayRun(env, [call(1, 'modify_order', { accountId: 1, orderId: 9, stopPrice: 21495.25 })]);
+  const close = await gatewayRun(env, [call(2, 'close_position', { accountId: 1, contractId: 'MNQ' })], { dir: tight.dir });
+  assert.strictEqual(close.byId[2].result.isError, undefined);
+  const recs = fs.readFileSync(path.join(tight.dir, 'gate.jsonl'), 'utf8').trim().split('\n').map(l => JSON.parse(l));
+  const m = recs.find(r => r.tool === 'modify_order');
+  assert.deepStrictEqual([m.source, m.decision, m.orderId, m.stopPrice, m.contractId, m.cycle], ['gateway', 'allowed', 9, 21495.25, 'MNQ', '0123456789abcdef']);
+  const c = recs.find(r => r.tool === 'close_position');
+  assert.deepStrictEqual([c.source, c.decision, c.ungated, c.contractId, c.cycle], ['gateway', 'allowed', true, 'MNQ', '0123456789abcdef']);
 });
 
 test('MCP gateway: an [exit] right after close_position cannot flip the position', async () => {
@@ -3860,6 +3902,24 @@ test('order gate (hook): no late entry ([late-entry]): the latest local price be
   assert.strictEqual(r.code, 0, r.stderr);
 });
 
+test('order gate (hook): a cited setup\'s market entry with the latest price over the share past its reference is refused [late-entry] (chased); at the reference it goes', () => {
+  const LE = require('../../scripts/lib/trading/late-entry');
+  const LC2 = require('../fixtures/lifecycle');
+  const { env } = setup([{ ts: '2026-10-07T13:59:30.000Z', kind: 'plan', contractId: 'MNQ', text: 'plan' }],
+    { FTH_STRATEGIES_DIRS: path.join(REPO, 'strategies'), FTH_ACCOUNTS_DIRS: path.join(REPO, 'accounts'), FTH_TEST_NOW: '2026-10-07T14:00:02.000Z', FTH_CYCLE_BARS: JSON.stringify({ MNQ: LC2.BAR }) });
+  LC2.writeS2(env.FTH_HOME);
+  const run = p => {
+    fs.rmSync(path.join(env.FTH_HOME, LE.FILE), { force: true });
+    LE.recordPrice(env.FTH_HOME, 'MNQ', { price: p, closedAt: '2026-10-07T14:00:00Z', minutes: 1, source: 'runner-entry' });
+    return gate(orderPayload(LC2.s2Order()), env);
+  };
+  const r = run(21544);
+  assert.strictEqual(r.code, 2);
+  assert.match(r.stderr, /\[late-entry\] .*chased entry/);
+  const ok = run(21540.25);
+  assert.doesNotMatch(ok.stderr, /\[late-entry\]/);
+});
+
 test('order gate (hook): a composed entry on the runner\'s cycle (opencode, index mode) needs no lookup of the composed bar\'s reads its attested head prompt embeds; a prompt without them is refused for them', () => {
   const H = require('../../scripts/lib/head-prompt');
   const home = trendHome();
@@ -4225,4 +4285,22 @@ test('order gate (hook): a Claude Code head trader in index mode (the runner\'s 
   assert.doesNotMatch(e1.stderr, skillsChecks, e1.stderr);
   const e2 = gate({ ...orderPayload(), transcript_path: path.join(dir, 'projects', 'executor-session.jsonl') }, { ...executor, FTH_CYCLE_ID: 'ab'.repeat(8) });
   assert.match(e2.stderr, /\[skills-loaded\][^\n]*trade-session/, 'another cycle\'s id');
+});
+
+test('order gate hook: a cited setup (momentum_continuation) goes only on the record citing it, at market; a limit for it and its own tag are refused; its exit goes', () => {
+  const LC = require('../fixtures/lifecycle');
+  const { env } = setup([{ ts: '2026-10-07T13:59:30.000Z', kind: 'plan', contractId: 'MNQ', text: 'plan' }],
+    // The shipped strategies and accounts: prop_portfolio (valid only with its account's rulebook) lists both.
+    { FTH_STRATEGIES_DIRS: path.join(REPO, 'strategies'), FTH_ACCOUNTS_DIRS: path.join(REPO, 'accounts'), FTH_TEST_NOW: '2026-10-07T14:00:02.000Z', FTH_CYCLE_BARS: JSON.stringify({ MNQ: LC.BAR }) });
+  LC.writeS2(env.FTH_HOME);
+  const ok = gate(orderPayload(LC.s2Order()), env);
+  assert.doesNotMatch(ok.stderr, /\[composed-reads\]|\[cited-setup\]/);
+  const limit = gate(orderPayload(LC.s2Order({ type: 'limit', limitPrice: 21540.25 })), env);
+  assert.strictEqual(limit.code, 2);
+  assert.match(limit.stderr, /\[composed-reads\] setup:trade_lifecycle: the entry is a limit order: momentum_continuation's entry is at market/);
+  const own = gate(orderPayload(LC.s2Order({ rationale: 'setup:momentum_continuation long at market from 21540.25, stop 21528.75, target 21563.25' })), env);
+  assert.strictEqual(own.code, 2);
+  assert.match(own.stderr, /\[cited-setup\] setup:momentum_continuation is a setup trade_lifecycle cites \(prop_portfolio\)/);
+  const exit = gate(orderPayload({ ...EXIT_BASE, side: 'sell', rationale: '[exit] close the momentum_continuation long' }), env);
+  assert.strictEqual(exit.code, 0, exit.stderr);
 });

@@ -162,11 +162,26 @@ Input: none.
 
 Result: `{ apiUrl, username, tradingEnabled, allowedAccountIds (integer[] | "any"),
 allowedSymbols (string[] | "any"), maxOrderSize, maxPositionSize,
-maxDailyLoss (number | "off"), journalPath, tradingDayStartedAt, serverTime, replay? }`.
+maxDailyLoss (number | "off"), journalPath, tradingDayStartedAt, serverTime, replay?, dataGaps? }`.
 Never returns credentials. `replay` (optional boolean) is `true` only for a
 replay server, which simulates history; its `serverTime` is then the replayed
 time. Live servers omit it. The gateway honors `FTH_REPLAY_NOW` only when the
 server reports `replay: true` and a `serverTime` within 5 minutes of it.
+`dataGaps` (optional, replay only) is `{ <root>: [{ day: "YYYY-MM-DD", bars,
+flow }] }`: per contract root it serves, the trading days of its replay window
+whose data misses a part. `bars: false` is a day with no bars at all (a replay
+server may still show a front contract and answer `get_bars` with the last bar
+before the day); `bars: true, flow: false` is a day with bars but no order
+flow (its bars' `flow` is incomplete, every value null, as live shows a minute
+without flow). It is a fact of the replayed data's calendar, like a holiday,
+not of prices, so it may list the whole window. A live server never sends it,
+and a server without it skips nothing. The replay driver reads it once when a
+run starts (pinned for the run) and skips a day without bars for every root
+the run trades: no decision time, not a session of a combine attempt
+(`scripts/lib/replay/data-gaps.js`); a day with bars but no flow is traded
+normally (the flow facts absent). The training preflight warns listing the
+days without bars and notes the days without flow. The conformance check
+refuses a malformed list.
 `maxOrderSize` is a whole number of contracts, 1 or more: the contract
 translator records it from each successful answer (`server` in the same local file as
 the tick specs), and the order gate refuses an entry larger than it, and
@@ -223,6 +238,16 @@ weekends and breaks.
 
 Result: `{ contractId, barSize ("5 minute"), count, bars }`, bars oldest first,
 each `{ t (bar open, UTC ISO), o, h, l, c, v }`.
+
+A contract month's bars are its own history, including its trading before it
+became the front month (every listed expiry trades at once), so the front
+month's bars reach back across a roll: the harness asks for the front month
+only, and its multi-timeframe read needs weeks of it the day after a roll. A
+replay server built from a continuous front-month series cannot hold the new
+month's own earlier bars: it may serve the previous contract's bars shifted by
+the roll spread (price-adjusted, the old front's volume, no order flow) as the
+closest reproduction of live, and may serve no history between the front
+switch and the first closed bar after its data switch (roll night).
 
 A bar may carry extra fields of the server's own (and the result extra
 keys). The harness passes them through untouched: it gives them no meaning,

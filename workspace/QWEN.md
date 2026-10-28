@@ -103,9 +103,10 @@ formats matter.
   planned vs. actual, result in R, followed-plan yes/no, mistakes. Tags must
   include exactly one of `result:win`, `result:loss`, `result:scratch`
   (|R| < 0.2), `result:nofill`, plus `setup:<name>` and any `mistake:<kind>`.
-- **lesson** (end of session, at most 1–3): one short, evidence-backed rule
-  with the sample behind it, e.g. "ORB on MNQ before 09:45 ET: 2W/7L → skip
-  until retest". Tag it with the setup and symbol.
+- **lesson** (session end, 1–3): advice: sample, bars condition, "ORB on MNQ
+  before 09:45 ET: 2W/7L". Tag setup, symbol.
+  Never a rule or a block (only the gate and rulebook block): shown with its
+  record. Defying one is no mistake.
 - Grade the process, not the P&L. A losing trade that followed the plan is a
   good trade; a winner that broke the plan is a mistake.
 
@@ -138,15 +139,15 @@ user; numbers here are the harness defaults, not any firm's official limits.
 - Decide the stop before the entry. No stop, no trade.
 - Risk per trade = |entry − stop| ÷ tickSize × tickValue × size. Keep it at or
   below 25% of the remaining daily loss allowance (`remainingBeforeLimit` in
-  `get_account_snapshot`), and at or below the plan's stated $ risk.
+  `get_account_snapshot`), and at or below the plan's $ risk.
 - Every open position has a protective stop working at the exchange: the
   entry's `stopLossBracket`, checked as soon as the fill shows (the order's
   one status check, or the next cycle's read). A separate `[protect]` stop
   only repairs protection on an existing position (resized after a partial
-  exit, or a stop cancelled or missing), placed at once; never a way to
+  exit, or stop cancelled or missing), placed at once; never a way to
   enter without a bracket. If the stop can't be placed, close the position. A working entry
   without a stop bracket (one the gate never checked, e.g. placed outside
-  the harness) is cancelled, not waited on (the `order-mechanics` skill).
+  the harness) is cancelled, not waited on (the `order-mechanics` skill; "bracket attached on fill" in the prompt is one).
 - Never widen a stop, never average down, never add to a loser. You may
   tighten a stop or move it to breakeven.
 - Use micro contracts (MNQ, MES, MYM, M2K, MGC, MCL) and size 1 until the

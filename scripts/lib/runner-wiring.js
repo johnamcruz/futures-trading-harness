@@ -21,7 +21,7 @@
  *   deskFor({ home, cfg, root, runRole, log })  the runner's desk (workflows/desk/WORKFLOW.md), or null
  *   entryFor({ home, cfg, root, runRole, client, log, now })  the runner's entry (workflows/entry/WORKFLOW.md), or null
  *   lookupsKeyOf(home, briefings, symbols, now, laneBars)  a one-symbol cycle's lookups facts key, or null
- *   reportCacheFor(home, cfg, frames, env) the runner's report cache (report-cache.js), or null for a harness whose
+ *   reportCacheFor(home, cfg, frames, env, root) the runner's report cache (report-cache.js), or null for a harness whose
  *                                         cycle output doesn't carry its roles' reports
  *   briefingRecorder(home, cfg, now, env, { frames, dataDir, log })   the bar briefing of each bar, and of each
  *                                         analyst's own timeframe (frames: lanes.js analystFrames); on a lane's bar
@@ -45,12 +45,12 @@ const { acquireAccountLocks, checkAccountLock, lockExemption, serverIdentities, 
 const { normId } = require('./broker/allow-list');
 const { propAccountRefusal, propAccountMessage } = require('./trading/prop-accounts');
 const { loadAccounts } = require('./trading/accounts');
-const { dayKey, ROLE_RUNS, TIMED_LAUNCHES, deskConcurrencyProblem } = require('./autotrader');
+const { dayKey, endOfDayAt, ROLE_RUNS, TIMED_LAUNCHES, deskConcurrencyProblem } = require('./autotrader');
 const { dayContextSeries, describeDay, describeOvernight } = require('./trading/day-context');
 const { premarketPlan, newsLine, unreviewedLine } = require('./trading/session-context');
 const { readBlackouts } = require('./trading/check-order');
 const { readRecord, liveRecord, describeRecord, excursionNote } = require('./trading/track-record');
-const { loadStrategies, scan, retiredCopies, composedExit } = require('./trading/strategies');
+const { loadStrategies, scan, retiredCopies, composedExit, citingPolicies } = require('./trading/strategies');
 const { lanesOf, laneStrategies, analystFrames, retireLanes } = require('./lanes');
 const { loadAgents } = require('./harness-sync');
 const { scanRecord, appendJsonl } = require('./trading/scan-log');
@@ -62,9 +62,10 @@ const { buildBriefing, readBriefing, writeBriefing, removeBriefing, buildFrameBr
 const { buildSignals, writeSignals, syncRetiredMarks } = require('./trading/signal-state');
 const RC = require('./trading/report-cache');
 const CD = require('./cycle-data');
-const { tradingDayKey } = require('./trading/clock');
+const { tradingDayKey, tradingDayStart, sessionMinuteOf } = require('./trading/clock');
 const { digest, recentTrades, formSummary } = require('./trading/instincts');
 const { historyFrom, journalSince } = require('./prop/attempt-scope');
+const { readShadow, recordShadow } = require('./trading/lesson-shadow');
 const LR = require('./trading/lifecycle-runner');
 const { recordsAt } = require('./trading/lifecycle-gate');
 const { resolveJournalPath, readJournal } = require('./trading/journal');
@@ -543,7 +544,7 @@ function entryFor({ home, cfg, root, runRole = null, client = null, log = () => 
   };
 }
 
-function reportCacheFor(home, cfg, frames = [], env = process.env) {
+function reportCacheFor(home, cfg, frames = [], env = process.env, root = path.join(__dirname, '..', '..')) {
   if (!['claude', 'opencode'].includes(cfg.harness)) return null;
   const briefings = symbols => Object.fromEntries(symbols.map(s => [s.symbol, readBriefing(home, s.symbol)]));
   // The analysts on their own timeframe (role -> minutes) and those timeframes' briefings.
@@ -553,12 +554,14 @@ function reportCacheFor(home, cfg, frames = [], env = process.env) {
   // The facts key the cycle's lookup requirement comes from (skill-lookups.js factsKey): one-symbol cycles only (an
   // analyst's report is cached in those alone); else null, under which no cached lookup counts.
   const keyOf = (b, symbols, now, laneBars) => lookupsKeyOf(home, b, symbols, now, laneBars);
+  // Phase 1's report is served only under the risk-manager body it was written under (an edited body runs the role again).
+  const bodyKey = () => { try { return require('crypto').createHash('sha256').update(fs.readFileSync(path.join(root, 'agents', 'risk-manager.md'))).digest('hex'); } catch (_err) { return null; } };
   return {
     // `laneBars`: several lanes, the other lanes whose bar closed this cycle ({ ROOT: { minutes: "<bar open>" } }).
     serve: ({ symbols, account, now, laneBars = {} }) => {
       const b = briefings(symbols);
       const key = keyOf(b, symbols, now, laneBars);
-      const s = RC.serveReports({ cache: RC.readCache(home), briefings: b, symbols, account, day: tradingDayKey(now), now, ...own(symbols) });
+      const s = RC.serveReports({ cache: RC.readCache(home), briefings: b, symbols, account, day: tradingDayKey(now), now, ...own(symbols), bodyKey: bodyKey() });
       // Index mode (the default, FTH_ROLE_SKILLS not full): a role a lookup is required of on this bar is served only when
       // the call that produced its cached report looked up every skill required, under this cycle's facts key (the same
       // bar and lanes: a candidate that appeared since needs a fresh run); else it runs. The gate counts those lookups
@@ -577,7 +580,7 @@ function reportCacheFor(home, cfg, frames = [], env = process.env) {
     record: ({ symbols, account, now, output, served, fresh = [], runs = [], lookups = [], laneBars = {} }) => {
       try {
         const b = briefings(symbols);
-        return RC.writeCache(home, RC.recordReports({ prev: RC.readCache(home), output, served, fresh, runs, briefings: b, symbols, account, day: tradingDayKey(now), now, ...own(symbols), lookups, lookupsKey: keyOf(b, symbols, now, laneBars) }));
+        return RC.writeCache(home, RC.recordReports({ prev: RC.readCache(home), output, served, fresh, runs, briefings: b, symbols, account, day: tradingDayKey(now), now, ...own(symbols), lookups, lookupsKey: keyOf(b, symbols, now, laneBars), bodyKey: bodyKey() }));
       } catch (err) {
         RC.removeCache(home); // a cache that can't be written is none: every role runs next cycle
         throw err;
@@ -694,6 +697,9 @@ function wireRunner({ cfg, root, home, env = process.env, client, prop = null, d
       return file;
     },
     recordMtf: (sym, bars) => writeMtfRecord(home, sym.symbol, bars, { now: now() }).line,
+    // The composed plans walked forward, settled by this bar (trading/lesson-shadow.js): a lesson's record.
+    // A plan's day ends at the runner's own close (as the decisions' outcomes do): a late fill is not held past it.
+    recordShadow: (sym, bars) => recordShadow(home, { root: sym.symbol, bars, minutes: cfg.timeframe, tick: sym.tickSize, now: now(), eodOf: ms => { const at = new Date(ms); const eod = endOfDayAt(cfg, at); return eod ? tradingDayStart(at).getTime() + sessionMinuteOf(eod, at) * 60000 : Infinity; } }),
     // Another lane's bar: the record the first lane's bars wrote, as the gate reads it (its line, or null).
     readMtf: sym => { const r = readMtfRecord(home, sym.symbol); return r && !r.error && r.line ? r.line : null; },
     // A strategy's track record (trading/track-record.js): its recorded backtest and the journal's reviews.
@@ -706,7 +712,7 @@ function wireRunner({ cfg, root, home, env = process.env, client, prop = null, d
     // the last reviewed trades' record on their own line.
     // Off when an active composed strategy (trade_lifecycle) trades the runner's timeframe: what it learns comes from
     // its experience record, not the journal's instincts (the composed-entry design, PR 14).
-    lessons: ({ entries } = {}) => (LR.runsComposed(strategies(), `${cfg.timeframe}m`) ? [] : digest(entries || journal(), 5, { kinds: ['mistake', 'lesson'], form: false })),
+    lessons: ({ entries } = {}) => (LR.runsComposed(strategies(), `${cfg.timeframe}m`) ? [] : digest(entries || journal(), 5, { kinds: ['mistake', 'lesson'], form: false, now: now(), shadow: readShadow(home, now()) })),
     // A fresh combine attempt's prompt shows only its own reviewed trades (prop/attempt-scope.js); any other run, all.
     recentTrades: ({ entries } = {}) => recentTrades(journalSince(entries || journal(), historyFrom(home)), 10),
     tradesSummary: ({ entries } = {}) => formSummary(journalSince(entries || journal(), historyFrom(home)), 10),
@@ -721,7 +727,7 @@ function wireRunner({ cfg, root, home, env = process.env, client, prop = null, d
     recordBriefing: recorder,
     // A 1m lane's closed bars, noted before the pass's briefings: the runner's briefing builds 5m candles from them.
     recordFineBars: recorder.fine,
-    reportCache: reportCacheFor(home, cfg, frames, env),
+    reportCache: reportCacheFor(home, cfg, frames, env, root),
     // The desk run by the runner (deskFor): on `runRole` (cycle-run.js, the caller's), else null.
     desk: deskFor({ home, cfg, root, runRole, log, env }),
     // The entry run by the runner (entryFor): on `runRole`, else null.
@@ -753,7 +759,8 @@ function wireRunner({ cfg, root, home, env = process.env, client, prop = null, d
       // A composed entry on these roots that may still be working: its expiry not passed when the cycle began, or no
       // expiry stamped and sent since then (an older one without an expiry was cancelled before the cycle).
       stamped: (roots, since) => LR.liveComposed({ entries: entryOrders(home), roots, since }),
-      onlyComposed: () => { const tags = LR.composedSetups(strategies()); const on = strategies().filter(s => s.valid && s.status !== 'disabled' && s.timeframe === `${cfg.timeframe}m`); return on.length > 0 && on.every(s => tags.has(s.name)); },
+      // A setup a composed trade cites (strategies.js citingPolicies) enters only through that trade's record: composed too.
+      onlyComposed: () => { const all = strategies(); const tags = LR.composedSetups(all); const on = all.filter(s => s.valid && s.status !== 'disabled' && s.timeframe === `${cfg.timeframe}m`); return on.length > 0 && on.every(s => tags.has(s.name) || citingPolicies(all, s.name).length > 0); },
       unrecorded: (orders, positions, contractId) => LR.unrecordedEntries({ entries: entryOrders(home), orders, positions, root: contractId }),
       forItem: item => recordsAt(home, item.symbol, item.bar && item.bar.t).map(LR.recordSummary),
       byOrder: () => Object.fromEntries(entryOrders(home).filter(e => e.composed && e.composed.record).map(e => [String(e.orderId), e.composed.record])),

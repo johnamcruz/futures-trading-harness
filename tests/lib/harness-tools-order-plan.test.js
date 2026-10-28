@@ -346,3 +346,10 @@ test('order_plan: the CLI (strategies.js plan) takes the same arguments', () => 
   assert.strictEqual(strategiesOps.parseArgv(['plan', '/b.json', '--symbol', 'MNQ', '--strategy', 'fx_break', '--side', 'long']).args.accountId, undefined);
   assert.strictEqual(strategiesOps.OPS.plan, plan);
 });
+
+test('order_plan: a cited setup (momentum_continuation) has no plan of its own: compose it and plan that record', () => {
+  const { file, ctx } = setup();
+  // The shipped tree: prop_portfolio lists it beside trade_lifecycle, so it is cited, never planned under its own tag.
+  assert.throws(() => plan({ file, symbol: 'MNQ', strategy: 'momentum_continuation', side: 'long', accountId: 7 }, { ...ctx, env: { FTH_HOME: ctx.env.FTH_HOME } }),
+    /^Error: momentum_continuation is a setup trade_lifecycle cites \(prop_portfolio\): compose it with compose_check \(the setup read "momentum_continuation fired up\|down"\) and plan that record; no order under setup:momentum_continuation$/);
+});

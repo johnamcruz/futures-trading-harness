@@ -80,6 +80,37 @@ test('lateEntry: the price past the entry the trade\'s way is no refusal (the li
   assert.strictEqual(LE.lateEntry({ side: 'long', entry: 21500, stop: 21510, price: 21500, share: SHARE }).kind, 'unreadable', 'a long\'s stop above its entry');
 });
 
+test('lateEntry, a MARKET entry: price the trade\'s way past the entry by more than the share of the risk is a chase (refused); at or under it, and any limit, is not', () => {
+  // LONG: 10-point risk, so 0.25 is 2.5 points: 21502.5 is at the share, 21502.75 over it.
+  assert.strictEqual(LE.lateEntry({ ...LONG, price: 21502.5, share: SHARE, market: true }), null, 'at the share');
+  const chased = LE.lateEntry({ ...LONG, price: 21502.75, share: SHARE, market: true });
+  assert.strictEqual(chased.kind, 'chased-entry');
+  assert.match(chased.message, /chased entry: .*entry 21500 \(price 21502\.75 is 2\.75 points past it with the long: 28% of the 10-point risk, over 0\.25R\).*stop 21490/);
+  // SHORT: 7-point risk, 1.75 points: 14978 at the share (14979.5 - 1.75 = 14977.75), 14977.5 over it.
+  assert.strictEqual(LE.lateEntry({ ...SHORT, price: 14977.75, share: SHARE, market: true }), null);
+  assert.strictEqual(LE.lateEntry({ ...SHORT, price: 14977.5, share: SHARE, market: true }).kind, 'chased-entry');
+  // A limit never chases; adverse drift and the stop are judged for a market order as for a limit.
+  assert.strictEqual(LE.lateEntry({ ...LONG, price: 21540, share: SHARE }), null);
+  assert.strictEqual(LE.lateEntry({ ...LONG, price: 21540, share: SHARE, market: false }), null);
+  assert.strictEqual(LE.lateEntry({ ...LONG, price: 21497, share: SHARE, market: true }).kind, 'missed-entry');
+  assert.strictEqual(LE.lateEntry({ ...LONG, price: 21489, share: SHARE, market: true }).kind, 'beyond-stop');
+  assert.strictEqual(LE.lateEntry({ ...LONG, price: 21530, share: SHARE, market: 'yes' }), null, 'only true is a market flag');
+});
+
+test('lateEntryCheck, a MARKET entry: the chase is logged as chased-entry; no current price still fails closed', () => {
+  const home = tmpDir('late-entry-market-');
+  LE.recordPrice(home, 'MNQ', { price: 21510, closedAt: '2026-10-07T14:00:00Z', minutes: 1, source: 'runner-entry' });
+  const now = new Date('2026-10-07T14:01:00Z');
+  const args = { home, root: 'MNQ', ...LONG, now, share: SHARE, maxAgeMin: AGE };
+  assert.strictEqual(LE.lateEntryCheck(args), null, 'a limit rests');
+  const r = LE.lateEntryCheck({ ...args, market: true });
+  assert.strictEqual(r.late.kind, 'chased-entry');
+  assert.strictEqual(r.late.price, 21510);
+  assert.match(r.message, /chased entry/);
+  const stale = LE.lateEntryCheck({ ...args, market: true, now: new Date('2026-10-07T14:30:00Z') });
+  assert.strictEqual(stale.late.kind, 'no-price');
+});
+
 test('recordPrice / readPrice: kept per family, never back in time', () => {
   const home = tmpDir();
   assert.strictEqual(LE.readPrice(home, 'MNQ'), null);

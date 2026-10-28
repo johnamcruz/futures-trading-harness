@@ -48,7 +48,8 @@
  *      cycles, prompts and history are the one-lane runner's.
  */
 
-const { openTrades, describeOpenTrade } = require('./trading/open-trades');
+const { openTrades, describeOpenTrade, tradeReadText } = require('./trading/open-trades');
+const { workingEntryLines } = require('./trading/working-entries');
 const { zonedParts } = require('./trading/clock');
 const { decide, recordRun, prompts, signalDecision, dayKey, endOfDayAt, historyShownLines } = require('./autotrader');
 const CD = require('./cycle-data');
@@ -117,6 +118,8 @@ function createRunner(deps) {
     scanLog = () => {}, // the decision log: one record per scanned bar (trading/scan-log.js scanRecord)
     // The multi-timeframe record the order gate reads (trading/mtf-state.js); returns its trend-rule line.
     recordMtf = () => null,
+    // The composed plans walked forward, settled by this bar (trading/lesson-shadow.js): (sym, bars), the first lane's.
+    recordShadow = () => 0,
     // Several lanes: the multi-timeframe record's line as the first lane's bars wrote it (another lane's bar never
     // rewrites it); (sym) -> line or null.
     readMtf = () => null,
@@ -386,6 +389,12 @@ function createRunner(deps) {
       } catch (err) {
         // Without a fresh record the gate refuses trend strategies' entries (fail closed).
         log(`${sym.symbol}: could not record the multi-timeframe read (${err.message}); the gate refuses trend entries`, 'error');
+      }
+      try {
+        if (first) recordShadow(sym, bars);
+      } catch (err) {
+        // A lesson's record only: its lessons show without the newest composed plans.
+        log(`${sym.symbol}: could not record the composed plans' shadow outcomes (${err.message})`, 'error');
       }
       let day = null;
       let dayError = null;
@@ -1360,6 +1369,8 @@ function createRunner(deps) {
         positions: state ? state.positions.filter(isOpen) : null,
         workingOrders: state ? state.orders.length : null,
         orders: state ? state.orders : null,
+        // Each working entry's bracket from the runner's record (attaches on the fill): a fact, not a model claim.
+        entryLines: state ? workingEntryLines(state.orders, entryOrders(), now) : [],
         attempts,
       };
     } catch (err) {
@@ -1789,7 +1800,15 @@ function createRunner(deps) {
               const tickOf = p => (item(p) || sym(p) || {}).tickSize || null;
               tradeObjs = openTrades({ positions: acct.positions, orders: acct.orders || [], entries: journal, barsFor: p => (item(p) ? item(p).bars : null) });
               const history = t => { try { return t.setup ? tradeHistory(t) : null; } catch (err) { failed(`${t.setup}'s backtest excursions for the open trade`, err); return null; } };
-              acct = { ...acct, openTrades: tradeObjs.map(t => describeOpenTrade(t, { tickSize: tickOf({ contractId: t.contractId }), et: etTime, history: history(t) })) };
+              // Its read facts (trade-read.js) from its contract's bars: the pullback-vs-reversal read of an open trade.
+              // The trail the runner holds for the trade (state.trails: its exit plan's afterTarget), read as the runner reads it.
+              const read = t => {
+                const x = item({ contractId: t.contractId });
+                const held = x ? (state.trails || {})[x.contractId] : null;
+                const exit = held && held.plan ? held.plan.afterTarget || null : null;
+                return x ? tradeReadText(t, { bars: x.bars, base: x.minutes || cfg.timeframe, tickSize: tickOf({ contractId: t.contractId }), exit }) : null;
+              };
+              acct = { ...acct, openTrades: tradeObjs.map(t => describeOpenTrade(t, { tickSize: tickOf({ contractId: t.contractId }), et: etTime, history: history(t), read: read(t) })) };
               manageAlso = [...new Set(tradeObjs.filter(t => !item({ contractId: t.contractId })).map(t => (sym({ contractId: t.contractId }) || {}).symbol || contractRoot(t.contractId)))];
             } catch (err) {
               failed('the open trades\' details', err);

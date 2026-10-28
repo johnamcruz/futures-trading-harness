@@ -9,6 +9,7 @@
  *   lastBreaks(bars, k)          the latest close through a confirmed swing that hadn't been broken, labelled BOS
  *                                 when it continues the previous break's direction and CHoCH when it reverses it;
  *                                 { last, previous } each { kind, direction, level, swingAt, at, barsAgo } or null
+ *   breaksOf(bars, k)            every such break, oldest first: [{ kind, direction, level, swingAt, at, i }]
  *   swingLevels(bars, k, n)      the last n confirmed swing highs and lows, each with when a close first went through
  *                                 it after its confirmation (`brokenAt`, null while it holds)
  *   sweeps(bars, levels, n)      in the last n bars, a high level traded above and closed back below within 1-3
@@ -37,8 +38,8 @@ function pivots(bars, k = AN.indicators.swingK) {
   return out;
 }
 
-/** The latest structure breaks: a close through the last confirmed, unbroken swing high (up) or low (down). */
-function lastBreaks(bars, k = AN.indicators.swingK) {
+/** Every structure break, oldest first: a close through the last confirmed, unbroken swing high (up) or low (down). */
+function breaksOf(bars, k = AN.indicators.swingK) {
   const ps = pivots(bars, k);
   let hi = null; // the last confirmed swing high not yet broken
   let lo = null;
@@ -59,6 +60,12 @@ function lastBreaks(bars, k = AN.indicators.swingK) {
       }
     }
   }
+  return breaks;
+}
+
+/** The latest structure breaks (breaksOf): the last and the one before it. */
+function lastBreaks(bars, k = AN.indicators.swingK) {
+  const breaks = breaksOf(bars, k);
   // Each with its age: how many bars (candles) ago it happened (0 = the last one).
   const out = b => (b ? { kind: b.kind, direction: b.direction, level: b.level, swingAt: b.swingAt, at: b.at, barsAgo: bars.length - 1 - b.i } : null);
   return { last: out(breaks[breaks.length - 1]), previous: out(breaks[breaks.length - 2]) };
@@ -118,4 +125,4 @@ function swingLevels(bars, k = AN.indicators.swingK, n = AN.structure.swingLevel
   return [...pick('high'), ...pick('low')];
 }
 
-module.exports = { pivots, lastBreaks, sweeps, untestedSwings, swingLevels };
+module.exports = { pivots, breaksOf, lastBreaks, sweeps, untestedSwings, swingLevels };

@@ -60,6 +60,12 @@ bar's close (two: 6 minutes on the 3m), so a cycle that runs past the next
 close can still enter on the facts of its own bar; the runner cancels a limit
 still resting then.
 
+A cited setup: a setup read `<name> fired up|down` of a rules strategy its
+policy lists (`momentum_continuation`) gives the plan that strategy's own
+entry (at market from the bar's close), stop (its scan's distance; the stop
+read is the level it sits beyond) and fixed-R target (`target 2r` for its
+2R); every other step and check stands.
+
 ### Risk and target
 
 A normal trade risks about $200-300, sized by the model from its sizing

@@ -75,7 +75,7 @@ never paste a long `get_bars` reply into a file.
    `strategy-library`, `strategy-scan`, `tool-arguments`, `bar-briefing`, `strategy-tools`, `trend-vs-range`,
    `bos-vs-choch`, `momentum-and-volume`, `pullback-vs-reversal`,
    `strategy-gate-checks`, and `market-snapshot`.
-2. Bars (only without a current briefing, or for what it lacks): the 3m file (the runner's 5000 bars, or `bars_fetch` without a `count`: the 4h trend needs about 4000) and, with `bars_fetch`, 15m (160). Run
+2. Bars (only without a current briefing, or for what it lacks): the 3m file (the runner's bars, or `bars_fetch` without a `count`: the 4h trend needs about 4000) and, with `bars_fetch`, 15m (160). Run
    `market_snapshot` on each, and `mtf_read` on the 3m file (its
    `Trend rule:` line is enforced by the scan and the gate).
 3. Regime: report the computed `regime` from the snapshot (primary,

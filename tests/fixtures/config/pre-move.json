@@ -379,6 +379,14 @@
   "trendFindings.saidChars": {
    "value": 160,
    "from": "new in feat/ppc-trend-facts (owner-approved 2026-10-24, build A: what the model said at an example leg, and each contradicting clause, clipped, e.g. at 160 characters, so the verified reads still fit the example)"
+  },
+  "exitFindings.examples": {
+   "value": 2,
+   "from": "new in feat/ride-or-exit (P1 item F, the owner: \"The model needs to learn when to ride trend and when to exit\"): an exit finding shows the proposer a few of its costliest exits, e.g. 2, each as the facts code read at the decision"
+  },
+  "exitFindings.exampleChars": {
+   "value": 400,
+   "from": "new in feat/ride-or-exit (P1 item F, the owner: \"The model needs to learn when to ride trend and when to exit\"): each example exit's facts clipped, e.g. at 400 characters, so the findings stay within a small model's prompt"
   }
  },
  "replay": {
@@ -636,6 +644,26 @@
     4
    ],
    "from": "new in feat/trend-catch-ride (the trend catch & ride report's leg size buckets, in multiples of the leg threshold: 1-2x, 2-4x, 4x+, so big trends are visible)"
+  },
+  "exitScore.cutR": {
+   "value": 1,
+   "from": "new in feat/ride-or-exit (P1 item F, the owner: \"The model needs to learn when to ride trend and when to exit\"): an exit cut a trend when price then went this R further the trade's way before rightR against (the owner's 1R)"
+  },
+  "exitScore.rightR": {
+   "value": 1,
+   "from": "new in feat/ride-or-exit (P1 item F, the owner: \"The model needs to learn when to ride trend and when to exit\"): an exit was right when price then went this R against first (the owner's 1R)"
+  },
+  "exitScore.lateGivebackR": {
+   "value": 1,
+   "from": "new in feat/ride-or-exit (P1 item F, the owner: \"The model needs to learn when to ride trend and when to exit\"): an exit came late when the hold gave back more than this R of open profit before it (the owner's 1R)"
+  },
+  "exitScore.horizonBars": {
+   "value": 60,
+   "from": "new in feat/ride-or-exit (P1 item F, the owner: \"The model needs to learn when to ride trend and when to exit\"): the bars after an exit read to score it, e.g. 60 base bars (3 hours of 3m bars)"
+  },
+  "exitScore.matchBars": {
+   "value": 2,
+   "from": "new in feat/ride-or-exit (P1 item F, the owner: \"The model needs to learn when to ride trend and when to exit\"): a close within this many bars of a round trip's exit is that exit's (the replay's fill lands a bar after the decision)"
   }
  },
  "runner": {
@@ -934,6 +962,10 @@
   "prompt.trackRecordMinSlice": {
    "value": 10,
    "from": "trading/track-record.js MIN_SLICE"
+  },
+  "prompt.lessonMinPlans": {
+   "value": 10,
+   "from": "new in feat/lesson-restrictions (the composed plans a lesson's record needs before it gets a verdict, trading/lesson-advice.js; the owner's \"It needs to learn from mistakes and improve\", 2026-10-27)"
   },
   "prompt.trackRecordLiveSlice": {
    "value": 5,
@@ -1393,12 +1425,16 @@
    "from": "trading/mtf.js DEFAULTS.maxCandles"
   },
   "mtf.historyHours": {
-   "value": 240,
+   "value": 504,
    "from": "trading/mtf.js DEFAULTS.historyHours"
   },
   "mtf.historyMarginHours": {
    "value": 10,
    "from": "trading/mtf.js HISTORY_MARGIN_HOURS"
+  },
+  "mtf.legacyHistoryHours": {
+   "value": 240,
+   "from": "trading/mtf.js DEFAULTS.historyHours before the three-week window (the window runs recorded before it were handed)"
   },
   "mtf.ruleFrames": {
    "value": [
@@ -1543,6 +1579,20 @@
   "compression.maxWidthAtr": {
    "value": 2,
    "from": "new in feat/compression (a box's widest range, in the ATR(14) before it: narrow; 2 picked on the tuning half from 1, 1.5, 2, 3 and none, where 2 and 3 tied at +0.26R and the narrower was kept; the review, 2026-10-25)"
+  },
+  "tradeRead.frames": {
+   "value": [
+    15
+   ],
+   "from": "new in feat/ride-or-exit (P1 item F, the owner: \"The model needs to learn when to ride trend and when to exit\"): the structure timeframes above the base an open trade's read reads (the skill's 3m, then 15m)"
+  },
+  "tradeRead.deepPullback": {
+   "value": 0.618,
+   "from": "new in feat/ride-or-exit (P1 item F, the owner: \"The model needs to learn when to ride trend and when to exit\"): a pullback past this share of the last impulse is one weakening sign (the fib 0.618, a hypothesis)"
+  },
+  "tradeRead.minSigns": {
+   "value": 2,
+   "from": "new in feat/ride-or-exit (P1 item F, the owner: \"The model needs to learn when to ride trend and when to exit\"): weakening needs at least this many independent signs (the count decides; review round 2: one sign alone fired on most healthy trend bars)"
   }
  }
 }

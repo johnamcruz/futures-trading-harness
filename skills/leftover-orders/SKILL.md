@@ -13,8 +13,9 @@ description: Use when flat with working orders - cancel leftovers, keep only a b
 
 - **Flat with working orders**: cancel leftovers from a closed trade (its stop
   or target) right away; they could fill into an unplanned position. Keep only
-  a pending entry from your own plan that carries its stop bracket. An order
-  list may not show a bracket before the entry fills, so tell by the entry's
+  a pending entry from your own plan that carries its stop bracket. No bracket shows
+  before the fill: keep an entry the prompt lists as "bracket attached on fill",
+  else tell by the entry's
   own `order_placed` journal record (`journal_read {kind:"order_placed"}`, kind
   only, no `contractId` filter: the
   one whose `data.result.orderId` is the order; its `data.request` has

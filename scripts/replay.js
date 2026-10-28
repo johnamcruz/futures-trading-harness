@@ -13,7 +13,7 @@
  *       training preflight first (learning/preflight.js; --bars: the run's bars for its facts check); every
  *       look goes to the one ledger, <FTH_HOME>/learning/looks.jsonl; the config's experienceIndex (and setupLibrary) is pinned for the
  *       run (learning/experience-index.js)
- *   node scripts/replay.js points --config replay.json                 the decision times, nothing run
+ *   node scripts/replay.js points --config replay.json                 the decision times, nothing run (the server's days without source data skipped)
  *   node scripts/replay.js report <run dir | --config replay.json> [--account <name>] [--natural-rates file] [--faults
  *       stop=R,outage=R] (the score's stop-fault and outage rates; `run` takes it too; without: faults not measured)   month by
  *       month, with the 30-day Monte Carlo prop score of the model's trades (prop/model-score.js: zero blows, pass
@@ -83,7 +83,7 @@ function load(argv) {
 const say = msg => process.stdout.write(`[replay] ${msg}\n`);
 
 function points(run) {
-  const all = decisionPoints(run.cfg, { start: run.start, end: run.end, everyNth: run.everyNth });
+  const all = decisionPoints(run.cfg, { start: run.start, end: run.end, everyNth: run.everyNth, dataGaps: run.dataGaps });
   const list = run.curated ? curatedPoints(all, run.curated, (run.cfg.barDelaySeconds || 0) * 1000).filter(p => !p.manage) : all;
   for (const d of tradingDays(run.cfg, run)) {
     const mine = list.filter(p => p.day === d.day);
@@ -185,7 +185,7 @@ async function run(argv) {
 async function main(argv) {
   const cmd = (require('./lib/tunables').assertUsable(), argv[0]); // a refused config file: no replay (the CRITICAL error)
   if (cmd === 'run') return run(argv);
-  if (cmd === 'points') return points(load(argv));
+  if (cmd === 'points') return points(require('./lib/replay/data-gaps').withServerGaps(load(argv), { root: ROOT, env: process.env, log: say }));
   if (cmd === 'report') return report(argv);
   if (cmd === 'labels') return labels(argv);
   if (cmd === 'scorecard') return score(argv);

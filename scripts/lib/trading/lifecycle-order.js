@@ -2,7 +2,7 @@
 
 /**
  * order_plan for a composed trade (the composed-entry design section 3.5): the order the model's compose record gives,
- * for this cycle's bar and side: a limit at the record's entry reference, the brackets from the record's stop and
+ * for this cycle's bar and side: a limit at the record's entry reference (a cited setup's record: at market from it), the brackets from the record's stop and
  * target (trade-lifecycle.js planOf, worked out again from the re-checked reads), and its size. A calculator: it never
  * picks, and it refuses (with the reason) what the gate would refuse, running the gate's own composed-reads check on
  * the exact arguments.
@@ -26,6 +26,7 @@
 const { familyRoot } = require('./contracts');
 const { briefingFor } = require('./fact-claims');
 const { composedRefusal, recordsAt } = require('./lifecycle-gate');
+const { citedSetups } = require('./strategies');
 const { entryRuleOf } = require('./entry-rule');
 const prop = require('./prop-state');
 const { composedVerdict } = require('../prop/composed-verdict');
@@ -64,12 +65,16 @@ function composedOrder({ home, root, side, now = new Date(), cycleBars = {}, str
   const spec = specOf(root);
   if (!spec) throw new Error(`no tick specs for ${root}; no order`);
   const sign = side === 'long' ? 1 : -1;
-  const brackets = { limitPrice: held.entry && held.entry.price, stopLossBracket: { ticks: held.stop && held.stop.ticks, type: 'stop' }, takeProfitBracket: { ticks: held.target && held.target.ticks, type: 'limit' } };
-  const draft = { ...(Number.isInteger(accountId) ? { accountId } : {}), contractId: root, side: sign > 0 ? 'buy' : 'sell', type: 'limit' };
+  // A cited setup's record (its plan at market, trade-lifecycle.js planOf) enters at market; every other one a limit.
+  const market = Boolean(held.entry && held.entry.type === 'market');
+  const brackets = { ...(market ? {} : { limitPrice: held.entry && held.entry.price }), stopLossBracket: { ticks: held.stop && held.stop.ticks, type: 'stop' }, takeProfitBracket: { ticks: held.target && held.target.ticks, type: 'limit' } };
+  const draft = { ...(Number.isInteger(accountId) ? { accountId } : {}), contractId: root, side: sign > 0 ? 'buy' : 'sell', type: market ? 'market' : 'limit' };
+  // The setups its record may cite (strategies.js citedSetups), as the gate's re-check takes them.
+  const cited = citedSetups(strategies, strategy.name, { paper });
   // The reads and the plan as the gate re-checks them, at the record's own size (its plan stands as written).
   // The policy's entry rule (entry-rule.js), as the gate's re-check holds it.
   const entryRule = policy ? entryRuleOf(policy.entry) : null;
-  const first = composedRefusal({ name: strategy.name, strategy, home, root, input: { ...draft, size: stated, ...brackets }, now, cycleBars, entries: [], specOf, attempt: Boolean(policy), entryRule });
+  const first = composedRefusal({ name: strategy.name, strategy, home, root, input: { ...draft, size: stated, ...brackets }, now, cycleBars, entries: [], specOf, attempt: Boolean(policy), entryRule, cited });
   if (first.message) throw new Error(`the order gate would refuse it: [composed-reads] ${first.message}`);
   const p = first.plan;
   const tick = spec.tickSize;
@@ -109,18 +114,20 @@ function composedOrder({ home, root, side, now = new Date(), cycleBars = {}, str
   if (floor) throw new Error(`[min-contracts] ${floor}${cutWhy ? ` (${cutWhy} to ${ordered}: no trade)` : ''}`);
   if (policy || cutWhy) {
     // The gate's own composed-reads check on the exact size: the same translation, the cut, nothing else.
-    const again = composedRefusal({ name: strategy.name, strategy, home, root, input: { ...draft, size: ordered, ...brackets }, now, cycleBars, entries: [], specOf, approvedSize: cutWhy ? ordered : null, translate, entryRule });
+    const again = composedRefusal({ name: strategy.name, strategy, home, root, input: { ...draft, size: ordered, ...brackets }, now, cycleBars, entries: [], specOf, approvedSize: cutWhy ? ordered : null, translate, entryRule, cited });
     if (again.message) throw new Error(`the order gate would refuse it: [composed-reads] ${again.message}`);
   }
   const tag = policy ? `setup:${policy.name} ${side} ${strategy.name}` : `setup:${strategy.name} ${side}`;
   const risk = perContract * ordered;
-  const rationale = `${tag} limit ${fmt(p.entry.price, tick)} (the record's entry price), stop ${fmt(p.stop.price, tick)} (${p.stop.ticks} ticks, one beyond ${fmt(p.stop.level, tick)}), target ${fmt(p.target.price, tick)} (${p.target.ticks} ticks, ${p.rr}R), ${ordered} ${root} risks ${usd(risk)}, record ${rec.id}`;
-  const args = { ...draft, size: ordered, contractId: root, limitPrice: p.entry.price, stopLossBracket: { ticks: p.stop.ticks, type: 'stop' }, takeProfitBracket: { ticks: p.target.ticks, type: 'limit' }, rationale };
+  const how = market ? `at market from ${fmt(p.entry.price, tick)} (the record's entry reference, ${p.setup}'s entry)` : `limit ${fmt(p.entry.price, tick)} (the record's entry price)`;
+  const beyond = market ? `${p.stop.bufferTicks} tick${p.stop.bufferTicks === 1 ? '' : 's'} beyond` : 'one beyond';
+  const rationale = `${tag} ${how}, stop ${fmt(p.stop.price, tick)} (${p.stop.ticks} ticks, ${beyond} ${fmt(p.stop.level, tick)}), target ${fmt(p.target.price, tick)} (${p.target.ticks} ticks, ${p.rr}R), ${ordered} ${root} risks ${usd(risk)}, record ${rec.id}`;
+  const args = { ...draft, size: ordered, contractId: root, ...(market ? {} : { limitPrice: p.entry.price }), stopLossBracket: { ticks: p.stop.ticks, type: 'stop' }, takeProfitBracket: { ticks: p.target.ticks, type: 'limit' }, rationale };
   const sizeLine = policy
     ? `size ${ordered}: ${cutWhy ? `${cutWhy}; ` : ''}${baseWhy}; the record suggested ${stated}`
     : cutWhy ? `size ${ordered}: ${cutWhy} (yours ${stated}, at or under the ceiling ${capOf}: ${capWhy})` : `size ${stated}: yours, at or under the ceiling ${capOf} (${capWhy})`;
   const line = [
-    `${strategy.name} ${side}: ${ordered} ${root} limit at ${fmt(p.entry.price, tick)} (the record's entry price, valid until ${rec.expiresAt})`,
+    `${strategy.name} ${side}: ${ordered} ${root} ${market ? `at market from ${fmt(p.entry.price, tick)} (${p.setup}'s entry; the brackets are ticks from the fill` : `limit at ${fmt(p.entry.price, tick)} (the record's entry price`}, valid until ${rec.expiresAt})`,
     `stop ${fmt(p.stop.price, tick)}: ${p.stop.ticks} ticks, stopLossBracket.ticks ${p.stop.ticks}`,
     `target ${fmt(p.target.price, tick)}: ${p.target.ticks} ticks (${p.rr}R), takeProfitBracket.ticks ${p.target.ticks}`,
     `risk ${usd(risk)} = ${ordered} x ${p.stop.ticks} ticks x ${usd(spec.tickValue)}/tick (before fees)`,
@@ -129,7 +136,7 @@ function composedOrder({ home, root, side, now = new Date(), cycleBars = {}, str
     ...(paper ? ['paper run: plan only'] : []),
   ].join(' | ');
   const sizes = policy ? { suggestedSize: stated, translatedSize: translated, minContracts: prop.minContractsIn(policy, account, root, specOf), translation: baseWhy } : {};
-  return { args, line, plan: { strategy: strategy.name, side, contract: root, size: ordered, ...(cutWhy ? { recordSize: base } : {}), ...sizes, entry: p.entry.price, stopPrice: p.stop.price, stopTicks: p.stop.ticks, targetPrice: p.target.price, targetTicks: p.target.ticks, riskUsd: Number(risk.toFixed(2)), record: rec.id }, policy, account, verdict };
+  return { args, line, plan: { strategy: strategy.name, side, contract: root, size: ordered, ...(cutWhy ? { recordSize: base } : {}), ...sizes, entry: p.entry.price, entryType: p.entry.type, stopPrice: p.stop.price, stopTicks: p.stop.ticks, targetPrice: p.target.price, targetTicks: p.target.ticks, riskUsd: Number(risk.toFixed(2)), record: rec.id }, policy, account, verdict };
 }
 
 module.exports = { composedOrder, attemptPolicy };

@@ -41,7 +41,7 @@ entry: a retired strategy (orb, 2026-10-14): REFUSED (intent entry)
 entry: the shipped prop_portfolio with no verdict on a compose record (an attempt running): REFUSED (intent entry)
   [combine] <name-43f416>: 1 MNQ is not within the account's size budget for a 40-tick stop (4 NQ at $207.80 risk each; contracts: auto).
   [min-contracts] setup:prop_portfolio: size 1 MNQ is under the floor of 3 contracts (its account's rulebook, sizing.min_contracts): trade 3 or more within the size budget, or no trade; never a tighter stop. Exits, protective stops, stop moves, cancels and closes still go.
-  [policy] setup:prop_portfolio: no verdict for MNQ (order_plan records one on each trade_lifecycle compose record).
+  [policy] setup:prop_portfolio: no verdict for MNQ (order_plan records one on each trade_lifecycle compose record (which may cite momentum_continuation)).
 exit: under the shipped prop_portfolio, an attempt running (allowed): ALLOWED (intent risk-reducing)
 entry: the side named is not the order side: REFUSED (intent entry)
   [order-consistency] The order doesn't agree with itself: the rationale says short but the order side is buy. Fix the order or the rationale so both say the same trade.

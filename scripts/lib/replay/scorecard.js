@@ -86,7 +86,7 @@ const { buildBriefing, sessionWindow, newsState } = require('../trading/briefing
 const { readBlackouts } = require('../trading/check-order');
 const { loadRoundSteps } = require('../trading/round-numbers');
 const { exitPlan, composedExit } = require('../trading/evaluator');
-const { historyBars } = require('../autotrader');
+const { recordedBars } = require('../autotrader');
 const { expandHome } = require('../paths');
 const { STEPS, NONE, expectedDecision, expectedForEntry, checkReasons, clausesOf, composedSetupsFrom, tagged } = require('../trading/reasons');
 const { familyRoot } = require('../trading/contracts');
@@ -348,7 +348,7 @@ function runRecords(home, { strategies, outcomeBars }) {
     return bars.get(k);
   };
   // The bars the runner hands a cycle under a config.
-  const countFor = cfg => { const tf = Number(cfg.timeframe) || null; return Number(cfg.bars) > 0 ? Number(cfg.bars) : tf ? historyBars(tf) : 0; };
+  const countFor = cfg => recordedBars(cfg);
   // The run's own round-number steps (its home, seeded at its start), never today's user config.
   return { scans, verdicts, verdictList, byName, barsFor, countFor, blackouts: readBlackouts(path.join(home, 'blackouts', 'blackouts.json')), roundSteps: loadRoundSteps({ FTH_HOME: home }) };
 }

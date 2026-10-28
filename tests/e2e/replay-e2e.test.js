@@ -114,7 +114,8 @@ test('replay: the live runner, cycle by cycle at the replayed time, through the 
   const labels = lines(path.join(w.runDir, 'labels.jsonl'));
   assert.deepStrictEqual(labels.map(l => l.t), recs.map(r => r.t));
   // First: the replay account's long is open (the cycle's context): an entry on top of it, refused, keeps it out of cloning.
-  // The close (close_position, not gated) is in no gate record and the fake harness's text transcript names no tool calls.
+  // The close (close_position, not gated) is in no judged gate record (the gateway's ungated record of it, the exit
+  // scorecard's, is not read here) and the fake harness's text transcript names no tool calls.
   assert.deepStrictEqual([labels[0].decision, labels[0].position.side, labels[0].teacher.action, labels[0].clone.reasons], ['in-trade', 'long', 'hold', ['entry while in a trade']]);
   assert.deepStrictEqual([labels[0].outcome.result, labels[0].outcome.pnl, labels[0].outcome.openKnown], ['win', 20, false]);
   // Then flat: the teacher's long (setup:orb, stop 21495 from its rationale), refused with the gate's checks; its intent kept.
@@ -201,4 +202,26 @@ test('replay every Nth bar with Qwen: a cycle at each decision time; the $versio
   assert.ok(Array.isArray(settings.permissions.allow));
   const stop = path.join(w.runHome, 'STOP');
   assert.ok(!fs.existsSync(stop), fs.existsSync(stop) ? fs.readFileSync(stop, 'utf8') : '');
+});
+
+test('replay: the server\'s days without source data (get_server_config dataGaps) are skipped by points and run, pinned in the manifest', { timeout: 300000 }, () => {
+  const w = setup();
+  // A two-day window; the replay server has no bars on its first day (Wednesday 2027-10-06), no flow on its second.
+  const brokers = JSON.parse(fs.readFileSync(path.join(w.live, 'brokers.json'), 'utf8'));
+  brokers.brokers.replaymock.env.push('MOCK_DATA_GAPS');
+  fs.writeFileSync(path.join(w.live, 'brokers.json'), JSON.stringify(brokers));
+  const cfg = JSON.parse(fs.readFileSync(w.config, 'utf8'));
+  fs.writeFileSync(w.config, JSON.stringify({ ...cfg, end: '2027-10-07T13:40:00Z' }));
+  // 2027-10-06: no bars at all (skipped); 2027-10-07: bars without order flow (traded).
+  w.env = { ...w.env, MOCK_DATA_GAPS: JSON.stringify({ MNQ: [{ day: '2027-10-06', bars: false, flow: false }, { day: '2027-10-07', bars: true, flow: false }] }) };
+  const pts = replay(w, ['points', '--config', w.config]);
+  assert.strictEqual(pts.status, 0, pts.stderr);
+  assert.match(pts.stdout, /2027-10-06 {2}skipped: no source data on the replay server; skipped \(not a session\)/);
+  assert.match(pts.stdout, /2027-10-07 {2}0 premarket, 4 trade, 0 eod/);
+  const run = replay(w, ['run', '--config', w.config, '--max-cycles', '1']);
+  assert.strictEqual(run.status, 0, `${run.stdout}\n${run.stderr}`);
+  assert.match(run.stdout, /\[replay\] 2027-10-06: no source data on the replay server; skipped \(not a session\)/);
+  assert.ok(!fs.existsSync(path.join(w.runDir, '2027-10-06.jsonl')), 'no decision time on the gap day');
+  assert.deepStrictEqual(lines(path.join(w.runDir, '2027-10-07.jsonl')).map(r => r.t), ['2027-10-07T13:30:02.000Z']);
+  assert.deepStrictEqual(JSON.parse(fs.readFileSync(path.join(w.runDir, 'manifest.json'), 'utf8')).dataGaps, ['2027-10-06']);
 });

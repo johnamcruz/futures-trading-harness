@@ -157,7 +157,9 @@ function parityMiss(records, b, tick, unknown) {
     const reads = (rec.reads || []).filter(r => isObj(r) && typeof r.read === 'string' && (r.check === true || r.check === false) && !dependsOnMissing(r.read, b, unknown));
     if (!reads.length) continue;
     // Per-read parity (each read's own check), which the entry rule never changes.
-    const again = checkReads({ reads: reads.map(r => ({ step: r.step, skill: r.skill, read: r.read, why: r.why || null })), side: rec.side, briefing: b, tick });
+    // A record that cited a setup (its plan's `setup`) is re-checked citing it, as compose_check judged it.
+    const cited = isObj(rec.plan) && typeof rec.plan.setup === 'string' ? [rec.plan.setup] : null;
+    const again = checkReads({ reads: reads.map(r => ({ step: r.step, skill: r.skill, read: r.read, why: r.why || null })), side: rec.side, briefing: b, tick, cited });
     for (const r of reads) {
       const x = again.reads.find(y => y.step === r.step && y.read === r.read);
       if (!x || (x.check === true) !== (r.check === true)) return r.read;
@@ -373,7 +375,7 @@ function attachFacts(capture, { runDir, home = path.resolve(runDir, '..', '..'),
   const { loadAccounts } = require('../trading/accounts');
   const { STRATEGY, stopRuleOf, readRecords } = require('../trading/trade-lifecycle');
   const { briefingFrom } = require('../learning/skill-usage');
-  const { historyBars } = require('../autotrader');
+  const { recordedBars } = require('../autotrader');
   const { cyclesOf } = require('../replay/trend-capture');
   const { tradingDayKey } = require('../trading/clock');
   const spec = specFor(root);
@@ -385,7 +387,7 @@ function attachFacts(capture, { runDir, home = path.resolve(runDir, '..', '..'),
   const names = accounts.map(a => a.name);
   const bars = barsOf(home, runDir, root, minutes, barsFiles);
   const fine = minutes !== 1 ? barsOf(home, runDir, root, 1, barsFiles) : [];
-  const count = Number(cfg.bars) > 0 ? Number(cfg.bars) : historyBars(minutes);
+  const count = recordedBars({ ...cfg, timeframe: minutes });
   const build = briefingFrom(bars, { root, minutes, count, roundSteps: require('../trading/round-numbers').loadRoundSteps({ FTH_HOME: home }), fineBars: fine.length ? fine : null, blackouts: require('../trading/check-order').readBlackouts(path.join(home, 'blackouts', 'blackouts.json')) });
   const all = cyclesOf(home);
   const cycles = new Map(all.map(c => [Date.parse(c.timing.barClose), c]));

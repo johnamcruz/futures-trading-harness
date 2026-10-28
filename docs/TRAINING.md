@@ -575,6 +575,35 @@ and leg ids; the lessons lines record the batch too.
   owner. A rule (the clock, the account's stops, news), a bar outside the
   session and a position already open are never findings: those are code
   and the rulebook.
+- **Exit findings** (`scripts/lib/train/exit-findings.js`, kind
+  `exit-decision`). Each run's trend-capture report scores every exit and
+  every stop the model tightened by what price did next on the closed bars,
+  to the end of the session it exited in
+  (`scripts/lib/replay/exit-scorecard.js`, post-hoc): cut a trend (price went
+  `cutR` the trade's way before `rightR` against), right, unclear,
+  unresolved, and late (open profit given back past the late threshold), by
+  who exited: the model's market exit or tightened stop (from its transcript
+  and from the gateway's records of each cycle, a trade-executor's own
+  session included), the runner's trail or close, the initial stop, the
+  target. The thresholds are in `config/replay.json` `exitScore`; the late
+  one is never below the active policy's `lock_giveback_r` (its rulebook),
+  so the runner's trail giving back what it was built to give back is never
+  late. Only what the model decided is a finding: its exits that cut a trend
+  (decided on an HTF bias flip apart), and its late exits (its own, or its
+  hold to the initial stop before the runner's trail armed). The runner's
+  trail, its close and the target are rows of the report only; an initial
+  stop that then ran the trade's way is the report's stop-placement row.
+  Findings rank by the R they cost with the trend findings, owned by the
+  open trade's read (`pullback-vs-reversal`; `manage-position` is a
+  management skill, never probed), each example the facts code read at the
+  decision (`scripts/lib/trading/trade-read.js` on the bars closed by
+  then), no date, price or R. The round's report counts them (`probe
+  exits`). An exit finding's edit is screened as a curated one, with the
+  trend set's harms: no exit-specific gain test exists yet. The read
+  itself is held to an acceptance check (`tests/lib/read-mechanical.test.js`,
+  `scripts/lib/replay/read-mechanical.js`): applied to the letter on a real
+  trend it keeps at least what the runner's 15m structure trail keeps, and
+  weakening is rare on that trend's bars.
 - **Learnable legs only** (`scripts/lib/train/trend-facts.js`). After the
   probe half's champion runs, code works out each missed leg's facts at its
   entry-able bars: the trade cycles of its catch window, less those a rule
@@ -894,6 +923,19 @@ above 1, a `maxSessions` above the profile's `sessions`, and an account that
 isn't the policy's. Narrower sessions are fine.
 The combine block is in both run hashes. The preflight's `combine` check shows
 the account, `maxSessions` and every attempt's window.
+
+A day the replay server has no bars for (its `get_server_config.dataGaps`
+entries with `bars: false`, replay only: docs/BROKER-MCP-INTERFACE.md) is not
+a trading day of the run:
+the driver reads the list once at a fresh start (pinned in the run's manifest),
+runs no decision time on it and logs `<day>: no source data on the replay
+server; skipped (not a session)`, so an attempt's `maxSessions` count only
+replayable days and its window ends that much later (refused when it then
+starts on one, or runs past the run's end or its split window). The
+preflight's `data-gaps` check warns listing them. A day with bars but no order
+flow (`bars: true, flow: false`) is traded normally, its flow facts absent as on
+any minute without flow; the check notes it. A server without the field skips
+nothing.
 
 Each attempt's entries are sized as live: the policy's verdict from the
 account's rulebook, never under its floor (`sizing.min_contracts`, in

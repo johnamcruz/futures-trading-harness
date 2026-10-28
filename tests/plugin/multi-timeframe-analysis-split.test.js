@@ -85,6 +85,9 @@ const ALLOWED = [
 // home to its edited text, and a late edit that matches nothing fails.
 const { withLate } = require('./skill-split-late');
 const LATE = [
+  { from: "the runner's bars file (at least 2000 bars), or `bars_fetch` with `{\"symbol\": \"<SYMBOL>\", \"timeframe\": 3, \"record\": true}` (the runner's default, 5000 3-minute bars, to `<FTH_HOME>/bars-scratch/<SYMBOL>-3m.json`, and the read recorded for the gate)",
+    to: "the runner's bars file (at least 2000 bars), or `bars_fetch` with `{\"symbol\": \"<SYMBOL>\", \"timeframe\": 3, \"record\": true}` (the runner's default count, to `<FTH_HOME>/bars-scratch/<SYMBOL>-3m.json`, and the read recorded for the gate)",
+    reason: "feat/htf-history: the runner's bar count follows the read's window (config/analysis.json mtf.historyHours), so the skills name no count (its one home is the config)" },
   { from: "**Reversal strategies** (`mtf: reversal`: `crt_1h`, `crt_4h`, `ofi_absorption`, `value_area_reentry`): may fade it.",
     to: "**Reversal strategies** (`mtf: reversal`): may fade it.",
     reason: "every rules strategy is retired (strategies/retired.json): no retired name as an example (the skill audit, fix/skills-stale-examples)" },

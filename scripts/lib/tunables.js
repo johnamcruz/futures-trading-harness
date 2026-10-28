@@ -13,7 +13,7 @@
  *              comparison, the proposal, compose, lesson and probe-edit limits, the skills' byte caps, the learning
  *              report and the field studies
  *   replay     the replay's training presets and draws: latency, the stage presets, the curated lists and moments, the
- *              setup moments, the account-state draw, the driver's retries, the decision labels, the scorecard's
+ *              setup moments, the exit-decision scorecard's thresholds, the account-state draw, the driver's retries, the decision labels, the scorecard's
  *              give-back rule and the backtester's plain-run defaults
  *   runner     the live runner and the order gate: the gate's limits and timing, the trade lifecycle's stop floor and
  *              size cap, the account snapshot, the replay clock, cycles, bars, the prompt's sizes, the live session,
@@ -85,6 +85,7 @@ const TRAINING = {
   trendScreen: { rollFlagGaps: list(int(0)) },
   trendWindows: { leadBars: int(0), controlPerLeg: int(0) },
   trendFindings: { examples: int(1), exampleChars: int(80), saidChars: int(40) },
+  exitFindings: { examples: int(1), exampleChars: int(80) },
 };
 
 // A stage preset's refused value: true or false (that value refused), or 'set' (any value refused).
@@ -99,6 +100,7 @@ const REPLAY = {
   windowBars: int(1),
   setupLibrary: { minRR: pos() },
   trendCapture: { minMoveAtr: pos(), catchShare: pos(1), messageChars: int(1), curationSessions: list(str(), { min: 1 }), censusBatch: int(1), sizeEdges: list(num({ min: 1 }), { min: 1 }) },
+  exitScore: { cutR: pos(), rightR: pos(), lateGivebackR: pos(), horizonBars: int(1), matchBars: int(0) },
   setupMoments: { setupTf: int(1), quietSample: frac(), seed: int(), levels: str(['key', 'wide']), setupTfs: list(int(1), { min: 1 }) },
   accountStates: { seed: int(), count: int(1), meanBlock: int(1), perBucket: int(1), oversample: record(pos()), cutoffs: { nearMll: frac(), nearTarget: frac() } },
   driver: { eodRetries: int(1) },
@@ -134,7 +136,7 @@ const RUNNER = {
   },
   prompt: {
     recentDecisions: int(1), historyPerLane: int(1), slowerContext: int(0), planChars: int(1), reasonChars: int(1), exitsKept: int(1), unseenReads: int(0),
-    sessionStartLessons: int(0), sessionStartLessonChars: int(1), reportMaxText: int(1), phase1MaxAgeMs: ms(), trackRecordMinSlice: int(1),
+    sessionStartLessons: int(0), sessionStartLessonChars: int(1), reportMaxText: int(1), phase1MaxAgeMs: ms(), trackRecordMinSlice: int(1), lessonMinPlans: int(1),
     trackRecordLiveSlice: int(1), instinctsMinSetupTrades: int(1), instinctsRecentReviews: int(1), valuesPerStrategy: int(1), brokerFieldsKept: int(1),
     brokerFieldsBytes: int(1), brokerFieldChars: int(1), cycleDataMaxBytes: int(1),
   },
@@ -168,7 +170,7 @@ const ANALYSIS = {
     dojiBody: frac(), wickBody: pos(), wickRange: frac(), otherWick: frac(), dispBody: frac(), dispAtr: pos(), volLen: int(1), volMin: int(1), maxActive: int(1),
     maxLevels: int(1), timeframes: list(int(1), { min: 1 }), rangeFrames: list(int(1), { min: 1 }),
   },
-  mtf: { fast: int(1), slow: int(1), rangeLen: int(1), maxCandles: int(1), historyHours: int(1), historyMarginHours: int(0), ruleFrames: list(int(1), { min: 1 }) },
+  mtf: { fast: int(1), slow: int(1), rangeLen: int(1), maxCandles: int(1), historyHours: int(1), historyMarginHours: int(0), legacyHistoryHours: int(1), ruleFrames: list(int(1), { min: 1 }) },
   dayContext: { ibMinutes: int(1), openMinutes: int(1), adrDays: int(1) },
   levelCloses: { maxCloses: int(1) },
   structure: { sweepBars: int(1), swingLevels: int(1), m5Recent: int(1) },
@@ -181,6 +183,7 @@ const ANALYSIS = {
     maxRunAtr: nonneg(), levelBandAtr: nonneg(), maxLevels: int(1),
   },
   briefing: { equalK: int(1), cisdFrames: list(int(1), { min: 1 }) },
+  tradeRead: { frames: list(int(1), { min: 1 }), deepPullback: frac(), minSigns: int(1) },
   evaluator: { windowBars: int(1) },
 };
 
@@ -212,7 +215,7 @@ const PINS = deepFreeze({
     'gate.signalMaxAgeBars': 3, 'gate.signalMaxAgeCeilingMin': 45, 'gate.futureToleranceMin': 1, 'gate.minConfluence': 1, 'gate.maxCorrelatedPositions': 1,
     'gate.noEntryWindows': ['09:30-09:35@America/New_York', '15:45-16:00@America/New_York'], 'gate.bracketToleranceTicks': 1, 'gate.bracketSpanToleranceTicks': 2,
     'gate.factsMinChecked': 2, 'gate.factsMaxItems': 20, 'gate.lateEntryDriftShare': 0.25, 'gate.freshPriceTimeoutMs': 3000,
-    'lifecycle.maxSize': 100,
+    'lifecycle.maxSize': 100, 'prompt.lessonMinPlans': 10,
     'account.snapshotMaxAgeMs': 600000, 'account.balanceToleranceUsd': 0.01, 'account.snapshotFutureToleranceMs': 60000,
     'clock.serverTimeToleranceMs': 300000, 'clock.wallStartMaxAgeMs': 86400000, 'clock.wallStartAheadMs': 5000,
     'cycle.maxConsecutiveErrors': 3, 'bars.staleAfterBars': 0.5, 'runner.closeSettleMs': 10000, 'runner.fillGraceMs': 30000, 'runner.minManagedRiskTicks': 4,
@@ -256,7 +259,7 @@ const BUILT_IN = deepFreeze({
     },
     prompt: {
       recentDecisions: 10, historyPerLane: 10, slowerContext: 3, planChars: 400, reasonChars: 100, exitsKept: 50, unseenReads: 10,
-      sessionStartLessons: 10, sessionStartLessonChars: 300, reportMaxText: 8000, phase1MaxAgeMs: 1800000, trackRecordMinSlice: 10,
+      sessionStartLessons: 10, sessionStartLessonChars: 300, reportMaxText: 8000, phase1MaxAgeMs: 1800000, trackRecordMinSlice: 10, lessonMinPlans: 10,
       trackRecordLiveSlice: 5, instinctsMinSetupTrades: 3, instinctsRecentReviews: 30, valuesPerStrategy: 6, brokerFieldsKept: 3,
       brokerFieldsBytes: 600, brokerFieldChars: 250, cycleDataMaxBytes: 48000,
     },
@@ -294,7 +297,7 @@ const BUILT_IN = deepFreeze({
       dojiBody: 0.1, wickBody: 2, wickRange: 0.6, otherWick: 0.15, dispBody: 0.7, dispAtr: 1.5, volLen: 20, volMin: 5, maxActive: 50, maxLevels: 4,
       timeframes: [3, 5, 15, 60, 240], rangeFrames: [60, 240],
     },
-    mtf: { fast: 20, slow: 50, rangeLen: 20, maxCandles: 300, historyHours: 240, historyMarginHours: 10, ruleFrames: [240, 60, 15] },
+    mtf: { fast: 20, slow: 50, rangeLen: 20, maxCandles: 300, historyHours: 504, historyMarginHours: 10, legacyHistoryHours: 240, ruleFrames: [240, 60, 15] },
     dayContext: { ibMinutes: 60, openMinutes: 30, adrDays: 10 },
     levelCloses: { maxCloses: 20 },
     structure: { sweepBars: 10, swingLevels: 3, m5Recent: 3 },
@@ -304,6 +307,7 @@ const BUILT_IN = deepFreeze({
     fvg: { frames: [5, 15, 60], window: 60, max: 3 },
     compression: { frames: [3, 5, 15, 60], nr: [7], maxWidthAtr: 2, poleBars: 3, expandAtr: 1, minBeyondAtr: 0.1, recentBars: 3, maxRunAtr: 1, levelBandAtr: 0.25, maxLevels: 3 },
     briefing: { equalK: 2, cisdFrames: [3, 5, 15, 60] },
+    tradeRead: { frames: [15], deepPullback: 0.618, minSigns: 2 },
     evaluator: { windowBars: 500 },
   },
 });
@@ -357,6 +361,8 @@ const SPECS = Object.freeze({
     // behind it less): only falls.
     'gate.freshPriceTimeoutMs': 'down',
     'lifecycle.maxSize': 'down',
+    // The plans a lesson's verdict needs (trading/lesson-advice.js): a higher floor judges later, so it only rises.
+    'prompt.lessonMinPlans': 'up',
     'account.snapshotMaxAgeMs': 'down', 'account.balanceToleranceUsd': 'down', 'account.snapshotFutureToleranceMs': 'down',
     'clock.serverTimeToleranceMs': 'down', 'clock.wallStartMaxAgeMs': 'down', 'clock.wallStartAheadMs': 'down',
     'cycle.maxConsecutiveErrors': 'down',

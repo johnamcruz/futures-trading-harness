@@ -28,6 +28,8 @@
  *   shape(c)                               { body, upperWick, lowerWick, closeAt } shares of the range (null at zero range)
  *   closeLocation(c)                       'top' | 'middle' | 'bottom' (third of the range), null at zero range
  *   patternsOf(c, prev, atrPrev)           every pattern that holds, in label priority; patternLabel: the first, else 'none'
+ *   factsOf(candles)                       per candle: shape, closeLocation, rangeAtr (ATR as of the candle before), volRatio,
+ *                                          patterns and pattern (one pass; the momentum read reads these)
  *   insideStackOf(candles, j)              { insideStack, mother } of candle j (the candles in a row inside one mother), or {}
  *                                          (insideStacks(candles): every candle's, one pass)
  *   relation(c, level, prevClose)          { relation: 'rejected' | 'broke' | 'touched' | 'none', dir } or null (no level)
@@ -314,6 +316,9 @@ function candleSeries(bars, minutes, base) {
       htfd_body: of((c, f) => num(f.body)), htfd_upper_wick: of((c, f) => num(f.upperWick)), htfd_lower_wick: of((c, f) => num(f.lowerWick)),
       htfd_close_loc: of((c, f) => (f.closeLocation === 'top' ? 1 : f.closeLocation === 'bottom' ? -1 : f.closeLocation ? 0 : NaN)),
       htfd_range_atr: of((c, f) => f.rangeAtr), htfd_vol_ratio: of((c, f) => f.volRatio),
+      // The momentum read (momentum.js momentumRead) on the unrounded facts, as htfd_range_atr and htfd_vol_ratio: 1 up,
+      // -1 down, 0 none, NaN unknown. A candle it fires on always shows `momentum` up or down in the briefing (rounded).
+      htfd_momentum: of((c, f) => { const m = momentumRead({ rangeAtr: f.rangeAtr, closeLocation: f.closeLocation, volRatio: f.volRatio }); return m === 'up' ? 1 : m === 'down' ? -1 : m === 'none' ? 0 : NaN; }),
       htfd_doji: of((c, f) => +f.patterns.includes('doji')), htfd_hammer: of((c, f) => +f.patterns.includes('hammer')),
       htfd_shooting_star: of((c, f) => +f.patterns.includes('shooting star')),
       htfd_inside: of((c, f) => +f.patterns.includes('inside')), htfd_outside: of((c, f) => +f.patterns.includes('outside')),
@@ -657,5 +662,5 @@ function completedCandlesAt({ bars, base, fine = null, minutes, at = bars.length
 module.exports = {
   TIMEFRAMES, DEF, LABELS, MAX_LEVELS, LEVEL_ORDER, label, completedSeries, shape, closeLocation, patternsOf, patternLabel, relation,
   candleSeries, relationSeries, swingTargetSeries, holdingSwingsAt, briefingCandles, briefingTargets, RELATION_TEXT,
-  prevSweep, RANGE_FRAMES, briefingRangeTargets, completedCandlesAt, gapRelation, insideStackOf, insideStacks,
+  prevSweep, RANGE_FRAMES, briefingRangeTargets, completedCandlesAt, gapRelation, insideStackOf, insideStacks, factsOf,
 };
