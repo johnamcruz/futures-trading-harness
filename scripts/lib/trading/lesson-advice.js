@@ -30,6 +30,7 @@
 
 const { tradingDayKey } = require('./clock');
 const { entryTime, reviewResult } = require('./journal');
+const { specFor } = require('./contracts');
 
 const MIN_PLANS = require('../tunables').runner().prompt.lessonMinPlans; // config/runner.json
 
@@ -63,11 +64,14 @@ const lessonSide = entry => sideIn(text(entry));
 
 // A condition the bars can check: a timeframe with a briefing fact about it, at most four words apart ("15m EMA20",
 // "3m trend up", "15m not in a fresh CHoCH down", "15m close below"); a timeframe or a word alone is no condition.
-const CONDITION = /\b(?:\d{1,2}m|[14]h)\b(?:\s+[\w-]+){0,4}?\s+(?:trend|choch|bos|ema\d+|vwap|supertrend|fvg|swing|structure|close\s+(?:above|below))\b/i;
+const GAP = '(?:the|its|a|not|fresh|in|is|was|below|above|at)';
+const CONDITION = new RegExp(`\\b(?:\\d{1,2}m|[14]h)\\b[\\s:,-]+(?:${GAP}\\s+){0,4}(?:trend|choch|bos|ema\\d+|vwap|supertrend|fvg|swing|structure|close\\s+(?:above|below))\\b`, 'i');
 const isBroad = entry => !CONDITION.test(text(entry));
 
-const AGAINST = /\b(?:skip|avoid|don'?t|do not|never|no|stop|stand aside|pass on|weak|restrict\w*)\b/i;
-const FOR = /\b(?:favou?r|take|prefer|strong|works?)\b/i;
+// Against a setup: "skip", "avoid", "lose", "don't take"; for one: "favour", "prefer", "take" (not after a negation).
+const NEG = "(?:don'?t|do not|never|no)";
+const AGAINST = new RegExp(`\\b(?:skip|avoid|stop|stand aside|pass on|los(?:e|es|t|ing)|fail\\w*|restrict\\w*|${NEG}(?:\\s+\\w+)?\\s+(?:take|favou?r|prefer)\\w*)\\b`, 'i');
+const FOR = new RegExp(`(?<!${NEG}\\s(?:\\w+\\s)?)\\b(?:favou?r|prefer|take)\\w*\\b`, 'i');
 function lessonDirection(entry) {
   const a = AGAINST.test(text(entry));
   const f = FOR.test(text(entry));
@@ -83,7 +87,7 @@ function plansSince(shadow, since, side, roots = []) {
   for (const x of [...(shadow || [])].sort((a, b) => Date.parse(a.entryTime || a.at) - Date.parse(b.entryTime || b.at))) {
     const t = Date.parse(x.entryTime || '');
     if (!Number.isFinite(x.R) || !Number.isFinite(t) || Date.parse(x.at) < since || (side && x.side !== side)) continue;
-    if (roots.length && !roots.includes(String(x.root || '').toUpperCase())) continue;
+    if (roots.length && !roots.includes(String(x.root || ''))) continue;
     if (busy[x.side] && t < busy[x.side]) continue;
     busy[x.side] = Date.parse(x.exitTime);
     out.push(x.R);
@@ -96,8 +100,10 @@ function lessonRecord(entry, { reviews = [], shadow = [], now = null, from = nul
   const until = Number.isFinite(timeOf(now)) ? timeOf(now) : -Infinity; // no clock: nothing counts
   const side = lessonSide(entry);
   const setup = tagValue(entry, 'setup');
-  // Its symbol tags (a contract root, as the journaling rule tags it: "MNQ"), never a kind:value tag or a word.
-  const roots = (Array.isArray(entry && entry.tags) ? entry.tags : []).map(String).filter(t => /^[A-Z][A-Z0-9]{0,7}$/.test(t));
+  // Its symbol tags (as the journaling rule tags it: "MNQ"): only a tag that names a contract root (contracts.js) or a
+  // symbol the plans are of, so a tag like "ORB" or "RTH" never filters every plan out.
+  const known = new Set((shadow || []).map(x => String(x.root || '')));
+  const roots = (Array.isArray(entry && entry.tags) ? entry.tags : []).map(String).filter(t => known.has(t) || (t === t.toUpperCase() && specFor(t)));
   const rOf = r => { const v = Number(tagValue(r, 'r')); return Number.isFinite(v) ? v : reviewResult(r) === 'win' ? 1 : reviewResult(r) === 'loss' ? -1 : 0; };
   const inScope = r => entryTime(r) >= since && entryTime(r) <= until;
   const taken = (reviews || []).filter(r => inScope(r) && (!setup || tagValue(r, 'setup') === setup) && (!side || sideIn(text(r)) === side)).map(rOf);

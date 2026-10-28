@@ -42,7 +42,12 @@ test('a lesson names its side and is flagged broad when it names no condition th
   // A timeframe or a common word alone is no condition.
   assert.strictEqual(isBroad(lesson('t', 'No trading after a loss; the 5m chart was a mess, close everything')), true);
   assert.strictEqual(isBroad(lesson('t', 'Stop taking longs: 1h high')), true);
-  assert.deepStrictEqual(['skip shorts with the 3m trend up', 'favour longs on the 3m trend up', 'the 15m EMA20 matters'].map(t => lessonDirection(lesson('t', t))), ['against', 'for', null]);
+  assert.strictEqual(isBroad(lesson('t', 'No trading in the first 15m of the trend day')), true);
+  assert.strictEqual(isBroad(lesson('t', 'Skip longs when the 15m: close below the EMA20')), false);
+  assert.deepStrictEqual([
+    'skip shorts with the 3m trend up', 'favour longs on the 3m trend up', 'the 15m EMA20 matters',
+    'Longs into a strong 15m trend down lose: 1W/6L', "Don't take longs below the 15m EMA20: 1W/5L", 'never take shorts above the 15m EMA20', 'take longs at the 15m EMA20',
+  ].map(t => lessonDirection(lesson('t', t))), ['against', 'for', null, 'against', 'against', 'against', 'for']);
 });
 
 test('a lesson\'s record: the trades taken since and the composed plans walked forward since, repeats once; provisional, supported or contradicted', () => {
@@ -66,6 +71,8 @@ test('a lesson\'s record: the trades taken since and the composed plans walked f
   const favour = lesson('2024-06-04T19:51:00.000Z', 'favour shorts with the 3m trend down');
   assert.strictEqual(lessonRecord(favour, { shadow: winners, now: LATER }).status, `supported by n=${MIN}`);
   assert.strictEqual(lessonRecord(lesson('2024-06-04T19:51:00.000Z', 'skip shorts entirely'), { shadow: winners, now: LATER }).status, 'no verdict');
+  // A capitalised tag that names no symbol the plans are of ("ORB") filters nothing.
+  assert.strictEqual(lessonRecord({ ...l, tags: ['setup:prop_portfolio', 'ORB'] }, { shadow: winners, now: LATER }).shadow.n, MIN);
   // Another symbol's plans are not this lesson's (its symbol tag); untagged, every symbol's count.
   const other = Array.from({ length: MIN }, (_, k) => plan(day(k), 'short', 2, 'MES'));
   assert.strictEqual(lessonRecord(l, { shadow: other, now: LATER }).shadow.n, 0);
