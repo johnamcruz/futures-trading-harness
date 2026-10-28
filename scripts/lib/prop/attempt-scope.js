@@ -5,7 +5,8 @@
  * combine replay starts carries `historyFrom` (its start) in its record, and from then on the prompt's own history shows
  * only what happened since: the last reviewed trades and their record (the journal's reviews, by their time) and the
  * last cycles' decisions (the runner's decision history, by their time). Read scoping only: the journal and the history
- * stay whole (reviews, labels, the experience log and lessons read them as before). An attempt without `historyFrom`
+ * stay whole (reviews, labels and the experience log read them as before; lessons are scoped by the clock only and persist
+ * across the attempts of a run: the lesson from a blow is the one to learn from). An attempt without `historyFrom`
  * (a live attempt, `scripts/combine.js start`; a drawn account state's seeded attempt; no attempt at all) shows its
  * history unchanged.
  *

@@ -1,7 +1,7 @@
 'use strict';
 
 /**
- * SessionStart hook: briefs the model with its standing lessons and today's
+ * SessionStart hook: briefs the model with its lessons (advice with their record: trading/lesson-advice.js) and the
  * trading-day state from the broker MCP server's journal, so every session starts
  * from its own track record. Never blocks.
  */
@@ -14,7 +14,9 @@ const { resolveJournalPath, readJournal, entriesSince } = require('../lib/tradin
 const { lossState, liveReviews } = require('../lib/trading/order-gate');
 const { runningAttempts, readAttempt, combineBlock } = require('../lib/trading/prop-state');
 const { sessionsText } = require('../lib/trading/combine');
-const { digest } = require('../lib/trading/instincts');
+const { digest, graded } = require('../lib/trading/instincts');
+const { scopedLessons, lessonRecord, adviceText } = require('../lib/trading/lesson-advice');
+const { readShadow } = require('../lib/trading/lesson-shadow');
 const { harnessNow } = require('../lib/trading/harness-now');
 
 const usd = x => `$${Math.round(x).toLocaleString('en-US')}`;
@@ -49,7 +51,10 @@ function clip(text) {
 function buildBriefing(entries, now, config, root = null, home = null) {
   const dayStart = tradingDayStart(now);
   const today = entriesSince(entries, dayStart);
-  const lessons = entries.filter(e => e.kind === 'lesson').slice(-MAX_LESSONS);
+  // The run's own lessons (by now), each as advice with its date and record.
+  let shadow = [];
+  try { shadow = home ? readShadow(home, now) : []; } catch (_err) { /* the lessons show without their composed plans */ }
+  const lessons = scopedLessons(entries, { now }).slice(-MAX_LESSONS);
   const { streak, losses } = lossState(today);
   const placed = today.filter(e => e.kind === 'order_placed').length;
   const blocked = today.filter(e => e.kind === 'order_blocked').length;
@@ -76,16 +81,18 @@ function buildBriefing(entries, now, config, root = null, home = null) {
   lines.push('', 'Know the account before every decision: get_account_snapshot (balance, today\'s P&L, open positions, working orders).');
   const attempts = home ? attemptLines(home, now) : [];
   if (attempts.length) lines.push('', '### Prop attempts (the order gate enforces these)', ...attempts);
-  lines.push('', '### Standing lessons (newest last)');
+  lines.push('', '### Lessons (advice with their record, never rules: rules/trading/journaling.md)');
   if (lessons.length === 0) {
     lines.push('- none yet');
   } else {
+    const reviews = graded(entries);
     for (const l of lessons) {
       const tags = Array.isArray(l.tags) && l.tags.length ? ` [${l.tags.join(', ')}]` : '';
-      lines.push(`- ${clip(l.text)}${tags}`);
+      lines.push(`- ${clip(adviceText(l, lessonRecord(l, { reviews, shadow, now })))}${tags}`);
     }
   }
-  const learned = digest(entries);
+  // The reviews' instincts; the lessons are above, each once.
+  const learned = digest(entries, undefined, { kinds: ['setup', 'mistake'] }); // its default count
   lines.push('', '### Instincts from your reviews (confidence 0.3-0.9; notes, not rules)');
   lines.push(...(learned.length ? learned.map(x => `- ${clip(x)}`) : ['- none yet: they grow from reviewed trades']));
   lines.push('', 'Start sessions with /premarket or /trade-session. Orders are gated by the harness order gate.');

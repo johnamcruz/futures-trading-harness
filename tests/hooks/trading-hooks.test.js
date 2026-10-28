@@ -1114,15 +1114,22 @@ test('order gate reads the blackout file', () => {
   assert.match(r.stderr, /FOMC/);
 });
 
-test('session-start briefing lists lessons and day state', () => {
+test('session-start briefing lists the run\'s lessons as advice with their date and record, never a later run\'s, and day state', () => {
   const { env } = setup([
-    { ts: minutesAgo(60 * 24 * 3, new Date(TEST_NOW)), kind: 'lesson', text: 'Skip ORB before 09:45 ET', tags: ['setup:orb'] },
+    { ts: minutesAgo(60 * 24 * 3, new Date(TEST_NOW)), kind: 'lesson', text: 'Rule: no orb entry until the cause is journaled', tags: ['setup:orb'] },
+    { ts: '2026-10-06T19:51:00.000Z', kind: 'lesson', text: 'Yesterday at end of day: skip longs below the 15m EMA20', tags: ['setup:orb'] },
+    { ts: '2099-01-02T15:00:00.000Z', kind: 'lesson', text: 'another run: skip every short', tags: ['setup:orb'] },
+    { ts: minutesAgo(20, new Date(TEST_NOW)), kind: 'lesson', text: 'Wait for the ORB retest', tags: ['setup:orb'] },
     { ts: minutesAgo(1, new Date(TEST_NOW)), kind: 'note', text: 'n' },
   ]);
   const r = runHook('session-start:trading:briefing', 'scripts/hooks/trading-session-start.js', 'minimal,standard,strict', {}, env);
   assert.strictEqual(r.code, 0);
   assert.match(r.stdout, /Trading harness briefing/);
-  assert.match(r.stdout, /Skip ORB before 09:45 ET \[setup:orb\]/);
+  assert.match(r.stdout, /### Lessons \(advice with their record, never rules: rules\/trading\/journaling\.md\)/);
+  assert.match(r.stdout, /- lesson from 2026-10-07 \(taken since n=0; all composed plans since n=0; provisional; broad: names no condition the bars can check\): advice, weigh it: Wait for the ORB retest \[setup:orb\]/);
+  assert.match(r.stdout, /- lesson from 2026-10-04 \([^)]*broad[^)]*\): advice, weigh it: Rule: no orb entry until the cause is journaled/);
+  assert.match(r.stdout, /- lesson from 2026-10-06 \(taken since n=0; all composed longs since n=0, condition unchecked; provisional\): advice, weigh it: Yesterday at end of day: skip longs below the 15m EMA20/);
+  assert.doesNotMatch(r.stdout, /another run|Standing lessons/, 'a later run\'s lesson is never this run\'s');
   assert.match(r.stdout, /Harness root \(FTH_ROOT\): /);
   assert.match(r.stdout, /Know the account before every decision: get_account_snapshot/);
   assert.doesNotMatch(r.stdout, /Prop attempts/);

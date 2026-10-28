@@ -8,8 +8,8 @@ description: The journal the gate reads - its kinds (plan, entry, exit, note, re
 ## When to Use
 
 - Writing a plan, entry, exit, note, review or lesson.
-- Reading the journal (`journal_read`): plans, reviews, lessons, or an
-  entry's `order_placed` record.
+- Reading the journal (`journal_read`): plans, reviews, or an entry's
+  `order_placed` record (lessons: `lessons`).
 
 ## How It Works
 
