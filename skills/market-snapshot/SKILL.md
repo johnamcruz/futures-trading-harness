@@ -18,7 +18,7 @@ LLMs are bad at indicator arithmetic. This skill runs it in code.
 
 1. Get closed bars, oldest first, in a file. Autonomous: the runner's bars
    file (the prompt names it). Otherwise the harness tool `bars_fetch`
-   (`{"symbol": "MNQ", "timeframe": 3}`: the runner's default, 5000 bars)
+   (`{"symbol": "MNQ", "timeframe": 3}`: the runner's default count)
    writes `<FTH_HOME>/bars-scratch/MNQ-3m.json` (the path it returns) and says when its last bar closed (see the
    `bar-briefing` skill).
    Don't paste a `get_bars` reply into a file: thousands of bars are far more

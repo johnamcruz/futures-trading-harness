@@ -13,7 +13,7 @@ const crypto = require('crypto');
 const os = require('os');
 const path = require('path');
 const { harnessHome } = require('./paths');
-const { scratchDir, MAX_COUNT: GET_BARS_MAX } = require('./bars-fetch');
+const { scratchDir } = require('./bars-fetch');
 // The runner's defaults (config/runner.json: bars, cycle, prompt; the kill switch's error count only falls).
 const TUN = require('./tunables').runner();
 const { SERVER_NAME, activeBroker } = require('./broker/config');
@@ -241,14 +241,30 @@ function sessionPastEod(cfg) {
   return false;
 }
 
-/** Closed bars the runner keeps per symbol: historyDays trading days (historyDayHours each), at least historyMinBars. */
-function historyBars(timeframe) {
-  // At least historyMinBars bars and historyDays trading days (config/runner.json bars), and the multi-timeframe read's
-  // whole window (mtf.HISTORY_HOURS), so the live trend rule reads the same candles as the backtest. get_bars caps a
-  // request at its interface's MAX_COUNT.
+/**
+ * Closed bars the runner keeps per symbol: historyDays trading days (historyDayHours each), at least historyMinBars, and
+ * the multi-timeframe read's whole window (mtf.HISTORY_HOURS), so the live trend rule reads the same candles as the
+ * backtest. Not capped: a request over one get_bars call's limit is paged (broker/adapter.js closedBars), never cut.
+ * `legacy`: the count runs recorded before the window was three weeks were handed (config/analysis.json
+ * mtf.legacyHistoryHours plus the margin).
+ */
+function historyBars(timeframe, { legacy = false } = {}) {
   const { HISTORY_HOURS } = require('./trading/mtf');
+  const A = require('./tunables').analysis().mtf;
+  const hours = legacy ? A.legacyHistoryHours + A.historyMarginHours : HISTORY_HOURS;
   const B = TUN.bars;
-  return Math.min(GET_BARS_MAX, Math.max(B.historyMinBars, Math.ceil((B.historyDays * B.historyDayHours * 60) / timeframe), Math.ceil((HISTORY_HOURS * 60) / timeframe)));
+  return Math.max(B.historyMinBars, Math.ceil((B.historyDays * B.historyDayHours * 60) / timeframe), Math.ceil((hours * 60) / timeframe));
+}
+
+/**
+ * The bars a run's cycles were handed, from its recorded runner config (autotrader.json): the recorded count, or for a
+ * run recorded before the count was written the legacy window's, never today's. 0 without a timeframe.
+ */
+function recordedBars(cfg) {
+  const c = cfg || {};
+  if (Number(c.bars) > 0) return Number(c.bars);
+  const tf = Number(c.timeframe) || null;
+  return tf ? historyBars(tf, { legacy: true }) : 0;
 }
 
 /**
@@ -1355,6 +1371,7 @@ module.exports = {
   endOfDayAt,
   marketHoursErrors,
   historyBars,
+  recordedBars,
   DEFAULTS,
   HARNESSES,
   claudeTools,

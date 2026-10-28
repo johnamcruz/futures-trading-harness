@@ -224,6 +224,16 @@ weekends and breaks.
 Result: `{ contractId, barSize ("5 minute"), count, bars }`, bars oldest first,
 each `{ t (bar open, UTC ISO), o, h, l, c, v }`.
 
+A contract month's bars are its own history, including its trading before it
+became the front month (every listed expiry trades at once), so the front
+month's bars reach back across a roll: the harness asks for the front month
+only, and its multi-timeframe read needs weeks of it the day after a roll. A
+replay server built from a continuous front-month series cannot hold the new
+month's own earlier bars: it may serve the previous contract's bars shifted by
+the roll spread (price-adjusted, the old front's volume, no order flow) as the
+closest reproduction of live, and may serve no history between the front
+switch and the first closed bar after its data switch (roll night).
+
 A bar may carry extra fields of the server's own (and the result extra
 keys). The harness passes them through untouched: it gives them no meaning,
 and only a strategy document that names a field (the rules' `field("path")`)

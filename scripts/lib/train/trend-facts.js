@@ -373,7 +373,7 @@ function attachFacts(capture, { runDir, home = path.resolve(runDir, '..', '..'),
   const { loadAccounts } = require('../trading/accounts');
   const { STRATEGY, stopRuleOf, readRecords } = require('../trading/trade-lifecycle');
   const { briefingFrom } = require('../learning/skill-usage');
-  const { historyBars } = require('../autotrader');
+  const { recordedBars } = require('../autotrader');
   const { cyclesOf } = require('../replay/trend-capture');
   const { tradingDayKey } = require('../trading/clock');
   const spec = specFor(root);
@@ -385,7 +385,7 @@ function attachFacts(capture, { runDir, home = path.resolve(runDir, '..', '..'),
   const names = accounts.map(a => a.name);
   const bars = barsOf(home, runDir, root, minutes, barsFiles);
   const fine = minutes !== 1 ? barsOf(home, runDir, root, 1, barsFiles) : [];
-  const count = Number(cfg.bars) > 0 ? Number(cfg.bars) : historyBars(minutes);
+  const count = recordedBars({ ...cfg, timeframe: minutes });
   const build = briefingFrom(bars, { root, minutes, count, roundSteps: require('../trading/round-numbers').loadRoundSteps({ FTH_HOME: home }), fineBars: fine.length ? fine : null, blackouts: require('../trading/check-order').readBlackouts(path.join(home, 'blackouts', 'blackouts.json')) });
   const all = cyclesOf(home);
   const cycles = new Map(all.map(c => [Date.parse(c.timing.barClose), c]));

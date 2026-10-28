@@ -45,6 +45,7 @@ const state = {
 };
 // n bars of the requested size (default one minute), the newest opening at 13:00 + n - 1 minutes on 2026-10-07:
 // one-minute bars run 13:00, 13:01, ...; longer ones end at the same bar, one bar size apart.
+let liveBase = null;
 const bars = (n, step = 60000) => Array.from({ length: n }, (_, k) => {
   const c = 21500 + k;
   return { t: new Date(Date.parse('2026-10-07T13:00:00Z') + (n - 1) * 60000 - (n - 1 - k) * step).toISOString(), o: c, h: c + 1, l: c - 1, c, v: 10 };
@@ -72,9 +73,14 @@ const HANDLERS = {
     }
     if (process.env.FAKE_LIVE_BARS) {
       // The newest 1-minute bar closed 5 seconds ago.
-      const lastOpen = Date.now() - 65000;
-      const live = [2, 1, 0].map(k => ({ t: new Date(lastOpen - k * 60000).toISOString(), o: 1, h: 2, l: 0, c: 1 + k, v: 10 }));
-      return { contractId: a.contractId, barSize: '1 minute', count: 3, bars: live };
+      // (kept for 2 s: the pages of one read, a few ms apart, see the same bars)
+      if (!liveBase || Date.now() - liveBase.at > 2000) liveBase = { at: Date.now(), lastOpen: Date.now() - 65000 };
+      const { lastOpen } = liveBase;
+      // Only those inside the call's window, as the interface says (a call paging back through history gets none of them).
+      const end = a.endTime ? Date.parse(a.endTime) : Infinity;
+      const start = a.startTime ? Date.parse(a.startTime) : -Infinity;
+      const live = [2, 1, 0].map(k => ({ t: new Date(lastOpen - k * 60000).toISOString(), o: 1, h: 2, l: 0, c: 1 + k, v: 10 })).filter(b => Date.parse(b.t) <= end && Date.parse(b.t) >= start);
+      return { contractId: a.contractId, barSize: '1 minute', count: live.length, bars: live };
     }
     const step = (a.unit === 'day' ? 1440 : Number(a.unitNumber) || 1) * 60000;
     const all = bars(Math.min(a.limit || 100, 300), step);

@@ -204,9 +204,9 @@ test('Monte Carlo: the evaluator refuses a size above the maximum instead of run
 
 // ---- 9. Smaller disagreements: the live value is the one value ----
 
-test('the read\'s history and the runner\'s kept history: one window plus a named margin (live: 240 read, 250 kept)', () => {
+test('the read\'s history and the runner\'s kept history: one window plus a named margin (live: 504 read, 514 kept)', () => {
   const mtf = require('../../scripts/lib/trading/mtf');
-  assert.strictEqual(mtf.DEFAULTS.historyHours, 240);
+  assert.strictEqual(mtf.DEFAULTS.historyHours, 504);
   assert.strictEqual(mtf.HISTORY_HOURS, mtf.DEFAULTS.historyHours + 10);
 });
 

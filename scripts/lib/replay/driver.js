@@ -353,7 +353,9 @@ async function runReplay(opts) {
 
 async function replayLoop({ run, baseEnv = process.env, root, deps = defaultDeps(run, root), maxCycles = Infinity, log = () => {}, wall = Date.now }) {
   const { paths, cfg } = run;
-  writeJsonAtomic(paths.autotrader, run.derived);
+  // The resolved bar count too (a null "bars" is derived from the multi-timeframe window): the scorers read what the run was
+  // handed (autotrader.recordedBars), never today's window.
+  writeJsonAtomic(paths.autotrader, { ...run.derived, bars: cfg.bars });
   const startEnv = replayEnv(baseEnv, run, { at: run.start });
   const problems = brokerErrors(startEnv, run);
   if (problems.length) throw new Error(`replay refused:\n- ${problems.join('\n- ')}`);

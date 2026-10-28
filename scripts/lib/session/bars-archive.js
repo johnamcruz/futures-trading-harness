@@ -177,7 +177,7 @@ const readArchive = file => readArchiveChecked(file).lines;
  */
 function archivedBars(dir, { log = () => {} } = {}) {
   const exact = new Map();
-  const loose = new Map(); // symbol|minutes|ms -> the bar, or null when two contracts have that time
+  const loose = new Map(); // symbol|minutes|ms -> the first archived bar at that time (the front contract's: see get)
   const errors = {};
   let names;
   try { names = fs.readdirSync(dir).filter(n => DAY_FILE.test(n)).sort(); } catch (_err) { names = []; }
@@ -194,7 +194,9 @@ function archivedBars(dir, { log = () => {} } = {}) {
       if (exact.has(k)) continue;
       exact.set(k, x.bar);
       const lk = `${x.symbol}|${x.minutes}|${ms}`;
-      loose.set(lk, loose.has(lk) ? null : x.bar);
+      // Two contracts can have a time (the 3 weeks before a roll: the new front's first poll archives its window, shifted
+      // from the old front's bars): the first archived is the one that was the front when the bar closed.
+      if (!loose.has(lk)) loose.set(lk, x.bar);
     }
   }
   return {

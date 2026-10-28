@@ -1767,3 +1767,23 @@ test('headSkillsInPrompt: a new prompt addition (a skill changed) prunes the old
   // The attested one is never pruned by its own write, and a missing directory is no error.
   assert.ok(fs.existsSync(file));
 });
+
+test('historyBars: the whole multi-timeframe window at any timeframe (paged past get_bars\' limit, never capped); recordedBars: the recorded count, else the legacy window', () => {
+  const A = require('../../scripts/lib/autotrader');
+  const T = require('../../scripts/lib/tunables');
+  const m = T.analysis().mtf;
+  const B = T.runner().bars;
+  const bars = (tf, hours) => Math.max(B.historyMinBars, Math.ceil((B.historyDays * B.historyDayHours * 60) / tf), Math.ceil((hours * 60) / tf));
+  const now = m.historyHours + m.historyMarginHours;
+  for (const tf of [1, 3, 15]) {
+    assert.strictEqual(A.historyBars(tf), bars(tf, now));
+    assert.strictEqual(validateConfig({ timeframe: tf }).bars, bars(tf, now), 'the run keeps the whole window');
+  }
+  assert.ok(A.historyBars(1) > require('../../scripts/lib/bars-fetch').MAX_COUNT, 'a one-minute lane\'s window is over one call: the adapter pages it');
+  // A run recorded with its count scores with it; one recorded before the field with the legacy window (the old 240 + 10 hours).
+  assert.strictEqual(A.recordedBars({ timeframe: 3, bars: 3000 }), 3000);
+  assert.strictEqual(A.recordedBars({ timeframe: 3 }), bars(3, m.legacyHistoryHours + m.historyMarginHours));
+  assert.strictEqual(A.recordedBars({ timeframe: 3 }), 5000);
+  assert.ok(A.recordedBars({ timeframe: 3 }) < A.historyBars(3));
+  assert.strictEqual(A.recordedBars({}), 0);
+});

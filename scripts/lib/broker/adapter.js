@@ -167,6 +167,24 @@ function createAdapter({ mcp, writeMcp = mcp }) {
     return listOf(res && res.bars, 'get_bars bars').slice().sort((a, b) => Date.parse(a.t) - Date.parse(b.t));
   };
 
+  /**
+   * Historical bars between two times (`start`/`end`, or `from`/`to`), oldest first, at `timeframe`
+   * (barSpec; default 1 minute), paged in chunks the interface allows. Each bar is the broker's own
+   * object, with every field its server put on it, untouched.
+   */
+  async function history(contractId, { start, end, from = start, to = end, timeframe = 1 }) {
+    const spec = barSpec(timeframe);
+    const t0 = new Date(from).getTime();
+    const t1 = new Date(to).getTime();
+    if (!Number.isFinite(t0) || !Number.isFinite(t1)) throw new BrokerError('history: from and to must be times');
+    const page = async (a, b) => (await bars({ contractId, unit: spec.unit, unitNumber: spec.unitNumber, limit: BAR_LIMIT, startTime: new Date(a).toISOString(), endTime: new Date(b).toISOString() })).map(bar => {
+      const ms = Date.parse(bar && bar.t);
+      if (!Number.isFinite(ms)) throw new BrokerError('get_bars returned a bar with no readable time (t)');
+      return { ms, bar };
+    });
+    return pageHistory(page, { from: t0, to: t1, chunk: HISTORY_CHUNK_BARS * spec.ms, limit: BAR_LIMIT });
+  }
+
   return {
     /** Throws unless the server lists every interface tool with the inputs the harness sends. */
     async verify() {
@@ -183,33 +201,24 @@ function createAdapter({ mcp, writeMcp = mcp }) {
       return { id: c.id, name: c.name, tickSize: Number(c.tickSize), tickValue: Number(c.tickValue) };
     },
 
-    /** Closed bars, oldest first: minute bars (`minutes`), or daily bars with `daily: true`. */
+    /**
+     * Closed bars, oldest first: minute bars (`minutes`), or daily bars with `daily: true`. A `limit` over what one get_bars
+     * call returns (the multi-timeframe window on a one-minute lane) is paged (history), never cut to the cap: the last
+     * `limit` closed bars of the span, as one call would return them.
+     */
     closedBars(contractId, { minutes, limit, now = new Date(), daily = false }) {
       // A span that covers weekends and the daily break.
       const span = daily ? (limit * 2 + 10) * 864e5 : minutes * 60000 * limit * 2 + 4 * 864e5;
+      if (!daily && limit > BAR_LIMIT) {
+        return history(contractId, { from: new Date(now.getTime() - span), to: now, timeframe: minutes }).then(all => all.slice(-limit));
+      }
       return bars({
         contractId, unit: daily ? 'day' : 'minute', unitNumber: daily ? 1 : minutes, limit,
         startTime: new Date(now.getTime() - span).toISOString(), endTime: now.toISOString(),
       });
     },
 
-    /**
-     * Historical bars between two times (`start`/`end`, or `from`/`to`), oldest first, at `timeframe`
-     * (barSpec; default 1 minute), paged in chunks the interface allows. Each bar is the broker's own
-     * object, with every field its server put on it, untouched.
-     */
-    async history(contractId, { start, end, from = start, to = end, timeframe = 1 }) {
-      const spec = barSpec(timeframe);
-      const t0 = new Date(from).getTime();
-      const t1 = new Date(to).getTime();
-      if (!Number.isFinite(t0) || !Number.isFinite(t1)) throw new BrokerError('history: from and to must be times');
-      const page = async (a, b) => (await bars({ contractId, unit: spec.unit, unitNumber: spec.unitNumber, limit: BAR_LIMIT, startTime: new Date(a).toISOString(), endTime: new Date(b).toISOString() })).map(bar => {
-        const ms = Date.parse(bar && bar.t);
-        if (!Number.isFinite(ms)) throw new BrokerError('get_bars returned a bar with no readable time (t)');
-        return { ms, bar };
-      });
-      return pageHistory(page, { from: t0, to: t1, chunk: HISTORY_CHUNK_BARS * spec.ms, limit: BAR_LIMIT });
-    },
+    history,
 
     /** Open positions and working orders of an account. */
     async accountState(accountId) {

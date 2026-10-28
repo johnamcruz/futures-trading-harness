@@ -31,11 +31,11 @@ const { harnessHome } = require('./paths');
 const MAX_COUNT = 20000; // the most get_bars returns at once (broker MCP interface)
 
 /** Problems with the request: [message]. */
-function requestErrors({ symbol, timeframe, daily, count, name = null }) {
+function requestErrors({ symbol, timeframe, daily, count, name = null, maxCount = MAX_COUNT }) {
   const errors = [];
   if (!/^[A-Z0-9]+$/.test(String(symbol || ''))) errors.push('--symbol: a contract root, e.g. MNQ'); // cli-only: the tool's schema refuses this first
   if (!daily && !(Number.isInteger(timeframe) && timeframe >= 1 && timeframe <= 60)) errors.push('--timeframe: minutes per bar, 1 to 60 (or --daily)'); // cli-only: the tool's schema refuses this first
-  if (!(Number.isInteger(count) && count >= 3 && count <= MAX_COUNT)) errors.push(`--count: 3 to ${MAX_COUNT} bars`); // cli-only: the tool's schema refuses this first
+  if (!(Number.isInteger(count) && count >= 3 && count <= maxCount)) errors.push(`--count: 3 to ${maxCount} bars`); // cli-only: the tool's schema refuses this first
   if (name !== null && name !== undefined && !NAME.test(String(name))) errors.push('name: a suffix like trend (lowercase letters, digits, -)'); // cli-only: the tool's schema refuses this first
   return errors;
 }
@@ -126,8 +126,10 @@ function outError(out, outDir, { tool = false } = {}) {
  */
 async function fetchBarsToFile({ client, symbol, timeframe = 3, daily = false, count = null, out = null, name = null, now = new Date(), cutAt = null, env = process.env, outDir = scratchDir(env), tool = false }) {
   // By default as many bars as the runner keeps (the multi-timeframe read's whole window).
-  if (count === null) count = daily ? 60 : require('./autotrader').historyBars(timeframe);
-  const errors = requestErrors({ symbol, timeframe, daily, count, name });
+  // (over one get_bars call's limit, the adapter pages it).
+  const defaulted = count === null;
+  if (defaulted) count = daily ? 60 : require('./autotrader').historyBars(timeframe);
+  const errors = requestErrors({ symbol, timeframe, daily, count, name, maxCount: defaulted ? Math.max(MAX_COUNT, count) : MAX_COUNT });
   if (errors.length) throw new Error(errors.join('; '));
   // Refused before the broker is asked.
   const file = path.resolve(out || defaultOut(symbol, timeframe, daily, outDir, name));
