@@ -47,7 +47,8 @@ test('a lesson names its side and is flagged broad when it names no condition th
   assert.deepStrictEqual([
     'skip shorts with the 3m trend up', 'favour longs on the 3m trend up', 'the 15m EMA20 matters',
     'Longs into a strong 15m trend down lose: 1W/6L', "Don't take longs below the 15m EMA20: 1W/5L", 'never take shorts above the 15m EMA20', 'take longs at the 15m EMA20',
-  ].map(t => lessonDirection(lesson('t', t))), ['against', 'for', null, 'against', 'against', 'against', 'for']);
+    'Longs above the 15m EMA20 never lost: 6W/0L', "Don't skip longs on the 3m trend up", 'Longs taken below the 15m EMA20 lose', 'No longs below the 15m EMA20',
+  ].map(t => lessonDirection(lesson('t', t))), ['against', 'for', null, 'against', 'against', 'against', 'for', null, null, 'against', 'against']);
 });
 
 test('a lesson\'s record: the trades taken since and the composed plans walked forward since, repeats once; provisional, supported or contradicted', () => {

@@ -69,10 +69,14 @@ const CONDITION = new RegExp(`\\b(?:\\d{1,2}m|[14]h)\\b[\\s:,-]+(?:${GAP}\\s+){0
 const isBroad = entry => !CONDITION.test(text(entry));
 
 // Against a setup: "skip", "avoid", "lose", "don't take"; for one: "favour", "prefer", "take" (not after a negation).
-const NEG = "(?:don'?t|do not|never|no)";
-const AGAINST = new RegExp(`\\b(?:skip|avoid|stop|stand aside|pass on|los(?:e|es|t|ing)|fail\\w*|restrict\\w*|${NEG}(?:\\s+\\w+)?\\s+(?:take|favou?r|prefer)\\w*)\\b`, 'i');
-const FOR = new RegExp(`(?<!${NEG}\\s(?:\\w+\\s)?)\\b(?:favou?r|prefer|take)\\w*\\b`, 'i');
+// A negated against-word ("never lost", "don't skip") gives no direction: the lesson is then read as having none.
+const NEG = "(?:don'?t|do not|never|no|rarely)";
+const AVOID = '(?:skip|avoid|stop|stand aside|pass on|los(?:e|es|t|ing)|fail\\w*|restrict\\w*)';
+const AGAINST = new RegExp(`\\b(?:${AVOID}|${NEG}(?:\\s+\\w+)?\\s+(?:tak(?:e|es|ing)|favou?r|prefer)\\w*|${NEG}\\s+(?:longs?|shorts?))\\b`, 'i');
+const NEGATED = new RegExp(`\\b${NEG}\\s+(?:\\w+\\s+)?${AVOID}\\b`, 'i');
+const FOR = new RegExp(`(?<!${NEG}\\s(?:\\w+\\s)?)\\b(?:favou?r\\w*|prefer\\w*|tak(?:e|es|ing))\\b`, 'i');
 function lessonDirection(entry) {
+  if (NEGATED.test(text(entry))) return null;
   const a = AGAINST.test(text(entry));
   const f = FOR.test(text(entry));
   return a === f ? null : a ? 'against' : 'for';
