@@ -18,7 +18,7 @@ test('instincts: setup records by regime, recurring mistakes, and lessons, with 
     review('win', ['setup:orb', 'regime:range', 'paper', 'r:5']),
     { ts: new Date((t += 3600000)).toISOString(), kind: 'lesson', text: 'Keltner in range: 0W/4L over 4 trades. Skip.', tags: ['setup:keltner'] },
   ];
-  const now = new Date(t + 60000); // the lesson's own session day
+  const now = new Date(t + 60000); // the harness clock, after the lesson
   const list = instincts(journal, { now });
   const orb = list.find(x => x.key === 'setup:orb regime:trend-up');
   assert.match(orb.text, /orb in trend-up: 6 trades, win 67%, E \+1R -> favour/);
@@ -38,7 +38,7 @@ test('instincts: setup records by regime, recurring mistakes, and lessons, with 
   assert.ok(prompt.length > 0 && prompt.every(x => !/\d+ trades, win \d+%/.test(x) && !/^\(form\)/.test(x)), prompt.join(' | '));
   assert.ok(prompt.some(x => /mistake:chased-entry/.test(x)));
   assert.ok(digest(journal, 10, { now }).some(x => /keltner/.test(x)), 'the full digest (briefings, lessons.js) keeps them all');
-  assert.ok(prompt.some(x => /advice from \d{4}-\d{2}-\d{2}, not a rule: Keltner in range/.test(x)), 'today\'s lesson, as advice with its date');
+  assert.ok(prompt.some(x => /^\(0\.\d\) lesson from \d{4}-\d{2}-\d{2} \(taken since n=0; [^)]*\): advice, weigh it: Keltner in range/.test(x)), 'the lesson, as advice with its date and record');
   assert.match(formSummary(journal), /^\d+W\/\d+L, E [+-][0-9.]+R$/);
   assert.strictEqual(formSummary([]), null);
   assert.deepStrictEqual([reviewR({ tags: ['r:-1.11'] }), reviewR({ text: 'R = 2.5' }), reviewR({ text: 'none' })], [-1.11, 2.5, null]);

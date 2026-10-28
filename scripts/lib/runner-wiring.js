@@ -65,6 +65,7 @@ const CD = require('./cycle-data');
 const { tradingDayKey } = require('./trading/clock');
 const { digest, recentTrades, formSummary } = require('./trading/instincts');
 const { historyFrom, journalSince } = require('./prop/attempt-scope');
+const { readShadow, recordShadow } = require('./trading/lesson-shadow');
 const LR = require('./trading/lifecycle-runner');
 const { recordsAt } = require('./trading/lifecycle-gate');
 const { resolveJournalPath, readJournal } = require('./trading/journal');
@@ -694,6 +695,8 @@ function wireRunner({ cfg, root, home, env = process.env, client, prop = null, d
       return file;
     },
     recordMtf: (sym, bars) => writeMtfRecord(home, sym.symbol, bars, { now: now() }).line,
+    // The composed plans walked forward, settled by this bar (trading/lesson-shadow.js): a lesson's record.
+    recordShadow: (sym, bars) => recordShadow(home, { root: sym.symbol, bars, minutes: cfg.timeframe, tick: sym.tickSize, now: now() }),
     // Another lane's bar: the record the first lane's bars wrote, as the gate reads it (its line, or null).
     readMtf: sym => { const r = readMtfRecord(home, sym.symbol); return r && !r.error && r.line ? r.line : null; },
     // A strategy's track record (trading/track-record.js): its recorded backtest and the journal's reviews.
@@ -706,7 +709,7 @@ function wireRunner({ cfg, root, home, env = process.env, client, prop = null, d
     // the last reviewed trades' record on their own line.
     // Off when an active composed strategy (trade_lifecycle) trades the runner's timeframe: what it learns comes from
     // its experience record, not the journal's instincts (the composed-entry design, PR 14).
-    lessons: ({ entries } = {}) => (LR.runsComposed(strategies(), `${cfg.timeframe}m`) ? [] : digest(entries || journal(), 5, { kinds: ['mistake', 'lesson'], form: false, now: now() })),
+    lessons: ({ entries } = {}) => (LR.runsComposed(strategies(), `${cfg.timeframe}m`) ? [] : digest(entries || journal(), 5, { kinds: ['mistake', 'lesson'], form: false, now: now(), from: historyFrom(home), shadow: readShadow(home, now()) })),
     // A fresh combine attempt's prompt shows only its own reviewed trades (prop/attempt-scope.js); any other run, all.
     recentTrades: ({ entries } = {}) => recentTrades(journalSince(entries || journal(), historyFrom(home)), 10),
     tradesSummary: ({ entries } = {}) => formSummary(journalSince(entries || journal(), historyFrom(home)), 10),

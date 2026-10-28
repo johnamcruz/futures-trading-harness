@@ -62,13 +62,13 @@ test('the desk\'s reads are each role\'s agent body\'s, with its arguments; the 
   assert.deepStrictEqual(reads('market-structure-analyst'), ['bar_briefing {"symbol":"MNQ"}', 'strategies_list {}']);
   assert.deepStrictEqual(reads('trend-momentum-analyst'), ['bar_briefing {"symbol":"MNQ"}']);
   assert.deepStrictEqual(reads('volume-liquidity-analyst'), ['bar_briefing {"symbol":"MNQ"}', 'get_quote {"contractId":"MNQ"}']);
-  assert.deepStrictEqual(reads('risk-manager'), ['get_server_config {}', 'list_accounts {}', 'get_account_snapshot {"accountId":7}', 'journal_read {"kind":"review","since":"2026-04-26T22:00:00.000Z"}', 'journal_read {"kind":"lesson","since":"2026-04-26T22:00:00.000Z"}', 'combine_status {}']);
-  assert.deepStrictEqual(CD.deskReads('risk-manager', { symbol: 'MNQ', since: o.since }).map(x => x.tool), ['get_server_config', 'list_accounts', 'journal_read', 'journal_read', 'combine_status'], 'no account: no snapshot');
+  assert.deepStrictEqual(reads('risk-manager'), ['get_server_config {}', 'list_accounts {}', 'get_account_snapshot {"accountId":7}', 'journal_read {"kind":"review","since":"2026-04-26T22:00:00.000Z"}', 'lessons {}', 'combine_status {}']);
+  assert.deepStrictEqual(CD.deskReads('risk-manager', { symbol: 'MNQ', since: o.since }).map(x => x.tool), ['get_server_config', 'list_accounts', 'journal_read', 'lessons', 'combine_status'], 'no account: no snapshot');
   assert.deepStrictEqual(CD.deskReads('trade-executor', o), []);
   // Each body names them (agents/*.md): the reads are its own, never ones it doesn't make.
   const body = n => fs.readFileSync(path.join(ROOT, 'agents', `${n}.md`), 'utf8');
   for (const r of ROLES) for (const x of CD.deskReads(r, o)) assert.ok(body(r).includes(`\`${x.tool}`), `${r}: ${x.tool}`);
-  assert.match(body('risk-manager'), /`journal_read` today's `review` entries[^]*`lesson`s since the day's start: advice\./);
+  assert.match(body('risk-manager'), /`journal_read` today's `review` entries[^]*The harness tool `lessons`: advice, with each one's record\./);
 });
 
 test('the store: one read per key per cycle, a read several roles share made once; the head trader takes the same entry, the account read again', async () => {
@@ -80,8 +80,8 @@ test('the store: one read per key per cycle, a read several roles share made onc
   const desk = await CD.collectDesk({ roles: ROLES, symbol: 'MNQ', contractId: 'MNQ', accountId: 7, env: w.env, store, since });
   // One bar_briefing for the three analysts; every key once.
   assert.deepStrictEqual(tool.calls.filter(c => c[0] === 'bar_briefing').length, 1);
-  assert.deepStrictEqual(tool.calls.map(c => c[0]).sort(), ['bar_briefing', 'combine_status', 'strategies_list']);
-  assert.deepStrictEqual(broker.calls.map(c => c[0]), ['get_quote', 'get_server_config', 'list_accounts', 'get_account_snapshot', 'journal_read', 'journal_read']);
+  assert.deepStrictEqual(tool.calls.map(c => c[0]).sort(), ['bar_briefing', 'combine_status', 'lessons', 'strategies_list']);
+  assert.deepStrictEqual(broker.calls.map(c => c[0]), ['get_quote', 'get_server_config', 'list_accounts', 'get_account_snapshot', 'journal_read']);
   assert.strictEqual(store.made, 9);
   for (const r of ROLES) assert.strictEqual(desk[r].primaryOk, true, r);
   const brief = r => desk[r].blocks.find(b => b.tool === 'bar_briefing');
@@ -97,7 +97,7 @@ test('the store: one read per key per cycle, a read several roles share made onc
   assert.strictEqual(tool.calls.filter(c => c[0] === 'bar_briefing').length, 1, 'the briefing not read again');
   assert.strictEqual(CD.sha256(head.blocks[0].text), CD.sha256(brief('trend-momentum-analyst').text));
   assert.strictEqual(head.blocks[0].text, brief('market-structure-analyst').text);
-  assert.deepStrictEqual(broker.calls.slice(6).map(c => c[0]), [...CD.READS], 'the account\'s reads made again for the head trader');
+  assert.deepStrictEqual(broker.calls.slice(5).map(c => c[0]), [...CD.READS], 'the account\'s reads made again for the head trader');
   assert.strictEqual(broker.calls.filter(c => c[0] === 'get_account_snapshot').length, 2);
   // In one fill a key read once, whatever its arguments' order.
   const s2 = CD.createStore({ root: ROOT, broker: countingBroker(), callTool: countingTool() });
@@ -135,9 +135,11 @@ test('byte identity: each desk block is exactly its tool\'s output with that rol
   B.writeBriefing(h, b);
   const state = path.join(h, 'exchange.json');
   const journal = path.join(h, 'journal.jsonl');
-  // Yesterday's end-of-day restriction (an earlier session day: expired) and today's lesson.
+  // Yesterday's end-of-day restriction (advice now, with its record), another run's lesson stamped after the harness
+  // clock (a later replay or the live account in the same journal: never this run's), and today's lesson.
   const yesterday = new Date(Date.parse(b.closedAt) - 86400000).toISOString();
-  fs.writeFileSync(journal, `${JSON.stringify({ ts: yesterday, kind: 'lesson', text: 'Rule: no long entries until the restriction is lifted in the journal' })}\n${JSON.stringify({ ts: b.closedAt, kind: 'review', text: 'a loss' })}\n${JSON.stringify({ ts: b.closedAt, kind: 'lesson', text: 'wait for the close' })}\n`);
+  const later = '2099-01-02T15:00:00.000Z';
+  fs.writeFileSync(journal, `${JSON.stringify({ ts: yesterday, kind: 'lesson', text: 'Rule: no long entries until the restriction is lifted in the journal' })}\n${JSON.stringify({ ts: later, kind: 'lesson', text: 'another run: skip shorts until lifted' })}\n${JSON.stringify({ ts: b.closedAt, kind: 'review', text: 'a loss' })}\n${JSON.stringify({ ts: b.closedAt, kind: 'lesson', text: 'wait for the close' })}\n`);
   fs.writeFileSync(path.join(h, 'brokers.json'), JSON.stringify({ broker: 'mock', brokers: { mock: { command: [process.execPath, SERVER], journal, allowedAccountsEnv: 'MOCK_ALLOWED_ACCOUNTS' } } }));
   exchange.initState(state, { nowMs: Date.parse(b.closedAt) });
   const base = { PATH: process.env.PATH, HOME: h, FTH_HOME: h, MOCK_STATE: state, MOCK_JOURNAL: journal, MOCK_ALLOWED_ACCOUNTS: '7', NODE_ENV: 'test', FTH_TEST_NOW: b.closedAt, FTH_GATE_LOG: path.join(h, 'gate.jsonl'), FTH_KILL_SWITCH_FILE: path.join(h, 'STOP') };
@@ -154,7 +156,7 @@ test('byte identity: each desk block is exactly its tool\'s output with that rol
       // The role's own run's environment (cycle-run.js runRole: the context with its role).
       const roleEnv = childEnv(cfg, ROOT, base, { ...context, roleRun: role });
       for (const blk of desk[role].blocks) {
-        const raw = ['bar_briefing', 'strategies_list', 'combine_status'].includes(blk.tool)
+        const raw = ['bar_briefing', 'strategies_list', 'combine_status', 'lessons'].includes(blk.tool)
           ? await callTool(blk.tool, blk.args, { env: roleEnv, root: ROOT })
           : await gw.request('tools/call', { name: blk.tool, arguments: blk.args });
         assert.strictEqual(raw.content.length, 1, `${role} ${blk.tool}`);
@@ -164,13 +166,16 @@ test('byte identity: each desk block is exactly its tool\'s output with that rol
         assert.ok(req.includes(`\n--- ${blk.tool} ${JSON.stringify(blk.args)} as of ${blk.asOf} ---\n${raw.content[0].text}\n--- end of ${blk.tool} ${JSON.stringify(blk.args)} (sha256 ${CD.sha256(raw.content[0].text)}) ---`), `${role} ${blk.tool} in its request`);
       }
     }
-    assert.match(desk['risk-manager'].blocks.find(x => x.args.kind === 'lesson').text, /wait for the close/);
-    // The next day's cycle data never carries the earlier day's restriction, in any role's reads.
-    for (const role of ROLES) assert.ok(desk[role].blocks.every(x => !/restriction is lifted/.test(x.text)), role);
+    const lessonsText = desk['risk-manager'].blocks.find(x => x.tool === 'lessons').text;
+    assert.match(lessonsText, /lesson from \d{4}-\d{2}-\d{2} \([^)]*\): advice, weigh it: wait for the close/);
+    // The earlier day's restriction only as advice with its record, flagged broad; another run's later lesson in no
+    // role's reads; no raw journal lesson in any.
+    assert.match(lessonsText, /lesson from \d{4}-\d{2}-\d{2} \([^)]*broad[^)]*\): advice, weigh it: Rule: no long entries until the restriction is lifted/);
+    for (const role of ROLES) assert.ok(desk[role].blocks.every(x => !/another run/.test(x.text) && !(x.tool === 'journal_read' && /restriction is lifted/.test(x.text))), role);
     assert.doesNotMatch(desk['risk-manager'].blocks.find(x => x.args.kind === 'review').text, /wait for the close/);
     // journal_read is the journal's one read: readText sends it; journal_add (a write) never.
     await assert.rejects(adapter.readText('journal_add', { kind: 'lesson', text: 'x' }), /not a read of the broker interface/);
-    assert.strictEqual(fs.readFileSync(journal, 'utf8').trim().split('\n').length, 3);
+    assert.strictEqual(fs.readFileSync(journal, 'utf8').trim().split('\n').length, 4);
   } finally {
     adapter.close();
     gw.close();
@@ -483,18 +488,17 @@ test('a read that failed is tried again by a later reader in the cycle: the desk
   assert.strictEqual(n, 2);
 });
 
-test('phase 1 reads today\'s reviews and today\'s lessons (since the trading day\'s start, the cycle\'s clock); without it no lesson', async () => {
+test('phase 1 reads today\'s reviews (since the trading day\'s start, the cycle\'s clock) and the lessons through the harness tool, never the raw journal', async () => {
   const { tradingDayStart } = require('../../scripts/lib/trading/clock');
-  assert.deepStrictEqual(CD.deskReads('risk-manager', { symbol: 'MNQ', since: '2026-04-26T22:00:00.000Z' }).filter(x => x.tool === 'journal_read').map(x => x.args), [{ kind: 'review', since: '2026-04-26T22:00:00.000Z' }, { kind: 'lesson', since: '2026-04-26T22:00:00.000Z' }]);
-  // No day's start: never an earlier day's lesson (an expired one), so no lesson read at all.
-  assert.deepStrictEqual(CD.deskReads('risk-manager', { symbol: 'MNQ' }).filter(x => x.tool === 'journal_read').map(x => x.args), [{ kind: 'review' }]);
+  assert.deepStrictEqual(CD.deskReads('risk-manager', { symbol: 'MNQ', since: '2026-04-26T22:00:00.000Z' }).filter(x => x.tool === 'journal_read').map(x => x.args), [{ kind: 'review', since: '2026-04-26T22:00:00.000Z' }]);
+  assert.ok(CD.deskReads('risk-manager', { symbol: 'MNQ' }).some(x => x.tool === 'lessons'));
   const w = home();
   const broker = countingBroker();
   const now = new Date(w.b.closedAt);
   const runRole = async () => ({ ok: true, text: '## Risk state: account 7', tools: [] });
   await deskFor({ home: w.h, cfg: ON(), root: ROOT, runRole, env: w.base }).run({ symbols: [{ symbol: 'MNQ', contractId: 'MNQ' }], roles: ['risk-manager'], now, at: now.toISOString(), context: w.context, store: CD.createStore({ root: ROOT, broker }) });
   const journal = broker.calls.filter(c => c[0] === 'journal_read').map(c => c[1]);
-  assert.deepStrictEqual(journal, [{ kind: 'review', since: tradingDayStart(now).toISOString() }, { kind: 'lesson', since: tradingDayStart(now).toISOString() }]);
+  assert.deepStrictEqual(journal, [{ kind: 'review', since: tradingDayStart(now).toISOString() }]);
   assert.ok(Date.parse(journal[0].since) <= now.getTime() && now.getTime() - Date.parse(journal[0].since) < 86400000);
 });
 

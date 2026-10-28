@@ -301,7 +301,10 @@ test('every role has the row of every harness tool it holds in its core, or a re
   const REFERENCED = {
     // The risk manager calls order_plan; its arguments are in the tool's schema and its use is in its step 5, which
     // references the order-plan skill and states the two read rules it acts on.
-    'risk-manager': ['order_plan'],
+    // lessons: the runner reads it for phase 1 every cycle (cycle-data.js deskReads, no arguments), as step 4 names
+    // it, so the lessons it shows are the run's own with their record, never the raw journal; embedding its row's
+    // skill (user-commands) would grow the prompt.
+    'risk-manager': ['order_plan', 'lessons'],
     // Neither ever loaded harness-tools, so neither had these rows on main; embedding them would grow its prompt.
     'trade-reviewer': ['bars_fetch', 'lessons', 'reconcile'],
     'strategy-researcher': ['strategies_validate', 'strategies_list', 'strategies_show'],

@@ -9,14 +9,20 @@
 const { instincts } = require('../trading/instincts');
 const { resolveJournalPath, readJournal } = require('../trading/journal');
 const { context } = require('./cli');
+const { harnessHome } = require('../paths');
+const { readShadow } = require('../trading/lesson-shadow');
+const { historyFrom } = require('../prop/attempt-scope');
 
 const USAGE = 'usage: lessons.js [--top 10] [--json]';
 
 function lessons({ top = 10, json = false } = {}, ctx) {
   const { env, now } = context(ctx);
   if (!(Number.isInteger(top) && top > 0)) throw new Error('--top: a positive whole number'); // cli-only: the tool's schema refuses this first
-  // Today's lessons only, each as advice with its date (trading/lesson-expiry.js): an earlier day's has expired.
-  const list = instincts(readJournal(resolveJournalPath(env)), { now: now() }).slice(0, top);
+  // The run's own lessons (by the harness clock, since a fresh attempt's start), each as advice with its date and its
+  // record since: the trades taken and the composed plans walked forward (trading/lesson-advice.js, lesson-shadow.js).
+  const at = now();
+  const home = harnessHome(env);
+  const list = instincts(readJournal(resolveJournalPath(env)), { now: at, from: historyFrom(home), shadow: readShadow(home, at) }).slice(0, top);
   if (json) return { text: `${JSON.stringify(list, null, 2)}\n` };
   return { text: list.length ? `${list.map(x => `(${x.confidence.toFixed(1)}) [${x.kind}] ${x.text}`).join('\n')}\n` : 'No instincts yet: they come from reviewed trades (result:, setup:, regime:, mistake: and r: tags) and lessons.\n' };
 }

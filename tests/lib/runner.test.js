@@ -1108,6 +1108,23 @@ test('every closed bar records the multi-timeframe read for the gate, and the cy
   assert.ok(logs.some(l => /error MNQ: could not record the multi-timeframe read \(disk full\)/.test(l)), logs.join('\n'));
 });
 
+test('every closed bar records the composed plans\' shadow outcomes (a lesson\'s record); a failure never stops the cycle', async () => {
+  const recorded = [];
+  const ok = await simulate({
+    cfg: { symbols: ['MNQ'], timeframe: 3 }, from: et(10, 0), to: et(10, 10), market: fakeMarket({ minutes: 3 }),
+    deps: { recordShadow: (sym, bars) => { recorded.push([sym.symbol, bars.length]); return 0; } },
+  });
+  assert.ok(recorded.length >= 3 && recorded.every(([sym, n]) => sym === 'MNQ' && n > 0));
+  assert.ok(ok.cycles.length >= 3);
+  const logs = [];
+  const failed = await simulate({
+    cfg: { symbols: ['MNQ'], timeframe: 3 }, from: et(10, 0), to: et(10, 4), market: fakeMarket({ minutes: 3 }),
+    deps: { recordShadow: () => { throw new Error('disk full'); }, log: (m, level = 'info') => logs.push(`${level} ${m}`) },
+  });
+  assert.ok(failed.cycles.length >= 1);
+  assert.ok(logs.some(l => /error MNQ: could not record the composed plans' shadow outcomes \(disk full\)/.test(l)), logs.join('\n'));
+});
+
 test('every scanned bar records its signals for the gate, also on the default bar trigger', async () => {
   const recorded = [];
   const scan = [{ name: 'orb', signal: 'rules', status: 'active', candidate: true, direction: 'long', stopDistance: 5 }];

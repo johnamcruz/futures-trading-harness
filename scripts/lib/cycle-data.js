@@ -75,7 +75,7 @@ const MAX_BYTES = require('./tunables').runner().prompt.cycleDataMaxBytes; // co
 const READS = Object.freeze(['get_account_snapshot', 'list_open_positions', 'list_open_orders']);
 const BRIEFING = 'bar_briefing';
 // The harness tools among the reads (harness-tools/protocol.js callTool); every other read is the broker's (readText).
-const HARNESS_READS = Object.freeze([BRIEFING, 'strategies_list', 'combine_status']);
+const HARNESS_READS = Object.freeze([BRIEFING, 'strategies_list', 'combine_status', 'lessons']);
 // Broker reads that change with fills or the market within a cycle: read again for each later reader, never handed on.
 const VOLATILE = Object.freeze([...READS, 'get_quote']);
 // The variables childEnv sets for each run of a cycle on its own (its transcript, its role, its records): not the reads'.
@@ -323,12 +323,11 @@ function deskReads(role, { symbol, contractId = null, accountId = null, timefram
   if (role === 'volume-liquidity-analyst') return [...brief, { tool: 'get_quote', args: { contractId: contractId || symbol } }];
   if (role === RISK_MANAGER) {
     const account = Number.isInteger(accountId) && accountId >= 1 ? [{ tool: 'get_account_snapshot', args: { accountId } }] : [];
-    // Today's reviews and today's lessons (since the trading day's start): an earlier day's lesson has expired
-    // (trading/lesson-expiry.js), so without the day's start no lesson is read (never one of another day).
-    const day = typeof since === 'string' && since ? { since } : null;
-    const review = { tool: 'journal_read', args: { kind: 'review', ...(day || {}) } };
-    const lessons = day ? [{ tool: 'journal_read', args: { kind: 'lesson', ...day } }] : [];
-    return [{ tool: 'get_server_config', args: {} }, { tool: 'list_accounts', args: {} }, ...account, review, ...lessons, { tool: 'combine_status', args: {} }];
+    // Today's reviews (since the trading day's start). The lessons through the harness tool `lessons`, never the raw
+    // journal: only those active on the role's own clock (written today, never after it: trading/lesson-expiry.js, so
+    // no earlier day's and no other run's), each as advice with its date, with the reviews' instincts.
+    const review = { tool: 'journal_read', args: { kind: 'review', ...(typeof since === 'string' && since ? { since } : {}) } };
+    return [{ tool: 'get_server_config', args: {} }, { tool: 'list_accounts', args: {} }, ...account, review, { tool: 'lessons', args: {} }, { tool: 'combine_status', args: {} }];
   }
   return [];
 }

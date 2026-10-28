@@ -103,10 +103,10 @@ formats matter.
   planned vs. actual, result in R, followed-plan yes/no, mistakes. Tags must
   include exactly one of `result:win`, `result:loss`, `result:scratch`
   (|R| < 0.2), `result:nofill`, plus `setup:<name>` and any `mistake:<kind>`.
-- **lesson** (end of session, 1–3): evidence-backed advice with its
-  sample, e.g. "ORB on MNQ before 09:45 ET: 2W/7L". Tags: setup, symbol.
-  Never a rule or a block "until" anything (only the gate and rulebook
-  block); it expires at its day's end.
+- **lesson** (end of session, 1–3): advice with its sample and a condition
+  the bars show, e.g. "ORB on MNQ before 09:45 ET: 2W/7L". Tags: setup,
+  symbol. Never a rule or a block (only the gate and rulebook block): it is
+  shown with its record. Defying one is no mistake.
 - Grade the process, not the P&L. A losing trade that followed the plan is a
   good trade; a winner that broke the plan is a mistake.
 

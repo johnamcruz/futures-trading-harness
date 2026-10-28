@@ -51,8 +51,8 @@ description: Use weekly (/setup-scorecard), before raising size or adding a setu
    improve E, the filter costs trades without adding edge: say so.
 8. Record the numbers as a `lesson` (advice) tagged with the setup and
    regime. The `lessons` tool shows it as ranked
-   instincts (confidence 0.3 to 0.9 from the number of trades), which every
-   cycle prompt and session briefing carries.
+   instincts (confidence 0.3 to 0.9 by trade count), with its record; a
+   lasting change is the user's edit (step 5).
 
 ## Examples
 
