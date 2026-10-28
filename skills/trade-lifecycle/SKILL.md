@@ -34,9 +34,10 @@ description: Use before a trade_lifecycle entry - compose the trade as reads wit
    `in ote`, `3m volume high`, `participation high`; a CISD or compression setup is
    timed from its confirming or expansion candle. A refusal's `HINT`
    lines list what is TRUE per step; `HINT these reads pass together` →
-   compose them if they are your trade, else pass.
+   compose them if they are your trade, else pass. Target NOT OK, `HINT target`
+   of 2R+: re-compose once with it, then pass.
 
-   A normal trade risks about $200-300 (less, or a pass, is fine; never
+   A normal trade risks $200-300 (less or a pass is fine; never
    over $300). Aim the target at the first real level at 2:1 to 3:1 (about
    $600 on that risk); beyond 3:1 only at the real level. In an
    attempt, NOT OK `no size fits`: a closer stop, or pass (healthy, code may
@@ -73,12 +74,12 @@ description: Use before a trade_lifecycle entry - compose the trade as reads wit
 | `experience_lookup` | `symbol`, `alternative`?, `role`? | after an OK compose_check, at most 2 a bar: your own past decisions of these skills in this context, then, only when the run enables its display (`libraryDisplay`), the code-measured history library apart (not yours: counts, win rate and no-room, never R); statistics only, never advice | `experience-lookup.js --symbol MNQ` |
 
 **Your risk record**, last in `experience_lookup` when the run shows it
-(`riskRecordDisplay`): a line per account state and risk decision of yours
-(standing down, sizing under the ceiling, exiting early, stopping for the day
-after losses), counting what reverting it did over the same Monte Carlo paths:
+(`riskRecordDisplay`): a line per account state and risk decision
+(standing down, sizing, exiting early, stopping after losses), counting what
+reverting it did over the same Monte Carlo paths:
 n is the paths it changed, then the blows it saved or caused and the passes it
-cost or gained. "Too few" is no reading yet. Read it as a prop trader reads a
-journal: evidence about your own standing-down habits in that account state,
+cost or gained. "Too few" is no reading yet. Read it as evidence about your own
+standing-down habits in that account state,
 never a forecast for this trade. A rule from code always overrides it.
 
 ## Examples

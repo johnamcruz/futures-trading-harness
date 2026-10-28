@@ -146,7 +146,7 @@ user; numbers here are the harness defaults, not any firm's official limits.
   exit, or a stop cancelled or missing), placed at once; never a way to
   enter without a bracket. If the stop can't be placed, close the position. A working entry
   without a stop bracket (one the gate never checked, e.g. placed outside
-  the harness) is cancelled, not waited on (the `order-mechanics` skill).
+  the harness) is cancelled, not waited on (the `order-mechanics` skill; "attached on fill" is a bracket).
 - Never widen a stop, never average down, never add to a loser. You may
   tighten a stop or move it to breakeven.
 - Use micro contracts (MNQ, MES, MYM, M2K, MGC, MCL) and size 1 until the
