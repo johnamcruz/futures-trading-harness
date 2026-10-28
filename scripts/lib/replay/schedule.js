@@ -24,13 +24,15 @@
  * is open, as live, and skips them once the account is flat with nothing working.
  *
  * Exchange holidays and closed days (the harness calendar: the config's
- * closedDates, which validateConfig merges with the built-in CME calendar) and
- * days with no session (weekends) have none. Each point is
+ * closedDates, which validateConfig merges with the built-in CME calendar),
+ * days with no session (weekends), and the replay server's days without source
+ * data (`dataGaps`: trading days, replay/data-gaps.js; none when not given) have none. Each point is
  * { t: Date, kind, day } with `day` the trading day (YYYY-MM-DD, the New York
  * date it ends on), sorted by time.
  *
- *   decisionPoints(cfg, { start, end, everyNth, delayMs, manage })
- *   tradingDays(cfg, { start, end })   [{ day, start, skipped }] (skipped: why a day has no points)
+ *   decisionPoints(cfg, { start, end, everyNth, delayMs, manage, dataGaps })
+ *   tradingDays(cfg, { start, end, dataGaps })   [{ day, start, skipped }] (skipped: why a day has no points)
+ *   NO_SOURCE_DATA                     the skipped reason of a day in dataGaps
  *   holidayDates(start, end)           { closed, early } from cmeHolidays for years the built-in calendar lacks
  *   isTradeTime(cfg, t)                whether t (a bar's close plus barDelaySeconds) is a trade decision time:
  *                                      the rule decisionPoints applies, for the live session record (session/live.js)
@@ -42,15 +44,19 @@ const { CLOSED, cmeHolidays } = require('../trading/exchange-calendar');
 const { tradingLanes } = require('../lanes');
 
 const HOUR = 3600000;
+/** Why a day of the replay server's dataGaps has no decision time (the driver logs it per day). */
+const NO_SOURCE_DATA = 'no source data on the replay server; skipped (not a session)';
 
 /** Every trading day that starts before `end` and ends after `start`. */
-function tradingDays(cfg, { start, end }) {
+function tradingDays(cfg, { start, end, dataGaps = [] }) {
+  const gaps = new Set(dataGaps || []);
   const out = [];
   for (let d = tradingDayStart(start); d.getTime() < end.getTime(); d = tradingDayStart(new Date(d.getTime() + 26 * HOUR))) {
     const day = tradingDayKey(new Date(d.getTime() + 12 * HOUR));
     // 09:00 ET of the day: inside the market session on every day that has one.
     const skipped = (cfg.closedDates || []).includes(day) ? 'exchange closed (holiday)'
-      : !inMarketHours(new Date(d.getTime() + 15 * HOUR)) ? 'no session (weekend)' : null;
+      : !inMarketHours(new Date(d.getTime() + 15 * HOUR)) ? 'no session (weekend)'
+        : gaps.has(day) ? NO_SOURCE_DATA : null;
     out.push({ day, start: d, skipped });
   }
   return out;
@@ -69,13 +75,13 @@ function laneCloses(lanes, from, to) {
   return [...closes.entries()].sort((a, b) => a[0] - b[0]);
 }
 
-function decisionPoints(cfg, { start, end, everyNth = 1, delayMs = (cfg.barDelaySeconds || 0) * 1000, manage = false }) {
+function decisionPoints(cfg, { start, end, everyNth = 1, delayMs = (cfg.barDelaySeconds || 0) * 1000, manage = false, dataGaps = [] }) {
   const lanes = tradingLanes(cfg);
   const multi = lanes.length > 1;
   const windows = parseWindows(cfg.sessions.join(',')).windows;
   const inside = t => t.getTime() >= start.getTime() && t.getTime() < end.getTime();
   const points = [];
-  for (const { day, start: d, skipped } of tradingDays(cfg, { start, end })) {
+  for (const { day, start: d, skipped } of tradingDays(cfg, { start, end, dataGaps })) {
     if (skipped) continue;
     const eodMin = sessionMinuteOf(endOfDayAt(cfg, new Date(d.getTime() + 12 * HOUR)), d);
     const eodAt = new Date(d.getTime() + eodMin * 60000);
@@ -139,4 +145,4 @@ function holidayDates(start, end) {
   return { closed, early };
 }
 
-module.exports = { decisionPoints, laneCloses, tradingDays, holidayDates, isTradeTime };
+module.exports = { decisionPoints, laneCloses, tradingDays, holidayDates, isTradeTime, NO_SOURCE_DATA };

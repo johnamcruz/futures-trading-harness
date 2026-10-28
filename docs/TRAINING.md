@@ -924,6 +924,19 @@ isn't the policy's. Narrower sessions are fine.
 The combine block is in both run hashes. The preflight's `combine` check shows
 the account, `maxSessions` and every attempt's window.
 
+A day the replay server has no bars for (its `get_server_config.dataGaps`
+entries with `bars: false`, replay only: docs/BROKER-MCP-INTERFACE.md) is not
+a trading day of the run:
+the driver reads the list once at a fresh start (pinned in the run's manifest),
+runs no decision time on it and logs `<day>: no source data on the replay
+server; skipped (not a session)`, so an attempt's `maxSessions` count only
+replayable days and its window ends that much later (refused when it then
+starts on one, or runs past the run's end or its split window). The
+preflight's `data-gaps` check warns listing them. A day with bars but no order
+flow (`bars: true, flow: false`) is traded normally, its flow facts absent as on
+any minute without flow; the check notes it. A server without the field skips
+nothing.
+
 Each attempt's entries are sized as live: the policy's verdict from the
 account's rulebook, never under its floor (`sizing.min_contracts`, in
 micro-equivalents: a mini counts as its family's ratio). A setup that fits

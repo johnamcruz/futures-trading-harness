@@ -16,7 +16,7 @@
  * adapters-in-sync, no-web-in-replay (no agent reaches the web: replay/web-access.js), facts, curated-list, curated-source (its moments' prices against the run's bars), schedule, split-window, latency, loop-role (the training loop's keep-rule and trend-set runs: LOOP_ROLES), practice-mode, library-display, experience-index,
  * risk-record (N/A when off), ledger-look, stage (the replay config's preset: replay/stage.js), scorecard-composed. Passing the prop firm:
  * prop-portfolio, rulebook-values, rulebook-missing, account-states, combine (stage 2's continuous combine), day-attempts (the
- * training loop's runs trade inside a fresh attempt each session day: replay/day-attempts.js), account-facts, monte-carlo, broker-limits (the replay broker's limits against the account's). The fine-tuning adapter
+ * training loop's runs trade inside a fresh attempt each session day: replay/day-attempts.js), account-facts, monte-carlo, broker-limits (the replay broker's limits against the account's), data-gaps (the replay server's days without source data in the window: WARN for days without bars, which the driver skips; days with bars but no flow noted). The fine-tuning adapter
  * the runner config declares: adapter (N/A with none; learning/adapter.js adapterCheck). A check of a feature
  * on another branch (NEEDS) says "not available (needs <branch>)" until that branch is merged; the merged ones are
  * judged, and a run or prompt without them FAILs. Stage 2's own requirements (stage): one of its two modes on a
@@ -695,6 +695,31 @@ function brokerLimits(ctx) {
 }
 
 /**
+ * The replay server's days without source data in the run's window (replay/data-gaps.js: get_server_config `dataGaps`,
+ * replay only): WARN listing the days without bars (the driver skips them: no decision time, not a combine session),
+ * noting the days with bars but no flow (traded normally); PASS with no day without bars;
+ * N/A for a live broker or a server without the field (nothing skipped, as before). A combine whose attempts no longer
+ * fit once they are skipped (an attempt starting on one, or running past the run's end or its split window) is a FAIL:
+ * the driver would refuse it. A server that can't be read is broker-limits' to judge (N/A here); a malformed list a WARN.
+ */
+function dataGapsCheck(ctx) {
+  const entry = ctx.read.brokerEntry(ctx.run);
+  if (entry && entry.replay !== true) return r('data-gaps', NA, 'the broker is not a replay server: live always has its data');
+  const config = ctx.read.brokerConfig(ctx.run);
+  if (!config || config.error) return r('data-gaps', NA, 'the replay server\'s configuration could not be read (broker-limits judges it)');
+  const DG = require('../replay/data-gaps');
+  const g = DG.gapsOf(config, ctx.run);
+  if (!g.present) return r('data-gaps', NA, 'the replay server reports no days without source data (get_server_config has no dataGaps): no day is skipped');
+  if (g.malformed) return r('data-gaps', WARN, 'the replay server\'s get_server_config.dataGaps is malformed: the driver refuses the run');
+  const flow = g.flowOnly.length ? `; ${g.flowOnly.length} day(s) have bars but no flow, traded as any minute without flow (the flow facts absent): ${g.flowOnly.join(', ')}` : '';
+  if (!g.days.length) return r('data-gaps', PASS, `the replay server has bars on every trading day of the run's window${flow}`);
+  const list = `${g.days.length} trading day(s) of the run's window have no bars on the replay server: ${g.days.join(', ')}`;
+  const unfit = ctx.run.combine && ctx.read.gapsUnfit ? ctx.read.gapsUnfit(ctx.run, g.days) : null;
+  if (unfit) return r('data-gaps', FAIL, `${list}; skipped, ${errText(unfit).replace(/^replay refused: /, '')}`);
+  return r('data-gaps', WARN, `${list}; the driver skips them (no decision time, not a session${ctx.run.combine ? ': each combine attempt runs its sessions on replayable days' : ''})${flow}`);
+}
+
+/**
  * The fine-tuning adapter the runner config declares (learning/adapter.js adapterCheck): N/A with none; FAIL on a
  * missing or invalid manifest, a stale one (its skills or prompt digest not the harness's now), or no validation result.
  */
@@ -706,7 +731,7 @@ function adapter(ctx) {
 const CHECKS = Object.freeze([
   strategy, strategyValidBars, skillsCrosswalk, headPromptCheck, headComposedReads, headDelivery, rolePrompts, adaptersInSync, noWebInReplay, facts, curatedList,
   curatedSource, scheduleCheck, splitWindow, latency, loopRole, practiceMode, libraryDisplay, experienceIndex, riskRecord, ledgerLook, stage,
-  scorecardComposed, propPortfolio, rulebookValues, rulebookMissing, accountStates, combineCheck, dayAttemptsCheck, accountFacts, monteCarlo, brokerLimits, adapter,
+  scorecardComposed, propPortfolio, rulebookValues, rulebookMissing, accountStates, combineCheck, dayAttemptsCheck, accountFacts, monteCarlo, brokerLimits, dataGapsCheck, adapter,
 ]);
 
 function runChecks(ctx, checks = CHECKS) {
@@ -826,16 +851,7 @@ function defaultReaders(root, env = process.env, { barsFiles = {} } = {}) {
   // the run's is not seeded yet; the user's own harness home and brokers file stay, so the same broker entry is found.
   const readConfig = run => {
     if (!(run && run.broker && run.paths)) return require('./broker-limits').readBrokerConfig(root, env);
-    const scratch = fs.mkdtempSync(path.join(require('os').tmpdir(), 'fth-broker-limits-'));
-    try {
-      fs.mkdirSync(path.join(scratch, 'broker'));
-      const paths = { clockFile: path.join(scratch, 'clock.json'), brokerDir: path.join(scratch, 'broker'), journal: path.join(scratch, 'broker', 'journal.jsonl') };
-      fs.writeFileSync(paths.clockFile, JSON.stringify({ now: run.start.toISOString() })); // the driver's clock file (replay/driver.js writeClock)
-      const driven = require('../replay/config').serverEnv(env, run, paths);
-      return require('./broker-limits').readBrokerConfig(root, driven);
-    } finally {
-      fs.rmSync(scratch, { recursive: true, force: true });
-    }
+    return require('../replay/data-gaps').scratchServerConfig(run, root, env);
   };
   const exists = rel => fs.existsSync(path.join(root, rel));
   return {
@@ -924,6 +940,8 @@ function defaultReaders(root, env = process.env, { barsFiles = {} } = {}) {
     sizingKeys: () => [...require('../trading/rulebook').SIZING_KEYS],
     statesDoc: file => require('../prop/account-states').readDocument(file),
     gateLimits: () => ({ ...require('../prop/attempts').gateLimits(env) }),
+    // Why the run's combine attempts no longer fit once the server's days without source data are skipped, or null.
+    gapsUnfit: (run, days) => { try { require('../replay/data-gaps').applyGaps({ ...run }, days, { root, env }); return null; } catch (err) { return err.message; } },
     accountProfile: name => { try { return require('../trading/accounts').accountNamed(root, name, env); } catch (_err) { return null; } },
     // The broker the run uses, in the environment the replay driver gives it (replay/config.js replayEnv: its run variables
     // and the account's limits), as the driver would start it.
@@ -990,6 +1008,6 @@ module.exports = {
   PASS, FAIL, NA, WARN, NEEDS, CHECKS, RECORD, FRAMES, LOOP_ROLES,
   strategy, strategyValidBars, skillsCrosswalk, headPromptCheck, headComposedReads, headDelivery, rolePrompts, adaptersInSync, facts, curatedList,
   curatedSource, scheduleCheck, splitWindow, latency, loopRole, practiceMode, libraryDisplay, experienceIndex, riskRecord, ledgerLook, stage,
-  scorecardComposed, propPortfolio, rulebookValues, rulebookMissing, accountStates, combineCheck, dayAttemptsCheck, accountFacts, monteCarlo, noWebInReplay, brokerLimits, adapter,
+  scorecardComposed, propPortfolio, rulebookValues, rulebookMissing, accountStates, combineCheck, dayAttemptsCheck, accountFacts, monteCarlo, noWebInReplay, brokerLimits, dataGapsCheck, adapter,
   crosswalkOf, attemptLine, runChecks, formatReport, defaultReaders, sampleBriefing, gateOptions, trainingMode, preflightForRun,
 };
