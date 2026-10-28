@@ -12,9 +12,15 @@
  * 5 trailing stop, side 0 buy / 1 sell, limitPrice, stopPrice), the journal's
  * order_placed entry for the entry (its rationale names the setup and the
  * stop, as the trade-executor writes it), and the closed bars since the fill.
+ * Each line ends with the trade's read facts (trade-read.js: failed extreme,
+ * pushes, pullback depth, VWAP and EMA20, structure, displacement and
+ * compression against, the HTF bias then and now), for the pullback-vs-reversal
+ * read of an open trade.
  */
 
 const { contractRoot, entryTime } = require('./journal');
+const { tradeRead, tradeReadLine } = require('./trade-read');
+const { levelOnTick } = require('./contracts');
 // The gate's reading of "stop <price>": a unit (40 ticks, 2R) is not a price; thousands separators are.
 const { STOP_PRICE } = require('./order-gate');
 
@@ -77,8 +83,21 @@ function openTrades({ positions = [], orders = [], entries = [], barsFor = () =>
   });
 }
 
-/** One sentence per open trade, for the prompt. */
-function describeOpenTrade(t, { round = x => Math.round(x * 100) / 100, tickSize = null, et = null, history = null } = {}) {
+/**
+ * The open trade's read facts as one line (trade-read.js), from its contract's closed bars (`base`-minute bars); a
+ * failure is said in the line, never dropped.
+ */
+function tradeReadText(t, { bars, base, tickSize = null }) {
+  try {
+    const level = tickSize ? x => levelOnTick(x, tickSize) : undefined;
+    return tradeReadLine(tradeRead({ side: t.side, entry: t.entry, openedAt: t.openedAt, bars, base }), level ? { level } : {});
+  } catch (err) {
+    return `Trade read: unavailable (${err.message}).`;
+  }
+}
+
+/** One sentence per open trade, for the prompt (`read`: its trade read line, appended). */
+function describeOpenTrade(t, { round = x => Math.round(x * 100) / 100, tickSize = null, et = null, history = null, read = null } = {}) {
   const r = x => (x === null || x === undefined ? '?' : round(x));
   const sR = x => (x === null || x === undefined ? '?' : `${x >= 0 ? '+' : ''}${x}R`);
   const R = x => (t.risk > 0 && x !== null ? Math.round(((t.sign * (x - t.entry)) / t.risk) * 100) / 100 : null);
@@ -96,7 +115,7 @@ function describeOpenTrade(t, { round = x => Math.round(x * 100) / 100, tickSize
       : `; now ${sR(t.rNow)} at ${r(t.last)}, best ${sR(t.mfeR)}, worst ${sR(t.maeR)}`;
   const notes = t.notes.filter(n => n !== 'NO working stop' && n !== 'initial stop unknown: risk from the working stop');
   // `history`: how the strategy's past trades moved (track-record.js excursionNote), to judge this one by.
-  return `Open trade ${t.contractId} ${t.side} ${t.size} @ ${r(t.entry)}${since}${held} (${t.setup ? `setup:${t.setup}` : 'setup unknown: no order_placed entry with a setup tag'}): ${risk}; ${stop}${target}${now}${notes.length ? ` (${notes.join('; ')})` : ''}.${history ? ` ${history}.` : ''}`;
+  return `Open trade ${t.contractId} ${t.side} ${t.size} @ ${r(t.entry)}${since}${held} (${t.setup ? `setup:${t.setup}` : 'setup unknown: no order_placed entry with a setup tag'}): ${risk}; ${stop}${target}${now}${notes.length ? ` (${notes.join('; ')})` : ''}.${history ? ` ${history}.` : ''}${read ? ` ${read}` : ''}`;
 }
 
-module.exports = { STOP_TYPES, entryOrder, openTrades, describeOpenTrade };
+module.exports = { STOP_TYPES, entryOrder, openTrades, describeOpenTrade, tradeReadText };

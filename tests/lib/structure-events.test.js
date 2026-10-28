@@ -4,7 +4,7 @@
 // swings not traded back to.
 const test = require('node:test');
 const assert = require('node:assert');
-const { pivots, lastBreaks, sweeps, untestedSwings } = require('../../scripts/lib/trading/structure-events');
+const { pivots, breaksOf, lastBreaks, sweeps, untestedSwings } = require('../../scripts/lib/trading/structure-events');
 
 // Bars from a list of [high, low, close]; times one minute apart.
 const mk = rows => rows.map(([h, l, c], i) => ({ t: new Date(Date.UTC(2026, 5, 1, 14, i)).toISOString(), o: c, h, l, c, v: 1 }));
@@ -30,6 +30,18 @@ test('lastBreaks: a close through the last confirmed swing; same direction BOS, 
   // A swing is broken once: later closes above 14 add no new break.
   assert.deepStrictEqual(lastBreaks(bars.slice(0, 8), 2), { last: { kind: 'BOS', direction: 'up', level: 14, swingAt: bars[2].t, at: bars[6].t, barsAgo: 1 }, previous: null });
   assert.deepStrictEqual(lastBreaks(mk([[10, 9, 9.5]]), 2), { last: null, previous: null });
+});
+
+test('breaksOf: every break, oldest first, the one list lastBreaks reads its last two from', () => {
+  const bars = mk([
+    [10, 8, 9], [11, 9, 10], [14, 10, 13], [12, 10, 11], [12, 10, 11], [13, 11, 12], [16, 13, 15],
+    [15, 12, 13], [14, 9, 11], [13, 10, 12], [13, 10, 12], [12, 7, 8],
+  ]);
+  const all = breaksOf(bars, 2);
+  assert.deepStrictEqual(all.map(b => [b.kind, b.direction, b.level, b.i]), [['BOS', 'up', 14, 6], ['CHoCH', 'down', 9, 11]]);
+  const { last, previous } = lastBreaks(bars, 2);
+  assert.deepStrictEqual([previous.at, last.at], [all[0].at, all[1].at]);
+  assert.deepStrictEqual(breaksOf(mk([[10, 9, 9.5]]), 2), []);
 });
 
 test('sweeps: a high wicked above and closed back below, a low wicked below and closed back above, in the last n bars', () => {

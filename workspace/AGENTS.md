@@ -217,7 +217,7 @@ user; numbers here are the harness defaults, not any firm's official limits.
 - `prop-challenge-pacing` (skills/prop-challenge-pacing/SKILL.md): Use when a policy strategy trades a harness-tracked prop attempt - its state, its verdicts, the gate's refusals.
 - `prop-evaluator` (skills/prop-evaluator/SKILL.md): Use when reading or reporting a replay run's prop score (pass, blow and timeout rates, days to pass).
 - `prop-pacing-judgment` (skills/prop-pacing-judgment/SKILL.md): Use when pacing a prop account with no running attempt (daily budget, pace, consistency, stand-downs).
-- `pullback-vs-reversal` (skills/pullback-vs-reversal/SKILL.md): Trader-process step 4, price moving against the higher-timeframe trend - a pullback (trend intact) or a reversal (a higher-frame CHoCH). A read, never a veto.
+- `pullback-vs-reversal` (skills/pullback-vs-reversal/SKILL.md): Trader-process step 4 and an open trade - price moving against the trend or the trade - a pullback, the trend weakening, or a reversal. A read, never a veto.
 - `reason-check` (skills/reason-check/SKILL.md): Use when checking stated reasons vs the facts.
 - `rejection` (skills/rejection/SKILL.md): Use when a completed candle, on any timeframe, may have rejected a key level - the setup read. A read, never an entry by itself.
 - `replay` (skills/replay/SKILL.md): Use when the user wants to set up, run or read a replay of the trader on history. User-run.

@@ -2082,6 +2082,26 @@ test('MCP gateway: a protective stop can be tightened but not widened', async ()
   assert.strictEqual(byId[2].result.content[0].text, 'forwarded:tools/call:modify_order');
 });
 
+test('MCP gateway: the open trade\'s read acts only through the bracket: tighten and market exit go; widen, a leg cancel and a limit [exit] are refused', async () => {
+  // manage-position (feat/ride-or-exit): weakening -> modify_order the bracket stop toward the market; reversal ->
+  // close_position; never a cancelled leg or a separate stop, target or limit exit.
+  const legs = JSON.stringify([{ id: 9, contractId: 'MNQ', side: 1, type: 4, size: 1, stopPrice: 21480 }, { id: 10, contractId: 'MNQ', side: 1, type: 1, size: 1, limitPrice: 21600 }]);
+  const { byId } = await gatewayRun({ FAKE_POSITIONS: LONG1, FAKE_ORDERS: legs }, [
+    call(1, 'modify_order', { accountId: 1, orderId: 9, stopPrice: 21495.25 }),
+    call(2, 'modify_order', { accountId: 1, orderId: 9, stopPrice: 21470 }),
+    call(3, 'cancel_order', { accountId: 1, orderId: 9 }),
+    call(4, 'cancel_order', { accountId: 1, orderId: 10 }),
+    call(5, 'place_order', { ...EXIT_BASE, side: 'sell', type: 'limit', limitPrice: 21590, rationale: '[exit] take the base hit' }),
+  ]);
+  assert.strictEqual(byId[1].result.content[0].text, 'forwarded:tools/call:modify_order', 'a tighten toward the market goes');
+  assert.match(byId[2].result.content[0].text, /\[modify-protection\]/, 'a widen is refused');
+  assert.match(byId[3].result.content[0].text, /\[bracket-leg\]/, 'the stop leg is never cancelled');
+  assert.match(byId[4].result.content[0].text, /\[bracket-leg\]/, 'the target leg is never cancelled');
+  assert.match(byId[5].result.content[0].text, /\[bracket-only\]/, 'a limit [exit] beside the legs is refused');
+  const exit = await gatewayRun({ FAKE_POSITIONS: LONG1, FAKE_ORDERS: legs }, [call(6, 'close_position', { accountId: 1, contractId: 'MNQ' })]);
+  assert.strictEqual(exit.byId[6].result.isError, undefined, 'a reversal exits at market');
+});
+
 test('MCP gateway: an [exit] right after close_position cannot flip the position', async () => {
   const { spawn } = require('child_process');
   const dir = tmpDir();

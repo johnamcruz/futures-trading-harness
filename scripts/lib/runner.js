@@ -48,7 +48,7 @@
  *      cycles, prompts and history are the one-lane runner's.
  */
 
-const { openTrades, describeOpenTrade } = require('./trading/open-trades');
+const { openTrades, describeOpenTrade, tradeReadText } = require('./trading/open-trades');
 const { zonedParts } = require('./trading/clock');
 const { decide, recordRun, prompts, signalDecision, dayKey, endOfDayAt, historyShownLines } = require('./autotrader');
 const CD = require('./cycle-data');
@@ -1789,7 +1789,9 @@ function createRunner(deps) {
               const tickOf = p => (item(p) || sym(p) || {}).tickSize || null;
               tradeObjs = openTrades({ positions: acct.positions, orders: acct.orders || [], entries: journal, barsFor: p => (item(p) ? item(p).bars : null) });
               const history = t => { try { return t.setup ? tradeHistory(t) : null; } catch (err) { failed(`${t.setup}'s backtest excursions for the open trade`, err); return null; } };
-              acct = { ...acct, openTrades: tradeObjs.map(t => describeOpenTrade(t, { tickSize: tickOf({ contractId: t.contractId }), et: etTime, history: history(t) })) };
+              // Its read facts (trade-read.js) from its contract's bars: the pullback-vs-reversal read of an open trade.
+              const read = t => { const x = item({ contractId: t.contractId }); return x ? tradeReadText(t, { bars: x.bars, base: x.minutes || cfg.timeframe, tickSize: tickOf({ contractId: t.contractId }) }) : null; };
+              acct = { ...acct, openTrades: tradeObjs.map(t => describeOpenTrade(t, { tickSize: tickOf({ contractId: t.contractId }), et: etTime, history: history(t), read: read(t) })) };
               manageAlso = [...new Set(tradeObjs.filter(t => !item({ contractId: t.contractId })).map(t => (sym({ contractId: t.contractId }) || {}).symbol || contractRoot(t.contractId)))];
             } catch (err) {
               failed('the open trades\' details', err);

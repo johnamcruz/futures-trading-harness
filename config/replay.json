@@ -27,6 +27,7 @@
   "windowBars": 700,
   "setupLibrary": { "minRR": 2 },
   "trendCapture": { "minMoveAtr": 2.25, "catchShare": 0.5, "messageChars": 200, "curationSessions": ["09:30-12:00@America/New_York"], "censusBatch": 200, "sizeEdges": [2, 4] },
+  "exitScore": { "cutR": 1, "rightR": 1, "lateGivebackR": 1, "horizonBars": 60, "matchBars": 2 },
   "setupMoments": { "setupTf": 15, "quietSample": 0.15, "seed": 0, "levels": "key", "setupTfs": [5, 15, 60] },
   "accountStates": {
     "seed": 1,

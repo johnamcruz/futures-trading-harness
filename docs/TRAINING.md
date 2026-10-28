@@ -575,6 +575,23 @@ and leg ids; the lessons lines record the batch too.
   owner. A rule (the clock, the account's stops, news), a bar outside the
   session and a position already open are never findings: those are code
   and the rulebook.
+- **Exit findings** (`scripts/lib/train/exit-findings.js`, kind
+  `exit-decision`). Each run's trend-capture report scores every exit and
+  every stop the model tightened by what price did next on the closed bars
+  (`scripts/lib/replay/exit-scorecard.js`, post-hoc): cut a trend (price went
+  `cutR` the trade's way before `rightR` against), right, unclear,
+  unresolved, and late (open profit given back past `lateGivebackR`), by who
+  exited (the model's market exit or tightened stop, the runner's trail or
+  close, the initial stop, the target), the thresholds in
+  `config/replay.json` `exitScore`. The model's exits that cut a trend
+  (decided on an HTF bias flip apart) and the late exits are findings, ranked
+  by the R they cost with the trend findings, owned by the open trade's read
+  (`pullback-vs-reversal`; `manage-position` is a management skill, never
+  probed), each example the facts code read at the decision
+  (`scripts/lib/trading/trade-read.js` on the bars closed by then), no date,
+  price or R. The round's report counts them (`probe exits`). An exit
+  finding's edit is screened as a curated one, with the trend set's harms: no
+  exit-specific gain test exists yet.
 - **Learnable legs only** (`scripts/lib/train/trend-facts.js`). After the
   probe half's champion runs, code works out each missed leg's facts at its
   entry-able bars: the trade cycles of its catch window, less those a rule

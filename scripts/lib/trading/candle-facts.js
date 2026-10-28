@@ -28,6 +28,8 @@
  *   shape(c)                               { body, upperWick, lowerWick, closeAt } shares of the range (null at zero range)
  *   closeLocation(c)                       'top' | 'middle' | 'bottom' (third of the range), null at zero range
  *   patternsOf(c, prev, atrPrev)           every pattern that holds, in label priority; patternLabel: the first, else 'none'
+ *   factsOf(candles)                       per candle: shape, closeLocation, rangeAtr (ATR as of the candle before), volRatio,
+ *                                          patterns and pattern (one pass; the momentum read reads these)
  *   insideStackOf(candles, j)              { insideStack, mother } of candle j (the candles in a row inside one mother), or {}
  *                                          (insideStacks(candles): every candle's, one pass)
  *   relation(c, level, prevClose)          { relation: 'rejected' | 'broke' | 'touched' | 'none', dir } or null (no level)
@@ -657,5 +659,5 @@ function completedCandlesAt({ bars, base, fine = null, minutes, at = bars.length
 module.exports = {
   TIMEFRAMES, DEF, LABELS, MAX_LEVELS, LEVEL_ORDER, label, completedSeries, shape, closeLocation, patternsOf, patternLabel, relation,
   candleSeries, relationSeries, swingTargetSeries, holdingSwingsAt, briefingCandles, briefingTargets, RELATION_TEXT,
-  prevSweep, RANGE_FRAMES, briefingRangeTargets, completedCandlesAt, gapRelation, insideStackOf, insideStacks,
+  prevSweep, RANGE_FRAMES, briefingRangeTargets, completedCandlesAt, gapRelation, insideStackOf, insideStacks, factsOf,
 };

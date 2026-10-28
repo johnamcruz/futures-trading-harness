@@ -2,7 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert');
-const { openTrades, describeOpenTrade, entryOrder } = require('../../scripts/lib/trading/open-trades');
+const { openTrades, describeOpenTrade, entryOrder, tradeReadText } = require('../../scripts/lib/trading/open-trades');
 
 const C = 'MNQ';
 const placed = (ts, text, ok = true, contractId = C) => ({ ts, kind: 'order_placed', contractId, text, data: { result: { success: ok } } });
@@ -96,4 +96,21 @@ test('the entry order: the last successful order with a setup, on the contract (
   assert.strictEqual(entryOrder([placed('2026-10-08T14:20:00Z', 'setup:orb long')], pos), null, 'too long before');
   assert.strictEqual(entryOrder([placed('2026-10-08T14:41:00Z', 'setup:orb long', true, 'MNQ:2027-03')], pos).text, 'setup:orb long', 'same root');
   assert.strictEqual(entryOrder([placed('2026-10-08T14:41:00Z', 'no setup tag')], pos), null);
+});
+
+test('the open trade\'s line ends with its read facts (trade-read.js); a read that fails is said in the line', () => {
+  const [t] = openTrades({
+    positions: [{ contractId: C, type: 1, size: 1, averagePrice: 21500, creationTimestamp: '2026-10-08T14:41:10Z' }],
+    orders: [{ contractId: C, type: 4, side: 1, stopPrice: 21490 }],
+    entries: [placed('2026-10-08T14:41:05Z', 'setup:trade_lifecycle long, stop 21490.00')],
+    barsFor: () => BARS,
+  });
+  const read = tradeReadText(t, { bars: BARS, base: 3, tickSize: 0.25 });
+  assert.match(read, /^Trade read \(closed bars since entry; pullback-vs-reversal\): best 21514, /);
+  const line = describeOpenTrade(t, { read });
+  assert.ok(line.endsWith(` ${read}`), line);
+  assert.ok(!describeOpenTrade(t).includes('Trade read'), 'no read given, none shown');
+  // Broken bars: the failure is in the line, never a throw.
+  assert.match(tradeReadText(t, { bars: [{ t: '2026-10-08T14:42:00.000Z' }], base: 3 }), /^Trade read: unavailable \(/);
+  assert.match(tradeReadText(t, { bars: null, base: 3 }), /^Trade read: unavailable \(/);
 });

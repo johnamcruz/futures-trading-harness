@@ -25,6 +25,9 @@
  * records: the compose records of the cycle's bar (any side; the leg's way's are read). The leg's blocker: the cycle that came closest to an entry (the furthest stage: no plan, rule, compose, risk,
  * execution), the latest among equals, with how many cycles it blocked.
  *
+ * The exit decisions (exit-scorecard.js, `exits`): each round trip's exit (who exited) and each stop the model tightened,
+ * scored by what price did next (cut a trend, right, unclear, unresolved; late), with the facts at each model decision.
+ *
  * The catch and the ride (trend-ride.js): each leg's size (its points over its threshold, bucketed), each caught leg's
  * ride (entry lag, capture and ride share, peak and giveback R), the run's filled entries (in-trend, counter or none,
  * with their R: `entries`), and totals.ride, the run's catch & ride totals.
@@ -49,6 +52,7 @@ const { FLOW_STEPS } = require('../trading/composed-reads');
 const { failingSteps } = require('../trading/compose-hints');
 const { parseWindows, inWindow, tradingDayKey, SESSION_DEFAULTS, MARKET_TZ } = require('../trading/clock');
 const TR = require('./trend-ride');
+const ES = require('./exit-scorecard');
 
 const TUN = require('../tunables').replay().trendCapture; // config/replay.json
 const DETECTOR = 'zigzag-session-tr-v1';
@@ -171,6 +175,32 @@ function givenLeg(g, bars) {
   return { day: g.day, side: g.side, start: g.start, end: g.end, from, to, points: num(g.points), pct: from ? round2((Math.abs(to - from) / from) * 100) : null, scale: num(g.scale) };
 }
 
+/**
+ * The run's exit decisions (exit-scorecard.js): every round trip's exit and every stop the model tightened, scored by
+ * what price did next, each model decision with the facts code read at its bar (trade-read.js on the bars closed by then).
+ * The model's actions from the cycle logs' transcripts, the runner's from its event log (<home>/logs/events-*.jsonl).
+ */
+function exitsOf({ home, days, bars, minutes, cycles }) {
+  const { toolCalls } = require('../cycle-log');
+  const { tradeRead } = require('../trading/trade-read');
+  const logs = path.join(home, 'logs');
+  let names = [];
+  try { names = fs.readdirSync(logs).filter(n => /^events-.*\.jsonl$/.test(n)).sort(); } catch (_err) { /* none */ }
+  const events = names.flatMap(n => readLines(path.join(logs, n)));
+  const model = ES.modelActions(cycles, { toolCalls });
+  const runner = ES.runnerActions(events);
+  const stepMs = (minutes || 0) * 60000;
+  const factsAt = (t, ms) => {
+    try {
+      return tradeRead({ side: t.side, entry: t.entry, openedAt: new Date(t.entryMs).toISOString(), bars: ES.barsClosedBy(bars, ms, stepMs), base: minutes });
+    } catch (err) {
+      return { unavailable: err.message };
+    }
+  };
+  const scored = ES.scoreExits({ trips: ES.tripsOf(days), moves: [...model.moves, ...runner.moves], closes: [...model.closes, ...runner.closes], bars, stepMs, factsAt });
+  return { ...scored, totals: ES.summarize(scored) };
+}
+
 const stageOf = c => STAGE.indexOf(c.code === 'outside-session' ? 'outside-session' : c.by === 'rule' ? 'rule' : c.code === 'position-open' ? 'position-open' : c.by === 'compose_check' ? 'compose' : c.step === 'risk' ? 'risk' : c.step === 'execution' ? 'execution' : 'no-plan');
 
 /**
@@ -271,6 +301,7 @@ function captureReport({ runDir, home = path.resolve(runDir, '..', '..'), days =
     entries,
     totals: { legs: out.length, captured: out.filter(l => l.captured).length, captureRate: out.length ? round2(out.filter(l => l.captured).length / out.length) : null, missedR: round2(missed.reduce((a, l) => a + (l.availableR || 0), 0)), byStep, ride: TR.summarize({ legs: out, entries }) },
     noLegDays,
+    exits: minutes ? exitsOf({ home, days, bars, minutes, cycles }) : null,
   };
 }
 
@@ -291,6 +322,7 @@ function reportLines(doc) {
   lines.push(`  blockers by cycle: ${Object.entries(codes).sort((a, b) => b[1] - a[1]).map(([k, n]) => `${k} ${n}`).join(', ') || 'none'}`);
   lines.push(`  by step: ${Object.entries(t.byStep).map(([s, x]) => `${s} ${x.legs} leg(s) ${x.missedR}R`).join(', ') || 'none'}`);
   if (isObj(t.ride)) lines.push(...TR.rideLines(t.ride));
+  if (isObj(doc.exits) && isObj(doc.exits.totals)) lines.push(...ES.exitLines(doc.exits.totals));
   if (doc.noLegDays.length) lines.push(`  days with no leg: ${doc.noLegDays.map(d => `${d.day} ${d.entries} entr${d.entries === 1 ? 'y' : 'ies'} ${d.netR}R`).join(', ')}`);
   return lines;
 }

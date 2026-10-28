@@ -45,19 +45,25 @@ description: Use when a position is open - its stop, the plan's management, the 
 - **A composed trade** (`setup:trade_lifecycle`, in an attempt
   `setup:prop_portfolio`): its bracket holds the compose record's stop and
   target; the policy's exit mode (`trade-plan`), in an attempt or not, is
-  the runner's: it moves the stop. Before its target, don't touch it unless
-  you are exiting; never close early by feel; never loosen the stop.
-- **Past its target** the runner locks the stop at a small R and trails it
-  behind 15m swings, so an ordinary pullback doesn't close a trend leg.
-  Read the move against it top-down with `pullback-vs-reversal`.
-  - A pullback while the 15m trend holds (a 3m CHoCH against included) →
-    hold; tightening here is what stops a winner before the leg runs on.
-  - Momentum ends (15m momentum turned against after a failed new extreme)
-    → exit (`[exit]`), or move the stop just beyond the extreme of the 15m
-    candle that turned it, on the far side of price (price already past
-    it → exit). A 15m CHoCH against
-    is the runner's stop: it has taken the trade out.
-  - Never tighten on one candle or by feel.
+  the runner's: it moves the stop (past the target: locked at a small R,
+  trailed behind 15m swings), and that trail is the edge: let it work.
+  Before or past its target, act only on the open trade's read
+  (`pullback-vs-reversal`, the prompt's "Trade read" line); never on one
+  candle or by feel; never loosen the stop.
+- **The read decides the action** (its definitions are there):
+  - Healthy pullback → hold; tightening here stops a winner before the
+    leg runs on.
+  - Trend weakening (an HTF bias flip alone is one) → tighten:
+    `modify_order` the bracket stop toward the market, just beyond the
+    last confirmed swing (price already past it → exit at market).
+    Stalling at a key level or opposing liquidity too → take the base hit
+    at market.
+  - Reversal → exit at market (`close_position`). An HTF bias flip
+    against the position confirmed by structure is one: exit, then let the
+    full top-down flow (HTF bias, location, setup, entry, stop, target)
+    decide any new direction. A 15m CHoCH against may already have taken
+    it out on the runner's stop.
+  - Never cancel a leg, and never add a stop, target or limit `[exit]`.
 - **An open trade** (the prompt's "Open trade" line) is managed before any
   new entry: its setup, initial stop and risk, the working stop and target in
   R, where it stands now, its best and worst so far, and bars held. "NO
@@ -75,5 +81,6 @@ description: Use when a position is open - its stop, the plan's management, the 
 ```text
 trade_lifecycle long +2.1R, past its target, stop trailed by the runner -> hold; journal
 trade_lifecycle short +2.6R, 3m CHoCH up, 15m still down -> hold (a pullback)
-trade_lifecycle short +3.1R, failed new low, 15m momentum turned up, price 21412.00 -> stop just above that 15m candle's high 21418.25, or exit
+trade_lifecycle short +3.1R, Trade read: new extreme FAILED, pushes fading -> weakening: modify_order the stop to just above the last swing high 21418.25
+trade_lifecycle long +1.4R, 15m CHoCH down and HTF bias FLIPPED -> reversal: close_position; then the top-down flow decides anew
 ```
