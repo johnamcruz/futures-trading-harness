@@ -10,7 +10,7 @@
  * (comma-separated, e.g. ~/.futures-trading-harness/strategies). A later
  * directory may not redefine an existing name.
  *
- * A policy strategy takes its `sizing`, `exit` and `multipliers` from its account's
+ * A policy strategy takes its `sizing`, `exit`, `multipliers` and `entry` (its entry rule) from its account's
  * rulebook (accounts/<account>/RULEBOOK.md, `policies.<name>`; trading/rulebook.js) and
  * may not state them itself (R1, one place). One its account's rulebook doesn't list, or
  * whose rulebook is missing or doesn't load, is invalid.
@@ -340,7 +340,8 @@ function validateStrategy(data, body, folderName) {
 
 
 /**
- * A policy strategy's frontmatter with its rulebook entry merged in: { data, errors, multipliers }.
+ * A policy strategy's frontmatter with its rulebook entry merged in: { data, errors, multipliers, entry } (entry: its
+ * entry rule block, entry-rule.js; a STRATEGY.md never states one: `entry` is no strategy key).
  * `rulebookOf(account)`: that account's rulebook, or null when it has none.
  */
 function withRulebook(data, folderName, rulebookOf) {
@@ -354,7 +355,7 @@ function withRulebook(data, folderName, rulebookOf) {
   if (!book.valid) return { data, errors: [...own, `account: ${where} is invalid (${book.errors.join('; ')}); no policy on it can be sized`], multipliers: undefined };
   const entry = rulebook.policyEntry(book, folderName);
   if (!entry) return { data, errors: [...own, `account: ${where} doesn't list ${folderName} (policies.${folderName}: its sizing, exit and multipliers); a policy is sized only from its account's rulebook`], multipliers: undefined };
-  return { data: { ...data, sizing: entry.sizing, exit: entry.exit }, errors: own, multipliers: entry.multipliers };
+  return { data: { ...data, sizing: entry.sizing, exit: entry.exit }, errors: own, multipliers: entry.multipliers, entry: entry.entry };
 }
 
 function loadStrategyFile(file, { rulebookOf = null } = {}) {
@@ -383,7 +384,7 @@ function loadStrategyFile(file, { rulebookOf = null } = {}) {
   const compiledTarget = tgt === undefined ? null
     : typeof tgt === 'string' ? compileExpression(tgt) : { long: compileExpression(tgt.long), short: compileExpression(tgt.short) };
   return {
-    ...parsed.data, ...(book.multipliers !== undefined ? { multipliers: book.multipliers } : {}), mtf: parsed.data.mtf || (parsed.data.signal === 'policy' ? undefined : 'trend'),
+    ...parsed.data, ...(book.multipliers !== undefined ? { multipliers: book.multipliers } : {}), ...(book.entry !== undefined ? { entry: book.entry } : {}), mtf: parsed.data.mtf || (parsed.data.signal === 'policy' ? undefined : 'trend'),
     name: folderName, file, body: parsed.body, compiledRules, compiledStop, compiledTarget, valid: ok, errors,
   };
 }

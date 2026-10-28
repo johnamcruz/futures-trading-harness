@@ -12,6 +12,7 @@
  *   accepted staler; so a value added above 0 where it was unlisted, a raised value, or a removed entry is refused,
  *   and duplicates are judged on their product;
  * - no policy added or removed; an exit (its mode and trail) unchanged: it is searched (R10), never a limit to loosen;
+ * - an entry rule (entry-rule.js) unchanged: the owner's switch, never a proposal's;
  * - no item moved out of `enforced`;
  * - no key removed.
  *
@@ -121,6 +122,7 @@ function loosenings(before, after) {
     for (const k of Object.keys(p)) if (q[k] === undefined) out.push(`${at}.${k}: removed`);
     for (const [k, v] of Object.entries(isMap(p.sizing) ? p.sizing : {})) limitLooser(k, `${at}.sizing.${k}`, v, isMap(q.sizing) ? q.sizing[k] : undefined, out);
     if (!same(p.exit, q.exit)) out.push(`${at}.exit: changed (the exit mode and trail are searched, R10; never a proposal's to change)`);
+    if (!same(p.entry, q.entry)) out.push(`${at}.entry: changed (the entry rule is the owner's switch; never a proposal's to change)`);
     multipliersLooser(`${at}.multipliers`, p.multipliers, q.multipliers, out);
   }
   return out;

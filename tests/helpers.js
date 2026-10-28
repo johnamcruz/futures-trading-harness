@@ -69,6 +69,7 @@ function withComponents(doc, components = ['fx_break', 'fx_cross']) {
 const FLOW_POLICY = Object.freeze({
   sizing: Object.freeze({ cushion_frac: 0.2, min_size_guard: 1.5, cap_usd: 'off', drawdown_halve_usd: 'off', stop_slippage_ticks: 1, clock_k: 'off', r_per_session: 0.3, min_contracts: 1, floor_stretch_max_usd: 'off' }),
   exit: Object.freeze({ mode: 'trail', trail_activate_r: 2, trail_giveback_r: 0.5, lock_giveback_r: 'off', trail_by: 'off', trail_r: 'off', swing_tf: 'off', ratchet: 'off' }),
+  entry: Object.freeze({ bias_frames: 'off', regime_against: 'off', leg_turned: 'off' }),
 });
 
 /**
@@ -207,9 +208,10 @@ function shippedPolicy(from = 'prop_portfolio') {
  * policy's sizing and exit, and `multipliers` (YAML list lines; none by default). One place, as the loaders require:
  * every account has a RULEBOOK.md beside its ACCOUNT.md, and every policy on it is listed there. Without a rulebook
  * yet one is written: the ACCOUNT.md's daily_loss_soft moves into it (else `soft`, else 0), its loss_streak_stop is `streak`
- * (off by default), with the shipped classification; each policy's exit is `exit` when given, else the shipped one's. Returns the rulebook's path.
+ * (off by default), with the shipped classification; each policy's exit is `exit` when given, else the shipped one's, and
+ * its entry rule `entry` when given, else the shipped one's. Returns the rulebook's path.
  */
-function listPolicies(accountDir, names = [], { from = 'prop_portfolio', soft = null, streak = 'off', multipliers = null, exit = null } = {}) {
+function listPolicies(accountDir, names = [], { from = 'prop_portfolio', soft = null, streak = 'off', multipliers = null, exit = null, entry = null } = {}) {
   const RB = require('../scripts/lib/trading/rulebook');
   const file = path.join(accountDir, RB.FILE);
   if (!fs.existsSync(file)) {
@@ -226,9 +228,9 @@ function listPolicies(accountDir, names = [], { from = 'prop_portfolio', soft = 
   // The shipped entry as written (a limit turned off says `off`, never 0).
   const s = from === 'prop_flow_1m' ? FLOW_POLICY
     : RB.loadRulebookFile(path.join(__dirname, '..', 'accounts', shippedPolicy(from).account, RB.FILE)).policies[from];
-  const map = (indent, o) => Object.entries(o).map(([k, v]) => `${indent}${k}: ${v}`);
+  const map = (indent, o) => Object.entries(o).map(([k, v]) => `${indent}${k}: ${Array.isArray(v) ? `[${v.join(', ')}]` : v}`);
   const block = names.flatMap(n => [`  ${n}:`, '    sizing:', ...map('      ', s.sizing), '    exit:', ...map('      ', exit || s.exit),
-    ...(multipliers ? ['    multipliers:', ...multipliers] : ['    multipliers: []'])]).join('\n');
+    ...(multipliers ? ['    multipliers:', ...multipliers] : ['    multipliers: []']), '    entry:', ...map('      ', entry || s.entry)]).join('\n');
   const text = fs.readFileSync(file, 'utf8');
   fs.writeFileSync(file, /^policies:/m.test(text) ? text.replace(/^policies:[^\n]*\n/m, h => `${h}${block}\n`)
     : text.replace(/^enforced:/m, `policies:\n${block}\nenforced:`));

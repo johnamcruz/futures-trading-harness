@@ -11,12 +11,13 @@
  *   candidatesOf(briefing, side, { tick, stopRule })   { bias, location, setup, entry, stop, target }: each [{ read, close?, tf? }],
  *                                            the reads TRUE on the bar and agreeing with the side (setup and entry:
  *                                            pointing the side; close: when its candle closed, ms)
- *   repairOf({ reads, side, briefing, tick, plan })   { reads, checked, planned } | null: the model's TRUE agreeing reads
+ *   repairOf({ reads, side, briefing, tick, plan, entryRule })   { reads, checked, planned } | null: the model's TRUE agreeing reads
  *                                            kept, each failing step filled from the candidates, the first combination
  *                                            the check and the plan both pass (plan: planOf's arguments but checked)
- *   hintsFor({ checked, planned, briefing, side, tick, plan, standard })   [line]: the hints for a refused record
+ *   hintsFor({ checked, planned, briefing, side, tick, plan, standard, entryRule })   [line]: the hints for a refused record
  *                                            (none for an OK one); standard: the briefing's standard plan for the side
- *                                            (setup-library.js standardPlans), when it passes
+ *                                            (setup-library.js standardPlans), when it passes; entryRule: the policy's
+ *                                            (entry-rule.js), every combination offered passes it too
  *
  * Limits (config/analysis.json composeHints): perStep reads listed a step, maxTries combinations tried.
  */
@@ -176,10 +177,10 @@ function rrOf(stop, target, checked, b, side, tick, plan) {
  * has one and no other failing reason; a step that fails filled from the candidates (setup and entry each pointing
  * the side, the entry on a candle closed after the setup's). null when none passes within maxTries.
  */
-function repairOf({ reads, side, briefing, tick, plan, candidates = null }) {
+function repairOf({ reads, side, briefing, tick, plan, candidates = null, entryRule = null }) {
   const m3 = m3Of(briefing);
   if (!m3 || !isObj(plan) || !(tick > 0)) return null;
-  const checked = checkReads({ reads, side, briefing, tick });
+  const checked = checkReads({ reads, side, briefing, tick, entryRule });
   if (checked.ok && planOkFor(checked, briefing, side, tick, plan)) return null;
   const planned = checked.stop && checked.target ? planOf(planArgs(checked, briefing, side, tick, plan)) : null;
   const fail = failingSteps(checked, planned);
@@ -213,7 +214,7 @@ function repairOf({ reads, side, briefing, tick, plan, candidates = null }) {
           tries += 1;
           if (tries > LIMITS.maxTries) return null;
           const list = [['bias', bias[0] || []], ['location', location[0] || []], ['setup', s], ['entry', e], ['stop', st], ['target', tg]].flatMap(([step, xs]) => xs.map(x => asRead(step, x)));
-          const ch = checkReads({ reads: list, side, briefing, tick });
+          const ch = checkReads({ reads: list, side, briefing, tick, entryRule });
           if (!ch.ok || !planOkFor(ch, briefing, side, tick, plan)) continue;
           return { reads: list, checked: ch, planned: planOf(planArgs(ch, briefing, side, tick, plan)) };
         }
@@ -235,7 +236,7 @@ function planOkFor(checked, briefing, side, tick, plan) {
 const quote = list => list.map(x => `"${x.read}"`).join(', ');
 
 /** The hints for a refused record (see the header): one line a failing step, then a whole combination when one passes. */
-function hintsFor({ checked, planned = null, briefing, side, tick, plan = null, standard = null }) {
+function hintsFor({ checked, planned = null, briefing, side, tick, plan = null, standard = null, entryRule = null }) {
   const m3 = m3Of(briefing);
   if (!m3 || !checked || !['long', 'short'].includes(side) || !(tick > 0)) return [];
   if (checked.ok && planned && planned.plan && !planned.problems.length) return [];
@@ -260,10 +261,13 @@ function hintsFor({ checked, planned = null, briefing, side, tick, plan = null, 
     }
     if (step === 'target') out.push(targetHint(checked, cand, briefing, side, tick, plan));
   }
-  if (standard && standard.status === 'traded' && Array.isArray(standard.reads) && standard.reads.length) {
+  // The standard plan only when it passes the policy's entry rule too (entry-rule.js): never a hint the check refuses.
+  const standardOk = standard && standard.status === 'traded' && Array.isArray(standard.reads) && standard.reads.length
+    && (!entryRule || checkReads({ reads: standard.reads.map(r => ({ step: r.step, skill: r.skill || SKILL[r.step], read: r.read })), side, briefing, tick, entryRule }).ok);
+  if (standardOk) {
     out.push(`the standard plan passes: compose_check with its reads: ${quote(standard.reads)} (R:R ${standard.plan ? standard.plan.rr : '?'})`);
   } else if (plan && rule !== false && m3.windowEntries === 'allowed') {
-    const fixed = repairOf({ reads: checked.reads.map(r => ({ step: r.step, skill: r.skill, read: r.read, why: r.why })), side, briefing, tick, plan, candidates: cand });
+    const fixed = repairOf({ reads: checked.reads.map(r => ({ step: r.step, skill: r.skill, read: r.read, why: r.why })), side, briefing, tick, plan, candidates: cand, entryRule });
     if (fixed) out.push(`these reads pass together (code-checked on this bar): ${quote(fixed.reads)} (R:R ${fixed.planned.plan.rr})`);
   }
   if (rule === false) out.push(`the trend rule allows the ${side} only as a reversal (a verified CHoCH tier among the bias reads)`);

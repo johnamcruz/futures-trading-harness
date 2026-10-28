@@ -758,6 +758,73 @@ test('order gate wiring, hook and gateway: the floor stretch: the stretched floo
   for (const s of [over.hook, over.gw]) assert.match(s, /\[max-risk\] .*the floor of 6 at \$56\.74 all in is \$340\.44, over the floor stretch's \$340\.00 too/);
 });
 
+/**
+ * The composed prop world on `pmc_entry` (prop_portfolio's document) on `entry_100k` (the shipped profile and rulebook,
+ * renamed, its entry rule's regime_against `on` when `on`), in folders of their own; the scenario's briefing (no m3
+ * regime, unless `regime` is given) and compose record suggesting 5.
+ */
+function entryRulePropWorld(home, { on = true, regime = null } = {}) {
+  const LC = require('../fixtures/lifecycle');
+  const prop = require('../../scripts/lib/trading/prop-state');
+  const shipped = require('../../scripts/lib/trading/strategies').loadStrategies(REPO, {}).strategies.find(s => s.name === 'prop_portfolio');
+  const dir = tmpDir();
+  const strategies = path.join(dir, 'strategies');
+  fs.mkdirSync(path.join(strategies, 'pmc_entry'), { recursive: true });
+  fs.cpSync(path.join(REPO, 'strategies', 'trade_lifecycle'), path.join(strategies, 'trade_lifecycle'), { recursive: true });
+  fs.writeFileSync(path.join(strategies, 'pmc_entry', 'STRATEGY.md'), fs.readFileSync(path.join(REPO, 'strategies', 'prop_portfolio', 'STRATEGY.md'), 'utf8')
+    .replace('name: prop_portfolio', 'name: pmc_entry').replace(new RegExp(`^account: ${shipped.account}`, 'm'), 'account: entry_100k'));
+  const accounts = path.join(dir, 'accounts', 'entry_100k');
+  fs.mkdirSync(accounts, { recursive: true });
+  fs.writeFileSync(path.join(accounts, 'ACCOUNT.md'), fs.readFileSync(path.join(REPO, 'accounts', shipped.account, 'ACCOUNT.md'), 'utf8').replace(`name: ${shipped.account}`, 'name: entry_100k'));
+  const rb = fs.readFileSync(path.join(REPO, 'accounts', shipped.account, 'RULEBOOK.md'), 'utf8');
+  assert.match(rb, /^ {6}regime_against: off /m);
+  fs.writeFileSync(path.join(accounts, 'RULEBOOK.md'), rb.replace(`name: ${shipped.account}`, 'name: entry_100k').replace(/^ {2}prop_portfolio:$/m, '  pmc_entry:')
+    .replace(/^( {6}regime_against: )off/m, on ? '$1on' : '$1off'));
+  const env = { FTH_STRATEGIES_DIRS: strategies, FTH_ACCOUNTS_DIRS: path.dirname(accounts) };
+  const policy = require('../../scripts/lib/trading/strategies').loadStrategies(REPO, env).strategies.find(s => s.name === 'pmc_entry');
+  assert.ok(policy && policy.valid !== false && policy.entry.regime_against === (on ? 'on' : 'off'), JSON.stringify(policy && policy.errors));
+  const account = require('../../scripts/lib/trading/accounts').loadAccounts(REPO, env).accounts.find(a => a.name === 'entry_100k');
+  const now = new Date('2026-10-07T14:00:02.000Z');
+  prop.startAttempt(home, account, new Date(now.getTime() - 86400000));
+  prop.snapshot(home, account, account.starting_balance, new Date(now.getTime() - 60000), { fills: [] });
+  const b = LC.briefing(regime ? { m3: { regime: { primary: regime } } } : {});
+  const rec = LC.writeScenario(home, { size: 5, b });
+  const spec = { tickSize: 0.25, tickValue: 0.5 };
+  require('../../scripts/lib/prop/composed-verdict').composedVerdict({ home, policy, component: 'trade_lifecycle', account, record: rec, plan: rec.plan, briefing: b, root: 'MNQ', spec, specOf: () => spec, now });
+  return { order: n => LC.order({ size: n, rationale: 'setup:pmc_entry long trade_lifecycle, stop 21512.50, target 21598.00' }), env: { ...env, FTH_TEST_NOW: now.toISOString(), FTH_CYCLE_BARS: JSON.stringify({ MNQ: LC.BAR }), FTH_SYMBOLS: 'MNQ' } };
+}
+
+test('order gate wiring, hook and gateway: the policy\'s entry rule (its rulebook\'s entry) refuses a composed entry [composed-reads]; off, or the regime with it, does not; an exit goes', { timeout: 120000 }, async () => {
+  const plan = [{ ts: '2026-10-07T13:59:30.000Z', kind: 'plan', contractId: 'MNQ', text: 'plan' }];
+  const text = r => r.result.content[0].text;
+  const both = async (env, input) => ({ hook: gate(orderPayload(input), env).stderr, gw: text((await gatewayRun(env, [call(1, 'place_order', input)])).byId[1]) });
+  const RULE = /\[composed-reads\] setup:trade_lifecycle: the record's reads do not stand on this bar: .*entry rule: /;
+  // On, against the long (trend-down): refused in both, naming the rule.
+  const h1 = tmpDir();
+  const w1 = entryRulePropWorld(h1, { regime: 'trend-down' });
+  const env1 = setup(plan, { FTH_HOME: h1, ...w1.env }).env;
+  const against = await both(env1, w1.order(5));
+  for (const t of [against.hook, against.gw]) assert.match(t, /entry rule: the regime is trend-down, against the long/, t);
+  for (const t of [against.hook, against.gw]) assert.match(t, RULE, t);
+  // On, the briefing without a regime: refused (fails closed).
+  const h2 = tmpDir();
+  const w2 = entryRulePropWorld(h2);
+  const missing = await both(setup(plan, { FTH_HOME: h2, ...w2.env }).env, w2.order(5));
+  for (const t of [missing.hook, missing.gw]) assert.match(t, /entry rule: the base regime \(m3\.regime\) is not in the briefing: no entry/, t);
+  // On, with the long (trend-up), and off against it: no entry-rule refusal.
+  for (const o of [{ regime: 'trend-up' }, { on: false, regime: 'trend-down' }]) {
+    const h = tmpDir();
+    const w = entryRulePropWorld(h, o);
+    const r = await both(setup(plan, { FTH_HOME: h, ...w.env }).env, w.order(5));
+    for (const t of [r.hook, r.gw]) assert.doesNotMatch(t, /entry rule/, `${JSON.stringify(o)}: ${t}`);
+  }
+  // An exit goes with the rule on.
+  const exit = { ...EXIT_BASE, contractId: 'MNQ', side: 'sell', size: 1, rationale: '[exit] close the pmc_entry long' };
+  assert.strictEqual(gate(orderPayload(exit), env1).code, 0);
+  const gx = await gatewayRun({ ...env1, FAKE_POSITIONS: LONG1 }, [call(1, 'place_order', exit)]);
+  assert.strictEqual(text(gx.byId[1]), 'forwarded:tools/call:place_order');
+});
+
 test('MCP gateway: a composed entry is judged late on the price at order time (the broker\'s newest closed 1m bar, read by the gateway), not on the runner\'s price from before the trade-executor ran', { timeout: 60000 }, async () => {
   // The live smoke: the runner read its price before the trade-executor's run; by the order the market had fallen most of
   // the risk toward the stop, and the long filled a few ticks over its stop. Here: the plan's long at 21540.25, stop

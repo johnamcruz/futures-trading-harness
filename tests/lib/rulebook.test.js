@@ -23,7 +23,8 @@ const errorsOf = (extra, body = BODY) => RB.validateRulebook(book(extra), body, 
 /** A complete policy entry: every sizing key and the trail stated. */
 const SIZING = { cushion_frac: 0.1, cap_usd: 500, clock_k: 'off', r_per_session: 0.3, min_size_guard: 1.5, drawdown_halve_usd: 'off', stop_slippage_ticks: 1, min_contracts: 3, floor_stretch_max_usd: 'off' };
 const OFFS = { trail_activate_r: 'off', trail_giveback_r: 'off', lock_giveback_r: 'off', trail_by: 'off', trail_r: 'off', swing_tf: 'off', ratchet: 'off' };
-const ENTRY = { sizing: SIZING, exit: { ...OFFS, mode: 'trail', trail_activate_r: 2, trail_giveback_r: 1 }, multipliers: [] };
+const ENTRY_OFF = { bias_frames: 'off', regime_against: 'off', leg_turned: 'off' };
+const ENTRY = { sizing: SIZING, exit: { ...OFFS, mode: 'trail', trail_activate_r: 2, trail_giveback_r: 1 }, multipliers: [], entry: ENTRY_OFF };
 const TARGET = { ...OFFS, mode: 'target' };
 const AFTER = { ...OFFS, mode: 'target_then_trail', lock_giveback_r: 0.5, trail_by: 'structure', trail_r: 1, swing_tf: '15m' };
 
@@ -52,6 +53,21 @@ test('validateRulebook: a complete one is valid; every item is classified exactl
   assert.match(errorsOf(moved).join(), /mtf_read: classified enforced, but no code holds it \(taught in strategy-library\)/);
   const back = { enforced: KINDS.enforced.filter(k => k !== 'sizing'), taught: [...KINDS.taught, 'sizing'] };
   assert.match(errorsOf(back).join(), /sizing: classified taught, but no skill teaches it/);
+});
+
+test('validateRulebook: a policy states its entry rule, every key (off: no check); a bad value or key is refused, naming it', () => {
+  const p = entry => ({ policies: { prop_a: { ...ENTRY, entry } } });
+  assert.deepStrictEqual(errorsOf(p(ENTRY_OFF)), []);
+  assert.deepStrictEqual(errorsOf(p({ bias_frames: ['4h', '1h'], regime_against: 'on', leg_turned: 'on' })), []);
+  assert.deepStrictEqual(errorsOf(p({ ...ENTRY_OFF, bias_frames: ['1h'] })), []);
+  assert.match(errorsOf(p(undefined)).join(), /policies\.prop_a\.entry: missing or not a map; state bias_frames, regime_against, leg_turned/);
+  for (const k of Object.keys(ENTRY_OFF)) {
+    const { [k]: _gone, ...rest } = ENTRY_OFF;
+    assert.match(errorsOf(p(rest)).join(), new RegExp(`policies\\.prop_a\\.entry\\.${k}: missing; state it`), k);
+  }
+  for (const v of [[], ['1h', '4h'], ['4h', '4h'], ['2h'], '4h', 'on', 0, null]) assert.match(errorsOf(p({ ...ENTRY_OFF, bias_frames: v })).join(), /entry\.bias_frames: .* is not off or a list of 4h, 1h, 15m, highest first, each once/, JSON.stringify(v));
+  for (const k of ['regime_against', 'leg_turned']) for (const v of [true, 'yes', 1, '']) assert.match(errorsOf(p({ ...ENTRY_OFF, [k]: v })).join(), new RegExp(`entry\\.${k}: .* is not on or off`), `${k} ${v}`);
+  assert.match(errorsOf(p({ ...ENTRY_OFF, surprise: 'on' })).join(), /entry\.surprise: unknown key/);
 });
 
 test('validateRulebook: a policy entry states every sizing key, the trail and its multiplier items; nothing falls back to a code default', () => {
@@ -163,7 +179,8 @@ test('loadRulebookFile and policyEntry: parsed and validated against its folder;
   const shipped = loadStrategies(ROOT, {}).strategies.find(s => s.name === 'prop_portfolio');
   const real = RB.loadRulebookFile(path.join(ROOT, 'accounts', shipped.account, RB.FILE));
   assert.strictEqual(real.valid, true, real.errors.join());
-  assert.deepStrictEqual(Object.keys(RB.policyEntry(real, 'prop_portfolio')), ['sizing', 'exit', 'multipliers']);
+  assert.deepStrictEqual(Object.keys(RB.policyEntry(real, 'prop_portfolio')), ['sizing', 'exit', 'multipliers', 'entry']);
+  assert.deepStrictEqual(RB.policyEntry(real, 'prop_portfolio').entry, real.policies.prop_portfolio.entry, 'the entry rule as written');
   assert.strictEqual(RB.policyEntry(real, 'nope'), null);
   assert.strictEqual(RB.policyEntry(null, 'prop_portfolio'), null);
   assert.strictEqual(RB.policyEntry({ policies: { toString: 1 } }, 'hasOwnProperty'), null);

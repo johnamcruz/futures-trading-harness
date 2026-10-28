@@ -31,7 +31,8 @@ stacking up the timeframes (3m, then 15m, then 1h) are a reversal
 developing. A 15m or 1h CHoCH against the trend weighs most: then the
 read is a reversal attempt. The pullback ends when its own minor
 structure breaks back: `m3.lastBreak.last` turns the trend's way (the
-shift or reclaim of `htf-to-ltf`): a lower-timeframe CHoCH
+shift or reclaim of `htf-to-ltf`; the leg turned: a true `3m choch up`,
+`3m bos up` or `3m compression break up`, short `down`): a lower-timeframe CHoCH
 back the HTF way at a level times the entry; the setup there: `rejection`,
 `breakout`, `fair-value-gaps`. A CISD (`cisd`) is an earlier
 sign than the CHoCH; depth in fib terms: `fib-retracement`.
@@ -42,8 +43,6 @@ sign than the CHoCH; depth in fib terms: `fib-retracement`.
 
 **Evidence** (Train, docs/research/mtf-setup-catalog.md): depth alone is no
 edge; buying a 50% or 62% retrace with the 4h trend lost after costs (F5).
-The RTH VWAP pullback (F3A, F3B) was slightly positive, interval straddling
-zero: not a finding.
 
 ## Examples
 

@@ -158,3 +158,11 @@ test('an invalid rulebook after the edit is refused before any comparison', () =
   const t = tree();
   assert.match(errs(t, 'daily_loss_soft: 500', 'daily_loss_soft: 0'), /invalid after the edit: daily_loss_soft: 0 is not dollars above 0, or off/);
 });
+
+test('the entry rule: any change, on or off, is refused (the owner\'s switch, never a proposal\'s)', () => {
+  const t = tree();
+  for (const [find, replace] of [['regime_against: off', 'regime_against: on'], ['leg_turned: off', 'leg_turned: on'], ['bias_frames: off', 'bias_frames: [4h, 1h]']]) {
+    assert.match(errs(t, find, replace), /policies\.p1\.entry: changed \(the entry rule is the owner's switch/, replace);
+  }
+  assert.match(errs(t, 'bias_frames: off', 'bias_frames: [1h, 4h]'), /entry\.bias_frames: .* is not off/, 'invalid: refused before the comparison');
+});

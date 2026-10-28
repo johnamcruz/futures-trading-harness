@@ -183,6 +183,39 @@ test('compose_check in a prop attempt: no size fits (the floor all in over the c
   assert.doesNotMatch(plain.text, /no size fits/);
 });
 
+test('compose_check in a prop attempt holds the policy\'s entry rule (its rulebook\'s entry): NOT OK on this bar\'s regime; off, or no attempt, unchanged', () => {
+  const prop = require('../../scripts/lib/trading/prop-state');
+  const { accountNamed } = require('../../scripts/lib/trading/accounts');
+  const run = ({ regime, on, attempt = true }) => {
+    const b = scenario1();
+    b.sections.m3.data.regime = { primary: regime, volatility: 'normal' };
+    const { home, ctx } = setup({ briefing: b });
+    const r = tmpDir();
+    for (const s of ['trade_lifecycle', 'prop_portfolio']) fs.cpSync(path.join(ROOT, 'strategies', s), path.join(r, 'strategies', s), { recursive: true });
+    const acct = loadStrategies(ROOT, {}).strategies.find(s => s.name === 'prop_portfolio').account;
+    fs.cpSync(path.join(ROOT, 'accounts', acct), path.join(r, 'accounts', acct), { recursive: true });
+    fs.symlinkSync(path.join(ROOT, 'skills'), path.join(r, 'skills'));
+    const book = path.join(r, 'accounts', acct, 'RULEBOOK.md');
+    const text = fs.readFileSync(book, 'utf8');
+    assert.match(text, /^ {6}regime_against: off /m, 'shipped off');
+    if (on) fs.writeFileSync(book, text.replace(/^( {6}regime_against: )off/m, '$1on'));
+    const account = accountNamed(r, acct, {});
+    if (attempt) {
+      prop.startAttempt(home, account, new Date('2026-04-23T13:00:00Z'));
+      prop.snapshot(home, account, account.starting_balance, new Date('2026-04-23T13:01:00Z'));
+    }
+    const out = composeCheck({ symbol: 'MNQ', side: 'long', reads: SCENARIO_1, size: 3 }, { ...ctx, root: r });
+    return { text: out.text, rec: readRecords(home, 'MNQ').pop() };
+  };
+  const against = run({ regime: 'trend-down', on: true });
+  assert.strictEqual(against.rec.ok, false);
+  assert.match(against.text, /- PROBLEM: entry rule: the regime is trend-down, against the long: wait until it stops trending against it/);
+  assert.ok(against.rec.problems.some(x => /^entry rule:/.test(x)), 'recorded with the record');
+  assert.strictEqual(run({ regime: 'trend-up', on: true }).rec.ok, true, 'with it: OK');
+  assert.strictEqual(run({ regime: 'trend-down', on: false }).rec.ok, true, 'shipped off: unchanged');
+  assert.strictEqual(run({ regime: 'trend-down', on: true, attempt: false }).rec.ok, true, 'no attempt: no policy, no rule');
+});
+
 test('compose_check: the briefing\'s bar (FTH_CYCLE_BRIEFING_BARS) comes before the cycle\'s lane bar (FTH_CYCLE_BARS)', () => {
   const { home, ctx } = setup({ cycleBar: '2026-04-23T14:58:00.000Z' });
   ctx.env.FTH_CYCLE_BRIEFING_BARS = JSON.stringify({ MNQ: BAR });
