@@ -103,7 +103,7 @@
     "brokerFieldsBytes": 600,
     "brokerFieldChars": 250,
     "cycleDataMaxBytes": 48000,
-    "situationalSkillBytes": 24000
+    "situationalSkillBytes": 72000
   },
   "session": {
     "fillsTimeoutMs": 10000,

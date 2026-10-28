@@ -4309,6 +4309,33 @@ test('order gate (hook): a managed cycle\'s attested situational skills (FTH_CYC
   assert.strictEqual(exit.code, 0, exit.stderr);
 });
 
+test('order gate (hook): an attested cycle-skills section is credited on the run\'s own session: an entry whose skills it embeds goes without their loads; unattested, refused', () => {
+  const { env, dir } = setup([{ ts: minutesAgo(5, new Date(TEST_NOW)), kind: 'plan', contractId: entryOrder().contractId, text: 'plan' }]);
+  simBroker(env);
+  const CA = require('../../scripts/lib/cycle-skills-attest');
+  const HP = require('../../scripts/lib/head-prompt');
+  const { REQUIRED_FOR_ENTRY, REQUIRED_AT_ENTRY } = require('../../scripts/lib/trading/skills-loaded');
+  const { cycleId: cycleIdOf } = require('../../scripts/lib/trading/check-order');
+  const SESSION = '6c2e4d8a-cycle-skills-hook';
+  const stream = path.join(dir, 'cycle-transcript-cs.jsonl');
+  fs.writeFileSync(stream, JSON.stringify({ type: 'system', subtype: 'init', session_id: SESSION }));
+  const session = path.join(dir, 'projects', `${SESSION}.jsonl`);
+  fs.mkdirSync(path.dirname(session), { recursive: true });
+  fs.writeFileSync(session, '');
+  // The section embeds every skill the entry needs: no load by tool in the run.
+  const text = ` Section.\n\n${[...REQUIRED_FOR_ENTRY, ...REQUIRED_AT_ENTRY].map(s => HP.block(s, HP.skillBody(REPO, s))).join('\n\n')}\n`;
+  const file = CA.fileOf(env.FTH_HOME, text);
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  fs.writeFileSync(file, text);
+  const att = CA.attestation({ file, text, root: REPO, cycle: cycleIdOf({ FTH_CYCLE_TRANSCRIPT: stream }) });
+  const auto = { ...env, FTH_AUTONOMOUS: '1', FTH_SYMBOLS: 'MNQ', FTH_ROLE_SKILLS: 'full', FTH_REPLAY_NOW: TEST_NOW, FTH_CYCLE_TRANSCRIPT: stream, FTH_CYCLE_SKILLS: JSON.stringify(att) };
+  const skillsChecks = /\[skills-loaded\]|\[skills-at-entry\]/;
+  const ok = gate({ ...orderPayload(), transcript_path: session }, auto);
+  assert.doesNotMatch(ok.stderr, skillsChecks, ok.stderr);
+  const none = gate({ ...orderPayload(), transcript_path: session }, { ...auto, FTH_CYCLE_SKILLS: '' });
+  assert.match(none.stderr, /\[skills-loaded\][^\n]*trade-session/);
+});
+
 test('order gate hook: a cited setup (momentum_continuation) goes only on the record citing it, at market; a limit for it and its own tag are refused; its exit goes', () => {
   const LC = require('../fixtures/lifecycle');
   const { env } = setup([{ ts: '2026-10-07T13:59:30.000Z', kind: 'plan', contractId: 'MNQ', text: 'plan' }],

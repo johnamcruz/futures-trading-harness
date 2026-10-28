@@ -262,7 +262,7 @@ const BUILT_IN = deepFreeze({
       recentDecisions: 10, historyPerLane: 10, slowerContext: 3, planChars: 400, reasonChars: 100, exitsKept: 50, unseenReads: 10,
       sessionStartLessons: 10, sessionStartLessonChars: 300, reportMaxText: 8000, phase1MaxAgeMs: 1800000, trackRecordMinSlice: 10, lessonMinPlans: 10,
       trackRecordLiveSlice: 5, instinctsMinSetupTrades: 3, instinctsRecentReviews: 30, valuesPerStrategy: 6, brokerFieldsKept: 3,
-      brokerFieldsBytes: 600, brokerFieldChars: 250, cycleDataMaxBytes: 48000, situationalSkillBytes: 24000,
+      brokerFieldsBytes: 600, brokerFieldChars: 250, cycleDataMaxBytes: 48000, situationalSkillBytes: 72000,
     },
     session: {
       fillsTimeoutMs: 10000, retryTimeoutMs: 4000, retryMs: 60000, retryAlertAfter: 5, backoffMs: 1800000, recentSessions: 7, archiveDays: 90,

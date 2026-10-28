@@ -19,7 +19,7 @@ Autonomous cycle.
   Your skills trade-session, multi-timeframe-analysis, trade-lifecycle, htf-to-ltf, confluence-counting, setup-judgment, trade-plan, and day-context are in your prompt, already loaded (don't load them again): decide by them, then run the trade-session skill for MNQ on account 7.
   Write the trader-process skill's PLAN (1 HTF to 9 Manage) before the result line.
   Full cycle: market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst and risk-manager (phase 1) as parallel subagents, plan from their reports, then risk-manager phase 2 on your plan, if any; the gate refuses an entry until all report and phase 2 approves.
-  This cycle's situation (a compression break on the Setups to check; a setup listed: its entry read; a setup listed: its stop, target and size) needs your skills `compression`, `candle-reading`, `momentum-and-volume`, `top-down-entry`, `take-profit`, and `position-sizing`: they are below, already loaded (don't load them again).
+  This cycle's situation (a compression break on the Setups to check; a setup listed: its entry read; a setup listed: its stop, target and size; price at a key level; a liquidity sweep; VWAP and value; the Trend declared? line; the trend rule; the day's bias; the last structure break) needs your skills `compression`, `candle-reading`, `momentum-and-volume`, `top-down-entry`, `take-profit`, `position-sizing`, `levels-and-reactions`, `breakout-vs-fakeout`, `vwap-volume-profile`, `mtf-bias-filter`, `daily-bias`, and `bos-vs-choch`: they are below, already loaded (don't load them again).
 
 <skill name="compression">
 # Compression
@@ -531,6 +531,487 @@ risk.max_risk_usd $300 -> maxSize 5; size 5, risk $277.50 = 5 x 111 ticks x $0.5
 (the same stop on MES: 111 ticks x $1.25 = $138.75 a contract: maxSize 2, $277.50)
 ```
 </skill>
- Also relevant now, read with your skill tool: `levels-and-reactions`, `breakout-vs-fakeout`, `vwap-volume-profile`, `trend-vs-range`, `mtf-bias-filter`, `daily-bias`, and `bos-vs-choch`.
-  End with the cycle result as plain text in your final message, never as a tool call.
+
+<skill name="levels-and-reactions">
+# Levels and Reactions
+
+## When to Use
+
+- Trader-process step 3: what is near price and how price behaved there.
+
+## How It Works
+
+A read, never a veto: the count decides (`confluence-counting`).
+  Thresholds are
+hypotheses; a missing field is `unknown`.
+
+**Levels**: prior RTH `day.priorRth.high`, `day.priorRth.low`,
+`day.priorRth.close`; overnight `m3.overnight.high`, `m3.overnight.low`;
+opening range `m3.today.openingRange` (the first 15 minutes from 09:30 ET;
+null until formed); IB
+`m3.today.ibHigh`, `m3.today.ibLow`; VWAP `m3.vwap.rth`,
+`m3.vwap.session` (`m3.vwap.applies`); prior value `day.priorProfile.vah`,
+`day.priorProfile.val`, `day.priorProfile.poc`; session value
+`m3.sessionProfile.vah`, `m3.sessionProfile.val`, `m3.sessionProfile.poc`;
+swings `m3.swings.high`, `m3.swings.low` (the last 4:
+`m3.liquidity.swingHighs`, `m3.liquidity.swingLows`), 15m and 1h `m3.htfLevels`
+(`brokenAt` null: holds), `m3.untested1hSwings`; equal highs and lows
+`m3.liquidity.equalHighs`, `m3.liquidity.equalLows` (`taken`); open FVGs
+`m3.liquidity.openFvgs` and partly filled ones
+`m3.liquidity.partlyFilledFvgs` (the unfilled part; `fair-value-gaps`); round numbers: `round number` in
+`m3.nearestLiquidity` (the multiples of the family's configured step just
+above and below price; price on one: its `at`; a refused step: none, the
+reason in its `roundNumbers`).
+
+**Resting liquidity** (stops cluster just beyond obvious levels).
+  Equal
+highs/lows: two of the last 12 confirmed swing highs (lows) within 0.1
+× ATR(14) of each other (3m swings, 2 bars each side: about 12 ticks on
+MNQ at an ATR of 30 points); the last 3 such pairs, each `taken` once
+traded through.
+  A flat top or bottom (bars side by side at the same high
+or low) is no swing, so it is in neither.
+  Targets: the next untested
+liquidity pool in the trade's direction.
+  Reversals follow a sweep,
+continuations a break.
+
+**Which matter now**: the nearest, `m3.nearestLiquidity.above` and
+`m3.nearestLiquidity.below` (in points and R); for a setup,
+`candidate.inTheWay` and `candidate.ahead` in its own R.
+  Where price sits:
+`m3.location.priorValue`, `m3.location.sessionValue`, `m3.vwap.side`.
+Hypothesis: levels a few ticks apart act as one zone.
+  Which kind matters
+most is not measured: the level families fired too rarely (F4, F7, F8, F9:
+docs/research/mtf-setup-catalog.md).
+
+**Reactions**, on closed bars:
+
+- rejection: traded through, closed back (`rejection`; per timeframe
+  `m3.candles`, in rules strategy-rules);
+- acceptance: closes beyond that hold (`breakout-vs-fakeout`);
+- sweep: `breakout-vs-fakeout` (`m3.sweeps`);
+- none yet: not reached.
+  No reaction is not a rejection.
+
+No call until the close; wicks are information, not signals.
+
+## Examples
+
+```text
+Take: m3.vwap.rth 21520.50; lows 21520.75, 21519.50, 21521.00, closes back above.
+  Read: rejection,
+  3m rejected vwap rth up; the session VAH 2.6R ahead, a read.
+  For outweighs against -> take.
+Skip: short at 21481.25, prior VAL 21480.00 5 ticks below, inTheWay 0.3R.
+  No rejection read -> pass.
+  That level is a read, not the reason.
+Loser: rejection at prior RTH low 21402.00 (wick 21401.25); long at 21408.50, stop 21399.75
+  (8.75 pts = 35 ticks, $17.50 on 1 MNQ); a close at 21398.00, acceptance below.
+  -35 ticks, -$17.50.
+```
+</skill>
+
+<skill name="breakout-vs-fakeout">
+# Breakout vs Fakeout
+
+## When to Use
+
+- Trader-process step 3, price through or at a level
+  (`levels-and-reactions`).
+
+## How It Works
+
+A read, never a veto: the count decides (`confluence-counting`).
+  Thresholds are
+hypotheses; a missing field is `unknown`.
+
+- **Fakeout (sweep), computed**: `m3.sweeps`, a level traded through from
+  inside and closed back inside within 1-3 bars, in the last 10 bars:
+  `m3.sweeps[].name`, `m3.sweeps[].price`, `m3.sweeps[].key` (prior RTH
+  or overnight extreme), `m3.sweeps[].back`, `m3.sweeps[].bars`,
+  `m3.sweeps[].wick` (the extreme), `m3.sweeps[].close`.
+  Never by eye.
+  Read: `swept <level>`.
+- **A candle's sweep** is another fact: a completed candle that traded
+  beyond its previous candle's high or low and closed back inside
+  (`sweep` in `m3.candles`), read as its relation
+  (`15m rejected previous 15m high down`; `rejection`).
+- **Acceptance (breakout)**: closes beyond that hold (hypothesis: two or
+  more).
+  Shown as a 3m swing break (`m3.lastBreak.last.level`), a 15m or 1h
+  swing with `brokenAt` set (`m3.htfLevels`), or a location that changed
+  side (`m3.location.priorValue`, `m3.location.initialBalance`,
+  `m3.location.priorRthRange`).
+- **Retest**: after acceptance, a pullback whose closes stay beyond the
+  level.
+  Not computed: read the last 10 bars.
+- **Undecided**: one close beyond, or a wick still inside its 3 bars:
+  `unknown`.
+  No call before the close.
+
+**Evidence** (Train, docs/research/mtf-setup-catalog.md): fading every
+sweep of the previous hour's high or low lost after costs (F1).
+  The levels
+in `m3.sweeps` differ and were not tested; read a sweep alone as no
+reversal signal.
+  A
+first 3m close through the IB high on volume lost (F8A); its retest (F8B)
+was positive on 38 trades, interval straddling zero; level retests (F9)
+fired too rarely to say.
+
+## Examples
+
+```text
+Take: prior RTH high 21615.00; closes 21619.25, 21622.50, 21621.75; retest low 21615.75 held.
+  Read: acceptance, 3m broke prior rth high up; aligned, for outweighs against -> take.
+Skip: m3.sweeps: prior RTH high 21625.00, key, wick 21629.50, back in 1 bar.
+  Long at 21616.50:
+  a fakeout against the long, no acceptance read -> pass.
+  The swept high 0.6R ahead is a read.
+Loser: read acceptance (closes 21618.50, 21620.25); long at 21620.25, stop 21615.75
+  (4.50 pts = 18 ticks, $9.00 on 1 MNQ); low 21612.00, now a sweep (bars 3).
+  -18 ticks, -$9.00.
+```
+</skill>
+
+<skill name="vwap-volume-profile">
+# VWAP and Volume
+
+## When to Use
+
+- Deciding trend day vs rotation day.
+- Grading a breakout's participation.
+- Choosing pullback entry areas.
+- Placing targets and judging room: the next high or low volume node.
+
+## How It Works
+
+In an autonomous cycle the bar briefing (`bar_briefing`, the
+`bar-briefing` skill) holds this bar's VWAP, participation and profiles
+(`m3`, `day`): use it, and compute only what it doesn't hold.
+
+1.
+  **VWAP** from market-snapshot: `vwapSession` (anchored 18:00 ET, Globex) and
+   `vwapRth` (anchored 09:30 ET).
+  `vwapRth` is null before today's 09:30 ET
+   open and after 16:00 ET: use `vwapSession` then, as the strategy filters
+   do.
+  The briefing's `m3.vwap`: which VWAP applies now (`applies`: `rth`
+   or `session`), the distance in ATR(14) (`distanceAtr`), and the closes
+   crossing each VWAP in the last 30 bars (`rthCrossesLast30`,
+   `sessionCrossesLast30`; read the one that applies).
+   - Price above a rising RTH VWAP, with pullbacks holding it → buyers in
+     control; buy pullbacks to VWAP.
+   - Price crossing VWAP repeatedly → rotation day; fade extremes, small
+     targets; a read against trend entries.
+   - Distance from VWAP in ATRs: a read, never a pass alone (far from
+     VWAP did no worse in the census).
+2.
+  **Relative volume**: the participation fields, as computed, are the
+   `momentum-and-volume` skill's.
+3.
+  **Volume profile.** Don't estimate it by hand: market-snapshot's
+   `volumeProfile` has three, computed from closed bars
+   (`scripts/lib/trading/volume-profile.js`):
+   - `priorRth`: the last complete RTH day.
+  The reference for the day; fixed.
+   - `session`: this Globex session from 18:00 ET, developing.
+   - `rolling`: the last 360 bars (`vpLookback`).
+
+   Each has `poc` (point of control: the most-traded price), `vah`/`val`
+   (the value area: 70% of the volume around the POC), `price` (above,
+   inside, or below value, from the exact levels: a shown VAH a tick under
+   price can still read inside), `fromPocAtr` ((price - POC) / ATR(14)),
+   and the nodes: `hvn` (high volume:
+   acceptance, where moves stall and rotate) and `lvn` (low volume:
+   rejection, where price moves fast), with the nearest above and below
+   (`hvnAbove`, `lvnBelow`, ...).
+  Strategies read the same levels as
+   `prior_poc prior_vah prior_val`, `session_*`, `vp_*(n)`, and the nodes.
+   - Open outside the prior value area, then back inside for two closes →
+     rotation to the far side is likely (the 80% rule).
+   - Two closes outside value on above-average volume → value is moving;
+     the next HVN is the likely stall, an LVN
+     beyond the entry is open air.
+   - Inside value with VWAP flat → rotation: fade VAH/VAL toward the POC,
+     small targets.
+   - A POC at one end of a wide value area means the day trended: a weak
+     reference for the next day.
+   - Levels are computed on a 100-row grid over the day's range, and shown
+     on the contract's tick (as in the briefing) for a harness bars file or
+     with `symbol`; otherwise to two decimals, between ticks: round to
+     `tickSize` before using one as an order price.
+
+   It is a bar-based approximation (each bar's volume spread evenly over its
+   range), not a tick-level profile.
+  Say so when you cite it.
+4.
+  **Volume climax**: the `absorption` skill.
+5.
+  **The day so far** (`m3.today`, from the 09:30 ET open; the prompt's
+   "day:" line says the same): the open against the prior RTH day
+   (`openVs`: inside the prior value area, outside value inside the range,
+   or outside the range), the `gap` from the prior close, the `openType`
+   (open-drive, open-test-drive, open-rejection-reverse, open-auction, from
+   the first 30 minutes), the initial balance (`ibHigh`, `ibLow`, the first
+   hour) and how far the day has gone past it (`extUp`, `extDown`), the
+   `dayType` so far (inside the initial balance; normal variation: one side
+   extended, under 2 IBs; trend: 2 IBs or more, or 1 from a narrow IB under
+   0.35 ADR; neutral: both sides), and the range against the average daily
+   range (`rangeVsAdr`, over 10 days).
+
+## Examples
+
+```text
+10:09 ET: MNQ opened 21462.50, below the prior day's VAL 21480.00
+(volumeProfile.priorRth: POC 21522.00, VAH 21560.00).
+  Two 3m closes back
+inside, 21486.00 and 21490.25 → reads value inside, 3m rejected prior val
+up; target VAH 21560.00, 69.75 points away; the POC at 21522.00 is the halfway mark.
+
+09:52 ET: 3m close above OR high, v = 2,140 vs OR average 1,180 (1.8×), price
+0.6 ATR above rising RTH VWAP → participation confirmed: 3m momentum up.
+
+11:30 ET: 6 crosses of RTH VWAP in 90 min, ADX 14 → rotation: a read against
+trend entries until a range break.
+```
+</skill>
+
+<skill name="mtf-bias-filter">
+# MTF Bias Filter
+
+## When to Use
+
+- Authoring or testing a rules strategy that should trade only with the
+  higher timeframe.
+
+## How It Works
+
+### In rules (mechanical strategies)
+
+`mtf_bias(m)` is the multi-timeframe trend per bar in strategy rules (the
+`strategy-authoring` skill defines it).
+Add it to a strategy's rules
+to keep its trades with the higher timeframe, and backtest both versions:
+
+```yaml
+rules:
+  long:
+    - close crosses_above ema(20)
+    - mtf_bias(60) > 0          # the 1-hour trend is up
+    - mtf_bias(240) >= 0        # and the 4-hour isn't down
+```
+
+The ported strategies keep their source's rules (parity); try a filter in a
+copy (e.g.
+  `strategies/<name>_mtf/`) and compare the two with
+`scripts/backtest.js`.
+
+## Examples
+
+```text
+<name>      long at 21500.25, stop 21490.25 (40 ticks, $20.00 per MNQ), 4h DOWN
+<name>_mtf  same bar: mtf_bias(240) >= 0 fails -> no trade; compare both with scripts/backtest.js
+```
+</skill>
+
+<skill name="daily-bias">
+# Daily Bias
+
+Whether price is more likely up or down today, from the higher timeframes
+(the trend per timeframe: `multi-timeframe-analysis`).
+
+## When to Use
+
+- Premarket: the bias per timeframe and the levels of the day.
+- At the open and each 1h close: today's bias, step by step.
+
+## How It Works
+
+### The daily read
+
+Without `daily` the highest timeframe is the 4-hour: the alignment is then
+judged from it, and the plan says "no daily read".
+  Fetch the daily bars once
+a session (premarket) and reuse the file; if the fetch fails, go on without
+them rather than retrying.
+
+### The bias
+
+The `bias` (long, short, or neutral) weights the higher timeframes more
+(score out of ±max): use it for the game plan's headline.
+
+### The levels
+
+The prior RTH day's high and low and the 4h swings are in the briefing
+(`timeframe-sources`, `m3.swingTargets`); the daily swings only in
+`mtf_read`: no target read.
+
+### Today's bias, step by step
+
+1.
+  **Prior day's candle.** `day.priorRthCandle`: `dir`, `closeLocation`
+   (top third: buyers held it), `closeVsDayBefore` (beyond its high or low:
+   accepted that way; inside: no lean).
+  A holiday or early-close prior day
+   is a weak read.
+2.
+  **Price against the prior day.** `m3.location.priorRthRange`,
+   `m3.location.priorRthClose` (`above`, `below`, `at`),
+   `m3.location.priorValue`: above leans long, below short, inside value
+   two-sided.
+  Acceptance beyond the prior high or low is closes holding
+   there (`breakout`), not a wick (`breakout-vs-fakeout`).
+3.
+  **The open.** `m3.today.openVs`, `m3.today.openType` (a drive leans its
+   way, an open-auction is two-sided), and the overnight range
+   (`m3.overnight.high`, `m3.overnight.low`): the first levels accepted or
+   rejected.
+4.
+  **1h and 4h structure.** `h1.lastBreak.last` (`bos-vs-choch`),
+   `h1.h1.swingPattern`, `h1.h4.swingPattern`.
+  The higher one sets the
+   side; the 1h against it lowers the confidence.
+5.
+  **Regime.** `m3.regime.primary`: a trend backs its side; range or
+   transition does not.
+6.
+  **Write it.** Long, short or neutral; high when steps 1-5 all back it,
+   medium when one does not, low when two or more do not; the reasons by
+   step; the level that flips it.
+
+**Flips intraday**: a 1h CHoCH against it, or closes back inside the prior
+range after a breakout of it.
+
+**Neutral**: expect two-sided trade; the range's extremes (prior range,
+value, overnight) are the better locations.
+
+The bias is a read: the trend rule (`multi-timeframe-analysis`) and the
+priority order (strategy-library) decide entries.
+  Against the prevailing
+trend, trend strategies wait; it never points at a side the rule refuses.
+
+## Examples
+
+```text
+Daily UP, 4h UP, 1h UP, 15m DOWN; bias long (score 8 of ±10).
+-> Game plan headline: bias long.
+  The 4h swing high 21720.50 is the target above
+   (`target 4h swing 21720.50`), 69.50 points (278 ticks, $139.00 per MNQ) over 21651.00.
+```
+
+NQ, back-adjusted CSV prices:
+
+```text
+2023-04-28 09:30, trend rule 4h up: 1 prior day up, top third, above its day
+before's high; 2 inside prior value, under the prior close 16230.25; 3 inside the
+overnight 16168.00-16235.00; 4 4h HH/HL, 1h CHoCH down at 16188.00; 5 range.
+-> Long, low: the 4h sets the side; 2-5 do not back it.
+12:00: 2 above the prior range; 3 the overnight high 16235.00 accepted; 4 1h CHoCH
+up at 16235.00.
+  -> Long, medium (5 range).
+  Flips on closes back under 16252.25.
+```
+</skill>
+
+<skill name="bos-vs-choch">
+# BOS vs CHoCH
+
+## When to Use
+
+- Trader-process steps 1 (HTF), 4 (Setup) and 9 (Manage): whenever a read
+  rests on a structure break.
+
+## How It Works
+
+A read, never a veto: the count decides (`confluence-counting`).
+  A missing field
+or a null break is `unknown`.
+
+The bar briefing holds the breaks.
+  The latest BOS or CHoCH (`lastBreak`)
+is computed there from confirmed swings: never call it by eye.
+
+**Swings.** Confirmed fractal swings (k=2: a pivot with 2 strictly lower
+highs or higher lows on each side, confirmed 2 bars later).
+  The same on
+3m bars and completed 15m and 1h candles (structure-events.js).
+  Fields:
+`m3.swings.high`, `m3.swings.low`, `m3.htfLevels` (15m and 1h swings),
+`m15.frame.swingPattern`, `h1.h1.swingPattern`.
+
+**Breaks.** A close strictly beyond the last confirmed swing not yet
+broken; each swing breaks once.
+  Only closes count, on completed candles.
+A wick through a swing that closes back inside is a sweep, not a break
+(the `breakout-vs-fakeout` skill).
+
+- BOS: a close beyond the last swing in the trend's direction.
+  In the
+  code, that is the previous break's direction (the first break too).
+- CHoCH: the first close beyond the last swing against it, an early
+  warning, not a reversal by itself (the `pullback-vs-reversal` skill).
+
+**Fields**: `m3.lastBreak.last` and `m3.lastBreak.previous`; the same
+under `m15.lastBreak` and `h1.lastBreak` (`knownAt`: the candle's close);
+a 5m lane's briefing has it in its `bar` part.
+  Each: `kind` (`BOS` or
+`CHoCH`), `direction` (`up` or `down`), `level`, `barsAgo` (that
+timeframe's candles).
+  The 4h has swings only (`h1.h4.swingPattern`).
+
+**By timeframe.** No one timeframe is the signal; read them top-down.
+
+| Timeframe | BOS | CHoCH |
+|---|---|---|
+| 3m, 5m | continuation; entry timing | against the HTF: usually a pullback; back with it: the pullback ends |
+| 15m | the working structure continues | the working structure shifting: a deeper pullback, or a reversal starting |
+| 1h (4h swings) | the HTF trend continues | the strongest sign of an HTF trend change, not a reversal by itself: a BOS the new way confirms it |
+
+A 3-minute BOS against a 1-hour downtrend is a counter-trend trade.
+CHoCHs stacking up the timeframes (3m, then 15m, then 1h) are a reversal
+developing.
+
+**In the PLAN.**
+
+- **1 HTF**: a 1h break is the side rule's, a 15m one structure
+  (`confluence-counting`).
+- **4 Setup**: continuation, a BOS the HTF way, a pullback to a level, a
+  lower-timeframe CHoCH back the HTF way; reversal, CHoCHs stacking up.
+- **9 Manage**: a CHoCH against an open trade on its timeframe or higher
+  is significant (`invalidation`); lower is mostly noise.
+  The exit stays
+  the strategy's.
+
+## Examples
+
+```text
+Take: 1h, 15m BOS up; pullback to the RTH VWAP 21520.50; m3 CHoCH up 0 bars ago.
+  Reads: 1h bos up, at vwap rth, 3m choch up.
+  Priority order: aligned; the count for -> take.
+Skip: 1h, 15m last BOS up; m3 CHoCH down through 21512.50.
+  Read: a 3m pullback, not a reversal.
+  A short: no 1h CHoCH down; the priority order (step 2) decided skip.
+Loser: 1h up; m3, then 15m CHoCH down through 21560.00.
+  Read: reversal developing.
+  short at 21548.75 (15m choch down), stop 21557.25 (8.50 pts = 34 ticks, $17.00 on 1 MNQ); no 1h CHoCH;
+  a 15m CHoCH up through 21562.50: the CHoCH failed, price resumed.
+  -34 ticks, -$17.00.
+```
+</skill>
+ For the Trend declared? line, from your `trend-vs-range` skill:
+
+**Declared yet?** (`Trend declared?` line; ATR, + your way; census
+hypotheses):
+
+- Declared (any one): regime `with`, overnight range broke out its way,
+  RTH VWAP +1 to +2.5, day's move +3 or more.
+- Not yet (false starts): RTH VWAP and EMA20 under 0 (EMA20 under -1
+  worse), regime `against`, inside the overnight range (back third worst):
+  wait for it, in the count; size is the verdict's.
+  An unfinished
+  pullback is no chop sign.
+ End with the cycle result as plain text in your final message, never as a tool call.
   Your last line must be exactly: CYCLE RESULT: <no-trade | planned | executed | managed | flattened | blocked | error> - <reason>.

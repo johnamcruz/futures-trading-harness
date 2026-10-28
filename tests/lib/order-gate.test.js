@@ -4249,6 +4249,23 @@ test('exit skills (gate): never fails open: another cycle, an edited file or ski
   assert.deepStrictEqual(ES.attested(att, root, { stream, cycle: att.cycle }), ['manage-position', 'pullback-vs-reversal', 'take-profit']);
 }));
 
+test('cycle skills (gate): an attested skill counts in an autonomous cycle only; never in an interactive session', () => {
+  const CA = require('../../scripts/lib/cycle-skills-attest');
+  const HP = require('../../scripts/lib/head-prompt');
+  const { cfg, root, dir, stream } = exitSkillsRun();
+  // A section that embeds an entry's own skill (as the runner would write one), attested for the run's cycle.
+  const text = ` Section.\n\n${HP.block('trade-session', HP.skillBody(root, 'trade-session'))}\n`;
+  const file = CA.fileOf(dir, text);
+  fs.writeFileSync(file, text);
+  const att = CA.attestation({ file, text, root, cycle: require('../../scripts/lib/trading/check-order').cycleId({ FTH_CYCLE_TRANSCRIPT: stream }) });
+  // The run loaded every skill but trade-session by tool.
+  fs.writeFileSync(stream, fs.readFileSync(stream, 'utf8').split('\n').filter(l => !l.includes('"skill":"trade-session"')).join('\n'));
+  const msg = r => (r.violations.find(v => v.check === 'skills-loaded') || {}).message || '';
+  assert.doesNotMatch(msg(headGate({ ...cfg, cycleSkillsAttestation: JSON.stringify(att) })), /trade-session/, 'autonomous: counted');
+  assert.match(msg(headGate({ ...cfg, autonomous: false, cycleSkillsAttestation: JSON.stringify(att) })), /trade-session/, 'interactive: never counted');
+  assert.match(msg(headGate({ ...cfg, cycleSkillsAttestation: null })), /trade-session/);
+});
+
 test('exit skills (gateway): checkOrder counts FTH_CYCLE_SKILLS for the run\'s own cycle only; an exit is never gated', () => withExitRequirement(() => {
   const { checkOrder } = require('../../scripts/lib/trading/check-order');
   const { att, stream, dir } = exitSkillsRun();

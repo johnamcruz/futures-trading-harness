@@ -55,6 +55,24 @@ test('cycle run: the injected run gets the cycle\'s argv and environment, the tr
   assert.deepStrictEqual(d.err, ['[autotrader] [desk] this cycle was decided without market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst, risk-manager (no launch returned)\n']);
 });
 
+test('cycle run: a listed setup neither composed nor skipped with a reason is a process miss, said on stderr; one with its SKIP line is not', async () => {
+  const cfg = validateConfig({ harness: 'opencode', premarketAt: '', symbols: ['MNQ'] });
+  const text = t => `${JSON.stringify({ type: 'text', timestamp: 99, sessionID: 's', part: { type: 'text', text: t } })}\n`;
+  const run = async output => {
+    const home = tmpDir();
+    const d = deps(home, async () => ({ ok: true, timedOut: false, code: 0, output, stdout: output }));
+    const context = { action: 'trade', cachedRoles: ['market-structure-analyst', 'trend-momentum-analyst', 'volume-liquidity-analyst', 'risk-manager'], symbols: [{ symbol: 'MNQ', bar: { t: '2026-10-07T14:00:00.000Z' } }], setupsListed: ['15m rejected overnight low up', '15m cisd up'] };
+    await runCycle(cfg, 'trade', 'p', {}, { timeoutMs: 1000, context }, d.deps);
+    return { line: JSON.parse(fs.readFileSync(path.join(home, 'logs', 'cycles-2026-10-07.jsonl'), 'utf8').trim()), err: d.err.join('') };
+  };
+  const miss = await run(text('SKIP "15m rejected overnight low up": HTF prevailing down\nCYCLE RESULT: no-trade - nothing'));
+  assert.deepStrictEqual(miss.line.setupSkips, [{ setup: '15m rejected overnight low up', reason: 'HTF prevailing down' }, { setup: '15m cisd up', reason: null }]);
+  assert.match(miss.err, /\[autotrader\] process miss: listed setup\(s\) neither composed nor skipped with a reason: "15m cisd up"\n/);
+  const ok = await run(text('SKIP "15m rejected overnight low up": HTF prevailing down\nSKIP "15m cisd up": no room to 2R\nCYCLE RESULT: no-trade - nothing'));
+  assert.doesNotMatch(ok.err, /process miss/);
+  assert.strictEqual(ok.line.result, 'CYCLE RESULT: no-trade - nothing', 'never refused, the result as reported');
+});
+
 test('cycle run: the desk check counts the roles that returned, names a failed launch, skips the cached, and is quiet when the desk ran', async () => {
   const task = (role, status, t) => `${JSON.stringify({ type: 'tool_use', timestamp: t, sessionID: 's', part: { type: 'tool', tool: 'task', state: { status, input: { subagent_type: role, description: 'd', prompt: 'p' }, ...(status === 'error' ? { error: 'Expected a string starting with "ses"' } : { output: 'report' }), time: { start: t, end: t + 1 } } } })}\n`;
   const said = `${JSON.stringify({ type: 'text', timestamp: 99, sessionID: 's', part: { type: 'text', text: 'CYCLE RESULT: no-trade - nothing fired' } })}\n`;

@@ -73,12 +73,23 @@ test('choose: stage order under the budget, nothing the prompt already holds, th
   assert.deepStrictEqual(small.skills, ['compression', 'candle-reading', 'momentum-and-volume']);
   assert.deepStrictEqual(small.over, ['top-down-entry', 'invalidation', 'take-profit', 'position-sizing', 'levels-and-reactions', 'vwap-volume-profile', 'mtf-bias-filter', 'daily-bias']);
   const text = SS.situationText(ROOT, small);
-  assert.ok(text.endsWith(' Also relevant now, read with your skill tool: `top-down-entry`, `invalidation`, `take-profit`, `position-sizing`, `levels-and-reactions`, `vwap-volume-profile`, `mtf-bias-filter`, and `daily-bias`.'), text.slice(-200));
+  assert.ok(text.endsWith(' Also relevant now, read with your skill tool (or skill_lookup, without one): `top-down-entry`, `invalidation`, `take-profit`, `position-sizing`, `levels-and-reactions`, `vwap-volume-profile`, `mtf-bias-filter`, and `daily-bias`.'), text.slice(-200));
+  // Strictly in order: a later skill small enough to fit after one that didn't is named, never taken in its place.
+  const later = all.skills.slice(2).filter(s => size(s) < size('candle-reading')).sort((a, b) => size(a) - size(b))[0];
+  assert.ok(later, 'a later skill smaller than candle-reading');
+  const strict = SS.choose(ROOT, facts, { budget: size('compression') + size(later), loaded: LOADED });
+  assert.deepStrictEqual(strict.skills, ['compression'], `${later} would fit, but it comes after candle-reading`);
+  assert.ok(strict.over.includes(later) && strict.over[0] === 'candle-reading');
+  // The prompt's line works on every harness: the skill tool, or skill_lookup where the head trader has none (opencode).
+  for (const harness of ['claude', 'opencode']) {
+    const p = prompts(validateConfig({ harness, account: '7', sessions: ['09:30-12:00@America/New_York'] }), NOW, ROOT).trade(ITEMS, { state: FLAT, cycleSkills: SS.situationText(ROOT, strict) });
+    assert.match(p, /Also relevant now, read with your skill tool \(or skill_lookup, without one\): `candle-reading`/, harness);
+  }
   // Management first: an open trade's exit skills before any context.
   const open = SS.choose(ROOT, SS.factsOf({ state: OPEN, briefings: [brief({})] }), { budget: size('manage-position') + size('pullback-vs-reversal') + size('take-profit'), loaded: LOADED });
   assert.deepStrictEqual([open.skills, open.over, open.stages], [['manage-position', 'pullback-vs-reversal', 'take-profit'], ['daily-bias'], ['management']]);
   // The committed budget.
-  assert.strictEqual(require('../../scripts/lib/tunables').runner().prompt.situationalSkillBytes, 24000);
+  assert.strictEqual(require('../../scripts/lib/tunables').runner().prompt.situationalSkillBytes, 72000);
 });
 
 test('the Setups-to-check line: a compression break on an allowed side (at its key level when its box sits at one) and a tradeable 15m or 1h CISD, the stronger first; nothing against the trend rule, on the 3m or 5m, or outside the window', () => {
@@ -99,6 +110,7 @@ test('the Setups-to-check line: a compression break on an allowed side (at its k
   // Only what can be traded now: waiting (unless freshly confirmed on the frame's last candle), void, expired: none.
   for (const status of ['waiting', 'void', 'expired', 'weak']) assert.deepStrictEqual(SM.setupChecks({ ...m3, compression: {}, cisd: { '15m': { ...cisd['15m'], status } } }), [], status);
   assert.deepStrictEqual(SM.setupChecks({ ...m3, compression: {}, cisd: { '15m': { ...cisd['15m'], status: 'waiting', confirmedClose: candles['15m'].closedAt } } }).map(c => c.status), ['fresh confirmation']);
+  assert.deepStrictEqual(SM.setupChecks({ ...m3, compression: {}, cisd: { '15m': { ...cisd['15m'], status: 'waiting', confirmedClose: '2026-04-23T13:30:00.000Z' } } }), [], 'confirmed on an earlier candle: waiting, no setup yet');
   assert.deepStrictEqual(SM.setupChecks({ ...m3, cisd: {}, compression: expanding('up', [{ name: 'prior rth high', edge: 'inside' }]) }).map(c => c.level), [undefined], 'no level at an edge: none named');
   assert.deepStrictEqual(SM.setupChecks({ ...m3, windowEntries: 'refused' }), []);
   assert.deepStrictEqual(SM.setupChecks({ ...m3, trendRule: 'Trend rule: SHORT allowed (prevailing 4h down); long only as a reversal' }), [], 'against the trend rule: none (the 3m short CISD is no setup)');

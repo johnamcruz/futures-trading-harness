@@ -174,7 +174,7 @@ function situationText(root, chosen) {
     const text = sectionOf(root, SECTIONS[id]);
     if (text) parts.push(` ${SECTIONS[id].intro}:\n\n${text}\n`);
   }
-  if (over.length) parts.push(` Also relevant now, read with your skill tool: ${HP.andList(over)}.`);
+  if (over.length) parts.push(` Also relevant now, read with your skill tool (or skill_lookup, without one): ${HP.andList(over)}.`);
   return parts.join('');
 }
 
