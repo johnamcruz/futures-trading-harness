@@ -457,7 +457,8 @@ function accountText(state) {
   const trades = (state.openTrades || []).map(t => ` ${t}`).join('');
   // Positions whose trade details couldn't be built: the model reads them itself.
   const unbuilt = state.openTradesError && positions.length ? ` Open positions: ${positions.join(', ')} (trade details unavailable this cycle: ${state.openTradesError}; read list_open_positions and list_open_orders).` : '';
-  return head + trades + unbuilt + attempts.join('');
+  const entryFacts = (state.entryLines || []).map(l => ` Working ${l}.`).join('');
+  return head + entryFacts + trades + unbuilt + attempts.join('');
 }
 
 const RECENT_IN_PROMPT = TUN.prompt.recentDecisions;

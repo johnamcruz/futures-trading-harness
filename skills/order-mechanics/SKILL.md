@@ -41,11 +41,10 @@ description: Use when an order replied - refused, unknown outcome, partial fill;
   Still working (a limit or stop entry not reached, or a market order the
   broker hasn't filled yet; a replay broker may fill it only at the next bar,
   and live fills can lag) with its stop bracket attached: journal that
-  it is working, with its order id and that its stop bracket is attached (an
-  order list may not show the bracket until the entry fills; the next cycle
-  tells by the entry's `order_placed` record, whose `data.request` carries
-  `stopLossBracket`, and this note), and end the cycle (the bracket protects it once it
-  fills).
+  it is working, with its order id and that its stop bracket is attached (it
+  attaches on the fill, so no stop leg shows first: not a reason to
+  cancel; the next cycle tells by the entry's `order_placed` record, whose `data.request` carries
+  `stopLossBracket`, or the prompt's "attached on fill" line), and end the cycle.
   Flat with no working entry after a successful reply: the broker reports
   the entry closed or not filled (it flattened a position whose stop it
   couldn't confirm, or cancelled the order); journal its review with the

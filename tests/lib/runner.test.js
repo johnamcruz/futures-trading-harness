@@ -1445,6 +1445,17 @@ test('the Unreviewed line gets the account\'s positions and working orders as th
   assert.deepStrictEqual(calls[0].orders.map(o => o.id), [9], 'the working order reaches it (an entry not filled yet is not "closed")');
 });
 
+test('the prompt shows a working entry\'s bracket from the runner\'s own entry record', async () => {
+  const order = { id: 9, contractId: 'MNQ', type: 1, side: 1, size: 3, limitPrice: 21400 };
+  const { cycles } = await simulate({
+    cfg: { symbols: ['MNQ'], timeframe: 3, account: '1' }, from: et(10, 0), to: et(10, 7),
+    market: fakeMarket({ minutes: 3, accountState: { positions: [], orders: [order] } }), positions: { net: 0, working: 1 },
+    deps: { journalEntries: () => [], entryOrders: () => [{ orderId: 9, contractId: 'MNQ', side: 'sell', stopTicks: 40, targetTicks: 80, composed: { stop: 21410, target: 21380 } }] },
+  });
+  const trade = cycles.filter(c => c.action === 'trade' || c.action === 'manage');
+  assert.ok(trade.some(c => /Working entry 9: sell limit 3 @ 21400, bracket attached on fill: stop 21410 \/ target 21380 \(runner record\)/.test(c.prompt)), trade.map(c => c.prompt.slice(0, 300)).join('\n'));
+});
+
 test('verifiedFlat: true only after a flatten pass read the account and found nothing open or working', async () => {
   const cfg = validateConfig({ harness: 'qwen', premarketAt: '', eodAt: '15:50@America/New_York', timeframe: 3, account: '7' });
   const clockRef = { t: et(16, 30) }; // the daily break: the runner checks the account once a minute

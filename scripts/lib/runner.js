@@ -49,6 +49,7 @@
  */
 
 const { openTrades, describeOpenTrade, tradeReadText } = require('./trading/open-trades');
+const { workingEntryLines } = require('./trading/working-entries');
 const { zonedParts } = require('./trading/clock');
 const { decide, recordRun, prompts, signalDecision, dayKey, endOfDayAt, historyShownLines } = require('./autotrader');
 const CD = require('./cycle-data');
@@ -1360,6 +1361,8 @@ function createRunner(deps) {
         positions: state ? state.positions.filter(isOpen) : null,
         workingOrders: state ? state.orders.length : null,
         orders: state ? state.orders : null,
+        // Each working entry's bracket from the runner's record (attaches on the fill): a fact, not a model claim.
+        entryLines: state ? workingEntryLines(state.orders, entryOrders(), now) : [],
         attempts,
       };
     } catch (err) {

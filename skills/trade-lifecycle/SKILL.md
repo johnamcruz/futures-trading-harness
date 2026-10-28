@@ -34,13 +34,13 @@ description: Use before a trade_lifecycle entry - compose the trade as reads wit
    `in ote`, `3m volume high`, `participation high`; a CISD or compression setup is
    timed from its confirming or expansion candle. A refusal's `HINT`
    lines list what is TRUE per step; `HINT these reads pass together` →
-   compose them if they are your trade, else pass.
+   compose them if they are your trade, else pass. Target NOT OK, `HINT target` of
+   2R+: re-compose once with it; still NOT OK: pass.
 
-   A normal trade risks about $200-300 (less, or a pass, is fine; never
-   over $300). Aim the target at the first real level at 2:1 to 3:1 (about
-   $600 on that risk); beyond 3:1 only at the real level. In an
+   A normal trade risks about $200-300 (less or a pass is fine; never
+   over $300). Target the first real level at 2:1 to 3:1 (about $600); beyond 3:1 only at the real level. In an
    attempt, NOT OK `no size fits`: a closer stop, or pass (healthy, code may
-   stretch the floor; never widen a stop).
+   stretch the floor).
 
 2. **Then read** `confluence-counting` and `invalidation` whenever you
    composed on the bar, `rejection` when a read says a candle rejected a
@@ -64,8 +64,8 @@ description: Use before a trade_lifecycle entry - compose the trade as reads wit
    another contract; a read false, unverifiable or against your side now
    (drop it or pass), or no setup or entry read your way; the plan, ticks, limit or size not the record's. The
    stop is never widened: name a farther level or pass. `[late-entry]`:
-   missed the plan's entry, or price beyond its stop before the order went
-   → pass: never enter late. Exits and protective orders are never held.
+   missed the plan's entry, or price past its stop before the order went
+   → pass, never late. Exits and protective orders are never held.
 
 | Tool | Arguments | What it returns | Script (people) |
 | --- | --- | --- | --- |
@@ -73,12 +73,12 @@ description: Use before a trade_lifecycle entry - compose the trade as reads wit
 | `experience_lookup` | `symbol`, `alternative`?, `role`? | after an OK compose_check, at most 2 a bar: your own past decisions of these skills in this context, then, only when the run enables its display (`libraryDisplay`), the code-measured history library apart (not yours: counts, win rate and no-room, never R); statistics only, never advice | `experience-lookup.js --symbol MNQ` |
 
 **Your risk record**, last in `experience_lookup` when the run shows it
-(`riskRecordDisplay`): a line per account state and risk decision of yours
-(standing down, sizing under the ceiling, exiting early, stopping for the day
-after losses), counting what reverting it did over the same Monte Carlo paths:
+(`riskRecordDisplay`): a line per account state and risk decision
+(standing down, sizing under the ceiling, exiting early, stopping for the day), counting what
+reverting it did over the same Monte Carlo paths:
 n is the paths it changed, then the blows it saved or caused and the passes it
-cost or gained. "Too few" is no reading yet. Read it as a prop trader reads a
-journal: evidence about your own standing-down habits in that account state,
+cost or gained. "Too few" is no reading yet. Read it as evidence about your own
+standing-down habits in that account state,
 never a forecast for this trade. A rule from code always overrides it.
 
 ## Examples
