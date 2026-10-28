@@ -5,21 +5,21 @@ const assert = require('node:assert');
 const { lessonDay, isActive, activeLessons, adviceText } = require('../../scripts/lib/trading/lesson-expiry');
 const { instincts, digest } = require('../../scripts/lib/trading/instincts');
 
-// 2024-06-11 10:00 ET (14:00Z): its trading day began 2024-06-10 17:00 CT (22:00Z) and ends 2024-06-11 17:00 CT.
+// 2024-06-11 10:00 ET (14:00Z): its trading day began 2024-06-10 22:00Z (clock.js tradingDayStart) and ends 2024-06-11 22:00Z.
 const NOW = new Date('2024-06-11T14:00:00.000Z');
 const lesson = (ts, text, tags = ['setup:prop_portfolio', 'MNQ']) => ({ ts, kind: 'lesson', text, tags });
 
 test('a lesson is active only on the session day it was written, up to now', () => {
   const eodYesterday = lesson('2024-06-10T19:51:00.000Z', 'Rule: no prop_portfolio entry until the cause is journaled.');
   const thisMorning = lesson('2024-06-11T13:40:00.000Z', 'Two stop-outs on reclaims: weak today.');
-  const lastEvening = lesson('2024-06-10T22:30:00.000Z', 'Overnight: thin.'); // after 17:00 CT: today's session day
+  const lastEvening = lesson('2024-06-10T22:30:00.000Z', 'Overnight: thin.'); // after the day's start (22:00Z): today's session day
   const later = lesson('2024-06-11T15:00:00.000Z', 'written after now');
   assert.strictEqual(lessonDay(eodYesterday), '2024-06-10');
   assert.strictEqual(lessonDay(thisMorning), '2024-06-11');
   assert.strictEqual(lessonDay(lastEvening), '2024-06-11');
   assert.strictEqual(isActive(eodYesterday, NOW), false, 'an earlier day\'s lesson has expired at its day\'s end');
   assert.strictEqual(isActive(thisMorning, NOW), true);
-  assert.strictEqual(isActive(lastEvening, NOW), true, 'written after the 17:00 CT start: the same session day');
+  assert.strictEqual(isActive(lastEvening, NOW), true, 'written after the day\'s start: the same session day');
   assert.strictEqual(isActive(later, NOW), false, 'never one from after now (a replay clock)');
   // The day it was written: active until that session's end, expired just after.
   assert.strictEqual(isActive(eodYesterday, new Date('2024-06-10T21:59:59.000Z')), true);

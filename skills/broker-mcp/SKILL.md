@@ -22,7 +22,7 @@ guide resource once per session if it has one.
 
 1. `get_server_config`: trading enabled? limits? The harness records `maxOrderSize` from this answer; the gate refuses entries until it has.
 2. `list_accounts`: pick `canTrade=true` and `mcpTradingAllowed=true`.
-3. `journal_read {kind:"lesson"}` plus recent `review` entries.
+3. `journal_read {kind:"lesson", since}` and recent `review`s.
 4. `get_account_snapshot`: balance, positions, working orders, `remainingBeforeLimit`.
 5. `search_contracts {searchText:"MNQ"}`: contracts come back by standard name: `MNQ` is the front month, `MNQ:2027-03` a later one. Note `tickSize`, `tickValue`: the harness takes every contract's tick specs from the broker's own answers (it records them as `search_contracts` or `get_contract` returns them), never from a table of its own. Use the name as `contractId` everywhere; the harness translates it to the broker's own id.
 6. The bar's facts: the bar briefing; without one, `bars_fetch` `{symbol:"MNQ", timeframe:3, record:true}` (`bar-briefing`).

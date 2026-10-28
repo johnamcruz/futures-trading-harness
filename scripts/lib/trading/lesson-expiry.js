@@ -3,7 +3,7 @@
 /**
  * Journaled lessons are advice, never rules (rules/trading/journaling.md): only the order gate and the account's
  * rulebook (code) block an entry. A lesson is active only on the session day it was written (its trading day,
- * clock.js tradingDayKey: from 17:00 CT to the next day's), and expires at that day's end; no lesson carries a
+ * clock.js tradingDayKey: from the trading day's start to the next one's), and expires at that day's end; no lesson carries a
  * condition the code can check on the current bars, so none outlives its day. Fail safe: a lesson without a readable
  * time, one written after `now`, or a `now` that isn't a time is never active. Every place that shows the model a
  * lesson takes the active ones from here and shows each as advice with its date, never as a standing rule.

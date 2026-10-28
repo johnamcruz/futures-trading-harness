@@ -87,7 +87,7 @@ function buildBriefing(entries, now, config, root = null, home = null) {
       lines.push(`- ${clip(adviceText(l))}${tags}`);
     }
   }
-  const learned = digest(entries, 6, { now });
+  const learned = digest(entries, undefined, { now }); // its default count
   lines.push('', '### Instincts from your reviews (confidence 0.3-0.9; notes, not rules)');
   lines.push(...(learned.length ? learned.map(x => `- ${clip(x)}`) : ['- none yet: they grow from reviewed trades']));
   lines.push('', 'Start sessions with /premarket or /trade-session. Orders are gated by the harness order gate.');

@@ -68,7 +68,7 @@ test('the desk\'s reads are each role\'s agent body\'s, with its arguments; the 
   // Each body names them (agents/*.md): the reads are its own, never ones it doesn't make.
   const body = n => fs.readFileSync(path.join(ROOT, 'agents', `${n}.md`), 'utf8');
   for (const r of ROLES) for (const x of CD.deskReads(r, o)) assert.ok(body(r).includes(`\`${x.tool}`), `${r}: ${x.tool}`);
-  assert.match(body('risk-manager'), /`journal_read` today's `review` entries[^]*Today's `lesson` entries \(`since` the trading day's start\): advice for the\s+count, never a restriction/);
+  assert.match(body('risk-manager'), /`journal_read` today's `review` entries[^]*`lesson`s since the day's start: advice\./);
 });
 
 test('the store: one read per key per cycle, a read several roles share made once; the head trader takes the same entry, the account read again', async () => {

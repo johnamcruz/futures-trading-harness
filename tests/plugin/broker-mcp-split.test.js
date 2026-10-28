@@ -112,6 +112,8 @@ const LATE = [
     reason: "fix/skills-match-code: no rules strategy is active (strategies/retired.json): the bar's facts are the briefing's, the signal record only a rules strategy's" },
   { from: "Bars to a file: the runner's bars file, or `bars_fetch` `{symbol:\"MNQ\", timeframe:3, record:true}` (+ `get_quote`), then `market_snapshot`, `mtf_read` (`bar-briefing`) and `strategies_scan` with `record` (`strategy-tools`).", to: "The bar's facts: the bar briefing; without one, `bars_fetch` `{symbol:\"MNQ\", timeframe:3, record:true}` (`bar-briefing`).",
     reason: "fix/skills-match-code: no rules strategy is active (strategies/retired.json): the bar's facts are the briefing's, the signal record only a rules strategy's" },
+  { from: "`journal_read {kind:\"lesson\"}` plus recent `review` entries.", to: "`journal_read {kind:\"lesson\", since}` and recent `review`s.",
+    reason: "feat/lesson-restrictions: a lesson expires at its session day's end (trading/lesson-expiry.js), so only today's (`since` the day's start) are read" },
 ];
 const LATE_STALE = (() => {
   const r = withLate(ALLOWED, LATE, units(require('fs').readFileSync(require('path').join(__dirname, '..', '..', BEFORE), 'utf8')));
