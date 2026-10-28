@@ -62,3 +62,15 @@ test('the shadow record writes nothing without bars, a clock or records', () => 
   assert.strictEqual(recordShadow(h, { root: 'MNQ', bars, minutes: 3, tick: 0.25, now: new Date(T0 + 10 * TF) }), 0);
   assert.ok(!fs.existsSync(shadowFile(h)));
 });
+
+test('the shadow record ends a plan at the runner\'s close: a fill after it is not held past it (eodOf)', () => {
+  const h = home([rec('late', 'long', 100, 98, 104, T0)]);
+  const now = new Date(T0 + 12 * TF);
+  // The close falls before the limit's bar fills (bar 1 on): the plan never fills that day.
+  const early = recordShadow(h, { root: 'MNQ', bars, minutes: 3, tick: 0.25, now, eodOf: () => T0 + 1 * TF });
+  assert.strictEqual(early, 1);
+  assert.strictEqual(readShadow(h, now).find(x => x.id === 'late').R, null, 'unfilled before the close: no outcome');
+  const h2 = home([rec('late', 'long', 100, 98, 104, T0)]);
+  recordShadow(h2, { root: 'MNQ', bars, minutes: 3, tick: 0.25, now });
+  assert.strictEqual(readShadow(h2, now).find(x => x.id === 'late').R, 2, 'control: no close given, the same plan reaches its target');
+});

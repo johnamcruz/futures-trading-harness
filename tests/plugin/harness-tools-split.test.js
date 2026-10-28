@@ -231,7 +231,7 @@ test('harness-tools retired: every unit of the old skill is in exactly one new h
   assert.ok(!fs.existsSync(path.join(ROOT, 'skills', 'harness-tools')), 'the skill is gone');
   // The dropped lessons and reconcile cells: the tools' own descriptions and schemas carry them.
   const { BY_NAME } = require('../../scripts/lib/harness-tools/registry');
-  assert.deepStrictEqual(Object.keys(BY_NAME.get('lessons').inputSchema.properties).sort(), ['json', 'top']);
+  assert.deepStrictEqual(Object.keys(BY_NAME.get('lessons').inputSchema.properties).sort(), ['json', 'kind', 'top']); // kind: the lesson-only mode of the cycle's pre-read
   assert.deepStrictEqual(Object.keys(BY_NAME.get('reconcile').inputSchema.properties).sort(), ['day', 'json', 'timeframe']);
   assert.match(BY_NAME.get('lessons').description, /instincts/);
   assert.match(BY_NAME.get('reconcile').description, /signals .* traded/);

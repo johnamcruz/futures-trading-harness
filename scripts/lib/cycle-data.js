@@ -324,10 +324,10 @@ function deskReads(role, { symbol, contractId = null, accountId = null, timefram
   if (role === RISK_MANAGER) {
     const account = Number.isInteger(accountId) && accountId >= 1 ? [{ tool: 'get_account_snapshot', args: { accountId } }] : [];
     // Today's reviews (since the trading day's start). The lessons through the harness tool `lessons`, never the raw
-    // journal: the run's own (written by the role's clock, since a fresh attempt's start: trading/lesson-advice.js, so
-    // no other run's), each as advice with its date and record, with the reviews' instincts.
+    // journal, in its lesson-only mode (a lesson is never crowded out by instinct ranking): the run's own (written by
+    // the role's clock: trading/lesson-advice.js, so no other run's), each as advice with its date and record.
     const review = { tool: 'journal_read', args: { kind: 'review', ...(typeof since === 'string' && since ? { since } : {}) } };
-    return [{ tool: 'get_server_config', args: {} }, { tool: 'list_accounts', args: {} }, ...account, review, { tool: 'lessons', args: {} }, { tool: 'combine_status', args: {} }];
+    return [{ tool: 'get_server_config', args: {} }, { tool: 'list_accounts', args: {} }, ...account, review, { tool: 'lessons', args: { kind: 'lesson' } }, { tool: 'combine_status', args: {} }];
   }
   return [];
 }

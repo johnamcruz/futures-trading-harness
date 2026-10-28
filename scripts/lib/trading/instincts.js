@@ -10,8 +10,8 @@
  *   setup     a setup in a regime with enough trades: its expectancy and win
  *             rate, favour or avoid ("orb in trend-up: 9 trades, E +0.41R")
  *   mistake   a mistake:* tag that keeps coming back in recent reviews
- *   lesson    a lesson the reviewer wrote, weighted by the trades it cites: only the run's own (written by `now`,
- *             since `from`: lesson-advice.js), shown as advice with its date and its record since (the trades taken,
+ *   lesson    a lesson the reviewer wrote, weighted by the trades it cites: only the run's own (written by `now`:
+ *             lesson-advice.js), shown as advice with its date and its record since (the trades taken,
  *             the composed plans walked forward: `shadow`, lesson-shadow.js); without a `now`, none
  *
  * Confidence runs 0.3 (first signs) to 0.9 (strong evidence), as ECC's
@@ -23,7 +23,7 @@
  */
 
 const { hasTag, reviewResult, entryTime, onePerOrder, orderKey } = require('./journal');
-const { scopedLessons, lessonRecord, adviceText } = require('./lesson-advice');
+const { scopedLessons, lessonRecord, adviceText, sidesIn } = require('./lesson-advice');
 
 const MIN_SETUP_TRADES = require('../tunables').runner().prompt.instinctsMinSetupTrades; // config/runner.json
 const RECENT_REVIEWS = require('../tunables').runner().prompt.instinctsRecentReviews;
@@ -67,9 +67,9 @@ const round = (x, d = 2) => Math.round(x * 10 ** d) / 10 ** d;
 
 /**
  * The instincts in `entries` (the journal, oldest first): [{ kind, key, text, confidence, evidence }], strongest first.
- * `now`, `from`, `shadow`: the lessons in scope and their record (lesson-advice.js); without a `now`, no lesson.
+ * `now`, `shadow`: the lessons in scope and their record (lesson-advice.js); without a `now`, no lesson.
  */
-function instincts(entries, { now = null, from = null, shadow = [] } = {}) {
+function instincts(entries, { now = null, shadow = [] } = {}) {
   const reviews = graded(entries);
   const out = [];
 
@@ -116,16 +116,31 @@ function instincts(entries, { now = null, from = null, shadow = [] } = {}) {
   }
 
   // The run's own lessons with their record (lesson-advice.js), weighted by the trades they cite ("over 6 trades").
-  for (const l of scopedLessons(entries, { now, from }).slice(-20)) {
-    const n = Number((/(\d+)\s+(?:trades?|reviews?)/i.exec(String(l.text || '')) || [])[1] || 1);
+  for (const l of scopedLessons(entries, { now }).slice(-20)) {
+    const n = evidenceOf(l);
     out.push({
       kind: 'lesson', key: (l.tags || []).join(' ') || 'lesson',
-      text: adviceText({ ...l, text: String(l.text || '').replace(/\s+/g, ' ').slice(0, 200) }, lessonRecord(l, { reviews, shadow, now, from })),
+      text: adviceText({ ...l, text: String(l.text || '').replace(/\s+/g, ' ').slice(0, 200) }, lessonRecord(l, { reviews, shadow, now })),
       confidence: round(confidenceFor(n)), evidence: n, at: new Date(entryTime(l)).toISOString(),
     });
   }
 
   return out.filter(x => x.confidence >= 0.3).sort((a, b) => b.confidence - a.confidence || b.evidence - a.evidence);
+}
+
+/** Its evidence: "6W/2L" counts 8 trades, "over 6 trades" 6, else 1. */
+function evidenceOf(l) {
+  const m = /(\d+)\s*W\s*\/\s*(\d+)\s*L\b|(\d+)\s+(?:trades?|reviews?)/i.exec(String(l.text || ''));
+  return (m ? (m[3] !== undefined ? Number(m[3]) : Number(m[1]) + Number(m[2])) : 0) || 1;
+}
+
+/**
+ * The run's lessons as advice lines, newest last, the last `n` (ranked by nothing: a lesson is never crowded out by the
+ * reviews' instincts). The cycle's pre-read of them (the `lessons` tool, kind lesson).
+ */
+function lessonLines(entries, { n, now = null, shadow = [] } = {}) {
+  const reviews = graded(entries);
+  return scopedLessons(entries, { now }).slice(-n).map(l => adviceText(l, lessonRecord(l, { reviews, shadow, now })));
 }
 
 /**
@@ -134,10 +149,10 @@ function instincts(entries, { now = null, from = null, shadow = [] } = {}) {
  */
 function recentTrades(entries, n = 10) {
   return graded(entries).slice(-n).map(r => {
-    const dir = (/\b(long|short)\b/i.exec(String(r.text || '')) || [])[1];
+    const dir = sidesIn(r.text)[0];
     const rr = reviewR(r);
     const mistakes = (r.tags || []).filter(t => String(t).toLowerCase().startsWith('mistake:'));
-    return `${tagValue(r, 'setup') || '?'}${dir ? ` ${dir.toLowerCase()}` : ''} ${reviewResult(r)}${rr === null ? '' : ` ${rr >= 0 ? '+' : ''}${rr}R`}${tagValue(r, 'regime') ? ` in ${tagValue(r, 'regime')}` : ''}${mistakes.length ? ` [${mistakes.join(', ')}]` : ''}`;
+    return `${tagValue(r, 'setup') || '?'}${dir ? ` ${dir}` : ''} ${reviewResult(r)}${rr === null ? '' : ` ${rr >= 0 ? '+' : ''}${rr}R`}${tagValue(r, 'regime') ? ` in ${tagValue(r, 'regime')}` : ''}${mistakes.length ? ` [${mistakes.join(', ')}]` : ''}`;
   });
 }
 
@@ -162,9 +177,9 @@ function recentForm(entries, n = 10) {
  * record), `form: false` leaves out the form line (the prompt's reviewed-trades
  * line carries it).
  */
-function digest(entries, n = 6, { kinds = null, form = true, now = null, from = null, shadow = [] } = {}) {
+function digest(entries, n = 6, { kinds = null, form = true, now = null, shadow = [] } = {}) {
   const f = form ? recentForm(entries) : null;
-  const list = instincts(entries, { now, from, shadow }).filter(x => !kinds || kinds.includes(x.kind));
+  const list = instincts(entries, { now, shadow }).filter(x => !kinds || kinds.includes(x.kind));
   return [...(f ? [`(form) ${f}`] : []), ...list.slice(0, n).map(x => `(${x.confidence.toFixed(1)}) ${x.text}`)];
 }
 
@@ -177,4 +192,4 @@ function formSummary(entries, n = 10) {
   return `${list.filter(r => reviewResult(r) === 'win').length}W/${list.filter(r => reviewResult(r) === 'loss').length}L${e === null ? '' : `, E ${e >= 0 ? '+' : ''}${e}R`}`;
 }
 
-module.exports = { instincts, digest, formSummary, recentTrades, recentForm, reviewR, confidenceFor, graded };
+module.exports = { instincts, lessonLines, digest, formSummary, recentTrades, recentForm, reviewR, confidenceFor, graded };

@@ -212,7 +212,7 @@ const PINS = deepFreeze({
     'gate.signalMaxAgeBars': 3, 'gate.signalMaxAgeCeilingMin': 45, 'gate.futureToleranceMin': 1, 'gate.minConfluence': 1, 'gate.maxCorrelatedPositions': 1,
     'gate.noEntryWindows': ['09:30-09:35@America/New_York', '15:45-16:00@America/New_York'], 'gate.bracketToleranceTicks': 1, 'gate.bracketSpanToleranceTicks': 2,
     'gate.factsMinChecked': 2, 'gate.factsMaxItems': 20, 'gate.lateEntryDriftShare': 0.25, 'gate.freshPriceTimeoutMs': 3000,
-    'lifecycle.maxSize': 100,
+    'lifecycle.maxSize': 100, 'prompt.lessonMinPlans': 10,
     'account.snapshotMaxAgeMs': 600000, 'account.balanceToleranceUsd': 0.01, 'account.snapshotFutureToleranceMs': 60000,
     'clock.serverTimeToleranceMs': 300000, 'clock.wallStartMaxAgeMs': 86400000, 'clock.wallStartAheadMs': 5000,
     'cycle.maxConsecutiveErrors': 3, 'bars.staleAfterBars': 0.5, 'runner.closeSettleMs': 10000, 'runner.fillGraceMs': 30000, 'runner.minManagedRiskTicks': 4,
@@ -357,6 +357,8 @@ const SPECS = Object.freeze({
     // behind it less): only falls.
     'gate.freshPriceTimeoutMs': 'down',
     'lifecycle.maxSize': 'down',
+    // The plans a lesson's verdict needs (trading/lesson-advice.js): a higher floor judges later, so it only rises.
+    'prompt.lessonMinPlans': 'up',
     'account.snapshotMaxAgeMs': 'down', 'account.balanceToleranceUsd': 'down', 'account.snapshotFutureToleranceMs': 'down',
     'clock.serverTimeToleranceMs': 'down', 'clock.wallStartMaxAgeMs': 'down', 'clock.wallStartAheadMs': 'down',
     'cycle.maxConsecutiveErrors': 'down',

@@ -17,7 +17,6 @@ const { sessionsText } = require('../lib/trading/combine');
 const { digest, graded } = require('../lib/trading/instincts');
 const { scopedLessons, lessonRecord, adviceText } = require('../lib/trading/lesson-advice');
 const { readShadow } = require('../lib/trading/lesson-shadow');
-const { historyFrom } = require('../lib/prop/attempt-scope');
 const { harnessNow } = require('../lib/trading/harness-now');
 
 const usd = x => `$${Math.round(x).toLocaleString('en-US')}`;
@@ -52,11 +51,10 @@ function clip(text) {
 function buildBriefing(entries, now, config, root = null, home = null) {
   const dayStart = tradingDayStart(now);
   const today = entriesSince(entries, dayStart);
-  // The run's own lessons (by now, since a fresh attempt's start), each as advice with its date and record.
-  const from = home ? historyFrom(home) : null;
+  // The run's own lessons (by now), each as advice with its date and record.
   let shadow = [];
   try { shadow = home ? readShadow(home, now) : []; } catch (_err) { /* the lessons show without their composed plans */ }
-  const lessons = scopedLessons(entries, { now, from }).slice(-MAX_LESSONS);
+  const lessons = scopedLessons(entries, { now }).slice(-MAX_LESSONS);
   const { streak, losses } = lossState(today);
   const placed = today.filter(e => e.kind === 'order_placed').length;
   const blocked = today.filter(e => e.kind === 'order_blocked').length;
@@ -83,14 +81,14 @@ function buildBriefing(entries, now, config, root = null, home = null) {
   lines.push('', 'Know the account before every decision: get_account_snapshot (balance, today\'s P&L, open positions, working orders).');
   const attempts = home ? attemptLines(home, now) : [];
   if (attempts.length) lines.push('', '### Prop attempts (the order gate enforces these)', ...attempts);
-  lines.push('', '### Lessons (advice with their record, never rules: only the order gate and the rulebook block an entry; a lesson becomes teaching only by a skill edit the training loop keeps)');
+  lines.push('', '### Lessons (advice with their record, never rules: rules/trading/journaling.md)');
   if (lessons.length === 0) {
     lines.push('- none yet');
   } else {
     const reviews = graded(entries);
     for (const l of lessons) {
       const tags = Array.isArray(l.tags) && l.tags.length ? ` [${l.tags.join(', ')}]` : '';
-      lines.push(`- ${clip(adviceText(l, lessonRecord(l, { reviews, shadow, now, from })))}${tags}`);
+      lines.push(`- ${clip(adviceText(l, lessonRecord(l, { reviews, shadow, now })))}${tags}`);
     }
   }
   // The reviews' instincts; the lessons are above, each once.

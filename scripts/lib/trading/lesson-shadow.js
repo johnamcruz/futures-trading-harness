@@ -13,7 +13,8 @@
  *
  *   shadowFile(home)
  *   readShadow(home, now)                          the lines settled at or before now (exitTime), oldest first
- *   recordShadow(home, { root, bars, minutes, tick, now })   append the newly settled; returns how many
+ *   recordShadow(home, { root, bars, minutes, tick, now, eodOf })   append the newly settled; returns how many
+ *                                                  (eodOf(ms): that trading day's close, ms: the runner's, as the decisions' outcomes use)
  */
 
 const fs = require('fs');
@@ -37,7 +38,7 @@ function readShadow(home, now) {
 
 const priceOf = x => (x && typeof x === 'object' ? x.price ?? x.limit ?? x.ref : x);
 
-function recordShadow(home, { root, bars, minutes, tick, now }) {
+function recordShadow(home, { root, bars, minutes, tick, now, eodOf = () => Infinity }) {
   const at = now instanceof Date ? now.getTime() : NaN;
   const tfMs = minutes * 60000;
   if (!Number.isFinite(at) || !(tfMs > 0) || !Array.isArray(bars) || !bars.length) return 0;
@@ -54,7 +55,7 @@ function recordShadow(home, { root, bars, minutes, tick, now }) {
     if (!Number.isFinite(barMs) || barMs + tfMs > at) continue;
     const o = limitOutcome({
       bars: closed, tfMs, side: r.side, entry: priceOf(r.plan.entry), stop: priceOf(r.plan.stop), target: priceOf(r.plan.target),
-      fromMs: barMs + tfMs, expiresMs: Date.parse(r.expiresAt), tick: Number(r.plan.tick) || tick,
+      fromMs: barMs + tfMs, expiresMs: Date.parse(r.expiresAt), eodMs: eodOf(barMs + tfMs), tick: Number(r.plan.tick) || tick,
     });
     // Settled: filled and out by now, or never filled (its window closed by now). Otherwise it waits for a later bar.
     const unfilled = !o.filled && o.exitReason === 'unfilled' && Date.parse(r.expiresAt) <= at;

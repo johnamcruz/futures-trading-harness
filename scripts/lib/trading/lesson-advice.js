@@ -1,34 +1,35 @@
 'use strict';
 
 /**
- * Journaled lessons are advice with their evidence, never rules (rules/trading/journaling.md): only the order gate and
- * the account's rulebook (code) block an entry. A lesson becomes teaching only through the training loop's keep rule
- * (a skill edit), and a rule only by the owner's rulebook edit; never on its own.
+ * Journaled lessons are advice with their record, never rules (rules/trading/journaling.md defines it).
  *
  * Scope: a lesson counts only in its own run: written at or before `now` (a replay's clock: never a later run's or the
- * live account's lesson in the same journal) and at or after `from` (a fresh combine attempt's start, prop/attempt-
- * scope.js historyFrom). Fail safe: an undated lesson, or a `now` that isn't a time, is never shown.
+ * live account's lesson in the same journal). It persists across a continuous combine's attempts (the lesson from a
+ * blow is the one to learn from). Fail safe: an undated lesson, or a `now` that isn't a time, is never shown.
  *
- * Its record, so it can't seal itself: since its date and up to `now` (inside its scope), the trades taken on its
- * setup (the journal's graded reviews, on its side when the lesson names one) and the composed plans walked forward
- * model-free (lesson-shadow.js), taken or not, on its side and its symbol: every such plan, not only those its
- * condition names (the shadow lines carry no bar facts), and labelled so. Its verdict: under config/runner.json
- * prompt.lessonMinPlans plans, provisional; past it, by the lesson's direction (against a setup: "skip", "avoid",
- * "no"; for one: "favour", "take", "prefer"), the plans' summed R supports or contradicts it ("contradicted by n=...
- * since <date>"); a lesson of no clear direction, or a broad one, gets no verdict, only its numbers. A lesson that
- * names no condition the bars can check (a timeframe with a briefing fact: "15m EMA20", "3m trend up", "15m ... CHoCH
- * down") is flagged broad.
+ * Its record, so it can't seal itself: since its date and up to `now`, the trades taken on its setup (the journal's
+ * graded reviews, on its side when the lesson names one) and the composed plans walked forward model-free
+ * (lesson-shadow.js), taken or not, on its side and its symbol: every such plan, not only those its condition names
+ * (the shadow lines carry no bar facts), and labelled so. Its verdict: under config/runner.json prompt.lessonMinPlans
+ * plans, provisional; past it, only a lesson with a side and a direction and NO condition (its claim is the population
+ * counted) is judged: the plans' summed R supports or contradicts it ("contradicted by n=... since <date>"). A
+ * conditional lesson shows the numbers labelled "condition unchecked", no verdict; so does one of no clear direction.
+ * Direction reads only explicit words (against: skip, avoid, stand aside, pass on, don't take, no longs/shorts, never
+ * long/short; for: favour, prefer, take); "stop", "failed", "lost" are facts, not directions. A lesson that names no
+ * condition the bars can check (a timeframe with a briefing fact: "15m EMA20", "3m trend up"; a session time window:
+ * "before 09:45 ET", "first 15 minutes") is flagged broad.
  *
- *   lessonDay(entry)                          the trading day (YYYY-MM-DD) it was written on, or null (undated)
- *   scopedLessons(entries, { now, from })     the lessons in scope, oldest first
+ *   lessonDay(entry)                          the calendar date (YYYY-MM-DD, ET) it was written on, or null (undated)
+ *   scopedLessons(entries, { now })           the lessons in scope, oldest first
+ *   sidesIn(text)                             the sides ('long'/'short') a text names, in order of first mention
  *   lessonSide(entry)                         'long' | 'short' | null (both or neither named)
  *   isBroad(entry)                            true when it names no condition the bars can check
  *   lessonDirection(entry)                    'against' | 'for' | null
- *   lessonRecord(entry, { reviews, shadow, now, from })  { taken: { n, wins, losses, R }, shadow: { n, ... }, status }
+ *   lessonRecord(entry, { reviews, shadow, now })  { taken: { n, wins, losses, R }, shadow: { n, ... }, status }
  *   adviceText(entry, record)                 'lesson from <day> (<record>; <status>[; broad]): advice, weigh it: <text>'
  */
 
-const { tradingDayKey } = require('./clock');
+const { zonedParts, MARKET_TZ } = require('./clock');
 const { entryTime, reviewResult } = require('./journal');
 const { specFor } = require('./contracts');
 
@@ -43,22 +44,25 @@ const tagValue = (e, prefix) => {
 };
 const round = x => Math.round(x * 100) / 100;
 
+// The calendar date in ET when it was written (not the trading day, which turns in the evening).
 function lessonDay(entry) {
   const t = entryTime(entry);
-  return Number.isFinite(t) ? tradingDayKey(new Date(t)) : null;
+  if (!Number.isFinite(t)) return null;
+  const p = zonedParts(new Date(t), MARKET_TZ);
+  return `${p.year}-${String(p.month).padStart(2, '0')}-${String(p.day).padStart(2, '0')}`;
 }
 
-function scopedLessons(entries, { now = null, from = null } = {}) {
+function scopedLessons(entries, { now = null } = {}) {
   const at = timeOf(now);
   if (!Array.isArray(entries) || !Number.isFinite(at)) return [];
-  const start = Number.isFinite(timeOf(from)) ? timeOf(from) : -Infinity;
-  return entries.filter(e => isLesson(e) && Number.isFinite(entryTime(e)) && entryTime(e) <= at && entryTime(e) >= start);
+  return entries.filter(e => isLesson(e) && Number.isFinite(entryTime(e)) && entryTime(e) <= at);
 }
 
+/** The sides a text names, in order of first mention (the one side regex: recentTrades reads the first, a lesson both). */
+const sidesIn = s => [...new Set([...String(s || '').matchAll(/\b(long|short)s?\b/gi)].map(m => m[1].toLowerCase()))];
 function sideIn(s) {
-  const long = /\blongs?\b/i.test(s);
-  const short = /\bshorts?\b/i.test(s);
-  return long === short ? null : long ? 'long' : 'short';
+  const sides = sidesIn(s);
+  return sides.length === 1 ? sides[0] : null;
 }
 const lessonSide = entry => sideIn(text(entry));
 
@@ -66,13 +70,19 @@ const lessonSide = entry => sideIn(text(entry));
 // "3m trend up", "15m not in a fresh CHoCH down", "15m close below"); a timeframe or a word alone is no condition.
 const GAP = '(?:the|its|a|not|fresh|in|is|was|below|above|at)';
 const CONDITION = new RegExp(`\\b(?:\\d{1,2}m|[14]h)\\b[\\s:,-]+(?:${GAP}\\s+){0,4}(?:trend|choch|bos|ema\\d+|vwap|supertrend|fvg|swing|structure|close\\s+(?:above|below))\\b`, 'i');
-const isBroad = entry => !CONDITION.test(text(entry));
+// A session time window is a condition too: "before 09:45 ET", "after 14:00", "the first 15 minutes".
+const TIME_WINDOW = /\b(?:before|after|until|from)\s+\d{1,2}:\d{2}\b|\b\d{1,2}:\d{2}\s*(?:-|to)\s*\d{1,2}:\d{2}\b|\bfirst\s+\d+\s*(?:min(?:ute)?s?)\b/i;
+const isBroad = entry => !CONDITION.test(text(entry)) && !TIME_WINDOW.test(text(entry));
+// Any further clause narrows the claim past "all composed plans on its side": its verdict can't be read from them.
+const CLAUSE = /\b(?:when|while|with|without|after|before|if|unless|during|above|below|under|until|into|once|only|except|on the|at the|in a)\b/i;
+const isUnconditional = entry => isBroad(entry) && !CLAUSE.test(text(entry));
 
-// Against a setup: "skip", "avoid", "lose", "don't take"; for one: "favour", "prefer", "take" (not after a negation).
-// A negated against-word ("never lost", "don't skip") gives no direction: the lesson is then read as having none.
+// Against a setup, by explicit words only: "skip", "avoid", "stand aside", "pass on", "don't take", "no longs", "never
+// long"; for one: "favour", "prefer", "take" (not after a negation). "stop", "failed", "lost" are facts about trades,
+// not directions: anything else gives no direction. A negated avoid-word ("don't skip") gives none either.
 const NEG = "(?:don'?t|do not|never|no|rarely)";
-const AVOID = '(?:skip|avoid|stop|stand aside|pass on|los(?:e|es|t|ing)|fail\\w*|restrict\\w*)';
-const AGAINST = new RegExp(`\\b(?:${AVOID}|${NEG}(?:\\s+\\w+)?\\s+(?:tak(?:e|es|ing)|favou?r|prefer)\\w*|${NEG}\\s+(?:longs?|shorts?))\\b`, 'i');
+const AVOID = '(?:skip|avoid|stand aside|pass on)';
+const AGAINST = new RegExp(`\\b(?:${AVOID}|${NEG}(?:\\s+\\w+)?\\s+(?:tak(?:e|es|ing)|favou?r|prefer)\\w*|${NEG}\\s+(?:longs?|shorts?)|never\\s+(?:go\\s+)?(?:long|short))\\b`, 'i');
 const NEGATED = new RegExp(`\\b${NEG}\\s+(?:\\w+\\s+)?${AVOID}\\b`, 'i');
 const FOR = new RegExp(`(?<!${NEG}\\s(?:\\w+\\s)?)\\b(?:favou?r\\w*|prefer\\w*|tak(?:e|es|ing))\\b`, 'i');
 function lessonDirection(entry) {
@@ -99,8 +109,8 @@ function plansSince(shadow, since, side, roots = []) {
   return out;
 }
 
-function lessonRecord(entry, { reviews = [], shadow = [], now = null, from = null } = {}) {
-  const since = Math.max(entryTime(entry), Number.isFinite(timeOf(from)) ? timeOf(from) : -Infinity);
+function lessonRecord(entry, { reviews = [], shadow = [], now = null } = {}) {
+  const since = entryTime(entry);
   const until = Number.isFinite(timeOf(now)) ? timeOf(now) : -Infinity; // no clock: nothing counts
   const side = lessonSide(entry);
   const setup = tagValue(entry, 'setup');
@@ -112,7 +122,8 @@ function lessonRecord(entry, { reviews = [], shadow = [], now = null, from = nul
   const inScope = r => entryTime(r) >= since && entryTime(r) <= until;
   const taken = (reviews || []).filter(r => inScope(r) && (!setup || tagValue(r, 'setup') === setup) && (!side || sideIn(text(r)) === side)).map(rOf);
   const plans = tally(plansSince((shadow || []).filter(x => Date.parse(x.exitTime) <= until), since, side, roots));
-  const dir = isBroad(entry) ? null : lessonDirection(entry);
+  // A verdict only where the counted population is the lesson's claim: a side, a direction, and no condition.
+  const dir = side && isUnconditional(entry) ? lessonDirection(entry) : null;
   const backed = dir === 'against' ? plans.R <= 0 : plans.R > 0;
   const status = plans.n < MIN_PLANS ? 'provisional'
     : !dir ? 'no verdict' : backed ? `supported by n=${plans.n}` : `contradicted by n=${plans.n} since ${lessonDay(entry)}`;
@@ -125,7 +136,7 @@ function adviceText(entry, record = null) {
   const rec = record || lessonRecord(entry);
   const broad = isBroad(entry) ? '; broad: names no condition the bars can check' : '';
   const plans = `all composed ${rec.side ? `${rec.side}s` : 'plans'} since`;
-  return `lesson from ${lessonDay(entry) || 'an unknown day'} (${recText('taken since', rec.taken)}; ${recText(plans, rec.shadow)}; ${rec.status}${broad}): advice, weigh it: ${text(entry)}`;
+  return `lesson from ${lessonDay(entry) || 'an unknown day'} (${recText('taken since', rec.taken)}; ${recText(plans, rec.shadow)}${isUnconditional(entry) ? '' : ', condition unchecked'}; ${rec.status}${broad}): advice, weigh it: ${text(entry)}`;
 }
 
-module.exports = { lessonDay, scopedLessons, lessonSide, lessonDirection, isBroad, lessonRecord, adviceText };
+module.exports = { lessonDay, scopedLessons, sidesIn, lessonSide, lessonDirection, isBroad, lessonRecord, adviceText };

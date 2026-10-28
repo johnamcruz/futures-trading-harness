@@ -62,7 +62,7 @@ test('the desk\'s reads are each role\'s agent body\'s, with its arguments; the 
   assert.deepStrictEqual(reads('market-structure-analyst'), ['bar_briefing {"symbol":"MNQ"}', 'strategies_list {}']);
   assert.deepStrictEqual(reads('trend-momentum-analyst'), ['bar_briefing {"symbol":"MNQ"}']);
   assert.deepStrictEqual(reads('volume-liquidity-analyst'), ['bar_briefing {"symbol":"MNQ"}', 'get_quote {"contractId":"MNQ"}']);
-  assert.deepStrictEqual(reads('risk-manager'), ['get_server_config {}', 'list_accounts {}', 'get_account_snapshot {"accountId":7}', 'journal_read {"kind":"review","since":"2026-04-26T22:00:00.000Z"}', 'lessons {}', 'combine_status {}']);
+  assert.deepStrictEqual(reads('risk-manager'), ['get_server_config {}', 'list_accounts {}', 'get_account_snapshot {"accountId":7}', 'journal_read {"kind":"review","since":"2026-04-26T22:00:00.000Z"}', 'lessons {"kind":"lesson"}', 'combine_status {}']);
   assert.deepStrictEqual(CD.deskReads('risk-manager', { symbol: 'MNQ', since: o.since }).map(x => x.tool), ['get_server_config', 'list_accounts', 'journal_read', 'lessons', 'combine_status'], 'no account: no snapshot');
   assert.deepStrictEqual(CD.deskReads('trade-executor', o), []);
   // Each body names them (agents/*.md): the reads are its own, never ones it doesn't make.

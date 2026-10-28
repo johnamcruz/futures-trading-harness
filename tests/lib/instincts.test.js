@@ -98,3 +98,28 @@ test('a grade review (no result, naming the order) adds its tags to the runner\'
   const { liveRecord } = require('../../scripts/lib/trading/track-record');
   assert.deepStrictEqual([liveRecord(twice, 'orb').trades, liveRecord(twice, 'orb').losses, liveRecord(twice, 'orb').wins], [1, 1, 0], 'the track record counts it once');
 });
+
+test('the lesson-only pre-read keeps every lesson however the instincts rank; "NW/ML" is a lesson\'s evidence', () => {
+  const { lessons } = require('../../scripts/lib/harness-tools/lessons');
+  const home = tmpDir();
+  const reviews = Array.from({ length: 16 }, (_, k) => ({ ts: `2026-09-0${1 + (k % 8)}T15:${String(k).padStart(2, '0')}:00.000Z`, kind: 'review', text: `orb long #${k}`, tags: ['result:loss', 'setup:orb', 'regime:range', 'r:-1', ...(k < 5 ? [`mistake:m${k}`] : [])] }));
+  const ls = [
+    { ts: '2026-09-09T20:00:00.000Z', kind: 'lesson', text: 'ORB on MNQ before 09:45 ET: 2W/7L', tags: ['setup:orb', 'MNQ'] },
+    { ts: '2026-09-09T20:05:00.000Z', kind: 'lesson', text: 'Skip shorts into the 15m EMA20: 1W/3L', tags: ['setup:orb'] },
+    { ts: '2026-12-01T20:00:00.000Z', kind: 'lesson', text: 'a later run: skip longs', tags: [] },
+  ];
+  const env = { FTH_BROKERS_FILE: FAKE_BROKERS, FTH_HOME: home, FAKE_BROKER_JOURNAL: writeJournal(home, [...reviews, ...ls]) };
+  const now = () => new Date('2026-09-10T14:00:00.000Z');
+  // A continuous combine's second attempt (historyFrom after both lessons): the lessons are still shown.
+  const prop = require('../../scripts/lib/trading/prop-state');
+  prop.startAttempt(home, { name: 'acct', startBalance: 50000, profitTarget: 3000, maxLossLimit: 2000 }, new Date('2026-09-09T21:00:00.000Z'), { historyFrom: new Date('2026-09-09T21:00:00.000Z') });
+  const out = lessons({ kind: 'lesson' }, { env, now }).text.trim().split('\n');
+  assert.strictEqual(out.length, 2, out.join(' | '));
+  assert.match(out[0], /ORB on MNQ before 09:45 ET: 2W\/7L/);
+  assert.match(out[1], /Skip shorts into the 15m EMA20/);
+  assert.ok(out.every(l => !/a later run/.test(l)), 'another run\'s (future-dated) lesson is not shown');
+  assert.strictEqual(lessons({ kind: 'lesson' }, { env: { ...env, FAKE_BROKER_JOURNAL: writeJournal(tmpDir(), []) }, now }).text, 'No lessons yet.\n');
+  assert.throws(() => lessons({ kind: 'mistake' }, { env, now }), /kind: lesson/);
+  // The rank: "2W/7L" is nine trades of evidence, not one.
+  assert.strictEqual(instincts(ls, { now: now() }).find(x => /before 09:45/.test(x.text)).evidence, 9);
+});
