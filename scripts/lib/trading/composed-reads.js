@@ -101,7 +101,7 @@
  */
 
 const { trendRuleOf } = require('./reasons');
-const { entryProblems } = require('./entry-rule');
+const { entryProblems, TREND_TF } = require('./entry-rule');
 
 const STEPS = ['bias', 'location', 'setup', 'entry', 'stop', 'target'];
 // The flow's steps as the hints, the trend-capture report and the learning loop name them: the six compose steps, then
@@ -166,7 +166,6 @@ function d2TierMet(tier, reads, side) {
     && !/ fvg (low|high) (up|down)$/.test(String(x.form)));
   return hasChoch && has4h;
 }
-const TREND_TF = { '15m': ['m15', 'frame'], '1h': ['h1', 'h1'], '4h': ['h1', 'h4'] };
 
 const isObj = x => Boolean(x) && typeof x === 'object' && !Array.isArray(x);
 const num = x => (typeof x === 'number' && Number.isFinite(x) ? x : null);

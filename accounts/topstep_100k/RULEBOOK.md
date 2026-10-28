@@ -7,7 +7,7 @@ loss_streak_stop: 2             # losing trades in a row: no new entries for the
 policies:                       # each policy strategy that trades this account (its STRATEGY.md names it; never restates these)
   prop_portfolio:
     entry:                      # the entry rule on a composed entry (entry-rule.js), held by compose_check and the gate; off: no check
-      bias_frames: off          # e.g. [4h, 1h]: the first that trends sets the side, none against it, none trending: no entry
+      bias_frames: off          # off, or [4h, 1h], [4h] or [1h] only (never the 15m): the first that trends sets the side, none against it, none trending: no entry
       regime_against: off       # on: no entry while the m3 regime trends against the side
       leg_turned: off           # on: an m3 regime not trending the side's way needs a true 3m BOS, CHoCH or compression break its way
     sizing:                     # risk from the headroom above the floor
@@ -202,7 +202,7 @@ briefing, so `compose_check` says NOT OK and the gate's `[composed-reads]`
 re-check refuses the same entry. Every key is stated; `off` is no check,
 and with all three off an entry is checked as before (the trend rule, D2):
 
-- `bias_frames` (a list, highest first, e.g. `[4h, 1h]`): the first listed
+- `bias_frames` (a list of 4h and/or 1h, highest first, e.g. `[4h, 1h]`; never the 15m): the first listed
   frame that trends is the bias and the side must be its way; no listed
   frame may trend against the side (the 15m never stands in against the
   1h); none trending is no bias, so no entry. The frames are this file's,

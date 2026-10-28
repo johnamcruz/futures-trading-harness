@@ -35,11 +35,13 @@ test('entryRuleOf: null when every key is off or the block is missing; the keys 
 
 test('entryRuleErrors: every key stated, each on, off or (bias_frames) a list highest first', () => {
   assert.deepStrictEqual(entryRuleErrors(OFF, 'policies.p'), []);
-  assert.deepStrictEqual(entryRuleErrors({ bias_frames: ['4h', '1h', '15m'], regime_against: 'on', leg_turned: 'off' }, 'policies.p'), []);
+  assert.deepStrictEqual(entryRuleErrors({ bias_frames: ['4h', '1h'], regime_against: 'on', leg_turned: 'off' }, 'policies.p'), []);
   assert.match(entryRuleErrors(undefined, 'policies.p').join(), /policies\.p\.entry: missing or not a map/);
   assert.match(entryRuleErrors([], 'policies.p').join(), /missing or not a map/);
   assert.match(entryRuleErrors({ regime_against: 'off', leg_turned: 'off' }, 'policies.p').join(), /entry\.bias_frames: missing/);
   assert.match(entryRuleErrors({ ...OFF, bias_frames: ['15m', '1h'] }, 'policies.p').join(), /highest first/);
+  // The 15m never sets the side against the 1h: only 4h and/or 1h may be listed.
+  for (const f of [['4h', '1h', '15m'], ['1h', '15m'], ['15m'], ['5m']]) assert.match(entryRuleErrors({ ...OFF, bias_frames: f }, 'policies.p').join(), /is not off or a list of 4h, 1h/, JSON.stringify(f));
   assert.match(entryRuleErrors({ ...OFF, leg_turned: 'yes' }, 'policies.p').join(), /leg_turned: "yes" is not on or off/);
 });
 

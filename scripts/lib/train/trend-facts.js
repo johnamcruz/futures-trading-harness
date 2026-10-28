@@ -60,6 +60,7 @@
 const fs = require('fs');
 const path = require('path');
 const { STEPS, TF_ORDER, TF_MIN, parseRead, checkReads } = require('../trading/composed-reads');
+const { entryRuleOf } = require('../trading/entry-rule');
 const { candidatesOf, repairOf } = require('../trading/compose-hints');
 const { trendRuleOf } = require('../trading/reasons');
 const { standardPlans } = require('../learning/setup-library');
@@ -155,6 +156,7 @@ function parityMiss(records, b, tick, unknown) {
   for (const rec of records || []) {
     const reads = (rec.reads || []).filter(r => isObj(r) && typeof r.read === 'string' && (r.check === true || r.check === false) && !dependsOnMissing(r.read, b, unknown));
     if (!reads.length) continue;
+    // Per-read parity (each read's own check), which the entry rule never changes.
     const again = checkReads({ reads: reads.map(r => ({ step: r.step, skill: r.skill, read: r.read, why: r.why || null })), side: rec.side, briefing: b, tick });
     for (const r of reads) {
       const x = again.reads.find(y => y.step === r.step && y.read === r.read);
@@ -172,7 +174,7 @@ const planOfRepair = f => ({ via: 'together', reads: f.reads.map(r => r.read), s
  * One bar's facts (see the header). plan: compose_check's plan arguments (size, tickValue, minRR, maxRiskUsd, stopRule,
  * suggestion); sizeFits(stopTicks) -> true | false | null (null: no attempt constrains; undefined: can't be worked out).
  */
-function barFacts({ briefing, side, tick, plan, said = '', reads = [], records = [], cycle = null, sizeFits = () => null, names = [], missing = [] }) {
+function barFacts({ briefing, side, tick, plan, said = '', reads = [], records = [], cycle = null, sizeFits = () => null, names = [], missing = [], entryRule = null }) {
   const own = ownOk(cycle);
   const base = { said: String(said || ''), shown: scrub(String(said || '').replace(/^\s*CYCLE RESULT:\s*/i, ''), { names }), reads: (reads || []).map(r => ({ step: r.step, read: r.read, verified: r.verified === true })) };
   const ownWhy = 'your own plan passed compose_check';
@@ -192,8 +194,8 @@ function barFacts({ briefing, side, tick, plan, said = '', reads = [], records =
   else if (rule !== true) why = 'the trend rule for the side is unknown';
   else {
     // The standard plan, unless it rests on a read of a missing frame; then a combination of the known reads.
-    const standard = (standardPlans(briefing) || []).find(p => p.side === side && p.status === 'traded' && !(p.reads || []).some(r => dependsOnMissing(isObj(r) ? r.read : r, briefing, unknown))) || null;
-    const fixed = repairOf({ reads: [], side, briefing, tick, plan, candidates: cand });
+    const standard = (standardPlans(briefing, { entryRule }) || []).find(p => p.side === side && p.status === 'traded' && !(p.reads || []).some(r => dependsOnMissing(isObj(r) ? r.read : r, briefing, unknown))) || null;
+    const fixed = repairOf({ reads: [], side, briefing, tick, plan, candidates: cand, entryRule });
     const tried = [standard && planOfStandard(standard), fixed && planOfRepair(fixed)].filter(Boolean);
     if (!tried.length) why = 'no combination of the verified reads passes the check and the plan';
     for (const p of tried) {
@@ -224,7 +226,7 @@ function barFacts({ briefing, side, tick, plan, said = '', reads = [], records =
  * -> the run's cycle record ({ result, context }) or null; recordsAt(barT) -> the compose records on the bar; sizeFor(rec)
  * -> sizeFits for barFacts; names: account names the text never shows.
  */
-function legFacts(leg, { briefingAt, cycleAt = () => null, recordsAt = () => [], tick, plan, minutes, sizeFor = () => () => null, names = [], missing = [] }) {
+function legFacts(leg, { briefingAt, cycleAt = () => null, recordsAt = () => [], tick, plan, minutes, sizeFor = () => () => null, names = [], missing = [], entryRule = null }) {
   const bars = [];
   for (const c of entryBars(leg)) {
     const barT = new Date(Date.parse(c.bar) - minutes * 60000).toISOString();
@@ -234,7 +236,7 @@ function legFacts(leg, { briefingAt, cycleAt = () => null, recordsAt = () => [],
     const records = recordsAt(barT);
     // The plan's stop read at a bar the floor refused: the head's stop choice (its record's stop read and skill).
     const stopRead = c.code === FLOOR ? ((records.filter(r => r && r.side === leg.side && r.ok).pop() || {}).reads || []).find(r => r && r.step === 'stop') || null : null;
-    bars.push({ bar: barT, code: c.code, ...(stopRead ? { stopRead: { read: stopRead.read, skill: stopRead.skill || null } } : {}), ...barFacts({ briefing: b, side: leg.side, tick, plan, said, reads: c.reads, records, cycle: c, sizeFits: sizeFor(rec), names, missing }) });
+    bars.push({ bar: barT, code: c.code, ...(stopRead ? { stopRead: { read: stopRead.read, skill: stopRead.skill || null } } : {}), ...barFacts({ briefing: b, side: leg.side, tick, plan, said, reads: c.reads, records, cycle: c, sizeFits: sizeFor(rec), names, missing, entryRule }) });
   }
   const learnable = bars.some(x => x.valid) ? true : bars.length && bars.every(x => x.known) ? false : null;
   const why = !bars.length ? 'no entry-able bar' : learnable === true ? bars.find(x => x.valid).why : learnable === false ? 'no valid plan at the time (a correct pass)' : 'facts unknown at a bar';
@@ -316,7 +318,7 @@ function outcomeOf({ side, entry, stop, minRR, after }) {
  * The control bars' facts, one entry a bar and side (each side checked on its own, as a leg bar is on its leg's):
  * [{ bar, side, known, valid, planReads?, shown?, outcome? }], a valid plan's outcome 'lost' | 'won' | null (undecided).
  */
-function controlFacts(cycles, { briefingAt, tick, plan, minutes, sizeFor, names, laterBars, missing = [] }) {
+function controlFacts(cycles, { briefingAt, tick, plan, minutes, sizeFor, names, laterBars, missing = [], entryRule = null }) {
   const out = [];
   for (const rec of cycles) {
     const close = Date.parse(rec.timing.barClose);
@@ -324,7 +326,7 @@ function controlFacts(cycles, { briefingAt, tick, plan, minutes, sizeFor, names,
     const b = (() => { try { return briefingAt(barT); } catch (_err) { return null; } })();
     for (const side of ['long', 'short']) {
       if (!m3Of(b)) { out.push({ bar: barT, side, known: false, valid: false }); continue; }
-      const f = barFacts({ briefing: b, side, tick, plan, said: rec.result || '', sizeFits: sizeFor(rec), names, missing });
+      const f = barFacts({ briefing: b, side, tick, plan, said: rec.result || '', sizeFits: sizeFor(rec), names, missing, entryRule });
       out.push({
         bar: barT, side, known: f.known, valid: f.valid,
         ...(f.valid ? { planReads: f.planReads, shown: f.shown, outcome: outcomeOf({ side, entry: f.entry, stop: f.stop, minRR: plan.minRR, after: laterBars(close) }) } : {}),
@@ -366,7 +368,7 @@ function attachFacts(capture, { runDir, home = path.resolve(runDir, '..', '..'),
   const root = Array.isArray(cfg.symbols) && cfg.symbols.length ? String(cfg.symbols[0]).toUpperCase() : null;
   const unknownAll = why => ({ ...capture, legs: capture.legs.map(l => (l.captured ? l : { ...l, facts: { learnable: null, why, bars: [], owner: null } })), controls: [] });
   if (!minutes || !root) return unknownAll('the run states no timeframe or symbol');
-  const { specFor } = require('../trading/contracts');
+  const { specFor, familyRoot } = require('../trading/contracts');
   const { loadStrategies } = require('../trading/strategies');
   const { loadAccounts } = require('../trading/accounts');
   const { STRATEGY, stopRuleOf, readRecords } = require('../trading/trade-lifecycle');
@@ -393,7 +395,10 @@ function attachFacts(capture, { runDir, home = path.resolve(runDir, '..', '..'),
   const plan = { size: 1, tickValue: spec.tickValue, minRR: doc.risk.min_rr, maxRiskUsd: doc.risk.max_risk_usd, stopRule: stopRuleOf(doc.risk), suggestion: inAttempt };
   const sizeFor = rec => sizeForCycle(rec, { strategies, accounts, root, composed: STRATEGY });
   const missing = missingFrames({ minutes, fineBars: fine.length ? fine : null });
-  const ctx = { briefingAt: t => build(root, t), cycleAt: bar => cycles.get(Date.parse(bar)) || null, recordsAt: t => records.get(Date.parse(t)) || [], tick: spec.tickSize, plan, minutes, sizeFor, names, missing };
+  // The entry rule of the policy that traded the attempt (as compose_check reads it): findings count only entries it allowed.
+  const policy = inAttempt ? strategies.find(s => s.valid && s.signal === 'policy' && (s.strategies || []).includes(STRATEGY) && s.instruments.some(x => familyRoot(x) === familyRoot(root))) : null;
+  const entryRule = policy ? entryRuleOf(policy.entry) : null;
+  const ctx = { briefingAt: t => build(root, t), cycleAt: bar => cycles.get(Date.parse(bar)) || null, recordsAt: t => records.get(Date.parse(t)) || [], tick: spec.tickSize, plan, minutes, sizeFor, names, missing, entryRule };
   // The control bars: in the given windows, else on no leg's span (start to end bar's close); trade cycles only.
   const stepMs = minutes * 60000;
   const spans = capture.legs.map(l => [Date.parse(l.start), Date.parse(l.end) + stepMs]);

@@ -108,7 +108,7 @@ function noSizeFitsHere({ c, home, doc, all, symbol, planned, spec }) {
 /** A refusal's hints (compose-hints.js), with the briefing's standard plan for the side when it passes; none on any error. */
 function hintsOf({ checked, planned, briefing, side, tick, plan, spec, entryRule = null }) {
   try {
-    const standard = (standardPlans(briefing) || []).find(p => p.side === side && p.status === 'traded') || null;
+    const standard = (standardPlans(briefing, { entryRule }) || []).find(p => p.side === side && p.status === 'traded') || null;
     return hintsFor({ checked, planned, briefing, side, tick, plan: spec ? plan : null, standard, entryRule });
   } catch (_err) {
     return [];

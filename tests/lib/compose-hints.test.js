@@ -219,3 +219,48 @@ test('compose hints: no setup read yet: the entry hint says a confirmation count
   assert.ok(lines.includes('entry: no setup read for the long is true yet; a confirmation counts only on a candle closed after the setup\'s: the setup first'), lines.join('\n'));
   assert.ok(!lines.some(l => /^entry: .*true here/.test(l)), 'no confirmation listed before a setup');
 });
+
+// The policy's entry rule (entry-rule.js): a problem no read can satisfy (bias frames, regime against) means no repair and
+// no reversal hint; a leg-turned problem a leg read satisfies keeps the repair.
+const { entryRuleOf } = require('../../scripts/lib/trading/entry-rule');
+const OFF3 = { bias_frames: 'off', regime_against: 'off', leg_turned: 'off' };
+const hintsWith = (reads, rule, b, side = 'long') => {
+  const checked = checkReads({ reads, side, briefing: b, entryRule: rule });
+  const planned = checked.stop && checked.target ? planOf({ checked, briefing: b, side, tick: 0.25, ...PLAN }) : null;
+  return { checked, lines: H.hintsFor({ checked, planned, briefing: b, side, tick: 0.25, plan: PLAN, entryRule: rule }) };
+};
+
+test('compose hints: bias frames trending against the side: no repair and no reversal hint (the entry rule refuses them too)', () => {
+  const against = brief(b => { b.sections.h1.data.h1.trend = 'down'; b.sections.m3.data.trendRule = 'Trend rule: prevailing trend 1h down; trend strategies may not go long.'; });
+  const reads = swap('entry', '3m volume high');
+  const rule = entryRuleOf({ ...OFF3, bias_frames: ['4h', '1h'] });
+  const on = hintsWith(reads, rule, against);
+  assert.ok(on.checked.problems.some(p => /^entry rule: .*1h trend is down/.test(p)), on.checked.problems.join());
+  assert.strictEqual(H.repairOf({ reads, side: 'long', briefing: against, tick: 0.25, plan: PLAN, entryRule: rule }), null);
+  assert.ok(!on.lines.some(l => /these reads pass together|only as a reversal/.test(l)), on.lines.join('\n'));
+  // Keys off: the reversal hint stays, as before.
+  assert.ok(hintsWith(reads, null, against).lines.some(l => /only as a reversal/.test(l)));
+});
+
+test('compose hints: the regime against the side: no repair (no read changes the regime)', () => {
+  const down = brief(b => { b.sections.m3.data.regime = { primary: 'trend-down', volatility: 'normal' }; });
+  const reads = swap('entry', '3m volume high');
+  const rule = entryRuleOf({ ...OFF3, regime_against: 'on' });
+  const on = hintsWith(reads, rule, down);
+  assert.ok(on.checked.problems.some(p => /^entry rule: the regime is trend-down/.test(p)));
+  assert.strictEqual(H.repairOf({ reads, side: 'long', briefing: down, tick: 0.25, plan: PLAN, entryRule: rule }), null);
+  assert.ok(!on.lines.some(l => /these reads pass together/.test(l)));
+});
+
+test('compose hints: a leg-turned problem keeps the repair: a leg read of the model\'s own completes a combination that passes', () => {
+  const rule = entryRuleOf({ ...OFF3, leg_turned: 'on' });
+  const reads = [...swap('entry', '3m volume high'), { step: 'bias', skill: 'candle-reading', read: '3m bos up', why: 'x' }];
+  const b = brief();
+  const fixed = H.repairOf({ reads, side: 'long', briefing: b, tick: 0.25, plan: PLAN, entryRule: rule });
+  assert.ok(fixed && fixed.checked.ok, 'repaired');
+  assert.ok(fixed.reads.some(r => r.read === '3m bos up'));
+  assert.ok(hintsWith(reads, rule, b).lines.some(l => /these reads pass together/.test(l)));
+  // Without the leg read the entry rule's leg problem stands, and every combination offered carries it or none is offered.
+  const none = H.repairOf({ reads: swap('entry', '3m volume high'), side: 'long', briefing: b, tick: 0.25, plan: PLAN, entryRule: rule });
+  assert.ok(none === null || none.checked.ok);
+});

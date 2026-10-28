@@ -134,9 +134,10 @@ function targetCandidates(m3, side, ref) {
 
 /**
  * The standard's reads and plan at one confirmation bar: { status, reads, checked, plan, why }. status: traded
- * (a plan), not-composable, stop-under-floor, no-room.
+ * (a plan), not-composable, stop-under-floor, no-room. entryRule: the running policy's (entry-rule.js entryRuleOf; null: none,
+ * the census's own pre-rule scan below), so a plan the policy's entry rule refuses is not-composable here too.
  */
-function composeAt(b, reaction, { side, tick, setupTf = DEFAULTS.setupTf, stopRule = strategyStopRule(), mark = false }) {
+function composeAt(b, reaction, { side, tick, setupTf = DEFAULTS.setupTf, stopRule = strategyStopRule(), mark = false, entryRule = null }) {
   const m3 = m3Of(b);
   const base = tfLabel(b.minutes);
   const stf = tfLabel(setupTf);
@@ -164,7 +165,7 @@ function composeAt(b, reaction, { side, tick, setupTf = DEFAULTS.setupTf, stopRu
   let pair = null;
   for (const bias of biasReads) {
     for (const loc of locReads) {
-      const ch = checkReads({ reads: reads(bias, loc, targets[0].read), side, briefing: b, tick });
+      const ch = checkReads({ reads: reads(bias, loc, targets[0].read), side, briefing: b, tick, entryRule });
       if (ch.reads.filter(r => r.step !== 'target').every(r => r.check === true && r.agrees !== false)) { pair = [bias, loc]; break; }
     }
     if (pair) break;
@@ -177,7 +178,7 @@ function composeAt(b, reaction, { side, tick, setupTf = DEFAULTS.setupTf, stopRu
   let refused = null;
   for (const t of targets) {
     const list = reads(pair[0], pair[1], t.read);
-    const checked = checkReads({ reads: list, side, briefing: b, tick });
+    const checked = checkReads({ reads: list, side, briefing: b, tick, entryRule });
     if (!checked.ok) { refused = refused || `the checker refused ${t.read}: ${checked.problems[0] || (checked.reads.find(r => r.check !== true) || {}).fact || 'a read is not true'}`; continue; }
     const planned = planOf({ checked, briefing: b, side, size: 1, tick, tickValue: 1, minRR: MIN_RR, maxRiskUsd: Number.MAX_SAFE_INTEGER, stopRule });
     if (!planned.plan) { refused = refused || `the plan refused ${t.read}: ${planned.problems[0]}`; continue; }
@@ -268,6 +269,7 @@ function scanLibrary({ bars, root, minutes = 3, tick = 0.25, from, to, setupTf =
       const cand = m3Of(bj).candles[tfLabel(setupTf)];
       if (!cand || cand.closedAt !== m.candle.closedAt) break;
       if (!entryRead(m3Of(bj).candles[tfLabel(minutes)], side, tfLabel(minutes))) continue;
+      // Pre-rule by design: the census measures every setup moment, with no policy (no entryRule) to hold it to.
       const r = composeAt(bj, reaction, { side, tick, setupTf });
       rec = { ...rec, bar: list[j].t, status: r.status, why: r.why || null };
       if (r.status === 'traded') {
@@ -425,8 +427,9 @@ function runnerClock({ from, to, sessions = null }) {
  * The standard plan compose_check would make of the strongest reaction each side at a bar briefing: per side
  * { side, reaction, status, why, plan, reads } (status 'traded' is a plan OK; 'against' is a side the trend rule
  * allows only as a reversal: no standard plan), or null when the bar has no setup moment to plan. Never throws.
+ * entryRule: the running policy's (entry-rule.js); the briefing's plan line and the census pass none (no policy there).
  */
-function standardPlans(b, { setupTf = DEFAULTS.setupTf } = {}) {
+function standardPlans(b, { setupTf = DEFAULTS.setupTf, entryRule = null } = {}) {
   try {
     const m3 = m3Of(b);
     if (!m3 || !m3.bar || m3.windowEntries !== 'allowed') return null;
@@ -442,7 +445,7 @@ function standardPlans(b, { setupTf = DEFAULTS.setupTf } = {}) {
       const reaction = mo.reactions.find(r => sideOf(r.dir) === side);
       if (!reaction) continue;
       if (rule[side] === false) { out.push({ side, reaction, status: 'against', why: 'against the trend rule: only as a reversal (its 1h CHoCH tier)', plan: null, reads: [] }); continue; }
-      const r = composeAt(b, reaction, { side, tick, setupTf, mark: true });
+      const r = composeAt(b, reaction, { side, tick, setupTf, mark: true, entryRule });
       out.push({ side, reaction, status: r.status, why: r.why || null, plan: r.plan || null, reads: r.reads || [] });
     }
     return out.length ? out : null;

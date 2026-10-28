@@ -20,7 +20,7 @@
  *                 (`3m compression break up`) pointing the side (pullback-vs-reversal: the pullback ends when its
  *                 minor structure breaks back).
  *
- *   ENTRY_KEYS, BIAS_TFS
+ *   ENTRY_KEYS, BIAS_FRAMES, TREND_TF (the briefing field each frame's trend is in; composed-reads takes it from here)
  *   entryRuleErrors(x, at)                      problems with a rulebook entry block (every key stated)
  *   entryRuleOf(x)                              the rule as the checker reads it ({ biasFrames, regimeAgainst,
  *                                               legTurned }), or null when every key is off or the block is missing
@@ -32,8 +32,10 @@ const { label } = require('./mtf');
 const ENTRY_KEYS = Object.freeze(['bias_frames', 'regime_against', 'leg_turned']);
 const OFF = 'off';
 /** The frames a bias may be read on, highest first, and the briefing field each trend is in. */
-const BIAS_TFS = Object.freeze({ '4h': ['h1', 'h4'], '1h': ['h1', 'h1'], '15m': ['m15', 'frame'] });
-const ORDER = Object.keys(BIAS_TFS);
+const TREND_TF = Object.freeze({ '15m': ['m15', 'frame'], '1h': ['h1', 'h1'], '4h': ['h1', 'h4'] });
+/** The frames a rule's bias may list, highest first: the 15m never sets the side against the 1h. */
+const BIAS_FRAMES = Object.freeze(['4h', '1h']);
+const ORDER = BIAS_FRAMES;
 
 const isObj = x => Boolean(x) && typeof x === 'object' && !Array.isArray(x);
 const onOff = x => x === OFF || x === 'on';
@@ -49,7 +51,7 @@ function entryRuleErrors(x, at) {
   for (const k of ENTRY_KEYS) if (x[k] === undefined) out.push(`${at}.entry.${k}: missing; state it (${OFF}: no check)`);
   const f = x.bias_frames;
   if (f !== undefined && f !== OFF) {
-    const ok = Array.isArray(f) && f.length >= 1 && f.every(tf => Object.hasOwn(BIAS_TFS, tf)) && new Set(f).size === f.length
+    const ok = Array.isArray(f) && f.length >= 1 && f.every(tf => BIAS_FRAMES.includes(tf)) && new Set(f).size === f.length
       && f.every((tf, i) => i === 0 || ORDER.indexOf(tf) > ORDER.indexOf(f[i - 1]));
     if (!ok) out.push(`${at}.entry.bias_frames: ${JSON.stringify(f)} is not ${OFF} or a list of ${ORDER.join(', ')}, highest first, each once`);
   }
@@ -70,7 +72,7 @@ function entryRuleOf(x) {
 
 /** A frame's trend on the briefing: 'up', 'down', 'range', or null when it doesn't hold one. */
 function trendOf(b, tf) {
-  const [sec, key] = BIAS_TFS[tf] || [];
+  const [sec, key] = TREND_TF[tf] || [];
   const d = sec ? data(b, sec) : null;
   const t = d && isObj(d[key]) ? d[key].trend : null;
   return ['up', 'down', 'range'].includes(t) ? t : null;
@@ -119,4 +121,4 @@ function entryProblems({ briefing, side, reads, rule }) {
   return out;
 }
 
-module.exports = { ENTRY_KEYS, BIAS_TFS, entryRuleErrors, entryRuleOf, entryProblems, trendOf, legReads };
+module.exports = { ENTRY_KEYS, BIAS_FRAMES, TREND_TF, entryRuleErrors, entryRuleOf, entryProblems, trendOf, legReads };

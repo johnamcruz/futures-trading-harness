@@ -21,7 +21,7 @@ description: Use before a trade_lifecycle entry - compose the trade as reads wit
 
    | Step | The read, your side's way | The skill for the fact |
    | --- | --- | --- |
-   | bias | the 4h/1h trend sets the side, not the 15m (`htf-to-ltf`): `1h bos up`, `trend long allowed`, regime, prior RTH range, read, day type; against it only by step 4 | `multi-timeframe-analysis`, `trend-vs-range`, `daily-bias`, `bos-vs-choch` |
+   | bias | the 15m/1h trend gives the side (`htf-to-ltf`): `15m down`, `1h bos up`, `trend long allowed`, regime, prior RTH range, read, day type; against it only by step 4 | `multi-timeframe-analysis`, `trend-vs-range`, `daily-bias`, `bos-vs-choch` |
    | location | the pullback into a key level: `at <level>`, `at 15m fvg`, `vwap above`, `value below` | `levels-and-reactions`, `vwap-volume-profile`, `fair-value-gaps`, `compression` |
    | setup | the reaction ending it, the trend's way, on a closed candle above the base: `15m rejected prior vah up`, a gap edge, pattern, `15m cisd down`, a breakout, `15m compression break up` (3m too, a candle later); else never 3m: nothing later confirms it | `rejection`, `breakout`, `fair-value-gaps`, `pullback-vs-reversal`, `breakout-vs-fakeout`, `cisd`, `candle-reading`, `compression` |
    | entry | continuation on a candle closed after the setup's: `3m close top` (short: bottom), `3m momentum up`, pattern (hammer, bullish engulfing; short: shooting star, bearish engulfing), absorption | `candle-reading`, `momentum-and-volume`, `absorption` |

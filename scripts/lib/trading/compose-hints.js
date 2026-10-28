@@ -163,6 +163,13 @@ function failingSteps(checked, planned) {
   return out;
 }
 
+/**
+ * Whether the policy's entry rule (entry-rule.js) refuses the entry on this bar whatever reads are stated: its bias frames,
+ * the regime, an unreadable briefing. A leg-turned problem is not one (a break read of the leg satisfies it), so repair
+ * stays for it.
+ */
+const entryBlocked = checked => ((checked && checked.problems) || []).some(p => /^entry rule:/.test(p) && !/state the leg turned back/.test(p));
+
 // The model's TRUE agreeing reads in a step (kept as they are).
 const goodOf = (checked, step) => (checked.reads || []).filter(r => r.step === step && r.check === true && r.agrees);
 
@@ -182,6 +189,8 @@ function repairOf({ reads, side, briefing, tick, plan, candidates = null, entryR
   if (!m3 || !isObj(plan) || !(tick > 0)) return null;
   const checked = checkReads({ reads, side, briefing, tick, entryRule });
   if (checked.ok && planOkFor(checked, briefing, side, tick, plan)) return null;
+  // No read satisfies the entry rule's bias frames or regime: no combination to try.
+  if (entryBlocked(checked)) return null;
   const planned = checked.stop && checked.target ? planOf(planArgs(checked, briefing, side, tick, plan)) : null;
   const fail = failingSteps(checked, planned);
   const cand = candidates || candidatesOf(briefing, side, { tick, stopRule: plan.stopRule });
@@ -245,6 +254,8 @@ function hintsFor({ checked, planned = null, briefing, side, tick, plan = null, 
   const n = LIMITS.perStep;
   const out = [];
   const rule = trendRuleOf(m3.trendRule)[side];
+  // The entry rule refuses this bar whatever is read: no repair, and no reversal hint (the rule refuses that entry too).
+  const blocked = entryBlocked(checked);
   for (const step of STEPS.filter(s => fail[s])) {
     // Only the reads pointing the side: a direction-less one (a range regime) is no bias for it.
     const sided = cand.bias.filter(x => x.dir === side);
@@ -266,11 +277,11 @@ function hintsFor({ checked, planned = null, briefing, side, tick, plan = null, 
     && (!entryRule || checkReads({ reads: standard.reads.map(r => ({ step: r.step, skill: r.skill || SKILL[r.step], read: r.read })), side, briefing, tick, entryRule }).ok);
   if (standardOk) {
     out.push(`the standard plan passes: compose_check with its reads: ${quote(standard.reads)} (R:R ${standard.plan ? standard.plan.rr : '?'})`);
-  } else if (plan && rule !== false && m3.windowEntries === 'allowed') {
+  } else if (plan && rule !== false && m3.windowEntries === 'allowed' && !blocked) {
     const fixed = repairOf({ reads: checked.reads.map(r => ({ step: r.step, skill: r.skill, read: r.read, why: r.why })), side, briefing, tick, plan, candidates: cand, entryRule });
     if (fixed) out.push(`these reads pass together (code-checked on this bar): ${quote(fixed.reads)} (R:R ${fixed.planned.plan.rr})`);
   }
-  if (rule === false) out.push(`the trend rule allows the ${side} only as a reversal (a verified CHoCH tier among the bias reads)`);
+  if (rule === false && !blocked) out.push(`the trend rule allows the ${side} only as a reversal (a verified CHoCH tier among the bias reads)`);
   return out;
 }
 

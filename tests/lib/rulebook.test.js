@@ -65,7 +65,7 @@ test('validateRulebook: a policy states its entry rule, every key (off: no check
     const { [k]: _gone, ...rest } = ENTRY_OFF;
     assert.match(errorsOf(p(rest)).join(), new RegExp(`policies\\.prop_a\\.entry\\.${k}: missing; state it`), k);
   }
-  for (const v of [[], ['1h', '4h'], ['4h', '4h'], ['2h'], '4h', 'on', 0, null]) assert.match(errorsOf(p({ ...ENTRY_OFF, bias_frames: v })).join(), /entry\.bias_frames: .* is not off or a list of 4h, 1h, 15m, highest first, each once/, JSON.stringify(v));
+  for (const v of [[], ['1h', '4h'], ['4h', '4h'], ['2h'], ['15m'], ['4h', '1h', '15m'], '4h', 'on', 0, null]) assert.match(errorsOf(p({ ...ENTRY_OFF, bias_frames: v })).join(), /entry\.bias_frames: .* is not off or a list of 4h, 1h, highest first, each once/, JSON.stringify(v));
   for (const k of ['regime_against', 'leg_turned']) for (const v of [true, 'yes', 1, '']) assert.match(errorsOf(p({ ...ENTRY_OFF, [k]: v })).join(), new RegExp(`entry\\.${k}: .* is not on or off`), `${k} ${v}`);
   assert.match(errorsOf(p({ ...ENTRY_OFF, surprise: 'on' })).join(), /entry\.surprise: unknown key/);
 });
