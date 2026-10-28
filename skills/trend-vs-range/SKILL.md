@@ -45,13 +45,14 @@ The 3m read sits inside `h1.h4.trend`, `h1.h1.trend`, `m15.frame.trend`;
 `m3.trendRule` wins where they differ. Indicators confirm structure, never
 override it. A 3m range inside a 15m trend is a pause. Side: `htf-to-ltf`.
 
-**Declared yet?** (`m3.declared`; ATR, + your way; census, both halves):
+**Declared yet?** (`Trend declared?` line; ATR, + your way; census
+hypotheses):
 
-- Declared, lead with it: regime `with`, overnight range broke out its
-  way, RTH VWAP +1 to +2.5, day's move +3 or more.
+- Declared (any one): regime `with`, overnight range broke out its way,
+  RTH VWAP +1 to +2.5, day's move +3 or more.
 - Not yet (false starts): RTH VWAP and EMA20 under 0 (EMA20 under -1
   worse), regime `against`, inside the overnight range (back third worst):
-  wait for the declaration or size down, in the count. An unfinished
+  wait for it, in the count; size is the verdict's. An unfinished
   pullback is no chop sign.
 
 ## Examples
