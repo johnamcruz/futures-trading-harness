@@ -702,8 +702,10 @@ and leg ids; the lessons lines record the batch too.
   gate counts them as loaded only on the runner's attestation for that
   cycle (`FTH_CYCLE_SKILLS`, `scripts/lib/cycle-skills-attest.js`). The
   Setups-to-check line now lists a compression break (at its key level when
-  its box sits at one) and a live CISD on a side the trend rule allows,
-  beside the setup moment's reactions. `node scripts/skill-coverage.js`
+  its box sits at one) and a 15m or 1h CISD tradeable now (its OTE touched
+  or bounced, or freshly confirmed; its displacement kind, status and swept
+  level named; an engulfing one first) on a side the trend rule allows,
+  beside the setup moment's reactions; a 3m or 5m CISD only times an entry. `node scripts/skill-coverage.js`
   prints how every skill reaches the model.
 - **Every listed setup composed or skipped with a reason**
   (`scripts/lib/setup-skips.js`). A cycle that composes none of a listed

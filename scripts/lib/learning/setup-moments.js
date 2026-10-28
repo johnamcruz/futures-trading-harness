@@ -161,7 +161,7 @@ function checkLine(candles, { barClose, et = x => x, setupTf = DEFAULTS.setupTf,
   if (entries !== 'allowed') return null;
   const m = setupMoment(candles, { setupTf, barClose });
   // The briefing's own setups (setupChecks: a compression break, a live CISD, on a side the trend rule allows), as reads.
-  const extra = (checks || []).map(c => `"${c.read}" (${c.side}${c.level ? `, at ${c.level}` : ''})`);
+  const extra = (checks || []).map(c => `"${c.read}" (${[c.side, ...(c.kind === 'cisd' ? [`${c.displacement} displacement`, c.status] : []), ...(c.level ? [`at ${c.level}`] : [])].join(', ')})`);
   const extraSkills = [...new Set((checks || []).map(c => c.kind))];
   if (!m.moment) return extra.length ? `- Setups to check: ${extra.join('; ')}. Compose and check each (trade-lifecycle, ${extraSkills.join(', ')}); pass unless every read is true; SKIP each one you don't compose, with its reason.` : null;
   const key = tfLabel(setupTf);
@@ -193,14 +193,17 @@ function listedReads(b) {
 
 // A live CISD: its OTE zone touched, or bounced from (cisd.js); waiting, weak, void or expired is no setup yet or any more.
 const LIVE_CISD = new Set(['touched', 'bounced']);
+// The frames a CISD is a setup on (the 15m, and the 1h: the stronger context); a 3m or 5m one stays a briefing fact.
+const CISD_FRAMES = Object.freeze(['15m', '1h']);
 const minutesOf = tf => { const x = /^(\d+)([mh])$/.exec(String(tf)); return x ? Number(x[1]) * (x[2] === 'h' ? 60 : 1) : 0; };
 
 /**
  * The briefing's setups beside the setup moment's reactions, on a side the trend rule allows (reasons.js trendRuleOf:
  * true), while the window allows entries: each timeframe's compression expanding out of its box (compression.js, the
  * read compose_check verifies: "<tf> compression break <dir>"), and its live CISD ("<tf> cisd <dir>"). The higher
- * timeframe first, at most `max`: [{ kind, tf, dir, side, read, level? }] (level: a compression box at a key level, the
- * name of the nearest at the break's edge, else at the other edge: the briefing's own fact, never inferred).
+ * timeframe first, at most `max`: [{ kind, tf, dir, side, read, level?, status?, displacement? }] (level: a compression
+ * box at a key level, the name of the nearest at the break's edge, else at the other edge; a CISD's swept level: the
+ * briefing's own facts, never inferred). A CISD only on the 15m or 1h, tradeable now; the stronger first.
  */
 function setupChecks(m3, { max = MAX_CHECKS } = {}) {
   const isObj = x => Boolean(x) && typeof x === 'object' && !Array.isArray(x);
@@ -216,11 +219,20 @@ function setupChecks(m3, { max = MAX_CHECKS } = {}) {
     const at = edges.find(l => l.edge === (dir === 'up' ? 'top' : 'bottom')) || edges[0] || null;
     if (sideOf(dir) && rule[sideOf(dir)] === true) out.push({ kind: 'compression', tf, dir, side: sideOf(dir), read: `${tf} compression break ${dir}`, ...(at ? { level: at.name } : {}) });
   }
+  // A CISD on the setup frames only (the 3m and 5m time the entry: the owner's top-down rule), tradeable now: its OTE
+  // touched or bounced from, or freshly confirmed on its frame's last completed candle.
   for (const [tf, x] of Object.entries(isObj(m3.cisd) ? m3.cisd : {})) {
-    const dir = isObj(x) && LIVE_CISD.has(x.status) ? (x.dir === 'bullish' ? 'up' : x.dir === 'bearish' ? 'down' : null) : null;
-    if (sideOf(dir) && rule[sideOf(dir)] === true) out.push({ kind: 'cisd', tf, dir, side: sideOf(dir), read: `${tf} cisd ${dir}` });
+    if (!CISD_FRAMES.includes(tf) || !isObj(x)) continue;
+    const fresh = x.status === 'waiting' && isObj(m3.candles) && isObj(m3.candles[tf]) && x.confirmedClose && x.confirmedClose === m3.candles[tf].closedAt;
+    const dir = LIVE_CISD.has(x.status) || fresh ? (x.dir === 'bullish' ? 'up' : x.dir === 'bearish' ? 'down' : null) : null;
+    if (!sideOf(dir) || rule[sideOf(dir)] !== true) continue;
+    out.push({ kind: 'cisd', tf, dir, side: sideOf(dir), read: `${tf} cisd ${dir}`, status: fresh ? 'fresh confirmation' : `${x.status} OTE`,
+      displacement: x.engulfing ? 'engulfing' : String(x.displacement || 'strong'), ...(isObj(x.sweep) && x.sweep.name ? { level: x.sweep.name } : {}) });
   }
-  return out.sort((a, b) => minutesOf(b.tf) - minutesOf(a.tf)).slice(0, max);
+  // The stronger first (the owner): a CISD with an engulfing displacement and a compression box at a key level, then
+  // the higher timeframe.
+  const strong = c => (c.kind === 'cisd' ? c.displacement === 'engulfing' : Boolean(c.level));
+  return out.sort((a, b) => Number(strong(b)) - Number(strong(a)) || minutesOf(b.tf) - minutesOf(a.tf)).slice(0, max);
 }
 
 module.exports = { MODES, SETUP_TFS, LEVEL_SETS, REACTION_KINDS, DEFAULTS, KEY_LEVEL, MOVING_LEVEL, PREVIOUS_LEVEL, validatePractice, reactionsOf, setupMoment, quietPick, selectBar, practiceLine, tfLabel, checkLine, setupChecks, listedReads };

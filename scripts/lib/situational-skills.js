@@ -11,10 +11,11 @@
  *   management  a position or a working entry is open: manage-position, pullback-vs-reversal, take-profit; an entry
  *               working: entry-outcome; flat with working orders: leftover-orders
  *   setup       flat, the window allowing entries, each setup the Setups-to-check line lists (setup-moments.js checkLine,
- *               setupChecks): a level rejected (rejection), broken (breakout, breakout-vs-fakeout), a compression break
- *               (compression), a live CISD (cisd, fib-retracement: its OTE is a fib zone), an FVG retested
- *               (fair-value-gaps)
- *   entry       a setup listed: candle-reading, momentum-and-volume (the entry read), top-down-entry
+ *               setupChecks): a tradeable 15m or 1h CISD (cisd, fib-retracement: its OTE is a fib zone), a compression
+ *               break (compression), first: the owner's stronger setups; a level rejected (rejection), broken
+ *               (breakout, breakout-vs-fakeout), an FVG retested (fair-value-gaps)
+ *   entry       a setup listed: candle-reading, momentum-and-volume (the entry read), top-down-entry; a 3m or 5m CISD
+ *               touched or bounced (cisd: it times the entry)
  *   risk        a setup listed: invalidation, take-profit, position-sizing; in a prop attempt prop-challenge-pacing
  *   location    price at a key level (a reaction, a compression box at one): levels-and-reactions; a liquidity sweep
  *               (breakout-vs-fakeout); VWAP and value (vwap-volume-profile)
@@ -80,11 +81,12 @@ const TABLE = Object.freeze([
   { id: 'open', stage: 'management', facts: ['account'], skills: ['manage-position', 'pullback-vs-reversal', S.target.target], why: 'a position or a working entry is open', when: c => c.open },
   { id: 'working', stage: 'management', facts: ['account'], skills: ['entry-outcome'], why: 'an entry is working', when: c => isObj(c.state) && nonEmpty(c.state.entryLines) },
   { id: 'leftover', stage: 'management', facts: ['account'], skills: ['leftover-orders'], why: 'flat with working orders', when: c => !c.open && isObj(c.state) && Array.isArray(c.state.positions) && Boolean(Number(c.state.workingOrders)) },
+  { id: 'cisd', stage: 'setup', facts: ['cisd'], skills: [S.setup.cisd, 'fib-retracement'], why: 'a live CISD on the Setups to check', when: c => c.flat.some(b => checksOf(b).some(x => x.kind === 'cisd')) },
+  { id: 'compression', stage: 'setup', facts: ['compression'], skills: [S.setup.compression], why: 'a compression break on the Setups to check', when: c => c.flat.some(b => checksOf(b).some(x => x.kind === 'compression')) },
   { id: 'rejected', stage: 'setup', facts: ['candles'], skills: [S.setup.rejected], why: 'a level rejected on the Setups to check', when: c => c.flat.some(b => reactionsOf(b).some(r => r.rel === 'rejected')) },
   { id: 'broke', stage: 'setup', facts: ['candles'], skills: [S.setup.broke, S.setup.swept], why: 'a level broken on the Setups to check', when: c => c.flat.some(b => reactionsOf(b).some(r => r.rel === 'broke')) },
-  { id: 'compression', stage: 'setup', facts: ['compression'], skills: [S.setup.compression], why: 'a compression break on the Setups to check', when: c => c.flat.some(b => checksOf(b).some(x => x.kind === 'compression')) },
-  { id: 'cisd', stage: 'setup', facts: ['cisd'], skills: [S.setup.cisd, 'fib-retracement'], why: 'a live CISD on the Setups to check', when: c => c.flat.some(b => checksOf(b).some(x => x.kind === 'cisd')) },
   { id: 'fvg', stage: 'setup', facts: ['fvgs'], skills: [S.setup.fvg], why: 'an FVG retested', when: c => c.flat.some(b => anyFvgRetest(m3Of(b))) },
+  { id: 'cisd-timing', stage: 'entry', facts: ['cisd'], skills: [S.setup.cisd], why: 'a 3m or 5m CISD to time an entry', when: c => c.flat.some(listed) && c.flat.some(b => Object.entries(isObj(m3Of(b).cisd) ? m3Of(b).cisd : {}).some(([tf, x]) => ['3m', '5m'].includes(tf) && isObj(x) && ['touched', 'bounced'].includes(x.status))) },
   { id: 'entry', stage: 'entry', facts: ['candles', 'candidates'], skills: [S.entry.close, S.entry.momentum, 'top-down-entry'], why: 'a setup listed: its entry read', when: c => c.flat.some(listed) },
   { id: 'risk', stage: 'risk', facts: ['candles', 'candidates'], skills: [S.stop.stop, S.target.target, 'position-sizing'], why: 'a setup listed: its stop, target and size', when: c => c.flat.some(listed) },
   { id: 'attempt', stage: 'risk', facts: ['account'], skills: ['prop-challenge-pacing'], why: 'a prop attempt sizes it', when: c => c.flat.some(listed) && isObj(c.state) && nonEmpty(c.state.attempts) },

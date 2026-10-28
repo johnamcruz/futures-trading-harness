@@ -81,17 +81,31 @@ test('choose: stage order under the budget, nothing the prompt already holds, th
   assert.strictEqual(require('../../scripts/lib/tunables').runner().prompt.situationalSkillBytes, 24000);
 });
 
-test('the Setups-to-check line: a compression break on an allowed side (at its key level when its box sits at one) and a live CISD; nothing against the trend rule or outside the window', () => {
-  const m3 = brief({ compression: expanding('up', [{ name: 'prior rth high', edge: 'inside' }, { name: 'overnight low', edge: 'top' }]), cisd: { '5m': { dir: 'bullish', status: 'bounced' }, '3m': { dir: 'bearish', status: 'touched' } } }).sections.m3.data;
+test('the Setups-to-check line: a compression break on an allowed side (at its key level when its box sits at one) and a tradeable 15m or 1h CISD, the stronger first; nothing against the trend rule, on the 3m or 5m, or outside the window', () => {
+  const candles = { '15m': { closedAt: '2026-04-23T13:45:00.000Z' }, '1h': { closedAt: '2026-04-23T13:00:00.000Z' } };
+  const cisd = {
+    '1h': { dir: 'bullish', status: 'bounced', displacement: 'strong', engulfing: false },
+    '15m': { dir: 'bullish', status: 'touched', displacement: 'strong', engulfing: true, sweep: { name: 'overnight low', price: 21480 } },
+    '5m': { dir: 'bullish', status: 'bounced', displacement: 'strong', engulfing: true },
+    '3m': { dir: 'bearish', status: 'touched', displacement: 'strong', engulfing: false },
+  };
+  const m3 = brief({ candles, compression: expanding('up', [{ name: 'prior rth high', edge: 'inside' }, { name: 'overnight low', edge: 'top' }]), cisd }).sections.m3.data;
   assert.deepStrictEqual(SM.setupChecks(m3), [
     { kind: 'compression', tf: '15m', dir: 'up', side: 'long', read: '15m compression break up', level: 'overnight low' },
-    { kind: 'cisd', tf: '5m', dir: 'up', side: 'long', read: '5m cisd up' },
-  ], 'the short CISD is against the trend rule; an inside level is no edge');
-  assert.strictEqual(SM.checkLine({}, { barClose: 0, checks: SM.setupChecks(m3) }), '- Setups to check: "15m compression break up" (long, at overnight low); "5m cisd up" (long). Compose and check each (trade-lifecycle, compression, cisd); pass unless every read is true; SKIP each one you don\'t compose, with its reason.');
-  assert.deepStrictEqual(SM.setupChecks({ ...m3, compression: expanding('up', [{ name: 'prior rth high', edge: 'inside' }]) }).map(c => c.level), [undefined, undefined], 'no level at an edge: none named');
+    { kind: 'cisd', tf: '15m', dir: 'up', side: 'long', read: '15m cisd up', status: 'touched OTE', displacement: 'engulfing', level: 'overnight low' },
+    { kind: 'cisd', tf: '1h', dir: 'up', side: 'long', read: '1h cisd up', status: 'bounced OTE', displacement: 'strong' },
+  ], 'the stronger first (a box at a key level, an engulfing displacement), then the higher frame; the 3m and 5m CISDs are no setups');
+  assert.strictEqual(SM.checkLine({}, { barClose: 0, checks: SM.setupChecks(m3) }), '- Setups to check: "15m compression break up" (long, at overnight low); "15m cisd up" (long, engulfing displacement, touched OTE, at overnight low); "1h cisd up" (long, strong displacement, bounced OTE). Compose and check each (trade-lifecycle, compression, cisd); pass unless every read is true; SKIP each one you don\'t compose, with its reason.');
+  // Only what can be traded now: waiting (unless freshly confirmed on the frame's last candle), void, expired: none.
+  for (const status of ['waiting', 'void', 'expired', 'weak']) assert.deepStrictEqual(SM.setupChecks({ ...m3, compression: {}, cisd: { '15m': { ...cisd['15m'], status } } }), [], status);
+  assert.deepStrictEqual(SM.setupChecks({ ...m3, compression: {}, cisd: { '15m': { ...cisd['15m'], status: 'waiting', confirmedClose: candles['15m'].closedAt } } }).map(c => c.status), ['fresh confirmation']);
+  assert.deepStrictEqual(SM.setupChecks({ ...m3, cisd: {}, compression: expanding('up', [{ name: 'prior rth high', edge: 'inside' }]) }).map(c => c.level), [undefined], 'no level at an edge: none named');
   assert.deepStrictEqual(SM.setupChecks({ ...m3, windowEntries: 'refused' }), []);
-  assert.deepStrictEqual(SM.setupChecks({ ...m3, trendRule: 'Trend rule: SHORT allowed (prevailing 4h down); long only as a reversal' }).map(c => c.read), ['3m cisd down']);
+  assert.deepStrictEqual(SM.setupChecks({ ...m3, trendRule: 'Trend rule: SHORT allowed (prevailing 4h down); long only as a reversal' }), [], 'against the trend rule: none (the 3m short CISD is no setup)');
   assert.strictEqual(SM.checkLine({}, { barClose: 0, checks: [] }), null);
+  // A 3m or 5m CISD times the entry of a listed setup: the cisd skill in the entry stage.
+  assert.ok(ids(SS.factsOf({ state: FLAT, briefings: [brief({ compression: expanding('up'), cisd: { '3m': cisd['5m'] } })] })).includes('cisd-timing'));
+  assert.ok(!ids(SS.factsOf({ state: FLAT, briefings: [brief({ cisd: { '3m': cisd['5m'] } })] })).includes('cisd-timing'), 'no setup listed: nothing to time');
 });
 
 test('the cycle prompt: a cycle in no situation is byte-identical to the prompt without a section; a situation\'s section sits before the result line', () => {
