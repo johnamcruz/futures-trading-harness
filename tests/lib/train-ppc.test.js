@@ -476,8 +476,10 @@ function world({ proposals, verdict = 'kept', loop: over = {}, trend = false, tr
     }),
     scorecard: ({ runDir }) => Object.values(store.readRun(runDir).days).flat().map(l => {
       const i = TIMES.indexOf(l.t);
-      // trades: a filled trade's R on two of every four moments (+2R, then -1R), as scorecardDecisions says it.
-      return { key: `${l.t}|MNQ`, t: l.t, barT: l.t, day: l.day, symbol: 'MNQ', category: categoryOf(l.ran[0].result, i), actual: { action: 'none' }, falseReasons: [], inTrade: false, blow: false, ...(trades ? { trade: i % 4 === 0 ? { r: 2 } : i % 4 === 1 ? { r: -1 } : null } : {}) };
+      // trades: a filled trade's R on two of every four moments (+2R, then -1R; a challenger's run, c- or k-, +3R), as
+      // scorecardDecisions says it, so a side read from the other side's runs shows.
+      const win = /^[^-]+-[ck]-/.test(path.basename(runDir)) ? 3 : 2;
+      return { key: `${l.t}|MNQ`, t: l.t, barT: l.t, day: l.day, symbol: 'MNQ', category: categoryOf(l.ran[0].result, i), actual: { action: 'none' }, falseReasons: [], inTrade: false, blow: false, ...(trades ? { trade: i % 4 === 0 ? { r: win } : i % 4 === 1 ? { r: -1 } : null } : {}) };
     }),
     probeData: ({ runDir, tree: dir }) => {
       calls.probeData.push({ runDir: path.basename(runDir), tree: path.basename(dir) });
@@ -1258,8 +1260,11 @@ test('the round report: risk and return on the trend confirm half\'s trades and 
     assert.deepStrictEqual(report.composed.trend.trades, tradesOf(`k-${report.composed.id}`), curriculum);
     const r = rec.mastery.risk;
     assert.ok(r.champion.trend.n > 0 && r.champion.trend.n === report.trend.champion.trades.length, curriculum);
-    // Two trades of every four moments, +2R then -1R: each side's expectancy 0.5R, win rate 50%, payoff 2.
+    // Two trades of every four moments, +2R then -1R: the champion's expectancy 0.5R, win rate 50%, payoff 2; the
+    // combined change's (k- runs) +3R then -1R: 1R, payoff 3. Each side read from its own runs, never the other's.
     assert.deepStrictEqual([r.champion.trend.expectancy, r.champion.trend.winRate, r.champion.trend.payoff, r.champion.trend.profitFactor], [0.5, 0.5, 2, 2], curriculum);
+    assert.deepStrictEqual([r.composed.trend.expectancy, r.composed.trend.payoff, r.composed.trend.profitFactor], [1, 3, 3], curriculum);
+    assert.notDeepStrictEqual(report.composed.trend.trades, report.trend.champion.trades);
     assert.deepStrictEqual(r.champion.trend, RS.riskStats(report.trend.champion.trades));
     assert.deepStrictEqual(r.composed.trend, RS.riskStats(report.composed.trend.trades));
     // The stub keep rule judged the combined change: the keep rule's runs (the tuning windows) read, each side its own.
@@ -1268,6 +1273,9 @@ test('the round report: risk and return on the trend confirm half\'s trades and 
     assert.deepStrictEqual(r.champion.keepRule, keep('champion'));
     assert.deepStrictEqual(r.composed.keepRule, keep(`c-${report.composed.id}`));
     assert.ok(r.composed.keepRule.n > 0);
+    // The keep rule's runs: the champion's +2R, the challenger's (its c- file) +3R.
+    assert.deepStrictEqual([r.champion.keepRule.payoff, r.composed.keepRule.payoff], [2, 3], curriculum);
+    assert.notDeepStrictEqual(r.composed.keepRule, r.champion.keepRule);
     const lines = IR.masteryLines(rec);
     assert.ok(lines.includes(`    combined ${report.composed.id}, keep rule's runs: ${RS.riskText(r.composed.keepRule)}`), curriculum);
     assert.ok(lines.every(l => !/Infinity|NaN/.test(l)));

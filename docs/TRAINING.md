@@ -960,7 +960,9 @@ change's tuning replays): n, expectancy (mean R a trade), win rate,
 average win and loss, payoff ratio, profit factor, max drawdown in R on
 the trade sequence, the longest losing streak, Sortino and Sharpe
 (`scripts/lib/train/risk-stats.js`). R is each trade's as the scorecard
-records it. All are per trade, not annualized; a ratio with fewer than 2
+records it: the broker's round-trip R when it sends one, else P&L over
+the initial risk before fees; a win here is R > 0, which can differ from
+the scorecard's net result. All are per trade, not annualized; a ratio with fewer than 2
 trades, no loss or no spread reads n/a. No screen, keep rule, promotion
 or prompt reads them: the combine pass rate with 0 blows still decides.
 

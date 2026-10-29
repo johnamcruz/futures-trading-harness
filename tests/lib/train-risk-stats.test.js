@@ -71,8 +71,8 @@ test('riskStats: the edge cases are n/a (null), never Infinity or NaN', () => {
 });
 
 test('riskText: one line, labelled per trade, n/a where null', () => {
-  assert.strictEqual(RS.riskText(RS.riskStats([1, -1, 2, -1, -1, 0.5])), 'n 6, expectancy 0.0833R a trade, win rate 50%, avg win 1.1667R, avg loss -1R, payoff 1.1667, profit factor 1.1667, max drawdown 2R, longest losing streak 2, Sortino 0.1179, Sharpe 0.065 (per trade, not annualized)');
-  assert.strictEqual(RS.riskText(RS.riskStats([])), 'n 0, expectancy n/a a trade, win rate n/a, avg win n/a, avg loss n/a, payoff n/a, profit factor n/a, max drawdown n/a, longest losing streak n/a, Sortino n/a, Sharpe n/a (per trade, not annualized)');
+  assert.strictEqual(RS.riskText(RS.riskStats([1, -1, 2, -1, -1, 0.5])), 'n 6, expectancy 0.0833R a trade, win rate 50%, avg win 1.1667R, avg loss -1R, payoff 1.1667, profit factor 1.1667, max drawdown 2R, longest losing streak 2, Sortino 0.1179, Sharpe 0.065 (per trade, not annualized; R: the broker\'s round-trip R when it sends one, else P&L over the initial risk before fees; a win here is R > 0, which can differ from the scorecard\'s net result)');
+  assert.strictEqual(RS.riskText(RS.riskStats([])), 'n 0, expectancy n/a a trade, win rate n/a, avg win n/a, avg loss n/a, payoff n/a, profit factor n/a, max drawdown n/a, longest losing streak n/a, Sortino n/a, Sharpe n/a (per trade, not annualized; R: the broker\'s round-trip R when it sends one, else P&L over the initial risk before fees; a win here is R > 0, which can differ from the scorecard\'s net result)');
   assert.match(RS.riskText(RS.riskStats([T(1), T(null)])), /^n 1 \(1 without an R\), /);
   assert.strictEqual(RS.riskText(null), 'n/a (trades unknown)');
 });
@@ -126,7 +126,7 @@ test('the round report: each side\'s risk on the trend confirm half and, when th
     `    combined c1, trend confirm half: ${RS.riskText(r.composed.trend)}`,
     `    combined c1, keep rule's runs: ${RS.riskText(r.composed.keepRule)}`,
   ]);
-  assert.match(lines[4], /Sortino 0\.1179, Sharpe 0\.065 \(per trade, not annualized\)$/);
+  assert.match(lines[4], /Sortino 0\.1179, Sharpe 0\.065 \(per trade, not annualized; R: the broker's round-trip R when it sends one, else P&L over the initial risk before fees; a win here is R > 0, which can differ from the scorecard's net result\)$/);
 });
 
 test('the round report: another proposal\'s verdict, no keep rule, or no trades recorded: n/a, never another side\'s', () => {

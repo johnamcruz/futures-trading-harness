@@ -3,7 +3,8 @@
 /**
  * The round report's risk and return diagnostics (docs/TRAINING.md, "The mastery read"): on one side's trades, in the
  * order they were opened, each trade's R as the scorecard records it (replay/scorecard.js: a flat decision's filled
- * trade, `trade.r`). Report only: no screen, keep rule, promotion, proposer or model prompt reads them (a test keeps
+ * trade, `trade.r`): the broker's round-trip R when it sends one, else P&L over the initial risk before fees; a win here
+ * is R > 0, which can differ from the scorecard's net result. Report only: no screen, keep rule, promotion, proposer or model prompt reads them (a test keeps
  * the decision modules from importing this one); the pass rate with 0 blows still decides.
  *
  *   tradesOf(decisions)      [{ t, r }] the trades among a run's scorecard decisions (train/loop.js scorecardDecisions:
@@ -86,7 +87,7 @@ const pct = x => (num(x) === null ? 'n/a' : `${round4(x * 100)}%`);
 
 function riskText(s) {
   if (!s) return 'n/a (trades unknown)';
-  return `n ${s.n}${s.unknown ? ` (${s.unknown} without an R)` : ''}, expectancy ${showR(s.expectancy)} a trade, win rate ${pct(s.winRate)}, avg win ${showR(s.avgWin)}, avg loss ${showR(s.avgLoss)}, payoff ${show(s.payoff)}, profit factor ${show(s.profitFactor)}, max drawdown ${showR(s.maxDrawdownR)}, longest losing streak ${show(s.longestLosingStreak)}, Sortino ${show(s.sortino)}, Sharpe ${show(s.sharpe)} (per trade, not annualized)`;
+  return `n ${s.n}${s.unknown ? ` (${s.unknown} without an R)` : ''}, expectancy ${showR(s.expectancy)} a trade, win rate ${pct(s.winRate)}, avg win ${showR(s.avgWin)}, avg loss ${showR(s.avgLoss)}, payoff ${show(s.payoff)}, profit factor ${show(s.profitFactor)}, max drawdown ${showR(s.maxDrawdownR)}, longest losing streak ${show(s.longestLosingStreak)}, Sortino ${show(s.sortino)}, Sharpe ${show(s.sharpe)} (per trade, not annualized; R: the broker's round-trip R when it sends one, else P&L over the initial risk before fees; a win here is R > 0, which can differ from the scorecard's net result)`;
 }
 
 module.exports = { tradesOf, riskStats, riskText };
