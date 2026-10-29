@@ -418,7 +418,7 @@ const behaviour = text => (text.includes('LUCKY') ? 'lucky' : text.includes('BAD
 const stateOf = (b, i) => (b === 'lucky' ? (i % 2 || SC.halfOf(dayOfT(TIMES[i]), 3) === 'probe' ? 'right' : 'misread') : b === 'bad' ? 'misread' : b === 'good' || i % 2 || (b === 'some' && i < 16) ? 'right' : 'misread');
 const categoryOf = (b, i) => (b === 'bad' ? 'wrong-side entry' : b === 'good' || b === 'reason' || i % 2 ? 'right' : 'wrong stated reason');
 
-function world({ proposals, verdict = 'kept', loop: over = {}, trend = false, trendBatch = {}, exits = false, incompleteDay = null, claimed = null, curriculum = undefined } = {}) {
+function world({ proposals, verdict = 'kept', loop: over = {}, trend = false, trendBatch = {}, exits = false, incompleteDay = null, claimed = null, curriculum = undefined, entered = false } = {}) {
   const user = tmpDir();
   const env = { PATH: process.env.PATH, HOME: user, FTH_HOME: path.join(user, 'home') };
   fs.mkdirSync(env.FTH_HOME);
@@ -484,7 +484,9 @@ function world({ proposals, verdict = 'kept', loop: over = {}, trend = false, tr
       // A trend run (read under curriculum trend): only the moments it stepped, as the real step reads its own log.
       const stepped = TREND_RUN.test(path.basename(runDir)) ? store.recordedTimes(runDir) : null;
       // claimed: only the first that many moments carry a read of skill a (none: every one).
-      const decisions = TIMES.map((t, i) => ({ root: 'MNQ', bar: t, decision: 'passed', outcome: { R: 0 }, reads: claimed !== null && i >= claimed ? [] : [{ step: 'zone', skill: 'a', read: 'y', check: stateOf(b, i) === 'right', agrees: true }] })).filter(d => !stepped || stepped.has(d.bar));
+      // entered: every moment an entry (long), its R the exit stub's (EXITFIX in manage-position banks 1.5R, else 0.5R).
+      const fixR = exits && /EXITFIX/.test(fs.readFileSync(path.join(dir, MP), 'utf8')) ? 1.5 : 0.5;
+      const decisions = TIMES.map((t, i) => ({ root: 'MNQ', bar: t, ...(entered ? { decision: 'entered', side: 'long', outcome: { R: fixR } } : { decision: 'passed', outcome: { R: 0 } }), reads: claimed !== null && i >= claimed ? [] : [{ step: 'zone', skill: 'a', read: 'y', check: stateOf(b, i) === 'right', agrees: true }] })).filter(d => !stepped || stepped.has(d.bar));
       const wrong = decisions.filter(d => d.reads.length && !d.reads[0].check).length;
       return { decisions, usage: { skills: [{ skill: 'a', reads: 20, correct: 20 - wrong, wrong, available: 20, used: 20, relevant: 20, missed: 0, topRefusals: wrong ? [{ what: 'false: y', count: wrong }] : [], topMissed: [] }] }, records: [] };
     },
@@ -1226,14 +1228,33 @@ test('the round report: the mastery read (legs caught, R caught / available, con
   const c = report.trend.champion;
   assert.deepStrictEqual([c.blows, Object.keys(c.controls).sort()], [0, ['entries', 'falseStarts', 'share', 'unknown', 'windows']]);
   const m = rec.mastery.champion;
-  assert.deepStrictEqual([m.legs, m.caught, m.caughtShare, m.rCaught, m.rAvailable, m.blows], [c.ride.legs, c.ride.caught, c.ride.catchRate, c.ride.rCaught, c.ride.rAvailable, 0]);
+  assert.deepStrictEqual([m.legs, m.caught, m.caughtShare, m.rCaught, m.rAvailable, m.floorBreaches, m.keepRuleBlows], [c.ride.legs, c.ride.caught, c.ride.catchRate, c.ride.rCaught, c.ride.rAvailable, 0, null]);
   assert.strictEqual(m.rShare, Math.round((c.ride.rCaught / c.ride.rAvailable) * 10000) / 10000);
   assert.deepStrictEqual(m.controls, c.controls);
-  assert.deepStrictEqual([rec.mastery.composed.id, rec.mastery.composed.kept, rec.mastery.composed.blows], [report.composed.id, true, 0]);
+  // The stub keep rule scores no window: its combine blows unknown (n/a), never the trend runs' floor breaches.
+  assert.deepStrictEqual([rec.mastery.composed.id, rec.mastery.composed.kept, rec.mastery.composed.keepRuleBlows, rec.mastery.composed.floorBreaches], [report.composed.id, true, null, 0]);
+  assert.strictEqual(rec.mastery.composed.combinePass, null, 'the stub keep rule scores no window');
   assert.deepStrictEqual(rec.mastery.composed.controls, report.composed.trend.controls);
   const lines = IR.masteryLines(rec);
   assert.strictEqual(lines[0], '  Mastery read (iteration 1, curriculum trend, confirm half: held-out trend legs):');
-  assert.match(lines[1], /^ {4}champion: legs caught \d+(\.\d+)?% \(\d+ of \d+\), R caught \/ available [\d.]+% \([\d.-]+ \/ [\d.]+\), control false starts .*, blows 0$/);
+  assert.match(lines[1], /^ {4}champion: legs caught \d+(\.\d+)?% \(\d+ of \d+\), R caught \/ available [\d.]+% \([\d.-]+ \/ [\d.]+\), control false starts .*, combine pass rate n\/a \(not judged by the keep rule\), keep rule's combine blows n\/a \(not judged by the keep rule\), floor breaches in the trend runs 0$/);
   assert.match(lines[2], new RegExp(`^ {4}combined ${report.composed.id} \\(kept\\): legs caught 100% `));
   assert.deepStrictEqual(IR.masteryLines({ ...rec, mastery: null }), []);
+});
+
+test('curriculum trend: an exit edit\'s trades pair once, by their scored exits, never also by the same runs\' entered moments', async () => {
+  let w = null;
+  const exitEdit = () => {
+    const f = w.calls.proposeProbes[0].findings.find(x => x.kind === 'exit-decision');
+    return [{ tag: { skill: 'manage-position', finding: f.id, kind: 'rule' }, proposal: edit('- line one', '- line one\n- EXITFIX → hold the healthy pullback', { expects: 'fewer cut trends', edits: [{ file: MP, find: '- line one', replace: '- line one\n- EXITFIX → hold the healthy pullback' }] }) }];
+  };
+  w = world({ trend: true, exits: true, entered: true, curriculum: 'trend', proposals: exitEdit });
+  await run(w);
+  const report = JSON.parse(fs.readFileSync(path.join(w.paths.iter(1), 'probe-report.json'), 'utf8'));
+  const [p] = report.probes;
+  assert.strictEqual(p.target.measure, 'exit: R banked on the trades both sides opened');
+  // The trend runs' read sides hold entered moments (4 a probe day) beside the scored exits (EXIT_TRADES a day): only the exits pair.
+  const n = ROUND1.probe.days.length * EXIT_TRADES;
+  assert.deepStrictEqual([p.target.pairs, p.target.b, p.target.c], [n, n, 0], JSON.stringify(p.target));
+  assert.deepStrictEqual(p.target.unmatched, { champion: 0, probe: 0 });
 });

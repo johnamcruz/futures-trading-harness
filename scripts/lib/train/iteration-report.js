@@ -20,7 +20,9 @@
  *   rideLines(record)                 the round's "Trend catch & ride" block for status (none without a trend set)
  *   masteryLines(record)              the round's mastery read for status (none without a trend set): on the confirm half
  *                                     (held-out trend legs), the champion's and the combined change's legs caught,
- *                                     R caught / available, control-window false-start share and blows (curriculum.js);
+ *                                     R caught / available, control-window false-start share, the keep rule's combine
+ *                                     pass rate and blows (the combined change's, when the keep rule judged it) and the trend runs'
+ *                                     floor breaches (curriculum.js);
  *                                     the owner's bar on them is text (docs/TRAINING.md), never judged here
  */
 
@@ -58,10 +60,12 @@ function rideOf(r) {
 function masteryOf(r, kept) {
   const c = r.trend.champion;
   const t = r.composed && r.composed.trend ? r.composed.trend : null;
+  const judged = Boolean(t && kept && kept.proposalId === r.composed.id);
   return {
     curriculum: r.curriculum || CU.DEFAULT,
-    champion: c ? CU.mastery({ ride: c.ride, blows: c.blows, controls: c.controls }) : null,
-    composed: t ? { id: r.composed.id, kept: Boolean(kept && kept.verdict === 'kept'), ...CU.mastery({ ride: t.ride, blows: t.blows, controls: t.controls }) } : null,
+    champion: c ? CU.mastery({ ride: c.ride, floorBreaches: c.blows, controls: c.controls }) : null,
+    // The combined change's keep-rule blows: its archive entry's (the keep rule's verdict, rule (a)), when it was judged.
+    composed: t ? { id: r.composed.id, kept: Boolean(kept && kept.verdict === 'kept'), ...CU.mastery({ ride: t.ride, floorBreaches: t.blows, keepRuleBlows: judged ? CU.keepRuleBlows(kept) : null, keepRulePass: judged ? CU.keepRulePass(kept) : null, controls: t.controls }) } : null,
   };
 }
 

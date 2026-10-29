@@ -351,6 +351,8 @@ async function probeRound(ctx, { n, champion, api }) {
     const theirs = finished(side);
     return { champion: base.exits, probe: side.exits, stepMs: traderCfg.timeframe * 60000, done: [...finished(base)].filter(u => theirs.has(u)) };
   };
+  // Curriculum trend: the read sides are the same trend runs, so a trade pairs by its exit only (screen.js onlyTrend).
+  const exitsFor = (base, side) => (trendOnly ? { ...exitPairs(base, side), onlyTrend: true } : exitPairs(base, side));
   const report = { iteration: n, ...(trendOnly ? { curriculum: 'trend' } : {}), windows: cfg.windows, seed, cycles: { champion: {}, edits: {} } };
   // A half of the trend batch with no session (a one-day batch): nothing to screen on one and judge on the other.
   const trendEmpty = trend && (!split.probe.days.length || !split.confirm.days.length);
@@ -512,7 +514,7 @@ async function probeRound(ctx, { n, champion, api }) {
     const curated = trendOnly ? null : await sideData(`p-${e.id}`, tree.dir, share, 'probe');
     const ts = trendBase ? await trendSide(`p-${e.id}`, tree.dir, share, 'probe') : null;
     const side = trendOnly ? { side: ts.read.side, cycles: 0 } : curated;
-    const m = SC.measure(halfOf(base.side, 'probe'), halfOf(side.side, 'probe'), { skill: e.tag.skill || null, kind: e.finding.kind, exits: exitPairs(trendBase, ts) });
+    const m = SC.measure(halfOf(base.side, 'probe'), halfOf(side.side, 'probe'), { skill: e.tag.skill || null, kind: e.finding.kind, exits: exitsFor(trendBase, ts) });
     const rs = regBase ? await trendSide(`p-${e.id}`, tree.dir, share, 'regression') : null;
     const rm = rs ? TSC.measureTrend(regBase.side, rs.side) : null;
     const tm = ts ? TSC.measureTrend(trendBase.side, ts.side) : null;
@@ -562,7 +564,7 @@ async function probeRound(ctx, { n, champion, api }) {
     const champC = halfOf(confirmBase.side, 'confirm');
     const probeC = halfOf(side.side, 'confirm');
     // A read part beside a trend or an exit part is judged on harm only (screen.js composedScreen).
-    const s = SC.composedScreen(champC, probeC, parts.filter(p => p.finding.kind !== TF.KIND), { exits: exitPairs(trendConfirm, ts), trendParts: parts.filter(p => p.finding.kind === TF.KIND).length });
+    const s = SC.composedScreen(champC, probeC, parts.filter(p => p.finding.kind !== TF.KIND), { exits: exitsFor(trendConfirm, ts), trendParts: parts.filter(p => p.finding.kind === TF.KIND).length });
     // The curated measures and harms even when every part is a trend part (no curated target then).
     const cm = s.measures || SC.measure(champC, probeC, {});
     const rs = regBase ? await trendSide(`k-${cid}`, tree.dir, 1, 'regression') : null;

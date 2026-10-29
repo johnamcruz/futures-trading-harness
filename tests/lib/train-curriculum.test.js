@@ -109,17 +109,25 @@ test('control false starts: of the trades in finished control windows, the loser
 test('the mastery read: legs caught, R caught / available, control false starts, blows; masteryText; the report\'s lines', () => {
   const ride = { legs: 20, caught: 7, catchRate: 0.35, rCaught: 6, rAvailable: 50, rCaughtUnknown: 1, rAvailableUnknown: 0 };
   const controls = { windows: 9, entries: 5, falseStarts: 2, unknown: 1, share: 0.5 };
-  const m = CU.mastery({ ride, blows: 0, controls });
-  assert.deepStrictEqual(m, { legs: 20, caught: 7, caughtShare: 0.35, rCaught: 6, rAvailable: 50, rShare: 0.12, rUnknown: 1, controls, blows: 0 });
-  assert.strictEqual(CU.masteryText(m), 'legs caught 35% (7 of 20), R caught / available 12% (6 / 50, 1 unknown), control false starts 50% (2 of 4 known trade(s), 1 unknown, in 9 finished control window(s)), blows 0');
+  const m = CU.mastery({ ride, floorBreaches: 0, controls });
+  assert.deepStrictEqual(m, { legs: 20, caught: 7, caughtShare: 0.35, rCaught: 6, rAvailable: 50, rShare: 0.12, rUnknown: 1, controls, combinePass: null, keepRuleBlows: null, floorBreaches: 0 });
+  assert.strictEqual(CU.masteryText(m), 'legs caught 35% (7 of 20), R caught / available 12% (6 / 50, 1 unknown), control false starts 50% (2 of 4 known trade(s), 1 unknown, in 9 finished control window(s)), combine pass rate n/a (not judged by the keep rule), keep rule\'s combine blows n/a (not judged by the keep rule), floor breaches in the trend runs 0');
+  assert.match(CU.masteryText(CU.mastery({ ride, keepRuleBlows: 2, floorBreaches: 0, keepRulePass: { passed: 3, attempts: 8, rate: 0.375 } })), /combine pass rate 37\.5% \(3 of 8 of the keep rule's real attempts\), keep rule's combine blows 2, floor breaches in the trend runs 0$/);
   assert.deepStrictEqual(CU.mastery({ ride: { ...ride, rAvailable: 0 } }).rShare, null, 'no R available: no share');
-  assert.deepStrictEqual(CU.mastery({}), { legs: null, caught: null, caughtShare: null, rCaught: null, rAvailable: null, rShare: null, rUnknown: null, controls: null, blows: null });
-  assert.strictEqual(CU.masteryText(CU.mastery({})), 'legs caught n/a (? of ?), R caught / available n/a (? / ?), control false starts n/a (exits unknown), blows ?');
+  assert.deepStrictEqual(CU.mastery({}), { legs: null, caught: null, caughtShare: null, rCaught: null, rAvailable: null, rShare: null, rUnknown: null, controls: null, combinePass: null, keepRuleBlows: null, floorBreaches: null });
+  assert.strictEqual(CU.masteryText(CU.mastery({})), 'legs caught n/a (? of ?), R caught / available n/a (? / ?), control false starts n/a (exits unknown), combine pass rate n/a (not judged by the keep rule), keep rule\'s combine blows n/a (not judged by the keep rule), floor breaches in the trend runs ?');
   // The iteration record: the champion's confirm half and the combined change's, kept or not.
   const probeReport = { iteration: 2, curriculum: 'trend', trend: { set: 'f', batch: { index: 1, size: 4, trigger: 'start' }, probe: { days: [], legs: [] }, confirm: { days: [], legs: [] }, champion: { ride, blows: 0, controls, legs: 20, caught: 7, netR: 0, firstTry: null, sessions: 3 } }, composed: { id: 'c1', verdict: 'helped', trend: { ride: { ...ride, caught: 9, catchRate: 0.45, rCaught: 8 }, blows: 1, controls: null } } };
-  const rec = IR.build({ probeReport, entries: [{ iteration: 2, proposalId: 'c1', verdict: 'kept', composition: {} }] });
+  const rec = IR.build({ probeReport, entries: [{ iteration: 2, proposalId: 'c1', verdict: 'kept', composition: {}, model: { windows: [{ blows: { a: 4, b: 0 }, challenger: { attempts: 10, passed: 5 } }, { blows: { a: 1, b: 0 }, challenger: { attempts: 6, passed: 1 } }] } }] });
   assert.deepStrictEqual(rec.mastery.champion, m);
-  assert.deepStrictEqual([rec.mastery.curriculum, rec.mastery.composed.id, rec.mastery.composed.kept, rec.mastery.composed.caughtShare, rec.mastery.composed.rShare, rec.mastery.composed.blows], ['trend', 'c1', true, 0.45, 0.16, 1]);
+  // The combined change: its keep-rule blows from the archive (0: the challenger's), its trend runs' floor breach (1) apart.
+  assert.deepStrictEqual([rec.mastery.curriculum, rec.mastery.composed.id, rec.mastery.composed.kept, rec.mastery.composed.caughtShare, rec.mastery.composed.rShare, rec.mastery.composed.keepRuleBlows, rec.mastery.composed.floorBreaches], ['trend', 'c1', true, 0.45, 0.16, 0, 1]);
+  assert.strictEqual(IR.build({ probeReport, entries: [{ iteration: 2, proposalId: 'other', verdict: 'kept', composition: {}, model: { windows: [{ blows: { a: 0, b: 0 } }] } }] }).mastery.composed.keepRuleBlows, null, 'another proposal\'s verdict is never this change\'s');
+  assert.strictEqual(IR.build({ probeReport }).mastery.composed.keepRuleBlows, null, 'the keep rule did not run');
+  // Its combine pass rate: the challenger's real attempts pooled over the windows (6 of 16), the keep rule's alone.
+  assert.deepStrictEqual(rec.mastery.composed.combinePass, { passed: 6, attempts: 16, rate: 0.375 });
+  assert.strictEqual(rec.mastery.champion.combinePass, null, 'the champion: no keep-rule verdict of its own here');
+  assert.strictEqual(IR.build({ probeReport }).mastery.composed.combinePass, null);
   assert.deepStrictEqual(IR.masteryLines(rec), [
     '  Mastery read (iteration 2, curriculum trend, confirm half: held-out trend legs):',
     `    champion: ${CU.masteryText(m)}`,
@@ -131,4 +139,32 @@ test('the mastery read: legs caught, R caught / available, control false starts,
   assert.strictEqual(IR.build({ probeReport: { ...probeReport, curriculum: undefined } }).mastery.curriculum, 'all');
   assert.strictEqual(IR.build({ probeReport: { iteration: 1 } }).mastery, null);
   assert.deepStrictEqual(IR.masteryLines(IR.build({ probeReport: { iteration: 1 } })), []);
+});
+
+test('the exit screen under curriculum trend (onlyTrend): a trade entered at a moment and scored as an exit pairs once', () => {
+  const at = '2022-03-07T14:36:30.000Z';
+  const side = R => ({ decisions: [{ key: `MNQ|${Date.parse(at)}`, entered: true, side: 'long', R }], scorecard: [], usage: [], exitPlans: [] });
+  const trade = r => [{ root: 'MNQ', side: 'long', entryAt: at, unit: 'u1', r, peakR: 2, cls: r > 1 ? 'right' : 'cut', exitBy: 'model-exit', late: false }];
+  const exits = { champion: trade(0.5), probe: trade(1.5), stepMs: 180000, done: ['u1'] };
+  assert.strictEqual(SC.exitTargetTest(side(0.5), side(1.5), exits).pairs, 2, 'curriculum all: the curated moment and the trend exit are two sets');
+  const once = SC.exitTargetTest(side(0.5), side(1.5), { ...exits, onlyTrend: true });
+  assert.deepStrictEqual([once.pairs, once.b, once.c, once.unmatched], [1, 1, 0, { champion: 0, probe: 0 }]);
+});
+
+test('the keep rule\'s combine blows: the archive entry\'s windows (rule (a)), never the trend runs\' floor breaches', () => {
+  const entry = w => ({ proposalId: 'c1', verdict: 'rejected', model: { windows: w } });
+  assert.strictEqual(CU.keepRuleBlows(entry([{ blows: { a: 3, b: 1 } }, { blows: { a: 0, b: 2 } }])), 3);
+  assert.strictEqual(CU.keepRuleBlows(entry([{ blows: { a: 0, b: 0 } }])), 0);
+  assert.strictEqual(CU.keepRuleBlows(entry([{ blows: { a: 0, b: 0 } }, { label: 'x' }])), null, 'a window unscored: unknown');
+  assert.strictEqual(CU.keepRuleBlows(entry([])), null);
+  assert.strictEqual(CU.keepRuleBlows(null), null);
+});
+
+test('the keep rule\'s combine pass rate: the challenger\'s real attempts that passed, pooled over its windows; unknown when a window has none', () => {
+  const entry = w => ({ model: { windows: w } });
+  assert.deepStrictEqual(CU.keepRulePass(entry([{ challenger: { attempts: 20, passed: 9 } }, { challenger: { attempts: 5, passed: 1 } }])), { passed: 10, attempts: 25, rate: 0.4 });
+  assert.deepStrictEqual(CU.keepRulePass(entry([{ challenger: { attempts: 0, passed: 0 } }])), { passed: 0, attempts: 0, rate: null });
+  assert.strictEqual(CU.keepRulePass(entry([{ challenger: { attempts: 4, passed: 1 } }, { label: 'x' }])), null);
+  assert.strictEqual(CU.keepRulePass(entry([])), null);
+  assert.strictEqual(CU.keepRulePass(undefined), null);
 });

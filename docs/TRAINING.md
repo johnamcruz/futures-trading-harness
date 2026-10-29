@@ -897,9 +897,11 @@ The probe round learns in two stages, set by the loop config's
   control windows carry the entries made where there was nothing to catch),
   first tries and blows, the regression days, and the reads, process and R
   per decision of its trend runs. The combined change is judged on the
-  trend confirm half alone. A round skips the curated runs, the costliest
-  part of a round (about 25 to 30 hours) and the weakest test (about 12
-  relevant moments a half).
+  trend confirm half alone. An exit edit's trades pair once, by their
+  scored exits (`screen.js` `exitTargetTest` `onlyTrend`), never also by
+  the same runs' entered moments. A round skips the curated runs (in the
+  2026-10 loops, the costliest part of a round and the fewest relevant
+  moments a half).
 - **Stage 2, `"all"` (the default): learn on all days.** Today's round:
   the curated windows and, with `probe.trend`, the trend set beside them.
   A config without the key, or with `"all"`, is the same loop (the same
@@ -924,22 +926,49 @@ the curriculum and what each round replays.
 half (held-out trend legs: no edit was screened on them), the champion's
 and the combined change's: legs caught (caught of the legs in finished
 windows), R caught / R available, the control windows' false-start share,
-and blows. A false start is a trade that lost and whose best R never rose
+the keep rule's combine pass rate, and two counts that are not the same
+thing:
+
+- **the keep rule's combine pass rate**: the share of the combined
+  change's real combine attempts (each as long as the account's combine,
+  e.g. 30 sessions) that passed, the keep rule's primary measure, pooled over the keep rule's tuning windows, read
+  from its archive entry (`model.windows[].challenger`); n/a when the keep
+  rule did not judge it;
+- **the keep rule's combine blows**: the combined change's blows over the
+  keep rule's real attempts and resampled paths on the tuning windows
+  (`model-verifier.js` rule (a)), read from its archive entry; only a
+  combined change the keep rule judged has them (n/a otherwise);
+- **floor breaches in the trend runs**: the trend runs' own scorecard
+  decisions at or past the account's floor. Each trend run trades a fresh
+  attempt a day, never a combine, so this is not a blow count.
+
+A false start is a trade that lost and whose best R never rose
 above `config/training.json` `trendReport.falseStartPeakR` (0.5); the share
 is of the trades opened in finished control windows whose R and peak are
 known.
 
-**The mastery bar** (the owner's, pre-registered before any result; text,
-never code). Stage 1 is mastered when, on held-out trend legs, two kept
-rounds in a row each show:
+**The mastery bar** (set 2026-10-29 and confirmed by the owner, before
+the first trend-curriculum round's result; the owner switches the stage;
+text, never code). Stage 1
+is mastered when, on held-out trend legs, two kept rounds in a row each
+show:
 
 - legs caught at least 35%;
-- R caught / R available at least 12%;
+- R caught / R available at least 40%;
+- the 30-session combine pass rate at least 40%, from the keep rule's
+  model-scoring Monte Carlo (the share of attempts that pass, read from the
+  keep rule's verdict for the combined change);
 - the control-window false-start share not rising;
-- 0 blows.
+- 0 blows in the keep rule's combine.
 
-Moving from stage 1 to stage 2 stays the owner's decision. Code only
-reports the numbers; it never switches the curriculum.
+The final pass's criteria (R caught at least 12%, false-start share under
+40%, 0 dead trend sessions, the run-1 window passing plus a fresh window,
+0 blows) are separate, and still judge the whole stack afterwards.
+
+Moving from stage 1 to stage 2 stays the owner's decision. The bar is
+the owner's judgement, not code: no config key or check holds its numbers.
+The mastery read prints the measures; it decides nothing and never
+switches the curriculum.
 
 ### Trend capture
 

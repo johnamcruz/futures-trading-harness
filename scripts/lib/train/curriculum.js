@@ -14,7 +14,13 @@
  * config's: switching it is a new loop (a new loopId), never mid-loop.
  *
  * The round report's mastery read (the owner's pre-registered bar is text in docs/TRAINING.md, never code here): on a
- * side's confirm half, the legs caught, R caught / R available, the control windows' false starts, and the blows.
+ * side's confirm half, the legs caught, R caught / R available, the control windows' false starts, and two counts that
+ * are not the same thing: keepRuleBlows, the keep rule's combine blows (model-verifier.js rule (a): the challenger's
+ * real attempts and resampled paths over the tuning windows; only a combined change the keep rule judged has them), and
+ * floorBreaches, the trend runs' own scorecard decisions at or past the account's floor (each run a fresh attempt a day:
+ * never a combine). And the keep rule's combine pass rate (the challenger's real attempts that passed, pooled over the
+ * keep rule's windows: its archive entry's model.windows[].challenger), when the keep rule judged it. The read prints the
+ * measures; it decides nothing (the owner's bar is text in docs/TRAINING.md).
  * A false start: a trade that lost (R under 0) and whose best R (its peak) never rose above
  * config/training.json trendReport.falseStartPeakR. The control-window share: of the trades opened in control windows
  * (no leg there) the side stepped to their end, the false starts among those whose R and peak are known.
@@ -26,8 +32,13 @@
  *   readSideOf(parts)                         one side's runs merged: { side, skills, refusals } (as the curated side's)
  *   falseStarts(exits, { controls, sessions, peakR })   { windows, entries, falseStarts, unknown, share }, or null when
  *                                             the side's exits are unknown (exits: probe.js exitsOf's, each with its unit)
- *   mastery({ ride, blows, controls })        { legs, caught, caughtShare, rCaught, rAvailable, rShare, rUnknown,
- *                                             controls, blows } (ride: trend-screen.js rideOfSide's)
+ *   mastery({ ride, floorBreaches, keepRuleBlows, keepRulePass, controls })   { legs, caught, caughtShare, rCaught,
+ *                                             rAvailable, rShare, rUnknown, controls, combinePass, keepRuleBlows, floorBreaches } (ride: trend-screen.js
+ *                                             rideOfSide's; keepRuleBlows null when the keep rule did not judge it)
+ *   keepRulePass(entry)                       { passed, attempts, rate }: the challenger's combine attempts that passed,
+ *                                             pooled over the keep rule's windows, or null when a window has none
+ *   keepRuleBlows(entry)                      the challenger's blows over the keep rule's windows (its archive entry's
+ *                                             model.windows[].blows.b, as rule (a) sums them), or null when it has none
  *   masteryText(m)                            one line of it
  */
 
@@ -78,7 +89,22 @@ function falseStarts(exits, { controls = [], sessions = [], peakR }) {
   return { windows: units.size, entries: inControl.length, falseStarts: fs.length, unknown: inControl.length - known.length, share: known.length ? round4(fs.length / known.length) : null };
 }
 
-function mastery({ ride = null, blows = null, controls = null } = {}) {
+function keepRulePass(entry) {
+  const ws = entry && entry.model && Array.isArray(entry.model.windows) ? entry.model.windows : [];
+  const ok = c => c && Number.isInteger(c.attempts) && Number.isInteger(c.passed);
+  if (!ws.length || !ws.every(w => w && ok(w.challenger))) return null;
+  const passed = ws.reduce((s, w) => s + w.challenger.passed, 0);
+  const attempts = ws.reduce((s, w) => s + w.challenger.attempts, 0);
+  return { passed, attempts, rate: attempts ? round4(passed / attempts) : null };
+}
+
+function keepRuleBlows(entry) {
+  const ws = entry && entry.model && Array.isArray(entry.model.windows) ? entry.model.windows : [];
+  if (!ws.length || !ws.every(w => w && w.blows && num(w.blows.b) !== null)) return null;
+  return ws.reduce((s, w) => s + w.blows.b, 0);
+}
+
+function mastery({ ride = null, floorBreaches = null, keepRuleBlows: kb = null, keepRulePass: kp = null, controls = null } = {}) {
   const r = ride && typeof ride === 'object' ? ride : null;
   const rUnknown = r ? (r.rCaughtUnknown || 0) + (r.rAvailableUnknown || 0) : null;
   return {
@@ -90,7 +116,9 @@ function mastery({ ride = null, blows = null, controls = null } = {}) {
     rShare: r && num(r.rAvailable) && r.rAvailable > 0 && num(r.rCaught) !== null ? round4(r.rCaught / r.rAvailable) : null,
     rUnknown,
     controls: controls || null,
-    blows: num(blows),
+    combinePass: kp || null,
+    keepRuleBlows: num(kb),
+    floorBreaches: num(floorBreaches),
   };
 }
 
@@ -100,7 +128,7 @@ function masteryText(m) {
   if (!m) return 'n/a';
   const c = m.controls;
   const controls = c ? `${pct(c.share)} (${c.falseStarts} of ${c.entries - c.unknown} known trade(s), ${c.unknown} unknown, in ${c.windows} finished control window(s))` : 'n/a (exits unknown)';
-  return `legs caught ${pct(m.caughtShare)} (${m.caught === null ? '?' : m.caught} of ${m.legs === null ? '?' : m.legs}), R caught / available ${pct(m.rShare)} (${m.rCaught === null ? '?' : m.rCaught} / ${m.rAvailable === null ? '?' : m.rAvailable}${m.rUnknown ? `, ${m.rUnknown} unknown` : ''}), control false starts ${controls}, blows ${m.blows === null ? '?' : m.blows}`;
+  return `legs caught ${pct(m.caughtShare)} (${m.caught === null ? '?' : m.caught} of ${m.legs === null ? '?' : m.legs}), R caught / available ${pct(m.rShare)} (${m.rCaught === null ? '?' : m.rCaught} / ${m.rAvailable === null ? '?' : m.rAvailable}${m.rUnknown ? `, ${m.rUnknown} unknown` : ''}), control false starts ${controls}, combine pass rate ${m.combinePass ? `${pct(m.combinePass.rate)} (${m.combinePass.passed} of ${m.combinePass.attempts} of the keep rule's real attempts)` : 'n/a (not judged by the keep rule)'}, keep rule's combine blows ${m.keepRuleBlows === null ? 'n/a (not judged by the keep rule)' : m.keepRuleBlows}, floor breaches in the trend runs ${m.floorBreaches === null ? '?' : m.floorBreaches}`;
 }
 
-module.exports = { CURRICULA, DEFAULT, curriculumOf, readPart, readSideOf, falseStarts, mastery, masteryText };
+module.exports = { CURRICULA, DEFAULT, curriculumOf, readPart, readSideOf, falseStarts, keepRulePass, keepRuleBlows, mastery, masteryText };
