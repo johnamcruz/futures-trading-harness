@@ -3734,6 +3734,59 @@ test('trade_lifecycle in an attempt: the model\'s raw 1 is refused and order_pla
   assert.deepStrictEqual([ev1.args.size, 'translatedSize' in ev1.plan], [1, false]);
 });
 
+test('trade_lifecycle in an attempt, phase 2\'s cut (owner-approved 2026-10-28, prop/phase2-cut.js): on a healthy account the translated size goes too; in a drawdown, after a loss or in a streak only the cut; never above the translated size', () => {
+  // The translated 5 (the $300 cap at $56.74 all in); phase 2 approves 3 with no pacing rule named.
+  const p2 = text => JSON.stringify({ type: 'tool_use', timestamp: 1, sessionID: 's', part: { type: 'tool', tool: 'task', state: { status: 'completed', input: { subagent_type: 'risk-manager' }, output: text } } });
+  const run = (o, size, verdict = 'Size: 3\nVERDICT: APPROVE - size 3, risk $166.50') => {
+    const { home } = LCP.propHome({ size: 1, ...o });
+    const args = lcPropPlan(home);
+    const file = path.join(home, 'logs', 'cycle-transcript.jsonl');
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, [...ocSkills, ...ocRoles.slice(0, 4), p2(`${verdict}\nFACTS: none`)].join('\n'));
+    const r = lcPropEval(home, { ...args, size }, { config: { autonomous: true, cycle: 'full', cycleTranscript: file } });
+    return r.violations.filter(v => v.check === 'composed-reads' || v.check === 'phase2-size').map(v => `[${v.check}] ${v.message}`);
+  };
+  assert.strictEqual(lcPropPlan(LCP.propHome({ size: 1 }).home).size, 5);
+  // Healthy (the balance at the start and its peak, no loss today, no streak, far from the soft stop and the target):
+  // the translated 5 goes, and the cut 3 still goes; anything else is refused, 6 (over the translation) among them.
+  assert.deepStrictEqual(run({}, 5), []);
+  assert.deepStrictEqual(run({}, 3), []);
+  for (const n of [4, 6]) assert.ok(run({}, n).some(m => /^\[composed-reads\]/.test(m)), String(n));
+  assert.ok(run({}, 6).some(m => /^\[phase2-size\] size 6 is over the 3/.test(m)));
+  // In a drawdown (the balance $100 under the attempt's start): the cut alone; 5 is refused on both checks.
+  const dd = run({ balance: 49900 }, 5);
+  assert.ok(dd.some(m => /\[composed-reads\] .*size 5 is not 3, risk-manager phase 2's cut of the translated 5/.test(m)), JSON.stringify(dd));
+  assert.ok(dd.some(m => /\[phase2-size\] size 5 is over the 3/.test(m)));
+  assert.deepStrictEqual(run({ balance: 49900 }, 3), []);
+  // The attempt's facts can't be read (a read that throws): the cut phase 2 approved still goes; no restore.
+  const P2C = require('../../scripts/lib/prop/phase2-cut');
+  const real = P2C.cutFacts;
+  P2C.cutFacts = () => { throw new Error('the attempt record is unreadable'); };
+  try {
+    assert.deepStrictEqual(run({}, 3), []);
+    assert.ok(run({}, 5).some(m => /\[composed-reads\] .*size 5 is not 3/.test(m)));
+  } finally {
+    P2C.cutFacts = real;
+  }
+});
+
+test('trade_lifecycle in an attempt near the target (owner-approved 2026-10-28, sizing.near_target_usd): order_plan and the gate take the same floor; the full size is refused; far from it, as before', () => {
+  // The record suggests 1; the $300 cap at $56.74 all in is 5. The rulebook's floor 3 and a $500 band; the attempt's
+  // profit $2,600 (today's snapshot $52,600 on a $50,000 start, $3,000 target): needed $400, at or under the band.
+  const reg = LCP.registry({ sizing: testSizing({ min_contracts: 3, near_target_usd: 500 }) });
+  const planAt = h => composedOrder({ home: h, root: 'MNQ', side: 'long', now: LCP.NOW, cycleBars: { MNQ: LC.BAR }, strategy: LCP.LC_DOC, strategies: reg, accounts: [LCP.MINI], specOf: lcSpec, accountId: 1, selected: ['MNQ'] });
+  const near = LCP.propHome({ size: 1, balance: 52600 });
+  const o = planAt(near.home);
+  assert.deepStrictEqual([o.args.size, o.plan.translatedSize], [3, 3]);
+  assert.match(o.plan.translation, /near the target: the floor/);
+  assert.deepStrictEqual(lcPropEval(near.home, o.args, { registry: reg }).violations, [], 'the gate takes the floor');
+  const five = lcPropEval(near.home, { ...o.args, size: 5 }, { registry: reg });
+  assert.match(five.violations.find(v => v.check === 'composed-reads').message, /size 5 is not the translated size 3 \(.*near the target/);
+  // Needed $3,000 (at the start): the translated 5, as before.
+  const far = LCP.propHome({ size: 1 });
+  assert.strictEqual(planAt(far.home).args.size, 5);
+});
+
 test('trade_lifecycle: modify_order never reprices a working composed entry worse than its record\'s entry; better, stops, targets and exits move freely', () => {
   const home = require('../helpers').tmpDir();
   fs.writeFileSync(path.join(home, 'entry-orders.json'), JSON.stringify([

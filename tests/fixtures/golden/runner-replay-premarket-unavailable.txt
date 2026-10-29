@@ -494,9 +494,11 @@ Prior 4h low 21440.50: 49.50 pts = 198 ticks, $99.00, 4.40R (extended).
   Everything else (stop first, protective
    stop always working) still applies.
   The verdict is the most the account
-   allows, not what the moment deserves: after a loss, near
-   `daily_loss_soft` or one loss short of `loss_streak_stop`, size under it
-   or pass on anything marginal (`prop-challenge-pacing`).
+   allows, not what the moment deserves: after a loss, in a streak or
+   drawdown, or one loss from `daily_loss_soft` or the target, size under it
+   (`Size: <n> (<rule>)`) or pass.
+  A healthy account: a pass is a VETO, a
+   smaller size is placed at the verdict.
    In a prop attempt, the size you state is a suggestion: code translates it
    at entry to the rulebook's size (min_contracts and the budget); read the
    size it returns.
@@ -504,7 +506,6 @@ Prior 4h low 21440.50: 49.50 pts = 198 ticks, $99.00, 4.40R (extended).
   **Half size** wherever the priority order (strategy-library) halves a
    trade, computed as it says there.
   Never round a half up.
-  In a prop attempt the half is phase 2's cut of the translated size (never under min_contracts).
   A composed
    trade: `confluence-counting` sizes it, under the caps.
 8.

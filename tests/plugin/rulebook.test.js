@@ -99,6 +99,7 @@ function restatements(key, v) {
   if (key === 'drawdown_halve_usd') res.push(new RegExp(`${$} or more below`), new RegExp(`${$} below (?:its|the) peak`));
   if (key === 'daily_loss_soft') res.push(new RegExp(`-${$} for the day`), new RegExp(`soft[^.\\n]{0,40}${$}`, 'i'));
   if (key === 'floor_stretch_max_usd') res.push(new RegExp(`(?:floor|stretch)[^.\\n]{0,60}(?:up to|at most|within) ${$}`, 'i'), new RegExp(`${$}[^.\\n]{0,40}(?:if|while) (?:the attempt is )?healthy`, 'i'));
+  if (key === 'near_target_usd') res.push(new RegExp(`(?:target|pass)[^.\\n]{0,60}(?:within|under|at most) ${$}`, 'i'), new RegExp(`${$}[^.\\n]{0,40}(?:of|from|short of) the (?:target|pass)`, 'i'));
   if (key === 'loss_streak_stop') res.push(new RegExp(`(?:^|[^\\d.])${num} (?:losing trades|losses|losers) in a row[^\\n]{0,80}\\b(?:session|loss streak stop)`, 'i'));
   if (key === 'trail_activate_r') res.push(new RegExp(`(?:until|past|to|from) \\+${num}R\\b`));
   if (key === 'trail_giveback_r') res.push(new RegExp(`trail(?:s|ing)? ${num}R\\b`), new RegExp(`${num}R behind`));

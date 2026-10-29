@@ -50,7 +50,7 @@ function defaultSize({ cs, trade, sizing, legs, mode, ratio, fraction, limits = 
   });
   // The floor stretch as live: the rulebook's floor_stretch_max_usd, the attempt's health from its own state (cs) and the
   // day's losing trades so far (runAttempt's counters, as live reads the snapshot's day counts).
-  return limitPlan(plan, { limits, minContracts: sizing.min_contracts, ratio, miniRoot: legs.mini ? legs.mini.root : null, stretchUsd: sizing.floor_stretch_max_usd, state: { ...cs, lossesToday } });
+  return limitPlan(plan, { limits, minContracts: sizing.min_contracts, ratio, miniRoot: legs.mini ? legs.mini.root : null, stretchUsd: sizing.floor_stretch_max_usd, state: { ...cs, lossesToday }, nearTargetUsd: sizing.near_target_usd });
 }
 
 /**

@@ -755,7 +755,8 @@ strategy prop_portfolio: {
     "clock_k": 0,
     "r_per_session": 0.3,
     "min_contracts": 3,
-    "floor_stretch_max_usd": 500
+    "floor_stretch_max_usd": 500,
+    "near_target_usd": 500
   },
   "source": "harness design (the prop challenge as a strategy); the learned-rulebook design (to come) will tune its numbers",
   "status": "active",

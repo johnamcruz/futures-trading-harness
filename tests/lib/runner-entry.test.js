@@ -496,7 +496,7 @@ test('runEntry in a prop attempt: the record suggests 1, the order is the transl
   };
   // Phase 2's request names the translated 5 as the size to approve; phase 2 approving the size its request names: 5.
   let { s, r } = await run(request => `APPROVE - size ${/The entry's size is (\d+) MNQ/.exec(request)[1]}, risk $277.50`);
-  assert.match(s.calls[0].request, /The entry's size is 5 MNQ: code's translation of the record's suggested 1 under the account rulebook \(the rulebook's size at this stop: 5 MNQ \(risk.max_risk_usd \$300.00 at \$56.74 a contract all in\)\)\. Approve that size \(your VERDICT line's size 5\), or cut it, never under 3 MNQ \(a cut below it is 3, never a veto\); the record's size is a suggestion, never the one to approve\. State only the final size \(already floored\): "Size: <n>" alone, the arithmetic on the lines before; every size on the VERDICT and Size lines binds\./);
+  assert.match(s.calls[0].request, /The entry's size is 5 MNQ: code's translation of the record's suggested 1 under the account rulebook \(the rulebook's size at this stop: 5 MNQ \(risk.max_risk_usd \$300.00 at \$56.74 a contract all in\)\)\. Approve that size \(your VERDICT line's size 5\), or cut it only while a pacing rule holds, named on your Size line \("Size: <n> \(after-loss\|streak\|drawdown\|soft-stop\|target\)"\), never under 3 MNQ \(a cut below it is 3, never a veto\); on a healthy account \(none holds\) a cut is placed at 5; the record's size is a suggestion, never the one to approve\. State only the final size \(already floored\): "Size: <n>" alone \(a cut adds its rule\), the arithmetic on the lines before; every size on the VERDICT and Size lines binds\./);
   assert.deepStrictEqual([r.entry.outcome, r.entry.size], ['executed', { suggested: 1, translated: 5, approved: 5, record: 5, ordered: 5 }]);
   assert.strictEqual(JSON.parse(/built by the runner from this bar's compose record: (\{.*\})\. Send them as given/.exec(s.calls[1].request)[1]).size, 5);
   assert.match(s.journal[0].text, /size 5: phase 2 approved the translated 5 \(the record suggested 1\)/);
@@ -514,6 +514,52 @@ test('runEntry in a prop attempt: the record suggests 1, the order is the transl
     assert.deepStrictEqual(s.calls.map(c => c.role), ['phase2'], 'no trade-executor run: nothing sent');
     assert.deepStrictEqual(s.journal, [], 'no plan journaled');
   }
+});
+
+test('runEntry in a prop attempt, phase 2\'s cut (owner-approved 2026-10-28, prop/phase2-cut.js): on a healthy account a cut is placed at the translated size, a process note; after a loss, in a streak or a drawdown the cut is placed as stated; a veto is unchanged', async () => {
+  const P = require('../fixtures/lifecycle-prop');
+  const LC = require('../fixtures/lifecycle');
+  const prop = require('../../scripts/lib/trading/prop-state');
+  const { composedOrder } = require('../../scripts/lib/trading/lifecycle-order');
+  const strategies = P.registry({ sizing: require('../helpers').testSizing({ min_contracts: 3 }) });
+  const FACTS = 'FACTS: window opening drive; trend long allowed';
+  const p2 = text => ({ ok: true, timedOut: false, text, tools: ['harness_order_plan'], lookups: [], output: '' });
+  // `state`: the attempt's facts as the runner's snapshot holds them (prop-state seedAttempt); none: a healthy start.
+  const run = async (text, state = null) => {
+    const { home } = P.propHome({ size: 1 });
+    const plan = a => composedOrder({ home, root: 'MNQ', side: 'long', now: P.NOW, cycleBars: { MNQ: LC.BAR }, strategy: P.LC_DOC, strategies, accounts: [P.MINI], specOf: () => ({ tickSize: 0.25, tickValue: 0.5 }), accountId: 7, selected: ['MNQ'], size: a.size ?? null, approved: a.approved ?? null });
+    const s = setup({ roles: { phase2: p2(`${text}\n${FACTS}`) }, records: [record({ plan: { ...PLAN, size: 1 } })], plan, market: 21540.25 });
+    s.deps.accounts = [P.MINI];
+    if (state) prop.seedAttempt(s.home, P.MINI, { day: '2026-10-07', at: '2026-10-07T13:30:00Z', state: { days: [], peak: 50000, ...state } });
+    else prop.startAttempt(s.home, P.MINI, new Date(NOW.getTime() - 86400000));
+    prop.snapshot(s.home, P.MINI, state ? state.balance : 50000, new Date(NOW.getTime() - 30000));
+    const r = await E.runEntry(s.deps, s.cycle({ result: 'CYCLE RESULT: planned - trade_lifecycle long 1' }));
+    return { s, r };
+  };
+  const CUT = 'Size: 3\nVERDICT: APPROVE - size 3, risk $166.50';
+  // Healthy, no rule named: the translated 5 goes, the note in the entry record, the journal plan and the log.
+  let { s, r } = await run(CUT);
+  assert.deepStrictEqual([r.entry.outcome, r.entry.size.ordered, r.entry.cutRestored], ['executed', 5, { from: 3, to: 5, named: [], note: 'phase-2 cut 3 -> 5: no pacing rule applies', process: true }]);
+  assert.match(s.journal[0].text, /size 5: phase 2 approved the translated 5 \(the record suggested 1\); phase-2 cut 3 -> 5: no pacing rule applies/);
+  assert.ok(s.logs.some(l => /^warn the entry: phase-2 cut 3 -> 5: no pacing rule applies: a process note$/.test(l)), s.logs.join('\n'));
+  assert.strictEqual(JSON.parse(/built by the runner from this bar's compose record: (\{.*\})\. Send them as given/.exec(s.calls[1].request)[1]).size, 5);
+  // Healthy, a rule named whose condition is false: restored too, the rule kept in the note.
+  ({ r } = await run('Size: 3 (after-loss)\nVERDICT: APPROVE - size 3, risk $166.50'));
+  assert.deepStrictEqual([r.entry.size.ordered, r.entry.cutRestored.named], [5, ['after-loss']]);
+  // A loss today (a streak of 1, the balance under the start): the cut goes as stated, named or not.
+  for (const text of [CUT, 'Size: 3 (after-loss)\nVERDICT: APPROVE - size 3, risk $166.50']) {
+    ({ r } = await run(text, { balance: 49950, dayPnl: -50, tradesToday: 1, lossesToday: 1, lossStreak: 1 }));
+    assert.deepStrictEqual([r.entry.outcome, r.entry.size.ordered, r.entry.cutRestored], ['executed', 3, undefined], text);
+    assert.deepStrictEqual(r.entry.cut.held, ['after-loss', 'streak', 'drawdown']);
+  }
+  // A drawdown alone (yesterday's loss, nothing today): the cut stands.
+  ({ r } = await run(CUT, { days: [-300], balance: 49700, dayPnl: 0, tradesToday: 0, lossesToday: 0, lossStreak: 0 }));
+  assert.deepStrictEqual([r.entry.size.ordered, r.entry.cut.held], [3, ['drawdown']]);
+  // A veto: no trade, as before; an approval at the translated size: the size, no note.
+  ({ s, r } = await run('VERDICT: VETO - room: stand aside'));
+  assert.deepStrictEqual([r.entry.outcome, r.entry.cutRestored, s.calls.map(c => c.role)], ['vetoed', undefined, ['phase2']]);
+  ({ r } = await run('Size: 5\nVERDICT: APPROVE - size 5, risk $277.50'));
+  assert.deepStrictEqual([r.entry.size.ordered, r.entry.cutRestored, r.entry.cut], [5, undefined, undefined]);
 });
 
 test('runEntry: the live smoke\'s long (entry 13853.00, stop 13838.75) with the market at 13840.75 (86% of the risk toward the stop) is skipped late, never sent; the skip is logged with the plan\'s prices and the price', async () => {

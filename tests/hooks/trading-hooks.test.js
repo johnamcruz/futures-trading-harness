@@ -952,6 +952,31 @@ test('MCP gateway wiring: in a prop attempt the translated size passes composed-
   assert.strictEqual(text(exit.byId[3]), 'forwarded:tools/call:place_order');
 });
 
+test('order gate wiring, phase 2\'s cut on a healthy prop account (owner-approved 2026-10-28, prop/phase2-cut.js), in the hook: the translated 5 goes as well as the cut 3; any other size, or over 5, is refused; exits go', () => {
+  const home = tmpDir();
+  const w = composedPropWorld(home, 1);
+  const content = c => JSON.stringify({ type: 'assistant', message: { content: [c] } });
+  const role = (id, subagent_type, text) => [content({ type: 'tool_use', id, name: 'Task', input: { subagent_type, prompt: 'p' } }),
+    JSON.stringify({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: id, content: text }] } })];
+  const cycle = p2 => ['market-structure-analyst', 'trend-momentum-analyst', 'volume-liquidity-analyst', 'risk-manager'].flatMap((t, i) => role(`a${i}`, t, 'report')).concat(role('p2', 'risk-manager', p2)).join('\n');
+  // An autonomous cycle reads no test clock: the replay broker's clock at the scenario's time.
+  const { env, dir } = setup([{ ts: '2026-10-07T13:59:30.000Z', kind: 'plan', contractId: 'MNQ', text: 'plan' }], { FTH_HOME: home, ...w.env, FTH_AUTONOMOUS: '1', FTH_ROLE_SKILLS: 'full', FTH_CYCLE: 'full', FTH_REPLAY_NOW: w.env.FTH_TEST_NOW });
+  simBroker(env);
+  const transcript = path.join(dir, 'session.jsonl');
+  const hook = (n, p2 = 'Size: 3\nVERDICT: APPROVE - size 3, risk $166.50') => { fs.writeFileSync(transcript, cycle(`${p2}\nFACTS: none`)); return gate({ ...orderPayload(w.order(n)), transcript_path: transcript }, env).stderr; };
+  const sizeChecks = s => (s.match(/\[(composed-reads|phase2-size)\][^\n]*/g) || []);
+  for (const n of [5, 3]) assert.deepStrictEqual(sizeChecks(hook(n)), [], String(n));
+  assert.match(sizeChecks(hook(4)).join(), /\[composed-reads\] setup:trade_lifecycle: size 4 is not 3, risk-manager phase 2's cut of the translated 5/);
+  const six = sizeChecks(hook(6)).join();
+  assert.ok(/\[composed-reads\]/.test(six) && /\[phase2-size\] size 6 is over the 3/.test(six), six);
+  // An approval of the translated 5 itself: 5 goes, 3 is no cut of it.
+  assert.deepStrictEqual(sizeChecks(hook(5, 'Size: 5\nVERDICT: APPROVE - size 5, risk $277.50')), []);
+  assert.match(sizeChecks(hook(3, 'Size: 5\nVERDICT: APPROVE - size 5, risk $277.50')).join(), /size 3 is not the translated size 5/);
+  fs.writeFileSync(transcript, cycle('Size: 3\nVERDICT: APPROVE - size 3\nFACTS: none'));
+  const exit = gate({ ...orderPayload({ ...EXIT_BASE, contractId: 'MNQ', side: 'sell', size: 1, rationale: '[exit] close the prop_portfolio long' }), transcript_path: transcript }, env);
+  assert.strictEqual(exit.code, 0, exit.stderr);
+});
+
 test('order gate: an entry tagged with a retired strategy is refused, saying so; its exit goes; a retired runner lane refuses even a manual entry', () => {
   const { env } = setup([{ ts: minutesAgo(5, new Date(TEST_NOW)), kind: 'plan', contractId: 'MNQ', text: 'plan' }]);
   const old = gate(orderPayload({ ...ORDER, rationale: 'setup:bos long, stop 21480' }), env);

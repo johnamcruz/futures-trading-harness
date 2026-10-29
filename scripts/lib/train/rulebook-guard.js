@@ -37,6 +37,7 @@ const DIRECTION = Object.freeze({
   stop_slippage_ticks: 'higher', // a stop's expected slippage counted in the risk: more is stricter
   min_contracts: 'higher', // the floor of contracts: a higher one skips sooner (never sizes past the budget)
   floor_stretch_max_usd: 'lower', // dollars the floor may risk over a composed cap while healthy: less is stricter
+  near_target_usd: 'higher', // the floor once a pass needs this or less: a wider band trades the floor sooner
 });
 /** Limits whose `off` is the strictest value, not the loosest (off: no floor stretch at all): compared as 0. */
 const OFF_STRICTEST = Object.freeze(['floor_stretch_max_usd']);

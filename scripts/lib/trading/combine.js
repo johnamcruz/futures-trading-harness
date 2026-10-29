@@ -14,6 +14,8 @@
  *   budget(s, sizing)               dollars a new trade may risk (sizing: a policy's rulebook entry, every key; else 0)
  *   sizingErrors(z), requireSizing(z)  what a sizing lacks (SIZING_KEYS: no code default)
  *   attemptFacts(s, counts)         the attempt line's further facts (room to the limits, today's counts, consistency)
+ *   neededOf(s), toTarget(s), nearTarget(s, sizing)   the profit a pass still needs (consistency included); the
+ *                                   profit to the target alone; that at or under sizing.near_target_usd (a trade: the floor)
  *   contracts(budget, riskPerContract, max, guard, room)
  *
  * The floor (max_loss_mode trailing_eod) trails the highest end-of-day
@@ -46,8 +48,11 @@
  *   floor_stretch_max_usd  > 0: where a composed strategy's risk.max_risk_usd fits fewer than the floor, exactly the
  *                       floor may go when it risks at most this all in and the attempt is healthy (0: none, the rulebook's
  *                       `off`); prop/size-translate.js floorStretch, the one rule (never read here)
+ *   near_target_usd     > 0: once the profit a pass still needs is at most this, a trade is the floor (min_contracts),
+ *                       never more (owner-approved 2026-10-28; 0: off, the rulebook's `off`); nearTarget below, applied
+ *                       by prop/size-translate.js (translateSize, limitPlan), the one place a prop size is set
  */
-const SIZING_KEYS = Object.freeze(['cushion_frac', 'cap_usd', 'clock_k', 'r_per_session', 'min_size_guard', 'drawdown_halve_usd', 'stop_slippage_ticks', 'min_contracts', 'floor_stretch_max_usd']);
+const SIZING_KEYS = Object.freeze(['cushion_frac', 'cap_usd', 'clock_k', 'r_per_session', 'min_size_guard', 'drawdown_halve_usd', 'stop_slippage_ticks', 'min_contracts', 'floor_stretch_max_usd', 'near_target_usd']);
 /**
  * The floor under a stop's expected slippage: the schema's (rulebook.js refuses less), not a value. A missing or
  * smaller slippage only ever sizes the same or down. The backtester's fill slippage (engine.js DEFAULTS.slippageTicks)
@@ -324,6 +329,26 @@ function summary(s) {
  *                   (pct x profit / (1 - pct), today counted in the profit); null otherwise
  *   needed          profit still needed to pass, consistency included
  */
+/** The profit a pass still needs (consistency included), never under 0: attemptFacts' `needed`. */
+const neededOf = s => round2(Math.max(0, profitNeeded(s, [...s.days, s.dayPnl]) - profit(s)));
+
+/**
+ * The profit to the target alone, never under 0: the owner plans against the profit target and leaves the consistency
+ * rule to the account (its best-day term is neededOf's, never this).
+ */
+const toTarget = s => round2(Math.max(0, s.target - profit(s)));
+
+/**
+ * Near the target: the policy's sizing.near_target_usd (0: off) at or above the profit to the target (toTarget).
+ * false without a band or a readable state (days, dayPnl, target).
+ */
+function nearTarget(s, sizing) {
+  const band = sizing && sizing.near_target_usd;
+  if (!(typeof band === 'number' && Number.isFinite(band) && band > 0) || !s || !Array.isArray(s.days) || !Number.isFinite(s.dayPnl) || !Number.isFinite(s.target)) return false;
+  const n = toTarget(s);
+  return Number.isFinite(n) && n <= band + 1e-9;
+}
+
 function attemptFacts(s, { tradesToday = null, lossesToday = null, lossStreak = null } = {}) {
   const p = profit(s);
   const before = p - s.dayPnl;
@@ -336,7 +361,7 @@ function attemptFacts(s, { tradesToday = null, lossesToday = null, lossStreak = 
     tradesToday: count(tradesToday), lossesToday: count(lossesToday), lossStreak: count(lossStreak),
     day: s.days.length + 1, sessions: s.sessions, sessionsLeft: sessionsLeft(s),
     consistencyCap: c > 0 && c < 1 && before > 0 ? round2((c * before) / (1 - c)) : null,
-    needed: round2(Math.max(0, profitNeeded(s, [...s.days, s.dayPnl]) - p)),
+    needed: neededOf(s),
   };
 }
 
@@ -346,6 +371,6 @@ const sessionsText = m => (m.sessionsLeft > 0 || m.status !== 'active'
   : `${m.sessionsDone} sessions done, past the training length (the attempt runs on until it passes or blows)`);
 
 module.exports = {
-  SIZING_KEYS, MIN_STOP_SLIPPAGE_TICKS, sizingErrors, requireSizing, CONTRACT_MODES, start, applyClose, streakAfter, touches, blow, dailyBreached, endDay, entryBlock, budget, contracts, contractPlan, floorReason, room, summary, attemptFacts,
+  SIZING_KEYS, MIN_STOP_SLIPPAGE_TICKS, sizingErrors, requireSizing, CONTRACT_MODES, start, applyClose, streakAfter, touches, blow, dailyBreached, endDay, entryBlock, budget, contracts, contractPlan, floorReason, room, summary, attemptFacts, neededOf, toTarget, nearTarget,
   profit, cushion, sessionsLeft, profitNeeded, sessionsText,
 };

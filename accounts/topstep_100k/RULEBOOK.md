@@ -20,6 +20,7 @@ policies:                       # each policy strategy that trades this account 
       r_per_session: 0.3        # the R a session is expected to make, for clock_k
       min_contracts: 3          # the floor: fewer micro-equivalents than this (a mini counts as 10) at the stop is a skip
       floor_stretch_max_usd: 500  # the composed cap fits fewer than the floor: exactly the floor, at most this all in, while the attempt is healthy
+      near_target_usd: 500      # once the target is this much profit away or less, a trade is the floor (min_contracts), never more; off: full size to the target
     exit:
       mode: target_then_trail   # target: out at the trade's own target; target_then_trail: past it, trailed; trail: the R trail below, no target
       trail_activate_r: off     # mode trail (or a trail on top of target): hold the stop until this many R ...
@@ -193,6 +194,16 @@ the gate (`[max-risk]` takes exactly the stretched floor, nothing else
 over the cap) and the backtester and the attempt simulator apply the one
 rule (`prop/size-translate.js` `floorStretch`). `off` turns it off. It
 never asks for a wider stop: the stop is the record's.
+
+**Near the target.** `near_target_usd` (owner-approved 2026-10-28) is part
+of `sizing`, so it is `enforced`: once the profit to the target (the
+target alone: the consistency rule is the account's) is at most this, a trade is the floor
+(`min_contracts`, in the order's own contracts), never more and never above
+the verdict; the floor rules hold as everywhere (one that doesn't fit the
+cap is the floor stretch's, else a skip). The size translation, the gate
+and the attempt simulator and backtester apply it (`combine.js`
+`nearTarget`, `prop/size-translate.js`), and phase 2's `target` cut reads
+the same band (`prop/phase2-cut.js`). `off` turns it off.
 
 **The entry rule.** `entry` (`scripts/lib/trading/entry-rule.js`) holds
 the owner's top-down flow on a composed entry ("We stick to our top down

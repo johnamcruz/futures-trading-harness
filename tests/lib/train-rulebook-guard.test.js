@@ -105,7 +105,7 @@ test('every key\'s direction: the looser way is refused and the stricter way pas
     assert.match(G.loosenings(at(k, 10), at(k, looser)).join(), new RegExp(`${k}: 10 -> ${looser} is looser`), `${k}: 10 -> ${looser}`);
   }
   // Pinned, so a flipped direction fails here.
-  assert.deepStrictEqual(G.DIRECTION, { daily_loss_soft: 'lower', loss_streak_stop: 'lower', cushion_frac: 'lower', cap_usd: 'lower', clock_k: 'lower', r_per_session: 'higher', min_size_guard: 'lower', drawdown_halve_usd: 'lower', stop_slippage_ticks: 'higher', min_contracts: 'higher', floor_stretch_max_usd: 'lower' });
+  assert.deepStrictEqual(G.DIRECTION, { daily_loss_soft: 'lower', loss_streak_stop: 'lower', cushion_frac: 'lower', cap_usd: 'lower', clock_k: 'lower', r_per_session: 'higher', min_size_guard: 'lower', drawdown_halve_usd: 'lower', stop_slippage_ticks: 'higher', min_contracts: 'higher', floor_stretch_max_usd: 'lower', near_target_usd: 'higher' });
 });
 
 test('the floor stretch: off is its strictest value (no stretch at all), never the loosest; a stretch turned on or raised is refused', () => {

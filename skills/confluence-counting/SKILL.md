@@ -25,7 +25,7 @@ ceiling; the against sets the size:
   location against (the trigger into the other side's level), or a 3m
   close beyond the leg's 15m swing (`m3.htfLevels` `brokenAt`). Closed
   back inside, it is a sweep (`breakout-vs-fakeout`): liquidity for.
-  In a prop attempt the half is phase 2's cut of the translated size (never under min_contracts).
+  In a prop attempt the translated size is full; phase 2 cuts it only on a pacing rule.
 - **Minor** → full size, never a reason not to compose: thin volume, the
   first level ahead, VWAP distance or "chasing" (no edge in the census),
   no pullback yet, mixed reads.
