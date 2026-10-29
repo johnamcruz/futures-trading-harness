@@ -51,9 +51,10 @@
  *   verdictLine(text)        phase 2's decisive VERDICT line (roles-ran.js decisiveLine), never a heading
  *   entryOutcome({ ... })    { outcome, result, why } from the after-order facts
  *   runEntry(deps, cycle)    null (the result isn't `planned`: nothing for the runner) or { result, entry }
- *     deps:  { workflow, runRole, client, home, cfg, root, env, log, wallNow, now, perRoleMs, childEnv, lookups, orderPlan, accounts }
+ *     deps:  { workflow, runRole, client, home, cfg, root, env, log, wallNow, now, perRoleMs, childEnv, lookups, orderPlan, accounts, strategies }
  *            (`orderPlan`: harness-tools/order-plan.js plan, the order_plan tool's own operation; a test's stand-in;
- *            `accounts`: the account profiles, accounts.js loadAccounts by default, for phase 2's cut check)
+ *            `accounts`, `strategies`: the account profiles and the strategies, accounts.js loadAccounts and
+ *            strategies.js loadStrategies by default, for phase 2's cut check)
  *     cycle: { result, output, headEnv, symbol, contractId, bar, bars, at, accountId, context, rolesFile, reports, budgetMs,
  *              startedWall (the wall ms the head trader's run began) }
  *   The cycle log's `entry.timing`: barClose, headMs (bar close to the head trader's planned), phase2Ms, executorMs,
@@ -454,7 +455,9 @@ async function runEntry(deps, c) {
       try {
         const names = require('./trading/prop-state').runningAttempts(home);
         const acct = names.length === 1 ? (deps.accounts || require('./trading/accounts').loadAccounts(root, roleEnv).accounts).find(a => a.name === names[0] && a.valid !== false) || null : null;
-        facts = P2C.cutFacts({ home, account: acct, now: now() });
+        // The policy that trades the attempt's account (its rulebook's near-target band, sizing.near_target_usd).
+        const policy = acct ? (deps.strategies || require('./trading/strategies').loadStrategies(root, roleEnv).strategies).find(x => x && x.valid !== false && x.signal === 'policy' && x.account === acct.name) || null : null;
+        facts = P2C.cutFacts({ home, account: acct, policy, now: now() });
       } catch (err) {
         log(`the entry: the attempt's facts for phase 2's cut can't be read (${err.message}): the cut stands`, 'warn');
       }

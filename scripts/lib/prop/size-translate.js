@@ -34,7 +34,8 @@
  */
 
 const prop = require('../trading/prop-state');
-const { MIN_STOP_SLIPPAGE_TICKS } = require('../trading/combine');
+const combine = require('../trading/combine');
+const { MIN_STOP_SLIPPAGE_TICKS } = combine;
 const { feePerSide: feePerSideOf } = require('../trading/accounts');
 
 const usd = x => `$${Number(x).toFixed(2)}`;
@@ -113,16 +114,21 @@ const stretchOf = policy => (policy && policy.sizing && Number.isFinite(policy.s
  * own contract at its all-in risk (the plan's riskPerContract: the stop, the slippage ticks and the fees, as live), then
  * held to the floor again (micro-equivalents: a mini counts as `ratio`), with the floor stretch as live (floorStretch:
  * `stretchUsd`, the rulebook's sizing.floor_stretch_max_usd; `state`, the simulated attempt's combine state with its lossesToday; the
- * budget's size and the broker's max its other limits). The plan, smaller, or null (under the floor: a skip).
+ * budget's size and the broker's max its other limits), and near the target (`nearTargetUsd`, the rulebook's
+ * sizing.near_target_usd: combine.nearTarget on `state`) at most the floor, as live. The plan, smaller, or null (under
+ * the floor: a skip).
  * limits: { capUsd, orderMax }.
  */
-function limitPlan(plan, { limits = null, minContracts = 1, ratio, miniRoot = null, stretchUsd = null, state = null }) {
-  if (!plan || !limits) return plan;
-  const caps = capsOf({ capUsd: limits.capUsd, perContract: plan.riskPerContract, orderMax: limits.orderMax });
-  const size = Math.min(plan.size, ...caps.map(c => c[0]));
+function limitPlan(plan, { limits = null, minContracts = 1, ratio, miniRoot = null, stretchUsd = null, state = null, nearTargetUsd = 0 }) {
+  if (!plan) return plan;
   const each = plan.root === miniRoot ? ratio : 1;
+  // Near the target (the rulebook's sizing.near_target_usd, combine.nearTarget on the attempt's state): the floor, never more.
+  const top = combine.nearTarget(state, { near_target_usd: nearTargetUsd }) ? Math.min(plan.size, Math.ceil(minContracts / each)) : plan.size;
+  if (!limits) return top === plan.size ? plan : { ...plan, size: top };
+  const caps = capsOf({ capUsd: limits.capUsd, perContract: plan.riskPerContract, orderMax: limits.orderMax });
+  const size = Math.min(top, ...caps.map(c => c[0]));
   if (size >= 1 && size * each >= minContracts) return size === plan.size ? plan : { ...plan, size };
-  const others = Math.min(plan.size, ...(Number.isInteger(limits.orderMax) && limits.orderMax >= 1 ? [limits.orderMax] : []));
+  const others = Math.min(top, ...(Number.isInteger(limits.orderMax) && limits.orderMax >= 1 ? [limits.orderMax] : []));
   const st = floorStretch({ floor: Math.ceil(minContracts / each), perContract: plan.riskPerContract, capUsd: limits.capUsd, stretchUsd, allows: others, state });
   return st && st.size ? { ...plan, size: st.size } : null;
 }
@@ -144,6 +150,10 @@ function translateSize({ suggested = null, home, root, policy, account, verdict,
     [verdict.maxSize, `the verdict's ${verdict.maxSize}`],
     [b.size, `the size budget's ${b.size}`],
   ];
+  // Near the target (owner-approved 2026-10-28): the floor, never more (the rulebook's sizing.near_target_usd at or
+  // above what a pass still needs, from the attempt's snapshot: combine.nearTarget). It only ever lowers the size.
+  const near = combine.nearTarget(liveState(home, account), policy && policy.sizing) ? prop.minContractsIn(policy, account, root, specOf) : null;
+  if (Number.isInteger(near)) others.push([near, `near the target: the floor (sizing.near_target_usd ${usd(policy.sizing.near_target_usd)})`]);
   const caps = [...others, ...capsOf({ capUsd, perContract, orderMax })];
   const size = Math.min(...caps.map(c => c[0]));
   const binds = caps.filter(c => c[0] === size).map(c => c[1]).join(', ');

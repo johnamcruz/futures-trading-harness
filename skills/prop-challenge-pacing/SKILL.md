@@ -51,7 +51,7 @@ it:
     next entry is the day's last.
   - A stop would take most of the day's room, or headroom is spent: done for
     the day. Headroom is a cap, not a target.
-  - Near the target: smaller or none; never risk the day the pass depends on.
+  - Near the target (`sizing.near_target_usd`): code trades the floor; never risk the day the pass depends on.
 - The harness tool `combine_status` shows the balance, floor, cushion,
   profit, sessions left, the size budget in dollars, whether entries are
   blocked, and each policy strategy's live verdict. Read it before planning;

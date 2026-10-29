@@ -18,7 +18,8 @@
  *               trailing max loss; the verdict's drawdown halving reads the same peak, combine.budget)
  *   soft-stop   one loss at the translated size reaches daily_loss_soft or the daily limit (softRoom or dailyRoom at or
  *               under its risk)
- *   target      the profit the pass still needs is at most one loss at the translated size (near the target: smaller)
+ *   target      near the target: the profit the pass still needs at most the policy's sizing.near_target_usd (the
+ *               band the size translation trades the floor in: combine.nearTarget; off: never)
  *
  * Facts that can't be read (no snapshot, today's counts unknown) are no healthy account: the cut stands. Only a cut on a
  * healthy account (no rule holds) is restored to the translated size, never more: it is a process note, never a refusal.
@@ -26,7 +27,8 @@
  *
  *   RULES                         the rule names, in the order above
  *   namedRules(text, size)        the rules named on line-start Size lines stating exactly `size`
- *   cutFacts({ home, account, now })   the facts above, or null (no attempt or no snapshot)
+ *   cutFacts({ home, account, policy, now })   the facts above (with the policy's near-target band), or null (no
+ *                                 attempt or no snapshot)
  *   rulesHolding(facts, riskUsd)  the rules whose condition holds ('unknown' for facts that can't be read)
  *   phase2Cut({ approved, base, facts, riskUsd, named })
  *       { size, cut: false } | { size: approved, cut: true, held, named } | { size: base, cut: true, restored: { from, to, named, note } }
@@ -51,7 +53,7 @@ function namedRules(text, size) {
 const num = x => typeof x === 'number' && Number.isFinite(x);
 const count = x => (Number.isInteger(x) && x >= 0 ? x : null);
 
-function cutFacts({ home, account, now = new Date() }) {
+function cutFacts({ home, account, policy = null, now = new Date() }) {
   if (!home || !account || account.valid === false) return null;
   const prop = require('../trading/prop-state');
   const combine = require('../trading/combine');
@@ -60,7 +62,8 @@ function cutFacts({ home, account, now = new Date() }) {
   const cs = prop.stateFrom(account, r, r.snapshot.balance);
   const streak = prop.sessionLossStreak(home, account, now);
   const f = combine.attemptFacts(cs, { ...prop.attemptCounts(r, now), lossStreak: streak ? streak.count : null });
-  return { balance: cs.balance, start: cs.start, peak: cs.peak, lossesToday: f.lossesToday, lossStreak: f.lossStreak, softRoom: f.softRoom, dailyRoom: f.dailyRoom, needed: f.needed };
+  const band = policy && policy.sizing ? policy.sizing.near_target_usd : null;
+  return { balance: cs.balance, start: cs.start, peak: cs.peak, lossesToday: f.lossesToday, lossStreak: f.lossStreak, softRoom: f.softRoom, dailyRoom: f.dailyRoom, needed: f.needed, nearTargetUsd: num(band) ? band : null };
 }
 
 function rulesHolding(facts, riskUsd) {
@@ -75,7 +78,7 @@ function rulesHolding(facts, riskUsd) {
     streak: streak >= 1,
     drawdown: f.balance < f.start || f.balance < f.peak,
     'soft-stop': within(f.softRoom) || within(f.dailyRoom),
-    target: num(f.needed) && f.needed > 0 && f.needed <= riskUsd,
+    target: num(f.needed) && num(f.nearTargetUsd) && f.nearTargetUsd > 0 && f.needed <= f.nearTargetUsd + 1e-9,
   };
   return RULES.filter(k => held[k]);
 }

@@ -430,7 +430,7 @@ function evaluateOrder({ input = {}, entries = [], now = new Date(), config, bla
     // translated size goes too, never more (owner-approved 2026-10-28); the facts are the runner's latest snapshot.
     const P2C = require('../prop/phase2-cut');
     const cutAccount = translate ? accounts.find(a => a.name === named.account) || null : null;
-    const cutCheck = translate ? ({ approved, base, riskUsd }) => P2C.phase2Cut({ approved, base, riskUsd, facts: P2C.cutFacts({ home: config.home, account: cutAccount, now }) }) : null;
+    const cutCheck = translate ? ({ approved, base, riskUsd }) => P2C.phase2Cut({ approved, base, riskUsd, facts: P2C.cutFacts({ home: config.home, account: cutAccount, policy: named, now }) }) : null;
     composedCheck = composedRefusal({ name: composed, strategy: doc, home: config.home, root: contractRoot(input.contractId), input, now, cycleBars: { ...(config.cycleBars || {}), ...(config.cycleBriefingBars || {}) }, entries, specOf, approvedSize: p2Size(), translate, entryRule, cutCheck,
       // The setups its record may cite (strategies.js citedSetups): no registry, none (a cited record is refused).
       cited: strategies ? citedSetups(strategies, composed) : null });

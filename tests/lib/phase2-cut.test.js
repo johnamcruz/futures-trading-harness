@@ -11,9 +11,9 @@ const combine = require('../../scripts/lib/trading/combine');
 const { translateSize } = require('../../scripts/lib/prop/size-translate');
 const { trendHome, testSizing } = require('../helpers');
 
-// Healthy: the balance at the start and its peak, no loss today, no streak, $500 to the soft stop, $1,000 to the daily
-// limit and $3,000 to the target, all over the translated size's $277.50 risk.
-const HEALTHY = Object.freeze({ balance: 50000, start: 50000, peak: 50000, lossesToday: 0, lossStreak: 0, softRoom: 500, dailyRoom: 1000, needed: 3000 });
+// Healthy: the balance at the start and its peak, no loss today, no streak, $500 to the soft stop and $1,000 to the
+// daily limit, over the translated size's $277.50 risk, and $3,000 to the target, over a $500 near-target band.
+const HEALTHY = Object.freeze({ balance: 50000, start: 50000, peak: 50000, lossesToday: 0, lossStreak: 0, softRoom: 500, dailyRoom: 1000, needed: 3000, nearTargetUsd: 500 });
 const RISK = 277.5;
 const facts = (o = {}) => ({ ...HEALTHY, ...o });
 
@@ -38,10 +38,12 @@ test('rulesHolding: each pacing rule holds only when its condition does; a healt
   assert.deepStrictEqual(C.rulesHolding(facts({ softRoom: 277.75 }), RISK), []);
   assert.deepStrictEqual(C.rulesHolding(facts({ softRoom: null, dailyRoom: 200 }), RISK), ['soft-stop'], 'the daily limit too');
   assert.deepStrictEqual(C.rulesHolding(facts({ softRoom: null, dailyRoom: null }), RISK), [], 'no limits: none near');
-  assert.deepStrictEqual(C.rulesHolding(facts({ needed: 200 }), RISK), ['target']);
-  assert.deepStrictEqual(C.rulesHolding(facts({ needed: 277.5 }), RISK), ['target'], 'one loss from the target');
-  assert.deepStrictEqual(C.rulesHolding(facts({ needed: 277.75 }), RISK), []);
-  assert.deepStrictEqual(C.rulesHolding(facts({ needed: 0 }), RISK), [], 'passed: the target stop blocks entries anyway');
+  // The near-target band (the rulebook's sizing.near_target_usd, as the size translation reads it): at it, the cut stands.
+  assert.deepStrictEqual(C.rulesHolding(facts({ needed: 100 }), RISK), ['target']);
+  assert.deepStrictEqual(C.rulesHolding(facts({ needed: 500 }), RISK), ['target'], 'at the band');
+  assert.deepStrictEqual(C.rulesHolding(facts({ needed: 500.01 }), RISK), []);
+  assert.deepStrictEqual(C.rulesHolding(facts({ needed: 501 }), RISK), []);
+  for (const band of [null, 0, undefined]) assert.deepStrictEqual(C.rulesHolding(facts({ needed: 100, nearTargetUsd: band }), RISK), [], `band ${band}: off`);
   for (const bad of [null, facts({ lossesToday: null }), facts({ lossStreak: undefined }), facts({ balance: NaN }), facts({ peak: null })]) assert.deepStrictEqual(C.rulesHolding(bad, RISK), ['unknown']);
   assert.deepStrictEqual(C.rulesHolding(HEALTHY, null), ['unknown'], 'no risk to measure: not healthy');
 });
@@ -81,7 +83,12 @@ test('cutFacts: read from the attempt\'s snapshot as combine_status shows it: he
     return C.cutFacts({ home: h, account: A, now: NOW });
   };
   const ok = at(50000);
-  assert.deepStrictEqual([ok.balance, ok.start, ok.peak, ok.lossesToday, ok.lossStreak, ok.softRoom, ok.dailyRoom, ok.needed], [50000, 50000, 50000, 0, 0, 500, 1000, 3000]);
+  assert.deepStrictEqual([ok.balance, ok.start, ok.peak, ok.lossesToday, ok.lossStreak, ok.softRoom, ok.dailyRoom, ok.needed, ok.nearTargetUsd], [50000, 50000, 50000, 0, 0, 500, 1000, 3000, null]);
+  // The policy's band comes with the facts.
+  const h = trendHome();
+  prop.startAttempt(h, A, new Date(NOW.getTime() - 86400000));
+  prop.snapshot(h, A, 50000, new Date(NOW.getTime() - 60000));
+  assert.strictEqual(C.cutFacts({ home: h, account: A, policy: { sizing: { near_target_usd: 500 } }, now: NOW }).nearTargetUsd, 500);
   assert.deepStrictEqual(C.rulesHolding(ok, RISK), []);
   assert.deepStrictEqual(C.rulesHolding(at(49800), RISK), ['drawdown']);
   const lost = at(49900, { balance: 49900, dayPnl: -100, tradesToday: 1, lossesToday: 1, lossStreak: 1 });

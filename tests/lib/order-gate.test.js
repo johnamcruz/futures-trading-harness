@@ -3770,6 +3770,23 @@ test('trade_lifecycle in an attempt, phase 2\'s cut (owner-approved 2026-10-28, 
   }
 });
 
+test('trade_lifecycle in an attempt near the target (owner-approved 2026-10-28, sizing.near_target_usd): order_plan and the gate take the same floor; the full size is refused; far from it, as before', () => {
+  // The record suggests 1; the $300 cap at $56.74 all in is 5. The rulebook's floor 3 and a $500 band; the attempt's
+  // profit $2,600 (today's snapshot $52,600 on a $50,000 start, $3,000 target): needed $400, at or under the band.
+  const reg = LCP.registry({ sizing: testSizing({ min_contracts: 3, near_target_usd: 500 }) });
+  const planAt = h => composedOrder({ home: h, root: 'MNQ', side: 'long', now: LCP.NOW, cycleBars: { MNQ: LC.BAR }, strategy: LCP.LC_DOC, strategies: reg, accounts: [LCP.MINI], specOf: lcSpec, accountId: 1, selected: ['MNQ'] });
+  const near = LCP.propHome({ size: 1, balance: 52600 });
+  const o = planAt(near.home);
+  assert.deepStrictEqual([o.args.size, o.plan.translatedSize], [3, 3]);
+  assert.match(o.plan.translation, /near the target: the floor/);
+  assert.deepStrictEqual(lcPropEval(near.home, o.args, { registry: reg }).violations, [], 'the gate takes the floor');
+  const five = lcPropEval(near.home, { ...o.args, size: 5 }, { registry: reg });
+  assert.match(five.violations.find(v => v.check === 'composed-reads').message, /size 5 is not the translated size 3 \(.*near the target/);
+  // Needed $3,000 (at the start): the translated 5, as before.
+  const far = LCP.propHome({ size: 1 });
+  assert.strictEqual(planAt(far.home).args.size, 5);
+});
+
 test('trade_lifecycle: modify_order never reprices a working composed entry worse than its record\'s entry; better, stops, targets and exits move freely', () => {
   const home = require('../helpers').tmpDir();
   fs.writeFileSync(path.join(home, 'entry-orders.json'), JSON.stringify([

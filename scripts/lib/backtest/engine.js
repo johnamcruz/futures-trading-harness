@@ -423,7 +423,7 @@ function runEngine(markets, strategies, opts = {}) {
       const cp = multiplier > 0 ? require('../prop/size-translate').limitPlan(sizeFor(multiplier), {
         limits: (o.prop && o.prop.limits) || null,
         minContracts: sizing.min_contracts, ratio: fam ? fam.ratio : 1, miniRoot: legs.mini ? legs.mini.root : null,
-        stretchUsd: sizing.floor_stretch_max_usd, state: { ...cs, lossesToday: closesToday.filter(c => c.pnl < 0).length },
+        stretchUsd: sizing.floor_stretch_max_usd, state: { ...cs, lossesToday: closesToday.filter(c => c.pnl < 0).length }, nearTargetUsd: sizing.near_target_usd,
       }) : null;
       if (!cp) return;
       size = cp.size;

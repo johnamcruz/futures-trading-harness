@@ -116,6 +116,7 @@ const SIZING_RULES = {
   stop_slippage_ticks: [x => typeof x === 'number' && Number.isFinite(x) && x >= MIN_STOP_SLIPPAGE_TICKS, `ticks, at least ${MIN_STOP_SLIPPAGE_TICKS}`],
   min_contracts: [x => Number.isInteger(x) && positive(x),'a whole number of contracts, 1 or more (micro-equivalents: a mini counts as its family\'s ratio)'],
   floor_stretch_max_usd: [offOrPositive, `dollars above 0, or ${OFF} (no floor stretch: under the composed cap's floor is a skip)`],
+  near_target_usd: [offOrPositive, `dollars above 0, or ${OFF} (no near-target floor: full size up to the target)`],
 };
 const EXIT_RULE = [x => x === OFF || (positive(x) && x <= 50), `R above 0, at most 50, or ${OFF} (no trail)`];
 /** A whole number of losing trades, at least 1, or off: 0 is refused (a slip of the pen would turn the stop off unseen). */
