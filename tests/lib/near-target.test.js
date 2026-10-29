@@ -41,6 +41,34 @@ test('combine.nearTarget: at or under the band is near; over it, a band of 0 (of
   for (const bad of [null, {}, { ...s(100), days: null }, { ...s(100), dayPnl: undefined }]) assert.strictEqual(combine.nearTarget(bad, { near_target_usd: 500 }), false);
 });
 
+test('near the target is the profit target alone (the owner: consistency is the account\'s): +5,700 with a 3,500 best day is near, +5,499 is not; live and the simulator agree', () => {
+  // A $6,000 target with a 50% consistency rule: at +5,700 with a $3,500 best day a pass needs $7,000 (neededOf: $1,300
+  // more), but the target is $300 away (toTarget): near.
+  const BIG = { ...MINI, name: 'big', starting_balance: 100000, profit_target: 6000, max_loss: 3000, consistency_pct: 50, max_contracts: { MNQ: 50, NQ: 5 } };
+  const pol = { ...policy({ cap_usd: 0 }), account: 'big' };
+  const at = require('../../scripts/lib/prop/attempts');
+  for (const [profit, near] of [[5700, true], [5499, false]]) {
+    const h = trendHome();
+    prop.startAttempt(h, BIG, new Date(NOW.getTime() - 4 * 86400000));
+    prop.recordEndOfDay(h, BIG, 103500, '2026-10-05');
+    prop.recordEndOfDay(h, BIG, 100000 + profit, '2026-10-06');
+    prop.snapshot(h, BIG, 100000 + profit, new Date(NOW.getTime() - 60000));
+    const cs = prop.stateFrom(BIG, prop.readAttempt(h, BIG.name), 100000 + profit);
+    assert.strictEqual(combine.toTarget(cs), 6000 - profit);
+    assert.ok(combine.neededOf(cs) > 500, `neededOf ${combine.neededOf(cs)} counts the best day`);
+    assert.strictEqual(combine.nearTarget(cs, pol.sizing), near, String(profit));
+    const live = translateSize({ suggested: 1, home: h, root: 'MNQ', policy: pol, account: BIG, verdict: verdict({ maxSize: 50 }), capUsd: 1000, perContract: 21.24, specOf, selected: ['MNQ'] });
+    const { legs, ratio } = at.legsFor(BIG, 'MNQ', { tickValue: 0.5 });
+    const sim = at.defaultSize({ cs, trade: { stopTicks: 40 }, sizing: pol.sizing, legs, mode: 'micro', ratio, fraction: 1, limits: { capUsd: 1000, orderMax: null }, lossesToday: 0 });
+    assert.strictEqual(live.size === 3, near, `${profit}: ${live.reason}`);
+    assert.strictEqual(sim.size, live.size, String(profit));
+    // Phase 2's target condition on the same basis.
+    const f = require('../../scripts/lib/prop/phase2-cut').cutFacts({ home: h, account: BIG, policy: pol, now: NOW });
+    assert.strictEqual(f.needed, 6000 - profit);
+    assert.strictEqual(require('../../scripts/lib/prop/phase2-cut').rulesHolding(f, 100).includes('target'), near, String(profit));
+  }
+});
+
 test('translateSize near the target: needed 501 is full, 500 and 100 the floor; never above the verdict; a floor that doesn\'t fit the cap is a skip', () => {
   assert.strictEqual(T(52499).size, 18, 'needed 501: full');
   for (const b of [52500, 52900]) {

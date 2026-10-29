@@ -17,7 +17,7 @@ const flat = s => s.replace(/\s+/g, ' ');
 
 test('phase 2 floor: the risk manager cut floors at min_contracts, never a veto under it (an untradable translation is code\'s skip)', () => {
   const rm = flat(fs.readFileSync(path.join(ROOT, 'agents', 'risk-manager.md'), 'utf8'));
-  assert.ok(rm.includes('In a prop attempt, full is the translated size your request names, cut only on a pacing rule, floored at min_contracts.'));
+  assert.ok(rm.includes('In a prop attempt, full is the translated size; cut only on a pacing rule (else full), floored at min_contracts.'));
   assert.ok(rm.includes('the translated size your request names (never the record\'s)'));
   assert.ok(!/under min_contracts: VETO/.test(rm), 'no veto under the floor');
 });

@@ -18,8 +18,9 @@
  *               trailing max loss; the verdict's drawdown halving reads the same peak, combine.budget)
  *   soft-stop   one loss at the translated size reaches daily_loss_soft or the daily limit (softRoom or dailyRoom at or
  *               under its risk)
- *   target      near the target: the profit the pass still needs at most the policy's sizing.near_target_usd (the
- *               band the size translation trades the floor in: combine.nearTarget; off: never)
+ *   target      near the target: the profit to the target (combine.toTarget, the target alone: consistency is the
+ *               account's) at most the policy's sizing.near_target_usd (the band the size translation trades the
+ *               floor in: combine.nearTarget; off: never)
  *
  * Facts that can't be read (no snapshot, today's counts unknown) are no healthy account: the cut stands. Only a cut on a
  * healthy account (no rule holds) is restored to the translated size, never more: it is a process note, never a refusal.
@@ -63,7 +64,7 @@ function cutFacts({ home, account, policy = null, now = new Date() }) {
   const streak = prop.sessionLossStreak(home, account, now);
   const f = combine.attemptFacts(cs, { ...prop.attemptCounts(r, now), lossStreak: streak ? streak.count : null });
   const band = policy && policy.sizing ? policy.sizing.near_target_usd : null;
-  return { balance: cs.balance, start: cs.start, peak: cs.peak, lossesToday: f.lossesToday, lossStreak: f.lossStreak, softRoom: f.softRoom, dailyRoom: f.dailyRoom, needed: f.needed, nearTargetUsd: num(band) ? band : null };
+  return { balance: cs.balance, start: cs.start, peak: cs.peak, lossesToday: f.lossesToday, lossStreak: f.lossStreak, softRoom: f.softRoom, dailyRoom: f.dailyRoom, needed: combine.toTarget(cs), nearTargetUsd: num(band) ? band : null };
 }
 
 function rulesHolding(facts, riskUsd) {
