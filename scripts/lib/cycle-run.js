@@ -65,6 +65,15 @@ async function precollected(cfg, prompt, context, precollect, deps, budgetMs) {
   got = CD.capped(got);
   let withData;
   try { withData = withCycleData(prompt, CD.render(got)); } catch (e) { got = { blocks: [], missing: [], note: `none given: ${e.message}` }; withData = prompt; }
+  // The whole prompt is one argv string (config/runner.json prompt.maxPromptBytes): past it, the reads go and the run
+  // reads them itself, never a spawn that fails on its size.
+  const max = require('./tunables').runner().prompt.maxPromptBytes;
+  if (withData !== prompt && Buffer.byteLength(withData) > max) {
+    if (deps.err) deps.err(`[autotrader] the cycle data would take the prompt past ${max} bytes: none given, the run reads them itself\n`);
+    got = { blocks: [], missing: [...(got.missing || []), ...(got.blocks || []).map(b => ({ tool: b.tool, args: b.args, why: 'the prompt would pass its size limit' }))], note: `none given: the prompt would pass ${max} bytes` };
+    withData = withCycleData(prompt, CD.render(got));
+    if (Buffer.byteLength(withData) > max) withData = prompt;
+  }
   const missing = [...(got.missing || []), ...(got.note ? [{ why: got.note }] : [])];
   return { runEnv, prompt: withData, context: { ...(context || {}), precollected: CD.records(got), ...(missing.length ? { notCollected: missing } : {}) } };
 }

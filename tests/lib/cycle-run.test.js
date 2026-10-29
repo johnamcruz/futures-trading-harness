@@ -73,6 +73,32 @@ test('cycle run: a listed setup neither composed nor skipped with a reason is a 
   assert.strictEqual(ok.line.result, 'CYCLE RESULT: no-trade - nothing', 'never refused, the result as reported');
 });
 
+test('cycle run: cycle data that would take the prompt past its size limit is dropped, said, and the run still spawns', async () => {
+  const { prompts } = require('../../scripts/lib/autotrader');
+  const max = require('../../scripts/lib/tunables').runner().prompt.maxPromptBytes;
+  const cfg = validateConfig({ harness: 'claude', premarketAt: '', symbols: ['MNQ'], cycleDataInPrompt: true });
+  const base = prompts(cfg, AT, ROOT).trade([{ symbol: 'MNQ', bar: { t: '2026-10-07T14:00:00.000Z', c: 1, file: '/b.json', contractId: 'MNQ' } }]);
+  const block = n => ({ blocks: [{ tool: 'bar_briefing', args: { symbol: 'MNQ' }, asOf: AT.toISOString(), text: 'r'.repeat(n) }], missing: [] });
+  const go = async (prompt, n) => {
+    const home = tmpDir();
+    const seen = [];
+    const d = deps(home, async (argv) => { seen.push(argv); return { ok: true, timedOut: false, code: 0, output: 'CYCLE RESULT: no-trade - x\n', stdout: 'CYCLE RESULT: no-trade - x\n' }; });
+    const r = await runCycle(cfg, 'trade', prompt, {}, { timeoutMs: 600000, context: { action: 'trade', symbols: [] }, precollect: async () => block(n) }, d.deps);
+    const sent = seen[0][seen[0].indexOf('-p') + 1];
+    return { r, sent, err: d.err.join('') };
+  };
+  // A long prompt: the reads would pass the limit, so none is given.
+  const long = `${'x'.repeat(max - 30000)}${base}`;
+  const over = await go(long, 40000);
+  assert.ok(over.r.ok, 'the run went');
+  assert.ok(Buffer.byteLength(over.sent) <= max, `${Buffer.byteLength(over.sent)} > ${max}`);
+  assert.ok(!over.sent.includes('r'.repeat(1000)));
+  assert.match(over.err, new RegExp(`the cycle data would take the prompt past ${max} bytes: none given`));
+  // Within the limit: the reads are given, nothing said.
+  const fine = await go(base, 1000);
+  assert.ok(fine.sent.includes('r'.repeat(1000)) && !/past \d+ bytes/.test(fine.err));
+});
+
 test('cycle run: the desk check counts the roles that returned, names a failed launch, skips the cached, and is quiet when the desk ran', async () => {
   const task = (role, status, t) => `${JSON.stringify({ type: 'tool_use', timestamp: t, sessionID: 's', part: { type: 'tool', tool: 'task', state: { status, input: { subagent_type: role, description: 'd', prompt: 'p' }, ...(status === 'error' ? { error: 'Expected a string starting with "ses"' } : { output: 'report' }), time: { start: t, end: t + 1 } } } })}\n`;
   const said = `${JSON.stringify({ type: 'text', timestamp: 99, sessionID: 's', part: { type: 'text', text: 'CYCLE RESULT: no-trade - nothing fired' } })}\n`;

@@ -39,6 +39,8 @@
  *   openOf(state)                      an open position or a working entry in the account state
  *   factsOf({ state, briefings })      the table's entries that apply: [{ id, stage, facts, skills | section, why }]
  *   choose(root, facts, { budget, loaded })   { skills, sections, over, why, stages, bytes }: in stage order, in budget
+ *   budgetFor({ base, max, reserve })  the room a prompt of max bytes leaves the section (never below 0)
+ *   fit(root, facts, { budget, base, max, reserve, loaded })   choose's choice whose whole prompt fits max
  *   situationText(root, chosen)        the prompt's section ('' for none; starts with a space)
  *   sectionOf(root, section)           a skill part's text, read from the skill (null when it has no such part)
  *   writeSituation(home, root, chosen) { file, text } or null (written atomically when missing or different)
@@ -151,6 +153,23 @@ function choose(root, facts, { budget = BUDGET(), loaded = [] } = {}) {
   return out;
 }
 
+/** The embedded text's room in a prompt of at most `max` bytes: what the rest (`base`, `reserve`) leaves, never below 0. */
+const budgetFor = ({ base = 0, max, reserve = 0 } = {}) => Math.max(0, Number(max) - Number(base) - Number(reserve));
+
+/**
+ * The choice that fits a whole prompt: within `budget` (the config's) and within what a prompt of `max` bytes leaves
+ * beside `base` (the prompt without the section) and `reserve` (the cycle data still to come), the section's own words
+ * counted; the budget shrinks one skill at a time from the end (stage order kept: management last to go), the rest named.
+ */
+function fit(root, facts, { budget = BUDGET(), base = 0, max = Infinity, reserve = 0, loaded = [] } = {}) {
+  let b = Math.min(budget, budgetFor({ base, max, reserve }));
+  for (;;) {
+    const chosen = choose(root, facts, { budget: b, loaded });
+    if (base + Buffer.byteLength(situationText(root, chosen)) + reserve <= max || !chosen.bytes) return chosen;
+    b = chosen.bytes - 1;
+  }
+}
+
 /** A skill part's text: from its heading line to the next heading (or bold heading, or the file's end), or null. */
 function sectionOf(root, section) {
   if (!section) return null;
@@ -187,4 +206,4 @@ function writeSituation(home, root, chosen) {
 }
 
 // The attestation, as the gate checks it (cycle-skills-attest.js: light, so the gate loads whatever the config holds).
-module.exports = { TABLE, STAGES, SECTIONS, SKILLS, ATTEST_ENV: CA.ATTEST_ENV, openOf, factsOf, choose, sectionOf, situationText, writeSituation, attestation: CA.attestation, parseAttestation: CA.parseAttestation, attested: CA.attested };
+module.exports = { TABLE, STAGES, SECTIONS, SKILLS, ATTEST_ENV: CA.ATTEST_ENV, openOf, factsOf, choose, budgetFor, fit, sectionOf, situationText, writeSituation, attestation: CA.attestation, parseAttestation: CA.parseAttestation, attested: CA.attested };

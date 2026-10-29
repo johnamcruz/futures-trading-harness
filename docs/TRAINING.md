@@ -697,7 +697,9 @@ and leg ids; the lessons lines record the batch too.
   line). The runner embeds each skill whole, read from its file, in the
   cycle's prompt, never one the prompt already holds, within a byte budget
   (`config/runner.json` `prompt.situationalSkillBytes`) filled in that
-  order; past it a skill is named on an "Also relevant now" line. The cycle
+  order, and within what the prompt's own limit (`prompt.maxPromptBytes`:
+  one argv string) leaves beside the prompt and the cycle data; past it a
+  skill is named on an "Also relevant now" line. The cycle
   record lists the stages, skills, bytes and the skills named. The order
   gate counts them as loaded only on the runner's attestation for that
   cycle (`FTH_CYCLE_SKILLS`, `scripts/lib/cycle-skills-attest.js`). The

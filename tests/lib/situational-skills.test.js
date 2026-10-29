@@ -120,6 +120,26 @@ test('the Setups-to-check line: a compression break on an allowed side (at its k
   assert.ok(!ids(SS.factsOf({ state: FLAT, briefings: [brief({ cisd: { '3m': cisd['5m'] } })] })).includes('cisd-timing'), 'no setup listed: nothing to time');
 });
 
+test('budgetFor and fit: the section gets what the prompt\'s limit leaves, never below 0; management kept first, the rest named, the whole within the limit', () => {
+  assert.strictEqual(SS.budgetFor({ base: 2000, max: 126976, reserve: 48000 }), 76976);
+  assert.strictEqual(SS.budgetFor({ base: 2000, max: 126976 }), 124976, 'no cycle data: nothing reserved');
+  assert.strictEqual(SS.budgetFor({ base: 130000, max: 126976, reserve: 48000 }), 0);
+  const facts = SS.factsOf({ state: OPEN, briefings: [brief({ vwap: { side: 'above' }, lastBreak: { last: { kind: 'BOS' } } })] });
+  const size = s => Buffer.byteLength(HP.block(s, HP.skillBody(ROOT, s)));
+  const exits = ['manage-position', 'pullback-vs-reversal', 'take-profit'];
+  const base = 2000;
+  const max = base + exits.reduce((n, s) => n + size(s), 0) + 1000;
+  const got = SS.fit(ROOT, facts, { loaded: LOADED, base, max });
+  assert.deepStrictEqual(got.skills, exits);
+  assert.ok(got.over.length > 0, 'the rest named');
+  assert.ok(base + Buffer.byteLength(SS.situationText(ROOT, got)) <= max);
+  // With the cycle data's reserve too: still within the limit, the exit skills going last.
+  const tight = SS.fit(ROOT, facts, { loaded: LOADED, base, max, reserve: size('take-profit') });
+  assert.deepStrictEqual(tight.skills, ['manage-position', 'pullback-vs-reversal']);
+  assert.ok(base + Buffer.byteLength(SS.situationText(ROOT, tight)) + size('take-profit') <= max);
+  assert.deepStrictEqual(SS.fit(ROOT, facts, { loaded: LOADED, base: 1e6, max }).skills, [], 'no room: none embedded, every one named');
+});
+
 test('the cycle prompt: a cycle in no situation is byte-identical to the prompt without a section; a situation\'s section sits before the result line', () => {
   const cfg = validateConfig({ harness: 'claude', account: '7', sessions: ['09:30-12:00@America/New_York'] });
   const P = prompts(cfg, NOW, ROOT);

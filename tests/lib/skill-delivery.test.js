@@ -78,6 +78,36 @@ const situation = f => (typeof f === 'function' ? f() : f);
 const LOADED = cycleLoaded(cfgOf('claude'));
 const ids = facts => facts.map(f => f.id);
 
+// Each skill's class, written out: a skill moved between classes (a table row dropped, a role's list changed, a skill
+// added or retired) is a deliberate edit here, never a silent one.
+const EXPECTED = {
+  a: ['autonomous-trading', 'confluence-counting', 'day-context', 'htf-to-ltf', 'multi-timeframe-analysis',
+    'setup-judgment', 'trade-lifecycle', 'trade-plan', 'trade-session'],
+  b: ['bos-vs-choch', 'breakout', 'breakout-vs-fakeout', 'candle-reading', 'cisd', 'compression', 'daily-bias',
+    'entry-outcome', 'fair-value-gaps', 'fib-retracement', 'invalidation', 'leftover-orders', 'levels-and-reactions',
+    'manage-position', 'momentum-and-volume', 'mtf-bias-filter', 'position-sizing', 'prop-challenge-pacing',
+    'pullback-vs-reversal', 'rejection', 'session-timing', 'take-profit', 'top-down-entry', 'trend-vs-range',
+    'vwap-volume-profile'],
+  c: ['absorption', 'broker-mcp', 'broker-refusals', 'contract-roll', 'exchange-holidays', 'gate-refusals',
+    'gate-refusals-cycle', 'gate-refusals-limits', 'gate-refusals-positions', 'harness-root', 'market-snapshot',
+    'micro-mini-specs', 'news-blackouts', 'order-failures', 'order-mechanics', 'order-rationale', 'order-types',
+    'prop-pacing-judgment', 'reason-check', 'setup-expectancy', 'strategy-authoring', 'strategy-gate-checks',
+    'strategy-library', 'strategy-rules', 'strategy-scan', 'strategy-tools', 'tool-arguments', 'trade-journal',
+    'trade-review', 'trading-agent-security', 'trend-momentum-indicators'],
+  d: ['broker-bar-fields', 'design-self-review', 'end-of-day', 'gate-refusals-skills', 'kill-switch', 'lean-cycle',
+    'live-session-records', 'order-plan', 'premarket', 'prop-evaluator', 'replay', 'replay-labels', 'replay-resume',
+    'replay-scorecard', 'runner-lanes', 'runner-logs', 'strategy-backtest', 'timeframe-sources', 'training-loop',
+    'training-verdict', 'user-commands'],
+  e: ['bar-briefing', 'role-round', 'trader-process'],
+};
+
+test('the class snapshot: every skill in the class written for it', () => {
+  const now = {};
+  for (const r of rows) (now[r.class] = now[r.class] || []).push(r.skill);
+  for (const k of Object.keys(now)) now[k].sort();
+  assert.deepStrictEqual(now, EXPECTED);
+});
+
 test('drift guard: every skill classified; every table entry has a delivery fixture, and every fixture an entry', () => {
   const skills = fs.readdirSync(path.join(ROOT, 'skills')).filter(n => fs.existsSync(path.join(ROOT, 'skills', n, 'SKILL.md'))).sort();
   assert.deepStrictEqual(rows.map(r => r.skill), skills);
