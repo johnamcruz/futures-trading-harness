@@ -31,7 +31,7 @@ const { loopPaths, readLedger, lockHolder } = require('./lib/train/state');
 const { readArchive, leaders } = require('./lib/train/archive');
 const { parseProposals } = require('./lib/train/proposal');
 const { checkLook } = require('./lib/prop/looks');
-const { line, rideLines } = require('./lib/train/iteration-report');
+const { line, rideLines, masteryLines } = require('./lib/train/iteration-report');
 
 const ROOT = path.resolve(__dirname, '..');
 const USAGE = 'usage: train-loop.js plan|run|status --config <loop.json> [--dry-run] [--steps <steps.js>] | judge --config <loop.json> --proposal <id> --held-out-look | import-proposal --config <loop.json> --file <proposal> --approved-by <name>';
@@ -74,8 +74,9 @@ function plan(loop) {
   say(`per iteration: up to ${loop.maxFlagged} flagged + ${loop.controlPoints} control decisions, ${loop.repeats} repeat(s), up to ${loop.maxProposals} proposal(s), seed ${loop.seed}`);
   say(`evaluator: ${loop.evaluator ? `${loop.evaluator.prop} on ${Object.keys(loop.evaluator.data).join(', ')}, champion and candidate on one seed` : 'none (a strategy or rulebook change stays blocked)'}`);
   say(`model scoring: ${loop.modelScore ? `on (account ${loop.modelScore.account}): the challenger replays every window, judged by the keep rule (train/model-verifier.js); a kept change is a PR, never promoted` : 'off (the paired panel test and the evaluator only)'}`);
-  say(`probe: ${loop.probe ? `on: ${loop.probe.k} edit(s) a round, each replayed alone on ${loop.probe.windows.map(w => `${w.from}..${w.to}`).join(', ')} (practice-train, no budget), ${loop.probe.parallel} at once; the passing ones composed, then the keep rule` : 'off'}`);
-  for (const l of require('./lib/train/plan').probePlan(loop, { root: ROOT })) say(l);
+  const PL = require('./lib/train/plan');
+  say(PL.probeSummary(loop.probe));
+  for (const l of PL.probePlan(loop, { root: ROOT })) say(l);
   say(`proposer: harness ${loop.proposer.harness}${loop.proposer.model ? ` (${loop.proposer.model})` : ''}; limits ${JSON.stringify(loop.limits)}; decision rule ${JSON.stringify(loop.rule)}`);
   return 0;
 }
@@ -99,7 +100,7 @@ function status(loop) {
   // Propose-Probe-Compose: each iteration in one line (lib/train/iteration-report.js), from its iteration-report.json.
   for (const it of state.iterations) {
     const rec = readJsonOr(path.join(paths.iter(it.n), 'iteration-report.json'));
-    if (rec) { say(line(rec)); rideLines(rec).forEach(l => say(l)); }
+    if (rec) { say(line(rec)); rideLines(rec).forEach(l => say(l)); masteryLines(rec).forEach(l => say(l)); }
   }
   for (const l of leaders(archive)) say(`leader for ${l.category}: ${l.proposalId} (iteration ${l.iteration}, effect ${l.effect})`);
   return 0;

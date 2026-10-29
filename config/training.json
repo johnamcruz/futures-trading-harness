@@ -64,5 +64,6 @@
   "trendScreen": { "rollFlagGaps": [0, 3] },
   "trendWindows": { "leadBars": 4, "controlPerLeg": 1 },
   "trendFindings": { "examples": 2, "exampleChars": 900, "saidChars": 160, "setupTypes": 5, "setupMinN": 3 },
-  "exitFindings": { "examples": 2, "exampleChars": 400 }
+  "exitFindings": { "examples": 2, "exampleChars": 400 },
+  "trendReport": { "falseStartPeakR": 0.5 }
 }

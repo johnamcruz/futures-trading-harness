@@ -5,6 +5,9 @@
  * come from the probe round (train/probe.js) instead of one proposer reply judged edit by edit.
  *
  *   probe {
+ *     curriculum 'all' (the default: the curated windows and, with `trend`, the trend set) or 'trend' (the trend set
+ *                only: curriculum.js; `trend` then required, `replay` and `windows` left out). A loop config's: a switch
+ *                is a new loop (a new loopId)
  *     replay     a stage-1 replay config (an object or a path, as the loop's `replay`): a curated practice list and
  *                its practice settings; the probes' runs, the champion's and each edit's, use it with the loop's seed.
  *                Its `autotrader` is the loop's (left out: the loop's is used), so the probes and the keep rule run the
@@ -34,7 +37,8 @@
 const { rolesBetween } = require('../learning/splits');
 const { tradingDayStart } = require('../trading/clock');
 
-const PROBE_KEYS = Object.freeze(['replay', 'windows', 'k', 'parallel', 'trend']);
+const PROBE_KEYS = Object.freeze(['replay', 'windows', 'k', 'parallel', 'trend', 'curriculum']);
+const CU = require('./curriculum');
 const TREND_KEYS = Object.freeze(['replay', 'census', 'from', 'to', 'batch', 'regression', 'moments']);
 // The batch settings a loop config may set for itself (the rest, and every default: config/training.json trendBatch).
 const BATCH_KEYS = Object.freeze(['start', 'max', 'half']);
@@ -54,8 +58,17 @@ function resolveProbe(raw, { read, resolvePath = p => p, readCensus = () => { th
   const errors = [];
   for (const k of Object.keys(raw)) if (!PROBE_KEYS.includes(k)) errors.push(`probe.${k}: not a setting (${PROBE_KEYS.join(', ')})`);
   if (!modelScore) errors.push('probe: the combined change goes through the full keep rule: set modelScore');
-  const windows = raw.windows;
-  if (!Array.isArray(windows) || !windows.length) errors.push('probe.windows: one or more { from, to } session-date windows in practice-train');
+  const curriculum = raw.curriculum === undefined ? CU.DEFAULT : raw.curriculum;
+  if (!CU.CURRICULA.includes(curriculum)) errors.push(`probe.curriculum: one of ${CU.CURRICULA.join(', ')} (default ${CU.DEFAULT})`);
+  // The trend curriculum replays the trend set only: no curated replay or windows to set, and the trend set required.
+  const trendOnly = curriculum === 'trend';
+  if (trendOnly) {
+    for (const k of ['replay', 'windows']) if (raw[k] !== undefined) errors.push(`probe.${k}: not read under curriculum trend (the round replays the trend set only): leave it out`);
+    if (raw.trend === undefined) errors.push('probe.trend: curriculum trend replays the trend set: set it');
+  }
+  // Under curriculum trend no curated window: none to check (an empty list, so every reader of it reads none).
+  const windows = trendOnly ? [] : raw.windows;
+  if (!trendOnly && (!Array.isArray(windows) || !windows.length)) errors.push('probe.windows: one or more { from, to } session-date windows in practice-train');
   else {
     windows.forEach((w, i) => {
       if (!(w && DATE.test(w.from) && DATE.test(w.to) && w.from < w.to && Object.keys(w).length === 2)) { errors.push(`probe.windows[${i}]: { from, to }, YYYY-MM-DD, from before to`); return; }
@@ -69,7 +82,7 @@ function resolveProbe(raw, { read, resolvePath = p => p, readCensus = () => { th
     });
   }
   let replay = null;
-  try { replay = read(raw.replay); } catch (err) { errors.push(`probe.replay: ${err.message}`); }
+  try { replay = trendOnly ? null : read(raw.replay); } catch (err) { errors.push(`probe.replay: ${err.message}`); }
   if (replay) {
     if (replay.stage !== 1) errors.push('probe.replay.stage: 1 (learn to trade): the probe screen reads stage-1 decisions');
     if (!replay.curatedList || typeof replay.curatedList !== 'object') errors.push('probe.replay.curatedList: the curated practice list the probes replay');
@@ -99,7 +112,8 @@ function resolveProbe(raw, { read, resolvePath = p => p, readCensus = () => { th
   replay = sameTrader(replay, 'probe.replay');
   const trend = raw.trend === undefined ? null : resolveTrend(raw.trend, { read, readCensus, resolvePath, tuningWindows, errors, sameTrader, parallel });
   if (errors.length) throw new Error(errors.join('\n- '));
-  return { replay, windows, k, parallel, ...(trend ? { trend } : {}) };
+  // 'all' (the default) adds no key: the resolved setting is the one before curricula existed.
+  return { replay, windows, k, parallel, ...(trend ? { trend } : {}), ...(trendOnly ? { curriculum } : {}) };
 }
 
 /** A session date's learning role, or the error's message. */

@@ -593,7 +593,10 @@ function pairedScore(daysA, daysB, { account, rulebook, size, contracts, maxDail
       resampled.push({ a: runA(idx.map(k => daysA[k]), p, decide), b: runB(idx.map(k => daysB[k]), p, decide) });
     }
   }
+  // Each side's real attempts with their effective sample size (the independent ones: neighbouring starts overlap).
+  const essReal = stats.effectiveSampleSize(startIdx, S);
   const side = (pairs, k) => finish(pairs.map(x => x[k]).reduce(add, blank()));
+  const realSide = k => ({ ...side(real, k), ess: essReal });
   const is = st => o => (o.status === st ? 1 : 0);
   const diffs = (pairs, label, block) => {
     const d = st => pairedInterval(pairs.map(x => is(st)(x.a) - is(st)(x.b)), { block, reps, level, rand: stats.streamFor(seed, `paired:${label}:${st}`) });
@@ -609,8 +612,8 @@ function pairedScore(daysA, daysB, { account, rulebook, size, contracts, maxDail
   const bBetter = (r.passRate.hi < 0 && !(r.blowRate.hi < 0)) || (r.blowRate.lo > 0 && !(r.passRate.lo > 0));
   const verdict = ba === 0 && bb > 0 ? 'A better' : bb === 0 && ba > 0 ? 'B better' : aBetter && !bBetter ? 'A better' : bBetter && !aBetter ? 'B better' : aBetter ? 'trade-off (one passes more, the other blows less)' : 'no significant difference';
   return {
-    a: { real: side(real, 'a'), resampled: side(resampled, 'a'), score: passA.diagnostic ? `diagnostic (${passA.diagnostic})` : 'real', look: passA.look },
-    b: { real: side(real, 'b'), resampled: side(resampled, 'b'), score: passB.diagnostic ? `diagnostic (${passB.diagnostic})` : 'real', look: passB.look },
+    a: { real: realSide('a'), resampled: side(resampled, 'a'), score: passA.diagnostic ? `diagnostic (${passA.diagnostic})` : 'real', look: passA.look },
+    b: { real: realSide('b'), resampled: side(resampled, 'b'), score: passB.diagnostic ? `diagnostic (${passB.diagnostic})` : 'real', look: passB.look },
     starts: real.map((x, k) => ({ start: daysA[startIdx[k]].day, a: x.a.status, b: x.b.status, aDays: x.a.sessions, bDays: x.b.sessions })),
     diff, verdict, blows: { a: ba, b: bb }, paired: { sameDays: true, sameBlocks: true, sameFaults: true, oneRulebook: rulebookB === rulebook && accountB === account && contractsB === contracts },
     inputs: { sessions: S, seed, paths, reps, level, every, faults: { ...rates, measured: Boolean(faults.measured) }, contracts, contractsB, days: daysA.length },

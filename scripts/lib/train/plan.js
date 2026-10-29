@@ -6,12 +6,26 @@
  * a config the first run would refuse (a curated list whose windows miss the runner's sessions, a trend replay that
  * isn't one) fails here; and the trend pool is described (its period, legs, days, the round's batch and halves).
  *
+ * Under curriculum trend (curriculum.js) there is no curated replay to resolve: only the trend replay and its pool.
+ *
+ *   probeSummary(probe)              the plan's `probe:` line: off, or the curriculum and what each round replays
  *   probePlan(loop, { root, env })   [line]; throws with every refusal, each naming the replay it came from
  */
 
 const { resolveReplay } = require('../replay/config');
 const { replayFor } = require('./config');
 const TS = require('./trend-set');
+const CU = require('./curriculum');
+
+const span = ws => ws.map(w => `${w.from}..${w.to}`).join(', ');
+
+function probeSummary(p) {
+  if (!p) return 'probe: off';
+  const tail = `${p.parallel} at once; the passing ones composed, then the keep rule (the loop's tuning windows, unchanged)`;
+  const trend = p.trend ? `the trend set (${p.trend.set.from}..${p.trend.set.to}: each round's batch legs' stepped windows, their control windows, ${p.trend.regression ? p.trend.regression.days.length : 0} regression day(s))` : null;
+  if (CU.curriculumOf(p) === 'trend') return `probe: on, curriculum trend: ${p.k} edit(s) a round, each replayed alone on ${trend} only, no curated replay (practice-train, no budget); findings and screens from the trend runs only; ${tail}`;
+  return `probe: on, curriculum all: ${p.k} edit(s) a round, each replayed alone on the curated windows ${span(p.windows)}${trend ? ` and ${trend}` : ''} (practice-train, no budget); ${tail}`;
+}
 
 function probePlan(loop, { root, env = process.env } = {}) {
   const p = loop.probe;
@@ -19,6 +33,7 @@ function probePlan(loop, { root, env = process.env } = {}) {
   const errors = [];
   const lines = [];
   const resolve = (replay, label, window) => resolveReplay(replayFor({ ...loop, replay }, { label, window }), { baseDir: root, env, root });
+  if (CU.curriculumOf(p) === 'trend') lines.push('curriculum trend: no curated replay to resolve (stage 1 of docs/TRAINING.md "The trend curriculum"; switching it is a new loopId)');
   for (const [i, w] of p.windows.entries()) {
     try {
       const run = resolve(p.replay, `plan-probe${i}`, w);
@@ -46,4 +61,4 @@ function probePlan(loop, { root, env = process.env } = {}) {
   return lines;
 }
 
-module.exports = { probePlan };
+module.exports = { probeSummary, probePlan };

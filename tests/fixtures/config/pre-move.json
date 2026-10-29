@@ -403,6 +403,10 @@
   "exitFindings.exampleChars": {
    "value": 400,
    "from": "new in feat/ride-or-exit (P1 item F, the owner: \"The model needs to learn when to ride trend and when to exit\"): each example exit's facts clipped, e.g. at 400 characters, so the findings stay within a small model's prompt"
+  },
+  "trendReport.falseStartPeakR": {
+   "value": 0.5,
+   "from": "new in feat/ppc-trend-curriculum (owner-approved trend curriculum; the owner's false-start definition, P1 criteria 2026-10-27: a loser never above +0.5R): the round report's control-window false start, report only"
   }
  },
  "replay": {

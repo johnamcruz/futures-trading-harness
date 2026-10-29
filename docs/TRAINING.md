@@ -875,6 +875,106 @@ server more than the champion's probe run, which runs alone. Raise it only
 when your local model server serves that many prompts at once (its own
 concurrency setting, in your local config).
 
+### The trend curriculum
+
+The probe round learns in two stages, set by the loop config's
+`probe.curriculum` (`scripts/lib/train/curriculum.js`):
+
+- **Stage 1, `"trend"`: master trends first** (detection, entry, exit).
+  The round replays the trend set only (`probe.trend`, required): each
+  round's batch legs' stepped windows, their control windows, and the
+  regression days. `probe.replay` and `probe.windows` are left out (the
+  config refuses them): no curated list is split, written or replayed.
+  The findings are the trend set's own: the trend-blocker and exit findings
+  of the champion's trend probe half, and the read findings from those same
+  trend runs' decisions (their skill usage, scorecard and compose records).
+  A read finding is kept only when at least `minPairs` of those decisions
+  are in its target's scope (`screen.js` `targetScope`), as on curated
+  runs; the others are left out and listed in the round's
+  `probe-report.json` (`readFindingsOmitted`). Each edit is screened on the
+  trend measures (legs caught, the exit target, the read target for a read
+  finding), with every harm check: the trend set's net R per window (the
+  control windows carry the entries made where there was nothing to catch),
+  first tries and blows, the regression days, and the reads, process and R
+  per decision of its trend runs. The combined change is judged on the
+  trend confirm half alone. An exit edit's trades pair once, by their
+  scored exits (`screen.js` `exitTargetTest` `onlyTrend`), never also by
+  the same runs' entered moments. A round skips the curated runs (in the
+  2026-10 loops, the costliest part of a round and the fewest relevant
+  moments a half).
+- **Stage 2, `"all"` (the default): learn on all days.** Today's round:
+  the curated windows and, with `probe.trend`, the trend set beside them.
+  A config without the key, or with `"all"`, is the same loop (the same
+  hash, the same round).
+
+The keep rule (section 6: `model-verifier.js` on the loop's full tuning
+windows, with model scoring) is the same under both. A curriculum is the
+loop config's: switching it is a new loop (a new `loopId`), never mid-loop
+(the loop's state refuses a changed config). `train-loop.js plan` prints
+the curriculum and what each round replays.
+
+```json
+"probe": {
+  "curriculum": "trend",
+  "k": 4,
+  "trend": { "replay": "s1-trend.json", "census": "census.json", "from": "2021-05-03", "to": "2022-09-01", "regression": { "days": ["2021-05-04"] } }
+}
+```
+
+**The mastery read.** Each round's record (`iteration-report.json`,
+`mastery`) and `train-loop.js status` ("Mastery read") give, on the confirm
+half (held-out trend legs: no edit was screened on them), the champion's
+and the combined change's: legs caught (caught of the legs in finished
+windows), R caught / R available, the control windows' false-start share,
+the keep rule's combine pass rate, and two counts that are not the same
+thing:
+
+- **the keep rule's combine pass rate**: the share of the combined
+  change's real combine attempts (each as long as the account's combine,
+  e.g. 30 sessions) that passed, the keep rule's primary measure,
+  pooled over the keep rule's tuning windows, read
+  from its archive entry (`model.windows[].challenger`); n/a when the keep
+  rule did not judge it. Every rolling start counts, and neighbouring
+  starts overlap (they share most of their sessions), so the read prints
+  the effective sample size beside it: "N of M rolling starts, ess K
+  independent" (K: the starts that share no session, summed over the
+  windows);
+- **the keep rule's combine blows**: the combined change's blows over the
+  keep rule's real attempts and resampled paths on the tuning windows
+  (`model-verifier.js` rule (a)), read from its archive entry; only a
+  combined change the keep rule judged has them (n/a otherwise);
+- **floor breaches in the trend runs**: the trend runs' own scorecard
+  decisions at or past the account's floor. Each trend run trades a fresh
+  attempt a day, never a combine, so this is not a blow count.
+
+A false start is a trade that lost and whose best R never rose
+above `config/training.json` `trendReport.falseStartPeakR` (0.5); the share
+is of the trades opened in finished control windows whose R and peak are
+known.
+
+**The mastery bar** (set 2026-10-29 and confirmed by the owner, before
+the first trend-curriculum round's result; the owner switches the stage;
+text, never code). Stage 1
+is mastered when, on held-out trend legs, two kept rounds in a row each
+show:
+
+- legs caught at least 35%;
+- R caught / R available at least 40%;
+- the 30-session combine pass rate at least 40%, from the keep rule's
+  model-scoring Monte Carlo (the share of attempts that pass, read from the
+  keep rule's verdict for the combined change);
+- the control-window false-start share not rising;
+- 0 blows in the keep rule's combine.
+
+The final pass's criteria (R caught at least 12%, false-start share under
+40%, 0 dead trend sessions, the run-1 window passing plus a fresh window,
+0 blows) are separate, and still judge the whole stack afterwards.
+
+Moving from stage 1 to stage 2 stays the owner's decision. The bar is
+the owner's judgement, not code: no config key or check holds its numbers.
+The mastery read prints the measures; it decides nothing and never
+switches the curriculum.
+
 ### Trend capture
 
 `node scripts/replay.js report` writes `trend-capture.json` beside
@@ -1506,7 +1606,7 @@ through `scripts/lib/tunables.js` (the schedule through
 | File | What it holds | Tighten-only keys |
 | --- | --- | --- |
 | `config/schedule.json` | The learning split, the prop schedule, look budgets, recorded looks, data dates (above) | look budgets, validate cap (down); reserve months (up); final needs a test pass |
-| `config/training.json` | The stage-1 exit test, the experience index and risk record minimums, the keep rule, the paired decision rule, the probe screen, probe and loop ranges, A/B levels, proposal, compose, lesson and probe-edit limits, skill byte caps, the learning report, the field studies, the trend findings' example legs | the exit test's bars, the sample floors and levels, the keep rule (its primary pinned), the decision rule, the screen, the loop's budget maxima, proposal limits, arms per evaluation, skill byte caps |
+| `config/training.json` | The stage-1 exit test, the experience index and risk record minimums, the keep rule, the paired decision rule, the probe screen, probe and loop ranges, A/B levels, proposal, compose, lesson and probe-edit limits, skill byte caps, the learning report, the field studies, the trend findings' example legs, the round report's false-start threshold | the exit test's bars, the sample floors and levels, the keep rule (its primary pinned), the decision rule, the screen, the loop's budget maxima, proposal limits, arms per evaluation, skill byte caps |
 | `config/replay.json` | Latency, the stage presets, curated lists and moments, setup moments, the account-state draw, driver retries, decision labels, the scorecard's give-back rule, the backtester's plain-run defaults | the stage presets (pinned) |
 | `config/runner.json` | The order gate's limits and timing, the trade lifecycle's size cap, the account snapshot, the replay clock, cycles, bars, prompt sizes, the live session, alerts, read caps and page sizes, the Monte Carlo's size | the gate's timing (pinned), its loss, entry, age and confluence limits, the bracket tolerances, the facts check, the size cap, the snapshot and clock tolerances, the kill switch's error count, bar staleness, the close settle time, the kill graces and the gate slack (pinned), the Monte Carlo maximum |
 | `config/analysis.json` | The reads' parameters: indicators, the snapshot, regime, CISD, CRT, volume profile, candles, the multi-timeframe read, day context, structure, momentum, fair value gaps, the briefing's frames, the rules evaluator's window | none |

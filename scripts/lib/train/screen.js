@@ -225,8 +225,9 @@ function targetTest(champion, probe, { skill, kind }) {
 function exitTargetTest(champion, probe, exits = null, { epsR = EXIT.epsR, runnerMfeR = EXIT.runnerMfeR, minPairs = SCREEN.minPairs } = {}) {
   const diffs = [];
   const unmatched = { champion: 0, probe: 0 };
-  // The curated set's moments: entered on both sides, each R known.
-  const entered = s => (s && Array.isArray(s.decisions) ? s.decisions : []).filter(d => d.entered === true && isR(d.R));
+  // The curated set's moments: entered on both sides, each R known. onlyTrend (curriculum trend: the sides' decisions
+  // are the same trend runs' whose exits are given): the trades pair once, by their exits, never by their moments too.
+  const entered = s => (exits && exits.onlyTrend ? [] : s && Array.isArray(s.decisions) ? s.decisions : []).filter(d => d.entered === true && isR(d.R));
   const a = new Map(entered(champion).map(d => [d.key, d]));
   const seen = new Set();
   for (const d of entered(probe)) {

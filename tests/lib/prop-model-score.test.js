@@ -219,6 +219,11 @@ test('acceptance: the paired comparison tells the more selective rule near the m
   assert.ok(res.a.resampled.passRate > res.b.resampled.passRate && res.a.resampled.blowRate < res.b.resampled.blowRate);
   assert.deepStrictEqual(res.paired, { sameDays: true, sameBlocks: true, sameFaults: true, oneRulebook: true });
   assert.ok(Number.isFinite(d.medianDaysToPass.diff));
+  // Each side's real attempts carry their effective sample size: the starts that share no session (stats.js).
+  const S = ACCOUNT.sessions;
+  const starts = res.starts.map((_x, k) => k * res.inputs.every);
+  assert.ok(res.a.real.attempts > res.a.real.ess && res.a.real.ess >= 1, JSON.stringify(res.a.real));
+  assert.deepStrictEqual([res.a.real.ess, res.b.real.ess], Array(2).fill(require('../../scripts/lib/prop/stats').effectiveSampleSize(starts, S)));
   // The same run against itself: exactly no difference (the same paths, blocks and faults).
   const same = scorePaired(A, A, { ...opts, passA: checkModelWindow({ run: run() }), passB: checkModelWindow({ run: run({ runId: 'r2' }) }) });
   assert.deepStrictEqual([same.verdict, same.diff.resampled.passRate.diff, same.diff.resampled.passRate.lo, same.diff.resampled.blowRate.hi], ['no significant difference', 0, 0, 0]);
