@@ -418,7 +418,7 @@ const behaviour = text => (text.includes('LUCKY') ? 'lucky' : text.includes('BAD
 const stateOf = (b, i) => (b === 'lucky' ? (i % 2 || SC.halfOf(dayOfT(TIMES[i]), 3) === 'probe' ? 'right' : 'misread') : b === 'bad' ? 'misread' : b === 'good' || i % 2 || (b === 'some' && i < 16) ? 'right' : 'misread');
 const categoryOf = (b, i) => (b === 'bad' ? 'wrong-side entry' : b === 'good' || b === 'reason' || i % 2 ? 'right' : 'wrong stated reason');
 
-function world({ proposals, verdict = 'kept', loop: over = {}, trend = false, trendBatch = {}, exits = false, incompleteDay = null, claimed = null } = {}) {
+function world({ proposals, verdict = 'kept', loop: over = {}, trend = false, trendBatch = {}, exits = false, incompleteDay = null, claimed = null, curriculum = undefined } = {}) {
   const user = tmpDir();
   const env = { PATH: process.env.PATH, HOME: user, FTH_HOME: path.join(user, 'home') };
   fs.mkdirSync(env.FTH_HOME);
@@ -481,8 +481,10 @@ function world({ proposals, verdict = 'kept', loop: over = {}, trend = false, tr
     probeData: ({ runDir, tree: dir }) => {
       calls.probeData.push({ runDir: path.basename(runDir), tree: path.basename(dir) });
       const b = behaviour(textOf(dir));
+      // A trend run (read under curriculum trend): only the moments it stepped, as the real step reads its own log.
+      const stepped = TREND_RUN.test(path.basename(runDir)) ? store.recordedTimes(runDir) : null;
       // claimed: only the first that many moments carry a read of skill a (none: every one).
-      const decisions = TIMES.map((t, i) => ({ root: 'MNQ', bar: t, decision: 'passed', outcome: { R: 0 }, reads: claimed !== null && i >= claimed ? [] : [{ step: 'zone', skill: 'a', read: 'y', check: stateOf(b, i) === 'right', agrees: true }] }));
+      const decisions = TIMES.map((t, i) => ({ root: 'MNQ', bar: t, decision: 'passed', outcome: { R: 0 }, reads: claimed !== null && i >= claimed ? [] : [{ step: 'zone', skill: 'a', read: 'y', check: stateOf(b, i) === 'right', agrees: true }] })).filter(d => !stepped || stepped.has(d.bar));
       const wrong = decisions.filter(d => d.reads.length && !d.reads[0].check).length;
       return { decisions, usage: { skills: [{ skill: 'a', reads: 20, correct: 20 - wrong, wrong, available: 20, used: 20, relevant: 20, missed: 0, topRefusals: wrong ? [{ what: 'false: y', count: wrong }] : [], topMissed: [] }] }, records: [] };
     },
@@ -540,6 +542,9 @@ function world({ proposals, verdict = 'kept', loop: over = {}, trend = false, tr
   const momentsFile = path.join(user, 'moments.jsonl');
   // And one after the runner's session (21:00Z, 16:00 New York time), which no run could act on: never counted.
   fs.writeFileSync(momentsFile, DAYS.flatMap(day => [[`${day}T14:33:00.000Z`, 'long', 2], [`${day}T14:33:00.000Z`, 'short', -1], [`${day}T21:00:00.000Z`, 'long', 9]].map(([bar, side, R]) => JSON.stringify({ day, bar, side, minutes: 3, validBars: 2, standard: { status: 'traded' }, outcome: { R } }))).join('\n'));
+  // curriculum: the probe setting's (probe-config.js); 'trend' has no curated replay or windows.
+  if (curriculum === 'trend') loop.probe = { ...loop.probe, curriculum, replay: null, windows: [] };
+  else if (curriculum !== undefined) loop.probe = { ...loop.probe, curriculum };
   if (trend) loop.probe = { ...loop.probe, trend: { moments: momentsFile, replay: { ...replay, latency: false }, set: { file: 'set.json', fingerprint: 'f', days: SET_DAYS, legs: POOL, spans: SPANS }, batch: { ...require('../../scripts/lib/tunables').training().trendBatch, start: BATCH, max: POOL.length, half: 0.5, ...trendBatch }, regression: { days: [REG_DAY] } } };
   const w = { user, env, loop, steps, calls, paths: S.loopPaths(env, 'l1') };
   return w;
@@ -1114,4 +1119,121 @@ test('a day whose legs have no window is never run, and the report and the log s
   assert.deepStrictEqual([report.trend.windows.confirm.noWindows, report.trend.windows.regression.noWindows], [[], []]);
   assert.ok(lines.some(l => l.includes(`trend probe: no windows on ${day} (never run)`)), lines.join('\n'));
   assert.ok(!w.calls.runs.some(r => TREND_RUN.test(r.runId) && dayOfRun(r.runId) === day), 'never run');
+});
+
+// --- the trend curriculum (curriculum.js): the trend set only ----------------------------------------------------------
+
+const CURATED_RUN = /-[pq]\d+$/;
+const trendCurriculum = () => [
+  tagged('a', 'F1', 'rule', '- line one', '- line one\n- TREND → enter on the pullback', 'more legs'),
+  tagged('a', 'F2', 'rule', '- line three', '- line three\n- GOOD → read it', 'fewer misreads'),
+];
+
+test('curriculum trend: a round runs no curated replay; findings and screens from the trend set only; the keep rule unchanged', async () => {
+  const w = world({ trend: true, curriculum: 'trend', proposals: trendCurriculum() });
+  await run(w);
+  const dir = w.paths.iter(1);
+  const report = JSON.parse(fs.readFileSync(path.join(dir, 'probe-report.json'), 'utf8'));
+  // The stub replayer's calls: no curated half written, no curated run (a -p/-q half or a practice config) on any side.
+  assert.deepStrictEqual(w.calls.halves, [], 'no curated half is written');
+  assert.deepStrictEqual(w.calls.runs.filter(r => CURATED_RUN.test(r.runId) || r.practice), [], 'no curated replay');
+  assert.ok(w.calls.runs.filter(r => TREND_RUN.test(r.runId)).length > 0);
+  // Every run is a trend run or a keep-rule run (the champion's and the challenger's tuning windows).
+  assert.deepStrictEqual(w.calls.runs.filter(r => !TREND_RUN.test(r.runId)).map(r => r.runId), ['l1-champion-t0', `l1-c-${report.composed.id}-t0`]);
+  assert.strictEqual(report.curriculum, 'trend');
+  assert.strictEqual(report.split, undefined, 'no curated split');
+  assert.deepStrictEqual(Object.keys(report.cycles.champion), ['trend'], 'no curated cycles');
+  // The findings: the trend set's, then the read findings from the trend probe half's own runs (never a regression day's).
+  const probeDays = ROUND1.probe.days;
+  assert.ok(w.calls.probeData.length && w.calls.probeData.every(x => TREND_RUN.test(x.runDir) && dayOfRun(x.runDir) !== REG_DAY), JSON.stringify(w.calls.probeData));
+  assert.deepStrictEqual([...new Set(w.calls.probeData.filter(x => x.runDir.startsWith('l1-pc-')).map(x => dayOfRun(x.runDir)))].sort(), [...probeDays, ...ROUND1.confirm.days].sort(), 'the champion: its probe half (findings) and confirm half (the combined change)');
+  const missed = ROUND1.probe.legs.filter(id => !(id.includes('|long|') && DAYS.indexOf(id.slice(0, 10)) % 2 === 0)).length;
+  // Each probe day steps its 4 moments; the champion misreads every other one (and refuses for a false reason there).
+  const moments = probeDays.length * 4;
+  assert.deepStrictEqual(report.findings.map(f => [f.kind, f.count]), [['trend-blocker', missed], ['misread', moments / 2], ['wrong-reason refusal', moments / 2]]);
+  // The screens: the trend edit on the probe half's legs; the read edit on the trend runs' decisions (not the curated 28).
+  assert.deepStrictEqual(report.probes.map(p => [p.verdict, p.target.pairs]), [['helped', ROUND1.probe.legs.length], ['helped', moments]]);
+  assert.ok(report.probes.every(p => p.trend && p.regression), 'the trend measures and the regression days on every edit');
+  for (const p of report.probes) assert.deepStrictEqual([...new Set(w.calls.runs.filter(r => r.runId.startsWith(`l1-p-${p.id}-`)).map(r => dayOfRun(r.runId)))].sort(), [...probeDays, REG_DAY].sort(), p.id);
+  // The combined change: on the trend confirm half (and the regression day) only.
+  assert.deepStrictEqual(w.calls.runs.filter(r => r.runId.startsWith(`l1-k-${report.composed.id}-`)).map(r => dayOfRun(r.runId)).sort(), [...ROUND1.confirm.days, REG_DAY].sort());
+  assert.strictEqual(report.composed.verdict, 'helped');
+  // The keep rule: invoked once, as ever: the loop's model scoring on its tuning windows' full-day runs, the champion's and the challenger's.
+  assert.strictEqual(w.calls.verifier.length, 1);
+  const v = w.calls.verifier[0];
+  assert.deepStrictEqual([v.cfg, v.seed, v.heldOut, v.rule], [w.loop.modelScore, w.loop.seed, false, w.loop.rule]);
+  assert.deepStrictEqual(v.pairs.map(x => [x.label, path.basename(x.champion.runDir), path.basename(x.candidate.runDir)]), [[`${TUNING[0].from}..${TUNING[0].to}`, 'l1-champion-t0', `l1-c-${report.composed.id}-t0`]]);
+  const [e] = readArchive(w.paths.archive);
+  assert.deepStrictEqual([e.verdict, e.source], ['kept', 'propose-probe-compose']);
+  // The lessons: practice-train, the round's trend days (never curated windows).
+  const lessons = LS.readLessons(path.join(w.paths.dir, LS.FILE));
+  const days = [...new Set([...probeDays, ...ROUND1.confirm.days, REG_DAY])].sort();
+  assert.deepStrictEqual(lessons.filter(l => typeof l.keep !== 'string').map(l => l.windows), Array(3).fill(TS.dayWindows(days)));
+  assert.ok(lessons.every(l => LS.practiceOnly(l.windows)));
+  // The probe look: the trend pool alone.
+  assert.deepStrictEqual(S.readLedger(w.paths.ledger).filter(l => l.candidate === 'l1/probe').map(l => l.what), ['training loop: probes of skill and role edits on the trend set\'s sessions (curriculum trend)']);
+  // Resumed: nothing re-runs.
+  const runs = w.calls.runs.length;
+  await run(w);
+  assert.strictEqual(w.calls.runs.length, runs);
+});
+
+test('curriculum trend: a read finding under minPairs of the trend runs\' judged decisions is left out; at minPairs it is kept', async () => {
+  // claimed: the moments before it carry the read; the probe days' first two (8 moments) or three (12).
+  const probeDays = [...ROUND1.probe.days].sort();
+  const round = async k => {
+    const w = world({ trend: true, curriculum: 'trend', claimed: DAYS.indexOf(probeDays[k - 1]) * 4 + 4, proposals: [] });
+    await run(w);
+    return JSON.parse(fs.readFileSync(path.join(w.paths.iter(1), 'probe-report.json'), 'utf8'));
+  };
+  const two = await round(2);
+  assert.ok(SC.SCREEN.minPairs > 8 && SC.SCREEN.minPairs <= 12, 'the fixture straddles minPairs');
+  assert.deepStrictEqual(two.readFindingsOmitted.map(x => [x.skill, x.kind, x.judged]), [['a', 'misread', 8]]);
+  assert.ok(!two.findings.some(f => f.kind === 'misread'));
+  const three = await round(3);
+  assert.strictEqual(three.readFindingsOmitted, undefined);
+  assert.deepStrictEqual(three.findings.filter(f => f.kind === 'misread').map(f => f.count), [6]);
+});
+
+test('curriculum all (the default, or said): today\'s round, unchanged: the curated windows and the trend set', async () => {
+  const runOf = async curriculum => {
+    const w = world({ trend: true, curriculum, proposals: trendCurriculum() });
+    await run(w);
+    return { w, report: JSON.parse(fs.readFileSync(path.join(w.paths.iter(1), 'probe-report.json'), 'utf8')), rec: JSON.parse(fs.readFileSync(path.join(w.paths.iter(1), 'iteration-report.json'), 'utf8')) };
+  };
+  const a = await runOf(undefined);
+  const b = await runOf('all');
+  assert.deepStrictEqual(b.report, a.report, 'the same report');
+  assert.deepStrictEqual(b.rec, a.rec);
+  assert.deepStrictEqual(b.w.calls.runs, a.w.calls.runs, 'the same runs, in the same order');
+  assert.deepStrictEqual([b.w.calls.halves, b.w.calls.probeData], [a.w.calls.halves, a.w.calls.probeData]);
+  // Today's round: both curated halves written, the curated runs replayed, the curated split and cycles reported.
+  assert.deepStrictEqual(a.w.calls.halves, ['probe', 'confirm']);
+  assert.deepStrictEqual(a.w.calls.runs.filter(r => CURATED_RUN.test(r.runId)).map(r => r.runId).sort(), ['l1-pc-p0', 'l1-pc-q0', ...a.report.probes.map(p => `l1-p-${p.id}-p0`), `l1-k-${a.report.composed.id}-q0`].sort());
+  assert.ok(a.w.calls.probeData.every(x => CURATED_RUN.test(x.runDir)), 'read data from the curated runs only');
+  assert.strictEqual(a.report.curriculum, undefined);
+  assert.deepStrictEqual([a.report.split.seed, Object.keys(a.report.cycles.champion).sort()], [3, ['confirm', 'probe', 'trend']]);
+  // The read edit judged on the curated probe half's 28 decisions, as before.
+  assert.deepStrictEqual(a.report.probes.map(p => p.target.pairs), [ROUND1.probe.legs.length, 28]);
+  assert.strictEqual(a.rec.mastery.curriculum, 'all');
+});
+
+test('the round report: the mastery read (legs caught, R caught / available, control false starts, blows) for status', async () => {
+  const w = world({ trend: true, curriculum: 'trend', proposals: trendCurriculum() });
+  await run(w);
+  const report = JSON.parse(fs.readFileSync(path.join(w.paths.iter(1), 'probe-report.json'), 'utf8'));
+  const rec = JSON.parse(fs.readFileSync(path.join(w.paths.iter(1), 'iteration-report.json'), 'utf8'));
+  const c = report.trend.champion;
+  assert.deepStrictEqual([c.blows, Object.keys(c.controls).sort()], [0, ['entries', 'falseStarts', 'share', 'unknown', 'windows']]);
+  const m = rec.mastery.champion;
+  assert.deepStrictEqual([m.legs, m.caught, m.caughtShare, m.rCaught, m.rAvailable, m.blows], [c.ride.legs, c.ride.caught, c.ride.catchRate, c.ride.rCaught, c.ride.rAvailable, 0]);
+  assert.strictEqual(m.rShare, Math.round((c.ride.rCaught / c.ride.rAvailable) * 10000) / 10000);
+  assert.deepStrictEqual(m.controls, c.controls);
+  assert.deepStrictEqual([rec.mastery.composed.id, rec.mastery.composed.kept, rec.mastery.composed.blows], [report.composed.id, true, 0]);
+  assert.deepStrictEqual(rec.mastery.composed.controls, report.composed.trend.controls);
+  const lines = IR.masteryLines(rec);
+  assert.strictEqual(lines[0], '  Mastery read (iteration 1, curriculum trend, confirm half: held-out trend legs):');
+  assert.match(lines[1], /^ {4}champion: legs caught \d+(\.\d+)?% \(\d+ of \d+\), R caught \/ available [\d.]+% \([\d.-]+ \/ [\d.]+\), control false starts .*, blows 0$/);
+  assert.match(lines[2], new RegExp(`^ {4}combined ${report.composed.id} \\(kept\\): legs caught 100% `));
+  assert.deepStrictEqual(IR.masteryLines({ ...rec, mastery: null }), []);
 });

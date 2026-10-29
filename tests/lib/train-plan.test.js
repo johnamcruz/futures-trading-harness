@@ -10,7 +10,8 @@ const fs = require('fs');
 const path = require('path');
 const { tmpDir } = require('../helpers');
 const { resolveLoop } = require('../../scripts/lib/train/config');
-const { probePlan } = require('../../scripts/lib/train/plan');
+const { probePlan, probeSummary } = require('../../scripts/lib/train/plan');
+const S = require('../../scripts/lib/train/state');
 const LC = require('../../scripts/lib/learning/leg-census');
 const C = require('../../scripts/lib/learning/curated-lists');
 const { VERSION } = require('../../scripts/lib/learning/curated-moments');
@@ -84,4 +85,37 @@ test('plan: a curated list whose windows miss the runner\'s sessions fails at pl
   const f = loopFolder({ sessions: ['13:00-14:00@America/New_York'] });
   const loop = resolveLoop(f.raw, { baseDir: f.dir });
   assert.throws(() => probePlan(loop, { root: ROOT, env: f.env }), /the probe round's replays are refused:\n- probe\.replay on 2021-05-03\.\.2021-05-07: invalid replay config:\n- curatedList: \d+ window\(s\) hold no decision time of the run's sessions/);
+});
+
+test('plan, curriculum trend: no curated replay resolved; the trend replay and pool are; the probe line says what each round replays', () => {
+  const f = loopFolder();
+  const { replay: _r, windows: _w, ...rest } = f.raw.probe;
+  const raw = { ...f.raw, probe: { ...rest, curriculum: 'trend' } };
+  const loop = resolveLoop(raw, { baseDir: f.dir });
+  const lines = probePlan(loop, { root: ROOT, env: f.env });
+  assert.strictEqual(lines[0], 'curriculum trend: no curated replay to resolve (stage 1 of docs/TRAINING.md "The trend curriculum"; switching it is a new loopId)');
+  assert.ok(!lines.some(l => l.startsWith('probe replay')), lines.join('\n'));
+  assert.match(lines[1], /^trend replay: resolves on 2021-05-0\d /);
+  assert.match(lines[2], /^trend pool: 2021-05-03\.\.2021-05-07, /);
+  assert.strictEqual(lines.length, 3);
+  assert.strictEqual(probeSummary(loop.probe), 'probe: on, curriculum trend: 4 edit(s) a round, each replayed alone on the trend set (2021-05-03..2021-05-07: each round\'s batch legs\' stepped windows, their control windows, 0 regression day(s)) only, no curated replay (practice-train, no budget); findings and screens from the trend runs only; 1 at once; the passing ones composed, then the keep rule (the loop\'s tuning windows, unchanged)');
+  // Curriculum all: the curated windows and the trend set; no curriculum line in the replays' plan (today's lines).
+  const all = resolveLoop(f.raw, { baseDir: f.dir });
+  assert.strictEqual(probeSummary(all.probe), 'probe: on, curriculum all: 4 edit(s) a round, each replayed alone on the curated windows 2021-05-03..2021-05-07 and the trend set (2021-05-03..2021-05-07: each round\'s batch legs\' stepped windows, their control windows, 0 regression day(s)) (practice-train, no budget); 1 at once; the passing ones composed, then the keep rule (the loop\'s tuning windows, unchanged)');
+  assert.ok(!probePlan(all, { root: ROOT, env: f.env }).some(l => l.startsWith('curriculum')));
+  assert.match(probeSummary({ ...all.probe, trend: undefined }), /curated windows 2021-05-03\.\.2021-05-07 \(practice-train/);
+  assert.strictEqual(probeSummary(null), 'probe: off');
+});
+
+test('a curriculum is the loop config\'s: all said or not is the same loop; trend is another, refused under the same loopId', () => {
+  const f = loopFolder();
+  const { replay: _r, windows: _w, ...rest } = f.raw.probe;
+  const all = resolveLoop(f.raw, { baseDir: f.dir });
+  assert.strictEqual(resolveLoop({ ...f.raw, probe: { ...f.raw.probe, curriculum: 'all' } }, { baseDir: f.dir }).hash, all.hash);
+  const trend = resolveLoop({ ...f.raw, probe: { ...rest, curriculum: 'trend' } }, { baseDir: f.dir });
+  assert.notStrictEqual(trend.hash, all.hash);
+  // A loop started under one curriculum and resumed under the other: refused (a switch is a new loopId).
+  const paths = S.loopPaths(f.env, all.loopId);
+  S.openState(paths, { loopId: all.loopId, hash: all.hash });
+  assert.throws(() => S.openState(paths, { loopId: trend.loopId, hash: trend.hash }), /started with another config .*a changed config is a new loopId/);
 });

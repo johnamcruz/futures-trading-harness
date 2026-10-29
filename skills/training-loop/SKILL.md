@@ -81,7 +81,11 @@ each probe showed, and the keep rule's verdict on each combined change
 (`docs/TRAINING.md`, "Propose–Probe–Compose"). Keep `parallel` at 1
 unless your local model server serves that many prompts at once; above 1
 needs `latency: false` in the probe replay. A proposal a person imported
-still comes first, without a probe round.
+still comes first, without a probe round. `probe.curriculum` `"trend"`
+replays the trend set only (`probe.trend` required, no `replay` or
+`windows`); `"all"`, the default, is the round above. A switch is a new
+`loopId`; `status` prints each round's mastery read (`docs/TRAINING.md`,
+"The trend curriculum").
 
 **The tiers.** (1) the scorecard's deterministic checks flag failures;
 (2) the local model reviews its own flagged decisions and proposes; (3) a

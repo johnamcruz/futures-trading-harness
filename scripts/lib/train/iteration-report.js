@@ -18,10 +18,15 @@
  *                                     previous: the earlier iterations' records, oldest first, for the learning curve)
  *   line(record)                      one line for status
  *   rideLines(record)                 the round's "Trend catch & ride" block for status (none without a trend set)
+ *   masteryLines(record)              the round's mastery read for status (none without a trend set): on the confirm half
+ *                                     (held-out trend legs), the champion's and the combined change's legs caught,
+ *                                     R caught / available, control-window false-start share and blows (curriculum.js);
+ *                                     the owner's bar on them is text (docs/TRAINING.md), never judged here
  */
 
 const TC = require('./trend-curve');
 const TR = require('../replay/trend-ride');
+const CU = require('./curriculum');
 
 const net = t => (t && Number.isInteger(t.pairs) ? { fixed: t.b, broken: t.c, pairs: t.pairs } : null);
 const targetLabel = tag => (tag ? (tag.agent ? `agent ${tag.agent}` : tag.skill || '?') : '?');
@@ -46,6 +51,17 @@ function rideOf(r) {
   return {
     champion: r.trend.champion && r.trend.champion.ride ? r.trend.champion.ride : null, championProbe: r.trend.probeRide || null, edits,
     composed: r.composed && r.composed.trend && r.composed.trend.ride ? { id: r.composed.id, ...r.composed.trend.ride } : null,
+  };
+}
+
+/** The round's mastery read (see masteryLines): the champion's confirm half, and the combined change's when judged. */
+function masteryOf(r, kept) {
+  const c = r.trend.champion;
+  const t = r.composed && r.composed.trend ? r.composed.trend : null;
+  return {
+    curriculum: r.curriculum || CU.DEFAULT,
+    champion: c ? CU.mastery({ ride: c.ride, blows: c.blows, controls: c.controls }) : null,
+    composed: t ? { id: r.composed.id, kept: Boolean(kept && kept.verdict === 'kept'), ...CU.mastery({ ride: t.ride, blows: t.blows, controls: t.controls }) } : null,
   };
 }
 
@@ -74,6 +90,8 @@ function build({ probeReport = null, entries = [], previous = [] } = {}) {
     // The round's trend catch & ride (replay/trend-ride.js), report only: the champion's confirm and probe halves, each
     // edit's probe half, the combined change's confirm half; null where a side recorded none.
     ride: r.trend ? rideOf(r) : null,
+    // The round's mastery read (curriculum.js mastery): what the owner's trend-mastery bar reads (docs/TRAINING.md).
+    mastery: r.trend ? masteryOf(r, kept) : null,
     ...(r.trend ? curveFields(r, kept, previous) : {}),
     cycles: r.cycles || null,
     // Each side's bars skipped while a cycle ran (latency, as live; probe.js): a slower edit shows here.
@@ -130,4 +148,15 @@ function rideLines(x) {
   return sides.length ? [`  Trend catch & ride (iteration ${x.iteration}):`, ...sides.map(([k, t]) => `    ${k}: ${TR.rideLine(t)}`)] : [];
 }
 
-module.exports = { build, line, rideLines };
+/** The round's mastery read: a line per side that has one (the champion's confirm half; the combined change's). */
+function masteryLines(x) {
+  const m = x && x.mastery;
+  if (!m || (!m.champion && !m.composed)) return [];
+  return [
+    `  Mastery read (iteration ${x.iteration}, curriculum ${m.curriculum}, confirm half: held-out trend legs):`,
+    ...(m.champion ? [`    champion: ${CU.masteryText(m.champion)}`] : []),
+    ...(m.composed ? [`    combined ${m.composed.id}${m.composed.kept ? ' (kept)' : ''}: ${CU.masteryText(m.composed)}`] : []),
+  ];
+}
+
+module.exports = { build, line, rideLines, masteryLines };

@@ -87,6 +87,8 @@ const TRAINING = {
   trendWindows: { leadBars: int(0), controlPerLeg: int(0) },
   trendFindings: { examples: int(1), exampleChars: int(80), saidChars: int(40), setupTypes: int(1), setupMinN: int(1) },
   exitFindings: { examples: int(1), exampleChars: int(80) },
+  // The round report's control-window false start (train/curriculum.js): a loser whose best R never rose above this.
+  trendReport: { falseStartPeakR: pos() },
 };
 
 // A stage preset's refused value: true or false (that value refused), or 'set' (any value refused).
