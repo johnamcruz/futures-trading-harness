@@ -236,8 +236,12 @@ function composedRefusal({ name, strategy = null, home, root, input = {}, now = 
     const want = cut ? approvedSize : base;
     // Phase 2's cut of the translated size on a healthy account (prop/phase2-cut.js: no pacing rule holds): the
     // translated size goes too, never more (owner-approved 2026-10-28); the cut itself still goes.
-    const restore = cut && t && typeof cutCheck === 'function' ? cutCheck({ approved: approvedSize, base, riskUsd: base * p.stop.ticks * spec.tickValue }) : null;
-    if (restore && restore.restored && Number(input.size) === base) return { message: null, check, record: rec, plan: p, room: roomOf(p, tick), expiresAt: new Date(expiry).toISOString(), briefing: b, restored: restore.restored };
+    // Only an order at the translated size asks; a check that throws is no restore (the cut itself still goes).
+    let restore = null;
+    if (cut && t && typeof cutCheck === 'function' && Number(input.size) === base) {
+      try { restore = cutCheck({ approved: approvedSize, base, riskUsd: base * p.stop.ticks * spec.tickValue }); } catch (_err) { restore = null; }
+    }
+    if (restore && restore.restored) return { message: null, check, record: rec, plan: p, room: roomOf(p, tick), expiresAt: new Date(expiry).toISOString(), briefing: b, restored: restore.restored };
     if (t && Number(input.size) !== want) return say(cut ? `size ${JSON.stringify(input.size)} is not ${want}, risk-manager phase 2's cut of the translated ${base}: the order is exactly the smaller` : `size ${JSON.stringify(input.size)} is not the translated size ${base} (${t.reason}; the record suggested ${stated}): order_plan gives it`, check);
     if (Number(input.size) !== want) return say(cut ? `size ${JSON.stringify(input.size)} is not ${want}, risk-manager phase 2's cut of the record's ${stated}: the order is exactly the smaller` : `size ${JSON.stringify(input.size)} is not the size the record states (${stated}); the ceilings over it are the risk cap, the broker's max and, in an attempt, the verdict`, check);
     // The room a phase-2 room fact is checked against (fact-claims.js): the plan's first level in the way, in its R,

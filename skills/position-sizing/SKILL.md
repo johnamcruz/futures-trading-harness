@@ -56,12 +56,13 @@ description: Use when sizing a trade plan - risk per contract, the budget, the c
    stop always working) still applies. The verdict is the most the account
    allows, not what the moment deserves: after a loss, in a streak or
    drawdown, or one loss from `daily_loss_soft` or the target, size under it
-   (`Size: <n> (<rule>)`; else it is placed at the verdict) or pass.
+   (`Size: <n> (<rule>)`) or pass. A healthy account: a pass is a VETO, a
+   smaller size is placed at the verdict.
    In a prop attempt, the size you state is a suggestion: code translates it
    at entry to the rulebook's size (min_contracts and the budget); read the
    size it returns.
 7. **Half size** wherever the priority order (strategy-library) halves a
-   trade, computed as it says there. Never round a half up. In a prop attempt the translated size is full; phase 2 cuts it only on a pacing rule. A composed
+   trade, computed as it says there. Never round a half up. A composed
    trade: `confluence-counting` sizes it, under the caps.
 8. **The arithmetic from `order_plan`** (the `order-plan` skill): steps 2
    and 4 for a compose record (refused over its cap), a policy verdict or a

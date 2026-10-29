@@ -3758,6 +3758,16 @@ test('trade_lifecycle in an attempt, phase 2\'s cut (owner-approved 2026-10-28, 
   assert.ok(dd.some(m => /\[composed-reads\] .*size 5 is not 3, risk-manager phase 2's cut of the translated 5/.test(m)), JSON.stringify(dd));
   assert.ok(dd.some(m => /\[phase2-size\] size 5 is over the 3/.test(m)));
   assert.deepStrictEqual(run({ balance: 49900 }, 3), []);
+  // The attempt's facts can't be read (a read that throws): the cut phase 2 approved still goes; no restore.
+  const P2C = require('../../scripts/lib/prop/phase2-cut');
+  const real = P2C.cutFacts;
+  P2C.cutFacts = () => { throw new Error('the attempt record is unreadable'); };
+  try {
+    assert.deepStrictEqual(run({}, 3), []);
+    assert.ok(run({}, 5).some(m => /\[composed-reads\] .*size 5 is not 3/.test(m)));
+  } finally {
+    P2C.cutFacts = real;
+  }
 });
 
 test('trade_lifecycle: modify_order never reprices a working composed entry worse than its record\'s entry; better, stops, targets and exits move freely', () => {

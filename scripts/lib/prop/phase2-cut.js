@@ -9,7 +9,9 @@
  * teach (prop-challenge-pacing "Read the attempt line", position-sizing step 6), each a condition code verifies from the
  * attempt's facts (combine.attemptFacts on the runner's latest snapshot: what combine_status and the attempt line show):
  *
- *   after-loss  a losing trade closed today (lossesToday >= 1; the gate's daily loss count is one of these)
+ *   after-loss  a losing trade closed today as the snapshot counts it (lossesToday >= 1: prop-state.js dayCounts, the
+ *               closing fills since the day's first flat snapshot plus the counts carried into the day; a loss
+ *               before that anchor and not carried isn't in it, though its P&L still shows as a drawdown)
  *   streak      a losing streak open (lossStreak >= 1: the session's, prop-state.js recordStreak; one loss short of
  *               loss_streak_stop and past it alike)
  *   drawdown    the balance under the attempt's start or under its peak (near the floor: the cushion is under the
