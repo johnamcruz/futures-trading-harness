@@ -1107,6 +1107,25 @@ test('the whole prompt stays within its limit: a managed cycle keeps its exit sk
   assert.ok(SS.situationText(rootDir, chosen).length > 0);
 });
 
+test('the cycle data\'s room is held: on a harness with cycleDataInPrompt, the section leaves the cycle data\'s cap beside it', async () => {
+  const HP = require('../../scripts/lib/head-prompt');
+  const SS = require('../../scripts/lib/situational-skills');
+  const rootDir = require('path').resolve(__dirname, '..', '..');
+  const reserve = require('../../scripts/lib/tunables').runner().prompt.cycleDataMaxBytes;
+  const size = s => Buffer.byteLength(HP.block(s, HP.skillBody(rootDir, s)));
+  const cfgOver = { harness: 'claude', cycleDataInPrompt: true };
+  const b = { symbol: 'MNQ', minutes: 3, sections: { m3: { data: { windowEntries: 'allowed', vwap: { side: 'above' }, lastBreak: { last: { kind: 'BOS' } } } } } };
+  const sim = maxPromptBytes => trailSim({ tape: {}, startAt: et(15, 40) + 2000, until: et(15, 52), rootDir, cfgOver, briefingFor: () => b, ...(maxPromptBytes ? { maxPromptBytes } : {}) });
+  const managedOf = r => { const p = r.prompts.find(x => /trade-session/.test(x) && /1 open position/.test(x)); return { p, chosen: r.contexts[r.prompts.indexOf(p)].cycleSkills }; };
+  const first = managedOf(await sim(null));
+  const base = Buffer.byteLength(first.p) - Buffer.byteLength(SS.situationText(rootDir, first.chosen));
+  // Room for manage-position beside the reserve; without the reserve, room for every skill.
+  const max = base + reserve + size('manage-position') + 500;
+  const { chosen } = managedOf(await sim(max));
+  assert.ok(chosen.bytes <= max - base - reserve, `${chosen.bytes} > ${max - base - reserve}`);
+  assert.deepStrictEqual(chosen.skills, ['manage-position']);
+});
+
 test('a hung account read is cut off: the run still starts and says so', async () => {
   const hung = await trailSim({ tape: {}, until: et(10, 8), balanceHangs: true, accountReadMs: 20 });
   assert.ok(hung.cycles.includes('trade'), 'the run is not held up');

@@ -138,6 +138,16 @@ test('budgetFor and fit: the section gets what the prompt\'s limit leaves, never
   assert.deepStrictEqual(tight.skills, ['manage-position', 'pullback-vs-reversal']);
   assert.ok(base + Buffer.byteLength(SS.situationText(ROOT, tight)) + size('take-profit') <= max);
   assert.deepStrictEqual(SS.fit(ROOT, facts, { loaded: LOADED, base: 1e6, max }).skills, [], 'no room: none embedded, every one named');
+  // No slack: room for the exit skills' blocks but not the section's own words, so the last one goes.
+  const exact = base + exits.reduce((n, s) => n + size(s), 0);
+  const none = SS.fit(ROOT, facts, { loaded: LOADED, base, max: exact });
+  assert.ok(!none.skills.includes('take-profit') && none.skills.length > 0, JSON.stringify(none.skills));
+  assert.ok(base + Buffer.byteLength(SS.situationText(ROOT, none)) <= exact);
+  // No slack beside a reserve (the cycle data still to come): the reserve is held in the fit, not only in the budget.
+  const reserve = 5000;
+  const held = SS.fit(ROOT, facts, { loaded: LOADED, base, max: exact + reserve, reserve });
+  assert.ok(!held.skills.includes('take-profit') && held.skills.length > 0, JSON.stringify(held.skills));
+  assert.ok(base + Buffer.byteLength(SS.situationText(ROOT, held)) + reserve <= exact + reserve);
 });
 
 test('the cycle prompt: a cycle in no situation is byte-identical to the prompt without a section; a situation\'s section sits before the result line', () => {
