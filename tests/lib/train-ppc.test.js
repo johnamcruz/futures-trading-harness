@@ -1257,4 +1257,6 @@ test('curriculum trend: an exit edit\'s trades pair once, by their scored exits,
   const n = ROUND1.probe.days.length * EXIT_TRADES;
   assert.deepStrictEqual([p.target.pairs, p.target.b, p.target.c], [n, n, 0], JSON.stringify(p.target));
   assert.deepStrictEqual(p.target.unmatched, { champion: 0, probe: 0 });
+  // The combined change, on the confirm half: its trades pair once too.
+  assert.strictEqual(report.composed.measures.target.pairs, ROUND1.confirm.days.length * EXIT_TRADES, JSON.stringify(report.composed.measures.target));
 });

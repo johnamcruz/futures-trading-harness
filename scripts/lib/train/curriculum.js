@@ -35,8 +35,11 @@
  *   mastery({ ride, floorBreaches, keepRuleBlows, keepRulePass, controls })   { legs, caught, caughtShare, rCaught,
  *                                             rAvailable, rShare, rUnknown, controls, combinePass, keepRuleBlows, floorBreaches } (ride: trend-screen.js
  *                                             rideOfSide's; keepRuleBlows null when the keep rule did not judge it)
- *   keepRulePass(entry)                       { passed, attempts, rate }: the challenger's combine attempts that passed,
- *                                             pooled over the keep rule's windows, or null when a window has none
+ *   keepRulePass(entry)                       { passed, attempts, rate, ess }: the challenger's combine attempts that
+ *                                             passed, pooled over the keep rule's windows: every rolling start counts and
+ *                                             neighbouring starts overlap, so ess (the windows' effective sample sizes summed,
+ *                                             the independent starts; null when a window has none) stands beside it; null
+ *                                             when a window has no attempts
  *   keepRuleBlows(entry)                      the challenger's blows over the keep rule's windows (its archive entry's
  *                                             model.windows[].blows.b, as rule (a) sums them), or null when it has none
  *   masteryText(m)                            one line of it
@@ -95,7 +98,8 @@ function keepRulePass(entry) {
   if (!ws.length || !ws.every(w => w && ok(w.challenger))) return null;
   const passed = ws.reduce((s, w) => s + w.challenger.passed, 0);
   const attempts = ws.reduce((s, w) => s + w.challenger.attempts, 0);
-  return { passed, attempts, rate: attempts ? round4(passed / attempts) : null };
+  const ess = ws.every(w => Number.isInteger(w.challenger.ess)) ? ws.reduce((s, w) => s + w.challenger.ess, 0) : null;
+  return { passed, attempts, rate: attempts ? round4(passed / attempts) : null, ess };
 }
 
 function keepRuleBlows(entry) {
@@ -128,7 +132,7 @@ function masteryText(m) {
   if (!m) return 'n/a';
   const c = m.controls;
   const controls = c ? `${pct(c.share)} (${c.falseStarts} of ${c.entries - c.unknown} known trade(s), ${c.unknown} unknown, in ${c.windows} finished control window(s))` : 'n/a (exits unknown)';
-  return `legs caught ${pct(m.caughtShare)} (${m.caught === null ? '?' : m.caught} of ${m.legs === null ? '?' : m.legs}), R caught / available ${pct(m.rShare)} (${m.rCaught === null ? '?' : m.rCaught} / ${m.rAvailable === null ? '?' : m.rAvailable}${m.rUnknown ? `, ${m.rUnknown} unknown` : ''}), control false starts ${controls}, combine pass rate ${m.combinePass ? `${pct(m.combinePass.rate)} (${m.combinePass.passed} of ${m.combinePass.attempts} of the keep rule's real attempts)` : 'n/a (not judged by the keep rule)'}, keep rule's combine blows ${m.keepRuleBlows === null ? 'n/a (not judged by the keep rule)' : m.keepRuleBlows}, floor breaches in the trend runs ${m.floorBreaches === null ? '?' : m.floorBreaches}`;
+  return `legs caught ${pct(m.caughtShare)} (${m.caught === null ? '?' : m.caught} of ${m.legs === null ? '?' : m.legs}), R caught / available ${pct(m.rShare)} (${m.rCaught === null ? '?' : m.rCaught} / ${m.rAvailable === null ? '?' : m.rAvailable}${m.rUnknown ? `, ${m.rUnknown} unknown` : ''}), control false starts ${controls}, combine pass rate ${m.combinePass ? `${pct(m.combinePass.rate)} (${m.combinePass.passed} of ${m.combinePass.attempts} rolling starts, ess ${m.combinePass.ess === null || m.combinePass.ess === undefined ? '?' : m.combinePass.ess} independent; the keep rule's)` : 'n/a (not judged by the keep rule)'}, keep rule's combine blows ${m.keepRuleBlows === null ? 'n/a (not judged by the keep rule)' : m.keepRuleBlows}, floor breaches in the trend runs ${m.floorBreaches === null ? '?' : m.floorBreaches}`;
 }
 
 module.exports = { CURRICULA, DEFAULT, curriculumOf, readPart, readSideOf, falseStarts, keepRulePass, keepRuleBlows, mastery, masteryText };

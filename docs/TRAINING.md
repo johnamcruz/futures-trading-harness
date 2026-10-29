@@ -931,9 +931,14 @@ thing:
 
 - **the keep rule's combine pass rate**: the share of the combined
   change's real combine attempts (each as long as the account's combine,
-  e.g. 30 sessions) that passed, the keep rule's primary measure, pooled over the keep rule's tuning windows, read
+  e.g. 30 sessions) that passed, the keep rule's primary measure,
+  pooled over the keep rule's tuning windows, read
   from its archive entry (`model.windows[].challenger`); n/a when the keep
-  rule did not judge it;
+  rule did not judge it. Every rolling start counts, and neighbouring
+  starts overlap (they share most of their sessions), so the read prints
+  the effective sample size beside it: "N of M rolling starts, ess K
+  independent" (K: the starts that share no session, summed over the
+  windows);
 - **the keep rule's combine blows**: the combined change's blows over the
   keep rule's real attempts and resampled paths on the tuning windows
   (`model-verifier.js` rule (a)), read from its archive entry; only a
