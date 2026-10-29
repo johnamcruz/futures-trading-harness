@@ -23,12 +23,18 @@
  *                                     R caught / available, control-window false-start share, the keep rule's combine
  *                                     pass rate and blows (the combined change's, when the keep rule judged it) and the trend runs'
  *                                     floor breaches (curriculum.js);
- *                                     the owner's bar on them is text (docs/TRAINING.md), never judged here
+ *                                     the owner's bar on them is text (docs/TRAINING.md), never judged here; and
+ *                                     each side's risk and return diagnostics (risk-stats.js: per trade, on the trend
+ *                                     confirm half's trades and, when the keep rule judged the combined change, on its
+ *                                     runs; report only)
+ *   build's keepRuleRuns               { champion, byId: { proposalId: decisions } }: the keep rule's scored decisions
+ *                                     (loop.js writeIterationReport), or null
  */
 
 const TC = require('./trend-curve');
 const TR = require('../replay/trend-ride');
 const CU = require('./curriculum');
+const RS = require('./risk-stats');
 
 const net = t => (t && Number.isInteger(t.pairs) ? { fixed: t.b, broken: t.c, pairs: t.pairs } : null);
 const targetLabel = tag => (tag ? (tag.agent ? `agent ${tag.agent}` : tag.skill || '?') : '?');
@@ -56,8 +62,26 @@ function rideOf(r) {
   };
 }
 
+/**
+ * The round's risk and return diagnostics (risk-stats.js), report only: each side's trades on the trend confirm half,
+ * and on the keep rule's runs when the keep rule judged the combined change (the same id match as its blows and pass
+ * rate; the champion's keep-rule runs are that judgment's other side). keepRuleRuns: { champion, byId } (loop.js
+ * writeIterationReport: each side's scored decisions of the tuning windows), or null.
+ */
+function riskOf(r, judged, keepRuleRuns) {
+  const c = r.trend.champion;
+  const t = r.composed && r.composed.trend ? r.composed.trend : null;
+  const k = judged && keepRuleRuns ? keepRuleRuns : null;
+  const keep = decisions => RS.riskStats(RS.tradesOf(decisions));
+  return {
+    judged: Boolean(judged),
+    champion: c ? { trend: RS.riskStats(c.trades), keepRule: k ? keep(k.champion) : null } : null,
+    composed: t ? { id: r.composed.id, trend: RS.riskStats(t.trades), keepRule: k ? keep((k.byId || {})[r.composed.id]) : null } : null,
+  };
+}
+
 /** The round's mastery read (see masteryLines): the champion's confirm half, and the combined change's when judged. */
-function masteryOf(r, kept) {
+function masteryOf(r, kept, keepRuleRuns) {
   const c = r.trend.champion;
   const t = r.composed && r.composed.trend ? r.composed.trend : null;
   const judged = Boolean(t && kept && kept.proposalId === r.composed.id);
@@ -66,13 +90,15 @@ function masteryOf(r, kept) {
     champion: c ? CU.mastery({ ride: c.ride, floorBreaches: c.blows, controls: c.controls }) : null,
     // The combined change's keep-rule blows: its archive entry's (the keep rule's verdict, rule (a)), when it was judged.
     composed: t ? { id: r.composed.id, kept: Boolean(kept && kept.verdict === 'kept'), ...CU.mastery({ ride: t.ride, floorBreaches: t.blows, keepRuleBlows: judged ? CU.keepRuleBlows(kept) : null, keepRulePass: judged ? CU.keepRulePass(kept) : null, controls: t.controls }) } : null,
+    // Diagnostics only (risk-stats.js): nothing decides on them; the pass rate with 0 blows still does.
+    risk: riskOf(r, judged, keepRuleRuns),
   };
 }
 
 const previousPoints = previous => (previous || []).map(x => x && x.curvePoint).filter(Boolean);
 const curveOfPrevious = previous => TC.curveOf(previousPoints(previous));
 
-function build({ probeReport = null, entries = [], previous = [] } = {}) {
+function build({ probeReport = null, entries = [], previous = [], keepRuleRuns = null } = {}) {
   const r = probeReport || {};
   const findings = new Map((r.findings || []).map(f => [f.id, f]));
   const kept = entries.find(e => e && e.phase !== 'held-out' && e.composition) || entries.find(e => e && e.phase !== 'held-out') || null;
@@ -95,7 +121,7 @@ function build({ probeReport = null, entries = [], previous = [] } = {}) {
     // edit's probe half, the combined change's confirm half; null where a side recorded none.
     ride: r.trend ? rideOf(r) : null,
     // The round's mastery read (curriculum.js mastery): what the owner's trend-mastery bar reads (docs/TRAINING.md).
-    mastery: r.trend ? masteryOf(r, kept) : null,
+    mastery: r.trend ? masteryOf(r, kept, keepRuleRuns) : null,
     ...(r.trend ? curveFields(r, kept, previous) : {}),
     cycles: r.cycles || null,
     // Each side's bars skipped while a cycle ran (latency, as live; probe.js): a slower edit shows here.
@@ -160,6 +186,21 @@ function masteryLines(x) {
     `  Mastery read (iteration ${x.iteration}, curriculum ${m.curriculum}, confirm half: held-out trend legs):`,
     ...(m.champion ? [`    champion: ${CU.masteryText(m.champion)}`] : []),
     ...(m.composed ? [`    combined ${m.composed.id}${m.composed.kept ? ' (kept)' : ''}: ${CU.masteryText(m.composed)}`] : []),
+    ...riskLines(m.risk),
+  ];
+}
+
+/** The risk diagnostics' lines (none in a record from before them): per side, the trend confirm half, the keep rule's runs. */
+function riskLines(risk) {
+  if (!risk || (!risk.champion && !risk.composed)) return [];
+  const side = (label, x) => (x ? [
+    `    ${label}, trend confirm half: ${RS.riskText(x.trend)}`,
+    `    ${label}, keep rule's runs: ${risk.judged ? RS.riskText(x.keepRule) : 'n/a (not judged by the keep rule)'}`,
+  ] : []);
+  return [
+    '  Risk and return (per trade, R as the scorecard records it; diagnostics only: pass rate with 0 blows decides):',
+    ...side('champion', risk.champion),
+    ...(risk.composed ? side(`combined ${risk.composed.id}`, risk.composed) : []),
   ];
 }
 

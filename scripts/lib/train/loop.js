@@ -110,6 +110,9 @@ function scorecardDecisions(records) {
     stated: r.actual && r.actual.result,
     // A blow: the account at or past its floor at this decision (the evaluator, step 9, judges blows over attempts).
     blow: Boolean(r.pacing && typeof r.pacing.cushion === 'number' && r.pacing.cushion <= 0),
+    // The decision's filled trade (a flat decision's, as the scorecard's trades count it): its R, for the round report's
+    // risk diagnostics only (risk-stats.js); null with none. Nothing judges or prompts on it.
+    trade: r.trade && r.decision === 'flat' ? { r: typeof r.trade.r === 'number' && Number.isFinite(r.trade.r) ? r.trade.r : null } : null,
   }));
 }
 
@@ -264,6 +267,9 @@ function windowRun(ctx, { label, window, tree, look, replay = null, role = undef
   return { run, gate: learningGate(ctx, run, look, label, loopRole) };
 }
 
+/** A side's scored decisions of its runs under a tag (windowRuns' phase file). */
+const decisionsFile = (ctx, side, tag) => path.join(ctx.paths.dir, `${side}-${tag}-decisions.json`);
+
 async function windowRuns(ctx, { side = 'champion', tag, windows, tree, look, replay = null, share = 1, role = undefined }) {
   const champion = side === 'champion';
   if (champion && !ctx.state.done[`look:${tag}`]) {
@@ -308,7 +314,7 @@ async function windowRuns(ctx, { side = 'champion', tag, windows, tree, look, re
     ctx.state.done[`run:${label}`] = true;
     ctx.save();
   }
-  const decisions = await phase(ctx, champion ? `scorecard:${tag}` : `scorecard:${side}-${tag}`, path.join(ctx.paths.dir, `${side}-${tag}-decisions.json`), async () => {
+  const decisions = await phase(ctx, champion ? `scorecard:${tag}` : `scorecard:${side}-${tag}`, decisionsFile(ctx, side, tag), async () => {
     const out = [];
     for (const r of runs) out.push(...(await ctx.steps.scorecard({ runDir: r.runDir, tree, look: ctx.lookFor(), env: ctx.env })).map(d => ({ ...d, run: r.label })));
     return out;
@@ -527,7 +533,11 @@ function writeIterationReport(ctx, n) {
   // The earlier iterations' records: the learning curve runs across the loop's rounds.
   const previous = [];
   for (let i = 1; i < n; i += 1) previous.push(readJson(path.join(ctx.paths.iter(i), 'iteration-report.json'), null));
-  writeJsonAtomic(path.join(ctx.paths.iter(n), 'iteration-report.json'), IR.build({ probeReport, entries, previous: previous.filter(Boolean) }));
+  // The keep rule's runs (the tuning windows, tag 't': modelVerdict's), report only: the champion's and each judged
+  // challenger's scored decisions, for the round's risk diagnostics (iteration-report.js, risk-stats.js).
+  const judged = entries.filter(e => e && e.model && e.proposalId);
+  const keepRuleRuns = judged.length ? { champion: readJson(decisionsFile(ctx, 'champion', 't'), null), byId: Object.fromEntries(judged.map(e => [e.proposalId, readJson(decisionsFile(ctx, `c-${e.proposalId}`, 't'), null)])) } : null;
+  writeJsonAtomic(path.join(ctx.paths.iter(n), 'iteration-report.json'), IR.build({ probeReport, entries, previous: previous.filter(Boolean), keepRuleRuns }));
 }
 
 /** The keep rule's verdict on a combined change, in the lessons record (lessons.js appendKeep), once. */

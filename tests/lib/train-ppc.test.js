@@ -418,7 +418,7 @@ const behaviour = text => (text.includes('LUCKY') ? 'lucky' : text.includes('BAD
 const stateOf = (b, i) => (b === 'lucky' ? (i % 2 || SC.halfOf(dayOfT(TIMES[i]), 3) === 'probe' ? 'right' : 'misread') : b === 'bad' ? 'misread' : b === 'good' || i % 2 || (b === 'some' && i < 16) ? 'right' : 'misread');
 const categoryOf = (b, i) => (b === 'bad' ? 'wrong-side entry' : b === 'good' || b === 'reason' || i % 2 ? 'right' : 'wrong stated reason');
 
-function world({ proposals, verdict = 'kept', loop: over = {}, trend = false, trendBatch = {}, exits = false, incompleteDay = null, claimed = null, curriculum = undefined, entered = false } = {}) {
+function world({ proposals, verdict = 'kept', loop: over = {}, trend = false, trendBatch = {}, exits = false, incompleteDay = null, claimed = null, curriculum = undefined, entered = false, trades = false } = {}) {
   const user = tmpDir();
   const env = { PATH: process.env.PATH, HOME: user, FTH_HOME: path.join(user, 'home') };
   fs.mkdirSync(env.FTH_HOME);
@@ -476,7 +476,8 @@ function world({ proposals, verdict = 'kept', loop: over = {}, trend = false, tr
     }),
     scorecard: ({ runDir }) => Object.values(store.readRun(runDir).days).flat().map(l => {
       const i = TIMES.indexOf(l.t);
-      return { key: `${l.t}|MNQ`, t: l.t, barT: l.t, day: l.day, symbol: 'MNQ', category: categoryOf(l.ran[0].result, i), actual: { action: 'none' }, falseReasons: [], inTrade: false, blow: false };
+      // trades: a filled trade's R on two of every four moments (+2R, then -1R), as scorecardDecisions says it.
+      return { key: `${l.t}|MNQ`, t: l.t, barT: l.t, day: l.day, symbol: 'MNQ', category: categoryOf(l.ran[0].result, i), actual: { action: 'none' }, falseReasons: [], inTrade: false, blow: false, ...(trades ? { trade: i % 4 === 0 ? { r: 2 } : i % 4 === 1 ? { r: -1 } : null } : {}) };
     }),
     probeData: ({ runDir, tree: dir }) => {
       calls.probeData.push({ runDir: path.basename(runDir), tree: path.basename(dir) });
@@ -1240,6 +1241,43 @@ test('the round report: the mastery read (legs caught, R caught / available, con
   assert.match(lines[1], /^ {4}champion: legs caught \d+(\.\d+)?% \(\d+ of \d+\), R caught \/ available [\d.]+% \([\d.-]+ \/ [\d.]+\), control false starts .*, combine pass rate n\/a \(not judged by the keep rule\), keep rule's combine blows n\/a \(not judged by the keep rule\), floor breaches in the trend runs 0$/);
   assert.match(lines[2], new RegExp(`^ {4}combined ${report.composed.id} \\(kept\\): legs caught 100% `));
   assert.deepStrictEqual(IR.masteryLines({ ...rec, mastery: null }), []);
+});
+
+test('the round report: risk and return on the trend confirm half\'s trades and the keep rule\'s runs, per trade', async () => {
+  const RS = require('../../scripts/lib/train/risk-stats');
+  for (const curriculum of ['trend', 'all']) {
+    const w = world({ trend: true, curriculum, proposals: trendCurriculum(), trades: true });
+    await run(w);
+    const report = JSON.parse(fs.readFileSync(path.join(w.paths.iter(1), 'probe-report.json'), 'utf8'));
+    const rec = JSON.parse(fs.readFileSync(path.join(w.paths.iter(1), 'iteration-report.json'), 'utf8'));
+    // The side's trend confirm half: its runs' scored decisions (one run a confirm day), never the probe half's days.
+    const files = side => fs.readdirSync(w.paths.dir).filter(f => f.startsWith(`${side}-t`) && f.endsWith('-decisions.json') && report.trend.confirm.days.some(d => f.startsWith(`${side}-t${d.replace(/-/g, '')}.`))).sort();
+    const tradesOf = side => RS.tradesOf(files(side).flatMap(f => JSON.parse(fs.readFileSync(path.join(w.paths.dir, f), 'utf8'))));
+    assert.ok(files('pc').length >= 1, curriculum);
+    assert.deepStrictEqual(report.trend.champion.trades, tradesOf('pc'), curriculum);
+    assert.deepStrictEqual(report.composed.trend.trades, tradesOf(`k-${report.composed.id}`), curriculum);
+    const r = rec.mastery.risk;
+    assert.ok(r.champion.trend.n > 0 && r.champion.trend.n === report.trend.champion.trades.length, curriculum);
+    // Two trades of every four moments, +2R then -1R: each side's expectancy 0.5R, win rate 50%, payoff 2.
+    assert.deepStrictEqual([r.champion.trend.expectancy, r.champion.trend.winRate, r.champion.trend.payoff, r.champion.trend.profitFactor], [0.5, 0.5, 2, 2], curriculum);
+    assert.deepStrictEqual(r.champion.trend, RS.riskStats(report.trend.champion.trades));
+    assert.deepStrictEqual(r.composed.trend, RS.riskStats(report.composed.trend.trades));
+    // The stub keep rule judged the combined change: the keep rule's runs (the tuning windows) read, each side its own.
+    const keep = side => RS.riskStats(RS.tradesOf(JSON.parse(fs.readFileSync(path.join(w.paths.dir, `${side}-t-decisions.json`), 'utf8'))));
+    assert.strictEqual(r.judged, true);
+    assert.deepStrictEqual(r.champion.keepRule, keep('champion'));
+    assert.deepStrictEqual(r.composed.keepRule, keep(`c-${report.composed.id}`));
+    assert.ok(r.composed.keepRule.n > 0);
+    const lines = IR.masteryLines(rec);
+    assert.ok(lines.includes(`    combined ${report.composed.id}, keep rule's runs: ${RS.riskText(r.composed.keepRule)}`), curriculum);
+    assert.ok(lines.every(l => !/Infinity|NaN/.test(l)));
+  }
+  // A scorecard without the trades' R (the stub's default): unknown, said so, never zero trades.
+  const w = world({ trend: true, curriculum: 'trend', proposals: trendCurriculum() });
+  await run(w);
+  const rec = JSON.parse(fs.readFileSync(path.join(w.paths.iter(1), 'iteration-report.json'), 'utf8'));
+  assert.deepStrictEqual([rec.mastery.risk.champion.trend, rec.mastery.risk.champion.keepRule], [null, null]);
+  assert.match(IR.masteryLines(rec).find(l => l.startsWith('    champion, trend confirm half')), /: n\/a \(trades unknown\)$/);
 });
 
 test('curriculum trend: an exit edit\'s trades pair once, by their scored exits, never also by the same runs\' entered moments', async () => {
