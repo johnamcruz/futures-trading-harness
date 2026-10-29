@@ -183,6 +183,10 @@ function loadConfig(env = process.env) {
     // The runner's attestation of the skills opencode's head trader has embedded in its prompt (FTH_HEAD_PROMPT, index
     // mode only; head-prompt.js), as given: the gate parses and checks it against the run's config file per entry.
     headPromptAttestation: String(env.FTH_HEAD_PROMPT || '').trim() || null,
+    // The runner's attestation of the skills a cycle's situation embeds in its prompt (FTH_CYCLE_SKILLS,
+    // situational-skills.js), as given: the gate checks it against its file, the skills' text and the run's own
+    // transcript per entry.
+    cycleSkillsAttestation: String(env.FTH_CYCLE_SKILLS || '').trim() || null,
     // The head trader's cycle id the runner gives a role it runs for that cycle (FTH_CYCLE_ID, as given): with
     // cycleTranscript, the cycle this process runs in (check-order.js cycleId), for which alone a Claude Code head
     // trader's attestation holds (order-gate.js, head-prompt.js claudeAttested).

@@ -760,6 +760,29 @@ test('runEntry: a Claude Code head trader the runner attested in index mode: its
   assert.ok(!('headPrompt' in s.calls[1].limits.context));
 });
 
+test('runEntry: a managed cycle\'s exit skills in the head trader\'s prompt are its loads for the executor\'s gate only on the verified attestation; never passed to a role\'s run', async () => {
+  const ES = require('../../scripts/lib/situational-skills');
+  const { cycleId } = require('../../scripts/lib/trading/check-order');
+  const skill = JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', id: 's1', name: 'Skill', input: { skill: 'trade-lifecycle' } }] } });
+  let s = setup();
+  const headEnv = s.cycle().headEnv;
+  fs.mkdirSync(path.dirname(headEnv.FTH_CYCLE_TRANSCRIPT), { recursive: true });
+  fs.writeFileSync(headEnv.FTH_CYCLE_TRANSCRIPT, `${JSON.stringify({ type: 'system', subtype: 'init', session_id: 'head-session', tools: [] })}\n${skill}`);
+  const { file, text } = ES.writeSituation(tmpDir(), ROOT, { skills: ['manage-position', 'pullback-vs-reversal', 'take-profit'], sections: [], over: [], why: ['a position or a working entry is open'] });
+  const att = ES.attestation({ file, text, root: ROOT, cycle: cycleId(headEnv) });
+  await E.runEntry(s.deps, s.cycle({ output: skill, headEnv: { ...headEnv, [ES.ATTEST_ENV]: JSON.stringify(att) }, context: { cycleSkills: { skills: ['manage-position', 'pullback-vs-reversal', 'take-profit'], sections: [], over: [], why: ['a position or a working entry is open'] } } }));
+  assert.deepStrictEqual(RR.readHeadSkills(s.rolesFile), ['manage-position', 'pullback-vs-reversal', 'take-profit', 'trade-lifecycle']);
+  assert.ok(!('cycleSkills' in s.calls[1].limits.context), 'a role\'s run never carries the head trader\'s section');
+  // Another cycle's attestation, or an edited file: the Skill load only.
+  for (const bad of [{ ...att, cycle: 'f'.repeat(16) }, { ...att, sha256: 'b'.repeat(64) }]) {
+    s = setup();
+    fs.mkdirSync(path.dirname(s.cycle().headEnv.FTH_CYCLE_TRANSCRIPT), { recursive: true });
+    fs.writeFileSync(s.cycle().headEnv.FTH_CYCLE_TRANSCRIPT, fs.readFileSync(headEnv.FTH_CYCLE_TRANSCRIPT));
+    await E.runEntry(s.deps, s.cycle({ output: skill, headEnv: { ...s.cycle().headEnv, [ES.ATTEST_ENV]: JSON.stringify(bad) } }));
+    assert.deepStrictEqual(RR.readHeadSkills(s.rolesFile), ['trade-lifecycle'], JSON.stringify(bad).slice(0, 80));
+  }
+});
+
 // Phase 2's restatement (feat/phase2-restate-retry, owner-approved 2026-10-24), on the replay's real reports: an
 // approving VERDICT line the reading refuses is restated once, read by the same readers, bound by the first VERDICT size.
 const R2 = require('../../scripts/lib/trading/roles-ran');

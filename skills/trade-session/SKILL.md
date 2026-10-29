@@ -48,8 +48,8 @@ as a step names them.
   enter, and the harness tool `combine_status` for an attempt. Every
   decision below (take, skip, size, manage, stand down) is made with these
   numbers.
-- **A position is open**: manage it by the `manage-position` skill, and end
-  the cycle.
+- **A position is open**: manage it by `manage-position` (in the prompt);
+  then end.
 - **Fresh data or no decision**: the last closed bar in the bars file must be
   no older than one bar of its timeframe (plus a minute) at the cycle's time,
   and the file's timeframe must be the one you are trading (a scan of 1m bars

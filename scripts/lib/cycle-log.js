@@ -260,7 +260,13 @@ function writeCycleLog(home, { at = new Date(), env = null, action, harness, pro
   // `env`: the cycle's environment (cycle-run.js), whose gate log holds the orders the cycle's calls sent through the
   // gateway, from its start to its end (`durationMs`, else now) and the log write's slack.
   const end = at.getTime() + (Number.isFinite(durationMs) ? durationMs : Math.max(0, Date.now() - at.getTime())) + GATE_SLACK_MS;
-  const summary = summarize(output, att ? att.skills : [], env ? gateOrders(env, at.getTime(), end) : []);
+  // And the situation's skills in its prompt as the runner attested them (FTH_CYCLE_SKILLS, situational-skills.js).
+  const cycleAtt = env ? require('./cycle-skills-attest').parseAttestation(env.FTH_CYCLE_SKILLS) : null;
+  const summary = summarize(output, [...new Set([...(att ? att.skills : []), ...(cycleAtt ? cycleAtt.skills : [])])], env ? gateOrders(env, at.getTime(), end) : []);
+  // What the situation embedded, and its cost (the runner's choice, context.cycleSkills): stages, skills, bytes, and the
+  // skills past the budget the prompt named instead.
+  const cs = context && context.cycleSkills && typeof context.cycleSkills === 'object' ? context.cycleSkills : null;
+  if (cs) summary.cycleSkills = { stages: cs.stages || [], skills: cs.skills || [], sections: cs.sections || [], bytes: cs.bytes || 0, over: cs.over || [] };
   let lookups = [];
   // The roles' own: a lookup the head trader made naming a role (sessionLookups) is never that role's, so it is never
   // stored with the role's cached report and credited on a later cycle (as the gate leaves it out: lookupRule).
@@ -280,6 +286,15 @@ function writeCycleLog(home, { at = new Date(), env = null, action, harness, pro
     const symbols = ((context && context.symbols) || []).map(x => x && x.symbol).filter(Boolean);
     composed = env ? require('./trading/lifecycle-runner').cycleComposed(home, require('./trading/check-order').cycleId(env), symbols, cycleAt) : [];
   } catch (_err) { composed = []; }
+  // Every listed setup composed or skipped with its reason (setup-skips.js): the final message's SKIP lines against the
+  // setups the briefing listed and the cycle's compose calls; one with neither is a process miss (reason null), logged,
+  // never a refusal.
+  if (action === 'trade' && context && Array.isArray(context.setupsListed) && context.setupsListed.length) {
+    let text;
+    try { text = harness === 'claude' ? require('./transcript').claudeRunResult(output).text : harness === 'opencode' ? require('./opencode').runResult(output).text : String(output || ''); } catch (_err) { text = String(output || ''); }
+    summary.setupsListed = context.setupsListed.length;
+    summary.setupSkips = require('./setup-skips').setupSkips({ listed: context.setupsListed, composed, text });
+  }
   const stamp = cycleAt.toISOString().slice(11, 19).replace(/:/g, '');
   const dir = path.join(home, 'logs', 'cycles', day);
   let file = path.join(dir, `${stamp}-${action}.json`);

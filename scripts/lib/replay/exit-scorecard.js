@@ -42,7 +42,9 @@
  *                                            ms itself outside every window
  *   lateThreshold(strategies, params)        the late threshold: config's, never below an active policy's lock_giveback_r
  *   scoreExits({ trips, moves, closes, bars, stepMs, factsAt, sessionEnd, orders, runnerKnown, params })   { decisions,
- *                                            tightens, thresholds } (pure; sessionEnd(ms): the session's end, or null; orders:
+ *                                            tightens, thresholds } (a decision names its trip's root, side and entryAt: the
+ *                                            probe screen pairs trades on them, train/screen.js exitTargetTest) (pure;
+ *                                            sessionEnd(ms): the session's end, or null; orders:
  *                                            orderId -> contractId, for a move that names only its order; runnerKnown
  *                                            false: the runner's event log wasn't read, so an exit that isn't the model's
  *                                            close or the target is 'unattributed', never guessed an initial stop)
@@ -162,7 +164,7 @@ function scoreExits({ trips = [], moves: given = [], closes = [], bars = [], ste
     const handed = peakR !== null && num(t.r) !== null ? peakR - Math.max(t.r, 0) : null;
     const late = handed !== null && handed > params.lateGivebackR;
     decisions.push({
-      trip: t.id ?? null, side: t.side, exitBy, cls, leftR, savedR, r: num(t.r), peakR, givebackR,
+      trip: t.id ?? null, root: famOf(t.contractId), side: t.side, entryAt: new Date(t.entryMs).toISOString(), exitBy, cls, leftR, savedR, r: num(t.r), peakR, givebackR,
       late, ...(late ? { lateR: r2(handed - params.lateGivebackR) } : {}), at: new Date(t.exitMs).toISOString(),
       ...(decision ? { decidedAt: new Date(decision.ms).toISOString() } : {}),
       flip: decision && facts && isObj(facts.bias) ? facts.bias.flipAgainst === true : null, facts: facts || null,

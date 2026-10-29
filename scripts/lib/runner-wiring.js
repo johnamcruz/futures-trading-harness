@@ -725,6 +725,8 @@ function wireRunner({ cfg, root, home, env = process.env, client, prop = null, d
     tradeHistory: t => excursionNote(readRecord(home, t.setup), t),
     // The bar briefing, each part kept from the last one until it expires or is invalidated (trading/briefing.js).
     recordBriefing: recorder,
+    // This bar's briefing as recorded (current: its m3 still valid), for the situational skills (situational-skills.js).
+    briefingFor: symbol => { const b = readBriefing(home, symbol); return b && require('./trading/briefing').current(b, now()) ? b : null; },
     // A 1m lane's closed bars, noted before the pass's briefings: the runner's briefing builds 5m candles from them.
     recordFineBars: recorder.fine,
     reportCache: reportCacheFor(home, cfg, frames, env, root),

@@ -66,6 +66,7 @@ const TRAINING = {
   keepRule: { maxChallengerBlows: int(0), level: num({ min: 0.5, max: 0.999 }), primary: str(['passRate']), minBlocks: int(1), minOverlap: frac() },
   decisionRule: { alpha: frac(), minPairs: int(1), minDiscordant: int(1), minEffect: frac(), harmTolerance: frac(), maxExcluded: frac() },
   screen: { gainAlpha: frac(), harmAlpha: frac(), minDiscordant: int(1), minPairs: int(1), minEffect: frac() },
+  exitScreen: { epsR: frac(), runnerMfeR: pos() },
   probe: { k: range(), parallel: range() },
   abCompare: { level: num({ min: 0.5, max: 0.999 }), reps: int(1) },
   loop: {
@@ -84,7 +85,7 @@ const TRAINING = {
   trendBatch: { start: int(2), max: int(2), half: num({ min: 0.1, max: 0.9 }), growAfter: int(1), growFactor: int(2), plateauRounds: int(1) },
   trendScreen: { rollFlagGaps: list(int(0)) },
   trendWindows: { leadBars: int(0), controlPerLeg: int(0) },
-  trendFindings: { examples: int(1), exampleChars: int(80), saidChars: int(40) },
+  trendFindings: { examples: int(1), exampleChars: int(80), saidChars: int(40), setupTypes: int(1), setupMinN: int(1) },
   exitFindings: { examples: int(1), exampleChars: int(80) },
 };
 
@@ -138,7 +139,7 @@ const RUNNER = {
     recentDecisions: int(1), historyPerLane: int(1), slowerContext: int(0), planChars: int(1), reasonChars: int(1), exitsKept: int(1), unseenReads: int(0),
     sessionStartLessons: int(0), sessionStartLessonChars: int(1), reportMaxText: int(1), phase1MaxAgeMs: ms(), trackRecordMinSlice: int(1), lessonMinPlans: int(1),
     trackRecordLiveSlice: int(1), instinctsMinSetupTrades: int(1), instinctsRecentReviews: int(1), valuesPerStrategy: int(1), brokerFieldsKept: int(1),
-    brokerFieldsBytes: int(1), brokerFieldChars: int(1), cycleDataMaxBytes: int(1),
+    brokerFieldsBytes: int(1), brokerFieldChars: int(1), cycleDataMaxBytes: int(1), situationalSkillBytes: int(0), maxPromptBytes: int(1),
   },
   session: {
     fillsTimeoutMs: int(1), retryTimeoutMs: int(1), retryMs: int(1), retryAlertAfter: int(1), backoffMs: int(1), recentSessions: int(1), archiveDays: int(1),
@@ -198,7 +199,7 @@ const PINS = deepFreeze({
     'experienceIndex.minN': 20, 'experienceIndex.minDays': 10, 'experienceIndex.level': 0.9, 'experienceLookups.maxPerBar': 2, 'riskRecord.minN': 10,
     'keepRule.maxChallengerBlows': 0, 'keepRule.level': 0.9, 'keepRule.primary': 'passRate', 'keepRule.minBlocks': 2, 'keepRule.minOverlap': 0.5,
     'decisionRule.alpha': 0.05, 'decisionRule.minPairs': 20, 'decisionRule.minDiscordant': 6, 'decisionRule.minEffect': 0.1, 'decisionRule.harmTolerance': 0.02, 'decisionRule.maxExcluded': 0.1,
-    'screen.gainAlpha': 0.1, 'screen.harmAlpha': 0.2, 'screen.minDiscordant': 4, 'screen.minPairs': 10, 'screen.minEffect': 0.1,
+    'screen.gainAlpha': 0.1, 'screen.harmAlpha': 0.2, 'screen.minDiscordant': 4, 'screen.minPairs': 10, 'screen.minEffect': 0.1, 'exitScreen.epsR': 0.05, 'exitScreen.runnerMfeR': 3,
     'loop.limits.maxIterations.max': 100, 'loop.limits.maxModelCalls.max': 100000, 'loop.limits.maxWallMinutes.max': 10080,
     'proposal.maxEdits': 3, 'proposal.maxText': 2000, 'proposal.maxChanged': 3000, 'looks.maxArms': 3,
     'skillCaps.skillBytes': 3400, 'skillCaps.setupSkillBytes': 4000,
@@ -261,7 +262,7 @@ const BUILT_IN = deepFreeze({
       recentDecisions: 10, historyPerLane: 10, slowerContext: 3, planChars: 400, reasonChars: 100, exitsKept: 50, unseenReads: 10,
       sessionStartLessons: 10, sessionStartLessonChars: 300, reportMaxText: 8000, phase1MaxAgeMs: 1800000, trackRecordMinSlice: 10, lessonMinPlans: 10,
       trackRecordLiveSlice: 5, instinctsMinSetupTrades: 3, instinctsRecentReviews: 30, valuesPerStrategy: 6, brokerFieldsKept: 3,
-      brokerFieldsBytes: 600, brokerFieldChars: 250, cycleDataMaxBytes: 48000,
+      brokerFieldsBytes: 600, brokerFieldChars: 250, cycleDataMaxBytes: 48000, situationalSkillBytes: 72000, maxPromptBytes: 126976,
     },
     session: {
       fillsTimeoutMs: 10000, retryTimeoutMs: 4000, retryMs: 60000, retryAlertAfter: 5, backoffMs: 1800000, recentSessions: 7, archiveDays: 90,
@@ -337,7 +338,7 @@ const SPECS = Object.freeze({
     'experienceLookups.maxPerBar': 'down', 'riskRecord.minN': 'up',
     'keepRule.maxChallengerBlows': 'down', 'keepRule.level': 'up', 'keepRule.primary': 'exact', 'keepRule.minBlocks': 'up', 'keepRule.minOverlap': 'up',
     'decisionRule.alpha': 'down', 'decisionRule.minPairs': 'up', 'decisionRule.minDiscordant': 'up', 'decisionRule.minEffect': 'up', 'decisionRule.harmTolerance': 'down', 'decisionRule.maxExcluded': 'down',
-    'screen.gainAlpha': 'down', 'screen.harmAlpha': 'up', 'screen.minDiscordant': 'up', 'screen.minPairs': 'up', 'screen.minEffect': 'up',
+    'screen.gainAlpha': 'down', 'screen.harmAlpha': 'up', 'screen.minDiscordant': 'up', 'screen.minPairs': 'up', 'screen.minEffect': 'up', 'exitScreen.epsR': 'up', 'exitScreen.runnerMfeR': 'down',
     'loop.limits.maxIterations.max': 'down', 'loop.limits.maxModelCalls.max': 'down', 'loop.limits.maxWallMinutes.max': 'down',
     'proposal.maxEdits': 'down', 'proposal.maxText': 'down', 'proposal.maxChanged': 'down',
     'looks.maxArms': 'down',

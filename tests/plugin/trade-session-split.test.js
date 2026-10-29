@@ -464,7 +464,7 @@ test('trade-session split: the gate requires setup-judgment and trade-plan at en
   // approved orders to [skills-at-entry] when the head trader was told to load them only before an entry.
   const A = require('../../scripts/lib/autotrader');
   const p = A.prompts(A.validateConfig({}), new Date('2026-10-07T14:30:00Z')).trade([{ symbol: 'MNQ', bar: { t: '2026-10-07T14:27:00Z', c: 1, file: '/b.json', contractId: 'MNQ' } }]);
-  assert.match(p, /also load htf-to-ltf, confluence-counting, setup-judgment, and trade-plan before deciding/);
+  assert.match(p, /also load htf-to-ltf, confluence-counting, setup-judgment, trade-plan, and day-context before deciding/);
   // The refusal is taught: its row in the gate-refusals family, which says exits and stops still go.
   const row = flat(skill('gate-refusals-skills'));
   assert.match(row, /\| `\[skills-at-entry\] … not read in this session: <skills>` \|/);

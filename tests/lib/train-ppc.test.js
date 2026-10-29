@@ -418,7 +418,7 @@ const behaviour = text => (text.includes('LUCKY') ? 'lucky' : text.includes('BAD
 const stateOf = (b, i) => (b === 'lucky' ? (i % 2 || SC.halfOf(dayOfT(TIMES[i]), 3) === 'probe' ? 'right' : 'misread') : b === 'bad' ? 'misread' : b === 'good' || i % 2 || (b === 'some' && i < 16) ? 'right' : 'misread');
 const categoryOf = (b, i) => (b === 'bad' ? 'wrong-side entry' : b === 'good' || b === 'reason' || i % 2 ? 'right' : 'wrong stated reason');
 
-function world({ proposals, verdict = 'kept', loop: over = {}, trend = false, trendBatch = {} } = {}) {
+function world({ proposals, verdict = 'kept', loop: over = {}, trend = false, trendBatch = {}, exits = false, incompleteDay = null, claimed = null } = {}) {
   const user = tmpDir();
   const env = { PATH: process.env.PATH, HOME: user, FTH_HOME: path.join(user, 'home') };
   fs.mkdirSync(env.FTH_HOME);
@@ -438,7 +438,12 @@ function world({ proposals, verdict = 'kept', loop: over = {}, trend = false, tr
   const steps = {
     // The preflight's own tests run it for real (train-trend-windows.test.js); here each run's loop role is recorded.
     preflight: (run, gate) => { calls.preflight.push({ runId: run.runId, loopRole: gate.loopRole || null }); return { ok: true, results: [], record: () => null }; },
-    makeTree: dir => { fs.mkdirSync(path.join(dir, 'skills', 'a'), { recursive: true }); fs.writeFileSync(path.join(dir, SKILL), TEXT); fs.mkdirSync(path.join(dir, 'workspace')); return 'c0ffee'; },
+    makeTree: dir => {
+      fs.mkdirSync(path.join(dir, 'skills', 'a'), { recursive: true }); fs.writeFileSync(path.join(dir, SKILL), TEXT); fs.mkdirSync(path.join(dir, 'workspace'));
+      // With exits: an exit finding's owner in the tree (exit-findings.js OWNERS), the skill its edit changes.
+      if (exits) { fs.mkdirSync(path.join(dir, 'skills', 'manage-position'), { recursive: true }); fs.writeFileSync(path.join(dir, MP), TEXT.replace('name: a', 'name: manage-position')); }
+      return 'c0ffee';
+    },
     prepareTree: (dir, { proposal }) => { if (proposal) require('../../scripts/lib/train/proposal').applyProposal(proposal, dir); },
     seedRunHome: run => {
       for (const d of [run.paths.runDir, run.paths.workspace, run.paths.bars]) fs.mkdirSync(d, { recursive: true });
@@ -476,8 +481,9 @@ function world({ proposals, verdict = 'kept', loop: over = {}, trend = false, tr
     probeData: ({ runDir, tree: dir }) => {
       calls.probeData.push({ runDir: path.basename(runDir), tree: path.basename(dir) });
       const b = behaviour(textOf(dir));
-      const decisions = TIMES.map((t, i) => ({ root: 'MNQ', bar: t, decision: 'passed', outcome: { R: 0 }, reads: [{ step: 'zone', skill: 'a', read: 'y', check: stateOf(b, i) === 'right', agrees: true }] }));
-      const wrong = decisions.filter(d => !d.reads[0].check).length;
+      // claimed: only the first that many moments carry a read of skill a (none: every one).
+      const decisions = TIMES.map((t, i) => ({ root: 'MNQ', bar: t, decision: 'passed', outcome: { R: 0 }, reads: claimed !== null && i >= claimed ? [] : [{ step: 'zone', skill: 'a', read: 'y', check: stateOf(b, i) === 'right', agrees: true }] }));
+      const wrong = decisions.filter(d => d.reads.length && !d.reads[0].check).length;
       return { decisions, usage: { skills: [{ skill: 'a', reads: 20, correct: 20 - wrong, wrong, available: 20, used: 20, relevant: 20, missed: 0, topRefusals: wrong ? [{ what: 'false: y', count: wrong }] : [], topMissed: [] }] }, records: [] };
     },
     // Each half: the same replay config (the stub replays no list), its session dates and moments, as the real step reads them.
@@ -504,8 +510,16 @@ function world({ proposals, verdict = 'kept', loop: over = {}, trend = false, tr
       // Entries: the champion takes each session's long reaction (14:33Z); TREND takes both.
       const entries = days.flatMap(day => [{ at: `${day}T14:36:30.000Z`, side: 'long' }, ...(/TREND/.test(text) ? [{ at: `${day}T14:36:30.000Z`, side: 'short' }] : [])]);
       // Each window stepped to its end or not, from the run's own records (the leg window's last time is 14:42:02Z).
-      const sessions = require('../../scripts/lib/train/trend-windows').windowStates({ days: recorded, windows, minutes: 3 }).map(s => ({ ...s, rollMonth: false }));
-      return { capture: { legs, entries: entries.map(e => ({ ...e, kind: e.side === 'long' ? 'in-trend' : 'counter', leg: null, r: /GREEDY/.test(text) ? -1 : 0 })) }, days: Object.fromEntries(days.map(d => [d, [{ t: `${d}T14:42:02.000Z`, trades: [{ roundTrip: { r: /GREEDY/.test(text) ? -1 : 0 } }] }]])), first, entries, sessions, stepped: Object.values(recorded).flat().map(l => l.t), minutes: 3 };
+      // incompleteDay: the exit edit's run of that day leaves its windows unfinished (only the champion finished them).
+      const cut = incompleteDay && days.includes(incompleteDay) && exits && /EXITFIX/.test(fs.readFileSync(path.join(trees.get(runDir), MP), 'utf8'));
+      const sessions = require('../../scripts/lib/train/trend-windows').windowStates({ days: recorded, windows, minutes: 3 }).map(s => ({ ...s, rollMonth: false, ...(cut ? { complete: false, why: 'stopped' } : {}) }));
+      // With exits: EXIT_TRADES scored model exits a session, a minute apart (the champion cuts each at 0.5R; manage-position's
+      // EXITFIX rides it to 1.5R).
+      const fix = exits && /EXITFIX/.test(fs.readFileSync(path.join(trees.get(runDir), MP), 'utf8'));
+      // exits 'old': scored by code from before they named their trades (no root, no entry time).
+      const named = (x, at) => (exits === 'old' ? x : { root: 'MNQ', entryAt: at, ...x });
+      const scored = exits ? { exits: { decisions: days.flatMap(day => Array.from({ length: EXIT_TRADES }, (_, i) => named({ side: 'long', exitBy: 'model-exit', cls: fix ? 'right' : 'cut', leftR: 2, late: false, r: fix ? 1.5 : 0.5, peakR: 2, facts: null }, new Date(Date.parse(`${day}T14:36:30.000Z`) + i * 60000).toISOString()))), tightens: [] } } : {};
+      return { capture: { legs, entries: entries.map(e => ({ ...e, kind: e.side === 'long' ? 'in-trend' : 'counter', leg: null, r: /GREEDY/.test(text) ? -1 : 0 })), ...scored }, days: Object.fromEntries(days.map(d => [d, [{ t: `${d}T14:42:02.000Z`, trades: [{ roundTrip: { r: /GREEDY/.test(text) ? -1 : 0 } }] }]])), first, entries, sessions, stepped: Object.values(recorded).flat().map(l => l.t), minutes: 3 };
     },
     // The trend facts (trend-facts.js attachFacts on the run's files): every missed leg here had a valid plan (learnable).
     // Its control bars: one a run, a valid plan that lost (the balancing example the proposer reads).
@@ -531,6 +545,8 @@ function world({ proposals, verdict = 'kept', loop: over = {}, trend = false, tr
   return w;
 }
 
+const MP = 'skills/manage-position/SKILL.md';
+const EXIT_TRADES = 6;
 const tagged = (skill, finding, kind, find, replace, expects = 'fewer misreads') => ({ tag: { skill, finding, kind }, proposal: edit(find, replace, { expects }) });
 const run = (w, opts = {}) => L.runLoop({ loop: w.loop, env: w.env, root: ROOT, steps: w.steps, dryRun: true, ...opts });
 
@@ -645,7 +661,7 @@ test('with a trend set: its missed legs are findings first; an edit that catches
   // Given the day's control windows; the base rate in the report; the base rate and the plan that lost in the prompt.
   assert.ok(w.calls.trendControls.every(c => Array.isArray(c) && c.every(x => Number.isFinite(x.from) && Number.isFinite(x.to))), JSON.stringify(w.calls.trendControls));
   assert.deepStrictEqual(report.trend.baseRate.controlBars, { sides: w.calls.trendFacts.length, valid: w.calls.trendFacts.length, won: 0, lost: w.calls.trendFacts.length, undecided: 0 });
-  assert.match(w.calls.proposeProbes[0].controls, /^Base rate: .*\nValid plan, it lost .*\n {3}- long: valid plan, it lost: "15m up"/);
+  assert.match(w.calls.proposeProbes[0].controls, /^Base rate: .*\nThose control plans by setup type, from this round's control windows .*\n {3}- other: n=\d+, .*\nValid plan, it lost .*\n {3}- long: valid plan, it lost: "15m up"/);
   assert.deepStrictEqual(report.trend.probe.days.filter(d => report.trend.confirm.days.includes(d)), [], 'no day in both halves');
   assert.deepStrictEqual(report.trend.regression, [REG_DAY]);
   assert.deepStrictEqual(report.probes.map(p => p.verdict), ['helped', 'no effect', 'helped', 'hurt'], 'the greedy edit\'s catches on losing sessions never count; a leg lost on the regression day hurts');
@@ -701,6 +717,70 @@ test('with a trend set: its missed legs are findings first; an edit that catches
   const lessons = LS.readLessons(path.join(w.paths.dir, LS.FILE)).filter(l => !l.composed);
   assert.deepStrictEqual(lessons.map(l => [l.findingKind, l.n]), [['trend-blocker', probeLegs.length], ['trend-blocker', probeLegs.length], ['misread', 28], ['trend-blocker', probeLegs.length]]);
   assert.ok(lessons.every(l => l.trendBatch && l.trendBatch.index === 0 && l.trendBatch.probe === probeLegs.length));
+});
+
+test('an exit finding\'s edit is screened on the trades both sides opened (the trend set\'s scored exits), never on read claims', async () => {
+  let w = null;
+  const exitEdit = () => {
+    const f = w.calls.proposeProbes[0].findings.find(x => x.kind === 'exit-decision');
+    return [{ tag: { skill: 'manage-position', finding: f.id, kind: 'rule' }, proposal: edit('- line one', '- line one\n- EXITFIX → hold the healthy pullback', { expects: 'fewer cut trends', edits: [{ file: MP, find: '- line one', replace: '- line one\n- EXITFIX → hold the healthy pullback' }] }) }];
+  };
+  w = world({ trend: true, exits: true, proposals: exitEdit });
+  await run(w);
+  const f = w.calls.proposeProbes[0].findings.find(x => x.kind === 'exit-decision');
+  assert.deepStrictEqual([f.code, f.skills], ['cut-trend', ['manage-position']]);
+  const report = JSON.parse(fs.readFileSync(path.join(w.paths.iter(1), 'probe-report.json'), 'utf8'));
+  const [p] = report.probes;
+  const days = TS.splitBatch(TS.drawRound(POOL, { seed: 3, round: 1, per: BATCH }).items, { seed: 3, half: 0.5 }).probe.days;
+  assert.strictEqual(p.target.measure, 'exit: R banked on the trades both sides opened');
+  const n = days.length * EXIT_TRADES;
+  assert.ok(n >= SC.SCREEN.minPairs, `enough trades for the gain path (${n})`);
+  assert.deepStrictEqual([p.target.pairs, p.target.b, p.target.c, p.target.enough], [n, n, 0, true], 'every probe-half trade 1R better');
+  assert.deepStrictEqual(p.target.classes, { 'cut->right (model-exit)': n });
+  assert.strictEqual(p.verdict, 'helped', JSON.stringify(p));
+  // The combined change: its exit part judged on the confirm half's trades both sides opened.
+  const ct = report.composed.measures.target;
+  assert.ok(ct && ct.measure === p.target.measure && ct.runners && ct.pairs > 0, JSON.stringify(report.composed));
+  assert.strictEqual(report.composed.verdict, 'helped');
+  // A window the edit's run left unfinished: that day's trades never pair (only the units both sides finished).
+  let q = null;
+  const [first] = [...days].sort();
+  q = world({ trend: true, exits: true, incompleteDay: first, proposals: () => { const g = q.calls.proposeProbes[0].findings.find(x => x.kind === 'exit-decision'); return [{ tag: { skill: 'manage-position', finding: g.id, kind: 'rule' }, proposal: edit('- line one', '- line one\n- EXITFIX → hold', { expects: 'fewer cut trends', edits: [{ file: MP, find: '- line one', replace: '- line one\n- EXITFIX → hold' }] }) }]; } });
+  await run(q);
+  const short = JSON.parse(fs.readFileSync(path.join(q.paths.iter(1), 'probe-report.json'), 'utf8')).probes[0];
+  assert.deepStrictEqual([short.target.pairs, short.target.unmatched, short.target.unfinished], [n - EXIT_TRADES, { champion: 0, probe: 0 }, { champion: EXIT_TRADES, probe: EXIT_TRADES }], 'the unfinished day\'s trades left out, counted apart');
+});
+
+test('a read finding whose skill has under minPairs judged decisions on the probe half is left out (said in the report); at minPairs it is kept', async () => {
+  // The probe half's moments in order: the first k of them claimed (the moments before the k-th probe one carry the read).
+  const probeIdx = TIMES.map((t, i) => (SC.halfOf(dayOfT(t), 3) === 'probe' ? i : -1)).filter(i => i >= 0);
+  const min = SC.SCREEN.minPairs;
+  const round = async k => {
+    const w = world({ claimed: probeIdx[k - 1] + 1, proposals: [] });
+    await run(w);
+    return { w, report: JSON.parse(fs.readFileSync(path.join(w.paths.iter(1), 'probe-report.json'), 'utf8')) };
+  };
+  const under = await round(min - 1);
+  assert.ok(!under.report.findings.some(f => f.kind === 'misread'), JSON.stringify(under.report.findings));
+  assert.deepStrictEqual(under.report.readFindingsOmitted.map(x => [x.skill, x.kind, x.judged]), [['a', 'misread', min - 1]]);
+  assert.match(under.report.readFindingsOmitted[0].why, new RegExp(`under the screen's minPairs ${min}: no edit of it could show a gain`));
+  const at = await round(min);
+  assert.ok(at.report.findings.some(f => f.kind === 'misread' && f.skill === 'a'), JSON.stringify(at.report.findings));
+  assert.ok(!(at.report.readFindingsOmitted || []).some(x => x.kind === 'misread'));
+});
+
+test('scored exits that name no trade (older code): the round shows no exit finding, so no edit is spent on one', async () => {
+  let o = null;
+  o = world({ trend: true, exits: 'old', proposals: () => (o.calls.proposeProbes[0].findings.some(x => x.kind === 'exit-decision') ? [{ tag: { skill: 'manage-position', finding: 'F1', kind: 'rule' }, proposal: edit('- line one', '- line one\n- EXITFIX → hold', { edits: [{ file: MP, find: '- line one', replace: '- line one\n- EXITFIX → hold' }] }) }] : []) });
+  await run(o);
+  assert.deepStrictEqual(o.calls.proposeProbes[0].findings.filter(x => x.kind === 'exit-decision'), []);
+  const report = JSON.parse(fs.readFileSync(path.join(o.paths.iter(1), 'probe-report.json'), 'utf8'));
+  assert.match(report.trend.exitFindings, /^none: the champion's scored exits name no trade/);
+  assert.ok(report.trend.exits.byExit['model-exit'].n > 0, 'the exits are still scored and reported');
+  // With exits that name their trades, the same round has its exit finding.
+  const k = world({ trend: true, exits: true, proposals: () => [] });
+  await run(k);
+  assert.ok(k.calls.proposeProbes[0].findings.some(x => x.kind === 'exit-decision'));
 });
 
 test('with a trend pool: a trend edit gains only on the trend batch; one that gains on the probe half alone never reaches the keep rule', async () => {

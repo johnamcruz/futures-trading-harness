@@ -198,6 +198,8 @@ const POINTERS = [
 const PROMPT_TEXT = [
   ...['trader-process', 'autonomous-trading', 'premarket', 'trade-session', 'prop-challenge-pacing', 'end-of-day', 'trade-lifecycle'].map(skill => ({ file: 'scripts/lib/autotrader.js', skill })),
   { file: 'scripts/lib/harness-sync.js', skill: 'tool-arguments' },
+  // The Trend declared? line's part of trend-vs-range, quoted in a cycle's prompt (situational-skills.js SECTIONS).
+  { file: 'scripts/lib/situational-skills.js', skill: 'trend-vs-range' },
 ];
 const GATE_CODE = () => fs.readdirSync(path.join(ROOT, 'scripts'), { recursive: true }).map(String).filter(f => f.endsWith('.js')).map(f => `scripts/${f.split(path.sep).join('/')}`);
 const SKILL_NAMES = new Set(fs.readdirSync(path.join(ROOT, 'skills')).filter(d => fs.existsSync(path.join(ROOT, 'skills', d, 'SKILL.md'))));

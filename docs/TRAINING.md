@@ -394,6 +394,11 @@ iteration of the loop then runs these steps (`scripts/lib/train/probe.js`):
    when the decision's scorecard result got no worse. The targeted skill's
    used, correct and missed counts are shown beside them. The verdict is
    `helped`, `no effect` or `hurt`.
+   A read finding is left out of the round when fewer than the screen's
+   `minPairs` of the champion's probe-half decisions are in its target's
+   scope (`screen.js` `targetScope`): no edit of it could show a gain, so
+   no proposer slot or probe run goes to one. `probe-report.json`
+   `readFindingsOmitted` names each, with the count and why.
    Probing uses practice-train only and spends no looks: its tuning look
    is logged in the loop's ledger, as every loop look is, and counts
    against no budget.
@@ -403,9 +408,13 @@ iteration of the loop then runs these steps (`scripts/lib/train/probe.js`):
    would break the proposal's limits (3 edits, the diff size, a byte cap)
    is left out, with the reason. The combined change is probed once more
    and judged on the confirm half only, which no edit was chosen on: no
-   measure may be worse and every part's target must still gain there, so
-   its parts can't cancel and a gain found by chance on the probe half
-   doesn't carry it.
+   measure may be worse, every part's target harm included, and every
+   trend and exit part's target must still gain there, so its parts can't
+   cancel and a gain found by chance on the probe half doesn't carry it. A
+   read part beside a trend or an exit part is judged on harm only: the
+   curated confirm half is small, so its missing gain there never cancels
+   a change whose trend or exit parts gained. A change of read parts alone
+   still needs each one's gain.
 5. **Keep.** The combined change is the iteration's one proposal and goes
    through the full keep rule (section 6), unchanged: the challenger's
    full-day tuning windows, zero blows, the pooled interval, then held-out
@@ -594,12 +603,38 @@ and leg ids; the lessons lines record the batch too.
   trail, its close and the target are rows of the report only; an initial
   stop that then ran the trade's way is the report's stop-placement row.
   Findings rank by the R they cost with the trend findings, owned by the
-  open trade's read (`pullback-vs-reversal`; `manage-position` is a
-  management skill, never probed), each example the facts code read at the
+  skills that decide the class, any one of which an edit may change
+  (`scripts/lib/train/exit-findings.js` `OWNERS`): a cut trend by the open
+  trade's read (`pullback-vs-reversal`) and the action on it
+  (`manage-position`), a late exit by those and `take-profit`.
+  `manage-position` has no read, so it never owns a read finding. An edit
+  to any of them reaches every managed cycle: the runner embeds the skills
+  a cycle's situation needs (below). Each example is the facts code read at the
   decision (`scripts/lib/trading/trade-read.js` on the bars closed by
   then), no date, price or R. The round's report counts them (`probe
-  exits`). An exit finding's edit is screened as a curated one, with the
-  trend set's harms: no exit-specific gain test exists yet. The read
+  exits`). An exit finding's edit is screened on its own target
+  (`scripts/lib/train/screen.js` `exitTargetTest`), with the trend set's
+  harms: the trades both sides opened, paired (a curated moment both
+  entered on the same side; a trend-set exit of the same root and side with
+  the entries at most `exitScore.matchBars` bars apart, in a window both
+  sides stepped to its end), each better or worse when its banked R moved
+  by at least `exitScreen.epsR` (tighten-only, pinned)
+  (`config/training.json`), decided by the screen's own McNemar test,
+  `minDiscordant` and `minEffect`, and never a gain under `minPairs` pairs.
+  Each pair's class change (cut, right, late) is reported, tagged by who
+  exited; trades on one side only are counted as unmatched, never paired.
+  An edit that turns more of the champion's runners (an MFE of at least
+  `exitScreen.runnerMfeR`, its exit cut or right) from right to cut than
+  from cut to right is a harm, whatever the mean. A read finding's edit
+  keeps the read target. An exit finding with none of its owners in the
+  tree takes no edit. The trend set's exits pair only when their scores
+  name their trades: a loop whose champion runs were scored before that
+  (started on older code) gets no gain from them, so an exit edit needs a
+  loop started on this code; until then the round shows no exit finding
+  (`trend.exitFindings` in `probe-report.json` says why), so no proposer
+  slot or probe run is spent on one. A trend set with no window both sides
+  finished, or none of the champion's trend trades matched by the edit's,
+  is no gain either, its reason stated. The read
   itself is held to an acceptance check (`tests/lib/read-mechanical.test.js`,
   `scripts/lib/replay/read-mechanical.js`): applied to the letter on a real
   trend it keeps at least what the runner's 15m structure trail keeps, and
@@ -639,12 +674,49 @@ and leg ids; the lessons lines record the batch too.
   `probe-report.json` (`trend.baseRate`) and `status` give the share of
   control bar-sides with a valid plan, and how those plans did on the
   session's later bars (won, lost, undecided by its end), beside the share
-  of the missed legs' entry bars. The proposer reads them all. It also reads up to `examples` control bars, a day each in
+  of the missed legs' entry bars. The proposer also reads those control
+  plans split by setup type (the setup read's kind and level, no timeframe,
+  side or number), labelled as from this round's control windows (small n):
+  the most common `setupTypes` types with at least `setupMinN` plans each,
+  the rest folded into "other" (`config/training.json` `trendFindings`).
+  Every outcome is the round's own replay's, never a census's. The proposer reads them all. It also reads up to `examples` control bars, a day each in
   turn, where a valid plan existed and lost: its stop was hit before its
   minimum R:R mark on the run's later bars that session, the stop first when
   one bar holds both. They are labelled "valid plan, it lost: what tells
   these apart from the legs?". The probe prompt says an edit must tell the
   legs from the losers, never just enter more.
+- **The skills each cycle's situation needs** (`scripts/lib/situational-skills.js`).
+  One table maps each fact of the account and the bar briefing to the
+  skills that own it (from the crosswalk), by decision stage: management
+  (an open position or a working entry: `manage-position`,
+  `pullback-vs-reversal`, `take-profit`), the setups the Setups-to-check
+  line lists, their entry, their risk and target, location (a key level, a
+  sweep, VWAP) and bias (`daily-bias`, the trend rule's filter, the last
+  structure break, `session-timing` when the window refuses entries, and
+  the "Declared yet?" part of `trend-vs-range` for the Trend declared?
+  line). The runner embeds each skill whole, read from its file, in the
+  cycle's prompt, never one the prompt already holds, within a byte budget
+  (`config/runner.json` `prompt.situationalSkillBytes`) filled in that
+  order, and within what the prompt's own limit (`prompt.maxPromptBytes`:
+  one argv string) leaves beside the prompt and the cycle data; past it a
+  skill is named on an "Also relevant now" line. The cycle
+  record lists the stages, skills, bytes and the skills named. The order
+  gate counts them as loaded only on the runner's attestation for that
+  cycle (`FTH_CYCLE_SKILLS`, `scripts/lib/cycle-skills-attest.js`). The
+  Setups-to-check line now lists a compression break (at its key level when
+  its box sits at one) and a 15m or 1h CISD tradeable now (its OTE touched
+  or bounced, or freshly confirmed; its displacement kind, status and swept
+  level named; an engulfing one first) on a side the trend rule allows,
+  beside the setup moment's reactions; a 3m or 5m CISD only times an entry. `node scripts/skill-coverage.js`
+  prints how every skill reaches the model.
+- **Every listed setup composed or skipped with a reason**
+  (`scripts/lib/setup-skips.js`). A cycle that composes none of a listed
+  setup writes `SKIP "<read>": <the deciding fact>` before its result line
+  (`autonomous-trading` step 6). The cycle record keeps `setupSkips`; one
+  with neither a compose call nor a reason is a process miss, logged and
+  counted in the report ("Setups listed"), never a refusal. A missed leg's
+  example in the trend findings shows the stated skip reason the leg's way,
+  scrubbed as what was said.
 - **What the proposer sees.** Each trend finding lists up to `examples`
   of its legs (`config/training.json` `trendFindings`), the costliest
   first, each clipped to `exampleChars` at a clause boundary. A late or

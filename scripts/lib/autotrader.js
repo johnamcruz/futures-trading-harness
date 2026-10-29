@@ -28,6 +28,7 @@ const { historyLines, marketOf } = require('./trading/decision-history');
 const { documents, isOpencodeEvent, unwrap } = require('./transcript');
 const opencode = require('./opencode');
 const headPrompt = require('./head-prompt');
+const situational = require('./cycle-skills-attest');
 
 const PLUGIN_ROOT = path.resolve(__dirname, '..', '..');
 const { parseLanes, agentOverrideErrors } = require('./lanes');
@@ -606,10 +607,11 @@ const MANAGED_NO_ENTRY_TEXT = ' This cycle started with a position or working or
 const loadSkills = cfg => ({ codex: 'Read the skills', custom: 'Load the skills' }[cfg.harness] || 'With your skill tool, load');
 // The skills an entry needs loaded (the order gate's skills-loaded check, REQUIRED_FOR_ENTRY), then the ones the head
 // trader loads every cycle that the gate does not require (ALSO_LOAD: htf-to-ltf, the alignment labels and the reversal rule;
-// confluence-counting, the count that decides take or pass; trade-session step 0).
+// confluence-counting, the count that decides take or pass; trade-session step 0; day-context, read for every decision:
+// trade-session step 3).
 // And the gate's skills-at-entry ones (REQUIRED_AT_ENTRY: setup-judgment, trade-plan) every cycle: "before an entry" relied on
 // the head trader remembering, and a Claude Code replay lost 2 of 6 approved orders to [skills-at-entry] without them.
-const ALSO_LOAD = ['htf-to-ltf', 'confluence-counting', ...REQUIRED_AT_ENTRY];
+const ALSO_LOAD = ['htf-to-ltf', 'confluence-counting', ...REQUIRED_AT_ENTRY, 'day-context'];
 const andList = xs => (xs.length < 3 ? xs.join(' and ') : `${xs.slice(0, -1).join(', ')}, and ${xs[xs.length - 1]}`);
 /** The skills a cycle loads, as the prompt names them: "a, b, and c (the order gate refuses an entry without them); also load d and e". */
 const loadList = (gated, required = REQUIRED_FOR_ENTRY, also = ALSO_LOAD) =>
@@ -676,6 +678,23 @@ function claudeHeadAttestation(cfg, root, base, context, env) {
     return null; // no attestation: the gate counts no embedded skill (the transcript decides)
   }
 }
+/**
+ * The attestation of a cycle's situational skills (situational-skills.js) for the head trader's run, or null: the
+ * section the runner put in its prompt (context.cycleSkills: its choice), written to the run's harness home and attested
+ * for this cycle. A role's run (context.roleRun) none: its own session never had the prompt. A probe (no run) none.
+ */
+function cycleSkillsAttestation(root, base, context, env) {
+  const c = context || {};
+  if (!c.cycleSkills || typeof c.cycleSkills !== 'object' || c.probe === true || (typeof c.roleRun === 'string' && c.roleRun)) return null;
+  try {
+    const w = require('./situational-skills').writeSituation(harnessHome(base), root || PLUGIN_ROOT, c.cycleSkills);
+    return w ? situational.attestation({ file: w.file, text: w.text, root: root || PLUGIN_ROOT, cycle: require('./trading/check-order').cycleId(env) }) : null;
+  } catch (_err) {
+    return null; // no attestation: the gate counts none (the transcript decides)
+  }
+}
+/** The skills a cycle's prompt has the head trader load or holds already: its load list, and the head prompt's CORE. */
+const cycleLoaded = cfg => [...REQUIRED_FOR_ENTRY, ...ALSO_LOAD, ...(claudeHeadOn(cfg) || (cfg && cfg.harness === 'opencode') ? headPrompt.CORE : [])];
 /** What the cycle's prompt says of the skills: load them, or (embedsSkills) they are in the head trader's prompt already. */
 const skillsText = (cfg, root, env = process.env) => (embedsSkills(cfg, root, env)
   ? `Your skills ${andList([...REQUIRED_FOR_ENTRY, ...ALSO_LOAD])} are in your prompt, already loaded (don't load them again): decide by them`
@@ -726,7 +745,7 @@ function prompts(cfg, now, root = '') {
      * One cycle for every symbol whose bar just closed. `items` is a symbol
      * string or a list of { symbol, bar } where bar = { t, c, file, contractId }.
      */
-    trade: (items, { manageOnly = false, recovered = false, state = null, history = [], lessons = [], trades = [], tradesSummary = null, news = null, unavailable = [], cyclesLeft = null, manageAlso = [], journalRead = true, cached = null, unreviewed = null, lanes = '', frames = [], entry = false, managedDesk = false, managedCycle = false } = {}) => {
+    trade: (items, { manageOnly = false, recovered = false, state = null, history = [], lessons = [], trades = [], tradesSummary = null, news = null, unavailable = [], cyclesLeft = null, manageAlso = [], journalRead = true, cached = null, unreviewed = null, lanes = '', frames = [], entry = false, managedDesk = false, managedCycle = false, cycleSkills: situationText = '' } = {}) => {
       const list = (Array.isArray(items) ? items : [{ symbol: items }]);
       const sentence = t => { const x = String(t).trim(); return /[.!?…]$/.test(x) ? x : `${x}.`; };
       // `minutes`: the lane whose bar closed (none: the runner's timeframe); `repeat`: a further lane of a symbol
@@ -768,7 +787,7 @@ function prompts(cfg, now, root = '') {
       // A section that couldn't be built is named, so its absence isn't read as "nothing to say".
       const missing = unavailable.length ? ` Context unavailable this cycle (not "none"): ${unavailable.join('; ')}.` : '';
       const also = manageAlso.length ? `, and manage the open ${manageAlso.join(', ')} position${manageAlso.length === 1 ? '' : 's'} (no bar closed for ${manageAlso.length === 1 ? 'it' : 'them'} this cycle)` : '';
-      return `${head}${recover}${lanes}${bars.join('')}${news ? ` ${news}` : ''}${eodText}${capText}${account}${verdicts.join('')}${historyText(history, Boolean(lanes), marketOf(list, cfg.timeframe))}${unreviewed ? ` ${unreviewed}` : ''}${own}${lessons.length ? ` Your recurring mistakes and lessons (confidence; notes from your own past, not rules): ${lessons.join(' | ')}.` : ''}${missing} ${skillsText(cfg, root)}, then run the trade-session skill for ${symbols}${new Set(list.map(x => x.symbol)).size > 1 ? ' (one symbol at a time, open positions first)' : ''}${also}${acct}${mode ? ` in ${mode}` : ''}.${PLAN_TEXT}${manageOnly || cfg.paper ? '' : entry ? `${ENTRY_TEXT}${cachedText(cached)}` : managedDesk ? `${MANAGED_DESK_TEXT}${cachedText(cached)}` : `${roster(cfg, (cached && cached.roles) || [], frames)}${managedCycle ? MANAGED_NO_ENTRY_TEXT : ''}${cachedText(cached)}`}${RESULT_LINE}`;
+      return `${head}${recover}${lanes}${bars.join('')}${news ? ` ${news}` : ''}${eodText}${capText}${account}${verdicts.join('')}${historyText(history, Boolean(lanes), marketOf(list, cfg.timeframe))}${unreviewed ? ` ${unreviewed}` : ''}${own}${lessons.length ? ` Your recurring mistakes and lessons (confidence; notes from your own past, not rules): ${lessons.join(' | ')}.` : ''}${missing} ${skillsText(cfg, root)}, then run the trade-session skill for ${symbols}${new Set(list.map(x => x.symbol)).size > 1 ? ' (one symbol at a time, open positions first)' : ''}${also}${acct}${mode ? ` in ${mode}` : ''}.${PLAN_TEXT}${manageOnly || cfg.paper ? '' : entry ? `${ENTRY_TEXT}${cachedText(cached)}` : managedDesk ? `${MANAGED_DESK_TEXT}${cachedText(cached)}` : `${roster(cfg, (cached && cached.roles) || [], frames)}${managedCycle ? MANAGED_NO_ENTRY_TEXT : ''}${cachedText(cached)}`}${situationText}${RESULT_LINE}`;
     },
     eod: ({ state = null, day = null } = {}) => {
       const d = day || dayKey(now);
@@ -886,6 +905,11 @@ function childEnv(cfg, root, base = process.env, context = null) {
     const att = claudeHeadAttestation(cfg, root, base, context, env);
     if (att) env[headPrompt.ATTEST_ENV] = JSON.stringify(att);
   }
+  // The cycle's situational skills in the head trader's prompt (situational-skills.js; context.cycleSkills: the runner's
+  // choice): written to the run's harness home and attested for this cycle. Never inherited, never a role run's.
+  delete env[situational.ATTEST_ENV];
+  const cycleAtt = cycleSkillsAttestation(root, base, context, env);
+  if (cycleAtt) env[situational.ATTEST_ENV] = JSON.stringify(cycleAtt);
   if (cfg.paper) {
     env.FTH_PAPER = '1';
     // The broker server's own switch, from the broker config (paperEnv): it refuses every order too.
@@ -1345,6 +1369,7 @@ module.exports = {
   loadList,
   embedsSkills,
   claudeHeadOn,
+  cycleLoaded,
   claudeRolesOn,
   writeRolePrompt,
   claudeHeadAttestation,

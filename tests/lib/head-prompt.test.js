@@ -68,8 +68,9 @@ test('CORE: the composed bar\'s reads the gate requires (SITUATIONAL taught in t
   // at entry; trade-lifecycle's line, the half as phase 2's cut in trade-session, confluence-counting, strategy-library: +278
   // over main's 73724), then 74227 with the owner's compression setup taught where the head trader composes (feat/compression,
   // the owner, 2026-10-24: "Make sure this skill is part of setup", taught in trade-lifecycle's setup list: its setup and stop
-  // reads and their timing, breakout's pointer and invalidation's box stop source: +225). It may shrink;
-  // it grows only on an owner's OK.
+  // reads and their timing, breakout's pointer and invalidation's box stop source: +225). The owner's skip reasons
+  // (feat/ppc-setup-rates: autonomous-trading's one SKIP line) fit under it with trade-session's manage-position line 3
+  // bytes shorter. It may shrink; it grows only on an owner's OK.
   assert.ok(Buffer.byteLength(prompt) <= 74227, `the head prompt is ${Buffer.byteLength(prompt)} bytes`);
   // Only the head trader's prompt grows: no other role's prompt embeds trade-lifecycle (the risk manager's embeds
   // confluence-counting and invalidation as before; its prompt is unchanged, pinned in trade-session-split.test.js).

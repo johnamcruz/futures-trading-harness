@@ -66,6 +66,18 @@ const FT = require('./first-try');
 const SEL = require('./selection');
 const { readJson } = require('../harness-run');
 
+/**
+ * A capture's scored exits as an exit edit's screen pairs them (exit-scorecard.js decisions), each to the window it was
+ * opened in (unitOfRecord); none without a capture; null (unknown) when it has some but none names its trade (a capture
+ * from before they did).
+ */
+function exitsOf(capture, windows) {
+  const list = capture && capture.exits && Array.isArray(capture.exits.decisions) ? capture.exits.decisions : [];
+  if (list.length && !list.some(d => d && d.root && d.entryAt)) return null;
+  const TW = require('./trend-windows');
+  return list.map(d => ({ root: d.root || null, side: d.side, entryAt: d.entryAt || null, unit: d.entryAt && windows ? TW.unitOfRecord(windows, d.entryAt) : null, exitBy: d.exitBy, cls: d.cls, late: d.late === true, r: d.r, peakR: d.peakR }));
+}
+
 /** The steps (cycles) a run recorded; 0 for a run with no records. */
 function stepsOf(runDir) {
   try {
@@ -261,7 +273,7 @@ async function probeRound(ctx, { n, champion, api }) {
   const trendSide = async (side, tree, share, which, withFindings = false) => {
     const days = trendDays(which);
     if (!days.length) return null;
-    const out = { legs: [], dayR: {}, blows: 0, cycles: 0, fresh: 0, captures: [], rides: [], first: [], sessions: [], entries: [], stepped: [], windows: 0, dropped: [], noWindows: [] };
+    const out = { legs: [], dayR: {}, blows: 0, cycles: 0, fresh: 0, exits: [], captures: [], rides: [], first: [], sessions: [], entries: [], stepped: [], windows: 0, dropped: [], noWindows: [] };
     for (const day of days) {
       const built = windowsOn(which, day);
       out.dropped.push(...built.dropped);
@@ -279,12 +291,16 @@ async function probeRound(ctx, { n, champion, api }) {
         const context = Object.keys(trend.set.spans || {}).filter(id => trend.set.spans[id].day === day && !legs.some(l => l.id === id)).map(spanOf);
         const got = await (ctx.steps.trendData || trendData)({ runDir: runs.runs[0].runDir, legs, windows: built.windows, context });
         const x = TSC.sideOfTrend({ captures: [got.capture], days: got.days, scorecard: runs.decisions, first: got.first || [], sessions: got.sessions || null, windows: built.windows, minutes: got.minutes || traderCfg.timeframe });
-        return { legs: [...x.legs], dayR: x.dayR, blows: x.blows, first: x.first, sessions: x.sessions, entries: got.entries || [], stepped: got.stepped || [], windows: built.windows.length, cycles: stepsOf(runs.runs[0].runDir), ride: TR.compact(got.capture), ...(side === 'pc' ? { capture: got.capture } : {}) };
+        return { legs: [...x.legs], dayR: x.dayR, blows: x.blows, first: x.first, sessions: x.sessions, entries: got.entries || [], stepped: got.stepped || [], windows: built.windows.length, cycles: stepsOf(runs.runs[0].runDir), ride: TR.compact(got.capture), exits: exitsOf(got.capture, built.windows), ...(side === 'pc' ? { capture: got.capture } : {}) };
       });
       // Its catch & ride (replay/trend-ride.js), report only: a phase kept before the ride was recorded has none (the
       // champion's keeps its capture, read instead), and the side's total is then unknown (trend-screen.js rideOfSide).
       out.rides.push({ ride: one.ride || TR.compact(one.capture), windows: built.windows });
       out.legs.push(...one.legs);
+      // Its scored exits, for an exit edit's screen (a phase kept before they were recorded: its capture's, when kept;
+      // else unknown, and the side's exits with it).
+      const ex = one.exits !== undefined ? one.exits : one.capture ? exitsOf(one.capture, built.windows) : null;
+      out.exits = out.exits && ex ? [...out.exits, ...ex] : null;
       Object.assign(out.dayR, one.dayR);
       out.blows += one.blows;
       out.first.push(...(one.first || []));
@@ -306,6 +322,15 @@ async function probeRound(ctx, { n, champion, api }) {
     const legs = mine ? out.legs.filter(([id]) => mine.has(id)) : out.legs;
     if (withFindings && mine) out.captures = out.captures.map(c => ({ ...c, legs: (c.legs || []).filter(l => mine.has(l.id)) }));
     return { ...out, legs, side: { legs: new Map(legs), dayR: out.dayR, blows: out.blows, first: out.first, sessions: out.sessions } };
+  };
+  // An exit edit's trend-set pairs (screen.js exitTargetTest): the champion's and the edit's scored exits, one bar apart at most.
+  // Only the units both sides finished pair (as measureTrend's); a side's exits unknown: no gain from them.
+  const exitPairs = (base, side) => {
+    if (!base || !side) return null;
+    if (!base.exits || !side.exits) return { unknown: true };
+    const finished = s => new Set((s.sessions || []).filter(x => x && x.complete).map(x => (x.unit !== undefined ? x.unit : x.day)));
+    const theirs = finished(side);
+    return { champion: base.exits, probe: side.exits, stepMs: traderCfg.timeframe * 60000, done: [...finished(base)].filter(u => theirs.has(u)) };
   };
   const report = { iteration: n, windows: cfg.windows, seed, cycles: { champion: {}, edits: {} } };
   // A half of the trend batch with no session (a one-day batch): nothing to screen on one and judge on the other.
@@ -352,6 +377,12 @@ async function probeRound(ctx, { n, champion, api }) {
     report.trend.missed = TF.missedTally(trendBase.captures);
     // The champion's exits on the probe half, scored by what price did next (replay/exit-scorecard.js): the round's report.
     report.trend.exits = EF.exitTally(trendBase.captures);
+    // The champion's scored exits name no trade (a phase kept from older code): no exit edit could be screened, so the
+    // round shows no exit finding (no proposer slot or probe run spent on an edit that can only end 'no effect').
+    if (!trendBase.exits) {
+      report.trend.exitFindings = 'none: the champion\'s scored exits name no trade (scored by older code), so no exit edit can be screened';
+      ctx.log(`iteration ${n}: exit findings left out: ${report.trend.exitFindings}`);
+    }
     // The base rate beside them: the share of the missed legs' entry bars, and of the control bars, with a valid plan.
     const c = TFX.controlsOf(trendBase.captures);
     report.trend.baseRate = { legBars: c.legBars, controlBars: c.controlBars };
@@ -391,12 +422,24 @@ async function probeRound(ctx, { n, champion, api }) {
     report.trend.champion = { ride: TSC.rideOfSide(trendConfirm.side, trendConfirm.rides), selection: reactions ? SEL.selectionOf(reactions, trendConfirm.entries, { stepped: trendConfirm.stepped }) : null, firstTry: FT.summarize(fin.first), legs: fin.legs.length, caught: fin.legs.filter(l => l.captured).length, netR: fin.netR, sessions: fin.units.length, windows: trendConfirm.windows };
   }
   const exists = s => fs.existsSync(path.join(champion.dir, 'skills', s, 'SKILL.md'));
+  // The read findings an edit could be judged on: those with at least minPairs of the champion's probe-half decisions in
+  // their target's scope (screen.js targetScope); the others are left out, said in the report, so no proposer slot or
+  // probe run goes to an edit that could only end 'no effect'.
+  const probeHalf = SC.half(base.side, 'probe', seed);
+  const allRead = F.findingsFrom({ skills: base.skills, refusals: base.refusals, max: Infinity, exists });
+  const judged = f => SC.targetScope(probeHalf, { skill: f.skill, kind: f.kind });
+  const readFindings = allRead.filter(f => judged(f) >= SC.SCREEN.minPairs).slice(0, cfg.k * 2);
+  const omitted = allRead.filter(f => judged(f) < SC.SCREEN.minPairs);
+  if (omitted.length) {
+    report.readFindingsOmitted = omitted.map(f => ({ skill: f.skill || null, kind: f.kind, count: f.count, judged: judged(f), why: `${judged(f)} of the champion's probe-half decisions in its target's scope, under the screen's minPairs ${SC.SCREEN.minPairs}: no edit of it could show a gain` }));
+    ctx.log(`iteration ${n}: ${omitted.length} read finding(s) left out: under minPairs judged decisions (${report.readFindingsOmitted.map(x => `${x.skill || 'no skill'} ${x.kind} ${x.judged}`).join('; ')})`);
+  }
   const findings = await api.phase(ctx, `${n}:findings`, path.join(dir, 'findings.json'), async () => F.mergeFindings(
     // The trend set's findings, its missed legs and its exits that cut a trend or came late (exit-findings.js), by the R
     // each cost.
-    trendBase ? [...TF.trendFindings(trendBase.captures, { exists, max: cfg.k * 2 }), ...EF.exitFindings(trendBase.captures, { exists, max: cfg.k * 2 })]
+    trendBase ? [...TF.trendFindings(trendBase.captures, { exists, max: cfg.k * 2 }), ...(trendBase.exits ? EF.exitFindings(trendBase.captures, { exists, max: cfg.k * 2 }) : [])]
       .sort((a, b) => TF.findingCost(b) - TF.findingCost(a)) : [],
-    F.findingsFrom({ skills: base.skills, refusals: base.refusals, max: cfg.k * 2, exists }),
+    readFindings,
     { max: cfg.k * 2 },
   ));
   report.findings = findings;
@@ -440,8 +483,8 @@ async function probeRound(ctx, { n, champion, api }) {
     const share = Math.min(cfg.parallel, runnable.length);
     const side = await sideData(`p-${e.id}`, tree.dir, share, 'probe');
     // Screened on the probe half only: the confirm half stays unseen until the combined change.
-    const m = SC.measure(SC.half(base.side, 'probe', seed), SC.half(side.side, 'probe', seed), { skill: e.tag.skill || null, kind: e.finding.kind });
     const ts = trendBase ? await trendSide(`p-${e.id}`, tree.dir, share, 'probe') : null;
+    const m = SC.measure(SC.half(base.side, 'probe', seed), SC.half(side.side, 'probe', seed), { skill: e.tag.skill || null, kind: e.finding.kind, exits: exitPairs(trendBase, ts) });
     const rs = regBase ? await trendSide(`p-${e.id}`, tree.dir, share, 'regression') : null;
     const rm = rs ? TSC.measureTrend(regBase.side, rs.side) : null;
     const tm = ts ? TSC.measureTrend(trendBase.side, ts.side) : null;
@@ -487,10 +530,11 @@ async function probeRound(ctx, { n, champion, api }) {
     const parts = passed.filter(p => composition.parts.some(x => x.id === p.id));
     const champC = SC.half(confirmBase.side, 'confirm', seed);
     const probeC = SC.half(side.side, 'confirm', seed);
-    const s = SC.composedScreen(champC, probeC, parts.filter(p => p.finding.kind !== TF.KIND));
+    const ts = trendConfirm ? await trendSide(`k-${cid}`, tree.dir, 1, 'confirm') : null;
+    // A read part beside a trend or an exit part is judged on harm only (screen.js composedScreen).
+    const s = SC.composedScreen(champC, probeC, parts.filter(p => p.finding.kind !== TF.KIND), { exits: exitPairs(trendConfirm, ts), trendParts: parts.filter(p => p.finding.kind === TF.KIND).length });
     // The curated measures and harms even when every part is a trend part (no curated target then).
     const cm = s.measures || SC.measure(champC, probeC, {});
-    const ts = trendConfirm ? await trendSide(`k-${cid}`, tree.dir, 1, 'confirm') : null;
     const rs = regBase ? await trendSide(`k-${cid}`, tree.dir, 1, 'regression') : null;
     const tm = ts ? TSC.measureTrend(trendConfirm.side, ts.side) : null;
     const trendParts = parts.filter(p => p.finding.kind === TF.KIND);

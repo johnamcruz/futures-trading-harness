@@ -773,8 +773,13 @@ function summaryLines(b, et) {
   const declared = declaredLine(m3.declared, tf);
   if (declared) out.push(declared);
   // The setup moment (learning/setup-moments.js): the reactions the model composes on, said as facts.
-  const check = m3.bar ? require('../learning/setup-moments').checkLine(m3.candles, { barClose: Date.parse(m3.bar.t) + b.minutes * 60000, et, entries: m3.windowEntries }) : null;
-  if (check) out.push(check);
+  // And the briefing's own setups on an allowed side (setupChecks: a compression break, a live CISD) on the same line;
+  // the standard plan below stays the setup moment's.
+  const SMo = require('../learning/setup-moments');
+  const checkOpts = m3.bar ? { barClose: Date.parse(m3.bar.t) + b.minutes * 60000, et, entries: m3.windowEntries } : null;
+  const check = checkOpts ? SMo.checkLine(m3.candles, checkOpts) : null;
+  const shownCheck = checkOpts ? SMo.checkLine(m3.candles, { ...checkOpts, checks: SMo.setupChecks(m3) }) : null;
+  if (shownCheck) out.push(shownCheck);
   // Its standard plan (learning/setup-library.js planLine, the census's composeAt and planOf): R:R as code's fact.
   const plan = check ? require('../learning/setup-library').planLine(b) : null;
   if (plan) out.push(plan);

@@ -144,6 +144,14 @@
    "value": 0.1,
    "from": "train/screen.js SCREEN.minEffect"
   },
+  "exitScreen.epsR": {
+   "value": 0.05,
+   "from": "new in feat/ppc-setup-rates (owner-approved 2026-10-28: an exit edit's screen pairs the trades both sides opened; a pair is discordant when its banked R differs by at least a small epsilon, e.g. 0.05R)"
+  },
+  "exitScreen.runnerMfeR": {
+   "value": 3,
+   "from": "new in feat/ppc-setup-rates (owner-approved 2026-10-28: an exit edit that cuts more of the trades that became runners, MFE of at least e.g. 3R on the champion's side, fails the screen whatever the mean)"
+  },
   "probe.k": {
    "value": {
     "default": 4,
@@ -379,6 +387,14 @@
   "trendFindings.saidChars": {
    "value": 160,
    "from": "new in feat/ppc-trend-facts (owner-approved 2026-10-24, build A: what the model said at an example leg, and each contradicting clause, clipped, e.g. at 160 characters, so the verified reads still fit the example)"
+  },
+  "trendFindings.setupTypes": {
+   "value": 5,
+   "from": "new in feat/ppc-setup-rates (owner-approved 2026-10-28, option A: the base rate's control plans split by setup type, at most a few types, e.g. 5, so the findings stay within a small model's prompt)"
+  },
+  "trendFindings.setupMinN": {
+   "value": 3,
+   "from": "new in feat/ppc-setup-rates (owner-approved 2026-10-28, option A: a setup type with fewer control plans, e.g. under 3, is folded into 'other', so no single plan reads as a type's rate)"
   },
   "exitFindings.examples": {
    "value": 2,
@@ -1194,6 +1210,14 @@
   "prompt.cycleDataMaxBytes": {
    "value": 48000,
    "from": "new in feat/cycle-data-in-prompt (the pre-collected cycle reads' section, in UTF-8 bytes: well under one argv string's 128 KB)"
+  },
+  "prompt.maxPromptBytes": {
+   "value": 126976,
+   "from": "new in feat/ppc-setup-rates (review: the cycle prompt is one argv string on every harness, and Linux refuses one past MAX_ARG_STRLEN, 131072 bytes; 4 KB under it: the situational skills' budget shrinks to fit, and the cycle data is dropped as a last resort, so a spawn never fails on its size)"
+  },
+  "prompt.situationalSkillBytes": {
+   "value": 72000,
+   "from": "new in feat/ppc-setup-rates (owner: every skill as context when its situation applies, \"All of the skills should be loaded. It should not be skipped.\"; UTF-8 bytes of embedded skill text a cycle: over 231 recorded briefings the most any cycle needed was 65053, a listed setup in a prop attempt, p90 58543; with about 10% headroom, so none is named past it; the line stays the fail-safe for an outlier; the whole prompt is held under prompt.maxPromptBytes, the budget shrinking first)"
   },
   "limits.probeOutputBytes": {
    "value": 67108864,

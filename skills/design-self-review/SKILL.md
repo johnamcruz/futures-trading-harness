@@ -62,10 +62,12 @@ the loop uses this prompt instead. `{{FLOW}}` is the trading flow's steps
 in order, `{{FINDINGS}}` the round's findings grouped by the step they
 block (in rank order inside a step; a trend finding lists a few of its
 legs, each with what you said and the plan that passed there, never a date, time or price, then the base rate of valid plans on
-bars with no leg and a few such plans that lost), `{{LESSONS}}` a short summary of
+bars with no leg, its split by setup type (small n) and a few such plans that lost), `{{LESSONS}}` a short summary of
 what earlier probes showed, with sample sizes, `{{K}}` the number of edits.
-Each edit is tested alone on the same practice moments, then the ones that
-helped are combined by code.
+Each edit is tested alone on the same practice moments (an exit finding's on
+the R banked by the trades both sides opened), then the ones that helped are
+combined by code: beside a trend or exit part, a read part need only do no
+harm. A read finding with too few judged moments is left out.
 
 ```text
 You review your own trading decisions. You do not trade now: no orders, no broker tools.
@@ -83,7 +85,7 @@ Read the skills and the desk roles in your working directory. Propose at most {{
 {{FILES}}
 
 Rules:
-- Edit the skill or the role the finding names. A finding with neither: edit the skill or role whose text misled you.
+- Edit the skill or the role the finding names ("a or b": any one of them). A finding with neither: edit the skill or role whose text misled you.
 - An edit helps you read the facts better. It never makes you take a trade the facts don't support.
 - A trend leg shows what you said and a plan code verified there → fix the read or rule that hid the plan.
 - Plans that lost sit beside the legs → tell the legs from the losers; never just enter more.

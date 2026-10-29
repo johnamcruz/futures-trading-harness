@@ -340,7 +340,7 @@ test('a trailing strategy\'s stop is tightened from +2R and the trade is closed 
  * Trailing harness: long 1 MNQ from 21500 with a 40-tick stop (1R = 10), exit
  * trail 2R / 0.5R. `tape` maps bar open (ET minutes after 10:00) to [h, l, c].
  */
-async function trailSim({ tape, fillAt = et(10, 0) + 5000, record = {}, modifyFails = 0, cycleMs = 0, until = et(10, 20), stopAt = 21490, noStop = false, stopSize = 1, killAfterCycle = false, otherMonth = null, barExtra = null, writeFails = false, startAt = et(10, 0) + 2000, eodFails = false, prop = null, startFlat = false, scan = [], trigger = undefined, balanceFails = false, balanceHangs = false, readMs = 0, accountReadMs = undefined, exit = { trail_activate_r: 2, trail_giveback_r: 0.5 }, stf = undefined, accountFails = false, ghostCloses = 0, oddSize = false, closeFillMs = 0, cfgOver = {}, pollMs = 0, stateIn = null, outcome = null, realKill = false, killWhen = null, keepCycleTime = false, killFile = null, beforeStep = null, fillPrice = 21500, short = false, base = [21501, 21499, 21500], extraEntries = [], closeFails = 0, bars1mFail = false, price1m = null, watchMs = undefined, recordPrice = undefined, cycleWait = 0, flatAt = null, cancelFails = 0, modifyGone = false, restore = false, placeFails = false, ordersOver = null, resizeFails = false, flatOnReread = false }) {
+async function trailSim({ tape, fillAt = et(10, 0) + 5000, record = {}, modifyFails = 0, cycleMs = 0, until = et(10, 20), stopAt = 21490, noStop = false, stopSize = 1, killAfterCycle = false, otherMonth = null, barExtra = null, writeFails = false, startAt = et(10, 0) + 2000, eodFails = false, prop = null, startFlat = false, scan = [], trigger = undefined, balanceFails = false, balanceHangs = false, readMs = 0, accountReadMs = undefined, exit = { trail_activate_r: 2, trail_giveback_r: 0.5 }, stf = undefined, accountFails = false, ghostCloses = 0, oddSize = false, closeFillMs = 0, cfgOver = {}, pollMs = 0, stateIn = null, outcome = null, realKill = false, killWhen = null, keepCycleTime = false, killFile = null, beforeStep = null, fillPrice = 21500, short = false, base = [21501, 21499, 21500], extraEntries = [], closeFails = 0, bars1mFail = false, price1m = null, watchMs = undefined, recordPrice = undefined, cycleWait = 0, flatAt = null, cancelFails = 0, modifyGone = false, restore = false, placeFails = false, ordersOver = null, resizeFails = false, flatOnReread = false, rootDir = '/r', maxPromptBytes = null, briefingFor = null }) {
   let ghosts = ghostCloses;
   let fillsAt = null; // closeFillMs: the close fills that long after it is sent // closes the broker accepts without filling
   const clockRef = { t: startAt };
@@ -352,7 +352,8 @@ async function trailSim({ tape, fillAt = et(10, 0) + 5000, record = {}, modifyFa
   let killed = false;
   const cycles = [];
   const runner = createRunner({
-    cfg: validateConfig({ harness: 'qwen', premarketAt: '', timeframe: 3, account: '7', ...(trigger ? { trigger } : {}), ...cfgOver }), root: '/r',
+    cfg: validateConfig({ harness: 'qwen', premarketAt: '', timeframe: 3, account: '7', ...(trigger ? { trigger } : {}), ...cfgOver }), root: rootDir,
+    ...(maxPromptBytes ? { maxPromptBytes } : {}), ...(briefingFor ? { briefingFor } : {}),
     client: {
       async activeContract() { return { id: 'MNQ', tickSize: 0.25, tickValue: 0.5 }; },
       async closedBars(cid, o = {}) {
@@ -399,7 +400,7 @@ async function trailSim({ tape, fillAt = et(10, 0) + 5000, record = {}, modifyFa
       },
     },
     clock: { now: () => new Date(clockRef.t) }, prop, ...(accountReadMs ? { accountReadMs } : {}), ...(watchMs ? { composedWatchMs: watchMs } : {}), ...(recordPrice ? { recordPrice } : {}),
-    runCycle: async (action, prompt, limits = {}) => { cycles.push(action); calls.prompts.push(prompt); calls.limits.push([action, clockRef.t, limits.timeoutMs]); if (action === 'eod' && eodFails) return { ok: false, timedOut: true }; if (cycleWait && (action === 'trade' || action === 'manage')) await cycleWait(clockRef); clockRef.t += cycleMs; if (killAfterCycle) killed = true; if (killWhen && killWhen(action)) killed = true; if (outcome && action !== 'eod') return outcome(action); return { ok: true, timedOut: false, result: `CYCLE RESULT: managed - ${action}` }; },
+    runCycle: async (action, prompt, limits = {}) => { cycles.push(action); calls.prompts.push(prompt); calls.limits.push([action, clockRef.t, limits.timeoutMs]); calls.contexts = [...(calls.contexts || []), limits.context || null]; if (action === 'eod' && eodFails) return { ok: false, timedOut: true }; if (cycleWait && (action === 'trade' || action === 'manage')) await cycleWait(clockRef); clockRef.t += cycleMs; if (killAfterCycle) killed = true; if (killWhen && killWhen(action)) killed = true; if (outcome && action !== 'eod') return outcome(action); return { ok: true, timedOut: false, result: `CYCLE RESULT: managed - ${action}` }; },
     isKillSwitchOn: () => killed || (killFile !== null && require('fs').existsSync(killFile)), createKillSwitch: () => { calls.kills = (calls.kills || 0) + 1; if (realKill) killed = true; }, loadState: () => stateIn, saveState: s => { calls.saved = s; },
     writeBars: (sym, bars) => { if (writeFails) throw new Error('ENOSPC: no space left on device'); calls.written.push(bars); return '/b.json'; }, scanFor: () => scan,
     entryOrders: () => [...extraEntries, { orderId: 5, contractId: 'MNQ', setup: 'trendy', side: short ? 'sell' : 'buy', stopTicks: 40, at: new Date(fillAt - 2000).toISOString(), ...record }],
@@ -1065,6 +1066,64 @@ test('every run\'s prompt states the account, read just before it; an unreadable
   assert.match(r.prompts.find(x => /trade-session/.test(x)), /Open trade MNQ long 1 @ 21500 [^\n]*\. Trade read \(closed bars since entry; pullback-vs-reversal\): best [\d.]+; [^;]+; [^;]+; pullback [^;]+; close vs RTH VWAP [^;]+; structure against since entry: 3m [^;]+, 15m [^;]+; 15m displacement against: [^;]+; compression against: [^;]+; HTF bias at entry [^,]+, now [^(]+\([^)]+\)\. Weakening signs: \d of 5[^;]*, 2 needed; reversal: [^;]+; tighten at most to [^.]+\./);
   const bad = await trailSim({ tape: {}, until: et(10, 8), balanceFails: true });
   assert.match(bad.prompts.find(x => /trade-session/.test(x)), /Account 7: state unavailable \(HTTP 503\); read get_account_snapshot before deciding anything/);
+});
+
+test('a managed cycle\'s prompt holds its situational skills in full (situational-skills.js), and its context asks the run to attest them; a flat cycle with no briefing holds none', async () => {
+  const SS = require('../../scripts/lib/situational-skills');
+  const rootDir = require('path').resolve(__dirname, '..', '..');
+  const r = await trailSim({ tape: {}, startAt: et(15, 40) + 2000, until: et(15, 52), rootDir });
+  const managed = r.prompts.find(x => /trade-session/.test(x) && /1 open position/.test(x));
+  const i = r.prompts.indexOf(managed);
+  const chosen = r.contexts[i].cycleSkills;
+  assert.deepStrictEqual([chosen.stages, chosen.skills, chosen.over], [['management'], ['manage-position', 'pullback-vs-reversal', 'take-profit'], []]);
+  assert.ok(managed.includes(SS.situationText(rootDir, chosen)), 'the open position\'s cycle: its section, attested by its run (autotrader.js childEnv)');
+  const HP = require('../../scripts/lib/head-prompt');
+  assert.strictEqual(chosen.bytes, chosen.skills.reduce((n, s) => n + Buffer.byteLength(HP.block(s, HP.skillBody(rootDir, s))), 0), 'the bytes recorded: the embedded skill text');
+  const flat = await trailSim({ tape: {}, startFlat: true, until: et(10, 8), rootDir });
+  const flatPrompt = flat.prompts.find(x => /trade-session/.test(x));
+  assert.ok(flatPrompt && /flat; 0 working orders/.test(flatPrompt) && !flatPrompt.includes('<skill name='), flatPrompt);
+  assert.ok(!('cycleSkills' in (flat.contexts[flat.prompts.indexOf(flatPrompt)] || {})));
+});
+
+test('the whole prompt stays within its limit: a managed cycle keeps its exit skills, names the rest, and fits with the cycle data still to come', async () => {
+  const SS = require('../../scripts/lib/situational-skills');
+  const HP = require('../../scripts/lib/head-prompt');
+  const rootDir = require('path').resolve(__dirname, '..', '..');
+  const size = s => Buffer.byteLength(HP.block(s, HP.skillBody(rootDir, s)));
+  const exits = ['manage-position', 'pullback-vs-reversal', 'take-profit'];
+  const b = { symbol: 'MNQ', minutes: 3, sections: { m3: { data: { windowEntries: 'allowed', vwap: { side: 'above' }, lastBreak: { last: { kind: 'BOS' } } } } } };
+  // The prompt without its section (a first run, no limit), then room for it, the exit skills and the section's own
+  // words only (no cycle data on this harness).
+  const first = await trailSim({ tape: {}, startAt: et(15, 40) + 2000, until: et(15, 52), rootDir, briefingFor: () => b });
+  const whole = first.prompts.find(x => /trade-session/.test(x) && /1 open position/.test(x));
+  const base = Buffer.byteLength(whole) - Buffer.byteLength(SS.situationText(rootDir, first.contexts[first.prompts.indexOf(whole)].cycleSkills));
+  const limit = base + exits.reduce((n, s) => n + size(s), 0) + 1000;
+  const r = await trailSim({ tape: {}, startAt: et(15, 40) + 2000, until: et(15, 52), rootDir, maxPromptBytes: limit, briefingFor: () => b });
+  const managed = r.prompts.find(x => /trade-session/.test(x) && /1 open position/.test(x));
+  const chosen = r.contexts[r.prompts.indexOf(managed)].cycleSkills;
+  assert.deepStrictEqual(chosen.skills, exits, JSON.stringify(chosen));
+  assert.ok(chosen.over.includes('daily-bias') && /Also relevant now/.test(managed));
+  assert.ok(Buffer.byteLength(managed) <= limit, `${Buffer.byteLength(managed)} > ${limit}`);
+  assert.ok(SS.situationText(rootDir, chosen).length > 0);
+});
+
+test('the cycle data\'s room is held: on a harness with cycleDataInPrompt, the section leaves the cycle data\'s cap beside it', async () => {
+  const HP = require('../../scripts/lib/head-prompt');
+  const SS = require('../../scripts/lib/situational-skills');
+  const rootDir = require('path').resolve(__dirname, '..', '..');
+  const reserve = require('../../scripts/lib/tunables').runner().prompt.cycleDataMaxBytes;
+  const size = s => Buffer.byteLength(HP.block(s, HP.skillBody(rootDir, s)));
+  const cfgOver = { harness: 'claude', cycleDataInPrompt: true };
+  const b = { symbol: 'MNQ', minutes: 3, sections: { m3: { data: { windowEntries: 'allowed', vwap: { side: 'above' }, lastBreak: { last: { kind: 'BOS' } } } } } };
+  const sim = maxPromptBytes => trailSim({ tape: {}, startAt: et(15, 40) + 2000, until: et(15, 52), rootDir, cfgOver, briefingFor: () => b, ...(maxPromptBytes ? { maxPromptBytes } : {}) });
+  const managedOf = r => { const p = r.prompts.find(x => /trade-session/.test(x) && /1 open position/.test(x)); return { p, chosen: r.contexts[r.prompts.indexOf(p)].cycleSkills }; };
+  const first = managedOf(await sim(null));
+  const base = Buffer.byteLength(first.p) - Buffer.byteLength(SS.situationText(rootDir, first.chosen));
+  // Room for manage-position beside the reserve; without the reserve, room for every skill.
+  const max = base + reserve + size('manage-position') + 500;
+  const { chosen } = managedOf(await sim(max));
+  assert.ok(chosen.bytes <= max - base - reserve, `${chosen.bytes} > ${max - base - reserve}`);
+  assert.deepStrictEqual(chosen.skills, ['manage-position']);
 });
 
 test('a hung account read is cut off: the run still starts and says so', async () => {

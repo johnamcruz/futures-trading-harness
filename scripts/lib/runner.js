@@ -51,7 +51,7 @@
 const { openTrades, describeOpenTrade, tradeReadText } = require('./trading/open-trades');
 const { workingEntryLines } = require('./trading/working-entries');
 const { zonedParts } = require('./trading/clock');
-const { decide, recordRun, prompts, signalDecision, dayKey, endOfDayAt, historyShownLines } = require('./autotrader');
+const { decide, recordRun, prompts, signalDecision, dayKey, endOfDayAt, historyShownLines, cycleLoaded } = require('./autotrader');
 const CD = require('./cycle-data');
 const { decisionEntry, marketOf, parseResult, withPositions, exitRecords, appendExit, fillsNeededSince } = require('./trading/decision-history');
 const { barStep, sleepMs } = require('./bar-clock');
@@ -143,6 +143,10 @@ function createRunner(deps) {
     recordSignals = () => {},
     // The bar briefing (trading/briefing.js): the analysis by timeframe, reused until each part expires.
     recordBriefing = () => {},
+    // A symbol's current bar briefing as recorded (the situational skills read it: situational-skills.js), or null.
+    briefingFor = () => null,
+    // The cycle prompt's size limit in bytes (one argv string): config/runner.json prompt.maxPromptBytes unless given.
+    maxPromptBytes = null,
     // A 1m lane's closed bars, noted before the pass's briefings (the runner's briefing builds 5m candles from them).
     recordFineBars = () => {},
     // The report cache (trading/report-cache.js): serve({ symbols, account, now }) -> { roles, reports } still valid,
@@ -1971,14 +1975,28 @@ function createRunner(deps) {
           // The recent decisions as the prompt shows them (its own call builds the same lines), for the session record.
           const historyShown = attempt('your recent decisions', () => historyShownLines(shownHistory, multi, marketOf(items, cfg.timeframe)), []);
           const runsEntry = entryCycle && Boolean(rolesFile);
-          const prompt = prompts(cfg, cycleNow, root).trade(items, {
+          // The skills the cycle's situation needs (situational-skills.js: the account and each symbol's bar briefing),
+          // in its prompt within the budget, attested by its run's environment (autotrader.js childEnv, context.cycleSkills).
+          // A cycle in no situation: its prompt as before.
+          const promptOpts = {
             manageOnly, recovered: recover, state: acct, history: shownHistory,
             lessons: lessonLines, trades: tradeLines, tradesSummary: summary, news: newsLine, unavailable,
             cyclesLeft, entry: runsEntry, managedDesk, managedCycle,
             manageAlso, journalRead: entries !== null, cached: served, unreviewed: unreviewedText,
             ...(multi ? { lanes: lanesLine(closedLanes) } : {}),
             ...(analystFrames.length ? { frames: analystFrames.map(f => ({ role: f.role, timeframe: tfLabel(f.minutes) })) } : {}),
-          });
+          };
+          const basePrompt = prompts(cfg, cycleNow, root).trade(items, promptOpts);
+          // The whole prompt is one argv string: the section gets what config/runner.json prompt.maxPromptBytes leaves
+          // beside the prompt and the cycle data still to come (CD.on: its cap), management first (situational-skills.js fit).
+          const situation = attempt('your situational skills', () => {
+            const SS = require('./situational-skills');
+            const P = require('./tunables').runner().prompt;
+            const chosen = SS.fit(root, SS.factsOf({ state: acct, briefings: [...new Set(items.map(x => x.symbol))].map(s => briefingFor(s)).filter(Boolean) }), { loaded: cycleLoaded(cfg), base: Buffer.byteLength(basePrompt), max: maxPromptBytes || P.maxPromptBytes, reserve: CD.on(cfg) ? P.cycleDataMaxBytes : 0 });
+            const text = SS.situationText(root, chosen);
+            return text ? { chosen, text } : null;
+          }, null);
+          const prompt = situation ? prompts(cfg, cycleNow, root).trade(items, { ...promptOpts, cycleSkills: situation.text }) : basePrompt;
           // What the prompt was built from, for the cycle log (logs/cycles/): debug a line without rebuilding it.
           const context = {
             symbols: items.map(x => ({
@@ -2005,6 +2023,12 @@ function createRunner(deps) {
             ...(runsEntry ? { entry: true } : {}),
             // A managed cycle (managedCycle: this machine's opt-in only): FTH_CYCLE_MANAGE, the gate refuses every entry.
             ...(managedCycle ? { manage: true } : {}),
+            // The setups each symbol's briefing lists (setup-moments.js listedReads): the cycle composes or skips each with a
+            // reason; the cycle log records the skips (setup-skips.js).
+            setupsListed: attempt('the listed setups', () => [...new Set(items.map(x => x.symbol))].flatMap(s => require('./learning/setup-moments').listedReads(briefingFor(s))), []),
+            // The situation's skills in the prompt (situational-skills.js): the run's environment writes and attests them
+            // (FTH_CYCLE_SKILLS); the cycle log records the stages, skills, bytes and those past the budget.
+            ...(situation ? { cycleSkills: situation.chosen } : {}),
             // Index mode: each cached report's own lookups and their facts key, which the gate counts for that role under that
             // key only (FTH_CYCLE_CACHED_LOOKUPS).
             cachedLookups: cached ? Object.fromEntries(cached.reports.filter(x => Array.isArray(x.lookups) && x.lookups.length && x.lookupsKey).map(x => [x.role, { skills: x.lookups, key: x.lookupsKey }])) : {},

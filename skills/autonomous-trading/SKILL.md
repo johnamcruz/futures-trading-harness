@@ -76,6 +76,7 @@ description: Use when a prompt says it is an autonomous or scheduled cycle - one
    Check its reasons against the facts before you write it (`reason_check`,
    setup-judgment): a reason marked FALSE is dropped and the decision
    made again.
+   A listed setup you don't compose: one line, `SKIP "<its read>": <the deciding fact>`.
    `blocked` only when the order gate, the gateway or the broker refused an
    order this cycle; nothing fired, or you stood aside, is `no-trade`.
    `planned`: only when the prompt says the runner runs the entry; else you place it (`trade-session` 4-6).
