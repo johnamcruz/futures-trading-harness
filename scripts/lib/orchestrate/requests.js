@@ -15,7 +15,7 @@
  *     review   risk-manager phase 2 on the head trader's composed plan (the entry workflow); ctx adds { strategy, side,
  *              accountId, record (the compose record as text: trade-lifecycle.js renderRecord), reports: [{ role, text }]
  *              (the desk's and the cached reports, phase 1 among them), entrySize (in a prop attempt: { size, contract, suggested,
- *              reason, floor }, the size code translated: the one to approve or cut) }
+ *              reason, floor }, the size code translated: the one to approve, or cut on a pacing rule: prop/phase2-cut.js) }
  *     execute  the trade-executor on the approved plan; ctx adds { args (order_plan's place_order arguments, built in
  *              code: runner-entry.js), verdict (phase 2's decisive VERDICT line: roles-ran.js decisiveLine) }
  *   restate(role, ctx)   risk-manager phase 2's one restatement (trading/phase2-restate.js: its approval couldn't be read):
@@ -40,7 +40,7 @@ const deskData = (role, precollected) => (precollected && Object.prototype.hasOw
  * In a prop attempt, the entry's size as code translated it (prop/size-translate.js, through order_plan: runner-entry.js),
  * the size phase 2 approves or cuts; the record's is a suggestion. None (outside an attempt): nothing, the request as before.
  */
-const sizeText = s => (s && Number.isInteger(s.size) ? ` The entry's size is ${s.size} ${s.contract}: code's translation of the record's suggested ${s.suggested} under the account rulebook (${s.reason}). Approve that size (your VERDICT line's size ${s.size}), or cut it${Number.isInteger(s.floor) ? `, never under ${s.floor} ${s.contract} (a cut below it is ${s.floor}, never a veto)` : ''}; the record's size is a suggestion, never the one to approve. State only the final size (already floored): "Size: <n>" alone, the arithmetic on the lines before; every size on the VERDICT and Size lines binds.` : '');
+const sizeText = s => (s && Number.isInteger(s.size) ? ` The entry's size is ${s.size} ${s.contract}: code's translation of the record's suggested ${s.suggested} under the account rulebook (${s.reason}). Approve that size (your VERDICT line's size ${s.size}), or cut it only while a pacing rule holds, named on your Size line ("Size: <n> (${require('../prop/phase2-cut').RULES.join('|')})")${Number.isInteger(s.floor) ? `, never under ${s.floor} ${s.contract} (a cut below it is ${s.floor}, never a veto)` : ''}; on a healthy account (none holds) a cut is placed at ${s.size}; the record's size is a suggestion, never the one to approve. State only the final size (already floored): "Size: <n>" alone (a cut adds its rule), the arithmetic on the lines before; every size on the VERDICT and Size lines binds.` : '');
 const reportName = role => (role === RISK_MANAGER ? 'risk-manager phase 1 report' : `${role} report`);
 
 const REQUESTS = Object.freeze({

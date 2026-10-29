@@ -29,6 +29,7 @@
  * restated once): each row's `restated` by outcome (approved, vetoed, unreadable, failed), shown when there were any.
  *
  *   restatedLine(row)              that count as one line, or null
+ *   cutRestoredLine(row)           phase 2's cuts placed at the translated size (prop/phase2-cut.js: no pacing rule), one line, or null
  *   setupsLine(row)                the listed setups composed, skipped with a reason, or neither, as one line, or null
  *   summarize(days, { runDir, barsFiles })   { months: [row], total: row, timing, combine?, late? } (runDir: the run's folder, for a
  *                                 combine run and the late-entry skips, late-skips.js; barsFiles: their counterfactual's bars)
@@ -66,7 +67,7 @@ function tradesOf(fills, open) {
 }
 
 function blankRow(key) {
-  return { key, points: 0, cycles: 0, tradeCycles: 0, standAside: 0, failed: 0, trades: [], refusals: {}, replayClock: 0, restated: {}, setups: { listed: 0, skipped: 0, unexplained: 0 } };
+  return { key, points: 0, cycles: 0, tradeCycles: 0, standAside: 0, failed: 0, trades: [], refusals: {}, replayClock: 0, restated: {}, cutRestored: [], setups: { listed: 0, skipped: 0, unexplained: 0 } };
 }
 
 function finish(row) {
@@ -84,6 +85,8 @@ function finish(row) {
     refusals: row.refusals, replayClockRefusals: row.replayClock,
     // Phase 2's restatements by outcome (approved: an approval rescued), only when there were any.
     ...(Object.keys(row.restated).length ? { restated: row.restated } : {}),
+    // Phase 2's cuts on a healthy account with no pacing rule, placed at the translated size (process notes), when any.
+    ...(row.cutRestored.length ? { cutRestored: row.cutRestored } : {}),
     // The setups the briefings listed, those skipped with a reason, and those neither composed nor explained (a process
     // miss: setup-skips.js), only when any were listed.
     ...(row.setups.listed ? { setups: row.setups } : {}),
@@ -122,6 +125,7 @@ function summarize(days, { runDir = null, barsFiles = {} } = {}) {
           row.cycles += 1;
           if (!c.ok) row.failed += 1;
           if (c.restated && typeof c.restated.outcome === 'string') row.restated[c.restated.outcome] = (row.restated[c.restated.outcome] || 0) + 1;
+          if (c.cutRestored && typeof c.cutRestored.note === 'string') row.cutRestored.push(c.cutRestored.note);
           if (c.action === 'trade' || c.action === 'manage') {
             row.tradeCycles += 1;
             if (/^CYCLE RESULT:\s*no-trade\b/i.test(String(c.result || ''))) row.standAside += 1;
@@ -205,6 +209,13 @@ function restatedLine(row) {
   return `Phase 2 restated ${n} approval${n === 1 ? '' : 's'} the runner couldn't read (${Object.entries(r).sort().map(([k, v]) => `${k} ${v}`).join(', ')}): ${r.approved || 0} rescued.`;
 }
 
+/** Phase 2's cuts restored to the translated size (runner-entry.js, prop/phase2-cut.js), as one line, or null. */
+function cutRestoredLine(row) {
+  const r = row && row.cutRestored;
+  if (!Array.isArray(r) || !r.length) return null;
+  return `Process notes: ${r.length} phase-2 cut${r.length === 1 ? '' : 's'} placed at the translated size, no pacing rule applying (${r.join('; ')}).`;
+}
+
 const pct = x => (x === null ? '-' : `${(x * 100).toFixed(1)}%`);
 const fix = (x, d = 2) => (x === null ? '-' : x.toFixed(d));
 const usd = x => (x === null ? '-' : `${x < 0 ? '-' : ''}$${Math.abs(x).toFixed(2)}`);
@@ -256,6 +267,7 @@ function toMarkdown(summary, manifest = {}) {
     `| ${HEAD.join(' | ')} |`, `| ${HEAD.map(() => '---').join(' | ')} |`, ...rows, '',
     'Stand-aside: trade cycles whose result was no-trade. Trades: closed round trips (net of fees); R from the initial stop. Refusals: the order gate\'s, by check; replay-clock refusals are the replay\'s own plumbing, not the trader\'s.', '',
     ...(restatedLine(summary.total) ? [restatedLine(summary.total), ''] : []),
+    ...(cutRestoredLine(summary.total) ? [cutRestoredLine(summary.total), ''] : []),
     ...(setupsLine(summary.total) ? [setupsLine(summary.total), ''] : []),
     ...timingMarkdown(summary),
     ...practiceMarkdown(summary.practice || null),
@@ -269,7 +281,7 @@ function toText(summary) {
   const combine = summary.combine ? `${require('./combine-run').reportLines(summary.combine).join('\n')}\n` : '';
   const late = summary.late ? `${require('./late-skips').reportLines(summary.late).join('\n')}\n` : '';
   const capture = summary.capture ? `trend capture: ${require('./trend-capture').reportLines(summary.capture).join('\n')}\n` : '';
-  const restated = restatedLine(summary.total) ? `${restatedLine(summary.total)}\n` : '';
+  const restated = `${restatedLine(summary.total) ? `${restatedLine(summary.total)}\n` : ''}${cutRestoredLine(summary.total) ? `${cutRestoredLine(summary.total)}\n` : ''}`;
   const main = table(HEAD, [...summary.months, summary.total].map(r => cells(r).map(String))) + restated + practiceText(summary.practice || null) + combine + late + capture;
   if (!hasTiming(summary)) return main;
   const kind = clockKind(summary.timing.all);
@@ -277,4 +289,4 @@ function toText(summary) {
   return `${main}\nsetup timing${note}\n${table(TIMING_HEAD, timingRows(summary.timing))}role median: ${roleText(summary.timing)}\n`;
 }
 
-module.exports = { restatedLine, setupsLine, summarize, tradesOf, toMarkdown, toText, formats: { usd, pct, fix } };
+module.exports = { restatedLine, cutRestoredLine, setupsLine, summarize, tradesOf, toMarkdown, toText, formats: { usd, pct, fix } };

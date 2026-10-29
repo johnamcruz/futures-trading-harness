@@ -17,15 +17,15 @@ const flat = s => s.replace(/\s+/g, ' ');
 
 test('phase 2 floor: the risk manager cut floors at min_contracts, never a veto under it (an untradable translation is code\'s skip)', () => {
   const rm = flat(fs.readFileSync(path.join(ROOT, 'agents', 'risk-manager.md'), 'utf8'));
-  assert.ok(rm.includes('In a prop attempt, full is the translated size your request names, half its cut, floored at min_contracts.'));
+  assert.ok(rm.includes('In a prop attempt, full is the translated size your request names, cut only on a pacing rule, floored at min_contracts.'));
   assert.ok(rm.includes('the translated size your request names (never the record\'s)'));
   assert.ok(!/under min_contracts: VETO/.test(rm), 'no veto under the floor');
 });
 
 test('phase 2 floor: the request names the floor as where a cut stops, never a veto, and asks for the final size alone', () => {
   const req = REQUESTS.review('risk-manager', { symbol: 'MNQ', at: '2026-10-07T14:27:00.000Z', timeframe: 3, strategy: 'prop_portfolio', side: 'long', entrySize: { size: 5, contract: 'MNQ', suggested: 1, reason: 'the rulebook\'s size at this stop', floor: 3 } });
-  assert.match(req, /Approve that size \(your VERDICT line's size 5\), or cut it, never under 3 MNQ \(a cut below it is 3, never a veto\); the record's size is a suggestion/);
-  assert.match(req, /State only the final size \(already floored\): "Size: <n>" alone, the arithmetic on the lines before; every size on the VERDICT and Size lines binds\./);
+  assert.match(req, /Approve that size \(your VERDICT line's size 5\), or cut it only while a pacing rule holds, named on your Size line \("Size: <n> \(after-loss\|streak\|drawdown\|soft-stop\|target\)"\), never under 3 MNQ \(a cut below it is 3, never a veto\); on a healthy account \(none holds\) a cut is placed at 5; the record's size is a suggestion/);
+  assert.match(req, /State only the final size \(already floored\): "Size: <n>" alone \(a cut adds its rule\), the arithmetic on the lines before; every size on the VERDICT and Size lines binds\./);
   assert.ok(!/veto instead/.test(req));
 });
 
@@ -59,7 +59,7 @@ test('phase 2 floor: stated in the order\'s own contracts (a mini counts as its 
   assert.match(prop.minContractsRefusal(policy(12), null, 'NQ', 1), /under the floor of 12 contracts \(a NQ counts as 10\)/);
   for (const min of [undefined, 0, 2.5]) assert.strictEqual(prop.minContractsIn(policy(min), null, 'NQ'), null, String(min));
   const req = REQUESTS.review('risk-manager', { symbol: 'NQ', at: '2026-10-07T14:27:00.000Z', timeframe: 3, strategy: 'prop_portfolio', side: 'long', entrySize: { size: 2, contract: 'NQ', suggested: 1, reason: 'the rulebook\'s size at this stop', floor: prop.minContractsIn(policy(3), null, 'NQ') } });
-  assert.match(req, /or cut it, never under 1 NQ \(a cut below it is 1, never a veto\)/);
+  assert.match(req, /\), never under 1 NQ \(a cut below it is 1, never a veto\)/);
 });
 
 test('phase 2 floor: order_plan\'s composed NQ entry names the floor phase 2 is told in NQ (1, not the rulebook\'s 3 micros)', () => {
@@ -84,7 +84,7 @@ test('phase 2 floor: order_plan\'s composed NQ entry names the floor phase 2 is 
   assert.deepStrictEqual([o.plan.contract, o.plan.translatedSize, o.plan.minContracts], ['NQ', 1, 1]);
   // The runner hands phase 2 exactly these (runner-entry.js entrySize): the request's floor is the order's own.
   const req = REQUESTS.review('risk-manager', { symbol: 'NQ', at: LC.BAR, timeframe: 3, strategy: 'prop_portfolio', side: 'long', entrySize: { size: o.plan.translatedSize, contract: o.plan.contract, suggested: o.plan.suggestedSize, reason: o.plan.translation, floor: o.plan.minContracts } });
-  assert.match(req, /The entry's size is 1 NQ: .*or cut it, never under 1 NQ \(a cut below it is 1, never a veto\)/);
+  assert.match(req, /The entry's size is 1 NQ: .*or cut it only while a pacing rule holds.*\), never under 1 NQ \(a cut below it is 1, never a veto\)/);
 });
 
 test('phase 2 floor: a halving floored at 3 reads as an approval of 3 (the report format\'s own readers)', () => {

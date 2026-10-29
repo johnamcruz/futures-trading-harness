@@ -215,20 +215,26 @@ test('prop size e2e: the binding limit, one row each: the broker\'s max, the dra
   }
 });
 
-test('prop size e2e: phase 2: the named 6 orders 6; a cut to 3, 3; a cut to 2, an echo of the record\'s 1 or a veto, no trade; above the translation, the translation', async () => {
+test('prop size e2e: phase 2: the named 6 orders 6; on a healthy account a cut (to 3, 2, or an echo of the record\'s 1) with no pacing rule orders the translated 6, a process note; in a drawdown a cut to 3 is 3 and to 2 no trade; a veto, no trade; above the translation, the translation', async () => {
+  // Healthy: the attempt at its start and peak, no loss today; `dd`: the balance $100 under the start (a drawdown, the
+  // budget still over the $300 cap: the translation is 6 either way). Phase 2's cut stands only in the drawdown.
+  const dd = N.start - 100;
   const rows = [
     { name: 'approves the named size', verdict: p => `APPROVE - size ${named(p)}, the composed long`, want: 6, approved: 6 },
-    { name: 'cuts to 3', verdict: () => 'APPROVE - size 3, the composed long', want: 3, approved: 3 },
-    { name: 'cuts to 2', verdict: () => 'APPROVE - size 2, the composed long', want: 0, approved: 2 },
-    { name: 'echoes the record\'s 1', verdict: () => 'APPROVE - size 1, the composed long', want: 0, approved: 1 },
+    { name: 'cuts to 3, healthy', verdict: () => 'APPROVE - size 3, the composed long', want: 6, approved: 6, restored: 3 },
+    { name: 'cuts to 2, healthy', verdict: () => 'APPROVE - size 2, the composed long', want: 6, approved: 6, restored: 2 },
+    { name: 'echoes the record\'s 1, healthy', verdict: () => 'APPROVE - size 1, the composed long', want: 6, approved: 6, restored: 1 },
+    { name: 'cuts to 3 in a drawdown', balance: dd, verdict: () => 'APPROVE - size 3, the composed long', want: 3, approved: 3 },
+    { name: 'cuts to 2 in a drawdown', balance: dd, verdict: () => 'APPROVE - size 2, the composed long', want: 0, approved: 2 },
     { name: 'vetoes', verdict: () => 'VETO - the room is short: stand aside', want: 0, approved: null },
     { name: 'approves above the translation', verdict: () => 'APPROVE - size 9, the composed long', want: 6, approved: 9 },
   ];
   for (const row of rows) {
-    const w = attemptWorld();
+    const w = attemptWorld(row.balance ? { balance: row.balance } : {});
     const { sent, entry, result } = await cycle(w, { suggest: 1, verdict: row.verdict });
     assert.deepStrictEqual(sent, row.want ? [row.want] : [], row.name);
     assert.deepStrictEqual(entry.translated.size, capSize, row.name);
+    assert.deepStrictEqual(entry.cutRestored && entry.cutRestored.note, row.restored ? `phase-2 cut ${row.restored} -> 6: no pacing rule applies` : undefined, row.name);
     if (row.want) {
       assert.deepStrictEqual([entry.size.suggested, entry.size.translated, entry.size.approved, entry.size.ordered], [1, capSize, row.approved, row.want], row.name);
       assert.match(result, new RegExp(`^CYCLE RESULT: executed - trade_lifecycle long ${row.want} MNQ`), row.name);

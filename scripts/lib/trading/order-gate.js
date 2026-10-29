@@ -426,7 +426,12 @@ function evaluateOrder({ input = {}, entries = [], now = new Date(), config, bla
     } : null;
     // Under a policy, its entry rule (its rulebook's `entry`, entry-rule.js) joins the re-check, as compose_check held it.
     const entryRule = named && named.signal === 'policy' ? entryRuleOf(named.entry) : null;
-    composedCheck = composedRefusal({ name: composed, strategy: doc, home: config.home, root: contractRoot(input.contractId), input, now, cycleBars: { ...(config.cycleBars || {}), ...(config.cycleBriefingBars || {}) }, entries, specOf, approvedSize: p2Size(), translate, entryRule,
+    // Phase 2's cut on a healthy account (prop/phase2-cut.js: no pacing rule holds on the attempt's facts): the
+    // translated size goes too, never more (owner-approved 2026-10-28); the facts are the runner's latest snapshot.
+    const P2C = require('../prop/phase2-cut');
+    const cutAccount = translate ? accounts.find(a => a.name === named.account) || null : null;
+    const cutCheck = translate ? ({ approved, base, riskUsd }) => P2C.phase2Cut({ approved, base, riskUsd, facts: P2C.cutFacts({ home: config.home, account: cutAccount, now }) }) : null;
+    composedCheck = composedRefusal({ name: composed, strategy: doc, home: config.home, root: contractRoot(input.contractId), input, now, cycleBars: { ...(config.cycleBars || {}), ...(config.cycleBriefingBars || {}) }, entries, specOf, approvedSize: p2Size(), translate, entryRule, cutCheck,
       // The setups its record may cite (strategies.js citedSetups): no registry, none (a cited record is refused).
       cited: strategies ? citedSetups(strategies, composed) : null });
     // `expired`: the record's time ran out (the cycle-timing count of entries lost to expiry: cycle-timing.js).
@@ -593,7 +598,10 @@ function evaluateOrder({ input = {}, entries = [], now = new Date(), config, bla
   // readable refuses); no approval required (not a cycle), none checked.
   let p2SizeMsg = null;
   if (config.autonomous) {
-    try { p2SizeMsg = sizeRefusal(p2Report(), input.size); } catch (err) { p2SizeMsg = `the phase-2 size check failed (${err.message}): no entry (fails closed)`; }
+    // A restored cut (composed-reads above admitted the translated size: no pacing rule holds) is checked at the size
+    // phase 2 stated, so its report must still read; the order is the translated size, never more.
+    const restored = composedCheck && !composedCheck.message && composedCheck.restored ? composedCheck.restored : null;
+    try { p2SizeMsg = sizeRefusal(p2Report(), restored && Number(input.size) === restored.to ? restored.from : input.size); } catch (err) { p2SizeMsg = `the phase-2 size check failed (${err.message}): no entry (fails closed)`; }
   }
   if (p2SizeMsg) violations.push({ check: 'phase2-size', message: p2SizeMsg });
   // Hard rule: no entry on stale data (the owner's "data accurate and not stale"): the briefing's bar closed more than

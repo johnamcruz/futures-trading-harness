@@ -3734,6 +3734,32 @@ test('trade_lifecycle in an attempt: the model\'s raw 1 is refused and order_pla
   assert.deepStrictEqual([ev1.args.size, 'translatedSize' in ev1.plan], [1, false]);
 });
 
+test('trade_lifecycle in an attempt, phase 2\'s cut (owner-approved 2026-10-28, prop/phase2-cut.js): on a healthy account the translated size goes too; in a drawdown, after a loss or in a streak only the cut; never above the translated size', () => {
+  // The translated 5 (the $300 cap at $56.74 all in); phase 2 approves 3 with no pacing rule named.
+  const p2 = text => JSON.stringify({ type: 'tool_use', timestamp: 1, sessionID: 's', part: { type: 'tool', tool: 'task', state: { status: 'completed', input: { subagent_type: 'risk-manager' }, output: text } } });
+  const run = (o, size, verdict = 'Size: 3\nVERDICT: APPROVE - size 3, risk $166.50') => {
+    const { home } = LCP.propHome({ size: 1, ...o });
+    const args = lcPropPlan(home);
+    const file = path.join(home, 'logs', 'cycle-transcript.jsonl');
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    fs.writeFileSync(file, [...ocSkills, ...ocRoles.slice(0, 4), p2(`${verdict}\nFACTS: none`)].join('\n'));
+    const r = lcPropEval(home, { ...args, size }, { config: { autonomous: true, cycle: 'full', cycleTranscript: file } });
+    return r.violations.filter(v => v.check === 'composed-reads' || v.check === 'phase2-size').map(v => `[${v.check}] ${v.message}`);
+  };
+  assert.strictEqual(lcPropPlan(LCP.propHome({ size: 1 }).home).size, 5);
+  // Healthy (the balance at the start and its peak, no loss today, no streak, far from the soft stop and the target):
+  // the translated 5 goes, and the cut 3 still goes; anything else is refused, 6 (over the translation) among them.
+  assert.deepStrictEqual(run({}, 5), []);
+  assert.deepStrictEqual(run({}, 3), []);
+  for (const n of [4, 6]) assert.ok(run({}, n).some(m => /^\[composed-reads\]/.test(m)), String(n));
+  assert.ok(run({}, 6).some(m => /^\[phase2-size\] size 6 is over the 3/.test(m)));
+  // In a drawdown (the balance $100 under the attempt's start): the cut alone; 5 is refused on both checks.
+  const dd = run({ balance: 49900 }, 5);
+  assert.ok(dd.some(m => /\[composed-reads\] .*size 5 is not 3, risk-manager phase 2's cut of the translated 5/.test(m)), JSON.stringify(dd));
+  assert.ok(dd.some(m => /\[phase2-size\] size 5 is over the 3/.test(m)));
+  assert.deepStrictEqual(run({ balance: 49900 }, 3), []);
+});
+
 test('trade_lifecycle: modify_order never reprices a working composed entry worse than its record\'s entry; better, stops, targets and exits move freely', () => {
   const home = require('../helpers').tmpDir();
   fs.writeFileSync(path.join(home, 'entry-orders.json'), JSON.stringify([

@@ -25,7 +25,9 @@
  *      (`phase2`: { chars, text cut at prompt.reportMaxText, cut }); phase 2's approved size (roles-ran.js approvedSize:
  *      none readable is a no-trade) sets the order's: exactly the smaller of it and the record's (in a prop attempt the translated size's: prop/size-translate.js; a cut is built by
  *      order_plan at it, as the gate's composed-reads takes it), never more than phase 2 approved
- *      (`size`: { approved, record, ordered }, and in an attempt suggested and translated); the order by order_plan's own path (harness-tools/order-plan.js:
+ *      (`size`: { approved, record, ordered }, and in an attempt suggested and translated; in an attempt a cut of the
+ *      translated size stands while a pacing rule holds on the attempt's facts, `cut`, else it is restored to the
+ *      translated size, `cutRestored`, a process note: prop/phase2-cut.js); the order by order_plan's own path (harness-tools/order-plan.js:
  *      trading/lifecycle-order.js composedOrder, and in a prop attempt the policy verdict it records), so its
  *      rationale and brackets are exactly what the gate checks; the journal plan for this bar (kind plan, contractId)
  *      through the broker adapter (journalAdd), which the gate's plan-required check reads;
@@ -49,8 +51,9 @@
  *   verdictLine(text)        phase 2's decisive VERDICT line (roles-ran.js decisiveLine), never a heading
  *   entryOutcome({ ... })    { outcome, result, why } from the after-order facts
  *   runEntry(deps, cycle)    null (the result isn't `planned`: nothing for the runner) or { result, entry }
- *     deps:  { workflow, runRole, client, home, cfg, root, env, log, wallNow, now, perRoleMs, childEnv, lookups, orderPlan }
- *            (`orderPlan`: harness-tools/order-plan.js plan, the order_plan tool's own operation; a test's stand-in)
+ *     deps:  { workflow, runRole, client, home, cfg, root, env, log, wallNow, now, perRoleMs, childEnv, lookups, orderPlan, accounts }
+ *            (`orderPlan`: harness-tools/order-plan.js plan, the order_plan tool's own operation; a test's stand-in;
+ *            `accounts`: the account profiles, accounts.js loadAccounts by default, for phase 2's cut check)
  *     cycle: { result, output, headEnv, symbol, contractId, bar, bars, at, accountId, context, rolesFile, reports, budgetMs,
  *              startedWall (the wall ms the head trader's run began) }
  *   The cycle log's `entry.timing`: barClose, headMs (bar close to the head trader's planned), phase2Ms, executorMs,
@@ -348,6 +351,8 @@ async function runEntry(deps, c) {
   // before phase 2 so its request names the size to approve or cut; the record's size is a suggestion. Outside an
   // attempt nothing is read and the request is as before. order_plan refusing here: phase 2 runs on the record and the
   // order is refused after it, as before.
+  // The translated size's risk (order_plan's, before fees), for phase 2's cut check (prop/phase2-cut.js).
+  let translatedRisk = null;
   if (require('./trading/prop-state').runningAttempts(home).length) {
     // The broker's max order size, read through the adapter (its translator records it for this day, as the gateway's
     // own read does before the gate), so order_plan's translation and the gate's see the same limit. Unread: as it is.
@@ -358,6 +363,7 @@ async function runEntry(deps, c) {
       if (p && Number.isInteger(p.translatedSize)) {
         ctx.entrySize = { size: p.translatedSize, contract: p.contract, suggested: p.suggestedSize, reason: p.translation, floor: p.minContracts };
         info.translated = ctx.entrySize;
+        if (p.size === p.translatedSize && Number.isFinite(p.riskUsd)) translatedRisk = p.riskUsd;
       }
     } catch (err) {
       log(`the entry: order_plan before phase 2 refused (${short(err.message)}); phase 2 sees the record's size`, 'warn');
@@ -439,6 +445,29 @@ async function runEntry(deps, c) {
       if (approved.error) { stop = { outcome: 'no-trade', why: `risk-manager phase 2 approved without a size the runner can read (${approved.error})` }; return { stop: stop.why }; }
     }
     const roleEnv = childEnv(cfg, root, env, roleContext);
+    // Phase 2's cut of the translated size (owner-approved 2026-10-28, prop/phase2-cut.js): it stands while any pacing
+    // rule holds on the attempt's facts (a loss today, a streak, a drawdown, near the soft stop or the target, or facts
+    // unread); on a healthy account it is restored to the translated size, never more: a process note, never a refusal.
+    if (ctx.entrySize && Number.isInteger(ctx.entrySize.size) && approved.size < ctx.entrySize.size) {
+      const P2C = require('./prop/phase2-cut');
+      let facts = null;
+      try {
+        const names = require('./trading/prop-state').runningAttempts(home);
+        const acct = names.length === 1 ? (deps.accounts || require('./trading/accounts').loadAccounts(root, roleEnv).accounts).find(a => a.name === names[0] && a.valid !== false) || null : null;
+        facts = P2C.cutFacts({ home, account: acct, now: now() });
+      } catch (err) {
+        log(`the entry: the attempt's facts for phase 2's cut can't be read (${err.message}): the cut stands`, 'warn');
+      }
+      const named = P2C.namedRules(`${restated && restated.outcome === 'approved' ? `${restated.text}\n` : ''}${rev.text}`, approved.size);
+      const c = P2C.phase2Cut({ approved: approved.size, base: ctx.entrySize.size, facts, riskUsd: translatedRisk, named });
+      if (c.restored) {
+        info.cutRestored = { ...c.restored, process: true };
+        log(`the entry: ${c.restored.note}${named.length ? ` (it named ${named.join(', ')})` : ''}: a process note`, 'warn');
+        approved = { size: c.restored.to };
+      } else if (c.cut) {
+        info.cut = { from: ctx.entrySize.size, to: approved.size, held: c.held, named };
+      }
+    }
     // The order is exactly the smaller of the record's size and phase 2's (owner-approved 2026-10-22): a cut is built by
     // order_plan at it (the record's brackets, the risk for the size ordered), as the gate's composed-reads takes it.
     const recSize = rec.plan && Number.isInteger(rec.plan.size) ? rec.plan.size : null;
@@ -463,7 +492,7 @@ async function runEntry(deps, c) {
     if (ordered > approved.size) { stop = { outcome: 'no-trade', why: `order_plan's size ${ordered} is over the ${approved.size} risk-manager phase 2 approved` }; return { stop: stop.why }; }
     if (ordered < recordSize) label = `${STRATEGY} ${rec.side} ${ordered} ${rec.symbol || c.symbol} (phase 2 cut ${base} ${recordSize})`;
     else if (translated !== null) label = `${STRATEGY} ${rec.side} ${ordered} ${rec.symbol || c.symbol}`; // the size ordered, never the suggestion
-    const sizeWhy = `size ${ordered}: ${ordered < recordSize ? `phase 2 cut ${base} ${recordSize}` : approved.size > ordered ? `phase 2 approved ${approved.size}, capped at ${base} ${ordered}` : `phase 2 approved ${base} ${ordered}`}${translated !== null ? ` (the record suggested ${order.plan.suggestedSize})` : ''}`;
+    const sizeWhy = `size ${ordered}: ${ordered < recordSize ? `phase 2 cut ${base} ${recordSize}` : approved.size > ordered ? `phase 2 approved ${approved.size}, capped at ${base} ${ordered}` : `phase 2 approved ${base} ${ordered}`}${translated !== null ? ` (the record suggested ${order.plan.suggestedSize})` : ''}${info.cutRestored ? `; ${info.cutRestored.note}` : ''}`;
     // No late entry (late-entry.js): the market at the order's moment, from the newest closed 1m bar read now and
     // recorded for the gate, else the local bars; left the plan (or no current price): a pass, no executor run.
     const late = await lateCheck(order, roleEnv);

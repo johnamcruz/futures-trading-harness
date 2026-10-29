@@ -120,7 +120,7 @@ It orders the thinking and adds no filter.
 - **Compose first** (`confluence-counting`): trend side, a reaction at a
   key level, the trigger closed → `compose_check`, never your own R:R.
   OK → take: full, half on serious against, pass on a 1h CHoCH against.
-  In a prop attempt the half is phase 2's cut of the translated size (never under min_contracts).
+  In a prop attempt the translated size is full; phase 2 cuts it only on a pacing rule.
 - **Every decision**: read the `setup-judgment` and `day-context` skills;
   before an entry, `trade-plan` too (the order gate refuses an entry until
   `setup-judgment` and `trade-plan` were read). An open trade: `manage-position`.

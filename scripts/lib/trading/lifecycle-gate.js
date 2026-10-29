@@ -29,7 +29,9 @@
  *     size (its cut). The ceilings over it are the gate's own checks (max-risk, max-order-size, and in a prop attempt
  *     the policy verdict's size): at or below, never above. In a prop attempt (`translate`: prop/size-translate.js,
  *     built from the policy's verdict on the record) the record's size is a suggestion: the order is exactly the
- *     translated size, the rulebook's correct one, or phase 2's smaller cut; a translation that skips refuses.
+ *     translated size, the rulebook's correct one, or phase 2's smaller cut; a translation that skips refuses. A cut
+ *     on a healthy account (`cutCheck`: prop/phase2-cut.js phase2Cut, no pacing rule holds) admits the translated size
+ *     too (`restored` in the answer), never more.
  * Anything missing, unreadable or throwing refuses (fails closed).
  *
  *   isComposed(strategy)            a strategy (or a name) of signal composed, or trade_lifecycle
@@ -40,8 +42,8 @@
  *   composedName({ setupName, named, strategies, home, root })   the composed strategy the order enters by, or null
  *   limitRefusal({ side, type, limitPrice, reference, tick })    why the entry isn't a limit at the reference or better
  *   marketRefusal({ type, reference, setup })   why a cited setup's entry (its plan: at market) isn't a market order
- *   composedRefusal({ name, strategy, home, root, input, now, cycleBars, entries, specOf, pluginRoot, approvedSize, entryRule })
- *                                   { message: why it is refused | null, check, record, plan, room, expiresAt, briefing }
+ *   composedRefusal({ name, strategy, home, root, input, now, cycleBars, entries, specOf, pluginRoot, approvedSize, entryRule, cutCheck })
+ *                                   { message: why it is refused | null, check, record, plan, room, expiresAt, briefing, restored? }
  *                                   (`briefing`: the cycle bar's, the one the reads were checked on)
  *                                   (`expired: true` when the record's time ran out: the cycle-timing count)
  *   reversalAllowed({ home, root, side, check, now, maxAgeMin })   D2 (the owner's "CHoCH at or above the trend"): whether a composed
@@ -158,7 +160,7 @@ function reversalAllowed({ home, root, side, check, now = new Date(), maxAgeMin 
 /** The room a phase-2 room fact is checked against (fact-claims.js): the plan's first level in the way, in its R, against the R its target needs. */
 const roomOf = (p, tick) => ({ stopPoints: p.stop.ticks * tick, needR: p.rr, inTheWay: p.inTheWay ? { name: p.inTheWay.name, R: p.inTheWay.R } : null });
 
-function composedRefusal({ name, strategy = null, home, root, input = {}, now = new Date(), cycleBars = {}, entries = [], specOf = () => null, pluginRoot = PLUGIN_ROOT, approvedSize = null, translate = null, attempt = false, entryRule = null, cited = null }) {
+function composedRefusal({ name, strategy = null, home, root, input = {}, now = new Date(), cycleBars = {}, entries = [], specOf = () => null, pluginRoot = PLUGIN_ROOT, approvedSize = null, translate = null, attempt = false, entryRule = null, cited = null, cutCheck = null }) {
   const say = (why, check = null) => ({ message: `setup:${name}: ${why}. Exits, protective stops and stop moves still go.`, check });
   try {
     const side = { buy: 'long', sell: 'short' }[String(input.side || '').toLowerCase()];
@@ -232,6 +234,10 @@ function composedRefusal({ name, strategy = null, home, root, input = {}, now = 
     const base = t ? t.size : stated;
     const cut = Number.isInteger(approvedSize) && approvedSize >= 1 && approvedSize < base;
     const want = cut ? approvedSize : base;
+    // Phase 2's cut of the translated size on a healthy account (prop/phase2-cut.js: no pacing rule holds): the
+    // translated size goes too, never more (owner-approved 2026-10-28); the cut itself still goes.
+    const restore = cut && t && typeof cutCheck === 'function' ? cutCheck({ approved: approvedSize, base, riskUsd: base * p.stop.ticks * spec.tickValue }) : null;
+    if (restore && restore.restored && Number(input.size) === base) return { message: null, check, record: rec, plan: p, room: roomOf(p, tick), expiresAt: new Date(expiry).toISOString(), briefing: b, restored: restore.restored };
     if (t && Number(input.size) !== want) return say(cut ? `size ${JSON.stringify(input.size)} is not ${want}, risk-manager phase 2's cut of the translated ${base}: the order is exactly the smaller` : `size ${JSON.stringify(input.size)} is not the translated size ${base} (${t.reason}; the record suggested ${stated}): order_plan gives it`, check);
     if (Number(input.size) !== want) return say(cut ? `size ${JSON.stringify(input.size)} is not ${want}, risk-manager phase 2's cut of the record's ${stated}: the order is exactly the smaller` : `size ${JSON.stringify(input.size)} is not the size the record states (${stated}); the ceilings over it are the risk cap, the broker's max and, in an attempt, the verdict`, check);
     // The room a phase-2 room fact is checked against (fact-claims.js): the plan's first level in the way, in its R,
