@@ -9,6 +9,10 @@
  *   CENSUS         the S2 census's candidates (the owner-approved momentum-continuation census, 2026-10-28) on its last
  *                  five sessions, 2021-05-17 to 2021-05-24: [bar open, side], every one the census flagged there
  *
+ *   BG_DROPPED     the census candidates the BG side drops (feat/bias-bg, the owner's change: S2 fires on the entry
+ *                  rule's side): 2021-05-17's five morning shorts, the 4h and 1h ranging with the 15m down and the day's
+ *                  trend not declared down (the close above the RTH VWAP); the 14:06 one, declared by then, stays
+ *   CENSUS_BG      the census on the BG side: CENSUS without BG_DROPPED (29 of the 34)
  *   load()         the bars, normalized (memoized)
  */
 
@@ -38,4 +42,7 @@ const CENSUS = Object.freeze([
   ['2021-05-24T14:12', 'long'], ['2021-05-24T14:15', 'long'],
 ].map(([t, side]) => Object.freeze([`${t}:00.000Z`, side])));
 
-module.exports = { load, CENSUS };
+const BG_DROPPED = Object.freeze(['13:39', '13:42', '13:48', '13:51', '14:00'].map(m => `2021-05-17T${m}:00.000Z`));
+const CENSUS_BG = Object.freeze(CENSUS.filter(([t]) => !BG_DROPPED.includes(t)));
+
+module.exports = { load, CENSUS, BG_DROPPED, CENSUS_BG };

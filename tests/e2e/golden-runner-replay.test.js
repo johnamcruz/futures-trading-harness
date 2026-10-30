@@ -217,7 +217,9 @@ test('two lanes wired for the harness: each lane\'s bars file and signal record,
   const bars1 = MNQ.flatMap(b => [0, 1, 2].map(k => ({ t: new Date(Date.parse(b.t) + k * 60000).toISOString(), o: k ? b.c : b.o, h: b.h, l: b.l, c: b.c, v: Math.round(b.v / 3) })));
   const seen = {};
   const run = await replay(MNQ, {
-    lanes: [{ timeframe: 3, trigger: 'bar' }, { timeframe: 1, trigger: 'bar' }], bars1, end: Date.parse('2026-04-27T14:46:30Z'),
+    // From the 10:33 ET close: momentum_continuation fires short on the 10:30 bar on the entry rule's side (BG, since
+    // feat/bias-bg; the prevailing-trend rule fired it on the 10:36 bar).
+    lanes: [{ timeframe: 3, trigger: 'bar' }, { timeframe: 1, trigger: 'bar' }], bars1, start: Date.parse('2026-04-27T14:33:01Z'), end: Date.parse('2026-04-27T14:46:30Z'),
     inspect: (home, cfg) => {
       const read = f => JSON.parse(fs.readFileSync(f, 'utf8'));
       seen.bars3 = read(path.join(cfg.dataDir, 'MNQ-3m.json'));
@@ -228,7 +230,7 @@ test('two lanes wired for the harness: each lane\'s bars file and signal record,
       seen.briefing = readBriefing(home, 'MNQ');
     },
   });
-  // One cycle per minute's close (10:37 .. 10:46), the 3m closes with both lanes.
+  // One cycle per minute's close (10:34 .. 10:46), the 3m closes with both lanes.
   const lanesOf = c => (c.prompt.match(/Lanes closed this cycle: ([^;]+);/) || [])[1];
   assert.ok(run.cycles.length >= 8, `cycles: ${run.cycles.length}`);
   const both = run.cycles.filter(c => /3m \(every bar\), 1m \(every bar\)/.test(lanesOf(c) || ''));
@@ -246,7 +248,7 @@ test('two lanes wired for the harness: each lane\'s bars file and signal record,
   assert.strictEqual(seen.briefing.asOf, seen.bars3.bars.at(-1).t);
   // The cache: a 1m-only cycle is keyed on the first lane's last bar (the briefing it rests on), so it reuses the
   // analysts' reports cached at that 3m bar.
-  // After a 3m bar a setup fired on (momentum_continuation, shipped since 2026-10-28, fires short on the 10:36 bar), a role's
+  // After a 3m bar a setup fired on (momentum_continuation, shipped since 2026-10-28, fires short on the 10:30 bar), a role's
   // lookups count only under that bar's facts key (report-cache.js lookupsKey), so the 1m cycles until the next 3m bar
   // run the analyst whose lookups the setup required (market structure) again, and still reuse the other's.
   const firedAt = run.cycles.filter(c => /3m \(every bar\)/.test(lanesOf(c) || '') && c.fired.length).map(c => Date.parse(c.at));

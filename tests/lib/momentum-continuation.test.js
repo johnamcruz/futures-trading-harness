@@ -55,7 +55,7 @@ test('momentum_continuation: risk.stop_min is a rules strategy\'s closest stop i
   assert.strictEqual(ev.at({ ...S2, risk: { ...S2.risk, stop_min: 20 } }, i, { describe: false }).stopDistance, 20);
 });
 
-test('momentum_continuation: the scan fires on exactly the S2 census candidates of the real-bar set (time and side), stop one tick beyond the candle', () => {
+test('momentum_continuation: the scan fires on exactly the S2 census candidates of the real-bar set on the BG side (time and side), stop one tick beyond the candle', () => {
   const bars = FX.load();
   const ev = createEvaluator(bars);
   const from = at(bars, FX.CENSUS[0][0]) - 1;
@@ -70,7 +70,38 @@ test('momentum_continuation: the scan fires on exactly the S2 census candidates 
       assert.strictEqual(r.stopDistance, Math.round(Math.max(3, own) * 1e4) / 1e4, b.t);
     }
   }
-  assert.deepStrictEqual(fired, FX.CENSUS.map(([t, side]) => [t, side]));
+  // The census's 34 on its prevailing-trend side; on the entry rule's side (BG: the owner's change) 29, the five 2021-05-17
+  // morning shorts dropped (the 4h and 1h ranging, the 15m down, the trend not declared down).
+  assert.deepStrictEqual([FX.CENSUS.length, FX.CENSUS_BG.length], [34, 29]);
+  assert.deepStrictEqual(fired, FX.CENSUS_BG.map(([t, side]) => [t, side]));
+});
+
+test('momentum_continuation: it fires only on the side the entry rule allows (BG), and the gate takes every fire on its side', () => {
+  const B = require('../../scripts/lib/trading/briefing');
+  const { entryRuleOf, entryProblems, BIAS_FRAMES, NEUTRAL } = require('../../scripts/lib/trading/entry-rule');
+  const { chainSideSeries } = require('../../scripts/lib/trading/chain-side');
+  const RULE = entryRuleOf({ bias_frames: [...BIAS_FRAMES], bias_agree: NEUTRAL, regime_against: 'off', leg_turned: 'off' });
+  const bars = FX.load();
+  const ev = createEvaluator(bars);
+  const side = chainSideSeries(bars);
+  const from = at(bars, FX.CENSUS[0][0]) - 1;
+  let n = 0;
+  for (let i = from; i < bars.length; i += 1) {
+    const r = ev.at(S2, i, { describe: false });
+    if (!r.candidate) continue;
+    n += 1;
+    assert.strictEqual(side[i], r.direction === 'long' ? 1 : -1, `${bars[i].t}: the series' side`);
+    // Parity with the gate: the briefing the runner builds on this bar's bars, the shipped rule's own check, its side.
+    const b = B.buildBriefing({ symbol: 'MNQ', bars: bars.slice(0, i + 1), minutes: 3 });
+    assert.deepStrictEqual(entryProblems({ briefing: b, side: r.direction, reads: [], rule: RULE }), [], `${bars[i].t} ${r.direction}`);
+  }
+  assert.strictEqual(n, FX.CENSUS_BG.length);
+  // A dropped one: both ranging, the 15m down, not declared: no side there, so no fire; the gate refuses the short too.
+  const k = at(bars, FX.BG_DROPPED[0]);
+  assert.strictEqual(side[k], 0);
+  assert.strictEqual(ev.at(S2, k, { describe: false }).candidate, false);
+  const kb = B.buildBriefing({ symbol: 'MNQ', bars: bars.slice(0, k + 1), minutes: 3 });
+  assert.match(entryProblems({ briefing: kb, side: 'short', reads: [], rule: RULE }).join(), /not declared down/);
 });
 
 test('momentum_continuation: the live scan fires long on the census\'s 2021-05-24 09:48 ET candle, and not on a candle without momentum, one against the trend or the opening print', () => {

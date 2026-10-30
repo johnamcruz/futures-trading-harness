@@ -106,14 +106,14 @@ Loser: 15m up; 3m inside x3 box 27066.75-27079.75 (prior VAH inside); 03:03 ET e
 
 ## When to Use
 
-- A completed candle at a level (trader-process step 3), and the trigger
-  bar's timing (step 6).
+- A completed candle at a level (trader-process step 3), and the entry's
+  timing (step 6).
 
 ## How It Works
 
 **Confirmation only, at a level.** A candle counts only AT a level: the
 `levels-and-reactions` skill's list, plus the previous candle's high and
-low and a CRT range (`m3.candles` lists both).
+low above the 3m and a CRT range (`m3.candles` lists both).
 A pattern away from a level is not evidence.
 
 **Completed candles only.** Judge a pattern at its candle's close, on
@@ -128,15 +128,15 @@ A read, never a veto: the count decides (`confluence-counting`).
 hypotheses; a missing field is `unknown`.
 
 **The stack**: each timeframe's last completed candle.
-  15m, 1h and 4h weigh more at a higher-timeframe level (a 1h
-rejection of the prior day's high outweighs a 3m one: `rejection`,
+  15m, 1h and 4h weigh more at a higher-timeframe level (`rejection`,
 `breakout`); the 3m only times the entry.
 
 - 3m, 5m, 15m, 1h and 4h: `m3.candles` (fields: `bar-briefing`), its
   `pattern` and the levels it
   met (`rejected`, `broke`, `touched`: `rejection`, `breakout`), only
   levels that existed before it opened.
-  5m without a 1m lane: `unknown`.
+  5m, `unavailable` without a 1m
+  lane, is `unknown`.
 - The targets: `m3.swingTargets`, the next swing each side (15m, 1h,
   4h).
 - Strategy rules: `htfd_*` (strategy-rules).
@@ -161,7 +161,8 @@ prior candle, ATR(14) as of prev):
   close vs open; it starts a leg, out of a box (`compression`) or a
   level.
 
-**Context decides**: with the HTF
+A CISD's strong displacement: `cisd`.
+  **Context decides**: with the HTF
 read (`trend-vs-range`, `pullback-vs-reversal`) and momentum and volume
 (`momentum-and-volume`, `absorption`).
 The stack counts once (`confluence-counting`, trigger).
@@ -180,6 +181,7 @@ Take: at the prior RTH high 21615.00: on the 15m close a shooting star (H 21621.
   Priority order -> take.
 Skip: at the session POC 21522.00, on the 3m close a doji (body 0.25, range 5.50); 15m forming:
   the entry read not in yet -> pass.
+  The session VAH 0.4R ahead is a read, not the reason.
 Loser: at the prior VAL 21480.00, on the 15m close a hammer (L 21474.50, C 21483.75).
   long at 21483.75, stop 21474.25 (9.50 pts = 38 ticks, $19.00 on 1 MNQ);
   closes below the VAL.
@@ -1026,7 +1028,7 @@ Autonomous cycle.
   MNQ: no premarket plan in the journal for today.
   MNQ day: opened 27410.75 inside the prior value area, gap -23.25 from the prior close; prior day 27130.25-27462.5, close 27434, value area 27246.5-27455.75 (POC 27414.25); overnight 27344.25-27542.5; opening type open-auction; initial balance 27298.5-27435 (136.5 points), extended 0 up and 0 down: inside the initial balance; range so far 136.5 (no 10-day average: fewer days in the data).
   MNQ last 10 closed 3m bars (ET open time, oldest first): 10:09 O 27379 H 27381.25 L 27348.25 C 27371.5 V 5026 c-o -7.5; 10:12 O 27372.5 H 27392.75 L 27371.25 C 27389.5 V 3328 c-o +17; 10:15 O 27389 H 27393.25 L 27356.75 C 27357 V 4403 c-o -32; 10:18 O 27356.5 H 27371.75 L 27352.5 C 27358 V 3736 c-o +1.5; 10:21 O 27358.25 H 27377 L 27357.75 C 27364.75 V 2332 c-o +6.5; 10:24 O 27365.5 H 27383.25 L 27353.75 C 27365 V 3302 c-o -0.5; 10:27 O 27365 H 27373.25 L 27355.25 C 27359.5 V 2255 c-o -5.5; 10:30 O 27360.25 H 27360.75 L 27321.5 C 27325.5 V 5921 c-o -34.75; 10:33 O 27326.75 H 27389.75 L 27326.5 C 27389.5 V 5598 c-o +62.75; 10:36 O 27389.5 H 27406 L 27365.25 C 27370.75 V 6456 c-o -18.75.
-  MNQ fired on this bar (scan candidates, already in session, regime, and the trend rule): momentum_continuation short [momentum_continuation track record: no backtest recorded (the user records one: backtest.js --record); live: no reviewed trades yet].
+  MNQ: no rules strategy fired on this bar (the scan's candidates); a setup you compose and check is still open (trade-lifecycle, compose_check).
   No news blackout recorded for the rest of today.
   End of day: the runner flattens every position at 15:50 ET (in 311 min); a trade must have room to work before then.
   Account 7 at 10:39 ET: balance $50,000; flat; 0 working orders.
@@ -1035,10 +1037,14 @@ Autonomous cycle.
   No reviewed trades in the journal yet, so no record of your own results, mistakes, or lessons.
   Your skills trade-session, multi-timeframe-analysis, trade-lifecycle, htf-to-ltf, confluence-counting, setup-judgment, trade-plan, and day-context are in your prompt, already loaded (don't load them again): decide by them, then run the trade-session skill for MNQ on account 7.
   Write the trader-process skill's PLAN (1 HTF to 9 Manage) before the result line.
-  Full cycle: market-structure-analyst and volume-liquidity-analyst as parallel subagents, plan from their reports, then risk-manager phase 2 on your plan, if any; the gate refuses an entry until all report and phase 2 approves.
-  Cached reports, still valid this bar (the runner's report cache: an analyst's report built on the bar briefing parts still current, risk-manager phase 1 on this account unchanged): don't launch trend-momentum-analyst, risk-manager (phase 1) this cycle; the order gate counts them as returned.
+  Full cycle: volume-liquidity-analyst as parallel subagents, plan from their reports, then risk-manager phase 2 on your plan, if any; the gate refuses an entry until all report and phase 2 approves.
+  Cached reports, still valid this bar (the runner's report cache: an analyst's report built on the bar briefing parts still current, risk-manager phase 1 on this account unchanged): don't launch market-structure-analyst, trend-momentum-analyst, risk-manager (phase 1) this cycle; the order gate counts them as returned.
   An analyst's 15m-and-up view holds until 10:45 ET; take this bar's 3m facts (the trigger, the VWAP side, the candidates) from the bar briefing.
   A cached report is that role's report this cycle: never send it back to a role to read, summarize or redo.
+--- market-structure-analyst report (from 10:36 ET) ---
+Data: bar_briefing m3@2026-04-27T14:36:00.000Z, m15@2026-04-27T14:36:00.000Z, h1@2026-04-27T14:36:00.000Z, day@2026-04-27T14:36:00.000Z
+Bias: long
+--- end of market-structure-analyst report ---
 --- trend-momentum-analyst report (from 10:36 ET) ---
 Data: bar_briefing m3@2026-04-27T14:36:00.000Z, m15@2026-04-27T14:36:00.000Z, h1@2026-04-27T14:36:00.000Z, day@2026-04-27T14:36:00.000Z
 Bias: long
@@ -1134,14 +1140,14 @@ Loser: 15m up; 3m inside x3 box 27066.75-27079.75 (prior VAH inside); 03:03 ET e
 
 ## When to Use
 
-- A completed candle at a level (trader-process step 3), and the trigger
-  bar's timing (step 6).
+- A completed candle at a level (trader-process step 3), and the entry's
+  timing (step 6).
 
 ## How It Works
 
 **Confirmation only, at a level.** A candle counts only AT a level: the
 `levels-and-reactions` skill's list, plus the previous candle's high and
-low and a CRT range (`m3.candles` lists both).
+low above the 3m and a CRT range (`m3.candles` lists both).
 A pattern away from a level is not evidence.
 
 **Completed candles only.** Judge a pattern at its candle's close, on
@@ -1156,15 +1162,15 @@ A read, never a veto: the count decides (`confluence-counting`).
 hypotheses; a missing field is `unknown`.
 
 **The stack**: each timeframe's last completed candle.
-  15m, 1h and 4h weigh more at a higher-timeframe level (a 1h
-rejection of the prior day's high outweighs a 3m one: `rejection`,
+  15m, 1h and 4h weigh more at a higher-timeframe level (`rejection`,
 `breakout`); the 3m only times the entry.
 
 - 3m, 5m, 15m, 1h and 4h: `m3.candles` (fields: `bar-briefing`), its
   `pattern` and the levels it
   met (`rejected`, `broke`, `touched`: `rejection`, `breakout`), only
   levels that existed before it opened.
-  5m without a 1m lane: `unknown`.
+  5m, `unavailable` without a 1m
+  lane, is `unknown`.
 - The targets: `m3.swingTargets`, the next swing each side (15m, 1h,
   4h).
 - Strategy rules: `htfd_*` (strategy-rules).
@@ -1189,7 +1195,8 @@ prior candle, ATR(14) as of prev):
   close vs open; it starts a leg, out of a box (`compression`) or a
   level.
 
-**Context decides**: with the HTF
+A CISD's strong displacement: `cisd`.
+  **Context decides**: with the HTF
 read (`trend-vs-range`, `pullback-vs-reversal`) and momentum and volume
 (`momentum-and-volume`, `absorption`).
 The stack counts once (`confluence-counting`, trigger).
@@ -1208,6 +1215,7 @@ Take: at the prior RTH high 21615.00: on the 15m close a shooting star (H 21621.
   Priority order -> take.
 Skip: at the session POC 21522.00, on the 3m close a doji (body 0.25, range 5.50); 15m forming:
   the entry read not in yet -> pass.
+  The session VAH 0.4R ahead is a read, not the reason.
 Loser: at the prior VAL 21480.00, on the 15m close a hammer (L 21474.50, C 21483.75).
   long at 21483.75, stop 21474.25 (9.50 pts = 38 ticks, $19.00 on 1 MNQ);
   closes below the VAL.
@@ -2058,7 +2066,7 @@ Autonomous cycle.
   No news blackout recorded for the rest of today.
   End of day: the runner flattens every position at 15:50 ET (in 308 min); a trade must have room to work before then.
   Account 7 at 10:42 ET: balance $50,000; flat; 0 working orders.
-  Your last 2 cycle(s), oldest first, ET (not facts; "since" is from bars closed by now): 10:36 MNQ 3m no-trade @27389.5: golden replay; since -119t | 10:39 MNQ 3m skipped momentum_continuation short @27370.75: golden replay; since -44t, neither +1R nor -1R yet.
+  Your last 2 cycle(s), oldest first, ET (not facts; "since" is from bars closed by now): 10:36-10:39 MNQ 3m no-trade ×2 @27389.5: golden replay; since -119t.
   Don't flip-flop without a new reason.
   No reviewed trades in the journal yet, so no record of your own results, mistakes, or lessons.
   Your skills trade-session, multi-timeframe-analysis, trade-lifecycle, htf-to-ltf, confluence-counting, setup-judgment, trade-plan, and day-context are in your prompt, already loaded (don't load them again): decide by them, then run the trade-session skill for MNQ on account 7.
@@ -2067,8 +2075,8 @@ Autonomous cycle.
   Cached reports, still valid this bar (the runner's report cache: an analyst's report built on the bar briefing parts still current, risk-manager phase 1 on this account unchanged): don't launch market-structure-analyst, trend-momentum-analyst, risk-manager (phase 1) this cycle; the order gate counts them as returned.
   An analyst's 15m-and-up view holds until 10:45 ET; take this bar's 3m facts (the trigger, the VWAP side, the candidates) from the bar briefing.
   A cached report is that role's report this cycle: never send it back to a role to read, summarize or redo.
---- market-structure-analyst report (from 10:39 ET) ---
-Data: bar_briefing m3@2026-04-27T14:39:00.000Z, m15@2026-04-27T14:36:00.000Z, h1@2026-04-27T14:36:00.000Z, day@2026-04-27T14:36:00.000Z
+--- market-structure-analyst report (from 10:36 ET) ---
+Data: bar_briefing m3@2026-04-27T14:36:00.000Z, m15@2026-04-27T14:36:00.000Z, h1@2026-04-27T14:36:00.000Z, day@2026-04-27T14:36:00.000Z
 Bias: long
 --- end of market-structure-analyst report ---
 --- trend-momentum-analyst report (from 10:36 ET) ---
@@ -2166,14 +2174,14 @@ Loser: 15m up; 3m inside x3 box 27066.75-27079.75 (prior VAH inside); 03:03 ET e
 
 ## When to Use
 
-- A completed candle at a level (trader-process step 3), and the trigger
-  bar's timing (step 6).
+- A completed candle at a level (trader-process step 3), and the entry's
+  timing (step 6).
 
 ## How It Works
 
 **Confirmation only, at a level.** A candle counts only AT a level: the
 `levels-and-reactions` skill's list, plus the previous candle's high and
-low and a CRT range (`m3.candles` lists both).
+low above the 3m and a CRT range (`m3.candles` lists both).
 A pattern away from a level is not evidence.
 
 **Completed candles only.** Judge a pattern at its candle's close, on
@@ -2188,15 +2196,15 @@ A read, never a veto: the count decides (`confluence-counting`).
 hypotheses; a missing field is `unknown`.
 
 **The stack**: each timeframe's last completed candle.
-  15m, 1h and 4h weigh more at a higher-timeframe level (a 1h
-rejection of the prior day's high outweighs a 3m one: `rejection`,
+  15m, 1h and 4h weigh more at a higher-timeframe level (`rejection`,
 `breakout`); the 3m only times the entry.
 
 - 3m, 5m, 15m, 1h and 4h: `m3.candles` (fields: `bar-briefing`), its
   `pattern` and the levels it
   met (`rejected`, `broke`, `touched`: `rejection`, `breakout`), only
   levels that existed before it opened.
-  5m without a 1m lane: `unknown`.
+  5m, `unavailable` without a 1m
+  lane, is `unknown`.
 - The targets: `m3.swingTargets`, the next swing each side (15m, 1h,
   4h).
 - Strategy rules: `htfd_*` (strategy-rules).
@@ -2221,7 +2229,8 @@ prior candle, ATR(14) as of prev):
   close vs open; it starts a leg, out of a box (`compression`) or a
   level.
 
-**Context decides**: with the HTF
+A CISD's strong displacement: `cisd`.
+  **Context decides**: with the HTF
 read (`trend-vs-range`, `pullback-vs-reversal`) and momentum and volume
 (`momentum-and-volume`, `absorption`).
 The stack counts once (`confluence-counting`, trigger).
@@ -2240,6 +2249,7 @@ Take: at the prior RTH high 21615.00: on the 15m close a shooting star (H 21621.
   Priority order -> take.
 Skip: at the session POC 21522.00, on the 3m close a doji (body 0.25, range 5.50); 15m forming:
   the entry read not in yet -> pass.
+  The session VAH 0.4R ahead is a read, not the reason.
 Loser: at the prior VAL 21480.00, on the 15m close a hammer (L 21474.50, C 21483.75).
   long at 21483.75, stop 21474.25 (9.50 pts = 38 ticks, $19.00 on 1 MNQ);
   closes below the VAL.
@@ -3090,7 +3100,7 @@ Autonomous cycle.
   No news blackout recorded for the rest of today.
   End of day: the runner flattens every position at 15:50 ET (in 305 min); a trade must have room to work before then.
   Account 7 at 10:45 ET: balance $50,000; flat; 0 working orders.
-  Your last 3 cycle(s), oldest first, ET (not facts; "since" is from bars closed by now): 10:36 MNQ 3m no-trade @27389.5: golden replay; since -50t | 10:39 MNQ 3m skipped momentum_continuation short @27370.75: golden replay; since +25t, neither +1R nor -1R yet | 10:42 MNQ 3m no-trade @27359.75: golden replay; since +69t.
+  Your last 3 cycle(s), oldest first, ET (not facts; "since" is from bars closed by now): 10:36-10:42 MNQ 3m no-trade ×3 @27389.5: golden replay; since -50t.
   Don't flip-flop without a new reason.
   No reviewed trades in the journal yet, so no record of your own results, mistakes, or lessons.
   Your skills trade-session, multi-timeframe-analysis, trade-lifecycle, htf-to-ltf, confluence-counting, setup-judgment, trade-plan, and day-context are in your prompt, already loaded (don't load them again): decide by them, then run the trade-session skill for MNQ on account 7.
@@ -3189,14 +3199,14 @@ Loser: 15m up; 3m inside x3 box 27066.75-27079.75 (prior VAH inside); 03:03 ET e
 
 ## When to Use
 
-- A completed candle at a level (trader-process step 3), and the trigger
-  bar's timing (step 6).
+- A completed candle at a level (trader-process step 3), and the entry's
+  timing (step 6).
 
 ## How It Works
 
 **Confirmation only, at a level.** A candle counts only AT a level: the
 `levels-and-reactions` skill's list, plus the previous candle's high and
-low and a CRT range (`m3.candles` lists both).
+low above the 3m and a CRT range (`m3.candles` lists both).
 A pattern away from a level is not evidence.
 
 **Completed candles only.** Judge a pattern at its candle's close, on
@@ -3211,15 +3221,15 @@ A read, never a veto: the count decides (`confluence-counting`).
 hypotheses; a missing field is `unknown`.
 
 **The stack**: each timeframe's last completed candle.
-  15m, 1h and 4h weigh more at a higher-timeframe level (a 1h
-rejection of the prior day's high outweighs a 3m one: `rejection`,
+  15m, 1h and 4h weigh more at a higher-timeframe level (`rejection`,
 `breakout`); the 3m only times the entry.
 
 - 3m, 5m, 15m, 1h and 4h: `m3.candles` (fields: `bar-briefing`), its
   `pattern` and the levels it
   met (`rejected`, `broke`, `touched`: `rejection`, `breakout`), only
   levels that existed before it opened.
-  5m without a 1m lane: `unknown`.
+  5m, `unavailable` without a 1m
+  lane, is `unknown`.
 - The targets: `m3.swingTargets`, the next swing each side (15m, 1h,
   4h).
 - Strategy rules: `htfd_*` (strategy-rules).
@@ -3244,7 +3254,8 @@ prior candle, ATR(14) as of prev):
   close vs open; it starts a leg, out of a box (`compression`) or a
   level.
 
-**Context decides**: with the HTF
+A CISD's strong displacement: `cisd`.
+  **Context decides**: with the HTF
 read (`trend-vs-range`, `pullback-vs-reversal`) and momentum and volume
 (`momentum-and-volume`, `absorption`).
 The stack counts once (`confluence-counting`, trigger).
@@ -3263,6 +3274,7 @@ Take: at the prior RTH high 21615.00: on the 15m close a shooting star (H 21621.
   Priority order -> take.
 Skip: at the session POC 21522.00, on the 3m close a doji (body 0.25, range 5.50); 15m forming:
   the entry read not in yet -> pass.
+  The session VAH 0.4R ahead is a read, not the reason.
 Loser: at the prior VAL 21480.00, on the 15m close a hammer (L 21474.50, C 21483.75).
   long at 21483.75, stop 21474.25 (9.50 pts = 38 ticks, $19.00 on 1 MNQ);
   closes below the VAL.
@@ -4113,7 +4125,7 @@ Autonomous cycle.
   No news blackout recorded for the rest of today.
   End of day: the runner flattens every position at 15:50 ET (in 302 min); a trade must have room to work before then.
   Account 7 at 10:48 ET: balance $50,000; flat; 0 working orders.
-  Your last 4 cycle(s), oldest first, ET (not facts; "since" is from bars closed by now): 10:36 MNQ 3m no-trade @27389.5: golden replay; since -92t | 10:39 MNQ 3m skipped momentum_continuation short @27370.75: golden replay; since -17t, neither +1R nor -1R yet | 10:42-10:45 MNQ 3m no-trade ×2 @27359.75: golden replay; since +27t.
+  Your last 4 cycle(s), oldest first, ET (not facts; "since" is from bars closed by now): 10:36-10:45 MNQ 3m no-trade ×4 @27389.5: golden replay; since -92t.
   Don't flip-flop without a new reason.
   No reviewed trades in the journal yet, so no record of your own results, mistakes, or lessons.
   Your skills trade-session, multi-timeframe-analysis, trade-lifecycle, htf-to-ltf, confluence-counting, setup-judgment, trade-plan, and day-context are in your prompt, already loaded (don't load them again): decide by them, then run the trade-session skill for MNQ on account 7.
@@ -4308,14 +4320,14 @@ Loser: 15m bullish CISD after the sweep of the prior RTH low 21402.25;
 
 ## When to Use
 
-- A completed candle at a level (trader-process step 3), and the trigger
-  bar's timing (step 6).
+- A completed candle at a level (trader-process step 3), and the entry's
+  timing (step 6).
 
 ## How It Works
 
 **Confirmation only, at a level.** A candle counts only AT a level: the
 `levels-and-reactions` skill's list, plus the previous candle's high and
-low and a CRT range (`m3.candles` lists both).
+low above the 3m and a CRT range (`m3.candles` lists both).
 A pattern away from a level is not evidence.
 
 **Completed candles only.** Judge a pattern at its candle's close, on
@@ -4330,15 +4342,15 @@ A read, never a veto: the count decides (`confluence-counting`).
 hypotheses; a missing field is `unknown`.
 
 **The stack**: each timeframe's last completed candle.
-  15m, 1h and 4h weigh more at a higher-timeframe level (a 1h
-rejection of the prior day's high outweighs a 3m one: `rejection`,
+  15m, 1h and 4h weigh more at a higher-timeframe level (`rejection`,
 `breakout`); the 3m only times the entry.
 
 - 3m, 5m, 15m, 1h and 4h: `m3.candles` (fields: `bar-briefing`), its
   `pattern` and the levels it
   met (`rejected`, `broke`, `touched`: `rejection`, `breakout`), only
   levels that existed before it opened.
-  5m without a 1m lane: `unknown`.
+  5m, `unavailable` without a 1m
+  lane, is `unknown`.
 - The targets: `m3.swingTargets`, the next swing each side (15m, 1h,
   4h).
 - Strategy rules: `htfd_*` (strategy-rules).
@@ -4363,7 +4375,8 @@ prior candle, ATR(14) as of prev):
   close vs open; it starts a leg, out of a box (`compression`) or a
   level.
 
-**Context decides**: with the HTF
+A CISD's strong displacement: `cisd`.
+  **Context decides**: with the HTF
 read (`trend-vs-range`, `pullback-vs-reversal`) and momentum and volume
 (`momentum-and-volume`, `absorption`).
 The stack counts once (`confluence-counting`, trigger).
@@ -4382,6 +4395,7 @@ Take: at the prior RTH high 21615.00: on the 15m close a shooting star (H 21621.
   Priority order -> take.
 Skip: at the session POC 21522.00, on the 3m close a doji (body 0.25, range 5.50); 15m forming:
   the entry read not in yet -> pass.
+  The session VAH 0.4R ahead is a read, not the reason.
 Loser: at the prior VAL 21480.00, on the 15m close a hammer (L 21474.50, C 21483.75).
   long at 21483.75, stop 21474.25 (9.50 pts = 38 ticks, $19.00 on 1 MNQ);
   closes below the VAL.
@@ -5232,7 +5246,7 @@ Autonomous cycle.
   No news blackout recorded for the rest of today.
   End of day: the runner flattens every position at 15:50 ET (in 299 min); a trade must have room to work before then.
   Account 7 at 10:51 ET: balance $49,950; flat; 0 working orders.
-  Your last 5 cycle(s), oldest first, ET (not facts; "since" is from bars closed by now): 10:36 MNQ 3m no-trade @27389.5: golden replay; since -63t | 10:39 MNQ 3m skipped momentum_continuation short @27370.75: golden replay; since +12t, neither +1R nor -1R yet | 10:42-10:48 MNQ 3m no-trade ×3 @27359.75: golden replay; since +56t.
+  Your last 5 cycle(s), oldest first, ET (not facts; "since" is from bars closed by now): 10:36-10:48 MNQ 3m no-trade ×5 @27389.5: golden replay; since -63t.
   Don't flip-flop without a new reason.
   No reviewed trades in the journal yet, so no record of your own results, mistakes, or lessons.
   Your skills trade-session, multi-timeframe-analysis, trade-lifecycle, htf-to-ltf, confluence-counting, setup-judgment, trade-plan, and day-context are in your prompt, already loaded (don't load them again): decide by them, then run the trade-session skill for MNQ on account 7.
@@ -5424,14 +5438,14 @@ Loser: 15m bullish CISD after the sweep of the prior RTH low 21402.25;
 
 ## When to Use
 
-- A completed candle at a level (trader-process step 3), and the trigger
-  bar's timing (step 6).
+- A completed candle at a level (trader-process step 3), and the entry's
+  timing (step 6).
 
 ## How It Works
 
 **Confirmation only, at a level.** A candle counts only AT a level: the
 `levels-and-reactions` skill's list, plus the previous candle's high and
-low and a CRT range (`m3.candles` lists both).
+low above the 3m and a CRT range (`m3.candles` lists both).
 A pattern away from a level is not evidence.
 
 **Completed candles only.** Judge a pattern at its candle's close, on
@@ -5446,15 +5460,15 @@ A read, never a veto: the count decides (`confluence-counting`).
 hypotheses; a missing field is `unknown`.
 
 **The stack**: each timeframe's last completed candle.
-  15m, 1h and 4h weigh more at a higher-timeframe level (a 1h
-rejection of the prior day's high outweighs a 3m one: `rejection`,
+  15m, 1h and 4h weigh more at a higher-timeframe level (`rejection`,
 `breakout`); the 3m only times the entry.
 
 - 3m, 5m, 15m, 1h and 4h: `m3.candles` (fields: `bar-briefing`), its
   `pattern` and the levels it
   met (`rejected`, `broke`, `touched`: `rejection`, `breakout`), only
   levels that existed before it opened.
-  5m without a 1m lane: `unknown`.
+  5m, `unavailable` without a 1m
+  lane, is `unknown`.
 - The targets: `m3.swingTargets`, the next swing each side (15m, 1h,
   4h).
 - Strategy rules: `htfd_*` (strategy-rules).
@@ -5479,7 +5493,8 @@ prior candle, ATR(14) as of prev):
   close vs open; it starts a leg, out of a box (`compression`) or a
   level.
 
-**Context decides**: with the HTF
+A CISD's strong displacement: `cisd`.
+  **Context decides**: with the HTF
 read (`trend-vs-range`, `pullback-vs-reversal`) and momentum and volume
 (`momentum-and-volume`, `absorption`).
 The stack counts once (`confluence-counting`, trigger).
@@ -5498,6 +5513,7 @@ Take: at the prior RTH high 21615.00: on the 15m close a shooting star (H 21621.
   Priority order -> take.
 Skip: at the session POC 21522.00, on the 3m close a doji (body 0.25, range 5.50); 15m forming:
   the entry read not in yet -> pass.
+  The session VAH 0.4R ahead is a read, not the reason.
 Loser: at the prior VAL 21480.00, on the 15m close a hammer (L 21474.50, C 21483.75).
   long at 21483.75, stop 21474.25 (9.50 pts = 38 ticks, $19.00 on 1 MNQ);
   closes below the VAL.
@@ -6348,7 +6364,7 @@ Autonomous cycle.
   No news blackout recorded for the rest of today.
   End of day: the runner flattens every position at 15:50 ET (in 296 min); a trade must have room to work before then.
   Account 7 at 10:54 ET: balance $49,950; flat; 0 working orders.
-  Your last 6 cycle(s), oldest first, ET (not facts; "since" is from bars closed by now): 10:36 MNQ 3m no-trade @27389.5: golden replay; since -136t | 10:39 MNQ 3m skipped momentum_continuation short @27370.75: golden replay; since -61t, neither +1R nor -1R yet | 10:42-10:51 MNQ 3m no-trade ×4 @27359.75: golden replay; since -17t.
+  Your last 6 cycle(s), oldest first, ET (not facts; "since" is from bars closed by now): 10:36-10:51 MNQ 3m no-trade ×6 @27389.5: golden replay; since -136t.
   Don't flip-flop without a new reason.
   No reviewed trades in the journal yet, so no record of your own results, mistakes, or lessons.
   Your skills trade-session, multi-timeframe-analysis, trade-lifecycle, htf-to-ltf, confluence-counting, setup-judgment, trade-plan, and day-context are in your prompt, already loaded (don't load them again): decide by them, then run the trade-session skill for MNQ on account 7.
@@ -6462,14 +6478,14 @@ Loser: 15m bullish CISD after the sweep of the prior RTH low 21402.25;
 
 ## When to Use
 
-- A completed candle at a level (trader-process step 3), and the trigger
-  bar's timing (step 6).
+- A completed candle at a level (trader-process step 3), and the entry's
+  timing (step 6).
 
 ## How It Works
 
 **Confirmation only, at a level.** A candle counts only AT a level: the
 `levels-and-reactions` skill's list, plus the previous candle's high and
-low and a CRT range (`m3.candles` lists both).
+low above the 3m and a CRT range (`m3.candles` lists both).
 A pattern away from a level is not evidence.
 
 **Completed candles only.** Judge a pattern at its candle's close, on
@@ -6484,15 +6500,15 @@ A read, never a veto: the count decides (`confluence-counting`).
 hypotheses; a missing field is `unknown`.
 
 **The stack**: each timeframe's last completed candle.
-  15m, 1h and 4h weigh more at a higher-timeframe level (a 1h
-rejection of the prior day's high outweighs a 3m one: `rejection`,
+  15m, 1h and 4h weigh more at a higher-timeframe level (`rejection`,
 `breakout`); the 3m only times the entry.
 
 - 3m, 5m, 15m, 1h and 4h: `m3.candles` (fields: `bar-briefing`), its
   `pattern` and the levels it
   met (`rejected`, `broke`, `touched`: `rejection`, `breakout`), only
   levels that existed before it opened.
-  5m without a 1m lane: `unknown`.
+  5m, `unavailable` without a 1m
+  lane, is `unknown`.
 - The targets: `m3.swingTargets`, the next swing each side (15m, 1h,
   4h).
 - Strategy rules: `htfd_*` (strategy-rules).
@@ -6517,7 +6533,8 @@ prior candle, ATR(14) as of prev):
   close vs open; it starts a leg, out of a box (`compression`) or a
   level.
 
-**Context decides**: with the HTF
+A CISD's strong displacement: `cisd`.
+  **Context decides**: with the HTF
 read (`trend-vs-range`, `pullback-vs-reversal`) and momentum and volume
 (`momentum-and-volume`, `absorption`).
 The stack counts once (`confluence-counting`, trigger).
@@ -6536,6 +6553,7 @@ Take: at the prior RTH high 21615.00: on the 15m close a shooting star (H 21621.
   Priority order -> take.
 Skip: at the session POC 21522.00, on the 3m close a doji (body 0.25, range 5.50); 15m forming:
   the entry read not in yet -> pass.
+  The session VAH 0.4R ahead is a read, not the reason.
 Loser: at the prior VAL 21480.00, on the 15m close a hammer (L 21474.50, C 21483.75).
   long at 21483.75, stop 21474.25 (9.50 pts = 38 ticks, $19.00 on 1 MNQ);
   closes below the VAL.
@@ -7386,7 +7404,7 @@ Autonomous cycle.
   No news blackout recorded for the rest of today.
   End of day: the runner flattens every position at 15:50 ET (in 293 min); a trade must have room to work before then.
   Account 7 at 10:57 ET: balance $49,950; flat; 0 working orders.
-  Your last 7 cycle(s), oldest first, ET (not facts; "since" is from bars closed by now): 10:36 MNQ 3m no-trade @27389.5: golden replay; since -127t | 10:39 MNQ 3m skipped momentum_continuation short @27370.75: golden replay; since -52t, neither +1R nor -1R yet | 10:42-10:54 MNQ 3m no-trade ×5 @27359.75: golden replay; since -8t.
+  Your last 7 cycle(s), oldest first, ET (not facts; "since" is from bars closed by now): 10:36-10:54 MNQ 3m no-trade ×7 @27389.5: golden replay; since -127t.
   Don't flip-flop without a new reason.
   No reviewed trades in the journal yet, so no record of your own results, mistakes, or lessons.
   Your skills trade-session, multi-timeframe-analysis, trade-lifecycle, htf-to-ltf, confluence-counting, setup-judgment, trade-plan, and day-context are in your prompt, already loaded (don't load them again): decide by them, then run the trade-session skill for MNQ on account 7.
@@ -7500,14 +7518,14 @@ Loser: 15m bullish CISD after the sweep of the prior RTH low 21402.25;
 
 ## When to Use
 
-- A completed candle at a level (trader-process step 3), and the trigger
-  bar's timing (step 6).
+- A completed candle at a level (trader-process step 3), and the entry's
+  timing (step 6).
 
 ## How It Works
 
 **Confirmation only, at a level.** A candle counts only AT a level: the
 `levels-and-reactions` skill's list, plus the previous candle's high and
-low and a CRT range (`m3.candles` lists both).
+low above the 3m and a CRT range (`m3.candles` lists both).
 A pattern away from a level is not evidence.
 
 **Completed candles only.** Judge a pattern at its candle's close, on
@@ -7522,15 +7540,15 @@ A read, never a veto: the count decides (`confluence-counting`).
 hypotheses; a missing field is `unknown`.
 
 **The stack**: each timeframe's last completed candle.
-  15m, 1h and 4h weigh more at a higher-timeframe level (a 1h
-rejection of the prior day's high outweighs a 3m one: `rejection`,
+  15m, 1h and 4h weigh more at a higher-timeframe level (`rejection`,
 `breakout`); the 3m only times the entry.
 
 - 3m, 5m, 15m, 1h and 4h: `m3.candles` (fields: `bar-briefing`), its
   `pattern` and the levels it
   met (`rejected`, `broke`, `touched`: `rejection`, `breakout`), only
   levels that existed before it opened.
-  5m without a 1m lane: `unknown`.
+  5m, `unavailable` without a 1m
+  lane, is `unknown`.
 - The targets: `m3.swingTargets`, the next swing each side (15m, 1h,
   4h).
 - Strategy rules: `htfd_*` (strategy-rules).
@@ -7555,7 +7573,8 @@ prior candle, ATR(14) as of prev):
   close vs open; it starts a leg, out of a box (`compression`) or a
   level.
 
-**Context decides**: with the HTF
+A CISD's strong displacement: `cisd`.
+  **Context decides**: with the HTF
 read (`trend-vs-range`, `pullback-vs-reversal`) and momentum and volume
 (`momentum-and-volume`, `absorption`).
 The stack counts once (`confluence-counting`, trigger).
@@ -7574,6 +7593,7 @@ Take: at the prior RTH high 21615.00: on the 15m close a shooting star (H 21621.
   Priority order -> take.
 Skip: at the session POC 21522.00, on the 3m close a doji (body 0.25, range 5.50); 15m forming:
   the entry read not in yet -> pass.
+  The session VAH 0.4R ahead is a read, not the reason.
 Loser: at the prior VAL 21480.00, on the 15m close a hammer (L 21474.50, C 21483.75).
   long at 21483.75, stop 21474.25 (9.50 pts = 38 ticks, $19.00 on 1 MNQ);
   closes below the VAL.
@@ -8424,7 +8444,7 @@ Autonomous cycle.
   No news blackout recorded for the rest of today.
   End of day: the runner flattens every position at 15:50 ET (in 290 min); a trade must have room to work before then.
   Account 7 at 11:00 ET: balance $49,950; flat; 0 working orders.
-  Your last 8 cycle(s), oldest first, ET (not facts; "since" is from bars closed by now): 10:36 MNQ 3m no-trade @27389.5: golden replay; since -86t | 10:39 MNQ 3m skipped momentum_continuation short @27370.75: golden replay; since -11t, neither +1R nor -1R yet | 10:42-10:57 MNQ 3m no-trade ×6 @27359.75: golden replay; since +33t.
+  Your last 8 cycle(s), oldest first, ET (not facts; "since" is from bars closed by now): 10:36-10:57 MNQ 3m no-trade ×8 @27389.5: golden replay; since -86t.
   Don't flip-flop without a new reason.
   No reviewed trades in the journal yet, so no record of your own results, mistakes, or lessons.
   Your skills trade-session, multi-timeframe-analysis, trade-lifecycle, htf-to-ltf, confluence-counting, setup-judgment, trade-plan, and day-context are in your prompt, already loaded (don't load them again): decide by them, then run the trade-session skill for MNQ on account 7.
@@ -8610,14 +8630,14 @@ Loser: 15m bullish CISD after the sweep of the prior RTH low 21402.25;
 
 ## When to Use
 
-- A completed candle at a level (trader-process step 3), and the trigger
-  bar's timing (step 6).
+- A completed candle at a level (trader-process step 3), and the entry's
+  timing (step 6).
 
 ## How It Works
 
 **Confirmation only, at a level.** A candle counts only AT a level: the
 `levels-and-reactions` skill's list, plus the previous candle's high and
-low and a CRT range (`m3.candles` lists both).
+low above the 3m and a CRT range (`m3.candles` lists both).
 A pattern away from a level is not evidence.
 
 **Completed candles only.** Judge a pattern at its candle's close, on
@@ -8632,15 +8652,15 @@ A read, never a veto: the count decides (`confluence-counting`).
 hypotheses; a missing field is `unknown`.
 
 **The stack**: each timeframe's last completed candle.
-  15m, 1h and 4h weigh more at a higher-timeframe level (a 1h
-rejection of the prior day's high outweighs a 3m one: `rejection`,
+  15m, 1h and 4h weigh more at a higher-timeframe level (`rejection`,
 `breakout`); the 3m only times the entry.
 
 - 3m, 5m, 15m, 1h and 4h: `m3.candles` (fields: `bar-briefing`), its
   `pattern` and the levels it
   met (`rejected`, `broke`, `touched`: `rejection`, `breakout`), only
   levels that existed before it opened.
-  5m without a 1m lane: `unknown`.
+  5m, `unavailable` without a 1m
+  lane, is `unknown`.
 - The targets: `m3.swingTargets`, the next swing each side (15m, 1h,
   4h).
 - Strategy rules: `htfd_*` (strategy-rules).
@@ -8665,7 +8685,8 @@ prior candle, ATR(14) as of prev):
   close vs open; it starts a leg, out of a box (`compression`) or a
   level.
 
-**Context decides**: with the HTF
+A CISD's strong displacement: `cisd`.
+  **Context decides**: with the HTF
 read (`trend-vs-range`, `pullback-vs-reversal`) and momentum and volume
 (`momentum-and-volume`, `absorption`).
 The stack counts once (`confluence-counting`, trigger).
@@ -8684,6 +8705,7 @@ Take: at the prior RTH high 21615.00: on the 15m close a shooting star (H 21621.
   Priority order -> take.
 Skip: at the session POC 21522.00, on the 3m close a doji (body 0.25, range 5.50); 15m forming:
   the entry read not in yet -> pass.
+  The session VAH 0.4R ahead is a read, not the reason.
 Loser: at the prior VAL 21480.00, on the 15m close a hammer (L 21474.50, C 21483.75).
   long at 21483.75, stop 21474.25 (9.50 pts = 38 ticks, $19.00 on 1 MNQ);
   closes below the VAL.
@@ -9534,7 +9556,7 @@ Autonomous cycle.
   No news blackout recorded for the rest of today.
   End of day: the runner flattens every position at 15:50 ET (in 287 min); a trade must have room to work before then.
   Account 7 at 11:03 ET: balance $49,950; flat; 0 working orders.
-  Your last 9 cycle(s), oldest first, ET (not facts; "since" is from bars closed by now): 10:36 MNQ 3m no-trade @27389.5: golden replay; since -119t | 10:39 MNQ 3m skipped momentum_continuation short @27370.75: golden replay; since -44t, neither +1R nor -1R yet | 10:42-11:00 MNQ 3m no-trade ×7 @27359.75: golden replay; since 0t.
+  Your last 9 cycle(s), oldest first, ET (not facts; "since" is from bars closed by now): 10:36-11:00 MNQ 3m no-trade ×9 @27389.5: golden replay; since -119t.
   Don't flip-flop without a new reason.
   No reviewed trades in the journal yet, so no record of your own results, mistakes, or lessons.
   Your skills trade-session, multi-timeframe-analysis, trade-lifecycle, htf-to-ltf, confluence-counting, setup-judgment, trade-plan, and day-context are in your prompt, already loaded (don't load them again): decide by them, then run the trade-session skill for MNQ on account 7.
@@ -9729,14 +9751,14 @@ Loser: 15m bullish CISD after the sweep of the prior RTH low 21402.25;
 
 ## When to Use
 
-- A completed candle at a level (trader-process step 3), and the trigger
-  bar's timing (step 6).
+- A completed candle at a level (trader-process step 3), and the entry's
+  timing (step 6).
 
 ## How It Works
 
 **Confirmation only, at a level.** A candle counts only AT a level: the
 `levels-and-reactions` skill's list, plus the previous candle's high and
-low and a CRT range (`m3.candles` lists both).
+low above the 3m and a CRT range (`m3.candles` lists both).
 A pattern away from a level is not evidence.
 
 **Completed candles only.** Judge a pattern at its candle's close, on
@@ -9751,15 +9773,15 @@ A read, never a veto: the count decides (`confluence-counting`).
 hypotheses; a missing field is `unknown`.
 
 **The stack**: each timeframe's last completed candle.
-  15m, 1h and 4h weigh more at a higher-timeframe level (a 1h
-rejection of the prior day's high outweighs a 3m one: `rejection`,
+  15m, 1h and 4h weigh more at a higher-timeframe level (`rejection`,
 `breakout`); the 3m only times the entry.
 
 - 3m, 5m, 15m, 1h and 4h: `m3.candles` (fields: `bar-briefing`), its
   `pattern` and the levels it
   met (`rejected`, `broke`, `touched`: `rejection`, `breakout`), only
   levels that existed before it opened.
-  5m without a 1m lane: `unknown`.
+  5m, `unavailable` without a 1m
+  lane, is `unknown`.
 - The targets: `m3.swingTargets`, the next swing each side (15m, 1h,
   4h).
 - Strategy rules: `htfd_*` (strategy-rules).
@@ -9784,7 +9806,8 @@ prior candle, ATR(14) as of prev):
   close vs open; it starts a leg, out of a box (`compression`) or a
   level.
 
-**Context decides**: with the HTF
+A CISD's strong displacement: `cisd`.
+  **Context decides**: with the HTF
 read (`trend-vs-range`, `pullback-vs-reversal`) and momentum and volume
 (`momentum-and-volume`, `absorption`).
 The stack counts once (`confluence-counting`, trigger).
@@ -9803,6 +9826,7 @@ Take: at the prior RTH high 21615.00: on the 15m close a shooting star (H 21621.
   Priority order -> take.
 Skip: at the session POC 21522.00, on the 3m close a doji (body 0.25, range 5.50); 15m forming:
   the entry read not in yet -> pass.
+  The session VAH 0.4R ahead is a read, not the reason.
 Loser: at the prior VAL 21480.00, on the 15m close a hammer (L 21474.50, C 21483.75).
   long at 21483.75, stop 21474.25 (9.50 pts = 38 ticks, $19.00 on 1 MNQ);
   closes below the VAL.
@@ -10590,7 +10614,7 @@ Autonomous cycle.
   No news blackout recorded for the rest of today.
   End of day: the runner flattens every position at 15:50 ET (in 284 min); a trade must have room to work before then.
   Account 7 at 11:06 ET: balance $49,950; flat; 0 working orders.
-  Your last 10 cycle(s), oldest first, ET (not facts; "since" is from bars closed by now): 10:36 MNQ 3m no-trade @27389.5: golden replay; since -171t | 10:39 MNQ 3m skipped momentum_continuation short @27370.75: golden replay; since -96t, would hit +1R first | 10:42-11:03 MNQ 3m no-trade ×8 @27359.75: golden replay; since -52t.
+  Your last 10 cycle(s), oldest first, ET (not facts; "since" is from bars closed by now): 10:36-11:03 MNQ 3m no-trade ×10 @27389.5: golden replay; since -171t.
   Don't flip-flop without a new reason.
   No reviewed trades in the journal yet, so no record of your own results, mistakes, or lessons.
   Your skills trade-session, multi-timeframe-analysis, trade-lifecycle, htf-to-ltf, confluence-counting, setup-judgment, trade-plan, and day-context are in your prompt, already loaded (don't load them again): decide by them, then run the trade-session skill for MNQ on account 7.
@@ -10613,14 +10637,14 @@ Phase 1: flat, budget 2 trades
 
 ## When to Use
 
-- A completed candle at a level (trader-process step 3), and the trigger
-  bar's timing (step 6).
+- A completed candle at a level (trader-process step 3), and the entry's
+  timing (step 6).
 
 ## How It Works
 
 **Confirmation only, at a level.** A candle counts only AT a level: the
 `levels-and-reactions` skill's list, plus the previous candle's high and
-low and a CRT range (`m3.candles` lists both).
+low above the 3m and a CRT range (`m3.candles` lists both).
 A pattern away from a level is not evidence.
 
 **Completed candles only.** Judge a pattern at its candle's close, on
@@ -10635,15 +10659,15 @@ A read, never a veto: the count decides (`confluence-counting`).
 hypotheses; a missing field is `unknown`.
 
 **The stack**: each timeframe's last completed candle.
-  15m, 1h and 4h weigh more at a higher-timeframe level (a 1h
-rejection of the prior day's high outweighs a 3m one: `rejection`,
+  15m, 1h and 4h weigh more at a higher-timeframe level (`rejection`,
 `breakout`); the 3m only times the entry.
 
 - 3m, 5m, 15m, 1h and 4h: `m3.candles` (fields: `bar-briefing`), its
   `pattern` and the levels it
   met (`rejected`, `broke`, `touched`: `rejection`, `breakout`), only
   levels that existed before it opened.
-  5m without a 1m lane: `unknown`.
+  5m, `unavailable` without a 1m
+  lane, is `unknown`.
 - The targets: `m3.swingTargets`, the next swing each side (15m, 1h,
   4h).
 - Strategy rules: `htfd_*` (strategy-rules).
@@ -10668,7 +10692,8 @@ prior candle, ATR(14) as of prev):
   close vs open; it starts a leg, out of a box (`compression`) or a
   level.
 
-**Context decides**: with the HTF
+A CISD's strong displacement: `cisd`.
+  **Context decides**: with the HTF
 read (`trend-vs-range`, `pullback-vs-reversal`) and momentum and volume
 (`momentum-and-volume`, `absorption`).
 The stack counts once (`confluence-counting`, trigger).
@@ -10687,6 +10712,7 @@ Take: at the prior RTH high 21615.00: on the 15m close a shooting star (H 21621.
   Priority order -> take.
 Skip: at the session POC 21522.00, on the 3m close a doji (body 0.25, range 5.50); 15m forming:
   the entry read not in yet -> pass.
+  The session VAH 0.4R ahead is a read, not the reason.
 Loser: at the prior VAL 21480.00, on the 15m close a hammer (L 21474.50, C 21483.75).
   long at 21483.75, stop 21474.25 (9.50 pts = 38 ticks, $19.00 on 1 MNQ);
   closes below the VAL.

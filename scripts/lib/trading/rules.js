@@ -110,6 +110,8 @@
  *               before this bar: 1 up, -1 down, 0 range (scripts/lib/trading/mtf.js:
  *               close vs EMA20, EMA20 vs EMA50, swing structure; two of three).
  *               mtf_bias(240) >= 0 keeps a long out of a 4-hour downtrend
+ *   chain_side  the side the shipped entry rule allows (chain-side.js: BG on the chain's bias frames, entry-rule.js's own
+ *               check): 1 long, -1 short, 0 none (a frame not read yet, a frame against, both ranging undeclared)
  *   mtf_prevailing the trend rule's prevailing direction (mtf.js trendRule: the first of 4h, 1h, 15m with a
  *               trend): 1 up, -1 down, 0 no trend on any frame; missing until the 4h has a read
  *   Volume profile (scripts/lib/trading/volume-profile.js; bar-based, each value
@@ -185,7 +187,7 @@ const NAMES = new Set([
   'open', 'high', 'low', 'close', 'volume', 'supertrend', 'supertrend_dir',
   'keltner_upper', 'keltner_mid', 'keltner_lower', 'vwap_session', 'vwap_rth',
   'or_high', 'or_low', 'swing_high', 'swing_low', 'prior_high', 'prior_low',
-  'prior_close', 'overnight_high', 'overnight_low', 'rth_open', 'rth_high', 'rth_low', 'ib_high', 'ib_low', 'minute_et', 'mtf_prevailing',
+  'prior_close', 'overnight_high', 'overnight_low', 'rth_open', 'rth_high', 'rth_low', 'ib_high', 'ib_low', 'minute_et', 'mtf_prevailing', 'chain_side',
   ...VP_NAMES,
 ]);
 const MAX_RULES_PER_SIDE = 12;
@@ -561,6 +563,7 @@ function seriesSource(bars, params, { barMinutes = null } = {}) {
       case 'overnight_high': case 'overnight_low': case 'rth_open': case 'rth_high': case 'rth_low': return level(key);
       case 'ib_high': case 'ib_low': return dayOf(10)[key];
       case 'mtf_prevailing': return mtf.prevailingSeries(bars);
+      case 'chain_side': return require('./chain-side').chainSideSeries(bars);
       case 'minute_et': return bars.map(b => {
         const p = zonedParts(new Date(b.t), 'America/New_York');
         return p.hour * 60 + p.minute;

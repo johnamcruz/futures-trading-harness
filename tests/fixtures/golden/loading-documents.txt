@@ -661,11 +661,11 @@ strategy fx_vwap_reclaim: {
   "version": 1
 }
 strategy momentum_continuation: {
-  "body": "4203 chars sha256:d4f884a2985d16f7",
-  "compiledRules": "sha256:6ce0659e3a543e8f",
+  "body": "4559 chars sha256:b4d204c655236eb7",
+  "compiledRules": "sha256:8d74c86079358090",
   "compiledStop": "sha256:54e436b332f2eef2",
   "compiledTarget": null,
-  "description": "Momentum continuation on 3m - a closed momentum candle the prevailing higher-timeframe trend's way, 09:36-11:57 ET; trade_lifecycle cites it and enters at market, its stop beyond the candle, 2R.",
+  "description": "Momentum continuation on 3m - a closed momentum candle the entry rule's side (BG), 09:36-11:57 ET; trade_lifecycle cites it and enters at market, its stop beyond the candle, 2R.",
   "errors": [],
   "exit": {
     "target_r": 2
@@ -686,13 +686,13 @@ strategy momentum_continuation: {
   },
   "rules": {
     "long": [
-      "mtf_prevailing > 0",
+      "chain_side > 0",
       "htfd_momentum(3) > 0",
       "minute_et >= 576",
       "minute_et <= 714"
     ],
     "short": [
-      "mtf_prevailing < 0",
+      "chain_side < 0",
       "htfd_momentum(3) < 0",
       "minute_et >= 576",
       "minute_et <= 714"
@@ -702,11 +702,11 @@ strategy momentum_continuation: {
     "ny"
   ],
   "signal": "rules",
-  "source": "the owner-approved S2 census (2026-10-28, model-free, NQ 3m practice-train days 2021-04-26..2024-06-30); the momentum read is momentum.js, the trend rule mtf.js",
+  "source": "the owner-approved S2 census (2026-10-28, model-free, NQ 3m practice-train days 2021-04-26..2024-06-30); the momentum read is momentum.js; the side the entry rule's BG (chain-side.js), the owner's change (2026-10-29)",
   "status": "active",
   "timeframe": "3m",
   "valid": true,
-  "version": 1
+  "version": 2
 }
 strategy prop_portfolio: {
   "account": "<name-43f416>",

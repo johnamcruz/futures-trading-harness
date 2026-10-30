@@ -16,7 +16,7 @@ Every strategy (name | status | timeframe | direction | candidate | why not):
   fx_value_area_breakout | active | 3m | - | no | no rule set fired (long: minute_et >= 600, close > prior_vah, close[1] > prior_vah; short: minute_et >= 600, close < prior_val, close[1] < prior_val); outside its sessions
   fx_value_area_reentry | active | 3m | - | no | no rule set fired (long: minute_et >= 573, rth_open < prior_val, prior_vah - close >= 2 * close - 2 * rth_low + 0.5 * atr(20); short: minute_et >= 573, rth_open > prior_vah, close - prior_val >= 2 * rth_high - 2 * close + 0.5 * atr(20)); outside its sessions
   fx_vwap_reclaim | active | 3m | - | no | no rule set fired (long: close crosses_above vwap_rth; short: close crosses_below vwap_rth, close < ema(50)); outside its sessions; regime transition not in its regimes (trend); failed: VWAP distance 1.95 ATR > 1.5
-  momentum_continuation | active | 3m | - | no | no rule set fired (long: mtf_prevailing > 0, minute_et >= 576; short: mtf_prevailing < 0, htfd_momentum(3) < 0, minute_et >= 576); outside its sessions
+  momentum_continuation | active | 3m | - | no | no rule set fired (long: chain_side > 0, minute_et >= 576; short: chain_side < 0, htfd_momentum(3) < 0, minute_et >= 576); outside its sessions
   prop_portfolio | active | - | - | no | a policy strategy: its setups are the trade_lifecycle compose records (order_plan sizes each), which may cite momentum_continuation
 One strategy's full result: name; every strategy's (large): detail true.
 --- market_snapshot ---
