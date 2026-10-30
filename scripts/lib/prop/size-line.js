@@ -6,8 +6,8 @@
  * conditions a cut stands on) and the floor stretch's health (size-translate.js attemptHealth). Pure: no files.
  *
  *   sizeLines({ facts, riskUsd, minContracts, stretchUsd, capUsd })
- *       [size, min]: "Size: full verdict (no pacing rule holds: ...); phase 2 cuts only on a pacing rule", or "Size:
- *       phase 2 may cut (pacing: after-loss, drawdown)"; "Min: 3 contracts at the stop. Fewer fit under the $300 cap →
+ *       [size, min]: "Size (prop attempt): the full verdict size; ... none holds now (...)", or "Size (prop
+ *       attempt): phase 2 may cut (pacing: after-loss, drawdown)"; "Min: 3 contracts at the stop. Fewer fit under the $300 cap →
  *       skip, unless the floor stretch applies (balance ≥ start, no loss today): then exactly 3, up to the stretch all in,
  *       never fewer" (the dollars the caller's). Each line names its own condition, as its code defines it: the Size
  *       line rulesHolding's (phase2-cut.js), the Min line attemptHealth's (size-translate.js). `facts`: phase2-cut.js
@@ -26,9 +26,9 @@ const num = x => typeof x === 'number' && Number.isFinite(x);
 
 function sizeLines({ facts, riskUsd, minContracts, stretchUsd = null, capUsd = null }) {
   const held = rulesHolding(facts, riskUsd);
-  const size = held.includes('unknown') ? 'Size: phase 2 may cut (the attempt\'s pacing facts can\'t all be read)'
-    : held.length ? `Size: phase 2 may cut (pacing: ${held.join(', ')})`
-      : 'Size: full verdict (no pacing rule holds: no loss today or streak, balance ≥ start and its peak, room past the soft and daily stops, not near the target); phase 2 cuts only on a pacing rule';
+  const size = held.includes('unknown') ? 'Size (prop attempt): phase 2 may cut (the attempt\'s pacing facts can\'t all be read)'
+    : held.length ? `Size (prop attempt): phase 2 may cut (pacing: ${held.join(', ')})`
+      : 'Size (prop attempt): the full verdict size; a serious factor against never cuts it. Phase 2 cuts only on a pacing rule; none holds now (no loss today or streak; balance at or above start and peak; room to the soft and daily stops; not near the target)';
   if (!(Number.isInteger(minContracts) && minContracts >= 1)) return [size];
   const f = facts || {};
   const h = attemptHealth({ balance: f.balance, start: f.start, lossesToday: f.lossesToday });
