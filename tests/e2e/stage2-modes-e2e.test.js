@@ -141,12 +141,12 @@ test('stage 2, combine: two attempts from zero; a model entry fills, the first a
   const big = ACCOUNT.profit_target + 200;
   const blowAt = '2022-04-21T16:40:00Z';
   const w = world({ scriptedFills: [{ at: blowAt, pnl: -(ACCOUNT.max_loss + 1000) }, { at: '2022-04-28T13:34:00Z', pnl: big }, { at: '2022-04-29T13:34:00Z', pnl: big }] });
-  // The parity week's 1h and 4h both range: the shipped entry rule (bias_frames [4h, 1h], bias_agree on) refuses every
-  // entry there (tests/e2e/entry-rule-e2e.test.js). This test is of the combine, so its CLIs run from a copy of the tree
-  // whose rulebook differs only in the entry rule's bias keys off (treeCopy).
+  // The parity week's 1h and 4h both range: the shipped entry rule (bias_frames [4h, 1h], BG) takes an entry there only
+  // with the 15m and the declared trend its way (tests/e2e/entry-rule-e2e.test.js). This test is of the combine, so its
+  // CLIs run from a copy of the tree whose rulebook differs only in the entry rule's bias keys off (treeCopy).
   const tree = treeCopy(w.home, root => {
     const f = path.join(root, 'accounts', ACCOUNT.name, 'RULEBOOK.md');
-    fs.writeFileSync(f, fs.readFileSync(f, 'utf8').replace(/^( {6}bias_frames: )\[4h, 1h\]/m, '$1off').replace(/^( {6}bias_agree: )on/m, '$1off'));
+    fs.writeFileSync(f, fs.readFileSync(f, 'utf8').replace(/^( {6}bias_frames: )\[4h, 1h\]/m, '$1off').replace(/^( {6}bias_agree: )\S+/m, '$1off'));
   });
   const run = name => path.join(tree, 'scripts', name);
   // The model stand-in from the copy too (its harness tools read the copy's rulebook).

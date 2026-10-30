@@ -13,7 +13,7 @@
  *   and duplicates are judged on their product;
  * - no policy added or removed; an exit (its mode and trail) unchanged: it is searched (R10), never a limit to loosen;
  * - an entry rule (entry-rule.js) unchanged: the owner's switch, never a proposal's; loosening its top-down bias
- *   (bias_agree on turned off, a bias frame dropped) is named as looser too, never stricter (entryLooser);
+ *   (bias_agree moved to a looser mode: on, then off, then neutral-15m-declared; a bias frame dropped) is named as looser too, never stricter (entryLooser);
  * - no item moved out of `enforced`;
  * - no key removed.
  *
@@ -25,6 +25,7 @@
 const path = require('path');
 const { parseFrontmatter } = require('../frontmatter');
 const { OFF, validateRulebook } = require('../trading/rulebook');
+const { AGREE_MODES } = require('../trading/entry-rule');
 
 /** Which way is stricter: 'lower' (a smaller number is stricter) or 'higher'. `off` is no limit: the loosest. */
 const DIRECTION = Object.freeze({
@@ -110,14 +111,19 @@ function multipliersLooser(at, was, now, out) {
 }
 
 /**
- * The ways an entry rule edit loosens the owner's top-down bias (never stricter): bias_agree on turned off or removed,
+ * The ways an entry rule edit loosens the owner's top-down bias (never stricter): bias_agree moved to a looser mode or removed,
  * or a bias frame dropped (bias_frames off, or a list missing one the rule listed). Each also counts as a change above.
  */
 function entryLooser(at, before, after) {
   const out = [];
   const b = isMap(before) ? before : {};
   const a = isMap(after) ? after : {};
-  if (b.bias_agree === 'on' && a.bias_agree !== 'on') out.push(`${at}.bias_agree: on -> ${a.bias_agree === undefined ? 'removed' : a.bias_agree} is looser (the 4h and the 1h must agree)`);
+  // bias_agree's modes, strictest first (entry-rule.js AGREE_MODES: on, off, neutral-15m-declared); a later one, an
+  // unknown value or a removed key is looser.
+  const rank = v => (AGREE_MODES.includes(v) ? AGREE_MODES.indexOf(v) : AGREE_MODES.length);
+  if (b.bias_agree !== undefined && rank(a.bias_agree) > rank(b.bias_agree)) {
+    out.push(`${at}.bias_agree: ${b.bias_agree} -> ${a.bias_agree === undefined ? 'removed' : a.bias_agree} is looser (${AGREE_MODES.join(' < ')}, strictest first)`);
+  }
   const listed = Array.isArray(b.bias_frames) ? b.bias_frames : [];
   const now = Array.isArray(a.bias_frames) ? a.bias_frames : [];
   const dropped = listed.filter(tf => !now.includes(tf));

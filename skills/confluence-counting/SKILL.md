@@ -19,8 +19,8 @@ naming it.
 OK → **a valid setup is the trade**: full size within the verdict's
 ceiling; the against sets the size:
 
-- **Decisive** → pass: a real HTF reversal against the side (a 1h CHoCH
-  against: the trend rule's tier, `trade-lifecycle`), or a hard step fails.
+- **Decisive** → pass: a 1h CHoCH against (the trend rule's tier,
+  `trade-lifecycle`; with the 4h and 1h your way, context), or a hard step fails.
 - **Serious** → half (`floor`, at least 1): 2+ categories against,
   location against (the trigger into the other side's level), or a 3m
   close beyond the leg's 15m swing (`m3.htfLevels` `brokenAt`). Closed

@@ -770,6 +770,14 @@ test('a composed pass: right with no OK record; on one (a valid setup) excessive
   // Only a 1h CHoCH itself: a lower-timeframe CHoCH beside the 1h trend's name is no decisive reason (review finding).
   for (const text of ['CYCLE RESULT: no-trade - a 3m choch down under the 1h uptrend', 'CYCLE RESULT: no-trade - the 1h is up but the 15m choch is down']) assert.strictEqual(run(label(), f, text).category, 'excessive abstention', text);
   assert.strictEqual(run(label(), f, 'CYCLE RESULT: no-trade - a CHoCH on the 1h against the long').category, 'unchecked');
+  // While the 4h and the 1h both trend the side (facts.htf, the briefing's own read), a 1h CHoCH against is context, not
+  // decisive (the CHoCH study): passing on it is abstention. Either frame not the side's way, or unknown: decisive stands.
+  const choch = 'CYCLE RESULT: no-trade - the 1h CHoCH down turned the trend against the long';
+  const agreeing = { ...f, htf: { '4h': 'up', '1h': 'up' } };
+  assert.deepStrictEqual(run(label(), agreeing, choch), { category: 'excessive abstention', agrees: false, why: ['a 1h CHoCH against stated while the 4h and the 1h both trend the side: context, not decisive', 'a valid setup (the verified compose record rec1) passed without a decisive reason'] });
+  for (const htf of [{ '4h': 'up', '1h': 'range' }, { '4h': 'range', '1h': 'up' }, { '4h': 'down', '1h': 'up' }, { '4h': 'up', '1h': null }, { '4h': 'down', '1h': 'down' }, null]) {
+    assert.strictEqual(run(label(), { ...f, htf }, choch).category, 'unchecked', JSON.stringify(htf));
+  }
   // A 3m close beyond the leg's 15m swing is serious (half size), never a pass: passing on it is abstention.
   assert.deepStrictEqual(run(label(), f, 'CYCLE RESULT: no-trade - the 3m close broke the 15m swing low: a reversal').category, 'excessive abstention');
   assert.strictEqual(run(label(), f, 'CYCLE RESULT: no-trade - opening print window until 10:00 ET').category, 'wrong stated reason');
@@ -836,6 +844,13 @@ test('scoreRun and labels: a composed limit entry at its record is right with no
   // standard plan targets the 2R mark and is OK (fix/trend-moves-compose): the pass is excessive abstention.
   assert.deepStrictEqual(records.map(r => r.category), ['right', 'bad size', 'right', 'excessive abstention', 'excessive abstention', 'right', 'bad size', 'bad size', 'right', 'bad size', 'right', 'bad size', 'right', 'right', 'right', 'bad size', 'right', 'right', 'right']);
   assert.deepStrictEqual(records[18].expected.composed, 'rec19');
+  // A composed setup's decision carries the 4h and 1h at its bar (briefing.js htfTrendsOf on the handed bars): a 1h CHoCH
+  // against is decisive only without both the side's way (classify).
+  for (const k of [0, 3, 18]) {
+    const h = records[k].facts.htf;
+    assert.deepStrictEqual(Object.keys(h || {}).sort(), ['1h', '4h'], `record ${k}`);
+    for (const tf of ['4h', '1h']) assert.ok(['up', 'down', 'range', null].includes(h[tf]), `record ${k} ${tf}: ${h[tf]}`);
+  }
   assert.deepStrictEqual([records[16].expected.composed, records[17].expected.composed], ['rec17', 'rec18']);
   assert.deepStrictEqual([records[14].expected.composed, records[15].expected.decidedBy, records[15].why], ['rec15', 1, ['the order says no trade (step 1)']]);
   assert.deepStrictEqual([records[11].expected.decidedBy, records[12].expected.composed], ['no setup', 'rec13']);

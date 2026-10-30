@@ -12,7 +12,7 @@ description: Use when filtering a rules strategy by the higher-timeframe trend (
 
 ## How It Works
 
-In a prop attempt the entry rule already needs the 4h and 1h both its way.
+In a prop attempt the entry rule already holds the side (`htf-to-ltf`).
 
 ### In rules (mechanical strategies)
 

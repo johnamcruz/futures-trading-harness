@@ -66,7 +66,9 @@ test('validateRulebook: a policy states its entry rule, every key (off: no check
     assert.match(errorsOf(p(rest)).join(), new RegExp(`policies\\.prop_a\\.entry\\.${k}: missing; state it`), k);
   }
   for (const v of [[], ['1h', '4h'], ['4h', '4h'], ['2h'], ['15m'], ['4h', '1h', '15m'], '4h', 'on', 0, null]) assert.match(errorsOf(p({ ...ENTRY_OFF, bias_frames: v })).join(), /entry\.bias_frames: .* is not off or a list of 4h, 1h, highest first, each once/, JSON.stringify(v));
-  for (const k of ['bias_agree', 'regime_against', 'leg_turned']) for (const v of [true, 'yes', 1, '']) assert.match(errorsOf(p({ ...ENTRY_OFF, [k]: v })).join(), new RegExp(`entry\\.${k}: .* is not on or off`), `${k} ${v}`);
+  for (const k of ['regime_against', 'leg_turned']) for (const v of [true, 'yes', 1, '']) assert.match(errorsOf(p({ ...ENTRY_OFF, [k]: v })).join(), new RegExp(`entry\\.${k}: .* is not on or off`), `${k} ${v}`);
+  for (const v of [true, 'yes', 1, '', 'neutral']) assert.match(errorsOf(p({ ...ENTRY_OFF, bias_frames: ['4h', '1h'], bias_agree: v })).join(), /entry\.bias_agree: .* is not on, off or neutral-15m-declared/, String(v));
+  assert.deepStrictEqual(errorsOf(p({ ...ENTRY_OFF, bias_frames: ['4h', '1h'], bias_agree: 'neutral-15m-declared' })), []);
   assert.match(errorsOf(p({ ...ENTRY_OFF, surprise: 'on' })).join(), /entry\.surprise: unknown key/);
 });
 

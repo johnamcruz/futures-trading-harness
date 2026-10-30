@@ -115,7 +115,7 @@ Judge every setup, a policy verdict too, by the priority order (the
 strategy-library skill, "The priority order"): a hard step's no trade is
 a VETO; then (`confluence-counting`): compose OK (its R:R the record's,
 never an estimate) → APPROVE, full size (no attempt: half on serious
-against); VETO only on a 1h CHoCH against the side or a failed hard step.
+against); VETO only on a decisive 1h CHoCH against or a failed hard step.
 In a prop attempt, full is the translated size; cut only on a pacing rule
 (else full), floored at min_contracts.
 

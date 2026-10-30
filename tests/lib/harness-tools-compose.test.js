@@ -219,11 +219,13 @@ test('compose_check in a prop attempt holds the policy\'s entry rule (its rulebo
   assert.strictEqual(run({ regime: 'trend-up', on: true }).rec.ok, true, 'with it: OK');
   assert.strictEqual(run({ regime: 'trend-down', on: false }).rec.ok, true, 'shipped off: unchanged');
   assert.strictEqual(run({ regime: 'trend-down', on: true, attempt: false }).rec.ok, true, 'no attempt: no policy, no rule');
-  // The shipped bias_agree: scenario 1's own 4h range beside its 1h up is no agreement: NOT OK, naming the rule; no attempt: unchanged.
-  const ranging = run({ regime: 'trend-up', on: false, h4: 'range' });
-  assert.strictEqual(ranging.rec.ok, false);
-  assert.match(ranging.text, /- PROBLEM: entry rule: the 4h and 1h must each trend up for a long \(4h range, 1h up\): no agreement, no trade/);
-  assert.strictEqual(run({ regime: 'trend-up', on: false, h4: 'range', attempt: false }).rec.ok, true, 'no attempt: no policy, no rule');
+  // The shipped bias_agree (neutral-15m-declared): scenario 1's own 4h range beside its 1h up goes (the 1h trends the
+  // side's way, the 4h not against it); a 4h down against it is NOT OK, naming the rule; no attempt: unchanged.
+  assert.strictEqual(run({ regime: 'trend-up', on: false, h4: 'range' }).rec.ok, true, 'BG: the 1h up, the 4h ranging');
+  const against4h = run({ regime: 'trend-up', on: false, h4: 'down' });
+  assert.strictEqual(against4h.rec.ok, false);
+  assert.match(against4h.text, /- PROBLEM: entry rule: the 4h trend is down, against the long: the bias frames \(4h, 1h\) set the side/);
+  assert.strictEqual(run({ regime: 'trend-up', on: false, h4: 'down', attempt: false }).rec.ok, true, 'no attempt: no policy, no rule');
 });
 
 test('compose_check: the briefing\'s bar (FTH_CYCLE_BRIEFING_BARS) comes before the cycle\'s lane bar (FTH_CYCLE_BARS)', () => {

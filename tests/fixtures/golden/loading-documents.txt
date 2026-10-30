@@ -721,7 +721,7 @@ strategy prop_portfolio: {
       "4h",
       "1h"
     ],
-    "bias_agree": "on",
+    "bias_agree": "neutral-15m-declared",
     "regime_against": "off",
     "leg_turned": "off"
   },

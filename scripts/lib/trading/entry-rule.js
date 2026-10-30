@@ -12,10 +12,17 @@
  *                 that trends (h1.h4.trend, h1.h1.trend, m15.frame.trend: up or down) is the bias, and the side must
  *                 be its way; none of them may trend against the side (a lower frame never stands in against a listed
  *                 one); none trending: no bias, no entry. The frames are the rulebook's, never the model's pick.
- *   bias_agree    on (with bias_frames listed): the owner's "no trade if there is no agreement between the two":
- *                 every listed frame must trend the side's way (a long needs the 4h and the 1h both up); a range,
- *                 a trend against or a trend the briefing doesn't hold on any of them: no entry. off: bias_frames
- *                 as above (the first trending one sets the side).
+ *   bias_agree    how the listed frames agree (with bias_frames listed), strictest first (AGREE_MODES):
+ *                 on: the owner's "no trade if there is no agreement between the two": every listed frame must trend
+ *                 the side's way (a long needs the 4h and the 1h both up); a range, a trend against or a trend the
+ *                 briefing doesn't hold on any of them: no entry.
+ *                 off: bias_frames as above (the first trending one sets the side, none against; none trending: no
+ *                 entry).
+ *                 neutral-15m-declared (BG, the alignment study's pick, 2026-10-29): when a listed frame trends, the
+ *                 side is the way of every listed frame that trends and none trends against it (off's check); when
+ *                 every listed frame ranges, the 15m trend (m15.frame.trend) must be the side's way and the day's
+ *                 trend declared the side's way (declaredOf). A fact it needs the briefing doesn't hold: no entry.
+ *                 on and neutral-15m-declared hold the top-down chain (topDown): a composed setup on the 15m or higher.
  *   regime_against  on: no entry while the base regime (m3.regime.primary, regime.js) trends against the side
  *                 (trend-down for a long, trend-up for a short).
  *   leg_turned    on: while the base regime does not trend the side's way (range, transition, or a trend against
@@ -26,8 +33,12 @@
  *
  *   ENTRY_KEYS, BIAS_FRAMES, TREND_TF (the briefing field each frame's trend is in; composed-reads takes it from here)
  *   entryRuleErrors(x, at)                      problems with a rulebook entry block (every key stated)
- *   entryRuleOf(x)                              the rule as the checker reads it ({ biasFrames, biasAgree,
- *                                               regimeAgainst, legTurned }), or null when every key is off or the block is missing
+ *   entryRuleOf(x)                              the rule as the checker reads it ({ biasFrames, biasAgree (on),
+ *                                               biasNeutral (neutral-15m-declared), regimeAgainst, legTurned }), or null
+ *                                               when every key is off or the block is missing
+ *   topDown(rule)                               the rule holds the top-down chain (bias_agree on or neutral-15m-declared)
+ *   declaredOf(briefing, side)                  the day's trend declared the side's way (true / false), null when the
+ *                                               briefing holds no Trend declared? facts (outside RTH, a frame briefing)
  *   entryProblems({ briefing, side, reads, rule })   [problem] (empty: the rule holds); reads: checkReads' checked rows
  */
 
@@ -35,6 +46,9 @@ const { label } = require('./mtf');
 
 const ENTRY_KEYS = Object.freeze(['bias_frames', 'bias_agree', 'regime_against', 'leg_turned']);
 const OFF = 'off';
+/** bias_agree's values, strictest first (the rulebook guard's order: a later one is looser). */
+const NEUTRAL = 'neutral-15m-declared';
+const AGREE_MODES = Object.freeze(['on', OFF, NEUTRAL]);
 /** The frames a bias may be read on, highest first, and the briefing field each trend is in. */
 const TREND_TF = Object.freeze({ '15m': ['m15', 'frame'], '1h': ['h1', 'h1'], '4h': ['h1', 'h4'] });
 /** The frames a rule's bias may list, highest first: the 15m never sets the side against the 1h. */
@@ -59,8 +73,9 @@ function entryRuleErrors(x, at) {
       && f.every((tf, i) => i === 0 || ORDER.indexOf(tf) > ORDER.indexOf(f[i - 1]));
     if (!ok) out.push(`${at}.entry.bias_frames: ${JSON.stringify(f)} is not ${OFF} or a list of ${ORDER.join(', ')}, highest first, each once`);
   }
-  for (const k of ['bias_agree', 'regime_against', 'leg_turned']) if (x[k] !== undefined && !onOff(x[k])) out.push(`${at}.entry.${k}: ${JSON.stringify(x[k])} is not on or ${OFF}`);
-  if (x.bias_agree === 'on' && !Array.isArray(f)) out.push(`${at}.entry.bias_agree: on needs bias_frames listed (the frames that must agree)`);
+  for (const k of ['regime_against', 'leg_turned']) if (x[k] !== undefined && !onOff(x[k])) out.push(`${at}.entry.${k}: ${JSON.stringify(x[k])} is not on or ${OFF}`);
+  if (x.bias_agree !== undefined && !AGREE_MODES.includes(x.bias_agree)) out.push(`${at}.entry.bias_agree: ${JSON.stringify(x.bias_agree)} is not on, ${OFF} or ${NEUTRAL}`);
+  if ((x.bias_agree === 'on' || x.bias_agree === NEUTRAL) && !Array.isArray(f)) out.push(`${at}.entry.bias_agree: ${x.bias_agree} needs bias_frames listed (the frames that must agree)`);
   return out;
 }
 
@@ -70,6 +85,7 @@ function entryRuleOf(x) {
   const rule = {
     biasFrames: Array.isArray(x.bias_frames) ? [...x.bias_frames] : null,
     biasAgree: x.bias_agree === 'on' && Array.isArray(x.bias_frames),
+    biasNeutral: x.bias_agree === NEUTRAL && Array.isArray(x.bias_frames),
     regimeAgainst: x.regime_against === 'on',
     legTurned: x.leg_turned === 'on',
   };
@@ -82,6 +98,35 @@ function trendOf(b, tf) {
   const d = sec ? data(b, sec) : null;
   const t = d && isObj(d[key]) ? d[key].trend : null;
   return ['up', 'down', 'range'].includes(t) ? t : null;
+}
+
+/** Whether the rule holds the top-down chain (bias_agree on or neutral-15m-declared). */
+const topDown = rule => Boolean(rule && (rule.biasAgree || rule.biasNeutral));
+
+/**
+ * The day's trend declared the side's way at this bar: the alignment study's DECLARED (PREREG-C), on the briefing's own
+ * trend-declared.js facts (m3.declared[side]): the regime with the side, and the close past the RTH VWAP, the EMA20
+ * and the RTH open the side's way, each side-signed in ATR and above 0. A fact null (no VWAP or no open): false. The
+ * overnight-range place is not part of it. No facts at all: null.
+ */
+function declaredOf(b, side) {
+  const m3 = data(b, 'm3');
+  const f = m3 && isObj(m3.declared) && isObj(m3.declared[side]) ? m3.declared[side] : null;
+  if (!f) return null;
+  const pos = x => typeof x === 'number' && Number.isFinite(x) && x > 0;
+  return f.regime === 'with' && pos(f.vwapAtr) && pos(f.ema20Atr) && pos(f.dayMoveAtr);
+}
+
+/** neutral-15m-declared with every listed frame ranging: the 15m trend and the declared trend, both the side's way. */
+function neutralProblems(b, side, d, frames) {
+  const ranging = frames.map(tf => `${tf} range`).join(', ');
+  const t15 = trendOf(b, '15m');
+  if (t15 === null) return [`entry rule: no higher-timeframe trend (${ranging}) and the 15m trend is not in the briefing: no entry`];
+  if (t15 !== d) return [`entry rule: no higher-timeframe trend (${ranging}) and the 15m is ${t15}, not ${d}: with the higher frames ranging, the 15m sets the side`];
+  const dec = declaredOf(b, side);
+  if (dec === null) return [`entry rule: no higher-timeframe trend (${ranging}), the 15m ${d}: the Trend declared? facts are not in the briefing, so it can't be read: no entry`];
+  if (!dec) return [`entry rule: no higher-timeframe trend (${ranging}), the 15m ${d}, but the day's trend is not declared ${d} (the regime with the ${side} and the close past the RTH VWAP, EMA20 and RTH open its way): no entry`];
+  return [];
 }
 
 /** The briefing's base timeframe as reads name it ('3m', mtf.js label), or null. */
@@ -109,6 +154,7 @@ function entryProblems({ briefing, side, reads, rule }) {
       const notWith = trends.filter(([, t]) => t !== d);
       if (rule.biasAgree && notWith.length) out.push(`entry rule: the ${rule.biasFrames.join(' and ')} must each trend ${d} for a ${side} (${trends.map(([tf, t]) => `${tf} ${t}`).join(', ')}): no agreement, no trade`);
       else if (against.length) out.push(`entry rule: the ${against.join(' and ')} trend${against.length > 1 ? 's are' : ' is'} ${opposite(d)}, against the ${side}: the bias frames (${rule.biasFrames.join(', ')}) set the side, never a lower frame`);
+      else if (!bias && rule.biasNeutral) out.push(...neutralProblems(briefing, side, d, rule.biasFrames));
       else if (!bias) out.push(`entry rule: no higher-timeframe bias (${rule.biasFrames.map(tf => `${tf} range`).join(', ')}): sit out until one of them trends`);
     }
   }
@@ -129,4 +175,4 @@ function entryProblems({ briefing, side, reads, rule }) {
   return out;
 }
 
-module.exports = { ENTRY_KEYS, BIAS_FRAMES, TREND_TF, entryRuleErrors, entryRuleOf, entryProblems, trendOf, legReads };
+module.exports = { ENTRY_KEYS, BIAS_FRAMES, TREND_TF, AGREE_MODES, NEUTRAL, entryRuleErrors, entryRuleOf, entryProblems, trendOf, legReads, topDown, declaredOf };

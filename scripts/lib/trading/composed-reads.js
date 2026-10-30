@@ -111,7 +111,7 @@
  */
 
 const { trendRuleOf } = require('./reasons');
-const { entryProblems, entryRuleOf, BIAS_FRAMES, TREND_TF } = require('./entry-rule');
+const { entryProblems, entryRuleOf, topDown, BIAS_FRAMES, TREND_TF } = require('./entry-rule');
 // The trail target's condition: the 4h and the 1h both the side's way (the entry rule's bias_agree, one check).
 const AGREE = entryRuleOf({ bias_frames: [...BIAS_FRAMES], bias_agree: 'on', regime_against: 'off', leg_turned: 'off' });
 
@@ -889,11 +889,11 @@ function checkReads({ reads, side, briefing, skills = null, tick = 0.25, entryRu
     }
     // The owner's chain (2026-10-29, "Yes enforce 15min setup"): the 4h and 1h set the side, the 15m (or higher) holds
     // the setup the side's way, the 3m only times the entry. Under a policy whose entry rule holds the HTF agreement
-    // (bias_agree), a setup pointing the side must be on the 15m or higher (its form's first word). Stated exemption: a
+    // (bias_agree on or neutral-15m-declared: topDown), a setup pointing the side must be on the 15m or higher (its form's first word). Stated exemption: a
     // cited setup's `fired` read (momentum_continuation: its setup is the prevailing HTF trend plus its momentum
     // candle). The 15m trend itself may run against the side (a 15m pullback): only the setup read's frame is held.
     const setups = pointing('setup');
-    if (entryRule && entryRule.biasAgree && setups.length && !setups.some(r => r.kind === 'fired' || (TF_MIN[String(r.form || '').split(' ')[0]] || 0) >= TF_MIN['15m'])) {
+    if (topDown(entryRule) && setups.length && !setups.some(r => r.kind === 'fired' || (TF_MIN[String(r.form || '').split(' ')[0]] || 0) >= TF_MIN['15m'])) {
       problems.push(`entry rule: the setup must be on the 15m or higher (a 3m read only times the entry): state the 15m, 1h or 4h reaction or break the ${side}'s way, or pass`);
     }
     // Reaction, then confirmation: when the setup's pointing reads name a candle (SETUP_CANDLE: a relation or pattern

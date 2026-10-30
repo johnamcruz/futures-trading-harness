@@ -14,9 +14,8 @@ trigger timeframe the entry (each frame's trend: `multi-timeframe-analysis`).
 
 ## How It Works
 
-The alignment and the trend rule in a trade plan are the briefing's (intraday
-frames); a daily read, if you have one (premarket's), is context only, never a
-second alignment.
+The alignment and the trend rule are the briefing's; a daily read
+(premarket's) is context only, never a second alignment.
 
 ### 1. Read the alignment
 
@@ -30,9 +29,9 @@ From the highest timeframe down, for each side (`m15.alignment`; read
 | `mixed` | timeframes disagree without a clear pullback | Priority step 4 sets the size. Target the nearest opposing level; a quiet session is a read against |
 | `counter` | the highest timeframe is against it | Priority step 4; a rules reversal at a higher-timeframe level is its step 2, and the plan says why |
 
-**The side rule** (composed, long and short alike): the 4h and the 1h
-must agree, both up for a long, both down for a short; else no trade
-(in an attempt). The setup is the 15m (or higher) reaction or break the
+**The side rule** (in an attempt): each trending 4h or 1h your way,
+neither against; both ranging: the 15m and `Trend declared?` your way;
+else no trade. The setup is the 15m (or higher) reaction or break the
 HTF side's way; the 3m only times the entry: best, its first turn back
 (the 3m timing line); still against, a false start, never a veto
 (`pullback-vs-reversal`).

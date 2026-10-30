@@ -2,8 +2,8 @@
 
 /**
  * The prop size end to end (the owner, 2026-10-23: "1 sizing should be translated to standard correct sizing"): in a
- * running prop attempt on the shipped prop_portfolio and its account's rulebook (a copy of both, bias_agree off: the
- * scenario's 1h ranges under the 4h uptrend; attemptWorld), the head trader composes and says
+ * running prop attempt on the shipped prop_portfolio and its account's rulebook (a copy of both, as shipped: the
+ * scenario's 1h ranges under the 4h uptrend, which BG takes; attemptWorld), the head trader composes and says
  * planned with a size of its own (a suggestion), and the real runner's entry reads code's translation
  * (prop/size-translate.js through order_plan), names it in phase 2's request, runs phase 2 and the trade-executor (each
  * its own scripted run), and the order goes through the real gateway and gate to the replay mock broker. The hook judges
@@ -37,7 +37,7 @@ const POLICY = loadStrategies(D.ROOT, {}).strategies.find(s => s.name === 'prop_
 const ACCOUNT = loadAccounts(D.ROOT, {}).accounts.find(a => a.name === POLICY.account);
 const LC = loadStrategies(D.ROOT, {}).strategies.find(s => s.name === 'trade_lifecycle');
 const { policyCopy } = require('../helpers');
-// The policy and account the attempt runs on: the shipped ones copied, bias_agree off (attemptWorld).
+// The policy and account the attempt runs on: the shipped ones copied, as shipped (attemptWorld).
 const SIZED = 'pmc_sized';
 const SIZED_ACCOUNT = 'pmc_sized_100k';
 
@@ -127,10 +127,10 @@ function roles(w, verdict, hooked = null) {
  */
 function attemptWorld({ attempt = true, balance = N.start, close = null, orderMax = 50 } = {}) {
   const w = D.world();
-  // The scenario's fired bar has the 4h up and the 1h ranging: the shipped entry rule's bias_agree (the 4h and the 1h
-  // must agree) refuses its long (tests/e2e/entry-rule-e2e.test.js). These tests are of the size, so the attempt runs on
-  // a copy of the shipped policy and account whose rulebook differs only in bias_agree off (the 4h sets the side).
-  const copy = policyCopy(w.home, { policy: SIZED, account: SIZED_ACCOUNT, rulebook: t => t.replace(/^( {6}bias_agree: )on/m, '$1off') });
+  // The scenario's fired bar has the 4h up and the 1h ranging: the shipped entry rule (BG, bias_agree
+  // neutral-15m-declared) takes its long (tests/e2e/entry-rule-e2e.test.js). The attempt runs on a copy of the shipped
+  // policy and account under names of their own.
+  const copy = policyCopy(w.home, { policy: SIZED, account: SIZED_ACCOUNT });
   w.env.FTH_STRATEGIES_DIRS = [w.env.FTH_STRATEGIES_DIRS, copy.strategies].filter(Boolean).join(',');
   w.env.FTH_ACCOUNTS_DIRS = copy.accounts;
   // The broker's max order size (the mock's own default is 5; 50 here, so the rulebook's limits bind but where a row sets it).

@@ -50,7 +50,7 @@ trigger bars) that has one: the 4h when it trends, else the 1h, else the 15m.
   strategy without `mtf: reversal`): never against the prevailing trend;
   wait while the 4h has fewer than 3 completed candles. With no trend on
   any of the three, both sides are open.
-- **In an attempt**: the 4h and 1h both its way, or no trade.
+- **In an attempt**: the side rule (`htf-to-ltf`), or no trade.
 - **Against it**: a composed entry only on its CHoCH tier
   (`trade-lifecycle`); a rules `mtf: reversal` strategy (none active) at a
   higher-timeframe level, decided by the priority order (step 2).

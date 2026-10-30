@@ -82,7 +82,7 @@ const { readJson, writeJsonAtomic } = require('../harness-run');
 const GIVE_BACK = require('../tunables').replay().scorecard;
 const { readLines, readRun } = require('./store');
 const { labelRun, composedTagsAt, countedEntry, loadBars, inside, realDir, unfinishedWhy, configsOf, outcomeBarsFor, outcomeFor } = require('./labels');
-const { buildBriefing, sessionWindow, newsState } = require('../trading/briefing');
+const { buildBriefing, sessionWindow, newsState, htfTrendsOf } = require('../trading/briefing');
 const { readBlackouts } = require('../trading/check-order');
 const { loadRoundSteps } = require('../trading/round-numbers');
 const { exitPlan, composedExit } = require('../trading/evaluator');
@@ -125,9 +125,16 @@ const etClock = ms => ET.format(new Date(ms));
 const GROUNDS = new Set(['no-entry-window', 'nothing-fired', 'trend-blocks', 'no-attempt', 'no-verdict', 'verdict-skip', 'counter', 'entry-block']);
 // The grounds that pass a valid composed setup (an OK record): the hard ones its record doesn't already hold.
 const COMPOSED_GROUNDS = new Set(['no-entry-window', 'trend-blocks', 'no-attempt', 'verdict-skip', 'entry-block']);
-// The decisive read against the side (confluence-counting): a real HTF reversal, a 1h CHoCH against it. A 15m swing
-// broken is serious (half), never a pass.
+// The decisive read against the side (confluence-counting): a real HTF reversal, a 1h CHoCH against it, but only while
+// the 4h and the 1h do not both trend the side (both its way, the CHoCH is context: the CHoCH study found no edge in
+// passing on it). A 15m swing broken is serious (half), never a pass.
 const DECISIVE = /\b1h (?:choch|change of character)\b|\b(?:choch|change of character) (?:on|of) the 1h\b/i;
+
+/** Whether the 4h and the 1h both trend the side's way at the decision (facts.htf, briefing.js htfTrendsOf); unknown: false. */
+const htfAgrees = (htf, side) => {
+  const way = side === 'long' ? 'up' : side === 'short' ? 'down' : null;
+  return Boolean(way && isObj(htf) && htf['4h'] === way && htf['1h'] === way);
+};
 
 /** The failure category of a scored decision, and whether it agrees with the expectation (true | false | null). */
 function classify(label, facts, expected, reasons) {
@@ -187,11 +194,15 @@ function classify(label, facts, expected, reasons) {
   // A pass on an OK compose record: a valid setup (every read verified, the plan standing) is the trade (the owner's
   // decision, 2026-10-21: confluence-counting); only a decisive reason passes it: a true hard ground the record can't
   // see (an entry block, a verdict's skip, the trend rule), or a 1h CHoCH against stated (which no claim kind checks:
-  // unchecked). Soft reads, or none, are excessive abstention.
+  // unchecked) while the 4h and the 1h do not both trend the side (both its way, or unknown: decisive stands; both its
+  // way at the decision, facts.htf: context). Soft reads, or none, are excessive abstention.
   if (expected.composed !== undefined) {
     const hard = reasons.claims.filter(x => x.check === true && COMPOSED_GROUNDS.has(x.kind));
     if (hard.length) return why.push(`a true hard ground: ${hard.map(x => x.kind).join(', ')}`), out('unchecked', null);
-    if ([...reasons.judgment, ...reasons.unparsed].some(c => DECISIVE.test(c))) return why.push('a decisive reason stated (a 1h CHoCH against): checked by hand'), out('unchecked', null);
+    if ([...reasons.judgment, ...reasons.unparsed].some(c => DECISIVE.test(c))) {
+      if (!htfAgrees(facts.htf, expected.direction)) return why.push('a decisive reason stated (a 1h CHoCH against): checked by hand'), out('unchecked', null);
+      why.push('a 1h CHoCH against stated while the 4h and the 1h both trend the side: context, not decisive');
+    }
     why.push(`a valid setup (the verified compose record ${expected.composed}) passed without a decisive reason`);
     return out(falseReason ? 'wrong stated reason' : 'excessive abstention', false);
   }
@@ -408,6 +419,17 @@ function composableSetup(b) {
   }
 }
 
+/** The briefing's 4h and 1h trends at a decision (briefing.js htfTrendsOf on the bars the cycle was handed), or null. */
+function htfAt(rec, { symbol, barT, tf, count }) {
+  const bars = barsAt(rec, { symbol, barT, tf, count });
+  if (!bars) return null;
+  try {
+    return htfTrendsOf(bars, tf);
+  } catch (_err) {
+    return null;
+  }
+}
+
 /** The bar briefing rebuilt at a decision (the runner's own code on the run's bars, no scan), or null. */
 function plainBriefingAt(rec, { symbol, barT, t, tf, count }) {
   const bars = barsAt(rec, { symbol, barT, tf, count });
@@ -506,6 +528,8 @@ function factsAt(label, rec, { tf, count, accounts, doc = null, strategies = [] 
     if (v) s.verdict = { action: v.action, maxSize: num(v.maxSize), contract: v.contract || null, stopTicks: num(v.stopTicks), reason: v.reason || null };
   }
   facts.setups.push(...composedSetups);
+  // The 4h and the 1h at the decision (the briefing's own read): a 1h CHoCH against is decisive only without both its way.
+  if (composedSetups.length && rec.barsFor) facts.htf = htfAt(rec, { symbol: label.symbol, barT: label.barT, tf, count });
   facts.attempt = attemptAt(label, facts, { accounts, doc });
   // A pass with no compose call on the bar: whether the briefing held a composable setup (only then rebuilt).
   const act = label.teacher ? label.teacher.action : null;

@@ -339,7 +339,7 @@ test('the roles start from the bar briefing, reuse it, and say which versions th
   assert.match(ts, /Read it once per role and reuse it: no role re-runs\s+`market_snapshot`, `mtf_read` or `strategies_scan` for what it holds/);
   assert.match(read('skills/role-round/SKILL.md'), /Each report opens with a `Data:` line: the briefing versions it used, or,\s+without a current briefing, the tools it called\. A report with no `Data:`\s+line, or naming another bar's `m3` version while this bar's briefing is\s+current, didn't read this bar: run that analyst again once; if it still\s+doesn't, stand aside\. An old briefing \(the tool says so\) counts as none/);
   assert.match(read('skills/timeframe-sources/SKILL.md'), /The briefing's fields per timeframe and the `mtf_read` calls: the `bar-briefing`\s+skill \(use a current briefing; `mtf_read`[^)]*only for what it lacks:\s[^]*?`mtf_read` json's\)/);
-  assert.match(read('skills/htf-to-ltf/SKILL.md'), /The alignment and the trend rule in a trade plan are the briefing's \(intraday\s+frames\); a daily read, if you have one \(premarket's\), is context only, never a\s+second alignment/);
+  assert.match(read('skills/htf-to-ltf/SKILL.md'), /The alignment and the trend rule are the briefing's; a daily read\s+\(premarket's\) is context only, never a second alignment/);
   assert.match(read('skills/autonomous-trading/SKILL.md'), /The bar briefing \(`bar_briefing`\) is the\s+runner's file for this bar: read it once per role and reuse it \(it doesn't\s+change during the cycle\)/);
   const ht = read('skills/bar-briefing/SKILL.md');
   // The briefing's m3 cisd (briefing.js cisdBlock), after the trend rule as m3 builds it; a frame points to it.
@@ -546,7 +546,7 @@ test('the analysts report reads for or against the trend rule\'s side, never adv
   // and trade-session step 0; the rule itself in trade-session and trade-lifecycle, which the gate requires every entry.
   assert.ok(require('../../scripts/lib/head-prompt').CORE.includes('confluence-counting'));
   assert.match(read('skills/trade-session/SKILL.md'), /Load\s+`confluence-counting` every cycle too/);
-  assert.match(read('skills/trade-session/SKILL.md'), /the trigger closed → `compose_check`, never your own R:R\.\s+OK → take: full, half on serious against, pass on a 1h CHoCH against\./);
+  assert.match(read('skills/trade-session/SKILL.md'), /the trigger closed → `compose_check`, never your own R:R\.\s+OK → take: full, half on serious, pass on decisive against\./);
   assert.match(read('skills/trade-lifecycle/SKILL.md'), /trend side, a reaction at a level, the trigger closed →\s+compose \(`confluence-counting`\); the plan, never you, works out R:R\./);
 });
 
@@ -560,7 +560,7 @@ test('the count is of independent categories, never labels, and every restatemen
   for (const rule of ['**Compose first.**', 'the trigger closed → call `compose_check`.', 'Never estimate room or R:R: the briefing\'s "Standard plan" line states it',
     'refused → pass, naming it.', 'OK → **a valid setup is the trade**: full size within the verdict\'s ceiling; the against sets the size:',
     'never a reason not to compose', 'no pullback yet',
-    '**Decisive** → pass: a real HTF reversal against the side (a 1h CHoCH against: the trend rule\'s tier, `trade-lifecycle`), or a hard step fails.', '**Serious** → half (`floor`, at least 1): 2+ categories against, location against',
+    '**Decisive** → pass: a 1h CHoCH against (the trend rule\'s tier, `trade-lifecycle`; with the 4h and 1h your way, context), or a hard step fails.', '**Serious** → half (`floor`, at least 1): 2+ categories against, location against',
     'or a 3m close beyond the leg\'s 15m swing (`m3.htfLevels` `brokenAt`). Closed back inside, it is a sweep (`breakout-vs-fakeout`): liquidity for.',
     '**Minor** → full size, never a reason not to compose: thin volume, the first level ahead, VWAP distance or "chasing"', 'A missing read is no reason to pass.',
     'reads of one price move are one piece of evidence.', 'mixed, none or `unknown` → neutral',
@@ -568,7 +568,7 @@ test('the count is of independent categories, never labels, and every restatemen
     '**The pullback is neutral** (`pullback-vs-reversal`)']) assert.ok(cc.includes(rule), rule);
   // Each restatement: categories, the same threshold, and no against category a pass alone.
   const ts = flat(read('skills/trade-session/SKILL.md'));
-  assert.ok(ts.includes('**Compose first** (`confluence-counting`): trend side, a reaction at a key level, the trigger closed → `compose_check`, never your own R:R. OK → take: full, half on serious against, pass on a 1h CHoCH against.'));
+  assert.ok(ts.includes('**Compose first** (`confluence-counting`): trend side, a reaction at a key level, the trigger closed → `compose_check`, never your own R:R. OK → take: full, half on serious, pass on decisive against.'));
   assert.ok(flat(read('skills/trade-lifecycle/SKILL.md')).includes('trend side, a reaction at a level, the trigger closed → compose (`confluence-counting`); the plan, never you, works out R:R.'));
   const tp = flat(read('skills/trader-process/SKILL.md'));
   // take or pass first: the decision word the verdict parser reads (roles-ran.js: "take" agrees, a "valid" first word
@@ -585,7 +585,7 @@ test('the count is of independent categories, never labels, and every restatemen
   assert.ok(!/\b1\.5R\b/.test(read('rules/trading/risk-management.md')), 'no hand-applied R:R number in the always-on rule');
   assert.ok(flat(read('skills/htf-to-ltf/SKILL.md')).includes('in the count it is neutral.'));
   assert.ok(flat(read('skills/trader-process/SKILL.md')).includes('The six categories of `confluence-counting`.'));
-  assert.ok(flat(read('agents/risk-manager.md')).includes('then (`confluence-counting`): compose OK (its R:R the record\'s, never an estimate) → APPROVE, full size (no attempt: half on serious against); VETO only on a 1h CHoCH against the side or a failed hard step.'));
+  assert.ok(flat(read('agents/risk-manager.md')).includes('then (`confluence-counting`): compose OK (its R:R the record\'s, never an estimate) → APPROVE, full size (no attempt: half on serious against); VETO only on a decisive 1h CHoCH against or a failed hard step.'));
   assert.ok(flat(read('skills/setup-judgment/SKILL.md')).includes('A valid setup on that side (`confluence-counting`) is the trade'));
   for (const role of ['market-structure-analyst', 'trend-momentum-analyst', 'volume-liquidity-analyst']) {
     assert.ok(read(`agents/${role}.md`).includes("Reads for <the trend rule's side>: <category: fact, level, number>; against: <same>"), role);
@@ -639,12 +639,12 @@ test('decisive is a real HTF reversal (a 1h CHoCH against), never a 15m swing br
   const read = f => fs.readFileSync(path.join(ROOT, f), 'utf8');
   const flat = t => t.replace(/\s+/g, ' ');
   const cc = flat(read('skills/confluence-counting/SKILL.md'));
-  assert.ok(cc.includes('**Decisive** → pass: a real HTF reversal against the side (a 1h CHoCH against: the trend rule\'s tier, `trade-lifecycle`), or a hard step fails.'));
+  assert.ok(cc.includes('**Decisive** → pass: a 1h CHoCH against (the trend rule\'s tier, `trade-lifecycle`; with the 4h and 1h your way, context), or a hard step fails.'));
   assert.ok(cc.includes('or a 3m close beyond the leg\'s 15m swing (`m3.htfLevels` `brokenAt`). Closed back inside, it is a sweep (`breakout-vs-fakeout`): liquidity for.'));
   const restated = {
-    'rules/trading/decision.md': ['serious against (a 3m close beyond the leg\'s 15m swing among them) → half', 'decisive against (a 1h CHoCH against the side) → pass'],
-    'skills/trade-session/SKILL.md': ['pass on a 1h CHoCH against.'],
-    'agents/risk-manager.md': ['VETO only on a 1h CHoCH against the side or a failed hard step.'],
+    'rules/trading/decision.md': ['serious against (a 3m close beyond the leg\'s 15m swing among them) → half', 'decisive against (a 1h CHoCH against, unless the 4h and 1h both your way) → pass'],
+    'skills/trade-session/SKILL.md': ['pass on decisive against.'],
+    'agents/risk-manager.md': ['VETO only on a decisive 1h CHoCH against or a failed hard step.'],
   };
   for (const [f, list] of Object.entries(restated)) for (const s of list) assert.ok(flat(read(f)).includes(s), `${f}: ${s}`);
   // No rule or restatement keeps a swing broken as a pass.

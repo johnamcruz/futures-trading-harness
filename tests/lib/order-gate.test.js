@@ -3728,7 +3728,7 @@ test('bias_agree, a cited setup\'s market entry (momentum_continuation through t
   }
 });
 
-test('bias_agree: a D2 reversal against the 4h is refused (a 1h CHoCH no longer stands against the HTF); the shipped rulebook holds the rule', () => {
+test('bias_agree: a D2 reversal against the 4h is refused (a 1h CHoCH no longer stands against the HTF); the shipped rulebook holds an entry rule', () => {
   const CR = require('../../scripts/lib/trading/composed-reads');
   const { entryRuleOf } = require('../../scripts/lib/trading/entry-rule');
   // A reversal short: the 1h CHoCHed down under a 4h uptrend (the D2 tier's 1h CHoCH plus a 4h rejection), as checked.
@@ -3752,7 +3752,7 @@ test('bias_agree: a D2 reversal against the 4h is refused (a 1h CHoCH no longer 
   assert.deepStrictEqual(evaluateOrder({ input: { ...EXIT_SELL, side: 'buy', rationale: '[exit] cover the prop_portfolio short' }, entries: [], now: LCP.NOW, strategies: reg(AGREE), accounts: [LCP.MINI], config: { ...config, home } }).violations, [], 'an exit goes');
   // The shipped rulebook: the policy trading the attempt carries the rule, so compose_check and the gate hold it.
   const shipped = LC_REGISTRY.find(x => x.name === 'prop_portfolio');
-  assert.strictEqual(entryRuleOf(shipped.entry).biasAgree, true);
+  assert.strictEqual(entryRuleOf(shipped.entry).biasNeutral, true, 'shipped: BG (bias_agree neutral-15m-declared)');
   assert.deepStrictEqual(entryRuleOf(shipped.entry).biasFrames, ['4h', '1h']);
 });
 
@@ -4512,4 +4512,86 @@ test('modify_order: a reprice of a working non-composed policy entry is held to 
   const other = home('up', 'range');
   fs.writeFileSync(path.join(other, 'entry-orders.json'), JSON.stringify([{ orderId: 77, contractId: 'MNQ', side: 'buy', setup: 'fx_break' }]));
   assert.deepStrictEqual(mod(other, reprice), []);
+});
+
+// ---- bias_agree: neutral-15m-declared (BG, the owner's pick from the alignment study, 2026-10-29): every trending
+// bias frame the side's way, none against; both ranging: the 15m trend and the declared trend the side's way ----
+const BG = { ...AGREE, bias_agree: 'neutral-15m-declared' };
+const DECLARED_UP = { long: { vwapAtr: 0.6, ema20Atr: 0.3, overnight: null, dayMoveAtr: 1.1, regime: 'with' }, short: { vwapAtr: -0.6, ema20Atr: -0.3, overnight: null, dayMoveAtr: -1.1, regime: 'against' } };
+const NOT_DECLARED = { long: { ...DECLARED_UP.long, dayMoveAtr: -0.1 }, short: DECLARED_UP.short };
+/** The briefing with the 4h, 1h and 15m trends and the declared facts (null: none, as outside RTH). */
+const bgBriefing = (t4h, t1h, t15, declared) => {
+  const b = LC.briefing();
+  b.sections.m15.data.frame = { ...b.sections.m15.data.frame, trend: t15 };
+  if (declared) b.sections.m3.data.declared = declared;
+  return [t4h, t1h, b];
+};
+/** The study's BG for a long (the study's classification), the oracle. */
+const bgLong = (t4h, t1h, t15, declared) => {
+  const s = t => ({ up: 1, range: 0, down: -1 })[t];
+  if (s(t4h) || s(t1h)) return s(t4h) !== -1 && s(t1h) !== -1;
+  return t15 === 'up' && declared === DECLARED_UP;
+};
+
+test('BG, a composed limit entry through the gate: every 4h x 1h x 15m x declared combination for a long equals the study\'s BG; exits go', () => {
+  let goes = 0;
+  for (const t4h of H1_TRENDS) for (const t1h of H1_TRENDS) for (const t15 of H1_TRENDS) for (const declared of [DECLARED_UP, NOT_DECLARED, null]) {
+    const label = `${t4h}/${t1h}/15m ${t15}/${declared === DECLARED_UP ? 'declared' : declared ? 'not declared' : 'none'}`;
+    // The record's bias read states a frame that trends the long's way on this briefing (else the read itself is FALSE).
+    const bias = t1h === 'up' ? '1h up' : t4h === 'up' ? '4h up' : '15m up';
+    const reads = LC.READS.map(x => (x.step === 'bias' ? { ...x, read: bias } : x));
+    const { home } = LCP.propHome({ size: 5, reads });
+    const args = lcPropPlan(home);
+    withTrends(home, ...bgBriefing(t4h, t1h, t15, declared));
+    const r = lcPropEval(home, args, { registry: LCP.registry({ entry: BG }) });
+    const ruled = r.violations.filter(v => /entry rule/.test(v.message));
+    if (bgLong(t4h, t1h, t15, declared)) { goes += 1; assert.deepStrictEqual(ruled, [], label); } else assert.ok(ruled.length && ruled.every(v => v.check === 'composed-reads'), `${label}: ${JSON.stringify(r.violations)}`);
+    assert.deepStrictEqual(lcPropEval(home, EXIT_SELL, { registry: LCP.registry({ entry: BG }) }).violations, [], `exit ${label}`);
+  }
+  // 3 trending pairs with none against x 9 (15m x declared) + both ranging with the 15m up and declared.
+  assert.strictEqual(goes, 3 * 9 + 1);
+});
+
+test('BG, the [entry-rule] route (a policy entry on no compose record): aligned and one frame ranging go; both ranging only with the 15m and declared; a frame against refused; strict still refuses the 1h ranging', () => {
+  const fx = { name: 'fx_rules', valid: true, errors: [], status: 'active', instruments: ['MNQ'], signal: 'rules', timeframe: '3m', mtf: 'trend', risk: {} };
+  const reg = entry => [LCP.policy({ strategies: ['fx_rules'], entry }), fx];
+  const long = { accountId: 1, contractId: 'MNQ', side: 'buy', type: 'market', size: 3, stopLossBracket: { ticks: 40, type: 'stop' }, rationale: 'setup:prop_portfolio long fx_rules, stop 21490.25' };
+  const ruleOf = (h, entry = BG) => evaluateOrder({ input: long, entries: [plan(1, { ts: '2026-10-07T13:59:30Z' })], now: LCP.NOW, strategies: reg(entry), accounts: [LCP.MINI], config: { ...config, home: h, cycleBars: { MNQ: LC.BAR } } }).violations.filter(v => v.check === 'entry-rule').map(v => v.message);
+  const at = (...x) => withTrends(trendHome(), ...bgBriefing(...x));
+  assert.deepStrictEqual(ruleOf(at('up', 'up', 'down', null)), [], 'aligned');
+  assert.deepStrictEqual(ruleOf(at('up', 'range', 'down', null)), [], 'the 4h up, the 1h ranging');
+  assert.deepStrictEqual(ruleOf(at('range', 'range', 'up', DECLARED_UP)), [], 'both ranging, the 15m and declared up');
+  assert.match(ruleOf(at('range', 'range', 'up', null))[0] || '', /^setup:prop_portfolio: entry rule: no higher-timeframe trend \(4h range, 1h range\), the 15m up: the Trend declared\? facts are not in the briefing, so it can't be read: no entry\. Exits, protective stops and stop moves still go\.$/);
+  assert.match(ruleOf(at('range', 'range', 'up', NOT_DECLARED))[0] || '', /the day's trend is not declared up/);
+  assert.match(ruleOf(at('range', 'range', 'down', DECLARED_UP))[0] || '', /the 15m is down, not up/);
+  assert.match(ruleOf(at('down', 'range', 'up', DECLARED_UP))[0] || '', /the 4h trend is down, against the long/);
+  assert.match(ruleOf(at('up', 'down', 'up', DECLARED_UP))[0] || '', /the 1h trend is down, against the long/);
+  // Strict stays available: the same 4h up, 1h ranging bar is refused under bias_agree on.
+  assert.match(ruleOf(at('up', 'range', 'down', null), AGREE)[0] || '', /no agreement, no trade/);
+  // No briefing: refused (fails closed); an exit always goes.
+  assert.match(ruleOf(trendHome())[0] || '', /the entry rule can't be checked/);
+  assert.deepStrictEqual(evaluateOrder({ input: EXIT_SELL, entries: [], now: LCP.NOW, strategies: reg(BG), accounts: [LCP.MINI], config: { ...config, home: at('down', 'down', 'down', null) } }).violations, [], 'an exit goes');
+});
+
+test('BG, modify_order: a reprice of a working policy entry is held to BG on this bar; a stop or target leg and a risk-reducing modify never', () => {
+  const { evaluateModify } = require('../../scripts/lib/trading/order-gate');
+  const reg = [LCP.policy({ entry: BG })];
+  const home = (...x) => {
+    const h = require('../helpers').tmpDir();
+    fs.writeFileSync(path.join(h, 'entry-orders.json'), JSON.stringify([{ orderId: 77, contractId: 'MNQ', side: 'buy', setup: 'prop_portfolio', stopTicks: 40, at: '2026-10-07T13:59:00.000Z' }]));
+    if (x.length) withTrends(h, ...bgBriefing(...x));
+    return h;
+  };
+  const mod = (h, input) => evaluateModify({ input, config: { ...config, home: h, cycleBars: { MNQ: LC.BAR } }, strategies: reg, now: LCP.NOW }).violations;
+  const reprice = { orderId: 77, limitPrice: 21538 };
+  assert.deepStrictEqual(mod(home('up', 'range', 'up', null), reprice), [], 'the 4h up, the 1h ranging: goes');
+  assert.deepStrictEqual(mod(home('range', 'range', 'up', DECLARED_UP), reprice), [], 'both ranging, declared up: goes');
+  const neutral = mod(home('range', 'range', 'up', null), reprice);
+  assert.deepStrictEqual(neutral.map(v => v.check), ['entry-rule']);
+  assert.match(neutral[0].message, /^order 77 is a working setup:prop_portfolio: entry rule: no higher-timeframe trend \(4h range, 1h range\), the 15m up: the Trend declared\? facts are not in the briefing/);
+  assert.match((mod(home('down', 'up', 'up', DECLARED_UP), { orderId: 77, stopPrice: 21541 })[0] || {}).message || '', /the 4h trend is down, against the long/, 'a stop entry\'s reprice');
+  assert.deepStrictEqual(mod(home(), reprice).map(v => v.check), ['entry-rule'], 'no briefing: fails closed');
+  for (const input of [{ orderId: 9, stopPrice: 21530 }, { orderId: 10, limitPrice: 21600 }, { orderId: 77, stopPrice: 21530, reason: '[protect] tighten' }]) {
+    assert.deepStrictEqual(mod(home('down', 'down', 'down', null), input), [], JSON.stringify(input));
+  }
 });

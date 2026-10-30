@@ -161,17 +161,27 @@ test('an invalid rulebook after the edit is refused before any comparison', () =
 
 test('the entry rule: any change, on or off, is refused (the owner\'s switch, never a proposal\'s); loosening the bias is named looser', () => {
   const t = tree();
-  for (const [find, replace] of [['regime_against: off', 'regime_against: on'], ['leg_turned: off', 'leg_turned: on'], ['bias_agree: on', 'bias_agree: off'], ['bias_frames: [4h, 1h]', 'bias_frames: [4h]']]) {
+  for (const [find, replace] of [['regime_against: off', 'regime_against: on'], ['leg_turned: off', 'leg_turned: on'], ['bias_agree: neutral-15m-declared', 'bias_agree: off'], ['bias_agree: neutral-15m-declared', 'bias_agree: on'], ['bias_frames: [4h, 1h]', 'bias_frames: [4h]']]) {
     assert.match(errs(t, find, replace), /policies\.p1\.entry: changed \(the entry rule is the owner's switch/, replace);
   }
-  assert.match(errs(t, 'bias_agree: on', 'bias_agree: off'), /policies\.p1\.entry\.bias_agree: on -> off is looser/);
+  // The shipped BG is bias_agree's loosest mode: off and on are stricter, never called looser (still refused: a change).
+  for (const v of ['off', 'on']) assert.doesNotMatch(errs(t, 'bias_agree: neutral-15m-declared', `bias_agree: ${v}`), /bias_agree: .* is looser/, v);
   assert.match(errs(t, 'bias_frames: [4h, 1h]', 'bias_frames: [1h]'), /policies\.p1\.entry\.bias_frames: \["4h","1h"\] -> \["1h"\] is looser \(drops 4h\)/);
   assert.doesNotMatch(errs(t, 'regime_against: off', 'regime_against: on'), /is looser/, 'a tightening is never called looser');
   assert.match(errs(t, 'bias_frames: [4h, 1h]', 'bias_frames: [1h, 4h]'), /entry\.bias_frames: .* is not off/, 'invalid: refused before the comparison');
   // bias_frames off with bias_agree on is invalid; with both turned off it is a loosening of both.
-  assert.match(errs(t, 'bias_frames: [4h, 1h]', 'bias_frames: off'), /bias_agree: on needs bias_frames listed/);
+  assert.match(errs(t, 'bias_frames: [4h, 1h]', 'bias_frames: off'), /bias_agree: neutral-15m-declared needs bias_frames listed/);
   const both = G.loosenings({ policies: { p: { entry: { bias_frames: ['4h', '1h'], bias_agree: 'on' } } } }, { policies: { p: { entry: { bias_frames: 'off', bias_agree: 'off' } } } }).join();
   assert.match(both, /bias_agree: on -> off is looser/);
   assert.match(both, /bias_frames: .* -> "off" is looser \(drops 4h, 1h\)/);
   assert.deepStrictEqual(G.entryLooser('e', { bias_frames: ['1h'], bias_agree: 'off' }, { bias_frames: ['4h', '1h'], bias_agree: 'on' }), [], 'stricter: not looser');
+  // bias_agree's order, strictest first: on, off, neutral-15m-declared; a later mode, an unknown value or a removed key is looser.
+  const ag = (b, a) => G.entryLooser('e', { bias_frames: ['4h', '1h'], bias_agree: b }, { bias_frames: ['4h', '1h'], ...(a === undefined ? {} : { bias_agree: a }) }).join();
+  const M = ['on', 'off', 'neutral-15m-declared'];
+  for (const [i, b] of M.entries()) for (const [j, a] of M.entries()) {
+    if (j > i) assert.match(ag(b, a), new RegExp(`e\\.bias_agree: ${b} -> ${a} is looser`), `${b} -> ${a}`);
+    else assert.strictEqual(ag(b, a), '', `${b} -> ${a}: as strict or stricter`);
+  }
+  assert.match(ag('neutral-15m-declared', undefined), /bias_agree: neutral-15m-declared -> removed is looser/);
+  assert.match(ag('neutral-15m-declared', 'any'), /bias_agree: neutral-15m-declared -> any is looser/);
 });

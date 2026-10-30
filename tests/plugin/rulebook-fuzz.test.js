@@ -110,7 +110,7 @@ function judge(root, account, shipped) {
     }
     if (JSON.stringify(p.exit) !== JSON.stringify(old.exit)) looser.push(`${p.name}.exit ${JSON.stringify(p.exit)} (a changed trail is never "stricter")`);
     if (JSON.stringify(p.multipliers) !== JSON.stringify(old.multipliers)) stricter = true;
-    // The entry rule: a dropped bias frame or bias_agree turned off loads valid but looser; the shipped-entry pin
+    // The entry rule: a dropped bias frame or bias_agree moved to a looser mode loads valid but looser; the shipped-entry pin
     // (tests/plugin/rulebook.test.js) refuses shipping it and the rulebook guard a proposal, so it is reported apart.
     const el = entryLooser(`${p.name}.entry`, old.entry, p.entry);
     if (el.length) pinned.push(...el);
@@ -182,8 +182,13 @@ test('fuzz: the writer and the judge catch what they claim (a looser load is rep
   assert.strictEqual(judge(root, policy.account, shipped).verdict, 'looser');
   write(edit(data, ['policies', policy.name, 'exit', 'mode'], (o, k) => { o[k] = 'trail'; }));
   assert.strictEqual(judge(root, policy.account, shipped).verdict, 'refused', 'mode trail without a trail in R');
-  write(edit(data, ['policies', policy.name, 'entry', 'bias_agree'], (o, k) => { o[k] = 'off'; }));
-  assert.strictEqual(judge(root, policy.account, shipped).verdict, 'pinned', 'bias_agree off: looser, held by the pin');
+  // The shipped bias_agree (neutral-15m-declared) is its loosest mode: off and on are stricter; a dropped frame is looser.
+  for (const v of ['off', 'on']) {
+    write(edit(data, ['policies', policy.name, 'entry', 'bias_agree'], (o, k) => { o[k] = v; }));
+    assert.strictEqual(judge(root, policy.account, shipped).verdict, 'stricter', `bias_agree ${v}: stricter`);
+  }
+  write(edit(data, ['policies', policy.name, 'entry', 'bias_frames'], (o, k) => { o[k] = ['4h']; }));
+  assert.strictEqual(judge(root, policy.account, shipped).verdict, 'pinned', 'a dropped bias frame: looser, held by the pin');
   write(edit(data, ['policies', policy.name, 'sizing', 'cushion_frac'], (o, k) => { o[k] = 0.01; }));
   assert.strictEqual(judge(root, policy.account, shipped).verdict, 'stricter');
   write(edit(data, ['policies', policy.name, 'sizing', 'cap_usd'], (o, k) => { o[k] = 0; }));

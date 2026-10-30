@@ -304,18 +304,25 @@ const ENFORCED = {
     assert.ok(r.violations.some(v => v.check === 'blackout'), JSON.stringify(r.violations));
   },
   entry_rule: () => {
-    // The rulebook's entry rule reaches the reads checker (compose_check and the gate's re-check): as shipped (the 4h
-    // and the 1h must agree), a long with the 1h ranging under a 4h uptrend is refused and one with both up is not;
-    // with bias_agree off the 4h alone sets the side, and with every key off nothing more is checked.
+    // The rulebook's entry rule reaches the reads checker (compose_check and the gate's re-check): as shipped (BG,
+    // bias_agree neutral-15m-declared), a long with the 4h up and the 1h ranging goes, one with the 1h down is refused,
+    // and with both ranging only the 15m up and the declared trend up let it go; bias_agree on refuses the 1h ranging;
+    // with every key off nothing more is checked.
     const { entryRuleOf } = require('../../scripts/lib/trading/entry-rule');
     const { checkReads } = require('../../scripts/lib/trading/composed-reads');
     const root = rootCopy();
-    const briefing = (t1h, regime = 'trend-up') => ({ minutes: 3, sections: { m3: { data: { price: 21500, regime: { primary: regime } } }, h1: { data: { h4: { trend: 'up' }, h1: { trend: t1h } } } } });
+    const DEC = { long: { vwapAtr: 0.5, ema20Atr: 0.3, dayMoveAtr: 1, regime: 'with' }, short: { vwapAtr: -0.5, ema20Atr: -0.3, dayMoveAtr: -1, regime: 'against' } };
+    const briefing = (t1h, regime = 'trend-up', { t4h = 'up', t15 = 'range', declared = null } = {}) => ({ minutes: 3, sections: { m3: { data: { price: 21500, regime: { primary: regime }, ...(declared ? { declared } : {}) } }, m15: { data: { frame: { trend: t15 } } }, h1: { data: { h4: { trend: t4h }, h1: { trend: t1h } } } } });
     const problems = b => checkReads({ reads: [], side: 'long', briefing: b, entryRule: entryRuleOf(policy(root).entry) }).problems.filter(x => /^entry rule/.test(x));
-    assert.match(problems(briefing('range')).join(), /4h and 1h must each trend up for a long .*no agreement, no trade/, policy(root).errors.join());
+    assert.deepStrictEqual(problems(briefing('range')), [], policy(root).errors.join());
     assert.deepStrictEqual(problems(briefing('up')), [], 'both up: no entry-rule problem');
+    assert.match(problems(briefing('down')).join(), /the 1h trend is down, against the long/);
+    assert.match(problems(briefing('range', 'trend-up', { t4h: 'range', t15: 'up' })).join(), /Trend declared\? facts are not in the briefing/);
+    assert.deepStrictEqual(problems(briefing('range', 'trend-up', { t4h: 'range', t15: 'up', declared: DEC })), [], 'both range: the 15m and declared up');
+    assert.match(problems(briefing('range', 'trend-up', { t4h: 'range', t15: 'down', declared: DEC })).join(), /the 15m is down, not up/);
+    edit(root, t => t.replace(/^( {6}bias_agree: )neutral-15m-declared/m, '$1on'));
+    assert.match(problems(briefing('range')).join(), /4h and 1h must each trend up for a long .*no agreement, no trade/, 'bias_agree on: the strict rule');
     edit(root, t => t.replace(/^( {6}bias_agree: )on/m, '$1off'));
-    assert.deepStrictEqual(problems(briefing('range')), [], 'bias_agree off: the 4h sets the side');
     edit(root, t => t.replace(/^( {6}bias_frames: )\[4h, 1h\]/m, '$1off'));
     edit(root, t => t.replace(/^( {6}regime_against: )off/m, '$1on'));
     assert.match(problems(briefing('range', 'trend-down')).join(), /regime is trend-down, against the long/, policy(root).errors.join());
@@ -331,22 +338,22 @@ const ENFORCED = {
   },
 };
 
-test('the owner\'s top-down rule is shipped and held: every policy\'s entry has bias_frames [4h, 1h] and bias_agree on', () => {
-  // "Don't counter trade against the prevailing trend"; "No trade if there is no agreement between the two" (2026-10-29).
+test('the owner\'s top-down rule is shipped and held: every policy\'s entry has bias_frames [4h, 1h] and bias_agree neutral-15m-declared (BG)', () => {
+  // "Don't counter trade against the prevailing trend" (2026-10-29); BG, the owner's pick from the alignment study (2026-10-29).
   const { entryRuleOf } = require('../../scripts/lib/trading/entry-rule');
   assert.ok(POLICIES.length >= 1);
   for (const { file, book } of BOOKS) for (const [name, p] of Object.entries(book.policies || {})) {
     assert.deepStrictEqual(p.entry.bias_frames, ['4h', '1h'], `${file} policies.${name}.entry.bias_frames`);
-    assert.strictEqual(p.entry.bias_agree, 'on', `${file} policies.${name}.entry.bias_agree`);
+    assert.strictEqual(p.entry.bias_agree, 'neutral-15m-declared', `${file} policies.${name}.entry.bias_agree`);
   }
-  for (const s of POLICIES) assert.deepStrictEqual({ ...entryRuleOf(s.entry) }, { biasFrames: ['4h', '1h'], biasAgree: true, regimeAgainst: s.entry.regime_against === 'on', legTurned: s.entry.leg_turned === 'on' }, s.name);
-  // A loosened copy fails this test: each way of loosening it is seen.
+  for (const s of POLICIES) assert.deepStrictEqual({ ...entryRuleOf(s.entry) }, { biasFrames: ['4h', '1h'], biasAgree: false, biasNeutral: true, regimeAgainst: s.entry.regime_against === 'on', legTurned: s.entry.leg_turned === 'on' }, s.name);
+  // A changed copy fails this test: each way of changing the bias is seen (a dropped frame is looser; on and off are stricter).
   const shipped = read(BOOKS[0].file);
-  const loosened = [['bias_agree: on', 'bias_agree: off'], ['bias_frames: [4h, 1h]', 'bias_frames: off'], ['bias_frames: [4h, 1h]', 'bias_frames: [4h]'], ['bias_frames: [4h, 1h]', 'bias_frames: [1h]']];
+  const loosened = [['bias_agree: neutral-15m-declared', 'bias_agree: off'], ['bias_agree: neutral-15m-declared', 'bias_agree: on'], ['bias_frames: [4h, 1h]', 'bias_frames: off'], ['bias_frames: [4h, 1h]', 'bias_frames: [4h]'], ['bias_frames: [4h, 1h]', 'bias_frames: [1h]']];
   for (const [a, b] of loosened) {
     assert.ok(shipped.includes(a), a);
     const e = parseFrontmatter(shipped.replace(a, b)).data.policies.prop_portfolio.entry;
-    assert.ok(!(JSON.stringify(e.bias_frames) === JSON.stringify(['4h', '1h']) && e.bias_agree === 'on'), b);
+    assert.ok(!(JSON.stringify(e.bias_frames) === JSON.stringify(['4h', '1h']) && e.bias_agree === 'neutral-15m-declared'), b);
   }
 });
 

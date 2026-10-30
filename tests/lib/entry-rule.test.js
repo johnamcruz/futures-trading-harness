@@ -2,17 +2,17 @@
 
 const test = require('node:test');
 const assert = require('node:assert');
-const { entryRuleErrors, entryRuleOf, entryProblems, trendOf, legReads } = require('../../scripts/lib/trading/entry-rule');
+const { entryRuleErrors, entryRuleOf, entryProblems, trendOf, legReads, topDown, declaredOf } = require('../../scripts/lib/trading/entry-rule');
 const { checkReads } = require('../../scripts/lib/trading/composed-reads');
 
 const GONE = 'gone';
 /** A briefing with only what the entry rule reads: the base regime and minutes, the 15m, 1h and 4h trends (GONE: left out). */
-function briefing({ regime = 'range', t15 = 'range', t1h = 'range', t4h = 'range', minutes = 3 } = {}) {
+function briefing({ regime = 'range', t15 = 'range', t1h = 'range', t4h = 'range', minutes = 3, declared = GONE } = {}) {
   const frame = t => (t === GONE ? undefined : { trend: t });
   return {
     minutes,
     sections: {
-      m3: { data: { price: 21500, ...(regime === GONE ? {} : { regime: regime === null ? null : { primary: regime } }) } },
+      m3: { data: { price: 21500, ...(regime === GONE ? {} : { regime: regime === null ? null : { primary: regime } }), ...(declared === GONE ? {} : { declared }) } },
       m15: { data: { frame: frame(t15) } },
       h1: { data: { h1: frame(t1h), h4: frame(t4h) } },
     },
@@ -27,9 +27,13 @@ test('entryRuleOf: null when every key is off or the block is missing; the keys 
   assert.strictEqual(entryRuleOf(OFF), null);
   assert.strictEqual(entryRuleOf(null), null);
   assert.strictEqual(entryRuleOf(undefined), null);
-  assert.deepStrictEqual({ ...rule({ bias_frames: ['4h', '1h'] }) }, { biasFrames: ['4h', '1h'], biasAgree: false, regimeAgainst: false, legTurned: false });
-  assert.deepStrictEqual({ ...rule({ bias_frames: ['4h', '1h'], bias_agree: 'on' }) }, { biasFrames: ['4h', '1h'], biasAgree: true, regimeAgainst: false, legTurned: false });
-  assert.deepStrictEqual({ ...rule({ regime_against: 'on', leg_turned: 'on' }) }, { biasFrames: null, biasAgree: false, regimeAgainst: true, legTurned: true });
+  assert.deepStrictEqual({ ...rule({ bias_frames: ['4h', '1h'] }) }, { biasFrames: ['4h', '1h'], biasAgree: false, biasNeutral: false, regimeAgainst: false, legTurned: false });
+  assert.deepStrictEqual({ ...rule({ bias_frames: ['4h', '1h'], bias_agree: 'on' }) }, { biasFrames: ['4h', '1h'], biasAgree: true, biasNeutral: false, regimeAgainst: false, legTurned: false });
+  assert.deepStrictEqual({ ...rule({ bias_frames: ['4h', '1h'], bias_agree: 'neutral-15m-declared' }) }, { biasFrames: ['4h', '1h'], biasAgree: false, biasNeutral: true, regimeAgainst: false, legTurned: false });
+  assert.deepStrictEqual({ ...rule({ regime_against: 'on', leg_turned: 'on' }) }, { biasFrames: null, biasAgree: false, biasNeutral: false, regimeAgainst: true, legTurned: true });
+  // topDown: the 15m-setup chain holds under on and neutral-15m-declared only.
+  assert.deepStrictEqual(['on', 'off', 'neutral-15m-declared'].map(v => topDown(rule({ bias_frames: ['4h', '1h'], bias_agree: v }))), [true, false, true]);
+  assert.strictEqual(topDown(null), false);
   // Only the word `on` turns a check on: anything else is no check here (the rulebook's validation refuses it first).
   assert.strictEqual(entryRuleOf({ ...OFF, regime_against: true }), null);
 });
@@ -38,9 +42,11 @@ test('entryRuleErrors: every key stated, each on, off or (bias_frames) a list hi
   assert.deepStrictEqual(entryRuleErrors(OFF, 'policies.p'), []);
   assert.deepStrictEqual(entryRuleErrors({ bias_frames: ['4h', '1h'], bias_agree: 'on', regime_against: 'on', leg_turned: 'off' }, 'policies.p'), []);
   assert.match(entryRuleErrors({ bias_frames: ['4h', '1h'], regime_against: 'on', leg_turned: 'off' }, 'policies.p').join(), /entry\.bias_agree: missing/);
-  // bias_agree on needs the frames that must agree; any value but on or off is refused.
+  // bias_agree on (or neutral-15m-declared) needs the frames that must agree; any other value is refused.
   assert.match(entryRuleErrors({ ...OFF, bias_agree: 'on' }, 'policies.p').join(), /bias_agree: on needs bias_frames listed/);
-  for (const v of [true, 'yes', 1, '']) assert.match(entryRuleErrors({ ...OFF, bias_frames: ['4h', '1h'], bias_agree: v }, 'policies.p').join(), /bias_agree: .* is not on or off/, String(v));
+  assert.match(entryRuleErrors({ ...OFF, bias_agree: 'neutral-15m-declared' }, 'policies.p').join(), /bias_agree: neutral-15m-declared needs bias_frames listed/);
+  assert.deepStrictEqual(entryRuleErrors({ ...OFF, bias_frames: ['4h', '1h'], bias_agree: 'neutral-15m-declared' }, 'policies.p'), []);
+  for (const v of [true, 'yes', 1, '', 'neutral-15m', 'neutral']) assert.match(entryRuleErrors({ ...OFF, bias_frames: ['4h', '1h'], bias_agree: v }, 'policies.p').join(), /bias_agree: .* is not on, off or neutral-15m-declared/, String(v));
   assert.match(entryRuleErrors(undefined, 'policies.p').join(), /policies\.p\.entry: missing or not a map/);
   assert.match(entryRuleErrors([], 'policies.p').join(), /missing or not a map/);
   assert.match(entryRuleErrors({ regime_against: 'off', leg_turned: 'off' }, 'policies.p').join(), /entry\.bias_frames: missing/);
@@ -155,4 +161,92 @@ test('checkReads holds the entry rule: its problems refuse the combination; none
   const ruled = checkReads({ reads: [], side: 'long', briefing: b, entryRule: rule({ regime_against: 'on', bias_frames: ['1h'] }) });
   assert.deepStrictEqual(ruled.problems.filter(x => /^entry rule/.test(x)).length, 2);
   assert.strictEqual(ruled.ok, false);
+});
+
+// ---- bias_agree: neutral-15m-declared (BG, the alignment study's pick, PREREG-C) ----
+/** The Trend declared? facts as the briefing holds them (trend-declared.js): declared for `way` ('long', 'short' or 'none'). */
+function declaredFor(way) {
+  const side = on => ({ vwapAtr: on ? 0.8 : -0.8, ema20Atr: on ? 0.4 : -0.4, overnight: on ? 'broke out its way' : 'back third', dayMoveAtr: on ? 1.2 : -1.2, regime: on ? 'with' : 'against' });
+  if (way === 'none') return { long: { ...side(true), regime: 'range' }, short: { ...side(false), regime: 'range' } };
+  return { long: side(way === 'long'), short: side(way === 'short') };
+}
+/** The study's BG (the study's classification classify), on signs: the oracle the rule must equal. */
+function studyBG(t4h, t1h, t15, declared, side) {
+  const sg = t => ({ up: 1, down: -1, range: 0 })[t];
+  const s = side === 'long' ? 1 : -1;
+  const h4 = sg(t4h), h1 = sg(t1h), m15 = sg(t15);
+  const dec = declared === side;
+  return (h4 !== 0 || h1 !== 0) ? (h4 !== -s && h1 !== -s && (h4 === s || h1 === s)) : (m15 === s && dec);
+}
+
+test('neutral-15m-declared: every 4h x 1h x 15m x declared combination, each side, equals the study\'s BG', () => {
+  const r = rule({ bias_frames: ['4h', '1h'], bias_agree: 'neutral-15m-declared' });
+  const T = ['up', 'range', 'down'];
+  let allowed = 0, n = 0;
+  for (const t4h of T) for (const t1h of T) for (const t15 of T) for (const dec of ['long', 'short', 'none']) for (const side of ['long', 'short']) {
+    const got = entryProblems({ briefing: briefing({ t4h, t1h, t15, declared: declaredFor(dec) }), side, reads: [], rule: r });
+    const want = studyBG(t4h, t1h, t15, dec, side);
+    assert.strictEqual(got.length === 0, want, `${t4h}/${t1h}/15m ${t15}/declared ${dec} ${side}: ${got.join('; ')}`);
+    n += 1; if (want) allowed += 1;
+  }
+  assert.strictEqual(n, 162);
+  // Per side: 3 trending 4h/1h pairs with none against x 9 15m/declared cells, plus both range with the 15m and declared its way.
+  assert.strictEqual(allowed, 2 * (3 * 9 + 1));
+});
+
+test('neutral-15m-declared: the cells the strict rule refused, named; the messages say why', () => {
+  const r = rule({ bias_frames: ['4h', '1h'], bias_agree: 'neutral-15m-declared' });
+  const strict = rule({ bias_frames: ['4h', '1h'], bias_agree: 'on' });
+  const at = (x, side = 'long', rr = r) => entryProblems({ briefing: briefing(x), side, reads: [], rule: rr });
+  // One frame trends the side's way, the other ranges: BG goes, strict refuses.
+  for (const x of [{ t4h: 'up', t1h: 'range' }, { t4h: 'range', t1h: 'up' }]) {
+    assert.deepStrictEqual(at(x), [], JSON.stringify(x));
+    assert.match(at(x, 'long', strict).join(), /no agreement, no trade/);
+  }
+  // Both agree: both go.
+  assert.deepStrictEqual(at({ t4h: 'down', t1h: 'down' }, 'short'), []);
+  assert.deepStrictEqual(at({ t4h: 'down', t1h: 'down' }, 'short', strict), []);
+  // A trending frame against: refused, whatever the 15m and declared say.
+  assert.match(at({ t4h: 'down', t1h: 'up', t15: 'up', declared: declaredFor('long') }).join(), /the 4h trend is down, against the long/);
+  assert.match(at({ t4h: 'range', t1h: 'down', t15: 'up', declared: declaredFor('long') }).join(), /the 1h trend is down, against the long/);
+  // Both range: the 15m and the declared trend set the side.
+  assert.deepStrictEqual(at({ t15: 'up', declared: declaredFor('long') }), []);
+  assert.deepStrictEqual(at({ t15: 'down', declared: declaredFor('short') }, 'short'), []);
+  assert.match(at({ t15: 'up', declared: declaredFor('none') }).join(), /the 15m up, but the day's trend is not declared up/);
+  assert.match(at({ t15: 'range', declared: declaredFor('long') }).join(), /the 15m is range, not up/);
+  assert.match(at({ t15: 'down', declared: declaredFor('long') }).join(), /the 15m is down, not up/);
+  // Strict never lets a both-range bar go.
+  assert.match(at({ t15: 'up', declared: declaredFor('long') }, 'long', strict).join(), /no agreement/);
+  // off keeps refusing a both-range bar (no bias), whatever the 15m says.
+  assert.match(at({ t15: 'up', declared: declaredFor('long') }, 'long', rule({ bias_frames: ['4h', '1h'] })).join(), /no higher-timeframe bias/);
+});
+
+test('neutral-15m-declared fails closed: a trend, the 15m or the declared facts the briefing doesn\'t hold refuse', () => {
+  const r = rule({ bias_frames: ['4h', '1h'], bias_agree: 'neutral-15m-declared' });
+  const at = x => entryProblems({ briefing: briefing(x), side: 'long', reads: [], rule: r }).join();
+  assert.match(at({ t4h: GONE, t1h: 'up' }), /the 4h trend is not in the briefing/);
+  assert.match(at({ t4h: 'up', t1h: 'unknown' }), /the 1h trend is not in the briefing/);
+  assert.match(at({ t15: GONE, declared: declaredFor('long') }), /the 15m trend is not in the briefing: no entry/);
+  assert.match(at({ t15: 'unknown', declared: declaredFor('long') }), /the 15m trend is not in the briefing/);
+  assert.match(at({ t15: 'up' }), /Trend declared\? facts are not in the briefing/);
+  assert.match(at({ t15: 'up', declared: null }), /Trend declared\? facts are not in the briefing/);
+  assert.match(at({ t15: 'up', declared: { short: declaredFor('short').short } }), /Trend declared\? facts are not in the briefing/);
+  assert.match(entryProblems({ briefing: null, side: 'long', reads: [], rule: r }).join(), /not in the briefing/);
+});
+
+test('declaredOf: the regime with the side and the close past the RTH VWAP, EMA20 and RTH open its way, each above 0; nothing else', () => {
+  const b = d => briefing({ declared: d });
+  const L = declaredFor('long');
+  assert.strictEqual(declaredOf(b(L), 'long'), true);
+  assert.strictEqual(declaredOf(b(L), 'short'), false);
+  assert.strictEqual(declaredOf(briefing(), 'long'), null);
+  assert.strictEqual(declaredOf(null, 'long'), null);
+  // Each of the three distances at 0, below 0 or null (no VWAP, no open) is not declared; the regime must read 'with'.
+  for (const k of ['vwapAtr', 'ema20Atr', 'dayMoveAtr']) for (const v of [0, -0.01, null, undefined, NaN, '1']) {
+    assert.strictEqual(declaredOf(b({ ...L, long: { ...L.long, [k]: v } }), 'long'), false, `${k} ${v}`);
+  }
+  for (const reg of ['range', 'transition', 'against', null]) assert.strictEqual(declaredOf(b({ ...L, long: { ...L.long, regime: reg } }), 'long'), false, String(reg));
+  // The overnight range's place is not part of it (the study's DECLARED reads four facts).
+  assert.strictEqual(declaredOf(b({ ...L, long: { ...L.long, overnight: 'broke out against' } }), 'long'), true);
+  assert.strictEqual(declaredOf(b({ ...L, long: { ...L.long, vwapAtr: 0.01 } }), 'long'), true, 'just above 0');
 });
