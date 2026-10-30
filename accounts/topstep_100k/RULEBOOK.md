@@ -99,7 +99,8 @@ each trade from its recorded path, prop/attempts.js exitAs):
   bars only) stands beyond it, then trails behind that swing; the latest
   swing counts even one confirmed before the entry, so `trail_r` applies
   only when the bars hold no swing at all. With `trail_by: r` it trails
-  `trail_r` behind the best price. A pre-registered study kept this: the
+  `trail_r` behind the best price. A pre-registered study
+  (docs/research/exit-trail-study.md) kept this: the
   stop held at the lock lets 5R+ trends run, and it beat a working R
   fallback and the ratchet on pass rate. Live, the runner
   cancels the entry's target order when it first manages the trade and moves

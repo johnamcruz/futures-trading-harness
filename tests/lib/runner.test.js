@@ -510,10 +510,10 @@ test('exit mode target_then_trail, live: the target order is cancelled, the stop
   // A bar through the new stop before it rests: out at market (an exit is never held).
   const thru = await trailSim({ tape: { 3: [21605, 21590, 21600] }, exit, record: { targetTicks: 400 }, until: et(10, 9) });
   assert.deepStrictEqual(thru.closedIds, ['MNQ']);
-  // Structure on 15m swings: these few bars confirm none, so the R trail (the fallback), and the runner says so.
+  // Structure on 15m swings: these few bars confirm none at all, so the R trail (the fallback), and the runner says so.
   const st = await trailSim({ tape, exit: { ...exit, trail_by: 'structure', swing_tf: '15m' }, record: { targetTicks: 400 }, until: et(10, 15) });
   assert.deepStrictEqual(st.modified, [21595, 21610]);
-  assert.ok(st.logs.some(l => /structure trail: no 15m swing confirmed yet; trailing 1R behind the best price \(the fallback\)/.test(l)), st.logs.join('\n'));
+  assert.ok(st.logs.some(l => /structure trail: no 15m swing in the bars at all; trailing 1R behind the best price \(the fallback\)/.test(l)), st.logs.join('\n'));
   const none = await trailSim({ tape, exit, until: et(10, 15) });
   assert.deepStrictEqual([none.modified, none.cancelled.includes(10)], [[21595, 21610], true], 'no bracket recorded: the one resting limit (21600) is its target');
 });

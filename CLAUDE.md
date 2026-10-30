@@ -208,7 +208,8 @@ request, every time, whatever the size of the change:
    `docs/research/cisd-ote-textbook.md` (the census the `cisd` and
    `fib-retracement` skills cite), `docs/COMPOSED-ENTRY.md` (the
    approved design of `trade_lifecycle` that `prop_portfolio`, the
-   rulebook and the retired-strategy list point to), `docs/TRAINING.md`
+   rulebook and the retired-strategy list point to), `docs/research/exit-trail-study.md` (the exit-trail
+   study the rulebook's exit points to), `docs/TRAINING.md`
    (the training guide the replay's stages and the training preflight
    point to), and `docs/TOOL-CALLS-AND-ORCHESTRATION.md` (the tool-call and
    orchestration design the workflows, the runner's desk and the tool-call

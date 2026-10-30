@@ -627,7 +627,7 @@ function createRunner(deps) {
       }
       save(t);
       if (ok) {
-        const how = [plan.trailActivateR !== null ? `activate ${plan.trailActivateR}R, give back ${plan.trailGivebackR}R` : '', plan.afterTarget ? `past the target ${t.target}: lock at its R less ${plan.afterTarget.lockGivebackR}R${plan.afterTarget.ratchet ? ' (ratchet on: from the best R reached)' : ''}, trail ${plan.afterTarget.trailBy === 'structure' ? `behind ${plan.afterTarget.swingMinutes}m swings (${plan.afterTarget.trailR}R until one is confirmed)` : `${plan.afterTarget.trailR}R`}` : '', plan.maxBars ? `time stop ${plan.maxBars} ${strategy.timeframe} bars = ${maxRunnerBars} ${cfg.timeframe}m bars` : ''].filter(Boolean).join('; ');
+        const how = [plan.trailActivateR !== null ? `activate ${plan.trailActivateR}R, give back ${plan.trailGivebackR}R` : '', plan.afterTarget ? `past the target ${t.target}: lock at its R less ${plan.afterTarget.lockGivebackR}R${plan.afterTarget.ratchet ? ' (ratchet on: from the best R reached)' : ''}, trail ${plan.afterTarget.trailBy === 'structure' ? `behind a ${plan.afterTarget.swingMinutes}m swing once one confirms beyond the lock (${plan.afterTarget.trailR}R only with no swing in the bars)` : `${plan.afterTarget.trailR}R`}` : '', plan.maxBars ? `time stop ${plan.maxBars} ${strategy.timeframe} bars = ${maxRunnerBars} ${cfg.timeframe}m bars` : ''].filter(Boolean).join('; ');
         log(`${item.symbol}: managing ${rec.setup} ${sign > 0 ? 'long' : 'short'} from ${entry}, 1R = ${risk} (${how})`);
         emit('position_managed', { symbol: item.symbol, contractId: cid, setup: rec.setup, side: sign > 0 ? 'long' : 'short', size: Number(p.size), entry, risk, stop: entry - sign * risk, plan, maxRunnerBars });
       } else if (managed) log(`${item.symbol}: ${rec.setup} position not managed (no trail, no time stop): no usable initial stop (1R ${risk}, needs 4+ ticks)`, 'error');
@@ -714,7 +714,7 @@ function createRunner(deps) {
       await closeOut(`time stop: ${barsHeld} ${cfg.timeframe}m bars in the trade (max_bars ${t.plan.maxBars})`);
       return;
     }
-    if (fellBack && !t.fellBackSaid) log(`${item.symbol}: structure trail: no ${t.plan.afterTarget.swingMinutes}m swing confirmed yet; trailing ${t.plan.afterTarget.trailR}R behind the best price (the fallback)`);
+    if (fellBack && !t.fellBackSaid) log(`${item.symbol}: structure trail: no ${t.plan.afterTarget.swingMinutes}m swing in the bars at all; trailing ${t.plan.afterTarget.trailR}R behind the best price (the fallback)`);
     save({ ...t, peakR, troughR, barsHeld, lastBarT, armed, fellBackSaid: Boolean(t.fellBackSaid || fellBack) });
     if (!stopOrder) {
       if (sign * (target - t.stop) < tick - 1e-9) return;

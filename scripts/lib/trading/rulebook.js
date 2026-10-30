@@ -36,8 +36,9 @@ const EXIT_KEYS = Object.freeze(['mode', 'trail_activate_r', 'trail_giveback_r',
  * - `target`: at each trade's own stop and target (a compose record's brackets, a rules component's own exit), with
  *   the trail on top only when trail_activate_r and trail_giveback_r are R;
  * - `target_then_trail`: the original stop until the trade's own target is reached, then no exit there: the stop
- *   locks at the target's R less lock_giveback_r and trails behind the last confirmed swing on swing_tf (trail_by
- *   structure; trail_r behind the best price until a swing is confirmed) or trail_r behind the best price (trail_by r)
+ *   holds at the target's R less lock_giveback_r until the latest confirmed swing on swing_tf stands beyond it, then
+ *   trails behind it (trail_by structure; trail_r behind the best price only with no swing in the bars at all) or
+ *   trail_r behind the best price (trail_by r)
  *   (trading/exit-trail.js); `ratchet: on` (opt in; `off` is the default, today's lock) lifts the lock with the trade:
  *   the best R reached, at least the target's, less lock_giveback_r;
  * - `trail`: the trail replaces the trade's own target (hold its stop until trail_activate_r, then trail_giveback_r
@@ -139,7 +140,7 @@ const EXIT_VALUE = {
 /**
  * Problems with one policy's exit: every key stated and valid, the mode one of EXIT_MODES, and the values the mode
  * uses set while the rest are `off`: target, the trail both off or both R (a trail on top); trail, both R;
- * target_then_trail, the lock, trail_by and trail_r set (trail_r: the R trail, and the structure trail's fallback),
+ * target_then_trail, the lock, trail_by and trail_r set (trail_r: the R trail, and the structure trail's fallback with no swing in the bars),
  * swing_tf with trail_by structure only, and no 2R-style trail.
  */
 function exitErrors(x, at) {
