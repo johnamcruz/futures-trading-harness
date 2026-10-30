@@ -27,8 +27,8 @@ description: Use before a trade_lifecycle entry - compose the trade as reads wit
    | entry | the entry timing (3m): the next candle closed after the setup's, its way: `3m close top` (short: bottom), `3m momentum up`, absorption; no 3m turn or break to wait for | `candle-reading`, `momentum-and-volume`, `absorption` |
    | stop | the stop (compose's): one tick beyond the level you name, the setup candle's extreme as a rule: `stop 15m low <price>` (short: high), `stop swing low <price>`, `stop 15m box low <price>`; under the floor refused, never widened | `invalidation` |
    | target | `target trail`: the 2R mark that arms the trail, not the exit (a level ahead is context). Not in a prop attempt, on a side the side rule doesn't give: the first level at 2R or more (`target <level> <price>`), or `target 2r` | `take-profit` |
-   | size | contracts; a healthy account (balance ≥ start, no loss streak): the full verdict size, the code computes it | `position-sizing`, `prop-challenge-pacing`, `prop-pacing-judgment` |
-   | management | once filled: the stop and the trail exit it (at 2R the policy's exit locks the stop and trails it); never widen it, move it by feel or close early | `manage-position` |
+   | size | contracts; a healthy account (balance ≥ start, no loss streak): the full verdict size, the code computes it; fewer than 3 (the rulebook's `min_contracts`) at the stop: skip | `position-sizing`, `prop-challenge-pacing`, `prop-pacing-judgment` |
+   | management | once filled: the stop and the trail exit it. At 2R nothing exits: the runner has cancelled the 2R order (when it first manages the trade), and the stop locks at +0.5R (2R less the rulebook's `lock_giveback_r`) and trails. Never widen it, move it by feel or close early | `manage-position` |
 
    Support only, never the setup or entry read: `at`, `touched`, `swept`,
    `in ote`, `3m volume high`, `participation high`; a CISD or compression setup is

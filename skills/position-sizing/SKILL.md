@@ -12,8 +12,10 @@ description: Use when sizing a trade plan - risk per contract, the budget, the c
 
 ## How It Works
 
-Healthy account (balance ≥ start, no loss streak): take the full verdict
-size; the code computes it. Phase 2 cuts only on a pacing rule.
+**In a prop attempt**: a healthy account (balance ≥ start, no loss streak)
+takes the full verdict size; the code computes it. Phase 2 cuts only on a
+pacing rule. Fewer than 3 contracts (`min_contracts`) at the stop:
+skip.
 
 1. **Specs from the API, always.** `search_contracts` / `get_contract` return
    `tickSize` and `tickValue`. Micro and mini specs to sanity-check them: the
@@ -22,7 +24,7 @@ size; the code computes it. Phase 2 cuts only on a pacing rule.
    fees from the account, if known). A stop can fill a tick or more past its
    price: when the room to the loss floor or the daily limit sets the size,
    count a tick of slippage per contract too (a policy verdict already does).
-3. **Risk budget** = the smallest of:
+3. **Risk budget** (outside an attempt) = the smallest of:
    - the strategy / plan $ risk (a composed trade: at most its $300 cap),
    - 25% of `remainingBeforeLimit` from `get_account_snapshot`, when known,
    - 10% of the trailing-drawdown cushion (balance − loss floor), when shown.
@@ -59,9 +61,6 @@ size; the code computes it. Phase 2 cuts only on a pacing rule.
    stop always working) still applies. The verdict is the most the account
    allows: phase 2 cuts it only on a pacing rule (a losing account, a loss
    streak, drawdown: `Size: <n> (<rule>)`) or passes.
-   In a prop attempt, the size you state is a suggestion: code translates it
-   at entry to the rulebook's size (min_contracts and the budget); read the
-   size it returns.
 7. Outside a prop attempt only, the priority order (strategy-library)
    halves a trade as it says there. Never round a half up. A composed
    trade: `confluence-counting` sizes it, under the caps.

@@ -512,9 +512,12 @@ Prior 4h low 21440.50: 49.50 pts = 198 ticks, $99.00, 4.40R (extended).
 
 ## How It Works
 
-Healthy account (balance ≥ start, no loss streak): take the full verdict
-size; the code computes it.
-  Phase 2 cuts only on a pacing rule.
+**In a prop attempt**: a healthy account (balance ≥ start, no loss streak)
+takes the full verdict size; the code computes it.
+  Phase 2 cuts only on a
+pacing rule.
+  Fewer than 3 contracts (`min_contracts`) at the stop:
+skip.
 
 1.
   **Specs from the API, always.** `search_contracts` / `get_contract` return
@@ -528,7 +531,7 @@ size; the code computes it.
    price: when the room to the loss floor or the daily limit sets the size,
    count a tick of slippage per contract too (a policy verdict already does).
 3.
-  **Risk budget** = the smallest of:
+  **Risk budget** (outside an attempt) = the smallest of:
    - the strategy / plan $ risk (a composed trade: at most its $300 cap),
    - 25% of `remainingBeforeLimit` from `get_account_snapshot`, when known,
    - 10% of the trailing-drawdown cushion (balance − loss floor), when shown.
@@ -576,9 +579,6 @@ size; the code computes it.
   The verdict is the most the account
    allows: phase 2 cuts it only on a pacing rule (a losing account, a loss
    streak, drawdown: `Size: <n> (<rule>)`) or passes.
-   In a prop attempt, the size you state is a suggestion: code translates it
-   at entry to the rulebook's size (min_contracts and the budget); read the
-   size it returns.
 7.
   Outside a prop attempt only, the priority order (strategy-library)
    halves a trade as it says there.
@@ -1615,9 +1615,12 @@ Prior 4h low 21440.50: 49.50 pts = 198 ticks, $99.00, 4.40R (extended).
 
 ## How It Works
 
-Healthy account (balance ≥ start, no loss streak): take the full verdict
-size; the code computes it.
-  Phase 2 cuts only on a pacing rule.
+**In a prop attempt**: a healthy account (balance ≥ start, no loss streak)
+takes the full verdict size; the code computes it.
+  Phase 2 cuts only on a
+pacing rule.
+  Fewer than 3 contracts (`min_contracts`) at the stop:
+skip.
 
 1.
   **Specs from the API, always.** `search_contracts` / `get_contract` return
@@ -1631,7 +1634,7 @@ size; the code computes it.
    price: when the room to the loss floor or the daily limit sets the size,
    count a tick of slippage per contract too (a policy verdict already does).
 3.
-  **Risk budget** = the smallest of:
+  **Risk budget** (outside an attempt) = the smallest of:
    - the strategy / plan $ risk (a composed trade: at most its $300 cap),
    - 25% of `remainingBeforeLimit` from `get_account_snapshot`, when known,
    - 10% of the trailing-drawdown cushion (balance − loss floor), when shown.
@@ -1679,9 +1682,6 @@ size; the code computes it.
   The verdict is the most the account
    allows: phase 2 cuts it only on a pacing rule (a losing account, a loss
    streak, drawdown: `Size: <n> (<rule>)`) or passes.
-   In a prop attempt, the size you state is a suggestion: code translates it
-   at entry to the rulebook's size (min_contracts and the budget); read the
-   size it returns.
 7.
   Outside a prop attempt only, the priority order (strategy-library)
    halves a trade as it says there.
@@ -2727,9 +2727,12 @@ Prior 4h low 21440.50: 49.50 pts = 198 ticks, $99.00, 4.40R (extended).
 
 ## How It Works
 
-Healthy account (balance ≥ start, no loss streak): take the full verdict
-size; the code computes it.
-  Phase 2 cuts only on a pacing rule.
+**In a prop attempt**: a healthy account (balance ≥ start, no loss streak)
+takes the full verdict size; the code computes it.
+  Phase 2 cuts only on a
+pacing rule.
+  Fewer than 3 contracts (`min_contracts`) at the stop:
+skip.
 
 1.
   **Specs from the API, always.** `search_contracts` / `get_contract` return
@@ -2743,7 +2746,7 @@ size; the code computes it.
    price: when the room to the loss floor or the daily limit sets the size,
    count a tick of slippage per contract too (a policy verdict already does).
 3.
-  **Risk budget** = the smallest of:
+  **Risk budget** (outside an attempt) = the smallest of:
    - the strategy / plan $ risk (a composed trade: at most its $300 cap),
    - 25% of `remainingBeforeLimit` from `get_account_snapshot`, when known,
    - 10% of the trailing-drawdown cushion (balance − loss floor), when shown.
@@ -2791,9 +2794,6 @@ size; the code computes it.
   The verdict is the most the account
    allows: phase 2 cuts it only on a pacing rule (a losing account, a loss
    streak, drawdown: `Size: <n> (<rule>)`) or passes.
-   In a prop attempt, the size you state is a suggestion: code translates it
-   at entry to the rulebook's size (min_contracts and the budget); read the
-   size it returns.
 7.
   Outside a prop attempt only, the priority order (strategy-library)
    halves a trade as it says there.
@@ -3830,9 +3830,12 @@ Prior 4h low 21440.50: 49.50 pts = 198 ticks, $99.00, 4.40R (extended).
 
 ## How It Works
 
-Healthy account (balance ≥ start, no loss streak): take the full verdict
-size; the code computes it.
-  Phase 2 cuts only on a pacing rule.
+**In a prop attempt**: a healthy account (balance ≥ start, no loss streak)
+takes the full verdict size; the code computes it.
+  Phase 2 cuts only on a
+pacing rule.
+  Fewer than 3 contracts (`min_contracts`) at the stop:
+skip.
 
 1.
   **Specs from the API, always.** `search_contracts` / `get_contract` return
@@ -3846,7 +3849,7 @@ size; the code computes it.
    price: when the room to the loss floor or the daily limit sets the size,
    count a tick of slippage per contract too (a policy verdict already does).
 3.
-  **Risk budget** = the smallest of:
+  **Risk budget** (outside an attempt) = the smallest of:
    - the strategy / plan $ risk (a composed trade: at most its $300 cap),
    - 25% of `remainingBeforeLimit` from `get_account_snapshot`, when known,
    - 10% of the trailing-drawdown cushion (balance − loss floor), when shown.
@@ -3894,9 +3897,6 @@ size; the code computes it.
   The verdict is the most the account
    allows: phase 2 cuts it only on a pacing rule (a losing account, a loss
    streak, drawdown: `Size: <n> (<rule>)`) or passes.
-   In a prop attempt, the size you state is a suggestion: code translates it
-   at entry to the rulebook's size (min_contracts and the budget); read the
-   size it returns.
 7.
   Outside a prop attempt only, the priority order (strategy-library)
    halves a trade as it says there.
@@ -4942,9 +4942,12 @@ Prior 4h low 21440.50: 49.50 pts = 198 ticks, $99.00, 4.40R (extended).
 
 ## How It Works
 
-Healthy account (balance ≥ start, no loss streak): take the full verdict
-size; the code computes it.
-  Phase 2 cuts only on a pacing rule.
+**In a prop attempt**: a healthy account (balance ≥ start, no loss streak)
+takes the full verdict size; the code computes it.
+  Phase 2 cuts only on a
+pacing rule.
+  Fewer than 3 contracts (`min_contracts`) at the stop:
+skip.
 
 1.
   **Specs from the API, always.** `search_contracts` / `get_contract` return
@@ -4958,7 +4961,7 @@ size; the code computes it.
    price: when the room to the loss floor or the daily limit sets the size,
    count a tick of slippage per contract too (a policy verdict already does).
 3.
-  **Risk budget** = the smallest of:
+  **Risk budget** (outside an attempt) = the smallest of:
    - the strategy / plan $ risk (a composed trade: at most its $300 cap),
    - 25% of `remainingBeforeLimit` from `get_account_snapshot`, when known,
    - 10% of the trailing-drawdown cushion (balance − loss floor), when shown.
@@ -5006,9 +5009,6 @@ size; the code computes it.
   The verdict is the most the account
    allows: phase 2 cuts it only on a pacing rule (a losing account, a loss
    streak, drawdown: `Size: <n> (<rule>)`) or passes.
-   In a prop attempt, the size you state is a suggestion: code translates it
-   at entry to the rulebook's size (min_contracts and the budget); read the
-   size it returns.
 7.
   Outside a prop attempt only, the priority order (strategy-library)
    halves a trade as it says there.
@@ -6045,9 +6045,12 @@ Prior 4h low 21440.50: 49.50 pts = 198 ticks, $99.00, 4.40R (extended).
 
 ## How It Works
 
-Healthy account (balance ≥ start, no loss streak): take the full verdict
-size; the code computes it.
-  Phase 2 cuts only on a pacing rule.
+**In a prop attempt**: a healthy account (balance ≥ start, no loss streak)
+takes the full verdict size; the code computes it.
+  Phase 2 cuts only on a
+pacing rule.
+  Fewer than 3 contracts (`min_contracts`) at the stop:
+skip.
 
 1.
   **Specs from the API, always.** `search_contracts` / `get_contract` return
@@ -6061,7 +6064,7 @@ size; the code computes it.
    price: when the room to the loss floor or the daily limit sets the size,
    count a tick of slippage per contract too (a policy verdict already does).
 3.
-  **Risk budget** = the smallest of:
+  **Risk budget** (outside an attempt) = the smallest of:
    - the strategy / plan $ risk (a composed trade: at most its $300 cap),
    - 25% of `remainingBeforeLimit` from `get_account_snapshot`, when known,
    - 10% of the trailing-drawdown cushion (balance − loss floor), when shown.
@@ -6109,9 +6112,6 @@ size; the code computes it.
   The verdict is the most the account
    allows: phase 2 cuts it only on a pacing rule (a losing account, a loss
    streak, drawdown: `Size: <n> (<rule>)`) or passes.
-   In a prop attempt, the size you state is a suggestion: code translates it
-   at entry to the rulebook's size (min_contracts and the budget); read the
-   size it returns.
 7.
   Outside a prop attempt only, the priority order (strategy-library)
    halves a trade as it says there.
@@ -7148,9 +7148,12 @@ Prior 4h low 21440.50: 49.50 pts = 198 ticks, $99.00, 4.40R (extended).
 
 ## How It Works
 
-Healthy account (balance ≥ start, no loss streak): take the full verdict
-size; the code computes it.
-  Phase 2 cuts only on a pacing rule.
+**In a prop attempt**: a healthy account (balance ≥ start, no loss streak)
+takes the full verdict size; the code computes it.
+  Phase 2 cuts only on a
+pacing rule.
+  Fewer than 3 contracts (`min_contracts`) at the stop:
+skip.
 
 1.
   **Specs from the API, always.** `search_contracts` / `get_contract` return
@@ -7164,7 +7167,7 @@ size; the code computes it.
    price: when the room to the loss floor or the daily limit sets the size,
    count a tick of slippage per contract too (a policy verdict already does).
 3.
-  **Risk budget** = the smallest of:
+  **Risk budget** (outside an attempt) = the smallest of:
    - the strategy / plan $ risk (a composed trade: at most its $300 cap),
    - 25% of `remainingBeforeLimit` from `get_account_snapshot`, when known,
    - 10% of the trailing-drawdown cushion (balance − loss floor), when shown.
@@ -7212,9 +7215,6 @@ size; the code computes it.
   The verdict is the most the account
    allows: phase 2 cuts it only on a pacing rule (a losing account, a loss
    streak, drawdown: `Size: <n> (<rule>)`) or passes.
-   In a prop attempt, the size you state is a suggestion: code translates it
-   at entry to the rulebook's size (min_contracts and the budget); read the
-   size it returns.
 7.
   Outside a prop attempt only, the priority order (strategy-library)
    halves a trade as it says there.
@@ -8348,9 +8348,12 @@ Prior 4h low 21440.50: 49.50 pts = 198 ticks, $99.00, 4.40R (extended).
 
 ## How It Works
 
-Healthy account (balance ≥ start, no loss streak): take the full verdict
-size; the code computes it.
-  Phase 2 cuts only on a pacing rule.
+**In a prop attempt**: a healthy account (balance ≥ start, no loss streak)
+takes the full verdict size; the code computes it.
+  Phase 2 cuts only on a
+pacing rule.
+  Fewer than 3 contracts (`min_contracts`) at the stop:
+skip.
 
 1.
   **Specs from the API, always.** `search_contracts` / `get_contract` return
@@ -8364,7 +8367,7 @@ size; the code computes it.
    price: when the room to the loss floor or the daily limit sets the size,
    count a tick of slippage per contract too (a policy verdict already does).
 3.
-  **Risk budget** = the smallest of:
+  **Risk budget** (outside an attempt) = the smallest of:
    - the strategy / plan $ risk (a composed trade: at most its $300 cap),
    - 25% of `remainingBeforeLimit` from `get_account_snapshot`, when known,
    - 10% of the trailing-drawdown cushion (balance − loss floor), when shown.
@@ -8412,9 +8415,6 @@ size; the code computes it.
   The verdict is the most the account
    allows: phase 2 cuts it only on a pacing rule (a losing account, a loss
    streak, drawdown: `Size: <n> (<rule>)`) or passes.
-   In a prop attempt, the size you state is a suggestion: code translates it
-   at entry to the rulebook's size (min_contracts and the budget); read the
-   size it returns.
 7.
   Outside a prop attempt only, the priority order (strategy-library)
    halves a trade as it says there.
@@ -9545,9 +9545,12 @@ Prior 4h low 21440.50: 49.50 pts = 198 ticks, $99.00, 4.40R (extended).
 
 ## How It Works
 
-Healthy account (balance ≥ start, no loss streak): take the full verdict
-size; the code computes it.
-  Phase 2 cuts only on a pacing rule.
+**In a prop attempt**: a healthy account (balance ≥ start, no loss streak)
+takes the full verdict size; the code computes it.
+  Phase 2 cuts only on a
+pacing rule.
+  Fewer than 3 contracts (`min_contracts`) at the stop:
+skip.
 
 1.
   **Specs from the API, always.** `search_contracts` / `get_contract` return
@@ -9561,7 +9564,7 @@ size; the code computes it.
    price: when the room to the loss floor or the daily limit sets the size,
    count a tick of slippage per contract too (a policy verdict already does).
 3.
-  **Risk budget** = the smallest of:
+  **Risk budget** (outside an attempt) = the smallest of:
    - the strategy / plan $ risk (a composed trade: at most its $300 cap),
    - 25% of `remainingBeforeLimit` from `get_account_snapshot`, when known,
    - 10% of the trailing-drawdown cushion (balance − loss floor), when shown.
@@ -9609,9 +9612,6 @@ size; the code computes it.
   The verdict is the most the account
    allows: phase 2 cuts it only on a pacing rule (a losing account, a loss
    streak, drawdown: `Size: <n> (<rule>)`) or passes.
-   In a prop attempt, the size you state is a suggestion: code translates it
-   at entry to the rulebook's size (min_contracts and the budget); read the
-   size it returns.
 7.
   Outside a prop attempt only, the priority order (strategy-library)
    halves a trade as it says there.
@@ -10736,9 +10736,12 @@ Prior 4h low 21440.50: 49.50 pts = 198 ticks, $99.00, 4.40R (extended).
 
 ## How It Works
 
-Healthy account (balance ≥ start, no loss streak): take the full verdict
-size; the code computes it.
-  Phase 2 cuts only on a pacing rule.
+**In a prop attempt**: a healthy account (balance ≥ start, no loss streak)
+takes the full verdict size; the code computes it.
+  Phase 2 cuts only on a
+pacing rule.
+  Fewer than 3 contracts (`min_contracts`) at the stop:
+skip.
 
 1.
   **Specs from the API, always.** `search_contracts` / `get_contract` return
@@ -10752,7 +10755,7 @@ size; the code computes it.
    price: when the room to the loss floor or the daily limit sets the size,
    count a tick of slippage per contract too (a policy verdict already does).
 3.
-  **Risk budget** = the smallest of:
+  **Risk budget** (outside an attempt) = the smallest of:
    - the strategy / plan $ risk (a composed trade: at most its $300 cap),
    - 25% of `remainingBeforeLimit` from `get_account_snapshot`, when known,
    - 10% of the trailing-drawdown cushion (balance − loss floor), when shown.
@@ -10800,9 +10803,6 @@ size; the code computes it.
   The verdict is the most the account
    allows: phase 2 cuts it only on a pacing rule (a losing account, a loss
    streak, drawdown: `Size: <n> (<rule>)`) or passes.
-   In a prop attempt, the size you state is a suggestion: code translates it
-   at entry to the rulebook's size (min_contracts and the budget); read the
-   size it returns.
 7.
   Outside a prop attempt only, the priority order (strategy-library)
    halves a trade as it says there.
@@ -11854,9 +11854,12 @@ Prior 4h low 21440.50: 49.50 pts = 198 ticks, $99.00, 4.40R (extended).
 
 ## How It Works
 
-Healthy account (balance ≥ start, no loss streak): take the full verdict
-size; the code computes it.
-  Phase 2 cuts only on a pacing rule.
+**In a prop attempt**: a healthy account (balance ≥ start, no loss streak)
+takes the full verdict size; the code computes it.
+  Phase 2 cuts only on a
+pacing rule.
+  Fewer than 3 contracts (`min_contracts`) at the stop:
+skip.
 
 1.
   **Specs from the API, always.** `search_contracts` / `get_contract` return
@@ -11870,7 +11873,7 @@ size; the code computes it.
    price: when the room to the loss floor or the daily limit sets the size,
    count a tick of slippage per contract too (a policy verdict already does).
 3.
-  **Risk budget** = the smallest of:
+  **Risk budget** (outside an attempt) = the smallest of:
    - the strategy / plan $ risk (a composed trade: at most its $300 cap),
    - 25% of `remainingBeforeLimit` from `get_account_snapshot`, when known,
    - 10% of the trailing-drawdown cushion (balance − loss floor), when shown.
@@ -11918,9 +11921,6 @@ size; the code computes it.
   The verdict is the most the account
    allows: phase 2 cuts it only on a pacing rule (a losing account, a loss
    streak, drawdown: `Size: <n> (<rule>)`) or passes.
-   In a prop attempt, the size you state is a suggestion: code translates it
-   at entry to the rulebook's size (min_contracts and the budget); read the
-   size it returns.
 7.
   Outside a prop attempt only, the priority order (strategy-library)
    halves a trade as it says there.
@@ -13054,9 +13054,12 @@ Prior 4h low 21440.50: 49.50 pts = 198 ticks, $99.00, 4.40R (extended).
 
 ## How It Works
 
-Healthy account (balance ≥ start, no loss streak): take the full verdict
-size; the code computes it.
-  Phase 2 cuts only on a pacing rule.
+**In a prop attempt**: a healthy account (balance ≥ start, no loss streak)
+takes the full verdict size; the code computes it.
+  Phase 2 cuts only on a
+pacing rule.
+  Fewer than 3 contracts (`min_contracts`) at the stop:
+skip.
 
 1.
   **Specs from the API, always.** `search_contracts` / `get_contract` return
@@ -13070,7 +13073,7 @@ size; the code computes it.
    price: when the room to the loss floor or the daily limit sets the size,
    count a tick of slippage per contract too (a policy verdict already does).
 3.
-  **Risk budget** = the smallest of:
+  **Risk budget** (outside an attempt) = the smallest of:
    - the strategy / plan $ risk (a composed trade: at most its $300 cap),
    - 25% of `remainingBeforeLimit` from `get_account_snapshot`, when known,
    - 10% of the trailing-drawdown cushion (balance − loss floor), when shown.
@@ -13118,9 +13121,6 @@ size; the code computes it.
   The verdict is the most the account
    allows: phase 2 cuts it only on a pacing rule (a losing account, a loss
    streak, drawdown: `Size: <n> (<rule>)`) or passes.
-   In a prop attempt, the size you state is a suggestion: code translates it
-   at entry to the rulebook's size (min_contracts and the budget); read the
-   size it returns.
 7.
   Outside a prop attempt only, the priority order (strategy-library)
    halves a trade as it says there.
@@ -14245,9 +14245,12 @@ Prior 4h low 21440.50: 49.50 pts = 198 ticks, $99.00, 4.40R (extended).
 
 ## How It Works
 
-Healthy account (balance ≥ start, no loss streak): take the full verdict
-size; the code computes it.
-  Phase 2 cuts only on a pacing rule.
+**In a prop attempt**: a healthy account (balance ≥ start, no loss streak)
+takes the full verdict size; the code computes it.
+  Phase 2 cuts only on a
+pacing rule.
+  Fewer than 3 contracts (`min_contracts`) at the stop:
+skip.
 
 1.
   **Specs from the API, always.** `search_contracts` / `get_contract` return
@@ -14261,7 +14264,7 @@ size; the code computes it.
    price: when the room to the loss floor or the daily limit sets the size,
    count a tick of slippage per contract too (a policy verdict already does).
 3.
-  **Risk budget** = the smallest of:
+  **Risk budget** (outside an attempt) = the smallest of:
    - the strategy / plan $ risk (a composed trade: at most its $300 cap),
    - 25% of `remainingBeforeLimit` from `get_account_snapshot`, when known,
    - 10% of the trailing-drawdown cushion (balance − loss floor), when shown.
@@ -14309,9 +14312,6 @@ size; the code computes it.
   The verdict is the most the account
    allows: phase 2 cuts it only on a pacing rule (a losing account, a loss
    streak, drawdown: `Size: <n> (<rule>)`) or passes.
-   In a prop attempt, the size you state is a suggestion: code translates it
-   at entry to the rulebook's size (min_contracts and the budget); read the
-   size it returns.
 7.
   Outside a prop attempt only, the priority order (strategy-library)
    halves a trade as it says there.
@@ -15436,9 +15436,12 @@ Prior 4h low 21440.50: 49.50 pts = 198 ticks, $99.00, 4.40R (extended).
 
 ## How It Works
 
-Healthy account (balance ≥ start, no loss streak): take the full verdict
-size; the code computes it.
-  Phase 2 cuts only on a pacing rule.
+**In a prop attempt**: a healthy account (balance ≥ start, no loss streak)
+takes the full verdict size; the code computes it.
+  Phase 2 cuts only on a
+pacing rule.
+  Fewer than 3 contracts (`min_contracts`) at the stop:
+skip.
 
 1.
   **Specs from the API, always.** `search_contracts` / `get_contract` return
@@ -15452,7 +15455,7 @@ size; the code computes it.
    price: when the room to the loss floor or the daily limit sets the size,
    count a tick of slippage per contract too (a policy verdict already does).
 3.
-  **Risk budget** = the smallest of:
+  **Risk budget** (outside an attempt) = the smallest of:
    - the strategy / plan $ risk (a composed trade: at most its $300 cap),
    - 25% of `remainingBeforeLimit` from `get_account_snapshot`, when known,
    - 10% of the trailing-drawdown cushion (balance − loss floor), when shown.
@@ -15500,9 +15503,6 @@ size; the code computes it.
   The verdict is the most the account
    allows: phase 2 cuts it only on a pacing rule (a losing account, a loss
    streak, drawdown: `Size: <n> (<rule>)`) or passes.
-   In a prop attempt, the size you state is a suggestion: code translates it
-   at entry to the rulebook's size (min_contracts and the budget); read the
-   size it returns.
 7.
   Outside a prop attempt only, the priority order (strategy-library)
    halves a trade as it says there.
@@ -16636,9 +16636,12 @@ Prior 4h low 21440.50: 49.50 pts = 198 ticks, $99.00, 4.40R (extended).
 
 ## How It Works
 
-Healthy account (balance ≥ start, no loss streak): take the full verdict
-size; the code computes it.
-  Phase 2 cuts only on a pacing rule.
+**In a prop attempt**: a healthy account (balance ≥ start, no loss streak)
+takes the full verdict size; the code computes it.
+  Phase 2 cuts only on a
+pacing rule.
+  Fewer than 3 contracts (`min_contracts`) at the stop:
+skip.
 
 1.
   **Specs from the API, always.** `search_contracts` / `get_contract` return
@@ -16652,7 +16655,7 @@ size; the code computes it.
    price: when the room to the loss floor or the daily limit sets the size,
    count a tick of slippage per contract too (a policy verdict already does).
 3.
-  **Risk budget** = the smallest of:
+  **Risk budget** (outside an attempt) = the smallest of:
    - the strategy / plan $ risk (a composed trade: at most its $300 cap),
    - 25% of `remainingBeforeLimit` from `get_account_snapshot`, when known,
    - 10% of the trailing-drawdown cushion (balance − loss floor), when shown.
@@ -16700,9 +16703,6 @@ size; the code computes it.
   The verdict is the most the account
    allows: phase 2 cuts it only on a pacing rule (a losing account, a loss
    streak, drawdown: `Size: <n> (<rule>)`) or passes.
-   In a prop attempt, the size you state is a suggestion: code translates it
-   at entry to the rulebook's size (min_contracts and the budget); read the
-   size it returns.
 7.
   Outside a prop attempt only, the priority order (strategy-library)
    halves a trade as it says there.
@@ -17764,9 +17764,12 @@ Prior 4h low 21440.50: 49.50 pts = 198 ticks, $99.00, 4.40R (extended).
 
 ## How It Works
 
-Healthy account (balance ≥ start, no loss streak): take the full verdict
-size; the code computes it.
-  Phase 2 cuts only on a pacing rule.
+**In a prop attempt**: a healthy account (balance ≥ start, no loss streak)
+takes the full verdict size; the code computes it.
+  Phase 2 cuts only on a
+pacing rule.
+  Fewer than 3 contracts (`min_contracts`) at the stop:
+skip.
 
 1.
   **Specs from the API, always.** `search_contracts` / `get_contract` return
@@ -17780,7 +17783,7 @@ size; the code computes it.
    price: when the room to the loss floor or the daily limit sets the size,
    count a tick of slippage per contract too (a policy verdict already does).
 3.
-  **Risk budget** = the smallest of:
+  **Risk budget** (outside an attempt) = the smallest of:
    - the strategy / plan $ risk (a composed trade: at most its $300 cap),
    - 25% of `remainingBeforeLimit` from `get_account_snapshot`, when known,
    - 10% of the trailing-drawdown cushion (balance − loss floor), when shown.
@@ -17828,9 +17831,6 @@ size; the code computes it.
   The verdict is the most the account
    allows: phase 2 cuts it only on a pacing rule (a losing account, a loss
    streak, drawdown: `Size: <n> (<rule>)`) or passes.
-   In a prop attempt, the size you state is a suggestion: code translates it
-   at entry to the rulebook's size (min_contracts and the budget); read the
-   size it returns.
 7.
   Outside a prop attempt only, the priority order (strategy-library)
    halves a trade as it says there.
@@ -18727,9 +18727,12 @@ Prior 4h low 21440.50: 49.50 pts = 198 ticks, $99.00, 4.40R (extended).
 
 ## How It Works
 
-Healthy account (balance ≥ start, no loss streak): take the full verdict
-size; the code computes it.
-  Phase 2 cuts only on a pacing rule.
+**In a prop attempt**: a healthy account (balance ≥ start, no loss streak)
+takes the full verdict size; the code computes it.
+  Phase 2 cuts only on a
+pacing rule.
+  Fewer than 3 contracts (`min_contracts`) at the stop:
+skip.
 
 1.
   **Specs from the API, always.** `search_contracts` / `get_contract` return
@@ -18743,7 +18746,7 @@ size; the code computes it.
    price: when the room to the loss floor or the daily limit sets the size,
    count a tick of slippage per contract too (a policy verdict already does).
 3.
-  **Risk budget** = the smallest of:
+  **Risk budget** (outside an attempt) = the smallest of:
    - the strategy / plan $ risk (a composed trade: at most its $300 cap),
    - 25% of `remainingBeforeLimit` from `get_account_snapshot`, when known,
    - 10% of the trailing-drawdown cushion (balance − loss floor), when shown.
@@ -18791,9 +18794,6 @@ size; the code computes it.
   The verdict is the most the account
    allows: phase 2 cuts it only on a pacing rule (a losing account, a loss
    streak, drawdown: `Size: <n> (<rule>)`) or passes.
-   In a prop attempt, the size you state is a suggestion: code translates it
-   at entry to the rulebook's size (min_contracts and the budget); read the
-   size it returns.
 7.
   Outside a prop attempt only, the priority order (strategy-library)
    halves a trade as it says there.

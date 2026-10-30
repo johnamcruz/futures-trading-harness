@@ -158,6 +158,8 @@ const SPLITS = {
         reason: "feat/bias-bg: stops locked (never a tighter stop; the floor stretch is code's); the half size only outside a prop attempt" },
       { from: "**Half size** wherever the priority order (strategy-library) halves a trade, computed as it says there.", to: null,
         reason: "feat/bias-bg: stops locked (never a tighter stop; the floor stretch is code's); the half size only outside a prop attempt" },
+      { from: "**Risk budget** = the smallest of: - the strategy / plan $ risk (a composed trade: at most its $300 cap), - 25% of `remainingBeforeLimit` from `get_account_snapshot`, when known, - 10% of the trailing-drawdown cushion (balance − loss floor), when shown.", to: "**Risk budget** (outside an attempt) = the smallest of: - the strategy / plan $ risk (a composed trade: at most its $300 cap), - 25% of `remainingBeforeLimit` from `get_account_snapshot`, when known, - 10% of the trailing-drawdown cushion (balance − loss floor), when shown.",
+        reason: "feat/bias-bg (the context quiz): the prop rule leads the skill (the code computes the size); the translation line is said once there" },
     ],
     moved: {
       // Step 1's table and the contract-naming paragraph, and the sentence that introduced the table.

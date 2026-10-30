@@ -42,8 +42,8 @@ side; no trend anywhere, both sides).
 ### 2. Levels flow down
 
 Levels come from the 1h and higher, the session and day (prior RTH, IB,
-overnight), the VWAP and the 15m swings; never the 3m (its swings are for
-the stop only). A setup that runs straight into one: a read against. The
+overnight), the VWAP and the 15m swings. A 3m swing is not a level and not
+a target. It is only where the stop goes. A setup that runs straight into one: a read against. The
 trail exits (`take-profit`). Where each frame's levels are: the
 `timeframe-sources` skill. Each timeframe's last completed candle and the
 levels it met: the `candle-reading` skill. Top down: `top-down-entry`.

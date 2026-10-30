@@ -20,10 +20,8 @@ its own stop: a read beside the target, not a pass), and the session window`,
 (\`trade-lifecycle\`); its policy's \`exit\` (the rulebook; a rules strategy's:
 the scan's) manages it:
 
-- **Target then trail** (today's policy mode, in an attempt or not): the
-  runner cancels the target order once it manages the trade, holds the stop
-  until the target, then locks and trails it. You tighten it only behind
-  turned structure (\`manage-position\`).
+- **Target then trail** (today's policy mode, in an attempt or not): At 2R nothing exits: the runner has cancelled the 2R order; the stop locks at +0.5R and trails.
+  You tighten it only behind turned structure (\`manage-position\`).
 - **Trailing:**`,
     reason: 'a composed trade\'s exit is its record\'s stop and target, managed by its policy\'s exit mode (evaluator.js composedExit, in an attempt or not; today target_then_trail, the rulebook); then feat/bias-bg: the model tightens it only behind turned structure (manage-position), never by feel' },
   { old: '  from the scan\'s `exit`, don\'t assume them.', now: '  from its `exit`, don\'t assume them.', reason: 'a policy\'s exit is its rulebook\'s, not the scan\'s' },

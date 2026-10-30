@@ -115,7 +115,7 @@ In a prop attempt, full is the translated size; cut only on a pacing rule
    ticks, the sides they sit on, and the risk per contract with the plan's;
    different stop ticks or a stop on the wrong side is a VETO with
    order_plan's stop as the fix. Size is not order_plan's to set: a plan may
-   be smaller (the priority order may halve it), a
+   be smaller, a
    policy verdict's entry is at most order_plan's size, a rules
    strategy's size follows position-sizing, and a composed entry's the
    record's (order_plan refuses it over its cap or verdict); in a prop
@@ -196,7 +196,8 @@ The code reads your report; anything else reads as a veto:
 - Size → its own line, `Size: <n>`: the final size alone, reasoning on
   the lines before (7 Risk). A prose Size line ("Size: I'd go with 3")
   beside `VERDICT: APPROVE - size 3` is a readable approved size; its cuts
-  bind; a second, smaller size is no trade. To cut, approve the smaller size.
+  bind; a second, smaller size is no trade. A bare `VERDICT: APPROVE` (no size) is unreadable even beside a Size line: one restate, never a veto. To cut,
+  approve the smaller size.
 - Every size and "cut to" on the VERDICT and Size lines binds.
 - These read as a veto: `Decision: cut to size 1`, `8 Decision: valid
   yes`, `Sizing verdict: skip x0.5`.

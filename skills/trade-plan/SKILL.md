@@ -31,10 +31,8 @@ The exit: a composed trade sends the record's stop and target
 (`trade-lifecycle`); its policy's `exit` (the rulebook; a rules strategy's:
 the scan's) manages it:
 
-- **Target then trail** (today's policy mode, in an attempt or not): the
-  runner cancels the target order once it manages the trade, holds the stop
-  until the target, then locks and trails it. You tighten it only behind
-  turned structure (`manage-position`).
+- **Target then trail** (today's policy mode, in an attempt or not): At 2R nothing exits: the runner has cancelled the 2R order; the stop locks at +0.5R and trails.
+  You tighten it only behind turned structure (`manage-position`).
 - **Trailing:** stop only, no target order. The runner (or you, without one)
   trails it from `trailActivateR` with `trailGivebackR` give-back; read both
   from its `exit`, don't assume them.
