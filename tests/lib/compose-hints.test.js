@@ -15,6 +15,9 @@ const H = require('../../scripts/lib/trading/compose-hints');
 const RULE = stopRuleOf({ stop_buffer_ticks: 1, stop_floor_ticks: 8, stop_floor_atr: 0.25 });
 const PLAN = { size: 1, tickValue: 0.5, minRR: 2, maxRiskUsd: 300, stopRule: RULE, suggestion: false };
 const brief = (edit = () => {}) => { const b = scenario1(); b.sections.m3.data.windowEntries = 'allowed'; edit(b); return b; };
+// A bar the entry rule's side check refuses (both HTF frames ranging, no declared trend): no trail target, so the
+// named-level and 2R-mark hints (on a side the rule allows, the trail comes first: the trail test below).
+const noTrail = b => { b.sections.h1.data.h4 = { trend: 'range' }; b.sections.h1.data.h1 = { trend: 'range' }; delete b.sections.m3.data.declared; };
 const swap = (step, read) => [...SCENARIO_1.filter(r => r.step !== step), { step, skill: 'candle-reading', read, why: 'x' }];
 function hints(reads, { b = brief(), side = 'long', standard = null } = {}) {
   const checked = checkReads({ reads, side, briefing: b });
@@ -72,21 +75,21 @@ test('compose hints: a directionless entry names the TRUE confirmations on a can
 });
 
 test('compose hints: a false target lists the named levels at the minimum R:R from the stop, with their R', () => {
-  const r = hints(swap('target', 'target 1h swing 21600'));
+  const r = hints(swap('target', 'target 1h swing 21600'), { b: brief(noTrail) });
   assert.strictEqual(r.checked.ok, false);
   assert.ok(r.lines.includes('target: named levels at 2R or more from the stop at 21512.75: "target 1h swing high 21598" (2.08R)'), r.lines.join('\n'));
   allTrue(r);
 });
 
 test('compose hints: a target under the minimum R:R with no named level reaching it says so, nearest first', () => {
-  const r = hints(swap('target', 'target 15m swing 21560'), { b: brief(b => { b.sections.m3.data.swingTargets.above = [{ frame: '15m', price: 21560 }]; }) });
+  const r = hints(swap('target', 'target 15m swing 21560'), { b: brief(b => { noTrail(b); b.sections.m3.data.swingTargets.above = [{ frame: '15m', price: 21560 }]; }) });
   assert.ok(r.planned.problems.some(p => /^R:R .* under the strategy's min 2/.test(p)));
   assert.match(r.lines.find(l => l.startsWith('target:')), /^target: no named level reaches 2R from the stop at 21512\.75 \(nearest: "target 15m swing high 21560" 0\.71R/);
   allTrue(r);
 });
 
 test('compose hints: no named level on the winning side: the hint names the 2R mark, and the whole passes with it', () => {
-  const r = hints(swap('target', 'target 1h swing 21598'), { b: brief(b => { b.sections.m3.data.swingTargets.above = []; b.keyLevels = b.keyLevels.filter(x => x[1] < 21540); }) });
+  const r = hints(swap('target', 'target 1h swing 21598'), { b: brief(b => { noTrail(b); b.sections.m3.data.swingTargets.above = []; b.keyLevels = b.keyLevels.filter(x => x[1] < 21540); }) });
   assert.ok(r.lines.includes('target: no named level the trade\'s way: "target 2r", the 2R mark 21595.75 from the stop at 21512.75; past it the runner trails'), r.lines.join('\n'));
   const whole = r.lines.find(l => l.startsWith('these reads pass together'));
   assert.ok(whole && whole.includes('"target 2r"') && passes(whole, r.b, 'long'), whole);
@@ -265,18 +268,26 @@ test('compose hints: a leg-turned problem keeps the repair: a leg read of the mo
   assert.ok(none === null || none.checked.ok);
 });
 
-test('compose hints: no named level reaching 2R, the 4h and 1h both the side\'s way: the hint is the trail, and the whole passes with it (never a pass for want of a level)', () => {
+test('compose hints: no named level reaching 2R, on a side the entry rule allows: the hint is the trail, and the whole passes with it (never a pass for want of a level)', () => {
   const aligned = b => { b.sections.m3.data.swingTargets.above = [{ frame: '15m', price: 21560 }]; b.sections.h1.data.h4 = { trend: 'up' }; };
   const r = hints(swap('target', 'target 15m swing 21560'), { b: brief(aligned) });
   assert.ok(r.planned.problems.some(p => /^R:R .* under the strategy's min 2/.test(p)));
-  assert.strictEqual(r.lines.find(l => l.startsWith('target:')), 'target: HTF-aligned (4h and 1h your way): "target trail" (the 2R mark 21595.75 from the stop at 21512.75 arms it); a level ahead is context, never a requirement');
+  assert.strictEqual(r.lines.find(l => l.startsWith('target:')), 'target: the entry rule allows the side: "target trail" (the 2R mark 21595.75 from the stop at 21512.75 arms it); a level ahead is context, never a requirement');
   const whole = r.lines.find(l => l.startsWith('these reads pass together'));
   assert.ok(whole && whole.includes('"target trail"') && passes(whole, r.b, 'long'), whole);
-  // The targets a plan can take: aligned, the trail first, the named ones context after it; not aligned (scenario 1's
-  // own 4h range): no trail.
+  // The targets a plan can take: on a side the rule allows, the trail first, the named ones context after it.
   assert.deepStrictEqual(H.targetsOf(brief(aligned), 'long', 0.25).map(x => x.read), ['target trail', 'target 15m swing high 21560']);
   // Aligned with a named level at 2R or more: still the trail (the level is context, never the requirement).
   const far = hints(swap('target', 'target 1h swing 21600'), { b: brief(b => { b.sections.h1.data.h4 = { trend: 'up' }; }) });
-  assert.match(far.lines.find(l => l.startsWith('target:')), /^target: HTF-aligned \(4h and 1h your way\): "target trail"/);
-  assert.ok(!H.targetsOf(brief(), 'long', 0.25).some(x => x.trail));
+  assert.match(far.lines.find(l => l.startsWith('target:')), /^target: the entry rule allows the side: "target trail"/);
+  // BG-only sides take it too (the owner: always trail): scenario 1's own 4h range beside its 1h up, the 4h up beside a
+  // 1h range, and for a short the 4h down beside a 1h range; a side the rule refuses never (both ranging, nothing
+  // declared; a frame against).
+  const tr = (edit, side = 'long') => H.targetsOf(brief(edit), side, 0.25).some(x => x.trail);
+  assert.strictEqual(tr(() => {}), true, '4h range, 1h up');
+  assert.strictEqual(tr(b => { b.sections.h1.data.h4 = { trend: 'up' }; b.sections.h1.data.h1 = { trend: 'range' }; }), true, '4h up, 1h range');
+  assert.strictEqual(tr(b => { b.sections.h1.data.h4 = { trend: 'down' }; b.sections.h1.data.h1 = { trend: 'range' }; }, 'short'), true, 'a short: 4h down, 1h range');
+  assert.strictEqual(tr(noTrail), false, 'both ranging, nothing declared');
+  assert.strictEqual(tr(b => { b.sections.h1.data.h4 = { trend: 'down' }; }), false, 'the 4h against the long');
+  assert.strictEqual(tr(() => {}, 'short'), false, 'a short against the 1h up');
 });

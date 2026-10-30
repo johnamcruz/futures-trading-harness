@@ -993,11 +993,11 @@ test('order gate hook and MCP gateway wiring: the shipped entry rule (BG, bias_a
   }
 });
 
-test('order gate hook and MCP gateway wiring: a trail-target record (the 4h and 1h up, the 2R mark) goes as its record says, the bracket at the stop and the mark; the 1h ranging, both refuse it; an exit goes', { timeout: 60000 }, async () => {
+test('order gate hook and MCP gateway wiring: a trail-target record (the 4h and 1h up, the 2R mark) goes as its record says, the bracket at the stop and the mark; the 1h against the side, both refuse it; an exit goes', { timeout: 60000 }, async () => {
   const LC = require('../fixtures/lifecycle');
   const { writeBriefing } = require('../../scripts/lib/trading/briefing');
   const reads = LC.READS.map(x => (x.step === 'target' ? { ...x, read: 'target trail' } : x));
-  for (const t1h of ['up', 'range']) {
+  for (const t1h of ['up', 'down']) {
     const home = tmpDir();
     const w = composedPropWorld(home, 5, reads);
     assert.deepStrictEqual([w.plan.stop.ticks, w.plan.target.ticks, w.plan.target.trail], [111, 222, true], 'the stop leg 111 ticks, the target leg the 2R mark');
@@ -1012,7 +1012,7 @@ test('order gate hook and MCP gateway wiring: a trail-target record (the 4h and 
       assert.doesNotMatch(text, /\[composed-reads\]|\[entry-rule\]/, text);
     } else {
       assert.strictEqual(hook.code, 2);
-      assert.match(hook.stderr, /\[composed-reads\] setup:trade_lifecycle: .*the trail target needs the 4h and the 1h both up/);
+      assert.match(hook.stderr, /\[composed-reads\] setup:trade_lifecycle: .*the trail target needs a side the entry rule allows \(htf-to-ltf\): the 1h trend is down, against the long/);
       assert.ok(g.byId[1].result.isError, text);
       assert.match(text, /\[composed-reads\]/);
     }

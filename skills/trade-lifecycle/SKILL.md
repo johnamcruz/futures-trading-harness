@@ -26,7 +26,7 @@ description: Use before a trade_lifecycle entry - compose the trade as reads wit
    | setup | the reaction ending it, the trend's way, on a closed candle above the base: `15m rejected prior vah up`, a gap edge, pattern, `15m cisd down`, a breakout, `15m compression break up`; in an attempt the 15m or higher (the 3m only times the entry); or a Setups-line setup: `momentum_continuation fired up` (then `3m momentum up`, `stop 3m low <price>`, `target 2r`; market) | `rejection`, `breakout`, `fair-value-gaps`, `pullback-vs-reversal`, `breakout-vs-fakeout`, `cisd`, `candle-reading`, `compression` |
    | entry | continuation on a candle closed after the setup's: `3m close top` (short: bottom), `3m momentum up`, pattern (hammer, bullish engulfing; short: shooting star, bearish engulfing), absorption | `candle-reading`, `momentum-and-volume`, `absorption` |
    | stop | beyond the pullback's extreme: `stop 15m low <price>` (short: high), `stop swing low <price>`, `stop 15m box low <price>` | `invalidation` |
-   | target | HTF-aligned: `target trail` (a level ahead is context); else the first level named at 2R or more, beyond any at price or broken: `target 1h swing high <price>`, `target <level> <price>`; none: `target 2r` | `take-profit` |
+   | target | an entry the rule allows: `target trail` (a level ahead is context); else the first level named at 2R or more, beyond any at price or broken: `target 1h swing high <price>`, `target <level> <price>`; none: `target 2r` | `take-profit` |
    | size | contracts | `position-sizing`, `prop-challenge-pacing`, `prop-pacing-judgment` |
    | management | once filled: the record's stop and target exit it; the policy's exit may trail it past the target; never widen it or close early by feel | `manage-position` |
 

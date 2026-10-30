@@ -657,13 +657,14 @@ function buildBriefing({ symbol, contractId = null, bars: raw, minutes, fineBars
   const fine = Array.isArray(fineBars) && fineBars.length ? normalizeBars(fineBars) : null;
   const fresh = computeSections({ bars, fine, c15, c60, snap, snap15, read, read15, readH1, scan, scanError, minutes, closedAt, blackouts, clock, tick, grid,
     roundStep: roundStepFor(root, roundSteps), roundError: roundStepError(root, roundSteps), own, keyLevels });
-  // The base timeframe's timing against the side the 4h and 1h agree on (ltf-timing.js), from these closed bars: the
+  // The base timeframe's timing against the side the entry rule allows (ltf-timing.js, BG), from these closed bars: the
   // runner's briefing only (a frame's is another timeframe's read).
   if (!own) {
     const m3 = fresh.m3.data;
     const h = fresh.h1.data || {};
     const comp = m3.compression && typeof m3.compression[tfLabel(minutes)] === 'object' ? m3.compression[tfLabel(minutes)] : null;
-    m3.timing = timingOf({ trends: { '4h': (h.h4 || {}).trend, '1h': (h.h1 || {}).trend }, regime: (m3.regime || {}).primary, bars, minutes, breaks: breaksOf(bars), compression: comp });
+    const f15 = (fresh.m15 && fresh.m15.data && fresh.m15.data.frame) || {};
+    m3.timing = timingOf({ trends: { '4h': (h.h4 || {}).trend, '1h': (h.h1 || {}).trend }, t15: f15.trend || null, declared: m3.declared || null, regime: (m3.regime || {}).primary, bars, minutes, breaks: breaksOf(bars), compression: comp });
   }
   // Same symbol, bar size and contract (a roll to the next month is new prices, never the old month's levels).
   const usable = prev && prev.symbol === symbol && prev.minutes === minutes && (prev.contractId || null) === contractId && Date.parse(prev.closedAt) < closedAt.getTime();
@@ -803,7 +804,7 @@ function summaryLines(b, et) {
   // Whether the trend has declared itself each side's way, in RTH only (trend-declared.js declaredLine).
   const declared = declaredLine(m3.declared, tf);
   if (declared) out.push(declared);
-  // The base timeframe's timing against the HTF side, when the 4h and 1h agree (ltf-timing.js timingLine).
+  // The base timeframe's timing against the side the entry rule allows (ltf-timing.js timingLine).
   const timing = timingLine(m3.timing, et, tf);
   if (timing) out.push(timing);
   // The setup moment (learning/setup-moments.js): the reactions the model composes on, said as facts.

@@ -159,7 +159,7 @@ user; numbers here are the harness defaults, not any firm's official limits.
   attempt's budget; the 25% and size-1 rules above don't apply to it, and the
   order gate enforces the verdict instead. Never exceed the verdict.
 - Minimum planned reward-to-risk: the strategy's (`risk.min_rr`), measured from the entry to the plan's target; `compose_check` computes and enforces it, never your estimate (never to the first level ahead: that is a read)
-  (a trailing exit: `trailActivateR`; the 4h and 1h your way: `target trail`,
+  (a trailing exit: `trailActivateR`; an entry the rule allows: `target trail`,
   no level needed).
 - After 2 losses in a row: stop, write a review and a lesson, then wait out the
   cooldown. After 3 losing trades in a trading day: done until 17:00 CT.

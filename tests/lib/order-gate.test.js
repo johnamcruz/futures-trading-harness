@@ -3759,7 +3759,7 @@ test('bias_agree: a D2 reversal against the 4h is refused (a 1h CHoCH no longer 
 // ---- The trail target (the owner, 2026-10-29: "We always use a trailing stop, not a fixed target, to maximize our wins") ----
 const TRAIL_READS = LC.READS.map(x => (x.step === 'target' ? { ...x, read: 'target trail', why: 'aligned: the trail' } : x));
 
-test('target trail: with the 4h and 1h both the side\'s way the record\'s target is the 2R mark (whatever level is ahead); the gate re-checks and takes the same plan; disagreeing, refused; the brackets as today\'s target_then_trail', () => {
+test('target trail: on a side the entry rule allows the record\'s target is the 2R mark (whatever level is ahead); the gate re-checks and takes the same plan, a BG-only side too; a refused side, refused; the brackets as today\'s target_then_trail', () => {
   // Scenario 1's 111-tick stop: the mark is 2 x 111 = 222 ticks (55.50 points) from 21540.25: 21595.75, short of the named
   // 1h swing 21598.00 (231 ticks), which stays a level ahead.
   const { home, rec } = LCP.propHome({ size: 5, reads: TRAIL_READS });
@@ -3776,30 +3776,46 @@ test('target trail: with the 4h and 1h both the side\'s way the record\'s target
   const { stopLossBracket: _s, ...noStop } = args;
   assert.ok(checks(lcPropEval(home, noStop, { registry: reg })).includes('stop-defined'));
   assert.match(lcPropEval(home, { ...args, takeProfitBracket: { ticks: 231, type: 'limit' } }, { registry: reg }).violations.find(v => v.check === 'composed-reads').message, /takeProfitBracket\.ticks 231 is not the record's 222/);
-  // The 1h ranging now (the hard rule): the trail read is FALSE and the entry rule refuses; an exit goes.
-  withTrends(home, 'up', 'range');
-  const off = lcPropEval(home, args, { registry: reg });
+  // A BG-only side now (the 4h ranging, the 1h up: the record's own "1h up" stays true): the trail still stands, so
+  // under the shipped BG rule the gate takes the same plan (the owner: always trail, never block a trend entry for want
+  // of a fixed target).
+  withTrends(home, 'range', 'up');
+  assert.deepStrictEqual(lcPropEval(home, args, { registry: LCP.registry({ entry: BG }) }).violations, [], 'BG-only: the trail, the same plan');
+  // A side the rule refuses (the 4h against): the trail read is FALSE and the record refused; an exit goes.
+  withTrends(home, 'down', 'up');
+  const off = lcPropEval(home, args, { registry: LCP.registry({ entry: BG }) });
   assert.ok(checks(off).includes('composed-reads'));
-  assert.match(off.violations.find(v => v.check === 'composed-reads').message, /the trail target needs the 4h and the 1h both up/);
+  assert.match(off.violations.find(v => v.check === 'composed-reads').message, /the trail target needs a side the entry rule allows \(htf-to-ltf\): the 4h trend is down, against the long/);
   assert.deepStrictEqual(lcPropEval(home, EXIT_SELL, { registry: reg }).violations, []);
 });
 
-test('target trail: not aligned, the record is NOT OK (a named target is still needed); aligned, accepted with no named level at 2R', () => {
+test('target trail: every side the shipped entry rule allows takes it with no named level at 2R; a side it refuses is NOT OK (a named target needed)', () => {
   const CR = require('../../scripts/lib/trading/composed-reads');
   // No swing target and no level ahead of the long at 2R: the 1h swing gone from the briefing.
   const b = LC.briefing({ m3: { swingTargets: { above: [], below: [] }, nearestLiquidity: { above: [{ name: 'prior VAH', price: 21570, points: 29.75, R: 2.48 }], below: [] } } });
   const at = (t4h, t1h) => { const x = JSON.parse(JSON.stringify(b)); x.sections.h1.data.h4 = { trend: t4h }; x.sections.h1.data.h1 = { trend: t1h }; return CR.checkReads({ reads: TRAIL_READS, side: 'long', briefing: x }); };
-  assert.strictEqual(at('up', 'up').ok, true);
-  for (const [a, c] of [['up', 'range'], ['range', 'up'], ['down', 'down']]) {
+  // The record's bias read is "1h up", so the whole stands where the 1h is up; the trail read itself on the 4h up, 1h range.
+  for (const [a, c] of [['up', 'up'], ['range', 'up']]) assert.strictEqual(at(a, c).ok, true, `${a}/${c}: allowed, the trail`);
+  const upRange = JSON.parse(JSON.stringify(b));
+  upRange.sections.h1.data.h1 = { trend: 'range' };
+  upRange.sections.h1.data.h4 = { trend: 'up' };
+  assert.strictEqual(CR.checkRead(CR.parseRead('target trail'), upRange, { side: 'long', tick: 0.25 }).check, true, 'up/range: the trail');
+  for (const [a, c] of [['down', 'down'], ['down', 'up'], ['up', 'down']]) {
     const r = at(a, c);
     assert.strictEqual(r.ok, false, `${a}/${c}`);
-    assert.match(r.reads.find(x => x.step === 'target').fact, /the trail target needs the 4h and the 1h both up/);
+    assert.match(r.reads.find(x => x.step === 'target').fact, /the trail target needs a side the entry rule allows \(htf-to-ltf\): the (4h|1h|4h and 1h) trends? (is|are) down, against the long/);
   }
-  // A short mirrors it: both down.
+  // Both ranging: the trail only with the 15m and the declared trend the side's way (the rule's neutral path).
+  const neutral = (t15, declared) => { const x = JSON.parse(JSON.stringify(b)); x.sections.h1.data.h4 = { trend: 'range' }; x.sections.h1.data.h1 = { trend: 'range' }; x.sections.m15.data.frame = { trend: t15 }; if (declared) x.sections.m3.data.declared = declared; return CR.checkRead(CR.parseRead('target trail'), x, { side: 'long', tick: 0.25 }); };
+  assert.strictEqual(neutral('up', DECLARED_UP).check, true, 'neutral, the 15m and declared up');
+  assert.strictEqual(neutral('up', NOT_DECLARED).check, false, 'neutral, not declared');
+  assert.strictEqual(neutral('up', null).check, 'unchecked', 'neutral, no declared facts: unchecked, never TRUE');
+  // A BG-only short (the 4h down, the 1h ranging), no named level at 2R: TRUE, the trail.
   const s = JSON.parse(JSON.stringify(b));
   s.sections.h1.data.h4 = { trend: 'down' };
-  s.sections.h1.data.h1 = { trend: 'down' };
+  s.sections.h1.data.h1 = { trend: 'range' };
   assert.strictEqual(CR.checkRead(CR.parseRead('target trail'), s, { side: 'short', tick: 0.25 }).check, true);
+  assert.strictEqual(CR.checkRead(CR.parseRead('target trail'), s, { side: 'long', tick: 0.25 }).check, false, 'the long the rule refuses there');
   // A trend the briefing doesn't hold: unchecked, never TRUE.
   const gone = JSON.parse(JSON.stringify(b));
   delete gone.sections.h1.data.h4;

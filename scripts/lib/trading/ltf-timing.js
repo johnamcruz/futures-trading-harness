@@ -8,8 +8,9 @@
  * mtf.js), the base regime (regime.js, m3.regime.primary), the base structure breaks (structure-events.js breaksOf) and
  * the base timeframe's compression break (compression.js, m3.compression).
  *
- * The side: the one the 4h and the 1h both trend (the policy's bias_agree: both up a long, both down a short); none
- * when they don't agree (then no timing: no side to time). Its state, first that holds:
+ * The side: the one the shipped entry rule allows (entry-rule.js, bias_agree neutral-15m-declared, BG): a trending 4h
+ * or 1h the side's way with none against, or both ranging with the 15m trend and the declared trend (m3.declared)
+ * its way; none when it allows neither (then no timing: no side to time). Its state, first that holds:
  *
  *   with      the base regime trends the side's way (trend-up for a long)
  *   turned    the latest base event the side's way (a BOS or CHoCH its way, or the base compression break its way)
@@ -18,23 +19,27 @@
  *             base regime trending against it (`since` null)
  *   waiting   otherwise (no break either way, the regime not trending against): no turn yet
  *
- *   timingOf({ trends, regime, bars, minutes, breaks, compression })   { side, state, kind?, dir?, at?, barsAgo?, since? }
+ *   sideOf(trends, { t15, declared })       the side the entry rule allows, or null
+ *   timingOf({ trends, t15, declared, regime, bars, minutes, breaks, compression })   { side, state, kind?, dir?, at?, barsAgo?, since? }
  *                                              or null (no agreed side, or no bars)
  *   timingLine(timing, et, tf)                 the summary's line, or null
  */
 
-const WAY = { long: 'up', short: 'down' };
+const { entryProblems, entryRuleOf, BIAS_FRAMES, NEUTRAL } = require('./entry-rule');
 
-/** The side the 4h and 1h agree on, or null. */
-function sideOf(trends) {
+const WAY = { long: 'up', short: 'down' };
+const RULE = entryRuleOf({ bias_frames: [...BIAS_FRAMES], bias_agree: NEUTRAL, regime_against: 'off', leg_turned: 'off' });
+
+/** The side the shipped entry rule allows (BG) on these facts, or null: the entry rule's own check on them. */
+function sideOf(trends, { t15 = null, declared = null } = {}) {
   const t = trends || {};
-  if (t['4h'] === 'up' && t['1h'] === 'up') return 'long';
-  if (t['4h'] === 'down' && t['1h'] === 'down') return 'short';
-  return null;
+  const b = { sections: { h1: { data: { h4: { trend: t['4h'] }, h1: { trend: t['1h'] } } }, m15: { data: { frame: { trend: t15 } } }, m3: { data: declared ? { declared } : {} } } };
+  const ok = ['long', 'short'].filter(side => !entryProblems({ briefing: b, side, reads: [], rule: RULE }).length);
+  return ok.length === 1 ? ok[0] : null;
 }
 
-function timingOf({ trends, regime = null, bars = [], minutes, breaks = [], compression = null } = {}) {
-  const side = sideOf(trends);
+function timingOf({ trends, t15 = null, declared = null, regime = null, bars = [], minutes, breaks = [], compression = null } = {}) {
+  const side = sideOf(trends, { t15, declared });
   if (!side || !Array.isArray(bars) || !bars.length || !(minutes > 0)) return null;
   const way = WAY[side];
   const step = minutes * 60000;
@@ -57,10 +62,10 @@ function timingOf({ trends, regime = null, bars = [], minutes, breaks = [], comp
   return { side, state: 'pullback', since: against ? against.at : null };
 }
 
-/** The summary's line: "- 3m timing (long, the 4h and 1h up): ..." or null. */
+/** The summary's line: "- 3m timing (long: the entry rule's side): ..." or null. */
 function timingLine(t, et, tf) {
   if (!t) return null;
-  const head = `- ${tf} timing (${t.side}: the 4h and 1h ${WAY[t.side]}):`;
+  const head = `- ${tf} timing (${t.side}: the entry rule's side):`;
   if (t.state === 'with') return `${head} ${tf} with the HTF side.`;
   if (t.state === 'waiting') return `${head} ${tf} no turn yet.`;
   if (t.state === 'turned') return `${head} ${tf} turned back: ${t.kind} ${t.dir} at ${et(t.at)} ET${Number.isInteger(t.barsAgo) ? ` (${t.barsAgo} bars ago)` : ''}.`;

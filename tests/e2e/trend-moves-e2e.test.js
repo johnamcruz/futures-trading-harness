@@ -79,7 +79,8 @@ test('trend-move set: the refusals\' hints list only TRUE reads; each listed who
     for (const l of text.split('\n').filter(x => x.startsWith('- HINT '))) {
       // The 2R mark is TRUE by the combination's own stop (the room rule's R): judged with its whole below.
       for (const read of quoted(l).filter(x => x !== 'target 2r')) {
-        const c = checkRead(parseRead(read), b, { tick: 0.25 });
+        // The trail is the side's (a side the entry rule allows): read with it.
+        const c = checkRead(parseRead(read), b, { tick: 0.25, ...(read === 'target trail' ? { side: p.side } : {}) });
         assert.strictEqual(c.check, true, `${p.leg} ${p.bar} ${read}: ${c.fact}`);
         assert.ok(!c.dir || c.dir === p.side, `${read} points ${c.dir}`);
       }
@@ -91,8 +92,9 @@ test('trend-move set: the refusals\' hints list only TRUE reads; each listed who
   }
   // The guided retries that pass (pinned: a change that loses one is a regression, one that adds one says why). 40
   // before the room band's tick cap (2026-10-24): 6 passed only through the uncapped 0.25R band, a level more than
-  // 8 ticks ahead skipped by a wide stop; such a level is in the way now, whatever the stop.
-  assert.strictEqual(wholes, 34);
+  // 8 ticks ahead skipped by a wide stop; such a level is in the way now, whatever the stop. 36 since the trail stands on
+  // every side the entry rule allows (feat/bias-bg, the owner: always trail): two refusals there now list a whole with it.
+  assert.strictEqual(wholes, 36);
 });
 
 test('trend-move set: per leg, a valid trend-following plan in its first half where the set says, and every such leg caught by a guided retry', () => {

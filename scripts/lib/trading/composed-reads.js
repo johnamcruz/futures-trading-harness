@@ -72,9 +72,9 @@
  *                                           and the levels within roomIgnoreR of the entry by the stop read's R, at most
  *                                           roomIgnoreTicks); the plan puts it at the minimum R (planOf)  its side
  *   target trail                            step target only: the trail (the owner's "We always use a trailing stop,
- *                                           not a fixed target, to maximize our wins"), TRUE when the 4h and the 1h
- *                                           both trend the side's way (h1.h4.trend, h1.h1.trend: the entry rule's
- *                                           bias_agree check, entry-rule.js), whatever levels lie ahead: the plan's
+ *                                           not a fixed target, to maximize our wins"), TRUE on every side the shipped
+ *                                           entry rule allows (BG, bias_agree neutral-15m-declared: entry-rule.js,
+ *                                           TRAIL_RULE), whatever levels lie ahead: the plan's
  *                                           target is the 2R mark (planOf, as `target 2r`), where the policy's exit
  *                                           arms its trail; a level ahead stays the plan's first in the way (a read)
  *                                                                                         its side
@@ -111,9 +111,11 @@
  */
 
 const { trendRuleOf } = require('./reasons');
-const { entryProblems, entryRuleOf, topDown, BIAS_FRAMES, TREND_TF } = require('./entry-rule');
-// The trail target's condition: the 4h and the 1h both the side's way (the entry rule's bias_agree, one check).
-const AGREE = entryRuleOf({ bias_frames: [...BIAS_FRAMES], bias_agree: 'on', regime_against: 'off', leg_turned: 'off' });
+const { entryProblems, entryRuleOf, topDown, BIAS_FRAMES, TREND_TF, NEUTRAL } = require('./entry-rule');
+// The trail target's condition (the owner: always trail; never block a trend entry for lack of a fixed target): every
+// side the shipped entry rule allows (BG, bias_agree neutral-15m-declared: a trending 4h or 1h the side's way, none
+// against; both ranging, the 15m and the declared trend its way), the entry rule's own check.
+const TRAIL_RULE = entryRuleOf({ bias_frames: [...BIAS_FRAMES], bias_agree: NEUTRAL, regime_against: 'off', leg_turned: 'off' });
 
 const STEPS = ['bias', 'location', 'setup', 'entry', 'stop', 'target'];
 // The flow's steps as the hints, the trend-capture report and the learning loop name them: the six compose steps, then
@@ -250,7 +252,7 @@ function parseRead(text) {
   if (fired) return out('fired', { name: fired[1], value: fired[2] });
   // The 2R mark: no named level on the winning side, the target is the strategy's minimum R from the entry.
   if (form === 'target 2r') return out('target', { source: '2r', price: null, mark: true }, ['2r']);
-  // The trail: aligned (the 4h and 1h the side's way), the target is the 2R mark, where the exit arms the trail.
+  // The trail: a side the entry rule allows (BG), the target is the 2R mark, where the exit arms the trail.
   if (form === 'target trail') return out('target', { source: 'trail', price: null, mark: true, trail: true }, ['trail']);
   if ((a === 'stop' || a === 'target') && w.length >= 3 && isNum(w[w.length - 1])) {
     const source = w.slice(1, -1);
@@ -742,10 +744,9 @@ function checkRead(p, b, { tick = 0.25, side = null, riskPts = null } = {}) {
         // at the minimum R or more), and one short of it in the way is no room, never the mark.
         if (!SIDES.includes(side)) return res('unchecked', 'the 2R mark is the side\'s: no side given', { field: 'm3 targets' });
         if (p.trail) {
-          const why = entryProblems({ briefing: b, side, reads: [], rule: AGREE });
-          const way = side === 'long' ? 'up' : 'down';
-          if (why.length) return res(/not in the briefing/.test(why[0]) ? 'unchecked' : false, `the trail target needs the 4h and the 1h both ${way}: ${why[0].replace(/^entry rule: /, '')}`, { field: 'h1 trends' });
-          return res(true, `the 4h and the 1h both ${way}: the target is the trail (the 2R mark from the plan's entry arms it; past it the runner trails), whatever level lies ahead`, { field: 'h1 trends', value: 'trail', price: null, dir: side, mark: true });
+          const why = entryProblems({ briefing: b, side, reads: [], rule: TRAIL_RULE });
+          if (why.length) return res(/not in the briefing|can't be read/.test(why[0]) ? 'unchecked' : false, `the trail target needs a side the entry rule allows (htf-to-ltf): ${why[0].replace(/^entry rule: /, '')}`, { field: 'h1 trends' });
+          return res(true, `the entry rule allows the ${side}: the target is the trail (the 2R mark from the plan's entry arms it; past it the runner trails), whatever level lies ahead`, { field: 'h1 trends', value: 'trail', price: null, dir: side, mark: true });
         }
         const ahead = targetsAhead(b, side, { tick, riskPts });
         if (ahead.length) return res(false, `the briefing names ${ahead[0].read.replace(/^target /, '')} ${side === 'long' ? 'above' : 'below'} price ${ref}: the target is the first named level at the minimum R or more; the 2R mark only with none named`, { field: 'm3 targets', value: ahead[0].price });

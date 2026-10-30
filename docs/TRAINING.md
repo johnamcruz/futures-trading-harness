@@ -81,6 +81,10 @@ comparable.
   a range where the full history reads the trend); the replay driver, the
   training preflight, the curated-lists scan and the training loop's
   `probe.trend.from` refuse an earlier start, naming the date.
+  This warm-up rule is what protects replay and training from short
+  history today; the multi-timeframe read itself still reads a short window
+  (a "not ready" read for a frame short of its window or its EMA50 is a
+  follow-up: it needs test fixtures with three weeks of bars).
 
 The standard trade each moment measures is a limit held the strategy's
 `valid_bars` base bars after its bar's close, the plan the gate allows (the
