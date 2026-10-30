@@ -27,7 +27,7 @@ Summary (MNQ 1m, 20:11 ET):
 - Next swing above (R = the 1m reference stop): 15m 27099.75 (88.25 pts, 353 ticks, 24.48R); below: none found.
 - Prior candle range (R = the 1m reference stop): 1h (closed 20:00) high 27099.75 (88.25 above, 24.48R), mid 27090.875 (79.25 above, 21.98R), low 27082 (70.5 above, 19.56R), low taken, closed below it.
 - 5m structure: CHoCH down through 27087 (known 20:05, 1 candle ago); swing high 27091.5, swing low 27087.
-- CISD (completed candles; a read, not a signal): 3m bearish at 27090.25 (closed 20:03, strong), no key-level sweep, OTE 27065.5-27080.5 (mid 27073), waiting; 5m bullish at 27093.75 (closed 19:50, strong, engulfing), no key-level sweep, zone void; 15m none; 1h none.
+- CISD (completed candles; a read, not a signal): 3m bearish at 27090.25 (closed 20:03, strong), no key-level sweep, OTE 27065.5-27080.5 (mid 27073), waiting; 5m bullish at 27093.75 (closed 19:50, strong), no key-level sweep, zone void; 15m none; 1h none.
 - Compression (completed candles; a read, not a signal): 5m no expansion: inside x2 box 27090-27098.75 (8.75 pts, 1.21 ATR), expansion closed 20:05 below it (range 3.21 ATR, 2.11 ATR beyond, volume 3.2x), 1 bar ago, late: 8.74 ATR past its close.
 - Rules setups: none fired on this bar; a composed setup is yours to read and check (trade-lifecycle).
 
@@ -113,7 +113,7 @@ Summary (MNQ 1m, 08:47 ET):
 - Next swing above (R = the 1m reference stop): 15m 27079.75 (123 pts, 492 ticks, 21.06R); below: 15m 26941.75 (15 pts, 60 ticks, 2.57R), 1h 26890 (66.75 pts, 267 ticks, 11.43R).
 - Prior candle range (R = the 1m reference stop): 1h (closed 08:00) high 27048.5 (91.75 above, 15.71R), mid 26995.125 (38.25 above, 6.55R), low 26941.75 (15 below, 2.57R), high taken, closed back inside; 4h (closed 06:00) high 27013.5 (56.75 above, 9.72R), mid 26951.75 (5 below, 0.86R), low 26890 (66.75 below, 11.43R), high taken, closed back inside.
 - FVGs near price or retested (completed candles): 5m bearish 27035.75-27061.25 (08:15) filled to 27049.5, retest closed out.
-- CISD (completed candles; a read, not a signal): 3m bearish at 27032.5 (closed 08:24, weak), no key-level sweep, a weak displacement: no zone; 5m bullish at 27032.25 (closed 08:45, weak, engulfing), no key-level sweep, a weak displacement: no zone; 15m bullish at 26948.75 (closed 06:45, weak), no key-level sweep, a weak displacement: no zone; 1h none.
+- CISD (completed candles; a read, not a signal): 3m bearish at 27032.5 (closed 08:24, weak), no key-level sweep, a weak displacement: no zone; 5m bullish at 27032.25 (closed 08:45, weak), no key-level sweep, a weak displacement: no zone; 15m bullish at 26948.75 (closed 06:45, weak), no key-level sweep, a weak displacement: no zone; 1h none.
 - Compression (completed candles; a read, not a signal): 3m nr7 box 27032.5-27043 (0.58 ATR); 15m inside x1 box 27020.75-27062.25 (1.17 ATR, after a up displacement pole).
 - Setups to check (the 15m candle closed 08:45): "15m rejected 5m fvg low down" (short, 27035.75; setup candle: inside, close middle third); a confirmation close: the entry reads from this bar. Compose and check each (trade-lifecycle, rejection, breakout); pass unless every read is true; SKIP each one you don't compose, with its reason.
 - Standard plan (code, as compose_check plans it): short "15m rejected 5m fvg low down": against the trend rule: only as a reversal (its 1h CHoCH tier).

@@ -178,7 +178,7 @@ const PINS = {
     'A doji, a small body or a mid-range close is weak: no zone, no fib',
     'price pulls back to a level, then a CISD back in the trend\'s direction ends the pullback; a later close is the entry.',
     'a CISD back toward the middle, aiming at the other side.',
-    'a 3m or 5m CISD in the 15m/1h trend\'s direction is the pullback ending',
+    'a 15m (or 1h) CISD the bias\'s way is the setup read; a 3m or 5m one is entry timing, context, never the setup',
     'Never anticipate the bounce.',
   ],
   compression: [

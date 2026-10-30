@@ -183,6 +183,26 @@ function checkLine(candles, { barClose, et = x => x, setupTf = DEFAULTS.setupTf,
   return `- Setups to check (the ${key} candle closed ${et(m.candle.closedAt)}): ${[what, ...extra].join('; ')}; ${when}. Compose and check each (trade-lifecycle, ${['rejection', 'breakout', ...extraSkills].join(', ')}); pass unless every read is true; SKIP each one you don't compose, with its reason.`;
 }
 
+/**
+ * A setup candle's strength the side's way (`dir` up or down), for the order, counting: strong (cisd.js strongCandle's rule on
+ * the briefing's candle: a body of at least minBody of its range the side's way, the close in the side's third, and an
+ * engulfing or a range of at least minRangeAtr x ATR), its close in the side's third, its close not in the other third.
+ * 0 without a candle.
+ */
+function setupCandleRank(c, dir) {
+  if (!c || typeof c !== 'object' || !(c.h > c.l) || (dir !== 'up' && dir !== 'down')) return 0;
+  const up = dir === 'up';
+  const P = require('../trading/cisd').PARAMS;
+  const range = c.h - c.l;
+  const body = Math.abs(c.c - c.o) / range;
+  const withDir = up ? c.c > c.o : c.c < c.o;
+  const sideThird = c.closeLocation === (up ? 'top' : 'bottom');
+  const notAgainst = c.closeLocation !== (up ? 'bottom' : 'top');
+  const engulfing = c.pattern === (up ? 'bullish engulfing' : 'bearish engulfing');
+  const strong = withDir && body >= P.minBody && sideThird && (engulfing || (Number.isFinite(c.rangeAtr) && c.rangeAtr >= P.minRangeAtr));
+  return [strong, sideThird, notAgainst].filter(Boolean).length;
+}
+
 /** The chain's setup-frame candle as words: its pattern (none: no pattern) and its close's third, or null. */
 function setupCandleText(candles) {
   const c = candles && typeof candles === 'object' ? candles[CHAIN.setup] : null;
@@ -243,13 +263,14 @@ function setupChecks(m3, { max = MAX_CHECKS } = {}) {
     const dir = LIVE_CISD.has(x.status) || fresh ? (x.dir === 'bullish' ? 'up' : x.dir === 'bearish' ? 'down' : null) : null;
     if (!sideOf(dir) || rule[sideOf(dir)] !== true) continue;
     out.push({ kind: 'cisd', tf, dir, side: sideOf(dir), read: `${tf} cisd ${dir}`, status: fresh ? 'fresh confirmation' : `${x.status} OTE`,
-      displacement: x.engulfing ? 'engulfing' : String(x.displacement || 'strong'), ...(isObj(x.sweep) && x.sweep.name ? { level: x.sweep.name } : {}) });
+      displacement: String(x.displacement || 'strong'), ...(isObj(x.sweep) && x.sweep.name ? { level: x.sweep.name } : {}) });
   }
-  // The stronger first (the owner): a CISD with an engulfing displacement and a compression box at a key level, then
-  // the higher timeframe.
-  const strong = c => (c.kind === 'cisd' ? c.displacement === 'engulfing' : Boolean(c.level));
-  return out.sort((a, b) => Number(strong(b)) - Number(strong(a)) || minutesOf(b.tf) - minutesOf(a.tf)).slice(0, max);
+  // The stronger setup candle first (the owner: read its strength and close, not its name): cisd.js's strong candle
+  // the side's way (an engulfing one ranks with any other strong one, never above it), then its close third the side's
+  // way, then the higher timeframe.
+  const rank = c => setupCandleRank(isObj(m3.candles) ? m3.candles[c.tf] : null, c.dir);
+  return out.sort((a, b) => rank(b) - rank(a) || minutesOf(b.tf) - minutesOf(a.tf)).slice(0, max);
 }
 
 module.exports = {
-  CISD_FRAMES, COMPRESSION_FRAMES, setupCandleText, MODES, SETUP_TFS, LEVEL_SETS, REACTION_KINDS, DEFAULTS, KEY_LEVEL, MOVING_LEVEL, PREVIOUS_LEVEL, validatePractice, reactionsOf, setupMoment, quietPick, selectBar, practiceLine, tfLabel, checkLine, setupChecks, listedReads };
+  CISD_FRAMES, COMPRESSION_FRAMES, setupCandleText, setupCandleRank, MODES, SETUP_TFS, LEVEL_SETS, REACTION_KINDS, DEFAULTS, KEY_LEVEL, MOVING_LEVEL, PREVIOUS_LEVEL, validatePractice, reactionsOf, setupMoment, quietPick, selectBar, practiceLine, tfLabel, checkLine, setupChecks, listedReads };

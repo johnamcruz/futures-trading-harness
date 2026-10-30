@@ -63,8 +63,8 @@ read (`trend-vs-range`, `pullback-vs-reversal`) and momentum and volume
 The stack counts once (`confluence-counting`, trigger).
 
 **Evidence**: standalone candlestick patterns have weak evidence in
-general; the 15m setup candle (census): engulfing +0.17R/+0.19R,
-other strong closes +0.37R/+0.27R: its strength and close, not its name.
+general; at the 15m setup candle read its strength and close, not its
+name (an engulfing is one strong candle among others).
 
 ## Examples
 

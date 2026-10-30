@@ -144,3 +144,25 @@ test('9. the setup candle: each listed setup names the chain\'s setup-frame cand
   assert.strictEqual(SM.setupCandleText({ ...candles, '15m': c('none', 'middle') }), 'no pattern, close middle third');
   assert.strictEqual(SM.setupCandleText({ '3m': c('shooting star', 'bottom') }), null);
 });
+
+test('10. the Setups to check order: the stronger setup candle first (cisd.js\'s strong candle, then its close), an engulfing ranked with any other strong candle, never above it', () => {
+  const SM = require('../../scripts/lib/learning/setup-moments');
+  const P = require('../../scripts/lib/trading/cisd').PARAMS;
+  const k = (o, h, l, c, closeLocation, pattern = 'none', rangeAtr = P.minRangeAtr + 0.2) => ({ o, h, l, c, closeLocation, pattern, rangeAtr });
+  const strongUp = k(100, 110, 99, 109.5, 'top');
+  const engulfUp = k(100, 104, 99, 103.9, 'top', 'bullish engulfing', P.minRangeAtr - 0.5);
+  const weakTop = k(100, 110, 99, 109.5, 'top', 'none', P.minRangeAtr - 0.5);
+  const middle = k(100, 110, 99, 104, 'middle');
+  assert.strictEqual(SM.setupCandleRank(strongUp, 'up'), SM.setupCandleRank(engulfUp, 'up'), 'engulfing is one strong candle among others');
+  assert.ok(SM.setupCandleRank(strongUp, 'up') > SM.setupCandleRank(weakTop, 'up') && SM.setupCandleRank(weakTop, 'up') > SM.setupCandleRank(middle, 'up'));
+  assert.strictEqual(SM.setupCandleRank(strongUp, 'down'), 0, 'side-relative: a strong up candle is nothing for a short');
+  // On a briefing: a compression break on the 15m with a strong candle ranks above a 1h CISD on a weak (engulfing-free) one,
+  // the higher frame only breaking a tie.
+  const m3 = { windowEntries: 'allowed', trendRule: 'Trend rule: no trend on 4h, 1h, or 15m; both sides open to every strategy.',
+    compression: { '15m': { state: 'expanding', break: { dir: 'up' } } },
+    cisd: { '1h': { status: 'touched', dir: 'bullish', displacement: 'strong', engulfing: true } },
+    candles: { '15m': strongUp, '1h': middle } };
+  assert.deepStrictEqual(SM.setupChecks(m3).map(c => c.read), ['15m compression break up', '1h cisd up']);
+  assert.deepStrictEqual(SM.setupChecks({ ...m3, candles: { '15m': middle, '1h': middle } }).map(c => c.read), ['1h cisd up', '15m compression break up'], 'a tie: the higher frame');
+  assert.ok(!SM.setupChecks(m3).some(c => c.displacement === 'engulfing'), 'the CISD tag is its strength, never engulfing');
+});

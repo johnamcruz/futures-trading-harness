@@ -867,7 +867,7 @@ function cisdLine(block, et) {
     if (typeof x === 'string') return `${tf} none`;
     const zone = x.ote ? `OTE ${x.ote.bottom}-${x.ote.top} (mid ${x.ote.mid}), ${x.status}${x.priceInOte ? ', price in it' : ''}`
       : x.displacement === 'weak' ? 'a weak displacement: no zone' : `zone ${x.status}`;
-    return `${tf} ${x.dir} at ${x.level} (closed ${et(x.confirmedClose)}, ${x.displacement}${x.engulfing ? ', engulfing' : ''})${x.sweep ? ` after a sweep of the ${x.sweep.name} ${x.sweep.price}` : ', no key-level sweep'}, ${zone}${x.bounce ? `, this bar bounced ${x.bounce} out of it` : ''}`;
+    return `${tf} ${x.dir} at ${x.level} (closed ${et(x.confirmedClose)}, ${x.displacement})${x.sweep ? ` after a sweep of the ${x.sweep.name} ${x.sweep.price}` : ', no key-level sweep'}, ${zone}${x.bounce ? `, this bar bounced ${x.bounce} out of it` : ''}`;
   });
   return parts.length ? `- CISD (completed candles; a read, not a signal): ${parts.join('; ')}.` : null;
 }
