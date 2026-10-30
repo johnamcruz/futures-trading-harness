@@ -46,9 +46,10 @@ works, or than the ratchet?
 | FB-FRESH | 6.95% | 4.90% | +0.050 | +0.020 | 53 | 21 |
 | FB-PROFIT | 2.40% | 5.15% | +0.015 | −0.001 | 6 | 1 |
 
-The raw-entry count is over all 3,954 entries; the traded-stream count is
-over the entries the Monte Carlo's attempts actually took. 0 blows in every
-arm.
+The raw-entry count is over all 3,954 entries. The traded-stream count is
+over the study's one-position-at-a-time stream: the entries actually taken
+when a new entry waits until the previous trade has exited (the per-arm n,
+819 and 883 for OFF). 0 blows in every arm.
 
 ## Decision
 
