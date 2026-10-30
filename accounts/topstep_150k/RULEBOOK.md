@@ -4,8 +4,8 @@ description: The rulebook for this account - the numbers its policy strategies t
 learned: none                   # none: today's values, carried over unchanged (docs/LEARNED-RULEBOOK.md, step 7)
 daily_loss_soft: 1500            # dollars: no new entries for the rest of the day once the day is down this much
 loss_streak_stop: 2             # losing trades in a row: no new entries for the rest of the session (a scratch neither ends nor extends the streak)
-enforced: [daily_loss_soft, loss_streak_stop, sizing, exit, multipliers, target_stop, consistency_stop, one_position, hard_stops, trend_rule, entry_rule]
-taught: [trend_fade, room, mtf_read, skip_rules, confluence, secondary_context, halving]
+enforced: [daily_loss_soft, loss_streak_stop, sizing, exit, multipliers, target_stop, consistency_stop, one_position, hard_stops, trend_rule, trend_fade, entry_rule]
+taught: [room, mtf_read, skip_rules, confluence, secondary_context, halving]
 ---
 
 # Rulebook: `topstep_150k`

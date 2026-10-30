@@ -327,6 +327,17 @@ const ENFORCED = {
     edit(root, t => t.replace(/^( {6}regime_against: )off/m, '$1on'));
     assert.match(problems(briefing('range', 'trend-down')).join(), /regime is trend-down, against the long/, policy(root).errors.join());
   },
+  trend_fade: () => {
+    // A reversal strategy (fx_crt_1h, mtf: reversal) against a trending 4h is refused like any other (never counter).
+    const { evaluateOrder } = require('../../scripts/lib/trading/order-gate');
+    const { loadConfig } = require('../../scripts/lib/trading/config');
+    const H = require('../helpers');
+    const order = H.entryOrder({ rationale: 'setup:fx_crt_1h long raid of the prior hour low, stop 21480, target 21540, risk $40' });
+    const fired = [{ name: 'fx_crt_1h', direction: 'long' }];
+    const config = { ...loadConfig({}), killSwitchFile: '/nonexistent/fth/STOP', home: H.trendHome(undefined, { biases: { 240: -1, 60: -1, 15: 1 }, fired }), mtfMaxAgeMin: 1e9, signalMaxAgeMin: 1e9 };
+    const r = evaluateOrder({ input: order, entries: [H.plan()], now: H.NOW, config, strategies: GATE_STRATEGIES });
+    assert.ok(r.violations.some(v => v.check === 'mtf-trend' && /setup:fx_crt_1h long is against the 4h down trend/.test(v.message)), JSON.stringify(r.violations));
+  },
   trend_rule: () => {
     const { evaluateOrder } = require('../../scripts/lib/trading/order-gate');
     const { loadConfig } = require('../../scripts/lib/trading/config');
@@ -368,7 +379,8 @@ test('R4: each rulebook classifies every item, and every enforced item is really
   // Every probe is for an item some rulebook classifies enforced (none left over from a reclassification).
   for (const k of Object.keys(ENFORCED)) assert.ok(CLASSES.some(c => c.enforced.includes(k)), `${k} has a probe but no rulebook enforces it`);
   // The owner's classification (section 11): the mechanical items the code holds today are enforced, the rest taught.
-  assert.deepStrictEqual(CLASSES[0].taught.sort(), ['confluence', 'halving', 'mtf_read', 'room', 'secondary_context', 'skip_rules', 'trend_fade']);
+  // trend_fade enforced since never counter (feat/bias-bg): the trend rule holds every strategy style.
+  assert.deepStrictEqual(CLASSES[0].taught.sort(), ['confluence', 'halving', 'mtf_read', 'room', 'secondary_context', 'skip_rules']);
 });
 
 /** What each taught item's step teaches, in the skill's own words (whitespace may wrap). */

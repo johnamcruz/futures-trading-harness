@@ -33,8 +33,8 @@ policies:                       # each policy strategy that trades this account 
       swing_tf: 15m             # target_then_trail with trail_by structure: the swings the stop trails behind
       ratchet: off              # target_then_trail: on lifts the lock to the best R reached less lock_giveback_r; off (opt in only): the lock above
     multipliers: []             # enforced size multipliers folded into the verdict: none yet
-enforced: [daily_loss_soft, loss_streak_stop, sizing, exit, multipliers, target_stop, consistency_stop, one_position, hard_stops, trend_rule, entry_rule]
-taught: [trend_fade, room, mtf_read, skip_rules, confluence, secondary_context, halving]
+enforced: [daily_loss_soft, loss_streak_stop, sizing, exit, multipliers, target_stop, consistency_stop, one_position, hard_stops, trend_rule, trend_fade, entry_rule]
+taught: [room, mtf_read, skip_rules, confluence, secondary_context, halving]
 ---
 
 # Rulebook: `topstep_100k`
