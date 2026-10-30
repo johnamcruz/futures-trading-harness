@@ -53,4 +53,7 @@ a wait.
 ## Caveats
 
 - Limit fills are optimistic (no queue position).
+- E0 was scored as a market-like fill at the next 3m bar. The live compose
+  entry is a limit at the setup bar's close, which fills only if a later bar
+  trades back to it within the record's `valid_bars`.
 - The setups are mechanical, not the model's.

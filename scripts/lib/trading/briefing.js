@@ -126,6 +126,18 @@ const WINDOWS = [
 const MARKET_CLOSED_WINDOW = 'daily break';
 const DEFAULT_ENTRY_CLOCK = { entryHours: DEFAULT_ENTRY_HOURS, noEntryWindows: DEFAULT_NO_ENTRY_WINDOWS };
 
+let validBarsCache;
+/** The shipped trade_lifecycle strategy's valid_bars (setup-library.js strategyValidBars), read once; null when unreadable. */
+function shippedValidBars() {
+  if (validBarsCache !== undefined) return validBarsCache;
+  try {
+    validBarsCache = require('../learning/setup-library').strategyValidBars(require('path').resolve(__dirname, '..', '..', '..'), {});
+  } catch (_err) {
+    validBarsCache = null;
+  }
+  return validBarsCache;
+}
+
 /** When the `minutes` candle containing `at` closes (candles from the trading day's 18:00 ET open). */
 function nextClose(at, minutes) {
   const start = tradingDayStart(at).getTime();
@@ -823,7 +835,7 @@ function summaryLines(b, et) {
   // And the briefing's own setups on an allowed side (setupChecks: a compression break, a live CISD) on the same line;
   // the standard plan below stays the setup moment's.
   const SMo = require('../learning/setup-moments');
-  const checkOpts = m3.bar ? { barClose: Date.parse(m3.bar.t) + b.minutes * 60000, et, entries: m3.windowEntries } : null;
+  const checkOpts = m3.bar ? { barClose: Date.parse(m3.bar.t) + b.minutes * 60000, et, entries: m3.windowEntries, validBars: shippedValidBars() } : null;
   const check = checkOpts ? SMo.checkLine(m3.candles, checkOpts) : null;
   const shownCheck = checkOpts ? SMo.checkLine(m3.candles, { ...checkOpts, checks: SMo.setupChecks(m3) }) : null;
   if (shownCheck) out.push(shownCheck);

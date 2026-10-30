@@ -127,10 +127,12 @@ test('causal: a bar\'s selection never changes when the bars after it change (cu
 test('checkLine: the setup moment as the briefing says it: each reaction, the side it points, reaction or confirmation; none without a moment', () => {
   const candles = { '15m': candle({ relations: [{ name: 'overnight high', price: 21650.25, rel: 'rejected', dir: 'down' }], fvgRelations: [{ name: '1h fvg low', price: 21600.5, rel: 'rejected', dir: 'up' }] }) };
   const et = iso => new Date(iso).toISOString().slice(11, 16);
-  // The reaction bar: the 15m candle closed with this bar, so an entry read needs a later close (the same-candle rule).
+  // The reaction bar: the 15m candle closed with this bar: the setup is the entry (CONF3M), a limit at this close that
+  // fills if a later bar trades to it while the record stands; with the strategy's valid_bars given, its count.
   // In the candle lines' read form ("15m rejected <level> <dir>"), so a read copied from it parses.
+  assert.match(M.checkLine(candles, { barClose: CLOSE, et, validBars: 2 }), /the entry is a limit at this close; it fills if a later bar trades to it within 2 bars\./);
   assert.strictEqual(M.checkLine(candles, { barClose: CLOSE, et }),
-    '- Setups to check (the 15m candle closed 14:45): "15m rejected overnight high down" (short, 21650.25); "15m rejected 1h fvg low up" (long, 21600.5); this bar closed the setup: it is the entry now (the next bar fills it), no confirming read needed. Compose and check each (trade-lifecycle, rejection, breakout); pass unless every read is true; SKIP each one you don\'t compose, with its reason.');
+    '- Setups to check (the 15m candle closed 14:45): "15m rejected overnight high down" (short, 21650.25); "15m rejected 1h fvg low up" (long, 21600.5); this bar closed the setup, no confirming read needed: the entry is a limit at this close; it fills if a later bar trades to it within the record\'s valid_bars. Compose and check each (trade-lifecycle, rejection, breakout); pass unless every read is true; SKIP each one you don\'t compose, with its reason.');
   // A broke reaction; a level whose name carries its price is priced once; a null direction states no side.
   const more = { '15m': candle({ relations: [{ name: '1h swing low 2264.2', price: 2264.2, rel: 'broke', dir: 'down' }, { name: 'IB high', price: 2290, rel: 'broke', dir: null }] }) };
   assert.match(M.checkLine(more, { barClose: CLOSE, et }), /: "15m broke 1h swing low 2264\.2 down" \(short\); this bar/);
