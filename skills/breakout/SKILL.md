@@ -19,7 +19,7 @@ A read, never a veto: the count decides (`confluence-counting`). Thresholds are
 hypotheses; a missing field is `unknown`. Completed candles only, on 3m,
 5m, 15m, 1h and 4h (`candle-reading`).
 
-**By timeframe**, the same setup:
+**By timeframe**:
 
 | Timeframe | What it reads | Weight |
 |---|---|---|
@@ -46,15 +46,14 @@ By PLAN step:
    (`m15.lastBreak.last`, `h1.lastBreak.last`) is accepted structure
    (`bos-vs-choch`).
 - **5 Confluence**: expanding range and volume (`momentum-and-volume`),
-   no absorption against it (`absorption`); counted by
-   `confluence-counting`.
+   no absorption against it (`absorption`).
 - **6 Entry**: the next 3m close after the 15m or 1h close beyond times it;
    a retest that holds (a pullback: `pullback-vs-reversal`) is support,
    never a wait. Never anticipate it.
 - **7 Risk**: the idea is wrong back inside the level, beyond the retest's
    low (high for a short): the stop read names it (`invalidation`). The
    trail exits (`target trail`, `take-profit`); the first level ahead
-   (`inTheWay`) is a read (step 3).
+   (`inTheWay`) is a read.
 - **9 Manage**: a close back inside the level means the breakout failed:
    invalidation. A CHoCH against the trade on its timeframe or higher
    (`bos-vs-choch`) is one too.
@@ -64,8 +63,10 @@ is the setup for a rejection the other way.
 Out of a tight box: `compression`.
 
 **Evidence** (Train, docs/research/mtf-setup-catalog.md): a first 3m close
-through the IB high lost after costs (F8A); its retest form (F8B) was
-positive on 38 trades, interval straddling zero. Not a finding.
+through the IB high lost after costs (F8A); its retest (F8B): no finding.
+Waiting for a retest (docs/research/retest-entry-study.md): every retest
+entry earned less than the setup; the breakouts that never retest were the
+best.
 
 ## Examples
 

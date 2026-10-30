@@ -214,6 +214,13 @@ const LATE = {
       reason: "feat/bias-bg (never counter): the setup is the 15m or higher, the next 3m close times the entry (no 3m confirmation to wait for), the trail exits; the rewritten text is new" },
   ],
   breakout: [
+    { from: "**Evidence** (Train, docs/research/mtf-setup-catalog.md): a first 3m close through the IB high lost after costs (F8A); its retest form (F8B) was positive on 38 trades, interval straddling zero.",
+      to: ["**Evidence** (Train, docs/research/mtf-setup-catalog.md): a first 3m close through the IB high lost after costs (F8A); its retest (F8B): no finding.", "Waiting for a retest (docs/research/retest-entry-study.md): every retest entry earned less than the setup; the breakouts that never retest were the best."],
+      reason: "the retest-entry study (docs/research/retest-entry-study.md, owner-approved): every retest entry earned less than the setup; the F8B line no longer reads as favouring a retest (fix/trail-swing-side-capture)" },
+    { from: "**5 Confluence**: expanding range and volume (`momentum-and-volume`), no absorption against it (`absorption`); counted by `confluence-counting`.",
+      to: "**5 Confluence**: expanding range and volume (`momentum-and-volume`), no absorption against it (`absorption`).",
+      reason: "the count is named once, in the skill's opening line (`confluence-counting`): its bytes pay for the retest evidence under the head prompt's cap (fix/trail-swing-side-capture)" },
+    { from: "Not a finding.", to: null, reason: "the retest-entry study (docs/research/retest-entry-study.md, owner-approved): every retest entry earned less than the setup; the F8B line no longer reads as favouring a retest (fix/trail-swing-side-capture)" },
     { from: "Completed candles only, on 3m, 5m, 15m and 60m (`candle-reading`).",
       to: "Completed candles only, on 3m, 5m, 15m, 1h and 4h (`candle-reading`).",
       reason: "\"60m\" is written \"1h\" (the briefing's and the reads' name), and the 4h candle is in the stack (fix/skills-concept-owners)" },
