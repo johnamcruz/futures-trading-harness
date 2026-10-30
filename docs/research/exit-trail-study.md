@@ -20,8 +20,10 @@ works, or than the ratchet?
 - **Ratchet 1.5** and **ratchet 1.2**: `ratchet: on`, the lock the best R
   reached less 1.5R or 1.2R.
 - **FB-FRESH** and **FB-PROFIT**: two arms in which the `trail_r` fallback
-  fires: the R trail stands until a qualifying swing exists (FB-FRESH: one
-  confirmed after the entry; FB-PROFIT: one in profit).
+  fires: until a qualifying swing exists, the stop trails 1R behind the best
+  price (best − 1R). FB-FRESH: a swing counts only if it was confirmed after
+  the entry. FB-PROFIT: a swing counts only if its trail sits beyond the
+  lock (+0.5R). In both, the stop never moves back.
 
 ## The method
 
