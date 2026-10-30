@@ -7,11 +7,12 @@
 - Every open position has a protective stop working at the exchange: the
   entry's `stopLossBracket`, checked as soon as the fill shows (the order's
   one status check, or the next cycle's read). A separate `[protect]` stop
-  only repairs protection on an existing position (resized after a partial
-  exit, or stop cancelled or missing), placed at once; never a way to
+  only repairs protection on an existing position (resized, or stop
+  cancelled or missing), placed at once; never a way to
   enter without a bracket. If the stop can't be placed, close the position. A working entry
   without a stop bracket (one the gate never checked, e.g. placed outside
-  the harness) is cancelled, not waited on (the `order-mechanics` skill; "bracket attached on fill" in the prompt is one).
+  the harness) is cancelled, not waited on (the `order-mechanics` skill); one its
+  record or prompt marks "bracket attached on fill" is bracketed: keep it.
 - Never widen a stop, never average down, never add to a loser. You may
   tighten a stop or move it to breakeven.
 - Use micro contracts (MNQ, MES, MYM, M2K, MGC, MCL) and size 1 until the
