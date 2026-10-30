@@ -33,8 +33,8 @@ skills `trade-review` and `setup-expectancy`.
    trades and the repeating mistakes). A mistake seen twice in the last 10
    trades gets a lesson now.
 3. For each: `search_trades` / `search_orders` for the fills and changes;
-   `get_contract` for tick value. Compute planned risk $, net P&L after fees,
-   and R.
+   `get_contract` for tick value. Compute risk $ (stop held), net P&L after
+   fees, and R.
 4. Grade A–F on trigger validity, entry, stop placement, management, and size.
    List mistakes as `mistake:<kind>` tags. An entry rationale labelled
    `[exit]`/`[protect]` that actually opened risk is `mistake:rule-break`.

@@ -626,7 +626,7 @@ function scoreRun(runDir, { strategies = [], accounts = [], outcomeBars = null, 
       actual: { action: label.teacher ? label.teacher.action : null, setup: label.teacher ? label.teacher.setup : null, size: label.teacher && label.teacher.size ? label.teacher.size.contracts : null, gate: label.gate, result: label.result },
       reasons, incidentalFalse: reasons.claims.filter(c => c.check === false && c.incidental).length, agrees: verdict.agrees, category: verdict.category, why: verdict.why,
       severity: null, flow, claimChecks, data: F.dataOf(label, facts), provenance: { cycleFile: cycleFile || null, promptHash: label.provenance ? label.provenance.promptHash : null },
-      trade: o && o.filled ? { result: o.result, r: o.r, net: o.net, side: o.side, size: o.size, exitReason: o.exitReason } : null,
+      trade: o && o.filled ? { result: o.result, r: o.r, net: o.net, side: o.side, size: o.size, exitReason: o.exitReason, ...(o.rBasis ? { rBasis: o.rBasis } : {}) } : null,
       counterfactual: label.counterfactualFor === 'skip' && label.counterfactual ? { strategy: label.counterfactual.strategy, direction: label.counterfactual.direction, simulated: label.counterfactual.simulated, result: label.counterfactual.result, R: label.counterfactual.R, net: label.counterfactual.net, reason: label.counterfactual.reason } : null,
       pacing: facts.attempt,
     });

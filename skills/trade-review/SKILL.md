@@ -7,8 +7,8 @@ description: Use after every closed or cancelled entry (the gate blocks the next
 
 ## When to Use
 
-- After every closed (or cancelled, unfilled) entry. The order gate blocks the
-  next entry until each entry has a review.
+- After every closed (or cancelled, unfilled) entry: the gate holds
+  the next entry until then.
 - End of session: distil 1–3 lessons.
 
 ## How It Works
@@ -28,11 +28,12 @@ description: Use after every closed or cancelled entry (the gate blocks the next
    - **Your last 10 trades.** The harness tool `lessons` (it starts
      with the form of the last 10: record, expectancy, repeated mistakes)
      and `journal_read {kind:"review", tag:"setup:<name>"}` for this
-     setup's last reviews. Is this a mistake you already made? If the same
+     setup's last reviews. If the same
      `mistake:*` tag appears twice in the last 10 trades, write the lesson
      **now** (with the trades as evidence), not at end of day.
-3. **Compute.** Planned risk $ = |entry − stop| ÷ tickSize × tickValue × size.
-   R = net P&L ÷ planned risk. MAE <= 0, MFE >= 0 (R) from `get_bars` over
+3. **Compute.** Risk $ = |fill − stop held| ÷ tickSize × tickValue × size
+   (after `[protect]`, the plan's; the round trip's `r` uses the
+   bracket's). R = net P&L ÷ risk. MAE <= 0, MFE >= 0 (R) from `get_bars` over
    the hold: MAE near -1R on a win = poor entry; high MFE on a loss = good
    setup, wasted exit; MAE near 0, MFE >= 2R = clean trend setup.
 4. **Grade the process (A–F)** independently of the result:

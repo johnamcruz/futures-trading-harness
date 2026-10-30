@@ -333,3 +333,49 @@ test('trend capture: the run\'s exits: the transcript and the gateway record of 
   assert.strictEqual(blind.exits.decisions[0].exitBy, 'unattributed');
   assert.strictEqual(require('../../scripts/lib/train/exit-findings').MODEL_DECIDED.has('unattributed'), false);
 });
+
+test('trend capture: an entry placed before the leg\'s start is its catch when it fills in the leg\'s first half; filled before the start or after that half, not', () => {
+  // The up leg runs bars[2] to bars[11]: its first half ends at bars[7]'s open. A long placed at bars[0]'s close, before
+  // the leg (2021-06-28: placed 75 s before the leg's start bar, filled at its open); the plan's order 7 never fills.
+  const placedEarly = filledAt => at => [{ orderId: 20, profitAndLoss: null, roundTripId: 1, price: 21500, creationTimestamp: filledAt(at) },
+    { orderId: 21, profitAndLoss: 30, roundTripId: 1, exitReason: 'target', roundTrip: { r: 1.5, entryTime: filledAt(at), entryPrice: 21500, exitPrice: 21530, exitTime: at(12), mfeR: 2, risk: 20, open: false } }];
+  const run = filledAt => { const x = runFixture({ trades: placedEarly(filledAt), orders: [{ orderId: 20, bar: 0, composed: { record: 'early', side: 'long', entry: 21500 } }] }); return tc.captureReport({ runDir: x.runDir, days: x.days }); };
+  // Filled at the leg's start bar's open (the edge): caught, and the entry is in the leg (at its fill, not its order).
+  const atStart = run(at => at(1));
+  assert.deepStrictEqual([atStart.legs[0].captured, atStart.legs[0].entry.r], [true, 1.5]);
+  assert.deepStrictEqual(atStart.entries.map(e => [e.kind, e.leg]), [['in-trend', atStart.legs[0].id]]);
+  // Filled at the end of the first half (bars[6]'s close): caught.
+  assert.strictEqual(run(at => at(6)).legs[0].captured, true);
+  // Filled a bar after the half: not caught (the plan's unfilled order is the blocker).
+  const late = run(at => at(7)).legs[0];
+  assert.deepStrictEqual([late.captured, late.blocker.code], [false, 'unfilled']);
+  // Filled before the leg's start (bars[0]'s close, a bar before bars[2]'s open): not this leg's catch.
+  assert.strictEqual(run(at => at(0)).legs[0].captured, false);
+});
+
+test('trend capture: a trade\'s R, peak and the leg\'s available R on the stop it held after the runner\'s move to the plan\'s stop', () => {
+  // In at 21516 with a 10-point bracket stop (21506), moved by the runner to the plan's 21508 (8 points) after the fill:
+  // the broker's 2.1R (21 points over 10) is 2.625R on the stop it held, its 2.5R best 3.125R (the ride's peak at 0.01: 3.13).
+  const trades = at => [OPEN(at), { orderId: 8, profitAndLoss: 40.5, roundTripId: 1, roundTrip: { contractId: 'MNQ', direction: 'long', r: 2.1, entryTime: at(4), entryPrice: 21516, exitPrice: 21537, exitTime: at(9), mfeR: 2.5, risk: 10, initialStop: 21506, open: false } }];
+  const x = runFixture({ trades });
+  const before = tc.captureReport({ runDir: x.runDir, days: x.days }).legs[0];
+  assert.deepStrictEqual([before.entry.r, before.entry.rBasis, before.ride.peakR], [2.1, 'bracket stop', 2.5], 'no move: the broker\'s');
+  fs.mkdirSync(path.join(x.home, 'logs'), { recursive: true });
+  const moved = { at: new Date(Date.parse(x.bars[5].t) + 1000).toISOString(), kind: 'stop_moved', symbol: 'MNQ', contractId: 'MNQ', from: 21506, to: 21508, why: 'plan stop' };
+  fs.writeFileSync(path.join(x.home, 'logs', 'events-2026-04-23.jsonl'), `${JSON.stringify(moved)}\n`);
+  const up = tc.captureReport({ runDir: x.runDir, days: x.days }).legs[0];
+  assert.deepStrictEqual([up.entry.r, up.entry.rBasis, up.ride.r, up.ride.peakR], [2.625, 'held stop', 2.625, 3.13]);
+  // Its available R on that 8-point stop (the plan's record planned 10), never estimated.
+  // From bars[3]'s close (21508) to the leg's high (21540.25): 32.25 points, 4.03R on 8 (3.23R on the planned 10).
+  assert.deepStrictEqual([before.availableR, up.availableR, up.estimated], [3.23, 4.03, false]);
+});
+
+test('trend capture: the broker\'s "trail" for an exit at the stop the trade held (the trail never armed) reads "stop"', () => {
+  // A long stopped a tick under the plan's stop the runner moved it to (21508): the broker calls a moved stop a trail.
+  const trades = at => [OPEN(at), { orderId: 8, profitAndLoss: -16.5, roundTripId: 1, exitReason: 'trail', roundTrip: { contractId: 'MNQ', direction: 'long', r: -0.825, entryTime: at(4), entryPrice: 21516, exitPrice: 21507.75, exitTime: at(9), mfeR: 0.5, risk: 10, initialStop: 21506, reason: 'trail', open: false } }];
+  const x = runFixture({ trades });
+  fs.mkdirSync(path.join(x.home, 'logs'), { recursive: true });
+  fs.writeFileSync(path.join(x.home, 'logs', 'events-2026-04-23.jsonl'), `${JSON.stringify({ at: new Date(Date.parse(x.bars[5].t) + 1000).toISOString(), kind: 'stop_moved', symbol: 'MNQ', to: 21508, why: 'plan stop' })}\n`);
+  const up = tc.captureReport({ runDir: x.runDir, days: x.days }).legs[0];
+  assert.deepStrictEqual([up.entry.outcome, up.entry.r], ['stop', -1.031]);
+});
