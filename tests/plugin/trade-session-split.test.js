@@ -305,6 +305,8 @@ const LATE = [
     reason: "feat/bias-bg (never counter): no entry against a trending 4h or 1h on any path, the 15m setup is the entry and the 3m only times it, the trail exits, a prop attempt trades the full verdict size; the rewritten text is new" },
   { from: "Read it before choosing a setup: a trend day (one side extended two IBs, or one from a narrow IB), often after an open outside the prior range and an open-drive, is traded with it (fading needs a reversal setup at a higher-timeframe level); a normal variation day (one side extended, less) has made its move and often rotates back; an open inside the prior value area that stays inside the IB is balance (fade the edges, small targets; the middle is a read against); a neutral day (both sides extended) is two-sided.", to: null,
     reason: "feat/bias-bg (never counter): no entry against a trending 4h or 1h on any path, the 15m setup is the entry and the 3m only times it, the trail exits, a prop attempt trades the full verdict size; the rewritten text is new" },
+  { from: "The position's own stop and target (bracket legs, `[protect]` and `[exit]` orders, on the opposite side) are never cancelled here; apply the plan's management (breakeven, trail, scale-out) through the trade-executor role, and journal any change.", to: null,
+    reason: "feat/bias-bg: the stop moves only behind turned structure (the trail), never to breakeven by feel" },
 ];
 const LATE_STALE = (() => {
   const r = withLate(ALLOWED, LATE, units(require('fs').readFileSync(require('path').join(__dirname, '..', '..', BEFORE), 'utf8')));

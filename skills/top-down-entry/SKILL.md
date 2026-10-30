@@ -32,7 +32,7 @@ points to the read it uses.
    or break to wait for.
 4. **Stop: compose's.** One tick beyond the setup's invalidation, as
    a rule its candle's extreme (`invalidation`); never tighter.
-5. **Exit: the trail.** `target trail`: the 2R mark arms it (`take-profit`;
+5. **Exit: the trail.** `target trail`: the 2R mark that arms the trail, not the exit (`take-profit`;
    `m3.swingTargets` are context); `candidate.inTheWay` is the first level
    ahead: a read to weigh, not a pass.
    Hard: R:R at least `risk.min_rr` (compose_check's).

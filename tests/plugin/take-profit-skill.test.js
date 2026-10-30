@@ -36,7 +36,7 @@ test('take-profit: the target kinds, their weight by timeframe, the room in R; c
     'A side the candle forming has already taken (`taken`) is spent as a target; the far side remains.',
     '**Fair value gap edges**: the near edge of an open gap ahead of price; a partly filled gap, its unfilled part only (`fair-value-gaps`).',
     // The trail exits (feat/bias-bg): a level read only off the side rule's sides, outside a prop attempt.
-    '`target trail` (the 2R mark arms it), every entry the side rule gives; a level ahead is context, never a requirement.',
+    '`target trail` (the 2R mark that arms the trail, not the exit), every entry the side rule gives; a level ahead is context, never a requirement.',
     '`target <tf> swing high|low <price>`, `target prior 1h|4h high|mid|low <price>` (a taken side reads false), `target <15m|1h> fvg high|low <price>`; none named: `target 2r`.',
     'its midpoint moves until it closes, so it is a target only once completed.',
     '**Timeframe weight** (hypothesis, not measured)',

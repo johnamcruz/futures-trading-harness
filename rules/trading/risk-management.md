@@ -13,8 +13,8 @@
   without a stop bracket (one the gate never checked, e.g. placed outside
   the harness) is cancelled, not waited on (the `order-mechanics` skill); one its
   record or prompt marks "bracket attached on fill" is bracketed: keep it.
-- Never widen a stop, never average down, never add to a loser. You may
-  tighten a stop or move it to breakeven.
+- Never widen a stop, never average down, never add to a loser. Tighten it
+  only behind turned structure (`manage-position`), never to breakeven by feel.
 - Use micro contracts (MNQ, MES, MYM, M2K, MGC, MCL) and size 1 until the
   journal shows positive expectancy over at least 30 closed trades of that
   setup.
@@ -27,4 +27,5 @@
   no level needed).
 - After 2 losses in a row: stop, write a review and a lesson, then wait out the
   cooldown. After 3 losing trades in a trading day: done until 17:00 CT.
+  In a prop attempt the rulebook's `loss_streak_stop` governs instead.
 - Pass when the count says so. Standing aside is a position.

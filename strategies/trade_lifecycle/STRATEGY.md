@@ -74,7 +74,7 @@ cap. In a prop attempt the ceiling is the lower of $300 and the account's
 verdict; where $300 fits fewer than the rulebook's floor at the stop, code
 may trade exactly the floor, up to the rulebook's floor stretch, while the
 attempt is healthy (its RULEBOOK.md). The trail exits (the owner: always
-trail): the 2R mark arms it and the policy's exit trails past it; a level
+trail): the 2R mark arms the trail, not the exit, and the policy's exit trails past it; a level
 ahead is context, never the exit. `min_rr` 2 is the code's floor.
 
 ### Against the trend

@@ -35,7 +35,7 @@ only:
 - **The candle forming**: its midpoint moves until it closes, so it is a
   target only once completed.
 
-**Read forms** (the target step): `target trail` (the 2R mark arms it),
+**Read forms** (the target step): `target trail` (the 2R mark that arms the trail, not the exit),
 every entry the side rule gives; a level ahead is context, never a
 requirement. Not in a prop attempt, on a side the side rule doesn't give:
 `target <tf> swing high|low <price>`, `target prior 1h|4h high|mid|low

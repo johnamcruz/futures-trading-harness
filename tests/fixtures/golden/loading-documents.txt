@@ -661,7 +661,7 @@ strategy fx_vwap_reclaim: {
   "version": 1
 }
 strategy momentum_continuation: {
-  "body": "4716 chars sha256:1ee59a861946ba05",
+  "body": "4777 chars sha256:0101a9e4f858ad57",
   "compiledRules": "sha256:8d74c86079358090",
   "compiledStop": "sha256:54e436b332f2eef2",
   "compiledTarget": null,
@@ -710,7 +710,7 @@ strategy momentum_continuation: {
 }
 strategy prop_portfolio: {
   "account": "<name-43f416>",
-  "body": "4244 chars sha256:0b33062656d580fd",
+  "body": "4304 chars sha256:a20d63b528822002",
   "compiledRules": null,
   "compiledStop": null,
   "compiledTarget": null,
@@ -774,7 +774,7 @@ strategy prop_portfolio: {
   "version": 3
 }
 strategy trade_lifecycle: {
-  "body": "3781 chars sha256:f4b30a5ccc31dc4d",
+  "body": "3803 chars sha256:ca37e20644f5a14b",
   "compiledRules": null,
   "compiledStop": null,
   "compiledTarget": null,

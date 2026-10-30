@@ -388,7 +388,7 @@ points to the read it uses.
   **Stop: compose's.** One tick beyond the setup's invalidation, as
    a rule its candle's extreme (`invalidation`); never tighter.
 5.
-  **Exit: the trail.** `target trail`: the 2R mark arms it (`take-profit`;
+  **Exit: the trail.** `target trail`: the 2R mark that arms the trail, not the exit (`take-profit`;
    `m3.swingTargets` are context); `candidate.inTheWay` is the first level
    ahead: a read to weigh, not a pass.
    Hard: R:R at least `risk.min_rr` (compose_check's).
@@ -455,7 +455,7 @@ only:
 - **The candle forming**: its midpoint moves until it closes, so it is a
   target only once completed.
 
-**Read forms** (the target step): `target trail` (the 2R mark arms it),
+**Read forms** (the target step): `target trail` (the 2R mark that arms the trail, not the exit),
 every entry the side rule gives; a level ahead is context, never a
 requirement.
   Not in a prop attempt, on a side the side rule doesn't give:
@@ -1489,7 +1489,7 @@ points to the read it uses.
   **Stop: compose's.** One tick beyond the setup's invalidation, as
    a rule its candle's extreme (`invalidation`); never tighter.
 5.
-  **Exit: the trail.** `target trail`: the 2R mark arms it (`take-profit`;
+  **Exit: the trail.** `target trail`: the 2R mark that arms the trail, not the exit (`take-profit`;
    `m3.swingTargets` are context); `candidate.inTheWay` is the first level
    ahead: a read to weigh, not a pass.
    Hard: R:R at least `risk.min_rr` (compose_check's).
@@ -1556,7 +1556,7 @@ only:
 - **The candle forming**: its midpoint moves until it closes, so it is a
   target only once completed.
 
-**Read forms** (the target step): `target trail` (the 2R mark arms it),
+**Read forms** (the target step): `target trail` (the 2R mark that arms the trail, not the exit),
 every entry the side rule gives; a level ahead is context, never a
 requirement.
   Not in a prop attempt, on a side the side rule doesn't give:
@@ -2599,7 +2599,7 @@ points to the read it uses.
   **Stop: compose's.** One tick beyond the setup's invalidation, as
    a rule its candle's extreme (`invalidation`); never tighter.
 5.
-  **Exit: the trail.** `target trail`: the 2R mark arms it (`take-profit`;
+  **Exit: the trail.** `target trail`: the 2R mark that arms the trail, not the exit (`take-profit`;
    `m3.swingTargets` are context); `candidate.inTheWay` is the first level
    ahead: a read to weigh, not a pass.
    Hard: R:R at least `risk.min_rr` (compose_check's).
@@ -2666,7 +2666,7 @@ only:
 - **The candle forming**: its midpoint moves until it closes, so it is a
   target only once completed.
 
-**Read forms** (the target step): `target trail` (the 2R mark arms it),
+**Read forms** (the target step): `target trail` (the 2R mark that arms the trail, not the exit),
 every entry the side rule gives; a level ahead is context, never a
 requirement.
   Not in a prop attempt, on a side the side rule doesn't give:
@@ -3700,7 +3700,7 @@ points to the read it uses.
   **Stop: compose's.** One tick beyond the setup's invalidation, as
    a rule its candle's extreme (`invalidation`); never tighter.
 5.
-  **Exit: the trail.** `target trail`: the 2R mark arms it (`take-profit`;
+  **Exit: the trail.** `target trail`: the 2R mark that arms the trail, not the exit (`take-profit`;
    `m3.swingTargets` are context); `candidate.inTheWay` is the first level
    ahead: a read to weigh, not a pass.
    Hard: R:R at least `risk.min_rr` (compose_check's).
@@ -3767,7 +3767,7 @@ only:
 - **The candle forming**: its midpoint moves until it closes, so it is a
   target only once completed.
 
-**Read forms** (the target step): `target trail` (the 2R mark arms it),
+**Read forms** (the target step): `target trail` (the 2R mark that arms the trail, not the exit),
 every entry the side rule gives; a level ahead is context, never a
 requirement.
   Not in a prop attempt, on a side the side rule doesn't give:
@@ -4810,7 +4810,7 @@ points to the read it uses.
   **Stop: compose's.** One tick beyond the setup's invalidation, as
    a rule its candle's extreme (`invalidation`); never tighter.
 5.
-  **Exit: the trail.** `target trail`: the 2R mark arms it (`take-profit`;
+  **Exit: the trail.** `target trail`: the 2R mark that arms the trail, not the exit (`take-profit`;
    `m3.swingTargets` are context); `candidate.inTheWay` is the first level
    ahead: a read to weigh, not a pass.
    Hard: R:R at least `risk.min_rr` (compose_check's).
@@ -4877,7 +4877,7 @@ only:
 - **The candle forming**: its midpoint moves until it closes, so it is a
   target only once completed.
 
-**Read forms** (the target step): `target trail` (the 2R mark arms it),
+**Read forms** (the target step): `target trail` (the 2R mark that arms the trail, not the exit),
 every entry the side rule gives; a level ahead is context, never a
 requirement.
   Not in a prop attempt, on a side the side rule doesn't give:
@@ -5911,7 +5911,7 @@ points to the read it uses.
   **Stop: compose's.** One tick beyond the setup's invalidation, as
    a rule its candle's extreme (`invalidation`); never tighter.
 5.
-  **Exit: the trail.** `target trail`: the 2R mark arms it (`take-profit`;
+  **Exit: the trail.** `target trail`: the 2R mark that arms the trail, not the exit (`take-profit`;
    `m3.swingTargets` are context); `candidate.inTheWay` is the first level
    ahead: a read to weigh, not a pass.
    Hard: R:R at least `risk.min_rr` (compose_check's).
@@ -5978,7 +5978,7 @@ only:
 - **The candle forming**: its midpoint moves until it closes, so it is a
   target only once completed.
 
-**Read forms** (the target step): `target trail` (the 2R mark arms it),
+**Read forms** (the target step): `target trail` (the 2R mark that arms the trail, not the exit),
 every entry the side rule gives; a level ahead is context, never a
 requirement.
   Not in a prop attempt, on a side the side rule doesn't give:
@@ -7012,7 +7012,7 @@ points to the read it uses.
   **Stop: compose's.** One tick beyond the setup's invalidation, as
    a rule its candle's extreme (`invalidation`); never tighter.
 5.
-  **Exit: the trail.** `target trail`: the 2R mark arms it (`take-profit`;
+  **Exit: the trail.** `target trail`: the 2R mark that arms the trail, not the exit (`take-profit`;
    `m3.swingTargets` are context); `candidate.inTheWay` is the first level
    ahead: a read to weigh, not a pass.
    Hard: R:R at least `risk.min_rr` (compose_check's).
@@ -7079,7 +7079,7 @@ only:
 - **The candle forming**: its midpoint moves until it closes, so it is a
   target only once completed.
 
-**Read forms** (the target step): `target trail` (the 2R mark arms it),
+**Read forms** (the target step): `target trail` (the 2R mark that arms the trail, not the exit),
 every entry the side rule gives; a level ahead is context, never a
 requirement.
   Not in a prop attempt, on a side the side rule doesn't give:
@@ -8210,7 +8210,7 @@ points to the read it uses.
   **Stop: compose's.** One tick beyond the setup's invalidation, as
    a rule its candle's extreme (`invalidation`); never tighter.
 5.
-  **Exit: the trail.** `target trail`: the 2R mark arms it (`take-profit`;
+  **Exit: the trail.** `target trail`: the 2R mark that arms the trail, not the exit (`take-profit`;
    `m3.swingTargets` are context); `candidate.inTheWay` is the first level
    ahead: a read to weigh, not a pass.
    Hard: R:R at least `risk.min_rr` (compose_check's).
@@ -8277,7 +8277,7 @@ only:
 - **The candle forming**: its midpoint moves until it closes, so it is a
   target only once completed.
 
-**Read forms** (the target step): `target trail` (the 2R mark arms it),
+**Read forms** (the target step): `target trail` (the 2R mark that arms the trail, not the exit),
 every entry the side rule gives; a level ahead is context, never a
 requirement.
   Not in a prop attempt, on a side the side rule doesn't give:
@@ -9405,7 +9405,7 @@ points to the read it uses.
   **Stop: compose's.** One tick beyond the setup's invalidation, as
    a rule its candle's extreme (`invalidation`); never tighter.
 5.
-  **Exit: the trail.** `target trail`: the 2R mark arms it (`take-profit`;
+  **Exit: the trail.** `target trail`: the 2R mark that arms the trail, not the exit (`take-profit`;
    `m3.swingTargets` are context); `candidate.inTheWay` is the first level
    ahead: a read to weigh, not a pass.
    Hard: R:R at least `risk.min_rr` (compose_check's).
@@ -9472,7 +9472,7 @@ only:
 - **The candle forming**: its midpoint moves until it closes, so it is a
   target only once completed.
 
-**Read forms** (the target step): `target trail` (the 2R mark arms it),
+**Read forms** (the target step): `target trail` (the 2R mark that arms the trail, not the exit),
 every entry the side rule gives; a level ahead is context, never a
 requirement.
   Not in a prop attempt, on a side the side rule doesn't give:
@@ -10594,7 +10594,7 @@ points to the read it uses.
   **Stop: compose's.** One tick beyond the setup's invalidation, as
    a rule its candle's extreme (`invalidation`); never tighter.
 5.
-  **Exit: the trail.** `target trail`: the 2R mark arms it (`take-profit`;
+  **Exit: the trail.** `target trail`: the 2R mark that arms the trail, not the exit (`take-profit`;
    `m3.swingTargets` are context); `candidate.inTheWay` is the first level
    ahead: a read to weigh, not a pass.
    Hard: R:R at least `risk.min_rr` (compose_check's).
@@ -10661,7 +10661,7 @@ only:
 - **The candle forming**: its midpoint moves until it closes, so it is a
   target only once completed.
 
-**Read forms** (the target step): `target trail` (the 2R mark arms it),
+**Read forms** (the target step): `target trail` (the 2R mark that arms the trail, not the exit),
 every entry the side rule gives; a level ahead is context, never a
 requirement.
   Not in a prop attempt, on a side the side rule doesn't give:
@@ -11710,7 +11710,7 @@ points to the read it uses.
   **Stop: compose's.** One tick beyond the setup's invalidation, as
    a rule its candle's extreme (`invalidation`); never tighter.
 5.
-  **Exit: the trail.** `target trail`: the 2R mark arms it (`take-profit`;
+  **Exit: the trail.** `target trail`: the 2R mark that arms the trail, not the exit (`take-profit`;
    `m3.swingTargets` are context); `candidate.inTheWay` is the first level
    ahead: a read to weigh, not a pass.
    Hard: R:R at least `risk.min_rr` (compose_check's).
@@ -11777,7 +11777,7 @@ only:
 - **The candle forming**: its midpoint moves until it closes, so it is a
   target only once completed.
 
-**Read forms** (the target step): `target trail` (the 2R mark arms it),
+**Read forms** (the target step): `target trail` (the 2R mark that arms the trail, not the exit),
 every entry the side rule gives; a level ahead is context, never a
 requirement.
   Not in a prop attempt, on a side the side rule doesn't give:
@@ -12908,7 +12908,7 @@ points to the read it uses.
   **Stop: compose's.** One tick beyond the setup's invalidation, as
    a rule its candle's extreme (`invalidation`); never tighter.
 5.
-  **Exit: the trail.** `target trail`: the 2R mark arms it (`take-profit`;
+  **Exit: the trail.** `target trail`: the 2R mark that arms the trail, not the exit (`take-profit`;
    `m3.swingTargets` are context); `candidate.inTheWay` is the first level
    ahead: a read to weigh, not a pass.
    Hard: R:R at least `risk.min_rr` (compose_check's).
@@ -12975,7 +12975,7 @@ only:
 - **The candle forming**: its midpoint moves until it closes, so it is a
   target only once completed.
 
-**Read forms** (the target step): `target trail` (the 2R mark arms it),
+**Read forms** (the target step): `target trail` (the 2R mark that arms the trail, not the exit),
 every entry the side rule gives; a level ahead is context, never a
 requirement.
   Not in a prop attempt, on a side the side rule doesn't give:
@@ -14097,7 +14097,7 @@ points to the read it uses.
   **Stop: compose's.** One tick beyond the setup's invalidation, as
    a rule its candle's extreme (`invalidation`); never tighter.
 5.
-  **Exit: the trail.** `target trail`: the 2R mark arms it (`take-profit`;
+  **Exit: the trail.** `target trail`: the 2R mark that arms the trail, not the exit (`take-profit`;
    `m3.swingTargets` are context); `candidate.inTheWay` is the first level
    ahead: a read to weigh, not a pass.
    Hard: R:R at least `risk.min_rr` (compose_check's).
@@ -14164,7 +14164,7 @@ only:
 - **The candle forming**: its midpoint moves until it closes, so it is a
   target only once completed.
 
-**Read forms** (the target step): `target trail` (the 2R mark arms it),
+**Read forms** (the target step): `target trail` (the 2R mark that arms the trail, not the exit),
 every entry the side rule gives; a level ahead is context, never a
 requirement.
   Not in a prop attempt, on a side the side rule doesn't give:
@@ -15286,7 +15286,7 @@ points to the read it uses.
   **Stop: compose's.** One tick beyond the setup's invalidation, as
    a rule its candle's extreme (`invalidation`); never tighter.
 5.
-  **Exit: the trail.** `target trail`: the 2R mark arms it (`take-profit`;
+  **Exit: the trail.** `target trail`: the 2R mark that arms the trail, not the exit (`take-profit`;
    `m3.swingTargets` are context); `candidate.inTheWay` is the first level
    ahead: a read to weigh, not a pass.
    Hard: R:R at least `risk.min_rr` (compose_check's).
@@ -15353,7 +15353,7 @@ only:
 - **The candle forming**: its midpoint moves until it closes, so it is a
   target only once completed.
 
-**Read forms** (the target step): `target trail` (the 2R mark arms it),
+**Read forms** (the target step): `target trail` (the 2R mark that arms the trail, not the exit),
 every entry the side rule gives; a level ahead is context, never a
 requirement.
   Not in a prop attempt, on a side the side rule doesn't give:
@@ -16484,7 +16484,7 @@ points to the read it uses.
   **Stop: compose's.** One tick beyond the setup's invalidation, as
    a rule its candle's extreme (`invalidation`); never tighter.
 5.
-  **Exit: the trail.** `target trail`: the 2R mark arms it (`take-profit`;
+  **Exit: the trail.** `target trail`: the 2R mark that arms the trail, not the exit (`take-profit`;
    `m3.swingTargets` are context); `candidate.inTheWay` is the first level
    ahead: a read to weigh, not a pass.
    Hard: R:R at least `risk.min_rr` (compose_check's).
@@ -16551,7 +16551,7 @@ only:
 - **The candle forming**: its midpoint moves until it closes, so it is a
   target only once completed.
 
-**Read forms** (the target step): `target trail` (the 2R mark arms it),
+**Read forms** (the target step): `target trail` (the 2R mark that arms the trail, not the exit),
 every entry the side rule gives; a level ahead is context, never a
 requirement.
   Not in a prop attempt, on a side the side rule doesn't give:
@@ -17610,7 +17610,7 @@ points to the read it uses.
   **Stop: compose's.** One tick beyond the setup's invalidation, as
    a rule its candle's extreme (`invalidation`); never tighter.
 5.
-  **Exit: the trail.** `target trail`: the 2R mark arms it (`take-profit`;
+  **Exit: the trail.** `target trail`: the 2R mark that arms the trail, not the exit (`take-profit`;
    `m3.swingTargets` are context); `candidate.inTheWay` is the first level
    ahead: a read to weigh, not a pass.
    Hard: R:R at least `risk.min_rr` (compose_check's).
@@ -17677,7 +17677,7 @@ only:
 - **The candle forming**: its midpoint moves until it closes, so it is a
   target only once completed.
 
-**Read forms** (the target step): `target trail` (the 2R mark arms it),
+**Read forms** (the target step): `target trail` (the 2R mark that arms the trail, not the exit),
 every entry the side rule gives; a level ahead is context, never a
 requirement.
   Not in a prop attempt, on a side the side rule doesn't give:
@@ -18571,7 +18571,7 @@ points to the read it uses.
   **Stop: compose's.** One tick beyond the setup's invalidation, as
    a rule its candle's extreme (`invalidation`); never tighter.
 5.
-  **Exit: the trail.** `target trail`: the 2R mark arms it (`take-profit`;
+  **Exit: the trail.** `target trail`: the 2R mark that arms the trail, not the exit (`take-profit`;
    `m3.swingTargets` are context); `candidate.inTheWay` is the first level
    ahead: a read to weigh, not a pass.
    Hard: R:R at least `risk.min_rr` (compose_check's).
@@ -18638,7 +18638,7 @@ only:
 - **The candle forming**: its midpoint moves until it closes, so it is a
   target only once completed.
 
-**Read forms** (the target step): `target trail` (the 2R mark arms it),
+**Read forms** (the target step): `target trail` (the 2R mark that arms the trail, not the exit),
 every entry the side rule gives; a level ahead is context, never a
 requirement.
   Not in a prop attempt, on a side the side rule doesn't give:

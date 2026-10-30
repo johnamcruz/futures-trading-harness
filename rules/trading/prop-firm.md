@@ -16,8 +16,8 @@ user; numbers here are the harness defaults, not any firm's official limits.
   entries from 15:45 ET, and end of day (15:50 ET) closes positions and
   cancels resting orders. Nothing is held through the 16:00-18:00 ET break or
   the weekend.
-- **Consistency:** on funded/combine accounts no single day should carry the
-  whole profit target. Prefer steady days over one big one.
+- **Consistency:** the account's rule (its ACCOUNT.md), enforced by code;
+  don't plan around it.
 - **Locked accounts:** `canTrade=false` or errorCode 4 `AccountViolation` means
   the firm locked the account. Stop trading it and tell the user.
 - **Market closed:** errorCode 5 `OutsideTradingHours`. Don't retry in a loop.

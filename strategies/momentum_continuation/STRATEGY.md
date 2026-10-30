@@ -73,11 +73,11 @@ with `compose_check`; code takes its entry, stop and target from here.
   side rule's, e.g. `4h up`), where price is (location), the setup
   `momentum_continuation fired up` (short: `down`), the entry `3m momentum
   up`, the stop `stop 3m low <the candle's low>` (short: high), the target
-  `target 2r`.
+  `target 2r` (the 2R mark that arms the trail, not the exit).
 - Code's plan: at market from the candle's close; its own stop: one tick
   beyond the candle's extreme, widened to at least 12 ticks (`stop_min`),
-  and like every composed stop refused under compose's floor; the target
-  2R. The brackets are
+  and like every composed stop refused under compose's floor; the 2R mark
+  arms the trail. The brackets are
   ticks from the fill. Past 2R the rulebook's exit trails it
   (`target_then_trail`: the lock, then the 15m structure trail).
 - Size: the rulebook's (in an attempt `order_plan` translates yours; the

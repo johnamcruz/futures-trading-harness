@@ -149,7 +149,7 @@ test('a setup whose stop is too wide for the cushion is skipped with the reason,
   hooks.screen([{ name: 'trendy', candidate: true, direction: 'long', stopDistance: 1000 }], { symbol: 'MNQ', contractId: CONTRACT, bars: bars(), now });
   const v = prop.latestVerdict(home, 'prop_x', 'MNQ');
   assert.strictEqual(v.action, 'skip');
-  assert.match(v.reason, /size budget \(\$450\) is below one contract at this stop; with a cushion of \$2250 the attempt can only trade setups with tighter stops/);
+  assert.match(v.reason, /size budget \(\$450\) is below one contract at this stop; with a cushion of \$2250 this setup is skipped \(never a tighter stop\)/);
 });
 
 test('a policy strategy screens its strategies\' setups: the first that fired, sized in micros or minis; the verdict is recorded', async () => {
