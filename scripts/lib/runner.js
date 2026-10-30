@@ -761,6 +761,7 @@ function createRunner(deps) {
     let cross = null;
     let armed = Boolean(t.armed);
     let fellBack = false;
+    let wrongSide = false; // a fallback because the swing sat on the wrong side of the close, not for want of one
     for (const bar of bars) {
       // A level the resting stop never reached (a modify that failed or came
       // too late) protects nothing: a bar through it means out at market.
@@ -770,7 +771,7 @@ function createRunner(deps) {
       // Past the target: exit-trail.js on this closed bar, the swing confirmed by its close (never a later bar).
       const step = after ? afterTargetStep({ ...t, stop: target, peakR, armed }, bar, t.plan, tick, after.trailBy === 'structure' ? swingAtBar(item.bars, bar, after.swingMinutes, sign) : null)
         : trailStep({ ...t, stop: target, peakR }, bar, t.plan, tick);
-      if (after) { armed = step.armed; fellBack = fellBack || step.fellBack; }
+      if (after) { armed = step.armed; fellBack = fellBack || step.fellBack; wrongSide = wrongSide || Boolean(step.wrongSide); }
       peakR = step.peakR;
       target = step.stop;
       if (step.close) { cross = { bar, stop: step.stop }; break; }
@@ -806,7 +807,7 @@ function createRunner(deps) {
       await closeOut(`time stop: ${barsHeld} ${cfg.timeframe}m bars in the trade (max_bars ${t.plan.maxBars})`);
       return;
     }
-    if (fellBack && !t.fellBackSaid) log(`${item.symbol}: structure trail: no ${t.plan.afterTarget.swingMinutes}m swing in the bars at all; trailing ${t.plan.afterTarget.trailR}R behind the best price (the fallback)`);
+    if (fellBack && !t.fellBackSaid) log(`${item.symbol}: structure trail: ${wrongSide ? `the last ${t.plan.afterTarget.swingMinutes}m swing is on the wrong side of the close (its stop would be through the market)` : `no ${t.plan.afterTarget.swingMinutes}m swing in the bars at all`}; trailing ${t.plan.afterTarget.trailR}R behind the best price (the fallback)`);
     save({ ...t, peakR, troughR, barsHeld, lastBarT, armed, fellBackSaid: Boolean(t.fellBackSaid || fellBack) });
     if (!stopOrder) {
       if (sign * (target - t.stop) < tick - 1e-9) return;

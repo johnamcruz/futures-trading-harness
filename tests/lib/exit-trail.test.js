@@ -104,7 +104,9 @@ test('afterTargetStep: a swing whose stop is not on the protective side of the c
   // (close 117). Before the fix its stop (123.75) sat over the market and closed the trade at once at 117.
   const long = LONG({ stop: 115, peakR: 2.2, armed: true });
   const gap = at(long, { h: 118, l: 116, c: 117 }, 124);
-  assert.deepStrictEqual([gap.stop, gap.close, gap.fellBack], [115, null, true], 'the lock holds; the R trail (112) is under it');
+  assert.deepStrictEqual([gap.stop, gap.close, gap.fellBack, gap.wrongSide], [115, null, true, true], 'the lock holds; the R trail (112) is under it');
+  // With no swing at all, a fallback that says it is not the wrong side's.
+  assert.strictEqual(at(long, { h: 118, l: 116, c: 117 }, null).wrongSide, undefined);
   // A swing a tick over the close's tick puts the stop at the close: not under it, so no swing either.
   const even = at(long, { h: 118, l: 116, c: 117 }, 117.25);
   assert.deepStrictEqual([even.stop, even.fellBack], [115, true]);

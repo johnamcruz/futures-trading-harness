@@ -63,7 +63,8 @@ function swingSeries(bars, minutes, k = 2) {
  * bar { h, l, c }; plan.afterTarget { lockGivebackR, trailBy ('r' | 'structure'), trailR, ratchet (true: on) }; swing: the structure
  * level on the trade's side at this bar's close (a long's swing low, a short's swing high), or null; a swing whose stop
  * (a tick beyond it) is not on the protective side of the bar's close counts as none.
- * Returns { stop, peakR, armed, close: null | { price, reason: 'trail' }, fellBack (structure with no usable swing: the R trail) }.
+ * Returns { stop, peakR, armed, close: null | { price, reason: 'trail' }, fellBack (structure with no usable swing: the R trail) },
+ * and wrongSide: true when it fell back because the swing given was on the wrong side of the close (not for want of one).
  */
 function afterTargetStep(trade, bar, plan, tick, swing = null) {
   const { sign, entry, risk } = trade;
@@ -83,13 +84,14 @@ function afterTargetStep(trade, bar, plan, tick, swing = null) {
   // the market and close the trade at once; it is no swing for this bar, so the lock and the R trail apply.
   const usable = Number.isFinite(swing) && sign * (bar.c - (swing - sign * tick)) > 0;
   const fellBack = a.trailBy === 'structure' && !usable;
+  const why = fellBack && Number.isFinite(swing) ? { wrongSide: true } : {};
   const trail = a.trailBy === 'structure' && !fellBack ? swing - sign * tick : entry + sign * (peakR - a.trailR) * risk;
   const best = sign > 0 ? Math.max(lock, trail) : Math.min(lock, trail);
   const snapped = snapStop(best, sign, tick);
   const stop = sign > 0 ? Math.max(trade.stop, snapped) : Math.min(trade.stop, snapped);
   const unfav = sign > 0 ? bar.l : bar.h;
-  if (stop !== trade.stop && (sign > 0 ? unfav <= stop : unfav >= stop)) return { stop, peakR, armed, close: { price: bar.c, reason: 'trail' }, fellBack };
-  return { stop, peakR, armed, close: null, fellBack };
+  if (stop !== trade.stop && (sign > 0 ? unfav <= stop : unfav >= stop)) return { stop, peakR, armed, close: { price: bar.c, reason: 'trail' }, fellBack, ...why };
+  return { stop, peakR, armed, close: null, fellBack, ...why };
 }
 
 /**
