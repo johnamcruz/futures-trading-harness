@@ -293,7 +293,7 @@ test('the risk-manager\'s phase-2 format: its example approves; each phrasing it
   assert.ok(rm.replace(/\n\s*/g, ' ').includes('To cut, approve the smaller size.'));
   assert.ok(rm.replace(/\n\s*/g, ' ').includes('- "verdict" and "decision" only to open the VERDICT line, never in prose or headings: one starting a line decides; elsewhere it can only veto.'));
   // A prose Size line is read (approvedSize: its cuts bind; a second, smaller size is no trade).
-  assert.ok(rm.replace(/\n\s*/g, ' ').includes('- Size → its own line, `Size: <n>`: the final size alone, reasoning on the lines before (7 Risk). A prose Size line is read: its cuts bind; a second, smaller size is no trade.'));
+  assert.ok(rm.replace(/\n\s*/g, ' ').includes('- Size → its own line, `Size: <n>`: the final size alone, reasoning on the lines before (7 Risk). A prose Size line ("Size: I\'d go with 3") beside `VERDICT: APPROVE - size 3` is a readable approved size; its cuts bind; a second, smaller size is no trade.'));
   const V = 'VERDICT: APPROVE - size 1, risk $20.00, trade_lifecycle long with the 1h up trend, 2.08R\nFACTS: window opening drive; trend long allowed';
   // Mid-line, a keyword then up to three words and a separator labels a decision: it still refuses (review of 2026-10-24).
   assert.strictEqual(verdictOf(`The verdict priority order: step 2 allows\n${V}`), 'VETO');

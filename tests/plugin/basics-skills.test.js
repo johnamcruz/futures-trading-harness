@@ -123,7 +123,7 @@ const PINS = {
     // Compose first (fix/confluence-not-vetoes): the plan, never the model, works out R:R.
     '**Compose first.** The side rule\'s side (never counter), a 15m rejection or breakout at a key level or FVG, closed (the next 3m close times it) → call `compose_check`.',
     'Never estimate room or R:R: the briefing\'s "Standard plan" line states it; OK → compose with its reads, refused → pass, naming it.',
-    'OK → **a valid setup is the trade**. In a prop attempt: the full translated size; phase 2 cuts it only on a pacing rule. Not in a prop attempt, within the verdict\'s ceiling, the against sets the size:',
+    'OK → **a valid setup is the trade**. In a prop attempt nothing halves: a serious factor against doesn\'t cut the size; the code sets the full verdict size. Not in a prop attempt, within the verdict\'s ceiling, the against sets the size:',
     // A swing broken is serious, never decisive: decisive is a real HTF reversal (the owner: a sweep misread as a pass).
     '**Decisive** → pass: a 1h CHoCH against while the 1h ranges (with the 4h and 1h your way: context), or a hard step fails.',
     '**Serious** → half (`floor`, at least 1): 2+ categories against, location against (the setup into the other side\'s level), or a 3m close beyond the leg\'s 15m swing (`m3.htfLevels` `brokenAt`).',

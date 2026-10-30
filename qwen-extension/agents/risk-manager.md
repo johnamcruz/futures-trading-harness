@@ -217,8 +217,9 @@ The code reads your report; anything else reads as a veto:
   or headings: one starting a line decides; elsewhere it can only veto.
 - "VETO" only when vetoing: never "VETO rules: none", "not a VETO".
 - Size → its own line, `Size: <n>`: the final size alone, reasoning on
-  the lines before (7 Risk). A prose Size line is read: its cuts bind; a
-  second, smaller size is no trade. To cut, approve the smaller size.
+  the lines before (7 Risk). A prose Size line ("Size: I'd go with 3")
+  beside `VERDICT: APPROVE - size 3` is a readable approved size; its cuts
+  bind; a second, smaller size is no trade. To cut, approve the smaller size.
 - Every size and "cut to" on the VERDICT and Size lines binds.
 - These read as a veto: `Decision: cut to size 1`, `8 Decision: valid
   yes`, `Sizing verdict: skip x0.5`.

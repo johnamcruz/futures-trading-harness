@@ -95,6 +95,8 @@ const LATE_STALE = (() => {
 // New text in the core, not from the old skill, each with its reason: the pointers to the pieces, and the one reaction
 // the head trader must always have without loading kill-switch (that skill keeps the details).
 const ADDED = [
+  { now: '**Phase 2\'s size.** A risk-manager approval whose Size line is prose ("Size: I\'d go with 3 contracts") beside `VERDICT: APPROVE - size 3` is a readable approved size; only an unreadable one gets the one restate.',
+    reason: 'feat/bias-bg (the context quiz, Q19): the head trader reads a prose Size line as the approved size, as roles-ran.js approvedSize does; only an unreadable approval is restated' },
   { now: 'Several lanes ("Lanes closed this cycle"), analysts on their own timeframe, or a setup "skipped: lower priority": the `runner-lanes` skill.', reason: 'pointer to runner-lanes' },
   { now: 'Why a setup did or didn\'t fire, and what earlier cycles saw: the `runner-logs` skill.', reason: 'pointer to runner-logs' },
   { now: '**Kill switch and account lock.** On `[kill-switch]`, `[allowed-accounts]` or `[account-lock]`: manage, protect or flatten only, end `blocked`, and never retry or trade another account: the user resolves it.',

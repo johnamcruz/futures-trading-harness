@@ -34,9 +34,10 @@ A verdict is a ceiling on size, never an order. A valid setup is the
 trade (`confluence-counting`). Go down the list; a higher step
 wins, and each step can only lower the size, never raise it: the size is the
 smaller of the verdict's (or position-sizing's) and what the steps allow.
+In a prop attempt nothing halves: a serious factor against doesn't cut the size; the code sets the full verdict size. Outside one, the steps below size it.
 Wherever a step halves, half is `floor(size / 2)`, and 0 means no trade (so
 at size 1 every halving is a skip). Halvings don't compound: however many
-steps halve, the size is halved once. In a prop attempt: the full translated size; phase 2 cuts it only on a pacing rule. Not in a prop attempt, a composed trade: `confluence-counting`
+steps halve, the size is halved once. A composed trade: `confluence-counting`
 sizes it, under the code's caps.
 
 1. **Hard stops → no trade**: the candidate is `blocked` (a news blackout

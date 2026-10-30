@@ -140,6 +140,9 @@ description: Use when a prompt says it is an autonomous or scheduled cycle - one
    them; don't run the harness's scripts from a shell. Starting, stopping, or
    recording a prop attempt, backtests, and replays (`replay.js`) are the
    user's.
+9. **Phase 2's size.** A risk-manager approval whose Size line is prose
+   ("Size: I'd go with 3 contracts") beside `VERDICT: APPROVE - size 3` is
+   a readable approved size; only an unreadable one gets the one restate.
 
 ## Examples
 

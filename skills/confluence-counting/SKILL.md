@@ -17,9 +17,8 @@ times it) → call
 `compose_check`. Never estimate room or R:R: the briefing's "Standard
 plan" line states it; OK → compose with its reads, refused → pass,
 naming it.
-OK → **a valid setup is the trade**. In a prop attempt: the full
-translated size; phase 2 cuts it only on a pacing rule. Not in a prop
-attempt, within the verdict's ceiling, the against sets the size:
+OK → **a valid setup is the trade**. In a prop attempt nothing halves: a serious factor against doesn't cut the size; the code sets the full verdict size. Not in a prop attempt, within the verdict's ceiling, the
+against sets the size:
 
 - **Decisive** → pass: a 1h CHoCH against while the 1h ranges (with the
   4h and 1h your way: context), or a hard step fails.

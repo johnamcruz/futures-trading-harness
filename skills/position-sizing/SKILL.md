@@ -12,6 +12,9 @@ description: Use when sizing a trade plan - risk per contract, the budget, the c
 
 ## How It Works
 
+Healthy account (balance ≥ start, no loss streak): take the full verdict
+size; the code computes it. Phase 2 cuts only on a pacing rule.
+
 1. **Specs from the API, always.** `search_contracts` / `get_contract` return
    `tickSize` and `tickValue`. Micro and mini specs to sanity-check them: the
    `micro-mini-specs` skill.
@@ -55,13 +58,12 @@ description: Use when sizing a trade plan - risk per contract, the budget, the c
    `trade_lifecycle`'s cap does: the lower of it and the verdict). Everything else (stop first, protective
    stop always working) still applies. The verdict is the most the account
    allows: phase 2 cuts it only on a pacing rule (a losing account, a loss
-   streak, drawdown: `Size: <n> (<rule>)`) or passes. A healthy account
-   (balance at or above the start, no loss streak): the full verdict size.
+   streak, drawdown: `Size: <n> (<rule>)`) or passes.
    In a prop attempt, the size you state is a suggestion: code translates it
    at entry to the rulebook's size (min_contracts and the budget); read the
    size it returns.
-7. **Not in a prop attempt: half size** wherever the priority order
-   (strategy-library) halves a trade, computed as it says there. Never round a half up. A composed
+7. Outside a prop attempt only, the priority order (strategy-library)
+   halves a trade as it says there. Never round a half up. A composed
    trade: `confluence-counting` sizes it, under the caps.
 8. **The arithmetic from `order_plan`** (the `order-plan` skill): steps 2
    and 4 for a compose record (refused over its cap), a policy verdict or a

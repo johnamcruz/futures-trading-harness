@@ -512,6 +512,10 @@ Prior 4h low 21440.50: 49.50 pts = 198 ticks, $99.00, 4.40R (extended).
 
 ## How It Works
 
+Healthy account (balance ≥ start, no loss streak): take the full verdict
+size; the code computes it.
+  Phase 2 cuts only on a pacing rule.
+
 1.
   **Specs from the API, always.** `search_contracts` / `get_contract` return
    `tickSize` and `tickValue`.
@@ -572,14 +576,12 @@ Prior 4h low 21440.50: 49.50 pts = 198 ticks, $99.00, 4.40R (extended).
   The verdict is the most the account
    allows: phase 2 cuts it only on a pacing rule (a losing account, a loss
    streak, drawdown: `Size: <n> (<rule>)`) or passes.
-  A healthy account
-   (balance at or above the start, no loss streak): the full verdict size.
    In a prop attempt, the size you state is a suggestion: code translates it
    at entry to the rulebook's size (min_contracts and the budget); read the
    size it returns.
 7.
-  **Not in a prop attempt: half size** wherever the priority order
-   (strategy-library) halves a trade, computed as it says there.
+  Outside a prop attempt only, the priority order (strategy-library)
+   halves a trade as it says there.
   Never round a half up.
   A composed
    trade: `confluence-counting` sizes it, under the caps.
@@ -1613,6 +1615,10 @@ Prior 4h low 21440.50: 49.50 pts = 198 ticks, $99.00, 4.40R (extended).
 
 ## How It Works
 
+Healthy account (balance ≥ start, no loss streak): take the full verdict
+size; the code computes it.
+  Phase 2 cuts only on a pacing rule.
+
 1.
   **Specs from the API, always.** `search_contracts` / `get_contract` return
    `tickSize` and `tickValue`.
@@ -1673,14 +1679,12 @@ Prior 4h low 21440.50: 49.50 pts = 198 ticks, $99.00, 4.40R (extended).
   The verdict is the most the account
    allows: phase 2 cuts it only on a pacing rule (a losing account, a loss
    streak, drawdown: `Size: <n> (<rule>)`) or passes.
-  A healthy account
-   (balance at or above the start, no loss streak): the full verdict size.
    In a prop attempt, the size you state is a suggestion: code translates it
    at entry to the rulebook's size (min_contracts and the budget); read the
    size it returns.
 7.
-  **Not in a prop attempt: half size** wherever the priority order
-   (strategy-library) halves a trade, computed as it says there.
+  Outside a prop attempt only, the priority order (strategy-library)
+   halves a trade as it says there.
   Never round a half up.
   A composed
    trade: `confluence-counting` sizes it, under the caps.
@@ -2723,6 +2727,10 @@ Prior 4h low 21440.50: 49.50 pts = 198 ticks, $99.00, 4.40R (extended).
 
 ## How It Works
 
+Healthy account (balance ≥ start, no loss streak): take the full verdict
+size; the code computes it.
+  Phase 2 cuts only on a pacing rule.
+
 1.
   **Specs from the API, always.** `search_contracts` / `get_contract` return
    `tickSize` and `tickValue`.
@@ -2783,14 +2791,12 @@ Prior 4h low 21440.50: 49.50 pts = 198 ticks, $99.00, 4.40R (extended).
   The verdict is the most the account
    allows: phase 2 cuts it only on a pacing rule (a losing account, a loss
    streak, drawdown: `Size: <n> (<rule>)`) or passes.
-  A healthy account
-   (balance at or above the start, no loss streak): the full verdict size.
    In a prop attempt, the size you state is a suggestion: code translates it
    at entry to the rulebook's size (min_contracts and the budget); read the
    size it returns.
 7.
-  **Not in a prop attempt: half size** wherever the priority order
-   (strategy-library) halves a trade, computed as it says there.
+  Outside a prop attempt only, the priority order (strategy-library)
+   halves a trade as it says there.
   Never round a half up.
   A composed
    trade: `confluence-counting` sizes it, under the caps.
@@ -3824,6 +3830,10 @@ Prior 4h low 21440.50: 49.50 pts = 198 ticks, $99.00, 4.40R (extended).
 
 ## How It Works
 
+Healthy account (balance ≥ start, no loss streak): take the full verdict
+size; the code computes it.
+  Phase 2 cuts only on a pacing rule.
+
 1.
   **Specs from the API, always.** `search_contracts` / `get_contract` return
    `tickSize` and `tickValue`.
@@ -3884,14 +3894,12 @@ Prior 4h low 21440.50: 49.50 pts = 198 ticks, $99.00, 4.40R (extended).
   The verdict is the most the account
    allows: phase 2 cuts it only on a pacing rule (a losing account, a loss
    streak, drawdown: `Size: <n> (<rule>)`) or passes.
-  A healthy account
-   (balance at or above the start, no loss streak): the full verdict size.
    In a prop attempt, the size you state is a suggestion: code translates it
    at entry to the rulebook's size (min_contracts and the budget); read the
    size it returns.
 7.
-  **Not in a prop attempt: half size** wherever the priority order
-   (strategy-library) halves a trade, computed as it says there.
+  Outside a prop attempt only, the priority order (strategy-library)
+   halves a trade as it says there.
   Never round a half up.
   A composed
    trade: `confluence-counting` sizes it, under the caps.
@@ -4934,6 +4942,10 @@ Prior 4h low 21440.50: 49.50 pts = 198 ticks, $99.00, 4.40R (extended).
 
 ## How It Works
 
+Healthy account (balance ≥ start, no loss streak): take the full verdict
+size; the code computes it.
+  Phase 2 cuts only on a pacing rule.
+
 1.
   **Specs from the API, always.** `search_contracts` / `get_contract` return
    `tickSize` and `tickValue`.
@@ -4994,14 +5006,12 @@ Prior 4h low 21440.50: 49.50 pts = 198 ticks, $99.00, 4.40R (extended).
   The verdict is the most the account
    allows: phase 2 cuts it only on a pacing rule (a losing account, a loss
    streak, drawdown: `Size: <n> (<rule>)`) or passes.
-  A healthy account
-   (balance at or above the start, no loss streak): the full verdict size.
    In a prop attempt, the size you state is a suggestion: code translates it
    at entry to the rulebook's size (min_contracts and the budget); read the
    size it returns.
 7.
-  **Not in a prop attempt: half size** wherever the priority order
-   (strategy-library) halves a trade, computed as it says there.
+  Outside a prop attempt only, the priority order (strategy-library)
+   halves a trade as it says there.
   Never round a half up.
   A composed
    trade: `confluence-counting` sizes it, under the caps.
@@ -6035,6 +6045,10 @@ Prior 4h low 21440.50: 49.50 pts = 198 ticks, $99.00, 4.40R (extended).
 
 ## How It Works
 
+Healthy account (balance ≥ start, no loss streak): take the full verdict
+size; the code computes it.
+  Phase 2 cuts only on a pacing rule.
+
 1.
   **Specs from the API, always.** `search_contracts` / `get_contract` return
    `tickSize` and `tickValue`.
@@ -6095,14 +6109,12 @@ Prior 4h low 21440.50: 49.50 pts = 198 ticks, $99.00, 4.40R (extended).
   The verdict is the most the account
    allows: phase 2 cuts it only on a pacing rule (a losing account, a loss
    streak, drawdown: `Size: <n> (<rule>)`) or passes.
-  A healthy account
-   (balance at or above the start, no loss streak): the full verdict size.
    In a prop attempt, the size you state is a suggestion: code translates it
    at entry to the rulebook's size (min_contracts and the budget); read the
    size it returns.
 7.
-  **Not in a prop attempt: half size** wherever the priority order
-   (strategy-library) halves a trade, computed as it says there.
+  Outside a prop attempt only, the priority order (strategy-library)
+   halves a trade as it says there.
   Never round a half up.
   A composed
    trade: `confluence-counting` sizes it, under the caps.
@@ -7136,6 +7148,10 @@ Prior 4h low 21440.50: 49.50 pts = 198 ticks, $99.00, 4.40R (extended).
 
 ## How It Works
 
+Healthy account (balance ≥ start, no loss streak): take the full verdict
+size; the code computes it.
+  Phase 2 cuts only on a pacing rule.
+
 1.
   **Specs from the API, always.** `search_contracts` / `get_contract` return
    `tickSize` and `tickValue`.
@@ -7196,14 +7212,12 @@ Prior 4h low 21440.50: 49.50 pts = 198 ticks, $99.00, 4.40R (extended).
   The verdict is the most the account
    allows: phase 2 cuts it only on a pacing rule (a losing account, a loss
    streak, drawdown: `Size: <n> (<rule>)`) or passes.
-  A healthy account
-   (balance at or above the start, no loss streak): the full verdict size.
    In a prop attempt, the size you state is a suggestion: code translates it
    at entry to the rulebook's size (min_contracts and the budget); read the
    size it returns.
 7.
-  **Not in a prop attempt: half size** wherever the priority order
-   (strategy-library) halves a trade, computed as it says there.
+  Outside a prop attempt only, the priority order (strategy-library)
+   halves a trade as it says there.
   Never round a half up.
   A composed
    trade: `confluence-counting` sizes it, under the caps.
@@ -8334,6 +8348,10 @@ Prior 4h low 21440.50: 49.50 pts = 198 ticks, $99.00, 4.40R (extended).
 
 ## How It Works
 
+Healthy account (balance ≥ start, no loss streak): take the full verdict
+size; the code computes it.
+  Phase 2 cuts only on a pacing rule.
+
 1.
   **Specs from the API, always.** `search_contracts` / `get_contract` return
    `tickSize` and `tickValue`.
@@ -8394,14 +8412,12 @@ Prior 4h low 21440.50: 49.50 pts = 198 ticks, $99.00, 4.40R (extended).
   The verdict is the most the account
    allows: phase 2 cuts it only on a pacing rule (a losing account, a loss
    streak, drawdown: `Size: <n> (<rule>)`) or passes.
-  A healthy account
-   (balance at or above the start, no loss streak): the full verdict size.
    In a prop attempt, the size you state is a suggestion: code translates it
    at entry to the rulebook's size (min_contracts and the budget); read the
    size it returns.
 7.
-  **Not in a prop attempt: half size** wherever the priority order
-   (strategy-library) halves a trade, computed as it says there.
+  Outside a prop attempt only, the priority order (strategy-library)
+   halves a trade as it says there.
   Never round a half up.
   A composed
    trade: `confluence-counting` sizes it, under the caps.
@@ -9529,6 +9545,10 @@ Prior 4h low 21440.50: 49.50 pts = 198 ticks, $99.00, 4.40R (extended).
 
 ## How It Works
 
+Healthy account (balance ≥ start, no loss streak): take the full verdict
+size; the code computes it.
+  Phase 2 cuts only on a pacing rule.
+
 1.
   **Specs from the API, always.** `search_contracts` / `get_contract` return
    `tickSize` and `tickValue`.
@@ -9589,14 +9609,12 @@ Prior 4h low 21440.50: 49.50 pts = 198 ticks, $99.00, 4.40R (extended).
   The verdict is the most the account
    allows: phase 2 cuts it only on a pacing rule (a losing account, a loss
    streak, drawdown: `Size: <n> (<rule>)`) or passes.
-  A healthy account
-   (balance at or above the start, no loss streak): the full verdict size.
    In a prop attempt, the size you state is a suggestion: code translates it
    at entry to the rulebook's size (min_contracts and the budget); read the
    size it returns.
 7.
-  **Not in a prop attempt: half size** wherever the priority order
-   (strategy-library) halves a trade, computed as it says there.
+  Outside a prop attempt only, the priority order (strategy-library)
+   halves a trade as it says there.
   Never round a half up.
   A composed
    trade: `confluence-counting` sizes it, under the caps.
@@ -10718,6 +10736,10 @@ Prior 4h low 21440.50: 49.50 pts = 198 ticks, $99.00, 4.40R (extended).
 
 ## How It Works
 
+Healthy account (balance ≥ start, no loss streak): take the full verdict
+size; the code computes it.
+  Phase 2 cuts only on a pacing rule.
+
 1.
   **Specs from the API, always.** `search_contracts` / `get_contract` return
    `tickSize` and `tickValue`.
@@ -10778,14 +10800,12 @@ Prior 4h low 21440.50: 49.50 pts = 198 ticks, $99.00, 4.40R (extended).
   The verdict is the most the account
    allows: phase 2 cuts it only on a pacing rule (a losing account, a loss
    streak, drawdown: `Size: <n> (<rule>)`) or passes.
-  A healthy account
-   (balance at or above the start, no loss streak): the full verdict size.
    In a prop attempt, the size you state is a suggestion: code translates it
    at entry to the rulebook's size (min_contracts and the budget); read the
    size it returns.
 7.
-  **Not in a prop attempt: half size** wherever the priority order
-   (strategy-library) halves a trade, computed as it says there.
+  Outside a prop attempt only, the priority order (strategy-library)
+   halves a trade as it says there.
   Never round a half up.
   A composed
    trade: `confluence-counting` sizes it, under the caps.
@@ -11834,6 +11854,10 @@ Prior 4h low 21440.50: 49.50 pts = 198 ticks, $99.00, 4.40R (extended).
 
 ## How It Works
 
+Healthy account (balance ≥ start, no loss streak): take the full verdict
+size; the code computes it.
+  Phase 2 cuts only on a pacing rule.
+
 1.
   **Specs from the API, always.** `search_contracts` / `get_contract` return
    `tickSize` and `tickValue`.
@@ -11894,14 +11918,12 @@ Prior 4h low 21440.50: 49.50 pts = 198 ticks, $99.00, 4.40R (extended).
   The verdict is the most the account
    allows: phase 2 cuts it only on a pacing rule (a losing account, a loss
    streak, drawdown: `Size: <n> (<rule>)`) or passes.
-  A healthy account
-   (balance at or above the start, no loss streak): the full verdict size.
    In a prop attempt, the size you state is a suggestion: code translates it
    at entry to the rulebook's size (min_contracts and the budget); read the
    size it returns.
 7.
-  **Not in a prop attempt: half size** wherever the priority order
-   (strategy-library) halves a trade, computed as it says there.
+  Outside a prop attempt only, the priority order (strategy-library)
+   halves a trade as it says there.
   Never round a half up.
   A composed
    trade: `confluence-counting` sizes it, under the caps.
@@ -13032,6 +13054,10 @@ Prior 4h low 21440.50: 49.50 pts = 198 ticks, $99.00, 4.40R (extended).
 
 ## How It Works
 
+Healthy account (balance ≥ start, no loss streak): take the full verdict
+size; the code computes it.
+  Phase 2 cuts only on a pacing rule.
+
 1.
   **Specs from the API, always.** `search_contracts` / `get_contract` return
    `tickSize` and `tickValue`.
@@ -13092,14 +13118,12 @@ Prior 4h low 21440.50: 49.50 pts = 198 ticks, $99.00, 4.40R (extended).
   The verdict is the most the account
    allows: phase 2 cuts it only on a pacing rule (a losing account, a loss
    streak, drawdown: `Size: <n> (<rule>)`) or passes.
-  A healthy account
-   (balance at or above the start, no loss streak): the full verdict size.
    In a prop attempt, the size you state is a suggestion: code translates it
    at entry to the rulebook's size (min_contracts and the budget); read the
    size it returns.
 7.
-  **Not in a prop attempt: half size** wherever the priority order
-   (strategy-library) halves a trade, computed as it says there.
+  Outside a prop attempt only, the priority order (strategy-library)
+   halves a trade as it says there.
   Never round a half up.
   A composed
    trade: `confluence-counting` sizes it, under the caps.
@@ -14221,6 +14245,10 @@ Prior 4h low 21440.50: 49.50 pts = 198 ticks, $99.00, 4.40R (extended).
 
 ## How It Works
 
+Healthy account (balance ≥ start, no loss streak): take the full verdict
+size; the code computes it.
+  Phase 2 cuts only on a pacing rule.
+
 1.
   **Specs from the API, always.** `search_contracts` / `get_contract` return
    `tickSize` and `tickValue`.
@@ -14281,14 +14309,12 @@ Prior 4h low 21440.50: 49.50 pts = 198 ticks, $99.00, 4.40R (extended).
   The verdict is the most the account
    allows: phase 2 cuts it only on a pacing rule (a losing account, a loss
    streak, drawdown: `Size: <n> (<rule>)`) or passes.
-  A healthy account
-   (balance at or above the start, no loss streak): the full verdict size.
    In a prop attempt, the size you state is a suggestion: code translates it
    at entry to the rulebook's size (min_contracts and the budget); read the
    size it returns.
 7.
-  **Not in a prop attempt: half size** wherever the priority order
-   (strategy-library) halves a trade, computed as it says there.
+  Outside a prop attempt only, the priority order (strategy-library)
+   halves a trade as it says there.
   Never round a half up.
   A composed
    trade: `confluence-counting` sizes it, under the caps.
@@ -15410,6 +15436,10 @@ Prior 4h low 21440.50: 49.50 pts = 198 ticks, $99.00, 4.40R (extended).
 
 ## How It Works
 
+Healthy account (balance ≥ start, no loss streak): take the full verdict
+size; the code computes it.
+  Phase 2 cuts only on a pacing rule.
+
 1.
   **Specs from the API, always.** `search_contracts` / `get_contract` return
    `tickSize` and `tickValue`.
@@ -15470,14 +15500,12 @@ Prior 4h low 21440.50: 49.50 pts = 198 ticks, $99.00, 4.40R (extended).
   The verdict is the most the account
    allows: phase 2 cuts it only on a pacing rule (a losing account, a loss
    streak, drawdown: `Size: <n> (<rule>)`) or passes.
-  A healthy account
-   (balance at or above the start, no loss streak): the full verdict size.
    In a prop attempt, the size you state is a suggestion: code translates it
    at entry to the rulebook's size (min_contracts and the budget); read the
    size it returns.
 7.
-  **Not in a prop attempt: half size** wherever the priority order
-   (strategy-library) halves a trade, computed as it says there.
+  Outside a prop attempt only, the priority order (strategy-library)
+   halves a trade as it says there.
   Never round a half up.
   A composed
    trade: `confluence-counting` sizes it, under the caps.
@@ -16608,6 +16636,10 @@ Prior 4h low 21440.50: 49.50 pts = 198 ticks, $99.00, 4.40R (extended).
 
 ## How It Works
 
+Healthy account (balance ≥ start, no loss streak): take the full verdict
+size; the code computes it.
+  Phase 2 cuts only on a pacing rule.
+
 1.
   **Specs from the API, always.** `search_contracts` / `get_contract` return
    `tickSize` and `tickValue`.
@@ -16668,14 +16700,12 @@ Prior 4h low 21440.50: 49.50 pts = 198 ticks, $99.00, 4.40R (extended).
   The verdict is the most the account
    allows: phase 2 cuts it only on a pacing rule (a losing account, a loss
    streak, drawdown: `Size: <n> (<rule>)`) or passes.
-  A healthy account
-   (balance at or above the start, no loss streak): the full verdict size.
    In a prop attempt, the size you state is a suggestion: code translates it
    at entry to the rulebook's size (min_contracts and the budget); read the
    size it returns.
 7.
-  **Not in a prop attempt: half size** wherever the priority order
-   (strategy-library) halves a trade, computed as it says there.
+  Outside a prop attempt only, the priority order (strategy-library)
+   halves a trade as it says there.
   Never round a half up.
   A composed
    trade: `confluence-counting` sizes it, under the caps.
@@ -17734,6 +17764,10 @@ Prior 4h low 21440.50: 49.50 pts = 198 ticks, $99.00, 4.40R (extended).
 
 ## How It Works
 
+Healthy account (balance ≥ start, no loss streak): take the full verdict
+size; the code computes it.
+  Phase 2 cuts only on a pacing rule.
+
 1.
   **Specs from the API, always.** `search_contracts` / `get_contract` return
    `tickSize` and `tickValue`.
@@ -17794,14 +17828,12 @@ Prior 4h low 21440.50: 49.50 pts = 198 ticks, $99.00, 4.40R (extended).
   The verdict is the most the account
    allows: phase 2 cuts it only on a pacing rule (a losing account, a loss
    streak, drawdown: `Size: <n> (<rule>)`) or passes.
-  A healthy account
-   (balance at or above the start, no loss streak): the full verdict size.
    In a prop attempt, the size you state is a suggestion: code translates it
    at entry to the rulebook's size (min_contracts and the budget); read the
    size it returns.
 7.
-  **Not in a prop attempt: half size** wherever the priority order
-   (strategy-library) halves a trade, computed as it says there.
+  Outside a prop attempt only, the priority order (strategy-library)
+   halves a trade as it says there.
   Never round a half up.
   A composed
    trade: `confluence-counting` sizes it, under the caps.
@@ -18695,6 +18727,10 @@ Prior 4h low 21440.50: 49.50 pts = 198 ticks, $99.00, 4.40R (extended).
 
 ## How It Works
 
+Healthy account (balance ≥ start, no loss streak): take the full verdict
+size; the code computes it.
+  Phase 2 cuts only on a pacing rule.
+
 1.
   **Specs from the API, always.** `search_contracts` / `get_contract` return
    `tickSize` and `tickValue`.
@@ -18755,14 +18791,12 @@ Prior 4h low 21440.50: 49.50 pts = 198 ticks, $99.00, 4.40R (extended).
   The verdict is the most the account
    allows: phase 2 cuts it only on a pacing rule (a losing account, a loss
    streak, drawdown: `Size: <n> (<rule>)`) or passes.
-  A healthy account
-   (balance at or above the start, no loss streak): the full verdict size.
    In a prop attempt, the size you state is a suggestion: code translates it
    at entry to the rulebook's size (min_contracts and the budget); read the
    size it returns.
 7.
-  **Not in a prop attempt: half size** wherever the priority order
-   (strategy-library) halves a trade, computed as it says there.
+  Outside a prop attempt only, the priority order (strategy-library)
+   halves a trade as it says there.
   Never round a half up.
   A composed
    trade: `confluence-counting` sizes it, under the caps.
