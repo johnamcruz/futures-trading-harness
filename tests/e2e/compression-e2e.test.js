@@ -6,8 +6,7 @@
  * (harness-tools/compose.js) on a with-trend plan whose setup is the compression break, its stop beyond the box's far
  * side and its entry a later closed candle (OK, and the gate's trend rule allows it); the same plan with its entry on the
  * expansion candle itself (refused); runway (a pennant whose box stop leaves no named level at 2R: refused); and a
- * counter-HTF compression break the gate's trend rule refuses (mtf-state.js checkTrend, with no verified CHoCH tier:
- * lifecycle-gate.js reversalAllowed).
+ * counter-HTF compression break the gate's trend rule refuses (mtf-state.js checkTrend: never counter).
  */
 
 const test = require('node:test');
@@ -18,7 +17,6 @@ const { readBarsArg } = require('../../scripts/lib/backtest/data');
 const { composeCheck } = require('../../scripts/lib/harness-tools/compose');
 const { checkReads, checkRead, parseRead } = require('../../scripts/lib/trading/composed-reads');
 const { buildRecord, writeRecord, checkTrend } = require('../../scripts/lib/trading/mtf-state');
-const { reversalAllowed } = require('../../scripts/lib/trading/lifecycle-gate');
 const { tmpDir } = require('../helpers');
 
 const ROOT = path.resolve(__dirname, '..', '..');
@@ -117,7 +115,7 @@ test('compression e2e: runway: a pennant whose box stop leaves no named level at
 });
 
 test('compression e2e: a compression break against the HTF trend verifies, and the gate\'s trend rule refuses it', () => {
-  // 04-28 01:51 UTC: a 3m expansion down out of an inside-bar box while the 4h trend is up, with no verified CHoCH tier.
+  // 04-28 01:51 UTC: a 3m expansion down out of an inside-bar box while the 4h trend is up.
   const b = briefingAt(1452);
   const read = checkRead(parseRead('3m compression break down'), b);
   assert.deepStrictEqual([read.check, read.dir], [true, 'short']);
@@ -126,6 +124,7 @@ test('compression e2e: a compression break against the HTF trend verifies, and t
   assert.ok(check.reads.every(x => x.check === true && x.agrees), JSON.stringify(check.reads.map(x => [x.read, x.check, x.fact])));
   const { home, now } = compose(1452, 'short', reads);
   writeRecord(home, buildRecord(BARS.slice(0, 1452), { symbol: 'MNQ', now }));
-  assert.match(String(checkTrend(home, { root: 'MNQ', side: 'sell', style: 'trend', strategy: 'trade_lifecycle', now })), /against the prevailing 4h up trend/);
-  assert.strictEqual(reversalAllowed({ home, root: 'MNQ', side: 'short', check: { ...check, ok: true }, now }).ok, false);
+  assert.match(String(checkTrend(home, { root: 'MNQ', side: 'sell', style: 'trend', strategy: 'trade_lifecycle', now })), /against the 4h up trend/);
+  // A reversal style is refused the same (never counter).
+  assert.match(String(checkTrend(home, { root: 'MNQ', side: 'sell', style: 'reversal', strategy: 'trade_lifecycle', now })), /against the 4h up trend/);
 });

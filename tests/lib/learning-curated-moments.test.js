@@ -184,15 +184,13 @@ test('lists: a rejection or a breakout with a clear trend, counter-trend against
   }
 });
 
-test('the gate\'s view: take only when the standard traded and the trend rule (or D2) allows the side; D2 asked only against a prevailing trend', () => {
+test('the gate\'s view: take only when the standard traded and the trend rule allows the side (never counter: no D2 reversal)', () => {
   assert.ok(MOMENTS.some(m => m.expected === 'take') && MOMENTS.some(m => m.expected === 'pass'));
-  // The fixture day has D2 both ways: reversals the gate's own reversalAllowed lets stand, and some it refuses.
-  assert.ok(MOMENTS.some(m => m.gate.d2 && m.gate.d2.allowed && m.expected === 'take'), 'a D2 reversal');
-  assert.ok(MOMENTS.some(m => m.gate.d2 && !m.gate.d2.allowed && m.expected === 'pass'), 'a refused one');
+  // The fixture day has standards traded against the trend rule (once D2's reversals): each is a pass now.
+  assert.ok(MOMENTS.some(m => m.standard.status === 'traded' && !m.gate.trendAllowed && m.expected === 'pass'), 'a traded standard the rule refuses');
   for (const m of MOMENTS) {
-    assert.strictEqual(m.expected, m.standard.status === 'traded' && (m.gate.trendAllowed || Boolean(m.gate.d2 && m.gate.d2.allowed)) ? 'take' : 'pass', m.id);
-    if (m.gate.d2) assert.ok(!m.gate.trendAllowed && m.gate.prevailing && m.standard.status === 'traded', m.id);
-    if (m.standard.status === 'traded' && !m.gate.trendAllowed && m.gate.prevailing) assert.ok(m.gate.d2 && typeof m.gate.d2.why !== 'undefined', m.id);
+    assert.strictEqual(m.gate.d2, null, m.id);
+    assert.strictEqual(m.expected, m.standard.status === 'traded' && m.gate.trendAllowed ? 'take' : 'pass', m.id);
   }
 });
 

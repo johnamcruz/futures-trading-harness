@@ -202,7 +202,6 @@
    "MAX_READS": "a parse, input or safety limit (sizes of inputs, depths, retries), not a trading value",
    "READ_MAX": "a parse, input or safety limit (sizes of inputs, depths, retries), not a trading value",
    "WHY_MAX": "a parse, input or safety limit (sizes of inputs, depths, retries), not a trading value",
-   "D2_TIERS": "a timeframe label or frame table (minutes by name)",
    "TF_MIN": "a timeframe label or frame table (minutes by name)"
   },
   "scripts/lib/trading/contracts.js": {
@@ -447,7 +446,7 @@
   "scripts/lib/trading/cisd.js": 5,
   "scripts/lib/trading/clock.js": 5,
   "scripts/lib/trading/combine.js": 2,
-  "scripts/lib/trading/composed-reads.js": 39,
+  "scripts/lib/trading/composed-reads.js": 38,
   "scripts/lib/trading/contracts.js": 1,
   "scripts/lib/trading/day-context.js": 14,
   "scripts/lib/trading/decision-history.js": 1,
@@ -469,7 +468,7 @@
   "scripts/lib/trading/order-gate.js": 2,
   "scripts/lib/trading/order-markers.js": 1,
   "scripts/lib/trading/prop-state.js": 6,
-  "scripts/lib/trading/reasons.js": 20,
+  "scripts/lib/trading/reasons.js": 19,
   "scripts/lib/trading/reconcile.js": 3,
   "scripts/lib/trading/regime.js": 4,
   "scripts/lib/trading/report-cache.js": 2,

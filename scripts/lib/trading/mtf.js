@@ -31,13 +31,11 @@
  * candles completed before it), for the rules language: mtf_bias(m); prevailingSeries(bars) the trend rule's
  * prevailing direction per bar: mtf_prevailing.
  *
- * The trend rule (trendRule, ruleSeries): the prevailing trend is the highest
- * of RULE_FRAMES (4h, 1h, 15m, built from the trigger bars) that has one. A
- * trend strategy (every strategy unless it declares `mtf: reversal`) may not
- * enter against it, and needs the 4-hour read to exist; a reversal strategy
- * may fade it. With no trend on any frame, both sides are open. The scan, the
- * backtester, the runner's record (recordFor), and the order gate all apply
- * this one rule.
+ * The trend rule (trendRule, ruleSeries), for every strategy (never counter): no entry against a trending 4h or 1h
+ * (the chain's bias frames, chain.js); with both ranging, only the 15m trend's way; with no trend on any of the three,
+ * no side. It needs the 4-hour read to exist. The prevailing trend shown is the highest of RULE_FRAMES with one. The
+ * entry rule (entry-rule.js, BG) adds the declared trend on the both-ranging side where the briefing is read. The scan,
+ * the backtester, the runner's record (recordFor) and the order gate all apply this one rule.
  */
 
 const ind = require('./indicators');
@@ -212,15 +210,20 @@ function alignment(frames) {
  * The trend rule for one side. `biases`: { 240: 1|0|-1|NaN, 60: ..., 15: ... }
  * (NaN: no read yet). Returns { allowed, prevailing: { minutes, label, trend } | null, ready, reason }.
  */
-function trendRule(biases, side, style = 'trend') {
+function trendRule(biases, side, _style = 'trend') {
   const sign = side === 'long' || side === 1 ? 1 : side === 'short' || side === -1 ? -1 : 0;
   const ready = Number.isFinite(biases[RULE_FRAMES[0]]);
   const top = RULE_FRAMES.find(m => Number.isFinite(biases[m]) && biases[m] !== 0);
   const prevailing = top ? { minutes: top, label: label(top), trend: biases[top] > 0 ? 'up' : 'down' } : null;
-  if (style === 'reversal') return { allowed: true, prevailing, ready, reason: null };
   if (!ready) return { allowed: false, prevailing, ready, reason: `no ${label(RULE_FRAMES[0])} trend read yet (needs 3 completed ${label(RULE_FRAMES[0])} candles in the bars)` };
-  if (prevailing && sign && Math.sign(biases[top]) === -sign) {
-    return { allowed: false, prevailing, ready, reason: `against the prevailing ${prevailing.label} ${prevailing.trend} trend: only a reversal strategy (mtf: reversal) may fade it` };
+  if (!sign) return { allowed: true, prevailing, ready, reason: null };
+  // The bias frames (the chain's: the 4h and the 1h), then the setup frame (the 15m) when both range.
+  const [setupFrame, ...biasFrames] = [...RULE_FRAMES].reverse();
+  const trending = biasFrames.reverse().filter(m => Number.isFinite(biases[m]) && biases[m] !== 0);
+  const against = trending.find(m => Math.sign(biases[m]) === -sign);
+  if (against) return { allowed: false, prevailing, ready, reason: `against the ${label(against)} ${biases[against] > 0 ? 'up' : 'down'} trend: no entry against a trending ${biasFrames.map(label).join(' or ')}` };
+  if (!trending.length && Math.sign(biases[setupFrame]) === -sign) {
+    return { allowed: false, prevailing, ready, reason: `against the ${label(setupFrame)} ${biases[setupFrame] > 0 ? 'up' : 'down'} trend, the ${biasFrames.map(label).join(' and ')} ranging` };
   }
   return { allowed: true, prevailing, ready, reason: null };
 }
@@ -253,9 +256,9 @@ function prevailingSeries(bars, opts = {}) {
 function sideReason(long, short) {
   if (!long.reason && !short.reason) return null;
   if (!long.ready) return long.reason;
+  if (long.reason && short.reason) return `no side: longs ${long.reason}; shorts ${short.reason}`;
   const [blocked, open] = long.reason ? ['long', 'short'] : ['short', 'long'];
-  const p = (long.reason ? long : short).prevailing;
-  return `${blocked}s are against the prevailing ${p.label} ${p.trend} trend: only a reversal strategy (mtf: reversal) may take them; ${open}s are with it`;
+  return `${blocked}s: ${(long.reason || short.reason)}; ${open}s are with it`;
 }
 
 /** The trend-rule summary of a bias map, for a scan result or a record. */
@@ -339,11 +342,14 @@ function mtfRead(bars, { timeframes = [15, 60, 240], daily = null, opts = {} } =
 }
 
 function ruleLine(r) {
-  if (!r.ready) return `Trend rule: ${r.reason}; trend strategies can't enter yet, reversal strategies can.`;
-  if (!r.prevailing) return 'Trend rule: no trend on 4h, 1h, or 15m; both sides open to every strategy.';
-  // The allowed side first and plainly (a small model misread the old wording, which ended on the blocked side).
+  if (!r.ready) return `Trend rule: ${r.reason}; no entry yet.`;
+  // The allowed side first and plainly (a small model misread a wording that ended on the blocked side).
+  if (!r.longAllowed && !r.shortAllowed) return `Trend rule: no side (${r.reason || 'no trend on 4h, 1h, or 15m'}); no entry.`;
+  if (!r.prevailing) return 'Trend rule: no trend on 4h, 1h, or 15m; in a prop attempt no side (the entry rule), else both sides open.';
   const [allowed, against] = r.longAllowed ? ['LONG', 'short'] : ['SHORT', 'long'];
-  return `Trend rule: ${allowed} allowed (prevailing ${r.prevailing}); ${against} only as a reversal (mtf: reversal).`;
+  // The 4h and 1h ranging, the 15m sets it; in a prop attempt the entry rule (BG) also needs the declared trend.
+  const neutral = String(r.prevailing).startsWith(`${label(RULE_FRAMES[RULE_FRAMES.length - 1])} `) ? '; the 4h and 1h ranging: in a prop attempt only with the trend declared' : '';
+  return `Trend rule: ${allowed} allowed (prevailing ${r.prevailing}${neutral}); no ${against} against it.`;
 }
 
 /**

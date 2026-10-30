@@ -113,18 +113,20 @@ test('a backtest on finer bars that carry broker fields: refused when a strategy
 
 test('a backtest on the broker\'s 1-minute bars trades from their flow fields, and nothing without them', () => {
   const dir = tmpDir();
-  // fx_ofi_absorption (a reversal setup, so no higher-timeframe history is needed): heavy selling that holds, then a turn up.
+  // fx_ofi_absorption (a reversal setup, held to the trend rule like any other: 1000 quiet bars give the 4h read, every
+  // frame ranging, so both sides are open): heavy selling that holds, then a turn up.
+  const Q = 1000;
   const absorbed = withFlow => {
-    const bars = series(0, (k, burst) => (withFlow ? flow(burst ? (k === 204 ? 0.4 : -0.5) : 0, 0, burst ? -0.4 : 0) : null), 200);
-    bars[204] = { ...bars[204], c: bars[203].c + 0.5, h: bars[203].c + 1 };
+    const bars = series(0, (k, burst) => (withFlow ? flow(burst ? (k === Q + 4 ? 0.4 : -0.5) : 0, 0, burst ? -0.4 : 0) : null), Q);
+    bars[Q + 4] = { ...bars[Q + 4], c: bars[Q + 3].c + 0.5, h: bars[Q + 3].c + 1 };
     // Bars after the setup, to fill the entry and run the trade.
-    for (let k = 205; k < 240; k += 1) { const c = bars[204].c + (k - 204) * 0.5; bars.push({ t: new Date(T0 + k * M).toISOString(), o: c - 0.5, h: c + 0.25, l: c - 0.75, c, v: 100 }); }
+    for (let k = Q + 5; k < Q + 40; k += 1) { const c = bars[Q + 4].c + (k - Q - 4) * 0.5; bars.push({ t: new Date(T0 + k * M).toISOString(), o: c - 0.5, h: c + 0.25, l: c - 0.75, c, v: 100 }); }
     return bars;
   };
   const run = (name, bars) => {
     const file = path.join(dir, `${name}.json`);
     fs.writeFileSync(file, JSON.stringify({ bars }));
-    return runBacktest({ symbols: ['MNQ'], timeframe: 1, feesPerSide: 0.37, data: { MNQ: file }, strategies: ['fx_ofi_absorption'], gate: false, window: 160, outDir: dir }, { root: ROOT, outRoot: dir, env: FX_ENV }).report;
+    return runBacktest({ symbols: ['MNQ'], timeframe: 1, feesPerSide: 0.37, data: { MNQ: file }, strategies: ['fx_ofi_absorption'], gate: false, window: Q - 40, outDir: dir }, { root: ROOT, outRoot: dir, env: FX_ENV }).report;
   };
   const withFlow = run('with', absorbed(true));
   assert.ok(withFlow.summary.trades >= 1 && withFlow.trades.every(t => t.strategy === 'fx_ofi_absorption' && t.direction === 'long'), JSON.stringify(withFlow.summary));

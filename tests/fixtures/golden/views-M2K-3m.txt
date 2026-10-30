@@ -19,7 +19,7 @@ Bar briefing M2K 3m, bar 06:30 ET closed 06:33 ET (02-20), price 2283.1; times i
 Summary (M2K 3m, 06:33 ET):
 - Session: london (market open, entries allowed) until 09:30 ET.
 - Price 2283.1. 1R = 0.31 pts (0.5 x 3m ATR(20) 0.61, the 3m reference stop); every distance below is in points and R.
-- Trend rule: no trend on 4h, 1h, or 15m; both sides open to every strategy.
+- Trend rule: no trend on 4h, 1h, or 15m; in a prop attempt no side (the entry rule), else both sides open.
 - Alignment: long mixed, short mixed. Regime: transition, normal volatility.
 - VWAP (session): price above, 1.99 x 3m ATR(14) away. Closes crossing a VWAP in the last 30 bars: the RTH VWAP 0, the session VWAP 0 (the regime's count).
 - News: no blackout ahead.
@@ -73,7 +73,7 @@ Detail by timeframe:
   priorProfileNodes: {"hvnAbove":2284.5,"hvnBelow":2281.3,"lvnAbove":2287.5,"lvnBelow":2282.6}
   location: {"priorValue":"inside","sessionValue":"inside","initialBalance":null,"priorRthRange":"inside","priorRthClose":"below","sessionRangeHalf":"premium"}
   candidates: []
-  trendRule: Trend rule: no trend on 4h, 1h, or 15m; both sides open to every strategy.
+  trendRule: Trend rule: no trend on 4h, 1h, or 15m; in a prop attempt no side (the entry rule), else both sides open.
   cisd: {"3m":{"dir":"bearish","level":2283.7,"confirmedClose":"06:33","displacement":"strong","engulfing":false,"sweep":null,"leg":{"origin":2285,"extreme":2283},"ote":{"top":2284.6,"bottom":2284.2,"mid":2284.4},"status":"waiting","priceInOte":false,"retracement":0.05},"5m":"unavailable (not built from 3m bars)","15m":{"dir":"bullish","level":2280.4,"confirmedClose":"03:15","displacement":"weak","engulfing":true,"sweep":null,"leg":{"origin":2279.2,"extreme":2281.2},"ote":null,"status":"weak","priceInOte":false,"retracement":-0.95},"1h":{"dir":"bearish","level":2284.7,"confirmedClose":"02-19 21:00","displacement":"strong","engulfing":true,"sweep":null,"leg":{"origin":2286.7,"extreme":2277.5},"ote":{"top":2284.8,"bottom":2283.2,"mid":2284},"status":"bounced","priceInOte":false,"retracement":0.609}}
   candles: {"3m":{"t":"06:30","body":0.88,"upperWick":0,"lowerWick":0.12},"15m":{"t":"06:15","o":2284,"h":2285,"l":2283.5,"c":2283.7,"v":359,"body":0.2,"upperWick":0.67,"lowerWick":0.13},"1h":{"t":"05:00","o":2284,"h":2285,"l":2283.5,"c":2283.9,"v":750,"body":0.07,"upperWick":0.67,"lowerWick":0.27}}
 [m15] version m15@2025-02-20T11:33:00.000Z, valid until 06:45 ET
@@ -91,14 +91,12 @@ Detail by timeframe:
   priorProfile: {"poc":2284.5,"vah":2292.5,"val":2282.7,"hvn":[2281.3,2284.5,2288.1,2294.1],"lvn":[2282.6,2287.5,2292.8]}
 === M2K 3m bar 791 (opened 2025-02-20T17:30:00.000Z) ===
 --- strategies_scan (the runner's, compact) ---
-Scan of M2K on the last closed bar (opened 2025-02-20T17:30:00.000Z): 8 strategies, 1 candidate. Regime trend-up. Trend 4h range, 1h range, 15m down, prevailing 15m down.
-Candidates:
-  fx_crt_4h long | active, 3m, rules, mtf reversal | entryRef 2263.7, stop 9.8016 pts = 99 ticks ($49.50/M2K contract), target 24.3 pts = 243 ticks ($121.50/M2K contract), minRR 2, exit: target level crt_target(240), at most 80 bars | with: none; against: none | a CRT setup: sweep, reclaim, shift, and room to the far side
-Exact order numbers (stop and target prices and ticks, size, $ risk, place_order arguments) for a strategy and side you choose: order_plan.
+Scan of M2K on the last closed bar (opened 2025-02-20T17:30:00.000Z): 8 strategies, 0 candidates. Regime trend-up. Trend 4h range, 1h range, 15m down, prevailing 15m down.
+Candidates: none.
 Every strategy (name | status | timeframe | direction | candidate | why not):
   fx_cisd_ote | paper | 3m | - | no | no rule set fired (long: cisd_entry(15) > 0; short: cisd_entry(15) < 0)
   fx_crt_1h | active | 3m | - | no | no rule set fired (long: crt_dir(60) > 0; short: crt_dir(60) < 0); the previous candle's range is under crtMinRangeAtr x ATR
-  fx_crt_4h | active | 3m | long | yes | -
+  fx_crt_4h | active | 3m | long | no | failed: mtf: against the 15m down trend, the 4h and 1h ranging
   fx_orb | active | 3m | - | no | no rule set fired (long: close crosses_above or_high; short: close crosses_below or_low)
   fx_value_area | active | 3m | - | no | no rule set fired (long: any(all(close[1] > prior_poc & low <= prior_poc + 0.1 * atr(20) & close > prior_poc & 2 * close >= …, any(field("flow.windows.3.ofiTrade") >= 0.2 | all(high - low >= 1.5 * atr(20) & volume >= 1.5 * vol… [field("flow.windows.3.ofiTrade")=-0.014]; short: any(all(close[1] < prior_poc & high >= prior_poc - 0.1 * atr(20) & close < prior_poc & 2 * close <=…, any(field("flow.windows.3.ofiTrade") <= -0.2 | all(high - low >= 1.5 * atr(20) & volume >= 1.5 * vo… [field("flow.windows.3.ofiTrade")=-0.014], close - prior_val >= 2 * highest(3) - 2 * close + 0.5 * atr(20))
   fx_value_area_breakout | active | 3m | - | no | no rule set fired (long: close > prior_vah, close[1] > prior_vah, volume > vol_sma(20); short: close[2] >= prior_val, volume > vol_sma(20))
@@ -112,7 +110,7 @@ Bar briefing M2K 3m, bar 12:30 ET closed 12:33 ET (02-20), price 2263.7; times i
 Summary (M2K 3m, 12:33 ET):
 - Session: lunch lull (market open, entries allowed) until 13:30 ET.
 - Price 2263.7. 1R = 1 pts (0.5 x 3m ATR(20) 2.01, the 3m reference stop); every distance below is in points and R.
-- Trend rule: SHORT allowed (prevailing 15m down); long only as a reversal (mtf: reversal).
+- Trend rule: SHORT allowed (prevailing 15m down; the 4h and 1h ranging: in a prop attempt only with the trend declared); no long against it.
 - Alignment: long mixed, short mixed. Regime: trend-up, normal volatility.
 - VWAP (rth): price below, 0.57 x 3m ATR(14) away. Closes crossing a VWAP in the last 30 bars: the RTH VWAP 0, the session VWAP 0 (the regime's count).
 - News: no blackout ahead.
@@ -129,8 +127,7 @@ Summary (M2K 3m, 12:33 ET):
 - Compression (completed candles; a read, not a signal): 15m expanding up: nr7 box 2256.3-2260 (3.7 pts, 0.85 ATR, at IB low 2258 (inside)), expansion closed 12:15 above it (range 1.27 ATR, 0.3 ATR beyond, volume 0.81x), 1 bar ago; 1h expanding down: inside x1 box 2282-2288 (6 pts, 1.36 ATR, at prior VAL 2282.7 (its bottom), prior POC 2284.5 (inside)), expansion closed 10:00 below it (range 5.34 ATR, 4.19 ATR beyond, volume 10.27x), 2 bars ago.
 - Trend declared? (in 3m ATR(14), + = the side's way; `trend-vs-range`): long RTH VWAP -0.57, EMA20 +1.64, overnight range broke out against, day's move -11.24, regime with; short RTH VWAP +0.57, EMA20 -1.64, overnight range broke out its way, day's move +11.24, regime against.
 - Setups to check: "1h compression break down" (short, at prior VAL). Compose and check each (trade-lifecycle, compression); pass unless every read is true; SKIP each one you don't compose, with its reason.
-- Setups:
-  - fx_crt_4h long: a reversal strategy fading the prevailing 15m down trend: the trend rule allows it; the priority order, step 2 (strategy-library), decides it (level, size, target); multi-timeframe read for a long: mixed; first level ahead: VWAP (rth) at 0.11R; it aims for 2.48R; confluence: none with it; price below the VWAP (the other side); lunch lull. Stop 9.8 pts (its own 1R); target 24.3 pts (2.48R); aims for 2.48R; levels ahead in its R: VWAP (rth) 2264.77 (1.07 pts, 0.11R), round number 2270 (6.3 pts, 0.64R), opening range low 2274.5 (10.8 pts, 1.1R).
+- Rules setups: none fired on this bar; a composed setup is yours to read and check (trade-lifecycle).
 
 Detail by timeframe:
 [m3] version m3@2025-02-20T17:33:00.000Z, valid until 12:36 ET
@@ -165,8 +162,8 @@ Detail by timeframe:
   sessionProfile: {"poc":2284.1,"vah":2286.7,"val":2260.1,"hvnAbove":2274.7,"hvnBelow":2257.9,"lvnAbove":2282.1,"lvnBelow":2263}
   priorProfileNodes: {"hvnAbove":2281.3,"hvnBelow":null,"lvnAbove":2282.6,"lvnBelow":null}
   location: {"priorValue":"below","sessionValue":"inside","initialBalance":"inside","priorRthRange":"below","priorRthClose":"below","sessionRangeHalf":"discount"}
-  candidates: [{"name":"fx_crt_4h","direction":"long","status":"active","confluence":{"with":[],"against":[]},"entryRef":2263.7,"stopPoints":9.8,"minRR":2,"exit":{"trailActivateR":null,"trailGivebackR":null,"targetR":null,"maxBars":80},"target":{"level":"crt_target(240)","points":24.3,"R":2.48},"inTheWay":{"name":"VWAP (rth)","price":2264.77,"points":1.07,"R":0.11},"ahead":[{"name":"VWAP (rth)","price":2264.77,"points":1.07,"R":0.11},{"name":"round number","price":2270,"points":6.3,"R":0.64},{"name":"opening range low","price":2274.5,"points":10.8,"R":1.1}],"needR":2.48,"trendRule":"reversal","alignment":"mixed","vwapSide":"below","facts":["a reversal strategy fading the prevailing 15m down trend: the trend rule allows it; the priority order, step 2 (strategy-library), decides it (level, size, target)","multi-timeframe read for a long: mixed","first level ahead: VWAP (rth) at 0.11R; it aims for 2.48R","confluence: none with it","price below the VWAP (the other side)","lunch lull"]}]
-  trendRule: Trend rule: SHORT allowed (prevailing 15m down); long only as a reversal (mtf: reversal).
+  candidates: []
+  trendRule: Trend rule: SHORT allowed (prevailing 15m down; the 4h and 1h ranging: in a prop attempt only with the trend declared); no long against it.
   cisd: {"3m":{"dir":"bullish","level":2262.4,"confirmedClose":"12:33","displacement":"strong","engulfing":false,"sweep":null,"leg":{"origin":2260.9,"extreme":2263.9},"ote":{"top":2262,"bottom":2261.5,"mid":2261.8},"status":"waiting","priceInOte":false,"retracement":0.067},"5m":"unavailable (not built from 3m bars)","15m":{"dir":"bullish","level":2286.3,"confirmedClose":"08:45","displacement":"strong","engulfing":false,"sweep":null,"leg":{"origin":2283.6,"extreme":2286.6},"ote":null,"status":"void","priceInOte":false,"retracement":7.633},"1h":{"dir":"bearish","level":2278.5,"confirmedClose":"10:00","displacement":"strong","engulfing":false,"sweep":null,"leg":{"origin":2288,"extreme":2254.4},"ote":{"top":2280.9,"bottom":2275.2,"mid":2278.1},"status":"waiting","priceInOte":false,"retracement":0.277}}
   candles: {"3m":{"t":"12:30","body":0.65,"upperWick":0.1,"lowerWick":0.25},"15m":{"t":"12:15","o":2261.3,"h":2262.7,"l":2260.8,"c":2262.4,"v":2141,"body":0.58,"upperWick":0.16,"lowerWick":0.26},"1h":{"t":"11:00","o":2255.7,"h":2260.2,"l":2254.4,"c":2256.4,"v":14292,"body":0.12,"upperWick":0.66,"lowerWick":0.22}}
 [m15] version m15@2025-02-20T17:33:00.000Z, valid until 12:45 ET
@@ -205,7 +202,7 @@ Bar briefing M2K 3m, bar 09:48 ET closed 09:51 ET (02-21), price 2261.2; times i
 Summary (M2K 3m, 09:51 ET):
 - Session: opening drive (market open, entries allowed) until 11:00 ET.
 - Price 2261.2. 1R = 1.26 pts (0.5 x 3m ATR(20) 2.52, the 3m reference stop); every distance below is in points and R.
-- Trend rule: SHORT allowed (prevailing 4h down); long only as a reversal (mtf: reversal).
+- Trend rule: SHORT allowed (prevailing 4h down); no long against it.
 - Alignment: long counter, short mixed. Regime: trend-down, high volatility.
 - VWAP (rth): price below, 3.56 x 3m ATR(14) away. Closes crossing a VWAP in the last 30 bars: the RTH VWAP 0, the session VWAP 1 (the regime's count).
 - News: no blackout ahead.
@@ -260,7 +257,7 @@ Detail by timeframe:
   priorProfileNodes: {"hvnAbove":2266.8,"hvnBelow":2257.2,"lvnAbove":2263,"lvnBelow":2258.8}
   location: {"priorValue":"inside","sessionValue":"below","initialBalance":null,"priorRthRange":"inside","priorRthClose":"below","sessionRangeHalf":"discount"}
   candidates: [{"name":"fx_orb","direction":"short","status":"active","confluence":{"with":[],"against":[]},"entryRef":2261.2,"stopPoints":1.26,"minRR":2,"exit":{"trailActivateR":2,"trailGivebackR":0.5,"targetR":null,"maxBars":null},"target":null,"inTheWay":{"name":"round number","price":2260,"points":1.2,"R":0.95},"ahead":[{"name":"round number","price":2260,"points":1.2,"R":0.95},{"name":"prior VAL","price":2257.9,"points":3.25,"R":2.58},{"name":"prior RTH low / untested 1h swing low","price":2254.4,"points":6.8,"R":5.41}],"needR":2,"trendRule":"allows","alignment":"mixed","vwapSide":"below","facts":["the trend rule allows a short","multi-timeframe read for a short: mixed","first level ahead: round number at 0.95R; it aims for 2R","confluence: none with it","price below the VWAP (its side)"]}]
-  trendRule: Trend rule: SHORT allowed (prevailing 4h down); long only as a reversal (mtf: reversal).
+  trendRule: Trend rule: SHORT allowed (prevailing 4h down); no long against it.
   cisd: {"3m":{"dir":"bearish","level":2282.8,"confirmedClose":"09:33","displacement":"strong","engulfing":false,"sweep":null,"leg":{"origin":2286.1,"extreme":2261.2},"ote":{"top":2280.9,"bottom":2276.6,"mid":2278.8},"status":"waiting","priceInOte":false,"retracement":0},"5m":"unavailable (not built from 3m bars)","15m":{"dir":"bearish","level":2273.5,"confirmedClose":"09:45","displacement":"strong","engulfing":true,"sweep":null,"leg":{"origin":2286.1,"extreme":2261.2},"ote":{"top":2280.9,"bottom":2276.6,"mid":2278.8},"status":"waiting","priceInOte":false,"retracement":0},"1h":{"dir":"bullish","level":2265.3,"confirmedClose":"02:00","displacement":"strong","engulfing":true,"sweep":null,"leg":{"origin":2264.2,"extreme":2286.5},"ote":null,"status":"void","priceInOte":false,"retracement":1.135}}
   candles: {"3m":{"t":"09:48","body":0.89,"upperWick":0.11,"lowerWick":0,"patterns":["bearish engulfing","displacement"]},"15m":{"t":"09:30","o":2283.9,"h":2284.3,"l":2265.7,"c":2265.7,"v":15275,"body":0.98,"upperWick":0.02,"lowerWick":0,"patterns":["bearish engulfing","displacement"]},"1h":{"t":"08:00","o":2274.2,"h":2282.7,"l":2272.5,"c":2282.2,"v":5000,"body":0.78,"upperWick":0.05,"lowerWick":0.17}}
 [m15] version m15@2025-02-21T14:51:00.000Z, valid until 10:00 ET
@@ -299,7 +296,7 @@ Bar briefing M2K 3m, bar 10:03 ET closed 10:06 ET (02-21), price 2253.5; times i
 Summary (M2K 3m, 10:06 ET):
 - Session: opening drive (market open, entries allowed) until 11:00 ET.
 - Price 2253.5. 1R = 1.4 pts (0.5 x 3m ATR(20) 2.8, the 3m reference stop); every distance below is in points and R.
-- Trend rule: SHORT allowed (prevailing 4h down); long only as a reversal (mtf: reversal).
+- Trend rule: SHORT allowed (prevailing 4h down); no long against it.
 - Alignment: long counter, short mixed. Regime: trend-down, high volatility.
 - VWAP (rth): price below, 4.33 x 3m ATR(14) away. Closes crossing a VWAP in the last 30 bars: the RTH VWAP 0, the session VWAP 1 (the regime's count).
 - News: no blackout ahead.
@@ -356,7 +353,7 @@ Detail by timeframe:
   priorProfileNodes: {"hvnAbove":2257.2,"hvnBelow":null,"lvnAbove":2254.6,"lvnBelow":null}
   location: {"priorValue":"below","sessionValue":"below","initialBalance":null,"priorRthRange":"below","priorRthClose":"below","sessionRangeHalf":"discount"}
   candidates: [{"name":"fx_value_area_breakout","direction":"short","status":"active","confluence":{"with":[],"against":[]},"entryRef":2253.5,"stopPoints":5.85,"minRR":2,"exit":{"trailActivateR":2,"trailGivebackR":0.5,"targetR":null,"maxBars":null},"target":null,"inTheWay":{"name":"day low / session low","price":2253.1,"points":0.4,"R":0.07},"ahead":[{"name":"day low / session low","price":2253.1,"points":0.4,"R":0.07},{"name":"round number","price":2250,"points":3.5,"R":0.6}],"needR":2,"trendRule":"allows","alignment":"mixed","vwapSide":"below","facts":["the trend rule allows a short","multi-timeframe read for a short: mixed","first level ahead: day low / session low at 0.07R; it aims for 2R","confluence: none with it","price below the VWAP (its side)"]}]
-  trendRule: Trend rule: SHORT allowed (prevailing 4h down); long only as a reversal (mtf: reversal).
+  trendRule: Trend rule: SHORT allowed (prevailing 4h down); no long against it.
   cisd: {"3m":{"dir":"bearish","level":2282.8,"confirmedClose":"09:33","displacement":"strong","engulfing":false,"sweep":null,"leg":{"origin":2286.1,"extreme":2253.1},"ote":{"top":2279.2,"bottom":2273.6,"mid":2276.4},"status":"waiting","priceInOte":false,"retracement":0.012},"5m":"unavailable (not built from 3m bars)","15m":{"dir":"bearish","level":2273.5,"confirmedClose":"09:45","displacement":"strong","engulfing":true,"sweep":null,"leg":{"origin":2286.1,"extreme":2253.1},"ote":{"top":2279.2,"bottom":2273.6,"mid":2276.4},"status":"waiting","priceInOte":false,"retracement":0.012},"1h":{"dir":"bearish","level":2272.2,"confirmedClose":"10:00","displacement":"strong","engulfing":false,"sweep":null,"leg":{"origin":2286.1,"extreme":2253.1},"ote":{"top":2279.2,"bottom":2273.6,"mid":2276.4},"status":"waiting","priceInOte":false,"retracement":0.012}}
   candles: {"3m":{"t":"10:03","body":0.83,"upperWick":0.03,"lowerWick":0.13},"15m":{"t":"09:45","o":2266.2,"h":2269.6,"l":2259.6,"c":2260.3,"v":8219,"body":0.59,"upperWick":0.34,"lowerWick":0.07},"1h":{"t":"09:00","o":2282.1,"h":2286.1,"l":2259.6,"c":2260.3,"v":31521,"body":0.82,"upperWick":0.15,"lowerWick":0.03,"patterns":["displacement","outside"]}}
 [m15] version m15@2025-02-21T15:06:00.000Z, valid until 10:15 ET

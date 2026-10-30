@@ -725,7 +725,7 @@ test('a prop run folds the rulebook\'s multiplier items in, as the live verdict 
   assert.deepStrictEqual(gated.trades, [], 'a multiplier item without its fact skips every setup (fails closed)');
 });
 
-test('a policy run picks only from the strategies it trades, but a left-out paper one still counts as disagreement, as in the live scan', () => {
+test('a policy run picks only from the strategies it trades, but a left-out paper one still counts, as in the live scan; one the trend rule refuses never does', () => {
   const bars = propSeries(30);
   const opts = { ...propEngine, account: propAccount(), start: Date.parse('2026-01-08T00:00:00Z') };
   const prop = { strategy: { exit: { trail_activate_r: 2, trail_giveback_r: 0.5 } }, components: ['trendy'], contracts: 'micro' };
@@ -734,8 +734,13 @@ test('a policy run picks only from the strategies it trades, but a left-out pape
   const contra = propStrategy({ name: 'contra', status: 'paper', mtf: 'reversal', rules: flip, compiledRules: compileRules(flip).compiled });
   const alone = runEngine([propMarket(bars)], [propStrategy()], { ...opts, prop });
   assert.ok(alone.trades.length > 0);
-  // Counted: every trendy setup conflicts with contra's (conflict 'reversal', trendy is no reversal strategy): none taken.
-  assert.deepStrictEqual(runEngine([propMarket(bars)], [contra, propStrategy()], { ...opts, prop }).trades, []);
+  // Counted where the trend rule allows it (every frame ranging): those trendy setups conflict with it (conflict
+  // 'reversal', trendy is no reversal strategy) and are not taken. Never counter: where it fires against a trend the
+  // rule refuses it, it is no candidate and never stands in trendy's way (it once did, as a reversal strategy).
+  const withContra = runEngine([propMarket(bars)], [contra, propStrategy()], { ...opts, prop }).trades;
+  const key = t => `${t.entryTime}|${t.direction}`;
+  assert.ok(withContra.length > 0 && withContra.length < alone.trades.length, `${withContra.length} of ${alone.trades.length}`);
+  assert.ok(withContra.every(t => alone.trades.some(a => key(a) === key(t))), 'only trendy\'s own setups, fewer');
   // contra on the same side instead: never picked (it is first and fires), so the trades are trendy's own,
   // with contra counted in their confluence.
   const same = runEngine([propMarket(bars)], [propStrategy({ name: 'contra', status: 'paper' }), propStrategy()], { ...opts, prop }).trades;
@@ -797,16 +802,17 @@ test('a policy\'s exit mode: target trades each setup on its strategy\'s own exi
 
 test('a prop run\'s loss streak counts each trade\'s P&L before fees: a scratch (gross 0, net the fees) neither ends nor extends it', () => {
   // 3-minute bars from 09:30 ET: 30 flat bars (no signal), then a loss, a scratch, a loss, and a fourth setup.
-  const t0 = Date.parse('2026-01-08T14:30:00Z');
+  // 500 flat bars before (the 4h read: every frame ranging, both sides open outside a prop attempt's entry rule).
+  const t0 = Date.parse('2026-01-08T14:30:00Z') - 500 * 180000;
   const bars = [];
   const bar = (o, h, l, c) => bars.push({ t: new Date(t0 + bars.length * 180000).toISOString(), o, h, l, c, v: 100 });
-  for (let k = 0; k < 30; k += 1) bar(100, 100.5, 99.5, 100);
+  for (let k = 0; k < 530; k += 1) bar(100, 100.5, 99.5, 100);
   // Each setup: a bar closing up (long at its close, 101), then the trade's one bar (max_bars 1): out at its close.
   for (const out of [100, 101, 100, 101]) { bar(100, 101.25, 99.75, 101); bar(101, 101.25, 99.75, out); }
   for (let k = 0; k < 5; k += 1) bar(100, 100.5, 99.5, 100);
   const rules = { long: ['close > open'] };
   const s = propStrategy({ rules, mtf: 'reversal', compiledRules: compileRules(rules).compiled, risk: { stop: 'atr:5', min_rr: 2 }, exit: { target_r: 20, max_bars: 1 } });
-  const run = stop => runEngine([propMarket(bars)], [s], { ...propEngine, window: 20, account: propAccount({ daily_loss_soft: 0, loss_streak_stop: stop }), sizing: testSizing({ cushion_frac: 0.2 }) }).trades;
+  const run = stop => runEngine([propMarket(bars)], [s], { ...propEngine, window: 520, account: propAccount({ daily_loss_soft: 0, loss_streak_stop: stop }), sizing: testSizing({ cushion_frac: 0.2 }) }).trades;
   const all = run(0);
   assert.deepStrictEqual(all.map(t => Math.sign(t.pnl)), [-1, 0, -1, 0], 'a loss, a scratch, a loss, a scratch (off: every setup)');
   assert.ok(all[1].net < 0, 'the scratch lost its fees');
@@ -827,7 +833,7 @@ test('a prop run stops the session after the account\'s loss_streak_stop losing 
   assert.ok(on.length < off.length);
 });
 
-test('backtest: a level target the fill leaves under min_rr is not traded (fx_value_area_reentry, min_rr: 2)', () => {
+test('backtest: never counter: fx_value_area_reentry\'s re-entry long fading a 15m down move (the 4h and 1h ranging) is no trade, gapped or not', () => {
   // A balanced day-1 RTH session gives the prior value area; day 2 opens below it and closes back inside twice.
   const { createEvaluator } = require('../../scripts/lib/trading/evaluator');
   const { profileSeries } = require('../../scripts/lib/trading/volume-profile');
@@ -852,11 +858,13 @@ test('backtest: a level target the fill leaves under min_rr is not traded (fx_va
   const ev = createEvaluator(bars);
   const fired = bars.map((b, i) => ev.at(s, i, { describe: false })).filter(r => r.direction);
   assert.strictEqual(fired.length, 1, 'the setup fires once');
+  // ...but the trend rule refuses it (it once traded here; the min_rr case is now crt.test.js's, with the trend).
+  assert.deepStrictEqual(fired[0].filtersFailed, ['mtf: no 4h trend read yet (needs 3 completed 4h candles in the bars)']);
   // The next bar opens so far up that the value area high is under 2R from the fill.
   const gapTo = p.vah - 1.5 * fired[0].stopDistance;
   const run = extra => runEngine([{ symbol: 'MNQ', bars: [...bars, ...extra], tickSize: 0.25, tickValue: 0.5, feesPerSide: 0 }], [s], { timeframe: 3, gate: false, window: 100 }).trades; // a short warm-up: these bars start a day before
   assert.strictEqual(run([bar(DAY2 + 2 * S, gapTo, gapTo)]).length, 0, 'gapped under 2R: skipped');
-  assert.strictEqual(run([bar(DAY2 + 2 * S, v + 2, v + 2.5), bar(DAY2 + 3 * S, v + 2.5, p.vah + 1)]).length, 1, 'a normal fill trades');
+  assert.strictEqual(run([bar(DAY2 + 2 * S, v + 2, v + 2.5), bar(DAY2 + 3 * S, v + 2.5, p.vah + 1)]).length, 0, 'a normal fill: refused by the trend rule');
 });
 
 test('one home: an account run takes its limits from the account (the backtest-only maxDailyLoss and maxContracts never apply), a plain run its own', () => {

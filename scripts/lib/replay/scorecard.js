@@ -165,7 +165,7 @@ function classify(label, facts, expected, reasons) {
     // trend by its reads (no scan's trend rule).
     const own = pool.find(s => tagged(s, o.setup) && s.direction === act);
     const ownOn = pool.find(s => tagged(s, o.setup) && s.direction !== act);
-    const against = own ? own.style !== 'reversal' && own.trendAllows === false : !composedTag && style === 'trend' && facts.trendRule[act] === false;
+    const against = own ? own.trendAllows === false : !composedTag && style !== 'manual' && facts.trendRule[act] === false;
     if (style === 'manual') return why.push('a manual strategy: its trigger is the model\'s'), out('unchecked', null);
     if ((!own && ownOn) || (!same.length && other.length) || against) return why.push(against ? `the trend rule blocks ${act}s` : `the setup was ${(ownOn || other[0]).direction}`), out('wrong-side entry', false);
     if (expected.decision === 'unchecked') return why.push(`expected unchecked (${typeof expected.decidedBy === 'number' ? `step ${expected.decidedBy}` : expected.decidedBy})`), out('unchecked', null);
@@ -480,8 +480,8 @@ function factsAt(label, rec, { tf, count, accounts, doc = null, strategies = [] 
     const results = scan.results.filter(isObj);
     // Every result the scan fired, tradeable or not (name|side): what the model saw fire.
     facts.fired = results.filter(r => r.candidate && r.direction).map(r => `${r.name}|${r.direction}`);
-    // The trend rule per side, for trend strategies: blocked when any trend strategy's record says so.
-    for (const r of results.filter(x => isObj(x.mtf) && facts.styleOf(x.name) !== 'reversal')) {
+    // The trend rule per side (never counter: every style's record counts): blocked when any record says so.
+    for (const r of results.filter(x => isObj(x.mtf))) {
       facts.trendRule.prevailing = facts.trendRule.prevailing || r.mtf.prevailing || null;
       for (const side of ['long', 'short']) {
         const v = r.mtf[`${side}Allowed`];

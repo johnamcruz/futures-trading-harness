@@ -48,9 +48,8 @@
  * The outcome: the library's standard (status traded, no-room, not-composable, stop-under-floor, no-confirmation,
  * no-entry-window), with its R when traded and filled (result win, loss, scratch or unfilled). The gate's view: the
  * trend rule for the side (mtf.js trendRule on the multi-timeframe record built from the same bars, as the runner
- * writes it), and against a prevailing trend D2 (lifecycle-gate.js reversalAllowed, the gate's own function and
- * D2_TIERS on that record) on the standard's reads plus the CHoCH and 4h rejection reads true the side's way.
- * expected: take when the standard traded and the gate would allow it (the trend rule, or D2), else pass.
+ * writes it): never counter, so no reversal tier stands against it.
+ * expected: take when the standard traded and the gate would allow it (the trend rule), else pass.
  *
  * The window (windowOf): from LEAD_SETUP setup candles before the reaction candle opened (so the facts build) to the
  * end of the reaction's confirmation window (or the decision close, if later), never past end of day. Never the
@@ -72,9 +71,8 @@ const os = require('os');
 const path = require('path');
 const { buildBriefing, sessionWindow } = require('../trading/briefing');
 const { checkReads, parseRead, levelName, ENTRY_PATTERNS } = require('../trading/composed-reads');
-const { buildRecord, writeRecord } = require('../trading/mtf-state');
+const { buildRecord } = require('../trading/mtf-state');
 const { trendRule, RULE_FRAMES, HISTORY_HOURS } = require('../trading/mtf');
-const { reversalAllowed } = require('../trading/lifecycle-gate');
 const { limitOutcome } = require('./experience-log');
 const { expiryOf } = require('../trading/trade-lifecycle');
 const { setupMoment, DEFAULTS } = require('./setup-moments');
@@ -83,7 +81,8 @@ const { assertUse, sessionDate } = require('./splits');
 const { LISTS } = require('./curated-lists');
 
 // 2: the standard's limit window is the trade_lifecycle strategy's valid_bars (1 held it one bar), as the library's.
-const VERSION = 2;
+// 3: never counter: no D2 reversal is a take (a moment of 2 may expect one, so lists skip it: rebuild).
+const VERSION = 3;
 const USES = Object.freeze(['practice', 'validate']);
 const CM = require('../tunables').replay().curatedMoments; // config/replay.json
 const LEAD_SETUP = CM.leadSetup;
@@ -232,24 +231,13 @@ function readsAt(b, { side, reaction, setupTf = DEFAULTS.setupTf, standard = nul
 
 const resultOf = o => (!o || !o.filled ? 'unfilled' : o.R > 0 ? 'win' : o.R < 0 ? 'loss' : 'scratch');
 
-/** The gate's view of the side at the decision bar: the trend rule, and D2 against a prevailing trend. */
-function gateView({ home, root, bars, side, b, standard, nowMs, tick }) {
+/** The gate's view of the side at the decision bar: the trend rule (never counter: no reversal tier; d2, kept in the
+ * moment's shape for curated-lists.js, is always null). */
+function gateView({ root, bars, side, nowMs }) {
   const rec = buildRecord(bars, { symbol: root, now: new Date(nowMs) });
   const biases = Object.fromEntries(RULE_FRAMES.map(m => [m, rec.biases[m] === null ? NaN : rec.biases[m]]));
   const rule = trendRule(biases, side, 'trend');
   const view = { trendAllowed: rule.allowed === true, prevailing: rule.prevailing ? rule.prevailing.label : null, d2: null };
-  if (rule.allowed || !rule.prevailing || !standard || standard.status !== 'traded') return view;
-  const d = dirOf(side);
-  const c4 = sec(b, 'm3').candles && sec(b, 'm3').candles['4h'];
-  const rejections = (isObj(c4) && Array.isArray(c4.relations) ? c4.relations : []).filter(r => isObj(r) && r.rel === 'rejected' && r.dir === d).map(r => ({ step: 'setup', read: `4h rejected ${levelName(r.name)} ${d}` }));
-  const wanted = [{ step: 'bias', read: `15m choch ${d}` }, { step: 'bias', read: `1h choch ${d}` }, ...rejections].map(r => ({ ...r, skill: skillOfRead(r.step, r.read) }));
-  // The curated set is the training pool, chosen with no policy running: the gate's trend rule and D2 view here are pre-entry-rule by design.
-  const extra = checkReads({ reads: wanted, side, briefing: b, tick }).reads.filter(r => r.check === true && r.agrees === true);
-  const combo = [...standard.reads.map(r => ({ step: r.step, skill: normalSkill(r.skill), read: r.read })), ...extra.map(r => ({ step: r.step, skill: r.skill, read: r.read }))];
-  const check = checkReads({ reads: combo, side, briefing: b, tick });
-  writeRecord(home, rec);
-  const r = reversalAllowed({ home, root, side, check, now: new Date(nowMs) });
-  view.d2 = { against: r.against, allowed: r.ok === true, why: r.why };
   return view;
 }
 
@@ -330,7 +318,7 @@ function scanMoments({ bars, root, minutes = 3, tick = 0.25, from, to, use, setu
       const cls = classify(b);
       const listName = listOf(cls.state, cls.trend, side, reaction);
       const reads = readsAt(decision.b, { side, reaction, setupTf, standard: at.standard, tick });
-      const gate = gateView({ home, root, bars: window(decision.i), side, b: decision.b, standard: at.standard, nowMs: decisionClose, tick });
+      const gate = gateView({ root, bars: window(decision.i), side, nowMs: decisionClose });
       const regime = cls.facts.regime;
       const shape = shapeOf(reads, side);
       const skills = [...new Set([...reads.map(r => r.skill), ...(shape ? [SHAPE_SKILL] : [])])].sort();
@@ -342,7 +330,7 @@ function scanMoments({ bars, root, minutes = 3, tick = 0.25, from, to, use, setu
         reads, shape, skills, aligned,
         standard: { status: at.status, why: at.why, setupKey: at.standard ? setupKeyOf(at.standard.reads) : null, plan: at.standard ? { entry: at.standard.plan.entry.price, stop: at.standard.plan.stop.price, target: at.standard.plan.target.price, rr: at.standard.plan.rr } : null },
         outcome: at.status === 'traded' ? { result: resultOf(outcome), R: outcome && outcome.filled ? outcome.R : null, exitReason: outcome ? outcome.exitReason : null } : { result: at.status, R: null, exitReason: null },
-        gate, expected: at.status === 'traded' && (gate.trendAllowed || (gate.d2 && gate.d2.allowed)) ? 'take' : 'pass',
+        gate, expected: at.status === 'traded' && gate.trendAllowed ? 'take' : 'pass',
         window: windowOf({ reactionAt: m.candle.closedAt, setupTf, eodMs: eodOf(decisionClose), decisionClose: Math.max(decisionClose, list[recordBar].ms + tfMs) }),
       });
     }

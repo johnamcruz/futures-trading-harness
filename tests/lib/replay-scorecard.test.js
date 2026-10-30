@@ -76,10 +76,10 @@ test('reasons: "keltner short blocked by 15m down trend rule" is false when the 
   // A side named without a strategy: the trend rule per side. "blocks all trend-following setups" claims both sides.
   assert.strictEqual(claim(checkReasons('CYCLE RESULT: no-trade - 15m down trend blocks trend longs', facts()), 'trend-blocks').check, true);
   assert.strictEqual(claim(checkReasons('CYCLE RESULT: no-trade - prevailing 15m down trend blocks all trend-following setups', facts()), 'trend-blocks').check, false);
-  // A reversal strategy named: the trend rule never blocks it; fading the prevailing trend, step 2 decides (judgment:
-  // only at a higher-timeframe level, half size), so a veto by it is unchecked, never false.
-  const rev = checkReasons('CYCLE RESULT: no-trade - cisd_ote long blocked by the trend rule', facts({ setups: [setup({ name: 'cisd_ote', component: null, policy: false, direction: 'long', style: 'reversal', verdict: null })] }));
-  assert.strictEqual(claim(rev, 'trend-blocks').check, 'unchecked');
+  // A reversal strategy named: never counter, the trend rule holds it as any other: fading the trend (refused), the
+  // veto is true; with it, false.
+  const rev = checkReasons('CYCLE RESULT: no-trade - cisd_ote long blocked by the trend rule', facts({ setups: [setup({ name: 'cisd_ote', component: null, policy: false, direction: 'long', style: 'reversal', trendAllows: false, verdict: null })] }));
+  assert.strictEqual(claim(rev, 'trend-blocks').check, true);
   const withIt = checkReasons('CYCLE RESULT: no-trade - cisd_ote short blocked by the trend rule', facts({ setups: [setup({ name: 'cisd_ote', component: null, policy: false, direction: 'short', style: 'reversal', verdict: null })] }));
   assert.strictEqual(claim(withIt, 'trend-blocks').check, false);
   // "blocked by the trend rule or failed their triggers": a claim that nothing fired, not a trend claim.
@@ -143,9 +143,11 @@ test('expected: no scan is unchecked, no setup is no trade, each step decides in
   assert.deepStrictEqual([go({ trendAllows: false }).decision, go({ trendAllows: false }).decidedBy], ['no-trade', 2]);
   // Two steps say no trade: the higher one (the first in the order) decides.
   assert.strictEqual(go({ trendAllows: false, room: { inTheWay: { name: 'prior VAL', R: 0.5 }, needR: 2 } }).decidedBy, 2);
-  // A reversal fading the prevailing trend: judgment, at half size.
-  const fade = go({ style: 'reversal', direction: 'long', vwapSide: 'above' });
-  assert.deepStrictEqual([fade.decision, fade.ceiling, fade.judgment], ['take', 11, [2, 5]]);
+  // Never counter: a reversal fading the prevailing trend is refused by the rule (step 2), as any other; one the rule
+  // allows is a plain take (no half size).
+  const fade = go({ style: 'reversal', direction: 'long', vwapSide: 'above', trendAllows: false });
+  assert.deepStrictEqual([fade.decision, fade.decidedBy], ['no-trade', 2]);
+  assert.deepStrictEqual([go({ style: 'reversal' }).decision, go({ style: 'reversal' }).ceiling], ['take', 22]);
   // The room is a read (step 3 judgment), never a no trade alone: a level ahead before the target leaves the take.
   const near = go({ room: { inTheWay: { name: 'prior VAL', R: 0.69 }, needR: 2 } });
   assert.deepStrictEqual([near.decision, near.decidedBy, near.ceiling, near.judgment, near.couldSkip], ['take', 'take', 22, [3, 5], []]);
@@ -155,8 +157,8 @@ test('expected: no scan is unchecked, no setup is no trade, each step decides in
   assert.deepStrictEqual([one.decision, one.ceiling, one.decidedBy], ['no-trade', 0, 4]);
   assert.deepStrictEqual([go({ alignment: 'counter' }).decision, go({ alignment: 'counter' }).decidedBy], ['no-trade', 4]);
   assert.deepStrictEqual(go({ alignment: 'pullback' }).judgment, [4, 5]);
-  // Halvings don't compound: a mixed read on a fading reversal is half once.
-  assert.strictEqual(go({ style: 'reversal', direction: 'long', vwapSide: 'above', alignment: 'mixed' }).ceiling, 11);
+  // A reversal's counter read is no trade too (step 4).
+  assert.deepStrictEqual([go({ style: 'reversal', alignment: 'counter' }).decision, go({ style: 'reversal', alignment: 'counter' }).decidedBy], ['no-trade', 4]);
   assert.deepStrictEqual([go({ confluence: { with: [], against: ['orb'] } }).decision, go({ confluence: { with: [], against: ['orb'] } }).decidedBy], ['no-trade', 6]);
   assert.deepStrictEqual(go({ vwapSide: 'above' }).judgment, [5, 7]);
   // A step it can't compute leaves it unchecked, unless a lower step says no trade (each step only lowers).
@@ -570,16 +572,17 @@ test('a take whose judgment steps can still say no trade is never scored right o
   assert.deepStrictEqual(classify(label(), unknownHalf, e, checkReasons('CYCLE RESULT: no-trade - no candidate strategies', unknownHalf)).category, 'wrong stated reason');
   // A known size halves without a judgment: a skip there is still abstention.
   assert.deepStrictEqual(expectedDecision(facts({ setups: [setup({ alignment: 'mixed' })] })).couldSkip, []);
-  // A pullback (step 4) and a reversal fading the trend (step 2): a skip and an entry are unchecked on that step.
+  // A pullback (step 4): a skip and an entry are unchecked on that step.
   const pull = facts({ setups: [setup({ alignment: 'pullback' })] });
   assert.deepStrictEqual(expectedDecision(pull).couldSkip, [4]);
   assert.strictEqual(classify(label(), pull, expectedDecision(pull), checkReasons('CYCLE RESULT: no-trade', pull)).category, 'unchecked');
   assert.deepStrictEqual(classify(entry('short', 5), pull, expectedForEntry(pull, 'prop_portfolio', 'short'), checkReasons('', pull)).category, 'unchecked');
-  const fade = facts({ setups: [setup({ style: 'reversal', direction: 'long', vwapSide: 'above' })] });
-  assert.deepStrictEqual(expectedDecision(fade).couldSkip, [2]);
-  assert.strictEqual(classify(entry('long', 5), fade, expectedForEntry(fade, 'prop_portfolio', 'long'), checkReasons('', fade)).category, 'unchecked');
   // Over the ceiling is bad size even so.
-  assert.strictEqual(classify(entry('long', 12), fade, expectedForEntry(fade, 'prop_portfolio', 'long'), checkReasons('', fade)).category, 'bad size');
+  assert.strictEqual(classify(entry('short', 23), pull, expectedForEntry(pull, 'prop_portfolio', 'short'), checkReasons('', pull)).category, 'bad size');
+  // Never counter: a reversal fading the trend leaves no judgment step (it was step 2's): the rule refuses it.
+  const fade = facts({ setups: [setup({ style: 'reversal', direction: 'long', vwapSide: 'above', trendAllows: false })] });
+  assert.deepStrictEqual(expectedDecision(fade).couldSkip, []);
+  assert.strictEqual(expectedDecision(fade).decision, 'no-trade');
 });
 
 test('a false claim about a setup the bar did not have is incidental: reported, never the category', () => {

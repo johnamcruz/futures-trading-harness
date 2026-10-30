@@ -109,22 +109,29 @@ test('scripts/mtf.js prints the read for a bars file, as lines or JSON', () => {
   assert.match(bad.stderr, /unknown argument: --bogus/);
 });
 
-test('trendRule: a trend strategy never goes against the highest frame that has a trend; a reversal may', () => {
+test('trendRule: never counter: no entry against a trending 4h or 1h, whatever the strategy\'s style; both ranging, not against the 15m', () => {
   const b = (h4, h1, m15) => ({ 240: h4, 60: h1, 15: m15 });
   const allowed = (biases, side, style) => trendRule(biases, side, style).allowed;
   // 4h up: shorts are against it, whatever the lower frames say; longs are fine even in a 15m pullback.
-  assert.strictEqual(allowed(b(1, -1, -1), 'short'), false);
+  assert.strictEqual(allowed(b(1, 1, -1), 'short'), false);
   assert.strictEqual(allowed(b(1, 1, -1), 'long'), true);
-  assert.match(trendRule(b(1, 0, 0), 'short').reason, /against the prevailing 4h up trend/);
-  // 4h range: the 1h trend prevails; all range: both sides open.
+  assert.match(trendRule(b(1, 0, 0), 'short').reason, /^against the 4h up trend: no entry against a trending 4h or 1h$/);
+  // A trending frame against either side: the 4h up beside the 1h down is no side at all.
+  assert.deepStrictEqual([allowed(b(1, -1, -1), 'long'), allowed(b(1, -1, -1), 'short')], [false, false]);
+  assert.match(trendRule(b(1, -1, 0), 'long').reason, /against the 1h down trend/);
+  // 4h range: the 1h trend sets it; both ranging: not against the 15m; all range: both sides open (not in a prop attempt:
+  // there the entry rule also needs the declared trend and refuses a bar with no trend).
   assert.deepStrictEqual([allowed(b(0, -1, 1), 'long'), allowed(b(0, -1, 1), 'short')], [false, true]);
+  assert.deepStrictEqual([allowed(b(0, 0, 1), 'long'), allowed(b(0, 0, 1), 'short')], [true, false]);
+  assert.match(trendRule(b(0, 0, 1), 'short').reason, /^against the 15m up trend, the 4h and 1h ranging$/);
   assert.strictEqual(trendRule(b(0, 0, 1), 'short').prevailing.label, '15m');
   assert.deepStrictEqual([allowed(b(0, 0, 0), 'long'), allowed(b(0, 0, 0), 'short')], [true, true]);
-  // No 4h read yet: trend strategies wait; reversal strategies are never held by the rule.
+  // No 4h read yet: no entry; a reversal style is held like any other (no exemption).
   assert.match(trendRule(b(NaN, 1, 1), 'long').reason, /no 4h trend read yet/);
   assert.strictEqual(allowed(b(NaN, 1, 1), 'long'), false);
-  assert.strictEqual(allowed(b(1, 1, 1), 'short', 'reversal'), true);
-  assert.strictEqual(allowed(b(NaN, NaN, NaN), 'short', 'reversal'), true);
+  assert.strictEqual(allowed(b(1, 1, 1), 'short', 'reversal'), false, 'a reversal strategy may not fade the 4h and 1h');
+  assert.strictEqual(allowed(b(NaN, NaN, NaN), 'short', 'reversal'), false, 'nor enter before the 4h read');
+  assert.strictEqual(allowed(b(1, 1, 1), 'long', 'reversal'), true, 'with the trend it goes');
 });
 
 test('ruleSeries: causal per bar, and on the last bar the same biases as the live read (mtfRead)', () => {
@@ -135,7 +142,7 @@ test('ruleSeries: causal per bar, and on the last bar the same biases as the liv
   for (const m of [240, 60, 15]) assert.strictEqual(biasesAt(ser, b.length - 1)[m], live.biases[m], `${m}m`);
   assert.strictEqual(live.rule.prevailing, '4h down');
   assert.deepStrictEqual([live.rule.longAllowed, live.rule.shortAllowed], [false, true]);
-  assert.match(live.lines[live.lines.length - 1], /^Trend rule: SHORT allowed \(prevailing 4h down\); long only as a reversal \(mtf: reversal\)\.$/);
+  assert.match(live.lines[live.lines.length - 1], /^Trend rule: SHORT allowed \(prevailing 4h down\); no long against it\.$/);
 });
 
 test('readTimeframe reads at most the last 300 candles, so long series stay linear', () => {
@@ -171,13 +178,17 @@ test('ruleSummary: the reason names the side it is about, so a strategy that fir
   // The June 1, 2026 replay: 15m down, keltner fired short, and the summary said only "against the prevailing 15m down trend".
   const down = ruleSummary({ 240: 0, 60: 0, 15: -1 });
   assert.deepStrictEqual([down.longAllowed, down.shortAllowed], [false, true]);
-  assert.strictEqual(down.reason, 'longs are against the prevailing 15m down trend: only a reversal strategy (mtf: reversal) may take them; shorts are with it');
-  const up = ruleSummary({ 240: 1, 60: -1, 15: -1 });
-  assert.match(up.reason, /^shorts are against the prevailing 4h up trend: .*; longs are with it$/);
-  // Not ready: both sides wait, said once; no trend anywhere, or a reversal strategy: no reason.
+  assert.strictEqual(down.reason, 'longs: against the 15m down trend, the 4h and 1h ranging; shorts are with it');
+  const up = ruleSummary({ 240: 1, 60: 1, 15: -1 });
+  assert.match(up.reason, /^shorts: against the 4h up trend: no entry against a trending 4h or 1h; longs are with it$/);
+  // A frame against either side: no side, both reasons said.
+  const split = ruleSummary({ 240: 1, 60: -1, 15: -1 });
+  assert.deepStrictEqual([split.longAllowed, split.shortAllowed], [false, false]);
+  assert.match(split.reason, /^no side: longs against the 1h down trend.*; shorts against the 4h up trend/);
+  // Not ready: both sides wait, said once; no trend anywhere: no reason; a reversal style is held as any other.
   assert.match(ruleSummary({ 240: NaN, 60: 0, 15: 0 }).reason, /^no 4h trend read yet/);
   assert.strictEqual(ruleSummary({ 240: 0, 60: 0, 15: 0 }).reason, undefined);
-  assert.strictEqual(ruleSummary({ 240: -1, 60: 0, 15: 0 }, 'reversal').reason, undefined);
+  assert.match(ruleSummary({ 240: -1, 60: 0, 15: 0 }, 'reversal').reason, /^longs: against the 4h down trend/);
 });
 
 test('the 4h EMA50 votes on the read\'s window: three weeks of Globex hours (weekends and the daily break out) hold over 50 4h candles', () => {

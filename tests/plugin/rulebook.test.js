@@ -334,7 +334,7 @@ const ENFORCED = {
     const { order, fired } = fxOrb(H);
     const config = { ...loadConfig({}), killSwitchFile: '/nonexistent/fth/STOP', home: H.trendHome(undefined, { biases: { 240: -1, 60: -1, 15: -1 }, fired }), mtfMaxAgeMin: 1e9, signalMaxAgeMin: 1e9 };
     const r = evaluateOrder({ input: order, entries: [H.plan()], now: H.NOW, config, strategies: GATE_STRATEGIES });
-    assert.ok(r.violations.some(v => /prevailing/.test(v.message)), JSON.stringify(r.violations));
+    assert.ok(r.violations.some(v => /against the 4h down trend: no entry against a trending 4h or 1h/.test(v.message)), JSON.stringify(r.violations));
   },
 };
 

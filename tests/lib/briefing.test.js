@@ -330,7 +330,9 @@ test('a setup\'s facts, never a grade: the trend rule and the read for its side,
   // A level before the R it aims for is stated as a fact, never as a pass (no "the level comes first").
   assert.strictEqual(g({ stopDistance: 16.67 }).facts[2], 'first level ahead: round number at 1.5R; it aims for 2R');
   assert.deepStrictEqual(g({ mtf: { style: 'trend', shortAllowed: false } }).facts[0], 'against the trend rule for a short');
-  assert.match(g({ mtf: { style: 'reversal', shortAllowed: false } }).facts[0], /^a reversal strategy, no prevailing trend read$/);
+  // Never counter: a reversal strategy the rule refuses is against it like any other; one it allows says it is a reversal.
+  assert.strictEqual(g({ mtf: { style: 'reversal', shortAllowed: false } }).facts[0], 'against the trend rule for a short');
+  assert.match(g({ mtf: { style: 'reversal', shortAllowed: true } }).facts[0], /^a reversal strategy, no prevailing trend read$/);
   assert.strictEqual(g({ confluence: { with: [], against: ['ema_cross'] } }).facts[3], 'confluence: none with it; against ema_cross');
   assert.strictEqual(g({}, { vwapSide: 'above' }).facts[4], 'price above the VWAP (the other side)');
   assert.strictEqual(g({}, { vwapSide: null }).facts[4], 'the VWAP unknown');
@@ -632,14 +634,16 @@ test('levels merge within the contract\'s own tick (contracts.js), in the neares
   assert.match(text, /levels ahead in its R: [^\n]*\(\d[\d.]* pts, R unknown\)/);
 });
 
-test('a reversal setup says whether it fades the prevailing trend (half size, nearest target) or goes with it, from the scan\'s own trend-rule summary', () => {
+test('a reversal setup fading the trend is against the trend rule (never counter); with it, it says so, from the scan\'s own trend-rule summary', () => {
   const { ruleSummary } = require('../../scripts/lib/trading/mtf');
   const r = { name: 'crt_1h', status: 'active', entryRef: 100, stopDistance: 10, exit: {}, confluence: { with: [], against: [] } };
   const fact = (direction, biases) => B.candidate({ ...r, direction, mtf: ruleSummary(biases, 'reversal') }, 100, [], {}).facts[0];
   const up = { 240: 1, 60: 1, 15: -1 };
   const down = { 240: -1, 60: -1, 15: 1 };
-  assert.strictEqual(fact('short', up), 'a reversal strategy fading the prevailing 4h up trend: the trend rule allows it; the priority order, step 2 (strategy-library), decides it (level, size, target)');
-  assert.strictEqual(fact('long', down), 'a reversal strategy fading the prevailing 4h down trend: the trend rule allows it; the priority order, step 2 (strategy-library), decides it (level, size, target)');
+  assert.strictEqual(fact('short', up), 'against the trend rule for a short');
+  assert.strictEqual(fact('long', down), 'against the trend rule for a long');
+  // A summary without the side's rule (an older record): fading, said so, the rule's read unknown.
+  assert.strictEqual(B.candidate({ ...r, direction: 'short', mtf: { style: 'reversal', prevailing: '4h up' } }, 100, [], {}).facts[0], 'a reversal strategy fading the prevailing 4h up trend: the trend rule\'s read for it unknown');
   assert.strictEqual(fact('long', up), 'a reversal strategy, with the prevailing 4h up trend');
   assert.strictEqual(fact('short', { 240: 0, 60: -1, 15: 0 }), 'a reversal strategy, with the prevailing 1h down trend');
   assert.strictEqual(fact('long', { 240: 0, 60: 0, 15: 0 }), 'a reversal strategy, no prevailing trend read');

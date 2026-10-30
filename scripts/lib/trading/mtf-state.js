@@ -69,11 +69,11 @@ function readRecord(home, root) {
 }
 
 /**
- * The gate's check: may a `style` strategy enter `side` (buy/sell) on `root`
- * at `now`? Returns a message, or null.
+ * The gate's check: may a strategy enter `side` (buy/sell) on `root` at `now`?
+ * Returns a message, or null. Never counter: `style` is ignored (a reversal
+ * style is held like any other, and needs the record too).
  */
 function checkTrend(home, { root, side, style = 'trend', strategy, now = new Date(), maxAgeMin = DEFAULT_MAX_AGE_MIN }) {
-  if (style === 'reversal') return null;
   const how = `Fetch fresh bars and record the read with the harness tool bars_fetch {"symbol": "${root}", "timeframe": <minutes>, "record": true} (or mtf_read {"bars": "<a fresh bars file>", "symbol": "${root}", "record": true}; re-recording an old file stays stale). The autonomous runner records it every bar; while it runs, recording it yourself is refused.`;
   const rec = readRecord(home, root);
   if (!rec) return `No multi-timeframe read for ${familyRoot(root)}: setup:${strategy} is a trend strategy and may not enter without one. ${how}`;

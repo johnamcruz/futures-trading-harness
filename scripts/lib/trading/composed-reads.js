@@ -87,11 +87,8 @@
  *
  * Each read is true, false or 'unchecked' (a form this checker doesn't know, a fact the briefing doesn't hold, a
  * level it doesn't name): never true unless the briefing says so. Side agreement (D12): a read with a direction must
- * be the order's side; a stop or target must be on its side of the reference price (m3.price). The one exception is
- * D2's verified reversal, the owner's "CHoCH at or above the trend" (D2_TIERS, one definition the gate's trend rule
- * shares, lifecycle-gate.js reversalAllowed): a trend or break read against the side stands when the combination
- * holds its frame's tier, the side's way: a 15m frame (or one under it) a true 15m or 1h CHoCH, a 1h frame a 1h CHoCH,
- * a 4h frame a 1h CHoCH plus a 4h candle that rejected a key level (a gap's edge is none). Each step takes its own kinds of read (STEP_KINDS: bias the trend, break, prior-range, trend-rule, alignment,
+ * be the order's side; a stop or target must be on its side of the reference price (m3.price). No exception: never
+ * counter (no reversal tier excuses a read against the side). Each step takes its own kinds of read (STEP_KINDS: bias the trend, break, prior-range, trend-rule, alignment,
  * regime and day-type reads; location at, box at, vwap and value; setup the candle relations, patterns, CISD, OTE, sweeps
  * and the compression break;
  * entry close, momentum, volume, participation, absorption and the confirming pattern), and no read is stated twice
@@ -162,26 +159,6 @@ const FVG_EDGE = /^(1m|3m|5m|15m|1h|4h) fvg (low|high)$/;
 const FVG_ZONE = /^(1m|3m|5m|15m|1h|4h) fvg$/;
 const TF_ORDER = ['1m', '3m', '5m', '15m', '1h', '4h'];
 const TFS = new Set(TF_ORDER);
-// D2, the owner's "CHoCH at or above the trend": what fading each frame (its minutes) needs, the CHoCH frames that
-// suffice and whether a 4h candle's rejection of a key level must join. One definition: the reads' agreement here
-// (a read on a frame under 15m is held to the 15m tier) and the gate's trend rule (lifecycle-gate.js reversalAllowed).
-const D2_TIERS = { 15: { choch: ['15m', '1h'], rejection4h: false }, 60: { choch: ['1h'], rejection4h: false }, 240: { choch: ['1h'], rejection4h: true } };
-
-/**
- * Whether checked reads hold a D2 tier for `side`: a true, agreeing 15m or 1h CHoCH the side's way on one of the tier's
- * frames, and, when the tier asks, a true, agreeing 4h rejection of a key level the side's way (a fair value gap's edge,
- * '<tf> fvg low|high', is not one). False for no tier.
- */
-function d2TierMet(tier, reads, side) {
-  if (!tier || !Array.isArray(reads)) return false;
-  const good = x => isObj(x) && x.check === true && x.agrees === true && x.dir === side;
-  const chochs = reads.filter(x => good(x) && x.kind === 'break' && /^(15m|1h) choch (up|down)$/.test(String(x.form || ''))).map(x => String(x.form).split(' ')[0]);
-  const hasChoch = tier.choch.some(tf => chochs.includes(tf));
-  const has4h = !tier.rejection4h || reads.some(x => good(x) && x.kind === 'relation' && /^4h rejected .+ (up|down)$/.test(String(x.form || ''))
-    && !/ fvg (low|high) (up|down)$/.test(String(x.form)));
-  return hasChoch && has4h;
-}
-
 const isObj = x => Boolean(x) && typeof x === 'object' && !Array.isArray(x);
 const num = x => (typeof x === 'number' && Number.isFinite(x) ? x : null);
 const data = (b, name) => (isObj(b) && isObj(b.sections) && isObj(b.sections[name]) && isObj(b.sections[name].data) ? b.sections[name].data : null);
@@ -862,19 +839,11 @@ function checkReads({ reads, side, briefing, skills = null, tick = 0.25, entryRu
     const c = checkRead(p, briefing, { tick, side, riskPts });
     return { ...row, ...c, agrees: true };
   });
-  // Side agreement (D12), with D2's verified reversal: a trend or break read against the side stands when the reads
-  // hold its frame's D2 tier the side's way (D2_TIERS, the gate's own; a frame under 15m is held to the 15m tier): a 15m
-  // CHoCH never excuses a 1h or 4h trend, a 3m CHoCH nothing, and a 4h trend stands beside a 1h CHoCH only with a 4h
-  // rejection of a key level. The tier is judged on the reads as checked, before any agreement below is settled.
-  const tierOf = tf => (TF_MIN[tf] ? D2_TIERS[Math.max(15, TF_MIN[tf])] || null : null);
-  const excused = new Map(TF_ORDER.map(tf => [tf, d2TierMet(tierOf(tf), checked, side)]));
+  // Side agreement (D12): a read pointing against the side never agrees (never counter: no reversal tier excuses one).
   for (const r of checked) {
     if (r.check !== true) continue;
     if (r.kind === 'stop' || r.kind === 'target') r.agrees = r.dir === side;
-    else if (r.dir && r.dir !== side) {
-      r.agrees = (r.kind === 'trend' || r.kind === 'break') && excused.get(r.form.split(' ')[0]) === true;
-      if (r.agrees) r.reversal = true;
-    }
+    else if (r.dir && r.dir !== side) r.agrees = false;
   }
   // A cited setup (a TRUE `<strategy> fired` read of a strategy in `cited`): the plan takes its own entry, stop and target.
   const setup = citedSetup({ checked, side, m3, cited, problems });
@@ -916,6 +885,8 @@ function checkReads({ reads, side, briefing, skills = null, tick = 0.25, entryRu
   }
   // The policy's entry rule (entry-rule.js, its rulebook's `entry`): the bias frames, the regime, the leg turned, on
   // the same briefing; none (no policy, or every key off): nothing more is checked.
+  // The entry rule: the policy's, else the shipped side check (BG, no lane): no entry against a trending 4h or 1h on
+  // any path, and with both ranging only the 15m's way with the trend declared.
   if (SIDES.includes(side)) problems.push(...entryProblems({ briefing, side, reads: checked, rule: entryRule }));
   for (const k of ['stop', 'target']) {
     const n = checked.filter(r => r.kind === k && r.step === k).length;
@@ -974,7 +945,7 @@ const WORD = { true: 'TRUE', false: 'FALSE', unchecked: 'UNCHECKED' };
 function renderCheck(r) {
   const out = [`Reads checked against the bar briefing (${r.side || 'no side'}):`];
   for (const x of r.reads) {
-    const agree = x.check === true && !x.agrees ? ` - AGAINST the ${r.side}` : x.reversal ? ' - against, allowed by the verified CHoCH (D2)' : '';
+    const agree = x.check === true && !x.agrees ? ` - AGAINST the ${r.side}` : '';
     out.push(`- ${WORD[String(x.check)]} ${x.step} (${x.skill}): "${x.read}" - ${x.fact}${agree}`);
   }
   for (const p of r.problems) out.push(`- PROBLEM: ${p}`);
@@ -983,4 +954,4 @@ function renderCheck(r) {
   return `${out.join('\n')}\n`;
 }
 
-module.exports = { STEPS, FLOW_STEPS, STEP_KINDS, D2_TIERS, d2TierMet, SETUP_CANDLE, LIVE_BOX, ENTRY_PATTERNS, levelIndex, targetsAhead, roomBand, candleClose, setupClose, TF_ORDER, TF_MIN, MAX_READS, WHY_MAX, MOMENTUM, VOLUME_HIGH, ABSORPTION, netAtrOf, parseRead, checkRead, checkReads, readSignature, skillSignature, contextOf, targetROf, rBucket, levelName, renderCheck };
+module.exports = { STEPS, FLOW_STEPS, STEP_KINDS, SETUP_CANDLE, LIVE_BOX, ENTRY_PATTERNS, levelIndex, targetsAhead, roomBand, candleClose, setupClose, TF_ORDER, TF_MIN, MAX_READS, WHY_MAX, MOMENTUM, VOLUME_HIGH, ABSORPTION, netAtrOf, parseRead, checkRead, checkReads, readSignature, skillSignature, contextOf, targetROf, rBucket, levelName, renderCheck };

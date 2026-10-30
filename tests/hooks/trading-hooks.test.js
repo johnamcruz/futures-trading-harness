@@ -281,7 +281,7 @@ test('order gate: a trend strategy entry against the recorded prevailing trend i
   const { env } = setup([{ ts: minutesAgo(5), kind: 'plan', contractId: entryOrder().contractId, text: 'plan' }], { FTH_HOME: home });
   const r = gate(orderPayload(), env);
   assert.strictEqual(r.code, 2);
-  assert.match(r.stderr, /\[mtf-trend\] setup:anytime long is against the prevailing 4h down trend/);
+  assert.match(r.stderr, /\[mtf-trend\] setup:anytime long is against the 4h down trend: no entry against a trending 4h or 1h/);
   const short = gate(orderPayload({ ...ORDER, side: 'sell', rationale: 'setup:anytime short, stop 21520, target 21460' }), env);
   assert.strictEqual(short.code, 0, short.stderr);
   // No record at all: refused, with how to make one.
@@ -4109,7 +4109,7 @@ test('order gate (hook and gate log): a trade_lifecycle record holds valid_bars 
   assert.strictEqual(lc('2026-10-07T14:08:00.000Z', { ...EXIT_BASE, side: 'sell', type: 'stop', stopPrice: 21512.5, rationale: '[exit] flatten the composed long' }, []).code, 0);
 });
 
-test('order gate (hook): a composed long fading a 4h down trend needs a 4h rejection of a key level; a gap edge is none ([mtf-trend]); an exit goes', () => {
+test('order gate (hook): never counter: a composed long against a 4h down trend is refused whatever CHoCH or 4h rejection it names ([mtf-trend]); an exit goes', () => {
   // The briefing: a 1h CHoCH up, and a 4h candle that rejected both the previous 4h low and a 15m gap's low, up.
   const b = LC.briefing();
   b.sections.h1.data.lastBreak = { last: { kind: 'CHoCH', direction: 'up', level: 21500 }, previous: null };
@@ -4124,20 +4124,17 @@ test('order gate (hook): a composed long fading a 4h down trend needs a 4h rejec
     LC.writeScenario(home, { reads, b });
     return gate(orderPayload(LC.order()), setup([lcPlan], { FTH_HOME: home, FTH_TEST_NOW: LC_AT, CLAUDE_PLUGIN_ROOT: LC_ROOT, FTH_CYCLE_BARS: JSON.stringify({ MNQ: LC.BAR }) }).env);
   };
-  // The gap edge's rejection is true (the record stands), but it is no 4h rejection of a level: the trend rule refuses.
-  const gap = run('4h rejected 15m fvg low up');
-  assert.strictEqual(gap.code, 2);
-  assert.match(gap.stderr, /\[mtf-trend\]/);
-  assert.doesNotMatch(gap.stderr, /\[composed-reads\]/);
-  // A real 4h rejection of a key level with the 1h CHoCH: it goes.
-  const level = run('4h rejected previous 4h low up');
-  assert.strictEqual(level.code, 0, level.stderr);
-  // The honest record also names the 4h trend it fades (D2's 4h tier, one definition for the reads and the trend
-  // rule): it goes. Without the 4h rejection, or on the gap edge, the 4h read is against the long: both refuse.
+  // The record stands (every read true and the long's way), but the trend rule refuses it: on a gap edge's rejection,
+  // and on a real 4h rejection of a key level with the 1h CHoCH (once D2's 4h tier).
+  for (const rejection of ['4h rejected 15m fvg low up', '4h rejected previous 4h low up']) {
+    const r = run(rejection);
+    assert.strictEqual(r.code, 2, rejection);
+    assert.match(r.stderr, /\[mtf-trend\] setup:trade_lifecycle long is against the 4h down trend: no entry against a trending 4h or 1h/);
+    assert.doesNotMatch(r.stderr, /\[composed-reads\]/);
+  }
+  // The record naming the 4h trend it fades: the 4h read is against the long, so both refuse, with any rejection.
   b.sections.h1.data.h4.trend = 'down';
-  const honest = run('4h rejected previous 4h low up', { bias4h: true });
-  assert.strictEqual(honest.code, 0, honest.stderr);
-  for (const rejection of [null, '4h rejected 15m fvg low up']) {
+  for (const rejection of [null, '4h rejected 15m fvg low up', '4h rejected previous 4h low up']) {
     const r = run(rejection, { bias4h: true });
     assert.strictEqual(r.code, 2, String(rejection));
     assert.match(r.stderr, /\[composed-reads\] setup:trade_lifecycle: .*"4h down"/);
