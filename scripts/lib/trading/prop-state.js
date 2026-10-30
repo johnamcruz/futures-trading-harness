@@ -473,6 +473,12 @@ function combineBlock(home, accountName, now = new Date()) {
   return s.block || null;
 }
 
+/** The oldest snapshot time (ms) of the running attempts `names`: NaN when one has none (the gate then refuses). */
+function oldestSnapshotMs(home, names) {
+  const ats = (names || []).map(n => { const r = readAttempt(home, n); return Date.parse(r && r.snapshot && r.snapshot.at); });
+  return ats.length && ats.every(Number.isFinite) ? Math.min(...ats) : NaN;
+}
+
 const RISK_REDUCING = /^\s*\[(exit|protect)\]/i;
 
 /**
@@ -795,6 +801,6 @@ function readVerdicts(home) {
 
 module.exports = {
   dayEndMs, closeBefore, balanceCheck, reconciled, orderSince, BALANCE_TOLERANCE,
-  SNAPSHOT_MAX_AGE_MS, combineFile, verdictsFile, readAttempt, startAttempt, seedAttempt, carriedOf, carriedLossState, endAttempt, runningAttempts, stateFrom, tradesFromFills, sessionLossStreak, snapshot, dayCounts, attemptCounts, recordEndOfDay, combineBlock, entrySinceSnapshot, feeOf,
+  SNAPSHOT_MAX_AGE_MS, combineFile, verdictsFile, readAttempt, startAttempt, seedAttempt, carriedOf, carriedLossState, endAttempt, runningAttempts, stateFrom, tradesFromFills, sessionLossStreak, snapshot, dayCounts, attemptCounts, recordEndOfDay, combineBlock, entrySinceSnapshot, oldestSnapshotMs, feeOf,
   legOf, legsFor, budgetPlan, sizeWithin, minContractsRefusal, minContractsIn, latestVerdict, propViolations, appendVerdict, readVerdicts, ENTRY_ACTIONS, verdictMultiplier, verdictUsed, openEntryVerdicts,
 };

@@ -724,6 +724,16 @@ test('combine: a live attempt never times out on its sessions, and a finished on
   assert.match(passed(entryOrder()).violations[0].message, /the challenge is passed.*node scripts\/combine.js stop --account mini/);
 });
 
+test('combine: the gateway\'s snapshot time for its fills check is the oldest running attempt\'s; one with none is NaN (it refuses)', () => {
+  const home = trendHome();
+  prop.startAttempt(home, MINI, new Date(NOW.getTime() - 86400000));
+  assert.ok(Number.isNaN(prop.oldestSnapshotMs(home, ['mini'])), 'no snapshot yet');
+  prop.snapshot(home, MINI, 50000, new Date(NOW.getTime() - 90000));
+  assert.strictEqual(prop.oldestSnapshotMs(home, ['mini']), NOW.getTime() - 90000);
+  assert.ok(Number.isNaN(prop.oldestSnapshotMs(home, ['mini', 'nonesuch'])), 'an attempt with no snapshot');
+  assert.ok(Number.isNaN(prop.oldestSnapshotMs(home, [])));
+});
+
 test('combine: every missed close is flagged, not only the first, so the floor is never left stale', () => {
   const home = trendHome();
   prop.startAttempt(home, MINI, new Date('2026-10-04T14:00:00Z'));

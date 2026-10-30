@@ -119,8 +119,8 @@ it:
   that isn't `full`, or carries no multiplier above 0 and at most 1; any entry that doesn't match the
   verdict, or whose verdict is not for the last recorded bar, or is for a
   setup of a strategy that isn't active; any position already open on the account, or any order working
-  on it (a resting entry on another market could fill next to it); any entry once another
-  went in since the latest account snapshot ("wait for the next bar's
+  on it (a resting entry elsewhere could fill next to it); any entry once another
+  went in, or a position closed, since the last snapshot ("wait for the next bar's
   snapshot"; one whose journal time is unreadable counts as since it: tell
   the user); and, while an attempt runs, any entry from a strategy that
   isn't its policy strategy.
