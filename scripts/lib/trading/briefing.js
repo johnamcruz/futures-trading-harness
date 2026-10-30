@@ -881,6 +881,7 @@ const targets = list => list.reduce((out, x) => {
 }, []).map(target).join(', ');
 
 // The m3 fields the summary says in full (one line each), left out of the detail whole.
+const CHAIN_FRAMES = (C => C.chainOf(C.SHIPPED))(require('./chain'));
 const SUMMARY_FIELDS = ['swingTargets', 'rangeTargets', 'fvgs', 'structure5m', 'compression', 'declared', 'timing'];
 // What the summary's "This bar's close" line says in full, left out of the detail (only present when it happened).
 const SUMMARY_ONLY = { vwap: ['crossed'], today: ['openingRangeCrossed'], location: ['closesBeyondValue', 'backInsideValue'] };
@@ -969,7 +970,9 @@ function candleLines(m3, et, roomOf = 'R = the reference stop', closedAt = null)
       // On high volume, the net move (absorption's "little progress", composed-reads.js netAtrOf).
       extras && c.volRatio >= VOLUME_HIGH && netAtrOf(c) !== null ? `net ${netAtrOf(c)} ATR` : null,
       c.momentum === 'up' || c.momentum === 'down' ? `momentum ${c.momentum}` : null].filter(Boolean).join(', ');
-    out.push(`- ${tf} (closed ${et(c.closedAt)}): ${shapeText}${sweepText(c.sweep)}${met.length ? `; ${met.join(', ')}` : ''}${extras ? gapText(c) : ''}.`);
+    // The chain's roles (chain.js): the setup frame's candle is the setup candle, the entry frame's the entry (timing) one.
+    const role = tf === CHAIN_FRAMES.setup ? 'setup candle, ' : tf === CHAIN_FRAMES.entry ? 'entry candle, timing, ' : '';
+    out.push(`- ${tf} (${role}closed ${et(c.closedAt)}): ${shapeText}${sweepText(c.sweep)}${met.length ? `; ${met.join(', ')}` : ''}${extras ? gapText(c) : ''}.`);
   }
   const t = m3.swingTargets || { above: [], below: [] };
   out.push(`- Next swing above (${roomOf}): ${targets(t.above || []) || 'none found'}; below: ${targets(t.below || []) || 'none found'}.`);

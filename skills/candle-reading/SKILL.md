@@ -27,15 +27,14 @@ hypotheses; a missing field is `unknown`.
 
 **The stack**: each timeframe's last completed candle. 15m, 1h and 4h weigh more at a higher-timeframe level (a 1h
 rejection of the prior day's high outweighs a 3m one: `rejection`,
-`breakout`); 3m and 5m time the entry.
+`breakout`); the 3m only times the entry.
 
 - 3m, 5m, 15m, 1h and 4h: `m3.candles` (fields: `bar-briefing`), its
   `pattern` and the levels it
   met (`rejected`, `broke`, `touched`: `rejection`, `breakout`), only
-  levels that existed before it opened. 5m, `unavailable` without a 1m
-  lane, is `unknown`.
-- The targets: `m3.swingTargets`, the next swing each side (base,
-  15m, 1h, 4h).
+  levels that existed before it opened. 5m without a 1m lane: `unknown`.
+- The targets: `m3.swingTargets`, the next swing each side (15m, 1h,
+  4h).
 - Strategy rules: `htfd_*` (strategy-rules).
 
 **Anatomy** (range = h - l; h = l is `unknown`): body and wick shares of
@@ -58,13 +57,14 @@ prior candle, ATR(14) as of prev):
   close vs open; it starts a leg, out of a box (`compression`) or a
   level.
 
-A CISD's strong displacement: `cisd`. **Context decides**: with the HTF
+**Context decides**: with the HTF
 read (`trend-vs-range`, `pullback-vs-reversal`) and momentum and volume
 (`momentum-and-volume`, `absorption`).
 The stack counts once (`confluence-counting`, trigger).
 
 **Evidence**: standalone candlestick patterns have weak evidence in
-general, none measured.
+general; the 15m setup candle (census): engulfing +0.17R/+0.19R,
+other strong closes +0.37R/+0.27R: its strength and close, not its name.
 
 ## Examples
 
@@ -73,7 +73,7 @@ Take: at the prior RTH high 21615.00: on the 15m close a shooting star (H 21621.
   on the 1h close a rejection wick, then on the 3m close a bearish engulfing. Stack agrees.
   Reads: 1h rejected prior rth high down, 3m pattern bearish engulfing. Priority order -> take.
 Skip: at the session POC 21522.00, on the 3m close a doji (body 0.25, range 5.50); 15m forming:
-  the entry read not in yet -> pass. The session VAH 0.4R ahead is a read, not the reason.
+  the entry read not in yet -> pass.
 Loser: at the prior VAL 21480.00, on the 15m close a hammer (L 21474.50, C 21483.75).
   long at 21483.75, stop 21474.25 (9.50 pts = 38 ticks, $19.00 on 1 MNQ);
   closes below the VAL. -38 ticks, -$19.00.

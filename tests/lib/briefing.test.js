@@ -671,7 +671,7 @@ test('completed-candle facts: per timeframe in m3 and a summary line each, the l
     }
   }
   const text = B.renderBriefing(b, { now: new Date(b.closedAt) });
-  assert.match(text, /\n- 15m \(closed \d\d:\d\d\): [a-z ]+/);
+  assert.match(text, /\n- 15m \(setup candle, closed \d\d:\d\d\): [a-z ]+/);
   // No 1m lane: the 5m line is left out of the summary (the JSON says why).
   assert.ok(!/\n- 5m/.test(text));
   // The detail leaves out the 3m candle's OHLCV (it is the bar above) and the unavailable 5m.

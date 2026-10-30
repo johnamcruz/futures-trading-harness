@@ -131,3 +131,16 @@ test('8. HTF neutral (BG): both ranging with the 15m and the declared trend agre
   assert.match(rule(briefing({ t4h: 'range', t1h: 'range', t15: 'down' }), 'short').join(), /Trend declared\? facts are not in the briefing/);
   assert.match(rule(briefing({ t4h: 'up', t1h: 'range', t15: 'down', declared: DECLARED('short') }), 'short').join(), /the 4h trend is up, against the short/);
 });
+
+test('9. the setup candle: each listed setup names the chain\'s setup-frame candle (its pattern and close), never the entry frame\'s', () => {
+  const SM = require('../../scripts/lib/learning/setup-moments');
+  const c = (pattern, closeLocation) => ({ t: '2026-06-01T13:45:00.000Z', closedAt: '2026-06-01T14:00:00.000Z', pattern, closeLocation, relations: [{ name: 'prior VAH', price: 21530.25, rel: 'rejected', dir: 'up' }] });
+  const candles = { [C.chainOf(C.SHIPPED).setup]: c('bullish engulfing', 'top'), [C.chainOf(C.SHIPPED).entry]: c('shooting star', 'bottom') };
+  assert.strictEqual(SM.setupCandleText(candles), 'bullish engulfing, close top third', 'the setup frame\'s candle');
+  const line = SM.checkLine(candles, { barClose: Date.parse('2026-06-01T14:03:00.000Z') });
+  assert.match(line, /\(long, 21530\.25; setup candle: bullish engulfing, close top third\)/);
+  assert.doesNotMatch(line, /setup candle: shooting star/, 'the 3m pattern is never the setup candle');
+  // No pattern on the setup candle: said so; no setup-frame candle: none named.
+  assert.strictEqual(SM.setupCandleText({ ...candles, '15m': c('none', 'middle') }), 'no pattern, close middle third');
+  assert.strictEqual(SM.setupCandleText({ '3m': c('shooting star', 'bottom') }), null);
+});
