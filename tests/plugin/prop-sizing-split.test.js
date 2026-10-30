@@ -186,8 +186,14 @@ const SPLITS = {
         to: "The budget and the caps stay your judgement: a budget below its risk is a skip; a raised size (a rules setup with 30+ reviewed trades) changes only `size`, the risk scaling with it.",
         reason: REORDER },
     ],
-    // Units moved out of their old order on purpose, each with its reason (the order check skips them).
-    reordered: { units: [RB_NEW, SZ_NEW], reason: REORDER },
+    // Units moved out of their old order on purpose, each with its reason (the order check skips them). Where they
+    // went is pinned instead: `after` (in this order) comes before each of `follow` (the exempt units, the halving).
+    reordered: {
+      units: [RB_NEW, SZ_NEW],
+      after: ['In a prop attempt: the full verdict size; a serious factor against never cuts it; only a pacing rule does.', 'Outside a prop attempt'],
+      follow: [RB_NEW, SZ_NEW, 'A trade marked smaller is halved: half is `floor(size / 2)`, 0 means no trade (at size 1 every halving is a skip).'],
+      reason: REORDER,
+    },
     moved: {
       // Step 1's table and the contract-naming paragraph, and the sentence that introduced the table.
       'micro-mini-specs': { lines: [[18, 28]], units: ['The table is for sanity checks only:'] },
@@ -280,6 +286,32 @@ function orderErrors(beforeText, homeTexts, homes, allowed, reordered = []) {
   });
   return bad;
 }
+
+/** Where a split's reordered units went: each of `after` once, in order, and every `follow` unit after the last. */
+function placementErrors(text, re) {
+  const us = units(text);
+  const at = re.after.map(u => us.indexOf(u));
+  const bad = re.after.filter((u, i) => at[i] < 0 || (i > 0 && at[i] < at[i - 1])).map(u => `${JSON.stringify(u)}: missing or out of order`);
+  const last = Math.max(...at);
+  for (const u of re.follow) if (!(us.indexOf(u) > last)) bad.push(`${JSON.stringify(u)}: not after ${JSON.stringify(re.after[re.after.length - 1])}`);
+  return bad;
+}
+
+test('position-sizing: the prop rule leads; the non-prop block stays at the end (the reordered units\' placement)', () => {
+  const re = SPLITS['position-sizing'].reordered;
+  const ps = skill('position-sizing');
+  assert.deepStrictEqual(placementErrors(ps, re), []);
+  // The mutation: the "Outside a prop attempt" block moved back to the top of How It Works fails.
+  const from = ps.indexOf('### Outside a prop attempt');
+  const to = ps.indexOf('## Examples');
+  const block = ps.slice(from, to);
+  const moved = (ps.slice(0, from) + ps.slice(to)).replace('## How It Works\n\n', `## How It Works\n\n${block}`);
+  assert.notDeepStrictEqual(placementErrors(moved, re), [], 'the block moved ahead of the prop rule');
+  // Only the halving moved up, or the heading dropped: also caught.
+  const half = re.follow[2];
+  assert.notDeepStrictEqual(placementErrors(ps.replace('## How It Works\n\n', `## How It Works\n\n${half}\n\n`).replace(/\n3\. A trade marked smaller is halved:[^]*?under the caps\.\n/, '\n'), re), []);
+  assert.notDeepStrictEqual(placementErrors(ps.replace('### Outside a prop attempt\n', ''), re), []);
+});
 
 for (const [name, s] of Object.entries(SPLITS)) {
   test(`${name} split: every unit of the old skill is in exactly one new home, the one its section maps to, byte-for-byte, in its old order`, () => {
