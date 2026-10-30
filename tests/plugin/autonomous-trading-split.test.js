@@ -95,7 +95,7 @@ const LATE_STALE = (() => {
 // New text in the core, not from the old skill, each with its reason: the pointers to the pieces, and the one reaction
 // the head trader must always have without loading kill-switch (that skill keeps the details).
 const ADDED = [
-  { now: 'A bare `VERDICT: APPROVE` with no size on the line is unreadable, even beside a Size line: it gets one restate of the Size and VERDICT lines; it is never a veto.',
+  { now: 'A bare `VERDICT: APPROVE` with no size on the line → unreadable, even beside a Size line → one restate of the Size and VERDICT lines; never a veto.',
     reason: 'feat/bias-bg (the context quiz, Q19): roles-ran.js approvedSize finds no size on a bare approval (an error, not a veto): the runner asks once to restate' },
   { now: "**Phase 2's size.** A risk-manager approval whose Size line is prose (\"Size: I'd go with 3 contracts\") beside `VERDICT: APPROVE - size 3` is a readable approved size.",
     reason: 'feat/bias-bg (the context quiz, Q19): the head trader reads a prose Size line as the approved size, as roles-ran.js approvedSize does; only an unreadable approval is restated' },

@@ -259,7 +259,7 @@ test('trader-process: each mapped role lists the skill, says to load it, and nam
   // The gate's news (the briefing's m3.news) wins over the analyst's own read.
   assert.ok(flat(read('agents/news-calendar-analyst.md')).includes("That line is your own read and proposal. The bar briefing's `m3.news` is the gate's and the source of truth: phase 2's line 2 takes the news from it, and it wins when the two differ."));
   assert.match(flat(read('skills/trade-session/SKILL.md')), /Decide top-down in the `trader-process` skill's order[^.]*write its PLAN block before your result line; the checks below fill its lines\. It orders the thinking and adds no filter\./);
-  assert.ok(flat(read('skills/trade-session/SKILL.md')).includes('**Compose first** (`confluence-counting`): the side rule\'s side, the setup (15m) at a key level closed → `compose_check`, never your own R:R. OK → take: in a prop attempt nothing halves (the code sets the full verdict size); else full, half on serious (the `position-sizing` skill), pass on decisive against.'));
+  assert.ok(flat(read('skills/trade-session/SKILL.md')).includes('**Compose first** (`confluence-counting`): the side rule\'s side, the setup (15m) at a key level closed → `compose_check`, never your own R:R. OK → take: in a prop attempt the full verdict size; pass only on a decisive against. Not in a prop attempt: the `position-sizing` skill.'));
 });
 
 test('trader-process: the executor executes; it carries no PLAN and no analysis', () => {

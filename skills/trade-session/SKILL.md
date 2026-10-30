@@ -118,9 +118,9 @@ It orders the thinking and adds no filter.
   the rule for every setup, a policy verdict too. Apply its steps in order.
 - **Compose first** (`confluence-counting`): the side rule's side, the
   setup (15m) at a key level closed → `compose_check`, never your own
-  R:R. OK → take: in a prop attempt nothing halves (the code sets the full
-  verdict size); else full, half on serious (the `position-sizing` skill),
-  pass on decisive against.
+  R:R. OK → take: in a prop attempt the full verdict size; pass only on a
+  decisive against.
+  Not in a prop attempt: the `position-sizing` skill.
 - **Every decision**: read the `setup-judgment` and `day-context` skills;
   before an entry, `trade-plan` too (the order gate refuses an entry until
   `setup-judgment` and `trade-plan` were read). An open trade: `manage-position`.

@@ -79,7 +79,7 @@ PLAN:
 5 Confluence: for <n>, against <n>, neutral <n>: <main ones>
 6 Entry: <the entry reads | none>
 7 Risk: stop <ticks>, target <R> (compose_check), size <n>, ahead <level R|none>
-8 Decision: <take|pass> - <full|half|the failed step>, <one main reason>
+8 Decision: <take|pass> - <full|the failed step>, <one main reason>
 9 Manage: <flat | invalidation, exit>
 ```
 

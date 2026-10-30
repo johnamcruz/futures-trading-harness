@@ -17,14 +17,13 @@ times it) → call
 `compose_check`. Never estimate room or R:R: the briefing's "Standard
 plan" line states it; OK → compose with its reads, refused → pass,
 naming it.
-OK → **a valid setup is the trade**. In a prop attempt nothing halves: a serious factor against doesn't cut the size; the code sets the full verdict size. Not in a prop attempt, within the verdict's ceiling, the
-against sets the size:
+OK → **a valid setup is the trade**. In a prop attempt nothing halves: a serious factor against doesn't cut the size; the code sets the full verdict size. The against:
 
 - **Decisive** → pass: a 1h CHoCH against while the 1h ranges (with the
   4h and 1h your way: context), or a hard step fails.
-- **Serious** → half (`floor`, at least 1): 2+ categories against,
-  location against (the setup into the other side's level), or a 3m
-  close beyond the leg's 15m swing (`m3.htfLevels` `brokenAt`). Closed
+- Serious (2+ categories against, the setup into the other side's level,
+  or a 3m close beyond the leg's 15m swing, `m3.htfLevels` `brokenAt`): in a
+  prop attempt no cut, the full verdict size; outside one, half. Closed
   back inside, it is a sweep (`breakout-vs-fakeout`): liquidity for.
 - **Minor** → full size, never a reason not to compose: thin volume, the
   first level ahead, VWAP distance or "chasing" (no edge in the census),
@@ -61,8 +60,8 @@ Take: valid long: structure (15m cisd up, 3m momentum up: one), location, trigge
   for 4, against 0, neutral 2 -> full.
 Skip: long: structure (the 15m pullback): neutral; the 1h CHoCH down, the 1h ranging.
   for 2, against 0, neutral 4: decisive -> pass.
-Half (not in a prop attempt): valid long: structure (the pullback): neutral; context, participation: against.
-  for 2, against 2, neutral 2: serious -> half.
+Serious: valid long: structure (the pullback): neutral; context, participation: against.
+  for 2, against 2, neutral 2: serious -> in a prop attempt the full verdict size (outside one, half).
 Loser: for 4, against 0, neutral 2; long at 21540.25, stop 21512.50
   (27.75 pts = 111 ticks, $55.50 on 1 MNQ). -111 ticks, -$55.50. A high count is odds, not a promise.
 ```

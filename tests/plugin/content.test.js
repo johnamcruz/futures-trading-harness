@@ -552,7 +552,7 @@ test('the analysts report reads for or against the trend rule\'s side, never adv
   assert.match(read('skills/trade-session/SKILL.md'), /Load\s+`confluence-counting` every cycle too/);
   // The setup (15m) closed is the trigger; in a prop attempt the full size (feat/bias-bg).
   const flatOf = f => read(f).replace(/\s+/g, ' ');
-  assert.ok(flatOf('skills/trade-session/SKILL.md').includes('the setup (15m) at a key level closed → `compose_check`, never your own R:R. OK → take: in a prop attempt nothing halves (the code sets the full verdict size); else full, half on serious (the `position-sizing` skill), pass on decisive against.'));
+  assert.ok(flatOf('skills/trade-session/SKILL.md').includes('the setup (15m) at a key level closed → `compose_check`, never your own R:R. OK → take: in a prop attempt the full verdict size; pass only on a decisive against. Not in a prop attempt: the `position-sizing` skill.'));
   assert.ok(flatOf('skills/trade-lifecycle/SKILL.md').includes('the side rule\'s side, the setup (15m) at a level closed (the next 3m close times it) → compose (`confluence-counting`); the plan, never you, works out R:R.'));
 });
 
@@ -564,22 +564,22 @@ test('the count is of independent categories, never labels, and every restatemen
   assert.deepStrictEqual([...cc.matchAll(/\| (\w+) \| [^|]+ \|/g)].map(m => m[1]).filter(c => c !== 'Category'), ['structure', 'location', 'liquidity', 'trigger', 'participation', 'context']);
   // A valid setup is the trade (the owner, 2026-10-21): the categories describe the evidence; the against sets the size.
   for (const rule of ['**Compose first.**', 'closed (the next 3m close times it) → call `compose_check`.', 'Never estimate room or R:R: the briefing\'s "Standard plan" line states it',
-    'refused → pass, naming it.', 'OK → **a valid setup is the trade**. In a prop attempt nothing halves: a serious factor against doesn\'t cut the size; the code sets the full verdict size. Not in a prop attempt, within the verdict\'s ceiling, the against sets the size:',
+    'refused → pass, naming it.', 'OK → **a valid setup is the trade**. In a prop attempt nothing halves: a serious factor against doesn\'t cut the size; the code sets the full verdict size. The against:',
     'never a reason not to compose', 'no pullback yet',
-    '**Decisive** → pass: a 1h CHoCH against while the 1h ranges (with the 4h and 1h your way: context), or a hard step fails.', '**Serious** → half (`floor`, at least 1): 2+ categories against, location against',
-    'or a 3m close beyond the leg\'s 15m swing (`m3.htfLevels` `brokenAt`). Closed back inside, it is a sweep (`breakout-vs-fakeout`): liquidity for.',
+    '**Decisive** → pass: a 1h CHoCH against while the 1h ranges (with the 4h and 1h your way: context), or a hard step fails.', 'Serious (2+ categories against, the setup into the other side\'s level',
+    'or a 3m close beyond the leg\'s 15m swing, `m3.htfLevels` `brokenAt`): in a prop attempt no cut, the full verdict size; outside one, half. Closed back inside, it is a sweep (`breakout-vs-fakeout`): liquidity for.',
     '**Minor** → full size, never a reason not to compose: thin volume, the first level ahead, VWAP distance or "chasing"', 'A missing read is no reason to pass.',
     'reads of one price move are one piece of evidence.', 'mixed, none or `unknown` → neutral',
     'a 15m BOS, an EMA slope and ADX are one structure vote', 'the trend rule and the 1h and 4h direction (the side rule;',
     '**The pullback is neutral** (`pullback-vs-reversal`)']) assert.ok(cc.includes(rule), rule);
   // Each restatement: categories, the same threshold, and no against category a pass alone.
   const ts = flat(read('skills/trade-session/SKILL.md'));
-  assert.ok(ts.includes('**Compose first** (`confluence-counting`): the side rule\'s side, the setup (15m) at a key level closed → `compose_check`, never your own R:R. OK → take: in a prop attempt nothing halves (the code sets the full verdict size); else full, half on serious (the `position-sizing` skill), pass on decisive against.'));
+  assert.ok(ts.includes('**Compose first** (`confluence-counting`): the side rule\'s side, the setup (15m) at a key level closed → `compose_check`, never your own R:R. OK → take: in a prop attempt the full verdict size; pass only on a decisive against. Not in a prop attempt: the `position-sizing` skill.'));
   assert.ok(flat(read('skills/trade-lifecycle/SKILL.md')).includes('the side rule\'s side, the setup (15m) at a level closed (the next 3m close times it) → compose (`confluence-counting`); the plan, never you, works out R:R.'));
   const tp = flat(read('skills/trader-process/SKILL.md'));
   // take or pass first: the decision word the verdict parser reads (roles-ran.js: "take" agrees, a "valid" first word
   // read as a veto in a phase-2 report).
-  assert.ok(tp.includes('8 Decision: <take|pass> - <full|half|the failed step>, <one main reason>'));
+  assert.ok(tp.includes('8 Decision: <take|pass> - <full|the failed step>, <one main reason>'));
   const { verdictOf } = require('../../scripts/lib/trading/roles-ran');
   assert.strictEqual(verdictOf('8 Decision: take - full, compose_check OK\nVERDICT: APPROVE - size 1'), 'APPROVE');
   // The PLAN's R:R and target are the compose record's, never the model's estimate.
@@ -646,10 +646,10 @@ test('decisive is a real HTF reversal (a 1h CHoCH against), never a 15m swing br
   const flat = t => t.replace(/\s+/g, ' ');
   const cc = flat(read('skills/confluence-counting/SKILL.md'));
   assert.ok(cc.includes('**Decisive** → pass: a 1h CHoCH against while the 1h ranges (with the 4h and 1h your way: context), or a hard step fails.'));
-  assert.ok(cc.includes('or a 3m close beyond the leg\'s 15m swing (`m3.htfLevels` `brokenAt`). Closed back inside, it is a sweep (`breakout-vs-fakeout`): liquidity for.'));
+  assert.ok(cc.includes('or a 3m close beyond the leg\'s 15m swing, `m3.htfLevels` `brokenAt`): in a prop attempt no cut, the full verdict size; outside one, half. Closed back inside, it is a sweep (`breakout-vs-fakeout`): liquidity for.'));
   const restated = {
     'rules/trading/decision.md': ['serious against (a 3m close beyond the leg\'s 15m swing among them) → half', 'decisive against (a 1h CHoCH against, unless the 4h and 1h both your way) → pass'],
-    'skills/trade-session/SKILL.md': ['pass on decisive against.'],
+    'skills/trade-session/SKILL.md': ['pass only on a decisive against.'],
     'agents/risk-manager.md': ['VETO only on a decisive 1h CHoCH against or a failed hard step.'],
   };
   for (const [f, list] of Object.entries(restated)) for (const s of list) assert.ok(flat(read(f)).includes(s), `${f}: ${s}`);

@@ -3,7 +3,7 @@ name: prop-pacing-judgment
 description: Use when pacing a prop account with no running attempt (daily budget, pace, consistency, stand-downs).
 ---
 
-# Prop Pacing by Judgment
+# Prop Pacing by Judgment (no running attempt)
 
 ## When to Use
 
