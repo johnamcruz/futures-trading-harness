@@ -5,7 +5,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert');
-const { sizeLines } = require('../../scripts/lib/prop/size-line');
+const { sizeLines, worstRisk } = require('../../scripts/lib/prop/size-line');
 const { rulesHolding } = require('../../scripts/lib/prop/phase2-cut');
 
 const HEALTHY = { balance: 100200, start: 100000, peak: 100200, lossesToday: 0, lossStreak: 0, softRoom: 1000, dailyRoom: 2000, needed: 5800, nearTargetUsd: 500 };
@@ -26,6 +26,18 @@ test('each pacing rule phase 2 may cut on is named, as rulesHolding finds it; th
   assert.strictEqual(lines({ ...HEALTHY, balance: 99000 })[0], 'Size: phase 2 may cut (pacing: drawdown)');
   assert.strictEqual(lines({ ...HEALTHY, softRoom: 250 })[0], 'Size: phase 2 may cut (pacing: soft-stop)');
   assert.strictEqual(lines({ ...HEALTHY, needed: 400 })[0], 'Size: phase 2 may cut (pacing: target)');
+});
+
+test('the soft stop is judged at the most one entry may risk: with $400 of room, a $500 floor stretch can reach it', () => {
+  assert.strictEqual(worstRisk({ capUsd: 300, stretchUsd: 500, budgetUsd: 450 }), 500);
+  assert.strictEqual(worstRisk({ capUsd: 300, stretchUsd: 'off', budgetUsd: 450 }), 300);
+  assert.strictEqual(worstRisk({ capUsd: null, budgetUsd: 450 }), 450);
+  assert.strictEqual(worstRisk({}), null);
+  const room = { ...HEALTHY, softRoom: 400 };
+  // At the $300 cap the soft stop isn't reached; at the stretch's $500 it is: the line never says full there.
+  assert.strictEqual(lines(room, { riskUsd: 300 })[0], 'Size: full verdict (healthy: balance ≥ start, no loss streak); phase 2 cuts only on a pacing rule');
+  assert.strictEqual(lines(room, { riskUsd: worstRisk({ capUsd: 300, stretchUsd: 500 }) })[0], 'Size: phase 2 may cut (pacing: soft-stop)');
+  assert.deepStrictEqual(rulesHolding(room, 500), ['soft-stop'], 'the gate\'s check on a stretched entry finds the same');
 });
 
 test('facts that can\'t be read are no healthy account (fails closed); no minimum stated, no Min line', () => {

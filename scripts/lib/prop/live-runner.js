@@ -25,7 +25,7 @@ const { isOpen } = require('../trading/positions');
 const state = require('../trading/prop-state');
 const { decideSetup } = require('./verdict');
 const { factsOf } = require('./phase2-cut');
-const { sizeLines } = require('./size-line');
+const { sizeLines, worstRisk } = require('./size-line');
 const { componentRefusal, composedOf } = require('../trading/strategies');
 const combine = require('../trading/combine');
 const { tradingDayKey } = require('../trading/clock');
@@ -160,8 +160,8 @@ function createPropHooks({ root, env = process.env, home, client, accountId, str
         const composed = strategies().find(x => x.valid && x.signal === 'composed');
         const z = (policy && policy.sizing) || {};
         const capUsd = composed && composed.risk ? composed.risk.max_risk_usd : null;
-        // A loss is measured at the most one trade may risk: the composed cap, or the size budget under it.
-        const riskUsd = Math.min(...[capUsd, combine.budget(cs, z)].filter(x => Number.isFinite(x) && x > 0));
+        // A loss is measured at the most one entry may risk (size-line.js worstRisk: the floor stretch above the cap).
+        const riskUsd = worstRisk({ capUsd, stretchUsd: z.floor_stretch_max_usd, budgetUsd: combine.budget(cs, z) });
         const sizing = policy ? sizeLines({ facts: factsOf(cs, facts, policy), riskUsd, minContracts: z.min_contracts, stretchUsd: z.floor_stretch_max_usd, capUsd }) : null;
         out.push({ ...combine.summary(cs), asOf: fresh ? now.toISOString() : snapshotAt, snapshotAt, budgets, entryBlock, facts, ...(sizing ? { sizing } : {}) });
       }
