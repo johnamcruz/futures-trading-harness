@@ -389,7 +389,7 @@ const TAUGHT = {
   room: /`inTheWay`[^]*`needR`\)[^]*never a no\s+trade alone/,
   mtf_read: /`aligned` → full;[^]*`mixed` → smaller[^]*`counter` → no trade/,
   skip_rules: /skip rules\*\*[^]*any skip rule hit: no trade/,
-  confluence: /\*\*Confluence\*\* \(rules strategies\): another firing the other side → no trade/,
+  confluence: /\*\*Confluence\*\* \(rules strategies\): another candidate \(one the trend rule\s+allows\) firing the other side → no trade/,
   secondary_context: /a read, never a veto alone \(not in a prop attempt: `position-sizing`\)/,
   halving: /half is `floor\(size \/ 2\)`[^]*?Halvings don't compound/,
 };

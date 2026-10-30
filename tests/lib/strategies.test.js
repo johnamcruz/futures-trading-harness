@@ -542,6 +542,38 @@ test('scan: each strategy that fired lists the others firing with it and against
   assert.match(p, /Strategies disagree on the side: stand aside/);
 });
 
+test('the gate\'s trigger check: a counter fire the trend rule refuses is no disagreement; an allowed opposite candidate still is', () => {
+  // Never counter (feat/bias-bg): strategies.js withConfluence counts candidates only, and a fire against a trending 4h
+  // or 1h is none, so it no longer stands in the way of a with-trend rules entry ([trigger-fired], signal-state.js
+  // checkTrigger). No shipped strategy has mtf: reversal: nothing changes in production.
+  const { buildSignals, writeSignals, checkTrigger } = require('../../scripts/lib/trading/signal-state');
+  const dir = tmpDir();
+  const mk = (name, side, style) => writeStrategy(dir, name, [
+    `name: ${name}`, `description: Fires ${side} on every bar, a test of the trend rule against confluence.`, 'status: active', 'instruments: [MNQ]',
+    'timeframe: 3m', 'signal: rules', `mtf: ${style}`, 'rules:', `  ${side}:`, '    - volume > 0', 'risk:', '  stop: atr:1', '  min_rr: 2',
+  ].join('\n'));
+  mk('with_up', 'long', 'trend');
+  mk('counter_down', 'short', 'reversal');
+  const mine = loadStrategies(ROOT, { FTH_STRATEGIES_DIRS: dir }).strategies.filter(s => ['with_up', 'counter_down'].includes(s.name));
+  const gate = bars => {
+    const results = scan(mine, { bars }, { symbol: 'MNQ' });
+    const home = tmpDir();
+    const last = bars[bars.length - 1];
+    const now = new Date(Date.parse(last.t) + 180000 + 1000);
+    writeSignals(home, buildSignals(results, { symbol: 'MNQ', bar: last, stepMs: 180000, now }));
+    return checkTrigger(home, { root: 'MNQ', side: 'buy', strategy: 'with_up', timeframe: '3m', now });
+  };
+  // A 4h uptrend (rising waves): the short is against it, refused, no candidate: the long's entry goes.
+  const up = Array.from({ length: 6000 }, (_, k) => {
+    const c = 20000 + 0.3 * k + 40 * Math.sin((2 * Math.PI * k) / 320);
+    return { t: new Date(Date.UTC(2026, 8, 1, 13) + k * 180000).toISOString(), o: c, h: c + 1, l: c - 1, c, v: 10 };
+  });
+  assert.strictEqual(gate(up), null);
+  // Every frame ranging: both sides allowed, the short is a candidate against the long: refused.
+  const flat = Array.from({ length: 400 }, (_, k) => ({ t: new Date(Date.UTC(2026, 9, 7, 14) + (k - 340) * 180000).toISOString(), o: 100, h: 101, l: 99, c: 100, v: 10 }));
+  assert.match(String(gate(flat)), /conflicts with counter_down firing the other side/);
+});
+
 test('recent: what fired on each of the last bars, as the scan judged each at its close', () => {
   const { recentSignals } = require('../../scripts/lib/trading/strategies');
   const out = [];

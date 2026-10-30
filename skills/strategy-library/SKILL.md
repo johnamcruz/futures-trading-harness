@@ -54,8 +54,8 @@ size; the code sets the full verdict size. Not in a prop attempt:
    (`htf-to-ltf`).
 5. **The strategy's own context filter and skip rules** (its STRATEGY.md)
    → any skip rule hit: no trade.
-6. **Confluence** (rules strategies): another firing the other side → no trade;
-   confluence with it supports the full size.
+6. **Confluence** (rules strategies): another candidate (one the trend rule
+   allows) firing the other side → no trade.
 7. **Secondary context** (the VWAP side, the lunch lull, participation):
    a read, never a veto alone (not in a prop attempt: `position-sizing`).
 

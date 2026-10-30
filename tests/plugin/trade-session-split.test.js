@@ -307,6 +307,8 @@ const LATE = [
     reason: "feat/bias-bg (never counter): no entry against a trending 4h or 1h on any path, the 15m setup is the entry and the 3m only times it, the trail exits, a prop attempt trades the full verdict size; the rewritten text is new" },
   { from: "The position's own stop and target (bracket legs, `[protect]` and `[exit]` orders, on the opposite side) are never cancelled here; apply the plan's management (breakeven, trail, scale-out) through the trade-executor role, and journal any change.", to: null,
     reason: "feat/bias-bg: the stop moves only behind turned structure (the trail), never to breakeven by feel" },
+  { from: "Rules strategies (none active) firing both sides (`confluence.against`): stand aside (priority step 6: no exception).", to: "Rules candidates (none active) firing both sides (`confluence.against`): stand aside (priority step 6: no exception).",
+    reason: "feat/bias-bg (review MED-2): a fire the trend rule refuses is no candidate, so no disagreement" },
 ];
 const LATE_STALE = (() => {
   const r = withLate(ALLOWED, LATE, units(require('fs').readFileSync(require('path').join(__dirname, '..', '..', BEFORE), 'utf8')));
