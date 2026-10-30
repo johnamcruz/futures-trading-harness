@@ -10,7 +10,9 @@ const K = require('../../scripts/lib/learning/looks');
 const ARMS = ['without', `with:${'a'.repeat(16)}`, `shuffled:${'b'.repeat(16)}`];
 // Each run its own arm (by its name's end), and every run of the same setup.
 const armOf = runId => ARMS[/without$/.test(runId) ? 0 : /with$/.test(runId) ? 1 : /shuffled$/.test(runId) ? 2 : /(\d)$/.test(runId) ? Number(runId.slice(-1)) % 3 : 0];
-const look = (from, to, o = {}) => ({ evaluation: 'ev1', candidate: 'champ', purpose: 'judging', runId: 'r1', from, to, config: 'c0nf', arm: armOf(o.runId || 'r1'), ...o });
+// Written under the committed schedule, as the ledger writer (appendLook) stamps each entry.
+const SCHEDULE = require('../../scripts/lib/schedule').current().fingerprint;
+const look = (from, to, o = {}) => ({ evaluation: 'ev1', candidate: 'champ', purpose: 'judging', runId: 'r1', from, to, config: 'c0nf', arm: armOf(o.runId || 'r1'), schedule: SCHEDULE, ...o });
 const TEST = ['2025-02-03', '2025-03-01'];
 const FINAL = ['2026-03-02', '2026-04-01'];
 const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'fth-learn-looks-'));
@@ -66,9 +68,10 @@ test('validate: counted, never budgeted; purposes per window; refusals', () => {
   assert.match(K.checkLook(look(...TEST, { purpose: 'tuning' }), []).refusals.join(), /purpose/);
   assert.match(K.checkLook(look(...TEST), null).refusals.join(), /ledger is required/);
   const usage = K.lookUsage([{ kind: 'look', ...look('2024-08-01', '2024-09-03', { purpose: 'validate' }), role: 'practice-validate' }, { kind: 'look', ...look(...TEST), role: 'test' }, { kind: 'look', ...look(...TEST, { runId: 'r2' }), role: 'test' }]);
-  // versions: the schedule version each look was taken under (a line without a fingerprint: the first, v1).
-  assert.deepStrictEqual(usage['practice-validate'], { looks: 1, runs: 1, evaluations: 0, versions: { v1: 1 } });
-  assert.deepStrictEqual(usage.test, { looks: 2, runs: 2, evaluations: 1, versions: { v1: 2 } });
+  // versions: the schedule version each look was taken under (these under the committed v2; a line without a
+  // fingerprint, as the recorded June 2026 replay: the first, v1).
+  assert.deepStrictEqual(usage['practice-validate'], { looks: 1, runs: 1, evaluations: 0, versions: { v2: 1 } });
+  assert.deepStrictEqual(usage.test, { looks: 2, runs: 2, evaluations: 1, versions: { v2: 2 } });
   assert.deepStrictEqual(usage.final, { looks: 1, runs: 1, evaluations: 0, versions: { v1: 1 } }, 'the recorded June 2026 replay');
 });
 

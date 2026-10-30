@@ -19,11 +19,16 @@ const PEAK = require('../../scripts/lib/tunables').training().trendReport.falseS
 const trader = { harness: 'custom', command: ['x', '{prompt}'], symbols: ['MNQ'], timeframe: 3 };
 const curated = { stage: 1, curatedList: { file: 'c.json', list: 'mix' }, practice: { mode: 'setup-focus' } };
 const leg = (id, day, side) => ({ id, day, side, start: `${day}T14:30:00.000Z`, end: `${day}T14:51:00.000Z`, points: 10 });
-const census = { kind: 'leg-census', fingerprint: 'fp', order: [leg('2022-03-07|long|a', '2022-03-07', 'long'), leg('2022-03-08|short|b', '2022-03-08', 'short'), leg('2021-05-04|long|c', '2021-05-04', 'long')] };
-const trendSet = { replay: { stage: 1 }, census: 'c.json', from: '2021-05-03', to: '2022-09-01', regression: { days: ['2021-05-04'] } };
+const census = { kind: 'leg-census', fingerprint: 'fp', order: [leg('2022-03-07|long|a', '2022-03-07', 'long'), leg('2022-03-08|short|b', '2022-03-08', 'short'), leg('2021-05-25|long|c', '2021-05-25', 'long')] };
+const trendSet = { replay: { stage: 1 }, census: 'c.json', from: '2021-05-24', to: '2022-09-01', regression: { days: ['2021-05-25'] } };
 const WINDOWS = [{ from: '2022-03-07', to: '2022-03-19' }];
 const read = x => { if (x === undefined) throw new Error('no replay config given'); return x; };
 const go = raw => PC.resolveProbe(raw, { read, readCensus: () => census, modelScore: { account: 'a' }, autotrader: trader, tuningWindows: [{ from: '2022-10-03', to: '2022-10-15' }] });
+
+test('probe.trend.from: a screen period starting before the warm-up (data.sessionsFrom) is refused, naming where to start', () => {
+  assert.throws(() => go({ replay: curated, windows: WINDOWS, trend: { ...trendSet, from: '2021-05-03' } }), /probe\.trend\.from 2021-05-03 is before 2021-05-24 \(config\/schedule\.json data\.sessionsFrom: .*\): its 4h and 1h would read from short history; start on or after 2021-05-24/);
+  assert.doesNotThrow(() => go({ replay: curated, windows: WINDOWS, trend: trendSet }));
+});
 
 test('probe.curriculum: all (the default) is today\'s setting, byte for byte; it adds no key', () => {
   const before = go({ replay: curated, windows: WINDOWS, trend: trendSet });

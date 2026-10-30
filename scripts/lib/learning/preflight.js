@@ -323,6 +323,10 @@ function splitWindow(ctx) {
   try { roles = rolesBetween(ctx.gate.from, ctx.gate.to); } catch (e) { return r('split-window', FAIL, errText(e)); }
   if (roles.length !== 1) return r('split-window', FAIL, `the run spans ${roles.join(' + ')}; a learning run lies inside one window`);
   try { assertUse(USE_OF[roles[0]], ctx.gate.from, ctx.gate.to); } catch (e) { return r('split-window', FAIL, errText(e)); }
+  // The warm-up rule (schedule.js warmupRefusal): a run before data.sessionsFrom reads its 4h and 1h from short history.
+  let warm;
+  try { warm = require('../schedule').warmupRefusal(ctx.gate.from); } catch (e) { return r('split-window', FAIL, errText(e)); }
+  if (warm) return r('split-window', FAIL, `the run starts ${warm}`);
   return r('split-window', PASS, `${roles[0]} (${USE_OF[roles[0]]})`);
 }
 

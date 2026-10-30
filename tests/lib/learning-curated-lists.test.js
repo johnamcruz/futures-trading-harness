@@ -416,7 +416,11 @@ test('accountOpen and listSizes: an unreadable size is open; a size of 0 flat; l
 
 test('data.start is used: a scan from before the data start is refused, one on or after it passes', () => {
   assert.throws(() => C.assertWithinData('2021-03-31', '2021-04-01'), /before the data's start 2021-04-01/);
-  assert.strictEqual(C.assertWithinData('2021-04-01', '2021-04-01'), '2021-04-01');
+  assert.strictEqual(C.assertWithinData('2021-04-01', '2021-04-01', () => null), '2021-04-01');
+  // The warm-up rule (schedule.js warmupRefusal, data.sessionsFrom): after data.start but inside the 4h and 1h reads'
+  // history window of the data's first bar, refused; from the committed schedule's sessionsFrom on, it passes.
+  assert.throws(() => C.assertWithinData('2021-05-03'), /--from 2021-05-03 is before 2021-05-24 \(config\/schedule\.json data\.sessionsFrom: .*\): its 4h and 1h would read from short history; start on or after 2021-05-24/);
+  assert.strictEqual(C.assertWithinData('2021-05-24'), '2021-05-24');
   assert.throws(() => C.assertWithinData('2020-01-02'), /before the data's start 2021-04-01/); // the committed schedule's
   assert.strictEqual(C.assertWithinData('2022-03-01'), '2022-03-01');
 });

@@ -157,6 +157,7 @@ function resolveTrend(raw, { read, readCensus, readBars = () => { throw new Erro
   try { census = readCensus(raw.census); } catch (err) { errors.push(`probe.trend.census: ${err.message}`); }
   const period = { from: raw.from, to: raw.to };
   if (!(DATE.test(String(period.from)) && DATE.test(String(period.to)) && period.from < period.to)) errors.push('probe.trend.from, to: the screen period the pool is read from (YYYY-MM-DD session dates, to exclusive)');
+  else { const why = require('../schedule').warmupRefusal(period.from); if (why) errors.push(`probe.trend.from ${why}`); }
   const tuning = (Array.isArray(tuningWindows) ? tuningWindows : []).filter(x => x && DATE.test(x.from) && DATE.test(x.to));
   const checkDays = (days, key) => {
     for (const d of days) {

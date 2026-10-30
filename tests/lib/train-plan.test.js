@@ -4,6 +4,9 @@
 // the loop's runs resolve them, so a config the first run would refuse fails at plan; the trend pool described. And a
 // replay config's autotrader path resolves against the replay file's own folder (train/config.js).
 
+// The trend-moves fixture's sessions (2021-05-03..07) lie inside the committed warm-up (data.sessionsFrom): these tests
+// of the loop's mechanics read the schedule with its sessions starting at data.start (first, before any schedule load).
+require('../fixtures/schedule/early-sessions');
 const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');

@@ -231,6 +231,7 @@ test('CLI: scan (practice-train only), build and show on fixture bars; the list 
   // The fixture bars are from 2020, before the committed data start: the scan reads a schedule whose data starts earlier.
   const sched = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', 'config', 'schedule.json'), 'utf8'));
   sched.data.start = '2020-01-01';
+  sched.data.sessionsFrom = '2020-01-01';
   const early = path.join(dir, 'schedule-early.json');
   fs.writeFileSync(early, JSON.stringify(sched));
   const useFile = path.join(__dirname, '..', 'fixtures', 'schedule', 'use-file.js');

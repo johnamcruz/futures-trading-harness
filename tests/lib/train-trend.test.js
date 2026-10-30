@@ -4,6 +4,9 @@
 // (train/trend-findings.js), the merged ranking (findings.js mergeFindings), the `probe.trend` config
 // (probe-config.js) and the screen of both sets together (probe.js combinedScreen), with the trend-move fixture's bars.
 
+// The trend-moves fixture's sessions (2021-05-03..07) lie inside the committed warm-up (data.sessionsFrom): these tests
+// of the loop's mechanics read the schedule with its sessions starting at data.start (first, before any schedule load).
+require('../fixtures/schedule/early-sessions');
 const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');

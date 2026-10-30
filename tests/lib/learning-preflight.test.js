@@ -191,6 +191,8 @@ test('each check fails on a broken fixture', () => {
     [P.curatedSource, { read: { curatedDoc: () => { throw new Error('c.json: unreadable'); } } }, /unreadable/],
     [P.splitWindow, { gate: { from: D('2024-06-28T00:00:00Z'), to: D('2024-07-03T00:00:00Z') } }, /spans practice-train \+ practice-validate/],
     [P.splitWindow, { gate: { from: D('2019-03-04T00:00:00Z'), to: D('2019-03-05T00:00:00Z') } }, /no learning role/],
+    // The warm-up rule (schedule.js warmupRefusal): practice-train, but before data.sessionsFrom.
+    [P.splitWindow, { gate: { from: D('2021-05-04T13:30:00Z'), to: D('2021-05-04T20:00:00Z') } }, /the run starts 2021-05-04 is before 2021-05-24 \(config\/schedule\.json data\.sessionsFrom: .*start on or after 2021-05-24/],
     [P.latency, { run: { latency: false } }, /latency: true/],
     [P.practiceMode, { run: { practice: null } }, /sets its practice mode/],
     [P.libraryDisplay, { run: { libraryDisplay: true } }, /no library comparison arm/],
@@ -525,7 +527,7 @@ test('schedule: FAILs on a schedule that can\'t load, a broken sealed rule (eith
   assert.strictEqual(one(P.scheduleCheck, ctx({ ...state({ learning: [evalLook] }), gate: { evaluation: 'other' } })).status, P.PASS, 'another evaluation');
   const warn = one(P.scheduleCheck, ctx(state({ run: { schedule: prev } })));
   assert.strictEqual(warn.status, P.WARN);
-  assert.match(warn.detail, /started under schedule v0 .* resumes under v1/);
+  assert.match(warn.detail, /started under schedule v0 .* resumes under v2/);
   // In the report, between curated-source and split-window.
   const names = P.runChecks(ctx()).results.map(x => x.check);
   assert.strictEqual(names[names.indexOf('schedule') + 1], 'split-window');

@@ -1,7 +1,8 @@
 {
-  "version": "v1",
+  "version": "v2",
   "data": {
     "start": "2021-04-01",
+    "sessionsFrom": "2021-05-24",
     "flowCoverage": ["2021-05-01", "2025-12-01"]
   },
   "learning": {

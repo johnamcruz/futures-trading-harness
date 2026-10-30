@@ -4,7 +4,10 @@
  * The schedule: which days are for what, as config (config/schedule.json, loaded by config-files.js), never as code.
  * One file holds both schedules the harness keeps, so they can't disagree:
  *
- *   data       start (the history's first month) and flowCoverage ([from, to) of the replay server's flow fields)
+ *   data       start (the history's first month), sessionsFrom (the first session a replay, a training run, a census
+ *              scan or the training loop's trend set may start: the replay store's first bar plus the 4h and 1h reads'
+ *              history window, mtf.historyHours; warmupRefusal) and flowCoverage ([from, to) of the replay server's flow
+ *              fields)
  *   learning   the learning loop's split (learning/splits.js): open { practice-train, practice-validate } and sealed
  *              { windows { test, final }, lookBudgets { test, final }, finalNeedsTestPass, validateRunsPerCandidate,
  *              recordedLooks } (learning/looks.js)
@@ -35,6 +38,9 @@
  *   SPEC                           the schedule's schema for config-files.js (validate, tightenOnly)
  *   load(file)                     a schedule from a file (pure: tests and the preflight); throws when refused
  *   current()                      the committed schedule, loaded once per process; throws (every call) when refused
+ *   warmupRefusal(day, s)          why a session on `day` (YYYY-MM-DD, or an ISO time: its session date) may not start (before
+ *                                  data.sessionsFrom: its 4h and 1h would read a history window the data does not
+ *                                  cover), or null; s defaults to current()
  *   fingerprint(s)                 { version, hash, sealed: { learning, prop } }
  *   resolve(day, use)              use 'learning' | 'prop': { use, day, role, ..., look } (the day's role and the look
  *                                  rule it requires), or { use, day, role: null, look: null } outside the schedule
@@ -111,8 +117,10 @@ function validate(v) {
   const errors = [];
   if (!keys(errors, 'schedule', v, ['version', 'data', 'learning', 'prop'])) return errors;
   if (typeof v.version !== 'string' || !ID.test(v.version)) errors.push('version: a name (letters, digits, ".", "_", "-"); a changed schedule carries a new one');
-  if (keys(errors, 'data', v.data, ['start', 'flowCoverage'])) {
+  if (keys(errors, 'data', v.data, ['start', 'sessionsFrom', 'flowCoverage'])) {
     if (!isDate(v.data.start)) errors.push('data.start: a date YYYY-MM-DD');
+    if (!isDate(v.data.sessionsFrom)) errors.push('data.sessionsFrom: a date YYYY-MM-DD');
+    else if (isDate(v.data.start) && v.data.sessionsFrom < v.data.start) errors.push(`data.sessionsFrom: ${v.data.sessionsFrom} is before data.start ${v.data.start}`);
     windowOk(errors, 'data.flowCoverage', v.data.flowCoverage);
   }
   const L = v.learning;
@@ -298,7 +306,24 @@ function resolve(day, use) {
   return { use, day, ...unit, look: require('./prop/looks').lookRule(unit) };
 }
 
+/**
+ * Why a session on `day` may not start, or null: before data.sessionsFrom the replay store holds less than the 4h and
+ * 1h reads' history window (mtf.historyHours) before it, so they would read a warm-up artifact (an EMA50 with no value,
+ * a few candles read as a range) where the live runner, which keeps the whole window, reads the trend. The replay
+ * driver, the training preflight, the census scan and the training loop's trend set refuse it.
+ */
+function warmupRefusal(day, s = current()) {
+  // A time is its session's date (learning/splits.js sessionDate: the session from 18:00 ET), a date itself.
+  let d = String(day || '');
+  if (/T/.test(d)) { try { d = require('./learning/splits').sessionDate(Date.parse(d)); } catch (_e) { d = ''; } }
+  if (!isDate(d)) return `${JSON.stringify(day)} is not a session date (YYYY-MM-DD)`;
+  const from = s.data.sessionsFrom;
+  if (d >= from) return null;
+  return `${d} is before ${from} (config/schedule.json data.sessionsFrom: the replay store's first bar plus the 4h and 1h reads' ${require('./tunables').analysis().mtf.historyHours}-hour history window): its 4h and 1h would read from short history; start on or after ${from}`;
+}
+
 module.exports = {
+  warmupRefusal,
   NAME, SPEC, LEGACY, DOMAINS, LEARNING_OPEN, LEARNING_SEALED, PROP_OPEN, PROP_SEALED,
   validate, load, current, fingerprint, resolve, sealedRefusals, assertSealed, isSealedLook, scheduleVersion,
   entryFingerprint, versionsOf,

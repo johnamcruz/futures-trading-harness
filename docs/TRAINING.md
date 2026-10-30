@@ -74,8 +74,13 @@ comparable.
   refused. Give the run the bars the replay serves, so the check sees what the
   model sees.
 - **History coverage.** The history starts 2021-04 (`data.start` in
-  `config/schedule.json`), so practice-train effectively covers 2021-04 to
-  2024-07.
+  `config/schedule.json`), and no session starts before `data.sessionsFrom`
+  (2021-05-24: the replay store's first bar, 2021-05-02, plus the 4h and 1h
+  reads' 504-hour window), so practice-train effectively covers 2021-05-24 to
+  2024-07. Before it the 4h and 1h read from a few days of candles (no EMA50:
+  a range where the full history reads the trend); the replay driver, the
+  training preflight, the curated-lists scan and the training loop's
+  `probe.trend.from` refuse an earlier start, naming the date.
 
 The standard trade each moment measures is a limit held the strategy's
 `valid_bars` base bars after its bar's close, the plan the gate allows (the
@@ -1573,8 +1578,9 @@ The file has an `open` part and a `sealed` part for each schedule:
 
 What you can and can't change:
 
-- **You can extend the data dates** (`data.start`, `data.flowCoverage`;
-  the curated-lists scan refuses a `--from` before `data.start`).
+- **You can extend the data dates** (`data.start`, `data.sessionsFrom`,
+  `data.flowCoverage`; the curated-lists scan refuses a `--from` before
+  `data.start` or `data.sessionsFrom`).
   New months need no edit: they fall into the half-year walk-forward and
   reserve blocks by rule.
 - **You can move the open windows.** For example, start practice-train
