@@ -58,7 +58,7 @@ const PINS = {
     '`m3.trendRule` wins where they differ.',
     'the breaks a sequence of BOS that way;',
     'alternating breaks on that timeframe (its last two opposite CHoCHs) or none;',
-    'a lower-timeframe CHoCH back the HTF way inside an HTF trend is the pullback ending (`pullback-vs-reversal`), not a range;',
+    'a 15m setup the HTF way inside an HTF trend is the pullback ending (`pullback-vs-reversal`), not a range;',
   ],
   'pullback-vs-reversal': [
     'a 1h CHoCH against the trend weighs most: a reversal attempt, context only (never counter).',

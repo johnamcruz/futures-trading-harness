@@ -36,9 +36,9 @@ belongs behind structure (a swing), not at an arbitrary distance (`invalidation`
 - trend: regime `trend-up`/`trend-down`, swings HH/HL (LH/LL), the breaks
   a sequence of BOS that way;
 - range: regime `range`, swings `mixed`, alternating breaks on that
-  timeframe (its last two opposite CHoCHs) or none; a lower-timeframe
-  CHoCH back the HTF way inside an HTF trend is the pullback ending
-  (`pullback-vs-reversal`), not a range;
+  timeframe (its last two opposite CHoCHs) or none; a 15m setup the HTF way
+  inside an HTF trend is the pullback ending (`pullback-vs-reversal`), not
+  a range;
 - transition: regime `transition`, or regime and structure disagree.
 
 The 3m read sits inside `h1.h4.trend`, `h1.h1.trend` (prop: both its
@@ -60,7 +60,7 @@ hypotheses):
 
 ```text
 Take: 4h, 1h, 15m up; m3 trend-up (adx 24.10); overnight broke out its way. Read: trend.
-  Reads: 1h up, 3m bos up. Priority order: aligned; the count for -> take.
+  Reads: 1h up, 15m bos up. Priority order: aligned; the count for -> take.
 Skip: m3 transition (adx 19.20); CHoCH down, previous CHoCH up; 15m up. Read: transition.
   Reads: regime transition, read long mixed; the priority order's rule (contradicting facts) decided skip.
 Loser: not yet declared (EMA20 -0.4); long at 21503.25, stop 21499.00 (4.25 pts = 17 ticks, $8.50 on 1 MNQ);
