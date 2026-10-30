@@ -631,7 +631,7 @@ test('order gate hook: a trade-lifecycle entry reads its cycle bar\'s day shard 
  * balance, the scenario's compose record suggesting `size`, and the policy's verdict on it (as order_plan records it).
  * The translated size (prop/size-translate.js) is 5: the $300 cap at 111 ticks ($55.50 a contract), under the verdict.
  */
-function composedPropWorld(home, size, reads = null) {
+function composedPropWorld(home, size, reads = null, briefing = null) {
   const LC = require('../fixtures/lifecycle');
   const prop = require('../../scripts/lib/trading/prop-state');
   const policy = require('../../scripts/lib/trading/strategies').loadStrategies(REPO, {}).strategies.find(s => s.name === 'prop_portfolio');
@@ -639,7 +639,7 @@ function composedPropWorld(home, size, reads = null) {
   const now = new Date('2026-10-07T14:00:02.000Z');
   prop.startAttempt(home, account, new Date(now.getTime() - 86400000));
   prop.snapshot(home, account, account.starting_balance, new Date(now.getTime() - 60000), { fills: [] });
-  const rec = LC.writeScenario(home, { size, ...(reads ? { reads } : {}) });
+  const rec = LC.writeScenario(home, { size, ...(reads ? { reads } : {}), ...(briefing ? { b: briefing } : {}) });
   const spec = { tickSize: 0.25, tickValue: 0.5 };
   require('../../scripts/lib/prop/composed-verdict').composedVerdict({ home, policy, component: 'trade_lifecycle', account, record: rec, plan: rec.plan, briefing: LC.briefing(), root: 'MNQ', spec, specOf: () => spec, now });
   // `reads`: the record's own target (its plan's ticks and price), else scenario 1's 1h swing (231 ticks, 21598.00).
@@ -999,6 +999,34 @@ test('order gate hook and MCP gateway wiring: a trail-target record (the 4h and 
     }
     const exit = { ...EXIT_BASE, contractId: 'MNQ', side: 'sell', size: 1, rationale: '[exit] close the prop_portfolio long' };
     assert.strictEqual(gate(orderPayload(exit), env).code, 0);
+  }
+});
+
+test('order gate hook and MCP gateway wiring: the shipped entry rule holds the setup to the 15m or higher: a 5m setup is refused, the 15m one goes; an exit goes', { timeout: 60000 }, async () => {
+  const LC = require('../fixtures/lifecycle');
+  const b = LC.briefing();
+  b.sections.m3.data.candles['5m'] = { t: '2026-10-07T13:50:00.000Z', closedAt: '2026-10-07T13:55:00.000Z', o: 21525, h: 21541, l: 21520, c: 21538, closeLocation: 'top', relations: [{ name: 'prior VAH', price: 21530.13, rel: 'rejected', dir: 'up' }] };
+  for (const setupRead of ['5m rejected prior vah up', '15m rejected prior vah up']) {
+    const home = tmpDir();
+    const reads = LC.READS.map(x => (x.step === 'setup' ? { ...x, read: setupRead } : x));
+    const w = composedPropWorld(home, 5, reads, b);
+    trendHome(home, { closedAt: LC.BAR });
+    const { env } = setup([{ ts: '2026-10-07T13:59:30.000Z', kind: 'plan', contractId: 'MNQ', text: 'plan' }], { FTH_HOME: home, ...w.env });
+    require('../../scripts/lib/trading/briefing').writeBriefing(home, b);
+    const hook = gate(orderPayload(w.order(5)), env);
+    const g = await gatewayRun(env, [call(1, 'place_order', w.order(5))]);
+    const text = g.byId[1].result.content[0].text;
+    const MSG = /\[composed-reads\] setup:trade_lifecycle: .*entry rule: the setup must be on the 15m or higher \(a 3m read only times the entry\)/;
+    if (setupRead.startsWith('5m')) {
+      assert.strictEqual(hook.code, 2);
+      assert.match(hook.stderr, MSG);
+      assert.ok(g.byId[1].result.isError, text);
+      assert.match(text, MSG);
+    } else {
+      assert.strictEqual(hook.code, 0, hook.stderr);
+      assert.doesNotMatch(text, /the setup must be on the 15m/, text);
+    }
+    assert.strictEqual(gate(orderPayload({ ...EXIT_BASE, contractId: 'MNQ', side: 'sell', size: 1, rationale: '[exit] close the prop_portfolio long' }), env).code, 0);
   }
 });
 

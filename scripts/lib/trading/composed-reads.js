@@ -887,6 +887,15 @@ function checkReads({ reads, side, briefing, skills = null, tick = 0.25, entryRu
       if (missingSteps.includes(s)) continue;
       if (!pointing(s).length) problems.push(`the ${s} has no read pointing ${side === 'long' ? 'up (long)' : 'down (short)'}: state the reaction${s === 'entry' ? '\'s confirmation' : ''} the trade's way`);
     }
+    // The owner's chain (2026-10-29, "Yes enforce 15min setup"): the 4h and 1h set the side, the 15m (or higher) holds
+    // the setup the side's way, the 3m only times the entry. Under a policy whose entry rule holds the HTF agreement
+    // (bias_agree), a setup pointing the side must be on the 15m or higher (its form's first word). Stated exemption: a
+    // cited setup's `fired` read (momentum_continuation: its setup is the prevailing HTF trend plus its momentum
+    // candle). The 15m trend itself may run against the side (a 15m pullback): only the setup read's frame is held.
+    const setups = pointing('setup');
+    if (entryRule && entryRule.biasAgree && setups.length && !setups.some(r => r.kind === 'fired' || (TF_MIN[String(r.form || '').split(' ')[0]] || 0) >= TF_MIN['15m'])) {
+      problems.push(`entry rule: the setup must be on the 15m or higher (a 3m read only times the entry): state the 15m, 1h or 4h reaction or break the ${side}'s way, or pass`);
+    }
     // Reaction, then confirmation: when the setup's pointing reads name a candle (SETUP_CANDLE: a relation or pattern
     // read's, a CISD read's confirming one), an entry read pointing the side must be on a candle that closed after the
     // last of them (the candle after the 15m rejection or the 15m CISD's displacement, never that candle itself or the

@@ -32,9 +32,10 @@ From the highest timeframe down, for each side (`m15.alignment`; read
 
 **The side rule** (composed, long and short alike): the 4h and the 1h
 must agree, both up for a long, both down for a short; else no trade
-(in an attempt). The 3m times it (the briefing's 3m timing line): best,
-its first turn back (CHoCH, BOS, compression break); while it still trends
-against, a false start: evidence, never a veto (`pullback-vs-reversal`).
+(in an attempt). The setup is the 15m (or higher) reaction or break the
+HTF side's way; the 3m only times the entry: best, its first turn back
+(the 3m timing line); still against, a false start, never a veto
+(`pullback-vs-reversal`).
 The pullback itself: in the count it is neutral.
 `counter` (the HTF against): pass.
 Range or transition: the trend rule decides.

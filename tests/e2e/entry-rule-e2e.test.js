@@ -146,3 +146,15 @@ test('entry rule e2e: the trail target through the real runner needs the 4h and 
   assert.deepStrictEqual(placed(w), []);
   assert.doesNotMatch(r.ran[0].result || '', /^CYCLE RESULT: executed/);
 });
+
+test('entry rule e2e: the setup is the 15m or higher: a 1h setup the long\'s way goes through the real runner to the broker (the HTF agreement held)', async () => {
+  const copy = policyCopy(require('../helpers').tmpDir(), { policy: 'pmc_setup', account: 'pmc_setup_100k', rulebook: t => t.replace(/^( {6}bias_frames: )\[4h, 1h\]/m, '$1[4h]') });
+  const w = attemptWorld(copy);
+  // The fired bar's TRUE setups the long's way are a 1h and a 15m one (no 3m one there): the 1h one, alone.
+  const reads = READS.map(x => (x.step === 'setup' ? { ...x, skill: 'breakout', read: '1h broke round number 27400 up' } : x));
+  const r = await D.pass(w, decisionAt(FIRED_BAR), [{ harness: 'bar_briefing', args: { symbol: 'MNQ', json: true } }, { harness: 'compose_check', args: { symbol: 'MNQ', side: 'long', reads, size: 6 } }, { result: 'CYCLE RESULT: planned - trade_lifecycle long 6' }], { runRole: roles(w).runRole, prop: true });
+  const rec = TL.readRecords(w.home, 'MNQ').at(-1);
+  assert.strictEqual(rec.ok, true, rec.problems.join('; '));
+  assert.match(r.ran[0].result, /^CYCLE RESULT: executed - trade_lifecycle long \d+ MNQ/, r.ran[0].result);
+  assert.strictEqual(placed(w).length, 1);
+});

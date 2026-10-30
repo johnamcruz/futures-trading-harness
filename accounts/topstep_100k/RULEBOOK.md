@@ -225,6 +225,13 @@ and with every key off an entry is checked as before (the trend rule, D2):
   trend the side's way, so a long needs the 4h and the 1h both up and a
   short both down; a range, a trend against, or a trend the briefing
   doesn't hold on either is no trade. `off`: `bias_frames` as above.
+  With it on, a composed plan's setup is the 15m or higher (the owner's
+  "Yes enforce 15min setup", 2026-10-29: the 4h and 1h set the side, the
+  15m holds the setup the side's way, the 3m only times the entry): a TRUE
+  setup read pointing the side on the 15m, 1h or 4h, else NOT OK. Stated
+  exemption: a cited setup's `fired` read (`momentum_continuation`: its
+  setup is the prevailing HTF trend plus its momentum candle). The 15m
+  trend itself may still run against the side (a 15m pullback).
 - `regime_against: on`: no entry while the `m3` regime (`regime.js`, the
   `trend-vs-range` skill's) trends against the side.
 - `leg_turned: on`: while the `m3` regime doesn't trend the side's way, the

@@ -3806,6 +3806,26 @@ test('target trail: not aligned, the record is NOT OK (a named target is still n
   assert.strictEqual(CR.checkRead(CR.parseRead('target trail'), gone, { side: 'long', tick: 0.25 }).check, 'unchecked');
 });
 
+test('the setup frame at the gate: under the policy\'s HTF agreement a setup under the 15m is refused ([composed-reads]); the 15m one goes; an exit always goes', () => {
+  const b = LC.briefing();
+  // A 5m candle (closed 13:55, before the 3m entry's 14:00 close: its timing holds) rejecting the prior VAH up: the setup
+  // is under the 15m, so the frame alone refuses it.
+  b.sections.m3.data.candles['5m'] = { t: '2026-10-07T13:50:00.000Z', closedAt: '2026-10-07T13:55:00.000Z', o: 21525, h: 21541, l: 21520, c: 21538, closeLocation: 'top', relations: [{ name: 'prior VAH', price: 21530.13, rel: 'rejected', dir: 'up' }] };
+  const reads = LC.READS.map(x => (x.step === 'setup' ? { ...x, read: '5m rejected prior vah up' } : x));
+  const three = LCP.propHome({ size: 5, b, reads });
+  const reg = LCP.registry({ entry: AGREE });
+  // The record written without the policy's rule (as a stage-1 compose would): the gate's re-check holds it now.
+  const order = lcPropPlan(three.home);
+  const r = lcPropEval(three.home, order, { registry: reg });
+  assert.ok(checks(r).includes('composed-reads'), JSON.stringify(r.violations));
+  assert.match(r.violations.find(v => v.check === 'composed-reads').message, /entry rule: the setup must be on the 15m or higher \(a 3m read only times the entry\)/);
+  assert.deepStrictEqual(lcPropEval(three.home, EXIT_SELL, { registry: reg }).violations, [], 'an exit goes');
+  // The rule without bias_agree: the 5m setup is not held to the frame (only its own timing, as before).
+  assert.doesNotMatch((lcPropEval(three.home, order, { registry: LCP.registry({ entry: { ...AGREE, bias_agree: 'off' } }) }).violations.find(v => v.check === 'composed-reads') || {}).message || '', /the setup must be on the 15m/);
+  const fifteen = LCP.propHome({ size: 5 });
+  assert.deepStrictEqual(lcPropEval(fifteen.home, lcPropPlan(fifteen.home), { registry: reg }).violations, [], 'the 15m setup goes');
+});
+
 test('trade_lifecycle in an attempt: the record\'s size is a suggestion: the translated size goes, the record\'s and any other are refused; a verdict not sized on this record is refused', () => {
   // The record suggests 4 ($222.00, under $300); a $1,000 cushion's verdict sized it at 3: the gate refuses 4 (the
   // record's, over the verdict and not the translated 3) and takes 3.

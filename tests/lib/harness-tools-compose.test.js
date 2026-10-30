@@ -234,3 +234,31 @@ test('compose_check: the briefing\'s bar (FTH_CYCLE_BRIEFING_BARS) comes before 
   assert.match(composeCheck({ symbol: 'MNQ', side: 'long', reads: SCENARIO_1, size: 1 }, ctx).text, /not the cycle's 2026-04-23T14:58:00.000Z[^]*NOT OK/);
   assert.deepStrictEqual(readRecords(home, 'MNQ').map(x => x.ok), [true, false]);
 });
+
+test('compose_check in a prop attempt: the shipped entry rule holds the setup to the 15m or higher (a 3m setup alone NOT OK, the 15m OK); no attempt, unchanged', () => {
+  const prop = require('../../scripts/lib/trading/prop-state');
+  const { accountNamed } = require('../../scripts/lib/trading/accounts');
+  const run = (setupRead, attempt = true) => {
+    const b = scenario1();
+    b.sections.h1.data.h4 = { trend: 'up' };
+    const { home, ctx } = setup({ briefing: b });
+    const r = tmpDir();
+    for (const s of ['trade_lifecycle', 'prop_portfolio', 'momentum_continuation']) fs.cpSync(path.join(ROOT, 'strategies', s), path.join(r, 'strategies', s), { recursive: true });
+    const acct = loadStrategies(ROOT, {}).strategies.find(s => s.name === 'prop_portfolio').account;
+    fs.cpSync(path.join(ROOT, 'accounts', acct), path.join(r, 'accounts', acct), { recursive: true });
+    fs.symlinkSync(path.join(ROOT, 'skills'), path.join(r, 'skills'));
+    const account = accountNamed(r, acct, {});
+    if (attempt) {
+      prop.startAttempt(home, account, new Date('2026-04-23T13:00:00Z'));
+      prop.snapshot(home, account, account.starting_balance, new Date('2026-04-23T13:01:00Z'));
+    }
+    const reads = SCENARIO_1.map(x => (x.step === 'setup' ? { ...x, read: setupRead } : x));
+    const out = composeCheck({ symbol: 'MNQ', side: 'long', reads, size: 3 }, { ...ctx, root: r });
+    return { text: out.text, rec: readRecords(home, 'MNQ').pop() };
+  };
+  const three = run('3m broke prior VAH up');
+  assert.strictEqual(three.rec.ok, false);
+  assert.match(three.text, /- PROBLEM: entry rule: the setup must be on the 15m or higher \(a 3m read only times the entry\)/);
+  assert.strictEqual(run('15m rejected prior VAH up').rec.ok, true);
+  assert.doesNotMatch(run('3m broke prior VAH up', false).text, /the setup must be on the 15m or higher/, 'no attempt: no policy, no rule');
+});
