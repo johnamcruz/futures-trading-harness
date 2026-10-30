@@ -100,3 +100,9 @@ test('manage-position still never owns a read finding', () => {
   assert.ok(found.some(f => f.skill === 'rejection'), 'the read skill is found');
   assert.ok(found.every(f => f.skill !== 'manage-position' && !(f.skills || []).includes('manage-position')), JSON.stringify(found));
 });
+
+test('exitFindings: an example names its entry\'s base timing when known (entered before the turn, at it, or with); none when unknown', () => {
+  const f = EF.exitFindings([doc([d({ cls: 'cut', leftR: 3, entryTiming: 'before the turn' }), d({ cls: 'cut', leftR: 1 })])]);
+  assert.match(f[0].examples[0], /^model-exit \(entered before the turn\): /);
+  assert.match(f[0].examples[1], /^model-exit: /);
+});

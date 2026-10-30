@@ -438,8 +438,12 @@ test('trade-session split: no head-trader path reads more than the base\'s every
 // Then the bracket rule (fix/orphan-orders, the owner's "always manage risk using stop loss brackets and adjust it
 // accordingly using modify order", 2026-10-26): the trade-executor +525 each mode (gate-refusals-positions'
 // [bracket-leg] and [bracket-only] rows); every other role unchanged.
+// Then the 3m timing (feat/htf-aligned-trend-stage, the owner's "Maybe we can have it conditional so the model learns
+// it", 2026-10-29): pullback-vs-reversal's line that the first 3m turn back is the best entry and an entry before it the
+// false start, embedded in full mode only: the market-structure analyst +83 (with htf-to-ltf's timing sentence, held to
+// its size by the agreement edit before it), the trend-momentum analyst +104; index mode and every other role unchanged.
 const ROLE_PROMPTS = {
-  full: { 'market-structure-analyst': 90178, 'news-calendar-analyst': 10182, 'risk-manager': 92762, 'strategy-researcher': 25650, 'trade-executor': 30492, 'trade-reviewer': 9454, 'trend-momentum-analyst': 54540, 'volume-liquidity-analyst': 48495 },
+  full: { 'market-structure-analyst': 90261, 'news-calendar-analyst': 10182, 'risk-manager': 92762, 'strategy-researcher': 25650, 'trade-executor': 30492, 'trade-reviewer': 9454, 'trend-momentum-analyst': 54644, 'volume-liquidity-analyst': 48495 },
   index: { 'market-structure-analyst': 43175, 'news-calendar-analyst': 10182, 'risk-manager': 78639, 'strategy-researcher': 25650, 'trade-executor': 30481, 'trade-reviewer': 9454, 'trend-momentum-analyst': 40023, 'volume-liquidity-analyst': 32975 },
 };
 

@@ -215,7 +215,7 @@ test('trend findings: learnable legs only; the others counted as a correct pass 
   const EX = require('../../scripts/lib/tunables').training().trendFindings;
   assert.strictEqual(found[0].examples.length, Math.min(2, EX.examples));
   assert.ok(found[0].examples.every(x => x.length <= EX.exampleChars));
-  assert.match(found[0].examples[0], /^long: what you said: "no-trade - the long at on: no rejection at a key level, price"\. A plan that passed there: "1h up", "at prior vah", "15m rejected prior vah up", "3m close top", "stop 15m low", "target 1h swing high"$/);
+  assert.match(found[0].examples[0], /^long: what you said: "no-trade - the long at on: no rejection at a key level, price"\. A plan that passed there: "1h up", "at prior vah", "15m rejected prior vah up", "3m close top", "stop 15m low", "target 1h swing high"; timing there: no HTF side, a turn back in the window: no$/);
   assert.doesNotMatch(found[0].examples[0], /15m bos up|3m bos up/, 'never the whole list of TRUE reads');
   assert.doesNotMatch(found[0].examples[0], /Contradiction/, 'what was said is never parsed');
   // A late or unfilled entry's legs (the runner's execution) give no example.
@@ -426,4 +426,30 @@ test('sizeWithin: budgetPlan\'s sizing at a budget and room given; budgetPlan wo
   const clocked = { ...policy, sizing: { ...policy.sizing, clock_k: 1 } };
   assert.throws(() => require('../../scripts/lib/trading/combine').budget(state, clocked.sizing), /not iterable/, 'the case: working out this budget throws');
   assert.match(prop.budgetPlan(home, account, clocked, 'MNQ', 0).error, /stopLossBracket\.ticks/);
+});
+
+test('trend facts: the base timing tags: a missed leg\'s bars and whether it turned back in its window; each entry\'s at its decision bar; the example says them, no number', () => {
+  const withTiming = t => { const b = scenario1(); b.sections.m3.data.timing = t; return b; };
+  assert.strictEqual(X.timingTagOf(withTiming({ side: 'long', state: 'pullback', since: null })), 'before the turn');
+  assert.strictEqual(X.timingTagOf(withTiming({ side: 'long', state: 'turned', kind: 'CHoCH', dir: 'up', at: '2026-04-23T14:57:00.000Z', barsAgo: 1 })), 'at the turn');
+  assert.strictEqual(X.timingTagOf(withTiming({ side: 'long', state: 'with' })), 'with');
+  assert.strictEqual(X.timingTagOf(withTiming(null)), 'no HTF side', 'the 4h and 1h disagree: no side to time');
+  assert.strictEqual(X.timingTagOf(null), null);
+  // A leg's bars, before the turn then at it: the leg turned back in its window.
+  const leg = { side: 'long', start: '2026-04-23T14:51:00.000Z', end: '2026-04-23T15:30:00.000Z', cycles: [{ bar: '2026-04-23T14:57:00.000Z', code: 'no-plan', reads: [] }, { bar: '2026-04-23T15:00:00.000Z', code: 'no-plan', reads: [] }] };
+  const states = { '2026-04-23T14:54:00.000Z': { side: 'long', state: 'pullback', since: null }, '2026-04-23T14:57:00.000Z': { side: 'long', state: 'turned', kind: 'BOS', dir: 'up', at: '2026-04-23T14:57:00.000Z', barsAgo: 0 } };
+  const ctx = { briefingAt: t => withTiming(states[t] || null), tick: 0.25, plan: { size: 1, tickValue: 0.5, minRR: 2, maxRiskUsd: 300, stopRule: stopRuleOf({ stop_buffer_ticks: 1, stop_floor_ticks: 8, stop_floor_atr: 0.25 }) }, minutes: 3 };
+  const f = X.legFacts(leg, ctx);
+  assert.deepStrictEqual(f.bars.map(b => b.timing), ['before the turn', 'at the turn']);
+  assert.strictEqual(f.turn, true);
+  const never = X.legFacts(leg, { ...ctx, briefingAt: () => withTiming({ side: 'long', state: 'pullback', since: null }) });
+  assert.strictEqual(never.turn, false);
+  assert.strictEqual(X.legFacts(leg, { ...ctx, briefingAt: () => null }).turn, null, 'no bar known');
+  const line = X.exampleLine({ side: 'long', facts: { turn: true, bars: [{ valid: true, known: true, said: 'CYCLE RESULT: no-trade - waiting', shown: 'no-trade - waiting', planReads: ['1h up'], timing: 'before the turn' }] } });
+  assert.strictEqual(line, 'long: what you said: "no-trade - waiting". A plan that passed there: "1h up"; timing there: before the turn, a turn back in the window: yes');
+  assert.doesNotMatch(line.split('; timing there')[1], /\d/, 'the tags hold no number');
+  // Each scored exit's entry: the tag of the last bar closed by its entry (14:58:30 entered: the 14:54 bar, closed 14:57).
+  const ds = X.entryTimings([{ entryAt: '2026-04-23T14:58:30.000Z', exitBy: 'model-exit' }, { entryAt: 'never' }], { briefingAt: t => withTiming(states[t] || null), minutes: 3 });
+  assert.deepStrictEqual(ds, [{ entryAt: '2026-04-23T14:58:30.000Z', exitBy: 'model-exit', entryTiming: 'before the turn' }, { entryAt: 'never' }]);
+  assert.deepStrictEqual(X.entryTimings([{ entryAt: '2026-04-23T14:58:30.000Z' }], { briefingAt: () => null, minutes: 3 }), [{ entryAt: '2026-04-23T14:58:30.000Z' }], 'no briefing: untagged');
 });

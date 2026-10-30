@@ -58,6 +58,14 @@
  *                                                 digits, words or fractions), ids or account names (for the proposer)
  *   skipsOf(rec, side)                            a cycle record's listed setups skipped with a reason the side's way
  *   exampleLine(leg), loserLine(x)                one example for the proposer (no date, time or price)
+ *   timingTagOf(briefing)                         the bar's base timing against the HTF side (the briefing's m3.timing,
+ *                                                 ltf-timing.js): 'before the turn' (pullback), 'at the turn' (turned),
+ *                                                 'with', 'no HTF side' (the 4h and 1h disagree), or null (no briefing)
+ *   entryTimings(decisions, { briefingAt, minutes })   each scored exit with `entryTiming`: the tag at its entry's
+ *                                                 decision bar (the last bar closed by its entry)
+ *
+ * Each missed leg's bar carries its `timing` tag, the leg `turn` (whether the base turned back to the HTF side on one
+ * of its bars: null with no bar known); the example line says both (no number), so the proposer sees the timing.
  */
 
 const fs = require('fs');
@@ -68,6 +76,14 @@ const { candidatesOf, repairOf } = require('../trading/compose-hints');
 const { trendRuleOf } = require('../trading/reasons');
 const { standardPlans } = require('../learning/setup-library');
 const { skillOfRead } = require('../learning/curated-moments');
+
+const TIMING_TAGS = Object.freeze({ pullback: 'before the turn', turned: 'at the turn', with: 'with' });
+/** The bar's base timing tag (see the header), or null without a briefing. */
+function timingTagOf(briefing) {
+  const m3 = isObj(briefing) && isObj(briefing.sections) && isObj(briefing.sections.m3) && isObj(briefing.sections.m3.data) ? briefing.sections.m3.data : null;
+  if (!m3) return null;
+  return isObj(m3.timing) ? TIMING_TAGS[m3.timing.state] || null : 'no HTF side';
+}
 const { NUMBER_WORDS, FRACTIONS } = require('./probe-edit');
 
 const TUN = require('../tunables').training().trendFindings; // config/training.json: examples, exampleChars, saidChars, setupTypes, setupMinN
@@ -253,7 +269,7 @@ function legFacts(leg, { briefingAt, cycleAt = () => null, recordsAt = () => [],
     // The listed setups the leg's way the model skipped, with its stated reason (the cycle record's setupSkips:
     // setup-skips.js), shown beside what it said.
     const skipped = skipsOf(rec, leg.side);
-    bars.push({ bar: barT, code: c.code, ...(stopRead ? { stopRead: { read: stopRead.read, skill: stopRead.skill || null } } : {}), ...(skipped.length ? { skipped } : {}), ...barFacts({ briefing: b, side: leg.side, tick, plan, said, reads: c.reads, records, cycle: c, sizeFits: sizeFor(rec), names, missing, entryRule }) });
+    bars.push({ bar: barT, code: c.code, timing: timingTagOf(b), ...(stopRead ? { stopRead: { read: stopRead.read, skill: stopRead.skill || null } } : {}), ...(skipped.length ? { skipped } : {}), ...barFacts({ briefing: b, side: leg.side, tick, plan, said, reads: c.reads, records, cycle: c, sizeFits: sizeFor(rec), names, missing, entryRule }) });
   }
   const learnable = bars.some(x => x.valid) ? true : bars.length && bars.every(x => x.known) ? false : null;
   const why = !bars.length ? 'no entry-able bar' : learnable === true ? bars.find(x => x.valid).why : learnable === false ? 'no valid plan at the time (a correct pass)' : 'facts unknown at a bar';
@@ -271,7 +287,22 @@ function legFacts(leg, { briefingAt, cycleAt = () => null, recordsAt = () => [],
     const skill = first ? first.skill || skillOfRead(first.step, first.read) || null : null;
     owner = first ? { step: first.step, ...(skill ? { skill } : {}) } : null;
   }
-  return { learnable, why, bars, owner };
+  // Whether the base turned back to the HTF side on one of its bars (the timing the proposer reads beside the plan).
+  const timed = bars.filter(x => typeof x.timing === 'string');
+  return { learnable, why, bars, owner, turn: timed.length ? timed.some(x => x.timing === TIMING_TAGS.turned) : null };
+}
+
+/** Each scored exit with its entry's timing tag: the briefing of the last bar closed by its entry (see the header). */
+function entryTimings(decisions, { briefingAt, minutes }) {
+  const step = minutes * 60000;
+  return (Array.isArray(decisions) ? decisions : []).map(d => {
+    const ms = isObj(d) ? Date.parse(d.entryAt) : NaN;
+    if (!Number.isFinite(ms)) return d;
+    const barT = new Date(Math.floor(ms / step) * step - step).toISOString();
+    const b = (() => { try { return briefingAt(barT); } catch (_err) { return null; } })();
+    const tag = timingTagOf(b);
+    return tag ? { ...d, entryTiming: tag } : d;
+  });
 }
 
 // --- the size chain --------------------------------------------------------------------------------------------------
@@ -428,6 +459,8 @@ function attachFacts(capture, { runDir, home = path.resolve(runDir, '..', '..'),
     ...capture,
     legs: capture.legs.map(l => (l.captured ? l : { ...l, facts: legFacts(l, ctx) })),
     controls: controlFacts(ctl, { ...ctx, laterBars }),
+    // Each scored exit's entry timing (the exit findings' examples say it).
+    ...(isObj(capture.exits) && Array.isArray(capture.exits.decisions) ? { exits: { ...capture.exits, decisions: entryTimings(capture.exits.decisions, ctx) } } : {}),
   };
 }
 
@@ -527,7 +560,9 @@ function exampleLine(leg, { saidChars = TUN.saidChars } = {}) {
   const tried = (x.reads || []).length ? `; you composed ${x.reads.map(r => `${r.step} "${scrub(r.read, { words: false })}" ${r.verified ? 'TRUE' : 'not verified'}`).join(', ')}` : '';
   const unknown = x.unknown && x.unknown.length ? ` (${x.unknown.join(', ')} reads unknown)` : '';
   const plan = x.valid ? (x.planReads && x.planReads.length ? `A plan that passed there${unknown}: ${quote(x.planReads)}` : `${scrub(x.why).replace(/^./, ch => ch.toUpperCase())}`) : `No valid plan (${scrub(x.why)})`;
-  return `${leg.side}: ${who}: "${said}"${skippedText}${tried}. ${plan}`;
+  // The base timing there and whether it turned back in the leg's window (tags only: no number).
+  const timing = typeof x.timing === 'string' ? `; timing there: ${x.timing}${typeof f.turn === 'boolean' ? `, a turn back in the window: ${f.turn ? 'yes' : 'no'}` : ''}` : '';
+  return `${leg.side}: ${who}: "${said}"${skippedText}${tried}. ${plan}${timing}`;
 }
 
 /** One balancing example: a control bar's valid plan that lost, and what was said there. */
@@ -547,4 +582,4 @@ function controlsText(c, { exampleChars = TUN.exampleChars } = {}) {
   return `${head}${setups}${lines.length ? `\nValid plan, it lost (control bars, no leg): what tells these apart from the legs?\n${lines.join('\n')}` : ''}`;
 }
 
-module.exports = { entryBars, barFacts, legFacts, skipsOf, sizeForCycle, outcomeOf, controlFacts, attachFacts, controlsOf, controlsText, setupTypeOf, setupRates, scrub, clip, exampleLine, loserLine, missingFrames, dependsOnMissing };
+module.exports = { timingTagOf, entryTimings, TIMING_TAGS, entryBars, barFacts, legFacts, skipsOf, sizeForCycle, outcomeOf, controlFacts, attachFacts, controlsOf, controlsText, setupTypeOf, setupRates, scrub, clip, exampleLine, loserLine, missingFrames, dependsOnMissing };
