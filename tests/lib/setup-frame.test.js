@@ -14,7 +14,7 @@ const { loadStrategies } = require('../../scripts/lib/trading/strategies');
 const { tmpDir } = require('../helpers');
 const path = require('path');
 
-const OFF = { bias_frames: 'off', bias_agree: 'off', regime_against: 'off', leg_turned: 'off' };
+const OFF = { chain: '4h', bias_frames: 'off', bias_agree: 'off', regime_against: 'off', leg_turned: 'off' };
 const AGREE = entryRuleOf({ ...OFF, bias_frames: ['4h', '1h'], bias_agree: 'on' });
 const FRAMES_ONLY = entryRuleOf({ ...OFF, bias_frames: ['4h', '1h'] });
 const BG = entryRuleOf({ ...OFF, bias_frames: ['4h', '1h'], bias_agree: 'neutral-15m-declared' });

@@ -386,7 +386,7 @@ test('standardPlans: with the policy\'s entry rule a plan it refuses is not-comp
   const { entryRuleOf } = require('../../scripts/lib/trading/entry-rule');
   const bars = readBarsArg(path.join(__dirname, '..', 'fixtures', 'parity', 'NQ-3m.csv')).map(b => ({ t: b.t, o: b.o, h: b.h, l: b.l, c: b.c, v: b.v }));
   const b = buildBriefing({ symbol: 'MNQ', bars: bars.slice(Math.max(0, 409 - 1399), 410), minutes: 3, now: new Date(Date.parse(bars[409].t) + 180000) });
-  const off = { bias_frames: 'off', bias_agree: 'off', regime_against: 'off', leg_turned: 'off' };
+  const off = { chain: '4h', bias_frames: 'off', bias_agree: 'off', regime_against: 'off', leg_turned: 'off' };
   const traded = p => (L.standardPlans(b, p) || []).find(x => x.side === 'short');
   assert.strictEqual(traded().status, 'traded');
   assert.strictEqual(traded({ entryRule: entryRuleOf(off) }).status, 'traded', 'every key off: no rule');

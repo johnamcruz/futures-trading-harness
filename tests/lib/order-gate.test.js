@@ -3652,7 +3652,7 @@ test('trade_lifecycle in an attempt: setup:prop_portfolio on the record\'s verdi
 test('trade_lifecycle in an attempt: the policy\'s entry rule joins the composed-reads re-check; every key off (shipped) changes nothing; exits still go', () => {
   const { home } = LCP.propHome({ size: 5 });
   const args = lcPropPlan(home);
-  const OFF = { bias_frames: 'off', bias_agree: 'off', regime_against: 'off', leg_turned: 'off' };
+  const OFF = { chain: '4h', bias_frames: 'off', bias_agree: 'off', regime_against: 'off', leg_turned: 'off' };
   const withRule = entry => LCP.registry({ entry: { ...OFF, ...entry } });
   assert.deepStrictEqual(lcPropEval(home, args, { registry: withRule({}) }).violations, [], 'every key off: as before');
   // The scenario's briefing holds no m3 regime: a key on that reads it refuses (fails closed), naming the rule.
@@ -3673,7 +3673,7 @@ test('trade_lifecycle in an attempt: the policy\'s entry rule joins the composed
 
 // ---- The owner's top-down bias (2026-10-29: "No trade if there is no agreement between the two"): bias_frames [4h, 1h]
 // with bias_agree on holds every entry route inside a prop attempt; exits always go ----
-const AGREE = { bias_frames: ['4h', '1h'], bias_agree: 'on', regime_against: 'off', leg_turned: 'off' };
+const AGREE = { chain: '4h', bias_frames: ['4h', '1h'], bias_agree: 'on', regime_against: 'off', leg_turned: 'off' };
 const H1_TRENDS = ['up', 'range', 'down'];
 const withTrends = (home, t4h, t1h, b = LC.briefing()) => {
   b.sections.h1.data.h4 = { trend: t4h };

@@ -69,7 +69,7 @@ function withComponents(doc, components = ['fx_break', 'fx_cross']) {
 const FLOW_POLICY = Object.freeze({
   sizing: Object.freeze({ cushion_frac: 0.2, min_size_guard: 1.5, cap_usd: 'off', drawdown_halve_usd: 'off', stop_slippage_ticks: 1, clock_k: 'off', r_per_session: 0.3, min_contracts: 1, floor_stretch_max_usd: 'off', near_target_usd: 'off' }),
   exit: Object.freeze({ mode: 'trail', trail_activate_r: 2, trail_giveback_r: 0.5, lock_giveback_r: 'off', trail_by: 'off', trail_r: 'off', swing_tf: 'off', ratchet: 'off' }),
-  entry: Object.freeze({ bias_frames: 'off', bias_agree: 'off', regime_against: 'off', leg_turned: 'off' }),
+  entry: Object.freeze({ chain: '4h', bias_frames: 'off', bias_agree: 'off', regime_against: 'off', leg_turned: 'off' }),
 });
 
 /**

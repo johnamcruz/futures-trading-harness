@@ -8,6 +8,9 @@
  * before (the trend rule, D2). A fact a key on needs that the briefing doesn't hold refuses (fails closed: the check
  * only ever refuses more).
  *
+ *   chain         the fractal chain's top (chain.js: 4h -> 4h/15m/3m, 1h -> 1h/5m/1m): its bias frames bound bias_frames,
+ *                 its setup frame is the composed setup's minimum and the neutral path's trend frame, its entry frame
+ *                 must be the briefing's base timeframe (the runner's base lane), else no entry (fails closed).
  *   bias_frames   off, or the frames that set the higher-timeframe bias, highest first ([4h, 1h]): the first of them
  *                 that trends (h1.h4.trend, h1.h1.trend, m15.frame.trend: up or down) is the bias, and the side must
  *                 be its way; none of them may trend against the side (a lower frame never stands in against a listed
@@ -43,17 +46,18 @@
  */
 
 const { label } = require('./mtf');
+const { chainOf, chainError, SHIPPED } = require('./chain');
 
-const ENTRY_KEYS = Object.freeze(['bias_frames', 'bias_agree', 'regime_against', 'leg_turned']);
+const ENTRY_KEYS = Object.freeze(['chain', 'bias_frames', 'bias_agree', 'regime_against', 'leg_turned']);
 const OFF = 'off';
 /** bias_agree's values, strictest first (the rulebook guard's order: a later one is looser). */
 const NEUTRAL = 'neutral-15m-declared';
 const AGREE_MODES = Object.freeze(['on', OFF, NEUTRAL]);
 /** The frames a bias may be read on, highest first, and the briefing field each trend is in. */
 const TREND_TF = Object.freeze({ '15m': ['m15', 'frame'], '1h': ['h1', 'h1'], '4h': ['h1', 'h4'] });
-/** The frames a rule's bias may list, highest first: the 15m never sets the side against the 1h. */
-const BIAS_FRAMES = Object.freeze(['4h', '1h']);
-const ORDER = BIAS_FRAMES;
+/** The shipped chain's bias frames, highest first (chain.js: the top and the one below it; the 4h chain: 4h, 1h): the
+ * frames the module constants that read no policy use (the trail target, the timing line, the PPC trend set). */
+const BIAS_FRAMES = chainOf(SHIPPED).bias;
 
 const isObj = x => Boolean(x) && typeof x === 'object' && !Array.isArray(x);
 const onOff = x => x === OFF || x === 'on';
@@ -67,11 +71,15 @@ function entryRuleErrors(x, at) {
   const out = [];
   for (const k of Object.keys(x)) if (!ENTRY_KEYS.includes(k)) out.push(`${at}.entry.${k}: unknown key (${ENTRY_KEYS.join(', ')})`);
   for (const k of ENTRY_KEYS) if (x[k] === undefined) out.push(`${at}.entry.${k}: missing; state it (${OFF}: no check)`);
+  const cerr = x.chain === undefined ? null : chainError(x.chain, `${at}.entry.chain`);
+  if (cerr) out.push(cerr);
+  // The bias frames are the chain's (its top and the one below it), highest first: never a frame below them.
+  const order = (chainOf(x.chain) || chainOf(SHIPPED)).bias;
   const f = x.bias_frames;
   if (f !== undefined && f !== OFF) {
-    const ok = Array.isArray(f) && f.length >= 1 && f.every(tf => BIAS_FRAMES.includes(tf)) && new Set(f).size === f.length
-      && f.every((tf, i) => i === 0 || ORDER.indexOf(tf) > ORDER.indexOf(f[i - 1]));
-    if (!ok) out.push(`${at}.entry.bias_frames: ${JSON.stringify(f)} is not ${OFF} or a list of ${ORDER.join(', ')}, highest first, each once`);
+    const ok = Array.isArray(f) && f.length >= 1 && f.every(tf => order.includes(tf)) && new Set(f).size === f.length
+      && f.every((tf, i) => i === 0 || order.indexOf(tf) > order.indexOf(f[i - 1]));
+    if (!ok) out.push(`${at}.entry.bias_frames: ${JSON.stringify(f)} is not ${OFF} or a list of ${order.join(', ')}, highest first, each once (the chain's bias frames)`);
   }
   for (const k of ['regime_against', 'leg_turned']) if (x[k] !== undefined && !onOff(x[k])) out.push(`${at}.entry.${k}: ${JSON.stringify(x[k])} is not on or ${OFF}`);
   if (x.bias_agree !== undefined && !AGREE_MODES.includes(x.bias_agree)) out.push(`${at}.entry.bias_agree: ${JSON.stringify(x.bias_agree)} is not on, ${OFF} or ${NEUTRAL}`);
@@ -83,6 +91,10 @@ function entryRuleErrors(x, at) {
 function entryRuleOf(x) {
   if (!isObj(x)) return null;
   const rule = {
+    chain: chainOf(x.chain) || chainOf(SHIPPED),
+    // A policy's stated chain holds the base lane to its entry frame; a check built in code with none (the trail target,
+    // the timing line, the PPC trend set) reads the shipped chain's frames and no lane.
+    entryLane: x.chain !== undefined,
     biasFrames: Array.isArray(x.bias_frames) ? [...x.bias_frames] : null,
     biasAgree: x.bias_agree === 'on' && Array.isArray(x.bias_frames),
     biasNeutral: x.bias_agree === NEUTRAL && Array.isArray(x.bias_frames),
@@ -118,14 +130,15 @@ function declaredOf(b, side) {
 }
 
 /** neutral-15m-declared with every listed frame ranging: the 15m trend and the declared trend, both the side's way. */
-function neutralProblems(b, side, d, frames) {
+function neutralProblems(b, side, d, frames, setupTf = '15m') {
   const ranging = frames.map(tf => `${tf} range`).join(', ');
-  const t15 = trendOf(b, '15m');
-  if (t15 === null) return [`entry rule: no higher-timeframe trend (${ranging}) and the 15m trend is not in the briefing: no entry`];
-  if (t15 !== d) return [`entry rule: no higher-timeframe trend (${ranging}) and the 15m is ${t15}, not ${d}: with the higher frames ranging, the 15m sets the side`];
+  const st = setupTf;
+  const t15 = trendOf(b, st);
+  if (t15 === null) return [`entry rule: no higher-timeframe trend (${ranging}) and the ${st} trend is not in the briefing: no entry`];
+  if (t15 !== d) return [`entry rule: no higher-timeframe trend (${ranging}) and the ${st} is ${t15}, not ${d}: with the higher frames ranging, the ${st} sets the side`];
   const dec = declaredOf(b, side);
-  if (dec === null) return [`entry rule: no higher-timeframe trend (${ranging}), the 15m ${d}: the Trend declared? facts are not in the briefing, so it can't be read: no entry`];
-  if (!dec) return [`entry rule: no higher-timeframe trend (${ranging}), the 15m ${d}, but the day's trend is not declared ${d} (the regime with the ${side} and the close past the RTH VWAP, EMA20 and RTH open its way): no entry`];
+  if (dec === null) return [`entry rule: no higher-timeframe trend (${ranging}), the ${st} ${d}: the Trend declared? facts are not in the briefing, so it can't be read: no entry`];
+  if (!dec) return [`entry rule: no higher-timeframe trend (${ranging}), the ${st} ${d}, but the day's trend is not declared ${d} (the regime with the ${side} and the close past the RTH VWAP, EMA20 and RTH open its way): no entry`];
   return [];
 }
 
@@ -144,6 +157,12 @@ function entryProblems({ briefing, side, reads, rule }) {
   const d = way(side);
   if (!d) return ['the entry rule needs the side (long or short)'];
   const out = [];
+  const base = baseOf(briefing);
+  if (rule.entryLane && base !== rule.chain.entry) {
+    out.push(base ? `entry rule: the chain ${rule.chain.name} enters on the ${rule.chain.entry}, and this briefing's base timeframe is the ${base}: no entry (the runner's base lane must be the chain's entry timeframe)`
+      : `entry rule: the briefing's base timeframe is unknown, so the chain ${rule.chain.name}'s entry frame can't be checked: no entry`);
+    return out;
+  }
   if (rule.biasFrames) {
     const trends = rule.biasFrames.map(tf => [tf, trendOf(briefing, tf)]);
     const unknown = trends.filter(([, t]) => t === null).map(([tf]) => tf);
@@ -154,7 +173,7 @@ function entryProblems({ briefing, side, reads, rule }) {
       const notWith = trends.filter(([, t]) => t !== d);
       if (rule.biasAgree && notWith.length) out.push(`entry rule: the ${rule.biasFrames.join(' and ')} must each trend ${d} for a ${side} (${trends.map(([tf, t]) => `${tf} ${t}`).join(', ')}): no agreement, no trade`);
       else if (against.length) out.push(`entry rule: the ${against.join(' and ')} trend${against.length > 1 ? 's are' : ' is'} ${opposite(d)}, against the ${side}: the bias frames (${rule.biasFrames.join(', ')}) set the side, never a lower frame`);
-      else if (!bias && rule.biasNeutral) out.push(...neutralProblems(briefing, side, d, rule.biasFrames));
+      else if (!bias && rule.biasNeutral) out.push(...neutralProblems(briefing, side, d, rule.biasFrames, rule.chain.setup));
       else if (!bias) out.push(`entry rule: no higher-timeframe bias (${rule.biasFrames.map(tf => `${tf} range`).join(', ')}): sit out until one of them trends`);
     }
   }
@@ -175,4 +194,4 @@ function entryProblems({ briefing, side, reads, rule }) {
   return out;
 }
 
-module.exports = { ENTRY_KEYS, BIAS_FRAMES, TREND_TF, AGREE_MODES, NEUTRAL, entryRuleErrors, entryRuleOf, entryProblems, trendOf, legReads, topDown, declaredOf };
+module.exports = { chainOf, ENTRY_KEYS, BIAS_FRAMES, TREND_TF, AGREE_MODES, NEUTRAL, entryRuleErrors, entryRuleOf, entryProblems, trendOf, legReads, topDown, declaredOf };

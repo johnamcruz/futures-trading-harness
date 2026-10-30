@@ -7,6 +7,7 @@ loss_streak_stop: 2             # losing trades in a row: no new entries for the
 policies:                       # each policy strategy that trades this account (its STRATEGY.md names it; never restates these)
   prop_portfolio:
     entry:                      # the entry rule on a composed entry (entry-rule.js), held by compose_check and the gate; off: no check
+      chain: 4h                 # the fractal chain's top (chain.js, the 2-level rule): 4h -> bias 4h + 1h, levels 1h, setup 15m, entry 3m (1h -> 1h + 15m, 15m, 5m, 1m)
       bias_frames: [4h, 1h]     # off, or [4h, 1h], [4h] or [1h] only (never the 15m): the first that trends sets the side, none against it, none trending: no entry
       bias_agree: neutral-15m-declared  # on: every bias frame trends the side's way; off: the first that trends sets the side; neutral-15m-declared: every one that trends is the side's way, none against, and with all ranging the 15m trend and the declared trend the side's way
       regime_against: off       # on: no entry while the m3 regime trends against the side

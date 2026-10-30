@@ -2,6 +2,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert');
+const { chainOf } = require('../../scripts/lib/trading/chain');
 const { entryRuleErrors, entryRuleOf, entryProblems, trendOf, legReads, topDown, declaredOf } = require('../../scripts/lib/trading/entry-rule');
 const { checkReads } = require('../../scripts/lib/trading/composed-reads');
 
@@ -18,7 +19,7 @@ function briefing({ regime = 'range', t15 = 'range', t1h = 'range', t4h = 'range
     },
   };
 }
-const OFF = { bias_frames: 'off', bias_agree: 'off', regime_against: 'off', leg_turned: 'off' };
+const OFF = { chain: '4h', bias_frames: 'off', bias_agree: 'off', regime_against: 'off', leg_turned: 'off' };
 const rule = over => entryRuleOf({ ...OFF, ...over });
 /** A checked read as checkReads returns it: true, agreeing, pointing `dir`. */
 const read = (form, kind, dir = 'long', extra = {}) => ({ form, kind, check: true, agrees: true, dir, ...extra });
@@ -27,10 +28,10 @@ test('entryRuleOf: null when every key is off or the block is missing; the keys 
   assert.strictEqual(entryRuleOf(OFF), null);
   assert.strictEqual(entryRuleOf(null), null);
   assert.strictEqual(entryRuleOf(undefined), null);
-  assert.deepStrictEqual({ ...rule({ bias_frames: ['4h', '1h'] }) }, { biasFrames: ['4h', '1h'], biasAgree: false, biasNeutral: false, regimeAgainst: false, legTurned: false });
-  assert.deepStrictEqual({ ...rule({ bias_frames: ['4h', '1h'], bias_agree: 'on' }) }, { biasFrames: ['4h', '1h'], biasAgree: true, biasNeutral: false, regimeAgainst: false, legTurned: false });
-  assert.deepStrictEqual({ ...rule({ bias_frames: ['4h', '1h'], bias_agree: 'neutral-15m-declared' }) }, { biasFrames: ['4h', '1h'], biasAgree: false, biasNeutral: true, regimeAgainst: false, legTurned: false });
-  assert.deepStrictEqual({ ...rule({ regime_against: 'on', leg_turned: 'on' }) }, { biasFrames: null, biasAgree: false, biasNeutral: false, regimeAgainst: true, legTurned: true });
+  assert.deepStrictEqual({ ...rule({ bias_frames: ['4h', '1h'] }) }, { chain: chainOf('4h'), entryLane: true, biasFrames: ['4h', '1h'], biasAgree: false, biasNeutral: false, regimeAgainst: false, legTurned: false });
+  assert.deepStrictEqual({ ...rule({ bias_frames: ['4h', '1h'], bias_agree: 'on' }) }, { chain: chainOf('4h'), entryLane: true, biasFrames: ['4h', '1h'], biasAgree: true, biasNeutral: false, regimeAgainst: false, legTurned: false });
+  assert.deepStrictEqual({ ...rule({ bias_frames: ['4h', '1h'], bias_agree: 'neutral-15m-declared' }) }, { chain: chainOf('4h'), entryLane: true, biasFrames: ['4h', '1h'], biasAgree: false, biasNeutral: true, regimeAgainst: false, legTurned: false });
+  assert.deepStrictEqual({ ...rule({ regime_against: 'on', leg_turned: 'on' }) }, { chain: chainOf('4h'), entryLane: true, biasFrames: null, biasAgree: false, biasNeutral: false, regimeAgainst: true, legTurned: true });
   // topDown: the 15m-setup chain holds under on and neutral-15m-declared only.
   assert.deepStrictEqual(['on', 'off', 'neutral-15m-declared'].map(v => topDown(rule({ bias_frames: ['4h', '1h'], bias_agree: v }))), [true, false, true]);
   assert.strictEqual(topDown(null), false);
@@ -40,7 +41,7 @@ test('entryRuleOf: null when every key is off or the block is missing; the keys 
 
 test('entryRuleErrors: every key stated, each on, off or (bias_frames) a list highest first', () => {
   assert.deepStrictEqual(entryRuleErrors(OFF, 'policies.p'), []);
-  assert.deepStrictEqual(entryRuleErrors({ bias_frames: ['4h', '1h'], bias_agree: 'on', regime_against: 'on', leg_turned: 'off' }, 'policies.p'), []);
+  assert.deepStrictEqual(entryRuleErrors({ chain: '4h', bias_frames: ['4h', '1h'], bias_agree: 'on', regime_against: 'on', leg_turned: 'off' }, 'policies.p'), []);
   assert.match(entryRuleErrors({ bias_frames: ['4h', '1h'], regime_against: 'on', leg_turned: 'off' }, 'policies.p').join(), /entry\.bias_agree: missing/);
   // bias_agree on (or neutral-15m-declared) needs the frames that must agree; any other value is refused.
   assert.match(entryRuleErrors({ ...OFF, bias_agree: 'on' }, 'policies.p').join(), /bias_agree: on needs bias_frames listed/);
@@ -72,8 +73,8 @@ test('regime_against: with the side and range or transition stand; a trend again
   assert.deepStrictEqual(at('trend-down', 'short'), [], 'a short with a down trend');
   // Fails closed on missing data (the tightening direction).
   assert.match(at(null).join(), /base regime \(m3\.regime\) is not in the briefing: no entry/);
-  assert.match(at(GONE).join(), /not in the briefing/);
-  assert.match(entryProblems({ briefing: null, side: 'long', reads: [], rule: r }).join(), /not in the briefing/);
+  assert.match(at(GONE).join(), /not in the briefing|base timeframe is unknown/);
+  assert.match(entryProblems({ briefing: null, side: 'long', reads: [], rule: r }).join(), /not in the briefing|base timeframe is unknown/);
   assert.match(entryProblems({ briefing: briefing(), side: 'up', reads: [], rule: r }).join(), /needs the side/);
 });
 
@@ -94,10 +95,12 @@ test('leg_turned: a regime not trending the side\'s way needs a true base break 
   }
   assert.deepStrictEqual(at('range', [read('3m choch down', 'break', 'short')], 'short'), [], 'a short\'s leg turned down');
   // A 5m lane reads its own base frame.
-  assert.deepStrictEqual(at('range', [read('5m bos up', 'break')], 'long', 5), []);
-  assert.match(at('range', [read('3m bos up', 'break')], 'long', 5).join(), /"5m choch up"/);
+  const { chain: _c, ...noChain } = OFF;
+  const lane = (reads, minutes) => entryProblems({ briefing: briefing({ regime: 'range', minutes }), side: 'long', reads, rule: entryRuleOf({ ...noChain, leg_turned: 'on' }) });
+  assert.deepStrictEqual(lane([read('5m bos up', 'break')], 5), []);
+  assert.match(lane([read('3m bos up', 'break')], 5).join(), /"5m choch up"/);
   // Missing data refuses.
-  assert.match(at(null, [read('3m choch up', 'break')]).join(), /not in the briefing/);
+  assert.match(at(null, [read('3m choch up', 'break')]).join(), /not in the briefing|base timeframe is unknown/);
   assert.match(entryProblems({ briefing: { ...briefing({ regime: 'range' }), minutes: undefined }, side: 'long', reads: [read('3m choch up', 'break')], rule: r }).join(), /base timeframe is unknown/);
   // With regime_against on too, a trend against refuses whatever the leg says (one problem, the regime's).
   const both = entryProblems({ briefing: briefing({ regime: 'trend-down' }), side: 'long', reads: [read('3m choch up', 'break')], rule: rule({ regime_against: 'on', leg_turned: 'on' }) });
@@ -231,7 +234,7 @@ test('neutral-15m-declared fails closed: a trend, the 15m or the declared facts 
   assert.match(at({ t15: 'up' }), /Trend declared\? facts are not in the briefing/);
   assert.match(at({ t15: 'up', declared: null }), /Trend declared\? facts are not in the briefing/);
   assert.match(at({ t15: 'up', declared: { short: declaredFor('short').short } }), /Trend declared\? facts are not in the briefing/);
-  assert.match(entryProblems({ briefing: null, side: 'long', reads: [], rule: r }).join(), /not in the briefing/);
+  assert.match(entryProblems({ briefing: null, side: 'long', reads: [], rule: r }).join(), /not in the briefing|base timeframe is unknown/);
 });
 
 test('declaredOf: the regime with the side and the close past the RTH VWAP, EMA20 and RTH open its way, each above 0; nothing else', () => {
@@ -249,4 +252,25 @@ test('declaredOf: the regime with the side and the close past the RTH VWAP, EMA2
   // The overnight range's place is not part of it (the study's DECLARED reads four facts).
   assert.strictEqual(declaredOf(b({ ...L, long: { ...L.long, overnight: 'broke out against' } }), 'long'), true);
   assert.strictEqual(declaredOf(b({ ...L, long: { ...L.long, vwapAtr: 0.01 } }), 'long'), true, 'just above 0');
+});
+
+test('the chain: its bias frames bound bias_frames, its entry frame must be the base lane (fails closed), its setup frame the neutral path\'s', () => {
+  // The 4h chain's bias frames are the 4h and the 1h: a 15m bias frame is refused; the 1h chain's are the 1h and the 15m.
+  assert.match(entryRuleErrors({ ...OFF, bias_frames: ['1h', '15m'] }, 'policies.p').join(), /bias_frames: .* is not off or a list of 4h, 1h, highest first, each once \(the chain's bias frames\)/);
+  assert.deepStrictEqual(entryRuleErrors({ ...OFF, chain: '1h', bias_frames: ['1h', '15m'] }, 'policies.p'), []);
+  assert.match(entryRuleErrors({ ...OFF, chain: '1h', bias_frames: ['4h', '1h'] }, 'policies.p').join(), /is not off or a list of 1h, 15m/);
+  assert.match(entryRuleErrors({ ...OFF, chain: '15m' }, 'policies.p').join(), /policies\.p\.entry\.chain: "15m" is not a chain top/);
+  const { chain: _c, ...noChain } = OFF;
+  assert.match(entryRuleErrors(noChain, 'policies.p').join(), /entry\.chain: missing; state it/);
+  // The base lane: the 4h chain enters on the 3m; a 5m or 1m base lane refuses, naming both; unknown refuses.
+  const r4 = rule({ bias_frames: ['4h', '1h'], bias_agree: 'neutral-15m-declared' });
+  const on = minutes => entryProblems({ briefing: briefing({ t4h: 'up', t1h: 'up', minutes }), side: 'long', reads: [], rule: r4 });
+  assert.deepStrictEqual(on(3), []);
+  for (const m of [1, 5, 15]) assert.match(on(m).join(), new RegExp(`entry rule: the chain 4h/15m/3m enters on the 3m, and this briefing's base timeframe is the ${m}m: no entry`), String(m));
+  assert.match(on(null).join(), /base timeframe is unknown, so the chain 4h\/15m\/3m's entry frame can't be checked: no entry/);
+  // The 1h chain on a 3m lane: refused (no 1m lane is built).
+  const r1 = rule({ chain: '1h', bias_frames: ['1h', '15m'], bias_agree: 'neutral-15m-declared' });
+  assert.match(entryProblems({ briefing: briefing({ t1h: 'up', t15: 'up', minutes: 3 }), side: 'long', reads: [], rule: r1 }).join(), /the chain 1h\/5m\/1m enters on the 1m, and this briefing's base timeframe is the 3m/);
+  // A check built in code with no chain (the trail target, the timing line) reads no lane.
+  assert.deepStrictEqual(entryProblems({ briefing: briefing({ t4h: 'up', t1h: 'up', minutes: 5 }), side: 'long', reads: [], rule: entryRuleOf({ ...noChain, bias_frames: ['4h', '1h'], bias_agree: 'on' }) }), []);
 });

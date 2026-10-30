@@ -346,7 +346,7 @@ test('the owner\'s top-down rule is shipped and held: every policy\'s entry has 
     assert.deepStrictEqual(p.entry.bias_frames, ['4h', '1h'], `${file} policies.${name}.entry.bias_frames`);
     assert.strictEqual(p.entry.bias_agree, 'neutral-15m-declared', `${file} policies.${name}.entry.bias_agree`);
   }
-  for (const s of POLICIES) assert.deepStrictEqual({ ...entryRuleOf(s.entry) }, { biasFrames: ['4h', '1h'], biasAgree: false, biasNeutral: true, regimeAgainst: s.entry.regime_against === 'on', legTurned: s.entry.leg_turned === 'on' }, s.name);
+  for (const s of POLICIES) assert.deepStrictEqual({ ...entryRuleOf(s.entry) }, { chain: require('../../scripts/lib/trading/chain').chainOf('4h'), entryLane: true, biasFrames: ['4h', '1h'], biasAgree: false, biasNeutral: true, regimeAgainst: s.entry.regime_against === 'on', legTurned: s.entry.leg_turned === 'on' }, s.name);
   // A changed copy fails this test: each way of changing the bias is seen (a dropped frame is looser; on and off are stricter).
   const shipped = read(BOOKS[0].file);
   const loosened = [['bias_agree: neutral-15m-declared', 'bias_agree: off'], ['bias_agree: neutral-15m-declared', 'bias_agree: on'], ['bias_frames: [4h, 1h]', 'bias_frames: off'], ['bias_frames: [4h, 1h]', 'bias_frames: [4h]'], ['bias_frames: [4h, 1h]', 'bias_frames: [1h]']];

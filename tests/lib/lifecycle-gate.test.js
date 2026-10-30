@@ -219,7 +219,7 @@ test('composedName: the tag, a composed strategy, or a policy whose latest verdi
 });
 
 test('composed-reads: a policy\'s entry rule joins the re-check: refused on this bar\'s facts, the record\'s ok never trusted; none: as before', () => {
-  const rule = over => entryRuleOf({ bias_frames: 'off', bias_agree: 'off', regime_against: 'off', leg_turned: 'off', ...over });
+  const rule = over => entryRuleOf({ chain: '4h', bias_frames: 'off', bias_agree: 'off', regime_against: 'off', leg_turned: 'off', ...over });
   const withM3 = m3 => F.briefing({ m3 });
   // No rule (every key off): scenario 1 stands as before.
   let { home } = world();
@@ -248,7 +248,7 @@ test('composed-reads: a policy\'s entry rule joins the re-check: refused on this
 
 test('policyRuleRefusal: a policy entry with no compose record is held to its entry rule on the briefing (fails closed); no rule: null', () => {
   const { policyRuleRefusal } = require('../../scripts/lib/trading/lifecycle-gate');
-  const rule = entryRuleOf({ bias_frames: ['4h', '1h'], bias_agree: 'on', regime_against: 'off', leg_turned: 'off' });
+  const rule = entryRuleOf({ chain: '4h', bias_frames: ['4h', '1h'], bias_agree: 'on', regime_against: 'off', leg_turned: 'off' });
   const at = (t4h, t1h, side = 'long', o = {}) => {
     const home = tmpDir();
     const b = F.briefing();

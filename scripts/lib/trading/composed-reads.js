@@ -471,6 +471,7 @@ const CANDLE_KINDS = new Set(['relation', 'pattern', 'close', 'momentum', 'absor
 // candle), and a compression break (its expansion candle). An OTE zone and a sweep name none, and point no side as a
 // setup (they only support it).
 const SETUP_CANDLE = new Set([...CANDLE_KINDS, 'cisd', 'compression']);
+const { LADDER } = require('./chain');
 const TF_MIN = { '1m': 1, '3m': 3, '5m': 5, '15m': 15, '1h': 60, '4h': 240 };
 
 /** When a timeframe's completed candle in the briefing closed (ms): its closedAt, else its open plus its length; null. */
@@ -894,8 +895,9 @@ function checkReads({ reads, side, briefing, skills = null, tick = 0.25, entryRu
     // cited setup's `fired` read (momentum_continuation: its setup is the prevailing HTF trend plus its momentum
     // candle). The 15m trend itself may run against the side (a 15m pullback): only the setup read's frame is held.
     const setups = pointing('setup');
-    if (topDown(entryRule) && setups.length && !setups.some(r => r.kind === 'fired' || (TF_MIN[String(r.form || '').split(' ')[0]] || 0) >= TF_MIN['15m'])) {
-      problems.push(`entry rule: the setup must be on the 15m or higher (a 3m read only times the entry): state the 15m, 1h or 4h reaction or break the ${side}'s way, or pass`);
+    const setupTf = entryRule && entryRule.chain ? entryRule.chain.setup : '15m';
+    if (topDown(entryRule) && setups.length && !setups.some(r => r.kind === 'fired' || (TF_MIN[String(r.form || '').split(' ')[0]] || 0) >= (TF_MIN[setupTf] || Infinity))) {
+      problems.push(`entry rule: the setup must be on the ${setupTf} or higher (a ${entryRule.chain ? entryRule.chain.entry : '3m'} read only times the entry): state the ${(l => (l.length > 1 ? `${l.slice(0, -1).join(', ')} or ${l[l.length - 1]}` : l[0]))(LADDER.slice(LADDER.indexOf(setupTf)))} reaction or break the ${side}'s way, or pass`);
     }
     // Reaction, then confirmation: when the setup's pointing reads name a candle (SETUP_CANDLE: a relation or pattern
     // read's, a CISD read's confirming one), an entry read pointing the side must be on a candle that closed after the
