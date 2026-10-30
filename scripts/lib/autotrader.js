@@ -497,20 +497,23 @@ function signalsText(symbol, scan, { manageOnly = false, verdicts = [], notEntri
   if (!fired.length) return ` ${symbol}: no rules strategy fired on this bar (the scan's candidates); a setup you compose and check is still open (trade-lifecycle, compose_check).`;
   const one = r => {
     const c = r.confluence || { with: [], against: [] };
+    // Another lane's setup: its trend rule, which the roles' required lookups read as the briefing's (runner-lanes skill).
+    const rule = lane ? candidateTrendRule(r) : null;
     // A running attempt's cited setup (momentum_continuation under prop_portfolio): a setup of the attempt, entered by
     // citing it in compose_check; it has no track record of its own, and that is no reason to pass.
     if (cited.includes(r.name)) {
       const way = r.direction === 'long' ? 'up' : 'down';
-      return `${r.name} fired ${way} (${r.direction}): a setup in this attempt: cite it in compose_check ("${r.name} fired ${way}", the trend rule's side)${c.with.length ? ` with ${c.with.join(', ')}` : ''}${c.against.length ? `; against ${c.against.join(', ')}` : ''} [track record: n/a, not a reason to pass]`;
+      return `${r.name} fired ${way} (${r.direction})${rule ? ` (trend rule: ${rule})` : ''}: a setup in this attempt: cite it in compose_check ("${r.name} fired ${way}", the trend rule's side)${c.with.length ? ` with ${c.with.join(', ')}` : ''}${c.against.length ? `; against ${c.against.join(', ')}` : ''} [track record: n/a, not a reason to pass]`;
     }
-    // Another lane's setup: its trend rule, which the roles' required lookups read as the briefing's (runner-lanes skill).
-    const rule = lane ? candidateTrendRule(r) : null;
     return `${r.name} ${r.direction}${rule ? ` (trend rule: ${rule})` : ''}${r.status === 'paper' ? ' (paper: plan only, the gate refuses a live entry)' : ''}${notEntries.includes(r.name) ? ' (its policy has no verdict this bar: not an entry)' : ''}${c.with.length ? ` with ${c.with.join(', ')}` : ''}${c.against.length ? `; against ${c.against.join(', ')}` : ''}${(v => (v ? ` (${v})` : ''))(sideValuesText(r.rules && r.rules[r.direction]))}${r.record ? ` [${r.name} ${r.record}]` : ''}`;
   };
   const conflict = fired.some(r => r.confluence && r.confluence.against.length);
   // A failed screen is named once, in the "Context unavailable" line; the strategies it owns are marked above.
-  const policy = notEntries.length || fired.every(r => cited.includes(r.name)) ? ''
-    : verdicts.length ? ` These are ${verdicts[0].strategy}'s components: enter only as its verdict below says (setup:${verdicts[0].strategy}), never as setup:<component>.` : '';
+  // The verdict sentence covers the fired strategies a verdict trades, never a cited setup (named apart when both fired).
+  const others = fired.filter(r => !cited.includes(r.name));
+  const names = others.length === fired.length ? 'These are' : `${others.map(r => r.name).join(', ')} ${others.length === 1 ? 'is one of' : 'are'}`;
+  const policy = notEntries.length || !others.length ? ''
+    : verdicts.length ? ` ${names} ${verdicts[0].strategy}'s components: enter only as its verdict below says (setup:${verdicts[0].strategy}), never as setup:<component>.` : '';
   return ` ${symbol} fired on this bar (scan candidates, already in session, regime, and the trend rule): ${fired.map(one).join(' | ')}.${conflict ? ' Strategies disagree on the side: stand aside unless one is a reversal at a higher-timeframe level and the plan says why.' : ''}${policy}`;
 }
 

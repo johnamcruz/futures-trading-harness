@@ -854,6 +854,20 @@ test('the fired line names a running attempt\'s cited setup as the attempt\'s, c
   const inAttempt = p.trade([{ symbol: 'MNQ', bar, scan: [s2], cited: ['momentum_continuation'] }]);
   assert.match(inAttempt, /MNQ fired on this bar \([^)]*\): momentum_continuation fired up \(long\): a setup in this attempt: cite it in compose_check \("momentum_continuation fired up", the trend rule's side\) \[track record: n\/a, not a reason to pass\]\./);
   assert.doesNotMatch(inAttempt, /no backtest recorded/);
+  // Both fired: a cited setup and a strategy a verdict trades. The verdict sentence names only the latter, so no strategy
+  // is told both "cite it" and "never as setup:<component>".
+  const orb = { name: 'orb', status: 'active', candidate: true, direction: 'long', signal: 'rules', confluence: { with: [], against: [] } };
+  const mixed = p.trade([{ symbol: 'MNQ', bar, scan: [s2, orb], cited: ['momentum_continuation'], verdicts: [{ strategy: 'prop_portfolio', component: 'orb', action: 'full' }] }]);
+  assert.match(mixed, / orb is one of prop_portfolio's components: enter only as its verdict below says \(setup:prop_portfolio\), never as setup:<component>\./);
+  assert.doesNotMatch(mixed, /These are prop_portfolio's components/);
+  assert.match(mixed, /momentum_continuation fired up \(long\): a setup in this attempt/);
+  // Only a verdict's components fired: the sentence as before.
+  assert.match(p.trade([{ symbol: 'MNQ', bar, scan: [orb], cited: ['momentum_continuation'], verdicts: [{ strategy: 'prop_portfolio', component: 'orb', action: 'full' }] }]), / These are prop_portfolio's components:/);
+  // Only the cited setup fired: no verdict sentence.
+  assert.doesNotMatch(p.trade([{ symbol: 'MNQ', bar, scan: [s2], cited: ['momentum_continuation'], verdicts: [{ strategy: 'prop_portfolio', component: 'orb', action: 'full' }] }]), /components: enter only/);
+  // Another lane's cited setup keeps its trend rule (runner-lanes: the roles read it as the briefing's).
+  const lane = p.trade([{ symbol: 'MNQ', bar, scan: [{ ...s2, mtf: { longAllowed: true, shortAllowed: false } }], cited: ['momentum_continuation'], minutes: 1 }]);
+  assert.match(lane, /momentum_continuation fired up \(long\) \(trend rule: allows\): a setup in this attempt/);
   // Outside an attempt (none cited), the line is as before, its track record shown.
   const outside = p.trade([{ symbol: 'MNQ', bar, scan: [s2] }]);
   assert.match(outside, /: momentum_continuation long \[momentum_continuation track record: no backtest recorded/);
