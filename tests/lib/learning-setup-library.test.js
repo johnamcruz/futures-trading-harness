@@ -376,6 +376,10 @@ test('planLine: the briefing states a setup\'s standard plan as code computes it
   // closed bars up to it, as the runner builds it).
   const altered = bars.map((x, k) => (k > 409 ? { ...x, h: x.h + 500, l: x.l - 500, c: x.c + 300 } : x));
   assert.strictEqual(L.planLine(at(409, altered)), line);
+  // On the bar that closed the 15m candle (its reaction bar, 408): the setup is the entry (CONF3M), the plan stands.
+  const rb = at(408);
+  assert.deepStrictEqual([setupMoment(rb.sections.m3.data.candles, { barClose: Date.parse(rb.sections.m3.data.bar.t) + 180000 }).phase, L.standardPlans(rb).map(p => [p.side, p.status])], ['reaction', [['short', 'traded']]]);
+  assert.match(L.planLine(rb), /^- Standard plan \(code, as compose_check plans it\): short "15m rejected ib low down": plan OK: /);
   // The next close needs no confirming entry read (the setup is the entry): the plan stands there too.
   assert.match(L.planLine(at(410)), /^- Standard plan \(code, as compose_check plans it\): short "15m rejected ib low down": plan OK: /);
   // No setup moment, no entries in the window, or a broken briefing: no line, never an error.

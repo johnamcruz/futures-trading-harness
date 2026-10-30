@@ -914,6 +914,8 @@ test('no compose: a pass on a composable setup (trend side, a key-level reaction
   const b = (i, o = {}) => { const x = at(i); return { ...x, sections: { ...x.sections, m3: { ...x.sections.m3, data: { ...x.sections.m3.data, trendRule: SHORT, news: { inBlackout: false }, ...o } } } }; };
   // 2026-04-23 18:45 UTC: the 15m rejected the IB low down, confirmed, its standard plan OK (setup-library planLine).
   assert.deepStrictEqual(composableSetup(b(409)), { valid: true, sides: ['short'], reason: '15m rejected IB low (+2), confirmation, plan OK' });
+  // The bar that closed the 15m candle (its reaction bar, 18:42): the setup is the entry (CONF3M), composable there.
+  assert.deepStrictEqual(composableSetup(b(408)), { valid: true, sides: ['short'], reason: '15m rejected IB low (+2), reaction (the setup, on its own bar), plan OK' });
   // The next close: the same reaction, no confirming entry read, still composable (the setup is the entry: CONF3M).
   const next = composableSetup(b(410));
   assert.deepStrictEqual([next.valid, next.reason], [true, '15m rejected IB low (+2), confirmation, plan OK']);
@@ -928,6 +930,8 @@ test('no compose: a pass on a composable setup (trend side, a key-level reaction
   const cls = f => classify(label, f, expectedDecision(f), checkReasons('CYCLE RESULT: no-trade - only 1.17R to the VAH ahead, wait for a pullback', f));
   assert.deepStrictEqual(cls({ ...quiet, composable: composableSetup(b(409)) }), { category: 'excessive abstention', agrees: false, why: ['no compose: short 15m rejected IB low (+2), confirmation, plan OK, passed without compose_check'] });
   assert.strictEqual(cls({ ...quiet, composable: composableSetup(b(410)) }).category, 'excessive abstention');
+  // A pass on the bar that closed the setup, its standard plan OK, is abstention too.
+  assert.strictEqual(cls({ ...quiet, composable: composableSetup(b(408)) }).category, 'excessive abstention');
   assert.strictEqual(cls({ ...quiet, composable: composableSetup(b(409, { windowEntries: 'none' })) }).category, 'right');
   assert.strictEqual(cls(quiet).category, 'right');
   // A true hard ground stated (here no attempt running) passes it too: unchecked, never abstention.
