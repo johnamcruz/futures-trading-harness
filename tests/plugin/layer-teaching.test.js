@@ -40,6 +40,9 @@ const FORBIDDEN = [
   [/target (?:the )?(?:next )?3m\b|3m swing (?:high|low)s? (?:is|are|as) (?:a )?(?:level|target)/i, 'a 3m level or target'],
   [/choch tier|\bD2\b|only as a reversal|reversal strategy may fade|fade it only at/i, 'a counter-trend exception'],
   [/target the first real level|aim for the next swing/i, 'a fixed level target in place of the trail'],
+  [/only `?mtf: reversal`? strategies may fade/i, 'a reversal style exempt from the trend rule'],
+  [/fade (?:extremes|VAH\/VAL)/i, 'fading a range\'s edges against the side rule'],
+  [/small targets/i, 'a fixed small target in place of the trail'],
 ];
 
 /** The forbidden phrasings a text holds: [what it teaches, the match]. */
@@ -69,6 +72,9 @@ test('layer teaching: the guard catches each contradiction (each phrasing fails 
     'Target the next 3m swing high.',
     'A composed entry against the trend needs the CHoCH tier.',
     'Target the first real level at 2:1.',
+    'Only `mtf: reversal` strategies may fade it.',
+    'Rotation day; fade extremes, small targets.',
+    'Inside value: fade VAH/VAL toward the POC.',
   ]) assert.notDeepStrictEqual(contradictions(`${base} ${bad}`), [], bad);
 });
 

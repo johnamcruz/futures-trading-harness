@@ -170,6 +170,8 @@ const LATE = [
     reason: "feat/bias-bg (the context quiz, Q18): nothing halves in a prop attempt; the halving arithmetic is position-sizing's non-prop step, the priority order points there" },
   { from: "Halvings don't compound: however many steps halve, the size is halved once.", to: null,
     reason: "feat/bias-bg (the context quiz, Q18): nothing halves in a prop attempt; the halving arithmetic is position-sizing's non-prop step, the priority order points there" },
+  { from: "A trend strategy that fires against the prevailing trend is never a candidate (`filtersFailed` says `mtf: ...`); only `mtf: reversal` strategies may fade it.", to: "No strategy that fires against a trending 4h or 1h is a candidate, whatever its style (`filtersFailed` says `mtf: ...`): never counter.",
+    reason: "feat/bias-bg (review MED-1): never counter: mtf reversal is a style label only, it never exempts a strategy from the trend rule; in a prop attempt the 2R mark arms the trail" },
 ];
 const LATE_STALE = (() => {
   const r = withLate(ALLOWED, LATE, units(require('fs').readFileSync(require('path').join(__dirname, '..', '..', BEFORE), 'utf8')));

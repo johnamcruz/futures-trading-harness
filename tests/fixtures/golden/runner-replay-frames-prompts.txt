@@ -784,8 +784,8 @@ In an autonomous cycle the bar briefing (`bar_briefing`, the
    `sessionCrossesLast30`; read the one that applies).
    - Price above a rising RTH VWAP, with pullbacks holding it → buyers in
      control; buy pullbacks to VWAP.
-   - Price crossing VWAP repeatedly → rotation day; fade extremes, small
-     targets; a read against trend entries.
+   - Price crossing VWAP repeatedly → rotation day: a read against trend
+     entries.
    - Distance from VWAP in ATRs: a read, never a pass alone (far from
      VWAP did no worse in the census).
 2.
@@ -815,8 +815,8 @@ In an autonomous cycle the bar briefing (`bar_briefing`, the
    - Two closes outside value on above-average volume → value is moving;
      the next HVN is the likely stall, an LVN
      beyond the entry is open air.
-   - Inside value with VWAP flat → rotation: fade VAH/VAL toward the POC,
-     small targets.
+   - Inside value with VWAP flat → rotation: with the 4h and 1h ranging,
+     only the 15m and declared side, from its VA edge.
    - A POC at one end of a wide value area means the day trended: a weak
      reference for the next day.
    - Levels are computed on a 100-row grid over the day's range, and shown
@@ -1901,8 +1901,8 @@ In an autonomous cycle the bar briefing (`bar_briefing`, the
    `sessionCrossesLast30`; read the one that applies).
    - Price above a rising RTH VWAP, with pullbacks holding it → buyers in
      control; buy pullbacks to VWAP.
-   - Price crossing VWAP repeatedly → rotation day; fade extremes, small
-     targets; a read against trend entries.
+   - Price crossing VWAP repeatedly → rotation day: a read against trend
+     entries.
    - Distance from VWAP in ATRs: a read, never a pass alone (far from
      VWAP did no worse in the census).
 2.
@@ -1932,8 +1932,8 @@ In an autonomous cycle the bar briefing (`bar_briefing`, the
    - Two closes outside value on above-average volume → value is moving;
      the next HVN is the likely stall, an LVN
      beyond the entry is open air.
-   - Inside value with VWAP flat → rotation: fade VAH/VAL toward the POC,
-     small targets.
+   - Inside value with VWAP flat → rotation: with the 4h and 1h ranging,
+     only the 15m and declared side, from its VA edge.
    - A POC at one end of a wide value area means the day trended: a weak
      reference for the next day.
    - Levels are computed on a 100-row grid over the day's range, and shown
