@@ -8,9 +8,9 @@
  * the rulebook's `ratchet: on`, the best R reached, at least the target's, less it: a lock that rises with the peak), and
  * behind either the best price by `trailR` (trail_by r) or the last confirmed swing on `swingMinutes` candles (trail_by
  * structure; the latest swing, even one confirmed before the entry, so the R trail is the fallback only when the bars
- * hold none). The stop only ratchets toward the market, snapped
- * to the tick on the safe side; a bar whose adverse extreme already went through the new stop closes the trade at its
- * close (trail.js: the stop wasn't resting there yet). Every input is a closed bar: nothing reads ahead.
+ * hold none or that swing's stop is not on the protective side of the bar's close). The stop only ratchets toward the
+ * market, snapped to the tick on the safe side; a bar whose adverse extreme already went through the new stop closes the
+ * trade at its close (trail.js: the stop wasn't resting there yet). Every input is a closed bar: nothing reads ahead.
  *
  *   SWING_TFS                                   the swing timeframes a structure trail may name, in minutes
  *   swingSeries(bars, minutes, k)               per base bar: the latest swing low and high confirmed by its close
@@ -61,8 +61,9 @@ function swingSeries(bars, minutes, k = 2) {
  * One closed bar of a trade after its fill under a target-then-trail plan.
  * trade { sign (1 long, -1 short), entry, risk (price, 1R), stop, peakR, armed, target (price, or null: never arms) }
  * bar { h, l, c }; plan.afterTarget { lockGivebackR, trailBy ('r' | 'structure'), trailR, ratchet (true: on) }; swing: the structure
- * level on the trade's side at this bar's close (a long's swing low, a short's swing high), or null.
- * Returns { stop, peakR, armed, close: null | { price, reason: 'trail' }, fellBack (structure with no swing: the R trail) }.
+ * level on the trade's side at this bar's close (a long's swing low, a short's swing high), or null; a swing whose stop
+ * (a tick beyond it) is not on the protective side of the bar's close counts as none.
+ * Returns { stop, peakR, armed, close: null | { price, reason: 'trail' }, fellBack (structure with no usable swing: the R trail) }.
  */
 function afterTargetStep(trade, bar, plan, tick, swing = null) {
   const { sign, entry, risk } = trade;
@@ -77,7 +78,11 @@ function afterTargetStep(trade, bar, plan, tick, swing = null) {
   // extremes, the peak the R trail reads) less it, so it rises with the peak. Never below the entry.
   const lockR = a.ratchet === true ? Math.max(targetR, peakR) : targetR;
   const lock = entry + sign * Math.max(0, lockR - a.lockGivebackR) * risk;
-  const fellBack = a.trailBy === 'structure' && !Number.isFinite(swing);
+  // A swing counts only when its stop is on the protective side of this bar's close (a long's under it, a short's over
+  // it): a swing carried forward from before a gap (a long's old low now above the price) would put the stop through
+  // the market and close the trade at once; it is no swing for this bar, so the lock and the R trail apply.
+  const usable = Number.isFinite(swing) && sign * (bar.c - (swing - sign * tick)) > 0;
+  const fellBack = a.trailBy === 'structure' && !usable;
   const trail = a.trailBy === 'structure' && !fellBack ? swing - sign * tick : entry + sign * (peakR - a.trailR) * risk;
   const best = sign > 0 ? Math.max(lock, trail) : Math.min(lock, trail);
   const snapped = snapStop(best, sign, tick);
