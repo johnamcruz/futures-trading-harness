@@ -954,4 +954,4 @@ function renderCheck(r) {
   return `${out.join('\n')}\n`;
 }
 
-module.exports = { STEPS, FLOW_STEPS, STEP_KINDS, SETUP_CANDLE, LIVE_BOX, ENTRY_PATTERNS, levelIndex, targetsAhead, roomBand, candleClose, setupClose, TF_ORDER, TF_MIN, MAX_READS, WHY_MAX, MOMENTUM, VOLUME_HIGH, ABSORPTION, netAtrOf, parseRead, checkRead, checkReads, readSignature, skillSignature, contextOf, targetROf, rBucket, levelName, renderCheck };
+module.exports = { TRAIL_RULE, STEPS, FLOW_STEPS, STEP_KINDS, SETUP_CANDLE, LIVE_BOX, ENTRY_PATTERNS, levelIndex, targetsAhead, roomBand, candleClose, setupClose, TF_ORDER, TF_MIN, MAX_READS, WHY_MAX, MOMENTUM, VOLUME_HIGH, ABSORPTION, netAtrOf, parseRead, checkRead, checkReads, readSignature, skillSignature, contextOf, targetROf, rBucket, levelName, renderCheck };

@@ -22,6 +22,7 @@ Summary (MNQ 3m, 00:48 ET):
 - Session: asia (market open, entries allowed) until 03:00 ET.
 - Price 27053.75. 1R = 5.13 pts (0.5 x 3m ATR(20) 10.26, the 3m reference stop); every distance below is in points and R.
 - Trend rule: no trend on 4h, 1h, or 15m; in a prop attempt no side (the entry rule), else both sides open.
+- Bias: no side yet (15m range).
 - Alignment: long mixed, short mixed. Regime: transition, normal volatility.
 - VWAP (session): price below, 1.95 x 3m ATR(14) away. Closes crossing a VWAP in the last 30 bars: the RTH VWAP 0, the session VWAP 0 (the regime's count).
 - News: no blackout ahead.
@@ -114,6 +115,7 @@ Summary (MNQ 3m, 10:33 ET):
 - Session: opening drive (market open, entries allowed) until 11:00 ET.
 - Price 27325.5. 1R = 14.51 pts (0.5 x 3m ATR(20) 29.03, the 3m reference stop); every distance below is in points and R.
 - Trend rule: SHORT allowed (prevailing 15m down; the 4h and 1h ranging: in a prop attempt only with the trend declared); no long against it.
+- Bias: neutral → 15m down + declared short → short only.
 - Alignment: long mixed, short mixed. Regime: trend-down, high volatility.
 - VWAP (rth): price below, 1.46 x 3m ATR(14) away. Closes crossing a VWAP in the last 30 bars: the RTH VWAP 6, the session VWAP 0 (the regime's count).
 - News: no blackout ahead.
@@ -214,6 +216,7 @@ Summary (MNQ 3m, 13:18 ET):
 - Session: lunch lull (market open, entries allowed) until 13:30 ET.
 - Price 27394.25. 1R = 8.15 pts (0.5 x 3m ATR(20) 16.3, the 3m reference stop); every distance below is in points and R.
 - Trend rule: no trend on 4h, 1h, or 15m; in a prop attempt no side (the entry rule), else both sides open.
+- Bias: no side yet (15m range).
 - Alignment: long mixed, short mixed. Regime: range, low volatility.
 - VWAP (rth): price above, 1.72 x 3m ATR(14) away. Closes crossing a VWAP in the last 30 bars: the RTH VWAP 4, the session VWAP 5 (the regime's count).
 - News: no blackout ahead.
@@ -308,6 +311,7 @@ Summary (MNQ 3m, 19:21 ET):
 - Session: asia (market open, entries allowed) until 03:00 ET.
 - Price 27488. 1R = 4.63 pts (0.5 x 3m ATR(20) 9.27, the 3m reference stop); every distance below is in points and R.
 - Trend rule: LONG allowed (prevailing 4h up); no short against it.
+- Bias: long only (4h up, 1h range; short refused).
 - Alignment: long aligned, short counter. Regime: transition, normal volatility.
 - VWAP (session): price above, 1.4 x 3m ATR(14) away. Closes crossing a VWAP in the last 30 bars: the RTH VWAP 0, the session VWAP 0 (the regime's count).
 - News: no blackout ahead.

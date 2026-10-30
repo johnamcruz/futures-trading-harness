@@ -67,6 +67,8 @@ test('snapshots and end-of-day balances go to the attempt the gate reads', async
   const [sum] = hooks.summaries(now);
   assert.deepStrictEqual({ account: sum.account, balance: sum.balance, floor: sum.floor, cushion: sum.cushion, dayPnl: sum.dayPnl, budgets: sum.budgets, entryBlock: sum.entryBlock },
     { account: 'topstep_50k', balance: 50250, floor: 48000, cushion: 2250, dayPnl: 250, budgets: [{ strategy: 'prop_x', budgetUsd: 450 }], entryBlock: null });
+  // The Size and Min lines the prompt prints (prop/size-line.js), from the attempt's facts and the policy's sizing.
+  assert.ok(Array.isArray(sum.sizing) && /^Size: /.test(sum.sizing[0]), JSON.stringify(sum.sizing));
   assert.deepStrictEqual(setup({ start: false }).hooks.summaries(now), [], 'no attempt, no state');
   assert.strictEqual(sum.asOf, now.toISOString(), 'built from the snapshot taken now');
   // A balance just read wins over the snapshot, and says so.

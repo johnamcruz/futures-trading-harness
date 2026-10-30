@@ -14,6 +14,7 @@ Summary (MNQ 1m, 20:11 ET):
 - Session: asia (market open, entries allowed) until 03:00 ET.
 - Price 27011.5. 1R = 3.6 pts (0.5 x 1m ATR(20) 7.21, the 1m reference stop); every distance below is in points and R.
 - Trend rule: no 4h trend read yet (needs 3 completed 4h candles in the bars); no entry yet.
+- Bias: no side (the 4h and 1h trend not in the briefing) → no entry.
 - Alignment: long mixed, short mixed. Regime: trend-down, high volatility.
 - VWAP (session): price ?, ? x 1m ATR(14) away. Closes crossing a VWAP in the last 30 bars: the RTH VWAP 0, the session VWAP 0 (the regime's count).
 - News: no blackout ahead.
@@ -97,6 +98,7 @@ Summary (MNQ 1m, 08:47 ET):
 - Session: london (market open, entries allowed) until 09:30 ET.
 - Price 26956.75. 1R = 5.84 pts (0.5 x 1m ATR(20) 11.68, the 1m reference stop); every distance below is in points and R.
 - Trend rule: no 4h trend read yet (needs 3 completed 4h candles in the bars); no entry yet.
+- Bias: no side (the 4h trend not in the briefing) → no entry.
 - Alignment: long mixed, short mixed. Regime: range, high volatility.
 - VWAP (session): price ?, ? x 1m ATR(14) away. Closes crossing a VWAP in the last 30 bars: the RTH VWAP 0, the session VWAP 0 (the regime's count).
 - News: no blackout ahead.
@@ -183,6 +185,7 @@ Summary (MNQ 1m, 22:19 ET):
 - Session: asia (market open, entries allowed) until 03:00 ET.
 - Price 27538. 1R = 2.75 pts (0.5 x 1m ATR(20) 5.51, the 1m reference stop); every distance below is in points and R.
 - Trend rule: LONG allowed (prevailing 1h up); no short against it.
+- Bias: long only (4h range, 1h up; short refused).
 - Alignment: long aligned, short mixed. Regime: range, normal volatility.
 - VWAP (session): price above, 21 x 1m ATR(14) away. Closes crossing a VWAP in the last 30 bars: the RTH VWAP 0, the session VWAP 0 (the regime's count).
 - News: no blackout ahead.
