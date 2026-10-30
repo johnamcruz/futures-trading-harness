@@ -464,6 +464,12 @@ test('fails closed: an unreadable imported proposal, a proposer that writes what
 test('scorecardDecisions: the scorecard\'s records as the loop reads them', () => {
   const [d] = L.scorecardDecisions([{ t: 'T', day: 'D', symbol: 'MNQ', decision: 'in-trade', category: 'early close', facts: { et: '09:40' }, expected: { decision: 'hold', setup: null }, actual: { action: 'exit', setup: null, result: 'CYCLE RESULT: closed' }, why: ['w'], reasons: { claims: [{ check: false, incidental: false, clause: 'c', why: 'y' }, { check: false, incidental: true, clause: 'i', why: 'z' }] }, pacing: { cushion: 0 } }]);
   assert.deepStrictEqual([d.key, d.inTrade, d.category, d.et, d.falseReasons, d.stated, d.blow], ['T|MNQ', true, 'early close', '09:40', ['"c": y'], 'CYCLE RESULT: closed', true]);
+  // The decision's trade R (the round report's risk diagnostics only): a flat decision's filled trade, as the scorecard's
+  // trades count it; an in-trade decision's outcome is never a second trade; no R known: null, never 0.
+  assert.strictEqual(d.trade, null);
+  const flat = (trade, decision = 'flat') => L.scorecardDecisions([{ t: 'T', symbol: 'MNQ', decision, trade }])[0].trade;
+  assert.deepStrictEqual([flat({ r: -1.25, net: -50 }), flat({ r: null }), flat(null), flat({ r: 2 }, 'in-trade'), flat({ r: NaN })], [{ r: -1.25 }, { r: null }, null, null, { r: null }]);
+  assert.ok(Object.prototype.hasOwnProperty.call(L.scorecardDecisions([{ t: 'T', symbol: 'MNQ' }])[0], 'trade'), 'always said, so an older scorecard (without it) reads unknown');
 });
 
 test('the loop never runs tests, verify, Python, a push, a merge or a pull request', () => {

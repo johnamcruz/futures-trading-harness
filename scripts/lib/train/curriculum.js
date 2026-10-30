@@ -20,7 +20,8 @@
  * floorBreaches, the trend runs' own scorecard decisions at or past the account's floor (each run a fresh attempt a day:
  * never a combine). And the keep rule's combine pass rate (the challenger's real attempts that passed, pooled over the
  * keep rule's windows: its archive entry's model.windows[].challenger), when the keep rule judged it. The read prints the
- * measures; it decides nothing (the owner's bar is text in docs/TRAINING.md).
+ * measures; it decides nothing (the owner's bar is text in docs/TRAINING.md). Beside it the record carries each side's
+ * risk and return diagnostics (risk-stats.js, iteration-report.js riskOf), report only as well.
  * A false start: a trade that lost (R under 0) and whose best R (its peak) never rose above
  * config/training.json trendReport.falseStartPeakR. The control-window share: of the trades opened in control windows
  * (no leg there) the side stepped to their end, the false starts among those whose R and peak are known.

@@ -952,6 +952,20 @@ above `config/training.json` `trendReport.falseStartPeakR` (0.5); the share
 is of the trades opened in finished control windows whose R and peak are
 known.
 
+**Risk and return** (diagnostics). Beside the read, the record
+(`mastery.risk`) and status ("Risk and return") give each side's risk and
+return on the trend confirm half's trades and, when the keep rule judged
+the combined change, on the keep rule's runs (the champion's and the
+change's tuning replays): n, expectancy (mean R a trade), win rate,
+average win and loss, payoff ratio, profit factor, max drawdown in R on
+the trade sequence, the longest losing streak, Sortino and Sharpe
+(`scripts/lib/train/risk-stats.js`). R is each trade's as the scorecard
+records it: the broker's round-trip R when it sends one, else P&L over
+the initial risk before fees; a win here is R > 0, which can differ from
+the scorecard's net result. All are per trade, not annualized; a ratio with fewer than 2
+trades, no loss or no spread reads n/a. No screen, keep rule, promotion
+or prompt reads them: the combine pass rate with 0 blows still decides.
+
 **The mastery bar** (set 2026-10-29 and confirmed by the owner, before
 the first trend-curriculum round's result; the owner switches the stage;
 text, never code). Stage 1

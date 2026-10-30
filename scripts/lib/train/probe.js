@@ -71,6 +71,7 @@ const TR = require('../replay/trend-ride');
 const FT = require('./first-try');
 const SEL = require('./selection');
 const CU = require('./curriculum');
+const RS = require('./risk-stats');
 const { readJson } = require('../harness-run');
 
 /**
@@ -282,7 +283,7 @@ async function probeRound(ctx, { n, champion, api }) {
   const trendSide = async (side, tree, share, which, withFindings = false) => {
     const days = trendDays(which);
     if (!days.length) return null;
-    const out = { legs: [], dayR: {}, blows: 0, cycles: 0, fresh: 0, exits: [], captures: [], rides: [], first: [], sessions: [], entries: [], stepped: [], windows: 0, dropped: [], noWindows: [], controls: [], reads: [] };
+    const out = { legs: [], dayR: {}, blows: 0, cycles: 0, fresh: 0, exits: [], captures: [], rides: [], first: [], sessions: [], entries: [], stepped: [], windows: 0, dropped: [], noWindows: [], controls: [], reads: [], trades: [] };
     for (const day of days) {
       const built = windowsOn(which, day);
       out.dropped.push(...built.dropped);
@@ -315,6 +316,10 @@ async function probeRound(ctx, { n, champion, api }) {
         out.reads.push(one.read);
       }
       out.legs.push(...one.legs);
+      // Its trades' R, as the run's scorecard records them (risk-stats.js tradesOf), for the round report's risk
+      // diagnostics only (nothing screens on them); a scorecard from before they were recorded: unknown.
+      const tr = RS.tradesOf(runs.decisions);
+      out.trades = out.trades && tr ? [...out.trades, ...tr] : null;
       // Its scored exits, for an exit edit's screen (a phase kept before they were recorded: its capture's, when kept;
       // else unknown, and the side's exits with it).
       const ex = one.exits !== undefined ? one.exits : one.capture ? exitsOf(one.capture, built.windows) : null;
@@ -445,7 +450,7 @@ async function probeRound(ctx, { n, champion, api }) {
     // The learning curve's champion: its finished units only (the screens' guard, one side), never a window it left early.
     const fin = TSC.finishedOf(trendConfirm.side);
     // blows and controls (the control windows' false starts, curriculum.js): the round report's mastery read.
-    report.trend.champion = { ride: TSC.rideOfSide(trendConfirm.side, trendConfirm.rides), selection: reactions ? SEL.selectionOf(reactions, trendConfirm.entries, { stepped: trendConfirm.stepped }) : null, firstTry: FT.summarize(fin.first), legs: fin.legs.length, caught: fin.legs.filter(l => l.captured).length, netR: fin.netR, sessions: fin.units.length, windows: trendConfirm.windows, blows: trendConfirm.blows, controls: trendConfirm.falseStarts };
+    report.trend.champion = { ride: TSC.rideOfSide(trendConfirm.side, trendConfirm.rides), selection: reactions ? SEL.selectionOf(reactions, trendConfirm.entries, { stepped: trendConfirm.stepped }) : null, firstTry: FT.summarize(fin.first), legs: fin.legs.length, caught: fin.legs.filter(l => l.captured).length, netR: fin.netR, sessions: fin.units.length, windows: trendConfirm.windows, blows: trendConfirm.blows, controls: trendConfirm.falseStarts, trades: trendConfirm.trades };
   }
   const exists = s => fs.existsSync(path.join(champion.dir, 'skills', s, 'SKILL.md'));
   // The read findings an edit could be judged on: those with at least minPairs of the champion's probe-half decisions in
@@ -577,7 +582,7 @@ async function probeRound(ctx, { n, champion, api }) {
     const verdict = harms.length ? 'hurt' : cancelled.length ? 'no effect' : 'helped';
     const targets = [...s.targets, ...trendParts.map(p => ({ id: p.id, target: tm ? tm.capture : { pairs: 0, b: 0, c: 0 } }))];
     const selection = ts && reactions ? SEL.selectionOf(reactions, ts.entries, { stepped: ts.stepped }) : null;
-    return { verdict, pass: verdict === 'helped', harms, cancelled, targets, ride: ts ? TSC.rideOfSide(ts.side, ts.rides) : null, measures: { ...compact(cm), ...(tm ? { trend: { ...tm, selection, controls: ts.falseStarts } } : {}) }, cycles: side.cycles + (ts ? ts.cycles : 0) + (rs ? rs.cycles : 0), ...(ts ? { skipped: TW.skippedShare([...ts.sessions, ...(rs ? rs.sessions : [])]) } : {}) };
+    return { verdict, pass: verdict === 'helped', harms, cancelled, targets, ride: ts ? TSC.rideOfSide(ts.side, ts.rides) : null, measures: { ...compact(cm), ...(tm ? { trend: { ...tm, selection, controls: ts.falseStarts } } : {}) }, cycles: side.cycles + (ts ? ts.cycles : 0) + (rs ? rs.cycles : 0), ...(ts ? { skipped: TW.skippedShare([...ts.sessions, ...(rs ? rs.sessions : [])]) } : {}), trades: ts ? ts.trades : null };
   });
   report.cycles.composed = composed.cycles === undefined ? null : composed.cycles;
   if (report.skipped && composed.skipped) report.skipped.composed = composed.skipped;
@@ -588,7 +593,7 @@ async function probeRound(ctx, { n, champion, api }) {
       measures: composed.measures, verdict: composed.verdict, n: Math.min(...composed.targets.map(t => t.target.pairs)), ...(draw ? { trendBatch: { index: n - 1, set: trend.set.fingerprint, probe: split.probe.legs.length, confirm: split.confirm.legs.length } } : {}),
     });
   }
-  report.composed = { id: cid, verdict: composed.verdict, harms: composed.harms, cancelled: composed.cancelled, measures: composed.measures, parts: composition.parts.map(p => p.id), ...(composed.measures && composed.measures.trend ? { trend: { capture: composed.measures.trend.capture, netR: composed.measures.trend.netR, firstTry: composed.measures.trend.firstTry, sides: composed.measures.trend.sides, selection: composed.measures.trend.selection || null, ride: composed.ride || null, blows: composed.measures.trend.blows, controls: composed.measures.trend.controls === undefined ? null : composed.measures.trend.controls } } : {}) };
+  report.composed = { id: cid, verdict: composed.verdict, harms: composed.harms, cancelled: composed.cancelled, measures: composed.measures, parts: composition.parts.map(p => p.id), ...(composed.measures && composed.measures.trend ? { trend: { capture: composed.measures.trend.capture, netR: composed.measures.trend.netR, firstTry: composed.measures.trend.firstTry, sides: composed.measures.trend.sides, selection: composed.measures.trend.selection || null, ride: composed.ride || null, blows: composed.measures.trend.blows, controls: composed.measures.trend.controls === undefined ? null : composed.measures.trend.controls, trades: composed.trades === undefined ? null : composed.trades } } : {}) };
   writeReport();
   ctx.log(`iteration ${n}: combined change ${cid} of ${composition.parts.length} edit(s): ${composed.verdict}${composed.pass ? ': to the keep rule' : ''}`);
   if (!composed.pass) return { proposals: [], report };
