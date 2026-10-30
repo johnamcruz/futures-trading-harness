@@ -59,7 +59,7 @@
  *   skipsOf(rec, side)                            a cycle record's listed setups skipped with a reason the side's way
  *   exampleLine(leg), loserLine(x)                one example for the proposer (no date, time or price)
  *   timingTagOf(briefing)                         the bar's base timing against the HTF side (the briefing's m3.timing,
- *                                                 ltf-timing.js): 'before the turn' (pullback), 'at the turn' (turned),
+ *                                                 ltf-timing.js): 'before the turn' (pullback, or no turn yet), 'at the turn' (turned),
  *                                                 'with', 'no HTF side' (the 4h and 1h disagree), or null (no briefing)
  *   entryTimings(decisions, { briefingAt, minutes })   each scored exit with `entryTiming`: the tag at its entry's
  *                                                 decision bar (the last bar closed by its entry)
@@ -77,7 +77,7 @@ const { trendRuleOf } = require('../trading/reasons');
 const { standardPlans } = require('../learning/setup-library');
 const { skillOfRead } = require('../learning/curated-moments');
 
-const TIMING_TAGS = Object.freeze({ pullback: 'before the turn', turned: 'at the turn', with: 'with' });
+const TIMING_TAGS = Object.freeze({ pullback: 'before the turn', waiting: 'before the turn', turned: 'at the turn', with: 'with' });
 /** The bar's base timing tag (see the header), or null without a briefing. */
 function timingTagOf(briefing) {
   const m3 = isObj(briefing) && isObj(briefing.sections) && isObj(briefing.sections.m3) && isObj(briefing.sections.m3.data) ? briefing.sections.m3.data : null;

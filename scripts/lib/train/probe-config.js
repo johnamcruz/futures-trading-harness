@@ -201,7 +201,7 @@ function resolveTrend(raw, { read, readCensus, readBars = () => { throw new Erro
       const allSpans = Object.fromEntries((census.order || []).map(x => [x.id, x]));
       const minutes = replay && replay.autotrader ? replay.autotrader.timeframe : null;
       if (!(Number.isInteger(minutes) && minutes > 0)) throw new Error('the trend replay\'s autotrader timeframe (the base bars) is needed to place the legs\' bars');
-      const series = align === 'htf' ? TA.htfSeries(readBars(resolvePath(raw.bars), minutes)) : null;
+      const series = align === 'htf' ? TA.htfSeries(readBars(resolvePath(raw.bars), minutes), minutes) : null;
       const got = TA.filterLegs(legs, allSpans, { align, opening, series, minutes, window: TA.openingWindow(), maxBars: TSET.openingMaxBars });
       filter = { align, opening, pool: legs.length, dropped: { align: got.dropped.align.length, opening: got.dropped.opening.length }, ...(align === 'htf' ? { bars: raw.bars } : {}) };
       legs = got.kept;

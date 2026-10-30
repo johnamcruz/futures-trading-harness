@@ -7,6 +7,7 @@
 const test = require('node:test');
 const assert = require('node:assert');
 const TA = require('../../scripts/lib/train/trend-align');
+const { htfTrendsOf } = require('../../scripts/lib/trading/briefing');
 const TW = require('../../scripts/lib/train/trend-windows');
 const PC = require('../../scripts/lib/train/probe-config');
 const { validateConfig } = require('../../scripts/lib/autotrader');
@@ -26,19 +27,42 @@ const UP = bars('2022-02-20T00:00:00.000Z', 16, 0.5);
 const leg = (side, start, end) => ({ id: `${start.slice(0, 10)}|${side}|${start}`, day: start.slice(0, 10), side, start, end, points: 30 });
 
 test('trendsAt: the 4h and the 1h as of the bars closed by the leg\'s start bar\'s open; never the leg\'s own bars (no look-ahead)', () => {
-  const s = TA.htfSeries(UP);
+  const s = TA.htfSeries(UP, 3);
   const start = '2022-03-07T15:00:00.000Z';
   assert.deepStrictEqual(TA.trendsAt(s, start), { '4h': 'up', '1h': 'up' });
   // The bars from the leg's start on replaced by a crash: the read at its start is the same (only bars before it count).
   const cut = UP.findIndex(b => b.t === start);
-  const crash = [...UP.slice(0, cut), ...bars(start, 2, -40, UP[cut].c).map(b => ({ ...b }))];
-  assert.deepStrictEqual(TA.trendsAt(TA.htfSeries(crash), start), { '4h': 'up', '1h': 'up' });
-  // The index read is the bar before the start bar (its close is the start bar's open).
-  assert.strictEqual(TA.lastBefore(s.times, Date.parse(start)), cut - 1);
+  const crash = [...UP.slice(0, cut), ...bars(start, 2, -40, UP[cut].c)];
+  assert.deepStrictEqual(TA.trendsAt(TA.htfSeries(crash, 3), start), { '4h': 'up', '1h': 'up' });
+  // Bound: a start bar whose own close completes the 1h candle that flips the 1h. The read is the bar before it's;
+  // one that took the start bar too (lastBefore(..., start + 1)) would read the flip.
+  const read = k => htfTrendsOf(crash.slice(0, k), 3)['1h'];
+  const hourClose = k => (Date.parse(crash[k].t) + STEP) % 3600000 === 0;
+  let flip = -1;
+  for (let k = cut + 1; k < crash.length && flip < 0; k += 1) if (hourClose(k) && read(k + 1) !== read(k)) flip = k;
+  assert.ok(flip > 0, 'the crash flips the 1h at an hour\'s close');
+  const cs = TA.htfSeries(crash, 3);
+  const at = crash[flip].t;
+  assert.strictEqual(TA.trendsAt(cs, at)['1h'], read(flip), 'the bar before the start bar\'s');
+  assert.notStrictEqual(read(flip + 1), read(flip), 'the start bar\'s own close flips it');
+  assert.strictEqual(TA.lastBefore(cs.times, Date.parse(at)), flip - 1);
+  assert.strictEqual(TA.lastBefore(cs.times, Date.parse(at) + 1), flip, 'start + 1 would take the start bar');
   // Before any history: unknown (null), never a guess.
   assert.deepStrictEqual(TA.trendsAt(s, '2022-02-20T00:00:00.000Z'), { '4h': null, '1h': null });
   // A long series down: both down.
-  assert.deepStrictEqual(TA.trendsAt(TA.htfSeries(bars('2022-02-20T00:00:00.000Z', 16, -0.5, 30000)), start), { '4h': 'down', '1h': 'down' });
+  assert.deepStrictEqual(TA.trendsAt(TA.htfSeries(bars('2022-02-20T00:00:00.000Z', 16, -0.5, 30000), 3), start), { '4h': 'down', '1h': 'down' });
+});
+
+test('trendsAt is the briefing\'s own 4h and 1h (the read as of the last 1h close), the daily break\'s hour included', () => {
+  // The market's daily break (17:00-18:00 New York time, 22:00-23:00Z in winter) holds no bars.
+  const gap = UP.filter(b => { const h = new Date(b.t).getUTCHours(); return h !== 22; });
+  const s = TA.htfSeries(gap, 3);
+  const { buildBriefing } = require('../../scripts/lib/trading/briefing');
+  for (const start of ['2022-03-07T23:00:00.000Z', '2022-03-07T23:03:00.000Z', '2022-03-07T21:57:00.000Z', '2022-03-08T02:00:00.000Z', '2022-03-08T14:33:00.000Z']) {
+    const before = gap.filter(b => Date.parse(b.t) < Date.parse(start));
+    const b = buildBriefing({ symbol: 'MNQ', bars: before, minutes: 3, now: new Date(start) });
+    assert.deepStrictEqual(TA.trendsAt(s, start), { '4h': b.sections.h1.data.h4.trend, '1h': b.sections.h1.data.h1.trend }, start);
+  }
 });
 
 test('aligned: the policy\'s own check (bias_frames [4h, 1h], bias_agree on): both the side\'s way, else not; unknown: not', () => {
@@ -64,7 +88,7 @@ test('the opening print: the runner\'s first no-entry window holding the cash op
 });
 
 test('filterLegs: align htf keeps the legs both frames trend the way of; opening drop leaves out the opening print; all and keep: every leg, in order', () => {
-  const series = TA.htfSeries(UP);
+  const series = TA.htfSeries(UP, 3);
   const L = [leg('long', '2022-03-07T15:00:00.000Z', '2022-03-07T15:30:00.000Z'), leg('short', '2022-03-07T15:30:00.000Z', '2022-03-07T16:00:00.000Z'), leg('long', '2022-03-08T14:30:00.000Z', '2022-03-08T14:33:00.000Z'), leg('long', '2022-02-20T00:30:00.000Z', '2022-02-20T01:00:00.000Z')];
   const spans = Object.fromEntries(L.map(g => [g.id, g]));
   const ids = L.map(g => g.id);

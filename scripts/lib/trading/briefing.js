@@ -86,7 +86,7 @@
 const fs = require('fs');
 const path = require('path');
 const { snapshot, levelsAsOf, priorDayCandle } = require('./market-snapshot');
-const { mtfRead, candles, label: tfLabel } = require('./mtf');
+const { mtfRead, candles, label: tfLabel, RULE_FRAMES } = require('./mtf');
 const { normalizeBars, atr: atrOf, sessionKey } = require('./indicators');
 const { tradingDayStart, minutesOfDay, entryClock, inMarketHours } = require('./clock');
 const { DEFAULT_ENTRY_HOURS, DEFAULT_NO_ENTRY_WINDOWS } = require('./config');
@@ -599,6 +599,32 @@ function newsState(blackouts, at) {
 }
 
 /**
+ * The multi-timeframe read as of the last `m`-minute candle close at or before `closedAt` (the h1 and m15 sections'
+ * rule: their read stays what a fresh read at that close gives for its whole life); fewer than 3 bars by then: `read`
+ * (the bar's own read; none given: computed).
+ */
+function readAsOfClose(bars, minutes, closedAt, m, read = null) {
+  const boundary = nextClose(new Date(closedAt.getTime() - m * 60000), m).getTime();
+  const upTo = bars.filter(b => Date.parse(b.t) + minutes * 60000 <= boundary);
+  return upTo.length >= 3 ? mtfRead(upTo) : read || mtfRead(bars);
+}
+
+/**
+ * The briefing's 4h and 1h trends for these closed bars, exactly as buildBriefing's h1 section reads them (the read as
+ * of the last 1h close: readAsOfClose(60), its 60 and 240 frames): { '4h', '1h' }, each 'up' | 'down' | 'range' | null.
+ */
+function htfTrendsOf(raw, minutes) {
+  const bars = normalizeBars(raw);
+  if (!bars.length) return { '4h': null, '1h': null };
+  // The trend rule's frames, highest first (config/analysis.json mtf.ruleFrames: the 4h, then the 1h).
+  const [h4, h1] = RULE_FRAMES;
+  const closedAt = new Date(Date.parse(bars[bars.length - 1].t) + minutes * 60000);
+  const readH1 = readAsOfClose(bars, minutes, closedAt, h1);
+  const t = f => (f && ['up', 'down', 'range'].includes(f.trend) ? f.trend : null);
+  return { '4h': t(frameOf(readH1, h4)), '1h': t(frameOf(readH1, h1)) };
+}
+
+/**
  * The briefing for `symbol`'s closed bars on `minutes`-minute bars: each section from `prev` while it is
  * valid (same symbol and bar size, not expired), else recomputed with a new version.
  */
@@ -615,11 +641,7 @@ function buildBriefing({ symbol, contractId = null, bars: raw, minutes, fineBars
   // The m15 and h1 reads as of their own last candle close: the read's window slides with each bar, so a section
   // read at its close stays what a fresh read at that close gives for its whole life (the trend rule in m3 is the
   // read of this bar, as the gate's).
-  const asOfClose = m => {
-    const boundary = nextClose(new Date(closedAt.getTime() - m * 60000), m).getTime();
-    const upTo = bars.filter(b => Date.parse(b.t) + minutes * 60000 <= boundary);
-    return upTo.length >= 3 ? mtfRead(upTo) : read;
-  };
+  const asOfClose = m => readAsOfClose(bars, minutes, closedAt, m, read);
   const read15 = asOfClose(15);
   const readH1 = asOfClose(60);
   // The 15m and 1h candles, completed only (the one forming isn't in them).
@@ -1116,7 +1138,7 @@ function removeFrameBriefing(home, root, minutes) {
   try { fs.unlinkSync(frameBriefingFile(home, root, minutes)); } catch (_err) { /* none */ }
 }
 
-module.exports = {
+module.exports = { htfTrendsOf,
   SECTIONS, WINDOWS, nextClose, nextRthRoll, sessionWindow, newsState, buildBriefing, candidate, current, renderBriefing, briefingFile, writeBriefing, readBriefing, removeBriefing,
   roundNumbers, sharedParts, buildFrameBriefing, frameHolds, frameUntil, wholeBars, renderFrameBriefing, frameBriefingFile, writeFrameBriefing, readFrameBriefing, removeFrameBriefing,
   gapText,

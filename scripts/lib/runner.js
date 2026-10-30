@@ -579,7 +579,9 @@ function createRunner(deps) {
     const protective = orders.filter(o => o.contractId === cid && Number(o.type) === 4 && (Number(o.side) === 0 ? 1 : -1) === -sign);
     const stopOrder = protective.length === 1 ? protective[0] : null;
     let t = trails[item.contractId];
+    let fresh = false;
     if (!t || t.key !== key) {
+      fresh = true;
       const side = sign > 0 ? 'buy' : 'sell';
       const firstSeen = clock.now().getTime();
       const fillAt = Number.isFinite(opened) ? opened : firstSeen;
@@ -618,7 +620,9 @@ function createRunner(deps) {
           await client.cancelOrder(cfg.account, o.id);
           log(`${item.symbol}: cancelled the target order ${o.id} at ${o.limitPrice}: past its target ${rec.setup} is trailed, not closed (exit mode target_then_trail)`);
         } catch (err) {
-          log(`${item.symbol}: could not cancel the target order ${o.id} (${err.message}); it may fill at the target`, 'error');
+          log(`${item.symbol}: could not cancel the target order ${o.id} (${err.message}); it may fill at the target; tried again each managed cycle`, 'error');
+          // The owner's rule is always to trail: the cancel is retried while that limit still rests (retryTargetCancel).
+          t.cancelPending = [...(t.cancelPending || []), Number(o.limitPrice ?? o.price)];
         }
       }
       save(t);
@@ -629,6 +633,28 @@ function createRunner(deps) {
       } else if (managed) log(`${item.symbol}: ${rec.setup} position not managed (no trail, no time stop): no usable initial stop (1R ${risk}, needs 4+ ticks)`, 'error');
     }
     if (t.skip) return;
+    // A target leg whose cancel failed (exit mode target_then_trail): cancelled again every managed cycle while a resting
+    // limit at that price remains on the exit side, each try logged; gone (filled, cancelled elsewhere), the retry stops,
+    // and a flat position drops the trail above. Never a stop order.
+    if (!fresh && Array.isArray(t.cancelPending) && t.cancelPending.length && tick > 0) {
+      const at = px => (orders || []).filter(o => o && o.contractId === cid && Number(o.type) === 1 && (Number(o.side) === 0 ? 1 : -1) === -sign && Math.abs(Number(o.limitPrice ?? o.price) - px) < tick / 2);
+      const still = [];
+      for (const px of t.cancelPending) {
+        let left = false;
+        for (const o of at(px)) {
+          try {
+            await client.cancelOrder(cfg.account, o.id);
+            log(`${item.symbol}: retried and cancelled the target order ${o.id} at ${px}: past its target ${t.setup} is trailed, not closed (exit mode target_then_trail)`);
+          } catch (err) {
+            left = true;
+            log(`${item.symbol}: retrying the cancel of the target order ${o.id} at ${px} failed (${err.message}); trying again next cycle`, 'error');
+          }
+        }
+        if (left) still.push(px);
+      }
+      t = { ...t, cancelPending: still };
+      save(t);
+    }
     // Every bar that opened after the fill (a market fill seconds into a bar
     // counts that bar, as the backtest does) and hasn't been applied yet.
     const bars = item.bars.filter(b => Date.parse(b.t) >= t.since - FILL_GRACE_MS && (t.lastBarT === null || Date.parse(b.t) > Date.parse(t.lastBarT)));

@@ -4466,3 +4466,30 @@ test('exit skills (gateway): checkOrder counts FTH_CYCLE_SKILLS for the run\'s o
     assert.ok(!run(env, entryOrder({ side: 'sell', rationale: '[exit] flatten', stopLossBracket: undefined })).violations.some(v => v.check.startsWith('skills-')), `${label}: an exit`);
   }
 }));
+
+test('modify_order: a reprice of a working non-composed policy entry is held to the entry rule on this bar (fails closed); a stop or target leg, and a risk-reducing modify, never', () => {
+  const { evaluateModify } = require('../../scripts/lib/trading/order-gate');
+  const reg = [LCP.policy({ entry: AGREE })];
+  const home = (t4h, t1h, brief = true) => {
+    const h = require('../helpers').tmpDir();
+    fs.writeFileSync(path.join(h, 'entry-orders.json'), JSON.stringify([{ orderId: 77, contractId: 'MNQ', side: 'buy', setup: 'prop_portfolio', stopTicks: 40, at: '2026-10-07T13:59:00.000Z' }]));
+    if (brief) withTrends(h, t4h, t1h);
+    return h;
+  };
+  const mod = (h, input) => evaluateModify({ input, config: { ...config, home: h, cycleBars: { MNQ: LC.BAR } }, strategies: reg, now: LCP.NOW }).violations;
+  const reprice = { orderId: 77, limitPrice: 21538 };
+  assert.deepStrictEqual(mod(home('up', 'up'), reprice), [], 'agreeing: the reprice goes');
+  const off = mod(home('up', 'range'), reprice);
+  assert.deepStrictEqual(off.map(v => v.check), ['entry-rule']);
+  assert.match(off[0].message, /^order 77 is a working setup:prop_portfolio: entry rule: the 4h and 1h must each trend up for a long \(4h up, 1h range\): no agreement, no trade/);
+  assert.deepStrictEqual(mod(home('up', 'range'), { orderId: 77, stopPrice: 21541 }).map(v => v.check), ['entry-rule'], 'a stop entry\'s reprice too');
+  assert.deepStrictEqual(mod(home('up', 'up', false), reprice).map(v => v.check), ['entry-rule'], 'no briefing: fails closed');
+  // A protective stop or target of an open position (not recorded as an entry), or a risk-reducing reason: never refused.
+  assert.deepStrictEqual(mod(home('up', 'range'), { orderId: 9, stopPrice: 21530 }), []);
+  assert.deepStrictEqual(mod(home('up', 'range'), { orderId: 10, limitPrice: 21600 }), []);
+  assert.deepStrictEqual(mod(home('up', 'range'), { orderId: 77, stopPrice: 21530, reason: '[protect] tighten' }), []);
+  // A recorded entry of no policy strategy: the rule isn't its (the gate's other checks judged it at placement).
+  const other = home('up', 'range');
+  fs.writeFileSync(path.join(other, 'entry-orders.json'), JSON.stringify([{ orderId: 77, contractId: 'MNQ', side: 'buy', setup: 'fx_break' }]));
+  assert.deepStrictEqual(mod(other, reprice), []);
+});

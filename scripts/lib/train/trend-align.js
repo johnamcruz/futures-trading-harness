@@ -6,17 +6,19 @@
  *
  *   align 'htf'      only legs the owner's top-down rule could trade: at the leg's start the 4h and the 1h both trend the
  *                    leg's way, read by the policy's own check (entry-rule.js entryProblems with bias_frames [4h, 1h] and
- *                    bias_agree on: the hard rule the gate holds, never a copy of it), from the bars closed by the leg's
- *                    start bar's open (causal: the bias of the bar before it, mtf.js biasSeries, as the briefing reads
- *                    it); a trend the bars can't read yet (too little history) is no agreement: the leg is dropped.
+ *                    bias_agree on: the hard rule the gate holds, never a copy of it), on the 4h and 1h trends the
+ *                    briefing of the bar before the leg's start bar gives (briefing.js htfTrendsOf: the read as of the
+ *                    last 1h close, from the bars closed by the start bar's open, the runner's kept history: causal);
+ *                    a trend the bars can't read yet (too little history) is no agreement: the leg is dropped.
  *                    'all': every leg, as before
  *   opening 'drop'   no leg inside the opening print (the runner's first no-entry window, config/runner.json
  *                    gate.noEntryWindows, the one holding the cash open, in the market's time zone): one that starts and ends in it, or one of
  *                    openingMaxBars base bars or fewer that starts in it (no entry could catch it). 'keep': as before
  *
  *   ALIGN, OPENING
- *   htfSeries(bars, frames)                     { times: [ms], [frame]: [bias] }: each frame's causal bias per base bar
- *   trendsAt(series, start, frames)             { [frame]: 'up' | 'down' | 'range' | null } as of the bars closed by start
+ *   htfSeries(bars, minutes)                    { bars, times, minutes }: the base bars, indexed by their open time
+ *   trendsAt(series, start)                     { '4h', '1h': 'up' | 'down' | 'range' | null }: the briefing's, as of the
+ *                                               bars closed by start (the bar before it, and the history before that)
  *   aligned(side, trends, frames)               whether the frames all trend the side's way (entry-rule.js, bias_agree)
  *   openingWindow(spec)                         the no-entry window holding the cash open ({ start, end, timeZone },
  *                                               minutes of the day), from spec (config/runner.json gate.noEntryWindows by default)
@@ -25,21 +27,16 @@
  *                                               { kept: [id], dropped: { align: [id], opening: [id] } } in the ids' order
  */
 
-const { biasSeries, label, RULE_FRAMES } = require('../trading/mtf');
+const { HISTORY_HOURS } = require('../trading/mtf');
+const { htfTrendsOf } = require('../trading/briefing');
 const { BIAS_FRAMES, entryRuleOf, entryProblems } = require('../trading/entry-rule');
 const { parseWindows, inWindow, MARKET_TZ, RTH_OPEN_MIN } = require('../trading/clock');
 
 const ALIGN = Object.freeze(['all', 'htf']);
 const OPENING = Object.freeze(['keep', 'drop']);
-// A bias frame's minutes, as the trend rule's frames name them (mtf.js label: 240 is '4h').
-const minutesOf = f => RULE_FRAMES.find(m => label(m) === f);
-const trendOfBias = b => (b > 0 ? 'up' : b < 0 ? 'down' : b === 0 ? 'range' : null);
-
-/** Each frame's bias per base bar, causal (mtf.js biasSeries: the candles completed by the bar's close). */
-function htfSeries(bars, frames = BIAS_FRAMES) {
-  const out = { times: bars.map(b => Date.parse(b.t)) };
-  for (const f of frames) out[f] = biasSeries(bars, minutesOf(f));
-  return out;
+/** The base bars, by their open time, for trendsAt. */
+function htfSeries(bars, minutes) {
+  return { bars, times: bars.map(b => Date.parse(b.t)), minutes };
 }
 
 /** The last index whose bar opened before ms (its close at or before ms), or -1. */
@@ -54,10 +51,16 @@ function lastBefore(times, ms) {
   return at;
 }
 
-/** Each frame's trend as of the bars closed by the leg's start bar's open (the bar before it): never the leg's own bars. */
-function trendsAt(series, start, frames = BIAS_FRAMES) {
+/**
+ * The 4h and 1h trends the briefing of the bar before the leg's start bar gives: its bars, those closed by the start
+ * bar's open within the runner's kept history (mtf.js HISTORY_HOURS), never the leg's own.
+ */
+function trendsAt(series, start) {
   const i = lastBefore(series.times, Date.parse(start));
-  return Object.fromEntries(frames.map(f => [f, i < 0 ? null : trendOfBias(series[f][i])]));
+  if (i < 0) return { '4h': null, '1h': null };
+  const from = series.times[i] - HISTORY_HOURS * 3600000;
+  const j = lastBefore(series.times, from) + 1;
+  return htfTrendsOf(series.bars.slice(j, i + 1), series.minutes);
 }
 
 /** The policy's top-down check (bias_frames with bias_agree on) on a briefing holding only these trends. */

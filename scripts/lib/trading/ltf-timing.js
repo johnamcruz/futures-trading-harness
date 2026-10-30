@@ -14,8 +14,9 @@
  *   with      the base regime trends the side's way (trend-up for a long)
  *   turned    the latest base event the side's way (a BOS or CHoCH its way, or the base compression break its way)
  *             closed after the latest base break against it: the turn back, with its kind, direction, time and age
- *   pullback  otherwise: the base structure points against the side; `since` the latest break against it (none known:
- *             null)
+ *   pullback  the base structure points against the side: its latest break against it (`since`), or with none the
+ *             base regime trending against it (`since` null)
+ *   waiting   otherwise (no break either way, the regime not trending against): no turn yet
  *
  *   timingOf({ trends, regime, bars, minutes, breaks, compression })   { side, state, kind?, dir?, at?, barsAgo?, since? }
  *                                              or null (no agreed side, or no bars)
@@ -52,6 +53,7 @@ function timingOf({ trends, regime = null, bars = [], minutes, breaks = [], comp
   if (turn && (!against || turn.closeMs > closeOf(against))) {
     return { side, state: 'turned', kind: turn.kind, dir: turn.dir, at: new Date(turn.closeMs - step).toISOString(), barsAgo: turn.barsAgo };
   }
+  if (!against && regime !== `trend-${way === 'up' ? 'down' : 'up'}`) return { side, state: 'waiting' };
   return { side, state: 'pullback', since: against ? against.at : null };
 }
 
@@ -60,6 +62,7 @@ function timingLine(t, et, tf) {
   if (!t) return null;
   const head = `- ${tf} timing (${t.side}: the 4h and 1h ${WAY[t.side]}):`;
   if (t.state === 'with') return `${head} ${tf} with the HTF side.`;
+  if (t.state === 'waiting') return `${head} ${tf} no turn yet.`;
   if (t.state === 'turned') return `${head} ${tf} turned back: ${t.kind} ${t.dir} at ${et(t.at)} ET${Number.isInteger(t.barsAgo) ? ` (${t.barsAgo} bars ago)` : ''}.`;
   return `${head} ${tf} pullback: trending against the HTF side${t.since ? ` since ${et(t.since)} ET` : ''}.`;
 }

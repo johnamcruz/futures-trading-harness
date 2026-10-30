@@ -37,9 +37,9 @@ only:
 
 **Read forms** (the target step): `target <tf> swing high|low <price>`,
 `target prior 1h|4h high|mid|low <price>` (a taken side reads false),
-`target <5m|15m|1h> fvg high|low <price>`. None named: `target 2r`. The
-4h and 1h your way: `target trail`, whatever is named (we always trail):
-the 2R mark arms the trail. A key level within 1R in front caps the first
+`target <5m|15m|1h> fvg high|low <price>`. None named: `target 2r`.
+HTF-aligned (4h and 1h your way): `target trail` (the 2R mark arms
+it); a level ahead is context, never a requirement. A key level within 1R in front caps the first
 push: evidence; prefer the turn after it.
 
 **Timeframe weight** (hypothesis, not measured): a higher timeframe's

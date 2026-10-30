@@ -4444,3 +4444,23 @@ test('order gate hook: a cited setup (momentum_continuation) goes only on the re
   const exit = gate(orderPayload({ ...EXIT_BASE, side: 'sell', rationale: '[exit] close the momentum_continuation long' }), env);
   assert.strictEqual(exit.code, 0, exit.stderr);
 });
+
+test('order gate hook wiring: modify_order on a working prop_portfolio entry with the 1h ranging is refused [entry-rule]; with both up, or on a stop leg, it goes', () => {
+  const LC = require('../fixtures/lifecycle');
+  const { writeBriefing } = require('../../scripts/lib/trading/briefing');
+  const run = (t1h, orderId) => {
+    const home = tmpDir();
+    fs.writeFileSync(path.join(home, 'entry-orders.json'), JSON.stringify([{ orderId: 77, contractId: 'MNQ', side: 'buy', setup: 'prop_portfolio', stopTicks: 40, at: '2026-10-07T13:59:00.000Z' }]));
+    const b = LC.briefing();
+    b.sections.h1.data.h1 = { trend: t1h };
+    // The shipped prop_portfolio and its account (this file's plugin root holds test strategies only).
+    const { env } = setup([], { FTH_HOME: home, FTH_TEST_NOW: '2026-10-07T14:00:02.000Z', FTH_CYCLE_BARS: JSON.stringify({ MNQ: LC.BAR }), FTH_STRATEGIES_DIRS: path.join(REPO, 'strategies'), FTH_ACCOUNTS_DIRS: path.join(REPO, 'accounts') });
+    writeBriefing(home, b);
+    return gate({ tool_name: 'mcp__broker__modify_order', tool_input: { accountId: 1, orderId, limitPrice: 21538 } }, env);
+  };
+  const off = run('range', 77);
+  assert.strictEqual(off.code, 2);
+  assert.match(off.stderr, /\[entry-rule\] order 77 is a working setup:prop_portfolio: entry rule: the 4h and 1h must each trend up for a long \(4h up, 1h range\)/);
+  assert.strictEqual(run('up', 77).code, 0);
+  assert.strictEqual(run('range', 9).code, 0, 'a leg not recorded as an entry');
+});
