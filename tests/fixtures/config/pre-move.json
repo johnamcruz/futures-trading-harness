@@ -376,6 +376,22 @@
    "value": 1,
    "from": "new in fix/ppc-trend-runs (owner-approved 2026-10-24: control windows for false entries, e.g. 1 a leg, of the same length from the same sessions)"
   },
+  "trendWindows.reach": {
+   "value": "catch",
+   "from": "new in feat/htf-aligned-trend-stage (owner-approved 2026-10-29: a trend window reaches the leg's catch window, today's, or its end, so a pullback entry and the ride are scored; a loop sets probe.trend.reach)"
+  },
+  "trendSet.align": {
+   "value": "all",
+   "from": "new in feat/htf-aligned-trend-stage (owner-approved 2026-10-29: the trend pool every leg, today's, or only the legs whose 4h and 1h both trend their way at the start; a loop sets probe.trend.align)"
+  },
+  "trendSet.opening": {
+   "value": "keep",
+   "from": "new in feat/htf-aligned-trend-stage (owner-approved 2026-10-29: the opening print's legs kept, today's, or dropped; a loop sets probe.trend.opening)"
+  },
+  "trendSet.openingMaxBars": {
+   "value": 3,
+   "from": "new in feat/htf-aligned-trend-stage (owner-approved 2026-10-29: a leg of 3 base bars or fewer starting in the opening print is uncatchable)"
+  },
   "trendFindings.examples": {
    "value": 2,
    "from": "new in feat/ppc-trend-facts (owner-approved 2026-10-24, build A: a trend finding shows the proposer a few of its learnable legs, e.g. 2, each with the reads code verified at its start, what the model said and the contradiction; few, so a small model's prompt stays short)"
