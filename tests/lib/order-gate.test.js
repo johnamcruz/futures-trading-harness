@@ -3652,7 +3652,7 @@ test('trade_lifecycle in an attempt: setup:prop_portfolio on the record\'s verdi
 test('trade_lifecycle in an attempt: the policy\'s entry rule joins the composed-reads re-check; every key off (shipped) changes nothing; exits still go', () => {
   const { home } = LCP.propHome({ size: 5 });
   const args = lcPropPlan(home);
-  const OFF = { bias_frames: 'off', regime_against: 'off', leg_turned: 'off' };
+  const OFF = { bias_frames: 'off', bias_agree: 'off', regime_against: 'off', leg_turned: 'off' };
   const withRule = entry => LCP.registry({ entry: { ...OFF, ...entry } });
   assert.deepStrictEqual(lcPropEval(home, args, { registry: withRule({}) }).violations, [], 'every key off: as before');
   // The scenario's briefing holds no m3 regime: a key on that reads it refuses (fails closed), naming the rule.
@@ -3669,6 +3669,91 @@ test('trade_lifecycle in an attempt: the policy\'s entry rule joins the composed
   assert.deepStrictEqual(lcPropEval(home, args, { registry: withRule({ bias_frames: ['1h'] }) }).violations, [], 'the 1h alone sets it');
   // A risk-reducing order never reaches the rule.
   assert.deepStrictEqual(lcPropEval(trendHome(), { accountId: 1, contractId: 'MNQ', side: 'sell', type: 'market', size: 5, rationale: '[exit] flatten the prop_portfolio long' }, { registry: withRule({ regime_against: 'on', leg_turned: 'on', bias_frames: ['4h', '1h'] }) }).violations, []);
+});
+
+// ---- The owner's top-down bias (2026-10-29: "No trade if there is no agreement between the two"): bias_frames [4h, 1h]
+// with bias_agree on holds every entry route inside a prop attempt; exits always go ----
+const AGREE = { bias_frames: ['4h', '1h'], bias_agree: 'on', regime_against: 'off', leg_turned: 'off' };
+const H1_TRENDS = ['up', 'range', 'down'];
+const withTrends = (home, t4h, t1h, b = LC.briefing()) => {
+  b.sections.h1.data.h4 = { trend: t4h };
+  b.sections.h1.data.h1 = { trend: t1h };
+  require('../../scripts/lib/trading/briefing').writeBriefing(home, b);
+  return home;
+};
+const EXIT_SELL = { accountId: 1, contractId: 'MNQ', side: 'sell', type: 'market', size: 5, rationale: '[exit] flatten the prop_portfolio long' };
+
+test('bias_agree, a composed limit entry (trade_lifecycle under the policy): only the 4h and the 1h both up lets a long go; each other combination is refused ([composed-reads]); exits go', () => {
+  for (const t4h of H1_TRENDS) for (const t1h of H1_TRENDS) {
+    const { home } = LCP.propHome({ size: 5 });
+    const args = lcPropPlan(home);
+    withTrends(home, t4h, t1h);
+    const r = lcPropEval(home, args, { registry: LCP.registry({ entry: AGREE }) });
+    if (t4h === 'up' && t1h === 'up') assert.deepStrictEqual(r.violations, [], 'both up');
+    else {
+      assert.ok(checks(r).includes('composed-reads'), `${t4h}/${t1h}: ${JSON.stringify(r.violations)}`);
+      assert.match(r.violations.find(v => v.check === 'composed-reads').message, /entry rule: the 4h and 1h must each trend up for a long \(4h \w+, 1h \w+\): no agreement, no trade/, `${t4h}/${t1h}`);
+    }
+    // Under the same briefing and rule, a risk-reducing order always goes.
+    assert.deepStrictEqual(lcPropEval(home, EXIT_SELL, { registry: LCP.registry({ entry: AGREE }) }).violations, [], `exit ${t4h}/${t1h}`);
+  }
+  // The 4h up with the 1h ranging went before (bias_agree off: the 4h set the side); now it doesn't.
+  const { home } = LCP.propHome({ size: 5 });
+  const args = lcPropPlan(home);
+  withTrends(home, 'up', 'range');
+  assert.ok(!lcPropEval(home, args, { registry: LCP.registry({ entry: { ...AGREE, bias_agree: 'off' } }) }).violations.some(v => /entry rule/.test(v.message)), 'off: as before');
+  // A trend the briefing doesn't hold refuses (fails closed).
+  const gone = LCP.propHome({ size: 5 });
+  const gArgs = lcPropPlan(gone.home);
+  const b = LC.briefing();
+  delete b.sections.h1.data.h4;
+  require('../../scripts/lib/trading/briefing').writeBriefing(gone.home, b);
+  assert.match(lcPropEval(gone.home, gArgs, { registry: LCP.registry({ entry: AGREE }) }).violations.find(v => v.check === 'composed-reads').message, /the 4h trend is not in the briefing/);
+});
+
+test('bias_agree, a cited setup\'s market entry (momentum_continuation through trade_lifecycle under the policy): refused unless the 4h and the 1h agree', () => {
+  const MC = LC_REGISTRY.find(x => x.name === 'momentum_continuation');
+  const reg = LCP.registry({ entry: AGREE, strategies: ['trade_lifecycle', 'momentum_continuation'] }).concat([MC]);
+  const planOn = home => composedOrder({ home, root: 'MNQ', side: 'long', now: LCP.NOW, cycleBars: { MNQ: LC.BAR }, strategy: LCP.LC_DOC, strategies: reg, accounts: [LCP.MINI], specOf: lcSpec, accountId: 1, selected: ['MNQ'] }).args;
+  for (const [t4h, t1h, goes] of [['up', 'up', true], ['up', 'range', false], ['range', 'up', false], ['down', 'up', false]]) {
+    const { home } = LCP.propHome({ size: 5, b: LC.s2Briefing(), reads: LC.S2_READS, cited: ['momentum_continuation'] });
+    const args = planOn(home);
+    assert.strictEqual(args.type, 'market');
+    assert.match(args.rationale, /momentum_continuation/);
+    withTrends(home, t4h, t1h, LC.s2Briefing());
+    const r = lcPropEval(home, args, { registry: reg });
+    if (goes) assert.deepStrictEqual(r.violations, [], 'both up');
+    else assert.match((r.violations.find(v => v.check === 'composed-reads') || {}).message || '', /no agreement, no trade/, `${t4h}/${t1h}: ${JSON.stringify(r.violations)}`);
+    assert.deepStrictEqual(lcPropEval(home, EXIT_SELL, { registry: reg }).violations, [], 'an exit goes');
+  }
+});
+
+test('bias_agree: a D2 reversal against the 4h is refused (a 1h CHoCH no longer stands against the HTF); the shipped rulebook holds the rule', () => {
+  const CR = require('../../scripts/lib/trading/composed-reads');
+  const { entryRuleOf } = require('../../scripts/lib/trading/entry-rule');
+  // A reversal short: the 1h CHoCHed down under a 4h uptrend (the D2 tier's 1h CHoCH plus a 4h rejection), as checked.
+  const b = LC.briefing();
+  b.sections.h1.data.h4 = { trend: 'up' };
+  b.sections.h1.data.h1 = { trend: 'down' };
+  const ruled = CR.checkReads({ reads: [], side: 'short', briefing: b, entryRule: entryRuleOf(AGREE) });
+  assert.ok(ruled.problems.some(x => /entry rule: the 4h and 1h must each trend down for a short \(4h up, 1h down\): no agreement, no trade/.test(x)), ruled.problems.join('; '));
+  // Through the gate on a policy entry with no compose record to stand on (a verdict for a rules component): refused,
+  // the side's rule on the briefing ([entry-rule]); the same short with the 4h and the 1h both down passes the rule.
+  const fx = { name: 'fx_rules', valid: true, errors: [], status: 'active', instruments: ['MNQ'], signal: 'rules', timeframe: '3m', mtf: 'trend', risk: {} };
+  const reg = entry => [LCP.policy({ strategies: ['fx_rules'], entry }), fx];
+  const home = withTrends(trendHome(), 'up', 'down');
+  const short = { accountId: 1, contractId: 'MNQ', side: 'sell', type: 'market', size: 3, stopLossBracket: { ticks: 40, type: 'stop' }, rationale: 'setup:prop_portfolio short fx_rules, stop 21550.25' };
+  const eval1 = h => evaluateOrder({ input: short, entries: [plan(1, { ts: '2026-10-07T13:59:30Z' })], now: LCP.NOW, strategies: reg(AGREE), accounts: [LCP.MINI], config: { ...config, home: h, cycleBars: { MNQ: LC.BAR } } });
+  const ruleOf = r => r.violations.filter(v => v.check === 'entry-rule').map(v => v.message);
+  assert.match(ruleOf(eval1(home))[0] || '', /^setup:prop_portfolio: entry rule: the 4h and 1h must each trend down for a short \(4h up, 1h down\): no agreement, no trade\. Exits, protective stops and stop moves still go\.$/);
+  assert.deepStrictEqual(ruleOf(eval1(withTrends(trendHome(), 'down', 'down'))), [], 'both down: the rule holds');
+  // No briefing to read it on: refused (fails closed).
+  assert.match(ruleOf(eval1(trendHome()))[0] || '', /the entry rule can't be checked/);
+  assert.deepStrictEqual(evaluateOrder({ input: { ...EXIT_SELL, side: 'buy', rationale: '[exit] cover the prop_portfolio short' }, entries: [], now: LCP.NOW, strategies: reg(AGREE), accounts: [LCP.MINI], config: { ...config, home } }).violations, [], 'an exit goes');
+  // The shipped rulebook: the policy trading the attempt carries the rule, so compose_check and the gate hold it.
+  const shipped = LC_REGISTRY.find(x => x.name === 'prop_portfolio');
+  assert.strictEqual(entryRuleOf(shipped.entry).biasAgree, true);
+  assert.deepStrictEqual(entryRuleOf(shipped.entry).biasFrames, ['4h', '1h']);
 });
 
 test('trade_lifecycle in an attempt: the record\'s size is a suggestion: the translated size goes, the record\'s and any other are refused; a verdict not sized on this record is refused', () => {

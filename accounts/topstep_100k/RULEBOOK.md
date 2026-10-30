@@ -7,7 +7,8 @@ loss_streak_stop: 2             # losing trades in a row: no new entries for the
 policies:                       # each policy strategy that trades this account (its STRATEGY.md names it; never restates these)
   prop_portfolio:
     entry:                      # the entry rule on a composed entry (entry-rule.js), held by compose_check and the gate; off: no check
-      bias_frames: off          # off, or [4h, 1h], [4h] or [1h] only (never the 15m): the first that trends sets the side, none against it, none trending: no entry
+      bias_frames: [4h, 1h]     # off, or [4h, 1h], [4h] or [1h] only (never the 15m): the first that trends sets the side, none against it, none trending: no entry
+      bias_agree: on            # on: every bias frame must trend the side's way (4h and 1h both up for a long, both down for a short); off: the first that trends sets the side
       regime_against: off       # on: no entry while the m3 regime trends against the side
       leg_turned: off           # on: an m3 regime not trending the side's way needs a true 3m BOS, CHoCH or compression break its way
     sizing:                     # risk from the headroom above the floor
@@ -210,14 +211,20 @@ the owner's top-down flow on a composed entry ("We stick to our top down
 flow - htf bias, location, setup, entry, stop and target"; "never trade
 against the HTF bias"), checked by the reads checker on the cycle bar's
 briefing, so `compose_check` says NOT OK and the gate's `[composed-reads]`
-re-check refuses the same entry. Every key is stated; `off` is no check,
-and with all three off an entry is checked as before (the trend rule, D2):
+re-check refuses the same entry; any other entry under the policy (one
+not on a compose record) is checked on the briefing by the gate's
+`[entry-rule]`, so no entry route skips it. Every key is stated; `off` is no check,
+and with every key off an entry is checked as before (the trend rule, D2):
 
 - `bias_frames` (a list of 4h and/or 1h, highest first, e.g. `[4h, 1h]`; never the 15m): the first listed
   frame that trends is the bias and the side must be its way; no listed
   frame may trend against the side (the 15m never stands in against the
   1h); none trending is no bias, so no entry. The frames are this file's,
   never the model's pick.
+- `bias_agree: on` (with `bias_frames` listed): every listed frame must
+  trend the side's way, so a long needs the 4h and the 1h both up and a
+  short both down; a range, a trend against, or a trend the briefing
+  doesn't hold on either is no trade. `off`: `bias_frames` as above.
 - `regime_against: on`: no entry while the `m3` regime (`regime.js`, the
   `trend-vs-range` skill's) trends against the side.
 - `leg_turned: on`: while the `m3` regime doesn't trend the side's way, the
@@ -225,8 +232,17 @@ and with all three off an entry is checked as before (the trend rule, D2):
   `3m compression break` the side's way (`pullback-vs-reversal`).
 
 A fact a key on needs and the briefing lacks refuses (it only ever refuses
-more). All three are `off`: the model-free census below did not support
-turning one on.
+more). `bias_frames: [4h, 1h]` with `bias_agree: on` is the owner's call
+(2026-10-29: "We should be using HTF bias, so our trades should be aligned
+with the 1h and 4h HTF trend"; "Don't counter trade against the prevailing
+trend"; "No trade if there is no agreement between the two"), for top-down
+alignment, not for the census: the model-free census below did not support
+it (the "only trends the side's way" row, the closest it measured: about
+20% of the trades, 0% pass on the first half, 10.3% on the second, against
+today's 18.7% and 10.8%). It also refuses every D2 reversal
+against the 4h or the 1h (a 1h CHoCH against them no longer stands).
+`regime_against` and `leg_turned` stay `off`. Exits, protective stops and
+stop moves are never checked by it.
 
 Measured on the practice-train setup census (the standard plans today's
 gate takes, 2021-04 to 2024-06, the decision bar's briefing rebuilt; split
@@ -255,7 +271,7 @@ one with its evidence.
 | `loss_streak_stop` | starting value, not learned; tuned by the 30-day Monte Carlo (phase 2) | not measured | not measured | not learned |
 | `policies.prop_portfolio.sizing` | `prop_portfolio`'s STRATEGY.md | not measured | not measured | not learned |
 | `policies.prop_portfolio.exit` | starting value, not learned; the 30-day Monte Carlo decides between the modes (phase 2) | not measured | not measured | not learned |
-| `policies.prop_portfolio.entry` | the owner's top-down flow (2026-10-27), every key off, not learned | the practice-train census above, two halves (model-free) | not measured | not learned |
+| `policies.prop_portfolio.entry` | the owner's top-down flow (2026-10-27); `bias_frames: [4h, 1h]` with `bias_agree: on` the owner's (2026-10-29), not learned | the practice-train census above, two halves (model-free) | not measured | not learned |
 | `policies.prop_portfolio.sizing.clock_k` | starting value, not learned; tuned by the 30-day Monte Carlo (phase 2) | not measured | not measured | not learned |
 | `policies.prop_portfolio.sizing.min_contracts` | the owner's floor (2026-10-23), not learned | not measured | not measured | not learned |
 | `policies.prop_portfolio.sizing.floor_stretch_max_usd` | the owner's stretch (2026-10-24), not learned | not measured | not measured | not learned |

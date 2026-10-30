@@ -53,6 +53,10 @@
  *                                   { ok, against: <frame> | null, why }; nothing against it: ok false (no reversal).
  *                                   The record is held to checkTrend's freshness (its close present, at most maxAgeMin
  *                                   old, not after now) and every frame read: else ok false (the trend rule refuses)
+ *   policyRuleRefusal({ home, root, side, cycleBar, now, rule, name })   a policy entry that is not a composed one (a rules
+ *                                   component's, or none) under an entry rule (entry-rule.js): the rule checked on the
+ *                                   briefing (the cycle bar's, else the current one) with no reads; its problem, or the
+ *                                   briefing unreadable, is the message (fails closed); null when it holds or no rule
  *   recordUsed(entries, { since, side }, root)   a successful non-exit entry on the root's family, that side (an entry
  *                                   whose side can't be read counts), placed at or after `since`
  */
@@ -66,6 +70,7 @@ const { briefingFor } = require('./fact-claims');
 const { readRecord: readMtf, DEFAULT_MAX_AGE_MIN } = require('./mtf-state');
 const { RULE_FRAMES, trendRule } = require('./mtf');
 const { checkReads, D2_TIERS, d2TierMet } = require('./composed-reads');
+const { entryProblems } = require('./entry-rule');
 const { STRATEGY, readRecords, planOf, stopRuleOf, dayOf, expiryOf } = require('./trade-lifecycle');
 
 const PLUGIN_ROOT = path.resolve(__dirname, '..', '..', '..');
@@ -106,6 +111,20 @@ const sideOfEntry = e => {
   const s = String((e.data && e.data.request && e.data.request.side) || '').toLowerCase();
   return s === 'buy' ? 'long' : s === 'sell' ? 'short' : null;
 };
+
+function policyRuleRefusal({ home, root, side, cycleBar = null, now = new Date(), rule = null, name = 'the policy' }) {
+  if (!rule) return null;
+  const say = why => `setup:${name}: ${why}. Exits, protective stops and stop moves still go.`;
+  try {
+    if (side !== 'long' && side !== 'short') return say('the order\'s side is not buy or sell, so the entry rule can\'t be read');
+    const got = briefingFor(home, root, { cycleBar, now });
+    if (!got.briefing) return say(`the entry rule can't be checked: ${got.why}`);
+    const problems = entryProblems({ briefing: got.briefing, side, reads: [], rule });
+    return problems.length ? say(problems.join('; ')) : null;
+  } catch (err) {
+    return say(`the entry rule's check failed (${err.message})`);
+  }
+}
 
 function recordUsed(entries, { since, side = null } = {}, root) {
   const at = Date.parse(since);
@@ -252,4 +271,4 @@ function composedRefusal({ name, strategy = null, home, root, input = {}, now = 
   }
 }
 
-module.exports = { D2_TIERS, reversalAllowed, isComposed, recordsAt, readsOf, skillFolders, composedName, limitRefusal, marketRefusal, composedRefusal, recordUsed };
+module.exports = { D2_TIERS, reversalAllowed, policyRuleRefusal, isComposed, recordsAt, readsOf, skillFolders, composedName, limitRefusal, marketRefusal, composedRefusal, recordUsed };

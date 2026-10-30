@@ -30,14 +30,14 @@ From the highest timeframe down, for each side (`m15.alignment`; read
 | `mixed` | timeframes disagree without a clear pullback | Priority step 4 sets the size. Target the nearest opposing level; a quiet session is a read against |
 | `counter` | the highest timeframe is against it | Priority step 4; a rules reversal at a higher-timeframe level is its step 2, and the plan says why |
 
-**The side rule** (composed, long and short alike): the prevailing HTF
-trend sets the side. `pullback` or `mixed` inside it: an entry at the
+**The side rule** (composed, long and short alike): the 4h and the 1h
+must agree, both up for a long, both down for a short; else no trade
+(in an attempt). `pullback` or `mixed` inside it: an entry at the
 pullback's end; while the `m3` regime still trends against the side it
 hasn't ended: the setup reaction at the level and an entry close the
 trend's way end it (`pullback-vs-reversal`); in the count it is neutral.
-Range or mixed on the allowed side: a read against. `counter` (the HTF against): pass
-unless the trend rule's CHoCH tier (`trade-lifecycle`) allows it; name the
-tier. Range or transition: the trend rule decides.
+`counter` (the HTF against): pass.
+Range or transition: the trend rule decides.
 
 ### 2. Levels flow down
 

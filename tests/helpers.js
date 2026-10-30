@@ -69,7 +69,7 @@ function withComponents(doc, components = ['fx_break', 'fx_cross']) {
 const FLOW_POLICY = Object.freeze({
   sizing: Object.freeze({ cushion_frac: 0.2, min_size_guard: 1.5, cap_usd: 'off', drawdown_halve_usd: 'off', stop_slippage_ticks: 1, clock_k: 'off', r_per_session: 0.3, min_contracts: 1, floor_stretch_max_usd: 'off', near_target_usd: 'off' }),
   exit: Object.freeze({ mode: 'trail', trail_activate_r: 2, trail_giveback_r: 0.5, lock_giveback_r: 'off', trail_by: 'off', trail_r: 'off', swing_tf: 'off', ratchet: 'off' }),
-  entry: Object.freeze({ bias_frames: 'off', regime_against: 'off', leg_turned: 'off' }),
+  entry: Object.freeze({ bias_frames: 'off', bias_agree: 'off', regime_against: 'off', leg_turned: 'off' }),
 });
 
 /**
@@ -95,6 +95,44 @@ function fxPolicyRoot(home, { paper = false } = {}) {
   if (!/^strategies: \[/m.test(policy)) throw new Error('prop_portfolio has no strategies list');
   fs.mkdirSync(path.join(root, 'strategies', 'prop_portfolio'), { recursive: true });
   fs.writeFileSync(path.join(root, 'strategies', 'prop_portfolio', 'STRATEGY.md'), withComponents(policy));
+  return root;
+}
+
+/**
+ * The shipped prop_portfolio and its account copied under names of their own in `dir` (a test's folders for
+ * FTH_STRATEGIES_DIRS and FTH_ACCOUNTS_DIRS): the policy `policy` on account `account`, its profile the shipped one and its
+ * rulebook the shipped one passed through `rulebook` (text -> text). For a test whose fixed market state the shipped
+ * rulebook's entry rule refuses (a 1h range under a 4h trend: bias_agree) but which tests something else on a policy.
+ * { strategies, accounts, env, policy, account }.
+ */
+function policyCopy(dir, { policy = 'pmc_e2e', account = 'pmc_100k', rulebook = t => t } = {}) {
+  const repo = path.resolve(__dirname, '..');
+  const shipped = shippedPolicy('prop_portfolio');
+  const strategies = path.join(dir, 'policy-strategies');
+  const accounts = path.join(dir, 'policy-accounts');
+  fs.mkdirSync(path.join(strategies, policy), { recursive: true });
+  fs.mkdirSync(path.join(accounts, account), { recursive: true });
+  fs.writeFileSync(path.join(strategies, policy, 'STRATEGY.md'), fs.readFileSync(path.join(repo, 'strategies', 'prop_portfolio', 'STRATEGY.md'), 'utf8')
+    .replace('name: prop_portfolio', `name: ${policy}`).replace(new RegExp(`^account: ${shipped.account}`, 'm'), `account: ${account}`));
+  const from = f => fs.readFileSync(path.join(repo, 'accounts', shipped.account, f), 'utf8').replace(`name: ${shipped.account}`, `name: ${account}`);
+  fs.writeFileSync(path.join(accounts, account, 'ACCOUNT.md'), from('ACCOUNT.md'));
+  fs.writeFileSync(path.join(accounts, account, 'RULEBOOK.md'), rulebook(from('RULEBOOK.md').replace(/^ {2}prop_portfolio:$/m, `  ${policy}:`)));
+  return { strategies, accounts, env: { FTH_STRATEGIES_DIRS: strategies, FTH_ACCOUNTS_DIRS: accounts }, policy, account };
+}
+
+/**
+ * A copy of the harness tree in `dir` (what a run reads: scripts, skills, agents, strategies, accounts, rules, hooks,
+ * config, workflows, the generated workspace and the test fixtures; never docs or version control), with `edit(root)` applied to it:
+ * for an end-to-end run (its CLIs started from the copy) that needs one shipped document changed, e.g. a rulebook value
+ * its fixed market state can't trade under. Returns the copy's root.
+ */
+function treeCopy(dir, edit = () => {}) {
+  const repo = path.resolve(__dirname, '..');
+  const root = path.join(dir, 'tree');
+  const skip = new Set(['.' + 'git', 'node_modules', 'docs', '.claude', '.github']);
+  fs.mkdirSync(root, { recursive: true });
+  for (const n of fs.readdirSync(repo)) if (!skip.has(n)) fs.cpSync(path.join(repo, n), path.join(root, n), { recursive: true, verbatimSymlinks: true });
+  edit(root);
   return root;
 }
 
@@ -273,4 +311,4 @@ function lifecycleStopRule() {
   return require('../scripts/lib/trading/trade-lifecycle').stopRuleOf(doc.risk);
 }
 
-module.exports = { lifecycleStopRule, TEST_SIZING, testSizing, TEST_FEE, withExitBlock, exitBlock, shippedPolicy, withComponents, FLOW_POLICY, FX_PARITY, FX_GOLDEN, listPolicies, rootWithPolicies, NOW, CONTRACT, FAKE_BROKERS, FAKE_BROKER, TEST_ACCOUNTS, FX_STRATEGIES, fxPolicyRoot, brokerId, shippedBroker, homeBrokers, minutesAgo, tmpDir, trendHome, recordBrokerSpecs, writeJournal, plan, placed, review, entryOrder };
+module.exports = { treeCopy, policyCopy, lifecycleStopRule, TEST_SIZING, testSizing, TEST_FEE, withExitBlock, exitBlock, shippedPolicy, withComponents, FLOW_POLICY, FX_PARITY, FX_GOLDEN, listPolicies, rootWithPolicies, NOW, CONTRACT, FAKE_BROKERS, FAKE_BROKER, TEST_ACCOUNTS, FX_STRATEGIES, fxPolicyRoot, brokerId, shippedBroker, homeBrokers, minutesAgo, tmpDir, trendHome, recordBrokerSpecs, writeJournal, plan, placed, review, entryOrder };

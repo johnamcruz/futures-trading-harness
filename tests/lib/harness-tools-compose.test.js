@@ -148,8 +148,10 @@ test('compose_check in a prop attempt: no size fits (the floor all in over the c
     fs.symlinkSync(path.join(ROOT, 'skills'), path.join(r, 'skills'));
     return { r, acct };
   };
+  // The 4h up beside scenario 1's 1h up: the shipped entry rule (the 4h and the 1h must agree) holds; this test is of the size.
+  const agreeing = () => { const b = scenario1(); b.sections.h1.data.h4 = { trend: 'up' }; return b; };
   const run = (cap, attempt) => {
-    const { home, ctx } = setup();
+    const { home, ctx } = setup({ briefing: agreeing() });
     const { r, acct } = pluginRoot(cap);
     const account = accountNamed(r, acct, {});
     if (attempt) prop.startAttempt(home, account, new Date('2026-04-23T13:00:00Z'));
@@ -187,9 +189,11 @@ test('compose_check in a prop attempt: no size fits (the floor all in over the c
 test('compose_check in a prop attempt holds the policy\'s entry rule (its rulebook\'s entry): NOT OK on this bar\'s regime; off, or no attempt, unchanged', () => {
   const prop = require('../../scripts/lib/trading/prop-state');
   const { accountNamed } = require('../../scripts/lib/trading/accounts');
-  const run = ({ regime, on, attempt = true }) => {
+  const run = ({ regime, on, attempt = true, h4 = 'up' }) => {
     const b = scenario1();
     b.sections.m3.data.regime = { primary: regime, volatility: 'normal' };
+    // The 4h up beside the 1h up (the shipped bias_agree holds), unless `h4` says otherwise.
+    b.sections.h1.data.h4 = { trend: h4 };
     const { home, ctx } = setup({ briefing: b });
     const r = tmpDir();
     for (const s of ['trade_lifecycle', 'prop_portfolio', 'momentum_continuation']) fs.cpSync(path.join(ROOT, 'strategies', s), path.join(r, 'strategies', s), { recursive: true });
@@ -215,6 +219,11 @@ test('compose_check in a prop attempt holds the policy\'s entry rule (its rulebo
   assert.strictEqual(run({ regime: 'trend-up', on: true }).rec.ok, true, 'with it: OK');
   assert.strictEqual(run({ regime: 'trend-down', on: false }).rec.ok, true, 'shipped off: unchanged');
   assert.strictEqual(run({ regime: 'trend-down', on: true, attempt: false }).rec.ok, true, 'no attempt: no policy, no rule');
+  // The shipped bias_agree: scenario 1's own 4h range beside its 1h up is no agreement: NOT OK, naming the rule; no attempt: unchanged.
+  const ranging = run({ regime: 'trend-up', on: false, h4: 'range' });
+  assert.strictEqual(ranging.rec.ok, false);
+  assert.match(ranging.text, /- PROBLEM: entry rule: the 4h and 1h must each trend up for a long \(4h range, 1h up\): no agreement, no trade/);
+  assert.strictEqual(run({ regime: 'trend-up', on: false, h4: 'range', attempt: false }).rec.ok, true, 'no attempt: no policy, no rule');
 });
 
 test('compose_check: the briefing\'s bar (FTH_CYCLE_BRIEFING_BARS) comes before the cycle\'s lane bar (FTH_CYCLE_BARS)', () => {

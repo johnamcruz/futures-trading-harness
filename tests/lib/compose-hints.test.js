@@ -223,7 +223,7 @@ test('compose hints: no setup read yet: the entry hint says a confirmation count
 // The policy's entry rule (entry-rule.js): a problem no read can satisfy (bias frames, regime against) means no repair and
 // no reversal hint; a leg-turned problem a leg read satisfies keeps the repair.
 const { entryRuleOf } = require('../../scripts/lib/trading/entry-rule');
-const OFF3 = { bias_frames: 'off', regime_against: 'off', leg_turned: 'off' };
+const OFF3 = { bias_frames: 'off', bias_agree: 'off', regime_against: 'off', leg_turned: 'off' };
 const hintsWith = (reads, rule, b, side = 'long') => {
   const checked = checkReads({ reads, side, briefing: b, entryRule: rule });
   const planned = checked.stop && checked.target ? planOf({ checked, briefing: b, side, tick: 0.25, ...PLAN }) : null;

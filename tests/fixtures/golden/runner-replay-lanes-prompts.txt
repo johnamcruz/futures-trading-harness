@@ -790,6 +790,8 @@ trend entries until a range break.
 
 ## How It Works
 
+In a prop attempt the entry rule already needs the 4h and 1h both its way.
+
 ### In rules (mechanical strategies)
 
 `mtf_bias(m)` is the multi-timeframe trend per bar in strategy rules (the
@@ -1814,6 +1816,8 @@ trend entries until a range break.
   higher timeframe.
 
 ## How It Works
+
+In a prop attempt the entry rule already needs the 4h and 1h both its way.
 
 ### In rules (mechanical strategies)
 
@@ -2845,6 +2849,8 @@ trend entries until a range break.
 
 ## How It Works
 
+In a prop attempt the entry rule already needs the 4h and 1h both its way.
+
 ### In rules (mechanical strategies)
 
 `mtf_bias(m)` is the multi-timeframe trend per bar in strategy rules (the
@@ -3869,6 +3875,8 @@ trend entries until a range break.
   higher timeframe.
 
 ## How It Works
+
+In a prop attempt the entry rule already needs the 4h and 1h both its way.
 
 ### In rules (mechanical strategies)
 
@@ -4904,6 +4912,8 @@ trend entries until a range break.
 
 ## How It Works
 
+In a prop attempt the entry rule already needs the 4h and 1h both its way.
+
 ### In rules (mechanical strategies)
 
 `mtf_bias(m)` is the multi-timeframe trend per bar in strategy rules (the
@@ -5928,6 +5938,8 @@ trend entries until a range break.
   higher timeframe.
 
 ## How It Works
+
+In a prop attempt the entry rule already needs the 4h and 1h both its way.
 
 ### In rules (mechanical strategies)
 
@@ -6954,6 +6966,8 @@ trend entries until a range break.
 
 ## How It Works
 
+In a prop attempt the entry rule already needs the 4h and 1h both its way.
+
 ### In rules (mechanical strategies)
 
 `mtf_bias(m)` is the multi-timeframe trend per bar in strategy rules (the
@@ -7978,6 +7992,8 @@ trend entries until a range break.
   higher timeframe.
 
 ## How It Works
+
+In a prop attempt the entry rule already needs the 4h and 1h both its way.
 
 ### In rules (mechanical strategies)
 
@@ -9100,6 +9116,8 @@ trend entries until a range break.
 
 ## How It Works
 
+In a prop attempt the entry rule already needs the 4h and 1h both its way.
+
 ### In rules (mechanical strategies)
 
 `mtf_bias(m)` is the multi-timeframe trend per bar in strategy rules (the
@@ -10211,6 +10229,8 @@ trend entries until a range break.
   higher timeframe.
 
 ## How It Works
+
+In a prop attempt the entry rule already needs the 4h and 1h both its way.
 
 ### In rules (mechanical strategies)
 
@@ -11330,6 +11350,8 @@ trend entries until a range break.
 
 ## How It Works
 
+In a prop attempt the entry rule already needs the 4h and 1h both its way.
+
 ### In rules (mechanical strategies)
 
 `mtf_bias(m)` is the multi-timeframe trend per bar in strategy rules (the
@@ -12441,6 +12463,8 @@ trend entries until a range break.
   higher timeframe.
 
 ## How It Works
+
+In a prop attempt the entry rule already needs the 4h and 1h both its way.
 
 ### In rules (mechanical strategies)
 
@@ -13563,6 +13587,8 @@ trend entries until a range break.
 
 ## How It Works
 
+In a prop attempt the entry rule already needs the 4h and 1h both its way.
+
 ### In rules (mechanical strategies)
 
 `mtf_bias(m)` is the multi-timeframe trend per bar in strategy rules (the
@@ -14674,6 +14700,8 @@ trend entries until a range break.
   higher timeframe.
 
 ## How It Works
+
+In a prop attempt the entry rule already needs the 4h and 1h both its way.
 
 ### In rules (mechanical strategies)
 
@@ -15796,6 +15824,8 @@ trend entries until a range break.
 
 ## How It Works
 
+In a prop attempt the entry rule already needs the 4h and 1h both its way.
+
 ### In rules (mechanical strategies)
 
 `mtf_bias(m)` is the multi-timeframe trend per bar in strategy rules (the
@@ -16907,6 +16937,8 @@ trend entries until a range break.
   higher timeframe.
 
 ## How It Works
+
+In a prop attempt the entry rule already needs the 4h and 1h both its way.
 
 ### In rules (mechanical strategies)
 
@@ -18020,6 +18052,8 @@ trend entries until a range break.
 
 ## How It Works
 
+In a prop attempt the entry rule already needs the 4h and 1h both its way.
+
 ### In rules (mechanical strategies)
 
 `mtf_bias(m)` is the multi-timeframe trend per bar in strategy rules (the
@@ -19131,6 +19165,8 @@ trend entries until a range break.
   higher timeframe.
 
 ## How It Works
+
+In a prop attempt the entry rule already needs the 4h and 1h both its way.
 
 ### In rules (mechanical strategies)
 
@@ -20253,6 +20289,8 @@ trend entries until a range break.
 
 ## How It Works
 
+In a prop attempt the entry rule already needs the 4h and 1h both its way.
+
 ### In rules (mechanical strategies)
 
 `mtf_bias(m)` is the multi-timeframe trend per bar in strategy rules (the
@@ -21365,6 +21403,8 @@ trend entries until a range break.
 
 ## How It Works
 
+In a prop attempt the entry rule already needs the 4h and 1h both its way.
+
 ### In rules (mechanical strategies)
 
 `mtf_bias(m)` is the multi-timeframe trend per bar in strategy rules (the
@@ -22313,6 +22353,8 @@ trend entries until a range break.
   higher timeframe.
 
 ## How It Works
+
+In a prop attempt the entry rule already needs the 4h and 1h both its way.
 
 ### In rules (mechanical strategies)
 

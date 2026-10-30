@@ -936,6 +936,41 @@ test('order gate hook: in a prop attempt the record\'s size is a suggestion: the
   assert.strictEqual(exit.code, 0, exit.stderr);
 });
 
+test('order gate hook and MCP gateway wiring: the shipped entry rule (the 4h and the 1h must agree) refuses a long under a 1h range or a 4h against; both up goes; an exit always goes', { timeout: 60000 }, async () => {
+  const LC = require('../fixtures/lifecycle');
+  const { writeBriefing } = require('../../scripts/lib/trading/briefing');
+  const NO = /\[composed-reads\] setup:trade_lifecycle: .*entry rule: the 4h and 1h must each trend up for a long \(4h (\w+), 1h (\w+)\): no agreement, no trade/;
+  const exit = { ...EXIT_BASE, contractId: 'MNQ', side: 'sell', size: 1, rationale: '[exit] close the prop_portfolio long' };
+  for (const [t4h, t1h] of [['up', 'range'], ['down', 'up'], ['range', 'up'], ['up', 'up']]) {
+    const home = tmpDir();
+    const w = composedPropWorld(home, 5);
+    // A fresh trend read at the scenario's close (the bar the verdict is on), so only the entry rule decides.
+    trendHome(home, { closedAt: LC.BAR });
+    const b = LC.briefing();
+    b.sections.h1.data.h4 = { trend: t4h };
+    b.sections.h1.data.h1 = { trend: t1h };
+    writeBriefing(home, b);
+    const { env } = setup([{ ts: '2026-10-07T13:59:30.000Z', kind: 'plan', contractId: 'MNQ', text: 'plan' }], { FTH_HOME: home, ...w.env });
+    const hook = gate(orderPayload(w.order(5)), env);
+    const g = await gatewayRun(env, [call(1, 'place_order', w.order(5))]);
+    const text = g.byId[1].result.content[0].text;
+    // The exit, with the long open at the broker (the gateway reads the position).
+    const out = await gatewayRun({ ...env, FAKE_POSITIONS: JSON.stringify([{ contractId: 'MNQ', type: 1, size: 1 }]) }, [call(2, 'place_order', exit)]);
+    if (t4h === 'up' && t1h === 'up') {
+      assert.doesNotMatch(hook.stderr, /entry rule/, hook.stderr);
+      assert.doesNotMatch(text, /entry rule/, text);
+      assert.strictEqual(hook.code, 0, hook.stderr);
+    } else {
+      assert.strictEqual(hook.code, 2, `${t4h}/${t1h} (hook)`);
+      assert.match(hook.stderr, NO, `${t4h}/${t1h} (hook)`);
+      assert.ok(g.byId[1].result.isError, `${t4h}/${t1h} (gateway): ${text}`);
+      assert.match(text, NO, `${t4h}/${t1h} (gateway)`);
+    }
+    assert.strictEqual(gate(orderPayload(exit), env).code, 0, `exit ${t4h}/${t1h} (hook)`);
+    assert.ok(!out.byId[2].result.isError, `exit ${t4h}/${t1h} (gateway): ${out.byId[2].result.content[0].text}`);
+  }
+});
+
 test('MCP gateway wiring: in a prop attempt the translated size passes composed-reads, the model\'s raw 1 is refused before the broker sees it; an exit is forwarded', { timeout: 60000 }, async () => {
   const home = tmpDir();
   const w = composedPropWorld(home, 1);
