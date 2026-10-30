@@ -7,10 +7,11 @@ loss_streak_stop: 2             # losing trades in a row: no new entries for the
 policies:                       # each policy strategy that trades this account (its STRATEGY.md names it; never restates these)
   prop_portfolio:
     entry:                      # the entry rule on a composed entry (entry-rule.js), held by compose_check and the gate; off: no check
-      bias_frames: [4h, 1h]     # off, or [4h, 1h], [4h] or [1h] only (never the 15m): the first that trends sets the side, none against it, none trending: no entry
-      bias_agree: on            # on: every bias frame must trend the side's way (4h and 1h both up for a long, both down for a short); off: the first that trends sets the side
-      regime_against: off       # on: no entry while the m3 regime trends against the side
-      leg_turned: off           # on: an m3 regime not trending the side's way needs a true 3m BOS, CHoCH or compression break its way
+      chain: 4h                 # the fractal chain's top (chain.js, the 2-level rule): 4h -> bias 4h + 1h, levels 1h, setup 15m, entry 3m (1h -> 1h + 15m, 15m, 5m, 1m)
+      bias_frames: [4h, 1h]     # off, or [4h, 1h], [4h] or [1h] only (never the 15m): the first that trends sets the side, none against it; none trending: as bias_agree says
+      bias_agree: neutral-15m-declared  # on: every bias frame trends the side's way; off: the first that trends sets the side; neutral-15m-declared: every one that trends is the side's way, none against, and with all ranging the 15m trend and the declared trend the side's way
+      regime_against: off       # off (a fallback, not taught); on: no entry while the m3 regime trends against the side
+      leg_turned: off           # off (a fallback, not taught); on: an m3 regime not trending the side's way needs a true 3m BOS, CHoCH or compression break its way
     sizing:                     # risk from the headroom above the floor
       cushion_frac: 0.3         # a trade risks at most this share of the cushion ...
       cap_usd: 1000             # ... and at most this many dollars
@@ -32,8 +33,8 @@ policies:                       # each policy strategy that trades this account 
       swing_tf: 15m             # target_then_trail with trail_by structure: the swings the stop trails behind
       ratchet: off              # target_then_trail: on lifts the lock to the best R reached less lock_giveback_r; off (opt in only): the lock above
     multipliers: []             # enforced size multipliers folded into the verdict: none yet
-enforced: [daily_loss_soft, loss_streak_stop, sizing, exit, multipliers, target_stop, consistency_stop, one_position, hard_stops, trend_rule, entry_rule]
-taught: [trend_fade, room, mtf_read, skip_rules, confluence, secondary_context, halving]
+enforced: [daily_loss_soft, loss_streak_stop, sizing, exit, multipliers, target_stop, consistency_stop, one_position, hard_stops, trend_rule, trend_fade, entry_rule]
+taught: [room, mtf_read, skip_rules, confluence, secondary_context, halving]
 ---
 
 # Rulebook: `topstep_100k`
@@ -87,8 +88,8 @@ reach.
 rule in the runner, the backtester and the attempt simulator (which re-exits
 each trade from its recorded path, prop/attempts.js exitAs):
 
-- `target`: out at the trade's own target, a real level at 2:1 to 3:1 (the
-  compose record's bracket), a trail on top only when `trail_activate_r` and
+- `target`: out at the trade's own target (the compose record's bracket:
+  the 2R mark with `target trail`), a trail on top only when `trail_activate_r` and
   `trail_giveback_r` are R.
 - `target_then_trail` (today's): the original stop holds until the trade's
   own target is reached; from there the trade is not closed but trailed, so a
@@ -103,8 +104,8 @@ each trade from its recorded path, prop/attempts.js exitAs):
   stop locks at +0.5R, room for an ordinary pullback in a trend; at 0.5 it
   locked at +1.5R and closed winners on a 1R pullback before the leg ran on.
 
-  `ratchet` (target_then_trail only) is off by default (the owner,
-  2026-10-24: opt in only). With `ratchet: on`, the lock rises with the
+  `ratchet` (target_then_trail only) is off until it is measured (the
+  owner-approved design, 2026-10-24). With `ratchet: on`, the lock rises with the
   trade: it is the best R reached (closed bars' extremes, as the R trail
   reads them; at least the target's R) less `lock_giveback_r`, never below
   the entry, so past its target the stop stands at most `lock_giveback_r`
@@ -214,42 +215,65 @@ briefing, so `compose_check` says NOT OK and the gate's `[composed-reads]`
 re-check refuses the same entry; any other entry under the policy (one
 not on a compose record) is checked on the briefing by the gate's
 `[entry-rule]`, so no entry route skips it. Every key is stated; `off` is no check,
-and with every key off an entry is checked as before (the trend rule, D2):
+and with every key off an entry is held by the trend rule alone (never counter):
 
 - `bias_frames` (a list of 4h and/or 1h, highest first, e.g. `[4h, 1h]`; never the 15m): the first listed
   frame that trends is the bias and the side must be its way; no listed
   frame may trend against the side (the 15m never stands in against the
   1h); none trending is no bias, so no entry. The frames are this file's,
   never the model's pick.
-- `bias_agree: on` (with `bias_frames` listed): every listed frame must
-  trend the side's way, so a long needs the 4h and the 1h both up and a
-  short both down; a range, a trend against, or a trend the briefing
-  doesn't hold on either is no trade. `off`: `bias_frames` as above.
-  With it on, a composed plan's setup is the 15m or higher (the owner's
+- `bias_agree` (with `bias_frames` listed), strictest first: `on`: every
+  listed frame must trend the side's way, so a long needs the 4h and the
+  1h both up and a short both down; a range, a trend against, or a trend
+  the briefing doesn't hold on either is no trade. `off`: `bias_frames` as
+  above. `neutral-15m-declared` (BG): when the 4h or the 1h trends, the
+  side is the way of every one that trends and neither trends against it;
+  when both range, the side is the 15m trend's way, and only when the
+  "Trend declared?" facts read declared for that side (the `m3` regime
+  with the side, and the close past the RTH VWAP, the EMA20 and the RTH
+  open its way, each above 0 ATR; the overnight range is not part of it).
+  A trend, a 15m trend or declared facts the briefing doesn't hold: no
+  trade.
+  With `on` or `neutral-15m-declared`, a composed plan's setup is the 15m or higher (the owner's
   "Yes enforce 15min setup", 2026-10-29: the 4h and 1h set the side, the
   15m holds the setup the side's way, the 3m only times the entry): a TRUE
   setup read pointing the side on the 15m, 1h or 4h, else NOT OK. Stated
   exemption: a cited setup's `fired` read (`momentum_continuation`: its
-  setup is the prevailing HTF trend plus its momentum candle). The 15m
+  setup is the entry rule's side plus its momentum candle). The 15m
   trend itself may still run against the side (a 15m pullback).
-- `regime_against: on`: no entry while the `m3` regime (`regime.js`, the
+- `regime_against` (off: a fallback, not taught) `on`: no entry while the `m3` regime (`regime.js`, the
   `trend-vs-range` skill's) trends against the side.
-- `leg_turned: on`: while the `m3` regime doesn't trend the side's way, the
+- `leg_turned` (off: a fallback, not taught) `on`: while the `m3` regime doesn't trend the side's way, the
   reads must state the leg turned back: a true `3m choch`, `3m bos` or
   `3m compression break` the side's way (`pullback-vs-reversal`).
 
 A fact a key on needs and the briefing lacks refuses (it only ever refuses
-more). `bias_frames: [4h, 1h]` with `bias_agree: on` is the owner's call
-(2026-10-29: "We should be using HTF bias, so our trades should be aligned
-with the 1h and 4h HTF trend"; "Don't counter trade against the prevailing
-trend"; "No trade if there is no agreement between the two"), for top-down
-alignment, not for the census: the model-free census below did not support
-it (the "only trends the side's way" row, the closest it measured: about
-20% of the trades, 0% pass on the first half, 10.3% on the second, against
-today's 18.7% and 10.8%). It also refuses every D2 reversal
-against the 4h or the 1h (a 1h CHoCH against them no longer stands).
-`regime_against` and `leg_turned` stay `off`. Exits, protective stops and
-stop moves are never checked by it.
+more). `bias_frames: [4h, 1h]` is the owner's call (2026-10-29: "We should
+be using HTF bias, so our trades should be aligned with the 1h and 4h HTF
+trend"; "Don't counter trade against the prevailing trend"), and
+`bias_agree: neutral-15m-declared` the owner's pick (2026-10-29: "Fix it
+accordingly while thinking like a quant") from the pre-registered
+alignment study (six bias rules by two timings, on the same census; split
+at 2022-11-23, chosen on the first half, confirmed on the second; 30-session
+real-start attempts, 0 blows required). The strict `on` was the worst bias
+cell: on the census plans (B0) it took 0.33 trades a weekday, a 47.4%
+false-start share, +0.014R a trade and a 2.4% pass on the first half, then
+43.8%, -0.177R and 0% on the second, catching 1.6% and 1.9% of the big
+legs' R. `neutral-15m-declared` on the same plans: 0.94 trades a
+weekday, 42.6%, +0.180R and a 7.9% pass, then 1.01, 40.2% (-3.6 pp,
+interval -9.3 to +2.5), -0.032R (+0.145 over strict, interval -0.110 to
++0.415) and 0.3%, catching 7.0% and 8.2%; on the momentum candidates
+(S2), 10.1% then 7.3% pass against strict's 1.3% and 0%, false starts
++1.1 pp then -3.3 pp (interval -7.5 to +0.5). 0 blows in every cell. By
+its own pre-registered test the second half confirms it on S2, not on B0
+(B0's false-start interval reaches +2.5 pp, past the +2 pp bound): the
+rule trades two to three times as often for no measured rise in false starts,
+which is what the pass rate needs, not a proven per-trade edge. Any trend
+against the side refuses (never counter: the trend rule holds every
+path). `on` stays available. The trail target (`target trail`) is TRUE
+on every side the rule allows (composed-reads.js TRAIL_RULE). `regime_against` and
+`leg_turned` stay `off`. Exits, protective stops and stop moves are never
+checked by it.
 
 Measured on the practice-train setup census (the standard plans today's
 gate takes, 2021-04 to 2024-06, the decision bar's briefing rebuilt; split
@@ -278,7 +302,7 @@ one with its evidence.
 | `loss_streak_stop` | starting value, not learned; tuned by the 30-day Monte Carlo (phase 2) | not measured | not measured | not learned |
 | `policies.prop_portfolio.sizing` | `prop_portfolio`'s STRATEGY.md | not measured | not measured | not learned |
 | `policies.prop_portfolio.exit` | starting value, not learned; the 30-day Monte Carlo decides between the modes (phase 2) | not measured | not measured | not learned |
-| `policies.prop_portfolio.entry` | the owner's top-down flow (2026-10-27); `bias_frames: [4h, 1h]` with `bias_agree: on` the owner's (2026-10-29), not learned | the practice-train census above, two halves (model-free) | not measured | not learned |
+| `policies.prop_portfolio.entry` | the owner's top-down flow (2026-10-27); `bias_frames: [4h, 1h]` the owner's, `bias_agree: neutral-15m-declared` the owner's pick from the alignment study (2026-10-29), not learned | the practice-train census and the alignment study above, two halves (model-free) | not measured | not learned |
 | `policies.prop_portfolio.sizing.clock_k` | starting value, not learned; tuned by the 30-day Monte Carlo (phase 2) | not measured | not measured | not learned |
 | `policies.prop_portfolio.sizing.min_contracts` | the owner's floor (2026-10-23), not learned | not measured | not measured | not learned |
 | `policies.prop_portfolio.sizing.floor_stretch_max_usd` | the owner's stretch (2026-10-24), not learned | not measured | not measured | not learned |

@@ -113,9 +113,8 @@ function setupSteps(s, facts) {
   const s1 = s.blocked ? s.blocked : s.verdict && s.verdict.action === 'skip' ? `the verdict is skip${s.verdict.reason ? ` (${s.verdict.reason})` : ''}`
     : s.policy && facts.attempt && facts.attempt.entryBlock ? `the attempt blocks entries (${facts.attempt.entryBlock})` : null;
   add(1, s1 ? 'no-trade' : 'pass', s1 || 'no hard stop');
-  const fading = s.prevailing && s.prevailing.trend === (s.direction === 'long' ? 'down' : 'up');
-  if (s.style === 'reversal') add(2, fading ? 'judgment' : 'pass', fading ? `a reversal fading the ${s.prevailing.label} ${s.prevailing.trend} trend: only at a higher-timeframe level, half size` : 'a reversal, not fading');
-  else if (s.trendAllows === false) add(2, 'no-trade', `a trend strategy ${s.direction} against the trend rule`);
+  // Never counter: every style is held to the trend rule.
+  if (s.trendAllows === false) add(2, 'no-trade', `a ${s.direction} against the trend rule`);
   else if (s.trendAllows === true) add(2, 'pass', `the trend rule allows a ${s.direction}`);
   else add(2, 'unknown', 'the trend rule for its side is not recorded');
   // The room is a read, never a no trade of its own (a census found it selects nothing): a level ahead before the R it
@@ -127,7 +126,7 @@ function setupSteps(s, facts) {
   if (al === 'aligned') add(4, 'pass', 'aligned');
   else if (al === 'mixed') add(4, 'half', 'mixed: half');
   else if (al === 'pullback') add(4, 'judgment', 'pullback: no trade until the trigger timeframe turns back');
-  else if (al === 'counter') add(4, s.style === 'reversal' ? 'pass' : 'no-trade', s.style === 'reversal' ? 'counter, a reversal (step 2 decides)' : 'counter on a non-reversal setup');
+  else if (al === 'counter') add(4, 'no-trade', 'counter');
   else add(4, 'unknown', 'the multi-timeframe read for its side is unknown');
   add(5, 'judgment', 'the strategy\'s own context filter and skip rules');
   const against = (s.confluence && s.confluence.against.length ? s.confluence.against : []).concat(facts.setups.filter(x => x !== s && x.candidate && !x.composed && x.direction !== s.direction).map(x => x.name));
@@ -141,7 +140,7 @@ const NONE = { setup: null, steps: [], judgment: [], couldSkip: [] };
 
 /**
  * One setup's expectation: no-trade | take | unchecked, the ceiling, the deciding step, and `couldSkip`: the
- * judgment steps that can still say no trade (a reversal fading the trend: only at a level; a pullback: not until
+ * judgment steps that can still say no trade (a pullback: not until
  * it turns; a halving of a size the record doesn't give: at 1, half is 0).
  */
 function setupExpectation(s, facts) {
@@ -292,12 +291,6 @@ function checkClaim(kind, clause, facts, text = clause) {
     const sides = sidesIn(clause);
     const rule = named && named.trendAllows !== null && named.trendAllows !== undefined ? { [named.direction]: named.trendAllows } : facts.trendRule;
     const asked = sides.length ? sides : named ? [named.direction] : ['long', 'short'];
-    if (named && named.style === 'reversal') {
-      // A reversal fading the prevailing trend: step 2 allows it only at a higher-timeframe level, at half size (judgment).
-      const p = named.prevailing;
-      if (p && p.trend === (named.direction === 'long' ? 'down' : 'up')) return tag(ok('unchecked', `${named.component || named.name} is a reversal fading the ${p.label} ${p.trend} trend: step 2 decides it (only at a higher-timeframe level, half size)`));
-      return tag(ok(false, `${named.component || named.name} is a reversal strategy, not fading the trend: the trend rule allows it`));
-    }
     if (asked.some(x => rule[x] === null || rule[x] === undefined)) return tag({ ...ok('unchecked', 'the trend rule for that side is not recorded'), sides: asked });
     const allowed = asked.filter(x => rule[x] === true);
     const res = allowed.length ? ok(false, `the trend rule (${facts.trendRule.prevailing || 'no prevailing trend'}) allows ${allowed.join(' and ')}`) : ok(true, `${facts.trendRule.prevailing}: ${asked.join(' and ')} blocked`);
@@ -422,14 +415,17 @@ const sectionData = (b, name) => (isObj(b) && isObj(b.sections) && isObj(b.secti
 /** The trend rule per side from the briefing's `Trend rule:` line (mtf.js ruleLine); unknown sides null. */
 function trendRuleOf(line) {
   const text = String(line || '');
-  // Today's line names the allowed side first ("Trend rule: SHORT allowed (prevailing 4h down); long only as a
-  // reversal"); a record from before says which side trend strategies may not take. The same rule either way.
-  const now = /Trend rule: (LONG|SHORT) allowed \(prevailing (\S+ (?:up|down))\)/.exec(text);
+  // The line names the allowed side first ("Trend rule: SHORT allowed (prevailing 4h down); no long against it"; an
+  // older record's "long only as a reversal" reads the same); a record from before says which side trend strategies may
+  // not take.
+  const now = /Trend rule: (LONG|SHORT) allowed \(prevailing (\S+ (?:up|down))[;)]/.exec(text);
   if (now) return { prevailing: now[2], long: now[1] === 'LONG', short: now[1] === 'SHORT' };
   const m = /prevailing trend (\S+ (?:up|down)); trend strategies may not go (long|short)/.exec(text);
   if (m) return { prevailing: m[1], long: m[2] !== 'long', short: m[2] !== 'short' };
+  // Never counter: a trending 4h or 1h against each side is no side at all.
+  if (/Trend rule: no side \(/.test(text)) return { prevailing: null, long: false, short: false };
   if (/no trend on /.test(text)) return { prevailing: null, long: true, short: true };
-  if (/trend strategies can't enter yet/.test(text)) return { prevailing: null, long: false, short: false };
+  if (/trend strategies can't enter yet|; no entry yet\./.test(text)) return { prevailing: null, long: false, short: false };
   return { prevailing: null, long: null, short: null };
 }
 
@@ -465,7 +461,7 @@ function factsFromBriefing(b, { attempts = null, verdicts = [], composed = [], r
   const scanned = Array.isArray(m3.candidates);
   const setups = scanned ? m3.candidates.filter(c => isObj(c) && c.name && c.direction).map(c => setupOf(c, ctx)) : [];
   // Fill a side the line leaves unknown from what the candidates say for it.
-  for (const s of setups) if (rule[s.direction] === null && s.style === 'trend') rule[s.direction] = s.trendAllows;
+  for (const s of setups) if (rule[s.direction] === null && s.trendAllows !== null) rule[s.direction] = s.trendAllows;
   // The compose records on the bar (recordSummary shape): the latest OK one per side is a composed setup.
   const composedSetups = composedSetupsFrom(composed, { window, news: isObj(m3.news) ? m3.news : null, root });
   for (const v of (verdicts || []).filter(x => isObj(x) && x.strategy && x.direction)) {

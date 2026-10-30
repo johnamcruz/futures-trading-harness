@@ -13,15 +13,15 @@ description: Use when choosing where to take profit - swing highs and lows per t
 ## How It Works
 
 A read of where price may stop, never a veto: the priority order
-(strategy-library) decides take, skip and size. Which target goes with
-which setup is a strategy's, not this skill's.
+(strategy-library) decides take, skip and size. The trail exits (read
+forms below): these levels are context, never the exit.
 
 **Target levels**, on the winning side of the entry, completed candles
 only:
 
 - **Pivot highs and lows**: the next untaken confirmed swing per
-  timeframe, `m3.swingTargets.above` and `m3.swingTargets.below` (the
-  base bars, 15m, 1h and 4h; `frame`, `price`, `points`, `ticks`, `R`).
+  timeframe, `m3.swingTargets.above` and `m3.swingTargets.below` (15m,
+  1h and 4h; `frame`, `price`, `points`, `ticks`, `R`).
   Stops rest beyond a swing (`levels-and-reactions`).
 - **The prior 1h and 4h candle's high, low and midpoint**:
   `m3.rangeTargets`, per frame its `high`, `mid` and `low`: where that candle's buyers and sellers
@@ -35,17 +35,17 @@ only:
 - **The candle forming**: its midpoint moves until it closes, so it is a
   target only once completed.
 
-**Read forms** (the target step): `target <tf> swing high|low <price>`,
-`target prior 1h|4h high|mid|low <price>` (a taken side reads false),
-`target <5m|15m|1h> fvg high|low <price>`. None named: `target 2r`.
-HTF-aligned (4h and 1h your way): `target trail` (the 2R mark arms
-it); a level ahead is context, never a requirement. A key level within 1R in front caps the first
+**Read forms** (the target step): `target trail` (the 2R mark that arms the trail, not the exit),
+every entry the side rule gives; a level ahead is context, never a
+requirement. Not in a prop attempt, on a side the side rule doesn't give:
+`target <tf> swing high|low <price>`, `target prior 1h|4h high|mid|low
+<price>` (a taken side reads false), `target <15m|1h> fvg high|low
+<price>`; none named: `target 2r`. A key level within 1R in front caps the first
 push: evidence; prefer the turn after it.
 
 **Timeframe weight** (hypothesis, not measured): a higher timeframe's
-level holds more orders and reacts more often; the nearest is the
-conservative target, a higher one beyond it the extended one; levels a few
-ticks apart are one zone.
+level holds more orders and reacts more often; levels a few ticks apart
+are one zone.
 
 **Room in R.** The briefing's `R` is against the reference stop
 (`m3.oneR`). Against the trade's own stop (`order_plan`'s distance, the

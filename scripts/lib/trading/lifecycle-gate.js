@@ -46,13 +46,6 @@
  *                                   { message: why it is refused | null, check, record, plan, room, expiresAt, briefing, restored? }
  *                                   (`briefing`: the cycle bar's, the one the reads were checked on)
  *                                   (`expired: true` when the record's time ran out: the cycle-timing count)
- *   reversalAllowed({ home, root, side, check, now, maxAgeMin })   D2 (the owner's "CHoCH at or above the trend"): whether a composed
- *                                   entry against the prevailing trend (mtf-state's record) stands on the re-checked
- *                                   reads: against 15m, a true agreeing 15m or 1h CHoCH; against 1h, a 1h CHoCH;
- *                                   against 4h, a 1h CHoCH and a 4h candle that rejected a level the trade's way.
- *                                   { ok, against: <frame> | null, why }; nothing against it: ok false (no reversal).
- *                                   The record is held to checkTrend's freshness (its close present, at most maxAgeMin
- *                                   old, not after now) and every frame read: else ok false (the trend rule refuses)
  *   policyRuleRefusal({ home, root, side, cycleBar, now, rule, name })   a policy entry that is not a composed one (a rules
  *                                   component's, or none) under an entry rule (entry-rule.js): the rule checked on the
  *                                   briefing (the cycle bar's, else the current one) with no reads; its problem, or the
@@ -67,9 +60,7 @@ const { familyOf, familyRoot } = require('./contracts');
 const { contractRoot, entryTime, mayBeRoot } = require('./journal');
 const { latestVerdict } = require('./prop-state');
 const { briefingFor } = require('./fact-claims');
-const { readRecord: readMtf, DEFAULT_MAX_AGE_MIN } = require('./mtf-state');
-const { RULE_FRAMES, trendRule } = require('./mtf');
-const { checkReads, D2_TIERS, d2TierMet } = require('./composed-reads');
+const { checkReads } = require('./composed-reads');
 const { entryProblems } = require('./entry-rule');
 const { STRATEGY, readRecords, planOf, stopRuleOf, dayOf, expiryOf } = require('./trade-lifecycle');
 
@@ -151,30 +142,6 @@ function marketRefusal({ type, reference, setup } = {}) {
 }
 
 const quote = r => `"${r.read}"`;
-
-function reversalAllowed({ home, root, side, check, now = new Date(), maxAgeMin = DEFAULT_MAX_AGE_MIN }) {
-  const no = (why, against = null) => ({ ok: false, against, why });
-  try {
-    if (!check || !check.ok || !Array.isArray(check.reads)) return no('no standing record');
-    const rec = readMtf(home, root);
-    if (!rec || rec.error || !rec.biases || !rec.closedAt) return no('no multi-timeframe read');
-    // checkTrend's freshness: a reversal never stands on a stale or future-dated read.
-    const age = (now.getTime() - Date.parse(rec.closedAt)) / 60000;
-    if (!Number.isFinite(age) || age < -1 || !(age <= maxAgeMin)) return no('the multi-timeframe read is stale or dated after now');
-    const biases = Object.fromEntries(RULE_FRAMES.map(m => [m, rec.biases[m] === null || rec.biases[m] === undefined ? NaN : Number(rec.biases[m])]));
-    // Every frame read: a tier can't be chosen on a trend that isn't known on all three.
-    if (!RULE_FRAMES.every(m => Number.isFinite(biases[m]))) return no('the multi-timeframe read is not ready on every frame');
-    const r = trendRule(biases, side, 'trend');
-    if (r.allowed || !r.prevailing) return no('not against the trend');
-    const tier = D2_TIERS[r.prevailing.minutes];
-    if (!tier) return no(`no D2 tier for ${r.prevailing.label}`, r.prevailing.label);
-    // The tier, read by the same definition the reads' agreement uses (composed-reads.js D2_TIERS, d2TierMet).
-    if (d2TierMet(tier, check.reads, side)) return { ok: true, against: r.prevailing.label, why: null };
-    return no(`against the ${r.prevailing.label} trend a verified ${tier.choch.join(' or ')} CHoCH${tier.rejection4h ? ' and a 4h candle that rejected a level' : ''} the trade's way is needed`, r.prevailing.label);
-  } catch (err) {
-    return no(`the check failed (${err.message})`);
-  }
-}
 
 /** The room a phase-2 room fact is checked against (fact-claims.js): the plan's first level in the way, in its R, against the R its target needs. */
 const roomOf = (p, tick) => ({ stopPoints: p.stop.ticks * tick, needR: p.rr, inTheWay: p.inTheWay ? { name: p.inTheWay.name, R: p.inTheWay.R } : null });
@@ -271,4 +238,4 @@ function composedRefusal({ name, strategy = null, home, root, input = {}, now = 
   }
 }
 
-module.exports = { D2_TIERS, reversalAllowed, policyRuleRefusal, isComposed, recordsAt, readsOf, skillFolders, composedName, limitRefusal, marketRefusal, composedRefusal, recordUsed };
+module.exports = { policyRuleRefusal, isComposed, recordsAt, readsOf, skillFolders, composedName, limitRefusal, marketRefusal, composedRefusal, recordUsed };

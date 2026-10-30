@@ -330,7 +330,9 @@ test('a setup\'s facts, never a grade: the trend rule and the read for its side,
   // A level before the R it aims for is stated as a fact, never as a pass (no "the level comes first").
   assert.strictEqual(g({ stopDistance: 16.67 }).facts[2], 'first level ahead: round number at 1.5R; it aims for 2R');
   assert.deepStrictEqual(g({ mtf: { style: 'trend', shortAllowed: false } }).facts[0], 'against the trend rule for a short');
-  assert.match(g({ mtf: { style: 'reversal', shortAllowed: false } }).facts[0], /^a reversal strategy, no prevailing trend read$/);
+  // Never counter: a reversal strategy the rule refuses is against it like any other; one it allows says it is a reversal.
+  assert.strictEqual(g({ mtf: { style: 'reversal', shortAllowed: false } }).facts[0], 'against the trend rule for a short');
+  assert.match(g({ mtf: { style: 'reversal', shortAllowed: true } }).facts[0], /^a reversal strategy, no prevailing trend read$/);
   assert.strictEqual(g({ confluence: { with: [], against: ['ema_cross'] } }).facts[3], 'confluence: none with it; against ema_cross');
   assert.strictEqual(g({}, { vwapSide: 'above' }).facts[4], 'price above the VWAP (the other side)');
   assert.strictEqual(g({}, { vwapSide: null }).facts[4], 'the VWAP unknown');
@@ -514,7 +516,12 @@ test('15m and 1h breaks: times are candle opens, as on the 3m, and knownAt is th
 
 test('equal lows traded through between their touches are taken (the pool is gone), not only after the last touch', () => {
   const bars = at(300);
-  const d = build(300).sections.m3.data;
+  // The runner's bars are the chain's entry frame: its equal lows are no level (liquidity lists empty, none in the room);
+  // on a frame's own bars they stand, read the same way.
+  const runner = build(300).sections.m3.data;
+  assert.deepStrictEqual([runner.liquidity.equalLows, runner.liquidity.equalHighs, runner.liquidity.openFvgs], [[], [], []]);
+  assert.ok(![...runner.nearestLiquidity.above, ...runner.nearestLiquidity.below].some(x => /equal|last 3m swing/.test(x.name)), 'no entry-frame level in the room');
+  const d = B.buildBriefing({ symbol: 'MNQ', bars, minutes: 3, own: true }).sections.m3.data;
   const pool = d.liquidity.equalLows.find(x => x.price === 26940.25);
   assert.ok(pool && pool.taken, JSON.stringify(d.liquidity.equalLows));
   // The fixture's touches are 09:48Z and 11:33Z; only a bar between them trades below.
@@ -614,10 +621,9 @@ test('round numbers show on the contract\'s tick like every other level: SI 0.12
 
 test('levels merge within the contract\'s own tick (contracts.js), in the nearest levels too; VWAP rounded; an unknown R spelled out', () => {
   const near = symbol => B.buildBriefing({ symbol, bars: at(370), minutes: 3 }).sections.m3.data.nearestLiquidity.below.map(x => x.name);
-  // The opening range high 27068 and the last 3m swing low 27067: two levels a point apart on NQ, one on YM (tick 1).
-  assert.ok(near('NQ').includes('opening range high') && near('NQ').includes('last 3m swing low'), near('NQ').join(' | '));
-  assert.ok(near('YM').includes('opening range high / last 3m swing low'), near('YM').join(' | '));
-  assert.ok(near('YM:2026-06').includes('opening range high / last 3m swing low'), 'a contract by month uses its root\'s tick');
+  // The opening range high 27068 stands; the last 3m swing low 27067 beside it is the entry frame's, no level (chain.js).
+  assert.ok(near('NQ').includes('opening range high') && !near('NQ').some(n => /3m swing/.test(n)), near('NQ').join(' | '));
+  assert.ok(!near('YM').some(n => /3m swing/.test(n)), near('YM').join(' | '));
   const d = build(370).sections.m3.data;
   for (const x of [...d.nearestLiquidity.above, ...d.nearestLiquidity.below]) assert.strictEqual(x.price, Math.round(x.price * 100) / 100, `${x.name} ${x.price}`);
   assert.ok([...d.nearestLiquidity.above, ...d.nearestLiquidity.below].some(x => /^VWAP/.test(x.name)), 'control: the VWAP is among them');
@@ -628,14 +634,16 @@ test('levels merge within the contract\'s own tick (contracts.js), in the neares
   assert.match(text, /levels ahead in its R: [^\n]*\(\d[\d.]* pts, R unknown\)/);
 });
 
-test('a reversal setup says whether it fades the prevailing trend (half size, nearest target) or goes with it, from the scan\'s own trend-rule summary', () => {
+test('a reversal setup fading the trend is against the trend rule (never counter); with it, it says so, from the scan\'s own trend-rule summary', () => {
   const { ruleSummary } = require('../../scripts/lib/trading/mtf');
   const r = { name: 'crt_1h', status: 'active', entryRef: 100, stopDistance: 10, exit: {}, confluence: { with: [], against: [] } };
   const fact = (direction, biases) => B.candidate({ ...r, direction, mtf: ruleSummary(biases, 'reversal') }, 100, [], {}).facts[0];
   const up = { 240: 1, 60: 1, 15: -1 };
   const down = { 240: -1, 60: -1, 15: 1 };
-  assert.strictEqual(fact('short', up), 'a reversal strategy fading the prevailing 4h up trend: the trend rule allows it; the priority order, step 2 (strategy-library), decides it (level, size, target)');
-  assert.strictEqual(fact('long', down), 'a reversal strategy fading the prevailing 4h down trend: the trend rule allows it; the priority order, step 2 (strategy-library), decides it (level, size, target)');
+  assert.strictEqual(fact('short', up), 'against the trend rule for a short');
+  assert.strictEqual(fact('long', down), 'against the trend rule for a long');
+  // A summary without the side's rule (an older record): fading, said so, the rule's read unknown.
+  assert.strictEqual(B.candidate({ ...r, direction: 'short', mtf: { style: 'reversal', prevailing: '4h up' } }, 100, [], {}).facts[0], 'a reversal strategy fading the prevailing 4h up trend: the trend rule\'s read for it unknown');
   assert.strictEqual(fact('long', up), 'a reversal strategy, with the prevailing 4h up trend');
   assert.strictEqual(fact('short', { 240: 0, 60: -1, 15: 0 }), 'a reversal strategy, with the prevailing 1h down trend');
   assert.strictEqual(fact('long', { 240: 0, 60: 0, 15: 0 }), 'a reversal strategy, no prevailing trend read');
@@ -667,7 +675,7 @@ test('completed-candle facts: per timeframe in m3 and a summary line each, the l
     }
   }
   const text = B.renderBriefing(b, { now: new Date(b.closedAt) });
-  assert.match(text, /\n- 15m \(closed \d\d:\d\d\): [a-z ]+/);
+  assert.match(text, /\n- 15m \(setup candle, closed \d\d:\d\d\): [a-z ]+/);
   // No 1m lane: the 5m line is left out of the summary (the JSON says why).
   assert.ok(!/\n- 5m/.test(text));
   // The detail leaves out the 3m candle's OHLCV (it is the bar above) and the unavailable 5m.

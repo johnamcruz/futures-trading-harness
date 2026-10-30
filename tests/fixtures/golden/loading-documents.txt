@@ -661,11 +661,11 @@ strategy fx_vwap_reclaim: {
   "version": 1
 }
 strategy momentum_continuation: {
-  "body": "4203 chars sha256:d4f884a2985d16f7",
-  "compiledRules": "sha256:6ce0659e3a543e8f",
+  "body": "4777 chars sha256:0101a9e4f858ad57",
+  "compiledRules": "sha256:8d74c86079358090",
   "compiledStop": "sha256:54e436b332f2eef2",
   "compiledTarget": null,
-  "description": "Momentum continuation on 3m - a closed momentum candle the prevailing higher-timeframe trend's way, 09:36-11:57 ET; trade_lifecycle cites it and enters at market, its stop beyond the candle, 2R.",
+  "description": "Momentum continuation on 3m - a closed momentum candle the entry rule's side (BG), 09:36-11:57 ET; trade_lifecycle cites it and enters at market, its stop beyond the candle, 2R.",
   "errors": [],
   "exit": {
     "target_r": 2
@@ -686,13 +686,13 @@ strategy momentum_continuation: {
   },
   "rules": {
     "long": [
-      "mtf_prevailing > 0",
+      "chain_side > 0",
       "htfd_momentum(3) > 0",
       "minute_et >= 576",
       "minute_et <= 714"
     ],
     "short": [
-      "mtf_prevailing < 0",
+      "chain_side < 0",
       "htfd_momentum(3) < 0",
       "minute_et >= 576",
       "minute_et <= 714"
@@ -702,26 +702,27 @@ strategy momentum_continuation: {
     "ny"
   ],
   "signal": "rules",
-  "source": "the owner-approved S2 census (2026-10-28, model-free, NQ 3m practice-train days 2021-04-26..2024-06-30); the momentum read is momentum.js, the trend rule mtf.js",
+  "source": "the owner-approved S2 census (2026-10-28, model-free, NQ 3m practice-train days 2021-04-26..2024-06-30); the momentum read is momentum.js; the side the entry rule's BG (chain-side.js), the owner's change (2026-10-29)",
   "status": "active",
   "timeframe": "3m",
   "valid": true,
-  "version": 1
+  "version": 2
 }
 strategy prop_portfolio: {
   "account": "<name-43f416>",
-  "body": "4244 chars sha256:0b33062656d580fd",
+  "body": "4304 chars sha256:a20d63b528822002",
   "compiledRules": null,
   "compiledStop": null,
   "compiledTarget": null,
   "contracts": "auto",
   "description": "Prop-challenge policy strategy, the account layer - it sizes each setup of the strategies it lists on the Nasdaq, S&P, Dow, and Russell from the attempt's budget in the selected contract (or skips it), and exits each trade by its rulebook's exit (today the trade's own stop until its own target, then a trail past it). Its trades are trade_lifecycle's records, which may cite momentum_continuation.",
   "entry": {
+    "chain": "4h",
     "bias_frames": [
       "4h",
       "1h"
     ],
-    "bias_agree": "on",
+    "bias_agree": "neutral-15m-declared",
     "regime_against": "off",
     "leg_turned": "off"
   },
@@ -773,7 +774,7 @@ strategy prop_portfolio: {
   "version": 3
 }
 strategy trade_lifecycle: {
-  "body": "3843 chars sha256:5946533a32e48b96",
+  "body": "3803 chars sha256:ca37e20644f5a14b",
   "compiledRules": null,
   "compiledStop": null,
   "compiledTarget": null,

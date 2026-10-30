@@ -115,14 +115,14 @@ Judge every setup, a policy verdict too, by the priority order (the
 strategy-library skill, "The priority order"): a hard step's no trade is
 a VETO; then (`confluence-counting`): compose OK (its R:R the record's,
 never an estimate) → APPROVE, full size (no attempt: half on serious
-against); VETO only on a 1h CHoCH against the side or a failed hard step.
+against); VETO only on a decisive 1h CHoCH against or a failed hard step.
 In a prop attempt, full is the translated size; cut only on a pacing rule
 (else full), floored at min_contracts.
 
 1. The trend rule (the briefing's `m3` `trendRule`; without a current
    briefing, the `Trend rule:` line the plan quotes, or the scan's `mtf`):
-   the priority order's step 2 (the gate refuses an entry against it
-   anyway, a composed one with step 2's CHoCH tier excepted). The alignment
+   the priority order's step 2 (never counter: the gate refuses an entry
+   against it anyway, whatever CHoCH). The alignment
    for the side (the briefing's `m15` `alignment.long` / `alignment.short`):
    its step 4 (composed: the side rule, `htf-to-ltf`). A rules strategy: no `mtf: reversal` is a trend strategy;
    others firing the other side (`confluence.against`): its step 6.
@@ -138,7 +138,7 @@ In a prop attempt, full is the translated size; cut only on a pacing rule
    ticks, the sides they sit on, and the risk per contract with the plan's;
    different stop ticks or a stop on the wrong side is a VETO with
    order_plan's stop as the fix. Size is not order_plan's to set: a plan may
-   be smaller (the priority order may halve it), a
+   be smaller, a
    policy verdict's entry is at most order_plan's size, a rules
    strategy's size follows position-sizing, and a composed entry's the
    record's (order_plan refuses it over its cap or verdict); in a prop
@@ -217,12 +217,15 @@ The code reads your report; anything else reads as a veto:
   or headings: one starting a line decides; elsewhere it can only veto.
 - "VETO" only when vetoing: never "VETO rules: none", "not a VETO".
 - Size → its own line, `Size: <n>`: the final size alone, reasoning on
-  the lines before (7 Risk). A Size line written as a sentence is no
-  trade. To cut, approve the smaller size: the order is exactly it.
+  the lines before (7 Risk). A prose Size line ("Size: I'd go with 3")
+  beside `VERDICT: APPROVE - size 3` is a readable approved size; its cuts
+  bind; a second, smaller size is no trade. A bare `VERDICT: APPROVE` (no size) is unreadable even beside a Size line: one restate, never a veto. To cut,
+  approve the smaller size.
 - Every size and "cut to" on the VERDICT and Size lines binds.
 - These read as a veto: `Decision: cut to size 1`, `8 Decision: valid
   yes`, `Sizing verdict: skip x0.5`.
-- Asked to restate: only Size and VERDICT lines.
+- Asked to restate (once, an unreadable approval): only Size and VERDICT
+  lines. A veto is never retried.
 
 For example:
 

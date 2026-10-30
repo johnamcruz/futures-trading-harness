@@ -23,12 +23,12 @@ hypotheses; a missing field is `unknown`. Completed candles only, on 3m,
 
 | Timeframe | What it reads | Weight |
 |---|---|---|
-| 3m, 5m | entry timing at an HTF level; alone, a minor level | least |
+| 3m, 5m | the entry timing only: never the setup | least |
 | 15m | the working structure and the session levels | more |
 | 1h, 4h | HTF levels (prior day, overnight, CRT) | most |
 
-**Strongest**: a 15m or 1h rejection confirmed on 3m or 5m (step 6),
-with the HTF bias (step 1); a lone 3m or 5m one against it is counter-trend.
+**The setup**: a 15m or 1h rejection the bias's way (step 1); the next
+3m close times the entry (step 6).
 
 By PLAN step:
 
@@ -39,22 +39,19 @@ By PLAN step:
 - **4 Setup**: a completed candle rejects the level: the briefing's
    relation `rejected` (traded through it, closed back; read
    `<tf> rejected <level> up|down`). A long wick, the close in the
-   opposite third or an engulfing grade its strength (`candle-reading`); a
+   opposite third grade its strength (`candle-reading`; a pattern name adds none); a
    candle's sweep of its previous candle is one too
    (`breakout-vs-fakeout`). After
    an HTF BOS, at the level a pullback reaches (`pullback-vs-reversal`),
-   it is a continuation. Against the HTF, whether a structure break went its way
-   (`m15.lastBreak.last` or `h1.lastBreak.last` a CHoCH) is the trend
-   rule's CHoCH tier (`trade-lifecycle`), never counted. A reversal rejection
-   reads strongest with an HTF CHoCH its way (`bos-vs-choch`).
+   it is a continuation. Against the bias (4h + 1h): the trend rule
+   refuses it (never counter), whatever CHoCH.
 - **5 Confluence**: volume or absorption at the level (`momentum-and-volume`,
    `absorption`), counted by `confluence-counting`.
-- **6 Entry**: after a 15m or 1h rejection, a completed 3m or 5m candle
-   confirms the same way: a displacement candle, or a break of the small
-   pullback structure (`m3.lastBreak.last`). Never anticipate it.
+- **6 Entry**: the next 3m close after the 15m or 1h rejection times it
+   (`3m close top`); no 3m turn or break to wait for. Never anticipate it.
 - **7 Risk**: the idea is wrong beyond the rejection wick: the stop read
-   names it (`invalidation`). Aim for the next swing (`m3.swingTargets`);
-   the first level ahead (`inTheWay`) is a read (step 3).
+   names it (`invalidation`). The trail exits (`target trail`,
+   `take-profit`); the first level ahead (`inTheWay`) is a read (step 3).
 - **9 Manage**: invalidation is a close back through the level against the
    trade, or a CHoCH against it on its timeframe or higher (`bos-vs-choch`).
 
@@ -68,11 +65,10 @@ evidence in general.
 
 ```text
 Take: at the prior VAH 21535.00, 1h and 15m up: on the 15m close a wick to 21512.75, close 21538.50
-  (top third), then on the 3m close a momentum bar. Reads: 1h up, at prior vah, 15m rejected prior vah up,
-  3m close top, 3m momentum up, stop 15m low 21512.75, target 1h swing 21598.00. Priority order -> take.
-Skip: at the previous high 21588.25 (3m, a minor level), 1h and 15m up: on the 3m close a shooting star
-  (H 21590.75, C 21585.50): 3m rejected previous 3m high down, against the 1h trend, no 1h CHoCH
-  down. Priority order (step 2, the trend rule): skip.
+  (top third), then the next 3m close. Reads: 1h up, at prior vah, 15m rejected prior vah up,
+  3m close top, 3m momentum up, stop 15m low 21512.75, target trail. Priority order -> take.
+Skip: at the prior RTH high 21588.25, 1h and 15m up: on the 3m close a shooting star (H 21590.75,
+  C 21585.50): a 3m candle is no setup, and a short is against the 1h trend (the trend rule refuses it) -> pass.
 Loser: at the prior VAH 21535.00: on the 15m close a rejection (L 21512.75, C 21538.50): long at 21540.25, stop 21512.50
   (27.75 pts = 111 ticks, $55.50 on 1 MNQ); the next 1h close went back below 21512.75. -111 ticks, -$55.50.
 ```

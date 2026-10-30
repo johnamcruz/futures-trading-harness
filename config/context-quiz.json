@@ -1,0 +1,456 @@
+{
+  "version": "1",
+  "about": "The context quiz: questions the head trader (and the risk manager) must answer from their prompts alone, each the agreed rule it checks and the phrase in the skills that states it. Run on demand (scripts/context-quiz.js), never in CI: it calls a model. A changed key or question needs a reason in the pull request, as a golden does.",
+  "k": 5,
+  "answerFormat": " Answer from your instructions only. First line: ANSWER: <one line>. Then at most 3 lines of why.",
+  "negations": [
+    "not",
+    "never",
+    "no",
+    "nor",
+    "neither",
+    "without",
+    "nothing",
+    "none",
+    "isn't",
+    "don't",
+    "doesn't",
+    "can't",
+    "cannot",
+    "won't"
+  ],
+  "negationWindow": 4,
+  "unsure": "it depends|unsure|not sure|unclear|ambiguous|can't tell|cannot tell|depends on",
+  "passBar": {
+    "partA": {
+      "allCorrect": 20,
+      "bothWays": 0
+    },
+    "partB": {
+      "allCorrect": 5,
+      "bothWays": 0
+    }
+  },
+  "questions": [
+    {
+      "id": "q1",
+      "layer": "bias",
+      "prompt": "head",
+      "text": "The 4h trend is up and the 1h trend is down. Can you take a long? A short?",
+      "rule": "no side when the 4h and 1h disagree: never counter",
+      "anchor": "each trending 4h or 1h your way, neither against",
+      "required": [
+        "\\b(no|not|neither|cannot|can't|stand aside|flat)\\b"
+      ],
+      "forbidden": [
+        "^\\s*(yes\\b|y,)",
+        "\\b(long|short) (is )?(ok|allowed)\\b",
+        "^\\s*(long|short)\\b"
+      ]
+    },
+    {
+      "id": "q2",
+      "layer": "bias",
+      "prompt": "head",
+      "text": "The 4h and 1h both range. What sets the side?",
+      "rule": "both ranging: the 15m trend and the declared trend",
+      "anchor": "both ranging: the 15m and `Trend declared?` your way",
+      "required": [
+        "15\\s*-?m",
+        "declared"
+      ],
+      "forbidden": []
+    },
+    {
+      "id": "q3",
+      "layer": "bias",
+      "prompt": "head",
+      "text": "The 4h is down, the 1h down, and a 1h CHoCH up just printed at a level. Can you go long?",
+      "rule": "never against a trending 4h or 1h; a CHoCH against the bias is context",
+      "anchor": "A CHoCH against the bias is context, never a way in.",
+      "required": [
+        "\\b(no|not|never|cannot|can't|refused)\\b"
+      ],
+      "forbidden": [
+        "^\\s*(yes\\b|y,)",
+        "\\bcan (go|take) (a )?long",
+        "reversal|tier|rejection|unless"
+      ]
+    },
+    {
+      "id": "q4",
+      "layer": "bias",
+      "prompt": "head",
+      "text": "Which timeframes set the bias?",
+      "rule": "the bias is the 4h and the 1h",
+      "anchor": "The bias (4h + 1h) sets the side",
+      "required": [
+        "4h",
+        "1h"
+      ],
+      "forbidden": [
+        "^(?!.*rang).*\\b15\\s*m(?! (sets the setup| setup))[^.;]*\\bsets? (the )?bias"
+      ]
+    },
+    {
+      "id": "q5",
+      "layer": "setup",
+      "prompt": "head",
+      "text": "Which timeframe is the setup read on?",
+      "rule": "the setup is the 15m (or a fired momentum_continuation)",
+      "anchor": "The setup is the 15m (or higher) reaction or break",
+      "required": [
+        "15\\s*-?m|momentum_continuation"
+      ],
+      "forbidden": [
+        "^[^0-9]*\\b[35]\\s*-?m\\b"
+      ]
+    },
+    {
+      "id": "q6",
+      "layer": "levels",
+      "prompt": "head",
+      "text": "Is a 3m swing high a level or target you can trade from?",
+      "rule": "a 3m swing is no level and no target, only where the stop goes",
+      "anchor": "A 3m swing is not a level and not a target.",
+      "required": [
+        "\\b(no|not|only)\\b"
+      ],
+      "forbidden": [
+        "^\\s*(yes\\b|y,)",
+        "trade around"
+      ]
+    },
+    {
+      "id": "q7",
+      "layer": "setup",
+      "prompt": "head",
+      "text": "A 3m CHoCH up prints while the 15m setup has not formed. Is that a setup?",
+      "rule": "a 3m break is never the setup",
+      "anchor": "a 3m candle is no setup",
+      "required": [
+        "\\b(no|not)\\b"
+      ],
+      "forbidden": [
+        "^\\s*(yes\\b|y,)"
+      ]
+    },
+    {
+      "id": "q8",
+      "layer": "setup",
+      "prompt": "head",
+      "text": "A 15m setup candle closed as a bearish engulfing; another closed as a strong full-body bear candle in its bottom third with no pattern name. Which is the stronger setup candle?",
+      "rule": "a candle is judged by its strength and close, never its pattern name",
+      "anchor": "a pattern name adds none",
+      "required": [
+        "neither|both|equal|\\bsame\\b|not by (its )?name|strength|body|close third|bottom[- ]third|judge|depends"
+      ],
+      "forbidden": [
+        "engulfing[^.;]*\\bis (the )?stronger",
+        "^[^.;]*engulfing[^.;]*stronger setup candle"
+      ]
+    },
+    {
+      "id": "q9",
+      "layer": "levels",
+      "prompt": "head",
+      "text": "Where do levels come from?",
+      "rule": "levels: the 1h and higher, the session and day, the VWAP, the 15m swings; never the 3m",
+      "anchor": "Levels come from the 1h and higher, the session and day",
+      "required": [
+        "1h|hourly",
+        "session|daily|prior[- ]day|overnight|vwap|15\\s*-?m"
+      ],
+      "forbidden": [
+        "\\b3\\s*-?m\\b"
+      ]
+    },
+    {
+      "id": "q10",
+      "layer": "entry",
+      "prompt": "head",
+      "text": "The 15m setup closed at a 1h level on the bias side. When do you enter?",
+      "rule": "the next 3m close times the entry; no 3m turn to wait for",
+      "anchor": "no 3m turn to wait for",
+      "required": [
+        "(next|first|following|completed|closed) 3\\s*-?m|3m close|on the 3m|immediately|next (bar|candle)"
+      ],
+      "forbidden": [
+        "wait for (the |a )?3\\s*-?m (to turn|choch|bos|shift)|3m (choch|bos|shift)\\b|3m shift turns"
+      ]
+    },
+    {
+      "id": "q11",
+      "layer": "entry",
+      "prompt": "head",
+      "text": "Do you need a 3m BOS or CHoCH before entering?",
+      "rule": "no 3m break is required",
+      "anchor": "no 3m turn or break to wait for",
+      "required": [
+        "\\b(no|not)\\b"
+      ],
+      "forbidden": [
+        "^\\s*(yes\\b|y,)"
+      ]
+    },
+    {
+      "id": "q12",
+      "layer": "stop",
+      "prompt": "head",
+      "text": "No size fits under the cap with compose's stop. Do you tighten the stop?",
+      "rule": "stops are locked: skip, never a tighter stop",
+      "anchor": "pass, never a closer stop",
+      "required": [
+        "\\b(no|not|skip|pass|floor|stretch)\\b"
+      ],
+      "forbidden": [
+        "^\\s*(yes\\b|y,)",
+        "\\b(tighten it|use a (tighter|closer)|take a (tighter|closer)|move (the )?stop closer)"
+      ]
+    },
+    {
+      "id": "q13",
+      "layer": "stop",
+      "prompt": "head",
+      "text": "Where does the stop go?",
+      "rule": "compose places the stop one tick beyond the named level; never tighter; on the bracket",
+      "anchor": "The stop: compose places it one tick beyond the level your stop read",
+      "required": [
+        "compose|(?=.*one tick beyond)(?=.*never tighter)"
+      ],
+      "forbidden": [
+        "your (own )?choice|your own",
+        "tighter"
+      ]
+    },
+    {
+      "id": "q14",
+      "layer": "stop",
+      "prompt": "head",
+      "text": "Can you move the stop to breakeven because the trade feels done?",
+      "rule": "the stop moves only behind turned structure (the trail)",
+      "anchor": "You tighten it only behind",
+      "required": [
+        "\\b(no|not|only behind|turned structure)\\b"
+      ],
+      "forbidden": [
+        "^\\s*(yes\\b|y,)"
+      ]
+    },
+    {
+      "id": "q15",
+      "layer": "exit",
+      "prompt": "head+risk",
+      "text": "The trade reaches 2R. Do you exit there?",
+      "rule": "at 2R nothing exits: the 2R order is cancelled, the stop locks and trails",
+      "anchor": "At 2R nothing exits",
+      "required": [
+        "\\b(no|not|trail|arm|lock)\\b"
+      ],
+      "forbidden": [
+        "^\\s*(yes\\b|y,)",
+        "(exit|close|take profit) (at|there|at 2r)"
+      ]
+    },
+    {
+      "id": "q16",
+      "layer": "exit",
+      "prompt": "head+risk",
+      "text": "Is the named 1h swing high your exit?",
+      "rule": "the trail exits; a level is context",
+      "anchor": "the 2R mark that arms the trail, not the exit",
+      "required": [
+        "\\b(no|not)\\b|trail|context"
+      ],
+      "forbidden": [
+        "^\\s*(yes\\b|y,)"
+      ]
+    },
+    {
+      "id": "q17",
+      "layer": "size",
+      "prompt": "head+risk",
+      "text": "The account is healthy (balance at or above start, no loss streak). What size?",
+      "rule": "a healthy prop account takes the full verdict size",
+      "anchor": "Size in a prop attempt: the full verdict size, the code's number.",
+      "required": [
+        "full"
+      ],
+      "forbidden": [
+        "half"
+      ]
+    },
+    {
+      "id": "q18",
+      "layer": "size",
+      "prompt": "head+risk",
+      "text": "The setup has one serious factor against it, in a prop attempt. What size?",
+      "rule": "in a prop attempt nothing halves",
+      "anchor": "In a prop attempt nothing halves",
+      "required": [
+        "full"
+      ],
+      "forbidden": [
+        "half"
+      ]
+    },
+    {
+      "id": "q19",
+      "layer": "approval",
+      "prompt": "head+risk",
+      "text": "The risk manager writes \"Size: I'd go with 3 contracts given the stop\" and \"VERDICT: approve\". Is that a trade?",
+      "rule": "a bare approval states no readable size: one restate of the Size and VERDICT lines, never a veto (roles-ran.js approvedSize)",
+      "anchor": "with no size on the line → unreadable",
+      "required": [
+        "restate|unreadable|no readable size"
+      ],
+      "forbidden": [
+        "^\\s*(yes\\b|y,)",
+        "^(?!.*\\b(not|never|isn't|no|without)\\b).*(veto|no trade)",
+        "(?<!not )(?<!not a )\\bis a trade\\b"
+      ]
+    },
+    {
+      "id": "q20",
+      "layer": "size",
+      "prompt": "head",
+      "text": "The setup fits only 2 contracts at the stop. What do you do?",
+      "rule": "fewer than the minimum (3) at the stop: skip, unless the code's floor stretch fits it",
+      "anchor": "Fewer than 3 (`min_contracts`) at the stop: skip",
+      "required": [
+        "skip|no trade|\\bpass\\b|floor|stretch|minimum|don't take|not take"
+      ],
+      "forbidden": [
+        "\\b(take|trade|enter|go|size( it)?( at)?)\\s+(with\\s+)?(the\\s+)?(only\\s+)?2\\b"
+      ]
+    }
+  ],
+  "partB": [
+    {
+      "id": "b1",
+      "layer": "bias",
+      "prompt": "head",
+      "excerpt": {
+        "bias": {
+          "h4": -1,
+          "h1": -1,
+          "t15": 1
+        }
+      },
+      "text": "A 15m bullish CHoCH prints at the prior VAL. Trade it long?",
+      "rule": "the Bias line refuses the long",
+      "required": [
+        "\\b(no|not|never)\\b"
+      ],
+      "forbidden": [
+        "^\\s*(yes\\b|y,)"
+      ]
+    },
+    {
+      "id": "b2",
+      "layer": "bias",
+      "prompt": "head",
+      "excerpt": {
+        "bias": {
+          "h4": 0,
+          "h1": 0,
+          "t15": 1,
+          "declared": true
+        }
+      },
+      "text": "A 15m rejection up at the VWAP. Which side, if any?",
+      "rule": "the Bias line gives the long",
+      "required": [
+        "long"
+      ],
+      "forbidden": [
+        "no trade|no side"
+      ]
+    },
+    {
+      "id": "b3",
+      "layer": "bias",
+      "prompt": "head",
+      "excerpt": {
+        "bias": {
+          "h4": 1,
+          "h1": -1,
+          "t15": 1
+        }
+      },
+      "text": "A 15m CISD up at a 1h level. Trade it?",
+      "rule": "no side: no entry",
+      "required": [
+        "\\b(no|not|never)\\b"
+      ],
+      "forbidden": [
+        "^\\s*(yes\\b|y,)",
+        "^\\s*long\\b"
+      ]
+    },
+    {
+      "id": "b4",
+      "layer": "size",
+      "prompt": "head",
+      "excerpt": {
+        "size": {
+          "facts": {
+            "balance": 100200,
+            "start": 100000,
+            "peak": 100200,
+            "lossesToday": 0,
+            "lossStreak": 0,
+            "softRoom": 1000,
+            "dailyRoom": 2000,
+            "needed": 5800,
+            "nearTargetUsd": 500
+          },
+          "riskUsd": 300,
+          "minContracts": 3,
+          "stretchUsd": 500,
+          "capUsd": 300
+        }
+      },
+      "text": "One serious factor against the setup. What size?",
+      "rule": "the Size line: the full verdict",
+      "required": [
+        "full"
+      ],
+      "forbidden": [
+        "half"
+      ]
+    },
+    {
+      "id": "b5",
+      "layer": "size",
+      "prompt": "head",
+      "excerpt": {
+        "size": {
+          "facts": {
+            "balance": 100200,
+            "start": 100000,
+            "peak": 100200,
+            "lossesToday": 0,
+            "lossStreak": 0,
+            "softRoom": 1000,
+            "dailyRoom": 2000,
+            "needed": 5800,
+            "nearTargetUsd": 500
+          },
+          "riskUsd": 300,
+          "minContracts": 3,
+          "stretchUsd": 500,
+          "capUsd": 300
+        }
+      },
+      "text": "The cap fits only 2 contracts at the stop. Take it with 2?",
+      "rule": "the Min line: skip under 3",
+      "required": [
+        "\\b(no|not|skip)\\b|floor|stretch"
+      ],
+      "forbidden": [
+        "\\b(take|trade|enter)\\s+(it\\s+)?(with\\s+)?2\\b"
+      ]
+    }
+  ]
+}

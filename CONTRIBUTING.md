@@ -70,6 +70,9 @@ prompts, the order gate's verdicts, and the cache keys and hits;
 (the scripts' output). Any difference fails `npm run verify` with the changed
 lines. A missing golden fails too: a test run never creates one.
 
+The context quiz (`config/context-quiz.json`, run by hand: docs/TRAINING.md, "The context quiz") is held the same way:
+a changed question or key is explained in the pull request.
+
 When a change is meant to change that output, regenerate on purpose, then
 review the diff:
 

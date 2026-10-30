@@ -24,6 +24,9 @@ const { readBriefing } = require('../../scripts/lib/trading/briefing');
 const RC = require('../../scripts/lib/trading/report-cache');
 
 const MNQ = G.served(G.load(G.SERIES[0]));
+// The bars a 1m signal lane's runs fetch: 20 hours of 1m bars, so its trend rule has its 4h read (never counter: a
+// reversal strategy needs it too).
+const LANE_HISTORY = 1200;
 const START = Date.parse('2026-04-27T14:36:01Z'); // 10:36 ET: the cycles cross the 10:45 15m close and the 11:00 1h close
 const END = Date.parse('2026-04-27T15:06:30Z');
 const BALANCE_DROP_AT = Date.parse('2026-04-27T14:51:00Z'); // a closed trade: the account changes, phase 1 is read again
@@ -35,7 +38,7 @@ const task = (role, report, [s, e]) => JSON.stringify({ type: 'tool_use', part: 
 // `agents`: the runner config's per-role timeframes; `analyst(role, run)`: an analyst's report (default: two build on the
 // briefing file, the third reads the bars); `fresh`: one fresh runner per decision point, the state kept between
 // them, under the replay clock (as replay runs passes), instead of the live loop; `restart`: the live loop, a new runner every pass from its saved state.
-async function replay(bars, { end = END, state = null, lanes = null, timeframe = 3, bars1 = null, inspect = null, extraEnv = {}, agents = null, analyst = null, fresh = false, start = START, restart = false } = {}) {
+async function replay(bars, { end = END, state = null, lanes = null, timeframe = 3, bars1 = null, inspect = null, extraEnv = {}, agents = null, analyst = null, fresh = false, start = START, restart = false, history = 700 } = {}) {
   const home = tmpDir();
   // The prompt names the harness home from the process's environment (autotrader.js prompts): this run's home.
   const savedHome = process.env.FTH_HOME;
@@ -51,7 +54,7 @@ async function replay(bars, { end = END, state = null, lanes = null, timeframe =
     FTH_STRATEGIES_DIRS: [FX_GOLDEN, extraEnv.FTH_STRATEGIES_DIRS].filter(Boolean).join(','),
   };
   // `lanes`: the same runner configured as one lane instead of the legacy timeframe (lanes.js).
-  const { timeframe: _tf, ...noTimeframe } = { harness: 'opencode', cycle: 'full', premarketAt: '', timeframe: 3, account: '7', symbols: ['MNQ'], dataDir: path.join(home, 'bars'), bars: 700 };
+  const { timeframe: _tf, ...noTimeframe } = { harness: 'opencode', cycle: 'full', premarketAt: '', timeframe: 3, account: '7', symbols: ['MNQ'], dataDir: path.join(home, 'bars'), bars: history };
   const cfg = validateConfig({ ...(lanes ? { ...noTimeframe, lanes } : { ...noTimeframe, timeframe }), ...(agents ? { agents } : {}) });
   const broker = {
     async activeContract(symbol) { return { id: symbol, name: `${symbol}M6`, tickSize: 0.25, tickValue: 0.5 }; },
@@ -217,7 +220,9 @@ test('two lanes wired for the harness: each lane\'s bars file and signal record,
   const bars1 = MNQ.flatMap(b => [0, 1, 2].map(k => ({ t: new Date(Date.parse(b.t) + k * 60000).toISOString(), o: k ? b.c : b.o, h: b.h, l: b.l, c: b.c, v: Math.round(b.v / 3) })));
   const seen = {};
   const run = await replay(MNQ, {
-    lanes: [{ timeframe: 3, trigger: 'bar' }, { timeframe: 1, trigger: 'bar' }], bars1, end: Date.parse('2026-04-27T14:46:30Z'),
+    // From the 10:33 ET close: momentum_continuation fires short on the 10:30 bar on the entry rule's side (BG, since
+    // feat/bias-bg; the prevailing-trend rule fired it on the 10:36 bar).
+    lanes: [{ timeframe: 3, trigger: 'bar' }, { timeframe: 1, trigger: 'bar' }], bars1, start: Date.parse('2026-04-27T14:33:01Z'), end: Date.parse('2026-04-27T14:46:30Z'),
     inspect: (home, cfg) => {
       const read = f => JSON.parse(fs.readFileSync(f, 'utf8'));
       seen.bars3 = read(path.join(cfg.dataDir, 'MNQ-3m.json'));
@@ -228,7 +233,7 @@ test('two lanes wired for the harness: each lane\'s bars file and signal record,
       seen.briefing = readBriefing(home, 'MNQ');
     },
   });
-  // One cycle per minute's close (10:37 .. 10:46), the 3m closes with both lanes.
+  // One cycle per minute's close (10:34 .. 10:46), the 3m closes with both lanes.
   const lanesOf = c => (c.prompt.match(/Lanes closed this cycle: ([^;]+);/) || [])[1];
   assert.ok(run.cycles.length >= 8, `cycles: ${run.cycles.length}`);
   const both = run.cycles.filter(c => /3m \(every bar\), 1m \(every bar\)/.test(lanesOf(c) || ''));
@@ -246,7 +251,7 @@ test('two lanes wired for the harness: each lane\'s bars file and signal record,
   assert.strictEqual(seen.briefing.asOf, seen.bars3.bars.at(-1).t);
   // The cache: a 1m-only cycle is keyed on the first lane's last bar (the briefing it rests on), so it reuses the
   // analysts' reports cached at that 3m bar.
-  // After a 3m bar a setup fired on (momentum_continuation, shipped since 2026-10-28, fires short on the 10:36 bar), a role's
+  // After a 3m bar a setup fired on (momentum_continuation, shipped since 2026-10-28, fires short on the 10:30 bar), a role's
   // lookups count only under that bar's facts key (report-cache.js lookupsKey), so the 1m cycles until the next 3m bar
   // run the analyst whose lookups the setup required (market structure) again, and still reuse the other's.
   const firedAt = run.cycles.filter(c => /3m \(every bar\)/.test(lanesOf(c) || '') && c.fired.length).map(c => Date.parse(c.at));
@@ -260,7 +265,7 @@ test('two lanes wired for the harness: each lane\'s bars file and signal record,
 });
 
 test('the report cache with a 3m bar lane and a 1m signal lane: the hit/miss sequence and keys are pinned; in full mode 1m cycles reuse the 3m reports with no extra misses; in index mode a 1m setup runs the roles its lookups require', async () => {
-  // A 1m rules strategy (a reversal: no trend rule) firing on a 1m bar that closes off the last one: in these bars,
+  // A 1m rules strategy (held to the trend rule, never counter: it fires on the trend's side) firing on a 1m bar that closes off the last one: in these bars,
   // the first minute of each 3m bar (1m-only closes), so the signal lane cycles between the 3m closes.
   const dir = path.join(tmpDir(), 'strategies', 'tick_up');
   fs.mkdirSync(dir, { recursive: true });
@@ -273,10 +278,10 @@ test('the report cache with a 3m bar lane and a 1m signal lane: the hit/miss seq
   const bars1 = MNQ.flatMap(b => [0, 1, 2].map(k => ({ t: new Date(Date.parse(b.t) + k * 60000).toISOString(), o: k ? b.c : b.o, h: b.h, l: b.l, c: b.c, v: Math.round(b.v / 3) })));
   const LANES = [{ timeframe: 3, trigger: 'bar' }, { timeframe: 1, trigger: 'signal' }];
   const isOneMin = c => Array.isArray(c.lanes) && c.lanes.length === 1 && c.lanes[0] === '1m';
-  // Index mode, the default (pinned in the golden below): a cycle whose 1m bar fired tick_up (a reversal, from the
+  // Index mode, the default (pinned in the golden below): a cycle whose 1m bar fired tick_up (from the
   // lane's signal record: no analyst reads 1m) runs every role a lookup is required of, as the gate requires them
   // (skill-lookups.js cycleFacts); one without it (a 3m close) is served from the cache as in full mode.
-  const indexed = await replay(MNQ, { lanes: LANES, bars1, extraEnv });
+  const indexed = await replay(MNQ, { lanes: LANES, bars1, extraEnv, history: LANE_HISTORY });
   // The risk manager carries its situational skills in its core (no lookup required of it): phase 1 is served as in full mode.
   const LOOKUP_ROLES = [ANALYSTS[0], ANALYSTS[1]];
   // A role served on such a bar only with a cached report whose own call made the lookups under the same facts key (the
@@ -286,8 +291,8 @@ test('the report cache with a 3m bar lane and a 1m signal lane: the hit/miss seq
   for (const c of setupBars) for (const r of LOOKUP_ROLES) assert.ok(!c.served.includes(r), `${c.at}: ${r} served on a new setup`);
   assert.ok(indexed.cycles.some(c => !c.fired.some(f => f.startsWith('tick_up')) && c.served.includes(ANALYSTS[0])), 'a cycle without the lane\'s setup: served');
   // Full mode: the lanes' caching rule alone (no lookups required).
-  const single = await replay(MNQ, { extraEnv: { ...extraEnv, FTH_ROLE_SKILLS: 'full' } });
-  const laned = await replay(MNQ, { lanes: LANES, bars1, extraEnv: { ...extraEnv, FTH_ROLE_SKILLS: 'full' } });
+  const single = await replay(MNQ, { extraEnv: { ...extraEnv, FTH_ROLE_SKILLS: 'full' }, history: LANE_HISTORY });
+  const laned = await replay(MNQ, { lanes: LANES, bars1, extraEnv: { ...extraEnv, FTH_ROLE_SKILLS: 'full' }, history: LANE_HISTORY });
   const threes = laned.cycles.filter(c => !isOneMin(c));
   const ones = laned.cycles.filter(isOneMin);
   assert.ok(ones.length >= 3, `1m signal cycles: ${ones.length}`);
@@ -372,8 +377,8 @@ test('analysts on 3m, 15m and 1h with a 1m signal lane: each reads its own timef
   // runs on a bar where a setup fired (runner-wiring lookupRoles), pinned in runner-replay-cache.txt and
   // runner-replay-lanes-cache.txt.
   const extraEnv = { ...tickUp(), FTH_ROLE_SKILLS: 'full' };
-  const one = await replay(MNQ, { lanes: TWO_LANES, bars1: BARS1, extraEnv, end: MULTI_END, analyst: toolAnalyst });
-  const multi = await replay(MNQ, { lanes: TWO_LANES, bars1: BARS1, extraEnv, end: MULTI_END, analyst: toolAnalyst, agents: AGENT_TFS });
+  const one = await replay(MNQ, { lanes: TWO_LANES, bars1: BARS1, extraEnv, end: MULTI_END, history: LANE_HISTORY, analyst: toolAnalyst });
+  const multi = await replay(MNQ, { lanes: TWO_LANES, bars1: BARS1, extraEnv, end: MULTI_END, history: LANE_HISTORY, analyst: toolAnalyst, agents: AGENT_TFS });
   assert.ok(multi.cycles.length >= 40, `cycles: ${multi.cycles.length}`);
   // The same cycles (the agents' timeframes add no decision time), the same phase-1 hits.
   assert.deepStrictEqual(multi.cycles.map(c => `${c.at} ${c.lanes}`), one.cycles.map(c => `${c.at} ${c.lanes}`));
@@ -398,7 +403,7 @@ test('analysts on 3m, 15m and 1h with a 1m signal lane: each reads its own timef
   assert.ok(!('tf' in lastKeys[ms]), 'the 3m analyst keeps the legacy key');
   // The prompt gives each launched analyst its timeframe; cached ones say how long they hold.
   assert.match(multi.cycles[0].prompt, /Each analyst reads its own timeframe: give it that timeframe with the symbol: trend-momentum-analyst on 15m \(bar_briefing with "timeframe": "15m"; its bars file is named there\), volume-liquidity-analyst on 1h/);
-  assert.doesNotMatch(one.cycles.map(c => c.prompt).join('\n'), /own timeframe/);
+  assert.doesNotMatch(one.cycles.map(c => c.prompt).join('\n'), /Each analyst reads its own timeframe/);
   const cachedOwn = multi.cycles.find(c => c.served.includes(vl) && c.served.includes(tm));
   assert.match(cachedOwn.prompt, /--- volume-liquidity-analyst report \(1h, from \d\d:\d\d ET, holds until \d\d:00 ET\) ---\nData: bar_briefing 1h bar60m@/);
   const rates = `hit rate per analyst (cycles): one timeframe (3m) ${ANALYSTS.map(r => `${short(r)} ${hitRate(one.cycles, r)}`).join(', ')}; 3m/15m/1h ${ANALYSTS.map(r => `${short(r)} ${hitRate(multi.cycles, r)}`).join(', ')}`;
@@ -411,8 +416,8 @@ test('replay equals live with analysts on their own timeframes: a fresh runner p
   const end = Date.parse('2026-04-27T15:21:30Z'); // across the 11:00 1h close
   // Both from the first decision point (a 3m close plus the poll delay), where the live loop's first poll cycles too.
   const start = Date.parse('2026-04-27T14:36:02Z');
-  const live = await replay(MNQ, { lanes: TWO_LANES, bars1: BARS1, extraEnv, end, start, analyst: toolAnalyst, agents: AGENT_TFS });
-  const passes = await replay(MNQ, { lanes: TWO_LANES, bars1: BARS1, extraEnv, end, start, analyst: toolAnalyst, agents: AGENT_TFS, fresh: true });
+  const live = await replay(MNQ, { lanes: TWO_LANES, bars1: BARS1, extraEnv, end, start, history: LANE_HISTORY, analyst: toolAnalyst, agents: AGENT_TFS });
+  const passes = await replay(MNQ, { lanes: TWO_LANES, bars1: BARS1, extraEnv, end, start, history: LANE_HISTORY, analyst: toolAnalyst, agents: AGENT_TFS, fresh: true });
   assert.ok(live.cycles.length >= 20, `cycles: ${live.cycles.length}`);
   assert.strictEqual(framesText(passes), framesText(live));
   assert.deepStrictEqual(passes.cycles.map(c => c.prompt), live.cycles.map(c => c.prompt));

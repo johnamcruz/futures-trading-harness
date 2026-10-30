@@ -389,9 +389,14 @@ function emptyWindows(points, curated, delayMs = 0) {
 }
 
 /** [from, to) (session dates) as up to n runs of whole dates, in order: [[from, to]]. */
-/** A scan starts no earlier than the data's first day (the schedule's data.start): refuses an earlier from. */
-function assertWithinData(from, dataStart = require('../schedule').current().data.start) {
+/**
+ * A scan starts no earlier than the data's first day (the schedule's data.start), and no session before the data covers
+ * the 4h and 1h reads' window (schedule.js warmupRefusal, data.sessionsFrom): refuses an earlier from.
+ */
+function assertWithinData(from, dataStart = require('../schedule').current().data.start, warmup = d => require('../schedule').warmupRefusal(d)) {
   if (sessionDate(from) < dataStart) throw new Error(`--from ${from} is before the data's start ${dataStart} (config/schedule.json data.start): no history there to scan`);
+  const why = warmup(sessionDate(from));
+  if (why) throw new Error(`--from ${why}`);
   return from;
 }
 

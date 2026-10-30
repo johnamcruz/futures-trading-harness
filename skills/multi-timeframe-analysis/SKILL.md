@@ -1,14 +1,14 @@
 ---
 name: multi-timeframe-analysis
-description: Use when reading each timeframe's trend and the trend rule the gate enforces (mtf trend|reversal).
+description: Use when reading each timeframe's trend and the trend rule the gate enforces (never counter).
 ---
 
 # Multi-Timeframe Analysis
 
-A trigger on 3-minute bars is worth more when the timeframes above it point
-the same way, and it is a pullback (or a trap) when they don't. This skill
-makes that read the same every time: one tool reads the trend on each
-higher timeframe from the bars you already have, and labels each side.
+The bias (4h + 1h) sets the side, the setup (15m) is the entry, the entry
+timing (3m) only times it. This skill makes the trend read the same every
+time: one tool reads the trend on each higher timeframe from the bars you
+already have, and labels each side.
 
 Elsewhere: the bars and briefing fields per timeframe (`timeframe-sources`),
 the day's bias (`daily-bias`), reading the labels from HTF to LTF
@@ -46,20 +46,18 @@ in the last 20 candles' range, and the swing high and low.
 The prevailing trend is the highest of 4h, 1h, and 15m (built from the
 trigger bars) that has one: the 4h when it trends, else the 1h, else the 15m.
 
-- **Every entry**, long or short alike (`trade_lifecycle`, and a rules
-  strategy without `mtf: reversal`): never against the prevailing trend;
-  wait while the 4h has fewer than 3 completed candles. With no trend on
-  any of the three, both sides are open.
-- **In an attempt**: the 4h and 1h both its way, or no trade.
-- **Against it**: a composed entry only on its CHoCH tier
-  (`trade-lifecycle`); a rules `mtf: reversal` strategy (none active) at a
-  higher-timeframe level, decided by the priority order (step 2).
+- **Every entry**, long or short, every setup and strategy (`mtf:
+  reversal` too): never counter: no entry against a trending 4h or 1h,
+  whatever CHoCH; both ranging, none against the 15m; none while the 4h has
+  fewer than 3 completed candles.
+- **In an attempt**: the side rule (`htf-to-ltf`), or no trade.
+- **Not in a prop attempt**: nothing trending, both sides are open.
 
 Where it is enforced:
 
 - `strategies_scan` (rules strategies): one that fires against it is not a
   candidate; its why-not (`filtersFailed` in its full result) says `mtf:
-  against the prevailing 4h down trend ...`. The summary names the frames
+  against the 4h down trend ...`. The summary names the frames
   and the prevailing trend; every full result has `mtf` (frames,
   `prevailing`, `longAllowed`, `shortAllowed`).
 - The backtester uses the same scan, so its trades obey it.
@@ -74,7 +72,7 @@ Where it is enforced:
   records the symbols it trades): don't trade interactively next to it.
 
 The last line of the read states it, the allowed side first: `Trend rule:
-LONG allowed (prevailing 4h up); short only as a reversal (mtf: reversal).`
+LONG allowed (prevailing 4h up); no short against it.`
 The daily (`daily`) is context for your judgment; the rule reads the
 intraday frames.
 
@@ -85,7 +83,7 @@ note, so reviews can grade it:
 
 ```text
 Daily UP (HH/HL). 4h UP. 1h UP, ADX 26. 15m DOWN (pullback to the 1h EMA20).
-Long: pullback (wait for a 3m shift up). Short: counter.
+Long: pullback (the 15m setup is the entry). Short: counter (no entry).
 ```
 
 ## Examples
@@ -97,18 +95,17 @@ daily: UP (close 21650 vs EMA20 21402.5, EMA20 vs EMA50 21180.25, structure HH/H
 1h: UP (close 21652.25 vs EMA20 21630.5, EMA20 vs EMA50 21588, structure HH/HL), ADX 26.0, ...
 15m: DOWN (close 21652.25 vs EMA20 21661, EMA20 vs EMA50 21664.5, structure LH/LL), ADX 18.2, ...
 Alignment: long pullback, short counter; bias long (score 8 of ±10).
-Trend rule: LONG allowed (prevailing 4h up); short only as a reversal (mtf: reversal).
+Trend rule: LONG allowed (prevailing 4h up); no short against it.
 
--> Longs are a pullback: wait for a 3m shift up (3m bos up), target the 1h swing high.
-   Shorts are counter: a trend strategy's short is refused (scan and gate); a composed
-   short needs a 1h CHoCH down and a 4h rejection (`trade-lifecycle`).
+-> Longs are a pullback: the 15m setup up is the entry, the next 3m close times it;
+   the trail exits. Shorts are counter: refused (scan and gate), whatever CHoCH.
 
 mtf_read {"bars": "/home/u/.futures-trading-harness/bars/NQ-3m.csv"}    (the parity fixture tests/fixtures/parity/NQ-3m.csv, copied to the bar directory by the user)
 4h: UP (... structure HH/HL), ... (18 candles: no EMA50 vote, needs 50)
 1h: RANGE (... structure mixed), ADX 14.14, ...
 15m: DOWN (... structure LH/LL), ADX 22.59, ...
 Alignment: long mixed, short counter; bias long (score 2 of ±6).
-Trend rule: LONG allowed (prevailing 4h up); short only as a reversal (mtf: reversal).
+Trend rule: LONG allowed (prevailing 4h up); no short against it.
 
--> Longs: mixed (the priority order's step 4 sizes it). Shorts: against the 4-hour trend, refused for trend strategies.
+-> Longs: mixed (the priority order's step 4). Shorts: against the 4-hour trend, refused.
 ```

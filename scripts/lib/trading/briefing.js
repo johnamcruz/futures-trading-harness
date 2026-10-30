@@ -107,6 +107,7 @@ const { VOLUME_HIGH, netAtrOf } = require('./composed-reads');
 const { structure5m, structureLine } = require('./m5-structure');
 const { compressionFrames, compressionLine } = require('./compression');
 const { declaredFacts, declaredLine } = require('./trend-declared');
+const { biasLine } = require('./bias-line');
 const { GLOBEX_OPEN_MIN, RTH_OPEN_MIN, RTH_CLOSE_MIN } = require('./clock'); // the session boundaries' one home
 
 const SECTIONS = ['m3', 'm15', 'h1', 'day'];
@@ -299,8 +300,13 @@ function computeSections({ bars, fine = null, c15, c60, snap, snap15, read, read
     const taken = bars.some(b => (Date.parse(b.t) > Date.parse(since) || between(b)) && beyond(b));
     return { name: type === 'high' ? 'equal highs' : 'equal lows', price: level, since, taken };
   });
-  const eqHighs = pool(liq.equalHighs, 'high');
-  const eqLows = pool(liq.equalLows, 'low');
+  // The runner's base bars are the chain's entry frame (the entry rule holds the lane to it): never a level (the owner:
+  // "We should never use entry timeframes as levels"; chain.js). Their swings, equal highs and lows and gaps stay out
+  // of the levels, the room, the sweeps and the liquidity lists; their candles stay as candle facts. A frame's own
+  // bars (15m and up) are no entry frame: its swings stand.
+  const entryBars = !own;
+  const eqHighs = entryBars ? [] : pool(liq.equalHighs, 'high');
+  const eqLows = entryBars ? [] : pool(liq.equalLows, 'low');
   const rth = applies === 'rth';
   // The round numbers on the family's step (contracts.js), none for a root without one: the one just above and
   // the one just below price; price on one: that one ("at") and the next above and below.
@@ -328,7 +334,7 @@ function computeSections({ bars, fine = null, c15, c60, snap, snap15, read, read
   const runnerVwap = own ? (sessionLevels.find(([n]) => /^VWAP /.test(n)) || [])[1] : null;
   const levels = [
     ...sessionLevels,
-    [`last ${ownSwing} swing high`, st.lastSwingHigh], [`last ${ownSwing} swing low`, st.lastSwingLow],
+    ...(entryBars ? [] : [[`last ${ownSwing} swing high`, st.lastSwingHigh], [`last ${ownSwing} swing low`, st.lastSwingLow]]),
     ...htfLevels.filter(x => !x.brokenAt).map(x => [x.name, x.price]),
     ...untested1h.map(x => [`untested 1h swing ${x.type}`, x.price]),
     ...[...eqHighs, ...eqLows].filter(x => !x.taken).map(x => [x.name, x.price]),
@@ -426,7 +432,10 @@ function computeSections({ bars, fine = null, c15, c60, snap, snap15, read, read
         referenceStop: snap.referenceStop ? { distance: round2(snap.referenceStop.distance), long: round2(snap.referenceStop.long), short: round2(snap.referenceStop.short) } : null,
         swings: { high: st.lastSwingHigh, highAt: st.lastSwingHighAt, low: st.lastSwingLow, lowAt: st.lastSwingLowAt },
         // Liquidity on the trigger bars: recent swing points, equal highs and lows (with whether taken), fair value gaps open and partly filled.
-        liquidity: { swingHighs: liq.swingHighs, swingLows: liq.swingLows, equalHighs: eqHighs.map(x => omit(x, ['since'])), equalLows: eqLows.map(x => omit(x, ['since'])), openFvgs: liq.openFvgs, partlyFilledFvgs: liq.partlyFilledFvgs || [] },
+        // The entry frame's swings stay for the stop beyond them (invalidation's 'stop swing low|high': structure, never a
+        // level, target or room); its equal highs and lows and its gaps are levels, so none.
+        liquidity: entryBars ? { swingHighs: liq.swingHighs, swingLows: liq.swingLows, equalHighs: [], equalLows: [], openFvgs: [], partlyFilledFvgs: [] }
+          : { swingHighs: liq.swingHighs, swingLows: liq.swingLows, equalHighs: eqHighs.map(x => omit(x, ['since'])), equalLows: eqLows.map(x => omit(x, ['since'])), openFvgs: liq.openFvgs, partlyFilledFvgs: liq.partlyFilledFvgs || [] },
         // Structure events (structure-events.js): the latest break on the trigger bars, sweeps of key liquidity in the last
         // 10 bars (only levels that existed before the sweep), the 1h swings not traded back to, and the 15m and 1h swings
         // against price (a 3m close through one since its candle closed: brokenAt).
@@ -436,8 +445,8 @@ function computeSections({ bars, fine = null, c15, c60, snap, snap15, read, read
           ...(own ? [] : [['prior RTH high', (lv.priorRth || {}).high, 'high', true], ['prior RTH low', (lv.priorRth || {}).low, 'low', true]]),
           // The overnight range is final at 09:30 ET: its sweeps count in RTH only.
           ...(rth && !own ? [['overnight high', (lv.overnight || {}).high, 'high', true], ['overnight low', (lv.overnight || {}).low, 'low', true]] : []),
-          [`last ${ownSwing} swing high`, st.lastSwingHigh, 'high', false, st.lastSwingHighAt ? after(st.lastSwingHighAt) : null],
-          [`last ${ownSwing} swing low`, st.lastSwingLow, 'low', false, st.lastSwingLowAt ? after(st.lastSwingLowAt) : null],
+          ...(entryBars ? [] : [[`last ${ownSwing} swing high`, st.lastSwingHigh, 'high', false, st.lastSwingHighAt ? after(st.lastSwingHighAt) : null],
+            [`last ${ownSwing} swing low`, st.lastSwingLow, 'low', false, st.lastSwingLowAt ? after(st.lastSwingLowAt) : null]]),
           ...eqHighs.map(x => [x.name, x.price, 'high', false, x.since]), ...eqLows.map(x => [x.name, x.price, 'low', false, x.since]),
         ].map(([name, p, sideOf, key = false, since = null]) => ({ name, price: p, side: sideOf, key, since })), 10),
         htfLevels,
@@ -475,7 +484,7 @@ function computeSections({ bars, fine = null, c15, c60, snap, snap15, read, read
         // Not on a frame's own bars: its candle facts are the runner's (buildFrameBriefing), one value per level.
         // fvgRelations: how each candle met the 5m, 15m and 1h gaps' edges as they stood at its open (fvg-frames.js).
         candles: own ? null : briefingCandles({ bars, base: minutes, fine, levelsAt, zonesAt: zonesOf, roundStep }),
-        swingTargets: own ? null : briefingTargets({ bars, minutes, price, oneR, tick, frames: [minutes < 3 ? 3 : minutes, 15, 60, 240] }),
+        swingTargets: own ? null : briefingTargets({ bars, minutes, price, oneR, tick, frames: [15, 60, 240] }),
         // The last completed 1h and 4h candle's high, mid and low as targets, and the side the candle forming since has
         // taken, only when it has (candle-facts.js; the runner's, as above).
         rangeTargets: own ? null : briefingRangeTargets({ bars, base: minutes, price, oneR, tick }),
@@ -550,16 +559,15 @@ function candidate(r, price, levels, { noEntry = false, news = null, lunch = fal
   const allowed = up ? mtf.longAllowed : mtf.shortAllowed;
   const align = (alignment && alignment[up ? 'long' : 'short']) || null;
   const conf = r.confluence || { with: [], against: [] };
-  // A reversal strategy may fade the prevailing trend; when it does, the priority order's step 2 (strategy-library) decides it.
+  // Never counter: a reversal strategy is held to the trend rule like any other; its fact says so when it is.
   // The scan's trend-rule summary names it as text: '4h up' (mtf.ruleSummary).
   const pm = /^(\S+) (up|down)$/.exec(String(mtf.prevailing || ''));
   const prev = pm ? { label: pm[1], trend: pm[2] } : null;
   const fading = prev && (up ? prev.trend === 'down' : prev.trend === 'up');
-  const reversalFact = fading ? `a reversal strategy fading the prevailing ${prev.label} ${prev.trend} trend: the trend rule allows it; the priority order, step 2 (strategy-library), decides it (level, size, target)`
+  const reversalFact = fading ? `a reversal strategy fading the prevailing ${prev.label} ${prev.trend} trend: the trend rule's read for it unknown`
     : prev ? `a reversal strategy, with the prevailing ${prev.label} ${prev.trend} trend` : 'a reversal strategy, no prevailing trend read';
   const facts = [
-    mtf.style === 'reversal' ? reversalFact
-      : allowed === false ? `against the trend rule for a ${r.direction}` : allowed === true ? `the trend rule allows a ${r.direction}` : 'the trend rule unknown',
+    allowed === false ? `against the trend rule for a ${r.direction}` : mtf.style === 'reversal' ? reversalFact : allowed === true ? `the trend rule allows a ${r.direction}` : 'the trend rule unknown',
     `multi-timeframe read for a ${r.direction}: ${align || 'unknown'}`,
     // The room as a fact, never a verdict: the first level ahead beside the R it aims for (the count weighs it).
     inTheWay ? `first level ahead: ${inTheWay.name} at ${inTheWay.R}R; it aims for ${needR}R`
@@ -657,13 +665,14 @@ function buildBriefing({ symbol, contractId = null, bars: raw, minutes, fineBars
   const fine = Array.isArray(fineBars) && fineBars.length ? normalizeBars(fineBars) : null;
   const fresh = computeSections({ bars, fine, c15, c60, snap, snap15, read, read15, readH1, scan, scanError, minutes, closedAt, blackouts, clock, tick, grid,
     roundStep: roundStepFor(root, roundSteps), roundError: roundStepError(root, roundSteps), own, keyLevels });
-  // The base timeframe's timing against the side the 4h and 1h agree on (ltf-timing.js), from these closed bars: the
+  // The base timeframe's timing against the side the entry rule allows (ltf-timing.js, BG), from these closed bars: the
   // runner's briefing only (a frame's is another timeframe's read).
   if (!own) {
     const m3 = fresh.m3.data;
     const h = fresh.h1.data || {};
     const comp = m3.compression && typeof m3.compression[tfLabel(minutes)] === 'object' ? m3.compression[tfLabel(minutes)] : null;
-    m3.timing = timingOf({ trends: { '4h': (h.h4 || {}).trend, '1h': (h.h1 || {}).trend }, regime: (m3.regime || {}).primary, bars, minutes, breaks: breaksOf(bars), compression: comp });
+    const f15 = (fresh.m15 && fresh.m15.data && fresh.m15.data.frame) || {};
+    m3.timing = timingOf({ trends: { '4h': (h.h4 || {}).trend, '1h': (h.h1 || {}).trend }, t15: f15.trend || null, declared: m3.declared || null, regime: (m3.regime || {}).primary, bars, minutes, breaks: breaksOf(bars), compression: comp });
   }
   // Same symbol, bar size and contract (a roll to the next month is new prices, never the old month's levels).
   const usable = prev && prev.symbol === symbol && prev.minutes === minutes && (prev.contractId || null) === contractId && Date.parse(prev.closedAt) < closedAt.getTime();
@@ -775,6 +784,9 @@ function summaryLines(b, et) {
     `- Session: ${m3.windowText || `${m3.window} until ${et(m3.windowUntil)} ET`}.`,
     `- Price ${m3.price}. 1R = ${m3.oneR ? `${m3.oneR.points} pts (${m3.oneR.basis})` : 'unknown'}; every distance below is in points and R.`,
     `- Trend rule: ${rule}`,
+    // The side the entry rule (BG) allows, from its own check (bias-line.js): the runner's briefing only (a frame's has no
+    // session facts, so no declared trend).
+    ...(!own && biasLine(b) ? [`- ${biasLine(b)}.`] : []),
     alignment,
     own ? `- VWAP and the session's levels (today, overnight, opening range, IB, profile): each ${SESSION_ELSEWHERE}, one value in every briefing; ${typeof m3.setups === 'string' ? `the room below is this ${tf} bar's own levels` : `the room below and the setups' levels include them (the runner's values), with this ${tf} bar's own`}.`
       : `- VWAP (${vw.applies || '?'}): price ${vw.side || '?'}, ${Number.isFinite(vw.distanceAtr) ? Math.abs(vw.distanceAtr) : '?'} x ${tf} ATR(14) away. Closes crossing a VWAP in the last 30 bars: the RTH VWAP ${vw.rthCrossesLast30 ?? '?'}, the session VWAP ${vw.sessionCrossesLast30 ?? '?'} (the regime's count).`,
@@ -803,7 +815,7 @@ function summaryLines(b, et) {
   // Whether the trend has declared itself each side's way, in RTH only (trend-declared.js declaredLine).
   const declared = declaredLine(m3.declared, tf);
   if (declared) out.push(declared);
-  // The base timeframe's timing against the HTF side, when the 4h and 1h agree (ltf-timing.js timingLine).
+  // The base timeframe's timing against the side the entry rule allows (ltf-timing.js timingLine).
   const timing = timingLine(m3.timing, et, tf);
   if (timing) out.push(timing);
   // The setup moment (learning/setup-moments.js): the reactions the model composes on, said as facts.
@@ -858,7 +870,7 @@ function cisdLine(block, et) {
     if (typeof x === 'string') return `${tf} none`;
     const zone = x.ote ? `OTE ${x.ote.bottom}-${x.ote.top} (mid ${x.ote.mid}), ${x.status}${x.priceInOte ? ', price in it' : ''}`
       : x.displacement === 'weak' ? 'a weak displacement: no zone' : `zone ${x.status}`;
-    return `${tf} ${x.dir} at ${x.level} (closed ${et(x.confirmedClose)}, ${x.displacement}${x.engulfing ? ', engulfing' : ''})${x.sweep ? ` after a sweep of the ${x.sweep.name} ${x.sweep.price}` : ', no key-level sweep'}, ${zone}${x.bounce ? `, this bar bounced ${x.bounce} out of it` : ''}`;
+    return `${tf} ${x.dir} at ${x.level} (closed ${et(x.confirmedClose)}, ${x.displacement})${x.sweep ? ` after a sweep of the ${x.sweep.name} ${x.sweep.price}` : ', no key-level sweep'}, ${zone}${x.bounce ? `, this bar bounced ${x.bounce} out of it` : ''}`;
   });
   return parts.length ? `- CISD (completed candles; a read, not a signal): ${parts.join('; ')}.` : null;
 }
@@ -872,6 +884,7 @@ const targets = list => list.reduce((out, x) => {
 }, []).map(target).join(', ');
 
 // The m3 fields the summary says in full (one line each), left out of the detail whole.
+const CHAIN_FRAMES = (C => C.chainOf(C.SHIPPED))(require('./chain'));
 const SUMMARY_FIELDS = ['swingTargets', 'rangeTargets', 'fvgs', 'structure5m', 'compression', 'declared', 'timing'];
 // What the summary's "This bar's close" line says in full, left out of the detail (only present when it happened).
 const SUMMARY_ONLY = { vwap: ['crossed'], today: ['openingRangeCrossed'], location: ['closesBeyondValue', 'backInsideValue'] };
@@ -960,7 +973,9 @@ function candleLines(m3, et, roomOf = 'R = the reference stop', closedAt = null)
       // On high volume, the net move (absorption's "little progress", composed-reads.js netAtrOf).
       extras && c.volRatio >= VOLUME_HIGH && netAtrOf(c) !== null ? `net ${netAtrOf(c)} ATR` : null,
       c.momentum === 'up' || c.momentum === 'down' ? `momentum ${c.momentum}` : null].filter(Boolean).join(', ');
-    out.push(`- ${tf} (closed ${et(c.closedAt)}): ${shapeText}${sweepText(c.sweep)}${met.length ? `; ${met.join(', ')}` : ''}${extras ? gapText(c) : ''}.`);
+    // The chain's roles (chain.js): the setup frame's candle is the setup candle, the entry frame's the entry (timing) one.
+    const role = tf === CHAIN_FRAMES.setup ? 'setup candle, ' : tf === CHAIN_FRAMES.entry ? 'entry candle, timing, ' : '';
+    out.push(`- ${tf} (${role}closed ${et(c.closedAt)}): ${shapeText}${sweepText(c.sweep)}${met.length ? `; ${met.join(', ')}` : ''}${extras ? gapText(c) : ''}.`);
   }
   const t = m3.swingTargets || { above: [], below: [] };
   out.push(`- Next swing above (${roomOf}): ${targets(t.above || []) || 'none found'}; below: ${targets(t.below || []) || 'none found'}.`);

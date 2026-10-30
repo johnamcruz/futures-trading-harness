@@ -22,7 +22,7 @@ function bars(n = 200) {
   });
 }
 
-function setup({ start = true, contracts = 'micro', specs = true, paper = false, lane = null } = {}) {
+function setup({ start = true, contracts = 'micro', specs = true, paper = false, lane = null, sizing = TEST_SIZING, extra = [] } = {}) {
   const home = tmpDir();
   if (specs) recordBrokerSpecs(home); // the broker's tick specs, as the translator records them
   const env = {};
@@ -31,7 +31,7 @@ function setup({ start = true, contracts = 'micro', specs = true, paper = false,
   const strategy = {
     name: 'prop_x', valid: true, status: 'active', instruments: ['MNQ', 'NQ'], timeframe: '3m', signal: 'policy', strategies: COMPONENTS,
     account: 'topstep_50k', contracts, exit: { trail_activate_r: 2, trail_giveback_r: 0.5 },
-    sizing: TEST_SIZING,
+    sizing,
   };
   // Its strategies, as loadStrategies reads them: a policy trades only the active ones (status set per test).
   const components = COMPONENTS.map(name => ({ name, valid: true, errors: [], status: 'active', signal: 'rules', instruments: ['MNQ', 'NQ'], timeframe: '3m' }));
@@ -45,7 +45,7 @@ function setup({ start = true, contracts = 'micro', specs = true, paper = false,
     journal: [],
     async fillsSince(id, start) { client.fillsFrom = start.toISOString(); return client.fills.filter(f => Date.parse(f.creationTimestamp) >= start.getTime()); },
   };
-  const hooks = createPropHooks({ root: ROOT, env, home, client, accountId: '7', strategies: () => [strategy, ...components], paper, log: m => logs.push(m), journal: () => client.journal, lane });
+  const hooks = createPropHooks({ root: ROOT, env, home, client, accountId: '7', strategies: () => [strategy, ...components, ...extra], paper, log: m => logs.push(m), journal: () => client.journal, lane });
   return { hooks, home, account, strategy, components, logs, balances, client };
 }
 
@@ -67,6 +67,8 @@ test('snapshots and end-of-day balances go to the attempt the gate reads', async
   const [sum] = hooks.summaries(now);
   assert.deepStrictEqual({ account: sum.account, balance: sum.balance, floor: sum.floor, cushion: sum.cushion, dayPnl: sum.dayPnl, budgets: sum.budgets, entryBlock: sum.entryBlock },
     { account: 'topstep_50k', balance: 50250, floor: 48000, cushion: 2250, dayPnl: 250, budgets: [{ strategy: 'prop_x', budgetUsd: 450 }], entryBlock: null });
+  // The Size and Min lines the prompt prints (prop/size-line.js), from the attempt's facts and the policy's sizing.
+  assert.ok(Array.isArray(sum.sizing) && /^Size: /.test(sum.sizing[0]), JSON.stringify(sum.sizing));
   assert.deepStrictEqual(setup({ start: false }).hooks.summaries(now), [], 'no attempt, no state');
   assert.strictEqual(sum.asOf, now.toISOString(), 'built from the snapshot taken now');
   // A balance just read wins over the snapshot, and says so.
@@ -149,7 +151,7 @@ test('a setup whose stop is too wide for the cushion is skipped with the reason,
   hooks.screen([{ name: 'trendy', candidate: true, direction: 'long', stopDistance: 1000 }], { symbol: 'MNQ', contractId: CONTRACT, bars: bars(), now });
   const v = prop.latestVerdict(home, 'prop_x', 'MNQ');
   assert.strictEqual(v.action, 'skip');
-  assert.match(v.reason, /size budget \(\$450\) is below one contract at this stop; with a cushion of \$2250 the attempt can only trade setups with tighter stops/);
+  assert.match(v.reason, /size budget \(\$450\) is below one contract at this stop; with a cushion of \$2250 this setup is skipped \(never a tighter stop\)/);
 });
 
 test('a policy strategy screens its strategies\' setups: the first that fired, sized in micros or minis; the verdict is recorded', async () => {
@@ -487,4 +489,22 @@ test('a cited setup gets no verdict: a policy listing a composed strategy screen
   const own = out.find(r => r.name === 'trendy');
   assert.strictEqual(own.candidate, false);
   assert.match(own.note, /^not traded through prop_x: trendy is a setup lifecycle_x cites in prop_x: it is traded only through lifecycle_x's compose record/);
+});
+
+
+test('the Size line judges the soft stop at the most one entry may risk: the floor stretch above the composed cap, as the gate does', async () => {
+  // The policy may stretch to $500 at the floor; the composed strategy caps a trade at $300 (size-line.js worstRisk).
+  const composed = { name: 'composed_x', valid: true, errors: [], status: 'active', signal: 'composed', instruments: ['MNQ'], timeframe: '3m', risk: { max_risk_usd: 300 } };
+  const now = new Date('2026-10-07T14:30:00Z');
+  const sizeLine = async opts => {
+    const { hooks } = setup(opts);
+    await hooks.snapshot(now);
+    // $49,900 now: the day is down $100, so $400 to the 50k account's $500 soft stop.
+    const [sum] = hooks.summaries(now, 49900);
+    return sum.sizing[0];
+  };
+  // A $500 stretched loss reaches the soft stop, so the line names it (the day is red, so drawdown holds too).
+  assert.match(await sizeLine({ sizing: { ...TEST_SIZING, floor_stretch_max_usd: 500 }, extra: [composed] }), /^Size: phase 2 may cut \(pacing: [^)]*\bsoft-stop\b/);
+  // No stretch: the $300 cap fits in the $400 room, so the soft stop doesn't hold.
+  assert.doesNotMatch(await sizeLine({ sizing: TEST_SIZING, extra: [composed] }), /soft-stop/);
 });

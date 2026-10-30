@@ -12,6 +12,11 @@ description: Use when sizing a trade plan - risk per contract, the budget, the c
 
 ## How It Works
 
+**In a prop attempt**: a healthy account (balance ≥ start, no loss streak)
+takes the full verdict size; the code computes it. Phase 2 cuts only on a
+pacing rule. Fewer than 3 contracts (`min_contracts`) at the stop:
+skip.
+
 1. **Specs from the API, always.** `search_contracts` / `get_contract` return
    `tickSize` and `tickValue`. Micro and mini specs to sanity-check them: the
    `micro-mini-specs` skill.
@@ -19,15 +24,15 @@ description: Use when sizing a trade plan - risk per contract, the budget, the c
    fees from the account, if known). A stop can fill a tick or more past its
    price: when the room to the loss floor or the daily limit sets the size,
    count a tick of slippage per contract too (a policy verdict already does).
-3. **Risk budget** = the smallest of:
+3. **Risk budget** (outside an attempt) = the smallest of:
    - the strategy / plan $ risk (a composed trade: at most its $300 cap),
    - 25% of `remainingBeforeLimit` from `get_account_snapshot`, when known,
    - 10% of the trailing-drawdown cushion (balance − loss floor), when shown.
      None shown (no attempt): skip this cap, never $0. Never ask when
      autonomous.
 4. **Size** = floor(budget ÷ risk per contract). If it's 0, the stop is too
-   wide for the budget: skip, or find a tighter, structure-based stop. Never
-   shrink the stop to make the size work.
+   wide for the budget: skip (in an attempt the floor stretch is code's).
+   Never a tighter stop to make the size work.
 5. **Caps:** the broker server's `maxOrderSize` and `maxPositionSize`
    (`get_server_config`); size 1 on micros for a rules strategy until
    its setup has 30+ reviewed trades with positive expectancy. The order gate enforces two
@@ -52,17 +57,13 @@ description: Use when sizing a trade plan - risk per contract, the budget, the c
    checks the verdict, not these caps; it still refuses a size over the
    broker's `maxOrderSize`, and over the policy strategy's own
    `risk.max_risk_usd` if it sets one (a rules component's caps don't apply;
-   `trade_lifecycle`'s cap does: the lower of it and the verdict). Everything else (stop first, protective
+   `trade_lifecycle`'s cap does: the lower of it and the verdict (the verdict is the full size; the cap limits the stop)). Everything else (stop first, protective
    stop always working) still applies. The verdict is the most the account
-   allows, not what the moment deserves: after a loss, in a streak or
-   drawdown, or one loss from `daily_loss_soft` or the target, size under it
-   (`Size: <n> (<rule>)`) or pass. A healthy account: a pass is a VETO, a
-   smaller size is placed at the verdict.
-   In a prop attempt, the size you state is a suggestion: code translates it
-   at entry to the rulebook's size (min_contracts and the budget); read the
-   size it returns.
-7. **Half size** wherever the priority order (strategy-library) halves a
-   trade, computed as it says there. Never round a half up. A composed
+   allows: phase 2 cuts it only on a pacing rule (a losing account, a loss
+   streak, drawdown: `Size: <n> (<rule>)`) or passes.
+7. Outside a prop attempt only, a trade marked smaller is halved: half is
+   `floor(size / 2)`, 0 means no trade (at size 1 every halving is a skip).
+   Halvings don't compound: the size is halved once, never rounded up. A composed
    trade: `confluence-counting` sizes it, under the caps.
 8. **The arithmetic from `order_plan`** (the `order-plan` skill): steps 2
    and 4 for a compose record (refused over its cap), a policy verdict or a

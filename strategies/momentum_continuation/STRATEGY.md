@@ -1,7 +1,7 @@
 ---
 name: momentum_continuation
-description: Momentum continuation on 3m - a closed momentum candle the prevailing higher-timeframe trend's way, 09:36-11:57 ET; trade_lifecycle cites it and enters at market, its stop beyond the candle, 2R.
-version: 1
+description: Momentum continuation on 3m - a closed momentum candle the entry rule's side (BG), 09:36-11:57 ET; trade_lifecycle cites it and enters at market, its stop beyond the candle, 2R.
+version: 2
 status: active                # the owner's ("build all of them", 2026-10-28); traded only through trade_lifecycle's record under prop_portfolio
 instruments: [MNQ]            # the census's market (NQ 3m); MNQ covers a selected NQ, as any rules strategy
 timeframe: 3m
@@ -9,12 +9,12 @@ sessions: [ny]                # the scan's session; the decision window is the m
 signal: rules
 rules:
   long:
-    - mtf_prevailing > 0      # the trend rule's prevailing frame (the first of 4h, 1h, 15m with a trend) is up
+    - chain_side > 0          # the side the shipped entry rule allows is long (chain-side.js: BG on the 4h and 1h; both ranging, the 15m and the declared trend)
     - htfd_momentum(3) > 0    # the closed 3m candle has momentum up (momentum.js: range >= 1 ATR, volume >= its average, close in the top third)
     - minute_et >= 576        # the candle opened 09:36 ET or later (closed 09:39, after the opening print)
     - minute_et <= 714        # and by 11:54 ET (closed by 11:57)
   short:
-    - mtf_prevailing < 0
+    - chain_side < 0
     - htfd_momentum(3) < 0
     - minute_et >= 576
     - minute_et <= 714
@@ -27,14 +27,14 @@ risk:
   stop_min: 3                 # at least 3.00 points (12 ticks): a closer stop is widened to it
   min_rr: 2
   max_risk_usd: 300           # the composed trade's cap, the same as trade_lifecycle's
-source: the owner-approved S2 census (2026-10-28, model-free, NQ 3m practice-train days 2021-04-26..2024-06-30); the momentum read is momentum.js, the trend rule mtf.js
+source: the owner-approved S2 census (2026-10-28, model-free, NQ 3m practice-train days 2021-04-26..2024-06-30); the momentum read is momentum.js; the side the entry rule's BG (chain-side.js), the owner's change (2026-10-29)
 ---
 
 # Strategy: Momentum Continuation (`momentum_continuation`)
 
-A closed 3m momentum candle in the direction of the prevailing
-higher-timeframe trend, in the morning session: the trend resuming with
-force. It is a setup the trade lifecycle cites, never a trade of its own:
+A closed 3m momentum candle on the entry rule's side (BG: the bias,
+4h + 1h), in the morning session: the trend resuming with force. Its
+fired read is the setup (the 15m may still run against it in a pullback). It is a setup the trade lifecycle cites, never a trade of its own:
 the head trader weighs it through the whole top-down flow and composes it
 with `compose_check`; code takes its entry, stop and target from here.
 
@@ -49,9 +49,14 @@ with `compose_check`; code takes its entry, stop and target from here.
 
 ### Context filter
 
-- The side is the prevailing trend's: the first of 4h, 1h, 15m with a
-  trend (the trend rule, `multi-timeframe-analysis`). No trend on any
-  frame, or the 4h not read yet: no setup.
+- The side is the one the entry rule allows (BG, `htf-to-ltf`'s side
+  rule): each trending 4h or 1h its way, neither against; both ranging, the
+  15m trend and the declared trend its way. Neither side allowed, or a
+  frame not read yet: no setup. A deliberate change from the census's
+  rule (the prevailing trend, the first of 4h, 1h, 15m with a trend),
+  approved by the owner (2026-10-29), so the setup fires only where the
+  gate takes its side; the candle, the stop, the 12-tick floor, the 2R
+  mark and the window are the census's.
 
 ### Trigger
 
@@ -65,12 +70,14 @@ with `compose_check`; code takes its entry, stop and target from here.
 ### Entry, stop, targets
 
 - Compose it (`compose_check`), one read per step: your bias (the
-  prevailing trend, e.g. `4h up`), where price is (location), the setup
+  side rule's, e.g. `4h up`), where price is (location), the setup
   `momentum_continuation fired up` (short: `down`), the entry `3m momentum
   up`, the stop `stop 3m low <the candle's low>` (short: high), the target
-  `target 2r`.
-- Code's plan: at market from the candle's close; the stop one tick beyond
-  the candle's extreme, at least 12 ticks; the target 2R. The brackets are
+  `target 2r` (the 2R mark that arms the trail, not the exit).
+- Code's plan: at market from the candle's close; its own stop: one tick
+  beyond the candle's extreme, widened to at least 12 ticks (`stop_min`),
+  and like every composed stop refused under compose's floor; the 2R mark
+  arms the trail. The brackets are
   ticks from the fill. Past 2R the rulebook's exit trails it
   (`target_then_trail`: the lock, then the 15m structure trail).
 - Size: the rulebook's (in an attempt `order_plan` translates yours; the

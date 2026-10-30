@@ -3,7 +3,7 @@ name: prop-pacing-judgment
 description: Use when pacing a prop account with no running attempt (daily budget, pace, consistency, stand-downs).
 ---
 
-# Prop Pacing by Judgment
+# Prop Pacing by Judgment (no running attempt)
 
 ## When to Use
 
@@ -15,7 +15,7 @@ for a running one, the `prop-challenge-pacing` skill):
 
 ## How It Works
 
-Only while no harness-tracked attempt is running (`combine_status` lists none): a
+**Not in a prop attempt.** Only while no harness-tracked attempt is running (`combine_status` lists none): a
 running attempt is paced by its verdicts (the `prop-challenge-pacing` skill), never
 by these rules.
 

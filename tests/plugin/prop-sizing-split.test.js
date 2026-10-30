@@ -74,6 +74,8 @@ const SPLITS = {
         reason: "fix/skills-match-code: no attempt and no cushion known (stage 1) is the composed cap's budget; an autonomous run never asks the user; step 8 the compose record first" },
       { from: "**Survival first.** Daily risk budget ≤ 25–30% of the cushion; per-trade risk ≤ 10% of the cushion.", to: "**Survival first.** Daily risk budget ≤ 25–30% of the cushion; per-trade risk ≤ 10% of the cushion (none known: no cap, never $0).",
         reason: "fix/no-attempt-cushion: an unknown cushion is no cap, never $0 (a model vetoed a $31.50 trade reading it as $0)" },
+      { from: "**A verdict is a ceiling, never an order**: take it only when the priority order (the strategy-library skill) says so, and then as given: rationale `setup:<policy strategy> ...`, the record's contract and side, at most the lower of the verdict's size and the composed cap, the record's ticks (`order_plan` for `trade_lifecycle` gives exactly these arguments, or refuses with the gate's reason).", to: null,
+        reason: "feat/bias-bg (the context quiz, Q17): the verdict is the full size, the cap limits the stop" },
     ],
     moved: {
       // "Scoring a policy strategy on history (the evaluator)", its body.
@@ -152,6 +154,18 @@ const SPLITS = {
         reason: "fix/skills-match-code: no attempt and no cushion known (stage 1) is the composed cap's budget; an autonomous run never asks the user; step 8 the compose record first" },
       { from: "The budget (step 3) and the caps are still your judgement: a budget below its risk is a skip, and a size you are allowed to raise (30+ reviewed trades) changes only `size`, with the risk scaling by it.", to: "The budget (step 3) and the caps stay your judgement: a budget below its risk is a skip; a raised size (a rules setup with 30+ reviewed trades) changes only `size`, the risk scaling with it.",
         reason: "fix/skills-match-code: no attempt and no cushion known (stage 1) is the composed cap's budget; an autonomous run never asks the user; step 8 the compose record first" },
+      { from: "If it's 0, the stop is too wide for the budget: skip, or find a tighter, structure-based stop.", to: null,
+        reason: "feat/bias-bg: stops locked (never a tighter stop; the floor stretch is code's); the half size only outside a prop attempt" },
+      { from: "Never shrink the stop to make the size work.", to: null,
+        reason: "feat/bias-bg: stops locked (never a tighter stop; the floor stretch is code's); the half size only outside a prop attempt" },
+      { from: "**Half size** wherever the priority order (strategy-library) halves a trade, computed as it says there.", to: null,
+        reason: "feat/bias-bg: stops locked (never a tighter stop; the floor stretch is code's); the half size only outside a prop attempt" },
+      { from: "**Risk budget** = the smallest of: - the strategy / plan $ risk (a composed trade: at most its $300 cap), - 25% of `remainingBeforeLimit` from `get_account_snapshot`, when known, - 10% of the trailing-drawdown cushion (balance − loss floor), when shown.", to: "**Risk budget** (outside an attempt) = the smallest of: - the strategy / plan $ risk (a composed trade: at most its $300 cap), - 25% of `remainingBeforeLimit` from `get_account_snapshot`, when known, - 10% of the trailing-drawdown cushion (balance − loss floor), when shown.",
+        reason: "feat/bias-bg (the context quiz): the prop rule leads the skill (the code computes the size); the translation line is said once there" },
+      { from: "Never round a half up.", to: null,
+        reason: "feat/bias-bg (the context quiz, Q18): nothing halves in a prop attempt; the halving arithmetic is position-sizing's non-prop step, the priority order points there; the verdict is the full size, the cap limits the stop (Q17)" },
+      { from: "The gate checks the verdict, not these caps; it still refuses a size over the broker's `maxOrderSize`, and over the policy strategy's own `risk.max_risk_usd` if it sets one (a rules component's caps don't apply; `trade_lifecycle`'s cap does: the lower of it and the verdict).", to: null,
+        reason: "feat/bias-bg (the context quiz, Q18): nothing halves in a prop attempt; the halving arithmetic is position-sizing's non-prop step, the priority order points there; the verdict is the full size, the cap limits the stop (Q17)" },
     ],
     moved: {
       // Step 1's table and the contract-naming paragraph, and the sentence that introduced the table.

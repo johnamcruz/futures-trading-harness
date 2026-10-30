@@ -34,38 +34,35 @@ A verdict is a ceiling on size, never an order. A valid setup is the
 trade (`confluence-counting`). Go down the list; a higher step
 wins, and each step can only lower the size, never raise it: the size is the
 smaller of the verdict's (or position-sizing's) and what the steps allow.
-Wherever a step halves, half is `floor(size / 2)`, and 0 means no trade (so
-at size 1 every halving is a skip). Halvings don't compound: however many
-steps halve, the size is halved once. In a prop attempt the translated size is full; phase 2 cuts it only on a pacing rule. A composed trade: `confluence-counting`
-sizes it, under the code's caps.
+In a prop attempt nothing halves: a serious factor against doesn't cut the
+size; the code sets the full verdict size. Not in a prop attempt:
+`position-sizing`.
 
 1. **Hard stops → no trade**: the candidate is `blocked` (a news blackout
    or the news unknown, a no-entry window), a phase-1 stand-down, or a gate
    refusal.
-2. **The trend rule**: a trend strategy against the prevailing trend → no
-   trade. A reversal strategy may
-   fade it only at a higher-timeframe level, at half size and the nearest
-   target; a composed one needs `trade-lifecycle`'s tier: vs a 15m trend a
-   15m or 1h CHoCH; vs 1h a 1h CHoCH; vs 4h a 1h CHoCH plus a 4h rejection.
+2. **The trend rule** (never counter): any setup or strategy against a
+   trending 4h or 1h, or with both ranging against the 15m → no trade,
+   whatever CHoCH.
 3. **Room**: the first level ahead (`inTheWay`, its own R) and the R it
    aims for (`needR`): a read, never a no trade alone. Hard: R:R to the
    target at least `risk.min_rr` (compose_check's).
 4. **The multi-timeframe read for its side**: a rules strategy:
-   `aligned` → full; `pullback` → no trade until the trigger timeframe turns back with the
-   bias (a shift, a reclaim), then full; `mixed` → half; `counter` on a
-   non-reversal setup → no trade. Composed: the side rule
+   `aligned` → full; `pullback` → full (the setup the bias's way ends
+   it); `mixed` → smaller (not in a prop attempt: `position-sizing`);
+   `counter` → no trade. Composed: the side rule
    (`htf-to-ltf`).
 5. **The strategy's own context filter and skip rules** (its STRATEGY.md)
    → any skip rule hit: no trade.
-6. **Confluence** (rules strategies): another firing the other side → no trade;
-   confluence with it supports the full size.
+6. **Confluence** (rules strategies): another candidate (one the trend rule
+   allows) firing the other side → no trade.
 7. **Secondary context** (the VWAP side, the lunch lull, participation):
-   cuts to half, never vetoes alone.
+   a read, never a veto alone (not in a prop attempt: `position-sizing`).
 
 Every other skill and role applies this order; none restates it.
 
 ## Examples
 
 ```text
-trade_lifecycle short, 1h up, no 1h CHoCH down → step 2: no trade.
+trade_lifecycle short, 1h up, a 1h CHoCH down → step 2: no trade (never counter).
 ```

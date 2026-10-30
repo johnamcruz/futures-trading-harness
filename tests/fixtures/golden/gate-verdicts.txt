@@ -49,7 +49,7 @@ entry: the side named is not the order side: REFUSED (intent entry)
 entry: stop on the wrong side of a limit entry: REFUSED (intent entry)
   [order-consistency] The order doesn't agree with itself: the stop 21510 is on the wrong side of the buy entry 21500. Fix the order or the rationale so both say the same trade.
 entry: against the prevailing trend: REFUSED (intent entry)
-  [mtf-trend] setup:fx_orb long is against the prevailing 4h down trend: only a reversal strategy (mtf: reversal) may fade it (4h down, 1h down, 15m down, as of the bar closed 2026-10-07T13:57:00.000Z). Stand aside, or trade a setup with the trend.
+  [mtf-trend] setup:fx_orb long is against the 4h down trend: no entry against a trending 4h or 1h (4h down, 1h down, 15m down, as of the bar closed 2026-10-07T13:57:00.000Z). Stand aside, or trade a setup with the trend.
 entry: its trigger did not fire: REFUSED (intent entry)
   [trigger-fired] setup:fx_orb long did not fire on the last closed MNQ bar (closed 2026-10-07T13:57:00.000Z; fired: nothing). Enter only on a strategy's own trigger; a different setup tag doesn't make it one.
 entry: no tick specs from the broker: REFUSED (intent entry)
@@ -94,7 +94,7 @@ policy: over the verdict's size: REFUSED (intent entry)
 policy: another stop than the verdict's: REFUSED (intent entry)
   [policy] setup:fx_orb: the stop is 60 ticks; the verdict was sized for 40.
 policy: the other side: REFUSED (intent entry)
-  [mtf-trend] setup:fx_cross short is against the prevailing 4h up trend: only a reversal strategy (mtf: reversal) may fade it (4h up, 1h up, 15m up, as of the bar closed 2026-10-07T13:57:00.000Z). Stand aside, or trade a setup with the trend.
+  [mtf-trend] setup:fx_cross short is against the 4h up trend: no entry against a trending 4h or 1h (4h up, 1h up, 15m up, as of the bar closed 2026-10-07T13:57:00.000Z). Stand aside, or trade a setup with the trend.
   [policy] setup:fx_orb: the verdict is for a long entry, not sell.
   [order-consistency] The order doesn't agree with itself: a short needs the target below the stop (stop 21480, target 21540). Fix the order or the rationale so both say the same trade.
 policy: an expired verdict: REFUSED (intent entry)

@@ -305,7 +305,7 @@
    "from": "field-study.js study seed default (and field-confluence.js)"
   },
   "skillCaps.skillBytes": {
-   "value": 3400,
+   "value": 3459,
    "from": "skill-caps.js SKILL_BYTES"
   },
   "skillCaps.setupSkillBytes": {

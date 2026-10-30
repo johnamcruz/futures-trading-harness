@@ -56,7 +56,7 @@ test('rendered on the candle\'s line: "momentum up" or "momentum down", nothing 
       if (line === plain[k]) continue;
       // The standard plan (setup-library.js planLine) composes from the candles, momentum among its entry reads.
       if (line.startsWith('- Standard plan')) continue;
-      const tf = /^- (\w+) \(closed/.exec(line)[1];
+      const tf = /^- (\w+) \((?:setup candle, |entry candle, timing, )?closed/.exec(line)[1];
       const m = b.sections.m3.data.candles[tf].momentum;
       assert.ok(m === 'up' || m === 'down');
       assert.strictEqual(line.replace(`, momentum ${m}`, ''), plain[k], 'only the read is added');

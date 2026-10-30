@@ -61,7 +61,7 @@ test('trend facts: no valid plan when the window allows no entries, or the trend
 
 test('trend facts: with the policy\'s entry rule on, a bar it refuses has no valid plan (the finding counts only entries the gate allows)', () => {
   const { entryRuleOf } = require('../../scripts/lib/trading/entry-rule');
-  const off = { bias_frames: 'off', bias_agree: 'off', regime_against: 'off', leg_turned: 'off' };
+  const off = { chain: '4h', bias_frames: 'off', bias_agree: 'off', regime_against: 'off', leg_turned: 'off' };
   assert.strictEqual(facts({ entryRule: entryRuleOf(off) }).valid, true, 'every key off: as before');
   const down = brief(b => { b.sections.h1.data.h1.trend = 'down'; });
   assert.strictEqual(facts({ briefing: down }).valid, true, 'no rule: the same bar has a plan');

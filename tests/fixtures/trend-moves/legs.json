@@ -451,8 +451,7 @@
       }
      ],
      "problems": [
-      "no entry read pointing long is on a candle that closed after the setup's (2021-05-03T14:03:00.000Z): the confirmation is the next closed candle, not the reaction's own",
-      "R:R 0.489 is under the strategy's min 2"
+      "no entry read pointing long is on a candle that closed after the setup's (2021-05-03T14:03:00.000Z): the confirmation is the next closed candle, not the reaction's own"
      ]
     }
    ]
@@ -616,7 +615,7 @@
       }
      ],
      "problems": [
-      "no entry read pointing short is on a candle that closed after the setup's (2021-05-03T14:54:00.000Z): the confirmation is the next closed candle, not the reaction's own"
+      "the setup has no read pointing down (short): state the reaction the trade's way"
      ]
     },
     {
@@ -717,7 +716,7 @@
      "bar": "2021-05-04T13:33:00.000Z",
      "window": "allowed",
      "trendRule": "allowed",
-     "validPlan": false
+     "validPlan": true
     },
     {
      "bar": "2021-05-04T13:36:00.000Z",
@@ -1712,8 +1711,7 @@
      ],
      "problems": [
       "steps not stated: bias, location (every step needs a read, D7)",
-      "the setup has no read pointing up (long): state the reaction the trade's way",
-      "R:R 0.941 is under the strategy's min 2"
+      "the setup has no read pointing up (long): state the reaction the trade's way"
      ]
     }
    ]
@@ -1934,8 +1932,7 @@
       }
      ],
      "problems": [
-      "no entry read pointing short is on a candle that closed after the setup's (2021-05-04T14:39:00.000Z): the confirmation is the next closed candle, not the reaction's own",
-      "R:R 1.426 is under the strategy's min 2"
+      "no entry read pointing short is on a candle that closed after the setup's (2021-05-04T14:39:00.000Z): the confirmation is the next closed candle, not the reaction's own"
      ]
     },
     {
@@ -2123,7 +2120,7 @@
      ],
      "problems": [
       "steps not stated: target (every step needs a read, D7)",
-      "no entry read pointing short is on a candle that closed after the setup's (2021-05-04T15:12:00.000Z): the confirmation is the next closed candle, not the reaction's own"
+      "the setup has no read pointing down (short): state the reaction the trade's way"
      ]
     },
     {
@@ -2201,8 +2198,7 @@
       }
      ],
      "problems": [
-      "no entry read pointing short is on a candle that closed after the setup's (2021-05-04T14:39:00.000Z): the confirmation is the next closed candle, not the reaction's own",
-      "R:R 1.426 is under the strategy's min 2"
+      "no entry read pointing short is on a candle that closed after the setup's (2021-05-04T14:39:00.000Z): the confirmation is the next closed candle, not the reaction's own"
      ]
     },
     {
@@ -2455,7 +2451,7 @@
       }
      ],
      "problems": [
-      "no entry read pointing long is on a candle that closed after the setup's (2021-05-05T13:39:00.000Z): the confirmation is the next closed candle, not the reaction's own",
+      "the setup has no read pointing up (long): state the reaction the trade's way",
       "R:R 1.450 is under the strategy's min 2"
      ]
     }

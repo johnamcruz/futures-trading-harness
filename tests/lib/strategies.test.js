@@ -487,7 +487,7 @@ test('mtf: trend (the default) or reversal; a policy strategy takes it from its 
   assert.strictEqual(byName.prop_portfolio.mtf, undefined);
 });
 
-test('scan: a trend strategy that fires against the prevailing trend is not a candidate; a reversal one is', () => {
+test('scan: never counter: a strategy that fires against a trending 4h or 1h is not a candidate, a reversal one neither', () => {
   const dir = tmpDir();
   const rules = style => [
     `name: ${style}_up`, `description: Fires long on every bar, a ${style} test of the multi-timeframe trend rule.`,
@@ -505,10 +505,11 @@ test('scan: a trend strategy that fires against the prevailing trend is not a ca
   const r = Object.fromEntries(scan(mine, { bars }, { symbol: 'MNQ', now: new Date(Date.UTC(2026, 8, 13, 14)) }).map(x => [x.name, x]));
   assert.strictEqual(r.trend_up.direction, 'long');
   assert.strictEqual(r.trend_up.candidate, false);
-  assert.ok(r.trend_up.filtersFailed.some(f => /^mtf: against the prevailing 4h down trend/.test(f)), r.trend_up.filtersFailed.join());
+  assert.ok(r.trend_up.filtersFailed.some(f => /^mtf: against the 4h down trend/.test(f)), r.trend_up.filtersFailed.join());
   assert.deepStrictEqual([r.trend_up.mtf.prevailing, r.trend_up.mtf.longAllowed, r.trend_up.mtf.shortAllowed], ['4h down', false, true]);
-  assert.ok(!r.reversal_up.filtersFailed.some(f => /^mtf:/.test(f)));
-  assert.strictEqual(r.reversal_up.mtf.style, 'reversal');
+  assert.strictEqual(r.reversal_up.candidate, false);
+  assert.ok(r.reversal_up.filtersFailed.some(f => /^mtf: against the 4h down trend/.test(f)), r.reversal_up.filtersFailed.join());
+  assert.deepStrictEqual([r.reversal_up.mtf.style, r.reversal_up.mtf.longAllowed], ['reversal', false]);
 });
 
 test('CLI scan reads CSV bars as well as get_bars JSON', () => {
@@ -529,15 +530,48 @@ test('scan: each strategy that fired lists the others firing with it and against
   mk('up_b', 'long');
   mk('down_c', 'short');
   const mine = loadStrategies(ROOT, { FTH_STRATEGIES_DIRS: dir }).strategies.filter(s => ['up_a', 'up_b', 'down_c'].includes(s.name));
-  const bars = Array.from({ length: 60 }, (_, k) => ({ t: new Date(Date.UTC(2026, 9, 7, 14) + k * 180000).toISOString(), o: 100, h: 101, l: 99, c: 100 + (k % 3), v: 10 }));
+  // Enough bars for the 4h read (every frame ranging: both sides open outside a prop attempt).
+  const bars = Array.from({ length: 400 }, (_, k) => ({ t: new Date(Date.UTC(2026, 9, 7, 14) + (k - 340) * 180000).toISOString(), o: 100, h: 101, l: 99, c: 100, v: 10 }));
   const r = Object.fromEntries(scan(mine, { bars }, { symbol: 'MNQ' }).map(x => [x.name, x]));
   assert.deepStrictEqual(r.up_a.confluence, { with: ['up_b'], against: ['down_c'] });
   assert.deepStrictEqual(r.down_c.confluence, { with: [], against: ['up_a', 'up_b'] });
   const { prompts, validateConfig } = require('../../scripts/lib/autotrader');
   const p = prompts(validateConfig({ harness: 'qwen', eodAt: '15:50@America/New_York' }), new Date(), '/r')
-    .trade([{ symbol: 'MNQ', bar: { t: bars[59].t, c: 100, file: '/f', contractId: 'C' }, scan: Object.values(r) }]);
+    .trade([{ symbol: 'MNQ', bar: { t: bars[399].t, c: 100, file: '/f', contractId: 'C' }, scan: Object.values(r) }]);
   assert.match(p, /MNQ fired on this bar .*: down_c short; against up_a, up_b \| up_a long with up_b; against down_c/);
   assert.match(p, /Strategies disagree on the side: stand aside/);
+});
+
+test('the gate\'s trigger check: a counter fire the trend rule refuses is no disagreement; an allowed opposite candidate still is', () => {
+  // Never counter (feat/bias-bg): strategies.js withConfluence counts candidates only, and a fire against a trending 4h
+  // or 1h is none, so it no longer stands in the way of a with-trend rules entry ([trigger-fired], signal-state.js
+  // checkTrigger). No shipped strategy has mtf: reversal: nothing changes in production.
+  const { buildSignals, writeSignals, checkTrigger } = require('../../scripts/lib/trading/signal-state');
+  const dir = tmpDir();
+  const mk = (name, side, style) => writeStrategy(dir, name, [
+    `name: ${name}`, `description: Fires ${side} on every bar, a test of the trend rule against confluence.`, 'status: active', 'instruments: [MNQ]',
+    'timeframe: 3m', 'signal: rules', `mtf: ${style}`, 'rules:', `  ${side}:`, '    - volume > 0', 'risk:', '  stop: atr:1', '  min_rr: 2',
+  ].join('\n'));
+  mk('with_up', 'long', 'trend');
+  mk('counter_down', 'short', 'reversal');
+  const mine = loadStrategies(ROOT, { FTH_STRATEGIES_DIRS: dir }).strategies.filter(s => ['with_up', 'counter_down'].includes(s.name));
+  const gate = bars => {
+    const results = scan(mine, { bars }, { symbol: 'MNQ' });
+    const home = tmpDir();
+    const last = bars[bars.length - 1];
+    const now = new Date(Date.parse(last.t) + 180000 + 1000);
+    writeSignals(home, buildSignals(results, { symbol: 'MNQ', bar: last, stepMs: 180000, now }));
+    return checkTrigger(home, { root: 'MNQ', side: 'buy', strategy: 'with_up', timeframe: '3m', now });
+  };
+  // A 4h uptrend (rising waves): the short is against it, refused, no candidate: the long's entry goes.
+  const up = Array.from({ length: 6000 }, (_, k) => {
+    const c = 20000 + 0.3 * k + 40 * Math.sin((2 * Math.PI * k) / 320);
+    return { t: new Date(Date.UTC(2026, 8, 1, 13) + k * 180000).toISOString(), o: c, h: c + 1, l: c - 1, c, v: 10 };
+  });
+  assert.strictEqual(gate(up), null);
+  // Every frame ranging: both sides allowed, the short is a candidate against the long: refused.
+  const flat = Array.from({ length: 400 }, (_, k) => ({ t: new Date(Date.UTC(2026, 9, 7, 14) + (k - 340) * 180000).toISOString(), o: 100, h: 101, l: 99, c: 100, v: 10 }));
+  assert.match(String(gate(flat)), /conflicts with counter_down firing the other side/);
 });
 
 test('recent: what fired on each of the last bars, as the scan judged each at its close', () => {

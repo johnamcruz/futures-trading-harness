@@ -69,15 +69,15 @@ const ITEMS = Object.freeze({
   consistency_stop: { group: 'pacing', what: 'past the target with today the best day: no more entries today', enforcedBy: 'combine.entryBlock' },
   one_position: { group: 'pacing', what: 'one position at a time across the account', enforcedBy: 'prop-state combineBlock and entrySinceSnapshot' },
   hard_stops: { group: 'priority', what: 'a news blackout, a no-entry window, a gate refusal: no trade', enforcedBy: 'the order gate (blackout, no-entry window, every refusal)' },
-  trend_rule: { group: 'priority', what: 'a trend strategy against the prevailing trend: no trade', enforcedBy: 'the scan and the order gate (checkTrend)' },
-  entry_rule: { group: 'priority', what: "each policy's entry rule on its every entry: the bias frames that set the side (with bias_agree, all of them must trend its way), no entry while the regime trends against it, the leg turned back while it doesn't trend the side's way (each key off: no check)", enforcedBy: 'entry-rule.js entryProblems in the reads checker: compose_check and the order gate\'s re-check (composed-reads); any other entry of the policy on the briefing (the gate\'s entry-rule check, lifecycle-gate.js policyRuleRefusal)' },
-  trend_fade: { group: 'priority', what: 'a reversal fading the prevailing trend: only at a higher-timeframe level, smaller, nearest target', taughtIn: STEP(2) },
+  trend_rule: { group: 'priority', what: 'any strategy against a trending 4h or 1h (with both ranging, against the 15m): no trade', enforcedBy: 'the scan and the order gate (checkTrend)' },
+  entry_rule: { group: 'priority', what: "each policy's entry rule on its every entry: the bias frames that set the side (bias_agree on: all of them trend its way; neutral-15m-declared: every one that trends its way, none against, and with all ranging the 15m and the declared trend its way), no entry while the regime trends against it, the leg turned back while it doesn't trend the side's way (each key off: no check)", enforcedBy: 'entry-rule.js entryProblems in the reads checker: compose_check and the order gate\'s re-check (composed-reads); any other entry of the policy on the briefing (the gate\'s entry-rule check, lifecycle-gate.js policyRuleRefusal)' },
+  trend_fade: { group: 'priority', what: 'no fade: a reversal strategy or a CHoCH read against a trending 4h or 1h is no trade (never counter)', enforcedBy: 'the trend rule (trendRule) for every strategy style: the scan and the order gate (checkTrend); the reads checker: a read against the side never agrees', taughtIn: STEP(2) },
   room: { group: 'priority', what: 'the first level ahead before the target: a read weighed in the count, never a no trade alone (the R:R to the target stays at least min_rr)', taughtIn: STEP(3) },
   mtf_read: { group: 'priority', what: 'the multi-timeframe read for the side sets the size', taughtIn: STEP(4) },
   skip_rules: { group: 'priority', what: "the strategy's own context filter and skip rules", taughtIn: STEP(5) },
   confluence: { group: 'priority', what: 'another strategy firing the other side: no trade', taughtIn: STEP(6) },
-  secondary_context: { group: 'priority', what: 'secondary context cuts the size, never vetoes alone', taughtIn: STEP(7) },
-  halving: { group: 'priority', what: 'how a cut is rounded, and that cuts do not compound', taughtIn: { skill: 'strategy-library', step: null } },
+  secondary_context: { group: 'priority', what: 'secondary context is a read, never a veto alone (outside an attempt it may cut the size)', taughtIn: STEP(7) },
+  halving: { group: 'priority', what: 'how a cut is rounded, and that cuts do not compound', taughtIn: { skill: 'position-sizing', step: null } },
 });
 
 const isMap = x => x && typeof x === 'object' && !Array.isArray(x);

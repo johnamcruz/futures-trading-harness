@@ -46,11 +46,10 @@ it:
 - **Read the attempt line before the setup:**
   - Near the floor: clearest setup only, at or under the verdict's size, or
     pass (a pass costs a day, a blow the attempt).
-  - After a loss today: the bar rises; never trade to win it back.
-  - One loss short of `loss_streak_stop` or the gate's daily loss count: the
-    next entry is the day's last.
-  - A stop would take most of the day's room, or headroom is spent: done for
-    the day. Headroom is a cap, not a target.
+  - A healthy account: the verdict's full size.
+  - After a loss today: never trade to win it back.
+  - A stop would take most of the day's room: done for the day.
+  - Consistency is the account's rule, enforced by code: don't plan around it.
   - Near the target (`sizing.near_target_usd`): code trades the floor; never risk the day the pass depends on.
 - The harness tool `combine_status` shows the balance, floor, cushion,
   profit, sessions left, the size budget in dollars, whether entries are
@@ -67,7 +66,7 @@ it:
   take it only when the priority order (the strategy-library skill) says so,
   and then as given: rationale `setup:<policy strategy> ...`, the record's
   contract and side, at most the lower of the verdict's size and the
-  composed cap, the record's ticks (`order_plan` for `trade_lifecycle`
+  composed cap (the verdict is the full size; the cap limits the stop), the record's ticks (`order_plan` for `trade_lifecycle`
   gives exactly these arguments, or refuses with the gate's reason). A verdict is for its own bar: the gate takes it only while
   that bar is still the last one recorded for the policy strategy's
   timeframe (the runner records each bar it scans). Once a newer bar is recorded
@@ -79,13 +78,12 @@ it:
   or route around it. Once in, the rulebook's `exit` manages the trade (exit
   mode `target`, `target_then_trail` or `trail`). Let a winner run past its
   target once it is reached: in `target_then_trail` the code locks the stop
-  near the target and trails it; you never widen it, close early or pull
-  the target in by feel.
+  at the target's R less the rulebook's `lock_giveback_r` and trails it; you
+  never widen it, close early or pull the target in by feel.
 - **Loss streak stop.** After `loss_streak_stop` losses in a row in a
   session (a win ends the streak, a scratch neither), the gate refuses
   entries until the next session: losses in a row mean the day's read is
-  off, not that a winner is due. Stand down before it does (the attempt
-  line, above).
+  off, not that a winner is due. The gate holds it; don't pre-empt it.
 - **Pacing** (`sizing.clock_k`, tuned by the phase-2 search, or `off`)
   caps a trade at what the pass still needs per session left. Never size up
   to catch up.

@@ -12,7 +12,7 @@ description: Use when a position is open - its stop, the plan's management, the 
 ## How It Works
 
 - **If a position is open, manage it and end the cycle**: confirm the protective stop is working (`list_open_orders`); an entry order on the position's side (one that would add to it) still working without a stop bracket (one the gate never checked, e.g. placed outside the harness; tell by its `order_placed` record, as for a flat account below) is cancelled first, and the cancel confirmed, since a fill would add size beyond the stop. The position's own stop and target (bracket legs, `[protect]` and `[exit]` orders, on the opposite side) are never cancelled here; apply
-  the plan's management (breakeven, trail, scale-out) through the
+  the plan's management (the trail behind turned structure, scale-out) through the
   trade-executor role, and journal any change. No new entries while a position
   is open. Protective stops move toward the market only.
 - **Always a bracket, never an orphan**: the stop (and the target, where

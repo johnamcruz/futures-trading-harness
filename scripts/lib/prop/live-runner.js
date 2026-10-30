@@ -24,6 +24,8 @@ const { liveSpecs, whyNoSpec } = require('../trading/broker-specs');
 const { isOpen } = require('../trading/positions');
 const state = require('../trading/prop-state');
 const { decideSetup } = require('./verdict');
+const { factsOf } = require('./phase2-cut');
+const { sizeLines, worstRisk } = require('./size-line');
 const { componentRefusal, composedOf } = require('../trading/strategies');
 const combine = require('../trading/combine');
 const { tradingDayKey } = require('../trading/clock');
@@ -152,7 +154,16 @@ function createPropHooks({ root, env = process.env, home, client, accountId, str
         // The losing streak: the session's, as prop-state records it for the loss streak stop (its one source).
         const streak = state.sessionLossStreak(home, a, now);
         const counts = { ...state.attemptCounts(r, now), lossStreak: streak ? streak.count : null };
-        out.push({ ...combine.summary(cs), asOf: fresh ? now.toISOString() : snapshotAt, snapshotAt, budgets, entryBlock, facts: combine.attemptFacts(cs, counts) });
+        const facts = combine.attemptFacts(cs, counts);
+        // The Size and Min lines (size-line.js): what phase 2 and the size translation will do, for the account's policy.
+        const policy = strategies().find(x => x.valid && x.signal === 'policy' && x.account === a.name && x.status !== 'disabled');
+        const composed = strategies().find(x => x.valid && x.signal === 'composed');
+        const z = (policy && policy.sizing) || {};
+        const capUsd = composed && composed.risk ? composed.risk.max_risk_usd : null;
+        // A loss is measured at the most one entry may risk (size-line.js worstRisk: the floor stretch above the cap).
+        const riskUsd = worstRisk({ capUsd, stretchUsd: z.floor_stretch_max_usd, budgetUsd: combine.budget(cs, z) });
+        const sizing = policy ? sizeLines({ facts: factsOf(cs, facts, policy), riskUsd, minContracts: z.min_contracts, stretchUsd: z.floor_stretch_max_usd, capUsd }) : null;
+        out.push({ ...combine.summary(cs), asOf: fresh ? now.toISOString() : snapshotAt, snapshotAt, budgets, entryBlock, facts, ...(sizing ? { sizing } : {}) });
       }
       return out;
     },

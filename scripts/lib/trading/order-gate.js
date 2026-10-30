@@ -38,7 +38,7 @@ const { gateRefusal: factsRefusal } = require('./fact-claims');
 const { brokerSpecs, contractsFileFor, whyNoSpec, brokerOrderLimit, dayFrontMissing } = require('./broker-specs');
 const { checkOrderSize, checkRiskLimit, entryStopTicks } = require('./order-limits');
 const { lockGateRefusal } = require('../account-lock');
-const { composedName, composedRefusal, reversalAllowed, policyRuleRefusal } = require('./lifecycle-gate');
+const { composedName, composedRefusal, policyRuleRefusal } = require('./lifecycle-gate');
 const { entryRuleOf } = require('./entry-rule');
 const { lateEntryCheck, ageLimitOf } = require('./late-entry');
 const { protectRefusal, restingExitRefusal } = require('./bracket-rule');
@@ -458,12 +458,6 @@ function evaluateOrder({ input = {}, entries = [], now = new Date(), config, bla
     const why = policyRuleRefusal({ home: config.home, root: contractRoot(input.contractId), side: { buy: 'long', sell: 'short' }[String(input.side || '').toLowerCase()] || null, cycleBar: briefingBarOf(config, contractRoot(input.contractId)), now, rule: entryRuleOf(named.entry), name: named.name });
     if (why) violations.push({ check: 'entry-rule', message: why });
   }
-  // D2 (the owner's "CHoCH at or above the trend"): a trade_lifecycle entry against the prevailing trend stands only on
-  // the tier its frame needs among the record's re-checked reads (lifecycle-gate.js reversalAllowed); then the trend
-  // rule is judged as a reversal's. Anything else (no record standing, a tier short): the trend rule as before.
-  const composedSide = { buy: 'long', sell: 'short' }[String(input.side || '').toLowerCase()] || null;
-  const composedReversal = Boolean(composedCheck && !composedCheck.message && composedSide
-    && reversalAllowed({ home: config.home, root: contractRoot(input.contractId), side: composedSide, check: composedCheck.check, now, maxAgeMin: config.mtfMaxAgeMin }).ok);
   // Hard rule: a trend strategy never enters against the prevailing higher-timeframe trend
   // (mtf-state.js; the runner records the read every bar). A policy strategy's entry is judged
   // by the strategy whose setup its verdict trades.
@@ -478,7 +472,8 @@ function evaluateOrder({ input = {}, entries = [], now = new Date(), config, bla
     // retireLanes: that lane enters nothing). A policy's entry is checked on its own timeframe.
     const retiredMsg = retiredLaneRefusal(config.home, { root, strategy: named.name, timeframe: named.timeframe });
     if (retiredMsg) violations.push({ check: 'retired-lane', message: retiredMsg });
-    const msg = checkTrend(config.home, { root, side: input.side, style: composedReversal ? 'reversal' : judge.mtf || 'trend', strategy: judge.name, now, maxAgeMin: config.mtfMaxAgeMin });
+    // Never counter: every entry, whatever its setup's style, is held to the trend rule (mtf.js trendRule).
+    const msg = checkTrend(config.home, { root, side: input.side, style: 'trend', strategy: judge.name, now, maxAgeMin: config.mtfMaxAgeMin });
     if (msg) violations.push({ check: 'mtf-trend', message: msg });
     // Hard rule: a rules strategy enters only on its own trigger, fired on the side ordered on a
     // recent bar (signal-state.js): no relabelled setup tag, no stale signal (age in bars of its own timeframe).

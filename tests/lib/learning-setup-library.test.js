@@ -61,7 +61,8 @@ test('the same-candle rule: every traded record confirms on a candle that closed
 test('every confirming close is tried until one composes: the fixture\'s counts, and a record traded after an earlier close failed', () => {
   const count = {};
   for (const r of RECORDS) count[r.status] = (count[r.status] || 0) + 1;
-  assert.deepStrictEqual(count, { traded: 79, 'no-room': 24, 'not-composable': 12, 'no-confirmation': 19, 'no-entry-window': 2 });
+  // One moment moved from no-room to not-composable when the entry frame's levels became none (chain.js).
+  assert.deepStrictEqual(count, { traded: 79, 'no-room': 23, 'not-composable': 13, 'no-confirmation': 19, 'no-entry-window': 2 });
   // A traded record whose window had an earlier confirming close that did not compose.
   const later = RECORDS.filter(r => r.status === 'traded').find(r => {
     for (let t = Date.parse(r.reactionAt); t + 180000 < Date.parse(r.bar) + 180000; t += 180000) {
@@ -386,7 +387,7 @@ test('standardPlans: with the policy\'s entry rule a plan it refuses is not-comp
   const { entryRuleOf } = require('../../scripts/lib/trading/entry-rule');
   const bars = readBarsArg(path.join(__dirname, '..', 'fixtures', 'parity', 'NQ-3m.csv')).map(b => ({ t: b.t, o: b.o, h: b.h, l: b.l, c: b.c, v: b.v }));
   const b = buildBriefing({ symbol: 'MNQ', bars: bars.slice(Math.max(0, 409 - 1399), 410), minutes: 3, now: new Date(Date.parse(bars[409].t) + 180000) });
-  const off = { bias_frames: 'off', bias_agree: 'off', regime_against: 'off', leg_turned: 'off' };
+  const off = { chain: '4h', bias_frames: 'off', bias_agree: 'off', regime_against: 'off', leg_turned: 'off' };
   const traded = p => (L.standardPlans(b, p) || []).find(x => x.side === 'short');
   assert.strictEqual(traded().status, 'traded');
   assert.strictEqual(traded({ entryRule: entryRuleOf(off) }).status, 'traded', 'every key off: no rule');

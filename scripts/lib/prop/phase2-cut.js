@@ -30,6 +30,7 @@
  *   namedRules(text, size)        the rules named on line-start Size lines stating exactly `size`
  *   cutFacts({ home, account, policy, now })   the facts above (with the policy's near-target band), or null (no
  *                                 attempt or no snapshot)
+ *   factsOf(cs, f, policy)        the same facts from a combine state and its attemptFacts (the prompt's Size line)
  *   rulesHolding(facts, riskUsd)  the rules whose condition holds ('unknown' for facts that can't be read)
  *   phase2Cut({ approved, base, facts, riskUsd, named })
  *       { size, cut: false } | { size: approved, cut: true, held, named } | { size: base, cut: true, restored: { from, to, named, note } }
@@ -62,7 +63,12 @@ function cutFacts({ home, account, policy = null, now = new Date() }) {
   if (!r || !r.snapshot || !num(r.snapshot.balance)) return null;
   const cs = prop.stateFrom(account, r, r.snapshot.balance);
   const streak = prop.sessionLossStreak(home, account, now);
-  const f = combine.attemptFacts(cs, { ...prop.attemptCounts(r, now), lossStreak: streak ? streak.count : null });
+  return factsOf(cs, combine.attemptFacts(cs, { ...prop.attemptCounts(r, now), lossStreak: streak ? streak.count : null }), policy);
+}
+
+/** cutFacts' shape from a combine state `cs` and its attempt facts `f` (combine.attemptFacts), with the policy's band. */
+function factsOf(cs, f, policy = null) {
+  const combine = require('../trading/combine');
   const band = policy && policy.sizing ? policy.sizing.near_target_usd : null;
   return { balance: cs.balance, start: cs.start, peak: cs.peak, lossesToday: f.lossesToday, lossStreak: f.lossStreak, softRoom: f.softRoom, dailyRoom: f.dailyRoom, needed: combine.toTarget(cs), nearTargetUsd: num(band) ? band : null };
 }
@@ -92,4 +98,4 @@ function phase2Cut({ approved, base, facts, riskUsd, named = [] }) {
   return { size: base, cut: true, restored: { from: approved, to: base, named, note: `phase-2 cut ${approved} -> ${base}: no pacing rule applies` } };
 }
 
-module.exports = { RULES, namedRules, cutFacts, rulesHolding, phase2Cut };
+module.exports = { RULES, namedRules, cutFacts, factsOf, rulesHolding, phase2Cut };

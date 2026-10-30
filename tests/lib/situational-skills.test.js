@@ -93,7 +93,8 @@ test('choose: stage order under the budget, nothing the prompt already holds, th
 });
 
 test('the Setups-to-check line: a compression break on an allowed side (at its key level when its box sits at one) and a tradeable 15m or 1h CISD, the stronger first; nothing against the trend rule, on the 3m or 5m, or outside the window', () => {
-  const candles = { '15m': { closedAt: '2026-04-23T13:45:00.000Z' }, '1h': { closedAt: '2026-04-23T13:00:00.000Z' } };
+  // The 15m setup candle strong up (cisd.js's strong candle: its body, its close in the top third, its range), the 1h's not.
+  const candles = { '15m': { closedAt: '2026-04-23T13:45:00.000Z', o: 100, h: 110, l: 99, c: 109.5, closeLocation: 'top', pattern: 'none', rangeAtr: 2 }, '1h': { closedAt: '2026-04-23T13:00:00.000Z', o: 100, h: 110, l: 99, c: 104, closeLocation: 'middle', pattern: 'bullish engulfing', rangeAtr: 2 } };
   const cisd = {
     '1h': { dir: 'bullish', status: 'bounced', displacement: 'strong', engulfing: false },
     '15m': { dir: 'bullish', status: 'touched', displacement: 'strong', engulfing: true, sweep: { name: 'overnight low', price: 21480 } },
@@ -103,10 +104,10 @@ test('the Setups-to-check line: a compression break on an allowed side (at its k
   const m3 = brief({ candles, compression: expanding('up', [{ name: 'prior rth high', edge: 'inside' }, { name: 'overnight low', edge: 'top' }]), cisd }).sections.m3.data;
   assert.deepStrictEqual(SM.setupChecks(m3), [
     { kind: 'compression', tf: '15m', dir: 'up', side: 'long', read: '15m compression break up', level: 'overnight low' },
-    { kind: 'cisd', tf: '15m', dir: 'up', side: 'long', read: '15m cisd up', status: 'touched OTE', displacement: 'engulfing', level: 'overnight low' },
+    { kind: 'cisd', tf: '15m', dir: 'up', side: 'long', read: '15m cisd up', status: 'touched OTE', displacement: 'strong', level: 'overnight low' },
     { kind: 'cisd', tf: '1h', dir: 'up', side: 'long', read: '1h cisd up', status: 'bounced OTE', displacement: 'strong' },
-  ], 'the stronger first (a box at a key level, an engulfing displacement), then the higher frame; the 3m and 5m CISDs are no setups');
-  assert.strictEqual(SM.checkLine({}, { barClose: 0, checks: SM.setupChecks(m3) }), '- Setups to check: "15m compression break up" (long, at overnight low); "15m cisd up" (long, engulfing displacement, touched OTE, at overnight low); "1h cisd up" (long, strong displacement, bounced OTE). Compose and check each (trade-lifecycle, compression, cisd); pass unless every read is true; SKIP each one you don\'t compose, with its reason.');
+  ], 'the stronger setup candle first (its strength and close, an engulfing never ranked above it), then the higher frame; the 3m and 5m CISDs are no setups');
+  assert.strictEqual(SM.checkLine({}, { barClose: 0, checks: SM.setupChecks(m3) }), '- Setups to check: "15m compression break up" (long, at overnight low); "15m cisd up" (long, strong displacement, touched OTE, at overnight low); "1h cisd up" (long, strong displacement, bounced OTE). Compose and check each (trade-lifecycle, compression, cisd); pass unless every read is true; SKIP each one you don\'t compose, with its reason.');
   // Only what can be traded now: waiting (unless freshly confirmed on the frame's last candle), void, expired: none.
   for (const status of ['waiting', 'void', 'expired', 'weak']) assert.deepStrictEqual(SM.setupChecks({ ...m3, compression: {}, cisd: { '15m': { ...cisd['15m'], status } } }), [], status);
   assert.deepStrictEqual(SM.setupChecks({ ...m3, compression: {}, cisd: { '15m': { ...cisd['15m'], status: 'waiting', confirmedClose: candles['15m'].closedAt } } }).map(c => c.status), ['fresh confirmation']);

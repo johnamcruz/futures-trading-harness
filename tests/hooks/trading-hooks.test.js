@@ -281,7 +281,7 @@ test('order gate: a trend strategy entry against the recorded prevailing trend i
   const { env } = setup([{ ts: minutesAgo(5), kind: 'plan', contractId: entryOrder().contractId, text: 'plan' }], { FTH_HOME: home });
   const r = gate(orderPayload(), env);
   assert.strictEqual(r.code, 2);
-  assert.match(r.stderr, /\[mtf-trend\] setup:anytime long is against the prevailing 4h down trend/);
+  assert.match(r.stderr, /\[mtf-trend\] setup:anytime long is against the 4h down trend: no entry against a trending 4h or 1h/);
   const short = gate(orderPayload({ ...ORDER, side: 'sell', rationale: 'setup:anytime short, stop 21520, target 21460' }), env);
   assert.strictEqual(short.code, 0, short.stderr);
   // No record at all: refused, with how to make one.
@@ -939,19 +939,36 @@ test('order gate hook: in a prop attempt the record\'s size is a suggestion: the
   assert.strictEqual(exit.code, 0, exit.stderr);
 });
 
-test('order gate hook and MCP gateway wiring: the shipped entry rule (the 4h and the 1h must agree) refuses a long under a 1h range or a 4h against; both up goes; an exit always goes', { timeout: 60000 }, async () => {
+test('order gate hook and MCP gateway wiring: the shipped entry rule (BG, bias_agree neutral-15m-declared): aligned goes, one frame ranging goes, both ranging goes only with the 15m and the declared trend its way; a frame against refuses; an exit always goes', { timeout: 90000 }, async () => {
   const LC = require('../fixtures/lifecycle');
   const { writeBriefing } = require('../../scripts/lib/trading/briefing');
-  const NO = /\[composed-reads\] setup:trade_lifecycle: .*entry rule: the 4h and 1h must each trend up for a long \(4h (\w+), 1h (\w+)\): no agreement, no trade/;
+  const RULE = '\\[composed-reads\\] setup:trade_lifecycle: .*entry rule: [^.]*?';
+  const DECLARED = { long: { vwapAtr: 0.6, ema20Atr: 0.3, overnight: 'front third', dayMoveAtr: 1.1, regime: 'with' }, short: { vwapAtr: -0.6, ema20Atr: -0.3, overnight: 'back third', dayMoveAtr: -1.1, regime: 'against' } };
+  const NOT_DECLARED = { long: { ...DECLARED.long, ema20Atr: -0.2 }, short: DECLARED.short };
   const exit = { ...EXIT_BASE, contractId: 'MNQ', side: 'sell', size: 1, rationale: '[exit] close the prop_portfolio long' };
-  for (const [t4h, t1h] of [['up', 'range'], ['down', 'up'], ['range', 'up'], ['up', 'up']]) {
+  // [4h, 1h, 15m, declared, the bias read the record states (a frame its way on that briefing), refusal or null: goes].
+  const cases = [
+    ['up', 'up', 'up', null, '1h up', null],
+    ['up', 'range', 'up', null, '4h up', null],
+    ['range', 'up', 'down', null, '1h up', null],
+    ['range', 'range', 'up', DECLARED, '15m up', null],
+    ['range', 'range', 'up', null, '15m up', /no higher-timeframe trend \(4h range, 1h range\), the 15m up: the Trend declared\? facts are not in the briefing/],
+    ['range', 'range', 'up', NOT_DECLARED, '15m up', /the 15m up, but the day's trend is not declared up/],
+    ['range', 'range', 'range', DECLARED, '4h up', /the 15m is range, not up/],
+    ['down', 'up', 'up', DECLARED, '1h up', /the 4h trend is down, against the long/],
+    ['range', 'down', 'up', DECLARED, '15m up', /the 1h trend is down, against the long/],
+  ];
+  for (const [t4h, t1h, t15, declared, bias, NO] of cases) {
+    const label = `${t4h}/${t1h}/15m ${t15}/${declared === DECLARED ? 'declared' : declared ? 'not declared' : 'no facts'}`;
     const home = tmpDir();
-    const w = composedPropWorld(home, 5);
+    const w = composedPropWorld(home, 5, LC.READS.map(x => (x.step === 'bias' ? { ...x, read: bias } : x)));
     // A fresh trend read at the scenario's close (the bar the verdict is on), so only the entry rule decides.
     trendHome(home, { closedAt: LC.BAR });
     const b = LC.briefing();
     b.sections.h1.data.h4 = { trend: t4h };
     b.sections.h1.data.h1 = { trend: t1h };
+    b.sections.m15.data.frame = { ...b.sections.m15.data.frame, trend: t15 };
+    if (declared) b.sections.m3.data.declared = declared;
     writeBriefing(home, b);
     const { env } = setup([{ ts: '2026-10-07T13:59:30.000Z', kind: 'plan', contractId: 'MNQ', text: 'plan' }], { FTH_HOME: home, ...w.env });
     const hook = gate(orderPayload(w.order(5)), env);
@@ -959,26 +976,28 @@ test('order gate hook and MCP gateway wiring: the shipped entry rule (the 4h and
     const text = g.byId[1].result.content[0].text;
     // The exit, with the long open at the broker (the gateway reads the position).
     const out = await gatewayRun({ ...env, FAKE_POSITIONS: JSON.stringify([{ contractId: 'MNQ', type: 1, size: 1 }]) }, [call(2, 'place_order', exit)]);
-    if (t4h === 'up' && t1h === 'up') {
-      assert.doesNotMatch(hook.stderr, /entry rule/, hook.stderr);
-      assert.doesNotMatch(text, /entry rule/, text);
-      assert.strictEqual(hook.code, 0, hook.stderr);
+    if (!NO) {
+      assert.strictEqual(hook.code, 0, `${label} (hook): ${hook.stderr}`);
+      // The fake server can't answer every other gateway read: only the entry rule's word is checked there.
+      assert.doesNotMatch(text, /entry rule/, `${label} (gateway): ${text}`);
+      assert.doesNotMatch(hook.stderr, /entry rule/, `${label} (hook)`);
     } else {
-      assert.strictEqual(hook.code, 2, `${t4h}/${t1h} (hook)`);
-      assert.match(hook.stderr, NO, `${t4h}/${t1h} (hook)`);
-      assert.ok(g.byId[1].result.isError, `${t4h}/${t1h} (gateway): ${text}`);
-      assert.match(text, NO, `${t4h}/${t1h} (gateway)`);
+      const re = new RegExp(RULE + NO.source);
+      assert.strictEqual(hook.code, 2, `${label} (hook)`);
+      assert.match(hook.stderr, re, `${label} (hook)`);
+      assert.ok(g.byId[1].result.isError, `${label} (gateway): ${text}`);
+      assert.match(text, re, `${label} (gateway)`);
     }
-    assert.strictEqual(gate(orderPayload(exit), env).code, 0, `exit ${t4h}/${t1h} (hook)`);
-    assert.ok(!out.byId[2].result.isError, `exit ${t4h}/${t1h} (gateway): ${out.byId[2].result.content[0].text}`);
+    assert.strictEqual(gate(orderPayload(exit), env).code, 0, `exit ${label} (hook)`);
+    assert.ok(!out.byId[2].result.isError, `exit ${label} (gateway): ${out.byId[2].result.content[0].text}`);
   }
 });
 
-test('order gate hook and MCP gateway wiring: a trail-target record (the 4h and 1h up, the 2R mark) goes as its record says, the bracket at the stop and the mark; the 1h ranging, both refuse it; an exit goes', { timeout: 60000 }, async () => {
+test('order gate hook and MCP gateway wiring: a trail-target record (the 4h and 1h up, the 2R mark) goes as its record says, the bracket at the stop and the mark; the 1h against the side, both refuse it; an exit goes', { timeout: 60000 }, async () => {
   const LC = require('../fixtures/lifecycle');
   const { writeBriefing } = require('../../scripts/lib/trading/briefing');
   const reads = LC.READS.map(x => (x.step === 'target' ? { ...x, read: 'target trail' } : x));
-  for (const t1h of ['up', 'range']) {
+  for (const t1h of ['up', 'down']) {
     const home = tmpDir();
     const w = composedPropWorld(home, 5, reads);
     assert.deepStrictEqual([w.plan.stop.ticks, w.plan.target.ticks, w.plan.target.trail], [111, 222, true], 'the stop leg 111 ticks, the target leg the 2R mark');
@@ -993,7 +1012,7 @@ test('order gate hook and MCP gateway wiring: a trail-target record (the 4h and 
       assert.doesNotMatch(text, /\[composed-reads\]|\[entry-rule\]/, text);
     } else {
       assert.strictEqual(hook.code, 2);
-      assert.match(hook.stderr, /\[composed-reads\] setup:trade_lifecycle: .*the trail target needs the 4h and the 1h both up/);
+      assert.match(hook.stderr, /\[composed-reads\] setup:trade_lifecycle: .*the trail target needs a side the entry rule allows \(htf-to-ltf\): the 1h trend is down, against the long/);
       assert.ok(g.byId[1].result.isError, text);
       assert.match(text, /\[composed-reads\]/);
     }
@@ -4090,7 +4109,7 @@ test('order gate (hook and gate log): a trade_lifecycle record holds valid_bars 
   assert.strictEqual(lc('2026-10-07T14:08:00.000Z', { ...EXIT_BASE, side: 'sell', type: 'stop', stopPrice: 21512.5, rationale: '[exit] flatten the composed long' }, []).code, 0);
 });
 
-test('order gate (hook): a composed long fading a 4h down trend needs a 4h rejection of a key level; a gap edge is none ([mtf-trend]); an exit goes', () => {
+test('order gate (hook): never counter: a composed long against a 4h down trend is refused whatever CHoCH or 4h rejection it names ([mtf-trend]); an exit goes', () => {
   // The briefing: a 1h CHoCH up, and a 4h candle that rejected both the previous 4h low and a 15m gap's low, up.
   const b = LC.briefing();
   b.sections.h1.data.lastBreak = { last: { kind: 'CHoCH', direction: 'up', level: 21500 }, previous: null };
@@ -4105,20 +4124,17 @@ test('order gate (hook): a composed long fading a 4h down trend needs a 4h rejec
     LC.writeScenario(home, { reads, b });
     return gate(orderPayload(LC.order()), setup([lcPlan], { FTH_HOME: home, FTH_TEST_NOW: LC_AT, CLAUDE_PLUGIN_ROOT: LC_ROOT, FTH_CYCLE_BARS: JSON.stringify({ MNQ: LC.BAR }) }).env);
   };
-  // The gap edge's rejection is true (the record stands), but it is no 4h rejection of a level: the trend rule refuses.
-  const gap = run('4h rejected 15m fvg low up');
-  assert.strictEqual(gap.code, 2);
-  assert.match(gap.stderr, /\[mtf-trend\]/);
-  assert.doesNotMatch(gap.stderr, /\[composed-reads\]/);
-  // A real 4h rejection of a key level with the 1h CHoCH: it goes.
-  const level = run('4h rejected previous 4h low up');
-  assert.strictEqual(level.code, 0, level.stderr);
-  // The honest record also names the 4h trend it fades (D2's 4h tier, one definition for the reads and the trend
-  // rule): it goes. Without the 4h rejection, or on the gap edge, the 4h read is against the long: both refuse.
+  // The record stands (every read true and the long's way), but the trend rule refuses it: on a gap edge's rejection,
+  // and on a real 4h rejection of a key level with the 1h CHoCH (once D2's 4h tier).
+  for (const rejection of ['4h rejected 15m fvg low up', '4h rejected previous 4h low up']) {
+    const r = run(rejection);
+    assert.strictEqual(r.code, 2, rejection);
+    assert.match(r.stderr, /\[mtf-trend\] setup:trade_lifecycle long is against the 4h down trend: no entry against a trending 4h or 1h/);
+    assert.doesNotMatch(r.stderr, /\[composed-reads\]/);
+  }
+  // The record naming the 4h trend it fades: the 4h read is against the long, so both refuse, with any rejection.
   b.sections.h1.data.h4.trend = 'down';
-  const honest = run('4h rejected previous 4h low up', { bias4h: true });
-  assert.strictEqual(honest.code, 0, honest.stderr);
-  for (const rejection of [null, '4h rejected 15m fvg low up']) {
+  for (const rejection of [null, '4h rejected 15m fvg low up', '4h rejected previous 4h low up']) {
     const r = run(rejection, { bias4h: true });
     assert.strictEqual(r.code, 2, String(rejection));
     assert.match(r.stderr, /\[composed-reads\] setup:trade_lifecycle: .*"4h down"/);
@@ -4473,22 +4489,31 @@ test('order gate hook: a cited setup (momentum_continuation) goes only on the re
   assert.strictEqual(exit.code, 0, exit.stderr);
 });
 
-test('order gate hook wiring: modify_order on a working prop_portfolio entry with the 1h ranging is refused [entry-rule]; with both up, or on a stop leg, it goes', () => {
+test('order gate hook wiring: modify_order (a reprice) on a working prop_portfolio entry is held to the shipped BG rule [entry-rule]: the 4h against or both ranging undeclared refused; one ranging, or a stop leg, goes', () => {
   const LC = require('../fixtures/lifecycle');
   const { writeBriefing } = require('../../scripts/lib/trading/briefing');
-  const run = (t1h, orderId) => {
+  const run = (t1h, orderId, { t4h = 'up', t15 = 'up', declared = null } = {}) => {
     const home = tmpDir();
     fs.writeFileSync(path.join(home, 'entry-orders.json'), JSON.stringify([{ orderId: 77, contractId: 'MNQ', side: 'buy', setup: 'prop_portfolio', stopTicks: 40, at: '2026-10-07T13:59:00.000Z' }]));
     const b = LC.briefing();
     b.sections.h1.data.h1 = { trend: t1h };
+    b.sections.h1.data.h4 = { trend: t4h };
+    b.sections.m15.data.frame = { ...b.sections.m15.data.frame, trend: t15 };
+    if (declared) b.sections.m3.data.declared = declared;
     // The shipped prop_portfolio and its account (this file's plugin root holds test strategies only).
     const { env } = setup([], { FTH_HOME: home, FTH_TEST_NOW: '2026-10-07T14:00:02.000Z', FTH_CYCLE_BARS: JSON.stringify({ MNQ: LC.BAR }), FTH_STRATEGIES_DIRS: path.join(REPO, 'strategies'), FTH_ACCOUNTS_DIRS: path.join(REPO, 'accounts') });
     writeBriefing(home, b);
     return gate({ tool_name: 'mcp__broker__modify_order', tool_input: { accountId: 1, orderId, limitPrice: 21538 } }, env);
   };
-  const off = run('range', 77);
-  assert.strictEqual(off.code, 2);
-  assert.match(off.stderr, /\[entry-rule\] order 77 is a working setup:prop_portfolio: entry rule: the 4h and 1h must each trend up for a long \(4h up, 1h range\)/);
+  const against = run('up', 77, { t4h: 'down' });
+  assert.strictEqual(against.code, 2);
+  assert.match(against.stderr, /\[entry-rule\] order 77 is a working setup:prop_portfolio: entry rule: the 4h trend is down, against the long/);
+  const neutral = run('range', 77, { t4h: 'range' });
+  assert.strictEqual(neutral.code, 2);
+  assert.match(neutral.stderr, /\[entry-rule\] order 77 is a working setup:prop_portfolio: entry rule: no higher-timeframe trend \(4h range, 1h range\), the 15m up: the Trend declared\? facts are not in the briefing/);
+  const DEC = { long: { vwapAtr: 0.6, ema20Atr: 0.3, overnight: null, dayMoveAtr: 1.1, regime: 'with' }, short: { vwapAtr: -0.6, ema20Atr: -0.3, overnight: null, dayMoveAtr: -1.1, regime: 'against' } };
+  assert.strictEqual(run('range', 77, { t4h: 'range', declared: DEC }).code, 0, 'both ranging, the 15m and the declared trend up');
+  assert.strictEqual(run('range', 77).code, 0, 'the 4h up, the 1h ranging (BG)');
   assert.strictEqual(run('up', 77).code, 0);
-  assert.strictEqual(run('range', 9).code, 0, 'a leg not recorded as an entry');
+  assert.strictEqual(run('range', 9, { t4h: 'down' }).code, 0, 'a leg not recorded as an entry');
 });

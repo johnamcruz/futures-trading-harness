@@ -206,6 +206,8 @@ function resolveReplay(raw, { baseDir = process.cwd(), env = process.env, home =
   const start = new Date(r.start);
   const end = new Date(r.end);
   if (!errors.length && !(start < end)) errors.push('end: after start');
+  // The warm-up rule (schedule.js warmupRefusal): no session before the data covers the 4h and 1h reads' window.
+  if (!errors.length) { const why = require('../schedule').warmupRefusal(r.start); if (why) errors.push(`start: ${why}`); }
   const everyNth = r.everyNthBar === undefined ? 1 : r.everyNthBar;
   if (!(Number.isInteger(everyNth) && everyNth >= 1)) errors.push('everyNthBar: 1 or more');
   for (const k of ['premarket', 'endOfDay', 'learning']) if (r[k] !== undefined && typeof r[k] !== 'boolean') errors.push(`${k}: true or false`);

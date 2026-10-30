@@ -98,6 +98,7 @@ test('replay config: the run\'s own home and files; the runner config derived fr
   assert.strictEqual(resolveReplay(replayConfig(dir, { autotrader: 'auto.json' }), { baseDir: dir, env: {}, home: dir, root: ROOT }).autotraderFile, path.join(dir, 'auto.json'));
   for (const [over, why] of [
     [{ runId: '../x' }, /runId/], [{ workDir: 'relative' }, /workDir/], [{ start: '2026-10-07' }, /start/], [{ end: '2026-10-07T13:00:00Z' }, /end: after start/],
+    [{ start: '2021-05-03T13:00:00Z', end: '2021-05-03T20:00:00Z' }, /2021-05-03 is before 2021-05-24 \(config\/schedule\.json data\.sessionsFrom: the replay store's first bar plus the 4h and 1h reads' 504-hour history window\): its 4h and 1h would read from short history; start on or after 2021-05-24/],
     [{ everyNthBar: 0 }, /everyNthBar/], [{ overrides: { dataDir: '/x' } }, /overrides.dataDir: set by the replay driver/], [{ broker: 'Bad Name' }, /broker/],
   ]) assert.throws(() => resolveReplay(replayConfig(dir, over), { env: {}, home: dir, root: ROOT }), why);
 });

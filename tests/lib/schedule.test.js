@@ -44,6 +44,26 @@ test('the committed schedule loads, and its first version is the one the code pi
   assert.strictEqual(s.learning.validateRunsPerCandidate, 3);
 });
 
+test('the warm-up rule: no session before data.sessionsFrom (the store\'s first bar plus the 4h and 1h reads\' window); validated', () => {
+  const s = S.current();
+  assert.strictEqual(s.version, 'v2', 'data.sessionsFrom added: a new version');
+  assert.strictEqual(s.data.sessionsFrom, '2021-05-24');
+  assert.match(S.warmupRefusal('2021-05-03'), /2021-05-03 is before 2021-05-24 \(config\/schedule\.json data\.sessionsFrom: the replay store's first bar plus the 4h and 1h reads' 504-hour history window\): its 4h and 1h would read from short history; start on or after 2021-05-24/);
+  assert.match(S.warmupRefusal('2021-05-21'), /2021-05-21 is before 2021-05-24/);
+  assert.strictEqual(S.warmupRefusal('2021-05-24'), null);
+  assert.strictEqual(S.warmupRefusal('2024-03-04'), null);
+  // A time is its session's date: Sunday 18:00 ET opens the Monday session; a minute before is Sunday's.
+  assert.strictEqual(S.warmupRefusal('2021-05-23T22:00:00Z'), null);
+  assert.match(S.warmupRefusal('2021-05-23T21:59:00Z'), /2021-05-23 is before 2021-05-24/);
+  for (const bad of ['', null, 'x', '2021-13-01']) assert.match(S.warmupRefusal(bad), /is not a session date/, String(bad));
+  // Another schedule's date is its own.
+  assert.strictEqual(S.warmupRefusal('2021-05-03', variant(d => { d.data.sessionsFrom = '2021-05-03'; }).load()), null);
+  // Validated: missing, not a date, or before data.start is refused.
+  assert.throws(() => variant(d => { delete d.data.sessionsFrom; }).load(), /data\.sessionsFrom: missing/);
+  assert.throws(() => variant(d => { d.data.sessionsFrom = '2021-5-24'; }).load(), /data\.sessionsFrom: a date YYYY-MM-DD/);
+  assert.throws(() => variant(d => { d.data.sessionsFrom = '2021-03-31'; }).load(), /data\.sessionsFrom: 2021-03-31 is before data\.start 2021-04-01/);
+});
+
 test('tighten only: the budgets never rise, the final look keeps needing a test pass, the reserve never shrinks', () => {
   // The loosest value each has ever had. Tightening one is allowed (tighten its pin here too); loosening it fails.
   const PINS = {
@@ -200,8 +220,8 @@ test('a changed schedule carries a new version: a version naming another file th
   const entry = stamp(A, { kind: 'look', role: 'practice-validate', from: '2024-07-01', to: '2024-07-02' });
   assert.match(S.sealedRefusals('learning', [entry], A2).join(), /version a \(hash [0-9a-f]{12}\) names another file than the one the ledger's entries of version a were written under/);
   assert.match(S.sealedRefusals('prop', [entry], A2).join(), /version a/, 'either ledger');
-  // On the committed schedule: an edit that keeps v1 is refused by the recorded looks themselves.
-  const keptV1 = variant(d => { d.learning.open['practice-train'][0] = '2019-07-01'; }).load();
+  // On the committed schedule: an edit back to v1 (the recorded looks' version) is refused by those looks themselves.
+  const keptV1 = variant(d => { d.version = 'v1'; d.learning.open['practice-train'][0] = '2019-07-01'; }).load();
   assert.match(S.sealedRefusals('learning', [], keptV1).join(), /version v1 .* names another file/);
   // The report: each entry's version, the first schedule's for an entry without one.
   const B = bare(d => { d.version = 'b'; d.learning.open['practice-train'][0] = '2019-07-01'; });

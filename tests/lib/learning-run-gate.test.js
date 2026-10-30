@@ -172,7 +172,7 @@ test('setupHash: the same for two runs of one setup (another runId, learning fla
   assert.notStrictEqual(h({ setupLibrary: libA }), h({ setupLibrary: libB }));
   assert.strictEqual(h({ setupLibrary: libA }), h({ setupLibrary: copyA }));
   const arm = (runId, setupLibrary) => ({ evaluation: 'evL', candidate: 'champ', purpose: 'judging', runId, from: '2025-03-03', to: '2025-03-04', arm: runId === 'r-with' ? `with:${'a'.repeat(16)}` : 'without', config: h({ runId, setupLibrary }) });
-  const ledger = [{ kind: 'look', ...arm('r-without', libA), role: 'test' }];
+  const ledger = [{ kind: 'look', ...arm('r-without', libA), role: 'test', schedule: require('../../scripts/lib/schedule').current().fingerprint }];
   const other = K.checkLook(arm('r-with', libB), ledger);
   assert.strictEqual(other.ok, false);
   assert.match(other.refusals.join(), /its arms differ only in their experience index/);
@@ -268,7 +268,7 @@ test('library display: off unless the config says true, part of the setup; a pai
   assert.match(rerun.refusals.join(), /run r-hidden took its look in evaluation evD with another setup .*: a resume keeps its setup/);
   assert.deepStrictEqual([K.checkLook(look('r-hidden', off), ledger).ok, K.checkLook(look('r-hidden', off), ledger).repeat], [true, true], 'the same arm: a free repeat');
   // An old line without arm or config resumes as it was.
-  const old = [{ kind: 'look', evaluation: 'evOld', candidate: 'champ', purpose: 'judging', runId: 'r-old', from: '2025-03-03', to: '2025-03-04', role: 'test' }];
+  const old = [{ kind: 'look', evaluation: 'evOld', candidate: 'champ', purpose: 'judging', runId: 'r-old', from: '2025-03-03', to: '2025-03-04', role: 'test', schedule: require('../../scripts/lib/schedule').current().fingerprint }];
   assert.ok(K.checkLook({ ...look('r-old', off), evaluation: 'evOld' }, old).ok);
   // The same config is the same display and base: an arm claiming the shown display on the hidden arm's setup is refused.
   const same = K.checkLook(look('r-z', off, { arm: `with:${'c'.repeat(16)}+library:${hashA}`, base: 'd'.repeat(64) }), one);

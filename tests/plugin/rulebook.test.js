@@ -304,21 +304,39 @@ const ENFORCED = {
     assert.ok(r.violations.some(v => v.check === 'blackout'), JSON.stringify(r.violations));
   },
   entry_rule: () => {
-    // The rulebook's entry rule reaches the reads checker (compose_check and the gate's re-check): as shipped (the 4h
-    // and the 1h must agree), a long with the 1h ranging under a 4h uptrend is refused and one with both up is not;
-    // with bias_agree off the 4h alone sets the side, and with every key off nothing more is checked.
+    // The rulebook's entry rule reaches the reads checker (compose_check and the gate's re-check): as shipped (BG,
+    // bias_agree neutral-15m-declared), a long with the 4h up and the 1h ranging goes, one with the 1h down is refused,
+    // and with both ranging only the 15m up and the declared trend up let it go; bias_agree on refuses the 1h ranging;
+    // with every key off nothing more is checked.
     const { entryRuleOf } = require('../../scripts/lib/trading/entry-rule');
     const { checkReads } = require('../../scripts/lib/trading/composed-reads');
     const root = rootCopy();
-    const briefing = (t1h, regime = 'trend-up') => ({ minutes: 3, sections: { m3: { data: { price: 21500, regime: { primary: regime } } }, h1: { data: { h4: { trend: 'up' }, h1: { trend: t1h } } } } });
+    const DEC = { long: { vwapAtr: 0.5, ema20Atr: 0.3, dayMoveAtr: 1, regime: 'with' }, short: { vwapAtr: -0.5, ema20Atr: -0.3, dayMoveAtr: -1, regime: 'against' } };
+    const briefing = (t1h, regime = 'trend-up', { t4h = 'up', t15 = 'range', declared = null } = {}) => ({ minutes: 3, sections: { m3: { data: { price: 21500, regime: { primary: regime }, ...(declared ? { declared } : {}) } }, m15: { data: { frame: { trend: t15 } } }, h1: { data: { h4: { trend: t4h }, h1: { trend: t1h } } } } });
     const problems = b => checkReads({ reads: [], side: 'long', briefing: b, entryRule: entryRuleOf(policy(root).entry) }).problems.filter(x => /^entry rule/.test(x));
-    assert.match(problems(briefing('range')).join(), /4h and 1h must each trend up for a long .*no agreement, no trade/, policy(root).errors.join());
+    assert.deepStrictEqual(problems(briefing('range')), [], policy(root).errors.join());
     assert.deepStrictEqual(problems(briefing('up')), [], 'both up: no entry-rule problem');
+    assert.match(problems(briefing('down')).join(), /the 1h trend is down, against the long/);
+    assert.match(problems(briefing('range', 'trend-up', { t4h: 'range', t15: 'up' })).join(), /Trend declared\? facts are not in the briefing/);
+    assert.deepStrictEqual(problems(briefing('range', 'trend-up', { t4h: 'range', t15: 'up', declared: DEC })), [], 'both range: the 15m and declared up');
+    assert.match(problems(briefing('range', 'trend-up', { t4h: 'range', t15: 'down', declared: DEC })).join(), /the 15m is down, not up/);
+    edit(root, t => t.replace(/^( {6}bias_agree: )neutral-15m-declared/m, '$1on'));
+    assert.match(problems(briefing('range')).join(), /4h and 1h must each trend up for a long .*no agreement, no trade/, 'bias_agree on: the strict rule');
     edit(root, t => t.replace(/^( {6}bias_agree: )on/m, '$1off'));
-    assert.deepStrictEqual(problems(briefing('range')), [], 'bias_agree off: the 4h sets the side');
     edit(root, t => t.replace(/^( {6}bias_frames: )\[4h, 1h\]/m, '$1off'));
     edit(root, t => t.replace(/^( {6}regime_against: )off/m, '$1on'));
     assert.match(problems(briefing('range', 'trend-down')).join(), /regime is trend-down, against the long/, policy(root).errors.join());
+  },
+  trend_fade: () => {
+    // A reversal strategy (fx_crt_1h, mtf: reversal) against a trending 4h is refused like any other (never counter).
+    const { evaluateOrder } = require('../../scripts/lib/trading/order-gate');
+    const { loadConfig } = require('../../scripts/lib/trading/config');
+    const H = require('../helpers');
+    const order = H.entryOrder({ rationale: 'setup:fx_crt_1h long raid of the prior hour low, stop 21480, target 21540, risk $40' });
+    const fired = [{ name: 'fx_crt_1h', direction: 'long' }];
+    const config = { ...loadConfig({}), killSwitchFile: '/nonexistent/fth/STOP', home: H.trendHome(undefined, { biases: { 240: -1, 60: -1, 15: 1 }, fired }), mtfMaxAgeMin: 1e9, signalMaxAgeMin: 1e9 };
+    const r = evaluateOrder({ input: order, entries: [H.plan()], now: H.NOW, config, strategies: GATE_STRATEGIES });
+    assert.ok(r.violations.some(v => v.check === 'mtf-trend' && /setup:fx_crt_1h long is against the 4h down trend/.test(v.message)), JSON.stringify(r.violations));
   },
   trend_rule: () => {
     const { evaluateOrder } = require('../../scripts/lib/trading/order-gate');
@@ -327,26 +345,26 @@ const ENFORCED = {
     const { order, fired } = fxOrb(H);
     const config = { ...loadConfig({}), killSwitchFile: '/nonexistent/fth/STOP', home: H.trendHome(undefined, { biases: { 240: -1, 60: -1, 15: -1 }, fired }), mtfMaxAgeMin: 1e9, signalMaxAgeMin: 1e9 };
     const r = evaluateOrder({ input: order, entries: [H.plan()], now: H.NOW, config, strategies: GATE_STRATEGIES });
-    assert.ok(r.violations.some(v => /prevailing/.test(v.message)), JSON.stringify(r.violations));
+    assert.ok(r.violations.some(v => /against the 4h down trend: no entry against a trending 4h or 1h/.test(v.message)), JSON.stringify(r.violations));
   },
 };
 
-test('the owner\'s top-down rule is shipped and held: every policy\'s entry has bias_frames [4h, 1h] and bias_agree on', () => {
-  // "Don't counter trade against the prevailing trend"; "No trade if there is no agreement between the two" (2026-10-29).
+test('the owner\'s top-down rule is shipped and held: every policy\'s entry has bias_frames [4h, 1h] and bias_agree neutral-15m-declared (BG)', () => {
+  // "Don't counter trade against the prevailing trend" (2026-10-29); BG, the owner's pick from the alignment study (2026-10-29).
   const { entryRuleOf } = require('../../scripts/lib/trading/entry-rule');
   assert.ok(POLICIES.length >= 1);
   for (const { file, book } of BOOKS) for (const [name, p] of Object.entries(book.policies || {})) {
     assert.deepStrictEqual(p.entry.bias_frames, ['4h', '1h'], `${file} policies.${name}.entry.bias_frames`);
-    assert.strictEqual(p.entry.bias_agree, 'on', `${file} policies.${name}.entry.bias_agree`);
+    assert.strictEqual(p.entry.bias_agree, 'neutral-15m-declared', `${file} policies.${name}.entry.bias_agree`);
   }
-  for (const s of POLICIES) assert.deepStrictEqual({ ...entryRuleOf(s.entry) }, { biasFrames: ['4h', '1h'], biasAgree: true, regimeAgainst: s.entry.regime_against === 'on', legTurned: s.entry.leg_turned === 'on' }, s.name);
-  // A loosened copy fails this test: each way of loosening it is seen.
+  for (const s of POLICIES) assert.deepStrictEqual({ ...entryRuleOf(s.entry) }, { chain: require('../../scripts/lib/trading/chain').chainOf('4h'), entryLane: true, biasFrames: ['4h', '1h'], biasAgree: false, biasNeutral: true, regimeAgainst: s.entry.regime_against === 'on', legTurned: s.entry.leg_turned === 'on' }, s.name);
+  // A changed copy fails this test: each way of changing the bias is seen (a dropped frame is looser; on and off are stricter).
   const shipped = read(BOOKS[0].file);
-  const loosened = [['bias_agree: on', 'bias_agree: off'], ['bias_frames: [4h, 1h]', 'bias_frames: off'], ['bias_frames: [4h, 1h]', 'bias_frames: [4h]'], ['bias_frames: [4h, 1h]', 'bias_frames: [1h]']];
+  const loosened = [['bias_agree: neutral-15m-declared', 'bias_agree: off'], ['bias_agree: neutral-15m-declared', 'bias_agree: on'], ['bias_frames: [4h, 1h]', 'bias_frames: off'], ['bias_frames: [4h, 1h]', 'bias_frames: [4h]'], ['bias_frames: [4h, 1h]', 'bias_frames: [1h]']];
   for (const [a, b] of loosened) {
     assert.ok(shipped.includes(a), a);
     const e = parseFrontmatter(shipped.replace(a, b)).data.policies.prop_portfolio.entry;
-    assert.ok(!(JSON.stringify(e.bias_frames) === JSON.stringify(['4h', '1h']) && e.bias_agree === 'on'), b);
+    assert.ok(!(JSON.stringify(e.bias_frames) === JSON.stringify(['4h', '1h']) && e.bias_agree === 'neutral-15m-declared'), b);
   }
 });
 
@@ -361,17 +379,18 @@ test('R4: each rulebook classifies every item, and every enforced item is really
   // Every probe is for an item some rulebook classifies enforced (none left over from a reclassification).
   for (const k of Object.keys(ENFORCED)) assert.ok(CLASSES.some(c => c.enforced.includes(k)), `${k} has a probe but no rulebook enforces it`);
   // The owner's classification (section 11): the mechanical items the code holds today are enforced, the rest taught.
-  assert.deepStrictEqual(CLASSES[0].taught.sort(), ['confluence', 'halving', 'mtf_read', 'room', 'secondary_context', 'skip_rules', 'trend_fade']);
+  // trend_fade enforced since never counter (feat/bias-bg): the trend rule holds every strategy style.
+  assert.deepStrictEqual(CLASSES[0].taught.sort(), ['confluence', 'halving', 'mtf_read', 'room', 'secondary_context', 'skip_rules']);
 });
 
 /** What each taught item's step teaches, in the skill's own words (whitespace may wrap). */
 const TAUGHT = {
-  trend_fade: /reversal strategy may\s+fade it only at a higher-timeframe level/,
+  trend_fade: /\(never counter\): any setup or strategy against a\s+trending 4h or 1h[^]*→ no trade/,
   room: /`inTheWay`[^]*`needR`\)[^]*never a no\s+trade alone/,
-  mtf_read: /`aligned` → full;[^]*`mixed` → half;[^]*`counter` on a\s+non-reversal setup → no trade/,
+  mtf_read: /`aligned` → full;[^]*`mixed` → smaller[^]*`counter` → no trade/,
   skip_rules: /skip rules\*\*[^]*any skip rule hit: no trade/,
-  confluence: /\*\*Confluence\*\* \(rules strategies\): another firing the other side → no trade/,
-  secondary_context: /cuts to half, never vetoes alone/,
+  confluence: /\*\*Confluence\*\* \(rules strategies\): another candidate \(one the trend rule\s+allows\) firing the other side → no trade/,
+  secondary_context: /a read, never a veto alone \(not in a prop attempt: `position-sizing`\)/,
   halving: /half is `floor\(size \/ 2\)`[^]*?Halvings don't compound/,
 };
 /** Step `n` of a priority-order section: from its number to the next step or the section's end. */
@@ -383,15 +402,16 @@ function stepText(section, n) {
 }
 
 test('R4: the taught keywords catch a rewritten step (each would fail on the step it does not pin)', () => {
-  const sec = '### The priority order\n\n4. **The multi-timeframe read for its side**: `aligned` → full; `mixed` → half;\n   `counter` on a non-reversal setup → no trade.\n5. **Next**: x\n';
+  const sec = '### The priority order\n\n4. **The multi-timeframe read for its side**: `aligned` → full; `mixed` → smaller;\n   `counter` → no trade.\n5. **Next**: x\n';
   assert.match(stepText(sec, 4), TAUGHT.mtf_read);
-  assert.doesNotMatch(stepText(sec.replace('`mixed` → half', '`mixed` → full'), 4), TAUGHT.mtf_read);
+  assert.doesNotMatch(stepText(sec.replace('`mixed` → smaller', '`mixed` → full'), 4), TAUGHT.mtf_read);
   assert.doesNotMatch(stepText(sec, 5), TAUGHT.mtf_read, 'another step\'s words never count');
   assert.strictEqual(stepText(sec, 6), null);
 });
 
 test('R4: every taught item is in the skill that teaches it, and the roles that decide load that skill in every harness', () => {
   const sections = {};
+  const flatSkill = skill => read(`skills/${skill}/SKILL.md`).replace(/\s+/g, ' ');
   const section = skill => {
     if (!sections[skill]) {
       const text = read(`skills/${skill}/SKILL.md`);
@@ -405,15 +425,17 @@ test('R4: every taught item is in the skill that teaches it, and the roles that 
     for (const k of taught) {
       const t = RB.ITEMS[k].taughtIn;
       assert.ok(t, `${file}: ${k} is classified taught, but no skill teaches it`);
-      const text = section(t.skill);
-      if (t.step === null) assert.match(text, TAUGHT.halving, `${k}: the rounding of a cut`);
-      else {
-        // The step, and what it teaches: a rewritten step fails here, not just a renumbered one.
-        const step = stepText(text, t.step);
-        assert.ok(step, `${k}: step ${t.step} of the priority order in ${t.skill}`);
-        assert.ok(TAUGHT[k], `${k}: no keyword pins what its step teaches`);
-        assert.match(step, TAUGHT[k], `${k}: step ${t.step} of ${t.skill} no longer teaches it`);
+      // A step-less item (the halving) is taught in its skill's own words, outside the priority order (position-sizing's
+      // non-prop step since feat/bias-bg: nothing halves in an attempt).
+      if (t.step === null) {
+        assert.match(flatSkill(t.skill), TAUGHT.halving, `${k}: the rounding of a cut`);
+        continue;
       }
+      // The step, and what it teaches: a rewritten step fails here, not just a renumbered one.
+      const step = stepText(section(t.skill), t.step);
+      assert.ok(step, `${k}: step ${t.step} of the priority order in ${t.skill}`);
+      assert.ok(TAUGHT[k], `${k}: no keyword pins what its step teaches`);
+      assert.match(step, TAUGHT[k], `${k}: step ${t.step} of ${t.skill} no longer teaches it`);
     }
   }
   // The skill reaches the agent: the head trader's cycle loads it, the risk manager carries it, and the

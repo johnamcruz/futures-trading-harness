@@ -37,6 +37,9 @@ const NOT_ON_FIXTURE = {
   fx_vwap_reclaim: 'each of its rule hits here is outside 10:00-15:00 ET, in a transition regime, or against the trend rule (vwap-reclaim-strategy.test.js fires it on constructed bars)',
   fx_value_area_breakout: 'its two closes above the prior value area on volume all come outside 10:00-15:00 ET here, none below it (value-area-strategies.test.js fires it on constructed sessions)',
   fx_value_area_reentry: 'no open outside the prior value area with two closes back inside on this fixture (value-area-strategies.test.js fires it on constructed sessions)',
+  // Never counter: a CRT raid here is always against a trending 4h or 1h, or against the 15m with both ranging.
+  fx_crt_1h: 'every raid it fires on here is against the trend rule (never counter; crt.test.js trades it with the trend)',
+  fx_crt_4h: 'every raid it fires on here is against the trend rule (never counter; crt.test.js covers its detector)',
 };
 const ACTIVE = ACTIVE_ALL.filter(s => !NOT_ON_FIXTURE[s.name]);
 
@@ -55,7 +58,7 @@ function firstFire(s) {
 test('the active strategies are the ones this test drives, and the ones the fixture can\'t, named with why', () => {
   // fx_value_area (value_area's rules, active): on this fixture, which carries no flow, it fires on its range-expansion
   // confirmation. fx_cisd_ote is paper (cisd_ote was, since its textbook rewrite): it is not driven here.
-  assert.deepStrictEqual(ACTIVE.map(s => s.name).sort(), ['fx_crt_1h', 'fx_crt_4h', 'fx_orb', 'fx_value_area']);
+  assert.deepStrictEqual(ACTIVE.map(s => s.name).sort(), ['fx_orb', 'fx_value_area']);
   assert.deepStrictEqual(ACTIVE_ALL.filter(s => NOT_ON_FIXTURE[s.name]).map(s => s.name).sort(), Object.keys(NOT_ON_FIXTURE).sort());
   // Each one not on the fixture: valid, scans every bar without an error, and truly never fires here (else drive it).
   const ev = createEvaluator(BARS);

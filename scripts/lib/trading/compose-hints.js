@@ -133,8 +133,8 @@ function nearestStops(list, b, side, tick, rule) {
 }
 
 /**
- * The targets a plan can take the side's way. An HTF-aligned plan (the 4h and 1h both the side's way: `target trail`
- * TRUE) takes the trail first, a named level ahead being context (the first in the way), never a requirement; then
+ * The targets a plan can take the side's way. A plan on a side the entry rule allows (BG: `target trail` TRUE) takes
+ * the trail first, a named level ahead being context (the first in the way), never a requirement; then
  * the named ones (composed-reads.js targetsAhead), else the 2R mark (`target 2r`, TRUE then: checkRead with the side).
  */
 function targetsOf(b, side, tick, riskPts = null) {
@@ -208,7 +208,7 @@ function repairOf({ reads, side, briefing, tick, plan, candidates = null, entryR
     return [...keep, ...listed];
   };
   const [bias, location, setups, entries, stops, targets] = STEPS.map(pool);
-  // The trail first (an HTF-aligned plan's target; the check holds it TRUE only with the 4h and 1h the side's way), the
+  // The trail first (the target of a side the entry rule allows; the check holds it TRUE only on such a side), the
   // 2R mark last: the check decides it with each combination's own stop (the room rule's R).
   if (!targets.some(t => t[0] && t[0].trail)) targets.unshift([{ read: 'target trail', price: null, mark: true, trail: true, skill: skillOf('target') }]);
   if (!targets.some(t => t[0] && t[0].mark && !t[0].trail)) targets.push([{ read: 'target 2r', price: null, mark: true, skill: skillOf('target') }]);
@@ -328,9 +328,9 @@ function targetHint(checked, cand, b, side, tick, plan) {
   const min = plan.minRR;
   const enough = rated.filter(x => x.r.ok);
   const from = `from the stop at ${stop.price}`;
-  // An HTF-aligned plan's target is the trail: a named level ahead is context, never a requirement.
+  // A plan on a side the entry rule allows: its target is the trail; a named level ahead is context, never a requirement.
   const trail = enough.find(x => x.trail);
-  if (trail) return `target: HTF-aligned (4h and 1h your way): "target trail" (the ${min}R mark ${trail.r.price} ${from} arms it); a level ahead is context, never a requirement`;
+  if (trail) return `target: the entry rule allows the side: "target trail" (the ${min}R mark ${trail.r.price} ${from} arms it); a level ahead is context, never a requirement`;
   if (enough.length && enough[0].mark) return `target: no named level the trade's way: "target 2r", the ${min}R mark ${enough[0].r.price} ${from}; past it the runner trails`;
   if (enough.length) return `target: named levels at ${min}R or more ${from}: ${enough.slice(0, n).map(x => `"${x.read}" (${x.r.rr}R)`).join(', ')}`;
   return `target: no named level reaches ${min}R ${from} (nearest: ${rated.slice(0, n).map(x => `"${x.read}" ${x.r.rr}R`).join(', ') || 'none'}): pass, or a setup with a nearer stop`;

@@ -31,7 +31,7 @@ test('buildRecord: the trend rule frames as of the last closed bar, and when tha
   assert.strictEqual(Date.parse(rec.closedAt) - Date.parse(rec.asOf), 180000, 'a 3-minute bar closes 3 minutes after it opens');
   assert.deepStrictEqual(rec.biases, { 15: -1, 60: -1, 240: -1 });
   assert.strictEqual(rec.rule.prevailing, '4h down');
-  assert.match(rec.line, /Trend rule: SHORT allowed \(prevailing \S+ down\); long only as a reversal/);
+  assert.match(rec.line, /Trend rule: SHORT allowed \(prevailing \S+ down\); no long against it/);
 });
 
 test('writeRecord / readRecord: one file per index family, written atomically; MNQ and NQ share it', () => {
@@ -47,17 +47,17 @@ test('writeRecord / readRecord: one file per index family, written atomically; M
   assert.strictEqual(readRecord(home, 'MES').symbol, 'MES');
 });
 
-test('checkTrend: refuses a trend strategy against the prevailing trend, without a record, or on a stale one', () => {
+test('checkTrend: refuses any strategy against a trending 4h or 1h, without a record, or on a stale one', () => {
   const now = new Date('2026-10-07T14:00:00Z');
   const fresh = '2026-10-07T13:57:00.000Z';
   const check = (home, extra = {}) => checkTrend(home, { root: 'MNQ', side: 'buy', strategy: 'orb', now, ...extra });
   const up = trendHome(tmpDir(), { closedAt: fresh });
   assert.strictEqual(check(up), null);
-  assert.match(check(up, { side: 'sell' }), /setup:orb short is against the prevailing 4h up trend.*4h up, 1h up, 15m up/);
-  assert.strictEqual(check(up, { side: 'sell', style: 'reversal' }), null, 'a reversal strategy may fade it');
+  assert.match(check(up, { side: 'sell' }), /setup:orb short is against the 4h up trend: no entry against a trending 4h or 1h.*4h up, 1h up, 15m up/);
+  assert.match(check(up, { side: 'sell', style: 'reversal' }), /against the 4h up trend/, 'never counter: a reversal style is refused too');
   // The 4h is a range: the 1h decides.
   const h1 = trendHome(tmpDir(), { closedAt: fresh, biases: { 240: 0, 60: -1, 15: 1 } });
-  assert.match(check(h1), /prevailing 1h down trend/);
+  assert.match(check(h1), /against the 1h down trend/);
   assert.strictEqual(check(h1, { side: 'sell' }), null);
   // Nothing trends: both sides open.
   assert.strictEqual(check(trendHome(tmpDir(), { closedAt: fresh, biases: { 240: 0, 60: 0, 15: 0 } }), { side: 'sell' }), null);
@@ -73,8 +73,12 @@ test('checkTrend: refuses a trend strategy against the prevailing trend, without
   assert.match(check(old), /30 min old \(limit 15, FTH_MTF_MAX_AGE_MIN\)/);
   assert.strictEqual(check(old, { maxAgeMin: 45 }), null);
   assert.match(check(trendHome(tmpDir(), { closedAt: '2026-10-07T15:00:00.000Z' })), /after now; it can't be trusted/);
-  // A reversal strategy needs no record at all.
-  assert.strictEqual(check(tmpDir(), { style: 'reversal' }), null);
+  // A reversal style needs the record like any other.
+  assert.match(check(tmpDir(), { style: 'reversal' }), /No multi-timeframe read for MNQ/);
+  // Both ranging: only the 15m's way.
+  const m15 = trendHome(tmpDir(), { closedAt: fresh, biases: { 240: 0, 60: 0, 15: -1 } });
+  assert.match(check(m15), /against the 15m down trend, the 4h and 1h ranging/);
+  assert.strictEqual(check(m15, { side: 'sell' }), null);
 });
 
 test('scripts/mtf.js --record writes the record the gate reads, and ignores it (with a note) in autonomous runs', () => {

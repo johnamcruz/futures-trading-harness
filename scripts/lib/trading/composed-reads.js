@@ -72,9 +72,9 @@
  *                                           and the levels within roomIgnoreR of the entry by the stop read's R, at most
  *                                           roomIgnoreTicks); the plan puts it at the minimum R (planOf)  its side
  *   target trail                            step target only: the trail (the owner's "We always use a trailing stop,
- *                                           not a fixed target, to maximize our wins"), TRUE when the 4h and the 1h
- *                                           both trend the side's way (h1.h4.trend, h1.h1.trend: the entry rule's
- *                                           bias_agree check, entry-rule.js), whatever levels lie ahead: the plan's
+ *                                           not a fixed target, to maximize our wins"), TRUE on every side the shipped
+ *                                           entry rule allows (BG, bias_agree neutral-15m-declared: entry-rule.js,
+ *                                           TRAIL_RULE), whatever levels lie ahead: the plan's
  *                                           target is the 2R mark (planOf, as `target 2r`), where the policy's exit
  *                                           arms its trail; a level ahead stays the plan's first in the way (a read)
  *                                                                                         its side
@@ -87,11 +87,8 @@
  *
  * Each read is true, false or 'unchecked' (a form this checker doesn't know, a fact the briefing doesn't hold, a
  * level it doesn't name): never true unless the briefing says so. Side agreement (D12): a read with a direction must
- * be the order's side; a stop or target must be on its side of the reference price (m3.price). The one exception is
- * D2's verified reversal, the owner's "CHoCH at or above the trend" (D2_TIERS, one definition the gate's trend rule
- * shares, lifecycle-gate.js reversalAllowed): a trend or break read against the side stands when the combination
- * holds its frame's tier, the side's way: a 15m frame (or one under it) a true 15m or 1h CHoCH, a 1h frame a 1h CHoCH,
- * a 4h frame a 1h CHoCH plus a 4h candle that rejected a key level (a gap's edge is none). Each step takes its own kinds of read (STEP_KINDS: bias the trend, break, prior-range, trend-rule, alignment,
+ * be the order's side; a stop or target must be on its side of the reference price (m3.price). No exception: never
+ * counter (no reversal tier excuses a read against the side). Each step takes its own kinds of read (STEP_KINDS: bias the trend, break, prior-range, trend-rule, alignment,
  * regime and day-type reads; location at, box at, vwap and value; setup the candle relations, patterns, CISD, OTE, sweeps
  * and the compression break;
  * entry close, momentum, volume, participation, absorption and the confirming pattern), and no read is stated twice
@@ -111,9 +108,11 @@
  */
 
 const { trendRuleOf } = require('./reasons');
-const { entryProblems, entryRuleOf, BIAS_FRAMES, TREND_TF } = require('./entry-rule');
-// The trail target's condition: the 4h and the 1h both the side's way (the entry rule's bias_agree, one check).
-const AGREE = entryRuleOf({ bias_frames: [...BIAS_FRAMES], bias_agree: 'on', regime_against: 'off', leg_turned: 'off' });
+const { entryProblems, entryRuleOf, topDown, BIAS_FRAMES, TREND_TF, NEUTRAL } = require('./entry-rule');
+// The trail target's condition (the owner: always trail; never block a trend entry for lack of a fixed target): every
+// side the shipped entry rule allows (BG, bias_agree neutral-15m-declared: a trending 4h or 1h the side's way, none
+// against; both ranging, the 15m and the declared trend its way), the entry rule's own check.
+const TRAIL_RULE = entryRuleOf({ bias_frames: [...BIAS_FRAMES], bias_agree: NEUTRAL, regime_against: 'off', leg_turned: 'off' });
 
 const STEPS = ['bias', 'location', 'setup', 'entry', 'stop', 'target'];
 // The flow's steps as the hints, the trend-capture report and the learning loop name them: the six compose steps, then
@@ -160,26 +159,6 @@ const FVG_EDGE = /^(1m|3m|5m|15m|1h|4h) fvg (low|high)$/;
 const FVG_ZONE = /^(1m|3m|5m|15m|1h|4h) fvg$/;
 const TF_ORDER = ['1m', '3m', '5m', '15m', '1h', '4h'];
 const TFS = new Set(TF_ORDER);
-// D2, the owner's "CHoCH at or above the trend": what fading each frame (its minutes) needs, the CHoCH frames that
-// suffice and whether a 4h candle's rejection of a key level must join. One definition: the reads' agreement here
-// (a read on a frame under 15m is held to the 15m tier) and the gate's trend rule (lifecycle-gate.js reversalAllowed).
-const D2_TIERS = { 15: { choch: ['15m', '1h'], rejection4h: false }, 60: { choch: ['1h'], rejection4h: false }, 240: { choch: ['1h'], rejection4h: true } };
-
-/**
- * Whether checked reads hold a D2 tier for `side`: a true, agreeing 15m or 1h CHoCH the side's way on one of the tier's
- * frames, and, when the tier asks, a true, agreeing 4h rejection of a key level the side's way (a fair value gap's edge,
- * '<tf> fvg low|high', is not one). False for no tier.
- */
-function d2TierMet(tier, reads, side) {
-  if (!tier || !Array.isArray(reads)) return false;
-  const good = x => isObj(x) && x.check === true && x.agrees === true && x.dir === side;
-  const chochs = reads.filter(x => good(x) && x.kind === 'break' && /^(15m|1h) choch (up|down)$/.test(String(x.form || ''))).map(x => String(x.form).split(' ')[0]);
-  const hasChoch = tier.choch.some(tf => chochs.includes(tf));
-  const has4h = !tier.rejection4h || reads.some(x => good(x) && x.kind === 'relation' && /^4h rejected .+ (up|down)$/.test(String(x.form || ''))
-    && !/ fvg (low|high) (up|down)$/.test(String(x.form)));
-  return hasChoch && has4h;
-}
-
 const isObj = x => Boolean(x) && typeof x === 'object' && !Array.isArray(x);
 const num = x => (typeof x === 'number' && Number.isFinite(x) ? x : null);
 const data = (b, name) => (isObj(b) && isObj(b.sections) && isObj(b.sections[name]) && isObj(b.sections[name].data) ? b.sections[name].data : null);
@@ -250,7 +229,7 @@ function parseRead(text) {
   if (fired) return out('fired', { name: fired[1], value: fired[2] });
   // The 2R mark: no named level on the winning side, the target is the strategy's minimum R from the entry.
   if (form === 'target 2r') return out('target', { source: '2r', price: null, mark: true }, ['2r']);
-  // The trail: aligned (the 4h and 1h the side's way), the target is the 2R mark, where the exit arms the trail.
+  // The trail: a side the entry rule allows (BG), the target is the 2R mark, where the exit arms the trail.
   if (form === 'target trail') return out('target', { source: 'trail', price: null, mark: true, trail: true }, ['trail']);
   if ((a === 'stop' || a === 'target') && w.length >= 3 && isNum(w[w.length - 1])) {
     const source = w.slice(1, -1);
@@ -469,6 +448,7 @@ const CANDLE_KINDS = new Set(['relation', 'pattern', 'close', 'momentum', 'absor
 // candle), and a compression break (its expansion candle). An OTE zone and a sweep name none, and point no side as a
 // setup (they only support it).
 const SETUP_CANDLE = new Set([...CANDLE_KINDS, 'cisd', 'compression']);
+const { LADDER } = require('./chain');
 const TF_MIN = { '1m': 1, '3m': 3, '5m': 5, '15m': 15, '1h': 60, '4h': 240 };
 
 /** When a timeframe's completed candle in the briefing closed (ms): its closedAt, else its open plus its length; null. */
@@ -742,10 +722,9 @@ function checkRead(p, b, { tick = 0.25, side = null, riskPts = null } = {}) {
         // at the minimum R or more), and one short of it in the way is no room, never the mark.
         if (!SIDES.includes(side)) return res('unchecked', 'the 2R mark is the side\'s: no side given', { field: 'm3 targets' });
         if (p.trail) {
-          const why = entryProblems({ briefing: b, side, reads: [], rule: AGREE });
-          const way = side === 'long' ? 'up' : 'down';
-          if (why.length) return res(/not in the briefing/.test(why[0]) ? 'unchecked' : false, `the trail target needs the 4h and the 1h both ${way}: ${why[0].replace(/^entry rule: /, '')}`, { field: 'h1 trends' });
-          return res(true, `the 4h and the 1h both ${way}: the target is the trail (the 2R mark from the plan's entry arms it; past it the runner trails), whatever level lies ahead`, { field: 'h1 trends', value: 'trail', price: null, dir: side, mark: true });
+          const why = entryProblems({ briefing: b, side, reads: [], rule: TRAIL_RULE });
+          if (why.length) return res(/not in the briefing|can't be read/.test(why[0]) ? 'unchecked' : false, `the trail target needs a side the entry rule allows (htf-to-ltf): ${why[0].replace(/^entry rule: /, '')}`, { field: 'h1 trends' });
+          return res(true, `the entry rule allows the ${side}: the target is the trail (the 2R mark from the plan's entry arms it; past it the runner trails), whatever level lies ahead`, { field: 'h1 trends', value: 'trail', price: null, dir: side, mark: true });
         }
         const ahead = targetsAhead(b, side, { tick, riskPts });
         if (ahead.length) return res(false, `the briefing names ${ahead[0].read.replace(/^target /, '')} ${side === 'long' ? 'above' : 'below'} price ${ref}: the target is the first named level at the minimum R or more; the 2R mark only with none named`, { field: 'm3 targets', value: ahead[0].price });
@@ -860,19 +839,11 @@ function checkReads({ reads, side, briefing, skills = null, tick = 0.25, entryRu
     const c = checkRead(p, briefing, { tick, side, riskPts });
     return { ...row, ...c, agrees: true };
   });
-  // Side agreement (D12), with D2's verified reversal: a trend or break read against the side stands when the reads
-  // hold its frame's D2 tier the side's way (D2_TIERS, the gate's own; a frame under 15m is held to the 15m tier): a 15m
-  // CHoCH never excuses a 1h or 4h trend, a 3m CHoCH nothing, and a 4h trend stands beside a 1h CHoCH only with a 4h
-  // rejection of a key level. The tier is judged on the reads as checked, before any agreement below is settled.
-  const tierOf = tf => (TF_MIN[tf] ? D2_TIERS[Math.max(15, TF_MIN[tf])] || null : null);
-  const excused = new Map(TF_ORDER.map(tf => [tf, d2TierMet(tierOf(tf), checked, side)]));
+  // Side agreement (D12): a read pointing against the side never agrees (never counter: no reversal tier excuses one).
   for (const r of checked) {
     if (r.check !== true) continue;
     if (r.kind === 'stop' || r.kind === 'target') r.agrees = r.dir === side;
-    else if (r.dir && r.dir !== side) {
-      r.agrees = (r.kind === 'trend' || r.kind === 'break') && excused.get(r.form.split(' ')[0]) === true;
-      if (r.agrees) r.reversal = true;
-    }
+    else if (r.dir && r.dir !== side) r.agrees = false;
   }
   // A cited setup (a TRUE `<strategy> fired` read of a strategy in `cited`): the plan takes its own entry, stop and target.
   const setup = citedSetup({ checked, side, m3, cited, problems });
@@ -889,12 +860,13 @@ function checkReads({ reads, side, briefing, skills = null, tick = 0.25, entryRu
     }
     // The owner's chain (2026-10-29, "Yes enforce 15min setup"): the 4h and 1h set the side, the 15m (or higher) holds
     // the setup the side's way, the 3m only times the entry. Under a policy whose entry rule holds the HTF agreement
-    // (bias_agree), a setup pointing the side must be on the 15m or higher (its form's first word). Stated exemption: a
+    // (bias_agree on or neutral-15m-declared: topDown), a setup pointing the side must be on the 15m or higher (its form's first word). Stated exemption: a
     // cited setup's `fired` read (momentum_continuation: its setup is the prevailing HTF trend plus its momentum
     // candle). The 15m trend itself may run against the side (a 15m pullback): only the setup read's frame is held.
     const setups = pointing('setup');
-    if (entryRule && entryRule.biasAgree && setups.length && !setups.some(r => r.kind === 'fired' || (TF_MIN[String(r.form || '').split(' ')[0]] || 0) >= TF_MIN['15m'])) {
-      problems.push(`entry rule: the setup must be on the 15m or higher (a 3m read only times the entry): state the 15m, 1h or 4h reaction or break the ${side}'s way, or pass`);
+    const setupTf = entryRule && entryRule.chain ? entryRule.chain.setup : '15m';
+    if (topDown(entryRule) && setups.length && !setups.some(r => r.kind === 'fired' || (TF_MIN[String(r.form || '').split(' ')[0]] || 0) >= (TF_MIN[setupTf] || Infinity))) {
+      problems.push(`entry rule: the setup must be on the ${setupTf} or higher (a ${entryRule.chain ? entryRule.chain.entry : '3m'} read only times the entry): state the ${(l => (l.length > 1 ? `${l.slice(0, -1).join(', ')} or ${l[l.length - 1]}` : l[0]))(LADDER.slice(LADDER.indexOf(setupTf)))} reaction or break the ${side}'s way, or pass`);
     }
     // Reaction, then confirmation: when the setup's pointing reads name a candle (SETUP_CANDLE: a relation or pattern
     // read's, a CISD read's confirming one), an entry read pointing the side must be on a candle that closed after the
@@ -912,7 +884,8 @@ function checkReads({ reads, side, briefing, skills = null, tick = 0.25, entryRu
     }
   }
   // The policy's entry rule (entry-rule.js, its rulebook's `entry`): the bias frames, the regime, the leg turned, on
-  // the same briefing; none (no policy, or every key off): nothing more is checked.
+  // the same briefing. No policy (or every key off): no BG check here; never counter outside a policy is the order
+  // gate's [mtf-trend] (mtf.js trendRule), which refuses any entry against a trending 4h or 1h.
   if (SIDES.includes(side)) problems.push(...entryProblems({ briefing, side, reads: checked, rule: entryRule }));
   for (const k of ['stop', 'target']) {
     const n = checked.filter(r => r.kind === k && r.step === k).length;
@@ -971,7 +944,7 @@ const WORD = { true: 'TRUE', false: 'FALSE', unchecked: 'UNCHECKED' };
 function renderCheck(r) {
   const out = [`Reads checked against the bar briefing (${r.side || 'no side'}):`];
   for (const x of r.reads) {
-    const agree = x.check === true && !x.agrees ? ` - AGAINST the ${r.side}` : x.reversal ? ' - against, allowed by the verified CHoCH (D2)' : '';
+    const agree = x.check === true && !x.agrees ? ` - AGAINST the ${r.side}` : '';
     out.push(`- ${WORD[String(x.check)]} ${x.step} (${x.skill}): "${x.read}" - ${x.fact}${agree}`);
   }
   for (const p of r.problems) out.push(`- PROBLEM: ${p}`);
@@ -980,4 +953,4 @@ function renderCheck(r) {
   return `${out.join('\n')}\n`;
 }
 
-module.exports = { STEPS, FLOW_STEPS, STEP_KINDS, D2_TIERS, d2TierMet, SETUP_CANDLE, LIVE_BOX, ENTRY_PATTERNS, levelIndex, targetsAhead, roomBand, candleClose, setupClose, TF_ORDER, TF_MIN, MAX_READS, WHY_MAX, MOMENTUM, VOLUME_HIGH, ABSORPTION, netAtrOf, parseRead, checkRead, checkReads, readSignature, skillSignature, contextOf, targetROf, rBucket, levelName, renderCheck };
+module.exports = { TRAIL_RULE, STEPS, FLOW_STEPS, STEP_KINDS, SETUP_CANDLE, LIVE_BOX, ENTRY_PATTERNS, levelIndex, targetsAhead, roomBand, candleClose, setupClose, TF_ORDER, TF_MIN, MAX_READS, WHY_MAX, MOMENTUM, VOLUME_HIGH, ABSORPTION, netAtrOf, parseRead, checkRead, checkReads, readSignature, skillSignature, contextOf, targetROf, rBucket, levelName, renderCheck };

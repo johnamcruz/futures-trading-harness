@@ -44,32 +44,32 @@ timeframe's candles). The 4h has swings only (`h1.h4.swingPattern`).
 
 | Timeframe | BOS | CHoCH |
 |---|---|---|
-| 3m, 5m | continuation; entry timing | against the HTF: usually a pullback; back with it: the pullback ends |
+| 3m, 5m | a candle fact only: never the setup, never a wait | a candle fact only (its swings are for the stop) |
 | 15m | the working structure continues | the working structure shifting: a deeper pullback, or a reversal starting |
 | 1h (4h swings) | the HTF trend continues | the strongest sign of an HTF trend change, not a reversal by itself: a BOS the new way confirms it |
 
-A 3-minute BOS against a 1-hour downtrend is a counter-trend trade.
-CHoCHs stacking up the timeframes (3m, then 15m, then 1h) are a reversal
-developing.
+A break against a trending 4h or 1h: the trend rule refuses it (never counter).
+CHoCHs stacking up the timeframes (15m, then 1h) are a reversal
+developing; a 1h CHoCH while the 4h and 1h agree is context.
 
 **In the PLAN.**
 
 - **1 HTF**: a 1h break is the side rule's, a 15m one structure
   (`confluence-counting`).
-- **4 Setup**: continuation, a BOS the HTF way, a pullback to a level, a
-  lower-timeframe CHoCH back the HTF way; reversal, CHoCHs stacking up.
+- **4 Setup**: a 15m (or higher) BOS the bias's way, or a pullback to a
+  level ending in the 15m setup the bias's way; never a 3m break.
 - **9 Manage**: a CHoCH against an open trade on its timeframe or higher
-  is significant (`invalidation`); lower is mostly noise. The exit stays
-  the strategy's.
+  (15m, 1h) is significant (`invalidation`); a 3m one is noise.
+  The exit stays the trail.
 
 ## Examples
 
 ```text
-Take: 1h, 15m BOS up; pullback to the RTH VWAP 21520.50; m3 CHoCH up 0 bars ago.
-  Reads: 1h bos up, at vwap rth, 3m choch up. Priority order: aligned; the count for -> take.
-Skip: 1h, 15m last BOS up; m3 CHoCH down through 21512.50. Read: a 3m pullback, not a reversal.
-  A short: no 1h CHoCH down; the priority order (step 2) decided skip.
-Loser: 1h up; m3, then 15m CHoCH down through 21560.00. Read: reversal developing.
-  short at 21548.75 (15m choch down), stop 21557.25 (8.50 pts = 34 ticks, $17.00 on 1 MNQ); no 1h CHoCH;
-  a 15m CHoCH up through 21562.50: the CHoCH failed, price resumed. -34 ticks, -$17.00.
+Take: 4h, 1h up, 1h and 15m BOS up; pullback to the RTH VWAP 21520.50; the 15m rejected it up.
+  Reads: 1h bos up, at vwap rth, 15m rejected vwap rth up, 3m close top. Priority order: aligned -> take.
+Skip: 1h trending up; a 15m CHoCH down through 21512.50: a 15m pullback. A short: against the 1h
+  trend (the trend rule refuses it, whatever CHoCH) -> pass.
+Loser: 4h up, 1h ranging; a 15m CHoCH down through 21560.00, then a 15m BOS down: against the 4h
+  (the trend rule refuses it). A short at 21548.75 anyway, stop 21557.25 (8.50 pts = 34 ticks, $17.00 on 1 MNQ):
+  a 15m CHoCH up through 21562.50, price resumed up. -34 ticks, -$17.00.
 ```

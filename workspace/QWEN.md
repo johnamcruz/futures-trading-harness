@@ -43,16 +43,16 @@ harness (Claude Code, Codex, Qwen Code, opencode, or any agent that reads AGENTS
 
 Always on, every harness, every bar (the detail: `confluence-counting`).
 
-- On the trend rule's side (or its CHoCH tier), a rejection or breakout at a
-  key level or FVG, the trigger closed → call `compose_check`. Never estimate
+- On the side rule's side (never counter), a 15m rejection or breakout at
+  a key level or FVG closed → call `compose_check`. Never estimate
   room, R:R or the target yourself: the briefing's "Standard plan" line
   states them, and the refusal is the R:R check. The line refused → pass.
-- `compose_check` OK → a valid setup is the trade: full size within the
-  verdict's ceiling; serious against (a 3m close beyond the leg's 15m swing
-  among them) → half; decisive against (a 1h CHoCH against the side) →
-  pass. Refused → pass, naming it.
-- Thin volume, the first level ahead, the VWAP distance, "chasing", no
-  pullback yet: minor reads, never a reason not to compose.
+- `compose_check` OK → a valid setup is the trade: in a prop attempt the
+  full translated size; else full; serious against (a 3m close beyond the leg's 15m swing
+  among them) → half; decisive against (a 1h CHoCH against, unless the 4h
+  and 1h both your way) → pass. Refused → pass.
+- Thin volume, the first level ahead, VWAP distance, "chasing", no
+  pullback yet: minor, never a reason not to compose.
 
 ## Execution
 
@@ -128,8 +128,8 @@ user; numbers here are the harness defaults, not any firm's official limits.
   entries from 15:45 ET, and end of day (15:50 ET) closes positions and
   cancels resting orders. Nothing is held through the 16:00-18:00 ET break or
   the weekend.
-- **Consistency:** on funded/combine accounts no single day should carry the
-  whole profit target. Prefer steady days over one big one.
+- **Consistency:** the account's rule (its ACCOUNT.md), enforced by code;
+  don't plan around it.
 - **Locked accounts:** `canTrade=false` or errorCode 4 `AccountViolation` means
   the firm locked the account. Stop trading it and tell the user.
 - **Market closed:** errorCode 5 `OutsideTradingHours`. Don't retry in a loop.
@@ -149,8 +149,8 @@ user; numbers here are the harness defaults, not any firm's official limits.
   without a stop bracket (one the gate never checked, e.g. placed outside
   the harness) is cancelled, not waited on (the `order-mechanics` skill); one its
   record or prompt marks "bracket attached on fill" is bracketed: keep it.
-- Never widen a stop, never average down, never add to a loser. You may
-  tighten a stop or move it to breakeven.
+- Never widen a stop, never average down, never add to a loser. Tighten it
+  only behind turned structure (`manage-position`), never to breakeven by feel.
 - Use micro contracts (MNQ, MES, MYM, M2K, MGC, MCL) and size 1 until the
   journal shows positive expectancy over at least 30 closed trades of that
   setup.
@@ -159,10 +159,11 @@ user; numbers here are the harness defaults, not any firm's official limits.
   attempt's budget; the 25% and size-1 rules above don't apply to it, and the
   order gate enforces the verdict instead. Never exceed the verdict.
 - Minimum planned reward-to-risk: the strategy's (`risk.min_rr`), measured from the entry to the plan's target; `compose_check` computes and enforces it, never your estimate (never to the first level ahead: that is a read)
-  (a trailing exit: `trailActivateR`; the 4h and 1h your way: `target trail`,
+  (a trailing exit: `trailActivateR`; an entry the rule allows: `target trail`,
   no level needed).
 - After 2 losses in a row: stop, write a review and a lesson, then wait out the
   cooldown. After 3 losing trades in a trading day: done until 17:00 CT.
+  In a prop attempt the rulebook's `loss_streak_stop` governs instead.
 - Pass when the count says so. Standing aside is a position.
 
 ## Skills

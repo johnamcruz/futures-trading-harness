@@ -43,7 +43,7 @@ description: Use when deciding a cycle, and before any entry - each setup's fact
   recorded" is the weakest case; a STALE record doesn't describe it.
   `trade_lifecycle` has no backtest record: none of this cuts its size.
 - **Confluence.** A composed setup's: the count of `confluence-counting`.
-  Rules strategies (none active) firing both sides (`confluence.against`):
+  Rules candidates (none active) firing both sides (`confluence.against`):
   stand aside (priority step 6: no exception).
 - **The setup**: compose it (`trade-lifecycle`). A rules strategy (none
   active): at most one scan `candidate` this direction on the last closed

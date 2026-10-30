@@ -1,6 +1,6 @@
 'use strict';
 
-// The base timeframe's timing against the side the 4h and 1h agree on (scripts/lib/trading/ltf-timing.js): its
+// The base timeframe's timing against the side the shipped entry rule allows (BG) (scripts/lib/trading/ltf-timing.js): its
 // states, from closed bars only, and the briefing's summary line.
 
 const test = require('node:test');
@@ -17,10 +17,29 @@ const brk = (i, direction, kind = 'BOS') => ({ kind, direction, level: 1, at: B[
 const UP = { '4h': 'up', '1h': 'up' };
 const et = iso => new Date(iso).toISOString().slice(11, 16);
 
-test('sideOf: the side the 4h and the 1h agree on; any disagreement or unknown: none', () => {
+const DEC = way => ({ long: { vwapAtr: way === 'long' ? 0.6 : -0.6, ema20Atr: way === 'long' ? 0.3 : -0.3, dayMoveAtr: way === 'long' ? 1 : -1, regime: way === 'long' ? 'with' : 'against' }, short: { vwapAtr: way === 'short' ? 0.6 : -0.6, ema20Atr: way === 'short' ? 0.3 : -0.3, dayMoveAtr: way === 'short' ? 1 : -1, regime: way === 'short' ? 'with' : 'against' } });
+
+test('sideOf: the side the shipped entry rule allows (BG); a frame against, both ranging undeclared, or unknown: none', () => {
   assert.strictEqual(sideOf(UP), 'long');
   assert.strictEqual(sideOf({ '4h': 'down', '1h': 'down' }), 'short');
-  for (const t of [{ '4h': 'up', '1h': 'range' }, { '4h': 'range', '1h': 'up' }, { '4h': 'up', '1h': 'down' }, { '4h': 'up' }, null]) assert.strictEqual(sideOf(t), null, JSON.stringify(t));
+  // BG-only: one frame trending, the other ranging.
+  assert.strictEqual(sideOf({ '4h': 'up', '1h': 'range' }), 'long');
+  assert.strictEqual(sideOf({ '4h': 'down', '1h': 'range' }), 'short');
+  assert.strictEqual(sideOf({ '4h': 'range', '1h': 'up' }), 'long');
+  // Both ranging: the 15m and the declared trend the side's way, else none.
+  assert.strictEqual(sideOf({ '4h': 'range', '1h': 'range' }, { t15: 'down', declared: DEC('short') }), 'short');
+  assert.strictEqual(sideOf({ '4h': 'range', '1h': 'range' }, { t15: 'up', declared: DEC('long') }), 'long');
+  assert.strictEqual(sideOf({ '4h': 'range', '1h': 'range' }, { t15: 'up', declared: DEC('short') }), null, 'the 15m up, declared down');
+  assert.strictEqual(sideOf({ '4h': 'range', '1h': 'range' }, { t15: 'up' }), null, 'no declared facts');
+  for (const t of [{ '4h': 'up', '1h': 'down' }, { '4h': 'up' }, null, { '4h': 'range', '1h': 'range' }]) assert.strictEqual(sideOf(t), null, JSON.stringify(t));
+});
+
+test('timingOf: a BG-only side is timed (a down/range bar, a neutral 15m + declared bar), its turn rules as before', () => {
+  const downRange = timingOf({ trends: { '4h': 'down', '1h': 'range' }, regime: 'range', bars: B, minutes: 3, breaks: [brk(20, 'up'), brk(25, 'down')] });
+  assert.deepStrictEqual(downRange, { side: 'short', state: 'turned', kind: 'BOS', dir: 'down', at: B[25].t, barsAgo: 14 });
+  const neutral = timingOf({ trends: { '4h': 'range', '1h': 'range' }, t15: 'up', declared: DEC('long'), regime: 'trend-up', bars: B, minutes: 3 });
+  assert.deepStrictEqual(neutral, { side: 'long', state: 'with' });
+  assert.strictEqual(timingOf({ trends: { '4h': 'range', '1h': 'range' }, t15: 'up', regime: 'trend-up', bars: B, minutes: 3 }), null, 'neutral without declared facts: no side');
 });
 
 test('timingOf: with (the base regime the side\'s way), turned (its latest event after the latest against), else pullback since that break', () => {
@@ -46,18 +65,18 @@ test('timingOf: with (the base regime the side\'s way), turned (its latest event
   assert.strictEqual(at({ breaks: [brk(38, 'down')], compression: comp }).state, 'pullback');
   // Shorts mirror it.
   assert.deepStrictEqual(timingOf({ trends: { '4h': 'down', '1h': 'down' }, regime: 'range', bars: B, minutes: 3, breaks: [brk(20, 'up'), brk(25, 'down')] }), { side: 'short', state: 'turned', kind: 'BOS', dir: 'down', at: B[25].t, barsAgo: 14 });
-  // No agreed side: nothing to time.
-  assert.strictEqual(timingOf({ trends: { '4h': 'up', '1h': 'range' }, regime: 'trend-up', bars: B, minutes: 3 }), null);
+  // No side the rule allows: nothing to time.
+  assert.strictEqual(timingOf({ trends: { '4h': 'up', '1h': 'down' }, regime: 'trend-up', bars: B, minutes: 3 }), null);
   assert.strictEqual(timingOf({ trends: UP, bars: [], minutes: 3 }), null);
 });
 
 test('timingLine: one short line per state, its timeframe named', () => {
   assert.strictEqual(timingLine(null, et, '3m'), null);
-  assert.strictEqual(timingLine({ side: 'long', state: 'with' }, et, '3m'), '- 3m timing (long: the 4h and 1h up): 3m with the HTF side.');
-  assert.strictEqual(timingLine({ side: 'long', state: 'turned', kind: 'CHoCH', dir: 'up', at: B[30].t, barsAgo: 9 }, et, '3m'), '- 3m timing (long: the 4h and 1h up): 3m turned back: CHoCH up at 15:30 ET (9 bars ago).');
-  assert.strictEqual(timingLine({ side: 'short', state: 'pullback', since: B[30].t }, et, '3m'), '- 3m timing (short: the 4h and 1h down): 3m pullback: trending against the HTF side since 15:30 ET.');
-  assert.strictEqual(timingLine({ side: 'long', state: 'pullback', since: null }, et, '3m'), '- 3m timing (long: the 4h and 1h up): 3m pullback: trending against the HTF side.');
-  assert.strictEqual(timingLine({ side: 'long', state: 'waiting' }, et, '3m'), '- 3m timing (long: the 4h and 1h up): 3m no turn yet.');
+  assert.strictEqual(timingLine({ side: 'long', state: 'with' }, et, '3m'), '- 3m timing (long: the entry rule\'s side; context, the setup is the entry): 3m with the HTF side.');
+  assert.strictEqual(timingLine({ side: 'long', state: 'turned', kind: 'CHoCH', dir: 'up', at: B[30].t, barsAgo: 9 }, et, '3m'), '- 3m timing (long: the entry rule\'s side; context, the setup is the entry): 3m turned back: CHoCH up at 15:30 ET (9 bars ago).');
+  assert.strictEqual(timingLine({ side: 'short', state: 'pullback', since: B[30].t }, et, '3m'), '- 3m timing (short: the entry rule\'s side; context, the setup is the entry): 3m pullback: trending against the HTF side since 15:30 ET.');
+  assert.strictEqual(timingLine({ side: 'long', state: 'pullback', since: null }, et, '3m'), '- 3m timing (long: the entry rule\'s side; context, the setup is the entry): 3m pullback: trending against the HTF side.');
+  assert.strictEqual(timingLine({ side: 'long', state: 'waiting' }, et, '3m'), '- 3m timing (long: the entry rule\'s side; context, the setup is the entry): 3m no turn yet.');
 });
 
 test('the briefing: m3.timing from the closed bars it is built on (no look-ahead: later bars never change it), and its summary line', () => {
@@ -77,7 +96,7 @@ test('the briefing: m3.timing from the closed bars it is built on (no look-ahead
     const b = buildBriefing({ symbol: 'MNQ', bars: upTo, minutes: 3, now: new Date(Date.parse(upTo[k - 1].t) + STEP) });
     const m3 = b.sections.m3.data;
     const h = b.sections.h1.data;
-    const want = timingOf({ trends: { '4h': h.h4.trend, '1h': h.h1.trend }, regime: m3.regime.primary, bars: upTo, minutes: 3, breaks: breaksOf(upTo), compression: typeof m3.compression['3m'] === 'object' ? m3.compression['3m'] : null });
+    const want = timingOf({ trends: { '4h': h.h4.trend, '1h': h.h1.trend }, t15: b.sections.m15.data.frame.trend, declared: m3.declared || null, regime: m3.regime.primary, bars: upTo, minutes: 3, breaks: breaksOf(upTo), compression: typeof m3.compression['3m'] === 'object' ? m3.compression['3m'] : null });
     assert.deepStrictEqual(m3.timing, want, `bar ${k}`);
     if (want) seen.add(want.state);
     // Every time it names is a closed bar's (no look-ahead): at or before the last bar given.
@@ -88,7 +107,7 @@ test('the briefing: m3.timing from the closed bars it is built on (no look-ahead
       assert.deepStrictEqual(later.sections.m3.data.timing, m3.timing);
     }
     const lines = require('../../scripts/lib/trading/briefing').renderBriefing(b, { now: new Date(b.closedAt) });
-    assert.strictEqual(/- 3m timing \((long|short): the 4h and 1h (up|down)\): 3m (with the HTF side|turned back|pullback|no turn yet)/.test(lines), Boolean(want), `bar ${k}`);
+    assert.strictEqual(/- 3m timing \((long|short): the entry rule's side; context, the setup is the entry\): 3m (with the HTF side|turned back|pullback|no turn yet)/.test(lines), Boolean(want), `bar ${k}`);
   }
   assert.deepStrictEqual([...seen].sort(), ['pullback', 'turned', 'with'], 'each state met on the way');
 });

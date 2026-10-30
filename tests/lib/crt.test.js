@@ -116,6 +116,17 @@ const C2 = [
   [et(11, 18), 21478, 21487, 21477, 21486.5], // the shift
 ];
 const crtSweep = (extra = []) => mk([...c1Rows(), ...C2, ...extra]);
+/** 520 rising 3m bars (a 1h up trend, the 4h and 15m ranging) into C1: a CRT long with the trend (never counter). */
+const risingWarm = () => {
+  const rows = [];
+  for (let k = 0; k < 520; k += 1) {
+    const c = 21510 - (520 - k) * 0.5 + 20 * Math.sin(k / 20);
+    rows.push([et(10, 0) - (520 - k) * 180000, c, c + 2, c - 2, c]);
+  }
+  return rows;
+};
+/** 520 flat 3m bars into C1: everything ranges until the raid turns the 15m down. */
+const flatWarm = () => flat(et(10, 0) - 520 * 180000, et(10, 0), 21510);
 const ATR8 = n => new Array(n).fill(8);
 const OPTS = { sweepBars: 10, shiftBars: 5, maxDepth: 0.5, minRangeAtr: 3, bufferAtr: 0.25, minRR: 2 };
 const fires = (b, opts = {}, atr = ATR8(b.length)) => {
@@ -162,7 +173,16 @@ test('CRT detector: a raid of the previous high is the mirror image (short)', ()
 test('a CRT rules strategy (fx_crt_1h) fires on the raid with crt_risk as its stop and the far side of C1 as its target', () => {
   const s = fixture(CRT_1H);
   assert.ok(s && s.valid, s && s.errors.join('; '));
-  const b = crtSweep();
+  // Never counter: with no 4h read yet, or against the 15m down trend with the 4h and 1h ranging, it fires but is no
+  // candidate.
+  const bare = crtSweep();
+  const r0 = createEvaluator(bare).at(s, bare.length - 1);
+  assert.deepStrictEqual([r0.direction, r0.candidate, r0.filtersFailed], ['long', false, ['mtf: no 4h trend read yet (needs 3 completed 4h candles in the bars)']]);
+  const fl = mk([...flatWarm(), ...c1Rows(), ...C2]);
+  const r1 = createEvaluator(fl).at(s, fl.length - 1);
+  assert.deepStrictEqual([r1.direction, r1.candidate, r1.filtersFailed], ['long', false, ['mtf: against the 15m down trend, the 4h and 1h ranging']]);
+  // With the 1h up: a candidate.
+  const b = mk([...risingWarm(), ...c1Rows(), ...C2]);
   const i = b.length - 1;
   const r = createEvaluator(b).at(s, i);
   assert.strictEqual(r.direction, 'long', JSON.stringify(r.rules));
@@ -174,13 +194,12 @@ test('a CRT rules strategy (fx_crt_1h) fires on the raid with crt_risk as its st
   assert.strictEqual(createEvaluator(b).at(s, i - 1).direction, null);
   const four = fixture('fx_crt_4h');
   assert.ok(four.valid, four.errors.join('; '));
-  assert.strictEqual(createEvaluator(b).at(four, i).direction, null, 'no complete previous 4-hour candle in the data');
+  assert.strictEqual(createEvaluator(bare).at(four, bare.length - 1).direction, null, 'no complete previous 4-hour candle in the data');
 });
 
 test('backtest: a CRT trade exits at the far side of the range (exit.target is a level), or by its time stop', () => {
   const s = fixture(CRT_1H);
-  const warm = [];
-  for (let t = et(10, 0) - 520 * 180000; t < et(10, 0); t += 180000) warm.push([t, 21510, 21512, 21508, 21510]);
+  const warm = risingWarm();
   const up = [];
   for (let k = 1; k <= 8; k += 1) up.push([et(11, 18) + k * 180000, 21486 + 7 * (k - 1), 21486 + 7 * k, 21485 + 7 * (k - 1), 21486 + 7 * k]);
   const run = rows => runEngine([{ symbol: 'MNQ', bars: mk([...warm, ...c1Rows(), ...C2, ...rows]), tickSize: 0.25, tickValue: 0.5, feesPerSide: 0 }], [s], { timeframe: 3, gate: false, fill: 'close', slippageTicks: 1 }).trades;
@@ -270,14 +289,20 @@ test('a policy strategy refuses exit.target (its trades exit by its trail)', () 
   assert.match(validateStrategy({ ...data, exit: { ...exit, target: 'crt_target(60)' } }, body, 'prop_portfolio').join(' '), /exit.target: not for a policy strategy/);
 });
 
-test('backtest: a fill already at or past the target level is not taken', () => {
+test('backtest: a fill already at or past the target level, or leaving it under min_rr (2), is not taken', () => {
   const s = fixture(CRT_1H);
-  const warm = [];
-  for (let t = et(10, 0) - 520 * 180000; t < et(10, 0); t += 180000) warm.push([t, 21510, 21512, 21508, 21510]);
+  const warm = risingWarm();
   const trades = slip => runEngine([{ symbol: 'MNQ', bars: mk([...warm, ...c1Rows(), ...C2]), tickSize: 0.25, tickValue: 0.5, feesPerSide: 0 }], [s], { timeframe: 3, gate: false, fill: 'close', slippageTicks: slip }).trades;
   assert.strictEqual(trades(1).length, 1);
   assert.strictEqual(trades(1)[0].setup.detail['crt(60)'].reason, 'fired', 'the trade carries the detector state that took it');
   assert.strictEqual(trades(400).length, 0, '400 ticks of slippage puts the fill past C1\'s high');
+  // A fill that leaves C1's high 1.5R away (under min_rr 2) is dropped; 2.5R away it trades (fx_value_area_reentry's
+  // case, which never counter now refuses on its fixture day: it fades a 15m down move with the 4h and 1h ranging).
+  const b = mk([...warm, ...c1Rows(), ...C2]);
+  const sd = createEvaluator(b).at(s, b.length - 1).stopDistance;
+  const slipFor = rr => Math.floor((21540 - rr * sd - 21486.5) / 0.25);
+  assert.strictEqual(trades(slipFor(1.5)).length, 0, 'under 2R: skipped');
+  assert.strictEqual(trades(slipFor(2.5)).length, 1, 'over 2R: a normal fill trades');
 });
 
 test('backtest --debug writes the strategy\'s verdict on every bar, and trades.jsonl the setups', () => {
@@ -292,7 +317,10 @@ test('backtest --debug writes the strategy\'s verdict on every bar, and trades.j
   assert.ok(lines.slice(0, 199).every(l => /trades from bar 199/.test(l.warmup)) && !lines[199].warmup, 'bars before the window are marked');
   const fired = lines.filter(l => l.detail['crt(60)'].reason === 'fired');
   assert.ok(fired.length >= 1);
+  // Never counter: every raid on these bars is against a trend (or before the 4h read), so the verdict says why and
+  // nothing trades (a CRT trade carrying its setup: 'a fill already at or past the target level is not taken').
+  assert.ok(fired.every(l => l.direction && l.mtf && l.mtf[`${l.direction}Allowed`] === false), JSON.stringify(fired.map(l => [l.direction, l.mtf && l.mtf.reason])));
   const trades = fs.readFileSync(path.join(runDir, 'trades.jsonl'), 'utf8').trim().split('\n').filter(Boolean).map(JSON.parse);
-  assert.ok(trades.length >= 1 && trades.every(t => t.setup && t.setup.detail['crt(60)'].reason === 'fired' && t.target !== null));
+  assert.strictEqual(trades.length, 0);
   assert.throws(() => runBacktest({ symbols: ['MNQ'], timeframe: 3, feesPerSide: 0.37, data: { MNQ: data }, strategies: [CRT_1H], gate: false, debug: 'fx_crt_4h', outDir: dir }, { root: ROOT, outRoot: dir, env }), /debug: fx_crt_4h is not among the strategies/);
 });

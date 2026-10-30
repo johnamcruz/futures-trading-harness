@@ -41,7 +41,7 @@ const A_BAR = '2026-04-23T14:00:00.000Z';
 const A = [
   ['bias', 'multi-timeframe-analysis', '15m up'], ['location', 'levels-and-reactions', 'at vwap rth'],
   ['setup', 'fair-value-gaps', '4h broke 15m fvg high up'], ['entry', 'candle-reading', '3m close top'],
-  ['stop', 'invalidation', 'stop 3m low 26970'], ['target', 'take-profit', 'target 3m swing 27102.75'],
+  ['stop', 'invalidation', 'stop 3m low 26970'], ['target', 'take-profit', 'target day high 27102.75'],
 ];
 /** A's reads with the read at `step` (its first) swapped for [skill, read]. */
 const onA = (step, skill, read) => A.map((x, i) => (i === A.findIndex(y => y[0] === step) ? [step, skill, read] : x));
@@ -55,45 +55,42 @@ const SCENARIOS = [
   { skill: 'candle-reading', bar: A_BAR, side: 'long', reads: A, read: '3m close top', false: '3m close bottom' },
   { skill: 'momentum-and-volume', bar: A_BAR, side: 'long', reads: onA('entry', 'momentum-and-volume', '3m momentum up'), read: '3m momentum up', false: '3m momentum down' },
   { skill: 'invalidation', bar: A_BAR, side: 'long', reads: A, read: 'stop 3m low 26970', false: 'stop 3m low 26960' },
-  { skill: 'take-profit', bar: A_BAR, side: 'long', reads: A, read: 'target 3m swing 27102.75', false: 'target 3m swing 27110' },
-  {
-    skill: 'breakout-vs-fakeout', bar: '2026-04-23T14:03:00.000Z', side: 'long', read: 'swept equal highs', false: 'swept equal lows',
-    reads: [...A.slice(0, 3), ['setup', 'breakout-vs-fakeout', 'swept equal highs'], A[3], ['stop', 'invalidation', 'stop 3m low 27000.5'], A[5]],
-  },
+  { skill: 'take-profit', bar: A_BAR, side: 'long', reads: A, read: 'target day high 27102.75', false: 'target day high 27110' },
   {
     skill: 'rejection', bar: '2026-04-23T16:24:00.000Z', side: 'long', read: '15m rejected opening range high up', false: '15m broke opening range high up',
-    reads: [A[0], ['location', 'levels-and-reactions', 'at ib high'], ['setup', 'rejection', '15m rejected opening range high up'], A[3], ['stop', 'invalidation', 'stop 3m low 27076'], ['target', 'take-profit', 'target 3m swing 27155.75']],
+    reads: [A[0], ['location', 'levels-and-reactions', 'at ib high'], ['setup', 'rejection', '15m rejected opening range high up'], A[3], ['stop', 'invalidation', 'stop 3m low 27076'], ['target', 'take-profit', 'target day high 27155.75']],
   },
   {
     skill: 'breakout', bar: '2026-04-23T15:54:00.000Z', side: 'long', read: '1h broke vwap rth up', false: '1h rejected vwap rth up',
-    reads: [A[0], ['location', 'levels-and-reactions', 'at opening range high'], ['setup', 'breakout', '1h broke vwap rth up'], A[3], ['stop', 'invalidation', 'stop opening range high 27068'], ['target', 'take-profit', 'target 3m swing 27155.75']],
+    reads: [A[0], ['location', 'levels-and-reactions', 'at opening range high'], ['setup', 'breakout', '1h broke vwap rth up'], A[3], ['stop', 'invalidation', 'stop opening range high 27068'], ['target', 'take-profit', 'target day high 27155.75']],
   },
   {
     skill: 'cisd', bar: '2026-04-23T15:54:00.000Z', side: 'long', read: '15m cisd up', false: '15m cisd down',
-    reads: [A[0], ['location', 'levels-and-reactions', 'at opening range high'], ['setup', 'cisd', '15m cisd up'], A[3], ['stop', 'invalidation', 'stop opening range high 27068'], ['target', 'take-profit', 'target 3m swing 27155.75']],
+    reads: [A[0], ['location', 'levels-and-reactions', 'at opening range high'], ['setup', 'cisd', '15m cisd up'], A[3], ['stop', 'invalidation', 'stop opening range high 27068'], ['target', 'take-profit', 'target day high 27155.75']],
   },
   {
     skill: 'absorption', bar: '2026-04-23T15:57:00.000Z', side: 'long', read: '1h absorption at opening range high up', false: '3m absorption at opening range high up',
-    reads: [A[0], ['location', 'levels-and-reactions', 'at ib high'], A[2], ['entry', 'absorption', '1h absorption at opening range high up'], ['stop', 'invalidation', 'stop 3m low 27078.75'], ['target', 'take-profit', 'target 3m swing 27155.75']],
+    reads: [A[0], ['location', 'levels-and-reactions', 'at ib high'], A[2], ['entry', 'absorption', '1h absorption at opening range high up'], ['stop', 'invalidation', 'stop 3m low 27078.75'], ['target', 'take-profit', 'target day high 27155.75']],
   },
   {
     skill: 'daily-bias', bar: '2026-04-23T22:06:00.000Z', side: 'short', read: 'inside prior rth range', false: 'above prior rth range',
-    reads: [['bias', 'daily-bias', 'inside prior rth range'], ['location', 'levels-and-reactions', 'at session high'], ['setup', 'candle-reading', '15m pattern bearish engulfing'], ['entry', 'candle-reading', '3m close bottom'], ['stop', 'invalidation', 'stop 3m high 27042'], ['target', 'take-profit', 'target 3m swing 26932.75']],
+    reads: [['bias', 'daily-bias', 'inside prior rth range'], ['location', 'levels-and-reactions', 'at session high'], ['setup', 'candle-reading', '15m pattern bearish engulfing'], ['entry', 'candle-reading', '3m close bottom'], ['stop', 'invalidation', 'stop 3m high 27042'], ['target', 'take-profit', 'target prior rth close 26926.25']],
   },
   {
     // A 3m expansion candle closed 08:39 UTC above an inside-bar box (its mother's range, on the prior POC), the 1h trend
     // up; the 08:39 bar's close (top third) is the confirmation on a later candle; the stop beyond the box's low.
     skill: 'compression', bar: '2026-04-27T08:39:00.000Z', side: 'long', read: '3m compression break up', false: '3m compression break down',
-    reads: [['bias', 'multi-timeframe-analysis', '1h up'], ['location', 'levels-and-reactions', 'at previous 3m high'], ['setup', 'compression', '3m compression break up'], A[3], ['stop', 'invalidation', 'stop 3m box low 27413'], ['target', 'take-profit', 'target prior rth high 27462.5']],
+    reads: [['bias', 'multi-timeframe-analysis', '1h up'], ['location', 'vwap-volume-profile', 'vwap below'], ['setup', 'compression', '3m compression break up'], A[3], ['stop', 'invalidation', 'stop 3m box low 27413'], ['target', 'take-profit', 'target prior rth high 27462.5']],
   },
   {
     // The reversal shape: a true 1h CHoCH the side's way (the trend breaking, not a pullback in it).
     skill: 'pullback-vs-reversal', bar: '2026-04-23T18:06:00.000Z', side: 'short', read: '1h choch down', false: '1h choch up',
-    reads: [['bias', 'pullback-vs-reversal', '1h choch down'], ['location', 'levels-and-reactions', 'at previous 3m high'], ['setup', 'breakout', '1h broke opening range high down'], ['entry', 'candle-reading', '3m close bottom'], ['stop', 'invalidation', 'stop 3m high 26939'], ['target', 'take-profit', 'target 3m swing 26681.75']],
+    reads: [['bias', 'pullback-vs-reversal', '1h choch down'], ['location', 'levels-and-reactions', 'at previous 4h low'], ['setup', 'breakout', '1h broke opening range high down'], ['entry', 'candle-reading', '3m close bottom'], ['stop', 'invalidation', 'stop 3m high 26939'], ['target', 'take-profit', 'target day low 26681.75']],
   },
 ];
 // The crosswalk's skills with no scenario on these bars, and why (a reason a reader can check).
 const TODO = {
+  'breakout-vs-fakeout': 'its scenario swept the equal highs of the 3m swings, the entry frame\'s, which are no level any more (the owner: never the entry timeframe as a level); no sweep of a 15m-or-higher or session level the long\'s way on these bars',
   'prop-challenge-pacing': 'sizes against a live prop attempt (its budget, the verdict, prop-state.js); the decision-path world runs no attempt (no account, no prop_portfolio policy), so no fixture bar has a true instance of its size read',
   'prop-pacing-judgment': 'the same: its read is the attempt\'s pacing (the days left, the target, the drawdown room), which only a prop attempt holds; the decision-path world runs none',
 };

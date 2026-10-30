@@ -38,11 +38,17 @@ test('trendRuleOf: the briefing\'s Trend rule line per side', () => {
   for (const [prevailing, longAllowed] of [['4h up', true], ['4h down', false], ['1h up', true], ['15m down', false]]) {
     const line = ruleLine({ ready: true, prevailing, longAllowed, shortAllowed: !longAllowed });
     const [allowed, against] = longAllowed ? ['LONG', 'short'] : ['SHORT', 'long'];
-    assert.strictEqual(line, `Trend rule: ${allowed} allowed (prevailing ${prevailing}); ${against} only as a reversal (mtf: reversal).`);
+    assert.strictEqual(line, `Trend rule: ${allowed} allowed (prevailing ${prevailing}${prevailing.startsWith('15m') ? '; the 4h and 1h ranging: in a prop attempt only with the trend declared' : ''}); no ${against} against it.`);
     const old = `Trend rule: prevailing trend ${prevailing}; trend strategies may not go ${against}; reversal strategies (mtf: reversal) may go ${against} too.`;
     assert.deepStrictEqual(trendRuleOf(line), trendRuleOf(old), line);
     assert.deepStrictEqual(trendRuleOf(line), { prevailing, long: longAllowed, short: !longAllowed });
+    // An older record's "<side> only as a reversal" line reads the same.
+    assert.deepStrictEqual(trendRuleOf(`Trend rule: ${allowed} allowed (prevailing ${prevailing}); ${against} only as a reversal (mtf: reversal).`), trendRuleOf(line));
   }
+  // Never counter: no side, and the not-ready line, refuse both sides; no trend at all opens both (the entry rule closes it in a prop attempt).
+  assert.deepStrictEqual(trendRuleOf(ruleLine({ ready: true, prevailing: '4h up', longAllowed: false, shortAllowed: false, reason: 'no side: longs x; shorts y' })), { prevailing: null, long: false, short: false });
+  assert.deepStrictEqual(trendRuleOf(ruleLine({ ready: false, reason: 'no 4h trend read yet' })), { prevailing: null, long: false, short: false });
+  assert.deepStrictEqual(trendRuleOf(ruleLine({ ready: true, prevailing: null, longAllowed: true, shortAllowed: true })), { prevailing: null, long: true, short: true });
 });
 
 test('factsFromBriefing: the window, the trend rule, the setups with room and read, a verdict on its component, the attempt', () => {
@@ -161,12 +167,12 @@ test('verdict-skip: checked against the verdict\'s action, named or not', () => 
   assert.strictEqual(claim(reasonCheck('no-trade - no topstep_50k attempt', named), 'no-attempt').check, false);
 });
 
-test('trend rule: a step-2 veto of a reversal fading the trend is judgment (unchecked), never FALSE; not fading, FALSE', () => {
+test('trend rule: never counter: a reversal fading the trend is blocked by the rule (TRUE); not fading, FALSE', () => {
   const CISD = { ...ORB, name: 'cisd_ote', direction: 'short', trendRule: 'reversal' };
   const up = factsFromBriefing(briefing({ rule: RULE_UP, candidates: [CISD] }));
   const fade = claim(reasonCheck('no-trade - cisd_ote short blocked by the 4h up trend rule', up), 'trend-blocks');
-  assert.strictEqual(fade.check, 'unchecked');
-  assert.match(fade.why, /cisd_ote is a reversal fading the 4h up trend: step 2 decides it \(only at a higher-timeframe level, half size\)/);
+  assert.strictEqual(fade.check, true);
+  assert.match(fade.why, /4h up: short blocked/);
   const down = factsFromBriefing(briefing({ rule: 'Trend rule: prevailing trend 4h down; trend strategies may not go long; reversal strategies (mtf: reversal) may go long too.', candidates: [CISD] }));
   assert.strictEqual(claim(reasonCheck('no-trade - cisd_ote short blocked by the trend rule', down), 'trend-blocks').check, false);
 });

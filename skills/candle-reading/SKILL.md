@@ -7,14 +7,14 @@ description: Trader-process steps 3 and 6 - completed candles at a level (body, 
 
 ## When to Use
 
-- A completed candle at a level (trader-process step 3), and the trigger
-  bar's timing (step 6).
+- A completed candle at a level (trader-process step 3), and the entry's
+  timing (step 6).
 
 ## How It Works
 
 **Confirmation only, at a level.** A candle counts only AT a level: the
 `levels-and-reactions` skill's list, plus the previous candle's high and
-low and a CRT range (`m3.candles` lists both).
+low above the 3m and a CRT range (`m3.candles` lists both).
 A pattern away from a level is not evidence.
 
 **Completed candles only.** Judge a pattern at its candle's close, on
@@ -25,17 +25,16 @@ progress: never judge a pattern on it.
 A read, never a veto: the count decides (`confluence-counting`). Thresholds are
 hypotheses; a missing field is `unknown`.
 
-**The stack**: each timeframe's last completed candle. 15m, 1h and 4h weigh more at a higher-timeframe level (a 1h
-rejection of the prior day's high outweighs a 3m one: `rejection`,
-`breakout`); 3m and 5m time the entry.
+**The stack**: each timeframe's last completed candle. 15m, 1h and 4h weigh more at a higher-timeframe level (`rejection`,
+`breakout`); the 3m only times the entry.
 
 - 3m, 5m, 15m, 1h and 4h: `m3.candles` (fields: `bar-briefing`), its
   `pattern` and the levels it
   met (`rejected`, `broke`, `touched`: `rejection`, `breakout`), only
   levels that existed before it opened. 5m, `unavailable` without a 1m
   lane, is `unknown`.
-- The targets: `m3.swingTargets`, the next swing each side (base,
-  15m, 1h, 4h).
+- The targets: `m3.swingTargets`, the next swing each side (15m, 1h,
+  4h).
 - Strategy rules: `htfd_*` (strategy-rules).
 
 **Anatomy** (range = h - l; h = l is `unknown`): body and wick shares of
@@ -64,7 +63,8 @@ read (`trend-vs-range`, `pullback-vs-reversal`) and momentum and volume
 The stack counts once (`confluence-counting`, trigger).
 
 **Evidence**: standalone candlestick patterns have weak evidence in
-general, none measured.
+general; at the 15m setup candle read its strength and close, not its
+name (an engulfing is one strong candle among others).
 
 ## Examples
 

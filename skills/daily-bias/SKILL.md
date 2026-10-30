@@ -64,8 +64,8 @@ range after a breakout of it.
 value, overnight) are the better locations.
 
 The bias is a read: the trend rule (`multi-timeframe-analysis`) and the
-priority order (strategy-library) decide entries. Against the prevailing
-trend, trend strategies wait; it never points at a side the rule refuses.
+priority order (strategy-library) decide entries. Against a trending 4h or 1h: no entry
+(never counter); it never points at a side the rule refuses.
 
 ## Examples
 

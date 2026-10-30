@@ -14,9 +14,10 @@ const { loadStrategies } = require('../../scripts/lib/trading/strategies');
 const { tmpDir } = require('../helpers');
 const path = require('path');
 
-const OFF = { bias_frames: 'off', bias_agree: 'off', regime_against: 'off', leg_turned: 'off' };
+const OFF = { chain: '4h', bias_frames: 'off', bias_agree: 'off', regime_against: 'off', leg_turned: 'off' };
 const AGREE = entryRuleOf({ ...OFF, bias_frames: ['4h', '1h'], bias_agree: 'on' });
 const FRAMES_ONLY = entryRuleOf({ ...OFF, bias_frames: ['4h', '1h'] });
+const BG = entryRuleOf({ ...OFF, bias_frames: ['4h', '1h'], bias_agree: 'neutral-15m-declared' });
 const MSG = /^entry rule: the setup must be on the 15m or higher \(a 3m read only times the entry\)/;
 const REL = dir => [{ name: 'prior VAH', price: 21530.13, rel: 'rejected', dir }];
 
@@ -46,7 +47,11 @@ test('the setup frame: a 3m or 5m setup alone is refused under the HTF agreement
   // One 15m setup read beside a 3m one: the setup is the 15m's.
   const both = [...withSetup('15m rejected prior vah up'), { step: 'setup', skill: 'rejection', read: '3m rejected prior vah up', why: 'x' }];
   assert.ok(!checkReads({ reads: both, side: 'long', briefing: briefing(), entryRule: AGREE }).problems.some(p => MSG.test(p)));
-  // Only under bias_agree: the frames alone (bias_agree off), or no rule, leave a 3m setup as before.
+  // bias_agree neutral-15m-declared holds the same chain (topDown): a 3m setup refused, the 15m taken.
+  assert.ok(problemsOf('3m rejected prior vah up', BG).some(p => MSG.test(p)), 'BG: a 3m-only setup');
+  assert.ok(problemsOf('5m rejected prior vah up', BG).some(p => MSG.test(p)), 'BG: a 5m setup');
+  assert.ok(!problemsOf('15m rejected prior vah up', BG).some(p => MSG.test(p)), 'BG: a 15m setup');
+  // Only under bias_agree on or neutral-15m-declared: the frames alone (bias_agree off), or no rule, leave a 3m setup as before.
   assert.ok(!problemsOf('3m rejected prior vah up', FRAMES_ONLY).some(p => MSG.test(p)));
   assert.ok(!problemsOf('3m rejected prior vah up', null).some(p => MSG.test(p)));
 });

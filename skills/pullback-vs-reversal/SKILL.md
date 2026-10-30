@@ -23,18 +23,15 @@ hypotheses; a missing field is `unknown`. "Last 10 bars": the prompt's `V`, `(c-
 | Swing | the leg's 15m/1h swing holds | a 3m close broke it | `m3.htfLevels` `brokenAt` |
 | Volume, bars | falling, shrinking | rising, wide against it | last 10 bars |
 
-**Read the breaks top-down** (`bos-vs-choch`). A lower-timeframe CHoCH
-inside an intact higher-timeframe structure is a pullback. CHoCHs
-stacking up the timeframes (3m, then 15m, then 1h) are a reversal
-developing. A 15m or 1h CHoCH against the trend weighs most: then the
-read is a reversal attempt. The pullback ends when its own minor
-structure breaks back: `m3.lastBreak.last` turns the trend's way (the
-shift or reclaim of `htf-to-ltf`):
-a lower-timeframe CHoCH
-back the HTF way at a level times the entry; the setup there: `rejection`,
-`breakout`, `fair-value-gaps`. The first (`m3.timing`) is the best
-entry; before it, a false start. A CISD (`cisd`) is an earlier
-sign than the CHoCH; depth in fib terms: `fib-retracement`.
+**Read the breaks top-down** (`bos-vs-choch`). A 15m CHoCH inside an
+intact 1h and 4h structure is a pullback. CHoCHs stacking up the
+timeframes (15m, then 1h) are a reversal developing; a 1h CHoCH against
+the trend weighs most: a reversal attempt, context only (never counter).
+The pullback ends with the setup (15m) the bias's way at a level
+(`rejection`, `breakout`, `fair-value-gaps`): it is the entry, the
+next 3m close times it; a 3m turn (`m3.timing`) is context, never a
+wait. A CISD (`cisd`) is an earlier sign than the CHoCH; depth in fib
+terms: `fib-retracement`.
 **Premium and discount** (`fib-retracement`): within a trend, pullbacks into discount
 (premium for shorts) are where continuation setups sit.
 
@@ -52,10 +49,10 @@ The RTH VWAP pullback alone (F3A, F3B): no finding.
 ## Examples
 
 ```text
-Take: 15m up, BOS up; 48% retrace; V 1,840 -> 960; m3 CHoCH up 0 bars ago: pullback ended.
-  Reads: 15m up, 3m choch up. Priority order: aligned -> take.
-Skip: m3, then 15m CHoCH down; 15m swing low broken; wide down bars, rising V: reversal attempt.
-  A long: read long counter; the priority order (step 4) decided skip.
+Take: 4h, 1h up, the 15m pulling back 48%; V 1,840 -> 960; the 15m rejected the prior VAH up: the
+  setup ended it. Reads: 1h up, 15m rejected prior vah up, 3m close top. Read long pullback -> take.
+Skip: 15m, then 1h CHoCH down, the 1h ranging; 15m swing low broken; wide down bars, rising V:
+  reversal attempt. A long: the 1h CHoCH against is decisive -> pass.
 Loser: read pullback; long at 21522.75, stop 21514.25 (8.50 pts = 34 ticks, $17.00 on 1 MNQ);
   15m CHoCH down, stopped: -34 ticks, -$17.00.
 Open: 15m push FAILED, pushes fading, no 15m break -> weakening.

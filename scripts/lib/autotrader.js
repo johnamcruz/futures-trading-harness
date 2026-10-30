@@ -454,7 +454,9 @@ function accountText(state) {
     ? ` ${a.account} attempt: no balance read yet, so no floor or cushion to show${blocked(a)}.`
     : ` ${a.account} attempt (${a.status})${a.asOf && a.asOf === state.at ? '' : ` as of ${a.asOf ? (tradingDayKey(new Date(a.asOf)) === tradingDayKey(new Date(state.at)) ? etTime(a.asOf) : etStamp(a.asOf)) : '?'}, balance ${usd(a.balance)}`}: floor ${usd(a.floor)}, cushion ${usd(a.cushion)}, `
     + `profit ${signed(a.profit)} of ${usd(a.target)}, day ${signed(a.dayPnl)}, ${sessionsText(a)}${a.status === 'active' ? factsText(a.facts) : ''}`
-    + `${(a.budgets || []).map(b => `; ${b.strategy} size budget ${usd(b.budgetUsd)}`).join('')}${blocked(a)}.`));
+    + `${(a.budgets || []).map(b => `; ${b.strategy} size budget ${usd(b.budgetUsd)}`).join('')}${blocked(a)}.`
+    // The Size and Min lines (prop/size-line.js): an active attempt only.
+    + (a.status === 'active' && Array.isArray(a.sizing) ? a.sizing.map(l => ` ${l}.`).join('') : '')));
   const trades = (state.openTrades || []).map(t => ` ${t}`).join('');
   // Positions whose trade details couldn't be built: the model reads them itself.
   const unbuilt = state.openTradesError && positions.length ? ` Open positions: ${positions.join(', ')} (trade details unavailable this cycle: ${state.openTradesError}; read list_open_positions and list_open_orders).` : '';

@@ -74,8 +74,17 @@ comparable.
   refused. Give the run the bars the replay serves, so the check sees what the
   model sees.
 - **History coverage.** The history starts 2021-04 (`data.start` in
-  `config/schedule.json`), so practice-train effectively covers 2021-04 to
-  2024-07.
+  `config/schedule.json`), and no session starts before `data.sessionsFrom`
+  (2021-05-24: the replay store's first bar, 2021-05-02, plus the 4h and 1h
+  reads' 504-hour window), so practice-train effectively covers 2021-05-24 to
+  2024-07. Before it the 4h and 1h read from a few days of candles (no EMA50:
+  a range where the full history reads the trend); the replay driver, the
+  training preflight, the curated-lists scan and the training loop's
+  `probe.trend.from` refuse an earlier start, naming the date.
+  This warm-up rule is what protects replay and training from short
+  history today; the multi-timeframe read itself still reads a short window
+  (a "not ready" read for a frame short of its window or its EMA50 is a
+  follow-up: it needs test fixtures with three weeks of bars).
 
 The standard trade each moment measures is a limit held the strategy's
 `valid_bars` base bars after its bar's close, the plan the gate allows (the
@@ -1573,8 +1582,9 @@ The file has an `open` part and a `sealed` part for each schedule:
 
 What you can and can't change:
 
-- **You can extend the data dates** (`data.start`, `data.flowCoverage`;
-  the curated-lists scan refuses a `--from` before `data.start`).
+- **You can extend the data dates** (`data.start`, `data.sessionsFrom`,
+  `data.flowCoverage`; the curated-lists scan refuses a `--from` before
+  `data.start` or `data.sessionsFrom`).
   New months need no edit: they fall into the half-year walk-forward and
   reserve blocks by rule.
 - **You can move the open windows.** For example, start practice-train
@@ -1696,6 +1706,31 @@ correct passes and correct entries reported apart.
 
 The LoRA steps are the LoRA section's (branch `feat/lora-ready`, not merged
 yet).
+
+### The context quiz
+
+A regression for the model's reading of its own prompts: 20 questions, each an
+agreed rule (the bias, levels, setup, entry, stop, exit, size, the phase-2
+approval), asked of the head trader's prompt (with the risk manager's for the
+sizing ones) as the runner builds it, plus 5 with a Bias or Size line from the
+briefing (Part B). The questions, their keys (required and forbidden terms on
+the ANSWER line, a forbidden term counting only when it isn't negated) and the
+pass bar are `config/context-quiz.json`: every question correct on all K runs
+(K 5), none answered both ways, Part B 5 of 5.
+
+Run it after any skill, rule, agent or briefing-text change, and before a
+practice round:
+
+```bash
+node scripts/context-quiz.js run --config <your runner config.json> --out <dir outside the repo>
+node scripts/context-quiz.js compare <the base's dir> <dir>
+```
+
+It calls the model the runner config names (no tools, no project settings, no
+session kept), so it never runs in CI. CI checks it offline: every question's
+anchor (the phrase of the skills that states its rule) must be in the prompt it
+is asked against (tests/plugin/context-quiz.test.js). A changed key or question
+is explained in the pull request, as a golden is.
 
 ## 8. Rules that keep it honest
 

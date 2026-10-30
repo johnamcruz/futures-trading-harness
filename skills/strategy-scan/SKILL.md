@@ -65,9 +65,8 @@ this strategy's style; its `reason` names the side it blocks, e.g. "longs are
 against the prevailing 15m down trend …; shorts are with it"), `candidate`,
 and `stopDistance`. Read the flag for the side the strategy fired: a short
 with `shortAllowed: true` is with the trend, whatever the reason says about
-longs. A trend strategy that fires against the prevailing trend is never a
-candidate (`filtersFailed` says `mtf: ...`); only `mtf: reversal` strategies
-may fade it. `signal: rules`
+longs. No strategy that fires against a trending 4h or 1h is a candidate,
+whatever its style (`filtersFailed` says `mtf: ...`): never counter. `signal: rules`
 strategies also list each rule with `ok: true|false`, so you can explain why
 one did or didn't fire. Strategies with `signal: manual` are listed
 as candidates when in session; you evaluate their trigger from the body.
