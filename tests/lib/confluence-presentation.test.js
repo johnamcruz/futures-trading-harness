@@ -205,8 +205,10 @@ test('the briefing shows partly filled FVGs with the open ones', () => {
   let withOpen = 0;
   let withPartly = 0;
   for (const n of [600, 900, 1100, 1200, 1250]) {
-    const b = B.buildBriefing({ symbol: 'NQ', bars: BARS.slice(0, n), minutes: 3 });
+    // On a frame's own bars (the runner's are the entry frame: its gaps are no level, its liquidity lists hold none).
+    const b = B.buildBriefing({ symbol: 'NQ', bars: BARS.slice(0, n), minutes: 3, own: true });
     const liq = b.sections.m3.data.liquidity;
+    assert.deepStrictEqual(B.buildBriefing({ symbol: 'NQ', bars: BARS.slice(0, n), minutes: 3 }).sections.m3.data.liquidity.openFvgs, []);
     const s = snapshot({ bars: BARS.slice(0, n) });
     assert.deepStrictEqual(liq.openFvgs, s.liquidity.openFvgs);
     assert.deepStrictEqual(liq.partlyFilledFvgs, s.liquidity.partlyFilledFvgs);

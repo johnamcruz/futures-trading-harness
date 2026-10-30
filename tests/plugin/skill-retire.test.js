@@ -92,6 +92,7 @@ const SKIP_RULES = /\bskip rules?\b/i;
 const SKIP_CONTEXT = '**Skip-rule context**';
 const ALLOWED = {
   'liquidity-concepts': [
+    { old: 'Equal highs/lows: two of the last 12 confirmed swing highs (lows) within 0.1 × ATR(14) of each other (3m swings, 2 bars each side: about 12 ticks on MNQ at an ATR of 30 points); the last 3 such pairs, each `taken` once traded through.', home: [[S('levels-and-reactions'), 'Equal highs/lows: two of the last 12 confirmed swing highs (lows) within 0.1 × ATR(14) of each other (a frame\'s own swings from the 15m up, 2 bars each side); the last 3 such pairs, each `taken` once traded through.']], reason: 'feat/bias-bg: the entry frame\'s (3m) swings are no level (the owner: never the entry timeframe as a level; chain.js), so equal highs and lows are a frame\'s own from the 15m up' },
     { old: 'Reversal setups (crt_1h) follow a sweep; continuation setups follow a break.', home: [[S('levels-and-reactions'), 'Reversals follow a sweep, continuations a break.']], reason: 'crt_1h is retired (strategies/retired.json)' },
     { old: 'Liquidity Concepts', home: null, reason: 'the retired skill\'s title' },
     // The strong middle bar is the cisd skill's, stated there once (fix/skills-concept-owners): fair-value-gaps points to it.
@@ -163,7 +164,7 @@ const ALLOWED = {
       home: [[S('market-snapshot'), '`trend` (`emaFast`, `emaSlow`, `ema50`, `ema200`, `adx`, `adxSlope`, `supertrend`, `keltner`)'], [S('trend-momentum-indicators'), '| SuperTrend(10, 3) | ATR bands |', IND],
         [S('trend-momentum-indicators'), '| Keltner(20, 1.5) | EMA20 ± 1.5 × ATR20 |', IND], [S('momentum-and-volume'), '`m3.trend.adxSlope` (now minus 5 bars ago)', MV]], reason: 'the keys stay; the settings are trend-momentum-indicators\' table' },
     { old: '`volatility`: atr14, atr20.', home: [[S('market-snapshot'), '`volatility` (`atr14`, `atr20`)'], [S('trend-momentum-indicators'), '| ATR(14/20) | Wilder |', IND]], reason: 'the keys stay; ATR is trend-momentum-indicators\'' },
-    { old: '`structure`: last confirmed fractal swing high/low (k=2) and when.', home: [[S('market-snapshot'), '`structure` (the last swing high and low)'], [S('levels-and-reactions'), '(3m swings, 2 bars each side:', LIQ]], reason: 'the key stays; the swings are levels-and-reactions\'' },
+    { old: '`structure`: last confirmed fractal swing high/low (k=2) and when.', home: [[S('market-snapshot'), '`structure` (the last swing high and low)'], [S('levels-and-reactions'), '(a frame\'s own swings from the 15m up, 2 bars', LIQ]], reason: 'the key stays; the swings are levels-and-reactions\'' },
     { old: '`levels`: priorRth high/low/close, overnight high/low, openingRange (first 15 min from 09:30 ET, only after it closes), vwapSession (18:00 ET anchor), vwapRth (09:30 ET anchor; null before today\'s 09:30 ET open and after 16:00 ET: use vwapSession then, as the strategy filters do).',
       home: [[S('market-snapshot'), '`levels` (`priorRth`, `overnight`, `openingRange`, `vwapSession`, `vwapRth`)'], [S('levels-and-reactions'), 'opening range `m3.today.openingRange` (the first 15 minutes from 09:30 ET; null until formed)', LEVELS], [S('trend-momentum-indicators'), '**Skip-rule context**', LEVELS],
         [S('vwap-volume-profile'), '`vwapRth` is null before today\'s 09:30 ET open and after 16:00 ET: use `vwapSession` then, as the strategy filters do.', VWAP], [S('trend-momentum-indicators'), '`rth` from 09:30 to 16:00 ET, else `session`', VWAP]], reason: 'the keys stay; the levels are levels-and-reactions\', the VWAPs vwap-volume-profile\'s' },
@@ -188,8 +189,8 @@ const ALLOWED = {
     { old: '`line` is the same as the prompt\'s "day:" line.', home: [[S('vwap-volume-profile'), 'the prompt\'s "day:" line says the same', DAY]], reason: 'moved to vwap-volume-profile' },
     { old: '`liquidity`: the last 4 swing highs and lows, equal highs/lows (within 0.1 x ATR), fair value gaps (3-bar gaps with a strong displacement middle bar, the CISD strength rule), open (`openFvgs`: not traded back into) and partly filled ones (`partlyFilledFvgs`: traded into, not through; `low` to `high` is the part still unfilled, `gapLow` to `gapHigh` the whole gap).',
       home: [[S('levels-and-reactions'), '(the last 4: `m3.liquidity.swingHighs`, `m3.liquidity.swingLows`)', LIQ], [S('levels-and-reactions'), 'Equal highs/lows: two of the last 12 confirmed swing highs (lows) within 0.1 × ATR(14)', LIQ],
-        [S('levels-and-reactions'), 'open FVGs `m3.liquidity.openFvgs` and partly filled ones `m3.liquidity.partlyFilledFvgs` (the unfilled part; `fair-value-gaps`)', LIQ],
-        [S('fair-value-gaps'), 'with a strong displacement middle bar the gap\'s way (the `cisd` skill\'s strong candle).', LIQ]], reason: 'levels-and-reactions lists them; fair-value-gaps reads the gaps and defines them (the strong middle bar, #129)' },
+        [S('levels-and-reactions'), 'FVGs `m3.fvgs` (`fair-value-gaps`)', LIQ],
+        [S('fair-value-gaps'), 'with a strong displacement middle bar the gap\'s way (the `cisd` skill\'s strong candle).', LIQ]], reason: 'levels-and-reactions lists them (since feat/bias-bg the entry frame\'s own gaps and equal highs are no level: the 5m, 15m and 1h gaps, a frame\'s own swings); fair-value-gaps reads the gaps and defines them (the strong middle bar, #129)' },
     { old: '`context`: the numbers the strategies\' skip rules name: EMA 9/20 crosses in the last 30 bars, bars of falling ADX, Keltner width vs its 20-bar average (a squeeze is under 1), the band-close streak, SuperTrend flips in the last 20 bars, the last 5 bars\' range in ATR, the session\'s high and low so far, and the last bar\'s volume vs its 60-bar average (`volVsAvg60`).',
       home: [[S('trend-momentum-indicators'), '**Skip-rule counters** (`m3.context`): the numbers the strategies\' skip rules name: EMA 9/20 crosses in the last 30 bars (`emaCrossesLast30`), bars of falling ADX (`adxFallingBars`), Keltner width vs its 20-bar average (`keltnerWidthVsAvg20`: a squeeze is under 1), the band-close streak (`bandCloseStreak`), SuperTrend flips in the last 20 bars (`supertrendFlipsLast20`), the last 5 bars\' range in ATR (`range5Atr`).', CTX],
         [S('market-snapshot'), 'Only in this tool\'s output: `context.volVsAvg60` (the last bar\'s volume vs its 60-bar average) and `context.session` (the session\'s high and low so far;']], reason: 'the briefing\'s counters to trend-momentum-indicators; the two the briefing lacks stay here' },
@@ -200,7 +201,7 @@ const ALLOWED = {
     { old: '`regime`: primary (trend-up, trend-down, range, transition), volatility (high, normal, low), tags, and the metrics behind them (ADX, EMA(20) slope in ATRs, `sessionVwapCrosses`: closes crossing the session VWAP in the last 30 bars, the same count as `vwap.sessionCrossesLast30`; ATR vs its average).',
       home: [[S('trend-momentum-indicators'), '**The regime\'s metrics** (`m3.regime.metrics`): ADX, EMA(20) slope in ATRs, `sessionVwapCrosses`, ATR vs its average (`atrRatio`).', REGIME], [S('trend-vs-range'), '**The computed regime** (`m3.regime.primary`;', REGIME], [A('volume-liquidity-analyst'), 'session count is the regime\'s own (`regime.metrics.sessionVwapCrosses`)', REGIME]], reason: 'moved to trend-momentum-indicators; the primary regime is trend-vs-range\'s, the volatility the Volatility bullet\'s, the VWAP count vwap-volume-profile\'s (fix/skills-concept-owners)' },
     { old: 'Fractal swings need strictly higher/lower neighbours (2 bars each side), so a flat top or bottom (bars side by side at the same high or low) is no swing.',
-      home: [[S('levels-and-reactions'), 'A flat top or bottom (bars side by side at the same high or low) is no swing, so it is in neither.', LIQ], [S('levels-and-reactions'), '(3m swings, 2 bars each side:', LIQ]], reason: 'moved to levels-and-reactions, next to the equal highs and lows' },
+      home: [[S('levels-and-reactions'), 'A flat top or bottom (bars side by side at the same high or low) is no swing, so it is in neither.', LIQ], [S('levels-and-reactions'), '(a frame\'s own swings from the 15m up, 2 bars', LIQ]], reason: 'moved to levels-and-reactions, next to the equal highs and lows' },
     { old: '`liquidity.equalHighs`/`equalLows` are pairs of separate confirmed swings within 0.1 x ATR(14) of each other (see levels-and-reactions); a flat top shows up in neither.',
       home: [[S('levels-and-reactions'), 'Equal highs/lows: two of the last 12 confirmed swing highs (lows) within 0.1 × ATR(14)', LIQ], [S('levels-and-reactions'), 'is no swing, so it is in neither.', LIQ]], reason: 'levels-and-reactions says it' },
   ],
@@ -348,7 +349,8 @@ test('skill retire: no role loses knowledge in full mode: each role that loaded 
 
 test('skill retire: the comparison catches a lost, a doubled or an edited unit, a fragment gone, and a stale exception', () => {
   const texts = current();
-  const EQ = 'Equal highs/lows: two of the last 12 confirmed swing highs (lows) within 0.1 × ATR(14) of each other (3m swings, 2 bars each side: about 12 ticks on MNQ at an ATR of 30 points); the last 3 such pairs, each `taken` once traded through.';
+  // A unit still verbatim in its new home (the equal-highs one is an allowed edit since feat/bias-bg).
+  const EQ = 'No call until the close; wicks are information, not signals.';
   assert.ok(units(read(fixture('liquidity-concepts'))).includes(EQ), 'a sentence is a unit');
   const lr = texts['levels-and-reactions'];
   const flatLr = flat(lr);
@@ -359,7 +361,7 @@ test('skill retire: the comparison catches a lost, a doubled or an edited unit, 
   // Doubled: in a second skill.
   assert.notDeepStrictEqual(differences('liquidity-concepts', { ...texts, 'fair-value-gaps': `${texts['fair-value-gaps']}\n\n${EQ}\n` }).bad, []);
   // Edited: one number changed.
-  assert.notDeepStrictEqual(differences('liquidity-concepts', withLr(flatLr.replace(EQ, EQ.replace('last 12', 'last 13')))).bad, []);
+  assert.notDeepStrictEqual(differences('liquidity-concepts', withLr(flatLr.replace(EQ, EQ.replace('No call', 'A call')))).bad, []);
   // A fragment an exception names is gone from its home.
   const T = 'Targets: the next untested liquidity pool in the trade\'s direction.';
   const read2 = f => (f === S('levels-and-reactions') ? flatLr.replace(T, '') : read(f));

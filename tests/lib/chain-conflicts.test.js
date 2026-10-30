@@ -68,9 +68,28 @@ test('3. 3m levels as targets: with the trail, an aligned plan is never refused 
   assert.strictEqual(checkRead(parseRead('target trail'), briefing({ t4h: 'down' }), { side: 'long', tick: 0.25 }).check, false);
 });
 
-// Not planned: the 3m levels stay in the briefing's level lists (the trigger study: the 3m, 15m and HTF level tiers don't
-// separate, so removing them would lower R by the data); compose's 3m confirming close after the setup stays too (its
-// test was inconclusive under its pre-registered rule).
+test('3b. no entry-frame level: the runner\'s base bars (the chain\'s entry frame) give no level, room, target or sweep; their candles stay as facts', () => {
+  // The owner: "We should never use entry timeframes as levels" (the study: the tiers are neutral, so the principle decides).
+  const B = require('../../scripts/lib/trading/briefing');
+  const { targetsAhead } = require('../../scripts/lib/trading/composed-reads');
+  const D = require('../fixtures/decision-path');
+  for (const [minutes, bars, tf] of [[3, D.BARS, '3m'], [1, D.MINUTE_BARS, '1m']]) {
+    const b = B.buildBriefing({ symbol: 'MNQ', bars: bars.slice(0, minutes === 3 ? 1300 : 3900), minutes });
+    const m3 = b.sections.m3.data;
+    const names = [...m3.nearestLiquidity.above, ...m3.nearestLiquidity.below].map(x => x.name);
+    const entryName = new RegExp(`(^|\\b)(${tf}|3m) swing|equal (highs|lows)|previous (${tf}|3m) `);
+    assert.ok(!names.some(n => entryName.test(n)), `${tf} room: ${names.join(' | ')}`);
+    assert.ok(!(m3.swingTargets.above || []).concat(m3.swingTargets.below || []).some(x => x.frame === tf || x.frame === '3m'), `${tf} swing targets`);
+    assert.deepStrictEqual([m3.liquidity.equalHighs, m3.liquidity.equalLows, m3.liquidity.openFvgs], [[], [], []], tf);
+    assert.ok(!m3.sweeps.some(x => entryName.test(x.name)), `${tf} sweeps`);
+    for (const c of Object.values(m3.candles)) for (const r of (c && c.relations) || []) assert.ok(!entryName.test(`${r.name} `), `${tf} relation ${r.name}`);
+    for (const side of ['long', 'short']) assert.ok(!targetsAhead(b, side, { tick: 0.25 }).some(t => entryName.test(`${t.read} `)), `${tf} ${side} targets`);
+    // The entry frame's candle stays as a candle fact (its close, its shape), and its swings for the stop.
+    assert.ok((m3.candles[tf] || m3.candles['3m'] || {}).closeLocation, `${tf} candle`);
+    assert.ok(Array.isArray(m3.liquidity.swingLows), 'the swings for the stop');
+  }
+  // compose's 3m confirming close after the setup stays (its test was inconclusive under its pre-registered rule).
+});
 
 test('4. the 15m trend against during a pullback: with the 4h and 1h up, a 15m trend down is allowed (the 15m is the setup frame, never a bias frame)', () => {
   assert.deepStrictEqual(rule(briefing({ t15: 'down' }), 'long'), []);

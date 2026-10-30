@@ -299,8 +299,13 @@ function computeSections({ bars, fine = null, c15, c60, snap, snap15, read, read
     const taken = bars.some(b => (Date.parse(b.t) > Date.parse(since) || between(b)) && beyond(b));
     return { name: type === 'high' ? 'equal highs' : 'equal lows', price: level, since, taken };
   });
-  const eqHighs = pool(liq.equalHighs, 'high');
-  const eqLows = pool(liq.equalLows, 'low');
+  // The runner's base bars are the chain's entry frame (the entry rule holds the lane to it): never a level (the owner:
+  // "We should never use entry timeframes as levels"; chain.js). Their swings, equal highs and lows and gaps stay out
+  // of the levels, the room, the sweeps and the liquidity lists; their candles stay as candle facts. A frame's own
+  // bars (15m and up) are no entry frame: its swings stand.
+  const entryBars = !own;
+  const eqHighs = entryBars ? [] : pool(liq.equalHighs, 'high');
+  const eqLows = entryBars ? [] : pool(liq.equalLows, 'low');
   const rth = applies === 'rth';
   // The round numbers on the family's step (contracts.js), none for a root without one: the one just above and
   // the one just below price; price on one: that one ("at") and the next above and below.
@@ -328,7 +333,7 @@ function computeSections({ bars, fine = null, c15, c60, snap, snap15, read, read
   const runnerVwap = own ? (sessionLevels.find(([n]) => /^VWAP /.test(n)) || [])[1] : null;
   const levels = [
     ...sessionLevels,
-    [`last ${ownSwing} swing high`, st.lastSwingHigh], [`last ${ownSwing} swing low`, st.lastSwingLow],
+    ...(entryBars ? [] : [[`last ${ownSwing} swing high`, st.lastSwingHigh], [`last ${ownSwing} swing low`, st.lastSwingLow]]),
     ...htfLevels.filter(x => !x.brokenAt).map(x => [x.name, x.price]),
     ...untested1h.map(x => [`untested 1h swing ${x.type}`, x.price]),
     ...[...eqHighs, ...eqLows].filter(x => !x.taken).map(x => [x.name, x.price]),
@@ -426,7 +431,10 @@ function computeSections({ bars, fine = null, c15, c60, snap, snap15, read, read
         referenceStop: snap.referenceStop ? { distance: round2(snap.referenceStop.distance), long: round2(snap.referenceStop.long), short: round2(snap.referenceStop.short) } : null,
         swings: { high: st.lastSwingHigh, highAt: st.lastSwingHighAt, low: st.lastSwingLow, lowAt: st.lastSwingLowAt },
         // Liquidity on the trigger bars: recent swing points, equal highs and lows (with whether taken), fair value gaps open and partly filled.
-        liquidity: { swingHighs: liq.swingHighs, swingLows: liq.swingLows, equalHighs: eqHighs.map(x => omit(x, ['since'])), equalLows: eqLows.map(x => omit(x, ['since'])), openFvgs: liq.openFvgs, partlyFilledFvgs: liq.partlyFilledFvgs || [] },
+        // The entry frame's swings stay for the stop beyond them (invalidation's 'stop swing low|high': structure, never a
+        // level, target or room); its equal highs and lows and its gaps are levels, so none.
+        liquidity: entryBars ? { swingHighs: liq.swingHighs, swingLows: liq.swingLows, equalHighs: [], equalLows: [], openFvgs: [], partlyFilledFvgs: [] }
+          : { swingHighs: liq.swingHighs, swingLows: liq.swingLows, equalHighs: eqHighs.map(x => omit(x, ['since'])), equalLows: eqLows.map(x => omit(x, ['since'])), openFvgs: liq.openFvgs, partlyFilledFvgs: liq.partlyFilledFvgs || [] },
         // Structure events (structure-events.js): the latest break on the trigger bars, sweeps of key liquidity in the last
         // 10 bars (only levels that existed before the sweep), the 1h swings not traded back to, and the 15m and 1h swings
         // against price (a 3m close through one since its candle closed: brokenAt).
@@ -436,8 +444,8 @@ function computeSections({ bars, fine = null, c15, c60, snap, snap15, read, read
           ...(own ? [] : [['prior RTH high', (lv.priorRth || {}).high, 'high', true], ['prior RTH low', (lv.priorRth || {}).low, 'low', true]]),
           // The overnight range is final at 09:30 ET: its sweeps count in RTH only.
           ...(rth && !own ? [['overnight high', (lv.overnight || {}).high, 'high', true], ['overnight low', (lv.overnight || {}).low, 'low', true]] : []),
-          [`last ${ownSwing} swing high`, st.lastSwingHigh, 'high', false, st.lastSwingHighAt ? after(st.lastSwingHighAt) : null],
-          [`last ${ownSwing} swing low`, st.lastSwingLow, 'low', false, st.lastSwingLowAt ? after(st.lastSwingLowAt) : null],
+          ...(entryBars ? [] : [[`last ${ownSwing} swing high`, st.lastSwingHigh, 'high', false, st.lastSwingHighAt ? after(st.lastSwingHighAt) : null],
+            [`last ${ownSwing} swing low`, st.lastSwingLow, 'low', false, st.lastSwingLowAt ? after(st.lastSwingLowAt) : null]]),
           ...eqHighs.map(x => [x.name, x.price, 'high', false, x.since]), ...eqLows.map(x => [x.name, x.price, 'low', false, x.since]),
         ].map(([name, p, sideOf, key = false, since = null]) => ({ name, price: p, side: sideOf, key, since })), 10),
         htfLevels,
@@ -475,7 +483,7 @@ function computeSections({ bars, fine = null, c15, c60, snap, snap15, read, read
         // Not on a frame's own bars: its candle facts are the runner's (buildFrameBriefing), one value per level.
         // fvgRelations: how each candle met the 5m, 15m and 1h gaps' edges as they stood at its open (fvg-frames.js).
         candles: own ? null : briefingCandles({ bars, base: minutes, fine, levelsAt, zonesAt: zonesOf, roundStep }),
-        swingTargets: own ? null : briefingTargets({ bars, minutes, price, oneR, tick, frames: [minutes < 3 ? 3 : minutes, 15, 60, 240] }),
+        swingTargets: own ? null : briefingTargets({ bars, minutes, price, oneR, tick, frames: [15, 60, 240] }),
         // The last completed 1h and 4h candle's high, mid and low as targets, and the side the candle forming since has
         // taken, only when it has (candle-facts.js; the runner's, as above).
         rangeTargets: own ? null : briefingRangeTargets({ bars, base: minutes, price, oneR, tick }),

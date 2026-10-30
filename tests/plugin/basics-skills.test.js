@@ -260,7 +260,9 @@ function briefings() {
     rules: { long: [{ rule: 'field("x.y") > 0', ok: true, values: { 'x.y': 0.42 } }] } }];
   const full = B.buildBriefing({ symbol: 'NQ', bars, minutes: 3, scan });
   const cut = B.buildBriefing({ symbol: 'NQ', bars: bars.slice(0, 1354), minutes: 3, scan });
-  return [full, cut];
+  // A cut with a sweep of a session level (the prior RTH high), the sweeps' fields named by breakout-vs-fakeout.
+  const swept = B.buildBriefing({ symbol: 'NQ', bars: bars.slice(0, 702), minutes: 3, scan });
+  return [full, cut, swept];
 }
 
 /** Every briefing path a skill names: m3., m15., h1., day., candidate. ([] steps into an array's first item). */
@@ -318,7 +320,8 @@ test('basics skills: every briefing field named resolves on a briefing built by 
   const bs = briefings();
   // The candidate's broker field values (when its rules read one) and the sweeps exist on these briefings.
   assert.ok(bs[0].sections.m3.data.candidates[0].values, 'candidate.values');
-  assert.ok(bs[1].sections.m3.data.sweeps.length > 0, 'a sweep');
+  // Sweeps of the session and HTF levels only (an entry-frame swing is no level, chain.js): the field is there.
+  assert.ok(bs[2].sections.m3.data.sweeps.length > 0, 'a sweep');
   let n = 0;
   for (const s of SKILLS) {
     for (const p of pathsIn(read(file(s)))) {

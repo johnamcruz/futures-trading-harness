@@ -38,7 +38,7 @@ const r = (step, skill, read) => ({ step, skill, read });
 
 // 08:39 UTC on 04-27 (04:39 ET): a 3m expansion candle closed above an inside-bar box (its mother's range 27413-27422,
 // on the prior POC), the 1h trend up; the 08:39 bar (closed 08:42) is the next closed candle, top third.
-const LONG = [r('bias', 'multi-timeframe-analysis', '1h up'), r('location', 'levels-and-reactions', 'at previous 3m high'), r('setup', 'compression', '3m compression break up'),
+const LONG = [r('bias', 'multi-timeframe-analysis', '1h up'), r('location', 'vwap-volume-profile', 'vwap below'), r('setup', 'compression', '3m compression break up'),
   r('entry', 'candle-reading', '3m close top'), r('stop', 'invalidation', 'stop 3m box low 27413'), r('target', 'take-profit', 'target prior rth high 27462.5')];
 
 test('compression e2e: the briefing holds the transition as code-verified facts, on completed candles', () => {

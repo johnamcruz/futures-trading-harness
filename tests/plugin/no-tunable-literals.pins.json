@@ -440,7 +440,7 @@
   "scripts/lib/session/record.js": 3,
   "scripts/lib/trading/account-gate.js": 2,
   "scripts/lib/trading/accounts.js": 3,
-  "scripts/lib/trading/briefing.js": 33,
+  "scripts/lib/trading/briefing.js": 32,
   "scripts/lib/trading/broker-specs.js": 1,
   "scripts/lib/trading/candle-facts.js": 11,
   "scripts/lib/trading/check-order.js": 1,

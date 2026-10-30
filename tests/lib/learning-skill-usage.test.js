@@ -21,7 +21,7 @@ const R_BAR = '2026-04-23T16:24:00.000Z';
 const A = [
   ['bias', 'multi-timeframe-analysis', '15m up'], ['location', 'levels-and-reactions', 'at vwap rth'],
   ['setup', 'fair-value-gaps', '4h broke 15m fvg high up'], ['entry', 'candle-reading', '3m close top'],
-  ['stop', 'invalidation', 'stop 3m low 26970'], ['target', 'take-profit', 'target 3m swing 27102.75'],
+  ['stop', 'invalidation', 'stop 3m low 26970'], ['target', 'take-profit', 'target day high 27102.75'],
 ];
 function rec(bar, side, reads, { briefing = at('MNQ', bar), size = 1 } = {}) {
   const checked = checkReads({ reads: reads.map(([step, skill, read]) => ({ step, skill, read, why: 'x' })), side, briefing });
@@ -115,7 +115,8 @@ test('skill usage: missed counts only a TRUE read pointing the side\'s way: one 
   const bc = of(short, 'bos-vs-choch');
   assert.deepStrictEqual([bc.available, bc.relevant, bc.missed, bc.topMissed], [1, 0, 0, []]);
   assert.ok(U.availableAt(at('MNQ', R_BAR), 'short').get('bos-vs-choch').reads.some(r => r.form === '3m choch up' && r.dir === 'long'));
-  for (const sk of ['vwap-volume-profile', 'trend-vs-range', 'daily-bias', 'cisd', 'breakout']) assert.strictEqual(of(short, sk).missed, 0, sk);
+  // (A skill with no read here at all, now that the entry frame's levels are none, is no miss either.)
+  for (const sk of ['vwap-volume-profile', 'trend-vs-range', 'daily-bias', 'cisd', 'breakout']) assert.strictEqual((of(short, sk) || { missed: 0 }).missed, 0, sk);
 });
 
 test('skill usage: a 1m lane: the run\'s 1m bars closed by the bar\'s close are the fine bars (the 5m facts), as the live briefing has them', () => {

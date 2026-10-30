@@ -514,7 +514,12 @@ test('15m and 1h breaks: times are candle opens, as on the 3m, and knownAt is th
 
 test('equal lows traded through between their touches are taken (the pool is gone), not only after the last touch', () => {
   const bars = at(300);
-  const d = build(300).sections.m3.data;
+  // The runner's bars are the chain's entry frame: its equal lows are no level (liquidity lists empty, none in the room);
+  // on a frame's own bars they stand, read the same way.
+  const runner = build(300).sections.m3.data;
+  assert.deepStrictEqual([runner.liquidity.equalLows, runner.liquidity.equalHighs, runner.liquidity.openFvgs], [[], [], []]);
+  assert.ok(![...runner.nearestLiquidity.above, ...runner.nearestLiquidity.below].some(x => /equal|last 3m swing/.test(x.name)), 'no entry-frame level in the room');
+  const d = B.buildBriefing({ symbol: 'MNQ', bars, minutes: 3, own: true }).sections.m3.data;
   const pool = d.liquidity.equalLows.find(x => x.price === 26940.25);
   assert.ok(pool && pool.taken, JSON.stringify(d.liquidity.equalLows));
   // The fixture's touches are 09:48Z and 11:33Z; only a bar between them trades below.
@@ -614,10 +619,9 @@ test('round numbers show on the contract\'s tick like every other level: SI 0.12
 
 test('levels merge within the contract\'s own tick (contracts.js), in the nearest levels too; VWAP rounded; an unknown R spelled out', () => {
   const near = symbol => B.buildBriefing({ symbol, bars: at(370), minutes: 3 }).sections.m3.data.nearestLiquidity.below.map(x => x.name);
-  // The opening range high 27068 and the last 3m swing low 27067: two levels a point apart on NQ, one on YM (tick 1).
-  assert.ok(near('NQ').includes('opening range high') && near('NQ').includes('last 3m swing low'), near('NQ').join(' | '));
-  assert.ok(near('YM').includes('opening range high / last 3m swing low'), near('YM').join(' | '));
-  assert.ok(near('YM:2026-06').includes('opening range high / last 3m swing low'), 'a contract by month uses its root\'s tick');
+  // The opening range high 27068 stands; the last 3m swing low 27067 beside it is the entry frame's, no level (chain.js).
+  assert.ok(near('NQ').includes('opening range high') && !near('NQ').some(n => /3m swing/.test(n)), near('NQ').join(' | '));
+  assert.ok(!near('YM').some(n => /3m swing/.test(n)), near('YM').join(' | '));
   const d = build(370).sections.m3.data;
   for (const x of [...d.nearestLiquidity.above, ...d.nearestLiquidity.below]) assert.strictEqual(x.price, Math.round(x.price * 100) / 100, `${x.name} ${x.price}`);
   assert.ok([...d.nearestLiquidity.above, ...d.nearestLiquidity.below].some(x => /^VWAP/.test(x.name)), 'control: the VWAP is among them');

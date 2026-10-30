@@ -61,7 +61,8 @@ test('the same-candle rule: every traded record confirms on a candle that closed
 test('every confirming close is tried until one composes: the fixture\'s counts, and a record traded after an earlier close failed', () => {
   const count = {};
   for (const r of RECORDS) count[r.status] = (count[r.status] || 0) + 1;
-  assert.deepStrictEqual(count, { traded: 79, 'no-room': 24, 'not-composable': 12, 'no-confirmation': 19, 'no-entry-window': 2 });
+  // One moment moved from no-room to not-composable when the entry frame's levels became none (chain.js).
+  assert.deepStrictEqual(count, { traded: 79, 'no-room': 23, 'not-composable': 13, 'no-confirmation': 19, 'no-entry-window': 2 });
   // A traded record whose window had an earlier confirming close that did not compose.
   const later = RECORDS.filter(r => r.status === 'traded').find(r => {
     for (let t = Date.parse(r.reactionAt); t + 180000 < Date.parse(r.bar) + 180000; t += 180000) {

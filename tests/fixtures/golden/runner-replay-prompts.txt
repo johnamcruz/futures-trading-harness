@@ -552,21 +552,21 @@ null until formed); IB
 `m3.vwap.session` (`m3.vwap.applies`); prior value `day.priorProfile.vah`,
 `day.priorProfile.val`, `day.priorProfile.poc`; session value
 `m3.sessionProfile.vah`, `m3.sessionProfile.val`, `m3.sessionProfile.poc`;
-swings `m3.swings.high`, `m3.swings.low` (the last 4:
-`m3.liquidity.swingHighs`, `m3.liquidity.swingLows`), 15m and 1h `m3.htfLevels`
-(`brokenAt` null: holds), `m3.untested1hSwings`; equal highs and lows
-`m3.liquidity.equalHighs`, `m3.liquidity.equalLows` (`taken`); open FVGs
-`m3.liquidity.openFvgs` and partly filled ones
-`m3.liquidity.partlyFilledFvgs` (the unfilled part; `fair-value-gaps`); round numbers: `round number` in
+15m and 1h `m3.htfLevels` (`brokenAt` null: holds), `m3.untested1hSwings`;
+FVGs `m3.fvgs` (`fair-value-gaps`); round numbers: `round number` in
 `m3.nearestLiquidity` (the multiples of the family's configured step just
 above and below price; price on one: its `at`; a refused step: none, the
 reason in its `roundNumbers`).
+  Never the entry frame's (3m) swings, equal
+highs and lows or gaps: they are structure for the stop (`m3.swings`;
+(the last 4: `m3.liquidity.swingHighs`, `m3.liquidity.swingLows`);
+`invalidation`), not levels.
 
 **Resting liquidity** (stops cluster just beyond obvious levels).
   Equal
 highs/lows: two of the last 12 confirmed swing highs (lows) within 0.1
-× ATR(14) of each other (3m swings, 2 bars each side: about 12 ticks on
-MNQ at an ATR of 30 points); the last 3 such pairs, each `taken` once
+× ATR(14) of each other (a frame's own swings from the 15m up, 2 bars
+each side); the last 3 such pairs, each `taken` once
 traded through.
   A flat top or bottom (bars side by side at the same high
 or low) is no swing, so it is in neither.
@@ -1582,21 +1582,21 @@ null until formed); IB
 `m3.vwap.session` (`m3.vwap.applies`); prior value `day.priorProfile.vah`,
 `day.priorProfile.val`, `day.priorProfile.poc`; session value
 `m3.sessionProfile.vah`, `m3.sessionProfile.val`, `m3.sessionProfile.poc`;
-swings `m3.swings.high`, `m3.swings.low` (the last 4:
-`m3.liquidity.swingHighs`, `m3.liquidity.swingLows`), 15m and 1h `m3.htfLevels`
-(`brokenAt` null: holds), `m3.untested1hSwings`; equal highs and lows
-`m3.liquidity.equalHighs`, `m3.liquidity.equalLows` (`taken`); open FVGs
-`m3.liquidity.openFvgs` and partly filled ones
-`m3.liquidity.partlyFilledFvgs` (the unfilled part; `fair-value-gaps`); round numbers: `round number` in
+15m and 1h `m3.htfLevels` (`brokenAt` null: holds), `m3.untested1hSwings`;
+FVGs `m3.fvgs` (`fair-value-gaps`); round numbers: `round number` in
 `m3.nearestLiquidity` (the multiples of the family's configured step just
 above and below price; price on one: its `at`; a refused step: none, the
 reason in its `roundNumbers`).
+  Never the entry frame's (3m) swings, equal
+highs and lows or gaps: they are structure for the stop (`m3.swings`;
+(the last 4: `m3.liquidity.swingHighs`, `m3.liquidity.swingLows`);
+`invalidation`), not levels.
 
 **Resting liquidity** (stops cluster just beyond obvious levels).
   Equal
 highs/lows: two of the last 12 confirmed swing highs (lows) within 0.1
-× ATR(14) of each other (3m swings, 2 bars each side: about 12 ticks on
-MNQ at an ATR of 30 points); the last 3 such pairs, each `taken` once
+× ATR(14) of each other (a frame's own swings from the 15m up, 2 bars
+each side); the last 3 such pairs, each `taken` once
 traded through.
   A flat top or bottom (bars side by side at the same high
 or low) is no swing, so it is in neither.
@@ -2616,21 +2616,21 @@ null until formed); IB
 `m3.vwap.session` (`m3.vwap.applies`); prior value `day.priorProfile.vah`,
 `day.priorProfile.val`, `day.priorProfile.poc`; session value
 `m3.sessionProfile.vah`, `m3.sessionProfile.val`, `m3.sessionProfile.poc`;
-swings `m3.swings.high`, `m3.swings.low` (the last 4:
-`m3.liquidity.swingHighs`, `m3.liquidity.swingLows`), 15m and 1h `m3.htfLevels`
-(`brokenAt` null: holds), `m3.untested1hSwings`; equal highs and lows
-`m3.liquidity.equalHighs`, `m3.liquidity.equalLows` (`taken`); open FVGs
-`m3.liquidity.openFvgs` and partly filled ones
-`m3.liquidity.partlyFilledFvgs` (the unfilled part; `fair-value-gaps`); round numbers: `round number` in
+15m and 1h `m3.htfLevels` (`brokenAt` null: holds), `m3.untested1hSwings`;
+FVGs `m3.fvgs` (`fair-value-gaps`); round numbers: `round number` in
 `m3.nearestLiquidity` (the multiples of the family's configured step just
 above and below price; price on one: its `at`; a refused step: none, the
 reason in its `roundNumbers`).
+  Never the entry frame's (3m) swings, equal
+highs and lows or gaps: they are structure for the stop (`m3.swings`;
+(the last 4: `m3.liquidity.swingHighs`, `m3.liquidity.swingLows`);
+`invalidation`), not levels.
 
 **Resting liquidity** (stops cluster just beyond obvious levels).
   Equal
 highs/lows: two of the last 12 confirmed swing highs (lows) within 0.1
-× ATR(14) of each other (3m swings, 2 bars each side: about 12 ticks on
-MNQ at an ATR of 30 points); the last 3 such pairs, each `taken` once
+× ATR(14) of each other (a frame's own swings from the 15m up, 2 bars
+each side); the last 3 such pairs, each `taken` once
 traded through.
   A flat top or bottom (bars side by side at the same high
 or low) is no swing, so it is in neither.
@@ -3641,21 +3641,21 @@ null until formed); IB
 `m3.vwap.session` (`m3.vwap.applies`); prior value `day.priorProfile.vah`,
 `day.priorProfile.val`, `day.priorProfile.poc`; session value
 `m3.sessionProfile.vah`, `m3.sessionProfile.val`, `m3.sessionProfile.poc`;
-swings `m3.swings.high`, `m3.swings.low` (the last 4:
-`m3.liquidity.swingHighs`, `m3.liquidity.swingLows`), 15m and 1h `m3.htfLevels`
-(`brokenAt` null: holds), `m3.untested1hSwings`; equal highs and lows
-`m3.liquidity.equalHighs`, `m3.liquidity.equalLows` (`taken`); open FVGs
-`m3.liquidity.openFvgs` and partly filled ones
-`m3.liquidity.partlyFilledFvgs` (the unfilled part; `fair-value-gaps`); round numbers: `round number` in
+15m and 1h `m3.htfLevels` (`brokenAt` null: holds), `m3.untested1hSwings`;
+FVGs `m3.fvgs` (`fair-value-gaps`); round numbers: `round number` in
 `m3.nearestLiquidity` (the multiples of the family's configured step just
 above and below price; price on one: its `at`; a refused step: none, the
 reason in its `roundNumbers`).
+  Never the entry frame's (3m) swings, equal
+highs and lows or gaps: they are structure for the stop (`m3.swings`;
+(the last 4: `m3.liquidity.swingHighs`, `m3.liquidity.swingLows`);
+`invalidation`), not levels.
 
 **Resting liquidity** (stops cluster just beyond obvious levels).
   Equal
 highs/lows: two of the last 12 confirmed swing highs (lows) within 0.1
-× ATR(14) of each other (3m swings, 2 bars each side: about 12 ticks on
-MNQ at an ATR of 30 points); the last 3 such pairs, each `taken` once
+× ATR(14) of each other (a frame's own swings from the 15m up, 2 bars
+each side); the last 3 such pairs, each `taken` once
 traded through.
   A flat top or bottom (bars side by side at the same high
 or low) is no swing, so it is in neither.
@@ -4762,21 +4762,21 @@ null until formed); IB
 `m3.vwap.session` (`m3.vwap.applies`); prior value `day.priorProfile.vah`,
 `day.priorProfile.val`, `day.priorProfile.poc`; session value
 `m3.sessionProfile.vah`, `m3.sessionProfile.val`, `m3.sessionProfile.poc`;
-swings `m3.swings.high`, `m3.swings.low` (the last 4:
-`m3.liquidity.swingHighs`, `m3.liquidity.swingLows`), 15m and 1h `m3.htfLevels`
-(`brokenAt` null: holds), `m3.untested1hSwings`; equal highs and lows
-`m3.liquidity.equalHighs`, `m3.liquidity.equalLows` (`taken`); open FVGs
-`m3.liquidity.openFvgs` and partly filled ones
-`m3.liquidity.partlyFilledFvgs` (the unfilled part; `fair-value-gaps`); round numbers: `round number` in
+15m and 1h `m3.htfLevels` (`brokenAt` null: holds), `m3.untested1hSwings`;
+FVGs `m3.fvgs` (`fair-value-gaps`); round numbers: `round number` in
 `m3.nearestLiquidity` (the multiples of the family's configured step just
 above and below price; price on one: its `at`; a refused step: none, the
 reason in its `roundNumbers`).
+  Never the entry frame's (3m) swings, equal
+highs and lows or gaps: they are structure for the stop (`m3.swings`;
+(the last 4: `m3.liquidity.swingHighs`, `m3.liquidity.swingLows`);
+`invalidation`), not levels.
 
 **Resting liquidity** (stops cluster just beyond obvious levels).
   Equal
 highs/lows: two of the last 12 confirmed swing highs (lows) within 0.1
-× ATR(14) of each other (3m swings, 2 bars each side: about 12 ticks on
-MNQ at an ATR of 30 points); the last 3 such pairs, each `taken` once
+× ATR(14) of each other (a frame's own swings from the 15m up, 2 bars
+each side); the last 3 such pairs, each `taken` once
 traded through.
   A flat top or bottom (bars side by side at the same high
 or low) is no swing, so it is in neither.
@@ -5880,21 +5880,21 @@ null until formed); IB
 `m3.vwap.session` (`m3.vwap.applies`); prior value `day.priorProfile.vah`,
 `day.priorProfile.val`, `day.priorProfile.poc`; session value
 `m3.sessionProfile.vah`, `m3.sessionProfile.val`, `m3.sessionProfile.poc`;
-swings `m3.swings.high`, `m3.swings.low` (the last 4:
-`m3.liquidity.swingHighs`, `m3.liquidity.swingLows`), 15m and 1h `m3.htfLevels`
-(`brokenAt` null: holds), `m3.untested1hSwings`; equal highs and lows
-`m3.liquidity.equalHighs`, `m3.liquidity.equalLows` (`taken`); open FVGs
-`m3.liquidity.openFvgs` and partly filled ones
-`m3.liquidity.partlyFilledFvgs` (the unfilled part; `fair-value-gaps`); round numbers: `round number` in
+15m and 1h `m3.htfLevels` (`brokenAt` null: holds), `m3.untested1hSwings`;
+FVGs `m3.fvgs` (`fair-value-gaps`); round numbers: `round number` in
 `m3.nearestLiquidity` (the multiples of the family's configured step just
 above and below price; price on one: its `at`; a refused step: none, the
 reason in its `roundNumbers`).
+  Never the entry frame's (3m) swings, equal
+highs and lows or gaps: they are structure for the stop (`m3.swings`;
+(the last 4: `m3.liquidity.swingHighs`, `m3.liquidity.swingLows`);
+`invalidation`), not levels.
 
 **Resting liquidity** (stops cluster just beyond obvious levels).
   Equal
 highs/lows: two of the last 12 confirmed swing highs (lows) within 0.1
-× ATR(14) of each other (3m swings, 2 bars each side: about 12 ticks on
-MNQ at an ATR of 30 points); the last 3 such pairs, each `taken` once
+× ATR(14) of each other (a frame's own swings from the 15m up, 2 bars
+each side); the last 3 such pairs, each `taken` once
 traded through.
   A flat top or bottom (bars side by side at the same high
 or low) is no swing, so it is in neither.
@@ -6920,21 +6920,21 @@ null until formed); IB
 `m3.vwap.session` (`m3.vwap.applies`); prior value `day.priorProfile.vah`,
 `day.priorProfile.val`, `day.priorProfile.poc`; session value
 `m3.sessionProfile.vah`, `m3.sessionProfile.val`, `m3.sessionProfile.poc`;
-swings `m3.swings.high`, `m3.swings.low` (the last 4:
-`m3.liquidity.swingHighs`, `m3.liquidity.swingLows`), 15m and 1h `m3.htfLevels`
-(`brokenAt` null: holds), `m3.untested1hSwings`; equal highs and lows
-`m3.liquidity.equalHighs`, `m3.liquidity.equalLows` (`taken`); open FVGs
-`m3.liquidity.openFvgs` and partly filled ones
-`m3.liquidity.partlyFilledFvgs` (the unfilled part; `fair-value-gaps`); round numbers: `round number` in
+15m and 1h `m3.htfLevels` (`brokenAt` null: holds), `m3.untested1hSwings`;
+FVGs `m3.fvgs` (`fair-value-gaps`); round numbers: `round number` in
 `m3.nearestLiquidity` (the multiples of the family's configured step just
 above and below price; price on one: its `at`; a refused step: none, the
 reason in its `roundNumbers`).
+  Never the entry frame's (3m) swings, equal
+highs and lows or gaps: they are structure for the stop (`m3.swings`;
+(the last 4: `m3.liquidity.swingHighs`, `m3.liquidity.swingLows`);
+`invalidation`), not levels.
 
 **Resting liquidity** (stops cluster just beyond obvious levels).
   Equal
 highs/lows: two of the last 12 confirmed swing highs (lows) within 0.1
-× ATR(14) of each other (3m swings, 2 bars each side: about 12 ticks on
-MNQ at an ATR of 30 points); the last 3 such pairs, each `taken` once
+× ATR(14) of each other (a frame's own swings from the 15m up, 2 bars
+each side); the last 3 such pairs, each `taken` once
 traded through.
   A flat top or bottom (bars side by side at the same high
 or low) is no swing, so it is in neither.
@@ -7960,21 +7960,21 @@ null until formed); IB
 `m3.vwap.session` (`m3.vwap.applies`); prior value `day.priorProfile.vah`,
 `day.priorProfile.val`, `day.priorProfile.poc`; session value
 `m3.sessionProfile.vah`, `m3.sessionProfile.val`, `m3.sessionProfile.poc`;
-swings `m3.swings.high`, `m3.swings.low` (the last 4:
-`m3.liquidity.swingHighs`, `m3.liquidity.swingLows`), 15m and 1h `m3.htfLevels`
-(`brokenAt` null: holds), `m3.untested1hSwings`; equal highs and lows
-`m3.liquidity.equalHighs`, `m3.liquidity.equalLows` (`taken`); open FVGs
-`m3.liquidity.openFvgs` and partly filled ones
-`m3.liquidity.partlyFilledFvgs` (the unfilled part; `fair-value-gaps`); round numbers: `round number` in
+15m and 1h `m3.htfLevels` (`brokenAt` null: holds), `m3.untested1hSwings`;
+FVGs `m3.fvgs` (`fair-value-gaps`); round numbers: `round number` in
 `m3.nearestLiquidity` (the multiples of the family's configured step just
 above and below price; price on one: its `at`; a refused step: none, the
 reason in its `roundNumbers`).
+  Never the entry frame's (3m) swings, equal
+highs and lows or gaps: they are structure for the stop (`m3.swings`;
+(the last 4: `m3.liquidity.swingHighs`, `m3.liquidity.swingLows`);
+`invalidation`), not levels.
 
 **Resting liquidity** (stops cluster just beyond obvious levels).
   Equal
 highs/lows: two of the last 12 confirmed swing highs (lows) within 0.1
-× ATR(14) of each other (3m swings, 2 bars each side: about 12 ticks on
-MNQ at an ATR of 30 points); the last 3 such pairs, each `taken` once
+× ATR(14) of each other (a frame's own swings from the 15m up, 2 bars
+each side); the last 3 such pairs, each `taken` once
 traded through.
   A flat top or bottom (bars side by side at the same high
 or low) is no swing, so it is in neither.
@@ -9072,21 +9072,21 @@ null until formed); IB
 `m3.vwap.session` (`m3.vwap.applies`); prior value `day.priorProfile.vah`,
 `day.priorProfile.val`, `day.priorProfile.poc`; session value
 `m3.sessionProfile.vah`, `m3.sessionProfile.val`, `m3.sessionProfile.poc`;
-swings `m3.swings.high`, `m3.swings.low` (the last 4:
-`m3.liquidity.swingHighs`, `m3.liquidity.swingLows`), 15m and 1h `m3.htfLevels`
-(`brokenAt` null: holds), `m3.untested1hSwings`; equal highs and lows
-`m3.liquidity.equalHighs`, `m3.liquidity.equalLows` (`taken`); open FVGs
-`m3.liquidity.openFvgs` and partly filled ones
-`m3.liquidity.partlyFilledFvgs` (the unfilled part; `fair-value-gaps`); round numbers: `round number` in
+15m and 1h `m3.htfLevels` (`brokenAt` null: holds), `m3.untested1hSwings`;
+FVGs `m3.fvgs` (`fair-value-gaps`); round numbers: `round number` in
 `m3.nearestLiquidity` (the multiples of the family's configured step just
 above and below price; price on one: its `at`; a refused step: none, the
 reason in its `roundNumbers`).
+  Never the entry frame's (3m) swings, equal
+highs and lows or gaps: they are structure for the stop (`m3.swings`;
+(the last 4: `m3.liquidity.swingHighs`, `m3.liquidity.swingLows`);
+`invalidation`), not levels.
 
 **Resting liquidity** (stops cluster just beyond obvious levels).
   Equal
 highs/lows: two of the last 12 confirmed swing highs (lows) within 0.1
-× ATR(14) of each other (3m swings, 2 bars each side: about 12 ticks on
-MNQ at an ATR of 30 points); the last 3 such pairs, each `taken` once
+× ATR(14) of each other (a frame's own swings from the 15m up, 2 bars
+each side); the last 3 such pairs, each `taken` once
 traded through.
   A flat top or bottom (bars side by side at the same high
 or low) is no swing, so it is in neither.
@@ -9572,7 +9572,7 @@ Bias: long
 --- risk-manager phase 1 report (from 10:51 ET) ---
 Phase 1: flat, budget 2 trades
 --- end of risk-manager report ---
- This cycle's situation (a compression break on the Setups to check; a 3m or 5m CISD to time an entry; a setup listed: its entry read; a setup listed: its stop, target and size; price at a key level; a liquidity sweep; VWAP and value; the Trend declared? line; the trend rule; the day's bias; the last structure break) needs your skills `compression`, `cisd`, `candle-reading`, `momentum-and-volume`, `top-down-entry`, `take-profit`, `position-sizing`, `levels-and-reactions`, `breakout-vs-fakeout`, `vwap-volume-profile`, `mtf-bias-filter`, `daily-bias`, and `bos-vs-choch`: they are below, already loaded (don't load them again).
+ This cycle's situation (a compression break on the Setups to check; a 3m or 5m CISD to time an entry; a setup listed: its entry read; a setup listed: its stop, target and size; price at a key level; VWAP and value; the Trend declared? line; the trend rule; the day's bias; the last structure break) needs your skills `compression`, `cisd`, `candle-reading`, `momentum-and-volume`, `top-down-entry`, `take-profit`, `position-sizing`, `levels-and-reactions`, `vwap-volume-profile`, `mtf-bias-filter`, `daily-bias`, and `bos-vs-choch`: they are below, already loaded (don't load them again).
 
 <skill name="compression">
 # Compression
@@ -10193,21 +10193,21 @@ null until formed); IB
 `m3.vwap.session` (`m3.vwap.applies`); prior value `day.priorProfile.vah`,
 `day.priorProfile.val`, `day.priorProfile.poc`; session value
 `m3.sessionProfile.vah`, `m3.sessionProfile.val`, `m3.sessionProfile.poc`;
-swings `m3.swings.high`, `m3.swings.low` (the last 4:
-`m3.liquidity.swingHighs`, `m3.liquidity.swingLows`), 15m and 1h `m3.htfLevels`
-(`brokenAt` null: holds), `m3.untested1hSwings`; equal highs and lows
-`m3.liquidity.equalHighs`, `m3.liquidity.equalLows` (`taken`); open FVGs
-`m3.liquidity.openFvgs` and partly filled ones
-`m3.liquidity.partlyFilledFvgs` (the unfilled part; `fair-value-gaps`); round numbers: `round number` in
+15m and 1h `m3.htfLevels` (`brokenAt` null: holds), `m3.untested1hSwings`;
+FVGs `m3.fvgs` (`fair-value-gaps`); round numbers: `round number` in
 `m3.nearestLiquidity` (the multiples of the family's configured step just
 above and below price; price on one: its `at`; a refused step: none, the
 reason in its `roundNumbers`).
+  Never the entry frame's (3m) swings, equal
+highs and lows or gaps: they are structure for the stop (`m3.swings`;
+(the last 4: `m3.liquidity.swingHighs`, `m3.liquidity.swingLows`);
+`invalidation`), not levels.
 
 **Resting liquidity** (stops cluster just beyond obvious levels).
   Equal
 highs/lows: two of the last 12 confirmed swing highs (lows) within 0.1
-× ATR(14) of each other (3m swings, 2 bars each side: about 12 ticks on
-MNQ at an ATR of 30 points); the last 3 such pairs, each `taken` once
+× ATR(14) of each other (a frame's own swings from the 15m up, 2 bars
+each side); the last 3 such pairs, each `taken` once
 traded through.
   A flat top or bottom (bars side by side at the same high
 or low) is no swing, so it is in neither.
@@ -10250,69 +10250,6 @@ Skip: short at 21481.25, prior VAL 21480.00 5 ticks below, inTheWay 0.3R.
 Loser: rejection at prior RTH low 21402.00 (wick 21401.25); long at 21408.50, stop 21399.75
   (8.75 pts = 35 ticks, $17.50 on 1 MNQ); a close at 21398.00, acceptance below.
   -35 ticks, -$17.50.
-```
-</skill>
-
-<skill name="breakout-vs-fakeout">
-# Breakout vs Fakeout
-
-## When to Use
-
-- Trader-process step 3, price through or at a level
-  (`levels-and-reactions`).
-
-## How It Works
-
-A read, never a veto: the count decides (`confluence-counting`).
-  Thresholds are
-hypotheses; a missing field is `unknown`.
-
-- **Fakeout (sweep), computed**: `m3.sweeps`, a level traded through from
-  inside and closed back inside within 1-3 bars, in the last 10 bars:
-  `m3.sweeps[].name`, `m3.sweeps[].price`, `m3.sweeps[].key` (prior RTH
-  or overnight extreme), `m3.sweeps[].back`, `m3.sweeps[].bars`,
-  `m3.sweeps[].wick` (the extreme), `m3.sweeps[].close`.
-  Never by eye.
-  Read: `swept <level>`.
-- **A candle's sweep** is another fact: a completed candle that traded
-  beyond its previous candle's high or low and closed back inside
-  (`sweep` in `m3.candles`), read as its relation
-  (`15m rejected previous 15m high down`; `rejection`).
-- **Acceptance (breakout)**: closes beyond that hold (hypothesis: two or
-  more).
-  Shown as a 3m swing break (`m3.lastBreak.last.level`), a 15m or 1h
-  swing with `brokenAt` set (`m3.htfLevels`), or a location that changed
-  side (`m3.location.priorValue`, `m3.location.initialBalance`,
-  `m3.location.priorRthRange`).
-- **Retest**: after acceptance, a pullback whose closes stay beyond the
-  level.
-  Not computed: read the last 10 bars.
-- **Undecided**: one close beyond, or a wick still inside its 3 bars:
-  `unknown`.
-  No call before the close.
-
-**Evidence** (Train, docs/research/mtf-setup-catalog.md): fading every
-sweep of the previous hour's high or low lost after costs (F1).
-  The levels
-in `m3.sweeps` differ and were not tested; read a sweep alone as no
-reversal signal.
-  A
-first 3m close through the IB high on volume lost (F8A); its retest (F8B)
-was positive on 38 trades, interval straddling zero; level retests (F9)
-fired too rarely to say.
-
-## Examples
-
-```text
-Take: prior RTH high 21615.00; closes 21619.25, 21622.50, 21621.75; retest low 21615.75 held.
-  Read: acceptance, 3m broke prior rth high up; aligned, for outweighs against -> take.
-Skip: m3.sweeps: prior RTH high 21625.00, key, wick 21629.50, back in 1 bar.
-  Long at 21616.50:
-  a fakeout against the long, no acceptance read -> pass.
-  The swept high 0.6R ahead is a read.
-Loser: read acceptance (closes 21618.50, 21620.25); long at 21620.25, stop 21615.75
-  (4.50 pts = 18 ticks, $9.00 on 1 MNQ); low 21612.00, now a sweep (bars 3).
-  -18 ticks, -$9.00.
 ```
 </skill>
 
@@ -11142,21 +11079,21 @@ null until formed); IB
 `m3.vwap.session` (`m3.vwap.applies`); prior value `day.priorProfile.vah`,
 `day.priorProfile.val`, `day.priorProfile.poc`; session value
 `m3.sessionProfile.vah`, `m3.sessionProfile.val`, `m3.sessionProfile.poc`;
-swings `m3.swings.high`, `m3.swings.low` (the last 4:
-`m3.liquidity.swingHighs`, `m3.liquidity.swingLows`), 15m and 1h `m3.htfLevels`
-(`brokenAt` null: holds), `m3.untested1hSwings`; equal highs and lows
-`m3.liquidity.equalHighs`, `m3.liquidity.equalLows` (`taken`); open FVGs
-`m3.liquidity.openFvgs` and partly filled ones
-`m3.liquidity.partlyFilledFvgs` (the unfilled part; `fair-value-gaps`); round numbers: `round number` in
+15m and 1h `m3.htfLevels` (`brokenAt` null: holds), `m3.untested1hSwings`;
+FVGs `m3.fvgs` (`fair-value-gaps`); round numbers: `round number` in
 `m3.nearestLiquidity` (the multiples of the family's configured step just
 above and below price; price on one: its `at`; a refused step: none, the
 reason in its `roundNumbers`).
+  Never the entry frame's (3m) swings, equal
+highs and lows or gaps: they are structure for the stop (`m3.swings`;
+(the last 4: `m3.liquidity.swingHighs`, `m3.liquidity.swingLows`);
+`invalidation`), not levels.
 
 **Resting liquidity** (stops cluster just beyond obvious levels).
   Equal
 highs/lows: two of the last 12 confirmed swing highs (lows) within 0.1
-× ATR(14) of each other (3m swings, 2 bars each side: about 12 ticks on
-MNQ at an ATR of 30 points); the last 3 such pairs, each `taken` once
+× ATR(14) of each other (a frame's own swings from the 15m up, 2 bars
+each side); the last 3 such pairs, each `taken` once
 traded through.
   A flat top or bottom (bars side by side at the same high
 or low) is no swing, so it is in neither.

@@ -452,6 +452,8 @@ const roundsIn = (c, step) => {
  * a later one has), else the one before is the last completed; never a partial one. Without 1m bars it is
  * unavailable (named why); with 1m bars that stopped (their last completed candle more than one candle old), too.
  */
+const ENTRY_TF = (C => C.chainOf(C.SHIPPED).entry)(require('./chain'));
+
 function briefingCandles({ bars, base, fine = null, levelsAt = () => [], zonesAt = null, roundStep = null, crtFrames = [60, 240], timeframes = TIMEFRAMES }) {
   const i = bars.length - 1;
   const out = {};
@@ -493,7 +495,10 @@ function briefingCandles({ bars, base, fine = null, levelsAt = () => [], zonesAt
       const h = htfOf(src, F);
       return [[`CRT ${label(F)} range high`, h.prevH[c.last]], [`CRT ${label(F)} range low`, h.prevL[c.last]]];
     });
-    const all = [...(idx >= 0 ? levelsAt(idx, openIdx, firstIdx) : []), ...roundsIn(c, roundStep), ...(prev ? [[`previous ${label(m)} high`, prev.h], [`previous ${label(m)} low`, prev.l]] : []), ...crt];
+    // The previous candle's high and low are levels on a frame above the entry frame only (the owner: "We should never use
+    // entry timeframes as levels"; chain.js): on the chain's entry frame, or the base bars under it, none.
+    const prevLevels = prev && !(label(m) === ENTRY_TF || m <= base);
+    const all = [...(idx >= 0 ? levelsAt(idx, openIdx, firstIdx) : []), ...roundsIn(c, roundStep), ...(prevLevels ? [[`previous ${label(m)} high`, prev.h], [`previous ${label(m)} low`, prev.l]] : []), ...crt];
     const found = [];
     for (const [name, price] of all) {
       const rel = relation(c, price, prev ? prev.c : NaN);
