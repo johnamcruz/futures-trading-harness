@@ -884,9 +884,8 @@ function checkReads({ reads, side, briefing, skills = null, tick = 0.25, entryRu
     }
   }
   // The policy's entry rule (entry-rule.js, its rulebook's `entry`): the bias frames, the regime, the leg turned, on
-  // the same briefing; none (no policy, or every key off): nothing more is checked.
-  // The entry rule: the policy's, else the shipped side check (BG, no lane): no entry against a trending 4h or 1h on
-  // any path, and with both ranging only the 15m's way with the trend declared.
+  // the same briefing. No policy (or every key off): no BG check here; never counter outside a policy is the order
+  // gate's [mtf-trend] (mtf.js trendRule), which refuses any entry against a trending 4h or 1h.
   if (SIDES.includes(side)) problems.push(...entryProblems({ briefing, side, reads: checked, rule: entryRule }));
   for (const k of ['stop', 'target']) {
     const n = checked.filter(r => r.kind === k && r.step === k).length;
