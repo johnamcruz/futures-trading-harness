@@ -1707,6 +1707,31 @@ correct passes and correct entries reported apart.
 The LoRA steps are the LoRA section's (branch `feat/lora-ready`, not merged
 yet).
 
+### The context quiz
+
+A regression for the model's reading of its own prompts: 20 questions, each an
+agreed rule (the bias, levels, setup, entry, stop, exit, size, the phase-2
+approval), asked of the head trader's prompt (with the risk manager's for the
+sizing ones) as the runner builds it, plus 5 with a Bias or Size line from the
+briefing (Part B). The questions, their keys (required and forbidden terms on
+the ANSWER line, a forbidden term counting only when it isn't negated) and the
+pass bar are `config/context-quiz.json`: every question correct on all K runs
+(K 5), none answered both ways, Part B 5 of 5.
+
+Run it after any skill, rule, agent or briefing-text change, and before a
+practice round:
+
+```bash
+node scripts/context-quiz.js run --config <your runner config.json> --out <dir outside the repo>
+node scripts/context-quiz.js compare <the base's dir> <dir>
+```
+
+It calls the model the runner config names (no tools, no project settings, no
+session kept), so it never runs in CI. CI checks it offline: every question's
+anchor (the phrase of the skills that states its rule) must be in the prompt it
+is asked against (tests/plugin/context-quiz.test.js). A changed key or question
+is explained in the pull request, as a golden is.
+
 ## 8. Rules that keep it honest
 
 - **No outcomes shown to the model.** It sees only its own record (the
