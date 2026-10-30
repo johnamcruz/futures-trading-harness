@@ -1119,6 +1119,35 @@ test('prop challenge: the balance is snapshotted every bar and recorded once at 
   assert.ok(r.closed.length && r.closed[0] <= prop.calls.eod[0], 'flat before the closing balance is read');
 });
 
+test('prop challenge: flat at end of day, a fresh snapshot and the close are recorded before the review reads the account; once', async () => {
+  // 2021-06-16: the stop filled at 15:34, after the last bar pass's snapshot; the review saw a stale attempt record.
+  const seq = [];
+  const base = fakeProp();
+  const prop = {
+    ...base,
+    async snapshot(now) { seq.push('snapshot'); return base.snapshot(now); },
+    async endOfDay(now, day) { seq.push('record'); return base.endOfDay(now, day); },
+    summaries(now, balance) { seq.push('prompt'); return base.summaries(now, balance); },
+  };
+  const r = await trailSim({ tape: {}, startFlat: true, noStop: true, ordersOver: () => [], startAt: et(15, 46) + 2000, until: et(15, 58), prop });
+  assert.deepStrictEqual(r.cycles.filter(c => c === 'eod'), ['eod']);
+  const last = seq.lastIndexOf('prompt');
+  assert.deepStrictEqual(seq.slice(last - 2, last + 1), ['snapshot', 'record', 'prompt'], seq.join(' '));
+  assert.strictEqual(base.calls.eod.length, 1, 'recorded once: not again after the review');
+});
+
+test('prop challenge: not yet flat at end of day, the close is recorded after the review\'s second flatten, as before; a paper run records none', async () => {
+  const seq = [];
+  const base = fakeProp();
+  const prop = { ...base, async endOfDay(now, day) { seq.push('record'); return base.endOfDay(now, day); }, summaries(now, balance) { seq.push('prompt'); return base.summaries(now, balance); } };
+  await trailSim({ tape: {}, startAt: et(15, 46) + 2000, until: et(15, 58), prop });
+  assert.strictEqual(base.calls.eod.length, 1);
+  assert.ok(seq.lastIndexOf('prompt') < seq.indexOf('record'), seq.join(' '));
+  const paper = fakeProp();
+  await trailSim({ tape: {}, startFlat: true, noStop: true, ordersOver: () => [], startAt: et(15, 46) + 2000, until: et(15, 58), prop: paper, cfgOver: { paper: true } });
+  assert.deepStrictEqual([paper.calls.eod.length], [0]);
+});
+
 test('end of day never deadlocks on the closing balance: a failed record is retried on its own, never by rerunning end of day', async () => {
   // Fails once (the broker), then records on the retry a minute later.
   const once = fakeProp({ eodFails: 1 });

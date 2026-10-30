@@ -208,6 +208,7 @@ function createRunner(deps) {
   let errors = 0;
   let recover = false; // the last trade cycle was stopped mid-run
   let pendingClose = null; // { day, tries, lastTry }: a closing balance still to record
+  let closeStartedFor = null; // the trading day whose closing balance end of day has started recording (once a day)
   let unflatPasses = 0; // flatten passes in a row (by one caller, unflatWhy) that found something open or working
   let unflatWhy = null;
   let unflatSince = 0; // when the current run of unflat passes began
@@ -1689,6 +1690,15 @@ function createRunner(deps) {
    * day already recorded with another balance) stops at once. Either way the
    * gate's missed-close check keeps prop entries refused until it is recorded.
    */
+  /** Start recording the closing balance of trading day `day` (once a day): its first try now, retries by recordClose. */
+  async function startClose(day, now) {
+    // The trading day being closed: a catch-up end of day runs on a later day.
+    if (pendingClose && pendingClose.day !== day) log(`end of day: the close of ${pendingClose.day} is still unrecorded; the gate refuses prop entries until it is (combine.js record-day)`, 'error');
+    closeStartedFor = day;
+    pendingClose = { day, tries: 0, lastTry: 0 };
+    await recordClose(now);
+  }
+
   async function recordClose(now) {
     if (!pendingClose || now.getTime() - pendingClose.lastTry < CLOSE_RETRY_MS) return;
     const { day } = pendingClose;
@@ -1750,7 +1760,20 @@ function createRunner(deps) {
       // End of day flattens first, directly: the agents' run (reviews, the
       // journal) can fail or run long, and nothing may be open past the close.
       // Whether the day is done is decided by the check after the run.
-      if (d.action === 'eod') await eodBackstop();
+      if (d.action === 'eod') {
+        const flatNow = await eodBackstop();
+        // The day's true balance before the review reads it (its prompt, combine_status): a fresh snapshot after the
+        // flatten (the last bar pass's can predate the day's last fill), and once verified flat the close recorded
+        // now, not after the review. Not yet flat: recorded after the review's second flatten, as before.
+        if (prop && cfg.account && !cfg.paper) {
+          try {
+            await prop.snapshot(clock.now());
+          } catch (err) {
+            log(`end of day: the balance snapshot before the review failed (${err.message})`, 'error');
+          }
+          if (flatNow && closeStartedFor !== d.state.day) await startClose(d.state.day, now);
+        }
+      }
       // Each job is built with the account as it is when that run starts.
       // Each job's prompt is dated when it starts (a second symbol's premarket runs after the first).
       // The agents' end-of-day run happens once a day: a retry (the account not yet verified flat) only flattens.
@@ -1793,12 +1816,7 @@ function createRunner(deps) {
       // A failed record never holds end of day open (the flatten is what can't
       // wait): it is retried on its own, and until it is recorded the gate
       // refuses prop entries (a missed close).
-      if (d.action === 'eod' && ok && prop && !cfg.paper) {
-        // The trading day being closed: a catch-up end of day runs on a later day.
-        if (pendingClose && pendingClose.day !== d.state.day) log(`end of day: the close of ${pendingClose.day} is still unrecorded; the gate refuses prop entries until it is (combine.js record-day)`, 'error');
-        pendingClose = { day: d.state.day, tries: 0, lastTry: 0 };
-        await recordClose(now);
-      }
+      if (d.action === 'eod' && ok && prop && !cfg.paper && closeStartedFor !== d.state.day) await startClose(d.state.day, now);
       // A failed premarket is no failed run (never toward the kill switch): it isn't done, and is tried again
       // after a growing pause (1, 2, 5, then every 10 min) until a session window opens (above). A success
       // clears what a failure left.
