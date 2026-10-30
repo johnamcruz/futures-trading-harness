@@ -68,7 +68,8 @@ function checkOrder(input, { env = process.env, pluginRoot, now = null, clock = 
   // cancel_order and partial_close_position need live account data; only the gateway checks them (account-gate.js).
   if (tool === 'cancel_order' || tool === 'partial_close_position') return { allowed: true, intent: tool === 'cancel_order' ? 'cancel' : 'risk-reducing', violations: [], message: '', now };
   if (tool === 'modify_order') {
-    const r = evaluateModify({ input: input || {}, config });
+    // A working policy entry's reprice is held to its entry rule again (order-gate.js evaluateModify): the registry.
+    const r = evaluateModify({ input: input || {}, config, strategies: loadStrategies(pluginRoot, env).strategies, now });
     const ok = r.violations.length === 0;
     return { allowed: ok, intent: r.intent, violations: r.violations, message: ok ? '' : formatBlock(r.violations), now };
   }

@@ -130,7 +130,7 @@ function resolveLoop(raw, { baseDir = process.cwd() } = {}) {
   // The probe round runs the loop's own model and runner config (its replay's autotrader, a path resolved as below).
   let trader = replay ? replay.autotrader : null;
   try { if (typeof trader === 'string') trader = readSpec(trader, baseDir, 'replay.autotrader'); } catch (_err) { trader = null; }
-  try { probe = resolveProbe(r.probe, { read: spec => readReplaySpec(spec, baseDir, 'probe.replay'), readCensus: file => require('../learning/leg-census').readCensus(path.resolve(baseDir, expandHome(String(file)))), resolvePath: p => path.resolve(baseDir, expandHome(String(p))), modelScore: r.modelScore, autotrader: trader, tuningWindows: r.tuningWindows }); } catch (err) { errors.push(err.message); }
+  try { probe = resolveProbe(r.probe, { read: spec => readReplaySpec(spec, baseDir, 'probe.replay'), readCensus: file => require('../learning/leg-census').readCensus(path.resolve(baseDir, expandHome(String(file)))), readBars: (file, minutes) => require('../learning/setup-library').baseBars(require('../backtest/data').loadBars(file), minutes), resolvePath: p => path.resolve(baseDir, expandHome(String(p))), modelScore: r.modelScore, autotrader: trader, tuningWindows: r.tuningWindows }); } catch (err) { errors.push(err.message); }
   let modelScore = null;
   try { modelScore = MV.resolveModelScore(r.modelScore); } catch (err) { errors.push(err.message); }
   if (modelScore) {

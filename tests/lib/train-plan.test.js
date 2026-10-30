@@ -81,6 +81,23 @@ test('plan: the probe and trend replays resolve as the loop\'s runs will; the tr
   assert.deepStrictEqual(probePlan({ ...loop, probe: undefined }, { root: ROOT, env: f.env }), []);
 });
 
+test('plan: the trend pool filter (align, opening) is said with the legs kept; reach end said in the windows line', () => {
+  const f = loopFolder();
+  const t0 = resolveLoop(f.raw, { baseDir: f.dir }).probe.trend;
+  // The opening print dropped and windows to the leg's end (align htf reads bars: trend-align's own tests).
+  const raw = { ...f.raw, probe: { ...f.raw.probe, trend: { ...f.raw.probe.trend, opening: 'drop', reach: 'end' } } };
+  const loop = resolveLoop(raw, { baseDir: f.dir });
+  const t = loop.probe.trend;
+  const lines = probePlan(loop, { root: ROOT, env: f.env });
+  const dropped = t0.set.legs.length - t.set.legs.length;
+  assert.strictEqual(t.set.filter.dropped.opening, dropped);
+  assert.ok(dropped > 0, 'the fixture census holds an opening-print leg');
+  assert.ok(lines.includes(`trend pool filter: kept ${t.set.legs.length} of the period's ${t0.set.legs.length} leg(s); opening print: ${dropped} dropped`), lines.join('\n'));
+  assert.ok(lines.some(l => l.startsWith('trend pool: ') && l.includes('(4 bar(s) before it through its end)')), lines.join('\n'));
+  // The defaults: no filter line (today's plan).
+  assert.ok(!probePlan(resolveLoop(f.raw, { baseDir: f.dir }), { root: ROOT, env: f.env }).some(l => l.startsWith('trend pool filter')));
+});
+
 test('plan: a curated list whose windows miss the runner\'s sessions fails at plan, naming the replay, not at the first run', () => {
   const f = loopFolder({ sessions: ['13:00-14:00@America/New_York'] });
   const loop = resolveLoop(f.raw, { baseDir: f.dir });

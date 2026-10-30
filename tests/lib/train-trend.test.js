@@ -228,7 +228,7 @@ test('probe.trend: whole-session stage-1 runs on the loop\'s trader; its days pr
   const go = (t, over = {}) => PC.resolveProbe({ ...base, trend: t }, { read: x => x, readCensus: () => set, modelScore: { account: 'a' }, autotrader: trader, tuningWindows: tuning, ...over });
   const ok = go({ replay: { stage: 1 }, census: 'c.json', from: '2021-05-03', to: '2022-09-01', regression: { days: ['2021-05-04', '2021-05-04'] } });
   const TB = require('../../scripts/lib/tunables').training().trendBatch;
-  assert.deepStrictEqual(ok.trend, { replay: { stage: 1, autotrader: trader }, set: { file: 'c.json', fingerprint: 'fp', from: '2021-05-03', to: '2022-09-01', days: ['2022-03-07', '2022-03-08'], legs: ['2022-03-07|long|a', '2022-03-08|short|b'], spans: Object.fromEntries(order.slice(0, 3).map(g => [g.id, span(g)])) }, batch: TB, regression: { days: ['2021-05-04'] } });
+  assert.deepStrictEqual(ok.trend, { replay: { stage: 1, autotrader: trader }, set: { file: 'c.json', fingerprint: 'fp', from: '2021-05-03', to: '2022-09-01', days: ['2022-03-07', '2022-03-08'], legs: ['2022-03-07|long|a', '2022-03-08|short|b'], spans: Object.fromEntries(order.slice(0, 3).map(g => [g.id, span(g)])), filter: { align: 'all', opening: 'keep', pool: 2, dropped: { align: 0, opening: 0 } } }, batch: TB, regression: { days: ['2021-05-04'] }, reach: 'catch' });
   // A regression day the census holds no leg on would never run (its runs step windows around legs): refused.
   assert.throws(() => go({ replay: { stage: 1 }, census: 's', from: '2021-05-03', to: '2022-09-01', regression: { days: ['2021-05-04', '2021-05-03'] } }), /probe.trend.regression 2021-05-03: the census holds no leg that day/);
   // The loop sets each trend run's stepped windows: a config's own is refused.

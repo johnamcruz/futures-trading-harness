@@ -235,7 +235,9 @@ test('order docs check a new order once and never wait or poll for a fill; the c
     'skills/end-of-day/SKILL.md': [/a position still\s+open after its close is closed again/, /Don't wait\s+for a close to fill/, /unless its earlier close still shows\s+as a working order in `list_open_orders`: a market order on the opposite\s+side, sized to the position \(a stop or limit is not one/,
       /cancels every working order once that\s+contract reads flat/, /runner keeps\s+closing until it reads flat \(interactively, close again and tell the user/],
     'rules/trading/risk-management.md': [/as soon as the\s+fill shows \(the order's\s+one status check, or the next cycle's read\)/, /without a stop bracket \(one the gate never checked, e\.g\. placed outside\s+the harness\) is cancelled, not waited on/,
-      /A separate `\[protect\]` stop\s+only repairs protection on an existing position[^]*?never a way to\s+enter without a bracket/],
+      /A separate `\[protect\]` stop\s+only repairs protection on an existing position[^]*?never a way to\s+enter without a bracket/,
+      // A working entry the runner placed with its bracket (attached on the fill) is never read as unbracketed.
+      /one its\s+record or prompt marks "bracket attached on fill" is bracketed: keep it\./],
     'rules/trading/execution.md': [/Every entry carries `stopLossBracket` \(and `takeProfitBracket` when it has\s+a target\), in whole ticks from the fill\. A broker that can't attach them\s+refuses the entry: never enter without them; report the broker's message\./],
   };
   for (const [rel, wants] of Object.entries(docs)) {

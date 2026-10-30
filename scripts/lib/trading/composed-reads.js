@@ -71,6 +71,13 @@
  *                                           the side's way (targetsAhead: past the running extreme the trade extends
  *                                           and the levels within roomIgnoreR of the entry by the stop read's R, at most
  *                                           roomIgnoreTicks); the plan puts it at the minimum R (planOf)  its side
+ *   target trail                            step target only: the trail (the owner's "We always use a trailing stop,
+ *                                           not a fixed target, to maximize our wins"), TRUE when the 4h and the 1h
+ *                                           both trend the side's way (h1.h4.trend, h1.h1.trend: the entry rule's
+ *                                           bias_agree check, entry-rule.js), whatever levels lie ahead: the plan's
+ *                                           target is the 2R mark (planOf, as `target 2r`), where the policy's exit
+ *                                           arms its trail; a level ahead stays the plan's first in the way (a read)
+ *                                                                                         its side
  *   target <source> <price>                 step target only: <tf> swing [high|low] (m3.swingTargets), prior 1h|4h
  *                                           high|mid|low (m3.rangeTargets: the prior completed candle; an off-tick
  *                                           mid is the price on the tick toward price; a side the candle forming
@@ -104,7 +111,9 @@
  */
 
 const { trendRuleOf } = require('./reasons');
-const { entryProblems, TREND_TF } = require('./entry-rule');
+const { entryProblems, entryRuleOf, BIAS_FRAMES, TREND_TF } = require('./entry-rule');
+// The trail target's condition: the 4h and the 1h both the side's way (the entry rule's bias_agree, one check).
+const AGREE = entryRuleOf({ bias_frames: [...BIAS_FRAMES], bias_agree: 'on', regime_against: 'off', leg_turned: 'off' });
 
 const STEPS = ['bias', 'location', 'setup', 'entry', 'stop', 'target'];
 // The flow's steps as the hints, the trend-capture report and the learning loop name them: the six compose steps, then
@@ -241,6 +250,8 @@ function parseRead(text) {
   if (fired) return out('fired', { name: fired[1], value: fired[2] });
   // The 2R mark: no named level on the winning side, the target is the strategy's minimum R from the entry.
   if (form === 'target 2r') return out('target', { source: '2r', price: null, mark: true }, ['2r']);
+  // The trail: aligned (the 4h and 1h the side's way), the target is the 2R mark, where the exit arms the trail.
+  if (form === 'target trail') return out('target', { source: 'trail', price: null, mark: true, trail: true }, ['trail']);
   if ((a === 'stop' || a === 'target') && w.length >= 3 && isNum(w[w.length - 1])) {
     const source = w.slice(1, -1);
     if (source.some(isNum) && !(source.length >= 3 && source.slice(0, -1).every(x => !isNum(x)))) return unknown;
@@ -730,6 +741,12 @@ function checkRead(p, b, { tick = 0.25, side = null, riskPts = null } = {}) {
         // TRUE only when the briefing names no target the side's way at all: a named level ahead is the target (the first
         // at the minimum R or more), and one short of it in the way is no room, never the mark.
         if (!SIDES.includes(side)) return res('unchecked', 'the 2R mark is the side\'s: no side given', { field: 'm3 targets' });
+        if (p.trail) {
+          const why = entryProblems({ briefing: b, side, reads: [], rule: AGREE });
+          const way = side === 'long' ? 'up' : 'down';
+          if (why.length) return res(/not in the briefing/.test(why[0]) ? 'unchecked' : false, `the trail target needs the 4h and the 1h both ${way}: ${why[0].replace(/^entry rule: /, '')}`, { field: 'h1 trends' });
+          return res(true, `the 4h and the 1h both ${way}: the target is the trail (the 2R mark from the plan's entry arms it; past it the runner trails), whatever level lies ahead`, { field: 'h1 trends', value: 'trail', price: null, dir: side, mark: true });
+        }
         const ahead = targetsAhead(b, side, { tick, riskPts });
         if (ahead.length) return res(false, `the briefing names ${ahead[0].read.replace(/^target /, '')} ${side === 'long' ? 'above' : 'below'} price ${ref}: the target is the first named level at the minimum R or more; the 2R mark only with none named`, { field: 'm3 targets', value: ahead[0].price });
         return res(true, `no named level ${side === 'long' ? 'above' : 'below'} price ${ref}: the target is the 2R mark (the plan's entry plus the minimum R times its stop)`, { field: 'm3 targets', value: '2r', price: null, dir: side, mark: true });
@@ -869,6 +886,15 @@ function checkReads({ reads, side, briefing, skills = null, tick = 0.25, entryRu
     for (const s of ['setup', 'entry']) {
       if (missingSteps.includes(s)) continue;
       if (!pointing(s).length) problems.push(`the ${s} has no read pointing ${side === 'long' ? 'up (long)' : 'down (short)'}: state the reaction${s === 'entry' ? '\'s confirmation' : ''} the trade's way`);
+    }
+    // The owner's chain (2026-10-29, "Yes enforce 15min setup"): the 4h and 1h set the side, the 15m (or higher) holds
+    // the setup the side's way, the 3m only times the entry. Under a policy whose entry rule holds the HTF agreement
+    // (bias_agree), a setup pointing the side must be on the 15m or higher (its form's first word). Stated exemption: a
+    // cited setup's `fired` read (momentum_continuation: its setup is the prevailing HTF trend plus its momentum
+    // candle). The 15m trend itself may run against the side (a 15m pullback): only the setup read's frame is held.
+    const setups = pointing('setup');
+    if (entryRule && entryRule.biasAgree && setups.length && !setups.some(r => r.kind === 'fired' || (TF_MIN[String(r.form || '').split(' ')[0]] || 0) >= TF_MIN['15m'])) {
+      problems.push(`entry rule: the setup must be on the 15m or higher (a 3m read only times the entry): state the 15m, 1h or 4h reaction or break the ${side}'s way, or pass`);
     }
     // Reaction, then confirmation: when the setup's pointing reads name a candle (SETUP_CANDLE: a relation or pattern
     // read's, a CISD read's confirming one), an entry read pointing the side must be on a candle that closed after the

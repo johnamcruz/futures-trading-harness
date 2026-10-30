@@ -8,7 +8,9 @@
  *
  *   leg window      the decision bars from leadBars (config/training.json trendWindows) bars before the leg's start bar
  *                   through its catch window (its first catchShare, config/replay.json trendCapture: the span a catch
- *                   counts in, trend-capture.js), clipped to the runner's sessions; legs whose windows touch merge into one
+ *                   counts in, trend-capture.js), or with reach 'end' (trendWindows.reach, a loop's probe.trend.reach)
+ *                   through the leg's end bar, so a pullback entry and the ride are stepped and scored; clipped to the
+ *                   runner's sessions; legs whose windows touch merge into one
  *   control window  per leg, controlPerLeg windows of the same length from the same session, in the runner's sessions,
  *                   sharing no bar with any census leg that day (the batch's or not: its lead-in to its end) or another window; chosen by
  *                   a seeded hash (the loop's seed), so the screen still sees entries where there is no leg to catch
@@ -22,7 +24,7 @@
  * Windows are bar-close bounds in ms: a bar whose close c has from < c <= to is in the window (curatedPoints' rule).
  *
  *   dayCloses(cfg, day)                         [ms]: the base-timeframe bar closes of the day's trade decision times
- *   windowsFor({ day, legs, others, closes, minutes, seed, leadBars, controlPerLeg, catchShare })
+ *   windowsFor({ day, legs, others, closes, minutes, seed, leadBars, controlPerLeg, catchShare, reach })
  *                                               { windows: [{ id, day, kind: 'leg' | 'control', legs, from, to }], dropped }
  *   windowStates({ days, windows, minutes })    [{ unit, day, kind, complete, why, ran, skipped, legSkipped }]: each window stepped to its end or not
  *   skippedShare(states)                        { skipped, bars, share, legWindows }: one side's skipped bars (latency) over its windows
@@ -58,11 +60,17 @@ function dayCloses(cfg, day) {
   return [...new Set(out)].sort((a, b) => a - b);
 }
 
-/** A leg's window before clipping: leadBars bars before its start bar through its catch window (whole bars). */
-function legSpan(g, { step, leadBars, catchShare }) {
+const REACH = Object.freeze(['catch', 'end']);
+
+/**
+ * A leg's window before clipping: leadBars bars before its start bar through its catch window (reach 'catch', whole
+ * bars) or through its end bar's close (reach 'end').
+ */
+function legSpan(g, { step, leadBars, catchShare, reach = 'catch' }) {
+  if (!REACH.includes(reach)) throw new Error(`legSpan: reach ${REACH.join(' or ')}, not ${JSON.stringify(reach)}`);
   const t0 = Date.parse(g.start);
   const endClose = Date.parse(g.end) + step;
-  const until = t0 + (endClose - t0) * catchShare;
+  const until = reach === 'end' ? endClose : t0 + (endClose - t0) * catchShare;
   const to = t0 + step * Math.max(1, Math.floor((until - t0) / step));
   return { from: t0 - leadBars * step, to };
 }
@@ -72,7 +80,7 @@ function legExtent(g, { step, leadBars }) {
   return { from: Date.parse(g.start) - leadBars * step, to: Date.parse(g.end) + step };
 }
 
-function windowsFor({ day, legs = [], others = [], closes = [], minutes, seed, leadBars, controlPerLeg, catchShare }) {
+function windowsFor({ day, legs = [], others = [], closes = [], minutes, seed, leadBars, controlPerLeg, catchShare, reach = 'catch' }) {
   const step = minutes * 60000;
   const set = new Set(closes);
   const inside = w => closes.filter(c => c > w.from && c <= w.to);
@@ -80,7 +88,7 @@ function windowsFor({ day, legs = [], others = [], closes = [], minutes, seed, l
   // Each batch leg's window, clipped to the runner's sessions (its first and last decision close inside it).
   const own = [];
   for (const g of [...legs].sort((a, b) => (a.id < b.id ? -1 : 1))) {
-    const w = legSpan(g, { step, leadBars, catchShare });
+    const w = legSpan(g, { step, leadBars, catchShare, reach });
     const cs = inside(w);
     if (!cs.length) { dropped.push({ id: g.id, why: 'no decision time of the runner\'s sessions (outside them, or an exchange holiday)' }); continue; }
     own.push({ leg: g.id, from: cs[0] - step, to: cs[cs.length - 1] });
@@ -206,4 +214,4 @@ function unitR({ days = {}, windows = [] } = {}) {
 
 const asConfig = windows => ({ kind: 'trend-set', windows: windows.map(w => ({ from: iso(w.from), to: iso(w.to) })) });
 
-module.exports = { dayCloses, legSpan, legExtent, windowsFor, windowStates, skippedShare, unitOfRecord, unitOfBar, unitR, asConfig };
+module.exports = { REACH, dayCloses, legSpan, legExtent, windowsFor, windowStates, skippedShare, unitOfRecord, unitOfBar, unitR, asConfig };

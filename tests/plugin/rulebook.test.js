@@ -304,16 +304,21 @@ const ENFORCED = {
     assert.ok(r.violations.some(v => v.check === 'blackout'), JSON.stringify(r.violations));
   },
   entry_rule: () => {
-    // The rulebook's entry rule reaches the reads checker (compose_check and the gate's re-check): with a key on, an entry
-    // the briefing shows against it is refused; with every key off (as shipped), nothing more is checked.
+    // The rulebook's entry rule reaches the reads checker (compose_check and the gate's re-check): as shipped (the 4h
+    // and the 1h must agree), a long with the 1h ranging under a 4h uptrend is refused and one with both up is not;
+    // with bias_agree off the 4h alone sets the side, and with every key off nothing more is checked.
     const { entryRuleOf } = require('../../scripts/lib/trading/entry-rule');
     const { checkReads } = require('../../scripts/lib/trading/composed-reads');
     const root = rootCopy();
-    const briefing = { minutes: 3, sections: { m3: { data: { price: 21500, regime: { primary: 'trend-down' } } } } };
-    const problems = () => checkReads({ reads: [], side: 'long', briefing, entryRule: entryRuleOf(policy(root).entry) }).problems.filter(x => /^entry rule/.test(x));
-    assert.deepStrictEqual(problems(), [], 'off: no entry-rule problem');
+    const briefing = (t1h, regime = 'trend-up') => ({ minutes: 3, sections: { m3: { data: { price: 21500, regime: { primary: regime } } }, h1: { data: { h4: { trend: 'up' }, h1: { trend: t1h } } } } });
+    const problems = b => checkReads({ reads: [], side: 'long', briefing: b, entryRule: entryRuleOf(policy(root).entry) }).problems.filter(x => /^entry rule/.test(x));
+    assert.match(problems(briefing('range')).join(), /4h and 1h must each trend up for a long .*no agreement, no trade/, policy(root).errors.join());
+    assert.deepStrictEqual(problems(briefing('up')), [], 'both up: no entry-rule problem');
+    edit(root, t => t.replace(/^( {6}bias_agree: )on/m, '$1off'));
+    assert.deepStrictEqual(problems(briefing('range')), [], 'bias_agree off: the 4h sets the side');
+    edit(root, t => t.replace(/^( {6}bias_frames: )\[4h, 1h\]/m, '$1off'));
     edit(root, t => t.replace(/^( {6}regime_against: )off/m, '$1on'));
-    assert.match(problems().join(), /regime is trend-down, against the long/, policy(root).errors.join());
+    assert.match(problems(briefing('range', 'trend-down')).join(), /regime is trend-down, against the long/, policy(root).errors.join());
   },
   trend_rule: () => {
     const { evaluateOrder } = require('../../scripts/lib/trading/order-gate');
@@ -325,6 +330,25 @@ const ENFORCED = {
     assert.ok(r.violations.some(v => /prevailing/.test(v.message)), JSON.stringify(r.violations));
   },
 };
+
+test('the owner\'s top-down rule is shipped and held: every policy\'s entry has bias_frames [4h, 1h] and bias_agree on', () => {
+  // "Don't counter trade against the prevailing trend"; "No trade if there is no agreement between the two" (2026-10-29).
+  const { entryRuleOf } = require('../../scripts/lib/trading/entry-rule');
+  assert.ok(POLICIES.length >= 1);
+  for (const { file, book } of BOOKS) for (const [name, p] of Object.entries(book.policies || {})) {
+    assert.deepStrictEqual(p.entry.bias_frames, ['4h', '1h'], `${file} policies.${name}.entry.bias_frames`);
+    assert.strictEqual(p.entry.bias_agree, 'on', `${file} policies.${name}.entry.bias_agree`);
+  }
+  for (const s of POLICIES) assert.deepStrictEqual({ ...entryRuleOf(s.entry) }, { biasFrames: ['4h', '1h'], biasAgree: true, regimeAgainst: s.entry.regime_against === 'on', legTurned: s.entry.leg_turned === 'on' }, s.name);
+  // A loosened copy fails this test: each way of loosening it is seen.
+  const shipped = read(BOOKS[0].file);
+  const loosened = [['bias_agree: on', 'bias_agree: off'], ['bias_frames: [4h, 1h]', 'bias_frames: off'], ['bias_frames: [4h, 1h]', 'bias_frames: [4h]'], ['bias_frames: [4h, 1h]', 'bias_frames: [1h]']];
+  for (const [a, b] of loosened) {
+    assert.ok(shipped.includes(a), a);
+    const e = parseFrontmatter(shipped.replace(a, b)).data.policies.prop_portfolio.entry;
+    assert.ok(!(JSON.stringify(e.bias_frames) === JSON.stringify(['4h', '1h']) && e.bias_agree === 'on'), b);
+  }
+});
 
 test('R4: each rulebook classifies every item, and every enforced item is really held by code (its probe)', () => {
   for (const { file, enforced, taught } of CLASSES) {

@@ -272,7 +272,7 @@ async function probeRound(ctx, { n, champion, api }) {
     const W = require('../tunables').training().trendWindows;
     return TW.windowsFor({
       day, legs: mine.map(spanOf), others: all.filter(id => !mine.includes(id)).map(spanOf), closes: TW.dayCloses(traderCfg, day), minutes: traderCfg.timeframe, seed,
-      leadBars: W.leadBars, controlPerLeg: W.controlPerLeg, catchShare: require('../tunables').replay().trendCapture.catchShare,
+      leadBars: W.leadBars, controlPerLeg: W.controlPerLeg, catchShare: require('../tunables').replay().trendCapture.catchShare, reach: trend.reach || W.reach,
     });
   };
   // One side's runs of a trend half's days (or the regression days), one run a day stepping that day's windows, each

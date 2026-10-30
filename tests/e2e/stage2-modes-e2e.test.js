@@ -27,7 +27,7 @@ const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
 const { spawnSync } = require('child_process');
-const { tmpDir } = require('../helpers');
+const { tmpDir, treeCopy } = require('../helpers');
 const D = require('../fixtures/decision-path');
 const PF = require('../fixtures/preflight');
 const { readRun } = require('../../scripts/lib/replay/store');
@@ -141,6 +141,16 @@ test('stage 2, combine: two attempts from zero; a model entry fills, the first a
   const big = ACCOUNT.profit_target + 200;
   const blowAt = '2022-04-21T16:40:00Z';
   const w = world({ scriptedFills: [{ at: blowAt, pnl: -(ACCOUNT.max_loss + 1000) }, { at: '2022-04-28T13:34:00Z', pnl: big }, { at: '2022-04-29T13:34:00Z', pnl: big }] });
+  // The parity week's 1h and 4h both range: the shipped entry rule (bias_frames [4h, 1h], bias_agree on) refuses every
+  // entry there (tests/e2e/entry-rule-e2e.test.js). This test is of the combine, so its CLIs run from a copy of the tree
+  // whose rulebook differs only in the entry rule's bias keys off (treeCopy).
+  const tree = treeCopy(w.home, root => {
+    const f = path.join(root, 'accounts', ACCOUNT.name, 'RULEBOOK.md');
+    fs.writeFileSync(f, fs.readFileSync(f, 'utf8').replace(/^( {6}bias_frames: )\[4h, 1h\]/m, '$1off').replace(/^( {6}bias_agree: )on/m, '$1off'));
+  });
+  const run = name => path.join(tree, 'scripts', name);
+  // The model stand-in from the copy too (its harness tools read the copy's rulebook).
+  fs.writeFileSync(path.join(w.home, 'bin', 'opencode'), `#!/bin/sh\nexec "${process.execPath}" "${path.join(tree, path.relative(ROOT, STANDIN))}" "$@"\n`, { mode: 0o755 });
   const moments = scanMoments(w);
   const entry = moments.find(m => m.bar === '2022-04-21T16:21:00.000Z');
   assert.ok(entry, moments.map(m => m.bar).join(', '));
@@ -159,12 +169,12 @@ test('stage 2, combine: two attempts from zero; a model entry fills, the first a
     start: '2022-04-21T13:30:00Z', end: '2022-04-30T00:00:00Z',
     combine: { account: ACCOUNT.name, attempts: ['2022-04-21', '2022-04-28'], maxSessions: 2 },
   });
-  const pre = sh(script('training-preflight.js'), ['--config', config, '--bars', `MNQ=${w.bars1m}`], w.env);
+  const pre = sh(run('training-preflight.js'), ['--config', config, '--bars', `MNQ=${w.bars1m}`], w.env);
   assert.strictEqual(pre.code, 0, pre.out);
   assert.match(pre.out, new RegExp(`PASS combine: continuous combine on ${ACCOUNT.name}, up to 2 session\\(s\\) an attempt, each from zero: 1 2022-04-21..2022-04-22, 2 2022-04-28..2022-04-29`));
   assert.match(pre.out, /PASS stage: stage 2 on practice-train: continuous combine/);
   assert.match(pre.out, /PASS practice-mode: continuous combine/);
-  const r = sh(script('replay.js'), ['run', '--config', config, '--bars', `MNQ=${w.bars1m}`], w.env);
+  const r = sh(run('replay.js'), ['run', '--config', config, '--bars', `MNQ=${w.bars1m}`], w.env);
  
   assert.strictEqual(r.code, 0, r.out);
   assert.match(r.out, /new run combine-e2e .*learning: practice-train/);
@@ -240,7 +250,7 @@ test('stage 2, combine: two attempts from zero; a model entry fills, the first a
   // The Monte Carlo reads the finished run as a real (full-day) score: it refuses only the scripted fills, which no
   // order of the model placed (a real score never leaves an entry out).
   assert.match(r.out, /Prop Monte Carlo: not scored \(3 entries without a settled outcome \(MNQ 2022-04-21T16:40:00\.000Z: a fill no record placed;.*a real score never leaves one out\)/);
-  const report = sh(script('replay.js'), ['report', path.join(runHomeOf(w, 'combine-e2e'), 'replay', 'combine-e2e')], w.env);
+  const report = sh(run('replay.js'), ['report', path.join(runHomeOf(w, 'combine-e2e'), 'replay', 'combine-e2e')], w.env);
   assert.strictEqual(report.code, 0, report.out);
   assert.match(report.out, /continuous combine: 2 attempt\(s\)/);
   assertClean(w, 'combine-e2e', r.out, { refused: [refusedBar] });

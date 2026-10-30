@@ -86,7 +86,7 @@
 const fs = require('fs');
 const path = require('path');
 const { snapshot, levelsAsOf, priorDayCandle } = require('./market-snapshot');
-const { mtfRead, candles } = require('./mtf');
+const { mtfRead, candles, label: tfLabel, RULE_FRAMES } = require('./mtf');
 const { normalizeBars, atr: atrOf, sessionKey } = require('./indicators');
 const { tradingDayStart, minutesOfDay, entryClock, inMarketHours } = require('./clock');
 const { DEFAULT_ENTRY_HOURS, DEFAULT_NO_ENTRY_WINDOWS } = require('./config');
@@ -94,7 +94,8 @@ const { familyRoot, tickOf, levelOnTick } = require('./contracts');
 const { candidateTrendRule } = require('./signal-state');
 const { sideTarget } = require('./order-plan');
 const { roundStepFor, roundStepError } = require('./round-numbers');
-const { pivots, lastBreaks, sweeps, untestedSwings, swingLevels } = require('./structure-events');
+const { pivots, lastBreaks, breaksOf, sweeps, untestedSwings, swingLevels } = require('./structure-events');
+const { timingOf, timingLine } = require('./ltf-timing');
 const { sideValuesText, causalLevels } = require('./rules');
 const { cisdFacts } = require('./cisd');
 const { briefingCandles, briefingTargets, holdingSwingsAt, briefingRangeTargets } = require('./candle-facts');
@@ -598,6 +599,32 @@ function newsState(blackouts, at) {
 }
 
 /**
+ * The multi-timeframe read as of the last `m`-minute candle close at or before `closedAt` (the h1 and m15 sections'
+ * rule: their read stays what a fresh read at that close gives for its whole life); fewer than 3 bars by then: `read`
+ * (the bar's own read; none given: computed).
+ */
+function readAsOfClose(bars, minutes, closedAt, m, read = null) {
+  const boundary = nextClose(new Date(closedAt.getTime() - m * 60000), m).getTime();
+  const upTo = bars.filter(b => Date.parse(b.t) + minutes * 60000 <= boundary);
+  return upTo.length >= 3 ? mtfRead(upTo) : read || mtfRead(bars);
+}
+
+/**
+ * The briefing's 4h and 1h trends for these closed bars, exactly as buildBriefing's h1 section reads them (the read as
+ * of the last 1h close: readAsOfClose(60), its 60 and 240 frames): { '4h', '1h' }, each 'up' | 'down' | 'range' | null.
+ */
+function htfTrendsOf(raw, minutes) {
+  const bars = normalizeBars(raw);
+  if (!bars.length) return { '4h': null, '1h': null };
+  // The trend rule's frames, highest first (config/analysis.json mtf.ruleFrames: the 4h, then the 1h).
+  const [h4, h1] = RULE_FRAMES;
+  const closedAt = new Date(Date.parse(bars[bars.length - 1].t) + minutes * 60000);
+  const readH1 = readAsOfClose(bars, minutes, closedAt, h1);
+  const t = f => (f && ['up', 'down', 'range'].includes(f.trend) ? f.trend : null);
+  return { '4h': t(frameOf(readH1, h4)), '1h': t(frameOf(readH1, h1)) };
+}
+
+/**
  * The briefing for `symbol`'s closed bars on `minutes`-minute bars: each section from `prev` while it is
  * valid (same symbol and bar size, not expired), else recomputed with a new version.
  */
@@ -614,11 +641,7 @@ function buildBriefing({ symbol, contractId = null, bars: raw, minutes, fineBars
   // The m15 and h1 reads as of their own last candle close: the read's window slides with each bar, so a section
   // read at its close stays what a fresh read at that close gives for its whole life (the trend rule in m3 is the
   // read of this bar, as the gate's).
-  const asOfClose = m => {
-    const boundary = nextClose(new Date(closedAt.getTime() - m * 60000), m).getTime();
-    const upTo = bars.filter(b => Date.parse(b.t) + minutes * 60000 <= boundary);
-    return upTo.length >= 3 ? mtfRead(upTo) : read;
-  };
+  const asOfClose = m => readAsOfClose(bars, minutes, closedAt, m, read);
   const read15 = asOfClose(15);
   const readH1 = asOfClose(60);
   // The 15m and 1h candles, completed only (the one forming isn't in them).
@@ -634,6 +657,14 @@ function buildBriefing({ symbol, contractId = null, bars: raw, minutes, fineBars
   const fine = Array.isArray(fineBars) && fineBars.length ? normalizeBars(fineBars) : null;
   const fresh = computeSections({ bars, fine, c15, c60, snap, snap15, read, read15, readH1, scan, scanError, minutes, closedAt, blackouts, clock, tick, grid,
     roundStep: roundStepFor(root, roundSteps), roundError: roundStepError(root, roundSteps), own, keyLevels });
+  // The base timeframe's timing against the side the 4h and 1h agree on (ltf-timing.js), from these closed bars: the
+  // runner's briefing only (a frame's is another timeframe's read).
+  if (!own) {
+    const m3 = fresh.m3.data;
+    const h = fresh.h1.data || {};
+    const comp = m3.compression && typeof m3.compression[tfLabel(minutes)] === 'object' ? m3.compression[tfLabel(minutes)] : null;
+    m3.timing = timingOf({ trends: { '4h': (h.h4 || {}).trend, '1h': (h.h1 || {}).trend }, regime: (m3.regime || {}).primary, bars, minutes, breaks: breaksOf(bars), compression: comp });
+  }
   // Same symbol, bar size and contract (a roll to the next month is new prices, never the old month's levels).
   const usable = prev && prev.symbol === symbol && prev.minutes === minutes && (prev.contractId || null) === contractId && Date.parse(prev.closedAt) < closedAt.getTime();
   const sections = {};
@@ -772,6 +803,9 @@ function summaryLines(b, et) {
   // Whether the trend has declared itself each side's way, in RTH only (trend-declared.js declaredLine).
   const declared = declaredLine(m3.declared, tf);
   if (declared) out.push(declared);
+  // The base timeframe's timing against the HTF side, when the 4h and 1h agree (ltf-timing.js timingLine).
+  const timing = timingLine(m3.timing, et, tf);
+  if (timing) out.push(timing);
   // The setup moment (learning/setup-moments.js): the reactions the model composes on, said as facts.
   // And the briefing's own setups on an allowed side (setupChecks: a compression break, a live CISD) on the same line;
   // the standard plan below stays the setup moment's.
@@ -838,7 +872,7 @@ const targets = list => list.reduce((out, x) => {
 }, []).map(target).join(', ');
 
 // The m3 fields the summary says in full (one line each), left out of the detail whole.
-const SUMMARY_FIELDS = ['swingTargets', 'rangeTargets', 'fvgs', 'structure5m', 'compression', 'declared'];
+const SUMMARY_FIELDS = ['swingTargets', 'rangeTargets', 'fvgs', 'structure5m', 'compression', 'declared', 'timing'];
 // What the summary's "This bar's close" line says in full, left out of the detail (only present when it happened).
 const SUMMARY_ONLY = { vwap: ['crossed'], today: ['openingRangeCrossed'], location: ['closesBeyondValue', 'backInsideValue'] };
 
@@ -1020,6 +1054,7 @@ function buildFrameBriefing({ symbol, contractId = null, bars, minutes, first, l
   delete data.swingTargets;
   delete data.rangeTargets;
   delete data.compression;
+  delete data.timing;
   if (!lane) {
     delete data.candidates;
     delete data.scanError;
@@ -1103,7 +1138,7 @@ function removeFrameBriefing(home, root, minutes) {
   try { fs.unlinkSync(frameBriefingFile(home, root, minutes)); } catch (_err) { /* none */ }
 }
 
-module.exports = {
+module.exports = { htfTrendsOf,
   SECTIONS, WINDOWS, nextClose, nextRthRoll, sessionWindow, newsState, buildBriefing, candidate, current, renderBriefing, briefingFile, writeBriefing, readBriefing, removeBriefing,
   roundNumbers, sharedParts, buildFrameBriefing, frameHolds, frameUntil, wholeBars, renderFrameBriefing, frameBriefingFile, writeFrameBriefing, readFrameBriefing, removeFrameBriefing,
   gapText,

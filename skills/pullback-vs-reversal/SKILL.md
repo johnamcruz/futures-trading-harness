@@ -29,10 +29,11 @@ stacking up the timeframes (3m, then 15m, then 1h) are a reversal
 developing. A 15m or 1h CHoCH against the trend weighs most: then the
 read is a reversal attempt. The pullback ends when its own minor
 structure breaks back: `m3.lastBreak.last` turns the trend's way (the
-shift or reclaim of `htf-to-ltf`; leg turned: `3m choch up`, `3m bos up`, `3m compression break up`):
+shift or reclaim of `htf-to-ltf`):
 a lower-timeframe CHoCH
 back the HTF way at a level times the entry; the setup there: `rejection`,
-`breakout`, `fair-value-gaps`. A CISD (`cisd`) is an earlier
+`breakout`, `fair-value-gaps`. The first (`m3.timing`) is the best
+entry; before it, a false start. A CISD (`cisd`) is an earlier
 sign than the CHoCH; depth in fib terms: `fib-retracement`.
 **Premium and discount** (`fib-retracement`): within a trend, pullbacks into discount
 (premium for shorts) are where continuation setups sit.
