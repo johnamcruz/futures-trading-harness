@@ -43,6 +43,22 @@ test('Bias: both ranging, the 15m and the declared trend set it; without the dec
   assert.strictEqual(biasLine(noFacts), 'Bias: no side yet (15m up, declared long: unknown)');
 });
 
+test('the line\'s rule is the rulebook\'s prop_portfolio entry (every key but the lane check); a changed rulebook fails it', () => {
+  const strip = ({ entryLane, ...r }) => r; // eslint-disable-line no-unused-vars
+  assert.deepStrictEqual(strip(RULE), strip(SHIPPED));
+  const entry = loadStrategies(ROOT, {}).strategies.find(s => s.name === 'prop_portfolio').entry;
+  for (const changed of [{ bias_agree: 'on' }, { bias_frames: ['4h'] }, { regime_against: 'on' }, { leg_turned: 'on' }, { chain: '1h' }]) {
+    assert.notDeepStrictEqual(strip(RULE), strip(entryRuleOf({ ...entry, ...changed })), JSON.stringify(changed));
+  }
+});
+
+test('Bias: off the chain\'s entry frame (the 3m) the gate refuses every prop entry: no side is said', () => {
+  const b = bar(-1, -1, -1);
+  b.minutes = 1;
+  assert.strictEqual(biasLine(b), 'Bias: no prop entry on this lane (the chain enters on the 3m)');
+  for (const side of ['long', 'short']) assert.strictEqual(shippedAllows(SHIPPED, b, side).allowed, false, side);
+});
+
 test('Bias: no line on a briefing without the 1h part (a frame\'s own)', () => {
   const b = bar(1, 1, 1);
   delete b.sections.h1;

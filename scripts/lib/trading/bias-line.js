@@ -6,14 +6,17 @@
  * rule's own check (entry-rule.js entryProblems, the function compose_check and the order gate's re-check run), so the
  * line and the gate can't disagree. Pure: no files, no clock.
  *
- *   RULE                 the shipped rule as the line reads it (the trail target's: composed-reads.js TRAIL_RULE)
+ *   RULE                 the shipped rule as the line reads it (the trail target's: composed-reads.js TRAIL_RULE; a test
+ *                        pins it to the rulebook's prop_portfolio entry)
  *   biasSides(b)         { long, short }: true when the rule allows that side on this briefing
  *   biasLine(b)          "Bias: short only (4h down, 1h down; long refused)", "Bias: neutral → 15m down + declared short
  *                        → short only", "Bias: no side (4h up, 1h down) → no entry", "Bias: no side yet (15m down,
- *                        declared short: no)", or null when the briefing holds no 1h part (a frame's own briefing)
+ *                        declared short: no)"; "Bias: no prop entry on this lane" off the chain's entry frame; null when
+ *                        the briefing holds no 1h part (a frame's own briefing)
  */
 
 const { entryRuleOf, entryProblems, trendOf, declaredOf, BIAS_FRAMES, NEUTRAL } = require('./entry-rule');
+const { label } = require('./mtf');
 
 const RULE = entryRuleOf({ bias_frames: [...BIAS_FRAMES], bias_agree: NEUTRAL, regime_against: 'off', leg_turned: 'off' });
 const SIDES = ['long', 'short'];
@@ -28,6 +31,8 @@ function biasSides(b) {
 
 function biasLine(b) {
   if (!isObj(b) || !isObj(b.sections) || !b.sections.h1) return null;
+  // Off the chain's entry frame (the 3m) the gate refuses every prop entry (the lane check): no side to say.
+  if (!(Number.isInteger(b.minutes) && label(b.minutes) === RULE.chain.entry)) return `Bias: no prop entry on this lane (the chain enters on the ${RULE.chain.entry})`;
   const trends = RULE.biasFrames.map(tf => [tf, trendOf(b, tf)]);
   const frames = trends.map(([tf, t]) => `${tf} ${t || 'unknown'}`).join(', ');
   const unknown = trends.filter(([, t]) => t === null).map(([tf]) => tf);
