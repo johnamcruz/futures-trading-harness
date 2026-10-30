@@ -16,6 +16,7 @@ const { loadAccounts } = require('../../scripts/lib/trading/accounts');
 const { loadStrategies } = require('../../scripts/lib/trading/strategies');
 const { parseFrontmatter } = require('../../scripts/lib/frontmatter');
 const { tmpDir } = require('../helpers');
+const { entryLooser } = require('../../scripts/lib/train/rulebook-guard');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const ACCOUNTS = fs.readdirSync(path.join(ROOT, 'accounts')).filter(d => fs.existsSync(path.join(ROOT, 'accounts', d, RB.FILE)));
@@ -91,6 +92,7 @@ function judge(root, account, shipped) {
   const a = loadAccounts(root, {}).accounts.find(x => x.name === account);
   if (!a || !a.valid) return { verdict: 'refused', why: a ? a.errors : ['not found'] };
   const looser = [];
+  const pinned = [];
   let stricter = a.daily_loss_soft !== shipped.account.daily_loss_soft;
   if (none(a.daily_loss_soft) > none(shipped.account.daily_loss_soft)) looser.push(`daily_loss_soft ${a.daily_loss_soft}`);
   // The loss streak stop: more losses in a row before the session stops (or off) is looser.
@@ -108,13 +110,20 @@ function judge(root, account, shipped) {
     }
     if (JSON.stringify(p.exit) !== JSON.stringify(old.exit)) looser.push(`${p.name}.exit ${JSON.stringify(p.exit)} (a changed trail is never "stricter")`);
     if (JSON.stringify(p.multipliers) !== JSON.stringify(old.multipliers)) stricter = true;
+    // The entry rule: a dropped bias frame or bias_agree turned off loads valid but looser; the shipped-entry pin
+    // (tests/plugin/rulebook.test.js) refuses shipping it and the rulebook guard a proposal, so it is reported apart.
+    const el = entryLooser(`${p.name}.entry`, old.entry, p.entry);
+    if (el.length) pinned.push(...el);
+    else if (JSON.stringify(p.entry) !== JSON.stringify(old.entry)) stricter = true;
   }
   if (looser.length) return { verdict: 'looser', why: looser };
+  if (pinned.length) return { verdict: 'pinned', why: pinned };
   return { verdict: refused ? 'refused' : stricter ? 'stricter' : 'identical' };
 }
 
 test('fuzz: every key of every shipped rulebook removed, emptied, negative, text, 0, or beside an unknown key - refused or stricter, never looser', t => {
-  const counts = { tried: 0, refused: 0, stricter: 0, identical: 0 };
+  const counts = { tried: 0, refused: 0, stricter: 0, identical: 0, pinned: 0 };
+  const pinnedLabels = [];
   const bad = [];
   for (const account of ACCOUNTS) {
     const root = tmpDir();
@@ -137,6 +146,7 @@ test('fuzz: every key of every shipped rulebook removed, emptied, negative, text
       counts.tried += 1;
       if (r.verdict === 'looser') bad.push(`${account}: ${label}: loads looser (${r.why.join(', ')})`);
       else counts[r.verdict] += 1;
+      if (r.verdict === 'pinned') pinnedLabels.push(label);
       if (r.verdict === 'identical') bad.push(`${account}: ${label}: loads as shipped, so the change went unseen`);
     }
     fs.writeFileSync(file, text);
@@ -144,7 +154,9 @@ test('fuzz: every key of every shipped rulebook removed, emptied, negative, text
   t.diagnostic(`rulebook fuzz: ${JSON.stringify(counts)}`);
   assert.deepStrictEqual(bad, []);
   assert.ok(counts.tried > 300, JSON.stringify(counts));
-  assert.strictEqual(counts.tried, counts.refused + counts.stricter, JSON.stringify(counts));
+  assert.strictEqual(counts.tried, counts.refused + counts.stricter + counts.pinned, JSON.stringify(counts));
+  // Only a bias frame dropped loads looser and valid: each one the shipped-entry pin and the guard refuse.
+  for (const l of pinnedLabels) assert.match(l, /\.entry\.bias_frames\.\d+ removed$/, l);
 });
 
 test('fuzz: the writer and the judge catch what they claim (a looser load is reported)', () => {
@@ -170,6 +182,8 @@ test('fuzz: the writer and the judge catch what they claim (a looser load is rep
   assert.strictEqual(judge(root, policy.account, shipped).verdict, 'looser');
   write(edit(data, ['policies', policy.name, 'exit', 'mode'], (o, k) => { o[k] = 'trail'; }));
   assert.strictEqual(judge(root, policy.account, shipped).verdict, 'refused', 'mode trail without a trail in R');
+  write(edit(data, ['policies', policy.name, 'entry', 'bias_agree'], (o, k) => { o[k] = 'off'; }));
+  assert.strictEqual(judge(root, policy.account, shipped).verdict, 'pinned', 'bias_agree off: looser, held by the pin');
   write(edit(data, ['policies', policy.name, 'sizing', 'cushion_frac'], (o, k) => { o[k] = 0.01; }));
   assert.strictEqual(judge(root, policy.account, shipped).verdict, 'stricter');
   write(edit(data, ['policies', policy.name, 'sizing', 'cap_usd'], (o, k) => { o[k] = 0; }));

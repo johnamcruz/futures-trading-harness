@@ -2192,3 +2192,20 @@ test('cycleDataInPrompt: the runner hands a trade cycle its reads\' collector on
   assert.ok(p.missing.filter(m => m.tool !== 'bar_briefing').every(m => /paper mode/.test(m.why)) && p.missing.length === 4);
   assert.ok(!paperSeen.some(x => x[0] === 'read'), 'no account read made');
 });
+
+test('exit mode target_then_trail, live: a target cancel that fails is retried every managed cycle until the limit is gone; the stop is never touched', async () => {
+  const exit = { mode: 'target_then_trail', lock_giveback_r: 0.5, trail_by: 'r', trail_r: 1 };
+  // The first cancel of the target (order 10 at 21600) fails; a later managed cycle cancels it.
+  // A second stop resting at the pending target's price (with a limitPrice field there too): never the retry's (type 1 only).
+  const atTarget = list => [...list, { id: 11, contractId: 'MNQ', type: 4, side: 1, size: 1, stopPrice: 21600, limitPrice: 21600 }];
+  const r = await trailSim({ tape: {}, exit, record: { targetTicks: 400 }, cancelFails: 1, until: et(10, 15), ordersOver: atTarget });
+  assert.ok(r.logs.some(l => /could not cancel the target order 10 \(HTTP 503\); it may fill at the target; tried again each managed cycle/.test(l)), r.logs.join('\n'));
+  assert.ok(r.logs.some(l => /retried and cancelled the target order 10 at 21600: past its target trendy is trailed, not closed/.test(l)), r.logs.join('\n'));
+  assert.deepStrictEqual(r.cancelled, [10], 'the target leg, once; never a stop (9, or 11 at the target\'s price)');
+  assert.deepStrictEqual(r.cancelTries.map(x => x[0]), [10, 10], 'tried twice: the failure, then the retry; none once it is gone, never order 11');
+  // Failing on every try: each managed cycle tries again and says so, the stop still untouched.
+  const always = await trailSim({ tape: {}, exit, record: { targetTicks: 400 }, cancelFails: 99, until: et(10, 15) });
+  const retries = always.logs.filter(l => /retrying the cancel of the target order 10 at 21600 failed \(HTTP 503\); trying again next cycle/.test(l)).length;
+  assert.ok(retries >= 2, always.logs.join('\n'));
+  assert.ok(!always.cancelTries.some(x => x[0] === 9));
+});

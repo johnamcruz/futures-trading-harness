@@ -159,10 +159,19 @@ test('an invalid rulebook after the edit is refused before any comparison', () =
   assert.match(errs(t, 'daily_loss_soft: 500', 'daily_loss_soft: 0'), /invalid after the edit: daily_loss_soft: 0 is not dollars above 0, or off/);
 });
 
-test('the entry rule: any change, on or off, is refused (the owner\'s switch, never a proposal\'s)', () => {
+test('the entry rule: any change, on or off, is refused (the owner\'s switch, never a proposal\'s); loosening the bias is named looser', () => {
   const t = tree();
-  for (const [find, replace] of [['regime_against: off', 'regime_against: on'], ['leg_turned: off', 'leg_turned: on'], ['bias_frames: off', 'bias_frames: [4h, 1h]']]) {
+  for (const [find, replace] of [['regime_against: off', 'regime_against: on'], ['leg_turned: off', 'leg_turned: on'], ['bias_agree: on', 'bias_agree: off'], ['bias_frames: [4h, 1h]', 'bias_frames: [4h]']]) {
     assert.match(errs(t, find, replace), /policies\.p1\.entry: changed \(the entry rule is the owner's switch/, replace);
   }
-  assert.match(errs(t, 'bias_frames: off', 'bias_frames: [1h, 4h]'), /entry\.bias_frames: .* is not off/, 'invalid: refused before the comparison');
+  assert.match(errs(t, 'bias_agree: on', 'bias_agree: off'), /policies\.p1\.entry\.bias_agree: on -> off is looser/);
+  assert.match(errs(t, 'bias_frames: [4h, 1h]', 'bias_frames: [1h]'), /policies\.p1\.entry\.bias_frames: \["4h","1h"\] -> \["1h"\] is looser \(drops 4h\)/);
+  assert.doesNotMatch(errs(t, 'regime_against: off', 'regime_against: on'), /is looser/, 'a tightening is never called looser');
+  assert.match(errs(t, 'bias_frames: [4h, 1h]', 'bias_frames: [1h, 4h]'), /entry\.bias_frames: .* is not off/, 'invalid: refused before the comparison');
+  // bias_frames off with bias_agree on is invalid; with both turned off it is a loosening of both.
+  assert.match(errs(t, 'bias_frames: [4h, 1h]', 'bias_frames: off'), /bias_agree: on needs bias_frames listed/);
+  const both = G.loosenings({ policies: { p: { entry: { bias_frames: ['4h', '1h'], bias_agree: 'on' } } } }, { policies: { p: { entry: { bias_frames: 'off', bias_agree: 'off' } } } }).join();
+  assert.match(both, /bias_agree: on -> off is looser/);
+  assert.match(both, /bias_frames: .* -> "off" is looser \(drops 4h, 1h\)/);
+  assert.deepStrictEqual(G.entryLooser('e', { bias_frames: ['1h'], bias_agree: 'off' }, { bias_frames: ['4h', '1h'], bias_agree: 'on' }), [], 'stricter: not looser');
 });

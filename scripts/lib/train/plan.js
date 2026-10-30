@@ -55,7 +55,10 @@ function probePlan(loop, { root, env = process.env } = {}) {
     }
     const W = require('../tunables').training().trendWindows;
     const probeLegs = Math.round(t.batch.start * t.batch.half);
-    lines.push(`trend pool: ${t.set.from}..${t.set.to}, ${t.set.legs.length} leg(s) on ${t.set.days.length} day(s) (census ${/^.{0,12}/.exec(String(t.set.fingerprint))[0]}); batch ${t.batch.start} leg(s) a round (about ${probeLegs} probe, ${t.batch.start - probeLegs} confirm), up to ${t.batch.max}; stepped around each leg (${W.leadBars} bar(s) before it through its catch window) and ${W.controlPerLeg} control window(s) a leg; regression ${t.regression ? t.regression.days.length : 0} day(s)`);
+    const f = t.set.filter || { align: 'all', opening: 'keep' };
+    if (f.align !== 'all' || f.opening !== 'keep') lines.push(`trend pool filter: kept ${t.set.legs.length} of the period's ${f.pool} leg(s)${f.align === 'htf' ? `; align htf (the 4h and the 1h both the leg's way at its start, from ${f.bars}): ${f.dropped.align} dropped` : ''}${f.opening === 'drop' ? `; opening print: ${f.dropped.opening} dropped` : ''}`);
+    const reach = (t.reach || W.reach) === 'end' ? 'its end' : 'its catch window';
+    lines.push(`trend pool: ${t.set.from}..${t.set.to}, ${t.set.legs.length} leg(s) on ${t.set.days.length} day(s) (census ${/^.{0,12}/.exec(String(t.set.fingerprint))[0]}); batch ${t.batch.start} leg(s) a round (about ${probeLegs} probe, ${t.batch.start - probeLegs} confirm), up to ${t.batch.max}; stepped around each leg (${W.leadBars} bar(s) before it through ${reach}) and ${W.controlPerLeg} control window(s) a leg; regression ${t.regression ? t.regression.days.length : 0} day(s)`);
   }
   if (errors.length) throw new Error(`the probe round's replays are refused:\n- ${errors.join('\n- ')}`);
   return lines;

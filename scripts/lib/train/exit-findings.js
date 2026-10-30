@@ -24,7 +24,8 @@
  * finding here. Each finding: count, cost, of (the model-decided scored exits), the exits' split by who exited (detail),
  * and up to `examples`
  * (config/training.json exitFindings) of the costliest, as the facts code read at the decision (exit-scorecard.js
- * factsText: no date, time or price). The exits that were right are counted in `of`, never findings.
+ * factsText: no date, time or price), each with its entry's base timing when known (trend-facts.js entryTimings:
+ * entered before the turn, at the turn, or with). The exits that were right are counted in `of`, never findings.
  *
  *   KIND, OWNER, OWNERS, MODEL_DECIDED
  *   exitFindings(captures, { exists, max })   [{ kind, step, skill, skills, code, count, cost, of, detail, examples }], by cost
@@ -75,7 +76,7 @@ function exitFindings(captures, { exists = () => true, max } = {}) {
   }
   return [...groups.values()].sort((a, b) => b.cost - a.cost || b.members.length - a.members.length || a.code.localeCompare(b.code)).slice(0, max).map(g => {
     const examples = [...g.members].sort((a, b) => costOf(b, g.code) - costOf(a, g.code))
-      .map(d => `${d.exitBy}: ${d.facts ? ES.factsText(d.facts) : 'no facts at the decision'}`).slice(0, EX.examples)
+      .map(d => `${d.exitBy}${typeof d.entryTiming === 'string' ? ` (entered ${d.entryTiming})` : ''}: ${d.facts ? ES.factsText(d.facts) : 'no facts at the decision'}`).slice(0, EX.examples)
       .map(x => (x.length > EX.exampleChars ? `${x.slice(0, EX.exampleChars - 3)}...` : x));
     const skills = OWNERS[g.code].filter(s => exists(s));
     return {

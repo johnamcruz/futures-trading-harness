@@ -41,7 +41,8 @@ belongs behind structure (a swing), not at an arbitrary distance (`invalidation`
   (`pullback-vs-reversal`), not a range;
 - transition: regime `transition`, or regime and structure disagree.
 
-The 3m read sits inside `h1.h4.trend`, `h1.h1.trend`, `m15.frame.trend`;
+The 3m read sits inside `h1.h4.trend`, `h1.h1.trend` (prop: both its
+way), `m15.frame.trend`;
 `m3.trendRule` wins where they differ. Indicators confirm structure, never
 override it. A 3m range inside a 15m trend is a pause. Side: `htf-to-ltf`.
 

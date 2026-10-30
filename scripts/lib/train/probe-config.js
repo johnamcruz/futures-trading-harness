@@ -15,8 +15,9 @@
  *     windows    [{ from, to }] session dates, each inside practice-train: the curated moments the probes replay
  *                (split by session date into a probe half and a confirm half: screen.js halfOf)
  *     k          edits the proposer writes per round (1-8, default 4)
- *     trend      optional: { replay, census, from, to, batch, regression } (resolveTrend below): the census's legs, screened on
- *                the legs caught (trend-screen.js), and the regression days (harm only)
+ *     trend      optional: { replay, census, from, to, batch, regression, moments, align, bars, reach, opening }
+ *                (resolveTrend below): the census's legs, screened on the legs caught (trend-screen.js), and the
+ *                regression days (harm only)
  *     parallel   probes replayed at once (1-4, default 1: one after another). More than 1 only with
  *                `replay.latency: false`: a replay that charges each cycle's real time would charge probes queued at
  *                the model server more than the champion, whose probe run runs alone; with no latency charged, both
@@ -27,7 +28,7 @@
  * screen alone.
  *
  *   PROBE_KEYS, PROBE_LIMITS
- *   resolveProbe(raw, { read, readCensus, modelScore, autotrader, tuningWindows })   the resolved setting, or null without one; throws
+ *   resolveProbe(raw, { read, readCensus, readBars, modelScore, autotrader, tuningWindows })   the resolved setting, or null without one; throws
  *                                             with every error. autotrader: the loop's replay's, resolved. tuningWindows:
  *                                             the keep rule's; a probe window that shares a session date with one is
  *                                             refused (the dates edits are chosen on never judge them)
@@ -39,7 +40,7 @@ const { tradingDayStart } = require('../trading/clock');
 
 const PROBE_KEYS = Object.freeze(['replay', 'windows', 'k', 'parallel', 'trend', 'curriculum']);
 const CU = require('./curriculum');
-const TREND_KEYS = Object.freeze(['replay', 'census', 'from', 'to', 'batch', 'regression', 'moments']);
+const TREND_KEYS = Object.freeze(['replay', 'census', 'from', 'to', 'batch', 'regression', 'moments', 'align', 'bars', 'reach', 'opening']);
 // The batch settings a loop config may set for itself (the rest, and every default: config/training.json trendBatch).
 const BATCH_KEYS = Object.freeze(['start', 'max', 'half']);
 // [default, min, max] of each (config/training.json probe).
@@ -52,7 +53,7 @@ const canonical = x => JSON.stringify(x, (_k, v) => (v && typeof v === 'object' 
 
 const overlaps = (a, b) => a.from < b.to && b.from < a.to;
 
-function resolveProbe(raw, { read, resolvePath = p => p, readCensus = () => { throw new Error('no census reader'); }, modelScore = null, autotrader = null, tuningWindows = [] } = {}) {
+function resolveProbe(raw, { read, resolvePath = p => p, readCensus = () => { throw new Error('no census reader'); }, readBars = () => { throw new Error('no bars reader'); }, modelScore = null, autotrader = null, tuningWindows = [] } = {}) {
   if (raw === undefined || raw === null) return null;
   if (typeof raw !== 'object' || Array.isArray(raw)) throw new Error(`probe: { ${PROBE_KEYS.join(', ')} }`);
   const errors = [];
@@ -110,7 +111,7 @@ function resolveProbe(raw, { read, resolvePath = p => p, readCensus = () => { th
     return { ...cfg, autotrader: own };
   };
   replay = sameTrader(replay, 'probe.replay');
-  const trend = raw.trend === undefined ? null : resolveTrend(raw.trend, { read, readCensus, resolvePath, tuningWindows, errors, sameTrader, parallel });
+  const trend = raw.trend === undefined ? null : resolveTrend(raw.trend, { read, readCensus, readBars, resolvePath, tuningWindows, errors, sameTrader, parallel });
   if (errors.length) throw new Error(errors.join('\n- '));
   // 'all' (the default) adds no key: the resolved setting is the one before curricula existed.
   return { replay, windows, k, parallel, ...(trend ? { trend } : {}), ...(trendOnly ? { curriculum } : {}) };
@@ -132,9 +133,13 @@ const nextDate = d => new Date(Date.parse(`${d}T00:00:00Z`) + 86400000).toISOStr
  * config/training.json trendBatch, trend-curve.js; batch: { start, max, half }, each optional, overrides those three for
  * this loop). regression: { days: [YYYY-MM-DD] } (the trend-move set's), harm only: in practice-train, outside the
  * tuning windows, and never in the pool (left out of it). moments (optional): the curated scan's moments file, for
- * the selection value on the confirm half (selection.js).
+ * the selection value on the confirm half (selection.js). Which legs enter the pool and how far a leg's window reaches
+ * (each optional, config/training.json trendSet and trendWindows.reach by default, today's: every leg, to its catch
+ * window): align 'all' | 'htf' (only the legs whose 4h and 1h both trend their way at the start, by the policy's
+ * check on the bars closed before it: trend-align.js; bars: the base bars file it reads, required with htf), opening
+ * 'keep' | 'drop' (the opening print's legs), reach 'catch' | 'end' (trend-windows.js). Each is a new loop's choice.
  */
-function resolveTrend(raw, { read, readCensus, resolvePath = p => p, tuningWindows, errors, sameTrader, parallel }) {
+function resolveTrend(raw, { read, readCensus, readBars = () => { throw new Error('no bars reader'); }, resolvePath = p => p, tuningWindows, errors, sameTrader, parallel }) {
   if (!raw || typeof raw !== 'object' || Array.isArray(raw)) { errors.push(`probe.trend: { ${TREND_KEYS.join(', ')} }`); return null; }
   for (const k of Object.keys(raw)) if (!TREND_KEYS.includes(k)) errors.push(`probe.trend.${k}: not a setting (${TREND_KEYS.join(', ')})`);
   let replay = null;
@@ -175,6 +180,33 @@ function resolveTrend(raw, { read, readCensus, resolvePath = p => p, tuningWindo
   if (census && !errors.some(e => e.startsWith('probe.trend.from'))) {
     try { legs = require('./trend-set').poolOf(census, { ...period, exclude: regression ? regression.days : [] }); } catch (err) { errors.push(`probe.trend.census: ${err.message}`); }
   }
+  // Which legs enter the pool (trend-align.js): every leg (today's), or only those the top-down rule could trade, and
+  // the opening print's left out; the dropped legs stay census legs (spans: no control window enters them).
+  const TSET = require('../tunables').training().trendSet;
+  const pick = (k, allowed) => {
+    const v = raw[k] === undefined ? TSET[k] : raw[k];
+    if (!allowed.includes(v)) errors.push(`probe.trend.${k}: ${allowed.join(' or ')}, not ${JSON.stringify(v)}`);
+    return v;
+  };
+  const TA = require('./trend-align');
+  const align = pick('align', TA.ALIGN);
+  const opening = pick('opening', TA.OPENING);
+  const reachRaw = raw.reach === undefined ? require('../tunables').training().trendWindows.reach : raw.reach;
+  const reach = require('./trend-windows').REACH.includes(reachRaw) ? reachRaw : (errors.push(`probe.trend.reach: ${require('./trend-windows').REACH.join(' or ')}, not ${JSON.stringify(reachRaw)}`), null);
+  if (raw.bars !== undefined && align !== 'htf') errors.push('probe.trend.bars: read only with align htf (the 4h and 1h trend at each leg\'s start)');
+  if (align === 'htf' && !(typeof raw.bars === 'string' && raw.bars)) errors.push('probe.trend.bars: align htf reads the 4h and 1h trend at each leg\'s start from the base bars: the bars file (as curated-lists.js scan --bars)');
+  let filter = { align, opening, pool: legs.length, dropped: { align: 0, opening: 0 } };
+  if (census && legs.length && !errors.some(e => /^probe\.trend\.(align|opening|bars|reach)/.test(e)) && (align !== 'all' || opening !== 'keep')) {
+    try {
+      const allSpans = Object.fromEntries((census.order || []).map(x => [x.id, x]));
+      const minutes = replay && replay.autotrader ? replay.autotrader.timeframe : null;
+      if (!(Number.isInteger(minutes) && minutes > 0)) throw new Error('the trend replay\'s autotrader timeframe (the base bars) is needed to place the legs\' bars');
+      const series = align === 'htf' ? TA.htfSeries(readBars(resolvePath(raw.bars), minutes), minutes) : null;
+      const got = TA.filterLegs(legs, allSpans, { align, opening, series, minutes, window: TA.openingWindow(), maxBars: TSET.openingMaxBars });
+      filter = { align, opening, pool: legs.length, dropped: { align: got.dropped.align.length, opening: got.dropped.opening.length }, ...(align === 'htf' ? { bars: raw.bars } : {}) };
+      legs = got.kept;
+    } catch (err) { errors.push(`probe.trend.${align === 'htf' ? 'bars' : 'opening'}: ${err.message}`); }
+  }
   const setDays = [...new Set(legs.map(id => require('./trend-set').dayOfLeg(id)))].sort();
   checkDays(setDays, 'probe.trend.census');
   for (const t of tuning) if (DATE.test(String(period.from)) && overlaps(period, t)) errors.push(`probe.trend.from..to ${period.from}..${period.to}: shares session dates with the tuning window ${t.from}..${t.to}; the dates edits are found and screened on never judge them`);
@@ -203,7 +235,7 @@ function resolveTrend(raw, { read, readCensus, resolvePath = p => p, tuningWindo
     for (const d of regression.days.filter(x => !withLegs.has(x))) errors.push(`probe.trend.regression ${d}: the census holds no leg that day; a trend run steps windows around its legs, so it would never run: leave it out`);
   }
   const spans = census && Array.isArray(census.order) ? Object.fromEntries(census.order.filter(x => spanDays.has(x.day)).map(x => [x.id, { day: x.day, side: x.side, start: x.start, end: x.end, points: x.points }])) : {};
-  return census ? { replay, ...(moments ? { moments } : {}), set: { file: raw.census, fingerprint: census.fingerprint, from: period.from, to: period.to, days: setDays, legs, spans }, batch, regression } : null;
+  return census ? { replay, ...(moments ? { moments } : {}), set: { file: raw.census, fingerprint: census.fingerprint, from: period.from, to: period.to, days: setDays, legs, spans, filter }, batch, regression, reach } : null;
 }
 
 module.exports = { PROBE_KEYS, TREND_KEYS, BATCH_KEYS, PROBE_LIMITS, resolveProbe, overlaps };

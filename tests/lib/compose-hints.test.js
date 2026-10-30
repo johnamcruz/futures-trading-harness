@@ -223,7 +223,7 @@ test('compose hints: no setup read yet: the entry hint says a confirmation count
 // The policy's entry rule (entry-rule.js): a problem no read can satisfy (bias frames, regime against) means no repair and
 // no reversal hint; a leg-turned problem a leg read satisfies keeps the repair.
 const { entryRuleOf } = require('../../scripts/lib/trading/entry-rule');
-const OFF3 = { bias_frames: 'off', regime_against: 'off', leg_turned: 'off' };
+const OFF3 = { bias_frames: 'off', bias_agree: 'off', regime_against: 'off', leg_turned: 'off' };
 const hintsWith = (reads, rule, b, side = 'long') => {
   const checked = checkReads({ reads, side, briefing: b, entryRule: rule });
   const planned = checked.stop && checked.target ? planOf({ checked, briefing: b, side, tick: 0.25, ...PLAN }) : null;
@@ -263,4 +263,20 @@ test('compose hints: a leg-turned problem keeps the repair: a leg read of the mo
   // Without the leg read the entry rule's leg problem stands, and every combination offered carries it or none is offered.
   const none = H.repairOf({ reads: swap('entry', '3m volume high'), side: 'long', briefing: b, tick: 0.25, plan: PLAN, entryRule: rule });
   assert.ok(none === null || none.checked.ok);
+});
+
+test('compose hints: no named level reaching 2R, the 4h and 1h both the side\'s way: the hint is the trail, and the whole passes with it (never a pass for want of a level)', () => {
+  const aligned = b => { b.sections.m3.data.swingTargets.above = [{ frame: '15m', price: 21560 }]; b.sections.h1.data.h4 = { trend: 'up' }; };
+  const r = hints(swap('target', 'target 15m swing 21560'), { b: brief(aligned) });
+  assert.ok(r.planned.problems.some(p => /^R:R .* under the strategy's min 2/.test(p)));
+  assert.strictEqual(r.lines.find(l => l.startsWith('target:')), 'target: HTF-aligned (4h and 1h your way): "target trail" (the 2R mark 21595.75 from the stop at 21512.75 arms it); a level ahead is context, never a requirement');
+  const whole = r.lines.find(l => l.startsWith('these reads pass together'));
+  assert.ok(whole && whole.includes('"target trail"') && passes(whole, r.b, 'long'), whole);
+  // The targets a plan can take: aligned, the trail first, the named ones context after it; not aligned (scenario 1's
+  // own 4h range): no trail.
+  assert.deepStrictEqual(H.targetsOf(brief(aligned), 'long', 0.25).map(x => x.read), ['target trail', 'target 15m swing high 21560']);
+  // Aligned with a named level at 2R or more: still the trail (the level is context, never the requirement).
+  const far = hints(swap('target', 'target 1h swing 21600'), { b: brief(b => { b.sections.h1.data.h4 = { trend: 'up' }; }) });
+  assert.match(far.lines.find(l => l.startsWith('target:')), /^target: HTF-aligned \(4h and 1h your way\): "target trail"/);
+  assert.ok(!H.targetsOf(brief(), 'long', 0.25).some(x => x.trail));
 });

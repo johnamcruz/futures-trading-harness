@@ -12,6 +12,8 @@ description: Use when filtering a rules strategy by the higher-timeframe trend (
 
 ## How It Works
 
+In a prop attempt the entry rule already needs the 4h and 1h both its way.
+
 ### In rules (mechanical strategies)
 
 `mtf_bias(m)` is the multi-timeframe trend per bar in strategy rules (the

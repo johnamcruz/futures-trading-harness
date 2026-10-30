@@ -84,7 +84,8 @@ const TRAINING = {
   skillUsage: { top: int(1) },
   trendBatch: { start: int(2), max: int(2), half: num({ min: 0.1, max: 0.9 }), growAfter: int(1), growFactor: int(2), plateauRounds: int(1) },
   trendScreen: { rollFlagGaps: list(int(0)) },
-  trendWindows: { leadBars: int(0), controlPerLeg: int(0) },
+  trendWindows: { leadBars: int(0), controlPerLeg: int(0), reach: str(['catch', 'end']) },
+  trendSet: { align: str(['all', 'htf']), opening: str(['keep', 'drop']), openingMaxBars: int(1) },
   trendFindings: { examples: int(1), exampleChars: int(80), saidChars: int(40), setupTypes: int(1), setupMinN: int(1) },
   exitFindings: { examples: int(1), exampleChars: int(80) },
   // The round report's control-window false start (train/curriculum.js): a loser whose best R never rose above this.

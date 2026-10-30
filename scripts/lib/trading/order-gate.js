@@ -38,7 +38,7 @@ const { gateRefusal: factsRefusal } = require('./fact-claims');
 const { brokerSpecs, contractsFileFor, whyNoSpec, brokerOrderLimit, dayFrontMissing } = require('./broker-specs');
 const { checkOrderSize, checkRiskLimit, entryStopTicks } = require('./order-limits');
 const { lockGateRefusal } = require('../account-lock');
-const { composedName, composedRefusal, reversalAllowed } = require('./lifecycle-gate');
+const { composedName, composedRefusal, reversalAllowed, policyRuleRefusal } = require('./lifecycle-gate');
 const { entryRuleOf } = require('./entry-rule');
 const { lateEntryCheck, ageLimitOf } = require('./late-entry');
 const { protectRefusal, restingExitRefusal } = require('./bracket-rule');
@@ -451,6 +451,13 @@ function evaluateOrder({ input = {}, entries = [], now = new Date(), config, bla
       if (late) violations.push({ check: 'late-entry', message: `setup:${composed}: ${late.message}. Exits, protective stops and stop moves still go.`, late: { ...late.late, record: composedCheck.record ? composedCheck.record.id : null } });
     }
   }
+  // Hard rule: a policy's entry rule (its rulebook's `entry`) holds every entry of the policy, not only a composed one
+  // (whose re-check above holds it on the record's reads): any other entry under it (a rules component's verdict, or
+  // none) is checked on the briefing, with no reads; unreadable, refused (fails closed).
+  if (!composed && named && named.signal === 'policy') {
+    const why = policyRuleRefusal({ home: config.home, root: contractRoot(input.contractId), side: { buy: 'long', sell: 'short' }[String(input.side || '').toLowerCase()] || null, cycleBar: briefingBarOf(config, contractRoot(input.contractId)), now, rule: entryRuleOf(named.entry), name: named.name });
+    if (why) violations.push({ check: 'entry-rule', message: why });
+  }
   // D2 (the owner's "CHoCH at or above the trend"): a trade_lifecycle entry against the prevailing trend stands only on
   // the tier its frame needs among the record's re-checked reads (lifecycle-gate.js reversalAllowed); then the trend
   // rule is judged as a reversal's. Anything else (no record standing, a tier short): the trend rule as before.
@@ -652,7 +659,7 @@ function evaluateOrder({ input = {}, entries = [], now = new Date(), config, bla
  * positions can always be managed; size changes must go through cancel_order
  * plus a new, gated place_order (or partial_close_position to reduce).
  */
-function evaluateModify({ input = {}, config }) {
+function evaluateModify({ input = {}, config, strategies = null, now = new Date() }) {
   const skip = (config && config.skipChecks) || new Set();
   const violations = [];
   // A size change labelled [exit]/[protect] (cutting a protective order after
@@ -675,7 +682,28 @@ function evaluateModify({ input = {}, config }) {
     const worse = !Number.isFinite(price) || (stamped.side === 'long' ? price > stamped.entry + 1e-9 : stamped.side === 'short' ? price < stamped.entry - 1e-9 : true);
     if (worse) violations.push({ check: 'composed-reprice', message: `order ${input.orderId} is a trade_lifecycle entry at its record's ${stamped.entry} (${stamped.side || 'unknown side'}): a limit of ${input.limitPrice} is worse for it, and its stop would land short of the level its reads named. Keep it, improve it, or cancel it.` });
   }
+  // Hard rule: a reprice of a working policy entry the gateway recorded that is no composed one (its compose record's
+  // re-check held it at placement) is held to the policy's entry rule again, on this bar (lifecycle-gate.js
+  // policyRuleRefusal: the 4h and 1h agreement; fails closed). A risk-reducing modify ([exit], [protect]) and any order
+  // not recorded as an entry (a stop or target leg of an open position) never reach it.
+  const entry = !stamped && !isRiskReducing(input.reason) && (price !== null || (input.stopPrice !== undefined && input.stopPrice !== null)) ? entryOrderOf(config && config.home, input.orderId) : null;
+  const named = entry && entry.setup && Array.isArray(strategies) ? strategies.find(s => s && s.name === entry.setup) : null;
+  if (named && named.signal === 'policy') {
+    const root = contractRoot(entry.contractId);
+    const why = policyRuleRefusal({ home: config.home, root, side: { buy: 'long', sell: 'short' }[String(entry.side || '').toLowerCase()] || null, cycleBar: briefingBarOf(config, root), now, rule: entryRuleOf(named.entry), name: named.name });
+    if (why) violations.push({ check: 'entry-rule', message: `order ${input.orderId} is a working ${why}` });
+  }
   return { intent: 'modify', violations };
+}
+
+/** The gateway's record of a working entry (entry-orders.json): { orderId, contractId, side, setup, ... }, or null. */
+function entryOrderOf(home, orderId) {
+  if (!home || orderId === undefined || orderId === null) return null;
+  try {
+    return require('../harness-run').entryOrders(home).find(x => String(x.orderId) === String(orderId)) || null;
+  } catch (_err) {
+    return null;
+  }
 }
 
 /** The gateway's stamp on a working composed entry (entry-orders.json): { entry, side }, or null. */

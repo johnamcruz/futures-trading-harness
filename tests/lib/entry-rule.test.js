@@ -18,7 +18,7 @@ function briefing({ regime = 'range', t15 = 'range', t1h = 'range', t4h = 'range
     },
   };
 }
-const OFF = { bias_frames: 'off', regime_against: 'off', leg_turned: 'off' };
+const OFF = { bias_frames: 'off', bias_agree: 'off', regime_against: 'off', leg_turned: 'off' };
 const rule = over => entryRuleOf({ ...OFF, ...over });
 /** A checked read as checkReads returns it: true, agreeing, pointing `dir`. */
 const read = (form, kind, dir = 'long', extra = {}) => ({ form, kind, check: true, agrees: true, dir, ...extra });
@@ -27,15 +27,20 @@ test('entryRuleOf: null when every key is off or the block is missing; the keys 
   assert.strictEqual(entryRuleOf(OFF), null);
   assert.strictEqual(entryRuleOf(null), null);
   assert.strictEqual(entryRuleOf(undefined), null);
-  assert.deepStrictEqual({ ...rule({ bias_frames: ['4h', '1h'] }) }, { biasFrames: ['4h', '1h'], regimeAgainst: false, legTurned: false });
-  assert.deepStrictEqual({ ...rule({ regime_against: 'on', leg_turned: 'on' }) }, { biasFrames: null, regimeAgainst: true, legTurned: true });
+  assert.deepStrictEqual({ ...rule({ bias_frames: ['4h', '1h'] }) }, { biasFrames: ['4h', '1h'], biasAgree: false, regimeAgainst: false, legTurned: false });
+  assert.deepStrictEqual({ ...rule({ bias_frames: ['4h', '1h'], bias_agree: 'on' }) }, { biasFrames: ['4h', '1h'], biasAgree: true, regimeAgainst: false, legTurned: false });
+  assert.deepStrictEqual({ ...rule({ regime_against: 'on', leg_turned: 'on' }) }, { biasFrames: null, biasAgree: false, regimeAgainst: true, legTurned: true });
   // Only the word `on` turns a check on: anything else is no check here (the rulebook's validation refuses it first).
   assert.strictEqual(entryRuleOf({ ...OFF, regime_against: true }), null);
 });
 
 test('entryRuleErrors: every key stated, each on, off or (bias_frames) a list highest first', () => {
   assert.deepStrictEqual(entryRuleErrors(OFF, 'policies.p'), []);
-  assert.deepStrictEqual(entryRuleErrors({ bias_frames: ['4h', '1h'], regime_against: 'on', leg_turned: 'off' }, 'policies.p'), []);
+  assert.deepStrictEqual(entryRuleErrors({ bias_frames: ['4h', '1h'], bias_agree: 'on', regime_against: 'on', leg_turned: 'off' }, 'policies.p'), []);
+  assert.match(entryRuleErrors({ bias_frames: ['4h', '1h'], regime_against: 'on', leg_turned: 'off' }, 'policies.p').join(), /entry\.bias_agree: missing/);
+  // bias_agree on needs the frames that must agree; any value but on or off is refused.
+  assert.match(entryRuleErrors({ ...OFF, bias_agree: 'on' }, 'policies.p').join(), /bias_agree: on needs bias_frames listed/);
+  for (const v of [true, 'yes', 1, '']) assert.match(entryRuleErrors({ ...OFF, bias_frames: ['4h', '1h'], bias_agree: v }, 'policies.p').join(), /bias_agree: .* is not on or off/, String(v));
   assert.match(entryRuleErrors(undefined, 'policies.p').join(), /policies\.p\.entry: missing or not a map/);
   assert.match(entryRuleErrors([], 'policies.p').join(), /missing or not a map/);
   assert.match(entryRuleErrors({ regime_against: 'off', leg_turned: 'off' }, 'policies.p').join(), /entry\.bias_frames: missing/);
@@ -114,6 +119,27 @@ test('bias_frames: the first listed frame that trends sets the side; no listed f
   assert.deepStrictEqual(entryProblems({ briefing: briefing({ t1h: 'up', t4h: 'down' }), side: 'long', reads: [], rule: rule({ bias_frames: ['1h'] }) }), []);
   assert.strictEqual(trendOf(briefing({ t15: 'up' }), '15m'), 'up');
   assert.strictEqual(trendOf(briefing(), '2h'), null);
+});
+
+test('bias_agree: the 4h and the 1h must both trend the side\'s way; every other combination is no trade', () => {
+  const r = rule({ bias_frames: ['4h', '1h'], bias_agree: 'on' });
+  const at = (t4h, t1h, side) => entryProblems({ briefing: briefing({ t4h, t1h }), side, reads: [], rule: r });
+  const T = ['up', 'range', 'down'];
+  for (const a of T) for (const b of T) {
+    const long = at(a, b, 'long');
+    const short = at(a, b, 'short');
+    if (a === 'up' && b === 'up') assert.deepStrictEqual(long, [], 'both up: a long goes');
+    else assert.match(long.join(), /entry rule: the 4h and 1h must each trend up for a long .*no agreement, no trade/, `${a}/${b} long`);
+    if (a === 'down' && b === 'down') assert.deepStrictEqual(short, [], 'both down: a short goes');
+    else assert.match(short.join(), /must each trend down for a short/, `${a}/${b} short`);
+  }
+  // A trend the briefing doesn't hold refuses (fails closed), on either frame.
+  assert.match(at(GONE, 'up', 'long').join(), /the 4h trend is not in the briefing/);
+  assert.match(at('up', 'unknown', 'long').join(), /the 1h trend is not in the briefing/);
+  // A 15m trend never stands in.
+  assert.match(entryProblems({ briefing: briefing({ t4h: 'up', t1h: 'range', t15: 'up' }), side: 'long', reads: [], rule: r }).join(), /no agreement/);
+  // off: bias_frames as before (the first trending frame sets the side).
+  assert.deepStrictEqual(entryProblems({ briefing: briefing({ t4h: 'up', t1h: 'range' }), side: 'long', reads: [], rule: rule({ bias_frames: ['4h', '1h'] }) }), []);
 });
 
 test('legReads: the base reads that turn the leg, from checked reads', () => {

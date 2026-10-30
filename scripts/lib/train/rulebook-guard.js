@@ -12,11 +12,13 @@
  *   accepted staler; so a value added above 0 where it was unlisted, a raised value, or a removed entry is refused,
  *   and duplicates are judged on their product;
  * - no policy added or removed; an exit (its mode and trail) unchanged: it is searched (R10), never a limit to loosen;
- * - an entry rule (entry-rule.js) unchanged: the owner's switch, never a proposal's;
+ * - an entry rule (entry-rule.js) unchanged: the owner's switch, never a proposal's; loosening its top-down bias
+ *   (bias_agree on turned off, a bias frame dropped) is named as looser too, never stricter (entryLooser);
  * - no item moved out of `enforced`;
  * - no key removed.
  *
  *   loosenings(before, after)    [message naming the key] (empty: as strict or stricter)
+ *   entryLooser(at, before, after)   [message] for each way an entry edit loosens the bias (bias_agree, bias_frames)
  *   rulebookErrors(file, beforeText, afterText)   validateRulebook's problems, then loosenings
  */
 
@@ -107,6 +109,22 @@ function multipliersLooser(at, was, now, out) {
   }
 }
 
+/**
+ * The ways an entry rule edit loosens the owner's top-down bias (never stricter): bias_agree on turned off or removed,
+ * or a bias frame dropped (bias_frames off, or a list missing one the rule listed). Each also counts as a change above.
+ */
+function entryLooser(at, before, after) {
+  const out = [];
+  const b = isMap(before) ? before : {};
+  const a = isMap(after) ? after : {};
+  if (b.bias_agree === 'on' && a.bias_agree !== 'on') out.push(`${at}.bias_agree: on -> ${a.bias_agree === undefined ? 'removed' : a.bias_agree} is looser (the 4h and the 1h must agree)`);
+  const listed = Array.isArray(b.bias_frames) ? b.bias_frames : [];
+  const now = Array.isArray(a.bias_frames) ? a.bias_frames : [];
+  const dropped = listed.filter(tf => !now.includes(tf));
+  if (dropped.length) out.push(`${at}.bias_frames: ${JSON.stringify(listed)} -> ${JSON.stringify(a.bias_frames === undefined ? 'removed' : a.bias_frames)} is looser (drops ${dropped.join(', ')})`);
+  return out;
+}
+
 function loosenings(before, after) {
   const out = [];
   for (const k of Object.keys(before)) if (after[k] === undefined) out.push(`${k}: removed (a rulebook key is never removed)`);
@@ -124,6 +142,7 @@ function loosenings(before, after) {
     for (const [k, v] of Object.entries(isMap(p.sizing) ? p.sizing : {})) limitLooser(k, `${at}.sizing.${k}`, v, isMap(q.sizing) ? q.sizing[k] : undefined, out);
     if (!same(p.exit, q.exit)) out.push(`${at}.exit: changed (the exit mode and trail are searched, R10; never a proposal's to change)`);
     if (!same(p.entry, q.entry)) out.push(`${at}.entry: changed (the entry rule is the owner's switch; never a proposal's to change)`);
+    out.push(...entryLooser(`${at}.entry`, p.entry, q.entry));
     multipliersLooser(`${at}.multipliers`, p.multipliers, q.multipliers, out);
   }
   return out;
@@ -144,4 +163,4 @@ function rulebookErrors(file, beforeText, afterText) {
   return loosenings(before.data, after.data).map(e => `${file}: ${e}; a proposal only tightens a rulebook`);
 }
 
-module.exports = { DIRECTION, loosenings, rulebookErrors };
+module.exports = { DIRECTION, loosenings, entryLooser, rulebookErrors };

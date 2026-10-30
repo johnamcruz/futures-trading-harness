@@ -2,7 +2,8 @@
 
 /**
  * The prop size end to end (the owner, 2026-10-23: "1 sizing should be translated to standard correct sizing"): in a
- * running prop attempt on the shipped prop_portfolio and its account's rulebook, the head trader composes and says
+ * running prop attempt on the shipped prop_portfolio and its account's rulebook (a copy of both, bias_agree off: the
+ * scenario's 1h ranges under the 4h uptrend; attemptWorld), the head trader composes and says
  * planned with a size of its own (a suggestion), and the real runner's entry reads code's translation
  * (prop/size-translate.js through order_plan), names it in phase 2's request, runs phase 2 and the trade-executor (each
  * its own scripted run), and the order goes through the real gateway and gate to the replay mock broker. The hook judges
@@ -35,6 +36,10 @@ const { FIRED_BAR, NEXT_BAR, decisionAt } = D;
 const POLICY = loadStrategies(D.ROOT, {}).strategies.find(s => s.name === 'prop_portfolio');
 const ACCOUNT = loadAccounts(D.ROOT, {}).accounts.find(a => a.name === POLICY.account);
 const LC = loadStrategies(D.ROOT, {}).strategies.find(s => s.name === 'trade_lifecycle');
+const { policyCopy } = require('../helpers');
+// The policy and account the attempt runs on: the shipped ones copied, bias_agree off (attemptWorld).
+const SIZED = 'pmc_sized';
+const SIZED_ACCOUNT = 'pmc_sized_100k';
 
 // The numbers this test works the sizes out from, checked against their homes (the rulebook, the profile, the strategy).
 const N = { start: 100000, maxLoss: 3000, cushionFrac: 0.3, capUsd: 1000, halveUsd: 1500, slip: 1, floor: 3, fee: 0.37, composedCap: 300, tickValue: 0.5, tick: 0.25 };
@@ -122,12 +127,19 @@ function roles(w, verdict, hooked = null) {
  */
 function attemptWorld({ attempt = true, balance = N.start, close = null, orderMax = 50 } = {}) {
   const w = D.world();
+  // The scenario's fired bar has the 4h up and the 1h ranging: the shipped entry rule's bias_agree (the 4h and the 1h
+  // must agree) refuses its long (tests/e2e/entry-rule-e2e.test.js). These tests are of the size, so the attempt runs on
+  // a copy of the shipped policy and account whose rulebook differs only in bias_agree off (the 4h sets the side).
+  const copy = policyCopy(w.home, { policy: SIZED, account: SIZED_ACCOUNT, rulebook: t => t.replace(/^( {6}bias_agree: )on/m, '$1off') });
+  w.env.FTH_STRATEGIES_DIRS = [w.env.FTH_STRATEGIES_DIRS, copy.strategies].filter(Boolean).join(',');
+  w.env.FTH_ACCOUNTS_DIRS = copy.accounts;
   // The broker's max order size (the mock's own default is 5; 50 here, so the rulebook's limits bind but where a row sets it).
   w.env.MOCK_MAX_ORDER_SIZE = String(orderMax);
   exchange.update(w.state, s => { s.balance = balance; });
   if (attempt) {
-    prop.startAttempt(w.home, ACCOUNT, new Date('2026-04-24T14:00:00Z'));
-    if (close !== null) prop.recordEndOfDay(w.home, ACCOUNT, close, '2026-04-27');
+    const account = loadAccounts(D.ROOT, w.env).accounts.find(a => a.name === SIZED_ACCOUNT);
+    prop.startAttempt(w.home, account, new Date('2026-04-24T14:00:00Z'));
+    if (close !== null) prop.recordEndOfDay(w.home, account, close, '2026-04-27');
   }
   return { ...w, attempt };
 }
@@ -210,7 +222,7 @@ test('prop size e2e: the binding limit, one row each: the broker\'s max, the dra
       assert.deepStrictEqual(sent, [], `${row.name}: no order`);
       assert.strictEqual(entry.translated, undefined, `${row.name}: no translation to name`);
       // 3 contracts at $47.24 = $141.72, over the $105.00 budget: the verdict skips (2 would fit, under the floor).
-      assert.match(result, /^CYCLE RESULT: no-trade - .*order_plan refused the composed plan: prop_portfolio skipped the setup \(3 MNQ at this stop risk \$141\.72, over the \$105\.00 budget/, row.name);
+      assert.match(result, /^CYCLE RESULT: no-trade - .*order_plan refused the composed plan: pmc_sized skipped the setup \(3 MNQ at this stop risk \$141\.72, over the \$105\.00 budget/, row.name);
     }
   }
 });
@@ -242,7 +254,7 @@ test('prop size e2e: phase 2: the named 6 orders 6; on a healthy account a cut (
     } else if (row.approved === null) {
       assert.match(result, /^CYCLE RESULT: no-trade - .*VETO/, row.name);
     } else {
-      assert.match(result, new RegExp(`order_plan refused the composed plan: \\[min-contracts\\] setup:prop_portfolio: size ${row.approved} MNQ is under the floor of 3 contracts`), row.name);
+      assert.match(result, new RegExp(`order_plan refused the composed plan: \\[min-contracts\\] setup:pmc_sized: size ${row.approved} MNQ is under the floor of 3 contracts`), row.name);
     }
   }
 });
