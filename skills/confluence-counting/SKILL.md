@@ -59,7 +59,7 @@ neutral = 6: reads of one price move are one piece of evidence.
 ```text
 Take: valid long: structure (15m cisd up, 3m momentum up: one), location, trigger, context: for.
   for 4, against 0, neutral 2 -> full.
-Skip: long: structure (3m choch down): neutral; the 1h CHoCH down reverses the side.
+Skip: long: structure (3m choch down): neutral; the 1h CHoCH down, the 1h ranging.
   for 2, against 0, neutral 4: decisive -> pass.
 Half: valid long: structure (the pullback): neutral; context, participation: against.
   for 2, against 2, neutral 2: serious -> half.

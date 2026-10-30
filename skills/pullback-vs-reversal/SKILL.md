@@ -32,8 +32,8 @@ structure breaks back: `m3.lastBreak.last` turns the trend's way (the
 shift or reclaim of `htf-to-ltf`):
 a lower-timeframe CHoCH
 back the HTF way at a level times the entry; the setup there: `rejection`,
-`breakout`, `fair-value-gaps`. The first (`m3.timing`) is the best
-entry; before it, a false start. A CISD (`cisd`) is an earlier
+`breakout`, `fair-value-gaps`. The 15m setup is the entry; the 3m
+turn (`m3.timing`) is context. A CISD (`cisd`) is an earlier
 sign than the CHoCH; depth in fib terms: `fib-retracement`.
 **Premium and discount** (`fib-retracement`): within a trend, pullbacks into discount
 (premium for shorts) are where continuation setups sit.

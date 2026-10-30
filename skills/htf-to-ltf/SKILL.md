@@ -32,9 +32,8 @@ From the highest timeframe down, for each side (`m15.alignment`; read
 **The side rule** (in an attempt): each trending 4h or 1h your way,
 neither against; both ranging: the 15m and `Trend declared?` your way;
 else no trade. The setup is the 15m (or higher) reaction or break the
-HTF side's way; the 3m only times the entry: best, its first turn back
-(the 3m timing line); still against, a false start, never a veto
-(`pullback-vs-reversal`).
+HTF side's way: it is the entry; the 3m only times the entry: the next
+3m close after it, no 3m turn to wait for (waiting cost R).
 The pullback itself: in the count it is neutral.
 `counter` (the HTF against): pass.
 Range or transition: the trend rule decides.

@@ -72,11 +72,11 @@ test('timingOf: with (the base regime the side\'s way), turned (its latest event
 
 test('timingLine: one short line per state, its timeframe named', () => {
   assert.strictEqual(timingLine(null, et, '3m'), null);
-  assert.strictEqual(timingLine({ side: 'long', state: 'with' }, et, '3m'), '- 3m timing (long: the entry rule\'s side): 3m with the HTF side.');
-  assert.strictEqual(timingLine({ side: 'long', state: 'turned', kind: 'CHoCH', dir: 'up', at: B[30].t, barsAgo: 9 }, et, '3m'), '- 3m timing (long: the entry rule\'s side): 3m turned back: CHoCH up at 15:30 ET (9 bars ago).');
-  assert.strictEqual(timingLine({ side: 'short', state: 'pullback', since: B[30].t }, et, '3m'), '- 3m timing (short: the entry rule\'s side): 3m pullback: trending against the HTF side since 15:30 ET.');
-  assert.strictEqual(timingLine({ side: 'long', state: 'pullback', since: null }, et, '3m'), '- 3m timing (long: the entry rule\'s side): 3m pullback: trending against the HTF side.');
-  assert.strictEqual(timingLine({ side: 'long', state: 'waiting' }, et, '3m'), '- 3m timing (long: the entry rule\'s side): 3m no turn yet.');
+  assert.strictEqual(timingLine({ side: 'long', state: 'with' }, et, '3m'), '- 3m timing (long: the entry rule\'s side; context, the setup is the entry): 3m with the HTF side.');
+  assert.strictEqual(timingLine({ side: 'long', state: 'turned', kind: 'CHoCH', dir: 'up', at: B[30].t, barsAgo: 9 }, et, '3m'), '- 3m timing (long: the entry rule\'s side; context, the setup is the entry): 3m turned back: CHoCH up at 15:30 ET (9 bars ago).');
+  assert.strictEqual(timingLine({ side: 'short', state: 'pullback', since: B[30].t }, et, '3m'), '- 3m timing (short: the entry rule\'s side; context, the setup is the entry): 3m pullback: trending against the HTF side since 15:30 ET.');
+  assert.strictEqual(timingLine({ side: 'long', state: 'pullback', since: null }, et, '3m'), '- 3m timing (long: the entry rule\'s side; context, the setup is the entry): 3m pullback: trending against the HTF side.');
+  assert.strictEqual(timingLine({ side: 'long', state: 'waiting' }, et, '3m'), '- 3m timing (long: the entry rule\'s side; context, the setup is the entry): 3m no turn yet.');
 });
 
 test('the briefing: m3.timing from the closed bars it is built on (no look-ahead: later bars never change it), and its summary line', () => {
@@ -107,7 +107,7 @@ test('the briefing: m3.timing from the closed bars it is built on (no look-ahead
       assert.deepStrictEqual(later.sections.m3.data.timing, m3.timing);
     }
     const lines = require('../../scripts/lib/trading/briefing').renderBriefing(b, { now: new Date(b.closedAt) });
-    assert.strictEqual(/- 3m timing \((long|short): the entry rule's side\): 3m (with the HTF side|turned back|pullback|no turn yet)/.test(lines), Boolean(want), `bar ${k}`);
+    assert.strictEqual(/- 3m timing \((long|short): the entry rule's side; context, the setup is the entry\): 3m (with the HTF side|turned back|pullback|no turn yet)/.test(lines), Boolean(want), `bar ${k}`);
   }
   assert.deepStrictEqual([...seen].sort(), ['pullback', 'turned', 'with'], 'each state met on the way');
 });

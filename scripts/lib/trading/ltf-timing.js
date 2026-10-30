@@ -65,7 +65,7 @@ function timingOf({ trends, t15 = null, declared = null, regime = null, bars = [
 /** The summary's line: "- 3m timing (long: the entry rule's side): ..." or null. */
 function timingLine(t, et, tf) {
   if (!t) return null;
-  const head = `- ${tf} timing (${t.side}: the entry rule's side):`;
+  const head = `- ${tf} timing (${t.side}: the entry rule's side; context, the setup is the entry):`;
   if (t.state === 'with') return `${head} ${tf} with the HTF side.`;
   if (t.state === 'waiting') return `${head} ${tf} no turn yet.`;
   if (t.state === 'turned') return `${head} ${tf} turned back: ${t.kind} ${t.dir} at ${et(t.at)} ET${Number.isInteger(t.barsAgo) ? ` (${t.barsAgo} bars ago)` : ''}.`;

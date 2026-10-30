@@ -77,7 +77,7 @@ const PINS = {
   ],
   'levels-and-reactions': [
     'No reaction is not a rejection.',
-    'Which kind matters most is not measured',
+    'Which kind matters (census, 15m rejections, both halves): the opening range, prior value and RTH VWAP held (+R), the IB lost (-0.22R/-0.19R)',
     'Equal highs/lows: two of the last 12 confirmed swing highs (lows) within 0.1 × ATR(14) of each other',
     'Targets: the next untested liquidity pool in the trade\'s direction.',
     'is no swing, so it is in neither.',

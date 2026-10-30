@@ -46,8 +46,8 @@ continuations a break.
 `candidate.inTheWay` and `candidate.ahead` in its own R. Where price sits:
 `m3.location.priorValue`, `m3.location.sessionValue`, `m3.vwap.side`.
 Hypothesis: levels a few ticks apart act as one zone. Which kind matters
-most is not measured: the level families fired too rarely (F4, F7, F8, F9:
-docs/research/mtf-setup-catalog.md).
+(census, 15m rejections, both halves): the opening range, prior value and
+RTH VWAP held (+R), the IB lost (-0.22R/-0.19R).
 
 **Reactions**, on closed bars:
 
