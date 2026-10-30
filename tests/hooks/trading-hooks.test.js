@@ -631,7 +631,7 @@ test('order gate hook: a trade-lifecycle entry reads its cycle bar\'s day shard 
  * balance, the scenario's compose record suggesting `size`, and the policy's verdict on it (as order_plan records it).
  * The translated size (prop/size-translate.js) is 5: the $300 cap at 111 ticks ($55.50 a contract), under the verdict.
  */
-function composedPropWorld(home, size) {
+function composedPropWorld(home, size, reads = null) {
   const LC = require('../fixtures/lifecycle');
   const prop = require('../../scripts/lib/trading/prop-state');
   const policy = require('../../scripts/lib/trading/strategies').loadStrategies(REPO, {}).strategies.find(s => s.name === 'prop_portfolio');
@@ -639,10 +639,13 @@ function composedPropWorld(home, size) {
   const now = new Date('2026-10-07T14:00:02.000Z');
   prop.startAttempt(home, account, new Date(now.getTime() - 86400000));
   prop.snapshot(home, account, account.starting_balance, new Date(now.getTime() - 60000), { fills: [] });
-  const rec = LC.writeScenario(home, { size });
+  const rec = LC.writeScenario(home, { size, ...(reads ? { reads } : {}) });
   const spec = { tickSize: 0.25, tickValue: 0.5 };
   require('../../scripts/lib/prop/composed-verdict').composedVerdict({ home, policy, component: 'trade_lifecycle', account, record: rec, plan: rec.plan, briefing: LC.briefing(), root: 'MNQ', spec, specOf: () => spec, now });
-  return { record: rec.id, order: n => LC.order({ size: n, rationale: 'setup:prop_portfolio long trade_lifecycle, stop 21512.50, target 21598.00' }), env: { FTH_STRATEGIES_DIRS: path.join(REPO, 'strategies'), FTH_ACCOUNTS_DIRS: path.join(REPO, 'accounts'), FTH_TEST_NOW: now.toISOString(), FTH_CYCLE_BARS: JSON.stringify({ MNQ: LC.BAR }), FTH_SYMBOLS: 'MNQ' } };
+  // `reads`: the record's own target (its plan's ticks and price), else scenario 1's 1h swing (231 ticks, 21598.00).
+  const target = reads ? { takeProfitBracket: { ticks: rec.plan.target.ticks, type: 'limit' } } : {};
+  const at = reads ? rec.plan.target.price.toFixed(2) : '21598.00';
+  return { record: rec.id, plan: rec.plan, order: n => LC.order({ size: n, ...target, rationale: `setup:prop_portfolio long trade_lifecycle, stop 21512.50, target ${at}` }), env: { FTH_STRATEGIES_DIRS: path.join(REPO, 'strategies'), FTH_ACCOUNTS_DIRS: path.join(REPO, 'accounts'), FTH_TEST_NOW: now.toISOString(), FTH_CYCLE_BARS: JSON.stringify({ MNQ: LC.BAR }), FTH_SYMBOLS: 'MNQ' } };
 }
 
 /**
@@ -968,6 +971,34 @@ test('order gate hook and MCP gateway wiring: the shipped entry rule (the 4h and
     }
     assert.strictEqual(gate(orderPayload(exit), env).code, 0, `exit ${t4h}/${t1h} (hook)`);
     assert.ok(!out.byId[2].result.isError, `exit ${t4h}/${t1h} (gateway): ${out.byId[2].result.content[0].text}`);
+  }
+});
+
+test('order gate hook and MCP gateway wiring: a trail-target record (the 4h and 1h up, the 2R mark) goes as its record says, the bracket at the stop and the mark; the 1h ranging, both refuse it; an exit goes', { timeout: 60000 }, async () => {
+  const LC = require('../fixtures/lifecycle');
+  const { writeBriefing } = require('../../scripts/lib/trading/briefing');
+  const reads = LC.READS.map(x => (x.step === 'target' ? { ...x, read: 'target trail' } : x));
+  for (const t1h of ['up', 'range']) {
+    const home = tmpDir();
+    const w = composedPropWorld(home, 5, reads);
+    assert.deepStrictEqual([w.plan.stop.ticks, w.plan.target.ticks, w.plan.target.trail], [111, 222, true], 'the stop leg 111 ticks, the target leg the 2R mark');
+    trendHome(home, { closedAt: LC.BAR });
+    if (t1h !== 'up') { const b = LC.briefing(); b.sections.h1.data.h1 = { trend: t1h }; writeBriefing(home, b); }
+    const { env } = setup([{ ts: '2026-10-07T13:59:30.000Z', kind: 'plan', contractId: 'MNQ', text: 'plan' }], { FTH_HOME: home, ...w.env });
+    const hook = gate(orderPayload(w.order(5)), env);
+    const g = await gatewayRun(env, [call(1, 'place_order', w.order(5))]);
+    const text = g.byId[1].result.content[0].text;
+    if (t1h === 'up') {
+      assert.strictEqual(hook.code, 0, hook.stderr);
+      assert.doesNotMatch(text, /\[composed-reads\]|\[entry-rule\]/, text);
+    } else {
+      assert.strictEqual(hook.code, 2);
+      assert.match(hook.stderr, /\[composed-reads\] setup:trade_lifecycle: .*the trail target needs the 4h and the 1h both up/);
+      assert.ok(g.byId[1].result.isError, text);
+      assert.match(text, /\[composed-reads\]/);
+    }
+    const exit = { ...EXIT_BASE, contractId: 'MNQ', side: 'sell', size: 1, rationale: '[exit] close the prop_portfolio long' };
+    assert.strictEqual(gate(orderPayload(exit), env).code, 0);
   }
 });
 

@@ -24,8 +24,7 @@ only:
   base bars, 15m, 1h and 4h; `frame`, `price`, `points`, `ticks`, `R`).
   Stops rest beyond a swing (`levels-and-reactions`).
 - **The prior 1h and 4h candle's high, low and midpoint**:
-  `m3.rangeTargets`, per frame its `high`, `mid` and `low` (`side` of
-  price, `points`, `ticks`, `R`): where that candle's buyers and sellers
+  `m3.rangeTargets`, per frame its `high`, `mid` and `low`: where that candle's buyers and sellers
   stopped, and its balance, where a move back into the range often
   pauses. The mid is exact ((high + low) / 2) and may sit between ticks;
   its `points`, `ticks` and `R` are to the tick toward price. A side the
@@ -38,13 +37,15 @@ only:
 
 **Read forms** (the target step): `target <tf> swing high|low <price>`,
 `target prior 1h|4h high|mid|low <price>` (a taken side reads false),
-`target <5m|15m|1h> fvg high|low <price>`. None named: `target 2r`.
+`target <5m|15m|1h> fvg high|low <price>`. None named: `target 2r`. The
+4h and 1h your way: `target trail`, whatever is named (we always trail):
+the 2R mark arms the trail. A key level within 1R in front caps the first
+push: evidence; prefer the turn after it.
 
 **Timeframe weight** (hypothesis, not measured): a higher timeframe's
-level holds more resting orders and reacts more often; a lower one's is
-usually the first in the way. The nearest level is the conservative
-target, a higher-timeframe one beyond it the extended one. Levels a few
-ticks apart act as one zone.
+level holds more orders and reacts more often; the nearest is the
+conservative target, a higher one beyond it the extended one; levels a few
+ticks apart are one zone.
 
 **Room in R.** The briefing's `R` is against the reference stop
 (`m3.oneR`). Against the trade's own stop (`order_plan`'s distance, the
@@ -73,6 +74,5 @@ toward the entry: 21560.00 = 14.50 pts = 58 ticks, $29.00, 1.76R.
 
 Short 21490.00, stop 21501.25 (11.25 pts = 45 ticks, $22.50 per MNQ).
 Prior 1h low 21471.75: 18.25 pts = 73 ticks, $36.50, 1.62R.
-Prior 1h mid 21492.125 is above the entry: behind the trade, not a target.
 Prior 4h low 21440.50: 49.50 pts = 198 ticks, $99.00, 4.40R (extended).
 ```

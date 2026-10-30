@@ -264,3 +264,15 @@ test('compose hints: a leg-turned problem keeps the repair: a leg read of the mo
   const none = H.repairOf({ reads: swap('entry', '3m volume high'), side: 'long', briefing: b, tick: 0.25, plan: PLAN, entryRule: rule });
   assert.ok(none === null || none.checked.ok);
 });
+
+test('compose hints: no named level reaching 2R, the 4h and 1h both the side\'s way: the hint is the trail, and the whole passes with it (never a pass for want of a level)', () => {
+  const aligned = b => { b.sections.m3.data.swingTargets.above = [{ frame: '15m', price: 21560 }]; b.sections.h1.data.h4 = { trend: 'up' }; };
+  const r = hints(swap('target', 'target 15m swing 21560'), { b: brief(aligned) });
+  assert.ok(r.planned.problems.some(p => /^R:R .* under the strategy's min 2/.test(p)));
+  assert.strictEqual(r.lines.find(l => l.startsWith('target:')), 'target: no named level reaches 2R from the stop at 21512.75; the 4h and 1h are your way: "target trail", the 2R mark 21595.75 arms the trail');
+  const whole = r.lines.find(l => l.startsWith('these reads pass together'));
+  assert.ok(whole && whole.includes('"target trail"') && passes(whole, r.b, 'long'), whole);
+  // The targets a plan can take: the named ones, then the trail; not aligned (scenario 1's own 4h range): no trail.
+  assert.deepStrictEqual(H.targetsOf(brief(aligned), 'long', 0.25).map(x => x.read), ['target 15m swing high 21560', 'target trail']);
+  assert.ok(!H.targetsOf(brief(), 'long', 0.25).some(x => x.trail));
+});

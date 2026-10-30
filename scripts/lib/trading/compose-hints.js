@@ -134,13 +134,15 @@ function nearestStops(list, b, side, tick, rule) {
 
 /**
  * The targets a plan can take the side's way: the named ones (composed-reads.js targetsAhead), else the 2R mark
- * (`target 2r`, TRUE then: checkRead with the side).
+ * (`target 2r`, TRUE then: checkRead with the side); and, last, the trail (`target trail`) when it is TRUE (the 4h and
+ * the 1h both the side's way), whatever is named.
  */
 function targetsOf(b, side, tick, riskPts = null) {
   const named = targetsAhead(b, side, { tick, riskPts });
-  if (named.length) return named;
+  const trail = checkRead(parseRead('target trail'), b, { tick, side, riskPts }).check === true ? [{ read: 'target trail', price: null, mark: true, trail: true }] : [];
+  if (named.length) return [...named, ...trail];
   const c = checkRead(parseRead('target 2r'), b, { tick, side, riskPts });
-  return c.check === true ? [{ read: 'target 2r', price: null, mark: true }] : [];
+  return [...(c.check === true ? [{ read: 'target 2r', price: null, mark: true }] : []), ...trail];
 }
 
 /** What fails in each step of a checked combination: { step: [reason] } (missing, a read not TRUE or against, none pointing, timing). */
@@ -207,7 +209,9 @@ function repairOf({ reads, side, briefing, tick, plan, candidates = null, entryR
   };
   const [bias, location, setups, entries, stops, targets] = STEPS.map(pool);
   // The 2R mark last: the check decides it with each combination's own stop (the room rule's R).
-  if (!targets.some(t => t[0] && t[0].mark)) targets.push([{ read: 'target 2r', price: null, mark: true, skill: skillOf('target') }]);
+  if (!targets.some(t => t[0] && t[0].mark && !t[0].trail)) targets.push([{ read: 'target 2r', price: null, mark: true, skill: skillOf('target') }]);
+  // The trail last of all: the check holds it TRUE only with the 4h and 1h the side's way.
+  if (!targets.some(t => t[0] && t[0].trail)) targets.push([{ read: 'target trail', price: null, mark: true, trail: true, skill: skillOf('target') }]);
   const closesAfter = (e, after) => e.some(x => { const t = candleClose(m3, parseRead(x.read).form.split(' ')[0]); return t !== null && t > after; });
   let tries = 0;
   // The first bias and location (the model's own when TRUE), the most recent setups, then every stop and the nearest
@@ -324,7 +328,9 @@ function targetHint(checked, cand, b, side, tick, plan) {
   const min = plan.minRR;
   const enough = rated.filter(x => x.r.ok);
   const from = `from the stop at ${stop.price}`;
-  if (enough.length && enough[0].mark) return `target: no named level the trade's way: "target 2r", the ${min}R mark ${enough[0].r.price} ${from}; past it the runner trails`;
+  if (enough.length && enough[0].mark && !enough[0].trail) return `target: no named level the trade's way: "target 2r", the ${min}R mark ${enough[0].r.price} ${from}; past it the runner trails`;
+  // Aligned (the 4h and 1h your way) with no named level at the minimum R: the trail, never a pass for lack of a level.
+  if (enough.length && enough[0].trail) return `target: no named level reaches ${min}R ${from}; the 4h and 1h are your way: "target trail", the ${min}R mark ${enough[0].r.price} arms the trail`;
   if (enough.length) return `target: named levels at ${min}R or more ${from}: ${enough.slice(0, n).map(x => `"${x.read}" (${x.r.rr}R)`).join(', ')}`;
   return `target: no named level reaches ${min}R ${from} (nearest: ${rated.slice(0, n).map(x => `"${x.read}" ${x.r.rr}R`).join(', ') || 'none'}): pass, or a setup with a nearer stop`;
 }

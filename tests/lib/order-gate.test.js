@@ -3756,6 +3756,56 @@ test('bias_agree: a D2 reversal against the 4h is refused (a 1h CHoCH no longer 
   assert.deepStrictEqual(entryRuleOf(shipped.entry).biasFrames, ['4h', '1h']);
 });
 
+// ---- The trail target (the owner, 2026-10-29: "We always use a trailing stop, not a fixed target, to maximize our wins") ----
+const TRAIL_READS = LC.READS.map(x => (x.step === 'target' ? { ...x, read: 'target trail', why: 'aligned: the trail' } : x));
+
+test('target trail: with the 4h and 1h both the side\'s way the record\'s target is the 2R mark (whatever level is ahead); the gate re-checks and takes the same plan; disagreeing, refused; the brackets as today\'s target_then_trail', () => {
+  // Scenario 1's 111-tick stop: the mark is 2 x 111 = 222 ticks (55.50 points) from 21540.25: 21595.75, short of the named
+  // 1h swing 21598.00 (231 ticks), which stays a level ahead.
+  const { home, rec } = LCP.propHome({ size: 5, reads: TRAIL_READS });
+  assert.strictEqual(rec.ok, true, rec.problems.join('; '));
+  assert.deepStrictEqual([rec.plan.stop.ticks, rec.plan.target.ticks, rec.plan.target.price, rec.plan.rr, rec.plan.target.trail, rec.plan.target.source], [111, 222, 21595.75, 2, true, 'trail']);
+  const args = lcPropPlan(home);
+  // The bracket sent: the stop leg at the stop (111 ticks) and the target leg at the 2R mark (222 ticks), which the runner
+  // cancels once it manages the fill (exit mode target_then_trail): no fixed take-profit stays.
+  assert.deepStrictEqual([args.stopLossBracket, args.takeProfitBracket], [{ ticks: 111, type: 'stop' }, { ticks: 222, type: 'limit' }]);
+  assert.match(args.rationale, /target 21595\.75/);
+  const reg = LCP.registry({ entry: AGREE });
+  assert.deepStrictEqual(lcPropEval(home, args, { registry: reg }).violations, [], 'the gate takes the same plan');
+  // The bracket checks hold as for any entry: no stop leg, refused; another target leg than the record's, refused.
+  const { stopLossBracket: _s, ...noStop } = args;
+  assert.ok(checks(lcPropEval(home, noStop, { registry: reg })).includes('stop-defined'));
+  assert.match(lcPropEval(home, { ...args, takeProfitBracket: { ticks: 231, type: 'limit' } }, { registry: reg }).violations.find(v => v.check === 'composed-reads').message, /takeProfitBracket\.ticks 231 is not the record's 222/);
+  // The 1h ranging now (the hard rule): the trail read is FALSE and the entry rule refuses; an exit goes.
+  withTrends(home, 'up', 'range');
+  const off = lcPropEval(home, args, { registry: reg });
+  assert.ok(checks(off).includes('composed-reads'));
+  assert.match(off.violations.find(v => v.check === 'composed-reads').message, /the trail target needs the 4h and the 1h both up/);
+  assert.deepStrictEqual(lcPropEval(home, EXIT_SELL, { registry: reg }).violations, []);
+});
+
+test('target trail: not aligned, the record is NOT OK (a named target is still needed); aligned, accepted with no named level at 2R', () => {
+  const CR = require('../../scripts/lib/trading/composed-reads');
+  // No swing target and no level ahead of the long at 2R: the 1h swing gone from the briefing.
+  const b = LC.briefing({ m3: { swingTargets: { above: [], below: [] }, nearestLiquidity: { above: [{ name: 'prior VAH', price: 21570, points: 29.75, R: 2.48 }], below: [] } } });
+  const at = (t4h, t1h) => { const x = JSON.parse(JSON.stringify(b)); x.sections.h1.data.h4 = { trend: t4h }; x.sections.h1.data.h1 = { trend: t1h }; return CR.checkReads({ reads: TRAIL_READS, side: 'long', briefing: x }); };
+  assert.strictEqual(at('up', 'up').ok, true);
+  for (const [a, c] of [['up', 'range'], ['range', 'up'], ['down', 'down']]) {
+    const r = at(a, c);
+    assert.strictEqual(r.ok, false, `${a}/${c}`);
+    assert.match(r.reads.find(x => x.step === 'target').fact, /the trail target needs the 4h and the 1h both up/);
+  }
+  // A short mirrors it: both down.
+  const s = JSON.parse(JSON.stringify(b));
+  s.sections.h1.data.h4 = { trend: 'down' };
+  s.sections.h1.data.h1 = { trend: 'down' };
+  assert.strictEqual(CR.checkRead(CR.parseRead('target trail'), s, { side: 'short', tick: 0.25 }).check, true);
+  // A trend the briefing doesn't hold: unchecked, never TRUE.
+  const gone = JSON.parse(JSON.stringify(b));
+  delete gone.sections.h1.data.h4;
+  assert.strictEqual(CR.checkRead(CR.parseRead('target trail'), gone, { side: 'long', tick: 0.25 }).check, 'unchecked');
+});
+
 test('trade_lifecycle in an attempt: the record\'s size is a suggestion: the translated size goes, the record\'s and any other are refused; a verdict not sized on this record is refused', () => {
   // The record suggests 4 ($222.00, under $300); a $1,000 cushion's verdict sized it at 3: the gate refuses 4 (the
   // record's, over the verdict and not the translated 3) and takes 3.

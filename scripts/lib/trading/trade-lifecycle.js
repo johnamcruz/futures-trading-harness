@@ -27,7 +27,9 @@
  *            ATR(20) reference stop); a closer stop is refused, never widened (a wider stop would not be the level the
  *            model named). The three numbers' one home is the strategy's STRATEGY.md (stopRuleOf); none: no plan
  *   target   the verified level, floored toward the entry on the tick; the 2R mark (`target 2r`, only when the briefing
- *            names no target the trade's way) at risk.min_rr times the stop from the entry, on the tick the trade's way
+ *            names no target the trade's way) at risk.min_rr times the stop from the entry, on the tick the trade's way;
+ *            the trail (`target trail`, with the 4h and the 1h both the trade's way) the same mark, `trail: true` (the
+ *            policy's exit arms its trail there: the runner cancels the resting target leg once filled)
  *   R:R      target ticks over stop ticks, at least the strategy's risk.min_rr
  *   size     the model's stated size (contracts, from the sizing skills); its dollar risk at most the strategy's
  *            risk.max_risk_usd (required); maxSize the most that cap allows
@@ -195,7 +197,7 @@ function planOf({ checked, briefing, side, size, tick, tickValue, minRR = null, 
     plan: {
       entry: { type: own ? 'market' : 'limit', price: ref },
       stop: { source: checked.stop.source, level: checked.stop.level, price: stopPrice, ticks: stopTicks, bufferTicks: own ? Math.round(Math.abs(checked.stop.level - stopPrice) / tick) : buffer, floorTicks: floor },
-      target: { source: checked.target.source, level: checked.target.mark ? targetPrice : checked.target.level, price: targetPrice, ticks: targetTicks, ...(checked.target.mark ? { mark: true } : {}) },
+      target: { source: checked.target.source, level: checked.target.mark ? targetPrice : checked.target.level, price: targetPrice, ticks: targetTicks, ...(checked.target.mark ? { mark: true } : {}), ...(checked.target.source === 'trail' ? { trail: true } : {}) },
       rr, inTheWay: way ? { name: way.name, price: way.price, R: round2(Math.abs(way.price - ref) / (stopTicks * tick)) } : null,
       size: Number.isInteger(size) ? size : null, riskUsd, perContractUsd: perContract,
       maxSize: num(maxRiskUsd) !== null && perContract > 0 ? Math.floor(maxRiskUsd / perContract) : null, tick, tickValue,

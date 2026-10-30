@@ -133,3 +133,16 @@ test('entry rule e2e: every listed frame agreeing (a copy listing only the 4h, b
   assert.ok(exits.ran.length);
   assert.deepStrictEqual(D.placedAtBroker(w).filter(c => /^\s*\[exit\]/.test(c.args.rationale)).map(c => c.args.size), [1], 'the exit reached the broker');
 });
+
+test('entry rule e2e: the trail target through the real runner needs the 4h and the 1h both the trade\'s way: with the 1h ranging the record is NOT OK and nothing is sent', async () => {
+  // The copy's rule lists only the 4h (so the entry rule holds here); the trail target reads the 4h and 1h itself.
+  const copy = policyCopy(require('../helpers').tmpDir(), { policy: 'pmc_trail', account: 'pmc_trail_100k', rulebook: t => t.replace(/^( {6}bias_frames: )\[4h, 1h\]/m, '$1[4h]') });
+  const w = attemptWorld(copy);
+  const trail = READS.map(x => (x.step === 'target' ? { ...x, read: 'target trail' } : x));
+  const r = await D.pass(w, decisionAt(FIRED_BAR), [{ harness: 'bar_briefing', args: { symbol: 'MNQ', json: true } }, { harness: 'compose_check', args: { symbol: 'MNQ', side: 'long', reads: trail, size: 6 } }, { result: 'CYCLE RESULT: planned - trade_lifecycle long 6' }], { runRole: roles(w).runRole, prop: true });
+  const rec = TL.readRecords(w.home, 'MNQ').at(-1);
+  assert.strictEqual(rec.ok, false);
+  assert.match(rec.reads.find(x => x.step === 'target').fact, /the trail target needs the 4h and the 1h both up/);
+  assert.deepStrictEqual(placed(w), []);
+  assert.doesNotMatch(r.ran[0].result || '', /^CYCLE RESULT: executed/);
+});
