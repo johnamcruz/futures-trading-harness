@@ -120,7 +120,8 @@ function assertClean(w, runId, out, { refused = [] } = {}) {
 /** The scripted model's script file (scripted-opencode.js): bar open time -> step; a bar with none is quiet. */
 const playScript = (w, bars) => fs.writeFileSync(w.env.SMOKE_MODEL_SCRIPT, JSON.stringify({ bars }));
 /** The composed scenario of a scanned moment: one true read of each step, as the scan stored them. */
-const scenarioOf = m => ({ side: m.side, skill: 'rejection', reads: ['bias', 'location', 'setup', 'entry', 'stop', 'target'].map(step => { const x = m.reads.find(r => r.step === step && r.agrees); return [step, x.skill, x.read]; }) });
+// The entry read is optional (the setup is the entry): a moment stored without one composes without one.
+const scenarioOf = m => ({ side: m.side, skill: 'rejection', reads: ['bias', 'location', 'setup', 'entry', 'stop', 'target'].flatMap(step => { const x = m.reads.find(r => r.step === step && r.agrees); return x ? [[step, x.skill, x.read]] : []; }) });
 /** The setup moments the scan finds on the first week's Thursday and Friday (scripts/curated-lists.js scan). */
 function scanMoments(w) {
   const file = path.join(w.home, 'moments.jsonl');
@@ -152,7 +153,11 @@ test('stage 2, combine: two attempts from zero; a model entry fills, the first a
   // The model stand-in from the copy too (its harness tools read the copy's rulebook).
   fs.writeFileSync(path.join(w.home, 'bin', 'opencode'), `#!/bin/sh\nexec "${process.execPath}" "${path.join(tree, path.relative(ROOT, STANDIN))}" "$@"\n`, { mode: 0o755 });
   const moments = scanMoments(w);
-  const entry = moments.find(m => m.bar === '2022-04-21T16:21:00.000Z');
+  // 16:21 before CONF3M (the setup is the entry: its moment is now the 16:18 bar). Its scan read "at opening range
+  // high" is the scan's 3m-only view; the runner's 1m-built 5m candle doesn't meet the level, so the location composed
+  // is the moment's VWAP read.
+  const found = moments.find(m => m.bar === '2022-04-21T16:18:00.000Z');
+  const entry = found ? { ...found, reads: found.reads.filter(r => r.read !== 'at opening range high') } : found;
   assert.ok(entry, moments.map(m => m.bar).join(', '));
   const exitBar = iso(Date.parse(entry.bar) + D.STEP);
   const refusedBar = iso(Date.parse(entry.bar) + 7 * 86400000); // the same bar a week later (the second week's Thursday)

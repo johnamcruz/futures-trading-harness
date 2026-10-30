@@ -66,9 +66,9 @@ review: "Composed long MNQ: 1h up, at prior vah, 15m rejected prior vah up, 3m c
 Plan: limit 21540.25, stop 21512.50 (111 ticks), target 21598.00, 1 contract, $55.50 risk.
 Filled 21540.25. Stopped at 21512.50 after the 1h closed back below the VAH: 111 ticks =
 $55.50 + $0.74 fees = $56.24 net loss, R = -56.24 / 55.50 = -1.01. Process B: reads true,
-but the 3m momentum read was missing and the bar's volume was 0.6x."
+but the 15m candle's volume was 0.6x."
 tags: ["result:loss", "setup:trade_lifecycle", "MNQ", "regime:trend-up", "r:-1.01"]
 
-lesson: "trade_lifecycle 15m rejection without a 3m momentum read: 1W/5L over 6 trades."
+lesson: "trade_lifecycle 15m rejection on 15m volume under 1x: 1W/5L over 6 trades."
 tags: ["setup:trade_lifecycle", "MNQ"]
 ```

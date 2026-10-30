@@ -124,7 +124,7 @@ Take: at the prior RTH high 21615.00: on the 15m close a shooting star (H 21621.
   on the 1h close a rejection wick, then on the 3m close a bearish engulfing. Stack agrees.
   Reads: 1h rejected prior rth high down, 3m pattern bearish engulfing. Priority order -> take.
 Skip: at the session POC 21522.00, on the 3m close a doji (body 0.25, range 5.50); 15m forming:
-  the entry read not in yet -> pass. The session VAH 0.4R ahead is a read, not the reason.
+  no setup yet -> pass. The session VAH 0.4R ahead is a read, not the reason.
 Loser: at the prior VAL 21480.00, on the 15m close a hammer (L 21474.50, C 21483.75).
   long at 21483.75, stop 21474.25 (9.50 pts = 38 ticks, $19.00 on 1 MNQ);
   closes below the VAL. -38 ticks, -$19.00.

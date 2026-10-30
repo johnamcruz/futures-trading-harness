@@ -84,19 +84,18 @@ test('stop beyond the box: a live box\'s far side, within a tick; a long\'s low,
   assert.strictEqual(one('stop 5m box low 21514').check, 'unchecked');
 });
 
-test('a compression setup with an entry on a candle closed after the expansion candle passes; on the expansion candle itself it is refused', () => {
+test('a compression setup passes with an entry read after the expansion candle, on it, or with none (the setup is the entry)', () => {
   const ok = CR.checkReads({ reads: READS, side: 'long', briefing: briefing() });
   assert.deepStrictEqual(ok.problems, []);
   assert.strictEqual(ok.ok, true);
   assert.deepStrictEqual(ok.stop, { source: '15m-box-low', level: 21514 });
-  // The 15m candle that closed 14:45 is the expansion candle: its own close is no confirmation.
+  // The expansion candle's own close (the CONF3M study: no confirming close is required), a 15m break closing with the
+  // 3m entry candle, and no entry read at all: each stands.
   const own = CR.checkReads({ reads: READS.map(r => (r.step === 'entry' ? { ...r, read: '15m close top' } : r)), side: 'long', briefing: briefing() });
-  assert.strictEqual(own.ok, false);
-  assert.ok(own.problems.some(p => /closed after the setup's \(2026-04-23T14:45:00\.000Z\)/.test(p)), own.problems.join('; '));
-  // The setup's time is the expansion candle's, not the timeframe's last candle: a 15m break that closed 15:00 (after
-  // the 3m entry candle's close) can't be confirmed by it.
+  assert.strictEqual(own.ok, true, own.problems.join('; '));
   const late = briefing({ state: 'expanding', box: BOX, break: { ...BREAK, closedAt: '2026-04-23T15:00:00.000Z' } });
-  assert.strictEqual(CR.checkReads({ reads: READS, side: 'long', briefing: late }).ok, false);
+  assert.strictEqual(CR.checkReads({ reads: READS, side: 'long', briefing: late }).ok, true);
+  assert.strictEqual(CR.checkReads({ reads: READS.filter(r => r.step !== 'entry'), side: 'long', briefing: briefing() }).ok, true);
   // The same setup for a short is against the side.
   const short = CR.checkReads({ reads: READS, side: 'short', briefing: briefing() });
   assert.strictEqual(short.ok, false);

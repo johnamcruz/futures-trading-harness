@@ -11,23 +11,22 @@
  * fixed plan, not the model's trades, and nothing yet measures what showing it does).
  *
  * Per reaction moment (scanLibrary), on the bar briefings the runner builds (briefing.js, bar by bar, causal):
- *   confirmation   the first entry-timeframe close in the reaction's window (the closes AFTER the reaction bar, while
- *                  its candle is still the last completed one: an entry read is on a candle closed after the setup
- *                  candle, the gate's same-candle rule) whose candle confirms the reaction's side, in this order: an
- *                  entry pattern (hammer or bullish engulfing long, shooting star or bearish engulfing short), momentum
- *                  that way, a close in the far third, and that composes; a confirming close that doesn't compose
- *                  leaves the next one to try. A close in a no-entry window (briefing.js sessionWindow, the gate's
- *                  entry clock) is skipped (`no-entry-window` when nothing else was tried). None: `no-confirmation`;
- *                  otherwise the last close tried says why.
+ *   entry bar      the first entry-timeframe close in the reaction's window (the reaction bar itself, then the closes
+ *                  after it while its candle is still the last completed one) that composes: the setup is the entry, no
+ *                  confirming read is needed (the CONF3M study). A close that doesn't compose leaves the next one to
+ *                  try. A close in a no-entry window (briefing.js sessionWindow, the gate's entry clock) is skipped
+ *                  (`no-entry-window` when nothing else was tried). None composed: the last close tried says why
+ *                  (`no-confirmation` with no close tried).
  *   reads          the reads TRUE at the confirmation bar, in compose_check's read forms (composed-reads.js), one per
  *                  step: bias `1h <trend>` when the 1h trend is the side's or a range, else `regime <name>`; location
  *                  `at <level>` (`at <tf> fvg`), else `vwap <side>`; setup the reaction itself (`15m rejected prior vah
- *                  down`); entry the confirming read; stop `<tf> high|low <price>`, the reaction candle's far side;
+ *                  down`); entry the 3m candle's read the side's way when one is true (an entry pattern, momentum, a far-third
+ *                  close; optional); stop `<tf> high|low <price>`, the reaction candle's far side;
  *                  target the nearest real level (a swing target, the prior 1h or 4h high, mid or low, a gap's edge)
  *                  whose plan is at least 2:1. checkReads verifies them all on that briefing, so the signature is the
  *                  one a model stating the same reads gets. Not every read true, or the checker or the plan refusing
  *                  the combination for anything but room: `not-composable`, with the problem.
- *   plan           trade-lifecycle.js planOf, as compose_check plans a model's record: a limit at the confirmation
+ *   plan           trade-lifecycle.js planOf, as compose_check plans a model's record: a limit at the entry bar's
  *                  close, the stop one tick beyond the reaction candle (D3), D13's floor (a closer stop is refused,
  *                  never widened: `stop-under-floor`), the target on the tick, R:R at least 2 (no verified target reaching it:
  *                  `no-room`).
@@ -60,7 +59,7 @@
  *   baseBars(bars, minutes)                a bars file's bars as base bars (1m bars aggregated), by time
  *   runnerClock({ from, to, sessions })    { inSession(closeMs), eodOf(ms) }: the runner's decision times and end of day
  *                                          (its default sessions, the exchange calendar for those years)
- *   planLine(briefing, { setupTf })        the briefing's "Standard plan" line: on a confirmation close of a "Setups to
+ *   planLine(briefing, { setupTf })        the briefing's "Standard plan" line: on a close of a "Setups to
  *                                          check" moment, the strongest reaction each side composed by composeAt (the
  *                                          census's path: checkReads, then planOf) on that briefing alone, so as of the
  *                                          bar's close: OK with its entry, stop, target, R:R and reads, or what refused it;
@@ -82,13 +81,14 @@ const { barMinutes, aggregate } = require('../backtest/data');
 const { tickOf } = require('../trading/contracts');
 
 // 2: the limit window is the strategy's valid_bars (1 held it one bar); a version-1 library is rebuilt.
-const VERSION = 2;
+// 3: the setup is the entry (no confirming read): the reaction bar itself is tried first; a version-2 library is rebuilt.
+const VERSION = 3;
 const PLUGIN_ROOT = path.resolve(__dirname, '..', '..', '..');
 const KIND = 'setup-library';
 const MIN_RR = require('../tunables').replay().setupLibrary.minRR; // config/replay.json
 const WINDOW_BARS = require('../tunables').replay().windowBars;
 const PINNED = 'library-pinned.json';
-const STANDARD = 'one fixed standard at every reaction: a limit at the confirmation close, the stop one tick beyond the reaction candle (D13 floor), the first real level at 2:1 or more (else no room)';
+const STANDARD = 'one fixed standard at every reaction: a limit at the setup close (no confirming read), the stop one tick beyond the reaction candle (D13 floor), the first real level at 2:1 or more (else no room)';
 const ENTRY_PATTERNS = { long: ['bullish engulfing', 'hammer'], short: ['bearish engulfing', 'shooting star'] };
 const SKILL = { bias: 'mtf-bias-filter', location: 'levels-and-reactions', rejected: 'rejection', broke: 'breakout', fvg: 'fair-value-gaps', entry: 'candle-reading', stop: 'invalidation', target: 'take-profit' };
 
@@ -100,7 +100,7 @@ const tfLabel = m => (m % 60 === 0 ? `${m / 60}h` : `${m}m`);
 const levelWords = name => String(name).replace(/[()[\]{}]/g, ' ').toLowerCase().split(/\s+/).filter(Boolean).join(' ');
 const sideOf = dir => (dir === 'up' ? 'long' : dir === 'down' ? 'short' : null);
 
-/** The entry read that confirms `side` on the base candle, in the standard's order, or null. */
+/** The base candle's entry read the side's way, in the standard's order, or null (optional: the setup is the entry). */
 function entryRead(c, side, base) {
   if (!isObj(c) || c.unavailable) return null;
   const pats = [...new Set([...(Array.isArray(c.patterns) ? c.patterns : []), c.pattern].filter(Boolean))];
@@ -143,7 +143,6 @@ function composeAt(b, reaction, { side, tick, setupTf = DEFAULTS.setupTf, stopRu
   const stf = tfLabel(setupTf);
   const c = m3.candles[stf];
   const entry = entryRead(m3.candles[base], side, base);
-  if (!entry) return { status: 'not-composable', why: 'no confirming entry read' };
   const fvg = reaction.kind === 'fvg';
   const setupRead = `${stf} ${reaction.rel} ${levelWords(reaction.name)} ${reaction.dir}`;
   const trend = b.sections.h1 && b.sections.h1.data && b.sections.h1.data.h1 ? b.sections.h1.data.h1.trend : null;
@@ -152,7 +151,7 @@ function composeAt(b, reaction, { side, tick, setupTf = DEFAULTS.setupTf, stopRu
   const stopRead = `stop ${stf} ${side === 'long' ? 'low' : 'high'} ${side === 'long' ? c.l : c.h}`;
   const reads = (bias, loc, target) => [
     { step: 'bias', skill: SKILL.bias, read: bias }, { step: 'location', skill: SKILL.location, read: loc },
-    { step: 'setup', skill: fvg ? SKILL.fvg : SKILL[reaction.rel], read: setupRead }, { step: 'entry', skill: SKILL.entry, read: entry },
+    { step: 'setup', skill: fvg ? SKILL.fvg : SKILL[reaction.rel], read: setupRead }, ...(entry ? [{ step: 'entry', skill: SKILL.entry, read: entry }] : []),
     { step: 'stop', skill: SKILL.stop, read: stopRead }, { step: 'target', skill: SKILL.target, read: target },
   ];
   const ref = num(m3.price);
@@ -255,20 +254,19 @@ function scanLibrary({ bars, root, minutes = 3, tick = 0.25, from, to, setupTf =
     if (!side) continue;
     const base = { v: VERSION, validBars, root, day, reactionAt: m.candle.closedAt, reaction: { kind: reaction.kind, name: reaction.name, rel: reaction.rel, dir: reaction.dir, price: reaction.price }, side };
     let rec = { ...base, id: idOf(root, m.candle.closedAt, reaction.name, reaction.rel), bar: list[i].t, status: 'no-confirmation', why: null, reads: [], signature: null, setupKey: null, context: null, plan: null, outcome: null };
-    // The window: the closes AFTER the reaction bar (an entry read is on a candle closed after the setup candle, the
-    // gate's same-candle rule) while the reaction candle is the last completed one. Each confirming close is tried in
-    // turn until one composes; a close in a no-entry window (the gate's entry clock, briefing.js sessionWindow) is skipped.
-    for (let j = i + 1; j < Math.min(list.length, i + span); j += 1) {
+    // The window: the reaction bar itself (the setup is the entry), then the closes after it while the reaction candle
+    // is the last completed one. Each close is tried in turn until one composes; a close in a no-entry window (the
+    // gate's entry clock, briefing.js sessionWindow) is skipped.
+    for (let j = i; j < Math.min(list.length, i + span); j += 1) {
       const cj = list[j].ms + tfMs;
-      if (cj % stepMs === 0 || !inSession(cj) || sessionDate(cj - 1) !== day) break;
+      if ((j > i && cj % stepMs === 0) || !inSession(cj) || sessionDate(cj - 1) !== day) break;
       if (sessionWindow(new Date(cj)).entries !== 'allowed') {
         if (rec.status === 'no-confirmation') rec = { ...rec, bar: list[j].t, status: 'no-entry-window', why: sessionWindow(new Date(cj)).text };
         continue;
       }
-      const bj = brief(j);
+      const bj = j === i ? b : brief(j);
       const cand = m3Of(bj).candles[tfLabel(setupTf)];
       if (!cand || cand.closedAt !== m.candle.closedAt) break;
-      if (!entryRead(m3Of(bj).candles[tfLabel(minutes)], side, tfLabel(minutes))) continue;
       // Pre-rule by design: the census measures every setup moment, with no policy (no entryRule) to hold it to.
       const r = composeAt(bj, reaction, { side, tick, setupTf });
       rec = { ...rec, bar: list[j].t, status: r.status, why: r.why || null };
@@ -280,7 +278,7 @@ function scanLibrary({ bars, root, minutes = 3, tick = 0.25, from, to, setupTf =
           outcome: { ...outcome, source: 'library' },
         };
       } else {
-        // Not composed on this close: the next confirming close is tried.
+        // Not composed on this close: the next close is tried.
         continue;
       }
       break;
@@ -434,7 +432,8 @@ function standardPlans(b, { setupTf = DEFAULTS.setupTf, entryRule = null } = {})
     const m3 = m3Of(b);
     if (!m3 || !m3.bar || m3.windowEntries !== 'allowed') return null;
     const mo = setupMoment(m3.candles, { setupTf, barClose: Date.parse(m3.bar.t) + b.minutes * 60000 });
-    if (!mo.moment || mo.phase !== 'confirmation') return null;
+    // The reaction bar (the setup is the entry) and the later closes while it stands.
+    if (!mo.moment) return null;
     // The contract's tick (contracts.js); a root it doesn't list gets no plan (never a guessed tick).
     const tick = tickOf(b.symbol);
     if (!tick) return null;

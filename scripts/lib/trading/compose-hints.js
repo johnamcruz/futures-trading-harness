@@ -22,7 +22,7 @@
  * Limits (config/analysis.json composeHints): perStep reads listed a step, maxTries combinations tried.
  */
 
-const { STEPS, ENTRY_PATTERNS, SETUP_CANDLE, TF_ORDER, TF_MIN, targetsAhead, levelIndex, candleClose, setupClose, levelName, parseRead, checkRead, checkReads } = require('./composed-reads');
+const { STEPS, ENTRY_PATTERNS, TF_ORDER, TF_MIN, targetsAhead, levelIndex, candleClose, setupClose, levelName, parseRead, checkRead, checkReads } = require('./composed-reads');
 const { planOf } = require('./trade-lifecycle');
 const { trendRuleOf } = require('./reasons');
 const { MARKET_TZ } = require('./clock');
@@ -152,6 +152,8 @@ function failingSteps(checked, planned) {
   for (const s of checked.missingSteps || []) add(s, 'missing');
   for (const r of checked.reads || []) if (STEPS.includes(r.step) && !(r.check === true && r.agrees)) add(r.step, r.check === true ? 'against' : 'false');
   for (const p of checked.problems || []) {
+    // The entry's pointing and timing problems are a record's composed before the setup became the entry (CONF3M):
+    // still named, so an older run's records read as they did.
     const m = /^the (setup|entry) has no read pointing/.exec(p);
     if (m) add(m[1], 'pointing');
     if (/^no entry read pointing .* closed after the setup/.test(p)) add('entry', 'timing');
@@ -183,8 +185,8 @@ function rrOf(stop, target, checked, b, side, tick, plan) {
 
 /**
  * The first combination that passes the check and the plan: the model's TRUE agreeing reads kept in each step that
- * has one and no other failing reason; a step that fails filled from the candidates (setup and entry each pointing
- * the side, the entry on a candle closed after the setup's). null when none passes within maxTries.
+ * has one and no other failing reason; a step that fails filled from the candidates (the setup pointing the side; the
+ * entry read optional: none unless the model's own holds). null when none passes within maxTries.
  */
 function repairOf({ reads, side, briefing, tick, plan, candidates = null, entryRule = null }) {
   const m3 = m3Of(briefing);
@@ -212,13 +214,15 @@ function repairOf({ reads, side, briefing, tick, plan, candidates = null, entryR
   // 2R mark last: the check decides it with each combination's own stop (the room rule's R).
   if (!targets.some(t => t[0] && t[0].trail)) targets.unshift([{ read: 'target trail', price: null, mark: true, trail: true, skill: skillOf('target') }]);
   if (!targets.some(t => t[0] && t[0].mark && !t[0].trail)) targets.push([{ read: 'target 2r', price: null, mark: true, skill: skillOf('target') }]);
-  const closesAfter = (e, after) => e.some(x => { const t = candleClose(m3, parseRead(x.read).form.split(' ')[0]); return t !== null && t > after; });
   let tries = 0;
   // The first bias and location (the model's own when TRUE), the most recent setups, then every stop and the nearest
   // target at the strategy's R:R from it (a target short of it is skipped before the whole check).
+  // The entry read is optional (the setup is the entry): the model's own TRUE ones first when they fail nothing, else
+  // none, then the listed ones.
+  const ownEntry = !fail.entry && goodOf(checked, 'entry').length;
+  const entryOpts = ownEntry ? [entries[0], [], ...entries.slice(1)] : [[], ...entries.filter(e => e.length)];
   for (const s of setups) {
-    const after = Math.max(...s.map(x => { const p = parseRead(x.read); return setupClose(m3, { kind: p.kind, form: p.form }); }).filter(t => t !== null), -Infinity);
-    for (const e of entries.filter(x => closesAfter(x, after))) {
+    for (const e of entryOpts) {
       for (const st of stops) {
         const stopAt = st[0] && num(st[0].price) !== null ? { price: st[0].price } : null;
         for (const tg of targets) {
@@ -269,7 +273,7 @@ function hintsFor({ checked, planned = null, briefing, side, tick, plan = null, 
       const s = cand.setup.slice(0, n).map(x => `"${x.read}" (closed ${et(x.close)})`).join(', ');
       out.push(s ? `setup: the reaction your way (${way(side)}), true here: ${s}` : `setup: no candle reacted ${way(side)} on this bar: no setup for the ${side}`);
     }
-    if (step === 'entry') out.push(entryHint(checked, cand, briefing, side));
+    if (step === 'entry') out.push(entryHint(checked, cand));
     if (step === 'stop') {
       const s = cand.stop.slice(0, n).map(x => `"${x.read}"`).join(', ');
       out.push(s ? `stop: true on the losing side here: ${s} (the stop goes beyond it; a closer one than the minimum is refused)` : 'stop: no stop source on the losing side is true at the minimum distance or more on this bar');
@@ -289,28 +293,14 @@ function hintsFor({ checked, planned = null, briefing, side, tick, plan = null, 
   return out;
 }
 
-/** The entry step's hint: a confirmation the side's way on a candle closed after the setup's, or wait a bar. */
-function entryHint(checked, cand, b, side) {
+/**
+ * The entry step's hint: the entry read is optional (the setup is the entry, timed by the next base close), so a failing
+ * one is a stated read that is false or points against the side: drop it, or state one true here.
+ */
+function entryHint(checked, cand) {
   const n = LIMITS.perStep;
-  const m3 = m3Of(b);
-  const pointing = (checked.reads || []).filter(r => r.step === 'setup' && r.check === true && r.dir === side && SETUP_CANDLE.has(r.kind));
-  const setupAt = pointing.length ? Math.max(...pointing.map(r => setupClose(m3, r)).filter(t => t !== null), -Infinity) : null;
-  const first = cand.setup[0];
-  const after = setupAt !== null && setupAt > -Infinity ? setupAt : first ? first.close : null;
-  const later = cand.entry.filter(x => after === null || (x.close !== null && x.close > after));
-  const directionless = (checked.reads || []).some(r => r.step === 'entry' && ['volume', 'participation'].includes(r.kind));
-  const lead = directionless ? 'volume and participation point no side, so they never confirm alone; ' : '';
-  const since = after !== null ? ` on a candle closed after the setup's (${et(after)})` : '';
-  // No setup read yet: a confirmation counts only on a candle closed after the setup's, so name the order.
-  if (after === null) return `entry: ${lead}no setup read for the ${side} is true yet; a confirmation counts only on a candle closed after the setup's: the setup first`;
-  if (later.length) return `entry: ${lead}the confirmation your way${since}, true here: ${quote(later.slice(0, n))}`;
-  const base = baseOf(b);
-  // A setup read on the base candle is this bar's own candle: no later candle is in the briefing, and on the next bar
-  // its reads are of the next candle. Its confirmation needs the reaction read on a higher candle.
-  const onBase = pointing.length && pointing.every(r => String(r.form || '').split(' ')[0] === base);
-  const higher = cand.setup.filter(x => x.tf !== base && cand.entry.some(e => e.close !== null && x.close !== null && e.close > x.close));
-  if (onBase) return `entry: ${lead}a ${base} setup is this bar's own candle, so no later candle can confirm it${higher.length ? `; a reaction on a higher candle that a later close confirms, true here: ${quote(higher.slice(0, n))}` : ': read the reaction on a higher candle, or pass'}`;
-  return `entry: ${lead}no candle closed after the setup's${after !== null ? ` (${et(after)})` : ''} confirms the ${side} yet: wait for the next ${base || 'base'} close, or pass`;
+  const ok = cand.entry.slice(0, n);
+  return `entry: optional (the setup is the entry, on the next close); a read stated there must be true and the trade's way: drop it${ok.length ? `, or true here: ${quote(ok)}` : ''}`;
 }
 
 /** The target step's hint: the named levels on the winning side with their R:R from the stop, those at the minimum first. */

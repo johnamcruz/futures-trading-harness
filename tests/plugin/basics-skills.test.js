@@ -182,7 +182,8 @@ const PINS = {
     'It is a setup read (`<tf> cisd up|down`), never a trade of its own',
     'A CISD after a sweep of a key level is stronger confluence; one without is still a CISD.',
     'A doji, a small body or a mid-range close is weak: no zone, no fib',
-    'price pulls back to a level, then a CISD back in the trend\'s direction ends the pullback; a later close is the entry.',
+    // The setup is the entry (the CONF3M study): the next close, not a later confirming one.
+    'price pulls back to a level, then a CISD back in the trend\'s direction ends the pullback; the next close is the entry.',
     'a CISD back toward the middle, aiming at the other side.',
     'a 15m (or 1h) CISD the bias\'s way is the setup read; a 3m or 5m one is entry timing, context, never the setup',
     'Never anticipate the bounce.',

@@ -8,7 +8,7 @@
  *
  * Scanned on practice-train (use 'practice') for the training lists, or on practice-validate (use 'validate') for the
  * validation list, never test or final (learning/splits.js assertUse). The scan is the library's own walk
- * (setup-library.js scanLibrary: the reaction bar, then each confirming close until one composes, composeAt, the
+ * (setup-library.js scanLibrary: the reaction bar, then each later close until one composes, composeAt, the
  * experience log's limitOutcome over the strategy's valid_bars, validBars, required), here with the use named and the
  * briefing window a parameter: the default is the
  * live runner's history (mtf.js HISTORY_HOURS), so the 1h and 4h trend facts are the ones live reads. With the
@@ -76,7 +76,7 @@ const { trendRule, RULE_FRAMES, HISTORY_HOURS } = require('../trading/mtf');
 const { limitOutcome } = require('./experience-log');
 const { expiryOf } = require('../trading/trade-lifecycle');
 const { setupMoment, DEFAULTS } = require('./setup-moments');
-const { composeAt, entryRead, setupKeyOf } = require('./setup-library');
+const { composeAt, setupKeyOf } = require('./setup-library');
 const { assertUse, sessionDate } = require('./splits');
 const { LISTS } = require('./curated-lists');
 
@@ -286,20 +286,20 @@ function scanMoments({ bars, root, minutes = 3, tick = 0.25, from, to, use, setu
       const reaction = m.reactions[0];
       const side = sideOf(reaction.dir);
       if (!side) continue;
-      // The library's walk: each confirming close after the reaction bar, while its candle is the last completed one.
+      // The library's walk: the reaction bar (the setup is the entry), then each close after it while its candle is the
+      // last completed one.
       let at = { i, b, status: 'no-confirmation', why: null, standard: null };
       let tried = null;
-      for (let j = i + 1; j < Math.min(list.length, i + span); j += 1) {
+      for (let j = i; j < Math.min(list.length, i + span); j += 1) {
         const cj = list[j].ms + tfMs;
-        if (cj % stepMs === 0 || !inSession(cj) || sessionDate(cj - 1) !== day) break;
+        if ((j > i && cj % stepMs === 0) || !inSession(cj) || sessionDate(cj - 1) !== day) break;
         if (sessionWindow(new Date(cj)).entries !== 'allowed') {
           if (at.status === 'no-confirmation') at = { ...at, status: 'no-entry-window', why: sessionWindow(new Date(cj)).text, skipped: j };
           continue;
         }
-        const bj = brief(j);
+        const bj = j === i ? b : brief(j);
         const cand = sec(bj, 'm3').candles[tfLabel(setupTf)];
         if (!cand || cand.closedAt !== m.candle.closedAt) break;
-        if (!entryRead(sec(bj, 'm3').candles[tfLabel(minutes)], side, tfLabel(minutes))) continue;
         const r = composeAt(bj, reaction, { side, tick, setupTf });
         tried = { i: j, b: bj };
         at = { i: j, b: bj, status: r.status, why: r.why || null, standard: r.status === 'traded' ? r : null };

@@ -256,7 +256,7 @@ Take: at the prior RTH high 21615.00: on the 15m close a shooting star (H 21621.
   Reads: 1h rejected prior rth high down, 3m pattern bearish engulfing.
   Priority order -> take.
 Skip: at the session POC 21522.00, on the 3m close a doji (body 0.25, range 5.50); 15m forming:
-  the entry read not in yet -> pass.
+  no setup yet -> pass.
   The session VAH 0.4R ahead is a read, not the reason.
 Loser: at the prior VAL 21480.00, on the 15m close a hammer (L 21474.50, C 21483.75).
   long at 21483.75, stop 21474.25 (9.50 pts = 38 ticks, $19.00 on 1 MNQ);
@@ -377,9 +377,9 @@ points to the read it uses.
    (`rejection`, `breakout`), a CISD (`cisd`), a pullback or a
    reversal (`pullback-vs-reversal`, `bos-vs-choch`).
 3.
-  **3m: the entry timing.** The next 3m close after the setup's, its way
-   (`candle-reading`, `momentum-and-volume`): the entry reads; no 3m turn
-   or break to wait for.
+  **3m: the entry timing.** The setup is the entry, on the next 3m bar:
+   no confirming close, no 3m turn or break to wait for; a 3m read
+   (`candle-reading`, `momentum-and-volume`) is timing context.
 4.
   **Stop: compose's.** One tick beyond the setup's invalidation, as
    a rule its candle's extreme (`invalidation`); never tighter.

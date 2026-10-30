@@ -132,7 +132,7 @@ function librarySection(lib, rec, before) {
   const at = key => libraryCellAt(lib, key, before);
   const setup = setupKeyOf(rec.reads);
   return [
-    `History library ${lib.hash.slice(0, 16)} (code-measured, not your decisions): every number is the standard plan's (a limit at the confirmation close, the stop one tick past the reaction candle, the first level at 2:1 or more), not your own stop and target; no record for a signature means the standard never composes it, not that it fails:`,
+    `History library ${lib.hash.slice(0, 16)} (code-measured, not your decisions): every number is the standard plan's (a limit at the setup close, no confirming read, the stop one tick past the reaction candle, the first level at 2:1 or more), not your own stop and target; no record for a signature means the standard never composes it, not that it fails:`,
     libraryLine('read signature, this context', at(cellKey('read', rec.signatures.read, full))),
     libraryLine('read signature, any context', at(cellKey('read', rec.signatures.read))),
     ...(setup ? [

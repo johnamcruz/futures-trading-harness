@@ -606,6 +606,21 @@ test('order gate: a trade-lifecycle entry (signal: composed) outside a runner cy
   assert.strictEqual(exit.code, 0, exit.stderr);
 });
 
+test('order gate hook: a trade-lifecycle entry with the 15m setup and no 3m read goes; once expired, or with no setup read, refused', () => {
+  const LC = require('../fixtures/lifecycle');
+  const at = now => setup([{ ts: '2026-10-07T13:59:30.000Z', kind: 'plan', contractId: 'MNQ', text: 'plan' }],
+    { FTH_STRATEGIES_DIRS: path.join(REPO, 'strategies'), FTH_TEST_NOW: now, FTH_CYCLE_BARS: JSON.stringify({ MNQ: LC.BAR }) }).env;
+  let env = at('2026-10-07T14:00:02.000Z');
+  LC.writeScenario(env.FTH_HOME, { reads: LC.READS.filter(x => x.step !== 'entry') });
+  assert.doesNotMatch(gate(orderPayload(LC.order()), env).stderr, /\[composed-reads\]/);
+  env = at('2026-10-07T14:06:00.000Z');
+  LC.writeScenario(env.FTH_HOME, { reads: LC.READS.filter(x => x.step !== 'entry') });
+  assert.match(gate(orderPayload(LC.order()), env).stderr, /\[composed-reads\] .*expired/);
+  env = at('2026-10-07T14:00:02.000Z');
+  LC.writeScenario(env.FTH_HOME, { reads: LC.READS.filter(x => x.step !== 'setup') });
+  assert.match(gate(orderPayload(LC.order()), env).stderr, /\[composed-reads\] .*steps not stated: setup/);
+});
+
 test('order gate hook: a trade-lifecycle entry reads its cycle bar\'s day shard alone; that shard unreadable refuses it (fails closed); its exit goes', () => {
   const LC = require('../fixtures/lifecycle');
   const TL = require('../../scripts/lib/trading/trade-lifecycle');

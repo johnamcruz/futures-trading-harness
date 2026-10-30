@@ -22,10 +22,9 @@
  *             On the parity fixtures 'wide' selects most bars (the developing profile and the previous candle's levels
  *             are met by nearly every candle), so 'key' is the default. `phase` is `reaction` on the entry bar that completed that candle,
  *             `confirmation` on the entry-timeframe closes after it while it is still the last completed candle (the
- *             window ends when the next setup candle completes: it is superseded). The reaction bar stays selected (the
- *             model notes the setup there) but is never the only one: an entry read is on a candle closed after the
- *             setup candle (the gate's same-candle rule), so the setup timeframe holds at least two runner bars
- *             (autotrader.js validateConfig) and every window has a confirmation close after the reaction bar;
+ *             window ends when the next setup candle completes: it is superseded). The reaction bar is the entry (the
+ *             setup is the entry; no confirming read is needed), and the later closes stay selected while the setup
+ *             stands; the setup timeframe holds at least two runner bars (autotrader.js validateConfig);
  *   quiet     a seeded sample of the other bars (quietSample, deterministic by seed, symbol and bar), so the model still
  *             practises passing on quiet bars;
  *   none      otherwise: no cycle (the bar is still polled, briefed, scanned and recorded as live).
@@ -151,8 +150,8 @@ function practiceLine(p) {
 
 /**
  * The setup moment as the model reads it in the bar briefing: the setup timeframe's last completed candle's reactions
- * at key levels, each with the side it points, and whether this bar is the reaction (an entry read needs a later close:
- * the gate's same-candle rule) or a confirmation close. The same moment setup-focused practice and the curated lists
+ * at key levels, each with the side it points, and whether this bar is the reaction (the setup: the entry now, the next
+ * bar fills it) or a later close while the setup still stands (no confirming read is needed: the setup is the entry). The same moment setup-focused practice and the curated lists
  * select, so what the model is shown and what it is scored on agree. A setup to check, never a signal: the model
  * composes and checks it, and passes unless every read is true.
  */
@@ -179,7 +178,7 @@ function checkLine(candles, { barClose, et = x => x, setupTf = DEFAULTS.setupTf,
   // never the entry frame's (the owner: "it needs to read candle patterns at the setup").
   const sc = setupCandleText(candles);
   const what = shown.map(r => `"${key} ${r.rel} ${r.name} ${r.dir}" (${r.dir === 'up' ? 'long' : 'short'}${priced(r)}${sc ? `; setup candle: ${sc}` : ''})`).join('; ');
-  const when = m.phase === 'reaction' ? 'this bar is the reaction: an entry read needs a later close' : 'a confirmation close: the entry reads from this bar';
+  const when = m.phase === 'reaction' ? 'this bar closed the setup: it is the entry now (the next bar fills it), no confirming read needed' : 'the setup still stands: no confirming read needed';
   return `- Setups to check (the ${key} candle closed ${et(m.candle.closedAt)}): ${[what, ...extra].join('; ')}; ${when}. Compose and check each (trade-lifecycle, ${['rejection', 'breakout', ...extraSkills].join(', ')}); pass unless every read is true; SKIP each one you don't compose, with its reason.`;
 }
 

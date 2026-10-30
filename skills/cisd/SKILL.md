@@ -36,7 +36,7 @@ Also: `leg` (`origin`, the run's extreme; `extreme`), `ote`, `status`
 
 **Where it works**:
 
-- **Trend pullback** (preferred; `trend-vs-range`): price pulls back to a level, then a CISD back in the trend's direction ends the pullback; a later close is the entry.
+- **Trend pullback** (preferred; `trend-vs-range`): price pulls back to a level, then a CISD back in the trend's direction ends the pullback; the next close is the entry.
 - **Range** (`range`): at an extreme (range high or low, value-area
   edge, prior day), a CISD back toward the middle, aiming at the other
   side. Mid-range is a skip.

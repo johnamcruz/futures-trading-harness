@@ -34,8 +34,8 @@ neither against; both ranging: the 15m and `Trend declared?` your way;
 else no trade. A CHoCH against the bias is context, never a way in.
 The setup is the 15m (or higher) reaction or break the
 bias's way (its candle's strength and close: `candle-reading`): it
-is the entry; the 3m only times the entry: the next
-3m close after it, no 3m turn to wait for (waiting cost R).
+is the entry; the 3m only times the entry: the next 3m bar, no
+confirming close, no 3m turn to wait for (waiting cost R).
 Not in a prop attempt: the trend rule alone (both ranging, the 15m's
 side; no trend anywhere, both sides).
 

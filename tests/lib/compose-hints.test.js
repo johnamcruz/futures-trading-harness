@@ -63,15 +63,16 @@ test('compose hints: none on an OK combination', () => {
   assert.deepStrictEqual(r.lines, []);
 });
 
-test('compose hints: a directionless entry names the TRUE confirmations on a candle closed after the setup, and a passing whole', () => {
-  const r = hints(swap('entry', '3m volume high'));
+test('compose hints: a false entry read: the entry is optional (the setup is the entry); the step lists its TRUE reads, and a passing whole', () => {
+  const r = hints(swap('entry', '3m close bottom'));
   assert.strictEqual(r.checked.ok, false, 'still refused');
   const entry = r.lines.find(l => l.startsWith('entry:'));
-  assert.match(entry, /^entry: volume and participation point no side, so they never confirm alone; the confirmation your way on a candle closed after the setup's \(10:45 ET\), true here: "3m momentum up", "3m close top"/);
+  assert.match(entry, /^entry: optional \(the setup is the entry, on the next close\); a read stated there must be true and the trade's way: drop it, or true here: "3m momentum up", "3m close top"/);
   const whole = r.lines.find(l => l.startsWith('these reads pass together'));
-  assert.ok(whole && /"3m momentum up"/.test(whole), whole);
-  assert.ok(passes(whole, r.b, 'long'), 'the listed combination passes compose_check on this bar');
+  assert.ok(whole && passes(whole, r.b, 'long'), whole);
   allTrue(r);
+  // A directionless entry read (volume) is no longer a refusal: the setup is the entry (the CONF3M study).
+  assert.deepStrictEqual(hints(swap('entry', '3m volume high')).lines, []);
 });
 
 test('compose hints: a false target lists the named levels at the minimum R:R from the stop, with their R', () => {
@@ -95,18 +96,18 @@ test('compose hints: no named level on the winning side: the hint names the 2R m
   assert.ok(whole && whole.includes('"target 2r"') && passes(whole, r.b, 'long'), whole);
 });
 
-test('compose hints: a setup on the base candle: no later candle can confirm it; the higher candles\' reactions that a later close confirms', () => {
+test('compose hints: a setup on the base candle needs no later candle (no confirming close): outside a policy chain it stands', () => {
   const r = hints(swap('setup', '3m broke prior vah up'));
-  assert.ok(r.checked.problems.some(p => /closed after the setup's/.test(p)), 'the 2-bar rule refuses it, as before');
-  assert.match(r.lines.find(l => l.startsWith('entry:')), /^entry: a 3m setup is this bar's own candle, so no later candle can confirm it; a reaction on a higher candle that a later close confirms, true here: "15m rejected prior vah up"/);
+  assert.ok(!r.checked.problems.some(p => /closed after the setup's/.test(p)), 'no timing rule');
+  assert.ok(!r.lines.some(l => /no later candle can confirm/.test(l)), r.lines.join('\n'));
   allTrue(r);
 });
 
-test('compose hints: the confirmation not closed yet: wait for the next base close (no entry read listed on the setup\'s own candle)', () => {
+test('compose hints: on the setup\'s own bar (the last 3m inside the 15m) it stands: no wait for a confirming close', () => {
   const b = brief(x => { x.sections.m3.data.candles['3m'].closedAt = '2026-04-23T14:45:00.000Z'; delete x.sections.m3.data.candles['1h']; });
   const r = hints(SCENARIO_1, { b });
-  assert.strictEqual(r.checked.ok, false);
-  assert.ok(r.lines.includes('entry: no candle closed after the setup\'s (10:45 ET) confirms the long yet: wait for the next 3m close, or pass'), r.lines.join('\n'));
+  assert.strictEqual(r.checked.ok, true, r.checked.problems.join('; '));
+  assert.ok(!r.lines.some(l => /wait for the next/.test(l)));
 });
 
 test('compose hints: a setup with no read pointing the side lists the reactions the side\'s way with their candle\'s close', () => {
@@ -132,27 +133,28 @@ test('compose hints: the side the trend rule refuses: no whole combination offer
   allTrue(r);
   // A long the check would pass whole once its entry is fixed, on a bar whose trend rule takes the long only as a
   // reversal: the step's reads are listed, the whole is not.
-  const against = hints(swap('entry', '3m volume high'), { b: brief(b => { b.sections.m3.data.trendRule = 'Trend rule: SHORT allowed (prevailing 1h down); long only as a reversal (mtf: reversal).'; }) });
+  const against = hints(swap('entry', '3m close bottom'), { b: brief(b => { b.sections.m3.data.trendRule = 'Trend rule: SHORT allowed (prevailing 1h down); long only as a reversal (mtf: reversal).'; }) });
   assert.ok(against.lines.some(l => l.startsWith('entry: ')));
   assert.ok(!against.lines.some(l => l.startsWith('these reads pass together')), against.lines.join('\n'));
   assert.ok(against.lines.includes('the trend rule allows the long only as a reversal (a verified CHoCH tier among the bias reads)'));
 });
 
 test('compose hints: no whole combination outside an entry window; the standard plan named when it passes', () => {
-  const closed = hints(swap('entry', '3m volume high'), { b: brief(b => { b.sections.m3.data.windowEntries = 'none'; }) });
+  const closed = hints(swap('entry', '3m close bottom'), { b: brief(b => { b.sections.m3.data.windowEntries = 'none'; }) });
   assert.ok(!closed.lines.some(l => l.startsWith('these reads pass together')));
   const std = { status: 'traded', reads: SCENARIO_1, plan: { rr: 2.08 } };
-  const r = hints(swap('entry', '3m volume high'), { standard: std });
+  const r = hints(swap('entry', '3m close bottom'), { standard: std });
   assert.ok(r.lines.some(l => l.startsWith('the standard plan passes: compose_check with its reads: "1h bos up", ') && l.endsWith('(R:R 2.08)')));
   assert.ok(!r.lines.some(l => l.startsWith('these reads pass together')), 'one whole combination, the standard plan first');
 });
 
 test('compose hints: repairOf keeps the model\'s TRUE reads, fills only the failing step, and never returns what the check refuses', () => {
   const b = brief();
-  const fixed = H.repairOf({ reads: swap('entry', '3m volume high'), side: 'long', briefing: b, tick: 0.25, plan: PLAN });
+  const fixed = H.repairOf({ reads: swap('entry', '3m close bottom'), side: 'long', briefing: b, tick: 0.25, plan: PLAN });
   assert.ok(fixed && fixed.checked.ok);
-  assert.deepStrictEqual(fixed.reads.filter(r => r.step !== 'entry').map(r => r.read), swap('entry', '3m volume high').filter(r => r.step !== 'entry').map(r => r.read));
-  assert.deepStrictEqual(fixed.reads.filter(r => r.step === 'entry').map(r => r.read), ['3m momentum up']);
+  assert.deepStrictEqual(fixed.reads.filter(r => r.step !== 'entry').map(r => r.read), swap('entry', '3m close bottom').filter(r => r.step !== 'entry').map(r => r.read));
+  // The failing entry read is dropped, none put in its place (the setup is the entry).
+  assert.deepStrictEqual(fixed.reads.filter(r => r.step === 'entry').map(r => r.read), []);
   assert.strictEqual(H.repairOf({ reads: SCENARIO_1, side: 'long', briefing: b, tick: 0.25, plan: PLAN }), null, 'an OK combination needs no repair');
   assert.strictEqual(H.repairOf({ reads: SCENARIO_1, side: 'long', briefing: null, tick: 0.25, plan: PLAN }), null);
   // From no reads at all, the whole is the candidates' and still passes the real check and plan.
@@ -162,8 +164,8 @@ test('compose hints: repairOf keeps the model\'s TRUE reads, fills only the fail
 
 test('compose hints: failingSteps names each step by the check\'s own problems and the plan\'s', () => {
   const b = brief();
-  const checked = checkReads({ reads: swap('entry', '3m volume high'), side: 'long', briefing: b });
-  assert.deepStrictEqual(H.failingSteps(checked, null), { entry: ['pointing'] });
+  const checked = checkReads({ reads: swap('entry', '3m close bottom'), side: 'long', briefing: b });
+  assert.deepStrictEqual(H.failingSteps(checked, null), { entry: ['false'] });
   const missing = checkReads({ reads: SCENARIO_1.filter(r => r.step !== 'target'), side: 'long', briefing: b });
   assert.deepStrictEqual(H.failingSteps(missing, null), { target: ['missing'] });
   const rr = { problems: ['R:R 1.500 is under the strategy\'s min 2', 'the stop is 10 ticks, under the minimum 40 (max of 8 ticks and 0.25 x ATR(20)): refused, never widened; name a level further away, or pass'] };
@@ -172,7 +174,7 @@ test('compose hints: failingSteps names each step by the check\'s own problems a
 
 test('compose hints: the record\'s text shows the hints only when it is not OK', () => {
   const b = brief();
-  const checked = checkReads({ reads: swap('entry', '3m volume high'), side: 'long', briefing: b });
+  const checked = checkReads({ reads: swap('entry', '3m close bottom'), side: 'long', briefing: b });
   const rec = buildRecord({ at: '2026-04-23T15:00:05Z', root: 'MNQ', symbol: 'MNQ', side: 'long', briefing: b, checked, planned: null });
   const text = renderRecord(rec, checked, ['entry: x']);
   assert.match(text, /- HINT entry: x\nNOT OK: no entry on this record/);
@@ -210,7 +212,7 @@ test('compose hints: the bias hint lists only reads pointing the side (a range r
   assert.match(long.lines[0], /^bias: true for the long here: "15m up", "1h up", "15m bos up"$/);
 });
 
-test('compose hints: no setup read yet: the entry hint says a confirmation counts only on a candle closed after the setup\'s', () => {
+test('compose hints: no setup read yet: the setup hint says so, and no entry hint (the entry read is optional)', () => {
   const b = brief(x => {
     const d = x.sections.m3.data;
     for (const tf of Object.keys(d.candles)) Object.assign(d.candles[tf], { relations: [], fvgRelations: [], patterns: [] });
@@ -219,8 +221,8 @@ test('compose hints: no setup read yet: the entry hint says a confirmation count
   assert.deepStrictEqual(H.candidatesOf(b, 'long', { tick: 0.25 }).setup, []);
   const checked = checkReads({ reads: SCENARIO_1.filter(r => !['setup', 'entry'].includes(r.step)), side: 'long', briefing: b });
   const lines = H.hintsFor({ checked, planned: null, briefing: b, side: 'long', tick: 0.25, plan: PLAN });
-  assert.ok(lines.includes('entry: no setup read for the long is true yet; a confirmation counts only on a candle closed after the setup\'s: the setup first'), lines.join('\n'));
-  assert.ok(!lines.some(l => /^entry: .*true here/.test(l)), 'no confirmation listed before a setup');
+  assert.ok(lines.includes('setup: no candle reacted up on this bar: no setup for the long'), lines.join('\n'));
+  assert.ok(!lines.some(l => /^entry:/.test(l)), 'no entry hint: the entry is optional');
 });
 
 // The policy's entry rule (entry-rule.js): a problem no read can satisfy (bias frames, regime against) means no repair and
@@ -235,7 +237,7 @@ const hintsWith = (reads, rule, b, side = 'long') => {
 
 test('compose hints: bias frames trending against the side: no repair and no reversal hint (the entry rule refuses them too)', () => {
   const against = brief(b => { b.sections.h1.data.h1.trend = 'down'; b.sections.m3.data.trendRule = 'Trend rule: prevailing trend 1h down; trend strategies may not go long.'; });
-  const reads = swap('entry', '3m volume high');
+  const reads = swap('entry', '3m close bottom');
   const rule = entryRuleOf({ ...OFF3, bias_frames: ['4h', '1h'] });
   const on = hintsWith(reads, rule, against);
   assert.ok(on.checked.problems.some(p => /^entry rule: .*1h trend is down/.test(p)), on.checked.problems.join());
@@ -247,7 +249,7 @@ test('compose hints: bias frames trending against the side: no repair and no rev
 
 test('compose hints: the regime against the side: no repair (no read changes the regime)', () => {
   const down = brief(b => { b.sections.m3.data.regime = { primary: 'trend-down', volatility: 'normal' }; });
-  const reads = swap('entry', '3m volume high');
+  const reads = swap('entry', '3m close bottom');
   const rule = entryRuleOf({ ...OFF3, regime_against: 'on' });
   const on = hintsWith(reads, rule, down);
   assert.ok(on.checked.problems.some(p => /^entry rule: the regime is trend-down/.test(p)));
@@ -257,14 +259,14 @@ test('compose hints: the regime against the side: no repair (no read changes the
 
 test('compose hints: a leg-turned problem keeps the repair: a leg read of the model\'s own completes a combination that passes', () => {
   const rule = entryRuleOf({ ...OFF3, leg_turned: 'on' });
-  const reads = [...swap('entry', '3m volume high'), { step: 'bias', skill: 'candle-reading', read: '3m bos up', why: 'x' }];
+  const reads = [...swap('entry', '3m close bottom'), { step: 'bias', skill: 'candle-reading', read: '3m bos up', why: 'x' }];
   const b = brief();
   const fixed = H.repairOf({ reads, side: 'long', briefing: b, tick: 0.25, plan: PLAN, entryRule: rule });
   assert.ok(fixed && fixed.checked.ok, 'repaired');
   assert.ok(fixed.reads.some(r => r.read === '3m bos up'));
   assert.ok(hintsWith(reads, rule, b).lines.some(l => /these reads pass together/.test(l)));
   // Without the leg read the entry rule's leg problem stands, and every combination offered carries it or none is offered.
-  const none = H.repairOf({ reads: swap('entry', '3m volume high'), side: 'long', briefing: b, tick: 0.25, plan: PLAN, entryRule: rule });
+  const none = H.repairOf({ reads: swap('entry', '3m close bottom'), side: 'long', briefing: b, tick: 0.25, plan: PLAN, entryRule: rule });
   assert.ok(none === null || none.checked.ok);
 });
 
