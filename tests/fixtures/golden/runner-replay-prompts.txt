@@ -435,10 +435,10 @@ Prior 4h low 21440.50: 49.50 pts = 198 ticks, $99.00, 4.40R (extended).
 
 In a prop attempt: the full verdict size; a serious factor against never
 cuts it; only a pacing rule does.
-  The code computes it (healthy: balance ≥
-start, no loss streak).
-  Fewer than 3 contracts (`min_contracts`) at the stop:
-skip.
+  The code computes it.
+  Fewer than 3
+contracts (`min_contracts`) at the stop: skip (unless the floor
+stretch takes exactly 3: the Min line).
 
 1.
   **Specs from the API, always.** `search_contracts` / `get_contract` return
@@ -1471,10 +1471,10 @@ Prior 4h low 21440.50: 49.50 pts = 198 ticks, $99.00, 4.40R (extended).
 
 In a prop attempt: the full verdict size; a serious factor against never
 cuts it; only a pacing rule does.
-  The code computes it (healthy: balance ≥
-start, no loss streak).
-  Fewer than 3 contracts (`min_contracts`) at the stop:
-skip.
+  The code computes it.
+  Fewer than 3
+contracts (`min_contracts`) at the stop: skip (unless the floor
+stretch takes exactly 3: the Min line).
 
 1.
   **Specs from the API, always.** `search_contracts` / `get_contract` return
@@ -2507,10 +2507,10 @@ Prior 4h low 21440.50: 49.50 pts = 198 ticks, $99.00, 4.40R (extended).
 
 In a prop attempt: the full verdict size; a serious factor against never
 cuts it; only a pacing rule does.
-  The code computes it (healthy: balance ≥
-start, no loss streak).
-  Fewer than 3 contracts (`min_contracts`) at the stop:
-skip.
+  The code computes it.
+  Fewer than 3
+contracts (`min_contracts`) at the stop: skip (unless the floor
+stretch takes exactly 3: the Min line).
 
 1.
   **Specs from the API, always.** `search_contracts` / `get_contract` return
@@ -3534,10 +3534,10 @@ Prior 4h low 21440.50: 49.50 pts = 198 ticks, $99.00, 4.40R (extended).
 
 In a prop attempt: the full verdict size; a serious factor against never
 cuts it; only a pacing rule does.
-  The code computes it (healthy: balance ≥
-start, no loss streak).
-  Fewer than 3 contracts (`min_contracts`) at the stop:
-skip.
+  The code computes it.
+  Fewer than 3
+contracts (`min_contracts`) at the stop: skip (unless the floor
+stretch takes exactly 3: the Min line).
 
 1.
   **Specs from the API, always.** `search_contracts` / `get_contract` return
@@ -4658,10 +4658,10 @@ Prior 4h low 21440.50: 49.50 pts = 198 ticks, $99.00, 4.40R (extended).
 
 In a prop attempt: the full verdict size; a serious factor against never
 cuts it; only a pacing rule does.
-  The code computes it (healthy: balance ≥
-start, no loss streak).
-  Fewer than 3 contracts (`min_contracts`) at the stop:
-skip.
+  The code computes it.
+  Fewer than 3
+contracts (`min_contracts`) at the stop: skip (unless the floor
+stretch takes exactly 3: the Min line).
 
 1.
   **Specs from the API, always.** `search_contracts` / `get_contract` return
@@ -5779,10 +5779,10 @@ Prior 4h low 21440.50: 49.50 pts = 198 ticks, $99.00, 4.40R (extended).
 
 In a prop attempt: the full verdict size; a serious factor against never
 cuts it; only a pacing rule does.
-  The code computes it (healthy: balance ≥
-start, no loss streak).
-  Fewer than 3 contracts (`min_contracts`) at the stop:
-skip.
+  The code computes it.
+  Fewer than 3
+contracts (`min_contracts`) at the stop: skip (unless the floor
+stretch takes exactly 3: the Min line).
 
 1.
   **Specs from the API, always.** `search_contracts` / `get_contract` return
@@ -6821,10 +6821,10 @@ Prior 4h low 21440.50: 49.50 pts = 198 ticks, $99.00, 4.40R (extended).
 
 In a prop attempt: the full verdict size; a serious factor against never
 cuts it; only a pacing rule does.
-  The code computes it (healthy: balance ≥
-start, no loss streak).
-  Fewer than 3 contracts (`min_contracts`) at the stop:
-skip.
+  The code computes it.
+  Fewer than 3
+contracts (`min_contracts`) at the stop: skip (unless the floor
+stretch takes exactly 3: the Min line).
 
 1.
   **Specs from the API, always.** `search_contracts` / `get_contract` return
@@ -7863,10 +7863,10 @@ Prior 4h low 21440.50: 49.50 pts = 198 ticks, $99.00, 4.40R (extended).
 
 In a prop attempt: the full verdict size; a serious factor against never
 cuts it; only a pacing rule does.
-  The code computes it (healthy: balance ≥
-start, no loss streak).
-  Fewer than 3 contracts (`min_contracts`) at the stop:
-skip.
+  The code computes it.
+  Fewer than 3
+contracts (`min_contracts`) at the stop: skip (unless the floor
+stretch takes exactly 3: the Min line).
 
 1.
   **Specs from the API, always.** `search_contracts` / `get_contract` return
@@ -8978,10 +8978,10 @@ Prior 4h low 21440.50: 49.50 pts = 198 ticks, $99.00, 4.40R (extended).
 
 In a prop attempt: the full verdict size; a serious factor against never
 cuts it; only a pacing rule does.
-  The code computes it (healthy: balance ≥
-start, no loss streak).
-  Fewer than 3 contracts (`min_contracts`) at the stop:
-skip.
+  The code computes it.
+  Fewer than 3
+contracts (`min_contracts`) at the stop: skip (unless the floor
+stretch takes exactly 3: the Min line).
 
 1.
   **Specs from the API, always.** `search_contracts` / `get_contract` return
@@ -10102,10 +10102,10 @@ Prior 4h low 21440.50: 49.50 pts = 198 ticks, $99.00, 4.40R (extended).
 
 In a prop attempt: the full verdict size; a serious factor against never
 cuts it; only a pacing rule does.
-  The code computes it (healthy: balance ≥
-start, no loss streak).
-  Fewer than 3 contracts (`min_contracts`) at the stop:
-skip.
+  The code computes it.
+  Fewer than 3
+contracts (`min_contracts`) at the stop: skip (unless the floor
+stretch takes exactly 3: the Min line).
 
 1.
   **Specs from the API, always.** `search_contracts` / `get_contract` return
@@ -10989,10 +10989,10 @@ Prior 4h low 21440.50: 49.50 pts = 198 ticks, $99.00, 4.40R (extended).
 
 In a prop attempt: the full verdict size; a serious factor against never
 cuts it; only a pacing rule does.
-  The code computes it (healthy: balance ≥
-start, no loss streak).
-  Fewer than 3 contracts (`min_contracts`) at the stop:
-skip.
+  The code computes it.
+  Fewer than 3
+contracts (`min_contracts`) at the stop: skip (unless the floor
+stretch takes exactly 3: the Min line).
 
 1.
   **Specs from the API, always.** `search_contracts` / `get_contract` return

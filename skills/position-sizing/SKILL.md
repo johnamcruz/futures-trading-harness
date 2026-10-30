@@ -13,9 +13,9 @@ description: Use when sizing a trade plan - risk per contract, the budget, the c
 ## How It Works
 
 In a prop attempt: the full verdict size; a serious factor against never
-cuts it; only a pacing rule does. The code computes it (healthy: balance ≥
-start, no loss streak). Fewer than 3 contracts (`min_contracts`) at the stop:
-skip.
+cuts it; only a pacing rule does. The code computes it. Fewer than 3
+contracts (`min_contracts`) at the stop: skip (unless the floor
+stretch takes exactly 3: the Min line).
 
 1. **Specs from the API, always.** `search_contracts` / `get_contract` return
    `tickSize` and `tickValue`. Micro and mini specs to sanity-check them: the
