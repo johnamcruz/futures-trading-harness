@@ -45,8 +45,8 @@ description: Use when a position is open - its stop, the plan's management, the 
 - **A composed trade** (`setup:trade_lifecycle`, in an attempt
   `setup:prop_portfolio`): its bracket holds the compose record's stop and
   target; the policy's exit mode (`trade-plan`), in an attempt or not, is
-  the runner's: it moves the stop (past the target: locked at a small R,
-  trailed behind 15m swings), and that trail is the edge: let it work.
+  the runner's: it moves the stop (past 2R: held at +0.5R until a 15m swing
+  confirms past it, then behind it), and that trail is the edge: let it work.
   Before or past its target, act only on the open trade's read
   (`pullback-vs-reversal`, the prompt's "Trade read" line); never on one
   candle or by feel; never loosen the stop.

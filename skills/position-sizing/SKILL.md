@@ -12,9 +12,9 @@ description: Use when sizing a trade plan - risk per contract, the budget, the c
 
 ## How It Works
 
-**In a prop attempt**: a healthy account (balance ≥ start, no loss streak)
-takes the full verdict size; the code computes it. Phase 2 cuts only on a
-pacing rule. Fewer than 3 contracts (`min_contracts`) at the stop:
+In a prop attempt: the full verdict size; a serious factor against never
+cuts it; only a pacing rule does. The code computes it (healthy: balance ≥
+start, no loss streak). Fewer than 3 contracts (`min_contracts`) at the stop:
 skip.
 
 1. **Specs from the API, always.** `search_contracts` / `get_contract` return
@@ -24,16 +24,7 @@ skip.
    fees from the account, if known). A stop can fill a tick or more past its
    price: when the room to the loss floor or the daily limit sets the size,
    count a tick of slippage per contract too (a policy verdict already does).
-3. **Risk budget** (outside an attempt) = the smallest of:
-   - the strategy / plan $ risk (a composed trade: at most its $300 cap),
-   - 25% of `remainingBeforeLimit` from `get_account_snapshot`, when known,
-   - 10% of the trailing-drawdown cushion (balance − loss floor), when shown.
-     None shown (no attempt): skip this cap, never $0. Never ask when
-     autonomous.
-4. **Size** = floor(budget ÷ risk per contract). If it's 0, the stop is too
-   wide for the budget: skip (in an attempt the floor stretch is code's).
-   Never a tighter stop to make the size work.
-5. **Caps:** the broker server's `maxOrderSize` and `maxPositionSize`
+3. **Caps:** the broker server's `maxOrderSize` and `maxPositionSize`
    (`get_server_config`); size 1 on micros for a rules strategy until
    its setup has 30+ reviewed trades with positive expectancy. The order gate enforces two
    of them on every entry: the size at most `maxOrderSize` (the harness
@@ -48,7 +39,7 @@ skip.
    never shrink the stop to fit). The cap is checked when the entry is
    placed: a `[protect]` stop that later repairs the position's protection
    goes where the rationale said, never farther.
-6. **A policy verdict overrides steps 3-5.** While a prop attempt runs a
+4. **A policy verdict overrides the budget and caps.** While a prop attempt runs a
    policy strategy, the verdict's contract (the selected one), size, and stop
    ticks were sized from the attempt's budget (`combine_status`), each
    contract's risk counting its stop plus a tick of expected slippage
@@ -61,17 +52,29 @@ skip.
    stop always working) still applies. The verdict is the most the account
    allows: phase 2 cuts it only on a pacing rule (a losing account, a loss
    streak, drawdown: `Size: <n> (<rule>)`) or passes.
-7. Outside a prop attempt only, a trade marked smaller is halved: half is
-   `floor(size / 2)`, 0 means no trade (at size 1 every halving is a skip).
-   Halvings don't compound: the size is halved once, never rounded up. A composed
-   trade: `confluence-counting` sizes it, under the caps.
-8. **The arithmetic from `order_plan`** (the `order-plan` skill): steps 2
-   and 4 for a compose record (refused over its cap), a policy verdict or a
-   rules candidate; use its numbers, never your own. The budget (step 3)
+5. **The arithmetic from `order_plan`** (the `order-plan` skill): step 2
+   and the size for a compose record (refused over its cap), a policy verdict or a
+   rules candidate; use its numbers, never your own. The budget
    and the caps stay your judgement: a budget below its risk is a skip; a
    raised size (a rules setup with 30+ reviewed trades) changes only
    `size`, the risk scaling with it.
-9. Write entry, stop, size, and $ risk into the plan.
+6. Write entry, stop, size, and $ risk into the plan.
+
+### Outside a prop attempt
+
+1. Risk budget = the smallest of:
+   - the strategy / plan $ risk (a composed trade: at most its $300 cap),
+   - 25% of `remainingBeforeLimit` from `get_account_snapshot`, when known,
+   - 10% of the trailing-drawdown cushion (balance − loss floor), when shown.
+     None shown (no attempt): skip this cap, never $0. Never ask when
+     autonomous.
+2. Size = floor(budget ÷ risk per contract). If it's 0, the stop is too
+   wide for the budget: skip.
+   Never a tighter stop to make the size work.
+3. A trade marked smaller is halved: half is
+   `floor(size / 2)`, 0 means no trade (at size 1 every halving is a skip).
+   Halvings don't compound: the size is halved once, never rounded up. A composed
+   trade: `confluence-counting` sizes it, under the caps.
 
 ## Examples
 

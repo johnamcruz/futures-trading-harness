@@ -28,8 +28,8 @@ policies:                       # each policy strategy that trades this account 
       trail_activate_r: off     # mode trail (or a trail on top of target): hold the stop until this many R ...
       trail_giveback_r: off     # ... then trail this many R behind the best price
       lock_giveback_r: 1.5      # target_then_trail: once the target is reached the stop locks at the target's R less this
-      trail_by: structure       # target_then_trail: structure (behind the last confirmed swing on swing_tf) or r (trail_r behind the best price)
-      trail_r: 1                # target_then_trail: R behind the best price (trail_by r, and structure's fallback until a swing is confirmed)
+      trail_by: structure       # target_then_trail: structure (behind the latest confirmed swing on swing_tf, once beyond the lock) or r (trail_r behind the best price)
+      trail_r: 1                # target_then_trail: R behind the best price (trail_by r; with structure only when the bars hold no swing at all)
       swing_tf: 15m             # target_then_trail with trail_by structure: the swings the stop trails behind
       ratchet: off              # target_then_trail: on lifts the lock to the best R reached less lock_giveback_r; off (opt in only): the lock above
     multipliers: []             # enforced size multipliers folded into the verdict: none yet
@@ -94,10 +94,14 @@ each trade from its recorded path, prop/attempts.js exitAs):
 - `target_then_trail` (today's): the original stop holds until the trade's
   own target is reached; from there the trade is not closed but trailed, so a
   runner can make more R. The stop locks at the target's R less
-  `lock_giveback_r` and never goes below it, and trails behind the last
-  swing confirmed on `swing_tf` candles (`trail_by: structure`, from closed
-  bars only), or `trail_r` behind the best price (`trail_by: r`, and the
-  structure trail's fallback until a swing is confirmed). Live, the runner
+  `lock_giveback_r` and never goes below it. With `trail_by: structure` it
+  holds at that lock until a swing confirmed on `swing_tf` candles (closed
+  bars only) stands beyond it, then trails behind that swing; the latest
+  swing counts even one confirmed before the entry, so `trail_r` applies
+  only when the bars hold no swing at all. With `trail_by: r` it trails
+  `trail_r` behind the best price. A pre-registered study kept this: the
+  stop held at the lock lets 5R+ trends run, and it beat a working R
+  fallback and the ratchet on pass rate. Live, the runner
   cancels the entry's target order when it first manages the trade and moves
   the stop at each closed bar; a target reached before then fills there.
   `lock_giveback_r` is 1.5 (the owner's, 2026-10-24): at a 2R target the

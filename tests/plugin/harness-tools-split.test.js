@@ -215,11 +215,11 @@ const OP_BEFORE_SHA256 = '6d319c1504ba47d0c7bcae2931a69f48f720225000dacb946959ae
 const OP_HOMES = ['position-sizing', 'order-plan'];
 const OP_ALLOWED = [
   { old: '**The arithmetic from `order_plan`.** For a scan candidate (or a policy verdict), the harness tool `order_plan` does steps 2 and 4\'s arithmetic for the strategy and side you chose and shows it: the stop in points and whole ticks, the risk per contract, the size and where it came from (1 for a rules strategy, the size-1 rule; the verdict\'s, within the attempt\'s budget, for a policy strategy), and the dollar risk.',
-    now: "**The arithmetic from `order_plan`** (the `order-plan` skill): steps 2 and 4 for a compose record (refused over its cap), a policy verdict or a rules candidate; use its numbers, never your own.",
+    now: "**The arithmetic from `order_plan`** (the `order-plan` skill): step 2 and the size for a compose record (refused over its cap), a policy verdict or a rules candidate; use its numbers, never your own.",
     reason: 'what it shows is the order_plan row (stop and target in points and whole ticks, how the size was derived, $ risk) plus order-plan\'s "Its working includes the risk per contract."; a composed trade\'s numbers are its compose record\'s (the skill audit, X2); then fix/skills-match-code: step 8 shorter, the compose record first (no rules strategy is active)' },
   { old: 'Use its numbers instead of computing them by hand.', copies: 0,
     reason: 'fix/skills-match-code: merged into step 8\'s first sentence (use its numbers, never your own)' },
-  { old: 'The budget (step 3) and the caps are still your judgement: a budget below its risk is a skip, and a size you are allowed to raise (30+ reviewed trades) changes only `size`, with the risk scaling by it.', now: "The budget (step 3) and the caps stay your judgement: a budget below its risk is a skip; a raised size (a rules setup with 30+ reviewed trades) changes only `size`, the risk scaling with it.",
+  { old: 'The budget (step 3) and the caps are still your judgement: a budget below its risk is a skip, and a size you are allowed to raise (30+ reviewed trades) changes only `size`, with the risk scaling by it.', now: "The budget and the caps stay your judgement: a budget below its risk is a skip; a raised size (a rules setup with 30+ reviewed trades) changes only `size`, the risk scaling with it.",
     reason: 'fix/skills-match-code: the same judgement, a raised size only a rules setup\'s' },
 ];
 

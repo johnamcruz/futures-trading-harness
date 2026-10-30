@@ -167,7 +167,7 @@ function exitErrors(x, at) {
     for (const k of trail) offIn(k, 'it trails only once the target is reached');
     need('lock_giveback_r', 'the stop locks at the target\'s R less it');
     need('trail_by', `${TRAIL_BY.join(' or ')}`);
-    need('trail_r', 'the R trail, and the structure trail\'s fallback until a swing is confirmed');
+    need('trail_r', 'the R trail, and the structure trail\'s fallback when the bars hold no swing at all');
     if (x.trail_by === 'structure') need('swing_tf', 'the swings the stop trails behind');
     else offIn('swing_tf', 'only a structure trail reads swings');
   }

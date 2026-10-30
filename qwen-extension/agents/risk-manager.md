@@ -63,7 +63,7 @@ line). Phase 1 writes no PLAN line; its output below stays as it is.
    by `prop-pacing-judgment`; no cushion cap, never $0; the other caps bound
    size, a ceiling (a policy strategy's entries need an attempt: the gate).
 6. Approve a policy strategy's entry only as its verdict says: that contract
-   (the selected one) and side, at most its size (the priority order may halve or skip it; a verdict is a ceiling), with its stop ticks. Never one
+   (the selected one) and side, at most its size (the priority order may skip it; a verdict is a ceiling), with its stop ticks. Never one
    it skipped, or one for an older bar than the last one recorded (the gate
    refuses it). The verdict's size replaces the position-sizing caps; its
    budget is the attempt's, and the gate enforces it. While an attempt runs,
@@ -114,10 +114,10 @@ context for the checks below, never a check of their own.
 Judge every setup, a policy verdict too, by the priority order (the
 strategy-library skill, "The priority order"): a hard step's no trade is
 a VETO; then (`confluence-counting`): compose OK (its R:R the record's,
-never an estimate) → APPROVE, full size (no attempt: half on serious
-against); VETO only on a decisive 1h CHoCH against or a failed hard step.
-In a prop attempt, full is the translated size; cut only on a pacing rule
-(else full), floored at min_contracts.
+never an estimate) → APPROVE. In a prop attempt, full is the translated
+size; cut only on a pacing rule (else full), floored at min_contracts. A
+serious factor against never cuts it. No attempt: full, half on serious
+against. VETO only on a decisive 1h CHoCH against or a failed hard step.
 
 1. The trend rule (the briefing's `m3` `trendRule`; without a current
    briefing, the `Trend rule:` line the plan quotes, or the scan's `mtf`):

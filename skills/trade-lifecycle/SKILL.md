@@ -28,7 +28,7 @@ description: Use before a trade_lifecycle entry - compose the trade as reads wit
    | stop | the stop (compose's): one tick beyond the level you name, the setup candle's extreme as a rule: `stop 15m low <price>` (short: high), `stop swing low <price>`, `stop 15m box low <price>`; under the floor refused, never widened | `invalidation` |
    | target | `target trail`: the 2R mark that arms the trail, not the exit (a level ahead is context). Not in a prop attempt, on a side the side rule doesn't give: the first level at 2R or more (`target <level> <price>`), or `target 2r` | `take-profit` |
    | size | Size in a prop attempt: the full verdict size, the code's number. Never less on a healthy account. Phase 2 cuts only on a pacing rule. Fewer than 3 (`min_contracts`) at the stop: skip | `position-sizing`, `prop-challenge-pacing`, `prop-pacing-judgment` |
-   | management | once filled: the stop and the trail exit it. At 2R nothing exits: the runner has cancelled the 2R order (when it first manages the trade), and the stop locks at +0.5R (2R less the rulebook's `lock_giveback_r`) and trails. Never widen it, move it by feel or close early | `manage-position` |
+   | management | once filled: the stop and the trail exit it. At 2R nothing exits: the runner has cancelled the 2R order (when it first manages the trade); the stop holds at +0.5R (2R less `lock_giveback_r`) until a 15m swing confirms past it, then trails behind it. Never widen it, move it by feel or close early | `manage-position` |
 
    Support only, never the setup or entry read: `at`, `touched`, `swept`,
    `in ote`, `3m volume high`, `participation high`; a CISD or compression setup is

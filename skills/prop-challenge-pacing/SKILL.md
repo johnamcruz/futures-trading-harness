@@ -77,8 +77,9 @@ it:
   entry: after a stop-out, wait for the next setup's verdict. Never exceed it
   or route around it. Once in, the rulebook's `exit` manages the trade (exit
   mode `target`, `target_then_trail` or `trail`). Let a winner run past its
-  target once it is reached: in `target_then_trail` the code locks the stop
-  at the target's R less the rulebook's `lock_giveback_r` and trails it; you
+  target once it is reached: in `target_then_trail` the code holds the stop
+  at the target's R less `lock_giveback_r` until a 15m swing confirms
+  past it, then behind that swing; you
   never widen it, close early or pull the target in by feel.
 - **Loss streak stop.** After `loss_streak_stop` losses in a row in a
   session (a win ends the streak, a scratch neither), the gate refuses

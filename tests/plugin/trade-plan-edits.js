@@ -55,6 +55,9 @@ strategy, smaller for a \`mixed\` read, and larger only as
 position-sizing allows (a setup with 30+ reviewed trades and positive
 expectancy, within the budget and caps). A manual`,
   reason: 'owner decision D1: a composed trade\'s size is its own under the caps (order_plan refuses one over them), never halved for a mixed read; the halving and the size steps stay for a rules strategy; then feat/bias-bg: never counter, so no reversal fade' },
+  { old: 'the runner has cancelled the 2R order; the stop locks at +0.5R and trails.',
+    now: 'the 2R order is cancelled; the stop holds at +0.5R until a 15m swing confirms past it, then trails behind it.',
+    reason: 'fix/min-line-trail-text: as exit-trail.js does it: the latest confirmed 15m swing (even one from before the entry) is always there, so past 2R the stop holds at the lock until a swing stands beyond it; trail_r applies only with no swing in the bars' },
 ];
 
 /** The fixture with every edit applied; throws when an edit's old text isn't in it exactly once. */

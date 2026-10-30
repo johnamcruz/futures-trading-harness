@@ -710,7 +710,7 @@ strategy momentum_continuation: {
 }
 strategy prop_portfolio: {
   "account": "<name-43f416>",
-  "body": "4304 chars sha256:a20d63b528822002",
+  "body": "4350 chars sha256:3a4e2be567005099",
   "compiledRules": null,
   "compiledStop": null,
   "compiledTarget": null,
