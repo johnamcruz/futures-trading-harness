@@ -48,6 +48,8 @@ test('facts that can\'t be read are no healthy account (fails closed); no minimu
   assert.strictEqual(lines(null)[0], 'Size: phase 2 may cut (the attempt\'s pacing facts can\'t all be read)');
   assert.strictEqual(lines({ ...HEALTHY, lossStreak: null })[0], 'Size: phase 2 may cut (the attempt\'s pacing facts can\'t all be read)');
   assert.strictEqual(lines(HEALTHY, { minContracts: undefined }).length, 1);
+  // A room that can't be read never reads as full (phase2-cut.js rulesHolding: unknown, as the other facts).
+  for (const room of [{ softRoom: undefined }, { dailyRoom: NaN }]) assert.strictEqual(lines({ ...HEALTHY, ...room })[0], 'Size: phase 2 may cut (the attempt\'s pacing facts can\'t all be read)', JSON.stringify(room));
   // No stretch above the cap (off): the Min line states the floor only.
   assert.strictEqual(lines(HEALTHY, { stretchUsd: null })[1], 'Min: 3 contracts at the stop; fewer → skip');
 });

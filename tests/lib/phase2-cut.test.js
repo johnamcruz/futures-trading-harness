@@ -46,6 +46,13 @@ test('rulesHolding: each pacing rule holds only when its condition does; a healt
   for (const band of [null, 0, undefined]) assert.deepStrictEqual(C.rulesHolding(facts({ needed: 100, nearTargetUsd: band }), RISK), [], `band ${band}: off`);
   for (const bad of [null, facts({ lossesToday: null }), facts({ lossStreak: undefined }), facts({ balance: NaN }), facts({ peak: null })]) assert.deepStrictEqual(C.rulesHolding(bad, RISK), ['unknown']);
   assert.deepStrictEqual(C.rulesHolding(HEALTHY, null), ['unknown'], 'no risk to measure: not healthy');
+  // A room that can't be read is unknown (fails closed), never room enough; null is no such limit (combine.attemptFacts).
+  for (const room of [{ softRoom: undefined }, { softRoom: NaN }, { dailyRoom: '1000' }, { dailyRoom: Infinity }]) {
+    assert.deepStrictEqual(C.rulesHolding(facts(room), RISK), ['unknown'], JSON.stringify(room));
+    // The cut stands, as on any other unread fact: never restored, never below what phase 2 approved.
+    assert.deepStrictEqual(C.phase2Cut({ approved: 4, base: 9, facts: facts(room), riskUsd: RISK }), { size: 4, cut: true, held: ['unknown'], named: [] });
+  }
+  assert.deepStrictEqual(C.rulesHolding(facts({ softRoom: null, dailyRoom: null }), RISK), [], 'no limits: none holds');
 });
 
 test('phase2Cut: a healthy account\'s cut is restored to the verdict, a process note; any rule true keeps the cut, named or not; never above the verdict; a veto is no cut', () => {
