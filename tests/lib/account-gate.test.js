@@ -181,6 +181,14 @@ test('a prop attempt\'s entry waits when a position closed at or after the snaps
   assert.deepStrictEqual(evaluateAccount({ input: order(), trades: [fill(1, -40)], now: NOW, config, propAttempt: 'acct_a' }), []);
   // An exit is never held by it.
   assert.deepStrictEqual(evaluateAccount({ input: order({ side: 'sell', rationale: '[exit] flatten' }), positions: long1, trades: [fill(1, -40)], ...prop }), []);
+  // The clocks are compared as they are (the snapshot the harness's, a fill the broker's). A broker clock 5 s behind: a
+  // stop that filled 3 s after the snapshot is stamped 2 s before it, so it is missed (the documented window: the
+  // position's closing fill, until the next snapshot); one 10 s after (stamped 5 s after) is caught. A broker clock ahead
+  // only refuses more: a fill 3 s before the snapshot stamped 2 s after it refuses.
+  const stamped = deltaMs => ({ ...fill(0, -40), creationTimestamp: new Date(snap + deltaMs).toISOString() });
+  assert.deepStrictEqual(evaluateAccount({ input: order(), trades: [stamped(3000 - 5000)], ...prop }), [], 'behind: missed within the skew');
+  assert.deepStrictEqual(checks(evaluateAccount({ input: order(), trades: [stamped(10000 - 5000)], ...prop })), ['combine'], 'behind: caught past it');
+  assert.deepStrictEqual(checks(evaluateAccount({ input: order(), trades: [stamped(-3000 + 5000)], ...prop })), ['combine'], 'ahead: refuses more');
 });
 
 test('the gateway counts the losses an attempt carried into the day (a seeded practice state) on top of the fills; exits never read them', () => {

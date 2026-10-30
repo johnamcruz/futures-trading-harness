@@ -145,6 +145,10 @@ function fillLossState(trades, carried = null) {
 /**
  * Why the snapshot an entry is sized from misses a closing fill, or null: `snapshotAt` (ms) missing, or a closing fill
  * (profitAndLoss set, not voided) at or after it or with an unreadable time. Fails closed.
+ * The clocks: `snapshotAt` is the harness clock's (the runner's snapshot), a fill's creationTimestamp the broker's; they
+ * are compared as they are. A broker clock ahead only refuses more (a fill before the snapshot reads as after it); one
+ * behind by N s lets a close in the N s after the snapshot read as before it, so its loss is missed until the next
+ * snapshot (one position at a time: that position's closing fill). In replay both are the replay clock.
  */
 function fillSinceSnapshot(trades, snapshotAt) {
   if (!Number.isFinite(snapshotAt)) return 'its time is unknown';
