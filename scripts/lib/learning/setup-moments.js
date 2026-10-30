@@ -193,8 +193,13 @@ function listedReads(b) {
 
 // A live CISD: its OTE zone touched, or bounced from (cisd.js); waiting, weak, void or expired is no setup yet or any more.
 const LIVE_CISD = new Set(['touched', 'bounced']);
-// The frames a CISD is a setup on (the 15m, and the 1h: the stronger context); a 3m or 5m one stays a briefing fact.
-const CISD_FRAMES = Object.freeze(['15m', '1h']);
+// The setup frames (chain.js, the shipped chain): a CISD is a setup from the chain's setup frame up to its levels frame
+// (the 4h chain: the 15m, and the 1h: the stronger context), a compression break from the setup frame up; one on a lower
+// frame (the entry frame's 3m, the 5m) stays a briefing fact, never a setup to check (the entry rule refuses it as one).
+const CH = require('../trading/chain');
+const CHAIN = CH.chainOf(CH.SHIPPED);
+const CISD_FRAMES = Object.freeze(CH.LADDER.filter((tf, i) => i >= CH.LADDER.indexOf(CHAIN.setup) && i <= CH.LADDER.indexOf(CHAIN.levels)));
+const COMPRESSION_FRAMES = Object.freeze(CH.LADDER.slice(CH.LADDER.indexOf(CHAIN.setup)));
 const minutesOf = tf => { const x = /^(\d+)([mh])$/.exec(String(tf)); return x ? Number(x[1]) * (x[2] === 'h' ? 60 : 1) : 0; };
 
 /**
@@ -217,7 +222,7 @@ function setupChecks(m3, { max = MAX_CHECKS } = {}) {
     // edge first; one inside the box is no edge.
     const edges = isObj(x) && isObj(x.box) && Array.isArray(x.box.levels) ? x.box.levels.filter(l => isObj(l) && (l.edge === 'top' || l.edge === 'bottom')) : [];
     const at = edges.find(l => l.edge === (dir === 'up' ? 'top' : 'bottom')) || edges[0] || null;
-    if (sideOf(dir) && rule[sideOf(dir)] === true) out.push({ kind: 'compression', tf, dir, side: sideOf(dir), read: `${tf} compression break ${dir}`, ...(at ? { level: at.name } : {}) });
+    if (COMPRESSION_FRAMES.includes(tf) && sideOf(dir) && rule[sideOf(dir)] === true) out.push({ kind: 'compression', tf, dir, side: sideOf(dir), read: `${tf} compression break ${dir}`, ...(at ? { level: at.name } : {}) });
   }
   // A CISD on the setup frames only (the 3m and 5m time the entry: the owner's top-down rule), tradeable now: its OTE
   // touched or bounced from, or freshly confirmed on its frame's last completed candle.
@@ -235,4 +240,5 @@ function setupChecks(m3, { max = MAX_CHECKS } = {}) {
   return out.sort((a, b) => Number(strong(b)) - Number(strong(a)) || minutesOf(b.tf) - minutesOf(a.tf)).slice(0, max);
 }
 
-module.exports = { MODES, SETUP_TFS, LEVEL_SETS, REACTION_KINDS, DEFAULTS, KEY_LEVEL, MOVING_LEVEL, PREVIOUS_LEVEL, validatePractice, reactionsOf, setupMoment, quietPick, selectBar, practiceLine, tfLabel, checkLine, setupChecks, listedReads };
+module.exports = {
+  CISD_FRAMES, COMPRESSION_FRAMES, MODES, SETUP_TFS, LEVEL_SETS, REACTION_KINDS, DEFAULTS, KEY_LEVEL, MOVING_LEVEL, PREVIOUS_LEVEL, validatePractice, reactionsOf, setupMoment, quietPick, selectBar, practiceLine, tfLabel, checkLine, setupChecks, listedReads };

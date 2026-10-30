@@ -68,7 +68,9 @@ test('3. 3m levels as targets: with the trail, an aligned plan is never refused 
   assert.strictEqual(checkRead(parseRead('target trail'), briefing({ t4h: 'down' }), { side: 'long', tick: 0.25 }).check, false);
 });
 
-test.todo('3b. 3m levels left out of the briefing\'s level lists (pending the trigger study: the levels are the chain\'s 1h and the daily/session HTF levels)');
+// Not planned: the 3m levels stay in the briefing's level lists (the trigger study: the 3m, 15m and HTF level tiers don't
+// separate, so removing them would lower R by the data); compose's 3m confirming close after the setup stays too (its
+// test was inconclusive under its pre-registered rule).
 
 test('4. the 15m trend against during a pullback: with the 4h and 1h up, a 15m trend down is allowed (the 15m is the setup frame, never a bias frame)', () => {
   assert.deepStrictEqual(rule(briefing({ t15: 'down' }), 'long'), []);
