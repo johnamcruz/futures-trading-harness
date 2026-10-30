@@ -34,11 +34,9 @@ A verdict is a ceiling on size, never an order. A valid setup is the
 trade (`confluence-counting`). Go down the list; a higher step
 wins, and each step can only lower the size, never raise it: the size is the
 smaller of the verdict's (or position-sizing's) and what the steps allow.
-In a prop attempt nothing halves: a serious factor against doesn't cut the size; the code sets the full verdict size. Outside one, the steps below size it.
-Wherever a step halves, half is `floor(size / 2)`, and 0 means no trade (so
-at size 1 every halving is a skip). Halvings don't compound: however many
-steps halve, the size is halved once. A composed trade: `confluence-counting`
-sizes it, under the code's caps.
+In a prop attempt nothing halves: a serious factor against doesn't cut the
+size; the code sets the full verdict size. Not in a prop attempt:
+`position-sizing`.
 
 1. **Hard stops → no trade**: the candidate is `blocked` (a news blackout
    or the news unknown, a no-entry window), a phase-1 stand-down, or a gate
@@ -51,14 +49,15 @@ sizes it, under the code's caps.
    target at least `risk.min_rr` (compose_check's).
 4. **The multi-timeframe read for its side**: a rules strategy:
    `aligned` → full; `pullback` → full (the setup the bias's way ends
-   it); `mixed` → half; `counter` → no trade. Composed: the side rule
+   it); `mixed` → smaller (not in a prop attempt: `position-sizing`);
+   `counter` → no trade. Composed: the side rule
    (`htf-to-ltf`).
 5. **The strategy's own context filter and skip rules** (its STRATEGY.md)
    → any skip rule hit: no trade.
 6. **Confluence** (rules strategies): another firing the other side → no trade;
    confluence with it supports the full size.
 7. **Secondary context** (the VWAP side, the lunch lull, participation):
-   cuts to half (not in a prop attempt), never vetoes alone.
+   a read, never a veto alone (not in a prop attempt: `position-sizing`).
 
 Every other skill and role applies this order; none restates it.
 

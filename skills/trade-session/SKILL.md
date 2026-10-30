@@ -119,7 +119,8 @@ It orders the thinking and adds no filter.
 - **Compose first** (`confluence-counting`): the side rule's side, the
   setup (15m) at a key level closed → `compose_check`, never your own
   R:R. OK → take: in a prop attempt nothing halves (the code sets the full
-  verdict size); else full, half on serious, pass on decisive against.
+  verdict size); else full, half on serious (the `position-sizing` skill),
+  pass on decisive against.
 - **Every decision**: read the `setup-judgment` and `day-context` skills;
   before an entry, `trade-plan` too (the order gate refuses an entry until
   `setup-judgment` and `trade-plan` were read). An open trade: `manage-position`.

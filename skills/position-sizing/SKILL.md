@@ -57,12 +57,13 @@ skip.
    checks the verdict, not these caps; it still refuses a size over the
    broker's `maxOrderSize`, and over the policy strategy's own
    `risk.max_risk_usd` if it sets one (a rules component's caps don't apply;
-   `trade_lifecycle`'s cap does: the lower of it and the verdict). Everything else (stop first, protective
+   `trade_lifecycle`'s cap does: the lower of it and the verdict (the verdict is the full size; the cap limits the stop)). Everything else (stop first, protective
    stop always working) still applies. The verdict is the most the account
    allows: phase 2 cuts it only on a pacing rule (a losing account, a loss
    streak, drawdown: `Size: <n> (<rule>)`) or passes.
-7. Outside a prop attempt only, the priority order (strategy-library)
-   halves a trade as it says there. Never round a half up. A composed
+7. Outside a prop attempt only, a trade marked smaller is halved: half is
+   `floor(size / 2)`, 0 means no trade (at size 1 every halving is a skip).
+   Halvings don't compound: the size is halved once, never rounded up. A composed
    trade: `confluence-counting` sizes it, under the caps.
 8. **The arithmetic from `order_plan`** (the `order-plan` skill): steps 2
    and 4 for a compose record (refused over its cap), a policy verdict or a

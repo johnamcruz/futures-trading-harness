@@ -387,10 +387,10 @@ test('R4: each rulebook classifies every item, and every enforced item is really
 const TAUGHT = {
   trend_fade: /\(never counter\): any setup or strategy against a\s+trending 4h or 1h[^]*→ no trade/,
   room: /`inTheWay`[^]*`needR`\)[^]*never a no\s+trade alone/,
-  mtf_read: /`aligned` → full;[^]*`mixed` → half;[^]*`counter` → no trade/,
+  mtf_read: /`aligned` → full;[^]*`mixed` → smaller[^]*`counter` → no trade/,
   skip_rules: /skip rules\*\*[^]*any skip rule hit: no trade/,
   confluence: /\*\*Confluence\*\* \(rules strategies\): another firing the other side → no trade/,
-  secondary_context: /cuts to half \(not in a prop attempt\), never vetoes alone/,
+  secondary_context: /a read, never a veto alone \(not in a prop attempt: `position-sizing`\)/,
   halving: /half is `floor\(size \/ 2\)`[^]*?Halvings don't compound/,
 };
 /** Step `n` of a priority-order section: from its number to the next step or the section's end. */
@@ -402,15 +402,16 @@ function stepText(section, n) {
 }
 
 test('R4: the taught keywords catch a rewritten step (each would fail on the step it does not pin)', () => {
-  const sec = '### The priority order\n\n4. **The multi-timeframe read for its side**: `aligned` → full; `mixed` → half;\n   `counter` → no trade.\n5. **Next**: x\n';
+  const sec = '### The priority order\n\n4. **The multi-timeframe read for its side**: `aligned` → full; `mixed` → smaller;\n   `counter` → no trade.\n5. **Next**: x\n';
   assert.match(stepText(sec, 4), TAUGHT.mtf_read);
-  assert.doesNotMatch(stepText(sec.replace('`mixed` → half', '`mixed` → full'), 4), TAUGHT.mtf_read);
+  assert.doesNotMatch(stepText(sec.replace('`mixed` → smaller', '`mixed` → full'), 4), TAUGHT.mtf_read);
   assert.doesNotMatch(stepText(sec, 5), TAUGHT.mtf_read, 'another step\'s words never count');
   assert.strictEqual(stepText(sec, 6), null);
 });
 
 test('R4: every taught item is in the skill that teaches it, and the roles that decide load that skill in every harness', () => {
   const sections = {};
+  const flatSkill = skill => read(`skills/${skill}/SKILL.md`).replace(/\s+/g, ' ');
   const section = skill => {
     if (!sections[skill]) {
       const text = read(`skills/${skill}/SKILL.md`);
@@ -424,15 +425,17 @@ test('R4: every taught item is in the skill that teaches it, and the roles that 
     for (const k of taught) {
       const t = RB.ITEMS[k].taughtIn;
       assert.ok(t, `${file}: ${k} is classified taught, but no skill teaches it`);
-      const text = section(t.skill);
-      if (t.step === null) assert.match(text, TAUGHT.halving, `${k}: the rounding of a cut`);
-      else {
-        // The step, and what it teaches: a rewritten step fails here, not just a renumbered one.
-        const step = stepText(text, t.step);
-        assert.ok(step, `${k}: step ${t.step} of the priority order in ${t.skill}`);
-        assert.ok(TAUGHT[k], `${k}: no keyword pins what its step teaches`);
-        assert.match(step, TAUGHT[k], `${k}: step ${t.step} of ${t.skill} no longer teaches it`);
+      // A step-less item (the halving) is taught in its skill's own words, outside the priority order (position-sizing's
+      // non-prop step since feat/bias-bg: nothing halves in an attempt).
+      if (t.step === null) {
+        assert.match(flatSkill(t.skill), TAUGHT.halving, `${k}: the rounding of a cut`);
+        continue;
       }
+      // The step, and what it teaches: a rewritten step fails here, not just a renumbered one.
+      const step = stepText(section(t.skill), t.step);
+      assert.ok(step, `${k}: step ${t.step} of the priority order in ${t.skill}`);
+      assert.ok(TAUGHT[k], `${k}: no keyword pins what its step teaches`);
+      assert.match(step, TAUGHT[k], `${k}: step ${t.step} of ${t.skill} no longer teaches it`);
     }
   }
   // The skill reaches the agent: the head trader's cycle loads it, the risk manager carries it, and the

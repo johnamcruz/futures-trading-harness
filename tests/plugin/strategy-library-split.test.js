@@ -166,6 +166,10 @@ const LATE = [
     reason: "feat/bias-bg (never counter): no entry against a trending 4h or 1h on any path, the 15m setup is the entry and the 3m only times it, the trail exits, a prop attempt trades the full verdict size; the rewritten text is new" },
   { from: "**The multi-timeframe read for its side**: a rules strategy: `aligned` → full; `pullback` → no trade until the trigger timeframe turns back with the bias (a shift, a reclaim), then full; `mixed` → half; `counter` on a non-reversal setup → no trade.", to: null,
     reason: "feat/bias-bg (never counter): no entry against a trending 4h or 1h on any path, the 15m setup is the entry and the 3m only times it, the trail exits, a prop attempt trades the full verdict size; the rewritten text is new" },
+  { from: "Wherever a step halves, half is `floor(size / 2)`, and 0 means no trade (so at size 1 every halving is a skip).", to: null,
+    reason: "feat/bias-bg (the context quiz, Q18): nothing halves in a prop attempt; the halving arithmetic is position-sizing's non-prop step, the priority order points there" },
+  { from: "Halvings don't compound: however many steps halve, the size is halved once.", to: null,
+    reason: "feat/bias-bg (the context quiz, Q18): nothing halves in a prop attempt; the halving arithmetic is position-sizing's non-prop step, the priority order points there" },
 ];
 const LATE_STALE = (() => {
   const r = withLate(ALLOWED, LATE, units(require('fs').readFileSync(require('path').join(__dirname, '..', '..', BEFORE), 'utf8')));

@@ -66,7 +66,7 @@ it:
   take it only when the priority order (the strategy-library skill) says so,
   and then as given: rationale `setup:<policy strategy> ...`, the record's
   contract and side, at most the lower of the verdict's size and the
-  composed cap, the record's ticks (`order_plan` for `trade_lifecycle`
+  composed cap (the verdict is the full size; the cap limits the stop), the record's ticks (`order_plan` for `trade_lifecycle`
   gives exactly these arguments, or refuses with the gate's reason). A verdict is for its own bar: the gate takes it only while
   that bar is still the last one recorded for the policy strategy's
   timeframe (the runner records each bar it scans). Once a newer bar is recorded

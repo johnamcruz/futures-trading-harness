@@ -76,8 +76,8 @@ const ITEMS = Object.freeze({
   mtf_read: { group: 'priority', what: 'the multi-timeframe read for the side sets the size', taughtIn: STEP(4) },
   skip_rules: { group: 'priority', what: "the strategy's own context filter and skip rules", taughtIn: STEP(5) },
   confluence: { group: 'priority', what: 'another strategy firing the other side: no trade', taughtIn: STEP(6) },
-  secondary_context: { group: 'priority', what: 'secondary context cuts the size, never vetoes alone', taughtIn: STEP(7) },
-  halving: { group: 'priority', what: 'how a cut is rounded, and that cuts do not compound', taughtIn: { skill: 'strategy-library', step: null } },
+  secondary_context: { group: 'priority', what: 'secondary context is a read, never a veto alone (outside an attempt it may cut the size)', taughtIn: STEP(7) },
+  halving: { group: 'priority', what: 'how a cut is rounded, and that cuts do not compound', taughtIn: { skill: 'position-sizing', step: null } },
 });
 
 const isMap = x => x && typeof x === 'object' && !Array.isArray(x);
