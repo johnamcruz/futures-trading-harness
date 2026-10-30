@@ -7,7 +7,8 @@
  * target but trailed, the stop never below the lock (the target's R less `lockGivebackR`, never below the entry; with
  * the rulebook's `ratchet: on`, the best R reached, at least the target's, less it: a lock that rises with the peak), and
  * behind either the best price by `trailR` (trail_by r) or the last confirmed swing on `swingMinutes` candles (trail_by
- * structure; with no swing confirmed yet, the R trail: the fallback). The stop only ratchets toward the market, snapped
+ * structure; the latest swing, even one confirmed before the entry, so the R trail is the fallback only when the bars
+ * hold none). The stop only ratchets toward the market, snapped
  * to the tick on the safe side; a bar whose adverse extreme already went through the new stop closes the trade at its
  * close (trail.js: the stop wasn't resting there yet). Every input is a closed bar: nothing reads ahead.
  *

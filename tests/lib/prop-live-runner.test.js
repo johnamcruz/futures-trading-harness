@@ -68,7 +68,7 @@ test('snapshots and end-of-day balances go to the attempt the gate reads', async
   assert.deepStrictEqual({ account: sum.account, balance: sum.balance, floor: sum.floor, cushion: sum.cushion, dayPnl: sum.dayPnl, budgets: sum.budgets, entryBlock: sum.entryBlock },
     { account: 'topstep_50k', balance: 50250, floor: 48000, cushion: 2250, dayPnl: 250, budgets: [{ strategy: 'prop_x', budgetUsd: 450 }], entryBlock: null });
   // The Size and Min lines the prompt prints (prop/size-line.js), from the attempt's facts and the policy's sizing.
-  assert.ok(Array.isArray(sum.sizing) && /^Size: /.test(sum.sizing[0]), JSON.stringify(sum.sizing));
+  assert.ok(Array.isArray(sum.sizing) && /^Size \(prop attempt\): /.test(sum.sizing[0]), JSON.stringify(sum.sizing));
   assert.deepStrictEqual(setup({ start: false }).hooks.summaries(now), [], 'no attempt, no state');
   assert.strictEqual(sum.asOf, now.toISOString(), 'built from the snapshot taken now');
   // A balance just read wins over the snapshot, and says so.
@@ -504,7 +504,7 @@ test('the Size line judges the soft stop at the most one entry may risk: the flo
     return sum.sizing[0];
   };
   // A $500 stretched loss reaches the soft stop, so the line names it (the day is red, so drawdown holds too).
-  assert.match(await sizeLine({ sizing: { ...TEST_SIZING, floor_stretch_max_usd: 500 }, extra: [composed] }), /^Size: phase 2 may cut \(pacing: [^)]*\bsoft-stop\b/);
+  assert.match(await sizeLine({ sizing: { ...TEST_SIZING, floor_stretch_max_usd: 500 }, extra: [composed] }), /^Size \(prop attempt\): phase 2 may cut \(pacing: [^)]*\bsoft-stop\b/);
   // No stretch: the $300 cap fits in the $400 room, so the soft stop doesn't hold.
   assert.doesNotMatch(await sizeLine({ sizing: TEST_SIZING, extra: [composed] }), /soft-stop/);
 });

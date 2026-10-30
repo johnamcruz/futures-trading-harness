@@ -101,6 +101,8 @@ function restatements(key, v) {
   if (key === 'floor_stretch_max_usd') res.push(new RegExp(`(?:floor|stretch)[^.\\n]{0,60}(?:up to|at most|within) ${$}`, 'i'), new RegExp(`${$}[^.\\n]{0,40}(?:if|while) (?:the attempt is )?healthy`, 'i'));
   if (key === 'near_target_usd') res.push(new RegExp(`(?:target|pass)[^.\\n]{0,60}(?:within|under|at most) ${$}`, 'i'), new RegExp(`${$}[^.\\n]{0,40}(?:of|from|short of) the (?:target|pass)`, 'i'));
   if (key === 'loss_streak_stop') res.push(new RegExp(`(?:^|[^\\d.])${num} (?:losing trades|losses|losers) in a row[^\\n]{0,80}\\b(?:session|loss streak stop)`, 'i'));
+  // The lock's giveback in prose: "the target's R less 1.5R".
+  if (key === 'lock_giveback_r') res.push(new RegExp(`(?:less|minus) ${num}R\\b`, 'i'));
   if (key === 'trail_activate_r') res.push(new RegExp(`(?:until|past|to|from) \\+${num}R\\b`));
   if (key === 'trail_giveback_r') res.push(new RegExp(`trail(?:s|ing)? ${num}R\\b`), new RegExp(`${num}R behind`));
   if (exit) res.push(new RegExp(`(?:^|[^\\d.])${num}R\\s*/`), new RegExp(`/\\s*${num}R\\b`));
@@ -169,6 +171,9 @@ test('R1: the scan catches each way a value can be restated (it would fail witho
   assert.ok(caught('trail_giveback_r', 0.5, '... then trail 0.5R behind the best price'));
   assert.ok(caught('trail_activate_r', 2, 'exits by the policy strategy\'s own trail (2R / 0.5R), not'));
   assert.ok(caught('trail_giveback_r', 0.5, 'exits by the policy strategy\'s own trail (2R / 0.5R), not'));
+  assert.ok(caught('lock_giveback_r', 1.5, 'past the target it holds at the target\'s R less 1.5R, +0.5R at the 2R mark'));
+  assert.ok(!caught('lock_giveback_r', 1.5, 'the target\'s R less `lock_giveback_r` (+0.5R at the 2R mark)'));
+  assert.ok(!caught('lock_giveback_r', 1.5, 'the best R reached less a 1.5R or 1.2R giveback'), 'a study arm\'s giveback is its own');
   // Not a restatement: another number, a cushion amount, the key without its value.
   assert.ok(!caught('cushion_frac', 0.3, 'cushion_frac: 0.35'));
   assert.ok(!caught('cap_usd', 1000, 'Cushion $1,000, $2,000 below the peak'));

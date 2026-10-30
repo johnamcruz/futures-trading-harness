@@ -71,9 +71,9 @@ on the replay broker, and there is no live trading until the owner says
    trade: exit mode `target` keeps the trade's own stop and target (the compose
    record's brackets), with a trail on top only when the rulebook sets one;
    `target_then_trail` holds the stop to the trade's own target and then, in
-   place of the exit there, locks the stop at its R less the rulebook's
-   `lock_giveback_r` and trails it behind the
-   last confirmed swing (or by R), so a winner can run; exit mode `trail` puts
+   place of the exit there, holds the stop at its R less the rulebook's
+   `lock_giveback_r` until a `swing_tf` swing confirms beyond it, then trails
+   behind that swing (with `trail_by: r`, by R), so a winner can run; exit mode `trail` puts
    the R trail in place of the target.
 5. A verdict is a ceiling: take it only when the priority order (the
    strategy-library skill) says so, and then exactly as given:

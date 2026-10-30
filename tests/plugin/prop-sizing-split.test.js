@@ -26,6 +26,10 @@ const skill = s => read(`skills/${s}/SKILL.md`);
 // dropped from the fixture and from its new home together. `moved`: the homes other than the kept skill (homes[0]), each with the old
 // fixture's line ranges (1-based, inclusive) that go to it, and single units moved out of a block that stays; every
 // other unit of the old skill belongs to the kept skill.
+const REORDER = "fix/min-line-trail-text (the context quiz: the risk manager read a serious factor against as half in a prop attempt, the non-prop halving ahead of the prop rule): the prop rule leads, complete; the non-prop budget, size and halving moved to the end, one heading, unbolded; steps named, not numbered";
+const RB_NEW = "Risk budget = the smallest of: - the strategy / plan $ risk (a composed trade: at most its $300 cap), - 25% of `remainingBeforeLimit` from `get_account_snapshot`, when known, - 10% of the trailing-drawdown cushion (balance − loss floor), when shown.";
+const SZ_NEW = "Size = floor(budget ÷ risk per contract).";
+
 const SPLITS = {
   'prop-challenge-pacing': {
     before: 'tests/fixtures/skill-split/prop-challenge-pacing.before.txt',
@@ -166,7 +170,30 @@ const SPLITS = {
         reason: "feat/bias-bg (the context quiz, Q18): nothing halves in a prop attempt; the halving arithmetic is position-sizing's non-prop step, the priority order points there; the verdict is the full size, the cap limits the stop (Q17)" },
       { from: "The gate checks the verdict, not these caps; it still refuses a size over the broker's `maxOrderSize`, and over the policy strategy's own `risk.max_risk_usd` if it sets one (a rules component's caps don't apply; `trade_lifecycle`'s cap does: the lower of it and the verdict).", to: null,
         reason: "feat/bias-bg (the context quiz, Q18): nothing halves in a prop attempt; the halving arithmetic is position-sizing's non-prop step, the priority order points there; the verdict is the full size, the cap limits the stop (Q17)" },
+      { from: "**Size** = floor(budget ÷ risk per contract).",
+        to: "Size = floor(budget ÷ risk per contract).",
+        reason: REORDER },
+      { from: "**A policy verdict overrides steps 3-5.** While a prop attempt runs a policy strategy, the verdict's contract (the selected one), size, and stop ticks were sized from the attempt's budget (`combine_status`), each contract's risk counting its stop plus a tick of expected slippage (`sizing.stop_slippage_ticks`) and fees both ways; place at most that size and don't apply the 25% / 10% / size-1 caps to it.",
+        to: "**A policy verdict overrides the budget and caps.** While a prop attempt runs a policy strategy, the verdict's contract (the selected one), size, and stop ticks were sized from the attempt's budget (`combine_status`), each contract's risk counting its stop plus a tick of expected slippage (`sizing.stop_slippage_ticks`) and fees both ways; place at most that size and don't apply the 25% / 10% / size-1 caps to it.",
+        reason: REORDER },
+      { from: "**The arithmetic from `order_plan`** (the `order-plan` skill): steps 2 and 4 for a compose record (refused over its cap), a policy verdict or a rules candidate; use its numbers, never your own.",
+        to: "**The arithmetic from `order_plan`** (the `order-plan` skill): step 2 and the size for a compose record (refused over its cap), a policy verdict or a rules candidate; use its numbers, never your own.",
+        reason: REORDER },
+      { from: "**Risk budget** (outside an attempt) = the smallest of: - the strategy / plan $ risk (a composed trade: at most its $300 cap), - 25% of `remainingBeforeLimit` from `get_account_snapshot`, when known, - 10% of the trailing-drawdown cushion (balance − loss floor), when shown.",
+        to: "Risk budget = the smallest of: - the strategy / plan $ risk (a composed trade: at most its $300 cap), - 25% of `remainingBeforeLimit` from `get_account_snapshot`, when known, - 10% of the trailing-drawdown cushion (balance − loss floor), when shown.",
+        reason: REORDER },
+      { from: "The budget (step 3) and the caps stay your judgement: a budget below its risk is a skip; a raised size (a rules setup with 30+ reviewed trades) changes only `size`, the risk scaling with it.",
+        to: "The budget and the caps stay your judgement: a budget below its risk is a skip; a raised size (a rules setup with 30+ reviewed trades) changes only `size`, the risk scaling with it.",
+        reason: REORDER },
     ],
+    // Units moved out of their old order on purpose, each with its reason (the order check skips them). Where they
+    // went is pinned instead: `after` (in this order) comes before each of `follow` (the exempt units, the halving).
+    reordered: {
+      units: [RB_NEW, SZ_NEW],
+      after: ['In a prop attempt: the full verdict size; a serious factor against never cuts it; only a pacing rule does.', 'Outside a prop attempt'],
+      follow: [RB_NEW, SZ_NEW, 'A trade marked smaller is halved: half is `floor(size / 2)`, 0 means no trade (at size 1 every halving is a skip).'],
+      reason: REORDER,
+    },
     moved: {
       // Step 1's table and the contract-naming paragraph, and the sentence that introduced the table.
       'micro-mini-specs': { lines: [[18, 28]], units: ['The table is for sanity checks only:'] },
@@ -234,8 +261,11 @@ function homeErrors(s, beforeText, homeTexts) {
   return bad;
 }
 
-/** Units out of their old order: in each home, the units that came from the old skill keep their old relative order. */
-function orderErrors(beforeText, homeTexts, homes, allowed) {
+/**
+ * Units out of their old order: in each home, the units that came from the old skill keep their old relative order.
+ * `reordered`: the units (as today's skill has them) moved out of it on purpose, skipped (a split's `reordered.units`).
+ */
+function orderErrors(beforeText, homeTexts, homes, allowed, reordered = []) {
   const old = units(beforeText);
   const nowToOld = new Map(allowed.flatMap(a => [a.now || []].flat().map(n => [n, a.old])));
   const bad = [];
@@ -245,7 +275,7 @@ function orderErrors(beforeText, homeTexts, homes, allowed) {
     let lastUnit = '';
     for (const u0 of units(text)) {
       const u = nowToOld.get(u0) || u0;
-      if (STRUCTURE.includes(u)) continue;
+      if (STRUCTURE.includes(u) || reordered.includes(u0)) continue;
       const at = old.indexOf(u, used.has(u) ? used.get(u) + 1 : 0);
       if (at < 0) continue; // new text, not from the old skill
       used.set(u, at);
@@ -257,13 +287,43 @@ function orderErrors(beforeText, homeTexts, homes, allowed) {
   return bad;
 }
 
+/** Where a split's reordered units went: each of `after` once, in order, and every `follow` unit after the last. */
+function placementErrors(text, re) {
+  const us = units(text);
+  const at = re.after.map(u => us.indexOf(u));
+  const bad = re.after.filter((u, i) => at[i] < 0 || (i > 0 && at[i] < at[i - 1])).map(u => `${JSON.stringify(u)}: missing or out of order`);
+  const last = Math.max(...at);
+  for (const u of re.follow) if (!(us.indexOf(u) > last)) bad.push(`${JSON.stringify(u)}: not after ${JSON.stringify(re.after[re.after.length - 1])}`);
+  return bad;
+}
+
+test('position-sizing: the prop rule leads; the non-prop block stays at the end (the reordered units\' placement)', () => {
+  const re = SPLITS['position-sizing'].reordered;
+  const ps = skill('position-sizing');
+  assert.deepStrictEqual(placementErrors(ps, re), []);
+  // The mutation: the "Outside a prop attempt" block moved back to the top of How It Works fails.
+  const from = ps.indexOf('### Outside a prop attempt');
+  const to = ps.indexOf('## Examples');
+  const block = ps.slice(from, to);
+  const moved = (ps.slice(0, from) + ps.slice(to)).replace('## How It Works\n\n', `## How It Works\n\n${block}`);
+  assert.notDeepStrictEqual(placementErrors(moved, re), [], 'the block moved ahead of the prop rule');
+  // Only the halving moved up, or the heading dropped: also caught.
+  const half = re.follow[2];
+  assert.notDeepStrictEqual(placementErrors(ps.replace('## How It Works\n\n', `## How It Works\n\n${half}\n\n`).replace(/\n3\. A trade marked smaller is halved:[^]*?under the caps\.\n/, '\n'), re), []);
+  assert.notDeepStrictEqual(placementErrors(ps.replace('### Outside a prop attempt\n', ''), re), []);
+});
+
 for (const [name, s] of Object.entries(SPLITS)) {
   test(`${name} split: every unit of the old skill is in exactly one new home, the one its section maps to, byte-for-byte, in its old order`, () => {
     assert.strictEqual(sha(s.before), s.sha256, 'the fixture is the old skill, unchanged');
     const homes = s.homes.map(skill);
     assert.deepStrictEqual(differences(read(s.before), homes, s.allowed), []);
     assert.deepStrictEqual(homeErrors(s, read(s.before), homes), [], 'each unit is in the home its old section maps to');
-    assert.deepStrictEqual(orderErrors(read(s.before), homes, s.homes, s.allowed), [], 'moved text keeps its old order in each home');
+    const re = s.reordered || { units: [] };
+    assert.deepStrictEqual(orderErrors(read(s.before), homes, s.homes, s.allowed, re.units), [], 'moved text keeps its old order in each home');
+    // Each unit let out of order is in the kept skill, with its reason, and is out of order without the exemption.
+    for (const u of re.units) assert.ok(units(homes[0]).includes(u) && re.reason, u);
+    if (re.units.length) assert.notDeepStrictEqual(orderErrors(read(s.before), homes, s.homes, s.allowed), [], 'a stale exemption: nothing out of order');
     for (const a of s.allowed) assert.ok(a.reason, a.old);
   });
 }

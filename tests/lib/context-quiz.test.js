@@ -74,8 +74,8 @@ test('Part B\'s excerpts are the lines the code writes (bias-line.js, prop/size-
   assert.deepStrictEqual(Q.excerptOf({ bias: { h4: -1, h1: -1, t15: 1 } }), ['Bias: short only (4h down, 1h down; long refused).']);
   assert.deepStrictEqual(Q.excerptOf({ bias: { h4: 0, h1: 0, t15: 1, declared: true } }), ['Bias: neutral → 15m up + declared long → long only.']);
   const size = q('b4').excerpt.size;
-  assert.match(Q.excerptOf({ size })[0], /^Size: full verdict/);
-  assert.match(Q.excerptOf({ size: { ...size, facts: { ...size.facts, balance: 99000, lossesToday: 1, lossStreak: 1 } } })[0], /^Size: phase 2 may cut \(pacing: after-loss, streak, drawdown\)/);
+  assert.match(Q.excerptOf({ size })[0], /^Size \(prop attempt\): the full verdict size; a serious factor against never cuts it\./);
+  assert.match(Q.excerptOf({ size: { ...size, facts: { ...size.facts, balance: 99000, lossesToday: 1, lossStreak: 1 } } })[0], /^Size \(prop attempt\): phase 2 may cut \(pacing: after-loss, streak, drawdown\)/);
   assert.throws(() => Q.excerptOf({}), /excerpt/);
   const t = Q.questionText(QUIZ, q('b1'));
   assert.match(t, /^Briefing excerpt:\nBias: short only[^\n]*\n\nA 15m bullish CHoCH/);

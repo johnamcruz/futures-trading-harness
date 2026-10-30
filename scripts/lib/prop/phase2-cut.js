@@ -22,7 +22,8 @@
  *               account's) at most the policy's sizing.near_target_usd (the band the size translation trades the
  *               floor in: combine.nearTarget; off: never)
  *
- * Facts that can't be read (no snapshot, today's counts unknown) are no healthy account: the cut stands. Only a cut on a
+ * Facts that can't be read (no snapshot, today's counts unknown, a room that is neither a number nor null: null is no
+ * such limit, combine.attemptFacts) are no healthy account: the cut stands. Only a cut on a
  * healthy account (no rule holds) is restored to the translated size, never more: it is a process note, never a refusal.
  * A veto is never a cut. The rule phase 2 names on its Size line (`Size: 4 (after-loss)`) is recorded with the outcome.
  *
@@ -78,7 +79,9 @@ function rulesHolding(facts, riskUsd) {
   const f = facts;
   const losses = count(f.lossesToday);
   const streak = count(f.lossStreak);
-  if (losses === null || streak === null || !num(f.balance) || !num(f.start) || !num(f.peak)) return ['unknown'];
+  // A room is a number or null (no such limit); anything else can't be read (fails closed, as the other facts).
+  const roomRead = room => room === null || num(room);
+  if (losses === null || streak === null || !num(f.balance) || !num(f.start) || !num(f.peak) || !roomRead(f.softRoom) || !roomRead(f.dailyRoom)) return ['unknown'];
   const within = room => num(room) && room <= riskUsd;
   const held = {
     'after-loss': losses >= 1,

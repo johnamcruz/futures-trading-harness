@@ -3892,6 +3892,24 @@ test('trade_lifecycle in an attempt, phase 2\'s cut (owner-approved 2026-10-28, 
   } finally {
     P2C.cutFacts = real;
   }
+  // A room that can't be read (neither a number nor null, which is no such limit): as the other unread facts, the
+  // cut phase 2 approved still goes and no restore; null rooms are no limit, and the healthy account restores.
+  for (const room of [{ softRoom: NaN }, { dailyRoom: undefined }, { softRoom: '500' }, { null: true }]) {
+    P2C.cutFacts = o => {
+      const f = real(o);
+      return room.null ? { ...f, softRoom: null, dailyRoom: null } : { ...f, ...room };
+    };
+    try {
+      assert.deepStrictEqual(run({}, 3), [], JSON.stringify(room));
+      if (room.null) assert.deepStrictEqual(run({}, 5), [], 'no limits: healthy, the translated size goes');
+      else assert.ok(run({}, 5).some(m => /\[composed-reads\] .*size 5 is not 3/.test(m)), JSON.stringify(room));
+      // An exit is never refused, whatever the room.
+      const exitHome = LCP.propHome({ size: 1 }).home;
+      assert.deepStrictEqual(lcPropEval(exitHome, { accountId: 1, contractId: 'MNQ', side: 'sell', type: 'market', size: 3, rationale: '[exit] flatten the prop_portfolio long' }).violations, [], JSON.stringify(room));
+    } finally {
+      P2C.cutFacts = real;
+    }
+  }
 });
 
 test('trade_lifecycle in an attempt near the target (owner-approved 2026-10-28, sizing.near_target_usd): order_plan and the gate take the same floor; the full size is refused; far from it, as before', () => {
