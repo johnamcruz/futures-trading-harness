@@ -60,7 +60,8 @@ or more (`rangeAtr`); `withPole` the pole its way, `volVsBox` support only
 (`beyondNow`; acceptance by closes: `breakout-vs-fakeout`) and under 1 x
 ATR past its close (`late`).
 
-**Detect it**, the setup (`<tf> compression break up|down`):
+**Detect it**, the setup (`<tf> compression break up|down`), the 15m or
+higher in an attempt (a 3m box only times it):
 
 1.
   `state` `compressing`: the narrow candle, its box and `levels`.
@@ -91,10 +92,10 @@ added nothing measured.
 ## Examples
 
 ```text
-Take: 1h up; 3m inside box 27413.00-27422.00 on the prior POC; 04:39 ET expansion closed 27428.50
-  (1.13 ATR, 0.54 beyond, volume 2.69x); 04:42 close 27428.00 top.
-  Reads: 3m compression break up,
-  3m close top, stop 3m box low 27413.00, target prior rth high 27462.50 (2.26R); hit at 05:51.
+Take: (no attempt) 1h up; 3m inside box 27413.00-27422.00 on the prior POC;
+  04:39 ET expansion closed 27428.50 (1.13 ATR, 0.54 beyond, volume 2.69x); 04:42 close 27428.00 top.
+  Reads: 3m compression break up, 3m close top, stop 3m box low 27413.00, target trail (2.26R); hit
+  the prior RTH high 27462.50 at 05:51.
 Skip: pennant: a 20:09 ET pole up, then 2 candles inside 27102.50-27116.25; expansion 27118.50;
   stop 27102.25, the 15m swing high 27155.75 only 1.35R: no runway -> pass.
 Skip: 4h up; 3m inside box 27475.00-27484.50; expansion down 27446.00: against the bias -> pass.
@@ -126,7 +127,7 @@ candle).
   A gap behind a weak middle bar, or one the wrong way, is no FVG.
   Price often
 revisits the gap; a gap that holds on retest supports continuation
-(`m3` `liquidity.openFvgs`).
+(`m3.fvgs`).
   By what price has done since: **open** (not
 traded back into), **partly filled** (traded into, not through: only the
 unfilled part is still a gap; `m3` `liquidity.partlyFilledFvgs` give it
@@ -138,9 +139,9 @@ open FVG".
 **Source vs ours.** The same in substance (fair price just moved, a large
 middle candle, invalid past the far edge); ours adds the CISD strength
 rule, wicks count, and partly filled.
-  `liquidity` holds the gaps of the
-last 60 bars of the briefing's own timeframe, the last 3 of each kind
-(`m3.fvgs`: the 5m, 15m and 1h ones); a filled gap is in neither list.
+  `m3.fvgs` holds the 5m, 15m and
+1h gaps, the last 3 of each kind (the entry frame gives none); a filled
+gap is in neither list.
 Never mark one by eye.
 
 **The read.** A location, never a trigger.
@@ -355,9 +356,10 @@ Loser: momentum up; long at 21512.50, stop 21508.00 (4.50 pts = 18 ticks, $9.00 
 <skill name="top-down-entry">
 # Top-Down Entry
 
-The fractal read: the higher timeframes give the side and the level, the
-15m the setup, the 3m or 5m the trigger (how the timeframes align:
-`htf-to-ltf`).
+The fractal read: the bias (4h + 1h) gives the side, the levels come from
+the 1h and up, the session, the VWAP and the 15m swings, the setup (15m)
+is the entry, the entry timing (3m) only times it (how the timeframes
+align: `htf-to-ltf`).
 
 ## When to Use
 
@@ -371,9 +373,9 @@ Completed candles only, on every timeframe.
 points to the read it uses.
 
 1.
-  **HTF: side and level.** The side the trend rule allows
-   (`m3.trendRule`); today's bias (`daily-bias`) sets the confidence, never
-   a side the rule refuses.
+  **Bias: side and level.** The bias (4h + 1h): the side rule's side (`htf-to-ltf`,
+   `m3.trendRule`; never counter); today's bias (`daily-bias`) sets the
+   confidence, never a side the rule refuses.
   The level price comes into
    (`levels-and-reactions`) is the point of interest.
 2.
@@ -381,26 +383,25 @@ points to the read it uses.
    (`rejection`, `breakout`), a CISD (`cisd`), a pullback or a
    reversal (`pullback-vs-reversal`, `bos-vs-choch`).
 3.
-  **3m/5m: the trigger.** A candle closed after the setup's, its way, with
-   momentum (`candle-reading`, `momentum-and-volume`): the entry reads.
+  **3m: the entry timing.** The next 3m close after the setup's, its way
+   (`candle-reading`, `momentum-and-volume`): the entry reads; no 3m turn
+   or break to wait for.
 4.
-  **Where the idea is wrong.** Beyond the reaction's LTF structure
-   (`invalidation`): check that the strategy's stop sits beyond it.
+  **Stop: compose's.** One tick beyond the setup's invalidation, as
+   a rule its candle's extreme (`invalidation`); never tighter.
 5.
-  **Where it aims.** The next HTF swing (`m3.swingTargets`);
-   `candidate.inTheWay` is the first level ahead: a read to weigh, not a
-   pass.
-  Hard: R:R to the target at least `risk.min_rr`.
+  **Exit: the trail.** `target trail`: the 2R mark arms it (`take-profit`;
+   `m3.swingTargets` are context); `candidate.inTheWay` is the first level
+   ahead: a read to weigh, not a pass.
+   Hard: R:R at least `risk.min_rr` (compose_check's).
 
 When the timeframes disagree, the alignment label (`htf-to-ltf`) names it:
-the HTF gives the side, the LTF only the timing.
+the bias gives the side, the 3m only the timing.
 
 A read: the trend rule (`multi-timeframe-analysis`) and the priority order
 (strategy-library) decide entries.
-  Against the prevailing trend, trend
-strategies wait.
-  The stop and exit stay the strategy's (the priority order,
-step 2: a reversal takes the nearest target).
+  Against a trending 4h or 1h: no entry
+(never counter); the stop is compose's, the exit the trail.
 
 ## Examples
 
@@ -408,16 +409,15 @@ NQ, back-adjusted CSV prices:
 
 ```text
 2022-06-22, trend rule 4h up, long aligned.
-  15m 12:45 candle rejects the prior
-POC 14942.75; the 3m 13:03 candle rejects it too and closes in its top third:
+  The 15m 12:45 candle rejects the prior
+POC 14942.75 (the setup); the next 3m close, 13:03, closes in its top third:
 long 14960.00, stop 14938.50 under the 15m low (21.50 pts = 86 ticks, $43.00 per MNQ);
-target the 15m swing high 15040.25 (80.25 pts, 3.73R), reached 14:15.
+target trail: the 2R mark 15003.00 armed it; the 15m swing high 15040.25 was reached 14:15.
 2022-08-12, trend rule 4h up.
-  15m shooting star at the prior VAH 16809.25, 3m
-bearish engulfing: short 16789.25, stop 16814.00 (24.75 pts = 99 ticks, $49.50 per MNQ).
-Step 1: shorts are not the side the rule allows; only a reversal strategy may
-fade it, and step 2 of the priority order decides.
-  The stop was hit 12:12.
+  A 15m shooting star at the prior VAH 16809.25: a short is
+against the 4h: no entry (never counter).
+  Taken, short 16789.25, stop 16814.00 (24.75 pts
+= 99 ticks, $49.50 per MNQ): the stop was hit 12:12.
 ```
 </skill>
 
@@ -433,15 +433,15 @@ fade it, and step 2 of the priority order decides.
 
 A read of where price may stop, never a veto: the priority order
 (strategy-library) decides take, skip and size.
-  Which target goes with
-which setup is a strategy's, not this skill's.
+  The trail exits (read
+forms below): these levels are context, never the exit.
 
 **Target levels**, on the winning side of the entry, completed candles
 only:
 
 - **Pivot highs and lows**: the next untaken confirmed swing per
-  timeframe, `m3.swingTargets.above` and `m3.swingTargets.below` (the
-  base bars, 15m, 1h and 4h; `frame`, `price`, `points`, `ticks`, `R`).
+  timeframe, `m3.swingTargets.above` and `m3.swingTargets.below` (15m,
+  1h and 4h; `frame`, `price`, `points`, `ticks`, `R`).
   Stops rest beyond a swing (`levels-and-reactions`).
 - **The prior 1h and 4h candle's high, low and midpoint**:
   `m3.rangeTargets`, per frame its `high`, `mid` and `low`: where that candle's buyers and sellers
@@ -457,19 +457,19 @@ only:
 - **The candle forming**: its midpoint moves until it closes, so it is a
   target only once completed.
 
-**Read forms** (the target step): `target <tf> swing high|low <price>`,
-`target prior 1h|4h high|mid|low <price>` (a taken side reads false),
-`target <5m|15m|1h> fvg high|low <price>`.
-  None named: `target 2r`.
-Any entry the rule allows: `target trail` (the 2R mark arms
-it); a level ahead is context, never a requirement.
+**Read forms** (the target step): `target trail` (the 2R mark arms it),
+every entry the side rule gives; a level ahead is context, never a
+requirement.
+  Not in a prop attempt, on a side the side rule doesn't give:
+`target <tf> swing high|low <price>`, `target prior 1h|4h high|mid|low
+<price>` (a taken side reads false), `target <15m|1h> fvg high|low
+<price>`; none named: `target 2r`.
   A key level within 1R in front caps the first
 push: evidence; prefer the turn after it.
 
 **Timeframe weight** (hypothesis, not measured): a higher timeframe's
-level holds more orders and reacts more often; the nearest is the
-conservative target, a higher one beyond it the extended one; levels a few
-ticks apart are one zone.
+level holds more orders and reacts more often; levels a few ticks apart
+are one zone.
 
 **Room in R.** The briefing's `R` is against the reference stop
 (`m3.oneR`).
@@ -536,9 +536,8 @@ Prior 4h low 21440.50: 49.50 pts = 198 ticks, $99.00, 4.40R (extended).
 4.
   **Size** = floor(budget ÷ risk per contract).
   If it's 0, the stop is too
-   wide for the budget: skip, or find a tighter, structure-based stop.
-  Never
-   shrink the stop to make the size work.
+   wide for the budget: skip (in an attempt the floor stretch is code's).
+   Never a tighter stop to make the size work.
 5.
   **Caps:** the broker server's `maxOrderSize` and `maxPositionSize`
    (`get_server_config`); size 1 on micros for a rules strategy until
@@ -573,17 +572,16 @@ Prior 4h low 21440.50: 49.50 pts = 198 ticks, $99.00, 4.40R (extended).
   Everything else (stop first, protective
    stop always working) still applies.
   The verdict is the most the account
-   allows, not what the moment deserves: after a loss, in a streak or
-   drawdown, or one loss from `daily_loss_soft` or the target, size under it
-   (`Size: <n> (<rule>)`) or pass.
-  A healthy account: a pass is a VETO, a
-   smaller size is placed at the verdict.
+   allows: phase 2 cuts it only on a pacing rule (a losing account, a loss
+   streak, drawdown: `Size: <n> (<rule>)`) or passes.
+  A healthy account
+   (balance at or above the start, no loss streak): the full verdict size.
    In a prop attempt, the size you state is a suggestion: code translates it
    at entry to the rulebook's size (min_contracts and the budget); read the
    size it returns.
 7.
-  **Half size** wherever the priority order (strategy-library) halves a
-   trade, computed as it says there.
+  **Not in a prop attempt: half size** wherever the priority order
+   (strategy-library) halves a trade, computed as it says there.
   Never round a half up.
   A composed
    trade: `confluence-counting` sizes it, under the caps.
@@ -720,8 +718,8 @@ hypotheses; a missing field is `unknown`.
   (`15m rejected previous 15m high down`; `rejection`).
 - **Acceptance (breakout)**: closes beyond that hold (hypothesis: two or
   more).
-  Shown as a 3m swing break (`m3.lastBreak.last.level`), a 15m or 1h
-  swing with `brokenAt` set (`m3.htfLevels`), or a location that changed
+  Shown as a 15m or 1h swing with `brokenAt` set
+  (`m3.htfLevels`), or a location that changed
   side (`m3.location.priorValue`, `m3.location.initialBalance`,
   `m3.location.priorRthRange`).
 - **Retest**: after acceptance, a pullback whose closes stay beyond the
@@ -972,8 +970,8 @@ value, overnight) are the better locations.
 
 The bias is a read: the trend rule (`multi-timeframe-analysis`) and the
 priority order (strategy-library) decide entries.
-  Against the prevailing
-trend, trend strategies wait; it never points at a side the rule refuses.
+  Against a trending 4h or 1h: no entry
+(never counter); it never points at a side the rule refuses.
 
 ## Examples
 
@@ -1048,38 +1046,37 @@ timeframe's candles).
 
 | Timeframe | BOS | CHoCH |
 |---|---|---|
-| 3m, 5m | continuation; entry timing | against the HTF: usually a pullback; back with it: the pullback ends |
+| 3m, 5m | a candle fact only: never the setup, never a wait | a candle fact only (its swings are for the stop) |
 | 15m | the working structure continues | the working structure shifting: a deeper pullback, or a reversal starting |
 | 1h (4h swings) | the HTF trend continues | the strongest sign of an HTF trend change, not a reversal by itself: a BOS the new way confirms it |
 
-A 3-minute BOS against a 1-hour downtrend is a counter-trend trade.
-CHoCHs stacking up the timeframes (3m, then 15m, then 1h) are a reversal
-developing.
+A break against a trending 4h or 1h: the trend rule refuses it (never counter).
+CHoCHs stacking up the timeframes (15m, then 1h) are a reversal
+developing; a 1h CHoCH while the 4h and 1h agree is context.
 
 **In the PLAN.**
 
 - **1 HTF**: a 1h break is the side rule's, a 15m one structure
   (`confluence-counting`).
-- **4 Setup**: continuation, a BOS the HTF way, a pullback to a level, a
-  lower-timeframe CHoCH back the HTF way; reversal, CHoCHs stacking up.
+- **4 Setup**: a 15m (or higher) BOS the bias's way, or a pullback to a
+  level ending in the 15m setup the bias's way; never a 3m break.
 - **9 Manage**: a CHoCH against an open trade on its timeframe or higher
-  is significant (`invalidation`); lower is mostly noise.
-  The exit stays
-  the strategy's.
+  (15m, 1h) is significant (`invalidation`); a 3m one is noise.
+  The exit stays the trail.
 
 ## Examples
 
 ```text
-Take: 1h, 15m BOS up; pullback to the RTH VWAP 21520.50; m3 CHoCH up 0 bars ago.
-  Reads: 1h bos up, at vwap rth, 3m choch up.
-  Priority order: aligned; the count for -> take.
-Skip: 1h, 15m last BOS up; m3 CHoCH down through 21512.50.
-  Read: a 3m pullback, not a reversal.
-  A short: no 1h CHoCH down; the priority order (step 2) decided skip.
-Loser: 1h up; m3, then 15m CHoCH down through 21560.00.
-  Read: reversal developing.
-  short at 21548.75 (15m choch down), stop 21557.25 (8.50 pts = 34 ticks, $17.00 on 1 MNQ); no 1h CHoCH;
-  a 15m CHoCH up through 21562.50: the CHoCH failed, price resumed.
+Take: 4h, 1h up, 1h and 15m BOS up; pullback to the RTH VWAP 21520.50; the 15m rejected it up.
+  Reads: 1h bos up, at vwap rth, 15m rejected vwap rth up, 3m close top.
+  Priority order: aligned -> take.
+Skip: 1h trending up; a 15m CHoCH down through 21512.50: a 15m pullback.
+  A short: against the 1h
+  trend (the trend rule refuses it, whatever CHoCH) -> pass.
+Loser: 4h up, 1h ranging; a 15m CHoCH down through 21560.00, then a 15m BOS down: against the 4h
+  (the trend rule refuses it).
+  A short at 21548.75 anyway, stop 21557.25 (8.50 pts = 34 ticks, $17.00 on 1 MNQ):
+  a 15m CHoCH up through 21562.50, price resumed up.
   -34 ticks, -$17.00.
 ```
 </skill>
@@ -1178,7 +1175,8 @@ or more (`rangeAtr`); `withPole` the pole its way, `volVsBox` support only
 (`beyondNow`; acceptance by closes: `breakout-vs-fakeout`) and under 1 x
 ATR past its close (`late`).
 
-**Detect it**, the setup (`<tf> compression break up|down`):
+**Detect it**, the setup (`<tf> compression break up|down`), the 15m or
+higher in an attempt (a 3m box only times it):
 
 1.
   `state` `compressing`: the narrow candle, its box and `levels`.
@@ -1209,10 +1207,10 @@ added nothing measured.
 ## Examples
 
 ```text
-Take: 1h up; 3m inside box 27413.00-27422.00 on the prior POC; 04:39 ET expansion closed 27428.50
-  (1.13 ATR, 0.54 beyond, volume 2.69x); 04:42 close 27428.00 top.
-  Reads: 3m compression break up,
-  3m close top, stop 3m box low 27413.00, target prior rth high 27462.50 (2.26R); hit at 05:51.
+Take: (no attempt) 1h up; 3m inside box 27413.00-27422.00 on the prior POC;
+  04:39 ET expansion closed 27428.50 (1.13 ATR, 0.54 beyond, volume 2.69x); 04:42 close 27428.00 top.
+  Reads: 3m compression break up, 3m close top, stop 3m box low 27413.00, target trail (2.26R); hit
+  the prior RTH high 27462.50 at 05:51.
 Skip: pennant: a 20:09 ET pole up, then 2 candles inside 27102.50-27116.25; expansion 27118.50;
   stop 27102.25, the 15m swing high 27155.75 only 1.35R: no runway -> pass.
 Skip: 4h up; 3m inside box 27475.00-27484.50; expansion down 27446.00: against the bias -> pass.
@@ -1244,7 +1242,7 @@ candle).
   A gap behind a weak middle bar, or one the wrong way, is no FVG.
   Price often
 revisits the gap; a gap that holds on retest supports continuation
-(`m3` `liquidity.openFvgs`).
+(`m3.fvgs`).
   By what price has done since: **open** (not
 traded back into), **partly filled** (traded into, not through: only the
 unfilled part is still a gap; `m3` `liquidity.partlyFilledFvgs` give it
@@ -1256,9 +1254,9 @@ open FVG".
 **Source vs ours.** The same in substance (fair price just moved, a large
 middle candle, invalid past the far edge); ours adds the CISD strength
 rule, wicks count, and partly filled.
-  `liquidity` holds the gaps of the
-last 60 bars of the briefing's own timeframe, the last 3 of each kind
-(`m3.fvgs`: the 5m, 15m and 1h ones); a filled gap is in neither list.
+  `m3.fvgs` holds the 5m, 15m and
+1h gaps, the last 3 of each kind (the entry frame gives none); a filled
+gap is in neither list.
 Never mark one by eye.
 
 **The read.** A location, never a trigger.
@@ -1473,9 +1471,10 @@ Loser: momentum up; long at 21512.50, stop 21508.00 (4.50 pts = 18 ticks, $9.00 
 <skill name="top-down-entry">
 # Top-Down Entry
 
-The fractal read: the higher timeframes give the side and the level, the
-15m the setup, the 3m or 5m the trigger (how the timeframes align:
-`htf-to-ltf`).
+The fractal read: the bias (4h + 1h) gives the side, the levels come from
+the 1h and up, the session, the VWAP and the 15m swings, the setup (15m)
+is the entry, the entry timing (3m) only times it (how the timeframes
+align: `htf-to-ltf`).
 
 ## When to Use
 
@@ -1489,9 +1488,9 @@ Completed candles only, on every timeframe.
 points to the read it uses.
 
 1.
-  **HTF: side and level.** The side the trend rule allows
-   (`m3.trendRule`); today's bias (`daily-bias`) sets the confidence, never
-   a side the rule refuses.
+  **Bias: side and level.** The bias (4h + 1h): the side rule's side (`htf-to-ltf`,
+   `m3.trendRule`; never counter); today's bias (`daily-bias`) sets the
+   confidence, never a side the rule refuses.
   The level price comes into
    (`levels-and-reactions`) is the point of interest.
 2.
@@ -1499,26 +1498,25 @@ points to the read it uses.
    (`rejection`, `breakout`), a CISD (`cisd`), a pullback or a
    reversal (`pullback-vs-reversal`, `bos-vs-choch`).
 3.
-  **3m/5m: the trigger.** A candle closed after the setup's, its way, with
-   momentum (`candle-reading`, `momentum-and-volume`): the entry reads.
+  **3m: the entry timing.** The next 3m close after the setup's, its way
+   (`candle-reading`, `momentum-and-volume`): the entry reads; no 3m turn
+   or break to wait for.
 4.
-  **Where the idea is wrong.** Beyond the reaction's LTF structure
-   (`invalidation`): check that the strategy's stop sits beyond it.
+  **Stop: compose's.** One tick beyond the setup's invalidation, as
+   a rule its candle's extreme (`invalidation`); never tighter.
 5.
-  **Where it aims.** The next HTF swing (`m3.swingTargets`);
-   `candidate.inTheWay` is the first level ahead: a read to weigh, not a
-   pass.
-  Hard: R:R to the target at least `risk.min_rr`.
+  **Exit: the trail.** `target trail`: the 2R mark arms it (`take-profit`;
+   `m3.swingTargets` are context); `candidate.inTheWay` is the first level
+   ahead: a read to weigh, not a pass.
+   Hard: R:R at least `risk.min_rr` (compose_check's).
 
 When the timeframes disagree, the alignment label (`htf-to-ltf`) names it:
-the HTF gives the side, the LTF only the timing.
+the bias gives the side, the 3m only the timing.
 
 A read: the trend rule (`multi-timeframe-analysis`) and the priority order
 (strategy-library) decide entries.
-  Against the prevailing trend, trend
-strategies wait.
-  The stop and exit stay the strategy's (the priority order,
-step 2: a reversal takes the nearest target).
+  Against a trending 4h or 1h: no entry
+(never counter); the stop is compose's, the exit the trail.
 
 ## Examples
 
@@ -1526,16 +1524,15 @@ NQ, back-adjusted CSV prices:
 
 ```text
 2022-06-22, trend rule 4h up, long aligned.
-  15m 12:45 candle rejects the prior
-POC 14942.75; the 3m 13:03 candle rejects it too and closes in its top third:
+  The 15m 12:45 candle rejects the prior
+POC 14942.75 (the setup); the next 3m close, 13:03, closes in its top third:
 long 14960.00, stop 14938.50 under the 15m low (21.50 pts = 86 ticks, $43.00 per MNQ);
-target the 15m swing high 15040.25 (80.25 pts, 3.73R), reached 14:15.
+target trail: the 2R mark 15003.00 armed it; the 15m swing high 15040.25 was reached 14:15.
 2022-08-12, trend rule 4h up.
-  15m shooting star at the prior VAH 16809.25, 3m
-bearish engulfing: short 16789.25, stop 16814.00 (24.75 pts = 99 ticks, $49.50 per MNQ).
-Step 1: shorts are not the side the rule allows; only a reversal strategy may
-fade it, and step 2 of the priority order decides.
-  The stop was hit 12:12.
+  A 15m shooting star at the prior VAH 16809.25: a short is
+against the 4h: no entry (never counter).
+  Taken, short 16789.25, stop 16814.00 (24.75 pts
+= 99 ticks, $49.50 per MNQ): the stop was hit 12:12.
 ```
 </skill>
 
@@ -1551,15 +1548,15 @@ fade it, and step 2 of the priority order decides.
 
 A read of where price may stop, never a veto: the priority order
 (strategy-library) decides take, skip and size.
-  Which target goes with
-which setup is a strategy's, not this skill's.
+  The trail exits (read
+forms below): these levels are context, never the exit.
 
 **Target levels**, on the winning side of the entry, completed candles
 only:
 
 - **Pivot highs and lows**: the next untaken confirmed swing per
-  timeframe, `m3.swingTargets.above` and `m3.swingTargets.below` (the
-  base bars, 15m, 1h and 4h; `frame`, `price`, `points`, `ticks`, `R`).
+  timeframe, `m3.swingTargets.above` and `m3.swingTargets.below` (15m,
+  1h and 4h; `frame`, `price`, `points`, `ticks`, `R`).
   Stops rest beyond a swing (`levels-and-reactions`).
 - **The prior 1h and 4h candle's high, low and midpoint**:
   `m3.rangeTargets`, per frame its `high`, `mid` and `low`: where that candle's buyers and sellers
@@ -1575,19 +1572,19 @@ only:
 - **The candle forming**: its midpoint moves until it closes, so it is a
   target only once completed.
 
-**Read forms** (the target step): `target <tf> swing high|low <price>`,
-`target prior 1h|4h high|mid|low <price>` (a taken side reads false),
-`target <5m|15m|1h> fvg high|low <price>`.
-  None named: `target 2r`.
-Any entry the rule allows: `target trail` (the 2R mark arms
-it); a level ahead is context, never a requirement.
+**Read forms** (the target step): `target trail` (the 2R mark arms it),
+every entry the side rule gives; a level ahead is context, never a
+requirement.
+  Not in a prop attempt, on a side the side rule doesn't give:
+`target <tf> swing high|low <price>`, `target prior 1h|4h high|mid|low
+<price>` (a taken side reads false), `target <15m|1h> fvg high|low
+<price>`; none named: `target 2r`.
   A key level within 1R in front caps the first
 push: evidence; prefer the turn after it.
 
 **Timeframe weight** (hypothesis, not measured): a higher timeframe's
-level holds more orders and reacts more often; the nearest is the
-conservative target, a higher one beyond it the extended one; levels a few
-ticks apart are one zone.
+level holds more orders and reacts more often; levels a few ticks apart
+are one zone.
 
 **Room in R.** The briefing's `R` is against the reference stop
 (`m3.oneR`).
@@ -1654,9 +1651,8 @@ Prior 4h low 21440.50: 49.50 pts = 198 ticks, $99.00, 4.40R (extended).
 4.
   **Size** = floor(budget ÷ risk per contract).
   If it's 0, the stop is too
-   wide for the budget: skip, or find a tighter, structure-based stop.
-  Never
-   shrink the stop to make the size work.
+   wide for the budget: skip (in an attempt the floor stretch is code's).
+   Never a tighter stop to make the size work.
 5.
   **Caps:** the broker server's `maxOrderSize` and `maxPositionSize`
    (`get_server_config`); size 1 on micros for a rules strategy until
@@ -1691,17 +1687,16 @@ Prior 4h low 21440.50: 49.50 pts = 198 ticks, $99.00, 4.40R (extended).
   Everything else (stop first, protective
    stop always working) still applies.
   The verdict is the most the account
-   allows, not what the moment deserves: after a loss, in a streak or
-   drawdown, or one loss from `daily_loss_soft` or the target, size under it
-   (`Size: <n> (<rule>)`) or pass.
-  A healthy account: a pass is a VETO, a
-   smaller size is placed at the verdict.
+   allows: phase 2 cuts it only on a pacing rule (a losing account, a loss
+   streak, drawdown: `Size: <n> (<rule>)`) or passes.
+  A healthy account
+   (balance at or above the start, no loss streak): the full verdict size.
    In a prop attempt, the size you state is a suggestion: code translates it
    at entry to the rulebook's size (min_contracts and the budget); read the
    size it returns.
 7.
-  **Half size** wherever the priority order (strategy-library) halves a
-   trade, computed as it says there.
+  **Not in a prop attempt: half size** wherever the priority order
+   (strategy-library) halves a trade, computed as it says there.
   Never round a half up.
   A composed
    trade: `confluence-counting` sizes it, under the caps.
@@ -1838,8 +1833,8 @@ hypotheses; a missing field is `unknown`.
   (`15m rejected previous 15m high down`; `rejection`).
 - **Acceptance (breakout)**: closes beyond that hold (hypothesis: two or
   more).
-  Shown as a 3m swing break (`m3.lastBreak.last.level`), a 15m or 1h
-  swing with `brokenAt` set (`m3.htfLevels`), or a location that changed
+  Shown as a 15m or 1h swing with `brokenAt` set
+  (`m3.htfLevels`), or a location that changed
   side (`m3.location.priorValue`, `m3.location.initialBalance`,
   `m3.location.priorRthRange`).
 - **Retest**: after acceptance, a pullback whose closes stay beyond the
@@ -2090,8 +2085,8 @@ value, overnight) are the better locations.
 
 The bias is a read: the trend rule (`multi-timeframe-analysis`) and the
 priority order (strategy-library) decide entries.
-  Against the prevailing
-trend, trend strategies wait; it never points at a side the rule refuses.
+  Against a trending 4h or 1h: no entry
+(never counter); it never points at a side the rule refuses.
 
 ## Examples
 
@@ -2166,38 +2161,37 @@ timeframe's candles).
 
 | Timeframe | BOS | CHoCH |
 |---|---|---|
-| 3m, 5m | continuation; entry timing | against the HTF: usually a pullback; back with it: the pullback ends |
+| 3m, 5m | a candle fact only: never the setup, never a wait | a candle fact only (its swings are for the stop) |
 | 15m | the working structure continues | the working structure shifting: a deeper pullback, or a reversal starting |
 | 1h (4h swings) | the HTF trend continues | the strongest sign of an HTF trend change, not a reversal by itself: a BOS the new way confirms it |
 
-A 3-minute BOS against a 1-hour downtrend is a counter-trend trade.
-CHoCHs stacking up the timeframes (3m, then 15m, then 1h) are a reversal
-developing.
+A break against a trending 4h or 1h: the trend rule refuses it (never counter).
+CHoCHs stacking up the timeframes (15m, then 1h) are a reversal
+developing; a 1h CHoCH while the 4h and 1h agree is context.
 
 **In the PLAN.**
 
 - **1 HTF**: a 1h break is the side rule's, a 15m one structure
   (`confluence-counting`).
-- **4 Setup**: continuation, a BOS the HTF way, a pullback to a level, a
-  lower-timeframe CHoCH back the HTF way; reversal, CHoCHs stacking up.
+- **4 Setup**: a 15m (or higher) BOS the bias's way, or a pullback to a
+  level ending in the 15m setup the bias's way; never a 3m break.
 - **9 Manage**: a CHoCH against an open trade on its timeframe or higher
-  is significant (`invalidation`); lower is mostly noise.
-  The exit stays
-  the strategy's.
+  (15m, 1h) is significant (`invalidation`); a 3m one is noise.
+  The exit stays the trail.
 
 ## Examples
 
 ```text
-Take: 1h, 15m BOS up; pullback to the RTH VWAP 21520.50; m3 CHoCH up 0 bars ago.
-  Reads: 1h bos up, at vwap rth, 3m choch up.
-  Priority order: aligned; the count for -> take.
-Skip: 1h, 15m last BOS up; m3 CHoCH down through 21512.50.
-  Read: a 3m pullback, not a reversal.
-  A short: no 1h CHoCH down; the priority order (step 2) decided skip.
-Loser: 1h up; m3, then 15m CHoCH down through 21560.00.
-  Read: reversal developing.
-  short at 21548.75 (15m choch down), stop 21557.25 (8.50 pts = 34 ticks, $17.00 on 1 MNQ); no 1h CHoCH;
-  a 15m CHoCH up through 21562.50: the CHoCH failed, price resumed.
+Take: 4h, 1h up, 1h and 15m BOS up; pullback to the RTH VWAP 21520.50; the 15m rejected it up.
+  Reads: 1h bos up, at vwap rth, 15m rejected vwap rth up, 3m close top.
+  Priority order: aligned -> take.
+Skip: 1h trending up; a 15m CHoCH down through 21512.50: a 15m pullback.
+  A short: against the 1h
+  trend (the trend rule refuses it, whatever CHoCH) -> pass.
+Loser: 4h up, 1h ranging; a 15m CHoCH down through 21560.00, then a 15m BOS down: against the 4h
+  (the trend rule refuses it).
+  A short at 21548.75 anyway, stop 21557.25 (8.50 pts = 34 ticks, $17.00 on 1 MNQ):
+  a 15m CHoCH up through 21562.50, price resumed up.
   -34 ticks, -$17.00.
 ```
 </skill>

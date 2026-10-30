@@ -43,14 +43,14 @@ harness (Claude Code, Codex, Qwen Code, opencode, or any agent that reads AGENTS
 
 Always on, every harness, every bar (the detail: `confluence-counting`).
 
-- On the trend rule's side (or its CHoCH tier), a rejection or breakout at a
-  key level or FVG, the trigger closed → call `compose_check`. Never estimate
+- On the side rule's side (never counter), a 15m rejection or breakout at
+  a key level or FVG closed → call `compose_check`. Never estimate
   room, R:R or the target yourself: the briefing's "Standard plan" line
   states them, and the refusal is the R:R check. The line refused → pass.
-- `compose_check` OK → a valid setup is the trade: full size within the
-  verdict; serious against (a 3m close beyond the leg's 15m swing
-  among them) → half; decisive against (a 1h CHoCH against, unless the
-  4h and 1h both your way) → pass. Refused → pass, naming it.
+- `compose_check` OK → a valid setup is the trade: in a prop attempt the
+  full translated size; else full; serious against (a 3m close beyond the leg's 15m swing
+  among them) → half; decisive against (a 1h CHoCH against, unless the 4h
+  and 1h both your way) → pass. Refused → pass.
 - Thin volume, the first level ahead, VWAP distance, "chasing", no
   pullback yet: minor, never a reason not to compose.
 
@@ -195,7 +195,7 @@ user; numbers here are the harness defaults, not any firm's official limits.
 - `gate-refusals-positions` (skills/gate-refusals-positions/SKILL.md): Use when the gate refuses managing a position (an exit by contract month, a trading-day change), or can't read one; close_position is never gated.
 - `gate-refusals-skills` (skills/gate-refusals-skills/SKILL.md): Use when the gate refuses an entry with [skills-at-entry].
 - `harness-root` (skills/harness-root/SKILL.md): Find the harness root (<root>) for absolute paths.
-- `htf-to-ltf` (skills/htf-to-ltf/SKILL.md): Use when timeframes disagree - alignment labels, reversals, HTF levels.
+- `htf-to-ltf` (skills/htf-to-ltf/SKILL.md): Use when timeframes disagree - alignment labels, the side rule (never counter), HTF levels.
 - `invalidation` (skills/invalidation/SKILL.md): Trader-process steps 7 and 9, and each cycle with a position open - what proves the idea wrong, the stop read, what makes management exit; never a veto.
 - `kill-switch` (skills/kill-switch/SKILL.md): Use when an entry is refused with [kill-switch], [allowed-accounts] or [account-lock].
 - `lean-cycle` (skills/lean-cycle/SKILL.md): Use when the prompt says lean - a 1-minute cycle with no parallel analysts.
@@ -207,7 +207,7 @@ user; numbers here are the harness defaults, not any firm's official limits.
 - `micro-mini-specs` (skills/micro-mini-specs/SKILL.md): Use when sanity-checking a contract's tick size and value, a micro against its mini.
 - `momentum-and-volume` (skills/momentum-and-volume/SKILL.md): Trader-process steps 3 and 5 - whether a move has push behind it from the trigger bar and the last few bars' range, close and volume. A read, never a veto.
 - `mtf-bias-filter` (skills/mtf-bias-filter/SKILL.md): Use when filtering a rules strategy by the higher-timeframe trend (mtf_bias in its rules, backtested).
-- `multi-timeframe-analysis` (skills/multi-timeframe-analysis/SKILL.md): Use when reading each timeframe's trend and the trend rule the gate enforces (mtf trend|reversal).
+- `multi-timeframe-analysis` (skills/multi-timeframe-analysis/SKILL.md): Use when reading each timeframe's trend and the trend rule the gate enforces (never counter).
 - `news-blackouts` (skills/news-blackouts/SKILL.md): Use when setting today's news blackouts (event times, windows, blackouts_add).
 - `order-failures` (skills/order-failures/SKILL.md): What to do when an order or read call errors or times out - never resend, the [order-pending] hold, and protecting an uncovered position first.
 - `order-mechanics` (skills/order-mechanics/SKILL.md): Use when an order replied - refused, unknown outcome, partial fill; check it once, never wait for a fill.
@@ -242,7 +242,7 @@ user; numbers here are the harness defaults, not any firm's official limits.
 - `take-profit` (skills/take-profit/SKILL.md): Use when choosing where to take profit - swing highs and lows per timeframe, the prior 1h and 4h candle's high, low and mid, FVG edges, room in R.
 - `timeframe-sources` (skills/timeframe-sources/SKILL.md): Use when you need a timeframe's bars or numbers - which file, briefing field or mtf_read call holds it.
 - `tool-arguments` (skills/tool-arguments/SKILL.md): Use when calling a harness tool, for its arguments.
-- `top-down-entry` (skills/top-down-entry/SKILL.md): Use when reading a setup top down - the HTF side and level, the 15m setup there, the 3m/5m trigger, where the idea is wrong and where it aims.
+- `top-down-entry` (skills/top-down-entry/SKILL.md): Use when reading a setup top down - the bias (4h + 1h) and level, the 15m setup there, the 3m entry timing, the stop and the trail.
 - `trade-journal` (skills/trade-journal/SKILL.md): The journal the gate reads - its kinds (plan, entry, exit, note, review, lesson; the server adds order_placed), what the gate reads, filtering by kind or tag.
 - `trade-lifecycle` (skills/trade-lifecycle/SKILL.md): Use before a trade_lifecycle entry - compose the trade as reads with compose_check, send it as the record says, and what the gate refuses.
 - `trade-plan` (skills/trade-plan/SKILL.md): Use before an entry - the plan entry, the exit, ticks, and order_plan's numbers.

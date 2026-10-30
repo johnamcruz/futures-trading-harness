@@ -78,15 +78,17 @@ test('trader-process: it orders the thinking and adds no filter; the count decid
     '**A setup is a combination of reads** you state, step by step, and `compose_check` verifies (`trade-lifecycle`); no one read makes a trade.',
     '**Management always runs.** Managing and exiting a position, and the end-of-day flatten, go ahead whatever steps 1-8 say; no window or wait blocks an exit or a risk reduction.',
     "**`unknown`, never invented.** A value the briefing or a report doesn't give is `unknown` (or `unavailable`); never estimate one.",
-    '**Decision.** Compose OK → take, sized by the against (step 5); refused → pass, naming it. One reason.',
-    // The trigger there and the count for: take it, never wait on (the baseline waited until the setup expired).
-    '**Entry.** A closed bar\'s entry reads; never anticipate. Trigger closed → `compose_check` now.',
+    // In a prop attempt the full verdict size (feat/bias-bg: phase 2 cuts only on a pacing rule).
+    '**Decision.** Compose OK → take (a prop attempt: the full verdict size; else step 5 sizes it); refused → pass. One reason.',
+    // The trigger there and the count for: take it, never wait on (the baseline waited until the setup expired); the 3m only
+    // times it (feat/bias-bg: no 3m turn to wait for).
+    '**Entry.** The next 3m close after the setup\'s times it; no 3m turn to wait for → `compose_check` now.',
     'Never loosen the stop.',
     // The side is the trend's (the owner's trend-following decision): a pullback's end with it, against it only on the CHoCH tier.
     '**Setup.** The setup reads (`trade-lifecycle`), on the side rule\'s side (`htf-to-ltf`).',
     '**Risk.** Stop (`invalidation`) and target (`take-profit`) reads, size; R:R: the compose record\'s, never yours.',
-    '1. **HTF.** The 4h, 1h and 15m trends and structure frame everything below.',
-    'The side rule (`htf-to-ltf`) sets the side, long or short alike.',
+    // The bias is the 4h and 1h (feat/bias-bg, the chain): never counter.
+    '1. **HTF.** The bias (4h + 1h) sets the side (the side rule, `htf-to-ltf`); never counter.',
     'The three market analysts never write step 2: a cached report would carry a stale window.',
     "In a cached report, take this bar's 3m facts from the briefing.",
     "Phase 2 writes line 2 fresh from this cycle's briefing; phase 1 writes no PLAN line.",
@@ -257,7 +259,7 @@ test('trader-process: each mapped role lists the skill, says to load it, and nam
   // The gate's news (the briefing's m3.news) wins over the analyst's own read.
   assert.ok(flat(read('agents/news-calendar-analyst.md')).includes("That line is your own read and proposal. The bar briefing's `m3.news` is the gate's and the source of truth: phase 2's line 2 takes the news from it, and it wins when the two differ."));
   assert.match(flat(read('skills/trade-session/SKILL.md')), /Decide top-down in the `trader-process` skill's order[^.]*write its PLAN block before your result line; the checks below fill its lines\. It orders the thinking and adds no filter\./);
-  assert.ok(flat(read('skills/trade-session/SKILL.md')).includes('**Compose first** (`confluence-counting`): trend side, a reaction at a key level, the trigger closed → `compose_check`, never your own R:R. OK → take: full, half on serious, pass on decisive against.'));
+  assert.ok(flat(read('skills/trade-session/SKILL.md')).includes('**Compose first** (`confluence-counting`): the side rule\'s side, the setup (15m) at a key level closed → `compose_check`, never your own R:R. OK → take: in a prop attempt the full translated size; else full, half on serious, pass on decisive against.'));
 });
 
 test('trader-process: the executor executes; it carries no PLAN and no analysis', () => {

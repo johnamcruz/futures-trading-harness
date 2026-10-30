@@ -29,7 +29,7 @@ too). The order gate refuses an entry until each is loaded (an errored load does
 count); one already in your prompt counts: don't reload it (no skill tool:
 skill_lookup). Load `trader-process`
 too: its checklist is the order you decide in. Load `htf-to-ltf` every cycle as
-well: the alignment labels for each side and the reversal rule. Load
+well: the side rule (the bias: 4h + 1h) and the alignment labels. Load
 `confluence-counting` every cycle too: the count. Load the others
 as a step names them.
 
@@ -86,13 +86,12 @@ rule, the setups to check, the snapshot's levels, VWAP,
 participation and liquidity, the session window), each part with its version
 and how long it holds. Read it once per role and reuse it: no role re-runs
 `market_snapshot`, `mtf_read` or `strategies_scan` for what it holds. Without a current briefing (interactively, or when the tool says none or old), the multi-timeframe read on the bars file
-(`mtf_read` with the bars file, the `timeframe-sources` skill). **The trend rule is enforced:** no entry against the prevailing trend
-(the highest of 4h, 1h, 15m with a trend), long or short alike: a composed
-one only on a true CHoCH its way at or above the trend's frame
-(`trade-lifecycle`), a rules one only with `mtf: reversal`. In autonomous runs the
+(`mtf_read` with the bars file, the `timeframe-sources` skill). **The trend rule is enforced (never counter):** no entry against a
+trending 4h or 1h, any setup, whatever CHoCH; both ranging, none against
+the 15m (in an attempt the side rule, `htf-to-ltf`). In autonomous runs the
 prompt states the recorded rule; interactively, `bars_fetch` with `record`
 (or `mtf_read` with `record` and `symbol`) records it (the gate refuses
-trend entries unless the recorded bar closed less than 15 minutes ago: fetch
+entries unless the recorded bar closed less than 15 minutes ago: fetch
 fresh bars, re-recording an old file doesn't help). Put the read for the side in the plan entry. A policy
 verdict is a ceiling, never an order.
 
@@ -117,10 +116,10 @@ It orders the thinking and adds no filter.
 
 - **The priority order** (the `strategy-library` skill, "The priority order"):
   the rule for every setup, a policy verdict too. Apply its steps in order.
-- **Compose first** (`confluence-counting`): trend side, a reaction at a
-  key level, the trigger closed → `compose_check`, never your own R:R.
-  OK → take: full, half on serious, pass on decisive against.
-  In a prop attempt the translated size is full; phase 2 cuts it only on a pacing rule.
+- **Compose first** (`confluence-counting`): the side rule's side, the
+  setup (15m) at a key level closed → `compose_check`, never your own
+  R:R. OK → take: in a prop attempt the full translated size; else full,
+  half on serious, pass on decisive against.
 - **Every decision**: read the `setup-judgment` and `day-context` skills;
   before an entry, `trade-plan` too (the order gate refuses an entry until
   `setup-judgment` and `trade-plan` were read). An open trade: `manage-position`.
@@ -159,6 +158,6 @@ to watch next. After the position closes, run trade-review.
 Cycle 10:21 ET MNQ: flat. Structure long (high), trend long (medium), volume
 long (rel-vol 1.6x), no events until 14:00. compose_check long OK. Plan (numbers
 from the record): limit long 21540.25, stop 21512.50 (111 ticks = $55.50),
-target 21598.00 (231 ticks, 2.08R), 1 MNQ.
+target trail (the 2R mark 21595.75, 222 ticks, arms it), 1 MNQ.
 Verdict APPROVE. Executed with stop and target brackets, stop working.
 ```

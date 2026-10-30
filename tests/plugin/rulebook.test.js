@@ -373,12 +373,12 @@ test('R4: each rulebook classifies every item, and every enforced item is really
 
 /** What each taught item's step teaches, in the skill's own words (whitespace may wrap). */
 const TAUGHT = {
-  trend_fade: /reversal strategy may\s+fade it only at a higher-timeframe level/,
+  trend_fade: /\(never counter\): any setup or strategy against a\s+trending 4h or 1h[^]*→ no trade/,
   room: /`inTheWay`[^]*`needR`\)[^]*never a no\s+trade alone/,
-  mtf_read: /`aligned` → full;[^]*`mixed` → half;[^]*`counter` on a\s+non-reversal setup → no trade/,
+  mtf_read: /`aligned` → full;[^]*`mixed` → half;[^]*`counter` → no trade/,
   skip_rules: /skip rules\*\*[^]*any skip rule hit: no trade/,
   confluence: /\*\*Confluence\*\* \(rules strategies\): another firing the other side → no trade/,
-  secondary_context: /cuts to half, never vetoes alone/,
+  secondary_context: /cuts to half \(not in a prop attempt\), never vetoes alone/,
   halving: /half is `floor\(size \/ 2\)`[^]*?Halvings don't compound/,
 };
 /** Step `n` of a priority-order section: from its number to the next step or the section's end. */
@@ -390,7 +390,7 @@ function stepText(section, n) {
 }
 
 test('R4: the taught keywords catch a rewritten step (each would fail on the step it does not pin)', () => {
-  const sec = '### The priority order\n\n4. **The multi-timeframe read for its side**: `aligned` → full; `mixed` → half;\n   `counter` on a non-reversal setup → no trade.\n5. **Next**: x\n';
+  const sec = '### The priority order\n\n4. **The multi-timeframe read for its side**: `aligned` → full; `mixed` → half;\n   `counter` → no trade.\n5. **Next**: x\n';
   assert.match(stepText(sec, 4), TAUGHT.mtf_read);
   assert.doesNotMatch(stepText(sec.replace('`mixed` → half', '`mixed` → full'), 4), TAUGHT.mtf_read);
   assert.doesNotMatch(stepText(sec, 5), TAUGHT.mtf_read, 'another step\'s words never count');

@@ -152,6 +152,12 @@ const SPLITS = {
         reason: "fix/skills-match-code: no attempt and no cushion known (stage 1) is the composed cap's budget; an autonomous run never asks the user; step 8 the compose record first" },
       { from: "The budget (step 3) and the caps are still your judgement: a budget below its risk is a skip, and a size you are allowed to raise (30+ reviewed trades) changes only `size`, with the risk scaling by it.", to: "The budget (step 3) and the caps stay your judgement: a budget below its risk is a skip; a raised size (a rules setup with 30+ reviewed trades) changes only `size`, the risk scaling with it.",
         reason: "fix/skills-match-code: no attempt and no cushion known (stage 1) is the composed cap's budget; an autonomous run never asks the user; step 8 the compose record first" },
+      { from: "If it's 0, the stop is too wide for the budget: skip, or find a tighter, structure-based stop.", to: null,
+        reason: "feat/bias-bg: stops locked (never a tighter stop; the floor stretch is code's); the half size only outside a prop attempt" },
+      { from: "Never shrink the stop to make the size work.", to: null,
+        reason: "feat/bias-bg: stops locked (never a tighter stop; the floor stretch is code's); the half size only outside a prop attempt" },
+      { from: "**Half size** wherever the priority order (strategy-library) halves a trade, computed as it says there.", to: null,
+        reason: "feat/bias-bg: stops locked (never a tighter stop; the floor stretch is code's); the half size only outside a prop attempt" },
     ],
     moved: {
       // Step 1's table and the contract-naming paragraph, and the sentence that introduced the table.

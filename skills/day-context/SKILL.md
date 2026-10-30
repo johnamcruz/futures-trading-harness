@@ -22,16 +22,15 @@ description: Use when deciding a cycle - the premarket plan, the news, and the d
   of the average daily range (ADR) is used. Read it before choosing a setup:
   a trend day (one side extended two IBs, or one from a narrow IB), often
   after an open outside the prior range and an open-drive, is traded with it
-  (fading needs a reversal setup at a higher-timeframe level); a normal
+  (never faded: never counter); a normal
   variation day (one side extended, less) has made its move and often
   rotates back; an open inside the prior value area that stays
-  inside the IB is balance (fade the edges, small targets; the middle
+  inside the IB is balance (the edges are its levels; the middle
   is a read against); a neutral day (both sides extended) is two-sided. With 80% or
-  more of the ADR used, the room left for a target is small: say so, and
-  prefer the nearest target.
+  more of the ADR used, the room left is small: say so (a read against).
 
 ## Examples
 
 ```text
-trend day up, 85% ADR used -> nearest target
+trend day up, 85% ADR used -> little room left: a read against
 ```

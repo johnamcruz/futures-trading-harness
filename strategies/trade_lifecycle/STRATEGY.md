@@ -6,7 +6,7 @@ status: active                # the owner's call; the order gate enters it only 
 instruments: [MNQ, MES, MYM, M2K]   # a micro covers its selected mini, as a rules strategy
 timeframe: 3m                 # the base bars its reads are checked on (the runner's)
 signal: composed              # the model composes the entry from its skills; compose_check verifies it
-mtf: trend                    # the gate's trend rule, unless the record holds a verified 15m or 1h CHoCH the trade's way (D2)
+mtf: trend                    # the gate's trend rule: never counter (no entry against a trending 4h or 1h)
 valid_bars: 2                 # a compose record, and its resting limit, stays valid 2 base bars after its bar's close (6 min on 3m)
 risk:
   stop: structure             # the stop is the verified invalidation level the model names, one tick beyond it
@@ -42,7 +42,7 @@ context, so the outcomes teach which combinations work in which market.
 One read per step at least, each in a closed form `compose_check` verifies
 against the briefing (the forms: scripts/lib/trading/composed-reads.js): bias, location,
 setup, entry, stop (`stop <source> <price>`) and target
-(`target <source> <price>`). Every directional read must agree with the side.
+(`target trail`, or `target <source> <price>`). Every directional read must agree with the side.
 Which skill at each step is the model's choice; nothing here prescribes one.
 
 ### The plan
@@ -50,11 +50,11 @@ Which skill at each step is the model's choice; nothing here prescribes one.
 Code, never the model's arithmetic: a limit entry at the bar's close, the
 stop `risk.stop_buffer_ticks` beyond the named level (at least the larger
 of `risk.stop_floor_ticks` and `risk.stop_floor_atr` x ATR(20), refused if
-closer, never widened), the target on the named
-level (or, with no level named the trade's way, the 2R mark `target 2r`:
-`risk.min_rr` times the stop from the entry, on the tick the trade's way;
-a level named short of it is no room, never the mark; past the target the
-policy's exit trails), R:R at least `risk.min_rr`, and the stated size within
+closer, never widened), the target: with `target trail` (every side the
+entry rule gives) the 2R mark, `risk.min_rr` times the stop from the entry
+on the tick the trade's way, where the policy's exit arms its trail; else
+the named level (none named the trade's way: the 2R mark `target 2r`; a
+level named short of it is no room, never the mark), R:R at least `risk.min_rr`, and the stated size within
 `risk.max_risk_usd`. The record expires `valid_bars` base bars after its
 bar's close (two: 6 minutes on the 3m), so a cycle that runs past the next
 close can still enter on the facts of its own bar; the runner cancels a limit
@@ -73,23 +73,22 @@ skills: smaller, or a pass, is always allowed; never above $300, the hard
 cap. In a prop attempt the ceiling is the lower of $300 and the account's
 verdict; where $300 fits fewer than the rulebook's floor at the stop, code
 may trade exactly the floor, up to the rulebook's floor stretch, while the
-attempt is healthy (its RULEBOOK.md). The ideal trade aims for about $600: a target at a real level at
-2:1 to 3:1 reward:risk. Prefer the first real level in that band; a level
-beyond 3:1 is allowed when it is the real one. The target is always a level
-the model reads, never a dollar amount; `min_rr` 2 is the code's floor.
+attempt is healthy (its RULEBOOK.md). The trail exits (the owner: always
+trail): the 2R mark arms it and the policy's exit trails past it; a level
+ahead is context, never the exit. `min_rr` 2 is the code's floor.
 
 ### Against the trend
 
-Only with a verified 15m or 1h CHoCH the trade's way among its reads (D2);
-otherwise the trend rule refuses it.
+Never (never counter): the trend rule refuses an entry against a trending
+4h or 1h, whatever CHoCH the reads name.
 
 ## Examples
 
 - Long MNQ at 21540.25: `1h bos up`, `above prior RTH range`, `at prior VAH`,
   `15m rejected prior VAH up`, `3m close top`, `3m momentum up`,
-  `stop 15m low 21512.75`, `target 1h swing 21598.00`. The stop goes to
-  21512.50 (one tick below): 111 ticks, $55.50 a contract; the target is 231
-  ticks, 2.08R. 5 MNQ risk $277.50 for a $577.50 target (about the $600
-  aim); 4 MNQ risk $222.00. 6 MNQ ($333.00) or 1 NQ ($555.00 at $5.00 a
-  tick) is over the $300 cap: refused.
+  `stop 15m low 21512.75`, `target trail`. The stop goes to
+  21512.50 (one tick below): 111 ticks, $55.50 a contract; the target is the
+  2R mark, 222 ticks, where the trail arms. 5 MNQ risk $277.50; 4 MNQ risk
+  $222.00. 6 MNQ ($333.00) or 1 NQ ($555.00 at $5.00 a tick) is over the
+  $300 cap: refused.
 - The same reads for a short: refused (every directional read is against it).

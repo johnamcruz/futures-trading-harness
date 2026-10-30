@@ -8,10 +8,10 @@ policies:                       # each policy strategy that trades this account 
   prop_portfolio:
     entry:                      # the entry rule on a composed entry (entry-rule.js), held by compose_check and the gate; off: no check
       chain: 4h                 # the fractal chain's top (chain.js, the 2-level rule): 4h -> bias 4h + 1h, levels 1h, setup 15m, entry 3m (1h -> 1h + 15m, 15m, 5m, 1m)
-      bias_frames: [4h, 1h]     # off, or [4h, 1h], [4h] or [1h] only (never the 15m): the first that trends sets the side, none against it, none trending: no entry
+      bias_frames: [4h, 1h]     # off, or [4h, 1h], [4h] or [1h] only (never the 15m): the first that trends sets the side, none against it; none trending: as bias_agree says
       bias_agree: neutral-15m-declared  # on: every bias frame trends the side's way; off: the first that trends sets the side; neutral-15m-declared: every one that trends is the side's way, none against, and with all ranging the 15m trend and the declared trend the side's way
-      regime_against: off       # on: no entry while the m3 regime trends against the side
-      leg_turned: off           # on: an m3 regime not trending the side's way needs a true 3m BOS, CHoCH or compression break its way
+      regime_against: off       # off (a fallback, not taught); on: no entry while the m3 regime trends against the side
+      leg_turned: off           # off (a fallback, not taught); on: an m3 regime not trending the side's way needs a true 3m BOS, CHoCH or compression break its way
     sizing:                     # risk from the headroom above the floor
       cushion_frac: 0.3         # a trade risks at most this share of the cushion ...
       cap_usd: 1000             # ... and at most this many dollars
@@ -88,8 +88,8 @@ reach.
 rule in the runner, the backtester and the attempt simulator (which re-exits
 each trade from its recorded path, prop/attempts.js exitAs):
 
-- `target`: out at the trade's own target, a real level at 2:1 to 3:1 (the
-  compose record's bracket), a trail on top only when `trail_activate_r` and
+- `target`: out at the trade's own target (the compose record's bracket:
+  the 2R mark with `target trail`), a trail on top only when `trail_activate_r` and
   `trail_giveback_r` are R.
 - `target_then_trail` (today's): the original stop holds until the trade's
   own target is reached; from there the trade is not closed but trailed, so a
@@ -104,8 +104,8 @@ each trade from its recorded path, prop/attempts.js exitAs):
   stop locks at +0.5R, room for an ordinary pullback in a trend; at 0.5 it
   locked at +1.5R and closed winners on a 1R pullback before the leg ran on.
 
-  `ratchet` (target_then_trail only) is off by default (the owner,
-  2026-10-24: opt in only). With `ratchet: on`, the lock rises with the
+  `ratchet` (target_then_trail only) is off until it is measured (the
+  owner-approved design, 2026-10-24). With `ratchet: on`, the lock rises with the
   trade: it is the best R reached (closed bars' extremes, as the R trail
   reads them; at least the target's R) less `lock_giveback_r`, never below
   the entry, so past its target the stop stands at most `lock_giveback_r`
@@ -215,7 +215,7 @@ briefing, so `compose_check` says NOT OK and the gate's `[composed-reads]`
 re-check refuses the same entry; any other entry under the policy (one
 not on a compose record) is checked on the briefing by the gate's
 `[entry-rule]`, so no entry route skips it. Every key is stated; `off` is no check,
-and with every key off an entry is checked as before (the trend rule, D2):
+and with every key off an entry is held by the trend rule alone (never counter):
 
 - `bias_frames` (a list of 4h and/or 1h, highest first, e.g. `[4h, 1h]`; never the 15m): the first listed
   frame that trends is the bias and the side must be its way; no listed
@@ -239,11 +239,11 @@ and with every key off an entry is checked as before (the trend rule, D2):
   15m holds the setup the side's way, the 3m only times the entry): a TRUE
   setup read pointing the side on the 15m, 1h or 4h, else NOT OK. Stated
   exemption: a cited setup's `fired` read (`momentum_continuation`: its
-  setup is the prevailing HTF trend plus its momentum candle). The 15m
+  setup is the entry rule's side plus its momentum candle). The 15m
   trend itself may still run against the side (a 15m pullback).
-- `regime_against: on`: no entry while the `m3` regime (`regime.js`, the
+- `regime_against` (off: a fallback, not taught) `on`: no entry while the `m3` regime (`regime.js`, the
   `trend-vs-range` skill's) trends against the side.
-- `leg_turned: on`: while the `m3` regime doesn't trend the side's way, the
+- `leg_turned` (off: a fallback, not taught) `on`: while the `m3` regime doesn't trend the side's way, the
   reads must state the leg turned back: a true `3m choch`, `3m bos` or
   `3m compression break` the side's way (`pullback-vs-reversal`).
 
@@ -269,10 +269,9 @@ its own pre-registered test the second half confirms it on S2, not on B0
 (B0's false-start interval reaches +2.5 pp, past the +2 pp bound): the
 rule trades two to three times as often for no measured rise in false starts,
 which is what the pass rate needs, not a proven per-trade edge. Any trend
-against the side still refuses, so every D2 reversal against the 4h or
-the 1h stays refused. `on` stays available. The trail target
-(`target trail`) still needs the 4h and the 1h both the side's way; an
-entry the looser rule adds names its target level. `regime_against` and
+against the side refuses (never counter: the trend rule holds every
+path). `on` stays available. The trail target (`target trail`) is TRUE
+on every side the rule allows (composed-reads.js TRAIL_RULE). `regime_against` and
 `leg_turned` stay `off`. Exits, protective stops and stop moves are never
 checked by it.
 

@@ -121,8 +121,8 @@ In a prop attempt, full is the translated size; cut only on a pacing rule
 
 1. The trend rule (the briefing's `m3` `trendRule`; without a current
    briefing, the `Trend rule:` line the plan quotes, or the scan's `mtf`):
-   the priority order's step 2 (the gate refuses an entry against it
-   anyway, a composed one with step 2's CHoCH tier excepted). The alignment
+   the priority order's step 2 (never counter: the gate refuses an entry
+   against it anyway, whatever CHoCH). The alignment
    for the side (the briefing's `m15` `alignment.long` / `alignment.short`):
    its step 4 (composed: the side rule, `htf-to-ltf`). A rules strategy: no `mtf: reversal` is a trend strategy;
    others firing the other side (`confluence.against`): its step 6.
@@ -217,12 +217,13 @@ The code reads your report; anything else reads as a veto:
   or headings: one starting a line decides; elsewhere it can only veto.
 - "VETO" only when vetoing: never "VETO rules: none", "not a VETO".
 - Size → its own line, `Size: <n>`: the final size alone, reasoning on
-  the lines before (7 Risk). A Size line written as a sentence is no
-  trade. To cut, approve the smaller size: the order is exactly it.
+  the lines before (7 Risk). A prose Size line is read: its cuts bind; a
+  second, smaller size is no trade. To cut, approve the smaller size.
 - Every size and "cut to" on the VERDICT and Size lines binds.
 - These read as a veto: `Decision: cut to size 1`, `8 Decision: valid
   yes`, `Sizing verdict: skip x0.5`.
-- Asked to restate: only Size and VERDICT lines.
+- Asked to restate (once, an unreadable approval): only Size and VERDICT
+  lines. A veto is never retried.
 
 For example:
 

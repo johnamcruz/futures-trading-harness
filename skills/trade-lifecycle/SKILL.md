@@ -13,7 +13,7 @@ description: Use before a trade_lifecycle entry - compose the trade as reads wit
 ## How It Works
 
 1. **Compose: the flow, a with-trend pullback** (`trader-process`).
-   trend side, a reaction at a level, the trigger closed → compose (`confluence-counting`); the plan, never you, works out R:R. Call
+   the side rule's side, the setup (15m) at a level closed (the next 3m close times it) → compose (`confluence-counting`); the plan, never you, works out R:R. Call
    `compose_check` with one true read per step at least, each your side's
    way (the against stay in the count), and your size. The standard plan
    says OK → compose with its reads. The record is for this bar and side;
@@ -21,14 +21,14 @@ description: Use before a trade_lifecycle entry - compose the trade as reads wit
 
    | Step | The read, your side's way | The skill for the fact |
    | --- | --- | --- |
-   | bias | the side rule gives the side (`htf-to-ltf`): `15m down`, `1h bos up`, `trend long allowed`, regime, prior RTH range, read, day type; against it only by step 4 | `multi-timeframe-analysis`, `trend-vs-range`, `daily-bias`, `bos-vs-choch` |
+   | bias | the side rule gives the side (`htf-to-ltf`): `15m down`, `1h bos up`, `trend long allowed`, regime, prior RTH range, read, day type; never against it (never counter) | `multi-timeframe-analysis`, `trend-vs-range`, `daily-bias`, `bos-vs-choch` |
    | location | the pullback into a key level: `at <level>`, `at 15m fvg`, `vwap above`, `value below` | `levels-and-reactions`, `vwap-volume-profile`, `fair-value-gaps`, `compression` |
-   | setup | the reaction ending it, the trend's way, on a closed candle above the base: `15m rejected prior vah up`, a gap edge, pattern, `15m cisd down`, a breakout, `15m compression break up`; in an attempt the 15m or higher (the 3m only times the entry); or a Setups-line setup: `momentum_continuation fired up` (S2, the best-measured entry: P2R 35%; then `3m momentum up`, `stop 3m low <price>`, `target 2r`; market) | `rejection`, `breakout`, `fair-value-gaps`, `pullback-vs-reversal`, `breakout-vs-fakeout`, `cisd`, `candle-reading`, `compression` |
-   | entry | continuation on a candle closed after the setup's: `3m close top` (short: bottom), `3m momentum up`, pattern (hammer, bullish engulfing; short: shooting star, bearish engulfing), absorption | `candle-reading`, `momentum-and-volume`, `absorption` |
-   | stop | beyond the pullback's extreme: `stop 15m low <price>` (short: high), `stop swing low <price>`, `stop 15m box low <price>` | `invalidation` |
-   | target | an entry the rule allows: `target trail` (a level ahead is context); else the first level named at 2R or more, beyond any at price or broken: `target 1h swing high <price>`, `target <level> <price>`; none: `target 2r` | `take-profit` |
+   | setup | the reaction ending it, the trend's way, on a closed candle above the base: `15m rejected prior vah up`, a gap edge, pattern, `15m cisd down`, a breakout, `15m compression break up`; in an attempt the 15m or higher (the 3m only times the entry); or a Setups-line setup: `momentum_continuation fired up` (S2, the best-measured entry: P2R 35%; then `3m momentum up`, `stop 3m low <price>`, `target 2r`: its own 2R target, where the trail arms; market) | `rejection`, `breakout`, `fair-value-gaps`, `pullback-vs-reversal`, `breakout-vs-fakeout`, `cisd`, `candle-reading`, `compression` |
+   | entry | the entry timing (3m): the next candle closed after the setup's, its way: `3m close top` (short: bottom), `3m momentum up`, absorption; no 3m turn or break to wait for | `candle-reading`, `momentum-and-volume`, `absorption` |
+   | stop | the stop (compose's): one tick beyond the level you name, the setup candle's extreme as a rule: `stop 15m low <price>` (short: high), `stop swing low <price>`, `stop 15m box low <price>`; under the floor refused, never widened | `invalidation` |
+   | target | `target trail`: the trail exits; the plan's target is the 2R mark, where it arms (a level ahead is context). Not in a prop attempt, on a side the side rule doesn't give: the first level at 2R or more (`target <level> <price>`), or `target 2r` | `take-profit` |
    | size | contracts | `position-sizing`, `prop-challenge-pacing`, `prop-pacing-judgment` |
-   | management | once filled: the record's stop and target exit it; the policy's exit may trail it past the target; never widen it or close early by feel | `manage-position` |
+   | management | once filled: the stop and the trail exit it (at 2R the policy's exit locks the stop and trails it); never widen it, move it by feel or close early | `manage-position` |
 
    Support only, never the setup or entry read: `at`, `touched`, `swept`,
    `in ote`, `3m volume high`, `participation high`; a CISD or compression setup is
@@ -37,10 +37,10 @@ description: Use before a trade_lifecycle entry - compose the trade as reads wit
    compose them if they are your trade, else pass. Target NOT OK, `HINT target` of
    2R+: re-compose once with it; still NOT OK: pass.
 
-   A normal trade risks about $200-300 (less or a pass is fine; never
-   over $300). Target the first real level at 2:1 to 3:1 (about $600); beyond 3:1 only at the real level. In an
-   attempt, NOT OK `no size fits`: a closer stop, or pass (healthy, code may
-   stretch the floor).
+   A normal trade risks about $200-300 (never over `risk.max_risk_usd`).
+   In an attempt: at least the rulebook's `min_contracts` at the stop,
+   else skip (on a healthy account code may stretch the floor); NOT OK
+   `no size fits`: pass, never a closer stop.
 
 2. **Then read** `confluence-counting` and `invalidation` whenever you
    composed on the bar, `rejection` when a read says a candle rejected a
@@ -56,9 +56,8 @@ description: Use before a trade_lifecycle entry - compose the trade as reads wit
    (in an attempt, `setup:prop_portfolio`); `order_plan` gives these and
    refuses a size over code's caps ($300, the broker's max, the verdict);
    in an attempt it translates yours to the rulebook's. No priority order halves a composed trade.
-4. **Against the trend**: a true CHoCH read your way at or above its frame
-   (15m trend: 15m or 1h; 1h: 1h; 4h: 1h plus `4h rejected <level> up|down`
-   your way, a key level, not a gap edge); else the trend rule refuses it.
+4. **Against the trend**: never (never counter): the trend rule refuses
+   it, whatever CHoCH or rejection the reads name.
 5. **`[composed-reads]` refusals**: no record for this bar and side, or
    expired (compose again); an entry already placed on this bar and side;
    another contract; a read false, unverifiable or against your side now
@@ -90,8 +89,8 @@ compose_check {"symbol": "MNQ", "side": "long", "size": 5, "reads": [
 {"step": "setup", "skill": "rejection", "read": "15m rejected prior vah up"},
 {"step": "entry", "skill": "candle-reading", "read": "3m close top"},
 {"step": "stop", "skill": "invalidation", "read": "stop 15m low 21512.75"},
-{"step": "target", "skill": "take-profit", "read": "target 1h swing 21598"}]}
--> ok, entry 21540.25, stop 111 ticks ($277.50), target 231 ticks ($577.50, 2.08R).
+{"step": "target", "skill": "take-profit", "read": "target trail"}]}
+-> ok, entry 21540.25, stop 111 ticks ($277.50), target 222 ticks (the 2R mark, where the trail arms).
 -> place_order MNQ buy 5 limit 21540.25, stopLossBracket.ticks 111,
-   takeProfitBracket.ticks 231, rationale "setup:trade_lifecycle long ...".
+   takeProfitBracket.ticks 222, rationale "setup:trade_lifecycle long ...".
 ```

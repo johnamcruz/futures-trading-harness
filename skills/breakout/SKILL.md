@@ -23,12 +23,12 @@ hypotheses; a missing field is `unknown`. Completed candles only, on 3m,
 
 | Timeframe | What it reads | Weight |
 |---|---|---|
-| 3m, 5m | entry timing past an HTF level; alone, a minor level, often a fakeout | least |
+| 3m, 5m | the entry timing only: never the setup | least |
 | 15m | the working structure and the session levels | more |
 | 1h, 4h | HTF levels (prior day, overnight, CRT) | most |
 
-**Strongest**: a 15m or 1h breakout confirmed on 3m or 5m (step 6),
-with the HTF bias (step 1); a lone 3m or 5m one against it is counter-trend.
+**The setup**: a 15m or 1h breakout the bias's way (step 1); the next
+3m close times the entry (step 6).
 
 By PLAN step:
 
@@ -45,12 +45,12 @@ By PLAN step:
 - **5 Confluence**: expanding range and volume (`momentum-and-volume`),
    no absorption against it (`absorption`); counted by
    `confluence-counting`.
-- **6 Entry**: a completed candle confirms: a retest of the broken level
-   that holds (a pullback: `pullback-vs-reversal`), with a rejection candle
-   there (preferred), or a continuation displacement. Never anticipate it.
+- **6 Entry**: the next 3m close after the 15m or 1h close beyond times it;
+   a retest that holds (a pullback: `pullback-vs-reversal`) is support,
+   never a wait. Never anticipate it.
 - **7 Risk**: the idea is wrong back inside the level, beyond the retest's
-   low (high for a short): the stop read names it (`invalidation`). Aim for
-   the next swing (`m3.swingTargets`); the first level ahead
+   low (high for a short): the stop read names it (`invalidation`). The
+   trail exits (`target trail`, `take-profit`); the first level ahead
    (`inTheWay`) is a read (step 3).
 - **9 Manage**: a close back inside the level means the breakout failed:
    invalidation. A CHoCH against the trade on its timeframe or higher
@@ -68,12 +68,12 @@ positive on 38 trades, interval straddling zero. Not a finding.
 
 ```text
 Take: at the prior RTH low 21385.00, 1h and 15m down: on the 15m close a body beyond, close 21375.25
-  (bottom third); 3m retest high 21386.50 held (shooting star), close 21381.00. Reads: 1h down, below
-  prior rth low, at prior rth low, 15m broke prior rth low down, 3m close bottom, stop 3m high 21386.50,
-  target 1h swing 21368.00. short 21381.00, stop 21386.75 (23 ticks, $11.50/MNQ), 2.26R -> take.
-Skip: at the IB high 21560.00: on the 3m close only a wick beyond, close 21556.25 (touched, no broke
+  (bottom third); the next 3m close 21381.00. Reads: 1h down, below prior rth low, at prior rth low,
+  15m broke prior rth low down, 3m close bottom, stop 3m high 21386.50, target trail.
+  short 21381.00, stop 21386.75 (23 ticks, $11.50/MNQ); the 2R mark 21369.50 arms the trail -> take.
+Skip: at the IB high 21560.00: on the 15m close only a wick beyond, close 21556.25 (touched, no broke
   read): no setup read -> pass. The session VAH 0.5R ahead is a read, not the reason.
-Loser: at the overnight high 21614.75: on the 1h close a body beyond, close 21629.50; on the 3m close a
-  retest held. long at 21622.25, stop 21613.75 (8.50 pts = 34 ticks, $17.00 on 1 MNQ);
+Loser: at the overnight high 21614.75: on the 1h close a body beyond, close 21629.50; the next 3m
+  close: long at 21622.25, stop 21613.75 (8.50 pts = 34 ticks, $17.00 on 1 MNQ);
   a 15m close back inside at 21611.00. -34 ticks, -$17.00.
 ```

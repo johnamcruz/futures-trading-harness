@@ -26,8 +26,8 @@ description: Use when sizing a trade plan - risk per contract, the budget, the c
      None shown (no attempt): skip this cap, never $0. Never ask when
      autonomous.
 4. **Size** = floor(budget ÷ risk per contract). If it's 0, the stop is too
-   wide for the budget: skip, or find a tighter, structure-based stop. Never
-   shrink the stop to make the size work.
+   wide for the budget: skip (in an attempt the floor stretch is code's).
+   Never a tighter stop to make the size work.
 5. **Caps:** the broker server's `maxOrderSize` and `maxPositionSize`
    (`get_server_config`); size 1 on micros for a rules strategy until
    its setup has 30+ reviewed trades with positive expectancy. The order gate enforces two
@@ -54,15 +54,14 @@ description: Use when sizing a trade plan - risk per contract, the budget, the c
    `risk.max_risk_usd` if it sets one (a rules component's caps don't apply;
    `trade_lifecycle`'s cap does: the lower of it and the verdict). Everything else (stop first, protective
    stop always working) still applies. The verdict is the most the account
-   allows, not what the moment deserves: after a loss, in a streak or
-   drawdown, or one loss from `daily_loss_soft` or the target, size under it
-   (`Size: <n> (<rule>)`) or pass. A healthy account: a pass is a VETO, a
-   smaller size is placed at the verdict.
+   allows: phase 2 cuts it only on a pacing rule (a losing account, a loss
+   streak, drawdown: `Size: <n> (<rule>)`) or passes. A healthy account
+   (balance at or above the start, no loss streak): the full verdict size.
    In a prop attempt, the size you state is a suggestion: code translates it
    at entry to the rulebook's size (min_contracts and the budget); read the
    size it returns.
-7. **Half size** wherever the priority order (strategy-library) halves a
-   trade, computed as it says there. Never round a half up. A composed
+7. **Not in a prop attempt: half size** wherever the priority order
+   (strategy-library) halves a trade, computed as it says there. Never round a half up. A composed
    trade: `confluence-counting` sizes it, under the caps.
 8. **The arithmetic from `order_plan`** (the `order-plan` skill): steps 2
    and 4 for a compose record (refused over its cap), a policy verdict or a

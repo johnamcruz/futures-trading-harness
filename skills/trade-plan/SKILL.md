@@ -33,7 +33,8 @@ the scan's) manages it:
 
 - **Target then trail** (today's policy mode, in an attempt or not): the
   runner cancels the target order once it manages the trade, holds the stop
-  until the target, then locks and trails it. You never move it.
+  until the target, then locks and trails it. You tighten it only behind
+  turned structure (`manage-position`).
 - **Trailing:** stop only, no target order. The runner (or you, without one)
   trails it from `trailActivateR` with `trailGivebackR` give-back; read both
   from its `exit`, don't assume them.
@@ -76,7 +77,7 @@ the verdict's cut to the attempt's size budget now, which is the most a
 policy entry may have; a composed trade's is the size you stated, refused
 over its cap (in an attempt, also the verdict). A different size from
 your plan changes only `size`, and the risk scales with it: for a rules
-strategy, smaller for a `mixed` read or a reversal fade, and larger only as
+strategy, smaller for a `mixed` read, and larger only as
 position-sizing allows (a setup with 30+ reviewed trades and positive
 expectancy, within the budget and caps). A manual
 strategy has no order_plan (its stop is your read of STRATEGY.md): work its

@@ -26,8 +26,8 @@ hypotheses; a missing field is `unknown`.
   (`sweep` in `m3.candles`), read as its relation
   (`15m rejected previous 15m high down`; `rejection`).
 - **Acceptance (breakout)**: closes beyond that hold (hypothesis: two or
-  more). Shown as a 3m swing break (`m3.lastBreak.last.level`), a 15m or 1h
-  swing with `brokenAt` set (`m3.htfLevels`), or a location that changed
+  more). Shown as a 15m or 1h swing with `brokenAt` set
+  (`m3.htfLevels`), or a location that changed
   side (`m3.location.priorValue`, `m3.location.initialBalance`,
   `m3.location.priorRthRange`).
 - **Retest**: after acceptance, a pullback whose closes stay beyond the

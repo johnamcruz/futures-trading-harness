@@ -20,7 +20,7 @@ low (bullish) or bar 1's low is above bar 3's high (bearish), with a
 strong displacement middle bar the gap's way (the `cisd` skill's strong
 candle). A gap behind a weak middle bar, or one the wrong way, is no FVG. Price often
 revisits the gap; a gap that holds on retest supports continuation
-(`m3` `liquidity.openFvgs`). By what price has done since: **open** (not
+(`m3.fvgs`). By what price has done since: **open** (not
 traded back into), **partly filled** (traded into, not through: only the
 unfilled part is still a gap; `m3` `liquidity.partlyFilledFvgs` give it
 as `low`-`high`, the whole gap as `gapLow`-`gapHigh`), or **filled**
@@ -29,9 +29,9 @@ open FVG".
 
 **Source vs ours.** The same in substance (fair price just moved, a large
 middle candle, invalid past the far edge); ours adds the CISD strength
-rule, wicks count, and partly filled. `liquidity` holds the gaps of the
-last 60 bars of the briefing's own timeframe, the last 3 of each kind
-(`m3.fvgs`: the 5m, 15m and 1h ones); a filled gap is in neither list.
+rule, wicks count, and partly filled. `m3.fvgs` holds the 5m, 15m and
+1h gaps, the last 3 of each kind (the entry frame gives none); a filled
+gap is in neither list.
 Never mark one by eye.
 
 **The read.** A location, never a trigger. The source: price back in the

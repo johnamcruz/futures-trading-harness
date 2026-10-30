@@ -32,9 +32,9 @@ source: the owner-approved S2 census (2026-10-28, model-free, NQ 3m practice-tra
 
 # Strategy: Momentum Continuation (`momentum_continuation`)
 
-A closed 3m momentum candle in the direction of the prevailing
-higher-timeframe trend, in the morning session: the trend resuming with
-force. It is a setup the trade lifecycle cites, never a trade of its own:
+A closed 3m momentum candle on the entry rule's side (BG: the bias,
+4h + 1h), in the morning session: the trend resuming with force. Its
+fired read is the setup (the 15m may still run against it in a pullback). It is a setup the trade lifecycle cites, never a trade of its own:
 the head trader weighs it through the whole top-down flow and composes it
 with `compose_check`; code takes its entry, stop and target from here.
 
@@ -70,12 +70,14 @@ with `compose_check`; code takes its entry, stop and target from here.
 ### Entry, stop, targets
 
 - Compose it (`compose_check`), one read per step: your bias (the
-  prevailing trend, e.g. `4h up`), where price is (location), the setup
+  side rule's, e.g. `4h up`), where price is (location), the setup
   `momentum_continuation fired up` (short: `down`), the entry `3m momentum
   up`, the stop `stop 3m low <the candle's low>` (short: high), the target
   `target 2r`.
-- Code's plan: at market from the candle's close; the stop one tick beyond
-  the candle's extreme, at least 12 ticks; the target 2R. The brackets are
+- Code's plan: at market from the candle's close; its own stop: one tick
+  beyond the candle's extreme, widened to at least 12 ticks (`stop_min`),
+  and like every composed stop refused under compose's floor; the target
+  2R. The brackets are
   ticks from the fill. Past 2R the rulebook's exit trails it
   (`target_then_trail`: the lock, then the 15m structure trail).
 - Size: the rulebook's (in an attempt `order_plan` translates yours; the

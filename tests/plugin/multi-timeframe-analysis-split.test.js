@@ -144,6 +144,46 @@ const LATE = [
   { from: "Priority step 4 sets the size. Target the nearest opposing level; skip in a quiet session",
     to: "Priority step 4 sets the size. Target the nearest opposing level; a quiet session is a read against",
     reason: "fix/confluence-not-vetoes: a soft read is a read in the count, never a pass alone (owner, 2026-10-21; a census of 27,698 moments)" },
+  { from: "This skill makes that read the same every time: one tool reads the trend on each higher timeframe from the bars you already have, and labels each side.", to: null,
+    reason: "feat/bias-bg (never counter): no entry against a trending 4h or 1h on any path, the 15m setup is the entry and the 3m only times it, the trail exits; the rewritten text is new (mtf.js trendRule, the gate's)" },
+  { from: "With no trend on any of the three, both sides are open.", to: null,
+    reason: "feat/bias-bg (never counter): no entry against a trending 4h or 1h on any path, the 15m setup is the entry and the 3m only times it, the trail exits; the rewritten text is new (mtf.js trendRule, the gate's)" },
+  { from: "Long: pullback (wait for a 3m shift up). Short: counter.", to: null,
+    reason: "feat/bias-bg (never counter): no entry against a trending 4h or 1h on any path, the 15m setup is the entry and the 3m only times it, the trail exits; the rewritten text is new (mtf.js trendRule, the gate's)" },
+  { from: "Each timeframe's last completed candle and the levels it met, and the next swing each side: the `candle-reading` skill.", to: null,
+    reason: "feat/bias-bg (never counter): no entry against a trending 4h or 1h on any path, the 15m setup is the entry and the 3m only times it, the trail exits; the rewritten text is new (mtf.js trendRule, the gate's)" },
+  { from: "`counter` (the HTF against): pass.", to: null,
+    reason: "feat/bias-bg (never counter): no entry against a trending 4h or 1h on any path, the 15m setup is the entry and the 3m only times it, the trail exits; the rewritten text is new (mtf.js trendRule, the gate's)" },
+  { from: "Trend rule: LONG allowed (prevailing 4h up); short only as a reversal (mtf: reversal).", to: "Trend rule: LONG allowed (prevailing 4h up); no short against it.",
+    reason: "feat/bias-bg (never counter): no entry against a trending 4h or 1h on any path, the 15m setup is the entry and the 3m only times it, the trail exits; the rewritten text is new (mtf.js trendRule, the gate's)" },
+  { from: "-> Longs are a pullback: wait for a 3m shift up (3m bos up), target the 1h swing high.", to: null,
+    reason: "feat/bias-bg (never counter): no entry against a trending 4h or 1h on any path, the 15m setup is the entry and the 3m only times it, the trail exits; the rewritten text is new (mtf.js trendRule, the gate's)" },
+  { from: "Shorts are counter: a trend strategy's short is refused (scan and gate); a composed", to: null,
+    reason: "feat/bias-bg (never counter): no entry against a trending 4h or 1h on any path, the 15m setup is the entry and the 3m only times it, the trail exits; the rewritten text is new (mtf.js trendRule, the gate's)" },
+  { from: "short needs a 1h CHoCH down and a 4h rejection (`trade-lifecycle`).", to: null,
+    reason: "feat/bias-bg (never counter): no entry against a trending 4h or 1h on any path, the 15m setup is the entry and the 3m only times it, the trail exits; the rewritten text is new (mtf.js trendRule, the gate's)" },
+  { from: "**Every entry**, long or short alike (`trade_lifecycle`, and a rules strategy without `mtf: reversal`): never against the prevailing trend; wait while the 4h has fewer than 3 completed candles.", to: null,
+    reason: "feat/bias-bg (never counter): no entry against a trending 4h or 1h on any path, the 15m setup is the entry and the 3m only times it, the trail exits; the rewritten text is new (mtf.js trendRule, the gate's)" },
+  { from: "**Against it**: a composed entry only on its CHoCH tier (`trade-lifecycle`); a rules `mtf: reversal` strategy (none active) at a higher-timeframe level, decided by the priority order (step 2).", to: null,
+    reason: "feat/bias-bg (never counter): no entry against a trending 4h or 1h on any path, the 15m setup is the entry and the 3m only times it, the trail exits; the rewritten text is new (mtf.js trendRule, the gate's)" },
+  { from: "`strategies_scan` (rules strategies): one that fires against it is not a candidate; its why-not (`filtersFailed` in its full result) says `mtf: against the prevailing 4h down trend ...`.", to: null,
+    reason: "feat/bias-bg (never counter): no entry against a trending 4h or 1h on any path, the 15m setup is the entry and the 3m only times it, the trail exits; the rewritten text is new (mtf.js trendRule, the gate's)" },
+  { from: "Priority step 4 (strategy-library) sets the size; with the count for it, the opportunity", to: null,
+    reason: "feat/bias-bg (never counter): no entry against a trending 4h or 1h on any path, the 15m setup is the entry and the 3m only times it, the trail exits; the rewritten text is new (mtf.js trendRule, the gate's)" },
+  { from: "The setup timeframe is pulling back. A rules strategy: wait for the trigger timeframe to turn back with the bias (a shift, a reclaim), then priority step 4", to: null,
+    reason: "feat/bias-bg (never counter): no entry against a trending 4h or 1h on any path, the 15m setup is the entry and the 3m only times it, the trail exits; the rewritten text is new (mtf.js trendRule, the gate's)" },
+  { from: "Priority step 4 sets the size. Target the nearest opposing level; a quiet session is a read against", to: null,
+    reason: "feat/bias-bg (never counter): no entry against a trending 4h or 1h on any path, the 15m setup is the entry and the 3m only times it, the trail exits; the rewritten text is new (mtf.js trendRule, the gate's)" },
+  { from: "Priority step 4; a rules reversal at a higher-timeframe level is its step 2, and the plan says why", to: null,
+    reason: "feat/bias-bg (never counter): no entry against a trending 4h or 1h on any path, the 15m setup is the entry and the 3m only times it, the trail exits; the rewritten text is new (mtf.js trendRule, the gate's)" },
+  { from: "The last line of the read states it, the allowed side first: `Trend rule: LONG allowed (prevailing 4h up); short only as a reversal (mtf: reversal).` The daily (`daily`) is context for your judgment; the rule reads the intraday frames.", to: null,
+    reason: "feat/bias-bg (never counter): no entry against a trending 4h or 1h on any path, the 15m setup is the entry and the 3m only times it, the trail exits; the rewritten text is new (mtf.js trendRule, the gate's)" },
+  { from: "Take levels from the higher timeframes and treat them as targets on the trigger timeframe, or as a read against a setup that runs straight into one.", to: null,
+    reason: "feat/bias-bg (never counter): no entry against a trending 4h or 1h on any path, the 15m setup is the entry and the 3m only times it, the trail exits; the rewritten text is new (mtf.js trendRule, the gate's)" },
+  { from: "A trigger on 3-minute bars is worth more when the timeframes above it point the same way, and it is a pullback (or a trap) when they don't.", to: null,
+    reason: "feat/bias-bg (never counter): no entry against a trending 4h or 1h on any path, the 15m setup is the entry and the 3m only times it, the trail exits; the rewritten text is new (mtf.js trendRule, the gate's)" },
+  { from: "-> Longs: mixed (the priority order's step 4 sizes it). Shorts: against the 4-hour trend, refused for trend strategies.", to: null,
+    reason: "feat/bias-bg (never counter): no entry against a trending 4h or 1h on any path, the 15m setup is the entry and the 3m only times it, the trail exits; the rewritten text is new (mtf.js trendRule, the gate's)" },
 ];
 // The two example lines (mtf_read output), both in today's wording (the same line twice: nowCopies).
 ALLOWED.push({ old: "Trend rule: prevailing trend 4h up; trend strategies may not go short; reversal strategies (mtf: reversal) may go short too.",
@@ -214,17 +254,17 @@ test('multi-timeframe-analysis split: the comparison catches a lost, a doubled, 
   // Lost, doubled, edited.
   assert.notDeepStrictEqual(differences(old, swap(['multi-timeframe-analysis', core.replace(S, '')]), ALLOWED), []);
   assert.notDeepStrictEqual(differences(old, swap(['daily-bias', `${homes[at('daily-bias')]}\n${S}\n`]), ALLOWED), []);
-  assert.notDeepStrictEqual(differences(old, swap(['multi-timeframe-analysis', core.replace('fewer than 3 completed candles', 'fewer than 2 completed candles')]), ALLOWED), []);
-  // Misplaced: the trend-rule bullet moved into mtf-bias-filter, or the reversal paragraph out of htf-to-ltf into the
+  assert.notDeepStrictEqual(differences(old, swap(['multi-timeframe-analysis', core.replace(S, S.replace('same scan', 'same scans'))]), ALLOWED), []);
+  // Misplaced: a where-enforced bullet moved into mtf-bias-filter, or the side-rule paragraph out of htf-to-ltf into the
   // core: nothing is lost or doubled, but it left its home.
-  const BULLET = /- \*\*Every entry\*\*[^]*?both sides are open\.\n/.exec(core)[0];
+  const BULLET = /- The backtester uses the same scan, so its trades obey it\.\n/.exec(core)[0];
   const f = homes[at('mtf-bias-filter')];
   const moved1 = swap(['multi-timeframe-analysis', core.replace(BULLET, '')], ['mtf-bias-filter', `${f}\n${BULLET}`]);
   assert.deepStrictEqual(differences(old, moved1, ALLOWED), [], 'the move loses nothing');
-  assert.notDeepStrictEqual(homeErrors(old, moved1), [], 'but the trend rule left the core');
+  assert.notDeepStrictEqual(homeErrors(old, moved1), [], 'but the bullet left the core');
   const h = homes[at('htf-to-ltf')];
   // The reversal paragraph (now the side rule: owner decision D2 and the trend-following side rule).
-  const REV = /\*\*The side rule\*\*[^]*?the trend rule decides\.\n/.exec(h)[0];
+  const REV = /\*\*The side rule\*\*[^]*?both sides\)\.\n/.exec(h)[0];
   const moved2 = swap(['htf-to-ltf', h.replace(REV, '')], ['multi-timeframe-analysis', `${core}\n${REV}`]);
   assert.deepStrictEqual(differences(old, moved2, ALLOWED), [], 'the move loses nothing');
   assert.notDeepStrictEqual(homeErrors(old, moved2), [], 'but the reversal paragraph left htf-to-ltf');
@@ -300,7 +340,7 @@ test('multi-timeframe-analysis split: the market-structure analyst loads what it
   assert.match(read('skills/trade-session/SKILL.md'), /\(`mtf_read` with the bars file, the `timeframe-sources` skill\)/);
   // In setup-judgment since the trade-session split (trade-session-split.test.js).
   assert.match(read('skills/setup-judgment/SKILL.md').replace(/\s+/g, ' '), /the side rule \(`htf-to-ltf`\) and its alignment table/);
-  assert.match(read('skills/pullback-vs-reversal/SKILL.md'), /shift or reclaim of `htf-to-ltf`/);
+  assert.match(read('skills/pullback-vs-reversal/SKILL.md').replace(/\s+/g, ' '), /The pullback ends with the setup \(15m\) the bias's way at a level/);
 });
 
 test('multi-timeframe-analysis-split: every late edit matches a unit of the homes', () => {

@@ -22,9 +22,10 @@ the scan's) manages it:
 
 - **Target then trail** (today's policy mode, in an attempt or not): the
   runner cancels the target order once it manages the trade, holds the stop
-  until the target, then locks and trails it. You never move it.
+  until the target, then locks and trails it. You tighten it only behind
+  turned structure (\`manage-position\`).
 - **Trailing:**`,
-    reason: 'a composed trade\'s exit is its record\'s stop and target, managed by its policy\'s exit mode (evaluator.js composedExit, in an attempt or not; today target_then_trail, the rulebook)' },
+    reason: 'a composed trade\'s exit is its record\'s stop and target, managed by its policy\'s exit mode (evaluator.js composedExit, in an attempt or not; today target_then_trail, the rulebook); then feat/bias-bg: the model tightens it only behind turned structure (manage-position), never by feel' },
   { old: '  from the scan\'s `exit`, don\'t assume them.', now: '  from its `exit`, don\'t assume them.', reason: 'a policy\'s exit is its rulebook\'s, not the scan\'s' },
   { old: `- **Target level:** with \`exit.target\` the scan gives \`targetDistance\`: the
   target is the signal bar's close ± that distance (e.g. a CRT range's far
@@ -52,10 +53,10 @@ expectancy, within the budget and caps). A manual`,
   now: `policy entry may have; a composed trade's is the size you stated, refused
 over its cap (in an attempt, also the verdict). A different size from
 your plan changes only \`size\`, and the risk scales with it: for a rules
-strategy, smaller for a \`mixed\` read or a reversal fade, and larger only as
+strategy, smaller for a \`mixed\` read, and larger only as
 position-sizing allows (a setup with 30+ reviewed trades and positive
 expectancy, within the budget and caps). A manual`,
-  reason: 'owner decision D1: a composed trade\'s size is its own under the caps (order_plan refuses one over them), never halved for a mixed read; the halving and the size steps stay for a rules strategy' },
+  reason: 'owner decision D1: a composed trade\'s size is its own under the caps (order_plan refuses one over them), never halved for a mixed read; the halving and the size steps stay for a rules strategy; then feat/bias-bg: never counter, so no reversal fade' },
 ];
 
 /** The fixture with every edit applied; throws when an edit's old text isn't in it exactly once. */

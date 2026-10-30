@@ -25,9 +25,8 @@ It adds no filter and no veto:
 
 ### The steps
 
-1. **HTF.** The 4h, 1h and 15m trends and structure frame everything
-   below. The side rule (`htf-to-ltf`) sets the side, long or short
-   alike.
+1. **HTF.** The bias (4h + 1h) sets the side (the side rule,
+   `htf-to-ltf`); never counter.
    Read: `trend-vs-range`, `htf-to-ltf`.
 2. **Context.** Window, news, regime, account (phase 1's Budget,
    Attempt).
@@ -37,13 +36,13 @@ It adds no filter and no veto:
    side (`htf-to-ltf`).
    Read: `pullback-vs-reversal`, `cisd`; setups: `rejection`, `breakout`, `fair-value-gaps`.
 5. **Confluence.** The six categories of `confluence-counting`.
-6. **Entry.** A closed bar's entry reads; never anticipate. Trigger
-   closed → `compose_check` now.
+6. **Entry.** The next 3m close after the setup's times it; no 3m turn
+   to wait for → `compose_check` now.
    Read: `candle-reading`, `momentum-and-volume`.
 7. **Risk.** Stop (`invalidation`) and target (`take-profit`) reads,
    size; R:R: the compose record's, never yours.
-8. **Decision.** Compose OK → take, sized by the against (step 5);
-   refused → pass, naming it. One reason.
+8. **Decision.** Compose OK → take (a prop attempt: the full verdict
+   size; else step 5 sizes it); refused → pass. One reason.
 9. **Management.** What invalidates the trade; its exit
    (`manage-position`). Never loosen the stop. Read: `invalidation`.
 

@@ -156,6 +156,16 @@ const LATE = [
   { from: "**Room**: the first level in its way (`inTheWay`, in its own R) comes before the room it needs (`needR`) → no trade.",
     to: ["**Room**: the first level ahead (`inTheWay`, its own R) and the R it aims for (`needR`): a read, never a no trade alone.", "Hard: R:R to the target at least `risk.min_rr` (compose_check's)."],
     reason: "fix/confluence-not-vetoes: the room rule selected nothing in a census of 27,698 moments (blocked -0.032R vs room -0.079R, p 0.51): a read, never a no trade; R:R to the target stays hard" },
+  { from: "**Secondary context** (the VWAP side, the lunch lull, participation): cuts to half, never vetoes alone.", to: null,
+    reason: "feat/bias-bg (never counter): no entry against a trending 4h or 1h on any path, the 15m setup is the entry and the 3m only times it, the trail exits, a prop attempt trades the full verdict size; the rewritten text is new" },
+  { from: "**The trend rule**: a trend strategy against the prevailing trend → no trade.", to: "**The trend rule** (never counter): any setup or strategy against a trending 4h or 1h, or with both ranging against the 15m → no trade, whatever CHoCH.",
+    reason: "feat/bias-bg (never counter): no entry against a trending 4h or 1h on any path, the 15m setup is the entry and the 3m only times it, the trail exits, a prop attempt trades the full verdict size; the rewritten text is new" },
+  { from: "A reversal strategy may fade it only at a higher-timeframe level, at half size and the nearest target; a composed one needs `trade-lifecycle`'s tier: vs a 15m trend a 15m or 1h CHoCH; vs 1h a 1h CHoCH; vs 4h a 1h CHoCH plus a 4h rejection.", to: null,
+    reason: "feat/bias-bg (never counter): no entry against a trending 4h or 1h on any path, the 15m setup is the entry and the 3m only times it, the trail exits, a prop attempt trades the full verdict size; the rewritten text is new" },
+  { from: "trade_lifecycle short, 1h up, no 1h CHoCH down → step 2: no trade.", to: null,
+    reason: "feat/bias-bg (never counter): no entry against a trending 4h or 1h on any path, the 15m setup is the entry and the 3m only times it, the trail exits, a prop attempt trades the full verdict size; the rewritten text is new" },
+  { from: "**The multi-timeframe read for its side**: a rules strategy: `aligned` → full; `pullback` → no trade until the trigger timeframe turns back with the bias (a shift, a reclaim), then full; `mixed` → half; `counter` on a non-reversal setup → no trade.", to: null,
+    reason: "feat/bias-bg (never counter): no entry against a trending 4h or 1h on any path, the 15m setup is the entry and the 3m only times it, the trail exits, a prop attempt trades the full verdict size; the rewritten text is new" },
 ];
 const LATE_STALE = (() => {
   const r = withLate(ALLOWED, LATE, units(require('fs').readFileSync(require('path').join(__dirname, '..', '..', BEFORE), 'utf8')));
@@ -241,7 +251,7 @@ test('strategy-library split: the comparison catches a lost, a doubled or an edi
   // Reordered: two numbered steps of the priority order swapped (the content is all there, the order is not).
   const lib = homes[at('strategy-library')];
   const ROOM = /3\. \*\*Room\*\*[^]*?\(compose_check's\)\.\n/.exec(lib)[0];
-  const TREND = /2\. \*\*The trend rule\*\*[^]*?4h rejection\.\n/.exec(lib)[0];
+  const TREND = /2\. \*\*The trend rule\*\*[^]*?whatever CHoCH\.\n/.exec(lib)[0];
   const swapped = lib.replace(TREND, '\u0000').replace(ROOM, TREND.replace('2. ', '3. ')).replace('\u0000', ROOM.replace('3. ', '2. '));
   assert.notStrictEqual(swapped, lib);
   assert.deepStrictEqual(differences(old, swap('strategy-library', swapped)), [], 'a swap loses nothing');

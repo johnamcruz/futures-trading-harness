@@ -61,13 +61,13 @@ const PINS = {
     'a lower-timeframe CHoCH back the HTF way inside an HTF trend is the pullback ending (`pullback-vs-reversal`), not a range;',
   ],
   'pullback-vs-reversal': [
-    'A 15m or 1h CHoCH against the trend weighs most: then the read is a reversal attempt.',
-    'The pullback ends when its own minor structure breaks back: `m3.lastBreak.last` turns the trend\'s way',
+    'a 1h CHoCH against the trend weighs most: a reversal attempt, context only (never counter).',
+    'The pullback ends with the setup (15m) the bias\'s way at a level',
     'up to about 50-62% of the leg (hypothesis)',
     'depth alone is no edge; buying a 50% or 62% retrace with the 4h trend lost after costs (F5).',
-    'A lower-timeframe CHoCH inside an intact higher-timeframe structure is a pullback.',
-    'CHoCHs stacking up the timeframes (3m, then 15m, then 1h) are a reversal developing.',
-    'a lower-timeframe CHoCH back the HTF way at a level times the entry; the setup there: `rejection`, `breakout`, `fair-value-gaps`.',
+    'A 15m CHoCH inside an intact 1h and 4h structure is a pullback.',
+    'CHoCHs stacking up the timeframes (15m, then 1h) are a reversal developing;',
+    'it is the entry, the next 3m close times it; a 3m turn (`m3.timing`) is context, never a wait.',
   ],
   'breakout-vs-fakeout': [
     'a level traded through from inside and closed back inside within 1-3 bars, in the last 10 bars',
@@ -85,7 +85,7 @@ const PINS = {
   'fair-value-gaps': [
     'Price inside a gap is never "at an open FVG".',
     'only the unfilled part is still a gap;',
-    'gaps of the last 60 bars of the briefing\'s own timeframe, the last 3 of each kind',
+    '`m3.fvgs` holds the 5m, 15m and 1h gaps, the last 3 of each kind (the entry frame gives none)',
     'a filled gap is in neither list. Never mark one by eye.',
     'The briefing does not rank gaps among the levels in a setup\'s way',
     'Like the first level ahead, a read in the count, never a pass alone.',
@@ -109,11 +109,11 @@ const PINS = {
     'This skill never moves, widens or replaces it.',
     'a fact, never a reason to change the stop;',
     // The stop read is this skill's (step stop): its forms and the code's placement and floor (trade-lifecycle.js).
-    'Code places the stop one tick beyond it, at least the larger of 8 ticks and 0.25 x ATR(20); a closer one is refused, never widened',
+    'The stop (compose\'s): code places it one tick beyond it, at least the larger of 8 ticks and 0.25 x ATR(20); a closer one is refused, never widened',
     'acting on it is management\'s call under trade-session, never a wider stop.',
     'Stops move toward the market only.',
-    'weighs by its timeframe against the trade\'s own: on the trade\'s timeframe or higher',
-    'on a lower one it is mostly noise.',
+    'weighs by its timeframe: on the setup\'s timeframe or higher',
+    'a 3m one is noise.',
   ],
   'confluence-counting': [
     // Independent categories, never labels (the owner's principle, fix/confluence-not-vetoes): reads of the same price
@@ -121,25 +121,25 @@ const PINS = {
     '**Six independent categories**, one vote each, so for + against + neutral = 6: reads of one price move are one piece of evidence.',
     // The margin sizes it (the owner's principle 3: strong is full size, marginal reduced or a pass).
     // Compose first (fix/confluence-not-vetoes): the plan, never the model, works out R:R.
-    '**Compose first.** The trend rule\'s side (or its CHoCH tier), a rejection or breakout at a key level or FVG, the trigger closed → call `compose_check`.',
+    '**Compose first.** The side rule\'s side (never counter), a 15m rejection or breakout at a key level or FVG, closed (the next 3m close times it) → call `compose_check`.',
     'Never estimate room or R:R: the briefing\'s "Standard plan" line states it; OK → compose with its reads, refused → pass, naming it.',
-    'OK → **a valid setup is the trade**: full size within the verdict\'s ceiling; the against sets the size:',
+    'OK → **a valid setup is the trade**. In a prop attempt: the full translated size; phase 2 cuts it only on a pacing rule. Not in a prop attempt, within the verdict\'s ceiling, the against sets the size:',
     // A swing broken is serious, never decisive: decisive is a real HTF reversal (the owner: a sweep misread as a pass).
-    '**Decisive** → pass: a 1h CHoCH against (the trend rule\'s tier, `trade-lifecycle`; with the 4h and 1h your way, context), or a hard step fails.',
-    '**Serious** → half (`floor`, at least 1): 2+ categories against, location against (the trigger into the other side\'s level), or a 3m close beyond the leg\'s 15m swing (`m3.htfLevels` `brokenAt`).',
+    '**Decisive** → pass: a 1h CHoCH against while the 1h ranges (with the 4h and 1h your way: context), or a hard step fails.',
+    '**Serious** → half (`floor`, at least 1): 2+ categories against, location against (the setup into the other side\'s level), or a 3m close beyond the leg\'s 15m swing (`m3.htfLevels` `brokenAt`).',
     'Closed back inside, it is a sweep (`breakout-vs-fakeout`): liquidity for.',
     '**Minor** → full size, never a reason not to compose: thin volume, the first level ahead, VWAP distance or "chasing" (no edge in the census), no pullback yet, mixed reads.',
     'A missing read is no reason to pass.',
     // A pullback inside the trend is never counted against itself (fix/confluence-not-vetoes).
-    '**The pullback is neutral** (`pullback-vs-reversal`): entry-timeframe structure against the trend; for once it breaks back.',
-    '| structure | 3m, 5m, 15m BOS, CHoCH (`bos-vs-choch`), CISD; momentum, EMA, ADX, SuperTrend |',
+    '**The pullback is neutral** (`pullback-vs-reversal`): the 15m against the bias; the setup (15m) the bias\'s way ends it.',
+    '| structure | 15m and higher BOS, CHoCH (`bos-vs-choch`), CISD; momentum, EMA, ADX, SuperTrend |',
     '| location | the level, POI or FVG it reacts at |',
     '| liquidity | a sweep taken, or liquidity as the target |',
-    '| trigger | the rejection or engulfing candle and its close |',
+    '| trigger | the setup candle\'s strength and close (`candle-reading`) |',
     '| participation | volume, delta, absorption; thin is neutral |',
     '| context | VWAP side, value area, day type, session |',
     '**One vote**: all its reads your way → for; all against → against; mixed, none or `unknown` → neutral.',
-    'Labels never add: a 3m BOS, an EMA slope and ADX are one structure vote.',
+    'Labels never add: a 15m BOS, an EMA slope and ADX are one structure vote.',
     '**Not counted**: the trend rule and the 1h and 4h direction (the side rule; compose step bias), R:R, the window, the news.',
     // The count decides (fix/confluence-not-vetoes): no soft read is a pass alone, the room among them.
   ],
@@ -155,17 +155,16 @@ const PINS = {
     '**A setup read, not an entry by itself.** It is stated with the other steps\' reads and `compose_check` verifies them (`trade_lifecycle`).',
     // A rejection is the briefing's relation; the wick, the close third and an engulfing grade it (candle-facts.js).
     '**4 Setup**: a completed candle rejects the level: the briefing\'s relation `rejected` (traded through it, closed back; read `<tf> rejected <level> up|down`).',
-    'A long wick, the close in the opposite third or an engulfing grade its strength (`candle-reading`)',
-    '| 3m, 5m | entry timing at an HTF level; alone, a minor level | least |',
+    'A long wick, the close in the opposite third grade its strength (`candle-reading`; a pattern name adds none)',
+    '| 3m, 5m | the entry timing only: never the setup | least |',
     '| 15m | the working structure and the session levels | more |',
     '| 1h, 4h | HTF levels (prior day, overnight, CRT) | most |',
-    '**Strongest**: a 15m or 1h rejection confirmed on 3m or 5m (step 6), with the HTF bias (step 1); a lone 3m or 5m one against it is counter-trend.',
-    'whether a structure break went its way (`m15.lastBreak.last` or `h1.lastBreak.last` a CHoCH) is the trend rule\'s CHoCH tier (`trade-lifecycle`), never counted.',
+    '**The setup**: a 15m or 1h rejection the bias\'s way (step 1); the next 3m close times the entry (step 6).',
+    'Against the bias (4h + 1h): the trend rule refuses it (never counter), whatever CHoCH.',
     'Never anticipate it.',
     'the stop read names it (`invalidation`).',
     '**Paired with `breakout`**: a failed breakout (a close back inside) is the setup for a rejection the other way.',
     'After an HTF BOS, at the level a pullback reaches (`pullback-vs-reversal`), it is a continuation.',
-    'A reversal rejection reads strongest with an HTF CHoCH its way (`bos-vs-choch`).',
     'or a CHoCH against it on its timeframe or higher (`bos-vs-choch`).',
   ],
   cisd: [
@@ -207,11 +206,11 @@ const PINS = {
     '**A setup read, not an entry by itself.** It is stated with the other steps\' reads and `compose_check` verifies them (`trade_lifecycle`).',
     '**4 Setup**: a completed candle closes beyond the level with acceptance',
     'not just a wick',
-    '| 3m, 5m | entry timing past an HTF level; alone, a minor level, often a fakeout | least |',
+    '| 3m, 5m | the entry timing only: never the setup | least |',
     '| 15m | the working structure and the session levels | more |',
     '| 1h, 4h | HTF levels (prior day, overnight, CRT) | most |',
-    '**Strongest**: a 15m or 1h breakout confirmed on 3m or 5m (step 6), with the HTF bias (step 1); a lone 3m or 5m one against it is counter-trend.',
-    'a retest of the broken level that holds (a pullback: `pullback-vs-reversal`), with a rejection candle there (preferred), or a continuation displacement.',
+    '**The setup**: a 15m or 1h breakout the bias\'s way (step 1); the next 3m close times the entry (step 6).',
+    'the next 3m close after the 15m or 1h close beyond times it; a retest that holds (a pullback: `pullback-vs-reversal`) is support, never a wait.',
     'Never anticipate it.',
     'the stop read names it (`invalidation`).',
     'a close back inside the level means the breakout failed: invalidation.',
@@ -224,11 +223,11 @@ const PINS = {
     'A close strictly beyond the last confirmed swing not yet broken; each swing breaks once. Only closes count, on completed candles.',
     'In the code, that is the previous break\'s direction (the first break too).',
     'No one timeframe is the signal; read them top-down.',
-    '| 3m, 5m | continuation; entry timing | against the HTF: usually a pullback; back with it: the pullback ends |',
+    '| 3m, 5m | a candle fact only: never the setup, never a wait | a candle fact only (its swings are for the stop) |',
     '| 15m | the working structure continues | the working structure shifting: a deeper pullback, or a reversal starting |',
     '| 1h (4h swings) | the HTF trend continues | the strongest sign of an HTF trend change, not a reversal by itself: a BOS the new way confirms it |',
-    'CHoCHs stacking up the timeframes (3m, then 15m, then 1h) are a reversal developing.',
-    'a CHoCH against an open trade on its timeframe or higher is significant (`invalidation`); lower is mostly noise.',
+    'CHoCHs stacking up the timeframes (15m, then 1h) are a reversal developing; a 1h CHoCH while the 4h and 1h agree is context.',
+    'a CHoCH against an open trade on its timeframe or higher (15m, 1h) is significant (`invalidation`); a 3m one is noise.',
   ],
 };
 
@@ -350,7 +349,8 @@ test('basics skills: the setups add no filter, equal highs are the code\'s, and 
   const cc = flat(read(file('confluence-counting')));
   const cats = [...cc.matchAll(/\| (structure|location|liquidity|trigger|participation|context) \|/g)].map(m => m[1]);
   assert.deepStrictEqual(cats, ['structure', 'location', 'liquidity', 'trigger', 'participation', 'context']);
-  assert.ok(flat(read(file('rejection'))).includes('is the trend rule\'s CHoCH tier (`trade-lifecycle`), never counted'));
+  // Against the bias the trend rule refuses it (never counter), never a count (feat/bias-bg).
+  assert.ok(flat(read(file('rejection'))).includes('Against the bias (4h + 1h): the trend rule refuses it (never counter), whatever CHoCH.'));
   // momentum-and-volume puts the indicators in structure, the same vote rule.
   assert.ok(flat(read(file('momentum-and-volume'))).includes('are structure (`confluence-counting`): all with its side FOR, all against AGAINST, mixed neutral.'));
   // Equal highs and lows: two of the last 12 confirmed swings within 0.1 x ATR(14) (market-snapshot.js), stated once,
@@ -540,7 +540,7 @@ const MOVED = [
   'BOS: a close beyond the last swing in the trend\'s direction.',
   'CHoCH: the first close beyond the last swing against it, an early warning, not a reversal by itself (the `pullback-vs-reversal` skill).',
   'A wick through a swing that closes back inside is a sweep, not a break (the `breakout-vs-fakeout` skill).',
-  'A 3-minute BOS against a 1-hour downtrend is a counter-trend trade.',
+  'A break against a trending 4h or 1h: the trend rule refuses it (never counter).',
 ];
 
 test('bos-vs-choch: every BOS/CHoCH sentence moved from market-structure has exactly one home, and the old skills point to it', () => {
@@ -693,7 +693,7 @@ test('basics skills: the fib numbers have one home: fib-retracement states the c
 // and both stay reads that yield to the trend rule.
 const PROCEDURES = {
   'daily-bias': { section: '### Today\'s bias, step by step', steps: ['Prior day\'s candle', 'Price against the prior day', 'The open', '1h and 4h structure', 'Regime', 'Write it'] },
-  'top-down-entry': { section: '## How It Works', steps: ['HTF: side and level', '15m: the setup there', '3m/5m: the trigger', 'Where the idea is wrong', 'Where it aims'] },
+  'top-down-entry': { section: '## How It Works', steps: ['Bias: side and level', '15m: the setup there', '3m: the entry timing', 'Stop: compose\'s', 'Exit: the trail'] },
 };
 
 /** The procedure's numbered steps, in order, inside its section (before the next heading). */
@@ -757,20 +757,20 @@ test('daily-bias and top-down-entry: the procedures\' steps are pinned in order;
 });
 
 test('daily-bias and top-down-entry: reads that yield to the trend rule; the stop and exit stay the strategy\'s', () => {
-  const YIELD = 'the trend rule (`multi-timeframe-analysis`) and the priority order (strategy-library) decide entries. Against the prevailing trend, trend strategies wait';
+  const YIELD = 'the trend rule (`multi-timeframe-analysis`) and the priority order (strategy-library) decide entries. Against a trending 4h or 1h: no entry (never counter)';
   for (const s of Object.keys(PROCEDURES)) assert.ok(flat(read(file(s))).includes(YIELD), s);
   assert.ok(flat(read(file('daily-bias'))).includes('it never points at a side the rule refuses.'));
   const top = flat(read(file('top-down-entry')));
   for (const pin of [
-    '**HTF: side and level.** The side the trend rule allows (`m3.trendRule`); today\'s bias (`daily-bias`) sets the confidence, never a side the rule refuses.',
-    'check that the strategy\'s stop sits beyond it.',
+    '**Bias: side and level.** The bias (4h + 1h): the side rule\'s side (`htf-to-ltf`, `m3.trendRule`; never counter); today\'s bias (`daily-bias`) sets the confidence, never a side the rule refuses.',
+    'One tick beyond the setup\'s invalidation, as a rule its candle\'s extreme (`invalidation`); never tighter.',
     'is the first level ahead: a read to weigh, not a pass.',
-    'The stop and exit stay the strategy\'s (the priority order, step 2: a reversal takes the nearest target).',
+    'the stop is compose\'s, the exit the trail.',
     'Completed candles only, on every timeframe.',
-    'the HTF gives the side, the LTF only the timing.',
+    'the bias gives the side, the 3m only the timing.',
   ]) assert.ok(top.includes(pin), pin);
   // The counter example: the trend rule's side wins over a rejection at a level.
-  assert.match(top, /2022-08-12, trend rule 4h up\.[^`]*shorts are not the side the rule allows/);
+  assert.match(top, /2022-08-12, trend rule 4h up\.[^`]*a short is against the 4h: no entry \(never counter\)/);
 });
 
 test('daily-bias, htf-to-ltf and top-down-entry: pointers, small, short "Use when" descriptions; the head trader\'s per-cycle load does not grow', () => {
