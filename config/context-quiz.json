@@ -506,7 +506,7 @@
       "id": "q30",
       "layer": "setup",
       "prompt": "head",
-      "text": "Two 15m long-wick rejections down: one at a pullback level with the 4h and 1h down, one with the 4h and 1h up. Same read?",
+      "text": "Two 15m long-wick rejections of a high (upper wick through it, closed back below): one at a pullback level with the 4h and 1h down, one with the 4h and 1h up. Same read?",
       "rule": "a reaction is read in its context at that moment: with the bias at a pullback level it supports the short; against the 4h + 1h the trend rule refuses it (never counter)",
       "anchor": "Against the bias (4h + 1h): the trend rule refuses it (never counter)",
       "required": [
