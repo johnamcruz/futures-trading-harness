@@ -21,9 +21,9 @@ Summary (MNQ 1m, 20:11 ET):
 - Room above (R = the 1m reference stop): 15m swing high / round number 27099.75 (88.25 pts, 24.48R).
 - Room below (R = the 1m reference stop): round number 27000 (11.5 pts, 3.19R).
 - Broker bar fields (last 3 bars, oldest first): ext.a 0.7/0.2/-0.3; ext.b.flag false/true/false; ext.b.n 5/6/0; flow.complete true/true/true; flow.ofiTrade -0.88/-0.332/-1; flow.windows.3.delta -64/-218/-827; +3 more.
-- 3m (entry candle, timing, closed 20:09): inside, 1 in a row inside the 20:03 candle 27074.75-27091.25, close top third, range 0.89 ATR, vol 1.77x, net 0.61 ATR; touched CRT 1h range low.
-- 5m (closed 20:10): inside, 1 in a row inside the 20:00 candle 27074.75-27098, close top third, range 1.1 ATR, vol 5.35x, net 0.83 ATR, momentum up; rejected CRT 1h range low (closed back below), touched previous 5m low.
-- 15m (setup candle, closed 20:00): bullish engulfing, close top third, vol 1.08x; traded beyond the previous 15m high, closed above its high; touched previous 15m high.
+- 3m (entry candle, timing, closed 20:09): inside, 1 in a row inside the 20:03 candle 27074.75-27091.25, close top third, range 0.89 ATR, vol 1.77x, net 0.61 ATR; touched CRT 1h range low (stall).
+- 5m (closed 20:10): inside, 1 in a row inside the 20:00 candle 27074.75-27098, close top third, range 1.1 ATR, vol 5.35x, net 0.83 ATR, momentum up; rejected CRT 1h range low (closed back below; conflicting), touched previous 5m low (unknown).
+- 15m (setup candle, closed 20:00): bullish engulfing, close top third, vol 1.08x; traded beyond the previous 15m high, closed above its high; touched previous 15m high (breakout), confirmed rejection of previous 15m low.
 - 1h (closed 20:00): none, close top third.
 - Next swing above (R = the 1m reference stop): 15m 27099.75 (88.25 pts, 353 ticks, 24.48R); below: none found.
 - Prior candle range (R = the 1m reference stop): 1h (closed 20:00) high 27099.75 (88.25 above, 24.48R), mid 27090.875 (79.25 above, 21.98R), low 27082 (70.5 above, 19.56R), low taken, closed below it.
@@ -106,9 +106,9 @@ Summary (MNQ 1m, 08:47 ET):
 - Room below (R = the 1m reference stop): 15m swing low 26941.75 (15 pts, 2.57R), 15m swing low 26916.25 (40.5 pts, 6.93R), round number 26900 (56.75 pts, 9.72R).
 - Broker bar fields (last 3 bars, oldest first): ext.a 0.7/0.2/-0.3; ext.b.flag false/true/false; ext.b.n 5/6/0; flow.complete true/true/true; flow.ofiTrade 0.884/0.732/-0.819; flow.windows.3.delta 274/993/75; +3 more.
 - 3m (entry candle, timing, closed 08:45): none, close bottom third, range 0.58 ATR, vol 0.57x; swept the previous 3m high, closed back inside.
-- 5m (closed 08:45): bullish engulfing, close middle third, range 0.67 ATR, vol 0.72x; swept the previous 5m high, closed back inside; rejected previous 5m high (closed back below).
-- 15m (setup candle, closed 08:45): inside, 1 in a row inside the 08:15 candle 27020.75-27062.25, close middle third, range 0.7 ATR, vol 1.52x, net 0.03 ATR; rejected CRT 1h range high (closed back below); rejected 5m fvg low down (27035.75).
-- 1h (closed 08:00): none, 11 in a row inside the 04-22 20:00 candle 26848-27098, close top third, vol 1.66x; traded beyond the previous 1h high, closed above its high; broke above previous 1h high, broke above round number 27000, touched 1h swing high 27013.5, touched 15m swing high 27013.5, +1 more.
+- 5m (closed 08:45): bullish engulfing, close middle third, range 0.67 ATR, vol 0.72x; swept the previous 5m high, closed back inside; rejected previous 5m high (closed back below; long-wick rejection).
+- 15m (setup candle, closed 08:45): inside, 1 in a row inside the 08:15 candle 27020.75-27062.25, close middle third, range 0.7 ATR, vol 1.52x, net 0.03 ATR; rejected CRT 1h range high (closed back below; long-wick rejection); rejected 5m fvg low down (27035.75).
+- 1h (closed 08:00): none, 11 in a row inside the 04-22 20:00 candle 26848-27098, close top third, vol 1.66x; traded beyond the previous 1h high, closed above its high; broke above previous 1h high (plain), broke above round number 27000 (plain), touched 1h swing high 27013.5 (plain), touched 15m swing high 27013.5 (plain), +1 more.
 - 4h (closed 06:00); swept the previous 4h high, closed back inside.
 - Next swing above (R = the 1m reference stop): 15m 27079.75 (123 pts, 492 ticks, 21.06R); below: 15m 26941.75 (15 pts, 60 ticks, 2.57R), 1h 26890 (66.75 pts, 267 ticks, 11.43R).
 - Prior candle range (R = the 1m reference stop): 1h (closed 08:00) high 27048.5 (91.75 above, 15.71R), mid 26995.125 (38.25 above, 6.55R), low 26941.75 (15 below, 2.57R), high taken, closed back inside; 4h (closed 06:00) high 27013.5 (56.75 above, 9.72R), mid 26951.75 (5 below, 0.86R), low 26890 (66.75 below, 11.43R), high taken, closed back inside.
@@ -194,9 +194,9 @@ Summary (MNQ 1m, 22:19 ET):
 - This bar's close: 20+ closes in a row above prior value.
 - Broker bar fields (last 3 bars, oldest first): ext.a -0.6/1/0.5; ext.b.flag false/false/true; ext.b.n 2/3/4; flow.complete true/true/true; flow.ofiTrade 0.597/-0.954/0.294; flow.windows.3.delta -41/-63/21; +3 more.
 - 3m (entry candle, timing, closed 22:18): none, close top third, range 0.71 ATR, vol 0.4x; traded beyond the previous 3m high, closed above its high.
-- 5m (closed 22:15): none, close middle third, range 0.56 ATR, vol 0.44x; swept the previous 5m high, closed back inside; touched previous 5m high.
-- 15m (setup candle, closed 22:15): none, close middle third, range 0.71 ATR, vol 0.61x; swept the previous 15m high, closed back inside; rejected overnight high (closed back below), rejected CRT 1h range high (closed back below), rejected CRT 4h range high (closed back below), rejected previous 15m high (closed back below); rejected 5m fvg low up (27521.25).
-- 1h (closed 22:00): none, close top third, range 1 ATR, vol 0.41x; traded beyond the previous 1h high, closed above its high; broke above prior RTH high, broke above overnight high, broke above session VAH, broke above previous 1h high, +1 more.
+- 5m (closed 22:15): none, close middle third, range 0.56 ATR, vol 0.44x; swept the previous 5m high, closed back inside; touched previous 5m high (unknown).
+- 15m (setup candle, closed 22:15): none, close middle third, range 0.71 ATR, vol 0.61x; swept the previous 15m high, closed back inside; rejected overnight high (closed back below; conflicting), rejected CRT 1h range high (closed back below; plain), rejected CRT 4h range high (closed back below; plain), rejected previous 15m high (closed back below; plain); rejected 5m fvg low up (27521.25).
+- 1h (closed 22:00): none, close top third, range 1 ATR, vol 0.41x; traded beyond the previous 1h high, closed above its high; broke above prior RTH high (breakout), broke above overnight high (breakout), broke above session VAH (breakout), broke above previous 1h high (breakout), +1 more.
 - 4h (closed 22:00): outside, close top third, vol 0.33x; traded beyond the previous 4h high and low, closed above its high; rejected session POC (closed back above), rejected 15m swing low 27367 (closed back above), rejected 15m swing low 27383.75 (closed back above), rejected previous 4h low (closed back above), +14 more.
 - Next swing above (R = the 1m reference stop): none found; below: 15m 27366.75 (171.25 pts, 685 ticks, 62.18R), 1h 27344.25 (193.75 pts, 775 ticks, 70.35R), 4h 26681.75 (856.25 pts, 3425 ticks, 310.91R).
 - Prior candle range (R = the 1m reference stop): 1h (closed 22:00) high 27540 (2 above, 0.73R), mid 27498 (40 below, 14.52R), low 27456 (82 below, 29.77R), high taken, closed back inside; 4h (closed 22:00) high 27540 (2 above, 0.73R), mid 27442.125 (95.75 below, 34.77R), low 27344.25 (193.75 below, 70.35R), high taken, closed back inside.

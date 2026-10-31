@@ -149,13 +149,19 @@ const PINS = {
     'In strategy rules `htfc_*` is the candle in progress: never judge a pattern on it.',
     'Judge a pattern at its candle\'s close, on every timeframe.',
     'standalone candlestick patterns have weak evidence in general',
+    // The owner's core rule of the reaction read, verbatim, and that a reaction is never decided on alone (2026-10-31).
+    'The close determines acceptance or rejection. The wick measures the failed attempt. The body measures directional conviction. The next candle measures confirmation.',
+    'Context, never decided on alone: it needs other confirmation (the bias, the level, the count: `confluence-counting`).',
+    'The close beats the wick: a long wick closing above is no rejection; a close exactly at the level is no breakout.',
   ],
   rejection: [
     // A setup read of the composed trade (no fired strategy since the rules strategies retired).
     '**A setup read, not an entry by itself.** It is stated with the other steps\' reads and `compose_check` verifies them (`trade_lifecycle`).',
-    // A rejection is the briefing's relation; the wick, the close third and an engulfing grade it (candle-facts.js).
+    // A rejection is the briefing's relation; its reaction (candle-reaction.js, candle-reading) reads who took control,
+    // context, never the setup alone (feat/sweep-candle-control: the wick-and-close grading became the reaction read).
     '**4 Setup**: a completed candle rejects the level: the briefing\'s relation `rejected` (traded through it, closed back; read `<tf> rejected <level> up|down`).',
-    'A long wick, the close in the opposite third grade its strength (`candle-reading`; a pattern name adds none)',
+    'Its `reaction` reads who took control (`candle-reading`; the close decides acceptance, the wick the failed attempt; a pattern name adds no strength)',
+    'Context, never the setup alone: it needs other confirmation.',
     '| 3m, 5m | the entry timing only: never the setup | least |',
     '| 15m | the working structure and the session levels | more |',
     '| 1h, 4h | HTF levels (prior day, overnight, CRT) | most |',
@@ -288,7 +294,9 @@ test('basics skills: frontmatter, the sections in order, and small', () => {
     const at = ['## When to Use', '## How It Works', '## Examples'].map(h => text.indexOf(`\n${h}\n`));
     assert.ok(at.every(i => i > 0) && at[0] < at[1] && at[1] < at[2], s);
     const words = body.split(/\s+/).filter(Boolean).length;
-    assert.ok(words >= 250 && words <= 650, `${s}: ${words} words`);
+    // candle-reading carries the reaction-at-a-level read (feat/sweep-candle-control, owner-approved 2026-10-31: "This will
+    // provide useful context"): the seven reactions, their priority and their evidence, 850 words.
+    assert.ok(words >= 250 && words <= (s === 'candle-reading' ? 850 : 650), `${s}: ${words} words`);
     // The two setups also carry a timeframe table (what the setup means on 3m/5m, 15m and 1h/4h): a little more room
     // (scripts/lib/skill-caps.js, the one source the training loop's probe edits read too).
     const max = skillByteCap(s);

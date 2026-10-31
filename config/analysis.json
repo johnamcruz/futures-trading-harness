@@ -50,6 +50,7 @@
     "timeframes": [3, 5, 15, 60, 240],
     "rangeFrames": [60, 240]
   },
+  "reaction": { "wickBody": 1, "wickRange": 0.3333, "breakoutBody": 0.7, "conflict": { "15": 60 } },
   "mtf": {
     "fast": 20,
     "slow": 50,

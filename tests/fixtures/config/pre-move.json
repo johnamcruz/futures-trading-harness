@@ -305,7 +305,7 @@
    "from": "field-study.js study seed default (and field-confluence.js)"
   },
   "skillCaps.skillBytes": {
-   "value": 3459,
+   "value": 5130,
    "from": "skill-caps.js SKILL_BYTES"
   },
   "skillCaps.setupSkillBytes": {
@@ -1586,6 +1586,24 @@
     240
    ],
    "from": "trading/candle-facts.js RANGE_FRAMES"
+  },
+  "reaction.wickBody": {
+   "value": 1,
+   "from": "new in feat/sweep-candle-control (the owner's candle-reaction classification, 2026-10-31: a long-wick rejection's wick at least the body)"
+  },
+  "reaction.wickRange": {
+   "value": 0.3333,
+   "from": "new in feat/sweep-candle-control (the owner's candle-reaction classification, 2026-10-31: and at least a third of the range)"
+  },
+  "reaction.breakoutBody": {
+   "value": 0.7,
+   "from": "new in feat/sweep-candle-control (the owner's candle-reaction classification, 2026-10-31: a breakout's body ratio at least 0.70)"
+  },
+  "reaction.conflict": {
+   "value": {
+    "15": 60
+   },
+   "from": "new in feat/sweep-candle-control (the owner's candle-reaction classification, 2026-10-31: the 15m rejection read against the 1h close beyond)"
   },
   "mtf.fast": {
    "value": 20,

@@ -70,8 +70,11 @@ test('CORE: the composed bar\'s reads the gate requires (SITUATIONAL taught in t
   // the owner, 2026-10-24: "Make sure this skill is part of setup", taught in trade-lifecycle's setup list: its setup and stop
   // reads and their timing, breakout's pointer and invalidation's box stop source: +225). The owner's skip reasons
   // (feat/ppc-setup-rates: autonomous-trading's one SKIP line) fit under it with trade-session's manage-position line 3
-  // bytes shorter. It may shrink; it grows only on an owner's OK.
-  assert.ok(Buffer.byteLength(prompt) <= 74227, `the head prompt is ${Buffer.byteLength(prompt)} bytes`);
+  // bytes shorter. Then 75037 with the reaction at a level (feat/sweep-candle-control, owner-approved 2026-10-31: "This will
+  // provide useful context. Not used in isolation for decision. It needs other confirmation"): rejection's and breakout's
+  // reaction pointers (who took control, the close over the wick, context never the setup alone) and bar-briefing's
+  // `reaction` and `confirmed` fields: +873 over main's 74164. It may shrink; it grows only on an owner's OK.
+  assert.ok(Buffer.byteLength(prompt) <= 75037, `the head prompt is ${Buffer.byteLength(prompt)} bytes`);
   // Only the head trader's prompt grows: no other role's prompt embeds trade-lifecycle (the risk manager's embeds
   // confluence-counting and invalidation as before; its prompt is unchanged, pinned in trade-session-split.test.js).
   for (const [name, a] of Object.entries(index.agent)) if (name !== H.HEAD_AGENT && a.prompt) assert.ok(!a.prompt.includes('<skill name="trade-lifecycle">'), name);

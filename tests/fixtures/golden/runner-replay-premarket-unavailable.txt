@@ -169,9 +169,58 @@ read (`trend-vs-range`, `pullback-vs-reversal`) and momentum and volume
 (`momentum-and-volume`, `absorption`).
 The stack counts once (`confluence-counting`, trigger).
 
-**Evidence**: standalone candlestick patterns have weak evidence in
-general; at the 15m setup candle read its strength and close, not its
-name (an engulfing is one strong candle among others).
+**Reaction at a level** (`reaction` on `m3.candles.<tf>.relations`,
+`confirmed`: `bar-briefing`).
+  The close determines acceptance or
+rejection.
+  The wick measures the failed attempt.
+  The body measures
+directional conviction.
+  The next candle measures confirmation.
+
+Context, never decided on alone: it needs other confirmation (the bias,
+the level, the count: `confluence-counting`).
+  Read the field, never by
+eye.
+  At a high (a low: the mirror), the first that holds:
+
+1.
+  confirmed rejection: a long-wick rejection, then a bearish engulfing
+   closing lower → sellers took over, confirmed.
+2.
+  breakout: closes above, a bullish engulfing or B ≥ 0.7 R
+   (`displacement` adds strength) → buyers in control: not a sweep.
+3.
+  engulfing rejection: through, closes back below, a bearish engulfing
+   → sellers took control.
+4.
+  long-wick rejection: through, closes back below, U ≥ B and ≥ R/3
+   → sellers rejected higher prices.
+5.
+  conflicting: closes back below with a bullish body, or the 15m
+   rejects while the 1h `broke` it → mixed: wait for confirmation.
+6.
+  stall: a doji or inside candle → stalled; the next candle decides.
+7.
+  plain: none → weak, context only.
+
+The close beats the wick: a long wick closing above is no rejection; a
+close exactly at the level is no breakout.
+
+**Evidence** (15m sweeps, two halves, descriptive): standalone
+candlestick patterns have weak evidence in general; a name adds no
+strength, the reaction reads who took control.
+  Breakout read as a
+sweep: worst on both (false starts ~70%, mean R ~-0.34), skipping them
+did not raise the pass rate.
+  Long-wick alone: no edge (0.00 / -0.05 R).
+Engulfing: +0.20 / -0.11 R.
+  Confirmed: false starts 36% / 45% vs 57% /
+55%, +0.31 / +0.02 R, intervals span 0, stop ~2x wider.
+  Conflicting:
+waiting gave +0.14 / +0.06 vs -0.04 R but missed ~40-55% of the trend
+legs.
+  None has a confirmed edge.
 
 ## Examples
 
@@ -639,6 +688,10 @@ hypotheses; a missing field is `unknown`.
   beyond its previous candle's high or low and closed back inside
   (`sweep` in `m3.candles`), read as its relation
   (`15m rejected previous 15m high down`; `rejection`).
+  Its `reaction`
+  (`candle-reading`) reads who took control: a `breakout` one is a
+  breakout attempt, not a sweep.
+  Context, never decided on alone.
 - **Acceptance (breakout)**: closes beyond that hold (hypothesis: two or
   more).
   Shown as a 15m or 1h swing with `brokenAt` set

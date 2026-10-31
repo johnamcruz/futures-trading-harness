@@ -218,11 +218,11 @@ test('a probe edit: its tag (skill, finding, kind), one skill, and the owner\'s 
   assert.match(PE.styleErrors(edit('name: a\n', 'name: a\nextra: x\n'), { root }).join(), /the frontmatter is not edited/);
   assert.deepStrictEqual(PE.styleErrors(edit('# A', '# A, reworded'), { root }), [], 'the body right after it is editable');
   assert.match(PE.styleErrors(edit('- line one', '- line one, longer'), { root, kind: 'removal' }).join(), /a removal shrinks/);
-  assert.match(PE.styleErrors(edit('- line one', `- line one\n${'- grow → more\n'.repeat(300)}`), { root }).join(), new RegExp(`over its cap \\(3459 \\+ ${PE.GROW_BYTES}\\)`));
+  assert.match(PE.styleErrors(edit('- line one', `- line one\n${'- grow → more\n'.repeat(400)}`), { root }).join(), new RegExp(`over its cap \\(5130 \\+ ${PE.GROW_BYTES}\\)`));
   // Already over the cap: may grow at most GROW_BYTES past its size (room for the rule a misread needs), may shrink.
-  const big = tree(`${TEXT}${'- filler line\n'.repeat(300)}`);
+  const big = tree(`${TEXT}${'- filler line\n'.repeat(400)}`);
   assert.deepStrictEqual(PE.styleErrors(edit('- line one', '- line one, grown'), { root: big }), [], 'a few bytes past its size');
-  assert.match(PE.styleErrors(edit('- line one', `- line one\n${'- grow → more\n'.repeat(Math.ceil(PE.GROW_BYTES / 14) + 1)}`), { root: big }).join(), new RegExp(`already over 3459: it may grow at most ${PE.GROW_BYTES} past`));
+  assert.match(PE.styleErrors(edit('- line one', `- line one\n${'- grow → more\n'.repeat(Math.ceil(PE.GROW_BYTES / 14) + 1)}`), { root: big }).join(), new RegExp(`already over 5130: it may grow at most ${PE.GROW_BYTES} past`));
   // The boundary: as many style-valid lines as fit within GROW_BYTES pass; one line more is refused.
   const unit = '- grow → more\n';
   const fit = Math.floor(PE.GROW_BYTES / Buffer.byteLength(unit));
@@ -235,7 +235,7 @@ test('a probe edit: its tag (skill, finding, kind), one skill, and the owner\'s 
   fs.mkdirSync(path.join(setup, 'skills', 'rejection'), { recursive: true });
   fs.writeFileSync(path.join(setup, 'skills', 'rejection', 'SKILL.md'), TEXT);
   const grow = n => ({ ...edit('- line one', `- line one\n${'- grow → more\n'.repeat(n)}`), edits: [{ file: 'skills/rejection/SKILL.md', find: '- line one', replace: `- line one\n${'- grow → more\n'.repeat(n)}` }] });
-  assert.deepStrictEqual(PE.styleErrors(grow(220), { root: setup }), [], 'over 3459, within 4000');
+  assert.deepStrictEqual(PE.styleErrors(grow(220), { root: setup }), [], 'within its own cap, 4000 (the setups\' cap; every other skill\'s is 5130 since feat/sweep-candle-control)');
   assert.match(PE.styleErrors(grow(300), { root: setup }).join(), new RegExp(`over its cap \\(4000 \\+ ${PE.GROW_BYTES}\\)`));
 });
 

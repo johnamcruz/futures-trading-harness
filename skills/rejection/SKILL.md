@@ -38,9 +38,14 @@ By PLAN step:
    previous candle's high/low, a CRT range; `m3.candles` has them).
 - **4 Setup**: a completed candle rejects the level: the briefing's
    relation `rejected` (traded through it, closed back; read
-   `<tf> rejected <level> up|down`). A long wick, the close in the
-   opposite third grade its strength (`candle-reading`; a pattern name adds none); a
-   candle's sweep of its previous candle is one too
+   `<tf> rejected <level> up|down`). Its `reaction` reads who took
+   control (`candle-reading`; the close decides acceptance, the wick the
+   failed attempt; a pattern name adds no strength): a long-wick or
+   engulfing rejection → the other side took control, a confirmed one
+   when the next candle engulfs; conflicting → mixed, wait for
+   confirmation; stall → the next candle decides. Context, never the
+   setup alone: it needs other confirmation. A candle's sweep of its
+   previous candle is one too
    (`breakout-vs-fakeout`). After
    an HTF BOS, at the level a pullback reaches (`pullback-vs-reversal`),
    it is a continuation. Against the bias (4h + 1h): the trend rule

@@ -962,11 +962,15 @@ function candleLines(m3, et, roomOf = 'R = the reference stop', closedAt = null)
     if (!shown) continue;
     if (shown === 'sweep') { out.push(`- ${tf} (closed ${et(c.closedAt)})${sweepText(c.sweep)}.`); continue; }
     // The levels it met, strongest first as listed (candle-facts.js: at most MAX_LEVELS, the rest counted).
-    const met = Object.entries(c.levels || {}).map(([name, r]) => (r.startsWith('rejected') ? `rejected ${name} (${r.replace('rejected: ', '')})` : `${r} ${name}`));
-    if (c.moreLevels) met.push(`+${c.moreLevels} more`);
-    // The entry reads' extras (the net move, the gap relation, the inside-bar stack): on the lines the entry reads from, not the
-    // event-driven ones (4h), which keep their own byte budget.
+    // Each with its reaction (candle-reaction.js, `reactions`), and a confirmed rejection of a level its previous candle met.
+    // The entry reads' extras (the net move, the gap relation, the inside-bar stack, the reactions): on the lines the entry
+    // reads from, not the event-driven ones (4h), which keep their own byte budget (its reactions stay in the JSON).
     const extras = !(tf in EVENT_FRAMES);
+    const rx = name => (extras && c.reactions && c.reactions[name] ? c.reactions[name] : null);
+    const met = Object.entries(c.levels || {}).map(([name, r]) => (r.startsWith('rejected')
+      ? `rejected ${name} (${r.replace('rejected: ', '')}${rx(name) ? `; ${rx(name)}` : ''})` : `${r} ${name}${rx(name) ? ` (${rx(name)})` : ''}`));
+    for (const x of extras && Array.isArray(c.confirmed) ? c.confirmed : []) met.push(`confirmed rejection of ${x.name}`);
+    if (c.moreLevels) met.push(`+${c.moreLevels} more`);
     const shapeText = [`${c.pattern}${c.dir ? ` ${c.dir}` : ''}`, extras && c.insideStack && c.mother ? `${c.insideStack} in a row inside the ${et(c.mother.t)} candle ${c.mother.l}-${c.mother.h}` : null,
       c.closeLocation ? `close ${c.closeLocation} third` : null,
       c.rangeAtr !== null ? `range ${c.rangeAtr} ATR` : null, c.volRatio !== null ? `vol ${c.volRatio}x` : null,
