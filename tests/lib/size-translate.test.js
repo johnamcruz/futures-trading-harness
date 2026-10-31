@@ -178,6 +178,7 @@ test('entryPlan: the healthy cap (sizing.healthy_risk_usd) takes the composed ca
   assert.strictEqual(entryPlan(planArgs(S, 120), on({ state: { ...S.cs, balance: S.cs.start - 1, lossesToday: 0 } })).size, 4);
   assert.deepStrictEqual(riskCapOf({ capUsd: 300, healthyUsd: 200, state: { ...S.cs, lossesToday: 0 } }), { capUsd: 300, healthy: false }, 'never under the composed cap');
   assert.deepStrictEqual(riskCapOf({ capUsd: 300, healthyUsd: 0, state: { ...S.cs, lossesToday: 0 } }), { capUsd: 300, healthy: false }, 'off');
+  for (const bad of ['450', Infinity, NaN, null]) assert.deepStrictEqual(riskCapOf({ capUsd: 300, healthyUsd: bad, state: { ...S.cs, lossesToday: 0 } }), { capUsd: 300, healthy: false }, `${String(bad)}: not a finite number, off`);
 });
 
 test('entryPlan: every other limit only lowers it: the floor stretch only while healthy, near the target the floor, the broker\'s max, the selected leg, no cap the budget alone', () => {

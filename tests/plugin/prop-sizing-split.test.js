@@ -190,7 +190,7 @@ const SPLITS = {
     // went is pinned instead: `after` (in this order) comes before each of `follow` (the exempt units, the halving).
     reordered: {
       units: [RB_NEW, SZ_NEW],
-      after: ['In a prop attempt: the code\'s size, the most the $300 cap fits all in; the budget only lowers it.', 'Outside a prop attempt'],
+      after: ['In a prop attempt: the full verdict size, the code\'s number: the most the $300 cap fits all in; the budget only lowers it.', 'Outside a prop attempt'],
       follow: [RB_NEW, SZ_NEW, 'A trade marked smaller is halved: half is `floor(size / 2)`, 0 means no trade (at size 1 every halving is a skip).'],
       reason: REORDER,
     },

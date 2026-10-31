@@ -150,7 +150,8 @@ const healthyOf = policy => (policy && policy.sizing && Number.isFinite(policy.s
  * never lower than the composed cap. { capUsd, healthy: true when the healthy cap is the one in force }.
  */
 function riskCapOf({ capUsd, healthyUsd = 0, state = null }) {
-  if (capUsd > 0 && healthyUsd > capUsd && attemptHealth(state).healthy) return { capUsd: healthyUsd, healthy: true };
+  // A healthy cap that isn't a finite number is off (fail closed: the composed cap stands).
+  if (capUsd > 0 && Number.isFinite(healthyUsd) && healthyUsd > capUsd && attemptHealth(state).healthy) return { capUsd: healthyUsd, healthy: true };
   return { capUsd, healthy: false };
 }
 

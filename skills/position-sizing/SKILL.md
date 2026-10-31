@@ -12,8 +12,8 @@ description: Use when sizing a trade plan - risk per contract, the budget, the c
 
 ## How It Works
 
-In a prop attempt: the code's size, the most the $300 cap fits all in; the
-budget only lowers it. A serious factor against never cuts it; only a
+In a prop attempt: the full verdict size, the code's number: the most the
+$300 cap fits all in; the budget only lowers it. A serious factor against never cuts it; only a
 pacing rule does. Fewer than 3
 contracts (`min_contracts`) at the stop: skip (unless the floor
 stretch takes exactly 3: the Min line).
