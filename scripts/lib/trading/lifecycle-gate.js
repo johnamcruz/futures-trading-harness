@@ -62,7 +62,7 @@ const { latestVerdict } = require('./prop-state');
 const { briefingFor } = require('./fact-claims');
 const { checkReads } = require('./composed-reads');
 const { entryProblems } = require('./entry-rule');
-const { STRATEGY, readRecords, planOf, stopRuleOf, dayOf, expiryOf } = require('./trade-lifecycle');
+const { STRATEGY, readRecords, planOf, stopRuleOf, dayOf, expiryOf, validBarsOf } = require('./trade-lifecycle');
 
 const PLUGIN_ROOT = path.resolve(__dirname, '..', '..', '..');
 const SIGNAL = 'composed';
@@ -167,7 +167,7 @@ function composedRefusal({ name, strategy = null, home, root, input = {}, now = 
     if (recSymbol !== String(contractRoot(input.contractId) || '').toUpperCase()) return say(`the compose record is for ${recSymbol || 'no named contract'}, not ${contractRoot(input.contractId)}: its size is a number of its own contract; compose on the contract you trade`);
     // Valid `valid_bars` base bars after its bar's close (the strategy's; 1, the next close, when it can't be read),
     // worked out again from the bar's own briefing, and never past the record's own stamp.
-    const bars = strategy && Number.isInteger(strategy.valid_bars) && strategy.valid_bars >= 1 ? strategy.valid_bars : 1;
+    const bars = validBarsOf(strategy);
     const expiries = [rec.expiresAt, expiryOf(b, bars)].map(x => (typeof x === 'number' ? x : Date.parse(x)));
     if (!expiries.every(Number.isFinite)) return say('the compose record or its bar has no readable expiry');
     const expiry = Math.min(...expiries);
