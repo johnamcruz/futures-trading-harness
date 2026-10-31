@@ -1789,7 +1789,12 @@ median risk of the trades taken, so the share isn't comparable across stop
 widths: a change in which trades are taken can raise it while catching
 fewer legs, which is why the legs caught are gated beside it. The
 blow path's trades and mean R are checked only on a fixture change (it
-never softens); on the same fixture only its blows are gated.
+never softens); on the same fixture only its blows are gated. A drop in
+its trades is excused only by a pinned owner allowance
+(`BLOW_PATH_ALLOWANCES` in `scripts/lib/eval/goal-check.js`: exactly one,
+2026-10-31, 11 to 10 trades when its gap went from 100 to 105 ticks, the
+shipped sizing skipping an entry near the floor), and only with no blow
+more and a mean R at or below the base's; a milder mean R never is.
 The fixture's draw, the Monte Carlo and tier 2's days are pinned exactly.
 Its mutation checks (`tests/goal/tier1.goal.js`) prove it fails on a worse
 exit, a stricter entry rule, a broken size on the blow path, a minimum size

@@ -514,7 +514,7 @@
      "bleed": {
       "from": "2024-03-04",
       "sessions": 10,
-      "gapTicks": 100
+      "gapTicks": 105
      },
      "floor": {
       "ticksDay": "2024-06-03",

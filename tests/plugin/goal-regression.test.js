@@ -107,6 +107,19 @@ test('the approved baseline resets are exactly the one-time owner-approved reset
   if (BASELINE.reset) assert.ok(GC.APPROVED_RESETS.some(r => r.from === GC.fromHash(BASELINE.reset.from) && r.to === GC.fromHash(GC.gatedOf(BASELINE)) && r.why === BASELINE.reset.why), 'the committed baseline\'s reset is a pinned one');
 });
 
+// The owner-approved blow-path allowances, pinned to exactly the one of 2026-10-31 (the gap 100 -> 105 ticks: one trade
+// fewer, the shipped sizing skipping an entry near the floor). A new entry is a new owner approval: it changes this pin too.
+test('the blow-path allowances are exactly the one-time owner-approved one of 2026-10-31', () => {
+  assert.deepStrictEqual(GC.BLOW_PATH_ALLOWANCES.map(a => ({ ...a })), [{
+    what: 'blow-path trades',
+    from: '11',
+    to: '10',
+    why: 'owner-approved 2026-10-31: the blow path\'s gap 100 -> 105 ticks makes it harsher (mean R -1.583 -> -1.663); one trade fewer because the shipped sizing skips the 2024-03-15 entry near the floor: the protection working',
+    approved: '2026-10-31',
+  }]);
+  assert.ok(Object.isFrozen(GC.BLOW_PATH_ALLOWANCES) && GC.BLOW_PATH_ALLOWANCES.every(Object.isFrozen));
+});
+
 test('tier 2\'s committed baseline and the move goldens are of this fixture and the configured days', () => {
   assert.ok(BASELINE.tier2, 'a tier 2 baseline (node tests/goal/tier2-run.js --write)');
   assert.strictEqual(BASELINE.tier2.fixture, DOC.hash);

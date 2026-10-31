@@ -38,6 +38,8 @@
  *                                  accepted only when pinned in APPROVED_RESETS (fromHash of its `from`, of the new baseline's
  *                                  gatedOf as `to`, and its why), every gated metric of the new baseline a number
  *   fromHash(from), APPROVED_RESETS   the sha256 of a reset's `from` (canonical JSON); the owner-approved resets
+ *   BLOW_PATH_ALLOWANCES, allowedTradeDrop(s0, s1)   the owner-approved blow-path trade-count drops on a fixture change
+ *                                  (pinned, one-time), and whether one excuses s0 -> s1 (blows not up, mean R not milder)
  *   renderTable(rows)              the table: metric, main, this PR, allowed
  */
 
@@ -195,6 +197,32 @@ const APPROVED_RESETS = Object.freeze([
     approved: '2026-10-30',
   }),
 ]);
+// The owner-approved allowances on a fixture change's blow-path check, pinned (tests/plugin/goal-regression.test.js holds
+// this list to exactly its one entry): a fixture change never softens the blow path (its mean R never above the base's,
+// never a blow more); an entry here excuses only a drop in its trades from exactly `from` to exactly `to`, and only with
+// the blow path's blows not above the base's and its mean R at or below the base's (a milder mean R is never excused).
+// Keyed on the blow path's own numbers, not the fixture's hash: the synthetic fixture's hash moves with any later
+// change to its days' config or labels before this lands, the blow path's trade counts don't. One-time: once on the
+// base, the base's blow path has `to` trades, so the entry matches no later change. The counts are recorded as text (a
+// record of what was approved, compared with String(trades)), never a setting (tests/plugin/no-tunable-literals.test.js). The one of 2026-10-31: the blow
+// path's gap 100 -> 105 ticks (mean R -1.583 on main -> -1.6634), one trade fewer because the shipped sizing skips the
+// 2024-03-15 entry near the floor (the protection working).
+const BLOW_PATH_ALLOWANCES = Object.freeze([
+  Object.freeze({
+    what: 'blow-path trades',
+    from: '11',
+    to: '10',
+    why: 'owner-approved 2026-10-31: the blow path\'s gap 100 -> 105 ticks makes it harsher (mean R -1.583 -> -1.663); one trade fewer because the shipped sizing skips the 2024-03-15 entry near the floor: the protection working',
+    approved: '2026-10-31',
+  }),
+]);
+/** A blow-path trade-count drop the pinned allowances excuse: only exactly an entry's from -> to, blows not up, mean R not milder. */
+const allowedTradeDrop = (s0, s1, allowances = BLOW_PATH_ALLOWANCES) => Boolean(s0 && s1)
+  && Number.isFinite(s1.meanR) && Number.isFinite(s0.meanR) && s1.meanR <= s0.meanR
+  && Number.isFinite(get(s1, 'mc.blows')) && get(s1, 'mc.blows') <= get(s0, 'mc.blows')
+  && Number.isInteger(s0.trades) && Number.isInteger(s1.trades)
+  && allowances.some(a => a.what === 'blow-path trades' && a.from === String(s0.trades) && a.to === String(s1.trades));
+
 // Blows never rise, a reset included (the owner's first rule): no half, the blow path included, blows more than the base's.
 const blowProblems = (base, next, what) => halvesOf(base).flatMap(half => {
   const was = get(base.halves[half], 'mc.blows');
@@ -232,7 +260,7 @@ function resetBaseline(base, now, { why, at, commit = null, approved = APPROVED_
 }
 
 // `approved` is APPROVED_RESETS; the unit tests pass their own to exercise the rule on synthetic baselines.
-function riseProblems(base, next, { approved = APPROVED_RESETS } = {}) {
+function riseProblems(base, next, { approved = APPROVED_RESETS, allowances = BLOW_PATH_ALLOWANCES } = {}) {
   if (!base || !next) return [];
   // An owner-approved reset of the same fixture, new in `next`: accepted once (it replaces the base's numbers exactly).
   const reset = resetProblems(base, next, approved);
@@ -246,7 +274,7 @@ function riseProblems(base, next, { approved = APPROVED_RESETS } = {}) {
     const out = blowProblems(base, next, 'a fixture change');
     const s0 = base.halves.S;
     const s1 = (next.halves || {}).S;
-    if (s0 && !(s1 && s1.meanR <= s0.meanR && s1.trades >= s0.trades)) out.push(`the blow path: ${s1 ? `${s1.trades} trades, mean R ${s1.meanR}` : 'gone'} in the new fixture's baseline, ${s0.trades} trades and ${s0.meanR} on the base branch: a fixture change never softens it`);
+    if (s0 && !(s1 && s1.meanR <= s0.meanR && (s1.trades >= s0.trades || allowedTradeDrop(s0, s1, allowances)))) out.push(`the blow path: ${s1 ? `${s1.trades} trades, mean R ${s1.meanR}` : 'gone'} in the new fixture's baseline, ${s0.trades} trades and ${s0.meanR} on the base branch: a fixture change never softens it`);
     return out;
   }
   const out = [];
@@ -269,4 +297,4 @@ function renderTable(rows) {
   return [line(head), line(w.map(x => '-'.repeat(x))), ...body.map(line)].join('\n');
 }
 
-module.exports = { CI_FIXTURE, REAL_FIXTURE, KINDS, fixtureSet, kindOf, blockOf, GATED, loadFixture, evaluate, summary, compare, regressions, gatedOf, fromHash, APPROVED_RESETS, resetBaseline, resetProblems, riseProblems, renderTable };
+module.exports = { BLOW_PATH_ALLOWANCES, allowedTradeDrop, CI_FIXTURE, REAL_FIXTURE, KINDS, fixtureSet, kindOf, blockOf, GATED, loadFixture, evaluate, summary, compare, regressions, gatedOf, fromHash, APPROVED_RESETS, resetBaseline, resetProblems, riseProblems, renderTable };

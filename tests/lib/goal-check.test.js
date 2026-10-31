@@ -41,6 +41,26 @@ test('riseProblems: a baseline only improves on the same fixture; a new fixture 
   assert.match(GC.riseProblems(withS({}), moved(doc())).join(), /half S combine blows: undefined|the blow path: gone/);
 });
 
+test('the blow path\'s pinned trade-count allowance: exactly its from -> to, blows not up, mean R not milder; nothing else', () => {
+  const withS = s => ({ ...doc(), halves: { ...doc().halves, S: { trades: 11, meanR: -1.583, mc: { blows: 0 }, ...s } } });
+  const moved = n => ({ ...n, fixture: 'f2', fixtureChange: { from: 'f1', why: 'the blow path harsher' } });
+  const base = withS({});
+  // The approved case: 11 -> 10 trades, mean R harsher, no blow more.
+  assert.deepStrictEqual(GC.riseProblems(base, moved(withS({ trades: 10, meanR: -1.6634 }))), []);
+  // Any other drop, a milder mean R, or a blow more: refused.
+  assert.match(GC.riseProblems(base, moved(withS({ trades: 9, meanR: -1.7 }))).join(), /the blow path: 9 trades/);
+  assert.match(GC.riseProblems(base, moved(withS({ trades: 10, meanR: -1.459 }))).join(), /the blow path: 10 trades, mean R -1.459 .* never softens it/);
+  assert.match(GC.riseProblems(base, moved(withS({ trades: 10, meanR: -1.6634, mc: { blows: 1 } }))).join(), /half S combine blows: 1/);
+  assert.strictEqual(GC.allowedTradeDrop({ trades: 11, meanR: -1.583, mc: { blows: 0 } }, { trades: 10, meanR: -1.6634, mc: { blows: 1 } }), false, 'a blow more is never excused');
+  assert.strictEqual(GC.allowedTradeDrop({ trades: 11, meanR: -1.583, mc: { blows: 0 } }, { trades: 10, meanR: null, mc: { blows: 0 } }), false, 'a missing mean R is never excused');
+  // Only from exactly the pinned count: a base of 12 dropping to 11 or 10 is no allowance.
+  assert.match(GC.riseProblems(withS({ trades: 12 }), moved(withS({ trades: 11, meanR: -1.7 }))).join(), /never softens it/);
+  // Without the allowance (an empty list) the same drop is refused: the allowance is what passes it.
+  assert.match(GC.riseProblems(base, moved(withS({ trades: 10, meanR: -1.6634 })), { allowances: [] }).join(), /never softens it/);
+  // The same fixture never needs it: only blows are gated there, as before.
+  assert.deepStrictEqual(GC.riseProblems(base, withS({ trades: 10, meanR: -1.6634 })), []);
+});
+
 test('resetBaseline: an owner-approved reset writes a lower baseline with the reset recorded, accepted once; never a blow more', () => {
   const base = doc();
   const lower = doc({ meanR: -0.4, mc: { pass: 0.05, blows: 0 } }, { caught: { share: -0.01, caught: 1, legs: 9 } });
