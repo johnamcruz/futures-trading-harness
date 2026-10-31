@@ -68,8 +68,15 @@ rejection. The wick measures the failed attempt. The body measures
 directional conviction. The next candle measures confirmation.
 
 Context, never decided on alone: it needs other confirmation (the bias,
-the level, the count: `confluence-counting`). Read the field, never by
-eye. At a high (a low: the mirror), the first that holds:
+the level, the count: `confluence-counting`). Read it at that moment
+against all the briefing shows: the bias (4h + 1h), the level (its
+timeframe and kind), where price is in the move (a pullback or an
+extension), momentum and volume, the other timeframes' reactions. The
+same reaction differs by context: a long-wick rejection at a pullback
+level with the bias → continuation (`pullback-vs-reversal`); the same
+candle against the 4h + 1h → the trend rule refuses it (never counter;
+`trend-vs-range`).
+Read the field, never by eye. At a high (a low: the mirror), the first that holds:
 
 1. confirmed rejection: a long-wick rejection, then a bearish engulfing
    closing lower → sellers took over, confirmed.
@@ -80,12 +87,16 @@ eye. At a high (a low: the mirror), the first that holds:
 4. long-wick rejection: through, closes back below, the wick above
    the level ≥ B and ≥ R/3 → sellers rejected higher prices.
 5. conflicting: closes back below with a bullish body, or the 15m
-   rejects while the 1h `broke` it → mixed: wait for confirmation.
-6. stall: a doji or inside candle → stalled; the next candle decides.
+   rejects while the 1h `broke` it → mixed: needs other confirmation
+   (the count, or the next candle).
+6. stall: a doji (never conflicting) or inside candle → stalled; the
+   next candle decides.
 7. plain: none → weak, context only.
 
 The close beats the wick: a long wick closing above is no rejection; a
-close exactly at the level is no breakout.
+close exactly at the level is no breakout. The relation is by the body,
+the reaction by the close and strength (the close decides): a `touched`
+can read `breakout`.
 
 **Evidence** (15m sweeps, two halves, descriptive): standalone
 candlestick patterns have weak evidence in general; a name adds no

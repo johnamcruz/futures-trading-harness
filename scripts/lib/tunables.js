@@ -234,7 +234,7 @@ const PINS = deepFreeze({
     'screen.gainAlpha': 0.1, 'screen.harmAlpha': 0.2, 'screen.minDiscordant': 4, 'screen.minPairs': 10, 'screen.minEffect': 0.1, 'exitScreen.epsR': 0.05, 'exitScreen.runnerMfeR': 3,
     'loop.limits.maxIterations.max': 100, 'loop.limits.maxModelCalls.max': 100000, 'loop.limits.maxWallMinutes.max': 10080,
     'proposal.maxEdits': 3, 'proposal.maxText': 2000, 'proposal.maxChanged': 3000, 'looks.maxArms': 3,
-    'skillCaps.skillBytes': 3459, 'skillCaps.setupSkillBytes': 4000, 'skillCaps.perSkill.candle-reading': 5182,
+    'skillCaps.skillBytes': 3459, 'skillCaps.setupSkillBytes': 4000, 'skillCaps.perSkill.candle-reading': 5825,
     'goalRegression.tolerance.passRate': 0.005, 'goalRegression.tolerance.meanR': 0.005, 'goalRegression.tolerance.rCaught': 0,
     'goalRegression.tier2.tolerance.trades': 0, 'goalRegression.tier2.tolerance.totalR': 0.05, 'goalRegression.tier2.tolerance.fills': 0, 'goalRegression.tier2.tolerance.moveShare': 0, 'goalRegression.tier2.maxLossR': 1.25,
     'goalRegression.seed': 1, 'goalRegression.split': '2022-11-23', 'goalRegression.blocksPerHalf': 3, 'goalRegression.blockSessions': 5, 'goalRegression.trendPerHalf': 8,

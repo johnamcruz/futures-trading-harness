@@ -27,9 +27,9 @@ test('after a high: each reaction', () => {
   // Long wick: traded above 100, closed back below; the wick beyond the level 3 >= B 1 and >= R/3 (5.5 / 3). Its
   // bullish body would be conflicting, but the long wick ranks first.
   assert.strictEqual(at(k(98, 103, 97.5, 99), up), 'long-wick rejection');
-  // The wick is measured beyond the level: the whole upper wick (3.2) qualifies (>= B 0.3, >= R/3 1.23), but the part
+  // The wick is measured beyond the level: the whole upper wick (2.9) qualifies (>= B 0.6, >= R/3 1.33), but the part
   // above 100 (0.5) is under a third of the range: no long-wick rejection (its bullish body: conflicting).
-  const shallow = k(97, 100.5, 96.8, 97.3);
+  const shallow = k(97, 100.5, 96.5, 97.6);
   assert.ok(shallow.h - Math.max(shallow.o, shallow.c) >= (shallow.h - shallow.l) / 3, 'the whole wick would qualify');
   assert.strictEqual(at(shallow, up), 'conflicting');
   assert.ok(!R.isLongWick(shallow, L, 'below'));
@@ -122,24 +122,24 @@ test('missing data: no label (unknown), never a guess', () => {
   assert.strictEqual(at(k(95, 96, 94, 95.5), prev), null);
 });
 
-test('reactionsOf: each relation carries its reaction, the 15m reads the 1h\'s relation to the same level, a confirmed level the candle missed is listed', () => {
+test('levelReactionsOf: each relation carries its reaction, the 15m reads the 1h\'s relation to the same level, a confirmed level the candle missed is listed', () => {
   const wick = k(98, 103, 97.5, 99);
   const c = k(99.5, 99.75, 95, 96);
   const found = [{ name: 'round number 96', price: 96, rel: 'touched', dir: null }];
   const out = { '1h': { relations: [] } };
-  const r = CF.reactionsOf({ m: 15, c, prev: wick, pp: 97, patterns: CF.patternsOf(c, wick), found, prevAll: [['prior RTH high', 100], ['far', 500]] }, out);
-  assert.deepStrictEqual(r.confirmed, [{ name: 'prior RTH high', price: 100, dir: 'down' }]);
+  const r = CF.levelReactionsOf({ m: 15, c, prev: wick, pp: 97, patterns: CF.patternsOf(c, wick), found, prevAll: [['prior RTH high', 100], ['far', 500]] }, out);
+  assert.deepStrictEqual(r.confirmed, [{ name: 'prior RTH high', price: 100, dir: 'down', text: 'prior RTH high 100' }]);
   assert.strictEqual(r.relations[0].reaction, r.reactions['round number 96']);
   // The 1h missing: a 15m rejection that the 1h would decide is unknown.
   const c2 = k(99.8, 100.4, 98, 98.4);
   const prev2 = k(99, 99.5, 97, 98);
   const one = [{ name: 'prior RTH high', price: 100, rel: 'rejected', dir: 'down' }];
-  const of = o => CF.reactionsOf({ m: 15, c: c2, prev: prev2, pp: 97, patterns: CF.patternsOf(c2, prev2), found: one, prevAll: [] }, o).reactions['prior RTH high'];
+  const of = o => CF.levelReactionsOf({ m: 15, c: c2, prev: prev2, pp: 97, patterns: CF.patternsOf(c2, prev2), found: one, prevAll: [] }, o).reactions['prior RTH high'];
   assert.strictEqual(of({ '1h': { unavailable: 'x' } }), 'unknown');
   assert.strictEqual(of({ '1h': { relations: [{ name: 'prior RTH high', rel: 'broke', dir: 'up' }] } }), 'conflicting');
   assert.strictEqual(of({ '1h': { relations: [] } }), 'plain');
   // A frame not checked against another (the 3m): the 1h is never read.
-  assert.strictEqual(CF.reactionsOf({ m: 3, c: c2, prev: prev2, pp: 97, patterns: [], found: one, prevAll: [] }, {}).reactions['prior RTH high'], 'plain');
+  assert.strictEqual(CF.levelReactionsOf({ m: 3, c: c2, prev: prev2, pp: 97, patterns: [], found: one, prevAll: [] }, {}).reactions['prior RTH high'], 'plain');
 });
 
 test('briefing candles: every level relation carries a reaction label', () => {
@@ -152,4 +152,45 @@ test('briefing candles: every level relation carries a reaction label', () => {
     for (const r of c.relations) { n += 1; assert.ok(R.REACTIONS.includes(r.reaction), JSON.stringify(r)); assert.strictEqual(c.reactions[r.name], r.reaction); }
   }
   assert.ok(n > 0);
+});
+
+test('a doji is never conflicting: its with-side body is noise, it stalls', () => {
+  const doji = k(99.5, 100.4, 99, 99.51); // B 0.01 of R 1.4; the wick above 100 (0.4) under R/3: no long wick
+  assert.ok(CF.patternsOf(doji, k(97, 99, 96, 98)).includes('doji'));
+  assert.strictEqual(at(doji, k(97, 99, 96, 98)), 'stall');
+  assert.strictEqual(at(doji, k(97, 99, 96, 98), { higher: { relation: 'broke', dir: 'up' } }), 'stall', 'nor by the 1h');
+  assert.strictEqual(at(doji, k(97, 99, 96, 98), { higher: null }), 'stall', 'the 1h unknown never decides a doji');
+});
+
+test('confirmed: a relative level is said as the previous candle met it, with its price; deduplicated by price, never by name', () => {
+  // 15m A (high 110), B a long-wick rejection of 110, C a bearish engulfing closing lower. For C, its own
+  // `previous 15m high` is B's 113: the confirmed level is A's high, said as "the 15m high 110".
+  const A = k(105, 110, 104, 107);
+  const B = k(106.5, 113, 106, 108);
+  const C = k(108.5, 109.5, 102.5, 103);
+  assert.ok(R.isLongWick(B, 110, 'below'));
+  const patterns = CF.patternsOf(C, B);
+  const ownLevels = [{ name: 'previous 15m low', price: 106, rel: 'touched', dir: null }];
+  const r = CF.levelReactionsOf({ m: 15, c: C, prev: B, pp: A.c, patterns, found: ownLevels, prevAll: [['previous 15m high', 110], ['previous 15m low', 104], ['prior RTH high', 110]] }, { '1h': { relations: [] } });
+  assert.deepStrictEqual(r.confirmed, [{ name: 'previous 15m high', price: 110, dir: 'down', text: 'the 15m high 110' }], 'once: the prior RTH high at the same price is the same level');
+  assert.strictEqual(CF.confirmedText('prior RTH high', 110), 'prior RTH high 110');
+  // A level this candle met at the same price, under another name: its own relation carries it, not `confirmed`.
+  const met = CF.levelReactionsOf({ m: 15, c: C, prev: B, pp: A.c, patterns, found: [{ name: 'IB high', price: 110, rel: 'touched', dir: null }], prevAll: [['previous 15m high', 110]] }, { '1h': { relations: [] } });
+  assert.strictEqual(met.confirmed, undefined);
+  // The rendered line names it with its price.
+  const B2 = require('../../scripts/lib/trading/briefing');
+  const line = B2.candleLines({ candles: { '15m': { closedAt: '2026-06-15T14:00:00.000Z', pattern: 'bearish engulfing', closeLocation: 'bottom', rangeAtr: null, volRatio: null, sweep: null, levels: {}, reactions: {}, confirmed: r.confirmed } }, swingTargets: { above: [], below: [] } }, v => v)[0];
+  assert.match(line, /confirmed rejection of the 15m high 110/);
+  assert.ok(!/previous 15m high/.test(line), line);
+});
+
+test('the rendered reaction: a touch closing beyond says so ("closed beyond: breakout"); a broke that is plain stays plain', () => {
+  const B2 = require('../../scripts/lib/trading/briefing');
+  const c = { closedAt: '2026-06-15T14:00:00.000Z', pattern: 'none', closeLocation: 'top', rangeAtr: null, volRatio: null, sweep: null,
+    levels: { 'session POC': 'touched', 'VWAP (rth)': 'broke above', 'overnight high': 'rejected: closed back below' },
+    reactions: { 'session POC': 'breakout', 'VWAP (rth)': 'plain', 'overnight high': 'long-wick rejection' } };
+  const line = B2.candleLines({ candles: { '15m': c }, swingTargets: { above: [], below: [] } }, v => v)[0];
+  assert.match(line, /touched session POC \(closed beyond: breakout\)/);
+  assert.match(line, /broke above VWAP \(rth\) \(plain\)/);
+  assert.match(line, /rejected overnight high \(closed back below; long-wick rejection\)/);
 });

@@ -21,7 +21,7 @@
  *   conflicting           traded beyond L, closed back inside, and its body is with the push (bullish after a high), or
  *                         (a frame checked against a higher one: the 15m against the 1h) the higher frame's last completed
  *                         candle broke L the push's way (candle-facts `broke`: closed beyond, most of the body beyond)
- *   stall                 a doji or an inside candle at L
+ *   stall                 a doji or an inside candle at L (a doji is never conflicting: its body is noise)
  *   plain                 met L, none of the above
  *   unknown               the read can't be made (fail closed): a candle or level not finite, no previous candle, no
  *                         side, or the higher frame unknown where it would decide
@@ -38,6 +38,7 @@
  */
 
 const RE = require('../tunables').analysis().reaction; // config/analysis.json reaction: the thresholds
+// wickRange 0.3333 stands for 1/3 (config holds no fraction; a wick of exactly a third still passes).
 const DEF = Object.freeze({ wickBody: RE.wickBody, wickRange: RE.wickRange, breakoutBody: RE.breakoutBody });
 
 const REACTIONS = Object.freeze(['confirmed rejection', 'breakout', 'engulfing rejection', 'long-wick rejection', 'conflicting', 'stall', 'plain', 'unknown']);
@@ -103,7 +104,8 @@ function reactionOf({ c, prev = null, level, patterns = [], prevPrevClose = NaN,
   if (x.beyond && (patterns.includes(x.withEngulf) || (x.R > 0 && x.B >= def.breakoutBody * x.R))) return 'breakout';
   if (x.through && x.back && patterns.includes(x.oppEngulf)) return 'engulfing rejection';
   if (isLongWick(c, level, side, def)) return 'long-wick rejection';
-  if (x.through && x.back) {
+  // A doji's with-side body is noise: it reads stall, never conflicting.
+  if (x.through && x.back && !patterns.includes('doji')) {
     const broke = Boolean(higher) && higher.relation === 'broke' && higher.dir === (x.up ? 'up' : 'down');
     if (x.withBody || broke) return 'conflicting';
     if (higher === null) return 'unknown';

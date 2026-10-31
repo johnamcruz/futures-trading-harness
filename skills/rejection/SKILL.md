@@ -42,8 +42,9 @@ By PLAN step:
    control (`candle-reading`; the close decides acceptance, the wick the
    failed attempt; a pattern name adds no strength): a long-wick or
    engulfing rejection → the other side took control, a confirmed one
-   when the next candle engulfs; conflicting → mixed, wait for
-   confirmation; stall → the next candle decides. Context, never the
+   when the next candle engulfs; conflicting → mixed: needs other
+   confirmation (the count, or the next candle); stall → the next candle
+   decides. Context, never the
    setup alone: it needs other confirmation. A candle's sweep of its
    previous candle is one too
    (`breakout-vs-fakeout`). After

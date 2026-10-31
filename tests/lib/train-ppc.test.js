@@ -242,8 +242,8 @@ test('a probe edit: its tag (skill, finding, kind), one skill, and the owner\'s 
   fs.mkdirSync(path.join(own, 'skills', 'candle-reading'), { recursive: true });
   fs.writeFileSync(path.join(own, 'skills', 'candle-reading', 'SKILL.md'), TEXT);
   const growCr = n => ({ ...edit('- line one', `- line one\n${'- grow → more\n'.repeat(n)}`), edits: [{ file: 'skills/candle-reading/SKILL.md', find: '- line one', replace: `- line one\n${'- grow → more\n'.repeat(n)}` }] });
-  assert.deepStrictEqual(PE.styleErrors(growCr(280), { root: own }), [], 'over 3459 and 4000, within its own 5182');
-  assert.match(PE.styleErrors(growCr(400), { root: own }).join(), new RegExp(`over its cap \\(5182 \\+ ${PE.GROW_BYTES}\\)`));
+  assert.deepStrictEqual(PE.styleErrors(growCr(280), { root: own }), [], 'over 3459 and 4000, within its own 5825');
+  assert.match(PE.styleErrors(growCr(400), { root: own }).join(), new RegExp(`over its cap \\(5825 \\+ ${PE.GROW_BYTES}\\)`));
 });
 
 test('findings: the skills with the most misreads, misses and wrong-reason refusals first; refusals credited to the reads at their bar', () => {

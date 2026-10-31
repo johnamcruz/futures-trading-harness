@@ -466,12 +466,12 @@ test('trade-session split: no head-trader path reads more than the base\'s every
 // [bracket-leg] and [bracket-only] rows); every other role unchanged.
 // Then the reaction at a level (feat/sweep-candle-control, owner-approved 2026-10-31: "This will provide useful context.
 // Not used in isolation for decision"): bar-briefing's field list names each relation's `reaction` and `confirmed`
-// (+270 in every role that embeds it); the market-structure analyst +2757 in full mode over main's 88956 (that, and
-// candle-reading's reaction section, rejection's and breakout's reaction pointers, embedded there; the pin +1535), the
+// (+270 in every role that embeds it); the market-structure analyst +3438 in full mode over main's 88956 (that, and
+// candle-reading's reaction section, rejection's and breakout's reaction pointers, embedded there, with the owner's "understand the context at that particular time" line; the pin +2216), the
 // volume-liquidity analyst +270 each mode over main's 48336 and 32968 (the pins +111 and +263); every other role within
 // its pin.
 const ROLE_PROMPTS = {
-  full: { 'market-structure-analyst': 91713, 'news-calendar-analyst': 10182, 'risk-manager': 92762, 'strategy-researcher': 25650, 'trade-executor': 30492, 'trade-reviewer': 9454, 'trend-momentum-analyst': 54540, 'volume-liquidity-analyst': 48606 },
+  full: { 'market-structure-analyst': 92394, 'news-calendar-analyst': 10182, 'risk-manager': 92762, 'strategy-researcher': 25650, 'trade-executor': 30492, 'trade-reviewer': 9454, 'trend-momentum-analyst': 54540, 'volume-liquidity-analyst': 48606 },
   index: { 'market-structure-analyst': 43175, 'news-calendar-analyst': 10182, 'risk-manager': 78639, 'strategy-researcher': 25650, 'trade-executor': 30481, 'trade-reviewer': 9454, 'trend-momentum-analyst': 40023, 'volume-liquidity-analyst': 33238 },
 };
 

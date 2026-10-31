@@ -968,8 +968,10 @@ function candleLines(m3, et, roomOf = 'R = the reference stop', closedAt = null)
     const extras = !(tf in EVENT_FRAMES);
     const rx = name => (extras && c.reactions && c.reactions[name] ? c.reactions[name] : null);
     const met = Object.entries(c.levels || {}).map(([name, r]) => (r.startsWith('rejected')
-      ? `rejected ${name} (${r.replace('rejected: ', '')}${rx(name) ? `; ${rx(name)}` : ''})` : `${r} ${name}${rx(name) ? ` (${rx(name)})` : ''}`));
-    for (const x of extras && Array.isArray(c.confirmed) ? c.confirmed : []) met.push(`confirmed rejection of ${x.name}`);
+      ? `rejected ${name} (${r.replace('rejected: ', '')}${rx(name) ? `; ${rx(name)}` : ''})`
+      // A touch whose close was beyond the level (the relation is by the body, the reaction by the close): said so.
+      : `${r} ${name}${rx(name) ? ` (${r === 'touched' && rx(name) === 'breakout' ? 'closed beyond: breakout' : rx(name)})` : ''}`));
+    for (const x of extras && Array.isArray(c.confirmed) ? c.confirmed : []) met.push(`confirmed rejection of ${x.text || `${x.name} ${x.price}`}`);
     if (c.moreLevels) met.push(`+${c.moreLevels} more`);
     const shapeText = [`${c.pattern}${c.dir ? ` ${c.dir}` : ''}`, extras && c.insideStack && c.mother ? `${c.insideStack} in a row inside the ${et(c.mother.t)} candle ${c.mother.l}-${c.mother.h}` : null,
       c.closeLocation ? `close ${c.closeLocation} third` : null,
@@ -1160,5 +1162,5 @@ function removeFrameBriefing(home, root, minutes) {
 module.exports = { htfTrendsOf,
   SECTIONS, WINDOWS, nextClose, nextRthRoll, sessionWindow, newsState, buildBriefing, candidate, current, renderBriefing, briefingFile, writeBriefing, readBriefing, removeBriefing,
   roundNumbers, sharedParts, buildFrameBriefing, frameHolds, frameUntil, wholeBars, renderFrameBriefing, frameBriefingFile, writeFrameBriefing, readFrameBriefing, removeFrameBriefing,
-  gapText,
+  gapText, candleLines,
 };

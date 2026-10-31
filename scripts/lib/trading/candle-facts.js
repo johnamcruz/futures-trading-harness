@@ -464,7 +464,7 @@ const ENTRY_TF = (C => C.chainOf(C.SHIPPED).entry)(require('./chain'));
 function briefingCandles({ bars, base, fine = null, levelsAt = () => [], zonesAt = null, roundStep = null, crtFrames = [60, 240], timeframes = TIMEFRAMES }) {
   const i = bars.length - 1;
   const out = {};
-  const pending = []; // per frame built, what its reactions need (reactionsOf, once every frame is in)
+  const pending = []; // per frame built, what its reactions need (levelReactionsOf, once every frame is in)
   const closeOf = k => Date.parse(bars[k].t) + base * 60000;
   const closedAt = i >= 0 ? closeOf(i) : NaN;
   const fineBars = Array.isArray(fine) ? fine.filter(b => Date.parse(b.t) + 60000 <= closedAt) : null;
@@ -551,23 +551,26 @@ function briefingCandles({ bars, base, fine = null, levelsAt = () => [], zonesAt
       ...(found.length > MAX_LEVELS ? { moreLevels: found.length - MAX_LEVELS } : {}),
       // Every relation, structured and uncapped (the text above keeps MAX_LEVELS): what the composed-entry reads checker
       // (composed-reads.js) verifies against. Never rendered (briefing.js detailEntries and candleLines leave it out).
-      relations: found.map(x => ({ name: x.name, price: x.price, rel: x.rel, dir: x.dir })),  // + reaction (reactionsOf)
+      relations: found.map(x => ({ name: x.name, price: x.price, rel: x.rel, dir: x.dir })),  // + reaction (levelReactionsOf)
       // How it met the fair value gaps' edges ('<tf> fvg low|high', fvg-frames.js fvgEdgesAt), uncapped and never
       // rendered either: the composed-entry FVG reads verify against it. Only when the caller gives the gaps.
       ...(zonesAt ? { fvgRelations: zones } : {}),
     };
     pending.push({ m, c, prev, pp: j > 1 ? s.candles[j - 2].c : NaN, patterns: f.patterns, found, prevAll });
   }
-  for (const x of pending) Object.assign(out[label(x.m)], reactionsOf(x, out));
+  for (const x of pending) Object.assign(out[label(x.m)], levelReactionsOf(x, out));
   return out;
 }
+
+/** A confirmed level named as the previous candle met it, with its price: `previous 15m high` there is `the 15m high 110`. */
+const confirmedText = (name, price) => (/^previous /.test(name) ? `the ${name.replace(/^previous /, '')} ${price}` : `${name} ${price}`);
 
 /**
  * A candle's reactions (candle-reaction.js) at the levels it met, on its relations (and `reactions`, by level, the
  * rendered text's), and `confirmed`: the confirmed rejections of levels its previous candle met that it didn't. A frame
  * checked against a higher one (CONFLICT) reads that frame's relation to the same level; the frame missing: unknown.
  */
-function reactionsOf({ m, c, prev, pp, patterns, found, prevAll }, out) {
+function levelReactionsOf({ m, c, prev, pp, patterns, found, prevAll }, out) {
   const hm = CONFLICT[String(m)];
   const hc = hm ? out[label(hm)] : undefined;
   const higherOf = name => {
@@ -577,10 +580,13 @@ function reactionsOf({ m, c, prev, pp, patterns, found, prevAll }, out) {
     return r ? { relation: r.rel, dir: r.dir } : { relation: 'none', dir: null };
   };
   const relations = found.map(x => ({ name: x.name, price: x.price, rel: x.rel, dir: x.dir, reaction: reactionOf({ c, prev, level: x.price, patterns, prevPrevClose: pp, higher: higherOf(x.name) }) }));
+  // The previous candle's levels are named as they stood for it: a relative one (its `previous <tf> high`) is another
+  // price for this candle, so each is said with its price (as the previous candle met it), and deduplicated against this
+  // candle's own levels and each other by price, never by name.
   const confirmed = [];
   for (const [name, price] of prevAll) {
-    if (found.some(x => x.name === name) || confirmed.some(x => x.name === name) || !Number.isFinite(price)) continue;
-    if (reactionOf({ c, prev, level: price, patterns, prevPrevClose: pp }) === 'confirmed rejection') confirmed.push({ name, price, dir: c.c < prev.c ? 'down' : 'up' });
+    if (!Number.isFinite(price) || found.some(x => x.price === price) || confirmed.some(x => x.price === price)) continue;
+    if (reactionOf({ c, prev, level: price, patterns, prevPrevClose: pp }) === 'confirmed rejection') confirmed.push({ name, price, dir: c.c < prev.c ? 'down' : 'up', text: confirmedText(name, price) });
   }
   return { relations, reactions: Object.fromEntries(relations.map(x => [x.name, x.reaction])), ...(confirmed.length ? { confirmed } : {}) };
 }
@@ -712,5 +718,5 @@ function completedCandlesAt({ bars, base, fine = null, minutes, at = bars.length
 module.exports = {
   TIMEFRAMES, DEF, LABELS, MAX_LEVELS, LEVEL_ORDER, label, completedSeries, shape, closeLocation, patternsOf, patternLabel, relation,
   candleSeries, relationSeries, swingTargetSeries, holdingSwingsAt, briefingCandles, briefingTargets, RELATION_TEXT,
-  prevSweep, RANGE_FRAMES, briefingRangeTargets, completedCandlesAt, gapRelation, insideStackOf, insideStacks, factsOf, reactionsOf,
+  prevSweep, RANGE_FRAMES, briefingRangeTargets, completedCandlesAt, gapRelation, insideStackOf, insideStacks, factsOf, levelReactionsOf, confirmedText,
 };

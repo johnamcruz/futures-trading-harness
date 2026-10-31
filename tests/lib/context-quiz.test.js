@@ -42,28 +42,32 @@ test('grading: the ANSWER line, the required terms, and a forbidden term only wh
   assert.ok(Q.gradeAnswer(QUIZ, q('q1'), 'ANSWER: it depends').unsure);
 });
 
-test('the reaction questions (q23-q29, feat/sweep-candle-control): answer-first keys pass the right answer, refuse the wrong ones', () => {
+test('the reaction questions (q23-q30, feat/sweep-candle-control): answer-first keys pass the right answer, refuse the wrong ones', () => {
   const cases = {
     // A reaction alone takes no trade: it needs other confirmation.
-    q23: [['No: a reaction is context, it needs other confirmation (bias, level, the count).', 'Pass: nothing else lines up.'],
+    q23: [['No: a reaction is context, it needs other confirmation (bias, level, the count).', 'Pass: nothing else lines up.', 'Not on the reaction alone.', 'Not by itself: it needs the count.'],
       ['Yes, the long wick is enough.', 'Take it: sellers rejected the high.', 'Enter short on the rejection.']],
     // The close decides: a close above is acceptance.
-    q24: [['Acceptance: the close decides, never the wick.', 'Accepted, not a rejection: it closed above the high.'],
-      ['Rejection: the long wick.', 'A long-wick rejection.', 'Rejected, the wick failed above.', "It's a rejection of the high."]],
+    q24: [['Acceptance: the close decides, never the wick.', 'Accepted, not a rejection: it closed above the high.', 'Not a rejection: acceptance.', 'Not rejection, acceptance: it closed above.'],
+      ['Rejection: the long wick.', 'A long-wick rejection.', 'Rejected, the wick failed above.', "It's a rejection of the high.", 'Not acceptance: a rejection.']],
     // A long-wick rejection after a high: sellers.
-    q25: [['Sellers: they rejected higher prices.', 'The sellers took control.'],
-      ['Buyers, they pushed above the high.', 'Neither, but buyers took control of the wick.']],
+    q25: [['Sellers: they rejected higher prices.', 'The sellers took control.', 'Sellers took control, not buyers.'],
+      ['Buyers, they pushed above the high.', 'Neither, but buyers took control of the wick.', 'Sellers? No, buyers took control.', 'Sellers? Buyers held it.', 'Sellers, no: buyers.']],
     // A strong close beyond: a breakout attempt, not a sweep.
     q26: [['Breakout: closed beyond with a 0.8 body, not a sweep.', 'A breakout attempt, buyers in control.'],
       ['Sweep of the high.', "It's a sweep, the wick traded above.", 'A sweep.']],
-    q27: [['Confirmed rejection: sellers took over and confirmed it.', 'A confirmed rejection on the second candle.'],
-      ['Breakout down.', 'Stall: the next candle decides.', 'Conflicting.']],
-    // Conflicting: mixed, wait.
-    q28: [['No: mixed evidence, wait for confirmation.', 'Wait for the next candle.', 'Not yet: conflicting.'],
-      ['Yes, it closed back below.', 'Sellers are in control.']],
-    // A stall: the next candle decides.
-    q29: [['The next candle decides.', 'Next 15m candle.'],
-      ['The doji itself.', 'This candle decides.', 'Sellers.', 'Buyers decide.']],
+    // The second candle: a confirmed rejection, said anywhere in the line; never a failed one.
+    q27: [['Confirmed rejection: sellers took over and confirmed it.', 'A confirmed rejection on the second candle.', 'The second candle is a bearish engulfing closing lower: a confirmed rejection, short side.'],
+      ['Breakout down.', 'Stall: the next candle decides.', 'Conflicting.', 'The rejection failed: not a confirmed rejection.', 'It undoes the confirmed rejection.', 'The engulfing cancels the confirmed rejection.']],
+    // Conflicting: mixed, it needs other confirmation (or the next candle).
+    q28: [['No: mixed evidence, wait for confirmation.', 'Wait for the next candle.', 'Not yet: conflicting.', 'Not on this read alone; mixed, not sellers in control.', 'Mixed: it needs other confirmation, the count or the next candle.'],
+      ['Yes, it closed back below.', 'Sellers are in control.', 'Take it now: the close is back below.', 'Short it: sellers in control.', 'Read it as a rejection, sellers in control.']],
+    // A stall: the next candle decides, said anywhere in the line.
+    q29: [['The next candle decides.', 'Next 15m candle.', 'The 15m candle after the doji decides it.', 'Whoever wins the next 15m close.'],
+      ['The doji itself.', 'This candle decides.', 'Sellers.', 'Buyers decide.', 'The doji decides: it is a stall.']],
+    // The same reaction in another context: the context decides (with the bias a short; against the 4h + 1h no trade).
+    q30: [['No: the context decides; the first supports a short, the second is no trade (the trend rule).', 'Not the same: with the bias it is a continuation short, against the 4h and 1h no trade.', 'Different: the second counters the 4h + 1h.'],
+      ['Yes, both are long-wick rejections.', 'Same read: short both.', 'The same, take either.', 'No difference, both are shorts.']],
   };
   for (const [id, [right, wrong]] of Object.entries(cases)) {
     for (const a of right) assert.ok(pass(id, `ANSWER: ${a}`), `${id} right: ${a}`);
@@ -76,10 +80,10 @@ test('summary: correct on all K, answered both ways, the totals, the bar; compar
   for (const x of QUIZ.questions) for (let k = 1; k <= 5; k += 1) rows.push({ id: x.id, k, pass: true });
   for (const x of QUIZ.partB) for (let k = 1; k <= 5; k += 1) rows.push({ id: x.id, k, pass: true });
   const all = Q.summarize(QUIZ, rows, 5);
-  assert.deepStrictEqual([all.partA.allCorrect, all.partA.bothWays, all.partB.allCorrect, all.meetsBar], [29, 0, 5, true]);
+  assert.deepStrictEqual([all.partA.allCorrect, all.partA.bothWays, all.partB.allCorrect, all.meetsBar], [30, 0, 5, true]);
   const one = rows.map(r => (r.id === 'q6' && r.k === 2 ? { ...r, pass: false } : r));
   const s = Q.summarize(QUIZ, one, 5);
-  assert.deepStrictEqual([s.partA.allCorrect, s.partA.bothWays, s.partA.total, s.meetsBar], [28, 1, 144, false]);
+  assert.deepStrictEqual([s.partA.allCorrect, s.partA.bothWays, s.partA.total, s.meetsBar], [29, 1, 149, false]);
   // Too few runs is never correct on all K.
   assert.strictEqual(Q.summarize(QUIZ, rows.filter(r => r.k <= 3), 5).partA.allCorrect, 0);
   const d = Q.compare(all, s).find(x => x.id === 'q6');

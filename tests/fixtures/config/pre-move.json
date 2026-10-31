@@ -313,8 +313,8 @@
    "from": "skill-caps.js SETUP_SKILL_BYTES"
   },
   "skillCaps.perSkill.candle-reading": {
-   "value": 5182,
-   "from": "new in feat/sweep-candle-control (owner-approved 2026-10-31, improves context: candle-reading's own cap for its reaction-at-a-level read; one skill only, every other non-setup skill stays at skillCaps.skillBytes)"
+   "value": 5825,
+   "from": "new in feat/sweep-candle-control (owner-approved 2026-10-31, improves context: candle-reading's own cap for its reaction-at-a-level read and the context it is read in; one skill only, every other non-setup skill stays at skillCaps.skillBytes)"
   },
   "compose.maxExpects": {
    "value": 300,
