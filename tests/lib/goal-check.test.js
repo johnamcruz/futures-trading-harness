@@ -46,7 +46,7 @@ test('resetBaseline: an owner-approved reset writes a lower baseline with the re
   const lower = doc({ meanR: -0.4, mc: { pass: 0.05, blows: 0 } }, { caught: { share: -0.01, caught: 1, legs: 9 } });
   const why = 'one-time reset, owner-approved: the corrected tool';
   // The rule on synthetic baselines: this test's own approved list (the pinned one holds main's real reset only).
-  const OK = [{ from: GC.fromHash(GC.gatedOf(base)), why, approved: '2026-10-30' }];
+  const OK = [{ from: GC.fromHash(GC.gatedOf(base)), to: GC.fromHash(GC.gatedOf(lower)), why, approved: '2026-10-30' }];
   const rise = (b, n) => GC.riseProblems(b, n, { approved: OK });
   // A reset without a why refuses; so does one with no base, or of another fixture.
   for (const w of [undefined, '', '  ']) assert.throws(() => GC.resetBaseline(base, lower, { why: w, at: '2026-10-30' }), /needs --why/);
@@ -101,6 +101,15 @@ test('a reset is accepted only when pinned in APPROVED_RESETS: the approved one 
   const tampered = [{ ...pin, from: `${pin.from.slice(0, -1)}${pin.from.endsWith('0') ? '1' : '0'}` }];
   assert.match(GC.riseProblems(before, real, { approved: tampered }).join(), /not an owner-approved one/);
   assert.match(GC.riseProblems(before, real, { approved: [] }).join(), /not an owner-approved one/);
+  // The pin holds the reset baseline's own numbers (to): the same reset record with any gated metric lowered fails.
+  const lowered = (h, mut) => { const x = JSON.parse(JSON.stringify(real)); mut(x.halves[h]); return x; };
+  for (const [h, mut] of [['A', x => { x.meanR = -5; }], ['A', x => { x.mc.pass = 0; }], ['A', x => { x.caught.caught = 0; }], ['B', x => { x.caught.share = -0.5; }]]) {
+    assert.match(GC.riseProblems(before, lowered(h, mut)).join(), /not an owner-approved one/);
+  }
+  // A reset whose new baseline is missing a gated metric (or holds a non-number) fails.
+  assert.match(GC.riseProblems(before, lowered('A', x => { delete x.caught.caught; })).join(), /missing gated metrics: A caught\.caught/);
+  assert.match(GC.riseProblems(before, lowered('B', x => { x.meanR = null; })).join(), /missing gated metrics: B meanR/);
+  assert.match(GC.riseProblems(before, lowered('A', x => { x.caught.share = 'NaN'; })).join(), /missing gated metrics: A caught\.share/);
   // The hash is of canonical JSON: key order doesn't change it, a value does.
   assert.strictEqual(GC.fromHash({ B: { x: 1, y: 2 }, A: { z: 3 } }), GC.fromHash({ A: { z: 3 }, B: { y: 2, x: 1 } }));
   assert.notStrictEqual(GC.fromHash({ A: { z: 3 } }), GC.fromHash({ A: { z: 3.0001 } }));

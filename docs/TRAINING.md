@@ -1781,6 +1781,12 @@ path's blows. It fails on one more blow, or a pass
 rate, mean R or R caught below main's less its tighten-only tolerance, or
 one trend leg fewer caught (a count, no tolerance)
 (`goalRegression.tolerance`: tight, since every number is deterministic).
+R caught's denominator (each trend leg's R available) is in units of the
+median risk of the trades taken, so the share isn't comparable across stop
+widths: a change in which trades are taken can raise it while catching
+fewer legs, which is why the legs caught are gated beside it. The
+blow path's trades and mean R are checked only on a fixture change (it
+never softens); on the same fixture only its blows are gated.
 The fixture's draw, the Monte Carlo and tier 2's days are pinned exactly.
 Its mutation checks (`tests/goal/tier1.goal.js`) prove it fails on a worse
 exit, a stricter entry rule, a broken size on the blow path, a minimum size

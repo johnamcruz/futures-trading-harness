@@ -5,8 +5,9 @@
  * scripts/goal-check.js): the harness's own entry, setup, stop, sizing and exit code on a fixed sample of real sessions
  * (goal-fixture.js), per half, against main's committed baseline (tests/fixtures/goal/baseline.json). A pull request
  * that moves the strategy away from the goal fails: in the owner's order, more blows, a lower combine pass rate, a
- * lower mean R or a smaller share of the trends' R caught, each beyond its tolerance (config/training.json
- * goalRegression.tolerance; blows have none: one more blow fails).
+ * lower mean R, a smaller share of the trends' R caught, each beyond its tolerance (config/training.json
+ * goalRegression.tolerance), or fewer trend legs caught (blows and legs caught have none: one more blow, one leg fewer
+ * fails).
  *
  * The baseline only rises (as the promotion gate's numbers): a new baseline is written only when every gated metric
  * is at least the current one's (blows at most), and the test holds the committed baseline to the base branch's the
@@ -34,7 +35,8 @@
  *                                  reset { why, from: gatedOf(base), fixture, at, commit } recorded (throws without a why,
  *                                  a base, the same fixture, or when a blow is added)
  *   resetProblems(base, next)      [problem] of a reset new in `next`; null when `next` carries none new; a reset is
- *                                  accepted only when pinned in APPROVED_RESETS (fromHash of its `from`, and its why)
+ *                                  accepted only when pinned in APPROVED_RESETS (fromHash of its `from`, of the new baseline's
+ *                                  gatedOf as `to`, and its why), every gated metric of the new baseline a number
  *   fromHash(from), APPROVED_RESETS   the sha256 of a reset's `from` (canonical JSON); the owner-approved resets
  *   renderTable(rows)              the table: metric, main, this PR, allowed
  */
@@ -178,13 +180,17 @@ const same = (a, b) => canon(a) === canon(b);
 const fromHash = from => crypto.createHash('sha256').update(canon(from)).digest('hex');
 
 // The owner-approved resets, pinned: a reset is accepted only when its `from` (the gated metrics it replaces, hashed by
-// fromHash) and its why are an entry here, so every reset is a code change the review sees (tests/plugin/goal-regression
+// fromHash), its `to` (the new baseline's own gated metrics, gatedOf(next), hashed the same way) and its why are an
+// entry here (so neither side of a reset can move without a code change), so every reset is a code change the review sees (tests/plugin/goal-regression
 // .test.js pins this list to exactly its one entry). The one-time reset of 2026-10-30: main's pre-reset tier 1 baseline
 // (A pass 0.7605, mean R 0.145, R caught 0.0477, legs caught 6; B pass 0, mean R -0.351, R caught 0.1111, legs caught
 // 8; 0 blows, the blow path included), replaced under the corrected tool (one position at a time after sizing).
 const APPROVED_RESETS = Object.freeze([
   Object.freeze({
     from: 'c63da23391f4e0225e642c6ea2e320cb557961f9da1891d9ba6c59399f0c6f02',
+    // A pass 0.607, mean R -0.337, R caught 0.1309, legs caught 3; B pass 0, mean R -0.8294, R caught -0.03, legs
+    // caught 3; 0 blows, the blow path included (the CI slice under the corrected tool).
+    to: '44a498c2cc6dd7803e4fc229b8972cefa8fbe296b83c78abc9a40b941a78fb96',
     why: 'one-time reset, owner-approved 2026-10-30: the old tool applied one position at a time before sizing and counted trades no account could size; the corrected tool takes one position at a time after sizing, at each attempt\'s own state, as live',
     approved: '2026-10-30',
   }),
@@ -206,8 +212,12 @@ function resetProblems(base, next, approved = APPROVED_RESETS) {
   if (!(typeof r.at === 'string' && r.at.trim())) out.push('the reset records no at (when it was written)');
   if (!(r.fixture === base.fixture && next.fixture === base.fixture)) out.push(`the reset is of fixture ${r.fixture} (the base's ${base.fixture}, the new baseline's ${next.fixture}): a reset keeps the fixture`);
   if (!same(r.from, gatedOf(base))) out.push('the reset\'s from is not the base branch\'s gated metrics: re-run the reset on the current base');
-  // Only an owner-approved reset, pinned in APPROVED_RESETS by the hash of what it replaces and its why.
-  if (!approved.some(a => a.from === fromHash(r.from) && a.why === r.why)) out.push(`the reset is not an owner-approved one (APPROVED_RESETS: from ${fromHash(r.from)} with its why): a reset is a code change the review sees`);
+  // Every gated metric of the new baseline is a number (each half of the base's, each of its gated fields).
+  const to = gatedOf(next);
+  const missing = halvesOf(base).flatMap(h => gatedFor(h).filter(g => !Number.isFinite((to[h] || {})[g.key])).map(g => `${h} ${g.key}`));
+  if (missing.length) out.push(`the reset's new baseline is missing gated metrics: ${missing.join(', ')}`);
+  // Only an owner-approved reset, pinned in APPROVED_RESETS by the hashes of what it replaces and what it writes, and its why.
+  if (!approved.some(a => a.from === fromHash(r.from) && a.to === fromHash(to) && a.why === r.why)) out.push(`the reset is not an owner-approved one (APPROVED_RESETS: from ${fromHash(r.from)}, to ${fromHash(to)}, with its why): a reset is a code change the review sees`);
   return [...out, ...blowProblems(base, next, 'a reset')];
 }
 
