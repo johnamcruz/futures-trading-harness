@@ -525,16 +525,18 @@
       "ticks": {
        "depthTicks": 0,
        "belowTicks": 2,
-       "crossTicks": 2,
+       "crossTicks": 3,
        "wickTicks": 3,
-       "confirmTicks": 1
+       "confirmTicks": 1,
+       "openUnderTicks": 2
       },
       "atr": {
        "depthTicks": 1000,
        "belowTicks": 3,
        "crossTicks": 3,
        "wickTicks": 6,
-       "confirmTicks": 3
+       "confirmTicks": 3,
+       "openUnderTicks": 0
       }
      }
     },

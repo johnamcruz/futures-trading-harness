@@ -14,9 +14,10 @@
  *             expires only when the price leaves before the order goes, the order-latency self-test's case)
  *   quiet     the drift alone (no momentum candle, no listed setup): a day whose right answer is no trade
  *   floor     D13's stop floor binding (compose must refuse, never widen): the cash session's approach to just under
- *             the overnight high (floor-ticks: straight; floor-atr: a deep V, a large ATR(20)), a 15m candle breaking it by
- *             a few ticks (the listed reaction, its low the stop read), a 3m bar closing at its top (the confirming close),
- *             then flat: the stop a few ticks under max(stop_floor_ticks, stop_floor_atr x ATR(20)), the tick term binding
+ *             the overnight high (floor-ticks: the open gapped to it, flat, so the approach meets no level; floor-atr: a
+ *             deep V, a large ATR(20)), a 15m candle breaking it by
+ *             a few ticks (the listed reaction, its low the stop read; the setup is the entry, composed on its own close),
+ *             a 3m bar closing at its top, then flat: the stop a few ticks under max(stop_floor_ticks, stop_floor_atr x ATR(20)), the tick term binding
  *             on floor-ticks, the ATR term on floor-atr (floorBar)
  *   bleed     the blow path: a block of consecutive fakeout sessions whose reversal opens with a gap through the stop
  *             (a loss of a few R every day). The shipped sizing (a share of the cushion) never risks the floor; a broken
@@ -130,7 +131,13 @@ function dayBars({ day, type, dir, rand, cfg, tick, startTicks, shape = null }) 
       else if (type === 'compress' && k <= e1 + C.runBars) { move = dir * sigma * C.trendDrift + normal(rand) * sigma * C.quietNoise; wick = C.wick; }
       else move = normal(rand) * sigma * C.quietNoise;
     }
-    if (type === 'floor' && rth && openTicks === null) openTicks = px;
+    // A floor day's cash open: where the overnight closed, or (openUnderTicks) a gap up to that many ticks under the
+    // level, over every prior-session level between, so no candle of the approach meets one (the setup is the entry:
+    // any break the approach made would be composed on its own close).
+    if (type === 'floor' && rth && openTicks === null) {
+      if (shape.openUnderTicks > 0) px = Math.max(px, onHigh - shape.openUnderTicks);
+      openTicks = px;
+    }
     const shaped = type === 'floor' && rth ? floorBar(k, px, { F: shape, level: onHigh, from: openTicks }) : null;
     const b = shaped ? { ...shaped, v: Math.max(1, Math.round(volume)) } : bar(px, { move, sigma, wick, volume, rand });
     if (!rth && openTicks === null) onHigh = Math.max(onHigh, b.h); // the overnight session: every bar before the cash open

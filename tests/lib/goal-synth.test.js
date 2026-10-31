@@ -73,5 +73,13 @@ test('the floor days: the reaction candle breaks the overnight high by crossTick
     assert.ok(Math.max(...approach.map(x => x.h)) < onHigh, `${name}: the approach stays under the level`);
     const low = Math.min(...approach.map(x => x.l));
     assert.strictEqual(low <= rth[0].o - v.depthTicks * t, true, `${name}: the V's depth`);
+    // The cash open: gapped to openUnderTicks under the level (over the prior session's levels: the approach meets
+    // none, so no break of it is composed on its own close), or where the overnight closed.
+    const prior = GF.decodeBars(b.bars).filter(x => tradingDayKey(new Date(Date.parse(x.t))) < day && minutesOfDay(new Date(Date.parse(x.t)), MARKET_TZ) >= RTH_OPEN_MIN && minutesOfDay(new Date(Date.parse(x.t)), MARKET_TZ) < RTH_CLOSE_MIN);
+    const priorDay = prior.filter(x => tradingDayKey(new Date(Date.parse(x.t))) === tradingDayKey(new Date(Date.parse(prior.at(-1).t))));
+    if (v.openUnderTicks > 0) {
+      assert.strictEqual(rth[0].o, Math.max(bars[rthAt - 1].c, onHigh - v.openUnderTicks * t), `${name}: the gapped open`);
+      assert.ok(low > Math.max(...priorDay.map(x => x.h)), `${name}: the approach over the prior session's high`);
+    } else assert.strictEqual(rth[0].o, bars[rthAt - 1].c, `${name}: the open where the overnight closed`);
   }
 });

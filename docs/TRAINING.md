@@ -1760,8 +1760,9 @@ at -1R, a quiet day whose right answer is no trade, a composed limit entry
 (a 15m level break listed with no cited fire: the limit at the confirming
 close fills, its bracket, the trail, the exit), a VWAP-break day (below),
 two floor days (a listed break whose stop, the reaction candle's low, is
-closer than D13's floor: the tick term binding on one, the ATR term on the
-other) and the blow path (ten sessions whose reversal gaps through the stop: the
+closer than D13's floor: the tick term binding on one, its cash open gapped
+over the prior session's levels so its approach breaks none, the ATR term on
+the other) and the blow path (ten sessions whose reversal gaps through the stop: the
 shipped sizing never risks the floor on it, a broken size does). Their
 shapes are config, pinned exactly with the rest of the yardstick.
 
