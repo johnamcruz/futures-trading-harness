@@ -5,7 +5,7 @@
  * shipped code finds on the entry rule's side, entered and exited by the shipped rules, one position at a time. The
  * harness's own modules detect, time, stop, size and exit each trade; what is this module's own is the choice of
  * setups (the 15m structure, compression and CISD primitives the studies measured, not the briefing's key-level
- * reactions), the standard's confirming read and the 2R mark as every target (the trail's arming point; compose's
+ * reactions) and the 2R mark as every target (the trail's arming point; compose's
  * nearest named target and its bias and location reads are not modelled):
  *
  *   side      the policy's entry rule (its RULEBOOK `entry`, entry-rule.js) per bar: chain-side.js chainSideSeries
@@ -16,10 +16,9 @@
  *             risk.stop_buffer_ticks beyond the setup candle's far side (a CISD: beyond the leg's origin), D3. And every
  *             rules strategy the composed strategy cites (strategies.js citedSetups: momentum_continuation), its scan
  *             (evaluator.js) firing on the bar, its own stop and R target, entered at market (trade-lifecycle.js planOf)
- *   entry     as compose_check plans it (setup-library.js, the standard): the first base close after the setup (a CISD:
- *             from its touch bar) within the setup frame's span whose candle confirms the side (setup-library.js
- *             entryRead: a confirming pattern, momentum, a close in the far third), the entry rule still giving the side
- *             on that bar, entries allowed (briefing.js sessionWindow: the gate's clock; the runner's sessions and
+ *   entry     as compose_check plans it (setup-library.js, the standard; the setup is the entry, no confirming read):
+ *             the first base close from the one the setup is known at (a CISD: its touch bar) within the setup frame's
+ *             span, the entry rule still giving the side on that bar, entries allowed (briefing.js sessionWindow: the gate's clock; the runner's sessions and
  *             holidays), the stop not traded through since the setup; a limit at that close for the strategy's
  *             valid_bars; the target the 2R mark (risk.min_rr; the policy's exit trails past it); D13's floor
  *             (trade-lifecycle.js stopFloorTicks): a closer stop is refused, never widened
@@ -42,7 +41,6 @@ const CF = require('../trading/candle-facts');
 const SE = require('../trading/structure-events');
 const CI = require('../trading/cisd');
 const CMP = require('../trading/compression');
-const { momentumRead } = require('../trading/momentum');
 const { causalLevels } = require('../trading/rules');
 const { chainSideSeries } = require('../trading/chain-side');
 const { loadStrategies, citedSetups, composedOf } = require('../trading/strategies');
@@ -50,7 +48,7 @@ const { composedExit, createEvaluator } = require('../trading/evaluator');
 const { entryRuleOf } = require('../trading/entry-rule');
 const { STRATEGY: LIFE, stopRuleOf, stopFloorTicks } = require('../trading/trade-lifecycle');
 const { TF_MIN } = require('../trading/composed-reads');
-const { entryRead, runnerClock } = require('../learning/setup-library');
+const { runnerClock } = require('../learning/setup-library');
 const { limitOutcome } = require('../learning/experience-log');
 const { sessionWindow } = require('../trading/briefing');
 const { parseWindows, inWindow, tradingDayKey } = require('../trading/clock');
@@ -59,7 +57,6 @@ const { tickOf } = require('../trading/contracts');
 const msOf = minutes => minutes * 60000;
 const AN = require('../tunables').analysis();
 const fin = x => typeof x === 'number' && Number.isFinite(x);
-const r2 = x => (fin(x) ? Math.round(x * 100) / 100 : x);
 const r4 = x => (fin(x) ? Math.round(x * 1e4) / 1e4 : x);
 const { label } = require('../trading/mtf');
 
@@ -97,14 +94,14 @@ function frameSetups(bars, P, tick) {
   for (const x of SE.breaksOf(cs)) {
     const c = cs[x.i];
     const s = x.direction === 'up' ? 1 : -1;
-    out.push({ type: `${label(M)} ${x.kind}`, k: c.known, side: s, stop: beyond(c, s), from: c.known + 1 });
+    out.push({ type: `${label(M)} ${x.kind}`, k: c.known, side: s, stop: beyond(c, s), from: c.known });
   }
   const ser = CMP.seriesOf(cs);
   for (let j = 1; j < cs.length; j += 1) {
     const x = CMP.compressionAt(cs, j, { series: ser });
     if (x.state === 'expanding' && x.break && x.break.barsAgo === 0) {
       const s = x.break.dir === 'up' ? 1 : -1;
-      out.push({ type: `${label(M)} compression break`, k: cs[j].known, side: s, stop: beyond(cs[j], s), from: cs[j].known + 1 });
+      out.push({ type: `${label(M)} compression break`, k: cs[j].known, side: s, stop: beyond(cs[j], s), from: cs[j].known });
     }
   }
   // A strong CISD, at the first base bar trading into its OTE zone while it stands (cisd.js cisdSeries: the same CISD).
@@ -148,9 +145,6 @@ function blockTrades(bars, sessions, P, { symbol }) {
   const side = chainSideSeries(bars, { rule: P.entryRule, minutes: base });
   const atr20 = ind.atr(bars, ind.STOP_ATR_PERIOD);
   const floorAt = j => stopFloorTicks({ sections: { m3: { data: { referenceStop: { distance: r4(AN.snapshot.stopAtrMult * atr20[j]) } } } } }, tick, P.stopRule);
-  const facts = CF.factsOf(bars);
-  const baseLabel = label(base);
-  const confirms = (j, s) => entryRead({ ...facts[j], momentum: momentumRead({ rangeAtr: r2(facts[j].rangeAtr), closeLocation: facts[j].closeLocation, volRatio: r2(facts[j].volRatio) }) }, s > 0 ? 'long' : 'short', baseLabel);
   const span = Math.round(P.setupMinutes / base);
   const up = x => Math.ceil(x / tick - 1e-9) * tick;
   const down = x => Math.floor(x / tick + 1e-9) * tick;
@@ -168,7 +162,7 @@ function blockTrades(bars, sessions, P, { symbol }) {
     for (let j = st.from; j < st.from + span - (st.from > st.k ? 1 : 0) && j < n; j += 1) {
       if (dayOf[j] !== dayOf[st.k]) break;
       if (s > 0 ? bars[j].l <= st.stop : bars[j].h >= st.stop) return no('stop traded first');
-      if (!entersAt(j) || side[j] !== s || !confirms(j, s)) continue;
+      if (!entersAt(j) || side[j] !== s) continue;
       const ref = bars[j].c;
       const stopTicks = Math.ceil(Math.abs(ref - st.stop) / tick - 1e-9);
       const floor = floorAt(j);
@@ -176,7 +170,7 @@ function blockTrades(bars, sessions, P, { symbol }) {
       const target = s > 0 ? up(ref + P.minRR * (ref - st.stop)) : down(ref - P.minRR * (st.stop - ref));
       return pack(st, j, run(s, ref, st.stop, target, j, false), stopTicks);
     }
-    return no('no confirming close');
+    return no('no entry bar');
   };
   const setups = [];
   for (const st of frameSetups(bars, P, tick)) if (decides(st.k) && side[st.k] === st.side) setups.push(st);
