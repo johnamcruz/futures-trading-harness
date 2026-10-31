@@ -42,15 +42,44 @@ test('grading: the ANSWER line, the required terms, and a forbidden term only wh
   assert.ok(Q.gradeAnswer(QUIZ, q('q1'), 'ANSWER: it depends').unsure);
 });
 
+test('the reaction questions (q23-q29, feat/sweep-candle-control): answer-first keys pass the right answer, refuse the wrong ones', () => {
+  const cases = {
+    // A reaction alone takes no trade: it needs other confirmation.
+    q23: [['No: a reaction is context, it needs other confirmation (bias, level, the count).', 'Pass: nothing else lines up.'],
+      ['Yes, the long wick is enough.', 'Take it: sellers rejected the high.', 'Enter short on the rejection.']],
+    // The close decides: a close above is acceptance.
+    q24: [['Acceptance: the close decides, never the wick.', 'Accepted, not a rejection: it closed above the high.'],
+      ['Rejection: the long wick.', 'A long-wick rejection.', 'Rejected, the wick failed above.', "It's a rejection of the high."]],
+    // A long-wick rejection after a high: sellers.
+    q25: [['Sellers: they rejected higher prices.', 'The sellers took control.'],
+      ['Buyers, they pushed above the high.', 'Neither, but buyers took control of the wick.']],
+    // A strong close beyond: a breakout attempt, not a sweep.
+    q26: [['Breakout: closed beyond with a 0.8 body, not a sweep.', 'A breakout attempt, buyers in control.'],
+      ['Sweep of the high.', "It's a sweep, the wick traded above.", 'A sweep.']],
+    q27: [['Confirmed rejection: sellers took over and confirmed it.', 'A confirmed rejection on the second candle.'],
+      ['Breakout down.', 'Stall: the next candle decides.', 'Conflicting.']],
+    // Conflicting: mixed, wait.
+    q28: [['No: mixed evidence, wait for confirmation.', 'Wait for the next candle.', 'Not yet: conflicting.'],
+      ['Yes, it closed back below.', 'Sellers are in control.']],
+    // A stall: the next candle decides.
+    q29: [['The next candle decides.', 'Next 15m candle.'],
+      ['The doji itself.', 'This candle decides.', 'Sellers.', 'Buyers decide.']],
+  };
+  for (const [id, [right, wrong]] of Object.entries(cases)) {
+    for (const a of right) assert.ok(pass(id, `ANSWER: ${a}`), `${id} right: ${a}`);
+    for (const a of wrong) assert.ok(!pass(id, `ANSWER: ${a}`), `${id} wrong: ${a}`);
+  }
+});
+
 test('summary: correct on all K, answered both ways, the totals, the bar; compare names each change', () => {
   const rows = [];
   for (const x of QUIZ.questions) for (let k = 1; k <= 5; k += 1) rows.push({ id: x.id, k, pass: true });
   for (const x of QUIZ.partB) for (let k = 1; k <= 5; k += 1) rows.push({ id: x.id, k, pass: true });
   const all = Q.summarize(QUIZ, rows, 5);
-  assert.deepStrictEqual([all.partA.allCorrect, all.partA.bothWays, all.partB.allCorrect, all.meetsBar], [22, 0, 5, true]);
+  assert.deepStrictEqual([all.partA.allCorrect, all.partA.bothWays, all.partB.allCorrect, all.meetsBar], [29, 0, 5, true]);
   const one = rows.map(r => (r.id === 'q6' && r.k === 2 ? { ...r, pass: false } : r));
   const s = Q.summarize(QUIZ, one, 5);
-  assert.deepStrictEqual([s.partA.allCorrect, s.partA.bothWays, s.partA.total, s.meetsBar], [21, 1, 109, false]);
+  assert.deepStrictEqual([s.partA.allCorrect, s.partA.bothWays, s.partA.total, s.meetsBar], [28, 1, 144, false]);
   // Too few runs is never correct on all K.
   assert.strictEqual(Q.summarize(QUIZ, rows.filter(r => r.k <= 3), 5).partA.allCorrect, 0);
   const d = Q.compare(all, s).find(x => x.id === 'q6');

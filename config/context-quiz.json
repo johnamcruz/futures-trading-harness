@@ -23,7 +23,7 @@
   "unsure": "it depends|unsure|not sure|unclear|ambiguous|can't tell|cannot tell|depends on",
   "passBar": {
     "partA": {
-      "allCorrect": 22,
+      "allCorrect": 29,
       "bothWays": 0
     },
     "partB": {
@@ -147,7 +147,7 @@
       "prompt": "head",
       "text": "A 15m setup candle closed as a bearish engulfing; another closed as a strong full-body bear candle in its bottom third with no pattern name. Which is the stronger setup candle?",
       "rule": "a candle is judged by its strength and close, never its pattern name",
-      "anchor": "a pattern name adds none",
+      "anchor": "a pattern name adds no strength",
       "required": [
         "neither|both|equal|\\bsame\\b|not by (its )?name|strength|body|close third|bottom[- ]third|judge|depends"
       ],
@@ -378,6 +378,107 @@
         "^(?!.*\\b(never|not|don't)\\s+(place|take|use|enter)\\s+(the\\s+)?8\\b).*\\b(place|take|use|enter|go with)\\s+(the\\s+)?8\\b",
         "^\\s*not\\s+(the\\s+)?5\\b",
         "\\b5\\b[^.;]*\\bsuggestion\\b"
+      ]
+    },
+    {
+      "id": "q23",
+      "layer": "entry",
+      "prompt": "head",
+      "text": "A 15m long-wick rejection at the prior RTH high, nothing else lines up. Take it on the reaction alone?",
+      "rule": "a reaction is context, never decided on alone: it needs other confirmation (the bias, the level, the count)",
+      "anchor": "Context, never the setup alone: it needs other confirmation.",
+      "required": [
+        "^\\W*(no|nope|pass|skip|wait|never)\\b"
+      ],
+      "forbidden": [
+        "^\\W*(yes|yep|take( it)?|enter|go)\\b"
+      ]
+    },
+    {
+      "id": "q24",
+      "layer": "setup",
+      "prompt": "head",
+      "text": "A 15m candle has a long upper wick above the prior RTH high but closes above the high. Rejection or acceptance?",
+      "rule": "the close decides acceptance, the wick measures the failed attempt: a close beyond the level is acceptance, never a rejection",
+      "anchor": "the close decides acceptance, the wick the failed attempt",
+      "required": [
+        "^\\W*(acceptance|accepted|accepts|it'?s acceptance|it is acceptance)\\b"
+      ],
+      "forbidden": [
+        "^\\W*(a\\s+)?(long-wick\\s+)?(rejection|rejected)\\b",
+        "\\b(it'?s|it is|that'?s|that is)\\s+(a\\s+)?(long-wick\\s+)?rejection\\b"
+      ]
+    },
+    {
+      "id": "q25",
+      "layer": "setup",
+      "prompt": "head",
+      "text": "A 15m candle trades above the prior RTH high and closes back below it, its upper wick longer than its body and a third of its range (the briefing: long-wick rejection). Who took control?",
+      "rule": "a long-wick rejection after a high: the other side, the sellers, took control",
+      "anchor": "long-wick or engulfing rejection → the other side took control",
+      "required": [
+        "^\\W*(the\\s+)?(sellers?|bears?|shorts?|short side)\\b"
+      ],
+      "forbidden": [
+        "^\\W*(the\\s+)?(buyers?|bulls?)\\b",
+        "\\b(buyers?|bulls?)\\s+(took|take|kept|keep|are in|in)\\s+(control|over|it)\\b"
+      ]
+    },
+    {
+      "id": "q26",
+      "layer": "setup",
+      "prompt": "head",
+      "text": "A 15m candle trades above the prior RTH high and closes above it, its body 0.8 of its range. A sweep of the high or a breakout?",
+      "rule": "a close beyond with an engulfing or a body of 0.7 of the range or more is a breakout attempt, not a sweep",
+      "anchor": "the breaking side in control, not a sweep",
+      "required": [
+        "^\\W*(a\\s+)?breakout\\b"
+      ],
+      "forbidden": [
+        "^\\W*(a\\s+)?sweep\\b",
+        "\\b(it'?s|it is|that'?s|that is)\\s+(a\\s+)?sweep\\b"
+      ]
+    },
+    {
+      "id": "q27",
+      "layer": "setup",
+      "prompt": "head",
+      "text": "A 15m long-wick rejection of the prior RTH high, then the next 15m candle is a bearish engulfing closing lower. What does that second candle read?",
+      "rule": "a long-wick rejection, then an opposite engulfing closing lower: a confirmed rejection, on the second candle",
+      "anchor": "a confirmed one when the next candle engulfs",
+      "required": [
+        "^\\W*(a\\s+)?confirmed\\b"
+      ],
+      "forbidden": [
+        "^\\W*(a\\s+)?(breakout|stall|conflicting|plain)\\b"
+      ]
+    },
+    {
+      "id": "q28",
+      "layer": "setup",
+      "prompt": "head",
+      "text": "A 15m candle trades above the prior RTH high and closes back below it with a bullish body and a short wick (the briefing: conflicting). Read it as sellers in control now?",
+      "rule": "a conflicting reaction is mixed evidence: wait for confirmation",
+      "anchor": "conflicting → mixed, wait for confirmation",
+      "required": [
+        "^\\W*(no|not yet|wait|mixed)\\b"
+      ],
+      "forbidden": [
+        "^\\W*(yes|yep|sellers)\\b"
+      ]
+    },
+    {
+      "id": "q29",
+      "layer": "setup",
+      "prompt": "head",
+      "text": "A 15m doji at the prior RTH high (the briefing: stall). What decides who takes control?",
+      "rule": "a stall: the push stalled, the next candle decides",
+      "anchor": "stall → the next candle decides",
+      "required": [
+        "^\\W*(the\\s+)?next\\b"
+      ],
+      "forbidden": [
+        "^\\W*(the\\s+)?(doji|this candle|sellers|buyers)\\b"
       ]
     }
   ],
