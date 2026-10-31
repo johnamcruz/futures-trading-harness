@@ -248,42 +248,42 @@
     "A": {
       "sessions": 15,
       "trend": 8,
-      "trades": 32,
-      "meanR": 0.145,
-      "totalR": 4.6412,
-      "falseStartShare": 0.3438,
-      "maxDrawdownR": 7.1824,
-      "medianRiskPts": 25.5,
+      "trades": 20,
+      "meanR": -0.337,
+      "totalR": -6.7394,
+      "falseStartShare": 0.4,
+      "maxDrawdownR": 8.2502,
+      "medianRiskPts": 19,
       "caught": {
         "legs": 14,
-        "caught": 6,
-        "rCaught": 1.7744,
-        "rAvailable": 37.1863,
-        "share": 0.0477
+        "caught": 3,
+        "rCaught": 6.5327,
+        "rAvailable": 49.9079,
+        "share": 0.1309
       },
       "mc": {
         "paths": 2000,
-        "pass": 0.7605,
+        "pass": 0.607,
         "blow": 0,
         "blows": 0,
-        "meanDaysToPass": 13.0835
+        "meanDaysToPass": 12.4819
       }
     },
     "B": {
       "sessions": 15,
       "trend": 8,
-      "trades": 39,
-      "meanR": -0.351,
-      "totalR": -13.6884,
-      "falseStartShare": 0.5641,
-      "maxDrawdownR": 15.295,
-      "medianRiskPts": 19.5,
+      "trades": 16,
+      "meanR": -0.8294,
+      "totalR": -13.2698,
+      "falseStartShare": 0.5625,
+      "maxDrawdownR": 13.2698,
+      "medianRiskPts": 16.75,
       "caught": {
         "legs": 13,
-        "caught": 8,
-        "rCaught": 4.9577,
-        "rAvailable": 44.6282,
-        "share": 0.1111
+        "caught": 3,
+        "rCaught": -1.5599,
+        "rAvailable": 51.9552,
+        "share": -0.03
       },
       "mc": {
         "paths": 2000,
@@ -297,10 +297,10 @@
       "sessions": 10,
       "trend": 0,
       "trades": 11,
-      "meanR": -1.643,
-      "totalR": -18.073,
+      "meanR": -1.583,
+      "totalR": -17.4128,
       "falseStartShare": 0.9091,
-      "maxDrawdownR": 18.073,
+      "maxDrawdownR": 17.4128,
       "medianRiskPts": 9.25,
       "caught": {
         "legs": 13,
@@ -322,5 +322,30 @@
     "from": "26cd22f0f657a065366cf44cd008ea273d9f5e733323df6feecd2bf4e3c9a8f0",
     "why": "two synthetic floor days added (goal-synth.js floor: D13's tick and ATR terms binding); the real slice and the other synthetic days unchanged"
   },
-  "writtenBy": "scripts/goal-check.js baseline --write"
+  "writtenBy": "scripts/goal-check.js baseline --write --reset",
+  "reset": {
+    "why": "one-time reset, owner-approved 2026-10-30: the old tool applied one position at a time before sizing and counted trades no account could size; the corrected tool takes one position at a time after sizing, at each attempt's own state, as live",
+    "from": {
+      "A": {
+        "mc.blows": 0,
+        "mc.pass": 0.7605,
+        "meanR": 0.145,
+        "caught.share": 0.0477,
+        "caught.caught": 6
+      },
+      "B": {
+        "mc.blows": 0,
+        "mc.pass": 0,
+        "meanR": -0.351,
+        "caught.share": 0.1111,
+        "caught.caught": 8
+      },
+      "S": {
+        "mc.blows": 0
+      }
+    },
+    "fixture": "7f08aa86683f62d45d1f82f73cc9c31589258947d430a9e45e5248673d95c30c",
+    "at": "2026-10-31",
+    "commit": "a98fa3cd9"
+  }
 }
