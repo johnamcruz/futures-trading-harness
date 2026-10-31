@@ -312,8 +312,9 @@ function entryTimings(decisions, { briefingAt, minutes }) {
  * translateSize, at the attempt line's recorded budget and room instead of today's snapshot): the policy's budget plan
  * (prop-state.js sizeWithin, the full multiplier: an upper bound on the verdict's), the composed strategy's
  * risk.max_risk_usd at the contract's all-in risk (capsOf, allInRisk), then the rulebook's floor on that capped size
- * (prop-state.js minContractsRefusal). stopTicks -> true (a size fits), false (none), null outside an attempt,
- * undefined when it can't be worked out.
+ * (prop-state.js minContractsRefusal). In `root`, the run's contract, as the live verdict and the gate size it (the selected
+ * leg: the runner's symbols), never a mini the cap prices out of a micro run. stopTicks -> true (a size fits), false
+ * (none), null outside an attempt, undefined when it can't be worked out.
  */
 function sizeForCycle(rec, { strategies, accounts, root, composed, specOf = null }) {
   const prop = require('../trading/prop-state');
@@ -331,7 +332,7 @@ function sizeForCycle(rec, { strategies, accounts, root, composed, specOf = null
   const room = Math.max(0, Math.min(num(a.cushion) ?? Infinity, isObj(a.facts) && num(a.facts.dailyRoom) !== null ? a.facts.dailyRoom : Infinity));
   return stopTicks => {
     if (!(Number.isInteger(stopTicks) && stopTicks > 0)) return undefined;
-    const b = prop.sizeWithin({ dollars: budget.budgetUsd, room }, account, policy, root, stopTicks, 1, spec);
+    const b = prop.sizeWithin({ dollars: budget.budgetUsd, room }, account, policy, root, stopTicks, 1, spec, [root]);
     if (b.error) return undefined;
     if (!(b.size >= 1)) return false;
     const s = spec(b.root);

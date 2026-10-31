@@ -710,7 +710,7 @@ strategy momentum_continuation: {
 }
 strategy prop_portfolio: {
   "account": "<name-43f416>",
-  "body": "4350 chars sha256:3a4e2be567005099",
+  "body": "4503 chars sha256:c4453ee0f6005f99",
   "compiledRules": null,
   "compiledStop": null,
   "compiledTarget": null,
@@ -761,7 +761,8 @@ strategy prop_portfolio: {
     "r_per_session": 0.3,
     "min_contracts": 3,
     "floor_stretch_max_usd": 500,
-    "near_target_usd": 500
+    "near_target_usd": 500,
+    "healthy_risk_usd": 0
   },
   "source": "harness design (the prop challenge as a strategy); the learned-rulebook design (to come) will tune its numbers",
   "status": "active",

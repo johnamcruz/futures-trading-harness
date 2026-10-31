@@ -12,8 +12,9 @@ description: Use when sizing a trade plan - risk per contract, the budget, the c
 
 ## How It Works
 
-In a prop attempt: the full verdict size; a serious factor against never
-cuts it; only a pacing rule does. The code computes it. Fewer than 3
+In a prop attempt: the code's size, the most the $300 cap fits all in; the
+budget only lowers it. A serious factor against never cuts it; only a
+pacing rule does. Fewer than 3
 contracts (`min_contracts`) at the stop: skip (unless the floor
 stretch takes exactly 3: the Min line).
 
@@ -48,7 +49,7 @@ stretch takes exactly 3: the Min line).
    checks the verdict, not these caps; it still refuses a size over the
    broker's `maxOrderSize`, and over the policy strategy's own
    `risk.max_risk_usd` if it sets one (a rules component's caps don't apply;
-   `trade_lifecycle`'s cap does: the lower of it and the verdict (the verdict is the full size; the cap limits the stop)). Everything else (stop first, protective
+   `trade_lifecycle`'s cap does: the size is the most it fits). Everything else (stop first, protective
    stop always working) still applies. The verdict is the most the account
    allows: phase 2 cuts it only on a pacing rule (a losing account, a loss
    streak, drawdown: `Size: <n> (<rule>)`) or passes.

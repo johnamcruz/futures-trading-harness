@@ -27,13 +27,14 @@ const { planOf, stopRuleOf } = require('../../scripts/lib/trading/trade-lifecycl
 const { loadStrategies } = require('../../scripts/lib/trading/strategies');
 const { trendRuleOf } = require('../../scripts/lib/trading/reasons');
 const H = require('../../scripts/lib/trading/compose-hints');
-const { tmpDir } = require('../helpers');
+const { tmpDir, recordBrokerSpecs } = require('../helpers');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const DOC = loadStrategies(ROOT, {}).strategies.find(s => s.name === 'trade_lifecycle');
 const PLAN = { size: 1, tickValue: 0.5, minRR: DOC.risk.min_rr, maxRiskUsd: DOC.risk.max_risk_usd, stopRule: stopRuleOf(DOC.risk), suggestion: false };
 const { legs } = load().legs;
 const home = tmpDir();
+recordBrokerSpecs(home); // the broker's tick specs: compose_check prices the stop with them only
 
 /** The real compose_check on a bar of the set: its briefing written to a run home, the cycle bar set. */
 function compose(bar, side, reads) {

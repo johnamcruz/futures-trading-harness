@@ -411,19 +411,17 @@ function runEngine(markets, strategies, opts = {}) {
       // or minis (contracts mode), within its limits. Same as live (combine.contractPlan).
       const fam = familyOf(book.symbol);
       const legs = legsOf(book);
-      const sizeFor = fraction => combine.contractPlan({
-        dollars: combine.budget(cs, sizing), room: combine.room(cs), stopTicks, legs, mode: (o.prop && o.prop.contracts) || 'micro',
-        guard: sizing.min_size_guard, fraction, ratio: fam ? fam.ratio : 10, slipTicks: sizing.stop_slippage_ticks, minContracts: sizing.min_contracts,
-      });
       // Times the verdict's multiplier (the rulebook's enforced items, as prop/verdict.js): 0 skips the setup.
       const { multiplier } = ceiling(o.prop && o.prop.strategy ? o.prop.strategy.multipliers : [], {}, closeAt);
-      // The live entry's limits over the sizing where the run states them (o.prop.limits: { capUsd, orderMax }; the
-      // composed cap and the broker's max, prop/size-translate.js limitPlan), then the floor again, with the floor
-      // stretch as live (the rulebook's floor_stretch_max_usd while the attempt, cs, is healthy: no deficit, no loss today).
-      const cp = multiplier > 0 ? require('../prop/size-translate').limitPlan(sizeFor(multiplier), {
+      // The live rule where the run states its limits (o.prop.limits: { capUsd, orderMax }; prop/size-translate.js
+      // entryPlan, as the attempt simulator): the most the composed cap fits all in, lowered by the budget and the room,
+      // with the floor stretch as live (the rulebook's floor_stretch_max_usd while the attempt, cs, is healthy).
+      const cp = multiplier > 0 ? require('../prop/size-translate').entryPlan({
+        dollars: combine.budget(cs, sizing), room: combine.room(cs), stopTicks, legs, mode: (o.prop && o.prop.contracts) || 'micro',
+        guard: sizing.min_size_guard, fraction: multiplier, ratio: fam ? fam.ratio : 10, slipTicks: sizing.stop_slippage_ticks, minContracts: sizing.min_contracts,
+      }, {
         limits: (o.prop && o.prop.limits) || null,
-        minContracts: sizing.min_contracts, ratio: fam ? fam.ratio : 1, miniRoot: legs.mini ? legs.mini.root : null,
-        stretchUsd: sizing.floor_stretch_max_usd, state: { ...cs, lossesToday: closesToday.filter(c => c.pnl < 0).length }, nearTargetUsd: sizing.near_target_usd,
+        healthyUsd: sizing.healthy_risk_usd, stretchUsd: sizing.floor_stretch_max_usd, state: { ...cs, lossesToday: closesToday.filter(c => c.pnl < 0).length }, nearTargetUsd: sizing.near_target_usd,
       }) : null;
       if (!cp) return;
       size = cp.size;

@@ -8,7 +8,7 @@ timeframe: 3m                 # the one setting for the bar size: every listed s
 signal: policy                # trades the setups of the strategies below on the account
 strategies: [trade_lifecycle, momentum_continuation] # the model's own composed trade, and the setup it may cite (traded only through its record)
 account: topstep_100k         # accounts/topstep_100k/ACCOUNT.md: $6,000 target, $3,000 trailing max loss, $2,000 daily limit
-contracts: auto               # micro | mini | auto (minis once the size reaches one mini = 10 micros); only with no contract selected
+contracts: auto               # micro | mini | auto (minis only when whole minis carry the same size within the cap, else micros); only with no contract selected
 # sizing, exit and the verdict's multipliers: in its account's rulebook (RULEBOOK.md beside ACCOUNT.md, policies.prop_portfolio), the one place for them
 risk:
   stop: strategy              # each setup keeps its own strategy's stop
@@ -59,9 +59,11 @@ on the replay broker, and there is no live trading until the owner says
    expected slippage (`stop_slippage_ticks`) and fees both ways in each
    contract's risk. Every one of these numbers is in the account's rulebook
    (`RULEBOOK.md` beside its ACCOUNT.md, `policies.prop_portfolio`), the one
-   place for them; this file never restates them. It is worked out in
-   micros and traded in the selected contract, always rounding down; with
-   none selected, as minis once it reaches one mini (`contracts: auto`).
+   place for them; this file never restates them. An entry's size is the
+   most contracts the composed strategy's dollar cap fits all in; this
+   budget only lowers it. It is traded in the selected contract, always
+   rounding down; with none selected (`contracts: auto`), as minis only when
+   whole minis carry the same micro-equivalents within the cap, else micros.
 4. The verdict: every setup gets the full size its budget allows (step 3),
    times the verdict's multiplier (the rulebook's enforced items; none yet,
    so 1), or a skip when the budget can't fund the rulebook's `min_contracts` at its stop, the

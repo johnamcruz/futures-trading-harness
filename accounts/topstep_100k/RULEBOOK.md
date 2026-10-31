@@ -12,7 +12,7 @@ policies:                       # each policy strategy that trades this account 
       bias_agree: neutral-15m-declared  # on: every bias frame trends the side's way; off: the first that trends sets the side; neutral-15m-declared: every one that trends is the side's way, none against, and with all ranging the 15m trend and the declared trend the side's way
       regime_against: off       # off (a fallback, not taught); on: no entry while the m3 regime trends against the side
       leg_turned: off           # off (a fallback, not taught); on: an m3 regime not trending the side's way needs a true 3m BOS, CHoCH or compression break its way
-    sizing:                     # risk from the headroom above the floor
+    sizing:                     # the size is the most contracts the composed cap (risk.max_risk_usd, all in) fits; these only lower it
       cushion_frac: 0.3         # a trade risks at most this share of the cushion ...
       cap_usd: 1000             # ... and at most this many dollars
       drawdown_halve_usd: 1500  # half that while the balance is this far or more below its peak
@@ -23,6 +23,7 @@ policies:                       # each policy strategy that trades this account 
       min_contracts: 3          # the floor: fewer micro-equivalents than this (a mini counts as 10) at the stop is a skip
       floor_stretch_max_usd: 500  # the composed cap fits fewer than the floor: exactly the floor, at most this all in, while the attempt is healthy
       near_target_usd: 500      # once the target is this much profit away or less, a trade is the floor (min_contracts), never more; off: full size to the target
+      healthy_risk_usd: off     # while the attempt is healthy, the per-trade cap all in in place of the composed cap; off: the composed cap always
     exit:
       mode: target_then_trail   # target: out at the trade's own target; target_then_trail: past it, trailed; trail: the R trail below, no target
       trail_activate_r: off     # mode trail (or a trail on top of target): hold the stop until this many R ...
@@ -158,22 +159,37 @@ guard (`min_size_guard`) only matters with a floor of 1: above it, the one
 contract the guard allows is under the floor. The backtester and the attempt
 simulator skip the same setups, so the Monte Carlo is sized as live.
 
-**The size at entry.** In an attempt the size the model states (its compose
-record) is a suggestion: `prop/size-translate.js`, the one place, translates
-it at entry to the correct size from these values alone: the largest the
-verdict, the size budget now, the composed strategy's dollar cap and the
-broker's max order size allow, never under the floor (under it: no trade)
-and never with a tighter stop. `order_plan` builds the order at it, the gate
-accepts exactly it (or phase 2's smaller cut) and refuses any other size.
-The cap is counted all in, as the budget is: a contract's stop plus
-`stop_slippage_ticks` at its tick value, plus the fees both ways. With the
-floor at 3 and the composed $300 cap, a stop wider than 197 ticks on MNQ
-((197 + 1) x $0.50 + $0.74 = $99.74 a contract) or 78 ticks on MES
-((78 + 1) x $1.25 + $0.74 = $99.49) can't be traded: 3 contracts would risk
-over $300 all in, so those setups skip, unless the floor stretch below
-takes them. The run's Monte Carlo
-(prop/model-score.js) sizes with the same limits (the cap, the broker's max
+**The size at entry.** The size is set by the per-trade risk (the owner's,
+2026-10-30: "Our stop is $300 per trade so sizing should be based on
+that"): the most contracts whose all-in risk at the stop fits the composed
+strategy's `risk.max_risk_usd` ($300 on `trade_lifecycle`). A contract's
+risk is its stop plus `stop_slippage_ticks` at its tick value, plus the
+fees both ways. Every value above only lowers that size, never raises it:
+the size budget (`cushion_frac`, `cap_usd`, the drawdown halving), the room
+to the floor and the daily limit, the verdict's own size, near the target
+the floor, the account's max contracts and the broker's max order size.
+It trades in the selected contract; with none selected (`auto`: the
+simulators) as minis only when whole minis carry the same
+micro-equivalents within the cap, else micros, so a wider stop never gets
+more contracts than a narrower one. In an attempt the size the model
+states (its compose record) is a suggestion: `prop/size-translate.js`, the
+one place, translates it at entry to this size, never under the floor
+(under it: no trade) and never with a tighter stop. `order_plan` builds
+the order at it, the gate accepts exactly it (or phase 2's smaller cut)
+and refuses any other size. With the floor at 3 and the composed $300 cap,
+a stop wider than 197 ticks on MNQ ((197 + 1) x $0.50 + $0.74 = $99.74 a
+contract) or 78 ticks on MES ((78 + 1) x $1.25 + $0.74 = $99.49) can't be
+traded: 3 contracts would risk over $300 all in, so those setups skip,
+unless the floor stretch below takes them. The run's Monte Carlo
+(prop/model-score.js) sizes with the same rule (the cap, the broker's max
 order size, the contract the run traded, the floor stretch).
+
+**The healthy cap.** `healthy_risk_usd` (`off` today) is part of
+`sizing`, so it is `enforced`: when it is on, while the attempt is healthy
+(as the floor stretch reads it, below) it is the per-trade cap all in in
+place of the composed cap, for every size, never under the composed cap;
+not healthy, the composed cap. It raises risk per trade, so it is turned
+on only after the 30-session Monte Carlo shows it adds no blow.
 
 **The floor stretch.** `floor_stretch_max_usd` (the owner's, 2026-10-24:
 "up to $500 if healthy") is part of `sizing`, so it is `enforced`: where
@@ -311,6 +327,7 @@ one with its evidence.
 | `policies.prop_portfolio.sizing.clock_k` | starting value, not learned; tuned by the 30-day Monte Carlo (phase 2) | not measured | not measured | not learned |
 | `policies.prop_portfolio.sizing.min_contracts` | the owner's floor (2026-10-23), not learned | not measured | not measured | not learned |
 | `policies.prop_portfolio.sizing.floor_stretch_max_usd` | the owner's stretch (2026-10-24), not learned | not measured | not measured | not learned |
+| `policies.prop_portfolio.sizing.healthy_risk_usd` | off: the owner's healthy cap (2026-10-30), measured before it is turned on, not learned | not measured | not measured | not learned |
 
 `prop_portfolio` lists no strategies since 2026-10-14 (every rules strategy
 retired, strategies/README.md): it has no setups, so it sizes nothing until

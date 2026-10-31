@@ -41,9 +41,10 @@ const DIRECTION = Object.freeze({
   min_contracts: 'higher', // the floor of contracts: a higher one skips sooner (never sizes past the budget)
   floor_stretch_max_usd: 'lower', // dollars the floor may risk over a composed cap while healthy: less is stricter
   near_target_usd: 'higher', // the floor once a pass needs this or less: a wider band trades the floor sooner
+  healthy_risk_usd: 'lower', // dollars a trade may risk while healthy in place of the composed cap: less is stricter
 });
-/** Limits whose `off` is the strictest value, not the loosest (off: no floor stretch at all): compared as 0. */
-const OFF_STRICTEST = Object.freeze(['floor_stretch_max_usd']);
+/** Limits whose `off` is the strictest value, not the loosest (off: no floor stretch, no healthy cap at all): compared as 0. */
+const OFF_STRICTEST = Object.freeze(['floor_stretch_max_usd', 'healthy_risk_usd']);
 
 const isMap = x => Boolean(x) && typeof x === 'object' && !Array.isArray(x);
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);

@@ -51,8 +51,11 @@
  *   near_target_usd     > 0: once the profit a pass still needs is at most this, a trade is the floor (min_contracts),
  *                       never more (owner-approved 2026-10-28; 0: off, the rulebook's `off`); nearTarget below, applied
  *                       by prop/size-translate.js (translateSize, limitPlan), the one place a prop size is set
+ *   healthy_risk_usd    > 0: while the attempt is healthy (no deficit, no loss today), the per-trade cap all in in place
+ *                       of the composed strategy's risk.max_risk_usd, never under it (0: off, the rulebook's `off`: the
+ *                       composed cap always); prop/size-translate.js riskCapOf, the one rule (never read here)
  */
-const SIZING_KEYS = Object.freeze(['cushion_frac', 'cap_usd', 'clock_k', 'r_per_session', 'min_size_guard', 'drawdown_halve_usd', 'stop_slippage_ticks', 'min_contracts', 'floor_stretch_max_usd', 'near_target_usd']);
+const SIZING_KEYS = Object.freeze(['cushion_frac', 'cap_usd', 'clock_k', 'r_per_session', 'min_size_guard', 'drawdown_halve_usd', 'stop_slippage_ticks', 'min_contracts', 'floor_stretch_max_usd', 'near_target_usd', 'healthy_risk_usd']);
 /**
  * The floor under a stop's expected slippage: the schema's (rulebook.js refuses less), not a value. A missing or
  * smaller slippage only ever sizes the same or down. The backtester's fill slippage (engine.js DEFAULTS.slippageTicks)

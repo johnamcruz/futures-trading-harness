@@ -694,7 +694,11 @@ function propViolations(home, { strategy, account, input = {}, now = new Date(),
   const block = combineBlock(home, account.name, now) || entrySinceSnapshot(home, account.name, journal);
   if (block) out.push({ check: 'combine', message: `${account.name}: ${block}.` });
   else {
-    const b = budgetPlan(home, account, strategy, root, ticks, fraction, specOf, selected);
+    // A composed entry's verdict (on a compose record) is sized in its own contract, as the runner sizes it (selected
+    // [root]) and the size translation reads it (prop/size-translate.js translateSize): with none selected, never a mini
+    // the entry doesn't trade (the owner, 2026-10-30: the size is the most the $300 cap fits).
+    const legs = selected || (verdictNow && verdictNow.record && verdictNow.contract === root ? [root] : null);
+    const b = budgetPlan(home, account, strategy, root, ticks, fraction, specOf, legs);
     if (b.error) out.push({ check: 'combine', message: `${account.name}: ${b.error}.` });
     else if (b.root !== root || !(size >= 1 && size <= b.size)) {
       const allowed = b.root ? `${b.size} ${b.root} at $${b.riskPerContract.toFixed(2)} risk each` : `nothing${b.floor ? `: ${b.floor}` : ''}`;

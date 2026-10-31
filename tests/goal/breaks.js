@@ -14,6 +14,9 @@
  *   gate-refuse      the order gate refuses every entry (order-gate.js evaluateOrder: one violation added) -> d
  *   stale-trail      the runner's structure trail stands behind a stale swing (exit-trail.js swingAtBar on the bars
  *                    STALE_BARS before the bar)                                                     -> g
+ *   no-micro-fallback  the sizing as it was before 2026-10-30 (budget first, then the cap): in auto mode the budget's
+ *                    mini that the composed cap prices out sizes nothing (size-translate.js entryPlan replaced by
+ *                    limitPlan on contractPlan) -> the sizing check (goal-sizing.js: the simulator skips a trade live sizes)
  * (Category e, the order's timing, is a world option: the clock runs on before the order, tests/fixtures/goal-world.js.)
  */
 
@@ -53,6 +56,10 @@ if (which === 'drop-setups') {
     const j = i - STALE_BARS;
     return j >= 0 ? at(bars.slice(0, j + 1), bars[j], minutes, sign) : at(bars, bar, minutes, sign);
   };
+} else if (which === 'no-micro-fallback') {
+  const ST = require(path.join(LIB, 'prop', 'size-translate'));
+  const combine = require(path.join(LIB, 'trading', 'combine'));
+  ST.entryPlan = (args, opts = {}) => ST.limitPlan(combine.contractPlan(args), { ...opts, minContracts: args.minContracts, ratio: args.ratio, miniRoot: args.legs && args.legs.mini ? args.legs.mini.root : null });
 } else if (which) {
-  throw new Error(`FTH_GOAL_BREAK=${which}: not a goal break (drop-setups, compose-refuse, phase2-unread, gate-refuse, stale-trail)`);
+  throw new Error(`FTH_GOAL_BREAK=${which}: not a goal break (drop-setups, compose-refuse, phase2-unread, gate-refuse, stale-trail, no-micro-fallback)`);
 }
