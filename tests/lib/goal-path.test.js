@@ -88,7 +88,20 @@ test('summarize, fillShare, tier2Rows and tier2RiseProblems: the tier 2 metrics 
   const mech = [{ day: '2022-03-30', side: 'long', entryTime: '2022-03-30T13:48:00.000Z' }];
   const s = GP.summarize(t, { legs: day().legs, mechanical: mech, spanMs: 15 * 60000, blows: 0 });
   assert.deepStrictEqual(s, { trades: 1, totalR: 1, meanR: 1, caught: 0.3333, fills: 1, blows: 0 });
-  assert.strictEqual(GP.fillShare(t, [{ ...mech[0], side: 'short' }], 15 * 60000), 0);
+  // The day's first planned entry filled, the mock's or the mechanical's (the owner, 2026-10-31).
+  const SPAN = 15 * 60000;
+  const m925 = [{ day: '2023-09-25', side: 'short', entryTime: '2023-09-25T13:54:00.000Z' }];
+  // The mock's earlier entry filled; the mechanical one is then refused (one position at a time): filled.
+  assert.strictEqual(GP.fillShare([{ day: '2023-09-25', side: 'short', entryTime: '2023-09-25T13:36:00.000Z' }], m925, SPAN), 1);
+  // The mechanical entry filled within its window, the mock on either side: filled.
+  assert.strictEqual(GP.fillShare([{ day: '2023-09-25', side: 'long', entryTime: '2023-09-25T14:03:00.000Z' }], m925, SPAN), 1);
+  // Neither filled: no trade that day, or the day's only fill after the mechanical entry's window: a lost fill.
+  assert.strictEqual(GP.fillShare([], m925, SPAN), 0);
+  assert.strictEqual(GP.fillShare([{ day: '2023-09-25', side: 'short', entryTime: '2023-09-25T14:12:00.000Z' }], m925, SPAN), 0);
+  assert.strictEqual(GP.fillShare([{ day: '2023-09-26', side: 'short', entryTime: '2023-09-26T13:36:00.000Z' }], m925, SPAN), 0, 'another day\'s fill is not this day\'s');
+  assert.strictEqual(GP.fillShare([{ day: '2023-09-25', side: 'short', entryTime: null }], m925, SPAN), 0, 'a fill with no time never counts');
+  assert.strictEqual(GP.fillShare([{ day: '2023-09-25', entryTime: '2023-09-25T13:36:00.000Z' }], [...m925, { day: '2023-09-26', side: 'long', entryTime: '2023-09-26T13:54:00.000Z' }], SPAN), 0.5);
+  assert.strictEqual(GP.fillShare([], [], SPAN), null);
   const tol = { trades: 0, totalR: 0.25, fills: 0.1 };
   assert.ok(GP.tier2Rows(s, s, tol).every(r => r.ok));
   assert.deepStrictEqual(GP.tier2Rows(s, { ...s, blows: 1, totalR: 0.7, fills: 0.85, trades: 0 }, tol).filter(r => !r.ok).map(r => r.key), ['blows', 'trades', 'totalR', 'fills']);

@@ -3,8 +3,9 @@
 /**
  * The goal regression's tier 2 (npm run goal:full; in CI its shards, then the goal-full job): the fixture's tier 2 days
  * through the live path with the mock policy (tests/goal/tier2-run.js), against main's tier 2 baseline. It fails on any
- * blow, on fewer trades, less total R or fewer fills of the mechanical tier's first entries than main beyond the
- * tolerances (config/training.json goalRegression.tier2.tolerance), on any lost or changed trade (each named by the
+ * blow, on fewer trades, less total R or fewer days whose first planned entry filled (the mock's or the mechanical
+ * tier's: goal-path.js fillShare) than main beyond the tolerances (config/training.json goalRegression.tier2.tolerance),
+ * on any lost or changed trade (each named by the
  * category of its break, goal-path.js CATEGORIES), and on any trade whose path trace is not whole (a step missing, failed
  * or out of order). The full trace is written outside the repository (its path printed). Its catch-the-move goldens
  * (below) share the one run: every layer of each move day as the golden has it, trend days caught and ridden. The break

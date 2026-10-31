@@ -1804,7 +1804,14 @@ delay is modelled. Each trade's path is traced (bias, setup, compose,
 phase 2, gate, order, fill, bracket, each trail move, exit, end of day) and
 every lost or changed trade against main's is named by its break (the
 briefing didn't list it, compose refused, phase 2 unreadable or vetoed, the
-gate refused, the order's timing, a fill difference, the exit). Each day is
+gate refused, the order's timing, a fill difference, the exit). Its sums
+are the blows, the trades, the total R and the fills: the share of the
+days with a mechanical first entry whose first planned entry filled, the
+mock's or the mechanical's (a trade filled that day by the end of the
+mechanical entry's setup-frame span), so one trade replacing another is no
+lost fill (the owner, 2026-10-31: the mock entering at the setup close
+earlier, one position at a time then refusing the mechanical entry), and a
+day where nothing filled by then is one. Each day is
 held to its label: no day blows; a non-trend day has no entry or a loss of
 at most `tier2.maxLossR`; a trend day main caught stays caught. Its self-tests
 inject each goal-breaking issue and must see it fail (`tier2-breaks`: a

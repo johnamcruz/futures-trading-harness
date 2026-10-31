@@ -374,12 +374,15 @@ function compareTrades(main, now, days) {
 }
 
 /**
- * The mechanical tier's first entry each day (goal-trades.js) filled by tier 2: a tier 2 entry the same day and side
- * whose fill is within one setup-frame span of the mechanical entry.
+ * The share of the days with a mechanical first entry (goal-trades.js) whose first planned entry filled, the mock's or the mechanical's
+ * (the owner, 2026-10-31: one trade replacing another isn't a lost fill): a trade filled that day no later than the
+ * mechanical entry's window (its entry time plus spanMs, one setup-frame span). The mechanical entry filled within its window counts; so does
+ * an earlier mock entry that filled (one position at a time then refuses the mechanical one); a day where nothing
+ * filled by then is a lost fill.
  */
 function fillShare(trades, mechanical, spanMs) {
   if (!mechanical.length) return null;
-  const hit = mechanical.filter(m => trades.some(t => t.day === m.day && t.side === m.side && Math.abs(ms(t.entryTime) - ms(m.entryTime)) <= spanMs));
+  const hit = mechanical.filter(m => trades.some(t => t.day === m.day && Number.isFinite(ms(t.entryTime)) && ms(t.entryTime) <= ms(m.entryTime) + spanMs));
   return r4(hit.length / mechanical.length);
 }
 
@@ -406,7 +409,7 @@ const TIER2 = Object.freeze([
   Object.freeze({ key: 'blows', label: 'tier 2 blows (days)', dir: 'max', tol: null }),
   Object.freeze({ key: 'trades', label: 'tier 2 trades', dir: 'min', tol: 'trades' }),
   Object.freeze({ key: 'totalR', label: 'tier 2 total R', dir: 'min', tol: 'totalR' }),
-  Object.freeze({ key: 'fills', label: 'tier 2 fills of the mechanical first entries', dir: 'min', tol: 'fills' }),
+  Object.freeze({ key: 'fills', label: 'tier 2 days whose first planned entry filled (mock or mechanical)', dir: 'min', tol: 'fills' }),
 ]);
 
 function tier2Rows(base, now, tol) {

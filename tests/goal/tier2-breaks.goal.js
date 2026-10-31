@@ -4,7 +4,8 @@
  * Tier 2's break self-tests (npm run goal:full; a test that can't catch the break it claims to guard is no test): one
  * deliberate break per goal-breaking issue, each on one short day of main's, each asserting tier 2 fails and names it:
  *   drop-setups, compose-refuse, phase2-unread, gate-refuse (tests/goal/breaks.js patches the shipped code) on a day
- *   whose trade stops out early: categories a, b, c, d of main's tier 2 trades
+ *   whose trade stops out early: categories a, b, c, d of main's tier 2 trades; gate-refuse's day also counts as a
+ *   lost fill (no first planned entry filled, mock or mechanical: the fills metric 0)
  *   latency (an injected stub of this test only: the replay clock moved past the record's life before the order, nothing
  *   waits): category e
  *   delay (the 3m-confirmation-style delay: the order a bar late) on a move day: its golden's ENTRY layer
@@ -43,7 +44,7 @@ const CHECKS = [
   { name: 'drop-setups', day: quick, category: 'a', says: /no setup listed/ },
   { name: 'compose-refuse', day: quick, category: 'b', says: /compose_check refuses/ },
   { name: 'phase2-unread', day: quick, category: 'c', says: /phase 2 approved without a size the runner can read/ },
-  { name: 'gate-refuse', day: quick, category: 'd', says: /\[goal-break\]/ },
+  { name: 'gate-refuse', day: quick, category: 'd', says: /\[goal-break\]/, lostFill: true },
   { name: 'latency', day: quick, category: 'e', says: /expired|late/, latencyMs: LATE_MS },
 ];
 // The days whose trade the cap holds to 5 MNQ or fewer: wide stops, where the old sizing skipped (the probe: 26-44 points).
@@ -73,6 +74,14 @@ test('tier 2 break self-tests: each deliberate break fails tier 2 and is named b
       lines.push(`${c.name} on ${c.day}: ${j.fail ? 'FAILS' : 'passes'}; ${j.changes.map(x => `(${x.category}) ${x.why}`).join('; ') || 'no change named'}`);
       assert.ok(j.fail, `${c.name}: tier 2 must fail\n${T.reportText(j)}`);
       assert.ok(hit.length, `${c.name}: tier 2 must name category ${c.category} (${GP.CATEGORIES[c.category]}); it named:\n${T.reportText(j)}`);
+      // A real lost fill (the gate refusing every entry: neither the mock's nor the mechanical entry fills) still
+      // counts as one under the fills metric (the day's first planned entry filled, mock or mechanical).
+      if (c.lostFill) {
+        const fills = T.readTier2(r).summary.fills;
+        lines.push(`${c.name} on ${c.day}: the day's first planned entry filled: ${fills}`);
+        assert.ok(r.every(d => d.mechanical.length), `${c.name}: ${c.day} has a mechanical first entry`);
+        assert.strictEqual(fills, 0, `${c.name}: a lost fill must count as one (fills ${fills})`);
+      }
     } else {
       const diffs = T.judgeMoves(GOLDEN, T.readMoves(r), r[0].tick)[0].diffs;
       lines.push(`${m.name} on ${m.day}: ${diffs.join('; ') || 'as the golden'}`);
