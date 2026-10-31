@@ -61,3 +61,12 @@ temp/
 # A runner or replay config at the root (the one that selects an adapter among them): local.
 /autotrader*.json
 /replay*.json
+
+# The goal regression's local real-data files (npm run goal:real): built through the replay broker under the harness
+# home, never here; a copy here is never committed.
+tests/fixtures/goal/real-bars.json.gz
+tests/fixtures/goal/baseline-real.json
+tests/fixtures/goal/move-scenarios-real.json
+
+# The goal regression's CI shard results
+goal-shards/

@@ -8,6 +8,12 @@
 
 <!-- Paste the counts, e.g. "npm test: 609 pass, 0 fail". -->
 
+- [ ] Goal regression: main vs this PR (tier 1 in `npm run verify`; tier 2: `npm run goal:full`, in CI the `goal-full` check)
+- [ ] Touches entries, exits, sizing, the gate or the runner: `npm run goal:real` (local, real data) main vs this PR
+
+<!-- Paste `node scripts/goal-check.js run`'s table and tier 2's report; any baseline or move-golden change explained
+     as an improvement, metric by metric. -->
+
 ## Adversarial review (required)
 
 - [ ] Reviewed by someone other than the change's author (an independent agent or a person), against the base branch

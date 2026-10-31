@@ -28,3 +28,94 @@ jobs:
       - run: node scripts/strategies.js validate
       # No env files or credential values in the repository.
       - run: npm run check:secrets
+
+  # The goal regression's tier 2 (docs/TRAINING.md, "The goal regression"): the live path with the mock policy, its
+  # break self-tests, the broker-fault days, the negative probes, the state and floor days, the catch-the-move goldens
+  # and tier 1's mutation checks. Too long for every npm run verify, so its own jobs on every pull request, in parallel:
+  # tier 2's days in shards (each shard one round of goalRegression.tier2.parallel days), and a job for each other file
+  # of tests/goal/*.goal.js (tests/plugin/process.test.js keeps the matrix whole). No npm ci: no dependency is used.
+  goal-part:
+    name: goal (${{ matrix.part }})
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    strategy:
+      fail-fast: false
+      matrix:
+        include:
+          - part: tier2-1-of-9
+            file: tests/goal/tier2.goal.js
+            shard: 1/9
+          - part: tier2-2-of-9
+            file: tests/goal/tier2.goal.js
+            shard: 2/9
+          - part: tier2-3-of-9
+            file: tests/goal/tier2.goal.js
+            shard: 3/9
+          - part: tier2-4-of-9
+            file: tests/goal/tier2.goal.js
+            shard: 4/9
+          - part: tier2-5-of-9
+            file: tests/goal/tier2.goal.js
+            shard: 5/9
+          - part: tier2-6-of-9
+            file: tests/goal/tier2.goal.js
+            shard: 6/9
+          - part: tier2-7-of-9
+            file: tests/goal/tier2.goal.js
+            shard: 7/9
+          - part: tier2-8-of-9
+            file: tests/goal/tier2.goal.js
+            shard: 8/9
+          - part: tier2-9-of-9
+            file: tests/goal/tier2.goal.js
+            shard: 9/9
+          - part: tier1
+            file: tests/goal/tier1.goal.js
+          - part: breaks
+            file: tests/goal/tier2-breaks.goal.js
+          - part: faults
+            file: tests/goal/tier2-faults.goal.js
+          - part: probes
+            file: tests/goal/tier2-probes.goal.js
+          - part: states
+            file: tests/goal/tier2-states.goal.js
+          - part: floor
+            file: tests/goal/tier2-floor.goal.js
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - run: node --test ${{ matrix.file }}
+        env:
+          FTH_GOAL_SHARD: ${{ matrix.shard }}
+          FTH_GOAL_SHARD_OUT: goal-shards
+      - if: matrix.shard
+        uses: actions/upload-artifact@v4
+        with:
+          name: goal-shard-${{ matrix.part }}
+          path: goal-shards/
+          retention-days: 3
+
+  # The one required check (mark goal-full required in the branch protection with test): every part passed, then tier
+  # 2's shards judged as one run (tests/goal/tier2-aggregate.js: every shard once, every day, the sums against main).
+  goal-full:
+    needs: goal-part
+    if: always()
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: every goal part passed
+        env:
+          PARTS: ${{ needs.goal-part.result }}
+        run: test "$PARTS" = success
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version-file: .nvmrc
+      - uses: actions/download-artifact@v4
+        with:
+          pattern: goal-shard-*
+          path: goal-shards
+          merge-multiple: true
+      - run: npm run goal:aggregate -- goal-shards

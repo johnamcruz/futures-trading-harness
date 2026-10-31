@@ -1732,6 +1732,140 @@ anchor (the phrase of the skills that states its rule) must be in the prompt it
 is asked against (tests/plugin/context-quiz.test.js). A changed key or question
 is explained in the pull request, as a golden is.
 
+### The goal regression
+
+A regression for the strategy, on every pull request, with real market data
+and a mock model: does the change break the goal, in the owner's order (0
+blows; a 30-session combine pass rate of 40% or more; more of the trends' R
+caught)? It runs the harness's own code and compares with the committed
+baseline (`tests/fixtures/goal/baseline.json`).
+
+**The CI fixture** (`tests/fixtures/goal/bars.json.gz`, about 0.5 MB): a
+small slice of real NQ 3m bars from the open learning window, never a
+sealed one. 30 sessions in 6 blocks of 5 consecutive sessions, 3 per half
+(half A before `goalRegression.split`, half B from it), drawn by a seed with
+8 trend days per half; and the five move days (`goalRegression.moveDays`) as
+blocks of their own. Each block carries the 514 hours before its first
+session, so the 4h and 1h reads see what live sees. Every session is
+labelled in the fixture, with why: trend (a PPC trend-set leg, the census
+detector with the 4h and 1h aligned) or non-trend (no such leg; the
+mechanical tier's day: a fakeout, or no trade). Rebuild it with
+`node scripts/goal-fixture.js --bars <NQ 3m bars file> --symbol MNQ`, then
+`node scripts/goal-check.js baseline --write --new-fixture --why "<why>"`
+and tier 2's `--write` and `--write-moves`.
+
+**Synthetic days** (`scripts/lib/eval/goal-synth.js`, built in memory, no
+data file): only what real days can't give cleanly: a fakeout that must end
+at -1R, a quiet day whose right answer is no trade, a composed limit entry
+(a 15m level break listed with no cited fire: the limit at the confirming
+close fills, its bracket, the trail, the exit), a VWAP-break day (below),
+two floor days (a listed break whose stop, the reaction candle's low, is
+closer than D13's floor: the tick term binding on one, the ATR term on the
+other) and the blow path (ten sessions whose reversal gaps through the stop: the
+shipped sizing never risks the floor on it, a broken size does). Their
+shapes are config, pinned exactly with the rest of the yardstick.
+
+**Tier 1** (`tests/plugin/goal-regression.test.js`, in `npm test`, about
+10 s; `node scripts/goal-check.js run` prints the table): mechanical entries
+only. On the entry rule's side per bar (the RULEBOOK's `entry`,
+chain-side.js), the 15m CHoCH, BOS, compression break and strong CISD at its
+OTE and momentum_continuation's scan; compose's entry timing as shipped, the
+locked stop and D13's floor, the exit (limitOutcome with the policy's
+composed exit), one position at a time; then per half the trades, mean R, R
+caught of the trend legs' R available, the false-start share, the drawdown
+and a seeded 30-session combine Monte Carlo on the account's rulebook
+sizing; and the blow path's blows. It fails on one more blow, or a pass
+rate, mean R or R caught below main's less its tighten-only tolerance
+(`goalRegression.tolerance`: tight, since every number is deterministic).
+The fixture's draw, the Monte Carlo and tier 2's days are pinned exactly.
+Its mutation checks (`tests/goal/tier1.goal.js`) prove it fails on a worse
+exit, a stricter entry rule, a broken size on the blow path, a minimum size
+no stop fits and a stop floor that refuses structure stops.
+
+**Tier 2** (`npm run goal:full` locally; in CI its own jobs, below): the live
+path (the runner, the briefing, compose_check, phase 2, the gate and the mock
+exchange as a replay broker) with a deterministic mock model that follows
+the plan (the Bias line's side, the first setup the briefing lists,
+compose_check, phase 2's `VERDICT: APPROVE - size n`, hold), on 6 of the
+slice's days (4 trend, 2 non-trend), entries in the session's first
+`tier2.entryMinutes`. It orders at the earliest the runner allows: no model
+delay is modelled. Each trade's path is traced (bias, setup, compose,
+phase 2, gate, order, fill, bracket, each trail move, exit, end of day) and
+every lost or changed trade against main's is named by its break (the
+briefing didn't list it, compose refused, phase 2 unreadable or vetoed, the
+gate refused, the order's timing, a fill difference, the exit). Each day is
+held to its label: no day blows; a non-trend day has no entry or a loss of
+at most `tier2.maxLossR`; a trend day main caught stays caught. Its self-tests
+inject each goal-breaking issue and must see it fail (`tier2-breaks`: a
+dropped setup line, a compose refusal, a phase-2 parse failure, a gate
+refusal, an order past the record's life, the order a bar late (a
+3m-confirmation-style delay), a trail behind a stale swing); the broker-fault
+days (`tier2-faults`: a lost reply, a late fill, a fill reported late past
+the gate's own reads, a refused or errored stop move, a partial fill) must
+stay protected (a late fill at every pass: its bracket stop rests from the
+fill), never refuse an exit (the runner never cancelling the working stop)
+and never double the position; the move goldens (`tests/fixtures/goal/move-scenarios.json`)
+pin every layer of the five real legs and the synthetic fakeout and quiet
+day, and hold trend days caught and ridden (at least two on main, so a
+capture loss fails). The negative probes (`tier2-probes`) send what the gate
+must refuse and assert each refusal by its tag: an entry against the Bias
+line before any verdict, a 3m setup, the side against the record, a size
+above the verdict and below the floor, no bracket stop, a second position,
+the stop loosened (the gate's entry rule turned off must fail them). The
+state days (`tier2-states`) start the attempt with a low cushion and near
+the target: each size is main's exactly, the floor near the target, smaller
+with the cushion low (a looser cushion share or no near-target floor must
+fail them). The floor days (`tier2-floor`) must see compose_check refuse
+the stop under D13's floor and never widen it (the record's stop the named
+level less the buffer), the tick term binding on one day and the ATR term
+on the other, and no trade (a floor of 4 ticks, or no ATR term, must each
+let its day's stop through and trade). Sizes are exact everywhere: a changed size is refused by
+`tier2-run.js --write` unless said why (`--sizes-why`). The full traces
+are written outside the repository.
+
+**In CI** (`.github/workflows/ci.yml`) the goal regression runs as parallel
+jobs on every pull request, so its wall time is about its slowest job's:
+`goal-part`, a matrix of tier 2's main days in shards (`FTH_GOAL_SHARD=k/n`:
+every n-th day of its days and the move days; enough shards that each plays
+one round of `tier2.parallel` days) and one job for each other
+`tests/goal/*.goal.js` file (tier 1's mutation checks, the breaks, the faults,
+the probes, the states, the floor days); then `goal-full`, the one check to
+mark required, which needs every part, fails unless all passed, and judges
+the shards' results as one run (`tests/goal/tier2-aggregate.js`: every shard
+once, every day once, the sums against main's baseline, every move day
+against its golden). `tests/plugin/process.test.js` keeps the matrix whole.
+
+**The local real run** (`npm run goal:real`): the same tiers on a larger
+fixture whose bars come from the replay broker's MCP server
+(`node scripts/goal-fixture.js --replay-config <replay config.json> --symbol MNQ`:
+the adapter's history, the replay server's clock moved chunk by chunk, a
+fresh run after a contract roll; or `--broker <name>` for a live broker,
+read only, no clock), kept with
+its baseline and move goldens under the harness home, never the repository.
+Without it the run skips, saying how to build it. A pull request touching
+entries, exits, sizing, the gate or the runner states its `goal:real`
+result against main.
+
+**Its limits.** Tier 1 is mechanical: it measures the code's entries, never
+the model's judgment; its setups are the 15m primitives the studies
+measured, not the briefing's key-level reactions, and every target is the
+2R mark, so a change there moves tier 2, not tier 1. Tier 2's mock follows
+the plan; it shows the path works, not what the model decides. A composed
+limit at the last close is marketable at once, so a limit that expires
+unfilled is only the order-latency self-test's (the order sent after the
+record's life). D13's floor binds only on the two synthetic floor days
+(every real day's stop is wider). The
+CI slice is small (30 sessions; a pass rate's sampling error is large):
+it guards against regressions, it is no estimate of the pass rate. Skill
+text, prompts and the model's reading are the context quiz's and the PPC
+rounds'. Two findings stay out of scope here, each its own pull request: "Setups to check" quotes the VWAP's name with its
+brackets ("15m broke VWAP (rth) up"), which compose_check doesn't verify
+(the listed-vwap golden); and tier 1's limitOutcome exit and the runner's
+live trail give different R on the same trade. A baseline only rises: `goal-check.js baseline --write` (and
+tier 2's `node tests/goal/tier2-run.js --write`) refuse a worse one, the
+test holds the committed baseline to the base branch's, and a new fixture
+starts over only with its change recorded (`--new-fixture --why "<why>"`).
+
 ## 8. Rules that keep it honest
 
 - **No outcomes shown to the model.** It sees only its own record (the

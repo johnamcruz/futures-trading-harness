@@ -90,6 +90,30 @@ const TRAINING = {
   exitFindings: { examples: int(1), exampleChars: int(80) },
   // The round report's control-window false start (train/curriculum.js): a loser whose best R never rose above this.
   trendReport: { falseStartPeakR: pos() },
+  // The goal regression (eval/goal-check.js, tests/plugin/goal-regression.test.js): the fixture's draw (goal-fixture.js),
+  // its combine Monte Carlo, and how far below main's baseline a metric may fall (tighten-only: they only fall).
+  goalRegression: {
+    seed: int(), split: str(), blocksPerHalf: int(1), blockSessions: int(1), trendPerHalf: int(0),
+    monteCarlo: { paths: int(1), seed: int(), meanBlock: int(1) },
+    tolerance: { passRate: frac(), meanR: nonneg(), rCaught: frac() },
+    // Tier 2 (eval/goal-path.js, tests/goal/tier2.goal.js): its days (seeded, from the fixture's trend and other days),
+    // how many run at once, and its tolerances below main (tighten-only).
+    // The golden catch-the-move days (tests/fixtures/goal/move-scenarios.json): known trend legs, a block each in the fixture.
+    moveDays: list(str()),
+    // The synthetic fixture (eval/goal-synth.js): its draws, the day shapes (ticks a bar, shares of sigma) and its layout.
+    // The local goal:real fixture's larger draw (scripts/goal-fixture.js --replay-config).
+    real: { blocksPerHalf: int(1), trendPerHalf: int(0), chunkDays: int(1), segmentDays: int(1) },
+    synth: {
+      seed: int(), symbol: str(), minutes: int(1), startPrice: pos(), breakMin: int(0, 1439), macroDrift: nonneg(), noise: nonneg(),
+      sigma: { overnight: pos(), rth: pos() }, wick: { with: nonneg(), against: nonneg() }, volume: { overnight: pos(), rth: pos(), decay: frac() },
+      fakeout: { day: str(), startBar: int(0), impulseBars: int(1), reversalBars: int(1), impulseDrift: nonneg(), reversalDrift: nonneg(), volume: pos() },
+      quiet: { day: str() },
+      compress: { vwapDay: str(), limitDay: str(), boxBars: int(1), quietNoise: nonneg(), expandBars: int(1), expandDrift: nonneg(), confirmDrift: nonneg(), confirmDip: nonneg(), trendDrift: nonneg(), runBars: int(0), gapTicks: nonneg(), wick: { with: nonneg(), against: nonneg() } },
+      bleed: { from: str(), sessions: int(1), gapTicks: nonneg() },
+      floor: { ticksDay: str(), atrDay: str(), quietBars: int(0), approachBars: int(2), reactionBars: int(1), ticks: { depthTicks: int(0), belowTicks: int(0), crossTicks: int(1), wickTicks: int(1), confirmTicks: int(1) }, atr: { depthTicks: int(0), belowTicks: int(0), crossTicks: int(1), wickTicks: int(1), confirmTicks: int(1) } },
+    },
+    tier2: { seed: int(), trendDays: int(0), otherDays: int(0), entryMinutes: int(1), maxLossR: pos(), states: { cushionShare: frac(), targetShare: frac() }, parallel: int(1), tolerance: { trades: int(0), totalR: nonneg(), fills: frac(), moveShare: frac() } },
+  },
 };
 
 // A stage preset's refused value: true or false (that value refused), or 'set' (any value refused).
@@ -206,6 +230,14 @@ const PINS = deepFreeze({
     'loop.limits.maxIterations.max': 100, 'loop.limits.maxModelCalls.max': 100000, 'loop.limits.maxWallMinutes.max': 10080,
     'proposal.maxEdits': 3, 'proposal.maxText': 2000, 'proposal.maxChanged': 3000, 'looks.maxArms': 3,
     'skillCaps.skillBytes': 3459, 'skillCaps.setupSkillBytes': 4000,
+    'goalRegression.tolerance.passRate': 0.005, 'goalRegression.tolerance.meanR': 0.005, 'goalRegression.tolerance.rCaught': 0,
+    'goalRegression.tier2.tolerance.trades': 0, 'goalRegression.tier2.tolerance.totalR': 0.05, 'goalRegression.tier2.tolerance.fills': 0, 'goalRegression.tier2.tolerance.moveShare': 0, 'goalRegression.tier2.maxLossR': 1.25,
+    'goalRegression.seed': 1, 'goalRegression.split': '2022-11-23', 'goalRegression.blocksPerHalf': 3, 'goalRegression.blockSessions': 5, 'goalRegression.trendPerHalf': 8,
+    'goalRegression.monteCarlo.paths': 2000, 'goalRegression.monteCarlo.seed': 1, 'goalRegression.monteCarlo.meanBlock': 7,
+    'goalRegression.moveDays': ['2021-06-15', '2021-06-24', '2021-10-04', '2021-10-06', '2021-11-19'],
+    'goalRegression.tier2.seed': 1, 'goalRegression.tier2.trendDays': 4, 'goalRegression.tier2.otherDays': 2,
+    'goalRegression.tier2.entryMinutes': 60, 'goalRegression.tier2.states': {'cushionShare': 0.5, 'targetShare': 0.5}, 'goalRegression.real': {'blocksPerHalf': 6, 'trendPerHalf': 15, 'chunkDays': 7, 'segmentDays': 56},
+    'goalRegression.synth': {'seed': 1, 'symbol': 'MNQ', 'minutes': 3, 'startPrice': 15000, 'breakMin': 1020, 'macroDrift': 0.6, 'noise': 0.4, 'sigma': {'overnight': 6, 'rth': 14}, 'wick': {'with': 0.15, 'against': 0.6}, 'volume': {'overnight': 900, 'rth': 900, 'decay': 0.002}, 'fakeout': {'day': '2024-01-08', 'startBar': 4, 'impulseBars': 2, 'reversalBars': 6, 'impulseDrift': 1.8, 'reversalDrift': 1.8, 'volume': 2.5}, 'quiet': {'day': '2024-02-05'}, 'compress': {'vwapDay': '2024-04-08', 'limitDay': '2024-05-06', 'boxBars': 10, 'quietNoise': 0.12, 'expandBars': 5, 'expandDrift': 1, 'confirmDrift': 0.4, 'confirmDip': 0.9, 'trendDrift': 0.8, 'runBars': 25, 'gapTicks': 6, 'wick': {'with': 0.05, 'against': 0.15}}, 'bleed': {'from': '2024-03-04', 'sessions': 10, 'gapTicks': 100}, 'floor': {'ticksDay': '2024-06-03', 'atrDay': '2024-06-10', 'quietBars': 0, 'approachBars': 10, 'reactionBars': 5, 'ticks': {'depthTicks': 0, 'belowTicks': 2, 'crossTicks': 2, 'wickTicks': 3, 'confirmTicks': 1}, 'atr': {'depthTicks': 1000, 'belowTicks': 3, 'crossTicks': 3, 'wickTicks': 6, 'confirmTicks': 3}}},
   },
   replay: {
     stages: {
@@ -346,6 +378,14 @@ const SPECS = Object.freeze({
     'proposal.maxEdits': 'down', 'proposal.maxText': 'down', 'proposal.maxChanged': 'down',
     'looks.maxArms': 'down',
     'skillCaps.skillBytes': 'down', 'skillCaps.setupSkillBytes': 'down',
+    // The goal regression's tolerances below main's baseline: only fall (a looser one lets a worse strategy pass).
+    'goalRegression.tolerance.passRate': 'down', 'goalRegression.tolerance.meanR': 'down', 'goalRegression.tolerance.rCaught': 'down',
+    'goalRegression.tier2.tolerance.trades': 'down', 'goalRegression.tier2.tolerance.totalR': 'down', 'goalRegression.tier2.tolerance.fills': 'down', 'goalRegression.tier2.tolerance.moveShare': 'down', 'goalRegression.tier2.maxLossR': 'down',
+    // The yardstick itself (the fixture's draw, the Monte Carlo, the days): pinned exactly, so a looser one can't be shopped for.
+    'goalRegression.seed': 'exact', 'goalRegression.split': 'exact', 'goalRegression.blocksPerHalf': 'exact', 'goalRegression.blockSessions': 'exact', 'goalRegression.trendPerHalf': 'exact',
+    'goalRegression.monteCarlo.paths': 'exact', 'goalRegression.monteCarlo.seed': 'exact', 'goalRegression.monteCarlo.meanBlock': 'exact', 'goalRegression.moveDays': 'exact',
+    'goalRegression.tier2.seed': 'exact', 'goalRegression.tier2.trendDays': 'exact', 'goalRegression.tier2.otherDays': 'exact',
+    'goalRegression.tier2.entryMinutes': 'exact', 'goalRegression.tier2.states': 'exact', 'goalRegression.real': 'exact', 'goalRegression.synth': 'exact',
   }),
   replay: spec('replay', REPLAY, {
     stages: 'exact',
