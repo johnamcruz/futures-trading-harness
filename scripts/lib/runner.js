@@ -59,7 +59,8 @@ const { contractRoot, contractMonthTag } = require('./trading/journal');
 const { familyRoot, familyOf } = require('./trading/contracts');
 const { specMismatch, validSpec, noSpecsMessage } = require('./trading/broker-specs');
 const { isOpen, signedSize } = require('./trading/positions');
-const { protectiveStops, legRole } = require('./trading/bracket-legs');
+const { protectiveStops, legRole, isStopLeg } = require('./trading/bracket-legs');
+const { stopHeld } = require('./trading/fill-evidence');
 const { coverageError } = require('./trading/exchange-calendar');
 const { writeReviews, tickValueFor } = require('./trading/runner-reviews');
 
@@ -516,17 +517,71 @@ function createRunner(deps) {
     // When no cycle may run (kill switch, outside the sessions), a pending
     // entry that fills would have no one to manage it: cancel those too.
     const entries = noCycles ? new Set() : entryOrderIds();
+    const ours = orders.filter(x => famOf(x.contractId) === root);
+    if (!ours.length) return;
+    // A flat position read is not the account flat: a fill reported late (the position not listed yet) still has its
+    // bracket stop. Every source counts first (fill-evidence.js); while one shows the position, nothing goes.
+    const late = await lateFill(root, ours);
+    if (late) {
+      log(`${item.symbol}: ALERT the ${root} position reads flat but ${late}; its orders are kept and the next bar reads the account again`, 'error');
+      emit('protection_kept', { symbol: item.symbol, root, why: late });
+      return;
+    }
     // Each cancel on its own: one the broker refuses, loses or answers late never skips the others (or the rest of the
     // housekeeping); the next bar reads the account again and retries what is still working.
-    for (const o of orders.filter(x => famOf(x.contractId) === root && !entries.has(Number(x.id)))) {
+    const cancel = async o => {
       try {
         await client.cancelOrder(cfg.account, o.id);
         log(`${item.symbol}: cancelled leftover order ${o.id} (type ${o.type}, side ${o.side}, size ${o.size}) on a flat ${root} position`);
+        return true;
       } catch (err) {
         log(`${item.symbol}: could not cancel leftover order ${o.id} on a flat ${root} position (${err.message}); the next bar retries`, 'error');
         emit('leftover_cancel_failed', { symbol: item.symbol, orderId: o.id, error: err.message });
+        return false;
       }
+    };
+    // Stops last: one that may be the bracket of an entry still working stays (an entry cancelled first no longer counts).
+    const left = new Set(ours);
+    for (const o of ours.filter(x => !isStopLeg(x) && !entries.has(Number(x.id)))) if (await cancel(o)) left.delete(o);
+    for (const o of ours.filter(x => isStopLeg(x) && !entries.has(Number(x.id)))) {
+      const held = stopHeld(o, { orders: [...left] });
+      if (held) { log(`${item.symbol}: kept stop ${o.id} on a flat ${root} position: ${held.text}`); continue; }
+      if (await cancel(o)) left.delete(o);
     }
+  }
+
+  /**
+   * Why a flat-reading root may still hold a position (a fill reported late), or null: the fills and the orders of any
+   * status since the trading day's start show a position one of its stops protects (an order filled beyond its listed
+   * fills, fills that don't net to zero), an entry the gateway let through today that no read lists, or a read that
+   * failed (kept: the next bar reads again). The adapter always has both reads; a client without one reads none.
+   */
+  async function lateFill(root, ours) {
+    const stops = ours.filter(isStopLeg);
+    if (!stops.length) return null;
+    const since = tradingDayStart(clock.now());
+    let fills = [];
+    let history = [];
+    try {
+      [fills, history] = await Promise.all([
+        typeof client.fillsSince === 'function' ? client.fillsSince(cfg.account, since) : [],
+        typeof client.ordersSince === 'function' ? client.ordersSince(cfg.account, since) : [],
+      ]);
+      if (!Array.isArray(fills) || !Array.isArray(history)) throw new Error('the fills or the orders are not a list');
+    } catch (err) {
+      return `the fills or orders since the day's start can't be read (${err.message})`;
+    }
+    for (const o of stops) {
+      const held = stopHeld(o, { orders: ours, fills, history });
+      if (held && held.why !== 'entry') return held.text;
+    }
+    if (typeof client.ordersSince !== 'function') return null;
+    // Within the time an order's outcome may take to show at the broker (ORDER_GRACE_MS): past it, an entry no read
+    // lists is gone (as order-markers.js settles one), so a leftover stop of a truly flat account is never kept for it.
+    const listed = new Set([...ours, ...history].map(o => String(o.id)));
+    const nowMs = clock.now().getTime();
+    const lost = entryOrders().find(e => e && famOf(e.contractId) === root && Date.parse(e.at) >= since.getTime() && nowMs - Date.parse(e.at) < ORDER_GRACE_MS && !listed.has(String(e.orderId)));
+    return lost ? `entry ${lost.orderId}, let through ${Math.round((nowMs - Date.parse(lost.at)) / 1000)} s ago, isn't listed by the broker yet (its fill may be late)` : null;
   }
 
   /** After a refused stop move: the account read again; a flat root has its leftover orders cancelled now. */
@@ -1343,7 +1398,18 @@ function createRunner(deps) {
       emit('flatten_unverified', { why, passes: unflatPasses - 1, open: open.map(p => p.contractId), working: working.length });
     }
     const toClose = open.filter(x => !settling(x.contractId));
-    const toCancel = working.filter(x => !settling(x.contractId) && !toClose.some(p => p.contractId === x.contractId));
+    let toCancel = working.filter(x => !settling(x.contractId) && !toClose.some(p => p.contractId === x.contractId));
+    // A root that reads flat while its fills or orders show a position (a fill reported late) keeps its orders but the
+    // recorded entries: the next pass reads it again and closes the position once it is listed.
+    const entries = entryOrderIds();
+    for (const root of new Set(toCancel.map(o => famOf(o.contractId)))) {
+      if (open.some(p => famOf(p.contractId) === root)) continue;
+      const late = await lateFill(root, working.filter(o => famOf(o.contractId) === root));
+      if (!late) continue;
+      log(`${why}: ALERT the ${root} position reads flat but ${late}; its stops are kept until it is listed and closed`, 'error');
+      emit('protection_kept', { symbol: root, root, why: late });
+      toCancel = toCancel.filter(o => famOf(o.contractId) !== root || entries.has(Number(o.id)));
+    }
     for (const p of toClose) {
       try {
         closedAt.set(p.contractId, nowMs);

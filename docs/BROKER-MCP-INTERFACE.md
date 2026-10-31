@@ -375,7 +375,13 @@ Result: outcome (edit codes).
 
 #### `cancel_order`
 
-Input: **`accountId`**, **`orderId`**. Result: outcome (edit codes).
+Input: **`accountId`**, **`orderId`**. Result: outcome (edit codes). The
+harness's gateway checks a cancel against the open positions and working
+orders, and against the fills and the orders of any status since the trading
+day's start (`search_trades`, `search_orders`): a stop stays while an order
+reads filled beyond the fills listed for it, or the fills don't net to zero
+(a fill the position read doesn't show yet). A read that fails refuses the
+cancel.
 
 #### `close_position`
 

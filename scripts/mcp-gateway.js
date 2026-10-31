@@ -128,9 +128,9 @@ function main(argv) {
       // cancel, modify, partial close: against the account, counting recent orders and orders of unknown outcome.
       if (tool === 'modify_order' && base.violations.length) return base;
       const { unknown } = await settle(args.accountId, now);
-      const { positions, orders } = await accountFacts(args, caller, false);
+      const { positions, orders, fills, history } = await accountFacts(args, caller, false, { evidence: tool === 'cancel_order', now });
       return { ...blocked(evaluateAccountChange(tool, {
-        input: args, positions, orders, config: loadConfig(process.env), now,
+        input: args, positions, orders, fills, history, config: loadConfig(process.env), now,
         ledger: [...ledger, ...tracker.exitLedger(unknown, now)], cancelLedger: [...ledger.filter(e => !e.unconfirmed), ...tracker.cancelLedger(unknown, now)],
       })), contractId: ((orders || []).find(o => o && args.orderId !== undefined && String(o.id) === String(args.orderId)) || {}).contractId }; // its order's, for the gate log
     }

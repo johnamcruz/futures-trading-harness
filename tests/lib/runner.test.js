@@ -292,6 +292,57 @@ test('leftover orders on a flat contract are cancelled before the cycle; pending
   assert.deepStrictEqual(cancelled, []);
 });
 
+test('a flat-reading contract keeps its stop while any source shows the position or its entry (a fill reported late); confirmed closed, the stop goes', async () => {
+  const run = async ({ orders, fills = [], history = [], entries = [], failReads = false, until = et(10, 2) }) => {
+    const market = fakeMarket({ minutes: 3 });
+    const clockRef = { t: et(9, 55) };
+    const cancelled = [];
+    const logs = [];
+    const runner = createRunner({
+      cfg: validateConfig({ harness: 'qwen', premarketAt: '', timeframe: 3, account: '7' }), root: '/r',
+      client: {
+        ...market.client(clockRef),
+        async accountState() { return { positions: [], orders: orders.filter(o => !cancelled.includes(o.id)) }; },
+        async cancelOrder(acct, id) { cancelled.push(id); },
+        async fillsSince() { if (failReads) throw new Error('HTTP 503'); return fills; },
+        async ordersSince() { return history; },
+      },
+      clock: { now: () => new Date(clockRef.t) }, runCycle: async () => ({ ok: true, timedOut: false }), log: (m, l) => logs.push(`${l || 'info'} ${m}`),
+      isKillSwitchOn: () => false, createKillSwitch: () => {}, loadState: () => null, saveState: () => {},
+      writeBars: () => '/b.json', scanFor: () => [], entryOrders: () => entries,
+    });
+    while (clockRef.t < until) { const ms = await runner.step(); clockRef.t += ms; }
+    return { cancelled, logs };
+  };
+  const stop = { id: 5, contractId: 'MNQ', type: 4, side: 1, size: 9, status: 1 };
+  const target = { id: 6, contractId: 'MNQ', type: 1, side: 1, size: 9, status: 1 };
+  const entry = { id: 4, contractId: 'MNQ', type: 2, side: 0, size: 9, status: 2, fillVolume: 9 };
+  // The entry reads filled, its fill isn't listed: the stop and its target stay.
+  const late = await run({ orders: [stop, target], history: [entry, stop, target] });
+  assert.deepStrictEqual(late.cancelled, []);
+  assert.ok(late.logs.some(l => /ALERT the MNQ position reads flat but the fills and order statuses show MNQ long 9/.test(l)), late.logs.join('\n'));
+  // A read that fails: kept, the next bar reads again.
+  const failed = await run({ orders: [stop], failReads: true });
+  assert.deepStrictEqual(failed.cancelled, []);
+  assert.ok(failed.logs.some(l => /can't be read \(HTTP 503\)/.test(l)));
+  // An entry the gateway let through moments ago that no read lists: kept, within the order grace; past it, it is gone
+  // and the leftover stop of the flat account goes (never kept all day for an entry the broker never took).
+  const just = [{ orderId: 4, contractId: 'MNQ', side: 'buy', at: new Date(et(9, 55)).toISOString() }];
+  const lost = await run({ orders: [stop], entries: just, until: et(9, 56) });
+  assert.deepStrictEqual(lost.cancelled, []);
+  assert.ok(lost.logs.some(l => /entry 4, let through \d+ s ago, isn't listed by the broker yet/.test(l)), lost.logs.join('\n'));
+  const gone = await run({ orders: [stop], entries: just, until: et(10, 5) });
+  assert.deepStrictEqual(gone.cancelled, [5]);
+  // An entry still working whose bracket stop this may be: the entry and the stop stay, a leftover target goes.
+  const working = { ...entry, type: 1, status: 1, fillVolume: 0, limitPrice: 21500 };
+  const pending = await run({ orders: [working, stop, target], history: [working, stop, target], entries: [{ orderId: 4, contractId: 'MNQ', side: 'buy', at: new Date(et(9, 50)).toISOString() }] });
+  assert.deepStrictEqual(pending.cancelled, [6]);
+  // Confirmed closed (the entry's fill and the stop's both listed, netting to zero): the leftovers go.
+  const stopped = { id: 7, contractId: 'MNQ', type: 4, side: 1, size: 9, status: 2, fillVolume: 9 };
+  const closed = await run({ orders: [stop, target], fills: [{ orderId: 4, contractId: 'MNQ', side: 0, size: 9 }, { orderId: 7, contractId: 'MNQ', side: 1, size: 9 }], history: [entry, stopped, stop, target] });
+  assert.deepStrictEqual(closed.cancelled.sort(), [5, 6]);
+});
+
 test('a trailing strategy\'s stop is tightened from +2R and the trade is closed when a bar goes through the new stop', async () => {
   const clockRef = { t: et(10, 0) + 2000 };
   const step = 180000;

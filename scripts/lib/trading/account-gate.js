@@ -26,6 +26,8 @@ const contractRoot = id => familyRoot(rootOf(id));
 const { isRiskReducing } = require('./order-gate');
 const { protectRefusal, restingExitRefusal } = require('./bracket-rule');
 const { coveredSize, isStopLeg, isTargetLeg } = require('./bracket-legs');
+const { stopHeld } = require('./fill-evidence');
+const { tradingDayStart } = require('./clock');
 const { normalizeBars } = require('./indicators');
 const { classifyRegime, regimeFits } = require('./regime');
 const { PENDING_ORDER_TTL_MS } = require('./gate-timing');
@@ -298,7 +300,7 @@ function bracketLegRefusal(order, positions, ledger, now, orders) {
  * cancel_order may not remove the last protective stop of an open position
  * (move it with modify_order instead, or close the position first).
  */
-function evaluateCancel({ input = {}, positions, orders, config, ledger = [], now = new Date() }) {
+function evaluateCancel({ input = {}, positions, orders, config, ledger = [], now = new Date(), fills, history }) {
   for (const [name, v] of Object.entries({ positions, orders })) {
     if (!Array.isArray(v)) throw new Error(`${name} from the server is not a list`);
   }
@@ -317,10 +319,26 @@ function evaluateCancel({ input = {}, positions, orders, config, ledger = [], no
   const resting = new Set(orders.filter(o => Number(o.side) === Number(order.side)).map(o => String(o.id)));
   const net = pendingState(ledger, order.contractId, contractNet(positions, order.contractId), now, undefined, { exact: true, resting }).projected;
   const orderSign = Number(order.side) === 0 ? 1 : -1;
-  if (net === 0 || orderSign !== -Math.sign(net)) return [];
+  if (net === 0 || orderSign !== -Math.sign(net)) return lateFillRefusal(order, { orders, fills, history });
   const otherStops = restingSize(orders.filter(o => o !== order), order.contractId, orderSign, STOP_TYPES);
   if (otherStops >= Math.abs(net)) return [];
   return [{ check: 'cancel-protection', message: `Order ${order.id} is the protective stop for the open ${contractRoot(order.contractId)} position (net ${net}). Move it with modify_order, or close the position first ([exit]).` }];
+}
+
+/**
+ * The position read shows nothing this stop protects: the fills and the order statuses since the trading day's start
+ * (the gateway reads them for every cancel; fill-evidence.js) still may. A fill reported late (an entry that reads
+ * filled with its fill not listed, fills that don't net to zero) or an entry still working keeps the stop; it goes once
+ * the fills net to zero and no entry works. Exits and close_position are never judged here.
+ */
+function lateFillRefusal(order, { orders, fills, history }) {
+  if (fills === undefined && history === undefined) return []; // a caller with no fill reads (the gateway always has them)
+  for (const [name, v] of Object.entries({ fills, history })) {
+    if (!Array.isArray(v)) throw new Error(`${name} from the server is not a list`);
+  }
+  const held = stopHeld(order, { orders, fills, history });
+  if (!held) return [];
+  return [{ check: 'cancel-protection', message: `Order ${order.id} may be the protective stop of a ${contractRoot(order.contractId)} position the account's position read doesn't show yet: ${held.text}. It stays while any source shows the position or its entry; it may go once the fills net to zero and no entry works. Move it with modify_order, or close the position first ([exit]).` }];
 }
 
 /**
@@ -491,10 +509,10 @@ function evaluatePartialClose({ input = {}, positions, orders, config, ledger = 
  * unknown market orders as they'd fill; `cancelLedger` also counts unknown
  * entries of any type as filled (their bracket stop may protect them).
  */
-function evaluateAccountChange(tool, { input, positions, orders, config, now, ledger: given = [], cancelLedger: givenCancel = given }) {
+function evaluateAccountChange(tool, { input, positions, orders, config, now, ledger: given = [], cancelLedger: givenCancel = given, fills, history }) {
   const ledger = ledgerNamed(input, given);
   const cancelLedger = ledgerNamed(input, givenCancel);
-  if (tool === 'cancel_order') return evaluateCancel({ input, positions, orders, config, ledger: cancelLedger, now });
+  if (tool === 'cancel_order') return evaluateCancel({ input, positions, orders, config, ledger: cancelLedger, now, fills, history });
   if (tool === 'modify_order') return evaluateModifyAccount({ input, positions, orders, config, ledger, now });
   if (tool === 'partial_close_position') return evaluatePartialClose({ input, positions, orders, config, ledger, now });
   throw new Error(`no account check for ${tool}`);
@@ -538,12 +556,18 @@ function regimeViolation(strategy, bars, config) {
  * entry counts losses, so only an entry asks for the fills: a rejected, late or lost search_trades never holds an exit
  * or a protective stop. Without them `trades` is null, which evaluateAccount refuses for an entry (fail closed).
  */
-async function accountFacts(args, caller, entry = !isRiskReducing(args.rationale)) {
+async function accountFacts(args, caller, entry = !isRiskReducing(args.rationale), { evidence = false, now = new Date() } = {}) {
   const accountId = args.accountId;
-  const [positions, orders, trades] = await Promise.all([
-    caller.call('list_open_positions', { accountId }).then(r => parseToolJson(r, 'list_open_positions')),
-    caller.call('list_open_orders', { accountId }).then(r => parseToolJson(r, 'list_open_orders')),
-    entry === true ? caller.call('search_trades', { accountId }).then(r => parseToolJson(r, 'search_trades')) : null,
+  // `evidence` (a cancel): the fills and the orders of any status since the trading day's start, so a stop a fill
+  // reported late still needs is kept (lateFillRefusal). A read that fails throws: the check fails closed.
+  const since = evidence ? tradingDayStart(now).toISOString() : null;
+  const read = (tool, a) => caller.call(tool, a).then(r => parseToolJson(r, tool));
+  const [positions, orders, trades, fills, history] = await Promise.all([
+    read('list_open_positions', { accountId }),
+    read('list_open_orders', { accountId }),
+    entry === true ? read('search_trades', { accountId }) : null,
+    evidence ? read('search_trades', { accountId, startTimestamp: since }) : undefined,
+    evidence ? read('search_orders', { accountId, startTimestamp: since }) : undefined,
   ]);
   // The call itself (in place: the gateway judges and records this object) and the account, named from one read
   // of the contract cache taken now, after the reads that may have looked the front month up (a new day, a roll).
@@ -552,7 +576,8 @@ async function accountFacts(args, caller, entry = !isRiskReducing(args.rationale
     const month = typeof args.contractId === 'string' && typeof r.names.month === 'function' ? { [MONTH]: r.names.month(args.contractId) } : {};
     Object.assign(args, { ...(typeof args.contractId === 'string' ? { contractId: r.args.contractId } : {}), [NAMES]: r.names, ...month });
   }
-  return { positions: r.positions, orders: r.orders, trades };
+  const each = list => (r.names && Array.isArray(list) ? list.map(x => (x && typeof x.contractId === 'string' ? { ...x, contractId: r.names(x.contractId) } : x)) : list);
+  return { positions: r.positions, orders: r.orders, trades, fills: each(fills), history: each(history) };
 }
 
 /**

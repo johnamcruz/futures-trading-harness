@@ -487,6 +487,70 @@ test('mock trading: an orphan target (2021-05-11): a stand-alone [protect] targe
   assert.strictEqual(exchange.read(w.state).fills.length, 2, 'the entry and its stop: nothing else filled');
 });
 
+/**
+ * A fill reported late (the goal regression's late-fill-long, 2026-10-30): a 9-contract bracket entry fills, and for
+ * eight 3m cycles the broker lists neither the position nor its fill (search_orders shows the entry filled). The runner
+ * must never send a cancel of the bracket stop (it read the root flat and called it a leftover), and the position must
+ * never be without a stop covering it for longer than one managed cycle. `loseLeg`: the broker drops the stop while the
+ * position is hidden; once listed, the runner's [protect] repair covers it within one cycle.
+ */
+async function lateFillDay(side, { loseLeg = false, at = '2026-10-07T14:00:00Z', reveal = '2026-10-07T14:24:00Z', until = '2026-10-07T14:40:00Z' } = {}) {
+  const w = world(at);
+  exchange.setPrice(w.state, MNQ_ID, 21500);
+  const placedOrder = exchange.handle(w.state, 'place_order', { accountId: 7, contractId: MNQ_ID, side, type: 'market', size: 9, stopLossBracket: { ticks: 40 } }, {});
+  const entryId = placedOrder.orderId;
+  // As the gateway records an entry it let through (order-tracker.js), so the plan's stop is known for a repair.
+  require('../../scripts/lib/trading/order-tracker').recordEntryOrder({ FTH_HOME: w.home }, entryId, { contractId: 'MNQ', side, rationale: `setup:fx_break ${side === 'buy' ? 'long' : 'short'}, stop ${side === 'buy' ? 21490 : 21510}`, stopLossBracket: { ticks: 40 } }, Date.parse(at));
+  const stop = working(w).find(o => o.type === 4);
+  assert.ok(stop && stop.size === 9);
+  const revealAt = Date.parse(reveal);
+  const uncovered = []; // pass times the exchange held the position with no stop covering it
+  const r = await runDay(w, {
+    from: new Date(Date.parse(at) + 30000).toISOString(), until, cfg: { sessions: ['09:30-12:00@America/New_York'] },
+    before: ms => {
+      exchange.update(w.state, s => { s.latePositions = ms < revealAt ? 1e6 : 0; });
+      if (loseLeg && ms >= Date.parse('2026-10-07T14:10:00Z') && ms < revealAt) exchange.update(w.state, s => { for (const o of s.orders) if (o.id === stop.id) o.status = 3; });
+      const s = exchange.read(w.state);
+      const p = s.positions.find(x => x.contractId === MNQ_ID);
+      const covered = s.orders.filter(o => o.status === 1 && o.contractId === MNQ_ID && o.type === 4 && o.side === (p && p.type === 1 ? 1 : 0)).reduce((n, o) => n + o.size, 0);
+      if (p && covered < p.size) uncovered.push(ms);
+    },
+  });
+  const calls = exchange.read(w.state).calls.filter(c => c.tool === 'cancel_order');
+  return { w, r, stop, uncovered, calls, revealAt };
+}
+
+for (const side of ['buy', 'sell']) {
+  test(`mock trading: a fill reported late (${side === 'buy' ? 'long' : 'short'} 9, hidden for eight cycles): the runner never cancels its bracket stop, and the position is never unprotected`, async () => {
+    const { w, r, stop, uncovered, calls } = await lateFillDay(side);
+    assert.deepStrictEqual(calls.filter(c => Number(c.args.orderId) === stop.id), [], 'no cancel of the stop reached the broker');
+    assert.ok(!r.logs.some(l => new RegExp(`cancel(led)? leftover order ${stop.id}\\b`).test(l)), `the runner never tried to cancel it: ${r.logs.filter(l => /leftover/.test(l)).join(' | ')}`);
+    const gateLog = fs.existsSync(path.join(w.home, 'gate.jsonl')) ? fs.readFileSync(path.join(w.home, 'gate.jsonl'), 'utf8') : '';
+    assert.ok(!/"cancel_order"/.test(gateLog), 'nor sent one to the gateway');
+    assert.ok(r.logs.some(l => /ALERT the MNQ position reads flat but the fills and order statuses show .* 9/.test(l)), r.logs.join('\n'));
+    assert.ok(r.events.some(e => e.kind === 'protection_kept'));
+    assert.deepStrictEqual(uncovered, [], 'never without a stop covering it');
+    assert.strictEqual(working(w).find(o => o.id === stop.id).status, 1, 'the stop still works');
+    assert.strictEqual(position(w).size, 9);
+  });
+}
+
+test('mock trading: a fill reported late across end of day: the flatten keeps the stop while the position is hidden, then closes it once listed', async () => {
+  const { w, r, stop, uncovered, calls } = await lateFillDay('buy', { at: '2026-10-07T19:45:00Z', reveal: '2026-10-07T19:54:00Z', until: '2026-10-07T19:58:00Z' });
+  assert.deepStrictEqual(calls.filter(c => Number(c.args.orderId) === stop.id && c.open), [], 'never cancelled while the position was open');
+  assert.ok(r.logs.some(l => /end of day: ALERT the MNQ position reads flat but .*its stops are kept/.test(l)), r.logs.filter(l => /end of day/.test(l)).join('\n'));
+  assert.deepStrictEqual(uncovered, []);
+  assert.strictEqual(position(w), null, 'closed once listed');
+  assert.ok(exchange.read(w.state).calls.some(c => c.tool === 'close_position' && c.open), 'by the runner\'s close');
+});
+
+test('mock trading: a fill reported late whose stop the broker dropped: once the position is listed, the runner restores protection within one cycle', async () => {
+  const { r, uncovered, revealAt } = await lateFillDay('buy', { loseLeg: true });
+  const after = uncovered.filter(ms => ms >= revealAt);
+  assert.ok(after.length === 0 || after[after.length - 1] - revealAt <= STEP, `uncovered after it was listed: ${after.map(ms => new Date(ms).toISOString()).join(', ')}`);
+  assert.ok(r.logs.some(l => /ALERT .* had stops for 0 of 9: restored a stop for 9 at 21490|ALERT .*closed at market/.test(l)), r.logs.filter(l => /ALERT/.test(l)).join('\n'));
+});
+
 test('mock trading: no resting exits: a limit [exit] is refused up front, a market one goes; with only the bracket working, the stop fills first and nothing outlives it', async () => {
   const w = world('2026-10-07T15:50:00Z');
   exchange.setPrice(w.state, MNQ_ID, 21500);
