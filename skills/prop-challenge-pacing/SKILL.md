@@ -62,7 +62,7 @@ it:
   side, `full` or `skip` (never anything else), the contract (the selected one: MNQ or NQ, MES or ES, ...), the budget's
   size (a ceiling), the stop in ticks, and its multiplier: the share of the budget the
   rulebook's enforced items allow (1 while it lists none; 0 is a skip, as is
-  an item whose fact is missing or stale). The size is already sized at it. **A verdict is a ceiling, never an order**:
+  an item whose fact is missing or stale). The verdict's size already counts it. **A verdict is a ceiling, never an order**:
   take it only when the priority order (the strategy-library skill) says so,
   and then as given: rationale `setup:<policy strategy> ...`, the record's
   contract and side, at most the lower of the verdict's size and the

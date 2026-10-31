@@ -37,6 +37,7 @@ const SPLITS = {
     homes: ['prop-challenge-pacing', 'prop-evaluator', 'prop-pacing-judgment'],
     // Edits made since the split (skill-split-late.js), each with its reason.
     late: [
+      { from: "The size is already sized at it.", to: "The verdict's size already counts it.", reason: "fix/sizing-micro-fallback (owner): sizing comes from the size translation, never restated" },
       { from: "prop_portfolio's sizing (its numbers are in the account's RULEBOOK.md, the", to: null, reason: "fix/sizing-micro-fallback (owner): sizing comes from the size translation, never restated" },
       { from: "one place for them): cushion_frac x $3250 = $975 (under cap_usd; no", to: null, reason: "fix/sizing-micro-fallback (owner): sizing comes from the size translation, never restated" },
       { from: "drawdown from the peak). A 40-tick stop plus a tick of expected slippage", to: null, reason: "fix/sizing-micro-fallback (owner): sizing comes from the size translation, never restated" },

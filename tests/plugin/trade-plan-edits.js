@@ -58,6 +58,15 @@ expectancy, within the budget and caps). A manual`,
   { old: 'the runner has cancelled the 2R order; the stop locks at +0.5R and trails.',
     now: 'the 2R order is cancelled; the stop holds at +0.5R until a 15m swing confirms past it, then trails behind it.',
     reason: 'fix/min-line-trail-text: as exit-trail.js does it: the latest confirmed 15m swing (even one from before the entry) is always there, so past 2R the stop holds at the lock until a swing stands beyond it; trail_r applies only with no swing in the bars' },
+  { old: `1 for a rules strategy (position-sizing's size-1 rule) and, for a policy,
+the verdict's cut to the attempt's size budget now, which is the most a
+policy entry may have; a composed trade's is the size you stated, refused
+over its cap (in an attempt, also the verdict).`,
+    now: `1 for a rules strategy (position-sizing's size-1 rule); in a prop attempt,
+the size translation's (\`order_plan\` gives it; the verdict is its
+ceiling); outside one, a composed trade's is the size you stated, refused
+over its cap.`,
+    reason: 'fix/sizing-micro-fallback (owner): sizing comes from the size translation, never restated' },
 ];
 
 /** The fixture with every edit applied; throws when an edit's old text isn't in it exactly once. */

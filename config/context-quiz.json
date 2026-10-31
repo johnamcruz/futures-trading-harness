@@ -120,7 +120,11 @@
         "^\\s*(yes\\b|y,)",
         "^\\s*(a )?(level|target)\\b",
         "\\b(both|as|from it as)\\s+(a\\s+)?(level|target)\\b",
-        "trade around"
+        "trade around",
+        "\\bis a (level|target)\\b",
+        "\\bbut a (level|target)\\b",
+        "\\ba (level|target) only\\b",
+        "^\\s*both\\b"
       ]
     },
     {
@@ -282,7 +286,8 @@
         "half",
         "^\\s*less\\b",
         "\\bless than (the )?full\\b",
-        "\\b(cut|reduce|trim|lower)\\s+(it|the (verdict's )?size)\\b|\\breduced?\\s+(it\\s+)?to\\s+\\d"
+        "\\b(cut|reduce|trim|lower)\\s+(it|the (verdict's )?size)\\b|\\breduced?\\s+(it\\s+)?to\\s+\\d",
+        "\\b(smaller|fewer|third|quarter|scaled?( down)?)\\b"
       ]
     },
     {
@@ -299,7 +304,8 @@
         "half",
         "^\\s*less\\b",
         "\\bless than (the )?full\\b",
-        "\\b(cut|reduce|trim|lower)\\s+(it|the (verdict's )?size)\\b|\\breduced?\\s+(it\\s+)?to\\s+\\d"
+        "\\b(cut|reduce|trim|lower)\\s+(it|the (verdict's )?size)\\b|\\breduced?\\s+(it\\s+)?to\\s+\\d",
+        "\\b(smaller|fewer|third|quarter|scaled?( down)?)\\b"
       ]
     },
     {
@@ -318,7 +324,10 @@
         "^(?!.*\\b(not|never|isn't|no|without)\\b).*(veto|no trade)",
         "\\b(place|take|send|go with)\\s+(the\\s+)?entry\\b",
         "\\bno restate\\b",
-        "\\binstead of (a )?restate\\b"
+        "\\binstead of (a )?restate\\b",
+        "(?<!not )(?<!not a )\\bis a trade\\b",
+        "\\brestate is (unnecessary|not needed)\\b",
+        "\\bno need (to|for a) restate\\b"
       ]
     },
     {
@@ -365,7 +374,11 @@
         "^\\s*8\\b",
         "\\b(place|take|use|enter|go with)\\s+(the\\s+)?(record'?s?\\s+)?(size\\s+)?(of\\s+)?8\\b",
         "\\b8\\b[^.;]*\\b(not|rather than|instead of)\\b[^.;]*\\b5\\b",
-        "\\b5\\s+or\\s+8\\b|\\b8\\s+or\\s+5\\b"
+        "\\b5\\s+or\\s+8\\b|\\b8\\s+or\\s+5\\b",
+        "^(?!.*\\b(never|not|don't)\\s+(place|take|use|enter)\\s+(the\\s+)?8\\b).*\\b(place|take|use|enter|go with)\\s+(the\\s+)?8\\b",
+        "^\\s*not\\s+(the\\s+)?5\\b",
+        "\\b5\\b[^.;]*\\bsuggestion\\b",
+        "\\brecord'?s\\s+8\\b"
       ]
     }
   ],
@@ -464,7 +477,8 @@
         "half",
         "^\\s*less\\b",
         "\\bless than (the )?full\\b",
-        "\\b(cut|reduce|trim|lower)\\s+(it|the (verdict's )?size)\\b|\\breduced?\\s+(it\\s+)?to\\s+\\d"
+        "\\b(cut|reduce|trim|lower)\\s+(it|the (verdict's )?size)\\b|\\breduced?\\s+(it\\s+)?to\\s+\\d",
+        "\\b(smaller|fewer|third|quarter|scaled?( down)?)\\b"
       ]
     },
     {
