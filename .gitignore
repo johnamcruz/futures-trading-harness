@@ -67,3 +67,6 @@ temp/
 tests/fixtures/goal/real-bars.json.gz
 tests/fixtures/goal/baseline-real.json
 tests/fixtures/goal/move-scenarios-real.json
+
+# The goal regression's CI shard results
+goal-shards/

@@ -30,6 +30,8 @@ const skip = SET.missing ? `skipped: ${SET.missing}` : false;
 const BASE = skip ? null : JSON.parse(fs.readFileSync(SET.baselineFile, 'utf8')).tier2;
 const OUT = fs.mkdtempSync(path.join(os.tmpdir(), 'fth-goal-tier2-'));
 const SHARD = GP.shardOf(process.env.FTH_GOAL_SHARD);
+// A shard judges no sums: without its results folder (for the aggregate) it would pass on part of the days alone.
+if (SHARD && !process.env.FTH_GOAL_SHARD_OUT) throw new Error('FTH_GOAL_SHARD without FTH_GOAL_SHARD_OUT: a shard\'s days are judged as one run only by the aggregate (unset FTH_GOAL_SHARD for the whole run)');
 const DAYS = skip ? [] : GP.shardDays(T.allDays(), SHARD);
 test('tier 2: main\'s baseline holds its days and a whole trace for every trade', { skip }, () => {
   assert.ok(BASE && Array.isArray(BASE.trades) && BASE.trades.length > 0, 'a tier 2 baseline (node tests/goal/tier2-run.js --write)');

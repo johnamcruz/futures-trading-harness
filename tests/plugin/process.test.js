@@ -12,7 +12,14 @@ const path = require('path');
 const REPO = path.resolve(__dirname, '..', '..');
 const read = f => fs.readFileSync(path.join(REPO, f), 'utf8');
 /** A workflow's jobs: [{ name, body }] (each job's lines under `jobs:`, two spaces in). */
-const jobsOf = yml => [...yml.split(/^jobs:\n/m)[1].matchAll(/^ {2}([a-z0-9-]+):\n((?: {4}.*\n|\n)*)/gm)].map(m => ({ name: m[1], body: m[2] }));
+const jobsOf = yml => {
+  const body = yml.split(/^jobs:\n/m)[1];
+  const jobs = [...body.matchAll(/^ {2}([a-z0-9-]+):\n((?: {4}.*\n|\n)*)/gm)].map(m => ({ name: m[1], body: m[2] }));
+  // Every job key read: one named outside the pattern would drop its steps from the checks below.
+  const keys = [...body.matchAll(/^ {2}([^\s#][^:]*):/gm)].map(m => m[1]);
+  assert.deepStrictEqual(jobs.map(j => j.name), keys, 'every CI job is read (job names are lowercase, digits and dashes)');
+  return jobs;
+};
 // The goal regression's jobs (below): its parts and the one aggregate.
 const GOAL_JOBS = ['goal-part', 'goal-full'];
 
