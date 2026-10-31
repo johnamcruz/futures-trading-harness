@@ -380,8 +380,9 @@ harness's gateway checks a cancel against the open positions and working
 orders, and against the fills and the orders of any status since the trading
 day's start (`search_trades`, `search_orders`): a stop stays while an order
 reads filled beyond the fills listed for it, or the fills don't net to zero
-(a fill the position read doesn't show yet). A read that fails refuses the
-cancel.
+(a fill the position read doesn't show yet), while an earlier entry it may be
+the leg of still works, or while a fill or order can't be read. A read that
+fails refuses a stop's cancel; an entry's or a target's still goes.
 
 #### `close_position`
 

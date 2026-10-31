@@ -560,8 +560,8 @@ function createRunner(deps) {
     const stops = ours.filter(isStopLeg);
     if (!stops.length) return null;
     const since = tradingDayStart(clock.now());
-    let fills = [];
-    let history = [];
+    let fills;
+    let history;
     try {
       [fills, history] = await Promise.all([
         typeof client.fillsSince === 'function' ? client.fillsSince(cfg.account, since) : [],

@@ -391,6 +391,9 @@ test('trade-session split: trade-plan is step 4 byte for byte (tests/plugin/harn
 // are read from the tree, so they cancel; in index mode the head trader's situational skills are the same on both
 // sides too, so each path's budget holds in both modes.
 const OLD_AGENTS_MD = 24466;
+// Raised pins (each by only the bytes its line needs): leftover-orders' [cancel-protection] line for a fill reported
+// late, 88394 -> 88548 (+154), owner-approved: improves context.
+const RAISED = 154;
 const EVERY_CYCLE = ['multi-timeframe-analysis', 'strategy-library', 'strategy-scan', 'strategy-gate-checks', 'trader-process', 'htf-to-ltf', 'autonomous-trading'];
 const PATHS = {
   'full cycle, no candidate': ['role-round', 'setup-judgment', 'day-context'],
@@ -402,7 +405,7 @@ const bytes = rel => fs.statSync(path.join(ROOT, rel)).size;
 
 test('trade-session split: no head-trader path reads more than the base\'s every-cycle load', () => {
   const common = EVERY_CYCLE.reduce((n, s) => n + bytes(`skills/${s}/SKILL.md`), 0);
-  const before = OLD_AGENTS_MD + bytes(BEFORE) + common;
+  const before = OLD_AGENTS_MD + RAISED + bytes(BEFORE) + common;
   const table = Object.entries(PATHS).map(([name, pieces]) => {
     const now = bytes('workspace/AGENTS.md') + bytes('skills/trade-session/SKILL.md') + common + pieces.reduce((n, s) => n + bytes(`skills/${s}/SKILL.md`), 0);
     return { name, now, before };

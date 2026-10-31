@@ -2145,6 +2145,10 @@ test('MCP gateway: a fill reported late (positions and fills not listed, the ent
     const failed = await gatewayRun({ FAKE_ORDERS: stop, FAKE_ERROR: tool, FTH_RUNNER_GATEWAY: '1' }, [call(5, 'cancel_order', { accountId: 1, orderId: 12 })]);
     assert.strictEqual(failed.byId[5].result.isError, true, tool);
     assert.match(failed.byId[5].result.content[0].text, /Blocked/, tool);
+    // An entry's cancel still goes: it only reduces risk.
+    const entryOrder = JSON.stringify([{ id: 14, contractId: 'MNQ', side: 0, type: 1, size: 1, status: 1, limitPrice: 21400 }]);
+    const entryCancel = await gatewayRun({ FAKE_ORDERS: entryOrder, FAKE_ERROR: tool, FTH_RUNNER_GATEWAY: '1' }, [call(6, 'cancel_order', { accountId: 1, orderId: 14 })]);
+    assert.strictEqual(entryCancel.byId[6].result.content[0].text, 'forwarded:tools/call:cancel_order', tool);
   }
 });
 

@@ -312,7 +312,7 @@ function evaluateCancel({ input = {}, positions, orders, config, ledger = [], no
   const leg = order && !(config && config.runnerGateway) ? bracketLegRefusal(order, positions, ledger, now, orders) : null;
   if (leg) return [leg];
   if (skip.has('cancel-protection')) return [];
-  if (!order || !STOP_TYPES.has(Number(order.type))) return [];
+  if (!order || !(STOP_TYPES.has(Number(order.type)) || isStopLeg(order))) return [];
   // A close the gateway sent moments ago (the ledger) counts though the account may not show it yet;
   // an exit still resting on the stop's side (a target) hasn't reduced the position. An entry still
   // working may have filled in part, so it stays counted: its bracket stop keeps protecting it.
@@ -559,15 +559,16 @@ function regimeViolation(strategy, bars, config) {
 async function accountFacts(args, caller, entry = !isRiskReducing(args.rationale), { evidence = false, now = new Date() } = {}) {
   const accountId = args.accountId;
   // `evidence` (a cancel): the fills and the orders of any status since the trading day's start, so a stop a fill
-  // reported late still needs is kept (lateFillRefusal). A read that fails throws: the check fails closed.
+  // reported late still needs is kept (lateFillRefusal). A read that fails is null: a stop's cancel is refused (fail
+  // closed), an entry's or a target's still goes (risk-reducing).
   const since = evidence ? tradingDayStart(now).toISOString() : null;
   const read = (tool, a) => caller.call(tool, a).then(r => parseToolJson(r, tool));
   const [positions, orders, trades, fills, history] = await Promise.all([
     read('list_open_positions', { accountId }),
     read('list_open_orders', { accountId }),
     entry === true ? read('search_trades', { accountId }) : null,
-    evidence ? read('search_trades', { accountId, startTimestamp: since }) : undefined,
-    evidence ? read('search_orders', { accountId, startTimestamp: since }) : undefined,
+    evidence ? read('search_trades', { accountId, startTimestamp: since }).catch(() => null) : undefined, // null: refused for a stop only
+    evidence ? read('search_orders', { accountId, startTimestamp: since }).catch(() => null) : undefined,
   ]);
   // The call itself (in place: the gateway judges and records this object) and the account, named from one read
   // of the contract cache taken now, after the reads that may have looked the front month up (a new day, a roll).
