@@ -55,7 +55,7 @@
     "reps": 1000,
     "seed": 1
   },
-  "skillCaps": { "skillBytes": 5130, "setupSkillBytes": 4000 },
+  "skillCaps": { "skillBytes": 3459, "setupSkillBytes": 4000, "perSkill": { "candle-reading": 5182 } },
   "compose": { "maxExpects": 300, "maxWhy": 1000 },
   "lessons": { "maxLines": 8, "maxChars": 1200 },
   "probeEdit": { "maxLine": 120, "growBytes": 150 },

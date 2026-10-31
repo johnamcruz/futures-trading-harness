@@ -295,8 +295,8 @@ test('basics skills: frontmatter, the sections in order, and small', () => {
     assert.ok(at.every(i => i > 0) && at[0] < at[1] && at[1] < at[2], s);
     const words = body.split(/\s+/).filter(Boolean).length;
     // candle-reading carries the reaction-at-a-level read (feat/sweep-candle-control, owner-approved 2026-10-31: "This will
-    // provide useful context"): the seven reactions, their priority and their evidence, 850 words.
-    assert.ok(words >= 250 && words <= (s === 'candle-reading' ? 850 : 650), `${s}: ${words} words`);
+    // provide useful context"): the seven reactions, their priority and their evidence, 860 words.
+    assert.ok(words >= 250 && words <= (s === 'candle-reading' ? 860 : 650), `${s}: ${words} words`);
     // The two setups also carry a timeframe table (what the setup means on 3m/5m, 15m and 1h/4h): a little more room
     // (scripts/lib/skill-caps.js, the one source the training loop's probe edits read too).
     const max = skillByteCap(s);

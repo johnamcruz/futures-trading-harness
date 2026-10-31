@@ -24,9 +24,17 @@ test('the thresholds come from config/analysis.json reaction (wick >= 1 body and
 
 test('after a high: each reaction', () => {
   const up = k(97, 99, 96, 98); // a bullish candle below the level
-  // Long wick: traded above 100, closed back below; U 4 >= B 1 and >= R/3 (5.5 / 3). Its bullish body would be
-  // conflicting, but the long wick ranks first.
+  // Long wick: traded above 100, closed back below; the wick beyond the level 3 >= B 1 and >= R/3 (5.5 / 3). Its
+  // bullish body would be conflicting, but the long wick ranks first.
   assert.strictEqual(at(k(98, 103, 97.5, 99), up), 'long-wick rejection');
+  // The wick is measured beyond the level: the whole upper wick (3.2) qualifies (>= B 0.3, >= R/3 1.23), but the part
+  // above 100 (0.5) is under a third of the range: no long-wick rejection (its bullish body: conflicting).
+  const shallow = k(97, 100.5, 96.8, 97.3);
+  assert.ok(shallow.h - Math.max(shallow.o, shallow.c) >= (shallow.h - shallow.l) / 3, 'the whole wick would qualify');
+  assert.strictEqual(at(shallow, up), 'conflicting');
+  assert.ok(!R.isLongWick(shallow, L, 'below'));
+  // After a low the mirror: the lower wick below the level.
+  assert.ok(!R.isLongWick(k(103, 103.2, 99.5, 102.7), L, 'above'), 'whole lower wick 3.2, below 100 only 0.5');
   // Engulfing: a bearish engulfing closing back below, the wick short (U 1.25 < B 1.75).
   assert.strictEqual(at(k(99.25, 100.5, 97, 97.5), k(98, 99.5, 97.5, 99)), 'engulfing rejection');
   // Breakout: closed above with a body 0.91 of the range.

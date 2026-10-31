@@ -193,8 +193,8 @@ eye.
   engulfing rejection: through, closes back below, a bearish engulfing
    → sellers took control.
 4.
-  long-wick rejection: through, closes back below, U ≥ B and ≥ R/3
-   → sellers rejected higher prices.
+  long-wick rejection: through, closes back below, the wick above
+   the level ≥ B and ≥ R/3 → sellers rejected higher prices.
 5.
   conflicting: closes back below with a bullish body, or the 15m
    rejects while the 1h `broke` it → mixed: wait for confirmation.
@@ -212,7 +212,7 @@ strength, the reaction reads who took control.
   Breakout read as a
 sweep: worst on both (false starts ~70%, mean R ~-0.34), skipping them
 did not raise the pass rate.
-  Long-wick alone: no edge (0.00 / -0.05 R).
+  Long-wick alone (measured on the whole wick): no edge (0.00 / -0.05 R).
 Engulfing: +0.20 / -0.11 R.
   Confirmed: false starts 36% / 45% vs 57% /
 55%, +0.31 / +0.02 R, intervals span 0, stop ~2x wider.
@@ -1280,8 +1280,8 @@ eye.
   engulfing rejection: through, closes back below, a bearish engulfing
    → sellers took control.
 4.
-  long-wick rejection: through, closes back below, U ≥ B and ≥ R/3
-   → sellers rejected higher prices.
+  long-wick rejection: through, closes back below, the wick above
+   the level ≥ B and ≥ R/3 → sellers rejected higher prices.
 5.
   conflicting: closes back below with a bullish body, or the 15m
    rejects while the 1h `broke` it → mixed: wait for confirmation.
@@ -1299,7 +1299,7 @@ strength, the reaction reads who took control.
   Breakout read as a
 sweep: worst on both (false starts ~70%, mean R ~-0.34), skipping them
 did not raise the pass rate.
-  Long-wick alone: no edge (0.00 / -0.05 R).
+  Long-wick alone (measured on the whole wick): no edge (0.00 / -0.05 R).
 Engulfing: +0.20 / -0.11 R.
   Confirmed: false starts 36% / 45% vs 57% /
 55%, +0.31 / +0.02 R, intervals span 0, stop ~2x wider.
@@ -2367,8 +2367,8 @@ eye.
   engulfing rejection: through, closes back below, a bearish engulfing
    → sellers took control.
 4.
-  long-wick rejection: through, closes back below, U ≥ B and ≥ R/3
-   → sellers rejected higher prices.
+  long-wick rejection: through, closes back below, the wick above
+   the level ≥ B and ≥ R/3 → sellers rejected higher prices.
 5.
   conflicting: closes back below with a bullish body, or the 15m
    rejects while the 1h `broke` it → mixed: wait for confirmation.
@@ -2386,7 +2386,7 @@ strength, the reaction reads who took control.
   Breakout read as a
 sweep: worst on both (false starts ~70%, mean R ~-0.34), skipping them
 did not raise the pass rate.
-  Long-wick alone: no edge (0.00 / -0.05 R).
+  Long-wick alone (measured on the whole wick): no edge (0.00 / -0.05 R).
 Engulfing: +0.20 / -0.11 R.
   Confirmed: false starts 36% / 45% vs 57% /
 55%, +0.31 / +0.02 R, intervals span 0, stop ~2x wider.
@@ -3445,8 +3445,8 @@ eye.
   engulfing rejection: through, closes back below, a bearish engulfing
    → sellers took control.
 4.
-  long-wick rejection: through, closes back below, U ≥ B and ≥ R/3
-   → sellers rejected higher prices.
+  long-wick rejection: through, closes back below, the wick above
+   the level ≥ B and ≥ R/3 → sellers rejected higher prices.
 5.
   conflicting: closes back below with a bullish body, or the 15m
    rejects while the 1h `broke` it → mixed: wait for confirmation.
@@ -3464,7 +3464,7 @@ strength, the reaction reads who took control.
   Breakout read as a
 sweep: worst on both (false starts ~70%, mean R ~-0.34), skipping them
 did not raise the pass rate.
-  Long-wick alone: no edge (0.00 / -0.05 R).
+  Long-wick alone (measured on the whole wick): no edge (0.00 / -0.05 R).
 Engulfing: +0.20 / -0.11 R.
   Confirmed: false starts 36% / 45% vs 57% /
 55%, +0.31 / +0.02 R, intervals span 0, stop ~2x wider.
@@ -4620,8 +4620,8 @@ eye.
   engulfing rejection: through, closes back below, a bearish engulfing
    → sellers took control.
 4.
-  long-wick rejection: through, closes back below, U ≥ B and ≥ R/3
-   → sellers rejected higher prices.
+  long-wick rejection: through, closes back below, the wick above
+   the level ≥ B and ≥ R/3 → sellers rejected higher prices.
 5.
   conflicting: closes back below with a bullish body, or the 15m
    rejects while the 1h `broke` it → mixed: wait for confirmation.
@@ -4639,7 +4639,7 @@ strength, the reaction reads who took control.
   Breakout read as a
 sweep: worst on both (false starts ~70%, mean R ~-0.34), skipping them
 did not raise the pass rate.
-  Long-wick alone: no edge (0.00 / -0.05 R).
+  Long-wick alone (measured on the whole wick): no edge (0.00 / -0.05 R).
 Engulfing: +0.20 / -0.11 R.
   Confirmed: false starts 36% / 45% vs 57% /
 55%, +0.31 / +0.02 R, intervals span 0, stop ~2x wider.
@@ -5792,8 +5792,8 @@ eye.
   engulfing rejection: through, closes back below, a bearish engulfing
    → sellers took control.
 4.
-  long-wick rejection: through, closes back below, U ≥ B and ≥ R/3
-   → sellers rejected higher prices.
+  long-wick rejection: through, closes back below, the wick above
+   the level ≥ B and ≥ R/3 → sellers rejected higher prices.
 5.
   conflicting: closes back below with a bullish body, or the 15m
    rejects while the 1h `broke` it → mixed: wait for confirmation.
@@ -5811,7 +5811,7 @@ strength, the reaction reads who took control.
   Breakout read as a
 sweep: worst on both (false starts ~70%, mean R ~-0.34), skipping them
 did not raise the pass rate.
-  Long-wick alone: no edge (0.00 / -0.05 R).
+  Long-wick alone (measured on the whole wick): no edge (0.00 / -0.05 R).
 Engulfing: +0.20 / -0.11 R.
   Confirmed: false starts 36% / 45% vs 57% /
 55%, +0.31 / +0.02 R, intervals span 0, stop ~2x wider.
@@ -6885,8 +6885,8 @@ eye.
   engulfing rejection: through, closes back below, a bearish engulfing
    → sellers took control.
 4.
-  long-wick rejection: through, closes back below, U ≥ B and ≥ R/3
-   → sellers rejected higher prices.
+  long-wick rejection: through, closes back below, the wick above
+   the level ≥ B and ≥ R/3 → sellers rejected higher prices.
 5.
   conflicting: closes back below with a bullish body, or the 15m
    rejects while the 1h `broke` it → mixed: wait for confirmation.
@@ -6904,7 +6904,7 @@ strength, the reaction reads who took control.
   Breakout read as a
 sweep: worst on both (false starts ~70%, mean R ~-0.34), skipping them
 did not raise the pass rate.
-  Long-wick alone: no edge (0.00 / -0.05 R).
+  Long-wick alone (measured on the whole wick): no edge (0.00 / -0.05 R).
 Engulfing: +0.20 / -0.11 R.
   Confirmed: false starts 36% / 45% vs 57% /
 55%, +0.31 / +0.02 R, intervals span 0, stop ~2x wider.
@@ -7978,8 +7978,8 @@ eye.
   engulfing rejection: through, closes back below, a bearish engulfing
    → sellers took control.
 4.
-  long-wick rejection: through, closes back below, U ≥ B and ≥ R/3
-   → sellers rejected higher prices.
+  long-wick rejection: through, closes back below, the wick above
+   the level ≥ B and ≥ R/3 → sellers rejected higher prices.
 5.
   conflicting: closes back below with a bullish body, or the 15m
    rejects while the 1h `broke` it → mixed: wait for confirmation.
@@ -7997,7 +7997,7 @@ strength, the reaction reads who took control.
   Breakout read as a
 sweep: worst on both (false starts ~70%, mean R ~-0.34), skipping them
 did not raise the pass rate.
-  Long-wick alone: no edge (0.00 / -0.05 R).
+  Long-wick alone (measured on the whole wick): no edge (0.00 / -0.05 R).
 Engulfing: +0.20 / -0.11 R.
   Confirmed: false starts 36% / 45% vs 57% /
 55%, +0.31 / +0.02 R, intervals span 0, stop ~2x wider.
@@ -9144,8 +9144,8 @@ eye.
   engulfing rejection: through, closes back below, a bearish engulfing
    → sellers took control.
 4.
-  long-wick rejection: through, closes back below, U ≥ B and ≥ R/3
-   → sellers rejected higher prices.
+  long-wick rejection: through, closes back below, the wick above
+   the level ≥ B and ≥ R/3 → sellers rejected higher prices.
 5.
   conflicting: closes back below with a bullish body, or the 15m
    rejects while the 1h `broke` it → mixed: wait for confirmation.
@@ -9163,7 +9163,7 @@ strength, the reaction reads who took control.
   Breakout read as a
 sweep: worst on both (false starts ~70%, mean R ~-0.34), skipping them
 did not raise the pass rate.
-  Long-wick alone: no edge (0.00 / -0.05 R).
+  Long-wick alone (measured on the whole wick): no edge (0.00 / -0.05 R).
 Engulfing: +0.20 / -0.11 R.
   Confirmed: false starts 36% / 45% vs 57% /
 55%, +0.31 / +0.02 R, intervals span 0, stop ~2x wider.
@@ -10319,8 +10319,8 @@ eye.
   engulfing rejection: through, closes back below, a bearish engulfing
    → sellers took control.
 4.
-  long-wick rejection: through, closes back below, U ≥ B and ≥ R/3
-   → sellers rejected higher prices.
+  long-wick rejection: through, closes back below, the wick above
+   the level ≥ B and ≥ R/3 → sellers rejected higher prices.
 5.
   conflicting: closes back below with a bullish body, or the 15m
    rejects while the 1h `broke` it → mixed: wait for confirmation.
@@ -10338,7 +10338,7 @@ strength, the reaction reads who took control.
   Breakout read as a
 sweep: worst on both (false starts ~70%, mean R ~-0.34), skipping them
 did not raise the pass rate.
-  Long-wick alone: no edge (0.00 / -0.05 R).
+  Long-wick alone (measured on the whole wick): no edge (0.00 / -0.05 R).
 Engulfing: +0.20 / -0.11 R.
   Confirmed: false starts 36% / 45% vs 57% /
 55%, +0.31 / +0.02 R, intervals span 0, stop ~2x wider.
@@ -11253,8 +11253,8 @@ eye.
   engulfing rejection: through, closes back below, a bearish engulfing
    → sellers took control.
 4.
-  long-wick rejection: through, closes back below, U ≥ B and ≥ R/3
-   → sellers rejected higher prices.
+  long-wick rejection: through, closes back below, the wick above
+   the level ≥ B and ≥ R/3 → sellers rejected higher prices.
 5.
   conflicting: closes back below with a bullish body, or the 15m
    rejects while the 1h `broke` it → mixed: wait for confirmation.
@@ -11272,7 +11272,7 @@ strength, the reaction reads who took control.
   Breakout read as a
 sweep: worst on both (false starts ~70%, mean R ~-0.34), skipping them
 did not raise the pass rate.
-  Long-wick alone: no edge (0.00 / -0.05 R).
+  Long-wick alone (measured on the whole wick): no edge (0.00 / -0.05 R).
 Engulfing: +0.20 / -0.11 R.
   Confirmed: false starts 36% / 45% vs 57% /
 55%, +0.31 / +0.02 R, intervals span 0, stop ~2x wider.

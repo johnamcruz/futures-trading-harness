@@ -9,7 +9,8 @@
  * The side price came from (sideOf): the candle's open against the level, or, when it opened on it, the previous
  * candle's close (candle-facts relation's rule). From below the level is a high ("after a high"); from above a low
  * (the mirror: bullish and bearish swap, the upper wick becomes the lower). L the level; R range, B body, W the wick
- * on the level's side (the upper after a high), each a candle's own:
+ * beyond the level (after a high: high - max(L, open, close), the failed attempt past it; after a low the mirror), each a
+ * candle's own:
  *
  *   confirmed rejection   the previous candle was a long-wick rejection of L (below), this one is the opposite-side
  *                         engulfing (bearish after a high) closing lower than the previous candle and back inside L. The
@@ -60,14 +61,15 @@ function against(c, level, side) {
     through: up ? c.h > level : c.l < level,
     back: up ? c.c < level : c.c > level,
     beyond: up ? c.c > level : c.c < level,
-    wick: up ? c.h - Math.max(c.o, c.c) : Math.min(c.o, c.c) - c.l,
+    // The wick beyond the level: the part of the attempt past it that failed (never the wick below it).
+    wick: up ? c.h - Math.max(level, c.o, c.c) : Math.min(level, c.o, c.c) - c.l,
     withBody: up ? c.c > c.o : c.c < c.o,
     withEngulf: up ? 'bullish engulfing' : 'bearish engulfing',
     oppEngulf: up ? 'bearish engulfing' : 'bullish engulfing',
   };
 }
 
-/** A long-wick rejection: traded beyond the level, closed back inside, the wick at least wickBody bodies and wickRange of the range. */
+/** A long-wick rejection: traded beyond the level, closed back inside, the wick beyond it at least wickBody bodies and wickRange of the range. */
 function isLongWick(c, level, side, def = DEF) {
   if (!finite(c) || !Number.isFinite(level) || !side) return false;
   const x = against(c, level, side);

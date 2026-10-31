@@ -77,8 +77,8 @@ eye. At a high (a low: the mirror), the first that holds:
    (`displacement` adds strength) → buyers in control: not a sweep.
 3. engulfing rejection: through, closes back below, a bearish engulfing
    → sellers took control.
-4. long-wick rejection: through, closes back below, U ≥ B and ≥ R/3
-   → sellers rejected higher prices.
+4. long-wick rejection: through, closes back below, the wick above
+   the level ≥ B and ≥ R/3 → sellers rejected higher prices.
 5. conflicting: closes back below with a bullish body, or the 15m
    rejects while the 1h `broke` it → mixed: wait for confirmation.
 6. stall: a doji or inside candle → stalled; the next candle decides.
@@ -91,7 +91,7 @@ close exactly at the level is no breakout.
 candlestick patterns have weak evidence in general; a name adds no
 strength, the reaction reads who took control. Breakout read as a
 sweep: worst on both (false starts ~70%, mean R ~-0.34), skipping them
-did not raise the pass rate. Long-wick alone: no edge (0.00 / -0.05 R).
+did not raise the pass rate. Long-wick alone (measured on the whole wick): no edge (0.00 / -0.05 R).
 Engulfing: +0.20 / -0.11 R. Confirmed: false starts 36% / 45% vs 57% /
 55%, +0.31 / +0.02 R, intervals span 0, stop ~2x wider. Conflicting:
 waiting gave +0.14 / +0.06 vs -0.04 R but missed ~40-55% of the trend
