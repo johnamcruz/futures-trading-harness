@@ -44,7 +44,7 @@
       ],
       "forbidden": [
         "^\\s*(yes\\b|y,)",
-        "\\b(long|short) (is )?(ok|allowed)\\b(?!\\s*\\?)",
+        "\\b(long|short) (is )?(ok|allowed)\\b(?!\\s*\\?\\s*(?:no|nope|never|not)\\b)",
         "^\\s*(long|short)\\b"
       ]
     },
@@ -75,7 +75,7 @@
         "^\\s*(yes\\b|y,)",
         "\\bcan (go|take) (a )?long",
         "\\bunless\\b",
-        "\\b(with|after|on|given|once|if)\\s+(a\\s+|the\\s+)?(1h\\s+|15m\\s+)?(reversal|tier|rejection)\\b"
+        "\\b(with|after|on|given|once|if|when|until|needs?|at least)\\b(?:\\s+[\\w-]+){0,3}?\\s+(reversal|tier|rejection)\\b"
       ]
     },
     {
@@ -120,7 +120,7 @@
       "forbidden": [
         "^\\s*(yes\\b|y,)",
         "^\\s*(a )?(level|target)\\b",
-        "\\b(both|as|from it as)\\s+(a\\s+)?(level|target)\\b(?![^.;]*\\b(useless|no|not|never)\\b)",
+        "(?<!useless )\\b(both|as|from it as)\\s+(a\\s+)?(level|target)\\b(?!\\s+(?:it\\s+)?(?:is\\s+)?(?:useless|no|not|never)\\b)",
         "trade around",
         "\\bis a (level|target)\\b",
         "\\bbut a (level|target)\\b",
@@ -212,7 +212,7 @@
       ],
       "forbidden": [
         "^\\s*(yes\\b|y,)",
-        "\\b(tighten it|use a (tighter|closer)|take a (tighter|closer)|move (the )?stop closer)(?!\\s*\\?)"
+        "\\b(tighten it|use a (tighter|closer)|take a (tighter|closer)|move (the )?stop closer)(?!\\s*\\?\\s*(?:no|nope|never|not)\\b)"
       ]
     },
     {
@@ -256,7 +256,7 @@
       ],
       "forbidden": [
         "^\\s*(yes\\b|y,)",
-        "(exit|close|take profit) (at|there|at 2r)(?![^.;:]*\\b(not|never|wrong|isn't|is no)\\b)"
+        "(exit|close|take profit) (at 2r|there|at(?!\\s+2r))(?!\\s+(?:is\\s+)?(?:not|never|wrong|cancelled|replaced|isn't|is no)\\b)"
       ]
     },
     {
@@ -326,7 +326,7 @@
         "\\b(place|take|send|go with)\\s+(the\\s+)?entry\\b",
         "\\bno restate\\b",
         "\\binstead of (a )?restate\\b",
-        "(?<!not )(?<!not a )\\bis a trade\\b(?![^.;]*\\b(only|after|once|when|if)\\b)",
+        "(?<!not )(?<!not a )\\bis a trade\\b(?!\\s+(?:only\\s+)?(?:after|once|when|if)\\b)",
         "\\brestate is (unnecessary|not needed)\\b",
         "\\bno need (to|for a) restate\\b"
       ]
@@ -342,7 +342,7 @@
         "skip|no trade|\\bpass\\b|floor|stretch|minimum|don't take|not take"
       ],
       "forbidden": [
-        "\\b(take|trade|enter|go|size( it)?( at)?)\\s+(with\\s+)?(the\\s+)?(only\\s+)?2\\b(?!\\s*\\?)"
+        "\\b(take|trade|enter|go|size( it)?( at)?)\\s+(with\\s+)?(the\\s+)?(only\\s+)?2\\b(?!\\s*\\?\\s*(?:no|nope|never|not)\\b)"
       ]
     },
     {
@@ -393,12 +393,12 @@
       ],
       "forbidden": [
         "^\\W*(yes|yep|take( it)?|enter|go)\\b",
-        "\\b(short|sell|go short)( it)? now\\b(?!\\s+(only\\s+(with|once|if|after|when|until)|once|if|after|when|until)\\b)",
-        "\\benter (a |the )?short\\b(?!\\s+(only\\s+(with|once|if|after|when|until)|once|if|after|when|until)\\b)",
-        "\\btake (the |a )?short\\b(?!\\s+(only\\s+(with|once|if|after|when|until)|once|if|after|when|until)\\b)",
-        "\\bshort it\\b(?!\\s+(only\\s+(with|once|if|after|when|until)|once|if|after|when|until)\\b)",
+        "\\b(short|sell|go short)( it)? now\\b(?!\\s+(only\\s+(with|once|if|after(?! all)|when|until)|once|if|after(?! all)|when|until)\\b)",
+        "\\benter (a |the )?short\\b(?!\\s+(only\\s+(with|once|if|after(?! all)|when|until)|once|if|after(?! all)|when|until)\\b)",
+        "\\btake (the |a )?short\\b(?!\\s+(only\\s+(with|once|if|after(?! all)|when|until)|once|if|after(?! all)|when|until)\\b)",
+        "\\bshort it\\b(?!\\s+(only\\s+(with|once|if|after(?! all)|when|until)|once|if|after(?! all)|when|until)\\b)",
         "\\b(so|therefore|then|thus)\\s+sellers (are )?in control\\b(?!\\s+(isn't|is not|is no|not|needs?|requires?)\\b)",
-        "\\bsellers (are )?in control\\s*([,:;–—-]|\\band\\b|\\bso\\b)?\\s*(and\\s+|so\\s+|then\\s+)?(short|sell|take|enter)\\b",
+        "\\bsellers (are )?in control(?:\\s*(?:[,:;.–—-]|\\band\\b|\\bso\\b|\\bthen\\b))*\\s*(?:and\\s+|so\\s+|then\\s+)?(?:i'?d\\s+|i would\\s+|i\\s+|go\\s+)?(short|sell|take|enter)\\b(?!\\s+(?:it\\s+)?(only\\s+)?(once|if|after(?! all)|when|until)\\b)",
         "\\bsellers (are )?in control\\W*$"
       ]
     },
@@ -465,7 +465,7 @@
         "\\b(read|wick|rejection)\\s+is\\s+undone\\b",
         "\\b(undoes|undo|cancels|negates|invalidates)\\s+(the\\s+)?(confirmed\\s+)?(rejection|read)\\b",
         "\\b(no|not( a)?|never|without)\\s+(a\\s+|the\\s+)?confirm\\w*(\\s+of)?(\\s+the)?\\s+rejection\\b",
-        "\\bconfirms (a |the )?breakout\\b",
+        "\\bconfirms (a |the )?breakout\\b(?!\\s+(failed|failure|was rejected))",
         "\\bconfirms nothing\\b"
       ]
     },
@@ -482,9 +482,9 @@
       "forbidden": [
         "^\\W*(yes|yep|sellers)\\b",
         "\\btake it now\\b(?![^.;:]*\\b(wrong|not|never)\\b)",
-        "\\bshort it( now)?\\b(?!\\s+(only\\s+(with|once|if|after|when|until)|once|if|after|when|until)\\b)",
+        "\\bshort it( now)?\\b(?!\\s+(only\\s+(with|once|if|after(?! all)|when|until)|once|if|after(?! all)|when|until)\\b)",
         "\\b(so|therefore|then|thus)\\s+sellers (are )?in control\\b(?!\\s+(isn't|is not|is no|not|needs?|requires?)\\b)",
-        "\\bsellers (are )?in control\\s*([,:;–—-]|\\band\\b|\\bso\\b)?\\s*(and\\s+|so\\s+|then\\s+)?(short|sell|take|enter)\\b",
+        "\\bsellers (are )?in control(?:\\s*(?:[,:;.–—-]|\\band\\b|\\bso\\b|\\bthen\\b))*\\s*(?:and\\s+|so\\s+|then\\s+)?(?:i'?d\\s+|i would\\s+|i\\s+|go\\s+)?(short|sell|take|enter)\\b(?!\\s+(?:it\\s+)?(only\\s+)?(once|if|after(?! all)|when|until)\\b)",
         "\\bsellers (are )?in control\\W*$"
       ]
     },
@@ -522,7 +522,9 @@
         "\\bshort in both\\b",
         "\\blong (setup|read|entry|trade|side)\\b",
         "\\b(with-trend|with the trend|counter-trend) long\\b",
-        "\\b(a|is a) short (too|as well|also)\\b"
+        "\\b(a|is a) short (too|as well|also)\\b(?!\\s*\\?\\s*(no|never)\\b)",
+        "\\b(on )?the (other|opposite) side\\b",
+        "\\b(4h|1h)\\b[^.;:]*\\bdown\\b[^.;:]{0,30}\\b(counter\\w*|refus\\w*)"
       ]
     },
     {
@@ -540,12 +542,13 @@
         "^\\W*(the\\s+)?15m\\b",
         "\\b15m (one |rejection |reaction )?(is )?(the )?stronger\\b",
         "^\\W*(yes|yep)\\b",
-        "\\b(take it|short it|enter (the )?short|take the short)\\b(?!\\s+(only\\s+)?(once|if|after|when|until)\\b)",
+        "\\b(take it|short it|enter (the )?short|take the short)\\b(?!\\s+(only\\s+)?(once|if|after(?! all)|when|until)\\b)",
         "\\b(a|is a) trade (on its own|by itself|alone)\\b",
         "\\benough on its own\\b",
         "\\b(context|that|it) is enough\\b",
         "\\bis the confirmation\\b",
-        "\\bconfirmation enough\\b"
+        "\\bconfirmation enough\\b",
+        "\\b(trade it|sell it|go short|enter now|stands on its own|tradeable on its own|(valid|good) trade (by itself|on its own))\\b(?!\\s+(only\\s+)?(once|if|after(?! all)|when|until)\\b)"
       ],
       "lookup": [
         "candle-reading"
@@ -567,7 +570,7 @@
         "\\b3m (rejection |reaction )?confirms\\b",
         "\\bconfirms the short\\b",
         "\\b(short|sell|go short)( it)? now\\b",
-        "\\bshort (it )?on the 3m\\b(?!\\s*\\?)",
+        "\\bshort (it )?on the 3m\\b(?!\\s*\\?\\s*(?:no|nope|never|not)\\b)(?!\\s+(?:rejection\\s+)?(?:is not a trade|is refused)\\b)",
         "\\btake the short\\b",
         "\\b(3m|it|the wick) (rejection )?is (a|the) short\\b",
         "\\bshort the 3m\\b",
@@ -708,7 +711,7 @@
       ],
       "forbidden": [
         "^\\s*(yes\\b|y,)",
-        "(?<!rather than )(?<!instead of )\\b(take|trade|enter)\\s+(it\\s+)?(with\\s+)?2\\b(?!\\s*\\?)"
+        "(?<!rather than )(?<!instead of )\\b(take|trade|enter)\\s+(it\\s+)?(with\\s+)?2\\b(?!\\s*\\?\\s*(?:no|nope|never|not)\\b)"
       ]
     }
   ]

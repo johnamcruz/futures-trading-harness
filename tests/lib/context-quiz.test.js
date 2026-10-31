@@ -79,6 +79,22 @@ test('grading: a correct "No, <term> ..." answer passes every question whose for
   };
   for (const [id, list] of Object.entries(right)) for (const a of list) assert.ok(pass(id, `ANSWER: ${a}`), `${id}: ${a}`);
   // ...and the wrong ones still fail.
+  // Round 5: an excuse applies only to the term's immediate predicate, never later in the clause.
+  for (const [id, a] of [['q1', 'No short; long is ok? Yes, the 4h is up.'], ['q12', 'Tighten it? Yes, otherwise no size fits.'], ['q20', 'Take with 2? Yes; the floor is 2.'], ['b5', 'Take 2? Yes, no need to skip.'],
+    ['q15', 'Exit at 2R, not trail.'], ['q15', 'Close at 2R, never trail.'], ['q6', 'Use it as a level, not as a target.'], ['q19', 'It is a trade, if the size is readable; restate otherwise.'],
+    ['q28', 'No. Sellers in control. Short.'], ['q28', 'No: sellers in control, go short.'], ['q28', 'No, the close back below shows sellers in control: go short.'], ['q28', 'No: sellers in control; I sell.'],
+    ['q28', 'Mixed, but sellers in control, so I\'d sell.'], ['q28', 'No; short it after all.'], ['q23', 'No: sellers in control. Short.'], ['q23', 'No - sellers are in control, so I\'d short.'],
+    ['q3', 'No, not now: it is a long only with a confirmed 1h reversal.'], ['q3', 'No: not on the CHoCH; go long when the 1h reversal tier prints.'],
+    ['q31', 'The 4h; yes, trade it: the context is there.'], ['q31', 'The 4h; tradeable on its own given the context.'], ['q31', 'The 4h, go short: context.'], ['q31', 'The 4h; take it after all, context.']]) {
+    assert.ok(!pass(id, `ANSWER: ${a}`), `${id} wrong: ${a}`);
+  }
+  for (const [id, a] of [['q15', 'No. The exit at 2R is cancelled: lock and trail.'], ['q27', 'The engulfing confirms the breakout failed: a confirmed rejection.'],
+    ['q30', 'No: the second is a short as well? No: never counter the 4h and 1h.'], ['q19', 'No: it is a trade only after a restate of the Size line.']]) {
+    assert.ok(pass(id, `ANSWER: ${a}`), `${id} right: ${a}`);
+  }
+  // A 3m short negated right after it is no forbidden term (e269-part q32 k2); with no reason given it still misses the substance.
+  const k2 = Q.gradeAnswer(QUIZ, q('q32'), 'ANSWER: No. A short on the 3m rejection is not a trade here.');
+  assert.deepStrictEqual([k2.forb, k2.miss.length], [[], 1]);
   for (const [id, a] of [['q3', 'No, unless a reversal tier confirms.'], ['q15', 'No: exit at 2R.'], ['q12', 'No, tighten it to fit.'], ['q28', 'No. Sellers in control: short it now.'], ['q28', 'No, but sellers are in control: short it.']]) {
     assert.ok(!pass(id, `ANSWER: ${a}`), `${id}: ${a}`);
   }
@@ -137,7 +153,11 @@ test('the reaction questions (q23-q32, feat/sweep-candle-control): answer-first 
         'No, not the same read: the pullback-level rejection is a long setup in a pullback, while the trend-up rejection is a counter-trend short that the trend rule refuses.',
         'No. The 4h/1h-down wick is a counter-trend long read and is refused; the 4h/1h-up wick is a with-trend long setup.',
         'No, not the same read: the pullback-level rejection is a with-trend long-side setup at a key level, while the trend-up one is a counter-trend short and gets refused.',
-        'No: the context decides; the second one is a long setup.', 'No: against the 4h and 1h it is a short too.', 'No, the trend rule: short both of them.', 'No: never counter, yet the second is a short as well.']],
+        'No: the context decides; the second one is a long setup.', 'No: against the 4h and 1h it is a short too.', 'No, the trend rule: short both of them.', 'No: never counter, yet the second is a short as well.',
+        // Real answers (e269-part k2, 9a0e k2) that put the sides the wrong way round.
+        'No, they are not the same read: the 4h and 1h down one is a counter-trend short-side rejection (the trend rule refuses it), while the 4h and 1h up one is a with-trend setup on the other side.',
+        'No, they are not the same read: the 4h/1h-down pullback long-wick rejection is a short-side setup only if the trend rule allows it, and the 4h/1h-up one is the opposite side.',
+        'No, different: the first a short; the second is a short too? Yes.']],
     // The reaction rules hold on every timeframe and a higher frame's is stronger confirmation (the owner, 2026-10-31); still
     // context. Asked with candle-reading looked up (its stack line).
     q31: [['The 4h: it outweighs the 15m, but it still needs other confirmation.', 'The 4h rejection; not a trade on its own, it needs the count.', '4h. Context only: it needs more confirmation.', 'The higher frame, the 4h; it still needs confirmation.',
