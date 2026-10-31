@@ -1887,8 +1887,12 @@ A lower baseline of the same fixture comes only from an owner-approved
 reset (`goal-check.js baseline --write --reset --why "<why>"`), recorded in
 the baseline (`reset`: why, the gated metrics it replaces, the fixture,
 when): the test accepts it once, on the branch that brings it (new against
-the base's, replacing exactly the base's numbers, never a blow more); once
-merged it is the base's own, and a later lowering without a new reset fails.
+the base's, replacing exactly the base's numbers, never a blow more, and
+pinned in `APPROVED_RESETS` in `scripts/lib/eval/goal-check.js` by the hash
+of the numbers it replaces and its why); once merged it is the base's own,
+and a later lowering fails unless a new reset is pinned there (a code change
+the review sees). The one pinned reset is the owner-approved one of
+2026-10-30 (the corrected tool: one position at a time after sizing).
 
 ## 8. Rules that keep it honest
 

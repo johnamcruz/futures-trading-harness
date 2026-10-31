@@ -14,8 +14,8 @@
  * (fixtureChange: the hash it replaces and why), which the review (CLAUDE.md) reads. A lower baseline of the same fixture
  * is written only by an owner-approved reset (goal-check.js baseline --write --reset --why "<why>"), recorded in it
  * (reset: why, the gated metrics it replaces, the fixture, when): accepted once, by the branch that brings it (a reset
- * new against the base's, replacing exactly the base's numbers, never adding a blow); once on the base it is the
- * base's, and a later lowering without a new reset fails as before.
+ * new against the base's, replacing exactly the base's numbers, never adding a blow, and pinned in APPROVED_RESETS);
+ * once on the base it is the base's, and a later lowering without a new pinned reset (a code change) fails as before.
  *
  *   CI_FIXTURE, REAL_FIXTURE(env)  the committed slice's file; the local goal:real fixture's (under the harness home)
  *   fixtureSet(kind, env)          { kind, doc, synth, baselineFile, goldenFile } | { kind, missing }; kindOf(env): FTH_GOAL_FIXTURE
@@ -33,7 +33,9 @@
  *   resetBaseline(base, now, { why, at, commit })   the owner-approved reset of the same fixture's baseline: `now` with
  *                                  reset { why, from: gatedOf(base), fixture, at, commit } recorded (throws without a why,
  *                                  a base, the same fixture, or when a blow is added)
- *   resetProblems(base, next)      [problem] of a reset new in `next`; null when `next` carries none new
+ *   resetProblems(base, next)      [problem] of a reset new in `next`; null when `next` carries none new; a reset is
+ *                                  accepted only when pinned in APPROVED_RESETS (fromHash of its `from`, and its why)
+ *   fromHash(from), APPROVED_RESETS   the sha256 of a reset's `from` (canonical JSON); the owner-approved resets
  *   renderTable(rows)              the table: metric, main, this PR, allowed
  */
 
@@ -170,7 +172,23 @@ const regressions = rows => rows.filter(r => r.gated && !r.ok);
 
 // The gated metrics of each half (what a reset replaces, recorded in it): { half: { key: value } }.
 const gatedOf = d => Object.fromEntries(halvesOf(d).map(h => [h, Object.fromEntries(gatedFor(h).map(g => [g.key, get(d.halves[h], g.key) ?? null]))]));
-const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+// Canonical JSON (keys sorted at every level): what a reset's `from` is hashed and compared by.
+const canon = o => (Array.isArray(o) ? `[${o.map(canon).join(',')}]` : o && typeof o === 'object' ? `{${Object.keys(o).sort().map(k => `${JSON.stringify(k)}:${canon(o[k])}`).join(',')}}` : JSON.stringify(o ?? null));
+const same = (a, b) => canon(a) === canon(b);
+const fromHash = from => crypto.createHash('sha256').update(canon(from)).digest('hex');
+
+// The owner-approved resets, pinned: a reset is accepted only when its `from` (the gated metrics it replaces, hashed by
+// fromHash) and its why are an entry here, so every reset is a code change the review sees (tests/plugin/goal-regression
+// .test.js pins this list to exactly its one entry). The one-time reset of 2026-10-30: main's pre-reset tier 1 baseline
+// (A pass 0.7605, mean R 0.145, R caught 0.0477, legs caught 6; B pass 0, mean R -0.351, R caught 0.1111, legs caught
+// 8; 0 blows, the blow path included), replaced under the corrected tool (one position at a time after sizing).
+const APPROVED_RESETS = Object.freeze([
+  Object.freeze({
+    from: 'c63da23391f4e0225e642c6ea2e320cb557961f9da1891d9ba6c59399f0c6f02',
+    why: 'one-time reset, owner-approved 2026-10-30: the old tool applied one position at a time before sizing and counted trades no account could size; the corrected tool takes one position at a time after sizing, at each attempt\'s own state, as live',
+    approved: '2026-10-30',
+  }),
+]);
 // Blows never rise, a reset included (the owner's first rule): no half, the blow path included, blows more than the base's.
 const blowProblems = (base, next, what) => halvesOf(base).flatMap(half => {
   const was = get(base.halves[half], 'mc.blows');
@@ -179,7 +197,7 @@ const blowProblems = (base, next, what) => halvesOf(base).flatMap(half => {
 });
 
 /** The problems of a reset new in `next` (not the base's own): null when `next` carries none new. */
-function resetProblems(base, next) {
+function resetProblems(base, next, approved = APPROVED_RESETS) {
   const r = next && next.reset;
   if (!r || (base && same(base.reset, r))) return null;
   if (!base) return ['a reset with no base baseline to reset'];
@@ -188,23 +206,26 @@ function resetProblems(base, next) {
   if (!(typeof r.at === 'string' && r.at.trim())) out.push('the reset records no at (when it was written)');
   if (!(r.fixture === base.fixture && next.fixture === base.fixture)) out.push(`the reset is of fixture ${r.fixture} (the base's ${base.fixture}, the new baseline's ${next.fixture}): a reset keeps the fixture`);
   if (!same(r.from, gatedOf(base))) out.push('the reset\'s from is not the base branch\'s gated metrics: re-run the reset on the current base');
+  // Only an owner-approved reset, pinned in APPROVED_RESETS by the hash of what it replaces and its why.
+  if (!approved.some(a => a.from === fromHash(r.from) && a.why === r.why)) out.push(`the reset is not an owner-approved one (APPROVED_RESETS: from ${fromHash(r.from)} with its why): a reset is a code change the review sees`);
   return [...out, ...blowProblems(base, next, 'a reset')];
 }
 
-function resetBaseline(base, now, { why, at, commit = null } = {}) {
+function resetBaseline(base, now, { why, at, commit = null, approved = APPROVED_RESETS } = {}) {
   if (!(typeof why === 'string' && why.trim())) throw new Error('refused: a reset needs --why "<the owner\'s approval and reason>"');
   if (!base) throw new Error('refused: no baseline to reset (write the first one with baseline --write)');
   if (base.fixture !== now.fixture) throw new Error('refused: a reset keeps the fixture (another fixture: --new-fixture --why "<why>")');
   const next = { ...base, ...now, reset: { why: why.trim(), from: gatedOf(base), fixture: base.fixture, at, ...(commit ? { commit } : {}) } };
-  const problems = resetProblems(base, next) || ['the reset is the base\'s own'];
+  const problems = resetProblems(base, next, approved) || ['the reset is the base\'s own'];
   if (problems.length) throw new Error(`refused: ${problems.join('\n')}`);
   return next;
 }
 
-function riseProblems(base, next) {
+// `approved` is APPROVED_RESETS; the unit tests pass their own to exercise the rule on synthetic baselines.
+function riseProblems(base, next, { approved = APPROVED_RESETS } = {}) {
   if (!base || !next) return [];
   // An owner-approved reset of the same fixture, new in `next`: accepted once (it replaces the base's numbers exactly).
-  const reset = resetProblems(base, next);
+  const reset = resetProblems(base, next, approved);
   if (reset) return reset;
   // A new fixture starts a new baseline only with the change recorded: the hash it replaces and why (the review reads it).
   if (base.fixture !== next.fixture) {
@@ -238,4 +259,4 @@ function renderTable(rows) {
   return [line(head), line(w.map(x => '-'.repeat(x))), ...body.map(line)].join('\n');
 }
 
-module.exports = { CI_FIXTURE, REAL_FIXTURE, KINDS, fixtureSet, kindOf, blockOf, GATED, loadFixture, evaluate, summary, compare, regressions, gatedOf, resetBaseline, resetProblems, riseProblems, renderTable };
+module.exports = { CI_FIXTURE, REAL_FIXTURE, KINDS, fixtureSet, kindOf, blockOf, GATED, loadFixture, evaluate, summary, compare, regressions, gatedOf, fromHash, APPROVED_RESETS, resetBaseline, resetProblems, riseProblems, renderTable };

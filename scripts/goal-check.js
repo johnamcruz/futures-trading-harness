@@ -9,7 +9,8 @@
  *                                                        current one's (blows not above, the rest not below): it only rises
  *   ... baseline --write --new-fixture --why "<why>"     a first baseline for a new fixture, the change recorded
  *   ... baseline --write --reset --why "<why>"           the owner-approved reset of the same fixture's baseline (lower
- *                                                        allowed, never a blow more), recorded in it: accepted once
+ *                                                        allowed, never a blow more), recorded in it: accepted once,
+ *                                                        and only when pinned in goal-check's APPROVED_RESETS
  *
  * The committed CI slice by default (tests/fixtures/goal: its baseline committed); --real, the local goal:real fixture
  * (fetched through the replay broker, its baseline under the harness home). Exit 1 on a regression or a refused baseline.
