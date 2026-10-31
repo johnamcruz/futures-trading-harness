@@ -24,6 +24,9 @@
  *   failJournal: n  the next n journal_add calls fail (an error reply; nothing is written)
  *   latePositions: n  the next n position reads (list_open_positions, get_account_snapshot) and fill reads
  *                   (search_trades) don't show the newest position and fills yet (a fill reported late)
+ *   modifyFaults: n the next n modify_order calls fail: modifyReply 'refuse' (success: false, nothing changed) or
+ *                   'error' (an error reply, nothing changed)
+ *   partialEntry: n a market entry fills only n contracts; the rest of the order is cancelled (a partial fill)
  * Stops fill at the price that reached them (a gap fills worse than the stop); limits at their limit.
  *
  *   initState(file, over)          a fresh account
@@ -261,6 +264,7 @@ const HANDLERS = {
       brackets: { stop: a.stopLossBracket ? a.stopLossBracket.ticks : null, target: a.takeProfitBracket ? a.takeProfitBracket.ticks : null },
     };
     s.orders.push(o);
+    if (o.type === 2 && s.partialEntry > 0 && s.partialEntry < o.size) { o.requested = o.size; o.size = s.partialEntry; s.partialEntry = 0; }
     if (o.type === 2) fillOrder(s, o, s.prices[a.contractId]);
     else match(s);
     // As the live server journals it (parity is one way: the mock matches live): data = { request, result }, the request
@@ -273,6 +277,11 @@ const HANDLERS = {
   modify_order: (s, a) => {
     const o = s.orders.find(x => x.id === Number(a.orderId) && x.status === 1);
     if (!o) return fail(2, 'OrderNotFound');
+    if (s.modifyFaults > 0) {
+      s.modifyFaults -= 1;
+      if (s.modifyReply === 'error') throw new Error('HTTP 504 gateway timeout');
+      return fail(3, 'Rejected');
+    }
     if (a.stopPrice !== undefined) o.stopPrice = a.stopPrice;
     if (a.limitPrice !== undefined) o.limitPrice = a.limitPrice;
     if (a.size !== undefined) o.size = Number(a.size);

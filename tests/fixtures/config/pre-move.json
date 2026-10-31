@@ -361,7 +361,10 @@
    "from": "new in ppc/flow-learning (owner-approved 2026-10-23: it doubles)"
   },
   "trendScreen.rollFlagGaps": {
-   "value": [0, 3],
+   "value": [
+    0,
+    3
+   ],
    "from": "new in ppc/flow-learning (owner-approved 2026-10-23: flag the sessions near a contract roll, months from the session to its front contract: 0, the expiry month; 3, the month after a quarterly roll, until a roll-spanning run confirms leg ids pair there)"
   },
   "trendBatch.plateauRounds": {
@@ -423,6 +426,91 @@
   "trendReport.falseStartPeakR": {
    "value": 0.5,
    "from": "new in feat/ppc-trend-curriculum (owner-approved trend curriculum; the owner's false-start definition, P1 criteria 2026-10-27: a loser never above +0.5R): the round report's control-window false start, report only"
+  },
+  "goalRegression": {
+   "value": {
+    "seed": 1,
+    "split": "2022-11-23",
+    "blocksPerHalf": 3,
+    "blockSessions": 5,
+    "trendPerHalf": 8,
+    "monteCarlo": {
+     "paths": 2000,
+     "seed": 1,
+     "meanBlock": 7
+    },
+    "tolerance": {
+     "passRate": 0.005,
+     "meanR": 0.005,
+     "rCaught": 0
+    },
+    "moveDays": [
+     "2021-06-15",
+     "2021-06-24",
+     "2021-10-04",
+     "2021-10-06",
+     "2021-11-19"
+    ],
+    "real": {
+     "blocksPerHalf": 8,
+     "trendPerHalf": 20,
+     "chunkDays": 7
+    },
+    "synth": {
+     "seed": 1,
+     "symbol": "MNQ",
+     "minutes": 3,
+     "startPrice": 15000,
+     "breakMin": 1020,
+     "macroDrift": 0.6,
+     "noise": 0.4,
+     "sigma": {
+      "overnight": 6,
+      "rth": 14
+     },
+     "wick": {
+      "with": 0.15,
+      "against": 0.6
+     },
+     "volume": {
+      "overnight": 900,
+      "rth": 900,
+      "decay": 0.002
+     },
+     "fakeout": {
+      "day": "2024-01-08",
+      "startBar": 4,
+      "impulseBars": 2,
+      "reversalBars": 6,
+      "impulseDrift": 1.8,
+      "reversalDrift": 1.8,
+      "volume": 2.5
+     },
+     "quiet": {
+      "day": "2024-02-05"
+     },
+     "bleed": {
+      "from": "2024-03-04",
+      "sessions": 10,
+      "gapTicks": 100
+     }
+    },
+    "tier2": {
+     "seed": 1,
+     "trendDays": 4,
+     "otherDays": 2,
+     "entryMinutes": 60,
+     "maxLossR": 1.25,
+     "parallel": 4,
+     "tolerance": {
+      "trades": 0,
+      "totalR": 0.05,
+      "fills": 0,
+      "moveShare": 0
+     }
+    }
+   },
+   "from": "new in feat/goal-regression (the owner's goal regression on every pull request: the fixture's seeded draw, its combine Monte Carlo, the tighten-only tolerances below main's baseline, the move days and tier 2's days)"
   }
  },
  "replay": {

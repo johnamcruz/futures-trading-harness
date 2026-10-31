@@ -172,7 +172,13 @@ request, every time, whatever the size of the change:
 1. **Regression.** `npm run verify` passes: the full test suite (unit,
    wiring, e2e, including `tests/e2e/mock-trading-e2e.test.js`), lint, the
    generated-files check, strategy validation, and the secrets check, as CI
-   runs them.
+   runs them. The goal regression is part of it: tier 1
+   (`tests/plugin/goal-regression.test.js`, in `npm test`) and tier 2
+   (`npm run goal:full`, its own CI job on every pull request) pass against
+   main's baseline (docs/TRAINING.md, "The goal regression"); the pull
+   request shows main vs this PR. A pull request touching entries, exits,
+   sizing, the gate or the runner also states its `npm run goal:real`
+   result against main (the local real-data run; the review checks it).
 2. **Adversarial review.** A reviewer other than the author of the change (a
    separate agent or subagent with no stake in it, or a person) reviews the
    whole diff against the base branch, trying to break it: inputs that make a
@@ -186,7 +192,11 @@ request, every time, whatever the size of the change:
    default. So is a changed golden (`tests/fixtures/golden/`, `tests/scripts/cli-parity.snapshot.json`)
    that the pull request doesn't explain as intended (CONTRIBUTING.md, "Golden files"), and so is any change to the
    tunables' pins or built-ins (`PINS`, `BUILT_IN` in `scripts/lib/tunables.js`, which `tests/lib/tunables.test.js`
-   imports) other than a tightened pin. Every confirmed finding is fixed (or,
+   imports) other than a tightened pin. So is a change to the goal
+   regression's baseline (`tests/fixtures/goal/baseline.json`), its move
+   goldens (`tests/fixtures/goal/move-scenarios.json`) or its fixture that
+   the pull request doesn't explain as an improvement, metric by metric (a
+   baseline only rises; a new fixture says why). Every confirmed finding is fixed (or,
    if not worth its code, answered with the reason), then the regression
    runs again and the fixes get their own review, until a round confirms
    nothing new.

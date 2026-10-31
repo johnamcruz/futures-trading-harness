@@ -18,10 +18,27 @@ test('process: `npm run verify` runs every check CI runs (the regression is one 
   const steps = verify.split('&&').map(s => s.trim());
   // CI's own checks: every `run:` step but the installs.
   const ci = read('.github/workflows/ci.yml').split('\n').map(l => /^\s*- run: (.+)$/.exec(l)).filter(Boolean).map(m => m[1].trim())
-    .filter(c => !/^(npm ci|pip install)\b/.test(c));
+    .filter(c => !/^(npm ci|pip install)\b/.test(c)).filter(c => c !== GOAL_FULL);
   assert.ok(ci.length >= 4, `CI's checks: ${ci.join('; ')}`);
   for (const c of ci) assert.ok(steps.includes(c), `CI runs "${c}" but npm run verify doesn't`);
   assert.strictEqual(steps.length, ci.length, `npm run verify runs ${steps.join('; ')}; CI runs ${ci.join('; ')}`);
+});
+
+// The goal regression's tier 2 (npm run goal:full) runs in CI as its own job on every pull request, not in npm run
+// verify (it plays the live path for minutes); it must stay there, its script the tier 2 files.
+const GOAL_FULL = 'npm run goal:full';
+
+test('process: the goal regression\'s tier 2 is its own CI job on every pull request, running npm run goal:full', () => {
+  const ci = read('.github/workflows/ci.yml');
+  assert.match(ci, /^on:\n(?:.*\n)*?\s+pull_request:/m, 'CI runs on every pull request');
+  const job = /^ {2}goal-full:\n((?: {4}.*\n|\n)+)/m.exec(ci);
+  assert.ok(job, 'a goal-full job');
+  assert.match(job[1], /- run: npm run goal:full/);
+  assert.match(job[1], /fetch-depth: 0/, 'the baseline is checked against the base branch');
+  assert.match(JSON.parse(read('package.json')).scripts['goal:full'], /tests\/goal\/\*\.goal\.js/);
+  assert.ok(!JSON.parse(read('package.json')).scripts.verify.includes('goal:full'), 'not in npm run verify (its tier 1 is: tests/plugin/goal-regression.test.js)');
+  assert.match(read('CLAUDE.md'), /goal regression/i);
+  assert.match(read('.github/pull_request_template.md'), /Goal regression: main vs this PR/);
 });
 
 test('process: the hard rule is where every coding agent reads it, and the PR template asks for both', () => {

@@ -1,0 +1,317 @@
+{
+  "fixture": "a200954be26ea089d513dd5e39ee0c6a893bd701963da1d3e062f77cdd1ac3bf",
+  "halves": {
+    "A": {
+      "sessions": 15,
+      "trend": 8,
+      "trades": 32,
+      "meanR": 0.145,
+      "totalR": 4.6412,
+      "falseStartShare": 0.3438,
+      "maxDrawdownR": 7.1824,
+      "medianRiskPts": 25.5,
+      "caught": {
+        "legs": 14,
+        "caught": 6,
+        "rCaught": 1.7744,
+        "rAvailable": 37.1863,
+        "share": 0.0477
+      },
+      "mc": {
+        "paths": 2000,
+        "pass": 0.218,
+        "blow": 0,
+        "blows": 0,
+        "meanDaysToPass": 24.6032
+      }
+    },
+    "B": {
+      "sessions": 15,
+      "trend": 8,
+      "trades": 39,
+      "meanR": -0.351,
+      "totalR": -13.6884,
+      "falseStartShare": 0.5641,
+      "maxDrawdownR": 15.295,
+      "medianRiskPts": 19.5,
+      "caught": {
+        "legs": 13,
+        "caught": 8,
+        "rCaught": 4.9577,
+        "rAvailable": 44.6282,
+        "share": 0.1111
+      },
+      "mc": {
+        "paths": 2000,
+        "pass": 0,
+        "blow": 0,
+        "blows": 0,
+        "meanDaysToPass": null
+      }
+    },
+    "S": {
+      "sessions": 10,
+      "trend": 0,
+      "trades": 11,
+      "meanR": -1.9334,
+      "totalR": -21.2679,
+      "falseStartShare": 0.9091,
+      "maxDrawdownR": 21.2679,
+      "medianRiskPts": 8.5,
+      "caught": {
+        "legs": 10,
+        "caught": 2,
+        "rCaught": -3.1306,
+        "rAvailable": 15.9412,
+        "share": -0.1964
+      },
+      "mc": {
+        "paths": 2000,
+        "pass": 0,
+        "blow": 0,
+        "blows": 0,
+        "meanDaysToPass": null
+      }
+    }
+  },
+  "writtenBy": "scripts/goal-check.js baseline --write",
+  "tier2": {
+    "fixture": "7ac3fde720c17a22bcc4fb838bbc687cd5be25f05afd94e93901e85c03533e0b",
+    "days": [
+      "2021-05-25",
+      "2022-08-15",
+      "2022-09-01",
+      "2023-04-28",
+      "2023-09-25",
+      "2023-12-07"
+    ],
+    "summary": {
+      "trades": 6,
+      "totalR": -2.4134,
+      "meanR": -0.4022,
+      "caught": 0,
+      "fills": 1,
+      "blows": 0
+    },
+    "behaviour": [
+      {
+        "day": "2021-05-25",
+        "kind": "non-trend",
+        "trades": 1,
+        "caught": false,
+        "R": -1.0132,
+        "worstR": -1.0132,
+        "blown": false
+      },
+      {
+        "day": "2022-08-15",
+        "kind": "trend",
+        "trades": 1,
+        "caught": false,
+        "R": -1.0156,
+        "worstR": -1.0156,
+        "blown": false
+      },
+      {
+        "day": "2022-09-01",
+        "kind": "trend",
+        "trades": 1,
+        "caught": false,
+        "R": -1.006,
+        "worstR": -1.006,
+        "blown": false
+      },
+      {
+        "day": "2023-04-28",
+        "kind": "trend",
+        "trades": 1,
+        "caught": false,
+        "R": -1.0147,
+        "worstR": -1.0147,
+        "blown": false
+      },
+      {
+        "day": "2023-09-25",
+        "kind": "trend",
+        "trades": 1,
+        "caught": false,
+        "R": -1.0139,
+        "worstR": -1.0139,
+        "blown": false
+      },
+      {
+        "day": "2023-12-07",
+        "kind": "non-trend",
+        "trades": 1,
+        "caught": false,
+        "R": 2.65,
+        "worstR": 2.65,
+        "blown": false
+      }
+    ],
+    "trades": [
+      {
+        "key": "2021-05-25|long|2021-05-25T13:39:00.000Z",
+        "day": "2021-05-25",
+        "side": "long",
+        "setup": "momentum_continuation fired up",
+        "bar": "2021-05-25T13:39:00.000Z",
+        "entry": 17039.25,
+        "size": 7,
+        "entryTime": "2021-05-25T13:42:02.000Z",
+        "exitTime": "2021-05-25T13:43:30.000Z",
+        "exitPrice": 17020,
+        "exitReason": "stop",
+        "R": -1.0132,
+        "trail": [],
+        "steps": [
+          "bias",
+          "setup",
+          "compose",
+          "phase2",
+          "gate",
+          "order",
+          "fill",
+          "bracket",
+          "exit",
+          "eod"
+        ]
+      },
+      {
+        "key": "2022-08-15|long|2022-08-15T13:45:00.000Z",
+        "day": "2022-08-15",
+        "side": "long",
+        "setup": "momentum_continuation fired up",
+        "bar": "2022-08-15T13:45:00.000Z",
+        "entry": 16893.5,
+        "size": 9,
+        "entryTime": "2022-08-15T13:48:02.000Z",
+        "exitTime": "2022-08-15T13:48:45.000Z",
+        "exitPrice": 16877.25,
+        "exitReason": "stop",
+        "R": -1.0156,
+        "trail": [],
+        "steps": [
+          "bias",
+          "setup",
+          "compose",
+          "phase2",
+          "gate",
+          "order",
+          "fill",
+          "bracket",
+          "exit",
+          "eod"
+        ]
+      },
+      {
+        "key": "2022-09-01|short|2022-09-01T13:48:00.000Z",
+        "day": "2022-09-01",
+        "side": "short",
+        "setup": "momentum_continuation fired down",
+        "bar": "2022-09-01T13:48:00.000Z",
+        "entry": 15484.5,
+        "size": 3,
+        "entryTime": "2022-09-01T13:51:02.000Z",
+        "exitTime": "2022-09-01T14:00:45.000Z",
+        "exitPrice": 15526.5,
+        "exitReason": "stop",
+        "R": -1.006,
+        "trail": [],
+        "steps": [
+          "bias",
+          "setup",
+          "compose",
+          "phase2",
+          "gate",
+          "order",
+          "fill",
+          "bracket",
+          "exit",
+          "eod"
+        ]
+      },
+      {
+        "key": "2023-04-28|long|2023-04-28T13:36:00.000Z",
+        "day": "2023-04-28",
+        "side": "long",
+        "setup": "momentum_continuation fired up",
+        "bar": "2023-04-28T13:36:00.000Z",
+        "entry": 16210.25,
+        "size": 8,
+        "entryTime": "2023-04-28T13:39:02.000Z",
+        "exitTime": "2023-04-28T13:40:30.000Z",
+        "exitPrice": 16193,
+        "exitReason": "stop",
+        "R": -1.0147,
+        "trail": [],
+        "steps": [
+          "bias",
+          "setup",
+          "compose",
+          "phase2",
+          "gate",
+          "order",
+          "fill",
+          "bracket",
+          "exit",
+          "eod"
+        ]
+      },
+      {
+        "key": "2023-09-25|short|2023-09-25T13:51:00.000Z",
+        "day": "2023-09-25",
+        "side": "short",
+        "setup": "momentum_continuation fired down",
+        "bar": "2023-09-25T13:51:00.000Z",
+        "entry": 17490.25,
+        "size": 8,
+        "entryTime": "2023-09-25T13:54:02.000Z",
+        "exitTime": "2023-09-25T13:55:30.000Z",
+        "exitPrice": 17508.5,
+        "exitReason": "stop",
+        "R": -1.0139,
+        "trail": [],
+        "steps": [
+          "bias",
+          "setup",
+          "compose",
+          "phase2",
+          "gate",
+          "order",
+          "fill",
+          "bracket",
+          "exit",
+          "eod"
+        ]
+      },
+      {
+        "key": "2023-12-07|short|2023-12-07T14:39:00.000Z",
+        "day": "2023-12-07",
+        "side": "short",
+        "setup": "momentum_continuation fired down",
+        "bar": "2023-12-07T14:39:00.000Z",
+        "entry": 18580,
+        "size": 7,
+        "entryTime": "2023-12-07T14:42:02.000Z",
+        "exitTime": "2023-12-07T14:51:02.000Z",
+        "exitPrice": 18527,
+        "exitReason": "close",
+        "R": 2.65,
+        "trail": [],
+        "steps": [
+          "bias",
+          "setup",
+          "compose",
+          "phase2",
+          "gate",
+          "order",
+          "fill",
+          "bracket",
+          "exit",
+          "eod"
+        ]
+      }
+    ]
+  }
+}

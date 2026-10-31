@@ -1,0 +1,268 @@
+{
+  "about": "The golden catch-the-move scenarios (goal-path.js moveLayers): each move day's first trade through the live path with the plan-following mock, layer by layer, as main's code gives them. Written by node tests/goal/tier2-run.js --write-moves; a change is a golden change the pull request explains.",
+  "scenarios": [
+    {
+      "day": "2021-06-15",
+      "label": {
+        "kind": "trend",
+        "why": "PPC trend leg long 13:33-13:54 UTC (58.75 pts), the 4h and 1h aligned"
+      },
+      "scenario": null,
+      "layers": {
+        "bias": "Bias: long only (4h up, 1h up; short refused)",
+        "setup": {
+          "read": "momentum_continuation fired up",
+          "kind": "cited",
+          "bar": "2021-06-15T13:36:00.000Z"
+        },
+        "entry": {
+          "bar": "2021-06-15T13:36:00.000Z",
+          "price": 17432.5,
+          "size": 8
+        },
+        "stop": {
+          "price": 17414.5,
+          "riskPts": 18
+        },
+        "exit": {
+          "target": "cancelled at the first managed cycle",
+          "heldToTarget": true,
+          "lockFirst": null,
+          "moves": [],
+          "reason": "close",
+          "time": "2021-06-15T13:57:02.000Z",
+          "price": 17453.75,
+          "R": 1.1806
+        },
+        "capture": {
+          "caught": true,
+          "leg": "long 2021-06-15T13:33:00.000Z to 2021-06-15T13:54:00.000Z",
+          "availR": 2.2917,
+          "share": 0.5152
+        }
+      }
+    },
+    {
+      "day": "2021-06-24",
+      "label": {
+        "kind": "trend",
+        "why": "PPC trend legs long 13:57-14:03 UTC (31.5 pts), long 14:03-14:42 UTC (40.75 pts), the 4h and 1h aligned"
+      },
+      "scenario": null,
+      "layers": {
+        "bias": "Bias: long only (4h up, 1h up; short refused)",
+        "setup": {
+          "read": "momentum_continuation fired up",
+          "kind": "cited",
+          "bar": "2021-06-24T13:57:00.000Z"
+        },
+        "entry": {
+          "bar": "2021-06-24T13:57:00.000Z",
+          "price": 17722.5,
+          "size": 9
+        },
+        "stop": {
+          "price": 17707.75,
+          "riskPts": 14.75
+        },
+        "exit": {
+          "target": "cancelled at the first managed cycle",
+          "heldToTarget": true,
+          "lockFirst": true,
+          "moves": [
+            17729.75
+          ],
+          "reason": "trail",
+          "time": "2021-06-24T15:21:45.000Z",
+          "price": 17729.5,
+          "R": 0.4746
+        },
+        "capture": {
+          "caught": true,
+          "leg": "long 2021-06-24T13:57:00.000Z to 2021-06-24T14:03:00.000Z",
+          "availR": 1.1525,
+          "share": 0.4118
+        }
+      }
+    },
+    {
+      "day": "2021-10-04",
+      "label": {
+        "kind": "trend",
+        "why": "PPC trend legs short 14:00-14:54 UTC (207.5 pts), short 15:15-15:42 UTC (94.25 pts), the 4h and 1h aligned"
+      },
+      "scenario": null,
+      "layers": {
+        "bias": "Bias: short only (4h down, 1h range; long refused)",
+        "setup": {
+          "read": "momentum_continuation fired down",
+          "kind": "cited",
+          "bar": "2021-10-04T13:39:00.000Z"
+        },
+        "entry": {
+          "bar": "2021-10-04T13:39:00.000Z",
+          "price": 17980.25,
+          "size": 3
+        },
+        "stop": {
+          "price": 18021,
+          "riskPts": 40.75
+        },
+        "exit": {
+          "target": "cancelled at the first managed cycle",
+          "heldToTarget": true,
+          "lockFirst": true,
+          "moves": [
+            17960,
+            17832.5,
+            17791.5
+          ],
+          "reason": "trail",
+          "time": "2021-10-04T18:07:30.000Z",
+          "price": 17791.75,
+          "R": 4.6258
+        },
+        "capture": {
+          "caught": false,
+          "leg": null,
+          "availR": null,
+          "share": null
+        }
+      }
+    },
+    {
+      "day": "2021-10-06",
+      "label": {
+        "kind": "trend",
+        "why": "PPC trend legs short 13:42-14:03 UTC (154.75 pts), short 14:48-15:21 UTC (107 pts), the 4h and 1h aligned"
+      },
+      "scenario": null,
+      "layers": {
+        "bias": "Bias: short only (4h down, 1h down; long refused)",
+        "setup": {
+          "read": "momentum_continuation fired down",
+          "kind": "cited",
+          "bar": "2021-10-06T13:45:00.000Z"
+        },
+        "entry": {
+          "bar": "2021-10-06T13:45:00.000Z",
+          "price": 17966.75,
+          "size": 6
+        },
+        "stop": {
+          "price": 17989.25,
+          "riskPts": 22.5
+        },
+        "exit": {
+          "target": "cancelled at the first managed cycle",
+          "heldToTarget": true,
+          "lockFirst": null,
+          "moves": [],
+          "reason": "close",
+          "time": "2021-10-06T13:54:02.000Z",
+          "price": 17919,
+          "R": 2.1222
+        },
+        "capture": {
+          "caught": true,
+          "leg": "short 2021-10-06T13:42:00.000Z to 2021-10-06T14:03:00.000Z",
+          "availR": 6.5222,
+          "share": 0.3254
+        }
+      }
+    },
+    {
+      "day": "2021-11-19",
+      "label": {
+        "kind": "trend",
+        "why": "PPC trend legs long 14:30-15:00 UTC (100.75 pts), long 15:30-16:36 UTC (79.75 pts), the 4h and 1h aligned"
+      },
+      "scenario": null,
+      "layers": {
+        "bias": "Bias: long only (4h up, 1h up; short refused)",
+        "setup": {
+          "read": "momentum_continuation fired up",
+          "kind": "cited",
+          "bar": "2021-11-19T14:42:00.000Z"
+        },
+        "entry": {
+          "bar": "2021-11-19T14:42:00.000Z",
+          "price": 19918.75,
+          "size": 7
+        },
+        "stop": {
+          "price": 19899.75,
+          "riskPts": 19
+        },
+        "exit": {
+          "target": "cancelled at the first managed cycle",
+          "heldToTarget": true,
+          "lockFirst": true,
+          "moves": [
+            19928.25
+          ],
+          "reason": "trail",
+          "time": "2021-11-19T15:10:30.000Z",
+          "price": 19928,
+          "R": 0.4868
+        },
+        "capture": {
+          "caught": true,
+          "leg": "long 2021-11-19T14:30:00.000Z to 2021-11-19T15:00:00.000Z",
+          "availR": 4.4474,
+          "share": 0.1095
+        }
+      }
+    },
+    {
+      "day": "2024-01-08",
+      "label": {
+        "kind": "non-trend",
+        "why": "synthetic fakeout: the impulse fires the setup, the reversal takes the stop: -1R at most"
+      },
+      "scenario": "fakeout",
+      "layers": {
+        "bias": "Bias: long only (4h up, 1h up; short refused)",
+        "setup": {
+          "read": "momentum_continuation fired up",
+          "kind": "cited",
+          "bar": "2024-01-08T14:42:00.000Z"
+        },
+        "entry": {
+          "bar": "2024-01-08T14:42:00.000Z",
+          "price": 16569.75,
+          "size": 16
+        },
+        "stop": {
+          "price": 16561.5,
+          "riskPts": 8.25
+        },
+        "exit": {
+          "target": "cancelled at the first managed cycle",
+          "heldToTarget": true,
+          "lockFirst": null,
+          "moves": [],
+          "reason": "stop",
+          "time": "2024-01-08T14:55:30.000Z",
+          "price": 16561.25,
+          "R": -1.0303
+        },
+        "capture": {
+          "caught": false,
+          "leg": null,
+          "availR": null,
+          "share": null
+        }
+      }
+    },
+    {
+      "day": "2024-02-05",
+      "label": {
+        "kind": "non-trend",
+        "why": "synthetic quiet day: the drift alone, no momentum, no listed setup: the right answer is no trade"
+      },
+      "scenario": "quiet",
+      "layers": null
+    }
+  ]
+}

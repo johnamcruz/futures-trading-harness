@@ -1732,6 +1732,103 @@ anchor (the phrase of the skills that states its rule) must be in the prompt it
 is asked against (tests/plugin/context-quiz.test.js). A changed key or question
 is explained in the pull request, as a golden is.
 
+### The goal regression
+
+A regression for the strategy, on every pull request, with real market data
+and a mock model: does the change break the goal, in the owner's order (0
+blows; a 30-session combine pass rate of 40% or more; more of the trends' R
+caught)? It runs the harness's own code and compares with the committed
+baseline (`tests/fixtures/goal/baseline.json`).
+
+**The CI fixture** (`tests/fixtures/goal/bars.json.gz`, about 0.5 MB): a
+small slice of real NQ 3m bars from the open learning window, never a
+sealed one. 30 sessions in 6 blocks of 5 consecutive sessions, 3 per half
+(half A before `goalRegression.split`, half B from it), drawn by a seed with
+8 trend days per half; and the five move days (`goalRegression.moveDays`) as
+blocks of their own. Each block carries the 514 hours before its first
+session, so the 4h and 1h reads see what live sees. Every session is
+labelled in the fixture, with why: trend (a PPC trend-set leg, the census
+detector with the 4h and 1h aligned) or non-trend (no such leg; the
+mechanical tier's day: a fakeout, or no trade). Rebuild it with
+`node scripts/goal-fixture.js --bars <NQ 3m bars file> --symbol MNQ`, then
+`node scripts/goal-check.js baseline --write --new-fixture --why "<why>"`
+and tier 2's `--write` and `--write-moves`.
+
+**Synthetic days** (`scripts/lib/eval/goal-synth.js`, built in memory, no
+data file): only what real days can't give cleanly: a fakeout that must end
+at -1R, a quiet day whose right answer is no trade, and the blow path (ten
+sessions whose reversal gaps through the stop: the shipped sizing never
+risks the floor on it, a broken size does).
+
+**Tier 1** (`tests/plugin/goal-regression.test.js`, in `npm test`, about
+10 s; `node scripts/goal-check.js run` prints the table): mechanical entries
+only. On the entry rule's side per bar (the RULEBOOK's `entry`,
+chain-side.js), the 15m CHoCH, BOS, compression break and strong CISD at its
+OTE and momentum_continuation's scan; compose's entry timing as shipped, the
+locked stop and D13's floor, the exit (limitOutcome with the policy's
+composed exit), one position at a time; then per half the trades, mean R, R
+caught of the trend legs' R available, the false-start share, the drawdown
+and a seeded 30-session combine Monte Carlo on the account's rulebook
+sizing; and the blow path's blows. It fails on one more blow, or a pass
+rate, mean R or R caught below main's less its tighten-only tolerance
+(`goalRegression.tolerance`: tight, since every number is deterministic).
+The fixture's draw, the Monte Carlo and tier 2's days are pinned exactly.
+Its mutation checks (`tests/goal/tier1.goal.js`) prove it fails on a worse
+exit, a stricter entry rule, a broken size on the blow path, a minimum size
+no stop fits and a stop floor that refuses structure stops.
+
+**Tier 2** (`npm run goal:full`, its own CI job, a few minutes): the live
+path (the runner, the briefing, compose_check, phase 2, the gate and the mock
+exchange as a replay broker) with a deterministic mock model that follows
+the plan (the Bias line's side, the first setup the briefing lists,
+compose_check, phase 2's `VERDICT: APPROVE - size n`, hold), on 6 of the
+slice's days (4 trend, 2 non-trend), entries in the session's first
+`tier2.entryMinutes`. It orders at the earliest the runner allows: no model
+delay is modelled. Each trade's path is traced (bias, setup, compose,
+phase 2, gate, order, fill, bracket, each trail move, exit, end of day) and
+every lost or changed trade against main's is named by its break (the
+briefing didn't list it, compose refused, phase 2 unreadable or vetoed, the
+gate refused, the order's timing, a fill difference, the exit). Each day is
+held to its label: no day blows; a non-trend day has no entry or a loss of
+at most `tier2.maxLossR`; a trend day main caught stays caught. Its self-tests
+inject each goal-breaking issue and must see it fail (`tier2-breaks`: a
+dropped setup line, a compose refusal, a phase-2 parse failure, a gate
+refusal, an order past the record's life, the order a bar late (a
+3m-confirmation-style delay), a trail behind a stale swing); the broker-fault
+days (`tier2-faults`: a lost reply, a late fill, a refused or errored stop
+move, a partial fill) must stay protected, never refuse an exit and never
+double the position; the move goldens (`tests/fixtures/goal/move-scenarios.json`)
+pin every layer of the five real legs and the synthetic fakeout and quiet
+day, and hold trend days caught and ridden. The full traces are written
+outside the repository.
+
+**The local real run** (`npm run goal:real`): the same tiers on a larger
+fixture whose bars come from the replay broker's MCP server
+(`node scripts/goal-fixture.js --replay-config <replay config.json> --symbol MNQ`:
+the adapter's history, the server's clock moved chunk by chunk), kept with
+its baseline and move goldens under the harness home, never the repository.
+Without it the run skips, saying how to build it. A pull request touching
+entries, exits, sizing, the gate or the runner states its `goal:real`
+result against main.
+
+**Its limits.** Tier 1 is mechanical: it measures the code's entries, never
+the model's judgment; its setups are the 15m primitives the studies
+measured, not the briefing's key-level reactions, and every target is the
+2R mark, so a change there moves tier 2, not tier 1. Tier 2's mock follows
+the plan; it shows the path works, not what the model decides; on main
+every tier 2 trade is a cited momentum_continuation entry at market. The
+CI slice is small (30 sessions; a pass rate's sampling error is large):
+it guards against regressions, it is no estimate of the pass rate. Skill
+text, prompts and the model's reading are the context quiz's and the PPC
+rounds'. Two findings stay out of scope here, each its own pull request: a
+fill reported late long enough that the gate's own reads miss the position
+lets the runner cancel its bracket stop (`tier2-faults`' open todo), and
+tier 1's limitOutcome exit and the runner's live trail give different R on
+the same trade. A baseline only rises: `goal-check.js baseline --write` (and
+tier 2's `node tests/goal/tier2-run.js --write`) refuse a worse one, the
+test holds the committed baseline to the base branch's, and a new fixture
+starts over only with its change recorded (`--new-fixture --why "<why>"`).
+
 ## 8. Rules that keep it honest
 
 - **No outcomes shown to the model.** It sees only its own record (the
