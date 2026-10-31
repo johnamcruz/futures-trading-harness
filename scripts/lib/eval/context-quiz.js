@@ -9,9 +9,11 @@
  *
  *   loadQuiz({ file })                 the quiz file, checked (config-files.js: fail closed): { value, hash }
  *   quizErrors(value)                  [problem] for a quiz document
- *   buildPrompts(root, quiz)           { head, 'head+risk', 'situational:<id>' }: the head trader's index-mode prompt (head-prompt.js
- *                                      claudeHeadText) and that plus the risk manager's (role-prompt.js claudeRoleText)
- *                                      with its agent body
+ *   buildPrompts(root, quiz)           { head, 'head+risk', 'situational:<id>', 'lookup:<id>' }: the head trader's index-mode
+ *                                      prompt (head-prompt.js claudeHeadText) and that plus the risk manager's (role-prompt.js
+ *                                      claudeRoleText) with its agent body; a lookup question's: the head prompt plus the
+ *                                      skills it names (`lookup`) as skill_lookup returns them, whole (a skill the head
+ *                                      reads as needed, not embedded: candle-reading's reaction read)
  *   excerptOf(excerpt)                 Part B's briefing excerpt: the Bias line (bias-line.js) or the Size and Min lines
  *                                      (prop/size-line.js), from the code that writes them
  *   questionText(quiz, q)              the text asked: the excerpt (Part B), the question, the answer format
@@ -33,7 +35,7 @@ const path = require('path');
 const { loadConfigFile } = require('../config-files');
 
 const LAYERS = Object.freeze(['bias', 'levels', 'setup', 'entry', 'stop', 'exit', 'size', 'approval']);
-const PROMPTS = Object.freeze(['head', 'head+risk', 'situational']);
+const PROMPTS = Object.freeze(['head', 'head+risk', 'situational', 'lookup']);
 const isObj = x => Boolean(x) && typeof x === 'object' && !Array.isArray(x);
 const str = x => typeof x === 'string' && x.length > 0;
 const re = src => new RegExp(src, 'i');
@@ -66,6 +68,7 @@ function quizErrors(v) {
       if (!LAYERS.includes(q.layer)) out.push(`${at}.layer: one of ${LAYERS.join(', ')}`);
       if (!PROMPTS.includes(q.prompt)) out.push(`${at}.prompt: one of ${PROMPTS.join(', ')}`);
       if (q.prompt === 'situational' && !(isObj(q.state) && Array.isArray(q.state.positions))) out.push(`${at}.state: the account state its situational skills are chosen for ({ positions, workingOrders, ... })`);
+      if (q.prompt === 'lookup' && !(Array.isArray(q.lookup) && q.lookup.length && q.lookup.every(s => typeof s === 'string' && /^[a-z0-9-]+$/.test(s)))) out.push(`${at}.lookup: the skills the head trader looks up for it (skill names)`);
       for (const k of ['text', 'rule']) if (!str(q[k])) out.push(`${at}.${k}: given`);
       if (part === 'questions' && !str(q.anchor)) out.push(`${at}.anchor: the phrase of the prompt that states the rule`);
       if (part === 'partB' && !(isObj(q.excerpt) && (isObj(q.excerpt.bias) || (isObj(q.excerpt.size) && isObj(q.excerpt.size.facts))))) out.push(`${at}.excerpt: { bias: { h4, h1, t15, declared } } or { size: { facts, riskUsd, minContracts, stretchUsd, capUsd } }`);
@@ -82,7 +85,7 @@ const loadQuiz = ({ file = null } = {}) => loadConfigFile({ name: 'context-quiz'
 const agentBody = (root, name) => fs.readFileSync(path.join(root, 'agents', `${name}.md`), 'utf8').replace(/^---\n[^]*?\n---\n/, '');
 
 /** The prompt a question is asked against: its `prompt`, or for a situational one its own (`situational:<id>`). */
-const promptKey = q => (q.prompt === 'situational' ? `situational:${q.id}` : q.prompt);
+const promptKey = q => (q.prompt === 'situational' || q.prompt === 'lookup' ? `${q.prompt}:${q.id}` : q.prompt);
 
 function buildPrompts(root, quiz = null) {
   const head = require('../head-prompt').claudeHeadText(root);
@@ -96,6 +99,11 @@ function buildPrompts(root, quiz = null) {
     const A = require('../autotrader');
     const loaded = A.cycleLoaded(A.validateConfig({ harness: 'claude' }));
     for (const q of situational) out[promptKey(q)] = `${head}\n${SS.situationText(root, SS.choose(root, SS.factsOf({ state: q.state }), { loaded }))}`;
+  }
+  // A lookup question: the head prompt plus the skills it reads as needed, whole, as skill_lookup returns them.
+  const HP = require('../head-prompt');
+  for (const q of quiz ? [...quiz.questions, ...quiz.partB].filter(x => x.prompt === 'lookup') : []) {
+    out[promptKey(q)] = `${head}\n\nYou looked up ${HP.andList(q.lookup)} (skill_lookup):\n\n${q.lookup.map(s => HP.block(s, HP.skillBody(root, s))).join('\n\n')}\n`;
   }
   return out;
 }
@@ -133,9 +141,9 @@ function answerLine(answer) {
   return m ? { line: m[1].trim(), fmt: true } : { line: a.split('\n')[0].trim(), fmt: false };
 }
 
-// A line-leading verdict and its punctuation ("No," "No -" "Not yet:" "Yes."): the answer to the question, not a negation
+// A line-leading verdict and its punctuation ("No," "No -" "Not yet:" "Not now," "**No**," "Yes."): the answer to the question, not a negation
 // of what follows it ("No, go short now" is a short). "Not the same read" has no punctuation after it: a negation still.
-const VERDICT = /^\W*(?:no|nope|not(?: yet)?|yes|yep)\b\s*[-–—,:;.!]+\s*/i;
+const VERDICT = /^[\W_]*(?:no|nope|not(?: yet| now)?|yes|yep)\b[*_]*\s*[-–—,:;.!]+\s*/i; // markdown bold too: **No**,
 
 function negated(line, index, negations, window) {
   const before = line.slice(0, index).replace(VERDICT, '');

@@ -44,7 +44,7 @@
       ],
       "forbidden": [
         "^\\s*(yes\\b|y,)",
-        "\\b(long|short) (is )?(ok|allowed)\\b",
+        "\\b(long|short) (is )?(ok|allowed)\\b(?!\\s*\\?)",
         "^\\s*(long|short)\\b"
       ]
     },
@@ -74,7 +74,8 @@
       "forbidden": [
         "^\\s*(yes\\b|y,)",
         "\\bcan (go|take) (a )?long",
-        "reversal|tier|rejection|unless"
+        "\\bunless\\b",
+        "\\b(with|after|on|given|once|if)\\s+(a\\s+|the\\s+)?(1h\\s+|15m\\s+)?(reversal|tier|rejection)\\b"
       ]
     },
     {
@@ -119,7 +120,7 @@
       "forbidden": [
         "^\\s*(yes\\b|y,)",
         "^\\s*(a )?(level|target)\\b",
-        "\\b(both|as|from it as)\\s+(a\\s+)?(level|target)\\b",
+        "\\b(both|as|from it as)\\s+(a\\s+)?(level|target)\\b(?![^.;]*\\b(useless|no|not|never)\\b)",
         "trade around",
         "\\bis a (level|target)\\b",
         "\\bbut a (level|target)\\b",
@@ -211,7 +212,7 @@
       ],
       "forbidden": [
         "^\\s*(yes\\b|y,)",
-        "\\b(tighten it|use a (tighter|closer)|take a (tighter|closer)|move (the )?stop closer)"
+        "\\b(tighten it|use a (tighter|closer)|take a (tighter|closer)|move (the )?stop closer)(?!\\s*\\?)"
       ]
     },
     {
@@ -255,7 +256,7 @@
       ],
       "forbidden": [
         "^\\s*(yes\\b|y,)",
-        "(exit|close|take profit) (at|there|at 2r)"
+        "(exit|close|take profit) (at|there|at 2r)(?![^.;:]*\\b(not|never|wrong|isn't|is no)\\b)"
       ]
     },
     {
@@ -325,7 +326,7 @@
         "\\b(place|take|send|go with)\\s+(the\\s+)?entry\\b",
         "\\bno restate\\b",
         "\\binstead of (a )?restate\\b",
-        "(?<!not )(?<!not a )\\bis a trade\\b",
+        "(?<!not )(?<!not a )\\bis a trade\\b(?![^.;]*\\b(only|after|once|when|if)\\b)",
         "\\brestate is (unnecessary|not needed)\\b",
         "\\bno need (to|for a) restate\\b"
       ]
@@ -341,7 +342,7 @@
         "skip|no trade|\\bpass\\b|floor|stretch|minimum|don't take|not take"
       ],
       "forbidden": [
-        "\\b(take|trade|enter|go|size( it)?( at)?)\\s+(with\\s+)?(the\\s+)?(only\\s+)?2\\b"
+        "\\b(take|trade|enter|go|size( it)?( at)?)\\s+(with\\s+)?(the\\s+)?(only\\s+)?2\\b(?!\\s*\\?)"
       ]
     },
     {
@@ -392,12 +393,12 @@
       ],
       "forbidden": [
         "^\\W*(yes|yep|take( it)?|enter|go)\\b",
-        "\\b(short|sell|go short)( it)? now\\b(?![^.;]*\\b(only|if|once|after|when|until)\\b)",
-        "\\benter (a |the )?short\\b(?![^.;]*\\b(only|if|once|after|when|until)\\b)",
-        "\\btake (the |a )?short\\b(?![^.;]*\\b(only|if|once|after|when|until)\\b)",
-        "\\bshort it\\b(?![^.;]*\\b(only|if|once|after|when|until)\\b)",
-        "\\b(so|therefore|then)\\s+sellers (are )?in control\\b",
-        "\\bsellers (are )?in control[,:;]?\\s*(so\\s+|then\\s+)?(short|sell|take|enter)\\b",
+        "\\b(short|sell|go short)( it)? now\\b(?!\\s+(only\\s+(with|once|if|after|when|until)|once|if|after|when|until)\\b)",
+        "\\benter (a |the )?short\\b(?!\\s+(only\\s+(with|once|if|after|when|until)|once|if|after|when|until)\\b)",
+        "\\btake (the |a )?short\\b(?!\\s+(only\\s+(with|once|if|after|when|until)|once|if|after|when|until)\\b)",
+        "\\bshort it\\b(?!\\s+(only\\s+(with|once|if|after|when|until)|once|if|after|when|until)\\b)",
+        "\\b(so|therefore|then|thus)\\s+sellers (are )?in control\\b(?!\\s+(isn't|is not|is no|not|needs?|requires?)\\b)",
+        "\\bsellers (are )?in control\\s*([,:;–—-]|\\band\\b|\\bso\\b)?\\s*(and\\s+|so\\s+|then\\s+)?(short|sell|take|enter)\\b",
         "\\bsellers (are )?in control\\W*$"
       ]
     },
@@ -463,7 +464,9 @@
         "\\b(rejection|it|the read)\\s+(as\\s+|has\\s+|is\\s+)?(failed|fails|undone|cancelled|invalidated|negated)\\b",
         "\\b(read|wick|rejection)\\s+is\\s+undone\\b",
         "\\b(undoes|undo|cancels|negates|invalidates)\\s+(the\\s+)?(confirmed\\s+)?(rejection|read)\\b",
-        "\\b(no|not( a)?|never|without)\\s+(a\\s+|the\\s+)?confirm\\w*(\\s+of)?(\\s+the)?\\s+rejection\\b"
+        "\\b(no|not( a)?|never|without)\\s+(a\\s+|the\\s+)?confirm\\w*(\\s+of)?(\\s+the)?\\s+rejection\\b",
+        "\\bconfirms (a |the )?breakout\\b",
+        "\\bconfirms nothing\\b"
       ]
     },
     {
@@ -478,9 +481,11 @@
       ],
       "forbidden": [
         "^\\W*(yes|yep|sellers)\\b",
-        "\\btake it now\\b",
-        "\\bshort it\\b",
-        "\\bsellers (are |were )?in control\\b"
+        "\\btake it now\\b(?![^.;:]*\\b(wrong|not|never)\\b)",
+        "\\bshort it( now)?\\b(?!\\s+(only\\s+(with|once|if|after|when|until)|once|if|after|when|until)\\b)",
+        "\\b(so|therefore|then|thus)\\s+sellers (are )?in control\\b(?!\\s+(isn't|is not|is no|not|needs?|requires?)\\b)",
+        "\\bsellers (are )?in control\\s*([,:;–—-]|\\band\\b|\\bso\\b)?\\s*(and\\s+|so\\s+|then\\s+)?(short|sell|take|enter)\\b",
+        "\\bsellers (are )?in control\\W*$"
       ]
     },
     {
@@ -516,45 +521,61 @@
         "\\bsame (read|thing|trade)\\b(?! of the candle)",
         "\\bshort in both\\b",
         "\\blong (setup|read|entry|trade|side)\\b",
-        "\\b(with-trend|with the trend|counter-trend) long\\b"
+        "\\b(with-trend|with the trend|counter-trend) long\\b",
+        "\\b(a|is a) short (too|as well|also)\\b"
       ]
     },
     {
       "id": "q31",
       "layer": "setup",
-      "prompt": "head",
+      "prompt": "lookup",
       "text": "The last 4h candle is a long-wick rejection of the prior RTH high; the 15m candle at it reads plain. Which reaction is the stronger, and is it a trade on its own?",
       "rule": "the reaction rules hold on every timeframe and a higher frame's reaction is stronger confirmation than a lower one's; a reaction is still context: it needs other confirmation",
-      "anchor": "| 1h, 4h | HTF levels (prior day, overnight, CRT) | most |",
+      "anchor": "a higher frame's reaction is stronger confirmation than a lower one's",
       "required": [
-        "^\\W*(the\\s+)?(4h|four-hour|higher)\\b",
-        "\\b(needs?|wants?|requires?)\\s+(other|more)\\s+confirmation\\b|\\bconfirmation\\b|\\bcontext\\b|\\bthe count\\b|\\bnot (a trade )?(on its own|alone|by itself)\\b"
+        "^[\\W_]*(the\\s+)?(4[- ]?h(our)?|four[- ]hour|higher)\\b",
+        "\\b(needs?|wants?|requires?)\\s+(other|more)\\s+confirmation\\b|\\bconfirmation\\b|\\bcontext\\b|\\bthe count\\b|\\bnot (a trade )?(on its own|alone|by itself)\\b|\\bneither( one)? is a trade\\b|\\bis not a trade\\b"
       ],
       "forbidden": [
         "^\\W*(the\\s+)?15m\\b",
         "\\b15m (one |rejection |reaction )?(is )?(the )?stronger\\b",
-        "\\b(yes|take it|short it|enter (the )?short)\\b(?![^.;]*\\b(only|if|once|after|when|until|with)\\b)",
-        "\\b(a|is a) trade on its own\\b"
+        "^\\W*(yes|yep)\\b",
+        "\\b(take it|short it|enter (the )?short|take the short)\\b(?!\\s+(only\\s+)?(once|if|after|when|until)\\b)",
+        "\\b(a|is a) trade (on its own|by itself|alone)\\b",
+        "\\benough on its own\\b",
+        "\\b(context|that|it) is enough\\b",
+        "\\bis the confirmation\\b",
+        "\\bconfirmation enough\\b"
+      ],
+      "lookup": [
+        "candle-reading"
       ]
     },
     {
       "id": "q32",
       "layer": "setup",
-      "prompt": "head",
+      "prompt": "lookup",
       "text": "The 3m candle is a long-wick rejection of the prior RTH high, but the last 1h candle closed decisively beyond it (broke above). Short on the 3m rejection?",
-      "rule": "a higher frame's reaction is stronger confirmation than a lower one's: the 1h close beyond outweighs the 3m rejection; the 3m only times the entry and alone can be noise (mixed: wait)",
-      "anchor": "| 3m, 5m | the entry timing only: never the setup | least |",
+      "rule": "a higher frame's reaction is stronger confirmation than a lower one's: the 1h close beyond outweighs the 3m rejection; the 3m only times the entry and alone can be noise (wait)",
+      "anchor": "3m only times the entry; alone it can be noise",
       "required": [
-        "^\\W*(no|nope|not|wait|pass)\\b",
-        "\\b(noise|outweigh\\w*|stronger|1h|timing|times|wait|mixed)\\b"
+        "^[\\W_]*(no|nope|not|wait|pass)\\b",
+        "\\b(noise|outweigh\\w*|stronger|only times|timing|times (the )?entr\\w*|cannot override|can't override|wait)\\b|\\b1h\\b[^.;]*\\b(close|closed|closes|break|breaks|broke|breakout)\\b"
       ],
       "forbidden": [
         "^\\W*(yes|yep|short|sell|take)\\b",
         "\\b3m (rejection |reaction )?confirms\\b",
         "\\bconfirms the short\\b",
-        "\\b(short|sell|go short)( it)? now\\b(?![^.;]*\\b(only|if|once|after|when|until|with)\\b)",
-        "\\bshort (it )?on the 3m\\b(?![^.;]*\\b(only|if|once|after|when|until|with)\\b)",
-        "\\btake the short\\b(?![^.;]*\\b(only|if|once|after|when|until|with)\\b)"
+        "\\b(short|sell|go short)( it)? now\\b",
+        "\\bshort (it )?on the 3m\\b(?!\\s*\\?)",
+        "\\btake the short\\b",
+        "\\b(3m|it|the wick) (rejection )?is (a|the) short\\b",
+        "\\bshort the 3m\\b",
+        "\\b3m times a short\\b",
+        "\\bthe 1h is noise\\b"
+      ],
+      "lookup": [
+        "candle-reading"
       ]
     }
   ],
@@ -687,7 +708,7 @@
       ],
       "forbidden": [
         "^\\s*(yes\\b|y,)",
-        "(?<!rather than )(?<!instead of )\\b(take|trade|enter)\\s+(it\\s+)?(with\\s+)?2\\b"
+        "(?<!rather than )(?<!instead of )\\b(take|trade|enter)\\s+(it\\s+)?(with\\s+)?2\\b(?!\\s*\\?)"
       ]
     }
   ]

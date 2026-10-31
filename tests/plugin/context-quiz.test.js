@@ -32,6 +32,22 @@ test('context quiz: a situational question is asked against the head prompt plus
   assert.ok(Q.quizErrors({ ...QUIZ, questions: [{ ...q, state: undefined }] }).some(e => /state/.test(e)));
 });
 
+test('context quiz: a lookup question is asked against the head prompt plus the skills it looks up (q31, q32: candle-reading\'s stack line)', () => {
+  const prompts = Q.buildPrompts(ROOT, QUIZ);
+  for (const id of ['q31', 'q32']) {
+    const q = QUIZ.questions.find(x => x.id === id);
+    assert.deepStrictEqual([q.prompt, q.lookup, Q.promptKey(q)], ['lookup', ['candle-reading'], `lookup:${id}`]);
+    const p = prompts[`lookup:${id}`];
+    assert.ok(p.startsWith(prompts.head) && p.includes('<skill name="candle-reading">'), id);
+  }
+  assert.ok(!prompts.head.includes('<skill name="candle-reading">'), 'not embedded in the head prompt alone');
+  // The owner's stack line deleted from candle-reading: both anchors go missing.
+  const flat = t => t.replace(/\s+/g, ' ');
+  const cut = Object.fromEntries(Object.entries(prompts).map(([k, v]) => [k, flat(v).replace(/The reaction rules \(below\) hold on every timeframe;[^.]*\. The 3m only times the entry; alone it can be noise\./, '')]));
+  assert.deepStrictEqual(Q.anchorsMissing(QUIZ, cut).filter(x => x === 'q31' || x === 'q32'), ['q31', 'q32']);
+  assert.ok(Q.quizErrors({ ...QUIZ, questions: [{ ...QUIZ.questions.find(x => x.id === 'q31'), lookup: undefined }] }).some(e => /lookup/.test(e)));
+});
+
 test('context quiz: every layer asked, ids unique, the bar the whole quiz at K 5', () => {
   const all = [...QUIZ.questions, ...QUIZ.partB];
   assert.deepStrictEqual([...new Set(QUIZ.questions.map(x => x.layer))].sort(), [...Q.LAYERS].sort());
