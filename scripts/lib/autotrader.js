@@ -484,7 +484,7 @@ function recentBarsText(symbol, bars, timeframe) {
  * entered, so nothing is listed; under a policy strategy's verdict the fired
  * strategies are its components, entered only as the verdict says.
  */
-function signalsText(symbol, scan, { manageOnly = false, verdicts = [], notEntries = [], lane = false, entryBlocked = null } = {}) {
+function signalsText(symbol, scan, { manageOnly = false, verdicts = [], notEntries = [], lane = false, entryBlocked = null, cited = [] } = {}) {
   // Manage-only is stated once, in the instruction's mode; a lane that fails closed (its briefing can't be built) says
   // its own "no entry on this bar", never an invitation to compose there.
   if (manageOnly || entryBlocked) return '';
@@ -497,13 +497,19 @@ function signalsText(symbol, scan, { manageOnly = false, verdicts = [], notEntri
   if (!fired.length) return ` ${symbol}: no rules strategy fired on this bar (the scan's candidates); a setup you compose and check is still open (trade-lifecycle, compose_check).`;
   const one = r => {
     const c = r.confluence || { with: [], against: [] };
+    // A running attempt's cited setup (momentum_continuation under prop_portfolio): a setup of the attempt, entered by
+    // citing it in compose_check; it has no track record of its own, and that is no reason to pass.
+    if (cited.includes(r.name)) {
+      const way = r.direction === 'long' ? 'up' : 'down';
+      return `${r.name} fired ${way} (${r.direction}): a setup in this attempt: cite it in compose_check ("${r.name} fired ${way}", the trend rule's side)${c.with.length ? ` with ${c.with.join(', ')}` : ''}${c.against.length ? `; against ${c.against.join(', ')}` : ''} [track record: n/a, not a reason to pass]`;
+    }
     // Another lane's setup: its trend rule, which the roles' required lookups read as the briefing's (runner-lanes skill).
     const rule = lane ? candidateTrendRule(r) : null;
     return `${r.name} ${r.direction}${rule ? ` (trend rule: ${rule})` : ''}${r.status === 'paper' ? ' (paper: plan only, the gate refuses a live entry)' : ''}${notEntries.includes(r.name) ? ' (its policy has no verdict this bar: not an entry)' : ''}${c.with.length ? ` with ${c.with.join(', ')}` : ''}${c.against.length ? `; against ${c.against.join(', ')}` : ''}${(v => (v ? ` (${v})` : ''))(sideValuesText(r.rules && r.rules[r.direction]))}${r.record ? ` [${r.name} ${r.record}]` : ''}`;
   };
   const conflict = fired.some(r => r.confluence && r.confluence.against.length);
   // A failed screen is named once, in the "Context unavailable" line; the strategies it owns are marked above.
-  const policy = notEntries.length ? ''
+  const policy = notEntries.length || fired.every(r => cited.includes(r.name)) ? ''
     : verdicts.length ? ` These are ${verdicts[0].strategy}'s components: enter only as its verdict below says (setup:${verdicts[0].strategy}), never as setup:<component>.` : '';
   return ` ${symbol} fired on this bar (scan candidates, already in session, regime, and the trend rule): ${fired.map(one).join(' | ')}.${conflict ? ' Strategies disagree on the side: stand aside unless one is a reversal at a higher-timeframe level and the plan says why.' : ''}${policy}`;
 }
@@ -752,14 +758,14 @@ function prompts(cfg, now, root = '') {
       const sentence = t => { const x = String(t).trim(); return /[.!?…]$/.test(x) ? x : `${x}.`; };
       // `minutes`: the lane whose bar closed (none: the runner's timeframe); `repeat`: a further lane of a symbol
       // already described this cycle, which adds only its own bars and signals.
-      const bars = list.filter(x => x.bar).map(({ symbol, bar, scan, verdicts, notEntries, entryBlocked = null, minutes = cfg.timeframe, repeat = false }) =>
+      const bars = list.filter(x => x.bar).map(({ symbol, bar, scan, verdicts, notEntries, entryBlocked = null, cited = [], minutes = cfg.timeframe, repeat = false }) =>
         // The bar's close is the last of the recent bars below; the trend line is one sentence.
         ` ${symbol}: a ${minutes}-minute bar just closed (opened ${etTime(bar.t)}); closed ${minutes}-minute bars, oldest first, are in ${bar.file} (get_bars format; contractId ${bar.contractId}) - use that file; don't fetch ${minutes}-minute bars.`
         + (repeat ? '' : bar.trend ? ` ${symbol} ${String(bar.trend).trim().replace(/\.$/, '')} (recorded for the order gate, which enforces it).` : ` ${symbol}: no multi-timeframe record this bar, so the gate refuses trend strategies' entries.`)
         + (bar.plan && !repeat ? ` ${sentence(bar.plan)}` : '')
         + (bar.day && !repeat ? ` ${sentence(bar.day)}` : '')
         + recentBarsText(symbol, bar.recent, minutes)
-        + signalsText(repeat ? `${symbol} ${minutes}m` : symbol, scan, { manageOnly, verdicts: verdicts || [], notEntries: notEntries || [], lane: minutes !== cfg.timeframe, entryBlocked }));
+        + signalsText(repeat ? `${symbol} ${minutes}m` : symbol, scan, { manageOnly, verdicts: verdicts || [], notEntries: notEntries || [], lane: minutes !== cfg.timeframe, entryBlocked, cited: cited || [] }));
       const symbols = [...new Set(list.map(x => x.symbol))].join(', ');
       const mode = [
         cfg.paper ? 'paper mode (plan only, no orders)' : '',

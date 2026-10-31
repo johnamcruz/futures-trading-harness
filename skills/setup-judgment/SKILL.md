@@ -35,13 +35,13 @@ description: Use when deciding a cycle, and before any entry - each setup's fact
   `prop-challenge-pacing` skill only when the priority order says take, at
   the size it allows; no trade when there is none, it says skip, or the
   order says no. Never tag the component (`trade_lifecycle`) yourself; the
-  gate refuses it.
-- **Track record** (a rules strategy; none active): weigh its signal by
-  its recorded backtest and reviewed live trades: no recorded edge, a
-  negative slice for this regime or hour, or live results well under it is
-  a smaller trade or none. Under 30 trades is anecdotal; "no backtest
-  recorded" is the weakest case; a STALE record doesn't describe it.
-  `trade_lifecycle` has no backtest record: none of this cuts its size.
+  gate refuses it. A setup the prompt names in this attempt (S2): cite it in
+  `compose_check`.
+- **Track record** (a rules strategy outside an attempt): weigh it by its
+  recorded backtest and reviewed live trades: no edge or live results well
+  under it is a smaller trade or none. Under 30 trades is anecdotal; a
+  STALE record doesn't describe it. None (`trade_lifecycle`, a cited
+  setup): never a reason to pass or cut.
 - **Confluence.** A composed setup's: the count of `confluence-counting`.
   Rules candidates (none active) firing both sides (`confluence.against`):
   stand aside (priority step 6: no exception).

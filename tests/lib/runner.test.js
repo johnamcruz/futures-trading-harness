@@ -1202,6 +1202,18 @@ test('prop challenge: when flat, the policy screens setups; a skipped setup star
   assert.ok(b.cycles.filter(c => c === 'trade').length >= 1);
 });
 
+test('prop challenge: the fired line names an attempt\'s cited setup as the attempt\'s (prop hooks cited), never a veto; an unreadable list names none', async () => {
+  const candidate = [{ name: 'trendy', status: 'active', signal: 'rules', candidate: true, direction: 'long', stopDistance: 10 }];
+  const take = { ...fakeProp(), cited: () => ['trendy'] };
+  const b = await trailSim({ tape: {}, startFlat: true, scan: candidate, prop: take, until: et(10, 10), trigger: 'signal' });
+  assert.match(b.prompts.find(x => /trade-session/.test(x)), /trendy fired up \(long\): a setup in this attempt: cite it in compose_check \("trendy fired up", the trend rule's side\) \[track record: n\/a, not a reason to pass\]/);
+  const broken = { ...fakeProp(), cited: () => { throw new Error('registry unreadable'); } };
+  const c = await trailSim({ tape: {}, startFlat: true, scan: candidate, prop: broken, until: et(10, 10), trigger: 'signal' });
+  const prompt = c.prompts.find(x => /trade-session/.test(x));
+  assert.doesNotMatch(prompt, /a setup in this attempt/);
+  assert.match(prompt, /trendy long/);
+});
+
 test('every run\'s prompt states the account, read just before it; an unreadable account is said, not hidden', async () => {
   const r = await trailSim({ tape: {}, startAt: et(15, 40) + 2000, until: et(15, 52) });
   const eod = r.prompts.find(x => /end-of-day skill/.test(x));

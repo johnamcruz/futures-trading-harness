@@ -26,7 +26,7 @@ const state = require('../trading/prop-state');
 const { decideSetup } = require('./verdict');
 const { factsOf } = require('./phase2-cut');
 const { sizeLines, worstRisk } = require('./size-line');
-const { componentRefusal, composedOf } = require('../trading/strategies');
+const { componentRefusal, composedOf, citedSetups } = require('../trading/strategies');
 const combine = require('../trading/combine');
 const { tradingDayKey } = require('../trading/clock');
 const { lanePolicies } = require('../lanes');
@@ -193,6 +193,17 @@ function createPropHooks({ root, env = process.env, home, client, accountId, str
      * the verdict's component). With only such setups fired, the policy has
      * no setup: not a candidate, no verdict, and a note naming them.
      */
+    /**
+     * The rules strategies a running attempt trades as cited setups on this contract now (strategies.js citedSetups:
+     * a policy listing a composed strategy, e.g. momentum_continuation under prop_portfolio's trade_lifecycle): their
+     * fired line names them as setups of the attempt, cited in compose_check. [] with no such attempt.
+     */
+    cited({ symbol, contractId }) {
+      const registry = strategies();
+      const out = new Set();
+      for (const s of activePolicies(symbol, contractId, true)) for (const c of composedOf(s, registry)) for (const n of citedSetups(registry, c, { paper })) out.add(n);
+      return [...out];
+    },
     /** The strategies an active policy owns on this contract now: Map(strategy -> policy); empty when none. */
     owners({ symbol, contractId }) {
       const owners = new Map();
