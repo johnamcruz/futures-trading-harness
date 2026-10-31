@@ -158,7 +158,19 @@ function riseProblems(base, next) {
   // A new fixture starts a new baseline only with the change recorded: the hash it replaces and why (the review reads it).
   if (base.fixture !== next.fixture) {
     const c = next.fixtureChange;
-    return c && c.from === base.fixture && typeof c.why === 'string' && c.why.trim() ? [] : [`the fixture changed (${base.fixture} on the base branch, ${next.fixture} now) with no fixtureChange { from: the base's hash, why } recorded in the baseline: node scripts/goal-check.js baseline --write --new-fixture --why "<why>"`];
+    if (!(c && c.from === base.fixture && typeof c.why === 'string' && c.why.trim())) return [`the fixture changed (${base.fixture} on the base branch, ${next.fixture} now) with no fixtureChange { from: the base's hash, why } recorded in the baseline: node scripts/goal-check.js baseline --write --new-fixture --why "<why>"`];
+    // Even a new fixture never takes a blow back: no half, nor the blow path, blows more than the base's, and the blow
+    // path stays as harsh (as many trades, a mean R no higher: a fixture change can't gut the stress it carries).
+    const out = [];
+    for (const half of halvesOf(base)) {
+      const was = get(base.halves[half], 'mc.blows');
+      const is = get((next.halves || {})[half], 'mc.blows');
+      if (typeof is !== 'number' || is > was) out.push(`half ${half} combine blows: ${is} in the new fixture's baseline, ${was} on the base branch: a fixture change never adds a blow`);
+    }
+    const s0 = base.halves.S;
+    const s1 = (next.halves || {}).S;
+    if (s0 && !(s1 && s1.meanR <= s0.meanR && s1.trades >= s0.trades)) out.push(`the blow path: ${s1 ? `${s1.trades} trades, mean R ${s1.meanR}` : 'gone'} in the new fixture's baseline, ${s0.trades} trades and ${s0.meanR} on the base branch: a fixture change never softens it`);
+    return out;
   }
   const out = [];
   for (const half of halvesOf(base)) {

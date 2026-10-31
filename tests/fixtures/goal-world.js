@@ -43,7 +43,7 @@ const { validateConfig } = require('../../scripts/lib/autotrader');
 const { openAdapter } = require('../../scripts/lib/broker/adapter');
 const { wireRunner, closedBarsOnly } = require('../../scripts/lib/runner-wiring');
 const { runCycle, runRole: realRunRole } = require('../../scripts/lib/cycle-run');
-const { readBriefing } = require('../../scripts/lib/trading/briefing');
+const { readBriefing, renderBriefing } = require('../../scripts/lib/trading/briefing');
 const { biasSides, biasLine } = require('../../scripts/lib/trading/bias-line');
 const { entryRead, runnerClock } = require('../../scripts/lib/learning/setup-library');
 const { trendRuleOf } = require('../../scripts/lib/trading/reasons');
@@ -69,12 +69,12 @@ const DECIDE_MS = 2000; // a replay's decision time: 2 s after its bar closed (d
 const iso = ms => new Date(ms).toISOString();
 const minuteOf = ms => minutesOfDay(new Date(ms), ET);
 
-function dayWorld(bars, day, { account, suggest = 3, fault = null } = {}) {
+function dayWorld(bars, day, { account, suggest = 3, fault = null, state = null, probe = false } = {}) {
   if (fault && !FAULTS[fault]) throw new Error(`fault ${fault}: one of ${Object.keys(FAULTS).join(', ')}`);
   const home = tmpDir();
   recordBrokerSpecs(home, { broker: 'replaymock', roots: ['MNQ', 'NQ', 'MES', 'ES'] });
   recordBrokerSpecs(home, { broker: 'replaymock', roots: ['MNQ', 'NQ', 'MES', 'ES'], day });
-  const state = path.join(home, 'exchange.json');
+  const statePath = path.join(home, 'exchange.json');
   const journal = path.join(home, 'journal.jsonl');
   const clock = path.join(home, 'clock.json');
   fs.writeFileSync(journal, '');
@@ -87,10 +87,10 @@ function dayWorld(bars, day, { account, suggest = 3, fault = null } = {}) {
   // The 1m bars the late-entry check reads (the newest closed one): the day's only, so the exchange's state stays small.
   const minute = toMinutes(dayBars).map(({ ms: _ms, ...b }) => b);
   const first = dayBars[0];
-  exchange.initState(state, { nowMs: first.ms, prices: { [MNQ_ID]: first.o }, balance: account.starting_balance, bars: { [MNQ_ID]: bars, [`${MNQ_ID}@1m`]: minute } });
+  exchange.initState(statePath, { nowMs: first.ms, prices: { [MNQ_ID]: first.o }, balance: account.starting_balance, bars: { [MNQ_ID]: bars, [`${MNQ_ID}@1m`]: minute } });
   const env = {
     PATH: process.env.PATH, HOME: home, FTH_HOME: home, NODE_ENV: 'test',
-    MOCK_STATE: state, MOCK_JOURNAL: journal, MOCK_CLOCK_FILE: clock, MOCK_REPLAY: '1', MOCK_ALLOWED_ACCOUNTS: '7', MOCK_MAX_ORDER_SIZE: '50', MOCK_JOURNAL_CLOCK: '1',
+    MOCK_STATE: statePath, MOCK_JOURNAL: journal, MOCK_CLOCK_FILE: clock, MOCK_REPLAY: '1', MOCK_ALLOWED_ACCOUNTS: '7', MOCK_MAX_ORDER_SIZE: '50', MOCK_JOURNAL_CLOCK: '1',
     FTH_GATE_LOG: path.join(home, 'gate.jsonl'), FTH_BLACKOUTS_FILE: path.join(home, 'blackouts.json'), FTH_KILL_SWITCH_FILE: path.join(home, 'STOP'),
     // A deliberate break (tests/goal/breaks.js) reaches every harness process the runner and the model start.
     ...(process.env.FTH_GOAL_BREAK ? { FTH_GOAL_BREAK: process.env.FTH_GOAL_BREAK, NODE_OPTIONS: `--require ${JSON.stringify(path.join(ROOT, 'tests', 'goal', 'breaks.js'))}` } : {}),
@@ -98,10 +98,16 @@ function dayWorld(bars, day, { account, suggest = 3, fault = null } = {}) {
   // The exchange calendar as the runner's clock has it (setup-library.js runnerClock): the day's closed and early dates.
   const h = holidayDates(new Date(`${day}T00:00:00Z`), new Date(`${day}T00:00:00Z`));
   const cfg = validateConfig({ harness: 'opencode', cycle: 'full', premarketAt: '', timeframe: 3, account: '7', symbols: ['MNQ'], dataDir: path.join(home, 'bars'), bars: bars.length, closedDates: h.closed, earlyCloseDates: h.early });
-  prop.startAttempt(home, account, new Date(first.ms));
+  // A mid-attempt state (the state days): the attempt started a session earlier and closed it at `balance` (the
+  // exchange's balance with it), so the cushion, the floor and the room to the target are that state's.
+  if (state) {
+    prop.startAttempt(home, account, new Date(first.ms - 86400000));
+    prop.recordEndOfDay(home, account, account.starting_balance + state.pnl, state.prevDay);
+    exchange.update(statePath, x => { x.balance = account.starting_balance + state.pnl; });
+  } else prop.startAttempt(home, account, new Date(first.ms));
   // The runner's end of day for the session (setup-library.js runnerClock: its sessions and the calendar's early closes).
   const eodMs = runnerClock({ from: day, to: day }).eodOf(dayBars.at(-1).ms);
-  return { sent: [], faults: [], snaps: [], fault, faulted: false, walkedTo: -Infinity, clockMs: first.ms, eodMs, home, state, journal, clock, env, cfg, day, list, dayBars, account, suggest, stateFile: path.join(home, 'runner-state.json') };
+  return { probe, probes: [], sent: [], faults: [], snaps: [], fault, faulted: false, walkedTo: -Infinity, clockMs: first.ms, eodMs, home, state: statePath, journal, clock, env, cfg, day, list, dayBars, account, suggest, stateFile: path.join(home, 'runner-state.json') };
 }
 
 /** The quoted reads of the briefing's "Setups to check" line, each with the side it points. */
@@ -111,7 +117,8 @@ function listedSetups(summary) {
   return [...line.matchAll(/"([^"]+)" \((long|short)/g)].map(m => ({ read: m[1], side: m[2] }));
 }
 
-const summaryOf = b => (b && typeof b.summary === 'string' ? b.summary : b && b.text ? b.text : '');
+// The briefing as the model reads it (briefing.js renderBriefing: its summary lines, the Bias line, Setups to check).
+const summaryOf = b => (b && b.sections ? renderBriefing(b, { now: new Date(Date.parse(b.closedAt)) }) : '');
 const m3Of = b => (b && b.sections && b.sections.m3 ? b.sections.m3.data : null);
 const way = side => (side === 'long' ? 'up' : 'down');
 
@@ -147,12 +154,12 @@ function decide(b) {
     const entry = c3 && c3.momentum === way(side) ? `3m momentum ${way(side)}` : entryRead(c3, side, '3m');
     return { side, setup: `${c.name} fired ${way(side)}`, kind: 'cited', reads: [bias, vwap, read('setup', `${c.name} fired ${way(side)}`), read('entry', entry || `3m close ${side === 'long' ? 'top' : 'bottom'}`), read('stop', `stop 3m ${side === 'long' ? 'low' : 'high'} ${side === 'long' ? c3.l : c3.h}`), read('target', 'target 2r')].filter(Boolean) };
   }
+  // The first valid listed setup: the one the briefing's Standard plan composes OK (its reads, as the briefing gives
+  // them), else the first listed with the bar's confirming 3m read.
+  const std = standardReads(summary, side);
+  const planned = std ? listed.find(x => std.includes(x.read)) : null;
+  if (planned) return { side, setup: planned.read, kind: 'standard', reads: std.map((r, i) => read(['bias', 'location', 'setup', 'entry', 'stop', 'target'][i] || 'setup', r)) };
   for (const x of listed) {
-    const std = standardReads(summary, side);
-    if (std && std.some(r => r === x.read)) {
-      const steps = ['bias', 'location', 'setup', 'entry', 'stop', 'target'];
-      return { side, setup: x.read, kind: 'standard', reads: std.map((r, i) => read(steps[i] || 'setup', r)) };
-    }
     const entry = entryRead(c3, side, '3m');
     const c15 = m3.candles && m3.candles['15m'];
     if (!entry || !c15) continue;
@@ -166,13 +173,26 @@ function headScript(w, decisions) {
   return () => {
     const b = readBriefing(w.home, 'MNQ');
     const open = exchange.read(w.state).positions.some(p => p.contractId === MNQ_ID);
-    if (open) return [{ harness: 'bar_briefing', args: { symbol: 'MNQ', json: true } }, { result: 'CYCLE RESULT: managed - holding, the stop untouched (the runner\'s exit manages it)' }];
+    if (open) return [{ harness: 'bar_briefing', args: { symbol: 'MNQ', json: true } }, ...(w.probe && !w.probedOpen && w.lastArgs ? openProbes(w) : []), { result: 'CYCLE RESULT: managed - holding, the stop untouched (the runner\'s exit manages it)' }];
     const d = decide(b);
+    // The counter-bias probe (a probe day): on the first bar the Bias line gives a side, before any compose or verdict, an
+    // entry under the policy the other way: the policy's entry rule refuses it ([entry-rule]).
+    const sides = biasSides(b);
+    const biasSide = ['long', 'short'].find(x => sides[x] && !sides[x === 'long' ? 'short' : 'long']);
+    const biasProbe = w.probe && !w.probedBias && biasSide && m3Of(b) && m3Of(b).windowEntries === 'allowed' ? (() => {
+      w.probedBias = true;
+      const other = biasSide === 'long' ? 'sell' : 'buy';
+      return probeStep(w, 'counter-bias, no verdict', { broker: 'place_order', args: { accountId: 7, contractId: 'MNQ', side: other, type: 'market', size: w.suggest, stopLossBracket: { ticks: 80, type: 'stop' }, takeProfitBracket: { ticks: 160, type: 'limit' }, rationale: `setup:prop_portfolio ${other === 'buy' ? 'long' : 'short'} against the Bias line (a probe)` } });
+    })() : [];
+    // The no-15m-setup probe: a combination whose setup is a 3m read, composed before the plan's own (compose refuses it).
+    const setupProbe = w.probe && !w.probedSetup && !d.pass ? (() => { w.probedSetup = true; return [{ harness: 'compose_check', args: { symbol: 'MNQ', side: d.side, reads: d.reads.map(r => (r.step === 'setup' ? { ...r, read: `3m bos ${d.side === 'long' ? 'up' : 'down'}` } : r)), size: w.suggest } }, { act: ctx => w.probes.push({ name: 'no 15m setup', kind: 'compose', text: String(ctx.results.compose_check || '') }) }]; })() : [];
     const bar = m3Of(b) && m3Of(b).bar ? m3Of(b).bar.t : null;
     decisions.push({ bar, bias: biasLine(b), ...d });
-    if (d.pass) return [{ harness: 'bar_briefing', args: { symbol: 'MNQ', json: true } }, { result: `CYCLE RESULT: no-trade - ${d.pass}` }];
+    if (d.pass) return [{ harness: 'bar_briefing', args: { symbol: 'MNQ', json: true } }, ...biasProbe, { result: `CYCLE RESULT: no-trade - ${d.pass}` }];
     return [
       { harness: 'bar_briefing', args: { symbol: 'MNQ', json: true } },
+      ...biasProbe,
+      ...setupProbe,
       { harness: 'compose_check', args: { symbol: 'MNQ', side: d.side, reads: d.reads, size: w.suggest } },
       { result: ctx => {
         const text = String(ctx.results.compose_check || '');
@@ -222,9 +242,12 @@ function roles(w, at, opts) {
       const arm = !w.fault || w.faulted ? null : () => { w.faulted = true; exchange.update(w.state, x => Object.assign(x, FAULTS[w.fault].arm(x))); w.faults.push({ at: iso(w.clockMs), kind: w.fault }); };
       script = prompt => {
         const args = requestedArgs(prompt);
+        w.lastArgs = args;
         return [
           { broker: 'get_account_snapshot', args: { accountId: 7 } },
           ...(arm && !FAULTS[w.fault].after ? [{ act: arm }] : []),
+          // The negative probes (a probe day): entries the gate must refuse, each before the real order.
+          ...(w.probe && !w.probedEntry ? entryProbes(w, args) : []),
           { broker: 'place_order', args },
           ...(arm && FAULTS[w.fault].after ? [{ act: arm }] : []),
           { result: ctx => { const c = ctx.calls.filter(x => x.tool === 'place_order').at(-1); return c && c.ok && !/Blocked by/.test(c.text) ? `EXECUTED\nOrders: ${c.text.slice(0, 120)}` : `BLOCKED\n${c ? c.text.slice(0, 600) : 'no reply'}`; } },
@@ -239,6 +262,38 @@ function roles(w, at, opts) {
   };
   return runRole;
 }
+
+/**
+ * The negative probes (a probe day, tests/goal/tier2-probes.goal.js): orders the gate must refuse, sent by the mock
+ * through the real gateway, each reply kept with its refusal tags (w.probes). At the first entry, before the real order:
+ * the side against the Bias line (not the record's: the entry rule), a size above the verdict's, one below the
+ * rulebook's floor, the order with no bracket stop. With the position open, the next pass: a second entry (and its
+ * record expired by then), and the bracket stop moved to loosen the risk.
+ */
+const probeStep = (w, name, call) => [call, { act: ctx => { const c = ctx.calls.at(-1); w.probes.push({ name, kind: call.broker, text: c ? c.text : 'no call', ok: Boolean(c && c.ok) }); } }];
+function entryProbes(w, args) {
+  w.probedEntry = true;
+  const other = args.side === 'buy' ? 'sell' : 'buy';
+  const { stopLossBracket: _s, ...bare } = args;
+  return [
+    ...probeStep(w, 'counter-bias', { broker: 'place_order', args: { ...args, side: other, rationale: `setup:prop_portfolio ${other === 'buy' ? 'long' : 'short'} against the bias (a probe)` } }),
+    ...probeStep(w, 'size above the verdict', { broker: 'place_order', args: { ...args, size: args.size + 1 } }),
+    ...probeStep(w, 'size below the floor', { broker: 'place_order', args: { ...args, size: 1 } }),
+    ...probeStep(w, 'no bracket stop', { broker: 'place_order', args: bare }),
+  ];
+}
+function openProbes(w) {
+  w.probedOpen = true;
+  const x = exchange.read(w.state);
+  const stop = x.orders.find(o => o.status === 1 && o.contractId === MNQ_ID && o.type === 4);
+  const loosen = stop ? stop.stopPrice + (stop.side === 1 ? -1 : 1) * cfgTicks(w) : null;
+  return [
+    ...probeStep(w, 'a second position while one is open', { broker: 'place_order', args: w.lastArgs }),
+    ...(stop ? probeStep(w, 'the stop moved to loosen the risk', { broker: 'modify_order', args: { accountId: 7, orderId: stop.id, stopPrice: loosen } }) : []),
+  ];
+}
+// How far the loosening probe moves the stop: the stop's own distance again (twice the risk).
+const cfgTicks = w => Math.abs(w.lastArgs.stopLossBracket.ticks) * 0.25;
 
 /**
  * The broker faults of the fault days (tests/goal/tier2.goal.js), each armed on the mock exchange just before the day's
@@ -376,7 +431,7 @@ function artifacts(w) {
   const records = TL.readRecords(w.home, 'MNQ').map(r => ({ id: r.id, at: r.at, ok: r.ok, side: r.side, cycleBar: r.bar, plan: r.plan, problems: r.problems }));
   const calls = s.calls.filter(c => ['place_order', 'modify_order', 'cancel_order', 'close_position'].includes(c.tool));
   const faultState = { latePositions: s.latePositions || 0, partialEntry: s.partialEntry || 0, modifyFaults: s.modifyFaults || 0 };
-  return { faultState, sent: w.sent, faults: w.faults, snaps: w.snaps, records, cycles, gate: jsonl(w.env.FTH_GATE_LOG), fills: s.fills, orders: s.orders.map(({ brackets, ...o }) => ({ ...o, brackets })), calls, attempt };
+  return { probes: w.probes, faultState, sent: w.sent, faults: w.faults, snaps: w.snaps, records, cycles, gate: jsonl(w.env.FTH_GATE_LOG), fills: s.fills, orders: s.orders.map(({ brackets, ...o }) => ({ ...o, brackets })), calls, attempt };
 }
 
 module.exports = { MNQ_ID, STEP, SESSION, dayWorld, runDay, artifacts, decide, listedSetups, standardReads };

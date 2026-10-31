@@ -136,7 +136,7 @@ test('faultChecks: a position uncovered more than one pass, an exit refused, a d
 test('moveLayers and moveDiff: each layer of the day\'s first trade, a change named by its layer', () => {
   const exit = { afterTarget: { lockGivebackR: 1.5 } };
   const L = GP.moveLayers(day(), { tick: 0.25, exit });
-  assert.deepStrictEqual(L.entry, { bar: B, price: 100, size: 5 });
+  assert.deepStrictEqual(L.entry, { bar: B, type: null, price: 100, size: 5 });
   assert.deepStrictEqual(L.stop, { price: 80, riskPts: 20 });
   assert.deepStrictEqual([L.exit.target, L.exit.heldToTarget, L.exit.lockFirst, L.exit.reason, L.exit.R], ['cancelled at the first managed cycle', true, true, 'trail', 1]);
   assert.deepStrictEqual(L.capture, { caught: true, leg: 'long 2022-03-30T13:42:00.000Z to 2022-03-30T14:20:00.000Z', availR: 3, share: 0.3333 });

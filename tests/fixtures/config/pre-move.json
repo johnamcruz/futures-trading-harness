@@ -490,6 +490,23 @@
      "quiet": {
       "day": "2024-02-05"
      },
+     "compress": {
+      "vwapDay": "2024-04-08",
+      "limitDay": "2024-05-06",
+      "boxBars": 10,
+      "quietNoise": 0.12,
+      "expandBars": 5,
+      "expandDrift": 1,
+      "confirmDrift": 0.4,
+      "confirmDip": 0.9,
+      "trendDrift": 0.8,
+      "runBars": 25,
+      "gapTicks": 6,
+      "wick": {
+       "with": 0.05,
+       "against": 0.15
+      }
+     },
      "bleed": {
       "from": "2024-03-04",
       "sessions": 10,
@@ -502,7 +519,11 @@
      "otherDays": 2,
      "entryMinutes": 60,
      "maxLossR": 1.25,
-     "parallel": 4,
+     "states": {
+      "cushionShare": 0.5,
+      "targetShare": 0.5
+     },
+     "parallel": 2,
      "tolerance": {
       "trades": 0,
       "totalR": 0.05,

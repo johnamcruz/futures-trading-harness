@@ -28,6 +28,13 @@ test('riseProblems: a baseline only improves on the same fixture; a new fixture 
   assert.match(GC.riseProblems(doc(), { ...doc({ meanR: -1 }), fixture: 'f2' }).join(), /the fixture changed .* no fixtureChange/, 'a new fixture without its change recorded');
   assert.deepStrictEqual(GC.riseProblems(doc(), { ...doc({ meanR: -1 }), fixture: 'f2', fixtureChange: { from: 'f1', why: 'more sessions' } }), []);
   assert.ok(GC.riseProblems(doc(), { ...doc(), fixture: 'f2', fixtureChange: { from: 'f0', why: 'x' } }).length, 'the change must name the hash it replaces');
+  // Even a recorded new fixture never takes a blow back, and never softens the blow path.
+  const withS = (s, o = {}) => ({ ...doc(o), halves: { ...doc(o).halves, S: { trades: 10, meanR: -2, mc: { blows: 0 }, ...s } } });
+  const moved = n => ({ ...n, fixture: 'f2', fixtureChange: { from: 'f1', why: 'a new draw' } });
+  assert.deepStrictEqual(GC.riseProblems(withS({}), moved(withS({}))), []);
+  assert.match(GC.riseProblems(withS({}), moved(withS({}, { mc: { pass: 0.2, blows: 3 } }))).join(), /half A combine blows: 3 .* never adds a blow/);
+  assert.match(GC.riseProblems(withS({}), moved(withS({ meanR: -0.1 }))).join(), /the blow path: .* never softens it/);
+  assert.match(GC.riseProblems(withS({}), moved(doc())).join(), /half S combine blows: undefined|the blow path: gone/);
 });
 
 test('renderTable: metric, main, this PR, allowed, and which fail', () => {

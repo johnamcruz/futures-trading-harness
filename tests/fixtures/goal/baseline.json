@@ -1,5 +1,5 @@
 {
-  "fixture": "a200954be26ea089d513dd5e39ee0c6a893bd701963da1d3e062f77cdd1ac3bf",
+  "fixture": "26cd22f0f657a065366cf44cd008ea273d9f5e733323df6feecd2bf4e3c9a8f0",
   "halves": {
     "A": {
       "sessions": 15,
@@ -53,17 +53,17 @@
       "sessions": 10,
       "trend": 0,
       "trades": 11,
-      "meanR": -1.9334,
-      "totalR": -21.2679,
+      "meanR": -1.643,
+      "totalR": -18.073,
       "falseStartShare": 0.9091,
-      "maxDrawdownR": 21.2679,
-      "medianRiskPts": 8.5,
+      "maxDrawdownR": 18.073,
+      "medianRiskPts": 9.25,
       "caught": {
-        "legs": 10,
+        "legs": 13,
         "caught": 2,
-        "rCaught": -3.1306,
-        "rAvailable": 15.9412,
-        "share": -0.1964
+        "rCaught": -3.1144,
+        "rAvailable": 16.3514,
+        "share": -0.1905
       },
       "mc": {
         "paths": 2000,
@@ -92,6 +92,11 @@
       "caught": 0,
       "fills": 1,
       "blows": 0
+    },
+    "states": {
+      "fresh": 7,
+      "low-cushion": 5,
+      "near-target": 3
     },
     "behaviour": [
       {

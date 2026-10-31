@@ -51,6 +51,10 @@ function briefingAt({ t4h, t1h, t15, declared, minutes = null }) {
 function chainSideSeries(bars, { rule = RULE, minutes = null } = {}) {
   if (rule && (rule.regimeAgainst || rule.legTurned)) throw new Error('chainSideSeries: a rule that reads the base regime or the leg (regime_against, leg_turned) needs the full briefing');
   const frames = rule && rule.biasFrames ? rule.biasFrames : [...BIAS_FRAMES];
+  // The series reads the 4h and the 1h (mtf.js RULE_FRAMES' bias frames): a rule on any other frame is refused, never
+  // read as ranging.
+  const unread = frames.filter(tf => !['4h', '1h'].includes(tf));
+  if (unread.length) throw new Error(`chainSideSeries: bias frames ${unread.join(', ')} are not read here (the 4h and the 1h only)`);
   const n = bars.length;
   const out = new Array(n).fill(0);
   if (!n) return out;

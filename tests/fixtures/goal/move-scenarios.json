@@ -17,6 +17,7 @@
         },
         "entry": {
           "bar": "2021-06-15T13:36:00.000Z",
+          "type": "market",
           "price": 17432.5,
           "size": 8
         },
@@ -52,36 +53,35 @@
       "layers": {
         "bias": "Bias: long only (4h up, 1h up; short refused)",
         "setup": {
-          "read": "momentum_continuation fired up",
-          "kind": "cited",
-          "bar": "2021-06-24T13:57:00.000Z"
+          "read": "15m broke overnight high up",
+          "kind": "listed",
+          "bar": "2021-06-24T13:48:00.000Z"
         },
         "entry": {
-          "bar": "2021-06-24T13:57:00.000Z",
-          "price": 17722.5,
-          "size": 9
+          "bar": "2021-06-24T13:48:00.000Z",
+          "type": "limit",
+          "price": 17719.25,
+          "size": 4
         },
         "stop": {
-          "price": 17707.75,
-          "riskPts": 14.75
+          "price": 17689.75,
+          "riskPts": 29.5
         },
         "exit": {
           "target": "cancelled at the first managed cycle",
           "heldToTarget": true,
-          "lockFirst": true,
-          "moves": [
-            17729.75
-          ],
-          "reason": "trail",
-          "time": "2021-06-24T15:21:45.000Z",
-          "price": 17729.5,
-          "R": 0.4746
+          "lockFirst": null,
+          "moves": [],
+          "reason": "stop",
+          "time": "2021-06-24T17:19:30.000Z",
+          "price": 17689.5,
+          "R": -1.0085
         },
         "capture": {
-          "caught": true,
-          "leg": "long 2021-06-24T13:57:00.000Z to 2021-06-24T14:03:00.000Z",
-          "availR": 1.1525,
-          "share": 0.4118
+          "caught": false,
+          "leg": null,
+          "availR": null,
+          "share": null
         }
       }
     },
@@ -95,32 +95,33 @@
       "layers": {
         "bias": "Bias: short only (4h down, 1h range; long refused)",
         "setup": {
-          "read": "momentum_continuation fired down",
-          "kind": "cited",
-          "bar": "2021-10-04T13:39:00.000Z"
+          "read": "15m broke prior VAH down",
+          "kind": "listed",
+          "bar": "2021-10-04T13:33:00.000Z"
         },
         "entry": {
-          "bar": "2021-10-04T13:39:00.000Z",
-          "price": 17980.25,
+          "bar": "2021-10-04T13:33:00.000Z",
+          "type": "limit",
+          "price": 18011.5,
           "size": 3
         },
         "stop": {
-          "price": 18021,
-          "riskPts": 40.75
+          "price": 18064,
+          "riskPts": 52.5
         },
         "exit": {
           "target": "cancelled at the first managed cycle",
           "heldToTarget": true,
           "lockFirst": true,
           "moves": [
-            17960,
+            17985.25,
             17832.5,
             17791.5
           ],
           "reason": "trail",
           "time": "2021-10-04T18:07:30.000Z",
           "price": 17791.75,
-          "R": 4.6258
+          "R": 4.1857
         },
         "capture": {
           "caught": false,
@@ -146,6 +147,7 @@
         },
         "entry": {
           "bar": "2021-10-06T13:45:00.000Z",
+          "type": "market",
           "price": 17966.75,
           "size": 6
         },
@@ -187,6 +189,7 @@
         },
         "entry": {
           "bar": "2021-11-19T14:42:00.000Z",
+          "type": "market",
           "price": 19918.75,
           "size": 7
         },
@@ -230,6 +233,7 @@
         },
         "entry": {
           "bar": "2024-01-08T14:42:00.000Z",
+          "type": "market",
           "price": 16569.75,
           "size": 16
         },
@@ -263,6 +267,61 @@
       },
       "scenario": "quiet",
       "layers": null
+    },
+    {
+      "day": "2024-04-08",
+      "label": {
+        "kind": "non-trend",
+        "why": "synthetic: a flat box at the VWAP, then the break: the first listed setup is the VWAP break, which compose_check does not verify (its quoted level keeps its brackets): no trade (an open finding)"
+      },
+      "scenario": "listed-vwap",
+      "layers": null
+    },
+    {
+      "day": "2024-05-06",
+      "label": {
+        "kind": "non-trend",
+        "why": "synthetic composed limit: a 15m level break listed (no cited fire), compose OK on the confirming close, the limit fills, its bracket, the trail, the exit"
+      },
+      "scenario": "limit-fill",
+      "layers": {
+        "bias": "Bias: long only (4h up, 1h range; short refused)",
+        "setup": {
+          "read": "15m broke prior RTH low up",
+          "kind": "listed",
+          "bar": "2024-05-06T14:15:00.000Z"
+        },
+        "entry": {
+          "bar": "2024-05-06T14:15:00.000Z",
+          "type": "limit",
+          "price": 16566.5,
+          "size": 7
+        },
+        "stop": {
+          "price": 16546.5,
+          "riskPts": 20
+        },
+        "exit": {
+          "target": "cancelled at the first managed cycle",
+          "heldToTarget": true,
+          "lockFirst": true,
+          "moves": [
+            16576.5,
+            16686.25,
+            16687.75
+          ],
+          "reason": "trail",
+          "time": "2024-05-06T19:18:45.000Z",
+          "price": 16687.5,
+          "R": 6.05
+        },
+        "capture": {
+          "caught": false,
+          "leg": null,
+          "availR": null,
+          "share": null
+        }
+      }
     }
   ]
 }

@@ -16,7 +16,7 @@ const blockOf = name => FX.blocks.find(b => b.scenario === name);
 test('synthFixture: deterministic (the same document, the same hash), its blocks the configured scenarios', () => {
   const again = S.synthFixture();
   assert.strictEqual(again.hash, FX.hash);
-  assert.deepStrictEqual(FX.blocks.map(b => [b.half, b.scenario]), [['M', 'fakeout'], ['M', 'quiet'], ['S', 'bleed']]);
+  assert.deepStrictEqual(FX.blocks.map(b => [b.half, b.scenario]), [['M', 'fakeout'], ['M', 'quiet'], ['M', 'listed-vwap'], ['M', 'limit-fill'], ['S', 'bleed']]);
   for (const b of FX.blocks) for (const d of b.sessions) assert.ok(b.labels[d].kind === 'non-trend' && b.labels[d].why, `${b.scenario} ${d}`);
 });
 

@@ -63,4 +63,5 @@ test('the chain side reads the rule it is given: a stricter rule allows no more 
   assert.ok(strict.filter(Boolean).length < shipped.filter(Boolean).length);
   assert.deepStrictEqual(chainSideSeries(bars), chainSideSeries(bars, { rule: entryRuleOf({ bias_frames: ['4h', '1h'], bias_agree: 'neutral-15m-declared', regime_against: 'off', leg_turned: 'off' }) }));
   assert.throws(() => chainSideSeries(bars, { rule: entryRuleOf({ ...P.policy.entry, regime_against: 'on' }) }), /needs the full briefing/);
+  assert.throws(() => chainSideSeries(bars, { rule: entryRuleOf({ ...P.policy.entry, bias_frames: ['4h', '15m'] }) }), /not read here/);
 });

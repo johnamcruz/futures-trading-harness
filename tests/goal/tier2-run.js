@@ -24,13 +24,12 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawn } = require('child_process');
+const crypto = require('crypto');
 const GC = require('../../scripts/lib/eval/goal-check');
 const GP = require('../../scripts/lib/eval/goal-path');
 const GT = require('../../scripts/lib/eval/goal-trades');
 
 const ROOT = path.resolve(__dirname, '..', '..');
-const DAY = path.join(__dirname, 'tier2-day.js');
-const BREAKS = path.join(__dirname, 'breaks.js');
 const CFG = () => require('../../scripts/lib/tunables').training().goalRegression.tier2;
 // The fixture set of this run (FTH_GOAL_FIXTURE: ci, the committed slice, by default; real, the local one).
 let SET = null;
@@ -39,24 +38,24 @@ const BASELINE_FILE = () => set().baselineFile;
 
 const tier2Days = () => GP.pickDays(set().doc.blocks, CFG());
 
-function runOne(day, { breakName = null, latencyMs = 0, fault = null, dir }) {
-  const out = path.join(dir, `${day}${breakName ? `-${breakName}` : ''}${latencyMs ? `-late${latencyMs}` : ''}${fault ? `-${fault}` : ''}.json`);
+function runOne(day, { breakName = null, latencyMs = 0, fault = null, state = null, probe = false, root = ROOT, dir }) {
+  const out = path.join(dir, `${day}${breakName ? `-${breakName}` : ''}${latencyMs ? `-late${latencyMs}` : ''}${fault ? `-${fault}` : ''}${state ? `-${state.name}` : ''}-${crypto.randomBytes(4).toString('hex')}.json`);
   const env = { ...process.env, ...(breakName ? { FTH_GOAL_BREAK: breakName } : {}) };
   if (!breakName) delete env.FTH_GOAL_BREAK;
   delete env.NODE_OPTIONS;
-  const args = [...(breakName ? ['--require', BREAKS] : []), DAY, JSON.stringify({ day, out, latencyMs, fault })];
+  const args = [...(breakName ? ['--require', path.join(root, 'tests', 'goal', 'breaks.js')] : []), path.join(root, 'tests', 'goal', 'tier2-day.js'), JSON.stringify({ day, out, latencyMs, fault, state, probe })];
   return new Promise((resolve, reject) => {
-    const child = spawn(process.execPath, args, { cwd: ROOT, env, stdio: ['ignore', 'ignore', 'pipe'] });
+    const child = spawn(process.execPath, args, { cwd: root, env, stdio: ['ignore', 'ignore', 'pipe'] });
     let err = '';
     child.stderr.on('data', d => { err += d; });
     child.on('close', code => (code === 0 ? resolve(JSON.parse(fs.readFileSync(out, 'utf8'))) : reject(new Error(`tier 2 day ${day}${breakName ? ` (${breakName})` : ''} failed (${code}): ${err.slice(-2000)}`))));
   });
 }
 
-async function runDays(days, { breakName = null, latencyMs = 0, fault = null, parallel = CFG().parallel, dir = fs.mkdtempSync(path.join(os.tmpdir(), 'fth-goal-')) } = {}) {
+async function runDays(days, { breakName = null, latencyMs = 0, fault = null, state = null, probe = false, root = ROOT, parallel = CFG().parallel, dir = fs.mkdtempSync(path.join(os.tmpdir(), 'fth-goal-')) } = {}) {
   const out = new Array(days.length);
   let next = 0;
-  const worker = async () => { while (next < days.length) { const i = next; next += 1; out[i] = await runOne(days[i], { breakName, latencyMs, fault, dir }); } };
+  const worker = async () => { while (next < days.length) { const i = next; next += 1; out[i] = await runOne(days[i], { breakName, latencyMs, fault, state, probe, root, dir }); } };
   await Promise.all(Array.from({ length: Math.min(parallel, days.length) }, worker));
   return out;
 }
@@ -102,6 +101,30 @@ function reportText(j) {
 
 const tracePath = dir => path.join(dir, 'tier2-trace.json');
 
+/**
+ * The state days: the quick day's first trade from a mid-attempt state each (the cushion low, the target near), so the
+ * rulebook's cushion_frac and near_target_usd bind: { name, pnl } from the account and the rulebook
+ * (config goalRegression.tier2.states: the cushion left as a share of max_loss, the room to the target as a share of
+ * near_target_usd).
+ */
+function stateDefs(root = ROOT) {
+  const P = GT.shippedOf(root, {});
+  const account = require('../../scripts/lib/trading/accounts').accountNamed(root, P.policy.account, {});
+  const st = CFG().states;
+  return [
+    { name: 'fresh', pnl: 0 },
+    { name: 'low-cushion', pnl: -Math.round((1 - st.cushionShare) * account.max_loss) },
+    { name: 'near-target', pnl: Math.round(account.profit_target - st.targetShare * P.policy.sizing.near_target_usd) },
+  ];
+}
+const quickDay = base => (base.trades.find(t => t.exitReason === 'stop') || base.trades[0]).day;
+/** Each state's first entry size on the quick day: { name: size | null }. */
+async function stateSizes(day, { root = ROOT, dir, names = null } = {}) {
+  const defs = stateDefs(root).filter(d => !names || names.includes(d.name));
+  const runs = await Promise.all(defs.map(state => runDays([day], { state, root, parallel: 1, dir }).then(r => [state.name, (GP.dayTrades(r[0], { tick: r[0].tick })[0] || {}).size ?? null])));
+  return Object.fromEntries(runs);
+}
+
 // The move days: the configured real ones in the fixture, and the synthetic scenarios (a fakeout, a quiet day).
 const moveDays = () => [...set().doc.blocks.filter(b => b.half === 'M').flatMap(b => b.sessions), ...set().synth.blocks.filter(b => b.half === 'M').flatMap(b => b.sessions)].sort();
 /** Each move day's layers (goal-path.js moveLayers). */
@@ -143,11 +166,18 @@ async function cli(argv) {
   if (now.problems.length) throw new Error('refused: a trace is not whole (its problems above): fix the path first');
   const rise = GP.tier2RiseProblems(baseline.tier2 && baseline.tier2.summary, now.summary);
   if (rise.length) throw new Error(`refused: a baseline only rises:\n${rise.join('\n')}`);
-  fs.writeFileSync(BASELINE_FILE(), `${JSON.stringify({ ...baseline, tier2: { fixture: set().doc.hash, days, summary: now.summary, behaviour: now.behaviour.map(({ problems: _p, ...b }) => b), trades: now.trades.map(kept) } }, null, 2)}\n`);
+  // Sizes are exact: a trade of main's sized differently, or a state day's, is refused unless the change is said why.
+  const why = argv.includes('--sizes-why') ? argv[argv.indexOf('--sizes-why') + 1] : null;
+  const sizeOf = new Map(((baseline.tier2 && baseline.tier2.trades) || []).map(t => [t.key, t.size]));
+  const states = await stateSizes(quickDay(now), { dir });
+  const resized = [...now.trades.filter(t => sizeOf.has(t.key) && sizeOf.get(t.key) !== t.size).map(t => `${t.key}: ${sizeOf.get(t.key)} -> ${t.size}`),
+    ...Object.entries(states).filter(([k, v]) => baseline.tier2 && baseline.tier2.states && baseline.tier2.states[k] !== undefined && baseline.tier2.states[k] !== v).map(([k, v]) => `state ${k}: ${baseline.tier2.states[k]} -> ${v}`)];
+  if (resized.length && !(why && why.trim())) throw new Error(`refused: sizes changed (an intended change says why: --sizes-why "<why>"):\n${resized.join('\n')}`);
+  fs.writeFileSync(BASELINE_FILE(), `${JSON.stringify({ ...baseline, tier2: { fixture: set().doc.hash, days, summary: now.summary, states, ...(resized.length ? { sizeChange: { why, trades: resized } } : {}), behaviour: now.behaviour.map(({ problems: _p, ...b }) => b), trades: now.trades.map(kept) } }, null, 2)}\n`);
   process.stdout.write(`${BASELINE_FILE()}: tier 2 written\n`);
   return 0;
 }
 
 if (require.main === module) cli(process.argv.slice(2)).then(c => { process.exitCode = c; }, err => { process.stderr.write(`${err.message}\n`); process.exitCode = 1; });
 
-module.exports = { set, BASELINE_FILE, dayLabels, behaviourProblems, moveDays, readMoves, judgeMoves, readGolden, tier2Days, runDays, readTier2, judge, reportText, tracePath, kept };
+module.exports = { stateDefs, quickDay, stateSizes, set, BASELINE_FILE, dayLabels, behaviourProblems, moveDays, readMoves, judgeMoves, readGolden, tier2Days, runDays, readTier2, judge, reportText, tracePath, kept };

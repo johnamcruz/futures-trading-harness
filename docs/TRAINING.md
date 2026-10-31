@@ -1756,9 +1756,12 @@ and tier 2's `--write` and `--write-moves`.
 
 **Synthetic days** (`scripts/lib/eval/goal-synth.js`, built in memory, no
 data file): only what real days can't give cleanly: a fakeout that must end
-at -1R, a quiet day whose right answer is no trade, and the blow path (ten
-sessions whose reversal gaps through the stop: the shipped sizing never
-risks the floor on it, a broken size does).
+at -1R, a quiet day whose right answer is no trade, a composed limit entry
+(a 15m level break listed with no cited fire: the limit at the confirming
+close fills, its bracket, the trail, the exit), a VWAP-break day (below),
+and the blow path (ten sessions whose reversal gaps through the stop: the
+shipped sizing never risks the floor on it, a broken size does). Their
+shapes are config, pinned exactly with the rest of the yardstick.
 
 **Tier 1** (`tests/plugin/goal-regression.test.js`, in `npm test`, about
 10 s; `node scripts/goal-check.js run` prints the table): mechanical entries
@@ -1799,8 +1802,18 @@ days (`tier2-faults`: a lost reply, a late fill, a refused or errored stop
 move, a partial fill) must stay protected, never refuse an exit and never
 double the position; the move goldens (`tests/fixtures/goal/move-scenarios.json`)
 pin every layer of the five real legs and the synthetic fakeout and quiet
-day, and hold trend days caught and ridden. The full traces are written
-outside the repository.
+day, and hold trend days caught and ridden (at least two on main, so a
+capture loss fails). The negative probes (`tier2-probes`) send what the gate
+must refuse and assert each refusal by its tag: an entry against the Bias
+line before any verdict, a 3m setup, the side against the record, a size
+above the verdict and below the floor, no bracket stop, a second position,
+the stop loosened (the gate's entry rule turned off must fail them). The
+state days (`tier2-states`) start the attempt with a low cushion and near
+the target: each size is main's exactly, the floor near the target, smaller
+with the cushion low (a looser cushion share or no near-target floor must
+fail them). Sizes are exact everywhere: a changed size is refused by
+`tier2-run.js --write` unless said why (`--sizes-why`). The full traces
+are written outside the repository.
 
 **The local real run** (`npm run goal:real`): the same tiers on a larger
 fixture whose bars come from the replay broker's MCP server
@@ -1817,16 +1830,22 @@ result against main.
 the model's judgment; its setups are the 15m primitives the studies
 measured, not the briefing's key-level reactions, and every target is the
 2R mark, so a change there moves tier 2, not tier 1. Tier 2's mock follows
-the plan; it shows the path works, not what the model decides; on main
-every tier 2 trade is a cited momentum_continuation entry at market. The
+the plan; it shows the path works, not what the model decides. A composed
+limit at the last close is marketable at once, so a limit that expires
+unfilled is only the order-latency self-test's (the order sent after the
+record's life). D13's stop floor never binds on these days (every setup's
+stop is wider), so a floor of 4 ticks or no ATR term passes; only a floor
+that refuses most stops (the mutation check's 160 ticks) fails. The
 CI slice is small (30 sessions; a pass rate's sampling error is large):
 it guards against regressions, it is no estimate of the pass rate. Skill
 text, prompts and the model's reading are the context quiz's and the PPC
-rounds'. Two findings stay out of scope here, each its own pull request: a
+rounds'. Three findings stay out of scope here, each its own pull request: a
 fill reported late long enough that the gate's own reads miss the position
-lets the runner cancel its bracket stop (`tier2-faults`' open todo), and
-tier 1's limitOutcome exit and the runner's live trail give different R on
-the same trade. A baseline only rises: `goal-check.js baseline --write` (and
+lets the runner cancel its bracket stop (`tier2-faults`' expected failure,
+red the day it is fixed); "Setups to check" quotes the VWAP's name with its
+brackets ("15m broke VWAP (rth) up"), which compose_check doesn't verify
+(the listed-vwap golden); and tier 1's limitOutcome exit and the runner's
+live trail give different R on the same trade. A baseline only rises: `goal-check.js baseline --write` (and
 tier 2's `node tests/goal/tier2-run.js --write`) refuse a worse one, the
 test holds the committed baseline to the base branch's, and a new fixture
 starts over only with its change recorded (`--new-fixture --why "<why>"`).

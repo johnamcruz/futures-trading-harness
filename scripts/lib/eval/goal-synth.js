@@ -7,6 +7,11 @@
  *   fakeout   the move scenario that must end at -1R: a drift the block's way (so the 4h and 1h trend it), then in the
  *             cash session a run of impulse bars that way (momentum candles: the cited setup fires) and a reversal
  *             through the stop
+ *   listed-vwap  a flat cash-session box at the VWAP, then an expansion (no cited fire: the volume keeps falling): the first
+ *             listed setup is the VWAP break, which compose_check does not verify (an open finding: no trade)
+ *   limit-fill the box away from the VWAP's level, a 15m level break listed: the composed limit entry at the confirming
+ *             3m close fills, its bracket, the trail, the exit (a limit at the last close is marketable at once: one
+ *             expires only when the price leaves before the order goes, the order-latency self-test's case)
  *   quiet     the drift alone (no momentum candle, no listed setup): a day whose right answer is no trade
  *   bleed     the blow path: a block of consecutive fakeout sessions whose reversal opens with a gap through the stop
  *             (a loss of a few R every day). The shipped sizing (a share of the cushion) never risks the floor; a broken
@@ -60,7 +65,9 @@ function dayBars({ day, type, dir, rand, cfg, tick, startTicks }) {
     const m = minutesOfDay(new Date(t), MARKET_TZ);
     const rth = m >= RTH_OPEN_MIN && m < RTH_CLOSE_MIN;
     const sigma = rth ? cfg.sigma.rth : cfg.sigma.overnight;
-    let move = dir * cfg.macroDrift + normal(rand) * sigma * cfg.noise;
+    // The drift its way, but on a composed-limit scenario's own day (its levels hold until the designed break).
+    const drift = type === 'compress' || type === 'runaway' || type === 'quiet' ? 0 : dir * cfg.macroDrift;
+    let move = drift + normal(rand) * sigma * cfg.noise;
     const k = rth ? Math.round((m - RTH_OPEN_MIN) / cfg.minutes) : 0;
     // The session's volume falls bar by bar (no ordinary bar is above its average: only the scenario's bars have momentum).
     let volume = rth ? cfg.volume.rth * (1 - cfg.volume.decay * k) : cfg.volume.overnight;
@@ -72,7 +79,25 @@ function dayBars({ day, type, dir, rand, cfg, tick, startTicks }) {
       move = (r < T.impulseBars ? dir * T.impulseDrift : -dir * T.reversalDrift) * sigma + normal(rand) * sigma * cfg.noise;
       volume *= T.volume;
     }
-    const b = bar(px, { move, sigma, wick: cfg.wick, volume, rand });
+    let wick = cfg.wick;
+    // The quiet day: no drift, and a flat cash session (it meets no level, nothing fires: no trade is the answer).
+    if (type === 'quiet' && rth) { move = 0; wick = { with: 0, against: 0 }; }
+    if ((type === 'compress' || type === 'runaway') && rth) {
+      // A 15m box (quiet bars, no momentum), its expansion its way (a 15m compression break the briefing lists, no single
+      // 3m momentum candle: the volume keeps falling), a 3m bar that dips and closes at its top (the entry's confirming
+      // close, the limit at it); then compress: the next bar trades back to the limit (it fills) and the trend runs;
+      // runaway: every next bar opens past the last close and never trades back (the limit expires unfilled).
+      const C = cfg.compress;
+      const e0 = C.boxBars;
+      const e1 = e0 + C.expandBars;
+      if (k < e0) { move = 0; wick = { with: 0, against: 0 }; } // the box: flat, so it meets no level until the break
+      else if (k < e1) { move = dir * sigma * C.expandDrift + normal(rand) * sigma * C.quietNoise; wick = C.wick; }
+      else if (k === e1) { move = dir * sigma * C.confirmDrift; wick = { with: 0, against: C.confirmDip }; }
+      else if (type === 'runaway' && k <= e1 + C.runBars) { px += dir * C.gapTicks; move = dir * sigma * C.expandDrift; wick = { with: C.wick.with, against: 0 }; }
+      else if (type === 'compress' && k <= e1 + C.runBars) { move = dir * sigma * C.trendDrift + normal(rand) * sigma * C.quietNoise; wick = C.wick; }
+      else move = normal(rand) * sigma * C.quietNoise;
+    }
+    const b = bar(px, { move, sigma, wick, volume, rand });
     bars.push({ t: new Date(t).toISOString(), o: b.o * tick, h: b.h * tick, l: b.l * tick, c: b.c * tick, v: b.v });
     px = b.c;
   }
@@ -111,7 +136,9 @@ function synthFixture() {
   });
   const blocks = [
     block('M', 'fakeout', 'fakeout', sessionsFrom(cfg.fakeout.day, 1, cfg), 1, 'synthetic fakeout: the impulse fires the setup, the reversal takes the stop: -1R at most'),
-    block('M', 'quiet', 'drift', sessionsFrom(cfg.quiet.day, 1, cfg), 1, 'synthetic quiet day: the drift alone, no momentum, no listed setup: the right answer is no trade'),
+    block('M', 'quiet', 'quiet', sessionsFrom(cfg.quiet.day, 1, cfg), 1, 'synthetic quiet day: the drift alone, no momentum, no listed setup: the right answer is no trade'),
+    block('M', 'listed-vwap', 'compress', sessionsFrom(cfg.compress.vwapDay, 1, cfg), 1, 'synthetic: a flat box at the VWAP, then the break: the first listed setup is the VWAP break, which compose_check does not verify (its quoted level keeps its brackets): no trade (an open finding)'),
+    block('M', 'limit-fill', 'runaway', sessionsFrom(cfg.compress.limitDay, 1, cfg), 1, 'synthetic composed limit: a 15m level break listed (no cited fire), compose OK on the confirming close, the limit fills, its bracket, the trail, the exit'),
     block('S', 'bleed', 'bleed', sessionsFrom(cfg.bleed.from, cfg.bleed.sessions, cfg), -1, 'synthetic blow path: a loss at the stop every session'),
   ];
   const doc = { v: 1, kind: 'goal-synth', symbol: cfg.symbol, minutes: cfg.minutes, seed: cfg.seed, blocks };

@@ -27,7 +27,7 @@ function main(argv) {
     return 0;
   }
   const one = node(['scripts/goal-check.js', 'run', '--real']);
-  const two = node(['--test', '--test-concurrency=2', 'tests/goal/tier2.goal.js', 'tests/goal/tier2-moves.goal.js']);
+  const two = node(['--test', '--test-concurrency=2', 'tests/goal/tier2.goal.js']);
   return one || two;
 }
 

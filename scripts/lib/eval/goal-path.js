@@ -43,6 +43,7 @@
  *   moveLayers(day, { tick, exit })  a catch-the-move day's layers (bias, setup, entry, stop, exit, capture), or null
  *   moveDiff(expected, got, { tick, shareTol })   ["LAYER: expected ..., got ..."] against the golden (shareTol: how far
  *                                   below the golden's capture share is still the golden's: config tier2.tolerance.moveShare)
+ *   probeProblems(probes, expected)   the negative probes refused, each by its expected tag or compose problem
  *   dayBehaviour(day, trades, { maxLossR })   a day's behaviour by its label (caught, R, worst R, the loss bound, a blow)
  *   caughtLost(base, now)           main's caught trend days lost now
  *   faultChecks(day)                { problems, trace }: a broker-fault day's protection, exit, duplicate and recovery
@@ -269,7 +270,7 @@ function moveLayers(day, { tick, exit }) {
   return {
     bias: at('bias').line || null,
     setup: { read: t.setup, kind: at('setup').kind || null, bar: t.bar },
-    entry: { bar: t.bar, price: t.entry, size: t.size },
+    entry: { bar: t.bar, type: plan && plan.plan && plan.plan.entry ? plan.plan.entry.type : null, price: t.entry, size: t.size },
     stop: { price: at('bracket').price ?? null, riskPts: t.riskPts },
     exit: {
       target: targetLeg, heldToTarget: moves.every(x => x.ok), lockFirst: moves.length && lock !== null ? s * (moves[0].to - lock) >= -tick : null,
@@ -288,7 +289,7 @@ function moveDiff(expected, got, { tick, shareTol = 0 }) {
   const out = [];
   if (expected.bias !== got.bias) out.push(`BIAS: expected ${say(expected.bias)}, got ${say(got.bias)}`);
   if (expected.setup.read !== got.setup.read || expected.setup.kind !== got.setup.kind || expected.setup.bar !== got.setup.bar) out.push(`SETUP: expected ${say(expected.setup)}, got ${say(got.setup)}`);
-  if (expected.entry.bar !== got.entry.bar || !near(expected.entry.price, got.entry.price, tick) || expected.entry.size !== got.entry.size) out.push(`ENTRY: expected ${say(expected.entry)}, got ${say(got.entry)}`);
+  if (expected.entry.bar !== got.entry.bar || expected.entry.type !== got.entry.type || !near(expected.entry.price, got.entry.price, tick) || expected.entry.size !== got.entry.size) out.push(`ENTRY: expected ${say(expected.entry)}, got ${say(got.entry)}`);
   if (!near(expected.stop.price, got.stop.price, tick) || !near(expected.stop.riskPts, got.stop.riskPts, tick)) out.push(`STOP: expected ${say(expected.stop)}, got ${say(got.stop)}`);
   const e = expected.exit;
   const n = got.exit;
@@ -322,6 +323,23 @@ function dayBehaviour(day, trades, { maxLossR }) {
 function caughtLost(base, now) {
   const was = new Map((base || []).map(b => [b.day, b]));
   return now.filter(n => n.kind === 'trend' && was.get(n.day) && was.get(n.day).caught && !n.caught).map(n => `${n.day} (trend): main caught its leg, this PR doesn't`);
+}
+
+/**
+ * The negative probes' verdicts (a probe day): each probe must be refused, by its expected refusal: a gate tag (an order:
+ * `[tag]` in the gateway's reply) or a compose problem (compose_check's text). expected: { name: { tag } | { says } }.
+ * [problem]: a probe missing, let through, or refused without its tag.
+ */
+function probeProblems(probes, expected) {
+  const out = [];
+  for (const [name, want] of Object.entries(expected)) {
+    const p = (probes || []).find(x => x.name === name);
+    if (!p) { out.push(`${name}: the probe never ran`); continue; }
+    const tags = [...String(p.text).matchAll(/\[([a-z0-9-]+)\]/g)].map(m => m[1]);
+    if (want.tag && !(/Blocked by/.test(String(p.text)) && tags.includes(want.tag))) out.push(`${name}: not refused by [${want.tag}] (${tags.length ? `refused by [${tags.join('] [')}]` : 'let through'})`);
+    if (want.says && !(/NOT OK/.test(String(p.text)) && new RegExp(want.says).test(String(p.text)))) out.push(`${name}: compose_check did not refuse it with "${want.says}"`);
+  }
+  return out;
 }
 
 const fillKey = t => `${t.entry}|${t.size}|${t.entryTime}`;
@@ -420,4 +438,4 @@ function pickDays(blocks, { seed, trendDays, otherDays }) {
   return out.sort();
 }
 
-module.exports = { dayBehaviour, caughtLost, moveLayers, moveDiff, faultChecks, pickDays, STEPS, CATEGORIES, TIER2, dayTrades, traceProblems, lostWhy, compareTrades, fillShare, summarize, tier2Rows, tier2RiseProblems };
+module.exports = { probeProblems, dayBehaviour, caughtLost, moveLayers, moveDiff, faultChecks, pickDays, STEPS, CATEGORIES, TIER2, dayTrades, traceProblems, lostWhy, compareTrades, fillShare, summarize, tier2Rows, tier2RiseProblems };

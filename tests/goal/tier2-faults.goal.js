@@ -13,9 +13,10 @@
  * cycle, no exit refused, no duplicate position, the fault fired, a refused stop move re-attempted, and the fault and its
  * recovery on the day's trace. Any of these failing fails the pull request.
  *
- * Known open (a todo until its fix lands, never hidden): late-fill-long, the fill reported late for long enough that the
- * gate's own reads miss the position too: the runner cancels the bracket stop and the gate lets it, so the position
- * goes unprotected for several cycles (the runner's finding; its fix is its own pull request).
+ * Known open (an expected failure until its fix lands: the test asserts the bug is still there, so the fix turns it red
+ * with "fixed: remove this expectation"): late-fill-long, the fill reported late for long enough that the gate's own
+ * reads miss the position too: the runner cancels the bracket stop and the gate lets it, so the position goes
+ * unprotected for several cycles (the runner's finding; its fix is its own pull request).
  */
 
 const test = require('node:test');
@@ -56,6 +57,9 @@ test('tier 2 broker faults: protected within a managed cycle, no exit refused, n
   assert.deepStrictEqual(await check(FAULTS), []);
 });
 
-test('tier 2 broker fault late-fill-long: the gate\'s own reads miss the position too; the stop must stay', { skip, todo: skip ? false : 'open runner finding: the runner cancels the bracket stop of a position its reads miss and the gate allows it (its own fix PR)' }, async () => {
-  assert.deepStrictEqual(await check([['late-fill-long', trailed]]), []);
+// An expected failure, not a todo (a todo never turns red): the known unprotected window must still be there; the day
+// its fix lands this fails with "fixed: remove this expectation", and the expectation becomes the check above.
+test('tier 2 broker fault late-fill-long (known open): the gate\'s own reads miss the position, the runner cancels the bracket stop', { skip }, async () => {
+  const bad = await check([['late-fill-long', trailed]]);
+  assert.ok(bad.some(p => /without a stop covering it/.test(p)), `fixed: remove this expectation (late-fill-long now stays protected; move it into the check above). It said: ${bad.join('; ') || 'nothing'}`);
 });
