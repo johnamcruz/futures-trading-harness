@@ -404,6 +404,9 @@ test('the bracket repair never cuts a stop below a position the fills show (a fi
   const failed = await run({ fills: [], history: [entry], failReads: true });
   assert.deepStrictEqual(failed.calls, []);
   assert.ok(failed.logs.some(l => /has stops for 9 of 3, and the fills or orders .* can't be read \(HTTP 503\): nothing is cut/.test(l)), failed.logs.join('\n'));
+  // Between the bounds: 3 listed, the fills show 6 with the entry still working (a partial fill): cut to the 6, not the 3.
+  const six = await run({ fills: [{ orderId: 4, contractId: 'MNQ', side: 0, size: 6 }], history: [{ ...entry, status: 1, fillVolume: 6 }] });
+  assert.deepStrictEqual(six.calls[0], ['resize', 5, 6]);
   // The fills show only the 3: the stop is cut to 3 (anti-flip), as before.
   const three = await run({ fills: [{ orderId: 4, contractId: 'MNQ', side: 0, size: 3 }], history: [{ ...entry, size: 3, fillVolume: 3 }] });
   assert.deepStrictEqual(three.calls[0], ['resize', 5, 3]);
