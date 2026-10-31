@@ -275,6 +275,18 @@ test('composed-reads: the 15m setup is the entry: no confirming 3m read needed; 
   assert.match(judge(home).message || '', /steps not stated: setup/);
 });
 
+test('composed-reads: valid_bars up to 5: the record and the gate hold it 5 base bars after its bar\'s close', () => {
+  // The cap is 5 (strategies.js MAX_VALID_BARS); the shipped value stays 2. Above 2 a record can outlive its setup's
+  // 15m candle (STRATEGY.md says so: raise it only after the entry-order study and the goal regression).
+  const five = { ...DOC, valid_bars: 5 };
+  const { home, rec } = world({ validBars: 5 });
+  assert.strictEqual(rec.expiresAt, '2026-10-07T14:15:00.000Z', 'the next close 14:03 plus 4 bars');
+  assert.strictEqual(judge(home, { strategy: five, now: new Date('2026-10-07T14:12:00Z') }).message, null);
+  assert.match(judge(home, { strategy: five, now: new Date('2026-10-07T14:15:00Z') }).message || '', /expired at 2026-10-07T14:15:00.000Z \(5 base bars after its bar's close\)/);
+  // The gate takes the earlier of the record's stamp and its own strategy's: a 5-bar record under the shipped 2 ends at 14:06.
+  assert.match(judge(home, { now: new Date('2026-10-07T14:06:00Z') }).message || '', /expired at 2026-10-07T14:06:00.000Z/);
+});
+
 test('policyRuleRefusal: a policy entry with no compose record is held to its entry rule on the briefing (fails closed); no rule: null', () => {
   const { policyRuleRefusal } = require('../../scripts/lib/trading/lifecycle-gate');
   const rule = entryRuleOf({ chain: '4h', bias_frames: ['4h', '1h'], bias_agree: 'on', regime_against: 'off', leg_turned: 'off' });

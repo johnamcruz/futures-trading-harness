@@ -133,7 +133,7 @@ Each check prints one line:
 
 The checks:
 
-- strategy, and its `valid_bars` (1 to 3)
+- strategy, and its `valid_bars` (1 to 5)
 - the skills crosswalk
 - the head prompt, its four composed reads and the lookup it lists (`candle-reading`; opencode, index mode)
 - generated adapters in sync

@@ -131,6 +131,8 @@ test('checkLine: the setup moment as the briefing says it: each reaction, the si
   // fills if a later bar trades to it while the record stands; with the strategy's valid_bars given, its count.
   // In the candle lines' read form ("15m rejected <level> <dir>"), so a read copied from it parses.
   assert.match(M.checkLine(candles, { barClose: CLOSE, et, validBars: 2 }), /the entry is a limit at this close; it fills if a later bar trades to it within 2 bars\./);
+  // The window is configurable 1 to 5 (on the reaction bar a 15m setup stands 5 3m bars: the count never overstates it).
+  assert.match(M.checkLine(candles, { barClose: CLOSE, et, validBars: 5 }), /within 5 bars\./);
   assert.strictEqual(M.checkLine(candles, { barClose: CLOSE, et }),
     '- Setups to check (the 15m candle closed 14:45): "15m rejected overnight high down" (short, 21650.25); "15m rejected 1h fvg low up" (long, 21600.5); this bar closed the setup, no confirming read needed: the entry is a limit at this close; it fills if a later bar trades to it within the record\'s valid_bars. Compose and check each (trade-lifecycle, rejection, breakout); pass unless every read is true; SKIP each one you don\'t compose, with its reason.');
   // A broke reaction; a level whose name carries its price is priced once; a null direction states no side.
