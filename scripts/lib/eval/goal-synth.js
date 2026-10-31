@@ -7,8 +7,10 @@
  *   fakeout   the move scenario that must end at -1R: a drift the block's way (so the 4h and 1h trend it), then in the
  *             cash session a run of impulse bars that way (momentum candles: the cited setup fires) and a reversal
  *             through the stop
- *   listed-vwap  a flat cash-session box at the VWAP, then an expansion (no cited fire: the volume keeps falling): the first
- *             listed setup is the VWAP break, which compose_check does not verify (an open finding: no trade)
+ *   listed-vwap  a flat cash-session box at the VWAP, then an expansion (no cited fire: the volume keeps falling): the
+ *             listed VWAP break is never taken (compose_check does not verify it, an open finding); with the 3m
+ *             confirmation gone (the owner, 2026-10-31) the day has a valid 15m rejection at the prior RTH high, taken
+ *             at the setup close: a trade day (goal-path.js vwapTaken holds the VWAP setup untaken)
  *   limit-fill the box away from the VWAP's level, a 15m level break listed: the composed limit entry at the confirming
  *             3m close fills, its bracket, the trail, the exit (a limit at the last close is marketable at once: one
  *             expires only when the price leaves before the order goes, the order-latency self-test's case)
@@ -182,7 +184,7 @@ function synthFixture() {
   const blocks = [
     block('M', 'fakeout', 'fakeout', sessionsFrom(cfg.fakeout.day, 1, cfg), 1, 'synthetic fakeout: the impulse fires the setup, the reversal takes the stop: -1R at most'),
     block('M', 'quiet', 'quiet', sessionsFrom(cfg.quiet.day, 1, cfg), 1, 'synthetic quiet day: the drift alone, no momentum, no listed setup: the right answer is no trade'),
-    block('M', 'listed-vwap', 'compress', sessionsFrom(cfg.compress.vwapDay, 1, cfg), 1, 'synthetic: a flat box at the VWAP, then the break: the first listed setup is the VWAP break, which compose_check does not verify (its quoted level keeps its brackets): no trade (an open finding)'),
+    block('M', 'listed-vwap', 'compress', sessionsFrom(cfg.compress.vwapDay, 1, cfg), 1, 'synthetic: a flat box at the VWAP, then the break: the listed VWAP break is never taken (compose_check does not verify it: its quoted level keeps its brackets, an open finding); with the 3m confirmation gone the day has a valid 15m rejection at the prior RTH high, taken at the setup close'),
     block('M', 'limit-fill', 'runaway', sessionsFrom(cfg.compress.limitDay, 1, cfg), 1, 'synthetic composed limit: a 15m level break listed (no cited fire), compose OK on the confirming close, the limit fills, its bracket, the trail, the exit'),
     block('S', 'bleed', 'bleed', sessionsFrom(cfg.bleed.from, cfg.bleed.sessions, cfg), -1, 'synthetic blow path: a loss at the stop every session'),
     // After the blow path (each block draws from the one seeded stream in turn: the earlier ones keep their bars).

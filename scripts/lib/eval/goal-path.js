@@ -45,6 +45,7 @@
  *                                   below the golden's capture share is still the golden's: config tier2.tolerance.moveShare)
  *   probeProblems(probes, expected)   the negative probes refused, each by its expected tag or compose problem
  *   dayBehaviour(day, trades, { maxLossR })   a day's behaviour by its label (caught, R, worst R, the loss bound, a blow)
+ *   vwapTaken(trades, day)          [problem]: a trade of the listed-vwap day whose setup quotes the VWAP (never taken)
  *   caughtLost(base, now)           main's caught trend days lost now
  *   faultChecks(day)                { problems, trace }: a broker-fault day's protection, exit, duplicate and recovery
  *                                   checks, and the fault and its recovery as trace steps
@@ -325,6 +326,15 @@ function dayBehaviour(day, trades, { maxLossR }) {
   return { day: day.day, kind, trades: mine.length, caught, R: r4(done.reduce((a, t) => a + t.R, 0)), worstR, blown: Boolean(day.blown), problems };
 }
 
+/**
+ * The listed-vwap day's check (goal-synth.js listed-vwap): the listed VWAP setup itself is never taken (compose_check
+ * doesn't verify a VWAP read, an open finding); another setup that day may be (the owner, 2026-10-31: with the 3m
+ * confirmation gone the day has a valid 15m rejection). [problem] for each trade of `day` whose setup quotes the VWAP.
+ */
+function vwapTaken(trades, day) {
+  return trades.filter(t => t.day === day && /\bvwap\b/i.test(String(t.setup || ''))).map(t => `${day}: the listed VWAP setup was taken (${t.setup} ${t.side} at ${t.entry}): compose_check doesn't verify a VWAP read`);
+}
+
 /** Main's caught trend days lost now: [problem]. */
 function caughtLost(base, now) {
   const was = new Map((base || []).map(b => [b.day, b]));
@@ -495,4 +505,4 @@ function shardCoverage(parts, { days, fixture }) {
   return problems;
 }
 
-module.exports = { floorChecks, shardOf, shardDays, shardCoverage, probeProblems, dayBehaviour, caughtLost, moveLayers, moveDiff, faultChecks, pickDays, STEPS, CATEGORIES, TIER2, dayTrades, traceProblems, lostWhy, compareTrades, fillShare, summarize, tier2Rows, tier2RiseProblems };
+module.exports = { vwapTaken, floorChecks, shardOf, shardDays, shardCoverage, probeProblems, dayBehaviour, caughtLost, moveLayers, moveDiff, faultChecks, pickDays, STEPS, CATEGORIES, TIER2, dayTrades, traceProblems, lostWhy, compareTrades, fillShare, summarize, tier2Rows, tier2RiseProblems };

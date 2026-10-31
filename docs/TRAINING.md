@@ -1758,7 +1758,9 @@ and tier 2's `--write` and `--write-moves`.
 data file): only what real days can't give cleanly: a fakeout that must end
 at -1R, a quiet day whose right answer is no trade, a composed limit entry
 (a 15m level break listed with no cited fire: the limit at the confirming
-close fills, its bracket, the trail, the exit), a VWAP-break day (below),
+close fills, its bracket, the trail, the exit), a VWAP-break day (below:
+its listed VWAP break is never taken; since the setup is the entry, its
+valid 15m rejection at the prior RTH high trades at the setup close),
 two floor days (a listed break whose stop, the reaction candle's low, is
 closer than D13's floor: the tick term binding on one, its cash open gapped
 over the prior session's levels so its approach breaks none, the ATR term on
@@ -1892,7 +1894,7 @@ it guards against regressions, it is no estimate of the pass rate. Skill
 text, prompts and the model's reading are the context quiz's and the PPC
 rounds'. Two findings stay out of scope here, each its own pull request: "Setups to check" quotes the VWAP's name with its
 brackets ("15m broke VWAP (rth) up"), which compose_check doesn't verify
-(the listed-vwap golden); and tier 1's limitOutcome exit and the runner's
+(the listed-vwap day, whose check holds that setup untaken); and tier 1's limitOutcome exit and the runner's
 live trail give different R on the same trade. A baseline only rises: `goal-check.js baseline --write` (and
 tier 2's `node tests/goal/tier2-run.js --write`) refuse a worse one, the
 test holds the committed baseline to the base branch's, and a new fixture

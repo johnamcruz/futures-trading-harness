@@ -204,3 +204,12 @@ test('shardOf, shardDays and shardCoverage: k/n parsed or refused; every n-th da
   assert.match(GP.shardCoverage([{ ...parts[0], fixture: 'x' }, ...parts.slice(1)], { days, fixture: 'h' }).join('; '), /another fixture/);
   assert.match(GP.shardCoverage([{ ...parts[0], days: ['d1', 'd4', 'd9'] }, ...parts.slice(1)], { days, fixture: 'h' }).join('; '), /not tier 2's: d9/);
 });
+
+test('vwapTaken: the listed-vwap day never takes the listed VWAP setup; another setup that day may trade', () => {
+  const D = '2024-04-08';
+  assert.deepStrictEqual(GP.vwapTaken([], D), []);
+  assert.deepStrictEqual(GP.vwapTaken([{ day: D, setup: '15m rejected prior RTH high up', side: 'long', entry: 16649 }], D), []);
+  assert.match(GP.vwapTaken([{ day: D, setup: '15m broke VWAP (rth) up', side: 'long', entry: 16650 }], D).join(), /listed VWAP setup was taken/);
+  assert.match(GP.vwapTaken([{ day: D, setup: '15m rejected vwap up', side: 'long', entry: 16650 }], D).join(), /listed VWAP/, 'any case');
+  assert.deepStrictEqual(GP.vwapTaken([{ day: '2024-04-09', setup: '15m broke VWAP (rth) up', side: 'long', entry: 1 }], D), [], 'another day\'s trade is not this day\'s');
+});

@@ -98,6 +98,9 @@ test('catch the move: every layer on each move day as the golden has it, each da
   process.stdout.write(`${text}\n${behaved.join('\n')}\n`);
   assert.ok(judged.every(j => !j.diffs.length), `a layer moved:\n${text}`);
   assert.deepStrictEqual(behaved, []);
+  // The listed-vwap day: the listed VWAP setup itself is never taken, whatever else trades that day (every trade, not only the first).
+  const vwapDay = results.find(d => d.scenario === 'listed-vwap');
+  if (vwapDay) assert.deepStrictEqual(GP.vwapTaken(GP.dayTrades(vwapDay, { tick: vwapDay.tick }), vwapDay.day), []);
   // Every sized or skipped entry of the move days as the rulebook plans it (the main days' are in readTier2's problems).
   assert.deepStrictEqual(T.sizingProblems(results), []);
 });
