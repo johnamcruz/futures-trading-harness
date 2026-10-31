@@ -17,7 +17,9 @@
  *   questionText(quiz, q)              the text asked: the excerpt (Part B), the question, the answer format
  *   answerLine(answer)                 { line, fmt }: the ANSWER line (fmt false: the first line, no ANSWER label)
  *   negated(line, index, negations, window)   a match at `index` negated within its clause (a negation word in the
- *                                      `window` words before it: the quiz file's negationWindow)
+ *                                      `window` words before it: the quiz file's negationWindow). A line-leading verdict
+ *                                      ("No," "No -" "Not yet:" "Yes,": VERDICT) answers the question; it never negates
+ *                                      the explanation after it
  *   gradeAnswer(quiz, q, answer)       { id, line, fmt, pass, miss, forb, unsure }
  *   summarize(quiz, rows, k)           per question { id, passes, n, allCorrect, bothWays }, per part totals, meetsBar
  *   compare(a, b)                      per question the change between two summaries: { id, from, to, delta }
@@ -131,8 +133,12 @@ function answerLine(answer) {
   return m ? { line: m[1].trim(), fmt: true } : { line: a.split('\n')[0].trim(), fmt: false };
 }
 
+// A line-leading verdict and its punctuation ("No," "No -" "Not yet:" "Yes."): the answer to the question, not a negation
+// of what follows it ("No, go short now" is a short). "Not the same read" has no punctuation after it: a negation still.
+const VERDICT = /^\W*(?:no|nope|not(?: yet)?|yes|yep)\b\s*[-–—,:;.!]+\s*/i;
+
 function negated(line, index, negations, window) {
-  const before = line.slice(0, index);
+  const before = line.slice(0, index).replace(VERDICT, '');
   const clause = before.split(/[.;:!?]|,\s+(?:but|so|and)\b/).pop();
   const words = clause.toLowerCase().match(/[a-z']+/g) || [];
   return words.slice(-window).some(w => negations.includes(w) || w.endsWith("n't"));
@@ -214,4 +220,4 @@ function compare(a, b) {
   });
 }
 
-module.exports = { LAYERS, PROMPTS, loadQuiz, quizErrors, promptKey, buildPrompts, excerptOf, questionText, answerLine, negated, gradeAnswer, summarize, compare, quizCommand, replyOf, anchorsMissing };
+module.exports = { VERDICT, LAYERS, PROMPTS, loadQuiz, quizErrors, promptKey, buildPrompts, excerptOf, questionText, answerLine, negated, gradeAnswer, summarize, compare, quizCommand, replyOf, anchorsMissing };

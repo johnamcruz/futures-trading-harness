@@ -590,11 +590,12 @@ function levelReactionsOf({ m, c, prev, pp, patterns, found, prevAll }, out) {
   };
   const relations = found.map(x => ({ name: x.name, price: x.price, rel: x.rel, dir: x.dir, reaction: reactionOf({ c, prev, level: x.price, patterns, prevPrevClose: pp, higher: higherOf(x.name) }) }));
   // The previous candle's levels are named as they stood for it: a relative one (its `previous <tf> high`) is another
-  // price for this candle, so each is said with its price (as the previous candle met it). A fixed one is deduplicated
-  // against this candle's own levels and each other by price, never by name; a MOVING one (MOVING_LEVEL: the same
-  // level at a new price each bar) by name: met by this candle, its own relation carries it.
+  // price for this candle, so each is said with its price (as the previous candle met it). Every one is deduplicated
+  // against this candle's own levels and each other by price (whatever its kind, so the order they come in never
+  // matters); a MOVING one (MOVING_LEVEL: the same level at a new price each bar) by its name too: met by this candle at
+  // its new price, its own relation carries it.
   const confirmed = [];
-  const same = (x, name, price) => (MOVING_LEVEL.test(name) ? x.name === name : x.price === price);
+  const same = (x, name, price) => x.price === price || (MOVING_LEVEL.test(name) && x.name === name);
   for (const [name, price] of prevAll) {
     if (!Number.isFinite(price) || found.some(x => same(x, name, price)) || confirmed.some(x => same(x, name, price))) continue;
     if (reactionOf({ c, prev, level: price, patterns, prevPrevClose: pp }) === 'confirmed rejection') confirmed.push({ name, price, dir: c.c < prev.c ? 'down' : 'up', text: confirmedText(name, price) });

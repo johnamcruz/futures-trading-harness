@@ -42,11 +42,31 @@ test('grading: the ANSWER line, the required terms, and a forbidden term only wh
   assert.ok(Q.gradeAnswer(QUIZ, q('q1'), 'ANSWER: it depends').unsure);
 });
 
-test('the reaction questions (q23-q30, feat/sweep-candle-control): answer-first keys pass the right answer, refuse the wrong ones', () => {
+test('grading: a line-leading verdict ("No," "No -" "Not yet:" "Yes.") answers the question; it never negates its own explanation', () => {
+  const W = QUIZ.negationWindow;
+  const N = QUIZ.negations;
+  // The verdict is stripped before the negation check: what follows it is the answer's own claim.
+  assert.strictEqual(Q.negated('No, go short now.', 'No, go '.length, N, W), false);
+  assert.strictEqual(Q.negated('Not yet - short it now.', 'Not yet - '.length, N, W), false);
+  assert.strictEqual(Q.negated('No: enter short.', 'No: enter '.length, N, W), false);
+  assert.strictEqual(Q.negated('Nope, short now.', 'Nope, '.length, N, W), false);
+  // A negation after the verdict still negates; one with no punctuation after it is a negation, not a verdict.
+  assert.strictEqual(Q.negated("No, don't short it now.", "No, don't ".length, N, W), true);
+  assert.strictEqual(Q.negated('No - not the same thing.', 'No - not the '.length, N, W), true);
+  assert.strictEqual(Q.negated('Not the same read.', 'Not the '.length, N, W), true);
+  assert.ok(Q.VERDICT.test('No, x') && Q.VERDICT.test('Not yet: x') && Q.VERDICT.test('Yes. x') && !Q.VERDICT.test('Not the same') && !Q.VERDICT.test('Nothing here'));
+});
+
+test('the reaction questions (q23-q32, feat/sweep-candle-control): answer-first keys pass the right answer, refuse the wrong ones', () => {
   const cases = {
     // A reaction alone takes no trade: it needs other confirmation.
-    q23: [['No: a reaction is context, it needs other confirmation (bias, level, the count).', 'Pass: nothing else lines up.', 'Not on the reaction alone.', 'Not by itself: it needs the count.'],
-      ['Yes, the long wick is enough.', 'Take it: sellers rejected the high.', 'Enter short on the rejection.', 'No, but short it now.', 'Not yet, sellers are in control.', 'No: sell now, sellers in control.']],
+    q23: [['No: a reaction is context, it needs other confirmation (bias, level, the count).', 'Pass: nothing else lines up.', 'Not on the reaction alone.', 'Not by itself: it needs the count.',
+      'No: a long-wick rejection reads sellers in control, but on its own it is context; it needs the count.',
+      'No: the wick alone never shows sellers in control; it needs the count.', 'No, not now: short it only with the 15m confirmation.', 'Not yet: sell now only if the count confirms.',
+      "No, don't short it now; wait for the count.", 'No: sellers in control needs the count and the level, not one wick.', 'No: wait for the next candle, then sell.'],
+      ['Yes, the long wick is enough.', 'Take it: sellers rejected the high.', 'Enter short on the rejection.', 'No, but short it now.', 'Not yet, sellers are in control.', 'No: sell now, sellers in control.',
+        'No, go short now.', 'No, sell it now.', 'Not yet - short it now.', 'No: enter short.', 'No: short it.', 'No, take the short.', 'Nope, short now.',
+        'No - sellers are in control, short it.', 'No. Sellers in control: short.', 'No: but sellers are in control so short.', 'Never wait: sellers in control.']],
     // The close decides: a close above is acceptance.
     q24: [['Acceptance: the close decides, never the wick.', 'Accepted, not a rejection: it closed above the high.', 'Not a rejection: acceptance.', 'Not rejection, acceptance: it closed above.'],
       ['Rejection: the long wick.', 'A long-wick rejection.', 'Rejected, the wick failed above.', "It's a rejection of the high.", 'Not acceptance: a rejection.']],
@@ -59,14 +79,15 @@ test('the reaction questions (q23-q30, feat/sweep-candle-control): answer-first 
     // The second candle: a confirmed rejection, said anywhere in the line; never a failed one.
     // Real answers (two quiz runs): confirm and rejection in either order within a clause; the wick's "failed attempt" is
     // no failed rejection.
-    q27: [['Confirmed rejection: sellers took over and confirmed it.', 'A confirmed rejection on the second candle.', 'The second candle is a bearish engulfing closing lower: a confirmed rejection, short side.',
+    q27: [['Confirmed. The rejection holds: sellers took control.', 'Confirmed rejection: sellers took over and confirmed it.', 'A confirmed rejection on the second candle.', 'The second candle is a bearish engulfing closing lower: a confirmed rejection, short side.',
       'It confirms the rejection: sellers took control of the prior RTH high, so the short-side 15m setup is confirmed.',
       'The second candle is a bearish confirmation of the rejection: it is a read that sellers took control after the long-wick rejection, supporting the short side, not an entry by itself.',
       'A bearish engulfing closing lower on the 15m is a confirmed-type short-side read: sellers took control after the long-wick rejection, so it is a rejection-confirmation context read against the long.',
       'A bearish engulfing closing lower is a read of sellers in control on the 15m, which confirms the rejection\'s failed attempt; it is context, not a setup by itself.'],
       ['Breakout down.', 'A breakout.', 'Stall: the next candle decides.', 'Conflicting.', 'The rejection failed: not a confirmed rejection.', 'It undoes the confirmed rejection.', 'The engulfing cancels the confirmed rejection.',
         'The second candle reads the rejection as failed: sellers took control, so the long-wick read is undone and there is no long setup from it.',
-        'The rejection failed and is undone: buyers are back.', 'No confirmation, buyers back.']],
+        'The rejection failed and is undone: buyers are back.', 'No confirmation, buyers back.',
+        'It is not a confirmation of the rejection.', 'No confirmation of the rejection.', 'Not a confirmed rejection.', 'The rejection is negated; a breakout confirmation.']],
     // Conflicting: mixed, it needs other confirmation (or the next candle).
     q28: [['No: mixed evidence, wait for confirmation.', 'Wait for the next candle.', 'Not yet: conflicting.', 'Not on this read alone; mixed, not sellers in control.', 'Mixed: it needs other confirmation, the count or the next candle.'],
       ['Yes, it closed back below.', 'Sellers are in control.', 'Take it now: the close is back below.', 'Short it: sellers in control.', 'Read it as a rejection, sellers in control.']],
@@ -74,8 +95,24 @@ test('the reaction questions (q23-q30, feat/sweep-candle-control): answer-first 
     q29: [['The next candle decides.', 'Next 15m candle.', 'The 15m candle after the doji decides it.', 'Whoever wins the next 15m close.'],
       ['The doji itself.', 'This candle decides.', 'Sellers.', 'Buyers decide.', 'The doji decides: it is a stall.']],
     // The same reaction in another context: the context decides (with the bias a short; against the 4h + 1h no trade).
-    q30: [['No: the context decides; the first supports a short, the second is no trade (the trend rule).', 'Not the same: with the bias it is a continuation short, against the 4h and 1h no trade.', 'Different: the second counters the 4h + 1h.'],
-      ['Yes, both are long-wick rejections.', 'Same read: short both.', 'The same, take either.', 'No difference, both are shorts.', 'No - same read, both shorts.', 'No, take both.', 'No: both shorts.', 'It is the same read either way.']],
+    // The same reaction in another context: the context decides, and the answer says how: with the bias a short, against the
+    // 4h + 1h refused (the trend rule). Real answers stating the wrong sides fail.
+    q30: [['No: the context decides; the first supports a short, the second is no trade (the trend rule).', 'Not the same: with the bias it is a continuation short, against the 4h and 1h no trade.', 'Different: the second counters the 4h + 1h.',
+      'No. The first is a short setup with the trend; the second is a counter-trend short that the trend rule refuses.',
+      'No, they are not the same read: the pullback-level rejection is a short in the bias direction, but the one with 4h and 1h up is a counter-trend short that the trend rule refuses.',
+      'No - not the same thing: the second counters the 4h and 1h.', 'Different: not both shorts; the second is no trade.'],
+      ['Yes, both are long-wick rejections.', 'Same read: short both.', 'The same, take either.', 'No difference, both are shorts.', 'No - same read, both shorts.', 'No, take both.', 'No: both shorts.', 'It is the same read either way.',
+        'No - both valid shorts.', 'No: same reaction, same trade.', 'No: short in both cases.', 'No - the second is a short too.', 'No - no difference.', 'No: the context decides.',
+        'No, they are not the same read: the 4h and 1h down long-wick rejection at a pullback level is a short setup, while the 4h and 1h up one is a long setup.',
+        'No, not the same read: the pullback-level rejection is a long setup in a pullback, while the trend-up rejection is a counter-trend short that the trend rule refuses.',
+        'No. The 4h/1h-down wick is a counter-trend long read and is refused; the 4h/1h-up wick is a with-trend long setup.',
+        'No, not the same read: the pullback-level rejection is a with-trend long-side setup at a key level, while the trend-up one is a counter-trend short and gets refused.']],
+    // The reaction rules hold on every timeframe and a higher frame's is stronger confirmation (the owner, 2026-10-31); still context.
+    q31: [['The 4h: it outweighs the 15m, but it still needs other confirmation.', 'The 4h rejection; not a trade on its own, it needs the count.', '4h. Context only: it needs more confirmation.', 'The higher frame, the 4h; it still needs confirmation.'],
+      ['The 15m: it is the setup candle.', 'Yes, the 4h alone takes it.', 'No - the 15m is stronger.', 'The 4h, take it now.', 'The 4h: short it.', 'The 4h; the 15m one is stronger for the setup, take it.']],
+    // The higher frame's read is the stronger: the 1h close beyond outweighs a 3m rejection, which alone can be noise.
+    q32: [['No: the 3m alone can be noise; the 1h closed beyond, the stronger read. Wait.', 'Not on the 3m: the 1h breakout outweighs it.', 'Wait: mixed, the 3m only times an entry.'],
+      ['Yes, the 3m rejection confirms the short.', 'No, the 3m rejection confirms the short.', 'No - short it now.', 'Short: the wick rejected the high.', 'No: take the short on the 3m.', 'No, sell now.']],
   };
   for (const [id, [right, wrong]] of Object.entries(cases)) {
     for (const a of right) assert.ok(pass(id, `ANSWER: ${a}`), `${id} right: ${a}`);
@@ -88,10 +125,10 @@ test('summary: correct on all K, answered both ways, the totals, the bar; compar
   for (const x of QUIZ.questions) for (let k = 1; k <= 5; k += 1) rows.push({ id: x.id, k, pass: true });
   for (const x of QUIZ.partB) for (let k = 1; k <= 5; k += 1) rows.push({ id: x.id, k, pass: true });
   const all = Q.summarize(QUIZ, rows, 5);
-  assert.deepStrictEqual([all.partA.allCorrect, all.partA.bothWays, all.partB.allCorrect, all.meetsBar], [30, 0, 5, true]);
+  assert.deepStrictEqual([all.partA.allCorrect, all.partA.bothWays, all.partB.allCorrect, all.meetsBar], [32, 0, 5, true]);
   const one = rows.map(r => (r.id === 'q6' && r.k === 2 ? { ...r, pass: false } : r));
   const s = Q.summarize(QUIZ, one, 5);
-  assert.deepStrictEqual([s.partA.allCorrect, s.partA.bothWays, s.partA.total, s.meetsBar], [29, 1, 149, false]);
+  assert.deepStrictEqual([s.partA.allCorrect, s.partA.bothWays, s.partA.total, s.meetsBar], [31, 1, 159, false]);
   // Too few runs is never correct on all K.
   assert.strictEqual(Q.summarize(QUIZ, rows.filter(r => r.k <= 3), 5).partA.allCorrect, 0);
   const d = Q.compare(all, s).find(x => x.id === 'q6');

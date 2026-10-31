@@ -25,8 +25,10 @@ progress: never judge a pattern on it.
 A read, never a veto: the count decides (`confluence-counting`). Thresholds are
 hypotheses; a missing field is `unknown`.
 
-**The stack**: each timeframe's last completed candle. 15m, 1h and 4h weigh more at a higher-timeframe level (`rejection`,
-`breakout`); the 3m only times the entry.
+**The stack**: each timeframe's last completed candle. The reaction
+rules (below) hold on every timeframe; a higher frame's reaction is
+stronger confirmation than a lower one's (`rejection`, `breakout`). The
+3m only times the entry; alone it can be noise.
 
 - 3m, 5m, 15m, 1h and 4h: `m3.candles` (fields: `bar-briefing`), its
   `pattern` and the levels it

@@ -23,7 +23,7 @@
   "unsure": "it depends|unsure|not sure|unclear|ambiguous|can't tell|cannot tell|depends on",
   "passBar": {
     "partA": {
-      "allCorrect": 30,
+      "allCorrect": 32,
       "bothWays": 0
     },
     "partB": {
@@ -392,9 +392,13 @@
       ],
       "forbidden": [
         "^\\W*(yes|yep|take( it)?|enter|go)\\b",
-        "\\b(short|sell|go short)( it)? now\\b",
-        "\\bsellers (are )?in control\\b",
-        "^\\W*(no|not)( yet)?\\W+sellers (are )?in control\\b"
+        "\\b(short|sell|go short)( it)? now\\b(?![^.;]*\\b(only|if|once|after|when|until)\\b)",
+        "\\benter (a |the )?short\\b(?![^.;]*\\b(only|if|once|after|when|until)\\b)",
+        "\\btake (the |a )?short\\b(?![^.;]*\\b(only|if|once|after|when|until)\\b)",
+        "\\bshort it\\b(?![^.;]*\\b(only|if|once|after|when|until)\\b)",
+        "\\b(so|therefore|then)\\s+sellers (are )?in control\\b",
+        "\\bsellers (are )?in control[,:;]?\\s*(so\\s+|then\\s+)?(short|sell|take|enter)\\b",
+        "\\bsellers (are )?in control\\W*$"
       ]
     },
     {
@@ -452,13 +456,14 @@
       "rule": "a long-wick rejection, then an opposite engulfing closing lower: a confirmed rejection, on the second candle",
       "anchor": "a confirmed one when the next candle engulfs",
       "required": [
-        "\\bconfirm\\w*\\b[^.;]*\\brejection\\b|\\brejection\\b[^.;]*\\bconfirm\\w*\\b"
+        "\\bconfirm\\w*\\b.*\\brejection\\b|\\brejection\\b.*\\bconfirm\\w*\\b"
       ],
       "forbidden": [
         "^\\W*(a\\s+)?(breakout|stall|conflicting|plain)\\b",
-        "\\b(rejection|it|the read)\\s+(as\\s+|has\\s+|is\\s+)?(failed|fails|undone|cancelled|invalidated)\\b",
+        "\\b(rejection|it|the read)\\s+(as\\s+|has\\s+|is\\s+)?(failed|fails|undone|cancelled|invalidated|negated)\\b",
         "\\b(read|wick|rejection)\\s+is\\s+undone\\b",
-        "\\b(undoes|undo|cancels|negates|invalidates)\\s+(the\\s+)?(confirmed\\s+)?(rejection|read)\\b"
+        "\\b(undoes|undo|cancels|negates|invalidates)\\s+(the\\s+)?(confirmed\\s+)?(rejection|read)\\b",
+        "\\b(no|not( a)?|never|without)\\s+(a\\s+|the\\s+)?confirm\\w*(\\s+of)?(\\s+the)?\\s+rejection\\b"
       ]
     },
     {
@@ -497,20 +502,59 @@
       "layer": "setup",
       "prompt": "head",
       "text": "Two 15m long-wick rejections down: one at a pullback level with the 4h and 1h down, one with the 4h and 1h up. Same read?",
-      "rule": "a reaction is read in its context at that moment: with the bias at a pullback level it supports the trade; against the 4h + 1h it is no trade (the trend rule)",
+      "rule": "a reaction is read in its context at that moment: with the bias at a pullback level it supports the short; against the 4h + 1h the trend rule refuses it (never counter)",
       "anchor": "Against the bias (4h + 1h): the trend rule refuses it (never counter)",
       "required": [
-        "^\\W*(no|nope|not|different|context)\\b"
+        "^\\W*(no|nope|not|different|context)\\b",
+        "\\b(no trade|not a trade|refus\\w*|counter\\w*|trend rule|never counter|against the (4h|1h|htf|bias|trend))\\b"
       ],
       "forbidden": [
         "^\\W*(yes|yep|same)\\b",
-        "^\\W*(no difference|not different|no change)\\b",
+        "\\b(no difference|not different|no change)\\b",
         "\\b(short|take|trade)\\s+(them\\s+)?(both|either)\\b",
-        "\\bboth\\s+(are\\s+)?(shorts?|trades?|valid|taken)\\b",
-        "\\bsame (read|thing)\\b",
-        "\\btake (them )?both\\b",
-        "\\bboth (are )?shorts?\\b",
-        "^\\W*(no|nope)\\s*[-–—,:;]\\s*(the\\s+)?(same (read|thing)|take (them )?both|both (are )?shorts?)\\b"
+        "\\bboth\\s+(are\\s+)?(valid\\s+)?(shorts?|trades?|valid|taken)\\b",
+        "\\bsame (read|thing|trade)\\b(?! of the candle)",
+        "\\bshort in both\\b",
+        "\\blong (setup|read|entry|trade|side)\\b",
+        "\\b(with-trend|with the trend|counter-trend) long\\b"
+      ]
+    },
+    {
+      "id": "q31",
+      "layer": "setup",
+      "prompt": "head",
+      "text": "The last 4h candle is a long-wick rejection of the prior RTH high; the 15m candle at it reads plain. Which reaction is the stronger, and is it a trade on its own?",
+      "rule": "the reaction rules hold on every timeframe and a higher frame's reaction is stronger confirmation than a lower one's; a reaction is still context: it needs other confirmation",
+      "anchor": "| 1h, 4h | HTF levels (prior day, overnight, CRT) | most |",
+      "required": [
+        "^\\W*(the\\s+)?(4h|four-hour|higher)\\b",
+        "\\b(needs?|wants?|requires?)\\s+(other|more)\\s+confirmation\\b|\\bconfirmation\\b|\\bcontext\\b|\\bthe count\\b|\\bnot (a trade )?(on its own|alone|by itself)\\b"
+      ],
+      "forbidden": [
+        "^\\W*(the\\s+)?15m\\b",
+        "\\b15m (one |rejection |reaction )?(is )?(the )?stronger\\b",
+        "\\b(yes|take it|short it|enter (the )?short)\\b(?![^.;]*\\b(only|if|once|after|when|until|with)\\b)",
+        "\\b(a|is a) trade on its own\\b"
+      ]
+    },
+    {
+      "id": "q32",
+      "layer": "setup",
+      "prompt": "head",
+      "text": "The 3m candle is a long-wick rejection of the prior RTH high, but the last 1h candle closed decisively beyond it (broke above). Short on the 3m rejection?",
+      "rule": "a higher frame's reaction is stronger confirmation than a lower one's: the 1h close beyond outweighs the 3m rejection; the 3m only times the entry and alone can be noise (mixed: wait)",
+      "anchor": "| 3m, 5m | the entry timing only: never the setup | least |",
+      "required": [
+        "^\\W*(no|nope|not|wait|pass)\\b",
+        "\\b(noise|outweigh\\w*|stronger|1h|timing|times|wait|mixed)\\b"
+      ],
+      "forbidden": [
+        "^\\W*(yes|yep|short|sell|take)\\b",
+        "\\b3m (rejection |reaction )?confirms\\b",
+        "\\bconfirms the short\\b",
+        "\\b(short|sell|go short)( it)? now\\b(?![^.;]*\\b(only|if|once|after|when|until|with)\\b)",
+        "\\bshort (it )?on the 3m\\b(?![^.;]*\\b(only|if|once|after|when|until|with)\\b)",
+        "\\btake the short\\b(?![^.;]*\\b(only|if|once|after|when|until|with)\\b)"
       ]
     }
   ],

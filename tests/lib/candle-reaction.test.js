@@ -193,7 +193,7 @@ test('confirmed: a relative level is said as the previous candle met it, with it
   assert.ok(!/110 110/.test(swingLine), swingLine);
 });
 
-test('confirmed: a MOVING level (VWAP, the session profile) is deduplicated by name against the candle\'s own levels; a fixed one by price', () => {
+test('confirmed: every level is deduplicated by price, whatever its kind or order; a MOVING one (VWAP, the session profile) by its name too', () => {
   const A = k(105, 110, 104, 107);
   const B = k(106.5, 113, 106, 108);
   const C = k(108.5, 109.5, 102.5, 103);
@@ -204,8 +204,15 @@ test('confirmed: a MOVING level (VWAP, the session profile) is deduplicated by n
   assert.strictEqual(of([{ name: 'VWAP (rth)', price: 104, rel: 'touched', dir: null }], [['VWAP (rth)', 110]]), undefined);
   // C didn't meet the VWAP: listed with the price B met it at.
   assert.deepStrictEqual(of([], [['VWAP (rth)', 110]]).map(x => x.text), ['VWAP (rth) 110']);
-  // A moving level met at another level's price is no duplicate of it (by name), and the other way round.
-  assert.deepStrictEqual(of([{ name: 'session POC', price: 110, rel: 'touched', dir: null }], [['VWAP (rth)', 110]]).map(x => x.name), ['VWAP (rth)']);
+  // A moving level at the price of one this candle met (another name): the same price, not listed.
+  assert.strictEqual(of([{ name: 'session POC', price: 110, rel: 'touched', dir: null }], [['VWAP (rth)', 110]]), undefined);
+  assert.strictEqual(of([{ name: 'VWAP (rth)', price: 110, rel: 'touched', dir: null }], [['prior RTH high', 110]]), undefined);
+  // The previous candle's levels at one price are listed once, in either order, whatever their kinds.
+  assert.deepStrictEqual(of([], [['prior RTH high', 110], ['VWAP (rth)', 110]]).map(x => x.text), ['prior RTH high 110']);
+  assert.deepStrictEqual(of([], [['VWAP (rth)', 110], ['prior RTH high', 110]]).map(x => x.text), ['VWAP (rth) 110']);
+  assert.strictEqual(of([], [['prior RTH high', 110], ['VWAP (rth)', 110]]).length, of([], [['VWAP (rth)', 110], ['prior RTH high', 110]]).length);
+  // Two moving levels at one price: once.
+  assert.deepStrictEqual(of([], [['VWAP (rth)', 110], ['session POC', 110]]).map(x => x.text), ['VWAP (rth) 110']);
   // A fixed level keeps the price rule: met by C under another name at that price, not listed; at another price, listed.
   assert.strictEqual(of([{ name: 'IB high', price: 110, rel: 'touched', dir: null }], [['prior RTH high', 110]]), undefined);
   assert.deepStrictEqual(of([{ name: 'prior RTH high', price: 104, rel: 'touched', dir: null }], [['prior RTH high', 110]]).map(x => x.text), ['prior RTH high 110']);
