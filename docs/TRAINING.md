@@ -1805,7 +1805,9 @@ outside the repository.
 **The local real run** (`npm run goal:real`): the same tiers on a larger
 fixture whose bars come from the replay broker's MCP server
 (`node scripts/goal-fixture.js --replay-config <replay config.json> --symbol MNQ`:
-the adapter's history, the server's clock moved chunk by chunk), kept with
+the adapter's history, the replay server's clock moved chunk by chunk, a
+fresh run after a contract roll; or `--broker <name>` for a live broker,
+read only, no clock), kept with
 its baseline and move goldens under the harness home, never the repository.
 Without it the run skips, saying how to build it. A pull request touching
 entries, exits, sizing, the gate or the runner states its `goal:real`

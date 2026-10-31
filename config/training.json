@@ -76,7 +76,7 @@
     "monteCarlo": { "paths": 2000, "seed": 1, "meanBlock": 7 },
     "tolerance": { "passRate": 0.005, "meanR": 0.005, "rCaught": 0 },
     "moveDays": ["2021-06-15", "2021-06-24", "2021-10-04", "2021-10-06", "2021-11-19"],
-    "real": { "blocksPerHalf": 8, "trendPerHalf": 20, "chunkDays": 7 },
+    "real": { "blocksPerHalf": 6, "trendPerHalf": 15, "chunkDays": 7, "segmentDays": 56 },
     "synth": {
       "seed": 1,
       "symbol": "MNQ",

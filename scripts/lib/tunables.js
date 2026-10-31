@@ -102,7 +102,7 @@ const TRAINING = {
     moveDays: list(str()),
     // The synthetic fixture (eval/goal-synth.js): its draws, the day shapes (ticks a bar, shares of sigma) and its layout.
     // The local goal:real fixture's larger draw (scripts/goal-fixture.js --replay-config).
-    real: { blocksPerHalf: int(1), trendPerHalf: int(0), chunkDays: int(1) },
+    real: { blocksPerHalf: int(1), trendPerHalf: int(0), chunkDays: int(1), segmentDays: int(1) },
     synth: {
       seed: int(), symbol: str(), minutes: int(1), startPrice: pos(), breakMin: int(0, 1439), macroDrift: nonneg(), noise: nonneg(),
       sigma: { overnight: pos(), rth: pos() }, wick: { with: nonneg(), against: nonneg() }, volume: { overnight: pos(), rth: pos(), decay: frac() },

@@ -452,9 +452,10 @@
      "2021-11-19"
     ],
     "real": {
-     "blocksPerHalf": 8,
-     "trendPerHalf": 20,
-     "chunkDays": 7
+     "blocksPerHalf": 6,
+     "trendPerHalf": 15,
+     "chunkDays": 7,
+     "segmentDays": 56
     },
     "synth": {
      "seed": 1,

@@ -9,9 +9,10 @@
  *   node scripts/goal-fixture.js --bars <3m bars file> --symbol MNQ
  *        the committed CI slice (tests/fixtures/goal/bars.json.gz): config goalRegression's draw, small
  *   node scripts/goal-fixture.js --replay-config <replay config.json> --symbol MNQ
- *        the local goal:real fixture: its bars fetched through the replay broker's MCP server (goal-fetch.js), the
- *        larger draw (goalRegression.real), written under the harness home (<FTH_HOME>/goal/real-bars.json.gz), never
- *        the repository
+ *   node scripts/goal-fixture.js --broker <name> --symbol MNQ
+ *        the local goal:real fixture: its bars fetched through the configured broker's MCP server (goal-fetch.js: the
+ *        replay config's replay broker, its clock moved chunk by chunk; or a broker by name, read only), the larger draw
+ *        (goalRegression.real), written under the harness home (<FTH_HOME>/goal/real-bars.json.gz), never the repository
  */
 
 const fs = require('fs');
@@ -26,25 +27,25 @@ const GF = require('./lib/eval/goal-fixture');
 const GT = require('./lib/eval/goal-trades');
 const GC = require('./lib/eval/goal-check');
 
-const USAGE = 'usage: goal-fixture.js (--bars <bars file> | --replay-config <replay config.json>) --symbol <root> [--out <file.json.gz>]';
+const USAGE = 'usage: goal-fixture.js (--bars <bars file> | --replay-config <replay config.json> | --broker <name>) --symbol <root> [--out <file.json.gz>]';
 const ROOT = path.resolve(__dirname, '..');
 const MINUTES = require('./lib/tunables').runner().bars.timeframe; // the runner's base bars (3m)
 
 function args(argv) {
-  const o = { bars: null, 'replay-config': null, symbol: null, out: null };
+  const o = { bars: null, 'replay-config': null, broker: null, symbol: null, out: null };
   for (let i = 0; i < argv.length; i += 1) {
     const k = argv[i].replace(/^--/, '');
     if (!(k in o) || argv[i + 1] === undefined) throw new Error(USAGE);
     o[k] = argv[i += 1];
   }
-  if (!o.symbol || Boolean(o.bars) === Boolean(o['replay-config'])) throw new Error(USAGE);
+  if (!o.symbol || [o.bars, o['replay-config'], o.broker].filter(Boolean).length !== 1) throw new Error(USAGE);
   return o;
 }
 
 async function main() {
   const o = args(process.argv.slice(2));
   const cfg = require('./lib/tunables').training().goalRegression;
-  const real = Boolean(o['replay-config']);
+  const real = Boolean(o['replay-config'] || o.broker);
   const draw = real ? { ...cfg, ...cfg.real } : cfg;
   const sched = require('./lib/schedule').current();
   const tick = tickOf(o.symbol);
@@ -59,14 +60,15 @@ async function main() {
     require('./lib/env-file').loadEnvForCli('goal-fixture');
     const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'fth-goal-fetch-'));
     const start = new Date(Date.parse(`${from}T00:00:00Z`) - HISTORY_HOURS * 3600000);
-    bars = baseBars(await require('./lib/eval/goal-fetch').fetchAll({ root: ROOT, replayConfig: o['replay-config'], from: start, to: new Date(`${to}T00:00:00Z`), dir, symbol: o.symbol, minutes: MINUTES }), MINUTES);
+    bars = baseBars(await require('./lib/eval/goal-fetch').fetchAll({ root: ROOT, replayConfig: o['replay-config'], broker: o.broker, from: start, to: new Date(`${to}T00:00:00Z`), dir, symbol: o.symbol, minutes: MINUTES }), MINUTES);
     fs.rmSync(dir, { recursive: true, force: true });
-    source = { broker: 'the replay config\'s replay broker (MCP)', bars: bars.length };
+    source = { broker: o.broker ? `${o.broker} (MCP, read only)` : 'the replay config\'s replay broker (MCP)', bars: bars.length };
   } else {
     source = { file: path.basename(o.bars), sha256: crypto.createHash('sha256').update(fs.readFileSync(o.bars)).digest('hex') };
     bars = baseBars(require('./lib/backtest/data').loadBars(o.bars), MINUTES).filter(b => b.t < `${to}T23:59:59Z`);
   }
   if (!bars.length) throw new Error('no bars');
+  process.stderr.write(`[goal-fixture] ${bars.length} bars, ${bars[0].t} to ${bars[bars.length - 1].t}\n`);
   const clock = runnerClock({ from, to });
   const days = GF.sessionDays(bars, { from, to, session, inSession: clock.inSession });
   const legs = GF.trendLegsByDay(bars, { from, to, session, minutes: MINUTES });
