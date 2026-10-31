@@ -9,7 +9,7 @@
  *
  *   loadQuiz({ file })                 the quiz file, checked (config-files.js: fail closed): { value, hash }
  *   quizErrors(value)                  [problem] for a quiz document
- *   buildPrompts(root)                 { head, 'head+risk' }: the head trader's index-mode prompt (head-prompt.js
+ *   buildPrompts(root, quiz)           { head, 'head+risk', 'situational:<id>' }: the head trader's index-mode prompt (head-prompt.js
  *                                      claudeHeadText) and that plus the risk manager's (role-prompt.js claudeRoleText)
  *                                      with its agent body
  *   excerptOf(excerpt)                 Part B's briefing excerpt: the Bias line (bias-line.js) or the Size and Min lines
@@ -31,7 +31,7 @@ const path = require('path');
 const { loadConfigFile } = require('../config-files');
 
 const LAYERS = Object.freeze(['bias', 'levels', 'setup', 'entry', 'stop', 'exit', 'size', 'approval']);
-const PROMPTS = Object.freeze(['head', 'head+risk']);
+const PROMPTS = Object.freeze(['head', 'head+risk', 'situational']);
 const isObj = x => Boolean(x) && typeof x === 'object' && !Array.isArray(x);
 const str = x => typeof x === 'string' && x.length > 0;
 const re = src => new RegExp(src, 'i');
@@ -63,6 +63,7 @@ function quizErrors(v) {
       ids.add(q.id);
       if (!LAYERS.includes(q.layer)) out.push(`${at}.layer: one of ${LAYERS.join(', ')}`);
       if (!PROMPTS.includes(q.prompt)) out.push(`${at}.prompt: one of ${PROMPTS.join(', ')}`);
+      if (q.prompt === 'situational' && !(isObj(q.state) && Array.isArray(q.state.positions))) out.push(`${at}.state: the account state its situational skills are chosen for ({ positions, workingOrders, ... })`);
       for (const k of ['text', 'rule']) if (!str(q[k])) out.push(`${at}.${k}: given`);
       if (part === 'questions' && !str(q.anchor)) out.push(`${at}.anchor: the phrase of the prompt that states the rule`);
       if (part === 'partB' && !(isObj(q.excerpt) && (isObj(q.excerpt.bias) || (isObj(q.excerpt.size) && isObj(q.excerpt.size.facts))))) out.push(`${at}.excerpt: { bias: { h4, h1, t15, declared } } or { size: { facts, riskUsd, minContracts, stretchUsd, capUsd } }`);
@@ -78,10 +79,23 @@ const loadQuiz = ({ file = null } = {}) => loadConfigFile({ name: 'context-quiz'
 /** The agent body (its frontmatter dropped). */
 const agentBody = (root, name) => fs.readFileSync(path.join(root, 'agents', `${name}.md`), 'utf8').replace(/^---\n[^]*?\n---\n/, '');
 
-function buildPrompts(root) {
+/** The prompt a question is asked against: its `prompt`, or for a situational one its own (`situational:<id>`). */
+const promptKey = q => (q.prompt === 'situational' ? `situational:${q.id}` : q.prompt);
+
+function buildPrompts(root, quiz = null) {
   const head = require('../head-prompt').claudeHeadText(root);
   const risk = `${agentBody(root, 'risk-manager')}\n${require('../role-prompt').claudeRoleText(root, 'risk-manager')}`;
-  return { head, 'head+risk': `${head}\n${risk}` };
+  const out = { head, 'head+risk': `${head}\n${risk}` };
+  // A situational question: the head prompt plus the situational skills the runner delivers for its state
+  // (situational-skills.js, as a cycle of that state gets them; the head's every-cycle skills counted as loaded).
+  const situational = quiz ? [...quiz.questions, ...quiz.partB].filter(q => q.prompt === 'situational') : [];
+  if (situational.length) {
+    const SS = require('../situational-skills');
+    const A = require('../autotrader');
+    const loaded = A.cycleLoaded(A.validateConfig({ harness: 'claude' }));
+    for (const q of situational) out[promptKey(q)] = `${head}\n${SS.situationText(root, SS.choose(root, SS.factsOf({ state: q.state }), { loaded }))}`;
+  }
+  return out;
 }
 
 /** A briefing holding only the bias facts the Bias line reads. */
@@ -187,7 +201,7 @@ function replyOf(cfg, stdout) {
 function anchorsMissing(quiz, prompts) {
   const flat = t => String(t).replace(/\s+/g, ' ');
   const texts = Object.fromEntries(Object.entries(prompts).map(([k, v]) => [k, flat(v)]));
-  return quiz.questions.filter(q => !texts[q.prompt] || !texts[q.prompt].includes(flat(q.anchor))).map(q => q.id);
+  return quiz.questions.filter(q => !texts[promptKey(q)] || !texts[promptKey(q)].includes(flat(q.anchor))).map(q => q.id);
 }
 
 function compare(a, b) {
@@ -200,4 +214,4 @@ function compare(a, b) {
   });
 }
 
-module.exports = { LAYERS, PROMPTS, loadQuiz, quizErrors, buildPrompts, excerptOf, questionText, answerLine, negated, gradeAnswer, summarize, compare, quizCommand, replyOf, anchorsMissing };
+module.exports = { LAYERS, PROMPTS, loadQuiz, quizErrors, promptKey, buildPrompts, excerptOf, questionText, answerLine, negated, gradeAnswer, summarize, compare, quizCommand, replyOf, anchorsMissing };

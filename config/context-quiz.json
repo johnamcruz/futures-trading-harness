@@ -23,7 +23,7 @@
   "unsure": "it depends|unsure|not sure|unclear|ambiguous|can't tell|cannot tell|depends on",
   "passBar": {
     "partA": {
-      "allCorrect": 20,
+      "allCorrect": 21,
       "bothWays": 0
     },
     "partB": {
@@ -322,6 +322,22 @@
       ],
       "forbidden": [
         "\\b(take|trade|enter|go|size( it)?( at)?)\\s+(with\\s+)?(the\\s+)?(only\\s+)?2\\b"
+      ]
+    },
+    {
+      "id": "q21",
+      "layer": "stop",
+      "prompt": "situational",
+      "state": { "positions": [], "workingOrders": 1 },
+      "text": "Positions read flat, but a fill shows a long 9 and its bracket stop is working. Do you cancel the stop as a leftover?",
+      "rule": "a fill reported late: a stop is never a leftover while fills or an order's status show the position; keep it ([cancel-protection] refuses its cancel)",
+      "anchor": "A stop is never a leftover while fills or an order's status show the position, even if positions read flat: `[cancel-protection]` refuses it; keep it.",
+      "required": [
+        "\\b(no|not|never|keep|kept|stays)\\b"
+      ],
+      "forbidden": [
+        "^\\s*(yes\\b|y,)",
+        "^(?!.*\\b(not|never|don't|no)\\b).*\\bcancel (it|the stop)\\b"
       ]
     }
   ],

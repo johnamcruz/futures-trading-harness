@@ -392,7 +392,8 @@ test('trade-session split: trade-plan is step 4 byte for byte (tests/plugin/harn
 // sides too, so each path's budget holds in both modes.
 const OLD_AGENTS_MD = 24466;
 // Raised pins (each by only the bytes its line needs): leftover-orders' [cancel-protection] line for a fill reported
-// late, 88394 -> 88548 (+154), owner-approved: improves context.
+// late: the skill file grew 1272 -> 1427 bytes (+155); the budget's +154 (88394 -> 88548) is the measured need of the
+// worst path; owner-approved: improves context.
 const RAISED = 154;
 const EVERY_CYCLE = ['multi-timeframe-analysis', 'strategy-library', 'strategy-scan', 'strategy-gate-checks', 'trader-process', 'htf-to-ltf', 'autonomous-trading'];
 const PATHS = {
