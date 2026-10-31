@@ -63,9 +63,9 @@ the verdict's cut to the attempt's size budget now, which is the most a
 policy entry may have; a composed trade's is the size you stated, refused
 over its cap (in an attempt, also the verdict).`,
     now: `1 for a rules strategy (position-sizing's size-1 rule); in a prop attempt,
-the size translation's (\`order_plan\` gives it; the verdict is its
-ceiling); outside one, a composed trade's is the size you stated, refused
-over its cap.`,
+the size translation's (\`order_plan\`; a policy verdict's own: cut to the
+size budget); outside one, a composed trade's is the size you stated,
+refused over its cap.`,
     reason: 'fix/sizing-micro-fallback (owner): sizing comes from the size translation, never restated' },
 ];
 

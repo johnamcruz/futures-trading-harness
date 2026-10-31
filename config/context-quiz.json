@@ -280,7 +280,7 @@
       "rule": "a healthy prop account takes the full verdict size",
       "anchor": "Size in a prop attempt: the full verdict size, the code's number.",
       "required": [
-        "full"
+        "^\\W*(in a prop attempt,?\\s+)?(no\\b\\W*)?((the\\s+)?size(\\s+is|:)\\s+)?(take\\s+|use\\s+)?(the\\s+)?(verdict'?s\\s+)?full\\b"
       ],
       "forbidden": [
         "half",
@@ -298,7 +298,7 @@
       "rule": "in a prop attempt nothing halves",
       "anchor": "In a prop attempt nothing halves",
       "required": [
-        "full"
+        "^\\W*(in a prop attempt,?\\s+)?(no\\b\\W*)?((the\\s+)?size(\\s+is|:)\\s+)?(take\\s+|use\\s+)?(the\\s+)?(verdict'?s\\s+)?full\\b"
       ],
       "forbidden": [
         "half",
@@ -368,7 +368,7 @@
       "rule": "the size comes from the size translation (order_plan's number), never the model's own",
       "anchor": "size, and stop ticks come from the size translation (`order_plan` gives them)",
       "required": [
-        "\\b5\\b"
+        "^\\W*(place\\s+|take\\s+|use\\s+|enter\\s+)?(the\\s+)?5\\b"
       ],
       "forbidden": [
         "^\\s*8\\b",
@@ -377,8 +377,7 @@
         "\\b5\\s+or\\s+8\\b|\\b8\\s+or\\s+5\\b",
         "^(?!.*\\b(never|not|don't)\\s+(place|take|use|enter)\\s+(the\\s+)?8\\b).*\\b(place|take|use|enter|go with)\\s+(the\\s+)?8\\b",
         "^\\s*not\\s+(the\\s+)?5\\b",
-        "\\b5\\b[^.;]*\\bsuggestion\\b",
-        "\\brecord'?s\\s+8\\b"
+        "\\b5\\b[^.;]*\\bsuggestion\\b"
       ]
     }
   ],
@@ -471,7 +470,7 @@
       "text": "One serious factor against the setup. What size: the full verdict size, or less?",
       "rule": "the Size line: the full verdict",
       "required": [
-        "full"
+        "^\\W*(in a prop attempt,?\\s+)?(no\\b\\W*)?((the\\s+)?size(\\s+is|:)\\s+)?(take\\s+|use\\s+)?(the\\s+)?(verdict'?s\\s+)?full\\b"
       ],
       "forbidden": [
         "half",
