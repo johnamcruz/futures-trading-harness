@@ -13,7 +13,7 @@ description: Use when sizing a trade plan - risk per contract, the budget, the c
 ## How It Works
 
 In a prop attempt: the full verdict size; a serious factor against never
-cuts it; only a pacing rule does. The code computes it. Fewer than 3
+cuts it; only a pacing rule does. The size translation computes it (`order_plan`). Fewer than 3
 contracts (`min_contracts`) at the stop: skip (unless the floor
 stretch takes exactly 3: the Min line).
 

@@ -142,8 +142,7 @@ description: Use when a prompt says it is an autonomous or scheduled cycle - one
    user's.
 9. **Phase 2's size.** The size is read from the VERDICT line
    (`VERDICT: APPROVE - size 3`). A bare `VERDICT: APPROVE` with no size on the line → unreadable, even beside a
-   Size line, prose or not: not a trade yet; one restate of the Size and VERDICT lines; never a veto. A prose
-   Size line ("Size: I'd go with 3 contracts") is readable only beside `VERDICT: APPROVE - size 3`.
+   Size line, prose or not: not a trade yet; one restate of the Size and VERDICT lines; never a veto.
 
 ## Examples
 

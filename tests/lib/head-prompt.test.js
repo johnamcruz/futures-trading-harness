@@ -70,10 +70,8 @@ test('CORE: the composed bar\'s reads the gate requires (SITUATIONAL taught in t
   // the owner, 2026-10-24: "Make sure this skill is part of setup", taught in trade-lifecycle's setup list: its setup and stop
   // reads and their timing, breakout's pointer and invalidation's box stop source: +225). The owner's skip reasons
   // (feat/ppc-setup-rates: autonomous-trading's one SKIP line) fit under it with trade-session's manage-position line 3
-  // bytes shorter. Then 74248 (fix/sizing-micro-fallback, owner-approved: improves context): autonomous-trading's phase-2
-  // size rule written rule first, the size read from the VERDICT line (the context quiz, Q19: 1/5 to 5/5): +21. It may
-  // shrink; it grows only on an owner's OK.
-  assert.ok(Buffer.byteLength(prompt) <= 74248, `the head prompt is ${Buffer.byteLength(prompt)} bytes`);
+  // bytes shorter. It may shrink; it grows only on an owner's OK.
+  assert.ok(Buffer.byteLength(prompt) <= 74227, `the head prompt is ${Buffer.byteLength(prompt)} bytes`);
   // Only the head trader's prompt grows: no other role's prompt embeds trade-lifecycle (the risk manager's embeds
   // confluence-counting and invalidation as before; its prompt is unchanged, pinned in trade-session-split.test.js).
   for (const [name, a] of Object.entries(index.agent)) if (name !== H.HEAD_AGENT && a.prompt) assert.ok(!a.prompt.includes('<skill name="trade-lifecycle">'), name);

@@ -20,7 +20,7 @@ A policy strategy (`signal: policy`, e.g. `prop_portfolio`) is the prop
 challenge as a strategy: it trades its component's setups
 (`trade_lifecycle`) on an account profile (`accounts/<name>/ACCOUNT.md`, e.g. a
 100K combine: $6,000 target, $3,000 trailing max loss, $2,000 daily limit),
-sized from the cushion in the selected contract (`contracts: micro | mini |
+traded in the selected contract (`contracts: micro | mini |
 auto` only when none is selected): each setup's size is the size
 translation's, or it is skipped. Its numbers (the `sizing`, the `exit`, the
 soft daily stop, the loss streak stop, and the verdict's multiplier items) are in the
@@ -59,8 +59,8 @@ it:
 - Entries under an attempt go through `prop_portfolio`'s verdict on
   `trade_lifecycle`: `order_plan` for `trade_lifecycle` records it once per
   compose record, from its side and stop, at its bar (`trade-lifecycle`): the
-  side, `full` or `skip` (never anything else), the contract (the selected one: MNQ or NQ, MES or ES, ...), the largest
-  size, the stop in ticks, and its multiplier: the share of the budget the
+  side, `full` or `skip` (never anything else), the contract (the selected one: MNQ or NQ, MES or ES, ...), the budget's
+  size (a ceiling), the stop in ticks, and its multiplier: the share of the budget the
   rulebook's enforced items allow (1 while it lists none; 0 is a skip, as is
   an item whose fact is missing or stale). The size is already sized at it. **A verdict is a ceiling, never an order**:
   take it only when the priority order (the strategy-library skill) says so,
@@ -129,7 +129,7 @@ it:
   two markets have verdicts on the same bar, place one (the first listed in
   the prompt, unless a verdict says skip) and stand aside on the other: the
   gate refuses it until the account is flat again and a new verdict comes.
-  Never split the budget between markets; each verdict is sized from the
+  Never split the budget between markets; each verdict's budget is the
   whole cushion.
 
 | Tool | Arguments | What it returns | Script (people) |
@@ -146,11 +146,7 @@ day $250, 4 sessions done, 26 left; prop_portfolio size budget $975; entries all
 prop_portfolio: long setup from trade_lifecycle: full, at most 4 NQ with a 40-tick stop
 
 Yesterday closed at $101000, so the floor trails to $101000 - $3000 = $98000.
-prop_portfolio's sizing (its numbers are in the account's RULEBOOK.md, the
-one place for them): cushion_frac x $3250 = $975 (under cap_usd; no
-drawdown from the peak). A 40-tick stop plus a tick of expected slippage
-risks 41 x $0.50 = $20.50 + $0.74 fees = $21.24 a micro: 45 micros ($975 /
-$21.24), traded as 4 NQ with NQ selected (NQ: 41 x $5 = $205 + $2.80 fees =
-$207.80 each, $831.20 in all). With MNQ selected the verdict is 45 MNQ ($955.80).
-The entry's size is the size translation's (order_plan gives it); the verdict's is a ceiling.
+The verdict (at most 4 NQ) is the size budget's ceiling, worked out by the code
+from the account's RULEBOOK.md. The entry's size is the size translation's
+(order_plan gives it), never above the verdict.
 ```

@@ -88,6 +88,7 @@ Never (never counter): the trend rule refuses an entry against a trending
   `15m rejected prior VAH up`, `3m close top`, `3m momentum up`,
   `stop 15m low 21512.75`, `target trail`. The stop goes to
   21512.50 (one tick below): 111 ticks; the target is the 2R mark, 222 ticks,
-  where the trail arms. The size is the size translation's (`order_plan`
-  gives it, within the $300 cap); a larger size is refused.
+  where the trail arms. In a prop attempt the size is the size translation's
+  (`order_plan` gives it); outside one, the record's, never over the $300
+  cap. A larger size is refused.
 - The same reads for a short: refused (every directional read is against it).

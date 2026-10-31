@@ -775,7 +775,7 @@ strategy prop_portfolio: {
   "version": 3
 }
 strategy trade_lifecycle: {
-  "body": "3768 chars sha256:0ffe1fe79cc2e638",
+  "body": "3819 chars sha256:7c723764583f907a",
   "compiledRules": null,
   "compiledStop": null,
   "compiledTarget": null,
