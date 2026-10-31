@@ -114,7 +114,9 @@ function gateRefusal(gate, day, t) {
  * and losing trades so far and the session's losing streak (combine's lossStreak, live's prop-state.sessionLossStreak),
  * as the attempt line shows them (combine.attemptFacts); the multiplier sees them too (multiplier(trade, { cs, counters })).
  * Each trade (already re-exited under the policy's exit, exitAs, by the evaluator) meets the checks in this order, the
- * first that refuses skipping it: (1) combine.entryBlock (the attempt over, the firm's daily limit, the soft daily stop,
+ * first that refuses skipping it: (0) with ctx.onePosition, a trade entered before the day's last taken trade exited
+ * (`position-open`: one position at a time, decided after sizing, so a trade skipped below never holds the slot; the
+ * day's trades in entry order); (1) combine.entryBlock (the attempt over, the firm's daily limit, the soft daily stop,
  * the account's loss_streak_stop for the rest of the session); (2) the engine's realized daily stop and a runner outage;
  * (3) the order gate's count rules (gateRefusal: daily-losses, then loss-cooldown); (4) the multiplier; (5) the size.
  * The streak is counted once (cs.lossStreak) and read by both (1) and (3): loss_streak_stop ends the session's entries,
@@ -122,7 +124,7 @@ function gateRefusal(gate, day, t) {
  * Returns { status, sessions, profit, taken, skipped }.
  */
 function runAttempt(days, ctx) {
-  const { account, sizing, size = defaultSize, multiplier = fullVerdict, mode = 'auto', legsOf, maxDailyLoss = 0, variant = null, outageDay = null, onDay = null, onTrade = null, onSkip = null, limits = null } = ctx;
+  const { account, sizing, size = defaultSize, multiplier = fullVerdict, mode = 'auto', legsOf, maxDailyLoss = 0, variant = null, outageDay = null, onDay = null, onTrade = null, onSkip = null, limits = null, onePosition = false } = ctx;
   const gate = ctx.gate === undefined ? gateLimits() : ctx.gate;
   let cs = combine.start(account);
   let taken = 0;
@@ -137,11 +139,14 @@ function runAttempt(days, ctx) {
     let lossesToday = 0;
     // The last loss's exit, by the time into the session (the gate's loss cooldown runs from it).
     let lastLossAt = NaN;
+    // One position at a time (ctx.onePosition): the last taken trade's exit; a trade entered before it is skipped.
+    let openUntil = -Infinity;
     // One count of the day's losses and losing streak for the gate, the attempt line and the loss streak stop: by the
     // trade's P&L before fees, as the gate counts the broker's; the streak is combine's (cs.lossStreak, the session's).
     const counters = () => Object.freeze({ tradesToday, lossesToday, lossStreak: cs.lossStreak || 0 });
     const skip = (t0, why) => { skipped += 1; if (onSkip) onSkip({ cs: view(cs), trade: t0, dayIndex: d, counters: counters(), why }); };
     for (const t0 of days[d].trades) {
+      if (onePosition && Date.parse(t0.entryTime) < openUntil) { skip(t0, 'position-open'); continue; }
       if (combine.entryBlock(cs)) { skip(t0, 'blocked'); continue; }
       if ((maxDailyLoss > 0 && closed <= -maxDailyLoss) || (outage && !first)) { skip(t0, outage && !first ? 'outage' : 'daily-stop'); continue; }
       const refused = gateRefusal(gate, { losses: lossesToday, streak: cs.lossStreak || 0, lastLossAt }, t0);
@@ -175,6 +180,8 @@ function runAttempt(days, ctx) {
       closed += net;
       tradesToday += 1;
       // A re-exited trade's exit time is its exit bar's close (exitAs), or null when unknown: the cooldown then refuses.
+      // An exit time unknown holds the slot for the rest of the day (never a second position on a guess).
+      if (onePosition) openUntil = Number.isFinite(Date.parse(t.exitTime)) ? Date.parse(t.exitTime) : Infinity;
       if (gross < 0) { lossesToday += 1; lastLossAt = intoSession(Date.parse(t.exitTime), Date.parse(t0.entryTime)); }
       if (forced === 'blow') cs = combine.blow(cs);
       if (forced === 'daily') cs = { ...cs, dayStopped: true };

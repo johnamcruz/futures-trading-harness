@@ -25,11 +25,14 @@
  *             (trade-lifecycle.js stopFloorTicks): a closer stop is refused, never widened
  *   exit      experience-log.js limitOutcome with the policy's exit (evaluator.js composedExit(trade_lifecycle).plan),
  *             out at the runner's end of day (setup-library.js runnerClock)
- *   one       one position at a time: a fill while one is open is dropped (by entry time, then the setup bar)
+ *   one       one position at a time, as live: decided after sizing, at each attempt's own account state (goal-metrics.js,
+ *             runAttempt's onePosition), so a plan the account can't size never holds the slot; the candidates are
+ *             every fill, in entry order (entryOrder); oneAtATime is the same rule before sizing (tier 2's first entries)
  *
  *   shippedOf(root, env)       the shipped pieces the trades read: { strategies, life, policy, entryRule, exit, stopRule,
  *                              validBars, minRR, cited, setupMinutes, baseMinutes, session }
- *   blockTrades(bars, sessions, shipped, { symbol })   { trades, setups, refused }: bars normalized ({ t, o, h, l, c, v }),
+ *   blockTrades(bars, sessions, shipped, { symbol })   { candidates, trades, setups, refused }: candidates every fill in
+ *                              entry order, trades oneAtATime of them; bars normalized ({ t, o, h, l, c, v }),
  *                              sessions the dates traded (the warm-up before them is read, never traded); refused counts
  *                              each setup that made no trade by why
  */
@@ -199,12 +202,19 @@ function blockTrades(bars, sessions, P, { symbol }) {
       if (t) trades.push(t);
     }
   }
-  return { trades: oneAtATime(trades), setups: setups.length, refused };
+  return { trades: oneAtATime(trades), candidates: [...trades].sort(entryOrder), setups: setups.length, refused };
 }
 
-/** One position at a time: by entry time (then the setup bar, then the type), a fill while one is open is dropped. */
+/** The order trades meet the account: by entry time, then the setup bar, then the type. */
+const entryOrder = (a, b) => Date.parse(a.entryTime) - Date.parse(b.entryTime) || a.setupAt.localeCompare(b.setupAt) || a.type.localeCompare(b.type);
+
+/**
+ * One position at a time before any sizing: by entryOrder, a fill while one is open is dropped. Tier 2's mechanical
+ * first entries read it (a day's first is its first candidate either way); the attempts decide the slot after sizing
+ * (goal-metrics.js: runAttempt's onePosition), so a plan no account sizes never holds it.
+ */
 function oneAtATime(trades) {
-  const sorted = [...trades].sort((a, b) => Date.parse(a.entryTime) - Date.parse(b.entryTime) || a.setupAt.localeCompare(b.setupAt) || a.type.localeCompare(b.type));
+  const sorted = [...trades].sort(entryOrder);
   const out = [];
   let free = -Infinity;
   for (const t of sorted) {
@@ -215,4 +225,4 @@ function oneAtATime(trades) {
   return out;
 }
 
-module.exports = { shippedOf, blockTrades, frameSetups, oneAtATime };
+module.exports = { shippedOf, blockTrades, frameSetups, oneAtATime, entryOrder };

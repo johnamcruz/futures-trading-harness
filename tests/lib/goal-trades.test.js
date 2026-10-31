@@ -49,6 +49,10 @@ test('blockTrades on a fixture block: deterministic; every trade on the entry ru
     assert.ok(Number.isFinite(t.R) && t.mfeR >= 0 && t.maeR <= 0);
   }
   for (let i = 1; i < r.trades.length; i += 1) assert.ok(Date.parse(r.trades[i].entryTime) >= Date.parse(r.trades[i - 1].exitTime), 'one position at a time');
+  // The candidates: every fill in entry order (the attempts decide the slot after sizing), the one-at-a-time list among them.
+  assert.ok(r.candidates.length >= r.trades.length);
+  for (let i = 1; i < r.candidates.length; i += 1) assert.ok(GT.entryOrder(r.candidates[i - 1], r.candidates[i]) <= 0, 'entry order');
+  assert.deepStrictEqual(GT.oneAtATime(r.candidates), r.trades);
   // No session is traded outside the sessions given: the warm-up is read, never traded.
   assert.deepStrictEqual(GT.blockTrades(bars, [b.sessions[0]], P, { symbol: DOC.symbol }).trades.filter(t => t.day !== b.sessions[0]), []);
 });
