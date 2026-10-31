@@ -53,13 +53,16 @@ async function check(faults) {
   return bad;
 }
 
-test('tier 2 broker faults: protected within a managed cycle, no exit refused, no duplicate position, the fault and its recovery traced', { skip }, async () => {
-  assert.deepStrictEqual(await check(FAULTS), []);
-});
+// Its checks at once (each its own processes): the job's time is the slowest one's.
+test.describe('tier 2 broker faults', { concurrency: true }, () => {
+  test('tier 2 broker faults: protected within a managed cycle, no exit refused, no duplicate position, the fault and its recovery traced', { skip }, async () => {
+    assert.deepStrictEqual(await check(FAULTS), []);
+  });
 
-// An expected failure, not a todo (a todo never turns red): the known unprotected window must still be there; the day
-// its fix lands this fails with "fixed: remove this expectation", and the expectation becomes the check above.
-test('tier 2 broker fault late-fill-long (known open): the gate\'s own reads miss the position, the runner cancels the bracket stop', { skip }, async () => {
-  const bad = await check([['late-fill-long', trailed]]);
-  assert.ok(bad.some(p => /without a stop covering it/.test(p)), `fixed: remove this expectation (late-fill-long now stays protected; move it into the check above). It said: ${bad.join('; ') || 'nothing'}`);
+  // An expected failure, not a todo (a todo never turns red): the known unprotected window must still be there; the day
+  // its fix lands this fails with "fixed: remove this expectation", and the expectation becomes the check above.
+  test('tier 2 broker fault late-fill-long (known open): the gate\'s own reads miss the position, the runner cancels the bracket stop', { skip }, async () => {
+    const bad = await check([['late-fill-long', trailed]]);
+    assert.ok(bad.some(p => /without a stop covering it/.test(p)), `fixed: remove this expectation (late-fill-long now stays protected; move it into the check above). It said: ${bad.join('; ') || 'nothing'}`);
+  });
 });

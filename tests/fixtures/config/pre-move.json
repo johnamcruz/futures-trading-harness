@@ -511,6 +511,27 @@
       "from": "2024-03-04",
       "sessions": 10,
       "gapTicks": 100
+     },
+     "floor": {
+      "ticksDay": "2024-06-03",
+      "atrDay": "2024-06-10",
+      "quietBars": 0,
+      "approachBars": 10,
+      "reactionBars": 5,
+      "ticks": {
+       "depthTicks": 0,
+       "belowTicks": 2,
+       "crossTicks": 2,
+       "wickTicks": 3,
+       "confirmTicks": 1
+      },
+      "atr": {
+       "depthTicks": 1000,
+       "belowTicks": 3,
+       "crossTicks": 3,
+       "wickTicks": 6,
+       "confirmTicks": 3
+      }
      }
     },
     "tier2": {

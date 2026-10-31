@@ -147,3 +147,42 @@ test('moveLayers and moveDiff: each layer of the day\'s first trade, a change na
   assert.match(GP.moveDiff(L, { ...L, capture: { ...L.capture, share: 0.2 } }, { tick: 0.25 }).join(), /CAPTURE: expected at least 0.3333/);
   assert.strictEqual(GP.moveLayers(day({ fills: [] }), { tick: 0.25, exit }), null);
 });
+
+test('floorChecks: the floor refusal, its stop not widened, the binding term of the day, no trade; each break a problem', () => {
+  const rule = { bufferTicks: 1, floorTicks: 8, floorAtr: 0.25 };
+  const rec = (o = {}) => ({ id: 'f1', at: '2024-06-03T14:18:02.000Z', ok: false, side: 'long', plan: { stop: { level: 100, price: 99.75, ticks: 6, bufferTicks: 1, floorTicks: 8, ...o } }, problems: ['the stop is 6 ticks, under the minimum 8 (max of 8 ticks and 0.25 x ATR(20)): refused, never widened'] });
+  const d = (records, extra = {}) => ({ day: '2024-06-03', tick: 0.25, records, decisions: [], cycles: [], gate: [], sent: [], calls: [], orders: [], fills: [], events: [], ...extra });
+  assert.deepStrictEqual(GP.floorChecks(d([rec()]), { rule, bind: 'ticks' }).problems, []);
+  assert.strictEqual(GP.floorChecks(d([rec()]), { rule, bind: 'ticks' }).refused.id, 'f1');
+  assert.match(GP.floorChecks(d([]), { rule, bind: 'ticks' }).problems[0], /no compose record refused by the stop floor/);
+  assert.match(GP.floorChecks(d([{ ...rec(), problems: ['R:R 1.5 is under the strategy\'s min 2'] }]), { rule, bind: 'ticks' }).problems[0], /no compose record refused/);
+  assert.match(GP.floorChecks(d([rec({ price: 99 })]), { rule, bind: 'ticks' }).problems.join(), /widened/);
+  assert.match(GP.floorChecks(d([rec({ floorTicks: 11 })]), { rule, bind: 'ticks' }).problems.join(), /the tick term must bind/);
+  // The ATR term: the floor above the ticks', the stop at least the ticks'.
+  assert.deepStrictEqual(GP.floorChecks(d([rec({ ticks: 10, floorTicks: 11 })]), { rule, bind: 'atr' }).problems, []);
+  assert.match(GP.floorChecks(d([rec()]), { rule, bind: 'atr' }).problems.join(), /the ATR term must bind/);
+  assert.match(GP.floorChecks(d([rec({ ticks: 7, floorTicks: 11 })]), { rule, bind: 'atr' }).problems.join(), /the ATR term must bind/);
+  // A short's stop over the level.
+  assert.deepStrictEqual(GP.floorChecks(d([{ ...rec({ level: 100, price: 100.25 }), side: 'short' }]), { rule, bind: 'ticks' }).problems, []);
+  // A trade that day.
+  const traded = day();
+  assert.match(GP.floorChecks({ ...traded, records: [...traded.records, rec()] }, { rule, bind: 'ticks' }).problems.join(), /trade\(s\)/);
+});
+
+test('shardOf, shardDays and shardCoverage: k/n parsed or refused; every n-th day from the k-th; every shard once, every day once, one fixture', () => {
+  assert.strictEqual(GP.shardOf(undefined), null);
+  assert.strictEqual(GP.shardOf(''), null);
+  assert.deepStrictEqual(GP.shardOf('2/3'), { k: 2, n: 3 });
+  for (const bad of ['0/3', '4/3', '1', 'a/b', '1/0', ' 1/2']) assert.throws(() => GP.shardOf(bad), /k\/n/, bad);
+  const days = ['d1', 'd2', 'd3', 'd4', 'd5'];
+  assert.deepStrictEqual(GP.shardDays(days, null), days);
+  const parts = [1, 2, 3].map(k => ({ shard: { k, n: 3 }, days: GP.shardDays(days, { k, n: 3 }), fixture: 'h' }));
+  assert.deepStrictEqual(parts.map(p => p.days), [['d1', 'd4'], ['d2', 'd5'], ['d3']]);
+  assert.deepStrictEqual(GP.shardCoverage(parts, { days, fixture: 'h' }), []);
+  assert.deepStrictEqual(GP.shardCoverage([], { days, fixture: 'h' }), ['no shard results']);
+  assert.match(GP.shardCoverage(parts.slice(0, 2), { days, fixture: 'h' }).join('; '), /shards 1,2 of 3.*days no shard ran: d3/);
+  assert.match(GP.shardCoverage([...parts, parts[0]], { days, fixture: 'h' }).join('; '), /shards 1,1,2,3 of 3.*days run twice: d1, d4/);
+  assert.match(GP.shardCoverage([{ ...parts[0], shard: { k: 1, n: 2 } }, ...parts.slice(1)], { days, fixture: 'h' }).join('; '), /disagree on their count/);
+  assert.match(GP.shardCoverage([{ ...parts[0], fixture: 'x' }, ...parts.slice(1)], { days, fixture: 'h' }).join('; '), /another fixture/);
+  assert.match(GP.shardCoverage([{ ...parts[0], days: ['d1', 'd4', 'd9'] }, ...parts.slice(1)], { days, fixture: 'h' }).join('; '), /not tier 2's: d9/);
+});

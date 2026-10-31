@@ -12,6 +12,11 @@
  *   node tests/goal/tier2-run.js --write-moves   the golden written from this code (a reviewed golden change)
  *
  *   tier2Days()                              the configured days (config/training.json goalRegression.tier2)
+ *   allDays()                                every day tier 2's main run plays: its days and the move days, sorted (the
+ *                                            CI shards split these: FTH_GOAL_SHARD, goal-path.js shardDays)
+ *   baseOn(base, days)                       main's tier 2 on some days only (no summary: the aggregate judges the sum)
+ *   moveBehaviour(golden, now, results)      [problem]: each move day behaving as its label says
+ *   floorDays()                              the floor days: [{ day, bind }] (goal-synth.js floor)
  *   runDays(days, { breakName, latencyMs, fault, parallel, dir })   [day result] (tier2-day.js's JSON); latencyMs only for
  *                                            the order-latency self-test (an injected stub), fault a broker-fault day
  *   readTier2(results)                       { trades, summary, problems }: the trades, their summary, the trace problems
@@ -125,6 +130,9 @@ async function stateSizes(day, { root = ROOT, dir, names = null } = {}) {
   return Object.fromEntries(runs);
 }
 
+/** main's tier 2 on some days only (a shard's or a day's own check): its trades there; the summary is the aggregate's. */
+const baseOn = (base, days) => ({ ...base, summary: null, trades: base.trades.filter(t => days.includes(t.day)) });
+
 // The move days: the configured real ones in the fixture, and the synthetic scenarios (a fakeout, a quiet day).
 const moveDays = () => [...set().doc.blocks.filter(b => b.half === 'M').flatMap(b => b.sessions), ...set().synth.blocks.filter(b => b.half === 'M').flatMap(b => b.sessions)].sort();
 /** Each move day's layers (goal-path.js moveLayers). */
@@ -139,6 +147,25 @@ function judgeMoves(golden, now, tick) {
     return { day: m.day, diffs: g ? GP.moveDiff(g.layers, m.layers, { tick, shareTol: CFG().tolerance.moveShare }) : ['no golden for this day: node tests/goal/tier2-run.js --write-moves'] };
   });
 }
+const allDays = () => [...new Set([...tier2Days(), ...moveDays()])].sort();
+/** The floor days (goal-synth.js floor): the term each binds, by its scenario. */
+const floorDays = () => set().synth.blocks.filter(b => /^floor-/.test(b.scenario || '')).map(b => ({ day: b.sessions[0], bind: b.scenario.replace(/^floor-/, '') }));
+
+/**
+ * Each move day's behaviour by its label: a trend day the golden catches is caught and ridden (its R above 0); a
+ * non-trend day has no entry, or a loss of at most the controlled 1R (the stop's slippage within maxLossR).
+ */
+function moveBehaviour(golden, now, results) {
+  return now.map((m, i) => {
+    const label = results[i].label || {};
+    const g = golden ? golden.scenarios.find(x => x.day === m.day) : null;
+    const L = m.layers;
+    if (label.kind === 'trend' && g && g.layers && g.layers.capture.caught) return L && L.capture.caught && L.exit.R > 0 ? null : `${m.day} (trend): not caught and ridden (${L ? `${L.exit.R}R, caught ${L.capture.caught}` : 'no trade'})`;
+    if (label.kind !== 'trend') return !L || L.exit.R >= -CFG().maxLossR ? null : `${m.day} (${label.kind}): a loss of ${L.exit.R}R, past the controlled -${CFG().maxLossR}R`;
+    return null;
+  }).filter(Boolean);
+}
+
 const readGolden = () => (fs.existsSync(set().goldenFile) ? JSON.parse(fs.readFileSync(set().goldenFile, 'utf8')) : null);
 
 async function cli(argv) {
@@ -180,4 +207,4 @@ async function cli(argv) {
 
 if (require.main === module) cli(process.argv.slice(2)).then(c => { process.exitCode = c; }, err => { process.stderr.write(`${err.message}\n`); process.exitCode = 1; });
 
-module.exports = { stateDefs, quickDay, stateSizes, set, BASELINE_FILE, dayLabels, behaviourProblems, moveDays, readMoves, judgeMoves, readGolden, tier2Days, runDays, readTier2, judge, reportText, tracePath, kept };
+module.exports = { allDays, baseOn, moveBehaviour, floorDays, stateDefs, quickDay, stateSizes, set, BASELINE_FILE, dayLabels, behaviourProblems, moveDays, readMoves, judgeMoves, readGolden, tier2Days, runDays, readTier2, judge, reportText, tracePath, kept };

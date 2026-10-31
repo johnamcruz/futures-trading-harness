@@ -1759,7 +1759,9 @@ data file): only what real days can't give cleanly: a fakeout that must end
 at -1R, a quiet day whose right answer is no trade, a composed limit entry
 (a 15m level break listed with no cited fire: the limit at the confirming
 close fills, its bracket, the trail, the exit), a VWAP-break day (below),
-and the blow path (ten sessions whose reversal gaps through the stop: the
+two floor days (a listed break whose stop, the reaction candle's low, is
+closer than D13's floor: the tick term binding on one, the ATR term on the
+other) and the blow path (ten sessions whose reversal gaps through the stop: the
 shipped sizing never risks the floor on it, a broken size does). Their
 shapes are config, pinned exactly with the rest of the yardstick.
 
@@ -1780,7 +1782,7 @@ Its mutation checks (`tests/goal/tier1.goal.js`) prove it fails on a worse
 exit, a stricter entry rule, a broken size on the blow path, a minimum size
 no stop fits and a stop floor that refuses structure stops.
 
-**Tier 2** (`npm run goal:full`, its own CI job, a few minutes): the live
+**Tier 2** (`npm run goal:full` locally; in CI its own jobs, below): the live
 path (the runner, the briefing, compose_check, phase 2, the gate and the mock
 exchange as a replay broker) with a deterministic mock model that follows
 the plan (the Bias line's side, the first setup the briefing lists,
@@ -1811,9 +1813,25 @@ the stop loosened (the gate's entry rule turned off must fail them). The
 state days (`tier2-states`) start the attempt with a low cushion and near
 the target: each size is main's exactly, the floor near the target, smaller
 with the cushion low (a looser cushion share or no near-target floor must
-fail them). Sizes are exact everywhere: a changed size is refused by
+fail them). The floor days (`tier2-floor`) must see compose_check refuse
+the stop under D13's floor and never widen it (the record's stop the named
+level less the buffer), the tick term binding on one day and the ATR term
+on the other, and no trade (a floor of 4 ticks, or no ATR term, must each
+let its day's stop through and trade). Sizes are exact everywhere: a changed size is refused by
 `tier2-run.js --write` unless said why (`--sizes-why`). The full traces
 are written outside the repository.
+
+**In CI** (`.github/workflows/ci.yml`) the goal regression runs as parallel
+jobs on every pull request, so its wall time is about its slowest job's:
+`goal-part`, a matrix of tier 2's main days in shards (`FTH_GOAL_SHARD=k/n`:
+every n-th day of its days and the move days; enough shards that each plays
+one round of `tier2.parallel` days) and one job for each other
+`tests/goal/*.goal.js` file (tier 1's mutation checks, the breaks, the faults,
+the probes, the states, the floor days); then `goal-full`, the one check to
+mark required, which needs every part, fails unless all passed, and judges
+the shards' results as one run (`tests/goal/tier2-aggregate.js`: every shard
+once, every day once, the sums against main's baseline, every move day
+against its golden). `tests/plugin/process.test.js` keeps the matrix whole.
 
 **The local real run** (`npm run goal:real`): the same tiers on a larger
 fixture whose bars come from the replay broker's MCP server
@@ -1833,9 +1851,8 @@ measured, not the briefing's key-level reactions, and every target is the
 the plan; it shows the path works, not what the model decides. A composed
 limit at the last close is marketable at once, so a limit that expires
 unfilled is only the order-latency self-test's (the order sent after the
-record's life). D13's stop floor never binds on these days (every setup's
-stop is wider), so a floor of 4 ticks or no ATR term passes; only a floor
-that refuses most stops (the mutation check's 160 ticks) fails. The
+record's life). D13's floor binds only on the two synthetic floor days
+(every real day's stop is wider). The
 CI slice is small (30 sessions; a pass rate's sampling error is large):
 it guards against regressions, it is no estimate of the pass rate. Skill
 text, prompts and the model's reading are the context quiz's and the PPC

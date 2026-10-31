@@ -42,20 +42,23 @@ const EXPECTED = {
 };
 const run = root => T.runDays([DAY], { probe: true, root, parallel: 1, dir: OUT }).then(r => r[0]);
 
-test('tier 2 negative probes: every order the gate must refuse is refused, by its own tag', { skip }, async () => {
-  const d = await run();
-  process.stdout.write(`${d.probes.map(p => `${p.name}: ${[...String(p.text).matchAll(/\[([a-z0-9-]+)\]/g)].map(m => m[1]).join(', ') || String(p.text).slice(0, 80)}`).join('\n')}\n`);
-  assert.deepStrictEqual(GP.probeProblems(d.probes, EXPECTED), []);
-});
-
-test('tier 2 negative probes mutation check: the policy\'s entry rule off in the gate fails the entry-rule probe', { skip }, async () => {
-  const root = treeCopy(tmpDir(), r => {
-    const f = path.join(r, 'scripts', 'lib', 'trading', 'order-gate.js');
-    const text = fs.readFileSync(f, 'utf8');
-    const from = "if (why) violations.push({ check: 'entry-rule', message: why });";
-    assert.ok(text.includes(from), 'the gate\'s entry-rule check');
-    fs.writeFileSync(f, text.replace(from, "if (false && why) violations.push({ check: 'entry-rule', message: why });"));
+// Its checks at once (each its own processes): the job's time is the slowest one's.
+test.describe('tier 2 negative probes', { concurrency: true }, () => {
+  test('tier 2 negative probes: every order the gate must refuse is refused, by its own tag', { skip }, async () => {
+    const d = await run();
+    process.stdout.write(`${d.probes.map(p => `${p.name}: ${[...String(p.text).matchAll(/\[([a-z0-9-]+)\]/g)].map(m => m[1]).join(', ') || String(p.text).slice(0, 80)}`).join('\n')}\n`);
+    assert.deepStrictEqual(GP.probeProblems(d.probes, EXPECTED), []);
   });
-  const problems = GP.probeProblems((await run(root)).probes, EXPECTED);
-  assert.ok(problems.some(p => /^counter-bias, no verdict: not refused by \[entry-rule\]/.test(p)), `the mutation must fail the probe; it said: ${problems.join('; ') || 'nothing'}`);
+
+  test('tier 2 negative probes mutation check: the policy\'s entry rule off in the gate fails the entry-rule probe', { skip }, async () => {
+    const root = treeCopy(tmpDir(), r => {
+      const f = path.join(r, 'scripts', 'lib', 'trading', 'order-gate.js');
+      const text = fs.readFileSync(f, 'utf8');
+      const from = "if (why) violations.push({ check: 'entry-rule', message: why });";
+      assert.ok(text.includes(from), 'the gate\'s entry-rule check');
+      fs.writeFileSync(f, text.replace(from, "if (false && why) violations.push({ check: 'entry-rule', message: why });"));
+    });
+    const problems = GP.probeProblems((await run(root)).probes, EXPECTED);
+    assert.ok(problems.some(p => /^counter-bias, no verdict: not refused by \[entry-rule\]/.test(p)), `the mutation must fail the probe; it said: ${problems.join('; ') || 'nothing'}`);
+  });
 });

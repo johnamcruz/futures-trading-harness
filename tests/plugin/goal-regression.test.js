@@ -71,7 +71,7 @@ test('the CI slice: small, real sessions of the open window, both halves, every 
     assert.ok(first > 0 && Date.parse(bars[first].t) - Date.parse(bars[0].t) >= (DOC.historyHours - 72) * 3600000, `${b.sessions[0]}: ${DOC.historyHours} h of warm-up`);
   }
   // The synthetic days: the blow path (half S) and the move scenarios real days can't give cleanly.
-  assert.deepStrictEqual(SET.synth.blocks.map(b => `${b.half} ${b.scenario}`), ['M fakeout', 'M quiet', 'M listed-vwap', 'M limit-fill', 'S bleed']);
+  assert.deepStrictEqual(SET.synth.blocks.map(b => `${b.half} ${b.scenario}`), ['M fakeout', 'M quiet', 'M listed-vwap', 'M limit-fill', 'S bleed', 'M floor-ticks', 'M floor-atr']);
 });
 
 test('goal regression tier 1: no goal metric worse than main\'s baseline beyond its tolerance (blows incl. the blow path, pass rate, mean R, R caught)', () => {

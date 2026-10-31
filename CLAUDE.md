@@ -174,7 +174,7 @@ request, every time, whatever the size of the change:
    generated-files check, strategy validation, and the secrets check, as CI
    runs them. The goal regression is part of it: tier 1
    (`tests/plugin/goal-regression.test.js`, in `npm test`) and tier 2
-   (`npm run goal:full`, its own CI job on every pull request) pass against
+   (`npm run goal:full`; in CI parallel jobs and one `goal-full` check) pass against
    main's baseline (docs/TRAINING.md, "The goal regression"); the pull
    request shows main vs this PR. A pull request touching entries, exits,
    sizing, the gate or the runner also states its `npm run goal:real`

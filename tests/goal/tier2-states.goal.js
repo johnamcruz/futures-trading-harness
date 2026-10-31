@@ -30,23 +30,26 @@ const edit = (file, from, to) => root => {
   fs.writeFileSync(p, text.replace(from, to));
 };
 
-test('tier 2 state days: each state\'s size is main\'s; near the target the floor; a low cushion sizes down', { skip }, async () => {
-  const sizes = await T.stateSizes(T.quickDay(BASE), { dir: OUT });
-  process.stdout.write(`state sizes: ${JSON.stringify(sizes)} (main ${JSON.stringify(BASE.states)})\n`);
-  assert.deepStrictEqual(sizes, BASE.states);
-  assert.strictEqual(sizes['near-target'], POLICY.sizing.min_contracts, 'near the target: the floor size');
-  assert.ok(sizes['low-cushion'] < sizes.fresh, 'the cushion binds');
-});
+// Its checks at once (each its own processes): the job's time is the slowest one's.
+test.describe('tier 2 state days', { concurrency: true }, () => {
+  test('tier 2 state days: each state\'s size is main\'s; near the target the floor; a low cushion sizes down', { skip }, async () => {
+    const sizes = await T.stateSizes(T.quickDay(BASE), { dir: OUT });
+    process.stdout.write(`state sizes: ${JSON.stringify(sizes)} (main ${JSON.stringify(BASE.states)})\n`);
+    assert.deepStrictEqual(sizes, BASE.states);
+    assert.strictEqual(sizes['near-target'], POLICY.sizing.min_contracts, 'near the target: the floor size');
+    assert.ok(sizes['low-cushion'] < sizes.fresh, 'the cushion binds');
+  });
 
-const MUTATIONS = [
-  { name: 'cushion_frac 0.3 -> 0.6', change: edit(RULEBOOK, 'cushion_frac: 0.3 ', 'cushion_frac: 0.6 '), state: 'low-cushion' },
-  { name: 'near_target_usd 500 -> off', change: edit(RULEBOOK, 'near_target_usd: 500 ', 'near_target_usd: off '), state: 'near-target' },
-];
+  const MUTATIONS = [
+    { name: 'cushion_frac 0.3 -> 0.6', change: edit(RULEBOOK, 'cushion_frac: 0.3 ', 'cushion_frac: 0.6 '), state: 'low-cushion' },
+    { name: 'near_target_usd 500 -> off', change: edit(RULEBOOK, 'near_target_usd: 500 ', 'near_target_usd: off '), state: 'near-target' },
+  ];
 
-test('tier 2 state days mutation checks: a looser cushion share and no near-target floor each change their size', { skip }, async () => {
-  const got = await Promise.all(MUTATIONS.map(m => T.stateSizes(T.quickDay(BASE), { root: treeCopy(tmpDir(), m.change), dir: OUT, names: [m.state] }).then(s => [m, s[m.state]])));
-  for (const [m, size] of got) {
-    process.stdout.write(`${m.name}: ${m.state} ${BASE.states[m.state]} -> ${size}\n`);
-    assert.notStrictEqual(size, BASE.states[m.state], `${m.name}: the ${m.state} size must change (it is main's ${size})`);
-  }
+  test('tier 2 state days mutation checks: a looser cushion share and no near-target floor each change their size', { skip }, async () => {
+    const got = await Promise.all(MUTATIONS.map(m => T.stateSizes(T.quickDay(BASE), { root: treeCopy(tmpDir(), m.change), dir: OUT, names: [m.state] }).then(s => [m, s[m.state]])));
+    for (const [m, size] of got) {
+      process.stdout.write(`${m.name}: ${m.state} ${BASE.states[m.state]} -> ${size}\n`);
+      assert.notStrictEqual(size, BASE.states[m.state], `${m.name}: the ${m.state} size must change (it is main's ${size})`);
+    }
+  });
 });

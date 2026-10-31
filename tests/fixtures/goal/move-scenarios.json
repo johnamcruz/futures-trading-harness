@@ -322,6 +322,24 @@
           "share": null
         }
       }
+    },
+    {
+      "day": "2024-06-03",
+      "label": {
+        "kind": "non-trend",
+        "why": "synthetic stop floor (its ticks): the listed break's stop under stop_floor_ticks, the ATR term below it: compose refuses, never widens: no trade"
+      },
+      "scenario": "floor-ticks",
+      "layers": null
+    },
+    {
+      "day": "2024-06-10",
+      "label": {
+        "kind": "non-trend",
+        "why": "synthetic stop floor (its ATR term): the listed break's stop past stop_floor_ticks, under stop_floor_atr x ATR(20): compose refuses, never widens: no trade"
+      },
+      "scenario": "floor-atr",
+      "layers": null
     }
   ]
 }

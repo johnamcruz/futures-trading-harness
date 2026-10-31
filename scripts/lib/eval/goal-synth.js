@@ -13,6 +13,11 @@
  *             3m close fills, its bracket, the trail, the exit (a limit at the last close is marketable at once: one
  *             expires only when the price leaves before the order goes, the order-latency self-test's case)
  *   quiet     the drift alone (no momentum candle, no listed setup): a day whose right answer is no trade
+ *   floor     D13's stop floor binding (compose must refuse, never widen): the cash session's approach to just under
+ *             the overnight high (floor-ticks: straight; floor-atr: a deep V, a large ATR(20)), a 15m candle breaking it by
+ *             a few ticks (the listed reaction, its low the stop read), a 3m bar closing at its top (the confirming close),
+ *             then flat: the stop a few ticks under max(stop_floor_ticks, stop_floor_atr x ATR(20)), the tick term binding
+ *             on floor-ticks, the ATR term on floor-atr (floorBar)
  *   bleed     the blow path: a block of consecutive fakeout sessions whose reversal opens with a gap through the stop
  *             (a loss of a few R every day). The shipped sizing (a share of the cushion) never risks the floor; a broken
  *             size or cap turns it into a blow (tier 1's stress group, its mutation check)
@@ -55,18 +60,46 @@ function bar(o, { move, sigma, wick, volume, rand }) {
   return { o, h: Math.max(o, c) + (up ? ahead : behind), l: Math.min(o, c) - (up ? behind : ahead), c, v: Math.max(1, Math.round(volume)) };
 }
 
-function dayBars({ day, type, dir, rand, cfg, tick, startTicks }) {
+/**
+ * A floor day's cash-session bar k (ticks): { o, h, l, c } from its shape F (config synth.floor with its variant), the
+ * level (the overnight high) and the price at the open (from). The approach (approachBars, whole 15m candles): down
+ * depthTicks and back up to belowTicks under the level (a V: its bars make ATR(20); no bar closes at its top again until
+ * the reaction candle is the last one closed, so the approach's own breaks never confirm); the reaction candle
+ * (reactionBars, one 15m candle): up through the level to crossTicks over it, each bar with a wick wickTicks over its
+ * close; the confirming close confirmTicks over it (its low the reaction's close); then flat to the session's end.
+ */
+function floorBar(k, px, { F, level, from }) {
+  const approachEnd = F.quietBars + F.approachBars;
+  const reactionEnd = approachEnd + F.reactionBars;
+  const line = (a, b, i, n) => Math.round(a + ((b - a) * (i + 1)) / n);
+  const flat = { o: px, h: px, l: px, c: px };
+  if (k < F.quietBars) return flat;
+  if (k < approachEnd) {
+    const i = k - F.quietBars;
+    const down = Math.floor(F.approachBars / 2);
+    const c = i < down ? line(from, from - F.depthTicks, i, down) : line(from - F.depthTicks, level - F.belowTicks, i - down, F.approachBars - down);
+    return { o: px, h: Math.max(px, c), l: Math.min(px, c), c };
+  }
+  if (k < reactionEnd) { const c = line(level - F.belowTicks, level + F.crossTicks, k - approachEnd, F.reactionBars); return { o: px, h: Math.max(px, c) + F.wickTicks, l: Math.min(px, c), c }; }
+  if (k === reactionEnd) { const c = px + F.confirmTicks; return { o: px, h: c, l: px, c }; }
+  return flat;
+}
+
+function dayBars({ day, type, dir, rand, cfg, tick, startTicks, shape = null }) {
   const open = at(addDays(day, -1), GLOBEX_OPEN_MIN); // the evening before (a Monday's: Sunday's)
   const step = msOf(cfg.minutes);
   const T = cfg.fakeout;
   const bars = [];
   let px = startTicks;
+  // A floor day's overnight high (ticks) and the price at the cash open (its approach starts there).
+  let onHigh = -Infinity;
+  let openTicks = null;
   for (let t = open; tradingDayKey(new Date(t)) === day && minutesOfDay(new Date(t), MARKET_TZ) !== cfg.breakMin; t += step) {
     const m = minutesOfDay(new Date(t), MARKET_TZ);
     const rth = m >= RTH_OPEN_MIN && m < RTH_CLOSE_MIN;
     const sigma = rth ? cfg.sigma.rth : cfg.sigma.overnight;
     // The drift its way, but on a composed-limit scenario's own day (its levels hold until the designed break).
-    const drift = type === 'compress' || type === 'runaway' || type === 'quiet' ? 0 : dir * cfg.macroDrift;
+    const drift = ['compress', 'runaway', 'quiet', 'floor'].includes(type) ? 0 : dir * cfg.macroDrift;
     let move = drift + normal(rand) * sigma * cfg.noise;
     const k = rth ? Math.round((m - RTH_OPEN_MIN) / cfg.minutes) : 0;
     // The session's volume falls bar by bar (no ordinary bar is above its average: only the scenario's bars have momentum).
@@ -97,7 +130,10 @@ function dayBars({ day, type, dir, rand, cfg, tick, startTicks }) {
       else if (type === 'compress' && k <= e1 + C.runBars) { move = dir * sigma * C.trendDrift + normal(rand) * sigma * C.quietNoise; wick = C.wick; }
       else move = normal(rand) * sigma * C.quietNoise;
     }
-    const b = bar(px, { move, sigma, wick, volume, rand });
+    if (type === 'floor' && rth && openTicks === null) openTicks = px;
+    const shaped = type === 'floor' && rth ? floorBar(k, px, { F: shape, level: onHigh, from: openTicks }) : null;
+    const b = shaped ? { ...shaped, v: Math.max(1, Math.round(volume)) } : bar(px, { move, sigma, wick, volume, rand });
+    if (!rth && openTicks === null) onHigh = Math.max(onHigh, b.h); // the overnight session: every bar before the cash open
     bars.push({ t: new Date(t).toISOString(), o: b.o * tick, h: b.h * tick, l: b.l * tick, c: b.c * tick, v: b.v });
     px = b.c;
   }
@@ -105,13 +141,13 @@ function dayBars({ day, type, dir, rand, cfg, tick, startTicks }) {
 }
 
 /** A block's bars: the warm-up weekdays (the drift alone), then its sessions, each of `type`. */
-function blockBars({ sessions, type, dir, rand, cfg, tick }) {
+function blockBars({ sessions, type, dir, rand, cfg, tick, shape = null }) {
   const warm = [];
   for (let d = sessions[0]; warm.length < Math.ceil(HISTORY_HOURS / 24) + 1;) { d = addDays(d, -1); if (isWeekday(d)) warm.unshift(d); }
   let px = Math.round(cfg.startPrice / tick);
   const out = [];
   for (const x of [...warm.map(day => ({ day, type: 'drift' })), ...sessions.map(day => ({ day, type }))]) {
-    const r = dayBars({ day: x.day, type: x.type, dir, rand, cfg, tick, startTicks: px });
+    const r = dayBars({ day: x.day, type: x.type, dir, rand, cfg, tick, startTicks: px, shape });
     out.push(...r.bars);
     px = r.endTicks;
   }
@@ -130,16 +166,20 @@ function synthFixture() {
   const cfg = CFG();
   const tick = tickOf(cfg.symbol);
   const rand = stats.streamFor(cfg.seed, 'goal:synth');
-  const block = (half, name, type, sessions, dir, why) => ({
+  const block = (half, name, type, sessions, dir, why, shape = null) => ({
     half, scenario: name, sessions, trend: [], labels: Object.fromEntries(sessions.map(d => [d, { kind: 'non-trend', why }])),
-    bars: GF.encodeBars(blockBars({ sessions, type, dir, rand, cfg, tick }), tick, cfg.minutes),
+    bars: GF.encodeBars(blockBars({ sessions, type, dir, rand, cfg, tick, shape }), tick, cfg.minutes),
   });
+  const floor = variant => { const { ticksDay: _t, atrDay: _a, ticks: _k, atr: _r, ...F } = cfg.floor; return { ...F, ...cfg.floor[variant] }; };
   const blocks = [
     block('M', 'fakeout', 'fakeout', sessionsFrom(cfg.fakeout.day, 1, cfg), 1, 'synthetic fakeout: the impulse fires the setup, the reversal takes the stop: -1R at most'),
     block('M', 'quiet', 'quiet', sessionsFrom(cfg.quiet.day, 1, cfg), 1, 'synthetic quiet day: the drift alone, no momentum, no listed setup: the right answer is no trade'),
     block('M', 'listed-vwap', 'compress', sessionsFrom(cfg.compress.vwapDay, 1, cfg), 1, 'synthetic: a flat box at the VWAP, then the break: the first listed setup is the VWAP break, which compose_check does not verify (its quoted level keeps its brackets): no trade (an open finding)'),
     block('M', 'limit-fill', 'runaway', sessionsFrom(cfg.compress.limitDay, 1, cfg), 1, 'synthetic composed limit: a 15m level break listed (no cited fire), compose OK on the confirming close, the limit fills, its bracket, the trail, the exit'),
     block('S', 'bleed', 'bleed', sessionsFrom(cfg.bleed.from, cfg.bleed.sessions, cfg), -1, 'synthetic blow path: a loss at the stop every session'),
+    // After the blow path (each block draws from the one seeded stream in turn: the earlier ones keep their bars).
+    block('M', 'floor-ticks', 'floor', sessionsFrom(cfg.floor.ticksDay, 1, cfg), 1, 'synthetic stop floor (its ticks): the listed break\'s stop under stop_floor_ticks, the ATR term below it: compose refuses, never widens: no trade', floor('ticks')),
+    block('M', 'floor-atr', 'floor', sessionsFrom(cfg.floor.atrDay, 1, cfg), 1, 'synthetic stop floor (its ATR term): the listed break\'s stop past stop_floor_ticks, under stop_floor_atr x ATR(20): compose refuses, never widens: no trade', floor('atr')),
   ];
   const doc = { v: 1, kind: 'goal-synth', symbol: cfg.symbol, minutes: cfg.minutes, seed: cfg.seed, blocks };
   return { ...doc, hash: crypto.createHash('sha256').update(JSON.stringify(doc)).digest('hex') };

@@ -44,7 +44,9 @@ function main(argv) {
   if (base && base.fixture !== now.fixture && !(fresh && why && why.trim())) throw new Error('the fixture changed: --new-fixture --why "<why>" writes its first baseline, the change recorded for the review');
   const same = base && base.fixture === now.fixture;
   const change = !same && base ? { fixtureChange: { from: base.fixture, why } } : {};
-  const next = { ...(same ? base : {}), ...now, ...change, writtenBy: 'scripts/goal-check.js baseline --write' };
+  // Tier 2's baseline is of the slice alone (its own fixture hash): kept while the slice is the same.
+  const tier2 = !same && base && base.tier2 && base.tier2.fixture === set.doc.hash ? { tier2: base.tier2 } : {};
+  const next = { ...(same ? base : tier2), ...now, ...change, writtenBy: 'scripts/goal-check.js baseline --write' };
   const problems = GC.riseProblems(base, next);
   if (problems.length) throw new Error(`refused: a baseline only rises:\n${problems.join('\n')}`);
   fs.mkdirSync(path.dirname(set.baselineFile), { recursive: true });

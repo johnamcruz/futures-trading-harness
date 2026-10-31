@@ -49,6 +49,14 @@
  *   faultChecks(day)                { problems, trace }: a broker-fault day's protection, exit, duplicate and recovery
  *                                   checks, and the fault and its recovery as trace steps
  *   tier2RiseProblems(base, next)   a tier 2 baseline only improves: blows not above, total R and fills share not below
+ *   floorChecks(day, { rule, bind })   { refused, problems }: a floor day's D13 refusal (goal-synth.js floor): the compose
+ *                                   record its stop floor refused, its stop the named level less the buffer (never
+ *                                   widened), the binding term the day's (bind 'ticks': rule.floorTicks; 'atr': above it,
+ *                                   the stop at least rule.floorTicks), and no trade that day
+ *   shardOf(text)                   { k, n } from "k/n" (FTH_GOAL_SHARD), null when unset; throws on anything else
+ *   shardDays(days, shard)          shard k of n's days (every n-th from the k-th), all of them with no shard
+ *   shardCoverage(parts, { days, fixture })   [problem]: the shards' parts ({ shard, days, fixture }) are 1..n of one n
+ *                                   once each, of this fixture, and their days are `days` exactly
  */
 
 const crypto = require('crypto');
@@ -438,4 +446,52 @@ function pickDays(blocks, { seed, trendDays, otherDays }) {
   return out.sort();
 }
 
-module.exports = { probeProblems, dayBehaviour, caughtLost, moveLayers, moveDiff, faultChecks, pickDays, STEPS, CATEGORIES, TIER2, dayTrades, traceProblems, lostWhy, compareTrades, fillShare, summarize, tier2Rows, tier2RiseProblems };
+/** A floor day's D13 refusal (see the header). */
+function floorChecks(day, { rule, bind }) {
+  const tick = day.tick;
+  const rec = (day.records || []).find(r => !r.ok && r.plan && r.plan.stop && (r.problems || []).some(p => /under the minimum/.test(p)));
+  if (!rec) return { refused: null, problems: [`${day.day}: no compose record refused by the stop floor (D13)`] };
+  const s = rec.plan.stop;
+  const problems = [];
+  const named = rec.side === 'long' ? s.level - s.bufferTicks * tick : s.level + s.bufferTicks * tick;
+  if (Math.round((s.price - named) / tick) !== 0) problems.push(`${day.day}: the stop ${s.price} is not the named level ${s.level} less its buffer: widened`);
+  if (!(s.ticks < s.floorTicks)) problems.push(`${day.day}: refused at ${s.ticks} ticks, not under its floor ${s.floorTicks}`);
+  if (bind === 'ticks' && s.floorTicks !== rule.floorTicks) problems.push(`${day.day}: the floor ${s.floorTicks} is not stop_floor_ticks ${rule.floorTicks} (the tick term must bind)`);
+  if (bind === 'atr' && !(s.floorTicks > rule.floorTicks && s.ticks >= rule.floorTicks)) problems.push(`${day.day}: the ATR term must bind: the floor ${s.floorTicks} above stop_floor_ticks ${rule.floorTicks}, the stop ${s.ticks} at least it`);
+  const trades = dayTrades(day, { tick });
+  if (trades.length) problems.push(`${day.day}: ${trades.length} trade(s): ${trades.map(t => `${t.side} ${t.size} at ${t.entry}`).join(', ')}`);
+  return { refused: rec, problems };
+}
+
+function shardOf(text) {
+  if (text === undefined || text === null || text === '') return null;
+  const m = /^(\d+)\/(\d+)$/.exec(String(text));
+  const k = m ? Number(m[1]) : NaN;
+  const n = m ? Number(m[2]) : NaN;
+  if (!(k >= 1 && k <= n)) throw new Error(`FTH_GOAL_SHARD ${text}: k/n, k from 1 to n`);
+  return { k, n };
+}
+
+const shardDays = (days, shard) => (shard ? days.filter((_, i) => i % shard.n === shard.k - 1) : [...days]);
+
+function shardCoverage(parts, { days, fixture }) {
+  const problems = [];
+  const ns = [...new Set(parts.map(p => p.shard && p.shard.n))];
+  if (!parts.length) return ['no shard results'];
+  if (ns.length !== 1) problems.push(`the shards disagree on their count: ${ns.join(', ')}`);
+  const n = ns[0];
+  const ks = parts.map(p => p.shard.k).sort((a, b) => a - b);
+  const want = Array.from({ length: n }, (_, i) => i + 1);
+  if (ks.join(',') !== want.join(',')) problems.push(`shards ${ks.join(',')} of ${n}: each of ${want.join(',')} once`);
+  for (const p of parts) if (p.fixture !== fixture) problems.push(`shard ${p.shard.k}/${p.shard.n}: another fixture (${p.fixture})`);
+  const got = parts.flatMap(p => p.days);
+  const dup = got.filter((d, i) => got.indexOf(d) !== i);
+  if (dup.length) problems.push(`days run twice: ${[...new Set(dup)].join(', ')}`);
+  const missing = days.filter(d => !got.includes(d));
+  if (missing.length) problems.push(`days no shard ran: ${missing.join(', ')}`);
+  const extra = got.filter(d => !days.includes(d));
+  if (extra.length) problems.push(`days not tier 2's: ${[...new Set(extra)].join(', ')}`);
+  return problems;
+}
+
+module.exports = { floorChecks, shardOf, shardDays, shardCoverage, probeProblems, dayBehaviour, caughtLost, moveLayers, moveDiff, faultChecks, pickDays, STEPS, CATEGORIES, TIER2, dayTrades, traceProblems, lostWhy, compareTrades, fillShare, summarize, tier2Rows, tier2RiseProblems };

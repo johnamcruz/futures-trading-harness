@@ -16,7 +16,7 @@ const blockOf = name => FX.blocks.find(b => b.scenario === name);
 test('synthFixture: deterministic (the same document, the same hash), its blocks the configured scenarios', () => {
   const again = S.synthFixture();
   assert.strictEqual(again.hash, FX.hash);
-  assert.deepStrictEqual(FX.blocks.map(b => [b.half, b.scenario]), [['M', 'fakeout'], ['M', 'quiet'], ['M', 'listed-vwap'], ['M', 'limit-fill'], ['S', 'bleed']]);
+  assert.deepStrictEqual(FX.blocks.map(b => [b.half, b.scenario]), [['M', 'fakeout'], ['M', 'quiet'], ['M', 'listed-vwap'], ['M', 'limit-fill'], ['S', 'bleed'], ['M', 'floor-ticks'], ['M', 'floor-atr']]);
   for (const b of FX.blocks) for (const d of b.sessions) assert.ok(b.labels[d].kind === 'non-trend' && b.labels[d].why, `${b.scenario} ${d}`);
 });
 
@@ -47,5 +47,31 @@ test('the scenarios do what they are for: the fakeout fires one setup on the sid
   for (const d of days) {
     const first = bleed.trades.find(t => t.day === d);
     assert.ok(first && first.R < -1.2, `${d}: a loss past 1R (${first && first.R})`);
+  }
+});
+
+test('the floor days: the reaction candle breaks the overnight high by crossTicks from belowTicks under it, no bar of it closing at its top; the confirming close confirmTicks over it; flat after; the V only on floor-atr', () => {
+  const cfg = require('../../scripts/lib/tunables').training().goalRegression.synth.floor;
+  const { RTH_OPEN_MIN, RTH_CLOSE_MIN, MARKET_TZ, minutesOfDay, tradingDayKey } = require('../../scripts/lib/trading/clock');
+  for (const [name, v] of [['floor-ticks', cfg.ticks], ['floor-atr', cfg.atr]]) {
+    const b = blockOf(name);
+    const day = b.sessions[0];
+    const bars = GF.decodeBars(b.bars).filter(x => tradingDayKey(new Date(Date.parse(x.t))) === day);
+    const rthAt = bars.findIndex(x => minutesOfDay(new Date(Date.parse(x.t)), MARKET_TZ) === RTH_OPEN_MIN);
+    const onHigh = Math.max(...bars.slice(0, rthAt).map(x => x.h));
+    const rth = bars.slice(rthAt).filter(x => minutesOfDay(new Date(Date.parse(x.t)), MARKET_TZ) < RTH_CLOSE_MIN);
+    const a = cfg.quietBars + cfg.approachBars;
+    const reaction = rth.slice(a, a + cfg.reactionBars);
+    const confirm = rth[a + cfg.reactionBars];
+    const t = 0.25;
+    assert.strictEqual(Math.min(...reaction.map(x => x.l)), onHigh - v.belowTicks * t, `${name}: the reaction candle's low`);
+    assert.strictEqual(reaction.at(-1).c, onHigh + v.crossTicks * t, `${name}: its close over the level`);
+    for (const x of reaction) assert.ok(x.h - x.c >= v.wickTicks * t, `${name} ${x.t}: no close at its top`);
+    assert.deepStrictEqual([confirm.o, confirm.l, confirm.c, confirm.h], [reaction.at(-1).c, reaction.at(-1).c, reaction.at(-1).c + v.confirmTicks * t, reaction.at(-1).c + v.confirmTicks * t], `${name}: the confirming close`);
+    for (const x of rth.slice(a + cfg.reactionBars + 1)) assert.ok(x.o === x.c && x.h === x.l, `${name} ${x.t}: flat after`);
+    const approach = rth.slice(cfg.quietBars, a);
+    assert.ok(Math.max(...approach.map(x => x.h)) < onHigh, `${name}: the approach stays under the level`);
+    const low = Math.min(...approach.map(x => x.l));
+    assert.strictEqual(low <= rth[0].o - v.depthTicks * t, true, `${name}: the V's depth`);
   }
 });
