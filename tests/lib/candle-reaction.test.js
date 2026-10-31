@@ -174,6 +174,12 @@ test('confirmed: a relative level is said as the previous candle met it, with it
   const r = CF.levelReactionsOf({ m: 15, c: C, prev: B, pp: A.c, patterns, found: ownLevels, prevAll: [['previous 15m high', 110], ['previous 15m low', 104], ['prior RTH high', 110]] }, { '1h': { relations: [] } });
   assert.deepStrictEqual(r.confirmed, [{ name: 'previous 15m high', price: 110, dir: 'down', text: 'the 15m high 110' }], 'once: the prior RTH high at the same price is the same level');
   assert.strictEqual(CF.confirmedText('prior RTH high', 110), 'prior RTH high 110');
+  // A name that already ends with its price (a swing, a round number) says it once.
+  assert.strictEqual(CF.confirmedText('15m swing high 21000.25', 21000.25), '15m swing high 21000.25');
+  assert.strictEqual(CF.confirmedText('round number 110', 110), 'round number 110');
+  assert.strictEqual(CF.confirmedText('15m swing high 21000.25', 21000.5), '15m swing high 21000.25 21000.5', 'another price is said');
+  const swing = CF.levelReactionsOf({ m: 15, c: C, prev: B, pp: A.c, patterns, found: [], prevAll: [['1h swing high 110', 110]] }, { '1h': { relations: [] } });
+  assert.deepStrictEqual(swing.confirmed.map(x => x.text), ['1h swing high 110']);
   // A level this candle met at the same price, under another name: its own relation carries it, not `confirmed`.
   const met = CF.levelReactionsOf({ m: 15, c: C, prev: B, pp: A.c, patterns, found: [{ name: 'IB high', price: 110, rel: 'touched', dir: null }], prevAll: [['previous 15m high', 110]] }, { '1h': { relations: [] } });
   assert.strictEqual(met.confirmed, undefined);
@@ -182,6 +188,27 @@ test('confirmed: a relative level is said as the previous candle met it, with it
   const line = B2.candleLines({ candles: { '15m': { closedAt: '2026-06-15T14:00:00.000Z', pattern: 'bearish engulfing', closeLocation: 'bottom', rangeAtr: null, volRatio: null, sweep: null, levels: {}, reactions: {}, confirmed: r.confirmed } }, swingTargets: { above: [], below: [] } }, v => v)[0];
   assert.match(line, /confirmed rejection of the 15m high 110/);
   assert.ok(!/previous 15m high/.test(line), line);
+  const swingLine = B2.candleLines({ candles: { '15m': { closedAt: '2026-06-15T14:00:00.000Z', pattern: 'bearish engulfing', closeLocation: 'bottom', rangeAtr: null, volRatio: null, sweep: null, levels: {}, reactions: {}, confirmed: swing.confirmed } }, swingTargets: { above: [], below: [] } }, v => v)[0];
+  assert.match(swingLine, /confirmed rejection of 1h swing high 110[.,]/);
+  assert.ok(!/110 110/.test(swingLine), swingLine);
+});
+
+test('confirmed: a MOVING level (VWAP, the session profile) is deduplicated by name against the candle\'s own levels; a fixed one by price', () => {
+  const A = k(105, 110, 104, 107);
+  const B = k(106.5, 113, 106, 108);
+  const C = k(108.5, 109.5, 102.5, 103);
+  const patterns = CF.patternsOf(C, B);
+  const of = (found, prevAll) => CF.levelReactionsOf({ m: 15, c: C, prev: B, pp: A.c, patterns, found, prevAll }, { '1h': { relations: [] } }).confirmed;
+  assert.ok(CF.MOVING_LEVEL.test('VWAP (rth)') && CF.MOVING_LEVEL.test('VWAP (session)') && CF.MOVING_LEVEL.test('session POC') && !CF.MOVING_LEVEL.test('prior POC'));
+  // The VWAP was 110 for B and is 104 for C, which met it: C's own relation carries it, not `confirmed`.
+  assert.strictEqual(of([{ name: 'VWAP (rth)', price: 104, rel: 'touched', dir: null }], [['VWAP (rth)', 110]]), undefined);
+  // C didn't meet the VWAP: listed with the price B met it at.
+  assert.deepStrictEqual(of([], [['VWAP (rth)', 110]]).map(x => x.text), ['VWAP (rth) 110']);
+  // A moving level met at another level's price is no duplicate of it (by name), and the other way round.
+  assert.deepStrictEqual(of([{ name: 'session POC', price: 110, rel: 'touched', dir: null }], [['VWAP (rth)', 110]]).map(x => x.name), ['VWAP (rth)']);
+  // A fixed level keeps the price rule: met by C under another name at that price, not listed; at another price, listed.
+  assert.strictEqual(of([{ name: 'IB high', price: 110, rel: 'touched', dir: null }], [['prior RTH high', 110]]), undefined);
+  assert.deepStrictEqual(of([{ name: 'prior RTH high', price: 104, rel: 'touched', dir: null }], [['prior RTH high', 110]]).map(x => x.text), ['prior RTH high 110']);
 });
 
 test('the rendered reaction: a touch closing beyond says so ("closed beyond: breakout"); a broke that is plain stays plain', () => {

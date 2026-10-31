@@ -410,6 +410,10 @@ const LEVEL_ORDER = [/^prior RTH/, /^overnight/, /^IB/, /^opening range/, /^VWAP
   /^1h swing/, /^15m swing/, /^CRT/, /^previous/, /^round number/];
 const levelRank = name => { const k = LEVEL_ORDER.findIndex(re => re.test(name)); return k < 0 ? LEVEL_ORDER.length : k; };
 
+// The MOVING levels (VWAP of any session, the developing session profile): read at a candle's close, recomputed every
+// bar, so the same name is the same level at another price (briefing.js levelsAt reads them so; the one home of the rule).
+const MOVING_LEVEL = /^(VWAP|session (POC|VAH|VAL))/;
+
 const RELATION_TEXT = { rejected: { up: 'rejected: closed back above', down: 'rejected: closed back below' }, broke: { up: 'broke above', down: 'broke below' } };
 
 /**
@@ -563,7 +567,12 @@ function briefingCandles({ bars, base, fine = null, levelsAt = () => [], zonesAt
 }
 
 /** A confirmed level named as the previous candle met it, with its price: `previous 15m high` there is `the 15m high 110`. */
-const confirmedText = (name, price) => (/^previous /.test(name) ? `the ${name.replace(/^previous /, '')} ${price}` : `${name} ${price}`);
+const confirmedText = (name, price) => {
+  const base = /^previous /.test(name) ? `the ${name.replace(/^previous /, '')}` : name;
+  // A name that already ends with its price (a swing: `15m swing high 21000.25`) is said once.
+  const tail = /\s(-?\d+(?:\.\d+)?)$/.exec(base);
+  return tail && Number(tail[1]) === price ? base : `${base} ${price}`;
+};
 
 /**
  * A candle's reactions (candle-reaction.js) at the levels it met, on its relations (and `reactions`, by level, the
@@ -581,11 +590,13 @@ function levelReactionsOf({ m, c, prev, pp, patterns, found, prevAll }, out) {
   };
   const relations = found.map(x => ({ name: x.name, price: x.price, rel: x.rel, dir: x.dir, reaction: reactionOf({ c, prev, level: x.price, patterns, prevPrevClose: pp, higher: higherOf(x.name) }) }));
   // The previous candle's levels are named as they stood for it: a relative one (its `previous <tf> high`) is another
-  // price for this candle, so each is said with its price (as the previous candle met it), and deduplicated against this
-  // candle's own levels and each other by price, never by name.
+  // price for this candle, so each is said with its price (as the previous candle met it). A fixed one is deduplicated
+  // against this candle's own levels and each other by price, never by name; a MOVING one (MOVING_LEVEL: the same
+  // level at a new price each bar) by name: met by this candle, its own relation carries it.
   const confirmed = [];
+  const same = (x, name, price) => (MOVING_LEVEL.test(name) ? x.name === name : x.price === price);
   for (const [name, price] of prevAll) {
-    if (!Number.isFinite(price) || found.some(x => x.price === price) || confirmed.some(x => x.price === price)) continue;
+    if (!Number.isFinite(price) || found.some(x => same(x, name, price)) || confirmed.some(x => same(x, name, price))) continue;
     if (reactionOf({ c, prev, level: price, patterns, prevPrevClose: pp }) === 'confirmed rejection') confirmed.push({ name, price, dir: c.c < prev.c ? 'down' : 'up', text: confirmedText(name, price) });
   }
   return { relations, reactions: Object.fromEntries(relations.map(x => [x.name, x.reaction])), ...(confirmed.length ? { confirmed } : {}) };
@@ -718,5 +729,5 @@ function completedCandlesAt({ bars, base, fine = null, minutes, at = bars.length
 module.exports = {
   TIMEFRAMES, DEF, LABELS, MAX_LEVELS, LEVEL_ORDER, label, completedSeries, shape, closeLocation, patternsOf, patternLabel, relation,
   candleSeries, relationSeries, swingTargetSeries, holdingSwingsAt, briefingCandles, briefingTargets, RELATION_TEXT,
-  prevSweep, RANGE_FRAMES, briefingRangeTargets, completedCandlesAt, gapRelation, insideStackOf, insideStacks, factsOf, levelReactionsOf, confirmedText,
+  prevSweep, RANGE_FRAMES, briefingRangeTargets, completedCandlesAt, gapRelation, insideStackOf, insideStacks, factsOf, levelReactionsOf, confirmedText, MOVING_LEVEL,
 };

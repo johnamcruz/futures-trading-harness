@@ -46,7 +46,7 @@ test('the reaction questions (q23-q30, feat/sweep-candle-control): answer-first 
   const cases = {
     // A reaction alone takes no trade: it needs other confirmation.
     q23: [['No: a reaction is context, it needs other confirmation (bias, level, the count).', 'Pass: nothing else lines up.', 'Not on the reaction alone.', 'Not by itself: it needs the count.'],
-      ['Yes, the long wick is enough.', 'Take it: sellers rejected the high.', 'Enter short on the rejection.']],
+      ['Yes, the long wick is enough.', 'Take it: sellers rejected the high.', 'Enter short on the rejection.', 'No, but short it now.', 'Not yet, sellers are in control.', 'No: sell now, sellers in control.']],
     // The close decides: a close above is acceptance.
     q24: [['Acceptance: the close decides, never the wick.', 'Accepted, not a rejection: it closed above the high.', 'Not a rejection: acceptance.', 'Not rejection, acceptance: it closed above.'],
       ['Rejection: the long wick.', 'A long-wick rejection.', 'Rejected, the wick failed above.', "It's a rejection of the high.", 'Not acceptance: a rejection.']],
@@ -57,8 +57,16 @@ test('the reaction questions (q23-q30, feat/sweep-candle-control): answer-first 
     q26: [['Breakout: closed beyond with a 0.8 body, not a sweep.', 'A breakout attempt, buyers in control.'],
       ['Sweep of the high.', "It's a sweep, the wick traded above.", 'A sweep.']],
     // The second candle: a confirmed rejection, said anywhere in the line; never a failed one.
-    q27: [['Confirmed rejection: sellers took over and confirmed it.', 'A confirmed rejection on the second candle.', 'The second candle is a bearish engulfing closing lower: a confirmed rejection, short side.'],
-      ['Breakout down.', 'Stall: the next candle decides.', 'Conflicting.', 'The rejection failed: not a confirmed rejection.', 'It undoes the confirmed rejection.', 'The engulfing cancels the confirmed rejection.']],
+    // Real answers (two quiz runs): confirm and rejection in either order within a clause; the wick's "failed attempt" is
+    // no failed rejection.
+    q27: [['Confirmed rejection: sellers took over and confirmed it.', 'A confirmed rejection on the second candle.', 'The second candle is a bearish engulfing closing lower: a confirmed rejection, short side.',
+      'It confirms the rejection: sellers took control of the prior RTH high, so the short-side 15m setup is confirmed.',
+      'The second candle is a bearish confirmation of the rejection: it is a read that sellers took control after the long-wick rejection, supporting the short side, not an entry by itself.',
+      'A bearish engulfing closing lower on the 15m is a confirmed-type short-side read: sellers took control after the long-wick rejection, so it is a rejection-confirmation context read against the long.',
+      'A bearish engulfing closing lower is a read of sellers in control on the 15m, which confirms the rejection\'s failed attempt; it is context, not a setup by itself.'],
+      ['Breakout down.', 'A breakout.', 'Stall: the next candle decides.', 'Conflicting.', 'The rejection failed: not a confirmed rejection.', 'It undoes the confirmed rejection.', 'The engulfing cancels the confirmed rejection.',
+        'The second candle reads the rejection as failed: sellers took control, so the long-wick read is undone and there is no long setup from it.',
+        'The rejection failed and is undone: buyers are back.', 'No confirmation, buyers back.']],
     // Conflicting: mixed, it needs other confirmation (or the next candle).
     q28: [['No: mixed evidence, wait for confirmation.', 'Wait for the next candle.', 'Not yet: conflicting.', 'Not on this read alone; mixed, not sellers in control.', 'Mixed: it needs other confirmation, the count or the next candle.'],
       ['Yes, it closed back below.', 'Sellers are in control.', 'Take it now: the close is back below.', 'Short it: sellers in control.', 'Read it as a rejection, sellers in control.']],
@@ -67,7 +75,7 @@ test('the reaction questions (q23-q30, feat/sweep-candle-control): answer-first 
       ['The doji itself.', 'This candle decides.', 'Sellers.', 'Buyers decide.', 'The doji decides: it is a stall.']],
     // The same reaction in another context: the context decides (with the bias a short; against the 4h + 1h no trade).
     q30: [['No: the context decides; the first supports a short, the second is no trade (the trend rule).', 'Not the same: with the bias it is a continuation short, against the 4h and 1h no trade.', 'Different: the second counters the 4h + 1h.'],
-      ['Yes, both are long-wick rejections.', 'Same read: short both.', 'The same, take either.', 'No difference, both are shorts.']],
+      ['Yes, both are long-wick rejections.', 'Same read: short both.', 'The same, take either.', 'No difference, both are shorts.', 'No - same read, both shorts.', 'No, take both.', 'No: both shorts.', 'It is the same read either way.']],
   };
   for (const [id, [right, wrong]] of Object.entries(cases)) {
     for (const a of right) assert.ok(pass(id, `ANSWER: ${a}`), `${id} right: ${a}`);

@@ -98,7 +98,7 @@ const { pivots, lastBreaks, breaksOf, sweeps, untestedSwings, swingLevels } = re
 const { timingOf, timingLine } = require('./ltf-timing');
 const { sideValuesText, causalLevels } = require('./rules');
 const { cisdFacts } = require('./cisd');
-const { briefingCandles, briefingTargets, holdingSwingsAt, briefingRangeTargets } = require('./candle-facts');
+const { briefingCandles, briefingTargets, holdingSwingsAt, briefingRangeTargets, MOVING_LEVEL } = require('./candle-facts');
 const { halfOf } = require('./fib');
 const { levelCloses, MAX_CLOSES } = require('./level-closes');
 const { brokerFieldsAt, brokerFieldsText } = require('./broker-fields');
@@ -220,8 +220,9 @@ function cisdBlock(bars, level, levels = causalLevels(bars)) {
 
 // The key levels a completed candle is read against: value areas, VWAP, the prior day, overnight, IB and opening range
 // (and the 15m and 1h swings, the round numbers in its range, its previous candle and the CRT range: candle-facts.js).
-// The moving ones among them (read at a candle's close); the rest are fixed (read as they stood at its open).
-const MOVING = /^(VWAP|session (POC|VAH|VAL))/;
+// The moving ones among them (read at a candle's close; candle-facts.js MOVING_LEVEL, its one home); the rest are fixed
+// (read as they stood at its open).
+const MOVING = MOVING_LEVEL;
 // The fixed ones a bar's own value includes once it completes them (read on the last bar closed by a candle's open).
 const AT_OPEN = /^(overnight|IB)/;
 const CANDLE_LEVELS = /^(prior (POC|VAH|VAL|RTH high|RTH low|RTH close)|session (POC|VAH|VAL)|VWAP|overnight (high|low)|IB (high|low)|opening range (high|low))/;

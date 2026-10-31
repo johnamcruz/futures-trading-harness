@@ -391,7 +391,10 @@
         "^\\W*(no|nope|not|pass|skip|wait|never)\\b"
       ],
       "forbidden": [
-        "^\\W*(yes|yep|take( it)?|enter|go)\\b"
+        "^\\W*(yes|yep|take( it)?|enter|go)\\b",
+        "\\b(short|sell|go short)( it)? now\\b",
+        "\\bsellers (are )?in control\\b",
+        "^\\W*(no|not)( yet)?\\W+sellers (are )?in control\\b"
       ]
     },
     {
@@ -449,11 +452,13 @@
       "rule": "a long-wick rejection, then an opposite engulfing closing lower: a confirmed rejection, on the second candle",
       "anchor": "a confirmed one when the next candle engulfs",
       "required": [
-        "\\bconfirmed rejection\\b"
+        "\\bconfirm\\w*\\b[^.;]*\\brejection\\b|\\brejection\\b[^.;]*\\bconfirm\\w*\\b"
       ],
       "forbidden": [
         "^\\W*(a\\s+)?(breakout|stall|conflicting|plain)\\b",
-        "\\b(failed|fails|undone|undoes|cancels?|cancelled|invalidat\\w*|negat(es|ed))\\b"
+        "\\b(rejection|it|the read)\\s+(as\\s+|has\\s+|is\\s+)?(failed|fails|undone|cancelled|invalidated)\\b",
+        "\\b(read|wick|rejection)\\s+is\\s+undone\\b",
+        "\\b(undoes|undo|cancels|negates|invalidates)\\s+(the\\s+)?(confirmed\\s+)?(rejection|read)\\b"
       ]
     },
     {
@@ -501,7 +506,11 @@
         "^\\W*(yes|yep|same)\\b",
         "^\\W*(no difference|not different|no change)\\b",
         "\\b(short|take|trade)\\s+(them\\s+)?(both|either)\\b",
-        "\\bboth\\s+(are\\s+)?(shorts?|trades?|valid|taken)\\b"
+        "\\bboth\\s+(are\\s+)?(shorts?|trades?|valid|taken)\\b",
+        "\\bsame (read|thing)\\b",
+        "\\btake (them )?both\\b",
+        "\\bboth (are )?shorts?\\b",
+        "^\\W*(no|nope)\\s*[-–—,:;]\\s*(the\\s+)?(same (read|thing)|take (them )?both|both (are )?shorts?)\\b"
       ]
     }
   ],
