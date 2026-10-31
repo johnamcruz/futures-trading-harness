@@ -1800,9 +1800,11 @@ inject each goal-breaking issue and must see it fail (`tier2-breaks`: a
 dropped setup line, a compose refusal, a phase-2 parse failure, a gate
 refusal, an order past the record's life, the order a bar late (a
 3m-confirmation-style delay), a trail behind a stale swing); the broker-fault
-days (`tier2-faults`: a lost reply, a late fill, a refused or errored stop
-move, a partial fill) must stay protected, never refuse an exit and never
-double the position; the move goldens (`tests/fixtures/goal/move-scenarios.json`)
+days (`tier2-faults`: a lost reply, a late fill, a fill reported late past
+the gate's own reads, a refused or errored stop move, a partial fill) must
+stay protected (a late fill at every pass: its bracket stop rests from the
+fill), never refuse an exit (the runner never cancelling the working stop)
+and never double the position; the move goldens (`tests/fixtures/goal/move-scenarios.json`)
 pin every layer of the five real legs and the synthetic fakeout and quiet
 day, and hold trend days caught and ridden (at least two on main, so a
 capture loss fails). The negative probes (`tier2-probes`) send what the gate
@@ -1856,10 +1858,7 @@ record's life). D13's floor binds only on the two synthetic floor days
 CI slice is small (30 sessions; a pass rate's sampling error is large):
 it guards against regressions, it is no estimate of the pass rate. Skill
 text, prompts and the model's reading are the context quiz's and the PPC
-rounds'. Three findings stay out of scope here, each its own pull request: a
-fill reported late long enough that the gate's own reads miss the position
-lets the runner cancel its bracket stop (`tier2-faults`' expected failure,
-red the day it is fixed); "Setups to check" quotes the VWAP's name with its
+rounds'. Two findings stay out of scope here, each its own pull request: "Setups to check" quotes the VWAP's name with its
 brackets ("15m broke VWAP (rth) up"), which compose_check doesn't verify
 (the listed-vwap golden); and tier 1's limitOutcome exit and the runner's
 live trail give different R on the same trade. A baseline only rises: `goal-check.js baseline --write` (and

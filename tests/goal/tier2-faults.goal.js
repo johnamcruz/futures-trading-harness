@@ -6,17 +6,15 @@
  * or a read), one short day each:
  *   lost-reply      the entry's reply never comes (the order is taken and fills)
  *   late-fill       the fill is reported late (the position and its fill not shown for three reads)
+ *   late-fill-long  the fill reported late for long enough that the gate's own reads miss the position too
  *   partial-fill    the market entry fills one contract of its size
  *   modify-refused  the runner's first stop moves refused by the broker
  *   modify-error    the runner's first stop moves answered with an error
  * Each must hold (goal-path.js faultChecks): the position never without a stop covering it for more than one managed
- * cycle, no exit refused, no duplicate position, the fault fired, a refused stop move re-attempted, and the fault and its
- * recovery on the day's trace. Any of these failing fails the pull request.
- *
- * Known open (an expected failure until its fix lands: the test asserts the bug is still there, so the fix turns it red
- * with "fixed: remove this expectation"): late-fill-long, the fill reported late for long enough that the gate's own
- * reads miss the position too: the runner cancels the bracket stop and the gate lets it, so the position goes
- * unprotected for several cycles (the runner's finding; its fix is its own pull request).
+ * cycle (on the late-fill days at no pass at all: its bracket stop rests from the fill, however late the fill is
+ * reported), no exit refused (the runner never cancelling the position's working stop), no duplicate position, the
+ * fault fired, a refused stop move re-attempted, and the fault and its recovery on the day's trace. Any of these failing
+ * fails the pull request.
  */
 
 const test = require('node:test');
@@ -35,7 +33,7 @@ const OUT = fs.mkdtempSync(path.join(os.tmpdir(), 'fth-goal-faults-'));
 // The entry faults on a day whose trade stops out early; the stop-move faults on the move day that trails soonest.
 const quick = skip ? null : (BASE.trades.find(t => t.exitReason === 'stop') || BASE.trades[0]).day;
 const trailed = skip ? null : (GOLDEN.scenarios.filter(s => s.layers && s.layers.exit.moves.length).sort((a, b) => Date.parse(a.layers.exit.time) - Date.parse(b.layers.exit.time))[0] || {}).day;
-const FAULTS = [['lost-reply', quick], ['late-fill', trailed], ['partial-fill', quick], ['modify-refused', trailed], ['modify-error', trailed]];
+const FAULTS = [['lost-reply', quick], ['late-fill', trailed], ['late-fill-long', trailed], ['partial-fill', quick], ['modify-refused', trailed], ['modify-error', trailed]];
 
 async function check(faults) {
   const runs = await Promise.all(faults.map(([fault, day]) => T.runDays([day], { fault, parallel: 1, dir: OUT }).then(r => ({ fault, day, d: r[0] }))));
@@ -53,16 +51,7 @@ async function check(faults) {
   return bad;
 }
 
-// Its checks at once (each its own processes): the job's time is the slowest one's.
-test.describe('tier 2 broker faults', { concurrency: true }, () => {
-  test('tier 2 broker faults: protected within a managed cycle, no exit refused, no duplicate position, the fault and its recovery traced', { skip }, async () => {
-    assert.deepStrictEqual(await check(FAULTS), []);
-  });
-
-  // An expected failure, not a todo (a todo never turns red): the known unprotected window must still be there; the day
-  // its fix lands this fails with "fixed: remove this expectation", and the expectation becomes the check above.
-  test('tier 2 broker fault late-fill-long (known open): the gate\'s own reads miss the position, the runner cancels the bracket stop', { skip }, async () => {
-    const bad = await check([['late-fill-long', trailed]]);
-    assert.ok(bad.some(p => /without a stop covering it/.test(p)), `fixed: remove this expectation (late-fill-long now stays protected; move it into the check above). It said: ${bad.join('; ') || 'nothing'}`);
-  });
+// Every fault day at once (each its own process): the job's time is the slowest day's.
+test('tier 2 broker faults: protected within a managed cycle (a late fill at every pass), no exit refused, no duplicate position, the fault and its recovery traced', { skip }, async () => {
+  assert.deepStrictEqual(await check(FAULTS), []);
 });

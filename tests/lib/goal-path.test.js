@@ -108,7 +108,7 @@ test('pickDays: seeded, the trend and other days split over both halves', () => 
   assert.strictEqual(d.filter(x => ['a1', 'a2', 'b3', 'b4'].includes(x)).length, 2);
 });
 
-test('faultChecks: a position uncovered more than one pass, an exit refused, a duplicate position, no recovery: each a problem', () => {
+test('faultChecks: a position uncovered more than one pass (a late fill: any pass), an exit refused (a working stop cancelled too), a duplicate position, no recovery: each a problem', () => {
   const pos = (at, stops) => ({ at, position: { side: 'long', size: 5, price: 100 }, stops });
   const ok = [pos('2022-03-30T13:45:02.000Z', [{ side: 1, size: 5, price: 80 }]), { at: '2022-03-30T15:03:02.000Z', position: null, stops: [] }];
   const faults = [{ at: '2022-03-30T13:45:02.000Z', kind: 'lost-reply' }];
@@ -120,9 +120,14 @@ test('faultChecks: a position uncovered more than one pass, an exit refused, a d
   assert.match(GP.faultChecks(day({ snaps: ok, faults, gate: [...day().gate, { tool: 'close_position', decision: 'refused', violations: [{ check: 'x' }] }] })).problems.join(), /an exit refused: close_position/);
   const cancel = { tool: 'cancel_order', decision: 'refused', violations: [{ check: 'cancel-protection' }], ts: '2022-03-30T13:46:00.000Z' };
   const late = [{ at: '2022-03-30T13:45:02.000Z', kind: 'late-fill' }];
-  const kept = GP.faultChecks(day({ snaps: ok, faults: late, gate: [...day().gate, cancel] }));
-  assert.deepStrictEqual([kept.problems, kept.trace.map(x => x.step), kept.trace[0].at], [[], ['finding', 'fault', 'recovery'], cancel.ts], 'on a late-fill day: the runner\'s attempt a finding');
-  assert.match(GP.faultChecks(day({ snaps: ok, faults, gate: [...day().gate, cancel] })).problems.join(), /an exit refused: cancel_order/, 'on any other day a problem');
+  // The runner trying to cancel the position's working stop is a problem on every day, a late-fill day too.
+  assert.match(GP.faultChecks(day({ snaps: ok, faults: late, gate: [...day().gate, cancel] })).problems.join(), /an exit refused: cancel_order \[cancel-protection\]/, 'on a late-fill day');
+  assert.match(GP.faultChecks(day({ snaps: ok, faults, gate: [...day().gate, cancel] })).problems.join(), /an exit refused: cancel_order/, 'on any other day');
+  // A late fill keeps its bracket stop: one pass uncovered is a problem there (elsewhere one managed cycle is allowed).
+  const once = [pos('2022-03-30T13:45:02.000Z', []), pos('2022-03-30T13:48:02.000Z', [{ side: 1, size: 5, price: 80 }]), ok[1]];
+  assert.deepStrictEqual(GP.faultChecks(day({ snaps: once, faults })).problems, []);
+  assert.match(GP.faultChecks(day({ snaps: once, faults: [{ at: '2022-03-30T13:45:02.000Z', kind: 'late-fill-long' }] })).problems.join(), /1 passes in a row without a stop covering it \(at most none/);
+  assert.deepStrictEqual(GP.faultChecks(day({ snaps: ok, faults: late })).problems, []);
   assert.match(GP.faultChecks(day({ snaps: [{ ...ok[0], position: { side: 'long', size: 10, price: 100 }, stops: [{ side: 1, size: 10, price: 80 }] }], faults })).problems.join(), /a duplicate position: 10 held, the largest entry 5/);
   assert.match(GP.faultChecks(day({ snaps: ok, faults: [] })).problems.join(), /no fault was armed/);
   assert.match(GP.faultChecks(day({ snaps: [ok[0]], faults })).problems.join(), /no recovery after it/, 'the fault\'s own pass is no recovery');

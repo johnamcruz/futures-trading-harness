@@ -190,10 +190,10 @@ function lostWhy(day, bar, side) {
  * A fault day's checks (the broker-fault scenarios, tests/goal/tier2.goal.js): from the account after each pass
  * (`snaps`: the position and the working stops), the gate's log and the faults armed (`faults`). Problems when:
  *   - a position was left without a stop covering it (the opposite side, its whole size) for more than one pass in a row
- *     (one managed cycle), or never covered again;
+ *     (one managed cycle), or never covered again; on a late-fill day (the fill reported late: the bracket stop rests
+ *     from the fill) for any pass at all;
  *   - an exit was refused (a close, a stop move, a cancel, an [exit] or [protect] order the gate didn't allow; a cancel
- *     refused as a working position's stop, [cancel-protection], on a late-fill day only: the gate protecting it, the
- *     runner's attempt traced as a `finding`);
+ *     the gate refused as a working position's stop, [cancel-protection], too: the runner tried to take its stop away);
  *   - a duplicate position opened (larger than the largest entry order sent, or a second entry order while one is open);
  *   - the fault left no recovery: no pass after it with the position flat or covered.
  * Returns { problems, trace }: trace the fault and its recovery, in order, as the day's path records them.
@@ -205,20 +205,18 @@ function faultChecks(day) {
   let run = 0;
   let worst = 0;
   for (const sn of day.snaps || []) { run = covered(sn) ? 0 : run + 1; worst = Math.max(worst, run); }
-  if (worst > 1) problems.push(`a position went ${worst} passes in a row without a stop covering it (at most one managed cycle)`);
+  const lateDay = (day.faults || []).some(f => /^late-fill/.test(f.kind));
+  const allowed = lateDay ? 0 : 1;
+  if (worst > allowed) problems.push(`a position went ${worst} passes in a row without a stop covering it (at most ${lateDay ? 'none: the fill reported late keeps its bracket stop' : 'one managed cycle'})`);
   const last = (day.snaps || []).at(-1);
   if (last && !covered(last)) problems.push(`the day ended with a position not covered by a stop (${JSON.stringify(last)})`);
-  // An exit or a stop move the gate refused is a problem; a cancel it refused because the order is a working position's
-  // stop ([cancel-protection]) is the gate keeping the position protected: traced, never a problem.
+  // An exit, a stop move or a cancel the gate refused is a problem (a cancel refused as a working position's stop,
+  // [cancel-protection], is the runner trying to take the stop away).
   const exitTools = new Set(['close_position', 'partial_close_position', 'cancel_order', 'modify_order']);
   for (const g of day.gate || []) {
     const exit = exitTools.has(g.tool) || /^\s*\[(exit|protect)\]/.test(String(g.rationale || ''));
     if (!exit || g.decision === 'allowed') continue;
     const tags = (g.violations || []).map(v => v.check);
-    // Only on a day whose fault hid the position (late-fill): the runner tried to cancel a live stop it couldn't see, a
-    // finding of the runner's the trace keeps; on any other day it is a problem.
-    const lateDay = (day.faults || []).some(f => /^late-fill/.test(f.kind));
-    if (lateDay && g.tool === 'cancel_order' && tags.length && tags.every(t => t === 'cancel-protection')) { trace.push({ step: 'finding', at: g.ts || null, how: 'the runner tried to cancel the position\'s working stop while the fill was reported late; only the gate\'s [cancel-protection] kept it' }); continue; }
     problems.push(`an exit refused: ${g.tool} [${tags.join('] [')}]`);
   }
   const entries = (day.orders || []).filter(o => !o.parentId && o.type !== TYPE.stop);

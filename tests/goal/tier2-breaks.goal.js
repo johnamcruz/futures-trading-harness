@@ -9,7 +9,7 @@
  *   waits): category e
  *   delay (the 3m-confirmation-style delay: the order a bar late) on a move day: its golden's ENTRY layer
  *   stale-trail (the structure trail behind a stale swing) on the move day that trails most: its golden's EXIT layer
- * The no-cancel-protection break is the fault days' (tier2-faults.goal.js).
+ * A stop taken away on a late fill is the fault days' (tier2-faults.goal.js: covered at every pass).
  */
 
 const test = require('node:test');
