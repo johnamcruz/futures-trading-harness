@@ -17,13 +17,14 @@
     "doesn't",
     "can't",
     "cannot",
-    "won't"
+    "won't",
+    "rather"
   ],
   "negationWindow": 4,
   "unsure": "it depends|unsure|not sure|unclear|ambiguous|can't tell|cannot tell|depends on",
   "passBar": {
     "partA": {
-      "allCorrect": 21,
+      "allCorrect": 22,
       "bothWays": 0
     },
     "partB": {
@@ -57,7 +58,7 @@
       "anchor": "both ranging: the 15m and `Trend declared?` your way",
       "required": [
         "15\\s*-?m",
-        "declared"
+        "declare"
       ],
       "forbidden": []
     },
@@ -110,14 +111,15 @@
       "id": "q6",
       "layer": "levels",
       "prompt": "head",
-      "text": "Is a 3m swing high a level or target you can trade from?",
+      "text": "What is a 3m swing high for: a level to trade from, a target, or only where the stop goes?",
       "rule": "a 3m swing is no level and no target, only where the stop goes",
       "anchor": "A 3m swing is not a level and not a target.",
       "required": [
-        "\\b(no|not|only)\\b"
+        "\\bonly\\b|\\bstop\\b"
       ],
       "forbidden": [
         "^\\s*(yes\\b|y,)",
+        "^\\s*(a )?(level|target)\\b",
         "trade around"
       ]
     },
@@ -162,7 +164,7 @@
         "session|daily|prior[- ]day|overnight|vwap|15\\s*-?m"
       ],
       "forbidden": [
-        "\\b3\\s*-?m\\b"
+        "^(?!.*(\\bstop|\\bnot\\b|\\bnever\\b)).*\\b3\\s*-?m\\b"
       ]
     },
     {
@@ -270,14 +272,15 @@
       "id": "q17",
       "layer": "size",
       "prompt": "head+risk",
-      "text": "The account is healthy (balance at or above start, no loss streak). What size?",
+      "text": "In a prop attempt the account is healthy (balance at or above start, no loss streak). What size: the full verdict size, or less?",
       "rule": "a healthy prop account takes the full verdict size",
       "anchor": "Size in a prop attempt: the full verdict size, the code's number.",
       "required": [
         "full"
       ],
       "forbidden": [
-        "half"
+        "half",
+        "^\\s*less\\b"
       ]
     },
     {
@@ -298,7 +301,7 @@
       "id": "q19",
       "layer": "approval",
       "prompt": "head+risk",
-      "text": "The risk manager writes \"Size: I'd go with 3 contracts given the stop\" and \"VERDICT: approve\". Is that a trade?",
+      "text": "The risk manager writes \"Size: I'd go with 3 contracts given the stop\" and \"VERDICT: approve\". What happens next: the entry at 3, or a restate?",
       "rule": "a bare approval states no readable size: one restate of the Size and VERDICT lines, never a veto (roles-ran.js approvedSize)",
       "anchor": "with no size on the line → unreadable",
       "required": [
@@ -306,8 +309,8 @@
       ],
       "forbidden": [
         "^\\s*(yes\\b|y,)",
-        "^(?!.*\\b(not|never|isn't|no|without)\\b).*(veto|no trade)",
-        "(?<!not )(?<!not a )\\bis a trade\\b"
+        "^\\s*(the )?entry\\b",
+        "^(?!.*\\b(not|never|isn't|no|without)\\b).*(veto|no trade)"
       ]
     },
     {
@@ -339,6 +342,16 @@
         "^\\s*(yes\\b|y,)",
         "^(?!.*\\b(not|never|don't|no)\\b).*\\bcancel (it|the stop)\\b"
       ]
+    },
+    {
+      "id": "q22",
+      "layer": "size",
+      "prompt": "head+risk",
+      "text": "In a prop attempt your compose record states 8 MNQ, but order_plan gives 5 MNQ for the entry. What size do you place?",
+      "rule": "the size comes from the size translation (order_plan's number), never the model's own",
+      "anchor": "size, and stop ticks come from the size translation (`order_plan` gives them)",
+      "required": ["\\b5\\b"],
+      "forbidden": ["^(?!.*\\b(not|never|don't|no)\\b).*\\b(place|take|use|enter|go with)\\s+(the\\s+)?8\\b", "^\\s*8\\b"]
     }
   ],
   "partB": [
@@ -427,13 +440,14 @@
           "capUsd": 300
         }
       },
-      "text": "One serious factor against the setup. What size?",
+      "text": "One serious factor against the setup. What size: the full verdict size, or less?",
       "rule": "the Size line: the full verdict",
       "required": [
         "full"
       ],
       "forbidden": [
-        "half"
+        "half",
+        "^\\s*less\\b"
       ]
     },
     {

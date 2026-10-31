@@ -146,7 +146,7 @@ env:
   FTH_CYCLE_TRANSCRIPT=<home>/logs/cycle-transcript-<pid>-<rand>.jsonl
   FTH_DENIED_ROLES=strategy-researcher
   FTH_EARLY_CLOSE_DATES=2026-11-27,2026-12-24,2027-11-26
-  FTH_HEAD_PROMPT={"config":"<root>/workspace/opencode.json","sha256":"853caabc3e9ce773f60f3ccf721242ccd9b281b5e65700cac847fe57f012701d","skills":["trade-session","multi-timeframe-analysis","trade-lifecycle","setup-judgment","trade-plan","autonomous-trading","trader-process","htf-to-ltf","bar-briefing","role-round","day-context","confluence-counting","invalidation","rejection","breakout"]}
+  FTH_HEAD_PROMPT={"config":"<root>/workspace/opencode.json","sha256":"e045dae918ae3bb4fa990595d95b67330fd4fd7ccf68e2d70bc11e6b17e5009d","skills":["trade-session","multi-timeframe-analysis","trade-lifecycle","setup-judgment","trade-plan","autonomous-trading","trader-process","htf-to-ltf","bar-briefing","role-round","day-context","confluence-counting","invalidation","rejection","breakout"]}
   FTH_HOME=<home>
   FTH_ROLE_RUN=market-structure-analyst
   FTH_ROLE_SKILLS=index
@@ -175,7 +175,7 @@ env:
   FTH_CYCLE_TRANSCRIPT=<home>/logs/cycle-transcript-<pid>-<rand>.jsonl
   FTH_DENIED_ROLES=strategy-researcher
   FTH_EARLY_CLOSE_DATES=2026-11-27,2026-12-24,2027-11-26
-  FTH_HEAD_PROMPT={"config":"<root>/workspace/opencode.json","sha256":"853caabc3e9ce773f60f3ccf721242ccd9b281b5e65700cac847fe57f012701d","skills":["trade-session","multi-timeframe-analysis","trade-lifecycle","setup-judgment","trade-plan","autonomous-trading","trader-process","htf-to-ltf","bar-briefing","role-round","day-context","confluence-counting","invalidation","rejection","breakout"]}
+  FTH_HEAD_PROMPT={"config":"<root>/workspace/opencode.json","sha256":"e045dae918ae3bb4fa990595d95b67330fd4fd7ccf68e2d70bc11e6b17e5009d","skills":["trade-session","multi-timeframe-analysis","trade-lifecycle","setup-judgment","trade-plan","autonomous-trading","trader-process","htf-to-ltf","bar-briefing","role-round","day-context","confluence-counting","invalidation","rejection","breakout"]}
   FTH_HOME=<home>
   FTH_ROLE_RUN=trend-momentum-analyst
   FTH_ROLE_SKILLS=index
@@ -204,7 +204,7 @@ env:
   FTH_CYCLE_TRANSCRIPT=<home>/logs/cycle-transcript-<pid>-<rand>.jsonl
   FTH_DENIED_ROLES=strategy-researcher
   FTH_EARLY_CLOSE_DATES=2026-11-27,2026-12-24,2027-11-26
-  FTH_HEAD_PROMPT={"config":"<root>/workspace/opencode.json","sha256":"853caabc3e9ce773f60f3ccf721242ccd9b281b5e65700cac847fe57f012701d","skills":["trade-session","multi-timeframe-analysis","trade-lifecycle","setup-judgment","trade-plan","autonomous-trading","trader-process","htf-to-ltf","bar-briefing","role-round","day-context","confluence-counting","invalidation","rejection","breakout"]}
+  FTH_HEAD_PROMPT={"config":"<root>/workspace/opencode.json","sha256":"e045dae918ae3bb4fa990595d95b67330fd4fd7ccf68e2d70bc11e6b17e5009d","skills":["trade-session","multi-timeframe-analysis","trade-lifecycle","setup-judgment","trade-plan","autonomous-trading","trader-process","htf-to-ltf","bar-briefing","role-round","day-context","confluence-counting","invalidation","rejection","breakout"]}
   FTH_HOME=<home>
   FTH_ROLE_RUN=volume-liquidity-analyst
   FTH_ROLE_SKILLS=index
@@ -233,7 +233,7 @@ env:
   FTH_CYCLE_TRANSCRIPT=<home>/logs/cycle-transcript-<pid>-<rand>.jsonl
   FTH_DENIED_ROLES=strategy-researcher
   FTH_EARLY_CLOSE_DATES=2026-11-27,2026-12-24,2027-11-26
-  FTH_HEAD_PROMPT={"config":"<root>/workspace/opencode.json","sha256":"853caabc3e9ce773f60f3ccf721242ccd9b281b5e65700cac847fe57f012701d","skills":["trade-session","multi-timeframe-analysis","trade-lifecycle","setup-judgment","trade-plan","autonomous-trading","trader-process","htf-to-ltf","bar-briefing","role-round","day-context","confluence-counting","invalidation","rejection","breakout"]}
+  FTH_HEAD_PROMPT={"config":"<root>/workspace/opencode.json","sha256":"e045dae918ae3bb4fa990595d95b67330fd4fd7ccf68e2d70bc11e6b17e5009d","skills":["trade-session","multi-timeframe-analysis","trade-lifecycle","setup-judgment","trade-plan","autonomous-trading","trader-process","htf-to-ltf","bar-briefing","role-round","day-context","confluence-counting","invalidation","rejection","breakout"]}
   FTH_HOME=<home>
   FTH_ROLE_RUN=risk-manager
   FTH_ROLE_SKILLS=index
@@ -269,7 +269,7 @@ env:
   FTH_CYCLE_TRANSCRIPT=<home>/logs/cycle-transcript-<pid>-<rand>.jsonl
   FTH_DENIED_ROLES=strategy-researcher,market-structure-analyst,trend-momentum-analyst,volume-liquidity-analyst
   FTH_EARLY_CLOSE_DATES=2026-11-27,2026-12-24,2027-11-26
-  FTH_HEAD_PROMPT={"config":"<root>/workspace/opencode.json","sha256":"853caabc3e9ce773f60f3ccf721242ccd9b281b5e65700cac847fe57f012701d","skills":["trade-session","multi-timeframe-analysis","trade-lifecycle","setup-judgment","trade-plan","autonomous-trading","trader-process","htf-to-ltf","bar-briefing","role-round","day-context","confluence-counting","invalidation","rejection","breakout"]}
+  FTH_HEAD_PROMPT={"config":"<root>/workspace/opencode.json","sha256":"e045dae918ae3bb4fa990595d95b67330fd4fd7ccf68e2d70bc11e6b17e5009d","skills":["trade-session","multi-timeframe-analysis","trade-lifecycle","setup-judgment","trade-plan","autonomous-trading","trader-process","htf-to-ltf","bar-briefing","role-round","day-context","confluence-counting","invalidation","rejection","breakout"]}
   FTH_HOME=<home>
   FTH_ROLE_RUN=risk-manager
   FTH_ROLE_SKILLS=index
@@ -299,7 +299,7 @@ env:
   FTH_CYCLE_TRANSCRIPT=<home>/logs/cycle-transcript-<pid>-<rand>.jsonl
   FTH_DENIED_ROLES=strategy-researcher,market-structure-analyst,trend-momentum-analyst,volume-liquidity-analyst
   FTH_EARLY_CLOSE_DATES=2026-11-27,2026-12-24,2027-11-26
-  FTH_HEAD_PROMPT={"config":"<root>/workspace/opencode.json","sha256":"853caabc3e9ce773f60f3ccf721242ccd9b281b5e65700cac847fe57f012701d","skills":["trade-session","multi-timeframe-analysis","trade-lifecycle","setup-judgment","trade-plan","autonomous-trading","trader-process","htf-to-ltf","bar-briefing","role-round","day-context","confluence-counting","invalidation","rejection","breakout"]}
+  FTH_HEAD_PROMPT={"config":"<root>/workspace/opencode.json","sha256":"e045dae918ae3bb4fa990595d95b67330fd4fd7ccf68e2d70bc11e6b17e5009d","skills":["trade-session","multi-timeframe-analysis","trade-lifecycle","setup-judgment","trade-plan","autonomous-trading","trader-process","htf-to-ltf","bar-briefing","role-round","day-context","confluence-counting","invalidation","rejection","breakout"]}
   FTH_HOME=<home>
   FTH_ROLE_RUN=trade-executor
   FTH_ROLE_SKILLS=index

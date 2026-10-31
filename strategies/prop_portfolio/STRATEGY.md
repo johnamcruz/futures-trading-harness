@@ -8,7 +8,7 @@ timeframe: 3m                 # the one setting for the bar size: every listed s
 signal: policy                # trades the setups of the strategies below on the account
 strategies: [trade_lifecycle, momentum_continuation] # the model's own composed trade, and the setup it may cite (traded only through its record)
 account: topstep_100k         # accounts/topstep_100k/ACCOUNT.md: $6,000 target, $3,000 trailing max loss, $2,000 daily limit
-contracts: auto               # micro | mini | auto (minis only when whole minis carry the same size within the cap, else micros); only with no contract selected
+contracts: auto               # micro | mini | auto (the size translation picks the leg); only with no contract selected
 # sizing, exit and the verdict's multipliers: in its account's rulebook (RULEBOOK.md beside ACCOUNT.md, policies.prop_portfolio), the one place for them
 risk:
   stop: strategy              # each setup keeps its own strategy's stop
@@ -39,7 +39,7 @@ on the replay broker, and there is no live trading until the owner says
 - A `topstep_100k` attempt is running (`node scripts/combine.js status`).
 - The runner reports a `prop_portfolio` setup with a verdict: the strategy
   that fired, the side, the contract (the selected one, the runner's symbols:
-  MNQ or NQ, MES or ES, MYM or YM, M2K or RTY), the largest size, and the stop in ticks.
+  MNQ or NQ, MES or ES, MYM or YM, M2K or RTY), the size step 3 gives, and the stop in ticks.
 
 ## How It Works
 
@@ -60,11 +60,9 @@ on the replay broker, and there is no live trading until the owner says
    contract's risk. Every one of these numbers is in the account's rulebook
    (`RULEBOOK.md` beside its ACCOUNT.md, `policies.prop_portfolio`), the one
    place for them; this file never restates them. An entry's size is the
-   most contracts the composed strategy's dollar cap fits all in; this
-   budget only lowers it. It is traded in the selected contract, always
-   rounding down; with none selected (`contracts: auto`), as minis only when
-   whole minis carry the same micro-equivalents within the cap, else micros.
-4. The verdict: every setup gets the full size its budget allows (step 3),
+   size translation's (`prop/size-translate.js`; the rulebook's "The size at
+   entry"), in the selected contract.
+4. The verdict: every setup gets the full size step 3 gives,
    times the verdict's multiplier (the rulebook's enforced items; none yet,
    so 1), or a skip when the budget can't fund the rulebook's `min_contracts` at its stop, the
    attempt blocks entries (its soft daily stop, its loss streak stop:

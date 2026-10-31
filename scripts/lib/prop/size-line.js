@@ -7,9 +7,9 @@
  *
  *   sizeLines({ facts, riskUsd, minContracts, stretchUsd, capUsd, healthyUsd })   (healthyUsd: the cap in force while healthy)
  *       [size, min]: "Size (prop attempt): the full verdict size; ... none holds now (...)", or "Size (prop
- *       attempt): phase 2 may cut (pacing: after-loss, drawdown)"; "Min: 3 contracts at the stop. Fewer fit under the $300 cap →
- *       skip, unless the floor stretch applies (balance ≥ start, no loss today): then exactly 3, up to the stretch all in,
- *       never fewer" (the dollars the caller's). Each line names its own condition, as its code defines it: the Size
+ *       attempt): phase 2 may cut (pacing: after-loss, drawdown)"; "Min: 3 contracts at the stop, never fewer. Fewer fit under the
+ *       $300 cap → skip, or exactly 3 by the floor stretch (balance ≥ start, no loss today; up to the stretch all in)"
+ *       (the dollars the caller's). Each line names its own condition, as its code defines it: the Size
  *       line rulesHolding's (phase2-cut.js), the Min line attemptHealth's (size-translate.js). `facts`: phase2-cut.js
  *       cutFacts' shape; `riskUsd`: the risk a loss is measured at for the soft-stop rule (worstRisk). The plan's stop
  *       is not known per bar: the Min line states the rule.
@@ -37,12 +37,12 @@ function sizeLines({ facts, riskUsd, minContracts, stretchUsd = null, capUsd = n
   const m = minContracts;
   // The cap in force: the rulebook's healthy cap while healthy (when on, size-translate.js riskCapOf), else the composed one.
   if (num(healthyUsd) && num(capUsd) && healthyUsd > capUsd && h.healthy) capUsd = healthyUsd;
-  const head = `Min: ${m} contracts at the stop`;
+  const head = `Min: ${m} contracts at the stop, never fewer`;
   // No closing period: the prompt (autotrader.js accountText) and the quiz's excerpt end each line with one.
   if (!(num(stretchUsd) && num(capUsd) && stretchUsd > capUsd)) return [size, `${head}; fewer → skip`];
   const under = `Fewer fit under the ${usd(capUsd)} cap → skip`;
   return [size, h.healthy
-    ? `${head}. ${under}, unless the floor stretch applies (balance ≥ start, no loss today): then exactly ${m}, up to ${usd(stretchUsd)} all in, never fewer`
+    ? `${head}. ${under}, or exactly ${m} by the floor stretch (balance ≥ start, no loss today; up to ${usd(stretchUsd)} all in)`
     : `${head}. ${under}; no floor stretch now (${h.why})`];
 }
 

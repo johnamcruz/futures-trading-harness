@@ -21,8 +21,8 @@ challenge as a strategy: it trades its component's setups
 (`trade_lifecycle`) on an account profile (`accounts/<name>/ACCOUNT.md`, e.g. a
 100K combine: $6,000 target, $3,000 trailing max loss, $2,000 daily limit),
 sized from the cushion in the selected contract (`contracts: micro | mini |
-auto` only when none is selected): each setup gets the largest size its
-`sizing` allows, or is skipped. Its numbers (the `sizing`, the `exit`, the
+auto` only when none is selected): each setup's size is the size
+translation's, or it is skipped. Its numbers (the `sizing`, the `exit`, the
 soft daily stop, the loss streak stop, and the verdict's multiplier items) are in the
 account's rulebook, `accounts/<name>/RULEBOOK.md`, the one place for them:
 read them there, never from a strategy or this skill. A missing, incomplete or
@@ -66,7 +66,7 @@ it:
   take it only when the priority order (the strategy-library skill) says so,
   and then as given: rationale `setup:<policy strategy> ...`, the record's
   contract and side, at most the lower of the verdict's size and the
-  composed cap (the verdict is the full size; the cap limits the stop), the record's ticks (`order_plan` for `trade_lifecycle`
+  composed cap (the size translation's number), the record's ticks (`order_plan` for `trade_lifecycle`
   gives exactly these arguments, or refuses with the gate's reason). A verdict is for its own bar: the gate takes it only while
   that bar is still the last one recorded for the policy strategy's
   timeframe (the runner records each bar it scans). Once a newer bar is recorded
@@ -152,5 +152,5 @@ drawdown from the peak). A 40-tick stop plus a tick of expected slippage
 risks 41 x $0.50 = $20.50 + $0.74 fees = $21.24 a micro: 45 micros ($975 /
 $21.24), traded as 4 NQ with NQ selected (NQ: 41 x $5 = $205 + $2.80 fees =
 $207.80 each, $831.20 in all). With MNQ selected the verdict is 45 MNQ ($955.80).
-trade_lifecycle's $300 cap is lower: 1 NQ (40 x $5 = $200) or 15 MNQ (40 x $0.50 x 15 = $300).
+The entry's size is the size translation's (order_plan gives it); the verdict's is a ceiling.
 ```

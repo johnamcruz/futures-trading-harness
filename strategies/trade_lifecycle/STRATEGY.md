@@ -87,8 +87,7 @@ Never (never counter): the trend rule refuses an entry against a trending
 - Long MNQ at 21540.25: `1h bos up`, `above prior RTH range`, `at prior VAH`,
   `15m rejected prior VAH up`, `3m close top`, `3m momentum up`,
   `stop 15m low 21512.75`, `target trail`. The stop goes to
-  21512.50 (one tick below): 111 ticks, $55.50 a contract; the target is the
-  2R mark, 222 ticks, where the trail arms. 5 MNQ risk $277.50; 4 MNQ risk
-  $222.00. 6 MNQ ($333.00) or 1 NQ ($555.00 at $5.00 a tick) is over the
-  $300 cap: refused.
+  21512.50 (one tick below): 111 ticks; the target is the 2R mark, 222 ticks,
+  where the trail arms. The size is the size translation's (`order_plan`
+  gives it, within the $300 cap); a larger size is refused.
 - The same reads for a short: refused (every directional read is against it).
