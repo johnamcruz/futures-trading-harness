@@ -11,7 +11,11 @@
  * The baseline only rises (as the promotion gate's numbers): a new baseline is written only when every gated metric
  * is at least the current one's (blows at most), and the test holds the committed baseline to the base branch's the
  * same way (riseProblems). A new fixture (another hash) starts a new baseline only with the change recorded in it
- * (fixtureChange: the hash it replaces and why), which the review (CLAUDE.md) reads.
+ * (fixtureChange: the hash it replaces and why), which the review (CLAUDE.md) reads. A lower baseline of the same fixture
+ * is written only by an owner-approved reset (goal-check.js baseline --write --reset --why "<why>"), recorded in it
+ * (reset: why, the gated metrics it replaces, the fixture, when): accepted once, by the branch that brings it (a reset
+ * new against the base's, replacing exactly the base's numbers, never adding a blow); once on the base it is the
+ * base's, and a later lowering without a new reset fails as before.
  *
  *   CI_FIXTURE, REAL_FIXTURE(env)  the committed slice's file; the local goal:real fixture's (under the harness home)
  *   fixtureSet(kind, env)          { kind, doc, synth, baselineFile, goldenFile } | { kind, missing }; kindOf(env): FTH_GOAL_FIXTURE
@@ -24,7 +28,12 @@
  *   compare(baseline, now, tolerance)   [row]: { half, key, label, main, pr, allowed, ok, gated }
  *   regressions(rows)              the failing rows
  *   riseProblems(base, next)       [problem]: a gated metric of `next` below `base`'s (blows above); another fixture
- *                                  without its fixtureChange recorded
+ *                                  without its fixtureChange recorded; a reset new in `next` that isn't valid (resetProblems)
+ *   gatedOf(doc)                   the gated metrics of each half: { half: { key: value } } (what a reset replaces)
+ *   resetBaseline(base, now, { why, at, commit })   the owner-approved reset of the same fixture's baseline: `now` with
+ *                                  reset { why, from: gatedOf(base), fixture, at, commit } recorded (throws without a why,
+ *                                  a base, the same fixture, or when a blow is added)
+ *   resetProblems(base, next)      [problem] of a reset new in `next`; null when `next` carries none new
  *   renderTable(rows)              the table: metric, main, this PR, allowed
  */
 
@@ -159,20 +168,51 @@ function compare(baseline, now, tolerance) {
 
 const regressions = rows => rows.filter(r => r.gated && !r.ok);
 
+// The gated metrics of each half (what a reset replaces, recorded in it): { half: { key: value } }.
+const gatedOf = d => Object.fromEntries(halvesOf(d).map(h => [h, Object.fromEntries(gatedFor(h).map(g => [g.key, get(d.halves[h], g.key) ?? null]))]));
+const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
+// Blows never rise, a reset included (the owner's first rule): no half, the blow path included, blows more than the base's.
+const blowProblems = (base, next, what) => halvesOf(base).flatMap(half => {
+  const was = get(base.halves[half], 'mc.blows');
+  const is = get((next.halves || {})[half], 'mc.blows');
+  return typeof is !== 'number' || is > was ? [`half ${half} combine blows: ${is} in the new baseline, ${was} on the base branch: ${what} never adds a blow`] : [];
+});
+
+/** The problems of a reset new in `next` (not the base's own): null when `next` carries none new. */
+function resetProblems(base, next) {
+  const r = next && next.reset;
+  if (!r || (base && same(base.reset, r))) return null;
+  if (!base) return ['a reset with no base baseline to reset'];
+  const out = [];
+  if (!(typeof r.why === 'string' && r.why.trim())) out.push('the reset records no why (the owner\'s approval): --reset --why "<why>"');
+  if (!(typeof r.at === 'string' && r.at.trim())) out.push('the reset records no at (when it was written)');
+  if (!(r.fixture === base.fixture && next.fixture === base.fixture)) out.push(`the reset is of fixture ${r.fixture} (the base's ${base.fixture}, the new baseline's ${next.fixture}): a reset keeps the fixture`);
+  if (!same(r.from, gatedOf(base))) out.push('the reset\'s from is not the base branch\'s gated metrics: re-run the reset on the current base');
+  return [...out, ...blowProblems(base, next, 'a reset')];
+}
+
+function resetBaseline(base, now, { why, at, commit = null } = {}) {
+  if (!(typeof why === 'string' && why.trim())) throw new Error('refused: a reset needs --why "<the owner\'s approval and reason>"');
+  if (!base) throw new Error('refused: no baseline to reset (write the first one with baseline --write)');
+  if (base.fixture !== now.fixture) throw new Error('refused: a reset keeps the fixture (another fixture: --new-fixture --why "<why>")');
+  const next = { ...base, ...now, reset: { why: why.trim(), from: gatedOf(base), fixture: base.fixture, at, ...(commit ? { commit } : {}) } };
+  const problems = resetProblems(base, next) || ['the reset is the base\'s own'];
+  if (problems.length) throw new Error(`refused: ${problems.join('\n')}`);
+  return next;
+}
+
 function riseProblems(base, next) {
   if (!base || !next) return [];
+  // An owner-approved reset of the same fixture, new in `next`: accepted once (it replaces the base's numbers exactly).
+  const reset = resetProblems(base, next);
+  if (reset) return reset;
   // A new fixture starts a new baseline only with the change recorded: the hash it replaces and why (the review reads it).
   if (base.fixture !== next.fixture) {
     const c = next.fixtureChange;
     if (!(c && c.from === base.fixture && typeof c.why === 'string' && c.why.trim())) return [`the fixture changed (${base.fixture} on the base branch, ${next.fixture} now) with no fixtureChange { from: the base's hash, why } recorded in the baseline: node scripts/goal-check.js baseline --write --new-fixture --why "<why>"`];
     // Even a new fixture never takes a blow back: no half, nor the blow path, blows more than the base's, and the blow
     // path stays as harsh (as many trades, a mean R no higher: a fixture change can't gut the stress it carries).
-    const out = [];
-    for (const half of halvesOf(base)) {
-      const was = get(base.halves[half], 'mc.blows');
-      const is = get((next.halves || {})[half], 'mc.blows');
-      if (typeof is !== 'number' || is > was) out.push(`half ${half} combine blows: ${is} in the new fixture's baseline, ${was} on the base branch: a fixture change never adds a blow`);
-    }
+    const out = blowProblems(base, next, 'a fixture change');
     const s0 = base.halves.S;
     const s1 = (next.halves || {}).S;
     if (s0 && !(s1 && s1.meanR <= s0.meanR && s1.trades >= s0.trades)) out.push(`the blow path: ${s1 ? `${s1.trades} trades, mean R ${s1.meanR}` : 'gone'} in the new fixture's baseline, ${s0.trades} trades and ${s0.meanR} on the base branch: a fixture change never softens it`);
@@ -198,4 +238,4 @@ function renderTable(rows) {
   return [line(head), line(w.map(x => '-'.repeat(x))), ...body.map(line)].join('\n');
 }
 
-module.exports = { CI_FIXTURE, REAL_FIXTURE, KINDS, fixtureSet, kindOf, blockOf, GATED, loadFixture, evaluate, summary, compare, regressions, riseProblems, renderTable };
+module.exports = { CI_FIXTURE, REAL_FIXTURE, KINDS, fixtureSet, kindOf, blockOf, GATED, loadFixture, evaluate, summary, compare, regressions, gatedOf, resetBaseline, resetProblems, riseProblems, renderTable };

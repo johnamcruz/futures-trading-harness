@@ -1883,6 +1883,12 @@ live trail give different R on the same trade. A baseline only rises: `goal-chec
 tier 2's `node tests/goal/tier2-run.js --write`) refuse a worse one, the
 test holds the committed baseline to the base branch's, and a new fixture
 starts over only with its change recorded (`--new-fixture --why "<why>"`).
+A lower baseline of the same fixture comes only from an owner-approved
+reset (`goal-check.js baseline --write --reset --why "<why>"`), recorded in
+the baseline (`reset`: why, the gated metrics it replaces, the fixture,
+when): the test accepts it once, on the branch that brings it (new against
+the base's, replacing exactly the base's numbers, never a blow more); once
+merged it is the base's own, and a later lowering without a new reset fails.
 
 ## 8. Rules that keep it honest
 

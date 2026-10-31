@@ -41,6 +41,39 @@ test('riseProblems: a baseline only improves on the same fixture; a new fixture 
   assert.match(GC.riseProblems(withS({}), moved(doc())).join(), /half S combine blows: undefined|the blow path: gone/);
 });
 
+test('resetBaseline: an owner-approved reset writes a lower baseline with the reset recorded, accepted once; never a blow more', () => {
+  const base = doc();
+  const lower = doc({ meanR: -0.4, mc: { pass: 0.05, blows: 0 } }, { caught: { share: -0.01, caught: 1, legs: 9 } });
+  const why = 'one-time reset, owner-approved: the corrected tool';
+  // A reset without a why refuses; so does one with no base, or of another fixture.
+  for (const w of [undefined, '', '  ']) assert.throws(() => GC.resetBaseline(base, lower, { why: w, at: '2026-10-30' }), /needs --why/);
+  assert.throws(() => GC.resetBaseline(null, lower, { why, at: '2026-10-30' }), /no baseline to reset/);
+  assert.throws(() => GC.resetBaseline(base, { ...lower, fixture: 'f2' }, { why, at: '2026-10-30' }), /keeps the fixture/);
+  assert.throws(() => GC.resetBaseline(base, doc({ mc: { pass: 0.2, blows: 1 } }), { why, at: '2026-10-30' }), /half A combine blows: 1 .* a reset never adds a blow/);
+  const next = GC.resetBaseline(base, lower, { why, at: '2026-10-30', commit: 'abc123' });
+  assert.deepStrictEqual(next.reset, { why, from: GC.gatedOf(base), fixture: 'f1', at: '2026-10-30', commit: 'abc123' });
+  assert.strictEqual(next.halves.A.meanR, -0.4);
+  assert.deepStrictEqual(GC.gatedOf(base).A, { 'mc.blows': 0, 'mc.pass': 0.2, meanR: 0.1, 'caught.share': 0.1, 'caught.caught': 3 });
+  // Accepted once: new against the base, it replaces the base's numbers.
+  assert.deepStrictEqual(GC.riseProblems(base, next), []);
+  // Without the reset the same lowering fails as before.
+  const { reset: _r, ...bare } = next;
+  assert.ok(GC.riseProblems(base, bare).length >= 4);
+  // Once on the base, the reset is the base's own: a second lowering without a new reset fails (the reset kept or dropped).
+  const later = { ...next, halves: { ...next.halves, A: half({ meanR: -0.5, mc: { pass: 0.05, blows: 0 } }) } };
+  assert.match(GC.riseProblems(next, later).join(), /half A mean R per trade: -0.5 in the new baseline, -0.4 on the base branch/);
+  const { reset: _k, ...laterBare } = later;
+  assert.match(GC.riseProblems(next, laterBare).join(), /half A mean R per trade/);
+  // A reset that doesn't replace the base's own numbers (stale, or forged) fails; so does one without its why or fixture.
+  assert.match(GC.riseProblems(next, { ...later, reset: { ...next.reset, at: '2026-11-02' } }).join(), /from is not the base branch's gated metrics/);
+  assert.match(GC.riseProblems(base, { ...next, reset: { ...next.reset, why: ' ' } }).join(), /records no why/);
+  assert.match(GC.riseProblems(base, { ...next, reset: { ...next.reset, at: '' } }).join(), /records no at/);
+  assert.match(GC.riseProblems(base, { ...next, reset: { ...next.reset, fixture: 'f0' } }).join(), /a reset keeps the fixture/);
+  assert.match(GC.riseProblems(base, { ...next, fixture: 'f2' }).join(), /a reset keeps the fixture/);
+  // A reset recorded in the baseline still never takes a blow back, the blow path included.
+  assert.match(GC.riseProblems(base, { ...next, halves: { ...next.halves, B: half({ mc: { pass: 0, blows: 2 } }) } }).join(), /half B combine blows: 2 .* a reset never adds a blow/);
+});
+
 test('renderTable: metric, main, this PR, allowed, and which fail', () => {
   const text = GC.renderTable(GC.compare(doc(), doc({ meanR: 0 }), TOL));
   const lines = text.split('\n');

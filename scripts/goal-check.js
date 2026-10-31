@@ -8,6 +8,8 @@
  *   node scripts/goal-check.js baseline --write [--real] write the baseline, only when no gated metric is worse than the
  *                                                        current one's (blows not above, the rest not below): it only rises
  *   ... baseline --write --new-fixture --why "<why>"     a first baseline for a new fixture, the change recorded
+ *   ... baseline --write --reset --why "<why>"           the owner-approved reset of the same fixture's baseline (lower
+ *                                                        allowed, never a blow more), recorded in it: accepted once
  *
  * The committed CI slice by default (tests/fixtures/goal: its baseline committed); --real, the local goal:real fixture
  * (fetched through the replay broker, its baseline under the harness home). Exit 1 on a regression or a refused baseline.
@@ -18,7 +20,7 @@ const path = require('path');
 const GC = require('./lib/eval/goal-check');
 
 const ROOT = path.resolve(__dirname, '..');
-const USAGE = 'usage: goal-check.js run [--real] | baseline --write [--real] [--new-fixture --why "<why the fixture changed>"]';
+const USAGE = 'usage: goal-check.js run [--real] | baseline --write [--real] [--new-fixture | --reset] --why "<why>"';
 
 function main(argv) {
   const [cmd, ...rest] = argv;
@@ -40,7 +42,16 @@ function main(argv) {
   }
   if (!rest.includes('--write')) throw new Error(USAGE);
   const fresh = rest.includes('--new-fixture');
-  const why = rest.includes('--why') ? rest[rest.indexOf('--why') + 1] : null;
+  const why = rest.includes('--why') && !/^--/.test(rest[rest.indexOf('--why') + 1] || '--') ? rest[rest.indexOf('--why') + 1] : null;
+  if (rest.includes('--reset')) {
+    if (fresh) throw new Error('--reset keeps the fixture: --new-fixture and --reset don\'t go together');
+    const head = require('child_process').spawnSync('git', ['rev-parse', '--short', 'HEAD'], { cwd: ROOT, encoding: 'utf8' });
+    const reset = GC.resetBaseline(base, now, { why, at: new Date().toISOString().slice(0, 10), commit: head.status === 0 ? head.stdout.trim() : null });
+    const next = { ...reset, writtenBy: 'scripts/goal-check.js baseline --write --reset' };
+    fs.writeFileSync(set.baselineFile, `${JSON.stringify(next, null, 2)}\n`);
+    process.stdout.write(`${set.baselineFile} reset (${secs} s): ${next.reset.why}\n`);
+    return 0;
+  }
   if (base && base.fixture !== now.fixture && !(fresh && why && why.trim())) throw new Error('the fixture changed: --new-fixture --why "<why>" writes its first baseline, the change recorded for the review');
   const same = base && base.fixture === now.fixture;
   const change = !same && base ? { fixtureChange: { from: base.fixture, why } } : {};
