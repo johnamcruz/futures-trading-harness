@@ -6,7 +6,8 @@
 // synthetic blow path (goal-synth.js), per half, against the committed baseline (tests/fixtures/goal/baseline.json).
 // A pull request that moves the strategy away from the goal fails, in the owner's order: one more combine blow (the
 // blow path included), a lower combine pass rate, a lower mean R, a smaller share of the trends' R caught, each beyond
-// its tighten-only tolerance (config/training.json goalRegression.tolerance). The table it prints on a failure:
+// its tighten-only tolerance (config/training.json goalRegression.tolerance), or one trend leg fewer caught (no
+// tolerance). The table it prints on a failure:
 // metric, main, this PR, allowed.
 //
 // The baseline only rises, as the promotion gate's numbers: against the base branch's baseline (git merge-base HEAD
@@ -74,7 +75,7 @@ test('the CI slice: small, real sessions of the open window, both halves, every 
   assert.deepStrictEqual(SET.synth.blocks.map(b => `${b.half} ${b.scenario}`), ['M fakeout', 'M quiet', 'M listed-vwap', 'M limit-fill', 'S bleed', 'M floor-ticks', 'M floor-atr']);
 });
 
-test('goal regression tier 1: no goal metric worse than main\'s baseline beyond its tolerance (blows incl. the blow path, pass rate, mean R, R caught)', () => {
+test('goal regression tier 1: no goal metric worse than main\'s baseline beyond its tolerance (blows incl. the blow path, pass rate, mean R, R caught, trend legs caught)', () => {
   const t0 = Date.now();
   const now = GC.summary(GC.evaluate(DOC, { root: REPO, env: {}, synth: SET.synth }));
   assert.strictEqual(BASELINE.fixture, now.fixture, 'the baseline is of this fixture (a new one: node scripts/goal-check.js baseline --write --new-fixture --why "<why>")');
@@ -91,6 +92,19 @@ test('the baseline only rises against the base branch\'s (tier 1 and tier 2); an
   // Tier 2: the same rule; another fixture only with the change recorded (the check above holds it to the base's hash).
   if (base.tier2 && base.tier2.fixture === (BASELINE.tier2 || {}).fixture) assert.deepStrictEqual(GP.tier2RiseProblems(base.tier2.summary, BASELINE.tier2.summary), []);
   else if (base.tier2) assert.ok(BASELINE.fixtureChange && BASELINE.fixtureChange.from === base.fixture, 'tier 2 of another fixture: the fixture change recorded');
+});
+
+// The owner-approved resets, pinned to exactly the one-time reset of 2026-10-30 (main's pre-reset tier 1 baseline under
+// the old tool). A new entry is a new owner approval: it changes this pin too, and the review reads both.
+test('the approved baseline resets are exactly the one-time owner-approved reset of 2026-10-30', () => {
+  assert.deepStrictEqual(GC.APPROVED_RESETS.map(r => ({ ...r })), [{
+    from: 'c63da23391f4e0225e642c6ea2e320cb557961f9da1891d9ba6c59399f0c6f02',
+    to: '44a498c2cc6dd7803e4fc229b8972cefa8fbe296b83c78abc9a40b941a78fb96',
+    why: 'one-time reset, owner-approved 2026-10-30: the old tool applied one position at a time before sizing and counted trades no account could size; the corrected tool takes one position at a time after sizing, at each attempt\'s own state, as live',
+    approved: '2026-10-30',
+  }]);
+  assert.ok(Object.isFrozen(GC.APPROVED_RESETS) && GC.APPROVED_RESETS.every(Object.isFrozen));
+  if (BASELINE.reset) assert.ok(GC.APPROVED_RESETS.some(r => r.from === GC.fromHash(BASELINE.reset.from) && r.to === GC.fromHash(GC.gatedOf(BASELINE)) && r.why === BASELINE.reset.why), 'the committed baseline\'s reset is a pinned one');
 });
 
 test('tier 2\'s committed baseline and the move goldens are of this fixture and the configured days', () => {

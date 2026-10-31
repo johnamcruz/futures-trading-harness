@@ -38,3 +38,23 @@ test('combineMc: the shipped account\'s 30-session attempts, seeded (the same tw
   assert.strictEqual(lose.pass, 0);
   assert.ok(lose.blows > 0, JSON.stringify(lose));
 });
+
+test('walkTaken and combineMc: one position at a time after sizing, so a plan the account can\'t size never holds the slot', () => {
+  const P = GT.shippedOf(ROOT, {});
+  const ctx = GM.mcContext(P, { root: ROOT, env: {}, symbol: 'MNQ' });
+  const day = '2022-01-03';
+  const t = (entry, exit, stopTicks, R, type) => ({ ...tr(day, 'long', `${day}T${entry}:00.000Z`, R), exitTime: `${day}T${exit}:00.000Z`, stopTicks, setupAt: `${day}T${entry}:00.000Z`, type });
+  // A 4000-tick stop sizes no contract; the 14:10 plan inside its span is taken in its place, the 14:20 one inside
+  // that one's span is not.
+  const wide = t('14:00', '15:00', 4000, 3, 'a');
+  const inside = t('14:10', '14:40', 80, 2, 'b');
+  const over = t('14:20', '14:30', 80, 2, 'c');
+  const taken = GM.walkTaken({ trades: [over, wide, inside], days: [day], regimes: ['normal'], ctx, symbol: 'MNQ' });
+  assert.deepStrictEqual(taken.map(x => x.type), ['b']);
+  // The same in every combine path: one taken trade a day, never the unsized one.
+  const days = Array.from({ length: 40 }, (_, i) => new Date(Date.UTC(2022, 0, 3 + i)).toISOString().slice(0, 10));
+  const each = d => [wide, inside, over].map(x => ({ ...x, day: d, entryTime: x.entryTime.replace(day, d), exitTime: x.exitTime.replace(day, d), setupAt: x.setupAt.replace(day, d) }));
+  const mc = GM.combineMc({ trades: days.flatMap(each), days, regimes: days.map(() => 'normal'), ctx, sessions: ctx.account.sessions, paths: 20, seed: 1, meanBlock: 7, symbol: 'MNQ' });
+  const only = GM.combineMc({ trades: days.flatMap(d => each(d).filter(x => x.type === 'b')), days, regimes: days.map(() => 'normal'), ctx, sessions: ctx.account.sessions, paths: 20, seed: 1, meanBlock: 7, symbol: 'MNQ' });
+  assert.deepStrictEqual(mc, only);
+});

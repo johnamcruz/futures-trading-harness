@@ -14,7 +14,10 @@
  *   tradeStats(trades, { falseStartPeakR, tick })   { trades, meanR, falseStartShare, maxDrawdownR, medianRiskPts }
  *   combineMc({ trades, days, regimes, ctx, sessions, paths, seed, meanBlock, symbol })   { paths, pass, blow, blows,
  *                          meanDaysToPass }: a seeded stationary bootstrap of the days (prop/stats.js stationaryPath, by
- *                          regime), each path a 30-session attempt under the account's rules (prop/attempts.js runAttempt)
+ *                          regime), each path a 30-session attempt under the account's rules (prop/attempts.js runAttempt),
+ *                          trades the candidates (goal-trades.js), one position at a time after sizing at the path's state
+ *   walkTaken({ trades, days, regimes, ctx, symbol })   the candidates live takes on the sessions in order (attempts back
+ *                          to back, one position at a time after sizing): what tradeStats and caught read
  *   mcContext(shipped, { root, env, symbol })   the attempt's context: the policy's account, rulebook sizing, the composed
  *                          strategy's cap and the gate's loss limits (as the studies' combine MC built it)
  */
@@ -25,6 +28,7 @@ const { legsOf } = require('../replay/trend-capture');
 const TA = require('../train/trend-align');
 const { accountNamed } = require('../trading/accounts');
 const { requireSizing } = require('../trading/combine');
+const { entryOrder } = require('./goal-trades');
 
 const msOf = minutes => minutes * 60000;
 const TC = require('../tunables').replay().trendCapture;
@@ -91,20 +95,41 @@ const toTrade = (t, symbol) => {
   return { symbol, day: t.day, entryTime: t.entryTime, exitTime: t.exitTime, stopTicks: t.stopTicks, moveTicks: r4(t.R * t.stopTicks), troughTicks: trough < 0 ? [r4(trough * t.stopTicks)] : [], R: t.R };
 };
 
-function combineMc({ trades, days, regimes, ctx, sessions, paths, seed, meanBlock, symbol }) {
+/** The days as an attempt reads them: each day's candidates in entry order (goal-trades.js entryOrder), `ref` the trade. */
+function dayList(trades, days, regimes, symbol) {
   const byDay = new Map(days.map(d => [d, []]));
-  for (const t of trades) if (byDay.has(t.day)) byDay.get(t.day).push(toTrade(t, symbol));
-  const list = days.map((day, i) => ({ day, month: day.slice(0, 7), regime: regimes[i], trades: byDay.get(day) }));
+  for (const t of [...trades].sort(entryOrder)) if (byDay.has(t.day)) byDay.get(t.day).push({ ...toTrade(t, symbol), ref: t });
+  return days.map((day, i) => ({ day, month: day.slice(0, 7), regime: regimes[i], trades: byDay.get(day) }));
+}
+
+/**
+ * The trades live would take on the half's sessions in their own order: attempts one after another (a new one the
+ * session after one ends), each trade sized at that attempt's state, one position at a time after sizing (runAttempt's
+ * onePosition). The trade metrics (tradeStats, caught) read these: a plan no account sizes is never a trade.
+ */
+function walkTaken({ trades, days, regimes, ctx, symbol }) {
+  const list = dayList(trades, days, regimes, symbol);
+  const taken = [];
+  for (let k = 0; k < list.length;) {
+    let last = 0;
+    at.runAttempt(list.slice(k), { ...ctx, onePosition: true, onDay: (_cs, d) => { last = d; }, onTrade: ({ trade }) => taken.push(trade.ref) });
+    k += last + 1;
+  }
+  return taken;
+}
+
+function combineMc({ trades, days, regimes, ctx, sessions, paths, seed, meanBlock, symbol }) {
+  const list = dayList(trades, days, regimes, symbol);
   const rand = stats.streamFor(seed, 'paths:goal');
   const byRegime = stats.groupBy(regimes);
   const out = [];
   for (let p = 0; p < paths; p += 1) {
     const ix = stats.stationaryPath(list.length, sessions, { meanBlock, rand, regimes, byRegime });
-    out.push(at.runAttempt(ix.map(j => list[j]), ctx));
+    out.push(at.runAttempt(ix.map(j => list[j]), { ...ctx, onePosition: true }));
   }
   const passed = out.filter(o => o.status === 'passed');
   const blows = out.filter(o => o.status === 'blown').length;
   return { paths, pass: r4(passed.length / paths), blow: r4(blows / paths), blows, meanDaysToPass: passed.length ? r4(sum(passed.map(o => o.sessions)) / passed.length) : null };
 }
 
-module.exports = { trendLegs, caught, tradeStats, combineMc, mcContext, toTrade };
+module.exports = { trendLegs, caught, tradeStats, combineMc, walkTaken, mcContext, toTrade };

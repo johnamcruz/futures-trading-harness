@@ -1771,12 +1771,22 @@ only. On the entry rule's side per bar (the RULEBOOK's `entry`,
 chain-side.js), the 15m CHoCH, BOS, compression break and strong CISD at its
 OTE and momentum_continuation's scan; compose's entry timing as shipped, the
 locked stop and D13's floor, the exit (limitOutcome with the policy's
-composed exit), one position at a time; then per half the trades, mean R, R
-caught of the trend legs' R available, the false-start share, the drawdown
-and a seeded 30-session combine Monte Carlo on the account's rulebook
-sizing; and the blow path's blows. It fails on one more blow, or a pass
-rate, mean R or R caught below main's less its tighten-only tolerance
+composed exit); one position at a time as live decides it, after sizing at
+the account's own state (a plan the account can't size never holds the
+slot): the trades, mean R, R caught of the trend legs' R available, the
+false-start share and the drawdown on what the half's sessions take in
+order (attempts back to back), and a seeded 30-session combine Monte Carlo
+on the account's rulebook sizing, each path at its own state; and the blow
+path's blows. It fails on one more blow, or a pass
+rate, mean R or R caught below main's less its tighten-only tolerance, or
+one trend leg fewer caught (a count, no tolerance)
 (`goalRegression.tolerance`: tight, since every number is deterministic).
+R caught's denominator (each trend leg's R available) is in units of the
+median risk of the trades taken, so the share isn't comparable across stop
+widths: a change in which trades are taken can raise it while catching
+fewer legs, which is why the legs caught are gated beside it. The
+blow path's trades and mean R are checked only on a fixture change (it
+never softens); on the same fixture only its blows are gated.
 The fixture's draw, the Monte Carlo and tier 2's days are pinned exactly.
 Its mutation checks (`tests/goal/tier1.goal.js`) prove it fails on a worse
 exit, a stricter entry rule, a broken size on the blow path, a minimum size
@@ -1879,6 +1889,16 @@ live trail give different R on the same trade. A baseline only rises: `goal-chec
 tier 2's `node tests/goal/tier2-run.js --write`) refuse a worse one, the
 test holds the committed baseline to the base branch's, and a new fixture
 starts over only with its change recorded (`--new-fixture --why "<why>"`).
+A lower baseline of the same fixture comes only from an owner-approved
+reset (`goal-check.js baseline --write --reset --why "<why>"`), recorded in
+the baseline (`reset`: why, the gated metrics it replaces, the fixture,
+when): the test accepts it once, on the branch that brings it (new against
+the base's, replacing exactly the base's numbers, never a blow more, and
+pinned in `APPROVED_RESETS` in `scripts/lib/eval/goal-check.js` by the hash
+of the numbers it replaces and its why); once merged it is the base's own,
+and a later lowering fails unless a new reset is pinned there (a code change
+the review sees). The one pinned reset is the owner-approved one of
+2026-10-30 (the corrected tool: one position at a time after sizing).
 
 ## 8. Rules that keep it honest
 

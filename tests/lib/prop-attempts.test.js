@@ -327,3 +327,23 @@ test('attempts: a runner outage leaves the day\'s first trade unprotected and ta
   const v = at.runAttempt(days([trade(30), trade(60)]), ctx({ variant: x => ({ ...x, moveTicks: x.moveTicks - 10 }), account: { sessions: 1 } }));
   assert.strictEqual(v.profit, (20 * 5 - 7.4) + (50 * 5 - 7.4));
 });
+
+test('attempts: onePosition decides the slot after sizing: a trade the account skips never holds it, a taken one holds it to its exit', () => {
+  const T = (move, entry, exit, extra = {}) => trade(move, { entryTime: `2022-03-01T${entry}:00.000Z`, exitTime: `2022-03-01T${exit}:00.000Z`, ...extra });
+  // The 14:00 trade is too wide to size (its own size refuses it); the 14:10 one, inside its span, is then taken.
+  const sizeOf = ({ trade: t }) => (t.stopTicks > 100 ? null : ten());
+  const wide = T(60, '14:00', '15:00', { stopTicks: 400 });
+  const inside = T(60, '14:10', '14:40');
+  const after = T(60, '14:20', '14:50');
+  const late = T(60, '14:40', '14:45');
+  const run = (list, onePosition) => {
+    const skips = [];
+    const o = at.runAttempt(days(list), ctx({ size: sizeOf, onePosition, account: { sessions: 1 }, onSkip: x => skips.push(x.why) }));
+    return [o.taken, skips];
+  };
+  assert.deepStrictEqual(run([wide, inside, after, late], true), [2, ['no-size', 'position-open']]);
+  // Off (the default): every trade the account sizes is taken, as before.
+  assert.deepStrictEqual(run([wide, inside, after, late], false), [3, ['no-size']]);
+  // An exit time unknown holds the slot for the rest of the day.
+  assert.deepStrictEqual(run([T(60, '14:10', '14:20', { exitTime: null }), late], true), [1, ['position-open']]);
+});
