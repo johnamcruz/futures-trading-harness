@@ -121,6 +121,9 @@ test('sizeForCycle: the entry\'s own size chain at the cycle\'s budget: the risk
   assert.ok(policy.sizing.min_contracts * perContract > cap && Math.floor(1500 / perContract) >= policy.sizing.min_contracts, 'the case: budget fits the floor, the cap does not');
   assert.strictEqual(fits(wide), false);
   assert.strictEqual(fits(40), true);
+  // A 30-point stop the budget alone would size as a mini (1 NQ, over the cap) is the run's contract, MNQ, as live sizes
+  // it: 4 MNQ fit the cap (the policy's auto mode never picks a mini for a micro run).
+  assert.strictEqual(fits(120), true);
   assert.strictEqual(X.sizeForCycle(rec(5), { strategies, accounts, root: 'MNQ', composed: 'trade_lifecycle' })(40), false, 'a budget under the floor');
   assert.strictEqual(X.sizeForCycle({ context: { attempts: [] } }, { strategies, accounts, root: 'MNQ', composed: 'trade_lifecycle' })(40), null, 'no attempt: no constraint');
   assert.strictEqual(X.sizeForCycle({ context: { attempts: [{ account: account.name, status: 'active', budgets: [] }] } }, { strategies, accounts, root: 'MNQ', composed: 'trade_lifecycle' })(40), undefined, 'no budget recorded: unknown');

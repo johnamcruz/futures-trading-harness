@@ -55,9 +55,11 @@ test('translateSize: the verdict\'s multiplier sizes the budget; a mini verdict 
   // A floor of 12: the one NQ (10) is under it: a skip with the floor's reason.
   const nq12 = translateSize({ suggested: 1, home: home(), root: 'NQ', policy: policy({ min_contracts: 12 }, { contracts: 'mini' }), account: MINI, verdict: verdict({ contract: 'NQ', maxSize: 1 }), capUsd: 1000, perContract: 200, specOf, selected: ['NQ'] });
   assert.ok(nq12.skip && /the size budget now allows nothing|under the floor of 12/.test(nq12.reason), nq12.reason);
-  // auto with nothing selected: 18 micros reach a mini, so the budget trades 1 NQ; a verdict on MNQ is not it.
+  // auto with nothing selected: the budget is sized in the verdict's own contract, as the runner's verdict is (its run's
+  // contract), never a mini the entry doesn't trade: 18 MNQ (before 2026-10-30 a budget that reached a mini sized 1 NQ, and
+  // the MNQ verdict skipped: a wider stop sized, a narrower one didn't).
   const auto = translateSize({ suggested: 1, home: home(), root: 'MNQ', policy: policy({}, { contracts: 'auto' }), account: MINI, verdict: verdict(), capUsd: 1000, perContract: 20, specOf, selected: null });
-  assert.ok(auto.skip && /the size budget now allows nothing at a 40-tick stop/.test(auto.reason), auto.reason);
+  assert.deepStrictEqual([auto.size, auto.contract], [18, 'MNQ'], auto.reason);
 });
 
 test('translateSize: under the floor is a skip (never sized up); a skip verdict, no verdict, another contract, no account or no cap skips', () => {
@@ -124,6 +126,166 @@ test('parity: the simulator (prop/attempts.js defaultSize with the live limits) 
   assert.strictEqual(compared, 56);
   // Without the limits the simulator sized past the live entry: the cap is what live binds on.
   assert.ok(at.defaultSize({ cs, trade: { stopTicks: 40 }, sizing: policy().sizing, legs, mode: 'micro', ratio, fraction: 1 }).size > 15);
+});
+
+// The shipped policy, its account and the composed cap (the probe the owner's fix came from): a fresh, healthy attempt.
+const shipped = () => {
+  const path = require('path');
+  const ROOT = path.resolve(__dirname, '..', '..');
+  const all = require('../../scripts/lib/trading/strategies').loadStrategies(ROOT, {}).strategies;
+  const pol = all.find(s => s.name === 'prop_portfolio');
+  const account = require('../../scripts/lib/trading/accounts').accountNamed(ROOT, pol.account, {});
+  const combine = require('../../scripts/lib/trading/combine');
+  const { legs, ratio } = require('../../scripts/lib/prop/attempts').legsFor(account, 'MNQ', { tickValue: 0.5 });
+  return { pol, account, combine, legs, ratio, cap: all.find(s => s.name === 'trade_lifecycle').risk.max_risk_usd, cs: combine.start(account) };
+};
+const planArgs = (S, stopTicks, extra = {}) => ({
+  dollars: S.combine.budget(S.cs, S.pol.sizing), room: S.combine.room(S.cs), stopTicks, legs: S.legs, mode: 'auto', guard: S.pol.sizing.min_size_guard,
+  fraction: 1, ratio: S.ratio, slipTicks: S.pol.sizing.stop_slippage_ticks, minContracts: S.pol.sizing.min_contracts, ...extra,
+});
+const planOpts = (S, extra = {}) => ({ limits: { capUsd: S.cap, orderMax: null }, healthyUsd: S.pol.sizing.healthy_risk_usd, stretchUsd: S.pol.sizing.floor_stretch_max_usd, state: { ...S.cs, lossesToday: 0 }, nearTargetUsd: S.pol.sizing.near_target_usd, ...extra });
+
+test('entryPlan: the size is the most the $300 cap fits all in; the budget only lowers it; auto trades minis only when whole minis carry the same size (the old rule skipped 26-44 points)', () => {
+  const { entryPlan, limitPlan } = require('../../scripts/lib/prop/size-translate');
+  const S = shipped();
+  assert.strictEqual(S.pol.contracts, 'auto', 'the shipped policy sizes in auto mode with no contract selected');
+  assert.ok(S.cap > 0 && S.pol.sizing.min_contracts === 3 && S.pol.sizing.floor_stretch_max_usd > S.cap, 'the case: a cap, a floor of 3, a stretch over the cap');
+  // 30 points (120 ticks): one MNQ is (120 + 1) x $0.50 + $0.74 = $61.24, so the cap fits 4 ($244.96). The budget alone
+  // would pick 1 NQ ((120 + 1) x $5 + $2.80 = $607.80), which the old rule then cut to nothing.
+  const args = planArgs(S, 120);
+  const mini = S.combine.contractPlan(args);
+  assert.deepStrictEqual(mini, { root: 'NQ', size: 1, riskPerContract: 607.8 });
+  assert.strictEqual(limitPlan(mini, { ...planOpts(S), minContracts: 3, ratio: S.ratio, miniRoot: 'NQ' }), null, 'the old rule: no size');
+  assert.deepStrictEqual(entryPlan(args, planOpts(S)), { root: 'MNQ', size: 4, riskPerContract: 61.24 });
+  // 10 points (40 ticks): the cap fits 14 MNQ at $21.24 ($297.36); 1 NQ ($207.80) is 10 micro-equivalents, not 14: micros.
+  assert.deepStrictEqual(entryPlan(planArgs(S, 40), planOpts(S)), { root: 'MNQ', size: 14, riskPerContract: 21.24 });
+  // 14.25 points (57 ticks): the cap fits 10 MNQ at $29.74 ($297.40) and 1 NQ at $292.80 is the same 10: the mini.
+  assert.deepStrictEqual(entryPlan(planArgs(S, 57), planOpts(S)), { root: 'NQ', size: 1, riskPerContract: 292.8 });
+  // 20 points: 7 MNQ at $41.24 ($288.68); never the mini's floor stretched (1 NQ at $407.80).
+  assert.deepStrictEqual(entryPlan(planArgs(S, 80), planOpts(S)), { root: 'MNQ', size: 7, riskPerContract: 41.24 });
+  // The budget lowers it: a $100 budget at 10 points is 4 MNQ ($84.96), never the cap's 14.
+  assert.deepStrictEqual(entryPlan(planArgs(S, 40, { dollars: 100 }), planOpts(S)), { root: 'MNQ', size: 4, riskPerContract: 21.24 });
+});
+
+test('entryPlan: the healthy cap (sizing.healthy_risk_usd) takes the composed cap\'s place for every size, only while healthy; off is the composed cap', () => {
+  const { entryPlan, riskCapOf } = require('../../scripts/lib/prop/size-translate');
+  const S = shipped();
+  assert.strictEqual(S.pol.sizing.healthy_risk_usd, 0, 'off in the shipped rulebook');
+  const on = extra => planOpts(S, { healthyUsd: 500, ...extra });
+  // 30 points: $500 fits 8 MNQ at $61.24 ($489.92) while healthy; a loss today or a deficit: the composed cap's 4.
+  assert.strictEqual(entryPlan(planArgs(S, 120), on()).size, 8);
+  assert.strictEqual(entryPlan(planArgs(S, 120), on({ state: { ...S.cs, lossesToday: 1 } })).size, 4);
+  assert.strictEqual(entryPlan(planArgs(S, 120), on({ state: { ...S.cs, balance: S.cs.start - 1, lossesToday: 0 } })).size, 4);
+  assert.deepStrictEqual(riskCapOf({ capUsd: 300, healthyUsd: 200, state: { ...S.cs, lossesToday: 0 } }), { capUsd: 300, healthy: false }, 'never under the composed cap');
+  assert.deepStrictEqual(riskCapOf({ capUsd: 300, healthyUsd: 0, state: { ...S.cs, lossesToday: 0 } }), { capUsd: 300, healthy: false }, 'off');
+  for (const bad of ['450', Infinity, NaN, null]) assert.deepStrictEqual(riskCapOf({ capUsd: 300, healthyUsd: bad, state: { ...S.cs, lossesToday: 0 } }), { capUsd: 300, healthy: false }, `${String(bad)}: not a finite number, off`);
+});
+
+test('entryPlan: every other limit only lowers it: the floor stretch only while healthy, near the target the floor, the broker\'s max, the selected leg, no cap the budget alone', () => {
+  const { entryPlan } = require('../../scripts/lib/prop/size-translate');
+  const S = shipped();
+  // 60 points (240 ticks): 3 MNQ at $121.24 = $363.72, over the cap, within the $500 stretch: only while healthy.
+  assert.deepStrictEqual(entryPlan(planArgs(S, 240), planOpts(S)), { root: 'MNQ', size: 3, riskPerContract: 121.24 });
+  assert.strictEqual(entryPlan(planArgs(S, 240), planOpts(S, { state: { ...S.cs, lossesToday: 1 } })), null, 'a loss today: the cap holds');
+  assert.strictEqual(entryPlan(planArgs(S, 240), planOpts(S, { state: { ...S.cs, balance: S.cs.start - 1, lossesToday: 0 } })), null, 'a deficit: the cap holds');
+  // 83 points: 3 MNQ at $167.24 = $501.72, over the stretch too: none, as before.
+  assert.strictEqual(entryPlan(planArgs(S, 332), planOpts(S)), null);
+  // Near the target: the floor in micros, never more.
+  const near = { ...S.cs, balance: S.cs.start + S.cs.target - 1, lossesToday: 0 };
+  assert.strictEqual(entryPlan(planArgs(S, 120), planOpts(S, { state: near })).size, 3);
+  // The broker's max order size binds the micros: 2 is under the floor and the stretch can't pass it: none.
+  assert.strictEqual(entryPlan(planArgs(S, 120), planOpts(S, { limits: { capUsd: S.cap, orderMax: 3 } })).size, 3);
+  assert.strictEqual(entryPlan(planArgs(S, 120), planOpts(S, { limits: { capUsd: S.cap, orderMax: 2 } })), null);
+  // A selected leg is never swapped: mini mode stays minis (none fits), micro mode was micros already.
+  assert.strictEqual(entryPlan(planArgs(S, 120, { mode: 'mini' }), planOpts(S)), null);
+  assert.deepStrictEqual(entryPlan(planArgs(S, 120, { mode: 'micro' }), planOpts(S)), { root: 'MNQ', size: 4, riskPerContract: 61.24 });
+  // No limits (no composed cap): the size budget's plan alone, as before (its mini).
+  assert.strictEqual(entryPlan(planArgs(S, 120), planOpts(S, { limits: null })).root, 'NQ');
+  // An account that can't trade micros: the mini's result as before (here none).
+  const noMicro = { ...S.legs, micro: { ...S.legs.micro, max: 0 } };
+  assert.strictEqual(entryPlan(planArgs(S, 120, { legs: noMicro }), planOpts(S)), null);
+  // The verdict's multiplier sizes the micros too: half of 16 is 8 micros, the cap 4.
+  assert.strictEqual(entryPlan(planArgs(S, 120, { fraction: 0.5 }), planOpts(S)).size, 4);
+});
+
+test('property: across stops of 1 to 120 points at a healthy state, the risk never passes the cap (or the stretch, exactly the floor), never under the floor, and the size never rises as the stop widens', () => {
+  const { entryPlan } = require('../../scripts/lib/prop/size-translate');
+  const at = require('../../scripts/lib/prop/attempts');
+  const S = shipped();
+  const z = S.pol.sizing;
+  let prev = Infinity;
+  let sized = 0;
+  let ended = false;
+  for (let ticks = 4; ticks <= 480; ticks += 1) {
+    const p = entryPlan(planArgs(S, ticks), planOpts(S));
+    // The simulator's own size is this one.
+    assert.deepStrictEqual(at.defaultSize({ cs: S.cs, trade: { stopTicks: ticks }, sizing: z, legs: S.legs, mode: 'auto', ratio: S.ratio, fraction: 1, limits: planOpts(S).limits, lossesToday: 0 }), p, `${ticks} ticks`);
+    if (!p) { ended = true; prev = 0; continue; }
+    assert.ok(!ended, `${ticks} ticks sizes ${p.size} ${p.root} but a narrower stop sized nothing: a gap`);
+    sized += 1;
+    const each = p.root === S.legs.mini.root ? S.ratio : 1;
+    const risk = p.size * p.riskPerContract;
+    const micros = p.size * each;
+    assert.ok(micros >= z.min_contracts, `${ticks} ticks: ${micros} micro-equivalents, under the floor`);
+    assert.ok(risk <= S.cap + 1e-9 || (micros === z.min_contracts && p.root === S.legs.micro.root && risk <= z.floor_stretch_max_usd + 1e-9), `${ticks} ticks: ${p.size} ${p.root} risk $${risk.toFixed(2)}, over the cap and not the stretched floor`);
+    assert.ok(micros <= prev, `${ticks} ticks: ${micros} micro-equivalents, more than the narrower stop's ${prev}`);
+    prev = micros;
+  }
+  assert.ok(sized > 300 && ended, `the range sizes most stops and ends past the stretch (${sized})`);
+});
+
+test('parity: translateSize (live) is entryPlan (the rule) in the selected leg, stop by stop: micro and mini, healthy and drawn, the stretch and the healthy cap on and off, the broker\'s max', () => {
+  const { entryPlan } = require('../../scripts/lib/prop/size-translate');
+  const { decideSetup } = require('../../scripts/lib/prop/verdict');
+  const combine = require('../../scripts/lib/trading/combine');
+  const bars = [{ t: '2026-10-07T13:57:00.000Z', o: 21500, h: 21502, l: 21498, c: 21500, v: 1 }];
+  let compared = 0;
+  let healthyBound = 0;
+  for (const [state, balance] of [['healthy', 50000], ['drawn', 49200]]) {
+    const h = home(balance);
+    const r = prop.readAttempt(h, MINI.name);
+    const cs = prop.stateFrom(MINI, r, r.snapshot.balance);
+    for (const [root, tv, fee] of [['MNQ', 0.5, 0.37], ['NQ', 5, 1.4]]) {
+      for (const [stretch, healthy] of [[0, 0], [500, 0], [500, 450], [0, 500]]) {
+        const pol = policy({ min_contracts: 3, floor_stretch_max_usd: stretch, healthy_risk_usd: healthy, cushion_frac: 0.5 });
+        const { legs, ratio, mode } = prop.legsFor(MINI, root, specOf, [root]);
+        for (let stopTicks = 20; stopTicks <= 400; stopTicks += 4) {
+          for (const orderMax of [null, 5]) {
+            const v = decideSetup({ account: MINI, cs, strategy: { ...pol, timeframe: '3m' }, component: 'trade_lifecycle', symbol: root, contractId: root, rawBars: bars, spec: specOf(root), scan: { direction: 'long', stopDistance: stopTicks * 0.25 }, now: NOW, specOf, selected: [root] });
+            const live = translateSize({ suggested: 1, home: h, root, policy: pol, account: MINI, verdict: v, capUsd: 300, perContract: (stopTicks + 1) * tv + 2 * fee, specOf, selected: [root], orderMax });
+            const rule = v.action === 'full' ? entryPlan({ dollars: combine.budget(cs, pol.sizing), room: combine.room(cs), stopTicks, legs, mode, guard: pol.sizing.min_size_guard, fraction: 1, ratio, slipTicks: 1, minContracts: 3 },
+              { limits: { capUsd: 300, orderMax, sizeMax: v.maxSize }, healthyUsd: healthy, stretchUsd: stretch, state: { ...cs, lossesToday: 0 }, nearTargetUsd: 0 }) : null;
+            assert.strictEqual(live.skip ? 0 : live.size, rule ? rule.size : 0, `${state} ${root} stretch ${stretch} healthy ${healthy} ${stopTicks} ticks max ${orderMax}: ${live.reason}`);
+            if (rule && rule.size * rule.riskPerContract > 300 + 1e-9 && healthy > 300) healthyBound += 1;
+            compared += 1;
+          }
+        }
+      }
+    }
+  }
+  assert.ok(compared > 3000 && healthyBound > 0, `${compared} compared, ${healthyBound} on the healthy cap`);
+});
+
+test('tick specs: live sizing takes the tick value from the broker\'s specs it is passed, never the table; none, or one that differs from the table, refuses', () => {
+  const { brokerSpecs } = require('../../scripts/lib/trading/broker-specs');
+  const { recordBrokerSpecs } = require('../helpers');
+  // A server spec with another tick value (a test-only contract set): the size follows it. $0.25 a tick on MNQ: a
+  // 40-tick stop is 41 x $0.25 + $0.74 = $11.99 a contract, $400 / 11.99 = 33 (the table's $0.50 would be 18).
+  const quarter = r => (r === 'MNQ' || r === 'NQ' ? { tickSize: 0.25, tickValue: r === 'NQ' ? 2.5 : 0.25 } : null);
+  const t = translateSize({ suggested: 1, home: home(), root: 'MNQ', policy: policy(), account: MINI, verdict: verdict({ maxSize: 50 }), capUsd: 1000, perContract: 10.99, specOf: quarter, selected: ['MNQ'] });
+  assert.strictEqual(t.size, 36, t.reason);
+  // The server's recorded spec that differs from the table: the spec source refuses it (docs/BROKER-MCP-INTERFACE.md,
+  // "Tick specs"), and so does the translation.
+  const h = home();
+  const odd = brokerSpecs(recordBrokerSpecs(h, { roots: ['MNQ', 'NQ'], specs: { MNQ: { tickSize: 0.25, tickValue: 0.25 } } }));
+  assert.strictEqual(odd('MNQ'), null);
+  const refused = translateSize({ suggested: 1, home: h, root: 'MNQ', policy: policy(), account: MINI, verdict: verdict(), capUsd: 1000, perContract: 20, specOf: odd, selected: ['MNQ'] });
+  assert.ok(refused.skip && /MNQ/.test(refused.reason), refused.reason);
+  // No server spec at all: refused; and no spec source passed: refused, never the table.
+  const none = translateSize({ suggested: 1, home: home(), root: 'MNQ', policy: policy(), account: MINI, verdict: verdict(), capUsd: 1000, perContract: 20, specOf: () => null, selected: ['MNQ'] });
+  assert.ok(none.skip, none.reason);
+  const unpassed = translateSize({ suggested: 1, home: home(), root: 'MNQ', policy: policy(), account: MINI, verdict: verdict(), capUsd: 1000, perContract: 20, selected: ['MNQ'] });
+  assert.ok(unpassed.skip && /no broker tick specs/.test(unpassed.reason), unpassed.reason);
 });
 
 test('liveSizing: the run\'s Monte Carlo takes the composed cap, the broker\'s max and the contract the run traded', () => {

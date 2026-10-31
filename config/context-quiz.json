@@ -23,7 +23,7 @@
   "unsure": "it depends|unsure|not sure|unclear|ambiguous|can't tell|cannot tell|depends on",
   "passBar": {
     "partA": {
-      "allCorrect": 21,
+      "allCorrect": 22,
       "bothWays": 0
     },
     "partB": {
@@ -57,7 +57,7 @@
       "anchor": "both ranging: the 15m and `Trend declared?` your way",
       "required": [
         "15\\s*-?m",
-        "declared"
+        "declare"
       ],
       "forbidden": []
     },
@@ -110,7 +110,7 @@
       "id": "q6",
       "layer": "levels",
       "prompt": "head",
-      "text": "Is a 3m swing high a level or target you can trade from?",
+      "text": "What is a 3m swing high for: a level to trade from, a target, or only where the stop goes?",
       "rule": "a 3m swing is no level and no target, only where the stop goes",
       "anchor": "A 3m swing is not a level and not a target.",
       "required": [
@@ -118,7 +118,13 @@
       ],
       "forbidden": [
         "^\\s*(yes\\b|y,)",
-        "trade around"
+        "^\\s*(a )?(level|target)\\b",
+        "\\b(both|as|from it as)\\s+(a\\s+)?(level|target)\\b",
+        "trade around",
+        "\\bis a (level|target)\\b",
+        "\\bbut a (level|target)\\b",
+        "\\ba (level|target) only\\b",
+        "^\\s*both\\b"
       ]
     },
     {
@@ -162,7 +168,7 @@
         "session|daily|prior[- ]day|overnight|vwap|15\\s*-?m"
       ],
       "forbidden": [
-        "\\b3\\s*-?m\\b"
+        "\\b3\\s*-?m\\b(?![^.;,]*\\b(stop|not|never)\\b)"
       ]
     },
     {
@@ -216,7 +222,7 @@
       "rule": "compose places the stop one tick beyond the named level; never tighter; on the bracket",
       "anchor": "The stop: compose places it one tick beyond the level your stop read",
       "required": [
-        "compose|(?=.*one tick beyond)(?=.*never tighter)"
+        "compose|(?=.*one tick beyond)(?=.*never (tighter|closer))"
       ],
       "forbidden": [
         "your (own )?choice|your own",
@@ -270,28 +276,36 @@
       "id": "q17",
       "layer": "size",
       "prompt": "head+risk",
-      "text": "The account is healthy (balance at or above start, no loss streak). What size?",
+      "text": "In a prop attempt the account is healthy (balance at or above start, no loss streak). What size: the full verdict size, or less?",
       "rule": "a healthy prop account takes the full verdict size",
       "anchor": "Size in a prop attempt: the full verdict size, the code's number.",
       "required": [
-        "full"
+        "^\\W*(in a prop attempt,?\\s+)?(no\\b\\W*)?((the\\s+)?size(\\s+is|:)\\s+)?(take\\s+|use\\s+)?(the\\s+)?(verdict'?s\\s+)?full\\b"
       ],
       "forbidden": [
-        "half"
+        "half",
+        "^\\s*less\\b",
+        "\\bless than (the )?full\\b",
+        "\\b(cut|reduce|trim|lower)\\s+(it|the (verdict's )?size)\\b|\\breduced?\\s+(it\\s+)?to\\s+\\d",
+        "\\b(smaller|fewer|third|quarter|scaled?( down)?)\\b"
       ]
     },
     {
       "id": "q18",
       "layer": "size",
       "prompt": "head+risk",
-      "text": "The setup has one serious factor against it, in a prop attempt. What size?",
+      "text": "The setup has one serious factor against it, in a prop attempt. What size: the full verdict size, or less?",
       "rule": "in a prop attempt nothing halves",
       "anchor": "In a prop attempt nothing halves",
       "required": [
-        "full"
+        "^\\W*(in a prop attempt,?\\s+)?(no\\b\\W*)?((the\\s+)?size(\\s+is|:)\\s+)?(take\\s+|use\\s+)?(the\\s+)?(verdict'?s\\s+)?full\\b"
       ],
       "forbidden": [
-        "half"
+        "half",
+        "^\\s*less\\b",
+        "\\bless than (the )?full\\b",
+        "\\b(cut|reduce|trim|lower)\\s+(it|the (verdict's )?size)\\b|\\breduced?\\s+(it\\s+)?to\\s+\\d",
+        "\\b(smaller|fewer|third|quarter|scaled?( down)?)\\b"
       ]
     },
     {
@@ -306,8 +320,14 @@
       ],
       "forbidden": [
         "^\\s*(yes\\b|y,)",
+        "^\\s*(the )?entry\\b",
         "^(?!.*\\b(not|never|isn't|no|without)\\b).*(veto|no trade)",
-        "(?<!not )(?<!not a )\\bis a trade\\b"
+        "\\b(place|take|send|go with)\\s+(the\\s+)?entry\\b",
+        "\\bno restate\\b",
+        "\\binstead of (a )?restate\\b",
+        "(?<!not )(?<!not a )\\bis a trade\\b",
+        "\\brestate is (unnecessary|not needed)\\b",
+        "\\bno need (to|for a) restate\\b"
       ]
     },
     {
@@ -338,6 +358,26 @@
       "forbidden": [
         "^\\s*(yes\\b|y,)",
         "^(?!.*\\b(not|never|don't|no)\\b).*\\bcancel (it|the stop)\\b"
+      ]
+    },
+    {
+      "id": "q22",
+      "layer": "size",
+      "prompt": "head+risk",
+      "text": "In a prop attempt your compose record states 8 MNQ, but order_plan gives 5 MNQ for the entry. What size do you place?",
+      "rule": "the size comes from the size translation (order_plan's number), never the model's own",
+      "anchor": "size, and stop ticks come from the size translation (`order_plan` gives them)",
+      "required": [
+        "^\\W*(place\\s+|take\\s+|use\\s+|enter\\s+)?(the\\s+)?5\\b"
+      ],
+      "forbidden": [
+        "^\\s*8\\b",
+        "\\b(place|take|use|enter|go with)\\s+(the\\s+)?(record'?s?\\s+)?(size\\s+)?(of\\s+)?8\\b",
+        "\\b8\\b[^.;]*\\b(not|rather than|instead of)\\b[^.;]*\\b5\\b",
+        "\\b5\\s+or\\s+8\\b|\\b8\\s+or\\s+5\\b",
+        "^(?!.*\\b(never|not|don't)\\s+(place|take|use|enter)\\s+(the\\s+)?8\\b).*\\b(place|take|use|enter|go with)\\s+(the\\s+)?8\\b",
+        "^\\s*not\\s+(the\\s+)?5\\b",
+        "\\b5\\b[^.;]*\\bsuggestion\\b"
       ]
     }
   ],
@@ -427,13 +467,17 @@
           "capUsd": 300
         }
       },
-      "text": "One serious factor against the setup. What size?",
+      "text": "One serious factor against the setup. What size: the full verdict size, or less?",
       "rule": "the Size line: the full verdict",
       "required": [
-        "full"
+        "^\\W*(in a prop attempt,?\\s+)?(no\\b\\W*)?((the\\s+)?size(\\s+is|:)\\s+)?(take\\s+|use\\s+)?(the\\s+)?(verdict'?s\\s+)?full\\b"
       ],
       "forbidden": [
-        "half"
+        "half",
+        "^\\s*less\\b",
+        "\\bless than (the )?full\\b",
+        "\\b(cut|reduce|trim|lower)\\s+(it|the (verdict's )?size)\\b|\\breduced?\\s+(it\\s+)?to\\s+\\d",
+        "\\b(smaller|fewer|third|quarter|scaled?( down)?)\\b"
       ]
     },
     {
@@ -465,7 +509,8 @@
         "\\b(no|not|skip)\\b|floor|stretch"
       ],
       "forbidden": [
-        "\\b(take|trade|enter)\\s+(it\\s+)?(with\\s+)?2\\b"
+        "^\\s*(yes\\b|y,)",
+        "(?<!rather than )(?<!instead of )\\b(take|trade|enter)\\s+(it\\s+)?(with\\s+)?2\\b"
       ]
     }
   ]

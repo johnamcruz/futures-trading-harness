@@ -400,7 +400,7 @@ test('account states: drawn from the Monte Carlo\'s own attempt paths, bucketed,
 
 test('the account-policy hook: a candidate rulebook scored through the same Monte Carlo; its values checked by the rulebook\'s rules; never on a sealed run', () => {
   const { A } = acceptance();
-  const cand = { sizing: testSizing({ cushion_frac: 0.4, cap_usd: 'off', drawdown_halve_usd: 'off', min_size_guard: 1.5, stop_slippage_ticks: 1, clock_k: 'off', r_per_session: 0.3, floor_stretch_max_usd: 'off', near_target_usd: 'off' }), daily_loss_soft: 'off', stand_down: 0, multipliers: [] };
+  const cand = { sizing: testSizing({ cushion_frac: 0.4, cap_usd: 'off', drawdown_halve_usd: 'off', min_size_guard: 1.5, stop_slippage_ticks: 1, clock_k: 'off', r_per_session: 0.3, floor_stretch_max_usd: 'off', near_target_usd: 'off', healthy_risk_usd: 'off' }), daily_loss_soft: 'off', stand_down: 0, multipliers: [] };
   assert.deepStrictEqual(validateCandidate(cand), []);
   assert.match(validateCandidate({ ...cand, sizing: testSizing({ ...cand.sizing, cap_usd: 0 }) }).join(), /sizing.cap_usd/);
   assert.match(validateCandidate({ ...cand, stand_down: 2 }).join(), /stand_down/);

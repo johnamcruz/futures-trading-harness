@@ -17,7 +17,7 @@ const { readBarsArg } = require('../../scripts/lib/backtest/data');
 const { composeCheck } = require('../../scripts/lib/harness-tools/compose');
 const { checkReads, checkRead, parseRead } = require('../../scripts/lib/trading/composed-reads');
 const { buildRecord, writeRecord, checkTrend } = require('../../scripts/lib/trading/mtf-state');
-const { tmpDir } = require('../helpers');
+const { tmpDir, recordBrokerSpecs } = require('../helpers');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const BARS = readBarsArg(path.join(ROOT, 'tests', 'fixtures', 'parity', 'NQ-3m.csv'));
@@ -26,6 +26,7 @@ const briefingAt = n => buildBriefing({ symbol: 'MNQ', bars: BARS.slice(0, n), m
 /** The real compose_check on the bar the first n bars end on: its briefing written to a run home, the cycle bar set. */
 function compose(n, side, reads) {
   const home = tmpDir();
+  recordBrokerSpecs(home); // the broker's tick specs: compose_check prices the stop with them only
   const b = briefingAt(n);
   writeBriefing(home, b);
   const env = { FTH_HOME: home, FTH_CYCLE_BARS: JSON.stringify({ MNQ: b.asOf }) };

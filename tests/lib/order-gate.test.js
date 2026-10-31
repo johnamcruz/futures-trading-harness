@@ -4321,6 +4321,57 @@ test('the floor stretch in an attempt: [max-risk] takes exactly the stretched fl
   assert.deepStrictEqual(lcPropEval(home, { accountId: 1, contractId: 'MNQ', side: 'sell', type: 'market', size: 3, rationale: '[exit] flatten the prop_portfolio long' }, { registry: reg(500) }).violations, []);
 });
 
+test('sizing agreement at a stop the cap prices out of one mini: order_plan, the gate, compose_check and the simulator give the same micros; one more is refused', () => {
+  // The account trades both legs (MNQ $0.37 a side, NQ $1.40), its budget $1,000 (0.5 x the $2,000 cushion), the floor 3,
+  // the stretch $500, the policy in auto mode. Scenario 1's 111-tick stop (27.75 points): the budget alone is 1 NQ
+  // ((111 + 1) x $5 + $2.80 = $562.80 all in), over the $300 cap; one MNQ is $56.74 all in, so the cap fits 5 ($283.70).
+  const both = { ...LCP.MINI, max_contracts: { MNQ: 50, NQ: 5 }, fees_per_side: { MNQ: 0.37, NQ: 1.4 } };
+  const sizing = testSizing({ cushion_frac: 0.5, cap_usd: 1000, min_contracts: 3, floor_stretch_max_usd: 500 });
+  const reg = LCP.registry({ contracts: 'auto', sizing });
+  const { home } = LCP.propHome({ size: 3, account: both });
+  const sel = { selection: loadConfig({ FTH_SYMBOLS: 'MNQ' }).selection };
+  const args = composedOrder({ home, root: 'MNQ', side: 'long', now: LCP.NOW, cycleBars: { MNQ: LC.BAR }, strategy: LCP.LC_DOC, strategies: reg, accounts: [both], specOf: lcSpec, accountId: 1, selected: ['MNQ'] }).args;
+  assert.strictEqual(args.size, 5);
+  assert.deepStrictEqual(lcPropEval(home, args, { registry: reg, accounts: [both], config: sel }).violations, [], 'the gate takes exactly the planned size');
+  const six = lcPropEval(home, { ...args, size: 6 }, { registry: reg, accounts: [both], config: sel });
+  assert.ok(checks(six).includes('max-risk') && checks(six).includes('composed-reads'), JSON.stringify(six.violations));
+  // compose_check finds a size (the floor fits the cap at this stop).
+  const ST = require('../../scripts/lib/prop/size-translate');
+  assert.strictEqual(ST.noSizeFits({ policy: reg[0], account: both, capUsd: LCP.LC_DOC.risk.max_risk_usd, stop: { ticks: 111, floorTicks: 1 }, spec: lcSpec('MNQ'), root: 'MNQ', strategy: 'trade_lifecycle', home }), null);
+  // The simulator, from the same snapshot in the policy's auto mode: the same 5 MNQ (the old rule sized none).
+  const r = prop.readAttempt(home, both.name);
+  const cs = prop.stateFrom(both, r, r.snapshot.balance);
+  const combine = require('../../scripts/lib/trading/combine');
+  const { legs, ratio } = require('../../scripts/lib/prop/attempts').legsFor(both, 'MNQ', { tickValue: 0.5 });
+  const planArgs = { dollars: combine.budget(cs, sizing), room: combine.room(cs), stopTicks: 111, legs, mode: 'auto', guard: sizing.min_size_guard, fraction: 1, ratio, slipTicks: 1, minContracts: 3 };
+  const opts = { limits: { capUsd: LCP.LC_DOC.risk.max_risk_usd, orderMax: null }, stretchUsd: 500, state: { ...cs, lossesToday: 0 }, nearTargetUsd: 0 };
+  assert.deepStrictEqual(ST.entryPlan(planArgs, opts), { root: 'MNQ', size: 5, riskPerContract: 56.74 });
+  assert.strictEqual(ST.limitPlan(combine.contractPlan(planArgs), { ...opts, minContracts: 3, ratio, miniRoot: 'NQ' }), null, 'the old rule: none');
+  // Exits go, whatever the size.
+  assert.deepStrictEqual(lcPropEval(home, { accountId: 1, contractId: 'MNQ', side: 'sell', type: 'market', size: 6, rationale: '[exit] flatten the prop_portfolio long' }, { registry: reg, accounts: [both], config: sel }).violations, []);
+});
+
+test('the healthy cap (sizing.healthy_risk_usd) in an attempt: order_plan sizes to it while healthy and [max-risk] takes exactly that; a loss today drops back to the $300 cap; off is the cap', () => {
+  // Scenario 1's 111-tick stop, $56.74 a contract all in; the $400 budget fits 7. The $300 cap fits 5; $450 fits 7 ($397.18).
+  const reg = healthy => LCP.registry({ sizing: testSizing({ min_contracts: 3, healthy_risk_usd: healthy }) });
+  const { home } = LCP.propHome({ size: 1 });
+  const at = healthy => composedOrder({ home, root: 'MNQ', side: 'long', now: LCP.NOW, cycleBars: { MNQ: LC.BAR }, strategy: LCP.LC_DOC, strategies: reg(healthy), accounts: [LCP.MINI], specOf: lcSpec, accountId: 1, selected: ['MNQ'] }).args;
+  assert.strictEqual(at(0).size, 5, 'off: the composed cap');
+  const args = at(450);
+  assert.strictEqual(args.size, 7);
+  assert.deepStrictEqual(lcPropEval(home, args, { registry: reg(450) }).violations, [], 'the healthy cap\'s size goes');
+  assert.ok(checks(lcPropEval(home, { ...args, size: 7 }, { registry: reg(0) })).includes('max-risk'), 'off: 7 is over the $300 cap');
+  // A loss today: not healthy, the cap holds ([max-risk]; the translation is 5 again, so [composed-reads] too).
+  const file = prop.combineFile(home, LCP.MINI.name);
+  const r = JSON.parse(fs.readFileSync(file, 'utf8'));
+  fs.writeFileSync(file, JSON.stringify({ ...r, snapshot: { ...r.snapshot, counts: { ...r.snapshot.counts, trades: 1, losses: 1 } } }));
+  const sick = lcPropEval(home, args, { registry: reg(450) });
+  assert.ok(checks(sick).includes('max-risk') && checks(sick).includes('composed-reads'), JSON.stringify(sick.violations));
+  assert.strictEqual(at(450).size, 5, 'not healthy: the composed cap');
+  // An exit goes whatever the health.
+  assert.deepStrictEqual(lcPropEval(home, { accountId: 1, contractId: 'MNQ', side: 'sell', type: 'market', size: 7, rationale: '[exit] flatten the prop_portfolio long' }, { registry: reg(450) }).violations, []);
+});
+
 test('the floor stretch never applies outside an attempt: setup:trade_lifecycle over its cap is refused [max-risk] as before', () => {
   const doc = { ...LCP.LC_DOC, risk: { ...LCP.LC_DOC.risk, max_risk_usd: 150 } };
   const free = trendHome();

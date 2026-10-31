@@ -15,6 +15,7 @@ const GC = require('../../scripts/lib/eval/goal-check');
 const GF = require('../../scripts/lib/eval/goal-fixture');
 const GT = require('../../scripts/lib/eval/goal-trades');
 const GM = require('../../scripts/lib/eval/goal-metrics');
+const GS = require('../../scripts/lib/eval/goal-sizing');
 const { accountNamed } = require('../../scripts/lib/trading/accounts');
 const { tradingDayKey } = require('../../scripts/lib/trading/clock');
 const GW = require('../fixtures/goal-world');
@@ -43,12 +44,18 @@ async function main() {
   try {
     const r = await GW.runDay(w, { breaks: { latencyMs } });
     const a = GW.artifacts(w);
+    // The sizing check's facts (goal-sizing.js): the traded and selected contracts and the max order size the gate read.
+    const { brokerOrderLimit, contractsFileFor } = require('../../scripts/lib/trading/broker-specs');
+    const sizing = { symbol: doc.symbol, selected: w.cfg.symbols, orderMax: brokerOrderLimit(contractsFileFor(w.home, w.env)).maxOrderSize };
     const result = {
       day, label: block.labels ? block.labels[day] : null, scenario: block.scenario || null, ms: Date.now() - t0, passes: r.passes, tick: require('../../scripts/lib/trading/contracts').tickOf(doc.symbol),
       decisions: r.decisions.map(({ reads, ...d }) => ({ ...d, reads: (reads || []).map(x => x.read) })),
       events: r.events.filter(e => KEEP.has(e.kind)), logs: r.logs.filter(l => /^(warn|error)/.test(l)),
       ...a, legs, mechanical: mechanical.slice(0, 1), blown: Boolean(a.attempt && a.attempt.snapshot && a.attempt.snapshot.summary && a.attempt.snapshot.summary.status === 'blown'),
+      sizing,
     };
+    // The simulator's size at each sized or skipped entry, in this process (a break, tests/goal/breaks.js, patches it here).
+    result.simSizes = GS.simSizes(result, GS.ctxOf(result, P, account));
     fs.writeFileSync(out, JSON.stringify(result));
   } finally {
     fs.rmSync(w.home, { recursive: true, force: true });

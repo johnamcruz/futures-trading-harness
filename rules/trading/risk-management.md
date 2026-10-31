@@ -19,9 +19,9 @@
   journal shows positive expectancy over at least 30 closed trades of that
   setup.
 - Exception: while a prop attempt runs a policy strategy (`signal: policy`),
-  its verdict sets the size in the selected contract, sized from the
-  attempt's budget; the 25% and size-1 rules above don't apply to it, and the
-  order gate enforces the verdict instead. Never exceed the verdict.
+  the size is the size translation's (`order_plan` gives it) in the selected
+  contract, never above the verdict; the 25% and size-1 rules above don't
+  apply to it, and the order gate enforces it instead.
 - Minimum planned reward-to-risk: the strategy's (`risk.min_rr`), measured from the entry to the plan's target; `compose_check` computes and enforces it, never your estimate (never to the first level ahead: that is a read)
   (a trailing exit: `trailActivateR`; an entry the rule allows: `target trail`,
   no level needed).

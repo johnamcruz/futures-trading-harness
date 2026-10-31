@@ -263,10 +263,10 @@
       },
       "mc": {
         "paths": 2000,
-        "pass": 0.218,
+        "pass": 0.7605,
         "blow": 0,
         "blows": 0,
-        "meanDaysToPass": 24.6032
+        "meanDaysToPass": 13.0835
       }
     },
     "B": {

@@ -1819,7 +1819,21 @@ fail them). The floor days (`tier2-floor`) must see compose_check refuse
 the stop under D13's floor and never widen it (the record's stop the named
 level less the buffer), the tick term binding on one day and the ATR term
 on the other, and no trade (a floor of 4 ticks, or no ATR term, must each
-let its day's stop through and trade). Sizes are exact everywhere: a changed size is refused by
+let its day's stop through and trade). The sizing check
+(`scripts/lib/eval/goal-sizing.js`, on every main and move day) recomputes
+each entry from the day's own facts (the attempt's closed days, the day's
+fills): the fill is the rulebook's plan at the trade's stop and that
+moment's account state (the rule: the most the composed cap fits all in, or
+the healthy cap while healthy when on; lowered by the budget, the room, the
+broker's max and near the target; the stretch while healthy), or phase 2's
+recorded cut; its dollar risk all in is within the cap, or is exactly the
+floor within the stretch while healthy; it is at least the
+floor in micro-equivalents; every "no size fits" or translation skip is a
+real no-fit; and the simulator (the policy's own `contracts` mode, as tier 1,
+the training Monte Carlo and the studies size) sizes and skips the same
+entries within the same bounds. Its self-test (`tier2-breaks`: the sizing
+before 2026-10-30, budget first, where a stop the cap prices out of one
+mini sized nothing) must fail it on main's wide-stop days. Sizes are exact everywhere: a changed size is refused by
 `tier2-run.js --write` unless said why (`--sizes-why`). The full traces
 are written outside the repository.
 

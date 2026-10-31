@@ -20,6 +20,7 @@
  *   runDays(days, { breakName, latencyMs, fault, parallel, dir })   [day result] (tier2-day.js's JSON); latencyMs only for
  *                                            the order-latency self-test (an injected stub), fault a broker-fault day
  *   readTier2(results)                       { trades, summary, problems }: the trades, their summary, the trace problems
+ *                                            and the sizing problems (sizingProblems: goal-sizing.js sizingChecks)
  *   judge(base, now, results)                { rows, changes, problems, fail }: base/now the tier 2 baselines' shape
  *   reportText(judged)                       the report: the table, then one line per change and per trace problem
  *   tracePath(dir)                           where a run's full trace JSON goes (outside the repository)
@@ -33,6 +34,7 @@ const crypto = require('crypto');
 const GC = require('../../scripts/lib/eval/goal-check');
 const GP = require('../../scripts/lib/eval/goal-path');
 const GT = require('../../scripts/lib/eval/goal-trades');
+const GS = require('../../scripts/lib/eval/goal-sizing');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const CFG = () => require('../../scripts/lib/tunables').training().goalRegression.tier2;
@@ -76,7 +78,14 @@ function readTier2(results) {
   const summary = GP.summarize(trades, {
     legs: results.flatMap(d => d.legs), mechanical: results.flatMap(d => d.mechanical), spanMs: P.setupMinutes * 60000, blows: results.filter(d => d.blown).length,
   });
-  return { trades, summary, problems: trades.flatMap(GP.traceProblems), behaviour: behaviour(results, trades) };
+  return { trades, summary, problems: [...trades.flatMap(GP.traceProblems), ...sizingProblems(results)], behaviour: behaviour(results, trades) };
+}
+
+/** Every sized or skipped entry of these days as the rulebook plans it, the simulator agreeing (goal-sizing.js). */
+function sizingProblems(results) {
+  const P = GT.shippedOf(ROOT, {});
+  const account = require('../../scripts/lib/trading/accounts').accountNamed(ROOT, P.policy.account, {});
+  return results.flatMap(d => GS.sizingChecks(d, GS.ctxOf(d, P, account)));
 }
 
 /** A trade as the baseline keeps it: its facts and its steps (the full trace stays out of the repository). */
@@ -207,4 +216,4 @@ async function cli(argv) {
 
 if (require.main === module) cli(process.argv.slice(2)).then(c => { process.exitCode = c; }, err => { process.stderr.write(`${err.message}\n`); process.exitCode = 1; });
 
-module.exports = { allDays, baseOn, moveBehaviour, floorDays, stateDefs, quickDay, stateSizes, set, BASELINE_FILE, dayLabels, behaviourProblems, moveDays, readMoves, judgeMoves, readGolden, tier2Days, runDays, readTier2, judge, reportText, tracePath, kept };
+module.exports = { sizingProblems, allDays, baseOn, moveBehaviour, floorDays, stateDefs, quickDay, stateSizes, set, BASELINE_FILE, dayLabels, behaviourProblems, moveDays, readMoves, judgeMoves, readGolden, tier2Days, runDays, readTier2, judge, reportText, tracePath, kept };

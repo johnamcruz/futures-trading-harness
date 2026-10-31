@@ -70,10 +70,10 @@ call it with the policy strategy's name: it plans exactly the verdict, on
 bars whose last closed bar is the verdict's, and refuses (as the gate does)
 a verdict for an older bar than the last one recorded: no entry until the
 next setup's verdict. Its size is the starting size:
-1 for a rules strategy (position-sizing's size-1 rule) and, for a policy,
-the verdict's cut to the attempt's size budget now, which is the most a
-policy entry may have; a composed trade's is the size you stated, refused
-over its cap (in an attempt, also the verdict). A different size from
+1 for a rules strategy (position-sizing's size-1 rule); in a prop attempt,
+the size translation's (`order_plan`; a policy verdict's own: cut to the
+size budget); outside one, a composed trade's is the size you stated,
+refused over its cap. A different size from
 your plan changes only `size`, and the risk scales with it: for a rules
 strategy, smaller for a `mixed` read, and larger only as
 position-sizing allows (a setup with 30+ reviewed trades and positive

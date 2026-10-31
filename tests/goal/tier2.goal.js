@@ -87,7 +87,7 @@ test('the move goldens cover the move days: the real trend legs and the syntheti
   assert.ok(GOLDEN.scenarios.filter(x => x.label && x.label.kind === 'trend' && x.layers && x.layers.capture.caught && x.layers.exit.R > 0).length >= 2, 'at least two trend days caught and ridden on main');
 });
 
-test('catch the move: every layer on each move day as the golden has it, and each day behaving as its label says', { skip }, async () => {
+test('catch the move: every layer on each move day as the golden has it, each day behaving as its label says, every size the rulebook\'s', { skip }, async () => {
   const results = pick((await runAll()).r, T.moveDays());
   if (!results.length) return; // a shard without a move day
   const now = T.readMoves(results);
@@ -97,4 +97,6 @@ test('catch the move: every layer on each move day as the golden has it, and eac
   process.stdout.write(`${text}\n${behaved.join('\n')}\n`);
   assert.ok(judged.every(j => !j.diffs.length), `a layer moved:\n${text}`);
   assert.deepStrictEqual(behaved, []);
+  // Every sized or skipped entry of the move days as the rulebook plans it (the main days' are in readTier2's problems).
+  assert.deepStrictEqual(T.sizingProblems(results), []);
 });

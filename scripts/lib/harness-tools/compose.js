@@ -28,7 +28,7 @@ const { briefingFor } = require('../trading/fact-claims');
 const { checkReads } = require('../trading/composed-reads');
 const { STRATEGY, planOf, stopRuleOf, buildRecord, appendRecord, renderRecord } = require('../trading/trade-lifecycle');
 const { loadStrategies, citedSetups } = require('../trading/strategies');
-const { specFor } = require('../trading/contracts');
+const { liveSpecs, whyNoSpec } = require('../trading/broker-specs');
 const { cycleId } = require('../trading/check-order');
 const { briefingAfterClock } = require('../trading/look-ahead');
 const { attemptPolicy } = require('../trading/lifecycle-order');
@@ -73,7 +73,11 @@ function composeCheck({ symbol = null, side = null, reads = null, size = null } 
   const all = loadStrategies(c.root, c.env).strategies;
   const doc = all.find(s => s.name === STRATEGY);
   if (!doc || !doc.valid) return refused([`strategies/${STRATEGY}/STRATEGY.md is ${doc ? `invalid (${(doc.errors || [])[0]})` : 'missing'}`]);
-  const spec = specFor(symbol);
+  // The contract's tick size and value from the broker server's recorded specs only (docs/BROKER-MCP-INTERFACE.md, "Tick
+  // specs"), as the gate and order_plan read them: none (or one that differs from the table) refuses the record.
+  const specOf = liveSpecs(c.env);
+  const spec = specOf(symbol);
+  if (!spec) return refused([`${whyNoSpec(specOf, symbol)}: compose_check prices the stop with the broker's tick specs only`]);
   const tick = spec ? spec.tickSize : null;
   const entryRule = entryRuleHere(home, doc, all, symbol);
   // The setups a record may cite (a `<strategy> fired` read: its plan, strategies.js citedSetups), as the gate's re-check.
@@ -81,7 +85,7 @@ function composeCheck({ symbol = null, side = null, reads = null, size = null } 
   const checked = checkReads({ reads, side, briefing: got.briefing, skills: skillCatalog(c.root).map(k => k.name), tick: tick || 0.25, entryRule, cited });
   const plan = { size, tickValue: spec ? spec.tickValue : null, minRR: doc.risk.min_rr, maxRiskUsd: doc.risk.max_risk_usd, stopRule: stopRuleOf(doc.risk), suggestion: inAttempt(home, doc, all, symbol) };
   const planned = checked.stop && checked.target ? planOf({ checked, briefing: got.briefing, side, tick, ...plan }) : null;
-  const fits = noSizeFitsHere({ c, home, doc, all, symbol, planned, spec });
+  const fits = noSizeFitsHere({ c, home, doc, all, symbol, planned, spec, specOf });
   const record = buildRecord({ at, root: symbol, symbol, side, briefing: got.briefing, checked, planned, problems: fits ? [fits.problem] : [], cycleId: cycleId(c.env), validBars: doc.valid_bars });
   appendRecord(home, record);
   // A record that is not OK is an answer, not a failure: the text says what stands, then what is TRUE on this bar
@@ -97,14 +101,14 @@ function composeCheck({ symbol = null, side = null, reads = null, size = null } 
  * trades the attempt and its account): { problem, hint }, or null (no attempt, no policy or valid account, no plan:
  * order_plan still sizes, or refuses, the entry itself).
  */
-function noSizeFitsHere({ c, home, doc, all, symbol, planned, spec }) {
+function noSizeFitsHere({ c, home, doc, all, symbol, planned, spec, specOf }) {
   const p = planned && planned.plan;
   if (!p || !p.stop || !spec) return null;
   let policy = null;
   try { policy = attemptPolicy(home, doc, all, symbol); } catch (_err) { return null; }
   const account = policy ? loadAccounts(c.root, c.env).accounts.find(a => a.name === policy.account && a.valid) : null;
   // `home`: the attempt's snapshot, whose health the floor stretch reads (size-translate.js floorStretch).
-  return account ? noSizeFits({ policy, account, capUsd: doc.risk.max_risk_usd, stop: p.stop, spec, root: symbol, strategy: STRATEGY, home }) : null;
+  return account ? noSizeFits({ policy, account, capUsd: doc.risk.max_risk_usd, stop: p.stop, spec, root: symbol, strategy: STRATEGY, specOf, home }) : null;
 }
 
 /** A refusal's hints (compose-hints.js), with the briefing's standard plan for the side when it passes; none on any error. */

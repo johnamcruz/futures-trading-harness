@@ -14,7 +14,7 @@ const { validate } = require('../../scripts/lib/harness-tools/validate');
 const { writeBriefing } = require('../../scripts/lib/trading/briefing');
 const { readRecords, recordFile } = require('../../scripts/lib/trading/trade-lifecycle');
 const { loadStrategies, checkStrategyForOrder, validateStrategy } = require('../../scripts/lib/trading/strategies');
-const { tmpDir } = require('../helpers');
+const { tmpDir, recordBrokerSpecs } = require('../helpers');
 const { scenario1, SCENARIO_1 } = require('../fixtures/trade-lifecycle-scenario');
 
 const ROOT = path.resolve(__dirname, '..', '..');
@@ -22,10 +22,25 @@ const BAR = '2026-04-23T14:57:00.000Z';
 
 function setup({ cycleBar = BAR, briefing = scenario1() } = {}) {
   const home = tmpDir();
+  // The broker's tick specs, as the translator records them: compose_check prices the stop with them only.
+  recordBrokerSpecs(home);
   if (briefing) writeBriefing(home, briefing);
   const env = { FTH_HOME: home, ...(cycleBar ? { FTH_CYCLE_BARS: JSON.stringify({ MNQ: cycleBar }) } : {}) };
   return { home, ctx: { env, now: () => new Date('2026-04-23T15:00:05Z') } };
 }
+
+test('compose_check prices the stop with the broker\'s recorded tick specs only: none, or one that differs from the table, is NOT OK (never the table)', () => {
+  const fsx = require('fs');
+  const { home, ctx } = setup();
+  for (const f of fsx.readdirSync(home).filter(x => /^contracts-.*\.json$/.test(x))) fsx.rmSync(require('path').join(home, f));
+  const none = composeCheck({ symbol: 'MNQ', side: 'long', reads: SCENARIO_1, size: 1 }, ctx);
+  assert.match(none.text, /PROBLEM: no tick specs from the broker for MNQ[^]*compose_check prices the stop with the broker's tick specs only[^]*NOT OK/);
+  // A server spec that differs from the table (a units mix-up): refused until they agree.
+  recordBrokerSpecs(home, { specs: { MNQ: { tickSize: 0.25, tickValue: 5 } } });
+  const odd = composeCheck({ symbol: 'MNQ', side: 'long', reads: SCENARIO_1, size: 1 }, ctx);
+  assert.match(odd.text, /PROBLEM: [^\n]*MNQ[^]*NOT OK/);
+  assert.doesNotMatch(odd.text, /OK: every read verified/);
+});
 
 test('compose_check: scenario 1 is OK, the plan in code, one record appended per call', () => {
   const { home, ctx } = setup();

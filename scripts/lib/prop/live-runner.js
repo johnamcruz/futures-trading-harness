@@ -161,8 +161,8 @@ function createPropHooks({ root, env = process.env, home, client, accountId, str
         const z = (policy && policy.sizing) || {};
         const capUsd = composed && composed.risk ? composed.risk.max_risk_usd : null;
         // A loss is measured at the most one entry may risk (size-line.js worstRisk: the floor stretch above the cap).
-        const riskUsd = worstRisk({ capUsd, stretchUsd: z.floor_stretch_max_usd, budgetUsd: combine.budget(cs, z) });
-        const sizing = policy ? sizeLines({ facts: factsOf(cs, facts, policy), riskUsd, minContracts: z.min_contracts, stretchUsd: z.floor_stretch_max_usd, capUsd }) : null;
+        const riskUsd = worstRisk({ capUsd, stretchUsd: z.floor_stretch_max_usd, budgetUsd: combine.budget(cs, z), healthyUsd: z.healthy_risk_usd });
+        const sizing = policy ? sizeLines({ facts: factsOf(cs, facts, policy), riskUsd, minContracts: z.min_contracts, stretchUsd: z.floor_stretch_max_usd, capUsd, healthyUsd: z.healthy_risk_usd }) : null;
         out.push({ ...combine.summary(cs), asOf: fresh ? now.toISOString() : snapshotAt, snapshotAt, budgets, entryBlock, facts, ...(sizing ? { sizing } : {}) });
       }
       return out;

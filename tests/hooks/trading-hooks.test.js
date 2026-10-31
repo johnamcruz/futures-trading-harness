@@ -684,10 +684,10 @@ function noFeePropWorld(home, size) {
 /**
  * The same world with the floor stretch in question: `pmc_stretch` (prop_portfolio's document) on `stretch_100k` (the
  * shipped profile and rulebook, renamed, its floor raised to 6 micros and its floor_stretch_max_usd at `stretch`, the
- * shipped value when null), in folders of their own, and the shipped trade_lifecycle ($300): scenario 1's 111-tick stop
+ * shipped value when null; its healthy_risk_usd at `healthy`, off when null), in folders of their own, and the shipped trade_lifecycle ($300): scenario 1's 111-tick stop
  * is $56.74 a contract all in, so the floor of 6 is $340.44, over the cap ($333.00 at the stop alone).
  */
-function stretchPropWorld(home, { stretch = null } = {}) {
+function stretchPropWorld(home, { stretch = null, healthy = null } = {}) {
   const LC = require('../fixtures/lifecycle');
   const prop = require('../../scripts/lib/trading/prop-state');
   const shipped = require('../../scripts/lib/trading/strategies').loadStrategies(REPO, {}).strategies.find(s => s.name === 'prop_portfolio');
@@ -704,7 +704,8 @@ function stretchPropWorld(home, { stretch = null } = {}) {
   assert.match(rb, /^ {6}floor_stretch_max_usd: \d+/m);
   assert.match(rb, /^ {6}min_contracts: 3 /m);
   fs.writeFileSync(path.join(accounts, 'RULEBOOK.md'), rb.replace(`name: ${shipped.account}`, 'name: stretch_100k').replace(/^ {2}prop_portfolio:$/m, '  pmc_stretch:')
-    .replace(/^( {6}min_contracts: )3 /m, '$16 ').replace(/^( {6}floor_stretch_max_usd: )\d+/m, m => (stretch === null ? m : m.replace(/\d+$/, String(stretch)))));
+    .replace(/^( {6}min_contracts: )3 /m, '$16 ').replace(/^( {6}floor_stretch_max_usd: )\d+/m, m => (stretch === null ? m : m.replace(/\d+$/, String(stretch))))
+    .replace(/^( {6}healthy_risk_usd: )off/m, m => (healthy === null ? m : m.replace(/off$/, String(healthy)))));
   const env = { FTH_STRATEGIES_DIRS: strategies, FTH_ACCOUNTS_DIRS: path.dirname(accounts) };
   const policy = require('../../scripts/lib/trading/strategies').loadStrategies(REPO, env).strategies.find(s => s.name === 'pmc_stretch');
   assert.ok(policy && policy.valid !== false && policy.sizing.min_contracts === 6, JSON.stringify(policy && policy.errors));
@@ -759,6 +760,23 @@ test('order gate wiring, hook and gateway: the floor stretch: the stretched floo
   const t = stretchPropWorld(tight, { stretch: 340 });
   const over = await both(setup(plan, { FTH_HOME: tight, ...t.env }).env, t.order(6));
   for (const s of [over.hook, over.gw]) assert.match(s, /\[max-risk\] .*the floor of 6 at \$56\.74 all in is \$340\.44, over the floor stretch's \$340\.00 too/);
+});
+
+test('order gate wiring, hook and gateway: the healthy cap (sizing.healthy_risk_usd): the translated size within it passes [max-risk] while healthy; one more, or the same after a loss today, is refused', { timeout: 120000 }, async () => {
+  const plan = [{ ts: '2026-10-07T13:59:30.000Z', kind: 'plan', contractId: 'MNQ', text: 'plan' }];
+  const text = r => r.result.content[0].text;
+  const both = async (env, input) => ({ hook: gate(orderPayload(input), env).stderr, gw: text((await gatewayRun(env, [call(1, 'place_order', input)])).byId[1]) });
+  // $450 while healthy: 7 MNQ at $56.74 all in ($397.18), over the $300 cap; 8 ($453.92) over it too.
+  const home = tmpDir();
+  const w = stretchPropWorld(home, { healthy: 450 });
+  const { env } = setup(plan, { FTH_HOME: home, ...w.env });
+  const seven = await both(env, w.order(7));
+  for (const t of [seven.hook, seven.gw]) { assert.doesNotMatch(t, /\[max-risk\]/, t); assert.doesNotMatch(t, /\[composed-reads\]/, t); }
+  const eight = await both(env, w.order(8));
+  for (const t of [eight.hook, eight.gw]) assert.match(t, /\[max-risk\]/, t);
+  w.setLosses(1);
+  const sick = await both(env, w.order(7));
+  for (const t of [sick.hook, sick.gw]) assert.match(t, /\[max-risk\] risk \$388\.50 \(size 7/, t);
 });
 
 /**

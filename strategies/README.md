@@ -69,8 +69,7 @@ ports' signals and stops against the original bot's own output on its data.
 
 The prop challenge is a strategy too: a **policy strategy** (`signal: policy`)
 trades the setups of the rules strategies it lists on a prop account: each
-setup at the largest size the attempt's budget allows (in the selected
-contract), or skipped, and every trade exits by its trail.
+setup at the size translation's size (in the selected contract), or skipped, and every trade exits by its trail.
 
 - `prop_portfolio`: the account layer, on NQ, ES, YM, and RTY (micros or
   minis), one `topstep_100k` attempt and one position at a time across them.

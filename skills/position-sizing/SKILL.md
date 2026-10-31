@@ -13,7 +13,7 @@ description: Use when sizing a trade plan - risk per contract, the budget, the c
 ## How It Works
 
 In a prop attempt: the full verdict size; a serious factor against never
-cuts it; only a pacing rule does. The code computes it. Fewer than 3
+cuts it; only a pacing rule does. The size translation computes it (`order_plan`). Fewer than 3
 contracts (`min_contracts`) at the stop: skip (unless the floor
 stretch takes exactly 3: the Min line).
 
@@ -39,16 +39,14 @@ stretch takes exactly 3: the Min line).
    never shrink the stop to fit). The cap is checked when the entry is
    placed: a `[protect]` stop that later repairs the position's protection
    goes where the rationale said, never farther.
-4. **A policy verdict overrides the budget and caps.** While a prop attempt runs a
-   policy strategy, the verdict's contract (the selected one), size, and stop
-   ticks were sized from the attempt's budget (`combine_status`), each
-   contract's risk counting its stop plus a tick of expected slippage
-   (`sizing.stop_slippage_ticks`) and fees both ways; place at
-   most that size and don't apply the 25% / 10% / size-1 caps to it. The gate
+4. **A policy verdict replaces the 25% / 10% / size-1 caps.** While a prop
+   attempt runs a policy strategy, the entry's contract (the selected one),
+   size, and stop ticks come from the size translation (`order_plan` gives
+   them); place at most that size and don't apply the 25% / 10% / size-1 caps to it. The gate
    checks the verdict, not these caps; it still refuses a size over the
    broker's `maxOrderSize`, and over the policy strategy's own
    `risk.max_risk_usd` if it sets one (a rules component's caps don't apply;
-   `trade_lifecycle`'s cap does: the lower of it and the verdict (the verdict is the full size; the cap limits the stop)). Everything else (stop first, protective
+   `trade_lifecycle`'s cap does, through the size translation). Everything else (stop first, protective
    stop always working) still applies. The verdict is the most the account
    allows: phase 2 cuts it only on a pacing rule (a losing account, a loss
    streak, drawdown: `Size: <n> (<rule>)`) or passes.

@@ -9,6 +9,9 @@
  *   waits): category e
  *   delay (the 3m-confirmation-style delay: the order a bar late) on a move day: its golden's ENTRY layer
  *   stale-trail (the structure trail behind a stale swing) on the move day that trails most: its golden's EXIT layer
+ *   no-micro-fallback (the sizing before the owner's 2026-10-30 fix: a stop the composed cap prices out of one mini sized
+ *   nothing in auto mode) on main's days whose trade the cap holds to 5 MNQ or fewer (a stop of about 26 points or more,
+ *   where the old rule skipped): the sizing check (goal-sizing.js), the simulator skipping a trade live sizes
  * A stop taken away on a late fill is the fault days' (tier2-faults.goal.js: covered at every pass).
  */
 
@@ -43,6 +46,8 @@ const CHECKS = [
   { name: 'gate-refuse', day: quick, category: 'd', says: /\[goal-break\]/ },
   { name: 'latency', day: quick, category: 'e', says: /expired|late/, latencyMs: LATE_MS },
 ];
+// The days whose trade the cap holds to 5 MNQ or fewer: wide stops, where the old sizing skipped (the probe: 26-44 points).
+const SIZING = skip ? null : { name: 'no-micro-fallback', days: [...new Set(BASE.trades.filter(t => t.size <= 5).map(t => t.day))] };
 const MOVES = [
   { name: 'delay (the order a bar late)', day: caughtMove, layer: 'ENTRY', latencyMs: BAR_MS },
   { name: 'stale-trail', day: trailed, layer: 'EXIT', breakName: 'stale-trail' },
@@ -52,10 +57,17 @@ test('tier 2 break self-tests: each deliberate break fails tier 2 and is named b
   const runs = await Promise.all([
     ...CHECKS.map(c => T.runDays([c.day], { breakName: c.latencyMs ? null : c.name, latencyMs: c.latencyMs || 0, parallel: 1, dir: OUT }).then(r => ({ c, r }))),
     ...MOVES.map(m => T.runDays([m.day], { breakName: m.breakName || null, latencyMs: m.latencyMs || 0, parallel: 1, dir: OUT }).then(r => ({ m, r }))),
+    T.runDays(SIZING.days, { breakName: SIZING.name, parallel: 1, dir: OUT }).then(r => ({ z: SIZING, r })),
   ]);
   const lines = [];
-  for (const { c, m, r } of runs) {
-    if (c) {
+  assert.ok(SIZING.days.length, 'main has a trade the cap holds to 5 MNQ or fewer (a wide stop) for the sizing break');
+  for (const { c, m, z, r } of runs) {
+    if (z) {
+      const j = T.judge(onDays(z.days), T.readTier2(r), r);
+      const hit = j.problems.filter(p => /sizing .*the simulator \(the policy's auto mode\) skips a trade live sizes/.test(p));
+      lines.push(`${z.name} on ${z.days.join(', ')}: ${j.fail ? 'FAILS' : 'passes'}; ${hit.join('; ') || 'no sizing problem named'}`);
+      assert.ok(j.fail && hit.length, `${z.name}: the sizing check must fail it\n${T.reportText(j)}`);
+    } else if (c) {
       const j = T.judge(onDays([c.day]), T.readTier2(r), r);
       const hit = j.changes.filter(x => x.category === c.category && c.says.test(x.why));
       lines.push(`${c.name} on ${c.day}: ${j.fail ? 'FAILS' : 'passes'}; ${j.changes.map(x => `(${x.category}) ${x.why}`).join('; ') || 'no change named'}`);
