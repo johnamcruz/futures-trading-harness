@@ -42,7 +42,7 @@ function headPlanned(w, o = {}) {
     ...(w.mode === 'full' ? [...new Set([...D.headLoads(w), ...REQUIRED_FOR_COMPOSED])].map(s => ({ load: s })) : []),
     { harness: 'bar_briefing', args: { symbol: 'MNQ', json: true } },
     ...D.entryLoads(w).map(s => ({ load: s })),
-    { harness: 'compose_check', args: { symbol: 'MNQ', side: 'long', reads: LC_READS, size: o.size || 1 } },
+    { harness: 'skill_lookup', args: { skill: 'candle-reading' } }, { harness: 'compose_check', args: { symbol: 'MNQ', side: 'long', reads: LC_READS, size: o.size || 1 } },
     { result: o.result || `CYCLE RESULT: planned - trade_lifecycle long ${o.size || 1}` },
   ];
 }
@@ -537,7 +537,7 @@ function claudeHeadPlanned(w, o = {}) {
   return [
     ...[...new Set([...D.headLoads(full), ...REQUIRED_FOR_COMPOSED, ...D.entryLoads(full)])].map(s => ({ load: s })),
     { harness: 'bar_briefing', args: { symbol: 'MNQ', json: true } },
-    { harness: 'compose_check', args: { symbol: 'MNQ', side: 'long', reads: LC_READS, size: o.size || 1 } },
+    { harness: 'skill_lookup', args: { skill: 'candle-reading' } }, { harness: 'compose_check', args: { symbol: 'MNQ', side: 'long', reads: LC_READS, size: o.size || 1 } },
     { result: o.result || `CYCLE RESULT: planned - trade_lifecycle long ${o.size || 1}` },
   ];
 }
@@ -811,7 +811,7 @@ test('entry workflow, Claude Code with headSkillsInPrompt (this machine\'s opt-i
   const H = require('../../scripts/lib/head-prompt');
   const headScript = [
     { harness: 'bar_briefing', args: { symbol: 'MNQ', json: true } },
-    { harness: 'compose_check', args: { symbol: 'MNQ', side: 'long', reads: LC_READS, size: 1 } },
+    { harness: 'skill_lookup', args: { skill: 'candle-reading' } }, { harness: 'compose_check', args: { symbol: 'MNQ', side: 'long', reads: LC_READS, size: 1 } },
     { result: 'CYCLE RESULT: planned - trade_lifecycle long 1' },
   ];
   const w = D.world({ harness: 'claude' });

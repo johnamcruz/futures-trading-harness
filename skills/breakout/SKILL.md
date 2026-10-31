@@ -38,11 +38,10 @@ By PLAN step:
    previous candle's high/low, a CRT range; `m3.candles` has them).
 - **4 Setup**: a completed candle closes beyond the level with
    acceptance (the briefing's `broke`: `<tf> broke <level> up|down`): a strong close in the extreme third, the body beyond the
-   level, not just a wick (`breakout-vs-fakeout`). Its `reaction` reads
-   who is in control (`candle-reading`; the close decides acceptance,
-   the wick the failed attempt): `breakout` (closed beyond, an engulfing or a body ≥ 0.7 of the
-   range) → the breaking side in control, not a sweep. Context, never the
-   setup alone: it needs other confirmation. A
+   level, not just a wick (`breakout-vs-fakeout`). Read its reaction
+   with `candle-reading`: its side, who took control, and context; a
+   `breakout` one → the breaking side in control, not a sweep. Context,
+   never the setup alone: it needs other confirmation. A
    close beyond a level that is also a BOS on that timeframe
    (`m15.lastBreak.last`, `h1.lastBreak.last`) is accepted structure
    (`bos-vs-choch`).

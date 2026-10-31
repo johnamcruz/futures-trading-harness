@@ -48,8 +48,8 @@ const asList = v => (v === undefined || v === null ? [] : Array.isArray(v) ? v.m
 
 /** The situational lookups of an index: [{ skill, when: [trigger] }]. */
 const requiredOf = (index, table = SITUATIONAL) => index
-  // An entry taught in a skill (`taughtIn`) is the head trader's alone (skills-loaded.js): no role's.
-  .map(skill => ({ skill, when: table.filter(e => e.skill === skill && !e.taughtIn).map(e => parseTrigger(e.when)) }))
+  // An entry taught in a skill (`taughtIn`) or marked `headOnly` is the head trader's alone (skills-loaded.js): no role's.
+  .map(skill => ({ skill, when: table.filter(e => e.skill === skill && !e.taughtIn && !e.headOnly).map(e => parseTrigger(e.when)) }))
   .filter(r => r.when.length);
 
 /**

@@ -1,6 +1,6 @@
 ---
 name: candle-reading
-description: Trader-process steps 3 and 6 - completed candles at a level (body, wicks, close, a few patterns) and the trigger bar's timing. Confirmation only, never a veto.
+description: The read of a candle's reaction at a level, on every timeframe - close, wick, body, next candle; its side and who took control. Context, never a veto.
 ---
 
 # Candle Reading
@@ -74,10 +74,14 @@ the level, the count: `confluence-counting`). Read it at that moment
 against all the briefing shows: the bias (4h + 1h), the level (its
 timeframe and kind), where price is in the move (a pullback or an
 extension), momentum and volume, the other timeframes' reactions. The
-same reaction differs by context: a long-wick rejection at a pullback
-level with the bias → continuation (`pullback-vs-reversal`); the same
-candle against the 4h + 1h → the trend rule refuses it (never counter;
-`trend-vs-range`).
+side is the candle's, never the bias's: a rejection of a high
+(`<tf> rejected <level> down`: through it above, closed back below) →
+the short side; of a low (`up`) → the long side; a breakout's is its
+close (`<tf> broke <level> up` → long). The bias only decides whether that side is
+allowed: with it, at a pullback level → a continuation
+(`pullback-vs-reversal`); against the 4h + 1h → the trend rule refuses
+it (never counter; `trend-vs-range`). A `rejected` relation alone is no
+rejection read: its reaction decides.
 Read the field, never by eye. At a high (a low: the mirror), the first that holds:
 
 1. confirmed rejection: a long-wick rejection, then a bearish engulfing

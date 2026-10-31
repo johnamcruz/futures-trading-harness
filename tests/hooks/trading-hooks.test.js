@@ -4128,14 +4128,20 @@ test('order gate (hook): a composed entry on the runner\'s cycle (opencode, inde
   const cycle = path.join(dir, 'cycle-transcript.jsonl');
   fs.writeFileSync(cycle, JSON.stringify({ type: 'step_start', timestamp: 1, sessionID: 's', part: { type: 'step-start' } }));
   const lc = (extra, input = LC.order()) => gate(orderPayload(input), setup([lcPlan], { FTH_HOME: home, FTH_TEST_NOW: LC_AT, CLAUDE_PLUGIN_ROOT: LC_ROOT, FTH_CYCLE_BARS: JSON.stringify({ MNQ: LC.BAR }), FTH_AUTONOMOUS: '1', FTH_SYMBOLS: 'MNQ', FTH_ROLE_SKILLS: 'index', FTH_CYCLE_TRANSCRIPT: cycle, ...extra }).env);
-  // The shipped head prompt embeds them: no [skills-loaded], no [skills-at-entry].
+  // The shipped head prompt embeds them; candle-reading (the rejection's reaction read) it lists for lookup, never embeds
+  // (feat/sweep-candle-control): with no lookup the entry is refused for it alone (fails closed); looked up, it goes.
   const embedded = lc({ FTH_HEAD_PROMPT: attest('index') });
-  assert.doesNotMatch(embedded.stderr, /\[skills-loaded\]|\[skills-at-entry\]/);
+  assert.strictEqual(embedded.code, 2);
+  assert.match(embedded.stderr, /\[skills-loaded\] Load the trading skills before an entry; not loaded in this session: candle-reading\./);
+  assert.doesNotMatch(embedded.stderr, /\[skills-at-entry\]/);
+  const looked = path.join(dir, 'cycle-transcript-looked.jsonl');
+  fs.writeFileSync(looked, [fs.readFileSync(cycle, 'utf8'), JSON.stringify({ type: 'tool_use', timestamp: 2, sessionID: 's', part: { type: 'tool', tool: 'harness_skill_lookup', state: { status: 'completed', input: { skill: 'candle-reading' }, output: '<skill name="candle-reading">...' } } })].join('\n'));
+  assert.doesNotMatch(lc({ FTH_HEAD_PROMPT: attest('index'), FTH_CYCLE_TRANSCRIPT: looked }).stderr, /\[skills-loaded\]|\[skills-at-entry\]/);
   // A head prompt without their blocks (attested as it is): refused for exactly them.
   const cut = attest('cut', p => H.COMPOSED_READS.reduce((t, s) => t.replace(new RegExp(`<skill name="${s}">\n[^]*?\n</skill>\n\n?`), ''), p));
   const refused = lc({ FTH_HEAD_PROMPT: cut });
   assert.strictEqual(refused.code, 2);
-  assert.match(refused.stderr, /\[skills-loaded\] Load the trading skills before an entry; not loaded in this session: confluence-counting, invalidation, rejection\./);
+  assert.match(refused.stderr, /\[skills-loaded\] Load the trading skills before an entry; not loaded in this session: confluence-counting, invalidation, rejection, candle-reading\./);
   // No attestation: the transcript alone decides, and they are among the missing.
   assert.match(lc({ FTH_HEAD_PROMPT: '' }).stderr, /\[skills-loaded\][^\n]*trade-session[^\n]*confluence-counting, invalidation, rejection/);
   // An exit goes either way.

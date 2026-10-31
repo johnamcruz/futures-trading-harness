@@ -54,6 +54,6 @@ test('context quiz: every layer asked, ids unique, the bar the whole quiz at K 5
   assert.strictEqual(new Set(all.map(x => x.id)).size, all.length);
   assert.strictEqual(QUIZ.k, 5);
   assert.deepStrictEqual(QUIZ.passBar, { partA: { allCorrect: QUIZ.questions.length, bothWays: 0 }, partB: { allCorrect: QUIZ.partB.length, bothWays: 0 } });
-  assert.strictEqual(QUIZ.questions.length, 32);
+  assert.strictEqual(QUIZ.questions.length, 35);
   assert.strictEqual(QUIZ.partB.length, 5);
 });

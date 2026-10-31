@@ -28,7 +28,7 @@ const { feePerSide } = require('./accounts');
 const { checkTrend } = require('./mtf-state');
 const { checkTrigger, retiredLaneRefusal, retiredLaneRefusalAny, signalMaxAgeMin } = require('./signal-state');
 const { readBriefing } = require('./briefing');
-const { checkSkillsLoaded, checkSkillsAtEntry, REQUIRED_FOR_ENTRY, REQUIRED_FOR_COMPOSED, SITUATIONAL, situationalSkills, headSituationalSkills, loadedSkills, claudeLookupsInTranscript } = require('./skills-loaded');
+const { checkSkillsLoaded, checkSkillsAtEntry, REQUIRED_FOR_ENTRY, REQUIRED_FOR_COMPOSED, SITUATIONAL, situationalSkills, headSituationalSkills, loadedSkills, claudeLookupsInTranscript, parseTrigger } = require('./skills-loaded');
 const { checkRolesRan, approvedPhase2, sizeRefusal, approvedSize } = require('./roles-ran');
 const { readHeadSkills } = require('./runner-roles');
 const { lookupRule, briefingFacts, PLUGIN_ROOT: HARNESS_ROOT } = require('./skill-lookups');
@@ -555,8 +555,9 @@ function evaluateOrder({ input = {}, entries = [], now = new Date(), config, bla
   const claudeHead = att && att.harness === 'claude'
     ? claudeAttested(att, HARNESS_ROOT, { stream: config.cycleTranscript, hook: transcriptPath, cycle: require('./check-order').cycleId({ FTH_CYCLE_ID: config.cycleIdGiven || '', FTH_CYCLE_TRANSCRIPT: config.cycleTranscript || '' }) }) : [];
   const claudeLooked = claudeHead.length ? [...(loadedSkills(transcript, claudeLookupsInTranscript) || [])] : [];
-  // The composed triggers (the head trader's own reads) apply to a composed entry only.
-  const table = composed ? SITUATIONAL : SITUATIONAL.filter(e => !e.taughtIn);
+  // The composed triggers (the head trader's own reads, taught in trade-lifecycle or the head's own lookups) apply to a
+  // composed entry only.
+  const table = composed ? SITUATIONAL : SITUATIONAL.filter(e => !e.taughtIn && parseTrigger(e.when).key.split('.')[0] !== 'composed');
   const situational = !(config.autonomous && (config.roleSkills === 'index' || claudeHead.length)) ? []
     : config.cycleLaneBars === null ? headSituationalSkills(table)
       : situationalSkills(briefingFacts(config.home, contractRoot(input.contractId), now, config.cycleLaneBars, factsBar), table);

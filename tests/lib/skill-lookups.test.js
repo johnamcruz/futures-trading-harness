@@ -504,7 +504,8 @@ test('composed triggers: the head trader\'s compose records on the bar (cycleFac
   appendRecord(home, { ...rec, id: 'liar', bar: F.BAR, kinds: ['relation'], relations: ['rejected'] });
   const facts = L.briefingFacts(home, 'MNQ', now, {});
   assert.deepStrictEqual(facts.composed.map(c => c.relations), [['broke'], ['broke']]);
-  assert.deepStrictEqual(SL.situationalSkills(facts).sort(), ['breakout', 'confluence-counting', 'invalidation']);
+  // ... and candle-reading, a break's reaction read (feat/sweep-candle-control: the head's lookup, never a role's).
+  assert.deepStrictEqual(SL.situationalSkills(facts).sort(), ['breakout', 'candle-reading', 'confluence-counting', 'invalidation']);
   // Another record on the bar, another key: lookups made under the old one are not credited under the new.
   const keyAfter = L.briefingFactsKey(home, 'MNQ', now, {});
   assert.strictEqual(keyBefore, 'v-scenario-1');
@@ -527,8 +528,11 @@ test('composed triggers: the head trader\'s compose records on the bar (cycleFac
   const roleSkills = require('../../scripts/lib/role-skills');
   const required = roleSkills.requiredByRole(path.resolve(__dirname, '..', '..'), 'index');
   for (const [role, list] of required) for (const r of list) assert.ok(!r.when.some(w => w.key.startsWith('composed')), `${role}: ${r.skill}`);
+  // The head prompt lists only the untaught composed one, candle-reading (headOnly: the head's lookup, no role's).
   const { headPrompt } = require('../../scripts/lib/head-prompt');
-  assert.doesNotMatch(headPrompt({ docs: [] }), /compose/);
+  assert.match(headPrompt({ docs: [] }), /- a composed read says a candle rejected a level, or a composed read says a candle broke a level: `candle-reading`/);
+  assert.doesNotMatch(headPrompt({ docs: [] }, SL.SITUATIONAL.filter(x => !x.headOnly)), /compose/);
+  for (const e of SL.SITUATIONAL.filter(x => x.headOnly)) assert.ok(e.head === true && !e.taughtIn && e.when.startsWith('composed'), `${e.skill}: a composed read, the head's alone`);
   const taught = fs.readFileSync(path.join(__dirname, '..', '..', 'skills', 'trade-lifecycle', 'SKILL.md'), 'utf8');
   for (const e of SL.SITUATIONAL.filter(x => x.taughtIn)) {
     assert.strictEqual(e.taughtIn, 'trade-lifecycle');

@@ -268,10 +268,16 @@ against all the briefing shows: the bias (4h + 1h), the level (its
 timeframe and kind), where price is in the move (a pullback or an
 extension), momentum and volume, the other timeframes' reactions.
   The
-same reaction differs by context: a long-wick rejection at a pullback
-level with the bias → continuation (`pullback-vs-reversal`); the same
-candle against the 4h + 1h → the trend rule refuses it (never counter;
-`trend-vs-range`).
+side is the candle's, never the bias's: a rejection of a high
+(`<tf> rejected <level> down`: through it above, closed back below) →
+the short side; of a low (`up`) → the long side; a breakout's is its
+close (`<tf> broke <level> up` → long).
+  The bias only decides whether that side is
+allowed: with it, at a pullback level → a continuation
+(`pullback-vs-reversal`); against the 4h + 1h → the trend rule refuses
+it (never counter; `trend-vs-range`).
+  A `rejected` relation alone is no
+rejection read: its reaction decides.
 Read the field, never by eye.
   At a high (a low: the mirror), the first that holds:
 
@@ -784,10 +790,11 @@ hypotheses; a missing field is `unknown`.
   beyond its previous candle's high or low and closed back inside
   (`sweep` in `m3.candles`), read as its relation
   (`15m rejected previous 15m high down`; `rejection`).
-  Its `reaction`
-  (`candle-reading`) reads who took control: a `breakout` one is a
-  breakout attempt, not a sweep.
-  Context, never decided on alone.
+  Read its reaction
+  with `candle-reading`: its side, who took control, and context; a
+  `breakout` one is a breakout attempt, not a sweep.
+  Context, never
+  decided on alone.
 - **Acceptance (breakout)**: closes beyond that hold (hypothesis: two or
   more).
   Shown as a 15m or 1h swing with `brokenAt` set
@@ -1455,10 +1462,16 @@ against all the briefing shows: the bias (4h + 1h), the level (its
 timeframe and kind), where price is in the move (a pullback or an
 extension), momentum and volume, the other timeframes' reactions.
   The
-same reaction differs by context: a long-wick rejection at a pullback
-level with the bias → continuation (`pullback-vs-reversal`); the same
-candle against the 4h + 1h → the trend rule refuses it (never counter;
-`trend-vs-range`).
+side is the candle's, never the bias's: a rejection of a high
+(`<tf> rejected <level> down`: through it above, closed back below) →
+the short side; of a low (`up`) → the long side; a breakout's is its
+close (`<tf> broke <level> up` → long).
+  The bias only decides whether that side is
+allowed: with it, at a pullback level → a continuation
+(`pullback-vs-reversal`); against the 4h + 1h → the trend rule refuses
+it (never counter; `trend-vs-range`).
+  A `rejected` relation alone is no
+rejection read: its reaction decides.
 Read the field, never by eye.
   At a high (a low: the mirror), the first that holds:
 
@@ -1971,10 +1984,11 @@ hypotheses; a missing field is `unknown`.
   beyond its previous candle's high or low and closed back inside
   (`sweep` in `m3.candles`), read as its relation
   (`15m rejected previous 15m high down`; `rejection`).
-  Its `reaction`
-  (`candle-reading`) reads who took control: a `breakout` one is a
-  breakout attempt, not a sweep.
-  Context, never decided on alone.
+  Read its reaction
+  with `candle-reading`: its side, who took control, and context; a
+  `breakout` one is a breakout attempt, not a sweep.
+  Context, never
+  decided on alone.
 - **Acceptance (breakout)**: closes beyond that hold (hypothesis: two or
   more).
   Shown as a 15m or 1h swing with `brokenAt` set

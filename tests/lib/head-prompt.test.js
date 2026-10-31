@@ -38,8 +38,14 @@ test('CORE: the composed bar\'s reads the gate requires (SITUATIONAL taught in t
   assert.deepStrictEqual(H.CORE.slice(-H.COMPOSED_READS.length), H.COMPOSED_READS);
   const prompt = index.agent[H.HEAD_AGENT].prompt;
   for (const s of H.COMPOSED_READS) assert.ok(prompt.includes(`<skill name="${s}">\n${body(s)}\n</skill>`), s);
-  // Still not listed as a lookup the situation requires: embedded, they need none.
-  assert.doesNotMatch(prompt.split('## Your skills (already loaded)')[0], /Required by the situation/);
+  // Still not listed as a lookup the situation requires: embedded, they need none. The one the list names is candle-reading
+  // (feat/sweep-candle-control, the owner: "Rejection should rely on candle reading", "It should use indexing"): a
+  // composed rejection or break reads its reaction, looked up, never embedded.
+  const head = prompt.split('## Your skills (already loaded)')[0];
+  const list = head.slice(head.indexOf('Required by the situation'));
+  assert.match(list, /- a composed read says a candle rejected a level, or a composed read says a candle broke a level: `candle-reading`/);
+  for (const s of H.COMPOSED_READS) assert.ok(!list.includes(`\`${s}\``), `${s}: embedded, not listed`);
+  assert.ok(!prompt.includes('<skill name="candle-reading">'), 'candle-reading: listed for lookup, never embedded');
   // trade-lifecycle no longer sends the head trader to look them up every bar: embedded, it doesn't; else it loads them
   // (full mode, another harness), with skill_lookup when it has no skill tool.
   const tl = body('trade-lifecycle').replace(/\s+/g, ' ');
@@ -74,8 +80,11 @@ test('CORE: the composed bar\'s reads the gate requires (SITUATIONAL taught in t
   // provide useful context. Not used in isolation for decision. It needs other confirmation"): rejection's and breakout's
   // reaction pointers (who took control, the close over the wick, context never the setup alone) and bar-briefing's
   // `reaction` and `confirmed` fields: +873 over main's 74164; then 75075 with conflicting's read in the owner's words
-  // (mixed: needs other confirmation, the count or the next candle; +38). It may shrink; it grows only on an owner's OK.
-  assert.ok(Buffer.byteLength(prompt) <= 75075, `the head prompt is ${Buffer.byteLength(prompt)} bytes`);
+  // (mixed: needs other confirmation, the count or the next candle; +38); then 75155 (owner: rejection relies on candle-reading; the side is the candle's (q30); the owner: "It
+  // should use indexing"): the Required-by-the-situation list naming candle-reading for a composed rejection or break,
+  // trade-lifecycle's line to look it up, and rejection's and breakout's candle reads cut to a pointer (+80 net). It may
+  // shrink; it grows only on an owner's OK.
+  assert.ok(Buffer.byteLength(prompt) <= 75155, `the head prompt is ${Buffer.byteLength(prompt)} bytes`);
   // Only the head trader's prompt grows: no other role's prompt embeds trade-lifecycle (the risk manager's embeds
   // confluence-counting and invalidation as before; its prompt is unchanged, pinned in trade-session-split.test.js).
   for (const [name, a] of Object.entries(index.agent)) if (name !== H.HEAD_AGENT && a.prompt) assert.ok(!a.prompt.includes('<skill name="trade-lifecycle">'), name);

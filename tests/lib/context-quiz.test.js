@@ -100,7 +100,7 @@ test('grading: a correct "No, <term> ..." answer passes every question whose for
   }
 });
 
-test('the reaction questions (q23-q32, feat/sweep-candle-control): answer-first keys pass the right answer, refuse the wrong ones', () => {
+test('the reaction questions (q23-q35, feat/sweep-candle-control): answer-first keys pass the right answer, refuse the wrong ones', () => {
   const cases = {
     // A reaction alone takes no trade: it needs other confirmation.
     q23: [['No: a reaction is context, it needs other confirmation (bias, level, the count).', 'Pass: nothing else lines up.', 'Not on the reaction alone.', 'Not by itself: it needs the count.',
@@ -175,6 +175,17 @@ test('the reaction questions (q23-q32, feat/sweep-candle-control): answer-first 
         'Not yet: wait, then short on the 3m once it confirms.', 'No - the 1h broke out, so the 3m times a short now.', 'No; short the 3m rejection with a tight stop, the 1h is stronger but late.',
         'No: the 1h is stronger, but the 3m rejection is a short with the count.', 'Wait: the 1h is stronger; take the short with the next 3m close.', 'Short, the 3m is a rejection; the 1h is noise.', 'No: short on the 3m with the 1h breakout as context.',
         'No short; the trend rule refuses it.']],
+    // The mirror of q30 (a rejection of a low): the side is the candle's (the long side), never the bias's.
+    q33: [['No: the side is the candle\'s, the long side; with the 4h and 1h up it supports the long, against them the trend rule refuses it.', 'Not the same: the first is a continuation long; the second is a counter-trend long the trend rule refuses.', 'Different: the second counters the 4h + 1h, no trade.'],
+      ['Yes, both are long-wick rejections.', 'Same read: long both.', 'No, take both.', 'No: the context decides; the second one is a short setup.', 'No: against the 4h and 1h it is a long too.',
+        'No, they are not the same read: the 4h and 1h up one is a long setup, while the 4h and 1h down one is a short setup.', 'No. The 4h/1h-up wick is a counter-trend short read and is refused; the 4h/1h-down wick is a with-trend short setup.',
+        'No, they are not the same read: the 4h and 1h up one is a counter-trend long (the trend rule refuses it), while the 4h and 1h down one is a with-trend setup on the other side.', 'No - no difference.']],
+    // No bare rejection: a `rejected` relation with a plain reaction is no rejection read by itself.
+    q34: [['No: it closed back, but the wick, the body and the next candle haven\'t confirmed; plain is weak, context only.', 'Not by itself: the reaction is plain, context only.', 'No - the relation alone is no rejection read; the reaction decides, and plain is weak.'],
+      ['Yes: it traded above and closed back below.', 'A rejection: sellers took control.', 'No, but it is a rejection read: short it.', 'Yes, a rejection read; the close back below is enough.', 'No: sellers are in control.']],
+    // The index reference: candle-reading, read with skill_lookup (or the cycle's embedded copy), never rejection alone.
+    q35: [['candle-reading, read with skill_lookup (or the cycle\'s embedded copy).', '`candle-reading`: look it up with skill_lookup before the entry.', 'The candle-reading skill, its reaction read: skill_lookup, unless the cycle embedded it.'],
+      ['rejection: it is the setup skill.', 'The rejection skill, already in my prompt.', 'candle-reading, with the skill tool.', 'breakout-vs-fakeout.', 'candle-reading.']],
   };
   for (const [id, [right, wrong]] of Object.entries(cases)) {
     for (const a of right) assert.ok(pass(id, `ANSWER: ${a}`), `${id} right: ${a}`);
@@ -187,10 +198,10 @@ test('summary: correct on all K, answered both ways, the totals, the bar; compar
   for (const x of QUIZ.questions) for (let k = 1; k <= 5; k += 1) rows.push({ id: x.id, k, pass: true });
   for (const x of QUIZ.partB) for (let k = 1; k <= 5; k += 1) rows.push({ id: x.id, k, pass: true });
   const all = Q.summarize(QUIZ, rows, 5);
-  assert.deepStrictEqual([all.partA.allCorrect, all.partA.bothWays, all.partB.allCorrect, all.meetsBar], [32, 0, 5, true]);
+  assert.deepStrictEqual([all.partA.allCorrect, all.partA.bothWays, all.partB.allCorrect, all.meetsBar], [35, 0, 5, true]);
   const one = rows.map(r => (r.id === 'q6' && r.k === 2 ? { ...r, pass: false } : r));
   const s = Q.summarize(QUIZ, one, 5);
-  assert.deepStrictEqual([s.partA.allCorrect, s.partA.bothWays, s.partA.total, s.meetsBar], [31, 1, 159, false]);
+  assert.deepStrictEqual([s.partA.allCorrect, s.partA.bothWays, s.partA.total, s.meetsBar], [34, 1, 174, false]);
   // Too few runs is never correct on all K.
   assert.strictEqual(Q.summarize(QUIZ, rows.filter(r => r.k <= 3), 5).partA.allCorrect, 0);
   const d = Q.compare(all, s).find(x => x.id === 'q6');

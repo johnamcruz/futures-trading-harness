@@ -2900,7 +2900,9 @@ test('an unreadable lanes list (FTH_CYCLE_LANE_BARS): every situational skill ma
   const entry = { when: 'candidate.trendRule=reversal', skill: 'session-timing', head: true };
   SITUATIONAL.push(entry);
   try {
-    assert.deepStrictEqual(headSituationalSkills(), ['session-timing']);
+    // The head prompt's listed ones (no taughtIn): candle-reading (a composed rejection or break, feat/sweep-candle-control) and
+    // the one pushed here; for this non-composed entry only the pushed one applies (composed triggers are a composed entry's).
+    assert.deepStrictEqual(headSituationalSkills(), ['candle-reading', 'session-timing']);
     const base = { ...config, ...loadConfig({ FTH_HOME: home }), killSwitchFile: config.killSwitchFile, mtfMaxAgeMin: 1e9, signalMaxAgeBars: 1e9, signalMaxAgeCeilingMin: 1e9, home, autonomous: true, cycle: null };
     const skillsLoaded = c => evaluateOrder({ input: entryOrder(), entries: [plan()], now: NOW, config: c, transcriptPath: file }).violations.filter(v => v.check === 'skills-loaded');
     assert.deepStrictEqual(skillsLoaded({ ...base, cycleLaneBars: {} }), [], 'lanes readable, no trigger: not required');
@@ -3362,17 +3364,19 @@ test('trade_lifecycle, index mode: the head trader\'s compose records trigger it
   LC.writeScenario(home, { reads: LC.READS.map(x => (x.step === 'setup' ? { ...x, read: '15m rejected prior vah up' } : x)) });
   const m3 = briefingFacts(home, 'MNQ', LC_NOW, {});
   assert.deepStrictEqual(m3.composed.map(c => [c.side, c.relations]), [['long', ['rejected']]]);
-  assert.deepStrictEqual(situationalSkills(m3).sort(), ['confluence-counting', 'invalidation', 'rejection']);
-  assert.deepStrictEqual(situationalSkills(m3, SITUATIONAL.filter(e => !e.taughtIn)), [], 'not for another entry');
-  assert.deepStrictEqual(headSituationalSkills(), [], 'the prompt-listed head entries: none of the composed ones');
-  assert.deepStrictEqual(headSituationalSkills(SITUATIONAL).sort(), ['breakout', 'confluence-counting', 'invalidation', 'rejection']);
+  // ... and candle-reading, the rejection's reaction read (feat/sweep-candle-control: listed for lookup, never embedded).
+  assert.deepStrictEqual(situationalSkills(m3).sort(), ['candle-reading', 'confluence-counting', 'invalidation', 'rejection']);
+  // The gate's table for another entry: no taughtIn and no composed trigger (a composed entry's alone).
+  assert.deepStrictEqual(situationalSkills(m3, SITUATIONAL.filter(e => !e.taughtIn && !e.when.startsWith('composed'))), [], 'not for another entry');
+  assert.deepStrictEqual(headSituationalSkills(), ['candle-reading'], 'the prompt-listed head entries: candle-reading, not the embedded composed reads');
+  assert.deepStrictEqual(headSituationalSkills(SITUATIONAL).sort(), ['breakout', 'candle-reading', 'confluence-counting', 'invalidation', 'rejection']);
   // The gate, autonomous in index mode: the composed entry needs them; a legacy entry on the same bar doesn't.
   const file = path.join(tmpDir(), 'session.jsonl');
   fs.writeFileSync(file, ocSkills.join('\n'));
   const auto = { ...loadConfig({ FTH_HOME: home }), killSwitchFile: config.killSwitchFile, mtfMaxAgeMin: 1e9, signalMaxAgeBars: 1e9, signalMaxAgeCeilingMin: 1e9, home, autonomous: true, cycle: null, cycleLaneBars: {}, cycleBars: { MNQ: LC.BAR } };
   const loaded = (input, c = auto) => evaluateOrder({ input, entries: [plan(1, { ts: '2026-10-07T13:59:30Z' })], now: LC_NOW, config: c, transcriptPath: file, strategies: LC_REGISTRY }).violations.filter(v => v.check === 'skills-loaded').map(v => v.message);
   const msg = loaded(LC.order())[0];
-  for (const s of ['trade-lifecycle', 'confluence-counting', 'invalidation', 'rejection']) assert.match(msg, new RegExp(`\\b${s}\\b`));
+  for (const s of ['trade-lifecycle', 'confluence-counting', 'invalidation', 'rejection', 'candle-reading']) assert.match(msg, new RegExp(`\\b${s}\\b`));
   assert.doesNotMatch(msg, /strategy-library|breakout/);
   assert.deepStrictEqual(loaded(entryOrder()), [], 'a legacy entry: neither trade-lifecycle nor the composed lookups');
   // Unreadable lanes: every head entry, the composed ones only for a composed entry.
@@ -3388,7 +3392,11 @@ test('trade_lifecycle, index mode: the head prompt embeds the composed bar\'s re
   const transcript = path.join(dir, 'logs', 'bare-transcript.jsonl');
   fs.writeFileSync(transcript, [JSON.stringify({ type: 'step_start', timestamp: 1, sessionID: 's', part: { type: 'step-start' } }), ocEvent('harness_bar_briefing', { symbol: 'MNQ' })].join('\n'));
   const skillMsgs = r => r.violations.filter(v => v.check.startsWith('skills-')).map(v => `${v.check}: ${v.message.replace(/ Load each with the skill tool [^]*$/, '')}`);
-  for (const [relation, read, skills] of [['rejected', '15m rejected prior vah up', ['confluence-counting', 'invalidation', 'rejection']], ['broke', '15m broke prior vah up', ['confluence-counting', 'invalidation', 'breakout']]]) {
+  // The embedded composed reads, and candle-reading (listed for lookup, never embedded: feat/sweep-candle-control).
+  const CR = 'skills-loaded: Load the trading skills before an entry; not loaded in this session: candle-reading.';
+  const lookupOf = skill => ocEvent('harness_skill_lookup', { skill }).replace('VERDICT: APPROVE - size 1', `<skill name=\\"${skill}\\">...`);
+  for (const [relation, read, embeddedReads] of [['rejected', '15m rejected prior vah up', ['confluence-counting', 'invalidation', 'rejection']], ['broke', '15m broke prior vah up', ['confluence-counting', 'invalidation', 'breakout']]]) {
+    const skills = [...embeddedReads, 'candle-reading'];
     const home = lcHome({ reads: LC.READS.map(x => (x.step === 'setup' ? { ...x, read } : x)) });
     const cfg = { autonomous: true, roleSkills: 'index', cycle: null, cycleLaneBars: {}, cycleTranscript: transcript, headPromptAttestation: JSON.stringify(att) };
     const run = (c, input = LC.order()) => lcEval(home, input, { config: { ...cfg, ...c } });
@@ -3396,8 +3404,12 @@ test('trade_lifecycle, index mode: the head prompt embeds the composed bar\'s re
     const { briefingFacts } = require('../../scripts/lib/trading/skill-lookups');
     const { situationalSkills } = require('../../scripts/lib/trading/skills-loaded');
     assert.deepStrictEqual(situationalSkills(briefingFacts(home, 'MNQ', LC_NOW, {})).sort(), [...skills].sort(), relation);
-    // ... and the attested prompt embeds them: no lookup needed, nothing refused for a skill.
-    assert.deepStrictEqual(skillMsgs(run({})), [], relation);
+    // ... and the attested prompt embeds the composed reads: those need no lookup; candle-reading does (refused without
+    // it, naming it), and with its skill_lookup in the transcript the entry goes.
+    assert.deepStrictEqual(skillMsgs(run({})), [CR], relation);
+    const looked = path.join(dir, 'logs', `looked-${relation}.jsonl`);
+    fs.writeFileSync(looked, `${fs.readFileSync(transcript, 'utf8')}\n${lookupOf('candle-reading')}`);
+    assert.deepStrictEqual(skillMsgs(run({ cycleTranscript: looked })), [], `${relation}: candle-reading looked up`);
     // No attestation (the transcript alone decides): refused, naming them among the rest.
     const none = skillMsgs(run({ headPromptAttestation: null })).join('\n');
     for (const s of skills) assert.match(none, new RegExp(`skills-loaded: [^\n]*\\b${s}\\b`), `${relation}, no attestation: ${s}`);
@@ -3416,17 +3428,52 @@ test('trade_lifecycle, index mode: the head prompt embeds the composed bar\'s re
   assert.deepStrictEqual(cut.skills, H.CORE.filter(s => !H.COMPOSED_READS.includes(s)));
   const home = lcHome({ reads: LC.READS.map(x => (x.step === 'setup' ? { ...x, read: '15m rejected prior vah up' } : x)) });
   const cfg = { autonomous: true, roleSkills: 'index', cycle: null, cycleLaneBars: {}, cycleTranscript: transcript, headPromptAttestation: JSON.stringify(cut) };
-  assert.deepStrictEqual(skillMsgs(lcEval(home, LC.order(), { config: cfg })), ['skills-loaded: Load the trading skills before an entry; not loaded in this session: confluence-counting, invalidation, rejection.']);
+  assert.deepStrictEqual(skillMsgs(lcEval(home, LC.order(), { config: cfg })), ['skills-loaded: Load the trading skills before an entry; not loaded in this session: confluence-counting, invalidation, rejection, candle-reading.']);
   // A forged attestation naming them for that prompt: the prompt doesn't embed them, so they still don't count.
   assert.match(skillMsgs(lcEval(home, LC.order(), { config: { ...cfg, headPromptAttestation: JSON.stringify(att) } })).join('\n'), /skills-loaded/, 'the uncut hash no longer matches');
-  assert.deepStrictEqual(skillMsgs(lcEval(home, LC.order(), { config: { ...cfg, headPromptAttestation: JSON.stringify({ ...cut, skills: att.skills }) } })), ['skills-loaded: Load the trading skills before an entry; not loaded in this session: confluence-counting, invalidation, rejection.']);
+  assert.deepStrictEqual(skillMsgs(lcEval(home, LC.order(), { config: { ...cfg, headPromptAttestation: JSON.stringify({ ...cut, skills: att.skills }) } })), ['skills-loaded: Load the trading skills before an entry; not loaded in this session: confluence-counting, invalidation, rejection, candle-reading.']);
   // Full mode never requires the situational reads (the head trader loads trade-lifecycle, which names them).
   const fullMode = skillMsgs(lcEval(home, LC.order(), { config: { ...cfg, roleSkills: 'full' } })).join('\n');
   assert.match(fullMode, /skills-loaded: [^\n]*trade-session/);
-  assert.doesNotMatch(fullMode, /confluence-counting|invalidation|rejection/);
-  fs.appendFileSync(transcript, `\n${['confluence-counting', 'invalidation', 'rejection'].map(skill => ocEvent('harness_skill_lookup', { skill }).replace('VERDICT: APPROVE - size 1', `<skill name=\\"${skill}\\">...`)).join('\n')}`);
+  assert.doesNotMatch(fullMode, /confluence-counting|invalidation|rejection|candle-reading/);
+  fs.appendFileSync(transcript, `\n${['confluence-counting', 'invalidation', 'rejection', 'candle-reading'].map(skill => ocEvent('harness_skill_lookup', { skill }).replace('VERDICT: APPROVE - size 1', `<skill name=\\"${skill}\\">...`)).join('\n')}`);
   assert.deepStrictEqual(skillMsgs(lcEval(home, LC.order(), { config: cfg })), [], 'looked up: counted, as before');
   fs.writeFileSync(configFile, generated);
+});
+
+test('trade_lifecycle, index mode: a composed rejection or break needs candle-reading (its reaction read, the head\'s lookup); looked up, or embedded in the cycle on the runner\'s attestation, it goes; another composed bar is unaffected', () => {
+  const { att, dir } = headRun();
+  const { cycleId: cycleIdOf } = require('../../scripts/lib/trading/check-order');
+  const ES = require('../../scripts/lib/situational-skills');
+  const root = path.resolve(__dirname, '..', '..');
+  const transcript = path.join(dir, 'logs', 'cycle-transcript-7-cr.jsonl');
+  fs.mkdirSync(path.dirname(transcript), { recursive: true });
+  fs.writeFileSync(transcript, [JSON.stringify({ type: 'step_start', timestamp: 1, sessionID: 's', part: { type: 'step-start' } }), ocEvent('harness_bar_briefing', { symbol: 'MNQ' })].join('\n'));
+  const cfg = { autonomous: true, roleSkills: 'index', cycle: null, cycleLaneBars: {}, cycleTranscript: transcript, headPromptAttestation: JSON.stringify(att) };
+  const msgs = (home, c = {}, input = LC.order()) => lcEval(home, input, { config: { ...cfg, ...c } }).violations.filter(v => v.check === 'skills-loaded').map(v => v.message);
+  for (const read of ['15m rejected prior vah up', '15m broke prior vah up']) {
+    const home = lcHome({ reads: LC.READS.map(x => (x.step === 'setup' ? { ...x, read } : x)) });
+    // No lookup, nothing embedded: refused, naming candle-reading.
+    const none = msgs(home);
+    assert.ok(none.length === 1 && /not loaded in this session: candle-reading\./.test(none[0]), `${read}: ${JSON.stringify(none)}`);
+    // Embedded in the cycle's prompt (situational-skills.js), attested for this cycle: counted.
+    const { file, text } = ES.writeSituation(dir, root, { skills: ['candle-reading'], sections: [], over: [], why: ['a setup listed: its entry read'] });
+    const csa = ES.attestation({ file, text, root, cycle: cycleIdOf({ FTH_CYCLE_TRANSCRIPT: transcript }) });
+    assert.deepStrictEqual(csa.skills, ['candle-reading']);
+    assert.deepStrictEqual(msgs(home, { cycleSkillsAttestation: JSON.stringify(csa) }), [], `${read}: embedded and attested`);
+    // Attested for another cycle: the transcript decides, refused.
+    assert.strictEqual(msgs(home, { cycleSkillsAttestation: JSON.stringify({ ...csa, cycle: 'a'.repeat(16) }) }).length, 1, `${read}: another cycle`);
+    // Exits never held by it.
+    assert.deepStrictEqual(msgs(home, {}, entryOrder({ side: 'sell', rationale: '[exit] flatten', stopLossBracket: undefined })), [], `${read}: exit`);
+  }
+  // A composed bar with no rejected or broke read (its setup a touch): candle-reading is not required.
+  const { situationalSkills } = require('../../scripts/lib/trading/skills-loaded');
+  const { briefingFacts } = require('../../scripts/lib/trading/skill-lookups');
+  const touchHome = lcHome();
+  const facts = briefingFacts(touchHome, 'MNQ', LC_NOW, {});
+  if (!facts.composed.some(c => c.relations.includes('rejected') || c.relations.includes('broke'))) assert.ok(!situationalSkills(facts).includes('candle-reading'));
+  assert.ok(!situationalSkills({ composed: [{ side: 'long', kinds: ['cisd'], relations: [] }] }).includes('candle-reading'), 'a composed CISD: unaffected');
+  assert.ok(!situationalSkills({ composed: [{ side: 'long', kinds: ['relation'], relations: ['touched'] }] }).includes('candle-reading'), 'a composed touch: unaffected');
 });
 
 test('trade_lifecycle: a phase-2 room fact is about the record\'s own plan (the first level ahead in its R), never a scan candidate', () => {

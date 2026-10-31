@@ -23,7 +23,7 @@
   "unsure": "it depends|unsure|not sure|unclear|ambiguous|can't tell|cannot tell|depends on",
   "passBar": {
     "partA": {
-      "allCorrect": 32,
+      "allCorrect": 35,
       "bothWays": 0
     },
     "partB": {
@@ -145,10 +145,13 @@
     {
       "id": "q8",
       "layer": "setup",
-      "prompt": "head",
+      "prompt": "lookup",
+      "lookup": [
+        "candle-reading"
+      ],
       "text": "A 15m setup candle closed as a bearish engulfing; another closed as a strong full-body bear candle in its bottom third with no pattern name. Which is the stronger setup candle?",
       "rule": "a candle is judged by its strength and close, never its pattern name",
-      "anchor": "a pattern name adds no strength",
+      "anchor": "a name adds no strength, the reaction reads who took control",
       "required": [
         "neither|both|equal|\\bsame\\b|not by (its )?name|strength|body|close third|bottom[- ]third|judge|depends"
       ],
@@ -405,10 +408,13 @@
     {
       "id": "q24",
       "layer": "setup",
-      "prompt": "head",
+      "prompt": "lookup",
+      "lookup": [
+        "candle-reading"
+      ],
       "text": "A 15m candle has a long upper wick above the prior RTH high but closes above the high. Rejection or acceptance?",
       "rule": "the close decides acceptance, the wick measures the failed attempt: a close beyond the level is acceptance, never a rejection",
-      "anchor": "the close decides acceptance, the wick the failed attempt",
+      "anchor": "The close beats the wick: a long wick closing above is no rejection",
       "required": [
         "^\\W*(not\\s+(a\\s+)?rejection\\W+)?(acceptance|accepted|accepts|it'?s acceptance|it is acceptance)\\b"
       ],
@@ -420,10 +426,13 @@
     {
       "id": "q25",
       "layer": "setup",
-      "prompt": "head",
+      "prompt": "lookup",
+      "lookup": [
+        "candle-reading"
+      ],
       "text": "A 15m candle trades above the prior RTH high and closes back below it, its upper wick longer than its body and a third of its range (the briefing: long-wick rejection). Who took control?",
       "rule": "a long-wick rejection after a high: the other side, the sellers, took control",
-      "anchor": "long-wick or engulfing rejection → the other side took control",
+      "anchor": "→ sellers rejected higher prices",
       "required": [
         "^\\W*(the\\s+)?(sellers?|bears?|shorts?|short side)\\b"
       ],
@@ -452,10 +461,13 @@
     {
       "id": "q27",
       "layer": "setup",
-      "prompt": "head",
+      "prompt": "lookup",
+      "lookup": [
+        "candle-reading"
+      ],
       "text": "A 15m long-wick rejection of the prior RTH high, then the next 15m candle is a bearish engulfing closing lower. What does that second candle read?",
       "rule": "a long-wick rejection, then an opposite engulfing closing lower: a confirmed rejection, on the second candle",
-      "anchor": "a confirmed one when the next candle engulfs",
+      "anchor": "closing lower → sellers took over, confirmed",
       "required": [
         "\\bconfirm\\w*\\b.*\\brejection\\b|\\brejection\\b.*\\bconfirm\\w*\\b"
       ],
@@ -472,10 +484,13 @@
     {
       "id": "q28",
       "layer": "setup",
-      "prompt": "head",
+      "prompt": "lookup",
+      "lookup": [
+        "candle-reading"
+      ],
       "text": "A 15m candle trades above the prior RTH high and closes back below it with a bullish body and a short wick (the briefing: conflicting). Read it as sellers in control now?",
       "rule": "a conflicting reaction is mixed evidence: it needs other confirmation (the count, or the next candle)",
-      "anchor": "conflicting → mixed: needs other confirmation (the count, or the next candle)",
+      "anchor": "→ mixed: needs other confirmation (the count, or the next candle)",
       "required": [
         "^\\W*(no|nope|not|wait|mixed)\\b|\\bneeds? (other |more )?confirmation\\b|\\bwait\\b"
       ],
@@ -491,10 +506,13 @@
     {
       "id": "q29",
       "layer": "setup",
-      "prompt": "head",
+      "prompt": "lookup",
+      "lookup": [
+        "candle-reading"
+      ],
       "text": "A 15m doji at the prior RTH high (the briefing: stall). What decides who takes control?",
       "rule": "a stall: the push stalled, the next candle decides",
-      "anchor": "stall → the next candle decides",
+      "anchor": "→ stalled; the next candle decides",
       "required": [
         "\\bnext\\b[^.;]*\\b(candle|close)\\b|\\b(candle|close|bar)\\s+after\\s+the\\s+doji\\b"
       ],
@@ -505,10 +523,13 @@
     {
       "id": "q30",
       "layer": "setup",
-      "prompt": "head",
+      "prompt": "lookup",
+      "lookup": [
+        "candle-reading"
+      ],
       "text": "Two 15m long-wick rejections of a high (upper wick through it, closed back below): one at a pullback level with the 4h and 1h down, one with the 4h and 1h up. Same read?",
       "rule": "a reaction is read in its context at that moment: with the bias at a pullback level it supports the short; against the 4h + 1h the trend rule refuses it (never counter)",
-      "anchor": "Against the bias (4h + 1h): the trend rule refuses it (never counter)",
+      "anchor": "The side is the candle's, never the bias's",
       "required": [
         "^\\W*(no|nope|not|different|context)\\b",
         "\\b(no trade|not a trade|refus\\w*|counter\\w*|trend rule|never counter|against the (4h|1h|htf|bias|trend))\\b"
@@ -579,6 +600,71 @@
       ],
       "lookup": [
         "candle-reading"
+      ]
+    },
+    {
+      "id": "q33",
+      "layer": "setup",
+      "prompt": "lookup",
+      "lookup": [
+        "candle-reading"
+      ],
+      "text": "Two 15m long-wick rejections of a low (lower wick through it, closed back above): one at a pullback level with the 4h and 1h up, one with the 4h and 1h down. Same read?",
+      "rule": "the side is the candle's, never the bias's: a rejection of a low is the long side; with the bias at a pullback level it supports the long; against the 4h + 1h the trend rule refuses it (never counter)",
+      "anchor": "of a low (`up`) → the long side",
+      "required": [
+        "^\\W*(no|nope|not|different|context)\\b",
+        "\\b(no trade|not a trade|refus\\w*|counter\\w*|trend rule|never counter|against the (4h|1h|htf|bias|trend))\\b"
+      ],
+      "forbidden": [
+        "^\\W*(yes|yep|same)\\b",
+        "\\b(no difference|not different|no change)\\b",
+        "\\b(long|buy|take|trade)\\s+(them\\s+)?(both|either)\\b",
+        "\\bboth\\s+(are\\s+)?(valid\\s+)?(longs?|trades?|valid|taken)\\b",
+        "\\bsame (read|thing|trade)\\b(?! of the candle)",
+        "\\blong in both\\b",
+        "\\bshort (setup|read|entry|trade|side)\\b",
+        "\\b(with-trend|with the trend|counter-trend) short\\b",
+        "\\b(a|is a) long (too|as well|also)\\b(?!\\s*\\?\\s*(no|never)\\b)",
+        "\\b(on )?the (other|opposite) side\\b",
+        "\\b(4h|1h)\\b[^.;:]*\\bup\\b[^.;:]{0,30}\\b(counter\\w*|refus\\w*)"
+      ]
+    },
+    {
+      "id": "q34",
+      "layer": "setup",
+      "prompt": "lookup",
+      "lookup": [
+        "candle-reading"
+      ],
+      "text": "A 15m candle `rejected` the prior RTH high (traded above, closed back below), and its reaction reads plain. Is that a rejection read?",
+      "rule": "no bare rejection: the close says it closed back, but the wick, the body and the next candle haven't confirmed; plain is weak, context only",
+      "anchor": "A `rejected` relation alone is no rejection read: its reaction decides.",
+      "required": [
+        "^[\\W_]*(no|nope|not)\\b",
+        "\\b(plain|weak|context|wick|body|next candle|confirm\\w*|reaction|by itself|alone)\\b"
+      ],
+      "forbidden": [
+        "^\\W*(yes|yep|a rejection)\\b",
+        "\\b(it'?s|it is|that'?s|that is)\\s+a\\s+rejection read\\b",
+        "\\bsellers (took|take|are in|in) control\\b",
+        "\\b(short it|take the short|go short|sell it)\\b(?!\\s+(only\\s+)?(once|if|after(?! all)|when|until)\\b)"
+      ]
+    },
+    {
+      "id": "q35",
+      "layer": "setup",
+      "prompt": "head",
+      "text": "A 15m candle `rejected` a level in your composed read and its reaction reads conflicting. Which skill do you read for what that means, and how?",
+      "rule": "the reaction read is candle-reading's, read from the index with skill_lookup (or the cycle's embedded copy); the gate requires it on a composed rejection or break",
+      "anchor": "- a composed read says a candle rejected a level, or a composed read says a candle broke a level: `candle-reading`",
+      "required": [
+        "^[\\W_`]*(the\\s+)?`?candle-reading`?",
+        "\\bskill_lookup\\b|\\blook(ed)?\\s+(it\\s+)?up\\b|\\blookup\\b|\\bembedded\\b"
+      ],
+      "forbidden": [
+        "^[\\W_`]*(the\\s+)?`?(rejection|breakout|breakout-vs-fakeout)`?\\b",
+        "\\bthe skill tool\\b"
       ]
     }
   ],
