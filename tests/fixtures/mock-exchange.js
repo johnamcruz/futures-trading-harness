@@ -22,6 +22,8 @@
  *   keepLegs        bracket legs stay working after the position goes flat (legs not cancelled on flat)
  *   oddSize         positions are listed without a size
  *   failJournal: n  the next n journal_add calls fail (an error reply; nothing is written)
+ *   latePositions: n  the next n position reads (list_open_positions, get_account_snapshot) and fill reads
+ *                   (search_trades) don't show the newest position and fills yet (a fill reported late)
  * Stops fill at the price that reached them (a gap fills worse than the stop); limits at their limit.
  *
  *   initState(file, over)          a fresh account
@@ -234,13 +236,17 @@ const HANDLERS = {
   get_contract: (s, a) => contractOf(a.contractId) || null,
   get_bars: (s, a, env) => bars(s, a, env),
   get_quote: (s, a) => ({ contractId: a.contractId, quote: { bid: s.prices[a.contractId] - 0.25, ask: s.prices[a.contractId], last: s.prices[a.contractId] } }),
-  list_open_positions: s => s.positions.map(p => (s.oddSize ? { ...p, size: undefined } : p)),
+  list_open_positions: s => {
+    if (s.latePositions > 0) { s.latePositions -= 1; return []; }
+    return s.positions.map(p => (s.oddSize ? { ...p, size: undefined } : p));
+  },
   list_open_orders: s => s.orders.filter(o => o.status === 1),
   search_orders: s => (s.hideOrders ? [] : s.orders),
   // From startTimestamp, by default the start of the trading day (the 18:00 ET open), as the interface says.
   search_trades: (s, a) => {
     const from = a.startTimestamp ? Date.parse(a.startTimestamp) : tradingDayStart(new Date(s.nowMs)).getTime();
-    return s.fills.filter(f => Date.parse(f.creationTimestamp) >= from);
+    const shown = s.latePositions > 0 ? s.fills.slice(0, -1) : s.fills;
+    return shown.filter(f => Date.parse(f.creationTimestamp) >= from);
   },
   get_performance: s => ({ window: { start: iso(s.nowMs - 3600000), end: iso(s.nowMs) }, overall: { fills: s.fills.length }, byContract: {} }),
   place_order: (s, a, env) => {

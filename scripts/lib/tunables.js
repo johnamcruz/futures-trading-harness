@@ -136,7 +136,7 @@ const RUNNER = {
   runner: {
     idleMs: int(1), resyncsBeforeReroll: int(1), lookupRetryMs: ms(), maxRetryMs: int(1), closeSettleMs: ms(), fillGraceMs: ms(), accountReadMs: int(1),
     closeRetryMs: ms(), closeTries: int(1), premarketRetryMs: list(int(1), { min: 1 }), composedWatchMs: ms(), wakeEarlyMs: ms(), minManagedRiskTicks: nonneg(),
-    runnerCloseToleranceMs: ms(), calendarWarnDays: int(0), killGraceMs: ms(), exitKillGraceMs: ms(), probeTimeoutMs: int(1), preflightSampleBars: int(1),
+    runnerCloseToleranceMs: ms(), calendarWarnDays: int(0), killGraceMs: ms(), exitKillGraceMs: ms(), probeTimeoutMs: int(1), preflightSampleBars: int(1), keptAlertBars: int(1),
   },
   prompt: {
     recentDecisions: int(1), historyPerLane: int(1), slowerContext: int(0), planChars: int(1), reasonChars: int(1), exitsKept: int(1), unseenReads: int(0),
@@ -223,7 +223,7 @@ const PINS = deepFreeze({
     'account.snapshotMaxAgeMs': 600000, 'account.balanceToleranceUsd': 0.01, 'account.snapshotFutureToleranceMs': 60000,
     'clock.serverTimeToleranceMs': 300000, 'clock.wallStartMaxAgeMs': 86400000, 'clock.wallStartAheadMs': 5000,
     'cycle.maxConsecutiveErrors': 3, 'bars.staleAfterBars': 0.5, 'runner.closeSettleMs': 10000, 'runner.fillGraceMs': 30000, 'runner.minManagedRiskTicks': 4,
-    'runner.killGraceMs': 10000, 'runner.exitKillGraceMs': 2000, 'session.gateSlackMs': 2000,
+    'runner.killGraceMs': 10000, 'runner.exitKillGraceMs': 2000, 'session.gateSlackMs': 2000, 'runner.keptAlertBars': 3,
     'monteCarlo.max': 20000,
   },
   analysis: {},
@@ -259,7 +259,7 @@ const BUILT_IN = deepFreeze({
       idleMs: 5000, resyncsBeforeReroll: 3, lookupRetryMs: 30000, maxRetryMs: 60000, closeSettleMs: 10000, fillGraceMs: 30000, accountReadMs: 5000,
       closeRetryMs: 60000, closeTries: 5, premarketRetryMs: [60000, 120000, 300000, 600000], composedWatchMs: 5000, wakeEarlyMs: 5000,
       minManagedRiskTicks: 4, runnerCloseToleranceMs: 60000, calendarWarnDays: 30, killGraceMs: 10000, exitKillGraceMs: 2000, probeTimeoutMs: 600000,
-      preflightSampleBars: 20,
+      preflightSampleBars: 20, keptAlertBars: 3,
     },
     prompt: {
       recentDecisions: 10, historyPerLane: 10, slowerContext: 3, planChars: 400, reasonChars: 100, exitsKept: 50, unseenReads: 10,
@@ -375,6 +375,9 @@ const SPECS = Object.freeze({
     // How long a stopped run gets before SIGKILL, and the slack matching gate records to a cycle: pinned (a shorter or
     // longer value is stricter for different users).
     'runner.killGraceMs': 'exact', 'runner.exitKillGraceMs': 'exact', 'session.gateSlackMs': 'exact',
+    // The passes in a row a flat-reading root's stops are kept on uncertainty before the runner's escalating ALERT
+    // (runner.js cleanupFlat): sooner is stricter, so it only falls.
+    'runner.keptAlertBars': 'down',
     'monteCarlo.max': 'down',
   }),
   analysis: spec('analysis', ANALYSIS, {}),

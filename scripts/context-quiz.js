@@ -21,6 +21,7 @@ const Q = require('./lib/eval/context-quiz');
 const ROOT = path.resolve(__dirname, '..');
 const arg = (argv, name) => { const i = argv.indexOf(name); return i >= 0 ? argv[i + 1] : null; };
 const FILES = { head: 'head.md', 'head+risk': 'head+risk.md' };
+const fileOf = key => FILES[key] || `${key.replace(/[^a-z0-9+]+/gi, '-')}.md`; // a situational question's own prompt
 
 /** The output directory: given, made, and never inside the repository. */
 function outDir(dir) {
@@ -34,9 +35,9 @@ function outDir(dir) {
 
 function build(dir) {
   const { value, hash } = Q.loadQuiz();
-  const prompts = Q.buildPrompts(ROOT);
-  for (const [k, f] of Object.entries(FILES)) fs.writeFileSync(path.join(dir, f), prompts[k]);
-  const asked = [...value.questions, ...value.partB].map(q => ({ id: q.id, prompt: q.prompt, text: Q.questionText(value, q) }));
+  const prompts = Q.buildPrompts(ROOT, value);
+  for (const [k, text] of Object.entries(prompts)) fs.writeFileSync(path.join(dir, fileOf(k)), text);
+  const asked = [...value.questions, ...value.partB].map(q => ({ id: q.id, prompt: Q.promptKey(q), text: Q.questionText(value, q) }));
   fs.writeFileSync(path.join(dir, 'questions.json'), `${JSON.stringify({ quizHash: hash, asked }, null, 1)}\n`);
   const missing = Q.anchorsMissing(value, prompts);
   console.log(`built ${asked.length} questions in ${dir} (head ${prompts.head.length} chars, head+risk ${prompts['head+risk'].length})${missing.length ? `; anchors missing: ${missing.join(', ')}` : ''}`);
@@ -65,7 +66,7 @@ function run(argv) {
     if (only && !only.includes(q.id)) continue;
     for (let i = 1; i <= k; i += 1) {
       if (done.has(`${q.id}:${i}`)) continue;
-      const [bin, ...args] = Q.quizCommand(cfg, q.text, path.join(dir, FILES[q.prompt]));
+      const [bin, ...args] = Q.quizCommand(cfg, q.text, path.join(dir, fileOf(q.prompt)));
       const t = Date.now();
       const r = spawnSync(bin, args, { cwd: empty, encoding: 'utf8' });
       const reply = r.error ? { answer: r.error.message, error: true } : Q.replyOf(cfg, r.stdout);

@@ -79,7 +79,8 @@
     "killGraceMs": 10000,
     "exitKillGraceMs": 2000,
     "probeTimeoutMs": 600000,
-    "preflightSampleBars": 20
+    "preflightSampleBars": 20,
+    "keptAlertBars": 3
   },
   "prompt": {
     "recentDecisions": 10,

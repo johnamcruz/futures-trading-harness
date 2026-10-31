@@ -59,7 +59,8 @@ const { contractRoot, contractMonthTag } = require('./trading/journal');
 const { familyRoot, familyOf } = require('./trading/contracts');
 const { specMismatch, validSpec, noSpecsMessage } = require('./trading/broker-specs');
 const { isOpen, signedSize } = require('./trading/positions');
-const { protectiveStops, legRole } = require('./trading/bracket-legs');
+const { protectiveStops, legRole, isStopLeg } = require('./trading/bracket-legs');
+const { stopHeld, workingEntryOf, evidenceCover } = require('./trading/fill-evidence');
 const { coverageError } = require('./trading/exchange-calendar');
 const { writeReviews, tickValueFor } = require('./trading/runner-reviews');
 
@@ -212,6 +213,9 @@ function createRunner(deps) {
   let unflatSince = 0; // when the current run of unflat passes began
   let flattenRead = false; // whether the last flatten pass read the account
   const closedAt = new Map(); // contractId -> when the runner last sent its close
+  const keptBars = new Map(); // root -> passes in a row its stops were kept on a flat position read (cleanupFlat)
+  const cancelledHere = new Map(); // order id -> { order, at, root, until (the pass whose read it waits for) }: the non-stop orders the cleanups cancelled (stopReason)
+  const passOf = new Map(); // root -> the cleanup passes over it so far (cleanupFlat, flattenAll)
   let calendarCheckedDay = null;
   let eodRunDay = null; // the trading day whose end-of-day agents' run already happened
   // A bar clock per symbol and lane (lanes.js): the first lane's in the symbols' order, then each further lane's.
@@ -508,7 +512,13 @@ function createRunner(deps) {
     return () => clearInterval(timer);
   }
 
-  /** Cancel leftover orders on a flat contract root (never pending entries). */
+  /**
+   * Cancel leftover orders on a flat contract root (never pending entries). A flat position read is not the account
+   * flat: a fill reported late (the position not listed yet) still has its bracket stop. Targets and other non-stop
+   * orders go first, as ever (one kept could open a position on a truly flat account: only stops are ever kept); then
+   * each stop stays while any source shows the position it protects or its entry (stopReason), and goes once they agree
+   * the root is flat. A root kept on uncertainty pass after pass is escalated every keptAlertBars passes.
+   */
   async function cleanupFlat(item, { positions, orders }, { noCycles = false } = {}) {
     const root = famOf(item.contractId);
     // Flat means no position in any month or size (micro, mini) of the root (not months netting to zero).
@@ -516,17 +526,98 @@ function createRunner(deps) {
     // When no cycle may run (kill switch, outside the sessions), a pending
     // entry that fills would have no one to manage it: cancel those too.
     const entries = noCycles ? new Set() : entryOrderIds();
+    const ours = orders.filter(x => famOf(x.contractId) === root);
+    passOf.set(root, (passOf.get(root) || 0) + 1);
     // Each cancel on its own: one the broker refuses, loses or answers late never skips the others (or the rest of the
     // housekeeping); the next bar reads the account again and retries what is still working.
-    for (const o of orders.filter(x => famOf(x.contractId) === root && !entries.has(Number(x.id)))) {
+    const cancel = async o => {
       try {
         await client.cancelOrder(cfg.account, o.id);
         log(`${item.symbol}: cancelled leftover order ${o.id} (type ${o.type}, side ${o.side}, size ${o.size}) on a flat ${root} position`);
+        return true;
       } catch (err) {
         log(`${item.symbol}: could not cancel leftover order ${o.id} on a flat ${root} position (${err.message}); the next bar retries`, 'error');
         emit('leftover_cancel_failed', { symbol: item.symbol, orderId: o.id, error: err.message });
+        return false;
+      }
+    };
+    for (const o of ours.filter(x => !isStopLeg(x) && !entries.has(Number(x.id)))) {
+      // Remembered: an entry cancelled with no filled size reported may have filled in part (stopReason).
+      if (await cancel(o)) cancelledHere.set(String(o.id), { order: o, at: clock.now().getTime(), root, until: passOf.get(root) + 1 });
+    }
+    const stops = ours.filter(x => isStopLeg(x) && !entries.has(Number(x.id)));
+    let uncertain = null;
+    if (stops.length) {
+      const ev = await lateEvidence(root, ours);
+      for (const o of stops) {
+        // Judged against the orders as this pass read them: an entry working this pass (one cancelled just above too)
+        // keeps the stop it may be the bracket of.
+        const held = stopReason(o, ours, ev);
+        if (!held) { await cancel(o); continue; }
+        log(`${item.symbol}: kept stop ${o.id} on a flat ${root} position: ${held.text}`);
+        if (held.why !== 'entry') uncertain = uncertain || held.text;
       }
     }
+    if (!uncertain) { keptBars.delete(root); return; }
+    const passes = (keptBars.get(root) || 0) + 1;
+    keptBars.set(root, passes);
+    log(`${item.symbol}: ALERT the ${root} position reads flat but ${uncertain}; its stops are kept and the next bar reads the account again`, 'error');
+    emit('protection_kept', { symbol: item.symbol, root, why: uncertain, passes });
+    if (passes % RUN.keptAlertBars === 0) {
+      log(`${item.symbol}: ALERT the ${root} stops have been kept on a flat position read for ${passes} passes in a row (${uncertain}): check the broker's positions, fills and orders now`, 'error');
+      emit('protection_kept_unresolved', { symbol: item.symbol, root, why: uncertain, passes });
+    }
+  }
+
+  /**
+   * The fills and the orders of any status since the trading day's start, and an entry the gateway let through moments
+   * ago that no read lists ({ fills, history, lost }), or why they can't be read ({ why }: the stops are kept and the
+   * next bar reads again). The adapter always has both reads; a client without one reads none.
+   */
+  async function lateEvidence(root, ours) {
+    const since = tradingDayStart(clock.now());
+    let fills;
+    let history;
+    try {
+      [fills, history] = await Promise.all([
+        typeof client.fillsSince === 'function' ? client.fillsSince(cfg.account, since) : [],
+        typeof client.ordersSince === 'function' ? client.ordersSince(cfg.account, since) : [],
+      ]);
+      if (!Array.isArray(fills) || !Array.isArray(history)) throw new Error('the fills or the orders are not a list');
+    } catch (err) {
+      return { why: `the fills or orders since the day's start can't be read (${err.message})` };
+    }
+    if (typeof client.ordersSince !== 'function') return { fills, history, lost: null };
+    // Within the time an order's outcome may take to show at the broker (ORDER_GRACE_MS): past it, an entry no read
+    // lists is gone (as order-markers.js settles one), so a leftover stop of a truly flat account is never kept for it.
+    const listed = new Set([...ours, ...history].map(o => String(o.id)));
+    const nowMs = clock.now().getTime();
+    const lost = entryOrders().find(e => e && famOf(e.contractId) === root && Date.parse(e.at) >= since.getTime() && nowMs - Date.parse(e.at) < ORDER_GRACE_MS && !listed.has(String(e.orderId)));
+    return { fills, history, lost: lost ? `entry ${lost.orderId}, let through ${Math.round((nowMs - Date.parse(lost.at)) / 1000)} s ago, isn't listed by the broker yet (its fill may be late)` : null };
+  }
+
+  /**
+   * Why a stop on a flat-reading root stays, or null: a read that failed; the fills or order statuses showing the
+   * position it protects (every stop of that side, whatever the others cover: they are cancelled one after another);
+   * an entry still working it may be the bracket of; an entry the gateway let through that no read lists yet; or an
+   * entry the runner cancelled moments ago (ORDER_GRACE_MS) whose filled size the broker doesn't report (no
+   * `fillVolume`, an optional field): it may have filled in part.
+   */
+  function stopReason(o, ours, ev) {
+    if (ev.why) return { why: 'read', text: ev.why };
+    const held = stopHeld(o, { orders: ours, fills: ev.fills, history: ev.history }, { cover: false });
+    if (held) return held;
+    if (ev.lost) return { why: 'lost', text: ev.lost };
+    const nowMs = clock.now().getTime();
+    for (const [id, c] of cancelledHere) {
+      // Held for the order grace and for the next pass's read after the cancel at least (passes may be a bar apart).
+      if ((passOf.get(c.root) || 0) > c.until && nowMs - c.at >= ORDER_GRACE_MS) { cancelledHere.delete(id); continue; }
+      if (!workingEntryOf(o, [c.order])) continue;
+      const rec = ev.history.find(h => h && String(h.id) === id);
+      const vol = rec ? rec.fillVolume : undefined;
+      if (vol === undefined || vol === null) return { why: 'cancelled', text: `entry ${id} was cancelled ${Math.round((nowMs - c.at) / 1000)} s ago and its filled size isn't reported (it may have filled in part)` };
+    }
+    return null;
   }
 
   /** After a refused stop move: the account read again; a flat root has its leftover orders cancelled now. */
@@ -899,26 +990,40 @@ function createRunner(deps) {
         }
       };
       if (covered > size) {
+        // A part the position read doesn't show yet (a fill reported late beside the listed position) counts: the stops
+        // are never cut below what the fills and order statuses show (fill-evidence.js); unreadable, nothing is cut.
+        const ev = await lateEvidence(root, orders);
+        let shown;
+        try {
+          if (ev.why) throw new Error(ev.why);
+          shown = evidenceCover(stops[0], ev);
+        } catch (err) {
+          log(`${item.symbol}: ALERT ${p.contractId} has stops for ${covered} of ${size}, and ${err.message}: nothing is cut; the next poll checks again`, 'error');
+          acted = true;
+          continue;
+        }
+        if (shown >= covered) continue;
+        const want = Math.max(size, shown);
         acted = true;
         const [only, ...more] = stops;
         if (!more.length && typeof client.resizeStop === 'function') {
           try {
-            await client.resizeStop(cfg.account, only.id, size, `[protect] stop cut to the position's size ${size}`);
-            log(`${item.symbol}: ALERT stop ${only.id} (${covered}) was bigger than the ${p.contractId} position (${size}); cut to its size`, 'error');
-            emit('stop_resized', { symbol: item.symbol, contractId: p.contractId, orderId: only.id, from: covered, to: size });
+            await client.resizeStop(cfg.account, only.id, want, `[protect] stop cut to the position's size ${want}`);
+            log(`${item.symbol}: ALERT stop ${only.id} (${covered}) was bigger than the ${p.contractId} position (${want}); cut to its size`, 'error');
+            emit('stop_resized', { symbol: item.symbol, contractId: p.contractId, orderId: only.id, from: covered, to: want });
           } catch (err) {
             await closeAt(`its stop for ${covered} could reverse it and could not be cut (${err.message})`);
           }
           continue;
         }
         // The bracket's own leg first (the server's role), else the oldest: never the stand-alone one beside it.
-        const sized = stops.filter(o => Number(o.size) === size).sort((a, b) => (legRole(b) === 'stop') - (legRole(a) === 'stop') || (Date.parse(a.creationTimestamp) || 0) - (Date.parse(b.creationTimestamp) || 0));
+        const sized = stops.filter(o => Number(o.size) === want).sort((a, b) => (legRole(b) === 'stop') - (legRole(a) === 'stop') || (Date.parse(a.creationTimestamp) || 0) - (Date.parse(b.creationTimestamp) || 0));
         const keep = sized[0];
         try {
           if (!keep) throw new Error('no single stop of its size to keep');
           for (const o of stops.filter(x => x !== keep)) await client.cancelOrder(cfg.account, o.id);
-          log(`${item.symbol}: ALERT ${p.contractId} had stops for ${covered} of ${size}: kept stop ${keep.id}, cancelled the rest`, 'error');
-          emit('stops_trimmed', { symbol: item.symbol, contractId: p.contractId, kept: keep.id, covered, size });
+          log(`${item.symbol}: ALERT ${p.contractId} had stops for ${covered} of ${want}: kept stop ${keep.id}, cancelled the rest`, 'error');
+          emit('stops_trimmed', { symbol: item.symbol, contractId: p.contractId, kept: keep.id, covered, size: want });
         } catch (err) {
           await closeAt(`stops for ${covered} could reverse it (${err.message})`);
         }
@@ -1343,7 +1448,26 @@ function createRunner(deps) {
       emit('flatten_unverified', { why, passes: unflatPasses - 1, open: open.map(p => p.contractId), working: working.length });
     }
     const toClose = open.filter(x => !settling(x.contractId));
-    const toCancel = working.filter(x => !settling(x.contractId) && !toClose.some(p => p.contractId === x.contractId));
+    let toCancel = working.filter(x => !settling(x.contractId) && !toClose.some(p => p.contractId === x.contractId));
+    // A root that reads flat keeps each stop that stopReason holds (a fill reported late, an entry working this pass or
+    // cancelled moments ago with no filled size reported): only stops, never entries or targets. The next pass reads it
+    // again and closes the position once it is listed.
+    for (const root of new Set(toCancel.map(o => famOf(o.contractId)))) {
+      passOf.set(root, (passOf.get(root) || 0) + 1);
+      if (open.some(p => famOf(p.contractId) === root)) continue;
+      const ours = working.filter(o => famOf(o.contractId) === root);
+      const stops = ours.filter(isStopLeg);
+      if (!stops.length) continue;
+      const ev = await lateEvidence(root, ours);
+      for (const o of stops) {
+        const held = stopReason(o, ours, ev);
+        if (!held) continue;
+        toCancel = toCancel.filter(x => x !== o);
+        if (held.why === 'entry') continue;
+        log(`${why}: ALERT the ${root} position reads flat but ${held.text}; its stops are kept until it is listed and closed`, 'error');
+        emit('protection_kept', { symbol: root, root, why: held.text });
+      }
+    }
     for (const p of toClose) {
       try {
         closedAt.set(p.contractId, nowMs);
@@ -1357,6 +1481,7 @@ function createRunner(deps) {
     for (const o of toCancel) {
       try {
         await client.cancelOrder(cfg.account, o.id);
+        if (!isStopLeg(o)) cancelledHere.set(String(o.id), { order: o, at: clock.now().getTime(), root: famOf(o.contractId), until: (passOf.get(famOf(o.contractId)) || 0) + 1 });
       } catch (err) {
         log(`${why}: could not cancel order ${o.id} (${err.message}); retrying`, 'error');
       }

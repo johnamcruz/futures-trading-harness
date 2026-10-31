@@ -2869,6 +2869,26 @@ test('account gate: a ledger entry kept by its month (never a root) is not count
   assert.deepStrictEqual(cancel(entry('MNQ')), [], 'the bare root it used to keep counted against March (the bug)');
 });
 
+test('account gate: a fill reported late keeps the bracket stop ([cancel-protection]), long and short; once the fills net to zero it may go; an exit still goes', () => {
+  const { evaluateAccountChange, evaluateAccount } = require('../../scripts/lib/trading/account-gate');
+  const now = new Date('2026-10-08T14:30:00Z');
+  const gate = { ...config, runnerGateway: true };
+  for (const side of [0, 1]) {
+    // The entry (11) reads filled in search_orders; neither its fill nor the position is listed yet.
+    const entry = { id: 11, contractId: CONTRACT, side, type: 2, size: 9, status: 2, fillVolume: 9 };
+    const stop = { id: 12, contractId: CONTRACT, side: 1 - side, type: 4, size: 9, status: 1, stopPrice: side === 0 ? 21480 : 21520 };
+    const cancel = extra => evaluateAccountChange('cancel_order', { input: { orderId: 12 }, positions: [], orders: [stop], fills: [], history: [entry, stop], config: gate, now, ...extra }).map(v => v.check);
+    assert.deepStrictEqual(cancel({}), ['cancel-protection'], `side ${side}`);
+    // Confirmed closed: the entry's fill and the close's both listed, netting to zero.
+    const closing = { id: 13, contractId: CONTRACT, side: 1 - side, type: 2, size: 9, status: 2, fillVolume: 9 };
+    const fills = [{ orderId: 11, contractId: CONTRACT, side, size: 9 }, { orderId: 13, contractId: CONTRACT, side: 1 - side, size: 9 }];
+    assert.deepStrictEqual(cancel({ fills, history: [entry, closing] }), []);
+    // The [exit] is never held by this: the account read alone judges it (here flat: nothing to close, refused as ever).
+    const exit = evaluateAccount({ input: { accountId: 1, contractId: CONTRACT, side: side === 0 ? 'sell' : 'buy', type: 'market', size: 9, rationale: '[exit] flatten' }, positions: [{ contractId: CONTRACT, type: side === 0 ? 1 : 2, size: 9 }], orders: [stop], trades: [], config: gate, now });
+    assert.deepStrictEqual(exit.map(v => v.check), [], 'an exit of the listed position goes');
+  }
+});
+
 test('an unreadable lanes list (FTH_CYCLE_LANE_BARS): every situational skill marked for the head trader is required, whatever the briefing shows', () => {
   const { writeBriefing } = require('../../scripts/lib/trading/briefing');
   const { SITUATIONAL, headSituationalSkills } = require('../../scripts/lib/trading/skills-loaded');

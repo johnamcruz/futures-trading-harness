@@ -25,6 +25,8 @@ description: Use when flat with working orders - cancel leftovers, keep only a b
   confirmed (the `order-mechanics` skill), and a `result:nofill` review journalled: cancelling an
   entry only reduces risk. New entries wait until no order is working in the
   contract. The runner also cancels leftovers before each bar.
+- A stop is never a leftover while fills or an order's status show the
+  position, even if positions read flat: `[cancel-protection]` refuses it; keep it.
 
 ## Examples
 

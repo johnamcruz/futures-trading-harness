@@ -2122,6 +2122,39 @@ test('MCP gateway: a limit entry of unknown outcome keeps its bracket stop too; 
   assert.match(target.byId[2].result.content[0].text, /\[cancel-protection\]/);
 });
 
+test('MCP gateway: a fill reported late (positions and fills not listed, the entry filled in search_orders) keeps the bracket stop, long and short; a close still goes; confirmed closed it may go; a failed read refuses', async () => {
+  for (const side of [0, 1]) {
+    const stop = { id: 12, contractId: 'MNQ', side: 1 - side, type: 4, size: 9, status: 1, stopPrice: side === 0 ? 21480 : 21520 };
+    const entry = { id: 11, contractId: 'MNQ', side, type: 2, size: 9, status: 2, fillVolume: 9 };
+    const env = { FAKE_POSITIONS: '[]', FAKE_TRADES: '[]', FAKE_ORDERS: JSON.stringify([stop]), FAKE_SEARCH_ORDERS: JSON.stringify([entry, stop]), FTH_RUNNER_GATEWAY: '1' };
+    const late = await gatewayRun(env, [call(1, 'cancel_order', { accountId: 1, orderId: 12 }), call(2, 'close_position', { accountId: 1, contractId: 'MNQ', reason: '[exit] runner' })]);
+    assert.match(late.byId[1].result.content[0].text, /\[cancel-protection\].*position read doesn't show yet/, `side ${side}`);
+    assert.strictEqual(late.byId[2].result.content[0].text, 'forwarded:tools/call:close_position', 'a close is never held');
+    // Nor cut below the 9 the fills and order statuses show.
+    const cut = await gatewayRun(env, [call(7, 'modify_order', { accountId: 1, orderId: 12, size: 1, reason: '[protect] cut' })]);
+    assert.match(cut.byId[7].result.content[0].text, /\[modify-size\]/, `side ${side}`);
+    // A model's gateway too.
+    const model = await gatewayRun({ ...env, FTH_RUNNER_GATEWAY: '' }, [call(3, 'cancel_order', { accountId: 1, orderId: 12 })]);
+    assert.match(model.byId[3].result.content[0].text, /\[cancel-protection\]/);
+    // Confirmed closed: the entry's fill and the stop's own fill listed (a second stop left over): it may go.
+    const filledStop = { ...stop, id: 13, status: 2, fillVolume: 9 };
+    const fills = [{ orderId: 11, contractId: 'MNQ', side, size: 9 }, { orderId: 13, contractId: 'MNQ', side: 1 - side, size: 9 }];
+    const closed = await gatewayRun({ ...env, FAKE_TRADES: JSON.stringify(fills), FAKE_SEARCH_ORDERS: JSON.stringify([entry, filledStop, stop]) }, [call(4, 'cancel_order', { accountId: 1, orderId: 12 })]);
+    assert.strictEqual(closed.byId[4].result.content[0].text, 'forwarded:tools/call:cancel_order');
+  }
+  // The gateway reads the fills and the orders since the trading day's start for a cancel; one that fails refuses it.
+  const stop = JSON.stringify([{ id: 12, contractId: 'MNQ', side: 1, type: 4, size: 1, status: 1, stopPrice: 21480 }]);
+  for (const tool of ['search_orders', 'search_trades']) {
+    const failed = await gatewayRun({ FAKE_ORDERS: stop, FAKE_ERROR: tool, FTH_RUNNER_GATEWAY: '1' }, [call(5, 'cancel_order', { accountId: 1, orderId: 12 })]);
+    assert.strictEqual(failed.byId[5].result.isError, true, tool);
+    assert.match(failed.byId[5].result.content[0].text, /Blocked/, tool);
+    // An entry's cancel still goes: it only reduces risk.
+    const entryOrder = JSON.stringify([{ id: 14, contractId: 'MNQ', side: 0, type: 1, size: 1, status: 1, limitPrice: 21400 }]);
+    const entryCancel = await gatewayRun({ FAKE_ORDERS: entryOrder, FAKE_ERROR: tool, FTH_RUNNER_GATEWAY: '1' }, [call(6, 'cancel_order', { accountId: 1, orderId: 14 })]);
+    assert.strictEqual(entryCancel.byId[6].result.content[0].text, 'forwarded:tools/call:cancel_order', tool);
+  }
+});
+
 test('MCP gateway: an unknown entry listed as pending still counts until the account shows it', async () => {
   const dir = tmpDir();
   writeUnknown(dir);

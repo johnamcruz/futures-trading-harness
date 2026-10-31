@@ -24,7 +24,7 @@ process.stdin.on('data', chunk => {
     const args = (msg.params && msg.params.arguments) || {};
     if (name === 'list_open_positions') text(msg.id, net === 0 ? [] : [{ contractId: CONTRACT, type: net > 0 ? 1 : 2, size: Math.abs(net) }]);
     else if (name === 'list_open_orders') text(msg.id, process.env.STOP_ORDER && net !== 0 ? [{ id: 9, contractId: CONTRACT, type: 4, side: net > 0 ? 1 : 0, size: Math.abs(net), stopPrice: 21480 }] : []);
-    else if (name === 'search_trades') text(msg.id, []);
+    else if (name === 'search_trades' || name === 'search_orders') text(msg.id, []);
     else if (name === 'place_order') {
       orderId += 1;
       const delta = (args.side === 'buy' ? 1 : -1) * Number(args.size);

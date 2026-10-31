@@ -286,6 +286,11 @@ Result: list of `{ id, accountId, contractId, creationTimestamp, updateTimestamp
 status, type, side, size, limitPrice, stopPrice, fillVolume, filledPrice,
 customTag, statusName, typeName, sideName }`.
 
+`fillVolume` (the contracts filled so far) is optional: the harness reads it
+when present and never requires it. Absent, it never reads the order as
+unfilled: the stop that order may protect is kept (an entry cancelled with no
+filled size reported may have filled in part).
+
 A bracket leg may also carry `bracket: { role: "stop" | "target", entry }`,
 in `list_open_orders`, `search_orders` and the snapshot's `openOrders` alike.
 `role` (required in `bracket`) is `stop` for the leg a `stopLossBracket`
@@ -375,7 +380,27 @@ Result: outcome (edit codes).
 
 #### `cancel_order`
 
-Input: **`accountId`**, **`orderId`**. Result: outcome (edit codes).
+Input: **`accountId`**, **`orderId`**. Result: outcome (edit codes). The
+harness's gateway checks a cancel against the open positions and working
+orders, and against the fills and the orders of any status since the trading
+day's start (`search_trades`, `search_orders`): a stop stays while an order
+reads filled beyond the fills listed for it, or the fills don't net to zero
+(a fill the position read doesn't show yet), while an earlier entry it may be
+the leg of still works, or while a fill or order can't be read. A read that
+fails refuses a stop's cancel; an entry's or a target's still goes. A stop's
+size cut is judged the same way: never below what the fills and order
+statuses show.
+
+Two edges of that count, for a server to know:
+
+- The window starts at the trading day's start (18:00 ET). A position opened
+  before it and closed after it shows only its closing fill: the count reads
+  the other side, which holds no stop of the open side; it never lets a stop
+  protecting a listed position go.
+- A fill with `orderId` null is counted from the fill, and its order (when
+  `search_orders` lists one filled) from its filled volume too: counted twice,
+  on the same side. Give every fill its `orderId`; until then the stop stays
+  until the fills net to zero.
 
 #### `close_position`
 

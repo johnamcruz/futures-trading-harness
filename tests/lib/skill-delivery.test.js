@@ -200,3 +200,16 @@ test('the budget: with every trigger that can hold at once, nothing is pushed to
   const refused = SS.choose(ROOT, SS.factsOf({ state: FLAT, briefings: [...everything.briefings, situation(FIXTURES.window.present).briefings[0]].map(x => ({ ...x, sections: { ...x.sections, m3: { ...x.sections.m3, data: { ...x.sections.m3.data, windowEntries: 'refused' } } } })) }), { loaded: LOADED });
   assert.ok(refused.skills.includes('session-timing') && !refused.over.length, `a refused window: ${refused.over.join(', ')}`);
 });
+
+test('a fill reported late (positions read flat, a fill shows a long 9, its bracket stop working) delivers leftover-orders with its [cancel-protection] line', () => {
+  // The account as the runner's snapshot shows it in that state: no position listed, the bracket stop working.
+  const late = { state: { ...FLAT, workingOrders: 1 } };
+  const facts = SS.factsOf(situation(late));
+  assert.ok(ids(facts).includes('leftover'), ids(facts).join());
+  const chosen = SS.choose(ROOT, facts, { loaded: LOADED });
+  const prompt = prompts(cfgOf('claude'), NOW, ROOT).trade(ITEMS, { state: late.state, cycleSkills: SS.situationText(ROOT, chosen) });
+  assert.ok(prompt.includes(block('leftover-orders')), 'leftover-orders\' whole body is in the cycle prompt');
+  const line = /A stop is never a leftover while fills or an order's status show the\s+position, even if positions read flat: `\[cancel-protection\]` refuses it; keep it\./;
+  assert.match(fs.readFileSync(path.join(ROOT, 'skills', 'leftover-orders', 'SKILL.md'), 'utf8'), line);
+  assert.match(prompt, line, 'the new line reaches the prompt');
+});

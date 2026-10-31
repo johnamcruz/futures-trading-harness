@@ -1211,6 +1211,10 @@
    "value": 20,
    "from": "preflight.js SAMPLE_BARS"
   },
+  "runner.keptAlertBars": {
+   "value": 3,
+   "from": "new in config (no pre-move constant): the passes in a row a flat-reading root's stops are kept on uncertainty before runner.js cleanupFlat escalates its ALERT (a fill reported late)"
+  },
   "prompt.valuesPerStrategy": {
    "value": 6,
    "from": "trading/rules.js VALUES_PER_STRATEGY"

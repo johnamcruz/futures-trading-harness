@@ -344,6 +344,81 @@ test('cancel_order: an entry still working (perhaps filled in part) keeps its br
   assert.deepStrictEqual(checks(evaluateCancel({ input: { orderId: 9 }, positions: [], orders, config, ledger, now: NOW })), ['cancel-protection']);
 });
 
+// A fill reported late (2026-10-30, the goal regression's late-fill-long): the entry reads filled in search_orders,
+// its fill isn't listed yet, and the position read shows nothing. The bracket stop is the position's only protection.
+const lateFill = (side, extra = {}) => {
+  const entry = { id: 11, contractId: CONTRACT, side, type: 2, size: 9, status: 2, fillVolume: 9 };
+  const stop = { id: 12, contractId: CONTRACT, side: 1 - side, type: 4, size: 9, status: 1, stopPrice: side === 0 ? 21480 : 21520 };
+  return { input: { orderId: 12 }, positions: [], orders: [stop], fills: [], history: [entry, stop], now: NOW, ...extra };
+};
+
+test('cancel_order: a fill reported late (the position read flat, the entry filled) keeps the bracket stop, long and short, for the runner\'s and a model\'s gateway', () => {
+  for (const side of [0, 1]) {
+    for (const c of [runnerConfig, config]) {
+      const v = evaluateCancel({ ...lateFill(side), config: c });
+      assert.deepStrictEqual(checks(v), ['cancel-protection'], `side ${side}`);
+      assert.match(v[0].message, /position read doesn't show yet.*(long|short) 9/);
+    }
+  }
+  // Through evaluateAccountChange, as the gateway calls it.
+  assert.deepStrictEqual(checks(evaluateAccountChange('cancel_order', { ...lateFill(0), config: runnerConfig })), ['cancel-protection']);
+  // The fills listing the entry but not its close count too (fills that don't net to zero).
+  const listed = lateFill(0, { fills: [{ orderId: 11, contractId: CONTRACT, side: 0, size: 9 }] });
+  assert.deepStrictEqual(checks(evaluateCancel({ ...listed, config: runnerConfig })), ['cancel-protection']);
+  // An entry still working that this stop may be the leg of (an earlier buy limit) keeps it too.
+  const working = lateFill(0, { orders: [{ id: 11, contractId: CONTRACT, side: 0, type: 1, size: 9, status: 1, limitPrice: 21500 }, lateFill(0).orders[0]], history: [] });
+  assert.deepStrictEqual(checks(evaluateCancel({ ...working, config: runnerConfig })), ['cancel-protection']);
+  // Unreadable fills or orders: the check fails closed (the gateway refuses on a throw).
+  assert.throws(() => evaluateCancel({ ...lateFill(0), fills: null, config: runnerConfig }), /fills from the server is not a list/);
+  assert.throws(() => evaluateCancel({ ...lateFill(0), history: 'x', config: runnerConfig }), /history from the server is not a list/);
+});
+
+test('a fill reported late beside a listed position (long 3 listed, 6 more filled): the 6-lot\'s stop can\'t be cancelled or cut below the 9', () => {
+  const listed = [{ contractId: CONTRACT, type: 1, size: 3 }];
+  const first = { id: 11, contractId: CONTRACT, side: 0, type: 2, size: 3, status: 2, fillVolume: 3 };
+  const second = { id: 21, contractId: CONTRACT, side: 0, type: 2, size: 6, status: 2, fillVolume: 6 };
+  const stop3 = { id: 12, contractId: CONTRACT, side: 1, type: 4, size: 3, status: 1, stopPrice: 21480 };
+  const stop6 = { id: 22, contractId: CONTRACT, side: 1, type: 4, size: 6, status: 1, stopPrice: 21480 };
+  const facts = { positions: listed, orders: [stop3, stop6], fills: [{ orderId: 11, contractId: CONTRACT, side: 0, size: 3 }], history: [first, second, stop3, stop6], now: NOW, config: runnerConfig };
+  const v = evaluateCancel({ ...facts, input: { orderId: 22 } });
+  assert.deepStrictEqual(checks(v), ['cancel-protection']);
+  assert.match(v[0].message, /net 1?3; the fills and order statuses show 9/);
+  // Listed in full (the 6 shown): the extra stop of a 3 + 6 = 9 position still covers it; a surplus third goes.
+  const extra = { ...stop3, id: 30 };
+  assert.deepStrictEqual(evaluateCancel({ ...facts, orders: [stop3, stop6, extra], input: { orderId: 30 } }), []);
+  // A resize of the 9-lot's single stop to the listed 3: refused; to 9 or more: allowed.
+  const stop9 = { ...stop6, id: 23, size: 9 };
+  const resize = size => checks(evaluateModifyAccount({ ...facts, orders: [stop9], input: { orderId: 23, size } }));
+  assert.deepStrictEqual(resize(3), ['modify-size']);
+  // Flat read, the whole 9 hidden: a cut is refused too; unreadable fills refuse it (fail closed).
+  assert.deepStrictEqual(checks(evaluateModifyAccount({ ...facts, positions: [], orders: [stop9], input: { orderId: 23, size: 3 } })), ['modify-size']);
+  assert.throws(() => evaluateModifyAccount({ ...facts, fills: null, orders: [stop9], input: { orderId: 23, size: 3 } }), /not a list/);
+  // No fill reads given: the position read decides, as before (the listed 3: a cut to 3 goes).
+  assert.deepStrictEqual(checks(evaluateModifyAccount({ ...facts, fills: undefined, history: undefined, orders: [stop9], input: { orderId: 23, size: 3 } })), []);
+});
+
+test('cancel_order: a stop leg the server marks by role (bracket.role "stop", any order type) is held as a stop', () => {
+  const leg = { id: 12, contractId: CONTRACT, side: 1, type: 1, size: 9, status: 1, limitPrice: 21480, bracket: { role: 'stop' } };
+  const entry = { id: 11, contractId: CONTRACT, side: 0, type: 2, size: 9, status: 2, fillVolume: 9 };
+  assert.deepStrictEqual(checks(evaluateCancel({ input: { orderId: 12 }, positions: [], orders: [leg], fills: [], history: [entry], config: runnerConfig, now: NOW })), ['cancel-protection']);
+  // Listed: the position read's own check holds it.
+  assert.deepStrictEqual(checks(evaluateCancel({ input: { orderId: 12 }, positions: [{ contractId: CONTRACT, type: 1, size: 9 }], orders: [leg], config: runnerConfig, now: NOW })), ['cancel-protection']);
+});
+
+test('cancel_order: a stop goes once the position is confirmed closed (fills net to zero, no entry working); a target or the wrong side\'s stop is not held', () => {
+  const closed = lateFill(0, {
+    fills: [{ orderId: 11, contractId: CONTRACT, side: 0, size: 9 }, { orderId: 13, contractId: CONTRACT, side: 1, size: 9 }],
+    history: [{ id: 11, contractId: CONTRACT, side: 0, type: 2, size: 9, status: 2, fillVolume: 9 }, { id: 13, contractId: CONTRACT, side: 1, type: 1, size: 9, status: 2, fillVolume: 9 }],
+  });
+  assert.deepStrictEqual(evaluateCancel({ ...closed, config: runnerConfig }), []);
+  // A stop on the other side of what the fills show protects nothing of it (a buy stop against a long).
+  assert.deepStrictEqual(evaluateCancel({ ...lateFill(0), orders: [{ ...lateFill(0).orders[0], side: 0 }], config: runnerConfig }), []);
+  // A target leg is not a stop: cancel-protection never holds it (the model's [bracket-leg] judges a visible position).
+  assert.deepStrictEqual(evaluateCancel({ ...lateFill(0), orders: [{ ...lateFill(0).orders[0], type: 1, limitPrice: 21600 }], config: runnerConfig }), []);
+  // No fill reads given (an older caller): as before.
+  assert.deepStrictEqual(evaluateCancel({ ...lateFill(0), fills: undefined, history: undefined, config: runnerConfig }), []);
+});
+
 test('ledger: entries are ordered by when they were sent, so one settled late doesn\'t count on top of a close sent after it', () => {
   const t = NOW.getTime();
   // An entry (buy 1 from flat) sent first but settled late, then a close of the resulting long sent after it.
