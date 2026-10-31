@@ -10,20 +10,24 @@ const TOL = { passRate: 0.02, meanR: 0.03, rCaught: 0.02 };
 
 test('compare: the gated metrics in the goal\'s order, each half; one more blow fails, the rest past their tolerance', () => {
   const rows = GC.compare(doc(), doc(), TOL);
-  assert.deepStrictEqual(rows.filter(r => r.gated && r.half === 'A').map(r => r.key), ['mc.blows', 'mc.pass', 'meanR', 'caught.share']);
+  assert.deepStrictEqual(rows.filter(r => r.gated && r.half === 'A').map(r => r.key), ['mc.blows', 'mc.pass', 'meanR', 'caught.share', 'caught.caught']);
   assert.deepStrictEqual(GC.regressions(rows), []);
   const k = now => GC.regressions(GC.compare(doc(), now, TOL)).map(r => `${r.half} ${r.key}`);
   assert.deepStrictEqual(k(doc({ mc: { pass: 0.2, blow: 0.001, blows: 1 } })), ['A mc.blows']);
   assert.deepStrictEqual(k(doc({}, { mc: { pass: 0.181, blows: 0 } })), [], 'within the tolerance');
   assert.deepStrictEqual(k(doc({}, { mc: { pass: 0.179, blows: 0 } })), ['B mc.pass']);
   assert.deepStrictEqual(k(doc({ meanR: 0.069 })), ['A meanR']);
-  assert.deepStrictEqual(k(doc({ caught: { share: 0.079 } })), ['A caught.share']);
+  assert.deepStrictEqual(k(doc({ caught: { share: 0.079, caught: 3, legs: 9 } })), ['A caught.share']);
+  // One trend leg fewer caught fails, with no tolerance; one more passes.
+  assert.deepStrictEqual(k(doc({}, { caught: { share: 0.1, caught: 2, legs: 9 } })), ['B caught.caught']);
+  assert.deepStrictEqual(k(doc({}, { caught: { share: 0.1, caught: 4, legs: 9 } })), []);
   assert.deepStrictEqual(k(doc({ meanR: null })), ['A meanR'], 'a missing metric fails');
 });
 
 test('riseProblems: a baseline only improves on the same fixture; a new fixture starts over only with its change recorded', () => {
   assert.deepStrictEqual(GC.riseProblems(doc(), doc({ mc: { pass: 0.3, blows: 0 } })), []);
   assert.match(GC.riseProblems(doc(), doc({ meanR: 0.09 })).join(), /half A mean R per trade: 0.09 in the new baseline, 0.1 on the base branch/);
+  assert.match(GC.riseProblems(doc(), doc({ caught: { share: 0.1, caught: 2, legs: 9 } })).join(), /half A trend legs caught: 2 in the new baseline, 3 on the base branch/);
   assert.match(GC.riseProblems(doc(), doc({}, { mc: { pass: 0.2, blows: 2 } })).join(), /half B combine blows/);
   assert.match(GC.riseProblems(doc(), { ...doc({ meanR: -1 }), fixture: 'f2' }).join(), /the fixture changed .* no fixtureChange/, 'a new fixture without its change recorded');
   assert.deepStrictEqual(GC.riseProblems(doc(), { ...doc({ meanR: -1 }), fixture: 'f2', fixtureChange: { from: 'f1', why: 'more sessions' } }), []);

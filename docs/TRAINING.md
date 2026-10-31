@@ -1778,7 +1778,8 @@ false-start share and the drawdown on what the half's sessions take in
 order (attempts back to back), and a seeded 30-session combine Monte Carlo
 on the account's rulebook sizing, each path at its own state; and the blow
 path's blows. It fails on one more blow, or a pass
-rate, mean R or R caught below main's less its tighten-only tolerance
+rate, mean R or R caught below main's less its tighten-only tolerance, or
+one trend leg fewer caught (a count, no tolerance)
 (`goalRegression.tolerance`: tight, since every number is deterministic).
 The fixture's draw, the Monte Carlo and tier 2's days are pinned exactly.
 Its mutation checks (`tests/goal/tier1.goal.js`) prove it fails on a worse

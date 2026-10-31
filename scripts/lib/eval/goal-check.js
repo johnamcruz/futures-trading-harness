@@ -46,9 +46,12 @@ const GATED = Object.freeze([
   Object.freeze({ key: 'mc.pass', label: 'combine pass rate', dir: 'min', tol: 'passRate' }),
   Object.freeze({ key: 'meanR', label: 'mean R per trade', dir: 'min', tol: 'meanR' }),
   Object.freeze({ key: 'caught.share', label: 'R caught / R available', dir: 'min', tol: 'rCaught' }),
+  // The trend legs caught, a count (no tolerance): fewer legs caught is a worse strategy for the goal even where the
+  // pass rate and mean R rise on a few wide trades (the stop-floor mutation under one position after sizing).
+  Object.freeze({ key: 'caught.caught', label: 'trend legs caught', dir: 'min', tol: null }),
 ]);
 const INFO = Object.freeze([
-  ['trades', 'trades'], ['mc.blow', 'combine blow rate'], ['mc.meanDaysToPass', 'sessions to pass (mean)'], ['caught.caught', 'trend legs caught'],
+  ['trades', 'trades'], ['mc.blow', 'combine blow rate'], ['mc.meanDaysToPass', 'sessions to pass (mean)'],
   ['caught.legs', 'trend legs'], ['falseStartShare', 'false-start share'], ['maxDrawdownR', 'max drawdown (R)'],
 ]);
 const get = (o, key) => key.split('.').reduce((x, k) => (x && typeof x === 'object' ? x[k] : undefined), o);
