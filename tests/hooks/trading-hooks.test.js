@@ -2130,6 +2130,9 @@ test('MCP gateway: a fill reported late (positions and fills not listed, the ent
     const late = await gatewayRun(env, [call(1, 'cancel_order', { accountId: 1, orderId: 12 }), call(2, 'close_position', { accountId: 1, contractId: 'MNQ', reason: '[exit] runner' })]);
     assert.match(late.byId[1].result.content[0].text, /\[cancel-protection\].*position read doesn't show yet/, `side ${side}`);
     assert.strictEqual(late.byId[2].result.content[0].text, 'forwarded:tools/call:close_position', 'a close is never held');
+    // Nor cut below the 9 the fills and order statuses show.
+    const cut = await gatewayRun(env, [call(7, 'modify_order', { accountId: 1, orderId: 12, size: 1, reason: '[protect] cut' })]);
+    assert.match(cut.byId[7].result.content[0].text, /\[modify-size\]/, `side ${side}`);
     // A model's gateway too.
     const model = await gatewayRun({ ...env, FTH_RUNNER_GATEWAY: '' }, [call(3, 'cancel_order', { accountId: 1, orderId: 12 })]);
     assert.match(model.byId[3].result.content[0].text, /\[cancel-protection\]/);

@@ -293,7 +293,8 @@ test('leftover orders on a flat contract are cancelled before the cycle; pending
 });
 
 test('a flat-reading contract keeps its stop while any source shows the position or its entry (a fill reported late); confirmed closed, the stop goes', async () => {
-  const run = async ({ orders, fills = [], history = [], entries = [], failReads = false, until = et(10, 2) }) => {
+  const run = async ({ orders, fills = [], history = [], entries = [], failReads = false, until = et(10, 2), kill = false }) => {
+    const events = [];
     const market = fakeMarket({ minutes: 3 });
     const clockRef = { t: et(9, 55) };
     const cancelled = [];
@@ -308,18 +309,45 @@ test('a flat-reading contract keeps its stop while any source shows the position
         async ordersSince() { return history; },
       },
       clock: { now: () => new Date(clockRef.t) }, runCycle: async () => ({ ok: true, timedOut: false }), log: (m, l) => logs.push(`${l || 'info'} ${m}`),
-      isKillSwitchOn: () => false, createKillSwitch: () => {}, loadState: () => null, saveState: () => {},
+      isKillSwitchOn: () => kill, createKillSwitch: () => {}, loadState: () => (kill ? { cycles: 1 } : null), saveState: () => {}, event: ev => events.push(ev),
       writeBars: () => '/b.json', scanFor: () => [], entryOrders: () => entries,
     });
     while (clockRef.t < until) { const ms = await runner.step(); clockRef.t += ms; }
-    return { cancelled, logs };
+    return { cancelled, logs, events };
   };
   const stop = { id: 5, contractId: 'MNQ', type: 4, side: 1, size: 9, status: 1 };
   const target = { id: 6, contractId: 'MNQ', type: 1, side: 1, size: 9, status: 1 };
   const entry = { id: 4, contractId: 'MNQ', type: 2, side: 0, size: 9, status: 2, fillVolume: 9 };
-  // The entry reads filled, its fill isn't listed: the stop and its target stay.
-  const late = await run({ orders: [stop, target], history: [entry, stop, target] });
-  assert.deepStrictEqual(late.cancelled, []);
+  // The entry reads filled, its fill isn't listed: the stop stays; the target goes (only stops are ever kept: a kept
+  // target could open a position on a truly flat account).
+  const late = await run({ orders: [stop, target], history: [entry, stop, target], until: et(10, 20) });
+  assert.deepStrictEqual(late.cancelled, [6]);
+  // Kept pass after pass: escalated every keptAlertBars passes (config/runner.json).
+  const kept = late.events.filter(e => e.kind === 'protection_kept');
+  const every = require('../../scripts/lib/tunables').runner().runner.keptAlertBars;
+  assert.ok(kept.length >= every, String(kept.length));
+  assert.deepStrictEqual(late.events.filter(e => e.kind === 'protection_kept_unresolved').map(e => e.passes), kept.map(e => e.passes).filter(n => n % every === 0));
+  assert.ok(late.logs.some(l => l.includes(`kept on a flat position read for ${every} passes in a row`)), late.logs.join('\n'));
+  // Two stops, each covering the hidden 9 by itself: neither goes, though each is covered by the other (cancelled one
+  // after the other on one read, both would go); and a 3 + 6 pair the same.
+  const part = { ...stop, size: 3 };
+  const twin = { ...stop, id: 9 };
+  const rest = { ...stop, id: 8, size: 6 };
+  const two = await run({ orders: [part, rest, target], history: [entry, part, rest, target] });
+  assert.deepStrictEqual(two.cancelled, [6]);
+  const twins = await run({ orders: [stop, twin, target], history: [entry, stop, twin, target] });
+  assert.deepStrictEqual(twins.cancelled, [6]);
+  // No cycle can run (the kill switch; a state of no day: end of day's flatten catches up): a working entry is cancelled, its stop kept that pass, and kept on while the
+  // broker reports no filled size for the cancelled entry (it may have filled in part), for the order grace; a reported
+  // fillVolume of 0 lets the stop go at once.
+  const limit = { id: 4, contractId: 'MNQ', type: 1, side: 0, size: 9, status: 1, limitPrice: 21500 };
+  const unknownFill = await run({ orders: [limit, stop], history: [{ ...limit, status: 3 }, stop], kill: true, until: et(9, 56) });
+  assert.deepStrictEqual(unknownFill.cancelled, [4], unknownFill.logs.join('\n'));
+  assert.ok(unknownFill.logs.some(l => /entry 4 was cancelled \d+ s ago and its filled size isn't reported/.test(l)), unknownFill.logs.join('\n'));
+  const later = await run({ orders: [limit, stop], history: [{ ...limit, status: 3 }, stop], kill: true, until: et(10, 1) });
+  assert.deepStrictEqual(later.cancelled, [4, 5]);
+  const reported = await run({ orders: [limit, stop], history: [{ ...limit, status: 3, fillVolume: 0 }, stop], kill: true, until: et(9, 56) });
+  assert.deepStrictEqual(reported.cancelled, [4, 5]);
   assert.ok(late.logs.some(l => /ALERT the MNQ position reads flat but the fills and order statuses show MNQ long 9/.test(l)), late.logs.join('\n'));
   // A read that fails: kept, the next bar reads again.
   const failed = await run({ orders: [stop], failReads: true });
@@ -341,6 +369,44 @@ test('a flat-reading contract keeps its stop while any source shows the position
   const stopped = { id: 7, contractId: 'MNQ', type: 4, side: 1, size: 9, status: 2, fillVolume: 9 };
   const closed = await run({ orders: [stop, target], fills: [{ orderId: 4, contractId: 'MNQ', side: 0, size: 9 }, { orderId: 7, contractId: 'MNQ', side: 1, size: 9 }], history: [entry, stopped, stop, target] });
   assert.deepStrictEqual(closed.cancelled.sort(), [5, 6]);
+});
+
+test('the bracket repair never cuts a stop below a position the fills show (a fill reported late beside the listed 3 of 9)', async () => {
+  const run = async ({ fills, history, failReads = false }) => {
+    const market = fakeMarket({ minutes: 3 });
+    const clockRef = { t: et(9, 55) };
+    const calls = [];
+    const logs = [];
+    const runner = createRunner({
+      cfg: validateConfig({ harness: 'qwen', premarketAt: '', timeframe: 3, account: '7' }), root: '/r',
+      client: {
+        ...market.client(clockRef),
+        async accountState() { return { positions: [{ id: 1, contractId: 'MNQ', type: 1, size: 3, averagePrice: 21500, creationTimestamp: new Date(et(9, 40)).toISOString() }], orders: [{ id: 5, contractId: 'MNQ', type: 4, side: 1, size: 9, status: 1, stopPrice: 21490 }] }; },
+        async cancelOrder(acct, id) { calls.push(['cancel', id]); },
+        async resizeStop(acct, id, size) { calls.push(['resize', id, size]); },
+        async placeStop() { calls.push(['place']); },
+        async closePosition() { calls.push(['close']); },
+        async fillsSince() { if (failReads) throw new Error('HTTP 503'); return fills; },
+        async ordersSince() { return history; },
+      },
+      clock: { now: () => new Date(clockRef.t) }, runCycle: async () => ({ ok: true, timedOut: false }), log: (m, l) => logs.push(`${l || 'info'} ${m}`),
+      isKillSwitchOn: () => false, createKillSwitch: () => {}, loadState: () => null, saveState: () => {},
+      writeBars: () => '/b.json', scanFor: () => [], entryOrders: () => [],
+    });
+    while (clockRef.t < et(10, 2)) { const ms = await runner.step(); clockRef.t += ms; }
+    return { calls, logs };
+  };
+  const entry = { id: 4, contractId: 'MNQ', type: 2, side: 0, size: 9, status: 2, fillVolume: 9 };
+  // 3 of the 9 listed in the fills: the stop for 9 is right; nothing is cut, cancelled or closed.
+  const hidden = await run({ fills: [{ orderId: 4, contractId: 'MNQ', side: 0, size: 3 }], history: [entry] });
+  assert.deepStrictEqual(hidden.calls, []);
+  // Unreadable: nothing is cut (the next poll checks again).
+  const failed = await run({ fills: [], history: [entry], failReads: true });
+  assert.deepStrictEqual(failed.calls, []);
+  assert.ok(failed.logs.some(l => /has stops for 9 of 3, and the fills or orders .* can't be read \(HTTP 503\): nothing is cut/.test(l)), failed.logs.join('\n'));
+  // The fills show only the 3: the stop is cut to 3 (anti-flip), as before.
+  const three = await run({ fills: [{ orderId: 4, contractId: 'MNQ', side: 0, size: 3 }], history: [{ ...entry, size: 3, fillVolume: 3 }] });
+  assert.deepStrictEqual(three.calls[0], ['resize', 5, 3]);
 });
 
 test('a trailing strategy\'s stop is tightened from +2R and the trade is closed when a bar goes through the new stop', async () => {

@@ -26,7 +26,7 @@ const contractRoot = id => familyRoot(rootOf(id));
 const { isRiskReducing } = require('./order-gate');
 const { protectRefusal, restingExitRefusal } = require('./bracket-rule');
 const { coveredSize, isStopLeg, isTargetLeg } = require('./bracket-legs');
-const { stopHeld } = require('./fill-evidence');
+const { stopHeld, evidenceCover } = require('./fill-evidence');
 const { tradingDayStart } = require('./clock');
 const { normalizeBars } = require('./indicators');
 const { classifyRegime, regimeFits } = require('./regime');
@@ -321,8 +321,11 @@ function evaluateCancel({ input = {}, positions, orders, config, ledger = [], no
   const orderSign = Number(order.side) === 0 ? 1 : -1;
   if (net === 0 || orderSign !== -Math.sign(net)) return lateFillRefusal(order, { orders, fills, history });
   const otherStops = restingSize(orders.filter(o => o !== order), order.contractId, orderSign, STOP_TYPES);
-  if (otherStops >= Math.abs(net)) return [];
-  return [{ check: 'cancel-protection', message: `Order ${order.id} is the protective stop for the open ${contractRoot(order.contractId)} position (net ${net}). Move it with modify_order, or close the position first ([exit]).` }];
+  // A part the position read doesn't show yet (a fill reported late beside the listed position) needs its stop too.
+  const need = Math.max(Math.abs(net), evidenceCover(order, { fills, history }));
+  if (otherStops >= need) return [];
+  const shown = need > Math.abs(net) ? `; the fills and order statuses show ${need}` : '';
+  return [{ check: 'cancel-protection', message: `Order ${order.id} is the protective stop for the open ${contractRoot(order.contractId)} position (net ${net}${shown}). Move it with modify_order, or close the position first ([exit]).` }];
 }
 
 /**
@@ -393,7 +396,7 @@ function bracketLegChange({ input, order, orders, isStop }) {
  *   cancel it and place a new order through the gate), and a protective
  *   stop only toward the market, checking every price field given.
  */
-function evaluateModifyAccount({ input = {}, positions, orders, config, ledger = [], now = new Date() }) {
+function evaluateModifyAccount({ input = {}, positions, orders, config, ledger = [], now = new Date(), fills, history }) {
   for (const [name, v] of Object.entries({ positions, orders })) {
     if (!Array.isArray(v)) throw new Error(`${name} from the server is not a list`);
   }
@@ -435,9 +438,11 @@ function evaluateModifyAccount({ input = {}, positions, orders, config, ledger =
     const size = Number(input.size);
     if (!(Number.isInteger(size) && size >= 1 && size < Number(order.size))) {
       add('modify-size', `modify_order may only reduce an order's size (order ${order.id} is ${order.size}, asked ${input.size}). To add, place a new order through the gate.`);
-    } else if (isStop && nets.some(n => n !== 0 && orderSign === -Math.sign(n))) {
+    } else if (isStop) {
       const others = restingSize(orders.filter(o => o !== order), order.contractId, orderSign, STOP_TYPES);
-      const covered = Math.max(...nets.map(n => (orderSign === -Math.sign(n) ? Math.abs(n) : 0)));
+      // The fills and order statuses count too (fill-evidence.js): a stop is never cut below a position they show that
+      // the position read doesn't yet (a fill reported late). Unreadable: refused (evidenceCover throws).
+      const covered = Math.max(...nets.map(n => (n !== 0 && orderSign === -Math.sign(n) ? Math.abs(n) : 0)), evidenceCover(order, { fills, history }));
       if (size + others < covered) {
         add('modify-size', `Cutting stop ${order.id} to ${size} would leave ${covered - size - others} of the open ${root} position (${covered}) without a stop. Reduce the position first ([exit] or partial_close_position), then cut the stop.`);
       }
@@ -513,7 +518,7 @@ function evaluateAccountChange(tool, { input, positions, orders, config, now, le
   const ledger = ledgerNamed(input, given);
   const cancelLedger = ledgerNamed(input, givenCancel);
   if (tool === 'cancel_order') return evaluateCancel({ input, positions, orders, config, ledger: cancelLedger, now, fills, history });
-  if (tool === 'modify_order') return evaluateModifyAccount({ input, positions, orders, config, ledger, now });
+  if (tool === 'modify_order') return evaluateModifyAccount({ input, positions, orders, config, ledger, now, fills, history });
   if (tool === 'partial_close_position') return evaluatePartialClose({ input, positions, orders, config, ledger, now });
   throw new Error(`no account check for ${tool}`);
 }

@@ -373,6 +373,38 @@ test('cancel_order: a fill reported late (the position read flat, the entry fill
   assert.throws(() => evaluateCancel({ ...lateFill(0), history: 'x', config: runnerConfig }), /history from the server is not a list/);
 });
 
+test('a fill reported late beside a listed position (long 3 listed, 6 more filled): the 6-lot\'s stop can\'t be cancelled or cut below the 9', () => {
+  const listed = [{ contractId: CONTRACT, type: 1, size: 3 }];
+  const first = { id: 11, contractId: CONTRACT, side: 0, type: 2, size: 3, status: 2, fillVolume: 3 };
+  const second = { id: 21, contractId: CONTRACT, side: 0, type: 2, size: 6, status: 2, fillVolume: 6 };
+  const stop3 = { id: 12, contractId: CONTRACT, side: 1, type: 4, size: 3, status: 1, stopPrice: 21480 };
+  const stop6 = { id: 22, contractId: CONTRACT, side: 1, type: 4, size: 6, status: 1, stopPrice: 21480 };
+  const facts = { positions: listed, orders: [stop3, stop6], fills: [{ orderId: 11, contractId: CONTRACT, side: 0, size: 3 }], history: [first, second, stop3, stop6], now: NOW, config: runnerConfig };
+  const v = evaluateCancel({ ...facts, input: { orderId: 22 } });
+  assert.deepStrictEqual(checks(v), ['cancel-protection']);
+  assert.match(v[0].message, /net 1?3; the fills and order statuses show 9/);
+  // Listed in full (the 6 shown): the extra stop of a 3 + 6 = 9 position still covers it; a surplus third goes.
+  const extra = { ...stop3, id: 30 };
+  assert.deepStrictEqual(evaluateCancel({ ...facts, orders: [stop3, stop6, extra], input: { orderId: 30 } }), []);
+  // A resize of the 9-lot's single stop to the listed 3: refused; to 9 or more: allowed.
+  const stop9 = { ...stop6, id: 23, size: 9 };
+  const resize = size => checks(evaluateModifyAccount({ ...facts, orders: [stop9], input: { orderId: 23, size } }));
+  assert.deepStrictEqual(resize(3), ['modify-size']);
+  // Flat read, the whole 9 hidden: a cut is refused too; unreadable fills refuse it (fail closed).
+  assert.deepStrictEqual(checks(evaluateModifyAccount({ ...facts, positions: [], orders: [stop9], input: { orderId: 23, size: 3 } })), ['modify-size']);
+  assert.throws(() => evaluateModifyAccount({ ...facts, fills: null, orders: [stop9], input: { orderId: 23, size: 3 } }), /not a list/);
+  // No fill reads given: the position read decides, as before (the listed 3: a cut to 3 goes).
+  assert.deepStrictEqual(checks(evaluateModifyAccount({ ...facts, fills: undefined, history: undefined, orders: [stop9], input: { orderId: 23, size: 3 } })), []);
+});
+
+test('cancel_order: a stop leg the server marks by role (bracket.role "stop", any order type) is held as a stop', () => {
+  const leg = { id: 12, contractId: CONTRACT, side: 1, type: 1, size: 9, status: 1, limitPrice: 21480, bracket: { role: 'stop' } };
+  const entry = { id: 11, contractId: CONTRACT, side: 0, type: 2, size: 9, status: 2, fillVolume: 9 };
+  assert.deepStrictEqual(checks(evaluateCancel({ input: { orderId: 12 }, positions: [], orders: [leg], fills: [], history: [entry], config: runnerConfig, now: NOW })), ['cancel-protection']);
+  // Listed: the position read's own check holds it.
+  assert.deepStrictEqual(checks(evaluateCancel({ input: { orderId: 12 }, positions: [{ contractId: CONTRACT, type: 1, size: 9 }], orders: [leg], config: runnerConfig, now: NOW })), ['cancel-protection']);
+});
+
 test('cancel_order: a stop goes once the position is confirmed closed (fills net to zero, no entry working); a target or the wrong side\'s stop is not held', () => {
   const closed = lateFill(0, {
     fills: [{ orderId: 11, contractId: CONTRACT, side: 0, size: 9 }, { orderId: 13, contractId: CONTRACT, side: 1, size: 9 }],

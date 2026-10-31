@@ -128,7 +128,7 @@ function main(argv) {
       // cancel, modify, partial close: against the account, counting recent orders and orders of unknown outcome.
       if (tool === 'modify_order' && base.violations.length) return base;
       const { unknown } = await settle(args.accountId, now);
-      const { positions, orders, fills, history } = await accountFacts(args, caller, false, { evidence: tool === 'cancel_order', now });
+      const { positions, orders, fills, history } = await accountFacts(args, caller, false, { evidence: tool !== 'partial_close_position', now });
       return { ...blocked(evaluateAccountChange(tool, {
         input: args, positions, orders, fills, history, config: loadConfig(process.env), now,
         ledger: [...ledger, ...tracker.exitLedger(unknown, now)], cancelLedger: [...ledger.filter(e => !e.unconfirmed), ...tracker.cancelLedger(unknown, now)],

@@ -60,3 +60,17 @@ test('workingEntryOf: an earlier working order on the other side is the entry a 
   assert.strictEqual(workingEntryOf(longStop, [{ ...entry, contractId: 'MNQ:2027-03' }, longStop]), null, 'another month');
   assert.strictEqual(workingEntryOf(longStop, [{ ...entry, id: 'abc' }, longStop]).id, 'abc', 'an id that is no number counts');
 });
+
+test('stopHeld cover: false (the runner\'s cleanup) holds every stop of the evidenced side; evidenceCover sizes it, fails closed', () => {
+  const { evidenceCover } = require('../../scripts/lib/trading/fill-evidence');
+  const part = { ...longStop, size: 3 };
+  const rest = { ...longStop, id: 13, size: 6 };
+  const facts = { orders: [part, rest], fills: [], history: [longEntry] };
+  assert.strictEqual(stopHeld(part, { ...facts, orders: [part, { ...rest, size: 9 }] }), null, 'the gate: covered by the other');
+  assert.strictEqual(stopHeld(part, { ...facts, orders: [part, { ...rest, size: 9 }] }, { cover: false }).why, 'fills', 'the runner: held');
+  assert.strictEqual(evidenceCover(longStop, { fills: [], history: [longEntry] }), 9);
+  assert.strictEqual(evidenceCover(shortStop, { fills: [], history: [longEntry] }), 0, 'the other side');
+  assert.strictEqual(evidenceCover(longStop, {}), 0, 'no reads made');
+  assert.throws(() => evidenceCover(longStop, { fills: null, history: [] }), /not a list/);
+  assert.throws(() => evidenceCover(longStop, { fills: [fill(11, 0, 'x')], history: [] }), /can't be read/);
+});

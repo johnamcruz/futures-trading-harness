@@ -64,13 +64,15 @@ function workingEntryOf(leg, orders = []) {
     && (!Number.isFinite(id) || !Number.isFinite(Number(o.id)) || Number(o.id) <= id)) || null;
 }
 
-function stopHeld(leg, { orders = [], fills = [], history = [] } = {}) {
+// `cover: false` (the runner's cleanup, which cancels one stop after another without re-reading): every stop of the
+// side the evidence shows is held, whatever the other stops cover, so two stops of one hidden position never both go.
+function stopHeld(leg, { orders = [], fills = [], history = [] } = {}, { cover = true } = {}) {
   if (!leg || !isStopLeg(leg)) return null;
   const protects = -orderSign(leg); // the position side this stop closes
   const { net, unknown } = evidenceNet(leg.contractId, { fills, history });
   if (unknown) return { why: 'unreadable', net, text: `a fill or order on ${leg.contractId} can't be read` };
   if (Math.sign(net) === protects) {
-    const others = coveredSize((orders || []).filter(o => o && String(o.id) !== String(leg.id)), leg.contractId, protects);
+    const others = cover ? coveredSize((orders || []).filter(o => o && String(o.id) !== String(leg.id)), leg.contractId, protects) : 0;
     if (others < Math.abs(net)) return { why: 'fills', net, text: `the fills and order statuses show ${leg.contractId} ${protects > 0 ? 'long' : 'short'} ${Math.abs(net)} (a fill the position read doesn't show yet)` };
   }
   const entry = workingEntryOf(leg, orders);
@@ -78,4 +80,16 @@ function stopHeld(leg, { orders = [], fills = [], history = [] } = {}) {
   return null;
 }
 
-module.exports = { evidenceNet, workingEntryOf, stopHeld };
+/**
+ * The size of the position a stop protects as the fills and order statuses show it: 0 when they show none on its side.
+ * Throws when they can't be read (the caller fails closed); `fills` and `history` both undefined (no reads made): 0.
+ */
+function evidenceCover(leg, { fills, history } = {}) {
+  if (fills === undefined && history === undefined) return 0;
+  if (!Array.isArray(fills) || !Array.isArray(history)) throw new Error('the fills or the orders from the server are not a list');
+  const { net, unknown } = evidenceNet(leg.contractId, { fills, history });
+  if (unknown) throw new Error(`a fill or order on ${leg.contractId} can't be read`);
+  return Math.sign(net) === -orderSign(leg) ? Math.abs(net) : 0;
+}
+
+module.exports = { evidenceNet, workingEntryOf, stopHeld, evidenceCover };
