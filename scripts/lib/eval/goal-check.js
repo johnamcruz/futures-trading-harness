@@ -107,18 +107,21 @@ function evaluate(doc, { root, env = {}, synth = null }) {
     let trend = 0;
     for (const b of blocks) {
       const bars = GF.decodeBars(b.bars);
-      trades.push(...GT.blockTrades(bars, b.sessions, P, { symbol: doc.symbol }).trades);
+      trades.push(...GT.blockTrades(bars, b.sessions, P, { symbol: doc.symbol }).candidates);
       legs.push(...GM.trendLegs(bars, b.sessions, { session: P.session, minutes: doc.minutes }));
       const reg = dayRegimes(bars.map(x => ({ ...x, ms: Date.parse(x.t) })), tfMs);
       for (const d of b.sessions) { days.push(d); regimes.push(reg.get(d) || 'normal'); }
       trend += b.trend.length;
     }
-    const ts = GM.tradeStats(trades, { falseStartPeakR, tick });
+    // The candidates meet the account: the trade metrics on what live takes in the sessions' order, the combine on
+    // each path's own (one position at a time after sizing, both).
+    const taken = GM.walkTaken({ trades, days, regimes, ctx, symbol: doc.symbol });
+    const ts = GM.tradeStats(taken, { falseStartPeakR, tick });
     halves[half] = {
       sessions: days.length, trend, ...ts,
-      caught: GM.caught(trades, legs, { refRiskPts: ts.medianRiskPts }),
+      caught: GM.caught(taken, legs, { refRiskPts: ts.medianRiskPts }),
       mc: GM.combineMc({ trades, days, regimes, ctx, sessions: ctx.account.sessions, paths: cfg.monteCarlo.paths, seed: cfg.monteCarlo.seed, meanBlock: cfg.monteCarlo.meanBlock, symbol: doc.symbol }),
-      list: trades,
+      list: taken,
     };
   }
   return { fixture: synth ? crypto.createHash('sha256').update(`${doc.hash}|${synth.hash}`).digest('hex') : doc.hash, halves };

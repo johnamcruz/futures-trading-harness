@@ -1771,10 +1771,13 @@ only. On the entry rule's side per bar (the RULEBOOK's `entry`,
 chain-side.js), the 15m CHoCH, BOS, compression break and strong CISD at its
 OTE and momentum_continuation's scan; compose's entry timing as shipped, the
 locked stop and D13's floor, the exit (limitOutcome with the policy's
-composed exit), one position at a time; then per half the trades, mean R, R
-caught of the trend legs' R available, the false-start share, the drawdown
-and a seeded 30-session combine Monte Carlo on the account's rulebook
-sizing; and the blow path's blows. It fails on one more blow, or a pass
+composed exit); one position at a time as live decides it, after sizing at
+the account's own state (a plan the account can't size never holds the
+slot): the trades, mean R, R caught of the trend legs' R available, the
+false-start share and the drawdown on what the half's sessions take in
+order (attempts back to back), and a seeded 30-session combine Monte Carlo
+on the account's rulebook sizing, each path at its own state; and the blow
+path's blows. It fails on one more blow, or a pass
 rate, mean R or R caught below main's less its tighten-only tolerance
 (`goalRegression.tolerance`: tight, since every number is deterministic).
 The fixture's draw, the Monte Carlo and tier 2's days are pinned exactly.
