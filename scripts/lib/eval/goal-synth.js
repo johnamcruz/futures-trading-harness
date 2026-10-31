@@ -14,8 +14,9 @@
  *             expires only when the price leaves before the order goes, the order-latency self-test's case)
  *   quiet     the drift alone (no momentum candle, no listed setup): a day whose right answer is no trade
  *   floor     D13's stop floor binding (compose must refuse, never widen): the cash session's approach to just under
- *             the overnight high (floor-ticks: the open gapped to it, flat, so the approach meets no level; floor-atr: a
- *             deep V, a large ATR(20)), a 15m candle breaking it by
+ *             the overnight high (floor-ticks: the open gapped to it and no approach, its approachBars 0, so the session
+ *             meets no level before the reaction, its first 15m candle; floor-atr: a deep V, a large ATR(20)), a 15m
+ *             candle breaking it by
  *             a few ticks (the listed reaction, its low the stop read; the setup is the entry, composed on its own close),
  *             a 3m bar closing at its top, then flat: the stop a few ticks under max(stop_floor_ticks, stop_floor_atr x ATR(20)), the tick term binding
  *             on floor-ticks, the ATR term on floor-atr (floorBar)
