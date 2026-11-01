@@ -41,7 +41,7 @@ env:
 the cycle log's argv is the run's: true
 cycle log: promptChars true; context {"action":"trade","symbols":[{"symbol":"MNQ","bar":{"t":"2026-10-07T14:27:00.000Z","contractId":"MNQ","file":"/bars/MNQ-3m.json"}}],"cachedRoles":[]}
 === claude: managed ===
-prompt (sha256 381d16c036a01078a156c678ff7430995810d8aeba14c6a2c734090d5ea5e201, 3338 chars, of its neutral text):
+prompt (sha256 3f11911d39f6cedd29f2effe34d8bc6bdc9d4099a259e2d9a091736f8425ffb9, 3414 chars, of its neutral text):
   Autonomous cycle.
   Follow the autonomous-trading skill.
   No user is present.
@@ -61,7 +61,7 @@ prompt (sha256 381d16c036a01078a156c678ff7430995810d8aeba14c6a2c734090d5ea5e201,
   Don't launch the analysts or the risk-manager this cycle, and send no new entry, added size or reversal (the order gate refuses an entry this cycle); a new entry waits for a cycle that starts flat.
   Exits, stop moves, closes and cancels go as always, through the trade-executor as the trade-session skill says.
   The desk ran for this bar: the runner ran market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst, risk-manager (phase 1) this cycle and their reports are below, with any the report cache served.
-  Cached reports, still valid this bar (the runner's report cache: an analyst's report built on the bar briefing parts still current): don't launch market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst, risk-manager (phase 1) this cycle; the order gate counts them as returned.
+  Cached reports, still valid this bar (the runner's report cache: an analyst's report built on the bar briefing parts still current, risk-manager phase 1 while every live account fact it reports is unchanged): don't launch market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst, risk-manager (phase 1) this cycle; the order gate counts them as returned.
   A cached report is that role's report this cycle: never send it back to a role to read, summarize or redo.
 --- market-structure-analyst report (from 10:30 ET) ---
 Data: bar_briefing m3@x
@@ -104,7 +104,7 @@ env:
 the cycle log's argv is the run's: true
 cycle log: promptChars true; context {"action":"trade","manage":true,"symbols":[{"symbol":"MNQ","bar":{"t":"2026-10-07T14:27:00.000Z","contractId":"MNQ","file":"/bars/MNQ-3m.json"}}],"cachedRoles":[],"runnerRoles":["market-structure-analyst","trend-momentum-analyst","volume-liquidity-analyst","risk-manager"],"rolesFile":"/roles/r.json"}
 === claude: entry ===
-prompt (sha256 2d505689dbcc59c354c08079f63e90384f4587a2a5263d17e0bd8df3c0cbc5e0, 3381 chars, of its neutral text):
+prompt (sha256 f89dd425bb1fc6bcd6183ce8b911bd8582de0b69cd832cbd4eb33aaf5a3e14fb, 3457 chars, of its neutral text):
   Autonomous cycle.
   Follow the autonomous-trading skill.
   No user is present.
@@ -124,7 +124,7 @@ prompt (sha256 2d505689dbcc59c354c08079f63e90384f4587a2a5263d17e0bd8df3c0cbc5e0,
   The runner then runs risk-manager phase 2 on your compose record and, on its APPROVE, the trade-executor with the order built from it, and writes the journal plan: don't launch risk-manager or the trade-executor, and don't write the plan (the harness refuses those launches this cycle).
   To pass: CYCLE RESULT: no-trade - <why>.
   The desk ran for this bar: the runner ran market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst, risk-manager (phase 1) this cycle and their reports are below, with any the report cache served.
-  Cached reports, still valid this bar (the runner's report cache: an analyst's report built on the bar briefing parts still current): don't launch market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst, risk-manager (phase 1) this cycle; the order gate counts them as returned.
+  Cached reports, still valid this bar (the runner's report cache: an analyst's report built on the bar briefing parts still current, risk-manager phase 1 while every live account fact it reports is unchanged): don't launch market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst, risk-manager (phase 1) this cycle; the order gate counts them as returned.
   A cached report is that role's report this cycle: never send it back to a role to read, summarize or redo.
 --- market-structure-analyst report (from 10:30 ET) ---
 Data: bar_briefing m3@x
@@ -235,8 +235,8 @@ prompt (sha256 aca1a7af1b7d36ce02c4abf7b4bb93b5c7e6a217e203b16a2f77dcd7a67a3355,
   Your last line must be exactly: CYCLE RESULT: <no-trade | planned | executed | managed | flattened | blocked | error> - <reason>.
 the run's prompt is the runner's: true
 the cycle log's prompt is the runner's: true
-argv: ["claude","-p","<prompt>","--plugin-dir","<root>","--append-system-prompt-file","<home>/head-prompt/claude-head-ff2e2ac1de631fc99d0f4d8e6c5e2ab05b70f39c681f4ef2a8112b9cd379c543.md","--output-format","stream-json","--verbose","--permission-mode","dontAsk","--allowedTools","mcp__broker,mcp__harness,Skill,Agent,WebSearch,WebFetch(domain:bls.gov),WebFetch(domain:bea.gov),WebFetch(domain:federalreserve.gov),WebFetch(domain:eia.gov),WebFetch(domain:treasurydirect.gov),WebFetch(domain:cmegroup.com),WebFetch(domain:census.gov),WebFetch(domain:dol.gov),Read(/<root>/**),Read(/<home>/bars/**),Read(/<home>/logs/**),Read(/<home>/bars-scratch/**),Bash(node <root>/scripts/strategies.js:*),Bash(node <root>/scripts/market-snapshot.js:*),Bash(node <root>/scripts/mtf.js:*),Bash(node <root>/scripts/blackouts.js:*),Bash(node <root>/scripts/bars.js:*),Bash(node <root>/scripts/reconcile.js:*),Bash(node <root>/scripts/lessons.js:*),Bash(node <root>/scripts/combine.js status:*)","--disallowedTools","SendMessage,ListAgents,Edit(/<home>/**),Write(/<home>/**),Read(//proc/**),Read(/<user-home>/.claude/**),Read(/<user-home>/.claude.json),Read(/<user-home>/.qwen/**),Read(/<user-home>/.codex/**),Read(/<user-home>/.ssh/**),Read(/<root>/**/.env),Read(/<user-home>/.futures-trading-harness/.env),Read(/<home>/.env),Edit(/<root>/**),Write(/<root>/**),Edit(/<user-home>/.futures-trading-harness/**),Write(/<user-home>/.futures-trading-harness/**),Edit(/<user-home>/.<name-ad45f8>-mcp/journal.jsonl),Write(/<user-home>/.<name-ad45f8>-mcp/journal.jsonl),Edit(/<user-home>/.claude/**),Write(/<user-home>/.claude/**)"]
-head file sha256: ff2e2ac1de631fc99d0f4d8e6c5e2ab05b70f39c681f4ef2a8112b9cd379c543
+argv: ["claude","-p","<prompt>","--plugin-dir","<root>","--append-system-prompt-file","<home>/head-prompt/claude-head-0c41f2987e24b19e176beff2fe1343cf1b3b55f8ffb4dd66615272d5f1f27ca6.md","--output-format","stream-json","--verbose","--permission-mode","dontAsk","--allowedTools","mcp__broker,mcp__harness,Skill,Agent,WebSearch,WebFetch(domain:bls.gov),WebFetch(domain:bea.gov),WebFetch(domain:federalreserve.gov),WebFetch(domain:eia.gov),WebFetch(domain:treasurydirect.gov),WebFetch(domain:cmegroup.com),WebFetch(domain:census.gov),WebFetch(domain:dol.gov),Read(/<root>/**),Read(/<home>/bars/**),Read(/<home>/logs/**),Read(/<home>/bars-scratch/**),Bash(node <root>/scripts/strategies.js:*),Bash(node <root>/scripts/market-snapshot.js:*),Bash(node <root>/scripts/mtf.js:*),Bash(node <root>/scripts/blackouts.js:*),Bash(node <root>/scripts/bars.js:*),Bash(node <root>/scripts/reconcile.js:*),Bash(node <root>/scripts/lessons.js:*),Bash(node <root>/scripts/combine.js status:*)","--disallowedTools","SendMessage,ListAgents,Edit(/<home>/**),Write(/<home>/**),Read(//proc/**),Read(/<user-home>/.claude/**),Read(/<user-home>/.claude.json),Read(/<user-home>/.qwen/**),Read(/<user-home>/.codex/**),Read(/<user-home>/.ssh/**),Read(/<root>/**/.env),Read(/<user-home>/.futures-trading-harness/.env),Read(/<home>/.env),Edit(/<root>/**),Write(/<root>/**),Edit(/<user-home>/.futures-trading-harness/**),Write(/<user-home>/.futures-trading-harness/**),Edit(/<user-home>/.<name-ad45f8>-mcp/journal.jsonl),Write(/<user-home>/.<name-ad45f8>-mcp/journal.jsonl),Edit(/<user-home>/.claude/**),Write(/<user-home>/.claude/**)"]
+head file sha256: 0c41f2987e24b19e176beff2fe1343cf1b3b55f8ffb4dd66615272d5f1f27ca6
 env:
   CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1
   CLAUDE_CODE_PROMPT_CACHE_TTL=5m
@@ -248,7 +248,7 @@ env:
   FTH_CYCLE_DESK=market-structure-analyst,trend-momentum-analyst,volume-liquidity-analyst,risk-manager
   FTH_CYCLE_TRANSCRIPT=<home>/logs/cycle-transcript-<pid>-<rand>.jsonl
   FTH_EARLY_CLOSE_DATES=2026-11-27,2026-12-24,2027-11-26
-  FTH_HEAD_PROMPT={"harness":"claude","config":"<home>/head-prompt/claude-head-ff2e2ac1de631fc99d0f4d8e6c5e2ab05b70f39c681f4ef2a8112b9cd379c543.md","sha256":"ff2e2ac1de631fc99d0f4d8e6c5e2ab05b70f39c681f4ef2a8112b9cd379c543","skills":["trade-session","multi-timeframe-analysis","trade-lifecycle","setup-judgment","trade-plan","autonomous-trading","trader-process","htf-to-ltf","bar-briefing","role-round","day-context","confluence-counting","invalidation","rejection","breakout"],"cycle":"<cycle>"}
+  FTH_HEAD_PROMPT={"harness":"claude","config":"<home>/head-prompt/claude-head-0c41f2987e24b19e176beff2fe1343cf1b3b55f8ffb4dd66615272d5f1f27ca6.md","sha256":"0c41f2987e24b19e176beff2fe1343cf1b3b55f8ffb4dd66615272d5f1f27ca6","skills":["trade-session","multi-timeframe-analysis","trade-lifecycle","setup-judgment","trade-plan","autonomous-trading","trader-process","htf-to-ltf","bar-briefing","role-round","day-context","confluence-counting","invalidation","rejection","breakout"],"cycle":"<cycle>"}
   FTH_HOME=<home>
   FTH_ROLE_SKILLS=full
   FTH_ROOT=<root>
@@ -257,7 +257,7 @@ env:
 the cycle log's argv is the run's: true
 cycle log: promptChars true; context {"action":"trade","symbols":[{"symbol":"MNQ","bar":{"t":"2026-10-07T14:27:00.000Z","contractId":"MNQ","file":"/bars/MNQ-3m.json"}}],"cachedRoles":[]}
 === claude headSkillsInPrompt: managed ===
-prompt (sha256 f008f236c276579039642aee96002ab9d507c9b4572707729748d65a9d7bfbd8, 3321 chars, of its neutral text):
+prompt (sha256 bfdf822e80a552ae3e689599b9dfa2dfbc6eef2d6e7c23aff220b5ee7be80fc6, 3397 chars, of its neutral text):
   Autonomous cycle.
   Follow the autonomous-trading skill.
   No user is present.
@@ -277,7 +277,7 @@ prompt (sha256 f008f236c276579039642aee96002ab9d507c9b4572707729748d65a9d7bfbd8,
   Don't launch the analysts or the risk-manager this cycle, and send no new entry, added size or reversal (the order gate refuses an entry this cycle); a new entry waits for a cycle that starts flat.
   Exits, stop moves, closes and cancels go as always, through the trade-executor as the trade-session skill says.
   The desk ran for this bar: the runner ran market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst, risk-manager (phase 1) this cycle and their reports are below, with any the report cache served.
-  Cached reports, still valid this bar (the runner's report cache: an analyst's report built on the bar briefing parts still current): don't launch market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst, risk-manager (phase 1) this cycle; the order gate counts them as returned.
+  Cached reports, still valid this bar (the runner's report cache: an analyst's report built on the bar briefing parts still current, risk-manager phase 1 while every live account fact it reports is unchanged): don't launch market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst, risk-manager (phase 1) this cycle; the order gate counts them as returned.
   A cached report is that role's report this cycle: never send it back to a role to read, summarize or redo.
 --- market-structure-analyst report (from 10:30 ET) ---
 Data: bar_briefing m3@x
@@ -298,8 +298,8 @@ Phase 1: flat, budget 2 trades
   Your last line must be exactly: CYCLE RESULT: <no-trade | planned | executed | managed | flattened | blocked | error> - <reason>.
 the run's prompt is the runner's: true
 the cycle log's prompt is the runner's: true
-argv: ["claude","-p","<prompt>","--plugin-dir","<root>","--append-system-prompt-file","<home>/head-prompt/claude-head-ff2e2ac1de631fc99d0f4d8e6c5e2ab05b70f39c681f4ef2a8112b9cd379c543.md","--output-format","stream-json","--verbose","--permission-mode","dontAsk","--allowedTools","mcp__broker,mcp__harness,Skill,Agent,WebSearch,WebFetch(domain:bls.gov),WebFetch(domain:bea.gov),WebFetch(domain:federalreserve.gov),WebFetch(domain:eia.gov),WebFetch(domain:treasurydirect.gov),WebFetch(domain:cmegroup.com),WebFetch(domain:census.gov),WebFetch(domain:dol.gov),Read(/<root>/**),Read(/<home>/bars/**),Read(/<home>/logs/**),Read(/<home>/bars-scratch/**),Bash(node <root>/scripts/strategies.js:*),Bash(node <root>/scripts/market-snapshot.js:*),Bash(node <root>/scripts/mtf.js:*),Bash(node <root>/scripts/blackouts.js:*),Bash(node <root>/scripts/bars.js:*),Bash(node <root>/scripts/reconcile.js:*),Bash(node <root>/scripts/lessons.js:*),Bash(node <root>/scripts/combine.js status:*)","--disallowedTools","SendMessage,ListAgents,Edit(/<home>/**),Write(/<home>/**),Read(//proc/**),Read(/<user-home>/.claude/**),Read(/<user-home>/.claude.json),Read(/<user-home>/.qwen/**),Read(/<user-home>/.codex/**),Read(/<user-home>/.ssh/**),Read(/<root>/**/.env),Read(/<user-home>/.futures-trading-harness/.env),Read(/<home>/.env),Edit(/<root>/**),Write(/<root>/**),Edit(/<user-home>/.futures-trading-harness/**),Write(/<user-home>/.futures-trading-harness/**),Edit(/<user-home>/.<name-ad45f8>-mcp/journal.jsonl),Write(/<user-home>/.<name-ad45f8>-mcp/journal.jsonl),Edit(/<user-home>/.claude/**),Write(/<user-home>/.claude/**)"]
-head file sha256: ff2e2ac1de631fc99d0f4d8e6c5e2ab05b70f39c681f4ef2a8112b9cd379c543
+argv: ["claude","-p","<prompt>","--plugin-dir","<root>","--append-system-prompt-file","<home>/head-prompt/claude-head-0c41f2987e24b19e176beff2fe1343cf1b3b55f8ffb4dd66615272d5f1f27ca6.md","--output-format","stream-json","--verbose","--permission-mode","dontAsk","--allowedTools","mcp__broker,mcp__harness,Skill,Agent,WebSearch,WebFetch(domain:bls.gov),WebFetch(domain:bea.gov),WebFetch(domain:federalreserve.gov),WebFetch(domain:eia.gov),WebFetch(domain:treasurydirect.gov),WebFetch(domain:cmegroup.com),WebFetch(domain:census.gov),WebFetch(domain:dol.gov),Read(/<root>/**),Read(/<home>/bars/**),Read(/<home>/logs/**),Read(/<home>/bars-scratch/**),Bash(node <root>/scripts/strategies.js:*),Bash(node <root>/scripts/market-snapshot.js:*),Bash(node <root>/scripts/mtf.js:*),Bash(node <root>/scripts/blackouts.js:*),Bash(node <root>/scripts/bars.js:*),Bash(node <root>/scripts/reconcile.js:*),Bash(node <root>/scripts/lessons.js:*),Bash(node <root>/scripts/combine.js status:*)","--disallowedTools","SendMessage,ListAgents,Edit(/<home>/**),Write(/<home>/**),Read(//proc/**),Read(/<user-home>/.claude/**),Read(/<user-home>/.claude.json),Read(/<user-home>/.qwen/**),Read(/<user-home>/.codex/**),Read(/<user-home>/.ssh/**),Read(/<root>/**/.env),Read(/<user-home>/.futures-trading-harness/.env),Read(/<home>/.env),Edit(/<root>/**),Write(/<root>/**),Edit(/<user-home>/.futures-trading-harness/**),Write(/<user-home>/.futures-trading-harness/**),Edit(/<user-home>/.<name-ad45f8>-mcp/journal.jsonl),Write(/<user-home>/.<name-ad45f8>-mcp/journal.jsonl),Edit(/<user-home>/.claude/**),Write(/<user-home>/.claude/**)"]
+head file sha256: 0c41f2987e24b19e176beff2fe1343cf1b3b55f8ffb4dd66615272d5f1f27ca6
 env:
   CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1
   CLAUDE_CODE_PROMPT_CACHE_TTL=5m
@@ -312,7 +312,7 @@ env:
   FTH_CYCLE_ROLES=/roles/r.json
   FTH_CYCLE_TRANSCRIPT=<home>/logs/cycle-transcript-<pid>-<rand>.jsonl
   FTH_EARLY_CLOSE_DATES=2026-11-27,2026-12-24,2027-11-26
-  FTH_HEAD_PROMPT={"harness":"claude","config":"<home>/head-prompt/claude-head-ff2e2ac1de631fc99d0f4d8e6c5e2ab05b70f39c681f4ef2a8112b9cd379c543.md","sha256":"ff2e2ac1de631fc99d0f4d8e6c5e2ab05b70f39c681f4ef2a8112b9cd379c543","skills":["trade-session","multi-timeframe-analysis","trade-lifecycle","setup-judgment","trade-plan","autonomous-trading","trader-process","htf-to-ltf","bar-briefing","role-round","day-context","confluence-counting","invalidation","rejection","breakout"],"cycle":"<cycle>"}
+  FTH_HEAD_PROMPT={"harness":"claude","config":"<home>/head-prompt/claude-head-0c41f2987e24b19e176beff2fe1343cf1b3b55f8ffb4dd66615272d5f1f27ca6.md","sha256":"0c41f2987e24b19e176beff2fe1343cf1b3b55f8ffb4dd66615272d5f1f27ca6","skills":["trade-session","multi-timeframe-analysis","trade-lifecycle","setup-judgment","trade-plan","autonomous-trading","trader-process","htf-to-ltf","bar-briefing","role-round","day-context","confluence-counting","invalidation","rejection","breakout"],"cycle":"<cycle>"}
   FTH_HOME=<home>
   FTH_ROLE_SKILLS=full
   FTH_ROOT=<root>
@@ -321,7 +321,7 @@ env:
 the cycle log's argv is the run's: true
 cycle log: promptChars true; context {"action":"trade","manage":true,"symbols":[{"symbol":"MNQ","bar":{"t":"2026-10-07T14:27:00.000Z","contractId":"MNQ","file":"/bars/MNQ-3m.json"}}],"cachedRoles":[],"runnerRoles":["market-structure-analyst","trend-momentum-analyst","volume-liquidity-analyst","risk-manager"],"rolesFile":"/roles/r.json"}
 === claude headSkillsInPrompt: entry ===
-prompt (sha256 66fbdceb518326b9220fd411e3b59f1162e71b7021078bf540d9aedd9342994b, 3364 chars, of its neutral text):
+prompt (sha256 ae4d445dca9cd44431978e774b5c28ff7023f95843f842b3da8344a97e1fa3e8, 3440 chars, of its neutral text):
   Autonomous cycle.
   Follow the autonomous-trading skill.
   No user is present.
@@ -341,7 +341,7 @@ prompt (sha256 66fbdceb518326b9220fd411e3b59f1162e71b7021078bf540d9aedd9342994b,
   The runner then runs risk-manager phase 2 on your compose record and, on its APPROVE, the trade-executor with the order built from it, and writes the journal plan: don't launch risk-manager or the trade-executor, and don't write the plan (the harness refuses those launches this cycle).
   To pass: CYCLE RESULT: no-trade - <why>.
   The desk ran for this bar: the runner ran market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst, risk-manager (phase 1) this cycle and their reports are below, with any the report cache served.
-  Cached reports, still valid this bar (the runner's report cache: an analyst's report built on the bar briefing parts still current): don't launch market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst, risk-manager (phase 1) this cycle; the order gate counts them as returned.
+  Cached reports, still valid this bar (the runner's report cache: an analyst's report built on the bar briefing parts still current, risk-manager phase 1 while every live account fact it reports is unchanged): don't launch market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst, risk-manager (phase 1) this cycle; the order gate counts them as returned.
   A cached report is that role's report this cycle: never send it back to a role to read, summarize or redo.
 --- market-structure-analyst report (from 10:30 ET) ---
 Data: bar_briefing m3@x
@@ -362,8 +362,8 @@ Phase 1: flat, budget 2 trades
   Your last line must be exactly: CYCLE RESULT: <no-trade | planned | executed | managed | flattened | blocked | error> - <reason>.
 the run's prompt is the runner's: true
 the cycle log's prompt is the runner's: true
-argv: ["claude","-p","<prompt>","--plugin-dir","<root>","--append-system-prompt-file","<home>/head-prompt/claude-head-ff2e2ac1de631fc99d0f4d8e6c5e2ab05b70f39c681f4ef2a8112b9cd379c543.md","--output-format","stream-json","--verbose","--permission-mode","dontAsk","--allowedTools","mcp__broker,mcp__harness,Skill,Agent,WebSearch,WebFetch(domain:bls.gov),WebFetch(domain:bea.gov),WebFetch(domain:federalreserve.gov),WebFetch(domain:eia.gov),WebFetch(domain:treasurydirect.gov),WebFetch(domain:cmegroup.com),WebFetch(domain:census.gov),WebFetch(domain:dol.gov),Read(/<root>/**),Read(/<home>/bars/**),Read(/<home>/logs/**),Read(/<home>/bars-scratch/**),Bash(node <root>/scripts/strategies.js:*),Bash(node <root>/scripts/market-snapshot.js:*),Bash(node <root>/scripts/mtf.js:*),Bash(node <root>/scripts/blackouts.js:*),Bash(node <root>/scripts/bars.js:*),Bash(node <root>/scripts/reconcile.js:*),Bash(node <root>/scripts/lessons.js:*),Bash(node <root>/scripts/combine.js status:*)","--disallowedTools","SendMessage,ListAgents,Edit(/<home>/**),Write(/<home>/**),Read(//proc/**),Read(/<user-home>/.claude/**),Read(/<user-home>/.claude.json),Read(/<user-home>/.qwen/**),Read(/<user-home>/.codex/**),Read(/<user-home>/.ssh/**),Read(/<root>/**/.env),Read(/<user-home>/.futures-trading-harness/.env),Read(/<home>/.env),Edit(/<root>/**),Write(/<root>/**),Edit(/<user-home>/.futures-trading-harness/**),Write(/<user-home>/.futures-trading-harness/**),Edit(/<user-home>/.<name-ad45f8>-mcp/journal.jsonl),Write(/<user-home>/.<name-ad45f8>-mcp/journal.jsonl),Edit(/<user-home>/.claude/**),Write(/<user-home>/.claude/**)"]
-head file sha256: ff2e2ac1de631fc99d0f4d8e6c5e2ab05b70f39c681f4ef2a8112b9cd379c543
+argv: ["claude","-p","<prompt>","--plugin-dir","<root>","--append-system-prompt-file","<home>/head-prompt/claude-head-0c41f2987e24b19e176beff2fe1343cf1b3b55f8ffb4dd66615272d5f1f27ca6.md","--output-format","stream-json","--verbose","--permission-mode","dontAsk","--allowedTools","mcp__broker,mcp__harness,Skill,Agent,WebSearch,WebFetch(domain:bls.gov),WebFetch(domain:bea.gov),WebFetch(domain:federalreserve.gov),WebFetch(domain:eia.gov),WebFetch(domain:treasurydirect.gov),WebFetch(domain:cmegroup.com),WebFetch(domain:census.gov),WebFetch(domain:dol.gov),Read(/<root>/**),Read(/<home>/bars/**),Read(/<home>/logs/**),Read(/<home>/bars-scratch/**),Bash(node <root>/scripts/strategies.js:*),Bash(node <root>/scripts/market-snapshot.js:*),Bash(node <root>/scripts/mtf.js:*),Bash(node <root>/scripts/blackouts.js:*),Bash(node <root>/scripts/bars.js:*),Bash(node <root>/scripts/reconcile.js:*),Bash(node <root>/scripts/lessons.js:*),Bash(node <root>/scripts/combine.js status:*)","--disallowedTools","SendMessage,ListAgents,Edit(/<home>/**),Write(/<home>/**),Read(//proc/**),Read(/<user-home>/.claude/**),Read(/<user-home>/.claude.json),Read(/<user-home>/.qwen/**),Read(/<user-home>/.codex/**),Read(/<user-home>/.ssh/**),Read(/<root>/**/.env),Read(/<user-home>/.futures-trading-harness/.env),Read(/<home>/.env),Edit(/<root>/**),Write(/<root>/**),Edit(/<user-home>/.futures-trading-harness/**),Write(/<user-home>/.futures-trading-harness/**),Edit(/<user-home>/.<name-ad45f8>-mcp/journal.jsonl),Write(/<user-home>/.<name-ad45f8>-mcp/journal.jsonl),Edit(/<user-home>/.claude/**),Write(/<user-home>/.claude/**)"]
+head file sha256: 0c41f2987e24b19e176beff2fe1343cf1b3b55f8ffb4dd66615272d5f1f27ca6
 env:
   CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1
   CLAUDE_CODE_PROMPT_CACHE_TTL=5m
@@ -376,7 +376,7 @@ env:
   FTH_CYCLE_ROLES=/roles/r.json
   FTH_CYCLE_TRANSCRIPT=<home>/logs/cycle-transcript-<pid>-<rand>.jsonl
   FTH_EARLY_CLOSE_DATES=2026-11-27,2026-12-24,2027-11-26
-  FTH_HEAD_PROMPT={"harness":"claude","config":"<home>/head-prompt/claude-head-ff2e2ac1de631fc99d0f4d8e6c5e2ab05b70f39c681f4ef2a8112b9cd379c543.md","sha256":"ff2e2ac1de631fc99d0f4d8e6c5e2ab05b70f39c681f4ef2a8112b9cd379c543","skills":["trade-session","multi-timeframe-analysis","trade-lifecycle","setup-judgment","trade-plan","autonomous-trading","trader-process","htf-to-ltf","bar-briefing","role-round","day-context","confluence-counting","invalidation","rejection","breakout"],"cycle":"<cycle>"}
+  FTH_HEAD_PROMPT={"harness":"claude","config":"<home>/head-prompt/claude-head-0c41f2987e24b19e176beff2fe1343cf1b3b55f8ffb4dd66615272d5f1f27ca6.md","sha256":"0c41f2987e24b19e176beff2fe1343cf1b3b55f8ffb4dd66615272d5f1f27ca6","skills":["trade-session","multi-timeframe-analysis","trade-lifecycle","setup-judgment","trade-plan","autonomous-trading","trader-process","htf-to-ltf","bar-briefing","role-round","day-context","confluence-counting","invalidation","rejection","breakout"],"cycle":"<cycle>"}
   FTH_HOME=<home>
   FTH_ROLE_SKILLS=full
   FTH_ROOT=<root>
@@ -409,8 +409,8 @@ prompt (sha256 598f2185464b321a16c44b0126fbf2ac5fee85d01763efe3d92bd8a31656bb1e,
   Your last line must be exactly: CYCLE RESULT: <no-trade | planned | executed | managed | flattened | blocked | error> - <reason>.
 the run's prompt is the runner's: true
 the cycle log's prompt is the runner's: true
-argv: ["claude","-p","<prompt>","--plugin-dir","<root>","--append-system-prompt-file","<home>/head-prompt/claude-head-ff2e2ac1de631fc99d0f4d8e6c5e2ab05b70f39c681f4ef2a8112b9cd379c543.md","--output-format","stream-json","--verbose","--permission-mode","dontAsk","--allowedTools","mcp__broker,mcp__harness,Skill,Agent,WebSearch,WebFetch(domain:bls.gov),WebFetch(domain:bea.gov),WebFetch(domain:federalreserve.gov),WebFetch(domain:eia.gov),WebFetch(domain:treasurydirect.gov),WebFetch(domain:cmegroup.com),WebFetch(domain:census.gov),WebFetch(domain:dol.gov),Read(/<root>/**),Read(/<home>/bars/**),Read(/<home>/logs/**),Read(/<home>/bars-scratch/**),Bash(node <root>/scripts/strategies.js:*),Bash(node <root>/scripts/market-snapshot.js:*),Bash(node <root>/scripts/mtf.js:*),Bash(node <root>/scripts/blackouts.js:*),Bash(node <root>/scripts/bars.js:*),Bash(node <root>/scripts/reconcile.js:*),Bash(node <root>/scripts/lessons.js:*),Bash(node <root>/scripts/combine.js status:*)","--disallowedTools","SendMessage,ListAgents,Edit(/<home>/**),Write(/<home>/**),Read(//proc/**),Read(/<user-home>/.claude/**),Read(/<user-home>/.claude.json),Read(/<user-home>/.qwen/**),Read(/<user-home>/.codex/**),Read(/<user-home>/.ssh/**),Read(/<root>/**/.env),Read(/<user-home>/.futures-trading-harness/.env),Read(/<home>/.env),Edit(/<root>/**),Write(/<root>/**),Edit(/<user-home>/.futures-trading-harness/**),Write(/<user-home>/.futures-trading-harness/**),Edit(/<user-home>/.<name-ad45f8>-mcp/journal.jsonl),Write(/<user-home>/.<name-ad45f8>-mcp/journal.jsonl),Edit(/<user-home>/.claude/**),Write(/<user-home>/.claude/**)"]
-head file sha256: ff2e2ac1de631fc99d0f4d8e6c5e2ab05b70f39c681f4ef2a8112b9cd379c543
+argv: ["claude","-p","<prompt>","--plugin-dir","<root>","--append-system-prompt-file","<home>/head-prompt/claude-head-0c41f2987e24b19e176beff2fe1343cf1b3b55f8ffb4dd66615272d5f1f27ca6.md","--output-format","stream-json","--verbose","--permission-mode","dontAsk","--allowedTools","mcp__broker,mcp__harness,Skill,Agent,WebSearch,WebFetch(domain:bls.gov),WebFetch(domain:bea.gov),WebFetch(domain:federalreserve.gov),WebFetch(domain:eia.gov),WebFetch(domain:treasurydirect.gov),WebFetch(domain:cmegroup.com),WebFetch(domain:census.gov),WebFetch(domain:dol.gov),Read(/<root>/**),Read(/<home>/bars/**),Read(/<home>/logs/**),Read(/<home>/bars-scratch/**),Bash(node <root>/scripts/strategies.js:*),Bash(node <root>/scripts/market-snapshot.js:*),Bash(node <root>/scripts/mtf.js:*),Bash(node <root>/scripts/blackouts.js:*),Bash(node <root>/scripts/bars.js:*),Bash(node <root>/scripts/reconcile.js:*),Bash(node <root>/scripts/lessons.js:*),Bash(node <root>/scripts/combine.js status:*)","--disallowedTools","SendMessage,ListAgents,Edit(/<home>/**),Write(/<home>/**),Read(//proc/**),Read(/<user-home>/.claude/**),Read(/<user-home>/.claude.json),Read(/<user-home>/.qwen/**),Read(/<user-home>/.codex/**),Read(/<user-home>/.ssh/**),Read(/<root>/**/.env),Read(/<user-home>/.futures-trading-harness/.env),Read(/<home>/.env),Edit(/<root>/**),Write(/<root>/**),Edit(/<user-home>/.futures-trading-harness/**),Write(/<user-home>/.futures-trading-harness/**),Edit(/<user-home>/.<name-ad45f8>-mcp/journal.jsonl),Write(/<user-home>/.<name-ad45f8>-mcp/journal.jsonl),Edit(/<user-home>/.claude/**),Write(/<user-home>/.claude/**)"]
+head file sha256: 0c41f2987e24b19e176beff2fe1343cf1b3b55f8ffb4dd66615272d5f1f27ca6
 env:
   CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1
   CLAUDE_CODE_PROMPT_CACHE_TTL=5m
@@ -424,7 +424,7 @@ env:
   FTH_CYCLE_LANE_BARS={"MNQ":{"1":"2026-10-07T14:29:00.000Z","3":"2026-10-07T14:27:00.000Z"}}
   FTH_CYCLE_TRANSCRIPT=<home>/logs/cycle-transcript-<pid>-<rand>.jsonl
   FTH_EARLY_CLOSE_DATES=2026-11-27,2026-12-24,2027-11-26
-  FTH_HEAD_PROMPT={"harness":"claude","config":"<home>/head-prompt/claude-head-ff2e2ac1de631fc99d0f4d8e6c5e2ab05b70f39c681f4ef2a8112b9cd379c543.md","sha256":"ff2e2ac1de631fc99d0f4d8e6c5e2ab05b70f39c681f4ef2a8112b9cd379c543","skills":["trade-session","multi-timeframe-analysis","trade-lifecycle","setup-judgment","trade-plan","autonomous-trading","trader-process","htf-to-ltf","bar-briefing","role-round","day-context","confluence-counting","invalidation","rejection","breakout"],"cycle":"<cycle>"}
+  FTH_HEAD_PROMPT={"harness":"claude","config":"<home>/head-prompt/claude-head-0c41f2987e24b19e176beff2fe1343cf1b3b55f8ffb4dd66615272d5f1f27ca6.md","sha256":"0c41f2987e24b19e176beff2fe1343cf1b3b55f8ffb4dd66615272d5f1f27ca6","skills":["trade-session","multi-timeframe-analysis","trade-lifecycle","setup-judgment","trade-plan","autonomous-trading","trader-process","htf-to-ltf","bar-briefing","role-round","day-context","confluence-counting","invalidation","rejection","breakout"],"cycle":"<cycle>"}
   FTH_HOME=<home>
   FTH_ROLE_SKILLS=full
   FTH_ROOT=<root>
@@ -466,7 +466,7 @@ env:
   FTH_CYCLE_TRANSCRIPT=<home>/logs/cycle-transcript-<pid>-<rand>.jsonl
   FTH_DENIED_ROLES=strategy-researcher
   FTH_EARLY_CLOSE_DATES=2026-11-27,2026-12-24,2027-11-26
-  FTH_HEAD_PROMPT={"config":"<root>/workspace/opencode.json","sha256":"f4c359a7db10afe5a95a5a9682c5546e8816829241a07ec68415c1478fab0ee2","skills":["trade-session","multi-timeframe-analysis","trade-lifecycle","setup-judgment","trade-plan","autonomous-trading","trader-process","htf-to-ltf","bar-briefing","role-round","day-context","confluence-counting","invalidation","rejection","breakout"]}
+  FTH_HEAD_PROMPT={"config":"<root>/workspace/opencode.json","sha256":"f95cba63e3c7233c394b2705cbb0fb248819d702dfdb6961a719b0de63482f2e","skills":["trade-session","multi-timeframe-analysis","trade-lifecycle","setup-judgment","trade-plan","autonomous-trading","trader-process","htf-to-ltf","bar-briefing","role-round","day-context","confluence-counting","invalidation","rejection","breakout"]}
   FTH_HOME=<home>
   FTH_ROLE_SKILLS=index
   FTH_ROOT=<root>
@@ -482,7 +482,7 @@ env:
 the cycle log's argv is the run's: true
 cycle log: promptChars true; context {"action":"trade","symbols":[{"symbol":"MNQ","bar":{"t":"2026-10-07T14:27:00.000Z","contractId":"MNQ","file":"/bars/MNQ-3m.json"}}],"cachedRoles":[]}
 === opencode: managed ===
-prompt (sha256 8c806e583b25d5ee68082e34b5e0c71bfee5990698d28f080fe4f6e802dba58f, 3321 chars, of its neutral text):
+prompt (sha256 b01e4e414e8b415929d361e9c9d34b1c0bd23fb27515e5f374b903b82c06c8f2, 3397 chars, of its neutral text):
   Autonomous cycle.
   Follow the autonomous-trading skill.
   No user is present.
@@ -502,7 +502,7 @@ prompt (sha256 8c806e583b25d5ee68082e34b5e0c71bfee5990698d28f080fe4f6e802dba58f,
   Don't launch the analysts or the risk-manager this cycle, and send no new entry, added size or reversal (the order gate refuses an entry this cycle); a new entry waits for a cycle that starts flat.
   Exits, stop moves, closes and cancels go as always, through the trade-executor as the trade-session skill says.
   The desk ran for this bar: the runner ran market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst, risk-manager (phase 1) this cycle and their reports are below, with any the report cache served.
-  Cached reports, still valid this bar (the runner's report cache: an analyst's report built on the bar briefing parts still current): don't launch market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst, risk-manager (phase 1) this cycle; the order gate counts them as returned.
+  Cached reports, still valid this bar (the runner's report cache: an analyst's report built on the bar briefing parts still current, risk-manager phase 1 while every live account fact it reports is unchanged): don't launch market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst, risk-manager (phase 1) this cycle; the order gate counts them as returned.
   A cached report is that role's report this cycle: never send it back to a role to read, summarize or redo.
 --- market-structure-analyst report (from 10:30 ET) ---
 Data: bar_briefing m3@x
@@ -536,7 +536,7 @@ env:
   FTH_CYCLE_TRANSCRIPT=<home>/logs/cycle-transcript-<pid>-<rand>.jsonl
   FTH_DENIED_ROLES=strategy-researcher,market-structure-analyst,trend-momentum-analyst,volume-liquidity-analyst
   FTH_EARLY_CLOSE_DATES=2026-11-27,2026-12-24,2027-11-26
-  FTH_HEAD_PROMPT={"config":"<root>/workspace/opencode.json","sha256":"f4c359a7db10afe5a95a5a9682c5546e8816829241a07ec68415c1478fab0ee2","skills":["trade-session","multi-timeframe-analysis","trade-lifecycle","setup-judgment","trade-plan","autonomous-trading","trader-process","htf-to-ltf","bar-briefing","role-round","day-context","confluence-counting","invalidation","rejection","breakout"]}
+  FTH_HEAD_PROMPT={"config":"<root>/workspace/opencode.json","sha256":"f95cba63e3c7233c394b2705cbb0fb248819d702dfdb6961a719b0de63482f2e","skills":["trade-session","multi-timeframe-analysis","trade-lifecycle","setup-judgment","trade-plan","autonomous-trading","trader-process","htf-to-ltf","bar-briefing","role-round","day-context","confluence-counting","invalidation","rejection","breakout"]}
   FTH_HOME=<home>
   FTH_ROLE_SKILLS=index
   FTH_ROOT=<root>
@@ -552,7 +552,7 @@ env:
 the cycle log's argv is the run's: true
 cycle log: promptChars true; context {"action":"trade","manage":true,"symbols":[{"symbol":"MNQ","bar":{"t":"2026-10-07T14:27:00.000Z","contractId":"MNQ","file":"/bars/MNQ-3m.json"}}],"cachedRoles":[],"runnerRoles":["market-structure-analyst","trend-momentum-analyst","volume-liquidity-analyst","risk-manager"],"rolesFile":"/roles/r.json"}
 === opencode: entry ===
-prompt (sha256 b02aed61ebcdcd0576ad6f4d084cdd106a0668ba97c3d19485900dbbfe480178, 3364 chars, of its neutral text):
+prompt (sha256 839daf031cf2848b8435c195726df2ae2be211ffc60d3bae99f256fe6ef48d57, 3440 chars, of its neutral text):
   Autonomous cycle.
   Follow the autonomous-trading skill.
   No user is present.
@@ -572,7 +572,7 @@ prompt (sha256 b02aed61ebcdcd0576ad6f4d084cdd106a0668ba97c3d19485900dbbfe480178,
   The runner then runs risk-manager phase 2 on your compose record and, on its APPROVE, the trade-executor with the order built from it, and writes the journal plan: don't launch risk-manager or the trade-executor, and don't write the plan (the harness refuses those launches this cycle).
   To pass: CYCLE RESULT: no-trade - <why>.
   The desk ran for this bar: the runner ran market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst, risk-manager (phase 1) this cycle and their reports are below, with any the report cache served.
-  Cached reports, still valid this bar (the runner's report cache: an analyst's report built on the bar briefing parts still current): don't launch market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst, risk-manager (phase 1) this cycle; the order gate counts them as returned.
+  Cached reports, still valid this bar (the runner's report cache: an analyst's report built on the bar briefing parts still current, risk-manager phase 1 while every live account fact it reports is unchanged): don't launch market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst, risk-manager (phase 1) this cycle; the order gate counts them as returned.
   A cached report is that role's report this cycle: never send it back to a role to read, summarize or redo.
 --- market-structure-analyst report (from 10:30 ET) ---
 Data: bar_briefing m3@x
@@ -606,7 +606,7 @@ env:
   FTH_CYCLE_TRANSCRIPT=<home>/logs/cycle-transcript-<pid>-<rand>.jsonl
   FTH_DENIED_ROLES=strategy-researcher,market-structure-analyst,trend-momentum-analyst,volume-liquidity-analyst
   FTH_EARLY_CLOSE_DATES=2026-11-27,2026-12-24,2027-11-26
-  FTH_HEAD_PROMPT={"config":"<root>/workspace/opencode.json","sha256":"f4c359a7db10afe5a95a5a9682c5546e8816829241a07ec68415c1478fab0ee2","skills":["trade-session","multi-timeframe-analysis","trade-lifecycle","setup-judgment","trade-plan","autonomous-trading","trader-process","htf-to-ltf","bar-briefing","role-round","day-context","confluence-counting","invalidation","rejection","breakout"]}
+  FTH_HEAD_PROMPT={"config":"<root>/workspace/opencode.json","sha256":"f95cba63e3c7233c394b2705cbb0fb248819d702dfdb6961a719b0de63482f2e","skills":["trade-session","multi-timeframe-analysis","trade-lifecycle","setup-judgment","trade-plan","autonomous-trading","trader-process","htf-to-ltf","bar-briefing","role-round","day-context","confluence-counting","invalidation","rejection","breakout"]}
   FTH_HOME=<home>
   FTH_ROLE_SKILLS=index
   FTH_ROOT=<root>
@@ -660,7 +660,7 @@ env:
   FTH_CYCLE_TRANSCRIPT=<home>/logs/cycle-transcript-<pid>-<rand>.jsonl
   FTH_DENIED_ROLES=strategy-researcher
   FTH_EARLY_CLOSE_DATES=2026-11-27,2026-12-24,2027-11-26
-  FTH_HEAD_PROMPT={"config":"<root>/workspace/opencode.json","sha256":"f4c359a7db10afe5a95a5a9682c5546e8816829241a07ec68415c1478fab0ee2","skills":["trade-session","multi-timeframe-analysis","trade-lifecycle","setup-judgment","trade-plan","autonomous-trading","trader-process","htf-to-ltf","bar-briefing","role-round","day-context","confluence-counting","invalidation","rejection","breakout"]}
+  FTH_HEAD_PROMPT={"config":"<root>/workspace/opencode.json","sha256":"f95cba63e3c7233c394b2705cbb0fb248819d702dfdb6961a719b0de63482f2e","skills":["trade-session","multi-timeframe-analysis","trade-lifecycle","setup-judgment","trade-plan","autonomous-trading","trader-process","htf-to-ltf","bar-briefing","role-round","day-context","confluence-counting","invalidation","rejection","breakout"]}
   FTH_HOME=<home>
   FTH_ROLE_SKILLS=index
   FTH_ROOT=<root>
@@ -715,7 +715,7 @@ env:
 the cycle log's argv is the run's: true
 cycle log: promptChars true; context {"action":"trade","symbols":[{"symbol":"MNQ","bar":{"t":"2026-10-07T14:27:00.000Z","contractId":"MNQ","file":"/bars/MNQ-3m.json"}}],"cachedRoles":[]}
 === codex: managed ===
-prompt (sha256 a1c0e394ca2ed1f2abd2d8d7c46cfcb38e1a5cf44f615ed52dbb53aaeebba1ec, 3280 chars, of its neutral text):
+prompt (sha256 54c095e9c46f106fe077889dc8bc94d85980500878cd7ef48c937ad3b4d31551, 3356 chars, of its neutral text):
   Autonomous cycle.
   Follow the autonomous-trading skill.
   No user is present.
@@ -735,7 +735,7 @@ prompt (sha256 a1c0e394ca2ed1f2abd2d8d7c46cfcb38e1a5cf44f615ed52dbb53aaeebba1ec,
   Don't launch the analysts or the risk-manager this cycle, and send no new entry, added size or reversal (the order gate refuses an entry this cycle); a new entry waits for a cycle that starts flat.
   Exits, stop moves, closes and cancels go as always, through the trade-executor as the trade-session skill says.
   The desk ran for this bar: the runner ran market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst, risk-manager (phase 1) this cycle and their reports are below, with any the report cache served.
-  Cached reports, still valid this bar (the runner's report cache: an analyst's report built on the bar briefing parts still current): don't launch market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst, risk-manager (phase 1) this cycle; the order gate counts them as returned.
+  Cached reports, still valid this bar (the runner's report cache: an analyst's report built on the bar briefing parts still current, risk-manager phase 1 while every live account fact it reports is unchanged): don't launch market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst, risk-manager (phase 1) this cycle; the order gate counts them as returned.
   A cached report is that role's report this cycle: never send it back to a role to read, summarize or redo.
 --- market-structure-analyst report (from 10:30 ET) ---
 Data: bar_briefing m3@x
@@ -775,7 +775,7 @@ env:
 the cycle log's argv is the run's: true
 cycle log: promptChars true; context {"action":"trade","manage":true,"symbols":[{"symbol":"MNQ","bar":{"t":"2026-10-07T14:27:00.000Z","contractId":"MNQ","file":"/bars/MNQ-3m.json"}}],"cachedRoles":[],"runnerRoles":["market-structure-analyst","trend-momentum-analyst","volume-liquidity-analyst","risk-manager"],"rolesFile":"/roles/r.json"}
 === codex: entry ===
-prompt (sha256 b9de0e04823c31e11e1b381079acd9b7b02632f9b5669258fbc7db8fcd6a71eb, 3323 chars, of its neutral text):
+prompt (sha256 4cffe4b0b683432eca702abfd0394cf71169a4f664f47b9c85281c5ef00195a4, 3399 chars, of its neutral text):
   Autonomous cycle.
   Follow the autonomous-trading skill.
   No user is present.
@@ -795,7 +795,7 @@ prompt (sha256 b9de0e04823c31e11e1b381079acd9b7b02632f9b5669258fbc7db8fcd6a71eb,
   The runner then runs risk-manager phase 2 on your compose record and, on its APPROVE, the trade-executor with the order built from it, and writes the journal plan: don't launch risk-manager or the trade-executor, and don't write the plan (the harness refuses those launches this cycle).
   To pass: CYCLE RESULT: no-trade - <why>.
   The desk ran for this bar: the runner ran market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst, risk-manager (phase 1) this cycle and their reports are below, with any the report cache served.
-  Cached reports, still valid this bar (the runner's report cache: an analyst's report built on the bar briefing parts still current): don't launch market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst, risk-manager (phase 1) this cycle; the order gate counts them as returned.
+  Cached reports, still valid this bar (the runner's report cache: an analyst's report built on the bar briefing parts still current, risk-manager phase 1 while every live account fact it reports is unchanged): don't launch market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst, risk-manager (phase 1) this cycle; the order gate counts them as returned.
   A cached report is that role's report this cycle: never send it back to a role to read, summarize or redo.
 --- market-structure-analyst report (from 10:30 ET) ---
 Data: bar_briefing m3@x
@@ -918,7 +918,7 @@ env:
 the cycle log's argv is the run's: true
 cycle log: promptChars true; context {"action":"trade","symbols":[{"symbol":"MNQ","bar":{"t":"2026-10-07T14:27:00.000Z","contractId":"MNQ","file":"/bars/MNQ-3m.json"}}],"cachedRoles":[]}
 === qwen: managed ===
-prompt (sha256 350838a87e19da6fb67ddee4c1cbf7ac8915d041bb3b3002d506649c6ff54281, 3338 chars, of its neutral text):
+prompt (sha256 896789d9d0a90e2d2f1aa90fd76d24c04848afe30806fd97caacfaa0a6938f09, 3414 chars, of its neutral text):
   Autonomous cycle.
   Follow the autonomous-trading skill.
   No user is present.
@@ -938,7 +938,7 @@ prompt (sha256 350838a87e19da6fb67ddee4c1cbf7ac8915d041bb3b3002d506649c6ff54281,
   Don't launch the analysts or the risk-manager this cycle, and send no new entry, added size or reversal (the order gate refuses an entry this cycle); a new entry waits for a cycle that starts flat.
   Exits, stop moves, closes and cancels go as always, through the trade-executor as the trade-session skill says.
   The desk ran for this bar: the runner ran market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst, risk-manager (phase 1) this cycle and their reports are below, with any the report cache served.
-  Cached reports, still valid this bar (the runner's report cache: an analyst's report built on the bar briefing parts still current): don't launch market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst, risk-manager (phase 1) this cycle; the order gate counts them as returned.
+  Cached reports, still valid this bar (the runner's report cache: an analyst's report built on the bar briefing parts still current, risk-manager phase 1 while every live account fact it reports is unchanged): don't launch market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst, risk-manager (phase 1) this cycle; the order gate counts them as returned.
   A cached report is that role's report this cycle: never send it back to a role to read, summarize or redo.
 --- market-structure-analyst report (from 10:30 ET) ---
 Data: bar_briefing m3@x
@@ -978,7 +978,7 @@ env:
 the cycle log's argv is the run's: true
 cycle log: promptChars true; context {"action":"trade","manage":true,"symbols":[{"symbol":"MNQ","bar":{"t":"2026-10-07T14:27:00.000Z","contractId":"MNQ","file":"/bars/MNQ-3m.json"}}],"cachedRoles":[],"runnerRoles":["market-structure-analyst","trend-momentum-analyst","volume-liquidity-analyst","risk-manager"],"rolesFile":"/roles/r.json"}
 === qwen: entry ===
-prompt (sha256 40720876a521e90f7c6f26ee8cc017c396fca9544a973045120273f6a482644e, 3381 chars, of its neutral text):
+prompt (sha256 130a1dd1f4f333d6c6498f6defab0f7971dd34f4000583865fc9f27598640b55, 3457 chars, of its neutral text):
   Autonomous cycle.
   Follow the autonomous-trading skill.
   No user is present.
@@ -998,7 +998,7 @@ prompt (sha256 40720876a521e90f7c6f26ee8cc017c396fca9544a973045120273f6a482644e,
   The runner then runs risk-manager phase 2 on your compose record and, on its APPROVE, the trade-executor with the order built from it, and writes the journal plan: don't launch risk-manager or the trade-executor, and don't write the plan (the harness refuses those launches this cycle).
   To pass: CYCLE RESULT: no-trade - <why>.
   The desk ran for this bar: the runner ran market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst, risk-manager (phase 1) this cycle and their reports are below, with any the report cache served.
-  Cached reports, still valid this bar (the runner's report cache: an analyst's report built on the bar briefing parts still current): don't launch market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst, risk-manager (phase 1) this cycle; the order gate counts them as returned.
+  Cached reports, still valid this bar (the runner's report cache: an analyst's report built on the bar briefing parts still current, risk-manager phase 1 while every live account fact it reports is unchanged): don't launch market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst, risk-manager (phase 1) this cycle; the order gate counts them as returned.
   A cached report is that role's report this cycle: never send it back to a role to read, summarize or redo.
 --- market-structure-analyst report (from 10:30 ET) ---
 Data: bar_briefing m3@x

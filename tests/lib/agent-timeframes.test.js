@@ -650,3 +650,25 @@ test('the runner\'s recorder builds 5m candles from a 1m lane\'s noted bars (sam
     fs.rmSync(home, { recursive: true, force: true });
   }
 });
+
+test('frameVersions\' lane path (F3): a lane bar that closed this cycle at or after the frame bar\'s end (closeAt) misses, though the runner\'s bar closed before it; through the runner\'s wiring too (laneBars)', () => {
+  // A 15m frame whose bar holds past the runner's 3m bar's close.
+  const f = first(1300);
+  const fr = frame(f, 15);
+  const until = Date.parse(fr.sections.bar.validUntil);
+  assert.ok(Date.parse(f.closedAt) < until, 'the runner\'s bar closed inside the frame bar');
+  assert.ok(RC.frameVersions(f, fr, 15), 'no lane bar: served');
+  assert.ok(RC.frameVersions(f, fr, 15, { closeAt: new Date(until - 1).toISOString() }), 'a lane bar closing just before its end: served');
+  for (const at of [until, until + 60000]) assert.strictEqual(RC.frameVersions(f, fr, 15, { closeAt: new Date(at).toISOString() }), null, new Date(at).toISOString());
+  // The runner's wiring: the lane bar that closed this cycle (laneBars) is the bar time it is judged at.
+  const { reportCacheFor } = require('../../scripts/lib/runner-wiring');
+  const home = tmpDir();
+  B.writeBriefing(home, f);
+  B.writeFrameBriefing(home, fr);
+  const rc = reportCacheFor(home, { harness: 'claude', cycle: 'full', timeframe: 3 }, [{ role: ANALYSTS[1], minutes: 15, lane: -1 }]);
+  const symbols = [{ symbol: 'MNQ', bar: f.asOf, contractId: C }];
+  rc.record({ symbols, account: ACCT, now: new Date(f.closedAt), output: task(ANALYSTS[1], dataOf(f, fr), [1, 2]), served: [] });
+  const laneAt = ms => ({ MNQ: { 1: new Date(ms - 60000).toISOString() } });
+  assert.ok(rc.serve({ symbols, account: ACCT, now: new Date(f.closedAt), laneBars: laneAt(until - 60000) }).roles.includes(ANALYSTS[1]), 'a 1m lane bar inside the frame bar');
+  assert.ok(!rc.serve({ symbols, account: ACCT, now: new Date(f.closedAt), laneBars: laneAt(until) }).roles.includes(ANALYSTS[1]), 'a 1m lane bar closing at its end');
+});

@@ -44,8 +44,8 @@ setup that fired this cycle with its trend rule (the `runner-lanes` skill).
 gives it again under "Cached reports" in the prompt while what it rests on
 holds: in a one-symbol cycle, an analyst's report while the bar briefing
 parts it was built on are current (until the next 15m close); `risk-manager`
-phase 1 while the account is unchanged (no fill, order, balance or attempt
-change, same day, and no `trade-executor` call in the cycle that wrote it).
+phase 1 while each live fact in it is unchanged (account, orders, losses,
+cooldown, attempt, window, lessons; no `trade-executor` in its cycle).
 Don't launch a role whose report the prompt gives (where the harness can, it
 refuses the launch; in a trade cycle it also refuses roles outside the desk,
 such as `strategy-researcher`): use that report for its

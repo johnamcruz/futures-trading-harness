@@ -604,7 +604,7 @@ function cachedText(cached) {
   // The desk's reports (the runner ran those roles this cycle: runner-wiring.js deskFor) apart from the cache's.
   const desk = cached.reports.filter(r => r.source === 'desk').map(r => (r.role === 'risk-manager' ? 'risk-manager (phase 1)' : r.role));
   const deskText = desk.length ? ` The desk ran for this bar: the runner ran ${desk.join(', ')} this cycle and their reports are below, with any the report cache served.` : '';
-  return `${deskText} Cached reports, still valid this bar (the runner's report cache: an analyst's report built on the bar briefing parts still current): don't launch ${roles.join(', ')} this cycle; the order gate counts them as returned.${until ? ` An analyst's 15m-and-up view holds until ${etTime(until)}; take this bar's 3m facts (the trigger, the VWAP side, the candidates) from the bar briefing.` : ''}${ownText} A cached report is that role's report this cycle: never send it back to a role to read, summarize or redo.`
+  return `${deskText} Cached reports, still valid this bar (the runner's report cache: an analyst's report built on the bar briefing parts still current, risk-manager phase 1 while every live account fact it reports is unchanged): don't launch ${roles.join(', ')} this cycle; the order gate counts them as returned.${until ? ` An analyst's 15m-and-up view holds until ${etTime(until)}; take this bar's 3m facts (the trigger, the VWAP side, the candidates) from the bar briefing.` : ''}${ownText} A cached report is that role's report this cycle: never send it back to a role to read, summarize or redo.`
     + cached.reports.map(r => `\n--- ${r.role === 'risk-manager' ? 'risk-manager phase 1' : r.role} report (${from(r)}) ---\n${String(r.text).trim()}\n--- end of ${r.role} report ---`).join('') + '\n';
 }
 
@@ -917,6 +917,11 @@ function childEnv(cfg, root, base = process.env, context = null) {
   const cachedRoles = ((context && context.cachedRoles) || []).filter(r => typeof r === 'string');
   if (cachedRoles.length) env.FTH_CYCLE_CACHED = cachedRoles.join(',');
   else delete env.FTH_CYCLE_CACHED;
+  // A phase 1 served from the cache: the runner's record of the facts it was served under (trading/phase1-facts.js), which
+  // the gate checks against its own reads before it counts phase 1 as returned. Never inherited.
+  const p1 = require('./trading/phase1-facts');
+  if (cachedRoles.includes('risk-manager') && context && context.phase1Cache && typeof context.phase1Cache === 'object') env[p1.ENV] = JSON.stringify(context.phase1Cache);
+  else delete env[p1.ENV];
   // The roles this cycle must launch before the head trader composes a trade (trading/desk-check.js, the prompt's
   // roster): the opencode plugin refuses compose_check until they reported (opencode.js deskGate).
   // The roles the runner ran itself this cycle and the record the gate credits them from (runner-roles.js): the head

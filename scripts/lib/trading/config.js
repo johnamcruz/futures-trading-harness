@@ -15,8 +15,24 @@ const { exchangeCalendar, calendarEnd } = require('./exchange-calendar');
 const { selectionOf, familyRoot } = require('./contracts');
 const { loadRoundSteps } = require('./round-numbers');
 
-// The roles whose report the runner may serve from its cache (report-cache.js): the analysts and risk-manager phase 1.
+// The roles whose report the runner may serve from its cache (report-cache.js): the analysts and risk-manager phase 1,
+// phase 1 only with the runner's record of its facts for this cycle's bar (cachedRoles below).
 const CACHEABLE = ['market-structure-analyst', 'trend-momentum-analyst', 'volume-liquidity-analyst', 'risk-manager'];
+const P1 = require('./phase1-facts');
+
+/**
+ * The roles FTH_CYCLE_CACHED names that the gate counts as served from the cache: the analysts as named; risk-manager
+ * phase 1 only when the runner's record of the facts it was served under (FTH_CYCLE_PHASE1, phase1-facts.js) is whole and
+ * for the one bar this cycle decides. The gateway then checks those facts against its own reads (mcp-gateway.js). No
+ * record, an edited one, another bar's, several symbols: phase 1 isn't counted as cached (it must run).
+ */
+function cachedRoles(env, bars) {
+  const named = String(env.FTH_CYCLE_CACHED || '').split(',').map(x => x.trim()).filter(x => CACHEABLE.includes(x));
+  const rec = P1.parseRecord(env[P1.ENV]);
+  const values = Object.values(bars);
+  const ok = Boolean(rec) && values.length === 1 && P1.recordHolds(rec, { bar: values[0] });
+  return { roles: named.filter(r => r !== 'risk-manager' || ok), phase1: ok ? rec : null };
+}
 
 // Empty: the whole market session (18:00-16:00 ET, a hard limit in the gate).
 // Strategies narrow their own hours with `sessions` (e.g. [ny]).
@@ -44,6 +60,9 @@ const GATE_CHECKS = [
   'replay-clock', // hard: listed for completeness, never skippable
   'account-lock', // hard: listed for completeness, never skippable
 ];
+
+/** The bar each symbol's briefing is on this cycle: FTH_CYCLE_BRIEFING_BARS (several lanes), else FTH_CYCLE_BARS. */
+const briefingBars = env => { const b = cycleBarsOf(env.FTH_CYCLE_BRIEFING_BARS); return Object.keys(b).length ? b : cycleBarsOf(env.FTH_CYCLE_BARS); };
 
 /** FTH_CYCLE_BARS as { <family root>: <bar open time> } ({} when unset or unreadable). */
 function cycleBarsOf(raw) {
@@ -198,7 +217,10 @@ function loadConfig(env = process.env) {
     roleSkills: String(env.FTH_ROLE_SKILLS || '').trim() === 'full' ? 'full' : 'index',
     // The roles the runner served from its report cache this cycle (FTH_CYCLE_CACHED, report-cache.js): roles-ran
     // counts them as returned. Only role names the cache can hold; anything else is ignored.
-    cycleCached: String(env.FTH_CYCLE_CACHED || '').split(',').map(x => x.trim()).filter(x => CACHEABLE.includes(x)),
+    cycleCached: cachedRoles(env, briefingBars(env)).roles,
+    // The runner's record of the facts a cached phase 1 was served under (phase1-facts.js), when it holds (above), for the
+    // gateway's check against its own reads; else null.
+    cyclePhase1: cachedRoles(env, briefingBars(env)).phase1,
     // Index mode: the skills each cached role's report looked up in the call that produced it (FTH_CYCLE_CACHED_LOOKUPS,
     // set by the runner from the cache): they count as this cycle's lookups for that role (skill-lookups.js lookupRule).
     cycleCachedLookups: cycleCachedLookupsOf(env.FTH_CYCLE_CACHED_LOOKUPS, String(env.FTH_CYCLE_CACHED || '').split(',').map(x => x.trim()).filter(x => CACHEABLE.includes(x))),

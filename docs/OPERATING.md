@@ -605,9 +605,23 @@ timeframe, while its frame bar is the one holding at the cycle's latest bar
 close (bar times only, never the clock). Each entry is keyed by its role's
 instructions (a hash of its agent file and its skills' files) and the cache by
 the harness root it was written under, so an edited agent or skill, or a home
-another root or checkout wrote, serves nothing. Risk-manager phase 1 (the
-account, its limits, streak and cooldown) is live data and is never cached: it
-runs every cycle it is needed.
+another root or checkout wrote, serves nothing; a key that can't be read (an
+agent or skill file missing, no root) serves and records nothing for it.
+Risk-manager phase 1 states live facts, so it is reused only while every one
+of them is unchanged (`scripts/lib/trading/phase1-facts.js`): each cycle the
+runner reads them fresh (the account's balance, positions and working orders,
+each running attempt, the day's fills for the losses and the loss cooldown's
+remaining whole bars from the bar close, the bar briefing's window state, the
+journal's lessons and reviewed trades, the trading day) and hashes them
+canonically; a cached phase 1 is served only under the same key, the same role
+body and root, in a one-symbol cycle, and never from a cycle that launched a
+trade-executor. Any read that fails gives no key: phase 1 runs. When it is
+served, the run's environment carries the runner's record of those facts
+(`FTH_CYCLE_PHASE1`): the order gate counts phase 1 as returned only when the
+record is whole and for the cycle's bar (a bare `FTH_CYCLE_CACHED` naming
+`risk-manager` counts for nothing), and the gateway refuses an entry
+(`[phase1-cache]`) when its own reads (positions, working orders, the running
+attempts, the trading day) differ from the record's facts.
 
 The runner runs roles on its own only in a full trade cycle on one symbol,
 outside paper mode and cycles that only manage (on Claude Code, only in a cycle

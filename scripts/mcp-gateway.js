@@ -56,6 +56,7 @@ async function accountViolations(args, caller, now, ledger, extraOrders = []) {
   const config = loadConfig(process.env);
   const running = entry ? runningAttempts(config.home) : [];
   const violations = evaluateAccount({ input: args, positions, orders, trades, now, config, ledger, propAttempt: running.length ? running.join(', ') : null, carried: entry ? carriedLossState(config.home, now) : null, snapshotAt: running.length ? oldestSnapshotMs(config.home, running) : undefined });
+  if (entry) violations.push(...require('./lib/trading/phase1-facts').gateViolations(config, { positions, orders: facts.orders, running, now })); // a cached phase 1 vs these reads
   const gated = entry ? regimeGatedStrategy(args, loadStrategies(ROOT, process.env).strategies) : null;
   if (gated) {
     const req = barsRequest(args.contractId, gated.timeframe);

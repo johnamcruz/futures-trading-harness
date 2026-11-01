@@ -188,8 +188,8 @@ test('decision path, the runner runs the desk: a report the record couldn\'t hol
     }
   };
   const control = await pass(null);
-  // Phase 1 is live data: given when recorded, never cached either way.
-  assert.ok(control.given.includes('risk-manager') && !control.cache.phase1, 'recorded: given, never cached');
+  // Phase 1 given and cached under its live facts' key (the account unchanged; trading/phase1-facts.js).
+  assert.ok(control.given.includes('risk-manager') && control.cache.phase1 && /^[0-9a-f]{64}$/.test(control.cache.phase1.factsKey), 'recorded: given and cached');
   const failed = await pass('risk-manager');
   assert.ok(!failed.given.includes('risk-manager'), 'not given');
   assert.ok(!failed.cache || !failed.cache.phase1, 'not cached');

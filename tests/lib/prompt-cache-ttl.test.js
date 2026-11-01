@@ -39,13 +39,17 @@ test('each run\'s interval: an analyst on its own timeframe (its agent file or t
 
 test('Claude Code\'s run environment carries its lifetime: the head trader and a 3m role 5 minutes, a 15m analyst an hour; another harness none', () => {
   const home = tmpDir();
-  const base = { FTH_HOME: home, HOME: home, [CLAUDE_CACHE_TTL_ENV]: '5m' };
-  const cfg = validateConfig({ harness: 'claude', timeframe: 3, dataDir: path.join(home, 'bars'), agents: { 'trend-momentum-analyst': { timeframe: '15m' } } });
-  const env = role => childEnv(cfg, ROOT, base, { action: 'trade', symbols: [], ...(role ? { roleRun: role } : {}) });
-  assert.strictEqual(env(null)[CLAUDE_CACHE_TTL_ENV], '5m');
-  assert.strictEqual(env('market-structure-analyst')[CLAUDE_CACHE_TTL_ENV], '5m');
-  assert.strictEqual(env('trend-momentum-analyst')[CLAUDE_CACHE_TTL_ENV], '1h');
-  assert.strictEqual(env('trade-executor')[CLAUDE_CACHE_TTL_ENV], '5m');
+  // Seeded with a value the runner never sets, so each lifetime below is childEnv's own, never the inherited one; and with
+  // each of the two, so neither is merely passed through.
+  for (const seed of ['inherited', '1h', '5m']) {
+    const base = { FTH_HOME: home, HOME: home, [CLAUDE_CACHE_TTL_ENV]: seed };
+    const cfg = validateConfig({ harness: 'claude', timeframe: 3, dataDir: path.join(home, 'bars'), agents: { 'trend-momentum-analyst': { timeframe: '15m' } } });
+    const env = role => childEnv(cfg, ROOT, base, { action: 'trade', symbols: [], ...(role ? { roleRun: role } : {}) });
+    assert.strictEqual(env(null)[CLAUDE_CACHE_TTL_ENV], '5m', seed);
+    assert.strictEqual(env('market-structure-analyst')[CLAUDE_CACHE_TTL_ENV], '5m', seed);
+    assert.strictEqual(env('trend-momentum-analyst')[CLAUDE_CACHE_TTL_ENV], '1h', seed);
+    assert.strictEqual(env('trade-executor')[CLAUDE_CACHE_TTL_ENV], '5m', seed);
+  }
   const q = childEnv(validateConfig({ harness: 'qwen', dataDir: path.join(home, 'bars') }), ROOT, { FTH_HOME: home, HOME: home }, { action: 'trade', symbols: [] });
   assert.strictEqual(q[CLAUDE_CACHE_TTL_ENV], undefined);
 });

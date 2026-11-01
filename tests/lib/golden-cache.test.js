@@ -34,9 +34,18 @@ const ACCT = { id: 7, balance: 50000, positions: [], orders: [], workingOrders: 
 const DAY = '2026-04-27';
 const sym = (b, extra = {}) => [{ symbol: 'MNQ', bar: b.asOf, contractId: 'MNQ', ...extra }];
 
-/** The cache after one cycle at bar N-1 (every analyst built on the briefing; phase 1 ran, never cached), under each role's instructions and a root, and the next bar's briefing. */
-const BODY = Object.fromEntries(ANALYSTS.map(r => [r, `body-${r}`]));
+/**
+ * The cache after one cycle at bar N-1 (every analyst built on the briefing, phase 1 under its live facts' key: confirming
+ * the attempt), under each role's instructions and a root, and the next bar's briefing.
+ */
+const BODY = Object.fromEntries([...ANALYSTS, 'risk-manager'].map(r => [r, `body-${r}`]));
 const SCOPE = 'root-1';
+const P1F = require('../../scripts/lib/trading/phase1-facts');
+// Phase 1's live facts of a cycle on bar `b` (trading/phase1-facts.js), the account and the rest given.
+const phase1 = (b, over = {}) => {
+  const facts = P1F.phase1Facts({ account: ACCT, day: DAY, trades: [], barClose: Date.parse(b.asOf) + 180000, barMinutes: 3, cooldown: { maxConsecutiveLosses: 2, lossCooldownMin: 30 }, windowEntries: 'allowed', lessons: [], reviewed: [], ...over });
+  return facts ? { facts, key: P1F.factsKey(facts) } : null;
+};
 function recorded(bars) {
   const a = briefAt(bars, N);
   const b = briefAt(bars, N + 1, a);
@@ -44,7 +53,7 @@ function recorded(bars) {
     ...ANALYSTS.map((r, k) => task(r, `${dataLine(a)}\nBias: long`, [10, 20 + k])),
     task('risk-manager', 'Phase 1\nAttempt: mini active, cushion $2,000; budget $400', [10, 15]),
   ].join('\n');
-  const cache = RC.recordReports({ output, briefings: { MNQ: a }, symbols: sym(a), account: ACCT, day: DAY, now: new Date(a.closedAt), bodyKeys: BODY, scope: SCOPE });
+  const cache = RC.recordReports({ output, briefings: { MNQ: a }, symbols: sym(a), account: ACCT, day: DAY, now: new Date(a.closedAt), bodyKeys: BODY, scope: SCOPE, phase1: phase1(a) });
   return { a, b, cache };
 }
 
@@ -53,15 +62,16 @@ const roles = s => (s.roles.length ? s.roles.map(r => (r === 'risk-manager' ? 'p
 
 /** Each input the keys are built from, changed alone: what is served then. */
 function components({ a, b, cache }) {
-  // The account (live data) keys nothing: phase 1 is never cached and no analyst rests on it, so each of its fields
-  // changed alone serves the same analysts ("all hit"), as the clock does (the first lane's analysts rest on bar versions).
+  // Phase 1 rests on its live facts (their key, read again each cycle: `facts` changes one of them); no analyst rests on
+  // any of them. The clock keys nothing (the first lane's analysts rest on bar versions).
   const POS = { contractId: 'MNQ', type: 1, size: 2, averagePrice: 27400 };
   const STOP = { id: 9, contractId: 'MNQ', type: 4, side: 1, size: 2, stopPrice: 27390 };
   const LIMIT = { id: 10, contractId: 'MNQ', type: 1, side: 1, size: 2, limitPrice: 27420 };
   const OPEN = { ...ACCT, positions: [POS], orders: [STOP, LIMIT], workingOrders: 2 };
-  const open = over => serve({ account: { ...OPEN, ...over } });
+  const recordedOpen = { ...cache, phase1: { ...cache.phase1, factsKey: phase1(a, { account: OPEN }).key } };
+  const open = over => serve({ cache: recordedOpen, facts: { account: { ...OPEN, ...over } } });
   const soon = new Date(Date.parse(cache.at) + 3 * 60000);
-  const serve = (over = {}) => RC.serveReports({ cache, briefings: { MNQ: b }, symbols: sym(b), account: ACCT, day: DAY, now: soon, bodyKeys: BODY, scope: SCOPE, ...over });
+  const serve = ({ facts = {}, ...over } = {}) => RC.serveReports({ cache, briefings: { MNQ: b }, symbols: sym(b), account: facts.account || ACCT, day: DAY, now: soon, bodyKeys: BODY, scope: SCOPE, phase1: phase1(b, facts), ...over });
   const other = briefAt(MNQ, N + 4, b); // two bars into the next 15m candle
   return [
     ['the next bar, nothing changed (all hit)', serve()],
@@ -73,15 +83,28 @@ function components({ a, b, cache }) {
     ['no briefing', serve({ briefings: {} })],
     ['another contract (a roll)', serve({ symbols: sym(b, { contractId: 'MNQ:2026-09' }) })],
     ['another symbol set (two symbols)', serve({ symbols: [...sym(b), { symbol: 'MES', bar: b.asOf, contractId: 'MES' }] })],
-    ['one role\'s instructions (its agent file or a skill edited)', serve({ bodyKeys: { ...BODY, [ANALYSTS[0]]: 'body-edited' } })],
+    ['one analyst\'s instructions (its agent file or a skill edited)', serve({ bodyKeys: { ...BODY, [ANALYSTS[0]]: 'body-edited' } })],
+    ['phase 1\'s instructions', serve({ bodyKeys: { ...BODY, 'risk-manager': 'body-edited' } })],
     ['another root or checkout (its home reused)', serve({ scope: 'root-2' })],
-    ['the balance (all hit)', serve({ account: { ...ACCT, balance: 49950 } })],
-    ['a position (all hit)', serve({ account: { ...ACCT, positions: [{ contractId: 'MNQ', type: 1, size: 1, averagePrice: 27400 }] } })],
-    ['a position and its stop and target (all hit)', open({})],
-    ['only the stop order\'s stop price (all hit)', open({ orders: [{ ...STOP, stopPrice: 27390.25 }, LIMIT] })],
-    ['the attempt\'s day P&L (all hit)', serve({ account: { ...ACCT, attempts: [{ ...ACCT.attempts[0], dayPnl: -50 }] } })],
-    ['an account not read (all hit)', serve({ account: { id: 7, error: 'HTTP 502' } })],
-    ['the trading day (all hit)', serve({ day: '2026-04-28' })],
+    ['the balance', serve({ facts: { account: { ...ACCT, balance: 49950 } } })],
+    ['a position', serve({ facts: { account: { ...ACCT, positions: [{ contractId: 'MNQ', type: 1, size: 1, averagePrice: 27400 }] } } })],
+    ['the position and orders the cache was recorded with (all hit)', open({})],
+    ['only the position\'s average price', open({ positions: [{ ...POS, averagePrice: 27400.25 }] })],
+    ['only the position\'s size', open({ positions: [{ ...POS, size: 1 }] })],
+    ['only the stop order\'s stop price', open({ orders: [{ ...STOP, stopPrice: 27390.25 }, LIMIT] })],
+    ['only the target order\'s limit price', open({ orders: [STOP, { ...LIMIT, limitPrice: 27420.25 }] })],
+    ['only an order\'s size', open({ orders: [STOP, { ...LIMIT, size: 1 }] })],
+    ['a working order', serve({ facts: { account: { ...ACCT, orders: [{ id: 9, contractId: 'MNQ', type: 4, side: 1, size: 1, stopPrice: 27390 }] } } })],
+    ['the working-order count', serve({ facts: { account: { ...ACCT, workingOrders: 1 } } })],
+    ['the account id', serve({ facts: { account: { ...ACCT, id: 8 } } })],
+    ['the attempt\'s day P&L', serve({ facts: { account: { ...ACCT, attempts: [{ ...ACCT.attempts[0], dayPnl: -50 }] } } })],
+    ['the attempt\'s entry block', serve({ facts: { account: { ...ACCT, attempts: [{ ...ACCT.attempts[0], entryBlock: 'soft daily limit' }] } } })],
+    ['an account not read (no key)', serve({ facts: { account: { id: 7, error: 'HTTP 502' } } })],
+    ['the trading day', serve({ facts: { day: '2026-04-28' } })],
+    ['a losing close', serve({ facts: { trades: [{ profitAndLoss: -50, creationTimestamp: new Date(Date.parse(cache.at) - 60000).toISOString() }] } })],
+    ['the fills not read (no key)', serve({ facts: { trades: null } })],
+    ['the window refusing entries', serve({ facts: { windowEntries: 'refused: the opening print' } })],
+    ['a lesson', serve({ facts: { lessons: ['skip chop'] } })],
     ['the clock 29 minutes on (all hit)', serve({ now: new Date(Date.parse(cache.at) + 29 * 60000) })],
     ['the clock a day behind (all hit)', serve({ now: new Date(Date.parse(cache.at) - 86400000) })],
     ['no clock (all hit)', serve({ now: null })],
@@ -93,14 +116,14 @@ const keysText = cache => JSON.stringify({
   analysts: Object.fromEntries(Object.entries(cache.analysts).map(([r, x]) => [r, x.versions])),
   bodies: Object.fromEntries(Object.entries(cache.analysts).map(([r, x]) => [r, x.body || null])),
   scope: cache.scope || null,
-  phase1: cache.phase1 || null,
+  phase1: cache.phase1 && { factsKey: cache.phase1.factsKey, body: cache.phase1.body || null },
 }, null, 2);
 
 test('report cache: each key component changed alone misses (only what rests on it); unchanged inputs hit; the keys are pinned', () => {
   const r = recorded(MNQ);
   const rows = components(r);
   const all = rows[0][1].roles;
-  assert.deepStrictEqual(all, [...ANALYSTS], 'nothing changed: every cached role is served (phase 1 never)');
+  assert.deepStrictEqual(all, [...ANALYSTS, 'risk-manager'], 'nothing changed: every cached role is served');
   for (const [label, s] of rows.slice(1)) {
     if (/\(all hit\)$/.test(label)) assert.deepStrictEqual(s.roles, all, label);
     else assert.ok(s.roles.length < all.length, `${label}: misses`);

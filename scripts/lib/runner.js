@@ -2036,7 +2036,10 @@ function createRunner(deps) {
             return current ? f.clock.lastBarT : x.bar.t;
           };
           const cacheSymbols = ordered.filter((x, i) => !items[i].repeat).map(x => ({ symbol: x.symbol, bar: briefingBar(x), contractId: x.bar.contractId || null }));
-          const fromCache = reportCache && !manageOnly && !cfg.paper ? attempt('the report cache: every role runs this cycle', () => reportCache.serve({ symbols: cacheSymbols, account: acct, now: cycleNow, laneBars: multi ? laneBarsOf(run) : {} }), null) : null;
+          // Phase 1's live inputs read fresh (the day's fills; the journal's lessons and reviewed trades: none when it wasn't
+          // read), for the smart phase-1 cache (runner-wiring.js reportCacheFor, trading/phase1-facts.js).
+          const p1Fills = reportCache && !manageOnly && !cfg.paper ? await historyFills(tradingDayStart(cycleNow).getTime(), null) : null;
+          const fromCache = reportCache && !manageOnly && !cfg.paper ? attempt('the report cache: every role runs this cycle', () => reportCache.serve({ symbols: cacheSymbols, account: acct, now: cycleNow, laneBars: multi ? laneBarsOf(run) : {}, fills: p1Fills, lessons: entries ? lessonLines : null, reviewed: entries ? tradeLines : null }), null) : null;
           // Several lanes: an analyst's report is served only until its parts' time (`until`, the next 15m close): a
           // first lane slower than that, or a bar of it that didn't arrive, never hands a report past it.
           const live = r => !r.until || Date.parse(r.until) > cycleNow.getTime();
@@ -2190,6 +2193,9 @@ function createRunner(deps) {
             // The roles served from the report cache (FTH_CYCLE_CACHED), and those the runner ran itself this cycle, with its
             // record of them (FTH_CYCLE_ROLES): the gate credits each from its own source.
             action: again.action, cachedRoles: cached ? cached.roles : [],
+            // Phase 1 served from the cache: the runner's record of the facts it was served under (FTH_CYCLE_PHASE1), which the
+            // gate checks against its own reads.
+            ...(cached && cached.roles.includes('risk-manager') && fromCache && fromCache.phase1Record ? { phase1Cache: fromCache.phase1Record } : {}),
             // skillsMissing: the desk roles that ran without some of their role-skills (role-skills-record.js), detection only.
             ...(deskRun ? { desk: { results: deskRun.results, missing: deskRun.missing, ms: deskMs, ...withSkillsMissing(deskRun.results) }, runnerRoles: deskReports.map(r => r.role) } : {}),
             ...(rolesFile ? { rolesFile } : {}),
@@ -2254,7 +2260,7 @@ function createRunner(deps) {
           }
           // The reports this cycle's roles returned, for the next cycles while what they rest on holds.
           // Only a trade cycle's roles (a manage-only or paper cycle's risk-manager isn't phase 1), from the stdout the gate reads.
-          if (reportCache && r && !manageOnly && !cfg.paper) attempt('recording the report cache', () => reportCache.record({ symbols: cacheSymbols, account: acct, now: cycleNow, output: r.transcript || '', served: cached ? cached.roles : [], fresh: deskReports, runs: ranRuns, lookups: Array.isArray(r.lookups) ? r.lookups : [], laneBars: multi ? laneBarsOf(run) : {} }), null);
+          if (reportCache && r && !manageOnly && !cfg.paper) attempt('recording the report cache', () => reportCache.record({ symbols: cacheSymbols, account: acct, now: cycleNow, output: r.transcript || '', served: cached ? cached.roles : [], fresh: deskReports, runs: ranRuns, lookups: Array.isArray(r.lookups) ? r.lookups : [], laneBars: multi ? laneBarsOf(run) : {}, phase1: fromCache ? fromCache.phase1 : null }), null);
           state = recordRun(state, 'trade', cycleNow);
           // The model's own recent decisions, carried into the next prompts (and across restarts with the state).
           // Several lanes: each entry tagged with its cycle's lanes, and kept to 10 per lane (not 10 in all).

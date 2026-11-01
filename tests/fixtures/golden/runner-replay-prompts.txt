@@ -1132,8 +1132,8 @@ Autonomous cycle.
   No reviewed trades in the journal yet, so no record of your own results, mistakes, or lessons.
   Your skills trade-session, multi-timeframe-analysis, trade-lifecycle, htf-to-ltf, confluence-counting, setup-judgment, trade-plan, and day-context are in your prompt, already loaded (don't load them again): decide by them, then run the trade-session skill for MNQ on account 7.
   Write the trader-process skill's PLAN (1 HTF to 9 Manage) before the result line.
-  Full cycle: volume-liquidity-analyst and risk-manager (phase 1) as parallel subagents, plan from their reports, then risk-manager phase 2 on your plan, if any; the gate refuses an entry until all report and phase 2 approves.
-  Cached reports, still valid this bar (the runner's report cache: an analyst's report built on the bar briefing parts still current): don't launch market-structure-analyst, trend-momentum-analyst this cycle; the order gate counts them as returned.
+  Full cycle: volume-liquidity-analyst as parallel subagents, plan from their reports, then risk-manager phase 2 on your plan, if any; the gate refuses an entry until all report and phase 2 approves.
+  Cached reports, still valid this bar (the runner's report cache: an analyst's report built on the bar briefing parts still current, risk-manager phase 1 while every live account fact it reports is unchanged): don't launch market-structure-analyst, trend-momentum-analyst, risk-manager (phase 1) this cycle; the order gate counts them as returned.
   An analyst's 15m-and-up view holds until 10:45 ET; take this bar's 3m facts (the trigger, the VWAP side, the candidates) from the bar briefing.
   A cached report is that role's report this cycle: never send it back to a role to read, summarize or redo.
 --- market-structure-analyst report (from 10:36 ET) ---
@@ -1144,6 +1144,9 @@ Bias: long
 Data: bar_briefing m3@2026-04-27T14:36:00.000Z, m15@2026-04-27T14:36:00.000Z, h1@2026-04-27T14:36:00.000Z, day@2026-04-27T14:36:00.000Z
 Bias: long
 --- end of trend-momentum-analyst report ---
+--- risk-manager phase 1 report (from 10:36 ET) ---
+Phase 1: flat, budget 2 trades
+--- end of risk-manager report ---
  This cycle's situation (a compression break on the Setups to check; a setup listed: its entry read; a setup listed: its stop, target and size; price at a key level; a liquidity sweep; VWAP and value; the Trend declared? line; the trend rule; the day's bias; the last structure break) needs your skills `compression`, `candle-reading`, `momentum-and-volume`, `top-down-entry`, `take-profit`, `position-sizing`, `levels-and-reactions`, `breakout-vs-fakeout`, `vwap-volume-profile`, `mtf-bias-filter`, `daily-bias`, and `bos-vs-choch`: they are below, already loaded (don't load them again).
 
 <skill name="compression">
@@ -2258,8 +2261,8 @@ Autonomous cycle.
   No reviewed trades in the journal yet, so no record of your own results, mistakes, or lessons.
   Your skills trade-session, multi-timeframe-analysis, trade-lifecycle, htf-to-ltf, confluence-counting, setup-judgment, trade-plan, and day-context are in your prompt, already loaded (don't load them again): decide by them, then run the trade-session skill for MNQ on account 7.
   Write the trader-process skill's PLAN (1 HTF to 9 Manage) before the result line.
-  Full cycle: volume-liquidity-analyst and risk-manager (phase 1) as parallel subagents, plan from their reports, then risk-manager phase 2 on your plan, if any; the gate refuses an entry until all report and phase 2 approves.
-  Cached reports, still valid this bar (the runner's report cache: an analyst's report built on the bar briefing parts still current): don't launch market-structure-analyst, trend-momentum-analyst this cycle; the order gate counts them as returned.
+  Full cycle: volume-liquidity-analyst as parallel subagents, plan from their reports, then risk-manager phase 2 on your plan, if any; the gate refuses an entry until all report and phase 2 approves.
+  Cached reports, still valid this bar (the runner's report cache: an analyst's report built on the bar briefing parts still current, risk-manager phase 1 while every live account fact it reports is unchanged): don't launch market-structure-analyst, trend-momentum-analyst, risk-manager (phase 1) this cycle; the order gate counts them as returned.
   An analyst's 15m-and-up view holds until 10:45 ET; take this bar's 3m facts (the trigger, the VWAP side, the candidates) from the bar briefing.
   A cached report is that role's report this cycle: never send it back to a role to read, summarize or redo.
 --- market-structure-analyst report (from 10:36 ET) ---
@@ -2270,6 +2273,9 @@ Bias: long
 Data: bar_briefing m3@2026-04-27T14:36:00.000Z, m15@2026-04-27T14:36:00.000Z, h1@2026-04-27T14:36:00.000Z, day@2026-04-27T14:36:00.000Z
 Bias: long
 --- end of trend-momentum-analyst report ---
+--- risk-manager phase 1 report (from 10:36 ET) ---
+Phase 1: flat, budget 2 trades
+--- end of risk-manager report ---
  This cycle's situation (a compression break on the Setups to check; a setup listed: its entry read; a setup listed: its stop, target and size; price at a key level; a liquidity sweep; VWAP and value; the Trend declared? line; the trend rule; the day's bias; the last structure break) needs your skills `compression`, `candle-reading`, `momentum-and-volume`, `top-down-entry`, `take-profit`, `position-sizing`, `levels-and-reactions`, `breakout-vs-fakeout`, `vwap-volume-profile`, `mtf-bias-filter`, `daily-bias`, and `bos-vs-choch`: they are below, already loaded (don't load them again).
 
 <skill name="compression">
@@ -3384,8 +3390,13 @@ Autonomous cycle.
   No reviewed trades in the journal yet, so no record of your own results, mistakes, or lessons.
   Your skills trade-session, multi-timeframe-analysis, trade-lifecycle, htf-to-ltf, confluence-counting, setup-judgment, trade-plan, and day-context are in your prompt, already loaded (don't load them again): decide by them, then run the trade-session skill for MNQ on account 7.
   Write the trader-process skill's PLAN (1 HTF to 9 Manage) before the result line.
-  Full cycle: market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst and risk-manager (phase 1) as parallel subagents, plan from their reports, then risk-manager phase 2 on your plan, if any; the gate refuses an entry until all report and phase 2 approves.
-  This cycle's situation (a compression break on the Setups to check; a setup listed: its entry read; a setup listed: its stop, target and size; price at a key level; a liquidity sweep; VWAP and value; the Trend declared? line; the trend rule; the day's bias; the last structure break) needs your skills `compression`, `candle-reading`, `momentum-and-volume`, `top-down-entry`, `take-profit`, `position-sizing`, `levels-and-reactions`, `breakout-vs-fakeout`, `vwap-volume-profile`, `mtf-bias-filter`, `daily-bias`, and `bos-vs-choch`: they are below, already loaded (don't load them again).
+  Full cycle: market-structure-analyst, trend-momentum-analyst and volume-liquidity-analyst as parallel subagents, plan from their reports, then risk-manager phase 2 on your plan, if any; the gate refuses an entry until all report and phase 2 approves.
+  Cached reports, still valid this bar (the runner's report cache: an analyst's report built on the bar briefing parts still current, risk-manager phase 1 while every live account fact it reports is unchanged): don't launch risk-manager (phase 1) this cycle; the order gate counts them as returned.
+  A cached report is that role's report this cycle: never send it back to a role to read, summarize or redo.
+--- risk-manager phase 1 report (from 10:36 ET) ---
+Phase 1: flat, budget 2 trades
+--- end of risk-manager report ---
+ This cycle's situation (a compression break on the Setups to check; a setup listed: its entry read; a setup listed: its stop, target and size; price at a key level; a liquidity sweep; VWAP and value; the Trend declared? line; the trend rule; the day's bias; the last structure break) needs your skills `compression`, `candle-reading`, `momentum-and-volume`, `top-down-entry`, `take-profit`, `position-sizing`, `levels-and-reactions`, `breakout-vs-fakeout`, `vwap-volume-profile`, `mtf-bias-filter`, `daily-bias`, and `bos-vs-choch`: they are below, already loaded (don't load them again).
 
 <skill name="compression">
 # Compression
@@ -4499,8 +4510,8 @@ Autonomous cycle.
   No reviewed trades in the journal yet, so no record of your own results, mistakes, or lessons.
   Your skills trade-session, multi-timeframe-analysis, trade-lifecycle, htf-to-ltf, confluence-counting, setup-judgment, trade-plan, and day-context are in your prompt, already loaded (don't load them again): decide by them, then run the trade-session skill for MNQ on account 7.
   Write the trader-process skill's PLAN (1 HTF to 9 Manage) before the result line.
-  Full cycle: volume-liquidity-analyst and risk-manager (phase 1) as parallel subagents, plan from their reports, then risk-manager phase 2 on your plan, if any; the gate refuses an entry until all report and phase 2 approves.
-  Cached reports, still valid this bar (the runner's report cache: an analyst's report built on the bar briefing parts still current): don't launch market-structure-analyst, trend-momentum-analyst this cycle; the order gate counts them as returned.
+  Full cycle: volume-liquidity-analyst as parallel subagents, plan from their reports, then risk-manager phase 2 on your plan, if any; the gate refuses an entry until all report and phase 2 approves.
+  Cached reports, still valid this bar (the runner's report cache: an analyst's report built on the bar briefing parts still current, risk-manager phase 1 while every live account fact it reports is unchanged): don't launch market-structure-analyst, trend-momentum-analyst, risk-manager (phase 1) this cycle; the order gate counts them as returned.
   An analyst's 15m-and-up view holds until 11:00 ET; take this bar's 3m facts (the trigger, the VWAP side, the candidates) from the bar briefing.
   A cached report is that role's report this cycle: never send it back to a role to read, summarize or redo.
 --- market-structure-analyst report (from 10:45 ET) ---
@@ -4511,6 +4522,9 @@ Bias: long
 Data: bar_briefing m3@2026-04-27T14:45:00.000Z, m15@2026-04-27T14:45:00.000Z, h1@2026-04-27T14:36:00.000Z, day@2026-04-27T14:36:00.000Z
 Bias: long
 --- end of trend-momentum-analyst report ---
+--- risk-manager phase 1 report (from 10:36 ET) ---
+Phase 1: flat, budget 2 trades
+--- end of risk-manager report ---
  This cycle's situation (a compression break on the Setups to check; a 3m or 5m CISD to time an entry; a setup listed: its entry read; a setup listed: its stop, target and size; price at a key level; a liquidity sweep; VWAP and value; the Trend declared? line; the trend rule; the day's bias; the last structure break) needs your skills `compression`, `cisd`, `candle-reading`, `momentum-and-volume`, `top-down-entry`, `take-profit`, `position-sizing`, `levels-and-reactions`, `breakout-vs-fakeout`, `vwap-volume-profile`, `mtf-bias-filter`, `daily-bias`, and `bos-vs-choch`: they are below, already loaded (don't load them again).
 
 <skill name="compression">
@@ -5714,7 +5728,7 @@ Autonomous cycle.
   Your skills trade-session, multi-timeframe-analysis, trade-lifecycle, htf-to-ltf, confluence-counting, setup-judgment, trade-plan, and day-context are in your prompt, already loaded (don't load them again): decide by them, then run the trade-session skill for MNQ on account 7.
   Write the trader-process skill's PLAN (1 HTF to 9 Manage) before the result line.
   Full cycle: volume-liquidity-analyst and risk-manager (phase 1) as parallel subagents, plan from their reports, then risk-manager phase 2 on your plan, if any; the gate refuses an entry until all report and phase 2 approves.
-  Cached reports, still valid this bar (the runner's report cache: an analyst's report built on the bar briefing parts still current): don't launch market-structure-analyst, trend-momentum-analyst this cycle; the order gate counts them as returned.
+  Cached reports, still valid this bar (the runner's report cache: an analyst's report built on the bar briefing parts still current, risk-manager phase 1 while every live account fact it reports is unchanged): don't launch market-structure-analyst, trend-momentum-analyst this cycle; the order gate counts them as returned.
   An analyst's 15m-and-up view holds until 11:00 ET; take this bar's 3m facts (the trigger, the VWAP side, the candidates) from the bar briefing.
   A cached report is that role's report this cycle: never send it back to a role to read, summarize or redo.
 --- market-structure-analyst report (from 10:45 ET) ---
@@ -6927,8 +6941,8 @@ Autonomous cycle.
   No reviewed trades in the journal yet, so no record of your own results, mistakes, or lessons.
   Your skills trade-session, multi-timeframe-analysis, trade-lifecycle, htf-to-ltf, confluence-counting, setup-judgment, trade-plan, and day-context are in your prompt, already loaded (don't load them again): decide by them, then run the trade-session skill for MNQ on account 7.
   Write the trader-process skill's PLAN (1 HTF to 9 Manage) before the result line.
-  Full cycle: volume-liquidity-analyst and risk-manager (phase 1) as parallel subagents, plan from their reports, then risk-manager phase 2 on your plan, if any; the gate refuses an entry until all report and phase 2 approves.
-  Cached reports, still valid this bar (the runner's report cache: an analyst's report built on the bar briefing parts still current): don't launch market-structure-analyst, trend-momentum-analyst this cycle; the order gate counts them as returned.
+  Full cycle: volume-liquidity-analyst as parallel subagents, plan from their reports, then risk-manager phase 2 on your plan, if any; the gate refuses an entry until all report and phase 2 approves.
+  Cached reports, still valid this bar (the runner's report cache: an analyst's report built on the bar briefing parts still current, risk-manager phase 1 while every live account fact it reports is unchanged): don't launch market-structure-analyst, trend-momentum-analyst, risk-manager (phase 1) this cycle; the order gate counts them as returned.
   An analyst's 15m-and-up view holds until 11:00 ET; take this bar's 3m facts (the trigger, the VWAP side, the candidates) from the bar briefing.
   A cached report is that role's report this cycle: never send it back to a role to read, summarize or redo.
 --- market-structure-analyst report (from 10:45 ET) ---
@@ -6939,6 +6953,9 @@ Bias: long
 Data: bar_briefing m3@2026-04-27T14:45:00.000Z, m15@2026-04-27T14:45:00.000Z, h1@2026-04-27T14:36:00.000Z, day@2026-04-27T14:36:00.000Z
 Bias: long
 --- end of trend-momentum-analyst report ---
+--- risk-manager phase 1 report (from 10:51 ET) ---
+Phase 1: flat, budget 2 trades
+--- end of risk-manager report ---
  This cycle's situation (a 3m or 5m CISD to time an entry; a setup listed: its entry read; a setup listed: its stop, target and size; price at a key level; a liquidity sweep; VWAP and value; the Trend declared? line; the trend rule; the day's bias; the last structure break) needs your skills `cisd`, `candle-reading`, `momentum-and-volume`, `top-down-entry`, `take-profit`, `position-sizing`, `levels-and-reactions`, `breakout-vs-fakeout`, `vwap-volume-profile`, `mtf-bias-filter`, `daily-bias`, and `bos-vs-choch`: they are below, already loaded (don't load them again).
 
 <skill name="cisd">
@@ -8059,8 +8076,8 @@ Autonomous cycle.
   No reviewed trades in the journal yet, so no record of your own results, mistakes, or lessons.
   Your skills trade-session, multi-timeframe-analysis, trade-lifecycle, htf-to-ltf, confluence-counting, setup-judgment, trade-plan, and day-context are in your prompt, already loaded (don't load them again): decide by them, then run the trade-session skill for MNQ on account 7.
   Write the trader-process skill's PLAN (1 HTF to 9 Manage) before the result line.
-  Full cycle: volume-liquidity-analyst and risk-manager (phase 1) as parallel subagents, plan from their reports, then risk-manager phase 2 on your plan, if any; the gate refuses an entry until all report and phase 2 approves.
-  Cached reports, still valid this bar (the runner's report cache: an analyst's report built on the bar briefing parts still current): don't launch market-structure-analyst, trend-momentum-analyst this cycle; the order gate counts them as returned.
+  Full cycle: volume-liquidity-analyst as parallel subagents, plan from their reports, then risk-manager phase 2 on your plan, if any; the gate refuses an entry until all report and phase 2 approves.
+  Cached reports, still valid this bar (the runner's report cache: an analyst's report built on the bar briefing parts still current, risk-manager phase 1 while every live account fact it reports is unchanged): don't launch market-structure-analyst, trend-momentum-analyst, risk-manager (phase 1) this cycle; the order gate counts them as returned.
   An analyst's 15m-and-up view holds until 11:00 ET; take this bar's 3m facts (the trigger, the VWAP side, the candidates) from the bar briefing.
   A cached report is that role's report this cycle: never send it back to a role to read, summarize or redo.
 --- market-structure-analyst report (from 10:45 ET) ---
@@ -8071,6 +8088,9 @@ Bias: long
 Data: bar_briefing m3@2026-04-27T14:45:00.000Z, m15@2026-04-27T14:45:00.000Z, h1@2026-04-27T14:36:00.000Z, day@2026-04-27T14:36:00.000Z
 Bias: long
 --- end of trend-momentum-analyst report ---
+--- risk-manager phase 1 report (from 10:51 ET) ---
+Phase 1: flat, budget 2 trades
+--- end of risk-manager report ---
  This cycle's situation (a 3m or 5m CISD to time an entry; a setup listed: its entry read; a setup listed: its stop, target and size; price at a key level; a liquidity sweep; VWAP and value; the Trend declared? line; the trend rule; the day's bias; the last structure break) needs your skills `cisd`, `candle-reading`, `momentum-and-volume`, `top-down-entry`, `take-profit`, `position-sizing`, `levels-and-reactions`, `breakout-vs-fakeout`, `vwap-volume-profile`, `mtf-bias-filter`, `daily-bias`, and `bos-vs-choch`: they are below, already loaded (don't load them again).
 
 <skill name="cisd">
@@ -9191,8 +9211,13 @@ Autonomous cycle.
   No reviewed trades in the journal yet, so no record of your own results, mistakes, or lessons.
   Your skills trade-session, multi-timeframe-analysis, trade-lifecycle, htf-to-ltf, confluence-counting, setup-judgment, trade-plan, and day-context are in your prompt, already loaded (don't load them again): decide by them, then run the trade-session skill for MNQ on account 7.
   Write the trader-process skill's PLAN (1 HTF to 9 Manage) before the result line.
-  Full cycle: market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst and risk-manager (phase 1) as parallel subagents, plan from their reports, then risk-manager phase 2 on your plan, if any; the gate refuses an entry until all report and phase 2 approves.
-  This cycle's situation (a compression break on the Setups to check; a 3m or 5m CISD to time an entry; a setup listed: its entry read; a setup listed: its stop, target and size; price at a key level; a liquidity sweep; VWAP and value; the Trend declared? line; the trend rule; the day's bias; the last structure break) needs your skills `compression`, `cisd`, `candle-reading`, `momentum-and-volume`, `top-down-entry`, `take-profit`, `position-sizing`, `levels-and-reactions`, `breakout-vs-fakeout`, `vwap-volume-profile`, `mtf-bias-filter`, `daily-bias`, and `bos-vs-choch`: they are below, already loaded (don't load them again).
+  Full cycle: market-structure-analyst, trend-momentum-analyst and volume-liquidity-analyst as parallel subagents, plan from their reports, then risk-manager phase 2 on your plan, if any; the gate refuses an entry until all report and phase 2 approves.
+  Cached reports, still valid this bar (the runner's report cache: an analyst's report built on the bar briefing parts still current, risk-manager phase 1 while every live account fact it reports is unchanged): don't launch risk-manager (phase 1) this cycle; the order gate counts them as returned.
+  A cached report is that role's report this cycle: never send it back to a role to read, summarize or redo.
+--- risk-manager phase 1 report (from 10:51 ET) ---
+Phase 1: flat, budget 2 trades
+--- end of risk-manager report ---
+ This cycle's situation (a compression break on the Setups to check; a 3m or 5m CISD to time an entry; a setup listed: its entry read; a setup listed: its stop, target and size; price at a key level; a liquidity sweep; VWAP and value; the Trend declared? line; the trend rule; the day's bias; the last structure break) needs your skills `compression`, `cisd`, `candle-reading`, `momentum-and-volume`, `top-down-entry`, `take-profit`, `position-sizing`, `levels-and-reactions`, `breakout-vs-fakeout`, `vwap-volume-profile`, `mtf-bias-filter`, `daily-bias`, and `bos-vs-choch`: they are below, already loaded (don't load them again).
 
 <skill name="compression">
 # Compression
@@ -10394,8 +10419,8 @@ Autonomous cycle.
   No reviewed trades in the journal yet, so no record of your own results, mistakes, or lessons.
   Your skills trade-session, multi-timeframe-analysis, trade-lifecycle, htf-to-ltf, confluence-counting, setup-judgment, trade-plan, and day-context are in your prompt, already loaded (don't load them again): decide by them, then run the trade-session skill for MNQ on account 7.
   Write the trader-process skill's PLAN (1 HTF to 9 Manage) before the result line.
-  Full cycle: volume-liquidity-analyst and risk-manager (phase 1) as parallel subagents, plan from their reports, then risk-manager phase 2 on your plan, if any; the gate refuses an entry until all report and phase 2 approves.
-  Cached reports, still valid this bar (the runner's report cache: an analyst's report built on the bar briefing parts still current): don't launch market-structure-analyst, trend-momentum-analyst this cycle; the order gate counts them as returned.
+  Full cycle: volume-liquidity-analyst as parallel subagents, plan from their reports, then risk-manager phase 2 on your plan, if any; the gate refuses an entry until all report and phase 2 approves.
+  Cached reports, still valid this bar (the runner's report cache: an analyst's report built on the bar briefing parts still current, risk-manager phase 1 while every live account fact it reports is unchanged): don't launch market-structure-analyst, trend-momentum-analyst, risk-manager (phase 1) this cycle; the order gate counts them as returned.
   An analyst's 15m-and-up view holds until 11:15 ET; take this bar's 3m facts (the trigger, the VWAP side, the candidates) from the bar briefing.
   A cached report is that role's report this cycle: never send it back to a role to read, summarize or redo.
 --- market-structure-analyst report (from 11:00 ET) ---
@@ -10406,6 +10431,9 @@ Bias: long
 Data: bar_briefing m3@2026-04-27T15:00:00.000Z, m15@2026-04-27T15:00:00.000Z, h1@2026-04-27T15:00:00.000Z, day@2026-04-27T14:36:00.000Z
 Bias: long
 --- end of trend-momentum-analyst report ---
+--- risk-manager phase 1 report (from 10:51 ET) ---
+Phase 1: flat, budget 2 trades
+--- end of risk-manager report ---
  This cycle's situation (a compression break on the Setups to check; a 3m or 5m CISD to time an entry; a setup listed: its entry read; a setup listed: its stop, target and size; price at a key level; VWAP and value; the Trend declared? line; the trend rule; the day's bias; the last structure break) needs your skills `compression`, `cisd`, `candle-reading`, `momentum-and-volume`, `top-down-entry`, `take-profit`, `position-sizing`, `levels-and-reactions`, `vwap-volume-profile`, `mtf-bias-filter`, `daily-bias`, and `bos-vs-choch`: they are below, already loaded (don't load them again).
 
 <skill name="compression">
@@ -11540,14 +11568,17 @@ Autonomous cycle.
   No reviewed trades in the journal yet, so no record of your own results, mistakes, or lessons.
   Your skills trade-session, multi-timeframe-analysis, trade-lifecycle, htf-to-ltf, confluence-counting, setup-judgment, trade-plan, and day-context are in your prompt, already loaded (don't load them again): decide by them, then run the trade-session skill for MNQ on account 7.
   Write the trader-process skill's PLAN (1 HTF to 9 Manage) before the result line.
-  Full cycle: market-structure-analyst, volume-liquidity-analyst and risk-manager (phase 1) as parallel subagents, plan from their reports, then risk-manager phase 2 on your plan, if any; the gate refuses an entry until all report and phase 2 approves.
-  Cached reports, still valid this bar (the runner's report cache: an analyst's report built on the bar briefing parts still current): don't launch trend-momentum-analyst this cycle; the order gate counts them as returned.
+  Full cycle: market-structure-analyst and volume-liquidity-analyst as parallel subagents, plan from their reports, then risk-manager phase 2 on your plan, if any; the gate refuses an entry until all report and phase 2 approves.
+  Cached reports, still valid this bar (the runner's report cache: an analyst's report built on the bar briefing parts still current, risk-manager phase 1 while every live account fact it reports is unchanged): don't launch trend-momentum-analyst, risk-manager (phase 1) this cycle; the order gate counts them as returned.
   An analyst's 15m-and-up view holds until 11:15 ET; take this bar's 3m facts (the trigger, the VWAP side, the candidates) from the bar briefing.
   A cached report is that role's report this cycle: never send it back to a role to read, summarize or redo.
 --- trend-momentum-analyst report (from 11:00 ET) ---
 Data: bar_briefing m3@2026-04-27T15:00:00.000Z, m15@2026-04-27T15:00:00.000Z, h1@2026-04-27T15:00:00.000Z, day@2026-04-27T14:36:00.000Z
 Bias: long
 --- end of trend-momentum-analyst report ---
+--- risk-manager phase 1 report (from 10:51 ET) ---
+Phase 1: flat, budget 2 trades
+--- end of risk-manager report ---
  This cycle's situation (a setup listed: its entry read; a setup listed: its stop, target and size; price at a key level; a liquidity sweep; VWAP and value; the Trend declared? line; the trend rule; the day's bias; the last structure break) needs your skills `candle-reading`, `momentum-and-volume`, `top-down-entry`, `take-profit`, `position-sizing`, `levels-and-reactions`, `breakout-vs-fakeout`, `vwap-volume-profile`, `mtf-bias-filter`, `daily-bias`, and `bos-vs-choch`: they are below, already loaded (don't load them again).
 
 <skill name="candle-reading">

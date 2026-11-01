@@ -2243,6 +2243,16 @@ test('roles-ran: the gateway (checkOrder) reads the cycle and its transcript fro
   assert.ok(!checkOrder(ANYTIME, { env, pluginRoot: live.root }).violations.some(v => v.check === 'roles-ran'));
 });
 
+/** The runner's record of a phase 1 served from the cache (phase1-facts.js), for `bar`, as FTH_CYCLE_PHASE1 carries it. */
+function phase1Env(bar, over = {}) {
+  const P1 = require('../../scripts/lib/trading/phase1-facts');
+  const facts = P1.phase1Facts({
+    account: { id: '7', balance: 50000, positions: [], orders: [], workingOrders: 0, attempts: [] }, day: '2026-10-07', trades: [], barClose: Date.parse(bar) + 180000, barMinutes: 3,
+    cooldown: { maxConsecutiveLosses: 2, lossCooldownMin: 30 }, windowEntries: 'allowed', lessons: [], reviewed: [], ...over,
+  });
+  return { FTH_CYCLE_BARS: JSON.stringify({ MNQ: bar }), [P1.ENV]: JSON.stringify(P1.record({ bar, barMinutes: 3, facts })) };
+}
+
 test('roles-ran: roles the runner served from its report cache (FTH_CYCLE_CACHED) count as returned; phase 2 still runs', () => {
   const { checkOrder } = require('../../scripts/lib/trading/check-order');
   const live = replaySetup({ replay: false });
@@ -2250,15 +2260,25 @@ test('roles-ran: roles the runner served from its report cache (FTH_CYCLE_CACHED
   const analysts = ['market-structure-analyst', 'trend-momentum-analyst', 'volume-liquidity-analyst'];
   const base = { ...live.env, FTH_TEST_NOW: '2026-10-07T14:30:00.000Z', FTH_CYCLE: 'full', FTH_CYCLE_TRANSCRIPT: file, FTH_AUTONOMOUS: '1', FTH_SYMBOLS: live.symbols || 'MNQ', FTH_ROLE_SKILLS: 'full' };
   const refused = env => checkOrder(ANYTIME, { env, pluginRoot: live.root }).violations.find(v => v.check === 'roles-ran');
-  // Only phase 2 ran this cycle: refused without the cache, accepted with every other role served from it.
+  // Only phase 2 ran this cycle: refused without the cache, accepted with every other role served from it, phase 1 with
+  // the runner's record of its facts for this cycle's bar.
+  const BAR = '2026-10-07T14:24:00.000Z';
+  const p1 = phase1Env(BAR);
   fs.writeFileSync(file, [...ocSkills, ocEvent('task', { subagent_type: 'risk-manager' })].join('\n'));
   assert.match(refused(base).message, /not returned yet: market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst/);
-  assert.strictEqual(refused({ ...base, FTH_CYCLE_CACHED: [...analysts, 'risk-manager'].join(',') }), undefined);
+  assert.strictEqual(refused({ ...base, ...p1, FTH_CYCLE_CACHED: [...analysts, 'risk-manager'].join(',') }), undefined);
+  // A forged claim: risk-manager named as cached with no record, an edited record, another bar's, a record of two symbols'
+  // bars: phase 1 isn't counted, so the lone risk-manager call is phase 1 and phase 2 is missing.
+  const rec = JSON.parse(p1.FTH_CYCLE_PHASE1);
+  for (const [label, extra] of [['no record', { FTH_CYCLE_BARS: p1.FTH_CYCLE_BARS }], ['an edited record', { ...p1, FTH_CYCLE_PHASE1: JSON.stringify({ ...rec, facts: { ...rec.facts, account: { ...rec.facts.account, balance: 1 } } }) }],
+    ['another bar', { ...p1, FTH_CYCLE_BARS: JSON.stringify({ MNQ: '2026-10-07T14:27:00.000Z' }) }], ['two symbols', { ...p1, FTH_CYCLE_BARS: JSON.stringify({ MNQ: BAR, MES: BAR }) }], ['unreadable', { ...p1, FTH_CYCLE_PHASE1: '{' }]]) {
+    assert.match((refused({ ...base, ...extra, FTH_CYCLE_CACHED: [...analysts, 'risk-manager'].join(',') }) || {}).message || '', /risk-manager phase 2/, label);
+  }
   // Two analysts cached, the third neither cached nor run: refused for it alone.
-  assert.match(refused({ ...base, FTH_CYCLE_CACHED: `${analysts.slice(0, 2).join(',')},risk-manager` }).message, /not returned yet: volume-liquidity-analyst\./);
+  assert.match(refused({ ...base, ...p1, FTH_CYCLE_CACHED: `${analysts.slice(0, 2).join(',')},risk-manager` }).message, /not returned yet: volume-liquidity-analyst\./);
   // Nothing ran at all: phase 2 is still needed, cache or not.
   fs.writeFileSync(file, ocSkills.join('\n'));
-  assert.match(refused({ ...base, FTH_CYCLE_CACHED: [...analysts, 'risk-manager'].join(',') }).message, /risk-manager phase 2/);
+  assert.match(refused({ ...base, ...p1, FTH_CYCLE_CACHED: [...analysts, 'risk-manager'].join(',') }).message, /risk-manager phase 2/);
   // A name the cache can't hold (phase 2, the executor, anything else) counts for nothing.
   assert.ok(refused({ ...base, FTH_CYCLE_CACHED: 'risk-manager phase 2,trade-executor,whatever' }));
 });
@@ -3095,7 +3115,8 @@ test('index mode, a long cycle: the briefing of the cycle\'s bar (FTH_CYCLE_BARS
   // cycle's start); another key, or no cycle bar (no key): nothing credited.
   const p2 = path.join(dir, 'logs', 'cycle-transcript-p2.jsonl');
   fs.writeFileSync(p2, [...ocSkills, timed('risk-manager', 30, 40)].join('\n'));
-  const cachedEnv = key => ({ ...BARS, FTH_CYCLE_TRANSCRIPT: p2, FTH_CYCLE_CACHED: 'market-structure-analyst,trend-momentum-analyst,volume-liquidity-analyst,risk-manager',
+  // (Phase 1 served with the runner's record of its facts for the cycle's bar: phase1Env.)
+  const cachedEnv = key => ({ ...phase1Env(CYCLE_BAR), ...BARS, FTH_CYCLE_TRANSCRIPT: p2, FTH_CYCLE_CACHED: 'market-structure-analyst,trend-momentum-analyst,volume-liquidity-analyst,risk-manager',
     FTH_CYCLE_CACHED_LOOKUPS: JSON.stringify({ 'market-structure-analyst': { skills: ['pullback-vs-reversal', 'rejection'], key }, 'trend-momentum-analyst': { skills: ['pullback-vs-reversal'], key } }) });
   assert.deepStrictEqual(run(cachedEnv(`m3@${CYCLE_BAR}`)).violations, []);
   assert.match(run(cachedEnv('m3@2026-10-07T13:54:00.000Z')).violations[0].message, /served from the report cache/);

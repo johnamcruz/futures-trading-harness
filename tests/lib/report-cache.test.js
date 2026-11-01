@@ -60,7 +60,7 @@ test('an analyst\'s report is served while the briefing parts it was built on ho
   const now = new Date(a.closedAt);
   const cache = RC.recordReports({ output, briefings: { MNQ: a }, symbols: sym(a), account: ACCT, day: DAY, now });
   assert.deepStrictEqual(Object.keys(cache.analysts).sort(), [ANALYSTS[0], ANALYSTS[2]].sort());
-  assert.ok(!('phase1' in cache), 'phase 1 is live data: never cached');
+  assert.strictEqual(cache.phase1, null, 'phase 1: no facts key given, none cached');
   // The next bar, same 15m candle: both analysts are served (phase 1 runs again).
   const next = RC.serveReports({ cache, briefings: { MNQ: b }, symbols: sym(b), account: ACCT, day: DAY, now: soon(cache) });
   assert.deepStrictEqual(next.roles, [ANALYSTS[0], ANALYSTS[2]]);
@@ -104,7 +104,7 @@ test('another symbol set or contract never reuses; served roles keep their entry
   // The next cycle served both and ran only phase 2: the cache keeps the served entries, not phase 2 as phase 1.
   const again = RC.recordReports({ prev: cache, output: task('risk-manager', 'Phase 2: VETO', [5, 6]), served: [ANALYSTS[0]], briefings: { MNQ: b }, symbols: sym(b), account: ACCT, day: DAY, now: new Date(b.closedAt) });
   assert.deepStrictEqual(again.analysts[ANALYSTS[0]], cache.analysts[ANALYSTS[0]]);
-  assert.ok(!('phase1' in again));
+  assert.strictEqual(again.phase1, null);
   // Not served and not run: dropped.
   const dropped = RC.recordReports({ prev: cache, output: '', served: [], briefings: { MNQ: b }, symbols: sym(b), account: ACCT, day: DAY, now: new Date(b.closedAt) });
   assert.deepStrictEqual(dropped.analysts, {});
@@ -119,7 +119,8 @@ test('the cache file: written atomically, read back, an unreadable one is none; 
   assert.strictEqual(RC.readCache(home), null);
   RC.removeCache(home);
   assert.strictEqual(RC.readCache(home), null);
-  assert.deepStrictEqual(loadConfig({ FTH_CYCLE_CACHED: `${RC.CACHED_ROLES.join(',')},trade-executor,risk-manager phase 2,` }).cycleCached, RC.CACHED_ROLES);
+  // Phase 1 counts as cached only with the runner's record of its facts (phase1-facts.js; the gate tests): named alone, not.
+  assert.deepStrictEqual(loadConfig({ FTH_CYCLE_CACHED: `${RC.CACHED_ROLES.join(',')},trade-executor,risk-manager phase 2,` }).cycleCached, ANALYSTS);
   assert.deepStrictEqual(loadConfig({}).cycleCached, []);
 });
 
@@ -189,7 +190,7 @@ test('the desk\'s reports (the runner ran those roles) are recorded as the roles
   const cache = RC.recordReports({ output: '', fresh, briefings: { MNQ: a }, symbols: sym(a), account: ACCT, day: DAY, now, lookupsKey: 'k' });
   assert.deepStrictEqual(Object.keys(cache.analysts), [ANALYSTS[0]]);
   assert.deepStrictEqual([cache.analysts[ANALYSTS[0]].lookups, cache.analysts[ANALYSTS[0]].lookupsKey], [['breakout', 'rejection'], 'k']);
-  assert.ok(!('phase1' in cache), 'phase 1 never');
+  assert.strictEqual(cache.phase1, null, 'phase 1: no facts key, none');
   const next = RC.serveReports({ cache, briefings: { MNQ: b }, symbols: sym(b), account: ACCT, day: DAY, now: soon(cache) });
   assert.deepStrictEqual(next.roles, [ANALYSTS[0]]);
 });
@@ -222,20 +223,20 @@ test('freshness: an analyst\'s report is keyed by its instructions; an edit of i
   const root = tmpDir();
   const ROOT = path.join(__dirname, '..', '..');
   for (const d of ['agents', 'skills']) require('fs').cpSync(path.join(ROOT, d), path.join(root, d), { recursive: true });
-  const keys = () => Object.fromEntries(RC.CACHED_ROLES.map(r => [r, RC.roleKey(root, r)]));
+  const keys = () => Object.fromEntries(ANALYSTS.map(r => [r, RC.roleKey(root, r)]));
   const k0 = keys();
-  assert.ok(RC.CACHED_ROLES.every(r => /^[0-9a-f]{64}$/.test(k0[r])), 'every analyst has a key');
+  assert.ok(ANALYSTS.every(r => /^[0-9a-f]{64}$/.test(k0[r])), 'every analyst has a key');
   assert.deepStrictEqual(keys(), k0, 'unchanged: the same key');
-  const output = RC.CACHED_ROLES.map(r => task(r, `${data(a)}\nBias: long`, [1, 2])).join('\n');
+  const output = ANALYSTS.map(r => task(r, `${data(a)}\nBias: long`, [1, 2])).join('\n');
   const cache = RC.recordReports({ output, briefings: { MNQ: a }, symbols: sym(a), now: new Date(a.closedAt), bodyKeys: k0 });
   const serve = (c, bodyKeys) => RC.serveReports({ cache: c, briefings: { MNQ: b }, symbols: sym(b), now: soon(c), bodyKeys }).roles;
-  assert.deepStrictEqual(serve(cache, k0), [...RC.CACHED_ROLES]);
+  assert.deepStrictEqual(serve(cache, k0), [...ANALYSTS]);
   // The first analyst's agent file edited, then the second's first role-skill: each misses alone.
   const agentFile = path.join(root, 'agents', `${ANALYSTS[0]}.md`);
   require('fs').appendFileSync(agentFile, '\nAn edited line.\n');
   const k1 = keys();
   assert.notStrictEqual(k1[ANALYSTS[0]], k0[ANALYSTS[0]]);
-  assert.deepStrictEqual(serve(cache, k1), RC.CACHED_ROLES.filter(r => r !== ANALYSTS[0]));
+  assert.deepStrictEqual(serve(cache, k1), ANALYSTS.filter(r => r !== ANALYSTS[0]));
   const { parseFrontmatter } = require('../../scripts/lib/frontmatter');
   const fm = parseFrontmatter(require('fs').readFileSync(path.join(root, 'agents', `${ANALYSTS[1]}.md`), 'utf8')).data['role-skills'];
   const skill = (Array.isArray(fm) ? fm : String(fm).split(','))[0].trim();
@@ -278,21 +279,73 @@ test('freshness: the cache is scoped to its harness root: another root\'s or che
   assert.deepStrictEqual(reportCacheFor(home, { harness: 'claude', cycle: 'full' }, [], {}, other).serve({ symbols: sym(b), account: ACCT, now: new Date(b.closedAt) }).roles, [], 'the same documents, another checkout');
 });
 
-test('freshness: phase 1 is live data, never cached nor served: a cooldown that ends, a balance or P&L that changes, is read fresh the next cycle', () => {
+
+// --- The smart phase-1 cache: served only under its live facts' key (phase1-facts.js). ---
+
+const P1F = require('../../scripts/lib/trading/phase1-facts');
+const p1In = (b, over = {}) => ({ account: ACCT, day: DAY, trades: [], barClose: Date.parse(b.asOf) + 180000, barMinutes: 3, cooldown: { maxConsecutiveLosses: 2, lossCooldownMin: 30 }, windowEntries: 'allowed', lessons: [], reviewed: [], ...over });
+const p1Of = (b, over) => { const facts = P1F.phase1Facts(p1In(b, over)); return facts ? { facts, key: P1F.factsKey(facts) } : null; };
+
+test('phase 1 is served only under its live facts\' key: equal, the report; any fact changed (a balance, a position, a cooldown that ended), a fresh run', () => {
   const { a, b } = pair();
-  const { reportCacheFor } = require('../../scripts/lib/runner-wiring');
-  const home = tmpDir();
-  B.writeBriefing(home, a);
-  const rc = reportCacheFor(home, { harness: 'claude', cycle: 'full' });
-  const p1 = '## Risk state: account 7\nP&L today -$600, cushion $2,400\nStreak: 2 losses in a row; cooldown until 10:30 ET\nAttempt: none';
-  rc.record({ symbols: sym(a), account: ACCT, now: new Date(a.closedAt), output: task('risk-manager', p1, [1, 2]), fresh: [{ role: 'risk-manager', text: p1, lookups: [] }], served: [] });
-  assert.ok(!('phase1' in RC.readCache(home)), 'never written');
-  assert.ok(!JSON.stringify(RC.readCache(home)).includes('cooldown'), 'no live fact in the cache file');
-  B.writeBriefing(home, b);
-  // The same account three minutes on (the old cache served it up to 30 minutes, the cooldown's end included): not served.
-  for (const acct of [ACCT, { ...ACCT, balance: 99400 }]) assert.ok(!rc.serve({ symbols: sym(b), account: acct, now: soon({ at: a.closedAt }) }).roles.includes('risk-manager'));
-  // Nor through a cache file that an older runner wrote with a phase-1 entry in it.
-  RC.writeCache(home, { ...RC.readCache(home), phase1: { text: p1, account: 'x', day: DAY, at: a.closedAt } });
-  assert.ok(!rc.serve({ symbols: sym(b), account: ACCT, now: soon({ at: a.closedAt }) }).roles.includes('risk-manager'));
-  assert.ok(!RC.CACHED_ROLES.includes('risk-manager'));
+  const output = task('risk-manager', '## Risk state: account 7\nP&L today $0\nStreak: 0; cooldown none\nAttempt: none', [1, 2]);
+  const cache = RC.recordReports({ output, briefings: { MNQ: a }, symbols: sym(a), account: ACCT, day: DAY, now: new Date(a.closedAt), phase1: p1Of(a) });
+  assert.strictEqual(cache.phase1.factsKey, p1Of(a).key);
+  const serve = phase1 => RC.serveReports({ cache, briefings: { MNQ: b }, symbols: sym(b), account: ACCT, day: DAY, now: soon(cache), phase1 }).roles;
+  assert.deepStrictEqual(serve(p1Of(b)), ['risk-manager'], 'the next bar, every fact the same');
+  assert.deepStrictEqual(serve(p1Of(b, { account: { ...ACCT, balance: 99950 } })), [], 'a closed trade');
+  assert.deepStrictEqual(serve(p1Of(b, { account: { ...ACCT, positions: [{ contractId: 'MNQ:2026-06', type: 1, size: 1, averagePrice: 21000 }] } })), [], 'a fill');
+  assert.deepStrictEqual(serve(p1Of(b, { day: '2026-04-28' })), [], 'a new day');
+  assert.deepStrictEqual(serve(null), [], 'no key (a read failed)');
+  assert.deepStrictEqual(serve({ facts: {}, key: null }), []);
+  // A cooldown recorded with 1 bar left, ending before the next bar: another key, phase 1 runs.
+  const T0 = Date.parse(a.asOf) + 180000;
+  const losses = [{ profitAndLoss: -50, creationTimestamp: new Date(T0 - 40 * 60000).toISOString() }, { profitAndLoss: -50, creationTimestamp: new Date(T0 - 28 * 60000).toISOString() }];
+  const cooling = RC.recordReports({ output, briefings: { MNQ: a }, symbols: sym(a), account: ACCT, day: DAY, now: new Date(a.closedAt), phase1: p1Of(a, { trades: losses }) });
+  assert.strictEqual(P1F.phase1Facts(p1In(a, { trades: losses })).loss.bars, 1);
+  assert.deepStrictEqual(RC.serveReports({ cache: cooling, briefings: { MNQ: b }, symbols: sym(b), account: ACCT, day: DAY, now: soon(cooling), phase1: p1Of(b, { trades: losses }) }).roles, [], 'the cooldown ended between the bars');
+  // A report that denies an active attempt, or carries a verdict (phase 2's), is never recorded; nor from a cycle that
+  // launched a trade-executor; nor with no key.
+  const active = { ...ACCT, attempts: [{ account: 'acct_a', status: 'active', balance: 100000, floor: 97000, profit: 0, dayPnl: 0, entryBlock: null }] };
+  const rec = (text, over = {}) => RC.recordReports({ output: task('risk-manager', text, [1, 2]), briefings: { MNQ: a }, symbols: sym(a), account: active, day: DAY, now: new Date(a.closedAt), phase1: p1Of(a, { account: active }), ...over }).phase1;
+  assert.ok(rec('Attempt: acct_a active, cushion $3,000'), 'control');
+  assert.strictEqual(rec('Attempt: acct_a active\nbut no attempt is currently running'), null);
+  assert.strictEqual(rec('Plan review\nVERDICT: APPROVE - size 1'), null);
+  assert.strictEqual(rec('Attempt: acct_a active', { output: `${task('risk-manager', 'Attempt: acct_a active', [1, 2])}\n${task('trade-executor', 'placed', [5, 6])}` }), null);
+  assert.strictEqual(rec('Attempt: acct_a active', { phase1: null }), null);
+  // Two symbols: none.
+  assert.strictEqual(rec('Attempt: acct_a active', { symbols: [...sym(a), { symbol: 'MES', bar: a.asOf, contractId: 'MES:2026-06' }], briefings: { MNQ: a, MES: { ...a, symbol: 'MES' } } }), null);
+  // Under another risk-manager body (an edit): a miss.
+  const bodied = RC.recordReports({ output, briefings: { MNQ: a }, symbols: sym(a), account: ACCT, day: DAY, now: new Date(a.closedAt), phase1: p1Of(a), bodyKeys: { 'risk-manager': 'b1' } });
+  const sb = bodyKeys => RC.serveReports({ cache: bodied, briefings: { MNQ: b }, symbols: sym(b), account: ACCT, day: DAY, now: soon(bodied), phase1: p1Of(b), bodyKeys }).roles;
+  assert.deepStrictEqual([sb({ 'risk-manager': 'b1' }), sb({ 'risk-manager': 'b2' })], [['risk-manager'], []]);
+  // Served and recorded again under the same key: kept; under another: dropped.
+  assert.ok(RC.recordReports({ prev: cache, output: '', served: ['risk-manager'], briefings: { MNQ: b }, symbols: sym(b), account: ACCT, day: DAY, now: soon(cache), phase1: p1Of(b) }).phase1);
+  assert.strictEqual(RC.recordReports({ prev: cache, output: '', served: ['risk-manager'], briefings: { MNQ: b }, symbols: sym(b), account: ACCT, day: DAY, now: soon(cache), phase1: p1Of(b, { account: { ...ACCT, balance: 1 } }) }).phase1, null);
+});
+
+test('an unreadable key keys nothing (F4): a role whose agent or skill file can\'t be read, or no root, is neither served nor recorded', () => {
+  const { a, b } = pair();
+  const ROOT = path.join(__dirname, '..', '..');
+  const root = tmpDir();
+  for (const d of ['agents', 'skills']) require('fs').cpSync(path.join(ROOT, d), path.join(root, d), { recursive: true });
+  // A role-skill folder missing: that role's key is null.
+  const { parseFrontmatter } = require('../../scripts/lib/frontmatter');
+  const fm = parseFrontmatter(require('fs').readFileSync(path.join(root, 'agents', `${ANALYSTS[0]}.md`), 'utf8')).data['role-skills'];
+  const skill = (Array.isArray(fm) ? fm : String(fm).split(','))[0].trim();
+  require('fs').rmSync(path.join(root, 'skills', skill), { recursive: true });
+  const keys = Object.fromEntries(RC.CACHED_ROLES.map(r => [r, RC.roleKey(root, r)]));
+  assert.strictEqual(keys[ANALYSTS[0]], null, `${skill} missing`);
+  const output = ANALYSTS.map(r => task(r, `${data(a)}\nBias: long`, [1, 2])).join('\n');
+  const cache = RC.recordReports({ output, briefings: { MNQ: a }, symbols: sym(a), now: new Date(a.closedAt), bodyKeys: keys, scope: 's' });
+  assert.ok(!(ANALYSTS[0] in cache.analysts), 'not recorded');
+  assert.ok(ANALYSTS[1] in cache.analysts);
+  // An entry written for it under some key (an older runner) is never served under a null key.
+  const forged = { ...cache, analysts: { ...cache.analysts, [ANALYSTS[0]]: { ...cache.analysts[ANALYSTS[1]] } } };
+  forged.analysts[ANALYSTS[0]].body = null;
+  assert.ok(!RC.serveReports({ cache: forged, briefings: { MNQ: b }, symbols: sym(b), now: soon(cache), bodyKeys: keys, scope: 's' }).roles.includes(ANALYSTS[0]));
+  // No root resolved (scope null): nothing served, nothing recorded.
+  assert.deepStrictEqual(RC.serveReports({ cache, briefings: { MNQ: b }, symbols: sym(b), now: soon(cache), bodyKeys: keys, scope: null }).roles, []);
+  assert.deepStrictEqual(RC.recordReports({ output, briefings: { MNQ: a }, symbols: sym(a), now: new Date(a.closedAt), bodyKeys: keys, scope: null }).analysts, {});
+  assert.strictEqual(RC.scopeOf(path.join(root, 'no-such-dir')), null);
 });
