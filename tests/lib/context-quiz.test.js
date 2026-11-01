@@ -98,7 +98,7 @@ test('grading: a correct "No, <term> ..." answer passes every question whose for
     assert.ok(!pass(id, `ANSWER: ${a}`), `${id} wrong: ${a}`);
   }
   for (const [id, a] of [['q15', 'No. The exit at 2R is cancelled: lock and trail.'], ['q27', 'The engulfing confirms the breakout failed: a confirmed rejection.'],
-    ['q30', 'No: the second is a short as well? No: never counter the 4h and 1h.'], ['q19', 'No: it is a trade only after a restate of the Size line.']]) {
+    ['q30', 'No: the second is a short as well? No: never counter the 4h and 1h; only the first can be taken.'], ['q19', 'No: it is a trade only after a restate of the Size line.']]) {
     assert.ok(pass(id, `ANSWER: ${a}`), `${id} right: ${a}`);
   }
   // A 3m short negated right after it is no forbidden term (e269-part q32 k2); with no reason given it still misses the substance.
@@ -201,7 +201,7 @@ test('the reaction questions (q23-q35, feat/sweep-candle-control): answer-first 
     // The "only" sense of a bias, hyphenated or not ("a long-only bias", as "a long only bias"), names the bias, not
     // the case's side; a case called a long ("Case 2 is a long", "a long-side read") still fails.
     q36: [['Both are shorts (the REACTION line: short side); only case 1 can be taken, case 2 is refused by the trend rule.', 'Short side both; only the first can be taken; the second counters the 4h + 1h.',
-      'Both are shorts; case 1 can be taken, case 2 is a short against a long-only bias, so it is refused.', 'Both short: case 2 sits under a long only bias, refused by the trend rule.'],
+      'Both are shorts; case 1 can be taken, case 2 is a short against a long-only bias, so it is refused.', 'Both short; case 1 can be taken, case 2 sits under a long only bias, refused by the trend rule.'],
       ['Case 1 short, case 2 long.', 'Both shorts to take.', 'Both short; neither is refused.', 'Case 1 is a short that can be taken; Case 2 is a long, refused by the trend rule.',
         'Case 1 is a short; case 2 is a long-side read against nothing, refused.', 'Case 1 short; case 2 is a long-side read under a long-only bias, refused.',
         'Both short; case 2 is a long-only setup, refused.']],
@@ -210,6 +210,25 @@ test('the reaction questions (q23-q35, feat/sweep-candle-control): answer-first 
       ['Case 1 long, case 2 short.', 'Both longs to take.', 'Both long; neither is refused.', 'Case 1 is a long that can be taken; Case 2 is a short, refused by the trend rule.',
         'Case 1 long; case 2 is a short-side read under a short-only bias, refused.']],
   };
+  // The aligned case must be said takeable: an answer refusing both (neither, both refused, no trade in either) is wrong,
+  // whatever it says of the side (qf-final-k20 q30 k7-k11: "Neither can be taken" passed).
+  const both = {
+    q30: [['Pullback-level rejection (4h and 1h down) is a short that may be taken; the rejection with 4h and 1h up is a short that is refused.',
+      'Pullback-level case (4h and 1h down): short side, may be taken. Uptrend case (4h and 1h up): short side, refused.', 'Upper-wick rejection at a high = short side for both; the 4h/1h down one can be taken, the 4h/1h up one is refused.',
+      'The 4h-and-1h-down one is a short with the trend; the 4h-and-1h-up one is a counter-trend short the trend rule refuses.'],
+    ['Both are shorts; neither can be taken.', 'Pullback-level rejection is a short, refused; the 4h+1h-up one is a short, refused too, and neither can be taken.',
+      'Both are the short side, and both are refused.', 'Both short: no trade in either case.', 'Pullback rejection is the short side and can\'t be taken; the rejection with the 4h and 1h up is also the short side and is refused too.']],
+    q33: [['Pullback-level low rejection (4h and 1h up) is a long and can be taken; the one with 4h and 1h down is a long and is refused.', 'Pullback-level low rejection is a long; the low rejection with 4h and 1h down is a long that may not be taken.',
+      'Both are long-side reads; take the 4h/1h-up pullback long if the rest of the setup checks, and refuse the 4h/1h-down long.'],
+    ['Both are longs; neither can be taken.', 'Both are the long side, and both are refused.', 'Both long: no trade in either case.']],
+    q36: [['Case 1 is a short and can be taken; Case 2 is a short and is refused.', 'Case 1: short, allowed. Case 2: short, refused (counter-trend); no long exists in either case.'],
+    ['Case 1 is a short, refused; Case 2 is a short, refused: neither can be taken.', 'Both are shorts and both are refused.', 'Both short: no trade in either case.']],
+    q37: [['Case 1 is a long, and it can be taken; Case 2 is a long, and it is refused.'], ['Both are longs; neither can be taken.', 'Both are longs and both are refused.', 'Both long: no trade in either case.']],
+  };
+  for (const [id, [right, wrong]] of Object.entries(both)) {
+    for (const a of right) assert.ok(pass(id, `ANSWER: ${a}`), `${id} takes the aligned case: ${a}`);
+    for (const a of wrong) assert.ok(!pass(id, `ANSWER: ${a}`), `${id} refuses both: ${a}`);
+  }
   for (const [id, [right, wrong]] of Object.entries(cases)) {
     for (const a of right) assert.ok(pass(id, `ANSWER: ${a}`), `${id} right: ${a}`);
     for (const a of wrong) assert.ok(!pass(id, `ANSWER: ${a}`), `${id} wrong: ${a}`);

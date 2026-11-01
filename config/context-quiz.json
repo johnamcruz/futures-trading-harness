@@ -536,7 +536,8 @@
       "anchor": "Side first, from the candle",
       "required": [
         "\\bshorts?\\b",
-        "\\b(refus\\w*|no trade|not a trade|counter\\w*|never counter|trend rule|not allowed|can'?t be taken|cannot be taken)\\b|\\bonly the (first|one|pullback)\\b[^.;]*\\b(can|may) be taken\\b|\\bonly the (first|one|pullback)\\b[^.;]*\\bis (tradeable|tradable|a setup|the trade)\\b|\\b(may|can) ?not( be taken)?\\b|\\bcannot be taken\\b"
+        "\\b(refus\\w*|no trade|not a trade|counter\\w*|never counter|trend rule|not allowed|can'?t be taken|cannot be taken)\\b|\\bonly the (first|one|pullback)\\b[^.;]*\\b(can|may) be taken\\b|\\bonly the (first|one|pullback)\\b[^.;]*\\bis (tradeable|tradable|a setup|the trade)\\b|\\b(may|can) ?not( be taken)?\\b|\\bcannot be taken\\b",
+        "(?<!\\b(?:neither|nor|none|not|never|no|cannot|can't|isn't|aren't|won't)\\b[^.;,:()]*)\\b(?:(?:can|may) be (?:taken|a setup|a long|a short)|take?able|tradeable|tradable|taken|allowed|take|is (?:the|a) (?:trade|setup)|with the trend|trend-with|with-trend|(?:long|short) setup|in the bias direction|usable|continuation (?:long|short))\\b|^[\\W_]*(?:long|short)\\s+on\\b|^(?!.*\\b(?:neither|none|either)\\b)(?!.*\\b(?:refus\\w*|cannot|can't|may not|not)\\b.*\\b(?:refus\\w*|cannot|can't|may not|not)\\b).*\\b(?:(?:cannot|can't|may not) be taken|no entry)\\b"
       ],
       "forbidden": [
         "\\blong[- ](setup|side|read|entry|trade)\\b",
@@ -618,7 +619,8 @@
       "anchor": "Side first, from the candle",
       "required": [
         "\\blongs?\\b(?!-wick)",
-        "\\b(refus\\w*|no trade|not a trade|counter\\w*|never counter|trend rule|not allowed|can'?t be taken|cannot be taken)\\b|\\bonly the (first|one|pullback)\\b[^.;]*\\b(can|may) be taken\\b|\\bonly the (first|one|pullback)\\b[^.;]*\\bis (tradeable|tradable|a setup|the trade)\\b|\\b(may|can) ?not( be taken)?\\b|\\bcannot be taken\\b"
+        "\\b(refus\\w*|no trade|not a trade|counter\\w*|never counter|trend rule|not allowed|can'?t be taken|cannot be taken)\\b|\\bonly the (first|one|pullback)\\b[^.;]*\\b(can|may) be taken\\b|\\bonly the (first|one|pullback)\\b[^.;]*\\bis (tradeable|tradable|a setup|the trade)\\b|\\b(may|can) ?not( be taken)?\\b|\\bcannot be taken\\b",
+        "(?<!\\b(?:neither|nor|none|not|never|no|cannot|can't|isn't|aren't|won't)\\b[^.;,:()]*)\\b(?:(?:can|may) be (?:taken|a setup|a long|a short)|take?able|tradeable|tradable|taken|allowed|take|is (?:the|a) (?:trade|setup)|with the trend|trend-with|with-trend|(?:long|short) setup|in the bias direction|usable|continuation (?:long|short))\\b|^[\\W_]*(?:long|short)\\s+on\\b|^(?!.*\\b(?:neither|none|either)\\b)(?!.*\\b(?:refus\\w*|cannot|can't|may not|not)\\b.*\\b(?:refus\\w*|cannot|can't|may not|not)\\b).*\\b(?:(?:cannot|can't|may not) be taken|no entry)\\b"
       ],
       "forbidden": [
         "\\bshort[- ](setup|side|read|entry|trade)\\b",
@@ -876,7 +878,8 @@
       "rule": "the side is the candle's: both are the short side (a rejection of a high); only the first, with the 4h and 1h, can be taken; against the 4h + 1h the trend rule refuses the second (never counter)",
       "required": [
         "\\bshorts?\\b",
-        "\\b(refus\\w*|no trade|not a trade|counter\\w*|never counter|trend rule|not allowed|can'?t be taken|cannot be taken)\\b|\\bonly the (first|one|pullback)\\b[^.;]*\\b(can|may) be taken\\b|\\bonly the (first|one|pullback)\\b[^.;]*\\bis (tradeable|tradable|a setup|the trade)\\b|\\b(may|can) ?not( be taken)?\\b|\\bcannot be taken\\b"
+        "\\b(refus\\w*|no trade|not a trade|counter\\w*|never counter|trend rule|not allowed|can'?t be taken|cannot be taken)\\b|\\bonly the (first|one|pullback)\\b[^.;]*\\b(can|may) be taken\\b|\\bonly the (first|one|pullback)\\b[^.;]*\\bis (tradeable|tradable|a setup|the trade)\\b|\\b(may|can) ?not( be taken)?\\b|\\bcannot be taken\\b",
+        "(?<!\\b(?:neither|nor|none|not|never|no|cannot|can't|isn't|aren't|won't)\\b[^.;,:()]*)\\b(?:(?:can|may) be (?:taken|a setup|a long|a short)|take?able|tradeable|tradable|taken|allowed|take|is (?:the|a) (?:trade|setup)|with the trend|trend-with|with-trend|(?:long|short) setup|in the bias direction|usable|continuation (?:long|short))\\b|^[\\W_]*(?:long|short)\\s+on\\b|^(?!.*\\b(?:neither|none|either)\\b)(?!.*\\b(?:refus\\w*|cannot|can't|may not|not)\\b.*\\b(?:refus\\w*|cannot|can't|may not|not)\\b).*\\b(?:(?:cannot|can't|may not) be taken|no entry)\\b"
       ],
       "forbidden": [
         "\\blong[- ](setup|side|read|entry|trade)\\b",
@@ -931,7 +934,8 @@
       "rule": "the side is the candle's: both are the long side (a rejection of a low); only the first, with the 4h and 1h, can be taken; against the 4h + 1h the trend rule refuses the second (never counter)",
       "required": [
         "\\blongs?\\b(?!-wick)",
-        "\\b(refus\\w*|no trade|not a trade|counter\\w*|never counter|trend rule|not allowed|can'?t be taken|cannot be taken)\\b|\\bonly the (first|one|pullback)\\b[^.;]*\\b(can|may) be taken\\b|\\bonly the (first|one|pullback)\\b[^.;]*\\bis (tradeable|tradable|a setup|the trade)\\b|\\b(may|can) ?not( be taken)?\\b|\\bcannot be taken\\b"
+        "\\b(refus\\w*|no trade|not a trade|counter\\w*|never counter|trend rule|not allowed|can'?t be taken|cannot be taken)\\b|\\bonly the (first|one|pullback)\\b[^.;]*\\b(can|may) be taken\\b|\\bonly the (first|one|pullback)\\b[^.;]*\\bis (tradeable|tradable|a setup|the trade)\\b|\\b(may|can) ?not( be taken)?\\b|\\bcannot be taken\\b",
+        "(?<!\\b(?:neither|nor|none|not|never|no|cannot|can't|isn't|aren't|won't)\\b[^.;,:()]*)\\b(?:(?:can|may) be (?:taken|a setup|a long|a short)|take?able|tradeable|tradable|taken|allowed|take|is (?:the|a) (?:trade|setup)|with the trend|trend-with|with-trend|(?:long|short) setup|in the bias direction|usable|continuation (?:long|short))\\b|^[\\W_]*(?:long|short)\\s+on\\b|^(?!.*\\b(?:neither|none|either)\\b)(?!.*\\b(?:refus\\w*|cannot|can't|may not|not)\\b.*\\b(?:refus\\w*|cannot|can't|may not|not)\\b).*\\b(?:(?:cannot|can't|may not) be taken|no entry)\\b"
       ],
       "forbidden": [
         "\\bshort[- ](setup|side|read|entry|trade)\\b",
