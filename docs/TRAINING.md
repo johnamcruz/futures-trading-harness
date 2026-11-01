@@ -990,7 +990,10 @@ on the trend confirm half:
   risk (moved away), an exit not at the stop, or unknown when the fill
   can't tell (never guessed). In a replay, stop slippage and a gap come
   from the bar-granular fill model, judged on the base bar's open: they
-  are not broker slippage;
+  are not broker slippage. The fill bar is the base bar holding the exit
+  time (its start up to, not including, the next bar's): a fill stamped
+  exactly on a bar boundary is judged on the later bar's open, so gap and
+  slippage can be misjudged there; no bar holding it reads unknown;
 - **win rate vs break-even**: with the average loss as one unit, the
   break-even win rate is (1 - z) / (1 + payoff), z the share of scratches
   (R 0, counted in the win rate's n): the win rate at zero expectancy (1 /
@@ -999,16 +1002,16 @@ on the trend confirm half:
   and a loss);
 - **chop drag by entry kind**: each filled entry's R, win rate, false-start
   share (as above, on its round trip's peak R; n/a with no peak known) and trend legs caught (distinct legs entered their
-  way), split by the reaction of its setup candle at its level (the
-  compose record's first rejection, break or sweep read, its reaction the
-  briefing's at the record's bar, rebuilt from the run's own bars:
-  `entry-reaction.js`; none: no such read; not recorded: no compose record
+  way), split by the reaction of its setup candle at its level and by key
+  level or not (the setup moments' key levels and FVG edges). The reaction
+  is the briefing's for the compose record's first rejection, break or
+  sweep read, at the record's bar, rebuilt from the run's own bars
+  (`entry-reaction.js`; none: no such read; not recorded: no compose record
   joined; unknown: the briefing can't say, with the coverage said). A
   frame built from one-minute bars (5m, gaps) needs them on the run's own
   price basis: runs archive no one-minute bars today and the loop's data
   file is back-adjusted (refused), so those reads are unknown until runs
-  archive their one-minute bars and by key level or not (the setup
-  moments' key levels and FVG edges); a bucket under
+  archive their one-minute bars. A bucket under
   `trendReport.smallN` (30) entries says "small n, no conclusion";
 - **exits**: the exit scorecard's cut-a-trend (R left) and late (R given
   back past the lock) totals on the side's own exits, and the probe

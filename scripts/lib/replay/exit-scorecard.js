@@ -149,7 +149,11 @@ function lateThreshold(strategies, params = PARAMS) {
 
 /**
  * A scored exit's fill facts in R (see the header): the stop working at a stop exit, the exit bar's open, the exit's
- * price, one tick. Pure; null where a price, the bar or the tick is unknown.
+ * price, one tick. r is the price R when the prices are known (rFrom 'price'), else the broker's R rescaled to the held
+ * stop (rFrom 'broker', rScale: the bracket's risk over the held one, which widens the broker R's rounding by as much).
+ * The fill bar is the base bar with bt <= exit time < bt + step: a fill stamped exactly on a bar boundary is judged on the
+ * later bar's open (gap or slippage can be misjudged there), and no bar holding it leaves openR null (the cause unknown).
+ * Pure; null where a price, the bar or the tick is unknown.
  */
 function fillOf(t, { exitBy, move, bars, stepMs, plan = null }) {
   const s = sign(t.side);
@@ -159,9 +163,11 @@ function fillOf(t, { exitBy, move, bars, stepMs, plan = null }) {
   const inR = px => (num(px) === null || num(t.entry) === null ? null : r4((s * (px - t.entry)) / unit));
   const stop = !STOP_EXITS.includes(exitBy) ? null : move ? num(move.to) : num(t.entry) === null ? null : t.entry - s * unit;
   const bar = stepMs > 0 ? (Array.isArray(bars) ? bars : []).find(b => { const bt = Date.parse(b.t); return bt <= t.exitMs && t.exitMs < bt + stepMs; }) : null;
+  const priceR = inR(t.exitPrice);
   return {
-    basis: unit === t.risk ? 'bracket stop' : 'held stop', r: num(t.r) === null ? null : r4((t.r * t.risk) / unit),
-    stopR: inR(stop), openR: bar ? inR(bar.o) : null, priceR: inR(t.exitPrice), tickR: num(t.tick) > 0 ? r4(t.tick / unit) : null,
+    basis: unit === t.risk ? 'bracket stop' : 'held stop',
+    r: priceR !== null ? priceR : num(t.r) === null ? null : r4((t.r * t.risk) / unit), rFrom: priceR !== null ? 'price' : num(t.r) === null ? null : 'broker', rScale: r4(t.risk / unit),
+    stopR: inR(stop), openR: bar ? inR(bar.o) : null, priceR, tickR: num(t.tick) > 0 ? r4(t.tick / unit) : null,
   };
 }
 

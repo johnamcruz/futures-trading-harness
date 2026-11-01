@@ -79,7 +79,9 @@ function losersPastOne(exits, { toleranceR }) {
   const known = exits.filter(e => isObj(e) && rOf(e) !== null);
   const losers = known.filter(e => rOf(e) < 0);
   // The side's R rounding unit: the most decimals any of its R was stated with (one R printed short never widens it).
-  const halfUnit = known.length ? 10 ** -Math.max(...known.map(e => decimalsOf(rOf(e)))) / 2 : 0;
+  // The broker's R as stated (a rescaled one widens it by its rescale: fill.rScale).
+  const halfUnit = known.length ? 10 ** -Math.max(...known.map(e => decimalsOf(num(e.r) !== null ? e.r : rOf(e)))) / 2 : 0;
+  const epsOf = e => halfUnit * (isObj(e.fill) && e.fill.rFrom === 'broker' && num(e.fill.rScale) > 0 ? e.fill.rScale : 1);
   let byTick = 0;
   const tolOf = e => {
     const t = num(isObj(e.fill) ? e.fill.tickR : null);
@@ -89,7 +91,7 @@ function losersPastOne(exits, { toleranceR }) {
   const marked = losers.map(e => ({ e, ...tolOf(e) }));
   // Past -1R on the fill's own price R when known (4 decimals, as the tick in R); else on its R, within the side's rounding
   // unit only beside a known tick (a one-tick slip rounded is not past), never on the config's tolerance.
-  const lossR = x => (num(isObj(x.e.fill) ? x.e.fill.priceR : null) !== null ? { r: x.e.fill.priceR, eps: 0 } : { r: rOf(x.e), eps: x.tick ? halfUnit : 0 });
+  const lossR = x => (num(isObj(x.e.fill) ? x.e.fill.priceR : null) !== null ? { r: x.e.fill.priceR, eps: 0 } : { r: rOf(x.e), eps: x.tick ? epsOf(x.e) : 0 });
   const past = marked.filter(x => { const l = lossR(x); return l.r < -1 - x.tol - l.eps; });
   const trades = past.map(({ e, tol }) => ({ entryAt: e.entryAt || null, side: e.side || null, exitBy: e.exitBy || null, r: rOf(e), toleranceR: round4(tol), cause: causeOf(e, tol) }));
   const causes = {};
