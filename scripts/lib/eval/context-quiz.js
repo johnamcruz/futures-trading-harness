@@ -14,7 +14,8 @@
  *                                      claudeRoleText) with its agent body; a lookup question's: the head prompt plus the
  *                                      skills it names (`lookup`) as skill_lookup returns them, whole (a skill the head
  *                                      reads as needed, not embedded: candle-reading's reaction read)
- *   excerptOf(excerpt)                 Part B's briefing excerpt: the Bias line (bias-line.js) or the Size and Min lines
+ *   excerptOf(excerpt)                 Part B's briefing excerpt: the Bias line (bias-line.js), the Size and Min lines, or per
+ *                                      case its Bias line and compose_check's REACTION line (reaction-echo.js)
  *                                      (prop/size-line.js), from the code that writes them
  *   questionText(quiz, q)              the text asked: the excerpt (Part B), the question, the answer format
  *   answerLine(answer)                 { line, fmt }: the ANSWER line (fmt false: the first line, no ANSWER label)
@@ -71,7 +72,8 @@ function quizErrors(v) {
       if (q.prompt === 'lookup' && !(Array.isArray(q.lookup) && q.lookup.length && q.lookup.every(s => typeof s === 'string' && /^[a-z0-9-]+$/.test(s)))) out.push(`${at}.lookup: the skills the head trader looks up for it (skill names)`);
       for (const k of ['text', 'rule']) if (!str(q[k])) out.push(`${at}.${k}: given`);
       if (part === 'questions' && !str(q.anchor)) out.push(`${at}.anchor: the phrase of the prompt that states the rule`);
-      if (part === 'partB' && !(isObj(q.excerpt) && (isObj(q.excerpt.bias) || (isObj(q.excerpt.size) && isObj(q.excerpt.size.facts))))) out.push(`${at}.excerpt: { bias: { h4, h1, t15, declared } } or { size: { facts, riskUsd, minContracts, stretchUsd, capUsd } }`);
+      const caseOk = x => isObj(x) && isObj(x.bias) && ['tf', 'rel', 'dir', 'level', 'reaction'].every(k => str(x[k]));
+      if (part === 'partB' && !(isObj(q.excerpt) && (isObj(q.excerpt.bias) || (isObj(q.excerpt.size) && isObj(q.excerpt.size.facts)) || (Array.isArray(q.excerpt.cases) && q.excerpt.cases.length && q.excerpt.cases.every(caseOk))))) out.push(`${at}.excerpt: { bias: { h4, h1, t15, declared } }, { size: { facts, riskUsd, minContracts, stretchUsd, capUsd } } or { cases: [{ bias, tf, rel, dir, level, reaction }] }`);
       out.push(...regexErrors(q.required, `${at}.required`), ...regexErrors(q.forbidden, `${at}.forbidden`));
       if (Array.isArray(q.required) && !q.required.length) out.push(`${at}.required: at least one`);
     });
@@ -127,7 +129,17 @@ function excerptOf(excerpt) {
   if (isObj(excerpt.bias)) return [`${require('../trading/bias-line').biasLine(biasBriefing(excerpt.bias))}.`];
   // The attempt's facts and sizing are the quiz file's (the lines are the code's on them).
   if (isObj(excerpt.size)) return require('../prop/size-line').sizeLines(excerpt.size).map(l => `${l}.`);
-  throw new Error('excerpt: { bias } or { size }');
+  // Live context (round 8): per case its Bias line and the REACTION line compose_check gives for its read
+  // (reaction-echo.js on a briefing holding that candle's relation and reaction): the lines the head sees.
+  if (Array.isArray(excerpt.cases)) {
+    const { echoLines } = require('../trading/reaction-echo');
+    return excerpt.cases.map((x, i) => {
+      const briefing = { sections: { m3: { data: { candles: { [x.tf]: { relations: [{ name: x.level, price: 0, rel: x.rel, dir: x.dir, reaction: x.reaction }] } } } } } };
+      const echo = echoLines([{ read: `${x.tf} ${x.rel} ${x.level} ${x.dir}` }], briefing)[0] || '';
+      return `Case ${i + 1}: ${require('../trading/bias-line').biasLine(biasBriefing(x.bias))}. compose_check on "${x.tf} ${x.rel} ${x.level} ${x.dir}": ${echo.replace(/^- /, '')}`;
+    });
+  }
+  throw new Error('excerpt: { bias }, { size } or { cases }');
 }
 
 function questionText(quiz, q) {

@@ -135,9 +135,10 @@ test('the reaction questions (q23-q35, feat/sweep-candle-control): answer-first 
         'It is not a confirmation of the rejection.', 'No confirmation of the rejection.', 'Not a confirmed rejection.', 'The rejection is negated; a breakout confirmation.',
         'The rejection, then the engulfing confirms a breakout.', 'The rejection: the engulfing confirms nothing.']],
     // Conflicting: mixed, it needs other confirmation (or the next candle).
-    q28: [['Not by itself: the conflicting label means mixed, so it needs other confirmation before you read sellers in control.', 'No, sellers in control needs a bearish close: mixed, wait.', 'No, short it only once the next candle closes lower.', 'No: mixed evidence, wait for confirmation.', 'Wait for the next candle.', 'Not yet: conflicting.', 'Not on this read alone; mixed, not sellers in control.', 'Mixed: it needs other confirmation, the count or the next candle.'],
+    q28: [['Not by itself: the conflicting label means mixed, so it needs other confirmation before you read sellers in control.', 'Not on this read alone; the conflicting label means mixed, so it needs other confirmation before you call sellers in control.',
+      'Not on this read alone: the candle is conflicting, so it needs other confirmation before it counts as sellers in control.', 'No, sellers in control needs a bearish close: mixed, wait.', 'No, short it only once the next candle closes lower.', 'No: mixed evidence, wait for confirmation.', 'Wait for the next candle.', 'Not yet: conflicting.', 'Not on this read alone; mixed, not sellers in control.', 'Mixed: it needs other confirmation, the count or the next candle.'],
       ['Yes, it closed back below.', 'Sellers are in control.', 'Take it now: the close is back below.', 'Short it: sellers in control.', 'Yes: sellers in control.', 'No, but sellers are in control: short it.', 'Not yet, sellers are in control.', 'No. Sellers in control: short it now.',
-        'Yes, read it as sellers in control, but only as a conflicting read that needs other confirmation.']],
+        'Yes, read it as sellers in control, but only as a conflicting read that needs other confirmation.', 'No. Until the next close: sellers in control']],
     // A stall: the next candle decides, said anywhere in the line.
     q29: [['The next candle decides.', 'Next 15m candle.', 'The 15m candle after the doji decides it.', 'Whoever wins the next 15m close.'],
       ['The doji itself.', 'This candle decides.', 'Sellers.', 'Buyers decide.', 'The doji decides: it is a stall.']],
@@ -146,11 +147,13 @@ test('the reaction questions (q23-q35, feat/sweep-candle-control): answer-first 
     // 4h + 1h refused (the trend rule). Real answers stating the wrong sides fail.
     q30: [['Both are the short side (a rejection of a high); only the first, with the 4h and 1h down, can be taken; the trend rule refuses the second (never counter).',
       'Short side both times: the pullback one is a continuation short to take, the one against the 4h + 1h is refused.', 'Same candle read (short side), different trade: the 4h and 1h down one can be a setup, the 4h and 1h up one is refused.',
-      'Both short; the first can be taken, the second is counter to the 4h and 1h: no trade.'],
+      'Both short; the first can be taken, the second is counter to the 4h and 1h: no trade.', 'Both are shorts (the candle\'s side). Only the first can be taken; the second is refused by the trend rule.',
+      'Both are shorts, but only the one with the 4h and 1h down can be taken.'],
       ['Both are shorts to take.', 'The first is a short, the second a long setup.', 'Short both: take them both.', 'The first a short; the second is a counter-trend short I\'d take small.',
         'Both short: the first can be taken, and take the second anyway.', 'The pullback one is a long, the other a short.', 'Short side; the second is a counter-trend short but still a short to take.',
         'No, they differ: the down-trend one is a short only if it sits against the trend, and the up-trend one is a long pullback.', 'Both short and both can be taken.',
-        'The pullback one is a continuation; the other one is refused.']],
+        'The pullback one is a continuation; the other one is refused.', 'Both short; neither is refused.', 'Both shorts, nothing refused: counter or not.',
+        'The one with the 4h up is a high rejection on the long side; only the first is short.']],
     // The reaction rules hold on every timeframe and a higher frame's is stronger confirmation (the owner, 2026-10-31); still
     // context. Asked with candle-reading looked up (its stack line).
     q31: [['The 4h: it outweighs the 15m, but it still needs other confirmation.', 'The 4h rejection; not a trade on its own, it needs the count.', '4h. Context only: it needs more confirmation.', 'The higher frame, the 4h; it still needs confirmation.',
@@ -170,18 +173,23 @@ test('the reaction questions (q23-q35, feat/sweep-candle-control): answer-first 
         'No short; the trend rule refuses it.']],
     // The mirror of q30 (a rejection of a low): the side is the candle's (the long side), never the bias's.
     q33: [['Both are the long side (a rejection of a low); only the first, with the 4h and 1h up, can be taken; the trend rule refuses the second (never counter).',
-      'Long side both times: the pullback one is a continuation long, the one against the 4h + 1h is refused.', 'Both long; the first can be taken, the second is counter to the 4h and 1h: no trade.'],
+      'Long side both times: the pullback one is a continuation long, the one against the 4h + 1h is refused.', 'Both long; the first can be taken, the second is counter to the 4h and 1h: no trade.',
+      'Both are longs (the candle\'s side). Only the first can be taken; the second is refused by the trend rule.', 'Both are longs, but only the one with the 4h and 1h up can be taken.'],
       ['Both are longs to take.', 'The first is a long, the second a short setup.', 'Long both: take them both.', 'The first a long; the second is a counter-trend long I\'d take small.',
-        'Both long: the first can be taken, and take the second anyway.', 'The pullback one is a short, the other a long.', 'Both long and both can be taken.', 'The pullback one is a continuation; the other one is refused.']],
+        'Both long: the first can be taken, and take the second anyway.', 'The pullback one is a short, the other a long.', 'Both long and both can be taken.', 'The pullback one is a continuation; the other one is refused.',
+        'Both long; neither is refused.']],
     // No bare rejection: a `rejected` relation with a plain reaction is no rejection read by itself.
-    q34: [['No: it closed back, but the wick, the body and the next candle haven\'t confirmed; plain is weak, context only.', 'Not by itself: the reaction is plain, context only.', 'No - the relation alone is no rejection read; the reaction decides, and plain is weak.',
-      'No: plain is no rejection read, weak context only; it needs other confirmation.'],
-      ['Yes: it traded above and closed back below.', 'A rejection: sellers took control.', 'No, but it is a rejection read: short it.', 'Yes, a rejection read; the close back below is enough.', 'No: sellers are in control.',
-        'Yes, a plain reaction still counts as a rejection read, but it is weak context only.', 'No: a rejection, context only.', 'Not confirmed, but it is still a rejection read.']],
+    q34: [['No: no one took control; plain is not a rejection, weak context only.', 'Not a rejection: the relation is only the fact, and plain means no one took control.', 'No - the reaction decides, and plain is weak context only.'],
+      ['Yes, a rejection read, but plain means no rejection read.', 'Yes: it traded above and closed back below.', 'No: a rejection, context only.', 'No, but it is a rejection: short it.', 'No: sellers took control.', 'Not confirmed, but it is still a rejection.']],
     // The index reference: candle-reading, read with skill_lookup (or the cycle's embedded copy), never rejection alone.
     q35: [['candle-reading, read with skill_lookup (or the cycle\'s embedded copy).', '`candle-reading`: look it up with skill_lookup before the entry.', 'The candle-reading skill, its reaction read: skill_lookup, unless the cycle embedded it.',
       'Read the `candle-reading` skill; it defines what a conflicting reaction means.', 'Read `candle-reading` (the reaction read), then `rejection` for the setup.', 'Read `rejection` for the setup, and `candle-reading` for what the conflicting reaction means; look it up with skill_lookup first.'],
       ['rejection: it is the setup skill.', 'The rejection skill, already in my prompt.', 'candle-reading, with the skill tool.', 'breakout-vs-fakeout.', 'candle-reading: it is embedded in my head prompt.']],
+    // The live lines (Part B): each case's Bias line and compose_check's REACTION line, built by the code.
+    q36: [['Both are shorts (the REACTION line: short side); only case 1 can be taken, case 2 is refused by the trend rule.', 'Short side both; only the first can be taken; the second counters the 4h + 1h.'],
+      ['Case 1 short, case 2 long.', 'Both shorts to take.', 'Both short; neither is refused.']],
+    q37: [['Both are longs (the REACTION line: long side); only case 1 can be taken, case 2 is refused by the trend rule.', 'Long side both; only the first can be taken; the second counters the 4h + 1h.'],
+      ['Case 1 long, case 2 short.', 'Both longs to take.', 'Both long; neither is refused.']],
   };
   for (const [id, [right, wrong]] of Object.entries(cases)) {
     for (const a of right) assert.ok(pass(id, `ANSWER: ${a}`), `${id} right: ${a}`);
@@ -194,7 +202,7 @@ test('summary: correct on all K, answered both ways, the totals, the bar; compar
   for (const x of QUIZ.questions) for (let k = 1; k <= 5; k += 1) rows.push({ id: x.id, k, pass: true });
   for (const x of QUIZ.partB) for (let k = 1; k <= 5; k += 1) rows.push({ id: x.id, k, pass: true });
   const all = Q.summarize(QUIZ, rows, 5);
-  assert.deepStrictEqual([all.partA.allCorrect, all.partA.bothWays, all.partB.allCorrect, all.meetsBar], [35, 0, 5, true]);
+  assert.deepStrictEqual([all.partA.allCorrect, all.partA.bothWays, all.partB.allCorrect, all.meetsBar], [35, 0, 7, true]);
   const one = rows.map(r => (r.id === 'q6' && r.k === 2 ? { ...r, pass: false } : r));
   const s = Q.summarize(QUIZ, one, 5);
   assert.deepStrictEqual([s.partA.allCorrect, s.partA.bothWays, s.partA.total, s.meetsBar], [34, 1, 174, false]);

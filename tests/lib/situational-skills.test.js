@@ -248,6 +248,13 @@ test('availability: on every bar a candle rejects, breaks or sweeps a level, can
     assert.match(SS.situationText(ROOT, tight), /Also relevant now[^]*`candle-reading`/);
     assert.match(RL.warningFor(['15m rejected prior vah down'], { env: { FTH_AUTONOMOUS: '1' }, root: ROOT }), /candle-reading/);
   }
+  // Hard room between compression's size and candle-reading's: compression embedded (nothing reserved for a skill that
+  // can't fit), candle-reading named and warned.
+  const both = SS.factsOf({ state: FLAT, briefings: [brief({ compression: expanding('up'), candles: { '15m': { relations: [{ name: 'prior VAH', price: 100, rel: 'rejected', dir: 'down' }] } } })] });
+  const between = SS.fit(ROOT, both, { base: 1000, max: 1000 + Math.floor((size('compression') + size('candle-reading')) / 2), loaded: LOADED });
+  assert.ok(size('compression') < size('candle-reading'));
+  assert.ok(between.skills.includes('compression') && !between.skills.includes('candle-reading') && between.over.includes('candle-reading'), JSON.stringify(between));
+  assert.match(SS.situationText(ROOT, between), /Also relevant now[^]*`candle-reading`/);
   // A required skill is the last to go: the rest shrinks before it.
   const facts = SS.factsOf({ state: FLAT, briefings: [brief({ compression: expanding('up'), candles: { '15m': { relations: [{ name: 'prior VAH', price: 100, rel: 'rejected', dir: 'down' }] } } })] });
   const room = SS.fit(ROOT, facts, { base: 1000, max: 1000 + size('candle-reading') + 400, loaded: LOADED });

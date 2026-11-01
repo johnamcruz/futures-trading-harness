@@ -186,8 +186,13 @@ function fit(root, facts, { budget = BUDGET(), base = 0, max = Infinity, reserve
   // gets what is left (and shrinks first).
   let h = budgetFor({ base, max, reserve });
   const must = new Set(MUST());
-  const reserved = [...new Set(facts.flatMap(f => f.skills || []))].filter(s => must.has(s) && !loaded.includes(s))
-    .reduce((n, s) => { try { return n + Buffer.byteLength(blockOf(root, s)); } catch (_err) { return n; } }, 0);
+  // Reserved only for what fits the hard room: a required skill too large for it is left out (named), and reserves nothing.
+  let reserved = 0;
+  for (const s of [...new Set(facts.flatMap(f => f.skills || []))].filter(x => must.has(x) && !loaded.includes(x))) {
+    let n;
+    try { n = Buffer.byteLength(blockOf(root, s)); } catch (_err) { continue; }
+    if (reserved + n <= h) reserved += n;
+  }
   let b = Math.max(0, Math.min(budget, h - reserved));
   for (;;) {
     const chosen = choose(root, facts, { budget: b, loaded, hard: h });

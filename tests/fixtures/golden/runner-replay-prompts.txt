@@ -173,7 +173,15 @@ The stack counts once (`confluence-counting`, trigger).
 
 **Reaction at a level** (`reaction` on `m3.candles.<tf>.relations`,
 `confirmed`: `bar-briefing`).
-  The close determines acceptance or
+  Side first, from the candle: a rejection
+of a high (`<tf> rejected <level> down`) is the short side, of a low
+(`up`) the long side; a breakout's side is its close (`<tf> broke
+<level> up` → long), whatever the trend.
+  Then the trend rule: with the
+4h + 1h (at a pullback level, a continuation: `pullback-vs-reversal`)
+→ may be taken; against → refused (never counter; `trend-vs-range`).
+
+The close determines acceptance or
 rejection.
   The wick measures the failed attempt.
   The body measures
@@ -187,16 +195,11 @@ against all the briefing shows: the bias (4h + 1h), the level (its
 timeframe and kind), where price is in the move (a pullback or an
 extension), momentum and volume, the other timeframes' reactions.
   The
-side is the candle's, never the bias's: a rejection of a high
-(`<tf> rejected <level> down`: through it above, closed back below) →
-the short side; of a low (`up`) → the long side; a breakout's is its
-close (`<tf> broke <level> up` → long).
-  The bias only decides whether that side is
-allowed: with it, at a pullback level → a continuation
-(`pullback-vs-reversal`); against the 4h + 1h → the trend rule refuses
-it (never counter; `trend-vs-range`).
-  A `rejected` relation alone is no
-rejection read: its reaction decides.
+`rejected` relation is only the fact (traded through, closed back).
+  It
+is a rejection only when its reaction is a long-wick, engulfing or
+confirmed rejection; plain → not a rejection: no one took control, weak
+context only.
 Read the field, never by eye.
   At a high (a low: the mirror), the first that holds:
 
@@ -220,7 +223,7 @@ Read the field, never by eye.
   stall: a doji (never conflicting) or inside candle → stalled; the
    next candle decides.
 7.
-  plain: none → no rejection read: weak context only.
+  plain: none → not a rejection: no one took control, weak context only.
 
 The close beats the wick: a long wick closing above is no rejection; a
 close exactly at the level is no breakout.
@@ -1283,7 +1286,15 @@ The stack counts once (`confluence-counting`, trigger).
 
 **Reaction at a level** (`reaction` on `m3.candles.<tf>.relations`,
 `confirmed`: `bar-briefing`).
-  The close determines acceptance or
+  Side first, from the candle: a rejection
+of a high (`<tf> rejected <level> down`) is the short side, of a low
+(`up`) the long side; a breakout's side is its close (`<tf> broke
+<level> up` → long), whatever the trend.
+  Then the trend rule: with the
+4h + 1h (at a pullback level, a continuation: `pullback-vs-reversal`)
+→ may be taken; against → refused (never counter; `trend-vs-range`).
+
+The close determines acceptance or
 rejection.
   The wick measures the failed attempt.
   The body measures
@@ -1297,16 +1308,11 @@ against all the briefing shows: the bias (4h + 1h), the level (its
 timeframe and kind), where price is in the move (a pullback or an
 extension), momentum and volume, the other timeframes' reactions.
   The
-side is the candle's, never the bias's: a rejection of a high
-(`<tf> rejected <level> down`: through it above, closed back below) →
-the short side; of a low (`up`) → the long side; a breakout's is its
-close (`<tf> broke <level> up` → long).
-  The bias only decides whether that side is
-allowed: with it, at a pullback level → a continuation
-(`pullback-vs-reversal`); against the 4h + 1h → the trend rule refuses
-it (never counter; `trend-vs-range`).
-  A `rejected` relation alone is no
-rejection read: its reaction decides.
+`rejected` relation is only the fact (traded through, closed back).
+  It
+is a rejection only when its reaction is a long-wick, engulfing or
+confirmed rejection; plain → not a rejection: no one took control, weak
+context only.
 Read the field, never by eye.
   At a high (a low: the mirror), the first that holds:
 
@@ -1330,7 +1336,7 @@ Read the field, never by eye.
   stall: a doji (never conflicting) or inside candle → stalled; the
    next candle decides.
 7.
-  plain: none → no rejection read: weak context only.
+  plain: none → not a rejection: no one took control, weak context only.
 
 The close beats the wick: a long wick closing above is no rejection; a
 close exactly at the level is no breakout.
@@ -2393,7 +2399,15 @@ The stack counts once (`confluence-counting`, trigger).
 
 **Reaction at a level** (`reaction` on `m3.candles.<tf>.relations`,
 `confirmed`: `bar-briefing`).
-  The close determines acceptance or
+  Side first, from the candle: a rejection
+of a high (`<tf> rejected <level> down`) is the short side, of a low
+(`up`) the long side; a breakout's side is its close (`<tf> broke
+<level> up` → long), whatever the trend.
+  Then the trend rule: with the
+4h + 1h (at a pullback level, a continuation: `pullback-vs-reversal`)
+→ may be taken; against → refused (never counter; `trend-vs-range`).
+
+The close determines acceptance or
 rejection.
   The wick measures the failed attempt.
   The body measures
@@ -2407,16 +2421,11 @@ against all the briefing shows: the bias (4h + 1h), the level (its
 timeframe and kind), where price is in the move (a pullback or an
 extension), momentum and volume, the other timeframes' reactions.
   The
-side is the candle's, never the bias's: a rejection of a high
-(`<tf> rejected <level> down`: through it above, closed back below) →
-the short side; of a low (`up`) → the long side; a breakout's is its
-close (`<tf> broke <level> up` → long).
-  The bias only decides whether that side is
-allowed: with it, at a pullback level → a continuation
-(`pullback-vs-reversal`); against the 4h + 1h → the trend rule refuses
-it (never counter; `trend-vs-range`).
-  A `rejected` relation alone is no
-rejection read: its reaction decides.
+`rejected` relation is only the fact (traded through, closed back).
+  It
+is a rejection only when its reaction is a long-wick, engulfing or
+confirmed rejection; plain → not a rejection: no one took control, weak
+context only.
 Read the field, never by eye.
   At a high (a low: the mirror), the first that holds:
 
@@ -2440,7 +2449,7 @@ Read the field, never by eye.
   stall: a doji (never conflicting) or inside candle → stalled; the
    next candle decides.
 7.
-  plain: none → no rejection read: weak context only.
+  plain: none → not a rejection: no one took control, weak context only.
 
 The close beats the wick: a long wick closing above is no rejection; a
 close exactly at the level is no breakout.
@@ -3494,7 +3503,15 @@ The stack counts once (`confluence-counting`, trigger).
 
 **Reaction at a level** (`reaction` on `m3.candles.<tf>.relations`,
 `confirmed`: `bar-briefing`).
-  The close determines acceptance or
+  Side first, from the candle: a rejection
+of a high (`<tf> rejected <level> down`) is the short side, of a low
+(`up`) the long side; a breakout's side is its close (`<tf> broke
+<level> up` → long), whatever the trend.
+  Then the trend rule: with the
+4h + 1h (at a pullback level, a continuation: `pullback-vs-reversal`)
+→ may be taken; against → refused (never counter; `trend-vs-range`).
+
+The close determines acceptance or
 rejection.
   The wick measures the failed attempt.
   The body measures
@@ -3508,16 +3525,11 @@ against all the briefing shows: the bias (4h + 1h), the level (its
 timeframe and kind), where price is in the move (a pullback or an
 extension), momentum and volume, the other timeframes' reactions.
   The
-side is the candle's, never the bias's: a rejection of a high
-(`<tf> rejected <level> down`: through it above, closed back below) →
-the short side; of a low (`up`) → the long side; a breakout's is its
-close (`<tf> broke <level> up` → long).
-  The bias only decides whether that side is
-allowed: with it, at a pullback level → a continuation
-(`pullback-vs-reversal`); against the 4h + 1h → the trend rule refuses
-it (never counter; `trend-vs-range`).
-  A `rejected` relation alone is no
-rejection read: its reaction decides.
+`rejected` relation is only the fact (traded through, closed back).
+  It
+is a rejection only when its reaction is a long-wick, engulfing or
+confirmed rejection; plain → not a rejection: no one took control, weak
+context only.
 Read the field, never by eye.
   At a high (a low: the mirror), the first that holds:
 
@@ -3541,7 +3553,7 @@ Read the field, never by eye.
   stall: a doji (never conflicting) or inside candle → stalled; the
    next candle decides.
 7.
-  plain: none → no rejection read: weak context only.
+  plain: none → not a rejection: no one took control, weak context only.
 
 The close beats the wick: a long wick closing above is no rejection; a
 close exactly at the level is no breakout.
@@ -4692,7 +4704,15 @@ The stack counts once (`confluence-counting`, trigger).
 
 **Reaction at a level** (`reaction` on `m3.candles.<tf>.relations`,
 `confirmed`: `bar-briefing`).
-  The close determines acceptance or
+  Side first, from the candle: a rejection
+of a high (`<tf> rejected <level> down`) is the short side, of a low
+(`up`) the long side; a breakout's side is its close (`<tf> broke
+<level> up` → long), whatever the trend.
+  Then the trend rule: with the
+4h + 1h (at a pullback level, a continuation: `pullback-vs-reversal`)
+→ may be taken; against → refused (never counter; `trend-vs-range`).
+
+The close determines acceptance or
 rejection.
   The wick measures the failed attempt.
   The body measures
@@ -4706,16 +4726,11 @@ against all the briefing shows: the bias (4h + 1h), the level (its
 timeframe and kind), where price is in the move (a pullback or an
 extension), momentum and volume, the other timeframes' reactions.
   The
-side is the candle's, never the bias's: a rejection of a high
-(`<tf> rejected <level> down`: through it above, closed back below) →
-the short side; of a low (`up`) → the long side; a breakout's is its
-close (`<tf> broke <level> up` → long).
-  The bias only decides whether that side is
-allowed: with it, at a pullback level → a continuation
-(`pullback-vs-reversal`); against the 4h + 1h → the trend rule refuses
-it (never counter; `trend-vs-range`).
-  A `rejected` relation alone is no
-rejection read: its reaction decides.
+`rejected` relation is only the fact (traded through, closed back).
+  It
+is a rejection only when its reaction is a long-wick, engulfing or
+confirmed rejection; plain → not a rejection: no one took control, weak
+context only.
 Read the field, never by eye.
   At a high (a low: the mirror), the first that holds:
 
@@ -4739,7 +4754,7 @@ Read the field, never by eye.
   stall: a doji (never conflicting) or inside candle → stalled; the
    next candle decides.
 7.
-  plain: none → no rejection read: weak context only.
+  plain: none → not a rejection: no one took control, weak context only.
 
 The close beats the wick: a long wick closing above is no rejection; a
 close exactly at the level is no breakout.
@@ -5887,7 +5902,15 @@ The stack counts once (`confluence-counting`, trigger).
 
 **Reaction at a level** (`reaction` on `m3.candles.<tf>.relations`,
 `confirmed`: `bar-briefing`).
-  The close determines acceptance or
+  Side first, from the candle: a rejection
+of a high (`<tf> rejected <level> down`) is the short side, of a low
+(`up`) the long side; a breakout's side is its close (`<tf> broke
+<level> up` → long), whatever the trend.
+  Then the trend rule: with the
+4h + 1h (at a pullback level, a continuation: `pullback-vs-reversal`)
+→ may be taken; against → refused (never counter; `trend-vs-range`).
+
+The close determines acceptance or
 rejection.
   The wick measures the failed attempt.
   The body measures
@@ -5901,16 +5924,11 @@ against all the briefing shows: the bias (4h + 1h), the level (its
 timeframe and kind), where price is in the move (a pullback or an
 extension), momentum and volume, the other timeframes' reactions.
   The
-side is the candle's, never the bias's: a rejection of a high
-(`<tf> rejected <level> down`: through it above, closed back below) →
-the short side; of a low (`up`) → the long side; a breakout's is its
-close (`<tf> broke <level> up` → long).
-  The bias only decides whether that side is
-allowed: with it, at a pullback level → a continuation
-(`pullback-vs-reversal`); against the 4h + 1h → the trend rule refuses
-it (never counter; `trend-vs-range`).
-  A `rejected` relation alone is no
-rejection read: its reaction decides.
+`rejected` relation is only the fact (traded through, closed back).
+  It
+is a rejection only when its reaction is a long-wick, engulfing or
+confirmed rejection; plain → not a rejection: no one took control, weak
+context only.
 Read the field, never by eye.
   At a high (a low: the mirror), the first that holds:
 
@@ -5934,7 +5952,7 @@ Read the field, never by eye.
   stall: a doji (never conflicting) or inside candle → stalled; the
    next candle decides.
 7.
-  plain: none → no rejection read: weak context only.
+  plain: none → not a rejection: no one took control, weak context only.
 
 The close beats the wick: a long wick closing above is no rejection; a
 close exactly at the level is no breakout.
@@ -7003,7 +7021,15 @@ The stack counts once (`confluence-counting`, trigger).
 
 **Reaction at a level** (`reaction` on `m3.candles.<tf>.relations`,
 `confirmed`: `bar-briefing`).
-  The close determines acceptance or
+  Side first, from the candle: a rejection
+of a high (`<tf> rejected <level> down`) is the short side, of a low
+(`up`) the long side; a breakout's side is its close (`<tf> broke
+<level> up` → long), whatever the trend.
+  Then the trend rule: with the
+4h + 1h (at a pullback level, a continuation: `pullback-vs-reversal`)
+→ may be taken; against → refused (never counter; `trend-vs-range`).
+
+The close determines acceptance or
 rejection.
   The wick measures the failed attempt.
   The body measures
@@ -7017,16 +7043,11 @@ against all the briefing shows: the bias (4h + 1h), the level (its
 timeframe and kind), where price is in the move (a pullback or an
 extension), momentum and volume, the other timeframes' reactions.
   The
-side is the candle's, never the bias's: a rejection of a high
-(`<tf> rejected <level> down`: through it above, closed back below) →
-the short side; of a low (`up`) → the long side; a breakout's is its
-close (`<tf> broke <level> up` → long).
-  The bias only decides whether that side is
-allowed: with it, at a pullback level → a continuation
-(`pullback-vs-reversal`); against the 4h + 1h → the trend rule refuses
-it (never counter; `trend-vs-range`).
-  A `rejected` relation alone is no
-rejection read: its reaction decides.
+`rejected` relation is only the fact (traded through, closed back).
+  It
+is a rejection only when its reaction is a long-wick, engulfing or
+confirmed rejection; plain → not a rejection: no one took control, weak
+context only.
 Read the field, never by eye.
   At a high (a low: the mirror), the first that holds:
 
@@ -7050,7 +7071,7 @@ Read the field, never by eye.
   stall: a doji (never conflicting) or inside candle → stalled; the
    next candle decides.
 7.
-  plain: none → no rejection read: weak context only.
+  plain: none → not a rejection: no one took control, weak context only.
 
 The close beats the wick: a long wick closing above is no rejection; a
 close exactly at the level is no breakout.
@@ -8119,7 +8140,15 @@ The stack counts once (`confluence-counting`, trigger).
 
 **Reaction at a level** (`reaction` on `m3.candles.<tf>.relations`,
 `confirmed`: `bar-briefing`).
-  The close determines acceptance or
+  Side first, from the candle: a rejection
+of a high (`<tf> rejected <level> down`) is the short side, of a low
+(`up`) the long side; a breakout's side is its close (`<tf> broke
+<level> up` → long), whatever the trend.
+  Then the trend rule: with the
+4h + 1h (at a pullback level, a continuation: `pullback-vs-reversal`)
+→ may be taken; against → refused (never counter; `trend-vs-range`).
+
+The close determines acceptance or
 rejection.
   The wick measures the failed attempt.
   The body measures
@@ -8133,16 +8162,11 @@ against all the briefing shows: the bias (4h + 1h), the level (its
 timeframe and kind), where price is in the move (a pullback or an
 extension), momentum and volume, the other timeframes' reactions.
   The
-side is the candle's, never the bias's: a rejection of a high
-(`<tf> rejected <level> down`: through it above, closed back below) →
-the short side; of a low (`up`) → the long side; a breakout's is its
-close (`<tf> broke <level> up` → long).
-  The bias only decides whether that side is
-allowed: with it, at a pullback level → a continuation
-(`pullback-vs-reversal`); against the 4h + 1h → the trend rule refuses
-it (never counter; `trend-vs-range`).
-  A `rejected` relation alone is no
-rejection read: its reaction decides.
+`rejected` relation is only the fact (traded through, closed back).
+  It
+is a rejection only when its reaction is a long-wick, engulfing or
+confirmed rejection; plain → not a rejection: no one took control, weak
+context only.
 Read the field, never by eye.
   At a high (a low: the mirror), the first that holds:
 
@@ -8166,7 +8190,7 @@ Read the field, never by eye.
   stall: a doji (never conflicting) or inside candle → stalled; the
    next candle decides.
 7.
-  plain: none → no rejection read: weak context only.
+  plain: none → not a rejection: no one took control, weak context only.
 
 The close beats the wick: a long wick closing above is no rejection; a
 close exactly at the level is no breakout.
@@ -9308,7 +9332,15 @@ The stack counts once (`confluence-counting`, trigger).
 
 **Reaction at a level** (`reaction` on `m3.candles.<tf>.relations`,
 `confirmed`: `bar-briefing`).
-  The close determines acceptance or
+  Side first, from the candle: a rejection
+of a high (`<tf> rejected <level> down`) is the short side, of a low
+(`up`) the long side; a breakout's side is its close (`<tf> broke
+<level> up` → long), whatever the trend.
+  Then the trend rule: with the
+4h + 1h (at a pullback level, a continuation: `pullback-vs-reversal`)
+→ may be taken; against → refused (never counter; `trend-vs-range`).
+
+The close determines acceptance or
 rejection.
   The wick measures the failed attempt.
   The body measures
@@ -9322,16 +9354,11 @@ against all the briefing shows: the bias (4h + 1h), the level (its
 timeframe and kind), where price is in the move (a pullback or an
 extension), momentum and volume, the other timeframes' reactions.
   The
-side is the candle's, never the bias's: a rejection of a high
-(`<tf> rejected <level> down`: through it above, closed back below) →
-the short side; of a low (`up`) → the long side; a breakout's is its
-close (`<tf> broke <level> up` → long).
-  The bias only decides whether that side is
-allowed: with it, at a pullback level → a continuation
-(`pullback-vs-reversal`); against the 4h + 1h → the trend rule refuses
-it (never counter; `trend-vs-range`).
-  A `rejected` relation alone is no
-rejection read: its reaction decides.
+`rejected` relation is only the fact (traded through, closed back).
+  It
+is a rejection only when its reaction is a long-wick, engulfing or
+confirmed rejection; plain → not a rejection: no one took control, weak
+context only.
 Read the field, never by eye.
   At a high (a low: the mirror), the first that holds:
 
@@ -9355,7 +9382,7 @@ Read the field, never by eye.
   stall: a doji (never conflicting) or inside candle → stalled; the
    next candle decides.
 7.
-  plain: none → no rejection read: weak context only.
+  plain: none → not a rejection: no one took control, weak context only.
 
 The close beats the wick: a long wick closing above is no rejection; a
 close exactly at the level is no breakout.
@@ -10506,7 +10533,15 @@ The stack counts once (`confluence-counting`, trigger).
 
 **Reaction at a level** (`reaction` on `m3.candles.<tf>.relations`,
 `confirmed`: `bar-briefing`).
-  The close determines acceptance or
+  Side first, from the candle: a rejection
+of a high (`<tf> rejected <level> down`) is the short side, of a low
+(`up`) the long side; a breakout's side is its close (`<tf> broke
+<level> up` → long), whatever the trend.
+  Then the trend rule: with the
+4h + 1h (at a pullback level, a continuation: `pullback-vs-reversal`)
+→ may be taken; against → refused (never counter; `trend-vs-range`).
+
+The close determines acceptance or
 rejection.
   The wick measures the failed attempt.
   The body measures
@@ -10520,16 +10555,11 @@ against all the briefing shows: the bias (4h + 1h), the level (its
 timeframe and kind), where price is in the move (a pullback or an
 extension), momentum and volume, the other timeframes' reactions.
   The
-side is the candle's, never the bias's: a rejection of a high
-(`<tf> rejected <level> down`: through it above, closed back below) →
-the short side; of a low (`up`) → the long side; a breakout's is its
-close (`<tf> broke <level> up` → long).
-  The bias only decides whether that side is
-allowed: with it, at a pullback level → a continuation
-(`pullback-vs-reversal`); against the 4h + 1h → the trend rule refuses
-it (never counter; `trend-vs-range`).
-  A `rejected` relation alone is no
-rejection read: its reaction decides.
+`rejected` relation is only the fact (traded through, closed back).
+  It
+is a rejection only when its reaction is a long-wick, engulfing or
+confirmed rejection; plain → not a rejection: no one took control, weak
+context only.
 Read the field, never by eye.
   At a high (a low: the mirror), the first that holds:
 
@@ -10553,7 +10583,7 @@ Read the field, never by eye.
   stall: a doji (never conflicting) or inside candle → stalled; the
    next candle decides.
 7.
-  plain: none → no rejection read: weak context only.
+  plain: none → not a rejection: no one took control, weak context only.
 
 The close beats the wick: a long wick closing above is no rejection; a
 close exactly at the level is no breakout.
@@ -11462,7 +11492,15 @@ The stack counts once (`confluence-counting`, trigger).
 
 **Reaction at a level** (`reaction` on `m3.candles.<tf>.relations`,
 `confirmed`: `bar-briefing`).
-  The close determines acceptance or
+  Side first, from the candle: a rejection
+of a high (`<tf> rejected <level> down`) is the short side, of a low
+(`up`) the long side; a breakout's side is its close (`<tf> broke
+<level> up` → long), whatever the trend.
+  Then the trend rule: with the
+4h + 1h (at a pullback level, a continuation: `pullback-vs-reversal`)
+→ may be taken; against → refused (never counter; `trend-vs-range`).
+
+The close determines acceptance or
 rejection.
   The wick measures the failed attempt.
   The body measures
@@ -11476,16 +11514,11 @@ against all the briefing shows: the bias (4h + 1h), the level (its
 timeframe and kind), where price is in the move (a pullback or an
 extension), momentum and volume, the other timeframes' reactions.
   The
-side is the candle's, never the bias's: a rejection of a high
-(`<tf> rejected <level> down`: through it above, closed back below) →
-the short side; of a low (`up`) → the long side; a breakout's is its
-close (`<tf> broke <level> up` → long).
-  The bias only decides whether that side is
-allowed: with it, at a pullback level → a continuation
-(`pullback-vs-reversal`); against the 4h + 1h → the trend rule refuses
-it (never counter; `trend-vs-range`).
-  A `rejected` relation alone is no
-rejection read: its reaction decides.
+`rejected` relation is only the fact (traded through, closed back).
+  It
+is a rejection only when its reaction is a long-wick, engulfing or
+confirmed rejection; plain → not a rejection: no one took control, weak
+context only.
 Read the field, never by eye.
   At a high (a low: the mirror), the first that holds:
 
@@ -11509,7 +11542,7 @@ Read the field, never by eye.
   stall: a doji (never conflicting) or inside candle → stalled; the
    next candle decides.
 7.
-  plain: none → no rejection read: weak context only.
+  plain: none → not a rejection: no one took control, weak context only.
 
 The close beats the wick: a long wick closing above is no rejection; a
 close exactly at the level is no breakout.

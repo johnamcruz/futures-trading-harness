@@ -97,6 +97,10 @@ test('warningFor: one line naming each unread skill with its skill_lookup call, 
   // An unreadable transcript (or none): nothing counts as read, so the warning shows (fails toward it).
   assert.ok(RL.warningFor(reads, { env: { FTH_AUTONOMOUS: '1', FTH_CYCLE_TRANSCRIPT: '/nonexistent/cycle-transcript-1-a.jsonl' }, root: ROOT }));
   assert.ok(RL.warningFor(reads, { env: { FTH_AUTONOMOUS: '1' }, root: ROOT }));
+  // The cycle's lanes set but unreadable: the gate requires every head entry on a composed entry; so does the warning.
+  const lanes = RL.unread(['15m cisd up'], { env: { ...envOf(), FTH_CYCLE_LANE_BARS: 'not json' }, root: ROOT });
+  assert.deepStrictEqual(lanes.sort(), SL.headSituationalSkills(SL.SITUATIONAL).sort());
+  assert.ok(lanes.includes('candle-reading'), 'even with no rejection, break or sweep read');
   // Attested for another cycle: not read.
   const env = envOf({ embedded: ['candle-reading'] });
   const att = JSON.parse(env.FTH_CYCLE_SKILLS);

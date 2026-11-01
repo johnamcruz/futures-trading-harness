@@ -15,7 +15,8 @@
  *   - embedded in the head prompt on its attestation (FTH_HEAD_PROMPT: opencode's attestedSkills, Claude Code's
  *     claudeAttested);
  *   - embedded in this cycle's situational section on its attestation (FTH_CYCLE_SKILLS, cycle-skills-attest.js).
- * Anything unreadable counts as not read, so the warning shows (also when the cycle's lanes can't be read).
+ * Anything unreadable counts as not read, so the warning shows. When the cycle's lanes are set but unreadable
+ * (FTH_CYCLE_LANE_BARS), the gate requires every head entry on a composed entry, and the warning names them all.
  *
  *   factsOf(reads)                          the composed facts the triggers read ({ composed: [{ kinds, relations }] })
  *   requiredBy(reads)                       the head-required skills these reads trigger
@@ -38,12 +39,22 @@ function requiredBy(reads) {
   return situationalSkills(factsOf(reads));
 }
 
-/** Whether the gate requires the head's situational skills in this run (order-gate.js: autonomous, index mode or Claude's head). */
-function enforced(env = process.env) {
-  if (String((env && env.FTH_AUTONOMOUS) || '') !== '1') return false;
-  if (String(env.FTH_ROLE_SKILLS || '').trim() !== 'full') return true;
-  const att = require('../head-prompt').parseAttestation(env.FTH_HEAD_PROMPT);
-  return Boolean(att && att.harness === 'claude');
+/**
+ * Whether the gate requires the head's situational skills in this run: the gate's own predicate (order-gate.js:
+ * autonomous, and index mode or Claude Code's head with its verified attestation), on the gate's own config.
+ */
+function enforced(env = process.env, root = null) {
+  const cfg = require('./config').loadConfig(env || {});
+  if (!cfg.autonomous) return false;
+  if (cfg.roleSkills === 'index') return true;
+  const HP = require('../head-prompt');
+  const att = HP.parseAttestation(env.FTH_HEAD_PROMPT);
+  if (!att || att.harness !== 'claude' || !root) return false;
+  try {
+    return HP.claudeAttested(att, root, { stream: String(env.FTH_CYCLE_TRANSCRIPT || '').trim() || null, cycle: require('./check-order').cycleId(env) }).length > 0;
+  } catch (_err) {
+    return false;
+  }
 }
 
 /** The skills this cycle's head trader has read, as the gate counts them for its own session (never throws). */
@@ -72,8 +83,12 @@ function readThisCycle(env = process.env, root = null) {
 
 /** The skills these reads require that this cycle's head hasn't read (none where the gate doesn't require them). */
 function unread(reads, { env = process.env, root = null } = {}) {
-  if (!enforced(env)) return [];
-  const need = requiredBy(reads);
+  if (!enforced(env, root)) return [];
+  // The cycle's lanes set but unreadable: the gate requires every head entry on a composed entry (order-gate.js), so
+  // the warning names every one (fails closed, recoverable: read them and compose again).
+  const { SITUATIONAL, headSituationalSkills } = require('./skills-loaded');
+  const lanes = require('./config').loadConfig(env || {}).cycleLaneBars;
+  const need = lanes === null ? headSituationalSkills(SITUATIONAL) : requiredBy(reads);
   if (!need.length) return [];
   const read = readThisCycle(env, root);
   return need.filter(s => !read.has(s));

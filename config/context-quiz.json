@@ -27,7 +27,7 @@
       "bothWays": 0
     },
     "partB": {
-      "allCorrect": 5,
+      "allCorrect": 7,
       "bothWays": 0
     }
   },
@@ -500,7 +500,7 @@
         "\\bshort it( now)?\\b(?!\\s+(only\\s+(with|once|if|after(?! all)|when|until)|once|if|after(?! all)|when|until)\\b)",
         "\\b(so|therefore|then|thus)\\s+sellers (are )?in control\\b(?!\\s+(isn't|is not|is no|not|needs?|requires?)\\b)",
         "\\bsellers (are )?in control(?:\\s*(?:[,:;.–—-]|\\band\\b|\\bso\\b|\\bthen\\b))*\\s*(?:and\\s+|so\\s+|then\\s+)?(?:i'?d\\s+|i would\\s+|i\\s+|go\\s+)?(short|sell|take|enter)\\b(?!\\s+(?:it\\s+)?(only\\s+)?(once|if|after(?! all)|when|until)\\b)",
-        "(?<!\\b(before|until)\\b[^.;]*)\\bsellers (are )?in control\\W*$"
+        "(?<!\\bbefore (you|i|we) (read|call) |\\bbefore it counts as )\\bsellers (are )?in control\\W*$"
       ]
     },
     {
@@ -529,10 +529,10 @@
       ],
       "text": "Two 15m long-wick rejections of a high (upper wick through it, closed back below): one at a pullback level with the 4h and 1h down, one with the 4h and 1h up. What side is each, and which can be taken?",
       "rule": "the side is the candle's: both are the short side (a rejection of a high); only the first, with the 4h and 1h, can be taken; against the 4h + 1h the trend rule refuses the second (never counter)",
-      "anchor": "The side is the candle's, never the bias's",
+      "anchor": "Side first, from the candle",
       "required": [
-        "\\bshort\\b",
-        "\\b(refus\\w*|no trade|not a trade|counter\\w*|never counter|trend rule|not allowed|can'?t be taken|cannot be taken)\\b"
+        "\\bshorts?\\b",
+        "\\b(refus\\w*|no trade|not a trade|counter\\w*|never counter|trend rule|not allowed|can'?t be taken|cannot be taken)\\b|\\bonly the (first|one|pullback)\\b[^.;]*\\b(can|may) be taken\\b|\\bonly the (first|one|pullback)\\b[^.;]*\\bis (tradeable|tradable|a setup|the trade)\\b"
       ],
       "forbidden": [
         "\\blong (setup|side|read|entry|trade)\\b",
@@ -542,9 +542,10 @@
         "\\b(take|trade) it (small|smaller|light|anyway)\\b",
         "\\bcounter[- ]trend (short|long|one)\\b[^.;]*\\b(i'?d|i would|can|could|to) take\\b",
         "\\bstill a (short|long) to take\\b",
-        "\\b(both|either)\\b[^.;]*\\b(taken|tradeable|tradable|can be taken|valid trades?|allowed)\\b",
+        "\\b(both|either)\\b(?![^.;]*\\bonly\\b)[^.;]*\\b(taken|tradeable|tradable|can be taken|valid trades?|allowed)\\b",
         "\\b(take|trade|short|long|buy|sell) (them )?(both|either)\\b",
-        "\\bboth (are )?(valid|tradeable|tradable|taken)\\b"
+        "\\bboth (are )?(valid|tradeable|tradable|taken)\\b",
+        "\\b(neither (is|are|one is) refused|nothing (is )?refused|no refusal)\\b"
       ]
     },
     {
@@ -610,10 +611,10 @@
       ],
       "text": "Two 15m long-wick rejections of a low (lower wick through it, closed back above): one at a pullback level with the 4h and 1h up, one with the 4h and 1h down. What side is each, and which can be taken?",
       "rule": "the side is the candle's: both are the long side (a rejection of a low); only the first, with the 4h and 1h, can be taken; against the 4h + 1h the trend rule refuses the second (never counter)",
-      "anchor": "of a low (`up`) → the long side",
+      "anchor": "Side first, from the candle",
       "required": [
-        "\\blong\\b(?!-wick)",
-        "\\b(refus\\w*|no trade|not a trade|counter\\w*|never counter|trend rule|not allowed|can'?t be taken|cannot be taken)\\b"
+        "\\blongs?\\b(?!-wick)",
+        "\\b(refus\\w*|no trade|not a trade|counter\\w*|never counter|trend rule|not allowed|can'?t be taken|cannot be taken)\\b|\\bonly the (first|one|pullback)\\b[^.;]*\\b(can|may) be taken\\b|\\bonly the (first|one|pullback)\\b[^.;]*\\bis (tradeable|tradable|a setup|the trade)\\b"
       ],
       "forbidden": [
         "\\bshort (setup|side|read|entry|trade)\\b",
@@ -623,9 +624,10 @@
         "\\b(take|trade) it (small|smaller|light|anyway)\\b",
         "\\bcounter[- ]trend (short|long|one)\\b[^.;]*\\b(i'?d|i would|can|could|to) take\\b",
         "\\bstill a (short|long) to take\\b",
-        "\\b(both|either)\\b[^.;]*\\b(taken|tradeable|tradable|can be taken|valid trades?|allowed)\\b",
+        "\\b(both|either)\\b(?![^.;]*\\bonly\\b)[^.;]*\\b(taken|tradeable|tradable|can be taken|valid trades?|allowed)\\b",
         "\\b(take|trade|short|long|buy|sell) (them )?(both|either)\\b",
-        "\\bboth (are )?(valid|tradeable|tradable|taken)\\b"
+        "\\bboth (are )?(valid|tradeable|tradable|taken)\\b",
+        "\\b(neither (is|are|one is) refused|nothing (is )?refused|no refusal)\\b"
       ]
     },
     {
@@ -635,19 +637,19 @@
       "lookup": [
         "candle-reading"
       ],
-      "text": "A 15m candle `rejected` the prior RTH high (traded above, closed back below), and its reaction reads plain. Is that a rejection read?",
-      "rule": "no bare rejection: the close says it closed back, but the wick, the body and the next candle haven't confirmed; plain is weak, context only",
-      "anchor": "A `rejected` relation alone is no rejection read: its reaction decides.",
+      "text": "A 15m candle `rejected` the prior RTH high (traded above, closed back below), and its reaction reads plain. Did the other side take control — is it a rejection?",
+      "rule": "the `rejected` relation is only the fact; it is a rejection only when its reaction is a long-wick, engulfing or confirmed rejection; plain: no one took control, weak context only",
+      "anchor": "It is a rejection only when its reaction is a long-wick, engulfing or confirmed rejection",
       "required": [
         "^[\\W_]*(no|nope|not)\\b",
-        "\\b(not a rejection read|no rejection read|weak|context|confirm\\w*|by itself|alone|reaction decides)\\b"
+        "\\b(not a rejection|no rejection|no one took control|nobody took control|weak|context|confirm\\w*|by itself|alone|reaction decides)\\b"
       ],
       "forbidden": [
         "^\\W*(yes|yep)\\b",
-        "\\b(it'?s|it is|that'?s|that is|still)\\s+(counts as\\s+)?a\\s+rejection read\\b",
-        "\\b(is|counts as) (still )?a rejection read\\b(?!\\s+(only\\s+)?(once|if|when|after)\\b)",
-        "^[\\W_]*(no|not)\\W+(it'?s\\s+)?a\\s+rejection\\b(?!\\s+read)",
-        "\\bsellers (took|take|are in|in) control\\b",
+        "\\b(it'?s|it is|that'?s|that is|still)\\s+(counts as\\s+)?a\\s+rejection\\b(?!\\s+(only\\s+)?(if|once|when|after)\\b)",
+        "\\b(is|counts as) (still )?a rejection( read)?\\b(?!\\s+(only\\s+)?(once|if|when|after)\\b)",
+        "^[\\W_]*no\\b\\W+(it'?s\\s+)?a\\s+rejection\\b",
+        "\\b(sellers|the other side) (took|take|are in|in) control\\b",
         "\\b(short it|take the short|go short|sell it)\\b(?!\\s+(only\\s+)?(once|if|after(?! all)|when|until)\\b)"
       ]
     },
@@ -798,6 +800,116 @@
       "forbidden": [
         "^\\s*(yes\\b|y,)",
         "(?<!rather than )(?<!instead of )\\b(take|trade|enter)\\s+(it\\s+)?(with\\s+)?2\\b(?!\\s*\\?\\s*(?:no|nope|never|not)\\b)"
+      ]
+    },
+    {
+      "id": "q36",
+      "layer": "setup",
+      "prompt": "lookup",
+      "lookup": [
+        "candle-reading"
+      ],
+      "excerpt": {
+        "cases": [
+          {
+            "bias": {
+              "h4": -1,
+              "h1": -1,
+              "t15": -1
+            },
+            "tf": "15m",
+            "rel": "rejected",
+            "dir": "down",
+            "level": "prior RTH high",
+            "reaction": "long-wick rejection"
+          },
+          {
+            "bias": {
+              "h4": 1,
+              "h1": 1,
+              "t15": 1
+            },
+            "tf": "15m",
+            "rel": "rejected",
+            "dir": "down",
+            "level": "prior RTH high",
+            "reaction": "long-wick rejection"
+          }
+        ]
+      },
+      "text": "Two cases as compose_check replies to each (its REACTION line) under each case's Bias line. What side is each, and which can be taken?",
+      "rule": "the side is the candle's: both are the short side (a rejection of a high); only the first, with the 4h and 1h, can be taken; against the 4h + 1h the trend rule refuses the second (never counter)",
+      "required": [
+        "\\bshorts?\\b",
+        "\\b(refus\\w*|no trade|not a trade|counter\\w*|never counter|trend rule|not allowed|can'?t be taken|cannot be taken)\\b|\\bonly the (first|one|pullback)\\b[^.;]*\\b(can|may) be taken\\b|\\bonly the (first|one|pullback)\\b[^.;]*\\bis (tradeable|tradable|a setup|the trade)\\b"
+      ],
+      "forbidden": [
+        "\\blong (setup|side|read|entry|trade)\\b",
+        "\\b(a|is a|as a) long\\b(?!-wick)",
+        "\\b(with-trend|with the trend|counter-trend) long\\b",
+        "\\b(on )?the (other|opposite) side\\b",
+        "\\b(take|trade) it (small|smaller|light|anyway)\\b",
+        "\\bcounter[- ]trend (short|long|one)\\b[^.;]*\\b(i'?d|i would|can|could|to) take\\b",
+        "\\bstill a (short|long) to take\\b",
+        "\\b(both|either)\\b(?![^.;]*\\bonly\\b)[^.;]*\\b(taken|tradeable|tradable|can be taken|valid trades?|allowed)\\b",
+        "\\b(take|trade|short|long|buy|sell) (them )?(both|either)\\b",
+        "\\bboth (are )?(valid|tradeable|tradable|taken)\\b",
+        "\\b(neither (is|are|one is) refused|nothing (is )?refused|no refusal)\\b"
+      ]
+    },
+    {
+      "id": "q37",
+      "layer": "setup",
+      "prompt": "lookup",
+      "lookup": [
+        "candle-reading"
+      ],
+      "excerpt": {
+        "cases": [
+          {
+            "bias": {
+              "h4": 1,
+              "h1": 1,
+              "t15": 1
+            },
+            "tf": "15m",
+            "rel": "rejected",
+            "dir": "up",
+            "level": "prior RTH low",
+            "reaction": "long-wick rejection"
+          },
+          {
+            "bias": {
+              "h4": -1,
+              "h1": -1,
+              "t15": -1
+            },
+            "tf": "15m",
+            "rel": "rejected",
+            "dir": "up",
+            "level": "prior RTH low",
+            "reaction": "long-wick rejection"
+          }
+        ]
+      },
+      "text": "Two cases as compose_check replies to each (its REACTION line) under each case's Bias line. What side is each, and which can be taken?",
+      "rule": "the side is the candle's: both are the long side (a rejection of a low); only the first, with the 4h and 1h, can be taken; against the 4h + 1h the trend rule refuses the second (never counter)",
+      "required": [
+        "\\blongs?\\b(?!-wick)",
+        "\\b(refus\\w*|no trade|not a trade|counter\\w*|never counter|trend rule|not allowed|can'?t be taken|cannot be taken)\\b|\\bonly the (first|one|pullback)\\b[^.;]*\\b(can|may) be taken\\b|\\bonly the (first|one|pullback)\\b[^.;]*\\bis (tradeable|tradable|a setup|the trade)\\b"
+      ],
+      "forbidden": [
+        "\\bshort (setup|side|read|entry|trade)\\b",
+        "\\b(a|is a|as a) short\\b",
+        "\\b(with-trend|with the trend|counter-trend) short\\b",
+        "\\b(on )?the (other|opposite) side\\b",
+        "\\b(take|trade) it (small|smaller|light|anyway)\\b",
+        "\\bcounter[- ]trend (short|long|one)\\b[^.;]*\\b(i'?d|i would|can|could|to) take\\b",
+        "\\bstill a (short|long) to take\\b",
+        "\\b(both|either)\\b(?![^.;]*\\bonly\\b)[^.;]*\\b(taken|tradeable|tradable|can be taken|valid trades?|allowed)\\b",
+        "\\b(take|trade|short|long|buy|sell) (them )?(both|either)\\b",
+        "\\bboth (are )?(valid|tradeable|tradable|taken)\\b",
+        "\\b(neither (is|are|one is) refused|nothing (is )?refused|no refusal)\\b"
       ]
     }
   ]

@@ -161,7 +161,7 @@ const PINS = {
     // context, never the setup alone (feat/sweep-candle-control: the wick-and-close grading became the reaction read).
     '**4 Setup**: a completed candle rejects the level: the briefing\'s relation `rejected` (traded through it, closed back; read `<tf> rejected <level> up|down`).',
     // Its candle read is candle-reading's (the owner, 2026-10-31: "Rejection should rely on candle reading", no bare rejection).
-    'The relation alone is no rejection read: read its reaction with `candle-reading` (by its rule: the close, the wick, the body, the next candle), its side, who took control, and context.',
+    'The `rejected` relation is only the fact: it is a rejection only when its reaction (`candle-reading`, by its rule: the close, the wick, the body, the next candle) is a long-wick, engulfing or confirmed rejection; read its side, who took control, and context there.',
     'Context, never the setup alone: it needs other confirmation.',
     '| 3m, 5m | the entry timing only: never the setup | least |',
     '| 15m | the working structure and the session levels | more |',
@@ -296,8 +296,8 @@ test('basics skills: frontmatter, the sections in order, and small', () => {
     assert.ok(at.every(i => i > 0) && at[0] < at[1] && at[1] < at[2], s);
     const words = body.split(/\s+/).filter(Boolean).length;
     // candle-reading carries the reaction-at-a-level read (feat/sweep-candle-control, owner-approved 2026-10-31: "This will
-    // provide useful context"): the seven reactions, their priority, the context it is read in (then 969: the owner rule, the reaction rules hold on every timeframe and a higher one's reaction is stronger confirmation; then 1023, owner: rejection relies on candle-reading; the side is the candle's (q30); then 1026, owner: no bare rejection (plain is no rejection read); sweeps need candle-reading too) and their evidence.
-    assert.ok(words >= 250 && words <= (s === 'candle-reading' ? 1026 : 650), `${s}: ${words} words`);
+    // provide useful context"): the seven reactions, their priority, the context it is read in (then 969: the owner rule, the reaction rules hold on every timeframe and a higher one's reaction is stronger confirmation; then 1023, owner: rejection relies on candle-reading; the side is the candle's (q30); then 1026, owner: no bare rejection (plain is no rejection read); sweeps need candle-reading too; then 1044, owner: q30 side confusion; side rule first) and their evidence.
+    assert.ok(words >= 250 && words <= (s === 'candle-reading' ? 1044 : 650), `${s}: ${words} words`);
     // The two setups also carry a timeframe table (what the setup means on 3m/5m, 15m and 1h/4h): a little more room
     // (scripts/lib/skill-caps.js, the one source the training loop's probe edits read too).
     const max = skillByteCap(s);

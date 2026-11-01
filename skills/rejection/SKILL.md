@@ -38,10 +38,11 @@ By PLAN step:
    previous candle's high/low, a CRT range; `m3.candles` has them).
 - **4 Setup**: a completed candle rejects the level: the briefing's
    relation `rejected` (traded through it, closed back; read
-   `<tf> rejected <level> up|down`). The relation alone is no rejection
-   read: read its reaction with `candle-reading` (by its rule: the close,
-   the wick, the body, the next candle), its side, who took control, and
-   context. Context, never the setup alone: it needs other confirmation.
+   `<tf> rejected <level> up|down`). The `rejected` relation is only the
+   fact: it is a rejection only when its reaction (`candle-reading`, by
+   its rule: the close, the wick, the body, the next candle) is a
+   long-wick, engulfing or confirmed rejection; read its side, who took
+   control, and context there. Context, never the setup alone: it needs other confirmation.
    A candle's sweep of its previous candle is one too
    (`breakout-vs-fakeout`). After
    an HTF BOS, at the level a pullback reaches (`pullback-vs-reversal`),

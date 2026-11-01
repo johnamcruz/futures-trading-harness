@@ -3476,6 +3476,36 @@ test('trade_lifecycle, index mode: a composed rejection or break needs candle-re
   assert.ok(!situationalSkills({ composed: [{ side: 'long', kinds: ['relation'], relations: ['touched'] }] }).includes('candle-reading'), 'a composed touch: unaffected');
 });
 
+test('the real gate and compose_check\'s warning agree: for each composed read and delivery (none, looked up, embedded in the cycle\'s section), the skills the gate refuses are the ones READ FIRST names', () => {
+  const RL = require('../../scripts/lib/trading/reaction-lookup');
+  const { SITUATIONAL } = require('../../scripts/lib/trading/skills-loaded');
+  const ES = require('../../scripts/lib/situational-skills');
+  const { cycleId: cycleIdOf } = require('../../scripts/lib/trading/check-order');
+  const { att, dir } = headRun();
+  const root = path.resolve(__dirname, '..', '..');
+  const situational = new Set(SITUATIONAL.filter(e => e.head).map(e => e.skill));
+  for (const read of ['15m rejected prior vah up', '15m broke prior vah up']) {
+    const home = lcHome({ reads: LC.READS.map(x => (x.step === 'setup' ? { ...x, read } : x)) });
+    for (const mode of ['none', 'looked up', 'embedded']) {
+      const transcript = path.join(dir, 'logs', `cycle-transcript-9-${mode.replace(' ', '')}${read.split(' ')[1]}.jsonl`);
+      fs.mkdirSync(path.dirname(transcript), { recursive: true });
+      fs.writeFileSync(transcript, [JSON.stringify({ type: 'step_start', timestamp: 1, sessionID: 's', part: { type: 'step-start' } }),
+        ...(mode === 'looked up' ? [ocEvent('harness_skill_lookup', { skill: 'candle-reading' }).replace('VERDICT: APPROVE - size 1', '<skill name=\\"candle-reading\\">...')] : [])].join('\n'));
+      const env = { FTH_AUTONOMOUS: '1', FTH_CYCLE_TRANSCRIPT: transcript, FTH_HEAD_PROMPT: JSON.stringify(att) };
+      if (mode === 'embedded') {
+        const { file, text } = ES.writeSituation(dir, root, { skills: ['candle-reading'], sections: [], over: [], why: ['a test'] });
+        env.FTH_CYCLE_SKILLS = JSON.stringify(ES.attestation({ file, text, root, cycle: cycleIdOf(env) }));
+      }
+      const cfg = { autonomous: true, roleSkills: 'index', cycle: null, cycleLaneBars: {}, cycleTranscript: transcript, headPromptAttestation: env.FTH_HEAD_PROMPT, ...(env.FTH_CYCLE_SKILLS ? { cycleSkillsAttestation: env.FTH_CYCLE_SKILLS } : {}) };
+      const msg = lcEval(home, LC.order(), { config: cfg }).violations.filter(v => v.check === 'skills-loaded').map(v => v.message).join('\n');
+      const refused = (/not loaded in this session: ([^.]*)\./.exec(msg) || [null, ''])[1].split(', ').filter(x => situational.has(x)).sort();
+      const warned = RL.unread([read], { env, root }).sort();
+      assert.deepStrictEqual(refused, warned, `${read}, ${mode}`);
+      assert.deepStrictEqual(warned, mode === 'none' ? ['candle-reading'] : [], `${read}, ${mode}: what is unread`);
+    }
+  }
+});
+
 test('trade_lifecycle: a phase-2 room fact is about the record\'s own plan (the first level ahead in its R), never a scan candidate', () => {
   const { factsOrder } = require('../../scripts/lib/trading/order-gate');
   const { checkClaim, parseClaim } = require('../../scripts/lib/trading/fact-claims');

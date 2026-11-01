@@ -86,7 +86,9 @@ test('CORE: the composed bar\'s reads the gate requires (SITUATIONAL taught in t
   // shrink; it grows only on an owner's OK. Then 75296 (round 7, owner-approved: "Include sweeps", "Warn early + embed"):
   // the Required list names a composed sweep too and says "or your own composed read", and trade-lifecycle's line names
   // the sweep and that the cycle's section may embed it and compose_check says so (+141).
-  assert.ok(Buffer.byteLength(prompt) <= 75296, `the head prompt is ${Buffer.byteLength(prompt)} bytes`);
+  // Then 75379 (owner: q30 side confusion; side rule first): rejection's step 4 says the `rejected` relation is only the fact, a rejection only when its
+  // reaction is a long-wick, engulfing or confirmed one (+83).
+  assert.ok(Buffer.byteLength(prompt) <= 75379, `the head prompt is ${Buffer.byteLength(prompt)} bytes`);
   // Only the head trader's prompt grows: no other role's prompt embeds trade-lifecycle (the risk manager's embeds
   // confluence-counting and invalidation as before; its prompt is unchanged, pinned in trade-session-split.test.js).
   for (const [name, a] of Object.entries(index.agent)) if (name !== H.HEAD_AGENT && a.prompt) assert.ok(!a.prompt.includes('<skill name="trade-lifecycle">'), name);
