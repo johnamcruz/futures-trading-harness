@@ -98,7 +98,7 @@ const { pivots, lastBreaks, breaksOf, sweeps, untestedSwings, swingLevels } = re
 const { timingOf, timingLine } = require('./ltf-timing');
 const { sideValuesText, causalLevels } = require('./rules');
 const { cisdFacts } = require('./cisd');
-const { briefingCandles, briefingTargets, holdingSwingsAt, briefingRangeTargets } = require('./candle-facts');
+const { briefingCandles, briefingTargets, holdingSwingsAt, briefingRangeTargets, MOVING_LEVEL } = require('./candle-facts');
 const { halfOf } = require('./fib');
 const { levelCloses, MAX_CLOSES } = require('./level-closes');
 const { brokerFieldsAt, brokerFieldsText } = require('./broker-fields');
@@ -220,8 +220,9 @@ function cisdBlock(bars, level, levels = causalLevels(bars)) {
 
 // The key levels a completed candle is read against: value areas, VWAP, the prior day, overnight, IB and opening range
 // (and the 15m and 1h swings, the round numbers in its range, its previous candle and the CRT range: candle-facts.js).
-// The moving ones among them (read at a candle's close); the rest are fixed (read as they stood at its open).
-const MOVING = /^(VWAP|session (POC|VAH|VAL))/;
+// The moving ones among them (read at a candle's close; candle-facts.js MOVING_LEVEL, its one home); the rest are fixed
+// (read as they stood at its open).
+const MOVING = MOVING_LEVEL;
 // The fixed ones a bar's own value includes once it completes them (read on the last bar closed by a candle's open).
 const AT_OPEN = /^(overnight|IB)/;
 const CANDLE_LEVELS = /^(prior (POC|VAH|VAL|RTH high|RTH low|RTH close)|session (POC|VAH|VAL)|VWAP|overnight (high|low)|IB (high|low)|opening range (high|low))/;
@@ -962,11 +963,17 @@ function candleLines(m3, et, roomOf = 'R = the reference stop', closedAt = null)
     if (!shown) continue;
     if (shown === 'sweep') { out.push(`- ${tf} (closed ${et(c.closedAt)})${sweepText(c.sweep)}.`); continue; }
     // The levels it met, strongest first as listed (candle-facts.js: at most MAX_LEVELS, the rest counted).
-    const met = Object.entries(c.levels || {}).map(([name, r]) => (r.startsWith('rejected') ? `rejected ${name} (${r.replace('rejected: ', '')})` : `${r} ${name}`));
-    if (c.moreLevels) met.push(`+${c.moreLevels} more`);
-    // The entry reads' extras (the net move, the gap relation, the inside-bar stack): on the lines the entry reads from, not the
-    // event-driven ones (4h), which keep their own byte budget.
+    // Each with its reaction (candle-reaction.js, `reactions`), and a confirmed rejection of a level its previous candle met.
+    // The entry reads' extras (the net move, the gap relation, the inside-bar stack, the reactions): on the lines the entry
+    // reads from, not the event-driven ones (4h), which keep their own byte budget (its reactions stay in the JSON).
     const extras = !(tf in EVENT_FRAMES);
+    const rx = name => (extras && c.reactions && c.reactions[name] ? c.reactions[name] : null);
+    const met = Object.entries(c.levels || {}).map(([name, r]) => (r.startsWith('rejected')
+      ? `rejected ${name} (${r.replace('rejected: ', '')}${rx(name) ? `; ${rx(name)}` : ''})`
+      // A touch whose close was beyond the level (the relation is by the body, the reaction by the close): said so.
+      : `${r} ${name}${rx(name) ? ` (${r === 'touched' && rx(name) === 'breakout' ? 'closed beyond: breakout' : rx(name)})` : ''}`));
+    for (const x of extras && Array.isArray(c.confirmed) ? c.confirmed : []) met.push(`confirmed rejection of ${x.text || `${x.name} ${x.price}`}`);
+    if (c.moreLevels) met.push(`+${c.moreLevels} more`);
     const shapeText = [`${c.pattern}${c.dir ? ` ${c.dir}` : ''}`, extras && c.insideStack && c.mother ? `${c.insideStack} in a row inside the ${et(c.mother.t)} candle ${c.mother.l}-${c.mother.h}` : null,
       c.closeLocation ? `close ${c.closeLocation} third` : null,
       c.rangeAtr !== null ? `range ${c.rangeAtr} ATR` : null, c.volRatio !== null ? `vol ${c.volRatio}x` : null,
@@ -1156,5 +1163,5 @@ function removeFrameBriefing(home, root, minutes) {
 module.exports = { htfTrendsOf,
   SECTIONS, WINDOWS, nextClose, nextRthRoll, sessionWindow, newsState, buildBriefing, candidate, current, renderBriefing, briefingFile, writeBriefing, readBriefing, removeBriefing,
   roundNumbers, sharedParts, buildFrameBriefing, frameHolds, frameUntil, wholeBars, renderFrameBriefing, frameBriefingFile, writeFrameBriefing, readFrameBriefing, removeFrameBriefing,
-  gapText,
+  gapText, candleLines,
 };

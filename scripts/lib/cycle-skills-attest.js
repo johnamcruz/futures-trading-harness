@@ -15,7 +15,9 @@
  *   fileOf(home, text)                        where the section is kept
  *   attestation({ file, text, root, cycle })  the attestation for one cycle, or null (no skill embedded, no cycle)
  *   parseAttestation(text)                    the env value parsed, or null
- *   attested(att, root, { stream, hook, cycle })   the skills the gate may count: [] unless every check holds
+ *   attested(att, root, { stream, hook, cycle, text })   the skills the gate may count: [] unless every check holds;
+ *                                             `text`: the run's own transcript as captured (the runner's entry, after the run:
+ *                                             its live file is gone), judged in place of the file
  */
 
 const fs = require('fs');
@@ -64,18 +66,32 @@ function fileText(file) {
  * The run's own transcript: the runner's cycle stream a Claude Code run's (and a hook's, that run's session), or an
  * opencode run's (never a hook's: a hook is another harness's session). Anything else: no.
  */
-function ownRun({ stream, hook }) {
+/** A captured transcript's own run: a Claude Code stream (its init event first) or an opencode run's first event. */
+function ownText(text) {
+  for (const line of String(text || '').slice(0, 64 * 1024).split('\n')) {
+    let ev;
+    try { ev = JSON.parse(line); } catch (_err) { continue; }
+    if (!ev || typeof ev !== 'object') return false;
+    if (ev.type === 'system') return ev.subtype === 'init' && typeof ev.session_id === 'string' && ev.session_id.length > 0;
+    return require('./transcript').isOpencodeEvent(ev);
+  }
+  return false;
+}
+
+function ownRun({ stream, hook, text = null }) {
+  // The runner's entry, after the head's run (its live file removed): its captured transcript, never a hook's.
+  if (typeof text === 'string') return !hook && ownText(text);
   if (!stream) return false;
   const session = HP.claudeStreamSession(stream);
   if (session) return !hook || HP.claudeSessionOfPath(hook) === session;
   return !hook && HP.isOpencodeTranscript(stream);
 }
 
-function attested(att, root, { stream = null, hook = null, cycle = null } = {}) {
+function attested(att, root, { stream = null, hook = null, cycle = null, text: runText = null } = {}) {
   if (!att || att.kind !== KIND || !CYCLE.test(String(cycle || '')) || att.cycle !== cycle) return [];
   const text = fileText(att.config);
   if (!text || HP.sha256(text) !== att.sha256) return [];
-  if (!ownRun({ stream, hook })) return [];
+  if (!ownRun({ stream, hook, text: runText })) return [];
   const embedded = HP.embeddedSkills(text, root);
   return att.skills.filter(s => embedded.includes(s));
 }

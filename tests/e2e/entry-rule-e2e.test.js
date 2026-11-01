@@ -47,7 +47,7 @@ const READS = [
 ];
 const planned = size => [
   { harness: 'bar_briefing', args: { symbol: 'MNQ', json: true } },
-  { harness: 'compose_check', args: { symbol: 'MNQ', side: 'long', reads: READS, size } },
+  { harness: 'skill_lookup', args: { skill: 'candle-reading' } }, { harness: 'compose_check', args: { symbol: 'MNQ', side: 'long', reads: READS, size } },
   { result: `CYCLE RESULT: planned - trade_lifecycle long ${size}` },
 ];
 const deskReport = role => ({
@@ -158,7 +158,7 @@ test('entry rule e2e: the trail target through the real runner on a BG-only bar 
   // the fired bar (the 4h trends its way, the 1h ranging is not against it), so its trail target stands too.
   const w = attemptWorld();
   const trail = READS.map(x => (x.step === 'target' ? { ...x, read: 'target trail' } : x));
-  const r = await D.pass(w, decisionAt(FIRED_BAR), [{ harness: 'bar_briefing', args: { symbol: 'MNQ', json: true } }, { harness: 'compose_check', args: { symbol: 'MNQ', side: 'long', reads: trail, size: 6 } }, { result: 'CYCLE RESULT: planned - trade_lifecycle long 6' }], { runRole: roles(w).runRole, prop: true });
+  const r = await D.pass(w, decisionAt(FIRED_BAR), [{ harness: 'bar_briefing', args: { symbol: 'MNQ', json: true } }, { harness: 'skill_lookup', args: { skill: 'candle-reading' } }, { harness: 'compose_check', args: { symbol: 'MNQ', side: 'long', reads: trail, size: 6 } }, { result: 'CYCLE RESULT: planned - trade_lifecycle long 6' }], { runRole: roles(w).runRole, prop: true });
   const rec = TL.readRecords(w.home, 'MNQ').at(-1);
   assert.strictEqual(rec.ok, true, (rec.problems || []).join('; '));
   assert.match(rec.reads.find(x => x.step === 'target').fact, /the entry rule allows the long: the target is the trail/);
@@ -172,7 +172,7 @@ test('entry rule e2e: the setup is the 15m or higher: a 1h setup the long\'s way
   const w = attemptWorld(copy);
   // The fired bar's TRUE setups the long's way are a 1h and a 15m one (no 3m one there): the 1h one, alone.
   const reads = READS.map(x => (x.step === 'setup' ? { ...x, skill: 'breakout', read: '1h broke round number 27400 up' } : x));
-  const r = await D.pass(w, decisionAt(FIRED_BAR), [{ harness: 'bar_briefing', args: { symbol: 'MNQ', json: true } }, { harness: 'compose_check', args: { symbol: 'MNQ', side: 'long', reads, size: 6 } }, { result: 'CYCLE RESULT: planned - trade_lifecycle long 6' }], { runRole: roles(w).runRole, prop: true });
+  const r = await D.pass(w, decisionAt(FIRED_BAR), [{ harness: 'bar_briefing', args: { symbol: 'MNQ', json: true } }, { harness: 'skill_lookup', args: { skill: 'candle-reading' } }, { harness: 'compose_check', args: { symbol: 'MNQ', side: 'long', reads, size: 6 } }, { result: 'CYCLE RESULT: planned - trade_lifecycle long 6' }], { runRole: roles(w).runRole, prop: true });
   const rec = TL.readRecords(w.home, 'MNQ').at(-1);
   assert.strictEqual(rec.ok, true, rec.problems.join('; '));
   assert.match(r.ran[0].result, /^CYCLE RESULT: executed - trade_lifecycle long \d+ MNQ/, r.ran[0].result);

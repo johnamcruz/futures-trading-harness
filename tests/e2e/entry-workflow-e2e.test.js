@@ -42,7 +42,10 @@ function headPlanned(w, o = {}) {
     ...(w.mode === 'full' ? [...new Set([...D.headLoads(w), ...REQUIRED_FOR_COMPOSED])].map(s => ({ load: s })) : []),
     { harness: 'bar_briefing', args: { symbol: 'MNQ', json: true } },
     ...D.entryLoads(w).map(s => ({ load: s })),
+    // The live path of the reaction read: compose, and on compose_check's READ FIRST line (a rejection read, candle-reading
+    // neither looked up nor embedded this cycle) look it up and compose again (reaction-lookup.js).
     { harness: 'compose_check', args: { symbol: 'MNQ', side: 'long', reads: LC_READS, size: o.size || 1 } },
+    { then: ctx => (/READ FIRST: [^\n]*candle-reading/.test(String(ctx.results.compose_check || '')) ? [{ harness: 'skill_lookup', args: { skill: 'candle-reading' } }, { harness: 'compose_check', args: { symbol: 'MNQ', side: 'long', reads: LC_READS, size: o.size || 1 } }] : []) },
     { result: o.result || `CYCLE RESULT: planned - trade_lifecycle long ${o.size || 1}` },
   ];
 }
@@ -144,6 +147,9 @@ for (const mode of ['index', 'full']) {
     assert.ok(prompt.includes(ENTRY_TEXT), 'the head prompt says the route');
     assert.doesNotMatch(prompt, /then risk-manager phase 2 on your plan, if any/, 'not the roster\'s phase 2');
     assert.strictEqual(r.ctx.env.FTH_CYCLE_ENTRY, '1');
+    // candle-reading embedded in the cycle's situational section, attested: no READ FIRST, no lookup, the entry goes.
+    assert.deepStrictEqual(r.ctx.calls.filter(x => ['compose_check', 'skill_lookup'].includes(x.tool)).map(x => x.tool), ['compose_check'], mode);
+    assert.doesNotMatch(r.ctx.calls.find(x => x.tool === 'compose_check').text, /READ FIRST/, mode);
     assert.strictEqual(context.entry, true);
     const exec = R.runs.at(-1);
     assert.strictEqual(exec.env.FTH_CYCLE_ENTRY, undefined);
@@ -208,6 +214,18 @@ for (const mode of ['index', 'full']) {
     assert.strictEqual(D.placedAtBroker(w).filter(c => !/^\s*\[(exit|protect)\]/.test(String(c.args.rationale || ''))).length, 1, 'one entry in all');
   });
 }
+
+test('entry workflow, index mode, no room for the situational section: compose_check says READ FIRST (candle-reading), the head looks it up and composes again, and the gate allows the entry', async () => {
+  const w = D.world({ mode: 'index' });
+  const at = decisionAt(FIRED_BAR);
+  const R = roles(w, at);
+  const r = await D.pass(w, at, headPlanned(w), { runRole: R.runRole, maxPromptBytes: 1 });
+  assert.doesNotMatch(r.ran[0].prompt, /<skill name="candle-reading">/, 'not embedded');
+  assert.deepStrictEqual(r.ctx.calls.filter(x => ['compose_check', 'skill_lookup'].includes(x.tool)).map(x => x.tool), ['compose_check', 'skill_lookup', 'compose_check']);
+  assert.deepStrictEqual(r.ctx.calls.filter(x => x.tool === 'compose_check').map(x => /READ FIRST: [^\n]*candle-reading/.test(x.text)), [true, false]);
+  assert.deepStrictEqual(entries(w).map(e => [e.decision, (e.violations || []).map(v => v.check)]), [['allowed', []]]);
+  assert.strictEqual(R.runs.slice(-1)[0].role, 'trade-executor');
+});
 
 test('entry workflow, full mode: the head trader\'s loads count for the trade-executor\'s run only from the runner\'s record of them; without it the gate refuses [skills-loaded] and nothing is placed', async () => {
   const RR = require('../../scripts/lib/trading/runner-roles');
@@ -537,7 +555,7 @@ function claudeHeadPlanned(w, o = {}) {
   return [
     ...[...new Set([...D.headLoads(full), ...REQUIRED_FOR_COMPOSED, ...D.entryLoads(full)])].map(s => ({ load: s })),
     { harness: 'bar_briefing', args: { symbol: 'MNQ', json: true } },
-    { harness: 'compose_check', args: { symbol: 'MNQ', side: 'long', reads: LC_READS, size: o.size || 1 } },
+    { harness: 'skill_lookup', args: { skill: 'candle-reading' } }, { harness: 'compose_check', args: { symbol: 'MNQ', side: 'long', reads: LC_READS, size: o.size || 1 } },
     { result: o.result || `CYCLE RESULT: planned - trade_lifecycle long ${o.size || 1}` },
   ];
 }
@@ -811,7 +829,7 @@ test('entry workflow, Claude Code with headSkillsInPrompt (this machine\'s opt-i
   const H = require('../../scripts/lib/head-prompt');
   const headScript = [
     { harness: 'bar_briefing', args: { symbol: 'MNQ', json: true } },
-    { harness: 'compose_check', args: { symbol: 'MNQ', side: 'long', reads: LC_READS, size: 1 } },
+    { harness: 'skill_lookup', args: { skill: 'candle-reading' } }, { harness: 'compose_check', args: { symbol: 'MNQ', side: 'long', reads: LC_READS, size: 1 } },
     { result: 'CYCLE RESULT: planned - trade_lifecycle long 1' },
   ];
   const w = D.world({ harness: 'claude' });

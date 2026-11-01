@@ -135,7 +135,7 @@ The checks:
 
 - strategy, and its `valid_bars` (1 to 3)
 - the skills crosswalk
-- the head prompt and its four composed reads (opencode, index mode)
+- the head prompt, its four composed reads and the lookup it lists (`candle-reading`; opencode, index mode)
 - generated adapters in sync
 - no web in the replay (`no-web-in-replay`): the replay step's permissions let
   no agent search or fetch the web, and the news analyst is not launched (a

@@ -15,7 +15,8 @@
  *               break (compression), first: the owner's stronger setups; a level rejected (rejection), broken
  *               (breakout, breakout-vs-fakeout), an FVG retested (fair-value-gaps)
  *   entry       a setup listed: candle-reading, momentum-and-volume (the entry read), top-down-entry; a 3m or 5m CISD
- *               touched or bounced (cisd: it times the entry)
+ *               touched or bounced (cisd: it times the entry); any candle's level rejected, broken or swept (or a
+ *               key-level sweep), setup listed or not: candle-reading, the reaction read (the owner: "Warn early + embed")
  *   risk        a setup listed: invalidation, take-profit, position-sizing; in a prop attempt prop-challenge-pacing
  *   location    price at a key level (a reaction, a compression box at one): levels-and-reactions; a liquidity sweep
  *               (breakout-vs-fakeout); VWAP and value (vwap-volume-profile)
@@ -68,6 +69,9 @@ function reactionsOf(b) {
   return m.moment ? m.reactions.filter(r => r.dir === 'up' || r.dir === 'down') : [];
 }
 const checksOf = b => require('./learning/setup-moments').setupChecks(m3Of(b));
+// Any completed candle that rejected or broke a level, or swept its previous candle, or a key-level sweep (m3.sweeps).
+const anyReaction = m3 => isObj(m3) && (nonEmpty(m3.sweeps) || Object.values(isObj(m3.candles) ? m3.candles : {}).some(c => isObj(c)
+  && ((Array.isArray(c.relations) && c.relations.some(r => isObj(r) && (r.rel === 'rejected' || r.rel === 'broke'))) || isObj(c.sweep))));
 const anyFvgRetest = m3 => Object.values(isObj(m3.fvgs) ? m3.fvgs : {}).some(list => Array.isArray(list) && list.some(g => isObj(g) && g.retest));
 
 // The decision stages (trader-process's flow, condensed), in the budget's priority order: the stage being decided now
@@ -90,6 +94,7 @@ const TABLE = Object.freeze([
   { id: 'fvg', stage: 'setup', facts: ['fvgs'], skills: [S.setup.fvg], why: 'an FVG retested', when: c => c.flat.some(b => anyFvgRetest(m3Of(b))) },
   { id: 'cisd-timing', stage: 'entry', facts: ['cisd'], skills: [S.setup.cisd], why: 'a 3m or 5m CISD to time an entry', when: c => c.flat.some(listed) && c.flat.some(b => Object.entries(isObj(m3Of(b).cisd) ? m3Of(b).cisd : {}).some(([tf, x]) => ['3m', '5m'].includes(tf) && isObj(x) && ['touched', 'bounced'].includes(x.status))) },
   { id: 'entry', stage: 'entry', facts: ['candles', 'candidates'], skills: [S.entry.close, S.entry.momentum, 'top-down-entry'], why: 'a setup listed: its entry read', when: c => c.flat.some(listed) },
+  { id: 'reaction', stage: 'entry', facts: ['candles', 'sweeps'], skills: ['candle-reading'], why: 'a candle rejected, broke or swept a level: its reaction read', when: c => c.flat.some(b => anyReaction(m3Of(b))) },
   { id: 'risk', stage: 'risk', facts: ['candles', 'candidates'], skills: [S.stop.stop, S.target.target, 'position-sizing'], why: 'a setup listed: its stop, target and size', when: c => c.flat.some(listed) },
   { id: 'attempt', stage: 'risk', facts: ['account'], skills: ['prop-challenge-pacing'], why: 'a prop attempt sizes it', when: c => c.flat.some(listed) && isObj(c.state) && nonEmpty(c.state.attempts) },
   { id: 'level', stage: 'location', facts: ['candles', 'compression'], skills: [S.location.at], why: 'price at a key level', when: c => c.flat.some(b => nonEmpty(reactionsOf(b)) || checksOf(b).some(x => x.level)) },
@@ -123,10 +128,22 @@ function factsOf({ state = null, briefings = [] } = {}) {
 const blockOf = (root, name) => HP.block(name, HP.skillBody(root, name));
 
 /**
- * The skills and sections to embed: the facts in stage order, each skill once, none the cycle loads anyway (`loaded`),
- * within `budget` bytes of embedded text; a skill or section past it goes to `over` (named in the prompt, recorded).
+ * The skills the gate requires of the head trader that a cycle may embed (skills-loaded.js SITUATIONAL: marked `head`,
+ * not taught in its prompt, e.g. candle-reading): never cut for the soft budget (the owner, 2026-10-31: "a needed skill
+ * is never cut for budget"); only the prompt's hard limit can leave one out, named on the Also-relevant-now line then,
+ * and compose_check warns (reaction-lookup.js).
  */
-function choose(root, facts, { budget = BUDGET(), loaded = [] } = {}) {
+const MUST = () => require('./trading/skills-loaded').headSituationalSkills().filter(s => SKILLS.includes(s));
+
+/**
+ * The skills and sections to embed: the facts in stage order, each skill once, none the cycle loads anyway (`loaded`),
+ * within `budget` bytes of embedded text; a skill or section past it goes to `over` (named in the prompt, recorded). A
+ * required one (MUST) is held only to `hard` (the prompt's own limit: fit), never to the soft budget nor cut by an
+ * earlier one that didn't fit.
+ */
+function choose(root, facts, { budget = BUDGET(), loaded = [], hard = Infinity } = {}) {
+  const must = new Set(MUST());
+  let mustBytes = 0;
   const out = { skills: [], sections: [], over: [], why: [], stages: [], bytes: 0 };
   const seen = new Set(loaded);
   // Strictly in order: once one doesn't fit, every later one is named, never a smaller later one in its place.
@@ -138,14 +155,16 @@ function choose(root, facts, { budget = BUDGET(), loaded = [] } = {}) {
       const text = sectionOf(root, SECTIONS[f.section]);
       if (!text || out.sections.includes(f.section)) continue;
       const n = Buffer.byteLength(text);
-      if (!full && out.bytes + n <= budget) { out.sections.push(f.section); out.bytes += n; used = true; } else { full = true; out.over.push(SECTIONS[f.section].skill); }
+      if (!full && out.bytes - mustBytes + n <= budget) { out.sections.push(f.section); out.bytes += n; used = true; } else { full = true; out.over.push(SECTIONS[f.section].skill); }
     }
     for (const name of f.skills || []) {
       if (seen.has(name)) continue;
       seen.add(name);
       let n;
       try { n = Buffer.byteLength(blockOf(root, name)); } catch (_err) { continue; }
-      if (!full && out.bytes + n <= budget) { out.skills.push(name); out.bytes += n; used = true; } else { full = true; out.over.push(name); }
+      // The rest is held to `budget` without the required ones' bytes (fit reserves those apart, within `hard`).
+      const ok = must.has(name) ? out.bytes + n <= hard : (!full && out.bytes - mustBytes + n <= budget);
+      if (ok) { out.skills.push(name); out.bytes += n; if (must.has(name)) mustBytes += n; used = true; } else { if (!must.has(name)) full = true; out.over.push(name); }
     }
     if (used) { out.why.push(f.why); if (!out.stages.includes(f.stage)) out.stages.push(f.stage); }
   }
@@ -160,13 +179,25 @@ const budgetFor = ({ base = 0, max, reserve = 0 } = {}) => Math.max(0, Number(ma
  * The choice that fits a whole prompt: within `budget` (the config's) and within what a prompt of `max` bytes leaves
  * beside `base` (the prompt without the section) and `reserve` (the cycle data still to come), the section's own words
  * counted; the budget shrinks one skill at a time from the end (stage order kept: management last to go), the rest named.
+ * A required skill (MUST) is above the soft budget and goes last, only when the hard limit leaves it no room.
  */
 function fit(root, facts, { budget = BUDGET(), base = 0, max = Infinity, reserve = 0, loaded = [] } = {}) {
-  let b = Math.min(budget, budgetFor({ base, max, reserve }));
+  // A required skill (MUST) is held to the hard room only, and is the last to go: its bytes are reserved first, the rest
+  // gets what is left (and shrinks first).
+  let h = budgetFor({ base, max, reserve });
+  const must = new Set(MUST());
+  // Reserved only for what fits the hard room: a required skill too large for it is left out (named), and reserves nothing.
+  let reserved = 0;
+  for (const s of [...new Set(facts.flatMap(f => f.skills || []))].filter(x => must.has(x) && !loaded.includes(x))) {
+    let n;
+    try { n = Buffer.byteLength(blockOf(root, s)); } catch (_err) { continue; }
+    if (reserved + n <= h) reserved += n;
+  }
+  let b = Math.max(0, Math.min(budget, h - reserved));
   for (;;) {
-    const chosen = choose(root, facts, { budget: b, loaded });
+    const chosen = choose(root, facts, { budget: b, loaded, hard: h });
     if (base + Buffer.byteLength(situationText(root, chosen)) + reserve <= max || !chosen.bytes) return chosen;
-    b = chosen.bytes - 1;
+    if (chosen.sections.length || chosen.skills.some(s => !must.has(s))) b = Math.min(b, chosen.bytes) - 1; else h = chosen.bytes - 1;
   }
 }
 

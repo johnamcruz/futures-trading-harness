@@ -21,7 +21,7 @@ const Q = require('./lib/eval/context-quiz');
 const ROOT = path.resolve(__dirname, '..');
 const arg = (argv, name) => { const i = argv.indexOf(name); return i >= 0 ? argv[i + 1] : null; };
 const FILES = { head: 'head.md', 'head+risk': 'head+risk.md' };
-const fileOf = key => FILES[key] || `${key.replace(/[^a-z0-9+]+/gi, '-')}.md`; // a situational question's own prompt
+const fileOf = key => FILES[key] || `${key.replace(/[^a-z0-9+]+/gi, '-')}.md`; // a situational or lookup question's own prompt
 
 /** The output directory: given, made, and never inside the repository. */
 function outDir(dir) {

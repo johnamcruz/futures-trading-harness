@@ -13,3 +13,33 @@ test('skill caps: the setups 4000 bytes, every other skill 3459 (3400 until feat
   assert.strictEqual(C.skillByteCap('cisd'), 3459);
   assert.strictEqual(C.skillByteCap(undefined), 3459);
 });
+
+test('skill caps: candle-reading alone has its own cap (feat/sweep-candle-control, owner-approved: its reaction read improves context); every other skill keeps its cap', () => {
+  assert.deepStrictEqual({ ...C.PER_SKILL }, { 'candle-reading': 6338 });
+  assert.ok(Object.isFrozen(C.PER_SKILL));
+  assert.strictEqual(C.skillByteCap('candle-reading'), 6338);
+  const fs = require('fs');
+  const path = require('path');
+  for (const s of fs.readdirSync(path.join(__dirname, '..', '..', 'skills'))) {
+    if (s === 'candle-reading') continue;
+    assert.strictEqual(C.skillByteCap(s), C.SETUP_SKILLS.includes(s) ? 4000 : 3459, s);
+  }
+  // Inherited names are no skill's own cap.
+  assert.strictEqual(C.skillByteCap('toString'), 3459);
+  assert.strictEqual(C.skillByteCap('constructor'), 3459);
+});
+
+test('skill caps: a per-skill cap past its pin, or a second skill given its own, is refused on load', () => {
+  const T = require('../../scripts/lib/tunables');
+  const os = require('os');
+  const fs = require('fs');
+  const path = require('path');
+  const base = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', 'config', 'training.json'), 'utf8'));
+  const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'fth-test-caps-'));
+  const at = v => { const f = path.join(dir, `t${Math.random()}.json`); fs.writeFileSync(f, JSON.stringify(v)); return f; };
+  try {
+    assert.throws(() => T.load('training', at({ ...base, skillCaps: { ...base.skillCaps, perSkill: { 'candle-reading': 7000 } } })), /perSkill\.candle-reading/);
+    assert.throws(() => T.load('training', at({ ...base, skillCaps: { ...base.skillCaps, perSkill: { 'candle-reading': 6338, cisd: 9000 } } })), /cisd/);
+    assert.strictEqual(T.load('training', at({ ...base, skillCaps: { ...base.skillCaps, perSkill: { 'candle-reading': 5000 } } })).skillCaps.perSkill['candle-reading'], 5000, 'lower is allowed');
+  } finally { fs.rmSync(dir, { recursive: true, force: true }); }
+});

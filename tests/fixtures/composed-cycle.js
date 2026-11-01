@@ -30,7 +30,9 @@ function roleLookups(w) {
 /** The head trader's lookups for its composed reads (skills-loaded.js SITUATIONAL, composed): the gate's own list. */
 function headLookups(reads) {
   const rels = new Set(reads.map(([, , r]) => parseRead(r)).filter(p => p.kind === 'relation').map(p => p.rel));
-  return ['confluence-counting', 'invalidation', ...(rels.has('rejected') ? ['rejection'] : []), ...(rels.has('broke') ? ['breakout'] : [])];
+  // A rejection or a break reads its reaction with candle-reading (skills-loaded.js SITUATIONAL: the head's lookup).
+  return ['confluence-counting', 'invalidation', ...(rels.has('rejected') ? ['rejection'] : []), ...(rels.has('broke') ? ['breakout'] : []),
+    ...(rels.has('rejected') || rels.has('broke') ? ['candle-reading'] : [])];
 }
 
 /** The place_order a composed trade sends: a limit at the reference with the plan's ticks (`plan`: { ref, stopTicks, targetTicks }). */

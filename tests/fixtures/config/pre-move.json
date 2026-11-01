@@ -312,6 +312,10 @@
    "value": 4000,
    "from": "skill-caps.js SETUP_SKILL_BYTES"
   },
+  "skillCaps.perSkill.candle-reading": {
+   "value": 6338,
+   "from": "new in feat/sweep-candle-control (owner-approved 2026-10-31, improves context: candle-reading's own cap for its reaction-at-a-level read and the context it is read in, then 5916 for the owner rule: the reaction rules hold on every timeframe, a higher timeframe's reaction is stronger confirmation, then 6212 (owner: rejection relies on candle-reading; the side is the candle's (q30)), then 6230 (owner: no bare rejection (plain is no rejection read); sweeps need candle-reading too), then 6338 (owner: q30 side confusion; side rule first); one skill only, every other non-setup skill stays at skillCaps.skillBytes)"
+  },
   "compose.maxExpects": {
    "value": 300,
    "from": "train/compose.js MAX_EXPECTS"
@@ -1586,6 +1590,24 @@
     240
    ],
    "from": "trading/candle-facts.js RANGE_FRAMES"
+  },
+  "reaction.wickBody": {
+   "value": 1,
+   "from": "new in feat/sweep-candle-control (the owner's candle-reaction classification, 2026-10-31: a long-wick rejection's wick at least the body)"
+  },
+  "reaction.wickRange": {
+   "value": 0.3333,
+   "from": "new in feat/sweep-candle-control (the owner's candle-reaction classification, 2026-10-31: and at least a third of the range)"
+  },
+  "reaction.breakoutBody": {
+   "value": 0.7,
+   "from": "new in feat/sweep-candle-control (the owner's candle-reaction classification, 2026-10-31: a breakout's body ratio at least 0.70)"
+  },
+  "reaction.conflict": {
+   "value": {
+    "15": 60
+   },
+   "from": "new in feat/sweep-candle-control (the owner's candle-reaction classification, 2026-10-31: the 15m rejection read against the 1h close beyond)"
   },
   "mtf.fast": {
    "value": 20,

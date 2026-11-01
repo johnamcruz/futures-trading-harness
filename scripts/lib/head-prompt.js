@@ -107,7 +107,7 @@ function headPrompt(plan, table = SITUATIONAL) {
   ];
   const required = headRequired(table);
   if (required.length) {
-    out.push('Required by the situation: when this bar\'s briefing shows it, look the skill up before an entry; otherwise the order gate refuses the entry.', '',
+    out.push('Required by the situation: when this bar\'s briefing or your own composed read shows it, look the skill up before an entry; otherwise the order gate refuses the entry.', '',
       ...required.map(r => `- ${r.when.map(describeTrigger).join(', or ')}: \`${r.skill}\``), '');
   }
   out.push('## Your skills (already loaded)', '',
@@ -185,7 +185,7 @@ function claudeHeadText(root, table = SITUATIONAL) {
   ];
   const required = headRequired(table);
   if (required.length) {
-    out.push('Required by the situation: when this bar\'s briefing shows it, look the skill up before an entry; otherwise the order gate refuses the entry.', '',
+    out.push('Required by the situation: when this bar\'s briefing or your own composed read shows it, look the skill up before an entry; otherwise the order gate refuses the entry.', '',
       ...required.map(r => `- ${r.when.map(describeTrigger).join(', or ')}: \`${r.skill}\``), '');
   }
   out.push('## Your skills (already loaded)', '',

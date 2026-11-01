@@ -17,6 +17,12 @@
  * policy's entry rule (its rulebook's `entry`, entry-rule.js: the bias frames, the regime, the leg turned), as the
  * order gate's re-check holds them.
  *
+ * Each composed rejection, break or sweep is followed by a REACTION line, the briefing's verified reaction for it
+ * (reaction-echo.js: its label, side and who took control, or what a conflicting, stall or plain one means), and a MISMATCH
+ * line when the read's own words name another. The skills the reads require that this cycle's head hasn't read end the
+ * reply on a READ FIRST line (reaction-lookup.js): read them, then compose again. Informational only: nothing more is
+ * refused, and OK or NOT OK is unchanged.
+ *
  *   compose_check { symbol, side, reads: [{ step, skill, read, why }], size }
  */
 
@@ -37,6 +43,8 @@ const { standardPlans } = require('../learning/setup-library');
 const { loadAccounts } = require('../trading/accounts');
 const { noSizeFits } = require('../prop/size-translate');
 const { entryRuleOf } = require('../trading/entry-rule');
+const { warningFor } = require('../trading/reaction-lookup');
+const { echoLines } = require('../trading/reaction-echo');
 
 /** A running prop attempt whose policy trades the composed strategy: its size is a suggestion, translated at entry. */
 const inAttempt = (home, doc, strategies, root) => { try { return Boolean(attemptPolicy(home, doc, strategies, root)); } catch (_err) { return true; } };
@@ -93,7 +101,14 @@ function composeCheck({ symbol = null, side = null, reads = null, size = null } 
   // The floor alone failing: its hint alone (the reads stand; a hint to compose them again would only fail again).
   const alone = fits && checked.ok && !planned.problems.length;
   const hints = record.ok ? [] : [...(alone ? [] : hintsOf({ checked, planned, briefing: got.briefing, side, tick, plan, spec, entryRule })), ...(fits ? [fits.hint] : [])];
-  return { text: renderRecord(record, checked, hints) };
+  // Informational, never a refusal (the record stands as is): each composed rejection, break or sweep with the briefing's
+  // verified reaction (reaction-echo.js), then the skills its reads need that this cycle hasn't read (reaction-lookup.js).
+  const echo = echoLines(reads, got.briefing);
+  // The bar's compose records too (this one included), as the gate reads them: an earlier record's rejection still needs
+  // its reaction read when this one has none.
+  const composed = (() => { try { return require('../trading/skill-lookups').composedAt(home, symbol, record.bar); } catch (_err) { return []; } })();
+  const warn = warningFor(reads.map(r => (r && typeof r === 'object' ? r.read : r)), { env: c.env, root: c.root, composed });
+  return { text: `${renderRecord(record, checked, hints)}${echo.map(l => `${l}\n`).join('')}${warn ? `${warn}\n` : ''}` };
 }
 
 /**

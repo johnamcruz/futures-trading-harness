@@ -177,7 +177,7 @@ user; numbers here are the harness defaults, not any firm's official limits.
 - `broker-bar-fields` (skills/broker-bar-fields/SKILL.md): Use when a briefing has broker bar fields. Confirmation only.
 - `broker-mcp` (skills/broker-mcp/SKILL.md): The broker MCP server - its tools (mcp__broker__<tool>), what each is for, and the session loop that calls them. Use before calling any mcp__broker__ tool.
 - `broker-refusals` (skills/broker-refusals/SKILL.md): What the broker's own refusal or error reply means - success:false, errorCode 4/5/6/7, a risk-guardrail block, a lost reply - and what to do for each.
-- `candle-reading` (skills/candle-reading/SKILL.md): Trader-process steps 3 and 6 - completed candles at a level (body, wicks, close, a few patterns) and the trigger bar's timing. Confirmation only, never a veto.
+- `candle-reading` (skills/candle-reading/SKILL.md): The read of a candle's reaction at a level, on every timeframe - close, wick, body, next candle; its side and who took control. Context, never a veto.
 - `cisd` (skills/cisd/SKILL.md): Trader-process step 4 - read the briefing's m3.cisd (a change in state of delivery) per timeframe, its OTE zone and bounce. Confluence, never a veto.
 - `compression` (skills/compression/SKILL.md): Trader-process step 4 - a narrow candle (NR7, inside) as a box turning into expansion, code-verified in m3.compression; the setup that starts a leg.
 - `confluence-counting` (skills/confluence-counting/SKILL.md): Trader-process step 5 - a valid setup is the trade; six independent categories, each counted once, set its size by the reads against.

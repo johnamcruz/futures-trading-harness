@@ -63,6 +63,8 @@ const FIXTURES = {
   fvg: { present: { state: FLAT, briefings: [brief({ fvgs: { '5m': [{ retest: 'closed inside' }] } })] }, absent: { state: FLAT, briefings: [brief({ fvgs: { '5m': [{ retest: null }] } })] } },
   'cisd-timing': { present: { state: FLAT, briefings: [brief({ compression: expanding(), cisd: { '3m': { ...CISD['15m'], status: 'bounced' } } })] }, absent: { state: FLAT, briefings: [brief({ compression: expanding() })] } },
   entry: { present: { state: FLAT, briefings: [brief({ compression: expanding() })] }, absent: { state: FLAT, briefings: [brief({})] } },
+  // Any candle that rejected, broke or swept a level, setup listed or not: candle-reading (the owner: "Warn early + embed").
+  reaction: { present: { state: FLAT, briefings: [brief({ candles: { '15m': { relations: [{ name: 'prior VAH', price: 100, rel: 'rejected', dir: 'down' }] } } })] }, absent: { state: FLAT, briefings: [brief({ candles: { '15m': { relations: [{ name: 'VWAP (rth)', price: 100, rel: 'touched', dir: null }] } } })] } },
   risk: { present: { state: FLAT, briefings: [brief({ compression: expanding() })] }, absent: { state: FLAT, briefings: [brief({})] } },
   attempt: { present: { state: { ...FLAT, attempts: [{ account: 'x', status: 'active' }] }, briefings: [brief({ compression: expanding() })] }, absent: { state: FLAT, briefings: [brief({ compression: expanding() })] } },
   level: { present: { state: FLAT, briefings: [brief({ compression: expanding([{ name: 'overnight low', edge: 'top' }]) })] }, absent: { state: FLAT, briefings: [brief({ compression: expanding() })] } },

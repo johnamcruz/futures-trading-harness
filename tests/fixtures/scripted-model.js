@@ -26,6 +26,7 @@
  *                                             subagent's own calls are not in opencode's main transcript), then its
  *                                             task event, printed when it ends, as opencode prints it
  *   { act: async ctx => {} }                  the test acting mid-cycle (a stale briefing, an unreadable transcript)
+ *   { then: ctx => [steps] }                  the model reacting to what it read: the steps it returns play next
  *   { result: '<CYCLE RESULT line>' }         the final message
  *
  * `args` may be a function of ctx. ctx: { env, prompt, results, calls: [{ tool, args, ok, text }] } where every
@@ -178,6 +179,8 @@ function scriptedModel(script, { format = 'opencode' } = {}) {
           });
         } else if (step.act) {
           await step.act(ctx);
+        } else if (step.then) {
+          steps.splice(steps.indexOf(step) + 1, 0, ...(step.then(ctx) || []));
         } else if (step.result && claude) {
           const text = val(step.result, ctx);
           emit({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'text', text }] } });

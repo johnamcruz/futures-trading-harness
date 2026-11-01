@@ -24,7 +24,10 @@ hypotheses; a missing field is `unknown`.
 - **A candle's sweep** is another fact: a completed candle that traded
   beyond its previous candle's high or low and closed back inside
   (`sweep` in `m3.candles`), read as its relation
-  (`15m rejected previous 15m high down`; `rejection`).
+  (`15m rejected previous 15m high down`; `rejection`). Read its reaction
+  with `candle-reading`: its side, who took control, and context; a
+  `breakout` one is a breakout attempt, not a sweep. Context, never
+  decided on alone.
 - **Acceptance (breakout)**: closes beyond that hold (hypothesis: two or
   more). Shown as a 15m or 1h swing with `brokenAt` set
   (`m3.htfLevels`), or a location that changed

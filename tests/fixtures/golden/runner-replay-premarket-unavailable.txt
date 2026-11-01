@@ -130,8 +130,11 @@ A read, never a veto: the count decides (`confluence-counting`).
 hypotheses; a missing field is `unknown`.
 
 **The stack**: each timeframe's last completed candle.
-  15m, 1h and 4h weigh more at a higher-timeframe level (`rejection`,
-`breakout`); the 3m only times the entry.
+  The reaction
+rules (below) hold on every timeframe; a higher frame's reaction is
+stronger confirmation than a lower one's (`rejection`, `breakout`).
+  The
+3m only times the entry; alone it can be noise.
 
 - 3m, 5m, 15m, 1h and 4h: `m3.candles` (fields: `bar-briefing`), its
   `pattern` and the levels it
@@ -169,9 +172,80 @@ read (`trend-vs-range`, `pullback-vs-reversal`) and momentum and volume
 (`momentum-and-volume`, `absorption`).
 The stack counts once (`confluence-counting`, trigger).
 
-**Evidence**: standalone candlestick patterns have weak evidence in
-general; at the 15m setup candle read its strength and close, not its
-name (an engulfing is one strong candle among others).
+**Reaction at a level** (`reaction` on `m3.candles.<tf>.relations`,
+`confirmed`: `bar-briefing`).
+  Side first, from the candle: a rejection
+of a high (`<tf> rejected <level> down`) is the short side, of a low
+(`up`) the long side; a breakout's side is its close (`<tf> broke
+<level> up` → long), whatever the trend.
+  Then the trend rule: with the
+4h + 1h (at a pullback level, a continuation: `pullback-vs-reversal`)
+→ may be taken; against → refused (never counter; `trend-vs-range`).
+
+The close determines acceptance or
+rejection.
+  The wick measures the failed attempt.
+  The body measures
+directional conviction.
+  The next candle measures confirmation.
+
+Context, never decided on alone: it needs other confirmation (the bias,
+the level, the count: `confluence-counting`).
+  Read it at that moment
+against all the briefing shows: the bias (4h + 1h), the level (its
+timeframe and kind), where price is in the move (a pullback or an
+extension), momentum and volume, the other timeframes' reactions.
+  The
+`rejected` relation is only the fact (traded through, closed back).
+  It
+is a rejection only when its reaction is a long-wick, engulfing or
+confirmed rejection; plain → not a rejection: no one took control, weak
+context only.
+Read the field, never by eye.
+  At a high (a low: the mirror), the first that holds:
+
+1.
+  confirmed rejection: a long-wick rejection, then a bearish engulfing
+   closing lower → sellers took over, confirmed.
+2.
+  breakout: closes above, a bullish engulfing or B ≥ 0.7 R
+   (`displacement` adds strength) → buyers in control: not a sweep.
+3.
+  engulfing rejection: through, closes back below, a bearish engulfing
+   → sellers took control.
+4.
+  long-wick rejection: through, closes back below, the wick above
+   the level ≥ B and ≥ R/3 → sellers rejected higher prices.
+5.
+  conflicting: closes back below with a bullish body, or the 15m
+   rejects while the 1h `broke` it → mixed: needs other confirmation
+   (the count, or the next candle).
+6.
+  stall: a doji (never conflicting) or inside candle → stalled; the
+   next candle decides.
+7.
+  plain: none → not a rejection: no one took control, weak context only.
+
+The close beats the wick: a long wick closing above is no rejection; a
+close exactly at the level is no breakout.
+  The relation is by the body,
+the reaction by the close and strength (the close decides): a `touched`
+can read `breakout`.
+
+**Evidence** (15m sweeps, two halves, descriptive): standalone
+candlestick patterns have weak evidence in general; a name adds no
+strength, the reaction reads who took control.
+  Breakout read as a
+sweep: worst on both (false starts ~70%, mean R ~-0.34), skipping them
+did not raise the pass rate.
+  Long-wick alone (measured on the whole wick): no edge (0.00 / -0.05 R).
+Engulfing: +0.20 / -0.11 R.
+  Confirmed: false starts 36% / 45% vs 57% /
+55%, +0.31 / +0.02 R, intervals span 0, stop ~2x wider.
+  Conflicting:
+waiting gave +0.14 / +0.06 vs -0.04 R but missed ~40-55% of the trend
+legs.
+  None has a confirmed edge.
 
 ## Examples
 
@@ -639,6 +713,11 @@ hypotheses; a missing field is `unknown`.
   beyond its previous candle's high or low and closed back inside
   (`sweep` in `m3.candles`), read as its relation
   (`15m rejected previous 15m high down`; `rejection`).
+  Read its reaction
+  with `candle-reading`: its side, who took control, and context; a
+  `breakout` one is a breakout attempt, not a sweep.
+  Context, never
+  decided on alone.
 - **Acceptance (breakout)**: closes beyond that hold (hypothesis: two or
   more).
   Shown as a 15m or 1h swing with `brokenAt` set

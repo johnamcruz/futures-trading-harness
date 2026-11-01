@@ -300,7 +300,10 @@ async function runEntry(deps, c) {
   // runner's attestation, checked now against its file, the skills' text and the head trader's own stream and cycle.
   const SS = require('./cycle-skills-attest');
   const he = c.headEnv || {};
-  const exitLoaded = SS.attested(SS.parseAttestation(he[SS.ATTEST_ENV]), root, { stream: he.FTH_CYCLE_TRANSCRIPT || null, cycle: require('./trading/check-order').cycleId(he) });
+  // Judged on the head's captured transcript (c.output): its live file is removed once the run ends, so a check of the
+  // file here would never hold. No attestation, another cycle, an edited file or skill, or a transcript that isn't a
+  // run's own: none counts (fails closed), and the executor's gate refuses the entry for a required one.
+  const exitLoaded = SS.attested(SS.parseAttestation(he[SS.ATTEST_ENV]), root, { text: typeof c.output === 'string' ? c.output : '', cycle: require('./trading/check-order').cycleId(he) });
   try {
     RR.appendHeadSkills(c.rolesFile, [...skillsInTranscript(c.output), ...(claudeHead ? claudeLookupsInTranscript(c.output) : []), ...exitLoaded].filter(Boolean));
   } catch (err) {

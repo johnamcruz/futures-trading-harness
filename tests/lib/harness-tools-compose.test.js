@@ -279,3 +279,32 @@ test('compose_check in a prop attempt: the shipped entry rule holds the setup to
   assert.strictEqual(run('15m rejected prior VAH up').rec.ok, true);
   assert.doesNotMatch(run('3m broke prior VAH up', false).text, /the setup must be on the 15m or higher/, 'no attempt: no policy, no rule');
 });
+
+test('compose_check: a composed rejection carries the briefing\'s reaction (REACTION) and, autonomous with candle-reading unread, a READ FIRST line; the record and its OK unchanged', () => {
+  const { home, ctx } = setup();
+  const plain = composeCheck({ symbol: 'MNQ', side: 'long', reads: SCENARIO_1, size: 1 }, ctx);
+  assert.match(plain.text, /\n- REACTION 15m rejected up prior VAH: [a-z -]+ \(/);
+  assert.match(plain.text, /OK: every read verified/);
+  assert.doesNotMatch(plain.text, /READ FIRST/, 'not autonomous: the gate requires none, so no warning');
+  const warned = composeCheck({ symbol: 'MNQ', side: 'long', reads: SCENARIO_1, size: 1 }, { ...ctx, env: { ...ctx.env, FTH_AUTONOMOUS: '1' } });
+  assert.match(warned.text, /\n- READ FIRST: this record's reads need [^\n]*candle-reading[^\n]*then compose again/);
+  assert.match(warned.text, /OK: every read verified/);
+  // The records: OK both times, identical but for their time and id (the lines are the reply's only).
+  const [a, b] = readRecords(home, 'MNQ');
+  assert.deepStrictEqual([a.ok, b.ok, a.signature === b.signature, a.problems.length, b.problems.length], [true, true, true, 0, 0]);
+  // A NOT OK record keeps its NOT OK (the lines never turn it).
+  const bad = composeCheck({ symbol: 'MNQ', side: 'short', reads: SCENARIO_1, size: 1 }, { ...ctx, env: { ...ctx.env, FTH_AUTONOMOUS: '1' } });
+  assert.match(bad.text, /NOT OK/);
+});
+
+test('compose_check: READ FIRST reads the bar\'s compose records as the gate does: a recompose without a rejection after one with it still names candle-reading', () => {
+  const { ctx } = setup();
+  const auto = { ...ctx, env: { ...ctx.env, FTH_AUTONOMOUS: '1' } };
+  const noRejection = SCENARIO_1.map(r => (r.step === 'setup' ? { ...r, read: '15m touched prior vah' } : r));
+  // Alone on its bar, a record without a rejection, break or sweep needs no candle-reading.
+  const fresh = setup();
+  assert.doesNotMatch(composeCheck({ symbol: 'MNQ', side: 'long', reads: noRejection, size: 1 }, { ...fresh.ctx, env: { ...fresh.ctx.env, FTH_AUTONOMOUS: '1' } }).text, /READ FIRST: [^\n]*candle-reading/);
+  // After a rejection's record on the same bar: the gate's composed facts still hold it, so the warning names it.
+  composeCheck({ symbol: 'MNQ', side: 'long', reads: SCENARIO_1, size: 1 }, auto);
+  assert.match(composeCheck({ symbol: 'MNQ', side: 'long', reads: noRejection, size: 1 }, auto).text, /READ FIRST: [^\n]*candle-reading/);
+});

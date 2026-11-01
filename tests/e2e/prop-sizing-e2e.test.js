@@ -69,7 +69,7 @@ const READS = [
 ];
 const planned = (w, size) => [
   { harness: 'bar_briefing', args: { symbol: 'MNQ', json: true } },
-  { harness: 'compose_check', args: { symbol: 'MNQ', side: 'long', reads: READS, size } },
+  { harness: 'skill_lookup', args: { skill: 'candle-reading' } }, { harness: 'compose_check', args: { symbol: 'MNQ', side: 'long', reads: READS, size } },
   { result: `CYCLE RESULT: planned - trade_lifecycle long ${size}` },
 ];
 const deskReport = role => ({

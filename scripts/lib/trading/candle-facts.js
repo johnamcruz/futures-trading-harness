@@ -88,15 +88,22 @@
  * The briefing lists at most MAX_LEVELS level relations per candle, strongest first: rejected, then broke, then
  * touched; within each, by level (LEVEL_ORDER: the prior day, overnight, IB and opening range, VWAP, value areas,
  * swings, CRT range, previous candle, round numbers), the rest counted.
+ *
+ * Each relation carries its `reaction` (candle-reaction.js: confirmed rejection, breakout, engulfing rejection,
+ * long-wick rejection, conflicting, stall, plain, unknown), a read for context, never a veto. A confirmed rejection of
+ * a level the previous candle rejected with a long wick, which this candle didn't meet, is listed in `confirmed`.
  */
 
 const { htfCandles, atr: atrOf, sessionKey, ATR_PERIOD } = require('./indicators');
 const { zonedParts, tradingDayStart } = require('./clock');
 const { pivots } = require('./structure-events');
 const { momentumRead } = require('./momentum');
+const { reactionOf } = require('./candle-reaction');
 const { GLOBEX_OPEN_MIN } = require('./clock'); // the session boundaries' one home
 
-const CAN = require('../tunables').analysis().candles; // config/analysis.json candles: the pattern definitions and the reads' lengths
+const CAN = require('../tunables').analysis().candles;
+// The reaction read's higher frame per frame (config/analysis.json reaction.conflict: the 15m against the 1h).
+const CONFLICT = require('../tunables').analysis().reaction.conflict; // config/analysis.json candles: the pattern definitions and the reads' lengths
 const TIMEFRAMES = CAN.timeframes;
 const ATR_LEN = ATR_PERIOD;
 const VOL_LEN = CAN.volLen;
@@ -403,6 +410,10 @@ const LEVEL_ORDER = [/^prior RTH/, /^overnight/, /^IB/, /^opening range/, /^VWAP
   /^1h swing/, /^15m swing/, /^CRT/, /^previous/, /^round number/];
 const levelRank = name => { const k = LEVEL_ORDER.findIndex(re => re.test(name)); return k < 0 ? LEVEL_ORDER.length : k; };
 
+// The MOVING levels (VWAP of any session, the developing session profile): read at a candle's close, recomputed every
+// bar, so the same name is the same level at another price (briefing.js levelsAt reads them so; the one home of the rule).
+const MOVING_LEVEL = /^(VWAP|session (POC|VAH|VAL))/;
+
 const RELATION_TEXT = { rejected: { up: 'rejected: closed back above', down: 'rejected: closed back below' }, broke: { up: 'broke above', down: 'broke below' } };
 
 /**
@@ -457,6 +468,7 @@ const ENTRY_TF = (C => C.chainOf(C.SHIPPED).entry)(require('./chain'));
 function briefingCandles({ bars, base, fine = null, levelsAt = () => [], zonesAt = null, roundStep = null, crtFrames = [60, 240], timeframes = TIMEFRAMES }) {
   const i = bars.length - 1;
   const out = {};
+  const pending = []; // per frame built, what its reactions need (levelReactionsOf, once every frame is in)
   const closeOf = k => Date.parse(bars[k].t) + base * 60000;
   const closedAt = i >= 0 ? closeOf(i) : NaN;
   const fineBars = Array.isArray(fine) ? fine.filter(b => Date.parse(b.t) + 60000 <= closedAt) : null;
@@ -481,30 +493,40 @@ function briefingCandles({ bars, base, fine = null, levelsAt = () => [], zonesAt
       const ok = Date.parse(c.closedAt) === lastBoundary || (!reaches && Date.parse(c.closedAt) === lastBoundary - m * 60000);
       if (!ok) { out[label(m)] = { unavailable: `the 1m bars stop at ${fineBars.length ? new Date(Date.parse(fineBars[fineBars.length - 1].t) + 60000).toISOString() : 'none'}: no current ${label(m)} candle` }; continue; }
     }
-    const f = candleFactsList(src, m, srcBase)[j];
+    const facts = candleFactsList(src, m, srcBase);
+    const f = facts[j];
     const prev = f.prev;
-    // The last base bar closed by the candle's close (a moving level's value then), and by its open (a fixed level as
-    // it stood before the candle began; a swing it broke still held then).
-    let idx = src === bars ? c.last : i;
-    while (idx >= 0 && closeOf(idx) > Date.parse(c.closedAt)) idx -= 1;
-    let openIdx = idx;
-    while (openIdx >= 0 && closeOf(openIdx) > Date.parse(c.t)) openIdx -= 1;
-    // And the first base bar from its open on (the candle's own first bar on base bars).
-    const firstIdx = src === bars ? c.first : bars.findIndex(b => Date.parse(b.t) >= Date.parse(c.t));
-    const crt = crtFrames.filter(F => F > m && 1440 % F === 0).flatMap(F => {
-      const h = htfOf(src, F);
-      return [[`CRT ${label(F)} range high`, h.prevH[c.last]], [`CRT ${label(F)} range low`, h.prevL[c.last]]];
-    });
-    // The previous candle's high and low are levels on a frame above the entry frame only (the owner: "We should never use
-    // entry timeframes as levels"; chain.js): on the chain's entry frame, or the base bars under it, none.
-    const prevLevels = prev && !(label(m) === ENTRY_TF || m <= base);
-    const all = [...(idx >= 0 ? levelsAt(idx, openIdx, firstIdx) : []), ...roundsIn(c, roundStep), ...(prevLevels ? [[`previous ${label(m)} high`, prev.h], [`previous ${label(m)} low`, prev.l]] : []), ...crt];
+    // The levels candle k met as they stood (levelsAt by its own close, open and first bar), its round numbers, its
+    // previous candle's high and low (above the entry frame) and the CRT range.
+    const levelsOfCandle = k => {
+      const x = s.candles[k];
+      const px = k > 0 ? s.candles[k - 1] : null;
+      // The last base bar closed by the candle's close (a moving level's value then), and by its open (a fixed level as
+      // it stood before the candle began; a swing it broke still held then).
+      let idx = src === bars ? x.last : i;
+      while (idx >= 0 && closeOf(idx) > Date.parse(x.closedAt)) idx -= 1;
+      let openIdx = idx;
+      while (openIdx >= 0 && closeOf(openIdx) > Date.parse(x.t)) openIdx -= 1;
+      // And the first base bar from its open on (the candle's own first bar on base bars).
+      const firstIdx = src === bars ? x.first : bars.findIndex(b => Date.parse(b.t) >= Date.parse(x.t));
+      const crt = crtFrames.filter(F => F > m && 1440 % F === 0).flatMap(F => {
+        const h = htfOf(src, F);
+        return [[`CRT ${label(F)} range high`, h.prevH[x.last]], [`CRT ${label(F)} range low`, h.prevL[x.last]]];
+      });
+      // The previous candle's high and low are levels on a frame above the entry frame only (the owner: "We should never use
+      // entry timeframes as levels"; chain.js): on the chain's entry frame, or the base bars under it, none.
+      const prevLevels = px && !(label(m) === ENTRY_TF || m <= base);
+      return { openIdx, all: [...(idx >= 0 ? levelsAt(idx, openIdx, firstIdx) : []), ...roundsIn(x, roundStep), ...(prevLevels ? [[`previous ${label(m)} high`, px.h], [`previous ${label(m)} low`, px.l]] : []), ...crt] };
+    };
+    const { openIdx, all } = levelsOfCandle(j);
     const found = [];
     for (const [name, price] of all) {
       const rel = relation(c, price, prev ? prev.c : NaN);
       if (!rel || rel.relation === 'none' || found.some(x => x.name === name)) continue;
       found.push({ name, price, rel: rel.relation, dir: rel.dir, text: rel.relation === 'touched' ? 'touched' : RELATION_TEXT[rel.relation][rel.dir] });
     }
+    // The previous candle's levels, for a confirmed rejection of one this candle didn't meet (reactions, below).
+    const prevAll = j > 0 ? levelsOfCandle(j - 1).all : [];
     found.sort((x, y) => (REL_RANK[x.rel] - REL_RANK[y.rel]) || (levelRank(x.name) - levelRank(y.name)));
     // The fair value gaps' edges as they stood at the candle's open (zonesAt(openIdx, its open in ms): [name, price,
     // side]), by the relation rule read through the gap's side (gapRelation): a gap the candle itself fills still
@@ -528,16 +550,57 @@ function briefingCandles({ bars, base, fine = null, levelsAt = () => [], zonesAt
       ...(f.insideStack ? { insideStack: f.insideStack, mother: f.mother } : {}),
       ...sweepField(m, c, prev),
       levels: Object.fromEntries(found.slice(0, MAX_LEVELS).map(x => [x.name, x.text])),
+      // Filled in below (reactions), once every frame's relations are known.
+      reactions: null,
       ...(found.length > MAX_LEVELS ? { moreLevels: found.length - MAX_LEVELS } : {}),
       // Every relation, structured and uncapped (the text above keeps MAX_LEVELS): what the composed-entry reads checker
       // (composed-reads.js) verifies against. Never rendered (briefing.js detailEntries and candleLines leave it out).
-      relations: found.map(x => ({ name: x.name, price: x.price, rel: x.rel, dir: x.dir })),
+      relations: found.map(x => ({ name: x.name, price: x.price, rel: x.rel, dir: x.dir })),  // + reaction (levelReactionsOf)
       // How it met the fair value gaps' edges ('<tf> fvg low|high', fvg-frames.js fvgEdgesAt), uncapped and never
       // rendered either: the composed-entry FVG reads verify against it. Only when the caller gives the gaps.
       ...(zonesAt ? { fvgRelations: zones } : {}),
     };
+    pending.push({ m, c, prev, pp: j > 1 ? s.candles[j - 2].c : NaN, patterns: f.patterns, found, prevAll });
   }
+  for (const x of pending) Object.assign(out[label(x.m)], levelReactionsOf(x, out));
   return out;
+}
+
+/** A confirmed level named as the previous candle met it, with its price: `previous 15m high` there is `the 15m high 110`. */
+const confirmedText = (name, price) => {
+  const base = /^previous /.test(name) ? `the ${name.replace(/^previous /, '')}` : name;
+  // A name that already ends with its price (a swing: `15m swing high 21000.25`) is said once.
+  const tail = /\s(-?\d+(?:\.\d+)?)$/.exec(base);
+  return tail && Number(tail[1]) === price ? base : `${base} ${price}`;
+};
+
+/**
+ * A candle's reactions (candle-reaction.js) at the levels it met, on its relations (and `reactions`, by level, the
+ * rendered text's), and `confirmed`: the confirmed rejections of levels its previous candle met that it didn't. A frame
+ * checked against a higher one (CONFLICT) reads that frame's relation to the same level; the frame missing: unknown.
+ */
+function levelReactionsOf({ m, c, prev, pp, patterns, found, prevAll }, out) {
+  const hm = CONFLICT[String(m)];
+  const hc = hm ? out[label(hm)] : undefined;
+  const higherOf = name => {
+    if (!hm) return undefined;
+    if (!hc || hc.unavailable || !Array.isArray(hc.relations)) return null;
+    const r = hc.relations.find(x => x.name === name);
+    return r ? { relation: r.rel, dir: r.dir } : { relation: 'none', dir: null };
+  };
+  const relations = found.map(x => ({ name: x.name, price: x.price, rel: x.rel, dir: x.dir, reaction: reactionOf({ c, prev, level: x.price, patterns, prevPrevClose: pp, higher: higherOf(x.name) }) }));
+  // The previous candle's levels are named as they stood for it: a relative one (its `previous <tf> high`) is another
+  // price for this candle, so each is said with its price (as the previous candle met it). Every one is deduplicated
+  // against this candle's own levels and each other by price (whatever its kind, so the order they come in never
+  // matters); a MOVING one (MOVING_LEVEL: the same level at a new price each bar) by its name too: met by this candle at
+  // its new price, its own relation carries it.
+  const confirmed = [];
+  const same = (x, name, price) => x.price === price || (MOVING_LEVEL.test(name) && x.name === name);
+  for (const [name, price] of prevAll) {
+    if (!Number.isFinite(price) || found.some(x => same(x, name, price)) || confirmed.some(x => same(x, name, price))) continue;
+    if (reactionOf({ c, prev, level: price, patterns, prevPrevClose: pp }) === 'confirmed rejection') confirmed.push({ name, price, dir: c.c < prev.c ? 'down' : 'up', text: confirmedText(name, price) });
+  }
+  return { relations, reactions: Object.fromEntries(relations.map(x => [x.name, x.reaction])), ...(confirmed.length ? { confirmed } : {}) };
 }
 
 /**
@@ -667,5 +730,5 @@ function completedCandlesAt({ bars, base, fine = null, minutes, at = bars.length
 module.exports = {
   TIMEFRAMES, DEF, LABELS, MAX_LEVELS, LEVEL_ORDER, label, completedSeries, shape, closeLocation, patternsOf, patternLabel, relation,
   candleSeries, relationSeries, swingTargetSeries, holdingSwingsAt, briefingCandles, briefingTargets, RELATION_TEXT,
-  prevSweep, RANGE_FRAMES, briefingRangeTargets, completedCandlesAt, gapRelation, insideStackOf, insideStacks, factsOf,
+  prevSweep, RANGE_FRAMES, briefingRangeTargets, completedCandlesAt, gapRelation, insideStackOf, insideStacks, factsOf, levelReactionsOf, confirmedText, MOVING_LEVEL,
 };

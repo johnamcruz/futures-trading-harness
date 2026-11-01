@@ -816,15 +816,26 @@ test('runEntry: a managed cycle\'s exit skills in the head trader\'s prompt are 
   fs.writeFileSync(headEnv.FTH_CYCLE_TRANSCRIPT, `${JSON.stringify({ type: 'system', subtype: 'init', session_id: 'head-session', tools: [] })}\n${skill}`);
   const { file, text } = ES.writeSituation(tmpDir(), ROOT, { skills: ['manage-position', 'pullback-vs-reversal', 'take-profit'], sections: [], over: [], why: ['a position or a working entry is open'] });
   const att = ES.attestation({ file, text, root: ROOT, cycle: cycleId(headEnv) });
-  await E.runEntry(s.deps, s.cycle({ output: skill, headEnv: { ...headEnv, [ES.ATTEST_ENV]: JSON.stringify(att) }, context: { cycleSkills: { skills: ['manage-position', 'pullback-vs-reversal', 'take-profit'], sections: [], over: [], why: ['a position or a working entry is open'] } } }));
+  // Judged on the head's captured transcript (its live file is removed once the run ends): counted with the file gone.
+  const output = fs.readFileSync(headEnv.FTH_CYCLE_TRANSCRIPT, 'utf8');
+  fs.unlinkSync(headEnv.FTH_CYCLE_TRANSCRIPT);
+  await E.runEntry(s.deps, s.cycle({ output, headEnv: { ...headEnv, [ES.ATTEST_ENV]: JSON.stringify(att) }, context: { cycleSkills: { skills: ['manage-position', 'pullback-vs-reversal', 'take-profit'], sections: [], over: [], why: ['a position or a working entry is open'] } } }));
   assert.deepStrictEqual(RR.readHeadSkills(s.rolesFile), ['manage-position', 'pullback-vs-reversal', 'take-profit', 'trade-lifecycle']);
+  // A captured output that isn't a run's own transcript (no init event first): the Skill load only (fails closed).
+  s = setup();
+  await E.runEntry(s.deps, s.cycle({ output: skill, headEnv: { ...headEnv, [ES.ATTEST_ENV]: JSON.stringify(att) } }));
+  assert.deepStrictEqual(RR.readHeadSkills(s.rolesFile), ['trade-lifecycle'], 'not a run\'s transcript');
+  // No attestation: the Skill load only.
+  s = setup();
+  await E.runEntry(s.deps, s.cycle({ output, headEnv }));
+  assert.deepStrictEqual(RR.readHeadSkills(s.rolesFile), ['trade-lifecycle'], 'unattested');
   assert.ok(!('cycleSkills' in s.calls[1].limits.context), 'a role\'s run never carries the head trader\'s section');
   // Another cycle's attestation, or an edited file: the Skill load only.
   for (const bad of [{ ...att, cycle: 'f'.repeat(16) }, { ...att, sha256: 'b'.repeat(64) }]) {
     s = setup();
     fs.mkdirSync(path.dirname(s.cycle().headEnv.FTH_CYCLE_TRANSCRIPT), { recursive: true });
-    fs.writeFileSync(s.cycle().headEnv.FTH_CYCLE_TRANSCRIPT, fs.readFileSync(headEnv.FTH_CYCLE_TRANSCRIPT));
-    await E.runEntry(s.deps, s.cycle({ output: skill, headEnv: { ...s.cycle().headEnv, [ES.ATTEST_ENV]: JSON.stringify(bad) } }));
+    fs.writeFileSync(s.cycle().headEnv.FTH_CYCLE_TRANSCRIPT, output);
+    await E.runEntry(s.deps, s.cycle({ output, headEnv: { ...s.cycle().headEnv, [ES.ATTEST_ENV]: JSON.stringify(bad) } }));
     assert.deepStrictEqual(RR.readHeadSkills(s.rolesFile), ['trade-lifecycle'], JSON.stringify(bad).slice(0, 80));
   }
 });

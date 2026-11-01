@@ -464,9 +464,15 @@ test('trade-session split: no head-trader path reads more than the base\'s every
 // Then the bracket rule (fix/orphan-orders, the owner's "always manage risk using stop loss brackets and adjust it
 // accordingly using modify order", 2026-10-26): the trade-executor +525 each mode (gate-refusals-positions'
 // [bracket-leg] and [bracket-only] rows); every other role unchanged.
+// Then the reaction at a level (feat/sweep-candle-control, owner-approved 2026-10-31: "This will provide useful context.
+// Not used in isolation for decision"): bar-briefing's field list names each relation's `reaction` and `confirmed`
+// (+270 in every role that embeds it); the market-structure analyst +3529 in full mode over main's 88956 (that, and
+// candle-reading's reaction section, rejection's and breakout's reaction pointers, embedded there, with the owner's "understand the context at that particular time" line; the pin +2307; +91 of it the owner rule "higher timeframe is stronger confirmation over lower timeframe"; then 92506, owner: rejection relies on candle-reading; the side is the candle's (q30): candle-reading's side rule, rejection's and breakout's own reads now a pointer to it, net +21; then 92524, owner: no bare rejection (plain is no rejection read); sweeps need candle-reading too: candle-reading's plain line, +18; then 92715, owner: q30 side confusion; side rule first: the side rule first, the `rejected` relation only the fact, +191), the
+// volume-liquidity analyst +270 each mode over main's 48336 and 32968 (the pins +111 and +263); every other role within
+// its pin.
 const ROLE_PROMPTS = {
-  full: { 'market-structure-analyst': 90178, 'news-calendar-analyst': 10182, 'risk-manager': 92762, 'strategy-researcher': 25650, 'trade-executor': 30492, 'trade-reviewer': 9454, 'trend-momentum-analyst': 54540, 'volume-liquidity-analyst': 48495 },
-  index: { 'market-structure-analyst': 43175, 'news-calendar-analyst': 10182, 'risk-manager': 78639, 'strategy-researcher': 25650, 'trade-executor': 30481, 'trade-reviewer': 9454, 'trend-momentum-analyst': 40023, 'volume-liquidity-analyst': 32975 },
+  full: { 'market-structure-analyst': 92715, 'news-calendar-analyst': 10182, 'risk-manager': 92762, 'strategy-researcher': 25650, 'trade-executor': 30492, 'trade-reviewer': 9454, 'trend-momentum-analyst': 54540, 'volume-liquidity-analyst': 48606 },
+  index: { 'market-structure-analyst': 43175, 'news-calendar-analyst': 10182, 'risk-manager': 78639, 'strategy-researcher': 25650, 'trade-executor': 30481, 'trade-reviewer': 9454, 'trend-momentum-analyst': 40023, 'volume-liquidity-analyst': 33238 },
 };
 
 test('trade-session split: no role prompt grows, in full or index mode, and no role lists a piece', () => {

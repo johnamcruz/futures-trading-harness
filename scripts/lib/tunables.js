@@ -77,7 +77,10 @@ const TRAINING = {
   learningReport: { rollingDays: int(1), collapseShare: frac(), minCollapse: int(1) },
   looks: { maxArms: int(1) },
   fieldStudy: { quantiles: list(frac(), { min: 1 }), confluenceLevels: list(frac(), { min: 1 }), minEvents: int(1), minDays: int(1), costTicks: nonneg(), reps: int(1), seed: int() },
-  skillCaps: { skillBytes: int(1), setupSkillBytes: int(1) },
+  // perSkill: one skill's own cap (owner-approved, improves context): candle-reading's reaction-at-a-level read
+  // (feat/sweep-candle-control, 2026-10-31; 5916 with the owner rule: a higher timeframe's reaction is stronger confirmation; 6212, owner: rejection relies on candle-reading; the side is the candle's (q30); 6230, owner: no bare rejection (plain is no rejection read); sweeps need candle-reading too; 6338, owner: q30 side confusion; side rule first). A fixed
+  // key, so no other skill can be given more room here.
+  skillCaps: { skillBytes: int(1), setupSkillBytes: int(1), perSkill: { 'candle-reading': int(1) } },
   compose: { maxExpects: int(1), maxWhy: int(1) },
   lessons: { maxLines: int(1), maxChars: int(1) },
   probeEdit: { maxLine: int(1), growBytes: int(0) },
@@ -198,6 +201,9 @@ const ANALYSIS = {
     dojiBody: frac(), wickBody: pos(), wickRange: frac(), otherWick: frac(), dispBody: frac(), dispAtr: pos(), volLen: int(1), volMin: int(1), maxActive: int(1),
     maxLevels: int(1), timeframes: list(int(1), { min: 1 }), rangeFrames: list(int(1), { min: 1 }),
   },
+  // The reaction read at a level (candle-reaction.js): the long wick's share of the body and of the range, a breakout's
+  // body share, and the frames a rejection is checked against (a frame's minutes -> the higher frame's).
+  reaction: { wickBody: pos(), wickRange: frac(), breakoutBody: frac(), conflict: record(int(1)) },
   mtf: { fast: int(1), slow: int(1), rangeLen: int(1), maxCandles: int(1), historyHours: int(1), historyMarginHours: int(0), legacyHistoryHours: int(1), ruleFrames: list(int(1), { min: 1 }) },
   dayContext: { ibMinutes: int(1), openMinutes: int(1), adrDays: int(1) },
   levelCloses: { maxCloses: int(1) },
@@ -229,7 +235,7 @@ const PINS = deepFreeze({
     'screen.gainAlpha': 0.1, 'screen.harmAlpha': 0.2, 'screen.minDiscordant': 4, 'screen.minPairs': 10, 'screen.minEffect': 0.1, 'exitScreen.epsR': 0.05, 'exitScreen.runnerMfeR': 3,
     'loop.limits.maxIterations.max': 100, 'loop.limits.maxModelCalls.max': 100000, 'loop.limits.maxWallMinutes.max': 10080,
     'proposal.maxEdits': 3, 'proposal.maxText': 2000, 'proposal.maxChanged': 3000, 'looks.maxArms': 3,
-    'skillCaps.skillBytes': 3459, 'skillCaps.setupSkillBytes': 4000,
+    'skillCaps.skillBytes': 3459, 'skillCaps.setupSkillBytes': 4000, 'skillCaps.perSkill.candle-reading': 6338,
     'goalRegression.tolerance.passRate': 0.005, 'goalRegression.tolerance.meanR': 0.005, 'goalRegression.tolerance.rCaught': 0,
     'goalRegression.tier2.tolerance.trades': 0, 'goalRegression.tier2.tolerance.totalR': 0.05, 'goalRegression.tier2.tolerance.fills': 0, 'goalRegression.tier2.tolerance.moveShare': 0, 'goalRegression.tier2.maxLossR': 1.25,
     'goalRegression.seed': 1, 'goalRegression.split': '2022-11-23', 'goalRegression.blocksPerHalf': 3, 'goalRegression.blockSessions': 5, 'goalRegression.trendPerHalf': 8,
@@ -333,6 +339,7 @@ const BUILT_IN = deepFreeze({
       dojiBody: 0.1, wickBody: 2, wickRange: 0.6, otherWick: 0.15, dispBody: 0.7, dispAtr: 1.5, volLen: 20, volMin: 5, maxActive: 50, maxLevels: 4,
       timeframes: [3, 5, 15, 60, 240], rangeFrames: [60, 240],
     },
+    reaction: { wickBody: 1, wickRange: 0.3333, breakoutBody: 0.7, conflict: { 15: 60 } },
     mtf: { fast: 20, slow: 50, rangeLen: 20, maxCandles: 300, historyHours: 504, historyMarginHours: 10, legacyHistoryHours: 240, ruleFrames: [240, 60, 15] },
     dayContext: { ibMinutes: 60, openMinutes: 30, adrDays: 10 },
     levelCloses: { maxCloses: 20 },
@@ -377,7 +384,7 @@ const SPECS = Object.freeze({
     'loop.limits.maxIterations.max': 'down', 'loop.limits.maxModelCalls.max': 'down', 'loop.limits.maxWallMinutes.max': 'down',
     'proposal.maxEdits': 'down', 'proposal.maxText': 'down', 'proposal.maxChanged': 'down',
     'looks.maxArms': 'down',
-    'skillCaps.skillBytes': 'down', 'skillCaps.setupSkillBytes': 'down',
+    'skillCaps.skillBytes': 'down', 'skillCaps.setupSkillBytes': 'down', 'skillCaps.perSkill.candle-reading': 'down',
     // The goal regression's tolerances below main's baseline: only fall (a looser one lets a worse strategy pass).
     'goalRegression.tolerance.passRate': 'down', 'goalRegression.tolerance.meanR': 'down', 'goalRegression.tolerance.rCaught': 'down',
     'goalRegression.tier2.tolerance.trades': 'down', 'goalRegression.tier2.tolerance.totalR': 'down', 'goalRegression.tier2.tolerance.fills': 'down', 'goalRegression.tier2.tolerance.moveShare': 'down', 'goalRegression.tier2.maxLossR': 'down',

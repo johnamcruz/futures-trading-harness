@@ -1,0 +1,108 @@
+'use strict';
+
+/**
+ * compose_check's early warning (the owner, 2026-10-31: "Warn early + embed", "We need to ensure all the skills are
+ * loaded"). Every skill the head trader's composed reads require (skills-loaded.js SITUATIONAL: the entries marked
+ * `head` whose composed trigger fires on the record's reads, e.g. candle-reading for a rejection, a break or a sweep)
+ * that this cycle's head has not read is named in the reply while the head is still running, so the same cycle can
+ * read it and compose again. It never refuses anything: the order gate stays the one that enforces the requirement,
+ * and the record is unchanged. Only where the gate requires them (an autonomous cycle, the head trader in index mode or
+ * Claude Code's head with its attested prompt: order-gate.js), so a warning always names what the gate would refuse.
+ *
+ * Read means, as the gate counts it for the head's own session:
+ *   - loaded or looked up in the cycle's transcript (FTH_CYCLE_TRANSCRIPT: a skill load, opencode's or Claude Code's
+ *     skill_lookup);
+ *   - embedded in the head prompt on its attestation (FTH_HEAD_PROMPT: opencode's attestedSkills, Claude Code's
+ *     claudeAttested);
+ *   - embedded in this cycle's situational section on its attestation (FTH_CYCLE_SKILLS, cycle-skills-attest.js).
+ * Anything unreadable counts as not read, so the warning shows. When the cycle's lanes are set but unreadable
+ * (FTH_CYCLE_LANE_BARS), the gate requires every head entry on a composed entry, and the warning names them all.
+ *
+ *   factsOf(reads)                          the composed facts the triggers read ({ composed: [{ kinds, relations }] })
+ *   requiredBy(reads, composed)             the head-required skills these reads and the bar's records trigger
+ *   readThisCycle(env, root)                the skills this cycle's head has read, as the gate counts them
+ *   enforced(env)                           whether the gate requires the situational skills here
+ *   unread(reads, { env, root, composed })  the required skills not read
+ *   warningFor(reads, { env, root, composed })   the reply's line, or null
+ */
+
+/** The composed facts these reads make (skill-lookups.js composedAt's shape), as the triggers read them. */
+function factsOf(reads) {
+  const { parseRead } = require('./composed-reads');
+  const parsed = (Array.isArray(reads) ? reads : []).map(r => { try { return parseRead(String(r)); } catch (_err) { return null; } }).filter(Boolean);
+  return { composed: [{ id: 'compose', kinds: [...new Set(parsed.map(p => p.kind))], relations: [...new Set(parsed.filter(p => p.kind === 'relation' && p.rel).map(p => p.rel))] }] };
+}
+
+/**
+ * The head-required skills these reads trigger, with the bar's earlier compose records (`composed`: skill-lookups.js
+ * composedAt, as the gate reads them): the gate's own table and triggers (the composed entry's table).
+ */
+function requiredBy(reads, composed = []) {
+  const { situationalSkills } = require('./skills-loaded');
+  return situationalSkills({ composed: [...factsOf(reads).composed, ...(Array.isArray(composed) ? composed : [])] });
+}
+
+/**
+ * Whether the gate requires the head's situational skills in this run: the gate's own predicate (order-gate.js:
+ * autonomous, and index mode or Claude Code's head with its verified attestation), on the gate's own config.
+ */
+function enforced(env = process.env, root = null) {
+  const cfg = require('./config').loadConfig(env || {});
+  if (!cfg.autonomous) return false;
+  if (cfg.roleSkills === 'index') return true;
+  const HP = require('../head-prompt');
+  const att = HP.parseAttestation(env.FTH_HEAD_PROMPT);
+  if (!att || att.harness !== 'claude' || !root) return false;
+  try {
+    return HP.claudeAttested(att, root, { stream: String(env.FTH_CYCLE_TRANSCRIPT || '').trim() || null, cycle: require('./check-order').cycleId(env) }).length > 0;
+  } catch (_err) {
+    return false;
+  }
+}
+
+/** The skills this cycle's head trader has read, as the gate counts them for its own session (never throws). */
+function readThisCycle(env = process.env, root = null) {
+  const out = new Set();
+  const transcript = String((env && env.FTH_CYCLE_TRANSCRIPT) || '').trim();
+  if (!transcript) return out;
+  const SL = require('./skills-loaded');
+  const add = list => { for (const s of list || []) out.add(s); };
+  try { add(SL.loadedSkills(transcript)); } catch (_err) { /* unreadable: none */ }
+  try { add(SL.loadedSkills(transcript, SL.claudeLookupsInTranscript)); } catch (_err) { /* unreadable: none */ }
+  if (!root) return out;
+  const HP = require('../head-prompt');
+  const cycle = (() => { try { return require('./check-order').cycleId(env); } catch (_err) { return null; } })();
+  try {
+    const att = HP.parseAttestation(env.FTH_HEAD_PROMPT);
+    if (att && att.harness === 'claude') add(HP.claudeAttested(att, root, { stream: transcript, cycle }));
+    else if (att) add(HP.attestedSkills(att, root, { transcript }));
+  } catch (_err) { /* off: none */ }
+  try {
+    const CSA = require('../cycle-skills-attest');
+    add(CSA.attested(CSA.parseAttestation(env.FTH_CYCLE_SKILLS), root, { stream: transcript, hook: null, cycle }));
+  } catch (_err) { /* off: none */ }
+  return out;
+}
+
+/** The skills these reads require that this cycle's head hasn't read (none where the gate doesn't require them). */
+function unread(reads, { env = process.env, root = null, composed = [] } = {}) {
+  if (!enforced(env, root)) return [];
+  // The cycle's lanes set but unreadable: the gate requires every head entry on a composed entry (order-gate.js), so
+  // the warning names every one (fails closed, recoverable: read them and compose again).
+  const { SITUATIONAL, headSituationalSkills } = require('./skills-loaded');
+  const lanes = require('./config').loadConfig(env || {}).cycleLaneBars;
+  const need = lanes === null ? headSituationalSkills(SITUATIONAL) : requiredBy(reads, composed);
+  if (!need.length) return [];
+  const read = readThisCycle(env, root);
+  return need.filter(s => !read.has(s));
+}
+
+/** The warning line for these reads, or null (nothing required, or all read this cycle). */
+function warningFor(reads, { env = process.env, root = null, composed = [] } = {}) {
+  const missing = unread(reads, { env, root, composed });
+  if (!missing.length) return null;
+  const calls = missing.map(s => `\`skill_lookup {"skill": "${s}"}\``).join(', ');
+  return `- READ FIRST: this record's reads need ${missing.join(', ')}, not read this cycle; read ${missing.length > 1 ? 'each' : 'it'} with ${calls}, then compose again (the order gate requires ${missing.length > 1 ? 'them' : 'it'} for this entry).`;
+}
+
+module.exports = { factsOf, requiredBy, enforced, readThisCycle, unread, warningFor };
