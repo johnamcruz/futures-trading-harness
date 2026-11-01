@@ -369,6 +369,38 @@ test('trend capture: an entry placed before the leg\'s start is its catch when i
   assert.strictEqual(run(at => at(0)).legs[0].captured, false);
 });
 
+test('trend capture: an entry for a bar in the leg\'s first half placed after that span\'s wall time (a slow cycle) is matched by its record\'s bar: caught, stopped with its R, never unfilled', () => {
+  // 2022-05-23: a market sell for the 13:54 bar placed at 13:58:23 filled, peaked +1.54R and was stopped about -1R; the
+  // order's wall time fell past the span the cycles were read in, so the leg read "unfilled". Here the up leg's first half
+  // ends at bars[7]'s open; the record is on bars[6] (its cycle closes at that end), the order placed 4 min after it.
+  const trades = at => [{ orderId: 30, profitAndLoss: null, roundTripId: 1, price: 21520, creationTimestamp: new Date(Date.parse(at(6)) + 250000).toISOString() },
+    { orderId: 31, profitAndLoss: -20, roundTripId: 1, exitReason: 'stop', roundTrip: { r: -1, entryTime: new Date(Date.parse(at(6)) + 250000).toISOString(), entryPrice: 21520, exitPrice: 21510, exitTime: at(9), mfeR: 1.54, risk: 10, open: false } }];
+  const x = runFixture({ trades });
+  const at = i => new Date(Date.parse(x.bars[i].t) + MIN3).toISOString();
+  fs.writeFileSync(path.join(x.home, 'logs', 'cycles', '2026-04-23', 'd.json'), JSON.stringify(cycle({ timing: { barClose: at(6) }, entry: { record: 'late1', outcome: 'executed' } })));
+  fs.appendFileSync(path.join(x.home, 'trade-lifecycle', 'MNQ', '2026-04-23.jsonl'), `${JSON.stringify(rec({ id: 'late1', bar: x.bars[6].t, ok: true, plan: { stop: { ticks: 40 }, tick: 0.25 } }))}\n`);
+  const orders = JSON.parse(fs.readFileSync(path.join(x.home, 'entry-orders.json'), 'utf8'));
+  orders.push({ orderId: 30, at: new Date(Date.parse(at(6)) + 4 * 60000 + 23000).toISOString(), composed: { record: 'late1', side: 'long', entry: 21520 } });
+  fs.writeFileSync(path.join(x.home, 'entry-orders.json'), JSON.stringify(orders));
+  const doc = tc.captureReport({ runDir: x.runDir, days: x.days });
+  const up = doc.legs[0];
+  assert.deepStrictEqual([up.captured, up.entry.filled, up.entry.r, up.entry.outcome, up.blocker], [true, true, -1, 'stop', null]);
+  assert.deepStrictEqual(up.cycles.filter(c => c.record === 'late1').map(c => c.code), ['entered']);
+  assert.ok(!up.cycles.some(c => c.code === 'unfilled' && c.record === 'late1'), 'a filled entry is never unfilled');
+  // The same order with no fill: unfilled, the leg's execution blocker, as before.
+  const none = runFixture({ fill: false });
+  fs.writeFileSync(path.join(none.home, 'logs', 'cycles', '2026-04-23', 'd.json'), JSON.stringify(cycle({ timing: { barClose: at(6) }, entry: { record: 'late1', outcome: 'executed' } })));
+  fs.appendFileSync(path.join(none.home, 'trade-lifecycle', 'MNQ', '2026-04-23.jsonl'), `${JSON.stringify(rec({ id: 'late1', bar: none.bars[6].t, ok: true, plan: { stop: { ticks: 40 }, tick: 0.25 } }))}\n`);
+  fs.writeFileSync(path.join(none.home, 'entry-orders.json'), JSON.stringify(orders));
+  const missed = tc.captureReport({ runDir: none.runDir, days: none.days }).legs[0];
+  assert.deepStrictEqual([missed.captured, missed.blocker.code], [false, 'unfilled']);
+  // Its record on a bar past the first half (placed late too): not this leg's catch.
+  const after = runFixture({ trades });
+  fs.writeFileSync(path.join(after.home, 'entry-orders.json'), JSON.stringify([...orders.slice(0, 1), { ...orders[1], at: new Date(Date.parse(at(8)) + 60000).toISOString() }]));
+  fs.appendFileSync(path.join(after.home, 'trade-lifecycle', 'MNQ', '2026-04-23.jsonl'), `${JSON.stringify(rec({ id: 'late1', bar: after.bars[8].t, ok: true, plan: { stop: { ticks: 40 }, tick: 0.25 } }))}\n`);
+  assert.strictEqual(tc.captureReport({ runDir: after.runDir, days: after.days }).legs[0].captured, false);
+});
+
 test('trend capture: a trade\'s R, peak and the leg\'s available R on the stop it held after the runner\'s move to the plan\'s stop', () => {
   // In at 21516 with a 10-point bracket stop (21506), moved by the runner to the plan's 21508 (8 points) after the fill:
   // the broker's 2.1R (21 points over 10) is 2.625R on the stop it held, its 2.5R best 3.125R (the ride's peak at 0.01: 3.13).
