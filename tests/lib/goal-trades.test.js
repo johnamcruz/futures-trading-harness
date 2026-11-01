@@ -24,7 +24,8 @@ const DOC = GC.loadFixture(path.join(ROOT, 'tests', 'fixtures', 'goal', 'bars.js
 let BLOCKS = null;
 const blocks = () => (BLOCKS = BLOCKS || DOC.blocks.map(b => {
   const bars = GF.decodeBars(b.bars);
-  return { b, bars, candidates: GT.blockTrades(bars, b.sessions, P, { symbol: DOC.symbol }).candidates };
+  const r = GT.blockTrades(bars, b.sessions, P, { symbol: DOC.symbol });
+  return { b, bars, candidates: r.candidates, refused: r.refused };
 }));
 
 test('shippedOf: the policy that trades trade_lifecycle, its rulebook entry rule and exit, the strategy\'s stop rule and window, the cited setups', () => {
@@ -83,7 +84,9 @@ test('a composed trade arms its lock and trail at its plan\'s target, as live: t
   const mark = t => t.reference + sign(t) * P.minRR * t.stopTicks * tick;
   let beyond = 0;
   let lockedHigher = 0;
-  for (const { bars, candidates } of blocks()) {
+  for (const { b, bars, candidates, refused } of blocks()) {
+    // Every composed setup that reaches its plan has one: none is dropped for want of a target.
+    assert.strictEqual(refused['no plan'], undefined, `${b.sessions[0]}: a setup refused for no plan`);
     const ix = new Map(bars.map((x, i) => [x.t, i]));
     const composed = candidates.filter(t => t.type !== 'momentum_continuation');
     assert.ok(composed.every(t => typeof t.targetRead === 'string' && Number.isFinite(t.target) && Number.isFinite(t.reference)));
@@ -112,7 +115,7 @@ test('a composed trade arms its lock and trail at its plan\'s target, as live: t
   assert.ok(lockedHigher > 0, 'one reached and locked above the 2R mark\'s lock');
 });
 
-test('parity: tier 1 arms where live arms for the same plan (scenario 1: the gate\'s stamp of the plan\'s target, liveTarget, against the simulation\'s exit)', () => {
+test('arming parity: tier 1 arms where live arms for the same plan (scenario 1: the gate\'s stamp of the plan\'s target through liveTarget and afterTargetStep, against the simulation\'s exit)', () => {
   const tick = 0.25;
   const briefing = scenario1();
   const checked = checkReads({ reads: SCENARIO_1, side: 'long', briefing, skills: SKILLS });
@@ -123,7 +126,8 @@ test('parity: tier 1 arms where live arms for the same plan (scenario 1: the gat
   const tier1 = planTargetOf({ briefing, side: 'long', stopLevel: checked.stop.level, tick, minRR: P.minRR, stopRule: P.stopRule }).target.price;
   assert.deepStrictEqual([live, tier1], [21598, 21598]);
   // The bars after the decision (3m, its close 21540.25): the limit fills on the next bar; then a high `peak`, then a drop
-  // through the stop. Live: afterTargetStep from the fill with the stamped target; tier 1: limitOutcome with its target.
+  // through the stop. Live: the runner's per-bar rule (afterTargetStep from the fill with the stamped target; a stop
+  // already breached in the bar closes at its close), its stop level compared, not a broker's fill; tier 1: limitOutcome.
   const at = ms => new Date(ms).toISOString();
   const t0 = Date.parse(briefing.closedAt);
   const path = peak => [
@@ -134,8 +138,9 @@ test('parity: tier 1 arms where live arms for the same plan (scenario 1: the gat
     const risk = plan.entry.price - plan.stop.price;
     let t = { sign: 1, entry: plan.entry.price, risk, stop: plan.stop.price, peakR: 0, armed: false, target: live };
     for (const b of bars.slice(1)) {
-      if (b.l <= t.stop) return { reason: t.stop === plan.stop.price ? 'stop' : 'trail', price: t.stop - SLIPPAGE_TICKS * tick, armed: t.armed };
+      if (b.l <= t.stop) return { reason: t.stop === plan.stop.price ? 'stop' : 'trail', stop: t.stop, armed: t.armed };
       const step = afterTargetStep(t, b, plan1, tick, swingAtBar(bars, b, plan1.afterTarget.swingMinutes, 1));
+      if (step.close) return { reason: 'trail', close: step.close.price, armed: step.armed };
       t = { ...t, ...step };
     }
     return null;
@@ -145,13 +150,15 @@ test('parity: tier 1 arms where live arms for the same plan (scenario 1: the gat
   // out); armed at the 2R mark instead, tier 1 would have trailed out in profit.
   const short = path(21597.75);
   assert.deepStrictEqual([liveExit(short).reason, tier1Exit(short, tier1).exitReason], ['stop', 'stop']);
-  assert.strictEqual(tier1Exit(short, tier1).exitPrice, liveExit(short).price);
+  assert.strictEqual(tier1Exit(short, tier1).exitPrice, liveExit(short).stop - SLIPPAGE_TICKS * tick, 'the original stop, the simulation\'s slippage beyond it');
   assert.strictEqual(tier1Exit(short, 21595.75).exitReason, 'trail');
-  // The peak at the named target: both arm, and both trail out at the same price.
+  // The peak at the named target: both arm, and both trail out at the same stop (the lock or trail the arming set).
   const reached = path(21598);
   const l = liveExit(reached);
   const s = tier1Exit(reached, tier1);
-  assert.deepStrictEqual([l.reason, l.armed, s.exitReason, s.exitPrice], ['trail', true, 'trail', l.price]);
+  assert.deepStrictEqual([l.reason, l.armed, s.exitReason], ['trail', true, 'trail']);
+  assert.ok(Number.isFinite(l.stop) && l.stop > plan.entry.price, 'live armed: its stop past the entry');
+  assert.strictEqual(s.exitPrice, l.stop - SLIPPAGE_TICKS * tick, 'the same stop, the simulation\'s slippage beyond it');
 });
 
 test('the chain side reads the rule it is given: a stricter rule allows no more than the shipped one; a rule reading the regime is refused', () => {

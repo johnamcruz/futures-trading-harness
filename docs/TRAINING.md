@@ -1942,9 +1942,11 @@ measured, not the briefing's key-level reactions, so a change there moves
 tier 2, not tier 1; its target is the plan's by compose's rule, so where a
 model would choose `target trail` over a named level ahead (the hint's first
 choice on a side the entry rule allows) tier 1 arms at the named level
-instead: a bound on the difference, not the model's choice. The briefing it
+instead: the named-level path, not the model's choice. The briefing it
 reads holds no round-number levels (their steps are the user's local
-config). Tier 2's mock follows
+config), no fine bars, and only the fixture's warm-up of history (the
+multi-timeframe read's window, `mtf.js` HISTORY_HOURS) where live keeps
+more. Tier 2's mock follows
 the plan; it shows the path works, not what the model decides. A composed
 limit at the last close is marketable at once, so a limit that expires
 unfilled is only the order-latency self-test's (the order sent after the
