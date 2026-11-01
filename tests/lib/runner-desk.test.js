@@ -130,9 +130,16 @@ test('the desk\'s concurrency: config/runner.json\'s, lowered by the runner conf
     await deskFor({ home: tmpDir(), cfg: c, root: ROOT, runRole }).run({ symbols: [{ symbol: 'MNQ' }], roles: ['market-structure-analyst', 'trend-momentum-analyst', 'volume-liquidity-analyst', 'risk-manager'], now: at, at: at.toISOString() });
     return most;
   };
-  // Absent (or null): the committed value.
-  assert.strictEqual(deskConcurrencyOf(cfg()), committed);
-  assert.strictEqual(await inFlight(cfg()), committed);
+  // Absent (or null): the harness's own default (config/runner.json desk.harnessConcurrency): Claude Code the committed
+  // value, the whole desk at once; opencode (a local model server) 2.
+  const byHarness = require('../../scripts/lib/tunables').runner().desk.harnessConcurrency;
+  assert.deepStrictEqual([committed, byHarness], [4, { opencode: 2 }]);
+  assert.strictEqual(deskConcurrencyOf(cfg({ harness: 'claude' })), committed);
+  assert.strictEqual(await inFlight(cfg({ harness: 'claude' })), committed);
+  assert.strictEqual(cfg().deskConcurrency, 2, 'opencode: its own default, set when the key is absent');
+  assert.strictEqual(deskConcurrencyOf(cfg()), 2);
+  assert.strictEqual(await inFlight(cfg()), 2);
+  assert.strictEqual(cfg({ deskConcurrency: null }).deskConcurrency, 2, 'null is absent');
   // Lowered: one at a time.
   assert.strictEqual(deskConcurrencyOf(cfg({ deskConcurrency: 1 })), 1);
   assert.strictEqual(await inFlight(cfg({ deskConcurrency: 1 })), 1);
@@ -146,7 +153,7 @@ test('the desk\'s concurrency: config/runner.json\'s, lowered by the runner conf
 
 test('deskOnManagedCycles (this machine\'s opt-in): absent by default; true or false accepted; anything else refuses the runner config', () => {
   assert.strictEqual(cfg().deskOnManagedCycles, undefined, 'absent: a managed cycle runs as before');
-  assert.strictEqual(cfg().deskConcurrency, undefined, 'absent: the committed concurrency');
+  assert.strictEqual(cfg({ harness: 'claude' }).deskConcurrency, undefined, 'absent on Claude Code: the committed concurrency');
   for (const ok of [true, false]) assert.strictEqual(cfg({ deskOnManagedCycles: ok }).deskOnManagedCycles, ok);
   for (const bad of ['true', 1, null, {}]) assert.throws(() => cfg({ deskOnManagedCycles: bad }), /deskOnManagedCycles: true or false, or absent/, JSON.stringify(bad));
 });
@@ -154,8 +161,8 @@ test('deskOnManagedCycles (this machine\'s opt-in): absent by default; true or f
 test('deskConcurrency null is the committed value (as absent); managedDeskNote: a line only where deskOnManagedCycles does nothing', () => {
   const { deskConcurrencyOf, managedDeskNote } = require('../../scripts/lib/runner-wiring');
   const committed = require('../../scripts/lib/tunables').runner().desk.concurrency;
-  assert.strictEqual(cfg({ deskConcurrency: null }).deskConcurrency, null, 'accepted');
-  assert.strictEqual(deskConcurrencyOf(cfg({ deskConcurrency: null })), committed);
+  assert.strictEqual(cfg({ harness: 'claude', deskConcurrency: null }).deskConcurrency, null, 'accepted');
+  assert.strictEqual(deskConcurrencyOf(cfg({ harness: 'claude', deskConcurrency: null })), committed);
   assert.strictEqual(managedDeskNote(cfg()), null, 'absent: nothing said');
   assert.strictEqual(managedDeskNote(cfg({ harness: 'claude', deskOnManagedCycles: false })), null);
   assert.strictEqual(managedDeskNote(cfg({ harness: 'claude', deskOnManagedCycles: true })), null, 'where it applies: nothing said');

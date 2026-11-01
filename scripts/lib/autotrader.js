@@ -411,6 +411,11 @@ function validateConfig(raw) {
     errors.push('sessions: a session runs past eodAt; end of day flattens at eodAt and nothing trades after it until the 18:00 ET open. End sessions before eodAt.');
   }
   if (errors.length) throw new Error(`invalid autotrader config:\n- ${errors.join('\n- ')}`);
+  // deskConcurrency absent (or null): the harness's own default (config/runner.json desk.harnessConcurrency: a local
+  // model server's harness answers fewer at once), at most desk.concurrency; a harness it doesn't name, the committed
+  // value. A machine's own value still lowers it (checked above).
+  const byHarness = TUN.desk.harnessConcurrency[cfg.harness];
+  if ((cfg.deskConcurrency === undefined || cfg.deskConcurrency === null) && Number.isInteger(byHarness)) cfg.deskConcurrency = Math.min(byHarness, TUN.desk.concurrency);
   return cfg;
 }
 
@@ -900,6 +905,10 @@ function childEnv(cfg, root, base = process.env, context = null) {
   // trader's (the stop-review reminder asks only the head trader for its CYCLE RESULT line). Never inherited.
   if (context && typeof context.roleRun === 'string' && context.roleRun) env.FTH_ROLE_RUN = context.roleRun;
   else delete env.FTH_ROLE_RUN;
+  // Phase 2 started at the head trader's compose (runner-entry.js overlapFor): its policy verdicts go to its own stage
+  // (trading/verdict-stage.js), promoted only when the entry adopts it. Never inherited (the head trader's run never has one).
+  if (context && typeof context.verdictStage === 'string' && context.verdictStage) env.FTH_VERDICT_STAGE = context.verdictStage;
+  else delete env.FTH_VERDICT_STAGE;
   // Index mode: the skills each cached role's report looked up in its own call, with the facts key they were required
   // under, which the gate counts for that role under that key only.
   const looked = context && context.cachedLookups && typeof context.cachedLookups === 'object' ? Object.entries(context.cachedLookups).filter(([r, e]) => cachedRoles.includes(r) && e && Array.isArray(e.skills) && e.skills.length && typeof e.key === 'string' && e.key) : [];

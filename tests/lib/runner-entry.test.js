@@ -1112,3 +1112,76 @@ test('overlapFor: none without a role record; the latest record not OK starts no
   assert.deepStrictEqual([snap.record, snap.bar, snap.side, snap.size], ['rec0000000000001', BAR, 'long', 1]);
   assert.notDeepStrictEqual(E.entrySnapshot(s.home, s.cycle(), record()).bars, snap.bars, 'an unreadable bars file never matches');
 });
+
+test('overlapFor in a prop attempt: the early run\'s verdicts (the runner\'s size step and its own order_plan) are staged: the head trader\'s reads (reason_check, latestVerdict) see none while its run goes; adopted, the verdict on the record is in the real file once, as the gate reads it; discarded, nothing is recorded; the head-visible state is the same with or without the early run', async () => {
+  const P = require('../fixtures/lifecycle-prop');
+  const LC = require('../fixtures/lifecycle');
+  const prop = require('../../scripts/lib/trading/prop-state');
+  const VS = require('../../scripts/lib/trading/verdict-stage');
+  const reasons = require('../../scripts/lib/harness-tools/reasons');
+  const { readBriefing } = require('../../scripts/lib/trading/briefing');
+  const { composedOrder } = require('../../scripts/lib/trading/lifecycle-order');
+  const strategies = P.registry({ sizing: require('../helpers').testSizing({ min_contracts: 3 }) });
+  const FACTS = 'FACTS: window opening drive; trend long allowed';
+  // One home: the attempt, the plan's compose record (LC.BAR) and the cycle's decision record (BAR).
+  const scenario = async ({ overlap = true, planned = true } = {}) => {
+    const { home, rec: planRec } = P.propHome({ size: 1 });
+    const plan = a => composedOrder({ home, root: 'MNQ', side: 'long', now: P.NOW, cycleBars: { MNQ: LC.BAR }, strategy: P.LC_DOC, strategies, accounts: [P.MINI], specOf: () => ({ tickSize: 0.25, tickValue: 0.5 }), accountId: 7, selected: ['MNQ'], size: a.size ?? null, approved: a.approved ?? null });
+    TL.appendRecord(home, record({ plan: { ...PLAN, size: 1 } }));
+    const s = setup({ records: [], plan, market: 21540.25 });
+    s.deps.home = home;
+    s.deps.now = () => P.NOW;
+    const bars = path.join(home, 'MNQ-3m.json');
+    fs.writeFileSync(bars, JSON.stringify([{ t: BAR, o: 1, h: 2, l: 0, c: 1, v: 1 }]));
+    const held = [];
+    const orig = s.deps.runRole;
+    s.deps.runRole = async (role, request, limits) => {
+      if (!/^Phase 2, plan verdict/.test(request)) return orig(role, request, limits);
+      s.calls.push({ role: 'phase2', request, limits });
+      // Phase 2's own order_plan, in its own run (its stage in force there, as its environment names it).
+      const stage = limits.context && limits.context.verdictStage;
+      if (stage) VS.withStage(stage, () => plan({})); else plan({});
+      const run = { stage };
+      held.push(run);
+      await new Promise(resolve => { run.release = resolve; });
+      return { ok: true, timedOut: false, text: `VERDICT: APPROVE - size ${/The entry's size is (\d+) MNQ/.exec(request)[1]}, risk $277.50\n${FACTS}`, tools: ['harness_order_plan'], lookups: [], output: '' };
+    };
+    const c = s.cycle({ bars, ...(planned ? {} : { result: 'CYCLE RESULT: no-trade - stalled' }) });
+    const { result: _r, output: _o, ...pre } = c;
+    const handle = overlap ? E.overlapFor({ ...s.deps, lookups: () => ({}), pollMs: 1 }, pre) : null;
+    if (overlap) await until(() => held.length === 1);
+    // The head trader's view while its run goes on, at its end: no stage in force here.
+    const headSees = () => ({ verdicts: prop.readVerdicts(home).filter(v => v.record === planRec.id).length, reason: reasons.verdictsFor(home, readBriefing(home, 'MNQ'), P.NOW).filter(v => v.record === planRec.id).length, latest: (prop.latestVerdict(home, 'prop_portfolio', 'MNQ') || {}).record || null });
+    const atHeadEnd = headSees();
+    const staged = overlap ? VS.withStage(held[0].stage, () => prop.readVerdicts(home).filter(v => v.record === planRec.id).length) : 0;
+    if (handle) handle.halt();
+    const pending = E.runEntry(s.deps, { ...c, ...(handle ? { overlap: handle } : {}) });
+    if (!overlap && planned) { await until(() => held.length === 1); }
+    for (const h of held) h.release();
+    const r = await pending;
+    for (const h of held) h.release();
+    const left = handle ? handle.finish(planned ? 'the entry did not adopt it' : 'the head trader did not end planned (no-trade)') : [];
+    const real = fs.existsSync(prop.verdictsFile(home)) ? fs.readFileSync(prop.verdictsFile(home), 'utf8').trim().split('\n').filter(Boolean).map(l => JSON.parse(l)) : [];
+    return { r, atHeadEnd, staged, real: real.filter(v => v.record === planRec.id), left, stages: (fs.existsSync(path.join(home, 'logs')) ? fs.readdirSync(path.join(home, 'logs')) : []).filter(n => n.startsWith('verdict-stage-')), latest: prop.latestVerdict(home, 'prop_portfolio', 'MNQ'), planRec };
+  };
+  // Adopted: staged while the head trader ran (it saw none), the real file holds the record's verdict once after.
+  const a = await scenario();
+  assert.deepStrictEqual(a.atHeadEnd, { verdicts: 0, reason: 0, latest: null }, 'the head trader sees no verdict for the record');
+  assert.ok(a.staged >= 1, 'the early run read its own staged verdict');
+  assert.strictEqual(a.r.entry.overlap.adopted, true);
+  assert.strictEqual(a.r.entry.outcome, 'executed');
+  assert.strictEqual(a.real.length, 1, 'once in the real file');
+  assert.strictEqual(a.latest.record, a.planRec.id, 'the gate\'s policy check reads the verdict sized on the record');
+  assert.deepStrictEqual(a.stages, [], 'no stage left');
+  // Discarded (not planned): nothing recorded, no stage left.
+  const d = await scenario({ planned: false });
+  assert.deepStrictEqual(d.atHeadEnd, { verdicts: 0, reason: 0, latest: null });
+  assert.strictEqual(d.r, null);
+  assert.deepStrictEqual(d.real, [], 'nothing reaches the real file');
+  assert.deepStrictEqual(d.left.map(x => x.outcome), ['discarded']);
+  assert.deepStrictEqual(d.stages, []);
+  // The same day without the early run: the same head-visible state, the same entry.
+  const n = await scenario({ overlap: false });
+  assert.deepStrictEqual(n.atHeadEnd, a.atHeadEnd, 'the head trader sees the same whatever the early run\'s timing');
+  assert.deepStrictEqual([n.r.entry.outcome, n.r.entry.size, n.real.length], [a.r.entry.outcome, a.r.entry.size, a.real.length]);
+});

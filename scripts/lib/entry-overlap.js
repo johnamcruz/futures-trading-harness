@@ -15,7 +15,11 @@
  *     request(key)        -> Promise<{ request, snapshot } | null>: the phase-2 request the entry would build on that
  *                         record now, and the snapshot of what it judges (runner-entry.js entrySnapshot: the record's
  *                         id, bar, side and size, the briefing's as-of time, the bars file's hash), or null
- *     start(request, signal) -> Promise<the role's run result>: the run (the entry engine's), stopped when `signal` aborts
+ *     start(request, signal, meta) -> Promise<the role's run result>: the run (the entry engine's), stopped when
+ *                         `signal` aborts
+ *     prepare() -> meta, onDrop(meta)   (optional) what a run carries of its own (runner-entry.js: its verdict stage),
+ *                         made before its request is built, given to request and start, and dropped with the run (or
+ *                         when no run starts on it); an adopted run's meta is the adopter's (take's `meta`)
  *     pollMs              how often latest() is read while the head trader's run goes (config/runner.json entry.overlapPollMs)
  *   handle.halt()         no more polls (the head trader's run ended); a poll in flight starts nothing after it
  *   handle.take(key, request, snapshot)   the run started on exactly this key, request and snapshot, still running or
@@ -28,7 +32,7 @@
  * starts one on the new record. At most one run is current; a dropped one is stopped (its signal aborted).
  */
 
-function createOverlap({ latest, request, start, pollMs, wallNow = Date.now, timers = { setInterval, clearInterval }, log = () => {} } = {}) {
+function createOverlap({ latest, request, start, pollMs, prepare = () => null, onDrop = () => {}, wallNow = Date.now, timers = { setInterval, clearInterval }, log = () => {} } = {}) {
   if (typeof latest !== 'function' || typeof request !== 'function' || typeof start !== 'function') throw new TypeError('entry-overlap: latest, request and start are required');
   if (!Number.isInteger(pollMs) || pollMs < 1) throw new TypeError('entry-overlap: pollMs must be a whole number >= 1');
   const runs = [];
@@ -41,15 +45,16 @@ function createOverlap({ latest, request, start, pollMs, wallNow = Date.now, tim
     run.outcome = outcome;
     run.why = why;
     try { run.controller.abort(); } catch (_err) { /* stopped already */ }
+    try { onDrop(run.meta); } catch (_err) { /* best effort */ }
     if (current === run) current = null;
   };
 
-  const begin = (key, req) => {
+  const begin = (key, req, meta) => {
     const controller = new AbortController();
-    const run = { key, request: req.request, snapshot: JSON.stringify(req.snapshot === undefined ? null : req.snapshot), start: wallNow(), end: null, controller, outcome: 'running', why: null };
+    const run = { key, meta, request: req.request, snapshot: JSON.stringify(req.snapshot === undefined ? null : req.snapshot), start: wallNow(), end: null, controller, outcome: 'running', why: null };
     // The run's own promise, as the entry engine's run returns it (a rejection is the engine's to read as a failed run);
     // its end is set first, before any awaiter reads it.
-    run.promise = Promise.resolve().then(() => start(run.request, controller.signal));
+    run.promise = Promise.resolve().then(() => start(run.request, controller.signal, meta));
     run.promise.then(() => { run.end = wallNow(); }, () => { run.end = wallNow(); });
     runs.push(run);
     current = run;
@@ -66,14 +71,18 @@ function createOverlap({ latest, request, start, pollMs, wallNow = Date.now, tim
       if (current && current.key === key) return;
       if (current) drop(current, 'superseded', key ? `the head trader composed again (record ${key})` : 'the latest compose record is not OK');
       if (!key) return;
+      let meta = null;
+      try { meta = prepare(); } catch (err) { log(`phase 2 at the compose: it can't be prepared (${err.message})`); return; }
       let req = null;
-      try { req = await request(key); } catch (err) { log(`phase 2 at the compose: its request can't be built (${err.message})`); req = null; }
+      try { req = await request(key, meta); } catch (err) { log(`phase 2 at the compose: its request can't be built (${err.message})`); req = null; }
       // The head trader's run may have ended, or composed again, while the request was built: start nothing then.
-      if (halted || !req || typeof req.request !== 'string' || !req.request) return;
-      let again;
+      let again = null;
       try { again = latest(); } catch (_err) { again = null; }
-      if (again !== key) return;
-      begin(key, req);
+      if (halted || !req || typeof req.request !== 'string' || !req.request || again !== key) {
+        try { onDrop(meta); } catch (_err) { /* best effort */ }
+        return;
+      }
+      begin(key, req, meta);
     } finally {
       busy = false;
     }
@@ -104,7 +113,7 @@ function createOverlap({ latest, request, start, pollMs, wallNow = Date.now, tim
       return { run: null, why: run.why };
     }
     run.outcome = 'adopted';
-    return { run: { start: run.start, end: () => run.end, promise: run.promise } };
+    return { run: { start: run.start, end: () => run.end, promise: run.promise, meta: run.meta } };
   };
 
   const summary = () => runs.map(r => ({ record: r.key, outcome: r.outcome, ...(r.why ? { why: r.why } : {}), ms: r.end !== null ? Math.max(0, r.end - r.start) : null }));

@@ -231,9 +231,10 @@ phases:
 1. The report cache serves what it can. The desk workflow runs the rest of the
    desk: the three analysts and risk-manager phase 1, in parallel (up to
    `config/runner.json` `desk.concurrency` at once, four today, so the
-   whole desk runs in one wave; the machine's `deskConcurrency` may lower
-   it, for example to 2 or 1 for a local model server that answers fewer
-   requests at once), each with the request built in code. Running at once
+   whole desk runs in one wave on Claude Code; a harness's own default,
+   `desk.harnessConcurrency`, is 2 for opencode, whose local model server
+   answers fewer requests at once; the machine's `deskConcurrency` may lower
+   either), each with the request built in code. Running at once
    changes nothing a role reads: every role runs with the cycle's own
    context (its bars file, its clock, its bar), so each analyst reads this
    cycle's bar briefing, never another cycle's.
@@ -398,6 +399,15 @@ head trader's run, before the cycle log; per role `config/runner.json`
      fresh phase 2 approves.
    - An adopted run that failed or timed out is retried fresh once (the
      workflow's retry); failing again, there is no order.
+
+   - Nothing the head trader reads changes while its run goes on. In a prop
+     attempt the early run's policy verdicts (its own `order_plan`, and the
+     runner's size step for its request) go to a stage of that run's
+     (`trading/verdict-stage.js`, `FTH_VERDICT_STAGE`, never inherited),
+     read back only by that run. Adopted, the stage is promoted to the real
+     verdicts file in one write once the run settles, before the order is
+     built (`prop-state.js promoteVerdicts`); dropped, the stage goes with
+     it. The gate reads the real file as today.
 
    A phase-2 approval of one record never authorizes another.
 4. **Between the phases, in code.** Anything but APPROVE stops the entry (a

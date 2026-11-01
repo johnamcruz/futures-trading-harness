@@ -294,7 +294,7 @@ function entryContext(c) {
  * as before. `translatedRisk`: the translated size's risk (order_plan's, before fees), for phase 2's cut check
  * (prop/phase2-cut.js). The same for phase 2 started at the compose (overlapFor) and after the head trader's run.
  */
-async function reviewCtx(deps, c, rec, roleContext, lookups) {
+async function reviewCtx(deps, c, rec, roleContext, lookups, stage = null) {
   const { client, home, cfg, root, env, log = () => {}, childEnv } = deps;
   const orderPlan = deps.orderPlan || require('./harness-tools/order-plan').plan;
   const ctx = {
@@ -308,7 +308,10 @@ async function reviewCtx(deps, c, rec, roleContext, lookups) {
     // own read does before the gate), so order_plan's translation and the gate's see the same limit. Unread: as it is.
     try { if (client && typeof client.serverConfig === 'function') await client.serverConfig(); } catch (_err) { /* the gate reads its own */ }
     try {
-      const pre = orderPlan({ file: c.bars, symbol: c.symbol, strategy: STRATEGY, side: rec.side, ...(Number.isInteger(c.accountId) ? { accountId: c.accountId } : {}) }, { env: childEnv(cfg, root, env, roleContext), root, tool: true });
+      // Phase 2 started at the compose (overlapFor): the verdict this records goes to its run's stage (verdict-stage.js),
+      // never where the head trader's reads see it while its run goes on.
+      const planNow = () => orderPlan({ file: c.bars, symbol: c.symbol, strategy: STRATEGY, side: rec.side, ...(Number.isInteger(c.accountId) ? { accountId: c.accountId } : {}) }, { env: childEnv(cfg, root, env, stage ? { ...roleContext, verdictStage: stage } : roleContext), root, tool: true });
+      const pre = stage ? require('./trading/verdict-stage').withStage(stage, planNow) : planNow();
       const p = pre && pre.plan;
       if (p && Number.isInteger(p.translatedSize)) {
         ctx.entrySize = { size: p.translatedSize, contract: p.contract, suggested: p.suggestedSize, reason: p.translation, floor: p.minContracts };
@@ -358,23 +361,36 @@ function overlapFor(deps, c) {
   const deadline = wallNow() + Math.max(0, Number(c.budgetMs) || 0);
   const due = () => entryDue(recordsAt(home, c.symbol, c.bar));
   const { createOverlap } = require('./entry-overlap');
-  return createOverlap({
+  const VS = require('./trading/verdict-stage');
+  const h = createOverlap({
     pollMs, wallNow, log: m => log(`the entry: ${m}`),
     latest: () => { const d = due(); return d.run ? d.record.id : null; },
-    request: async key => {
+    // Each early run's policy verdicts go to a stage of its own (verdict-stage.js), dropped with the run.
+    prepare: () => VS.newStage(home),
+    onDrop: stage => VS.dropStage(stage),
+    request: async (key, stage) => {
       const d = due();
       if (!d.run || d.record.id !== key) return null;
       // What it judges, read before its inputs: a newer snapshot by adoption drops it (entrySnapshot).
       const snapshot = entrySnapshot(home, c, d.record);
-      const { ctx } = await reviewCtx(deps, c, d.record, roleContext, typeof deps.lookups === 'function' ? deps.lookups() : deps.lookups);
+      const { ctx } = await reviewCtx(deps, c, d.record, roleContext, typeof deps.lookups === 'function' ? deps.lookups() : deps.lookups, stage);
       return { request: REQUESTS[review.request](role, ctx), snapshot };
     },
-    start: async (request, signal) => {
+    start: async (request, signal, stage) => {
       const left = deadline - wallNow();
       if (left <= 0) return { ok: false, timedOut: true, text: '', tools: [], output: '' };
-      return runRole(role, request, { timeoutMs: Math.min(perRoleMs || left, left), context: roleContext, signal });
+      return runRole(role, request, { timeoutMs: Math.min(perRoleMs || left, left), context: { ...roleContext, verdictStage: stage }, signal });
     },
   });
+  // Adopted (the head trader planned that record, nothing it judged changed): its staged verdicts promoted to the real
+  // file, once its run has settled (runEntry, before the order is built and the gate reads them).
+  const take = h.take;
+  h.take = (...a) => {
+    const got = take(...a);
+    if (got && got.run) got.run.promote = () => require('./trading/prop-state').promoteVerdicts(home, got.run.meta);
+    return got;
+  };
+  return h;
 }
 
 async function runEntry(deps, c) {
@@ -440,7 +456,15 @@ async function runEntry(deps, c) {
     run: async (role, request, { timeoutMs }) => {
       if (adopted && !adopted.used && role === adopted.role && request === adopted.request) {
         adopted.used = true;
-        try { return await adopted.promise; } finally { times.set(role, { start: adopted.start, end: adopted.end() ?? wallNow() }); }
+        try {
+          return await adopted.promise;
+        } finally {
+          times.set(role, { start: adopted.start, end: adopted.end() ?? wallNow() });
+          // Its staged verdicts reach the real file now (overlapFor), before the order and the gate's reads.
+          if (typeof adopted.promote === 'function') {
+            try { adopted.promote(); } catch (err) { log(`the entry: phase 2's staged verdicts could not be promoted (${err.message}): the gate reads the real file as it is`, 'error'); }
+          }
+        }
       }
       const left = deadline - wallNow();
       if (left <= 0) return { ok: false, timedOut: true, text: '', tools: [], output: '' };

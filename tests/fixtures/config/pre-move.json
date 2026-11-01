@@ -1301,6 +1301,10 @@
    "value": 4,
    "from": "new in feat/desk-in-runner (the runner's desk: roles at once, the model server's concurrency); 2 -> 4 in feat/entry-latency-overlap (owner-approved 'A: a faster pipeline': the four desk roles at once; a machine's deskConcurrency lowers it)"
   },
+  "desk.harnessConcurrency": {
+   "value": { "opencode": 2 },
+   "from": "new in feat/entry-latency-overlap (a harness's own desk default: opencode's local model server answers two at once; Claude Code runs desk.concurrency)"
+  },
   "desk.timeoutMinutes": {
    "value": 8,
    "from": "new in feat/desk-in-runner (one desk role's run)"

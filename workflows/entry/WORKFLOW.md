@@ -49,7 +49,9 @@ failure: logged, and nothing runs.
    as-of time, the bars file, and its request. Otherwise it is stopped and
    discarded, never written to the role record, and phase 2 runs fresh on
    the final record (or not at all, when the head trader did not plan). A
-   recompose stops the run and starts one on the new record.
+   recompose stops the run and starts one on the new record. Its policy
+   verdicts are staged for its own reads alone and reach the real file only
+   when it is adopted, so the head trader's reads never change because of it.
 2. Between the phases, in code: the order (`order_plan`'s path,
    `trading/lifecycle-order.js`, so its rationale, brackets and, in a prop
    attempt, the policy verdict are what the gate checks) and the journal plan
