@@ -482,9 +482,12 @@ test('trade-session split: no head-trader path reads more than the base\'s every
 // compose says its cycle; +4); every other role within its pin.
 // Then 93989 (fix/quiz-side-doji, owner: q29/q30/q33 answered correctly): candle-reading's side never from the bias, the
 // briefing's side, a stall decides nothing, the four side and trend-rule cases, a paired side example (+1029); every other role within its pin.
+// Then feat/stable-first-prompt (owner rule: raise a pin when it improves context): gate-refusals' [phase1-cache] row, the
+// gateway's refusal of a cached phase 1 its reads no longer match: the trade-executor +178 each mode (30670, 30659); every
+// other role within its pin.
 const ROLE_PROMPTS = {
-  full: { 'market-structure-analyst': 93989, 'news-calendar-analyst': 10182, 'risk-manager': 92762, 'strategy-researcher': 25650, 'trade-executor': 30492, 'trade-reviewer': 9454, 'trend-momentum-analyst': 54540, 'volume-liquidity-analyst': 48624 },
-  index: { 'market-structure-analyst': 43175, 'news-calendar-analyst': 10182, 'risk-manager': 78639, 'strategy-researcher': 25650, 'trade-executor': 30481, 'trade-reviewer': 9454, 'trend-momentum-analyst': 40023, 'volume-liquidity-analyst': 33256 },
+  full: { 'market-structure-analyst': 93989, 'news-calendar-analyst': 10182, 'risk-manager': 92762, 'strategy-researcher': 25650, 'trade-executor': 30670, 'trade-reviewer': 9454, 'trend-momentum-analyst': 54540, 'volume-liquidity-analyst': 48624 },
+  index: { 'market-structure-analyst': 43175, 'news-calendar-analyst': 10182, 'risk-manager': 78639, 'strategy-researcher': 25650, 'trade-executor': 30659, 'trade-reviewer': 9454, 'trend-momentum-analyst': 40023, 'volume-liquidity-analyst': 33256 },
 };
 
 test('trade-session split: no role prompt grows, in full or index mode, and no role lists a piece', () => {

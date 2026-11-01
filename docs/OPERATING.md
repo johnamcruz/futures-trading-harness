@@ -613,7 +613,10 @@ runner reads them fresh (the account's balance, positions and working orders,
 each running attempt, the day's fills for the losses and the loss cooldown's
 remaining whole bars from the bar close, the bar briefing's window state, the
 journal's lessons and reviewed trades, the trading day) and hashes them
-canonically; a cached phase 1 is served only under the same key, the same role
+canonically. The bar itself is not in the key (a key that changes every bar
+never hits): what depends on the time is, quantised to the bar (the cooldown's
+bars left, the window's state on the bar), and the gate's record must be for
+the cycle's own bar; a cached phase 1 is served only under the same key, the same role
 body and root, in a one-symbol cycle, and never from a cycle that launched a
 trade-executor. Any read that fails gives no key: phase 1 runs. When it is
 served, the run's environment carries the runner's record of those facts
