@@ -215,6 +215,45 @@ for (const mode of ['index', 'full']) {
   });
 }
 
+// The setup is the entry (the owner, 2026-10-30): a key-level rejection and a breakout composed with no entry read go
+// through #288's reaction path end to end: the situational section embeds candle-reading (attested, counted at the
+// runner's entry), compose_check prints the REACTION line (and no READ FIRST: read this cycle), the gate requires it
+// and allows the entry, and the order is the limit at the last close when composed (the briefing's, the plan's entry).
+for (const [kind, skill, setup, reaction] of [
+  ['rejection', 'rejection', '15m rejected prior VAH up', /- REACTION 15m rejected up prior VAH: conflicting \(mixed: needs other confirmation/],
+  ['breakout', 'breakout', '1h broke round number 27400 up', /- REACTION 1h broke up round number 27400: stall \(stalled: the next candle decides\)/],
+]) {
+  test(`entry workflow, the setup is the entry: a key-level ${kind} with no entry read: REACTION shown, candle-reading embedded and attested, the gate allows the limit at the composed close`, async () => {
+    const w = D.world({ mode: 'index' });
+    const at = decisionAt(FIRED_BAR);
+    const R = roles(w, at);
+    const reads = LC_READS.filter(x => x.step !== 'entry').map(x => (x.step === 'setup' ? { ...x, skill, read: setup } : x));
+    assert.ok(!reads.some(x => x.step === 'entry'), 'no entry read: the setup is the entry');
+    const script = headPlanned(w).map(x => (x.harness === 'compose_check' ? { ...x, args: { ...x.args, reads } } : x));
+    const r = await D.pass(w, at, script, { runRole: R.runRole });
+    // candle-reading in the cycle's situational section, attested by the runner for this cycle.
+    assert.match(r.ran[0].prompt, /<skill name="candle-reading">/, 'embedded');
+    const att = require('../../scripts/lib/cycle-skills-attest').parseAttestation(r.ctx.env.FTH_CYCLE_SKILLS);
+    assert.ok(att && att.skills.includes('candle-reading'), 'attested');
+    // One compose: the REACTION line (the verified reaction, context only), no READ FIRST, no lookup.
+    const composes = r.ctx.calls.filter(x => ['compose_check', 'skill_lookup'].includes(x.tool));
+    assert.deepStrictEqual(composes.map(x => x.tool), ['compose_check']);
+    assert.match(composes[0].text, /OK: every read verified/);
+    assert.match(composes[0].text, reaction);
+    assert.doesNotMatch(composes[0].text, /READ FIRST/);
+    // The record has no entry read; its plan's entry is a limit at the briefing's last close when composed.
+    const rec = TL.readRecords(w.home, 'MNQ').at(-1);
+    assert.ok(rec.ok && !rec.reads.some(x => x.step === 'entry'), JSON.stringify(rec.problems));
+    assert.deepStrictEqual([rec.plan.entry.type, rec.plan.entry.price], ['limit', 27427.5]);
+    // The gate (which requires candle-reading for a composed rejection or break) allows the code-built order: that limit.
+    const args = requestedArgs(R.runs.at(-1).request);
+    assert.deepStrictEqual([args.type, args.limitPrice], ['limit', rec.plan.entry.price]);
+    assert.deepStrictEqual(entries(w).map(e => [e.decision, (e.violations || []).map(v => v.check)]), [['allowed', []]]);
+    assert.deepStrictEqual(D.cycleLines(w).at(-1).missingSkills, []);
+    assert.strictEqual(D.placedAtBroker(w).length, 1);
+  });
+}
+
 test('entry workflow, index mode, no room for the situational section: compose_check says READ FIRST (candle-reading), the head looks it up and composes again, and the gate allows the entry', async () => {
   const w = D.world({ mode: 'index' });
   const at = decisionAt(FIRED_BAR);
