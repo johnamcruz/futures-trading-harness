@@ -380,8 +380,10 @@ head trader's run, before the cycle log; per role `config/runner.json`
    `entry.overlapPollMs` (`runner-entry.js overlapFor`,
    `entry-overlap.js`), and on the latest OK record it starts phase 2's run
    with the request it would build then. A newer record (the head trader
-   composed again) or a latest record that is not OK stops that run and,
-   for a new OK record, starts another. When the head trader's run ends:
+   composed again) or a latest record that is not OK stops that run,
+   recorded `superseded` in the cycle log, and, for a new OK record, starts
+   another. While the kill switch is on, no early run starts and a running
+   one is stopped. When the head trader's run ends:
 
    - `planned` on that record: the early run is the phase's first attempt
      only if everything it judged is unchanged. The record's id, its bar,

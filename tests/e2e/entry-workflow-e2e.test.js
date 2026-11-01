@@ -952,6 +952,10 @@ test('entry workflow, phase 2 at the compose: started while the head trader runs
   assert.deepStrictEqual(R.runs.map(x => x.role).slice(-2), ['risk-manager phase 2', 'trade-executor'], 'phase 2 once, then the executor');
   const rec = TL.readRecords(w.home, 'MNQ').at(-1);
   assert.ok(R.runs.at(-2).request.includes(rec.id), 'phase 2 on the record the head trader planned');
+  // The verdict stage: the early phase 2's own environment only, never the head trader's or the trade-executor's.
+  assert.match(String(R.runs.at(-2).env.FTH_VERDICT_STAGE || ''), /verdict-stage-\d+-[0-9a-f]{12}\.jsonl$/);
+  assert.strictEqual(R.runs.at(-1).env.FTH_VERDICT_STAGE, undefined, 'the trade-executor\'s run');
+  assert.strictEqual(r.ctx.env.FTH_VERDICT_STAGE, undefined, 'the head trader\'s run');
   // The role record the executor's gate read: phase 2 started before the head trader's run ended (after the desk).
   assert.strictEqual(R.p2Lines.length, 1);
   assert.ok(R.p2Lines[0].start < headEnded, `phase 2 started ${R.p2Lines[0].start}, the head trader ended ${headEnded}`);

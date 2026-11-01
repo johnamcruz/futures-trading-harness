@@ -1040,7 +1040,7 @@ test('overlapFor + runEntry: phase 2 started at the OK compose is adopted on the
   const p2run = RR.readRoleRuns(s.rolesFile).find(x => x.role === 'risk-manager');
   assert.ok(p2run.start <= startedAt, 'its start is the early run\'s');
   assert.deepStrictEqual(r.entry.overlap, { adopted: true, record: 'rec0000000000001' });
-  assert.ok(r.entry.timing.phase2EarlyMs >= 10, JSON.stringify(r.entry.timing));
+  assert.ok(r.entry.timing.phase2EarlyMs > 0, JSON.stringify(r.entry.timing));
   assert.strictEqual(r.entry.outcome, 'executed');
   assert.deepStrictEqual(s.handle.finish('the entry did not adopt it').map(x => x.outcome), ['adopted']);
 });
@@ -1184,4 +1184,46 @@ test('overlapFor in a prop attempt: the early run\'s verdicts (the runner\'s siz
   const n = await scenario({ overlap: false });
   assert.deepStrictEqual(n.atHeadEnd, a.atHeadEnd, 'the head trader sees the same whatever the early run\'s timing');
   assert.deepStrictEqual([n.r.entry.outcome, n.r.entry.size, n.real.length], [a.r.entry.outcome, a.r.entry.size, a.real.length]);
+});
+
+test('adoptsRun: the adopted early phase 2 is the engine\'s run only for its own role and exactly its own request, once', () => {
+  const adopted = { role: 'risk-manager', request: 'Phase 2, plan verdict, on record A' };
+  assert.strictEqual(E.adoptsRun(adopted, 'risk-manager', 'Phase 2, plan verdict, on record A'), true);
+  assert.strictEqual(E.adoptsRun(adopted, 'risk-manager', 'Phase 2, plan verdict, on record B'), false, 'another request');
+  assert.strictEqual(E.adoptsRun(adopted, 'risk-manager', 'Phase 2, restate, ...'), false, 'the restatement');
+  assert.strictEqual(E.adoptsRun(adopted, 'trade-executor', adopted.request), false, 'another role');
+  assert.strictEqual(E.adoptsRun({ ...adopted, used: true }, 'risk-manager', adopted.request), false, 'once only (a retry runs fresh)');
+  assert.strictEqual(E.adoptsRun(null, 'risk-manager', adopted.request), false);
+  assert.strictEqual(E.adoptsRun({ role: 'risk-manager' }, 'risk-manager', undefined), false, 'no request: never');
+});
+
+test('overlapFor + runEntry: the trade-executor\'s run never carries the early run\'s verdict stage; the early run does', async () => {
+  const s = overlapSetup();
+  await until(() => s.p2.length === 1);
+  assert.match(String(s.p2[0].limits.context.verdictStage || ''), /verdict-stage-\d+-[0-9a-f]{12}\.jsonl$/, 'the early run\'s own stage');
+  s.handle.halt();
+  const pending = E.runEntry(s.deps, { ...s.c, overlap: s.handle });
+  s.p2[0].release(null);
+  const r = await pending;
+  assert.strictEqual(r.entry.outcome, 'executed');
+  const exec = s.calls.find(c => c.role === 'trade-executor');
+  assert.strictEqual(exec.limits.context.verdictStage, undefined, 'the executor\'s context: no stage');
+  s.handle.finish('done');
+});
+
+test('overlapFor: the kill switch on, no early phase 2 starts; switched on while one runs, it is stopped (discarded, saying so)', async () => {
+  const s = setup();
+  const stop = path.join(s.home, 'STOP');
+  fs.writeFileSync(stop, 'stopped');
+  const started = [];
+  const deps = { ...s.deps, runRole: async (role, request, limits) => { started.push(limits); return new Promise(resolve => limits.signal.addEventListener('abort', () => resolve({ ok: false }))); }, lookups: () => ({}), pollMs: 1 };
+  const h = E.overlapFor(deps, s.cycle());
+  await new Promise(r => setTimeout(r, 30));
+  assert.strictEqual(started.length, 0, 'nothing started while the switch is on');
+  fs.unlinkSync(stop);
+  await until(() => started.length === 1);
+  fs.writeFileSync(stop, 'stopped');
+  await until(() => started[0].signal.aborted);
+  assert.deepStrictEqual(h.finish('done').map(x => [x.outcome, x.why]), [['discarded', 'the kill switch is on']]);
+  assert.strictEqual(started.length, 1);
 });

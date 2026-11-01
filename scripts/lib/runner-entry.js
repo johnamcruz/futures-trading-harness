@@ -328,8 +328,9 @@ async function reviewCtx(deps, c, rec, roleContext, lookups, stage = null) {
  * What phase 2 judges, as a snapshot compared when it started at the compose and when the entry adopts it (the owner's
  * "avoid stale data"): the compose record's id, its bar, side and size; the bar briefing's as-of time (the bar the
  * facts are on); the cycle's bars file's content hash. Any part differing drops the early run. A briefing or bars file
- * that can't be read is a value of its own that never equals a readable one, and two unreadable reads never match
- * (fails closed).
+ * whose read throws is a value of its own that never equals another read, readable or not (fails closed). A missing
+ * briefing (none written) reads as null and matches null, as the sequential path takes it; no bars file named is
+ * null too.
  */
 let unreadSeq = 0;
 function entrySnapshot(home, c, rec) {
@@ -364,6 +365,8 @@ function overlapFor(deps, c) {
   const VS = require('./trading/verdict-stage');
   const h = createOverlap({
     pollMs, wallNow, log: m => log(`the entry: ${m}`),
+    // No model run starts while the kill switch is on (the cycle's own check, cycle-run.js, comes after the head trader).
+    blocked: () => (fs.existsSync(require('./trading/config').loadConfig(deps.env || process.env).killSwitchFile) ? 'the kill switch is on' : null),
     latest: () => { const d = due(); return d.run ? d.record.id : null; },
     // Each early run's policy verdicts go to a stage of its own (verdict-stage.js), dropped with the run.
     prepare: () => VS.newStage(home),
@@ -392,6 +395,12 @@ function overlapFor(deps, c) {
   };
   return h;
 }
+
+/**
+ * Whether an engine run is the adopted early phase 2 (runEntry): only its own role and exactly the request it ran on,
+ * once (`used`); any other run (another role, a retry, a restatement, another request) runs as before.
+ */
+const adoptsRun = (adopted, role, request) => Boolean(adopted) && !adopted.used && role === adopted.role && typeof request === 'string' && request === adopted.request;
 
 async function runEntry(deps, c) {
   const { workflow, runRole, client, home, cfg, root, env, log = () => {}, wallNow = Date.now, now = () => new Date(), perRoleMs, childEnv, lookups = {} } = deps;
@@ -454,7 +463,7 @@ async function runEntry(deps, c) {
   let adopted = null;
   const engine = {
     run: async (role, request, { timeoutMs }) => {
-      if (adopted && !adopted.used && role === adopted.role && request === adopted.request) {
+      if (adoptsRun(adopted, role, request)) {
         adopted.used = true;
         try {
           return await adopted.promise;
@@ -743,4 +752,4 @@ async function runEntry(deps, c) {
   return say(out.outcome, out.result, { account, ...(out.why ? { why: short(out.why) } : {}) });
 }
 
-module.exports = { STRATEGY, entryDue, plannedDrift, verdictLine, gateRefusal, gateDecision, workingEntry, entryOutcome, entryContext, reviewCtx, entrySnapshot, overlapFor, runEntry };
+module.exports = { STRATEGY, entryDue, plannedDrift, verdictLine, gateRefusal, gateDecision, workingEntry, entryOutcome, entryContext, reviewCtx, entrySnapshot, overlapFor, adoptsRun, runEntry };

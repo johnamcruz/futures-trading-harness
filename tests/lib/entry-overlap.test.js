@@ -109,3 +109,24 @@ test('createOverlap: finish stops and discards every run not adopted, with why; 
   }
   assert.throws(() => createOverlap({ latest: () => null, request: async () => null, start: async () => ({}), pollMs: 0, timers: noTimers }), /pollMs/);
 });
+
+test('createOverlap: blocked (the kill switch on) starts nothing and stops a running run, saying why; a check that throws blocks', async () => {
+  let why = 'the kill switch is on';
+  const started = [];
+  const h = createOverlap({
+    pollMs: 1, timers: noTimers, latest: () => 'A', request: async k => ({ request: `review ${k}`, snapshot: SNAP }), blocked: () => why,
+    start: (request, signal) => { started.push(signal); return new Promise(() => {}); },
+  });
+  await h.tick();
+  assert.strictEqual(started.length, 0);
+  why = null;
+  await h.tick();
+  assert.strictEqual(started.length, 1);
+  why = 'the kill switch is on';
+  await h.tick();
+  assert.strictEqual(started[0].aborted, true);
+  assert.deepStrictEqual(h.summary().map(x => [x.outcome, x.why]), [['discarded', 'the kill switch is on']]);
+  const t = createOverlap({ pollMs: 1, timers: noTimers, latest: () => 'A', request: async () => ({ request: 'r', snapshot: SNAP }), blocked: () => { throw new Error('unreadable'); }, start: () => { started.push(null); return new Promise(() => {}); } });
+  await t.tick();
+  assert.strictEqual(started.length, 1, 'a failing check blocks');
+});

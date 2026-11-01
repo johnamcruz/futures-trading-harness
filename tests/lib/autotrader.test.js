@@ -185,6 +185,19 @@ test('a previous day that never finished end of day is flattened first', () => {
   assert.strictEqual(decide(cfg, { ...thursday, cycles: 0, premarketDone: false, eodAttempted: true }, sat).action, 'eod');
 });
 
+test('child env: the verdict stage (FTH_VERDICT_STAGE) only from the run\'s own context (the early phase 2\'s), never inherited by the head trader, the trade-executor or any other run', () => {
+  const home = '/srv/fth';
+  const stage = require('path').join(home, 'logs', 'verdict-stage-123-0123456789ab.jsonl');
+  const inherited = { FTH_HOME: home, FTH_VERDICT_STAGE: stage };
+  for (const harness of ['opencode', 'claude']) {
+    const c = validateConfig({ harness });
+    assert.strictEqual(childEnv(c, '/r', inherited).FTH_VERDICT_STAGE, undefined, `${harness}: the head trader's run`);
+    assert.strictEqual(childEnv(c, '/r', inherited, { roleRun: 'trade-executor', entry: false }).FTH_VERDICT_STAGE, undefined, `${harness}: the trade-executor's`);
+    assert.strictEqual(childEnv(c, '/r', inherited, { roleRun: 'risk-manager', verdictStage: '' }).FTH_VERDICT_STAGE, undefined, `${harness}: an empty one`);
+    assert.strictEqual(childEnv(c, '/r', { FTH_HOME: home }, { roleRun: 'risk-manager', verdictStage: stage }).FTH_VERDICT_STAGE, stage, `${harness}: the early phase 2's own`);
+  }
+});
+
 test('child env names the cycle and, for a harness that streams its transcript, the live transcript file the gate reads', () => {
   const home = { FTH_HOME: '/srv/fth' };
   for (const harness of ['opencode', 'claude']) {
