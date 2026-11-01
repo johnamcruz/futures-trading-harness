@@ -39,7 +39,12 @@ test('grading: the ANSWER line, the required terms, and a forbidden term only wh
   // "No readable size" said another way: without a readable size, not a readable approval or approved size.
   for (const a of ['No. Without a readable size on the VERDICT line, it\'s not a trade yet, and it isn\'t a veto either.', 'No. "VERDICT: approve" is not a readable approval, so this is not a trade yet.',
     'No. Under the harness rules that line is not a readable approved size, so it is not a trade yet.']) assert.ok(pass('q19', `ANSWER: ${a}`), a);
-  for (const a of ['Yes: without a readable size the Size line gives 3.', 'Not a readable approval, but it is a trade at 3.', 'It is a trade: the Size line is a readable size.', 'No, it is a readable size: go with 3.']) assert.ok(!pass('q19', `ANSWER: ${a}`), a);
+  // A negation in the "no readable size" substance never excuses a veto, a trade or an entry said elsewhere on the line.
+  for (const a of ['Yes: without a readable size the Size line gives 3.', 'Not a readable approval, but it is a trade at 3.', 'It is a trade: the Size line is a readable size.', 'No, it is a readable size: go with 3.',
+    'Veto: not a readable approval.', 'No readable size, so it is vetoed.', 'Trade it at 3. Not a readable approval but the Size line counts.',
+    'It\'s a trade; without a readable size on the VERDICT line the prose Size line gives 3.']) assert.ok(!pass('q19', `ANSWER: ${a}`), a);
+  // ...while a veto it rules out stays right: "never a veto", "a veto is never retried".
+  for (const a of ['No. That line is not a valid approval, so it is not a trade yet: one restate of the Size and VERDICT lines is owed, and a veto is never retried.', 'No: unreadable, one restate, never a veto.']) assert.ok(pass('q19', `ANSWER: ${a}`), a);
   assert.strictEqual(Q.negated('it is not from the 3m', 'it is not from the '.length, QUIZ.negations, QUIZ.negationWindow), true);
   assert.strictEqual(Q.negated('take it; the 3m swing', 'take it; the '.length, QUIZ.negations, QUIZ.negationWindow), false);
   assert.strictEqual(Q.negated('not one two three four five the 3m', 'not one two three four five the '.length, QUIZ.negations, QUIZ.negationWindow), false, 'past the window');
@@ -183,7 +188,7 @@ test('the reaction questions (q23-q35, feat/sweep-candle-control): answer-first 
       ['Both are longs to take.', 'The first is a long, the second a short setup.', 'Long both: take them both.', 'The first a long; the second is a counter-trend long I\'d take small.',
         'Both long: the first can be taken, and take the second anyway.', 'The pullback one is a short, the other a long.', 'Both long and both can be taken.', 'The pullback one is a continuation; the other one is refused.',
         'Both long; neither is refused.', 'Pullback case is LONG (takeable); the case with 4h and 1h down is SHORT-side only as a counter, so it cannot be taken.',
-        'Long (the pullback one) can be taken; the short-side one is not a long setup, so it is refused.']],
+        'Long (the pullback one) can be taken; the short-side one is not a long setup, so it is refused.', 'The first is a long; the other is a short-only entry, refused.']],
     // No bare rejection: a `rejected` relation with a plain reaction is no rejection read by itself.
     q34: [['No: no one took control; plain is not a rejection, weak context only.', 'Not a rejection: the relation is only the fact, and plain means no one took control.', 'No - the reaction decides, and plain is weak context only.',
       'No. A rejection needs a long-wick, engulfing or confirmed reaction; plain is weak context only.', 'No: it is a rejection only with a long wick, an engulfing or a confirmation; plain is weak context.'],
@@ -198,7 +203,8 @@ test('the reaction questions (q23-q35, feat/sweep-candle-control): answer-first 
     q36: [['Both are shorts (the REACTION line: short side); only case 1 can be taken, case 2 is refused by the trend rule.', 'Short side both; only the first can be taken; the second counters the 4h + 1h.',
       'Both are shorts; case 1 can be taken, case 2 is a short against a long-only bias, so it is refused.', 'Both short: case 2 sits under a long only bias, refused by the trend rule.'],
       ['Case 1 short, case 2 long.', 'Both shorts to take.', 'Both short; neither is refused.', 'Case 1 is a short that can be taken; Case 2 is a long, refused by the trend rule.',
-        'Case 1 is a short; case 2 is a long-side read against nothing, refused.', 'Case 1 short; case 2 is a long-side read under a long-only bias, refused.']],
+        'Case 1 is a short; case 2 is a long-side read against nothing, refused.', 'Case 1 short; case 2 is a long-side read under a long-only bias, refused.',
+        'Both short; case 2 is a long-only setup, refused.']],
     q37: [['Case 1 is a long, and it can be taken; Case 2 is a long against a short bias, and it cannot be taken.', 'Both are longs (the REACTION line: long side); only case 1 can be taken, case 2 is refused by the trend rule.', 'Long side both; only the first can be taken; the second counters the 4h + 1h.',
       'Both are longs; case 1 can be taken, case 2 is a long against a short-only bias, so it is refused.'],
       ['Case 1 long, case 2 short.', 'Both longs to take.', 'Both long; neither is refused.', 'Case 1 is a long that can be taken; Case 2 is a short, refused by the trend rule.',

@@ -78,7 +78,7 @@ const TRAINING = {
   looks: { maxArms: int(1) },
   fieldStudy: { quantiles: list(frac(), { min: 1 }), confluenceLevels: list(frac(), { min: 1 }), minEvents: int(1), minDays: int(1), costTicks: nonneg(), reps: int(1), seed: int() },
   // perSkill: one skill's own cap (owner-approved, improves context): candle-reading's reaction-at-a-level read
-  // (feat/sweep-candle-control, 2026-10-31; 5916 with the owner rule: a higher timeframe's reaction is stronger confirmation; 6212, owner: rejection relies on candle-reading; the side is the candle's (q30); 6230, owner: no bare rejection (plain is no rejection read); sweeps need candle-reading too; 6338, owner: q30 side confusion; side rule first; 7216 (+878), fix/quiz-side-doji, owner: q29/q30/q33 answered correctly: the side never from the bias, the briefing's side, a stall decides nothing, a refused counter-bias example, a refused counter-bias example). A fixed
+  // (feat/sweep-candle-control, 2026-10-31; 5916 with the owner rule: a higher timeframe's reaction is stronger confirmation; 6212, owner: rejection relies on candle-reading; the side is the candle's (q30); 6230, owner: no bare rejection (plain is no rejection read); sweeps need candle-reading too; 6338, owner: q30 side confusion; side rule first; 7367 (+1029), fix/quiz-side-doji, owner: q29/q30/q33 answered correctly: the side never from the bias, the briefing's side, a stall decides nothing, the four side and trend-rule cases, a paired side example). A fixed
   // key, so no other skill can be given more room here.
   skillCaps: { skillBytes: int(1), setupSkillBytes: int(1), perSkill: { 'candle-reading': int(1) } },
   compose: { maxExpects: int(1), maxWhy: int(1) },
@@ -235,7 +235,7 @@ const PINS = deepFreeze({
     'screen.gainAlpha': 0.1, 'screen.harmAlpha': 0.2, 'screen.minDiscordant': 4, 'screen.minPairs': 10, 'screen.minEffect': 0.1, 'exitScreen.epsR': 0.05, 'exitScreen.runnerMfeR': 3,
     'loop.limits.maxIterations.max': 100, 'loop.limits.maxModelCalls.max': 100000, 'loop.limits.maxWallMinutes.max': 10080,
     'proposal.maxEdits': 3, 'proposal.maxText': 2000, 'proposal.maxChanged': 3000, 'looks.maxArms': 3,
-    'skillCaps.skillBytes': 3459, 'skillCaps.setupSkillBytes': 4000, 'skillCaps.perSkill.candle-reading': 7216,
+    'skillCaps.skillBytes': 3459, 'skillCaps.setupSkillBytes': 4000, 'skillCaps.perSkill.candle-reading': 7367,
     'goalRegression.tolerance.passRate': 0.005, 'goalRegression.tolerance.meanR': 0.005, 'goalRegression.tolerance.rCaught': 0,
     'goalRegression.tier2.tolerance.trades': 0, 'goalRegression.tier2.tolerance.totalR': 0.05, 'goalRegression.tier2.tolerance.fills': 0, 'goalRegression.tier2.tolerance.moveShare': 0, 'goalRegression.tier2.maxLossR': 1.25,
     'goalRegression.seed': 1, 'goalRegression.split': '2022-11-23', 'goalRegression.blocksPerHalf': 3, 'goalRegression.blockSessions': 5, 'goalRegression.trendPerHalf': 8,

@@ -241,6 +241,17 @@ test('the rendered rejection says its side, the candle\'s: back below short, bac
   assert.match(line, /rejected session POC \(closed back below; conflicting\)/, 'mixed: no side');
   assert.match(line, /rejected IB high \(closed back below; plain\)/, 'not a rejection: no side');
   assert.match(line, /rejected IB low \(closed back above; stall\)/, 'stalled: the next candle decides, no side');
+  // A touch that reads as a rejection (a confirmed one, its high exactly at the level): its side by the close against the
+  // level; a plain touch none.
+  const t = { closedAt: '2026-06-15T14:00:00.000Z', pattern: 'bearish engulfing', closeLocation: 'bottom', rangeAtr: null, volRatio: null, sweep: null, c: 98,
+    levels: { 'overnight high': 'touched', 'prior RTH low': 'touched', 'IB high': 'touched' }, reactions: { 'overnight high': 'confirmed rejection', 'prior RTH low': 'confirmed rejection', 'IB high': 'plain' },
+    relations: [{ name: 'overnight high', price: 100, rel: 'touched', dir: null }, { name: 'prior RTH low', price: 96, rel: 'touched', dir: null }, { name: 'IB high', price: 99, rel: 'touched', dir: null }] };
+  const tl = B2.candleLines({ candles: { '15m': t }, swingTargets: { above: [], below: [] } }, v => v)[0];
+  assert.match(tl, /touched overnight high \(confirmed rejection, short side\)/);
+  assert.match(tl, /touched prior RTH low \(confirmed rejection, long side\)/);
+  assert.match(tl, /touched IB high \(plain\)/);
+  const noPrice = B2.candleLines({ candles: { '15m': { ...t, relations: [] } }, swingTargets: { above: [], below: [] } }, v => v)[0];
+  assert.match(noPrice, /touched overnight high \(confirmed rejection\)/, 'no price: no side');
   // The 4h (an event frame) keeps its own byte budget: no reaction, so no side.
   const h4 = B2.candleLines({ candles: { '4h': { ...c, closedAt: '2026-06-15T14:00:00.000Z' } }, swingTargets: { above: [], below: [] } }, v => v, undefined, '2026-06-15T14:00:00.000Z')[0];
   assert.ok(!/ side\)/.test(h4), h4);

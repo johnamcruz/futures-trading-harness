@@ -331,7 +331,11 @@
         "\\binstead of (a )?restate\\b",
         "(?<!not )(?<!not a )\\bis a trade\\b(?!\\s+(?:only\\s+)?(?:after|once|when|if)\\b)",
         "\\brestate is (unnecessary|not needed)\\b",
-        "\\bno need (to|for a) restate\\b"
+        "\\bno need (to|for a) restate\\b",
+        "(?<!never a |not a |no |never )\\bveto(e[sd])?\\b(?!\\s+(is|was)\\s+never\\b)",
+        "\\b(it'?s|this is|that'?s|that is) a trade\\b(?!\\s+(?:only\\s+)?(?:after|once|when|if)\\b)",
+        "\\b(trade|take|place|enter|send) it\\b(?!\\s+(?:only\\s+)?(?:after|once|when|if|until)\\b)",
+        "\\bsize line (counts|binds|gives (\\d|it|the size))"
       ]
     },
     {
@@ -536,7 +540,7 @@
       ],
       "forbidden": [
         "\\blong[- ](setup|side|read|entry|trade)\\b",
-        "\\b(a|is a|as a) long\\b(?!-wick|-only\\b|\\s+(bias|only))",
+        "\\b(a|is a|as a) long\\b(?!-wick|[- ]only (bias|trend)\\b|\\s+bias\\b)",
         "\\b(with-trend|with the trend|counter-trend) long\\b",
         "\\b(on )?the (other|opposite) side\\b",
         "\\b(take|trade) it (small|smaller|light|anyway)\\b",
@@ -618,7 +622,7 @@
       ],
       "forbidden": [
         "\\bshort[- ](setup|side|read|entry|trade)\\b",
-        "\\b(a|is a|as a) short\\b(?!-only\\b|\\s+(bias|only))",
+        "\\b(a|is a|as a) short\\b(?![- ]only (bias|trend)\\b|\\s+bias\\b)",
         "\\b(with-trend|with the trend|counter-trend) short\\b",
         "\\b(on )?the (other|opposite) side\\b",
         "\\b(take|trade) it (small|smaller|light|anyway)\\b",
@@ -876,7 +880,7 @@
       ],
       "forbidden": [
         "\\blong[- ](setup|side|read|entry|trade)\\b",
-        "\\b(a|is a|as a) long\\b(?!-wick|-only\\b|\\s+(bias|only))",
+        "\\b(a|is a|as a) long\\b(?!-wick|[- ]only (bias|trend)\\b|\\s+bias\\b)",
         "\\b(with-trend|with the trend|counter-trend) long\\b",
         "\\b(on )?the (other|opposite) side\\b",
         "\\b(take|trade) it (small|smaller|light|anyway)\\b",
@@ -931,7 +935,7 @@
       ],
       "forbidden": [
         "\\bshort[- ](setup|side|read|entry|trade)\\b",
-        "\\b(a|is a|as a) short\\b(?!-only\\b|\\s+(bias|only))",
+        "\\b(a|is a|as a) short\\b(?![- ]only (bias|trend)\\b|\\s+bias\\b)",
         "\\b(with-trend|with the trend|counter-trend) short\\b",
         "\\b(on )?the (other|opposite) side\\b",
         "\\b(take|trade) it (small|smaller|light|anyway)\\b",

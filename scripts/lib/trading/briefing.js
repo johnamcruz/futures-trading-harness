@@ -994,10 +994,17 @@ function candleLines(m3, et, roomOf = 'R = the reference stop', closedAt = null)
     // A reaction that reads as a rejection says its side, the candle's (candle-reading: side first, never from the
     // bias): closed back below, a high's rejection, the short side; back above, the long side.
     const sided = (name, r) => (SIDED.has(rx(name)) ? `${rx(name)}, ${/below/.test(r) ? 'short' : 'long'} side` : rx(name));
+    // A touch (a high exactly at the level) can read as a rejection too (a confirmed one): its side by the close against
+    // the level (below: the short side), none at the level or with no price.
+    const touchedSided = name => {
+      const at = Array.isArray(c.relations) ? c.relations.find(x => x && x.name === name) : null;
+      const p = at ? at.price : NaN;
+      return SIDED.has(rx(name)) && Number.isFinite(c.c) && Number.isFinite(p) && c.c !== p ? `${rx(name)}, ${c.c < p ? 'short' : 'long'} side` : rx(name);
+    };
     const met = Object.entries(c.levels || {}).map(([name, r]) => (r.startsWith('rejected')
       ? `rejected ${name} (${r.replace('rejected: ', '')}${rx(name) ? `; ${sided(name, r)}` : ''})`
       // A touch whose close was beyond the level (the relation is by the body, the reaction by the close): said so.
-      : `${r} ${name}${rx(name) ? ` (${r === 'touched' && rx(name) === 'breakout' ? 'closed beyond: breakout' : rx(name)})` : ''}`));
+      : `${r} ${name}${rx(name) ? ` (${r === 'touched' && rx(name) === 'breakout' ? 'closed beyond: breakout' : r === 'touched' ? touchedSided(name) : rx(name)})` : ''}`));
     for (const x of extras && Array.isArray(c.confirmed) ? c.confirmed : []) met.push(`confirmed rejection of ${x.text || `${x.name} ${x.price}`}${x.dir ? ` (${x.dir === 'down' ? 'short' : 'long'} side)` : ''}`);
     if (c.moreLevels) met.push(`+${c.moreLevels} more`);
     const shapeText = [`${c.pattern}${c.dir ? ` ${c.dir}` : ''}`, extras && c.insideStack && c.mother ? `${c.insideStack} in a row inside the ${et(c.mother.t)} candle ${c.mother.l}-${c.mother.h}` : null,
