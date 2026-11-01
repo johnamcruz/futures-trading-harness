@@ -49,7 +49,9 @@
  *   caughtLost(base, now)           main's caught trend days lost now
  *   faultChecks(day)                { problems, trace }: a broker-fault day's protection, exit, duplicate and recovery
  *                                   checks, and the fault and its recovery as trace steps
- *   tier2RiseProblems(base, next)   a tier 2 baseline only improves: blows not above, total R and fills share not below
+ *   tier2RiseProblems(base, next, { baseTrades, nextTrades })   a tier 2 baseline only improves: blows not above, total R
+ *                                   and fills share not below (a total R drop only by a pinned TIER2_ALLOWANCES entry's exact swap)
+ *   TIER2_ALLOWANCES, allowedTotalRDrop(base, next, { baseTrades, nextTrades })   the owner-approved one-time tier 2 total R drop
  *   floorChecks(day, { rule, bind })   { refused, problems }: a floor day's D13 refusal (goal-synth.js floor): the compose
  *                                   record its stop floor refused, its stop the named level less the buffer (never
  *                                   widened), the binding term the day's (bind 'ticks': rule.floorTicks; 'atr': above it,
@@ -433,12 +435,47 @@ function tier2Rows(base, now, tol) {
   });
 }
 
-function tier2RiseProblems(base, next) {
+// The owner-approved tier 2 allowances, pinned (tests/plugin/goal-regression.test.js holds this list to exactly its one
+// entry): an entry excuses only a total R drop from exactly `from` to exactly `to`, and only when the trades changed by
+// exactly its one swap on its one day (main's `trade.from` gone, `trade.to` new, every other trade the same key, size and
+// R); every other rise rule stands. One-time: once on the base, the base's total R is `to`, so the entry matches no later
+// change. The numbers are recorded as text (a record of what was approved, compared with String()), never a setting
+// (tests/plugin/no-tunable-literals.test.js).
+const TIER2_ALLOWANCES = Object.freeze([
+  Object.freeze({
+    what: 'tier 2 total R',
+    day: '2023-09-25',
+    from: '-2.4134',
+    to: '-2.4151',
+    trade: Object.freeze({ from: '2023-09-25|short|2023-09-25T13:51:00.000Z size 8 R -1.0139', to: '2023-09-25|short|2023-09-25T13:33:00.000Z size 9 R -1.0156' }),
+    why: 'owner-approved 2026-10-31: PR3\'s setup-is-the-entry enters earlier on 2023-09-25 (the 13:33 1h cisd down short, 9 contracts, -1.0156R, for main\'s 13:51 short, 8 contracts, -1.0139R); one -1R stop swaps for another; tier 1 rises: A pass 0.607 -> 0.7795, mean R -0.337 -> -0.0173, R caught 0.1309 -> 0.2144, legs 3 -> 5',
+    approved: '2026-10-31',
+  }),
+]);
+const tradeId = t => `${t.key} size ${t.size} R ${t.R}`;
+/** A tier 2 total R drop a pinned allowance excuses: exactly its from -> to, and the trades changed by exactly its swap. */
+function allowedTotalRDrop(base, next, { baseTrades, nextTrades, allowances = TIER2_ALLOWANCES } = {}) {
+  if (!Array.isArray(baseTrades) || !Array.isArray(nextTrades)) return false;
+  const was = baseTrades.map(tradeId);
+  const is = nextTrades.map(tradeId);
+  const gone = was.filter(x => !is.includes(x));
+  const added = is.filter(x => !was.includes(x));
+  return allowances.some(a => a.what === 'tier 2 total R' && a.from === String(base.totalR) && a.to === String(next.totalR)
+    && gone.length === 1 && added.length === 1 && gone[0] === a.trade.from && added[0] === a.trade.to
+    && gone[0].startsWith(`${a.day}|`) && added[0].startsWith(`${a.day}|`) && was.length === is.length);
+}
+
+function tier2RiseProblems(base, next, { baseTrades = null, nextTrades = null, allowances = TIER2_ALLOWANCES } = {}) {
   if (!base) return [];
   if (!next) return ['tier 2: the new baseline has no summary'];
   const out = [];
   if (next.blows > base.blows) out.push(`tier 2 blows: ${next.blows} in the new baseline, ${base.blows} on the base branch`);
-  for (const k of ['trades', 'totalR', 'fills']) if (typeof base[k] === 'number' && !(next[k] >= base[k])) out.push(`tier 2 ${k}: ${next[k]} in the new baseline, ${base[k]} on the base branch: a baseline only improves`);
+  for (const k of ['trades', 'totalR', 'fills']) {
+    if (typeof base[k] === 'number' && !(next[k] >= base[k])) {
+      if (k === 'totalR' && allowedTotalRDrop(base, next, { baseTrades, nextTrades, allowances })) continue;
+      out.push(`tier 2 ${k}: ${next[k]} in the new baseline, ${base[k]} on the base branch: a baseline only improves`);
+    }
+  }
   return out;
 }
 
@@ -505,4 +542,4 @@ function shardCoverage(parts, { days, fixture }) {
   return problems;
 }
 
-module.exports = { vwapTaken, floorChecks, shardOf, shardDays, shardCoverage, probeProblems, dayBehaviour, caughtLost, moveLayers, moveDiff, faultChecks, pickDays, STEPS, CATEGORIES, TIER2, dayTrades, traceProblems, lostWhy, compareTrades, fillShare, summarize, tier2Rows, tier2RiseProblems };
+module.exports = { vwapTaken, floorChecks, shardOf, shardDays, shardCoverage, probeProblems, dayBehaviour, caughtLost, moveLayers, moveDiff, faultChecks, pickDays, STEPS, CATEGORIES, TIER2, dayTrades, traceProblems, lostWhy, compareTrades, fillShare, summarize, tier2Rows, tier2RiseProblems, TIER2_ALLOWANCES, allowedTotalRDrop };

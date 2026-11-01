@@ -213,3 +213,34 @@ test('vwapTaken: the listed-vwap day never takes the listed VWAP setup; another 
   assert.match(GP.vwapTaken([{ day: D, setup: '15m rejected vwap up', side: 'long', entry: 16650 }], D).join(), /listed VWAP/, 'any case');
   assert.deepStrictEqual(GP.vwapTaken([{ day: '2024-04-09', setup: '15m broke VWAP (rth) up', side: 'long', entry: 1 }], D), [], 'another day\'s trade is not this day\'s');
 });
+
+test('tier2RiseProblems: a total R drop is excused only by the pinned allowance\'s exact from -> to and its exact trade swap', () => {
+  const T = (key, size, R) => ({ key, size, R });
+  const other = [T('2021-05-25|long|2021-05-25T13:39:00.000Z', 7, -1.0132), T('2023-12-07|short|2023-12-07T14:39:00.000Z', 7, 2.65)];
+  const mainT = [...other, T('2023-09-25|short|2023-09-25T13:51:00.000Z', 8, -1.0139)];
+  const prT = [...other, T('2023-09-25|short|2023-09-25T13:33:00.000Z', 9, -1.0156)];
+  const s0 = { trades: 6, totalR: -2.4134, meanR: -0.4022, caught: 0, fills: 1, blows: 0 };
+  const s1 = { ...s0, totalR: -2.4151, meanR: -0.4025 };
+  const ok = (b, n, o) => GP.tier2RiseProblems(b, n, o);
+  // The exact pinned entry: accepted.
+  assert.deepStrictEqual(ok(s0, s1, { baseTrades: mainT, nextTrades: prT }), []);
+  // No trades given: never excused (fails closed).
+  assert.match(ok(s0, s1).join(), /totalR/);
+  // Another value, another from, another day's swap, another size or R, an extra change: refused.
+  assert.match(ok(s0, { ...s1, totalR: -2.42 }, { baseTrades: mainT, nextTrades: prT }).join(), /totalR/);
+  assert.match(ok({ ...s0, totalR: -2.4 }, s1, { baseTrades: mainT, nextTrades: prT }).join(), /totalR/);
+  assert.match(ok(s0, s1, { baseTrades: mainT, nextTrades: [...other, T('2023-09-25|short|2023-09-25T13:33:00.000Z', 10, -1.0156)] }).join(), /totalR/);
+  assert.match(ok(s0, s1, { baseTrades: mainT, nextTrades: [...other, T('2023-09-25|short|2023-09-25T13:33:00.000Z', 9, -1.2)] }).join(), /totalR/);
+  assert.match(ok(s0, s1, { baseTrades: mainT, nextTrades: [other[0], T('2023-12-07|short|2023-12-07T14:39:00.000Z', 7, 2.6), T('2023-09-25|short|2023-09-25T13:33:00.000Z', 9, -1.0156)] }).join(), /totalR/);
+  const dayMoved = [T('2021-05-25|long|2021-05-25T13:51:00.000Z', 8, -1.0139), other[1], mainT[2]];
+  assert.match(ok(s0, s1, { baseTrades: dayMoved, nextTrades: [T('2021-05-25|long|2021-05-25T13:33:00.000Z', 9, -1.0156), other[1], mainT[2]] }).join(), /totalR/);
+  // Tampered allowances (from, to, the trade, the day): refused.
+  const A = GP.TIER2_ALLOWANCES[0];
+  for (const bad of [{ ...A, from: '-2.4' }, { ...A, to: '-2.5' }, { ...A, trade: { ...A.trade, to: 'x' } }, { ...A, day: '2023-09-26' }, { ...A, what: 'tier 2 fills' }]) {
+    assert.match(ok(s0, s1, { baseTrades: mainT, nextTrades: prT, allowances: [bad] }).join(), /totalR/, JSON.stringify(bad));
+  }
+  // The other rise rules stand with the allowance: a blow more, fewer trades, a lower fill share.
+  assert.match(ok(s0, { ...s1, blows: 1 }, { baseTrades: mainT, nextTrades: prT }).join(), /blows/);
+  assert.match(ok(s0, { ...s1, fills: 0.5 }, { baseTrades: mainT, nextTrades: prT }).join(), /fills/);
+  assert.match(ok(s0, { ...s1, trades: 5 }, { baseTrades: mainT, nextTrades: prT }).join(), /trades/);
+});

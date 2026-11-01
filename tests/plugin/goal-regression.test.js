@@ -90,7 +90,7 @@ test('the baseline only rises against the base branch\'s (tier 1 and tier 2); an
   if (!base) return; // no baseline on the base yet: the change that brings it
   assert.deepStrictEqual(GC.riseProblems(base, BASELINE), []);
   // Tier 2: the same rule; another fixture only with the change recorded (the check above holds it to the base's hash).
-  if (base.tier2 && base.tier2.fixture === (BASELINE.tier2 || {}).fixture) assert.deepStrictEqual(GP.tier2RiseProblems(base.tier2.summary, BASELINE.tier2.summary), []);
+  if (base.tier2 && base.tier2.fixture === (BASELINE.tier2 || {}).fixture) assert.deepStrictEqual(GP.tier2RiseProblems(base.tier2.summary, BASELINE.tier2.summary, { baseTrades: base.tier2.trades, nextTrades: BASELINE.tier2.trades }), []);
   else if (base.tier2) assert.ok(BASELINE.fixtureChange && BASELINE.fixtureChange.from === base.fixture, 'tier 2 of another fixture: the fixture change recorded');
 });
 
@@ -118,6 +118,21 @@ test('the blow-path allowances are exactly the one-time owner-approved one of 20
     approved: '2026-10-31',
   }]);
   assert.ok(Object.isFrozen(GC.BLOW_PATH_ALLOWANCES) && GC.BLOW_PATH_ALLOWANCES.every(Object.isFrozen));
+});
+
+// The owner-approved tier 2 allowances, pinned to exactly the one of 2026-10-31 (PR3's setup-is-the-entry on 2023-09-25:
+// one -1R stop for another). A new entry is a new owner approval: it changes this pin too.
+test('the tier 2 allowances are exactly the one-time owner-approved one of 2026-10-31', () => {
+  assert.deepStrictEqual(GP.TIER2_ALLOWANCES.map(a => ({ ...a, trade: { ...a.trade } })), [{
+    what: 'tier 2 total R',
+    day: '2023-09-25',
+    from: '-2.4134',
+    to: '-2.4151',
+    trade: { from: '2023-09-25|short|2023-09-25T13:51:00.000Z size 8 R -1.0139', to: '2023-09-25|short|2023-09-25T13:33:00.000Z size 9 R -1.0156' },
+    why: 'owner-approved 2026-10-31: PR3\'s setup-is-the-entry enters earlier on 2023-09-25 (the 13:33 1h cisd down short, 9 contracts, -1.0156R, for main\'s 13:51 short, 8 contracts, -1.0139R); one -1R stop swaps for another; tier 1 rises: A pass 0.607 -> 0.7795, mean R -0.337 -> -0.0173, R caught 0.1309 -> 0.2144, legs 3 -> 5',
+    approved: '2026-10-31',
+  }]);
+  assert.ok(Object.isFrozen(GP.TIER2_ALLOWANCES) && GP.TIER2_ALLOWANCES.every(a => Object.isFrozen(a) && Object.isFrozen(a.trade)));
 });
 
 test('tier 2\'s committed baseline and the move goldens are of this fixture and the configured days', () => {
