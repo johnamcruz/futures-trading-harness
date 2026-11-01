@@ -28,7 +28,9 @@
  *   at <level>                              the level inside the trigger bar's range (m3.bar), or met by the base
  *                                           timeframe's candle or the next one up and within one ATR(14) of price
  *                                           (m3.candles.<tf>.relations, m3.atr14)         none
- *   at <tf> fvg                             the same with a zone: an unfilled gap (m3.fvgs, what is left of it)
+ *                                           <level>: a briefing level's name, with or without its price (within one
+ *                                           tick; atLevel), or a gap's edge <tf> fvg high|low (m3.fvgs, fvgRelations)
+ *   at <tf> fvg                            the same with a zone: an unfilled gap (m3.fvgs, what is left of it)
  *                                           overlapping the trigger bar, or overlapped by the base or next candle and
  *                                           within one ATR(14) of price (inside it: 0)     none
  *   <tf> rejected|broke <level> up|down     m3.candles.<tf>.relations (every relation, uncapped)   up long, down short
@@ -260,6 +262,67 @@ function levelIndex(b) {
   const liq = isObj(m3.liquidity) ? m3.liquidity : {};
   for (const x of [...(liq.equalHighs || []), ...(liq.equalLows || [])]) if (isObj(x) && !x.taken) add(x.name, x.price);
   return out;
+}
+
+/**
+ * The level an `at <level>` read names, by the names the briefing shows: { prices, names, relations } (names: the
+ * relation names a candle meets it by, in its `relations` list: 'relations' or, for a gap's edge, 'fvgRelations'), or
+ * { refuse } (the name stands for more than one level, or its price is not the level's). In order:
+ * - a gap's edge ('<tf> fvg high|low'): what is left of each unfilled gap (m3.fvgs, as the target form reads it), met by
+ *   the candles' fvgRelations (as the relation form reads it) at that edge's price, within one tick (samePrice: the name
+ *   stands for every gap's edge);
+ * - the name as the briefing's levels hold it (levelIndex: "session val", "15m swing low 13404.25");
+ * - the name with a trailing price ("session val 14003.25", "1h fvg high 13187", "15m swing low 13404.5"): the level
+ *   without it, only its prices within one tick of the one stated (none: refused, the level is elsewhere);
+ * - a name without the trailing price the level's own name carries ("15m swing low" for "15m swing low 13404.25"):
+ *   only when one price is named so (more: refused, state the one with its price).
+ * Nothing so named: no prices (the read is unchecked: the briefing names no such level).
+ */
+function atLevel(b, m3, level, tick) {
+  const index = levelIndex(b);
+  const none = { prices: [], names: new Set(), relations: 'relations' };
+  const named = name => {
+    const edge = FVG_EDGE.exec(name);
+    if (edge) {
+      const v = isObj(m3.fvgs) ? m3.fvgs[edge[1]] : null;
+      const prices = (Array.isArray(v) ? v : []).map(leftOf).filter(Boolean).map(e => num(e[edge[2] === 'low' ? 0 : 1])).filter(x => x !== null);
+      return { prices: [...new Set(prices)], names: new Set([name]), relations: 'fvgRelations', samePrice: true };
+    }
+    return index.has(name) ? { prices: index.get(name), names: new Set([name]), relations: 'relations' } : pricedNames(index, name);
+  };
+  const w = level.split(' ');
+  const exact = FVG_EDGE.test(level) || index.has(level) ? named(level) : null;
+  if (exact && exact.prices.length) return exact;
+  const bare = w.slice(0, -1).join(' ');
+  if (!exact && bare && isNum(w[w.length - 1])) {
+    const stated = Number(w[w.length - 1]);
+    const found = named(bare);
+    if (!found || !found.prices.length) return none;
+    const hit = found.prices.filter(x => within(x, stated, tick));
+    if (!hit.length) return { refuse: `the briefing's ${bare} is at ${found.prices.join(', ')}, not ${stated}` };
+    // Met only as the level stated: a name carrying another price is another level.
+    const names = new Set([...found.names].filter(k => !isNum(k.split(' ').pop()) || hit.some(x => within(x, Number(k.split(' ').pop()), tick))));
+    return { ...found, prices: hit, names };
+  }
+  if (exact) return exact;
+  const found = pricedNames(index, level);
+  if (found && found.prices.length > 1) return { refuse: `"${level}" names ${found.prices.length} levels (${found.prices.join(', ')}): state the one meant with its price` };
+  return found || none;
+}
+
+/** The briefing's levels named `name` and their own price ("15m swing low 13404.25"): { prices, names, relations } | null. */
+function pricedNames(index, name) {
+  const prices = [];
+  const names = new Set();
+  for (const [k, ps] of index) {
+    if (!k.startsWith(`${name} `) || !isNum(k.slice(name.length + 1))) continue;
+    const own = Number(k.slice(name.length + 1));
+    const same = ps.filter(x => within(x, own, 0));
+    if (!same.length) continue;
+    names.add(k);
+    for (const x of same) if (!prices.includes(x)) prices.push(x);
+  }
+  return names.size ? { prices, names, relations: 'relations' } : null;
 }
 
 /** The base timeframe's candle and the next available one up (the candles a location read may count). */
@@ -569,15 +632,17 @@ function checkRead(p, b, { tick = 0.25, side = null, riskPts = null } = {}) {
       // At a level now: inside the trigger bar's range, or met by the base timeframe's last completed candle or the next
       // one up and still within one ATR(14) of price. A higher timeframe's candle that met it an hour ago, or a level
       // far from price, is not "at" it.
-      const prices = levelIndex(b).get(p.level) || [];
+      const lv = atLevel(b, m3, p.level, tick);
+      if (lv.refuse) return res(false, lv.refuse);
+      const prices = lv.prices;
       const bar = isObj(m3.bar) ? m3.bar : {};
       const price = num(m3.price);
       const atr = num(m3.atr14);
       const inBar = prices.filter(x => num(bar.l) !== null && num(bar.h) !== null && x >= bar.l && x <= bar.h);
       const near = prices.filter(x => price !== null && atr > 0 && Math.abs(x - price) <= atr);
       const frames = recentFrames(m3, base);
-      const met = frames.filter(tf => isObj(m3.candles[tf]) && Array.isArray(m3.candles[tf].relations)
-        && m3.candles[tf].relations.some(r => isObj(r) && levelName(r.name) === p.level));
+      const met = frames.filter(tf => isObj(m3.candles[tf]) && Array.isArray(m3.candles[tf][lv.relations])
+        && m3.candles[tf][lv.relations].some(r => isObj(r) && lv.names.has(levelName(r.name)) && (!lv.samePrice || prices.some(x => within(x, Number(r.price), tick)))));
       if (!prices.length) return res('unchecked', `the briefing names no level "${p.level}"`);
       const ok = inBar.length > 0 || (met.length > 0 && near.length > 0);
       const fact = inBar.length ? `${p.level} ${inBar[0]} is inside the bar's range ${bar.l}-${bar.h}`

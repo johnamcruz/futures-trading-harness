@@ -698,3 +698,95 @@ test('a cited setup: with the strategy in `cited`, the combination carries its o
   const noR = { ...b, sections: { ...b.sections, m3: { ...b.sections.m3, data: { ...b.sections.m3.data, candidates: [{ ...LCX.S2_CANDIDATE, exit: { targetR: null } }] } } } };
   assert.ok(CR.checkReads({ reads: LCX.S2_READS, side: 'long', briefing: noR, cited: ['momentum_continuation'] }).problems.some(x => /has no stop and fixed target \(in R\) on this bar/.test(x)));
 });
+
+test('at <level> by the names the briefing shows: a gap\'s edge, a level with or without its trailing price (within one tick); a wrong price, a missing level or a name for two levels refused', () => {
+  const b = scenario1();
+  const m3 = b.sections.m3.data;
+  const at = read => CR.checkRead(CR.parseRead(read), b);
+  // The bar 21529.75-21541, price 21540.25.
+  // A gap's edge: what is left of the gap (m3.fvgs), as the target form reads it; met by the candles' fvgRelations.
+  m3.fvgs = { '1h': [{ state: 'open', low: 21520, high: 21535 }], '15m': [{ state: 'partly', low: 21500, high: 21560, unfilled: [21550, 21560] }] };
+  assert.strictEqual(at('at 1h fvg high').check, true, 'the edge 21535 is inside the bar');
+  assert.strictEqual(at('at 1h FVG high').check, true, 'the briefing\'s capitals read the same');
+  assert.strictEqual(at('at 1h fvg high 21535').check, true);
+  assert.strictEqual(at('at 1h fvg high 21535.25').check, true, 'within one tick');
+  assert.strictEqual(at('at 1h fvg high 21540').check, false, 'a price that is not the edge\'s');
+  assert.match(at('at 1h fvg high 21540').fact, /1h fvg high is at 21535, not 21540/);
+  assert.strictEqual(at('at 1h fvg low').check, false, 'the edge 21520 is outside the bar and no candle met it');
+  m3.atr14 = 25;
+  m3.candles['15m'].fvgRelations = [{ name: '1h fvg low', price: 21520, rel: 'touched', dir: null }];
+  assert.strictEqual(at('at 1h fvg low').check, true, 'met by the 15m candle, within one ATR(14) of price');
+  m3.candles['15m'].fvgRelations = [{ name: '1h fvg low', price: 21510, rel: 'touched', dir: null }];
+  assert.strictEqual(at('at 1h fvg low').check, false, 'the candle met another 1h gap\'s low (21510), not this one\'s');
+  m3.candles['15m'].fvgRelations = [{ name: '1h fvg low', price: 21520, rel: 'touched', dir: null }];
+  m3.atr14 = 10;
+  assert.strictEqual(at('at 1h fvg low').check, false, 'met, but more than one ATR(14) from price');
+  assert.strictEqual(at('at 15m fvg low').check, false, 'a partly filled gap\'s unfilled part (21550) is away from the bar');
+  assert.strictEqual(at('at 4h fvg high').check, 'unchecked', 'no 4h gaps: no such level');
+  m3.fvgs['1h'] = [{ state: 'filled', low: 21520, high: 21535 }];
+  assert.strictEqual(at('at 1h fvg high').check, 'unchecked', 'a filled gap is gone');
+  // A key level with its trailing price: the same level, only within one tick of its price.
+  assert.strictEqual(at('at IB high 21533').check, true);
+  assert.strictEqual(at('at IB high 21533.25').check, true, 'within one tick');
+  assert.strictEqual(at('at IB high 21533.5').check, false, 'two ticks off: refused');
+  assert.match(at('at IB high 21540').fact, /ib high is at 21533, not 21540/);
+  assert.strictEqual(at('at prior VAH 21530.25').check, true, 'the profile level shown on the tick (21530.13)');
+  assert.strictEqual(at('at overnight high 21535').check, 'unchecked', 'a level the briefing doesn\'t name, whatever its price');
+  // Away from price: the at-level distance rule holds for every name.
+  m3.bar.l = 21536;
+  m3.atr14 = 5;
+  assert.strictEqual(at('at IB high 21533').check, false, 'outside the bar, and the 15m candle\'s touch is more than one ATR(14) away');
+  m3.bar.l = 21529.75;
+  // A level whose own name carries its price (a swing): with it, within a tick of it, or without it when one is so named.
+  m3.atr14 = 30;
+  assert.strictEqual(at('at 1h swing low 21514.5').check, true, 'met by the 15m candle, 25.75 from price');
+  assert.strictEqual(at('at 1h swing low 21514.75').check, true, 'within one tick');
+  assert.strictEqual(at('at 1h swing low').check, true, 'one 1h swing low named');
+  assert.strictEqual(at('at 1h swing low 21600').check, false);
+  m3.atr14 = 10;
+  assert.strictEqual(at('at 1h swing low').check, false, 'more than one ATR(14) from price');
+  m3.atr14 = 30;
+  m3.candles['15m'].relations.push({ name: '1h swing low 21490', price: 21490, rel: 'touched', dir: null });
+  assert.strictEqual(at('at 1h swing low').check, false, 'two 1h swing lows: the name alone is ambiguous');
+  assert.match(at('at 1h swing low').fact, /names 2 levels/);
+  assert.strictEqual(at('at 1h swing low 21514.5').check, true, 'its price names the one');
+  // Brackets stay refused (the validator is not loosened).
+  assert.strictEqual(at('at VWAP (rth)').check, false);
+  assert.strictEqual(at('at vwap rth').check, true);
+});
+
+test('every level name a built briefing shows (its session levels, candle relations, gap edges, the room\'s and the swings\'), in an at read by its read name, parses and resolves to a level', () => {
+  const bars = fixtureBars();
+  let names = 0;
+  for (const i of [773, 776, 900, 1100]) {
+    const b = briefingAt(bars, i);
+    const m3 = b.sections.m3.data;
+    const shown = new Set([
+      ...(b.keyLevels || []).map(x => x[0]),
+      ...Object.values(m3.candles || {}).flatMap(c => [...(c.relations || []), ...(c.fvgRelations || [])].map(r => r.name)),
+      ...Object.entries(m3.fvgs || {}).filter(([, v]) => Array.isArray(v) && v.some(g => g.state !== 'filled')).flatMap(([tf]) => [`${tf} fvg high`, `${tf} fvg low`]),
+    ]);
+    for (const name of shown) {
+      const read = `at ${CR.levelName(name)}`;
+      const p = CR.parseRead(read);
+      assert.strictEqual(p.kind, 'at', read);
+      const c = CR.checkRead(p, b);
+      assert.notStrictEqual(c.check, 'unchecked', `${read} (bar ${i}): ${c.fact}`);
+      // Written as the briefing writes it (a capital, a trailing price), unless a bracket (refused by design: "VWAP (rth)").
+      if (!/[()]/.test(name)) assert.strictEqual(CR.parseRead(`at ${name}`).kind, 'at', name);
+      names += 1;
+    }
+  }
+  assert.ok(names > 20, `${names} names`);
+});
+
+test('at <level> with a price: a candle that met another level of the same name doesn\'t make it met', () => {
+  const b = scenario1();
+  const m3 = b.sections.m3.data;
+  m3.atr14 = 60;
+  // The 15m candle met the 1h swing low 21514.5; another 1h swing low 21490, outside the bar, that no candle met.
+  b.keyLevels.push(['1h swing low 21490', 21490]);
+  const at = read => CR.checkRead(CR.parseRead(read), b);
+  assert.strictEqual(at('at 1h swing low 21514.5').check, true);
+  assert.strictEqual(at('at 1h swing low 21490.25').check, false, 'within one ATR, but no candle met 21490');
+});
