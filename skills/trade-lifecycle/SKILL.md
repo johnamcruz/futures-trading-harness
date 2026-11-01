@@ -18,7 +18,7 @@ description: Use before a trade_lifecycle entry - compose the trade as reads wit
    way (the against stay in the count), and your size. The standard plan
    says OK → compose with its reads. The record is for this bar and side;
    it expires `valid_bars` base bars after its bar's close.
-   At the setup's close a stall or conflicting reaction is weak context: it counts nothing; the count decides (the next candle, inside `valid_bars`, confirms or not).
+   At the setup's close a stall or conflicting reaction is weak context: it counts nothing; the count decides. The limit rests `valid_bars`: a later bar fills it or it expires.
 
    | Step | The read, your side's way | The skill for the fact |
    | --- | --- | --- |

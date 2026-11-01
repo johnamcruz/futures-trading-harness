@@ -636,7 +636,8 @@ test('compression: the skill states the code\'s numbers (config/analysis.json co
   // Each read the skill teaches parses into the checker's form and step.
   const CR = require('../../scripts/lib/trading/composed-reads');
   const reads = /Reads: (.+?) \(\d+\.\d+R\); hit/.exec(t)[1].split(', ');
-  assert.deepStrictEqual(reads.map(x => CR.parseRead(x).kind), ['compression', 'close', 'stop', 'target'], reads.join('; '));
+  // The setup is the entry (the owner, 2026-10-30): the example states no entry read (the limit at the expansion's close).
+  assert.deepStrictEqual(reads.map(x => CR.parseRead(x).kind), ['compression', 'stop', 'target'], reads.join('; '));
   // candle-reading's displacement and breakout point to it.
   assert.match(flat(read(file('candle-reading'))), /it starts a leg, out of a box \(`compression`\)/);
   assert.match(flat(read(file('breakout'))), /Out of a tight box: `compression`\./);

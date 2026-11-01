@@ -17,7 +17,8 @@ the setup's level beat entering at the setup?
 
 ## The arms
 
-- **E0**: at the setup, on the next 3m close (today's entry).
+- **E0**: at the setup, on the next 3m bar (the entry when the study ran; the shipped entry is
+  now a limit at the setup's close: Caveats).
 - **E1**: a limit at the broken level, resting for 10 3m bars.
 - **E2**: a limit at 50% of the setup candle's range.
 - **E3**: a limit at the 62% retracement (OTE).
@@ -47,8 +48,8 @@ limit never fills is a miss, scored 0R.
 
 No arm passes the pre-registered rule (half A: a pass rate 2pp over E0's
 and a total R at least E0's). Keep the taught entry: the 15m setup is the
-entry, timed by the next 3m close. A retest that holds is support, never
-a wait.
+entry, shipped as a limit at the setup's close (Caveats). A retest that
+holds is support, never a wait.
 
 ## Caveats
 

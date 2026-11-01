@@ -1757,9 +1757,10 @@ and tier 2's `--write` and `--write-moves`.
 **Synthetic days** (`scripts/lib/eval/goal-synth.js`, built in memory, no
 data file): only what real days can't give cleanly: a fakeout that must end
 at -1R, a quiet day whose right answer is no trade, a composed limit entry
-(a 15m level break listed with no cited fire: the limit at the confirming
-close fills, its bracket, the trail, the exit), a VWAP-break day (below:
-its listed VWAP break is never taken; since the setup is the entry, its
+(a 15m level break listed with no cited fire: the limit at the last close
+when composed fills, its bracket, the exit; since the setup is the entry
+its first trade is an earlier 15m rejection at the setup's close), a
+VWAP-break day (below: its listed VWAP break is never taken; since the setup is the entry, its
 valid 15m rejection at the prior RTH high trades at the setup close),
 two floor days (a listed break whose stop, the reaction candle's low, is
 closer than D13's floor: the tick term binding on one, its cash open gapped

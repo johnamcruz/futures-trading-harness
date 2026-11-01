@@ -63,13 +63,13 @@ candle closing back the CISD's way in it (`candle-reading`) or
 ## Examples
 
 ```text
-Take: 1h up; pullback to the RTH VWAP 21520.50; 15m bullish CISD, strong; ote 21518.25-21522.50,
-  a 3m close 21525.75 above it. Reads: 15m cisd up, 15m in ote, 3m close top. Priority order: aligned -> take.
-Take: range 21480.00-21560.00; at the prior VAL 21480.00 a 15m bullish CISD, strong (top third); into the ote
-  V 2.1x with little progress (absorption), then a 3m bounce 21492.25. Reads: at prior val, 15m cisd up, in ote. Priority order -> take.
+Take: 1h up; pullback to the RTH VWAP 21520.50; 15m bullish CISD, strong, closed 21525.75:
+  the setup and the entry, a limit there. Reads: 15m cisd up. Priority order: aligned -> take.
+Take: range 21480.00-21560.00; at the prior VAL 21480.00 a 15m bullish CISD, strong (top third), closed 21492.25,
+  V 2.1x, little progress (absorption): setup and entry, a limit there. Reads: at prior val, 15m cisd up. Priority order -> take.
 Skip: transition, 15m mixed: chop; 15m bearish CISD at 21640.00.
   Reads: regime transition, 15m cisd down; the priority order (step 3, location) decided skip.
 Loser: 15m bullish CISD after the sweep of the prior RTH low 21402.25;
-  long at 21420.50, stop 21399.75 (20.75 pts = 83 ticks, $41.50 on 1 MNQ);
+  long at 21420.50 (a limit at its close), stop 21399.75 (20.75 pts = 83 ticks, $41.50 on 1 MNQ);
   a 3m close under the origin 21400.75, stopped: -83 ticks, -$41.50.
 ```

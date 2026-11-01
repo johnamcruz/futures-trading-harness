@@ -475,9 +475,10 @@ test('trade-session split: no head-trader path reads more than the base\'s every
 // (trader-process's step-6 line: 48624 and 33256); every other role within its pin.
 // Then the owner's 2026-10-31 wording (the entry is a limit at the last close when you compose, filled within valid_bars;
 // the examples' entries at that limit; cisd's OTE is support, never a wait): the market-structure analyst +216 in full
-// mode (92956); every other role within its pin.
+// mode (92956); then 92960 (review: cisd's and candle-reading's examples enter at the setup's close, top-down-entry's
+// compose says its cycle; +4); every other role within its pin.
 const ROLE_PROMPTS = {
-  full: { 'market-structure-analyst': 92956, 'news-calendar-analyst': 10182, 'risk-manager': 92762, 'strategy-researcher': 25650, 'trade-executor': 30492, 'trade-reviewer': 9454, 'trend-momentum-analyst': 54540, 'volume-liquidity-analyst': 48624 },
+  full: { 'market-structure-analyst': 92960, 'news-calendar-analyst': 10182, 'risk-manager': 92762, 'strategy-researcher': 25650, 'trade-executor': 30492, 'trade-reviewer': 9454, 'trend-momentum-analyst': 54540, 'volume-liquidity-analyst': 48624 },
   index: { 'market-structure-analyst': 43175, 'news-calendar-analyst': 10182, 'risk-manager': 78639, 'strategy-researcher': 25650, 'trade-executor': 30481, 'trade-reviewer': 9454, 'trend-momentum-analyst': 40023, 'volume-liquidity-analyst': 33256 },
 };
 

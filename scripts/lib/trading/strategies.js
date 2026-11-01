@@ -107,7 +107,7 @@ const COMPOSED_RISK_KEYS = ['stop_buffer_ticks', 'stop_floor_ticks', 'stop_floor
 const RISK_KEYS = ['stop', 'min_rr', 'max_risk_usd', 'stop_min', ...COMPOSED_RISK_KEYS];
 // A composed record's validity in base bars after its bar's close (the record's own window; the gate's briefing-age
 // check is on the cycle bar, a separate bound). Above 2 a record can outlive its setup's 15m candle (STRATEGY.md).
-const MAX_VALID_BARS = 5; // a ceiling on STRATEGY.md valid_bars (the owner: 2 to 5 configurable); the shipped value is the document's
+const MAX_VALID_BARS = 5; // a ceiling on STRATEGY.md valid_bars (accepted 1 to 5); the shipped value is the document's
 const EXIT_KEYS = ['target_r', 'target', 'trail_activate_r', 'trail_giveback_r', 'max_bars', 'mode', 'lock_giveback_r', 'trail_by', 'trail_r', 'swing_tf', 'ratchet'];
 /** A policy strategy's exit modes and its after-target keys (its rulebook's exit; trading/rulebook.js EXIT_MODES). */
 const POLICY_EXIT_MODES = ['target', 'target_then_trail', 'trail'];

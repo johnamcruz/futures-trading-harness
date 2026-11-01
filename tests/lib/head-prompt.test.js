@@ -96,7 +96,8 @@ test('CORE: the composed bar\'s reads the gate requires (SITUATIONAL taught in t
   // breakout's, trade-lifecycle's and confluence-counting's entry say "a limit at the last close when you compose (the setup's
   // own close when you compose on its bar), filled within `valid_bars`", trade-lifecycle's one stall/conflicting line, and the
   // rejection and breakout examples' entries at that limit (+549).
-  assert.ok(Buffer.byteLength(prompt) <= 75952, `the head prompt is ${Buffer.byteLength(prompt)} bytes`);
+  // Then 75962 (review): trade-lifecycle's stall line says the limit rests `valid_bars`, a later bar fills it or it expires (+10).
+  assert.ok(Buffer.byteLength(prompt) <= 75962, `the head prompt is ${Buffer.byteLength(prompt)} bytes`);
   // Only the head trader's prompt grows: no other role's prompt embeds trade-lifecycle (the risk manager's embeds
   // confluence-counting and invalidation as before; its prompt is unchanged, pinned in trade-session-split.test.js).
   for (const [name, a] of Object.entries(index.agent)) if (name !== H.HEAD_AGENT && a.prompt) assert.ok(!a.prompt.includes('<skill name="trade-lifecycle">'), name);

@@ -50,8 +50,8 @@ NQ, back-adjusted CSV prices:
 
 ```text
 2022-06-22, trend rule 4h up, long aligned. The 15m 12:45 candle rejects the prior
-POC 14942.75 (the setup and the entry), composed at the 13:03 close, inside `valid_bars`:
-long 14960.00, stop 14938.50 under the 15m low (21.50 pts = 86 ticks, $43.00 per MNQ), a limit at that close;
+POC 14942.75 (the setup and the entry); the head composed on the 13:03 cycle, the limit that bar's close:
+long 14960.00, stop 14938.50 under the 15m low (21.50 pts = 86 ticks, $43.00 per MNQ);
 target trail: the 2R mark 15003.00 armed it; the 15m swing high 15040.25 was reached 14:15.
 2022-08-12, trend rule 4h up. A 15m shooting star at the prior VAH 16809.25: a short is
 against the 4h: no entry (never counter). Taken, short 16789.25, stop 16814.00 (24.75 pts

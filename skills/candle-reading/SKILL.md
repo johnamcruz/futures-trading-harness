@@ -121,7 +121,7 @@ legs. None has a confirmed edge.
 
 ```text
 Take: at the prior RTH high 21615.00: on the 15m close a shooting star (H 21621.50, C 21608.25),
-  on the 1h close a rejection wick, then on the 3m close a bearish engulfing. Stack agrees.
+  on the 1h close a rejection wick, on the 3m close a bearish engulfing: one close. Stack agrees.
   Reads: 1h rejected prior rth high down, 3m pattern bearish engulfing. Priority order -> take.
 Skip: at the session POC 21522.00, on the 3m close a doji (body 0.25, range 5.50); 15m forming:
   no setup yet -> pass. The session VAH 0.4R ahead is a read, not the reason.
