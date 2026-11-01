@@ -406,7 +406,8 @@ test('the trend facts reach no trading prompt: only the training loop requires t
   const walk = d => { for (const e of fs.readdirSync(path.join(ROOT, d), { withFileTypes: true })) { const p = path.join(d, e.name); if (e.isDirectory()) walk(p); else if (p.endsWith('.js') && /require\([^)]*trend-facts['"]\)/.test(fs.readFileSync(path.join(ROOT, p), 'utf8'))) users.push(p); } };
   walk('scripts');
   walk('hooks');
-  assert.deepStrictEqual(users.sort(), ['scripts/lib/train/probe.js', 'scripts/lib/train/trend-findings.js']);
+  // entry-reaction.js: the round report's entry reads (its bars only: barsOf), the training loop's too.
+  assert.deepStrictEqual(users.sort(), ['scripts/lib/train/entry-reaction.js', 'scripts/lib/train/probe.js', 'scripts/lib/train/trend-findings.js']);
 });
 
 test('sizeWithin: budgetPlan\'s sizing at a budget and room given; budgetPlan works them out only after its checks pass', () => {

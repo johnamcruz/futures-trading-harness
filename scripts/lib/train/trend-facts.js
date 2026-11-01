@@ -43,6 +43,7 @@
  * when one bar holds both), won, or undecided by the session's end, in all and by the plan's setup type (its setup read's
  * kind and level: setupRates). A plan that lost is a balancing example: never a finding, never shown to the trader.
  *
+ *   barsOf(home, runDir, root, minutes, barsFiles)   a run's bars at a timeframe (the given files, the home's, the archive)
  *   entryBars(leg)                                the leg's entry-able cycles
  *   barFacts({ briefing, side, tick, plan, said, reads, records, cycle, sizeFits, names, missing })   one bar's facts
  *   legFacts(leg, { briefingAt, cycleAt, recordsAt, tick, plan, sizeFor, names, missing })   { learnable, why, bars, owner }
@@ -583,4 +584,4 @@ function controlsText(c, { exampleChars = TUN.exampleChars } = {}) {
   return `${head}${setups}${lines.length ? `\nValid plan, it lost (control bars, no leg): what tells these apart from the legs?\n${lines.join('\n')}` : ''}`;
 }
 
-module.exports = { timingTagOf, entryTimings, TIMING_TAGS, entryBars, barFacts, legFacts, skipsOf, sizeForCycle, outcomeOf, controlFacts, attachFacts, controlsOf, controlsText, setupTypeOf, setupRates, scrub, clip, exampleLine, loserLine, missingFrames, dependsOnMissing };
+module.exports = { barsOf, timingTagOf, entryTimings, TIMING_TAGS, entryBars, barFacts, legFacts, skipsOf, sizeForCycle, outcomeOf, controlFacts, attachFacts, controlsOf, controlsText, setupTypeOf, setupRates, scrub, clip, exampleLine, loserLine, missingFrames, dependsOnMissing };

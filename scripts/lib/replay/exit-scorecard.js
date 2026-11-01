@@ -34,6 +34,12 @@
  * the model-free detection study).
  * The model's tightens: each modify_order of the stop; `stopped` when that stop (the last move before the exit) took the
  * trade out (its class is the exit's), else `held` (the trade went on: a later move, or another exit).
+ * fill (report only: the round report's losers past -1R, train/loss-diagnostics.js), in R on the stop the trade held
+ * (trade-basis.js: the runner's move to the plan's stop after the fill, else the bracket's risk; `basis` says which), from
+ * its entry: r the trade's R on that basis; stopR the stop working at a stop exit (the last move's price, else the held
+ * stop), null for any other exit; openR the open of the bar the exit filled in (null when no bar holds it); priceR the
+ * exit's price; tickR one tick (the trip's `tick`), null when its tick is unknown. Nothing scores or screens on them (the
+ * decision's own `r` stays the broker's, as the exit screen reads it).
  *
  *   PARAMS                                   config/replay.json exitScore (frozen)
  *   barsClosedBy(bars, ms, stepMs)          the bars closed by ms: a decision's facts read only these (no look-ahead)
@@ -69,9 +75,12 @@ const { familyRoot } = require('../trading/contracts');
 const num = x => (typeof x === 'number' && Number.isFinite(x) ? x : null);
 const isObj = x => Boolean(x) && typeof x === 'object' && !Array.isArray(x);
 const r2 = x => (num(x) === null ? null : Math.round(x * 100) / 100);
+const r4 = x => (num(x) === null ? null : Math.round(x * 10000) / 10000);
 const sign = side => (side === 'short' ? -1 : 1);
 const CLASSES = Object.freeze(['cut', 'right', 'unclear', 'unresolved']);
 const EXIT_BY = Object.freeze(['model-exit', 'model-stop', 'runner-trail', 'runner-exit', 'initial-stop', 'target', 'unattributed']);
+// The exits a stop order filled (fill.stopR known).
+const STOP_EXITS = Object.freeze(['model-stop', 'runner-trail', 'initial-stop']);
 
 /** A contract's family root (MNQ for MNQ, NQ, MNQ:2026-12): the one family however a record names the contract. */
 const famOf = id => (id ? familyRoot((parseStandardName(String(id)) || { root: String(id).toUpperCase() }).root) : null);
@@ -138,6 +147,30 @@ function lateThreshold(strategies, params = PARAMS) {
   return Math.max(params.lateGivebackR, ...locks);
 }
 
+/**
+ * A scored exit's fill facts in R (see the header): the stop working at a stop exit, the exit bar's open, the exit's
+ * price, one tick. r is the price R when the prices are known (rFrom 'price'), else the broker's R rescaled to the held
+ * stop (rFrom 'broker', rScale: the bracket's risk over the held one, which widens the broker R's rounding by as much).
+ * The fill bar is the base bar with bt <= exit time < bt + step: a fill stamped exactly on a bar boundary is judged on the
+ * later bar's open (gap or slippage can be misjudged there), and no bar holding it leaves openR null (the cause unknown).
+ * Pure; null where a price, the bar or the tick is unknown.
+ */
+function fillOf(t, { exitBy, move, bars, stepMs, plan = null }) {
+  const s = sign(t.side);
+  // The held stop's risk: the runner's move to the plan's stop after the fill (trade-basis.js onHeldStop), else the bracket's.
+  const held = plan && num(plan.to) !== null && num(t.entry) !== null ? s * (t.entry - plan.to) : null;
+  const unit = held !== null && held > 0 ? held : t.risk;
+  const inR = px => (num(px) === null || num(t.entry) === null ? null : r4((s * (px - t.entry)) / unit));
+  const stop = !STOP_EXITS.includes(exitBy) ? null : move ? num(move.to) : num(t.entry) === null ? null : t.entry - s * unit;
+  const bar = stepMs > 0 ? (Array.isArray(bars) ? bars : []).find(b => { const bt = Date.parse(b.t); return bt <= t.exitMs && t.exitMs < bt + stepMs; }) : null;
+  const priceR = inR(t.exitPrice);
+  return {
+    basis: unit === t.risk ? 'bracket stop' : 'held stop',
+    r: priceR !== null ? priceR : num(t.r) === null ? null : r4((t.r * t.risk) / unit), rFrom: priceR !== null ? 'price' : num(t.r) === null ? null : 'broker', rScale: r4(t.risk / unit),
+    stopR: inR(stop), openR: bar ? inR(bar.o) : null, priceR, tickR: num(t.tick) > 0 ? r4(t.tick / unit) : null,
+  };
+}
+
 /** The last of `list` (by ms) at or before `ms` and after `since`. */
 const lastBefore = (list, since, ms) => list.filter(x => x.ms > since && x.ms <= ms).sort((a, b) => a.ms - b.ms).pop() || null;
 
@@ -166,6 +199,7 @@ function scoreExits({ trips = [], moves: given = [], closes = [], bars = [], ste
     decisions.push({
       trip: t.id ?? null, root: famOf(t.contractId), side: t.side, entryAt: new Date(t.entryMs).toISOString(), exitBy, cls, leftR, savedR, r: num(t.r), peakR, givebackR,
       late, ...(late ? { lateR: r2(handed - params.lateGivebackR) } : {}), at: new Date(t.exitMs).toISOString(),
+      fill: fillOf(t, { exitBy, move, bars, stepMs, plan: moves.filter(same).filter(m => m.by === 'plan' && m.ms >= t.entryMs && m.ms <= t.exitMs).sort((a, b) => a.ms - b.ms)[0] || null }),
       ...(decision ? { decidedAt: new Date(decision.ms).toISOString() } : {}),
       flip: decision && facts && isObj(facts.bias) ? facts.bias.flipAgainst === true : null, facts: facts || null,
     });
@@ -341,4 +375,4 @@ function tripsOf(days) {
   return [...seen.values()];
 }
 
-module.exports = { PARAMS, CLASSES, EXIT_BY, famOf, resolveOrders, barsClosedBy, classify, sessionEnds, lateThreshold, scoreExits, summarize, factsText, exitLines, modelActions, gateActions, mergeActions, runnerActions, tripsOf };
+module.exports = { PARAMS, CLASSES, EXIT_BY, STOP_EXITS, famOf, fillOf, resolveOrders, barsClosedBy, classify, sessionEnds, lateThreshold, scoreExits, summarize, factsText, exitLines, modelActions, gateActions, mergeActions, runnerActions, tripsOf };

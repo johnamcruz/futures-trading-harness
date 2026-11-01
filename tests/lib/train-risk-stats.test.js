@@ -116,10 +116,10 @@ test('the round report: each side\'s risk on the trend confirm half and, when th
   assert.deepStrictEqual(r.composed.keepRule, RS.riskStats([2, 1, -1]));
   assert.deepStrictEqual([r.composed.keepRule.n, r.composed.keepRule.maxDrawdownR, r.composed.keepRule.expectancy], [3, 1, 0.6667]);
   // The existing fields stay as they were: the risk is a key beside them.
-  assert.deepStrictEqual(Object.keys(rec.mastery), ['curriculum', 'champion', 'composed', 'risk']);
+  assert.deepStrictEqual(Object.keys(rec.mastery), ['curriculum', 'champion', 'composed', 'risk', 'loss']);
   assert.strictEqual(rec.mastery.champion.risk, undefined);
   const lines = IR.masteryLines(rec);
-  assert.deepStrictEqual(lines.slice(3), [
+  assert.deepStrictEqual(lines.slice(3, 8), [
     '  Risk and return (per trade, R as the scorecard records it; diagnostics only: pass rate with 0 blows decides):',
     `    champion, trend confirm half: ${RS.riskText(r.champion.trend)}`,
     `    champion, keep rule's runs: ${RS.riskText(r.champion.keepRule)}`,
@@ -149,10 +149,10 @@ test('the round report: another proposal\'s verdict, no keep rule, or no trades 
   const solo = IR.build({ probeReport: { ...probeReport(), composed: null } });
   assert.strictEqual(solo.mastery.risk.composed, null);
   assert.strictEqual(IR.masteryLines(solo).filter(l => /^ {4}combined/.test(l)).length, 0);
-  assert.strictEqual(IR.masteryLines(solo).filter(l => /^ {4}champion, /.test(l)).length, 2);
+  assert.strictEqual(IR.masteryLines(solo).filter(l => /^ {4}champion, (trend confirm half|keep rule's runs)/.test(l)).length, 2);
   // A record from before the risk diagnostics: its lines as they were.
   const rec = IR.build({ probeReport: probeReport() });
-  const { risk: _risk, ...before } = rec.mastery;
+  const { risk: _risk, loss: _loss, ...before } = rec.mastery;
   assert.deepStrictEqual(IR.masteryLines({ ...rec, mastery: before }), IR.masteryLines(rec).slice(0, 3));
 });
 

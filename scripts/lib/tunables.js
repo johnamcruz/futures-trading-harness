@@ -92,7 +92,9 @@ const TRAINING = {
   trendFindings: { examples: int(1), exampleChars: int(80), saidChars: int(40), setupTypes: int(1), setupMinN: int(1) },
   exitFindings: { examples: int(1), exampleChars: int(80) },
   // The round report's control-window false start (train/curriculum.js): a loser whose best R never rose above this.
-  trendReport: { falseStartPeakR: pos() },
+  // Its loss diagnostics (train/loss-diagnostics.js, report only): how far past -1R a loser may close before it counts
+  // as past -1R when its tick is unknown (else one tick in R), and the bucket size under which a split says no conclusion.
+  trendReport: { falseStartPeakR: pos(), loserToleranceR: pos(), smallN: int(1) },
   // The goal regression (eval/goal-check.js, tests/plugin/goal-regression.test.js): the fixture's draw (goal-fixture.js),
   // its combine Monte Carlo, and how far below main's baseline a metric may fall (tighten-only: they only fall).
   goalRegression: {

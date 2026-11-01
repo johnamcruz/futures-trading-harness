@@ -1267,6 +1267,13 @@ test('the round report: risk and return on the trend confirm half\'s trades and 
     assert.deepStrictEqual(report.composed.trend.trades, tradesOf(`k-${report.composed.id}`), curriculum);
     const r = rec.mastery.risk;
     assert.ok(r.champion.trend.n > 0 && r.champion.trend.n === report.trend.champion.trades.length, curriculum);
+    // The loss diagnostics (loss-diagnostics.js) read the same side's confirm-half entries (the captures' filled entries,
+    // none joined to a compose record here: not recorded) and its break-even from these risk stats.
+    const rows = report.trend.champion.entryRows;
+    assert.ok(Array.isArray(rows) && rows.length > 0 && rows.every(e => e.read === null), curriculum);
+    assert.deepStrictEqual(rec.mastery.loss.champion.chop.coverage, { entries: rows.length, recorded: 0, reaction: 0 }, curriculum);
+    assert.deepStrictEqual(rec.mastery.loss.champion.breakEven, require('../../scripts/lib/train/loss-diagnostics').breakEven(r.champion.trend), curriculum);
+    assert.ok(Array.isArray(report.composed.trend.entryRows), curriculum);
     // Two trades of every four moments, +2R then -1R: the champion's expectancy 0.5R, win rate 50%, payoff 2; the
     // combined change's (k- runs) +3R then -1R: 1R, payoff 3. Each side read from its own runs, never the other's.
     assert.deepStrictEqual([r.champion.trend.expectancy, r.champion.trend.winRate, r.champion.trend.payoff, r.champion.trend.profitFactor], [0.5, 0.5, 2, 2], curriculum);

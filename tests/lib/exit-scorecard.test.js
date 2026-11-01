@@ -255,3 +255,48 @@ test('scoreExits: with the runner\'s events unread, an exit that isn\'t the mode
   const cl = [{ ms: trip().exitMs, by: 'model', contractId: 'MNQ' }];
   assert.strictEqual(ES.scoreExits({ trips: [trip()], closes: cl, bars: after, stepMs: STEP, params: P, runnerKnown: false }).decisions[0].exitBy, 'model-exit');
 });
+
+test('scoreExits: each exit\'s fill facts in R (report only): the working stop, the fill bar\'s open, the price, a tick', () => {
+  // A long from 100 with 10 points of risk, stopped (never moved) at 89 inside a bar that opened at 95: 1R of stop,
+  // filled 0.1R past it, the bar opening inside it (slippage, not a gap); one 0.25 tick is 0.025R.
+  const bar = [{ t: new Date(T0 + 10 * STEP).toISOString(), o: 95, h: 96, l: 88, c: 90 }];
+  const one = x => ES.scoreExits({ trips: [trip({ r: -1.1, mfeR: 0.2, exitPrice: 89, exitMs: T0 + 10 * STEP + 60000, tick: 0.25, ...x })], bars: bar, stepMs: STEP, params: P, ...(x.actions || {}) }).decisions[0];
+  assert.deepStrictEqual(one({}).fill, { basis: 'bracket stop', r: -1.1, rFrom: 'price', rScale: 1, stopR: -1, openR: -0.5, priceR: -1.1, tickR: 0.025 });
+  // A gap: the bar opened at 85, under the stop; no tick known.
+  assert.deepStrictEqual(ES.scoreExits({ trips: [trip({ r: -1.5, exitPrice: 85, exitMs: T0 + 10 * STEP })], bars: [{ ...bar[0], o: 85 }], stepMs: STEP, params: P }).decisions[0].fill, { basis: 'bracket stop', r: -1.5, rFrom: 'price', rScale: 1, stopR: -1, openR: -1.5, priceR: -1.5, tickR: null });
+  // A stop the model moved: its price is the working stop (here further away, at 80: -2R).
+  const moved = one({ actions: { moves: [{ ms: T0 + 5 * STEP, by: 'model', to: 80, contractId: 'MNQ' }] } });
+  assert.deepStrictEqual([moved.exitBy, moved.fill.stopR], ['model-stop', -2]);
+  // The runner's move to the plan's stop after the fill is the stop the trade held: 9 points, the facts in its R (as
+  // trade-basis.js measures the trade), the broker's -1.1R on 10 points -1.2222R on it; the decision's own r unchanged.
+  const plan = one({ actions: { moves: [{ ms: T0 + 1, by: 'plan', to: 91, contractId: 'MNQ' }] } });
+  assert.deepStrictEqual([plan.exitBy, plan.r, plan.fill], ['initial-stop', -1.1, { basis: 'held stop', r: -1.2222, rFrom: 'price', rScale: 1.1111, stopR: -1, openR: -0.5556, priceR: -1.2222, tickR: 0.0278 }]);
+  // Not a stop exit: no working stop; no bar holding the exit: its open unknown; a short mirrors the signs.
+  const closed = one({ actions: { closes: [{ ms: T0 + 10 * STEP, by: 'model', contractId: 'MNQ' }] } });
+  assert.deepStrictEqual([closed.exitBy, closed.fill.stopR], ['model-exit', null]);
+  assert.strictEqual(ES.scoreExits({ trips: [trip({ r: -1 })], bars: [], stepMs: STEP, params: P }).decisions[0].fill.openR, null);
+  const short = ES.scoreExits({ trips: [trip({ side: 'short', entry: 100, exitPrice: 111, r: -1.1, exitMs: T0 + 10 * STEP })], bars: [{ ...bar[0], o: 105 }], stepMs: STEP, params: P }).decisions[0].fill;
+  assert.deepStrictEqual([short.stopR, short.openR, short.priceR], [-1, -0.5, -1.1]);
+  // fillOf alone: a stop exit with no entry price knows no stop.
+  assert.deepStrictEqual(ES.fillOf({ side: 'long', entry: null, risk: 10, exitPrice: 90, exitMs: T0 }, { exitBy: 'initial-stop', move: null, bars: [], stepMs: STEP }), { basis: 'bracket stop', r: null, rFrom: null, rScale: 1, stopR: null, openR: null, priceR: null, tickR: null });
+});
+
+test('fillOf: R on the held stop from the prices when known; else the broker\'s R rescaled, its rescale stated', () => {
+  // p1-run1-01, 2021-05-03 15:00: a long filled 13840.75, its bracket stop 13826.5 (14.25 points), moved to the plan's
+  // 13838.75 (2 points), out at 13838.5. The prices: -2.25 / 2 = -1.125R exactly; the broker's -0.158R rescaled by
+  // 14.25 / 2 = 7.125 reads -1.1257 (its 3-decimal rounding widened as much).
+  const t = { side: 'long', entry: 13840.75, risk: 14.25, exitPrice: 13838.5, exitMs: T0, r: -0.158, tick: 0.25 };
+  const plan = { to: 13838.75 };
+  const byPrice = ES.fillOf(t, { exitBy: 'initial-stop', move: null, bars: [], stepMs: STEP, plan });
+  assert.deepStrictEqual([byPrice.basis, byPrice.r, byPrice.rFrom, byPrice.priceR, byPrice.stopR, byPrice.tickR, byPrice.rScale], ['held stop', -1.125, 'price', -1.125, -1, 0.125, 7.125]);
+  const byBroker = ES.fillOf({ ...t, exitPrice: null }, { exitBy: 'initial-stop', move: null, bars: [], stepMs: STEP, plan });
+  assert.deepStrictEqual([byBroker.r, byBroker.rFrom, byBroker.priceR, byBroker.rScale], [-1.1257, 'broker', null, 7.125]);
+  // The loss report: one tick past the held stop is not past -1R on either path (the broker's, its rounding widened by 7.125).
+  const LD = require('../../scripts/lib/train/loss-diagnostics');
+  for (const fill of [byPrice, byBroker]) assert.strictEqual(LD.losersPastOne([{ side: 'long', exitBy: 'initial-stop', r: -0.158, fill }], { toleranceR: 0.05 }).past, 0, fill.rFrom);
+  // A real slip past it still counts on the broker's path: -0.17 rescaled is -1.2113R.
+  assert.strictEqual(LD.losersPastOne([{ side: 'long', exitBy: 'initial-stop', r: -0.17, fill: ES.fillOf({ ...t, r: -0.17, exitPrice: null }, { exitBy: 'initial-stop', move: null, bars: [], stepMs: STEP, plan }) }], { toleranceR: 0.05 }).past, 1);
+  // The fill bar: the base bar holding the exit time; a fill stamped on a boundary is the later bar's.
+  const bars = [{ t: new Date(T0 - STEP).toISOString(), o: 13845, h: 1, l: 1, c: 1 }, { t: new Date(T0).toISOString(), o: 13830, h: 1, l: 1, c: 1 }];
+  assert.strictEqual(ES.fillOf(t, { exitBy: 'initial-stop', move: null, bars, stepMs: STEP, plan }).openR, -5.375);
+});
