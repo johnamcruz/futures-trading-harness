@@ -165,6 +165,10 @@ test('diagnostics: one side, on the config\'s values; the scored exits\' cut and
   const noPeak = LD.lossLines({ ...d, chop: LD.chopDrag([entry(-1, rd('plain'), { peakR: null })], { falseStartPeakR: 0.5, smallN: 30 }) }, 'champion');
   assert.match(noPeak.find(x => /chop drag by reaction/.test(x)), /plain n 1: -1R a trade, win 0%, false starts n\/a \(no peak R\), legs caught 0/);
   assert.ok(noPeak.every(x => !/ 0\/0/.test(x)));
+  // No known R in a bucket (an open trade): n/a a trade, never "n/aR".
+  const noR = LD.lossLines({ ...d, chop: LD.chopDrag([entry(null, rd('breakout'), { peakR: null })], { falseStartPeakR: 0.5, smallN: 30 }) }, 'champion');
+  assert.match(noR.find(x => /chop drag by reaction/.test(x)), /breakout n 1: n\/a a trade, win n\/a, /);
+  assert.ok(noR.every(x => !/n\/aR/.test(x)));
   assert.deepStrictEqual(LD.lossLines(null, 'x'), []);
 });
 

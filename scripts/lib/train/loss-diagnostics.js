@@ -179,7 +179,7 @@ function breakEvenText(b) {
   return `win rate ${pct(b.winRate)} vs break-even ${pct(b.breakEven)} ((1 - scratch share ${pct(b.scratchShare)}) / (1 + payoff ${b.payoff}), |avg loss| = 1 unit): margin ${b.marginPp >= 0 ? '+' : ''}${b.marginPp}pp${b.below ? ', BELOW BREAK-EVEN' : ''}`;
 }
 
-const bucketText = (k, b) => `${k} n ${b.n}: ${show(b.meanR)}R a trade, win ${pct(b.winRate)}, false starts ${b.of ? `${b.falseStarts}/${b.of}` : 'n/a (no peak R)'}, legs caught ${b.legsCaught}${b.small ? ' (small n, no conclusion)' : ''}`;
+const bucketText = (k, b) => `${k} n ${b.n}: ${num(b.meanR) === null ? 'n/a' : `${b.meanR}R`} a trade, win ${pct(b.winRate)}, false starts ${b.of ? `${b.falseStarts}/${b.of}` : 'n/a (no peak R)'}, legs caught ${b.legsCaught}${b.small ? ' (small n, no conclusion)' : ''}`;
 
 function lossLines(loss, label) {
   if (!isObj(loss)) return [];
