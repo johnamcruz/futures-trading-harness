@@ -41,7 +41,11 @@ test('grading: the ANSWER line, the required terms, and a forbidden term only wh
     'No. Under the harness rules that line is not a readable approved size, so it is not a trade yet.']) assert.ok(pass('q19', `ANSWER: ${a}`), a);
   // A negation in the "no readable size" substance never excuses a veto, a trade or an entry said elsewhere on the line.
   for (const a of ['Yes: without a readable size the Size line gives 3.', 'Not a readable approval, but it is a trade at 3.', 'It is a trade: the Size line is a readable size.', 'No, it is a readable size: go with 3.',
-    'Veto: not a readable approval.', 'No readable size, so it is vetoed.', 'Trade it at 3. Not a readable approval but the Size line counts.',
+    'Veto: not a readable approval.', 'No readable size, so it is vetoed.',
+    // A negation that governs something else in the clause never excuses the veto: only "never/not/no/only (a) veto",
+    // "never treats it as a veto" and "a veto is never / would be wrong / never ..." do.
+    'Veto it — not a readable approval.', 'Veto it since it is not a readable approval.', 'A veto would be right: not a readable approval.', 'No. Not a readable approval so veto it.',
+    'Not a readable approval and the harness vetoes it.', 'No; it is vetoed as not a readable approval.', 'No readable size so it is vetoed.', 'Trade it at 3. Not a readable approval but the Size line counts.',
     'It\'s a trade; without a readable size on the VERDICT line the prose Size line gives 3.']) assert.ok(!pass('q19', `ANSWER: ${a}`), a);
   // ...while a veto it rules out in its own clause stays right (the negation before or after it there).
   for (const a of ['No. That line is not a valid approval, so it is not a trade yet: one restate of the Size and VERDICT lines is owed, and a veto is never retried.', 'No: unreadable, one restate, never a veto.',
