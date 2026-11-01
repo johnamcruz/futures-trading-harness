@@ -42,6 +42,9 @@
  *                                                live at that time can be in)
  *   planOf({ checked, briefing, side, size, tick, tickValue, minRR, maxRiskUsd, stopRule, suggestion })   { plan, problems }
  *                                                (suggestion: a prop attempt's size, never refused over the cap)
+ *   planTargetOf({ briefing, side, stopLevel, tick, minRR, stopRule })   { read, target } | null: the plan's target by
+ *                                                compose's rule (the first named level ahead at minRR or more, else the
+ *                                                2R mark), planOf's own
  *   stopRuleOf(risk)                             { bufferTicks, floorTicks, floorAtr } from a strategy's risk, or null
  *   stopFloorTicks(briefing, tick, stopRule)     D13's floor in ticks, or null when ATR(20) is unknown
  *   expiryOf(briefing, validBars)                when a record on the briefing's bar expires (ms): `validBars` base bars
@@ -61,7 +64,7 @@ const fs = require('fs');
 const path = require('path');
 const { familyRoot } = require('./contracts');
 const { tradingDayKey, tradingDayStart } = require('./clock');
-const { renderCheck } = require('./composed-reads');
+const { renderCheck, targetsAhead, parseRead } = require('./composed-reads');
 
 const STRATEGY = 'trade_lifecycle';
 const SCHEMA = 1;
@@ -206,6 +209,30 @@ function planOf({ checked, briefing, side, size, tick, tickValue, minRR = null, 
   };
 }
 
+/**
+ * The plan's target for a stop read on a briefing, by compose's target rule (composed-reads.js checkRead, `target 2r`:
+ * "the target is the first named level at the minimum R or more; the 2R mark only with none named"): the first level
+ * targetsAhead names the side's way (nearest first, the room band of the stop read's distance) whose plan (planOf: its
+ * stop one buffer beyond stopLevel, its target's rounding, its R:R check) has no R:R or target-side problem; none: the
+ * 2R mark's plan (`target 2r`; `target trail` plans the same price). { read, target: the plan's target }, its price the
+ * one live arms its exit at (the gate's stamp of plan.target.price, exit-trail.js liveTarget); null when no plan can be
+ * worked out (no reference price, stop level or min R). The goal regression's tier 1 (goal-trades.js) plans each
+ * composed trade's target here.
+ */
+function planTargetOf({ briefing, side, stopLevel, tick, minRR, stopRule }) {
+  const m3 = isObj(briefing) && isObj(briefing.sections) && isObj(briefing.sections.m3) ? briefing.sections.m3.data : null;
+  const ref = isObj(m3) ? num(m3.price) : null;
+  if (ref === null || num(stopLevel) === null || num(minRR) === null || !(tick > 0)) return null;
+  const planned = target => planOf({ checked: { reference: ref, stop: { source: 'stop', level: stopLevel }, target }, briefing, side, size: 1, tick, tickValue: tick, minRR, stopRule, suggestion: true });
+  for (const x of targetsAhead(briefing, side, { tick, riskPts: Math.abs(ref - stopLevel) })) {
+    const { plan, problems } = planned({ source: parseRead(x.read).slug, level: x.price });
+    if (plan && !problems.some(p => /^R:R .* under the strategy's min|^the target .* not on the winning side/.test(p))) return { read: x.read, target: plan.target };
+  }
+  const mark = parseRead('target 2r');
+  const { plan } = planned({ source: mark.slug, level: null, mark: true });
+  return plan ? { read: mark.form, target: plan.target } : null;
+}
+
 /** The record (RECORD_KEYS): the checked reads and the plan, ok only when both stand. */
 function buildRecord({ at, root, symbol, side, briefing = null, checked = null, planned = null, problems = [], cycleId = null, validBars = 1 }) {
   const m3 = briefing && isObj(briefing.sections) && isObj(briefing.sections.m3) ? briefing.sections.m3 : null;
@@ -310,4 +337,4 @@ function renderRecord(r, checked = null, hints = []) {
  */
 const validBarsOf = strategy => (strategy && Number.isInteger(strategy.valid_bars) && strategy.valid_bars >= 1 ? strategy.valid_bars : 1);
 
-module.exports = { validBarsOf, STRATEGY, SCHEMA, RECORD_KEYS, MAX_SIZE, MAX_BYTES, recordFile, legacyFile, dayOf, shardDay, daysNear, stopRuleOf, stopFloorTicks, expiryOf, planOf, buildRecord, appendRecord, readRecords, renderRecord };
+module.exports = { validBarsOf, STRATEGY, SCHEMA, RECORD_KEYS, MAX_SIZE, MAX_BYTES, recordFile, legacyFile, dayOf, shardDay, daysNear, stopRuleOf, stopFloorTicks, expiryOf, planOf, planTargetOf, buildRecord, appendRecord, readRecords, renderRecord };

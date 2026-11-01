@@ -1819,8 +1819,13 @@ shapes are config, pinned exactly with the rest of the yardstick.
 only. On the entry rule's side per bar (the RULEBOOK's `entry`,
 chain-side.js), the 15m CHoCH, BOS, compression break and strong CISD at its
 OTE and momentum_continuation's scan; compose's entry timing as shipped, the
-locked stop and D13's floor, the exit (limitOutcome with the policy's
-composed exit); one position at a time as live decides it, after sizing at
+locked stop and D13's floor, the target where live arms the exit (the
+plan's own: `trade-lifecycle.js` planTargetOf, compose's rule on the
+briefing built at the decision bar from the closed bars up to it, the first
+named level at `min_rr` or more, else the 2R mark as `target 2r` and
+`target trail` plan it; momentum_continuation its own 2R), the exit
+(limitOutcome with the policy's composed exit, its lock and trail armed at
+that target, as the runner arms them at the gate's stamp of it); one position at a time as live decides it, after sizing at
 the account's own state (a plan the account can't size never holds the
 slot): the trades, mean R, R caught of the trend legs' R available, the
 false-start share and the drawdown on what the half's sessions take in
@@ -1933,8 +1938,13 @@ result against main.
 
 **Its limits.** Tier 1 is mechanical: it measures the code's entries, never
 the model's judgment; its setups are the 15m primitives the studies
-measured, not the briefing's key-level reactions, and every target is the
-2R mark, so a change there moves tier 2, not tier 1. Tier 2's mock follows
+measured, not the briefing's key-level reactions, so a change there moves
+tier 2, not tier 1; its target is the plan's by compose's rule, so where a
+model would choose `target trail` over a named level ahead (the hint's first
+choice on a side the entry rule allows) tier 1 arms at the named level
+instead: a bound on the difference, not the model's choice. The briefing it
+reads holds no round-number levels (their steps are the user's local
+config). Tier 2's mock follows
 the plan; it shows the path works, not what the model decides. A composed
 limit at the last close is marketable at once, so a limit that expires
 unfilled is only the order-latency self-test's (the order sent after the

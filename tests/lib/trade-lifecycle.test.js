@@ -269,3 +269,30 @@ test('a cited setup\'s plan: its 12-tick floor (stop_min 3.00 points) widens a c
   assert.strictEqual(r.plan.stop.price, 21528.75);
   assert.ok(r.problems.some(x => /momentum_continuation's stop 21528\.75 is inside the level you named \(21512\.75\): its stop is its own/.test(x)), r.problems.join('; '));
 });
+
+// ---- The plan's target by compose's rule (planTargetOf): what the goal regression's tier 1 arms its exit at ----
+const targetArgs = (over = {}) => ({ briefing: scenario1(), side: 'long', stopLevel: 21512.75, tick: 0.25, minRR: 2, stopRule: lifecycleStopRule(), ...over });
+const markPlan = (stopLevel, trail = false) => TL.planOf({ checked: { reference: 21540.25, stop: { source: 'x', level: stopLevel }, target: { source: trail ? 'trail' : '2r', level: null, mark: true } }, briefing: scenario1(), side: 'long', size: 1, minRR: 2, maxRiskUsd: 150, stopRule: lifecycleStopRule(), ...MNQ }).plan.target;
+
+test('planTargetOf: the first named level at min_rr or more, its plan\'s target: scenario 1\'s 1h swing 21598 (2.08R), past the 2R mark 21595.75, as live plans the model\'s own reads', () => {
+  const r = TL.planTargetOf(targetArgs());
+  assert.deepStrictEqual(r, { read: 'target 1h swing high 21598', target: { source: '1h-swing-high', level: 21598, price: 21598, ticks: 231 } });
+  assert.strictEqual(markPlan(21512.75).price, 21595.75);
+  assert.ok(r.target.price > markPlan(21512.75).price, 'beyond the 2R mark');
+  // Live: the model's reads (target 60m swing 21598) checked and planned: the price the gate stamps and the runner arms at.
+  assert.strictEqual(plan().plan.target.price, r.target.price);
+});
+
+test('planTargetOf: a level short of min_rr is skipped for the next; none at min_rr: the 2R mark, the price `target 2r` and `target trail` plan', () => {
+  // Stop 21500 (a 21499.75 stop, 162 ticks): 21560 is 0.49R and 21598 1.43R, both under 2: the 2R mark 21621.25.
+  const none = TL.planTargetOf(targetArgs({ stopLevel: 21500 }));
+  assert.deepStrictEqual(none, { read: 'target 2r', target: markPlan(21500) });
+  assert.strictEqual(none.target.price, 21621.25);
+  assert.strictEqual(markPlan(21500, true).price, none.target.price, '`target trail` plans the same mark');
+  // A min of 1: 21560 (0.49R) is skipped, 21598 (1.43R) taken.
+  assert.strictEqual(TL.planTargetOf(targetArgs({ stopLevel: 21500, minRR: 1 })).target.price, 21598);
+  // No plan: no reference price, no stop level, no min R.
+  assert.strictEqual(TL.planTargetOf(targetArgs({ briefing: { sections: {} } })), null);
+  assert.strictEqual(TL.planTargetOf(targetArgs({ stopLevel: null })), null);
+  assert.strictEqual(TL.planTargetOf(targetArgs({ minRR: null })), null);
+});

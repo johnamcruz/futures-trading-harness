@@ -249,8 +249,8 @@
       "sessions": 15,
       "trend": 8,
       "trades": 24,
-      "meanR": -0.0173,
-      "totalR": -0.4163,
+      "meanR": -0.0055,
+      "totalR": -0.1322,
       "falseStartShare": 0.3333,
       "maxDrawdownR": 6.589,
       "medianRiskPts": 21.75,
@@ -263,10 +263,10 @@
       },
       "mc": {
         "paths": 2000,
-        "pass": 0.7795,
+        "pass": 0.7865,
         "blow": 0,
         "blows": 0,
-        "meanDaysToPass": 13.56
+        "meanDaysToPass": 13.5569
       }
     },
     "B": {
