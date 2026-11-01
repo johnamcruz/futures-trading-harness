@@ -177,7 +177,10 @@ function checkLine(candles, { barClose, et = x => x, setupTf = DEFAULTS.setupTf,
   // Its setup candle: the chain's setup frame's last completed candle (candle-facts.js patternsOf's label and its close),
   // never the entry frame's (the owner: "it needs to read candle patterns at the setup").
   const sc = setupCandleText(candles);
-  const what = shown.map(r => `"${key} ${r.rel} ${r.name} ${r.dir}" (${r.dir === 'up' ? 'long' : 'short'}${priced(r)}${sc ? `; setup candle: ${sc}` : ''})`).join('; ');
+  // The level by its read name (composed-reads.js levelName: "VWAP (rth)" is "vwap rth"; a bracket fails a read), as the
+  // Standard plan line quotes it: a copy always parses.
+  const { levelName } = require('../trading/composed-reads');
+  const what = shown.map(r => `"${key} ${r.rel} ${levelName(r.name)} ${r.dir}" (${r.dir === 'up' ? 'long' : 'short'}${priced(r)}${sc ? `; setup candle: ${sc}` : ''})`).join('; ');
   // The compose plan's entry is a limit at the bar's close (trade-lifecycle.js planOf; a cited setup's, at market): it
   // fills only if a later bar trades to it while the record stands (the strategy's valid_bars).
   const within = Number.isInteger(validBars) && validBars > 0 ? `${validBars} bar${validBars === 1 ? '' : 's'}` : 'the record\'s valid_bars';

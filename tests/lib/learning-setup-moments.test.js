@@ -124,6 +124,26 @@ test('causal: a bar\'s selection never changes when the bars after it change (cu
   }
 });
 
+test('checkLine: every quoted read is in its read name (VWAP rth and session, swings, gap edges): each parses, never ambiguous, and checks TRUE on its candle', () => {
+  const { parseRead, checkRead } = require('../../scripts/lib/trading/composed-reads');
+  const relations = [{ name: 'VWAP (rth)', price: 21612.4, rel: 'rejected', dir: 'up' }, { name: 'VWAP (session)', price: 21640.1, rel: 'broke', dir: 'down' },
+    { name: '15m swing low 13404.25', price: 13404.25, rel: 'rejected', dir: 'up' }, { name: 'prior RTH high', price: 21660, rel: 'rejected', dir: 'down' }];
+  const fvgRelations = [{ name: '1h fvg high', price: 21630.5, rel: 'rejected', dir: 'down' }, { name: '5m fvg low', price: 21600.5, rel: 'broke', dir: 'down' }];
+  const c15 = candle({ relations, fvgRelations });
+  const line = M.checkLine({ '15m': c15 }, { barClose: CLOSE, et: iso => iso.slice(11, 16), max: 10 });
+  const quoted = [...line.matchAll(/"([^"]+)"/g)].map(m => m[1]);
+  const canonical = ['15m rejected vwap rth up', '15m broke vwap session down', '15m rejected 15m swing low 13404.25 up', '15m rejected prior rth high down', '15m rejected 1h fvg high down', '15m broke 5m fvg low down'];
+  for (const q of quoted) assert.ok(canonical.includes(q), q);
+  assert.ok(quoted.length >= 5 && ['15m rejected vwap rth up', '15m broke vwap session down'].every(q => quoted.includes(q)), line);
+  assert.ok(!/[()]/.test(quoted.join(' ')), 'no bracket inside a quoted read');
+  const briefing = { minutes: 3, sections: { m3: { data: { candles: { '15m': c15 } } } } };
+  for (const q of quoted) {
+    const p = parseRead(q);
+    assert.strictEqual(p.kind, 'relation', q);
+    assert.strictEqual(checkRead(p, briefing).check, true, q);
+  }
+});
+
 test('checkLine: the setup moment as the briefing says it: each reaction, the side it points, reaction or confirmation; none without a moment', () => {
   const candles = { '15m': candle({ relations: [{ name: 'overnight high', price: 21650.25, rel: 'rejected', dir: 'down' }], fvgRelations: [{ name: '1h fvg low', price: 21600.5, rel: 'rejected', dir: 'up' }] }) };
   const et = iso => new Date(iso).toISOString().slice(11, 16);
@@ -144,7 +164,7 @@ test('checkLine: the setup moment as the briefing says it: each reaction, the si
     { name: 'prior POC', price: 2270, rel: 'broke', dir: 'down' }, { name: 'prior VAL', price: 2268, rel: 'broke', dir: 'down' }, { name: 'IB low', price: 2266, rel: 'broke', dir: 'down' } ] }) };
   const capped = M.checkLine(many, { barClose: CLOSE, et, max: 2 });
   assert.deepStrictEqual((capped.match(/"15m broke/g) || []).length, 2);
-  assert.match(capped, /: "15m broke 1h swing low 2265\.6 down" \(short\); "15m broke prior POC down" \(short, 2270\)/);
+  assert.match(capped, /: "15m broke 1h swing low 2265\.6 down" \(short\); "15m broke prior poc down" \(short, 2270\)/);
   // No entries in this window: no line (the gate refuses one; nothing to compose now).
   assert.strictEqual(M.checkLine(candles, { barClose: CLOSE, et, entries: 'none' }), null);
   // A later close inside the same 15m candle's window: a confirmation close.
@@ -178,4 +198,23 @@ test('the bar briefing shows the setup moment practice selects, on the golden ba
     }
   }
   assert.ok(shown > 0, 'the golden bars hold a setup moment');
+});
+
+test('every read the pinned briefings quote to copy (the Setups to check and Standard plan lines) parses in a known form, never ambiguous', () => {
+  const fs = require('fs');
+  const { parseRead } = require('../../scripts/lib/trading/composed-reads');
+  const dir = require('path').join(__dirname, '..', 'fixtures', 'golden');
+  let reads = 0;
+  for (const f of fs.readdirSync(dir).filter(n => n.endsWith('.txt'))) {
+    // The lines as the model reads them (a prompt golden holds them JSON-escaped).
+    const text = fs.readFileSync(require('path').join(dir, f), 'utf8').replace(/\\"/g, '"').replace(/\\n/g, '\n');
+    for (const line of text.split('\n').filter(l => /^\s*- (Setups to check|Standard plan)/.test(l))) {
+      for (const [, q] of line.matchAll(/"([^"]+)"/g)) {
+        const p = parseRead(q);
+        assert.ok(!['ambiguous', 'unknown'].includes(p.kind), `${f}: "${q}" parses as ${p.kind}`);
+        reads += 1;
+      }
+    }
+  }
+  assert.ok(reads > 20, `${reads} quoted reads`);
 });
