@@ -5,8 +5,8 @@
  * shipped code finds on the entry rule's side, entered and exited by the shipped rules, one position at a time. The
  * harness's own modules detect, time, stop, size and exit each trade; what is this module's own is the choice of
  * setups (the 15m structure, compression and CISD primitives the studies measured, not the briefing's key-level
- * reactions) and the 2R mark as every target (the trail's arming point; compose's
- * nearest named target and its bias and location reads are not modelled):
+ * reactions); compose's bias and location reads are not modelled, its target is (the trail's arming point, where live
+ * arms it: the plan's target, exit-trail.js liveTarget):
  *
  *   side      the policy's entry rule (its RULEBOOK `entry`, entry-rule.js) per bar: chain-side.js chainSideSeries
  *   setups    on the chain's setup frame (the 15m), the side's way only, closed in the curation session
@@ -20,8 +20,11 @@
  *             the first base close from the one the setup is known at (a CISD: its touch bar) within the setup frame's
  *             span, the entry rule still giving the side on that bar, entries allowed (briefing.js sessionWindow: the gate's clock; the runner's sessions and
  *             holidays), the stop not traded through since the setup; a limit at that close for the strategy's
- *             valid_bars; the target the 2R mark (risk.min_rr; the policy's exit trails past it); D13's floor
- *             (trade-lifecycle.js stopFloorTicks): a closer stop is refused, never widened
+ *             valid_bars; D13's floor (trade-lifecycle.js stopFloorTicks): a closer stop is refused, never widened; the
+ *             target the plan's (trade-lifecycle.js planTargetOf, on the briefing live builds at that close from the
+ *             closed bars up to it, briefing.js buildBriefing on the runner's history, autotrader.js historyBars): the
+ *             first named level at risk.min_rr or more, else the 2R mark (`target 2r`, `target trail`); the policy's
+ *             exit arms its lock and trail there, as live (a cited setup: its own R target)
  *   exit      experience-log.js limitOutcome with the policy's exit (evaluator.js composedExit(trade_lifecycle).plan),
  *             out at the runner's end of day (setup-library.js runnerClock)
  *   one       one position at a time, as live: decided after sizing, at each attempt's own account state (goal-metrics.js,
@@ -31,7 +34,10 @@
  *   shippedOf(root, env)       the shipped pieces the trades read: { strategies, life, policy, entryRule, exit, stopRule,
  *                              validBars, minRR, cited, setupMinutes, baseMinutes, session }
  *   blockTrades(bars, sessions, shipped, { symbol })   { candidates, trades, setups, refused }: candidates every fill in
- *                              entry order, trades oneAtATime of them; bars normalized ({ t, o, h, l, c, v }),
+ *                              entry order (each with its plan's `reference` price and `target`, the price its exit
+ *                              arms at, and a composed one's `targetRead`, the named level's read or `target 2r`),
+ *                              trades oneAtATime of them; bars
+ *                              normalized ({ t, o, h, l, c, v }),
  *                              sessions the dates traded (the warm-up before them is read, never traded); refused counts
  *                              each setup that made no trade by why
  */
@@ -46,11 +52,12 @@ const { chainSideSeries } = require('../trading/chain-side');
 const { loadStrategies, citedSetups, composedOf } = require('../trading/strategies');
 const { composedExit, createEvaluator } = require('../trading/evaluator');
 const { entryRuleOf } = require('../trading/entry-rule');
-const { STRATEGY: LIFE, stopRuleOf, stopFloorTicks } = require('../trading/trade-lifecycle');
+const { STRATEGY: LIFE, stopRuleOf, stopFloorTicks, planTargetOf } = require('../trading/trade-lifecycle');
 const { TF_MIN } = require('../trading/composed-reads');
 const { runnerClock } = require('../learning/setup-library');
 const { limitOutcome } = require('../learning/experience-log');
-const { sessionWindow } = require('../trading/briefing');
+const { sessionWindow, buildBriefing } = require('../trading/briefing');
+const { historyBars } = require('../autotrader');
 const { parseWindows, inWindow, tradingDayKey } = require('../trading/clock');
 const { tickOf } = require('../trading/contracts');
 
@@ -84,24 +91,25 @@ function knownCandles(bars, minutes, base) {
   return CF.completedSeries(bars, minutes, base).candles.map(c => ({ ...c, known: Date.parse(bars[c.last].t) + stepMs === Date.parse(c.closedAt) ? c.last : c.last + 1 }));
 }
 
-/** Every setup on the setup frame, any side: [{ type, k, side, stop }] (k: the base bar it is known at). */
+/** Every setup on the setup frame, any side: [{ type, k, side, level, stop }] (k: the base bar it is known at; level: the stop read's, the stop one buffer beyond it). */
 function frameSetups(bars, P, tick) {
   const out = [];
   const buf = P.stopRule.bufferTicks * tick;
   const M = P.setupMinutes;
   const cs = knownCandles(bars, M, P.baseMinutes);
-  const beyond = (c, s) => (s > 0 ? c.l - buf : c.h + buf);
+  const far = (c, s) => (s > 0 ? c.l : c.h);
+  const beyond = (c, s) => far(c, s) - s * buf;
   for (const x of SE.breaksOf(cs)) {
     const c = cs[x.i];
     const s = x.direction === 'up' ? 1 : -1;
-    out.push({ type: `${label(M)} ${x.kind}`, k: c.known, side: s, stop: beyond(c, s), from: c.known });
+    out.push({ type: `${label(M)} ${x.kind}`, k: c.known, side: s, level: far(c, s), stop: beyond(c, s), from: c.known });
   }
   const ser = CMP.seriesOf(cs);
   for (let j = 1; j < cs.length; j += 1) {
     const x = CMP.compressionAt(cs, j, { series: ser });
     if (x.state === 'expanding' && x.break && x.break.barsAgo === 0) {
       const s = x.break.dir === 'up' ? 1 : -1;
-      out.push({ type: `${label(M)} compression break`, k: cs[j].known, side: s, stop: beyond(cs[j], s), from: cs[j].known });
+      out.push({ type: `${label(M)} compression break`, k: cs[j].known, side: s, level: far(cs[j], s), stop: beyond(cs[j], s), from: cs[j].known });
     }
   }
   // A strong CISD, at the first base bar trading into its OTE zone while it stands (cisd.js cisdSeries: the same CISD).
@@ -119,7 +127,7 @@ function frameSetups(bars, P, tick) {
       const edge = bull ? sr.top[i - 1] : sr.bottom[i - 1];
       if (!fin(edge) || sr.dir[i - 1] !== ev.dir) continue;
       if (bull ? bars[i].l <= edge : bars[i].h >= edge) {
-        out.push({ type: `${label(M)} cisd ote`, k: i, side: ev.dir, stop: bull ? origin - buf : origin + buf, from: i });
+        out.push({ type: `${label(M)} cisd ote`, k: i, side: ev.dir, level: origin, stop: bull ? origin - buf : origin + buf, from: i });
         break;
       }
     }
@@ -146,17 +154,22 @@ function blockTrades(bars, sessions, P, { symbol }) {
   const atr20 = ind.atr(bars, ind.STOP_ATR_PERIOD);
   const floorAt = j => stopFloorTicks({ sections: { m3: { data: { referenceStop: { distance: r4(AN.snapshot.stopAtrMult * atr20[j]) } } } } }, tick, P.stopRule);
   const span = Math.round(P.setupMinutes / base);
-  const up = x => Math.ceil(x / tick - 1e-9) * tick;
-  const down = x => Math.floor(x / tick + 1e-9) * tick;
   const refused = {};
   const no = why => { refused[why] = (refused[why] || 0) + 1; return null; };
   const run = (s, entry, stop, target, j, market) => limitOutcome({
     bars: list, tfMs, side: s > 0 ? 'long' : 'short', entry, stop, target, fromMs: ms[j] + tfMs,
     expiresMs: ms[j] + tfMs + (market ? 1 : P.validBars) * tfMs, eodMs: clock.eodOf(ms[j] + tfMs), tick, plan: P.exit.plan, market,
   });
-  const pack = (st, j, o, stopTicks) => (o.filled && o.R !== null
-    ? { type: st.type, side: st.side > 0 ? 'long' : 'short', day: dayOf[j], setupAt: bars[st.k].t, decidedAt: bars[j].t, entryTime: o.entryTime, exitTime: o.exitTime, entry: o.entryPrice, stopTicks, R: o.R, mfeR: o.mfeR, maeR: o.maeR, reason: o.exitReason }
+  const pack = (st, j, o, stopTicks, planned) => (o.filled && o.R !== null
+    ? { type: st.type, side: st.side > 0 ? 'long' : 'short', day: dayOf[j], setupAt: bars[st.k].t, decidedAt: bars[j].t, entryTime: o.entryTime, exitTime: o.exitTime, entry: o.entryPrice, stopTicks, ...planned, R: o.R, mfeR: o.mfeR, maeR: o.maeR, reason: o.exitReason }
     : no(`unfilled (${o.exitReason})`));
+  // The plan's target at decision bar j's close: on the briefing live builds then (the runner's history of closed bars
+  // up to j, never a later one), by compose's rule (trade-lifecycle.js planTargetOf: a named level, else the 2R mark).
+  const history = historyBars(base);
+  const targetAt = (j, s, level) => planTargetOf({
+    briefing: buildBriefing({ symbol, bars: bars.slice(Math.max(0, j + 1 - history), j + 1), minutes: base, now: new Date(ms[j] + tfMs) }),
+    side: s > 0 ? 'long' : 'short', stopLevel: level, tick, minRR: P.minRR, stopRule: P.stopRule,
+  });
   const composed = st => {
     const s = st.side;
     for (let j = st.from; j < st.from + span - (st.from > st.k ? 1 : 0) && j < n; j += 1) {
@@ -167,8 +180,10 @@ function blockTrades(bars, sessions, P, { symbol }) {
       const stopTicks = Math.ceil(Math.abs(ref - st.stop) / tick - 1e-9);
       const floor = floorAt(j);
       if (floor === null || stopTicks < floor) return no('stop under the D13 floor');
-      const target = s > 0 ? up(ref + P.minRR * (ref - st.stop)) : down(ref - P.minRR * (st.stop - ref));
-      return pack(st, j, run(s, ref, st.stop, target, j, false), stopTicks);
+      const planned = targetAt(j, s, st.level);
+      if (!planned) return no('no plan');
+      const target = planned.target.price;
+      return pack(st, j, run(s, ref, st.stop, target, j, false), stopTicks, { reference: ref, target, targetRead: planned.read });
     }
     return no('no entry bar');
   };
@@ -192,7 +207,8 @@ function blockTrades(bars, sessions, P, { symbol }) {
       const floor = floorAt(i);
       if (floor === null || ticks < floor) { no('stop under the D13 floor'); continue; }
       const targetR = strat.exit && fin(strat.exit.target_r) ? strat.exit.target_r : P.minRR;
-      const t = pack(st, i, run(s, ref, ref - s * ticks * tick, ref + s * Math.round(targetR * ticks) * tick, i, true), ticks);
+      const target = ref + s * Math.round(targetR * ticks) * tick;
+      const t = pack(st, i, run(s, ref, ref - s * ticks * tick, target, i, true), ticks, { reference: ref, target });
       if (t) trades.push(t);
     }
   }
