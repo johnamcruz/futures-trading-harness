@@ -11,8 +11,8 @@
     ],
     "summary": {
       "trades": 6,
-      "totalR": -2.4134,
-      "meanR": -0.4022,
+      "totalR": -2.4151,
+      "meanR": -0.4025,
       "caught": 0,
       "fills": 1,
       "blows": 0
@@ -64,8 +64,8 @@
         "kind": "trend",
         "trades": 1,
         "caught": false,
-        "R": -1.0139,
-        "worstR": -1.0139,
+        "R": -1.0156,
+        "worstR": -1.0156,
         "blown": false
       },
       {
@@ -188,18 +188,18 @@
         ]
       },
       {
-        "key": "2023-09-25|short|2023-09-25T13:51:00.000Z",
+        "key": "2023-09-25|short|2023-09-25T13:33:00.000Z",
         "day": "2023-09-25",
         "side": "short",
-        "setup": "momentum_continuation fired down",
-        "bar": "2023-09-25T13:51:00.000Z",
-        "entry": 17490.25,
-        "size": 8,
-        "entryTime": "2023-09-25T13:54:02.000Z",
-        "exitTime": "2023-09-25T13:55:30.000Z",
-        "exitPrice": 17508.5,
+        "setup": "1h cisd down",
+        "bar": "2023-09-25T13:33:00.000Z",
+        "entry": 17440,
+        "size": 9,
+        "entryTime": "2023-09-25T13:36:02.000Z",
+        "exitTime": "2023-09-25T13:37:30.000Z",
+        "exitPrice": 17456.25,
         "exitReason": "stop",
-        "R": -1.0139,
+        "R": -1.0156,
         "trail": [],
         "steps": [
           "bias",
@@ -243,30 +243,30 @@
       }
     ]
   },
-  "fixture": "7f08aa86683f62d45d1f82f73cc9c31589258947d430a9e45e5248673d95c30c",
+  "fixture": "28ba372543dc8d61240e3288db6ba4dc88b3264b6fbb2ade8950431632521d30",
   "halves": {
     "A": {
       "sessions": 15,
       "trend": 8,
-      "trades": 20,
-      "meanR": -0.337,
-      "totalR": -6.7394,
-      "falseStartShare": 0.4,
-      "maxDrawdownR": 8.2502,
-      "medianRiskPts": 19,
+      "trades": 24,
+      "meanR": -0.0173,
+      "totalR": -0.4163,
+      "falseStartShare": 0.3333,
+      "maxDrawdownR": 6.589,
+      "medianRiskPts": 21.75,
       "caught": {
         "legs": 14,
-        "caught": 3,
-        "rCaught": 6.5327,
-        "rAvailable": 49.9079,
-        "share": 0.1309
+        "caught": 5,
+        "rCaught": 9.3481,
+        "rAvailable": 43.5977,
+        "share": 0.2144
       },
       "mc": {
         "paths": 2000,
-        "pass": 0.607,
+        "pass": 0.7795,
         "blow": 0,
         "blows": 0,
-        "meanDaysToPass": 12.4819
+        "meanDaysToPass": 13.56
       }
     },
     "B": {
@@ -296,18 +296,18 @@
     "S": {
       "sessions": 10,
       "trend": 0,
-      "trades": 11,
-      "meanR": -1.583,
-      "totalR": -17.4128,
-      "falseStartShare": 0.9091,
-      "maxDrawdownR": 17.4128,
+      "trades": 10,
+      "meanR": -1.6634,
+      "totalR": -16.6345,
+      "falseStartShare": 0.9,
+      "maxDrawdownR": 16.6345,
       "medianRiskPts": 9.25,
       "caught": {
-        "legs": 13,
+        "legs": 11,
         "caught": 2,
-        "rCaught": -3.1144,
-        "rAvailable": 16.3514,
-        "share": -0.1905
+        "rCaught": -3.3348,
+        "rAvailable": 13.9459,
+        "share": -0.2391
       },
       "mc": {
         "paths": 2000,
@@ -319,33 +319,8 @@
     }
   },
   "fixtureChange": {
-    "from": "26cd22f0f657a065366cf44cd008ea273d9f5e733323df6feecd2bf4e3c9a8f0",
-    "why": "two synthetic floor days added (goal-synth.js floor: D13's tick and ATR terms binding); the real slice and the other synthetic days unchanged"
+    "from": "7f08aa86683f62d45d1f82f73cc9c31589258947d430a9e45e5248673d95c30c",
+    "why": "fix/trail-swing-side-capture (owner-approved 2026-10-31): the synthetic blow path's gap 100 -> 105 ticks, harsher (mean R -1.583 -> -1.6634, one trade fewer: the shipped sizing skips the 2024-03-15 entry near the floor, BLOW_PATH_ALLOWANCES), and 2024-04-08 relabelled a trade day (its listed VWAP setup never taken: goal-path.js vwapTaken); with the trail and entry fixes tier 1 rises: A pass 0.607 -> 0.7795, mean R -0.337 -> -0.0173, R caught 0.1309 -> 0.2144, legs caught 3 -> 5, 0 blows everywhere"
   },
-  "writtenBy": "scripts/goal-check.js baseline --write --reset",
-  "reset": {
-    "why": "one-time reset, owner-approved 2026-10-30: the old tool applied one position at a time before sizing and counted trades no account could size; the corrected tool takes one position at a time after sizing, at each attempt's own state, as live",
-    "from": {
-      "A": {
-        "mc.blows": 0,
-        "mc.pass": 0.7605,
-        "meanR": 0.145,
-        "caught.share": 0.0477,
-        "caught.caught": 6
-      },
-      "B": {
-        "mc.blows": 0,
-        "mc.pass": 0,
-        "meanR": -0.351,
-        "caught.share": 0.1111,
-        "caught.caught": 8
-      },
-      "S": {
-        "mc.blows": 0
-      }
-    },
-    "fixture": "7f08aa86683f62d45d1f82f73cc9c31589258947d430a9e45e5248673d95c30c",
-    "at": "2026-10-31",
-    "commit": "a98fa3cd9"
-  }
+  "writtenBy": "scripts/goal-check.js baseline --write"
 }

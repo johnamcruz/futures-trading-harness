@@ -100,7 +100,9 @@ test('resetBaseline: an owner-approved reset writes a lower baseline with the re
 test('a reset is accepted only when pinned in APPROVED_RESETS: the approved one passes, any other fails, a tampered pin fails', () => {
   const fs = require('fs');
   const path = require('path');
-  const real = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'fixtures', 'goal', 'baseline.json'), 'utf8'));
+  // The reset baseline as main wrote it on 2026-10-30 (its tier 1 part): a later fixture change writes a new baseline
+  // without the reset record (goal-check.js --new-fixture), so the approved reset is checked on this frozen copy.
+  const real = JSON.parse(fs.readFileSync(path.join(__dirname, '..', 'fixtures', 'goal', 'baseline-reset-2026-10-30.json'), 'utf8'));
   // The base the approved reset replaced, rebuilt from what it records (each half's gated metrics).
   const set = (o, key, v) => { const ks = key.split('.'); let x = o; for (const k of ks.slice(0, -1)) x = x[k] = x[k] || {}; x[ks[ks.length - 1]] = v; return o; };
   const before = { fixture: real.fixture, halves: Object.fromEntries(Object.entries(real.reset.from).map(([h, m]) => [h, Object.entries(m).reduce((o, [k, v]) => set(o, k, v), {})])) };
