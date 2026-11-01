@@ -30,9 +30,12 @@ const skip = SET.missing ? `skipped: ${SET.missing}` : false;
 const BASE = skip ? null : JSON.parse(fs.readFileSync(SET.baselineFile, 'utf8')).tier2;
 const GOLDEN = skip ? null : T.readGolden();
 const OUT = fs.mkdtempSync(path.join(os.tmpdir(), 'fth-goal-faults-'));
-// The entry faults on a day whose trade stops out early; the stop-move faults on the move day that trails soonest.
+// The entry faults on a day whose trade stops out early; the stop-move faults on the move day that trails soonest with
+// moves enough for them: the two refused or errored moves (goal-world.js FAULTS modifyFaults) and the re-attempt after.
+// A day whose trail moves once and exits (2021-06-15 since the wrong-side swing fix) can't show the re-attempt.
+const MOVES_FOR_FAULTS = 3;
 const quick = skip ? null : (BASE.trades.find(t => t.exitReason === 'stop') || BASE.trades[0]).day;
-const trailed = skip ? null : (GOLDEN.scenarios.filter(s => s.layers && s.layers.exit.moves.length).sort((a, b) => Date.parse(a.layers.exit.time) - Date.parse(b.layers.exit.time))[0] || {}).day;
+const trailed = skip ? null : (GOLDEN.scenarios.filter(s => s.layers && s.layers.exit.moves.length >= MOVES_FOR_FAULTS).sort((a, b) => Date.parse(a.layers.exit.time) - Date.parse(b.layers.exit.time))[0] || {}).day;
 const FAULTS = [['lost-reply', quick], ['late-fill', trailed], ['late-fill-long', trailed], ['partial-fill', quick], ['modify-refused', trailed], ['modify-error', trailed]];
 
 async function check(faults) {
