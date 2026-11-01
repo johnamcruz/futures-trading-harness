@@ -363,10 +363,13 @@ function overlapFor(deps, c) {
   const due = () => entryDue(recordsAt(home, c.symbol, c.bar));
   const { createOverlap } = require('./entry-overlap');
   const VS = require('./trading/verdict-stage');
+  // The kill-switch file is found once per entry; an unreadable config blocks every start (blocked() throws).
+  let stopFile = null; let stopErr = null;
+  try { stopFile = require('./trading/config').loadConfig(deps.env || process.env).killSwitchFile; } catch (err) { stopErr = err; }
   const h = createOverlap({
     pollMs, wallNow, log: m => log(`the entry: ${m}`),
     // No model run starts while the kill switch is on (the cycle's own check, cycle-run.js, comes after the head trader).
-    blocked: () => (fs.existsSync(require('./trading/config').loadConfig(deps.env || process.env).killSwitchFile) ? 'the kill switch is on' : null),
+    blocked: () => { if (stopErr || !stopFile) throw stopErr || new Error('no kill-switch file'); return fs.existsSync(stopFile) ? 'the kill switch is on' : null; },
     latest: () => { const d = due(); return d.run ? d.record.id : null; },
     // Each early run's policy verdicts go to a stage of its own (verdict-stage.js), dropped with the run.
     prepare: () => VS.newStage(home),

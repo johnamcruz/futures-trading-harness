@@ -130,3 +130,17 @@ test('createOverlap: blocked (the kill switch on) starts nothing and stops a run
   await t.tick();
   assert.strictEqual(started.length, 1, 'a failing check blocks');
 });
+
+test('createOverlap: the kill switch turned on while the request is built starts nothing, and drops its stage', async () => {
+  let why = null;
+  const started = []; const dropped = [];
+  const h = createOverlap({
+    pollMs: 1, timers: noTimers, latest: () => 'A', blocked: () => why,
+    prepare: () => 'stage-1', onDrop: s => dropped.push(s),
+    request: async k => { why = 'the kill switch is on'; return { request: `review ${k}`, snapshot: SNAP }; },
+    start: () => { started.push(1); return new Promise(() => {}); },
+  });
+  await h.tick();
+  assert.strictEqual(started.length, 0);
+  assert.deepStrictEqual(dropped, ['stage-1']);
+});
