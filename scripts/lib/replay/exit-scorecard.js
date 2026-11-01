@@ -34,6 +34,10 @@
  * the model-free detection study).
  * The model's tightens: each modify_order of the stop; `stopped` when that stop (the last move before the exit) took the
  * trade out (its class is the exit's), else `held` (the trade went on: a later move, or another exit).
+ * fill (report only: the round report's losers past -1R, train/loss-diagnostics.js), in the trade's R from its entry:
+ * stopR the stop working at a stop exit (the last move's price, else the initial stop: entry minus the risk), null for
+ * any other exit; openR the open of the bar the exit filled in (null when no bar holds it); priceR the exit's price;
+ * tickR one tick (the trip's `tick`), null when its tick is unknown. Nothing scores or screens on them.
  *
  *   PARAMS                                   config/replay.json exitScore (frozen)
  *   barsClosedBy(bars, ms, stepMs)          the bars closed by ms: a decision's facts read only these (no look-ahead)
@@ -69,9 +73,12 @@ const { familyRoot } = require('../trading/contracts');
 const num = x => (typeof x === 'number' && Number.isFinite(x) ? x : null);
 const isObj = x => Boolean(x) && typeof x === 'object' && !Array.isArray(x);
 const r2 = x => (num(x) === null ? null : Math.round(x * 100) / 100);
+const r4 = x => (num(x) === null ? null : Math.round(x * 10000) / 10000);
 const sign = side => (side === 'short' ? -1 : 1);
 const CLASSES = Object.freeze(['cut', 'right', 'unclear', 'unresolved']);
 const EXIT_BY = Object.freeze(['model-exit', 'model-stop', 'runner-trail', 'runner-exit', 'initial-stop', 'target', 'unattributed']);
+// The exits a stop order filled (fill.stopR known).
+const STOP_EXITS = Object.freeze(['model-stop', 'runner-trail', 'initial-stop']);
 
 /** A contract's family root (MNQ for MNQ, NQ, MNQ:2026-12): the one family however a record names the contract. */
 const famOf = id => (id ? familyRoot((parseStandardName(String(id)) || { root: String(id).toUpperCase() }).root) : null);
@@ -138,6 +145,18 @@ function lateThreshold(strategies, params = PARAMS) {
   return Math.max(params.lateGivebackR, ...locks);
 }
 
+/**
+ * A scored exit's fill facts in R (see the header): the stop working at a stop exit, the exit bar's open, the exit's
+ * price, one tick. Pure; null where a price, the bar or the tick is unknown.
+ */
+function fillOf(t, { exitBy, move, bars, stepMs }) {
+  const s = sign(t.side);
+  const inR = px => (num(px) === null || num(t.entry) === null ? null : r4((s * (px - t.entry)) / t.risk));
+  const stop = !STOP_EXITS.includes(exitBy) ? null : move ? num(move.to) : num(t.entry) === null ? null : t.entry - s * t.risk;
+  const bar = stepMs > 0 ? (Array.isArray(bars) ? bars : []).find(b => { const bt = Date.parse(b.t); return bt <= t.exitMs && t.exitMs < bt + stepMs; }) : null;
+  return { stopR: inR(stop), openR: bar ? inR(bar.o) : null, priceR: inR(t.exitPrice), tickR: num(t.tick) > 0 ? r4(t.tick / t.risk) : null };
+}
+
 /** The last of `list` (by ms) at or before `ms` and after `since`. */
 const lastBefore = (list, since, ms) => list.filter(x => x.ms > since && x.ms <= ms).sort((a, b) => a.ms - b.ms).pop() || null;
 
@@ -166,6 +185,7 @@ function scoreExits({ trips = [], moves: given = [], closes = [], bars = [], ste
     decisions.push({
       trip: t.id ?? null, root: famOf(t.contractId), side: t.side, entryAt: new Date(t.entryMs).toISOString(), exitBy, cls, leftR, savedR, r: num(t.r), peakR, givebackR,
       late, ...(late ? { lateR: r2(handed - params.lateGivebackR) } : {}), at: new Date(t.exitMs).toISOString(),
+      fill: fillOf(t, { exitBy, move, bars, stepMs }),
       ...(decision ? { decidedAt: new Date(decision.ms).toISOString() } : {}),
       flip: decision && facts && isObj(facts.bias) ? facts.bias.flipAgainst === true : null, facts: facts || null,
     });
@@ -341,4 +361,4 @@ function tripsOf(days) {
   return [...seen.values()];
 }
 
-module.exports = { PARAMS, CLASSES, EXIT_BY, famOf, resolveOrders, barsClosedBy, classify, sessionEnds, lateThreshold, scoreExits, summarize, factsText, exitLines, modelActions, gateActions, mergeActions, runnerActions, tripsOf };
+module.exports = { PARAMS, CLASSES, EXIT_BY, STOP_EXITS, famOf, fillOf, resolveOrders, barsClosedBy, classify, sessionEnds, lateThreshold, scoreExits, summarize, factsText, exitLines, modelActions, gateActions, mergeActions, runnerActions, tripsOf };

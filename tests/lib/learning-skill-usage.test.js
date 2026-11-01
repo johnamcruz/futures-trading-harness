@@ -270,6 +270,9 @@ test('skill usage: never shown to the model: only the replay report (and the sta
     'scripts/lib/learning/learning-report.js',
     'scripts/lib/replay/stage.js', // the stage report a finished replay run prints to the operator
     'scripts/lib/train/ab-compare.js', // the operator A/B comparison of two finished runs (its CLI scripts/ab-compare.js requires only it): a report, never a prompt or tool
+    // The round report's entry reads (train/entry-reaction.js): a past entry's briefing rebuilt with briefingFrom alone,
+    // after the run, for the report's chop drag only (train-loss-diagnostics.test.js keeps it out of every deciding module).
+    'scripts/lib/train/entry-reaction.js',
     // Propose-Probe-Compose: the probe round's findings (a skill's wrong and missed read counts and their forms, no
     // outcome) go to the design-time proposer, never to a trading cycle; probe.js reads each probe run's report for the code screen.
     'scripts/lib/train/findings.js',

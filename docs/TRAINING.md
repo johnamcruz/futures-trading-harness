@@ -975,6 +975,39 @@ the scorecard's net result. All are per trade, not annualized; a ratio with fewe
 trades, no loss or no spread reads n/a. No screen, keep rule, promotion
 or prompt reads them: the combine pass rate with 0 blows still decides.
 
+**Losses, break-even and chop** (diagnostics,
+`scripts/lib/train/loss-diagnostics.js`). Beside them, the record
+(`mastery.loss`) and status ("Losses, break-even and chop") give, per side
+on the trend confirm half:
+
+- **losers past -1R**: of the losing round trips (the exit scorecard's),
+  how many closed below -1R by more than one tick in R (`trendReport.loserToleranceR`,
+  0.05R, when the tick is unknown), their share, the worst loser's R, and
+  each one's cause from its fill (in R, `exit-scorecard.js` `fill`): stop
+  slippage (filled past the stop, its bar opening inside it), a gap
+  through the stop (its bar opened past it), a stop beyond the initial
+  risk (moved away), an exit not at the stop, or unknown when the fill
+  can't tell (never guessed);
+- **win rate vs break-even**: with the average loss as one unit, the
+  break-even win rate is 1 / (1 + payoff); the actual win rate, the margin
+  in percentage points, and "below break-even" when it is negative (n/a
+  without a win and a loss);
+- **chop drag by entry kind**: each filled entry's R, win rate, false-start
+  share (as above) and trend legs caught (distinct legs entered their
+  way), split by the reaction of its setup candle at its level (the
+  compose record's first rejection, break or sweep read, its reaction the
+  briefing's at the record's bar, rebuilt from the run's bars:
+  `entry-reaction.js`; none: no such read; not recorded: no compose record
+  joined, with the coverage said) and by key level or not (the setup
+  moments' key levels and FVG edges); a bucket under
+  `trendReport.smallN` (30) entries says "small n, no conclusion";
+- **exits**: the exit scorecard's cut-a-trend (R left) and late (R given
+  back past the lock) totals on the side's own exits, and the probe
+  half's beside them.
+
+Report only, like the risk: no screen, keep rule, promotion or prompt
+imports them (a test keeps it so).
+
 **The mastery bar** (set 2026-10-29 and confirmed by the owner, before
 the first trend-curriculum round's result; the owner switches the stage;
 text, never code). Stage 1

@@ -221,7 +221,9 @@ function exitsOf({ home, days, bars, minutes, cycles, session, broker = '' }) {
       return { unavailable: err.message };
     }
   };
-  const scored = ES.scoreExits({ trips: ES.tripsOf(days).map(t => ({ ...t, contractId: canon(t.contractId) })), moves: [...model.moves, ...canonAll(runner.moves)], closes: [...model.closes, ...canonAll(runner.closes)], bars, stepMs, factsAt, sessionEnd: ES.sessionEnds(session), orders: gated.orders, runnerKnown, params });
+  // Each trip's tick (its contract's), for the fill facts in R (report only); unknown: none.
+  const tickOf = id => { try { return require('../trading/contracts').tickOf(id); } catch (_err) { return null; } };
+  const scored = ES.scoreExits({ trips: ES.tripsOf(days).map(t => ({ ...t, contractId: canon(t.contractId), tick: tickOf(canon(t.contractId)) })), moves: [...model.moves, ...canonAll(runner.moves)], closes: [...model.closes, ...canonAll(runner.closes)], bars, stepMs, factsAt, sessionEnd: ES.sessionEnds(session), orders: gated.orders, runnerKnown, params });
   return { ...scored, totals: ES.summarize(scored) };
 }
 

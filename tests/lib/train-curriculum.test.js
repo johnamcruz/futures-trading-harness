@@ -140,7 +140,7 @@ test('the mastery read: legs caught, R caught / available, control false starts,
   ]);
   // Then the risk diagnostics (train-risk-stats.test.js): this report recorded no trades, so unknown.
   assert.strictEqual(IR.masteryLines(rec)[3], '  Risk and return (per trade, R as the scorecard records it; diagnostics only: pass rate with 0 blows decides):');
-  assert.ok(IR.masteryLines(rec).slice(4).every(l => / n\/a \(trades unknown\)$/.test(l)));
+  assert.ok(IR.masteryLines(rec).slice(4, 8).every(l => / n\/a \(trades unknown\)$/.test(l)));
   const rejected = IR.build({ probeReport, entries: [{ iteration: 2, proposalId: 'c1', verdict: 'rejected', composition: {} }] });
   assert.match(IR.masteryLines(rejected)[2], /^ {4}combined c1: /);
   // Without the curriculum key, 'all'; without a trend set, no read.

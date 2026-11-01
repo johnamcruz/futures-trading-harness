@@ -83,7 +83,18 @@ function exitsOf(capture, windows) {
   const list = capture && capture.exits && Array.isArray(capture.exits.decisions) ? capture.exits.decisions : [];
   if (list.length && !list.some(d => d && d.root && d.entryAt)) return null;
   const TW = require('./trend-windows');
-  return list.map(d => ({ root: d.root || null, side: d.side, entryAt: d.entryAt || null, unit: d.entryAt && windows ? TW.unitOfRecord(windows, d.entryAt) : null, exitBy: d.exitBy, cls: d.cls, late: d.late === true, r: d.r, peakR: d.peakR }));
+  // leftR, lateR and fill: the round report's losses and exits only (loss-diagnostics.js; null from older code).
+  return list.map(d => ({ root: d.root || null, side: d.side, entryAt: d.entryAt || null, unit: d.entryAt && windows ? TW.unitOfRecord(windows, d.entryAt) : null, exitBy: d.exitBy, cls: d.cls, late: d.late === true, r: d.r, peakR: d.peakR, leftR: d.leftR ?? null, lateR: d.lateR ?? null, fill: d.fill || null }));
+}
+
+/**
+ * A capture's filled entries as the round report's chop drag reads them (loss-diagnostics.js chopDrag), report only:
+ * each with its kind (in a leg its way, counter, none: trend-ride.js entryKind), the leg, its R and peak R, and its entry
+ * read (entry-reaction.js: absent from older code, then 'not recorded'). Null without a capture.
+ */
+function entryRowsOf(capture) {
+  if (!capture || typeof capture !== 'object') return null;
+  return (Array.isArray(capture.entries) ? capture.entries : []).map(e => ({ at: e.at || null, side: e.side || null, kind: e.kind || null, leg: e.leg || null, r: typeof e.r === 'number' ? e.r : null, peakR: typeof e.peakR === 'number' ? e.peakR : null, read: e.read || null }));
 }
 
 /** The steps (cycles) a run recorded; 0 for a run with no records. */
@@ -144,7 +155,11 @@ function trendData({ runDir, legs = null, windows = null, context = [] }) {
   const { readRun } = require('../replay/store');
   const { readJson } = require('../harness-run');
   const days = readRun(runDir).days;
-  const capture = tc.captureReport({ runDir, days, manifest: readJson(path.join(runDir, 'manifest.json'), {}) || {}, legs, context });
+  const captured = tc.captureReport({ runDir, days, manifest: readJson(path.join(runDir, 'manifest.json'), {}) || {}, legs, context });
+  // Each filled entry's read (entry-reaction.js: its setup candle's reaction at its level, the level's kind), for the
+  // round report's chop drag only.
+  const ER = require('./entry-reaction');
+  const capture = { ...captured, entries: ER.withReads(captured.entries, ER.readerFor({ runDir })) };
   tc.writeCapture(runDir, capture);
   // The first tries of the run's compose records (first-try.js): its own home's, one session's.
   const home = path.resolve(runDir, '..', '..');
@@ -283,7 +298,7 @@ async function probeRound(ctx, { n, champion, api }) {
   const trendSide = async (side, tree, share, which, withFindings = false) => {
     const days = trendDays(which);
     if (!days.length) return null;
-    const out = { legs: [], dayR: {}, blows: 0, cycles: 0, fresh: 0, exits: [], captures: [], rides: [], first: [], sessions: [], entries: [], stepped: [], windows: 0, dropped: [], noWindows: [], controls: [], reads: [], trades: [] };
+    const out = { legs: [], dayR: {}, blows: 0, cycles: 0, fresh: 0, exits: [], captures: [], rides: [], first: [], sessions: [], entries: [], entryRows: [], stepped: [], windows: 0, dropped: [], noWindows: [], controls: [], reads: [], trades: [] };
     for (const day of days) {
       const built = windowsOn(which, day);
       out.dropped.push(...built.dropped);
@@ -304,7 +319,7 @@ async function probeRound(ctx, { n, champion, api }) {
         // Curriculum trend: the run's read data too (its decisions, skill usage and compose records), the read findings'
         // and the read screens' (curriculum.js readPart); never the regression days' (harm only).
         const read = trendOnly && which !== 'regression' ? CU.readPart({ data: await ctx.steps.probeData({ runDir: runs.runs[0].runDir, tree, barsFiles, keep: null }), scorecard: runs.decisions }) : null;
-        return { ...(read ? { read } : {}), legs: [...x.legs], dayR: x.dayR, blows: x.blows, first: x.first, sessions: x.sessions, entries: got.entries || [], stepped: got.stepped || [], windows: built.windows.length, cycles: stepsOf(runs.runs[0].runDir), ride: TR.compact(got.capture), exits: exitsOf(got.capture, built.windows), ...(side === 'pc' ? { capture: got.capture } : {}) };
+        return { ...(read ? { read } : {}), legs: [...x.legs], dayR: x.dayR, blows: x.blows, first: x.first, sessions: x.sessions, entries: got.entries || [], stepped: got.stepped || [], windows: built.windows.length, cycles: stepsOf(runs.runs[0].runDir), ride: TR.compact(got.capture), exits: exitsOf(got.capture, built.windows), entryRows: entryRowsOf(got.capture), ...(side === 'pc' ? { capture: got.capture } : {}) };
       });
       // Its catch & ride (replay/trend-ride.js), report only: a phase kept before the ride was recorded has none (the
       // champion's keeps its capture, read instead), and the side's total is then unknown (trend-screen.js rideOfSide).
@@ -324,6 +339,10 @@ async function probeRound(ctx, { n, champion, api }) {
       // else unknown, and the side's exits with it).
       const ex = one.exits !== undefined ? one.exits : one.capture ? exitsOf(one.capture, built.windows) : null;
       out.exits = out.exits && ex ? [...out.exits, ...ex] : null;
+      // Its filled entries, for the round report's chop drag only (a phase kept before they were recorded: its capture's,
+      // when kept; else unknown).
+      const er = one.entryRows !== undefined ? one.entryRows : one.capture ? entryRowsOf(one.capture) : null;
+      out.entryRows = out.entryRows && er ? [...out.entryRows, ...er] : null;
       Object.assign(out.dayR, one.dayR);
       out.blows += one.blows;
       out.first.push(...(one.first || []));
@@ -450,7 +469,7 @@ async function probeRound(ctx, { n, champion, api }) {
     // The learning curve's champion: its finished units only (the screens' guard, one side), never a window it left early.
     const fin = TSC.finishedOf(trendConfirm.side);
     // blows and controls (the control windows' false starts, curriculum.js): the round report's mastery read.
-    report.trend.champion = { ride: TSC.rideOfSide(trendConfirm.side, trendConfirm.rides), selection: reactions ? SEL.selectionOf(reactions, trendConfirm.entries, { stepped: trendConfirm.stepped }) : null, firstTry: FT.summarize(fin.first), legs: fin.legs.length, caught: fin.legs.filter(l => l.captured).length, netR: fin.netR, sessions: fin.units.length, windows: trendConfirm.windows, blows: trendConfirm.blows, controls: trendConfirm.falseStarts, trades: trendConfirm.trades };
+    report.trend.champion = { ride: TSC.rideOfSide(trendConfirm.side, trendConfirm.rides), selection: reactions ? SEL.selectionOf(reactions, trendConfirm.entries, { stepped: trendConfirm.stepped }) : null, firstTry: FT.summarize(fin.first), legs: fin.legs.length, caught: fin.legs.filter(l => l.captured).length, netR: fin.netR, sessions: fin.units.length, windows: trendConfirm.windows, blows: trendConfirm.blows, controls: trendConfirm.falseStarts, trades: trendConfirm.trades, exits: trendConfirm.exits, entryRows: trendConfirm.entryRows };
   }
   const exists = s => fs.existsSync(path.join(champion.dir, 'skills', s, 'SKILL.md'));
   // The read findings an edit could be judged on: those with at least minPairs of the champion's probe-half decisions in
@@ -582,7 +601,7 @@ async function probeRound(ctx, { n, champion, api }) {
     const verdict = harms.length ? 'hurt' : cancelled.length ? 'no effect' : 'helped';
     const targets = [...s.targets, ...trendParts.map(p => ({ id: p.id, target: tm ? tm.capture : { pairs: 0, b: 0, c: 0 } }))];
     const selection = ts && reactions ? SEL.selectionOf(reactions, ts.entries, { stepped: ts.stepped }) : null;
-    return { verdict, pass: verdict === 'helped', harms, cancelled, targets, ride: ts ? TSC.rideOfSide(ts.side, ts.rides) : null, measures: { ...compact(cm), ...(tm ? { trend: { ...tm, selection, controls: ts.falseStarts } } : {}) }, cycles: side.cycles + (ts ? ts.cycles : 0) + (rs ? rs.cycles : 0), ...(ts ? { skipped: TW.skippedShare([...ts.sessions, ...(rs ? rs.sessions : [])]) } : {}), trades: ts ? ts.trades : null };
+    return { verdict, pass: verdict === 'helped', harms, cancelled, targets, ride: ts ? TSC.rideOfSide(ts.side, ts.rides) : null, measures: { ...compact(cm), ...(tm ? { trend: { ...tm, selection, controls: ts.falseStarts } } : {}) }, cycles: side.cycles + (ts ? ts.cycles : 0) + (rs ? rs.cycles : 0), ...(ts ? { skipped: TW.skippedShare([...ts.sessions, ...(rs ? rs.sessions : [])]) } : {}), trades: ts ? ts.trades : null, exits: ts ? ts.exits : null, entryRows: ts ? ts.entryRows : null };
   });
   report.cycles.composed = composed.cycles === undefined ? null : composed.cycles;
   if (report.skipped && composed.skipped) report.skipped.composed = composed.skipped;
@@ -593,7 +612,7 @@ async function probeRound(ctx, { n, champion, api }) {
       measures: composed.measures, verdict: composed.verdict, n: Math.min(...composed.targets.map(t => t.target.pairs)), ...(draw ? { trendBatch: { index: n - 1, set: trend.set.fingerprint, probe: split.probe.legs.length, confirm: split.confirm.legs.length } } : {}),
     });
   }
-  report.composed = { id: cid, verdict: composed.verdict, harms: composed.harms, cancelled: composed.cancelled, measures: composed.measures, parts: composition.parts.map(p => p.id), ...(composed.measures && composed.measures.trend ? { trend: { capture: composed.measures.trend.capture, netR: composed.measures.trend.netR, firstTry: composed.measures.trend.firstTry, sides: composed.measures.trend.sides, selection: composed.measures.trend.selection || null, ride: composed.ride || null, blows: composed.measures.trend.blows, controls: composed.measures.trend.controls === undefined ? null : composed.measures.trend.controls, trades: composed.trades === undefined ? null : composed.trades } } : {}) };
+  report.composed = { id: cid, verdict: composed.verdict, harms: composed.harms, cancelled: composed.cancelled, measures: composed.measures, parts: composition.parts.map(p => p.id), ...(composed.measures && composed.measures.trend ? { trend: { capture: composed.measures.trend.capture, netR: composed.measures.trend.netR, firstTry: composed.measures.trend.firstTry, sides: composed.measures.trend.sides, selection: composed.measures.trend.selection || null, ride: composed.ride || null, blows: composed.measures.trend.blows, controls: composed.measures.trend.controls === undefined ? null : composed.measures.trend.controls, trades: composed.trades === undefined ? null : composed.trades, exits: composed.exits === undefined ? null : composed.exits, entryRows: composed.entryRows === undefined ? null : composed.entryRows } } : {}) };
   writeReport();
   ctx.log(`iteration ${n}: combined change ${cid} of ${composition.parts.length} edit(s): ${composed.verdict}${composed.pass ? ': to the keep rule' : ''}`);
   if (!composed.pass) return { proposals: [], report };

@@ -26,7 +26,10 @@
  *                                     the owner's bar on them is text (docs/TRAINING.md), never judged here; and
  *                                     each side's risk and return diagnostics (risk-stats.js: per trade, on the trend
  *                                     confirm half's trades and, when the keep rule judged the combined change, on its
- *                                     runs; report only)
+ *                                     runs; report only), and each side's loss diagnostics on the trend confirm half
+ *                                     (loss-diagnostics.js: losers past -1R, the win rate against break-even, chop drag by
+ *                                     the entry's reaction and level kind, the exits that cut a trend or gave one back;
+ *                                     the probe half's exit totals beside them; report only)
  *   build's keepRuleRuns               { champion, byId: { proposalId: decisions } }: the keep rule's scored decisions
  *                                     (loop.js writeIterationReport), or null
  */
@@ -35,6 +38,7 @@ const TC = require('./trend-curve');
 const TR = require('../replay/trend-ride');
 const CU = require('./curriculum');
 const RS = require('./risk-stats');
+const LD = require('./loss-diagnostics');
 
 const net = t => (t && Number.isInteger(t.pairs) ? { fixed: t.b, broken: t.c, pairs: t.pairs } : null);
 const targetLabel = tag => (tag ? (tag.agent ? `agent ${tag.agent}` : tag.skill || '?') : '?');
@@ -90,8 +94,23 @@ function masteryOf(r, kept, keepRuleRuns) {
     champion: c ? CU.mastery({ ride: c.ride, floorBreaches: c.blows, controls: c.controls }) : null,
     // The combined change's keep-rule blows: its archive entry's (the keep rule's verdict, rule (a)), when it was judged.
     composed: t ? { id: r.composed.id, kept: Boolean(kept && kept.verdict === 'kept'), ...CU.mastery({ ride: t.ride, floorBreaches: t.blows, keepRuleBlows: judged ? CU.keepRuleBlows(kept) : null, keepRulePass: judged ? CU.keepRulePass(kept) : null, controls: t.controls }) } : null,
-    // Diagnostics only (risk-stats.js): nothing decides on them; the pass rate with 0 blows still does.
-    risk: riskOf(r, judged, keepRuleRuns),
+    // Diagnostics only (risk-stats.js, loss-diagnostics.js): nothing decides on them; the pass rate with 0 blows still does.
+    ...(() => { const risk = riskOf(r, judged, keepRuleRuns); return { risk, loss: lossOf(r, risk) }; })(),
+  };
+}
+
+/**
+ * The round's loss diagnostics (loss-diagnostics.js), report only: each side's trend confirm half (its scored exits, its
+ * filled entries, its risk stats), and the probe half's exit totals (the round's exit tally, the champion's).
+ */
+function lossOf(r, risk) {
+  const c = r.trend.champion;
+  const t = r.composed && r.composed.trend ? r.composed.trend : null;
+  const side = (x, rs) => LD.diagnostics({ exits: x.exits === undefined ? null : x.exits, entries: x.entryRows === undefined ? null : x.entryRows, risk: rs });
+  return {
+    champion: c ? side(c, risk.champion && risk.champion.trend) : null,
+    composed: t ? { id: r.composed.id, ...side(t, risk.composed && risk.composed.trend) } : null,
+    probeExits: LD.exitTotals(r.trend.exits),
   };
 }
 
@@ -187,6 +206,19 @@ function masteryLines(x) {
     ...(m.champion ? [`    champion: ${CU.masteryText(m.champion)}`] : []),
     ...(m.composed ? [`    combined ${m.composed.id}${m.composed.kept ? ' (kept)' : ''}: ${CU.masteryText(m.composed)}`] : []),
     ...riskLines(m.risk),
+    ...lossDiagLines(m.loss),
+  ];
+}
+
+/** The loss diagnostics' lines (none in a record from before them): per side, then the probe half's exit totals. */
+function lossDiagLines(loss) {
+  if (!loss || (!loss.champion && !loss.composed)) return [];
+  const p = loss.probeExits;
+  return [
+    '  Losses, break-even and chop (trend confirm half, per trade; diagnostics only: pass rate with 0 blows decides):',
+    ...LD.lossLines(loss.champion, 'champion'),
+    ...(loss.composed ? LD.lossLines(loss.composed, `combined ${loss.composed.id}`) : []),
+    ...(p ? [`    champion, probe half exits: cut a trend ${p.cut} of ${p.n} (${p.leftR}R left), late ${p.late} (${p.givebackR}R given back past the lock)`] : []),
   ];
 }
 

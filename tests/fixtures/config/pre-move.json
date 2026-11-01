@@ -431,6 +431,14 @@
    "value": 0.5,
    "from": "new in feat/ppc-trend-curriculum (owner-approved trend curriculum; the owner's false-start definition, P1 criteria 2026-10-27: a loser never above +0.5R): the round report's control-window false start, report only"
   },
+  "trendReport.loserToleranceR": {
+   "value": 0.05,
+   "from": "new in feat/ppc-loss-diagnostics (the owner: keep losers at -1R): the round report's losers past -1R count a loser past -1R by more than this when its tick is unknown (else one tick in R), e.g. 0.05R, report only"
+  },
+  "trendReport.smallN": {
+   "value": 30,
+   "from": "new in feat/ppc-loss-diagnostics (the owner: n < 30 is small n, no conclusion): the round report's chop drag marks a bucket under this many entries, report only"
+  },
   "goalRegression": {
    "value": {
     "seed": 1,
