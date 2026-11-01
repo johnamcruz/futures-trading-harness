@@ -762,7 +762,7 @@ test('entry workflow, Claude Code, deskOnManagedCycles on: a cycle that started 
   assert.deepStrictEqual(D.placedAtBroker(v).filter(c => c.args.contractId !== 'fake:MES:Z26'), [], 'nothing reached the broker');
 });
 
-test('entry workflow, Claude Code, deskOnManagedCycles on: the next managed cycle with the desk all served from the report cache: the managed text, no roster, an entry refused [managed-cycle], an exit still goes', async () => {
+test('entry workflow, Claude Code, deskOnManagedCycles on: the next managed cycle with the analysts served from the report cache and phase 1 run again: the managed text, no roster, an entry refused [managed-cycle], an exit still goes', async () => {
   const { MANAGED_DESK_TEXT } = require('../../scripts/lib/autotrader');
   const w = managedOptIn(D.world({ harness: 'claude' }));
   exchange.handle(w.state, 'place_order', { accountId: 7, contractId: MNQ_ID, side: 'buy', type: 'market', size: 1, stopLossBracket: { ticks: 40 } }, {});
@@ -776,7 +776,8 @@ test('entry workflow, Claude Code, deskOnManagedCycles on: the next managed cycl
     { executor: [{ broker: 'close_position', args: { accountId: 7, contractId: MNQ_ID } }] },
     { result: 'CYCLE RESULT: managed - closed the long' },
   ], { runRole: R.runRole });
-  assert.deepStrictEqual(R.runs, [], 'the report cache served the whole desk');
+  // The report cache served every analyst; phase 1 (live data, never cached) ran again.
+  assert.deepStrictEqual(R.runs.map(x => x.role), ['risk-manager'], 'the report cache served the analysts');
   const { prompt } = r.ran[0];
   assert.ok(prompt.includes(MANAGED_DESK_TEXT), prompt);
   assert.doesNotMatch(prompt, /as parallel subagents|then risk-manager phase 2 on your plan/, 'no roster');

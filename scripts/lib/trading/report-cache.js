@@ -11,12 +11,13 @@
  *   - An analyst on its own timeframe (lanes.js analystFrames; `frames`: role -> minutes), in a one-symbol cycle,
  *     holds while its timeframe's briefing (trading/briefing.js buildFrameBriefing: its `bar` part) and the runner's
  *     parts it shares are the ones it names, until its own next bar close (a 15m analyst's at most 15 min, a 1h one's
- *     an hour), never past it: an expired one is never served. An analyst without one keeps the rule above.
- *   - risk-manager phase 1 (the account's state, limits, budget) holds while the account is unchanged (balance,
- *     positions, working orders, prop attempts) on the same trading day, for at most PHASE1_MAX_AGE_MS; never from
- *     a cycle that launched a trade-executor, nor on an account that wasn't read whole, nor a report that doesn't
- *     confirm each active attempt on its Attempt line or says none is running (a wrong report would be served
- *     every cycle the account stays unchanged).
+ *     an hour), never past it: judged by bar times alone (its frame bar is the one holding at the cycle's bar's close),
+ *     never the clock, so no clock skew stretches or cuts it. An analyst without one keeps the rule above.
+ *   - Every analyst's entry is keyed by its instructions (`bodyKeys`: role -> a hash of its agent file and its skills'
+ *     files, roleKey) and the cache by its root (`scope`): an edited body or skill, or a home another root or checkout
+ *     wrote, serves nothing (the role runs again).
+ *   - risk-manager phase 1 (the account's state, limits, budget, streak, cooldown) is live data: never cached; it runs
+ *     every cycle it is needed.
  *   - risk-manager phase 2 reviews this bar's plan: never cached.
  *
  * The runner records the reports from each cycle's transcript (the roles can't write the harness home), serves
@@ -24,69 +25,26 @@
  * roles-ran check counts them as returned.
  *
  *   reportVersions(text, current, parts)        { m15, h1, day } (or `parts`: [[key, version prefix]]) from a report's Data line, or null
- *   frameVersions(first, frame, minutes, now)   an own-timeframe analyst's current versions { bar, ...shared } and until, or null
- *   accountKey(account)                         the account facts phase 1 rests on, as text
- *   serveReports({ cache, briefings, symbols, account, day, now, frames, frameBriefings, bodyKey })  { roles, reports: [{ role, text, at, until, tf? }] }
- *   deniesActiveAttempt(text, account)          a report claims no attempt runs, but one is active
- *   phase1Holds(text, account)                  phase 1 confirms every active attempt and denies none
- *   recordReports({ prev, output, served, fresh, runs, briefings, symbols, account, day, now, frames, frameBriefings, lookups, bodyKey })  the new cache
- *                                               bodyKey: a hash of the phase-1 role's body; a report written under another is not served
- *                                               (`runs`: the runner's role record of the cycle, runner-roles.js readRoleRuns:
- *                                               a trade-executor the runner ran ends phase 1's cache as a launch does)
+ *   frameVersions(first, frame, minutes, { closeAt })   an own-timeframe analyst's current versions { bar, ...shared } and until, or null
+ *   roleKey(root, role)                         a hash of the role's agent file and its role-skills' and role-index's SKILL.md files, or null
+ *   scopeOf(root)                               the cache's scope: a hash of the harness root's real path
+ *   serveReports({ cache, briefings, symbols, frames, frameBriefings, bodyKeys, scope, closeAt })  { roles, reports: [{ role, text, at, until, tf? }] }
+ *   recordReports({ prev, output, served, fresh, runs, briefings, symbols, now, frames, frameBriefings, lookups, bodyKeys, scope, closeAt })  the new cache
+ *                                               (phase 1 never in it; `runs`: the runner's role record of the cycle,
+ *                                               runner-roles.js readRoleRuns, its desk's reports among the calls)
  *   cacheFile(home), readCache(home), writeCache(home, cache)
  */
 
 const fs = require('fs');
 const path = require('path');
-const { ANALYSTS, roleCalls, verdictOf, withRunnerRuns } = require('./roles-ran');
+const { ANALYSTS, roleCalls, withRunnerRuns } = require('./roles-ran');
 const { sharedParts, frameHolds } = require('./briefing');
 
 const PHASE1 = 'risk-manager';
-const CACHED_ROLES = [...ANALYSTS, PHASE1];
+// Phase 1 is live data (the account, its limits, streak and cooldown): never cached, so only the analysts are.
+const CACHED_ROLES = [...ANALYSTS];
 const PARTS = ['m15', 'h1', 'day'];
 const MAX_TEXT = require('../tunables').runner().prompt.reportMaxText; // a longer report isn't cached (never served cut): the role runs again
-// Phase 1 is read again at least this often, even on an unchanged account: a cached report is a claim, not a fact.
-const PHASE1_MAX_AGE_MS = require('../tunables').runner().prompt.phase1MaxAgeMs; // config/runner.json
-
-// Denials of a running attempt: "no attempt is running", "no prop attempt running", "Attempt: none", "the attempt
-// hasn't started", "wait for a prop attempt to be started". "no attempt restrictions", "no attempt block" and the like
-// (the word right after "attempt" says what is absent) are not denials.
-const NOT_DENIAL = '(?![-\\s]*(?:restrict|limit|lesson|block|level|rule|breach|blown|was\\s+blown|floor|stop|entry|dll))';
-const NO_ATTEMPT = new RegExp([
-  `\\bno\\s+(?:prop\\s+|active\\s+|combine\\s+|running\\s+)*attempts?\\b${NOT_DENIAL}`,
-  '\\battempts?\\s*:\\s*(?:none|not\\s+started|inactive)',
-  '\\battempts?\\s+(?:is|are|has|have)\\s*(?:not|n\'t)\\s+(?:currently\\s+|yet\\s+|been\\s+)*(?:running|started|active)',
-  '\\battempts?\\s+(?:isn\'t|hasn\'t|aren\'t|haven\'t)\\s+(?:currently\\s+|yet\\s+|been\\s+)*(?:running|started|active)',
-  '\\battempts?\\s+not\\s+(?:currently\\s+|yet\\s+)*(?:running|started|active)',
-  '\\bwait\\s+for\\s+an?\\s+(?:prop\\s+)?attempt\\s+to\\s+(?:be\\s+)?start',
-  `\\bthere\\s+(?:is\\s+not|isn't|is\\s+no|'s\\s+no)\\s+(?:an?\\s+)?(?:active\\s+|running\\s+|prop\\s+|combine\\s+)*attempts?\\b${NOT_DENIAL}`,
-].join('|'), 'i');
-
-// A report's Attempt line: "Attempt: ...", "**Attempts:** ...", "Prop attempt: ...", "| Attempt | ... |".
-const ATTEMPT_LINE = /^[\s*_>|-]*(?:prop\s+|combine\s+)?attempts?\b/i;
-// "none" denies only as the line's status ("Attempt: none") or "none running", not "entry block: none".
-const LINE_DENIAL = /\b(?:not|n't|never)\s+(?:currently\s+|yet\s+|been\s+)*(?:running|started|active)\b|^[\s*_>|-]*(?:prop\s+|combine\s+)?attempts?\b[\s*_:|]*none\b|\bnone\s+(?:currently\s+|yet\s+|been\s+)*(?:running|started|active)\b|\binactive\b|\bwas\s+active\b/i;
-const activeAttempts = account => (account && Array.isArray(account.attempts) ? account.attempts.filter(x => x && x.status === 'active') : []);
-const escapeRe = t => String(t).replace(/[.*+?^${}()|[\]\\]/g, '\\$&');
-
-/** A report that says no attempt is running while the account's attempts list an active one. */
-function deniesActiveAttempt(text, account) {
-  return activeAttempts(account).length > 0 && NO_ATTEMPT.test(String(text || ''));
-}
-
-/**
- * Phase 1 may be cached and served only if it states every active attempt as combine_status lists it (its
- * "Attempt: <account> active" line, risk-manager's output) and denies none: phrasing can't be enumerated, so a
- * report that doesn't confirm the attempt is simply read again (fails closed; the cost is a phase-1 run).
- */
-function phase1Holds(text, account) {
-  const t = String(text || '');
-  // The account's Attempt line, its status right after the name ("Attempt: topstep_100k active, cushion ..."), and
-  // nothing on that line saying it isn't running ("... active but not running", "none").
-  const lines = t.split('\n').filter(l => ATTEMPT_LINE.test(l));
-  const confirmed = activeAttempts(account).every(x => lines.some(l => new RegExp(`(?<![\\w-])${escapeRe(x.account)}(?![\\w-])[\\s\`*_:()|]*active\\b`, 'i').test(l) && !LINE_DENIAL.test(l)));
-  return confirmed && !deniesActiveAttempt(t, account);
-}
 
 /**
  * The briefing versions a report names in its Data line (`Data: bar_briefing m3@..., m15@..., h1@..., day@...`). A
@@ -113,28 +71,35 @@ const frameParts = minutes => [['bar', `bar${minutes}m`], ...sharedParts(minutes
 /**
  * An analyst on `minutes`-minute bars: the versions its report must name (its briefing's `bar` part and the runner's
  * parts it shares) and until when they hold (the earliest of their ends), or null when there is no current one: its
- * briefing missing, of another symbol or contract, or not the bar holding at `now` (no clock: none).
+ * briefing missing, of another symbol or contract, or not the bar holding at the cycle's latest bar close (the runner's
+ * briefing's, or `closeAt`, a later lane bar's that closed this cycle): bar times only, the clock is never read.
  */
-function frameVersions(first, frame, minutes, now) {
-  if (!now || !first || !first.sections || !frame || frame.minutes !== minutes || frame.symbol !== first.symbol) return null;
-  if ((frame.contractId || null) !== (first.contractId || null) || !frameHolds(frame, now)) return null;
+function frameVersions(first, frame, minutes, opts = null) {
+  // Only `closeAt`, a bar time, is read: a clock (a Date) or nothing given is no bar time.
+  const closeAt = opts && typeof opts === 'object' && !(opts instanceof Date) ? opts.closeAt : null;
+  if (!first || !first.sections || !frame || frame.minutes !== minutes || frame.symbol !== first.symbol) return null;
+  // The bar time it is judged at: the cycle's latest bar close (the runner's briefing's bar's, or a later lane bar's that
+  // closed this cycle: `closeAt`), never the clock.
+  const lane = Date.parse(closeAt);
+  const at = Math.max(Date.parse(first.closedAt), Number.isFinite(lane) ? lane : -Infinity);
+  if (!Number.isFinite(at) || (frame.contractId || null) !== (first.contractId || null) || !frameHolds(frame, new Date(at))) return null;
   const parts = frameParts(minutes);
   const secs = parts.map(([p]) => (p === 'bar' ? frame.sections.bar : first.sections[p]));
   if (secs.some(x => !x || !x.version || !Number.isFinite(Date.parse(x.validUntil)))) return null;
   const until = Math.min(...secs.map(x => Date.parse(x.validUntil)));
-  if (until <= now.getTime()) return null;
+  if (until <= at) return null;
   return { versions: Object.fromEntries(parts.map(([p], i) => [p, secs[i].version])), until: new Date(until).toISOString() };
 }
 
 const sameVersions = (a, b) => Boolean(a && b) && Object.keys(a).length === Object.keys(b).length && Object.keys(b).every(k => a[k] === b[k]);
 
 /** An own-timeframe analyst's current versions in a one-symbol cycle on this bar's runner briefing, or null. */
-function frameNow({ briefings, frameBriefings, symbols, minutes, now }) {
+function frameNow({ briefings, frameBriefings, symbols, minutes, closeAt = null }) {
   if (symbols.length !== 1) return null;
   const s = symbols[0];
   const b = briefings[s.symbol];
   if (!b || !b.sections || b.asOf !== s.bar) return null;
-  return frameVersions(b, ((frameBriefings || {})[s.symbol] || {})[minutes] || null, minutes, now);
+  return frameVersions(b, ((frameBriefings || {})[s.symbol] || {})[minutes] || null, minutes, { closeAt });
 }
 
 /** The current m15, h1 and day versions, the same for every symbol (else null: nothing is reusable across them). */
@@ -159,20 +124,32 @@ function untilOf(briefings, symbols) {
   return ok.length ? new Date(Math.min(...ok)).toISOString() : null;
 }
 
-/** The account facts phase 1 rests on: any change (a fill, an order, a balance, an attempt) makes it stale. */
-function accountKey(a) {
-  if (!a || a.error || !Number.isFinite(a.balance) || !Array.isArray(a.positions) || !Array.isArray(a.orders)) return null;
-  return JSON.stringify({
-    id: a.id ?? null,
-    balance: a.balance ?? null,
-    positions: (a.positions || []).map(p => [p.contractId, p.type, p.size, p.averagePrice]),
-    workingOrders: a.workingOrders ?? null,
-    orders: (a.orders || []).map(o => [o.id, o.contractId, o.type, o.side, o.size, o.limitPrice ?? null, o.stopPrice ?? null]),
-    attempts: (a.attempts || []).map(x => [x.account, x.status, x.balance, x.floor, x.profit, x.dayPnl, x.entryBlock || null]),
-  });
+const sameSymbols = (cache, symbols) => JSON.stringify(cache.symbols || []) === JSON.stringify(symbols.map(s => [s.symbol, s.contractId || null]));
+
+const keyOf = (keys, role) => (keys && typeof keys[role] === 'string' && keys[role] ? keys[role] : null);
+const sha = text => require('crypto').createHash('sha256').update(text).digest('hex');
+
+/**
+ * A role's instructions as one hash: its agent file and the SKILL.md of every skill its role-skills and role-index
+ * name, in order. Any edit of them is another key (its cached report is not served). Unreadable: null.
+ */
+function roleKey(root, role) {
+  try {
+    const { parseFrontmatter } = require('../frontmatter');
+    const agent = fs.readFileSync(path.join(root, 'agents', `${role}.md`), 'utf8');
+    const { data } = parseFrontmatter(agent);
+    const list = v => (Array.isArray(v) ? v : String(v || '').split(',')).map(x => String(x).trim()).filter(Boolean);
+    const skills = [...list(data['role-skills']), ...list(data['role-index'])];
+    return sha(JSON.stringify([agent, ...skills.map(n => [n, fs.readFileSync(path.join(root, 'skills', n, 'SKILL.md'), 'utf8')])]));
+  } catch (_err) {
+    return null;
+  }
 }
 
-const sameSymbols = (cache, symbols) => JSON.stringify(cache.symbols || []) === JSON.stringify(symbols.map(s => [s.symbol, s.contractId || null]));
+/** The cache's scope: the harness root it was written under (its real path), so another root's or checkout's never serves. */
+function scopeOf(root) {
+  try { return sha(fs.realpathSync(root)); } catch (_err) { return null; }
+}
 
 // The skills a cached report's own call looked up (an entry recorded before they were kept: none).
 const lookupsOf = r => (Array.isArray(r.lookups) ? r.lookups.filter(s => typeof s === 'string') : []);
@@ -181,9 +158,13 @@ const lookupsOf = r => (Array.isArray(r.lookups) ? r.lookups.filter(s => typeof 
  * The cached reports still valid for this cycle, and the roles they stand for; each analyst's with the skills its
  * own call looked up (`lookups`: index mode serves it only when they cover what this bar requires, runner-wiring.js).
  */
-function serveReports({ cache, briefings, symbols, account, day, now = null, frames = {}, frameBriefings = {}, bodyKey = null }) {
+function serveReports({ cache, briefings, symbols, account: _account = null, day: _day = null, now: _now = null, frames = {}, frameBriefings = {}, bodyKeys = {}, scope = null, closeAt = null }) {
   const none = { roles: [], reports: [] };
   if (!cache || !Array.isArray(symbols) || !symbols.length || !sameSymbols(cache, symbols)) return none;
+  // Another root's or checkout's cache (a home it wrote): nothing of it.
+  if ((cache.scope ?? null) !== (scope ?? null)) return none;
+  // Written under this role's instructions (its agent file and skills as they are now), else it runs again.
+  const sameBody = (role, r) => (r.body ?? null) === (keyOf(bodyKeys, role));
   const reports = [];
   const v = symbols.length === 1 ? briefingVersions(briefings, symbols) : null;
   const until = untilOf(briefings, symbols);
@@ -192,19 +173,13 @@ function serveReports({ cache, briefings, symbols, account, day, now = null, fra
     const m = (frames || {})[role];
     if (m) {
       // On its own timeframe: its versions now, and never past their time.
-      const f = r && r.tf === m ? frameNow({ briefings, frameBriefings, symbols, minutes: m, now }) : null;
-      if (f && sameVersions(r.versions, f.versions)) reports.push({ role, text: r.text, at: r.at, until: f.until, tf: m % 60 === 0 ? `${m / 60}h` : `${m}m`, lookups: lookupsOf(r), lookupsKey: typeof r.lookupsKey === 'string' ? r.lookupsKey : null });
+      const f = r && r.tf === m ? frameNow({ briefings, frameBriefings, symbols, minutes: m, closeAt }) : null;
+      if (f && sameBody(role, r) && sameVersions(r.versions, f.versions)) reports.push({ role, text: r.text, at: r.at, until: f.until, tf: m % 60 === 0 ? `${m / 60}h` : `${m}m`, lookups: lookupsOf(r), lookupsKey: typeof r.lookupsKey === 'string' ? r.lookupsKey : null });
       continue;
     }
-    if (v && r && !r.tf && r.versions && PARTS.every(p => r.versions[p] === v[p])) reports.push({ role, text: r.text, at: r.at, until, lookups: lookupsOf(r), lookupsKey: typeof r.lookupsKey === 'string' ? r.lookupsKey : null });
+    if (v && r && !r.tf && sameBody(role, r) && r.versions && PARTS.every(p => r.versions[p] === v[p])) reports.push({ role, text: r.text, at: r.at, until, lookups: lookupsOf(r), lookupsKey: typeof r.lookupsKey === 'string' ? r.lookupsKey : null });
   }
-  const p1 = cache.phase1;
-  const key = accountKey(account);
-  // Without the clock its age can't be known: not served (fails closed, the role runs).
-  const age = now ? now.getTime() - Date.parse(p1 && p1.at) : NaN;
-  if (p1 && key && p1.account === key && p1.day === day && (p1.body ?? null) === bodyKey && age >= 0 && age < PHASE1_MAX_AGE_MS && phase1Holds(p1.text, account)) {
-    reports.push({ role: PHASE1, text: p1.text, at: p1.at, until: null });
-  }
+  // Phase 1 is never served: its facts are the account's now.
   return { roles: reports.map(r => r.role), reports };
 }
 
@@ -216,13 +191,16 @@ function serveReports({ cache, briefings, symbols, account, day, now = null, fra
  * skill-lookups.js; a call without times shows none), and `lookupsKey`, the facts key of the cycle that made them
  * (skill-lookups.js factsKey): they count again only under that key.
  */
-function recordReports({ prev, output, served = [], fresh = [], runs = [], briefings, symbols, account, day, now, frames = {}, frameBriefings = {}, lookups = [], lookupsKey = null, bodyKey = null }) {
+function recordReports({ prev, output, served = [], fresh = [], runs = [], briefings, symbols, account: _account = null, day: _day = null, now, frames = {}, frameBriefings = {}, lookups = [], lookupsKey = null, bodyKeys = {}, scope = null, closeAt = null }) {
   const { lookupsInCall } = require('./skill-lookups');
-  const keep = prev && sameSymbols(prev, symbols) ? prev : null;
-  const cache = { symbols: symbols.map(s => [s.symbol, s.contractId || null]), analysts: {}, phase1: null, at: now.toISOString() };
+  const keep = prev && sameSymbols(prev, symbols) && (prev.scope ?? null) === (scope ?? null) ? prev : null;
+  const cache = { symbols: symbols.map(s => [s.symbol, s.contractId || null]), ...(scope ? { scope } : {}), analysts: {}, at: now.toISOString() };
+  const body = role => { const k = keyOf(bodyKeys, role); return k ? { body: k } : {}; };
+  // A served entry is kept only while it is still this role's (its body unchanged).
+  const kept = role => (keep && keep.analysts && keep.analysts[role] && (keep.analysts[role].body ?? null) === keyOf(bodyKeys, role) ? keep.analysts[role] : null);
   const v = symbols.length === 1 ? briefingVersions(briefings, symbols) : null;
   // With the runner's own runs (its role record): the entry workflow's trade-executor is a launch (the account changed).
-  const { calls, launches } = withRunnerRuns(roleCalls(output), Array.isArray(runs) ? runs : []);
+  const { calls } = withRunnerRuns(roleCalls(output), Array.isArray(runs) ? runs : []);
   const fits = t => typeof t === 'string' && t.length <= MAX_TEXT;
   // The desk's reports this cycle (the runner ran those roles): each is that role's report, with its own run's lookups.
   const ran = role => (Array.isArray(fresh) ? fresh : []).find(f => f && f.role === role && typeof f.text === 'string') || null;
@@ -233,27 +211,18 @@ function recordReports({ prev, output, served = [], fresh = [], runs = [], brief
     const m = (frames || {})[role];
     if (m) {
       // On its own timeframe: built on its briefing's bar and the shared parts current now, reusable while they hold.
-      const f = frameNow({ briefings, frameBriefings, symbols, minutes: m, now });
+      const f = frameNow({ briefings, frameBriefings, symbols, minutes: m, closeAt });
       const named = f && last ? reportVersions(last.text, f.versions, frameParts(m)) : null;
-      if (named && fits(last.text) && sameVersions(named, f.versions)) cache.analysts[role] = { text: last.text, versions: named, tf: m, at: now.toISOString(), lookups: ownLookups(role, last), lookupsKey };
-      else if (served.includes(role) && keep && keep.analysts && keep.analysts[role] && keep.analysts[role].tf === m) cache.analysts[role] = keep.analysts[role];
+      if (named && fits(last.text) && sameVersions(named, f.versions)) cache.analysts[role] = { text: last.text, versions: named, tf: m, ...body(role), at: now.toISOString(), lookups: ownLookups(role, last), lookupsKey };
+      else if (served.includes(role) && kept(role) && kept(role).tf === m) cache.analysts[role] = kept(role);
       continue;
     }
     const versions = last ? reportVersions(last.text, v) : null;
     // Built on this bar's briefing (its Data line names the current versions): reusable while they hold.
-    if (v && versions && fits(last.text) && PARTS.every(p => versions[p] === v[p])) cache.analysts[role] = { text: last.text, versions, at: now.toISOString(), lookups: ownLookups(role, last), lookupsKey };
-    else if (served.includes(role) && keep && keep.analysts && keep.analysts[role] && !keep.analysts[role].tf) cache.analysts[role] = keep.analysts[role];
+    if (v && versions && fits(last.text) && PARTS.every(p => versions[p] === v[p])) cache.analysts[role] = { text: last.text, versions, ...body(role), at: now.toISOString(), lookups: ownLookups(role, last), lookupsKey };
+    else if (served.includes(role) && kept(role) && !kept(role).tf) cache.analysts[role] = kept(role);
   }
-  const key = accountKey(account);
-  // A cycle that launched a trade-executor changed (or may have changed) the account: no phase 1 from it.
-  if (launches.length) cache.phase1 = null;
-  else if (served.includes(PHASE1)) cache.phase1 = keep ? keep.phase1 : null;
-  else {
-    const rm = ran(PHASE1) ? { text: ran(PHASE1).text } : calls.filter(c => c.role === PHASE1).sort((a, b) => a.start - b.start)[0];
-    // A report with a verdict is a plan's review (phase 2), never the account's state: not cached as phase 1.
-    // Nor one that doesn't confirm an active attempt (or denies it): served on every unchanged bar, it would block the day.
-    if (rm && key && fits(rm.text) && verdictOf(rm.text) === null && phase1Holds(rm.text, account)) cache.phase1 = { text: rm.text, account: key, day, body: bodyKey, at: now.toISOString() };
-  }
+  // Phase 1 is never recorded: its facts are live (the account, its limits, streak and cooldown), read every cycle.
   return cache;
 }
 
@@ -280,4 +249,4 @@ function removeCache(home) {
   try { fs.unlinkSync(cacheFile(home)); } catch (_err) { /* none */ }
 }
 
-module.exports = { CACHED_ROLES, PHASE1, PHASE1_MAX_AGE_MS, deniesActiveAttempt, phase1Holds, reportVersions, frameVersions, accountKey, serveReports, recordReports, cacheFile, readCache, writeCache, removeCache };
+module.exports = { CACHED_ROLES, PHASE1, roleKey, scopeOf, reportVersions, frameVersions, serveReports, recordReports, cacheFile, readCache, writeCache, removeCache };

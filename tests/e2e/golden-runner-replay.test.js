@@ -156,13 +156,13 @@ test('the runner\'s scripted replay: the report cache\'s hits, misses and keys p
   const plain = await replay(MNQ);
   const ext = await replay(G.withExt(MNQ));
   assert.ok(plain.cycles.length >= 10, `cycles: ${plain.cycles.length}`);
-  // Hits happen and misses happen: an analyst's report holds within a 15m candle, phase 1 while the account holds.
+  // Hits happen and misses happen: an analyst's report holds within a 15m candle; phase 1 (live data) never.
   const hits = plain.cycles.flatMap(c => c.served);
-  assert.ok(hits.includes(ANALYSTS[0]) && hits.includes('risk-manager'), 'cache hits');
+  assert.ok(hits.includes(ANALYSTS[0]) && !hits.includes('risk-manager'), 'cache hits, never phase 1');
   assert.ok(!hits.includes(ANALYSTS[2]), 'a report not built on the briefing is never served');
   assert.ok(plain.cycles.some((c, k) => k > 0 && !c.served.includes(ANALYSTS[0])), 'a new 15m candle is a miss');
   const drop = plain.cycles.findIndex(c => Date.parse(c.at) >= BALANCE_DROP_AT);
-  assert.ok(drop > 0 && !plain.cycles[drop].served.includes('risk-manager') && plain.cycles[drop - 1].served.includes('risk-manager'), 'the account changed: phase 1 misses');
+  assert.ok(drop > 0 && plain.cycles.every(c => !c.served.includes('risk-manager')), 'phase 1 runs every cycle, the account changed or not');
   // The broker's field: the same sequence, keys and prompts; the bars files keep it, with the same OHLCV.
   assert.strictEqual(sequenceText(ext), sequenceText(plain));
   assert.deepStrictEqual(ext.cycles.map(c => c.prompt), plain.cycles.map(c => c.prompt));
@@ -282,7 +282,7 @@ test('the report cache with a 3m bar lane and a 1m signal lane: the hit/miss seq
   // lane's signal record: no analyst reads 1m) runs every role a lookup is required of, as the gate requires them
   // (skill-lookups.js cycleFacts); one without it (a 3m close) is served from the cache as in full mode.
   const indexed = await replay(MNQ, { lanes: LANES, bars1, extraEnv, history: LANE_HISTORY });
-  // The risk manager carries its situational skills in its core (no lookup required of it): phase 1 is served as in full mode.
+  // The risk manager carries its situational skills in its core (no lookup required of it); phase 1 is never cached.
   const LOOKUP_ROLES = [ANALYSTS[0], ANALYSTS[1]];
   // A role served on such a bar only with a cached report whose own call made the lookups under the same facts key (the
   // same 3m bar and lane bars): each 1m setup is a new lane bar, so the roles its lookups require run every time.
@@ -302,9 +302,8 @@ test('the report cache with a 3m bar lane and a 1m signal lane: the hit/miss seq
   const misses = list => list.reduce((n, c) => n + ANALYSTS.slice(0, 2).filter(r => !c.served.includes(r)).length, 0);
   for (const c of ones) assert.ok(c.served.includes(ANALYSTS[0]) && c.served.includes(ANALYSTS[1]), `${c.at}: ${c.served}`);
   assert.strictEqual(misses(laned.cycles), misses(single.cycles), 'no analyst misses beyond the single lane\'s');
-  // Phase 1 misses only where the account changed (the balance drop), as in the single lane.
-  const phase1Misses = list => list.filter(c => !c.served.includes('risk-manager')).map(c => c.at);
-  assert.ok(phase1Misses(ones).every(at => Date.parse(at) >= BALANCE_DROP_AT && Date.parse(at) < BALANCE_DROP_AT + 4 * 60000), phase1Misses(ones).join(','));
+  // Phase 1 (live data) is never served, on any lane's cycle.
+  assert.ok(laned.cycles.every(c => !c.served.includes('risk-manager')));
   // The slower parts' keys (m15, h1, day) don't move across a 1m-only cycle.
   laned.cycles.forEach((c, k) => {
     if (!isOneMin(c) || k === 0) return;

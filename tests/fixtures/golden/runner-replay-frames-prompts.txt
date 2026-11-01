@@ -1214,8 +1214,8 @@ Autonomous cycle.
   No reviewed trades in the journal yet, so no record of your own results, mistakes, or lessons.
   Your skills trade-session, multi-timeframe-analysis, trade-lifecycle, htf-to-ltf, confluence-counting, setup-judgment, trade-plan, and day-context are in your prompt, already loaded (don't load them again): decide by them, then run the trade-session skill for MNQ on account 7.
   Write the trader-process skill's PLAN (1 HTF to 9 Manage) before the result line.
-  Full cycle: plan from their reports, then risk-manager phase 2 on your plan, if any; the gate refuses an entry until all report and phase 2 approves.
-  Cached reports, still valid this bar (the runner's report cache: an analyst's report built on the bar briefing parts still current, risk-manager phase 1 on this account unchanged): don't launch market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst, risk-manager (phase 1) this cycle; the order gate counts them as returned.
+  Full cycle: risk-manager (phase 1) as parallel subagents, plan from their reports, then risk-manager phase 2 on your plan, if any; the gate refuses an entry until all report and phase 2 approves.
+  Cached reports, still valid this bar (the runner's report cache: an analyst's report built on the bar briefing parts still current): don't launch market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst this cycle; the order gate counts them as returned.
   An analyst's 15m-and-up view holds until 10:45 ET; take this bar's 3m facts (the trigger, the VWAP side, the candidates) from the bar briefing.
   A report on an analyst's own timeframe (trend-momentum-analyst 15m, volume-liquidity-analyst 1h) holds until that timeframe's next bar close, so it may be up to one of its bars old; take this bar's facts (the trigger, the VWAP side, the candidates) from the bar briefing.
   A cached report is that role's report this cycle: never send it back to a role to read, summarize or redo.
@@ -1231,9 +1231,6 @@ Bias: long
 Data: bar_briefing 1h bar60m@2026-04-27T14:00:00.000Z, h1@2026-04-27T14:36:00.000Z, day@2026-04-27T14:36:00.000Z
 Bias: long
 --- end of volume-liquidity-analyst report ---
---- risk-manager phase 1 report (from 10:36 ET) ---
-Phase 1: flat, budget 2 trades
---- end of risk-manager report ---
  This cycle's situation (a compression break on the Setups to check; an FVG retested; a setup listed: its entry read; a setup listed: its stop, target and size; price at a key level; a liquidity sweep; VWAP and value; the Trend declared? line; the trend rule; the day's bias; the last structure break) needs your skills `compression`, `fair-value-gaps`, `candle-reading`, `momentum-and-volume`, `top-down-entry`, `take-profit`, `position-sizing`, `levels-and-reactions`, `breakout-vs-fakeout`, `vwap-volume-profile`, `mtf-bias-filter`, `daily-bias`, and `bos-vs-choch`: they are below, already loaded (don't load them again).
 
 <skill name="compression">

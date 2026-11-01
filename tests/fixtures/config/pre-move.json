@@ -1137,10 +1137,6 @@
    "value": 8000,
    "from": "trading/report-cache.js MAX_TEXT"
   },
-  "prompt.phase1MaxAgeMs": {
-   "value": 1800000,
-   "from": "trading/report-cache.js PHASE1_MAX_AGE_MS"
-  },
   "prompt.trackRecordMinSlice": {
    "value": 10,
    "from": "trading/track-record.js MIN_SLICE"

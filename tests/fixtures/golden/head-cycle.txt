@@ -41,7 +41,7 @@ env:
 the cycle log's argv is the run's: true
 cycle log: promptChars true; context {"action":"trade","symbols":[{"symbol":"MNQ","bar":{"t":"2026-10-07T14:27:00.000Z","contractId":"MNQ","file":"/bars/MNQ-3m.json"}}],"cachedRoles":[]}
 === claude: managed ===
-prompt (sha256 38a2e54f41b30d2e5ef5fde1e0776a6d876a8e7ab6fd256ca87d9482028775be, 3386 chars, of its neutral text):
+prompt (sha256 381d16c036a01078a156c678ff7430995810d8aeba14c6a2c734090d5ea5e201, 3338 chars, of its neutral text):
   Autonomous cycle.
   Follow the autonomous-trading skill.
   No user is present.
@@ -61,7 +61,7 @@ prompt (sha256 38a2e54f41b30d2e5ef5fde1e0776a6d876a8e7ab6fd256ca87d9482028775be,
   Don't launch the analysts or the risk-manager this cycle, and send no new entry, added size or reversal (the order gate refuses an entry this cycle); a new entry waits for a cycle that starts flat.
   Exits, stop moves, closes and cancels go as always, through the trade-executor as the trade-session skill says.
   The desk ran for this bar: the runner ran market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst, risk-manager (phase 1) this cycle and their reports are below, with any the report cache served.
-  Cached reports, still valid this bar (the runner's report cache: an analyst's report built on the bar briefing parts still current, risk-manager phase 1 on this account unchanged): don't launch market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst, risk-manager (phase 1) this cycle; the order gate counts them as returned.
+  Cached reports, still valid this bar (the runner's report cache: an analyst's report built on the bar briefing parts still current): don't launch market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst, risk-manager (phase 1) this cycle; the order gate counts them as returned.
   A cached report is that role's report this cycle: never send it back to a role to read, summarize or redo.
 --- market-structure-analyst report (from 10:30 ET) ---
 Data: bar_briefing m3@x
@@ -104,7 +104,7 @@ env:
 the cycle log's argv is the run's: true
 cycle log: promptChars true; context {"action":"trade","manage":true,"symbols":[{"symbol":"MNQ","bar":{"t":"2026-10-07T14:27:00.000Z","contractId":"MNQ","file":"/bars/MNQ-3m.json"}}],"cachedRoles":[],"runnerRoles":["market-structure-analyst","trend-momentum-analyst","volume-liquidity-analyst","risk-manager"],"rolesFile":"/roles/r.json"}
 === claude: entry ===
-prompt (sha256 e5457c83ed1cc072db7a0c7a6a13eb5e1f58d476f7afae7001c681fa4cfaa1a0, 3429 chars, of its neutral text):
+prompt (sha256 2d505689dbcc59c354c08079f63e90384f4587a2a5263d17e0bd8df3c0cbc5e0, 3381 chars, of its neutral text):
   Autonomous cycle.
   Follow the autonomous-trading skill.
   No user is present.
@@ -124,7 +124,7 @@ prompt (sha256 e5457c83ed1cc072db7a0c7a6a13eb5e1f58d476f7afae7001c681fa4cfaa1a0,
   The runner then runs risk-manager phase 2 on your compose record and, on its APPROVE, the trade-executor with the order built from it, and writes the journal plan: don't launch risk-manager or the trade-executor, and don't write the plan (the harness refuses those launches this cycle).
   To pass: CYCLE RESULT: no-trade - <why>.
   The desk ran for this bar: the runner ran market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst, risk-manager (phase 1) this cycle and their reports are below, with any the report cache served.
-  Cached reports, still valid this bar (the runner's report cache: an analyst's report built on the bar briefing parts still current, risk-manager phase 1 on this account unchanged): don't launch market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst, risk-manager (phase 1) this cycle; the order gate counts them as returned.
+  Cached reports, still valid this bar (the runner's report cache: an analyst's report built on the bar briefing parts still current): don't launch market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst, risk-manager (phase 1) this cycle; the order gate counts them as returned.
   A cached report is that role's report this cycle: never send it back to a role to read, summarize or redo.
 --- market-structure-analyst report (from 10:30 ET) ---
 Data: bar_briefing m3@x
@@ -257,7 +257,7 @@ env:
 the cycle log's argv is the run's: true
 cycle log: promptChars true; context {"action":"trade","symbols":[{"symbol":"MNQ","bar":{"t":"2026-10-07T14:27:00.000Z","contractId":"MNQ","file":"/bars/MNQ-3m.json"}}],"cachedRoles":[]}
 === claude headSkillsInPrompt: managed ===
-prompt (sha256 7fb2c3f856912115209fe5a5aec94530e535202d2264650899045f9981fd50e3, 3369 chars, of its neutral text):
+prompt (sha256 f008f236c276579039642aee96002ab9d507c9b4572707729748d65a9d7bfbd8, 3321 chars, of its neutral text):
   Autonomous cycle.
   Follow the autonomous-trading skill.
   No user is present.
@@ -277,7 +277,7 @@ prompt (sha256 7fb2c3f856912115209fe5a5aec94530e535202d2264650899045f9981fd50e3,
   Don't launch the analysts or the risk-manager this cycle, and send no new entry, added size or reversal (the order gate refuses an entry this cycle); a new entry waits for a cycle that starts flat.
   Exits, stop moves, closes and cancels go as always, through the trade-executor as the trade-session skill says.
   The desk ran for this bar: the runner ran market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst, risk-manager (phase 1) this cycle and their reports are below, with any the report cache served.
-  Cached reports, still valid this bar (the runner's report cache: an analyst's report built on the bar briefing parts still current, risk-manager phase 1 on this account unchanged): don't launch market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst, risk-manager (phase 1) this cycle; the order gate counts them as returned.
+  Cached reports, still valid this bar (the runner's report cache: an analyst's report built on the bar briefing parts still current): don't launch market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst, risk-manager (phase 1) this cycle; the order gate counts them as returned.
   A cached report is that role's report this cycle: never send it back to a role to read, summarize or redo.
 --- market-structure-analyst report (from 10:30 ET) ---
 Data: bar_briefing m3@x
@@ -321,7 +321,7 @@ env:
 the cycle log's argv is the run's: true
 cycle log: promptChars true; context {"action":"trade","manage":true,"symbols":[{"symbol":"MNQ","bar":{"t":"2026-10-07T14:27:00.000Z","contractId":"MNQ","file":"/bars/MNQ-3m.json"}}],"cachedRoles":[],"runnerRoles":["market-structure-analyst","trend-momentum-analyst","volume-liquidity-analyst","risk-manager"],"rolesFile":"/roles/r.json"}
 === claude headSkillsInPrompt: entry ===
-prompt (sha256 e62fcc9c6478fc790b02fa43d66a2caa068edde73236849e738330d13b3518ff, 3412 chars, of its neutral text):
+prompt (sha256 66fbdceb518326b9220fd411e3b59f1162e71b7021078bf540d9aedd9342994b, 3364 chars, of its neutral text):
   Autonomous cycle.
   Follow the autonomous-trading skill.
   No user is present.
@@ -341,7 +341,7 @@ prompt (sha256 e62fcc9c6478fc790b02fa43d66a2caa068edde73236849e738330d13b3518ff,
   The runner then runs risk-manager phase 2 on your compose record and, on its APPROVE, the trade-executor with the order built from it, and writes the journal plan: don't launch risk-manager or the trade-executor, and don't write the plan (the harness refuses those launches this cycle).
   To pass: CYCLE RESULT: no-trade - <why>.
   The desk ran for this bar: the runner ran market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst, risk-manager (phase 1) this cycle and their reports are below, with any the report cache served.
-  Cached reports, still valid this bar (the runner's report cache: an analyst's report built on the bar briefing parts still current, risk-manager phase 1 on this account unchanged): don't launch market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst, risk-manager (phase 1) this cycle; the order gate counts them as returned.
+  Cached reports, still valid this bar (the runner's report cache: an analyst's report built on the bar briefing parts still current): don't launch market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst, risk-manager (phase 1) this cycle; the order gate counts them as returned.
   A cached report is that role's report this cycle: never send it back to a role to read, summarize or redo.
 --- market-structure-analyst report (from 10:30 ET) ---
 Data: bar_briefing m3@x
@@ -482,7 +482,7 @@ env:
 the cycle log's argv is the run's: true
 cycle log: promptChars true; context {"action":"trade","symbols":[{"symbol":"MNQ","bar":{"t":"2026-10-07T14:27:00.000Z","contractId":"MNQ","file":"/bars/MNQ-3m.json"}}],"cachedRoles":[]}
 === opencode: managed ===
-prompt (sha256 8b2fa33651198582a6810b3bf5e8ed697443f161bff082d36a13f304fa862c4f, 3369 chars, of its neutral text):
+prompt (sha256 8c806e583b25d5ee68082e34b5e0c71bfee5990698d28f080fe4f6e802dba58f, 3321 chars, of its neutral text):
   Autonomous cycle.
   Follow the autonomous-trading skill.
   No user is present.
@@ -502,7 +502,7 @@ prompt (sha256 8b2fa33651198582a6810b3bf5e8ed697443f161bff082d36a13f304fa862c4f,
   Don't launch the analysts or the risk-manager this cycle, and send no new entry, added size or reversal (the order gate refuses an entry this cycle); a new entry waits for a cycle that starts flat.
   Exits, stop moves, closes and cancels go as always, through the trade-executor as the trade-session skill says.
   The desk ran for this bar: the runner ran market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst, risk-manager (phase 1) this cycle and their reports are below, with any the report cache served.
-  Cached reports, still valid this bar (the runner's report cache: an analyst's report built on the bar briefing parts still current, risk-manager phase 1 on this account unchanged): don't launch market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst, risk-manager (phase 1) this cycle; the order gate counts them as returned.
+  Cached reports, still valid this bar (the runner's report cache: an analyst's report built on the bar briefing parts still current): don't launch market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst, risk-manager (phase 1) this cycle; the order gate counts them as returned.
   A cached report is that role's report this cycle: never send it back to a role to read, summarize or redo.
 --- market-structure-analyst report (from 10:30 ET) ---
 Data: bar_briefing m3@x
@@ -552,7 +552,7 @@ env:
 the cycle log's argv is the run's: true
 cycle log: promptChars true; context {"action":"trade","manage":true,"symbols":[{"symbol":"MNQ","bar":{"t":"2026-10-07T14:27:00.000Z","contractId":"MNQ","file":"/bars/MNQ-3m.json"}}],"cachedRoles":[],"runnerRoles":["market-structure-analyst","trend-momentum-analyst","volume-liquidity-analyst","risk-manager"],"rolesFile":"/roles/r.json"}
 === opencode: entry ===
-prompt (sha256 589f39244a4e27fdf78df6c7218b66653fdf8be8ce88073e71af9d4c2c41a498, 3412 chars, of its neutral text):
+prompt (sha256 b02aed61ebcdcd0576ad6f4d084cdd106a0668ba97c3d19485900dbbfe480178, 3364 chars, of its neutral text):
   Autonomous cycle.
   Follow the autonomous-trading skill.
   No user is present.
@@ -572,7 +572,7 @@ prompt (sha256 589f39244a4e27fdf78df6c7218b66653fdf8be8ce88073e71af9d4c2c41a498,
   The runner then runs risk-manager phase 2 on your compose record and, on its APPROVE, the trade-executor with the order built from it, and writes the journal plan: don't launch risk-manager or the trade-executor, and don't write the plan (the harness refuses those launches this cycle).
   To pass: CYCLE RESULT: no-trade - <why>.
   The desk ran for this bar: the runner ran market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst, risk-manager (phase 1) this cycle and their reports are below, with any the report cache served.
-  Cached reports, still valid this bar (the runner's report cache: an analyst's report built on the bar briefing parts still current, risk-manager phase 1 on this account unchanged): don't launch market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst, risk-manager (phase 1) this cycle; the order gate counts them as returned.
+  Cached reports, still valid this bar (the runner's report cache: an analyst's report built on the bar briefing parts still current): don't launch market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst, risk-manager (phase 1) this cycle; the order gate counts them as returned.
   A cached report is that role's report this cycle: never send it back to a role to read, summarize or redo.
 --- market-structure-analyst report (from 10:30 ET) ---
 Data: bar_briefing m3@x
@@ -715,7 +715,7 @@ env:
 the cycle log's argv is the run's: true
 cycle log: promptChars true; context {"action":"trade","symbols":[{"symbol":"MNQ","bar":{"t":"2026-10-07T14:27:00.000Z","contractId":"MNQ","file":"/bars/MNQ-3m.json"}}],"cachedRoles":[]}
 === codex: managed ===
-prompt (sha256 57eb3576bff29b41f9d582785a859fe86da3b2bc2a127a541e3f0fd9a229af3a, 3328 chars, of its neutral text):
+prompt (sha256 a1c0e394ca2ed1f2abd2d8d7c46cfcb38e1a5cf44f615ed52dbb53aaeebba1ec, 3280 chars, of its neutral text):
   Autonomous cycle.
   Follow the autonomous-trading skill.
   No user is present.
@@ -735,7 +735,7 @@ prompt (sha256 57eb3576bff29b41f9d582785a859fe86da3b2bc2a127a541e3f0fd9a229af3a,
   Don't launch the analysts or the risk-manager this cycle, and send no new entry, added size or reversal (the order gate refuses an entry this cycle); a new entry waits for a cycle that starts flat.
   Exits, stop moves, closes and cancels go as always, through the trade-executor as the trade-session skill says.
   The desk ran for this bar: the runner ran market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst, risk-manager (phase 1) this cycle and their reports are below, with any the report cache served.
-  Cached reports, still valid this bar (the runner's report cache: an analyst's report built on the bar briefing parts still current, risk-manager phase 1 on this account unchanged): don't launch market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst, risk-manager (phase 1) this cycle; the order gate counts them as returned.
+  Cached reports, still valid this bar (the runner's report cache: an analyst's report built on the bar briefing parts still current): don't launch market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst, risk-manager (phase 1) this cycle; the order gate counts them as returned.
   A cached report is that role's report this cycle: never send it back to a role to read, summarize or redo.
 --- market-structure-analyst report (from 10:30 ET) ---
 Data: bar_briefing m3@x
@@ -775,7 +775,7 @@ env:
 the cycle log's argv is the run's: true
 cycle log: promptChars true; context {"action":"trade","manage":true,"symbols":[{"symbol":"MNQ","bar":{"t":"2026-10-07T14:27:00.000Z","contractId":"MNQ","file":"/bars/MNQ-3m.json"}}],"cachedRoles":[],"runnerRoles":["market-structure-analyst","trend-momentum-analyst","volume-liquidity-analyst","risk-manager"],"rolesFile":"/roles/r.json"}
 === codex: entry ===
-prompt (sha256 1bc4e7ff0c965792fb01d80e0a1e859e75c688eb3c0bb744de968194f581d9ef, 3371 chars, of its neutral text):
+prompt (sha256 b9de0e04823c31e11e1b381079acd9b7b02632f9b5669258fbc7db8fcd6a71eb, 3323 chars, of its neutral text):
   Autonomous cycle.
   Follow the autonomous-trading skill.
   No user is present.
@@ -795,7 +795,7 @@ prompt (sha256 1bc4e7ff0c965792fb01d80e0a1e859e75c688eb3c0bb744de968194f581d9ef,
   The runner then runs risk-manager phase 2 on your compose record and, on its APPROVE, the trade-executor with the order built from it, and writes the journal plan: don't launch risk-manager or the trade-executor, and don't write the plan (the harness refuses those launches this cycle).
   To pass: CYCLE RESULT: no-trade - <why>.
   The desk ran for this bar: the runner ran market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst, risk-manager (phase 1) this cycle and their reports are below, with any the report cache served.
-  Cached reports, still valid this bar (the runner's report cache: an analyst's report built on the bar briefing parts still current, risk-manager phase 1 on this account unchanged): don't launch market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst, risk-manager (phase 1) this cycle; the order gate counts them as returned.
+  Cached reports, still valid this bar (the runner's report cache: an analyst's report built on the bar briefing parts still current): don't launch market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst, risk-manager (phase 1) this cycle; the order gate counts them as returned.
   A cached report is that role's report this cycle: never send it back to a role to read, summarize or redo.
 --- market-structure-analyst report (from 10:30 ET) ---
 Data: bar_briefing m3@x
@@ -918,7 +918,7 @@ env:
 the cycle log's argv is the run's: true
 cycle log: promptChars true; context {"action":"trade","symbols":[{"symbol":"MNQ","bar":{"t":"2026-10-07T14:27:00.000Z","contractId":"MNQ","file":"/bars/MNQ-3m.json"}}],"cachedRoles":[]}
 === qwen: managed ===
-prompt (sha256 e91420f8ffb150eb8f7e5ed9e0dc6f5016d0e51d98beadf3398d29d5d76c69ab, 3386 chars, of its neutral text):
+prompt (sha256 350838a87e19da6fb67ddee4c1cbf7ac8915d041bb3b3002d506649c6ff54281, 3338 chars, of its neutral text):
   Autonomous cycle.
   Follow the autonomous-trading skill.
   No user is present.
@@ -938,7 +938,7 @@ prompt (sha256 e91420f8ffb150eb8f7e5ed9e0dc6f5016d0e51d98beadf3398d29d5d76c69ab,
   Don't launch the analysts or the risk-manager this cycle, and send no new entry, added size or reversal (the order gate refuses an entry this cycle); a new entry waits for a cycle that starts flat.
   Exits, stop moves, closes and cancels go as always, through the trade-executor as the trade-session skill says.
   The desk ran for this bar: the runner ran market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst, risk-manager (phase 1) this cycle and their reports are below, with any the report cache served.
-  Cached reports, still valid this bar (the runner's report cache: an analyst's report built on the bar briefing parts still current, risk-manager phase 1 on this account unchanged): don't launch market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst, risk-manager (phase 1) this cycle; the order gate counts them as returned.
+  Cached reports, still valid this bar (the runner's report cache: an analyst's report built on the bar briefing parts still current): don't launch market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst, risk-manager (phase 1) this cycle; the order gate counts them as returned.
   A cached report is that role's report this cycle: never send it back to a role to read, summarize or redo.
 --- market-structure-analyst report (from 10:30 ET) ---
 Data: bar_briefing m3@x
@@ -978,7 +978,7 @@ env:
 the cycle log's argv is the run's: true
 cycle log: promptChars true; context {"action":"trade","manage":true,"symbols":[{"symbol":"MNQ","bar":{"t":"2026-10-07T14:27:00.000Z","contractId":"MNQ","file":"/bars/MNQ-3m.json"}}],"cachedRoles":[],"runnerRoles":["market-structure-analyst","trend-momentum-analyst","volume-liquidity-analyst","risk-manager"],"rolesFile":"/roles/r.json"}
 === qwen: entry ===
-prompt (sha256 f1b1add8f2b95a64d6036bb1995290cb6c3e16e2e450b91a5e24d8ac31337d95, 3429 chars, of its neutral text):
+prompt (sha256 40720876a521e90f7c6f26ee8cc017c396fca9544a973045120273f6a482644e, 3381 chars, of its neutral text):
   Autonomous cycle.
   Follow the autonomous-trading skill.
   No user is present.
@@ -998,7 +998,7 @@ prompt (sha256 f1b1add8f2b95a64d6036bb1995290cb6c3e16e2e450b91a5e24d8ac31337d95,
   The runner then runs risk-manager phase 2 on your compose record and, on its APPROVE, the trade-executor with the order built from it, and writes the journal plan: don't launch risk-manager or the trade-executor, and don't write the plan (the harness refuses those launches this cycle).
   To pass: CYCLE RESULT: no-trade - <why>.
   The desk ran for this bar: the runner ran market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst, risk-manager (phase 1) this cycle and their reports are below, with any the report cache served.
-  Cached reports, still valid this bar (the runner's report cache: an analyst's report built on the bar briefing parts still current, risk-manager phase 1 on this account unchanged): don't launch market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst, risk-manager (phase 1) this cycle; the order gate counts them as returned.
+  Cached reports, still valid this bar (the runner's report cache: an analyst's report built on the bar briefing parts still current): don't launch market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst, risk-manager (phase 1) this cycle; the order gate counts them as returned.
   A cached report is that role's report this cycle: never send it back to a role to read, summarize or redo.
 --- market-structure-analyst report (from 10:30 ET) ---
 Data: bar_briefing m3@x

@@ -42,7 +42,7 @@
  * one-entry rule and max-entries limit it.
  *
  * Roles the runner served from its report cache this cycle (FTH_CYCLE_CACHED, report-cache.js: an analyst's report
- * built on the briefing parts still current, risk-manager phase 1 on the account unchanged) count as returned;
+ * built on the briefing parts still current; phase 1 is never cached) count as returned;
  * phase 2 is never cached and still starts after every analyst that ran.
  *
  * Roles the runner ran itself this cycle (its role record, FTH_CYCLE_ROLES, runner-roles.js: the desk's roles, each its

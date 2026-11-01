@@ -604,7 +604,7 @@ function cachedText(cached) {
   // The desk's reports (the runner ran those roles this cycle: runner-wiring.js deskFor) apart from the cache's.
   const desk = cached.reports.filter(r => r.source === 'desk').map(r => (r.role === 'risk-manager' ? 'risk-manager (phase 1)' : r.role));
   const deskText = desk.length ? ` The desk ran for this bar: the runner ran ${desk.join(', ')} this cycle and their reports are below, with any the report cache served.` : '';
-  return `${deskText} Cached reports, still valid this bar (the runner's report cache: an analyst's report built on the bar briefing parts still current, risk-manager phase 1 on this account unchanged): don't launch ${roles.join(', ')} this cycle; the order gate counts them as returned.${until ? ` An analyst's 15m-and-up view holds until ${etTime(until)}; take this bar's 3m facts (the trigger, the VWAP side, the candidates) from the bar briefing.` : ''}${ownText} A cached report is that role's report this cycle: never send it back to a role to read, summarize or redo.`
+  return `${deskText} Cached reports, still valid this bar (the runner's report cache: an analyst's report built on the bar briefing parts still current): don't launch ${roles.join(', ')} this cycle; the order gate counts them as returned.${until ? ` An analyst's 15m-and-up view holds until ${etTime(until)}; take this bar's 3m facts (the trigger, the VWAP side, the candidates) from the bar briefing.` : ''}${ownText} A cached report is that role's report this cycle: never send it back to a role to read, summarize or redo.`
     + cached.reports.map(r => `\n--- ${r.role === 'risk-manager' ? 'risk-manager phase 1' : r.role} report (${from(r)}) ---\n${String(r.text).trim()}\n--- end of ${r.role} report ---`).join('') + '\n';
 }
 

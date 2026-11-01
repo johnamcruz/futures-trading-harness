@@ -188,7 +188,8 @@ test('decision path, the runner runs the desk: a report the record couldn\'t hol
     }
   };
   const control = await pass(null);
-  assert.ok(control.given.includes('risk-manager') && control.cache.phase1, 'recorded: given and cached');
+  // Phase 1 is live data: given when recorded, never cached either way.
+  assert.ok(control.given.includes('risk-manager') && !control.cache.phase1, 'recorded: given, never cached');
   const failed = await pass('risk-manager');
   assert.ok(!failed.given.includes('risk-manager'), 'not given');
   assert.ok(!failed.cache || !failed.cache.phase1, 'not cached');

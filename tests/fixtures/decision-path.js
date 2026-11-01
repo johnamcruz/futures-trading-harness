@@ -73,7 +73,8 @@ const strategyReads = w => (w.mode === 'full' ? [] : STRATEGY_SKILLS);
 // The roles the report cache serves on the fired bar after a quiet bar, in index mode (the default): risk-manager phase 1
 // (the account unchanged; no lookup is required of it). The analysts' reports here name no briefing versions, so none is
 // cached; a cached analyst is served only with lookups made under the same facts key (the e2e's cache cases).
-const CACHE_SERVED = ['risk-manager'];
+// None: the analysts' reports need this bar's lookups, and phase 1 (live data) is never cached.
+const CACHE_SERVED = [];
 
 // The parity bars as 1m bars (golden-bars.js toMinutes: three per 3m bar, its path open, extreme, extreme, close),
 // served at 1m for a data lane (lanes.js trigger "data").
