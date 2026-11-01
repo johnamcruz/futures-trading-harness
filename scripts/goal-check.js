@@ -29,7 +29,8 @@ function main(argv) {
   const set = GC.fixtureSet(rest.includes('--real') ? 'real' : 'ci');
   if (set.missing) { process.stdout.write(`skipped: ${set.missing}\n`); return 0; }
   const t0 = Date.now();
-  const now = GC.summary(GC.evaluate(set.doc, { root: ROOT, env: {}, synth: set.synth }));
+  const full = GC.evaluate(set.doc, { root: ROOT, env: {}, synth: set.synth });
+  const now = GC.summary(full);
   const secs = ((Date.now() - t0) / 1000).toFixed(1);
   const base = fs.existsSync(set.baselineFile) ? JSON.parse(fs.readFileSync(set.baselineFile, 'utf8')) : null;
   const tol = require('./lib/tunables').training().goalRegression.tolerance;
@@ -59,7 +60,7 @@ function main(argv) {
   // Tier 2's baseline is of the slice alone (its own fixture hash): kept while the slice is the same.
   const tier2 = !same && base && base.tier2 && base.tier2.fixture === set.doc.hash ? { tier2: base.tier2 } : {};
   const next = { ...(same ? base : tier2), ...now, ...change, writtenBy: 'scripts/goal-check.js baseline --write' };
-  const problems = GC.riseProblems(base, next);
+  const problems = GC.riseProblems(base, next, { blowPathList: full.halves.S ? full.halves.S.list : null });
   if (problems.length) throw new Error(`refused: a baseline only rises:\n${problems.join('\n')}`);
   fs.mkdirSync(path.dirname(set.baselineFile), { recursive: true });
   fs.writeFileSync(set.baselineFile, `${JSON.stringify(next, null, 2)}\n`);

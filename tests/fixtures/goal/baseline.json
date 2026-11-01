@@ -243,7 +243,7 @@
       }
     ]
   },
-  "fixture": "28ba372543dc8d61240e3288db6ba4dc88b3264b6fbb2ade8950431632521d30",
+  "fixture": "4dca0c5172278224fbf8f226185f68d9db0a4f7b7e1d0e4282801198830dd6f4",
   "halves": {
     "A": {
       "sessions": 15,
@@ -320,7 +320,7 @@
   },
   "fixtureChange": {
     "from": "7f08aa86683f62d45d1f82f73cc9c31589258947d430a9e45e5248673d95c30c",
-    "why": "fix/trail-swing-side-capture (owner-approved 2026-10-31): the synthetic blow path's gap 100 -> 105 ticks, harsher (mean R -1.583 -> -1.6634, one trade fewer: the shipped sizing skips the 2024-03-15 entry near the floor, BLOW_PATH_ALLOWANCES), and 2024-04-08 relabelled a trade day (its listed VWAP setup never taken: goal-path.js vwapTaken); with the trail and entry fixes tier 1 rises: A pass 0.607 -> 0.7795, mean R -0.337 -> -0.0173, R caught 0.1309 -> 0.2144, legs caught 3 -> 5, 0 blows everywhere"
+    "why": "fix/trail-swing-side-capture (owner-approved 2026-10-31): the synthetic blow path's gap 100 -> 105 ticks, harsher (mean R -1.583 -> -1.6634, one trade fewer: main's 2024-03-14 13:48 short is not taken, BLOW_PATH_ALLOWANCES), 2024-04-08 relabelled a trade day (its listed VWAP setup never taken: goal-path.js vwapTaken), and the synthetic limit-fill day's label says the setup is the entry; with the trail and entry fixes tier 1 rises: A pass 0.607 -> 0.7795, mean R -0.337 -> -0.0173, R caught 0.1309 -> 0.2144, legs caught 3 -> 5, 0 blows everywhere"
   },
   "writtenBy": "scripts/goal-check.js baseline --write"
 }

@@ -41,22 +41,44 @@ test('riseProblems: a baseline only improves on the same fixture; a new fixture 
   assert.match(GC.riseProblems(withS({}), moved(doc())).join(), /half S combine blows: undefined|the blow path: gone/);
 });
 
-test('the blow path\'s pinned trade-count allowance: exactly its from -> to, blows not up, mean R not milder; nothing else', () => {
-  const withS = s => ({ ...doc(), halves: { ...doc().halves, S: { trades: 11, meanR: -1.583, mc: { blows: 0 }, ...s } } });
-  const moved = n => ({ ...n, fixture: 'f2', fixtureChange: { from: 'f1', why: 'the blow path harsher' } });
+test('the blow path\'s pinned trade-count allowance: exactly its from -> to on its fixture change, its dropped trade gone, blows not up, mean R not milder; nothing else', () => {
+  const A = GC.BLOW_PATH_ALLOWANCES[0];
+  const withS = s => ({ ...doc(), fixture: A.fixture.from, halves: { ...doc().halves, S: { trades: 11, meanR: -1.583, mc: { blows: 0 }, ...s } } });
+  const moved = n => ({ ...n, fixture: A.fixture.to, fixtureChange: { from: A.fixture.from, why: 'the blow path harsher' } });
+  const t = (day, at) => ({ day, side: 'short', entryTime: `${day}T${at}:00.000Z` });
+  const days = ['2024-03-04', '2024-03-05', '2024-03-06', '2024-03-07', '2024-03-08', '2024-03-11', '2024-03-12', '2024-03-13', '2024-03-15'];
+  const list = [...days.map(d => t(d, '13:45')), t('2024-03-08', '16:45')];
+  const ok = { blowPathList: list };
   const base = withS({});
-  // The approved case: 11 -> 10 trades, mean R harsher, no blow more.
-  assert.deepStrictEqual(GC.riseProblems(base, moved(withS({ trades: 10, meanR: -1.6634 }))), []);
+  assert.strictEqual(GC.blowPathKey(t('2024-03-14', '13:48')), A.dropped);
+  // The exact pinned entry: 11 -> 10 trades on its fixture change, its dropped trade gone, mean R harsher, no blow more.
+  assert.deepStrictEqual(GC.riseProblems(base, moved(withS({ trades: 10, meanR: -1.6634 })), ok), []);
+  // No list (the dropped trade can't be checked): refused (fails closed).
+  assert.match(GC.riseProblems(base, moved(withS({ trades: 10, meanR: -1.6634 }))).join(), /never softens it/);
+  // Another dropped trade (the pinned one still there, another gone): refused.
+  const other = [...list.filter(x => x.day !== '2024-03-15'), t('2024-03-14', '13:48')];
+  assert.match(GC.riseProblems(base, moved(withS({ trades: 10, meanR: -1.6634 })), { blowPathList: other }).join(), /never softens it/);
+  // A list that isn't the new blow path's (another length): refused.
+  assert.match(GC.riseProblems(base, moved(withS({ trades: 10, meanR: -1.6634 })), { blowPathList: list.slice(1) }).join(), /never softens it/);
+  // Another fixture change (either hash): refused.
+  assert.match(GC.riseProblems({ ...base, fixture: 'f0' }, { ...moved(withS({ trades: 10, meanR: -1.6634 })), fixtureChange: { from: 'f0', why: 'x' } }, ok).join(), /never softens it/);
+  assert.match(GC.riseProblems(base, { ...moved(withS({ trades: 10, meanR: -1.6634 })), fixture: 'f9' }, ok).join(), /never softens it/);
+  // A tampered allowance (from, to, a fixture hash, the dropped key): refused.
+  for (const bad of [{ ...A, from: '12' }, { ...A, to: '9' }, { ...A, fixture: { ...A.fixture, from: 'f0' } }, { ...A, fixture: { ...A.fixture, to: 'f9' } }, { ...A, dropped: '2024-03-15|short|2024-03-15T13:45:00.000Z' }]) {
+    assert.match(GC.riseProblems(base, moved(withS({ trades: 10, meanR: -1.6634 })), { ...ok, allowances: [bad] }).join(), /never softens it/, JSON.stringify(bad));
+  }
   // Any other drop, a milder mean R, or a blow more: refused.
-  assert.match(GC.riseProblems(base, moved(withS({ trades: 9, meanR: -1.7 }))).join(), /the blow path: 9 trades/);
-  assert.match(GC.riseProblems(base, moved(withS({ trades: 10, meanR: -1.459 }))).join(), /the blow path: 10 trades, mean R -1.459 .* never softens it/);
-  assert.match(GC.riseProblems(base, moved(withS({ trades: 10, meanR: -1.6634, mc: { blows: 1 } }))).join(), /half S combine blows: 1/);
-  assert.strictEqual(GC.allowedTradeDrop({ trades: 11, meanR: -1.583, mc: { blows: 0 } }, { trades: 10, meanR: -1.6634, mc: { blows: 1 } }), false, 'a blow more is never excused');
-  assert.strictEqual(GC.allowedTradeDrop({ trades: 11, meanR: -1.583, mc: { blows: 0 } }, { trades: 10, meanR: null, mc: { blows: 0 } }), false, 'a missing mean R is never excused');
-  // Only from exactly the pinned count: a base of 12 dropping to 11 or 10 is no allowance.
-  assert.match(GC.riseProblems(withS({ trades: 12 }), moved(withS({ trades: 11, meanR: -1.7 }))).join(), /never softens it/);
+  assert.match(GC.riseProblems(base, moved(withS({ trades: 9, meanR: -1.7 })), { blowPathList: list.slice(1) }).join(), /the blow path: 9 trades/);
+  assert.match(GC.riseProblems(base, moved(withS({ trades: 10, meanR: -1.459 })), ok).join(), /the blow path: 10 trades, mean R -1.459 .* never softens it/);
+  assert.match(GC.riseProblems(base, moved(withS({ trades: 10, meanR: -1.6634, mc: { blows: 1 } })), ok).join(), /half S combine blows: 1/);
+  const fx = { fixtures: A.fixture, list };
+  assert.strictEqual(GC.allowedTradeDrop({ trades: 11, meanR: -1.583, mc: { blows: 0 } }, { trades: 10, meanR: -1.6634, mc: { blows: 0 } }, undefined, fx), true);
+  assert.strictEqual(GC.allowedTradeDrop({ trades: 11, meanR: -1.583, mc: { blows: 0 } }, { trades: 10, meanR: -1.6634, mc: { blows: 1 } }, undefined, fx), false, 'a blow more is never excused');
+  assert.strictEqual(GC.allowedTradeDrop({ trades: 11, meanR: -1.583, mc: { blows: 0 } }, { trades: 10, meanR: null, mc: { blows: 0 } }, undefined, fx), false, 'a missing mean R is never excused');
+  // Only from exactly the pinned count: a base of 12 dropping to 11 is no allowance.
+  assert.match(GC.riseProblems(withS({ trades: 12 }), moved(withS({ trades: 11, meanR: -1.7 })), { blowPathList: [...list, t('2024-03-14', '13:48')] }).join(), /never softens it/);
   // Without the allowance (an empty list) the same drop is refused: the allowance is what passes it.
-  assert.match(GC.riseProblems(base, moved(withS({ trades: 10, meanR: -1.6634 })), { allowances: [] }).join(), /never softens it/);
+  assert.match(GC.riseProblems(base, moved(withS({ trades: 10, meanR: -1.6634 })), { ...ok, allowances: [] }).join(), /never softens it/);
   // The same fixture never needs it: only blows are gated there, as before.
   assert.deepStrictEqual(GC.riseProblems(base, withS({ trades: 10, meanR: -1.6634 })), []);
 });

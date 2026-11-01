@@ -387,14 +387,14 @@ function compareTrades(main, now, days) {
 
 /**
  * The share of the days with a mechanical first entry (goal-trades.js) whose first planned entry filled, the mock's or the mechanical's
- * (the owner, 2026-10-31: one trade replacing another isn't a lost fill): a trade filled that day no later than the
+ * (the owner, 2026-10-31: one trade replacing another isn't a lost fill): a trade of its side filled that day no later than the
  * mechanical entry's window (its entry time plus spanMs, one setup-frame span). The mechanical entry filled within its window counts; so does
  * an earlier mock entry that filled (one position at a time then refuses the mechanical one); a day where nothing
  * filled by then is a lost fill.
  */
 function fillShare(trades, mechanical, spanMs) {
   if (!mechanical.length) return null;
-  const hit = mechanical.filter(m => trades.some(t => t.day === m.day && Number.isFinite(ms(t.entryTime)) && ms(t.entryTime) <= ms(m.entryTime) + spanMs));
+  const hit = mechanical.filter(m => trades.some(t => t.day === m.day && t.side === m.side && Number.isFinite(ms(t.entryTime)) && ms(t.entryTime) <= ms(m.entryTime) + spanMs));
   return r4(hit.length / mechanical.length);
 }
 
