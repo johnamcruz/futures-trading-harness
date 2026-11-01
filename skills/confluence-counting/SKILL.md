@@ -12,8 +12,8 @@ description: Trader-process step 5 - a valid setup is the trade; six independent
 ## How It Works
 
 **Compose first.** The side rule's side (never counter), a 15m
-rejection or breakout at a key level or FVG, closed (the next 3m close
-times it) → call
+rejection or breakout at a key level or FVG, closed (it is the entry, on the next
+3m bar) → call
 `compose_check`. Never estimate room or R:R: the briefing's "Standard
 plan" line states it; OK → compose with its reads, refused → pass,
 naming it.

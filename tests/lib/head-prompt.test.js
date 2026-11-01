@@ -88,7 +88,11 @@ test('CORE: the composed bar\'s reads the gate requires (SITUATIONAL taught in t
   // the sweep and that the cycle's section may embed it and compose_check says so (+141).
   // Then 75379 (owner: q30 side confusion; side rule first): rejection's step 4 says the `rejected` relation is only the fact, a rejection only when its
   // reaction is a long-wick, engulfing or confirmed one (+83).
-  assert.ok(Buffer.byteLength(prompt) <= 75379, `the head prompt is ${Buffer.byteLength(prompt)} bytes`);
+  // Then 75403 with fix/trail-swing-side-capture on it (the owner's 2026-10-30 decision: the setup is the entry): breakout's
+  // retest-entry evidence and htf-to-ltf's next-3m-bar line, less trade-lifecycle's and setup-judgment's trimmed lines (+3),
+  // and no skill left saying the next 3m close times the entry (rejection, breakout, trade-lifecycle, confluence-counting,
+  // trader-process, pullback-vs-reversal: "on the next 3m bar", +21).
+  assert.ok(Buffer.byteLength(prompt) <= 75403, `the head prompt is ${Buffer.byteLength(prompt)} bytes`);
   // Only the head trader's prompt grows: no other role's prompt embeds trade-lifecycle (the risk manager's embeds
   // confluence-counting and invalidation as before; its prompt is unchanged, pinned in trade-session-split.test.js).
   for (const [name, a] of Object.entries(index.agent)) if (name !== H.HEAD_AGENT && a.prompt) assert.ok(!a.prompt.includes('<skill name="trade-lifecycle">'), name);

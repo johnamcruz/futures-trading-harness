@@ -27,8 +27,8 @@ hypotheses; a missing field is `unknown`. Completed candles only, on 3m,
 | 15m | the working structure and the session levels | more |
 | 1h, 4h | HTF levels (prior day, overnight, CRT) | most |
 
-**The setup**: a 15m or 1h breakout the bias's way (step 1); the next
-3m close times the entry (step 6).
+**The setup**: a 15m or 1h breakout the bias's way (step 1); it is
+the entry, on the next 3m bar (step 6).
 
 By PLAN step:
 
@@ -47,7 +47,7 @@ By PLAN step:
    (`bos-vs-choch`).
 - **5 Confluence**: expanding range and volume (`momentum-and-volume`),
    no absorption against it (`absorption`).
-- **6 Entry**: the next 3m close after the 15m or 1h close beyond times it;
+- **6 Entry**: the 15m or 1h close beyond is the entry, on the next 3m bar;
    a retest that holds (a pullback: `pullback-vs-reversal`) is support,
    never a wait. Never anticipate it.
 - **7 Risk**: the idea is wrong back inside the level, beyond the retest's

@@ -27,8 +27,8 @@ hypotheses; a missing field is `unknown`. Completed candles only, on 3m,
 | 15m | the working structure and the session levels | more |
 | 1h, 4h | HTF levels (prior day, overnight, CRT) | most |
 
-**The setup**: a 15m or 1h rejection the bias's way (step 1); the next
-3m close times the entry (step 6).
+**The setup**: a 15m or 1h rejection the bias's way (step 1); it is
+the entry, on the next 3m bar (step 6).
 
 By PLAN step:
 
@@ -50,8 +50,8 @@ By PLAN step:
    refuses it (never counter), whatever CHoCH.
 - **5 Confluence**: volume or absorption at the level (`momentum-and-volume`,
    `absorption`), counted by `confluence-counting`.
-- **6 Entry**: the next 3m close after the 15m or 1h rejection times it
-   (`3m close top`); no 3m turn or break to wait for. Never anticipate it.
+- **6 Entry**: the 15m or 1h rejection is the entry, on the next 3m
+   bar; no 3m turn or break to wait for. Never anticipate it.
 - **7 Risk**: the idea is wrong beyond the rejection wick: the stop read
    names it (`invalidation`). The trail exits (`target trail`,
    `take-profit`); the first level ahead (`inTheWay`) is a read (step 3).

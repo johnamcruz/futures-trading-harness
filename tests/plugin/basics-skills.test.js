@@ -67,7 +67,7 @@ const PINS = {
     'depth alone is no edge; buying a 50% or 62% retrace with the 4h trend lost after costs (F5).',
     'A 15m CHoCH inside an intact 1h and 4h structure is a pullback.',
     'CHoCHs stacking up the timeframes (15m, then 1h) are a reversal developing;',
-    'it is the entry, the next 3m close times it; a 3m turn (`m3.timing`) is context, never a wait.',
+    'it is the entry, on the next 3m bar; a 3m turn (`m3.timing`) is context, never a wait.',
   ],
   'breakout-vs-fakeout': [
     'a level traded through from inside and closed back inside within 1-3 bars, in the last 10 bars',
@@ -121,7 +121,7 @@ const PINS = {
     '**Six independent categories**, one vote each, so for + against + neutral = 6: reads of one price move are one piece of evidence.',
     // The margin sizes it (the owner's principle 3: strong is full size, marginal reduced or a pass).
     // Compose first (fix/confluence-not-vetoes): the plan, never the model, works out R:R.
-    '**Compose first.** The side rule\'s side (never counter), a 15m rejection or breakout at a key level or FVG, closed (the next 3m close times it) → call `compose_check`.',
+    '**Compose first.** The side rule\'s side (never counter), a 15m rejection or breakout at a key level or FVG, closed (it is the entry, on the next 3m bar) → call `compose_check`.',
     'Never estimate room or R:R: the briefing\'s "Standard plan" line states it; OK → compose with its reads, refused → pass, naming it.',
     'OK → **a valid setup is the trade**. In a prop attempt nothing halves: a serious factor against doesn\'t cut the size; the code sets the full verdict size. The against:',
     // A swing broken is serious, never decisive: decisive is a real HTF reversal (the owner: a sweep misread as a pass).
@@ -166,7 +166,7 @@ const PINS = {
     '| 3m, 5m | the entry timing only: never the setup | least |',
     '| 15m | the working structure and the session levels | more |',
     '| 1h, 4h | HTF levels (prior day, overnight, CRT) | most |',
-    '**The setup**: a 15m or 1h rejection the bias\'s way (step 1); the next 3m close times the entry (step 6).',
+    '**The setup**: a 15m or 1h rejection the bias\'s way (step 1); it is the entry, on the next 3m bar (step 6).',
     'Against the bias (4h + 1h): the trend rule refuses it (never counter), whatever CHoCH.',
     'Never anticipate it.',
     'the stop read names it (`invalidation`).',
@@ -217,8 +217,8 @@ const PINS = {
     '| 3m, 5m | the entry timing only: never the setup | least |',
     '| 15m | the working structure and the session levels | more |',
     '| 1h, 4h | HTF levels (prior day, overnight, CRT) | most |',
-    '**The setup**: a 15m or 1h breakout the bias\'s way (step 1); the next 3m close times the entry (step 6).',
-    'the next 3m close after the 15m or 1h close beyond times it; a retest that holds (a pullback: `pullback-vs-reversal`) is support, never a wait.',
+    '**The setup**: a 15m or 1h breakout the bias\'s way (step 1); it is the entry, on the next 3m bar (step 6).',
+    'the 15m or 1h close beyond is the entry, on the next 3m bar; a retest that holds (a pullback: `pullback-vs-reversal`) is support, never a wait.',
     'Never anticipate it.',
     'the stop read names it (`invalidation`).',
     'a close back inside the level means the breakout failed: invalidation.',

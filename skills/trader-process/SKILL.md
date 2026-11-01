@@ -36,8 +36,8 @@ It adds no filter and no veto:
    side (`htf-to-ltf`).
    Read: `pullback-vs-reversal`, `cisd`; setups: `rejection`, `breakout`, `fair-value-gaps`.
 5. **Confluence.** The six categories of `confluence-counting`.
-6. **Entry.** The next 3m close after the setup's times it; no 3m turn
-   to wait for → `compose_check` now.
+6. **Entry.** The setup is the entry, on the next 3m bar; no
+   confirming close or 3m turn to wait for → `compose_check` now.
    Read: `candle-reading`, `momentum-and-volume`.
 7. **Risk.** Stop (`invalidation`) and target (`take-profit`) reads,
    size; R:R: the compose record's, never yours.

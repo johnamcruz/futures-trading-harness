@@ -52,6 +52,6 @@ levels it met: the `candle-reading` skill. Top down: `top-down-entry`.
 
 ```text
 4h UP, 1h UP, 15m DOWN: long pullback. The 15m rejected the prior VAH up at 21600.25:
-the setup; enter on the next 3m close; target trail (the 2R mark that arms the trail, not the exit).
+the setup and the entry, on the next 3m bar; target trail (the 2R mark that arms the trail, not the exit).
 4h UP, 1h DOWN: no side, no entry. 4h and 1h RANGE, 15m DOWN, declared short: short only.
 ```
