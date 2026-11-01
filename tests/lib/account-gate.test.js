@@ -514,6 +514,10 @@ test('modify_order: a size equal to the order\'s is no size change (a stop moved
   for (const size of [4, 2.5, 3.5, 0, -3, 'x', '', NaN, Infinity, true, {}, [3]]) {
     assert.deepStrictEqual(run({ size, stopPrice: 21490 }), ['modify-size'], `size ${JSON.stringify(size)}`);
   }
+  // A boolean or a list is no size, on a target too (where no stop-cover check would catch it).
+  const target = { id: 5, contractId: CONTRACT, side: 1, type: 1, size: 3, limitPrice: 21600 };
+  for (const size of [true, [1], { n: 1 }]) assert.deepStrictEqual(run({ orderId: 5, size }, [stop, target]), ['modify-size'], `target size ${JSON.stringify(size)}`);
+  assert.deepStrictEqual(run({ orderId: 5, size: 1 }, [stop, target]), [], 'a real cut of the target goes');
   // An order of unreadable size: no size is equal to it; every size refused (fail closed).
   for (const bad of [undefined, null, 'x', NaN]) {
     assert.deepStrictEqual(run({ size: 3, stopPrice: 21490 }, [{ ...stop, size: bad }]), ['modify-size'], `order size ${bad}`);

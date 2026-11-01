@@ -641,12 +641,16 @@ function checkRead(p, b, { tick = 0.25, side = null, riskPts = null } = {}) {
       const inBar = prices.filter(x => num(bar.l) !== null && num(bar.h) !== null && x >= bar.l && x <= bar.h);
       const near = prices.filter(x => price !== null && atr > 0 && Math.abs(x - price) <= atr);
       const frames = recentFrames(m3, base);
-      const met = frames.filter(tf => isObj(m3.candles[tf]) && Array.isArray(m3.candles[tf][lv.relations])
-        && m3.candles[tf][lv.relations].some(r => isObj(r) && lv.names.has(levelName(r.name)) && (!lv.samePrice || prices.some(x => within(x, Number(r.price), tick)))));
+      // A candle met the level (a gap's edge, samePrice: at that edge's own price; xs: the prices it may be at).
+      const meets = (tf, xs) => isObj(m3.candles[tf]) && Array.isArray(m3.candles[tf][lv.relations])
+        && m3.candles[tf][lv.relations].some(r => isObj(r) && lv.names.has(levelName(r.name)) && (!lv.samePrice || xs.some(x => within(x, Number(r.price), tick))));
+      const met = frames.filter(tf => meets(tf, prices));
       if (!prices.length) return res('unchecked', `the briefing names no level "${p.level}"`);
-      const ok = inBar.length > 0 || (met.length > 0 && near.length > 0);
+      // Near and met: the same level (a gap's edge: the same edge, never one gap's met edge for another's near one).
+      const nearMet = lv.samePrice ? near.filter(x => frames.some(tf => meets(tf, [x]))) : met.length ? near : [];
+      const ok = inBar.length > 0 || nearMet.length > 0;
       const fact = inBar.length ? `${p.level} ${inBar[0]} is inside the bar's range ${bar.l}-${bar.h}`
-        : ok ? `${p.level} ${near[0]} was met by the ${met.join(', ')} candle and is within one ATR(14) ${atr} of price ${price}`
+        : ok ? `${p.level} ${nearMet[0]} was met by the ${frames.filter(tf => meets(tf, [nearMet[0]])).join(', ')} candle and is within one ATR(14) ${atr} of price ${price}`
           : `${p.level} ${prices.join(', ')} is outside the bar's range ${bar.l}-${bar.h}${met.length ? `, ${atr > 0 ? `more than one ATR(14) ${atr} from price ${price}` : 'ATR(14) unknown'}` : ` and the ${frames.join(', ') || 'base'} candle didn't meet it`}`;
       return res(ok, fact, { field: 'm3.bar, m3.candles.<base|next>.relations', value: prices[0] });
     }

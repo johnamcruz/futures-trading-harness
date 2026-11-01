@@ -368,6 +368,9 @@ function lateFillRefusal(order, { orders, fills, history }) {
   return [{ check: 'cancel-protection', message: `Order ${order.id} may be the protective stop of a ${contractRoot(order.contractId)} position the account's position read doesn't show yet: ${held.text}. It stays while any source shows the position or its entry; it may go once the fills net to zero and no entry works. Move it with modify_order, or close the position first ([exit]).` }];
 }
 
+/** A size as a number: a number or its text; anything else (a boolean, an object, a list) NaN (refused). */
+const sizeOf = v => (typeof v === 'number' || typeof v === 'string' ? Number(v) : NaN);
+
 /**
  * Does this modify change the order's size? A size given equal to the order's own (a whole number, 1 or more: a stop
  * moved with its size restated) is no change; any other size given is (and is then checked: only a decrease, so a
@@ -375,8 +378,7 @@ function lateFillRefusal(order, { orders, fills, history }) {
  */
 function resizes(input, order) {
   if (input.size === undefined || input.size === null) return false;
-  if (typeof input.size !== 'number' && typeof input.size !== 'string') return true;
-  const size = Number(input.size);
+  const size = sizeOf(input.size);
   return !(Number.isInteger(size) && size >= 1 && size === Number(order.size));
 }
 
@@ -401,7 +403,7 @@ function bracketLegChange({ input, order, orders, isStop }) {
   const sized = resizes(input, order);
   if (!sized && !given.length) return { ok: false, why: 'nothing to cut or move' };
   if (sized) {
-    const size = Number(input.size);
+    const size = sizeOf(input.size);
     if (!(Number.isInteger(size) && size >= 1 && size < Number(order.size))) return { ok: false, why: 'only a smaller size' };
     if (isStop) {
       const others = restingSize(orders.filter(o => o !== order), order.contractId, sign, STOP_TYPES);
@@ -471,7 +473,7 @@ function evaluateModifyAccount({ input = {}, positions, orders, config, ledger =
   }
 
   if (resizes(input, order)) {
-    const size = Number(input.size);
+    const size = sizeOf(input.size);
     if (!(Number.isInteger(size) && size >= 1 && size < Number(order.size))) {
       add('modify-size', `modify_order may only reduce an order's size (order ${order.id} is ${order.size}, asked ${input.size}). To add, place a new order through the gate.`);
     } else if (isStop) {

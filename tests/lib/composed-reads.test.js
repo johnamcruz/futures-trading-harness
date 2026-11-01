@@ -722,6 +722,18 @@ test('at <level> by the names the briefing shows: a gap\'s edge, a level with or
   m3.atr14 = 10;
   assert.strictEqual(at('at 1h fvg low').check, false, 'met, but more than one ATR(14) from price');
   assert.strictEqual(at('at 15m fvg low').check, false, 'a partly filled gap\'s unfilled part (21550) is away from the bar');
+  // Two gaps: one edge near price but met by no candle, the other met but far: neither is at price.
+  const saved = [m3.fvgs['1h'], m3.candles['15m'].fvgRelations, m3.atr14];
+  m3.atr14 = 25;
+  m3.fvgs['1h'] = [{ state: 'open', low: 21500, high: 21525 }, { state: 'open', low: 21380, high: 21400 }];
+  for (const edge of ['high', 'low']) {
+    m3.candles['15m'].fvgRelations = [{ name: `1h fvg ${edge}`, price: edge === 'high' ? 21400 : 21380, rel: 'touched', dir: null }];
+    assert.strictEqual(at(`at 1h fvg ${edge}`).check, false, `${edge}: the met edge is far, the near one unmet`);
+  }
+  m3.candles['15m'].fvgRelations = [{ name: '1h fvg high', price: 21525, rel: 'touched', dir: null }];
+  assert.strictEqual(at('at 1h fvg high').check, true, 'the near edge met');
+  assert.match(at('at 1h fvg high').fact, /21525 was met by the 15m candle/);
+  [m3.fvgs['1h'], m3.candles['15m'].fvgRelations, m3.atr14] = saved;
   assert.strictEqual(at('at 4h fvg high').check, 'unchecked', 'no 4h gaps: no such level');
   m3.fvgs['1h'] = [{ state: 'filled', low: 21520, high: 21535 }];
   assert.strictEqual(at('at 1h fvg high').check, 'unchecked', 'a filled gap is gone');

@@ -48,6 +48,7 @@
  */
 
 const crypto = require('crypto');
+const { levelName } = require('../trading/composed-reads');
 
 const MODES = Object.freeze(['setup-focus']);
 const SM = require('../tunables').replay().setupMoments; // config/replay.json setupMoments
@@ -179,7 +180,6 @@ function checkLine(candles, { barClose, et = x => x, setupTf = DEFAULTS.setupTf,
   const sc = setupCandleText(candles);
   // The level by its read name (composed-reads.js levelName: "VWAP (rth)" is "vwap rth"; a bracket fails a read), as the
   // Standard plan line quotes it: a copy always parses.
-  const { levelName } = require('../trading/composed-reads');
   const what = shown.map(r => `"${key} ${r.rel} ${levelName(r.name)} ${r.dir}" (${r.dir === 'up' ? 'long' : 'short'}${priced(r)}${sc ? `; setup candle: ${sc}` : ''})`).join('; ');
   // The compose plan's entry is a limit at the bar's close (trade-lifecycle.js planOf; a cited setup's, at market): it
   // fills only if a later bar trades to it while the record stands (the strategy's valid_bars).
