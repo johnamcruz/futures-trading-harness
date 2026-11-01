@@ -319,7 +319,7 @@
       "day": "2024-05-06",
       "label": {
         "kind": "non-trend",
-        "why": "synthetic composed limit: a 15m level break listed (no cited fire), compose OK on the confirming close, the limit fills, its bracket, the trail, the exit"
+        "why": "synthetic composed limit: a 15m level break listed (no cited fire), compose OK at the setup, the limit at the last close fills, its bracket, the exit"
       },
       "scenario": "limit-fill",
       "layers": {
