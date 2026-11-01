@@ -1259,6 +1259,26 @@ test('runHarness writes the live transcript as the run streams it: a fresh file,
   assert.strictEqual(r2.ok, true);
 });
 
+test('runHarness with a signal: aborted mid-run, the run is stopped (its group killed) and resolves not ok, cancelled; aborted before it starts, the same; never aborted, as without one', async () => {
+  const { runHarness } = require('../../scripts/lib/harness-run');
+  const dir = require('../helpers').tmpDir();
+  const ac = new AbortController();
+  const t0 = Date.now();
+  const p = runHarness(['bash', '-c', 'echo started; sleep 30; echo never'], { cwd: dir, env: process.env, timeoutMs: 60000, signal: ac.signal });
+  setTimeout(() => ac.abort(), 200);
+  const r = await p;
+  assert.deepStrictEqual([r.ok, r.cancelled, r.timedOut], [false, true, false]);
+  assert.ok(Date.now() - t0 < 10000, 'stopped, not waited out');
+  assert.doesNotMatch(r.output, /never/);
+  assert.match(r.output, /run cancelled/);
+  const pre = new AbortController();
+  pre.abort();
+  const r2 = await runHarness(['bash', '-c', 'sleep 30'], { cwd: dir, env: process.env, timeoutMs: 60000, signal: pre.signal });
+  assert.deepStrictEqual([r2.ok, r2.cancelled], [false, true]);
+  const r3 = await runHarness(['bash', '-c', 'echo x'], { cwd: dir, env: process.env, timeoutMs: 10000, signal: new AbortController().signal });
+  assert.deepStrictEqual([r3.ok, r3.cancelled], [true, undefined]);
+});
+
 test('cycleOutcome: what a cycle hands the runner - the transcript is the standard output alone, never stderr', () => {
   const res = { ok: true, timedOut: false, code: 0, output: '{"a":1}\nwarning on stderr\nCYCLE RESULT: no-trade - x\n', stdout: '{"a":1}\nCYCLE RESULT: no-trade - x\n' };
   assert.deepStrictEqual(cycleOutcome(res, { result: 'CYCLE RESULT: no-trade - x', intact: true, action: 'trade' }),

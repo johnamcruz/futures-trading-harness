@@ -325,3 +325,39 @@ test('cycle run: the runner\'s entry runs after the head trader\'s run, within w
   assert.strictEqual(r3.result, 'CYCLE RESULT: planned - trade_lifecycle long 1');
   assert.ok(boom.err.some(t => /the runner's entry failed \(x\): no order/.test(t)));
 });
+
+test('cycle run: phase 2 at the compose (`overlap`): made with the head trader\'s own environment before its run, halted when it ends, given to the entry; what the entry didn\'t adopt is finished with why and kept in the cycle log; never without the entry', async () => {
+  const home = tmpDir();
+  const cfg = validateConfig({ harness: 'opencode', premarketAt: '', symbols: ['MNQ'] });
+  const context = { action: 'trade', symbols: [{ symbol: 'MNQ', bar: { t: '2026-10-07T14:00:00.000Z' } }] };
+  const handle = () => {
+    const h = { made: null, halted: false, haltedBeforeEntry: null, finished: null };
+    h.halt = () => { h.halted = true; };
+    h.finish = why => { h.finished = why; return [{ record: 'r1', outcome: 'discarded', why, ms: 5 }]; };
+    return h;
+  };
+  const runWith = async (out, entry, o = {}) => {
+    const h = handle();
+    let runEnv = null;
+    const d = deps(home, async (argv, opts) => { runEnv = opts.env; return o.fail ? { ok: false, timedOut: true, code: null, output: '', stdout: '' } : { ok: true, timedOut: false, code: 0, output: out, stdout: out }; });
+    const overlap = a => { h.made = a; return h; };
+    const r = await runCycle(cfg, 'trade', 'p', {}, { timeoutMs: 10000, context, ...(entry ? { entry: async a => { h.haltedBeforeEntry = h.halted; h.given = a.overlap; return entry(a); } } : {}), overlap }, d.deps);
+    return { r, h, runEnv };
+  };
+  // Planned: the handle made with the run's own environment, halted before the entry, which is given it.
+  const a = await runWith('CYCLE RESULT: planned - trade_lifecycle long 1\n', async () => ({ result: 'CYCLE RESULT: executed - x', entry: { outcome: 'executed' } }));
+  assert.strictEqual(a.h.made.env, a.runEnv, 'the head trader\'s own environment');
+  assert.ok(a.h.made.budgetMs > 0 && a.h.made.budgetMs <= 10000);
+  assert.deepStrictEqual([a.h.haltedBeforeEntry, a.h.given === a.h, a.h.finished], [true, true, 'the entry did not adopt it']);
+  // Not planned: the entry gives nothing back; the early run is finished as not planned, kept in the cycle log.
+  const b = await runWith('CYCLE RESULT: no-trade - stalled\n', async () => null);
+  assert.strictEqual(b.h.finished, 'the head trader did not end planned (no-trade)');
+  const lines = fs.readFileSync(path.join(home, 'logs', 'cycles-2026-10-07.jsonl'), 'utf8').trim().split('\n').map(l => JSON.parse(l));
+  assert.deepStrictEqual(lines.at(-1).overlap, [{ record: 'r1', outcome: 'discarded' }]);
+  // The head trader's run failed: finished as that.
+  const c = await runWith('', async () => null, { fail: true });
+  assert.strictEqual(c.h.finished, 'the head trader\'s run failed or timed out');
+  // No entry hook: no handle made at all.
+  const n = await runWith('CYCLE RESULT: planned - trade_lifecycle long 1\n', null);
+  assert.strictEqual(n.h.made, null);
+});

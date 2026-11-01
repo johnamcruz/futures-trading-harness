@@ -103,6 +103,13 @@ test('entryFor: the runner\'s entry only with a role runner, on a harness that r
   assert.strictEqual(path.dirname(e.recordFile()), path.join(home, 'logs'));
   // The per-role timeout is config's (config/runner.json entry.timeoutMinutes).
   assert.ok(require('../../scripts/lib/tunables').runner().entry.timeoutMinutes >= 1);
+  // Phase 2 at the compose (entry.overlapPhase2): on where the desk runs two or more at once; a machine whose model
+  // server answers one at a time (deskConcurrency 1) or a caller's `overlap: false` runs phase 2 after the head trader.
+  assert.strictEqual(require('../../scripts/lib/tunables').runner().entry.overlapPhase2, true);
+  assert.strictEqual(typeof e.overlap, 'function');
+  assert.strictEqual(typeof entryFor({ home, cfg: cfg({ deskConcurrency: 2 }), root: ROOT, runRole }).overlap, 'function');
+  assert.strictEqual(entryFor({ home, cfg: cfg({ deskConcurrency: 1 }), root: ROOT, runRole }).overlap, undefined);
+  assert.strictEqual(entryFor({ home, cfg: cfg(), root: ROOT, runRole, overlap: false }).overlap, undefined);
 });
 
 test('the desk\'s concurrency: config/runner.json\'s, lowered by the runner config\'s deskConcurrency (this machine\'s); a higher or invalid value is refused', async () => {

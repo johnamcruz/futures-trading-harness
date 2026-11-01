@@ -3458,6 +3458,18 @@ test('order gate: in an autonomous full cycle, an entry waits until the analysts
   assert.doesNotMatch(gate({ ...orderPayload(), transcript_path: transcript }, recorded).stderr, /roles-ran/);
   fs.writeFileSync(transcript, [...skills, ...role('p2b', 'risk-manager')].join('\n'));
   assert.match(gate({ ...orderPayload(), transcript_path: transcript }, recorded).stderr, /\[roles-ran\][^\n]*without wall-clock times/);
+  // Phase 2 started at the head trader's OK compose (runner-entry.js overlapFor): the runner records it with its own
+  // start, after the desk's end and before the head trader's run ended; the gate judges it as any phase 2 (no rule
+  // reads the head trader's end). One started before the desk returned never counts.
+  fs.writeFileSync(transcript, skills.join('\n'));
+  const overlapped = start => {
+    const f = path.join(dir, `cycle-roles-overlap-${start}.jsonl`);
+    for (const r of ['market-structure-analyst', 'trend-momentum-analyst', 'volume-liquidity-analyst', 'risk-manager']) RR.appendRoleRun(f, { role: r, start: T, end: T + 1000, text: `## ${r}`, lookups: [], ok: true });
+    RR.appendRoleRun(f, { role: 'risk-manager', start, end: start + 1000, text: 'VERDICT: APPROVE - size 1', lookups: [], ok: true });
+    return { ...env, FTH_CYCLE_ROLES: f };
+  };
+  assert.doesNotMatch(gate({ ...orderPayload(), transcript_path: transcript }, overlapped(T + 1500)).stderr, /roles-ran/);
+  assert.match(gate({ ...orderPayload(), transcript_path: transcript }, overlapped(T + 500)).stderr, /\[roles-ran\][^\n]*risk-manager phase 2/);
   // An exit is never held for roles.
   fs.writeFileSync(transcript, '');
   const exit = gate({ ...orderPayload({ ...EXIT_BASE, side: 'sell', rationale: '[exit] flatten' }), transcript_path: transcript }, env);

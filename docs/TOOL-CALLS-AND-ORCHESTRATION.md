@@ -230,8 +230,13 @@ phases:
 
 1. The report cache serves what it can. The desk workflow runs the rest of the
    desk: the three analysts and risk-manager phase 1, in parallel (up to
-   `config/runner.json` `desk.concurrency` at once, which the machine's
-   `deskConcurrency` may lower), each with the request built in code.
+   `config/runner.json` `desk.concurrency` at once, four today, so the
+   whole desk runs in one wave; the machine's `deskConcurrency` may lower
+   it, for example to 2 or 1 for a local model server that answers fewer
+   requests at once), each with the request built in code. Running at once
+   changes nothing a role reads: every role runs with the cycle's own
+   context (its bars file, its clock, its bar), so each analyst reads this
+   cycle's bar briefing, never another cycle's.
 2. A report counts only if its run read data (a broker call, a file read, or a
    market or account tool, not a skill or past-decision lookup), has its
    role's report shape, and, in index mode, looked up every skill the bar
@@ -365,6 +370,36 @@ head trader's run, before the cycle log; per role `config/runner.json`
    start). Accepted on `read-data`, `verdict-facts` (a verdict and its FACTS
    line, by the gate's own readers) and `lookups`; retried once. Recorded with
    its wall-clock times, so the gate orders it after phase 1 and the analysts.
+
+   **Phase 2 starts at the compose** (owner-approved "A: a faster pipeline";
+   `config/runner.json` `entry.overlapPhase2`, where the desk runs two or
+   more roles at once). All of phase 2's inputs exist once `compose_check`
+   says OK, so the runner does not wait for the head trader's run to end:
+   while it runs, the runner reads the bar's compose records every
+   `entry.overlapPollMs` (`runner-entry.js overlapFor`,
+   `entry-overlap.js`), and on the latest OK record it starts phase 2's run
+   with the request it would build then. A newer record (the head trader
+   composed again) or a latest record that is not OK stops that run and,
+   for a new OK record, starts another. When the head trader's run ends:
+
+   - `planned` on that record: the early run is the phase's first attempt
+     only if everything it judged is unchanged. The record's id, its bar,
+     side and size, the bar briefing's as-of time, the bars file's content
+     hash (`entrySnapshot`), and the request built now byte for byte must all
+     match. Then it is recorded with its own (earlier) start, which is still
+     after the desk ended, so the gate's ordering (phase 2 after phase 1 and
+     every analyst) holds unchanged.
+   - Anything else (another record, a stale bar or briefing, changed bars,
+     reports or lookups, the head trader not ending `planned`, its run failing
+     or timing out, the kill switch): the early run is stopped and recorded
+     `discarded` in the cycle log (`overlap`), never in the role record, so
+     the gate never sees it. With `planned`, phase 2 then runs fresh on the
+     final record, as without the overlap; nothing is ordered unless that
+     fresh phase 2 approves.
+   - An adopted run that failed or timed out is retried fresh once (the
+     workflow's retry); failing again, there is no order.
+
+   A phase-2 approval of one record never authorizes another.
 4. **Between the phases, in code.** Anything but APPROVE stops the entry (a
    VETO is the cycle's no-trade with its line). The reading is the gate's
    (`roles-ran.js verdictOf`): "verdict" or "decision" decides only where it

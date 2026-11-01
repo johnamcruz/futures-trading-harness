@@ -139,6 +139,9 @@ async function pass(w, at, script, o = {}) {
       ...(o.runRole ? { runRole: o.runRole } : {}),
       // `o.maxPromptBytes`: the cycle prompt's limit (a small one: no situational skill embedded).
       ...(o.maxPromptBytes ? { maxPromptBytes: o.maxPromptBytes } : {}),
+      // Phase 2 started at the head trader's OK compose (runner-entry.js overlapFor) only with `o.overlap` (its own e2e):
+      // without it a scripted head trader's run races the poll, so the other tests run phase 2 after the run, as before.
+      entryOverlap: o.overlap === true ? null : false,
       // `o.prop`: the runner's prop hooks wired as autotrader.js wires them (a running attempt's snapshot each bar).
       ...(o.prop ? { prop: require('../../scripts/lib/prop/live-runner').createPropHooks({ root: ROOT, env, home: w.home, client, accountId: w.cfg.account, strategies: () => require('../../scripts/lib/trading/strategies').loadStrategies(ROOT, env).strategies, log: (m, level) => logs.push(`${level || 'info'} ${m}`) }) } : {}),
       runCycle: async (action, prompt, limits) => {

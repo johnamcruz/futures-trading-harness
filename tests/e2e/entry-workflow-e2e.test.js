@@ -907,3 +907,128 @@ test('entry workflow, Claude Code with headSkillsInPrompt (this machine\'s opt-i
   assert.deepStrictEqual(D.placedAtBroker(v), []);
   assert.match(r2.ran[0].result, /^CYCLE RESULT: blocked - the order gate refused the trade_lifecycle long 1 MNQ: \[skills-loaded\]/);
 });
+
+// ---- Phase 2 started at the head trader's OK compose (runner-entry.js overlapFor, config/runner.json entry.overlapPhase2) ----
+// The head trader's run waits, after its OK compose, until the runner has started phase 2 on that record (`started`), so
+// the overlap is certain, not a race with the poll; phase 2's run is the entry's review only when the head trader ends
+// planned on that same record.
+
+/** roles() whose phase-2 starts can be awaited: `started(n)` resolves once n phase-2 runs have begun. */
+function overlapRoles(w, at, o = {}) {
+  const R = roles(w, at, o);
+  const waits = [];
+  let n = 0;
+  const p2Lines = [];
+  const runRole = async (role, request, limits) => {
+    if (role === 'risk-manager' && /^Phase 2, plan verdict/.test(request)) {
+      n += 1;
+      for (const x of waits.filter(y => y.n <= n)) x.resolve();
+    }
+    // The role record as the trade-executor's gate reads it (the runner removes it when the cycle ends).
+    if (role === 'trade-executor') p2Lines.push(...require('../../scripts/lib/trading/runner-roles').readRoleRuns(limits.context.rolesFile).filter(x => x.role === 'risk-manager' && /VERDICT/.test(x.text)));
+    return R.runRole(role, request, limits);
+  };
+  const started = k => new Promise((resolve, reject) => {
+    if (n >= k) { resolve(); return; }
+    const t = setTimeout(() => reject(new Error(`phase 2 did not start at the compose (${n} of ${k})`)), 20000);
+    waits.push({ n: k, resolve: () => { clearTimeout(t); resolve(); } });
+  });
+  return { ...R, runRole, started, p2Lines };
+}
+
+/** The head trader: its loads, the briefing, an OK compose, then it waits for phase 2 to start; `after`: its next steps. */
+function headOverlapped(w, R, after) {
+  const head = headPlanned(w);
+  const compose = head.findIndex(s => s.harness === 'compose_check');
+  return [...head.slice(0, compose + 1), { act: () => R.started(1) }, ...after];
+}
+
+test('entry workflow, phase 2 at the compose: started while the head trader runs, adopted on the record it planned; one phase-2 run, the gate allows the order (phase 2 recorded as starting before the head trader ended)', async () => {
+  const w = D.world();
+  const at = decisionAt(FIRED_BAR);
+  const R = overlapRoles(w, at);
+  let headEnded = null;
+  const r = await D.pass(w, at, headOverlapped(w, R, [{ act: () => { headEnded = Date.now(); } }, { result: 'CYCLE RESULT: planned - trade_lifecycle long 1' }]), { runRole: R.runRole, overlap: true });
+  assert.deepStrictEqual(R.runs.map(x => x.role).slice(-2), ['risk-manager phase 2', 'trade-executor'], 'phase 2 once, then the executor');
+  const rec = TL.readRecords(w.home, 'MNQ').at(-1);
+  assert.ok(R.runs.at(-2).request.includes(rec.id), 'phase 2 on the record the head trader planned');
+  // The role record the executor's gate read: phase 2 started before the head trader's run ended (after the desk).
+  assert.strictEqual(R.p2Lines.length, 1);
+  assert.ok(R.p2Lines[0].start < headEnded, `phase 2 started ${R.p2Lines[0].start}, the head trader ended ${headEnded}`);
+  assert.deepStrictEqual(entries(w).map(e => [e.decision, (e.violations || []).map(v => v.check)]), [['allowed', []]]);
+  assert.strictEqual(D.placedAtBroker(w).length, 1);
+  assert.match(r.ran[0].result, /^CYCLE RESULT: executed - trade_lifecycle long 1 MNQ/);
+  const line = D.cycleLines(w).at(-1);
+  assert.deepStrictEqual([line.entry.outcome, line.entry.ran, line.entry.record], ['executed', ['risk-manager', 'trade-executor'], rec.id]);
+  assert.deepStrictEqual(line.overlap, [{ record: rec.id, outcome: 'adopted' }]);
+  const full = JSON.parse(fs.readFileSync(line.file, 'utf8'));
+  assert.deepStrictEqual(full.entry.overlap, { adopted: true, record: rec.id });
+  assert.ok(full.entry.timing.phase2EarlyMs > 0, JSON.stringify(full.entry.timing));
+});
+
+test('entry workflow, phase 2 at the compose: the head trader then ends no-trade: the run is discarded (no order, nothing recorded for the gate)', async () => {
+  const w = D.world();
+  const at = decisionAt(FIRED_BAR);
+  const R = overlapRoles(w, at);
+  const r = await D.pass(w, at, headOverlapped(w, R, [{ result: 'CYCLE RESULT: no-trade - the 15m stalled at the level' }]), { runRole: R.runRole, overlap: true });
+  assert.ok(!R.runs.some(x => x.role === 'trade-executor'));
+  assert.deepStrictEqual(D.placedAtBroker(w), []);
+  assert.deepStrictEqual(entries(w), []);
+  assert.deepStrictEqual(journal(w).filter(e => e.kind === 'plan'), []);
+  assert.match(r.ran[0].result, /^CYCLE RESULT: no-trade - the 15m stalled/);
+  const line = D.cycleLines(w).at(-1);
+  assert.strictEqual(line.entry, undefined, 'no entry ran');
+  const rec = TL.readRecords(w.home, 'MNQ').at(-1);
+  assert.deepStrictEqual(line.overlap, [{ record: rec.id, outcome: 'discarded' }]);
+  const full = JSON.parse(fs.readFileSync(line.file, 'utf8'));
+  assert.match(full.overlap[0].why, /the head trader did not end planned \(no-trade\)/);
+});
+
+test('entry workflow, phase 2 at the compose: the head trader composes again (a new record): the first run is superseded, the second adopted; the order is the second record\'s', async () => {
+  const w = D.world();
+  const at = decisionAt(FIRED_BAR);
+  const R = overlapRoles(w, at, { phase2: phase2(w, { verdict: 'APPROVE - size 2, risk $92.00, trade_lifecycle long with the trend' }) });
+  const r = await D.pass(w, at, headOverlapped(w, R, [
+    { harness: 'compose_check', args: { symbol: 'MNQ', side: 'long', reads: LC_READS, size: 2 } },
+    { act: () => R.started(2) },
+    { result: 'CYCLE RESULT: planned - trade_lifecycle long 2' },
+  ]), { runRole: R.runRole, overlap: true });
+  const [first, second] = TL.readRecords(w.home, 'MNQ').slice(-2);
+  assert.notStrictEqual(first.id, second.id);
+  const p2 = R.runs.filter(x => x.role === 'risk-manager phase 2');
+  assert.strictEqual(p2.length, 2);
+  assert.ok(p2[0].request.includes(first.id) && p2[1].request.includes(second.id));
+  const line = D.cycleLines(w).at(-1);
+  assert.deepStrictEqual(line.overlap, [{ record: first.id, outcome: 'superseded' }, { record: second.id, outcome: 'adopted' }]);
+  assert.strictEqual(line.entry.record, second.id);
+  // The executor's gate read one phase-2 report: the adopted one, on the second record.
+  assert.strictEqual(R.p2Lines.length, 1);
+  assert.deepStrictEqual(entries(w).map(e => e.decision), ['allowed']);
+  assert.match(requestedArgs(R.runs.at(-1).request).rationale, new RegExp(`record ${second.id}$`));
+  assert.match(r.ran[0].result, /^CYCLE RESULT: executed - trade_lifecycle long 2 MNQ/);
+});
+
+test('the desk at four at once (config/runner.json desk.concurrency): the four roles run concurrently, and every analyst reads this cycle\'s bar briefing (the same as-of time as the head trader\'s), with this cycle\'s bars and clock', async () => {
+  const w = D.world({ harness: 'claude' });
+  const at = decisionAt(FIRED_BAR);
+  const R = roles(w, at, { deskRuns: true });
+  let now = 0;
+  let most = 0;
+  const runRole = async (role, request, limits) => {
+    now += 1; most = Math.max(most, now);
+    try { return await R.runRole(role, request, limits); } finally { now -= 1; }
+  };
+  const r = await D.pass(w, at, claudeHeadPlanned(w), { runRole });
+  assert.strictEqual(most, 4, 'the desk\'s four roles in flight at once');
+  const asOf = x => { const c = (x.calls || []).find(y => y.tool === 'bar_briefing'); try { return JSON.parse(c.text).asOf; } catch (_err) { return c ? (/"asOf":\s*"([^"]+)"/.exec(c.text) || [])[1] : undefined; } };
+  const head = asOf(r.ctx);
+  assert.strictEqual(Date.parse(head), Date.parse(FIRED_BAR), 'the head trader\'s briefing is the cycle\'s bar');
+  const analysts = R.runs.filter(x => /analyst$/.test(x.role));
+  assert.deepStrictEqual(analysts.map(x => x.role).sort(), ["market-structure-analyst", "trend-momentum-analyst", "volume-liquidity-analyst"], JSON.stringify(R.runs.map(x => [x.role, x.result && x.result.ok])));
+  for (const x of analysts) {
+    assert.strictEqual(asOf(x), head, `${x.role}: the cycle's bar briefing`);
+    assert.strictEqual(x.env.FTH_CYCLE_BARS, r.ctx.env.FTH_CYCLE_BARS, `${x.role}: the cycle's bars`);
+    assert.strictEqual(x.env.FTH_REPLAY_NOW, r.ctx.env.FTH_REPLAY_NOW, `${x.role}: the cycle's clock`);
+  }
+  assert.match(r.ran[0].result, /^CYCLE RESULT: executed/);
+});

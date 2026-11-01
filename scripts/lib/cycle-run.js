@@ -15,7 +15,11 @@
  *             `precollect`: the cycle's pre-collected reads (cycle-data.js; the runner config's cycleDataInPrompt only):
  *             (runEnv) -> cycle-data collect's result, made with the very environment the head trader's run gets, inside
  *             the cycle's time; its blocks go at the end of the prompt (autotrader.js withCycleData) and the cycle log's
- *             context records them (`precollected`, and `notCollected`). Absent: the cycle runs exactly as without it)
+ *             context records them (`precollected`, and `notCollected`). Absent: the cycle runs exactly as without it;
+ *             `overlap`: phase 2 started at the head trader's OK compose (runner-entry.js overlapFor): ({ env, startedWall,
+ *             budgetMs }) -> null | a handle (entry-overlap.js), made with the head trader's own environment just before
+ *             its run; its polls stop when the run ends, the entry is given it (`overlap`), and every run it started
+ *             that the entry didn't adopt is stopped and recorded discarded in the cycle log (`overlap`))
  *     deps:   { root, home, env, run (runHarness), onChild, out(text), err(text), appendLog(now, text),
  *               guard(killSwitchFile, when) (the workspace guard: false when it tripped; required, never defaulted
  *               open), now(), wallNow() (the wall clock in ms the cycle's timing reads: Date.now) }
@@ -38,7 +42,7 @@ const { expectedRoles, deskCheck, deskWarning } = require('./trading/desk-check'
 function runOnce(cfg, argv, timeoutMs, context, deps, given = null) {
   const env = given || childEnv(cfg, deps.root, deps.env, context);
   const run = deps.run || runHarness;
-  return run(argv, { cwd: path.resolve(deps.root, cfg.workdir), env, timeoutMs, liveFile: env.FTH_CYCLE_TRANSCRIPT, onChild: deps.onChild || (() => {}) })
+  return run(argv, { cwd: path.resolve(deps.root, cfg.workdir), env, timeoutMs, liveFile: env.FTH_CYCLE_TRANSCRIPT, onChild: deps.onChild || (() => {}), ...(deps.signal ? { signal: deps.signal } : {}) })
     .then(r => ({ ...r, transcript: env.FTH_CYCLE_TRANSCRIPT || null, roleSkills: env.FTH_ROLE_SKILLS || null, headPrompt: env.FTH_HEAD_PROMPT || null, env }));
 }
 
@@ -78,7 +82,7 @@ async function precollected(cfg, prompt, context, precollect, deps, budgetMs) {
   return { runEnv, prompt: withData, context: { ...(context || {}), precollected: CD.records(got), ...(missing.length ? { notCollected: missing } : {}) } };
 }
 
-async function runCycle(cfg, action, prompt, opts, { timeoutMs = cfg.cycleTimeoutMinutes * 60000, context = null, entry: entryHook = null, precollect = null } = {}, deps = {}) {
+async function runCycle(cfg, action, prompt, opts, { timeoutMs = cfg.cycleTimeoutMinutes * 60000, context = null, entry: entryHook = null, precollect = null, overlap: overlapHook = null } = {}, deps = {}) {
   // The workspace guard is the caller's to give: a missing one would let a run that changed the instructions go on.
   if (typeof deps.guard !== 'function') throw new Error('cycle-run: deps.guard (the workspace guard) is required');
   const { guard } = deps;
@@ -105,7 +109,20 @@ async function runCycle(cfg, action, prompt, opts, { timeoutMs = cfg.cycleTimeou
   }
   // The run gets what is left of the cycle's limit after the reads (none made: the whole limit, as without them).
   // (Never under its floor because of them: a deadline's lag aside, as the runner's desk leaves it.)
-  const res = await runOnce(cfg, argv, pre ? Math.max(timeoutMs - (wallNow() - startedMs), Math.min(minHeadMs(), timeoutMs)) : timeoutMs, context, { ...deps, env }, pre ? pre.runEnv : null);
+  const runEnv = pre ? pre.runEnv : childEnv(cfg, deps.root, env, context);
+  // Phase 2 started at the head trader's OK compose (runner-entry.js overlapFor), only where the entry is the runner's:
+  // its handle polls while the run goes, and stops polling when it ends. One that can't be made: none (the entry runs
+  // phase 2 after the run, as without it).
+  let overlap = null;
+  if (typeof overlapHook === 'function' && typeof entryHook === 'function') {
+    try { overlap = overlapHook({ env: runEnv, startedWall: startedMs, budgetMs: Math.max(0, timeoutMs - (wallNow() - startedMs)) }) || null; } catch (e) { err(`[autotrader] phase 2 can't start at the compose (${e.message}): it runs after the head trader's run\n`); }
+  }
+  let res;
+  try {
+    res = await runOnce(cfg, argv, pre ? Math.max(timeoutMs - (wallNow() - startedMs), Math.min(minHeadMs(), timeoutMs)) : timeoutMs, context, { ...deps, env }, runEnv);
+  } finally {
+    if (overlap) overlap.halt();
+  }
   // The result as scored (autotrader.js scoreRun: a `blocked` with no order call is no-trade), the agent's own kept.
   const scored = scoreRun(res, { action, harness: cfg.harness });
   const { reportedResult, resultNote } = scored;
@@ -113,18 +130,24 @@ async function runCycle(cfg, action, prompt, opts, { timeoutMs = cfg.cycleTimeou
   // The runner's entry (runner-entry.js) after a head trader's run that finished, within what is left of the cycle's
   // limit, and never once the kill switch is on: its result is the cycle's, its time the cycle's.
   let entry = null;
+  // Why a phase-2 run started at the compose is dropped, when the entry adopts none (entry-overlap.js finish).
+  let dropWhy = 'the head trader\'s run failed or timed out';
   if (typeof entryHook === 'function' && res.ok && !res.timedOut) {
-    if (!guard(killSwitchFile, 'before the runner\'s entry')) entry = { outcome: 'not-run', why: 'the kill switch is on' };
+    if (!guard(killSwitchFile, 'before the runner\'s entry')) { entry = { outcome: 'not-run', why: 'the kill switch is on' }; dropWhy = 'the kill switch is on'; }
     else {
       try {
-        const e = await entryHook({ result, output: typeof res.stdout === 'string' ? res.stdout : (res.output || ''), env: res.env || {}, startedWall: startedMs, budgetMs: Math.max(0, timeoutMs - (wallNow() - startedMs)) });
+        const e = await entryHook({ result, output: typeof res.stdout === 'string' ? res.stdout : (res.output || ''), env: res.env || {}, startedWall: startedMs, budgetMs: Math.max(0, timeoutMs - (wallNow() - startedMs)), ...(overlap ? { overlap } : {}) });
         if (e) { entry = e.entry || null; if (typeof e.result === 'string' && e.result) result = e.result; }
+        dropWhy = e ? 'the entry did not adopt it' : `the head trader did not end planned (${outcomeOf(result) || 'no result'})`;
       } catch (e2) {
         err(`[autotrader] the runner's entry failed (${e2.message}): no order\n`);
         entry = { outcome: 'error', why: e2.message };
+        dropWhy = 'the runner\'s entry failed';
       }
     }
   }
+  // Every phase-2 run started at the compose that the entry didn't adopt: stopped, no order from it, recorded discarded.
+  const overlapRuns = overlap ? overlap.finish(dropWhy) : [];
   // The entry's roles that ran without some of their skills (role-skills-record.js): its record says so, as the desk's.
   if (entry && Array.isArray(entry.ran)) entry = { ...entry, ...withSkillsMissing(entry.ran) };
   // One runner log line a cycle when any role the runner ran lacked a skill (detection only: no report is refused).
@@ -148,7 +171,7 @@ async function runCycle(cfg, action, prompt, opts, { timeoutMs = cfg.cycleTimeou
     decided: Boolean(res.ok) && !res.timedOut && outcomeOf(result) !== 'blocked',
   }) : null;
   // What the model saw and did: the prompt, every tool call, skills loaded, orders sent (logs/cycles/).
-  const { summary, file: cycleFile, lookups } = writeCycleLog(deps.home, { at: now, action, harness: cfg.harness, prompt, context, argv, output: res.output, result, reportedResult, resultNote, ok: res.ok, timedOut: res.timedOut, durationMs: Date.now() - now.getTime(), transcript: res.transcript, roleSkills: res.roleSkills, headPrompt: res.headPrompt, env: res.env || null, timing, desk, entry });
+  const { summary, file: cycleFile, lookups } = writeCycleLog(deps.home, { at: now, action, harness: cfg.harness, prompt, context, argv, output: res.output, result, reportedResult, resultNote, ok: res.ok, timedOut: res.timedOut, durationMs: Date.now() - now.getTime(), transcript: res.transcript, roleSkills: res.roleSkills, headPrompt: res.headPrompt, env: res.env || null, timing, desk, entry, ...(overlapRuns.length ? { overlap: overlapRuns } : {}) });
   out(`[autotrader] cycle log ${cycleFile}: skills ${summary.skills.join(', ') || 'none seen'}; ${Object.entries(summary.tools).map(([k, n]) => `${k} x${n}`).join(', ') || 'no tool calls seen'}\n`);
   const deskWarn = deskWarning(desk);
   if (deskWarn) err(`[autotrader] ${deskWarn}\n`);
@@ -171,8 +194,9 @@ async function runCycle(cfg, action, prompt, opts, { timeoutMs = cfg.cycleTimeou
  * lookups } (`text` its final message, `tools` the tools it completed, `lookups` the skills it looked up naming its
  * role: what the order gate credits its report with, in the runner's role record, runner-roles.js). Only on a harness
  * that runs a role on its own (autotrader.js ROLE_RUNS), each read the same way (runResultOf); any other throws.
+ * `signal` (optional): aborted, the run is stopped (harness-run.js) and its result is not ok.
  */
-async function runRole(cfg, role, request, { timeoutMs, context = null } = {}, deps = {}) {
+async function runRole(cfg, role, request, { timeoutMs, context = null, signal = null } = {}, deps = {}) {
   if (!ROLE_RUNS.has(cfg.harness)) throw new Error(`cycle-run: the runner runs a role on its own on ${[...ROLE_RUNS].join(' and ')} only (harness ${cfg.harness}: its head trader launches its roles)`);
   const env = deps.env || process.env;
   // The run is the role's (`roleRun`): the head trader's prompt addition is never attested for it (autotrader.js).
@@ -189,7 +213,7 @@ async function runRole(cfg, role, request, { timeoutMs, context = null } = {}, d
     if (!claudeRolesOn(cfg)) throw e;
     throw new Error(`role-prompt: ${role}'s prompt addition (roleSkillsInPrompt) can't be built or written: ${e.message}`, { cause: e });
   }
-  const res = await runOnce(cfg, argv, timeoutMs, roleContext, { ...deps, env });
+  const res = await runOnce(cfg, argv, timeoutMs, roleContext, { ...deps, env, ...(signal ? { signal } : {}) });
   const { text, tools } = runResultOf(cfg.harness, typeof res.stdout === 'string' ? res.stdout : res.output);
   let lookups;
   try {

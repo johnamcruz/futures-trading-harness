@@ -995,3 +995,120 @@ test('runEntry restated: entry.phase2RestateRetries 0 turns it off (no restateme
     T.runner = orig;
   }
 });
+
+// ---- Phase 2 started at the head trader's OK compose (overlapFor, entry-overlap.js; config/runner.json entry.overlapPhase2) ----
+
+const until = async (cond, ms = 5000) => { const t0 = Date.now(); while (!cond()) { if (Date.now() - t0 > ms) throw new Error('timed out waiting'); await new Promise(r => setTimeout(r, 2)); } };
+
+/**
+ * setup() with a real bars file, the overlap started while "the head trader runs" (before runEntry), and phase 2's runs
+ * held until released: `p2[i].release(result)` (null: the default approval).
+ */
+function overlapSetup(o = {}) {
+  const s = setup(o);
+  const bars = path.join(s.home, 'MNQ-3m.json');
+  fs.writeFileSync(bars, JSON.stringify([{ t: BAR, o: 1, h: 2, l: 0, c: 1, v: 1 }]));
+  const p2 = [];
+  const orig = s.deps.runRole;
+  s.deps.runRole = async (role, request, limits) => {
+    if (/^Phase 2, plan verdict/.test(request)) {
+      const run = { request, limits, result: null };
+      p2.push(run);
+      s.calls.push({ role: 'phase2', request, limits });
+      await new Promise(resolve => { run.release = r => { run.result = r; resolve(); }; });
+      return run.result || { ok: true, timedOut: false, text: P2, tools: ['harness_order_plan'], lookups: [], output: '' };
+    }
+    return orig(role, request, limits);
+  };
+  const c = s.cycle({ bars });
+  const { result: _r, output: _o, ...pre } = c;
+  const handle = E.overlapFor({ ...s.deps, lookups: () => ({}), pollMs: 1 }, pre);
+  return { ...s, bars, p2, c, handle };
+}
+
+test('overlapFor + runEntry: phase 2 started at the OK compose is adopted on the record the head trader planned: one phase-2 run, recorded with its own (earlier) start; the order goes on its approval', async () => {
+  const s = overlapSetup();
+  await until(() => s.p2.length === 1);
+  const startedAt = Date.now();
+  await new Promise(r => setTimeout(r, 10)); // the head trader's run goes on
+  s.handle.halt();
+  const pending = E.runEntry(s.deps, { ...s.c, overlap: s.handle });
+  s.p2[0].release(null);
+  const r = await pending;
+  assert.deepStrictEqual(s.calls.map(c => c.role), ['phase2', 'trade-executor'], 'phase 2 once');
+  assert.match(s.p2[0].request, /rec0000000000001/);
+  const p2run = RR.readRoleRuns(s.rolesFile).find(x => x.role === 'risk-manager');
+  assert.ok(p2run.start <= startedAt, 'its start is the early run\'s');
+  assert.deepStrictEqual(r.entry.overlap, { adopted: true, record: 'rec0000000000001' });
+  assert.ok(r.entry.timing.phase2EarlyMs >= 10, JSON.stringify(r.entry.timing));
+  assert.strictEqual(r.entry.outcome, 'executed');
+  assert.deepStrictEqual(s.handle.finish('the entry did not adopt it').map(x => x.outcome), ['adopted']);
+});
+
+test('overlapFor + runEntry: what the early run judged changed by the head trader\'s end (the bars file, the briefing\'s bar, the record): discarded, never recorded for the gate; a fresh phase 2 on the final record decides', async () => {
+  const B = require('../../scripts/lib/trading/briefing');
+  for (const [name, change, why] of [
+    ['the bars file rewritten', s => fs.writeFileSync(s.bars, JSON.stringify([{ t: BAR, o: 1, h: 3, l: 0, c: 2, v: 1 }])), /\(bars\)/],
+    ['a newer bar briefing', s => B.writeBriefing(s.home, { symbol: 'MNQ', minutes: 3, asOf: '2026-10-07T13:57:00.000Z', closedAt: '2026-10-07T14:00:00.000Z', sections: {} }), /\(briefing\)/],
+    ['the head trader composed again (the poll never saw it)', s => TL.appendRecord(s.home, record({ id: 'rec0000000000002', plan: { ...PLAN, size: 2 } })), /no phase 2 running on record rec0000000000002/],
+  ]) {
+    const s = overlapSetup();
+    await until(() => s.p2.length === 1);
+    s.handle.halt();
+    change(s);
+    const again = /composed again/.test(name);
+    const pending = E.runEntry(s.deps, { ...s.c, overlap: s.handle, ...(again ? { result: 'CYCLE RESULT: planned - trade_lifecycle long 2' } : {}) });
+    await until(() => s.p2.length === 2);
+    // The early run's approval comes back too: it never counts.
+    s.p2[0].release({ ok: true, timedOut: false, text: 'Phase 2.\nVERDICT: APPROVE - size 9\nFACTS: early', tools: ['harness_order_plan'], lookups: [], output: '' });
+    s.p2[1].release(null);
+    const r = await pending;
+    assert.strictEqual(r.entry.overlap.adopted, false, name);
+    assert.match(r.entry.overlap.why, why, name);
+    if (!again) assert.strictEqual(s.p2[0].limits.signal.aborted, true, `${name}: the early run stopped`);
+    else assert.match(s.p2[1].request, /rec0000000000002/, 'the fresh phase 2 on the final record');
+    // The gate's record holds the fresh run only.
+    const p2runs = RR.readRoleRuns(s.rolesFile).filter(x => x.role === 'risk-manager');
+    assert.strictEqual(p2runs.length, 1, name);
+    assert.doesNotMatch(p2runs[0].text, /size 9|early/, name);
+    s.handle.finish('the entry did not adopt it');
+    assert.strictEqual(s.p2[0].limits.signal.aborted, true, `${name}: stopped by the cycle's end at the latest`);
+    assert.deepStrictEqual(s.handle.summary().map(x => x.outcome), ['discarded'], name);
+  }
+});
+
+test('overlapFor + runEntry: the adopted run failed or timed out: phase 2 is run fresh (its retry); failing again, no order. A veto from it is the cycle\'s veto, no executor', async () => {
+  const s = overlapSetup();
+  await until(() => s.p2.length === 1);
+  s.handle.halt();
+  const pending = E.runEntry(s.deps, { ...s.c, overlap: s.handle });
+  s.p2[0].release({ ok: false, timedOut: true, text: '', tools: [], lookups: [], output: '' });
+  await until(() => s.p2.length === 2);
+  s.p2[1].release({ ok: false, timedOut: true, text: '', tools: [], lookups: [], output: '' });
+  const r = await pending;
+  assert.deepStrictEqual(s.calls.map(c => c.role), ['phase2', 'phase2'], 'no executor');
+  assert.strictEqual(r.entry.outcome, 'no-trade');
+  assert.deepStrictEqual(s.journal, []);
+  const v = overlapSetup();
+  await until(() => v.p2.length === 1);
+  v.handle.halt();
+  const p = E.runEntry(v.deps, { ...v.c, overlap: v.handle });
+  v.p2[0].release({ ok: true, timedOut: false, text: 'Phase 2.\nVERDICT: VETO - room: stand aside\nFACTS: window opening drive; trend long allowed', tools: ['harness_order_plan'], lookups: [], output: '' });
+  const rv = await p;
+  assert.strictEqual(rv.entry.outcome, 'vetoed');
+  assert.deepStrictEqual(v.calls.map(c => c.role), ['phase2']);
+});
+
+test('overlapFor: none without a role record; the latest record not OK starts nothing; entrySnapshot names the record, bar, side, size, briefing and bars hash, and an unreadable read never matches another', async () => {
+  const s = setup();
+  assert.strictEqual(E.overlapFor({ ...s.deps, pollMs: 1 }, s.cycle({ rolesFile: null })), null);
+  const n = setup({ records: [record({ ok: false })] });
+  const h = E.overlapFor({ ...n.deps, lookups: () => ({}), pollMs: 1 }, n.cycle());
+  await new Promise(r => setTimeout(r, 20));
+  h.finish('done');
+  assert.deepStrictEqual(n.calls, []);
+  const snap = E.entrySnapshot(s.home, s.cycle(), record());
+  assert.deepStrictEqual(Object.keys(snap), ['record', 'bar', 'side', 'size', 'briefing', 'bars']);
+  assert.deepStrictEqual([snap.record, snap.bar, snap.side, snap.size], ['rec0000000000001', BAR, 'long', 1]);
+  assert.notDeepStrictEqual(E.entrySnapshot(s.home, s.cycle(), record()).bars, snap.bars, 'an unreadable bars file never matches');
+});

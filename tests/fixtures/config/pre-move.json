@@ -1298,8 +1298,8 @@
    "from": "prop/mc-size.js MC_MAX"
   },
   "desk.concurrency": {
-   "value": 2,
-   "from": "new in feat/desk-in-runner (the runner's desk: roles at once, the model server's concurrency)"
+   "value": 4,
+   "from": "new in feat/desk-in-runner (the runner's desk: roles at once, the model server's concurrency); 2 -> 4 in feat/entry-latency-overlap (owner-approved 'A: a faster pipeline': the four desk roles at once; a machine's deskConcurrency lowers it)"
   },
   "desk.timeoutMinutes": {
    "value": 8,
@@ -1316,6 +1316,14 @@
   "entry.phase2RestateRetries": {
    "value": 1,
    "from": "new in feat/phase2-restate-retry (phase 2 restates an approval the runner can't read, once: 0 turns it off, at most 1)"
+  },
+  "entry.overlapPhase2": {
+   "value": true,
+   "from": "new in feat/entry-latency-overlap (risk-manager phase 2 starts at the head trader's OK compose, adopted only on the record it planned)"
+  },
+  "entry.overlapPollMs": {
+   "value": 250,
+   "from": "new in feat/entry-latency-overlap (how often the compose records are read while the head trader's run goes)"
   },
   "reviews.scratchR": {
    "value": 0.2,

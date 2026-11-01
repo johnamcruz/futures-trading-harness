@@ -525,21 +525,29 @@ function deskFor({ home, cfg, root, runRole = null, log = () => {}, wallNow = Da
  * entry, as before) without a `runRole`, on a harness that runs no role on its own (ROLE_RUNS), on a lean cycle, or without a valid entry
  * workflow.
  *   run(cycle) -> null | { result, entry }    runner-entry.js runEntry (the lookups the bar requires of phase 2 added)
+ *   overlap(cycle) -> handle | null           runner-entry.js overlapFor: phase 2 started at the head trader's OK compose
+ *                                             (only with config/runner.json entry.overlapPhase2, a desk of two or more
+ *                                             at once, and `overlap` not false; else absent)
  *   recordFile()                              a fresh role record for a cycle whose desk the cache served whole
  */
-function entryFor({ home, cfg, root, runRole = null, client = null, log = () => {}, wallNow = Date.now, now = () => new Date(), env = process.env }) {
+function entryFor({ home, cfg, root, runRole = null, client = null, log = () => {}, wallNow = Date.now, now = () => new Date(), env = process.env, overlap = null }) {
   if (typeof runRole !== 'function' || !ROLE_RUNS.has(cfg.harness) || cfg.cycle !== 'full') return null;
   const workflow = require('./orchestrate/workflows').workflowNamed(root, 'entry');
   if (!workflow) return null;
   const { timeoutMinutes } = require('./tunables').runner().entry;
   const { runEntry } = require('./runner-entry');
   const { childEnv } = require('./autotrader');
+  // The lookups the bar requires of phase 2, as the gate reads them now (the briefing and the bar's compose records).
+  const lookupsOf = cycle => lookupNeeds({ [cycle.symbol]: readBriefing(home, cycle.symbol) }, cycle.now || new Date(), rolesEnv(cfg, env), { home, laneBars: cycle.laneBars || {} });
+  const deps = { workflow, runRole, client, home, cfg, root, env, log, wallNow, now, perRoleMs: timeoutMinutes * 60000, childEnv };
+  // Phase 2 started at the head trader's OK compose (runner-entry.js overlapFor): config/runner.json entry.overlapPhase2,
+  // where this machine's desk runs two or more roles at once (deskConcurrencyOf: its model server answers that many);
+  // `overlap` false (a caller's) turns it off.
+  const { overlapPhase2, overlapPollMs } = require('./tunables').runner().entry;
+  const overlapOn = overlap !== false && overlapPhase2 === true && (() => { try { return deskConcurrencyOf(cfg) > 1; } catch (_err) { return false; } })();
   return {
-    run: cycle => {
-      const b = { [cycle.symbol]: readBriefing(home, cycle.symbol) };
-      const lookups = lookupNeeds(b, cycle.now || new Date(), rolesEnv(cfg, env), { home, laneBars: cycle.laneBars || {} });
-      return runEntry({ workflow, runRole, client, home, cfg, root, env, log, wallNow, now, perRoleMs: timeoutMinutes * 60000, childEnv, lookups }, cycle);
-    },
+    run: cycle => runEntry({ ...deps, lookups: lookupsOf(cycle) }, cycle),
+    ...(overlapOn ? { overlap: cycle => require('./runner-entry').overlapFor({ ...deps, lookups: () => lookupsOf(cycle), pollMs: overlapPollMs }, cycle) } : {}),
     recordFile: () => require('./trading/runner-roles').newRoleRunsFile(home),
   };
 }
@@ -650,7 +658,7 @@ function exitsOnly(env, log, critical = require('./tunables').critical()) {
   return true;
 }
 
-function wireRunner({ cfg, root, home, env = process.env, client, prop = null, dataDir, now, runCycle, runRole = null, loadState, saveState, killSwitchFile, log, event, onBarClosed = () => {}, agents = null, configCritical = undefined, maxPromptBytes = null }) {
+function wireRunner({ cfg, root, home, env = process.env, client, prop = null, dataDir, now, runCycle, runRole = null, loadState, saveState, killSwitchFile, log, event, onBarClosed = () => {}, agents = null, configCritical = undefined, maxPromptBytes = null, entryOverlap = null }) {
   const strategies = () => loadStrategies(root, env).strategies;
   // A user's own strategy under a retired name: it trades as theirs; said at start so a stale copy is noticed.
   try { for (const m of retiredCopies(strategies())) log(m, 'error'); } catch (_err) { /* the strategies load again at each scan */ }
@@ -736,7 +744,8 @@ function wireRunner({ cfg, root, home, env = process.env, client, prop = null, d
     // The desk run by the runner (deskFor): on `runRole` (cycle-run.js, the caller's), else null.
     desk: deskFor({ home, cfg, root, runRole, log, env }),
     // The entry run by the runner (entryFor): on `runRole`, else null.
-    entry: entryFor({ home, cfg, root, runRole, client, log, env, now }),
+    // `entryOverlap` false (a caller's): phase 2 never starts at the compose (entryFor's `overlap`).
+    entry: entryFor({ home, cfg, root, runRole, client, log, env, now, overlap: entryOverlap }),
     // The price the runner's entry recorded before its order (trading/late-entry.js), for a composed fill's check.
     latestPrice: symbol => { try { return require('./trading/late-entry').readPrice(home, symbol); } catch (_err) { return null; } },
     // The latest 1m price kept during a trade cycle for the gate's [late-entry] (runner.js watchPrice), on every harness.
