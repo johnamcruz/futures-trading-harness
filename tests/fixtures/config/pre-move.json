@@ -1397,6 +1397,14 @@
    "value": 126976,
    "from": "new in feat/ppc-setup-rates (review: the cycle prompt is one argv string on every harness, and Linux refuses one past MAX_ARG_STRLEN, 131072 bytes; 4 KB under it: the situational skills' budget shrinks to fit, and the cycle data is dropped as a last resort, so a spawn never fails on its size)"
   },
+  "prompt.cacheTtlMinutes.5m": {
+   "value": 5,
+   "from": "new in feat/stable-first-prompt (the prompt-cache lifetimes a Claude Code run may ask for, each value's minutes: the CLI accepts 5m and 1h; a run asks for the shortest that lasts until its next run, prompt-cache-ttl.js)"
+  },
+  "prompt.cacheTtlMinutes.1h": {
+   "value": 60,
+   "from": "new in feat/stable-first-prompt (the hour lifetime, for a 15m or 1h analyst whose next run comes after 5 minutes; its cache writes cost more, its reads the same)"
+  },
   "prompt.situationalSkillBytes": {
    "value": 72000,
    "from": "new in feat/ppc-setup-rates (owner: every skill as context when its situation applies, \"All of the skills should be loaded. It should not be skipped.\"; UTF-8 bytes of embedded skill text a cycle: over 231 recorded briefings the most any cycle needed was 65053, a listed setup in a prop attempt, p90 58543; with about 10% headroom, so none is named past it; the line stays the fail-safe for an outlier; the whole prompt is held under prompt.maxPromptBytes, the budget shrinking first)"

@@ -1,10 +1,12 @@
 === claude: trade ===
-prompt (sha256 044f0e50dc98bcbc97b5ee655e8a9c9e9d0e1c421a382e984d64f4f87eec91b7, 1954 chars, of its neutral text):
+prompt (sha256 bbbd2789123dd7ee527948e33b07c91f1b9bbed9cffb59a24cf2a07326b6287e, 1954 chars, of its neutral text):
   Autonomous cycle.
   Follow the autonomous-trading skill.
   No user is present.
   Harness root (FTH_ROOT): <root>; its operations are the `harness` MCP server's tools, not scripts.
   Harness home (FTH_HOME): <home>; the runner's logs (scans, events, alerts, gate decisions) are in its logs/ folder.
+  With your skill tool, load trade-session, multi-timeframe-analysis, and trade-lifecycle (the order gate refuses an entry without them); also load htf-to-ltf, confluence-counting, setup-judgment, trade-plan, and day-context before deciding, then run the trade-session skill for MNQ on account 7.
+  Write the trader-process skill's PLAN (1 HTF to 9 Manage) before the result line.
   The cycle's time: 2026-10-07 10:30:05 ET (2026-10-07T14:30:05.000Z).
   MNQ: a 3-minute bar just closed (opened 10:27 ET); closed 3-minute bars, oldest first, are in /bars/MNQ-3m.json (get_bars format; contractId MNQ) - use that file; don't fetch 3-minute bars.
   MNQ 4h range, 1h up, 15m up: longs with the trend (recorded for the order gate, which enforces it).
@@ -13,8 +15,6 @@ prompt (sha256 044f0e50dc98bcbc97b5ee655e8a9c9e9d0e1c421a382e984d64f4f87eec91b7,
   End of day: the runner flattens every position at 15:50 ET (in 320 min); a trade must have room to work before then.
   Account 7 at 10:30 ET: balance $50,000; flat; 0 working orders.
   No reviewed trades in the journal yet, so no record of your own results, mistakes, or lessons.
-  With your skill tool, load trade-session, multi-timeframe-analysis, and trade-lifecycle (the order gate refuses an entry without them); also load htf-to-ltf, confluence-counting, setup-judgment, trade-plan, and day-context before deciding, then run the trade-session skill for MNQ on account 7.
-  Write the trader-process skill's PLAN (1 HTF to 9 Manage) before the result line.
   Full cycle: market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst and risk-manager (phase 1) as parallel subagents, plan from their reports, then risk-manager phase 2 on your plan, if any; the gate refuses an entry until all report and phase 2 approves.
   End with the cycle result as plain text in your final message, never as a tool call.
   Your last line must be exactly: CYCLE RESULT: <no-trade | planned | executed | managed | flattened | blocked | error> - <reason>.
@@ -24,6 +24,7 @@ argv: ["claude","-p","<prompt>","--plugin-dir","<root>","--output-format","strea
 head file sha256: none
 env:
   CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1
+  CLAUDE_CODE_PROMPT_CACHE_TTL=5m
   FTH_AUTONOMOUS=1
   FTH_BARS_DIR=<home>/bars
   FTH_CLOSED_DATES=2026-01-01,2026-01-19,2026-02-16,2026-04-03,2026-05-25,2026-06-19,2026-07-03,2026-09-07,2026-11-26,2026-12-25,2027-01-01,2027-01-18,2027-02-15,2027-03-26,2027-05-31,2027-06-18,2027-07-05,2027-09-06,2027-11-25,2027-12-24
@@ -40,12 +41,14 @@ env:
 the cycle log's argv is the run's: true
 cycle log: promptChars true; context {"action":"trade","symbols":[{"symbol":"MNQ","bar":{"t":"2026-10-07T14:27:00.000Z","contractId":"MNQ","file":"/bars/MNQ-3m.json"}}],"cachedRoles":[]}
 === claude: managed ===
-prompt (sha256 e91420f8ffb150eb8f7e5ed9e0dc6f5016d0e51d98beadf3398d29d5d76c69ab, 3386 chars, of its neutral text):
+prompt (sha256 38a2e54f41b30d2e5ef5fde1e0776a6d876a8e7ab6fd256ca87d9482028775be, 3386 chars, of its neutral text):
   Autonomous cycle.
   Follow the autonomous-trading skill.
   No user is present.
   Harness root (FTH_ROOT): <root>; its operations are the `harness` MCP server's tools, not scripts.
   Harness home (FTH_HOME): <home>; the runner's logs (scans, events, alerts, gate decisions) are in its logs/ folder.
+  With your skill tool, load trade-session, multi-timeframe-analysis, and trade-lifecycle (the order gate refuses an entry without them); also load htf-to-ltf, confluence-counting, setup-judgment, trade-plan, and day-context before deciding, then run the trade-session skill for MNQ on account 7.
+  Write the trader-process skill's PLAN (1 HTF to 9 Manage) before the result line.
   The cycle's time: 2026-10-07 10:30:05 ET (2026-10-07T14:30:05.000Z).
   MNQ: a 3-minute bar just closed (opened 10:27 ET); closed 3-minute bars, oldest first, are in /bars/MNQ-3m.json (get_bars format; contractId MNQ) - use that file; don't fetch 3-minute bars.
   MNQ 4h range, 1h up, 15m up: longs with the trend (recorded for the order gate, which enforces it).
@@ -54,8 +57,6 @@ prompt (sha256 e91420f8ffb150eb8f7e5ed9e0dc6f5016d0e51d98beadf3398d29d5d76c69ab,
   End of day: the runner flattens every position at 15:50 ET (in 320 min); a trade must have room to work before then.
   Account 7 at 10:30 ET: balance $50,000; open: MNQ long 1 @ 27410; 1 working order.
   No reviewed trades in the journal yet, so no record of your own results, mistakes, or lessons.
-  With your skill tool, load trade-session, multi-timeframe-analysis, and trade-lifecycle (the order gate refuses an entry without them); also load htf-to-ltf, confluence-counting, setup-judgment, trade-plan, and day-context before deciding, then run the trade-session skill for MNQ on account 7.
-  Write the trader-process skill's PLAN (1 HTF to 9 Manage) before the result line.
   This cycle started with a position or working order open: it manages them, and the desk's reports for this bar are below (the runner ran the desk, or its report cache served it).
   Don't launch the analysts or the risk-manager this cycle, and send no new entry, added size or reversal (the order gate refuses an entry this cycle); a new entry waits for a cycle that starts flat.
   Exits, stop moves, closes and cancels go as always, through the trade-executor as the trade-session skill says.
@@ -85,6 +86,7 @@ argv: ["claude","-p","<prompt>","--plugin-dir","<root>","--output-format","strea
 head file sha256: none
 env:
   CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1
+  CLAUDE_CODE_PROMPT_CACHE_TTL=5m
   FTH_AUTONOMOUS=1
   FTH_BARS_DIR=<home>/bars
   FTH_CLOSED_DATES=2026-01-01,2026-01-19,2026-02-16,2026-04-03,2026-05-25,2026-06-19,2026-07-03,2026-09-07,2026-11-26,2026-12-25,2027-01-01,2027-01-18,2027-02-15,2027-03-26,2027-05-31,2027-06-18,2027-07-05,2027-09-06,2027-11-25,2027-12-24
@@ -102,12 +104,14 @@ env:
 the cycle log's argv is the run's: true
 cycle log: promptChars true; context {"action":"trade","manage":true,"symbols":[{"symbol":"MNQ","bar":{"t":"2026-10-07T14:27:00.000Z","contractId":"MNQ","file":"/bars/MNQ-3m.json"}}],"cachedRoles":[],"runnerRoles":["market-structure-analyst","trend-momentum-analyst","volume-liquidity-analyst","risk-manager"],"rolesFile":"/roles/r.json"}
 === claude: entry ===
-prompt (sha256 f1b1add8f2b95a64d6036bb1995290cb6c3e16e2e450b91a5e24d8ac31337d95, 3429 chars, of its neutral text):
+prompt (sha256 e5457c83ed1cc072db7a0c7a6a13eb5e1f58d476f7afae7001c681fa4cfaa1a0, 3429 chars, of its neutral text):
   Autonomous cycle.
   Follow the autonomous-trading skill.
   No user is present.
   Harness root (FTH_ROOT): <root>; its operations are the `harness` MCP server's tools, not scripts.
   Harness home (FTH_HOME): <home>; the runner's logs (scans, events, alerts, gate decisions) are in its logs/ folder.
+  With your skill tool, load trade-session, multi-timeframe-analysis, and trade-lifecycle (the order gate refuses an entry without them); also load htf-to-ltf, confluence-counting, setup-judgment, trade-plan, and day-context before deciding, then run the trade-session skill for MNQ on account 7.
+  Write the trader-process skill's PLAN (1 HTF to 9 Manage) before the result line.
   The cycle's time: 2026-10-07 10:30:05 ET (2026-10-07T14:30:05.000Z).
   MNQ: a 3-minute bar just closed (opened 10:27 ET); closed 3-minute bars, oldest first, are in /bars/MNQ-3m.json (get_bars format; contractId MNQ) - use that file; don't fetch 3-minute bars.
   MNQ 4h range, 1h up, 15m up: longs with the trend (recorded for the order gate, which enforces it).
@@ -116,8 +120,6 @@ prompt (sha256 f1b1add8f2b95a64d6036bb1995290cb6c3e16e2e450b91a5e24d8ac31337d95,
   End of day: the runner flattens every position at 15:50 ET (in 320 min); a trade must have room to work before then.
   Account 7 at 10:30 ET: balance $50,000; flat; 0 working orders.
   No reviewed trades in the journal yet, so no record of your own results, mistakes, or lessons.
-  With your skill tool, load trade-session, multi-timeframe-analysis, and trade-lifecycle (the order gate refuses an entry without them); also load htf-to-ltf, confluence-counting, setup-judgment, trade-plan, and day-context before deciding, then run the trade-session skill for MNQ on account 7.
-  Write the trader-process skill's PLAN (1 HTF to 9 Manage) before the result line.
   The runner runs this cycle's entry (the desk's reports are below): to trade, call compose_check with your reads and size; when it says OK, end with CYCLE RESULT: planned - <setup> <side> <size> (the trade-lifecycle skill).
   The runner then runs risk-manager phase 2 on your compose record and, on its APPROVE, the trade-executor with the order built from it, and writes the journal plan: don't launch risk-manager or the trade-executor, and don't write the plan (the harness refuses those launches this cycle).
   To pass: CYCLE RESULT: no-trade - <why>.
@@ -147,6 +149,7 @@ argv: ["claude","-p","<prompt>","--plugin-dir","<root>","--output-format","strea
 head file sha256: none
 env:
   CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1
+  CLAUDE_CODE_PROMPT_CACHE_TTL=5m
   FTH_AUTONOMOUS=1
   FTH_BARS_DIR=<home>/bars
   FTH_CLOSED_DATES=2026-01-01,2026-01-19,2026-02-16,2026-04-03,2026-05-25,2026-06-19,2026-07-03,2026-09-07,2026-11-26,2026-12-25,2027-01-01,2027-01-18,2027-02-15,2027-03-26,2027-05-31,2027-06-18,2027-07-05,2027-09-06,2027-11-25,2027-12-24
@@ -164,12 +167,14 @@ env:
 the cycle log's argv is the run's: true
 cycle log: promptChars true; context {"action":"trade","entry":true,"symbols":[{"symbol":"MNQ","bar":{"t":"2026-10-07T14:27:00.000Z","contractId":"MNQ","file":"/bars/MNQ-3m.json"}}],"cachedRoles":[],"runnerRoles":["market-structure-analyst","trend-momentum-analyst","volume-liquidity-analyst","risk-manager"],"rolesFile":"/roles/r.json"}
 === claude: multi-lane ===
-prompt (sha256 15d463ef82da2f835adb6ff6f7f3ab246534cb1a521f3020e5425aaca9ef211a, 2411 chars, of its neutral text):
+prompt (sha256 23beb9f19fa5cbe9bc0b9d68907e4e98410489e7206b51762834739efe732de7, 2411 chars, of its neutral text):
   Autonomous cycle.
   Follow the autonomous-trading skill.
   No user is present.
   Harness root (FTH_ROOT): <root>; its operations are the `harness` MCP server's tools, not scripts.
   Harness home (FTH_HOME): <home>; the runner's logs (scans, events, alerts, gate decisions) are in its logs/ folder.
+  With your skill tool, load trade-session, multi-timeframe-analysis, and trade-lifecycle (the order gate refuses an entry without them); also load htf-to-ltf, confluence-counting, setup-judgment, trade-plan, and day-context before deciding, then run the trade-session skill for MNQ on account 7.
+  Write the trader-process skill's PLAN (1 HTF to 9 Manage) before the result line.
   The cycle's time: 2026-10-07 10:30:05 ET (2026-10-07T14:30:05.000Z).
   Lanes closed this cycle: 3m (every bar), 1m (every bar); one cycle covers them all (decide once for every lane's setups).
   MNQ: a 3-minute bar just closed (opened 10:27 ET); closed 3-minute bars, oldest first, are in /bars/MNQ-3m.json (get_bars format; contractId MNQ) - use that file; don't fetch 3-minute bars.
@@ -181,8 +186,6 @@ prompt (sha256 15d463ef82da2f835adb6ff6f7f3ab246534cb1a521f3020e5425aaca9ef211a,
   End of day: the runner flattens every position at 15:50 ET (in 320 min); a trade must have room to work before then.
   Account 7 at 10:30 ET: balance $50,000; flat; 0 working orders.
   No reviewed trades in the journal yet, so no record of your own results, mistakes, or lessons.
-  With your skill tool, load trade-session, multi-timeframe-analysis, and trade-lifecycle (the order gate refuses an entry without them); also load htf-to-ltf, confluence-counting, setup-judgment, trade-plan, and day-context before deciding, then run the trade-session skill for MNQ on account 7.
-  Write the trader-process skill's PLAN (1 HTF to 9 Manage) before the result line.
   Full cycle: market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst and risk-manager (phase 1) as parallel subagents, plan from their reports, then risk-manager phase 2 on your plan, if any; the gate refuses an entry until all report and phase 2 approves.
   End with the cycle result as plain text in your final message, never as a tool call.
   Your last line must be exactly: CYCLE RESULT: <no-trade | planned | executed | managed | flattened | blocked | error> - <reason>.
@@ -192,6 +195,7 @@ argv: ["claude","-p","<prompt>","--plugin-dir","<root>","--output-format","strea
 head file sha256: none
 env:
   CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1
+  CLAUDE_CODE_PROMPT_CACHE_TTL=5m
   FTH_AUTONOMOUS=1
   FTH_BARS_DIR=<home>/bars
   FTH_CLOSED_DATES=2026-01-01,2026-01-19,2026-02-16,2026-04-03,2026-05-25,2026-06-19,2026-07-03,2026-09-07,2026-11-26,2026-12-25,2027-01-01,2027-01-18,2027-02-15,2027-03-26,2027-05-31,2027-06-18,2027-07-05,2027-09-06,2027-11-25,2027-12-24
@@ -210,12 +214,14 @@ env:
 the cycle log's argv is the run's: true
 cycle log: promptChars true; context {"action":"trade","lanes":["3m","1m"],"cycleBars":{"MNQ":"2026-10-07T14:27:00.000Z"},"symbols":[{"symbol":"MNQ","lane":"3m","bar":{"t":"2026-10-07T14:27:00.000Z","contractId":"MNQ","file":"/bars/MNQ-3m.json"}},{"symbol":"MNQ","lane":"1m","bar":{"t":"2026-10-07T14:29:00.000Z","contractId":"MNQ","file":"/bars/MNQ-1m.json"}}],"cachedRoles":[]}
 === claude headSkillsInPrompt: trade ===
-prompt (sha256 ad367081fa4f231e80baf4e430b2fed397c7fe83d5bb0abcd9bf54286f5e2824, 1937 chars, of its neutral text):
+prompt (sha256 aca1a7af1b7d36ce02c4abf7b4bb93b5c7e6a217e203b16a2f77dcd7a67a3355, 1937 chars, of its neutral text):
   Autonomous cycle.
   Follow the autonomous-trading skill.
   No user is present.
   Harness root (FTH_ROOT): <root>; its operations are the `harness` MCP server's tools, not scripts.
   Harness home (FTH_HOME): <home>; the runner's logs (scans, events, alerts, gate decisions) are in its logs/ folder.
+  Your skills trade-session, multi-timeframe-analysis, trade-lifecycle, htf-to-ltf, confluence-counting, setup-judgment, trade-plan, and day-context are in your prompt, already loaded (don't load them again): decide by them, then run the trade-session skill for MNQ on account 7.
+  Write the trader-process skill's PLAN (1 HTF to 9 Manage) before the result line.
   The cycle's time: 2026-10-07 10:30:05 ET (2026-10-07T14:30:05.000Z).
   MNQ: a 3-minute bar just closed (opened 10:27 ET); closed 3-minute bars, oldest first, are in /bars/MNQ-3m.json (get_bars format; contractId MNQ) - use that file; don't fetch 3-minute bars.
   MNQ 4h range, 1h up, 15m up: longs with the trend (recorded for the order gate, which enforces it).
@@ -224,8 +230,6 @@ prompt (sha256 ad367081fa4f231e80baf4e430b2fed397c7fe83d5bb0abcd9bf54286f5e2824,
   End of day: the runner flattens every position at 15:50 ET (in 320 min); a trade must have room to work before then.
   Account 7 at 10:30 ET: balance $50,000; flat; 0 working orders.
   No reviewed trades in the journal yet, so no record of your own results, mistakes, or lessons.
-  Your skills trade-session, multi-timeframe-analysis, trade-lifecycle, htf-to-ltf, confluence-counting, setup-judgment, trade-plan, and day-context are in your prompt, already loaded (don't load them again): decide by them, then run the trade-session skill for MNQ on account 7.
-  Write the trader-process skill's PLAN (1 HTF to 9 Manage) before the result line.
   Full cycle: market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst and risk-manager (phase 1) as parallel subagents, plan from their reports, then risk-manager phase 2 on your plan, if any; the gate refuses an entry until all report and phase 2 approves.
   End with the cycle result as plain text in your final message, never as a tool call.
   Your last line must be exactly: CYCLE RESULT: <no-trade | planned | executed | managed | flattened | blocked | error> - <reason>.
@@ -235,6 +239,7 @@ argv: ["claude","-p","<prompt>","--plugin-dir","<root>","--append-system-prompt-
 head file sha256: ff2e2ac1de631fc99d0f4d8e6c5e2ab05b70f39c681f4ef2a8112b9cd379c543
 env:
   CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1
+  CLAUDE_CODE_PROMPT_CACHE_TTL=5m
   FTH_AUTONOMOUS=1
   FTH_BARS_DIR=<home>/bars
   FTH_CLOSED_DATES=2026-01-01,2026-01-19,2026-02-16,2026-04-03,2026-05-25,2026-06-19,2026-07-03,2026-09-07,2026-11-26,2026-12-25,2027-01-01,2027-01-18,2027-02-15,2027-03-26,2027-05-31,2027-06-18,2027-07-05,2027-09-06,2027-11-25,2027-12-24
@@ -252,12 +257,14 @@ env:
 the cycle log's argv is the run's: true
 cycle log: promptChars true; context {"action":"trade","symbols":[{"symbol":"MNQ","bar":{"t":"2026-10-07T14:27:00.000Z","contractId":"MNQ","file":"/bars/MNQ-3m.json"}}],"cachedRoles":[]}
 === claude headSkillsInPrompt: managed ===
-prompt (sha256 8b2fa33651198582a6810b3bf5e8ed697443f161bff082d36a13f304fa862c4f, 3369 chars, of its neutral text):
+prompt (sha256 7fb2c3f856912115209fe5a5aec94530e535202d2264650899045f9981fd50e3, 3369 chars, of its neutral text):
   Autonomous cycle.
   Follow the autonomous-trading skill.
   No user is present.
   Harness root (FTH_ROOT): <root>; its operations are the `harness` MCP server's tools, not scripts.
   Harness home (FTH_HOME): <home>; the runner's logs (scans, events, alerts, gate decisions) are in its logs/ folder.
+  Your skills trade-session, multi-timeframe-analysis, trade-lifecycle, htf-to-ltf, confluence-counting, setup-judgment, trade-plan, and day-context are in your prompt, already loaded (don't load them again): decide by them, then run the trade-session skill for MNQ on account 7.
+  Write the trader-process skill's PLAN (1 HTF to 9 Manage) before the result line.
   The cycle's time: 2026-10-07 10:30:05 ET (2026-10-07T14:30:05.000Z).
   MNQ: a 3-minute bar just closed (opened 10:27 ET); closed 3-minute bars, oldest first, are in /bars/MNQ-3m.json (get_bars format; contractId MNQ) - use that file; don't fetch 3-minute bars.
   MNQ 4h range, 1h up, 15m up: longs with the trend (recorded for the order gate, which enforces it).
@@ -266,8 +273,6 @@ prompt (sha256 8b2fa33651198582a6810b3bf5e8ed697443f161bff082d36a13f304fa862c4f,
   End of day: the runner flattens every position at 15:50 ET (in 320 min); a trade must have room to work before then.
   Account 7 at 10:30 ET: balance $50,000; open: MNQ long 1 @ 27410; 1 working order.
   No reviewed trades in the journal yet, so no record of your own results, mistakes, or lessons.
-  Your skills trade-session, multi-timeframe-analysis, trade-lifecycle, htf-to-ltf, confluence-counting, setup-judgment, trade-plan, and day-context are in your prompt, already loaded (don't load them again): decide by them, then run the trade-session skill for MNQ on account 7.
-  Write the trader-process skill's PLAN (1 HTF to 9 Manage) before the result line.
   This cycle started with a position or working order open: it manages them, and the desk's reports for this bar are below (the runner ran the desk, or its report cache served it).
   Don't launch the analysts or the risk-manager this cycle, and send no new entry, added size or reversal (the order gate refuses an entry this cycle); a new entry waits for a cycle that starts flat.
   Exits, stop moves, closes and cancels go as always, through the trade-executor as the trade-session skill says.
@@ -297,6 +302,7 @@ argv: ["claude","-p","<prompt>","--plugin-dir","<root>","--append-system-prompt-
 head file sha256: ff2e2ac1de631fc99d0f4d8e6c5e2ab05b70f39c681f4ef2a8112b9cd379c543
 env:
   CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1
+  CLAUDE_CODE_PROMPT_CACHE_TTL=5m
   FTH_AUTONOMOUS=1
   FTH_BARS_DIR=<home>/bars
   FTH_CLOSED_DATES=2026-01-01,2026-01-19,2026-02-16,2026-04-03,2026-05-25,2026-06-19,2026-07-03,2026-09-07,2026-11-26,2026-12-25,2027-01-01,2027-01-18,2027-02-15,2027-03-26,2027-05-31,2027-06-18,2027-07-05,2027-09-06,2027-11-25,2027-12-24
@@ -315,12 +321,14 @@ env:
 the cycle log's argv is the run's: true
 cycle log: promptChars true; context {"action":"trade","manage":true,"symbols":[{"symbol":"MNQ","bar":{"t":"2026-10-07T14:27:00.000Z","contractId":"MNQ","file":"/bars/MNQ-3m.json"}}],"cachedRoles":[],"runnerRoles":["market-structure-analyst","trend-momentum-analyst","volume-liquidity-analyst","risk-manager"],"rolesFile":"/roles/r.json"}
 === claude headSkillsInPrompt: entry ===
-prompt (sha256 589f39244a4e27fdf78df6c7218b66653fdf8be8ce88073e71af9d4c2c41a498, 3412 chars, of its neutral text):
+prompt (sha256 e62fcc9c6478fc790b02fa43d66a2caa068edde73236849e738330d13b3518ff, 3412 chars, of its neutral text):
   Autonomous cycle.
   Follow the autonomous-trading skill.
   No user is present.
   Harness root (FTH_ROOT): <root>; its operations are the `harness` MCP server's tools, not scripts.
   Harness home (FTH_HOME): <home>; the runner's logs (scans, events, alerts, gate decisions) are in its logs/ folder.
+  Your skills trade-session, multi-timeframe-analysis, trade-lifecycle, htf-to-ltf, confluence-counting, setup-judgment, trade-plan, and day-context are in your prompt, already loaded (don't load them again): decide by them, then run the trade-session skill for MNQ on account 7.
+  Write the trader-process skill's PLAN (1 HTF to 9 Manage) before the result line.
   The cycle's time: 2026-10-07 10:30:05 ET (2026-10-07T14:30:05.000Z).
   MNQ: a 3-minute bar just closed (opened 10:27 ET); closed 3-minute bars, oldest first, are in /bars/MNQ-3m.json (get_bars format; contractId MNQ) - use that file; don't fetch 3-minute bars.
   MNQ 4h range, 1h up, 15m up: longs with the trend (recorded for the order gate, which enforces it).
@@ -329,8 +337,6 @@ prompt (sha256 589f39244a4e27fdf78df6c7218b66653fdf8be8ce88073e71af9d4c2c41a498,
   End of day: the runner flattens every position at 15:50 ET (in 320 min); a trade must have room to work before then.
   Account 7 at 10:30 ET: balance $50,000; flat; 0 working orders.
   No reviewed trades in the journal yet, so no record of your own results, mistakes, or lessons.
-  Your skills trade-session, multi-timeframe-analysis, trade-lifecycle, htf-to-ltf, confluence-counting, setup-judgment, trade-plan, and day-context are in your prompt, already loaded (don't load them again): decide by them, then run the trade-session skill for MNQ on account 7.
-  Write the trader-process skill's PLAN (1 HTF to 9 Manage) before the result line.
   The runner runs this cycle's entry (the desk's reports are below): to trade, call compose_check with your reads and size; when it says OK, end with CYCLE RESULT: planned - <setup> <side> <size> (the trade-lifecycle skill).
   The runner then runs risk-manager phase 2 on your compose record and, on its APPROVE, the trade-executor with the order built from it, and writes the journal plan: don't launch risk-manager or the trade-executor, and don't write the plan (the harness refuses those launches this cycle).
   To pass: CYCLE RESULT: no-trade - <why>.
@@ -360,6 +366,7 @@ argv: ["claude","-p","<prompt>","--plugin-dir","<root>","--append-system-prompt-
 head file sha256: ff2e2ac1de631fc99d0f4d8e6c5e2ab05b70f39c681f4ef2a8112b9cd379c543
 env:
   CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1
+  CLAUDE_CODE_PROMPT_CACHE_TTL=5m
   FTH_AUTONOMOUS=1
   FTH_BARS_DIR=<home>/bars
   FTH_CLOSED_DATES=2026-01-01,2026-01-19,2026-02-16,2026-04-03,2026-05-25,2026-06-19,2026-07-03,2026-09-07,2026-11-26,2026-12-25,2027-01-01,2027-01-18,2027-02-15,2027-03-26,2027-05-31,2027-06-18,2027-07-05,2027-09-06,2027-11-25,2027-12-24
@@ -378,12 +385,14 @@ env:
 the cycle log's argv is the run's: true
 cycle log: promptChars true; context {"action":"trade","entry":true,"symbols":[{"symbol":"MNQ","bar":{"t":"2026-10-07T14:27:00.000Z","contractId":"MNQ","file":"/bars/MNQ-3m.json"}}],"cachedRoles":[],"runnerRoles":["market-structure-analyst","trend-momentum-analyst","volume-liquidity-analyst","risk-manager"],"rolesFile":"/roles/r.json"}
 === claude headSkillsInPrompt: multi-lane ===
-prompt (sha256 373f3de07e4f897bc0ed8b958243c5cf0b831774ac09147a5b664b728b91bce7, 2394 chars, of its neutral text):
+prompt (sha256 598f2185464b321a16c44b0126fbf2ac5fee85d01763efe3d92bd8a31656bb1e, 2394 chars, of its neutral text):
   Autonomous cycle.
   Follow the autonomous-trading skill.
   No user is present.
   Harness root (FTH_ROOT): <root>; its operations are the `harness` MCP server's tools, not scripts.
   Harness home (FTH_HOME): <home>; the runner's logs (scans, events, alerts, gate decisions) are in its logs/ folder.
+  Your skills trade-session, multi-timeframe-analysis, trade-lifecycle, htf-to-ltf, confluence-counting, setup-judgment, trade-plan, and day-context are in your prompt, already loaded (don't load them again): decide by them, then run the trade-session skill for MNQ on account 7.
+  Write the trader-process skill's PLAN (1 HTF to 9 Manage) before the result line.
   The cycle's time: 2026-10-07 10:30:05 ET (2026-10-07T14:30:05.000Z).
   Lanes closed this cycle: 3m (every bar), 1m (every bar); one cycle covers them all (decide once for every lane's setups).
   MNQ: a 3-minute bar just closed (opened 10:27 ET); closed 3-minute bars, oldest first, are in /bars/MNQ-3m.json (get_bars format; contractId MNQ) - use that file; don't fetch 3-minute bars.
@@ -395,8 +404,6 @@ prompt (sha256 373f3de07e4f897bc0ed8b958243c5cf0b831774ac09147a5b664b728b91bce7,
   End of day: the runner flattens every position at 15:50 ET (in 320 min); a trade must have room to work before then.
   Account 7 at 10:30 ET: balance $50,000; flat; 0 working orders.
   No reviewed trades in the journal yet, so no record of your own results, mistakes, or lessons.
-  Your skills trade-session, multi-timeframe-analysis, trade-lifecycle, htf-to-ltf, confluence-counting, setup-judgment, trade-plan, and day-context are in your prompt, already loaded (don't load them again): decide by them, then run the trade-session skill for MNQ on account 7.
-  Write the trader-process skill's PLAN (1 HTF to 9 Manage) before the result line.
   Full cycle: market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst and risk-manager (phase 1) as parallel subagents, plan from their reports, then risk-manager phase 2 on your plan, if any; the gate refuses an entry until all report and phase 2 approves.
   End with the cycle result as plain text in your final message, never as a tool call.
   Your last line must be exactly: CYCLE RESULT: <no-trade | planned | executed | managed | flattened | blocked | error> - <reason>.
@@ -406,6 +413,7 @@ argv: ["claude","-p","<prompt>","--plugin-dir","<root>","--append-system-prompt-
 head file sha256: ff2e2ac1de631fc99d0f4d8e6c5e2ab05b70f39c681f4ef2a8112b9cd379c543
 env:
   CLAUDE_CODE_DISABLE_BACKGROUND_TASKS=1
+  CLAUDE_CODE_PROMPT_CACHE_TTL=5m
   FTH_AUTONOMOUS=1
   FTH_BARS_DIR=<home>/bars
   FTH_CLOSED_DATES=2026-01-01,2026-01-19,2026-02-16,2026-04-03,2026-05-25,2026-06-19,2026-07-03,2026-09-07,2026-11-26,2026-12-25,2027-01-01,2027-01-18,2027-02-15,2027-03-26,2027-05-31,2027-06-18,2027-07-05,2027-09-06,2027-11-25,2027-12-24

@@ -401,7 +401,7 @@ test('delivery: no key on, the index exactly as before; on, named and another ha
   assert.notStrictEqual(on.hash, doc.hash);
   assert.deepStrictEqual(on.cells, doc.cells, 'the same decisions: only the delivery tells them apart');
   const mixed = ds.map((d, i) => (i % 2 ? { ...d, delivery: 'cycleDataInPrompt' } : d));
-  assert.throws(() => X.buildIndex(mixed, { reps: 200 }), /index refused: made under 2 head trader deliveries \(none \| cycleDataInPrompt; the runner config's headSkillsInPrompt, cycleDataInPrompt, roleSkillsInPrompt, deskBriefReports\)/);
+  assert.throws(() => X.buildIndex(mixed, { reps: 200 }), /index refused: made under 2 head trader deliveries \(none \| cycleDataInPrompt; the runner config's headSkillsInPrompt, cycleDataInPrompt, roleSkillsInPrompt, deskBriefReports, stableFirstPrompt\)/);
   assert.throws(() => X.buildIndex(ds.map((d, i) => ({ ...d, delivery: i % 2 ? 'cycleDataInPrompt' : 'headSkillsInPrompt,cycleDataInPrompt' })), { reps: 200 }), /2 head trader deliveries/);
 });
 

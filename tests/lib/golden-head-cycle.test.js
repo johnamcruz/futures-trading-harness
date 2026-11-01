@@ -4,7 +4,9 @@
 // (cycle-run.js runCycle, the harness run injected): the prompt, the argv, the environment, the cycle log's prompt and
 // context, and the Claude head prompt file's hash, for a trade, a managed, an entry and a multi-lane cycle, on every
 // harness, with Claude Code's head trader in both of its modes. Captured from main before the machine-local cycle data
-// key (cycleDataInPrompt) existed: with that key absent, every one of these stays byte for byte what it was.
+// key (cycleDataInPrompt) existed: with that key absent, every one of these stays byte for byte what it was, but Claude
+// Code's prompts, which are in the stable-first order (stableFirstPrompt, its default: autotrader.js TRADE_ORDER), the
+// same lines reordered (the instructions and the PLAN line moved up, after the stable head), the same size.
 // Goldens: tests/fixtures/golden/ (tests/golden.js says how to update them on purpose).
 
 const test = require('node:test');

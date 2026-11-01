@@ -191,8 +191,9 @@ async function runCycle(cfg, action, prompt, opts, { timeoutMs = cfg.cycleTimeou
  * One desk role's run, as the runner's orchestration engine runs it (orchestrate/engine.js; the desk workflow): the
  * role as its own harness run (`buildCommand`'s `agent`), with the cycle's environment (its bars, cached roles, the
  * transcript live), within `timeoutMs`. Its result for the engine: { ok, timedOut, output, transcript, text, tools,
- * lookups } (`text` its final message, `tools` the tools it completed, `lookups` the skills it looked up naming its
- * role: what the order gate credits its report with, in the runner's role record, runner-roles.js). Only on a harness
+ * lookups, skills, usage } (`text` its final message, `tools` the tools it completed, `lookups` the skills it looked up naming its
+ * role: what the order gate credits its report with, in the runner's role record, runner-roles.js; `usage` its
+ * prompt-cache use on Claude Code, transcript.js claudeRunUsage, measurement only). Only on a harness
  * that runs a role on its own (autotrader.js ROLE_RUNS), each read the same way (runResultOf); any other throws.
  * `signal` (optional): aborted, the run is stopped (harness-run.js) and its result is not ok.
  */
@@ -224,7 +225,9 @@ async function runRole(cfg, role, request, { timeoutMs, context = null, signal =
   } catch (_err) { lookups = []; }
   // Which skills it had (role-skills-record.js), for the cycle log's desk and entry records: detection only.
   const skills = roleSkills({ root: deps.root, role, output: typeof res.stdout === 'string' ? res.stdout : (res.output || ''), home: harnessHome(runEnv), embedded: embeddedFor(cfg, deps.root, role, added) });
-  return { ok: Boolean(res.ok), timedOut: Boolean(res.timedOut), output: res.output || '', transcript: res.transcript || null, text, tools, lookups, skills };
+  // Its prompt-cache use (Claude Code's result event; measurement only), for the cycle log's desk and entry records.
+  const usage = cfg.harness === 'claude' ? require('./transcript').claudeRunUsage(typeof res.stdout === 'string' ? res.stdout : res.output) : null;
+  return { ok: Boolean(res.ok), timedOut: Boolean(res.timedOut), output: res.output || '', transcript: res.transcript || null, text, tools, lookups, skills, ...(usage ? { usage } : {}) };
 }
 
 /** The skills a role's prompt held whole: its prompt addition (Claude Code, roleSkillsInPrompt), or opencode's role prompt; else none. */

@@ -1687,12 +1687,53 @@ test('deskBriefReports (this machine\'s runner config): a boolean or absent, for
 
 test('HEAD_DELIVERY_KEYS: every head trader delivery key is validated (a boolean or absent, claude only)', () => {
   const { HEAD_DELIVERY_KEYS } = require('../../scripts/lib/autotrader');
-  assert.deepStrictEqual([...HEAD_DELIVERY_KEYS], ['headSkillsInPrompt', 'cycleDataInPrompt', 'roleSkillsInPrompt', 'deskBriefReports']);
+  assert.deepStrictEqual([...HEAD_DELIVERY_KEYS], ['headSkillsInPrompt', 'cycleDataInPrompt', 'roleSkillsInPrompt', 'deskBriefReports', 'stableFirstPrompt']);
   for (const k of HEAD_DELIVERY_KEYS) {
     assert.strictEqual(validateConfig({ harness: 'claude', [k]: true })[k], true, k);
     assert.throws(() => validateConfig({ harness: 'claude', [k]: 'yes' }), new RegExp(`${k}: true or false`), k);
     for (const harness of ['opencode', 'codex', 'qwen']) assert.throws(() => validateConfig({ harness, [k]: true }), new RegExp(`${k}: for harness "claude" only`), `${k} ${harness}`);
   }
+});
+
+test('stableFirstPrompt: Claude Code\'s default (set when absent, so its config, hashes and decisions name it), false keeps the old order; another harness never has it', () => {
+  const { headDeliveryOf } = require('../../scripts/lib/autotrader');
+  assert.strictEqual(validateConfig({ harness: 'claude' }).stableFirstPrompt, true, 'absent: set on');
+  assert.strictEqual(validateConfig({ harness: 'claude', stableFirstPrompt: false }).stableFirstPrompt, false);
+  for (const v of ['yes', 1, null, {}]) assert.throws(() => validateConfig({ harness: 'claude', stableFirstPrompt: v }), /stableFirstPrompt: true or false/, JSON.stringify(v));
+  for (const harness of ['opencode', 'codex', 'qwen']) {
+    assert.strictEqual(validateConfig({ harness }).stableFirstPrompt, undefined, `${harness}: absent stays absent`);
+    assert.throws(() => validateConfig({ harness, stableFirstPrompt: true }), /stableFirstPrompt: for harness "claude" only/, harness);
+  }
+  // The delivery a run was made under: a run made before the key existed (no cfg.stableFirstPrompt) is none, a new
+  // Claude Code run names it, so the two are never pooled.
+  assert.strictEqual(headDeliveryOf({ config: {} }, {}), null);
+  assert.strictEqual(headDeliveryOf({ config: { 'cfg.stableFirstPrompt': 'true' } }, null), 'stableFirstPrompt');
+  assert.strictEqual(headDeliveryOf(null, validateConfig({ harness: 'claude', roleSkillsInPrompt: true })), 'roleSkillsInPrompt,stableFirstPrompt');
+  assert.strictEqual(headDeliveryOf(null, validateConfig({ harness: 'claude', stableFirstPrompt: false })), null);
+});
+
+test('the trade prompt\'s two orders hold the same parts (nothing added, cut or reworded): the stable-first order puts the stable part, the instructions and the situation first, the result line last', () => {
+  const { TRADE_ORDER, TRADE_ORDER_BEFORE, tradeOrder, withCycleData } = require('../../scripts/lib/autotrader');
+  assert.deepStrictEqual([...TRADE_ORDER].sort(), [...TRADE_ORDER_BEFORE].sort());
+  assert.deepStrictEqual(TRADE_ORDER.slice(0, 3), ['stable', 'instructions', 'situation']);
+  for (const o of [TRADE_ORDER, TRADE_ORDER_BEFORE]) assert.strictEqual(o[o.length - 1], 'result');
+  assert.strictEqual(tradeOrder(validateConfig({ harness: 'claude' })), TRADE_ORDER);
+  for (const cfg of [validateConfig({ harness: 'claude', stableFirstPrompt: false }), validateConfig({ harness: 'opencode' }), validateConfig({ harness: 'qwen' }), { harness: 'opencode', stableFirstPrompt: true }]) assert.strictEqual(tradeOrder(cfg), TRADE_ORDER_BEFORE, JSON.stringify(cfg.harness));
+  const now = new Date('2026-10-07T14:03:00Z');
+  const item = { symbol: 'MNQ', bar: { t: '2026-10-07T14:00:00Z', c: 1, file: '/b.json', contractId: 'MNQ' } };
+  const opts = { cycleSkills: ' This cycle\'s situation (x) needs your skills `rejection`: they are below.\n\n<skill name="rejection">\nbody\n</skill>\n', state: { id: '7', at: now.toISOString(), balance: 1, positions: [], workingOrders: 0 } };
+  const on = validateConfig({ harness: 'claude', account: '7' });
+  const off = validateConfig({ harness: 'claude', account: '7', stableFirstPrompt: false });
+  const parts = prompts(on, now, '/fth').trade([item], opts, { raw: true });
+  const a = prompts(on, now, '/fth').trade([item], opts);
+  const b = prompts(off, now, '/fth').trade([item], opts);
+  assert.strictEqual(a, TRADE_ORDER.map(k => parts[k]).join(''));
+  assert.strictEqual(b, TRADE_ORDER_BEFORE.map(k => parts[k]).join(''));
+  assert.strictEqual(a.length, b.length);
+  assert.ok(a.startsWith(`${parts.stable}${parts.instructions}${parts.situation} The cycle's time: `));
+  assert.ok(a.endsWith(parts.result) && b.endsWith(parts.result));
+  // The pre-collected reads still go just before the result line.
+  assert.ok(withCycleData(a, ' DATA').endsWith(` DATA${parts.result}`));
 });
 
 test('roleSkillsInPrompt (this machine\'s runner config): a boolean or absent, harness claude only; on, each role\'s own run (never the head trader\'s) gets its prompt addition, the role\'s own tools still allowed', () => {

@@ -285,7 +285,9 @@ function deskConcurrencyProblem(v) {
  */
 // roleSkillsInPrompt is the roles' (the runner's role runs: their skills in a prompt addition, role-prompt.js), listed
 // here so a run with it is never pooled with one without it either.
-const HEAD_DELIVERY_KEYS = Object.freeze(['headSkillsInPrompt', 'cycleDataInPrompt', 'roleSkillsInPrompt', 'deskBriefReports']);
+// stableFirstPrompt is the order of the head trader's cycle prompt (Claude Code's default: validateConfig sets it), listed
+// so a run in the stable-first order is never pooled with one made before it, in the old order.
+const HEAD_DELIVERY_KEYS = Object.freeze(['headSkillsInPrompt', 'cycleDataInPrompt', 'roleSkillsInPrompt', 'deskBriefReports', 'stableFirstPrompt']);
 /**
  * The delivery keys a run was made under, present and truthy: from its setup record's config (cfg.<key>, JSON values,
  * written at its fresh start) or a runner config of it (as the replay driver wrote it). 'a,b' in the list's order, or
@@ -394,6 +396,12 @@ function validateConfig(raw) {
   // absent or false as before.
   if (cfg.deskBriefReports !== undefined && typeof cfg.deskBriefReports !== 'boolean') errors.push('deskBriefReports: true or false, or absent (as before: the desk\'s requests as they are)');
   if (cfg.deskBriefReports === true && cfg.harness !== 'claude') errors.push(`deskBriefReports: for harness "claude" only (harness ${cfg.harness})`);
+  // stableFirstPrompt: the trade cycle's prompt in its stable-first order (prompts().trade, TRADE_ORDER). Claude Code's
+  // default, so it is set (true) when absent: the run's config, hashes and setup record name it, and its decisions are never
+  // pooled with ones made under the old order (HEAD_DELIVERY_KEYS). false: the order as before. Claude Code only.
+  if (cfg.stableFirstPrompt !== undefined && typeof cfg.stableFirstPrompt !== 'boolean') errors.push('stableFirstPrompt: true or false, or absent (Claude Code: true; false keeps the order as before)');
+  if (cfg.stableFirstPrompt === true && cfg.harness !== 'claude') errors.push(`stableFirstPrompt: for harness "claude" only (harness ${cfg.harness})`);
+  if (cfg.harness === 'claude' && cfg.stableFirstPrompt === undefined) cfg.stableFirstPrompt = true;
   if (cfg.harness === 'opencode') {
     // opencode names a model provider/model (the provider is the user's own opencode config).
     if (cfg.model && !/^[^/\s]+\/\S+$/.test(String(cfg.model))) errors.push('model: for harness "opencode", "<provider>/<model>" from your opencode config, or "" for its default');
@@ -749,10 +757,31 @@ function stableHead(root = '') {
   return `Autonomous cycle. Follow the autonomous-trading skill. No user is present.${where}`;
 }
 
+/*
+ * A trade cycle's prompt is the same parts in one of two orders (prompts().trade; nothing is added, cut or reworded):
+ *   stable        stableHead: the same every cycle of a run
+ *   instructions  the skills sentence, the trade-session line, the PLAN line: the same while the symbols and mode are
+ *   situation     the cycle's situational skills (situational-skills.js): the same while the situation is (most
+ *                 consecutive bars), so it comes right after the stable part and before anything that changes every bar
+ *   time, facts   the cycle's time, then its bars, account, history, lessons: new every cycle
+ *   desk          the roster or the entry or managed line, and the desk's reports: this cycle's
+ *   result        the result line, last (the cycle data goes just before it: withCycleData)
+ * TRADE_ORDER (stableFirstPrompt, Claude Code's default) puts the parts that hold across cycles first, so consecutive
+ * prompts share the longest prefix a prompt cache can reuse; TRADE_ORDER_BEFORE is the order as before (every other
+ * harness, and Claude Code with stableFirstPrompt false).
+ */
+/** Claude Code's prompt-cache lifetime for its run's main conversation ('5m' or '1h'; childEnv sets it per run). */
+const CLAUDE_CACHE_TTL_ENV = 'CLAUDE_CODE_PROMPT_CACHE_TTL';
+const TRADE_ORDER = Object.freeze(['stable', 'instructions', 'situation', 'time', 'facts', 'desk', 'result']);
+const TRADE_ORDER_BEFORE = Object.freeze(['stable', 'time', 'facts', 'instructions', 'desk', 'situation', 'result']);
+const stableFirstOn = cfg => Boolean(cfg) && cfg.harness === 'claude' && cfg.stableFirstPrompt === true;
+const tradeOrder = cfg => (stableFirstOn(cfg) ? TRADE_ORDER : TRADE_ORDER_BEFORE);
+
 function prompts(cfg, now, root = '') {
   const acct = cfg.account ? ` on account ${cfg.account}` : '';
   // What every cycle's prompt starts with, the same each cycle (stableHead), then the cycle's time: consecutive prompts
   // share this prefix, which a local model server's prompt cache reuses (nothing that changes between cycles before it).
+  // (A trade cycle's prompt in the stable-first order, TRADE_ORDER, puts the cycle's time later, after its instructions.)
   // New York time, as the bars, sessions, and strategies read it; UTC once, for tools that take it.
   const head = `${stableHead(root)} The cycle's time: ${etStamp(now)} (${now.toISOString()}).`;
   return {
@@ -761,7 +790,7 @@ function prompts(cfg, now, root = '') {
      * One cycle for every symbol whose bar just closed. `items` is a symbol
      * string or a list of { symbol, bar } where bar = { t, c, file, contractId }.
      */
-    trade: (items, { manageOnly = false, recovered = false, state = null, history = [], lessons = [], trades = [], tradesSummary = null, news = null, unavailable = [], cyclesLeft = null, manageAlso = [], journalRead = true, cached = null, unreviewed = null, lanes = '', frames = [], entry = false, managedDesk = false, managedCycle = false, cycleSkills: situationText = '' } = {}) => {
+    trade: (items, { manageOnly = false, recovered = false, state = null, history = [], lessons = [], trades = [], tradesSummary = null, news = null, unavailable = [], cyclesLeft = null, manageAlso = [], journalRead = true, cached = null, unreviewed = null, lanes = '', frames = [], entry = false, managedDesk = false, managedCycle = false, cycleSkills: situationText = '' } = {}, { raw = false } = {}) => {
       const list = (Array.isArray(items) ? items : [{ symbol: items }]);
       const sentence = t => { const x = String(t).trim(); return /[.!?…]$/.test(x) ? x : `${x}.`; };
       // `minutes`: the lane whose bar closed (none: the runner's timeframe); `repeat`: a further lane of a symbol
@@ -803,7 +832,17 @@ function prompts(cfg, now, root = '') {
       // A section that couldn't be built is named, so its absence isn't read as "nothing to say".
       const missing = unavailable.length ? ` Context unavailable this cycle (not "none"): ${unavailable.join('; ')}.` : '';
       const also = manageAlso.length ? `, and manage the open ${manageAlso.join(', ')} position${manageAlso.length === 1 ? '' : 's'} (no bar closed for ${manageAlso.length === 1 ? 'it' : 'them'} this cycle)` : '';
-      return `${head}${recover}${lanes}${bars.join('')}${news ? ` ${news}` : ''}${eodText}${capText}${account}${verdicts.join('')}${historyText(history, Boolean(lanes), marketOf(list, cfg.timeframe))}${unreviewed ? ` ${unreviewed}` : ''}${own}${lessons.length ? ` Your recurring mistakes and lessons (confidence; notes from your own past, not rules): ${lessons.join(' | ')}.` : ''}${missing} ${skillsText(cfg, root)}, then run the trade-session skill for ${symbols}${new Set(list.map(x => x.symbol)).size > 1 ? ' (one symbol at a time, open positions first)' : ''}${also}${acct}${mode ? ` in ${mode}` : ''}.${PLAN_TEXT}${manageOnly || cfg.paper ? '' : entry ? `${ENTRY_TEXT}${cachedText(cached)}` : managedDesk ? `${MANAGED_DESK_TEXT}${cachedText(cached)}` : `${roster(cfg, (cached && cached.roles) || [], frames)}${managedCycle ? MANAGED_NO_ENTRY_TEXT : ''}${cachedText(cached)}`}${situationText}${RESULT_LINE}`;
+      const parts = {
+        stable: stableHead(root),
+        time: ` The cycle's time: ${etStamp(now)} (${now.toISOString()}).`,
+        facts: `${recover}${lanes}${bars.join('')}${news ? ` ${news}` : ''}${eodText}${capText}${account}${verdicts.join('')}${historyText(history, Boolean(lanes), marketOf(list, cfg.timeframe))}${unreviewed ? ` ${unreviewed}` : ''}${own}${lessons.length ? ` Your recurring mistakes and lessons (confidence; notes from your own past, not rules): ${lessons.join(' | ')}.` : ''}${missing}`,
+        instructions: ` ${skillsText(cfg, root)}, then run the trade-session skill for ${symbols}${new Set(list.map(x => x.symbol)).size > 1 ? ' (one symbol at a time, open positions first)' : ''}${also}${acct}${mode ? ` in ${mode}` : ''}.${PLAN_TEXT}`,
+        desk: manageOnly || cfg.paper ? '' : entry ? `${ENTRY_TEXT}${cachedText(cached)}` : managedDesk ? `${MANAGED_DESK_TEXT}${cachedText(cached)}` : `${roster(cfg, (cached && cached.roles) || [], frames)}${managedCycle ? MANAGED_NO_ENTRY_TEXT : ''}${cachedText(cached)}`,
+        situation: situationText,
+        result: RESULT_LINE,
+      };
+      if (raw) return parts;
+      return tradeOrder(cfg).map(k => parts[k]).join('');
     },
     eod: ({ state = null, day = null } = {}) => {
       const d = day || dayKey(now);
@@ -940,6 +979,15 @@ function childEnv(cfg, root, base = process.env, context = null) {
   // counts no background launch as a role that ran: roles-ran.js). Claude Code starts subagents in the background by
   // default; this is its documented switch that makes it wait for every one (and for background tasks).
   if (cfg.harness === 'claude') env.CLAUDE_CODE_DISABLE_BACKGROUND_TASKS = '1';
+  // Claude Code: the run's prompt-cache lifetime, from how often it comes back (prompt-cache-ttl.js: a 3m run's 5
+  // minutes, a 15m or 1h analyst's hour, config/runner.json prompt.cacheTtlMinutes), so its stable prefix is still
+  // cached at its next run. The CLI's own switches above it (forcing 5 minutes) still win. None configured: as inherited.
+  if (cfg.harness === 'claude') {
+    const role = context && typeof context.roleRun === 'string' && context.roleRun ? context.roleRun : null;
+    let ttl;
+    try { ttl = require('./prompt-cache-ttl').ttlOfRun(cfg, role, role ? require('./harness-sync').loadAgents(PLUGIN_ROOT) : []); } catch (_err) { ttl = null; }
+    if (ttl) env[CLAUDE_CACHE_TTL_ENV] = ttl;
+  }
   // opencode: reading the runner's directories (the committed workspace/opencode.json can't name them) and its lock-down.
   if (cfg.harness === 'opencode') {
     // How its roles' prompts carry their skills (role-skills.js; index by default): the gate enforces index mode's lookups,
@@ -1377,6 +1425,11 @@ function runnerArgv(argv) {
 }
 
 module.exports = {
+  TRADE_ORDER,
+  CLAUDE_CACHE_TTL_ENV,
+  TRADE_ORDER_BEFORE,
+  stableFirstOn,
+  tradeOrder,
   ENTRY_TEXT,
   MANAGED_DESK_TEXT,
   MANAGED_NO_ENTRY_TEXT,

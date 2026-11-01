@@ -325,3 +325,26 @@ test('phase 1\'s report is served only under the risk-manager body it was writte
   assert.deepStrictEqual(serve('body-2'), [], 'an edited role body runs the role again');
   assert.deepStrictEqual(serve(null), [], 'a cache from before the key is not served under one');
 });
+
+test('freshness pin: an analyst\'s report is served only on its own 15m bar, whatever the clock says and across a restart (the cache file read back); a report built on an older bar is never served', () => {
+  const { n, a, b } = pair();
+  const output = task(ANALYSTS[0], `${data(a)}\nBias: long (high)`, [10, 20]);
+  const cache = RC.recordReports({ output, briefings: { MNQ: a }, symbols: sym(a), account: ACCT, day: DAY, now: new Date(a.closedAt) });
+  // A restart: the cache as the next runner reads it from the harness home.
+  const home = tmpDir();
+  RC.writeCache(home, cache);
+  const back = RC.readCache(home);
+  let m = n + 1;
+  let later = b;
+  while (later.sections.m15.version === a.sections.m15.version) { m += 1; later = brief(m); }
+  // Clocks: the cache's own time, far behind, far ahead; none of them serves a report past its 15m bar, all serve it inside.
+  for (const now of [soon(cache), new Date(Date.parse(cache.at) - 86400000), new Date(Date.parse(cache.at) + 86400000), null]) {
+    assert.deepStrictEqual(RC.serveReports({ cache: back, briefings: { MNQ: b }, symbols: sym(b), account: null, day: DAY, now }).roles, [ANALYSTS[0]], `inside its 15m bar (${now && now.toISOString()})`);
+    assert.deepStrictEqual(RC.serveReports({ cache: back, briefings: { MNQ: later }, symbols: sym(later), account: null, day: DAY, now }).roles, [], `after the next 15m close (${now && now.toISOString()})`);
+  }
+  // Built on an older bar than the cycle's (the cache holds an earlier 15m bar's report): never served on the new one.
+  const old = RC.recordReports({ output: task(ANALYSTS[0], `${data(a)}\nBias: long`, [10, 20]), briefings: { MNQ: a }, symbols: sym(a), account: ACCT, day: DAY, now: new Date(a.closedAt) });
+  assert.deepStrictEqual(RC.serveReports({ cache: old, briefings: { MNQ: later }, symbols: sym(later), account: null, day: DAY, now: soon(old) }).roles, []);
+  // A briefing that isn't the cycle's bar's (a missing bar: the newest briefing is an older bar's): nothing served.
+  assert.deepStrictEqual(RC.serveReports({ cache: back, briefings: { MNQ: a }, symbols: sym(later), account: null, day: DAY, now: soon(cache) }).roles, []);
+});

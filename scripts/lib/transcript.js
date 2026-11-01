@@ -19,6 +19,9 @@
  *                            mcp__<server>__<tool> as on the other harnesses
  *   claudeRunResult(text)    a Claude Code `-p --output-format stream-json` run's { text, tools }, as opencode.js
  *                            runResult reads opencode's: the orchestration engine's role result
+ *   claudeRunUsage(text)     the run's prompt-cache use, from its stream: { total, first, turns } (total: its result
+ *                            event's usage; first: its first turn's, whose cacheRead is what an earlier run left cached;
+ *                            each { input, cacheRead, cacheCreation, output }), or null (no result event with usage)
  *
  * Never throws on a malformed transcript: what it can't parse it skips.
  */
@@ -143,4 +146,31 @@ function claudeRunResult(text) {
   return { text: errored ? '' : final || last, tools };
 }
 
-module.exports = { claudeRunResult, documents, parsed, BRIDGE_TOOLS, unwrap, resultText, bridgeRefused, SHELL_TOOLS, isOpencodeEvent, opencodeCall, opencodeStopped, OPENCODE_SERVERS };
+const tokens = u => {
+  const n = k => (Number.isFinite(Number(u && u[k])) ? Number(u[k]) : 0);
+  return { input: n('input_tokens'), cacheRead: n('cache_read_input_tokens'), cacheCreation: n('cache_creation_input_tokens'), output: n('output_tokens') };
+};
+const isUsage = u => Boolean(u) && typeof u === 'object' && !Array.isArray(u);
+
+/**
+ * A Claude Code stream-json run's prompt-cache use (measurement only: nothing decides by it). Only the session's own
+ * events (a subagent's, parent_tool_use_id, are its own run). A turn is one assistant message id; its usage is on each of
+ * its events, the same, so the first one read counts.
+ */
+function claudeRunUsage(text) {
+  let total = null;
+  let first = null;
+  const turns = new Set();
+  for (const ev of documents(text)) {
+    if (!ev || typeof ev !== 'object' || ev.parent_tool_use_id) continue;
+    if (ev.type === 'result' && isUsage(ev.usage)) total = tokens(ev.usage);
+    if (ev.type === 'assistant' && ev.message && typeof ev.message === 'object') {
+      const id = typeof ev.message.id === 'string' ? ev.message.id : null;
+      if (id) turns.add(id);
+      if (!first && isUsage(ev.message.usage)) first = tokens(ev.message.usage);
+    }
+  }
+  return total ? { total, first, turns: turns.size } : null;
+}
+
+module.exports = { claudeRunResult, claudeRunUsage, documents, parsed, BRIDGE_TOOLS, unwrap, resultText, bridgeRefused, SHELL_TOOLS, isOpencodeEvent, opencodeCall, opencodeStopped, OPENCODE_SERVERS };
