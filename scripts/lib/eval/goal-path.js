@@ -387,14 +387,19 @@ function compareTrades(main, now, days) {
 
 /**
  * The share of the days with a mechanical first entry (goal-trades.js) whose first planned entry filled, the mock's or the mechanical's
- * (the owner, 2026-10-31: one trade replacing another isn't a lost fill): a trade of its side filled that day no later than the
+ * (the owner, 2026-10-31: one trade replacing another isn't a lost fill): a trade of its side filled that day, at or after
+ * one 1h bar before the mechanical setup (setupAt) and no later than the
  * mechanical entry's window (its entry time plus spanMs, one setup-frame span). The mechanical entry filled within its window counts; so does
  * an earlier mock entry that filled (one position at a time then refuses the mechanical one); a day where nothing
  * filled by then is a lost fill.
  */
 function fillShare(trades, mechanical, spanMs) {
   if (!mechanical.length) return null;
-  const hit = mechanical.filter(m => trades.some(t => t.day === m.day && t.side === m.side && Number.isFinite(ms(t.entryTime)) && ms(t.entryTime) <= ms(m.entryTime) + spanMs));
+  // The earliest a planned entry can be: one 1h bar (the largest setup frame, composed-reads.js TF_MIN) before the
+  // mechanical setup, as the setup is the entry and a setup can be a 1h bar. No setup time: no fill counts (fails closed).
+  const before = require('../trading/composed-reads').TF_MIN['1h'] * 60000;
+  const hit = mechanical.filter(m => trades.some(t => t.day === m.day && t.side === m.side && Number.isFinite(ms(t.entryTime)) && Number.isFinite(ms(m.setupAt))
+    && ms(t.entryTime) >= ms(m.setupAt) - before && ms(t.entryTime) <= ms(m.entryTime) + spanMs));
   return r4(hit.length / mechanical.length);
 }
 
