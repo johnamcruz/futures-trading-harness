@@ -265,6 +265,8 @@ function captureReport({ runDir, home = path.resolve(runDir, '..', '..'), days =
     try { tick = require('../trading/contracts').tickOf(o.contractId || rt.contractId); } catch (_err) { /* unknown: no tolerance */ }
     return TB.onHeldStop(rt, { stop, tick });
   };
+  // An entry's compose record's cycle bar (its close, as byBar keys the cycles), NaN without one.
+  const recordBarOf = o => { const r = records.get(o.composed.record); return r ? Date.parse(r.bar) + stepMs : NaN; };
   const stops = [...records.values()].filter(r => r.plan && r.plan.stop && num(r.plan.stop.ticks) !== null).map(r => r.plan.stop.ticks * r.plan.tick);
   const runStop = median(stops);
   const out = legs.map(g => {
@@ -285,8 +287,11 @@ function captureReport({ runDir, home = path.resolve(runDir, '..', '..'), days =
     const availPts = firstEntry && num(g.to) !== null ? Math.abs(g.to - firstEntry.c) : null;
     // An entry the leg's way placed in its first catchShare, or placed before the leg's start and filled in it (an order
     // placed on the bar before the turn and filled at the leg's first bar caught it: 2021-06-28, placed 75 s early).
-    const entered = orders.filter(o => isObj(o.composed) && o.composed.side === g.side && Date.parse(o.at) <= until
-      && (Date.parse(o.at) >= t0 || (filledAt(o) >= t0 && filledAt(o) <= until)));
+    // Placed in that span by its wall time, or by its compose record's bar as the cycles are read (a cycle slower than
+    // its bar places the order after the span's wall time: 2022-05-23, the 13:54 bar's order placed at 13:58:23).
+    const inSpan = ms => ms >= t0 && ms <= until;
+    const entered = orders.filter(o => isObj(o.composed) && o.composed.side === g.side
+      && (inSpan(Date.parse(o.at)) || inSpan(recordBarOf(o)) || (Date.parse(o.at) < t0 && inSpan(filledAt(o)))));
     const fill = entered.map(o => ({ o, f: filled(o.orderId) })).find(x => x.f) || (entered[0] ? { o: entered[0], f: null } : null);
     const trip = fill && fill.f ? tripOf(fill.f) : null;
     const captured = Boolean(fill && fill.f);
@@ -303,7 +308,7 @@ function captureReport({ runDir, home = path.resolve(runDir, '..', '..'), days =
     const threshold = num(g.scale) !== null ? TUN.minMoveAtr * g.scale : null;
     const sizeX = threshold && num(g.points) !== null ? round2(g.points / threshold) : null;
     // An entry placed that never filled blocked the leg at execution: its limit went unfilled.
-    for (const c of legCycles) if (c.code === 'entered' && !(captured && fill.o.composed.record === c.record)) c.code = entered.some(o => o.composed.record === c.record && filled(o.orderId)) ? 'entered' : 'unfilled';
+    for (const c of legCycles) if (c.code === 'entered' && !(captured && fill.o.composed.record === c.record)) c.code = orders.some(o => isObj(o.composed) && o.composed.record === c.record && filled(o.orderId)) ? 'entered' : 'unfilled';
     const blocking = legCycles.filter(c => c.code !== 'entered' || !captured);
     const best = blocking.reduce((a, c) => (!a || stageOf(c) >= stageOf(a) ? c : a), null);
     return {

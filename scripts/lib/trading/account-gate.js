@@ -368,6 +368,20 @@ function lateFillRefusal(order, { orders, fills, history }) {
   return [{ check: 'cancel-protection', message: `Order ${order.id} may be the protective stop of a ${contractRoot(order.contractId)} position the account's position read doesn't show yet: ${held.text}. It stays while any source shows the position or its entry; it may go once the fills net to zero and no entry works. Move it with modify_order, or close the position first ([exit]).` }];
 }
 
+/** A size as a number: a number or its text; anything else (a boolean, an object, a list) NaN (refused). */
+const sizeOf = v => (typeof v === 'number' || typeof v === 'string' ? Number(v) : NaN);
+
+/**
+ * Does this modify change the order's size? A size given equal to the order's own (a whole number, 1 or more: a stop
+ * moved with its size restated) is no change; any other size given is (and is then checked: only a decrease, so a
+ * larger, fractional, zero or unreadable size is refused, as is any size against an order of unreadable size).
+ */
+function resizes(input, order) {
+  if (input.size === undefined || input.size === null) return false;
+  const size = sizeOf(input.size);
+  return !(Number.isInteger(size) && size >= 1 && size === Number(order.size));
+}
+
 /**
  * Under a refused config file: is this change to an order that works no position only a risk cut on the bracket leg of a
  * still-working entry? The entry is an earlier working order (a lower id: a leg is placed with or after its entry) on the other side of the
@@ -386,10 +400,10 @@ function bracketLegChange({ input, order, orders, isStop }) {
   const mine = Number.isFinite(legPrice) ? entries.filter(beyond) : [];
   if (!mine.length) return { ok: false, why: 'it is no bracket leg of a working entry' };
   const given = ['limitPrice', 'stopPrice', 'trailPrice'].filter(f => input[f] !== undefined && input[f] !== null);
-  const sized = input.size !== undefined && input.size !== null;
+  const sized = resizes(input, order);
   if (!sized && !given.length) return { ok: false, why: 'nothing to cut or move' };
   if (sized) {
-    const size = Number(input.size);
+    const size = sizeOf(input.size);
     if (!(Number.isInteger(size) && size >= 1 && size < Number(order.size))) return { ok: false, why: 'only a smaller size' };
     if (isStop) {
       const others = restingSize(orders.filter(o => o !== order), order.contractId, sign, STOP_TYPES);
@@ -411,7 +425,7 @@ function bracketLegChange({ input, order, orders, isStop }) {
  * modify_order checks that need the account. An order "works" an open
  * position when it sits on the opposite side of a position in its own
  * contract month (a protective stop or a target).
- * - size: only a decrease; a protective stop's cut must leave the stops
+ * - size: only a decrease (a size equal to the order's is no change: resizes); a protective stop's cut must leave the stops
  *   covering the position (cut it after a partial exit, not before);
  * - a refused config file (CRITICAL): an entry order is not modified at all (a bracket leg of a working entry may be
  *   cut, its stop moved toward the entry: bracketLegChange);
@@ -458,8 +472,8 @@ function evaluateModifyAccount({ input = {}, positions, orders, config, ledger =
     return violations;
   }
 
-  if (input.size !== undefined && input.size !== null) {
-    const size = Number(input.size);
+  if (resizes(input, order)) {
+    const size = sizeOf(input.size);
     if (!(Number.isInteger(size) && size >= 1 && size < Number(order.size))) {
       add('modify-size', `modify_order may only reduce an order's size (order ${order.id} is ${order.size}, asked ${input.size}). To add, place a new order through the gate.`);
     } else if (isStop) {

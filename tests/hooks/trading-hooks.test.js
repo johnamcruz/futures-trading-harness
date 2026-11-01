@@ -2130,6 +2130,25 @@ test('MCP gateway: with an exit of unknown outcome, the stop can\'t be cancelled
   assert.strictEqual(noStop.byId[3].result.content[0].text, 'forwarded:tools/call:place_order');
 });
 
+test('modify_order through the hook and the gateway: a stop moved toward the market with its size restated (3 = 3) goes; a larger, fractional size or a widened stop is refused', async () => {
+  const { env } = setup([]);
+  const move = { accountId: 1, orderId: 2, size: 3, stopPrice: 21490, reason: '[protect] trail behind the 15m swing' };
+  assert.strictEqual(gate({ tool_name: 'mcp__broker__modify_order', tool_input: move }, env).code, 0, 'the hook lets it through');
+  assert.strictEqual(gate({ tool_name: 'mcp__broker__modify_order', tool_input: { ...move, size: 2.5 } }, env).code, 2, 'the hook refuses a fractional size');
+  const long3 = JSON.stringify([{ contractId: 'MNQ', type: 1, size: 3 }]);
+  const stop = JSON.stringify([{ id: 2, contractId: 'MNQ', side: 1, type: 4, size: 3, status: 1, stopPrice: 21480 }]);
+  const { byId } = await gatewayRun({ FAKE_POSITIONS: long3, FAKE_ORDERS: stop }, [
+    call(1, 'modify_order', move),
+    call(2, 'modify_order', { ...move, size: 4 }),
+    call(3, 'modify_order', { ...move, size: 3.5 }),
+    call(4, 'modify_order', { ...move, stopPrice: 21470 }),
+  ]);
+  assert.strictEqual(byId[1].result.content[0].text, 'forwarded:tools/call:modify_order');
+  assert.match(byId[2].result.content[0].text, /\[modify-size\]/);
+  assert.match(byId[3].result.content[0].text, /\[modify-size\]/);
+  assert.match(byId[4].result.content[0].text, /\[modify-protection\]/);
+});
+
 const writeUnknown = (dir, extra) => require('../../scripts/lib/trading/order-markers').writeMarker({ FTH_HOME: path.join(dir, '.futures-trading-harness') }, {
   tag: 'u-1', accountId: 1, contractId: 'MNQ', side: 'buy', size: 1, type: 'market', risk: false, observedNet: 0, observedRootNet: 0,
   args: { contractId: 'MNQ', side: 'buy', rationale: 'setup:orb long, stop 21480' }, sentAt: new Date(Date.parse(TEST_NOW) - 5000).toISOString(), ...extra,
