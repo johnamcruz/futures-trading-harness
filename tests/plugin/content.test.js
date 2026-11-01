@@ -553,7 +553,7 @@ test('the analysts report reads for or against the trend rule\'s side, never adv
   // The setup (15m) closed is the trigger; in a prop attempt the full size (feat/bias-bg).
   const flatOf = f => read(f).replace(/\s+/g, ' ');
   assert.ok(flatOf('skills/trade-session/SKILL.md').includes('the setup (15m) at a key level closed → `compose_check`, never your own R:R. OK → take: in a prop attempt the full verdict size; pass only on a decisive against. Not in a prop attempt: the `position-sizing` skill.'));
-  assert.ok(flatOf('skills/trade-lifecycle/SKILL.md').includes('the side rule\'s side, the setup (15m) at a level closed (it is the entry, on the next 3m bar) → compose (`confluence-counting`); the plan, never you, works out R:R.'));
+  assert.ok(flatOf('skills/trade-lifecycle/SKILL.md').includes('the side rule\'s side, the setup (15m) at a level closed (it is the entry: a limit at the last close when you compose (the setup\'s own close when you compose on its bar), filled within `valid_bars`) → compose (`confluence-counting`); the plan, never you, works out R:R.'));
 });
 
 test('the count is of independent categories, never labels, and every restatement says the same (the owner\'s duplicated-evidence principle)', () => {
@@ -563,7 +563,7 @@ test('the count is of independent categories, never labels, and every restatemen
   // The six categories, in order, each once; labels of one price move are one piece of evidence.
   assert.deepStrictEqual([...cc.matchAll(/\| (\w+) \| [^|]+ \|/g)].map(m => m[1]).filter(c => c !== 'Category'), ['structure', 'location', 'liquidity', 'trigger', 'participation', 'context']);
   // A valid setup is the trade (the owner, 2026-10-21): the categories describe the evidence; the against sets the size.
-  for (const rule of ['**Compose first.**', 'closed (it is the entry, on the next 3m bar) → call `compose_check`.', 'Never estimate room or R:R: the briefing\'s "Standard plan" line states it',
+  for (const rule of ['**Compose first.**', 'closed (it is the entry: a limit at the last close when you compose (the setup\'s own close when you compose on its bar), filled within `valid_bars`) → call `compose_check`.', 'Never estimate room or R:R: the briefing\'s "Standard plan" line states it',
     'refused → pass, naming it.', 'OK → **a valid setup is the trade**. In a prop attempt nothing halves: a serious factor against doesn\'t cut the size; the code sets the full verdict size. The against:',
     'never a reason not to compose', 'no pullback yet',
     '**Decisive** → pass: a 1h CHoCH against while the 1h ranges (with the 4h and 1h your way: context), or a hard step fails.', 'Serious (2+ categories against, the setup into the other side\'s level',
@@ -575,7 +575,7 @@ test('the count is of independent categories, never labels, and every restatemen
   // Each restatement: categories, the same threshold, and no against category a pass alone.
   const ts = flat(read('skills/trade-session/SKILL.md'));
   assert.ok(ts.includes('**Compose first** (`confluence-counting`): the side rule\'s side, the setup (15m) at a key level closed → `compose_check`, never your own R:R. OK → take: in a prop attempt the full verdict size; pass only on a decisive against. Not in a prop attempt: the `position-sizing` skill.'));
-  assert.ok(flat(read('skills/trade-lifecycle/SKILL.md')).includes('the side rule\'s side, the setup (15m) at a level closed (it is the entry, on the next 3m bar) → compose (`confluence-counting`); the plan, never you, works out R:R.'));
+  assert.ok(flat(read('skills/trade-lifecycle/SKILL.md')).includes('the side rule\'s side, the setup (15m) at a level closed (it is the entry: a limit at the last close when you compose (the setup\'s own close when you compose on its bar), filled within `valid_bars`) → compose (`confluence-counting`); the plan, never you, works out R:R.'));
   const tp = flat(read('skills/trader-process/SKILL.md'));
   // take or pass first: the decision word the verdict parser reads (roles-ran.js: "take" agrees, a "valid" first word
   // read as a veto in a phase-2 report).

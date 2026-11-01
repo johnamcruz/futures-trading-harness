@@ -28,7 +28,7 @@ hypotheses; a missing field is `unknown`. Completed candles only, on 3m,
 | 1h, 4h | HTF levels (prior day, overnight, CRT) | most |
 
 **The setup**: a 15m or 1h breakout the bias's way (step 1); it is
-the entry, on the next 3m bar (step 6).
+the entry (step 6).
 
 By PLAN step:
 
@@ -47,7 +47,7 @@ By PLAN step:
    (`bos-vs-choch`).
 - **5 Confluence**: expanding range and volume (`momentum-and-volume`),
    no absorption against it (`absorption`).
-- **6 Entry**: the 15m or 1h close beyond is the entry, on the next 3m bar;
+- **6 Entry**: the 15m or 1h close beyond is the entry: a limit at the last close when you compose (the setup's own close when you compose on its bar), filled within `valid_bars`;
    a retest that holds (a pullback: `pullback-vs-reversal`) is support,
    never a wait. Never anticipate it.
 - **7 Risk**: the idea is wrong back inside the level, beyond the retest's
@@ -72,12 +72,12 @@ best.
 
 ```text
 Take: at the prior RTH low 21385.00, 1h and 15m down: on the 15m close a body beyond, close 21375.25
-  (bottom third); the next 3m close 21381.00. Reads: 1h down, below prior rth low, at prior rth low,
-  15m broke prior rth low down, 3m close bottom, stop 3m high 21386.50, target trail.
-  short 21381.00, stop 21386.75 (23 ticks, $11.50/MNQ); the 2R mark 21369.50 arms the trail -> take.
+  (bottom third): the setup and the entry. Reads: 1h down, below prior rth low, at prior rth low,
+  15m broke prior rth low down, stop 3m high 21386.50, target trail.
+  short limit 21375.25, stop 21386.75 (46 ticks, $23.00/MNQ); the 2R mark 21352.25 arms the trail -> take.
 Skip: at the IB high 21560.00: on the 15m close only a wick beyond, close 21556.25 (touched, no broke
   read): no setup read -> pass. The session VAH 0.5R ahead is a read, not the reason.
-Loser: at the overnight high 21614.75: on the 1h close a body beyond, close 21629.50; the next 3m
-  close: long at 21622.25, stop 21613.75 (8.50 pts = 34 ticks, $17.00 on 1 MNQ);
-  a 15m close back inside at 21611.00. -34 ticks, -$17.00.
+Loser: at the overnight high 21614.75: on the 1h close a body beyond, close 21629.50:
+  long at 21629.50 (a limit at its close), stop 21613.75 (15.75 pts = 63 ticks, $31.50 on 1 MNQ);
+  a 15m close back inside at 21611.00. -63 ticks, -$31.50.
 ```

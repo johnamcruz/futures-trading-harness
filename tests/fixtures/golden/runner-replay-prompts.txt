@@ -403,8 +403,8 @@ NQ, back-adjusted CSV prices:
 ```text
 2022-06-22, trend rule 4h up, long aligned.
   The 15m 12:45 candle rejects the prior
-POC 14942.75 (the setup); the next 3m close, 13:03, closes in its top third:
-long 14960.00, stop 14938.50 under the 15m low (21.50 pts = 86 ticks, $43.00 per MNQ);
+POC 14942.75 (the setup and the entry), composed at the 13:03 close, inside `valid_bars`:
+long 14960.00, stop 14938.50 under the 15m low (21.50 pts = 86 ticks, $43.00 per MNQ), a limit at that close;
 target trail: the 2R mark 15003.00 armed it; the 15m swing high 15040.25 was reached 14:15.
 2022-08-12, trend rule 4h up.
   A 15m shooting star at the prior VAH 16809.25: a short is
@@ -1516,8 +1516,8 @@ NQ, back-adjusted CSV prices:
 ```text
 2022-06-22, trend rule 4h up, long aligned.
   The 15m 12:45 candle rejects the prior
-POC 14942.75 (the setup); the next 3m close, 13:03, closes in its top third:
-long 14960.00, stop 14938.50 under the 15m low (21.50 pts = 86 ticks, $43.00 per MNQ);
+POC 14942.75 (the setup and the entry), composed at the 13:03 close, inside `valid_bars`:
+long 14960.00, stop 14938.50 under the 15m low (21.50 pts = 86 ticks, $43.00 per MNQ), a limit at that close;
 target trail: the 2R mark 15003.00 armed it; the 15m swing high 15040.25 was reached 14:15.
 2022-08-12, trend rule 4h up.
   A 15m shooting star at the prior VAH 16809.25: a short is
@@ -2629,8 +2629,8 @@ NQ, back-adjusted CSV prices:
 ```text
 2022-06-22, trend rule 4h up, long aligned.
   The 15m 12:45 candle rejects the prior
-POC 14942.75 (the setup); the next 3m close, 13:03, closes in its top third:
-long 14960.00, stop 14938.50 under the 15m low (21.50 pts = 86 ticks, $43.00 per MNQ);
+POC 14942.75 (the setup and the entry), composed at the 13:03 close, inside `valid_bars`:
+long 14960.00, stop 14938.50 under the 15m low (21.50 pts = 86 ticks, $43.00 per MNQ), a limit at that close;
 target trail: the 2R mark 15003.00 armed it; the 15m swing high 15040.25 was reached 14:15.
 2022-08-12, trend rule 4h up.
   A 15m shooting star at the prior VAH 16809.25: a short is
@@ -3733,8 +3733,8 @@ NQ, back-adjusted CSV prices:
 ```text
 2022-06-22, trend rule 4h up, long aligned.
   The 15m 12:45 candle rejects the prior
-POC 14942.75 (the setup); the next 3m close, 13:03, closes in its top third:
-long 14960.00, stop 14938.50 under the 15m low (21.50 pts = 86 ticks, $43.00 per MNQ);
+POC 14942.75 (the setup and the entry), composed at the 13:03 close, inside `valid_bars`:
+long 14960.00, stop 14938.50 under the 15m low (21.50 pts = 86 ticks, $43.00 per MNQ), a limit at that close;
 target trail: the 2R mark 15003.00 armed it; the 15m swing high 15040.25 was reached 14:15.
 2022-08-12, trend rule 4h up.
   A 15m shooting star at the prior VAH 16809.25: a short is
@@ -4608,11 +4608,11 @@ and close: an engulfing ranks with other strong ones); the 3m only times
 the entry.
 
 **OTE and bounce** (`fib-retracement`): a strong CISD's `leg` gives
-`ote`.
-  Wait for a completed candle closing back the CISD's way in it
-(`candle-reading`); `absorption` in the zone confirms.
-  Never anticipate
-the bounce.
+`ote`: support, never a wait (the 15m CISD is the entry).
+  A completed
+candle closing back the CISD's way in it (`candle-reading`) or
+`absorption` in the zone counts.
+  Never anticipate the bounce.
 
 ## Examples
 
@@ -4934,8 +4934,8 @@ NQ, back-adjusted CSV prices:
 ```text
 2022-06-22, trend rule 4h up, long aligned.
   The 15m 12:45 candle rejects the prior
-POC 14942.75 (the setup); the next 3m close, 13:03, closes in its top third:
-long 14960.00, stop 14938.50 under the 15m low (21.50 pts = 86 ticks, $43.00 per MNQ);
+POC 14942.75 (the setup and the entry), composed at the 13:03 close, inside `valid_bars`:
+long 14960.00, stop 14938.50 under the 15m low (21.50 pts = 86 ticks, $43.00 per MNQ), a limit at that close;
 target trail: the 2R mark 15003.00 armed it; the 15m swing high 15040.25 was reached 14:15.
 2022-08-12, trend rule 4h up.
   A 15m shooting star at the prior VAH 16809.25: a short is
@@ -5806,11 +5806,11 @@ and close: an engulfing ranks with other strong ones); the 3m only times
 the entry.
 
 **OTE and bounce** (`fib-retracement`): a strong CISD's `leg` gives
-`ote`.
-  Wait for a completed candle closing back the CISD's way in it
-(`candle-reading`); `absorption` in the zone confirms.
-  Never anticipate
-the bounce.
+`ote`: support, never a wait (the 15m CISD is the entry).
+  A completed
+candle closing back the CISD's way in it (`candle-reading`) or
+`absorption` in the zone counts.
+  Never anticipate the bounce.
 
 ## Examples
 
@@ -6132,8 +6132,8 @@ NQ, back-adjusted CSV prices:
 ```text
 2022-06-22, trend rule 4h up, long aligned.
   The 15m 12:45 candle rejects the prior
-POC 14942.75 (the setup); the next 3m close, 13:03, closes in its top third:
-long 14960.00, stop 14938.50 under the 15m low (21.50 pts = 86 ticks, $43.00 per MNQ);
+POC 14942.75 (the setup and the entry), composed at the 13:03 close, inside `valid_bars`:
+long 14960.00, stop 14938.50 under the 15m low (21.50 pts = 86 ticks, $43.00 per MNQ), a limit at that close;
 target trail: the 2R mark 15003.00 armed it; the 15m swing high 15040.25 was reached 14:15.
 2022-08-12, trend rule 4h up.
   A 15m shooting star at the prior VAH 16809.25: a short is
@@ -6925,11 +6925,11 @@ and close: an engulfing ranks with other strong ones); the 3m only times
 the entry.
 
 **OTE and bounce** (`fib-retracement`): a strong CISD's `leg` gives
-`ote`.
-  Wait for a completed candle closing back the CISD's way in it
-(`candle-reading`); `absorption` in the zone confirms.
-  Never anticipate
-the bounce.
+`ote`: support, never a wait (the 15m CISD is the entry).
+  A completed
+candle closing back the CISD's way in it (`candle-reading`) or
+`absorption` in the zone counts.
+  Never anticipate the bounce.
 
 ## Examples
 
@@ -7251,8 +7251,8 @@ NQ, back-adjusted CSV prices:
 ```text
 2022-06-22, trend rule 4h up, long aligned.
   The 15m 12:45 candle rejects the prior
-POC 14942.75 (the setup); the next 3m close, 13:03, closes in its top third:
-long 14960.00, stop 14938.50 under the 15m low (21.50 pts = 86 ticks, $43.00 per MNQ);
+POC 14942.75 (the setup and the entry), composed at the 13:03 close, inside `valid_bars`:
+long 14960.00, stop 14938.50 under the 15m low (21.50 pts = 86 ticks, $43.00 per MNQ), a limit at that close;
 target trail: the 2R mark 15003.00 armed it; the 15m swing high 15040.25 was reached 14:15.
 2022-08-12, trend rule 4h up.
   A 15m shooting star at the prior VAH 16809.25: a short is
@@ -8044,11 +8044,11 @@ and close: an engulfing ranks with other strong ones); the 3m only times
 the entry.
 
 **OTE and bounce** (`fib-retracement`): a strong CISD's `leg` gives
-`ote`.
-  Wait for a completed candle closing back the CISD's way in it
-(`candle-reading`); `absorption` in the zone confirms.
-  Never anticipate
-the bounce.
+`ote`: support, never a wait (the 15m CISD is the entry).
+  A completed
+candle closing back the CISD's way in it (`candle-reading`) or
+`absorption` in the zone counts.
+  Never anticipate the bounce.
 
 ## Examples
 
@@ -8370,8 +8370,8 @@ NQ, back-adjusted CSV prices:
 ```text
 2022-06-22, trend rule 4h up, long aligned.
   The 15m 12:45 candle rejects the prior
-POC 14942.75 (the setup); the next 3m close, 13:03, closes in its top third:
-long 14960.00, stop 14938.50 under the 15m low (21.50 pts = 86 ticks, $43.00 per MNQ);
+POC 14942.75 (the setup and the entry), composed at the 13:03 close, inside `valid_bars`:
+long 14960.00, stop 14938.50 under the 15m low (21.50 pts = 86 ticks, $43.00 per MNQ), a limit at that close;
 target trail: the 2R mark 15003.00 armed it; the 15m swing high 15040.25 was reached 14:15.
 2022-08-12, trend rule 4h up.
   A 15m shooting star at the prior VAH 16809.25: a short is
@@ -9236,11 +9236,11 @@ and close: an engulfing ranks with other strong ones); the 3m only times
 the entry.
 
 **OTE and bounce** (`fib-retracement`): a strong CISD's `leg` gives
-`ote`.
-  Wait for a completed candle closing back the CISD's way in it
-(`candle-reading`); `absorption` in the zone confirms.
-  Never anticipate
-the bounce.
+`ote`: support, never a wait (the 15m CISD is the entry).
+  A completed
+candle closing back the CISD's way in it (`candle-reading`) or
+`absorption` in the zone counts.
+  Never anticipate the bounce.
 
 ## Examples
 
@@ -9562,8 +9562,8 @@ NQ, back-adjusted CSV prices:
 ```text
 2022-06-22, trend rule 4h up, long aligned.
   The 15m 12:45 candle rejects the prior
-POC 14942.75 (the setup); the next 3m close, 13:03, closes in its top third:
-long 14960.00, stop 14938.50 under the 15m low (21.50 pts = 86 ticks, $43.00 per MNQ);
+POC 14942.75 (the setup and the entry), composed at the 13:03 close, inside `valid_bars`:
+long 14960.00, stop 14938.50 under the 15m low (21.50 pts = 86 ticks, $43.00 per MNQ), a limit at that close;
 target trail: the 2R mark 15003.00 armed it; the 15m swing high 15040.25 was reached 14:15.
 2022-08-12, trend rule 4h up.
   A 15m shooting star at the prior VAH 16809.25: a short is
@@ -10437,11 +10437,11 @@ and close: an engulfing ranks with other strong ones); the 3m only times
 the entry.
 
 **OTE and bounce** (`fib-retracement`): a strong CISD's `leg` gives
-`ote`.
-  Wait for a completed candle closing back the CISD's way in it
-(`candle-reading`); `absorption` in the zone confirms.
-  Never anticipate
-the bounce.
+`ote`: support, never a wait (the 15m CISD is the entry).
+  A completed
+candle closing back the CISD's way in it (`candle-reading`) or
+`absorption` in the zone counts.
+  Never anticipate the bounce.
 
 ## Examples
 
@@ -10763,8 +10763,8 @@ NQ, back-adjusted CSV prices:
 ```text
 2022-06-22, trend rule 4h up, long aligned.
   The 15m 12:45 candle rejects the prior
-POC 14942.75 (the setup); the next 3m close, 13:03, closes in its top third:
-long 14960.00, stop 14938.50 under the 15m low (21.50 pts = 86 ticks, $43.00 per MNQ);
+POC 14942.75 (the setup and the entry), composed at the 13:03 close, inside `valid_bars`:
+long 14960.00, stop 14938.50 under the 15m low (21.50 pts = 86 ticks, $43.00 per MNQ), a limit at that close;
 target trail: the 2R mark 15003.00 armed it; the 15m swing high 15040.25 was reached 14:15.
 2022-08-12, trend rule 4h up.
   A 15m shooting star at the prior VAH 16809.25: a short is
@@ -11722,8 +11722,8 @@ NQ, back-adjusted CSV prices:
 ```text
 2022-06-22, trend rule 4h up, long aligned.
   The 15m 12:45 candle rejects the prior
-POC 14942.75 (the setup); the next 3m close, 13:03, closes in its top third:
-long 14960.00, stop 14938.50 under the 15m low (21.50 pts = 86 ticks, $43.00 per MNQ);
+POC 14942.75 (the setup and the entry), composed at the 13:03 close, inside `valid_bars`:
+long 14960.00, stop 14938.50 under the 15m low (21.50 pts = 86 ticks, $43.00 per MNQ), a limit at that close;
 target trail: the 2R mark 15003.00 armed it; the 15m swing high 15040.25 was reached 14:15.
 2022-08-12, trend rule 4h up.
   A 15m shooting star at the prior VAH 16809.25: a short is

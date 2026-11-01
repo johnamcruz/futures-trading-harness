@@ -56,9 +56,9 @@ and close: an engulfing ranks with other strong ones); the 3m only times
 the entry.
 
 **OTE and bounce** (`fib-retracement`): a strong CISD's `leg` gives
-`ote`. Wait for a completed candle closing back the CISD's way in it
-(`candle-reading`); `absorption` in the zone confirms. Never anticipate
-the bounce.
+`ote`: support, never a wait (the 15m CISD is the entry). A completed
+candle closing back the CISD's way in it (`candle-reading`) or
+`absorption` in the zone counts. Never anticipate the bounce.
 
 ## Examples
 

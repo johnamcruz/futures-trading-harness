@@ -484,8 +484,8 @@ NQ, back-adjusted CSV prices:
 ```text
 2022-06-22, trend rule 4h up, long aligned.
   The 15m 12:45 candle rejects the prior
-POC 14942.75 (the setup); the next 3m close, 13:03, closes in its top third:
-long 14960.00, stop 14938.50 under the 15m low (21.50 pts = 86 ticks, $43.00 per MNQ);
+POC 14942.75 (the setup and the entry), composed at the 13:03 close, inside `valid_bars`:
+long 14960.00, stop 14938.50 under the 15m low (21.50 pts = 86 ticks, $43.00 per MNQ), a limit at that close;
 target trail: the 2R mark 15003.00 armed it; the 15m swing high 15040.25 was reached 14:15.
 2022-08-12, trend rule 4h up.
   A 15m shooting star at the prior VAH 16809.25: a short is
@@ -1681,8 +1681,8 @@ NQ, back-adjusted CSV prices:
 ```text
 2022-06-22, trend rule 4h up, long aligned.
   The 15m 12:45 candle rejects the prior
-POC 14942.75 (the setup); the next 3m close, 13:03, closes in its top third:
-long 14960.00, stop 14938.50 under the 15m low (21.50 pts = 86 ticks, $43.00 per MNQ);
+POC 14942.75 (the setup and the entry), composed at the 13:03 close, inside `valid_bars`:
+long 14960.00, stop 14938.50 under the 15m low (21.50 pts = 86 ticks, $43.00 per MNQ), a limit at that close;
 target trail: the 2R mark 15003.00 armed it; the 15m swing high 15040.25 was reached 14:15.
 2022-08-12, trend rule 4h up.
   A 15m shooting star at the prior VAH 16809.25: a short is

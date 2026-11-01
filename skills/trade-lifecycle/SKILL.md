@@ -13,11 +13,12 @@ description: Use before a trade_lifecycle entry - compose the trade as reads wit
 ## How It Works
 
 1. **Compose: the flow, a with-trend pullback** (`trader-process`).
-   the side rule's side, the setup (15m) at a level closed (it is the entry, on the next 3m bar) → compose (`confluence-counting`); the plan, never you, works out R:R. Call
+   the side rule's side, the setup (15m) at a level closed (it is the entry: a limit at the last close when you compose (the setup's own close when you compose on its bar), filled within `valid_bars`) → compose (`confluence-counting`); the plan, never you, works out R:R. Call
    `compose_check` with one true read per step at least, each your side's
    way (the against stay in the count), and your size. The standard plan
    says OK → compose with its reads. The record is for this bar and side;
    it expires `valid_bars` base bars after its bar's close.
+   At the setup's close a stall or conflicting reaction is weak context: it counts nothing; the count decides (the next candle, inside `valid_bars`, confirms or not).
 
    | Step | The read, your side's way | The skill for the fact |
    | --- | --- | --- |

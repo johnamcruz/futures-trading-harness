@@ -28,7 +28,7 @@ hypotheses; a missing field is `unknown`. Completed candles only, on 3m,
 | 1h, 4h | HTF levels (prior day, overnight, CRT) | most |
 
 **The setup**: a 15m or 1h rejection the bias's way (step 1); it is
-the entry, on the next 3m bar (step 6).
+the entry (step 6).
 
 By PLAN step:
 
@@ -50,8 +50,8 @@ By PLAN step:
    refuses it (never counter), whatever CHoCH.
 - **5 Confluence**: volume or absorption at the level (`momentum-and-volume`,
    `absorption`), counted by `confluence-counting`.
-- **6 Entry**: the 15m or 1h rejection is the entry, on the next 3m
-   bar; no 3m turn or break to wait for. Never anticipate it.
+- **6 Entry**: the 15m or 1h rejection is the entry: a limit at the last close when you compose (the setup's own close when you compose on its bar), filled within `valid_bars`;
+   no 3m turn or break to wait for. Never anticipate it.
 - **7 Risk**: the idea is wrong beyond the rejection wick: the stop read
    names it (`invalidation`). The trail exits (`target trail`,
    `take-profit`); the first level ahead (`inTheWay`) is a read (step 3).
@@ -68,10 +68,10 @@ evidence in general.
 
 ```text
 Take: at the prior VAH 21535.00, 1h and 15m up: on the 15m close a wick to 21512.75, close 21538.50
-  (top third), then the next 3m close. Reads: 1h up, at prior vah, 15m rejected prior vah up,
-  3m close top, 3m momentum up, stop 15m low 21512.75, target trail. Priority order -> take.
+  (top third): the setup and the entry, a limit at 21538.50. Reads: 1h up, at prior vah,
+  15m rejected prior vah up, stop 15m low 21512.75, target trail. Priority order -> take.
 Skip: at the prior RTH high 21588.25, 1h and 15m up: on the 3m close a shooting star (H 21590.75,
   C 21585.50): a 3m candle is no setup, and a short is against the 1h trend (the trend rule refuses it) -> pass.
-Loser: at the prior VAH 21535.00: on the 15m close a rejection (L 21512.75, C 21538.50): long at 21540.25, stop 21512.50
-  (27.75 pts = 111 ticks, $55.50 on 1 MNQ); the next 1h close went back below 21512.75. -111 ticks, -$55.50.
+Loser: at the prior VAH 21535.00: on the 15m close a rejection (L 21512.75, C 21538.50): long at 21538.50 (a limit at its close), stop 21512.50
+  (26.00 pts = 104 ticks, $52.00 on 1 MNQ); the next 1h close went back below 21512.75. -104 ticks, -$52.00.
 ```

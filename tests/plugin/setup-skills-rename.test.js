@@ -180,6 +180,8 @@ const LATE = {
     { from: "3m close a displacement. crt_1h long at 21407.25, stop 21396.25 (11.00 pts = 44 ticks,",
       to: "(27.75 pts = 111 ticks, $55.50 on 1 MNQ); the next 1h close went back below 21512.75. -111 ticks, -$55.50.",
       reason: "the example as reads in compose_check's forms, no retired strategy, tick-correct (fix/skills-stale-examples)" },
+    { from: "Loser: at the prior VAH 21535.00: on the 15m close a rejection (L 21512.75, C 21538.50): long at 21540.25, stop 21512.50", to: null, reason: "fix/trail-swing-side-capture (owner-approved 2026-10-31): the setup is the entry, a limit at the last close when you compose; the example's entry is that limit, its stop where the setup's rule puts it, tick-correct" },
+    { from: "(27.75 pts = 111 ticks, $55.50 on 1 MNQ); the next 1h close went back below 21512.75. -111 ticks, -$55.50.", to: null, reason: "fix/trail-swing-side-capture (owner-approved 2026-10-31): the setup is the entry, a limit at the last close when you compose; the example's entry is that limit, its stop where the setup's rule puts it, tick-correct" },
     { from: "$22.00 on 1 MNQ); the next 15m closed back below 21402.00. -44 ticks, -$22.00.",
       to: null,
       reason: "the example as reads in compose_check's forms, no retired strategy, tick-correct (fix/skills-stale-examples)" },
@@ -294,6 +296,7 @@ const LATE = {
       reason: "feat/bias-bg (never counter): the setup is the 15m or higher, the next 3m close times the entry (no 3m confirmation to wait for), the trail exits; the rewritten text is new" },
     { from: "retest held. long at 21622.25, stop 21613.75 (8.50 pts = 34 ticks, $17.00 on 1 MNQ);", to: null,
       reason: "feat/bias-bg (never counter): the setup is the 15m or higher, the next 3m close times the entry (no 3m confirmation to wait for), the trail exits; the rewritten text is new" },
+    { from: "a 15m close back inside at 21611.00. -34 ticks, -$17.00.", to: null, reason: "fix/trail-swing-side-capture (owner-approved 2026-10-31): the setup is the entry, a limit at the last close when you compose; the example's entry is that limit, its stop where the setup's rule puts it, tick-correct" },
   ],
 };
 const LATE_STALE = [];
