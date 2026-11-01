@@ -186,10 +186,10 @@ test('confirmed: a relative level is said as the previous candle met it, with it
   // The rendered line names it with its price.
   const B2 = require('../../scripts/lib/trading/briefing');
   const line = B2.candleLines({ candles: { '15m': { closedAt: '2026-06-15T14:00:00.000Z', pattern: 'bearish engulfing', closeLocation: 'bottom', rangeAtr: null, volRatio: null, sweep: null, levels: {}, reactions: {}, confirmed: r.confirmed } }, swingTargets: { above: [], below: [] } }, v => v)[0];
-  assert.match(line, /confirmed rejection of the 15m high 110/);
+  assert.match(line, /confirmed rejection of the 15m high 110 \(short side\)/, 'a confirmed rejection closing lower: the short side');
   assert.ok(!/previous 15m high/.test(line), line);
   const swingLine = B2.candleLines({ candles: { '15m': { closedAt: '2026-06-15T14:00:00.000Z', pattern: 'bearish engulfing', closeLocation: 'bottom', rangeAtr: null, volRatio: null, sweep: null, levels: {}, reactions: {}, confirmed: swing.confirmed } }, swingTargets: { above: [], below: [] } }, v => v)[0];
-  assert.match(swingLine, /confirmed rejection of 1h swing high 110[.,]/);
+  assert.match(swingLine, /confirmed rejection of 1h swing high 110 \(short side\)[.,]/);
   assert.ok(!/110 110/.test(swingLine), swingLine);
 });
 
@@ -226,5 +226,22 @@ test('the rendered reaction: a touch closing beyond says so ("closed beyond: bre
   const line = B2.candleLines({ candles: { '15m': c }, swingTargets: { above: [], below: [] } }, v => v)[0];
   assert.match(line, /touched session POC \(closed beyond: breakout\)/);
   assert.match(line, /broke above VWAP \(rth\) \(plain\)/);
-  assert.match(line, /rejected overnight high \(closed back below; long-wick rejection\)/);
+  assert.match(line, /rejected overnight high \(closed back below; long-wick rejection, short side\)/);
+});
+
+test('the rendered rejection says its side, the candle\'s: back below short, back above long; a conflicting, stall or plain one none', () => {
+  const B2 = require('../../scripts/lib/trading/briefing');
+  const c = { closedAt: '2026-06-15T14:00:00.000Z', pattern: 'none', closeLocation: 'top', rangeAtr: null, volRatio: null, sweep: null,
+    levels: { 'prior VAH': 'rejected: closed back below', 'prior VAL': 'rejected: closed back above', 'session POC': 'rejected: closed back below', 'IB high': 'rejected: closed back below', 'IB low': 'rejected: closed back above', 'VWAP (rth)': 'rejected: closed back below' },
+    reactions: { 'prior VAH': 'engulfing rejection', 'prior VAL': 'long-wick rejection', 'session POC': 'conflicting', 'IB high': 'plain', 'IB low': 'stall', 'VWAP (rth)': 'confirmed rejection' } };
+  const line = B2.candleLines({ candles: { '15m': c }, swingTargets: { above: [], below: [] } }, v => v)[0];
+  assert.match(line, /rejected prior VAH \(closed back below; engulfing rejection, short side\)/);
+  assert.match(line, /rejected prior VAL \(closed back above; long-wick rejection, long side\)/);
+  assert.match(line, /rejected VWAP \(rth\) \(closed back below; confirmed rejection, short side\)/);
+  assert.match(line, /rejected session POC \(closed back below; conflicting\)/, 'mixed: no side');
+  assert.match(line, /rejected IB high \(closed back below; plain\)/, 'not a rejection: no side');
+  assert.match(line, /rejected IB low \(closed back above; stall\)/, 'stalled: the next candle decides, no side');
+  // The 4h (an event frame) keeps its own byte budget: no reaction, so no side.
+  const h4 = B2.candleLines({ candles: { '4h': { ...c, closedAt: '2026-06-15T14:00:00.000Z' } }, swingTargets: { above: [], below: [] } }, v => v, undefined, '2026-06-15T14:00:00.000Z')[0];
+  assert.ok(!/ side\)/.test(h4), h4);
 });

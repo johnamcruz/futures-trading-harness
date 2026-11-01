@@ -65,16 +65,24 @@ read (`trend-vs-range`, `pullback-vs-reversal`) and momentum and volume
 The stack counts once (`confluence-counting`, trigger).
 
 **Reaction at a level** (`reaction` on `m3.candles.<tf>.relations`,
-`confirmed`: `bar-briefing`). Side first, from the candle: a rejection
-of a high (`<tf> rejected <level> down`) is the short side, of a low
-(`up`) the long side; a breakout's side is its close (`<tf> broke
-<level> up` → long), whatever the trend. Then the trend rule: with the
-4h + 1h (at a pullback level, a continuation: `pullback-vs-reversal`)
-→ may be taken; against → refused (never counter; `trend-vs-range`).
+`confirmed`: `bar-briefing`). Side first, from the candle, never from
+the bias: a rejection of a high (`<tf> rejected <level> down`; the
+briefing says it: "rejected <level> (closed back below; long-wick
+rejection, short side)") is the short side, of a low (`up`) the long
+side; a breakout's side is its close (`<tf> broke <level> up` → long),
+whatever the trend. The bias never sets the side; it decides only
+whether that side may be taken. Then the trend rule: with the 4h + 1h (at a pullback
+level, a continuation: `pullback-vs-reversal`) → may be taken; against →
+refused (never counter; `trend-vs-range`). Against the bias the side stays
+the candle's: a high's rejection with the 4h + 1h up is a short, refused
+(never a long); a low's rejection with the 4h + 1h down is a long, refused
+(never a short).
 
 The close determines acceptance or
 rejection. The wick measures the failed attempt. The body measures
 directional conviction. The next candle measures confirmation.
+A stall (a doji, an inside candle) decides nothing, not by its close,
+not by its wick: only the next candle's close decides who takes control.
 
 Context, never decided on alone: it needs other confirmation (the bias,
 the level, the count: `confluence-counting`). Read it at that moment
@@ -99,7 +107,8 @@ Read the field, never by eye. At a high (a low: the mirror), the first that hold
    rejects while the 1h `broke` it → mixed: needs other confirmation
    (the count, or the next candle).
 6. stall: a doji (never conflicting) or inside candle → stalled; the
-   next candle decides.
+   next candle decides who takes control (its close: the confirmation);
+   the doji's own close, wick and body decide nothing.
 7. plain: none → not a rejection: no one took control, weak context only.
 
 The close beats the wick: a long wick closing above is no rejection; a
@@ -128,4 +137,7 @@ Skip: at the session POC 21522.00, on the 3m close a doji (body 0.25, range 5.50
 Loser: at the prior VAL 21480.00, on the 15m close a hammer (L 21474.50, C 21483.75).
   long at 21483.75, stop 21474.25 (9.50 pts = 38 ticks, $19.00 on 1 MNQ);
   closes below the VAL. -38 ticks, -$19.00.
+Refused: at the prior RTH low, on the 15m close a long-wick rejection (closed back above)
+  with the 4h and 1h down: the long side, the candle's; against the 4h + 1h -> refused by
+  the trend rule. Not a short: the bias never sets the side.
 ```

@@ -320,7 +320,7 @@
       "rule": "a bare approval states no readable size: one restate of the Size and VERDICT lines, never a veto (roles-ran.js approvedSize)",
       "anchor": "with no size on the line → unreadable",
       "required": [
-        "restate|unreadable|no readable size"
+        "restate|unreadable|\\b(no|without a|not a) readable (approved )?(size|approval)\\b"
       ],
       "forbidden": [
         "^\\s*(yes\\b|y,)",
@@ -535,8 +535,8 @@
         "\\b(refus\\w*|no trade|not a trade|counter\\w*|never counter|trend rule|not allowed|can'?t be taken|cannot be taken)\\b|\\bonly the (first|one|pullback)\\b[^.;]*\\b(can|may) be taken\\b|\\bonly the (first|one|pullback)\\b[^.;]*\\bis (tradeable|tradable|a setup|the trade)\\b|\\b(may|can) ?not( be taken)?\\b|\\bcannot be taken\\b"
       ],
       "forbidden": [
-        "\\blong (setup|side|read|entry|trade)\\b",
-        "\\b(a|is a|as a) long\\b(?!-wick|\\s+(bias|only))",
+        "\\blong[- ](setup|side|read|entry|trade)\\b",
+        "\\b(a|is a|as a) long\\b(?!-wick|-only\\b|\\s+(bias|only))",
         "\\b(with-trend|with the trend|counter-trend) long\\b",
         "\\b(on )?the (other|opposite) side\\b",
         "\\b(take|trade) it (small|smaller|light|anyway)\\b",
@@ -617,8 +617,8 @@
         "\\b(refus\\w*|no trade|not a trade|counter\\w*|never counter|trend rule|not allowed|can'?t be taken|cannot be taken)\\b|\\bonly the (first|one|pullback)\\b[^.;]*\\b(can|may) be taken\\b|\\bonly the (first|one|pullback)\\b[^.;]*\\bis (tradeable|tradable|a setup|the trade)\\b|\\b(may|can) ?not( be taken)?\\b|\\bcannot be taken\\b"
       ],
       "forbidden": [
-        "\\bshort (setup|side|read|entry|trade)\\b",
-        "\\b(a|is a|as a) short\\b(?!\\s+(bias|only))",
+        "\\bshort[- ](setup|side|read|entry|trade)\\b",
+        "\\b(a|is a|as a) short\\b(?!-only\\b|\\s+(bias|only))",
         "\\b(with-trend|with the trend|counter-trend) short\\b",
         "\\b(on )?the (other|opposite) side\\b",
         "\\b(take|trade) it (small|smaller|light|anyway)\\b",
@@ -875,8 +875,8 @@
         "\\b(refus\\w*|no trade|not a trade|counter\\w*|never counter|trend rule|not allowed|can'?t be taken|cannot be taken)\\b|\\bonly the (first|one|pullback)\\b[^.;]*\\b(can|may) be taken\\b|\\bonly the (first|one|pullback)\\b[^.;]*\\bis (tradeable|tradable|a setup|the trade)\\b|\\b(may|can) ?not( be taken)?\\b|\\bcannot be taken\\b"
       ],
       "forbidden": [
-        "\\blong (setup|side|read|entry|trade)\\b",
-        "\\b(a|is a|as a) long\\b(?!-wick|\\s+(bias|only))",
+        "\\blong[- ](setup|side|read|entry|trade)\\b",
+        "\\b(a|is a|as a) long\\b(?!-wick|-only\\b|\\s+(bias|only))",
         "\\b(with-trend|with the trend|counter-trend) long\\b",
         "\\b(on )?the (other|opposite) side\\b",
         "\\b(take|trade) it (small|smaller|light|anyway)\\b",
@@ -930,8 +930,8 @@
         "\\b(refus\\w*|no trade|not a trade|counter\\w*|never counter|trend rule|not allowed|can'?t be taken|cannot be taken)\\b|\\bonly the (first|one|pullback)\\b[^.;]*\\b(can|may) be taken\\b|\\bonly the (first|one|pullback)\\b[^.;]*\\bis (tradeable|tradable|a setup|the trade)\\b|\\b(may|can) ?not( be taken)?\\b|\\bcannot be taken\\b"
       ],
       "forbidden": [
-        "\\bshort (setup|side|read|entry|trade)\\b",
-        "\\b(a|is a|as a) short\\b(?!\\s+(bias|only))",
+        "\\bshort[- ](setup|side|read|entry|trade)\\b",
+        "\\b(a|is a|as a) short\\b(?!-only\\b|\\s+(bias|only))",
         "\\b(with-trend|with the trend|counter-trend) short\\b",
         "\\b(on )?the (other|opposite) side\\b",
         "\\b(take|trade) it (small|smaller|light|anyway)\\b",
