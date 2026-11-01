@@ -97,8 +97,8 @@
       "layers": {
         "bias": "Bias: short only (4h down, 1h range; long refused)",
         "setup": {
-          "read": "15m broke prior VAH down",
-          "kind": "listed",
+          "read": "15m broke prior vah down",
+          "kind": "standard",
           "bar": "2021-10-04T13:33:00.000Z"
         },
         "entry": {
@@ -116,7 +116,7 @@
           "heldToTarget": true,
           "lockFirst": true,
           "moves": [
-            17985.25,
+            17970.75,
             17832.5,
             17791.5
           ],
@@ -185,37 +185,37 @@
       "layers": {
         "bias": "Bias: long only (4h up, 1h up; short refused)",
         "setup": {
-          "read": "momentum_continuation fired up",
-          "kind": "cited",
-          "bar": "2021-11-19T14:42:00.000Z"
+          "read": "15m rejected vwap session up",
+          "kind": "standard",
+          "bar": "2021-11-19T14:33:00.000Z"
         },
         "entry": {
-          "bar": "2021-11-19T14:42:00.000Z",
-          "type": "market",
-          "price": 19918.75,
-          "size": 7
+          "bar": "2021-11-19T14:33:00.000Z",
+          "type": "limit",
+          "price": 19896.25,
+          "size": 12
         },
         "stop": {
-          "price": 19899.75,
-          "riskPts": 19
+          "price": 19885,
+          "riskPts": 11.25
         },
         "exit": {
           "target": "cancelled at the first managed cycle",
           "heldToTarget": true,
           "lockFirst": true,
           "moves": [
-            19928.25
+            19905.5
           ],
           "reason": "trail",
-          "time": "2021-11-19T15:10:30.000Z",
-          "price": 19928,
-          "R": 0.4868
+          "time": "2021-11-19T15:28:30.000Z",
+          "price": 19905.25,
+          "R": 0.8
         },
         "capture": {
           "caught": true,
           "leg": "long 2021-11-19T14:30:00.000Z to 2021-11-19T15:00:00.000Z",
-          "availR": 4.4474,
-          "share": 0.1095
+          "availR": 7.5111,
+          "share": 0.1065
         }
       }
     },
@@ -280,8 +280,8 @@
       "layers": {
         "bias": "Bias: long only (4h up, 1h up; short refused)",
         "setup": {
-          "read": "15m rejected prior RTH high up",
-          "kind": "listed",
+          "read": "15m rejected prior rth high up",
+          "kind": "standard",
           "bar": "2024-04-08T13:33:00.000Z"
         },
         "entry": {
@@ -299,7 +299,7 @@
           "heldToTarget": true,
           "lockFirst": true,
           "moves": [
-            16650.25,
+            16650.5,
             16734.5
           ],
           "reason": "trail",
