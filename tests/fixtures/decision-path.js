@@ -137,6 +137,8 @@ async function pass(w, at, script, o = {}) {
       cfg: w.cfg, root: ROOT, home: w.home, env, client: closedBarsOnly(client, now), dataDir: w.cfg.dataDir, now,
       // `o.runRole`: the runner runs the desk itself (runner-wiring.js deskFor), each role's run scripted.
       ...(o.runRole ? { runRole: o.runRole } : {}),
+      // `o.maxPromptBytes`: the cycle prompt's limit (a small one: no situational skill embedded).
+      ...(o.maxPromptBytes ? { maxPromptBytes: o.maxPromptBytes } : {}),
       // `o.prop`: the runner's prop hooks wired as autotrader.js wires them (a running attempt's snapshot each bar).
       ...(o.prop ? { prop: require('../../scripts/lib/prop/live-runner').createPropHooks({ root: ROOT, env, home: w.home, client, accountId: w.cfg.account, strategies: () => require('../../scripts/lib/trading/strategies').loadStrategies(ROOT, env).strategies, log: (m, level) => logs.push(`${level || 'info'} ${m}`) }) } : {}),
       runCycle: async (action, prompt, limits) => {

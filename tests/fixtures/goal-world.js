@@ -189,15 +189,17 @@ function headScript(w, decisions) {
     const bar = m3Of(b) && m3Of(b).bar ? m3Of(b).bar.t : null;
     decisions.push({ bar, bias: biasLine(b), ...d });
     if (d.pass) return [{ harness: 'bar_briefing', args: { symbol: 'MNQ', json: true } }, ...biasProbe, { result: `CYCLE RESULT: no-trade - ${d.pass}` }];
-    // A composed rejection or break: the head looks up its reaction read first (the head prompt's "Required by the
-    // situation" list, skills-loaded.js SITUATIONAL), as a live head trader does; the gate refuses the entry without it.
-    const reactionLookup = d.reads.some(r => /\b(rejected|broke)\b/.test(String(r.read))) ? [{ harness: 'skill_lookup', args: { skill: 'candle-reading' } }] : [];
+    // A composed rejection, break or sweep needs its reaction read (candle-reading: skills-loaded.js SITUATIONAL). The mock
+    // composes first and reacts to compose_check's READ FIRST line as a live head trader would: it looks the skill up and
+    // composes again (the warning's path, warn -> lookup -> compose again); without it the gate refuses the entry.
+    const compose = { harness: 'compose_check', args: { symbol: 'MNQ', side: d.side, reads: d.reads, size: w.suggest } };
+    const react = { then: ctx => (/READ FIRST: [^\n]*candle-reading/.test(String(ctx.results.compose_check || '')) ? [{ harness: 'skill_lookup', args: { skill: 'candle-reading' } }, { ...compose }] : []) };
     return [
       { harness: 'bar_briefing', args: { symbol: 'MNQ', json: true } },
       ...biasProbe,
       ...setupProbe,
-      ...reactionLookup,
-      { harness: 'compose_check', args: { symbol: 'MNQ', side: d.side, reads: d.reads, size: w.suggest } },
+      compose,
+      react,
       { result: ctx => {
         const text = String(ctx.results.compose_check || '');
         const ok = /OK: every read verified/.test(text) && !/NOT OK/.test(text);

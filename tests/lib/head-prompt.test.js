@@ -43,7 +43,7 @@ test('CORE: the composed bar\'s reads the gate requires (SITUATIONAL taught in t
   // composed rejection or break reads its reaction, looked up, never embedded.
   const head = prompt.split('## Your skills (already loaded)')[0];
   const list = head.slice(head.indexOf('Required by the situation'));
-  assert.match(list, /- a composed read says a candle rejected a level, or a composed read says a candle broke a level: `candle-reading`/);
+  assert.match(list, /- a composed read says a candle rejected a level, or a composed read says a candle broke a level, or a composed read says a level was swept: `candle-reading`/);
   for (const s of H.COMPOSED_READS) assert.ok(!list.includes(`\`${s}\``), `${s}: embedded, not listed`);
   assert.ok(!prompt.includes('<skill name="candle-reading">'), 'candle-reading: listed for lookup, never embedded');
   // trade-lifecycle no longer sends the head trader to look them up every bar: embedded, it doesn't; else it loads them
@@ -83,8 +83,10 @@ test('CORE: the composed bar\'s reads the gate requires (SITUATIONAL taught in t
   // (mixed: needs other confirmation, the count or the next candle; +38); then 75155 (owner: rejection relies on candle-reading; the side is the candle's (q30); the owner: "It
   // should use indexing"): the Required-by-the-situation list naming candle-reading for a composed rejection or break,
   // trade-lifecycle's line to look it up, and rejection's and breakout's candle reads cut to a pointer (+80 net). It may
-  // shrink; it grows only on an owner's OK.
-  assert.ok(Buffer.byteLength(prompt) <= 75155, `the head prompt is ${Buffer.byteLength(prompt)} bytes`);
+  // shrink; it grows only on an owner's OK. Then 75296 (round 7, owner-approved: "Include sweeps", "Warn early + embed"):
+  // the Required list names a composed sweep too and says "or your own composed read", and trade-lifecycle's line names
+  // the sweep and that the cycle's section may embed it and compose_check says so (+141).
+  assert.ok(Buffer.byteLength(prompt) <= 75296, `the head prompt is ${Buffer.byteLength(prompt)} bytes`);
   // Only the head trader's prompt grows: no other role's prompt embeds trade-lifecycle (the risk manager's embeds
   // confluence-counting and invalidation as before; its prompt is unchanged, pinned in trade-session-split.test.js).
   for (const [name, a] of Object.entries(index.agent)) if (name !== H.HEAD_AGENT && a.prompt) assert.ok(!a.prompt.includes('<skill name="trade-lifecycle">'), name);

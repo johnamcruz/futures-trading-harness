@@ -174,7 +174,17 @@ function headComposedReads(ctx) {
   if (h.composedReads.length < 4 || notCore.length || notIn.length) {
     return r('head-composed-reads', FAIL, `the composed reads (${h.composedReads.join(', ') || 'none'}): ${[...notCore.map(s => `${s} not in the core`), ...notIn.map(s => `${s} not embedded`)].join('; ') || 'fewer than 4'}`);
   }
-  return r('head-composed-reads', PASS, `embeds the ${h.composedReads.length} composed reads (${h.composedReads.join(', ')})`);
+  // And the lookups it lists (head-prompt.js headRequired: candle-reading for a composed rejection, break or sweep): at
+  // least one, each named on the prompt's Required-by-the-situation list, none embedded (listed for lookup, never in it).
+  const listed = Array.isArray(h.listed) ? h.listed : [];
+  const section = String(h.prompt || '').split('## Your skills (already loaded)')[0];
+  const list = section.includes('Required by the situation') ? section.slice(section.indexOf('Required by the situation')) : '';
+  const unlisted = listed.filter(s => !list.includes(`\`${s}\``));
+  const embeddedToo = listed.filter(s => h.embedded.includes(s));
+  if (!listed.length || unlisted.length || embeddedToo.length) {
+    return r('head-composed-reads', FAIL, `the listed lookups (${listed.join(', ') || 'none'}): ${[...unlisted.map(s => `${s} not on the Required by the situation list`), ...embeddedToo.map(s => `${s} embedded (listed for lookup only)`)].join('; ') || 'none listed'}`);
+  }
+  return r('head-composed-reads', PASS, `embeds the ${h.composedReads.length} composed reads (${h.composedReads.join(', ')}); lists ${listed.join(', ')} for lookup`);
 }
 
 /**
@@ -869,6 +879,7 @@ function defaultReaders(root, env = process.env, { barsFiles = {} } = {}) {
       const prompt = hp.headPromptIn(config);
       return {
         prompt, core: [...hp.CORE], composedReads: Array.isArray(hp.COMPOSED_READS) ? [...hp.COMPOSED_READS] : null,
+        listed: hp.headRequired().map(x => x.skill),
         embedded: hp.embeddedSkills(prompt, root), attestation: hp.attestation(config, root),
         expectedSha256: hp.sha256(hp.headPrompt(hp.headPlan(root, 'index'))),
       };
@@ -890,7 +901,7 @@ function defaultReaders(root, env = process.env, { barsFiles = {} } = {}) {
       } finally {
         if (scratch) fs.rmSync(scratch, { recursive: true, force: true });
       }
-      return { prompt, core: [...hp.CORE], composedReads: Array.isArray(hp.COMPOSED_READS) ? [...hp.COMPOSED_READS] : null, embedded: hp.embeddedSkills(prompt, root), attestation: prompt ? { sha256: hp.sha256(prompt) } : null, expectedSha256: expected ? hp.sha256(expected) : null };
+      return { prompt, core: [...hp.CORE], composedReads: Array.isArray(hp.COMPOSED_READS) ? [...hp.COMPOSED_READS] : null, listed: hp.headRequired().map(x => x.skill), embedded: hp.embeddedSkills(prompt, root), attestation: prompt ? { sha256: hp.sha256(prompt) } : null, expectedSha256: expected ? hp.sha256(expected) : null };
     }),
     // The roles' prompt additions (roleSkillsInPrompt), each written to a scratch home as the runner writes it and read back.
     claudeRoles: once(() => {

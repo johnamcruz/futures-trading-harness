@@ -74,6 +74,7 @@ const REQUIRED_AT_ENTRY = ['setup-judgment', 'trade-plan'];
  *   composed                       the head trader composed a trade on the bar: a compose record for the bar (m3.composed,
  *                                  added by skill-lookups.js cycleFacts from the records; never in the briefing itself)
  *   composed.relation=<rel>        a composed read of a candle's relation to a level (rejected | broke | touched)
+ *   composed.kind=<kind>           a composed read of that kind (composed-reads.js STEP_KINDS: swept, a sweep of a level)
  *
  * An entry with `headOnly` is the head trader's alone too (a composed read: the desk reports before it), listed in its prompt
  * as a lookup (head-prompt.js headRequired) and required of no role's index.
@@ -105,6 +106,8 @@ const SITUATIONAL = [
   // head trader's own composed read, so no role's index requires it (the desk reports before the head composes).
   { when: 'composed.relation=rejected', skill: 'candle-reading', head: true, headOnly: true },
   { when: 'composed.relation=broke', skill: 'candle-reading', head: true, headOnly: true },
+  // A composed sweep of a level (the owner: "Include sweeps"): the sweeping candle's reaction, the same read.
+  { when: 'composed.kind=swept', skill: 'candle-reading', head: true, headOnly: true },
 ];
 
 const TREND_RULES = ['reversal', 'against', 'allows'];
@@ -119,6 +122,8 @@ const TRIGGERS = {
   'news.inBlackout': { value: false, test: m3 => Boolean(m3 && m3.news && m3.news.inBlackout === true), text: () => 'a news blackout is in force' },
   composed: { value: false, test: m3 => composedOf(m3).length > 0, text: () => 'you composed a trade on the bar (a compose record)' },
   'composed.relation': { value: v => RELATIONS.includes(v), test: (m3, v) => composedOf(m3).some(c => Array.isArray(c.relations) && c.relations.includes(v)), text: v => `a composed read says a candle ${v} a level` },
+  // A read kind (composed-reads.js STEP_KINDS: a test holds every one named here to it); its text for the head prompt.
+  'composed.kind': { value: v => /^[a-z][A-Za-z]{1,31}$/.test(v), test: (m3, v) => composedOf(m3).some(c => Array.isArray(c.kinds) && c.kinds.includes(v)), text: v => (v === 'swept' ? 'a composed read says a level was swept' : `a composed read of kind ${v}`) },
 };
 
 /** "candidate.trendRule=reversal" -> { key, value }; throws on anything outside the vocabulary. */

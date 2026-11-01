@@ -49,7 +49,7 @@ function ctx({ run = {}, gate = {}, read = {}, lifecycle = {}, policy = {}, book
       skillText: () => SKILL_TEXT,
       skillExists: () => true,
       roleSkillsMode: () => 'index',
-      head: () => ({ prompt: 'p', core: [...CORE, ...READS], composedReads: READS, embedded: [...CORE, ...READS], attestation: { sha256: 'a'.repeat(64) }, expectedSha256: 'a'.repeat(64) }),
+      head: () => ({ prompt: 'p\nRequired by the situation: when ...\n\n- a composed read says a candle rejected a level: `candle-reading`\n\n## Your skills (already loaded)', core: [...CORE, ...READS], composedReads: READS, listed: ['candle-reading'], embedded: [...CORE, ...READS], attestation: { sha256: 'a'.repeat(64) }, expectedSha256: 'a'.repeat(64) }),
       syncStale: () => [],
       replayStep: () => REPLAY_STEP,
       sampleBriefing: real.sampleBriefing,
@@ -162,6 +162,10 @@ test('each check fails on a broken fixture', () => {
     [P.headComposedReads, { read: { head: () => ({ ...ctx().read.head(), composedReads: READS.slice(1), core: CORE.concat(READS.slice(1)) }) } }, /fewer than 4/],
     // Merged (#188): a head-prompt module without the composed reads is a FAIL, not "not available".
     [P.headComposedReads, { read: { head: () => ({ ...ctx().read.head(), composedReads: null }) } }, /lists no composed reads/],
+    // The listed lookups (candle-reading, feat/sweep-candle-control): none, not on the list, or embedded too.
+    [P.headComposedReads, { read: { head: () => ({ ...ctx().read.head(), listed: [] }) } }, /the listed lookups \(none\): none listed/],
+    [P.headComposedReads, { read: { head: () => ({ ...ctx().read.head(), prompt: 'p\n## Your skills (already loaded)' }) } }, /candle-reading not on the Required by the situation list/],
+    [P.headComposedReads, { read: { head: () => ({ ...ctx().read.head(), embedded: [...CORE, ...READS, 'candle-reading'] }) } }, /candle-reading embedded \(listed for lookup only\)/],
     [P.adaptersInSync, { read: { syncStale: () => ['workspace/AGENTS.md'] } }, /stale generated files: workspace\/AGENTS.md/],
     [P.noWebInReplay, { read: { replayStep: () => qwenStep(false) } }, /the replay could reach the web: qwen: the allowlist holds .*web_search/],
     [P.facts, { run: { cfg: { ...ctx().run.cfg, lanes: undefined } } }, /5m candle .*5m structure/],

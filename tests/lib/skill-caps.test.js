@@ -15,9 +15,9 @@ test('skill caps: the setups 4000 bytes, every other skill 3459 (3400 until feat
 });
 
 test('skill caps: candle-reading alone has its own cap (feat/sweep-candle-control, owner-approved: its reaction read improves context); every other skill keeps its cap', () => {
-  assert.deepStrictEqual({ ...C.PER_SKILL }, { 'candle-reading': 6212 });
+  assert.deepStrictEqual({ ...C.PER_SKILL }, { 'candle-reading': 6230 });
   assert.ok(Object.isFrozen(C.PER_SKILL));
-  assert.strictEqual(C.skillByteCap('candle-reading'), 6212);
+  assert.strictEqual(C.skillByteCap('candle-reading'), 6230);
   const fs = require('fs');
   const path = require('path');
   for (const s of fs.readdirSync(path.join(__dirname, '..', '..', 'skills'))) {
@@ -39,7 +39,7 @@ test('skill caps: a per-skill cap past its pin, or a second skill given its own,
   const at = v => { const f = path.join(dir, `t${Math.random()}.json`); fs.writeFileSync(f, JSON.stringify(v)); return f; };
   try {
     assert.throws(() => T.load('training', at({ ...base, skillCaps: { ...base.skillCaps, perSkill: { 'candle-reading': 7000 } } })), /perSkill\.candle-reading/);
-    assert.throws(() => T.load('training', at({ ...base, skillCaps: { ...base.skillCaps, perSkill: { 'candle-reading': 6212, cisd: 9000 } } })), /cisd/);
+    assert.throws(() => T.load('training', at({ ...base, skillCaps: { ...base.skillCaps, perSkill: { 'candle-reading': 6230, cisd: 9000 } } })), /cisd/);
     assert.strictEqual(T.load('training', at({ ...base, skillCaps: { ...base.skillCaps, perSkill: { 'candle-reading': 5000 } } })).skillCaps.perSkill['candle-reading'], 5000, 'lower is allowed');
   } finally { fs.rmSync(dir, { recursive: true, force: true }); }
 });

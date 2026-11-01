@@ -313,8 +313,8 @@
    "from": "skill-caps.js SETUP_SKILL_BYTES"
   },
   "skillCaps.perSkill.candle-reading": {
-   "value": 6212,
-   "from": "new in feat/sweep-candle-control (owner-approved 2026-10-31, improves context: candle-reading's own cap for its reaction-at-a-level read and the context it is read in, then 5916 for the owner rule: the reaction rules hold on every timeframe, a higher timeframe's reaction is stronger confirmation, then 6212 (owner: rejection relies on candle-reading; the side is the candle's (q30)); one skill only, every other non-setup skill stays at skillCaps.skillBytes)"
+   "value": 6230,
+   "from": "new in feat/sweep-candle-control (owner-approved 2026-10-31, improves context: candle-reading's own cap for its reaction-at-a-level read and the context it is read in, then 5916 for the owner rule: the reaction rules hold on every timeframe, a higher timeframe's reaction is stronger confirmation, then 6212 (owner: rejection relies on candle-reading; the side is the candle's (q30)), then 6230 (owner: no bare rejection (plain is no rejection read); sweeps need candle-reading too); one skill only, every other non-setup skill stays at skillCaps.skillBytes)"
   },
   "compose.maxExpects": {
    "value": 300,

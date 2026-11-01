@@ -50,7 +50,13 @@ test('each situation\'s facts: an open position is management only; a listed set
   assert.deepStrictEqual(ids(SS.factsOf({ state: FLAT, briefings: [brief({ cisd: { '15m': { dir: 'bullish', status: 'waiting' } } })] })), ['trend', 'day'], 'a CISD not yet live lists nothing');
   assert.deepStrictEqual(ids(SS.factsOf({ state: { ...FLAT, attempts: [{ account: 'x' }] }, briefings: [brief({ compression: expanding('up') })] })), ['compression', 'entry', 'risk', 'attempt', 'trend', 'day']);
   assert.deepStrictEqual(ids(SS.factsOf({ state: FLAT, briefings: [brief({ windowEntries: 'refused', compression: expanding('up') })] })), ['day', 'window']);
-  assert.deepStrictEqual(ids(SS.factsOf({ state: FLAT, briefings: [brief({ fvgs: { '5m': [{ retest: 'closed inside' }] }, sweeps: [{ name: 'equal highs' }], vwap: { side: 'above' }, lastBreak: { last: { kind: 'BOS' } } })] })), ['fvg', 'sweep', 'vwap', 'trend', 'day', 'structure']);
+  assert.deepStrictEqual(ids(SS.factsOf({ state: FLAT, briefings: [brief({ fvgs: { '5m': [{ retest: 'closed inside' }] }, sweeps: [{ name: 'equal highs' }], vwap: { side: 'above' }, lastBreak: { last: { kind: 'BOS' } } })] })), ['fvg', 'reaction', 'sweep', 'vwap', 'trend', 'day', 'structure'], 'a sweep: its reaction read too (candle-reading)');
+  // Any candle's rejected or broke relation, or its sweep of the previous candle, setup listed or not: the reaction read.
+  for (const c of [{ relations: [{ name: 'prior VAH', rel: 'rejected', dir: 'down' }] }, { relations: [{ name: 'IB high', rel: 'broke', dir: 'up' }] }, { sweep: { of: 'previous 15m high', closedBack: true } }]) {
+    assert.ok(ids(SS.factsOf({ state: FLAT, briefings: [brief({ candles: { '15m': c } })] })).includes('reaction'), JSON.stringify(c));
+  }
+  assert.ok(!ids(SS.factsOf({ state: FLAT, briefings: [brief({ candles: { '15m': { relations: [{ name: 'VWAP (rth)', rel: 'touched' }] } } })] })).includes('reaction'), 'a touch only: none');
+  assert.ok(!ids(SS.factsOf({ state: OPEN, briefings: [brief({ candles: { '15m': { relations: [{ name: 'prior VAH', rel: 'rejected', dir: 'down' }] } } })] })).includes('reaction'), 'a trade open: management only');
   assert.deepStrictEqual(ids(SS.factsOf({ state: FLAT, briefings: [brief({ declared: { long: { vwapAtr: 1, ema20Atr: 1, overnight: 'inside', dayMoveAtr: 1, regime: 'with' }, short: { vwapAtr: -1, ema20Atr: -1, overnight: 'inside', dayMoveAtr: -1, regime: 'against' } } })] })), ['declared', 'trend', 'day']);
   // No briefing and flat: nothing. An entry working: its outcome; flat with working orders: the leftovers.
   assert.deepStrictEqual(SS.factsOf({ state: FLAT }), []);
@@ -69,20 +75,27 @@ test('choose: stage order under the budget, nothing the prompt already holds, th
   assert.ok(!SS.choose(ROOT, facts, { budget: 1e9, loaded: [...LOADED, ...HP.CORE] }).skills.includes('invalidation'));
   // A budget for the setup and its entry only: the rest named, in order.
   const size = s => Buffer.byteLength(HP.block(s, HP.skillBody(ROOT, s)));
-  const small = SS.choose(ROOT, facts, { budget: size('compression') + size('candle-reading') + size('momentum-and-volume'), loaded: LOADED });
+  // The soft budget counts the rest only (candle-reading, required, is held apart: see below).
+  const small = SS.choose(ROOT, facts, { budget: size('compression') + size('momentum-and-volume'), loaded: LOADED });
   assert.deepStrictEqual(small.skills, ['compression', 'candle-reading', 'momentum-and-volume']);
   assert.deepStrictEqual(small.over, ['top-down-entry', 'invalidation', 'take-profit', 'position-sizing', 'levels-and-reactions', 'vwap-volume-profile', 'mtf-bias-filter', 'daily-bias']);
   const text = SS.situationText(ROOT, small);
   assert.ok(text.endsWith(' Also relevant now, read with your skill tool (or skill_lookup, without one): `top-down-entry`, `invalidation`, `take-profit`, `position-sizing`, `levels-and-reactions`, `vwap-volume-profile`, `mtf-bias-filter`, and `daily-bias`.'), text.slice(-200));
   // Strictly in order: a later skill small enough to fit after one that didn't is named, never taken in its place.
-  const later = all.skills.slice(2).filter(s => size(s) < size('candle-reading')).sort((a, b) => size(a) - size(b))[0];
-  assert.ok(later, 'a later skill smaller than candle-reading');
+  const later = all.skills.slice(3).filter(s => size(s) < size('momentum-and-volume')).sort((x, y) => size(x) - size(y))[0];
+  assert.ok(later, 'a later skill smaller than momentum-and-volume');
   const strict = SS.choose(ROOT, facts, { budget: size('compression') + size(later), loaded: LOADED });
-  assert.deepStrictEqual(strict.skills, ['compression'], `${later} would fit, but it comes after candle-reading`);
-  assert.ok(strict.over.includes(later) && strict.over[0] === 'candle-reading');
+  assert.deepStrictEqual(strict.skills, ['compression', 'candle-reading'], `${later} would fit, but it comes after momentum-and-volume`);
+  assert.ok(strict.over.includes(later) && strict.over[0] === 'momentum-and-volume');
+  // A skill the gate requires of the head (candle-reading, skills-loaded.js SITUATIONAL): never cut for the soft budget,
+  // even after one that didn't fit; only the hard room (the prompt's limit) can leave it out, then named.
+  const soft = SS.choose(ROOT, facts, { budget: size('compression'), loaded: LOADED });
+  assert.deepStrictEqual(soft.skills, ['compression', 'candle-reading'], 'past the soft budget, still embedded');
+  const hard = SS.choose(ROOT, facts, { budget: size('compression'), hard: size('compression'), loaded: LOADED });
+  assert.deepStrictEqual([hard.skills, hard.over[0]], [['compression'], 'candle-reading']);
   // The prompt's line works on every harness: the skill tool, or skill_lookup where the head trader has none (opencode).
   for (const harness of ['claude', 'opencode']) {
-    const p = prompts(validateConfig({ harness, account: '7', sessions: ['09:30-12:00@America/New_York'] }), NOW, ROOT).trade(ITEMS, { state: FLAT, cycleSkills: SS.situationText(ROOT, strict) });
+    const p = prompts(validateConfig({ harness, account: '7', sessions: ['09:30-12:00@America/New_York'] }), NOW, ROOT).trade(ITEMS, { state: FLAT, cycleSkills: SS.situationText(ROOT, hard) });
     assert.match(p, /Also relevant now, read with your skill tool \(or skill_lookup, without one\): `candle-reading`/, harness);
   }
   // Management first: an open trade's exit skills before any context.
@@ -214,4 +227,29 @@ test('the prompt\'s section sizes: a managed, a setup and a context-only cycle, 
     assert.ok(chosen.bytes > 0 && chosen.bytes <= budget, `${name}: ${chosen.bytes}`);
     assert.ok(Buffer.byteLength(SS.situationText(ROOT, chosen)) < budget + 1000, name);
   }
+});
+
+test('availability: on every bar a candle rejects, breaks or sweeps a level, candle-reading is in the head\'s context (embedded), or, past the hard limit only, named on the Also-relevant-now line and warned by compose_check', () => {
+  const RL = require('../../scripts/lib/trading/reaction-lookup');
+  const size = s => Buffer.byteLength(HP.block(s, HP.skillBody(ROOT, s)));
+  const triggers = [
+    { candles: { '15m': { relations: [{ name: 'prior VAH', price: 100, rel: 'rejected', dir: 'down' }] } } },
+    { candles: { '1h': { relations: [{ name: 'IB high', price: 100, rel: 'broke', dir: 'up' }] } } },
+    { candles: { '3m': { sweep: { of: 'previous 3m low', closedBack: true } } } },
+    { sweeps: [{ name: 'prior RTH high' }] },
+  ];
+  for (const t of triggers) {
+    const facts = SS.factsOf({ state: FLAT, briefings: [brief(t)] });
+    // Any soft budget, even none: embedded while the hard limit has room.
+    for (const budget of [1e9, 0]) assert.ok(SS.fit(ROOT, facts, { budget, base: 1000, max: 1e9, loaded: LOADED }).skills.includes('candle-reading'), `${JSON.stringify(t)}, budget ${budget}`);
+    // The hard limit leaves no room: named, never dropped silently, and compose_check's warning names it.
+    const tight = SS.fit(ROOT, facts, { base: 1000, max: 1000 + size('candle-reading') - 1, loaded: LOADED });
+    assert.ok(!tight.skills.includes('candle-reading') && tight.over.includes('candle-reading'), JSON.stringify(t));
+    assert.match(SS.situationText(ROOT, tight), /Also relevant now[^]*`candle-reading`/);
+    assert.match(RL.warningFor(['15m rejected prior vah down'], { env: { FTH_AUTONOMOUS: '1' }, root: ROOT }), /candle-reading/);
+  }
+  // A required skill is the last to go: the rest shrinks before it.
+  const facts = SS.factsOf({ state: FLAT, briefings: [brief({ compression: expanding('up'), candles: { '15m': { relations: [{ name: 'prior VAH', price: 100, rel: 'rejected', dir: 'down' }] } } })] });
+  const room = SS.fit(ROOT, facts, { base: 1000, max: 1000 + size('candle-reading') + 400, loaded: LOADED });
+  assert.ok(room.skills.includes('candle-reading'), JSON.stringify(room.skills));
 });

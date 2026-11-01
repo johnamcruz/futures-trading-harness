@@ -49,8 +49,9 @@ description: Use before a trade_lifecycle entry - compose the trade as reads wit
    level, `breakout` when one says it broke one: in your prompt when it
    embeds them (don't look them up); else load each (no skill tool:
    `skill_lookup`; in index mode the gate requires them). With a
-   rejection or a break, look up `candle-reading` too: its reaction read,
-   never embedded (the gate requires it). The gate requires
+   rejection, a break or a sweep, look up `candle-reading` too: its
+   reaction read, unless this cycle's situational section embeds it (the
+   gate requires it; `compose_check` says so). The gate requires
    the journal plan (`[plan-required]`), `setup-judgment` and `trade-plan`
    (`[skills-at-entry]`) and the role round (`[roles-ran]`).
 3. **Send it as the record says** (runner runs the entry: `planned`): `place_order` at the record's

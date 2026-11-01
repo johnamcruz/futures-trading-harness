@@ -494,6 +494,11 @@ test('composed triggers: the head trader\'s compose records on the bar (cycleFac
   assert.ok(!SL.fires(t('composed'), { composed: [] }) && !SL.fires(t('composed'), {}) && !SL.fires(t('composed'), null));
   assert.ok(SL.fires(t('composed.relation=rejected'), withRel('rejected')) && !SL.fires(t('composed.relation=broke'), withRel('rejected')));
   assert.throws(() => t('composed.relation=swept'), /needs a valid value/);
+  // A composed sweep (a read kind, composed-reads.js STEP_KINDS): the kind trigger.
+  const withKind = kind => ({ composed: [{ id: 'a', side: 'long', kinds: [kind], relations: [] }] });
+  assert.ok(SL.fires(t('composed.kind=swept'), withKind('swept')) && !SL.fires(t('composed.kind=swept'), withKind('cisd')) && !SL.fires(t('composed.kind=swept'), {}));
+  assert.throws(() => t('composed.kind=Not a kind!'), /needs a valid value/);
+  for (const e of SL.SITUATIONAL.filter(x => x.when.startsWith('composed.kind='))) assert.ok(Object.keys(require('../../scripts/lib/trading/composed-reads').STEP_KINDS).includes(e.when.split('=')[1]), e.when);
   // The records on the briefing's bar, parsed again (a record's own fields about itself are never read).
   const home = tmpDir();
   const now = new Date('2026-10-07T14:00:02Z');
@@ -530,7 +535,7 @@ test('composed triggers: the head trader\'s compose records on the bar (cycleFac
   for (const [role, list] of required) for (const r of list) assert.ok(!r.when.some(w => w.key.startsWith('composed')), `${role}: ${r.skill}`);
   // The head prompt lists only the untaught composed one, candle-reading (headOnly: the head's lookup, no role's).
   const { headPrompt } = require('../../scripts/lib/head-prompt');
-  assert.match(headPrompt({ docs: [] }), /- a composed read says a candle rejected a level, or a composed read says a candle broke a level: `candle-reading`/);
+  assert.match(headPrompt({ docs: [] }), /- a composed read says a candle rejected a level, or a composed read says a candle broke a level, or a composed read says a level was swept: `candle-reading`/);
   assert.doesNotMatch(headPrompt({ docs: [] }, SL.SITUATIONAL.filter(x => !x.headOnly)), /compose/);
   for (const e of SL.SITUATIONAL.filter(x => x.headOnly)) assert.ok(e.head === true && !e.taughtIn && e.when.startsWith('composed'), `${e.skill}: a composed read, the head's alone`);
   const taught = fs.readFileSync(path.join(__dirname, '..', '..', 'skills', 'trade-lifecycle', 'SKILL.md'), 'utf8');

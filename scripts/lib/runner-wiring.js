@@ -650,7 +650,7 @@ function exitsOnly(env, log, critical = require('./tunables').critical()) {
   return true;
 }
 
-function wireRunner({ cfg, root, home, env = process.env, client, prop = null, dataDir, now, runCycle, runRole = null, loadState, saveState, killSwitchFile, log, event, onBarClosed = () => {}, agents = null, configCritical = undefined }) {
+function wireRunner({ cfg, root, home, env = process.env, client, prop = null, dataDir, now, runCycle, runRole = null, loadState, saveState, killSwitchFile, log, event, onBarClosed = () => {}, agents = null, configCritical = undefined, maxPromptBytes = null }) {
   const strategies = () => loadStrategies(root, env).strategies;
   // A user's own strategy under a retired name: it trades as theirs; said at start so a stale copy is noticed.
   try { for (const m of retiredCopies(strategies())) log(m, 'error'); } catch (_err) { /* the strategies load again at each scan */ }
@@ -680,6 +680,9 @@ function wireRunner({ cfg, root, home, env = process.env, client, prop = null, d
   return createRunner({
     cfg,
     prop,
+    // The cycle prompt's size limit (null: config/runner.json prompt.maxPromptBytes); a test's smaller one leaves the
+    // situational section no room (its skills named on the Also-relevant-now line instead).
+    maxPromptBytes,
     root,
     client,
     clock: { now },

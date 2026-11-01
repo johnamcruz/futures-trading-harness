@@ -135,29 +135,22 @@ test('the reaction questions (q23-q35, feat/sweep-candle-control): answer-first 
         'It is not a confirmation of the rejection.', 'No confirmation of the rejection.', 'Not a confirmed rejection.', 'The rejection is negated; a breakout confirmation.',
         'The rejection, then the engulfing confirms a breakout.', 'The rejection: the engulfing confirms nothing.']],
     // Conflicting: mixed, it needs other confirmation (or the next candle).
-    q28: [['No, sellers in control needs a bearish close: mixed, wait.', 'No, short it only once the next candle closes lower.', 'No: mixed evidence, wait for confirmation.', 'Wait for the next candle.', 'Not yet: conflicting.', 'Not on this read alone; mixed, not sellers in control.', 'Mixed: it needs other confirmation, the count or the next candle.'],
-      ['Yes, it closed back below.', 'Sellers are in control.', 'Take it now: the close is back below.', 'Short it: sellers in control.', 'Yes: sellers in control.', 'No, but sellers are in control: short it.', 'Not yet, sellers are in control.', 'No. Sellers in control: short it now.']],
+    q28: [['Not by itself: the conflicting label means mixed, so it needs other confirmation before you read sellers in control.', 'No, sellers in control needs a bearish close: mixed, wait.', 'No, short it only once the next candle closes lower.', 'No: mixed evidence, wait for confirmation.', 'Wait for the next candle.', 'Not yet: conflicting.', 'Not on this read alone; mixed, not sellers in control.', 'Mixed: it needs other confirmation, the count or the next candle.'],
+      ['Yes, it closed back below.', 'Sellers are in control.', 'Take it now: the close is back below.', 'Short it: sellers in control.', 'Yes: sellers in control.', 'No, but sellers are in control: short it.', 'Not yet, sellers are in control.', 'No. Sellers in control: short it now.',
+        'Yes, read it as sellers in control, but only as a conflicting read that needs other confirmation.']],
     // A stall: the next candle decides, said anywhere in the line.
     q29: [['The next candle decides.', 'Next 15m candle.', 'The 15m candle after the doji decides it.', 'Whoever wins the next 15m close.'],
       ['The doji itself.', 'This candle decides.', 'Sellers.', 'Buyers decide.', 'The doji decides: it is a stall.']],
     // The same reaction in another context: the context decides (with the bias a short; against the 4h + 1h no trade).
     // The same reaction in another context: the context decides, and the answer says how: with the bias a short, against the
     // 4h + 1h refused (the trend rule). Real answers stating the wrong sides fail.
-    q30: [['No: the context decides; the first supports a short, the second is no trade (the trend rule).', 'Not the same: with the bias it is a continuation short, against the 4h and 1h no trade.', 'Different: the second counters the 4h + 1h.',
-      'No. The first is a short setup with the trend; the second is a counter-trend short that the trend rule refuses.',
-      'No, they are not the same read: the pullback-level rejection is a short in the bias direction, but the one with 4h and 1h up is a counter-trend short that the trend rule refuses.',
-      'No - not the same thing: the second counters the 4h and 1h.', 'Different: not both shorts; the second is no trade.'],
-      ['Yes, both are long-wick rejections.', 'Same read: short both.', 'The same, take either.', 'No difference, both are shorts.', 'No - same read, both shorts.', 'No, take both.', 'No: both shorts.', 'It is the same read either way.',
-        'No - both valid shorts.', 'No: same reaction, same trade.', 'No: short in both cases.', 'No - the second is a short too.', 'No - no difference.', 'No: the context decides.',
-        'No, they are not the same read: the 4h and 1h down long-wick rejection at a pullback level is a short setup, while the 4h and 1h up one is a long setup.',
-        'No, not the same read: the pullback-level rejection is a long setup in a pullback, while the trend-up rejection is a counter-trend short that the trend rule refuses.',
-        'No. The 4h/1h-down wick is a counter-trend long read and is refused; the 4h/1h-up wick is a with-trend long setup.',
-        'No, not the same read: the pullback-level rejection is a with-trend long-side setup at a key level, while the trend-up one is a counter-trend short and gets refused.',
-        'No: the context decides; the second one is a long setup.', 'No: against the 4h and 1h it is a short too.', 'No, the trend rule: short both of them.', 'No: never counter, yet the second is a short as well.',
-        // Real answers (e269-part k2, 9a0e k2) that put the sides the wrong way round.
-        'No, they are not the same read: the 4h and 1h down one is a counter-trend short-side rejection (the trend rule refuses it), while the 4h and 1h up one is a with-trend setup on the other side.',
-        'No, they are not the same read: the 4h/1h-down pullback long-wick rejection is a short-side setup only if the trend rule allows it, and the 4h/1h-up one is the opposite side.',
-        'No, different: the first a short; the second is a short too? Yes.']],
+    q30: [['Both are the short side (a rejection of a high); only the first, with the 4h and 1h down, can be taken; the trend rule refuses the second (never counter).',
+      'Short side both times: the pullback one is a continuation short to take, the one against the 4h + 1h is refused.', 'Same candle read (short side), different trade: the 4h and 1h down one can be a setup, the 4h and 1h up one is refused.',
+      'Both short; the first can be taken, the second is counter to the 4h and 1h: no trade.'],
+      ['Both are shorts to take.', 'The first is a short, the second a long setup.', 'Short both: take them both.', 'The first a short; the second is a counter-trend short I\'d take small.',
+        'Both short: the first can be taken, and take the second anyway.', 'The pullback one is a long, the other a short.', 'Short side; the second is a counter-trend short but still a short to take.',
+        'No, they differ: the down-trend one is a short only if it sits against the trend, and the up-trend one is a long pullback.', 'Both short and both can be taken.',
+        'The pullback one is a continuation; the other one is refused.']],
     // The reaction rules hold on every timeframe and a higher frame's is stronger confirmation (the owner, 2026-10-31); still
     // context. Asked with candle-reading looked up (its stack line).
     q31: [['The 4h: it outweighs the 15m, but it still needs other confirmation.', 'The 4h rejection; not a trade on its own, it needs the count.', '4h. Context only: it needs more confirmation.', 'The higher frame, the 4h; it still needs confirmation.',
@@ -176,16 +169,19 @@ test('the reaction questions (q23-q35, feat/sweep-candle-control): answer-first 
         'No: the 1h is stronger, but the 3m rejection is a short with the count.', 'Wait: the 1h is stronger; take the short with the next 3m close.', 'Short, the 3m is a rejection; the 1h is noise.', 'No: short on the 3m with the 1h breakout as context.',
         'No short; the trend rule refuses it.']],
     // The mirror of q30 (a rejection of a low): the side is the candle's (the long side), never the bias's.
-    q33: [['No: the side is the candle\'s, the long side; with the 4h and 1h up it supports the long, against them the trend rule refuses it.', 'Not the same: the first is a continuation long; the second is a counter-trend long the trend rule refuses.', 'Different: the second counters the 4h + 1h, no trade.'],
-      ['Yes, both are long-wick rejections.', 'Same read: long both.', 'No, take both.', 'No: the context decides; the second one is a short setup.', 'No: against the 4h and 1h it is a long too.',
-        'No, they are not the same read: the 4h and 1h up one is a long setup, while the 4h and 1h down one is a short setup.', 'No. The 4h/1h-up wick is a counter-trend short read and is refused; the 4h/1h-down wick is a with-trend short setup.',
-        'No, they are not the same read: the 4h and 1h up one is a counter-trend long (the trend rule refuses it), while the 4h and 1h down one is a with-trend setup on the other side.', 'No - no difference.']],
+    q33: [['Both are the long side (a rejection of a low); only the first, with the 4h and 1h up, can be taken; the trend rule refuses the second (never counter).',
+      'Long side both times: the pullback one is a continuation long, the one against the 4h + 1h is refused.', 'Both long; the first can be taken, the second is counter to the 4h and 1h: no trade.'],
+      ['Both are longs to take.', 'The first is a long, the second a short setup.', 'Long both: take them both.', 'The first a long; the second is a counter-trend long I\'d take small.',
+        'Both long: the first can be taken, and take the second anyway.', 'The pullback one is a short, the other a long.', 'Both long and both can be taken.', 'The pullback one is a continuation; the other one is refused.']],
     // No bare rejection: a `rejected` relation with a plain reaction is no rejection read by itself.
-    q34: [['No: it closed back, but the wick, the body and the next candle haven\'t confirmed; plain is weak, context only.', 'Not by itself: the reaction is plain, context only.', 'No - the relation alone is no rejection read; the reaction decides, and plain is weak.'],
-      ['Yes: it traded above and closed back below.', 'A rejection: sellers took control.', 'No, but it is a rejection read: short it.', 'Yes, a rejection read; the close back below is enough.', 'No: sellers are in control.']],
+    q34: [['No: it closed back, but the wick, the body and the next candle haven\'t confirmed; plain is weak, context only.', 'Not by itself: the reaction is plain, context only.', 'No - the relation alone is no rejection read; the reaction decides, and plain is weak.',
+      'No: plain is no rejection read, weak context only; it needs other confirmation.'],
+      ['Yes: it traded above and closed back below.', 'A rejection: sellers took control.', 'No, but it is a rejection read: short it.', 'Yes, a rejection read; the close back below is enough.', 'No: sellers are in control.',
+        'Yes, a plain reaction still counts as a rejection read, but it is weak context only.', 'No: a rejection, context only.', 'Not confirmed, but it is still a rejection read.']],
     // The index reference: candle-reading, read with skill_lookup (or the cycle's embedded copy), never rejection alone.
-    q35: [['candle-reading, read with skill_lookup (or the cycle\'s embedded copy).', '`candle-reading`: look it up with skill_lookup before the entry.', 'The candle-reading skill, its reaction read: skill_lookup, unless the cycle embedded it.'],
-      ['rejection: it is the setup skill.', 'The rejection skill, already in my prompt.', 'candle-reading, with the skill tool.', 'breakout-vs-fakeout.', 'candle-reading.']],
+    q35: [['candle-reading, read with skill_lookup (or the cycle\'s embedded copy).', '`candle-reading`: look it up with skill_lookup before the entry.', 'The candle-reading skill, its reaction read: skill_lookup, unless the cycle embedded it.',
+      'Read the `candle-reading` skill; it defines what a conflicting reaction means.', 'Read `candle-reading` (the reaction read), then `rejection` for the setup.', 'Read `rejection` for the setup, and `candle-reading` for what the conflicting reaction means; look it up with skill_lookup first.'],
+      ['rejection: it is the setup skill.', 'The rejection skill, already in my prompt.', 'candle-reading, with the skill tool.', 'breakout-vs-fakeout.', 'candle-reading: it is embedded in my head prompt.']],
   };
   for (const [id, [right, wrong]] of Object.entries(cases)) {
     for (const a of right) assert.ok(pass(id, `ANSWER: ${a}`), `${id} right: ${a}`);

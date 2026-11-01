@@ -97,7 +97,7 @@ Read the field, never by eye. At a high (a low: the mirror), the first that hold
    (the count, or the next candle).
 6. stall: a doji (never conflicting) or inside candle → stalled; the
    next candle decides.
-7. plain: none → weak, context only.
+7. plain: none → no rejection read: weak context only.
 
 The close beats the wick: a long wick closing above is no rejection; a
 close exactly at the level is no breakout. The relation is by the body,
