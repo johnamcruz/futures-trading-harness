@@ -14,9 +14,10 @@
  * The mock policy follows the plan exactly, every bar, from the briefing the runner wrote:
  *   flat, entries allowed: the side the Bias line gives (bias-line.js); the first setup that side's way, in order: a
  *   cited rules setup the scan fired on the bar (m3.candidates: momentum_continuation), else a setup on the "Setups to
- *   check" line (its quoted read: the 15m reaction, CISD or compression break) with the bar's confirming 3m read
- *   (setup-library.js entryRead); compose_check with that setup's reads (the briefing's Standard plan's reads when it
- *   plans that setup OK); OK: `planned`; NOT OK: no-trade with the first problem; nothing: no-trade
+ *   check" line (its quoted read: the 15m reaction, CISD or compression break); the setup is the entry, so no
+ *   confirming 3m read is needed and one is stated only when it is true (setup-library.js entryRead); compose_check
+ *   with that setup's reads (the briefing's Standard plan's reads when it plans that setup OK, each read's step by its
+ *   form: stepsOf); OK: `planned`; NOT OK: no-trade with the first problem; nothing: no-trade
  *   phase 2: `VERDICT: APPROVE - size <the size its request names>` with true FACTS; the executor sends the runner's
  *   arguments as given; with a position: hold, never touch the stop (the runner's own exit manages it)
  *
@@ -31,6 +32,11 @@
  *                                              other breaks patch the shipped code itself (tests/goal/breaks.js)
  *   artifacts(w)                               { sent, faults, snaps, records, cycles, gate, fills, orders, calls,
  *                                              attempt } read from the home and the exchange
+ *   stepsOf(reads)                             a Standard plan's quoted reads as compose_check steps, by each read's
+ *                                              form (`stop …` the stop, `target …` the target; the rest bias, location,
+ *                                              setup, then entry in order: the plan states an entry read only when true)
+ *   listedReads({ side, setup, c3, c15, bias, vwap })   a listed setup's reads, the 3m entry read only when one is
+ *                                              true; null without the 15m candle (no stop read)
  */
 
 const fs = require('fs');
@@ -135,6 +141,20 @@ function standardReads(summary, side) {
 const SKILL = { bias: 'htf-to-ltf', location: 'vwap-volume-profile', setup: 'trade-lifecycle', entry: 'candle-reading', stop: 'invalidation', target: 'take-profit' };
 const read = (step, text) => ({ step, skill: SKILL[step], read: text, why: `the mock policy's ${step}` });
 
+/** A Standard plan's reads as compose_check steps, by form, never by position (its entry read is optional). */
+function stepsOf(reads) {
+  const order = ['bias', 'location', 'setup', 'entry'];
+  let k = 0;
+  return reads.map(r => (/^stop /.test(r) ? read('stop', r) : /^target /.test(r) ? read('target', r) : read(order[Math.min(k++, order.length - 1)], r)));
+}
+
+/** A listed setup's reads: the setup is the entry, the 3m entry read stated only when one is true; null without the 15m. */
+function listedReads({ side, setup, c3, c15, bias, vwap }) {
+  if (!c15) return null;
+  const entry = entryRead(c3, side, '3m');
+  return [bias, vwap, read('setup', setup), entry ? read('entry', entry) : null, read('stop', `stop 15m ${side === 'long' ? 'low' : 'high'} ${side === 'long' ? c15.l : c15.h}`), read('target', 'target trail')].filter(Boolean);
+}
+
 /** The mock's choice on this bar's briefing: { side, setup, reads } or { pass: why }. */
 function decide(b) {
   const m3 = m3Of(b);
@@ -152,18 +172,17 @@ function decide(b) {
   if (cand.length) {
     const c = cand[0];
     const entry = c3 && c3.momentum === way(side) ? `3m momentum ${way(side)}` : entryRead(c3, side, '3m');
-    return { side, setup: `${c.name} fired ${way(side)}`, kind: 'cited', reads: [bias, vwap, read('setup', `${c.name} fired ${way(side)}`), read('entry', entry || `3m close ${side === 'long' ? 'top' : 'bottom'}`), read('stop', `stop 3m ${side === 'long' ? 'low' : 'high'} ${side === 'long' ? c3.l : c3.h}`), read('target', 'target 2r')].filter(Boolean) };
+    // The entry read only when one is true (a false one stated would be refused: the setup is the entry).
+    return { side, setup: `${c.name} fired ${way(side)}`, kind: 'cited', reads: [bias, vwap, read('setup', `${c.name} fired ${way(side)}`), entry ? read('entry', entry) : null, read('stop', `stop 3m ${side === 'long' ? 'low' : 'high'} ${side === 'long' ? c3.l : c3.h}`), read('target', 'target 2r')].filter(Boolean) };
   }
   // The first valid listed setup: the one the briefing's Standard plan composes OK (its reads, as the briefing gives
-  // them), else the first listed with the bar's confirming 3m read.
+  // them, each in its step by form), else the first listed (the setup is the entry: no confirming 3m read needed).
   const std = standardReads(summary, side);
   const planned = std ? listed.find(x => std.includes(x.read)) : null;
-  if (planned) return { side, setup: planned.read, kind: 'standard', reads: std.map((r, i) => read(['bias', 'location', 'setup', 'entry', 'stop', 'target'][i] || 'setup', r)) };
+  if (planned) return { side, setup: planned.read, kind: 'standard', reads: stepsOf(std) };
   for (const x of listed) {
-    const entry = entryRead(c3, side, '3m');
-    const c15 = m3.candles && m3.candles['15m'];
-    if (!entry || !c15) continue;
-    return { side, setup: x.read, kind: 'listed', reads: [bias, vwap, read('setup', x.read), read('entry', entry), read('stop', `stop 15m ${side === 'long' ? 'low' : 'high'} ${side === 'long' ? c15.l : c15.h}`), read('target', 'target trail')].filter(Boolean) };
+    const reads = listedReads({ side, setup: x.read, c3, c15: m3.candles && m3.candles['15m'], bias, vwap });
+    if (reads) return { side, setup: x.read, kind: 'listed', reads };
   }
   return { pass: listedSetups(summary).length || (m3.candidates || []).length ? 'no setup the side\'s way' : 'no setup listed' };
 }
@@ -440,4 +459,4 @@ function artifacts(w) {
   return { probes: w.probes, faultState, sent: w.sent, faults: w.faults, snaps: w.snaps, records, cycles, gate: jsonl(w.env.FTH_GATE_LOG), fills: s.fills, orders: s.orders.map(({ brackets, ...o }) => ({ ...o, brackets })), calls, attempt };
 }
 
-module.exports = { MNQ_ID, STEP, SESSION, dayWorld, runDay, artifacts, decide, listedSetups, standardReads };
+module.exports = { MNQ_ID, STEP, SESSION, dayWorld, runDay, artifacts, decide, listedSetups, standardReads, stepsOf, listedReads };

@@ -395,8 +395,8 @@ function briefingAt(rec, { symbol, barT, t, scan, tf, count }) {
 
 /**
  * A composable setup in a bar briefing (the facts compose_check starts from): the setup timeframe's last completed
- * candle reacted at a key level or FVG (setup-moments.js, the "Setups to check" line), the trigger timeframe closed
- * after it (phase confirmation), on a side the trend rule allows, in a window that allows entries and no news
+ * candle reacted at a key level or FVG (setup-moments.js, the "Setups to check" line), on its reaction bar or a later
+ * close while it stands (the setup is the entry: no confirming close), on a side the trend rule allows, in a window that allows entries and no news
  * blackout, and the briefing's Standard plan for that side is OK (setup-library.js standardPlans, the same code the
  * briefing's line comes from): a plan the line states refused is a pass the skills prescribe, never abstention.
  * { valid, sides, reason }; never throws (no briefing: not valid).
@@ -409,11 +409,11 @@ function composableSetup(b) {
     const rule = trendRuleOf(m3.trendRule);
     const allowed = [...new Set(mo.reactions.map(r => (r.dir === 'up' ? 'long' : r.dir === 'down' ? 'short' : null)).filter(x => x && rule[x] === true))];
     const blocked = m3.windowEntries !== 'allowed' ? `the ${m3.window} window allows no entries` : m3.news && m3.news.inBlackout !== false ? 'a news blackout or the news unknown' : null;
-    const plans = mo.moment && mo.phase === 'confirmation' && allowed.length && !blocked ? standardPlans(b) || [] : [];
+    const plans = mo.moment && allowed.length && !blocked ? standardPlans(b) || [] : [];
     const sides = allowed.filter(side => plans.some(p => p.side === side && p.status === 'traded'));
     const refused = allowed.map(side => plans.find(p => p.side === side)).filter(Boolean).map(p => `${p.side} plan refused (${p.why})`);
     const valid = sides.length > 0;
-    return { valid, sides: valid ? sides : allowed, reason: blocked || (!mo.moment ? mo.reason : mo.phase !== 'confirmation' ? `${mo.reason}: the trigger not closed yet` : !allowed.length ? `${mo.reason}: not the trend rule's side` : !valid ? `${mo.reason}: ${refused.join(', ') || 'no standard plan'}` : `${mo.reason}, plan OK`) };
+    return { valid, sides: valid ? sides : allowed, reason: blocked || (!mo.moment ? mo.reason : !allowed.length ? `${mo.reason}: not the trend rule's side` : !valid ? `${mo.reason}: ${refused.join(', ') || 'no standard plan'}` : `${mo.reason}, plan OK`) };
   } catch (err) {
     return { valid: false, sides: [], reason: `the briefing can't be read (${err.message})` };
   }
@@ -626,7 +626,7 @@ function scoreRun(runDir, { strategies = [], accounts = [], outcomeBars = null, 
       actual: { action: label.teacher ? label.teacher.action : null, setup: label.teacher ? label.teacher.setup : null, size: label.teacher && label.teacher.size ? label.teacher.size.contracts : null, gate: label.gate, result: label.result },
       reasons, incidentalFalse: reasons.claims.filter(c => c.check === false && c.incidental).length, agrees: verdict.agrees, category: verdict.category, why: verdict.why,
       severity: null, flow, claimChecks, data: F.dataOf(label, facts), provenance: { cycleFile: cycleFile || null, promptHash: label.provenance ? label.provenance.promptHash : null },
-      trade: o && o.filled ? { result: o.result, r: o.r, net: o.net, side: o.side, size: o.size, exitReason: o.exitReason } : null,
+      trade: o && o.filled ? { result: o.result, r: o.r, net: o.net, side: o.side, size: o.size, exitReason: o.exitReason, ...(o.rBasis ? { rBasis: o.rBasis } : {}) } : null,
       counterfactual: label.counterfactualFor === 'skip' && label.counterfactual ? { strategy: label.counterfactual.strategy, direction: label.counterfactual.direction, simulated: label.counterfactual.simulated, result: label.counterfactual.result, R: label.counterfactual.R, net: label.counterfactual.net, reason: label.counterfactual.reason } : null,
       pacing: facts.attempt,
     });

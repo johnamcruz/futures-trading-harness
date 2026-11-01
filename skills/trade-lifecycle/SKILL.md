@@ -13,18 +13,19 @@ description: Use before a trade_lifecycle entry - compose the trade as reads wit
 ## How It Works
 
 1. **Compose: the flow, a with-trend pullback** (`trader-process`).
-   the side rule's side, the setup (15m) at a level closed (the next 3m close times it) → compose (`confluence-counting`); the plan, never you, works out R:R. Call
+   the side rule's side, the setup (15m) at a level closed (it is the entry: a limit at the last close when you compose (the setup's own close when you compose on its bar), filled within `valid_bars`) → compose (`confluence-counting`); the plan, never you, works out R:R. Call
    `compose_check` with one true read per step at least, each your side's
    way (the against stay in the count), and your size. The standard plan
    says OK → compose with its reads. The record is for this bar and side;
    it expires `valid_bars` base bars after its bar's close.
+   At the setup's close a stall or conflicting reaction is weak context: it counts nothing; the count decides. The limit rests `valid_bars`: a later bar fills it or it expires.
 
    | Step | The read, your side's way | The skill for the fact |
    | --- | --- | --- |
    | bias | the side rule gives the side (`htf-to-ltf`): `15m down`, `1h bos up`, `trend long allowed`, regime, prior RTH range, read, day type; never against it (never counter) | `multi-timeframe-analysis`, `trend-vs-range`, `daily-bias`, `bos-vs-choch` |
    | location | the pullback into a key level: `at <level>`, `at 15m fvg`, `vwap above`, `value below` | `levels-and-reactions`, `vwap-volume-profile`, `fair-value-gaps`, `compression` |
    | setup | the reaction ending it, the trend's way, on a closed candle above the base: `15m rejected prior vah up`, a gap edge, pattern, `15m cisd down`, a breakout, `15m compression break up`; in an attempt the 15m or higher (the 3m only times the entry); or a Setups-line setup: `momentum_continuation fired up` (S2, the best-measured entry: P2R 35%; then `3m momentum up`, `stop 3m low <price>`, `target 2r`: the 2R mark that arms the trail, not the exit; market) | `rejection`, `breakout`, `fair-value-gaps`, `pullback-vs-reversal`, `breakout-vs-fakeout`, `cisd`, `candle-reading`, `compression` |
-   | entry | the entry timing (3m): the next candle closed after the setup's, its way: `3m close top` (short: bottom), `3m momentum up`, absorption; no 3m turn or break to wait for | `candle-reading`, `momentum-and-volume`, `absorption` |
+   | entry | optional: the setup is the entry, on the next 3m bar; no confirming close to wait for. A 3m read stated must be true its way: `3m close top`, `3m momentum up` | `candle-reading`, `momentum-and-volume`, `absorption` |
    | stop | the stop (compose's): one tick beyond the level you name, the setup candle's extreme as a rule: `stop 15m low <price>` (short: high), `stop swing low <price>`, `stop 15m box low <price>`; under the floor refused, never widened | `invalidation` |
    | target | `target trail`: the 2R mark that arms the trail, not the exit (a level ahead is context). Not in a prop attempt, on a side the side rule doesn't give: the first level at 2R or more (`target <level> <price>`), or `target 2r` | `take-profit` |
    | size | Size in a prop attempt: the full verdict size, the code's number. Never less on a healthy account. Phase 2 cuts only on a pacing rule. Fewer than 3 (`min_contracts`) at the stop: skip | `position-sizing`, `prop-challenge-pacing`, `prop-pacing-judgment` |
@@ -66,7 +67,7 @@ description: Use before a trade_lifecycle entry - compose the trade as reads wit
 5. **`[composed-reads]` refusals**: no record for this bar and side, or
    expired (compose again); an entry already placed on this bar and side;
    another contract; a read false, unverifiable or against your side now
-   (drop it or pass), or no setup or entry read your way; the plan, ticks, limit or size not the record's. The
+   (drop it or pass), or no setup read your way; the plan, ticks, limit or size not the record's. The
    stop is never widened: name a farther level or pass. `[late-entry]`:
    missed the plan's entry, or price past its stop before the order went
    → pass, never late. Exits and protective orders are never held.

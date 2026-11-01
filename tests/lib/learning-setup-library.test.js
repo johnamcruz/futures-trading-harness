@@ -49,31 +49,32 @@ test('scan: deterministic on the fixture bars; every record from a fixed-level o
   assert.strictEqual(new Set(RECORDS.map(r => r.id)).size, RECORDS.length);
 });
 
-test('the same-candle rule: every traded record confirms on a candle that closed after the reaction candle, in an entry window', () => {
+test('the setup is the entry: every traded record is on the reaction bar or a later close while it stands, in an entry window', () => {
   const { sessionWindow } = require('../../scripts/lib/trading/briefing');
   const traded = RECORDS.filter(r => r.status === 'traded');
+  // The CONF3M study: entering at the setup beat waiting for a confirming 3m close; most now trade on the reaction bar.
+  assert.ok(traded.filter(r => Date.parse(r.bar) + 180000 === Date.parse(r.reactionAt)).length > traded.length / 2);
   for (const r of traded) {
-    assert.ok(Date.parse(r.bar) + 180000 > Date.parse(r.reactionAt), `${r.id}: bar ${r.bar}, reaction ${r.reactionAt}`);
+    assert.ok(Date.parse(r.bar) + 180000 >= Date.parse(r.reactionAt), `${r.id}: bar ${r.bar}, reaction ${r.reactionAt}`);
     assert.strictEqual(sessionWindow(new Date(Date.parse(r.bar) + 180000)).entries, 'allowed', `${r.id} in a no-entry window`);
   }
 });
 
-test('every confirming close is tried until one composes: the fixture\'s counts, and a record traded after an earlier close failed', () => {
+test('every close from the reaction bar on is tried until one composes: the fixture\'s counts, and a record traded after an earlier close failed', () => {
   const count = {};
   for (const r of RECORDS) count[r.status] = (count[r.status] || 0) + 1;
-  // One moment moved from no-room to not-composable when the entry frame's levels became none (chain.js).
-  assert.deepStrictEqual(count, { traded: 79, 'no-room': 23, 'not-composable': 13, 'no-confirmation': 19, 'no-entry-window': 2 });
-  // A traded record whose window had an earlier confirming close that did not compose.
+  // The setup is the entry (the CONF3M study): 79 traded, 23 no-room, 13 not-composable, 19 no-confirmation and 2
+  // no-entry-window before (an entry read on a later close required); the same 136 moments now.
+  assert.deepStrictEqual(count, { traded: 109, 'no-room': 17, 'not-composable': 9, 'no-entry-window': 1 });
+  // A traded record whose window had an earlier close (from the reaction bar on) that did not compose.
   const later = RECORDS.filter(r => r.status === 'traded').find(r => {
-    for (let t = Date.parse(r.reactionAt); t + 180000 < Date.parse(r.bar) + 180000; t += 180000) {
-      const bar = new Date(t).toISOString();
-      const b = briefAt(bar);
-      if (!L.entryRead(b.sections.m3.data.candles['3m'], r.side, '3m')) continue;
+    for (let t = Date.parse(r.reactionAt) - 180000; t < Date.parse(r.bar); t += 180000) {
+      const b = briefAt(new Date(t).toISOString());
       if (L.composeAt(b, r.reaction, { side: r.side, tick: 0.25 }).status !== 'traded') return true;
     }
     return false;
   });
-  assert.ok(later, 'a later close traded after an earlier confirming close failed to compose');
+  assert.ok(later, 'a later close traded after an earlier close failed to compose');
 });
 
 test('a checker or plan refusal is not-composable with its problem, never no-room; no-room is a verified target short of 2:1', () => {
@@ -91,11 +92,11 @@ test('a checker or plan refusal is not-composable with its problem, never no-roo
   assert.match(c.why, /^the checker refused target 7m swing/);
 });
 
-test('the standard: entry at the confirmation close, stop one tick beyond the reaction candle, the target at 2:1 or more, the experience log\'s fill model', () => {
+test('the standard: entry at the setup\'s close (or a later one while it stands), stop one tick beyond the reaction candle, the target at 2:1 or more, the experience log\'s fill model', () => {
   for (const r of RECORDS.filter(x => x.status === 'traded').slice(0, 12)) {
     const b = briefAt(r.bar);
     const m3 = b.sections.m3.data;
-    assert.strictEqual(r.plan.entry, m3.price, 'a limit at the confirmation close');
+    assert.strictEqual(r.plan.entry, m3.price, 'a limit at the entry bar\'s close');
     const c = m3.candles['15m'];
     assert.strictEqual(c.closedAt, r.reactionAt, 'the reaction candle is still the last completed one');
     assert.strictEqual(r.plan.stop, r.side === 'long' ? c.l - 0.25 : c.h + 0.25, 'one tick beyond the reaction candle');
@@ -128,7 +129,8 @@ test('signature parity: a record\'s reads, checked by compose_check\'s checker o
     assert.ok(ch.reads.every(x => x.check === true));
     assert.strictEqual(ch.signature, r.signature);
     assert.deepStrictEqual(ch.context, r.context);
-    assert.deepStrictEqual(r.reads.map(x => x.step), ['bias', 'location', 'setup', 'entry', 'stop', 'target']);
+    // The entry read only when one is true the side's way (optional: the setup is the entry).
+    assert.deepStrictEqual(r.reads.map(x => x.step).filter(x => x !== 'entry'), ['bias', 'location', 'setup', 'stop', 'target']);
   }
 });
 
@@ -203,7 +205,7 @@ test('experience_lookup: the history library in a section of its own, after the 
   assert.doesNotMatch(plain, /History library/);
   L.pinLibrary(home, L.writeLibrary(path.join(home, 'built'), L.buildLibraryIndex(libraryFor(rec), { reps: 200 })), { display: true });
   const text = H.experienceLookup({ symbol: 'MNQ' }, ctx).text;
-  assert.match(text, /No experience index is pinned for this run: no record\.\nHistory library [0-9a-f]{16} \(code-measured, not your decisions\): every number is the standard plan's \(a limit at the confirmation close.*\), not your own stop and target; no record for a signature means the standard never composes it, not that it fails:/);
+  assert.match(text, /No experience index is pinned for this run: no record\.\nHistory library [0-9a-f]{16} \(code-measured, not your decisions\): every number is the standard plan's \(a limit at the setup close, no confirming read.*\), not your own stop and target; no record for a signature means the standard never composes it, not that it fails:/);
   assert.match(text, /- read signature, any context: n 23 \(12 days, 0 unfilled\), win 0\.\d\d \[0\.\d\d, [01]\.\d\d\]\n/);
   assert.match(text, /- setup:15m-rejected-prior-vah-up, any context: n 23 \(12 days, 0 unfilled\), win 0\.\d\d \[0\.\d\d, [01]\.\d\d\]; 1 more had no room at 2:1/);
   // Counts, the win rate and no-room only: never an R (the library measures one fixed plan, not the model's trades).
@@ -374,8 +376,12 @@ test('planLine: the briefing states a setup\'s standard plan as code computes it
   // closed bars up to it, as the runner builds it).
   const altered = bars.map((x, k) => (k > 409 ? { ...x, h: x.h + 500, l: x.l - 500, c: x.c + 300 } : x));
   assert.strictEqual(L.planLine(at(409, altered)), line);
-  // The next close has no confirming entry read: the plan says so, and nothing tells the model to compose.
-  assert.strictEqual(L.planLine(at(410)), '- Standard plan (code, as compose_check plans it): short "15m rejected ib low down": plan refused (no confirming entry read).');
+  // On the bar that closed the 15m candle (its reaction bar, 408): the setup is the entry (CONF3M), the plan stands.
+  const rb = at(408);
+  assert.deepStrictEqual([setupMoment(rb.sections.m3.data.candles, { barClose: Date.parse(rb.sections.m3.data.bar.t) + 180000 }).phase, L.standardPlans(rb).map(p => [p.side, p.status])], ['reaction', [['short', 'traded']]]);
+  assert.match(L.planLine(rb), /^- Standard plan \(code, as compose_check plans it\): short "15m rejected ib low down": plan OK: /);
+  // The next close needs no confirming entry read (the setup is the entry): the plan stands there too.
+  assert.match(L.planLine(at(410)), /^- Standard plan \(code, as compose_check plans it\): short "15m rejected ib low down": plan OK: /);
   // No setup moment, no entries in the window, or a broken briefing: no line, never an error.
   assert.strictEqual(L.planLine({ ...b, sections: { ...b.sections, m3: { ...b.sections.m3, data: { ...m3, windowEntries: 'none' } } } }), null);
   assert.strictEqual(L.planLine(null), null);

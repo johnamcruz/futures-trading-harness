@@ -162,6 +162,35 @@ test('loss streak and daily losses come from real closing fills', () => {
   assert.deepStrictEqual(evaluateAccount({ input: order(), trades: [fill(20, -5, { voided: true })], now: NOW, config }), []);
 });
 
+test('a prop attempt\'s entry waits when a position closed at or after the snapshot it is sized from; fails closed; exits never wait', () => {
+  const snap = Date.parse(minutesAgo(2));
+  const prop = { now: NOW, config, propAttempt: 'acct_a', snapshotAt: snap };
+  // A stop that filled after the bar pass's snapshot (a loss the balance, the day's P&L and the cushion don't hold yet).
+  const v = evaluateAccount({ input: order(), trades: [fill(5, null), fill(1, -40)], ...prop });
+  assert.deepStrictEqual(checks(v), ['combine']);
+  assert.match(v[0].message, /acct_a attempt sizes entries from the account snapshot of .*, but a position closed at or after it \(.*\); this entry waits for the next bar's snapshot \(exits still go\)/);
+  // At the snapshot's own time: not in it either (refused).
+  assert.deepStrictEqual(checks(evaluateAccount({ input: order(), trades: [{ ...fill(0, -40), creationTimestamp: new Date(snap).toISOString() }], ...prop })), ['combine']);
+  // Closed before it, an opening fill after it, a voided close: the snapshot holds them.
+  assert.deepStrictEqual(evaluateAccount({ input: order(), trades: [fill(3, -40), fill(1, null), fill(1, -40, { voided: true })], ...prop }), []);
+  // An unreadable fill time, or no snapshot time: refused (fails closed).
+  assert.deepStrictEqual(checks(evaluateAccount({ input: order(), trades: [fill(1, -40, { creationTimestamp: 'x' })], ...prop })), ['combine']);
+  assert.match(evaluateAccount({ input: order(), ...prop, snapshotAt: NaN })[0].message, /snapshot, but its time is unknown/);
+  // No attempt, or no snapshot time passed (the hook, a caller without one): not this check.
+  assert.deepStrictEqual(evaluateAccount({ input: order(), trades: [fill(1, -40)], now: NOW, config, snapshotAt: snap }), []);
+  assert.deepStrictEqual(evaluateAccount({ input: order(), trades: [fill(1, -40)], now: NOW, config, propAttempt: 'acct_a' }), []);
+  // An exit is never held by it.
+  assert.deepStrictEqual(evaluateAccount({ input: order({ side: 'sell', rationale: '[exit] flatten' }), positions: long1, trades: [fill(1, -40)], ...prop }), []);
+  // The clocks are compared as they are (the snapshot the harness's, a fill the broker's). A broker clock 5 s behind: a
+  // stop that filled 3 s after the snapshot is stamped 2 s before it, so it is missed (the documented window: the
+  // position's closing fill, until the next snapshot); one 10 s after (stamped 5 s after) is caught. A broker clock ahead
+  // only refuses more: a fill 3 s before the snapshot stamped 2 s after it refuses.
+  const stamped = deltaMs => ({ ...fill(0, -40), creationTimestamp: new Date(snap + deltaMs).toISOString() });
+  assert.deepStrictEqual(evaluateAccount({ input: order(), trades: [stamped(3000 - 5000)], ...prop }), [], 'behind: missed within the skew');
+  assert.deepStrictEqual(checks(evaluateAccount({ input: order(), trades: [stamped(10000 - 5000)], ...prop })), ['combine'], 'behind: caught past it');
+  assert.deepStrictEqual(checks(evaluateAccount({ input: order(), trades: [stamped(-3000 + 5000)], ...prop })), ['combine'], 'ahead: refuses more');
+});
+
 test('the gateway counts the losses an attempt carried into the day (a seeded practice state) on top of the fills; exits never read them', () => {
   const carried = { losses: 2, streak: 1, lastLossMs: Date.parse(minutesAgo(50)) };
   // Two carried and one losing close today: the daily count (3).

@@ -885,3 +885,24 @@ test('the day part carries the prior RTH day as a daily candle, and m3 location 
   const text = B.renderFrameBriefing(f, b, { now: new Date(f.closedAt) });
   assert.ok(text.includes(`priorRthCandle: ${JSON.stringify(day.priorRthCandle)}`), 'the frame shows the runner\'s value');
 });
+
+test('the Setups line on the bar that closed the setup states the record\'s window the gate enforces (valid_bars, as the gate loads the strategy)', () => {
+  const ROOT = path.resolve(__dirname, '..', '..');
+  const TL = require('../../scripts/lib/trading/trade-lifecycle');
+  const { loadStrategies } = require('../../scripts/lib/trading/strategies');
+  const bars = readBarsArg(path.join(__dirname, '..', 'fixtures', 'parity', 'NQ-3m.csv')).map(x => ({ t: x.t, o: x.o, h: x.h, l: x.l, c: x.c, v: x.v }));
+  // Bar 408 (18:42 UTC) closes the 15m candle that rejected the IB low: the reaction bar.
+  const b = B.buildBriefing({ symbol: 'MNQ', bars: bars.slice(0, 409), minutes: 3, now: new Date(Date.parse(bars[408].t) + 180000) });
+  const text = B.renderBriefing(b, { now: new Date(b.closedAt) });
+  assert.match(text, /this bar closed the setup, no confirming read needed: the entry is a limit at this close; it fills if a later bar trades to it within 2 bars\./);
+  // The count is the one the gate enforces (lifecycle-gate.js: validBarsOf on the strategy loaded with the process env),
+  // whatever a strategies override holds: here a second trade_lifecycle with valid_bars 3, which the loader ignores (a later
+  // directory may not redefine a name), so both read 2 through the same load.
+  const gate = env => TL.validBarsOf(loadStrategies(ROOT, env).strategies.find(x => x.name === TL.STRATEGY));
+  const dir = tmpDir();
+  fs.cpSync(path.join(ROOT, 'strategies', 'trade_lifecycle'), path.join(dir, 'trade_lifecycle'), { recursive: true });
+  const f = path.join(dir, 'trade_lifecycle', 'STRATEGY.md');
+  fs.writeFileSync(f, fs.readFileSync(f, 'utf8').replace(/^valid_bars: 2\b/m, 'valid_bars: 3'));
+  for (const env of [{}, { FTH_STRATEGIES_DIRS: dir }]) assert.strictEqual(B.gateValidBars(env), gate(env), JSON.stringify(env));
+  assert.deepStrictEqual([B.gateValidBars({}), B.gateValidBars({ FTH_STRATEGIES_DIRS: dir })], [2, 2]);
+});

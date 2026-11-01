@@ -218,12 +218,12 @@ const LATE = [
     reason: "fix/skills-match-code: trade_lifecycle is the one active strategy (no rules strategy: strategies/retired.json), so the rules-only text is labelled or dropped; one side rule for every entry, long and short alike; a composed trade's exit is its policy's" },
   { from: "Regime, indicator values, strategy scan results", to: "Regime, indicator values, trend and momentum",
     reason: "fix/skills-match-code: trade_lifecycle is the one active strategy (no rules strategy: strategies/retired.json), so the rules-only text is labelled or dropped; one side rule for every entry, long and short alike; a composed trade's exit is its policy's" },
-  { from: "**Track record.** Each strategy that fired carries its record: the recorded backtest (overall, in this regime, at this hour, when there are enough trades) and your reviewed live trades.", to: "**Track record** (a rules strategy; none active): weigh its signal by its recorded backtest and reviewed live trades: no recorded edge, a negative slice for this regime or hour, or live results well under it is a smaller trade or none.",
-    reason: "fix/skills-match-code: trade_lifecycle is the one active strategy (no rules strategy: strategies/retired.json), so the rules-only text is labelled or dropped; one side rule for every entry, long and short alike; a composed trade's exit is its policy's" },
+  { from: "**Track record.** Each strategy that fired carries its record: the recorded backtest (overall, in this regime, at this hour, when there are enough trades) and your reviewed live trades.", to: "**Track record** (a rules strategy outside an attempt): weigh it by its recorded backtest and reviewed live trades: no edge or live results well under it is a smaller trade or none.",
+    reason: "fix/skills-match-code: trade_lifecycle is the one active strategy (no rules strategy: strategies/retired.json), so the rules-only text is labelled or dropped; one side rule for every entry, long and short alike; a composed trade's exit is its policy's; then fix/trail-swing-side-capture (owner-approved): a cited setup (S2) is traded in an attempt, and a missing track record is never a reason to pass (the late-entry diagnosis: four skips on it)" },
   { from: "Weigh the signal by it: a strategy with no recorded edge, a negative slice for this regime or hour, or live results well under its backtest is a smaller trade or no trade; say which in the plan.", to: null,
     reason: "fix/skills-match-code: trade_lifecycle is the one active strategy (no rules strategy: strategies/retired.json), so the rules-only text is labelled or dropped; one side rule for every entry, long and short alike; a composed trade's exit is its policy's" },
-  { from: "Under 30 trades is anecdotal, not evidence.", to: "Under 30 trades is anecdotal; \"no backtest recorded\" is the weakest case; a STALE record doesn't describe it.",
-    reason: "fix/skills-match-code: trade_lifecycle is the one active strategy (no rules strategy: strategies/retired.json), so the rules-only text is labelled or dropped; one side rule for every entry, long and short alike; a composed trade's exit is its policy's" },
+  { from: "Under 30 trades is anecdotal, not evidence.", to: "Under 30 trades is anecdotal; a STALE record doesn't describe it.",
+    reason: "fix/skills-match-code: trade_lifecycle is the one active strategy (no rules strategy: strategies/retired.json), so the rules-only text is labelled or dropped; one side rule for every entry, long and short alike; a composed trade's exit is its policy's; then fix/trail-swing-side-capture (owner-approved): a cited setup (S2) is traded in an attempt, and a missing track record is never a reason to pass (the late-entry diagnosis: four skips on it)" },
   { from: "Manage it by its strategy's exit (`exit` in its STRATEGY.md: trail, target, time stop); never loosen the stop.", to: "Manage it by its `exit` (trail, target, time stop); never loosen the stop.",
     reason: "fix/skills-match-code: trade_lifecycle is the one active strategy (no rules strategy: strategies/retired.json), so the rules-only text is labelled or dropped; one side rule for every entry, long and short alike; a composed trade's exit is its policy's" },
   { from: "`show` it (strategy-library) and check every context filter and skip rule against the reports.", to: null,
@@ -469,10 +469,17 @@ test('trade-session split: no head-trader path reads more than the base\'s every
 // (+270 in every role that embeds it); the market-structure analyst +3529 in full mode over main's 88956 (that, and
 // candle-reading's reaction section, rejection's and breakout's reaction pointers, embedded there, with the owner's "understand the context at that particular time" line; the pin +2307; +91 of it the owner rule "higher timeframe is stronger confirmation over lower timeframe"; then 92506, owner: rejection relies on candle-reading; the side is the candle's (q30): candle-reading's side rule, rejection's and breakout's own reads now a pointer to it, net +21; then 92524, owner: no bare rejection (plain is no rejection read); sweeps need candle-reading too: candle-reading's plain line, +18; then 92715, owner: q30 side confusion; side rule first: the side rule first, the `rejected` relation only the fact, +191), the
 // volume-liquidity analyst +270 each mode over main's 48336 and 32968 (the pins +111 and +263); every other role within
-// its pin.
+// its pin. Then fix/trail-swing-side-capture on it (the owner's 2026-10-30 decision: the setup is the entry): breakout's
+// retest-entry evidence, htf-to-ltf's next-3m-bar line, and no skill left saying the next 3m close times the entry ("on
+// the next 3m bar"): the market-structure analyst +25 in full mode (92740), the volume-liquidity analyst +18 each mode
+// (trader-process's step-6 line: 48624 and 33256); every other role within its pin.
+// Then the owner's 2026-10-31 wording (the entry is a limit at the last close when you compose, filled within valid_bars;
+// the examples' entries at that limit; cisd's OTE is support, never a wait): the market-structure analyst +216 in full
+// mode (92956); then 92960 (review: cisd's and candle-reading's examples enter at the setup's close, top-down-entry's
+// compose says its cycle; +4); every other role within its pin.
 const ROLE_PROMPTS = {
-  full: { 'market-structure-analyst': 92715, 'news-calendar-analyst': 10182, 'risk-manager': 92762, 'strategy-researcher': 25650, 'trade-executor': 30492, 'trade-reviewer': 9454, 'trend-momentum-analyst': 54540, 'volume-liquidity-analyst': 48606 },
-  index: { 'market-structure-analyst': 43175, 'news-calendar-analyst': 10182, 'risk-manager': 78639, 'strategy-researcher': 25650, 'trade-executor': 30481, 'trade-reviewer': 9454, 'trend-momentum-analyst': 40023, 'volume-liquidity-analyst': 33238 },
+  full: { 'market-structure-analyst': 92960, 'news-calendar-analyst': 10182, 'risk-manager': 92762, 'strategy-researcher': 25650, 'trade-executor': 30492, 'trade-reviewer': 9454, 'trend-momentum-analyst': 54540, 'volume-liquidity-analyst': 48624 },
+  index: { 'market-structure-analyst': 43175, 'news-calendar-analyst': 10182, 'risk-manager': 78639, 'strategy-researcher': 25650, 'trade-executor': 30481, 'trade-reviewer': 9454, 'trend-momentum-analyst': 40023, 'volume-liquidity-analyst': 33256 },
 };
 
 test('trade-session split: no role prompt grows, in full or index mode, and no role lists a piece', () => {

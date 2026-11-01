@@ -43,6 +43,8 @@ const FORBIDDEN = [
   [/only `?mtf: reversal`? strategies may fade/i, 'a reversal style exempt from the trend rule'],
   [/fade (?:extremes|VAH\/VAL)/i, 'fading a range\'s edges against the side rule'],
   [/small targets/i, 'a fixed small target in place of the trail'],
+  // The setup is the entry (the CONF3M study): no confirming 3m close, read or trigger is required before entering.
+  [/(?:needs?|requires?|wait(?:s|ing)? for) (?:a |the )?(?:3m |trigger )?(?:trigger|confirming|confirmation) (?:close|read|candle|bar)|no 3m trigger (?:has )?closed yet|entry read (?:is )?not in yet/i, 'a 3m confirming close required before entry'],
 ];
 
 /** The forbidden phrasings a text holds: [what it teaches, the match]. */
@@ -75,6 +77,8 @@ test('layer teaching: the guard catches each contradiction (each phrasing fails 
     'Only `mtf: reversal` strategies may fade it.',
     'Rotation day; fade extremes, small targets.',
     'Inside value: fade VAH/VAL toward the POC.',
+    'The 15m setup needs a 3m confirming close before entry.',
+    'Pass: no 3m trigger closed yet.',
   ]) assert.notDeepStrictEqual(contradictions(`${base} ${bad}`), [], bad);
 });
 

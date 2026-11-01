@@ -10,7 +10,10 @@
  * The legs (legsOf, the detector DETECTOR): a zigzag on the base bars inside the run's sessions, day by day; a leg ends
  * when price turns back by the threshold from its extreme, and counts when its move is the threshold or more. The
  * threshold is minMoveAtr (config/replay.json trendCapture) times the session's own scale: the mean true range of its
- * in-session base bars. A leg is caught when an entry the leg's way filled in its first catchShare (config) of time.
+ * in-session base bars. A leg is caught when an entry the leg's way placed in its first catchShare (config) of time
+ * filled, or one placed before the leg's start filled in that span (the fill, not the order, is what caught it). A trade's
+ * R, peak and risk are on the stop it held (trade-basis.js: the runner's move to the plan's stop after the fill), and a
+ * leg's available R on that stop when a trade was taken in it (else the planned stop; else the run's, estimated).
  *
  * Each cycle's first blocker (classifyCycle), by: compose_check | gate | phase2 | executor | head | rule; step one of
  * FLOW_STEPS (composed-reads.js, shared with the refusal hints), null when nothing was planned:
@@ -53,6 +56,7 @@ const { failingSteps } = require('../trading/compose-hints');
 const { parseWindows, inWindow, tradingDayKey, SESSION_DEFAULTS, MARKET_TZ } = require('../trading/clock');
 const TR = require('./trend-ride');
 const ES = require('./exit-scorecard');
+const TB = require('./trade-basis');
 
 const TUN = require('../tunables').replay().trendCapture; // config/replay.json
 const DETECTOR = 'zigzag-session-tr-v1';
@@ -247,6 +251,18 @@ function captureReport({ runDir, home = path.resolve(runDir, '..', '..'), days =
   const fills = Object.values(days).flat().flatMap(r => (Array.isArray(r.trades) ? r.trades : []));
   const filled = id => fills.find(f => f.orderId === id && f.profitAndLoss === null);
   const tripOf = f => (f ? fills.find(x => x.roundTripId === f.roundTripId && isObj(x.roundTrip)) : null);
+  // An entry's fill time: its round trip's entry, else its opening fill's.
+  const filledAt = o => { const f = filled(o.orderId); if (!f) return NaN; const t = tripOf(f); const ms = t ? Date.parse(t.roundTrip.entryTime) : NaN; return Number.isFinite(ms) ? ms : Date.parse(f.creationTimestamp); };
+  // A trade's round trip on the stop it held (trade-basis.js: the runner's move to the plan's stop after the fill).
+  const moves = TB.readPlanStops(home);
+  const heldOf = (o, t) => {
+    if (!t) return null;
+    const rt = t.roundTrip;
+    const stop = TB.heldStop(moves, { fam: o.contractId || rt.contractId, fromMs: Date.parse(rt.entryTime), toMs: Date.parse(rt.exitTime || t.creationTimestamp) });
+    let tick = null;
+    try { tick = require('../trading/contracts').tickOf(o.contractId || rt.contractId); } catch (_err) { /* unknown: no tolerance */ }
+    return TB.onHeldStop(rt, { stop, tick });
+  };
   const stops = [...records.values()].filter(r => r.plan && r.plan.stop && num(r.plan.stop.ticks) !== null).map(r => r.plan.stop.ticks * r.plan.tick);
   const runStop = median(stops);
   const out = legs.map(g => {
@@ -265,18 +281,23 @@ function captureReport({ runDir, home = path.resolve(runDir, '..', '..'), days =
     // From the first bar an entry could be on (two closes into the leg: the setup's, then its confirmation) to the end.
     const firstEntry = bars.find(b => Date.parse(b.t) === t0 + stepMs);
     const availPts = firstEntry && num(g.to) !== null ? Math.abs(g.to - firstEntry.c) : null;
-    const entered = orders.filter(o => isObj(o.composed) && o.composed.side === g.side && Date.parse(o.at) >= t0 && Date.parse(o.at) <= until);
+    // An entry the leg's way placed in its first catchShare, or placed before the leg's start and filled in it (an order
+    // placed on the bar before the turn and filled at the leg's first bar caught it: 2021-06-28, placed 75 s early).
+    const entered = orders.filter(o => isObj(o.composed) && o.composed.side === g.side && Date.parse(o.at) <= until
+      && (Date.parse(o.at) >= t0 || (filledAt(o) >= t0 && filledAt(o) <= until)));
     const fill = entered.map(o => ({ o, f: filled(o.orderId) })).find(x => x.f) || (entered[0] ? { o: entered[0], f: null } : null);
     const trip = fill && fill.f ? tripOf(fill.f) : null;
     const captured = Boolean(fill && fill.f);
-    // Its ride (trend-ride.js): the fills' prices, the round trip's R and peak, the trade's risk (the round trip's, else
-    // its record's planned stop, else the leg's).
+    // Its ride (trend-ride.js): the fills' prices, the round trip's R and peak on the stop it held (trade-basis.js), the
+    // trade's risk (that stop's, else its record's planned stop, else the leg's).
     const rt = trip ? trip.roundTrip : null;
+    const held = trip ? heldOf(fill.o, trip) : null;
     const plan = captured ? records.get(fill.o.composed.record) : null;
-    const riskPts = rt && num(rt.risk) > 0 ? rt.risk : plan && isObj(plan.plan) && isObj(plan.plan.stop) && num(plan.plan.stop.ticks) !== null ? plan.plan.stop.ticks * plan.plan.tick : stop;
+    const riskPts = held && num(held.risk) > 0 ? held.risk : plan && isObj(plan.plan) && isObj(plan.plan.stop) && num(plan.plan.stop.ticks) !== null ? plan.plan.stop.ticks * plan.plan.tick : stop;
     const entryPx = rt ? num(rt.averageEntryPrice) ?? num(rt.entryPrice) ?? num(Number(fill.f.price)) : captured ? num(Number(fill.f.price)) : null;
     const exitPx = rt && rt.open !== true ? num(rt.averageExitPrice) ?? num(rt.exitPrice) : null;
-    const ride = captured ? TR.rideOf(g, { entry: entryPx, exit: exitPx, r: rt ? num(rt.r) : null, peakR: rt ? num(rt.mfeR) : null, riskPts, bars, from: Date.parse(fill.f.creationTimestamp), to: trip ? Date.parse(rt.exitTime || trip.creationTimestamp) : null, stepMs }) : null;
+    const ride = captured ? TR.rideOf(g, { entry: entryPx, exit: exitPx, r: held ? held.r : null, peakR: held ? held.mfeR : null, riskPts, bars, from: Date.parse(fill.f.creationTimestamp), to: trip ? Date.parse(rt.exitTime || trip.creationTimestamp) : null, stepMs }) : null;
+    const legStop = held && num(held.risk) > 0 ? held.risk : stop;
     const threshold = num(g.scale) !== null ? TUN.minMoveAtr * g.scale : null;
     const sizeX = threshold && num(g.points) !== null ? round2(g.points / threshold) : null;
     // An entry placed that never filled blocked the leg at execution: its limit went unfilled.
@@ -285,9 +306,10 @@ function captureReport({ runDir, home = path.resolve(runDir, '..', '..'), days =
     const best = blocking.reduce((a, c) => (!a || stageOf(c) >= stageOf(a) ? c : a), null);
     return {
       id: `${g.day}|${g.side}|${g.start}`, day: g.day, side: g.side, start: g.start, end: g.end, move: { points: g.points, pct: g.pct, from: g.from, to: g.to },
-      plannedStopPts: round2(plannedStopPts), availableR: stop && availPts !== null ? round2(availPts / stop) : null, estimated: plannedStopPts === null,
+      // Available R on the leg's trade's own stop when one was taken in it, else the planned stop, else the run's (estimated).
+      plannedStopPts: round2(plannedStopPts), availableR: legStop && availPts !== null ? round2(availPts / legStop) : null, estimated: !(held && num(held.risk) > 0) && plannedStopPts === null,
       size: { x: sizeX, bucket: TR.sizeBucket(sizeX) }, ride,
-      captured, entry: fill ? { at: fill.o.at, price: fill.o.composed.entry, filled: Boolean(fill.f), r: trip ? num(trip.roundTrip.r) : null, outcome: trip ? trip.exitReason || null : null } : null,
+      captured, entry: fill ? { at: fill.o.at, price: fill.o.composed.entry, filled: Boolean(fill.f), r: held ? held.r : null, outcome: trip ? (held && held.reason === 'stop' && trip.exitReason === 'trail' ? 'stop' : trip.exitReason || null) : null, ...(held ? { rBasis: held.rBasis } : {}) } : null,
       cycles: legCycles,
       blocker: captured || !best ? null : { step: best.step, code: best.code, by: best.by, role: best.role, skills: [...new Set(best.reads.map(r => r.skill).filter(Boolean))], cycles: legCycles.filter(c => c.code === best.code).length },
     };
@@ -303,14 +325,17 @@ function captureReport({ runDir, home = path.resolve(runDir, '..', '..'), days =
   // The day's other known legs (a windowed run's undrawn census legs): they classify entries only, never a leg here.
   const kindLegs = (Array.isArray(context) ? context : []).filter(g => isObj(g) && g.start && g.end && g.side).map(g => ({ id: g.id || `${g.day}|${g.side}|${g.start}`, side: g.side, start: g.start, end: g.end }));
   // The run's filled entries, each in a leg its way, against one, or in none (trend-ride.js entryKind), with its R.
+  // Classified at the fill (an order placed before a leg's start and filled in it is in that leg), with its R on the held stop.
   const entries = orders.filter(o => isObj(o.composed) && filled(o.orderId)).map(o => {
     const t = tripOf(filled(o.orderId));
-    return { at: o.at, side: o.composed.side, record: o.composed.record || null, ...TR.entryKind({ side: o.composed.side, at: o.at }, [...out, ...kindLegs], stepMs), r: t ? num(t.roundTrip.r) : null };
+    const at = Number.isFinite(filledAt(o)) ? new Date(filledAt(o)).toISOString() : o.at;
+    const h = heldOf(o, t);
+    return { at: o.at, side: o.composed.side, record: o.composed.record || null, ...TR.entryKind({ side: o.composed.side, at }, [...out, ...kindLegs], stepMs), r: h ? h.r : null };
   });
   const legDays = new Set(out.map(l => l.day));
   const noLegDays = [...new Set(cycles.map(c => tradingDayKey(new Date(Date.parse(c.timing.barClose) - 1))))].filter(d => !legDays.has(d)).sort().map(day => {
     const placed = orders.filter(o => tradingDayKey(new Date(o.at)) === day);
-    const rs = placed.map(o => tripOf(filled(o.orderId))).filter(Boolean).map(t => num(t.roundTrip.r)).filter(r => r !== null);
+    const rs = placed.map(o => heldOf(o, tripOf(filled(o.orderId)))).filter(Boolean).map(h => h.r).filter(r => r !== null);
     return { day, entries: placed.length, netR: round2(rs.reduce((a, b) => a + b, 0)) };
   });
   const hash = crypto.createHash('sha256').update(JSON.stringify(bars.map(b => [b.t, b.o, b.h, b.l, b.c]))).digest('hex');

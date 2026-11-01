@@ -133,7 +133,7 @@ Each check prints one line:
 
 The checks:
 
-- strategy, and its `valid_bars` (1 to 3)
+- strategy, and its `valid_bars` (1 to 5)
 - the skills crosswalk
 - the head prompt, its four composed reads and the lookup it lists (`candle-reading`; opencode, index mode)
 - generated adapters in sync
@@ -1757,11 +1757,15 @@ and tier 2's `--write` and `--write-moves`.
 **Synthetic days** (`scripts/lib/eval/goal-synth.js`, built in memory, no
 data file): only what real days can't give cleanly: a fakeout that must end
 at -1R, a quiet day whose right answer is no trade, a composed limit entry
-(a 15m level break listed with no cited fire: the limit at the confirming
-close fills, its bracket, the trail, the exit), a VWAP-break day (below),
+(a 15m level break listed with no cited fire: the limit at the last close
+when composed fills, its bracket, the exit; since the setup is the entry
+its first trade is an earlier 15m rejection at the setup's close), a
+VWAP-break day (below: its listed VWAP break is never taken; since the setup is the entry, its
+valid 15m rejection at the prior RTH high trades at the setup close),
 two floor days (a listed break whose stop, the reaction candle's low, is
-closer than D13's floor: the tick term binding on one, the ATR term on the
-other) and the blow path (ten sessions whose reversal gaps through the stop: the
+closer than D13's floor: the tick term binding on one, its cash open gapped
+over the prior session's levels so its approach breaks none, the ATR term on
+the other) and the blow path (ten sessions whose reversal gaps through the stop: the
 shipped sizing never risks the floor on it, a broken size does). Their
 shapes are config, pinned exactly with the rest of the yardstick.
 
@@ -1786,7 +1790,12 @@ median risk of the trades taken, so the share isn't comparable across stop
 widths: a change in which trades are taken can raise it while catching
 fewer legs, which is why the legs caught are gated beside it. The
 blow path's trades and mean R are checked only on a fixture change (it
-never softens); on the same fixture only its blows are gated.
+never softens); on the same fixture only its blows are gated. A drop in
+its trades is excused only by a pinned owner allowance
+(`BLOW_PATH_ALLOWANCES` in `scripts/lib/eval/goal-check.js`: exactly one,
+2026-10-31, 11 to 10 trades when its gap went from 100 to 105 ticks, the
+shipped sizing skipping an entry near the floor), and only with no blow
+more and a mean R at or below the base's; a milder mean R never is.
 The fixture's draw, the Monte Carlo and tier 2's days are pinned exactly.
 Its mutation checks (`tests/goal/tier1.goal.js`) prove it fails on a worse
 exit, a stricter entry rule, a broken size on the blow path, a minimum size
@@ -1803,7 +1812,14 @@ delay is modelled. Each trade's path is traced (bias, setup, compose,
 phase 2, gate, order, fill, bracket, each trail move, exit, end of day) and
 every lost or changed trade against main's is named by its break (the
 briefing didn't list it, compose refused, phase 2 unreadable or vetoed, the
-gate refused, the order's timing, a fill difference, the exit). Each day is
+gate refused, the order's timing, a fill difference, the exit). Its sums
+are the blows, the trades, the total R and the fills: the share of the
+days with a mechanical first entry whose first planned entry filled, the
+mock's or the mechanical's (a trade filled that day by the end of the
+mechanical entry's setup-frame span), so one trade replacing another is no
+lost fill (the owner, 2026-10-31: the mock entering at the setup close
+earlier, one position at a time then refusing the mechanical entry), and a
+day where nothing filled by then is one. Each day is
 held to its label: no day blows; a non-trend day has no entry or a loss of
 at most `tier2.maxLossR`; a trend day main caught stays caught. Its self-tests
 inject each goal-breaking issue and must see it fail (`tier2-breaks`: a
@@ -1884,7 +1900,7 @@ it guards against regressions, it is no estimate of the pass rate. Skill
 text, prompts and the model's reading are the context quiz's and the PPC
 rounds'. Two findings stay out of scope here, each its own pull request: "Setups to check" quotes the VWAP's name with its
 brackets ("15m broke VWAP (rth) up"), which compose_check doesn't verify
-(the listed-vwap golden); and tier 1's limitOutcome exit and the runner's
+(the listed-vwap day, whose check holds that setup untaken); and tier 1's limitOutcome exit and the runner's
 live trail give different R on the same trade. A baseline only rises: `goal-check.js baseline --write` (and
 tier 2's `node tests/goal/tier2-run.js --write`) refuse a worse one, the
 test holds the committed baseline to the base branch's, and a new fixture

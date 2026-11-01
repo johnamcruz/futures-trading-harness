@@ -7,7 +7,7 @@ instruments: [MNQ, MES, MYM, M2K]   # a micro covers its selected mini, as a rul
 timeframe: 3m                 # the base bars its reads are checked on (the runner's)
 signal: composed              # the model composes the entry from its skills; compose_check verifies it
 mtf: trend                    # the gate's trend rule: never counter (no entry against a trending 4h or 1h)
-valid_bars: 2                 # a compose record, and its resting limit, stays valid 2 base bars after its bar's close (6 min on 3m)
+valid_bars: 2                 # 1 to 5: a compose record, and its resting limit, stays valid 2 base bars after its bar's close (6 min on 3m). Above 2, a record can outlive its setup's 15m candle; raise it only after the entry-order study and the goal regression
 risk:
   stop: structure             # the stop is the verified invalidation level the model names, one tick beyond it
   min_rr: 2                   # compose_check refuses a plan under it

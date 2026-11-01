@@ -97,12 +97,13 @@ test('compression e2e: a with-trend plan whose setup is the compression break, i
   assert.strictEqual(checkTrend(home, { root: 'MNQ', side: 'buy', style: 'trend', strategy: 'trade_lifecycle', now }), null);
 });
 
-test('compression e2e: the same plan with its entry on the expansion candle itself is refused (the confirmation is the next close)', () => {
-  // On the 08:36 bar (closed 08:39) the expansion candle is the base's last completed one: its own close is no entry.
+test('compression e2e: the same plan with its entry on the expansion candle itself verifies (the setup is the entry: no confirming close)', () => {
+  // On the 08:36 bar (closed 08:39) the expansion candle is the base's last completed one: the CONF3M study made the
+  // setup the entry, so its own close is no longer refused for want of a later one.
   const { text } = compose(1127, 'long', LONG);
   assert.match(text, /TRUE setup \(compression\): "3m compression break up"/, text);
-  assert.match(text, /NOT OK/, text);
-  assert.match(text, /closed after the setup's/);
+  assert.match(text, /Every read is true and agrees with the long/, text);
+  assert.doesNotMatch(text, /closed after the setup's/);
 });
 
 test('compression e2e: runway: a pennant whose box stop leaves no named level at 2R is refused', () => {

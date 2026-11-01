@@ -57,6 +57,17 @@ function asReads(line) {
   });
 }
 const firstHalfPlans = () => legs.flatMap(l => l.plans.map(p => ({ ...p, leg: l.id })));
+// The entry problems the CONF3M change retired (the setup is the entry: no confirming read, none timed after the
+// setup): a recorded refusal no longer carries them; every other recorded problem stands as recorded.
+const RETIRED = /^the entry has no read pointing|^no entry read pointing .* closed after the setup/;
+// ...and the entry is no longer a required step: a recorded "steps not stated" names the others only.
+const STEPS_NOT_STATED = /^steps not stated: (.*) \(every step needs a read, D7\)$/;
+const asToday = list => list.filter(x => !RETIRED.test(x)).flatMap(x => {
+  const m = STEPS_NOT_STATED.exec(x);
+  if (!m) return [x];
+  const rest = m[1].split(', ').filter(s => s !== 'entry');
+  return rest.length ? [`steps not stated: ${rest.join(', ')} (every step needs a read, D7)`] : [];
+});
 
 test('trend-move set: every recorded refused plan is refused for the same problems (the check as strict as before)', () => {
   const plans = firstHalfPlans();
@@ -66,7 +77,7 @@ test('trend-move set: every recorded refused plan is refused for the same proble
     const checked = checkReads({ reads: p.reads, side: p.side, briefing: b, tick: 0.25 });
     const planned = checked.stop && checked.target ? planOf({ checked, briefing: b, side: p.side, tick: 0.25, ...PLAN, size: 1, suggestion: true }) : null;
     const problems = [...checked.problems, ...(planned ? planned.problems : [])];
-    assert.deepStrictEqual(problems, p.problems, `${p.leg} ${p.bar}`);
+    assert.deepStrictEqual(problems, asToday(p.problems), `${p.leg} ${p.bar}`);
     assert.ok(!(checked.ok && planned && !planned.problems.length), `${p.leg} ${p.bar} stays refused`);
   }
 });
@@ -95,7 +106,8 @@ test('trend-move set: the refusals\' hints list only TRUE reads; each listed who
   // before the room band's tick cap (2026-10-24): 6 passed only through the uncapped 0.25R band, a level more than
   // 8 ticks ahead skipped by a wide stop; such a level is in the way now, whatever the stop. 36 since the trail stands on
   // every side the entry rule allows (feat/bias-bg, the owner: always trail): two refusals there now list a whole with it.
-  assert.strictEqual(wholes, 36);
+  // 38 since the setup is the entry (CONF3M): two refusals for want of a confirming close now list a whole.
+  assert.strictEqual(wholes, 38);
 });
 
 test('trend-move set: per leg, a valid trend-following plan in its first half where the set says, and every such leg caught by a guided retry', () => {

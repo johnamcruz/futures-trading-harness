@@ -640,10 +640,10 @@ test('decision path, trade_lifecycle: the model composes the whole trade with co
   assert.strictEqual(r.state.history.at(-1).action, D.RESULT_ACTION.executed);
 });
 
-// The guided retry (compose-hints.js): the scripted model states a directionless entry ("3m volume high"), compose_check
-// refuses it and its hint lists the TRUE confirmations; the model composes again with the first one listed, which is
-// OK, and the entry goes through the gate. The refusal is the check's own (unchanged); only its text says what is true.
-test('decision path, trade_lifecycle: a refused directionless entry, the hint\'s listed read composed again, OK and entered', async () => {
+// The guided retry (compose-hints.js): the scripted model states a false entry read ("3m close bottom"), compose_check
+// refuses it and its hint says the entry is optional and lists the TRUE ones; the model composes again with the first
+// one listed, which is OK, and the entry goes through the gate. The refusal is the check's own; its text says what is true.
+test('decision path, trade_lifecycle: a refused false entry read, the hint\'s listed read composed again, OK and entered', async () => {
   const w = D.world();
   const steps = composedCycle(w);
   const at = steps.findIndex(s => s.harness === 'compose_check');
@@ -653,12 +653,12 @@ test('decision path, trade_lifecycle: a refused directionless entry, the hint\'s
   };
   let first = null;
   steps.splice(at, 1,
-    { harness: 'compose_check', args: { symbol: 'MNQ', side: 'long', reads: lcSwap('entry', '3m volume high'), size: 1 } },
+    { harness: 'compose_check', args: { symbol: 'MNQ', side: 'long', reads: lcSwap('entry', '3m close bottom'), size: 1 } },
     { act: ctx => { first = ctx.results.compose_check; } },
-    { harness: 'compose_check', args: ctx => ({ symbol: 'MNQ', side: 'long', reads: lcSwap('entry', listed(ctx) || '3m volume high'), size: 1 }) });
+    { harness: 'compose_check', args: ctx => ({ symbol: 'MNQ', side: 'long', reads: lcSwap('entry', listed(ctx) || '3m close bottom'), size: 1 }) });
   const r = await D.pass(w, decisionAt(FIRED_BAR), steps);
-  assert.match(first, /PROBLEM: the entry has no read pointing up \(long\)/);
-  assert.match(first, /- HINT entry: volume and participation point no side, so they never confirm alone; [^\n]*true here: "3m/);
+  assert.doesNotMatch(first, /the entry has no read pointing/);
+  assert.match(first, /- HINT entry: optional \(the setup is the entry, on the next close\); a read stated there must be true and the trade's way: drop it, or true here: "3m/);
   assert.match(first, /\nNOT OK: no entry on this record/);
   assert.match(r.ctx.results.compose_check, /\nOK: every read verified and the plan stands/);
   const recs = TL.readRecords(w.home, 'MNQ');

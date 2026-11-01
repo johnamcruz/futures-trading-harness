@@ -440,7 +440,7 @@ test('order gate (hook): an entry needs setup-judgment and trade-plan read (REQU
   assert.strictEqual(r.code, 2);
   assert.match(r.stderr, /\[skills-at-entry\] Read how to judge the setup and write its plan before an entry; not read in this session: trade-plan\./);
   assert.doesNotMatch(r.stderr, /\[skills-loaded\]/, 'its own check, apart from the per-cycle list');
-  for (const order of [{ ...ORDER, side: 'sell', rationale: '[exit] flatten' }, { ...ORDER, side: 'sell', type: 'stop', stopPrice: 21480, stopLossBracket: undefined, rationale: '[protect] stop for the long' }]) {
+  for (const order of [{ ...EXIT_BASE, side: 'sell', rationale: '[exit] flatten' }, { ...ORDER, side: 'sell', type: 'stop', stopPrice: 21480, stopLossBracket: undefined, rationale: '[protect] stop for the long' }]) {
     const ok = gate({ ...orderPayload(order), transcript_path: transcript }, env);
     assert.strictEqual(ok.code, 0, ok.stderr);
   }
@@ -604,6 +604,21 @@ test('order gate: a trade-lifecycle entry (signal: composed) outside a runner cy
   assert.doesNotMatch(entry.stderr, /\[strategy\]/);
   const exit = gate(orderPayload({ ...EXIT_BASE, side: 'sell', rationale: '[exit] close the trade_lifecycle long' }), env);
   assert.strictEqual(exit.code, 0, exit.stderr);
+});
+
+test('order gate hook: a trade-lifecycle entry with the 15m setup and no 3m read goes; once expired, or with no setup read, refused', () => {
+  const LC = require('../fixtures/lifecycle');
+  const at = now => setup([{ ts: '2026-10-07T13:59:30.000Z', kind: 'plan', contractId: 'MNQ', text: 'plan' }],
+    { FTH_STRATEGIES_DIRS: path.join(REPO, 'strategies'), FTH_TEST_NOW: now, FTH_CYCLE_BARS: JSON.stringify({ MNQ: LC.BAR }) }).env;
+  let env = at('2026-10-07T14:00:02.000Z');
+  LC.writeScenario(env.FTH_HOME, { reads: LC.READS.filter(x => x.step !== 'entry') });
+  assert.doesNotMatch(gate(orderPayload(LC.order()), env).stderr, /\[composed-reads\]/);
+  env = at('2026-10-07T14:06:00.000Z');
+  LC.writeScenario(env.FTH_HOME, { reads: LC.READS.filter(x => x.step !== 'entry') });
+  assert.match(gate(orderPayload(LC.order()), env).stderr, /\[composed-reads\] .*expired/);
+  env = at('2026-10-07T14:00:02.000Z');
+  LC.writeScenario(env.FTH_HOME, { reads: LC.READS.filter(x => x.step !== 'setup') });
+  assert.match(gate(orderPayload(LC.order()), env).stderr, /\[composed-reads\] .*steps not stated: setup/);
 });
 
 test('order gate hook: a trade-lifecycle entry reads its cycle bar\'s day shard alone; that shard unreadable refuses it (fails closed); its exit goes', () => {
@@ -2943,6 +2958,42 @@ test('MCP gateway: while a prop attempt runs, no entry while an order is working
   assert.match(r.result.content[0].text, /\[prop-one-position\] A topstep_50k attempt trades one position at a time: an order is working on MES/);
 });
 
+test('MCP gateway: while a prop attempt runs, an entry waits when a position closed at or after the snapshot it is sized from; an [exit] still goes', async () => {
+  const { spawn } = require('child_process');
+  const prop = require('../../scripts/lib/trading/prop-state');
+  // The shipped 50k profile, found by its balance (no firm name in a new line).
+  const account = require('../../scripts/lib/trading/accounts').loadAccounts(REPO, {}).accounts.find(a => a.valid && a.starting_balance === 50000);
+  const run = async (trades, args = ORDER, positions = []) => {
+    const dir = tmpDir();
+    const home = tmpDir();
+    prop.startAttempt(home, account);
+    // The bar pass's snapshot, a minute before now; then a stop filled 30 s before now (after it).
+    prop.snapshot(home, account, 50000, new Date(Date.parse(TEST_NOW) - 60000));
+    const env = {
+      PATH: process.env.PATH, HOME: dir, FTH_HOME: home, FAKE_TRADES: JSON.stringify(trades), FAKE_POSITIONS: JSON.stringify(positions),
+      FTH_BROKERS_FILE: FAKE_BROKERS, FAKE_BROKER_API_URL: 'https://api.fake-broker.test', FAKE_BROKER_ALLOWED_ACCOUNT_IDS: '1,7', FAKE_BROKER_JOURNAL: writeJournal(dir, []),
+      FTH_NO_ENTRY_WINDOWS: '', FTH_ENTRY_HOURS: '', FTH_TEST_NOW: TEST_NOW, NODE_ENV: 'test', FTH_GATE_LOG: path.join(dir, 'gate.jsonl'),
+    };
+    const gw = spawn(process.execPath, [path.join(REPO, 'scripts', 'mcp-gateway.js'), '--', process.execPath, path.join(REPO, 'tests', 'fixtures', 'fake-mcp-server.js')], { env });
+    let out = '';
+    gw.stdout.on('data', c => { out += c; });
+    gw.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'tools/call', params: { name: 'place_order', arguments: args } })}\n`);
+    gw.stdin.end();
+    assert.strictEqual(await new Promise(resolve => gw.on('close', resolve)), 0);
+    return JSON.parse(out.trim().split('\n')[0]).result;
+  };
+  const at = s => new Date(Date.parse(TEST_NOW) - s * 1000).toISOString();
+  const after = await run([{ id: 1, contractId: 'MES', creationTimestamp: at(90), profitAndLoss: null }, { id: 2, contractId: 'MES', creationTimestamp: at(30), profitAndLoss: -60 }]);
+  assert.strictEqual(after.isError, true);
+  assert.match(after.content[0].text, new RegExp(`\\[combine\\] A ${account.name} attempt sizes entries from the account snapshot of .*, but a position closed at or after it \\(.*\\); this entry waits for the next bar's snapshot`));
+  // The same loss before the snapshot is in it: this check stays quiet (whatever else the gate says).
+  const before = await run([{ id: 2, contractId: 'MES', creationTimestamp: at(90), profitAndLoss: -60 }]);
+  assert.doesNotMatch(JSON.stringify(before), /sizes entries from the account snapshot/);
+  // An exit is never held by it.
+  const exit = await run([{ id: 2, contractId: 'MES', creationTimestamp: at(30), profitAndLoss: -60 }], { ...EXIT_BASE, side: 'sell', rationale: '[exit] flatten' }, [{ contractId: ORDER.contractId, type: 1, size: ORDER.size }]);
+  assert.doesNotMatch(JSON.stringify(exit), /sizes entries from the account snapshot/);
+});
+
 // --- The replay clock (trading/harness-now.js): FTH_REPLAY_NOW, honored only with a replay broker. ---
 const SATURDAY = '2026-10-10T15:00:00.000Z'; // market closed
 
@@ -3390,7 +3441,7 @@ test('order gate: in an autonomous full cycle, an entry waits until the analysts
   assert.match(gate({ ...orderPayload(), transcript_path: transcript }, recorded).stderr, /\[roles-ran\][^\n]*without wall-clock times/);
   // An exit is never held for roles.
   fs.writeFileSync(transcript, '');
-  const exit = gate({ ...orderPayload({ ...ORDER, side: 'sell', rationale: '[exit] flatten' }), transcript_path: transcript }, env);
+  const exit = gate({ ...orderPayload({ ...EXIT_BASE, side: 'sell', rationale: '[exit] flatten' }), transcript_path: transcript }, env);
   assert.strictEqual(exit.code, 0, exit.stderr);
 });
 
@@ -3421,7 +3472,7 @@ test('order gate hook: a room fact is about the order\'s own setup tag (phase2-f
   fs.writeFileSync(transcript, cycle('VERDICT: APPROVE - size 1, anytime long\nFACTS: window opening drive; entries allowed; room long short'));
   assert.doesNotMatch(gate({ ...orderPayload(), transcript_path: transcript }, env).stderr, /\[phase2-facts\]/);
   // An exit goes whatever the facts say.
-  const exit = gate({ ...orderPayload({ ...ORDER, side: 'sell', rationale: '[exit] flatten' }), transcript_path: transcript }, env);
+  const exit = gate({ ...orderPayload({ ...EXIT_BASE, side: 'sell', rationale: '[exit] flatten' }), transcript_path: transcript }, env);
   assert.strictEqual(exit.code, 0, exit.stderr);
 });
 
@@ -3460,12 +3511,12 @@ test('order gate: in an autonomous cycle, an entry approved on a fact the bar br
   assert.doesNotMatch(gate({ ...orderPayload(), transcript_path: transcript }, env).stderr, /phase2-facts/);
   // An exit with no FACTS line goes under a current briefing.
   fs.writeFileSync(transcript, cycle('VERDICT: APPROVE - size 1'));
-  const bare = gate({ ...orderPayload({ ...ORDER, side: 'sell', rationale: '[exit] flatten' }), transcript_path: transcript }, env);
+  const bare = gate({ ...orderPayload({ ...EXIT_BASE, side: 'sell', rationale: '[exit] flatten' }), transcript_path: transcript }, env);
   assert.strictEqual(bare.code, 0, bare.stderr);
   // An exit goes, with the false facts and the briefing gone.
   fs.writeFileSync(transcript, cycle('VERDICT: APPROVE - size 1\nFACTS: vwap above'));
   fs.unlinkSync(B.briefingFile(env.FTH_HOME, 'MNQ'));
-  const exit = gate({ ...orderPayload({ ...ORDER, side: 'sell', rationale: '[exit] flatten' }), transcript_path: transcript }, env);
+  const exit = gate({ ...orderPayload({ ...EXIT_BASE, side: 'sell', rationale: '[exit] flatten' }), transcript_path: transcript }, env);
   assert.strictEqual(exit.code, 0, exit.stderr);
   // The cycle's bar pinned and its briefing gone: refused, even with FACTS: none; an exit still goes (above).
   fs.writeFileSync(transcript, cycle('VERDICT: APPROVE - size 1\nFACTS: none'));
@@ -3880,7 +3931,7 @@ test('order gate hook: in index mode (the default: no FTH_ROLE_SKILLS set) a rol
   // Full, on request (as the runner sets for every harness but opencode): not required.
   assert.doesNotMatch(gate({ ...orderPayload(), transcript_path: transcript }, { ...env, FTH_ROLE_SKILLS: 'full' }).stderr, /roles-ran/);
   // Never held by the missing lookup: an exit, a protective stop, a stop move (modify_order).
-  for (const order of [{ ...ORDER, side: 'sell', rationale: '[exit] flatten' }, { ...ORDER, side: 'sell', type: 'stop', stopPrice: 21480, stopLossBracket: undefined, rationale: '[protect] stop for the long' }]) {
+  for (const order of [{ ...EXIT_BASE, side: 'sell', rationale: '[exit] flatten' }, { ...ORDER, side: 'sell', type: 'stop', stopPrice: 21480, stopLossBracket: undefined, rationale: '[protect] stop for the long' }]) {
     const r2 = gate({ ...orderPayload(order), transcript_path: transcript }, index);
     assert.strictEqual(r2.code, 0, r2.stderr);
   }
@@ -3892,7 +3943,7 @@ test('order gate hook: in index mode (the default: no FTH_ROLE_SKILLS set) a rol
   assert.doesNotMatch(gate({ ...orderPayload(), transcript_path: transcript }, index).stderr, /roles-ran/);
   // An exit is never held.
   fs.unlinkSync(`${transcript}.lookups.jsonl`);
-  const exit = gate({ ...orderPayload({ ...ORDER, side: 'sell', rationale: '[exit] flatten' }), transcript_path: transcript }, index);
+  const exit = gate({ ...orderPayload({ ...EXIT_BASE, side: 'sell', rationale: '[exit] flatten' }), transcript_path: transcript }, index);
   assert.strictEqual(exit.code, 0, exit.stderr);
 });
 
@@ -3918,7 +3969,7 @@ test('order gate hook, several lanes (FTH_CYCLE_LANE_BARS): a closed lane\'s can
   // Without the lane in the environment, the 3m briefing alone: nothing required.
   const { FTH_CYCLE_LANE_BARS: _lanes, ...oneLane } = env;
   assert.doesNotMatch(gate({ ...orderPayload(), transcript_path: transcript }, oneLane).stderr, /roles-ran/);
-  const exit = gate({ ...orderPayload({ ...ORDER, side: 'sell', rationale: '[exit] flatten' }), transcript_path: transcript }, env);
+  const exit = gate({ ...orderPayload({ ...EXIT_BASE, side: 'sell', rationale: '[exit] flatten' }), transcript_path: transcript }, env);
   assert.strictEqual(exit.code, 0, exit.stderr);
   const look = (role, skill, at) => recordLookup({ FTH_CYCLE_TRANSCRIPT: transcript }, { role, skill }, T + at);
   look('market-structure-analyst', 'breakout-vs-fakeout', 15);
@@ -3959,7 +4010,7 @@ test('order gate hook, reports from the report cache (FTH_CYCLE_CACHED): a cache
   // A new bar with a candidate since the reports were made: their lookups are not credited to it.
   brief('m3@bar-n3');
   assert.match(run({ FTH_CYCLE_CACHED_LOOKUPS: JSON.stringify(met) }).stderr, /market-structure-analyst was served from the report cache/);
-  const exit = gate({ ...orderPayload({ ...ORDER, side: 'sell', rationale: '[exit] flatten' }), transcript_path: transcript }, env);
+  const exit = gate({ ...orderPayload({ ...EXIT_BASE, side: 'sell', rationale: '[exit] flatten' }), transcript_path: transcript }, env);
   assert.strictEqual(exit.code, 0, exit.stderr);
 });
 
@@ -4004,7 +4055,7 @@ test('order gate hook, a long cycle: past its briefing\'s validUntil by the wall
     FTH_CYCLE_CACHED_LOOKUPS: JSON.stringify({ 'market-structure-analyst': { skills: ['pullback-vs-reversal', 'rejection'], key }, 'trend-momentum-analyst': { skills: ['pullback-vs-reversal'], key } }) });
   assert.doesNotMatch(gate({ ...orderPayload(), transcript_path: p2 }, { ...env, ...cached(`m3@${BAR_T}`) }).stderr, /roles-ran/);
   assert.match(gate({ ...orderPayload(), transcript_path: p2 }, { ...env, ...cached(`m3@${BAR_T}`), FTH_CYCLE_BARS: '' }).stderr, /market-structure-analyst was served from the report cache/);
-  const exit = run({}, orderPayload({ ...ORDER, side: 'sell', rationale: '[exit] flatten' }));
+  const exit = run({}, orderPayload({ ...EXIT_BASE, side: 'sell', rationale: '[exit] flatten' }));
   assert.strictEqual(exit.code, 0, exit.stderr);
 });
 
@@ -4021,7 +4072,7 @@ test('order gate hook, briefing-age: an autonomous entry on a bar briefing older
   assert.match(r.stderr, /\[briefing-age\][^\n]*Stale data: the MNQ bar briefing's bar \(at 2026-10-07T14:24:00.000Z\) closed 12\.\d min ago, over the 9 min limit/);
   const log = fs.readFileSync(env.FTH_GATE_LOG, 'utf8').trim().split('\n').map(l => JSON.parse(l)).at(-1);
   assert.ok(log.violations.some(v => v.check === 'briefing-age' && /closed 12\.\d min ago/.test(v.message)), JSON.stringify(log));
-  const exit = gate(orderPayload({ ...ORDER, side: 'sell', rationale: '[exit] flatten' }), env);
+  const exit = gate(orderPayload({ ...EXIT_BASE, side: 'sell', rationale: '[exit] flatten' }), env);
   assert.strictEqual(exit.code, 0, exit.stderr);
   brief(1);
   assert.doesNotMatch(gate(orderPayload(), env).stderr, /briefing-age/);

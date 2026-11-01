@@ -60,7 +60,8 @@ test('the floor days: the reaction candle breaks the overnight high by crossTick
     const rthAt = bars.findIndex(x => minutesOfDay(new Date(Date.parse(x.t)), MARKET_TZ) === RTH_OPEN_MIN);
     const onHigh = Math.max(...bars.slice(0, rthAt).map(x => x.h));
     const rth = bars.slice(rthAt).filter(x => minutesOfDay(new Date(Date.parse(x.t)), MARKET_TZ) < RTH_CLOSE_MIN);
-    const a = cfg.quietBars + cfg.approachBars;
+    // A variant's own approachBars (floor-ticks: none, its reaction is the session's first 15m candle) over the shared one.
+    const a = cfg.quietBars + (v.approachBars ?? cfg.approachBars);
     const reaction = rth.slice(a, a + cfg.reactionBars);
     const confirm = rth[a + cfg.reactionBars];
     const t = 0.25;
@@ -71,7 +72,16 @@ test('the floor days: the reaction candle breaks the overnight high by crossTick
     for (const x of rth.slice(a + cfg.reactionBars + 1)) assert.ok(x.o === x.c && x.h === x.l, `${name} ${x.t}: flat after`);
     const approach = rth.slice(cfg.quietBars, a);
     assert.ok(Math.max(...approach.map(x => x.h)) < onHigh, `${name}: the approach stays under the level`);
-    const low = Math.min(...approach.map(x => x.l));
+    // The session's low before the reaction's close (the approach, else the reaction candle itself).
+    const low = Math.min(...rth.slice(cfg.quietBars, a + cfg.reactionBars).map(x => x.l));
     assert.strictEqual(low <= rth[0].o - v.depthTicks * t, true, `${name}: the V's depth`);
+    // The cash open: gapped to openUnderTicks under the level (over the prior session's levels: the approach meets
+    // none, so no break of it is composed on its own close), or where the overnight closed.
+    const prior = GF.decodeBars(b.bars).filter(x => tradingDayKey(new Date(Date.parse(x.t))) < day && minutesOfDay(new Date(Date.parse(x.t)), MARKET_TZ) >= RTH_OPEN_MIN && minutesOfDay(new Date(Date.parse(x.t)), MARKET_TZ) < RTH_CLOSE_MIN);
+    const priorDay = prior.filter(x => tradingDayKey(new Date(Date.parse(x.t))) === tradingDayKey(new Date(Date.parse(prior.at(-1).t))));
+    if (v.openUnderTicks > 0) {
+      assert.strictEqual(rth[0].o, Math.max(bars[rthAt - 1].c, onHigh - v.openUnderTicks * t), `${name}: the gapped open`);
+      assert.ok(low > Math.max(...priorDay.map(x => x.h)), `${name}: the session over the prior session's high until the reaction`);
+    } else assert.strictEqual(rth[0].o, bars[rthAt - 1].c, `${name}: the open where the overnight closed`);
   }
 });

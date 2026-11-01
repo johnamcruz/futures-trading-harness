@@ -23,7 +23,7 @@
   "unsure": "it depends|unsure|not sure|unclear|ambiguous|can't tell|cannot tell|depends on",
   "passBar": {
     "partA": {
-      "allCorrect": 35,
+      "allCorrect": 37,
       "bothWays": 0
     },
     "partB": {
@@ -667,6 +667,37 @@
         "\\bembedded in (my|the|your) (head )?prompt\\b",
         "\\b(already )?in my (head )?prompt\\b",
         "\\b(with|via|using) the skill tool\\b"
+      ]
+    },
+    {
+      "id": "q38",
+      "layer": "setup",
+      "prompt": "head",
+      "text": "In a prop attempt, momentum_continuation fired long on the BG side. Can you take it?",
+      "rule": "a cited setup (S2) is traded in the attempt: cite it in compose_check (trade_lifecycle's citedSetup), never a reason to pass for being a rules strategy",
+      "anchor": "A setup the prompt names in this attempt (S2): cite it in",
+      "required": [
+        "compose_check|cite|fired up"
+      ],
+      "forbidden": [
+        "^\\s*(no\\b|n,)",
+        "can(no|')t be (placed|traded|taken)",
+        "refused under the attempt",
+        "needs? a (policy )?verdict first"
+      ]
+    },
+    {
+      "id": "q39",
+      "layer": "setup",
+      "prompt": "head",
+      "text": "The fired setup's track record says no backtest recorded. Is that a reason to pass?",
+      "rule": "a missing track record is never a reason to pass or cut (trade_lifecycle and a cited setup have none)",
+      "anchor": "never a reason to pass or cut",
+      "required": [
+        "\\b(no|not|never)\\b"
+      ],
+      "forbidden": [
+        "^\\s*(yes\\b|y,)"
       ]
     }
   ],

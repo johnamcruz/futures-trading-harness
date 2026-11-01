@@ -261,7 +261,7 @@ test('rBucket and readSignature with a stated R', () => {
 const fixtureBars = () => loadBars(path.join(__dirname, '..', 'fixtures', 'parity', 'NQ-3m.csv')).map(({ ms, ...b }) => b); // eslint-disable-line no-unused-vars
 const briefingAt = (bars, i) => clone(buildBriefing({ symbol: 'MNQ', bars: bars.slice(0, i + 1), minutes: 3, scan: [], now: new Date(Date.parse(bars[i].t) + 180000) }));
 
-test('scenario 1 on the fixture bars: the 15m rejection closing 10:00 ET, confirmed by the 3m closing 10:09 ET (bar 776), not by the 3m inside it (bar 773)', () => {
+test('scenario 1 on the fixture bars: the 15m rejection closing 10:00 ET is the entry on its own bar (773), and still at 10:09 ET (bar 776)', () => {
   // The 1h changed character up and price holds above the prior RTH high 27155.75; the 15m (09:45-10:00 ET) traded
   // under it and closed back above; wrong under the 15m low 27130.25; target the next 1h swing high 27363.75.
   const bars = fixtureBars();
@@ -275,13 +275,13 @@ test('scenario 1 on the fixture bars: the 15m rejection closing 10:00 ET, confir
     { step: 'stop', skill: 'invalidation', read: 'stop 15m low 27130.25' },
     { step: 'target', skill: 'top-down-entry', read: 'target 1h swing 27363.75' },
   ];
-  // Bar 773 (09:57-10:00 ET): the last 3m inside the 15m closes with it. Every read is true, but nothing confirms the
-  // reaction after it closed.
+  // Bar 773 (09:57-10:00 ET): the last 3m inside the 15m closes with it. Every read is true: the setup is the entry
+  // (the CONF3M study), no later confirming close is asked for.
   const r773 = CR.checkReads({ reads: at773, side: 'long', briefing: briefingAt(bars, 773) });
   assert.ok(r773.reads.every(x => x.check === true && x.agrees), CR.renderCheck(r773));
-  assert.strictEqual(r773.ok, false);
-  assert.ok(r773.problems.some(p => /no entry read pointing long is on a candle that closed after the setup's \(2026-04-24T14:00:00.000Z\)/.test(p)), r773.problems.join('; '));
-  // Bar 776 (10:06-10:09 ET): the 3m closed at its high after the 15m closed: the confirmation. Still above the VWAP.
+  assert.deepStrictEqual(r773.problems, []);
+  assert.strictEqual(r773.ok, true);
+  // Bar 776 (10:06-10:09 ET): the 3m closed at its high after the 15m closed, the setup still standing. Above the VWAP.
   const b = briefingAt(bars, 776);
   const reads = at773.filter(x => x.read !== '3m momentum up').map(x => (x.step === 'location' ? { ...x, skill: 'vwap-volume-profile', read: 'vwap above' } : x));
   const r = CR.checkReads({ reads, side: 'long', briefing: b });

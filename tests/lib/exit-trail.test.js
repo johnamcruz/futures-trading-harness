@@ -97,6 +97,35 @@ test('afterTargetStep: the structure trail stands a tick behind the last confirm
   assert.strictEqual(afterTargetStep({ ...short, stop: 110, armed: false, peakR: 0 }, { h: 84, l: 79, c: 81 }, AFTER(), 0.25).stop, 85, 'a short\'s lock: 1.5R under the entry');
 });
 
+test('afterTargetStep: a swing whose stop is not on the protective side of the close is no swing: the lock and the R trail hold', () => {
+  const s = AFTER({ trailBy: 'structure', swingMinutes: 15 });
+  const at = (t, bar, swing) => afterTargetStep(t, bar, s, 0.25, swing);
+  // A long past its target (lock 115) after a gap down: the latest 15m swing low (124) is a stale one above the price
+  // (close 117). Before the fix its stop (123.75) sat over the market and closed the trade at once at 117.
+  const long = LONG({ stop: 115, peakR: 2.2, armed: true });
+  const gap = at(long, { h: 118, l: 116, c: 117 }, 124);
+  assert.deepStrictEqual([gap.stop, gap.close, gap.fellBack, gap.wrongSide], [115, null, true, true], 'the lock holds; the R trail (112) is under it');
+  // With no swing at all, a fallback that says it is not the wrong side's.
+  assert.strictEqual(at(long, { h: 118, l: 116, c: 117 }, null).wrongSide, undefined);
+  // A swing a tick over the close's tick puts the stop at the close: not under it, so no swing either.
+  const even = at(long, { h: 118, l: 116, c: 117 }, 117.25);
+  assert.deepStrictEqual([even.stop, even.fellBack], [115, true]);
+  // At the close it counts: the stop a tick under it (116.75), under the close; a bar whose low reached it closes at the close.
+  const thru = at(long, { h: 118, l: 116.75, c: 117 }, 117);
+  assert.deepStrictEqual([thru.stop, thru.close, thru.fellBack], [116.75, { price: 117, reason: 'trail' }, false]);
+  const held = at(long, { h: 118, l: 117, c: 117.5 }, 117);
+  assert.deepStrictEqual([held.stop, held.close], [116.75, null]);
+  // A stop already above the lock never moves back when the swing goes stale.
+  assert.strictEqual(at({ ...long, stop: 116.5 }, { h: 118, l: 116.75, c: 117 }, 124).stop, 116.5);
+  // The short mirror: entry 100, 1R 10, lock 85 after a gap up; a stale swing high at 76, under the close (83).
+  const short = { sign: -1, entry: 100, risk: 10, stop: 85, peakR: 2.2, armed: true, target: 80 };
+  const up = at(short, { h: 84, l: 82, c: 83 }, 76);
+  assert.deepStrictEqual([up.stop, up.close, up.fellBack], [85, null, true]);
+  // A short's normal swing high above the price: unchanged, a tick over it.
+  const normal = at(short, { h: 79, l: 72, c: 74 }, 80);
+  assert.deepStrictEqual([normal.stop, normal.close, normal.fellBack], [80.25, null, false]);
+});
+
 // The 2026-10-24 replay's MNQ short: entry 14530.5, 1R = 24.5 points (98 ticks), its own target at 2R (14481.5). A
 // 15m swing high far above (14525: its stop a tick over, 14525.25) so the swing trail never binds and the ratchet shows.
 const SHORT = (over = {}) => ({ sign: -1, entry: 14530.5, risk: 24.5, stop: 14555, peakR: 0, armed: false, target: 14481.5, ...over });

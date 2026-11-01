@@ -63,3 +63,14 @@ fallbacks cut them and lower the mean R on both halves.
 
 - The entries are mechanical, not the model's.
 - Fills are on 3m bars.
+
+## Later: a swing on the wrong side of the price
+
+A swing carried forward from before a gap can sit on the wrong side of the
+price (2021-06-15: a long's 15m swing low above the market). Its stop then
+sat through the market and closed the trade on the bar that armed it. Such a
+swing no longer counts for that bar: the lock and the `trail_r` fallback
+hold instead (`exit-trail.js` `afterTargetStep`). On this study's 3,954
+entries, OFF's exits change on 8 trades (3 up, 5 down). The mean R goes from
++0.1398 to +0.1395, and the pass rate stays 6.30% on half A and 5.95% on
+half B, with 0 blows.

@@ -142,6 +142,22 @@ function fillLossState(trades, carried = null) {
   return { streak, losses, lastLossTs };
 }
 
+/**
+ * Why the snapshot an entry is sized from misses a closing fill, or null: `snapshotAt` (ms) missing, or a closing fill
+ * (profitAndLoss set, not voided) at or after it or with an unreadable time. Fails closed.
+ * The clocks: `snapshotAt` is the harness clock's (the runner's snapshot), a fill's creationTimestamp the broker's; they
+ * are compared as they are. A broker clock ahead only refuses more (a fill before the snapshot reads as after it); one
+ * behind by N s lets a close in the N s after the snapshot read as before it, so its loss is missed until the next
+ * snapshot (one position at a time: that position's closing fill). In replay both are the replay clock.
+ */
+function fillSinceSnapshot(trades, snapshotAt) {
+  if (!Number.isFinite(snapshotAt)) return 'its time is unknown';
+  const closes = (Array.isArray(trades) ? trades : []).filter(t => t && t.profitAndLoss !== null && t.profitAndLoss !== undefined && !t.voided);
+  const late = closes.filter(t => !(Date.parse(t.creationTimestamp) < snapshotAt));
+  if (!late.length) return null;
+  return `a position closed at or after it (${late.map(t => (Number.isFinite(Date.parse(t.creationTimestamp)) ? t.creationTimestamp : 'an unreadable time')).join(', ')})`;
+}
+
 /** Size of resting orders of `types` on this side, in exactly this contract month. */
 function restingSize(orders, contractId, sideSign, types) {
   return orders
@@ -154,7 +170,7 @@ function restingSize(orders, contractId, sideSign, types) {
  * Returns violations [{check, message}] for a place_order given live facts
  * { positions, orders, trades } from the broker MCP server.
  */
-function evaluateAccount({ input = {}, positions, orders, trades, now = new Date(), config, ledger: given = [], propAttempt = null, carried = null }) {
+function evaluateAccount({ input = {}, positions, orders, trades, now = new Date(), config, ledger: given = [], propAttempt = null, carried = null, snapshotAt = undefined }) {
   const ledger = ledgerNamed(input, given);
   // Missing or malformed account data must block, never read as "flat". The fills count losses for entries only:
   // an [exit] / [protect] never reads them (accountFacts doesn't fetch them), so a fault there never holds one.
@@ -269,6 +285,14 @@ function evaluateAccount({ input = {}, positions, orders, trades, now = new Date
       + 'Cancel leftovers (stops or targets of a closed trade) or let a pending entry work; one entry at a time.'
     : null);
 
+  // A prop attempt's entry is sized from the runner's last snapshot (balance, the day's P&L, the cushion): a closing fill
+  // at or after it (a stop that filled during this cycle) isn't in those numbers yet, so the entry waits for the next
+  // bar's snapshot. Hard; an unknown snapshot time, or a fill time that can't be read, refuses (fails closed). Entries
+  // only: an [exit] / [protect] returned above.
+  if (propAttempt && snapshotAt !== undefined) {
+    const late = fillSinceSnapshot(trades, snapshotAt);
+    if (late) violations.push({ check: 'combine', message: `A ${propAttempt} attempt sizes entries from the account snapshot${Number.isFinite(snapshotAt) ? ` of ${new Date(snapshotAt).toISOString()}` : ''}, but ${late}; this entry waits for the next bar's snapshot (exits still go).` });
+  }
   // `carried`: the losses a running attempt carried into the day (prop-state.js carriedLossState); they only add.
   const { streak, losses, lastLossTs } = fillLossState(trades, carried);
   if (streak >= config.maxConsecutiveLosses && lastLossTs !== null) {
@@ -667,6 +691,7 @@ const ledgerNamed = (input, ledger) => (input && typeof input[NAMES] === 'functi
   ? ledger.map(e => (e && typeof e.contractId === 'string' ? { ...e, contractId: input[NAMES](e.contractId) } : e)) : ledger);
 
 module.exports = {
+  fillSinceSnapshot,
   RENAME, renamed, ledgerName, accountFacts, parseToolJson, netPosition, contractNet, openPositions, pendingState, pendingNet, closingFills, fillLossState, evaluateAccount, evaluateCancel,
   evaluateModifyAccount, evaluatePartialClose, evaluateAccountChange, barsRequest, regimeGatedStrategy, regimeViolation, STOP_TYPES, freshEntryPrice, freshRefusal,
 };

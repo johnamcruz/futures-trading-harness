@@ -62,8 +62,8 @@ added nothing measured. A census.
 
 ```text
 Take: (no attempt) 1h up; 3m inside box 27413.00-27422.00 on the prior POC;
-  04:39 ET expansion closed 27428.50 (1.13 ATR, 0.54 beyond, volume 2.69x); 04:42 close 27428.00 top.
-  Reads: 3m compression break up, 3m close top, stop 3m box low 27413.00, target trail (2.26R); hit
+  04:39 ET expansion closed 27428.50 (1.13 ATR, 0.54 beyond, volume 2.69x): the setup and the entry, a limit there.
+  Reads: 3m compression break up, stop 3m box low 27413.00, target trail (2.16R); hit
   the prior RTH high 27462.50 at 05:51.
 Skip: pennant: a 20:09 ET pole up, then 2 candles inside 27102.50-27116.25; expansion 27118.50;
   stop 27102.25, the 15m swing high 27155.75 only 1.35R: no runway -> pass.

@@ -79,6 +79,7 @@ const { targetFor } = require('../trading/order-plan');
 const { STRATEGY: COMPOSED } = require('../trading/trade-lifecycle');
 const { exitPlan } = require('../trading/evaluator');
 const { simulate, fromFills } = require('./counterfactual');
+const TB = require('./trade-basis');
 const { loadBars: loadDataBars, barMinutes, aggregate } = require('../backtest/data');
 const { endOfDayAt } = require('../autotrader');
 const { expandHome } = require('../paths');
@@ -281,8 +282,13 @@ function roundTrips(fills, cache = null) {
   return out;
 }
 
-/** The outcome of a round trip: P&L, R from the initial stop, MAE/MFE in R (the broker's when it sends them). */
-function outcomeOf(rt, stopTicks, specsFile = null) {
+/**
+ * The outcome of a round trip: P&L, R from the initial stop, MAE/MFE in R (the broker's when it sends them). `held`: the
+ * stop the trade held after the runner moved it to the plan's after the fill (trade-basis.js heldStop), or null: R, MAE
+ * and MFE are then on that stop (`rBasis: 'held stop'`; without it, the bracket's), and the broker's 'trail' for an exit at it is
+ * 'stop' (the trail never armed).
+ */
+function outcomeOf(rt, stopTicks, specsFile = null, held = null) {
   if (!rt) return null;
   const first = rt.opens[0] || null;
   const entry = first && first.entry && typeof first.entry === 'object' ? first.entry : {};
@@ -297,13 +303,18 @@ function outcomeOf(rt, stopTicks, specsFile = null) {
   const last = rt.closes[rt.closes.length - 1] || null;
   const closed = rt.closeMs !== null;
   const net = closed ? (one && num(one.net) !== null ? one.net : pnl - fees) : null;
-  const r = closed ? (one && num(one.r) !== null ? one.r : risk ? pnl / risk : null) : null;
-  const pick = key => (one && num(one[key]) !== null ? one[key] : last && num(last[key]) !== null ? last[key] : null);
+  const basis = one ? TB.onHeldStop(one, { stop: held, tick: num(spec.tickSize) }) : null;
+  const firstPx = first ? num(Number(first.price)) : null;
+  const heldTicks = !one && num(held) !== null && firstPx !== null && num(spec.tickSize) > 0 ? ((rt.side === 'sell' ? -1 : 1) * (firstPx - held)) / spec.tickSize : null;
+  const heldRisk = heldTicks > 0 && tickValue ? heldTicks * tickValue * (rt.openSize || 1) : null;
+  const r = closed ? (one && num(one.r) !== null ? basis.r : heldRisk ? pnl / heldRisk : risk ? pnl / risk : null) : null;
+  const pick = key => (one && num(one[key]) !== null ? (basis[key] !== undefined ? basis[key] : one[key]) : last && num(last[key]) !== null ? last[key] : null);
   return {
     filled: true, openKnown: Boolean(first), entryTime: first ? first.creationTimestamp : null, entryPrice: first ? num(Number(first.price)) : null,
     side: rt.side, size: rt.openSize, setup: entry.setup || null,
     exitTime: closed ? last.creationTimestamp : null, exitPrice: closed ? num(Number(last.price)) : null,
-    exitReason: closed ? (one && one.reason) || null : null,
+    exitReason: closed ? (one && basis.reason) || null : null,
+    ...((basis && basis.rBasis === 'held stop') || (!one && heldRisk) ? { rBasis: 'held stop' } : {}),
     pnl: closed ? round(pnl, 2) : null, fees: round(fees, 2), net: round(net, 2), r: round(r),
     maeR: closed ? round(pick('maeR')) : null, mfeR: closed ? round(pick('mfeR')) : null,
     result: !closed ? 'open' : net > 0 ? 'win' : net < 0 ? 'loss' : 'scratch',
@@ -745,6 +756,9 @@ function labelRun(runDir, { budgetUsd = null, strategies = [], accounts = [], ou
   const cycleStarts = lines.flatMap(r => (r.cycles || []).map(c => Date.parse(c.at))).filter(Number.isFinite).sort((a, b) => a - b);
   const contractCache = translatorCache(require('../broker/config').contractsCacheFiles(manifest.broker || '', { FTH_HOME: home }));
   const trips = roundTrips(fills, contractCache);
+  // The stop each trip held: the runner's move to the plan's stop after its fill (trade-basis.js), from the event log.
+  const planMoves = TB.readPlanStops(home);
+  const heldOf = x => TB.heldStop(planMoves, { fam: x.family, fromMs: x.openMs, toMs: x.closeMs === null ? Infinity : x.closeMs });
   const journal = brokerOrders(path.join(dir, 'broker', 'journal.jsonl'), id => {
     const root = id ? contractCache.root(id) || (parseStandardName(String(id)) || {}).root : null;
     return root ? familyRoot(root) : null;
@@ -988,10 +1002,10 @@ function labelRun(runDir, { budgetUsd = null, strategies = [], accounts = [], ou
       else if (isEntry && stop.multiple === null) reasons.push('stop not mapped to ATR');
       if (d.decision === 'in-trade') {
         const open = trips.find(x => x.family === d.fam && (x.openMs === null || x.openMs <= d.t) && (x.closeMs === null || x.closeMs >= d.t)) || null;
-        outcome = open ? outcomeOf(open, null, contractCache) : null;
+        outcome = open ? outcomeOf(open, null, contractCache, heldOf(open)) : null;
       } else if (isEntry) {
         // Allowed, no fill: unfilled, unless the call timed out (it may have been placed, or not): unknown, never taken.
-        outcome = gate.decision === 'allowed' ? (rt ? outcomeOf(rt, stop && stop.ticks, contractCache) : o.broker && o.broker.timeout ? { filled: null, result: 'unknown' } : { filled: false, result: 'unfilled' })
+        outcome = gate.decision === 'allowed' ? (rt ? outcomeOf(rt, stop && stop.ticks, contractCache, heldOf(rt)) : o.broker && o.broker.timeout ? { filled: null, result: 'unknown' } : { filled: false, result: 'unfilled' })
           : { filled: false, result: gate.decision === 'refused' ? 'refused' : 'not logged' };
       }
       // A skip: flat, nothing sent, no working order touched (a cancel or a modify is a decision of its own).

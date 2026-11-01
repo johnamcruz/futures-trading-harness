@@ -93,10 +93,11 @@
  * and the compression break;
  * entry close, momentum, volume, participation, absorption and the confirming pattern), and no read is stated twice
  * (the same pattern in setup and entry counts once). The combination is ok when every read is true and agrees,
- * every step is stated, the setup and the entry each hold a true read pointing to the side (a setup OTE zone is none),
- * an entry one is on a candle that closed after the setup's pointing candle reads (reaction, then confirmation: a
- * relation or pattern read's candle, a CISD read's confirming candle, SETUP_CANDLE), and
- * there is exactly one stop and one target read.
+ * every required step is stated (REQUIRED_STEPS: all but the entry), the setup holds a true read pointing to the side
+ * (a setup OTE zone is none), and there is exactly one stop and one target read. The entry step is optional: the setup
+ * (15m) is the entry, timed by the next base close; no confirming read is needed (the CONF3M study: entering at the
+ * setup beat waiting for a confirming 3m close on both halves). An entry read stated is checked like any other (true,
+ * the side's way).
  *
  *   parseRead(text)                           { kind, ...params, form, slug } | { kind: 'ambiguous' | 'unknown' }
  *   checkRead(parsed, briefing, { side, tick })  { check, fact, field, value, dir, price? }
@@ -115,6 +116,8 @@ const { entryProblems, entryRuleOf, topDown, BIAS_FRAMES, TREND_TF, NEUTRAL } = 
 const TRAIL_RULE = entryRuleOf({ bias_frames: [...BIAS_FRAMES], bias_agree: NEUTRAL, regime_against: 'off', leg_turned: 'off' });
 
 const STEPS = ['bias', 'location', 'setup', 'entry', 'stop', 'target'];
+// The steps a combination must state: the entry's reads are optional (the setup is the entry).
+const REQUIRED_STEPS = STEPS.filter(s => s !== 'entry');
 // The flow's steps as the hints, the trend-capture report and the learning loop name them: the six compose steps, then
 // risk (phase 2, sizing) and execution (the gate, the executor, a late or unfilled entry) for what blocks past the check.
 const FLOW_STEPS = Object.freeze([...STEPS, 'risk', 'execution']);
@@ -804,7 +807,7 @@ function checkReads({ reads, side, briefing, skills = null, tick = 0.25, entryRu
   const problems = [];
   if (!SIDES.includes(side)) problems.push('side must be long or short');
   const list = Array.isArray(reads) ? reads : [];
-  if (!Array.isArray(reads) || !list.length) problems.push('no reads: state one per step at least (bias, location, setup, entry, stop, target)');
+  if (!Array.isArray(reads) || !list.length) problems.push('no reads: state one per step at least (bias, location, setup, stop, target; an entry read is optional)');
   if (list.length > MAX_READS) problems.push(`${list.length} reads, more than ${MAX_READS}`);
   const known = skills ? new Set(skills) : null;
   const m3 = data(briefing, 'm3');
@@ -847,17 +850,14 @@ function checkReads({ reads, side, briefing, skills = null, tick = 0.25, entryRu
   }
   // A cited setup (a TRUE `<strategy> fired` read of a strategy in `cited`): the plan takes its own entry, stop and target.
   const setup = citedSetup({ checked, side, m3, cited, problems });
-  const missingSteps = STEPS.filter(s => !checked.some(r => r.step === s));
+  const missingSteps = REQUIRED_STEPS.filter(s => !checked.some(r => r.step === s));
   if (missingSteps.length) problems.push(`steps not stated: ${missingSteps.join(', ')} (every step needs a read, D7)`);
-  // The reaction and its confirmation point the trade's way: the setup and the entry each need a true read whose
-  // direction is the side (reads without a direction, such as touched, at, volume or participation, support it only).
-  // An OTE zone is where the pullback sits, not a reaction: it counts as no setup read pointing.
+  // The reaction points the trade's way: the setup needs a true read whose direction is the side (reads without a
+  // direction, such as touched, at, volume or participation, support it only). An OTE zone is where the pullback sits,
+  // not a reaction: it counts as no setup read pointing. No confirming entry read is required (the setup is the entry).
   const pointing = s => checked.filter(r => r.step === s && r.check === true && r.dir === side && !(s === 'setup' && r.kind === 'ote'));
   if (SIDES.includes(side)) {
-    for (const s of ['setup', 'entry']) {
-      if (missingSteps.includes(s)) continue;
-      if (!pointing(s).length) problems.push(`the ${s} has no read pointing ${side === 'long' ? 'up (long)' : 'down (short)'}: state the reaction${s === 'entry' ? '\'s confirmation' : ''} the trade's way`);
-    }
+    if (!missingSteps.includes('setup') && !pointing('setup').length) problems.push(`the setup has no read pointing ${side === 'long' ? 'up (long)' : 'down (short)'}: state the reaction the trade's way`);
     // The owner's chain (2026-10-29, "Yes enforce 15min setup"): the 4h and 1h set the side, the 15m (or higher) holds
     // the setup the side's way, the 3m only times the entry. Under a policy whose entry rule holds the HTF agreement
     // (bias_agree on or neutral-15m-declared: topDown), a setup pointing the side must be on the 15m or higher (its form's first word). Stated exemption: a
@@ -867,20 +867,6 @@ function checkReads({ reads, side, briefing, skills = null, tick = 0.25, entryRu
     const setupTf = entryRule && entryRule.chain ? entryRule.chain.setup : '15m';
     if (topDown(entryRule) && setups.length && !setups.some(r => r.kind === 'fired' || (TF_MIN[String(r.form || '').split(' ')[0]] || 0) >= (TF_MIN[setupTf] || Infinity))) {
       problems.push(`entry rule: the setup must be on the ${setupTf} or higher (a ${entryRule.chain ? entryRule.chain.entry : '3m'} read only times the entry): state the ${(l => (l.length > 1 ? `${l.slice(0, -1).join(', ')} or ${l[l.length - 1]}` : l[0]))(LADDER.slice(LADDER.indexOf(setupTf)))} reaction or break the ${side}'s way, or pass`);
-    }
-    // Reaction, then confirmation: when the setup's pointing reads name a candle (SETUP_CANDLE: a relation or pattern
-    // read's, a CISD read's confirming one), an entry read pointing the side must be on a candle that closed after the
-    // last of them (the candle after the 15m rejection or the 15m CISD's displacement, never that candle itself or the
-    // last 3m inside it). A candle whose close time the briefing doesn't hold can't confirm or be timed.
-    const setupCandles = pointing('setup').filter(r => SETUP_CANDLE.has(r.kind));
-    const entries = pointing('entry').filter(r => CANDLE_KINDS.has(r.kind));
-    if (setupCandles.length && entries.length) {
-      const setupTimes = setupCandles.map(r => setupClose(m3, r));
-      const after = Math.max(...setupTimes);
-      if (setupTimes.some(t => t === null)) problems.push('a setup candle\'s close time is not in the briefing: the confirmation can\'t be timed');
-      else if (!entries.some(r => { const t = candleClose(m3, r.form.split(' ')[0]); return t !== null && t > after; })) {
-        problems.push(`no entry read pointing ${side} is on a candle that closed after the setup's (${new Date(after).toISOString()}): the confirmation is the next closed candle, not the reaction's own`);
-      }
     }
   }
   // The policy's entry rule (entry-rule.js, its rulebook's `entry`): the bias frames, the regime, the leg turned, on
@@ -953,4 +939,4 @@ function renderCheck(r) {
   return `${out.join('\n')}\n`;
 }
 
-module.exports = { TRAIL_RULE, STEPS, FLOW_STEPS, STEP_KINDS, SETUP_CANDLE, LIVE_BOX, ENTRY_PATTERNS, levelIndex, targetsAhead, roomBand, candleClose, setupClose, TF_ORDER, TF_MIN, MAX_READS, WHY_MAX, MOMENTUM, VOLUME_HIGH, ABSORPTION, netAtrOf, parseRead, checkRead, checkReads, readSignature, skillSignature, contextOf, targetROf, rBucket, levelName, renderCheck };
+module.exports = { TRAIL_RULE, STEPS, REQUIRED_STEPS, FLOW_STEPS, STEP_KINDS, SETUP_CANDLE, LIVE_BOX, ENTRY_PATTERNS, levelIndex, targetsAhead, roomBand, candleClose, setupClose, TF_ORDER, TF_MIN, MAX_READS, WHY_MAX, MOMENTUM, VOLUME_HIGH, ABSORPTION, netAtrOf, parseRead, checkRead, checkReads, readSignature, skillSignature, contextOf, targetROf, rBucket, levelName, renderCheck };

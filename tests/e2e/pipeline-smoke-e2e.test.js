@@ -57,8 +57,8 @@ const shiftOf = monday => Math.round((Date.parse(`${monday}T00:00:00Z`) - PF.PAR
 const nextDay = day => new Date(Date.parse(`${day}T00:00:00Z`) + 86400000).toISOString().slice(0, 10);
 
 // The moments each list is curated to (decision bars, UTC time of day on the series' day): the model passes the first,
-// composes a trade on the second and takes it out on the third. Pinned: a scan that finds others fails here.
-const MOMENTS = { train: ['15:57', '16:21', '16:27'], validate: ['16:21'] };
+// composes a trade on the second and takes it out on the next bar. Pinned: a scan that finds others fails here.
+const MOMENTS = { train: ['16:00', '17:27', '17:54'], validate: ['16:18'] };
 
 /** A command's result: { code, out } (stdout and stderr). */
 const sh = (file, args, env) => {
@@ -150,7 +150,8 @@ function replayConfig(w, runId, s, over = {}) {
 const playScript = (w, bars) => fs.writeFileSync(w.model, JSON.stringify({ bars }));
 
 /** The composed scenario of a curated moment: one true read of each step, as the scan stored them. */
-const scenarioOf = m => ({ side: m.side, skill: 'rejection', reads: ['bias', 'location', 'setup', 'entry', 'stop', 'target'].map(step => { const x = m.reads.find(r => r.step === step && r.agrees); return [step, x.skill, x.read]; }) });
+// The entry read is optional (the setup is the entry): a moment stored without one composes without one.
+const scenarioOf = m => ({ side: m.side, skill: 'rejection', reads: ['bias', 'location', 'setup', 'entry', 'stop', 'target'].flatMap(step => { const x = m.reads.find(r => r.step === step && r.agrees); return x ? [[step, x.skill, x.read]] : []; }) });
 
 /** `replay.js run` or `training-preflight.js` on a config: the run's bars given, as its facts check reads them. */
 const withBars = (s, flags = []) => ['--bars', `MNQ=${s.bars1m}`, ...flags];
@@ -196,7 +197,10 @@ test('pipeline smoke: curated lists, preflight, stage 1, its report, experience,
     assert.match(r.out, /training preflight passed/);
   });
 
-  const [passed, composed, leaving] = lists.train ? lists.train.moments : [];
+  const [passed, composed] = lists.train ? lists.train.moments : [];
+  // The exit: the bar after the composed moment, inside its window (the setup is the entry since CONF3M, so the trade
+  // goes in on the moment's own bar and a later moment can find it already out).
+  const leaving = composed ? { bar: new Date(Date.parse(composed.bar) + D.STEP).toISOString() } : null;
   await step('stage 1 (practice-train): latency charged, the list pinned; a pass, a composed trade through the gate to the broker, its exit', () => {
     playScript(w, {
       [passed.bar]: { do: 'pass', why: 'the rejection has no room' },

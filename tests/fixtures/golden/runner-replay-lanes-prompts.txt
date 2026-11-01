@@ -91,8 +91,8 @@ added nothing measured.
 
 ```text
 Take: (no attempt) 1h up; 3m inside box 27413.00-27422.00 on the prior POC;
-  04:39 ET expansion closed 27428.50 (1.13 ATR, 0.54 beyond, volume 2.69x); 04:42 close 27428.00 top.
-  Reads: 3m compression break up, 3m close top, stop 3m box low 27413.00, target trail (2.26R); hit
+  04:39 ET expansion closed 27428.50 (1.13 ATR, 0.54 beyond, volume 2.69x): the setup and the entry, a limit there.
+  Reads: 3m compression break up, stop 3m box low 27413.00, target trail (2.16R); hit
   the prior RTH high 27462.50 at 05:51.
 Skip: pennant: a 20:09 ET pole up, then 2 candles inside 27102.50-27116.25; expansion 27118.50;
   stop 27102.25, the 15m swing high 27155.75 only 1.35R: no runway -> pass.
@@ -329,12 +329,12 @@ legs.
 
 ```text
 Take: at the prior RTH high 21615.00: on the 15m close a shooting star (H 21621.50, C 21608.25),
-  on the 1h close a rejection wick, then on the 3m close a bearish engulfing.
+  on the 1h close a rejection wick, on the 3m close a bearish engulfing: one close.
   Stack agrees.
   Reads: 1h rejected prior rth high down, 3m pattern bearish engulfing.
   Priority order -> take.
 Skip: at the session POC 21522.00, on the 3m close a doji (body 0.25, range 5.50); 15m forming:
-  the entry read not in yet -> pass.
+  no setup yet -> pass.
   The session VAH 0.4R ahead is a read, not the reason.
 Loser: at the prior VAL 21480.00, on the 15m close a hammer (L 21474.50, C 21483.75).
   long at 21483.75, stop 21474.25 (9.50 pts = 38 ticks, $19.00 on 1 MNQ);
@@ -455,9 +455,9 @@ points to the read it uses.
    (`rejection`, `breakout`), a CISD (`cisd`), a pullback or a
    reversal (`pullback-vs-reversal`, `bos-vs-choch`).
 3.
-  **3m: the entry timing.** The next 3m close after the setup's, its way
-   (`candle-reading`, `momentum-and-volume`): the entry reads; no 3m turn
-   or break to wait for.
+  **3m: the entry timing.** The setup is the entry, on the next 3m bar:
+   no confirming close, no 3m turn or break to wait for; a 3m read
+   (`candle-reading`, `momentum-and-volume`) is timing context.
 4.
   **Stop: compose's.** One tick beyond the setup's invalidation, as
    a rule its candle's extreme (`invalidation`); never tighter.
@@ -482,7 +482,7 @@ NQ, back-adjusted CSV prices:
 ```text
 2022-06-22, trend rule 4h up, long aligned.
   The 15m 12:45 candle rejects the prior
-POC 14942.75 (the setup); the next 3m close, 13:03, closes in its top third:
+POC 14942.75 (the setup and the entry); the head composed on the 13:03 cycle, the limit that bar's close:
 long 14960.00, stop 14938.50 under the 15m low (21.50 pts = 86 ticks, $43.00 per MNQ);
 target trail: the 2R mark 15003.00 armed it; the 15m swing high 15040.25 was reached 14:15.
 2022-08-12, trend rule 4h up.
@@ -1274,8 +1274,8 @@ added nothing measured.
 
 ```text
 Take: (no attempt) 1h up; 3m inside box 27413.00-27422.00 on the prior POC;
-  04:39 ET expansion closed 27428.50 (1.13 ATR, 0.54 beyond, volume 2.69x); 04:42 close 27428.00 top.
-  Reads: 3m compression break up, 3m close top, stop 3m box low 27413.00, target trail (2.26R); hit
+  04:39 ET expansion closed 27428.50 (1.13 ATR, 0.54 beyond, volume 2.69x): the setup and the entry, a limit there.
+  Reads: 3m compression break up, stop 3m box low 27413.00, target trail (2.16R); hit
   the prior RTH high 27462.50 at 05:51.
 Skip: pennant: a 20:09 ET pole up, then 2 candles inside 27102.50-27116.25; expansion 27118.50;
   stop 27102.25, the 15m swing high 27155.75 only 1.35R: no runway -> pass.
@@ -1512,12 +1512,12 @@ legs.
 
 ```text
 Take: at the prior RTH high 21615.00: on the 15m close a shooting star (H 21621.50, C 21608.25),
-  on the 1h close a rejection wick, then on the 3m close a bearish engulfing.
+  on the 1h close a rejection wick, on the 3m close a bearish engulfing: one close.
   Stack agrees.
   Reads: 1h rejected prior rth high down, 3m pattern bearish engulfing.
   Priority order -> take.
 Skip: at the session POC 21522.00, on the 3m close a doji (body 0.25, range 5.50); 15m forming:
-  the entry read not in yet -> pass.
+  no setup yet -> pass.
   The session VAH 0.4R ahead is a read, not the reason.
 Loser: at the prior VAL 21480.00, on the 15m close a hammer (L 21474.50, C 21483.75).
   long at 21483.75, stop 21474.25 (9.50 pts = 38 ticks, $19.00 on 1 MNQ);
@@ -1638,9 +1638,9 @@ points to the read it uses.
    (`rejection`, `breakout`), a CISD (`cisd`), a pullback or a
    reversal (`pullback-vs-reversal`, `bos-vs-choch`).
 3.
-  **3m: the entry timing.** The next 3m close after the setup's, its way
-   (`candle-reading`, `momentum-and-volume`): the entry reads; no 3m turn
-   or break to wait for.
+  **3m: the entry timing.** The setup is the entry, on the next 3m bar:
+   no confirming close, no 3m turn or break to wait for; a 3m read
+   (`candle-reading`, `momentum-and-volume`) is timing context.
 4.
   **Stop: compose's.** One tick beyond the setup's invalidation, as
    a rule its candle's extreme (`invalidation`); never tighter.
@@ -1665,7 +1665,7 @@ NQ, back-adjusted CSV prices:
 ```text
 2022-06-22, trend rule 4h up, long aligned.
   The 15m 12:45 candle rejects the prior
-POC 14942.75 (the setup); the next 3m close, 13:03, closes in its top third:
+POC 14942.75 (the setup and the entry); the head composed on the 13:03 cycle, the limit that bar's close:
 long 14960.00, stop 14938.50 under the 15m low (21.50 pts = 86 ticks, $43.00 per MNQ);
 target trail: the 2R mark 15003.00 armed it; the 15m swing high 15040.25 was reached 14:15.
 2022-08-12, trend rule 4h up.
@@ -2466,8 +2466,8 @@ added nothing measured.
 
 ```text
 Take: (no attempt) 1h up; 3m inside box 27413.00-27422.00 on the prior POC;
-  04:39 ET expansion closed 27428.50 (1.13 ATR, 0.54 beyond, volume 2.69x); 04:42 close 27428.00 top.
-  Reads: 3m compression break up, 3m close top, stop 3m box low 27413.00, target trail (2.26R); hit
+  04:39 ET expansion closed 27428.50 (1.13 ATR, 0.54 beyond, volume 2.69x): the setup and the entry, a limit there.
+  Reads: 3m compression break up, stop 3m box low 27413.00, target trail (2.16R); hit
   the prior RTH high 27462.50 at 05:51.
 Skip: pennant: a 20:09 ET pole up, then 2 candles inside 27102.50-27116.25; expansion 27118.50;
   stop 27102.25, the 15m swing high 27155.75 only 1.35R: no runway -> pass.
@@ -2704,12 +2704,12 @@ legs.
 
 ```text
 Take: at the prior RTH high 21615.00: on the 15m close a shooting star (H 21621.50, C 21608.25),
-  on the 1h close a rejection wick, then on the 3m close a bearish engulfing.
+  on the 1h close a rejection wick, on the 3m close a bearish engulfing: one close.
   Stack agrees.
   Reads: 1h rejected prior rth high down, 3m pattern bearish engulfing.
   Priority order -> take.
 Skip: at the session POC 21522.00, on the 3m close a doji (body 0.25, range 5.50); 15m forming:
-  the entry read not in yet -> pass.
+  no setup yet -> pass.
   The session VAH 0.4R ahead is a read, not the reason.
 Loser: at the prior VAL 21480.00, on the 15m close a hammer (L 21474.50, C 21483.75).
   long at 21483.75, stop 21474.25 (9.50 pts = 38 ticks, $19.00 on 1 MNQ);
@@ -2830,9 +2830,9 @@ points to the read it uses.
    (`rejection`, `breakout`), a CISD (`cisd`), a pullback or a
    reversal (`pullback-vs-reversal`, `bos-vs-choch`).
 3.
-  **3m: the entry timing.** The next 3m close after the setup's, its way
-   (`candle-reading`, `momentum-and-volume`): the entry reads; no 3m turn
-   or break to wait for.
+  **3m: the entry timing.** The setup is the entry, on the next 3m bar:
+   no confirming close, no 3m turn or break to wait for; a 3m read
+   (`candle-reading`, `momentum-and-volume`) is timing context.
 4.
   **Stop: compose's.** One tick beyond the setup's invalidation, as
    a rule its candle's extreme (`invalidation`); never tighter.
@@ -2857,7 +2857,7 @@ NQ, back-adjusted CSV prices:
 ```text
 2022-06-22, trend rule 4h up, long aligned.
   The 15m 12:45 candle rejects the prior
-POC 14942.75 (the setup); the next 3m close, 13:03, closes in its top third:
+POC 14942.75 (the setup and the entry); the head composed on the 13:03 cycle, the limit that bar's close:
 long 14960.00, stop 14938.50 under the 15m low (21.50 pts = 86 ticks, $43.00 per MNQ);
 target trail: the 2R mark 15003.00 armed it; the 15m swing high 15040.25 was reached 14:15.
 2022-08-12, trend rule 4h up.
@@ -3649,8 +3649,8 @@ added nothing measured.
 
 ```text
 Take: (no attempt) 1h up; 3m inside box 27413.00-27422.00 on the prior POC;
-  04:39 ET expansion closed 27428.50 (1.13 ATR, 0.54 beyond, volume 2.69x); 04:42 close 27428.00 top.
-  Reads: 3m compression break up, 3m close top, stop 3m box low 27413.00, target trail (2.26R); hit
+  04:39 ET expansion closed 27428.50 (1.13 ATR, 0.54 beyond, volume 2.69x): the setup and the entry, a limit there.
+  Reads: 3m compression break up, stop 3m box low 27413.00, target trail (2.16R); hit
   the prior RTH high 27462.50 at 05:51.
 Skip: pennant: a 20:09 ET pole up, then 2 candles inside 27102.50-27116.25; expansion 27118.50;
   stop 27102.25, the 15m swing high 27155.75 only 1.35R: no runway -> pass.
@@ -3887,12 +3887,12 @@ legs.
 
 ```text
 Take: at the prior RTH high 21615.00: on the 15m close a shooting star (H 21621.50, C 21608.25),
-  on the 1h close a rejection wick, then on the 3m close a bearish engulfing.
+  on the 1h close a rejection wick, on the 3m close a bearish engulfing: one close.
   Stack agrees.
   Reads: 1h rejected prior rth high down, 3m pattern bearish engulfing.
   Priority order -> take.
 Skip: at the session POC 21522.00, on the 3m close a doji (body 0.25, range 5.50); 15m forming:
-  the entry read not in yet -> pass.
+  no setup yet -> pass.
   The session VAH 0.4R ahead is a read, not the reason.
 Loser: at the prior VAL 21480.00, on the 15m close a hammer (L 21474.50, C 21483.75).
   long at 21483.75, stop 21474.25 (9.50 pts = 38 ticks, $19.00 on 1 MNQ);
@@ -4013,9 +4013,9 @@ points to the read it uses.
    (`rejection`, `breakout`), a CISD (`cisd`), a pullback or a
    reversal (`pullback-vs-reversal`, `bos-vs-choch`).
 3.
-  **3m: the entry timing.** The next 3m close after the setup's, its way
-   (`candle-reading`, `momentum-and-volume`): the entry reads; no 3m turn
-   or break to wait for.
+  **3m: the entry timing.** The setup is the entry, on the next 3m bar:
+   no confirming close, no 3m turn or break to wait for; a 3m read
+   (`candle-reading`, `momentum-and-volume`) is timing context.
 4.
   **Stop: compose's.** One tick beyond the setup's invalidation, as
    a rule its candle's extreme (`invalidation`); never tighter.
@@ -4040,7 +4040,7 @@ NQ, back-adjusted CSV prices:
 ```text
 2022-06-22, trend rule 4h up, long aligned.
   The 15m 12:45 candle rejects the prior
-POC 14942.75 (the setup); the next 3m close, 13:03, closes in its top third:
+POC 14942.75 (the setup and the entry); the head composed on the 13:03 cycle, the limit that bar's close:
 long 14960.00, stop 14938.50 under the 15m low (21.50 pts = 86 ticks, $43.00 per MNQ);
 target trail: the 2R mark 15003.00 armed it; the 15m swing high 15040.25 was reached 14:15.
 2022-08-12, trend rule 4h up.
@@ -4841,8 +4841,8 @@ added nothing measured.
 
 ```text
 Take: (no attempt) 1h up; 3m inside box 27413.00-27422.00 on the prior POC;
-  04:39 ET expansion closed 27428.50 (1.13 ATR, 0.54 beyond, volume 2.69x); 04:42 close 27428.00 top.
-  Reads: 3m compression break up, 3m close top, stop 3m box low 27413.00, target trail (2.26R); hit
+  04:39 ET expansion closed 27428.50 (1.13 ATR, 0.54 beyond, volume 2.69x): the setup and the entry, a limit there.
+  Reads: 3m compression break up, stop 3m box low 27413.00, target trail (2.16R); hit
   the prior RTH high 27462.50 at 05:51.
 Skip: pennant: a 20:09 ET pole up, then 2 candles inside 27102.50-27116.25; expansion 27118.50;
   stop 27102.25, the 15m swing high 27155.75 only 1.35R: no runway -> pass.
@@ -5079,12 +5079,12 @@ legs.
 
 ```text
 Take: at the prior RTH high 21615.00: on the 15m close a shooting star (H 21621.50, C 21608.25),
-  on the 1h close a rejection wick, then on the 3m close a bearish engulfing.
+  on the 1h close a rejection wick, on the 3m close a bearish engulfing: one close.
   Stack agrees.
   Reads: 1h rejected prior rth high down, 3m pattern bearish engulfing.
   Priority order -> take.
 Skip: at the session POC 21522.00, on the 3m close a doji (body 0.25, range 5.50); 15m forming:
-  the entry read not in yet -> pass.
+  no setup yet -> pass.
   The session VAH 0.4R ahead is a read, not the reason.
 Loser: at the prior VAL 21480.00, on the 15m close a hammer (L 21474.50, C 21483.75).
   long at 21483.75, stop 21474.25 (9.50 pts = 38 ticks, $19.00 on 1 MNQ);
@@ -5205,9 +5205,9 @@ points to the read it uses.
    (`rejection`, `breakout`), a CISD (`cisd`), a pullback or a
    reversal (`pullback-vs-reversal`, `bos-vs-choch`).
 3.
-  **3m: the entry timing.** The next 3m close after the setup's, its way
-   (`candle-reading`, `momentum-and-volume`): the entry reads; no 3m turn
-   or break to wait for.
+  **3m: the entry timing.** The setup is the entry, on the next 3m bar:
+   no confirming close, no 3m turn or break to wait for; a 3m read
+   (`candle-reading`, `momentum-and-volume`) is timing context.
 4.
   **Stop: compose's.** One tick beyond the setup's invalidation, as
    a rule its candle's extreme (`invalidation`); never tighter.
@@ -5232,7 +5232,7 @@ NQ, back-adjusted CSV prices:
 ```text
 2022-06-22, trend rule 4h up, long aligned.
   The 15m 12:45 candle rejects the prior
-POC 14942.75 (the setup); the next 3m close, 13:03, closes in its top third:
+POC 14942.75 (the setup and the entry); the head composed on the 13:03 cycle, the limit that bar's close:
 long 14960.00, stop 14938.50 under the 15m low (21.50 pts = 86 ticks, $43.00 per MNQ);
 target trail: the 2R mark 15003.00 armed it; the 15m swing high 15040.25 was reached 14:15.
 2022-08-12, trend rule 4h up.
@@ -6024,8 +6024,8 @@ added nothing measured.
 
 ```text
 Take: (no attempt) 1h up; 3m inside box 27413.00-27422.00 on the prior POC;
-  04:39 ET expansion closed 27428.50 (1.13 ATR, 0.54 beyond, volume 2.69x); 04:42 close 27428.00 top.
-  Reads: 3m compression break up, 3m close top, stop 3m box low 27413.00, target trail (2.26R); hit
+  04:39 ET expansion closed 27428.50 (1.13 ATR, 0.54 beyond, volume 2.69x): the setup and the entry, a limit there.
+  Reads: 3m compression break up, stop 3m box low 27413.00, target trail (2.16R); hit
   the prior RTH high 27462.50 at 05:51.
 Skip: pennant: a 20:09 ET pole up, then 2 candles inside 27102.50-27116.25; expansion 27118.50;
   stop 27102.25, the 15m swing high 27155.75 only 1.35R: no runway -> pass.
@@ -6262,12 +6262,12 @@ legs.
 
 ```text
 Take: at the prior RTH high 21615.00: on the 15m close a shooting star (H 21621.50, C 21608.25),
-  on the 1h close a rejection wick, then on the 3m close a bearish engulfing.
+  on the 1h close a rejection wick, on the 3m close a bearish engulfing: one close.
   Stack agrees.
   Reads: 1h rejected prior rth high down, 3m pattern bearish engulfing.
   Priority order -> take.
 Skip: at the session POC 21522.00, on the 3m close a doji (body 0.25, range 5.50); 15m forming:
-  the entry read not in yet -> pass.
+  no setup yet -> pass.
   The session VAH 0.4R ahead is a read, not the reason.
 Loser: at the prior VAL 21480.00, on the 15m close a hammer (L 21474.50, C 21483.75).
   long at 21483.75, stop 21474.25 (9.50 pts = 38 ticks, $19.00 on 1 MNQ);
@@ -6388,9 +6388,9 @@ points to the read it uses.
    (`rejection`, `breakout`), a CISD (`cisd`), a pullback or a
    reversal (`pullback-vs-reversal`, `bos-vs-choch`).
 3.
-  **3m: the entry timing.** The next 3m close after the setup's, its way
-   (`candle-reading`, `momentum-and-volume`): the entry reads; no 3m turn
-   or break to wait for.
+  **3m: the entry timing.** The setup is the entry, on the next 3m bar:
+   no confirming close, no 3m turn or break to wait for; a 3m read
+   (`candle-reading`, `momentum-and-volume`) is timing context.
 4.
   **Stop: compose's.** One tick beyond the setup's invalidation, as
    a rule its candle's extreme (`invalidation`); never tighter.
@@ -6415,7 +6415,7 @@ NQ, back-adjusted CSV prices:
 ```text
 2022-06-22, trend rule 4h up, long aligned.
   The 15m 12:45 candle rejects the prior
-POC 14942.75 (the setup); the next 3m close, 13:03, closes in its top third:
+POC 14942.75 (the setup and the entry); the head composed on the 13:03 cycle, the limit that bar's close:
 long 14960.00, stop 14938.50 under the 15m low (21.50 pts = 86 ticks, $43.00 per MNQ);
 target trail: the 2R mark 15003.00 armed it; the 15m swing high 15040.25 was reached 14:15.
 2022-08-12, trend rule 4h up.
@@ -7207,8 +7207,8 @@ added nothing measured.
 
 ```text
 Take: (no attempt) 1h up; 3m inside box 27413.00-27422.00 on the prior POC;
-  04:39 ET expansion closed 27428.50 (1.13 ATR, 0.54 beyond, volume 2.69x); 04:42 close 27428.00 top.
-  Reads: 3m compression break up, 3m close top, stop 3m box low 27413.00, target trail (2.26R); hit
+  04:39 ET expansion closed 27428.50 (1.13 ATR, 0.54 beyond, volume 2.69x): the setup and the entry, a limit there.
+  Reads: 3m compression break up, stop 3m box low 27413.00, target trail (2.16R); hit
   the prior RTH high 27462.50 at 05:51.
 Skip: pennant: a 20:09 ET pole up, then 2 candles inside 27102.50-27116.25; expansion 27118.50;
   stop 27102.25, the 15m swing high 27155.75 only 1.35R: no runway -> pass.
@@ -7445,12 +7445,12 @@ legs.
 
 ```text
 Take: at the prior RTH high 21615.00: on the 15m close a shooting star (H 21621.50, C 21608.25),
-  on the 1h close a rejection wick, then on the 3m close a bearish engulfing.
+  on the 1h close a rejection wick, on the 3m close a bearish engulfing: one close.
   Stack agrees.
   Reads: 1h rejected prior rth high down, 3m pattern bearish engulfing.
   Priority order -> take.
 Skip: at the session POC 21522.00, on the 3m close a doji (body 0.25, range 5.50); 15m forming:
-  the entry read not in yet -> pass.
+  no setup yet -> pass.
   The session VAH 0.4R ahead is a read, not the reason.
 Loser: at the prior VAL 21480.00, on the 15m close a hammer (L 21474.50, C 21483.75).
   long at 21483.75, stop 21474.25 (9.50 pts = 38 ticks, $19.00 on 1 MNQ);
@@ -7571,9 +7571,9 @@ points to the read it uses.
    (`rejection`, `breakout`), a CISD (`cisd`), a pullback or a
    reversal (`pullback-vs-reversal`, `bos-vs-choch`).
 3.
-  **3m: the entry timing.** The next 3m close after the setup's, its way
-   (`candle-reading`, `momentum-and-volume`): the entry reads; no 3m turn
-   or break to wait for.
+  **3m: the entry timing.** The setup is the entry, on the next 3m bar:
+   no confirming close, no 3m turn or break to wait for; a 3m read
+   (`candle-reading`, `momentum-and-volume`) is timing context.
 4.
   **Stop: compose's.** One tick beyond the setup's invalidation, as
    a rule its candle's extreme (`invalidation`); never tighter.
@@ -7598,7 +7598,7 @@ NQ, back-adjusted CSV prices:
 ```text
 2022-06-22, trend rule 4h up, long aligned.
   The 15m 12:45 candle rejects the prior
-POC 14942.75 (the setup); the next 3m close, 13:03, closes in its top third:
+POC 14942.75 (the setup and the entry); the head composed on the 13:03 cycle, the limit that bar's close:
 long 14960.00, stop 14938.50 under the 15m low (21.50 pts = 86 ticks, $43.00 per MNQ);
 target trail: the 2R mark 15003.00 armed it; the 15m swing high 15040.25 was reached 14:15.
 2022-08-12, trend rule 4h up.
@@ -8399,8 +8399,8 @@ added nothing measured.
 
 ```text
 Take: (no attempt) 1h up; 3m inside box 27413.00-27422.00 on the prior POC;
-  04:39 ET expansion closed 27428.50 (1.13 ATR, 0.54 beyond, volume 2.69x); 04:42 close 27428.00 top.
-  Reads: 3m compression break up, 3m close top, stop 3m box low 27413.00, target trail (2.26R); hit
+  04:39 ET expansion closed 27428.50 (1.13 ATR, 0.54 beyond, volume 2.69x): the setup and the entry, a limit there.
+  Reads: 3m compression break up, stop 3m box low 27413.00, target trail (2.16R); hit
   the prior RTH high 27462.50 at 05:51.
 Skip: pennant: a 20:09 ET pole up, then 2 candles inside 27102.50-27116.25; expansion 27118.50;
   stop 27102.25, the 15m swing high 27155.75 only 1.35R: no runway -> pass.
@@ -8528,7 +8528,7 @@ Also: `leg` (`origin`, the run's extreme; `extreme`), `ote`, `status`
 
 **Where it works**:
 
-- **Trend pullback** (preferred; `trend-vs-range`): price pulls back to a level, then a CISD back in the trend's direction ends the pullback; a later close is the entry.
+- **Trend pullback** (preferred; `trend-vs-range`): price pulls back to a level, then a CISD back in the trend's direction ends the pullback; the next close is the entry.
 - **Range** (`range`): at an extreme (range high or low, value-area
   edge, prior day), a CISD back toward the middle, aiming at the other
   side.
@@ -8552,27 +8552,27 @@ and close: an engulfing ranks with other strong ones); the 3m only times
 the entry.
 
 **OTE and bounce** (`fib-retracement`): a strong CISD's `leg` gives
-`ote`.
-  Wait for a completed candle closing back the CISD's way in it
-(`candle-reading`); `absorption` in the zone confirms.
-  Never anticipate
-the bounce.
+`ote`: support, never a wait (the 15m CISD is the entry).
+  A completed
+candle closing back the CISD's way in it (`candle-reading`) or
+`absorption` in the zone counts.
+  Never anticipate the bounce.
 
 ## Examples
 
 ```text
-Take: 1h up; pullback to the RTH VWAP 21520.50; 15m bullish CISD, strong; ote 21518.25-21522.50,
-  a 3m close 21525.75 above it.
-  Reads: 15m cisd up, 15m in ote, 3m close top.
+Take: 1h up; pullback to the RTH VWAP 21520.50; 15m bullish CISD, strong, closed 21525.75:
+  the setup and the entry, a limit there.
+  Reads: 15m cisd up.
   Priority order: aligned -> take.
-Take: range 21480.00-21560.00; at the prior VAL 21480.00 a 15m bullish CISD, strong (top third); into the ote
-  V 2.1x with little progress (absorption), then a 3m bounce 21492.25.
-  Reads: at prior val, 15m cisd up, in ote.
+Take: range 21480.00-21560.00; at the prior VAL 21480.00 a 15m bullish CISD, strong (top third), closed 21492.25,
+  V 2.1x, little progress (absorption): setup and entry, a limit there.
+  Reads: at prior val, 15m cisd up.
   Priority order -> take.
 Skip: transition, 15m mixed: chop; 15m bearish CISD at 21640.00.
   Reads: regime transition, 15m cisd down; the priority order (step 3, location) decided skip.
 Loser: 15m bullish CISD after the sweep of the prior RTH low 21402.25;
-  long at 21420.50, stop 21399.75 (20.75 pts = 83 ticks, $41.50 on 1 MNQ);
+  long at 21420.50 (a limit at its close), stop 21399.75 (20.75 pts = 83 ticks, $41.50 on 1 MNQ);
   a 3m close under the origin 21400.75, stopped: -83 ticks, -$41.50.
 ```
 </skill>
@@ -8725,12 +8725,12 @@ legs.
 
 ```text
 Take: at the prior RTH high 21615.00: on the 15m close a shooting star (H 21621.50, C 21608.25),
-  on the 1h close a rejection wick, then on the 3m close a bearish engulfing.
+  on the 1h close a rejection wick, on the 3m close a bearish engulfing: one close.
   Stack agrees.
   Reads: 1h rejected prior rth high down, 3m pattern bearish engulfing.
   Priority order -> take.
 Skip: at the session POC 21522.00, on the 3m close a doji (body 0.25, range 5.50); 15m forming:
-  the entry read not in yet -> pass.
+  no setup yet -> pass.
   The session VAH 0.4R ahead is a read, not the reason.
 Loser: at the prior VAL 21480.00, on the 15m close a hammer (L 21474.50, C 21483.75).
   long at 21483.75, stop 21474.25 (9.50 pts = 38 ticks, $19.00 on 1 MNQ);
@@ -8851,9 +8851,9 @@ points to the read it uses.
    (`rejection`, `breakout`), a CISD (`cisd`), a pullback or a
    reversal (`pullback-vs-reversal`, `bos-vs-choch`).
 3.
-  **3m: the entry timing.** The next 3m close after the setup's, its way
-   (`candle-reading`, `momentum-and-volume`): the entry reads; no 3m turn
-   or break to wait for.
+  **3m: the entry timing.** The setup is the entry, on the next 3m bar:
+   no confirming close, no 3m turn or break to wait for; a 3m read
+   (`candle-reading`, `momentum-and-volume`) is timing context.
 4.
   **Stop: compose's.** One tick beyond the setup's invalidation, as
    a rule its candle's extreme (`invalidation`); never tighter.
@@ -8878,7 +8878,7 @@ NQ, back-adjusted CSV prices:
 ```text
 2022-06-22, trend rule 4h up, long aligned.
   The 15m 12:45 candle rejects the prior
-POC 14942.75 (the setup); the next 3m close, 13:03, closes in its top third:
+POC 14942.75 (the setup and the entry); the head composed on the 13:03 cycle, the limit that bar's close:
 long 14960.00, stop 14938.50 under the 15m low (21.50 pts = 86 ticks, $43.00 per MNQ);
 target trail: the 2R mark 15003.00 armed it; the 15m swing high 15040.25 was reached 14:15.
 2022-08-12, trend rule 4h up.
@@ -9676,8 +9676,8 @@ added nothing measured.
 
 ```text
 Take: (no attempt) 1h up; 3m inside box 27413.00-27422.00 on the prior POC;
-  04:39 ET expansion closed 27428.50 (1.13 ATR, 0.54 beyond, volume 2.69x); 04:42 close 27428.00 top.
-  Reads: 3m compression break up, 3m close top, stop 3m box low 27413.00, target trail (2.26R); hit
+  04:39 ET expansion closed 27428.50 (1.13 ATR, 0.54 beyond, volume 2.69x): the setup and the entry, a limit there.
+  Reads: 3m compression break up, stop 3m box low 27413.00, target trail (2.16R); hit
   the prior RTH high 27462.50 at 05:51.
 Skip: pennant: a 20:09 ET pole up, then 2 candles inside 27102.50-27116.25; expansion 27118.50;
   stop 27102.25, the 15m swing high 27155.75 only 1.35R: no runway -> pass.
@@ -9805,7 +9805,7 @@ Also: `leg` (`origin`, the run's extreme; `extreme`), `ote`, `status`
 
 **Where it works**:
 
-- **Trend pullback** (preferred; `trend-vs-range`): price pulls back to a level, then a CISD back in the trend's direction ends the pullback; a later close is the entry.
+- **Trend pullback** (preferred; `trend-vs-range`): price pulls back to a level, then a CISD back in the trend's direction ends the pullback; the next close is the entry.
 - **Range** (`range`): at an extreme (range high or low, value-area
   edge, prior day), a CISD back toward the middle, aiming at the other
   side.
@@ -9829,27 +9829,27 @@ and close: an engulfing ranks with other strong ones); the 3m only times
 the entry.
 
 **OTE and bounce** (`fib-retracement`): a strong CISD's `leg` gives
-`ote`.
-  Wait for a completed candle closing back the CISD's way in it
-(`candle-reading`); `absorption` in the zone confirms.
-  Never anticipate
-the bounce.
+`ote`: support, never a wait (the 15m CISD is the entry).
+  A completed
+candle closing back the CISD's way in it (`candle-reading`) or
+`absorption` in the zone counts.
+  Never anticipate the bounce.
 
 ## Examples
 
 ```text
-Take: 1h up; pullback to the RTH VWAP 21520.50; 15m bullish CISD, strong; ote 21518.25-21522.50,
-  a 3m close 21525.75 above it.
-  Reads: 15m cisd up, 15m in ote, 3m close top.
+Take: 1h up; pullback to the RTH VWAP 21520.50; 15m bullish CISD, strong, closed 21525.75:
+  the setup and the entry, a limit there.
+  Reads: 15m cisd up.
   Priority order: aligned -> take.
-Take: range 21480.00-21560.00; at the prior VAL 21480.00 a 15m bullish CISD, strong (top third); into the ote
-  V 2.1x with little progress (absorption), then a 3m bounce 21492.25.
-  Reads: at prior val, 15m cisd up, in ote.
+Take: range 21480.00-21560.00; at the prior VAL 21480.00 a 15m bullish CISD, strong (top third), closed 21492.25,
+  V 2.1x, little progress (absorption): setup and entry, a limit there.
+  Reads: at prior val, 15m cisd up.
   Priority order -> take.
 Skip: transition, 15m mixed: chop; 15m bearish CISD at 21640.00.
   Reads: regime transition, 15m cisd down; the priority order (step 3, location) decided skip.
 Loser: 15m bullish CISD after the sweep of the prior RTH low 21402.25;
-  long at 21420.50, stop 21399.75 (20.75 pts = 83 ticks, $41.50 on 1 MNQ);
+  long at 21420.50 (a limit at its close), stop 21399.75 (20.75 pts = 83 ticks, $41.50 on 1 MNQ);
   a 3m close under the origin 21400.75, stopped: -83 ticks, -$41.50.
 ```
 </skill>
@@ -10002,12 +10002,12 @@ legs.
 
 ```text
 Take: at the prior RTH high 21615.00: on the 15m close a shooting star (H 21621.50, C 21608.25),
-  on the 1h close a rejection wick, then on the 3m close a bearish engulfing.
+  on the 1h close a rejection wick, on the 3m close a bearish engulfing: one close.
   Stack agrees.
   Reads: 1h rejected prior rth high down, 3m pattern bearish engulfing.
   Priority order -> take.
 Skip: at the session POC 21522.00, on the 3m close a doji (body 0.25, range 5.50); 15m forming:
-  the entry read not in yet -> pass.
+  no setup yet -> pass.
   The session VAH 0.4R ahead is a read, not the reason.
 Loser: at the prior VAL 21480.00, on the 15m close a hammer (L 21474.50, C 21483.75).
   long at 21483.75, stop 21474.25 (9.50 pts = 38 ticks, $19.00 on 1 MNQ);
@@ -10128,9 +10128,9 @@ points to the read it uses.
    (`rejection`, `breakout`), a CISD (`cisd`), a pullback or a
    reversal (`pullback-vs-reversal`, `bos-vs-choch`).
 3.
-  **3m: the entry timing.** The next 3m close after the setup's, its way
-   (`candle-reading`, `momentum-and-volume`): the entry reads; no 3m turn
-   or break to wait for.
+  **3m: the entry timing.** The setup is the entry, on the next 3m bar:
+   no confirming close, no 3m turn or break to wait for; a 3m read
+   (`candle-reading`, `momentum-and-volume`) is timing context.
 4.
   **Stop: compose's.** One tick beyond the setup's invalidation, as
    a rule its candle's extreme (`invalidation`); never tighter.
@@ -10155,7 +10155,7 @@ NQ, back-adjusted CSV prices:
 ```text
 2022-06-22, trend rule 4h up, long aligned.
   The 15m 12:45 candle rejects the prior
-POC 14942.75 (the setup); the next 3m close, 13:03, closes in its top third:
+POC 14942.75 (the setup and the entry); the head composed on the 13:03 cycle, the limit that bar's close:
 long 14960.00, stop 14938.50 under the 15m low (21.50 pts = 86 ticks, $43.00 per MNQ);
 target trail: the 2R mark 15003.00 armed it; the 15m swing high 15040.25 was reached 14:15.
 2022-08-12, trend rule 4h up.
@@ -10947,8 +10947,8 @@ added nothing measured.
 
 ```text
 Take: (no attempt) 1h up; 3m inside box 27413.00-27422.00 on the prior POC;
-  04:39 ET expansion closed 27428.50 (1.13 ATR, 0.54 beyond, volume 2.69x); 04:42 close 27428.00 top.
-  Reads: 3m compression break up, 3m close top, stop 3m box low 27413.00, target trail (2.26R); hit
+  04:39 ET expansion closed 27428.50 (1.13 ATR, 0.54 beyond, volume 2.69x): the setup and the entry, a limit there.
+  Reads: 3m compression break up, stop 3m box low 27413.00, target trail (2.16R); hit
   the prior RTH high 27462.50 at 05:51.
 Skip: pennant: a 20:09 ET pole up, then 2 candles inside 27102.50-27116.25; expansion 27118.50;
   stop 27102.25, the 15m swing high 27155.75 only 1.35R: no runway -> pass.
@@ -11076,7 +11076,7 @@ Also: `leg` (`origin`, the run's extreme; `extreme`), `ote`, `status`
 
 **Where it works**:
 
-- **Trend pullback** (preferred; `trend-vs-range`): price pulls back to a level, then a CISD back in the trend's direction ends the pullback; a later close is the entry.
+- **Trend pullback** (preferred; `trend-vs-range`): price pulls back to a level, then a CISD back in the trend's direction ends the pullback; the next close is the entry.
 - **Range** (`range`): at an extreme (range high or low, value-area
   edge, prior day), a CISD back toward the middle, aiming at the other
   side.
@@ -11100,27 +11100,27 @@ and close: an engulfing ranks with other strong ones); the 3m only times
 the entry.
 
 **OTE and bounce** (`fib-retracement`): a strong CISD's `leg` gives
-`ote`.
-  Wait for a completed candle closing back the CISD's way in it
-(`candle-reading`); `absorption` in the zone confirms.
-  Never anticipate
-the bounce.
+`ote`: support, never a wait (the 15m CISD is the entry).
+  A completed
+candle closing back the CISD's way in it (`candle-reading`) or
+`absorption` in the zone counts.
+  Never anticipate the bounce.
 
 ## Examples
 
 ```text
-Take: 1h up; pullback to the RTH VWAP 21520.50; 15m bullish CISD, strong; ote 21518.25-21522.50,
-  a 3m close 21525.75 above it.
-  Reads: 15m cisd up, 15m in ote, 3m close top.
+Take: 1h up; pullback to the RTH VWAP 21520.50; 15m bullish CISD, strong, closed 21525.75:
+  the setup and the entry, a limit there.
+  Reads: 15m cisd up.
   Priority order: aligned -> take.
-Take: range 21480.00-21560.00; at the prior VAL 21480.00 a 15m bullish CISD, strong (top third); into the ote
-  V 2.1x with little progress (absorption), then a 3m bounce 21492.25.
-  Reads: at prior val, 15m cisd up, in ote.
+Take: range 21480.00-21560.00; at the prior VAL 21480.00 a 15m bullish CISD, strong (top third), closed 21492.25,
+  V 2.1x, little progress (absorption): setup and entry, a limit there.
+  Reads: at prior val, 15m cisd up.
   Priority order -> take.
 Skip: transition, 15m mixed: chop; 15m bearish CISD at 21640.00.
   Reads: regime transition, 15m cisd down; the priority order (step 3, location) decided skip.
 Loser: 15m bullish CISD after the sweep of the prior RTH low 21402.25;
-  long at 21420.50, stop 21399.75 (20.75 pts = 83 ticks, $41.50 on 1 MNQ);
+  long at 21420.50 (a limit at its close), stop 21399.75 (20.75 pts = 83 ticks, $41.50 on 1 MNQ);
   a 3m close under the origin 21400.75, stopped: -83 ticks, -$41.50.
 ```
 </skill>
@@ -11273,12 +11273,12 @@ legs.
 
 ```text
 Take: at the prior RTH high 21615.00: on the 15m close a shooting star (H 21621.50, C 21608.25),
-  on the 1h close a rejection wick, then on the 3m close a bearish engulfing.
+  on the 1h close a rejection wick, on the 3m close a bearish engulfing: one close.
   Stack agrees.
   Reads: 1h rejected prior rth high down, 3m pattern bearish engulfing.
   Priority order -> take.
 Skip: at the session POC 21522.00, on the 3m close a doji (body 0.25, range 5.50); 15m forming:
-  the entry read not in yet -> pass.
+  no setup yet -> pass.
   The session VAH 0.4R ahead is a read, not the reason.
 Loser: at the prior VAL 21480.00, on the 15m close a hammer (L 21474.50, C 21483.75).
   long at 21483.75, stop 21474.25 (9.50 pts = 38 ticks, $19.00 on 1 MNQ);
@@ -11399,9 +11399,9 @@ points to the read it uses.
    (`rejection`, `breakout`), a CISD (`cisd`), a pullback or a
    reversal (`pullback-vs-reversal`, `bos-vs-choch`).
 3.
-  **3m: the entry timing.** The next 3m close after the setup's, its way
-   (`candle-reading`, `momentum-and-volume`): the entry reads; no 3m turn
-   or break to wait for.
+  **3m: the entry timing.** The setup is the entry, on the next 3m bar:
+   no confirming close, no 3m turn or break to wait for; a 3m read
+   (`candle-reading`, `momentum-and-volume`) is timing context.
 4.
   **Stop: compose's.** One tick beyond the setup's invalidation, as
    a rule its candle's extreme (`invalidation`); never tighter.
@@ -11426,7 +11426,7 @@ NQ, back-adjusted CSV prices:
 ```text
 2022-06-22, trend rule 4h up, long aligned.
   The 15m 12:45 candle rejects the prior
-POC 14942.75 (the setup); the next 3m close, 13:03, closes in its top third:
+POC 14942.75 (the setup and the entry); the head composed on the 13:03 cycle, the limit that bar's close:
 long 14960.00, stop 14938.50 under the 15m low (21.50 pts = 86 ticks, $43.00 per MNQ);
 target trail: the 2R mark 15003.00 armed it; the 15m swing high 15040.25 was reached 14:15.
 2022-08-12, trend rule 4h up.
@@ -12274,7 +12274,7 @@ Also: `leg` (`origin`, the run's extreme; `extreme`), `ote`, `status`
 
 **Where it works**:
 
-- **Trend pullback** (preferred; `trend-vs-range`): price pulls back to a level, then a CISD back in the trend's direction ends the pullback; a later close is the entry.
+- **Trend pullback** (preferred; `trend-vs-range`): price pulls back to a level, then a CISD back in the trend's direction ends the pullback; the next close is the entry.
 - **Range** (`range`): at an extreme (range high or low, value-area
   edge, prior day), a CISD back toward the middle, aiming at the other
   side.
@@ -12298,27 +12298,27 @@ and close: an engulfing ranks with other strong ones); the 3m only times
 the entry.
 
 **OTE and bounce** (`fib-retracement`): a strong CISD's `leg` gives
-`ote`.
-  Wait for a completed candle closing back the CISD's way in it
-(`candle-reading`); `absorption` in the zone confirms.
-  Never anticipate
-the bounce.
+`ote`: support, never a wait (the 15m CISD is the entry).
+  A completed
+candle closing back the CISD's way in it (`candle-reading`) or
+`absorption` in the zone counts.
+  Never anticipate the bounce.
 
 ## Examples
 
 ```text
-Take: 1h up; pullback to the RTH VWAP 21520.50; 15m bullish CISD, strong; ote 21518.25-21522.50,
-  a 3m close 21525.75 above it.
-  Reads: 15m cisd up, 15m in ote, 3m close top.
+Take: 1h up; pullback to the RTH VWAP 21520.50; 15m bullish CISD, strong, closed 21525.75:
+  the setup and the entry, a limit there.
+  Reads: 15m cisd up.
   Priority order: aligned -> take.
-Take: range 21480.00-21560.00; at the prior VAL 21480.00 a 15m bullish CISD, strong (top third); into the ote
-  V 2.1x with little progress (absorption), then a 3m bounce 21492.25.
-  Reads: at prior val, 15m cisd up, in ote.
+Take: range 21480.00-21560.00; at the prior VAL 21480.00 a 15m bullish CISD, strong (top third), closed 21492.25,
+  V 2.1x, little progress (absorption): setup and entry, a limit there.
+  Reads: at prior val, 15m cisd up.
   Priority order -> take.
 Skip: transition, 15m mixed: chop; 15m bearish CISD at 21640.00.
   Reads: regime transition, 15m cisd down; the priority order (step 3, location) decided skip.
 Loser: 15m bullish CISD after the sweep of the prior RTH low 21402.25;
-  long at 21420.50, stop 21399.75 (20.75 pts = 83 ticks, $41.50 on 1 MNQ);
+  long at 21420.50 (a limit at its close), stop 21399.75 (20.75 pts = 83 ticks, $41.50 on 1 MNQ);
   a 3m close under the origin 21400.75, stopped: -83 ticks, -$41.50.
 ```
 </skill>
@@ -12471,12 +12471,12 @@ legs.
 
 ```text
 Take: at the prior RTH high 21615.00: on the 15m close a shooting star (H 21621.50, C 21608.25),
-  on the 1h close a rejection wick, then on the 3m close a bearish engulfing.
+  on the 1h close a rejection wick, on the 3m close a bearish engulfing: one close.
   Stack agrees.
   Reads: 1h rejected prior rth high down, 3m pattern bearish engulfing.
   Priority order -> take.
 Skip: at the session POC 21522.00, on the 3m close a doji (body 0.25, range 5.50); 15m forming:
-  the entry read not in yet -> pass.
+  no setup yet -> pass.
   The session VAH 0.4R ahead is a read, not the reason.
 Loser: at the prior VAL 21480.00, on the 15m close a hammer (L 21474.50, C 21483.75).
   long at 21483.75, stop 21474.25 (9.50 pts = 38 ticks, $19.00 on 1 MNQ);
@@ -12597,9 +12597,9 @@ points to the read it uses.
    (`rejection`, `breakout`), a CISD (`cisd`), a pullback or a
    reversal (`pullback-vs-reversal`, `bos-vs-choch`).
 3.
-  **3m: the entry timing.** The next 3m close after the setup's, its way
-   (`candle-reading`, `momentum-and-volume`): the entry reads; no 3m turn
-   or break to wait for.
+  **3m: the entry timing.** The setup is the entry, on the next 3m bar:
+   no confirming close, no 3m turn or break to wait for; a 3m read
+   (`candle-reading`, `momentum-and-volume`) is timing context.
 4.
   **Stop: compose's.** One tick beyond the setup's invalidation, as
    a rule its candle's extreme (`invalidation`); never tighter.
@@ -12624,7 +12624,7 @@ NQ, back-adjusted CSV prices:
 ```text
 2022-06-22, trend rule 4h up, long aligned.
   The 15m 12:45 candle rejects the prior
-POC 14942.75 (the setup); the next 3m close, 13:03, closes in its top third:
+POC 14942.75 (the setup and the entry); the head composed on the 13:03 cycle, the limit that bar's close:
 long 14960.00, stop 14938.50 under the 15m low (21.50 pts = 86 ticks, $43.00 per MNQ);
 target trail: the 2R mark 15003.00 armed it; the 15m swing high 15040.25 was reached 14:15.
 2022-08-12, trend rule 4h up.
@@ -13425,8 +13425,8 @@ added nothing measured.
 
 ```text
 Take: (no attempt) 1h up; 3m inside box 27413.00-27422.00 on the prior POC;
-  04:39 ET expansion closed 27428.50 (1.13 ATR, 0.54 beyond, volume 2.69x); 04:42 close 27428.00 top.
-  Reads: 3m compression break up, 3m close top, stop 3m box low 27413.00, target trail (2.26R); hit
+  04:39 ET expansion closed 27428.50 (1.13 ATR, 0.54 beyond, volume 2.69x): the setup and the entry, a limit there.
+  Reads: 3m compression break up, stop 3m box low 27413.00, target trail (2.16R); hit
   the prior RTH high 27462.50 at 05:51.
 Skip: pennant: a 20:09 ET pole up, then 2 candles inside 27102.50-27116.25; expansion 27118.50;
   stop 27102.25, the 15m swing high 27155.75 only 1.35R: no runway -> pass.
@@ -13554,7 +13554,7 @@ Also: `leg` (`origin`, the run's extreme; `extreme`), `ote`, `status`
 
 **Where it works**:
 
-- **Trend pullback** (preferred; `trend-vs-range`): price pulls back to a level, then a CISD back in the trend's direction ends the pullback; a later close is the entry.
+- **Trend pullback** (preferred; `trend-vs-range`): price pulls back to a level, then a CISD back in the trend's direction ends the pullback; the next close is the entry.
 - **Range** (`range`): at an extreme (range high or low, value-area
   edge, prior day), a CISD back toward the middle, aiming at the other
   side.
@@ -13578,27 +13578,27 @@ and close: an engulfing ranks with other strong ones); the 3m only times
 the entry.
 
 **OTE and bounce** (`fib-retracement`): a strong CISD's `leg` gives
-`ote`.
-  Wait for a completed candle closing back the CISD's way in it
-(`candle-reading`); `absorption` in the zone confirms.
-  Never anticipate
-the bounce.
+`ote`: support, never a wait (the 15m CISD is the entry).
+  A completed
+candle closing back the CISD's way in it (`candle-reading`) or
+`absorption` in the zone counts.
+  Never anticipate the bounce.
 
 ## Examples
 
 ```text
-Take: 1h up; pullback to the RTH VWAP 21520.50; 15m bullish CISD, strong; ote 21518.25-21522.50,
-  a 3m close 21525.75 above it.
-  Reads: 15m cisd up, 15m in ote, 3m close top.
+Take: 1h up; pullback to the RTH VWAP 21520.50; 15m bullish CISD, strong, closed 21525.75:
+  the setup and the entry, a limit there.
+  Reads: 15m cisd up.
   Priority order: aligned -> take.
-Take: range 21480.00-21560.00; at the prior VAL 21480.00 a 15m bullish CISD, strong (top third); into the ote
-  V 2.1x with little progress (absorption), then a 3m bounce 21492.25.
-  Reads: at prior val, 15m cisd up, in ote.
+Take: range 21480.00-21560.00; at the prior VAL 21480.00 a 15m bullish CISD, strong (top third), closed 21492.25,
+  V 2.1x, little progress (absorption): setup and entry, a limit there.
+  Reads: at prior val, 15m cisd up.
   Priority order -> take.
 Skip: transition, 15m mixed: chop; 15m bearish CISD at 21640.00.
   Reads: regime transition, 15m cisd down; the priority order (step 3, location) decided skip.
 Loser: 15m bullish CISD after the sweep of the prior RTH low 21402.25;
-  long at 21420.50, stop 21399.75 (20.75 pts = 83 ticks, $41.50 on 1 MNQ);
+  long at 21420.50 (a limit at its close), stop 21399.75 (20.75 pts = 83 ticks, $41.50 on 1 MNQ);
   a 3m close under the origin 21400.75, stopped: -83 ticks, -$41.50.
 ```
 </skill>
@@ -13751,12 +13751,12 @@ legs.
 
 ```text
 Take: at the prior RTH high 21615.00: on the 15m close a shooting star (H 21621.50, C 21608.25),
-  on the 1h close a rejection wick, then on the 3m close a bearish engulfing.
+  on the 1h close a rejection wick, on the 3m close a bearish engulfing: one close.
   Stack agrees.
   Reads: 1h rejected prior rth high down, 3m pattern bearish engulfing.
   Priority order -> take.
 Skip: at the session POC 21522.00, on the 3m close a doji (body 0.25, range 5.50); 15m forming:
-  the entry read not in yet -> pass.
+  no setup yet -> pass.
   The session VAH 0.4R ahead is a read, not the reason.
 Loser: at the prior VAL 21480.00, on the 15m close a hammer (L 21474.50, C 21483.75).
   long at 21483.75, stop 21474.25 (9.50 pts = 38 ticks, $19.00 on 1 MNQ);
@@ -13877,9 +13877,9 @@ points to the read it uses.
    (`rejection`, `breakout`), a CISD (`cisd`), a pullback or a
    reversal (`pullback-vs-reversal`, `bos-vs-choch`).
 3.
-  **3m: the entry timing.** The next 3m close after the setup's, its way
-   (`candle-reading`, `momentum-and-volume`): the entry reads; no 3m turn
-   or break to wait for.
+  **3m: the entry timing.** The setup is the entry, on the next 3m bar:
+   no confirming close, no 3m turn or break to wait for; a 3m read
+   (`candle-reading`, `momentum-and-volume`) is timing context.
 4.
   **Stop: compose's.** One tick beyond the setup's invalidation, as
    a rule its candle's extreme (`invalidation`); never tighter.
@@ -13904,7 +13904,7 @@ NQ, back-adjusted CSV prices:
 ```text
 2022-06-22, trend rule 4h up, long aligned.
   The 15m 12:45 candle rejects the prior
-POC 14942.75 (the setup); the next 3m close, 13:03, closes in its top third:
+POC 14942.75 (the setup and the entry); the head composed on the 13:03 cycle, the limit that bar's close:
 long 14960.00, stop 14938.50 under the 15m low (21.50 pts = 86 ticks, $43.00 per MNQ);
 target trail: the 2R mark 15003.00 armed it; the 15m swing high 15040.25 was reached 14:15.
 2022-08-12, trend rule 4h up.
@@ -14696,8 +14696,8 @@ added nothing measured.
 
 ```text
 Take: (no attempt) 1h up; 3m inside box 27413.00-27422.00 on the prior POC;
-  04:39 ET expansion closed 27428.50 (1.13 ATR, 0.54 beyond, volume 2.69x); 04:42 close 27428.00 top.
-  Reads: 3m compression break up, 3m close top, stop 3m box low 27413.00, target trail (2.26R); hit
+  04:39 ET expansion closed 27428.50 (1.13 ATR, 0.54 beyond, volume 2.69x): the setup and the entry, a limit there.
+  Reads: 3m compression break up, stop 3m box low 27413.00, target trail (2.16R); hit
   the prior RTH high 27462.50 at 05:51.
 Skip: pennant: a 20:09 ET pole up, then 2 candles inside 27102.50-27116.25; expansion 27118.50;
   stop 27102.25, the 15m swing high 27155.75 only 1.35R: no runway -> pass.
@@ -14825,7 +14825,7 @@ Also: `leg` (`origin`, the run's extreme; `extreme`), `ote`, `status`
 
 **Where it works**:
 
-- **Trend pullback** (preferred; `trend-vs-range`): price pulls back to a level, then a CISD back in the trend's direction ends the pullback; a later close is the entry.
+- **Trend pullback** (preferred; `trend-vs-range`): price pulls back to a level, then a CISD back in the trend's direction ends the pullback; the next close is the entry.
 - **Range** (`range`): at an extreme (range high or low, value-area
   edge, prior day), a CISD back toward the middle, aiming at the other
   side.
@@ -14849,27 +14849,27 @@ and close: an engulfing ranks with other strong ones); the 3m only times
 the entry.
 
 **OTE and bounce** (`fib-retracement`): a strong CISD's `leg` gives
-`ote`.
-  Wait for a completed candle closing back the CISD's way in it
-(`candle-reading`); `absorption` in the zone confirms.
-  Never anticipate
-the bounce.
+`ote`: support, never a wait (the 15m CISD is the entry).
+  A completed
+candle closing back the CISD's way in it (`candle-reading`) or
+`absorption` in the zone counts.
+  Never anticipate the bounce.
 
 ## Examples
 
 ```text
-Take: 1h up; pullback to the RTH VWAP 21520.50; 15m bullish CISD, strong; ote 21518.25-21522.50,
-  a 3m close 21525.75 above it.
-  Reads: 15m cisd up, 15m in ote, 3m close top.
+Take: 1h up; pullback to the RTH VWAP 21520.50; 15m bullish CISD, strong, closed 21525.75:
+  the setup and the entry, a limit there.
+  Reads: 15m cisd up.
   Priority order: aligned -> take.
-Take: range 21480.00-21560.00; at the prior VAL 21480.00 a 15m bullish CISD, strong (top third); into the ote
-  V 2.1x with little progress (absorption), then a 3m bounce 21492.25.
-  Reads: at prior val, 15m cisd up, in ote.
+Take: range 21480.00-21560.00; at the prior VAL 21480.00 a 15m bullish CISD, strong (top third), closed 21492.25,
+  V 2.1x, little progress (absorption): setup and entry, a limit there.
+  Reads: at prior val, 15m cisd up.
   Priority order -> take.
 Skip: transition, 15m mixed: chop; 15m bearish CISD at 21640.00.
   Reads: regime transition, 15m cisd down; the priority order (step 3, location) decided skip.
 Loser: 15m bullish CISD after the sweep of the prior RTH low 21402.25;
-  long at 21420.50, stop 21399.75 (20.75 pts = 83 ticks, $41.50 on 1 MNQ);
+  long at 21420.50 (a limit at its close), stop 21399.75 (20.75 pts = 83 ticks, $41.50 on 1 MNQ);
   a 3m close under the origin 21400.75, stopped: -83 ticks, -$41.50.
 ```
 </skill>
@@ -15022,12 +15022,12 @@ legs.
 
 ```text
 Take: at the prior RTH high 21615.00: on the 15m close a shooting star (H 21621.50, C 21608.25),
-  on the 1h close a rejection wick, then on the 3m close a bearish engulfing.
+  on the 1h close a rejection wick, on the 3m close a bearish engulfing: one close.
   Stack agrees.
   Reads: 1h rejected prior rth high down, 3m pattern bearish engulfing.
   Priority order -> take.
 Skip: at the session POC 21522.00, on the 3m close a doji (body 0.25, range 5.50); 15m forming:
-  the entry read not in yet -> pass.
+  no setup yet -> pass.
   The session VAH 0.4R ahead is a read, not the reason.
 Loser: at the prior VAL 21480.00, on the 15m close a hammer (L 21474.50, C 21483.75).
   long at 21483.75, stop 21474.25 (9.50 pts = 38 ticks, $19.00 on 1 MNQ);
@@ -15148,9 +15148,9 @@ points to the read it uses.
    (`rejection`, `breakout`), a CISD (`cisd`), a pullback or a
    reversal (`pullback-vs-reversal`, `bos-vs-choch`).
 3.
-  **3m: the entry timing.** The next 3m close after the setup's, its way
-   (`candle-reading`, `momentum-and-volume`): the entry reads; no 3m turn
-   or break to wait for.
+  **3m: the entry timing.** The setup is the entry, on the next 3m bar:
+   no confirming close, no 3m turn or break to wait for; a 3m read
+   (`candle-reading`, `momentum-and-volume`) is timing context.
 4.
   **Stop: compose's.** One tick beyond the setup's invalidation, as
    a rule its candle's extreme (`invalidation`); never tighter.
@@ -15175,7 +15175,7 @@ NQ, back-adjusted CSV prices:
 ```text
 2022-06-22, trend rule 4h up, long aligned.
   The 15m 12:45 candle rejects the prior
-POC 14942.75 (the setup); the next 3m close, 13:03, closes in its top third:
+POC 14942.75 (the setup and the entry); the head composed on the 13:03 cycle, the limit that bar's close:
 long 14960.00, stop 14938.50 under the 15m low (21.50 pts = 86 ticks, $43.00 per MNQ);
 target trail: the 2R mark 15003.00 armed it; the 15m swing high 15040.25 was reached 14:15.
 2022-08-12, trend rule 4h up.
@@ -15967,8 +15967,8 @@ added nothing measured.
 
 ```text
 Take: (no attempt) 1h up; 3m inside box 27413.00-27422.00 on the prior POC;
-  04:39 ET expansion closed 27428.50 (1.13 ATR, 0.54 beyond, volume 2.69x); 04:42 close 27428.00 top.
-  Reads: 3m compression break up, 3m close top, stop 3m box low 27413.00, target trail (2.26R); hit
+  04:39 ET expansion closed 27428.50 (1.13 ATR, 0.54 beyond, volume 2.69x): the setup and the entry, a limit there.
+  Reads: 3m compression break up, stop 3m box low 27413.00, target trail (2.16R); hit
   the prior RTH high 27462.50 at 05:51.
 Skip: pennant: a 20:09 ET pole up, then 2 candles inside 27102.50-27116.25; expansion 27118.50;
   stop 27102.25, the 15m swing high 27155.75 only 1.35R: no runway -> pass.
@@ -16096,7 +16096,7 @@ Also: `leg` (`origin`, the run's extreme; `extreme`), `ote`, `status`
 
 **Where it works**:
 
-- **Trend pullback** (preferred; `trend-vs-range`): price pulls back to a level, then a CISD back in the trend's direction ends the pullback; a later close is the entry.
+- **Trend pullback** (preferred; `trend-vs-range`): price pulls back to a level, then a CISD back in the trend's direction ends the pullback; the next close is the entry.
 - **Range** (`range`): at an extreme (range high or low, value-area
   edge, prior day), a CISD back toward the middle, aiming at the other
   side.
@@ -16120,27 +16120,27 @@ and close: an engulfing ranks with other strong ones); the 3m only times
 the entry.
 
 **OTE and bounce** (`fib-retracement`): a strong CISD's `leg` gives
-`ote`.
-  Wait for a completed candle closing back the CISD's way in it
-(`candle-reading`); `absorption` in the zone confirms.
-  Never anticipate
-the bounce.
+`ote`: support, never a wait (the 15m CISD is the entry).
+  A completed
+candle closing back the CISD's way in it (`candle-reading`) or
+`absorption` in the zone counts.
+  Never anticipate the bounce.
 
 ## Examples
 
 ```text
-Take: 1h up; pullback to the RTH VWAP 21520.50; 15m bullish CISD, strong; ote 21518.25-21522.50,
-  a 3m close 21525.75 above it.
-  Reads: 15m cisd up, 15m in ote, 3m close top.
+Take: 1h up; pullback to the RTH VWAP 21520.50; 15m bullish CISD, strong, closed 21525.75:
+  the setup and the entry, a limit there.
+  Reads: 15m cisd up.
   Priority order: aligned -> take.
-Take: range 21480.00-21560.00; at the prior VAL 21480.00 a 15m bullish CISD, strong (top third); into the ote
-  V 2.1x with little progress (absorption), then a 3m bounce 21492.25.
-  Reads: at prior val, 15m cisd up, in ote.
+Take: range 21480.00-21560.00; at the prior VAL 21480.00 a 15m bullish CISD, strong (top third), closed 21492.25,
+  V 2.1x, little progress (absorption): setup and entry, a limit there.
+  Reads: at prior val, 15m cisd up.
   Priority order -> take.
 Skip: transition, 15m mixed: chop; 15m bearish CISD at 21640.00.
   Reads: regime transition, 15m cisd down; the priority order (step 3, location) decided skip.
 Loser: 15m bullish CISD after the sweep of the prior RTH low 21402.25;
-  long at 21420.50, stop 21399.75 (20.75 pts = 83 ticks, $41.50 on 1 MNQ);
+  long at 21420.50 (a limit at its close), stop 21399.75 (20.75 pts = 83 ticks, $41.50 on 1 MNQ);
   a 3m close under the origin 21400.75, stopped: -83 ticks, -$41.50.
 ```
 </skill>
@@ -16293,12 +16293,12 @@ legs.
 
 ```text
 Take: at the prior RTH high 21615.00: on the 15m close a shooting star (H 21621.50, C 21608.25),
-  on the 1h close a rejection wick, then on the 3m close a bearish engulfing.
+  on the 1h close a rejection wick, on the 3m close a bearish engulfing: one close.
   Stack agrees.
   Reads: 1h rejected prior rth high down, 3m pattern bearish engulfing.
   Priority order -> take.
 Skip: at the session POC 21522.00, on the 3m close a doji (body 0.25, range 5.50); 15m forming:
-  the entry read not in yet -> pass.
+  no setup yet -> pass.
   The session VAH 0.4R ahead is a read, not the reason.
 Loser: at the prior VAL 21480.00, on the 15m close a hammer (L 21474.50, C 21483.75).
   long at 21483.75, stop 21474.25 (9.50 pts = 38 ticks, $19.00 on 1 MNQ);
@@ -16419,9 +16419,9 @@ points to the read it uses.
    (`rejection`, `breakout`), a CISD (`cisd`), a pullback or a
    reversal (`pullback-vs-reversal`, `bos-vs-choch`).
 3.
-  **3m: the entry timing.** The next 3m close after the setup's, its way
-   (`candle-reading`, `momentum-and-volume`): the entry reads; no 3m turn
-   or break to wait for.
+  **3m: the entry timing.** The setup is the entry, on the next 3m bar:
+   no confirming close, no 3m turn or break to wait for; a 3m read
+   (`candle-reading`, `momentum-and-volume`) is timing context.
 4.
   **Stop: compose's.** One tick beyond the setup's invalidation, as
    a rule its candle's extreme (`invalidation`); never tighter.
@@ -16446,7 +16446,7 @@ NQ, back-adjusted CSV prices:
 ```text
 2022-06-22, trend rule 4h up, long aligned.
   The 15m 12:45 candle rejects the prior
-POC 14942.75 (the setup); the next 3m close, 13:03, closes in its top third:
+POC 14942.75 (the setup and the entry); the head composed on the 13:03 cycle, the limit that bar's close:
 long 14960.00, stop 14938.50 under the 15m low (21.50 pts = 86 ticks, $43.00 per MNQ);
 target trail: the 2R mark 15003.00 armed it; the 15m swing high 15040.25 was reached 14:15.
 2022-08-12, trend rule 4h up.
@@ -17247,8 +17247,8 @@ added nothing measured.
 
 ```text
 Take: (no attempt) 1h up; 3m inside box 27413.00-27422.00 on the prior POC;
-  04:39 ET expansion closed 27428.50 (1.13 ATR, 0.54 beyond, volume 2.69x); 04:42 close 27428.00 top.
-  Reads: 3m compression break up, 3m close top, stop 3m box low 27413.00, target trail (2.26R); hit
+  04:39 ET expansion closed 27428.50 (1.13 ATR, 0.54 beyond, volume 2.69x): the setup and the entry, a limit there.
+  Reads: 3m compression break up, stop 3m box low 27413.00, target trail (2.16R); hit
   the prior RTH high 27462.50 at 05:51.
 Skip: pennant: a 20:09 ET pole up, then 2 candles inside 27102.50-27116.25; expansion 27118.50;
   stop 27102.25, the 15m swing high 27155.75 only 1.35R: no runway -> pass.
@@ -17376,7 +17376,7 @@ Also: `leg` (`origin`, the run's extreme; `extreme`), `ote`, `status`
 
 **Where it works**:
 
-- **Trend pullback** (preferred; `trend-vs-range`): price pulls back to a level, then a CISD back in the trend's direction ends the pullback; a later close is the entry.
+- **Trend pullback** (preferred; `trend-vs-range`): price pulls back to a level, then a CISD back in the trend's direction ends the pullback; the next close is the entry.
 - **Range** (`range`): at an extreme (range high or low, value-area
   edge, prior day), a CISD back toward the middle, aiming at the other
   side.
@@ -17400,27 +17400,27 @@ and close: an engulfing ranks with other strong ones); the 3m only times
 the entry.
 
 **OTE and bounce** (`fib-retracement`): a strong CISD's `leg` gives
-`ote`.
-  Wait for a completed candle closing back the CISD's way in it
-(`candle-reading`); `absorption` in the zone confirms.
-  Never anticipate
-the bounce.
+`ote`: support, never a wait (the 15m CISD is the entry).
+  A completed
+candle closing back the CISD's way in it (`candle-reading`) or
+`absorption` in the zone counts.
+  Never anticipate the bounce.
 
 ## Examples
 
 ```text
-Take: 1h up; pullback to the RTH VWAP 21520.50; 15m bullish CISD, strong; ote 21518.25-21522.50,
-  a 3m close 21525.75 above it.
-  Reads: 15m cisd up, 15m in ote, 3m close top.
+Take: 1h up; pullback to the RTH VWAP 21520.50; 15m bullish CISD, strong, closed 21525.75:
+  the setup and the entry, a limit there.
+  Reads: 15m cisd up.
   Priority order: aligned -> take.
-Take: range 21480.00-21560.00; at the prior VAL 21480.00 a 15m bullish CISD, strong (top third); into the ote
-  V 2.1x with little progress (absorption), then a 3m bounce 21492.25.
-  Reads: at prior val, 15m cisd up, in ote.
+Take: range 21480.00-21560.00; at the prior VAL 21480.00 a 15m bullish CISD, strong (top third), closed 21492.25,
+  V 2.1x, little progress (absorption): setup and entry, a limit there.
+  Reads: at prior val, 15m cisd up.
   Priority order -> take.
 Skip: transition, 15m mixed: chop; 15m bearish CISD at 21640.00.
   Reads: regime transition, 15m cisd down; the priority order (step 3, location) decided skip.
 Loser: 15m bullish CISD after the sweep of the prior RTH low 21402.25;
-  long at 21420.50, stop 21399.75 (20.75 pts = 83 ticks, $41.50 on 1 MNQ);
+  long at 21420.50 (a limit at its close), stop 21399.75 (20.75 pts = 83 ticks, $41.50 on 1 MNQ);
   a 3m close under the origin 21400.75, stopped: -83 ticks, -$41.50.
 ```
 </skill>
@@ -17573,12 +17573,12 @@ legs.
 
 ```text
 Take: at the prior RTH high 21615.00: on the 15m close a shooting star (H 21621.50, C 21608.25),
-  on the 1h close a rejection wick, then on the 3m close a bearish engulfing.
+  on the 1h close a rejection wick, on the 3m close a bearish engulfing: one close.
   Stack agrees.
   Reads: 1h rejected prior rth high down, 3m pattern bearish engulfing.
   Priority order -> take.
 Skip: at the session POC 21522.00, on the 3m close a doji (body 0.25, range 5.50); 15m forming:
-  the entry read not in yet -> pass.
+  no setup yet -> pass.
   The session VAH 0.4R ahead is a read, not the reason.
 Loser: at the prior VAL 21480.00, on the 15m close a hammer (L 21474.50, C 21483.75).
   long at 21483.75, stop 21474.25 (9.50 pts = 38 ticks, $19.00 on 1 MNQ);
@@ -17699,9 +17699,9 @@ points to the read it uses.
    (`rejection`, `breakout`), a CISD (`cisd`), a pullback or a
    reversal (`pullback-vs-reversal`, `bos-vs-choch`).
 3.
-  **3m: the entry timing.** The next 3m close after the setup's, its way
-   (`candle-reading`, `momentum-and-volume`): the entry reads; no 3m turn
-   or break to wait for.
+  **3m: the entry timing.** The setup is the entry, on the next 3m bar:
+   no confirming close, no 3m turn or break to wait for; a 3m read
+   (`candle-reading`, `momentum-and-volume`) is timing context.
 4.
   **Stop: compose's.** One tick beyond the setup's invalidation, as
    a rule its candle's extreme (`invalidation`); never tighter.
@@ -17726,7 +17726,7 @@ NQ, back-adjusted CSV prices:
 ```text
 2022-06-22, trend rule 4h up, long aligned.
   The 15m 12:45 candle rejects the prior
-POC 14942.75 (the setup); the next 3m close, 13:03, closes in its top third:
+POC 14942.75 (the setup and the entry); the head composed on the 13:03 cycle, the limit that bar's close:
 long 14960.00, stop 14938.50 under the 15m low (21.50 pts = 86 ticks, $43.00 per MNQ);
 target trail: the 2R mark 15003.00 armed it; the 15m swing high 15040.25 was reached 14:15.
 2022-08-12, trend rule 4h up.
@@ -18450,8 +18450,8 @@ added nothing measured.
 
 ```text
 Take: (no attempt) 1h up; 3m inside box 27413.00-27422.00 on the prior POC;
-  04:39 ET expansion closed 27428.50 (1.13 ATR, 0.54 beyond, volume 2.69x); 04:42 close 27428.00 top.
-  Reads: 3m compression break up, 3m close top, stop 3m box low 27413.00, target trail (2.26R); hit
+  04:39 ET expansion closed 27428.50 (1.13 ATR, 0.54 beyond, volume 2.69x): the setup and the entry, a limit there.
+  Reads: 3m compression break up, stop 3m box low 27413.00, target trail (2.16R); hit
   the prior RTH high 27462.50 at 05:51.
 Skip: pennant: a 20:09 ET pole up, then 2 candles inside 27102.50-27116.25; expansion 27118.50;
   stop 27102.25, the 15m swing high 27155.75 only 1.35R: no runway -> pass.
@@ -18579,7 +18579,7 @@ Also: `leg` (`origin`, the run's extreme; `extreme`), `ote`, `status`
 
 **Where it works**:
 
-- **Trend pullback** (preferred; `trend-vs-range`): price pulls back to a level, then a CISD back in the trend's direction ends the pullback; a later close is the entry.
+- **Trend pullback** (preferred; `trend-vs-range`): price pulls back to a level, then a CISD back in the trend's direction ends the pullback; the next close is the entry.
 - **Range** (`range`): at an extreme (range high or low, value-area
   edge, prior day), a CISD back toward the middle, aiming at the other
   side.
@@ -18603,27 +18603,27 @@ and close: an engulfing ranks with other strong ones); the 3m only times
 the entry.
 
 **OTE and bounce** (`fib-retracement`): a strong CISD's `leg` gives
-`ote`.
-  Wait for a completed candle closing back the CISD's way in it
-(`candle-reading`); `absorption` in the zone confirms.
-  Never anticipate
-the bounce.
+`ote`: support, never a wait (the 15m CISD is the entry).
+  A completed
+candle closing back the CISD's way in it (`candle-reading`) or
+`absorption` in the zone counts.
+  Never anticipate the bounce.
 
 ## Examples
 
 ```text
-Take: 1h up; pullback to the RTH VWAP 21520.50; 15m bullish CISD, strong; ote 21518.25-21522.50,
-  a 3m close 21525.75 above it.
-  Reads: 15m cisd up, 15m in ote, 3m close top.
+Take: 1h up; pullback to the RTH VWAP 21520.50; 15m bullish CISD, strong, closed 21525.75:
+  the setup and the entry, a limit there.
+  Reads: 15m cisd up.
   Priority order: aligned -> take.
-Take: range 21480.00-21560.00; at the prior VAL 21480.00 a 15m bullish CISD, strong (top third); into the ote
-  V 2.1x with little progress (absorption), then a 3m bounce 21492.25.
-  Reads: at prior val, 15m cisd up, in ote.
+Take: range 21480.00-21560.00; at the prior VAL 21480.00 a 15m bullish CISD, strong (top third), closed 21492.25,
+  V 2.1x, little progress (absorption): setup and entry, a limit there.
+  Reads: at prior val, 15m cisd up.
   Priority order -> take.
 Skip: transition, 15m mixed: chop; 15m bearish CISD at 21640.00.
   Reads: regime transition, 15m cisd down; the priority order (step 3, location) decided skip.
 Loser: 15m bullish CISD after the sweep of the prior RTH low 21402.25;
-  long at 21420.50, stop 21399.75 (20.75 pts = 83 ticks, $41.50 on 1 MNQ);
+  long at 21420.50 (a limit at its close), stop 21399.75 (20.75 pts = 83 ticks, $41.50 on 1 MNQ);
   a 3m close under the origin 21400.75, stopped: -83 ticks, -$41.50.
 ```
 </skill>
@@ -18776,12 +18776,12 @@ legs.
 
 ```text
 Take: at the prior RTH high 21615.00: on the 15m close a shooting star (H 21621.50, C 21608.25),
-  on the 1h close a rejection wick, then on the 3m close a bearish engulfing.
+  on the 1h close a rejection wick, on the 3m close a bearish engulfing: one close.
   Stack agrees.
   Reads: 1h rejected prior rth high down, 3m pattern bearish engulfing.
   Priority order -> take.
 Skip: at the session POC 21522.00, on the 3m close a doji (body 0.25, range 5.50); 15m forming:
-  the entry read not in yet -> pass.
+  no setup yet -> pass.
   The session VAH 0.4R ahead is a read, not the reason.
 Loser: at the prior VAL 21480.00, on the 15m close a hammer (L 21474.50, C 21483.75).
   long at 21483.75, stop 21474.25 (9.50 pts = 38 ticks, $19.00 on 1 MNQ);
@@ -18902,9 +18902,9 @@ points to the read it uses.
    (`rejection`, `breakout`), a CISD (`cisd`), a pullback or a
    reversal (`pullback-vs-reversal`, `bos-vs-choch`).
 3.
-  **3m: the entry timing.** The next 3m close after the setup's, its way
-   (`candle-reading`, `momentum-and-volume`): the entry reads; no 3m turn
-   or break to wait for.
+  **3m: the entry timing.** The setup is the entry, on the next 3m bar:
+   no confirming close, no 3m turn or break to wait for; a 3m read
+   (`candle-reading`, `momentum-and-volume`) is timing context.
 4.
   **Stop: compose's.** One tick beyond the setup's invalidation, as
    a rule its candle's extreme (`invalidation`); never tighter.
@@ -18929,7 +18929,7 @@ NQ, back-adjusted CSV prices:
 ```text
 2022-06-22, trend rule 4h up, long aligned.
   The 15m 12:45 candle rejects the prior
-POC 14942.75 (the setup); the next 3m close, 13:03, closes in its top third:
+POC 14942.75 (the setup and the entry); the head composed on the 13:03 cycle, the limit that bar's close:
 long 14960.00, stop 14938.50 under the 15m low (21.50 pts = 86 ticks, $43.00 per MNQ);
 target trail: the 2R mark 15003.00 armed it; the 15m swing high 15040.25 was reached 14:15.
 2022-08-12, trend rule 4h up.
@@ -19814,12 +19814,12 @@ legs.
 
 ```text
 Take: at the prior RTH high 21615.00: on the 15m close a shooting star (H 21621.50, C 21608.25),
-  on the 1h close a rejection wick, then on the 3m close a bearish engulfing.
+  on the 1h close a rejection wick, on the 3m close a bearish engulfing: one close.
   Stack agrees.
   Reads: 1h rejected prior rth high down, 3m pattern bearish engulfing.
   Priority order -> take.
 Skip: at the session POC 21522.00, on the 3m close a doji (body 0.25, range 5.50); 15m forming:
-  the entry read not in yet -> pass.
+  no setup yet -> pass.
   The session VAH 0.4R ahead is a read, not the reason.
 Loser: at the prior VAL 21480.00, on the 15m close a hammer (L 21474.50, C 21483.75).
   long at 21483.75, stop 21474.25 (9.50 pts = 38 ticks, $19.00 on 1 MNQ);
@@ -19940,9 +19940,9 @@ points to the read it uses.
    (`rejection`, `breakout`), a CISD (`cisd`), a pullback or a
    reversal (`pullback-vs-reversal`, `bos-vs-choch`).
 3.
-  **3m: the entry timing.** The next 3m close after the setup's, its way
-   (`candle-reading`, `momentum-and-volume`): the entry reads; no 3m turn
-   or break to wait for.
+  **3m: the entry timing.** The setup is the entry, on the next 3m bar:
+   no confirming close, no 3m turn or break to wait for; a 3m read
+   (`candle-reading`, `momentum-and-volume`) is timing context.
 4.
   **Stop: compose's.** One tick beyond the setup's invalidation, as
    a rule its candle's extreme (`invalidation`); never tighter.
@@ -19967,7 +19967,7 @@ NQ, back-adjusted CSV prices:
 ```text
 2022-06-22, trend rule 4h up, long aligned.
   The 15m 12:45 candle rejects the prior
-POC 14942.75 (the setup); the next 3m close, 13:03, closes in its top third:
+POC 14942.75 (the setup and the entry); the head composed on the 13:03 cycle, the limit that bar's close:
 long 14960.00, stop 14938.50 under the 15m low (21.50 pts = 86 ticks, $43.00 per MNQ);
 target trail: the 2R mark 15003.00 armed it; the 15m swing high 15040.25 was reached 14:15.
 2022-08-12, trend rule 4h up.

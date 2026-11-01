@@ -843,6 +843,36 @@ test('a busy cycle prompt stays lean: every line is decision context, and the wh
   assert.doesNotMatch(p, /95% CI|not over|no 10-day average/);
 });
 
+test('the fired line names a running attempt\'s cited setup as the attempt\'s, cited in compose_check, its track record no reason to pass', () => {
+  // The late-entry diagnosis: four skips of a fired S2 on "a rules candidate ... refused under the attempt" and on its
+  // "no backtest recorded" track record; the setup trade_lifecycle cites is traded in the attempt (composed-reads citedSetup).
+  const { prompts, validateConfig } = require('../../scripts/lib/autotrader');
+  const cfg = validateConfig({ harness: 'qwen', premarketAt: '', symbols: ['MNQ'], timeframe: 3, account: 1 });
+  const bar = { t: '2026-10-08T14:30:00.000Z', c: 21505.25, file: '/b.json', contractId: 'MNQ' };
+  const s2 = { name: 'momentum_continuation', status: 'active', candidate: true, direction: 'long', signal: 'rules', confluence: { with: [], against: [] }, record: 'track record: no backtest recorded (the user records one: backtest.js --record); live: no reviewed trades yet' };
+  const p = prompts(cfg, new Date('2026-10-08T14:33:20Z'), '/r');
+  const inAttempt = p.trade([{ symbol: 'MNQ', bar, scan: [s2], cited: ['momentum_continuation'] }]);
+  assert.match(inAttempt, /MNQ fired on this bar \([^)]*\): momentum_continuation fired up \(long\): a setup in this attempt: cite it in compose_check \("momentum_continuation fired up", the trend rule's side\) \[track record: n\/a, not a reason to pass\]\./);
+  assert.doesNotMatch(inAttempt, /no backtest recorded/);
+  // Both fired: a cited setup and a strategy a verdict trades. The verdict sentence names only the latter, so no strategy
+  // is told both "cite it" and "never as setup:<component>".
+  const orb = { name: 'orb', status: 'active', candidate: true, direction: 'long', signal: 'rules', confluence: { with: [], against: [] } };
+  const mixed = p.trade([{ symbol: 'MNQ', bar, scan: [s2, orb], cited: ['momentum_continuation'], verdicts: [{ strategy: 'prop_portfolio', component: 'orb', action: 'full' }] }]);
+  assert.match(mixed, / orb is one of prop_portfolio's components: enter only as its verdict below says \(setup:prop_portfolio\), never as setup:<component>\./);
+  assert.doesNotMatch(mixed, /These are prop_portfolio's components/);
+  assert.match(mixed, /momentum_continuation fired up \(long\): a setup in this attempt/);
+  // Only a verdict's components fired: the sentence as before.
+  assert.match(p.trade([{ symbol: 'MNQ', bar, scan: [orb], cited: ['momentum_continuation'], verdicts: [{ strategy: 'prop_portfolio', component: 'orb', action: 'full' }] }]), / These are prop_portfolio's components:/);
+  // Only the cited setup fired: no verdict sentence.
+  assert.doesNotMatch(p.trade([{ symbol: 'MNQ', bar, scan: [s2], cited: ['momentum_continuation'], verdicts: [{ strategy: 'prop_portfolio', component: 'orb', action: 'full' }] }]), /components: enter only/);
+  // Another lane's cited setup keeps its trend rule (runner-lanes: the roles read it as the briefing's).
+  const lane = p.trade([{ symbol: 'MNQ', bar, scan: [{ ...s2, mtf: { longAllowed: true, shortAllowed: false } }], cited: ['momentum_continuation'], minutes: 1 }]);
+  assert.match(lane, /momentum_continuation fired up \(long\) \(trend rule: allows\): a setup in this attempt/);
+  // Outside an attempt (none cited), the line is as before, its track record shown.
+  const outside = p.trade([{ symbol: 'MNQ', bar, scan: [s2] }]);
+  assert.match(outside, /: momentum_continuation long \[momentum_continuation track record: no backtest recorded/);
+});
+
 test('the fired line shows the field values a candidate\'s rules read on the bar; one without fields is unchanged', () => {
   const { prompts, validateConfig } = require('../../scripts/lib/autotrader');
   const cfg = validateConfig({ harness: 'qwen', premarketAt: '', symbols: ['MNQ'], timeframe: 3, account: 1 });

@@ -28,8 +28,8 @@ intact 1h and 4h structure is a pullback. CHoCHs stacking up the
 timeframes (15m, then 1h) are a reversal developing; a 1h CHoCH against
 the trend weighs most: a reversal attempt, context only (never counter).
 The pullback ends with the setup (15m) the bias's way at a level
-(`rejection`, `breakout`, `fair-value-gaps`): it is the entry, the
-next 3m close times it; a 3m turn (`m3.timing`) is context, never a
+(`rejection`, `breakout`, `fair-value-gaps`): it is the entry, on
+the next 3m bar; a 3m turn (`m3.timing`) is context, never a
 wait. A CISD (`cisd`) is an earlier sign than the CHoCH; depth in fib
 terms: `fib-retracement`.
 **Premium and discount** (`fib-retracement`): within a trend, pullbacks into discount

@@ -267,8 +267,9 @@ test('the prop hooks have no in-trade decision: an open trade is left to the pol
   const { hooks } = setup();
   assert.strictEqual(hooks.position, undefined);
   // supersede records a verdict (a setup skipped for a higher-priority policy) and openVerdicts reads them; recentFills
-  // hands the decision history the fills a snapshot read: no in-trade decision either.
-  assert.deepStrictEqual(Object.keys(hooks).sort(), ['accounts', 'endOfDay', 'openVerdicts', 'owners', 'recentFills', 'screen', 'snapshot', 'summaries', 'supersede']);
+  // hands the decision history the fills a snapshot read; cited names the attempt's cited setups for the fired line: no
+  // in-trade decision either.
+  assert.deepStrictEqual(Object.keys(hooks).sort(), ['accounts', 'cited', 'endOfDay', 'openVerdicts', 'owners', 'recentFills', 'screen', 'snapshot', 'summaries', 'supersede']);
 });
 
 test('combine CLI: start an attempt and read its status', () => {
@@ -305,6 +306,19 @@ test('a policy strategy owns its strategies\' setups only while it is active and
   paper.strategy.status = 'paper';
   await paper.hooks.snapshot(now);
   assert.deepStrictEqual(paper.hooks.screen(scan, { symbol: 'MNQ', contractId: CONTRACT, bars: bars(), now }), scan);
+});
+
+test('cited: the rules setups a running attempt trades through its composed strategy; none without one, or without an attempt', () => {
+  const on = setup();
+  assert.deepStrictEqual(on.hooks.cited({ symbol: 'MNQ', contractId: CONTRACT }), [], 'a policy of rules strategies only cites none');
+  Object.assign(on.strategy, { strategies: ['lifecycle_x', ...COMPONENTS] });
+  on.components.push({ name: 'lifecycle_x', valid: true, errors: [], status: 'active', signal: 'composed', instruments: ['MNQ', 'NQ'], timeframe: '3m' });
+  assert.deepStrictEqual(on.hooks.cited({ symbol: 'MNQ', contractId: CONTRACT }), COMPONENTS);
+  assert.deepStrictEqual(on.hooks.cited({ symbol: 'GC', contractId: 'GC' }), [], 'another instrument');
+  const off = setup({ start: false });
+  Object.assign(off.strategy, { strategies: ['lifecycle_x', ...COMPONENTS] });
+  off.components.push({ name: 'lifecycle_x', valid: true, errors: [], status: 'active', signal: 'composed', instruments: ['MNQ', 'NQ'], timeframe: '3m' });
+  assert.deepStrictEqual(off.hooks.cited({ symbol: 'MNQ', contractId: CONTRACT }), [], 'no attempt running');
 });
 
 test('owners: the strategies an active policy with a running attempt owns on the contract; none otherwise', () => {

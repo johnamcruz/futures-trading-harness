@@ -208,6 +208,7 @@ function createRunner(deps) {
   let errors = 0;
   let recover = false; // the last trade cycle was stopped mid-run
   let pendingClose = null; // { day, tries, lastTry }: a closing balance still to record
+  let closeStartedFor = null; // the trading day whose closing balance end of day has started recording (once a day)
   let unflatPasses = 0; // flatten passes in a row (by one caller, unflatWhy) that found something open or working
   let unflatWhy = null;
   let unflatSince = 0; // when the current run of unflat passes began
@@ -760,6 +761,7 @@ function createRunner(deps) {
     let cross = null;
     let armed = Boolean(t.armed);
     let fellBack = false;
+    let wrongSide = false; // a fallback because the swing sat on the wrong side of the close, not for want of one
     for (const bar of bars) {
       // A level the resting stop never reached (a modify that failed or came
       // too late) protects nothing: a bar through it means out at market.
@@ -769,7 +771,7 @@ function createRunner(deps) {
       // Past the target: exit-trail.js on this closed bar, the swing confirmed by its close (never a later bar).
       const step = after ? afterTargetStep({ ...t, stop: target, peakR, armed }, bar, t.plan, tick, after.trailBy === 'structure' ? swingAtBar(item.bars, bar, after.swingMinutes, sign) : null)
         : trailStep({ ...t, stop: target, peakR }, bar, t.plan, tick);
-      if (after) { armed = step.armed; fellBack = fellBack || step.fellBack; }
+      if (after) { armed = step.armed; fellBack = fellBack || step.fellBack; wrongSide = wrongSide || Boolean(step.wrongSide); }
       peakR = step.peakR;
       target = step.stop;
       if (step.close) { cross = { bar, stop: step.stop }; break; }
@@ -805,7 +807,7 @@ function createRunner(deps) {
       await closeOut(`time stop: ${barsHeld} ${cfg.timeframe}m bars in the trade (max_bars ${t.plan.maxBars})`);
       return;
     }
-    if (fellBack && !t.fellBackSaid) log(`${item.symbol}: structure trail: no ${t.plan.afterTarget.swingMinutes}m swing in the bars at all; trailing ${t.plan.afterTarget.trailR}R behind the best price (the fallback)`);
+    if (fellBack && !t.fellBackSaid) log(`${item.symbol}: structure trail: ${wrongSide ? `the last ${t.plan.afterTarget.swingMinutes}m swing is on the wrong side of the close (its stop would be through the market)` : `no ${t.plan.afterTarget.swingMinutes}m swing in the bars at all`}; trailing ${t.plan.afterTarget.trailR}R behind the best price (the fallback)`);
     save({ ...t, peakR, troughR, barsHeld, lastBarT, armed, fellBackSaid: Boolean(t.fellBackSaid || fellBack) });
     if (!stopOrder) {
       if (sign * (target - t.stop) < tick - 1e-9) return;
@@ -1689,6 +1691,15 @@ function createRunner(deps) {
    * day already recorded with another balance) stops at once. Either way the
    * gate's missed-close check keeps prop entries refused until it is recorded.
    */
+  /** Start recording the closing balance of trading day `day` (once a day): its first try now, retries by recordClose. */
+  async function startClose(day, now) {
+    // The trading day being closed: a catch-up end of day runs on a later day.
+    if (pendingClose && pendingClose.day !== day) log(`end of day: the close of ${pendingClose.day} is still unrecorded; the gate refuses prop entries until it is (combine.js record-day)`, 'error');
+    closeStartedFor = day;
+    pendingClose = { day, tries: 0, lastTry: 0 };
+    await recordClose(now);
+  }
+
   async function recordClose(now) {
     if (!pendingClose || now.getTime() - pendingClose.lastTry < CLOSE_RETRY_MS) return;
     const { day } = pendingClose;
@@ -1750,7 +1761,20 @@ function createRunner(deps) {
       // End of day flattens first, directly: the agents' run (reviews, the
       // journal) can fail or run long, and nothing may be open past the close.
       // Whether the day is done is decided by the check after the run.
-      if (d.action === 'eod') await eodBackstop();
+      if (d.action === 'eod') {
+        const flatNow = await eodBackstop();
+        // The day's true balance before the review reads it (its prompt, combine_status): a fresh snapshot after the
+        // flatten (the last bar pass's can predate the day's last fill), and once verified flat the close recorded
+        // now, not after the review. Not yet flat: recorded after the review's second flatten, as before.
+        if (prop && cfg.account && !cfg.paper) {
+          try {
+            await prop.snapshot(clock.now());
+          } catch (err) {
+            log(`end of day: the balance snapshot before the review failed (${err.message})`, 'error');
+          }
+          if (flatNow && closeStartedFor !== d.state.day) await startClose(d.state.day, now);
+        }
+      }
       // Each job is built with the account as it is when that run starts.
       // Each job's prompt is dated when it starts (a second symbol's premarket runs after the first).
       // The agents' end-of-day run happens once a day: a retry (the account not yet verified flat) only flattens.
@@ -1793,12 +1817,7 @@ function createRunner(deps) {
       // A failed record never holds end of day open (the flatten is what can't
       // wait): it is retried on its own, and until it is recorded the gate
       // refuses prop entries (a missed close).
-      if (d.action === 'eod' && ok && prop && !cfg.paper) {
-        // The trading day being closed: a catch-up end of day runs on a later day.
-        if (pendingClose && pendingClose.day !== d.state.day) log(`end of day: the close of ${pendingClose.day} is still unrecorded; the gate refuses prop entries until it is (combine.js record-day)`, 'error');
-        pendingClose = { day: d.state.day, tries: 0, lastTry: 0 };
-        await recordClose(now);
-      }
+      if (d.action === 'eod' && ok && prop && !cfg.paper && closeStartedFor !== d.state.day) await startClose(d.state.day, now);
       // A failed premarket is no failed run (never toward the kill switch): it isn't done, and is tried again
       // after a growing pause (1, 2, 5, then every 10 min) until a session window opens (above). A success
       // clears what a failure left.
@@ -1985,6 +2004,8 @@ function createRunner(deps) {
           const repeat = x => multi && ordered.some(y => y !== x && y.symbol === x.symbol && ordered.indexOf(y) < ordered.indexOf(x));
           const items = ordered.map(x => ({
             symbol: x.symbol, verdicts: x.verdicts, scan: withRecords(x), notEntries: x.notEntries || [], entryBlocked: x.entryBlocked || null,
+            // A running attempt's cited setups (prop/live-runner.js cited): their fired line says they are the attempt's.
+            cited: prop && typeof prop.cited === 'function' && !cfg.paper ? attempt(`${x.symbol} cited setups`, () => prop.cited({ symbol: x.symbol, contractId: x.contractId }), []) : [],
             bar: { ...x.bar, plan: entries && !repeat(x) ? attempt(`${x.symbol} premarket plan`, () => premarketPlan(x.symbol, journal, cycleNow), null) : null },
             ...(multi ? { minutes: x.minutes, repeat: repeat(x) } : {}),
             // The closed bars, for what happened since each recent decision (decision-history.js; never in the prompt).

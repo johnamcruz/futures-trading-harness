@@ -240,6 +240,9 @@ test('exitAs, target_then_trail: the stop holds to the trade\'s own target, then
   assert.strictEqual(at.exitAs(pathed(run, { swingPath: swings }), ttt({ trail_by: 'structure', swing_tf: '15m' }), 1).moveTicks, 76, 'a tick behind the 78 swing: out at 77 less a tick (the R trail would be 80)');
   assert.strictEqual(at.exitAs(pathed(run, { swingPath: { ...swings, '15m': [null, null, 30, 30] } }), ttt({ trail_by: 'structure', swing_tf: '15m' }), 1).moveTicks, 72, 'a swing under the lock: the lock (50) holds, out at the close');
   assert.strictEqual(at.exitAs(pathed(run), ttt({ trail_by: 'structure', swing_tf: '15m' }), 1).moveTicks, 79, 'no swings: the R trail');
+  // A stale swing above the price (120 over closes of 65 and 95: a long's old low before a gap) is no swing: the R trail,
+  // as with none (it used to put the stop at 119, over the market, and close the trade at once at 65).
+  assert.strictEqual(at.exitAs(pathed(run, { swingPath: { ...swings, '15m': [null, 120, 120, 120] } }), ttt({ trail_by: 'structure', swing_tf: '15m' }), 1).moveTicks, 79, 'a swing on the wrong side: the R trail');
   // Kept as recorded when the exit is malformed.
   for (const bad of [ttt({ trail_by: 'atr' }), ttt({ lock_giveback_r: 0 }), ttt({ trail_by: 'structure', swing_tf: '4h' })]) { const x = pathed(run); assert.strictEqual(at.exitAs(x, bad, 1), x, JSON.stringify(bad)); }
 });

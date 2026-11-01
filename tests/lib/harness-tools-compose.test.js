@@ -124,12 +124,13 @@ test('the trade_lifecycle strategy: signal composed, active, max_risk_usd requir
   const base = { name: 'x', description: 'a composed strategy for the schema test, forty chars', status: 'active', instruments: ['MNQ'], timeframe: '3m', signal: 'composed', risk: { stop: 'structure', min_rr: 2, max_risk_usd: 100, ...RULE }, valid_bars: 2 };
   assert.deepStrictEqual(validateStrategy(base, body, 'x'), []);
   assert.strictEqual(s.valid_bars, 2, 'the shipped plan validity: two base bars');
-  // valid_bars: required for composed, a whole number from 1 to 3 (the default briefing age refuses past it anyway); no other signal has it.
-  for (const bad of [undefined, 0, 4, 1.5, '2']) {
+  // valid_bars: required for composed, a whole number from 1 to 5 (the owner: configurable 2 to 5; the shipped 2; above 2 a
+  // record can outlive its setup's 15m candle, STRATEGY.md); no other signal has it.
+  for (const bad of [undefined, 0, 6, 1.5, '2']) {
     const { valid_bars: _drop, ...rest } = base;
     assert.ok(validateStrategy(bad === undefined ? rest : { ...base, valid_bars: bad }, body, 'x').some(e => /valid_bars: required for signal: composed/.test(e)), String(bad));
   }
-  for (const ok of [1, 3]) assert.deepStrictEqual(validateStrategy({ ...base, valid_bars: ok }, body, 'x'), [], String(ok));
+  for (const ok of [1, 3, 4, 5]) assert.deepStrictEqual(validateStrategy({ ...base, valid_bars: ok }, body, 'x'), [], String(ok));
   assert.ok(validateStrategy({ ...base, signal: 'manual', valid_bars: 2, risk: { stop: 'atr:0.5', min_rr: 2 } }, body, 'x').some(e => /valid_bars: only for signal: composed/.test(e)));
   assert.ok(validateStrategy({ ...base, risk: { stop: 'structure', min_rr: 2, ...RULE } }, body, 'x').some(e => /max_risk_usd: required for signal: composed/.test(e)));
   assert.ok(validateStrategy({ ...base, risk: { stop: 'atr:0.5', min_rr: 2, max_risk_usd: 100, ...RULE } }, body, 'x').some(e => /risk.stop: structure/.test(e)));

@@ -494,7 +494,10 @@ test('scoreRun: a candidate the model could not trade (a paper strategy) is no s
   const strategies = [...STRATS, { name: 'ofi', valid: true, signal: 'rules', mtf: 'trend', status: 'paper', risk: { min_rr: 2 }, exit: { trail_activate_r: 2, trail_giveback_r: 0.5 } }];
   const { runDir } = makeRun({ steps: [{ k: 0, scan: [{ name: 'ofi', candidate: true, direction: 'long', stopDistance: 10, mtf: MTF }], cycle: { result: 'CYCLE RESULT: no-trade - no candidate strategies' } }] });
   const { records } = scoreRun(runDir, { strategies, accounts: ACCOUNTS });
-  assert.deepStrictEqual([records[0].facts.setups, records[0].expected.decidedBy, records[0].category], [[], 'no setup', 'right']);
+  assert.deepStrictEqual([records[0].facts.setups, records[0].expected.decidedBy], [[], 'no setup']);
+  // The bar's own composed setup is another matter (the setup is the entry since CONF3M: its reaction bar composes):
+  // the pass is judged on it alone, never on the paper candidate.
+  assert.strictEqual(records[0].category, records[0].facts.composable && records[0].facts.composable.valid ? 'excessive abstention' : 'right');
 });
 
 test('replay.js scorecard: the CLI writes the scorecard and prints its summary', () => {
@@ -911,9 +914,11 @@ test('no compose: a pass on a composable setup (trend side, a key-level reaction
   const b = (i, o = {}) => { const x = at(i); return { ...x, sections: { ...x.sections, m3: { ...x.sections.m3, data: { ...x.sections.m3.data, trendRule: SHORT, news: { inBlackout: false }, ...o } } } }; };
   // 2026-04-23 18:45 UTC: the 15m rejected the IB low down, confirmed, its standard plan OK (setup-library planLine).
   assert.deepStrictEqual(composableSetup(b(409)), { valid: true, sides: ['short'], reason: '15m rejected IB low (+2), confirmation, plan OK' });
-  // The next close: the same reaction, but no confirming entry read: the plan refused, so the pass is the skills' own.
-  const refused = composableSetup(b(410));
-  assert.deepStrictEqual([refused.valid, refused.reason], [false, '15m rejected IB low (+2), confirmation: short plan refused (no confirming entry read)']);
+  // The bar that closed the 15m candle (its reaction bar, 18:42): the setup is the entry (CONF3M), composable there.
+  assert.deepStrictEqual(composableSetup(b(408)), { valid: true, sides: ['short'], reason: '15m rejected IB low (+2), reaction (the setup, on its own bar), plan OK' });
+  // The next close: the same reaction, no confirming entry read, still composable (the setup is the entry: CONF3M).
+  const next = composableSetup(b(410));
+  assert.deepStrictEqual([next.valid, next.reason], [true, '15m rejected IB low (+2), confirmation, plan OK']);
   // Against the trend rule's side; no entries in the window; a news blackout; no briefing.
   assert.strictEqual(composableSetup(b(409, { trendRule: LONG })).valid, false);
   assert.strictEqual(composableSetup(b(409, { windowEntries: 'none' })).valid, false);
@@ -924,7 +929,9 @@ test('no compose: a pass on a composable setup (trend side, a key-level reaction
   const label = { decision: 'flat', teacher: { action: 'none', setup: null, size: null, orders: [] }, gate: { decision: 'none', checks: [] }, clone: { ok: true, reasons: [] }, cycleFailed: null };
   const cls = f => classify(label, f, expectedDecision(f), checkReasons('CYCLE RESULT: no-trade - only 1.17R to the VAH ahead, wait for a pullback', f));
   assert.deepStrictEqual(cls({ ...quiet, composable: composableSetup(b(409)) }), { category: 'excessive abstention', agrees: false, why: ['no compose: short 15m rejected IB low (+2), confirmation, plan OK, passed without compose_check'] });
-  assert.strictEqual(cls({ ...quiet, composable: composableSetup(b(410)) }).category, 'right');
+  assert.strictEqual(cls({ ...quiet, composable: composableSetup(b(410)) }).category, 'excessive abstention');
+  // A pass on the bar that closed the setup, its standard plan OK, is abstention too.
+  assert.strictEqual(cls({ ...quiet, composable: composableSetup(b(408)) }).category, 'excessive abstention');
   assert.strictEqual(cls({ ...quiet, composable: composableSetup(b(409, { windowEntries: 'none' })) }).category, 'right');
   assert.strictEqual(cls(quiet).category, 'right');
   // A true hard ground stated (here no attempt running) passes it too: unchecked, never abstention.

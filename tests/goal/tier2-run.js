@@ -200,7 +200,7 @@ async function cli(argv) {
   process.stdout.write(`${reportText(j)}\n${days.length} days, ${now.trades.length} trades, ${((Date.now() - t0) / 1000).toFixed(0)} s; the full trace: ${tracePath(dir)}\n`);
   if (!argv.includes('--write')) return j.fail ? 1 : 0;
   if (now.problems.length) throw new Error('refused: a trace is not whole (its problems above): fix the path first');
-  const rise = GP.tier2RiseProblems(baseline.tier2 && baseline.tier2.summary, now.summary);
+  const rise = GP.tier2RiseProblems(baseline.tier2 && baseline.tier2.summary, now.summary, { baseTrades: baseline.tier2 && baseline.tier2.trades, nextTrades: now.trades });
   if (rise.length) throw new Error(`refused: a baseline only rises:\n${rise.join('\n')}`);
   // Sizes are exact: a trade of main's sized differently, or a state day's, is refused unless the change is said why.
   const why = argv.includes('--sizes-why') ? argv[argv.indexOf('--sizes-why') + 1] : null;

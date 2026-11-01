@@ -67,7 +67,7 @@ const PINS = {
     'depth alone is no edge; buying a 50% or 62% retrace with the 4h trend lost after costs (F5).',
     'A 15m CHoCH inside an intact 1h and 4h structure is a pullback.',
     'CHoCHs stacking up the timeframes (15m, then 1h) are a reversal developing;',
-    'it is the entry, the next 3m close times it; a 3m turn (`m3.timing`) is context, never a wait.',
+    'it is the entry, on the next 3m bar; a 3m turn (`m3.timing`) is context, never a wait.',
   ],
   'breakout-vs-fakeout': [
     'a level traded through from inside and closed back inside within 1-3 bars, in the last 10 bars',
@@ -121,7 +121,7 @@ const PINS = {
     '**Six independent categories**, one vote each, so for + against + neutral = 6: reads of one price move are one piece of evidence.',
     // The margin sizes it (the owner's principle 3: strong is full size, marginal reduced or a pass).
     // Compose first (fix/confluence-not-vetoes): the plan, never the model, works out R:R.
-    '**Compose first.** The side rule\'s side (never counter), a 15m rejection or breakout at a key level or FVG, closed (the next 3m close times it) → call `compose_check`.',
+    '**Compose first.** The side rule\'s side (never counter), a 15m rejection or breakout at a key level or FVG, closed (it is the entry: a limit at the last close when you compose (the setup\'s own close when you compose on its bar), filled within `valid_bars`) → call `compose_check`.',
     'Never estimate room or R:R: the briefing\'s "Standard plan" line states it; OK → compose with its reads, refused → pass, naming it.',
     'OK → **a valid setup is the trade**. In a prop attempt nothing halves: a serious factor against doesn\'t cut the size; the code sets the full verdict size. The against:',
     // A swing broken is serious, never decisive: decisive is a real HTF reversal (the owner: a sweep misread as a pass).
@@ -166,7 +166,7 @@ const PINS = {
     '| 3m, 5m | the entry timing only: never the setup | least |',
     '| 15m | the working structure and the session levels | more |',
     '| 1h, 4h | HTF levels (prior day, overnight, CRT) | most |',
-    '**The setup**: a 15m or 1h rejection the bias\'s way (step 1); the next 3m close times the entry (step 6).',
+    '**The setup**: a 15m or 1h rejection the bias\'s way (step 1); it is the entry (step 6).',
     'Against the bias (4h + 1h): the trend rule refuses it (never counter), whatever CHoCH.',
     'Never anticipate it.',
     'the stop read names it (`invalidation`).',
@@ -182,7 +182,8 @@ const PINS = {
     'It is a setup read (`<tf> cisd up|down`), never a trade of its own',
     'A CISD after a sweep of a key level is stronger confluence; one without is still a CISD.',
     'A doji, a small body or a mid-range close is weak: no zone, no fib',
-    'price pulls back to a level, then a CISD back in the trend\'s direction ends the pullback; a later close is the entry.',
+    // The setup is the entry (the CONF3M study): the next close, not a later confirming one.
+    'price pulls back to a level, then a CISD back in the trend\'s direction ends the pullback; the next close is the entry.',
     'a CISD back toward the middle, aiming at the other side.',
     'a 15m (or 1h) CISD the bias\'s way is the setup read; a 3m or 5m one is entry timing, context, never the setup',
     'Never anticipate the bounce.',
@@ -216,8 +217,8 @@ const PINS = {
     '| 3m, 5m | the entry timing only: never the setup | least |',
     '| 15m | the working structure and the session levels | more |',
     '| 1h, 4h | HTF levels (prior day, overnight, CRT) | most |',
-    '**The setup**: a 15m or 1h breakout the bias\'s way (step 1); the next 3m close times the entry (step 6).',
-    'the next 3m close after the 15m or 1h close beyond times it; a retest that holds (a pullback: `pullback-vs-reversal`) is support, never a wait.',
+    '**The setup**: a 15m or 1h breakout the bias\'s way (step 1); it is the entry (step 6).',
+    'the 15m or 1h close beyond is the entry: a limit at the last close when you compose (the setup\'s own close when you compose on its bar), filled within `valid_bars`; a retest that holds (a pullback: `pullback-vs-reversal`) is support, never a wait.',
     'Never anticipate it.',
     'the stop read names it (`invalidation`).',
     'a close back inside the level means the breakout failed: invalidation.',
@@ -635,7 +636,8 @@ test('compression: the skill states the code\'s numbers (config/analysis.json co
   // Each read the skill teaches parses into the checker's form and step.
   const CR = require('../../scripts/lib/trading/composed-reads');
   const reads = /Reads: (.+?) \(\d+\.\d+R\); hit/.exec(t)[1].split(', ');
-  assert.deepStrictEqual(reads.map(x => CR.parseRead(x).kind), ['compression', 'close', 'stop', 'target'], reads.join('; '));
+  // The setup is the entry (the owner, 2026-10-30): the example states no entry read (the limit at the expansion's close).
+  assert.deepStrictEqual(reads.map(x => CR.parseRead(x).kind), ['compression', 'stop', 'target'], reads.join('; '));
   // candle-reading's displacement and breakout point to it.
   assert.match(flat(read(file('candle-reading'))), /it starts a leg, out of a box \(`compression`\)/);
   assert.match(flat(read(file('breakout'))), /Out of a tight box: `compression`\./);

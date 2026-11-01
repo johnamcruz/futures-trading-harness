@@ -88,7 +88,16 @@ test('CORE: the composed bar\'s reads the gate requires (SITUATIONAL taught in t
   // the sweep and that the cycle's section may embed it and compose_check says so (+141).
   // Then 75379 (owner: q30 side confusion; side rule first): rejection's step 4 says the `rejected` relation is only the fact, a rejection only when its
   // reaction is a long-wick, engulfing or confirmed one (+83).
-  assert.ok(Buffer.byteLength(prompt) <= 75379, `the head prompt is ${Buffer.byteLength(prompt)} bytes`);
+  // Then 75403 with fix/trail-swing-side-capture on it (the owner's 2026-10-30 decision: the setup is the entry): breakout's
+  // retest-entry evidence and htf-to-ltf's next-3m-bar line, less trade-lifecycle's and setup-judgment's trimmed lines (+3),
+  // and no skill left saying the next 3m close times the entry (rejection, breakout, trade-lifecycle, confluence-counting,
+  // trader-process, pullback-vs-reversal: "on the next 3m bar", +21).
+  // Then 75952 (owner, 2026-10-31: the wording matches the code; a stall or conflicting setup candle is entered): rejection's,
+  // breakout's, trade-lifecycle's and confluence-counting's entry say "a limit at the last close when you compose (the setup's
+  // own close when you compose on its bar), filled within `valid_bars`", trade-lifecycle's one stall/conflicting line, and the
+  // rejection and breakout examples' entries at that limit (+549).
+  // Then 75962 (review): trade-lifecycle's stall line says the limit rests `valid_bars`, a later bar fills it or it expires (+10).
+  assert.ok(Buffer.byteLength(prompt) <= 75962, `the head prompt is ${Buffer.byteLength(prompt)} bytes`);
   // Only the head trader's prompt grows: no other role's prompt embeds trade-lifecycle (the risk manager's embeds
   // confluence-counting and invalidation as before; its prompt is unchanged, pinned in trade-session-split.test.js).
   for (const [name, a] of Object.entries(index.agent)) if (name !== H.HEAD_AGENT && a.prompt) assert.ok(!a.prompt.includes('<skill name="trade-lifecycle">'), name);

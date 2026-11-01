@@ -246,6 +246,47 @@ test('composed-reads: a policy\'s entry rule joins the re-check: refused on this
   assert.strictEqual(judge(home, { entryRule: rule({ bias_frames: ['1h'] }) }).message, null, 'the 1h alone sets it');
 });
 
+test('composed-reads: the 15m setup is the entry: no confirming 3m read needed; expired, stale, against the bias or without a 15m setup it is refused', () => {
+  // The CONF3M study (owner-approved): entering at the setup beat waiting for a confirming 3m close on both halves.
+  const noEntry = F.READS.filter(x => x.step !== 'entry');
+  let { home } = world({ reads: noEntry });
+  assert.strictEqual(judge(home).message, null, 'the 15m setup alone: no 3m read');
+  // A 3m read stated must still be true and the side's way.
+  const bottom = F.briefing({ m3: { candles: { ...F.briefing().sections.m3.data.candles, '3m': { ...F.briefing().sections.m3.data.candles['3m'], closeLocation: 'bottom' } } } });
+  ({ home } = world({ b: bottom }));
+  assert.match(judge(home).message || '', /"3m close top"/);
+  ({ home } = world({ reads: noEntry, b: bottom }));
+  assert.strictEqual(judge(home).message, null, 'a 3m close against the side, not stated: the setup still stands');
+  // The validity window still bounds it: expired after valid_bars, and the setup's 15m candle no longer the one that rejected.
+  ({ home } = world({ reads: noEntry }));
+  assert.match(judge(home, { now: new Date(F.EXPIRES) }).message || '', /expired at 2026-10-07T14:06:00.000Z/);
+  const later = F.briefing();
+  later.sections.m3.data.candles['15m'] = { ...later.sections.m3.data.candles['15m'], t: '2026-10-07T13:45:00.000Z', closedAt: '2026-10-07T14:00:00.000Z', relations: [] };
+  writeBriefing(home, later);
+  assert.match(judge(home).message || '', /false by the briefing: "15m rejected prior VAH up"/);
+  // Against the bias: refused under the policy's entry rule (the 4h down).
+  const b4 = F.briefing();
+  b4.sections.h1.data.h4 = { trend: 'down' };
+  ({ home } = world({ reads: noEntry, b: b4 }));
+  const bg = entryRuleOf({ chain: '4h', bias_frames: ['4h', '1h'], bias_agree: 'off', regime_against: 'off', leg_turned: 'off' });
+  assert.match(judge(home, { entryRule: bg }).message || '', /entry rule: the 4h trend is down, against the long/);
+  // Without a setup read: refused (the entry read alone never is one).
+  ({ home } = world({ reads: F.READS.filter(x => x.step !== 'setup') }));
+  assert.match(judge(home).message || '', /steps not stated: setup/);
+});
+
+test('composed-reads: valid_bars up to 5: the record and the gate hold it 5 base bars after its bar\'s close', () => {
+  // The cap is 5 (strategies.js MAX_VALID_BARS); the shipped value stays 2. Above 2 a record can outlive its setup's
+  // 15m candle (STRATEGY.md says so: raise it only after the entry-order study and the goal regression).
+  const five = { ...DOC, valid_bars: 5 };
+  const { home, rec } = world({ validBars: 5 });
+  assert.strictEqual(rec.expiresAt, '2026-10-07T14:15:00.000Z', 'the next close 14:03 plus 4 bars');
+  assert.strictEqual(judge(home, { strategy: five, now: new Date('2026-10-07T14:12:00Z') }).message, null);
+  assert.match(judge(home, { strategy: five, now: new Date('2026-10-07T14:15:00Z') }).message || '', /expired at 2026-10-07T14:15:00.000Z \(5 base bars after its bar's close\)/);
+  // The gate takes the earlier of the record's stamp and its own strategy's: a 5-bar record under the shipped 2 ends at 14:06.
+  assert.match(judge(home, { now: new Date('2026-10-07T14:06:00Z') }).message || '', /expired at 2026-10-07T14:06:00.000Z/);
+});
+
 test('policyRuleRefusal: a policy entry with no compose record is held to its entry rule on the briefing (fails closed); no rule: null', () => {
   const { policyRuleRefusal } = require('../../scripts/lib/trading/lifecycle-gate');
   const rule = entryRuleOf({ chain: '4h', bias_frames: ['4h', '1h'], bias_agree: 'on', regime_against: 'off', leg_turned: 'off' });

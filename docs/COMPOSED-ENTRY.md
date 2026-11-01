@@ -289,6 +289,17 @@ candle itself or the last 3m inside it; a setup candle without a close time
 refuses), and the stop and target reads are present. Any false, unchecked or
 disagreeing read refuses it, naming the read.
 
+*Amended 2026-10-30 (the owner's decision, after the pre-registered CONF3M
+study and the retest-entry study, `docs/research/retest-entry-study.md`):
+the entry step is optional and no confirming read is required. Entering at
+the next 3m bar after the 15m setup beat the confirming-close rule on both
+halves: MC pass +2.0pp on half A [0.95, 3.05] and +0.65pp on half B [0.10,
+1.25], 0 blows, R caught 5.5% to 8.3% and 6.4% to 11.2%; every retest entry
+earned less than the setup's own. The setup's read must still point the
+side and stand on its bar (its candle the last completed one, or the CISD
+or compression still live); an entry read stated is still checked (true,
+the side's way). `composed-reads.js` REQUIRED_STEPS.*
+
 ### 3.3 The composed record
 
 `compose_check` checks the reads against the cycle bar's briefing, with
@@ -1190,7 +1201,9 @@ Each has a proposed default; the owner may change any of them.
 - **D7.** Required steps. *Proposed default: all six steps stated, each with
   the model's own read; the skill at each step is free. A step becomes
   optional only if the per-step record (section 4.3) shows it adds nothing,
-  and only by the owner's decision.*
+  and only by the owner's decision.* *Decided 2026-10-30 (owner): the entry
+  step is optional, the setup is the entry (the CONF3M study; section 3.2's
+  amendment). The other five stay required.*
 - **D8.** Scenario 2's facts. *Proposed default: 4h candle facts and 4h
   swing targets first, then FVGs per timeframe, then 5m structure from 1m
   bars (no 5m lane).*

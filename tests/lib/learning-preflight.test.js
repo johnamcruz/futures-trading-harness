@@ -151,7 +151,7 @@ test('each check fails on a broken fixture', () => {
     [P.strategy, { lifecycle: { status: 'paper' } }, /not active/],
     [P.strategy, { lifecycle: { signal: 'rules' } }, /not composed/],
     [P.strategy, { lifecycle: { valid: false, errors: ['bad'] } }, /invalid: bad/],
-    [P.strategyValidBars, { lifecycle: { valid_bars: 4 } }, /valid_bars 4/],
+    [P.strategyValidBars, { lifecycle: { valid_bars: 6 } }, /valid_bars 6/],
     [P.strategyValidBars, { lifecycle: { valid_bars: undefined } }, /valid_bars undefined/],
     [P.skillsCrosswalk, { read: { skillExists: n => n !== 'invalidation' } }, /don't exist: invalidation/],
     [P.skillsCrosswalk, { read: { skillText: () => SKILL_TEXT.replace(/^ *\| stop \|.*$/m, '') } }, /no skill for stop/],

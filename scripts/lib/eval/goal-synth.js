@@ -7,16 +7,20 @@
  *   fakeout   the move scenario that must end at -1R: a drift the block's way (so the 4h and 1h trend it), then in the
  *             cash session a run of impulse bars that way (momentum candles: the cited setup fires) and a reversal
  *             through the stop
- *   listed-vwap  a flat cash-session box at the VWAP, then an expansion (no cited fire: the volume keeps falling): the first
- *             listed setup is the VWAP break, which compose_check does not verify (an open finding: no trade)
- *   limit-fill the box away from the VWAP's level, a 15m level break listed: the composed limit entry at the confirming
- *             3m close fills, its bracket, the trail, the exit (a limit at the last close is marketable at once: one
+ *   listed-vwap  a flat cash-session box at the VWAP, then an expansion (no cited fire: the volume keeps falling): the
+ *             listed VWAP break is never taken (compose_check does not verify it, an open finding); with the 3m
+ *             confirmation gone (the owner, 2026-10-31) the day has a valid 15m rejection at the prior RTH high, taken
+ *             at the setup close: a trade day (goal-path.js vwapTaken holds the VWAP setup untaken)
+ *   limit-fill the box away from the VWAP's level, a 15m level break listed: the composed limit entry at the last close
+ *             when composed (the setup is the entry: on the setup's own bar its close) fills, its bracket, the exit (a limit at the last close is marketable at once: one
  *             expires only when the price leaves before the order goes, the order-latency self-test's case)
  *   quiet     the drift alone (no momentum candle, no listed setup): a day whose right answer is no trade
  *   floor     D13's stop floor binding (compose must refuse, never widen): the cash session's approach to just under
- *             the overnight high (floor-ticks: straight; floor-atr: a deep V, a large ATR(20)), a 15m candle breaking it by
- *             a few ticks (the listed reaction, its low the stop read), a 3m bar closing at its top (the confirming close),
- *             then flat: the stop a few ticks under max(stop_floor_ticks, stop_floor_atr x ATR(20)), the tick term binding
+ *             the overnight high (floor-ticks: the open gapped to it and no approach, its approachBars 0, so the session
+ *             meets no level before the reaction, its first 15m candle; floor-atr: a deep V, a large ATR(20)), a 15m
+ *             candle breaking it by
+ *             a few ticks (the listed reaction, its low the stop read; the setup is the entry, composed on its own close),
+ *             a 3m bar closing at its top, then flat: the stop a few ticks under max(stop_floor_ticks, stop_floor_atr x ATR(20)), the tick term binding
  *             on floor-ticks, the ATR term on floor-atr (floorBar)
  *   bleed     the blow path: a block of consecutive fakeout sessions whose reversal opens with a gap through the stop
  *             (a loss of a few R every day). The shipped sizing (a share of the cushion) never risks the floor; a broken
@@ -66,7 +70,8 @@ function bar(o, { move, sigma, wick, volume, rand }) {
  * depthTicks and back up to belowTicks under the level (a V: its bars make ATR(20); no bar closes at its top again until
  * the reaction candle is the last one closed, so the approach's own breaks never confirm); the reaction candle
  * (reactionBars, one 15m candle): up through the level to crossTicks over it, each bar with a wick wickTicks over its
- * close; the confirming close confirmTicks over it (its low the reaction's close); then flat to the session's end.
+ * close; the next close confirmTicks over it (its low the reaction's close: no longer needed to compose, the setup is the
+ * entry); then flat to the session's end.
  */
 function floorBar(k, px, { F, level, from }) {
   const approachEnd = F.quietBars + F.approachBars;
@@ -117,8 +122,8 @@ function dayBars({ day, type, dir, rand, cfg, tick, startTicks, shape = null }) 
     if (type === 'quiet' && rth) { move = 0; wick = { with: 0, against: 0 }; }
     if ((type === 'compress' || type === 'runaway') && rth) {
       // A 15m box (quiet bars, no momentum), its expansion its way (a 15m compression break the briefing lists, no single
-      // 3m momentum candle: the volume keeps falling), a 3m bar that dips and closes at its top (the entry's confirming
-      // close, the limit at it); then compress: the next bar trades back to the limit (it fills) and the trend runs;
+      // 3m momentum candle: the volume keeps falling), a 3m bar that dips and closes at its top (no longer needed to
+      // compose: the setup is the entry, the limit at the last close when composed); then compress: the next bar trades back to the limit (it fills) and the trend runs;
       // runaway: every next bar opens past the last close and never trades back (the limit expires unfilled).
       const C = cfg.compress;
       const e0 = C.boxBars;
@@ -130,7 +135,13 @@ function dayBars({ day, type, dir, rand, cfg, tick, startTicks, shape = null }) 
       else if (type === 'compress' && k <= e1 + C.runBars) { move = dir * sigma * C.trendDrift + normal(rand) * sigma * C.quietNoise; wick = C.wick; }
       else move = normal(rand) * sigma * C.quietNoise;
     }
-    if (type === 'floor' && rth && openTicks === null) openTicks = px;
+    // A floor day's cash open: where the overnight closed, or (openUnderTicks) a gap up to that many ticks under the
+    // level, over every prior-session level between, so no candle of the approach meets one (the setup is the entry:
+    // any break the approach made would be composed on its own close).
+    if (type === 'floor' && rth && openTicks === null) {
+      if (shape.openUnderTicks > 0) px = Math.max(px, onHigh - shape.openUnderTicks);
+      openTicks = px;
+    }
     const shaped = type === 'floor' && rth ? floorBar(k, px, { F: shape, level: onHigh, from: openTicks }) : null;
     const b = shaped ? { ...shaped, v: Math.max(1, Math.round(volume)) } : bar(px, { move, sigma, wick, volume, rand });
     if (!rth && openTicks === null) onHigh = Math.max(onHigh, b.h); // the overnight session: every bar before the cash open
@@ -174,8 +185,8 @@ function synthFixture() {
   const blocks = [
     block('M', 'fakeout', 'fakeout', sessionsFrom(cfg.fakeout.day, 1, cfg), 1, 'synthetic fakeout: the impulse fires the setup, the reversal takes the stop: -1R at most'),
     block('M', 'quiet', 'quiet', sessionsFrom(cfg.quiet.day, 1, cfg), 1, 'synthetic quiet day: the drift alone, no momentum, no listed setup: the right answer is no trade'),
-    block('M', 'listed-vwap', 'compress', sessionsFrom(cfg.compress.vwapDay, 1, cfg), 1, 'synthetic: a flat box at the VWAP, then the break: the first listed setup is the VWAP break, which compose_check does not verify (its quoted level keeps its brackets): no trade (an open finding)'),
-    block('M', 'limit-fill', 'runaway', sessionsFrom(cfg.compress.limitDay, 1, cfg), 1, 'synthetic composed limit: a 15m level break listed (no cited fire), compose OK on the confirming close, the limit fills, its bracket, the trail, the exit'),
+    block('M', 'listed-vwap', 'compress', sessionsFrom(cfg.compress.vwapDay, 1, cfg), 1, 'synthetic: a flat box at the VWAP, then the break: the listed VWAP break is never taken (compose_check does not verify it: its quoted level keeps its brackets, an open finding); with the 3m confirmation gone the day has a valid 15m rejection at the prior RTH high, taken at the setup close'),
+    block('M', 'limit-fill', 'runaway', sessionsFrom(cfg.compress.limitDay, 1, cfg), 1, 'synthetic composed limit: a 15m level break listed (no cited fire), compose OK at the setup, the limit at the last close fills, its bracket, the exit'),
     block('S', 'bleed', 'bleed', sessionsFrom(cfg.bleed.from, cfg.bleed.sessions, cfg), -1, 'synthetic blow path: a loss at the stop every session'),
     // After the blow path (each block draws from the one seeded stream in turn: the earlier ones keep their bars).
     block('M', 'floor-ticks', 'floor', sessionsFrom(cfg.floor.ticksDay, 1, cfg), 1, 'synthetic stop floor (its ticks): the listed break\'s stop under stop_floor_ticks, the ATR term below it: compose refuses, never widens: no trade', floor('ticks')),

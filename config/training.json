@@ -91,8 +91,8 @@
       "fakeout": { "day": "2024-01-08", "startBar": 4, "impulseBars": 2, "reversalBars": 6, "impulseDrift": 1.8, "reversalDrift": 1.8, "volume": 2.5 },
       "quiet": { "day": "2024-02-05" },
       "compress": { "vwapDay": "2024-04-08", "limitDay": "2024-05-06", "boxBars": 10, "quietNoise": 0.12, "expandBars": 5, "expandDrift": 1, "confirmDrift": 0.4, "confirmDip": 0.9, "trendDrift": 0.8, "runBars": 25, "gapTicks": 6, "wick": { "with": 0.05, "against": 0.15 } },
-      "bleed": { "from": "2024-03-04", "sessions": 10, "gapTicks": 100 },
-      "floor": { "ticksDay": "2024-06-03", "atrDay": "2024-06-10", "quietBars": 0, "approachBars": 10, "reactionBars": 5, "ticks": { "depthTicks": 0, "belowTicks": 2, "crossTicks": 2, "wickTicks": 3, "confirmTicks": 1 }, "atr": { "depthTicks": 1000, "belowTicks": 3, "crossTicks": 3, "wickTicks": 6, "confirmTicks": 3 } }
+      "bleed": { "from": "2024-03-04", "sessions": 10, "gapTicks": 105 },
+      "floor": { "ticksDay": "2024-06-03", "atrDay": "2024-06-10", "quietBars": 0, "approachBars": 10, "reactionBars": 5, "ticks": { "depthTicks": 0, "belowTicks": 2, "crossTicks": 3, "wickTicks": 3, "confirmTicks": 1, "openUnderTicks": 2, "approachBars": 0 }, "atr": { "depthTicks": 1000, "belowTicks": 3, "crossTicks": 4, "wickTicks": 6, "confirmTicks": 3, "openUnderTicks": 0 } }
     },
     "tier2": {
       "seed": 1,

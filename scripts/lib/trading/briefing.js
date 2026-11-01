@@ -126,6 +126,27 @@ const WINDOWS = [
 const MARKET_CLOSED_WINDOW = 'daily break';
 const DEFAULT_ENTRY_CLOCK = { entryHours: DEFAULT_ENTRY_HOURS, noEntryWindows: DEFAULT_NO_ENTRY_WINDOWS };
 
+const validBarsCache = new Map();
+/**
+ * The trade_lifecycle record's validity window in base bars, as the gate enforces it (trade-lifecycle.js validBarsOf on
+ * the strategy loaded as the gate loads it: this process's env, its FTH_STRATEGIES_DIRS overrides), read once per
+ * strategies source; null when the strategies can't be read (the line then says "the record's valid_bars").
+ */
+function gateValidBars(env = process.env) {
+  const key = String(env.FTH_STRATEGIES_DIRS || '');
+  if (validBarsCache.has(key)) return validBarsCache.get(key);
+  let n;
+  try {
+    const TL = require('./trade-lifecycle');
+    const all = require('./strategies').loadStrategies(require('path').resolve(__dirname, '..', '..', '..'), env).strategies;
+    n = TL.validBarsOf(all.find(x => x && x.name === TL.STRATEGY));
+  } catch (_err) {
+    n = null;
+  }
+  validBarsCache.set(key, n);
+  return n;
+}
+
 /** When the `minutes` candle containing `at` closes (candles from the trading day's 18:00 ET open). */
 function nextClose(at, minutes) {
   const start = tradingDayStart(at).getTime();
@@ -823,7 +844,7 @@ function summaryLines(b, et) {
   // And the briefing's own setups on an allowed side (setupChecks: a compression break, a live CISD) on the same line;
   // the standard plan below stays the setup moment's.
   const SMo = require('../learning/setup-moments');
-  const checkOpts = m3.bar ? { barClose: Date.parse(m3.bar.t) + b.minutes * 60000, et, entries: m3.windowEntries } : null;
+  const checkOpts = m3.bar ? { barClose: Date.parse(m3.bar.t) + b.minutes * 60000, et, entries: m3.windowEntries, validBars: gateValidBars() } : null;
   const check = checkOpts ? SMo.checkLine(m3.candles, checkOpts) : null;
   const shownCheck = checkOpts ? SMo.checkLine(m3.candles, { ...checkOpts, checks: SMo.setupChecks(m3) }) : null;
   if (shownCheck) out.push(shownCheck);
@@ -1160,7 +1181,7 @@ function removeFrameBriefing(home, root, minutes) {
   try { fs.unlinkSync(frameBriefingFile(home, root, minutes)); } catch (_err) { /* none */ }
 }
 
-module.exports = { htfTrendsOf,
+module.exports = { gateValidBars, htfTrendsOf,
   SECTIONS, WINDOWS, nextClose, nextRthRoll, sessionWindow, newsState, buildBriefing, candidate, current, renderBriefing, briefingFile, writeBriefing, readBriefing, removeBriefing,
   roundNumbers, sharedParts, buildFrameBriefing, frameHolds, frameUntil, wholeBars, renderFrameBriefing, frameBriefingFile, writeFrameBriefing, readFrameBriefing, removeFrameBriefing,
   gapText, candleLines,

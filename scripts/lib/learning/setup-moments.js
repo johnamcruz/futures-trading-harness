@@ -22,10 +22,9 @@
  *             On the parity fixtures 'wide' selects most bars (the developing profile and the previous candle's levels
  *             are met by nearly every candle), so 'key' is the default. `phase` is `reaction` on the entry bar that completed that candle,
  *             `confirmation` on the entry-timeframe closes after it while it is still the last completed candle (the
- *             window ends when the next setup candle completes: it is superseded). The reaction bar stays selected (the
- *             model notes the setup there) but is never the only one: an entry read is on a candle closed after the
- *             setup candle (the gate's same-candle rule), so the setup timeframe holds at least two runner bars
- *             (autotrader.js validateConfig) and every window has a confirmation close after the reaction bar;
+ *             window ends when the next setup candle completes: it is superseded). The reaction bar is the entry (the
+ *             setup is the entry; no confirming read is needed), and the later closes stay selected while the setup
+ *             stands; the setup timeframe holds at least two runner bars (autotrader.js validateConfig);
  *   quiet     a seeded sample of the other bars (quietSample, deterministic by seed, symbol and bar), so the model still
  *             practises passing on quiet bars;
  *   none      otherwise: no cycle (the bar is still polled, briefed, scanned and recorded as live).
@@ -121,7 +120,7 @@ function setupMoment(candles, { setupTf = DEFAULTS.setupTf, barClose, levels = D
   const candle = { t: c.t, closedAt: c.closedAt };
   if (!reactions.length) return { available: true, moment: false, phase, candle, reactions, reason: `the last ${key} candle met no key level` };
   const top = reactions[0];
-  return { available: true, moment: true, phase, candle, reactions, reason: `${key} ${top.rel} ${top.name}${reactions.length > 1 ? ` (+${reactions.length - 1})` : ''}, ${phase === 'reaction' ? 'reaction (the setup; confirmation from the next close)' : phase}` };
+  return { available: true, moment: true, phase, candle, reactions, reason: `${key} ${top.rel} ${top.name}${reactions.length > 1 ? ` (+${reactions.length - 1})` : ''}, ${phase === 'reaction' ? 'reaction (the setup, on its own bar)' : phase}` };
 }
 
 /** Whether a bar is in the quiet sample: sha256(seed|symbol|bar) as a share, below the rate. */
@@ -151,12 +150,12 @@ function practiceLine(p) {
 
 /**
  * The setup moment as the model reads it in the bar briefing: the setup timeframe's last completed candle's reactions
- * at key levels, each with the side it points, and whether this bar is the reaction (an entry read needs a later close:
- * the gate's same-candle rule) or a confirmation close. The same moment setup-focused practice and the curated lists
+ * at key levels, each with the side it points, and whether this bar is the reaction (the setup: the entry now, the next
+ * bar fills it) or a later close while the setup still stands (no confirming read is needed: the setup is the entry). The same moment setup-focused practice and the curated lists
  * select, so what the model is shown and what it is scored on agree. A setup to check, never a signal: the model
  * composes and checks it, and passes unless every read is true.
  */
-function checkLine(candles, { barClose, et = x => x, setupTf = DEFAULTS.setupTf, entries = 'allowed', max = MAX_CHECKS, checks = [] } = {}) {
+function checkLine(candles, { barClose, et = x => x, setupTf = DEFAULTS.setupTf, entries = 'allowed', max = MAX_CHECKS, checks = [], validBars = null } = {}) {
   // No entries in this window: nothing to compose now (the gate refuses one), so no line.
   if (entries !== 'allowed') return null;
   const m = setupMoment(candles, { setupTf, barClose });
@@ -179,7 +178,12 @@ function checkLine(candles, { barClose, et = x => x, setupTf = DEFAULTS.setupTf,
   // never the entry frame's (the owner: "it needs to read candle patterns at the setup").
   const sc = setupCandleText(candles);
   const what = shown.map(r => `"${key} ${r.rel} ${r.name} ${r.dir}" (${r.dir === 'up' ? 'long' : 'short'}${priced(r)}${sc ? `; setup candle: ${sc}` : ''})`).join('; ');
-  const when = m.phase === 'reaction' ? 'this bar is the reaction: an entry read needs a later close' : 'a confirmation close: the entry reads from this bar';
+  // The compose plan's entry is a limit at the bar's close (trade-lifecycle.js planOf; a cited setup's, at market): it
+  // fills only if a later bar trades to it while the record stands (the strategy's valid_bars).
+  const within = Number.isInteger(validBars) && validBars > 0 ? `${validBars} bar${validBars === 1 ? '' : 's'}` : 'the record\'s valid_bars';
+  const when = m.phase === 'reaction'
+    ? `this bar closed the setup, no confirming read needed: the entry is a limit at this close; it fills if a later bar trades to it within ${within}`
+    : 'the setup still stands: no confirming read needed';
   return `- Setups to check (the ${key} candle closed ${et(m.candle.closedAt)}): ${[what, ...extra].join('; ')}; ${when}. Compose and check each (trade-lifecycle, ${['rejection', 'breakout', ...extraSkills].join(', ')}); pass unless every read is true; SKIP each one you don't compose, with its reason.`;
 }
 

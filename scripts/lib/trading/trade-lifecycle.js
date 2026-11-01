@@ -304,4 +304,10 @@ function renderRecord(r, checked = null, hints = []) {
   return `${out.join('\n')}\n`;
 }
 
-module.exports = { STRATEGY, SCHEMA, RECORD_KEYS, MAX_SIZE, MAX_BYTES, recordFile, legacyFile, dayOf, shardDay, daysNear, stopRuleOf, stopFloorTicks, expiryOf, planOf, buildRecord, appendRecord, readRecords, renderRecord };
+/**
+ * A record's validity window in base bars, as the gate enforces it: the strategy's `valid_bars` (a whole number from 1),
+ * else 1 (the next close) when it can't be read. The gate (lifecycle-gate.js) and the briefing's Setups line read it here.
+ */
+const validBarsOf = strategy => (strategy && Number.isInteger(strategy.valid_bars) && strategy.valid_bars >= 1 ? strategy.valid_bars : 1);
+
+module.exports = { validBarsOf, STRATEGY, SCHEMA, RECORD_KEYS, MAX_SIZE, MAX_BYTES, recordFile, legacyFile, dayOf, shardDay, daysNear, stopRuleOf, stopFloorTicks, expiryOf, planOf, buildRecord, appendRecord, readRecords, renderRecord };

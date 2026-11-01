@@ -47,7 +47,7 @@
      "bar": "2021-05-03T13:45:00.000Z",
      "window": "allowed",
      "trendRule": "allowed",
-     "validPlan": false
+     "validPlan": true
     },
     {
      "bar": "2021-05-03T13:48:00.000Z",
@@ -71,7 +71,7 @@
      "bar": "2021-05-03T13:57:00.000Z",
      "window": "allowed",
      "trendRule": "allowed",
-     "validPlan": false
+     "validPlan": true
     },
     {
      "bar": "2021-05-03T14:00:00.000Z",
@@ -2372,7 +2372,7 @@
      "bar": "2021-05-05T13:39:00.000Z",
      "window": "allowed",
      "trendRule": "allowed",
-     "validPlan": false
+     "validPlan": true
     }
    ],
    "plans": [
@@ -2495,7 +2495,7 @@
      "bar": "2021-05-05T13:57:00.000Z",
      "window": "allowed",
      "trendRule": "allowed",
-     "validPlan": false
+     "validPlan": true
     },
     {
      "bar": "2021-05-05T14:00:00.000Z",

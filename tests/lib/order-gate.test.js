@@ -724,6 +724,16 @@ test('combine: a live attempt never times out on its sessions, and a finished on
   assert.match(passed(entryOrder()).violations[0].message, /the challenge is passed.*node scripts\/combine.js stop --account mini/);
 });
 
+test('combine: the gateway\'s snapshot time for its fills check is the oldest running attempt\'s; one with none is NaN (it refuses)', () => {
+  const home = trendHome();
+  prop.startAttempt(home, MINI, new Date(NOW.getTime() - 86400000));
+  assert.ok(Number.isNaN(prop.oldestSnapshotMs(home, ['mini'])), 'no snapshot yet');
+  prop.snapshot(home, MINI, 50000, new Date(NOW.getTime() - 90000));
+  assert.strictEqual(prop.oldestSnapshotMs(home, ['mini']), NOW.getTime() - 90000);
+  assert.ok(Number.isNaN(prop.oldestSnapshotMs(home, ['mini', 'nonesuch'])), 'an attempt with no snapshot');
+  assert.ok(Number.isNaN(prop.oldestSnapshotMs(home, [])));
+});
+
 test('combine: every missed close is flagged, not only the first, so the floor is never left stale', () => {
   const home = trendHome();
   prop.startAttempt(home, MINI, new Date('2026-10-04T14:00:00Z'));
@@ -3586,19 +3596,22 @@ test('trade_lifecycle, never counter on the 4h: the record naming the 4h trend i
   assert.deepStrictEqual(lcEval(home, { accountId: 1, contractId: 'MNQ', side: 'sell', type: 'market', size: 1, rationale: '[exit] flatten the composed long' }).violations, []);
 });
 
-test('trade_lifecycle: a CISD setup is timed on its confirming candle; an entry read on that same candle is refused ([composed-reads]), a later one goes', () => {
+test('trade_lifecycle: a CISD setup is the entry on its confirming candle or a later one ([composed-reads] asks no confirming close); against the bias it is refused', () => {
+  // The CONF3M study (owner-approved): the setup is the entry, no confirming 3m close required.
   const reads = LC.READS.map(x => (x.step === 'setup' ? { ...x, skill: 'cisd', read: '15m cisd up' } : x));
-  const run = confirmedClose => {
+  const run = (confirmedClose, over = {}) => {
     const home = trendHome();
-    LC.writeScenario(home, { reads, b: LC.briefing({ m3: { cisd: { '15m': { dir: 'bullish', level: 21520, confirmedClose, status: 'touched', priceInOte: false } } } }) });
+    LC.writeScenario(home, { reads: reads.filter(x => !over.noEntry || x.step !== 'entry'), b: LC.briefing({ m3: { cisd: { '15m': { dir: 'bullish', level: 21520, confirmedClose, status: 'touched', priceInOte: false } } } }) });
     return lcEval(home);
   };
-  // Confirmed 13:45: the 3m closing 14:00 is the next candle.
+  // Confirmed 13:45 (the 3m closing 14:00 is the next candle), or on the 3m's own close (14:00), with or without a 3m read.
   assert.deepStrictEqual(run('2026-10-07T13:45:00.000Z').violations, []);
-  // Confirmed 14:00, with the 3m the entry reads: the same candle, refused.
-  const same = run(LC.CLOSE);
-  assert.deepStrictEqual(checks(same), ['composed-reads']);
-  assert.match(same.violations[0].message, /no entry read pointing long is on a candle that closed after the setup's/);
+  assert.deepStrictEqual(run(LC.CLOSE).violations, []);
+  assert.deepStrictEqual(run(LC.CLOSE, { noEntry: true }).violations, []);
+  // Against a trending 4h, the same entry is refused (never counter), as before.
+  const home = trendHome(require('../helpers').tmpDir(), { biases: { 240: -1, 60: -1, 15: -1 } });
+  LC.writeScenario(home, { reads: reads.filter(x => x.step !== 'entry') });
+  assert.ok(checks(lcEval(home)).includes('mtf-trend'), JSON.stringify(lcEval(home).violations));
 });
 
 test('trade_lifecycle: the order is on the record\'s own contract; the bar\'s own expiry (its validUntil plus valid_bars - 1 bars) earlier than the record\'s expiresAt decides', () => {

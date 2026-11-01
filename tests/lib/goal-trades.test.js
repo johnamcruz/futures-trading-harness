@@ -53,6 +53,11 @@ test('blockTrades on a fixture block: deterministic; every trade on the entry ru
   assert.ok(r.candidates.length >= r.trades.length);
   for (let i = 1; i < r.candidates.length; i += 1) assert.ok(GT.entryOrder(r.candidates[i - 1], r.candidates[i]) <= 0, 'entry order');
   assert.deepStrictEqual(GT.oneAtATime(r.candidates), r.trades);
+  // The setup is the entry (no confirming read): a 15m structure setup is entered from the bar its candle is known at,
+  // its own close first.
+  const structure = DOC.blocks.flatMap(x => GT.blockTrades(GF.decodeBars(x.bars), x.sessions, P, { symbol: DOC.symbol }).candidates).filter(t => /^15m (CHoCH|BOS|compression break)$/.test(t.type));
+  assert.ok(structure.length > 0 && structure.every(t => Date.parse(t.decidedAt) >= Date.parse(t.setupAt)));
+  assert.ok(structure.some(t => t.decidedAt === t.setupAt), 'one entered at the setup bar\'s own close');
   // No session is traded outside the sessions given: the warm-up is read, never traded.
   assert.deepStrictEqual(GT.blockTrades(bars, [b.sessions[0]], P, { symbol: DOC.symbol }).trades.filter(t => t.day !== b.sessions[0]), []);
 });

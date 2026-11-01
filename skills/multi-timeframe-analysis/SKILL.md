@@ -97,7 +97,7 @@ daily: UP (close 21650 vs EMA20 21402.5, EMA20 vs EMA50 21180.25, structure HH/H
 Alignment: long pullback, short counter; bias long (score 8 of ±10).
 Trend rule: LONG allowed (prevailing 4h up); no short against it.
 
--> Longs are a pullback: the 15m setup up is the entry, the next 3m close times it;
+-> Longs are a pullback: the 15m setup up is the entry, on the next 3m bar;
    the trail exits. Shorts are counter: refused (scan and gate), whatever CHoCH.
 
 mtf_read {"bars": "/home/u/.futures-trading-harness/bars/NQ-3m.csv"}    (the parity fixture tests/fixtures/parity/NQ-3m.csv, copied to the bar directory by the user)

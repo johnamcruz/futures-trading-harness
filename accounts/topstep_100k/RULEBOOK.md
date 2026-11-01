@@ -30,7 +30,7 @@ policies:                       # each policy strategy that trades this account 
       trail_giveback_r: off     # ... then trail this many R behind the best price
       lock_giveback_r: 1.5      # target_then_trail: once the target is reached the stop locks at the target's R less this
       trail_by: structure       # target_then_trail: structure (behind the latest confirmed swing on swing_tf, once beyond the lock) or r (trail_r behind the best price)
-      trail_r: 1                # target_then_trail: R behind the best price (trail_by r; with structure only when the bars hold no swing at all)
+      trail_r: 1                # target_then_trail: R behind the best price (trail_by r; with structure only when no swing's stop is under the close, over it for a short)
       swing_tf: 15m             # target_then_trail with trail_by structure: the swings the stop trails behind
       ratchet: off              # target_then_trail: on lifts the lock to the best R reached less lock_giveback_r; off (opt in only): the lock above
     multipliers: []             # enforced size multipliers folded into the verdict: none yet
@@ -99,7 +99,9 @@ each trade from its recorded path, prop/attempts.js exitAs):
   holds at that lock until a swing confirmed on `swing_tf` candles (closed
   bars only) stands beyond it, then trails behind that swing; the latest
   swing counts even one confirmed before the entry, so `trail_r` applies
-  only when the bars hold no swing at all. With `trail_by: r` it trails
+  only when the bars hold no swing, or the swing's stop (a tick beyond it)
+  is not under the bar's close for a long (over it for a short: a stale
+  swing from before a gap would close the trade at once). With `trail_by: r` it trails
   `trail_r` behind the best price. A pre-registered study
   (docs/research/exit-trail-study.md) kept this: the
   stop held at the lock lets 5R+ trends run, and it beat a working R

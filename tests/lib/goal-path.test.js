@@ -85,10 +85,37 @@ test('compareTrades: each lost or changed trade named by the category of its bre
 
 test('summarize, fillShare, tier2Rows and tier2RiseProblems: the tier 2 metrics and their gate', () => {
   const t = one(day());
-  const mech = [{ day: '2022-03-30', side: 'long', entryTime: '2022-03-30T13:48:00.000Z' }];
+  const mech = [{ day: '2022-03-30', side: 'long', setupAt: '2022-03-30T13:45:00.000Z', entryTime: '2022-03-30T13:48:00.000Z' }];
   const s = GP.summarize(t, { legs: day().legs, mechanical: mech, spanMs: 15 * 60000, blows: 0 });
   assert.deepStrictEqual(s, { trades: 1, totalR: 1, meanR: 1, caught: 0.3333, fills: 1, blows: 0 });
-  assert.strictEqual(GP.fillShare(t, [{ ...mech[0], side: 'short' }], 15 * 60000), 0);
+  // The day's first planned entry filled, the mock's or the mechanical's (the owner, 2026-10-31).
+  const SPAN = 15 * 60000;
+  const m925 = [{ day: '2023-09-25', side: 'short', setupAt: '2023-09-25T13:51:00.000Z', entryTime: '2023-09-25T13:54:00.000Z' }];
+  // The mock's earlier entry filled; the mechanical one is then refused (one position at a time): filled.
+  assert.strictEqual(GP.fillShare([{ day: '2023-09-25', side: 'short', entryTime: '2023-09-25T13:36:00.000Z' }], m925, SPAN), 1);
+  // A fill of the mechanical entry's side within its window: filled; the opposite side never counts (fails toward lost).
+  assert.strictEqual(GP.fillShare([{ day: '2023-09-25', side: 'short', entryTime: '2023-09-25T14:03:00.000Z' }], m925, SPAN), 1);
+  assert.strictEqual(GP.fillShare([{ day: '2023-09-25', side: 'long', entryTime: '2023-09-25T14:03:00.000Z' }], m925, SPAN), 0);
+  assert.strictEqual(GP.fillShare([{ day: '2023-09-25', side: 'long', entryTime: '2023-09-25T13:36:00.000Z' }], m925, SPAN), 0, 'an earlier fill of the other side is no planned entry');
+  // Neither filled: no trade that day, or the day's only fill after the mechanical entry's window: a lost fill.
+  assert.strictEqual(GP.fillShare([], m925, SPAN), 0);
+  assert.strictEqual(GP.fillShare([{ day: '2023-09-25', side: 'short', entryTime: '2023-09-25T14:12:00.000Z' }], m925, SPAN), 0);
+  assert.strictEqual(GP.fillShare([{ day: '2023-09-26', side: 'short', entryTime: '2023-09-26T13:36:00.000Z' }], m925, SPAN), 0, 'another day\'s fill is not this day\'s');
+  assert.strictEqual(GP.fillShare([{ day: '2023-09-25', side: 'short', entryTime: null }], m925, SPAN), 0, 'a fill with no time never counts');
+  assert.strictEqual(GP.fillShare([{ day: '2023-09-25', side: 'short', entryTime: '2023-09-25T13:36:00.000Z' }], [...m925, { day: '2023-09-26', side: 'long', setupAt: '2023-09-26T13:51:00.000Z', entryTime: '2023-09-26T13:54:00.000Z' }], SPAN), 0.5);
+  assert.strictEqual(GP.fillShare([], [], SPAN), null);
+  // The lower bound: one 1h bar before the mechanical setup (13:51). 13:36 (PR3's earlier entry at the setup) is kept,
+  // 12:51 exactly at the bound too; a same-side trade more than an hour before the setup is no planned entry.
+  assert.strictEqual(GP.fillShare([{ day: '2023-09-25', side: 'short', entryTime: '2023-09-25T13:36:02.000Z' }], m925, SPAN), 1);
+  assert.strictEqual(GP.fillShare([{ day: '2023-09-25', side: 'short', entryTime: '2023-09-25T12:51:00.000Z' }], m925, SPAN), 1);
+  assert.strictEqual(GP.fillShare([{ day: '2023-09-25', side: 'short', entryTime: '2023-09-25T12:50:00.000Z' }], m925, SPAN), 0);
+  assert.strictEqual(GP.fillShare([{ day: '2023-09-25', side: 'short', entryTime: '2023-09-25T10:36:00.000Z' }], m925, SPAN), 0, 'hours before the setup');
+  // Later than the mechanical entry plus the span (14:09): refused; the opposite side: refused.
+  assert.strictEqual(GP.fillShare([{ day: '2023-09-25', side: 'short', entryTime: '2023-09-25T14:09:00.000Z' }], m925, SPAN), 1);
+  assert.strictEqual(GP.fillShare([{ day: '2023-09-25', side: 'short', entryTime: '2023-09-25T14:09:01.000Z' }], m925, SPAN), 0);
+  assert.strictEqual(GP.fillShare([{ day: '2023-09-25', side: 'long', entryTime: '2023-09-25T13:36:02.000Z' }], m925, SPAN), 0);
+  // A mechanical entry with no setup time: nothing counts (fails closed).
+  assert.strictEqual(GP.fillShare([{ day: '2023-09-25', side: 'short', entryTime: '2023-09-25T13:54:00.000Z' }], [{ day: '2023-09-25', side: 'short', entryTime: '2023-09-25T13:54:00.000Z' }], SPAN), 0);
   const tol = { trades: 0, totalR: 0.25, fills: 0.1 };
   assert.ok(GP.tier2Rows(s, s, tol).every(r => r.ok));
   assert.deepStrictEqual(GP.tier2Rows(s, { ...s, blows: 1, totalR: 0.7, fills: 0.85, trades: 0 }, tol).filter(r => !r.ok).map(r => r.key), ['blows', 'trades', 'totalR', 'fills']);
@@ -190,4 +217,44 @@ test('shardOf, shardDays and shardCoverage: k/n parsed or refused; every n-th da
   assert.match(GP.shardCoverage([{ ...parts[0], shard: { k: 1, n: 2 } }, ...parts.slice(1)], { days, fixture: 'h' }).join('; '), /disagree on their count/);
   assert.match(GP.shardCoverage([{ ...parts[0], fixture: 'x' }, ...parts.slice(1)], { days, fixture: 'h' }).join('; '), /another fixture/);
   assert.match(GP.shardCoverage([{ ...parts[0], days: ['d1', 'd4', 'd9'] }, ...parts.slice(1)], { days, fixture: 'h' }).join('; '), /not tier 2's: d9/);
+});
+
+test('vwapTaken: the listed-vwap day never takes the listed VWAP setup; another setup that day may trade', () => {
+  const D = '2024-04-08';
+  assert.deepStrictEqual(GP.vwapTaken([], D), []);
+  assert.deepStrictEqual(GP.vwapTaken([{ day: D, setup: '15m rejected prior RTH high up', side: 'long', entry: 16649 }], D), []);
+  assert.match(GP.vwapTaken([{ day: D, setup: '15m broke VWAP (rth) up', side: 'long', entry: 16650 }], D).join(), /listed VWAP setup was taken/);
+  assert.match(GP.vwapTaken([{ day: D, setup: '15m rejected vwap up', side: 'long', entry: 16650 }], D).join(), /listed VWAP/, 'any case');
+  assert.deepStrictEqual(GP.vwapTaken([{ day: '2024-04-09', setup: '15m broke VWAP (rth) up', side: 'long', entry: 1 }], D), [], 'another day\'s trade is not this day\'s');
+});
+
+test('tier2RiseProblems: a total R drop is excused only by the pinned allowance\'s exact from -> to and its exact trade swap', () => {
+  const T = (key, size, R) => ({ key, size, R });
+  const other = [T('2021-05-25|long|2021-05-25T13:39:00.000Z', 7, -1.0132), T('2023-12-07|short|2023-12-07T14:39:00.000Z', 7, 2.65)];
+  const mainT = [...other, T('2023-09-25|short|2023-09-25T13:51:00.000Z', 8, -1.0139)];
+  const prT = [...other, T('2023-09-25|short|2023-09-25T13:33:00.000Z', 9, -1.0156)];
+  const s0 = { trades: 6, totalR: -2.4134, meanR: -0.4022, caught: 0, fills: 1, blows: 0 };
+  const s1 = { ...s0, totalR: -2.4151, meanR: -0.4025 };
+  const ok = (b, n, o) => GP.tier2RiseProblems(b, n, o);
+  // The exact pinned entry: accepted.
+  assert.deepStrictEqual(ok(s0, s1, { baseTrades: mainT, nextTrades: prT }), []);
+  // No trades given: never excused (fails closed).
+  assert.match(ok(s0, s1).join(), /totalR/);
+  // Another value, another from, another day's swap, another size or R, an extra change: refused.
+  assert.match(ok(s0, { ...s1, totalR: -2.42 }, { baseTrades: mainT, nextTrades: prT }).join(), /totalR/);
+  assert.match(ok({ ...s0, totalR: -2.4 }, s1, { baseTrades: mainT, nextTrades: prT }).join(), /totalR/);
+  assert.match(ok(s0, s1, { baseTrades: mainT, nextTrades: [...other, T('2023-09-25|short|2023-09-25T13:33:00.000Z', 10, -1.0156)] }).join(), /totalR/);
+  assert.match(ok(s0, s1, { baseTrades: mainT, nextTrades: [...other, T('2023-09-25|short|2023-09-25T13:33:00.000Z', 9, -1.2)] }).join(), /totalR/);
+  assert.match(ok(s0, s1, { baseTrades: mainT, nextTrades: [other[0], T('2023-12-07|short|2023-12-07T14:39:00.000Z', 7, 2.6), T('2023-09-25|short|2023-09-25T13:33:00.000Z', 9, -1.0156)] }).join(), /totalR/);
+  const dayMoved = [T('2021-05-25|long|2021-05-25T13:51:00.000Z', 8, -1.0139), other[1], mainT[2]];
+  assert.match(ok(s0, s1, { baseTrades: dayMoved, nextTrades: [T('2021-05-25|long|2021-05-25T13:33:00.000Z', 9, -1.0156), other[1], mainT[2]] }).join(), /totalR/);
+  // Tampered allowances (from, to, the trade, the day): refused.
+  const A = GP.TIER2_ALLOWANCES[0];
+  for (const bad of [{ ...A, from: '-2.4' }, { ...A, to: '-2.5' }, { ...A, trade: { ...A.trade, to: 'x' } }, { ...A, day: '2023-09-26' }, { ...A, what: 'tier 2 fills' }]) {
+    assert.match(ok(s0, s1, { baseTrades: mainT, nextTrades: prT, allowances: [bad] }).join(), /totalR/, JSON.stringify(bad));
+  }
+  // The other rise rules stand with the allowance: a blow more, fewer trades, a lower fill share.
+  assert.match(ok(s0, { ...s1, blows: 1 }, { baseTrades: mainT, nextTrades: prT }).join(), /blows/);
+  assert.match(ok(s0, { ...s1, fills: 0.5 }, { baseTrades: mainT, nextTrades: prT }).join(), /fills/);
+  assert.match(ok(s0, { ...s1, trades: 5 }, { baseTrades: mainT, nextTrades: prT }).join(), /trades/);
 });

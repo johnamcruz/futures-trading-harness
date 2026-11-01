@@ -52,7 +52,7 @@ test('sizing: the rulebook is the one home; the strategy loader hands each polic
     assert.deepStrictEqual(combine.sizingErrors(p.sizing), [], `${p.name}: whole`);
   }
   assert.strictEqual(rb.SIZING_KEYS, combine.SIZING_KEYS, 'one key list');
-  assert.strictEqual(require('../../scripts/lib/trading/strategies').MAX_VALID_BARS, 3);
+  assert.strictEqual(require('../../scripts/lib/trading/strategies').MAX_VALID_BARS, 5);
 });
 
 test('sizing: the live verdict and the gate refuse a policy without a whole sizing (fail closed, with the reason)', () => {
@@ -240,7 +240,7 @@ test('strategy numbers: the shipped trade_lifecycle keeps the owner\'s risk ceil
   const d = s.data || s;
   assert.ok(d.risk.max_risk_usd <= 300, `max_risk_usd ${d.risk.max_risk_usd} is above the owner's $300 cap`);
   assert.ok(d.risk.min_rr >= 2, `min_rr ${d.risk.min_rr} is under 2`);
-  assert.ok(d.valid_bars <= 3, `valid_bars ${d.valid_bars} is above 3`);
+  assert.ok(d.valid_bars <= 5, `valid_bars ${d.valid_bars} is above 5`);
   // The stop's floor tightens as it grows: a smaller floor lets a closer stop through (a looser rule), so it may only rise.
   assert.ok(d.risk.stop_floor_ticks >= 8, `stop_floor_ticks ${d.risk.stop_floor_ticks} is under 8 (a smaller floor loosens the stop)`);
   assert.ok(d.risk.stop_floor_atr >= 0.25, `stop_floor_atr ${d.risk.stop_floor_atr} is under 0.25 (a smaller floor loosens the stop)`);
