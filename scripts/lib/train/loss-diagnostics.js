@@ -9,8 +9,8 @@
  *   losersPastOne(exits, { toleranceR })   the losing trades past -1R, on one side's scored exits (exit-scorecard.js
  *                          decisions as probe.js keeps them: { side, entryAt, exitBy, r, fill }), or null when unknown:
  *     n, losers           the exits with a known R; those below 0
- *     past, share         the losers with R < -1 - tolerance (R: the fill's price R when known, else the broker's R
- *                         within half its rounding unit, e.g. 0.0005 for -1.013); past / losers (null with no loser)
+ *     past, share         the losers with R < -1 - tolerance (R: the fill's price R when known, else its R, on the stop it
+ *                         held when known, within half the side's rounding unit only beside a known tick); past / losers (null with no loser)
  *     worstR              the lowest loser's R (null with no loser)
  *     byTick, byConfig    how many losers' tolerance was one tick in R (fill.tickR), how many the config's
  *                         (config/training.json trendReport.loserToleranceR: the tick unknown)
@@ -53,9 +53,10 @@ const mean = xs => (xs.length ? round4(xs.reduce((a, b) => a + b, 0) / xs.length
 const REACTION_ORDER = ['confirmed rejection', 'breakout', 'engulfing rejection', 'long-wick rejection', 'conflicting', 'stall', 'plain', 'none', 'unknown', 'not recorded'];
 const LEVEL_ORDER = ['key', 'not key', 'no level'];
 const CLOSES = new Set(['model-exit', 'runner-exit', 'target']);
-// Half the rounding unit of an R as it was stated (-1.013: 3 decimals, 0.0005): a loser one tick past -1R, its R
-// rounded, is not past it.
-const halfUnit = x => { const t = String(x); const i = t.indexOf('.'); return i < 0 || /e/i.test(t) ? 0 : 10 ** -(t.length - i - 1) / 2; };
+// The decimals an R was stated with (-1.013: 3; -1.1: 1, its trailing zeros dropped when printed).
+const decimalsOf = x => { const t = String(x); const i = t.indexOf('.'); return i < 0 || /e/i.test(t) ? 0 : t.length - i - 1; };
+// A trade's R on the stop it held (exit-scorecard.js fill.r, as trade-basis.js measures it), else the broker's.
+const rOf = e => (num(isObj(e.fill) ? e.fill.r : null) !== null ? e.fill.r : num(e.r));
 
 function causeOf(e, toleranceR) {
   if (!isObj(e)) return 'unknown';
@@ -75,25 +76,28 @@ function causeOf(e, toleranceR) {
 function losersPastOne(exits, { toleranceR }) {
   if (num(toleranceR) === null) throw new Error('losersPastOne: toleranceR (config/training.json trendReport.loserToleranceR)');
   if (!Array.isArray(exits)) return null;
-  const known = exits.filter(e => isObj(e) && num(e.r) !== null);
-  const losers = known.filter(e => e.r < 0);
+  const known = exits.filter(e => isObj(e) && rOf(e) !== null);
+  const losers = known.filter(e => rOf(e) < 0);
+  // The side's R rounding unit: the most decimals any of its R was stated with (one R printed short never widens it).
+  const halfUnit = known.length ? 10 ** -Math.max(...known.map(e => decimalsOf(rOf(e)))) / 2 : 0;
   let byTick = 0;
   const tolOf = e => {
     const t = num(isObj(e.fill) ? e.fill.tickR : null);
-    if (t !== null && t > 0) { byTick += 1; return t; }
-    return toleranceR;
+    if (t !== null && t > 0) { byTick += 1; return { tol: t, tick: true }; }
+    return { tol: toleranceR, tick: false };
   };
-  const marked = losers.map(e => ({ e, tol: tolOf(e) }));
-  // Past -1R on the fill's own price R when known (4 decimals, as the tick in R), else the broker's R within its rounding.
-  const lossR = e => (num(isObj(e.fill) ? e.fill.priceR : null) !== null ? { r: e.fill.priceR, eps: 0 } : { r: e.r, eps: halfUnit(e.r) });
-  const past = marked.filter(x => { const l = lossR(x.e); return l.r < -1 - x.tol - l.eps; });
-  const trades = past.map(({ e, tol }) => ({ entryAt: e.entryAt || null, side: e.side || null, exitBy: e.exitBy || null, r: e.r, toleranceR: round4(tol), cause: causeOf(e, tol) }));
+  const marked = losers.map(e => ({ e, ...tolOf(e) }));
+  // Past -1R on the fill's own price R when known (4 decimals, as the tick in R); else on its R, within the side's rounding
+  // unit only beside a known tick (a one-tick slip rounded is not past), never on the config's tolerance.
+  const lossR = x => (num(isObj(x.e.fill) ? x.e.fill.priceR : null) !== null ? { r: x.e.fill.priceR, eps: 0 } : { r: rOf(x.e), eps: x.tick ? halfUnit : 0 });
+  const past = marked.filter(x => { const l = lossR(x); return l.r < -1 - x.tol - l.eps; });
+  const trades = past.map(({ e, tol }) => ({ entryAt: e.entryAt || null, side: e.side || null, exitBy: e.exitBy || null, r: rOf(e), toleranceR: round4(tol), cause: causeOf(e, tol) }));
   const causes = {};
   for (const t of trades) causes[t.cause] = (causes[t.cause] || 0) + 1;
   return {
     n: known.length, unknown: exits.length - known.length, losers: losers.length, past: past.length,
     share: losers.length ? round4(past.length / losers.length) : null,
-    worstR: losers.length ? Math.min(...losers.map(e => e.r)) : null,
+    worstR: losers.length ? Math.min(...losers.map(rOf)) : null,
     byTick, byConfig: losers.length - byTick, toleranceR, causes, trades,
   };
 }

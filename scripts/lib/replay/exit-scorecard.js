@@ -34,10 +34,12 @@
  * the model-free detection study).
  * The model's tightens: each modify_order of the stop; `stopped` when that stop (the last move before the exit) took the
  * trade out (its class is the exit's), else `held` (the trade went on: a later move, or another exit).
- * fill (report only: the round report's losers past -1R, train/loss-diagnostics.js), in the trade's R from its entry:
- * stopR the stop working at a stop exit (the last move's price, else the initial stop: entry minus the risk), null for
- * any other exit; openR the open of the bar the exit filled in (null when no bar holds it); priceR the exit's price;
- * tickR one tick (the trip's `tick`), null when its tick is unknown. Nothing scores or screens on them.
+ * fill (report only: the round report's losers past -1R, train/loss-diagnostics.js), in R on the stop the trade held
+ * (trade-basis.js: the runner's move to the plan's stop after the fill, else the bracket's risk; `basis` says which), from
+ * its entry: r the trade's R on that basis; stopR the stop working at a stop exit (the last move's price, else the held
+ * stop), null for any other exit; openR the open of the bar the exit filled in (null when no bar holds it); priceR the
+ * exit's price; tickR one tick (the trip's `tick`), null when its tick is unknown. Nothing scores or screens on them (the
+ * decision's own `r` stays the broker's, as the exit screen reads it).
  *
  *   PARAMS                                   config/replay.json exitScore (frozen)
  *   barsClosedBy(bars, ms, stepMs)          the bars closed by ms: a decision's facts read only these (no look-ahead)
@@ -149,12 +151,18 @@ function lateThreshold(strategies, params = PARAMS) {
  * A scored exit's fill facts in R (see the header): the stop working at a stop exit, the exit bar's open, the exit's
  * price, one tick. Pure; null where a price, the bar or the tick is unknown.
  */
-function fillOf(t, { exitBy, move, bars, stepMs }) {
+function fillOf(t, { exitBy, move, bars, stepMs, plan = null }) {
   const s = sign(t.side);
-  const inR = px => (num(px) === null || num(t.entry) === null ? null : r4((s * (px - t.entry)) / t.risk));
-  const stop = !STOP_EXITS.includes(exitBy) ? null : move ? num(move.to) : num(t.entry) === null ? null : t.entry - s * t.risk;
+  // The held stop's risk: the runner's move to the plan's stop after the fill (trade-basis.js onHeldStop), else the bracket's.
+  const held = plan && num(plan.to) !== null && num(t.entry) !== null ? s * (t.entry - plan.to) : null;
+  const unit = held !== null && held > 0 ? held : t.risk;
+  const inR = px => (num(px) === null || num(t.entry) === null ? null : r4((s * (px - t.entry)) / unit));
+  const stop = !STOP_EXITS.includes(exitBy) ? null : move ? num(move.to) : num(t.entry) === null ? null : t.entry - s * unit;
   const bar = stepMs > 0 ? (Array.isArray(bars) ? bars : []).find(b => { const bt = Date.parse(b.t); return bt <= t.exitMs && t.exitMs < bt + stepMs; }) : null;
-  return { stopR: inR(stop), openR: bar ? inR(bar.o) : null, priceR: inR(t.exitPrice), tickR: num(t.tick) > 0 ? r4(t.tick / t.risk) : null };
+  return {
+    basis: unit === t.risk ? 'bracket stop' : 'held stop', r: num(t.r) === null ? null : r4((t.r * t.risk) / unit),
+    stopR: inR(stop), openR: bar ? inR(bar.o) : null, priceR: inR(t.exitPrice), tickR: num(t.tick) > 0 ? r4(t.tick / unit) : null,
+  };
 }
 
 /** The last of `list` (by ms) at or before `ms` and after `since`. */
@@ -185,7 +193,7 @@ function scoreExits({ trips = [], moves: given = [], closes = [], bars = [], ste
     decisions.push({
       trip: t.id ?? null, root: famOf(t.contractId), side: t.side, entryAt: new Date(t.entryMs).toISOString(), exitBy, cls, leftR, savedR, r: num(t.r), peakR, givebackR,
       late, ...(late ? { lateR: r2(handed - params.lateGivebackR) } : {}), at: new Date(t.exitMs).toISOString(),
-      fill: fillOf(t, { exitBy, move, bars, stepMs }),
+      fill: fillOf(t, { exitBy, move, bars, stepMs, plan: moves.filter(same).filter(m => m.by === 'plan' && m.ms >= t.entryMs && m.ms <= t.exitMs).sort((a, b) => a.ms - b.ms)[0] || null }),
       ...(decision ? { decidedAt: new Date(decision.ms).toISOString() } : {}),
       flip: decision && facts && isObj(facts.bias) ? facts.bias.flipAgainst === true : null, facts: facts || null,
     });

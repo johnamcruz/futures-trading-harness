@@ -68,6 +68,18 @@ test('losersPastOne: a one-tick slip is never past -1R by rounding: the fill\'s 
   assert.strictEqual(one(-1.013, -1.0125), 0, 'the fill\'s own price R: exactly one tick');
   assert.strictEqual(one(-1.013, -1.04), 1, 'the price R past one tick');
   assert.strictEqual(one(-1.014, null), 1, 'past the rounding: past -1R');
+  // The unit is the side's (the most decimals stated), never one R printed short: -1.100 prints -1.1, still past.
+  assert.strictEqual(LD.losersPastOne([exit(-1.1, { fill: fill(-1, -0.5, null, tick) }), exit(-1.013, { fill: fill(-1, -0.5, null, tick) })], { toleranceR: 0.05 }).past, 1);
+  // The tick unknown: the config's tolerance, no rounding allowance beside it: -1.1 is past -1.05.
+  assert.strictEqual(LD.losersPastOne([exit(-1.1, { fill: fill(-1, -0.5, null) })], { toleranceR: 0.05 }).past, 1);
+  assert.strictEqual(LD.losersPastOne([exit(-1.04, { fill: fill(-1, -0.5, null) })], { toleranceR: 0.05 }).past, 0);
+});
+
+test('losersPastOne: on the stop the trade held when the fill says it (trade-basis.js), else the broker\'s R', () => {
+  // The broker's -0.9R on a bracket wider than the plan's stop the runner moved it to is -1.2R on the stop it held.
+  const held = exit(-0.9, { fill: { basis: 'held stop', r: -1.2, stopR: -1, openR: -0.5, priceR: -1.2, tickR: null } });
+  const l = LD.losersPastOne([held], { toleranceR: 0.05 });
+  assert.deepStrictEqual([l.losers, l.past, l.worstR, l.trades[0].r, l.trades[0].cause], [1, 1, -1.2, -1.2, 'stop slippage']);
 });
 
 // --- break-even -------------------------------------------------------------------------------------------------------
@@ -263,9 +275,49 @@ test('entry read, the production join: the record\'s 5m read gets the label the 
     assert.deepStrictEqual(after.briefingAt('MNQ', bar).sections.m3.data.candles['5m'], before);
     assert.strictEqual(ER.withReads(entries, after)[0].read.reaction, rel.reaction);
     // fineBarsOf: the data file's one-minute bars when the run holds none; a file of another bar size gives none.
-    assert.strictEqual(ER.fineBarsOf(h.home, h.runDir, 'MNQ', h.barsFiles).length, h.m1.length);
+    const got1 = ER.fineBarsOf(h.home, h.runDir, 'MNQ', h.barsFiles);
+    assert.deepStrictEqual([got1.bars.length, got1.source], [h.m1.length, 'file']);
     fs.writeFileSync(path.join(h.home, 'data-3m.json'), JSON.stringify(h.m3));
-    assert.deepStrictEqual(ER.fineBarsOf(h.home, h.runDir, 'MNQ', { MNQ: path.join(h.home, 'data-3m.json') }), []);
+    assert.deepStrictEqual(ER.fineBarsOf(h.home, h.runDir, 'MNQ', { MNQ: path.join(h.home, 'data-3m.json') }), { bars: [], source: null });
+    // A data file that is gone: no briefing, unknown, never a throw.
+    assert.strictEqual(ER.withReads(entries, ER.readerFor({ runDir: h.runDir, barsFiles: { MNQ: path.join(h.home, 'gone.json') } }))[0].read.reaction, 'unknown');
+  } finally {
+    fs.rmSync(h.home, { recursive: true, force: true });
+  }
+});
+
+test('entry read: a data file on another price basis (back-adjusted) never lends its bars: the own-bars label or unknown', () => {
+  const LC = require('../../scripts/lib/trading/trade-lifecycle');
+  const { levelName } = require('../../scripts/lib/trading/composed-reads');
+  const h = runHome();
+  try {
+    // The census file's prices a constant 3345.75 points off the run's own bars.
+    const shifted = h.m1.map(x => ({ ...x, o: x.o + 3345.75, h: x.h + 3345.75, l: x.l + 3345.75, c: x.c + 3345.75 }));
+    const adjusted = path.join(h.home, 'adjusted-1m.json');
+    fs.writeFileSync(adjusted, JSON.stringify(shifted));
+    const own = ER.readerFor({ runDir: h.runDir });
+    const viaFile = ER.readerFor({ runDir: h.runDir, barsFiles: { MNQ: adjusted } });
+    const bar = h.m3[h.m3.length - 40].t;
+    // The base frames read the run's own bars either way (the file never replaces them); its fine bars are refused.
+    assert.deepStrictEqual(viaFile.briefingAt('MNQ', bar).sections.m3.data.candles['15m'], own.briefingAt('MNQ', bar).sections.m3.data.candles['15m']);
+    assert.ok(!ER.sameBasis(shifted, h.m3.find(x => x.t === bar), 3));
+    assert.ok(ER.sameBasis(h.m1, h.m3.find(x => x.t === bar), 3));
+    // Every 15m reaction the own bars give is the label through the adjusted file; every 5m read is unknown.
+    let checked = 0;
+    for (const b of h.m3.slice(-30)) {
+      const c = own.briefingAt('MNQ', b.t).sections.m3.data.candles;
+      for (const tf of ['15m', '5m']) {
+        const x = c[tf] && Array.isArray(c[tf].relations) ? c[tf].relations.find(y => (y.rel === 'rejected' || y.rel === 'broke') && y.dir) : null;
+        const f = tf === '5m' ? (h.m1.length ? ER.readerFor({ runDir: h.runDir, barsFiles: h.barsFiles }).briefingAt('MNQ', b.t).sections.m3.data.candles['5m'] : null) : null;
+        const y = tf === '5m' && f && Array.isArray(f.relations) ? f.relations.find(z => (z.rel === 'rejected' || z.rel === 'broke') && z.dir) : x;
+        if (!y) continue;
+        const rec = LC.buildRecord({ at: b.t, root: 'MNQ', symbol: 'MNQ', side: y.dir === 'up' ? 'long' : 'short', briefing: { asOf: b.t, minutes: 3, sections: {} }, checked: { ok: true, problems: [], reads: [{ step: 'setup', skill: 's', read: `${tf} ${y.rel} ${levelName(y.name)} ${y.dir}`, why: 'w', kind: 'relation' }], signature: null, skillSignature: null, context: null } });
+        const got = ER.withReads([{ record: rec.id }], { records: new Map([[rec.id, rec]]), briefingAt: viaFile.briefingAt })[0].read.reaction;
+        assert.strictEqual(got, tf === '5m' ? 'unknown' : (y.reaction || 'unknown'), `${b.t} ${tf}`);
+        checked += 1;
+      }
+    }
+    assert.ok(checked >= 2, `checked ${checked}`);
   } finally {
     fs.rmSync(h.home, { recursive: true, force: true });
   }

@@ -983,7 +983,8 @@ on the trend confirm half:
 - **losers past -1R**: of the losing round trips (the exit scorecard's),
   how many closed below -1R by more than one tick in R (`trendReport.loserToleranceR`,
   0.05R, when the tick is unknown), their share, the worst loser's R, and
-  each one's cause from its fill (in R, `exit-scorecard.js` `fill`): stop
+  each one's cause from its fill (in R on the stop the trade held, as the
+  trade's R is measured: `exit-scorecard.js` `fill`): stop
   slippage (filled past the stop, its bar opening inside it), a gap
   through the stop (its bar opened past it), a stop beyond the initial
   risk (moved away), an exit not at the stop, or unknown when the fill
@@ -1000,10 +1001,13 @@ on the trend confirm half:
   share (as above, on its round trip's peak R; n/a with no peak known) and trend legs caught (distinct legs entered their
   way), split by the reaction of its setup candle at its level (the
   compose record's first rejection, break or sweep read, its reaction the
-  briefing's at the record's bar, rebuilt from the run's bars and the
-  replayed data's one-minute bars, as live:
+  briefing's at the record's bar, rebuilt from the run's own bars:
   `entry-reaction.js`; none: no such read; not recorded: no compose record
-  joined, with the coverage said) and by key level or not (the setup
+  joined; unknown: the briefing can't say, with the coverage said). A
+  frame built from one-minute bars (5m, gaps) needs them on the run's own
+  price basis: runs archive no one-minute bars today and the loop's data
+  file is back-adjusted (refused), so those reads are unknown until runs
+  archive their one-minute bars and by key level or not (the setup
   moments' key levels and FVG edges); a bucket under
   `trendReport.smallN` (30) entries says "small n, no conclusion";
 - **exits**: the exit scorecard's cut-a-trend (R left) and late (R given
