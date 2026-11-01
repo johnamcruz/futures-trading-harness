@@ -957,6 +957,8 @@ const EVENT_FRAMES = { '4h': 60 };
 const eventShown = (tf, c, closedAt) => (!(tf in EVENT_FRAMES) || !(Date.parse(closedAt) - Date.parse(c.closedAt) > EVENT_FRAMES[tf] * 60000) ? 'full'
   : c.sweep && c.sweep.closedBack ? 'sweep' : null);
 
+// The reactions that read as a rejection (candle-reading 1, 3, 4): their briefing text says the side.
+const SIDED = new Set(['confirmed rejection', 'engulfing rejection', 'long-wick rejection']);
 const GAP_REL_RANK = { rejected: 0, broke: 1, touched: 2 };
 const GAP_TF_RANK = { '1h': 0, '15m': 1, '5m': 2 };
 /**
@@ -989,11 +991,21 @@ function candleLines(m3, et, roomOf = 'R = the reference stop', closedAt = null)
     // reads from, not the event-driven ones (4h), which keep their own byte budget (its reactions stay in the JSON).
     const extras = !(tf in EVENT_FRAMES);
     const rx = name => (extras && c.reactions && c.reactions[name] ? c.reactions[name] : null);
+    // A reaction that reads as a rejection says its side, the candle's (candle-reading: side first, never from the
+    // bias): closed back below, a high's rejection, the short side; back above, the long side.
+    const sided = (name, r) => (SIDED.has(rx(name)) ? `${rx(name)}, ${/below/.test(r) ? 'short' : 'long'} side` : rx(name));
+    // A touch (a high exactly at the level) can read as a rejection too (a confirmed one): its side by the close against
+    // the level (below: the short side), none at the level or with no price.
+    const touchedSided = name => {
+      const at = Array.isArray(c.relations) ? c.relations.find(x => x && x.name === name) : null;
+      const p = at ? at.price : NaN;
+      return SIDED.has(rx(name)) && Number.isFinite(c.c) && Number.isFinite(p) && c.c !== p ? `${rx(name)}, ${c.c < p ? 'short' : 'long'} side` : rx(name);
+    };
     const met = Object.entries(c.levels || {}).map(([name, r]) => (r.startsWith('rejected')
-      ? `rejected ${name} (${r.replace('rejected: ', '')}${rx(name) ? `; ${rx(name)}` : ''})`
+      ? `rejected ${name} (${r.replace('rejected: ', '')}${rx(name) ? `; ${sided(name, r)}` : ''})`
       // A touch whose close was beyond the level (the relation is by the body, the reaction by the close): said so.
-      : `${r} ${name}${rx(name) ? ` (${r === 'touched' && rx(name) === 'breakout' ? 'closed beyond: breakout' : rx(name)})` : ''}`));
-    for (const x of extras && Array.isArray(c.confirmed) ? c.confirmed : []) met.push(`confirmed rejection of ${x.text || `${x.name} ${x.price}`}`);
+      : `${r} ${name}${rx(name) ? ` (${r === 'touched' && rx(name) === 'breakout' ? 'closed beyond: breakout' : r === 'touched' ? touchedSided(name) : rx(name)})` : ''}`));
+    for (const x of extras && Array.isArray(c.confirmed) ? c.confirmed : []) met.push(`confirmed rejection of ${x.text || `${x.name} ${x.price}`}${x.dir ? ` (${x.dir === 'down' ? 'short' : 'long'} side)` : ''}`);
     if (c.moreLevels) met.push(`+${c.moreLevels} more`);
     const shapeText = [`${c.pattern}${c.dir ? ` ${c.dir}` : ''}`, extras && c.insideStack && c.mother ? `${c.insideStack} in a row inside the ${et(c.mother.t)} candle ${c.mother.l}-${c.mother.h}` : null,
       c.closeLocation ? `close ${c.closeLocation} third` : null,

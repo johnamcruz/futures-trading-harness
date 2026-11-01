@@ -28,21 +28,25 @@ const MEANING = Object.freeze({
   unknown: 'unknown: the briefing can\'t say; never read it by eye',
 });
 
+const num = v => (typeof v === 'number' ? v : NaN);
 const isObj = x => Boolean(x) && typeof x === 'object' && !Array.isArray(x);
 const m3Of = b => (isObj(b) && isObj(b.sections) && isObj(b.sections.m3) && isObj(b.sections.m3.data) ? b.sections.m3.data : null);
 
 /**
  * The side of a reaction at a level the candle met: a rejection's is the way it closed back (`dir`: down, a rejection of
- * a high, the short side); a break's, its close beyond (up: long). After a high or a low: which way the attempt went.
+ * a high, the short side); a break's, its close beyond (up: long). A touch has no `dir`: its side is the candle's close
+ * against the level's price (below: down), as the briefing's candle line says it; neither known: no side. After a high or
+ * a low: which way the attempt went.
  */
-function sideOf(rel, dir, reaction) {
-  if (!dir) return { side: null, high: null };
-  // A rejection closed back down (or a break down): the attempt was through a level from below for a rejection.
-  const short = dir === 'down';
-  // A breakout's control is the breaking side; a rejection's the other side of the attempt: after a high for a
-  // rejection closing back down, after a low for one closing back up. A break up came from below (a high's breakout).
-  const high = rel === 'rejected' ? short : !short;
-  return { side: short ? 'short' : 'long', high: reaction === 'breakout' ? !short : high };
+function sideOf(rel, dir, reaction, close = NaN, price = NaN) {
+  const d = dir || (Number.isFinite(close) && Number.isFinite(price) && close !== price ? (close < price ? 'down' : 'up') : null);
+  if (!d) return { side: null, high: null };
+  // Closed down (back below, or a break down): the short side.
+  const short = d === 'down';
+  // A breakout's control is the breaking side (a break up came from below: a high's breakout, buyers); a rejection's
+  // (any other reaction) the other side of the attempt: the short side is after a high, the long side after a low,
+  // whatever the relation (a `broke` or `touched` candle reading as a rejection says the same as a `rejected` one).
+  return { side: short ? 'short' : 'long', high: reaction === 'breakout' ? !short : short };
 }
 
 /** The briefing's relation entries for this level on this frame, the matching one first. */
@@ -64,8 +68,10 @@ function sweepRelation(m3, level) {
 
 function text(reaction, side, high) {
   const m = MEANING[reaction] || MEANING.unknown;
+  // A side-bearing reaction with no side to read: the label alone, never a meaning of the wrong side.
+  if (Array.isArray(m) && !side) return reaction;
   const meaning = Array.isArray(m) ? m[high ? 0 : 1] : m;
-  return `${reaction}${side && Array.isArray(m) ? ` (${side} side: ${meaning})` : ` (${meaning})`}`;
+  return `${reaction}${Array.isArray(m) ? ` (${side} side: ${meaning})` : ` (${meaning})`}`;
 }
 
 /** One read's echo: { text, reaction, said } or null. `said`: a reaction the read's own words name. */
@@ -83,7 +89,8 @@ function echoOf(read, briefing) {
     if (s) { tf = s.tf; rel = s.r; }
   } else return null;
   const reaction = rel && REACTIONS.includes(rel.reaction) ? rel.reaction : 'unknown';
-  const { side, high } = rel ? sideOf(rel.rel, rel.dir, reaction) : { side: null, high: null };
+  const candle = isObj(m3.candles) && isObj(m3.candles[tf]) ? m3.candles[tf] : {};
+  const { side, high } = rel ? sideOf(rel.rel, rel.dir, reaction, num(candle.c), num(rel.price)) : { side: null, high: null };
   const said = REACTIONS.filter(x => x !== 'unknown').find(x => new RegExp(`\\b${x.replace('-', '[- ]')}\\b`, 'i').test(String(r.why || ''))) || null;
   const where = rel ? `${tf} ${rel.rel}${rel.dir ? ` ${rel.dir}` : ''} ${rel.name}` : `${p.form}`;
   return { reaction, said, text: `- REACTION ${where}: ${text(reaction, side, high)}` };

@@ -44,3 +44,30 @@ test('a MISMATCH when the read\'s own words name another reaction than the brief
   assert.strictEqual(E.echoLines([{ read: '15m rejected prior vah down', why: 'plain, weak' }], b).length, 1);
   assert.strictEqual(E.echoLines([{ read: '15m rejected prior vah down', why: 'the VAH held' }], b).length, 1);
 });
+
+test('a touch reading as a rejection: its side by the close against the level, as the briefing says it; none without a price', () => {
+  const B = require('../../scripts/lib/trading/briefing');
+  const touch = (name, price, c, reaction) => ({ sections: { m3: { data: { candles: { '15m': { c, relations: [{ name, price, rel: 'touched', dir: null, reaction }] } } } } } });
+  // A high touched exactly, the close below it: the short side, sellers (never the after-a-low meaning).
+  assert.deepStrictEqual(E.echoLines([{ read: '15m rejected overnight high down' }], touch('overnight high', 100, 98, 'confirmed rejection')),
+    ['- REACTION 15m touched overnight high: confirmed rejection (short side: sellers took over, confirmed)']);
+  // The briefing's candle line for the same candle says the same side.
+  const line = B.candleLines({ candles: { '15m': { closedAt: '2026-06-15T14:00:00.000Z', pattern: 'bearish engulfing', closeLocation: 'bottom', rangeAtr: null, volRatio: null, sweep: null, c: 98,
+    levels: { 'overnight high': 'touched' }, reactions: { 'overnight high': 'confirmed rejection' }, relations: [{ name: 'overnight high', price: 100, rel: 'touched', dir: null }] } }, swingTargets: { above: [], below: [] } }, v => v)[0];
+  assert.match(line, /touched overnight high \(confirmed rejection, short side\)/);
+  // The mirror: a low touched, the close above it: the long side, buyers.
+  assert.deepStrictEqual(E.echoLines([{ read: '15m rejected overnight low up' }], touch('overnight low', 100, 102, 'confirmed rejection')),
+    ['- REACTION 15m touched overnight low: confirmed rejection (long side: buyers took over, confirmed)']);
+  // No price (or a close at the level): the label alone, no side and no meaning.
+  for (const [price, c] of [[null, 98], [100, 100], [100, undefined]]) {
+    assert.deepStrictEqual(E.echoLines([{ read: '15m rejected overnight high down' }], touch('overnight high', price, c, 'confirmed rejection')), ['- REACTION 15m touched overnight high: confirmed rejection'], `${price} ${c}`);
+  }
+});
+
+test('a broke candle reading as a rejection: the meaning follows its side (short: sellers), never the other side\'s', () => {
+  const at = (dir, reaction) => E.echoLines([{ read: `15m broke prior vah ${dir}` }], briefing('15m', [rel('prior VAH', 'broke', dir, reaction)]))[0];
+  assert.strictEqual(at('down', 'confirmed rejection'), '- REACTION 15m broke down prior VAH: confirmed rejection (short side: sellers took over, confirmed)');
+  assert.strictEqual(at('up', 'long-wick rejection'), '- REACTION 15m broke up prior VAH: long-wick rejection (long side: buyers rejected lower prices)');
+  // A breakout's stays the breaking side.
+  assert.strictEqual(at('down', 'breakout'), '- REACTION 15m broke down prior VAH: breakout (short side: sellers in control: a breakout attempt, not a sweep)');
+});

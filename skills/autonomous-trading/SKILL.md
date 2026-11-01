@@ -143,7 +143,9 @@ description: Use when a prompt says it is an autonomous or scheduled cycle - one
 9. **Phase 2's size.** A risk-manager approval whose Size line is prose
    ("Size: I'd go with 3 contracts") beside `VERDICT: APPROVE - size 3` is
    a readable approved size. A bare `VERDICT: APPROVE` with no size on the line → unreadable, even beside a
-   Size line → one restate of the Size and VERDICT lines; never a veto.
+   Size line, prose or not ("Size: I'd go with 3 contracts" with "VERDICT:
+   approve"): not a trade yet → one restate of the Size and VERDICT lines;
+   never a veto.
 
 ## Examples
 

@@ -197,7 +197,7 @@ The code reads your report; anything else reads as a veto:
 - Size → its own line, `Size: <n>`: the final size alone, reasoning on
   the lines before (7 Risk). A prose Size line ("Size: I'd go with 3")
   beside `VERDICT: APPROVE - size 3` is a readable approved size; its cuts
-  bind; a second, smaller size is no trade. A bare `VERDICT: APPROVE` (no size) is unreadable even beside a Size line: one restate, never a veto. To cut,
+  bind; a second, smaller size is no trade. A bare `VERDICT: APPROVE` (no size on it) is unreadable even beside a Size line, prose or not ("Size: I'd go with 3 contracts" with "VERDICT: approve"): not a trade yet; one restate, never a veto. To cut,
   approve the smaller size.
 - Every size and "cut to" on the VERDICT and Size lines binds.
 - These read as a veto: `Decision: cut to size 1`, `8 Decision: valid
