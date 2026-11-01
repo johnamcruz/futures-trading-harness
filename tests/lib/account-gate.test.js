@@ -503,6 +503,35 @@ test('the target-then-trail ratchet\'s stop moves (one jump of several R toward 
   assert.deepStrictEqual(checks(evaluateModifyAccount({ input: { orderId: 9, stopPrice: 14518.25 }, positions: short1, orders: [{ ...buyStop, stopPrice: 14452 }], config })), ['modify-protection']);
 });
 
+test('modify_order: a size equal to the order\'s is no size change (a stop moved with its size restated goes); a larger, fractional or unreadable size is still refused', () => {
+  const long3 = [{ contractId: CONTRACT, type: 1, size: 3 }];
+  const stop = { id: 2, contractId: CONTRACT, side: 1, type: 4, size: 3, stopPrice: 21480 };
+  const run = (input, orders = [stop]) => checks(evaluateModifyAccount({ input: { orderId: 2, reason: '[protect] trail', ...input }, positions: long3, orders, config }));
+  assert.deepStrictEqual(run({ size: 3, stopPrice: 21490 }), [], 'toward the market, size 3 = 3: goes');
+  assert.deepStrictEqual(run({ size: '3', stopPrice: 21490 }), [], 'the size as text: the same');
+  assert.deepStrictEqual(run({ size: 3 }), [], 'the size alone, unchanged: nothing changes');
+  assert.deepStrictEqual(run({ size: 3, stopPrice: 21470 }), ['modify-protection'], 'a stop widened is refused, its size restated or not');
+  for (const size of [4, 2.5, 3.5, 0, -3, 'x', '', NaN, Infinity, true, {}, [3]]) {
+    assert.deepStrictEqual(run({ size, stopPrice: 21490 }), ['modify-size'], `size ${JSON.stringify(size)}`);
+  }
+  // An order of unreadable size: no size is equal to it; every size refused (fail closed).
+  for (const bad of [undefined, null, 'x', NaN]) {
+    assert.deepStrictEqual(run({ size: 3, stopPrice: 21490 }, [{ ...stop, size: bad }]), ['modify-size'], `order size ${bad}`);
+  }
+  // A missing order: still refused.
+  assert.deepStrictEqual(checks(evaluateModifyAccount({ input: { orderId: 99, size: 3, stopPrice: 21490 }, positions: long3, orders: [stop], config })), ['modify-protection']);
+  // Under a refused config file, a working entry's bracket stop: an unchanged size with a move toward the entry goes;
+  // the unchanged size alone is nothing to cut or move (refused); a larger one is refused.
+  const critical = { ...config, configCritical: 'CRITICAL config error: x' };
+  const entry = { id: 1, contractId: CONTRACT, side: 0, type: 1, size: 3, limitPrice: 21500 };
+  const leg = { ...stop, status: 1 };
+  const crit = input => checks(evaluateModifyAccount({ input: { orderId: 2, ...input }, positions: [], orders: [entry, leg], config: critical }));
+  assert.deepStrictEqual(crit({ size: 3, stopPrice: 21490 }), []);
+  assert.deepStrictEqual(crit({ size: 3 }), ['config-critical']);
+  assert.deepStrictEqual(crit({ size: 4, stopPrice: 21490 }), ['config-critical']);
+  assert.deepStrictEqual(crit({ size: 3, stopPrice: 21470 }), ['config-critical']);
+});
+
 test('contract months: an exit must be in the month that is open, and a long and a short in two months are not flat', () => {
   const Z = CONTRACT;
   const H = 'MNQ:2027-03';

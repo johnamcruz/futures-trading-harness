@@ -465,6 +465,11 @@ test('modify_order size changes need an [exit]/[protect] reason (the gateway the
   const cfg = loadConfig({});
   assert.deepStrictEqual(evaluateModify({ input: { orderId: 1, size: 1 }, config: cfg }).violations.map(v => v.check), ['modify-size']);
   assert.deepStrictEqual(evaluateModify({ input: { orderId: 1, size: 1, reason: '[protect] cut the stop to 1 after scaling out' }, config: cfg }).violations, []);
+  // A stop moved with its size restated (the hook can't see the order's size: the gateway decides it is no change).
+  assert.deepStrictEqual(evaluateModify({ input: { orderId: 1, size: 3, stopPrice: 21490, reason: '[protect] trail behind the 15m swing' }, config: cfg }).violations, []);
+  for (const size of [0, -1, 2.5, 'x', NaN]) {
+    assert.deepStrictEqual(evaluateModify({ input: { orderId: 1, size, stopPrice: 21490, reason: '[protect] trail' }, config: cfg }).violations.map(v => v.check), ['modify-size'], `size ${size}`);
+  }
 });
 
 test('market hours are a hard rule: entries only in the 18:00-16:00 ET session, Sunday evening to Friday, whatever the config', () => {
