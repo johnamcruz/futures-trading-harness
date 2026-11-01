@@ -987,16 +987,21 @@ on the trend confirm half:
   slippage (filled past the stop, its bar opening inside it), a gap
   through the stop (its bar opened past it), a stop beyond the initial
   risk (moved away), an exit not at the stop, or unknown when the fill
-  can't tell (never guessed);
+  can't tell (never guessed). In a replay, stop slippage and a gap come
+  from the bar-granular fill model, judged on the base bar's open: they
+  are not broker slippage;
 - **win rate vs break-even**: with the average loss as one unit, the
-  break-even win rate is 1 / (1 + payoff); the actual win rate, the margin
-  in percentage points, and "below break-even" when it is negative (n/a
-  without a win and a loss);
+  break-even win rate is (1 - z) / (1 + payoff), z the share of scratches
+  (R 0, counted in the win rate's n): the win rate at zero expectancy (1 /
+  (1 + payoff) with none). The actual win rate, the margin in percentage
+  points, and "below break-even" when it is negative (n/a without a win
+  and a loss);
 - **chop drag by entry kind**: each filled entry's R, win rate, false-start
-  share (as above) and trend legs caught (distinct legs entered their
+  share (as above, on its round trip's peak R; n/a with no peak known) and trend legs caught (distinct legs entered their
   way), split by the reaction of its setup candle at its level (the
   compose record's first rejection, break or sweep read, its reaction the
-  briefing's at the record's bar, rebuilt from the run's bars:
+  briefing's at the record's bar, rebuilt from the run's bars and the
+  replayed data's one-minute bars, as live:
   `entry-reaction.js`; none: no such read; not recorded: no compose record
   joined, with the coverage said) and by key level or not (the setup
   moments' key levels and FVG edges); a bucket under

@@ -150,7 +150,7 @@ function probeData({ runDir, tree, barsFiles = {}, keep = null }) {
  * tries. legs, windows: a stepped-windows run's (trend-windows.js): the capture reads those legs (the census's), and each
  * window's state replaces the session's (stepped to its end or not).
  */
-function trendData({ runDir, legs = null, windows = null, context = [] }) {
+function trendData({ runDir, legs = null, windows = null, context = [], barsFiles = {} }) {
   const tc = require('../replay/trend-capture');
   const { readRun } = require('../replay/store');
   const { readJson } = require('../harness-run');
@@ -159,7 +159,7 @@ function trendData({ runDir, legs = null, windows = null, context = [] }) {
   // Each filled entry's read (entry-reaction.js: its setup candle's reaction at its level, the level's kind), for the
   // round report's chop drag only.
   const ER = require('./entry-reaction');
-  const capture = { ...captured, entries: ER.withReads(captured.entries, ER.readerFor({ runDir })) };
+  const capture = { ...captured, entries: ER.withReads(captured.entries, ER.readerFor({ runDir, barsFiles })) };
   tc.writeCapture(runDir, capture);
   // The first tries of the run's compose records (first-try.js): its own home's, one session's.
   const home = path.resolve(runDir, '..', '..');
@@ -314,7 +314,7 @@ async function probeRound(ctx, { n, champion, api }) {
         const legs = built.windows.flatMap(w => w.legs).map(spanOf);
         // The day's other census legs classify the run's entries only (an entry in a lead-in bar is in its leg, never "none").
         const context = Object.keys(trend.set.spans || {}).filter(id => trend.set.spans[id].day === day && !legs.some(l => l.id === id)).map(spanOf);
-        const got = await (ctx.steps.trendData || trendData)({ runDir: runs.runs[0].runDir, legs, windows: built.windows, context });
+        const got = await (ctx.steps.trendData || trendData)({ runDir: runs.runs[0].runDir, legs, windows: built.windows, context, barsFiles });
         const x = TSC.sideOfTrend({ captures: [got.capture], days: got.days, scorecard: runs.decisions, first: got.first || [], sessions: got.sessions || null, windows: built.windows, minutes: got.minutes || traderCfg.timeframe });
         // Curriculum trend: the run's read data too (its decisions, skill usage and compose records), the read findings'
         // and the read screens' (curriculum.js readPart); never the regression days' (harm only).

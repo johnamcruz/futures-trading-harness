@@ -9,7 +9,8 @@
  *   losersPastOne(exits, { toleranceR })   the losing trades past -1R, on one side's scored exits (exit-scorecard.js
  *                          decisions as probe.js keeps them: { side, entryAt, exitBy, r, fill }), or null when unknown:
  *     n, losers           the exits with a known R; those below 0
- *     past, share         the losers with R < -1 - tolerance; past / losers (null with no loser)
+ *     past, share         the losers with R < -1 - tolerance (R: the fill's price R when known, else the broker's R
+ *                         within half its rounding unit, e.g. 0.0005 for -1.013); past / losers (null with no loser)
  *     worstR              the lowest loser's R (null with no loser)
  *     byTick, byConfig    how many losers' tolerance was one tick in R (fill.tickR), how many the config's
  *                         (config/training.json trendReport.loserToleranceR: the tick unknown)
@@ -21,10 +22,12 @@
  *     'exit not at the stop'           the model's or the runner's close, or the target
  *     'unknown'                        anything the facts can't tell (an unattributed exit, a price or bar unknown, a fill
  *                                      at the stop whose R is still past -1R): never guessed
- *   breakEven(risk)        the win rate against its break-even line, from risk-stats.js riskStats: with the average loss as
- *                          one unit, a trade wins payoff units or loses one, so the line is 1 / (1 + payoff); { winRate,
- *                          payoff, breakEven, marginPp: (winRate - breakEven) in percentage points, below: margin < 0 }
- *                          (nulls where the payoff is unknown: no win or no loss), or null without the stats
+ *   breakEven(risk, trades)   the win rate against its break-even line, from risk-stats.js riskStats and the trades it
+ *                          was read from: with the average loss as one unit, a trade wins payoff units, loses one, or
+ *                          scratches (R 0, a share z of the n), so zero expectancy is at a win rate of (1 - z) / (1 +
+ *                          payoff) (1 / (1 + payoff) with no scratch); { winRate, payoff, scratchShare, breakEven,
+ *                          marginPp: (winRate - breakEven) in percentage points, below: margin < 0 } (nulls where the
+ *                          payoff is unknown: no win or no loss), or null without the stats
  *   chopDrag(entries, { falseStartPeakR, smallN })   the filled entries (probe.js entryRowsOf) split by their entry read
  *                          (entry-reaction.js): byReaction { label: bucket } and byLevel { key, 'not key', 'no level':
  *                          bucket }, each bucket { n, meanR, winRate, falseStarts, of, falseStartShare, legsCaught,
@@ -35,7 +38,7 @@
  *                          null when unknown
  *   exitTotals(summary)    the exit scorecard's cut-a-trend and late totals over every exit kind (exit-scorecard.js
  *                          summarize): { n, cut, leftR, late, givebackR }, or null
- *   diagnostics({ exits, entries, risk })   { losers, breakEven, chop, exits } of one side (the config's values)
+ *   diagnostics({ exits, entries, risk, trades })   { losers, breakEven, chop, exits } of one side (the config's values)
  *   lossLines(loss, label)  the report's lines of one side
  */
 
@@ -50,6 +53,9 @@ const mean = xs => (xs.length ? round4(xs.reduce((a, b) => a + b, 0) / xs.length
 const REACTION_ORDER = ['confirmed rejection', 'breakout', 'engulfing rejection', 'long-wick rejection', 'conflicting', 'stall', 'plain', 'none', 'unknown', 'not recorded'];
 const LEVEL_ORDER = ['key', 'not key', 'no level'];
 const CLOSES = new Set(['model-exit', 'runner-exit', 'target']);
+// Half the rounding unit of an R as it was stated (-1.013: 3 decimals, 0.0005): a loser one tick past -1R, its R
+// rounded, is not past it.
+const halfUnit = x => { const t = String(x); const i = t.indexOf('.'); return i < 0 || /e/i.test(t) ? 0 : 10 ** -(t.length - i - 1) / 2; };
 
 function causeOf(e, toleranceR) {
   if (!isObj(e)) return 'unknown';
@@ -78,7 +84,9 @@ function losersPastOne(exits, { toleranceR }) {
     return toleranceR;
   };
   const marked = losers.map(e => ({ e, tol: tolOf(e) }));
-  const past = marked.filter(x => x.e.r < -1 - x.tol);
+  // Past -1R on the fill's own price R when known (4 decimals, as the tick in R), else the broker's R within its rounding.
+  const lossR = e => (num(isObj(e.fill) ? e.fill.priceR : null) !== null ? { r: e.fill.priceR, eps: 0 } : { r: e.r, eps: halfUnit(e.r) });
+  const past = marked.filter(x => { const l = lossR(x.e); return l.r < -1 - x.tol - l.eps; });
   const trades = past.map(({ e, tol }) => ({ entryAt: e.entryAt || null, side: e.side || null, exitBy: e.exitBy || null, r: e.r, toleranceR: round4(tol), cause: causeOf(e, tol) }));
   const causes = {};
   for (const t of trades) causes[t.cause] = (causes[t.cause] || 0) + 1;
@@ -90,13 +98,15 @@ function losersPastOne(exits, { toleranceR }) {
   };
 }
 
-function breakEven(risk) {
+function breakEven(risk, trades = []) {
   if (!isObj(risk)) return null;
   const winRate = num(risk.winRate);
   const payoff = num(risk.payoff);
-  const be = payoff !== null && payoff > 0 ? round4(1 / (1 + payoff)) : null;
+  const rs = (Array.isArray(trades) ? trades : []).map(x => num(isObj(x) ? x.r : x)).filter(r => r !== null);
+  const z = rs.length ? round4(rs.filter(r => r === 0).length / rs.length) : 0;
+  const be = payoff !== null && payoff > 0 ? round4((1 - z) / (1 + payoff)) : null;
   const margin = be !== null && winRate !== null ? round4((winRate - be) * 100) : null;
-  return { winRate, payoff, breakEven: be, marginPp: margin, below: margin === null ? null : margin < 0 };
+  return { winRate, payoff, scratchShare: z, breakEven: be, marginPp: margin, below: margin === null ? null : margin < 0 };
 }
 
 function bucketOf(list, { falseStartPeakR, smallN }) {
@@ -138,11 +148,11 @@ function exitTotals(summary) {
   return { n: add('n'), cut: add('cut'), leftR: add('leftR'), late: add('late'), givebackR: add('givebackR') };
 }
 
-function diagnostics({ exits = null, entries = null, risk = null } = {}) {
+function diagnostics({ exits = null, entries = null, risk = null, trades = null } = {}) {
   const T = require('../tunables').training().trendReport;
   return {
     losers: losersPastOne(exits, { toleranceR: T.loserToleranceR }),
-    breakEven: breakEven(risk),
+    breakEven: breakEven(risk, trades),
     chop: chopDrag(entries, { falseStartPeakR: T.falseStartPeakR, smallN: T.smallN }),
     // The exit scorecard's own totals on this side's scored exits (cut a trend with R left; late past the lock).
     exits: Array.isArray(exits) ? exitTotals(ES.summarize({ decisions: exits.filter(e => isObj(e) && ES.CLASSES.includes(e.cls)).map(e => ({ ...e, leftR: num(e.leftR), lateR: num(e.lateR) })) })) : null,
@@ -162,10 +172,10 @@ function losersText(l) {
 function breakEvenText(b) {
   if (!b) return 'n/a (trades unknown)';
   if (b.breakEven === null) return `win rate ${pct(b.winRate)}, break-even n/a (payoff ${show(b.payoff)}: needs a win and a loss)`;
-  return `win rate ${pct(b.winRate)} vs break-even ${pct(b.breakEven)} (1 / (1 + payoff ${b.payoff}), |avg loss| = 1 unit): margin ${b.marginPp >= 0 ? '+' : ''}${b.marginPp}pp${b.below ? ', BELOW BREAK-EVEN' : ''}`;
+  return `win rate ${pct(b.winRate)} vs break-even ${pct(b.breakEven)} ((1 - scratch share ${pct(b.scratchShare)}) / (1 + payoff ${b.payoff}), |avg loss| = 1 unit): margin ${b.marginPp >= 0 ? '+' : ''}${b.marginPp}pp${b.below ? ', BELOW BREAK-EVEN' : ''}`;
 }
 
-const bucketText = (k, b) => `${k} n ${b.n}: ${show(b.meanR)}R a trade, win ${pct(b.winRate)}, false starts ${b.falseStarts}/${b.of}, legs caught ${b.legsCaught}${b.small ? ' (small n, no conclusion)' : ''}`;
+const bucketText = (k, b) => `${k} n ${b.n}: ${show(b.meanR)}R a trade, win ${pct(b.winRate)}, false starts ${b.of ? `${b.falseStarts}/${b.of}` : 'n/a (no peak R)'}, legs caught ${b.legsCaught}${b.small ? ' (small n, no conclusion)' : ''}`;
 
 function lossLines(loss, label) {
   if (!isObj(loss)) return [];

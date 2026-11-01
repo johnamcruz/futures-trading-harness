@@ -19,7 +19,12 @@
  *   readOf(record, briefing)      { reaction, tf, level, keyLevel } (pure; keyLevel true | false | null: no level read)
  *   withReads(entries, { records, briefingAt })   the entries, each with `read` (records: id -> record; briefingAt(root,
  *                                 bar) -> the briefing or null; never throws)
- *   readerFor({ runDir, home })   { records, briefingAt } from a run's own files (none readable: no records)
+ *   readerFor({ runDir, home, barsFiles })   { records, briefingAt } from a run's own files and the data it replayed
+ *                                 (barsFiles { SYMBOL: file }, the loop's evaluator.data, as trend-facts.js attachFacts
+ *                                 reads them): its base bars, and its one-minute bars (the run's, else the data file's
+ *                                 when it holds one-minute bars), so a 5m candle or a gap built from them reads as the
+ *                                 live briefing did (none readable: no records; no fine bars: those frames unknown)
+ *   fineBarsOf(home, runDir, root, barsFiles)   the run's one-minute bars, else the data file's, else none
  */
 
 const path = require('path');
@@ -66,7 +71,17 @@ function withReads(entries, { records = new Map(), briefingAt = null } = {}) {
   });
 }
 
-function readerFor({ runDir, home = path.resolve(runDir, '..', '..') }) {
+function fineBarsOf(home, runDir, root, barsFiles = {}) {
+  const { barsOf } = require('./trend-facts');
+  const own = barsOf(home, runDir, root, 1, barsFiles);
+  if (own.length) return own;
+  const file = isObj(barsFiles) ? barsFiles[root] : null;
+  if (!file) return [];
+  // The data file's own one-minute bars (a file of another bar size throws: none).
+  try { return require('../replay/labels').outcomeBarsFrom(file, 1).slice().sort((a, b) => Date.parse(a.t) - Date.parse(b.t)); } catch (_err) { return []; }
+}
+
+function readerFor({ runDir, home = path.resolve(runDir, '..', '..'), barsFiles = {} }) {
   const { readJson } = require('../harness-run');
   let records;
   try { records = new Map(require('../trading/trade-lifecycle').readRecords(home).map(r => [r.id, r])); } catch (_err) { records = new Map(); }
@@ -79,8 +94,8 @@ function readerFor({ runDir, home = path.resolve(runDir, '..', '..') }) {
     if (!build) {
       const { barsOf } = require('./trend-facts');
       const { briefingFrom } = require('../learning/skill-usage');
-      const bars = barsOf(home, runDir, root, minutes, {});
-      const fine = minutes !== 1 ? barsOf(home, runDir, root, 1, {}) : [];
+      const bars = barsOf(home, runDir, root, minutes, barsFiles || {});
+      const fine = minutes !== 1 ? fineBarsOf(home, runDir, root, barsFiles || {}) : [];
       build = bars.length ? briefingFrom(bars, { root, minutes, count: require('../autotrader').recordedBars({ ...cfg, timeframe: minutes }), roundSteps: require('../trading/round-numbers').loadRoundSteps({ FTH_HOME: home }), fineBars: fine.length ? fine : null, blackouts: require('../trading/check-order').readBlackouts(path.join(home, 'blackouts', 'blackouts.json')) }) : () => null;
     }
     return build(r, bar);
@@ -88,4 +103,4 @@ function readerFor({ runDir, home = path.resolve(runDir, '..', '..') }) {
   return { records, briefingAt };
 }
 
-module.exports = { NOT_RECORDED, NONE, UNKNOWN, isKeyLevel, readOf, withReads, readerFor };
+module.exports = { NOT_RECORDED, NONE, UNKNOWN, isKeyLevel, readOf, withReads, fineBarsOf, readerFor };

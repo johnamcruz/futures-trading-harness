@@ -106,7 +106,7 @@ function masteryOf(r, kept, keepRuleRuns) {
 function lossOf(r, risk) {
   const c = r.trend.champion;
   const t = r.composed && r.composed.trend ? r.composed.trend : null;
-  const side = (x, rs) => LD.diagnostics({ exits: x.exits === undefined ? null : x.exits, entries: x.entryRows === undefined ? null : x.entryRows, risk: rs });
+  const side = (x, rs) => LD.diagnostics({ exits: x.exits === undefined ? null : x.exits, entries: x.entryRows === undefined ? null : x.entryRows, risk: rs, trades: x.trades || null });
   return {
     champion: c ? side(c, risk.champion && risk.champion.trend) : null,
     composed: t ? { id: r.composed.id, ...side(t, risk.composed && risk.composed.trend) } : null,

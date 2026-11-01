@@ -327,12 +327,13 @@ function captureReport({ runDir, home = path.resolve(runDir, '..', '..'), days =
   // The day's other known legs (a windowed run's undrawn census legs): they classify entries only, never a leg here.
   const kindLegs = (Array.isArray(context) ? context : []).filter(g => isObj(g) && g.start && g.end && g.side).map(g => ({ id: g.id || `${g.day}|${g.side}|${g.start}`, side: g.side, start: g.start, end: g.end }));
   // The run's filled entries, each in a leg its way, against one, or in none (trend-ride.js entryKind), with its R.
-  // Classified at the fill (an order placed before a leg's start and filled in it is in that leg), with its R on the held stop.
+  // Classified at the fill (an order placed before a leg's start and filled in it is in that leg), with its R on the held
+  // stop, and its peak R on the same basis (the round report's false starts).
   const entries = orders.filter(o => isObj(o.composed) && filled(o.orderId)).map(o => {
     const t = tripOf(filled(o.orderId));
     const at = Number.isFinite(filledAt(o)) ? new Date(filledAt(o)).toISOString() : o.at;
     const h = heldOf(o, t);
-    return { at: o.at, side: o.composed.side, record: o.composed.record || null, ...TR.entryKind({ side: o.composed.side, at }, [...out, ...kindLegs], stepMs), r: h ? h.r : null };
+    return { at: o.at, side: o.composed.side, record: o.composed.record || null, ...TR.entryKind({ side: o.composed.side, at }, [...out, ...kindLegs], stepMs), r: h ? h.r : null, peakR: h ? num(h.mfeR) : null };
   });
   const legDays = new Set(out.map(l => l.day));
   const noLegDays = [...new Set(cycles.map(c => tradingDayKey(new Date(Date.parse(c.timing.barClose) - 1))))].filter(d => !legDays.has(d)).sort().map(day => {

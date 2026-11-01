@@ -60,17 +60,35 @@ test('losersPastOne: count, share, worst, tolerance one tick in R when known, el
   assert.throws(() => LD.losersPastOne([], {}), /loserToleranceR/);
 });
 
+test('losersPastOne: a one-tick slip is never past -1R by rounding: the fill\'s price R when known, else the broker\'s R within half its unit', () => {
+  // One 0.25 tick on a 20-point stop is 0.0125R: the broker's R rounds a -1.0125R loss to -1.013 (3 decimals).
+  const tick = 0.0125;
+  const one = (r, priceR) => LD.losersPastOne([exit(r, { fill: fill(-1, -0.5, priceR, tick) })], { toleranceR: 0.05 }).past;
+  assert.strictEqual(one(-1.013, null), 0, 'no price R: the broker\'s -1.013 is within its rounding of one tick');
+  assert.strictEqual(one(-1.013, -1.0125), 0, 'the fill\'s own price R: exactly one tick');
+  assert.strictEqual(one(-1.013, -1.04), 1, 'the price R past one tick');
+  assert.strictEqual(one(-1.014, null), 1, 'past the rounding: past -1R');
+});
+
 // --- break-even -------------------------------------------------------------------------------------------------------
 
-test('breakEven: 1 / (1 + payoff) with |avg loss| as one unit; the margin in points; below when negative', () => {
-  // Payoff 2: break-even 1/3. A 30% win rate is 3.33 points below it.
-  const below = LD.breakEven(RS.riskStats([2, -1, -1, 2, -1, -1, -1, -1, -1, -1].map(r => ({ r }))));
-  assert.deepStrictEqual(below, { winRate: 0.2, payoff: 2, breakEven: 0.3333, marginPp: -13.33, below: true });
+test('breakEven: (1 - scratch share) / (1 + payoff) with |avg loss| as one unit; the margin in points; below when negative', () => {
+  // Payoff 2, no scratch: break-even 1/3. A 20% win rate (2 of 10) is 13.33 points below it.
+  const trades = [2, -1, -1, 2, -1, -1, -1, -1, -1, -1].map(r => ({ r }));
+  const below = LD.breakEven(RS.riskStats(trades), trades);
+  assert.deepStrictEqual(below, { winRate: 0.2, payoff: 2, scratchShare: 0, breakEven: 0.3333, marginPp: -13.33, below: true });
   const above = LD.breakEven({ winRate: 0.5, payoff: 1.1667 });
   assert.deepStrictEqual([above.breakEven, above.marginPp, above.below], [0.4615, 3.85, false]);
   // No win or no loss (payoff unknown), no trade, no stats: n/a, never a line from nothing.
-  assert.deepStrictEqual(LD.breakEven(RS.riskStats([-1, -1])), { winRate: 0, payoff: null, breakEven: null, marginPp: null, below: null });
-  assert.deepStrictEqual(LD.breakEven(RS.riskStats([1])), { winRate: 1, payoff: null, breakEven: null, marginPp: null, below: null });
+  assert.deepStrictEqual(LD.breakEven(RS.riskStats([-1, -1]), [-1, -1]), { winRate: 0, payoff: null, scratchShare: 0, breakEven: null, marginPp: null, below: null });
+  assert.deepStrictEqual(LD.breakEven(RS.riskStats([1]), [1]), { winRate: 1, payoff: null, scratchShare: 0, breakEven: null, marginPp: null, below: null });
+  // Scratches (R 0) are in the win rate's n: zero expectancy is at (1 - z) / (1 + payoff). 2, -1, 0, 0: payoff 2, z 0.5,
+  // win rate 25%, break-even 0.5 / 3 = 16.67%: 8.33 points above (a line of 1 / 3 would call it 8.33 below).
+  const sc = [2, -1, 0, 0];
+  const withScratch = LD.breakEven(RS.riskStats(sc), sc);
+  assert.deepStrictEqual(withScratch, { winRate: 0.25, payoff: 2, scratchShare: 0.5, breakEven: 0.1667, marginPp: 8.33, below: false });
+  // The line is zero expectancy: the win rate at it with this payoff and these scratches nets 0R.
+  assert.ok(Math.abs(withScratch.breakEven * 2 - (1 - 0.5 - withScratch.breakEven)) < 1e-3);
   assert.strictEqual(LD.breakEven(RS.riskStats([])).breakEven, null);
   assert.strictEqual(LD.breakEven(null), null);
 });
@@ -131,6 +149,10 @@ test('diagnostics: one side, on the config\'s values; the scored exits\' cut and
     '    champion, exits: n/a (exits unknown)',
   ]);
   for (const l of LD.lossLines(d, 'champion')) assert.doesNotMatch(l, /Infinity|NaN|undefined|null/, l);
+  // No peak R known in a bucket: its false starts n/a, never 0/0.
+  const noPeak = LD.lossLines({ ...d, chop: LD.chopDrag([entry(-1, rd('plain'), { peakR: null })], { falseStartPeakR: 0.5, smallN: 30 }) }, 'champion');
+  assert.match(noPeak.find(x => /chop drag by reaction/.test(x)), /plain n 1: -1R a trade, win 0%, false starts n\/a \(no peak R\), legs caught 0/);
+  assert.ok(noPeak.every(x => !/ 0\/0/.test(x)));
   assert.deepStrictEqual(LD.lossLines(null, 'x'), []);
 });
 
@@ -183,6 +205,72 @@ test('readerFor: a run with no compose records or config reads none (never throw
   fs.rmSync(home, { recursive: true, force: true });
 });
 
+// The production join: a run home's compose record and bars, through readerFor (trade-lifecycle readRecords, trend-facts
+// barsOf, skill-usage briefingFrom) and withReads (reaction-echo echoOf), as the probe round's trend step runs it.
+function runHome() {
+  const os = require('os');
+  let seed = 7;
+  const rnd = () => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed / 2147483648; };
+  const m1 = [];
+  let p = 21500;
+  for (let d = 0; d < 3; d += 1) {
+    const s = Date.parse('2026-04-20T13:30:00Z') + d * 86400000;
+    for (let i = 0; i < 390; i += 1) { const o = p; const c = Math.round((o + (rnd() - 0.5) * 8) * 4) / 4; m1.push({ t: new Date(s + i * 60000).toISOString(), o, h: Math.max(o, c) + 0.5, l: Math.min(o, c) - 0.5, c, v: 100 }); p = c; }
+  }
+  const m3 = [];
+  for (let i = 0; i + 3 <= m1.length; i += 3) { const g = m1.slice(i, i + 3); m3.push({ t: g[0].t, o: g[0].o, h: Math.max(...g.map(x => x.h)), l: Math.min(...g.map(x => x.l)), c: g[2].c, v: 300 }); }
+  const home = fs.mkdtempSync(path.join(os.tmpdir(), 'fth-er-join-'));
+  const runDir = path.join(home, 'replay', 'r1');
+  fs.mkdirSync(runDir, { recursive: true });
+  fs.mkdirSync(path.join(home, 'bars'));
+  const write = (b3, b1) => { fs.writeFileSync(path.join(home, 'bars', 'MNQ-3m.json'), JSON.stringify(b3)); fs.writeFileSync(path.join(home, 'data-1m.json'), JSON.stringify(b1)); };
+  write(m3, m1);
+  fs.writeFileSync(path.join(runDir, 'autotrader.json'), JSON.stringify({ timeframe: 3, symbols: ['MNQ'] }));
+  return { home, runDir, m1, m3, write, barsFiles: { MNQ: path.join(home, 'data-1m.json') } };
+}
+
+test('entry read, the production join: the record\'s 5m read gets the label the briefing gave it, built only from bars closed by then', () => {
+  const LC = require('../../scripts/lib/trading/trade-lifecycle');
+  const { levelName } = require('../../scripts/lib/trading/composed-reads');
+  const h = runHome();
+  try {
+    // A bar whose 5m candle (built from the one-minute bars) met a level with a known reaction, as the live briefing has it.
+    const reader = ER.readerFor({ runDir: h.runDir, barsFiles: h.barsFiles });
+    let bar = null;
+    let rel = null;
+    for (const b of h.m3.slice(-60)) {
+      const br = reader.briefingAt('MNQ', b.t);
+      const c = br && br.sections.m3.data.candles['5m'];
+      const x = c && Array.isArray(c.relations) ? c.relations.find(y => (y.rel === 'rejected' || y.rel === 'broke') && y.dir && y.reaction && y.reaction !== 'unknown') : null;
+      if (x) { bar = b.t; rel = x; break; }
+    }
+    assert.ok(rel, 'the fixture holds a 5m reaction');
+    const read = `5m ${rel.rel} ${levelName(rel.name)} ${rel.dir}`;
+    const side = rel.dir === 'up' ? 'long' : 'short';
+    const record = LC.buildRecord({ at: new Date(Date.parse(bar) + 180000).toISOString(), root: 'MNQ', symbol: 'MNQ', side, briefing: { asOf: bar, minutes: 3, sections: {} }, checked: { ok: true, problems: [], reads: [{ step: 'bias', skill: 's', read: '1h up', why: 'w', kind: 'trend' }, { step: 'setup', skill: 's', read, why: 'w', kind: 'relation' }], signature: null, skillSignature: null, context: null } });
+    LC.appendRecord(h.home, record);
+    const entries = [{ at: record.at, side, record: record.id, kind: 'none', leg: null, r: -1, peakR: 0.1 }];
+    const got = ER.withReads(entries, ER.readerFor({ runDir: h.runDir, barsFiles: h.barsFiles }))[0].read;
+    assert.deepStrictEqual([got.reaction, got.tf, got.level], [rel.reaction, '5m', levelName(rel.name)]);
+    // Without the run's one-minute bars no 5m candle is built: unknown, never a label made up.
+    assert.strictEqual(ER.withReads(entries, ER.readerFor({ runDir: h.runDir }))[0].read.reaction, 'unknown');
+    // No look-ahead: every bar after the record's bar changed, the label and the briefing's candle stay the same.
+    const close = Date.parse(bar) + 180000;
+    const wild = x => (Date.parse(x.t) >= close ? { ...x, o: x.o + 400, h: x.h + 900, l: x.l - 900, c: x.c - 400 } : x);
+    const before = ER.readerFor({ runDir: h.runDir, barsFiles: h.barsFiles }).briefingAt('MNQ', bar).sections.m3.data.candles['5m'];
+    h.write(h.m3.map(wild), h.m1.map(wild));
+    const after = ER.readerFor({ runDir: h.runDir, barsFiles: h.barsFiles });
+    assert.deepStrictEqual(after.briefingAt('MNQ', bar).sections.m3.data.candles['5m'], before);
+    assert.strictEqual(ER.withReads(entries, after)[0].read.reaction, rel.reaction);
+    // fineBarsOf: the data file's one-minute bars when the run holds none; a file of another bar size gives none.
+    assert.strictEqual(ER.fineBarsOf(h.home, h.runDir, 'MNQ', h.barsFiles).length, h.m1.length);
+    fs.writeFileSync(path.join(h.home, 'data-3m.json'), JSON.stringify(h.m3));
+    assert.deepStrictEqual(ER.fineBarsOf(h.home, h.runDir, 'MNQ', { MNQ: path.join(h.home, 'data-3m.json') }), []);
+  } finally {
+    fs.rmSync(h.home, { recursive: true, force: true });
+  }
+});
+
 // --- the report's wiring ----------------------------------------------------------------------------------------------
 
 const ride = { legs: 4, caught: 1, catchRate: 0.25, rCaught: 2, rAvailable: 10 };
@@ -203,7 +291,7 @@ test('the round report: losses, break-even and chop beside the risk, per side; a
   const rec = IR.build({ probeReport: probeReport() });
   const l = rec.mastery.loss;
   assert.deepStrictEqual([l.champion.losers.past, l.champion.losers.worstR, l.champion.losers.causes], [1, -1.6, { 'gap through the stop': 1 }]);
-  assert.deepStrictEqual(l.champion.breakEven, LD.breakEven(rec.mastery.risk.champion.trend));
+  assert.deepStrictEqual(l.champion.breakEven, LD.breakEven(rec.mastery.risk.champion.trend, probeReport().trend.champion.trades));
   assert.strictEqual(l.champion.breakEven.below, false);
   assert.deepStrictEqual(l.champion.chop.coverage, { entries: 4, recorded: 3, reaction: 3 });
   assert.deepStrictEqual(l.champion.exits, { n: 4, cut: 1, leftR: 1.5, late: 1, givebackR: 0.5 });
@@ -219,7 +307,7 @@ test('the round report: losses, break-even and chop beside the risk, per side; a
     '    champion, probe half exits: cut a trend 3 of 4 (4.5R left), late 0 (0R given back past the lock)',
   ]);
   assert.strictEqual(lines[at + 1], `    champion, losers past -1R: 1 of 2 loser(s) (50%) past -1R, worst -1.6R (tolerance one tick in R on 0, ${TOL}R on 2: tick unknown); cause: gap through the stop 1; 2022-03-07T15:06:00.000Z long -1.6R gap through the stop`);
-  assert.match(lines[at + 2], /^ {4}champion, win rate vs break-even: win rate 50% vs break-even \d+(\.\d+)?% \(1 \/ \(1 \+ payoff [\d.]+\), \|avg loss\| = 1 unit\): margin [+-][\d.]+pp/);
+  assert.match(lines[at + 2], /^ {4}champion, win rate vs break-even: win rate 50% vs break-even \d+(\.\d+)?% \(\(1 - scratch share 0%\) \/ \(1 \+ payoff [\d.]+\), \|avg loss\| = 1 unit\): margin [+-][\d.]+pp/);
   assert.match(lines[at + 3], /^ {4}champion, chop drag by reaction \(3 of 4 entries joined to a compose record, 3 read: the briefing's reaction, or no reaction read\): long-wick rejection n 1: 2R a trade, win 100%, false starts 0\/1, legs caught 1 \(small n, no conclusion\); plain n 2: /);
   assert.match(lines[at + 4], /^ {4}champion, chop drag by level: key n 1: .*; not key n 2: .*; no level n 1: /);
   assert.ok(lines.every(x => !/Infinity|NaN|undefined/.test(x)));

@@ -243,6 +243,22 @@ test('trend capture: the run\'s filled entries: in a leg its way, against one, o
   assert.deepStrictEqual(doc.legs.map(l => l.captured), [true, false]);
 });
 
+test('trend capture: each filled entry carries its round trip\'s peak R, so the round report\'s false starts read real entries', () => {
+  // The real entry shape, built by captureReport: the fixture's round trips name mfeR only where the broker sent it.
+  const trades = at => [
+    OPEN(at), { orderId: 8, profitAndLoss: 40, roundTripId: 1, roundTrip: { r: 2, entryPrice: 21516, exitPrice: 21536, exitTime: at(9), mfeR: 2.4, risk: 10 } },
+    { orderId: 9, profitAndLoss: null, roundTripId: 2, price: 21520, creationTimestamp: at(5) }, { orderId: 10, profitAndLoss: -20, roundTripId: 2, roundTrip: { r: -1, mfeR: 0.2 } },
+    { orderId: 11, profitAndLoss: null, roundTripId: 3, price: 21497, creationTimestamp: at(23) }, { orderId: 12, profitAndLoss: -5, roundTripId: 3, roundTrip: { r: -0.5 } },
+  ];
+  const orders = [{ orderId: 9, bar: 5, composed: { record: 'c1', side: 'short', entry: 21520 } }, { orderId: 11, bar: 23, composed: { record: 'n1', side: 'long', entry: 21497 } }];
+  const { runDir, days } = runFixture({ trades, orders });
+  const doc = tc.captureReport({ runDir, days });
+  assert.deepStrictEqual(doc.entries.map(e => [e.r, e.peakR]), [[2, 2.4], [-1, 0.2], [-0.5, null]]);
+  // Through the round report's chop drag: one false start of the two with a peak (the -1R loser that never passed 0.5R).
+  const c = require('../../scripts/lib/train/loss-diagnostics').chopDrag(doc.entries, { falseStartPeakR: 0.5, smallN: 30 });
+  assert.deepStrictEqual([c.byReaction['not recorded'].falseStarts, c.byReaction['not recorded'].of], [1, 2]);
+});
+
 test('trend capture: the day\'s other known legs (context) classify the entries only: an entry in a lead-in bar is in its leg, never none', () => {
   const trades = at => [OPEN(at), { orderId: 8, profitAndLoss: 40, roundTripId: 1, roundTrip: { r: 2, entryPrice: 21516, exitPrice: 21536, exitTime: at(9), mfeR: 2, risk: 10 } },
     { orderId: 9, profitAndLoss: null, roundTripId: 2, price: 21520, creationTimestamp: at(5) }, { orderId: 10, profitAndLoss: -20, roundTripId: 2, roundTrip: { r: -1 } }];
