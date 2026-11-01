@@ -296,3 +296,15 @@ test('compose_check: a composed rejection carries the briefing\'s reaction (REAC
   const bad = composeCheck({ symbol: 'MNQ', side: 'short', reads: SCENARIO_1, size: 1 }, { ...ctx, env: { ...ctx.env, FTH_AUTONOMOUS: '1' } });
   assert.match(bad.text, /NOT OK/);
 });
+
+test('compose_check: READ FIRST reads the bar\'s compose records as the gate does: a recompose without a rejection after one with it still names candle-reading', () => {
+  const { ctx } = setup();
+  const auto = { ...ctx, env: { ...ctx.env, FTH_AUTONOMOUS: '1' } };
+  const noRejection = SCENARIO_1.map(r => (r.step === 'setup' ? { ...r, read: '15m touched prior vah' } : r));
+  // Alone on its bar, a record without a rejection, break or sweep needs no candle-reading.
+  const fresh = setup();
+  assert.doesNotMatch(composeCheck({ symbol: 'MNQ', side: 'long', reads: noRejection, size: 1 }, { ...fresh.ctx, env: { ...fresh.ctx.env, FTH_AUTONOMOUS: '1' } }).text, /READ FIRST: [^\n]*candle-reading/);
+  // After a rejection's record on the same bar: the gate's composed facts still hold it, so the warning names it.
+  composeCheck({ symbol: 'MNQ', side: 'long', reads: SCENARIO_1, size: 1 }, auto);
+  assert.match(composeCheck({ symbol: 'MNQ', side: 'long', reads: noRejection, size: 1 }, auto).text, /READ FIRST: [^\n]*candle-reading/);
+});

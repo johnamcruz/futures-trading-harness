@@ -24,7 +24,7 @@ const MEANING = Object.freeze({
   'long-wick rejection': ['sellers rejected higher prices', 'buyers rejected lower prices'],
   conflicting: 'mixed: needs other confirmation (the count, or the next candle)',
   stall: 'stalled: the next candle decides',
-  plain: 'no rejection read: weak context only; needs other confirmation',
+  plain: 'not a rejection: no one took control, weak context only; needs other confirmation',
   unknown: 'unknown: the briefing can\'t say; never read it by eye',
 });
 

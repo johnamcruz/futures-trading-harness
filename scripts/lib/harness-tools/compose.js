@@ -104,7 +104,10 @@ function composeCheck({ symbol = null, side = null, reads = null, size = null } 
   // Informational, never a refusal (the record stands as is): each composed rejection, break or sweep with the briefing's
   // verified reaction (reaction-echo.js), then the skills its reads need that this cycle hasn't read (reaction-lookup.js).
   const echo = echoLines(reads, got.briefing);
-  const warn = warningFor(reads.map(r => (r && typeof r === 'object' ? r.read : r)), { env: c.env, root: c.root });
+  // The bar's compose records too (this one included), as the gate reads them: an earlier record's rejection still needs
+  // its reaction read when this one has none.
+  const composed = (() => { try { return require('../trading/skill-lookups').composedAt(home, symbol, record.bar); } catch (_err) { return []; } })();
+  const warn = warningFor(reads.map(r => (r && typeof r === 'object' ? r.read : r)), { env: c.env, root: c.root, composed });
   return { text: `${renderRecord(record, checked, hints)}${echo.map(l => `${l}\n`).join('')}${warn ? `${warn}\n` : ''}` };
 }
 

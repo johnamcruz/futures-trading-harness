@@ -22,7 +22,7 @@ test('each reaction class: its label and its meaning, the side the candle\'s (a 
   assert.strictEqual(at('broke', 'down', 'breakout'), '- REACTION 15m broke down prior VAH: breakout (short side: sellers in control: a breakout attempt, not a sweep)');
   assert.strictEqual(at('rejected', 'down', 'conflicting'), '- REACTION 15m rejected down prior VAH: conflicting (mixed: needs other confirmation (the count, or the next candle))');
   assert.strictEqual(at('rejected', 'down', 'stall'), '- REACTION 15m rejected down prior VAH: stall (stalled: the next candle decides)');
-  assert.strictEqual(at('rejected', 'down', 'plain'), '- REACTION 15m rejected down prior VAH: plain (no rejection read: weak context only; needs other confirmation)');
+  assert.strictEqual(at('rejected', 'down', 'plain'), '- REACTION 15m rejected down prior VAH: plain (not a rejection: no one took control, weak context only; needs other confirmation)');
   assert.match(at('broke', 'up', undefined), /: unknown \(unknown: the briefing can't say/);
   for (const r of REACTIONS) assert.ok(E.MEANING[r], `${r}: a meaning`);
 });
@@ -38,7 +38,7 @@ test('a sweep: the swept level\'s rejection on the setup frame first, its side; 
 test('a MISMATCH when the read\'s own words name another reaction than the briefing\'s; none when they agree or name none', () => {
   const b = briefing('15m', [rel('prior VAH', 'rejected', 'down', 'plain')]);
   assert.deepStrictEqual(E.echoLines([{ read: '15m rejected prior vah down', why: 'a long-wick rejection of the VAH' }], b), [
-    '- REACTION 15m rejected down prior VAH: plain (no rejection read: weak context only; needs other confirmation)',
+    '- REACTION 15m rejected down prior VAH: plain (not a rejection: no one took control, weak context only; needs other confirmation)',
     '- MISMATCH: your read says long-wick rejection; the briefing\'s reaction is plain (a read, never a veto: read it with candle-reading)',
   ]);
   assert.strictEqual(E.echoLines([{ read: '15m rejected prior vah down', why: 'plain, weak' }], b).length, 1);

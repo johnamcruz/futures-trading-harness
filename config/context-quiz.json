@@ -400,7 +400,7 @@
         "\\benter (a |the )?short\\b(?!\\s+(only\\s+(with|once|if|after(?! all)|when|until)|once|if|after(?! all)|when|until)\\b)",
         "\\btake (the |a )?short\\b(?!\\s+(only\\s+(with|once|if|after(?! all)|when|until)|once|if|after(?! all)|when|until)\\b)",
         "\\bshort it\\b(?!\\s+(only\\s+(with|once|if|after(?! all)|when|until)|once|if|after(?! all)|when|until)\\b)",
-        "\\b(so|therefore|then|thus)\\s+sellers (are )?in control\\b(?!\\s+(isn't|is not|is no|not|needs?|requires?)\\b)",
+        "(?<!\\bonly )\\b(so|therefore|then|thus)\\s+sellers (are )?in control\\b(?!\\s+(isn't|is not|is no|not|needs?|requires?)\\b)",
         "\\bsellers (are )?in control(?:\\s*(?:[,:;.–—-]|\\band\\b|\\bso\\b|\\bthen\\b))*\\s*(?:and\\s+|so\\s+|then\\s+)?(?:i'?d\\s+|i would\\s+|i\\s+|go\\s+)?(short|sell|take|enter)\\b(?!\\s+(?:it\\s+)?(only\\s+)?(once|if|after(?! all)|when|until)\\b)",
         "\\bsellers (are )?in control\\W*$"
       ]
@@ -498,9 +498,9 @@
         "^\\W*(yes|yep|sellers)\\b",
         "\\btake it now\\b(?![^.;:]*\\b(wrong|not|never)\\b)",
         "\\bshort it( now)?\\b(?!\\s+(only\\s+(with|once|if|after(?! all)|when|until)|once|if|after(?! all)|when|until)\\b)",
-        "\\b(so|therefore|then|thus)\\s+sellers (are )?in control\\b(?!\\s+(isn't|is not|is no|not|needs?|requires?)\\b)",
+        "(?<!\\bonly )\\b(so|therefore|then|thus)\\s+sellers (are )?in control\\b(?!\\s+(isn't|is not|is no|not|needs?|requires?)\\b)",
         "\\bsellers (are )?in control(?:\\s*(?:[,:;.–—-]|\\band\\b|\\bso\\b|\\bthen\\b))*\\s*(?:and\\s+|so\\s+|then\\s+)?(?:i'?d\\s+|i would\\s+|i\\s+|go\\s+)?(short|sell|take|enter)\\b(?!\\s+(?:it\\s+)?(only\\s+)?(once|if|after(?! all)|when|until)\\b)",
-        "(?<!\\bbefore (you|i|we) (read|call) |\\bbefore it counts as )\\bsellers (are )?in control\\W*$"
+        "(?<!\\bbefore (you |i |we )?(can |could )?(read|reading|call|calling) |\\bbefore it counts as |\\bonly then )\\bsellers (are )?in control\\W*$"
       ]
     },
     {
@@ -532,20 +532,20 @@
       "anchor": "Side first, from the candle",
       "required": [
         "\\bshorts?\\b",
-        "\\b(refus\\w*|no trade|not a trade|counter\\w*|never counter|trend rule|not allowed|can'?t be taken|cannot be taken)\\b|\\bonly the (first|one|pullback)\\b[^.;]*\\b(can|may) be taken\\b|\\bonly the (first|one|pullback)\\b[^.;]*\\bis (tradeable|tradable|a setup|the trade)\\b"
+        "\\b(refus\\w*|no trade|not a trade|counter\\w*|never counter|trend rule|not allowed|can'?t be taken|cannot be taken)\\b|\\bonly the (first|one|pullback)\\b[^.;]*\\b(can|may) be taken\\b|\\bonly the (first|one|pullback)\\b[^.;]*\\bis (tradeable|tradable|a setup|the trade)\\b|\\b(may|can) ?not( be taken)?\\b|\\bcannot be taken\\b"
       ],
       "forbidden": [
         "\\blong (setup|side|read|entry|trade)\\b",
-        "\\b(a|is a|as a) long\\b(?!-wick)",
+        "\\b(a|is a|as a) long\\b(?!-wick|\\s+(bias|only))",
         "\\b(with-trend|with the trend|counter-trend) long\\b",
         "\\b(on )?the (other|opposite) side\\b",
         "\\b(take|trade) it (small|smaller|light|anyway)\\b",
         "\\bcounter[- ]trend (short|long|one)\\b[^.;]*\\b(i'?d|i would|can|could|to) take\\b",
         "\\bstill a (short|long) to take\\b",
-        "\\b(both|either)\\b(?![^.;]*\\bonly\\b)[^.;]*\\b(taken|tradeable|tradable|can be taken|valid trades?|allowed)\\b",
+        "\\b(both|either)\\b(?![^.;]*\\bonly the (first|one|pullback)\\b)[^.;]*\\b(taken|tradeable|tradable|can be taken|valid trades?|allowed)\\b",
         "\\b(take|trade|short|long|buy|sell) (them )?(both|either)\\b",
         "\\bboth (are )?(valid|tradeable|tradable|taken)\\b",
-        "\\b(neither (is|are|one is) refused|nothing (is )?refused|no refusal)\\b"
+        "\\b(neither (is|are|one is) refused|nothing (is )?refused|no refusal)\\b", "\\bnone (is |are )?refused\\b|\\bnot refused\\b|\\b(counter|counter-trend) but allowed\\b|\\bonly lowers size\\b|\\bthe second too\\b|\\b(at )?(full|a smaller|smaller|reduced|half|lower) size\\b|\\b(cannot|can'?t|can not|may not)\\s+be taken (at|with)\\b"
       ]
     },
     {
@@ -614,20 +614,20 @@
       "anchor": "Side first, from the candle",
       "required": [
         "\\blongs?\\b(?!-wick)",
-        "\\b(refus\\w*|no trade|not a trade|counter\\w*|never counter|trend rule|not allowed|can'?t be taken|cannot be taken)\\b|\\bonly the (first|one|pullback)\\b[^.;]*\\b(can|may) be taken\\b|\\bonly the (first|one|pullback)\\b[^.;]*\\bis (tradeable|tradable|a setup|the trade)\\b"
+        "\\b(refus\\w*|no trade|not a trade|counter\\w*|never counter|trend rule|not allowed|can'?t be taken|cannot be taken)\\b|\\bonly the (first|one|pullback)\\b[^.;]*\\b(can|may) be taken\\b|\\bonly the (first|one|pullback)\\b[^.;]*\\bis (tradeable|tradable|a setup|the trade)\\b|\\b(may|can) ?not( be taken)?\\b|\\bcannot be taken\\b"
       ],
       "forbidden": [
         "\\bshort (setup|side|read|entry|trade)\\b",
-        "\\b(a|is a|as a) short\\b",
+        "\\b(a|is a|as a) short\\b(?!\\s+(bias|only))",
         "\\b(with-trend|with the trend|counter-trend) short\\b",
         "\\b(on )?the (other|opposite) side\\b",
         "\\b(take|trade) it (small|smaller|light|anyway)\\b",
         "\\bcounter[- ]trend (short|long|one)\\b[^.;]*\\b(i'?d|i would|can|could|to) take\\b",
         "\\bstill a (short|long) to take\\b",
-        "\\b(both|either)\\b(?![^.;]*\\bonly\\b)[^.;]*\\b(taken|tradeable|tradable|can be taken|valid trades?|allowed)\\b",
+        "\\b(both|either)\\b(?![^.;]*\\bonly the (first|one|pullback)\\b)[^.;]*\\b(taken|tradeable|tradable|can be taken|valid trades?|allowed)\\b",
         "\\b(take|trade|short|long|buy|sell) (them )?(both|either)\\b",
         "\\bboth (are )?(valid|tradeable|tradable|taken)\\b",
-        "\\b(neither (is|are|one is) refused|nothing (is )?refused|no refusal)\\b"
+        "\\b(neither (is|are|one is) refused|nothing (is )?refused|no refusal)\\b", "\\bnone (is |are )?refused\\b|\\bnot refused\\b|\\b(counter|counter-trend) but allowed\\b|\\bonly lowers size\\b|\\bthe second too\\b|\\b(at )?(full|a smaller|smaller|reduced|half|lower) size\\b|\\b(cannot|can'?t|can not|may not)\\s+be taken (at|with)\\b"
       ]
     },
     {
@@ -646,9 +646,9 @@
       ],
       "forbidden": [
         "^\\W*(yes|yep)\\b",
-        "\\b(it'?s|it is|that'?s|that is|still)\\s+(counts as\\s+)?a\\s+rejection\\b(?!\\s+(only\\s+)?(if|once|when|after)\\b)",
-        "\\b(is|counts as) (still )?a rejection( read)?\\b(?!\\s+(only\\s+)?(once|if|when|after)\\b)",
-        "^[\\W_]*no\\b\\W+(it'?s\\s+)?a\\s+rejection\\b",
+        "\\b(it'?s|it is|that'?s|that is|still)\\s+(counts as\\s+)?a\\s+rejection\\b(?!\\s+(only\\s+)?(if|once|when|after|with)\\b)",
+        "\\b(is|counts as) (still )?a rejection( read)?\\b(?!\\s+(only\\s+)?(once|if|when|after|with)\\b)",
+        "^[\\W_]*no\\b\\W+(it'?s\\s+)?a\\s+rejection\\b(?!\\s+(needs?|requires?|only|is|counts))",
         "\\b(sellers|the other side) (took|take|are in|in) control\\b",
         "\\b(short it|take the short|go short|sell it)\\b(?!\\s+(only\\s+)?(once|if|after(?! all)|when|until)\\b)"
       ]
@@ -841,20 +841,20 @@
       "rule": "the side is the candle's: both are the short side (a rejection of a high); only the first, with the 4h and 1h, can be taken; against the 4h + 1h the trend rule refuses the second (never counter)",
       "required": [
         "\\bshorts?\\b",
-        "\\b(refus\\w*|no trade|not a trade|counter\\w*|never counter|trend rule|not allowed|can'?t be taken|cannot be taken)\\b|\\bonly the (first|one|pullback)\\b[^.;]*\\b(can|may) be taken\\b|\\bonly the (first|one|pullback)\\b[^.;]*\\bis (tradeable|tradable|a setup|the trade)\\b"
+        "\\b(refus\\w*|no trade|not a trade|counter\\w*|never counter|trend rule|not allowed|can'?t be taken|cannot be taken)\\b|\\bonly the (first|one|pullback)\\b[^.;]*\\b(can|may) be taken\\b|\\bonly the (first|one|pullback)\\b[^.;]*\\bis (tradeable|tradable|a setup|the trade)\\b|\\b(may|can) ?not( be taken)?\\b|\\bcannot be taken\\b"
       ],
       "forbidden": [
         "\\blong (setup|side|read|entry|trade)\\b",
-        "\\b(a|is a|as a) long\\b(?!-wick)",
+        "\\b(a|is a|as a) long\\b(?!-wick|\\s+(bias|only))",
         "\\b(with-trend|with the trend|counter-trend) long\\b",
         "\\b(on )?the (other|opposite) side\\b",
         "\\b(take|trade) it (small|smaller|light|anyway)\\b",
         "\\bcounter[- ]trend (short|long|one)\\b[^.;]*\\b(i'?d|i would|can|could|to) take\\b",
         "\\bstill a (short|long) to take\\b",
-        "\\b(both|either)\\b(?![^.;]*\\bonly\\b)[^.;]*\\b(taken|tradeable|tradable|can be taken|valid trades?|allowed)\\b",
+        "\\b(both|either)\\b(?![^.;]*\\bonly the (first|one|pullback)\\b)[^.;]*\\b(taken|tradeable|tradable|can be taken|valid trades?|allowed)\\b",
         "\\b(take|trade|short|long|buy|sell) (them )?(both|either)\\b",
         "\\bboth (are )?(valid|tradeable|tradable|taken)\\b",
-        "\\b(neither (is|are|one is) refused|nothing (is )?refused|no refusal)\\b"
+        "\\b(neither (is|are|one is) refused|nothing (is )?refused|no refusal)\\b", "\\bnone (is |are )?refused\\b|\\bnot refused\\b|\\b(counter|counter-trend) but allowed\\b|\\bonly lowers size\\b|\\bthe second too\\b|\\b(at )?(full|a smaller|smaller|reduced|half|lower) size\\b|\\b(cannot|can'?t|can not|may not)\\s+be taken (at|with)\\b"
       ]
     },
     {
@@ -896,20 +896,20 @@
       "rule": "the side is the candle's: both are the long side (a rejection of a low); only the first, with the 4h and 1h, can be taken; against the 4h + 1h the trend rule refuses the second (never counter)",
       "required": [
         "\\blongs?\\b(?!-wick)",
-        "\\b(refus\\w*|no trade|not a trade|counter\\w*|never counter|trend rule|not allowed|can'?t be taken|cannot be taken)\\b|\\bonly the (first|one|pullback)\\b[^.;]*\\b(can|may) be taken\\b|\\bonly the (first|one|pullback)\\b[^.;]*\\bis (tradeable|tradable|a setup|the trade)\\b"
+        "\\b(refus\\w*|no trade|not a trade|counter\\w*|never counter|trend rule|not allowed|can'?t be taken|cannot be taken)\\b|\\bonly the (first|one|pullback)\\b[^.;]*\\b(can|may) be taken\\b|\\bonly the (first|one|pullback)\\b[^.;]*\\bis (tradeable|tradable|a setup|the trade)\\b|\\b(may|can) ?not( be taken)?\\b|\\bcannot be taken\\b"
       ],
       "forbidden": [
         "\\bshort (setup|side|read|entry|trade)\\b",
-        "\\b(a|is a|as a) short\\b",
+        "\\b(a|is a|as a) short\\b(?!\\s+(bias|only))",
         "\\b(with-trend|with the trend|counter-trend) short\\b",
         "\\b(on )?the (other|opposite) side\\b",
         "\\b(take|trade) it (small|smaller|light|anyway)\\b",
         "\\bcounter[- ]trend (short|long|one)\\b[^.;]*\\b(i'?d|i would|can|could|to) take\\b",
         "\\bstill a (short|long) to take\\b",
-        "\\b(both|either)\\b(?![^.;]*\\bonly\\b)[^.;]*\\b(taken|tradeable|tradable|can be taken|valid trades?|allowed)\\b",
+        "\\b(both|either)\\b(?![^.;]*\\bonly the (first|one|pullback)\\b)[^.;]*\\b(taken|tradeable|tradable|can be taken|valid trades?|allowed)\\b",
         "\\b(take|trade|short|long|buy|sell) (them )?(both|either)\\b",
         "\\bboth (are )?(valid|tradeable|tradable|taken)\\b",
-        "\\b(neither (is|are|one is) refused|nothing (is )?refused|no refusal)\\b"
+        "\\b(neither (is|are|one is) refused|nothing (is )?refused|no refusal)\\b", "\\bnone (is |are )?refused\\b|\\bnot refused\\b|\\b(counter|counter-trend) but allowed\\b|\\bonly lowers size\\b|\\bthe second too\\b|\\b(at )?(full|a smaller|smaller|reduced|half|lower) size\\b|\\b(cannot|can'?t|can not|may not)\\s+be taken (at|with)\\b"
       ]
     }
   ]

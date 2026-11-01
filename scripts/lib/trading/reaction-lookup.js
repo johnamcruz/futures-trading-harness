@@ -19,11 +19,11 @@
  * (FTH_CYCLE_LANE_BARS), the gate requires every head entry on a composed entry, and the warning names them all.
  *
  *   factsOf(reads)                          the composed facts the triggers read ({ composed: [{ kinds, relations }] })
- *   requiredBy(reads)                       the head-required skills these reads trigger
+ *   requiredBy(reads, composed)             the head-required skills these reads and the bar's records trigger
  *   readThisCycle(env, root)                the skills this cycle's head has read, as the gate counts them
  *   enforced(env)                           whether the gate requires the situational skills here
- *   unread(reads, { env, root })            the required skills not read
- *   warningFor(reads, { env, root })        the reply's line, or null
+ *   unread(reads, { env, root, composed })  the required skills not read
+ *   warningFor(reads, { env, root, composed })   the reply's line, or null
  */
 
 /** The composed facts these reads make (skill-lookups.js composedAt's shape), as the triggers read them. */
@@ -33,10 +33,13 @@ function factsOf(reads) {
   return { composed: [{ id: 'compose', kinds: [...new Set(parsed.map(p => p.kind))], relations: [...new Set(parsed.filter(p => p.kind === 'relation' && p.rel).map(p => p.rel))] }] };
 }
 
-/** The head-required skills these reads trigger: the gate's own table and triggers (the composed entry's table). */
-function requiredBy(reads) {
+/**
+ * The head-required skills these reads trigger, with the bar's earlier compose records (`composed`: skill-lookups.js
+ * composedAt, as the gate reads them): the gate's own table and triggers (the composed entry's table).
+ */
+function requiredBy(reads, composed = []) {
   const { situationalSkills } = require('./skills-loaded');
-  return situationalSkills(factsOf(reads));
+  return situationalSkills({ composed: [...factsOf(reads).composed, ...(Array.isArray(composed) ? composed : [])] });
 }
 
 /**
@@ -82,21 +85,21 @@ function readThisCycle(env = process.env, root = null) {
 }
 
 /** The skills these reads require that this cycle's head hasn't read (none where the gate doesn't require them). */
-function unread(reads, { env = process.env, root = null } = {}) {
+function unread(reads, { env = process.env, root = null, composed = [] } = {}) {
   if (!enforced(env, root)) return [];
   // The cycle's lanes set but unreadable: the gate requires every head entry on a composed entry (order-gate.js), so
   // the warning names every one (fails closed, recoverable: read them and compose again).
   const { SITUATIONAL, headSituationalSkills } = require('./skills-loaded');
   const lanes = require('./config').loadConfig(env || {}).cycleLaneBars;
-  const need = lanes === null ? headSituationalSkills(SITUATIONAL) : requiredBy(reads);
+  const need = lanes === null ? headSituationalSkills(SITUATIONAL) : requiredBy(reads, composed);
   if (!need.length) return [];
   const read = readThisCycle(env, root);
   return need.filter(s => !read.has(s));
 }
 
 /** The warning line for these reads, or null (nothing required, or all read this cycle). */
-function warningFor(reads, { env = process.env, root = null } = {}) {
-  const missing = unread(reads, { env, root });
+function warningFor(reads, { env = process.env, root = null, composed = [] } = {}) {
+  const missing = unread(reads, { env, root, composed });
   if (!missing.length) return null;
   const calls = missing.map(s => `\`skill_lookup {"skill": "${s}"}\``).join(', ');
   return `- READ FIRST: this record's reads need ${missing.join(', ')}, not read this cycle; read ${missing.length > 1 ? 'each' : 'it'} with ${calls}, then compose again (the order gate requires ${missing.length > 1 ? 'them' : 'it'} for this entry).`;
