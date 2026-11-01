@@ -332,7 +332,7 @@
         "(?<!not )(?<!not a )\\bis a trade\\b(?!\\s+(?:only\\s+)?(?:after|once|when|if)\\b)",
         "\\brestate is (unnecessary|not needed)\\b",
         "\\bno need (to|for a) restate\\b",
-        "(?<!never a |not a |no |never )\\bveto(e[sd])?\\b(?!\\s+(is|was)\\s+never\\b)",
+        "(?<!\\b(?:not|never|no|isn't|doesn't|don't|won't|without|rather than|instead of|only)\\b[^.;,:()]*)\\bveto(?:e[sd])?\\b(?![^.;,:()]*\\b(?:never|not|would|isn't|doesn't|won't)\\b)",
         "\\b(it'?s|this is|that'?s|that is) a trade\\b(?!\\s+(?:only\\s+)?(?:after|once|when|if)\\b)",
         "\\b(trade|take|place|enter|send) it\\b(?!\\s+(?:only\\s+)?(?:after|once|when|if|until)\\b)",
         "\\bsize line (counts|binds|gives (\\d|it|the size))"

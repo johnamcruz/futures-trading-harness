@@ -43,8 +43,11 @@ test('grading: the ANSWER line, the required terms, and a forbidden term only wh
   for (const a of ['Yes: without a readable size the Size line gives 3.', 'Not a readable approval, but it is a trade at 3.', 'It is a trade: the Size line is a readable size.', 'No, it is a readable size: go with 3.',
     'Veto: not a readable approval.', 'No readable size, so it is vetoed.', 'Trade it at 3. Not a readable approval but the Size line counts.',
     'It\'s a trade; without a readable size on the VERDICT line the prose Size line gives 3.']) assert.ok(!pass('q19', `ANSWER: ${a}`), a);
-  // ...while a veto it rules out stays right: "never a veto", "a veto is never retried".
-  for (const a of ['No. That line is not a valid approval, so it is not a trade yet: one restate of the Size and VERDICT lines is owed, and a veto is never retried.', 'No: unreadable, one restate, never a veto.']) assert.ok(pass('q19', `ANSWER: ${a}`), a);
+  // ...while a veto it rules out in its own clause stays right (the negation before or after it there).
+  for (const a of ['No. That line is not a valid approval, so it is not a trade yet: one restate of the Size and VERDICT lines is owed, and a veto is never retried.', 'No: unreadable, one restate, never a veto.',
+    'No. Unreadable, so the harness asks for one restate and never treats it as a veto.', 'No. Unreadable: the harness asks for one restate and does not treat it as a veto.',
+    'No: unreadable, so one restate rather than a veto.', 'No: unreadable, so a restate instead of a veto.', 'No: unreadable; one restate, and a veto would be wrong here.',
+    'No: unreadable, one restate; only a real veto ends it.', 'No: unreadable, one restate; a veto never applies here.', 'No: unreadable, one restate; a veto is never retried.']) assert.ok(pass('q19', `ANSWER: ${a}`), a);
   assert.strictEqual(Q.negated('it is not from the 3m', 'it is not from the '.length, QUIZ.negations, QUIZ.negationWindow), true);
   assert.strictEqual(Q.negated('take it; the 3m swing', 'take it; the '.length, QUIZ.negations, QUIZ.negationWindow), false);
   assert.strictEqual(Q.negated('not one two three four five the 3m', 'not one two three four five the '.length, QUIZ.negations, QUIZ.negationWindow), false, 'past the window');
