@@ -159,7 +159,9 @@ function createRunner(deps) {
     desk = null,
     // The runner's entry (runner-wiring.js entryFor: workflows/entry/WORKFLOW.md): run(cycle) after the head trader's
     // run in a cycle where the runner runs the entry (entryCycle below), recordFile() a role record for a cycle the
-    // desk didn't write one for. null: the head trader runs phase 2 and the trade-executor itself, as before.
+    // desk didn't write one for, and (optional) overlap(cycle): phase 2 started at the head trader's OK compose
+    // (runner-entry.js overlapFor), given to the cycle (cycle-run.js `overlap`). null: the head trader runs phase 2 and
+    // the trade-executor itself, as before.
     entry: entryWorkflow = null,
     // The latest local price of a symbol's family (trading/late-entry.js readPrice: the runner's entry recorded it before
     // its order): (symbol) -> { price, closedAt } or null. A composed fill's check reads the newer of it and the bars.
@@ -2219,12 +2221,16 @@ function createRunner(deps) {
           const stopPrices = again.action === 'trade' && !manageOnly ? watchPrice(run) : () => {};
           // The runner's entry after the head trader's run (cycle-run.js runs it inside the cycle's time, before the cycle
           // log): phase 2 and the trade-executor on the decision's compose record (runner-entry.js).
-          const entryHook = runsEntry ? ({ result, output, env: headEnv, startedWall, budgetMs }) => entryWorkflow.run({
-            result, output, headEnv, startedWall, symbol: cacheSymbols[0].symbol, contractId: cacheSymbols[0].contractId || run[0].contractId || null, bar: cacheSymbols[0].bar,
+          const entryCycleOf = ({ env: headEnv, startedWall, budgetMs }) => ({
+            headEnv, startedWall, symbol: cacheSymbols[0].symbol, contractId: cacheSymbols[0].contractId || run[0].contractId || null, bar: cacheSymbols[0].bar,
             bars: run[0].bar.file || null, at: cycleNow.toISOString(), now: cycleNow, laneBars: multi ? laneBarsOf(run) : {},
             accountId: Number.isInteger(Number(cfg.account)) && Number(cfg.account) >= 1 ? Number(cfg.account) : null,
             context, rolesFile, reports: served ? served.reports.map(x => ({ role: x.role, text: x.text })) : [], budgetMs,
-          }) : null;
+          });
+          const entryHook = runsEntry ? ({ result, output, overlap, ...run2 }) => entryWorkflow.run({ ...entryCycleOf(run2), result, output, ...(overlap ? { overlap } : {}) }) : null;
+          // Phase 2 started at the head trader's OK compose (runner-entry.js overlapFor; runner-wiring.js entryFor: only where
+          // it is on), on the same cycle the entry gets, made with the head trader's environment just before its run.
+          const overlapHook = runsEntry && typeof entryWorkflow.overlap === 'function' ? run2 => entryWorkflow.overlap(entryCycleOf(run2)) : null;
           // This machine's opt-in (the runner config's cycleDataInPrompt, Claude Code only): the head trader's first reads,
           // made by the runner with its run's own environment just before its run (cycle-run.js), in its prompt (cycle-data.js).
           const precollect = CD.on(cfg) ? runEnv => CD.collect({
@@ -2234,7 +2240,7 @@ function createRunner(deps) {
           let r;
           let ranRuns = [];
           try {
-            r = await timedCycle(again.action, prompt, { timeoutMs, context, ...(entryHook ? { entry: entryHook } : {}), ...(precollect ? { precollect } : {}) }, { symbols: run.map(x => x.symbol), bars: run.map(x => x.bar.t), manageOnly, cached: served ? served.roles : [], ...(multi ? { lanes: run.map(x => `${x.minutes}m`) } : {}), ...(historyShown.length ? { history: historyShown } : {}) });
+            r = await timedCycle(again.action, prompt, { timeoutMs, context, ...(entryHook ? { entry: entryHook } : {}), ...(overlapHook ? { overlap: overlapHook } : {}), ...(precollect ? { precollect } : {}) }, { symbols: run.map(x => x.symbol), bars: run.map(x => x.bar.t), manageOnly, cached: served ? served.roles : [], ...(multi ? { lanes: run.map(x => `${x.minutes}m`) } : {}), ...(historyShown.length ? { history: historyShown } : {}) });
           } finally {
             stopWatch();
             stopPrices();

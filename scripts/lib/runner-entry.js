@@ -15,7 +15,11 @@
  *      skillsInTranscript), recorded in the cycle's role record (runner-roles.js appendHeadSkills): the trade-executor
  *      is a session of its own, so the gate counts the decider's loads from the record;
  *   3. phase `review`: risk-manager phase 2 on the record (orchestrate/requests.js review), its run recorded with its
- *      wall-clock times (the gate orders it after phase 1 and the analysts, as a launch);
+ *      wall-clock times (the gate orders it after phase 1 and the analysts, as a launch). Where the runner started it at
+ *      the head trader's OK compose (overlapFor, config/runner.json entry.overlapPhase2: `cycle.overlap`), that run is
+ *      the phase's first attempt only when it ran on this very record with exactly the request built now (the
+ *      entry record's `overlap`: { adopted, record | why }; timing.phase2EarlyMs, how long it ran before the entry
+ *      began); any other is dropped, never recorded for the gate, and phase 2 runs now, as without it;
  *   4. between the phases, in code: phase 2's verdict (roles-ran.js verdictOf: anything but APPROVE stops the entry, a
  *      VETO is the cycle's no-trade with its line; an APPROVE line the reading still takes as a veto, the same outcome
  *      with the reading's reason: roles-ran.js approvalReadAsVeto; but first, an approving VERDICT line the reading
@@ -50,13 +54,14 @@
  *   plannedDrift(result, rec)  why the head trader's planned line (its side, its size) isn't the record's, or null
  *   verdictLine(text)        phase 2's decisive VERDICT line (roles-ran.js decisiveLine), never a heading
  *   entryOutcome({ ... })    { outcome, result, why } from the after-order facts
+ *   overlapFor(deps, cycle)  phase 2 started at the head trader's OK compose: an entry-overlap.js handle, or null
  *   runEntry(deps, cycle)    null (the result isn't `planned`: nothing for the runner) or { result, entry }
  *     deps:  { workflow, runRole, client, home, cfg, root, env, log, wallNow, now, perRoleMs, childEnv, lookups, orderPlan, accounts, strategies }
  *            (`orderPlan`: harness-tools/order-plan.js plan, the order_plan tool's own operation; a test's stand-in;
  *            `accounts`, `strategies`: the account profiles and the strategies, accounts.js loadAccounts and
  *            strategies.js loadStrategies by default, for phase 2's cut check)
  *     cycle: { result, output, headEnv, symbol, contractId, bar, bars, at, accountId, context, rolesFile, reports, budgetMs,
- *              startedWall (the wall ms the head trader's run began) }
+ *              startedWall (the wall ms the head trader's run began), overlap (overlapFor's handle, or none) }
  *   The cycle log's `entry.timing`: barClose, headMs (bar close to the head trader's planned), phase2Ms, executorMs,
  *   orderMs (bar close to the order sent: the gate log's allowed decision of this cycle's order; for an expired record,
  *   to order_plan's refusal; else null); outcome `expired`: the record ran out first.
@@ -66,7 +71,7 @@ const fs = require('fs');
 const { outcomeOf } = require('./autotrader');
 const { verdictOf, approvalReadAsVeto, approvedSize, decisiveLine } = require('./trading/roles-ran');
 const { restateDue, readRestatement } = require('./trading/phase2-restate');
-const { restate: restateRequest } = require('./orchestrate/requests');
+const { restate: restateRequest, REQUESTS } = require('./orchestrate/requests');
 const { recordsAt } = require('./trading/lifecycle-gate');
 const { renderRecord } = require('./trading/trade-lifecycle');
 const { skillsInTranscript, claudeLookupsInTranscript } = require('./trading/skills-loaded');
@@ -264,6 +269,142 @@ function attemptedOrder(exec) {
   }
 }
 
+/**
+ * The cycle's id and the roles' run context: the cycle's own context (its bars, lanes, cached roles, the role record)
+ * and its id. A Claude Code head trader in index mode: its attestation goes with the cycle's id, so the executor's gate
+ * counts what the head trader's prompt embedded (autotrader.js claudeHeadAttestation checks it is this cycle's). Never
+ * the head trader's situational skills (a role's run is its own session: situational-skills.js). From the head trader's
+ * environment alone (`headEnv`), so it is the same before its run ends (overlapFor) and after (runEntry).
+ */
+function entryContext(c) {
+  const he = c.headEnv || {};
+  const headAtt = require('./head-prompt').parseAttestation(he.FTH_HEAD_PROMPT);
+  const claudeHead = Boolean(headAtt && headAtt.harness === 'claude');
+  const id = require('./trading/check-order').cycleId(he);
+  const { cycleSkills: _cycleSkills, ...cycleContext } = c.context || {};
+  const roleContext = { ...cycleContext, entry: false, rolesFile: c.rolesFile, ...(id ? { cycleId: id } : {}), ...(claudeHead && id ? { headPrompt: he.FTH_HEAD_PROMPT } : {}) };
+  return { id, claudeHead, roleContext };
+}
+
+/**
+ * Phase 2's request context on a compose record (orchestrate/requests.js review): { ctx, translatedRisk }. In a prop
+ * attempt the entry's size is code's translation (order_plan's own path: prop/size-translate.js), read before phase 2
+ * so its request names the size to approve or cut; the record's size is a suggestion. Outside an attempt nothing is read
+ * and the request is as before. order_plan refusing here: phase 2 runs on the record and the order is refused after it,
+ * as before. `translatedRisk`: the translated size's risk (order_plan's, before fees), for phase 2's cut check
+ * (prop/phase2-cut.js). The same for phase 2 started at the compose (overlapFor) and after the head trader's run.
+ */
+async function reviewCtx(deps, c, rec, roleContext, lookups, stage = null) {
+  const { client, home, cfg, root, env, log = () => {}, childEnv } = deps;
+  const orderPlan = deps.orderPlan || require('./harness-tools/order-plan').plan;
+  const ctx = {
+    symbol: c.symbol, contractId: c.contractId || null, at: c.at, timeframe: cfg.timeframe, bars: c.bars || null, lookups: lookups || {},
+    strategy: STRATEGY, side: rec.side, accountId: Number.isInteger(c.accountId) ? c.accountId : null,
+    record: renderRecord(rec), reports: c.reports || [],
+  };
+  let translatedRisk = null;
+  if (require('./trading/prop-state').runningAttempts(home).length) {
+    // The broker's max order size, read through the adapter (its translator records it for this day, as the gateway's
+    // own read does before the gate), so order_plan's translation and the gate's see the same limit. Unread: as it is.
+    try { if (client && typeof client.serverConfig === 'function') await client.serverConfig(); } catch (_err) { /* the gate reads its own */ }
+    try {
+      // Phase 2 started at the compose (overlapFor): the verdict this records goes to its run's stage (verdict-stage.js),
+      // never where the head trader's reads see it while its run goes on.
+      const planNow = () => orderPlan({ file: c.bars, symbol: c.symbol, strategy: STRATEGY, side: rec.side, ...(Number.isInteger(c.accountId) ? { accountId: c.accountId } : {}) }, { env: childEnv(cfg, root, env, stage ? { ...roleContext, verdictStage: stage } : roleContext), root, tool: true });
+      const pre = stage ? require('./trading/verdict-stage').withStage(stage, planNow) : planNow();
+      const p = pre && pre.plan;
+      if (p && Number.isInteger(p.translatedSize)) {
+        ctx.entrySize = { size: p.translatedSize, contract: p.contract, suggested: p.suggestedSize, reason: p.translation, floor: p.minContracts };
+        if (p.size === p.translatedSize && Number.isFinite(p.riskUsd)) translatedRisk = p.riskUsd;
+      }
+    } catch (err) {
+      log(`the entry: order_plan before phase 2 refused (${short(err.message)}); phase 2 sees the record's size`, 'warn');
+    }
+  }
+  return { ctx, translatedRisk };
+}
+
+/**
+ * What phase 2 judges, as a snapshot compared when it started at the compose and when the entry adopts it (the owner's
+ * "avoid stale data"): the compose record's id, its bar, side and size; the bar briefing's as-of time (the bar the
+ * facts are on); the cycle's bars file's content hash. Any part differing drops the early run. A briefing or bars file
+ * whose read throws is a value of its own that never equals another read, readable or not (fails closed). A missing
+ * briefing (none written) reads as null and matches null, as the sequential path takes it; no bars file named is
+ * null too.
+ */
+let unreadSeq = 0;
+function entrySnapshot(home, c, rec) {
+  let briefing;
+  try { const b = require('./trading/briefing').readBriefing(home, c.symbol); briefing = b && b.asOf ? String(b.asOf) : null; } catch (_err) { briefing = { unreadable: (unreadSeq += 1) }; }
+  let bars = null;
+  if (c.bars) {
+    try { bars = require('crypto').createHash('sha256').update(fs.readFileSync(c.bars)).digest('hex'); } catch (_err) { bars = { unreadable: (unreadSeq += 1) }; }
+  }
+  return { record: rec.id, bar: rec.bar, side: rec.side, size: rec.plan && Number.isInteger(rec.plan.size) ? rec.plan.size : null, briefing, bars };
+}
+
+/**
+ * Phase 2 started at the head trader's OK compose (entry-overlap.js; config/runner.json entry.overlapPhase2): a handle
+ * that, while the head trader's run goes, starts phase 2's run on the latest OK compose record on the cycle's bar
+ * (entryDue's record), with the request runEntry would build on it (reviewCtx, the lookups as `deps.lookups()` reads
+ * them then), within the cycle's budget and entry.timeoutMinutes, as runEntry's engine runs it. runEntry adopts it only
+ * on the record the head trader planned with that exact request; anything else drops it. null: no role record, or a
+ * workflow whose first phase is not one review role.
+ *   deps: runEntry's, with `lookups` a function (read at each request) and `pollMs` (entry.overlapPollMs)
+ *   c:    runEntry's cycle without `result` and `output` (the head trader's run is going): `headEnv` its environment
+ */
+function overlapFor(deps, c) {
+  const { workflow, home, runRole, perRoleMs, wallNow = Date.now, log = () => {}, pollMs } = deps;
+  const review = workflow && Array.isArray(workflow.phases) ? workflow.phases[0] : null;
+  if (!c.rolesFile || !review || review.orders === true || !Array.isArray(review.parallel) || review.parallel.length !== 1) return null;
+  const role = review.parallel[0];
+  const { roleContext } = entryContext(c);
+  const deadline = wallNow() + Math.max(0, Number(c.budgetMs) || 0);
+  const due = () => entryDue(recordsAt(home, c.symbol, c.bar));
+  const { createOverlap } = require('./entry-overlap');
+  const VS = require('./trading/verdict-stage');
+  // The kill-switch file is found once per entry; an unreadable config blocks every start (blocked() throws).
+  let stopFile = null; let stopErr = null;
+  try { stopFile = require('./trading/config').loadConfig(deps.env || process.env).killSwitchFile; } catch (err) { stopErr = err; }
+  const h = createOverlap({
+    pollMs, wallNow, log: m => log(`the entry: ${m}`),
+    // No model run starts while the kill switch is on (the cycle's own check, cycle-run.js, comes after the head trader).
+    blocked: () => { if (stopErr || !stopFile) throw stopErr || new Error('no kill-switch file'); return fs.existsSync(stopFile) ? 'the kill switch is on' : null; },
+    latest: () => { const d = due(); return d.run ? d.record.id : null; },
+    // Each early run's policy verdicts go to a stage of its own (verdict-stage.js), dropped with the run.
+    prepare: () => VS.newStage(home),
+    onDrop: stage => VS.dropStage(stage),
+    request: async (key, stage) => {
+      const d = due();
+      if (!d.run || d.record.id !== key) return null;
+      // What it judges, read before its inputs: a newer snapshot by adoption drops it (entrySnapshot).
+      const snapshot = entrySnapshot(home, c, d.record);
+      const { ctx } = await reviewCtx(deps, c, d.record, roleContext, typeof deps.lookups === 'function' ? deps.lookups() : deps.lookups, stage);
+      return { request: REQUESTS[review.request](role, ctx), snapshot };
+    },
+    start: async (request, signal, stage) => {
+      const left = deadline - wallNow();
+      if (left <= 0) return { ok: false, timedOut: true, text: '', tools: [], output: '' };
+      return runRole(role, request, { timeoutMs: Math.min(perRoleMs || left, left), context: { ...roleContext, verdictStage: stage }, signal });
+    },
+  });
+  // Adopted (the head trader planned that record, nothing it judged changed): its staged verdicts promoted to the real
+  // file, once its run has settled (runEntry, before the order is built and the gate reads them).
+  const take = h.take;
+  h.take = (...a) => {
+    const got = take(...a);
+    if (got && got.run) got.run.promote = () => require('./trading/prop-state').promoteVerdicts(home, got.run.meta);
+    return got;
+  };
+  return h;
+}
+
+/**
+ * Whether an engine run is the adopted early phase 2 (runEntry): only its own role and exactly the request it ran on,
+ * once (`used`); any other run (another role, a retry, a restatement, another request) runs as before.
+ */
+const adoptsRun = (adopted, role, request) => Boolean(adopted) && !adopted.used && role === adopted.role && typeof request === 'string' && request === adopted.request;
+
 async function runEntry(deps, c) {
   const { workflow, runRole, client, home, cfg, root, env, log = () => {}, wallNow = Date.now, now = () => new Date(), perRoleMs, childEnv, lookups = {} } = deps;
   const orderPlan = deps.orderPlan || require('./harness-tools/order-plan').plan;
@@ -294,8 +435,7 @@ async function runEntry(deps, c) {
   // 2. The head trader's loads, for the gate's skills checks in the executor's run. A Claude Code head trader in index
   // mode (attested by the runner: autotrader.js claudeHeadOn, this machine's opt-in) also read skills whole with
   // skill_lookup; those are its loads too. Without that attestation, as before.
-  const headAtt = require('./head-prompt').parseAttestation((c.headEnv || {}).FTH_HEAD_PROMPT);
-  const claudeHead = Boolean(headAtt && headAtt.harness === 'claude');
+  const { claudeHead } = entryContext(c);
   // The cycle's situational skills in the head trader's prompt (situational-skills.js): its loads too, only on the
   // runner's attestation, checked now against its file, the skills' text and the head trader's own stream and cycle.
   const SS = require('./cycle-skills-attest');
@@ -311,15 +451,9 @@ async function runEntry(deps, c) {
   }
   const { createRun } = require('./orchestrate/engine');
   const { runWorkflow } = require('./orchestrate/workflows');
-  const { cycleId } = require('./trading/check-order');
-  const id = cycleId(c.headEnv || {});
-  // The roles' runs get the cycle's own context (its bars, lanes, cached roles, the role record) and its id.
-  // A Claude Code head trader in index mode: its attestation goes with the cycle's id, so the executor's gate counts what
-  // the head trader's prompt embedded (autotrader.js claudeHeadAttestation checks it is this cycle's).
-  // Never the head trader's situational skills (a role's run is its own session: situational-skills.js).
-  const { cycleSkills: _cycleSkills, ...cycleContext } = c.context || {};
-  const roleContext = { ...cycleContext, entry: false, rolesFile: c.rolesFile, ...(id ? { cycleId: id } : {}), ...(claudeHead && id ? { headPrompt: c.headEnv.FTH_HEAD_PROMPT } : {}) };
-  const deadline = wallNow() + Math.max(0, Number(c.budgetMs) || 0);
+  const { id, roleContext } = entryContext(c);
+  const entryStart = wallNow();
+  const deadline = entryStart + Math.max(0, Number(c.budgetMs) || 0);
   // The budget's timings (the cycle log's entry.timing): from the bar's close, in the harness's time up to the cycle's
   // start (c.at), then the wall clock since the head trader's run began (c.startedWall).
   const closeMs = Date.parse(c.bar) + cfg.timeframe * 60000;
@@ -327,8 +461,23 @@ async function runEntry(deps, c) {
   const sinceClose = wall => (lagMs !== null && Number.isFinite(c.startedWall) ? lagMs + Math.max(0, wall - c.startedWall) : null);
   info.timing = { barClose: Number.isFinite(closeMs) ? new Date(closeMs).toISOString() : null, headMs: sinceClose(wallNow()) };
   const times = new Map();
+  // Phase 2 started at the head trader's OK compose (overlapFor), set below once the request is built: its run is the
+  // review phase's first attempt only for this role and this exact request; any other run goes as before.
+  let adopted = null;
   const engine = {
     run: async (role, request, { timeoutMs }) => {
+      if (adoptsRun(adopted, role, request)) {
+        adopted.used = true;
+        try {
+          return await adopted.promise;
+        } finally {
+          times.set(role, { start: adopted.start, end: adopted.end() ?? wallNow() });
+          // Its staged verdicts reach the real file now (overlapFor), before the order and the gate's reads.
+          if (typeof adopted.promote === 'function') {
+            try { adopted.promote(); } catch (err) { log(`the entry: phase 2's staged verdicts could not be promoted (${err.message}): the gate reads the real file as it is`, 'error'); }
+          }
+        }
+      }
       const left = deadline - wallNow();
       if (left <= 0) return { ok: false, timedOut: true, text: '', tools: [], output: '' };
       const start = wallNow();
@@ -346,31 +495,22 @@ async function runEntry(deps, c) {
       return false;
     }
   };
-  const ctx = {
-    symbol: c.symbol, contractId: c.contractId || null, at: c.at, timeframe: cfg.timeframe, bars: c.bars || null, lookups,
-    strategy: STRATEGY, side: rec.side, accountId: Number.isInteger(c.accountId) ? c.accountId : null,
-    record: renderRecord(rec), reports: c.reports || [],
-  };
-  // In a prop attempt the entry's size is code's translation (order_plan's own path: prop/size-translate.js), read
-  // before phase 2 so its request names the size to approve or cut; the record's size is a suggestion. Outside an
-  // attempt nothing is read and the request is as before. order_plan refusing here: phase 2 runs on the record and the
-  // order is refused after it, as before.
-  // The translated size's risk (order_plan's, before fees), for phase 2's cut check (prop/phase2-cut.js).
-  let translatedRisk = null;
-  if (require('./trading/prop-state').runningAttempts(home).length) {
-    // The broker's max order size, read through the adapter (its translator records it for this day, as the gateway's
-    // own read does before the gate), so order_plan's translation and the gate's see the same limit. Unread: as it is.
-    try { if (client && typeof client.serverConfig === 'function') await client.serverConfig(); } catch (_err) { /* the gate reads its own */ }
-    try {
-      const pre = orderPlan({ file: c.bars, symbol: c.symbol, strategy: STRATEGY, side: rec.side, ...(Number.isInteger(c.accountId) ? { accountId: c.accountId } : {}) }, { env: childEnv(cfg, root, env, roleContext), root, tool: true });
-      const p = pre && pre.plan;
-      if (p && Number.isInteger(p.translatedSize)) {
-        ctx.entrySize = { size: p.translatedSize, contract: p.contract, suggested: p.suggestedSize, reason: p.translation, floor: p.minContracts };
-        info.translated = ctx.entrySize;
-        if (p.size === p.translatedSize && Number.isFinite(p.riskUsd)) translatedRisk = p.riskUsd;
-      }
-    } catch (err) {
-      log(`the entry: order_plan before phase 2 refused (${short(err.message)}); phase 2 sees the record's size`, 'warn');
+  const { ctx, translatedRisk } = await reviewCtx(deps, c, rec, roleContext, typeof lookups === 'function' ? lookups() : lookups);
+  if (ctx.entrySize) info.translated = ctx.entrySize;
+  // Phase 2 started at the compose (overlapFor): adopted only when it ran on this very record (the one the head trader
+  // planned, on the cycle's bar) with exactly the request built now; else dropped (stopped, never recorded for the gate)
+  // and phase 2 runs now, as without it. A dropped run never authorizes anything.
+  const review = workflow.phases[0];
+  if (c.overlap && typeof c.overlap.take === 'function' && review && review.orders !== true && Array.isArray(review.parallel) && review.parallel.length === 1) {
+    const want = REQUESTS[review.request](review.parallel[0], ctx);
+    let got;
+    try { got = c.overlap.take(rec.id, want, entrySnapshot(home, c, rec)); } catch (err) { got = { run: null, why: err.message }; }
+    if (got && got.run) {
+      adopted = { role: review.parallel[0], request: want, ...got.run };
+      info.overlap = { adopted: true, record: rec.id };
+      info.timing.phase2EarlyMs = Math.max(0, entryStart - got.run.start);
+    } else {
+      info.overlap = { adopted: false, why: (got && got.why) || 'none started' };
     }
   }
   let stop = null;
@@ -615,4 +755,4 @@ async function runEntry(deps, c) {
   return say(out.outcome, out.result, { account, ...(out.why ? { why: short(out.why) } : {}) });
 }
 
-module.exports = { STRATEGY, entryDue, plannedDrift, verdictLine, gateRefusal, gateDecision, workingEntry, entryOutcome, runEntry };
+module.exports = { STRATEGY, entryDue, plannedDrift, verdictLine, gateRefusal, gateDecision, workingEntry, entryOutcome, entryContext, reviewCtx, entrySnapshot, overlapFor, adoptsRun, runEntry };

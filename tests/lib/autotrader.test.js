@@ -185,6 +185,19 @@ test('a previous day that never finished end of day is flattened first', () => {
   assert.strictEqual(decide(cfg, { ...thursday, cycles: 0, premarketDone: false, eodAttempted: true }, sat).action, 'eod');
 });
 
+test('child env: the verdict stage (FTH_VERDICT_STAGE) only from the run\'s own context (the early phase 2\'s), never inherited by the head trader, the trade-executor or any other run', () => {
+  const home = '/srv/fth';
+  const stage = require('path').join(home, 'logs', 'verdict-stage-123-0123456789ab.jsonl');
+  const inherited = { FTH_HOME: home, FTH_VERDICT_STAGE: stage };
+  for (const harness of ['opencode', 'claude']) {
+    const c = validateConfig({ harness });
+    assert.strictEqual(childEnv(c, '/r', inherited).FTH_VERDICT_STAGE, undefined, `${harness}: the head trader's run`);
+    assert.strictEqual(childEnv(c, '/r', inherited, { roleRun: 'trade-executor', entry: false }).FTH_VERDICT_STAGE, undefined, `${harness}: the trade-executor's`);
+    assert.strictEqual(childEnv(c, '/r', inherited, { roleRun: 'risk-manager', verdictStage: '' }).FTH_VERDICT_STAGE, undefined, `${harness}: an empty one`);
+    assert.strictEqual(childEnv(c, '/r', { FTH_HOME: home }, { roleRun: 'risk-manager', verdictStage: stage }).FTH_VERDICT_STAGE, stage, `${harness}: the early phase 2's own`);
+  }
+});
+
 test('child env names the cycle and, for a harness that streams its transcript, the live transcript file the gate reads', () => {
   const home = { FTH_HOME: '/srv/fth' };
   for (const harness of ['opencode', 'claude']) {
@@ -1257,6 +1270,26 @@ test('runHarness writes the live transcript as the run streams it: a fresh file,
   // Without a live file nothing is written.
   const r2 = await runHarness(['bash', '-c', 'echo x'], { cwd: dir, env: process.env, timeoutMs: 10000 });
   assert.strictEqual(r2.ok, true);
+});
+
+test('runHarness with a signal: aborted mid-run, the run is stopped (its group killed) and resolves not ok, cancelled; aborted before it starts, the same; never aborted, as without one', async () => {
+  const { runHarness } = require('../../scripts/lib/harness-run');
+  const dir = require('../helpers').tmpDir();
+  const ac = new AbortController();
+  const t0 = Date.now();
+  const p = runHarness(['bash', '-c', 'echo started; sleep 30; echo never'], { cwd: dir, env: process.env, timeoutMs: 60000, signal: ac.signal });
+  setTimeout(() => ac.abort(), 200);
+  const r = await p;
+  assert.deepStrictEqual([r.ok, r.cancelled, r.timedOut], [false, true, false]);
+  assert.ok(Date.now() - t0 < 10000, 'stopped, not waited out');
+  assert.doesNotMatch(r.output, /never/);
+  assert.match(r.output, /run cancelled/);
+  const pre = new AbortController();
+  pre.abort();
+  const r2 = await runHarness(['bash', '-c', 'sleep 30'], { cwd: dir, env: process.env, timeoutMs: 60000, signal: pre.signal });
+  assert.deepStrictEqual([r2.ok, r2.cancelled], [false, true]);
+  const r3 = await runHarness(['bash', '-c', 'echo x'], { cwd: dir, env: process.env, timeoutMs: 10000, signal: new AbortController().signal });
+  assert.deepStrictEqual([r3.ok, r3.cancelled], [true, undefined]);
 });
 
 test('cycleOutcome: what a cycle hands the runner - the transcript is the standard output alone, never stderr', () => {

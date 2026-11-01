@@ -363,6 +363,9 @@ async function pass(w, at, script, opts, sink) {
     const runner = wireRunner({
       cfg: w.cfg, root: ROOT, home: w.home, env, client: closedBarsOnly(client, now), dataDir: w.cfg.dataDir, now,
       runRole: roles(w, at, opts),
+      // Phase 2 started at the head trader's OK compose (runner-entry.js overlapFor) is off here: a scripted head trader's
+      // run races the poll, so the goal numbers measure phase 2 after the run, as before (deterministic).
+      entryOverlap: false,
       prop: require('../../scripts/lib/prop/live-runner').createPropHooks({ root: ROOT, env, home: w.home, client, accountId: w.cfg.account, strategies: () => require('../../scripts/lib/trading/strategies').loadStrategies(ROOT, env).strategies, log: m => sink.logs.push(m) }),
       runCycle: async (action, prompt, limits) => runCycle(w.cfg, action, prompt, {}, limits, { root: ROOT, home: w.home, env, run: model, guard: () => true }),
       loadState: () => (fs.existsSync(w.stateFile) ? JSON.parse(fs.readFileSync(w.stateFile, 'utf8')) : null),

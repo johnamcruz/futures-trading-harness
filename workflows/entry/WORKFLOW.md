@@ -40,6 +40,18 @@ failure: logged, and nothing runs.
    mode, looked up what the bar requires of it (`lookups`). Run once more if
    not, then missing: no order. A VETO ends the entry: the cycle is a no-trade
    with its reason.
+
+   Where `config/runner.json` `entry.overlapPhase2` is on (and the desk runs
+   two or more roles at once), this run starts at the head trader's OK
+   `compose_check`, while its run goes on, on that record. It counts only if
+   the head trader then ends `planned` on that same record and nothing it
+   judged changed: the record's id, bar, side and size, the bar briefing's
+   as-of time, the bars file, and its request. Otherwise it is stopped and
+   discarded, never written to the role record, and phase 2 runs fresh on
+   the final record (or not at all, when the head trader did not plan). A
+   recompose stops the run and starts one on the new record. Its policy
+   verdicts are staged for its own reads alone and reach the real file only
+   when it is adopted, so the head trader's reads never change because of it.
 2. Between the phases, in code: the order (`order_plan`'s path,
    `trading/lifecycle-order.js`, so its rationale, brackets and, in a prop
    attempt, the policy verdict are what the gate checks) and the journal plan

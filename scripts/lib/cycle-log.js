@@ -235,7 +235,9 @@ function cycleClock(env, at, wallMs = at.getTime()) {
  * `at`: when the cycle started on the wall clock (its `at`: the replay store and labels window the gate log, which
  * the wall clock stamps, with it). `env`: the cycle's environment (cycleClock): its own time (`cycleAt`, the replay
  * clock's in a replay) files the record under its trading day and is the time the lookups and the fact checks read
- * the bar briefing at, with the cycle's lanes, the inputs the gate judged its entries on.
+ * the bar briefing at, with the cycle's lanes, the inputs the gate judged its entries on. `overlap`: the phase-2 runs the
+ * runner started at the head trader's OK compose (entry-overlap.js summary: each one's record, outcome, why, ms), kept
+ * in the record and its summary line when there were any.
  */
 const { perRole } = require('./role-skills-record');
 /**
@@ -252,7 +254,7 @@ function roleSkillsMissing(context, entry) {
   return out;
 }
 
-function writeCycleLog(home, { at = new Date(), env = null, action, harness, prompt, context = null, argv = [], output = '', result = null, reportedResult = null, resultNote = null, ok = null, timedOut = false, durationMs = null, transcript = null, roleSkills = null, headPrompt = null, timing = null, desk = null, entry = null }) {
+function writeCycleLog(home, { at = new Date(), env = null, action, harness, prompt, context = null, argv = [], output = '', result = null, reportedResult = null, resultNote = null, ok = null, timedOut = false, durationMs = null, transcript = null, roleSkills = null, headPrompt = null, timing = null, desk = null, entry = null, overlap = null }) {
   const { cycleAt, laneBars } = cycleClock(env, at);
   const day = tradingDayKey(cycleAt);
   // The head trader's embedded skills as the runner attested them (FTH_HEAD_PROMPT; the gate checks them per entry).
@@ -303,7 +305,7 @@ function writeCycleLog(home, { at = new Date(), env = null, action, harness, pro
     const body = JSON.stringify({
       // result: the line as scored (autotrader.js scoreRun); reportedResult: the agent's own, when scored otherwise;
       // resultNote: why (scored otherwise, or the line taken from an earlier message: the final message had none).
-      at: at.toISOString(), cycleAt: cycleAt.toISOString(), action, harness, ok, timedOut, durationMs, result, ...(reportedResult ? { reportedResult } : {}), ...(resultNote ? { resultNote } : {}), summary, factCheck, ...(timing ? { timing } : {}), ...(desk ? { desk } : {}), ...(entry ? { entry } : {}),
+      at: at.toISOString(), cycleAt: cycleAt.toISOString(), action, harness, ok, timedOut, durationMs, result, ...(reportedResult ? { reportedResult } : {}), ...(resultNote ? { resultNote } : {}), summary, factCheck, ...(timing ? { timing } : {}), ...(desk ? { desk } : {}), ...(entry ? { entry } : {}), ...(overlap ? { overlap } : {}),
       ...(composed.length ? { composed } : {}),
       // context: what the prompt was built from (runner.js), so a line can be checked against its inputs.
       prompt, context, argv: argv.map(a => (a === prompt ? '<prompt>' : a)), transcript: output,
@@ -327,6 +329,7 @@ function writeCycleLog(home, { at = new Date(), env = null, action, harness, pro
       ...(timing ? { timing } : {}),
       ...(desk ? { desk } : {}),
       ...(entry ? { entry: { outcome: entry.outcome || null, ran: (entry.ran || []).map(x => x.role), ...(perRole(entry.ran) ? { skills: perRole(entry.ran) } : {}), ...(entry.record ? { record: entry.record } : {}), ...(entry.failure ? { failure: entry.failure } : {}), ...(entry.timing ? { timing: entry.timing } : {}), ...(entry.restated ? { restated: { kind: entry.restated.kind, outcome: entry.restated.outcome, ...(entry.restated.size ? { size: entry.restated.size } : {}) } } : {}), ...(entry.cutRestored ? { cutRestored: { from: entry.cutRestored.from, to: entry.cutRestored.to, note: entry.cutRestored.note } } : {}) } } : {}),
+      ...(overlap ? { overlap: overlap.map(o => ({ record: o.record, outcome: o.outcome })) } : {}),
       // The roles the runner ran without some of their skills (role-skills-record.js; the cycle's desk and entry records).
       ...roleSkillsMissing(context, entry),
     })}\n`);

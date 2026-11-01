@@ -53,8 +53,10 @@ function liveWriter(file) {
  * pipes can't hold up the loop, and whatever it left in its process group is
  * stopped.
  * `onChild(child|null)` tracks the running child for signal handling.
+ * `signal` (an AbortSignal, optional): once aborted, the run is stopped as a timeout stops it (its group killed) and
+ * resolves not ok with `cancelled` (the runner's entry dropping a phase-2 run it started early: runner-entry.js).
  */
-function runHarness(argv, { cwd, env, timeoutMs, onChild = () => {}, liveFile = null }) {
+function runHarness(argv, { cwd, env, timeoutMs, onChild = () => {}, liveFile = null, signal = null }) {
   return new Promise(resolve => {
     const [cmd, ...args] = argv;
     // The transcript so far, for the gate to read while the run goes on: emptied first, then each output chunk appended.
@@ -81,14 +83,29 @@ function runHarness(argv, { cwd, env, timeoutMs, onChild = () => {}, liveFile = 
       killGroup('SIGTERM');
       setTimeout(() => killGroup('SIGKILL'), RUN.killGraceMs).unref();
     }, timeoutMs);
+    // Aborted (the caller no longer wants this run): stopped as a timeout stops it, never a result that counts.
+    let cancelled = false;
+    const onAbort = () => {
+      if (cancelled) return;
+      cancelled = true;
+      output += '\n[autotrader] run cancelled; killing run\n';
+      killGroup('SIGTERM');
+      setTimeout(() => killGroup('SIGKILL'), RUN.killGraceMs).unref();
+    };
+    const listens = Boolean(signal) && typeof signal.addEventListener === 'function';
+    if (listens && signal.aborted) onAbort();
+    else if (listens) signal.addEventListener('abort', onAbort, { once: true });
+    const unlisten = () => { if (listens) signal.removeEventListener('abort', onAbort); };
     child.on('error', err => {
       clearTimeout(timer);
+      unlisten();
       onChild(null);
       live.done();
-      resolve({ ok: false, timedOut, stdout, lineTimes, output: `${output}\n[autotrader] could not start ${cmd}: ${err.message}\n` });
+      resolve({ ok: false, timedOut, ...(cancelled ? { cancelled } : {}), stdout, lineTimes, output: `${output}\n[autotrader] could not start ${cmd}: ${err.message}\n` });
     });
-    child.on('exit', (code, signal) => {
+    child.on('exit', (code, sig) => {
       clearTimeout(timer);
+      unlisten();
       onChild(null);
       // Anything the harness left running in its group (a background shell, a
       // sub-agent) must not keep acting after the cycle: end the group too.
@@ -99,8 +116,8 @@ function runHarness(argv, { cwd, env, timeoutMs, onChild = () => {}, liveFile = 
         child.stdout.destroy();
         child.stderr.destroy();
         live.done();
-        const exitCode = code === null ? (signal ? 1 : 0) : code;
-        resolve({ ok: exitCode === 0 && !timedOut, timedOut, code: exitCode, output, stdout, lineTimes });
+        const exitCode = code === null ? (sig ? 1 : 0) : code;
+        resolve({ ok: exitCode === 0 && !timedOut && !cancelled, timedOut, ...(cancelled ? { cancelled } : {}), code: exitCode, output, stdout, lineTimes });
       }, 200);
     });
   });

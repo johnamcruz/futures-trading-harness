@@ -8,6 +8,10 @@
  *                                       balances, and the latest snapshot
  *   <FTH_HOME>/policy-verdicts.jsonl    one line per policy strategy's verdict at a setup
  *
+ * Where a verdict stage is in force (verdict-stage.js: phase 2 started at the head trader's compose), appendVerdict
+ * writes to the stage and readVerdicts reads the real file and the stage; promoteVerdicts moves a stage's verdicts to
+ * the real file at once (one atomic rename), once the entry adopts the run.
+ *
  * Light on purpose: the order-gate hook loads it on every order.
  */
 
@@ -775,7 +779,7 @@ function openEntryVerdicts(home, entries, now = new Date()) {
 }
 
 function appendVerdict(home, verdict) {
-  const file = verdictsFile(home);
+  const file = require('./verdict-stage').stageOf(home) || verdictsFile(home);
   fs.mkdirSync(path.dirname(file), { recursive: true });
   let lines = [];
   try {
@@ -789,18 +793,48 @@ function appendVerdict(home, verdict) {
   fs.renameSync(tmp, file);
 }
 
-function readVerdicts(home) {
+const readVerdictLines = file => {
   try {
-    return fs.readFileSync(verdictsFile(home), 'utf8').split('\n').filter(Boolean).map(l => {
+    return fs.readFileSync(file, 'utf8').split('\n').filter(Boolean).map(l => {
       try { return JSON.parse(l); } catch (_err) { return null; }
     }).filter(Boolean);
   } catch (_err) {
     return [];
   }
+};
+
+function readVerdicts(home) {
+  // A stage named that isn't one: no verdicts at all (fails closed: the gate's policy check refuses the entry).
+  let stage;
+  try { stage = require('./verdict-stage').stageOf(home); } catch (_err) { return []; }
+  return [...readVerdictLines(verdictsFile(home)), ...(stage ? readVerdictLines(stage) : [])];
+}
+
+/**
+ * A stage's verdicts moved to the real file (verdict-stage.js; the runner's entry adopting phase 2 started at the
+ * compose), in one write and rename; a staged verdict on a record the real file already holds for its strategy is
+ * left out (composed-verdict.js records one per record). The stage is removed. Returns how many were added.
+ */
+function promoteVerdicts(home, stageFile) {
+  const staged = stageFile ? readVerdictLines(stageFile) : [];
+  const file = verdictsFile(home);
+  const real = readVerdictLines(file);
+  const have = new Set(real.filter(v => v.record).map(v => `${v.strategy}|${v.record}`));
+  const add = staged.filter(v => !(v.record && have.has(`${v.strategy}|${v.record}`)));
+  if (add.length) {
+    fs.mkdirSync(path.dirname(file), { recursive: true });
+    const tmp = `${file}.${process.pid}.tmp`;
+    let lines = [];
+    try { lines = fs.readFileSync(file, 'utf8').split('\n').filter(Boolean); } catch (_err) { /* the first verdicts */ }
+    fs.writeFileSync(tmp, `${[...lines, ...add.map(v => JSON.stringify(v))].slice(-VERDICT_KEEP).join('\n')}\n`);
+    fs.renameSync(tmp, file);
+  }
+  require('./verdict-stage').dropStage(stageFile);
+  return add.length;
 }
 
 module.exports = {
   dayEndMs, closeBefore, balanceCheck, reconciled, orderSince, BALANCE_TOLERANCE,
   SNAPSHOT_MAX_AGE_MS, combineFile, verdictsFile, readAttempt, startAttempt, seedAttempt, carriedOf, carriedLossState, endAttempt, runningAttempts, stateFrom, tradesFromFills, sessionLossStreak, snapshot, dayCounts, attemptCounts, recordEndOfDay, combineBlock, entrySinceSnapshot, oldestSnapshotMs, feeOf,
-  legOf, legsFor, budgetPlan, sizeWithin, minContractsRefusal, minContractsIn, latestVerdict, propViolations, appendVerdict, readVerdicts, ENTRY_ACTIONS, verdictMultiplier, verdictUsed, openEntryVerdicts,
+  legOf, legsFor, budgetPlan, sizeWithin, minContractsRefusal, minContractsIn, latestVerdict, propViolations, appendVerdict, readVerdicts, promoteVerdicts, ENTRY_ACTIONS, verdictMultiplier, verdictUsed, openEntryVerdicts,
 };
