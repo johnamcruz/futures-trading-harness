@@ -169,9 +169,11 @@ const RUNNER = {
   },
   prompt: {
     recentDecisions: int(1), historyPerLane: int(1), slowerContext: int(0), planChars: int(1), reasonChars: int(1), exitsKept: int(1), unseenReads: int(0),
-    sessionStartLessons: int(0), sessionStartLessonChars: int(1), reportMaxText: int(1), phase1MaxAgeMs: ms(), trackRecordMinSlice: int(1), lessonMinPlans: int(1),
+    sessionStartLessons: int(0), sessionStartLessonChars: int(1), reportMaxText: int(1), trackRecordMinSlice: int(1), lessonMinPlans: int(1),
     trackRecordLiveSlice: int(1), instinctsMinSetupTrades: int(1), instinctsRecentReviews: int(1), valuesPerStrategy: int(1), brokerFieldsKept: int(1),
     brokerFieldsBytes: int(1), brokerFieldChars: int(1), cycleDataMaxBytes: int(1), situationalSkillBytes: int(0), maxPromptBytes: int(1),
+    // The prompt-cache lifetimes a harness run may ask for, each value's minutes (prompt-cache-ttl.js).
+    cacheTtlMinutes: record(int(1)),
   },
   session: {
     fillsTimeoutMs: int(1), retryTimeoutMs: int(1), retryMs: int(1), retryAlertAfter: int(1), backoffMs: int(1), recentSessions: int(1), archiveDays: int(1),
@@ -307,9 +309,10 @@ const BUILT_IN = deepFreeze({
     },
     prompt: {
       recentDecisions: 10, historyPerLane: 10, slowerContext: 3, planChars: 400, reasonChars: 100, exitsKept: 50, unseenReads: 10,
-      sessionStartLessons: 10, sessionStartLessonChars: 300, reportMaxText: 8000, phase1MaxAgeMs: 1800000, trackRecordMinSlice: 10, lessonMinPlans: 10,
+      sessionStartLessons: 10, sessionStartLessonChars: 300, reportMaxText: 8000, trackRecordMinSlice: 10, lessonMinPlans: 10,
       trackRecordLiveSlice: 5, instinctsMinSetupTrades: 3, instinctsRecentReviews: 30, valuesPerStrategy: 6, brokerFieldsKept: 3,
       brokerFieldsBytes: 600, brokerFieldChars: 250, cycleDataMaxBytes: 48000, situationalSkillBytes: 72000, maxPromptBytes: 126976,
+      cacheTtlMinutes: { '5m': 5, '1h': 60 },
     },
     session: {
       fillsTimeoutMs: 10000, retryTimeoutMs: 4000, retryMs: 60000, retryAlertAfter: 5, backoffMs: 1800000, recentSessions: 7, archiveDays: 90,

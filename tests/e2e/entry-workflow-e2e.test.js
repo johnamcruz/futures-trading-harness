@@ -776,6 +776,7 @@ test('entry workflow, Claude Code, deskOnManagedCycles on: the next managed cycl
     { executor: [{ broker: 'close_position', args: { accountId: 7, contractId: MNQ_ID } }] },
     { result: 'CYCLE RESULT: managed - closed the long' },
   ], { runRole: R.runRole });
+  // The report cache served the whole desk: the analysts on their briefing, phase 1 on its unchanged live facts.
   assert.deepStrictEqual(R.runs, [], 'the report cache served the whole desk');
   const { prompt } = r.ran[0];
   assert.ok(prompt.includes(MANAGED_DESK_TEXT), prompt);

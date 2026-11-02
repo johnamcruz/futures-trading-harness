@@ -269,6 +269,13 @@ function writeCycleLog(home, { at = new Date(), env = null, action, harness, pro
   // skills past the budget the prompt named instead.
   const cs = context && context.cycleSkills && typeof context.cycleSkills === 'object' ? context.cycleSkills : null;
   if (cs) summary.cycleSkills = { stages: cs.stages || [], skills: cs.skills || [], sections: cs.sections || [], bytes: cs.bytes || 0, over: cs.over || [] };
+  // The head trader's prompt-cache use (Claude Code's result event, transcript.js claudeRunUsage; measurement only): its
+  // first turn's cacheRead is what the cycles before it left cached. The roles' are on their desk and entry records.
+  if (harness === 'claude') {
+    let usage;
+    try { usage = require('./transcript').claudeRunUsage(output); } catch (_err) { usage = null; }
+    if (usage) summary.usage = usage;
+  }
   let lookups = [];
   // The roles' own: a lookup the head trader made naming a role (sessionLookups) is never that role's, so it is never
   // stored with the role's cached report and credited on a later cycle (as the gate leaves it out: lookupRule).

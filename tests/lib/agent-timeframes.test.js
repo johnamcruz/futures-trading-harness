@@ -77,13 +77,15 @@ test('1h bars across the DST change and the daily break: built on the ET hour; t
   assert.ok(B.frameHolds(f1, new Date(Date.parse(f1.closedAt))) && B.frameHolds(f1, new Date(until - 1)));
   assert.ok(!B.frameHolds(f1, new Date(until)) && !B.frameHolds(f1, new Date(Date.parse(f1.closedAt) - 1)));
   // Sunday 18:03 EDT: the runner's parts are new (the break expired them), so a report keyed on Friday's misses; then
-  // the 1h report made at 18:03 holds to 19:00 and is never served at 19:00.
+  // the 1h report made at 18:03 holds to 19:00 and is never served at 19:00 (judged at the runner's bar's close, never
+  // the clock: any `now` gives the same).
   const sunday = mk(at(ET(2026, 3, 8, 18, 3, 4)), friday);
   assert.notStrictEqual(sunday.sections.h1.version, friday.sections.h1.version);
   const fNow = RC.frameVersions(sunday, f1, 60, new Date(ET(2026, 3, 8, 18, 3, 4)));
   assert.deepStrictEqual(Object.keys(fNow.versions), ['bar', 'h1', 'day']);
   assert.strictEqual(fNow.until, f1.sections.bar.validUntil);
-  assert.strictEqual(RC.frameVersions(sunday, f1, 60, new Date(ET(2026, 3, 8, 19, 0, 4))), null);
+  for (const skew of [-86400000, 0, 86400000]) assert.deepStrictEqual(RC.frameVersions(sunday, f1, 60, new Date(ET(2026, 3, 8, 19, 0, 4) + skew)), fNow, 'the clock never decides');
+  assert.strictEqual(RC.frameVersions(mk(at(ET(2026, 3, 8, 19, 0, 4)), sunday), f1, 60, null), null, 'the 19:00 bar\'s cycle: Friday\'s 1h bar no longer holds');
   const f2 = B.buildFrameBriefing({ symbol: 'MNQ', contractId: C, bars: whole(bars.slice(0, at(ET(2026, 3, 8, 19, 0, 4))), 60), minutes: 60, first: mk(at(ET(2026, 3, 8, 19, 0, 4)), sunday) });
   assert.strictEqual(f2.asOf, '2026-03-08T22:00:00.000Z');
   assert.strictEqual(f2.sections.bar.validUntil, iso(ET(2026, 3, 8, 20, 0, 4)));
@@ -174,21 +176,16 @@ test('report cache, own timeframes: a 15m report holds within its 15m bar, a 1h 
     // The hour's last 3m close is the next hour's first: the 1h report misses there, and only there.
     assert.strictEqual(/volume-liquidity/.test(line), line.slice(0, 5) !== c0.fr[60].sections.bar.validUntil.slice(11, 16), line);
   }
-  // The 1h report at its own expiry instant: served a millisecond before, never at it (whatever the briefings say).
-  const vlUntil = Date.parse(c0.fr[60].sections.bar.validUntil);
-  const ser = at => RC.serveReports({ cache: c0.cache, ...c0.args, now: new Date(at) }).roles;
-  assert.ok(ser(vlUntil - 1).includes(ANALYSTS[2]));
-  assert.ok(!ser(vlUntil).includes(ANALYSTS[2]));
-  const tmUntil = Date.parse(c0.fr[15].sections.bar.validUntil);
-  assert.ok(ser(tmUntil - 1).includes(ANALYSTS[1]) && !ser(tmUntil).includes(ANALYSTS[1]));
-  // A shared part that ends before its bar (a runner briefing not rebuilt since): never served past the part's end.
-  const h1End = Date.parse(c0.f.sections.h1.validUntil);
-  const early = { ...c0.f, sections: { ...c0.f.sections, day: { ...c0.f.sections.day, validUntil: iso(Date.parse(c0.f.closedAt) + 60000) } } };
-  const withDay = at2 => RC.serveReports({ cache: c0.cache, ...c0.args, briefings: { MNQ: early }, now: new Date(at2) }).roles.includes(ANALYSTS[2]);
-  assert.ok(h1End > Date.parse(c0.f.closedAt) + 60000);
-  assert.deepStrictEqual([withDay(Date.parse(c0.f.closedAt) + 59999), withDay(Date.parse(c0.f.closedAt) + 60000)], [true, false]);
-  // No clock: no own-timeframe report (its age can't be known).
-  assert.ok(!RC.serveReports({ cache: c0.cache, ...c0.args, now: null }).roles.some(r => [ANALYSTS[1], ANALYSTS[2]].includes(r)));
+  // Judged by bar times alone: on its own cycle's briefings the clock (a day behind, a day ahead, none) never changes
+  // what is served; the bar closing at a report's expiry (the loop above) is the first it misses on.
+  const ser = at => RC.serveReports({ cache: c0.cache, ...c0.args, now: at === null ? null : new Date(at) }).roles;
+  const base = ser(Date.parse(c0.f.closedAt));
+  assert.ok(base.includes(ANALYSTS[1]) && base.includes(ANALYSTS[2]));
+  for (const at of [Date.parse(c0.f.closedAt) - 86400000, Date.parse(c0.f.closedAt) + 86400000, Date.parse(c0.fr[60].sections.bar.validUntil), null]) assert.deepStrictEqual(ser(at), base, String(at));
+  // A frame briefing not rebuilt since (an older bar's, its end at or before this cycle's bar's close): never served.
+  const later = first(n0 + 20);
+  const stale = RC.serveReports({ cache: c0.cache, ...c0.args, briefings: { MNQ: later }, symbols: [{ symbol: 'MNQ', bar: later.asOf, contractId: C }], now: new Date(Date.parse(c0.f.closedAt)) }).roles;
+  assert.ok(!stale.includes(ANALYSTS[1]) && !stale.includes(ANALYSTS[2]), 'the old frame briefings with a later bar\'s cycle');
 });
 
 test('report cache, own timeframes: keyed on exactly its parts; a report that names other versions, or the 3m briefing, is never cached for it; entries never cross between the rules', () => {
@@ -240,8 +237,12 @@ test('a 1m analyst on a 1m lane: its report holds one minute, served at most unt
   const now = new Date(f.closedAt);
   const cache = RC.recordReports({ output: task(ANALYSTS[0], dataOf(f, fr), [1, 2]), now, ...args });
   assert.deepStrictEqual(Object.keys(cache.analysts[ANALYSTS[0]].versions), ['bar', 'm15', 'h1', 'day']);
+  // Judged at the cycle's bar's close, never the clock: served on its own bar whatever the clock says, and not on a
+  // runner bar that closes after its 1m bar's end (a briefing of the next 3m bar: its 1m frame no longer holds).
   const at = ms => RC.serveReports({ cache, ...args, now: new Date(Date.parse(f.closedAt) + ms) }).roles.includes(ANALYSTS[0]);
-  assert.deepStrictEqual([at(0), at(59999), at(60000)], [true, true, false]);
+  assert.deepStrictEqual([at(0), at(59999), at(60000), at(-86400000)], [true, true, true, true]);
+  const f2 = first(1301, f);
+  assert.ok(!RC.serveReports({ cache, ...args, briefings: { MNQ: f2 }, symbols: [{ symbol: 'MNQ', bar: f2.asOf, contractId: C }], now: new Date(Date.parse(f2.closedAt)) }).roles.includes(ANALYSTS[0]));
 });
 
 test('bar_briefing with a timeframe: the analyst\'s briefing holding at the cycle\'s start (FTH_CYCLE_AT), with the shared parts; old, missing and after the replay clock are refused', () => {
@@ -648,4 +649,26 @@ test('the runner\'s recorder builds 5m candles from a 1m lane\'s noted bars (sam
   } finally {
     fs.rmSync(home, { recursive: true, force: true });
   }
+});
+
+test('frameVersions\' lane path (F3): a lane bar that closed this cycle at or after the frame bar\'s end (closeAt) misses, though the runner\'s bar closed before it; through the runner\'s wiring too (laneBars)', () => {
+  // A 15m frame whose bar holds past the runner's 3m bar's close.
+  const f = first(1300);
+  const fr = frame(f, 15);
+  const until = Date.parse(fr.sections.bar.validUntil);
+  assert.ok(Date.parse(f.closedAt) < until, 'the runner\'s bar closed inside the frame bar');
+  assert.ok(RC.frameVersions(f, fr, 15), 'no lane bar: served');
+  assert.ok(RC.frameVersions(f, fr, 15, { closeAt: new Date(until - 1).toISOString() }), 'a lane bar closing just before its end: served');
+  for (const at of [until, until + 60000]) assert.strictEqual(RC.frameVersions(f, fr, 15, { closeAt: new Date(at).toISOString() }), null, new Date(at).toISOString());
+  // The runner's wiring: the lane bar that closed this cycle (laneBars) is the bar time it is judged at.
+  const { reportCacheFor } = require('../../scripts/lib/runner-wiring');
+  const home = tmpDir();
+  B.writeBriefing(home, f);
+  B.writeFrameBriefing(home, fr);
+  const rc = reportCacheFor(home, { harness: 'claude', cycle: 'full', timeframe: 3 }, [{ role: ANALYSTS[1], minutes: 15, lane: -1 }]);
+  const symbols = [{ symbol: 'MNQ', bar: f.asOf, contractId: C }];
+  rc.record({ symbols, account: ACCT, now: new Date(f.closedAt), output: task(ANALYSTS[1], dataOf(f, fr), [1, 2]), served: [] });
+  const laneAt = ms => ({ MNQ: { 1: new Date(ms - 60000).toISOString() } });
+  assert.ok(rc.serve({ symbols, account: ACCT, now: new Date(f.closedAt), laneBars: laneAt(until - 60000) }).roles.includes(ANALYSTS[1]), 'a 1m lane bar inside the frame bar');
+  assert.ok(!rc.serve({ symbols, account: ACCT, now: new Date(f.closedAt), laneBars: laneAt(until) }).roles.includes(ANALYSTS[1]), 'a 1m lane bar closing at its end');
 });

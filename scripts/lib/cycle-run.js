@@ -184,15 +184,30 @@ async function runCycle(cfg, action, prompt, opts, { timeoutMs = cfg.cycleTimeou
   const intact = guard(killSwitchFile, `during a ${action} run`);
   // End of day did its job if the run succeeded; the guard's verdict is in the kill switch.
   // lookups: the cycle's skill_lookup records, for the report cache (runner-wiring.js record).
-  return cycleOutcome(res, { result, intact, action, lookups, reportedResult, resultNote });
+  // A cached phase 1 the gateway refused this cycle ([phase1-cache], its gate log): the report cache drops it, so the next
+  // cycle runs phase 1 fresh (runner-wiring.js reportCacheFor record).
+  const phase1Refused = phase1RefusedIn(res.env, startedMs, wallNow());
+  return { ...cycleOutcome(res, { result, intact, action, lookups, reportedResult, resultNote }), ...(phase1Refused ? { phase1Refused: true } : {}) };
+}
+
+/** The cycle's gate log holds a [phase1-cache] refusal (its place_order records, cycle-log.js gateOrders), from `fromMs` on. */
+function phase1RefusedIn(env, fromMs, toMs) {
+  if (!env) return false;
+  const slack = require('./tunables').runner().session.gateSlackMs;
+  try {
+    return require('./cycle-log').gateOrders(env, fromMs, toMs + slack).some(e => Array.isArray(e.violations) && e.violations.some(v => v && v.check === 'phase1-cache'));
+  } catch (_err) {
+    return false;
+  }
 }
 
 /**
  * One desk role's run, as the runner's orchestration engine runs it (orchestrate/engine.js; the desk workflow): the
  * role as its own harness run (`buildCommand`'s `agent`), with the cycle's environment (its bars, cached roles, the
  * transcript live), within `timeoutMs`. Its result for the engine: { ok, timedOut, output, transcript, text, tools,
- * lookups } (`text` its final message, `tools` the tools it completed, `lookups` the skills it looked up naming its
- * role: what the order gate credits its report with, in the runner's role record, runner-roles.js). Only on a harness
+ * lookups, skills, usage } (`text` its final message, `tools` the tools it completed, `lookups` the skills it looked up naming its
+ * role: what the order gate credits its report with, in the runner's role record, runner-roles.js; `usage` its
+ * prompt-cache use on Claude Code, transcript.js claudeRunUsage, measurement only). Only on a harness
  * that runs a role on its own (autotrader.js ROLE_RUNS), each read the same way (runResultOf); any other throws.
  * `signal` (optional): aborted, the run is stopped (harness-run.js) and its result is not ok.
  */
@@ -224,7 +239,9 @@ async function runRole(cfg, role, request, { timeoutMs, context = null, signal =
   } catch (_err) { lookups = []; }
   // Which skills it had (role-skills-record.js), for the cycle log's desk and entry records: detection only.
   const skills = roleSkills({ root: deps.root, role, output: typeof res.stdout === 'string' ? res.stdout : (res.output || ''), home: harnessHome(runEnv), embedded: embeddedFor(cfg, deps.root, role, added) });
-  return { ok: Boolean(res.ok), timedOut: Boolean(res.timedOut), output: res.output || '', transcript: res.transcript || null, text, tools, lookups, skills };
+  // Its prompt-cache use (Claude Code's result event; measurement only), for the cycle log's desk and entry records.
+  const usage = cfg.harness === 'claude' ? require('./transcript').claudeRunUsage(typeof res.stdout === 'string' ? res.stdout : res.output) : null;
+  return { ok: Boolean(res.ok), timedOut: Boolean(res.timedOut), output: res.output || '', transcript: res.transcript || null, text, tools, lookups, skills, ...(usage ? { usage } : {}) };
 }
 
 /** The skills a role's prompt held whole: its prompt addition (Claude Code, roleSkillsInPrompt), or opencode's role prompt; else none. */
@@ -244,4 +261,4 @@ function embeddedFor(cfg, root, role, added) {
 /** A role's run as the engine reads it, { text, tools }: Claude Code's stream-json (transcript.js), opencode's events (opencode.js). */
 const runResultOf = (harness, output) => (harness === 'claude' ? require('./transcript').claudeRunResult(output) : require('./opencode').runResult(output));
 
-module.exports = { runCycle, runOnce, runRole, runResultOf };
+module.exports = { runCycle, runOnce, runRole, runResultOf, phase1RefusedIn };

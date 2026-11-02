@@ -16,6 +16,8 @@
  *   pageHistory(page, { from, to, chunk }) history()'s paging, whatever a server does at a page's edges
  *   accountState(accountId)                { positions, orders }
  *   accountBalance(accountId)              realized balance
+ *   accountStatus(accountId)               { balance, canTrade, mcpTradingAllowed } (list_accounts, the same read)
+ *   accountToday(accountId)                { remainingBeforeLimit } (get_account_snapshot's today)
  *   workingOrders(accountId, contractId)   working orders in the contract
  *   netPosition(accountId, contractId)     signed net size
  *   cancelOrder / modifyStop / resizeStop / placeStop / closePosition
@@ -234,6 +236,30 @@ function createAdapter({ mcp, writeMcp = mcp }) {
       const balance = Number(a.balance);
       if (!Number.isFinite(balance)) throw new BrokerError(`account ${accountId} has no balance`);
       return balance;
+    },
+
+    /**
+     * The account's balance and trading flags from one list_accounts read (accountBalance's read): { balance, canTrade,
+     * mcpTradingAllowed }, each flag as the server gives it or null when it gives none.
+     */
+    async accountStatus(accountId) {
+      const accounts = listOf(await call('list_accounts', { onlyActiveAccounts: false }), 'list_accounts');
+      const a = accounts.find(x => Number(x.id) === Number(accountId));
+      if (!a) throw new BrokerError(`account ${accountId} not found`);
+      const balance = Number(a.balance);
+      if (!Number.isFinite(balance)) throw new BrokerError(`account ${accountId} has no balance`);
+      const flag = v => (typeof v === 'boolean' ? v : null);
+      return { balance, canTrade: flag(a.canTrade), mcpTradingAllowed: flag(a.mcpTradingAllowed) };
+    },
+
+    /** The account's day from get_account_snapshot: { remainingBeforeLimit } (null when the server gives none). */
+    async accountToday(accountId) {
+      const raw = await call('get_account_snapshot', { accountId: Number(accountId) });
+      const snap = raw && typeof raw === 'object' && !Array.isArray(raw) ? raw : null;
+      if (!snap) throw new BrokerError(`get_account_snapshot: no snapshot for account ${accountId}`);
+      const today = snap.today && typeof snap.today === 'object' ? snap.today : {};
+      const r = Number(today.remainingBeforeLimit);
+      return { remainingBeforeLimit: today.remainingBeforeLimit === null || today.remainingBeforeLimit === undefined || !Number.isFinite(r) ? null : r };
     },
 
     /** The account's fills since `start` (search_trades), oldest first by the broker's order. */

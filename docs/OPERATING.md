@@ -530,15 +530,17 @@ without them. A wrong value refuses the config, so no run starts.
 
 ### Machine-local head trader settings
 
-Three optional keys of the runner config, set the same way (the user's machine,
-never the repo; absent means the run behaves as without them; a wrong value, or
+Four optional keys of the runner config, set the same way (the user's machine,
+never the repo; absent means the run behaves as without them, but
+`stableFirstPrompt`, which is on for Claude Code when absent; a wrong value, or
 `true` on a harness other than `claude`, refuses the config).
 
 | Key | Absent (default) | Set |
 |---|---|---|
 | `headSkillsInPrompt` | Claude Code's head trader loads its per-cycle skills with its skill tool, one tool turn each, as the cycle's prompt says (`false` is the same) | `true` (harness `claude` only): the head trader runs as opencode's does in index mode. The runner writes its per-cycle skills (`scripts/lib/head-prompt.js` `CORE`, the same text a load returns) and a one-line index of every other skill to `<harness home>/head-prompt/claude-head-<hash>.md` and gives it to the head trader's run as `--append-system-prompt-file` (the cached prefix, before the cycle's prompt); the cycle's prompt says they are loaded, and any other skill is read whole with `skill_lookup`. The runner attests the file for that cycle (`FTH_HEAD_PROMPT`); the order gate counts the embedded skills, the head trader's `skill_lookup` reads and index mode's situational lookups only when the file still hashes to the attestation, embeds each skill's current text, and the call is that cycle's (the head trader's own session, or the runner's entry executor). Anything off: none counts, and the transcript decides as before. The roles still load their skills themselves |
 | `cycleDataInPrompt` | Claude Code's head trader makes its first reads of every trade and manage cycle itself: `bar_briefing` for each symbol, then the account (`get_account_snapshot`, `list_open_positions`, `list_open_orders`), one tool turn each (`false` is the same) | `true` (harness `claude` only): the runner makes those reads just before the head trader's run, with that run's own environment, and puts their exact text at the end of its prompt, before the result line (the cached prefix is unchanged): `bar_briefing` through the harness tool itself, the broker reads straight to the server through the contract translator, as the gateway passes the model's reads. Each block's header names the tool, its arguments and its as-of time; the model calls a tool again only for anything more or newer. A read not made whole (an error, a briefing that isn't this cycle's bar's, a broker client that can't read raw text) gives no block, only a line telling the model to read it itself. The reads take their time from the cycle's limit, only above the head trader's floor (`config/runner.json` `cycle.timeoutMinMinutes`): with no time above it they aren't made, reads still going when it runs out are dropped, and the run goes with the "read it yourself" line, never with less than its floor because of them. In paper mode no broker read is made (each is a "read it yourself" line). The whole section stays under `config/runner.json` `prompt.cycleDataMaxBytes`: the largest blocks give way to their lines first. The blocks are data, as tool results are: no gate or check reads them (the gate recomputes from the harness home, as always), and nothing trusts a block's header or footer; the footer's sha256 is a record of the text given, never a check. The cycle log's context records `precollected` (`tool`, `args`, `asOf`, `sha256`, `chars`) and `notCollected`; the key is part of a replay's config and setup hashes and its setup record, and its decisions carry it, so the decision dataset refuses to pool them with decisions made without it; the training preflight's `head-delivery` line says it (both keys are `scripts/lib/autotrader.js` `HEAD_DELIVERY_KEYS`, which these readers share), so a run with it is never pooled or compared with one without it (`scripts/lib/cycle-data.js`). The same key gives the runner's desk its reads (Claude Code's desk, `scripts/lib/runner-wiring.js` `deskFor`): before the roles run, the runner makes each role's every-cycle reads as its agent body names them (every analyst `bar_briefing`, and one on its own timeframe its timeframe's briefing first; market structure `strategies_list`; volume and liquidity `get_quote`; risk-manager phase 1 `get_server_config`, `list_accounts`, `get_account_snapshot`, `journal_read` for today's reviews, since the trading day's start, and for the recent lessons, `combine_status`) in the cycle's store, once each (the analysts' shared briefing once), with the environment the roles' runs get and within the desk's time, and ends each role's request with their exact text (each over the size cap gives way to a line). The store is the runner's, in memory, one per cycle; the head trader's reads take its entries (the briefing's same text), the account's read again for it; a reader of another cycle never takes from it, and a read that failed is tried again by the next reader; no tool serves from it. The desk's `read-data` check then also counts a role whose run called no data tool, only on the runner's own record for that role: its bar briefing served as this cycle's (an analyst; one on its own timeframe, that timeframe's, the one holding at the cycle's start) or its account snapshot answered whole (phase 1), in its request; another role's record, a failed read or another bar's briefing gives none (`scripts/lib/orchestrate/checks.js` `collectedFor`). Each read has a kind, `preload` (`strategies_list` only) or `close`; the store's `preload` is the seam for a later preloader and never makes a `close` read before the bar's close |
-| `deskBriefReports` | The runner's desk asks each role for its report in its output format, as before (`false` is the same) | `true` (harness `claude` only): each desk role's request adds one instruction: write only your report block, in the output format your role defines, with no preamble or narration, each line kept to the facts and reads that block asks for (`scripts/lib/orchestrate/requests.js` `BRIEF`). No agent or skill wording changes, and every consumer of a desk report reads only that block: the desk's checks (a Data line, a risk state), the report cache (the Data line's versions, phase 1's Attempt line), the head trader's prompt and the order gate's credit from the runner's record. It is one of `HEAD_DELIVERY_KEYS`: its runs are never pooled or compared with runs without it |
+| `stableFirstPrompt` | On for harness `claude` (the runner sets it `true` when absent); on any other harness absent, and a trade cycle's prompt is in the order as before | `true` (Claude Code's default): a trade cycle's prompt is in the stable-first order (`scripts/lib/autotrader.js` `TRADE_ORDER`): the stable head, then the instructions (the skills sentence, the trade-session line, the PLAN line), then the cycle's situational skills, then the cycle's time, its bars, account, history and lessons, then the roster or the entry line and the desk's reports, the pre-collected reads, and the result line last. The same parts as before, none added, cut or reworded, only reordered (before: the time and the facts second, the instructions after them, the situational skills last): what holds across cycles comes first, so consecutive prompts share it as a prefix, the situational skills (the same on most consecutive bars) before anything that changes every bar. A prompt cache that matches on the longest shared prefix (a local model server's) reuses it; the API's cache reads only where an earlier request set a breakpoint (Claude Code sets one at the end of its system prompt and one at the latest message), so there the part reused across cycles is the system prompt, with `headSkillsInPrompt` and `roleSkillsInPrompt` the skills files. `false`: the order as before. The key is one of `HEAD_DELIVERY_KEYS`: a run with it (every Claude Code run from this change on) is never pooled or compared with one made before it, and a run started before it isn't resumed under it (its config hash changed) |
+| `deskBriefReports` | The runner's desk asks each role for its report in its output format, as before (`false` is the same) | `true` (harness `claude` only): each desk role's request adds one instruction: write only your report block, in the output format your role defines, with no preamble or narration, each line kept to the facts and reads that block asks for (`scripts/lib/orchestrate/requests.js` `BRIEF`). No agent or skill wording changes, and every consumer of a desk report reads only that block: the desk's checks (a Data line, a risk state), the report cache (the Data line's versions), the head trader's prompt and the order gate's credit from the runner's record. It is one of `HEAD_DELIVERY_KEYS`: its runs are never pooled or compared with runs without it |
 
 ### Machine-local role settings
 
@@ -577,6 +579,58 @@ loaded skills their prompt addition already holds (was it seen?): ...`, for a
 watchdog to grep. It is detection only: no report is refused for it. A role
 prompt file that can't be built or written fails that role's run with an error
 naming `role-prompt`.
+
+On Claude Code each role run the runner ran also carries `usage`, its
+prompt-cache use from its run's result event (`scripts/lib/transcript.js`
+`claudeRunUsage`): `total` (the run's `input`, `cacheRead`, `cacheCreation` and
+`output` tokens), `first` (its first turn's, whose `cacheRead` is what earlier
+runs left cached) and `turns`; the head trader's is the cycle summary's `usage`.
+It is measurement only: nothing decides by it.
+
+On Claude Code each run also asks for a prompt-cache lifetime that outlasts
+the time to its next run (`scripts/lib/prompt-cache-ttl.js`, through the run's
+`CLAUDE_CODE_PROMPT_CACHE_TTL`): the shortest of `config/runner.json`
+`prompt.cacheTtlMinutes` that lasts the run's interval, else the longest. A
+role's interval is its own timeframe (its agent file's `timeframe`, or the
+runner config's `agents` override), every other run's (the head trader,
+phase 2, the trade-executor) the first lane's: so 3m runs ask for 5 minutes and
+a 15m or 1h analyst for an hour. An hour's cache write costs more than a
+5-minute one (reads cost the same), paid once per analyst run in place of a
+full rewrite at every run. The CLI's own switch forcing 5 minutes still wins.
+
+The runner's report cache (`scripts/lib/trading/report-cache.js`) reuses an
+analyst's report only while it is fresh: on the first lane, while the bar
+briefing's m15, h1 and day versions it names are the cycle's bar's; on its own
+timeframe, while its frame bar is the one holding at the cycle's latest bar
+close (bar times only, never the clock). Each entry is keyed by its role's
+instructions (a hash of its agent file and its skills' files) and the cache by
+the harness root it was written under, so an edited agent or skill, or a home
+another root or checkout wrote, serves nothing; a key that can't be read (an
+agent or skill file missing, no root) serves and records nothing for it.
+Risk-manager phase 1 states live facts, so it is reused only while every one
+of them is unchanged (`scripts/lib/trading/phase1-facts.js`): each cycle the
+runner reads them fresh, with the account (the balance with the account's
+`canTrade` and `mcpTradingAllowed` from the same read, the day's
+`remainingBeforeLimit`, positions and working orders, each running attempt,
+the day's fills: their count, the losses and the loss cooldown's remaining
+whole bars from the bar close; the bar briefing's window state, the journal's
+lessons and reviewed trades, the trading day) and hashes them canonically (a
+value the server doesn't give is a fact too). The bar itself is not in the key (a key that changes every bar
+never hits): what depends on the time is, quantised to the bar (the cooldown's
+bars left, the window's state on the bar), and the gate's record must be for
+the cycle's own bar; a cached phase 1 is served only under the same key, the same role
+body and root, in a one-symbol cycle, and never from a cycle that launched a
+trade-executor. Any read that fails gives no key: phase 1 runs. When it is
+served, the run's environment carries the runner's record of those facts
+(`FTH_CYCLE_PHASE1`): the order gate counts phase 1 as returned only when the
+record is whole and for the cycle's bar (a bare `FTH_CYCLE_CACHED` naming
+`risk-manager` counts for nothing), and the gateway refuses an entry
+(`[phase1-cache]`) when its own reads (positions, working orders, the running
+attempts, the trading day) differ from the record's facts; the contract always
+counts, so a contract one side can't name by its standard name differs (fail
+closed). A refusal
+drops the cached phase 1, and it isn't cached again under the same facts, so
+the next cycle runs phase 1 fresh.
 
 The runner runs roles on its own only in a full trade cycle on one symbol,
 outside paper mode and cycles that only manage (on Claude Code, only in a cycle

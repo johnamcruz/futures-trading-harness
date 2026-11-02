@@ -341,13 +341,13 @@ test('deskBriefReports: each desk request asks for the report block alone; a min
   // The order gate's credit: the runner's record of each run (runner-roles.js asRoleCalls).
   const calls = RR.asRoleCalls(RR.readRoleRuns(d.rolesFile));
   assert.deepStrictEqual(calls.calls.map(c => c.role).sort(), [...ROLES].sort());
-  // The report cache: each analyst's versions and phase 1's attempt line, recorded and served.
+  // The report cache: each analyst's versions, recorded and served (phase 1, live data, never cached).
   const account = { id: 7, balance: 50000, positions: [], orders: [], attempts: [{ account: 'practice_50k', status: 'active' }] };
   const symbols = [{ symbol: 'MNQ', contractId: null, bar: w.b.asOf }];
   const cache = RC.recordReports({ prev: null, output: '', fresh: d.reports, briefings: { MNQ: w.b }, symbols, account, day: 'd', now });
   assert.deepStrictEqual(Object.keys(cache.analysts).sort(), ANALYSTS);
-  assert.ok(cache.phase1, 'phase 1 confirms the attempt on its Attempt line');
-  assert.strictEqual(RC.serveReports({ cache, briefings: { MNQ: w.b }, symbols, account, day: 'd', now }).roles.length, 4);
+  assert.ok(!cache.phase1, 'phase 1 never cached');
+  assert.deepStrictEqual(RC.serveReports({ cache, briefings: { MNQ: w.b }, symbols, account, day: 'd', now }).roles.sort(), [...ANALYSTS].sort());
   // The head trader's prompt: each report given whole.
   const p = prompts(cfg, now, ROOT).trade([{ symbol: 'MNQ', bar: { t: w.b.asOf, c: 1, file: '/b.json', contractId: 'MNQ' } }], { cached: { roles: ROLES, reports: d.reports } });
   for (const role of ROLES) assert.ok(p.includes(minimal[role]), role);

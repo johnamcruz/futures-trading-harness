@@ -3444,7 +3444,14 @@ test('order gate: in an autonomous full cycle, an entry waits until the analysts
   fs.writeFileSync(transcript, [...skills, ...role('p2', 'risk-manager')].join('\n'));
   assert.match(gate({ ...orderPayload(), transcript_path: transcript }, env).stderr, /\[roles-ran\]/, 'control: nothing cached');
   const cached = { ...env, FTH_CYCLE_CACHED: 'market-structure-analyst,trend-momentum-analyst,volume-liquidity-analyst,risk-manager' };
-  assert.doesNotMatch(gate({ ...orderPayload(), transcript_path: transcript }, cached).stderr, /roles-ran/);
+  // Phase 1 named as cached with no runner record of its facts (a forged claim): not counted, so the lone risk-manager
+  // call is phase 1 and phase 2 is missing. With the record for the cycle's bar it counts; an edited one doesn't.
+  assert.match(gate({ ...orderPayload(), transcript_path: transcript }, cached).stderr, /\[roles-ran\][^\n]*risk-manager phase 2/);
+  const p1 = phase1Env('2026-10-07T14:24:00.000Z');
+  assert.doesNotMatch(gate({ ...orderPayload(), transcript_path: transcript }, { ...cached, ...p1 }).stderr, /roles-ran/);
+  const edited = JSON.parse(p1.FTH_CYCLE_PHASE1);
+  edited.facts.account.balance = 49000;
+  assert.match(gate({ ...orderPayload(), transcript_path: transcript }, { ...cached, ...p1, FTH_CYCLE_PHASE1: JSON.stringify(edited) }).stderr, /\[roles-ran\][^\n]*risk-manager phase 2/);
   // Roles the runner ran itself (its role record, FTH_CYCLE_ROLES) count with their wall-clock times: phase 2 after them,
   // timed (opencode's event), passes; a call timed by line position can't be ordered against the record: refused.
   const RR = require('../../scripts/lib/trading/runner-roles');
@@ -4010,19 +4017,26 @@ test('order gate hook, several lanes (FTH_CYCLE_LANE_BARS): a closed lane\'s can
   assert.doesNotMatch(gate({ ...orderPayload(), transcript_path: transcript }, env).stderr, /roles-ran/);
 });
 
+/** The runner's record of a phase 1 served from the cache (phase1-facts.js) for `bar`, as the run's environment carries it. */
+function phase1Env(bar) {
+  const P1 = require('../../scripts/lib/trading/phase1-facts');
+  const facts = P1.phase1Facts({ account: { id: '7', balance: 50000, positions: [], orders: [], workingOrders: 0, attempts: [] }, day: '2026-10-07', trades: [], barClose: Date.parse(bar) + 180000, barMinutes: 3, cooldown: { maxConsecutiveLosses: 2, lossCooldownMin: 30 }, windowEntries: 'allowed', lessons: [], reviewed: [] });
+  return { FTH_CYCLE_BARS: JSON.stringify({ MNQ: bar }), [P1.ENV]: JSON.stringify(P1.record({ bar, barMinutes: 3, facts })) };
+}
+
 test('order gate hook, reports from the report cache (FTH_CYCLE_CACHED): a cached report counts on a bar requiring lookups only with its own call\'s lookups (FTH_CYCLE_CACHED_LOOKUPS); none, unreadable or another role\'s: refused; an exit is never held', () => {
   const { writeBriefing } = require('../../scripts/lib/trading/briefing');
   const { env, dir } = setup([{ ts: minutesAgo(5, new Date(TEST_NOW)), kind: 'plan', contractId: entryOrder().contractId, text: 'plan' }],
-    { FTH_AUTONOMOUS: '1', FTH_CYCLE: 'full', FTH_SYMBOLS: 'MNQ', FTH_CYCLE_CACHED: 'market-structure-analyst,trend-momentum-analyst,volume-liquidity-analyst,risk-manager' });
+    { FTH_AUTONOMOUS: '1', FTH_CYCLE: 'full', FTH_SYMBOLS: 'MNQ', FTH_CYCLE_CACHED: 'market-structure-analyst,trend-momentum-analyst,volume-liquidity-analyst' });
   // The bar's briefing, its m3 version the facts key the requirement comes from (skill-lookups.js factsKey).
   const brief = version => writeBriefing(env.FTH_HOME, { symbol: 'MNQ', sections: { m3: { version, validUntil: new Date(Date.now() + 3600000).toISOString(), data: { candidates: [{ name: 'anytime', direction: 'long', trendRule: 'reversal' }] } } } });
   brief('m3@bar-n');
   const ev = (tool, input, time) => JSON.stringify({ type: 'tool_use', timestamp: 1, sessionID: 's', part: { type: 'tool', tool, state: { status: 'completed', input, output: 'VERDICT: APPROVE - size 1', ...(time ? { time } : {}) } } });
   const T = 1.8e12;
   const transcript = path.join(dir, 'cycle-transcript.jsonl');
-  // Only phase 2 ran this cycle: every other report came from the cache.
+  // Phase 1 and phase 2 ran this cycle: the analysts' reports came from the cache.
   fs.writeFileSync(transcript, [...['trade-session', 'multi-timeframe-analysis', 'strategy-library', 'strategy-scan', 'strategy-gate-checks', 'setup-judgment', 'trade-plan'].map(name => ev('skill', { name })),
-    ev('task', { subagent_type: 'risk-manager' }, { start: T + 30, end: T + 40 })].join('\n'));
+    ev('task', { subagent_type: 'risk-manager' }, { start: T + 10, end: T + 18 }), ev('task', { subagent_type: 'risk-manager' }, { start: T + 30, end: T + 40 })].join('\n'));
   const keyed = (o, key = 'm3@bar-n') => Object.fromEntries(Object.entries(o).map(([role, skills]) => [role, { skills, key }]));
   const met = keyed({ 'market-structure-analyst': ['pullback-vs-reversal', 'rejection'], 'trend-momentum-analyst': ['pullback-vs-reversal'] });
   const run = extra => gate({ ...orderPayload(), transcript_path: transcript }, { ...env, ...extra });
@@ -4036,7 +4050,7 @@ test('order gate hook, reports from the report cache (FTH_CYCLE_CACHED): a cache
     assert.match(r.stderr, /market-structure-analyst was served from the report cache, which made no lookup of pullback-vs-reversal/, raw);
   }
   // Not cached this cycle (FTH_CYCLE_CACHED without it): its lookups are ignored.
-  assert.strictEqual(run({ FTH_CYCLE_CACHED: 'trend-momentum-analyst,volume-liquidity-analyst,risk-manager', FTH_CYCLE_CACHED_LOOKUPS: JSON.stringify(met) }).code, 2);
+  assert.strictEqual(run({ FTH_CYCLE_CACHED: 'trend-momentum-analyst,volume-liquidity-analyst', FTH_CYCLE_CACHED_LOOKUPS: JSON.stringify(met) }).code, 2);
   assert.doesNotMatch(run({ FTH_CYCLE_CACHED_LOOKUPS: JSON.stringify(met) }).stderr, /roles-ran/);
   // A new bar with a candidate since the reports were made: their lookups are not credited to it.
   brief('m3@bar-n3');
@@ -4082,7 +4096,7 @@ test('order gate hook, a long cycle: past its briefing\'s validUntil by the wall
   const p2 = path.join(dir, 'cycle-transcript-p2.jsonl');
   fs.writeFileSync(p2, [...['trade-session', 'multi-timeframe-analysis', 'strategy-library', 'strategy-scan', 'strategy-gate-checks', 'setup-judgment', 'trade-plan'].map(name => ev('skill', { name })),
     ev('task', { subagent_type: 'risk-manager' }, { start: T + 30, end: T + 40 })].join('\n'));
-  const cached = key => ({ ...BARS, FTH_CYCLE_CACHED: 'market-structure-analyst,trend-momentum-analyst,volume-liquidity-analyst,risk-manager',
+  const cached = key => ({ ...phase1Env(BAR_T), ...BARS, FTH_CYCLE_CACHED: 'market-structure-analyst,trend-momentum-analyst,volume-liquidity-analyst,risk-manager',
     FTH_CYCLE_CACHED_LOOKUPS: JSON.stringify({ 'market-structure-analyst': { skills: ['pullback-vs-reversal', 'rejection'], key }, 'trend-momentum-analyst': { skills: ['pullback-vs-reversal'], key } }) });
   assert.doesNotMatch(gate({ ...orderPayload(), transcript_path: p2 }, { ...env, ...cached(`m3@${BAR_T}`) }).stderr, /roles-ran/);
   assert.match(gate({ ...orderPayload(), transcript_path: p2 }, { ...env, ...cached(`m3@${BAR_T}`), FTH_CYCLE_BARS: '' }).stderr, /market-structure-analyst was served from the report cache/);
@@ -4655,4 +4669,42 @@ test('order gate hook wiring: modify_order (a reprice) on a working prop_portfol
   assert.strictEqual(run('range', 77).code, 0, 'the 4h up, the 1h ranging (BG)');
   assert.strictEqual(run('up', 77).code, 0);
   assert.strictEqual(run('range', 9, { t4h: 'down' }).code, 0, 'a leg not recorded as an entry');
+});
+
+test('MCP gateway wiring: an entry whose cycle was served phase 1 from the cache is refused [phase1-cache] when the broker\'s positions or orders differ from the facts it was served under; the same facts: not; no record: phase 1 is not counted (no check)', async () => {
+  const { spawn } = require('child_process');
+  const P1 = require('../../scripts/lib/trading/phase1-facts');
+  const BAR = '2026-10-07T14:24:00.000Z';
+  const facts = positions => P1.phase1Facts({ account: { id: '7', balance: 50000, positions, orders: [], workingOrders: 0, attempts: [] }, day: '2026-10-07', trades: [], barClose: Date.parse(BAR) + 180000, barMinutes: 3, cooldown: { maxConsecutiveLosses: 2, lossCooldownMin: 30 }, windowEntries: 'allowed', lessons: [], reviewed: [] });
+  const session = async (recordPositions, { record = true, broker = [] } = {}) => {
+    const dir = tmpDir();
+    const env = {
+      PATH: process.env.PATH, HOME: dir, FTH_HOME: dir, FAKE_POSITIONS: JSON.stringify(broker), FAKE_ORDERS: '[]',
+      FTH_BROKERS_FILE: FAKE_BROKERS, FAKE_BROKER_API_URL: 'https://api.fake-broker.test', FAKE_BROKER_ALLOWED_ACCOUNT_IDS: '1,7', FAKE_BROKER_JOURNAL: writeJournal(dir, []),
+      FTH_NO_ENTRY_WINDOWS: '', FTH_ENTRY_HOURS: '', FTH_TEST_NOW: TEST_NOW, NODE_ENV: 'test', FTH_GATE_LOG: path.join(dir, 'gate.jsonl'),
+      FTH_CYCLE_CACHED: 'market-structure-analyst,trend-momentum-analyst,volume-liquidity-analyst,risk-manager', FTH_CYCLE_BARS: JSON.stringify({ MNQ: BAR }),
+      ...(record ? { [P1.ENV]: JSON.stringify(P1.record({ bar: BAR, barMinutes: 3, facts: facts(recordPositions) })) } : {}),
+    };
+    const gw = spawn(process.execPath, [path.join(REPO, 'scripts', 'mcp-gateway.js'), '--', process.execPath, path.join(REPO, 'tests', 'fixtures', 'fake-mcp-server.js')], { env });
+    let out = '';
+    gw.stdout.on('data', c => { out += c; });
+    gw.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id: 1, method: 'initialize', params: {} })}\n`);
+    gw.stdin.write(`${JSON.stringify({ jsonrpc: '2.0', id: 2, method: 'tools/call', params: { name: 'place_order', arguments: ORDER } })}\n`);
+    gw.stdin.end();
+    await new Promise(resolve => gw.on('close', resolve));
+    const byId = Object.fromEntries(out.trim().split('\n').filter(Boolean).map(l => JSON.parse(l)).map(x => [x.id, x]));
+    return byId[2].result.content[0].text;
+  };
+  // Served under a long position the broker no longer shows (it closed since): refused, exits still go.
+  assert.match(await session([{ contractId: 'MNQ', type: 1, size: 1, averagePrice: 21500 }]), /\[phase1-cache\][^\n]*positions changed/);
+  // The same facts the broker shows: no [phase1-cache] (other checks are their own tests).
+  assert.doesNotMatch(await session([]), /phase1-cache/);
+  // No record: phase 1 isn't counted as cached at all, so there's nothing for the gateway to check.
+  assert.doesNotMatch(await session([], { record: false }), /phase1-cache/);
+  // A position the broker names by an id the translator's cache doesn't (the runner's read named it MNQ:2026-12): the
+  // contract always counts, so it's refused (fail closed; one refused entry, then phase 1 runs fresh: refusedKey).
+  const pos = { type: 1, size: 1, averagePrice: 21500 };
+  assert.match(await session([{ contractId: 'MNQ:2026-12', ...pos }], { broker: [{ contractId: 'BRK-77X', ...pos }] }), /\[phase1-cache\][^\n]*positions changed/);
+  assert.doesNotMatch(await session([{ contractId: 'MNQ:2026-12', ...pos }], { broker: [{ contractId: 'MNQ:2026-12', ...pos }] }), /phase1-cache/);
+  assert.match(await session([{ contractId: 'MNQ:2026-12', ...pos }], { broker: [{ contractId: 'BRK-77X', ...pos, size: 2 }] }), /\[phase1-cache\][^\n]*positions changed/);
 });

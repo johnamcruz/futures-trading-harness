@@ -82,3 +82,24 @@ test('opencode: events are recognized by their whole envelope; tool parts name M
   assert.deepStrictEqual(opencodeCall({ tool: 'brokerage_x', state: { input: 'x' } }), { name: 'brokerage_x', input: {}, result: null });
   assert.ok(SHELL_TOOLS.has('bash'));
 });
+
+test('claudeRunUsage: a run\'s prompt-cache use from its stream (the result event\'s usage, its first turn\'s, its turns); a subagent\'s events, or no result usage: none', () => {
+  const { claudeRunUsage } = require('../../scripts/lib/transcript');
+  const u = (read, made, input = 3, output = 10) => ({ input_tokens: input, cache_read_input_tokens: read, cache_creation_input_tokens: made, output_tokens: output });
+  const asst = (id, usage, parent = null) => JSON.stringify({ type: 'assistant', parent_tool_use_id: parent, message: { id, usage, content: [{ type: 'text', text: 'x' }] } });
+  const lines = [
+    JSON.stringify({ type: 'system', subtype: 'init', session_id: 's' }),
+    asst('sub', u(1, 1), 'tool-1'),
+    asst('m1', u(25310, 59715)), asst('m1', u(25310, 59715)), asst('m2', u(85025, 1600)),
+    JSON.stringify({ type: 'result', is_error: false, result: 'done', usage: u(110335, 61315, 9, 4000) }),
+  ];
+  assert.deepStrictEqual(claudeRunUsage(lines.join('\n')), {
+    total: { input: 9, cacheRead: 110335, cacheCreation: 61315, output: 4000 },
+    first: { input: 3, cacheRead: 25310, cacheCreation: 59715, output: 10 },
+    turns: 2,
+  });
+  assert.strictEqual(claudeRunUsage(lines.slice(0, -1).join('\n')), null, 'no result event');
+  assert.strictEqual(claudeRunUsage(''), null);
+  assert.strictEqual(claudeRunUsage('CYCLE RESULT: no-trade - x'), null);
+  assert.deepStrictEqual(claudeRunUsage(JSON.stringify({ type: 'result', usage: { cache_read_input_tokens: 'x' } })), { total: { input: 0, cacheRead: 0, cacheCreation: 0, output: 0 }, first: null, turns: 0 });
+});

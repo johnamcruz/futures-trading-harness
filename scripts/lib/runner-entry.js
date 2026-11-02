@@ -487,11 +487,11 @@ async function runEntry(deps, c) {
   const record = r => {
     try {
       RR.appendRoleRun(c.rolesFile, { role: r.role, ...times.get(r.role), text: r.text || '', lookups: r.lookups || [], ok: r.ok });
-      info.ran.push({ role: r.role, stop: r.stop, attempts: r.attempts, ms: r.ms, ...(r.why ? { why: r.why } : {}), ...(r.skills ? { skills: r.skills } : {}) });
+      info.ran.push({ role: r.role, stop: r.stop, attempts: r.attempts, ms: r.ms, ...(r.why ? { why: r.why } : {}), ...(r.skills ? { skills: r.skills } : {}), ...(r.usage ? { usage: r.usage } : {}) });
       return true;
     } catch (err) {
       log(`the entry: ${r.role}'s run could not be recorded for the gate (${err.message})`, 'error');
-      info.ran.push({ role: r.role, stop: r.stop, unrecorded: err.message, ...(r.skills ? { skills: r.skills } : {}) });
+      info.ran.push({ role: r.role, stop: r.stop, unrecorded: err.message, ...(r.skills ? { skills: r.skills } : {}), ...(r.usage ? { usage: r.usage } : {}) });
       return false;
     }
   };
@@ -541,7 +541,7 @@ async function runEntry(deps, c) {
         if (read.outcome === 'approved') read = { outcome: 'failed', why: 'it could not be recorded for the gate' };
       }
     }
-    info.ran.push({ role, restate: true, stop: res && res.ok ? 'completed' : res && res.timedOut ? 'timed_out' : 'failed', ...(ran ? { ms: Math.max(0, ran.end - ran.start) } : {}) });
+    info.ran.push({ role, restate: true, stop: res && res.ok ? 'completed' : res && res.timedOut ? 'timed_out' : 'failed', ...(ran ? { ms: Math.max(0, ran.end - ran.start) } : {}), ...(res && res.usage ? { usage: res.usage } : {}) });
     info.restated = { kind: due.kind, why: due.why, ceiling: due.ceiling, outcome: read.outcome, ...(read.outcome === 'approved' ? { size: read.size } : {}), ...(read.why ? { reason: read.why } : {}), ...(text ? { text: short(text) } : {}) };
     log(`the entry: phase 2 restated its size: ${read.outcome}${read.outcome === 'approved' ? ` ${read.size}` : read.why ? ` (${read.why})` : ''}`, read.outcome === 'approved' ? 'info' : 'error');
     return read;

@@ -23,9 +23,15 @@ Recorded after the cycle at bar 1245 (keys):
       "day": "day@2026-04-27T14:36:00.000Z"
     }
   },
+  "bodies": {
+    "market-structure-analyst": "body-market-structure-analyst",
+    "trend-momentum-analyst": "body-trend-momentum-analyst",
+    "volume-liquidity-analyst": "body-volume-liquidity-analyst"
+  },
+  "scope": "root-1",
   "phase1": {
-    "account": "{\"id\":7,\"balance\":50000,\"positions\":[],\"workingOrders\":0,\"orders\":[],\"attempts\":[[\"mini\",\"active\",50000,48000,0,0,null]]}",
-    "day": "2026-04-27"
+    "factsKey": "40bf5a8200f78b5cf306466d8fb32973ea6a786500e3d21555c285208485d0be",
+    "body": "body-risk-manager"
   }
 }
 Served on the next bar when one input changes:
@@ -38,6 +44,9 @@ Served on the next bar when one input changes:
   no briefing: phase1
   another contract (a roll): none
   another symbol set (two symbols): none
+  one analyst's instructions (its agent file or a skill edited): trend-momentum, volume-liquidity, phase1
+  phase 1's instructions: market-structure, trend-momentum, volume-liquidity
+  another root or checkout (its home reused): none
   the balance: market-structure, trend-momentum, volume-liquidity
   a position: market-structure, trend-momentum, volume-liquidity
   the position and orders the cache was recorded with (all hit): market-structure, trend-momentum, volume-liquidity, phase1
@@ -51,8 +60,12 @@ Served on the next bar when one input changes:
   the account id: market-structure, trend-momentum, volume-liquidity
   the attempt's day P&L: market-structure, trend-momentum, volume-liquidity
   the attempt's entry block: market-structure, trend-momentum, volume-liquidity
-  an account not read: market-structure, trend-momentum, volume-liquidity
+  an account not read (no key): market-structure, trend-momentum, volume-liquidity
   the trading day: market-structure, trend-momentum, volume-liquidity
-  phase 1 at 29 minutes old: market-structure, trend-momentum, volume-liquidity, phase1
-  phase 1 at 30 minutes old: market-structure, trend-momentum, volume-liquidity
-  no clock: market-structure, trend-momentum, volume-liquidity
+  a losing close: market-structure, trend-momentum, volume-liquidity
+  the fills not read (no key): market-structure, trend-momentum, volume-liquidity
+  the window refusing entries: market-structure, trend-momentum, volume-liquidity
+  a lesson: market-structure, trend-momentum, volume-liquidity
+  the clock 29 minutes on (all hit): market-structure, trend-momentum, volume-liquidity, phase1
+  the clock a day behind (all hit): market-structure, trend-momentum, volume-liquidity, phase1
+  no clock (all hit): market-structure, trend-momentum, volume-liquidity, phase1

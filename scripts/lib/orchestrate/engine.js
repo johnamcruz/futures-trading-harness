@@ -15,7 +15,7 @@
  *     phase(name), log(text)             named steps and notes, as events
  *   engine.run(role, request, { signal, timeoutMs }) -> { ok, timedOut, text, tools, output, transcript }   the harness
  *       run: `text` its final message, `tools` the tools its run completed (the engine adapter reads them from its
- *       harness's own output; `lookups` the skills it looked up, and `skills` which it had (cycle-run.js runRole), kept on the envelope; the adapter enforces `timeoutMs` (it owns the process) and reports `timedOut`; the
+ *       harness's own output; `lookups` the skills it looked up, `skills` which it had and `usage` its prompt-cache use (cycle-run.js runRole), kept on the envelope (the last attempt's); the adapter enforces `timeoutMs` (it owns the process) and reports `timedOut`; the
  *       caller's: `opencode run --agent <role>` for opencode); nothing here names a harness.
  *   accept: [(role, envelope) -> null | why]   the checks a result must pass (orchestrate/checks.js)
  *   onEvent({ type, seq, phase, role, ... })   agent-start / agent-end / phase / log, paired by `seq`
@@ -59,7 +59,7 @@ function createRun({ engine, signal = null, now = () => Date.now(), onEvent = ()
         ran.push({ text: '', stop: last.stop, why: last.why });
         continue;
       }
-      const base = { output: (res && res.output) || '', transcript: (res && res.transcript) || null, text: (res && typeof res.text === 'string' ? res.text : ''), tools: Array.isArray(res && res.tools) ? res.tools.filter(t => typeof t === 'string') : [], lookups: Array.isArray(res && res.lookups) ? res.lookups.filter(t => typeof t === 'string') : [], ...(res && res.skills && typeof res.skills === 'object' ? { skills: res.skills } : {}) };
+      const base = { output: (res && res.output) || '', transcript: (res && res.transcript) || null, text: (res && typeof res.text === 'string' ? res.text : ''), tools: Array.isArray(res && res.tools) ? res.tools.filter(t => typeof t === 'string') : [], lookups: Array.isArray(res && res.lookups) ? res.lookups.filter(t => typeof t === 'string') : [], ...(res && res.skills && typeof res.skills === 'object' ? { skills: res.skills } : {}), ...(res && res.usage && typeof res.usage === 'object' ? { usage: res.usage } : {}) };
       if (cancelled()) { last = { ...base, stop: 'cancelled', why: 'the run was cancelled' }; ran.push({ text: base.text, stop: last.stop, why: last.why }); break; }
       if (!res || !res.ok) { last = { ...base, stop: res && res.timedOut ? 'timed_out' : 'failed', why: res && res.timedOut ? 'timed out' : 'the run failed' }; ran.push({ text: base.text, stop: last.stop, why: last.why }); continue; }
       // A check that throws is a failed check (its reason the error), never a rejection: every start has its end.
@@ -68,7 +68,7 @@ function createRun({ engine, signal = null, now = () => Date.now(), onEvent = ()
       ran.push({ text: base.text, stop: last.stop, why: last.why });
       if (!why) break;
     }
-    const env = { ok: last.stop === 'completed', role, text: last.text, tools: last.tools, lookups: last.lookups || [], ...(last.skills ? { skills: last.skills } : {}), attempts, tries: ran, ms: now() - started, stop: last.stop, why: last.why, output: last.output, transcript: last.transcript, meta };
+    const env = { ok: last.stop === 'completed', role, text: last.text, tools: last.tools, lookups: last.lookups || [], ...(last.skills ? { skills: last.skills } : {}), ...(last.usage ? { usage: last.usage } : {}), attempts, tries: ran, ms: now() - started, stop: last.stop, why: last.why, output: last.output, transcript: last.transcript, meta };
     emit({ type: 'agent-end', seq: id, phase: current, role, stop: env.stop, attempts, ms: env.ms, why: env.why });
     return env;
   }

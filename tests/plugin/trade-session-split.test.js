@@ -165,6 +165,9 @@ const ALLOWED = [
 // home to its edited text, and a late edit that matches nothing fails.
 const { withLate } = require('./skill-split-late');
 const LATE = [
+  { from: "**Cached reports.** The autonomous runner keeps each role's last report and gives it again under \"Cached reports\" in the prompt while what it rests on holds: in a one-symbol cycle, an analyst's report while the bar briefing parts it was built on are current (until the next 15m close); `risk-manager` phase 1 while the account is unchanged (no fill, order, balance or attempt change, same day, and no `trade-executor` call in the cycle that wrote it).",
+    to: "**Cached reports.** The autonomous runner keeps each role's last report and gives it again under \"Cached reports\" in the prompt while what it rests on holds: in a one-symbol cycle, an analyst's report while the bar briefing parts it was built on are current (until the next 15m close); `risk-manager` phase 1 while each live fact in it is unchanged (account, orders, losses, cooldown, attempt, window, lessons; no `trade-executor` in its cycle).",
+    reason: "feat/stable-first-prompt (owner-approved 2026-11-01, smart phase-1 cache: 'accurate, not stale and not late'): phase 1 is served only while every live fact it reports is unchanged this bar (report-cache.js, trading/phase1-facts.js), no longer on an unchanged account alone; 6 bytes shorter" },
   { from: "**Bars, interactively** (no runner bars file): the harness tool `bars_fetch` (`{\"symbol\": \"<SYMBOL>\", \"timeframe\": <3 or 1>, \"record\": true}`) writes the runner's default count of closed bars (5000 3-minute, 15000 1-minute) to `<FTH_HOME>/bars-scratch/<SYMBOL>-<tf>m.json` (this harness home's own; use the path it returns) and records the multi-timeframe read for the gate (the `bar-briefing` skill).",
     to: "**Bars, interactively** (no runner bars file): the harness tool `bars_fetch` (`{\"symbol\": \"<SYMBOL>\", \"timeframe\": <3 or 1>, \"record\": true}`) writes the runner's default count of closed bars to `<FTH_HOME>/bars-scratch/<SYMBOL>-<tf>m.json` (this harness home's own; use the path it returns) and records the multi-timeframe read for the gate (the `bar-briefing` skill).",
     reason: "feat/htf-history: the runner's bar count follows the read's window (config/analysis.json mtf.historyHours), so the skills name no count (its one home is the config)" },
@@ -479,9 +482,12 @@ test('trade-session split: no head-trader path reads more than the base\'s every
 // compose says its cycle; +4); every other role within its pin.
 // Then 93989 (fix/quiz-side-doji, owner: q29/q30/q33 answered correctly): candle-reading's side never from the bias, the
 // briefing's side, a stall decides nothing, the four side and trend-rule cases, a paired side example (+1029); every other role within its pin.
+// Then feat/stable-first-prompt (owner rule: raise a pin when it improves context): gate-refusals' [phase1-cache] row, the
+// gateway's refusal of a cached phase 1 its reads no longer match: the row costs 182 bytes, and the trade-executor's prompt
+// sat 4 under its pins, so they move +178 each mode (30670, 30659); every other role within its pin.
 const ROLE_PROMPTS = {
-  full: { 'market-structure-analyst': 93989, 'news-calendar-analyst': 10182, 'risk-manager': 92762, 'strategy-researcher': 25650, 'trade-executor': 30492, 'trade-reviewer': 9454, 'trend-momentum-analyst': 54540, 'volume-liquidity-analyst': 48624 },
-  index: { 'market-structure-analyst': 43175, 'news-calendar-analyst': 10182, 'risk-manager': 78639, 'strategy-researcher': 25650, 'trade-executor': 30481, 'trade-reviewer': 9454, 'trend-momentum-analyst': 40023, 'volume-liquidity-analyst': 33256 },
+  full: { 'market-structure-analyst': 93989, 'news-calendar-analyst': 10182, 'risk-manager': 92762, 'strategy-researcher': 25650, 'trade-executor': 30670, 'trade-reviewer': 9454, 'trend-momentum-analyst': 54540, 'volume-liquidity-analyst': 48624 },
+  index: { 'market-structure-analyst': 43175, 'news-calendar-analyst': 10182, 'risk-manager': 78639, 'strategy-researcher': 25650, 'trade-executor': 30659, 'trade-reviewer': 9454, 'trend-momentum-analyst': 40023, 'volume-liquidity-analyst': 33256 },
 };
 
 test('trade-session split: no role prompt grows, in full or index mode, and no role lists a piece', () => {

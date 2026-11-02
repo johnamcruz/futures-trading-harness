@@ -55,6 +55,7 @@ const { lanesOf, laneStrategies, analystFrames, retireLanes } = require('./lanes
 const { loadAgents } = require('./harness-sync');
 const { scanRecord, appendJsonl } = require('./trading/scan-log');
 const { loadConfig } = require('./trading/config');
+const P1 = require('./trading/phase1-facts');
 const { writeJsonAtomic, entryOrders } = require('./harness-run');
 const { createExitMemory } = require('./trading/exit-memory');
 const { writeMtfRecord, readRecord: readMtfRecord } = require('./trading/mtf-state');
@@ -513,7 +514,7 @@ function deskFor({ home, cfg, root, runRole = null, log = () => {}, wallNow = Da
           log(`the desk: ${r.role}'s run could not be recorded for the gate (${err.message}): the head trader may launch it`);
         }
       }
-      return { reports, missing: results.filter(r => !r.ok).map(r => ({ role: r.role, stop: r.stop, why: r.why })), results: results.map(r => ({ role: r.role, stop: r.stop, attempts: r.attempts, ms: r.ms, ...(r.skills ? { skills: r.skills } : {}), ...deskText(r) })), rolesFile, recorded };
+      return { reports, missing: results.filter(r => !r.ok).map(r => ({ role: r.role, stop: r.stop, why: r.why })), results: results.map(r => ({ role: r.role, stop: r.stop, attempts: r.attempts, ms: r.ms, ...(r.skills ? { skills: r.skills } : {}), ...(r.usage ? { usage: r.usage } : {}), ...deskText(r) })), rolesFile, recorded };
     },
   };
 }
@@ -562,14 +563,40 @@ function reportCacheFor(home, cfg, frames = [], env = process.env, root = path.j
   // The facts key the cycle's lookup requirement comes from (skill-lookups.js factsKey): one-symbol cycles only (an
   // analyst's report is cached in those alone); else null, under which no cached lookup counts.
   const keyOf = (b, symbols, now, laneBars) => lookupsKeyOf(home, b, symbols, now, laneBars);
-  // Phase 1's report is served only under the risk-manager body it was written under (an edited body runs the role again).
-  const bodyKey = () => { try { return require('crypto').createHash('sha256').update(fs.readFileSync(path.join(root, 'agents', 'risk-manager.md'))).digest('hex'); } catch (_err) { return null; } };
+  // Each analyst's report is served only under the instructions it was written under (its agent file and skills: an edit
+  // runs the role again), and only from this root's cache (another root's or checkout's home serves nothing).
+  const bodyKeys = () => Object.fromEntries(RC.CACHED_ROLES.map(r => [r, RC.roleKey(root, r)]));
+  const scope = RC.scopeOf(root);
+  // The cycle's latest bar close: a lane bar that closed this cycle after the runner's own (laneBars: { ROOT: { minutes:
+  // "<bar open>" } }), so an own-timeframe report is judged at it, by bar times, never the clock.
+  const closeOf = laneBars => { const t = Object.values(laneBars || {}).flatMap(m => Object.entries(m || {}).map(([k, v]) => Date.parse(v) + Number(k) * 60000)).filter(Number.isFinite); return t.length ? new Date(Math.max(...t)).toISOString() : null; };
+  // Phase 1's live facts this cycle (phase1-facts.js), read fresh: the account as the runner read it, the day's fills
+  // (`fills`; null: not read), the cycle's bar briefing's window state, the journal's lessons and reviewed trades. Any of
+  // them missing: no facts and no key (phase 1 neither served nor recorded). One-symbol cycles only.
+  const barMinutes = lanesOf(cfg)[0].timeframe;
+  const phase1Of = ({ symbols, b, account, now, fills, lessons, reviewed }) => {
+    if (!Array.isArray(symbols) || symbols.length !== 1) return null;
+    const s0 = symbols[0];
+    const brief = b[s0.symbol];
+    const m3 = brief && brief.asOf === s0.bar && brief.sections && brief.sections.m3 && brief.sections.m3.data ? brief.sections.m3.data : null;
+    let gate;
+    let carried;
+    try { gate = loadConfig(env); carried = require('./trading/prop-state').carriedLossState(gate.home, now); } catch (_err) { return null; }
+    const facts = P1.phase1Facts({
+      account, day: tradingDayKey(now), trades: fills, carried, barClose: Date.parse(s0.bar) + barMinutes * 60000, barMinutes,
+      cooldown: { maxConsecutiveLosses: gate.maxConsecutiveLosses, lossCooldownMin: gate.lossCooldownMin }, windowEntries: m3 ? m3.windowEntries : null, lessons, reviewed,
+    });
+    return facts ? { facts, key: P1.factsKey(facts), bar: s0.bar } : null;
+  };
   return {
     // `laneBars`: several lanes, the other lanes whose bar closed this cycle ({ ROOT: { minutes: "<bar open>" } }).
-    serve: ({ symbols, account, now, laneBars = {} }) => {
+    // `fills`, `lessons`, `reviewed`: phase 1's live inputs read this cycle (phase1Of). The result carries `phase1` (its
+    // facts and key, for record) and, when phase 1 is served, `phase1Record`: the runner's record the gate checks it by.
+    serve: ({ symbols, account, now, laneBars = {}, fills = null, lessons = null, reviewed = null }) => {
       const b = briefings(symbols);
       const key = keyOf(b, symbols, now, laneBars);
-      const s = RC.serveReports({ cache: RC.readCache(home), briefings: b, symbols, account, day: tradingDayKey(now), now, ...own(symbols), bodyKey: bodyKey() });
+      const phase1 = phase1Of({ symbols, b, account, now, fills, lessons, reviewed });
+      const s = RC.serveReports({ cache: RC.readCache(home), briefings: b, symbols, account, day: tradingDayKey(now), now, ...own(symbols), bodyKeys: bodyKeys(), scope, closeAt: closeOf(laneBars), phase1 });
       // Index mode (the default, FTH_ROLE_SKILLS not full): a role a lookup is required of on this bar is served only when
       // the call that produced its cached report looked up every skill required, under this cycle's facts key (the same
       // bar and lanes: a candidate that appeared since needs a fresh run); else it runs. The gate counts those lookups
@@ -578,17 +605,21 @@ function reportCacheFor(home, cfg, frames = [], env = process.env, root = path.j
       const needs = lookupNeeds(b, now, rolesEnv(cfg, env), { home, laneBars });
       const credited = r => (key && r.lookupsKey === key && Array.isArray(r.lookups) ? r.lookups : []);
       const met = r => (needs[r.role] || []).every(skill => credited(r).includes(skill));
+      // A lean cycle runs no analyst: phase 1 alone may be served there.
       const reports = (cfg.cycle === 'lean' ? s.reports.filter(r => r.role === RC.PHASE1) : s.reports).filter(met)
         .map(r => ({ ...r, lookups: credited(r), lookupsKey: credited(r).length ? key : null }));
-      return { roles: reports.map(r => r.role), reports };
+      const p1Served = reports.some(r => r.role === RC.PHASE1);
+      return { roles: reports.map(r => r.role), reports, phase1, ...(p1Served ? { phase1Record: P1.record({ bar: phase1.bar, barMinutes, facts: phase1.facts }) } : {}) };
     },
     // `lookups`: the cycle's skill_lookup records (skill-lookups.js), so each cached report keeps its own call's, under
     // the cycle's facts key (`laneBars` as serve takes them).
     // `fresh`: the desk's reports this cycle (deskFor), recorded as the roles' own calls are.
-    record: ({ symbols, account, now, output, served, fresh = [], runs = [], lookups = [], laneBars = {} }) => {
+    // `phase1`: serve's (the same cycle's facts and key).
+    // `phase1Refused`: the gateway refused this cycle's cached phase 1 (cycle-run.js phase1RefusedIn).
+    record: ({ symbols, account, now, output, served, fresh = [], runs = [], lookups = [], laneBars = {}, phase1 = null, phase1Refused = false }) => {
       try {
         const b = briefings(symbols);
-        return RC.writeCache(home, RC.recordReports({ prev: RC.readCache(home), output, served, fresh, runs, briefings: b, symbols, account, day: tradingDayKey(now), now, ...own(symbols), lookups, lookupsKey: keyOf(b, symbols, now, laneBars), bodyKey: bodyKey() }));
+        return RC.writeCache(home, RC.recordReports({ prev: RC.readCache(home), output, served, fresh, runs, briefings: b, symbols, account, day: tradingDayKey(now), now, ...own(symbols), lookups, lookupsKey: keyOf(b, symbols, now, laneBars), bodyKeys: bodyKeys(), scope, closeAt: closeOf(laneBars), phase1, phase1Refused }));
       } catch (err) {
         RC.removeCache(home); // a cache that can't be written is none: every role runs next cycle
         throw err;

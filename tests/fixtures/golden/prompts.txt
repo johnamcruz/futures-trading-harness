@@ -29,7 +29,7 @@ Autonomous cycle.
   Your skills trade-session, multi-timeframe-analysis, trade-lifecycle, htf-to-ltf, confluence-counting, setup-judgment, trade-plan, and day-context are in your prompt, already loaded (don't load them again): decide by them, then run the trade-session skill for MNQ, M2K (one symbol at a time, open positions first) on account 7.
   Write the trader-process skill's PLAN (1 HTF to 9 Manage) before the result line.
   Full cycle: trend-momentum-analyst and volume-liquidity-analyst as parallel subagents, plan from their reports, then risk-manager phase 2 on your plan, if any; the gate refuses an entry until all report and phase 2 approves.
-  Cached reports, still valid this bar (the runner's report cache: an analyst's report built on the bar briefing parts still current, risk-manager phase 1 on this account unchanged): don't launch market-structure-analyst, risk-manager (phase 1) this cycle; the order gate counts them as returned.
+  Cached reports, still valid this bar (the runner's report cache: an analyst's report built on the bar briefing parts still current, risk-manager phase 1 while every live account fact it reports is unchanged): don't launch market-structure-analyst, risk-manager (phase 1) this cycle; the order gate counts them as returned.
   An analyst's 15m-and-up view holds until 10:45 ET; take this bar's 3m facts (the trigger, the VWAP side, the candidates) from the bar briefing.
   A cached report is that role's report this cycle: never send it back to a role to read, summarize or redo.
 --- market-structure-analyst report (from 10:30 ET) ---
@@ -45,6 +45,8 @@ Phase 1: Attempt: mini active, cushion $2,000; budget $400
 Autonomous cycle.
   Follow the autonomous-trading skill.
   No user is present.
+  With your skill tool, load trade-session, multi-timeframe-analysis, and trade-lifecycle (the order gate refuses an entry without them); also load htf-to-ltf, confluence-counting, setup-judgment, trade-plan, and day-context before deciding, then run the trade-session skill for MNQ, M2K (one symbol at a time, open positions first) on account 7 in lean cycle (see the trade-session skill).
+  Write the trader-process skill's PLAN (1 HTF to 9 Manage) before the result line.
   The cycle's time: 2026-04-27 10:33:05 ET (2026-04-27T14:33:05.000Z).
   MNQ: a 3-minute bar just closed (opened 10:30 ET); closed 3-minute bars, oldest first, are in /bars/MNQ-3m.json (get_bars format; contractId MNQ) - use that file; don't fetch 3-minute bars.
   MNQ 4h range, 1h up, 15m up: longs with the trend, shorts need mtf: reversal (recorded for the order gate, which enforces it).
@@ -69,10 +71,8 @@ Autonomous cycle.
   Your last 3 reviewed trade(s) (2W/1L, E +0.73R), oldest first: orb long +1.2R | bos short -1R | keltner long +2R.
   Your recurring mistakes and lessons (confidence; notes from your own past, not rules): skip keltner in a range (0.7) | wait for the 15m close at a level (0.6).
   Context unavailable this cycle (not "none"): the M2K day context (the bars don't hold today's open or a whole prior day).
-  With your skill tool, load trade-session, multi-timeframe-analysis, and trade-lifecycle (the order gate refuses an entry without them); also load htf-to-ltf, confluence-counting, setup-judgment, trade-plan, and day-context before deciding, then run the trade-session skill for MNQ, M2K (one symbol at a time, open positions first) on account 7 in lean cycle (see the trade-session skill).
-  Write the trader-process skill's PLAN (1 HTF to 9 Manage) before the result line.
   Lean cycle: on a candidate, then risk-manager phase 2 on your plan, if any; the gate refuses an entry until all report and phase 2 approves.
-  Cached reports, still valid this bar (the runner's report cache: an analyst's report built on the bar briefing parts still current, risk-manager phase 1 on this account unchanged): don't launch market-structure-analyst, risk-manager (phase 1) this cycle; the order gate counts them as returned.
+  Cached reports, still valid this bar (the runner's report cache: an analyst's report built on the bar briefing parts still current, risk-manager phase 1 while every live account fact it reports is unchanged): don't launch market-structure-analyst, risk-manager (phase 1) this cycle; the order gate counts them as returned.
   An analyst's 15m-and-up view holds until 10:45 ET; take this bar's 3m facts (the trigger, the VWAP side, the candidates) from the bar briefing.
   A cached report is that role's report this cycle: never send it back to a role to read, summarize or redo.
 --- market-structure-analyst report (from 10:30 ET) ---
@@ -201,7 +201,7 @@ Autonomous cycle.
   Your skills trade-session, multi-timeframe-analysis, trade-lifecycle, htf-to-ltf, confluence-counting, setup-judgment, trade-plan, and day-context are in your prompt, already loaded (don't load them again): decide by them, then run the trade-session skill for MNQ.
   Write the trader-process skill's PLAN (1 HTF to 9 Manage) before the result line.
   Full cycle: trend-momentum-analyst and volume-liquidity-analyst as parallel subagents, plan from their reports, then risk-manager phase 2 on your plan, if any; the gate refuses an entry until all report and phase 2 approves.
-  Cached reports, still valid this bar (the runner's report cache: an analyst's report built on the bar briefing parts still current, risk-manager phase 1 on this account unchanged): don't launch market-structure-analyst, risk-manager (phase 1) this cycle; the order gate counts them as returned.
+  Cached reports, still valid this bar (the runner's report cache: an analyst's report built on the bar briefing parts still current, risk-manager phase 1 while every live account fact it reports is unchanged): don't launch market-structure-analyst, risk-manager (phase 1) this cycle; the order gate counts them as returned.
   An analyst's 15m-and-up view holds until 10:45 ET; take this bar's 3m facts (the trigger, the VWAP side, the candidates) from the bar briefing.
   A cached report is that role's report this cycle: never send it back to a role to read, summarize or redo.
 --- market-structure-analyst report (from 10:30 ET) ---
@@ -237,7 +237,7 @@ Autonomous cycle.
   Your skills trade-session, multi-timeframe-analysis, trade-lifecycle, htf-to-ltf, confluence-counting, setup-judgment, trade-plan, and day-context are in your prompt, already loaded (don't load them again): decide by them, then run the trade-session skill for MNQ on account 7.
   Write the trader-process skill's PLAN (1 HTF to 9 Manage) before the result line.
   Full cycle: trend-momentum-analyst and volume-liquidity-analyst as parallel subagents, plan from their reports, then risk-manager phase 2 on your plan, if any; the gate refuses an entry until all report and phase 2 approves.
-  Cached reports, still valid this bar (the runner's report cache: an analyst's report built on the bar briefing parts still current, risk-manager phase 1 on this account unchanged): don't launch market-structure-analyst, risk-manager (phase 1) this cycle; the order gate counts them as returned.
+  Cached reports, still valid this bar (the runner's report cache: an analyst's report built on the bar briefing parts still current, risk-manager phase 1 while every live account fact it reports is unchanged): don't launch market-structure-analyst, risk-manager (phase 1) this cycle; the order gate counts them as returned.
   An analyst's 15m-and-up view holds until 10:45 ET; take this bar's 3m facts (the trigger, the VWAP side, the candidates) from the bar briefing.
   A cached report is that role's report this cycle: never send it back to a role to read, summarize or redo.
 --- market-structure-analyst report (from 10:30 ET) ---
@@ -274,7 +274,7 @@ Autonomous cycle.
   Your skills trade-session, multi-timeframe-analysis, trade-lifecycle, htf-to-ltf, confluence-counting, setup-judgment, trade-plan, and day-context are in your prompt, already loaded (don't load them again): decide by them, then run the trade-session skill for MNQ on account 7.
   Write the trader-process skill's PLAN (1 HTF to 9 Manage) before the result line.
   Full cycle: trend-momentum-analyst and volume-liquidity-analyst as parallel subagents, plan from their reports, then risk-manager phase 2 on your plan, if any; the gate refuses an entry until all report and phase 2 approves.
-  Cached reports, still valid this bar (the runner's report cache: an analyst's report built on the bar briefing parts still current, risk-manager phase 1 on this account unchanged): don't launch market-structure-analyst, risk-manager (phase 1) this cycle; the order gate counts them as returned.
+  Cached reports, still valid this bar (the runner's report cache: an analyst's report built on the bar briefing parts still current, risk-manager phase 1 while every live account fact it reports is unchanged): don't launch market-structure-analyst, risk-manager (phase 1) this cycle; the order gate counts them as returned.
   An analyst's 15m-and-up view holds until 10:45 ET; take this bar's 3m facts (the trigger, the VWAP side, the candidates) from the bar briefing.
   A cached report is that role's report this cycle: never send it back to a role to read, summarize or redo.
 --- market-structure-analyst report (from 10:30 ET) ---

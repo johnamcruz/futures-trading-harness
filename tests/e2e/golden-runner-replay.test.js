@@ -63,6 +63,8 @@ async function replay(bars, { end = END, state = null, lanes = null, timeframe =
     async closedBars(contractId, { limit, minutes }) { return JSON.parse(JSON.stringify((minutes === 1 && bars1 ? bars1 : bars).filter(b => Date.parse(b.t) < clockRef.t).slice(-limit))); },
     async accountState() { return { positions: [], orders: [] }; },
     async accountBalance() { return clockRef.t >= BALANCE_DROP_AT ? 49950 : 50000; },
+    // The day's fills (search_trades): none closed; phase 1's live facts read them (trading/phase1-facts.js).
+    async fillsSince() { return []; },
     async netPosition() { return 0; },
     async workingOrders() { return 0; },
   };
@@ -107,7 +109,7 @@ async function replay(bars, { end = END, state = null, lanes = null, timeframe =
   const after = before => {
     if (cycles.length > before) {
       const c = RC.readCache(home);
-      keysAfter.push(c ? { analysts: Object.fromEntries(Object.entries(c.analysts).map(([r, x]) => [r, x.tf ? { ...x.versions, tf: x.tf } : x.versions])), phase1: c.phase1 && { account: c.phase1.account, day: c.phase1.day }, symbols: c.symbols } : null);
+      keysAfter.push(c ? { analysts: Object.fromEntries(Object.entries(c.analysts).map(([r, x]) => [r, x.tf ? { ...x.versions, tf: x.tf } : x.versions])), phase1: c.phase1 && { key: String(c.phase1.factsKey).slice(0, 16) }, symbols: c.symbols } : null);
       written.push(JSON.parse(fs.readFileSync(path.join(cfg.dataDir, `MNQ-${cfg.timeframe}m.json`), 'utf8')).bars);
     }
   };
@@ -147,7 +149,7 @@ function sequenceText({ cycles, keysAfter }) {
   return cycles.map((c, k) => {
     const hit = ['risk-manager', ...ANALYSTS].map(r => `${short(r)} ${c.served.includes(r) ? 'HIT' : 'miss'}`).join(', ');
     const keys = keysAfter[k];
-    const after = keys ? `cached after: ${Object.entries(keys.analysts).map(([r, v]) => `${short(r)} ${v.m15} ${v.h1} ${v.day}`).join('; ') || 'no analyst'}; phase1 ${keys.phase1 ? `${keys.phase1.day} ${keys.phase1.account}` : 'none'}; symbols ${JSON.stringify(keys.symbols)}` : 'no cache';
+    const after = keys ? `cached after: ${Object.entries(keys.analysts).map(([r, v]) => `${short(r)} ${v.m15} ${v.h1} ${v.day}`).join('; ') || 'no analyst'}; phase1 ${keys.phase1 ? `facts ${keys.phase1.key}` : 'none'}; symbols ${JSON.stringify(keys.symbols)}` : 'no cache';
     return `${c.at} ${c.action}: ${hit}; fired [${c.fired.join(', ')}]\n  ${after}`;
   }).join('\n');
 }
@@ -156,13 +158,13 @@ test('the runner\'s scripted replay: the report cache\'s hits, misses and keys p
   const plain = await replay(MNQ);
   const ext = await replay(G.withExt(MNQ));
   assert.ok(plain.cycles.length >= 10, `cycles: ${plain.cycles.length}`);
-  // Hits happen and misses happen: an analyst's report holds within a 15m candle, phase 1 while the account holds.
+  // Hits happen and misses happen: an analyst's report holds within a 15m candle, phase 1 while its live facts hold.
   const hits = plain.cycles.flatMap(c => c.served);
   assert.ok(hits.includes(ANALYSTS[0]) && hits.includes('risk-manager'), 'cache hits');
   assert.ok(!hits.includes(ANALYSTS[2]), 'a report not built on the briefing is never served');
   assert.ok(plain.cycles.some((c, k) => k > 0 && !c.served.includes(ANALYSTS[0])), 'a new 15m candle is a miss');
   const drop = plain.cycles.findIndex(c => Date.parse(c.at) >= BALANCE_DROP_AT);
-  assert.ok(drop > 0 && !plain.cycles[drop].served.includes('risk-manager') && plain.cycles[drop - 1].served.includes('risk-manager'), 'the account changed: phase 1 misses');
+  assert.ok(drop > 0 && !plain.cycles[drop].served.includes('risk-manager') && plain.cycles[drop - 1].served.includes('risk-manager'), 'the balance changed: phase 1 misses');
   // The broker's field: the same sequence, keys and prompts; the bars files keep it, with the same OHLCV.
   assert.strictEqual(sequenceText(ext), sequenceText(plain));
   assert.deepStrictEqual(ext.cycles.map(c => c.prompt), plain.cycles.map(c => c.prompt));
@@ -302,7 +304,7 @@ test('the report cache with a 3m bar lane and a 1m signal lane: the hit/miss seq
   const misses = list => list.reduce((n, c) => n + ANALYSTS.slice(0, 2).filter(r => !c.served.includes(r)).length, 0);
   for (const c of ones) assert.ok(c.served.includes(ANALYSTS[0]) && c.served.includes(ANALYSTS[1]), `${c.at}: ${c.served}`);
   assert.strictEqual(misses(laned.cycles), misses(single.cycles), 'no analyst misses beyond the single lane\'s');
-  // Phase 1 misses only where the account changed (the balance drop), as in the single lane.
+  // Phase 1 misses only where its live facts changed (the balance drop), as in the single lane.
   const phase1Misses = list => list.filter(c => !c.served.includes('risk-manager')).map(c => c.at);
   assert.ok(phase1Misses(ones).every(at => Date.parse(at) >= BALANCE_DROP_AT && Date.parse(at) < BALANCE_DROP_AT + 4 * 60000), phase1Misses(ones).join(','));
   // The slower parts' keys (m15, h1, day) don't move across a 1m-only cycle.

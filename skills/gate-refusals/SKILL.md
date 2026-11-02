@@ -31,6 +31,7 @@ the cycle's roles and FACTS in `gate-refusals-cycle`.
 | `[order-pending] The outcome of an order is unknown` | An earlier order got no clear answer | No new entry. Read `search_orders` / `list_open_orders`; manage what's there. It clears when the broker lists the order or after 2 min; while `search_orders` fails it holds (tell the user), and an unreadable record named in the message is deleted by hand after checking the broker's orders. |
 | `[loss-streak] N losses in a row. Cooling down for M min more` | Losses in a row today: a cooldown | Stand aside until it ends; write a lesson. Exits and stops still go. |
 | `[briefing-age] Stale data: …` (or no bar briefing) | The briefing's bar is past the signal age | End the cycle (trade-session step 6); the next bar decides. Exits and stops still go. |
+| `[phase1-cache] … from the report cache, but <what changed>` | The cached phase 1 no longer matches the account | No entry this cycle; exits still go; phase 1 runs next cycle. |
 
 ## Examples
 

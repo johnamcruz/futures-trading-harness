@@ -92,9 +92,6 @@
   "scripts/lib/trading/reasons.js|account": [
     "ecc79c8545455175"
   ],
-  "scripts/lib/trading/report-cache.js|account": [
-    "f1e5d8c2c56574d9"
-  ],
   "skills/replay/SKILL.md|account": [
     "011e6f9022668405",
     "614560bc8894c9f9",
@@ -259,27 +256,6 @@
     "a98b342e6c80de53",
     "b76c6a15de672dd5",
     "febf26b947367d6b"
-  ],
-  "tests/lib/report-cache.test.js|account": [
-    "140a2aef14ab62c2",
-    "39d393ff711473f4",
-    "3b4740a544690c2f",
-    "3d367e2165ba8e16",
-    "4902a3fc2d0997bc",
-    "4eef674883972421",
-    "4fe19f29b491368d",
-    "5aa5ca4ed627a550",
-    "625bceee84f029b7",
-    "6861dd2ebad66bc2",
-    "6d993dcba0ec2025",
-    "84fe78e21d7ecf2c",
-    "ac2873fa7b9dbf01",
-    "b781b2dee52d26b6",
-    "d3f06e91a325486b",
-    "d686e61c6b0cea21",
-    "d72ba0e7f49bdf79",
-    "eea2d883ae4ac902",
-    "f3a8b741c74f7792"
   ],
   "tests/lib/strategies.test.js|account": [
     "4e1b397b70a79876",
