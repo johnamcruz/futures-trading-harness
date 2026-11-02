@@ -46,18 +46,18 @@ function canonical(v) {
   return JSON.stringify(v === undefined ? null : v);
 }
 const sha = text => crypto.createHash('sha256').update(text).digest('hex');
-// A contract by the translator's standard name (its root), or `raw:<id>` when nothing names it (journal.js resolveContract):
-// two reads that name one contract two ways compare by the rest of their fields (sameList).
+// A contract by the translator's standard name (its root), or `raw:<id>` when nothing names it (journal.js resolveContract).
+// The contract always counts (fail closed): two reads naming one contract two ways differ, which costs one refused entry,
+// after which that facts key is never cached again (report-cache.js refusedKey) and phase 1 runs fresh.
 const root = id => { if (typeof id !== 'string' || !id) return null; const r = resolveContract(id); return r.named ? r.root : `raw:${id}`; };
-const unnamed = c => typeof c !== 'string' || c.startsWith('raw:');
-/** Two lists of [contract, ...fields] the same: each field equal, the contract too unless either side's is unnamed. */
+/** Two lists of [contract, ...fields] the same: every field and the contract equal, in any order. */
 function sameList(a, b) {
   if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
   const rest = x => canonical(x.slice(1));
   const by = (x, y) => (rest(x) < rest(y) ? -1 : rest(x) > rest(y) ? 1 : 0);
   const sa = [...a].sort(by);
   const sb = [...b].sort(by);
-  return sa.every((x, i) => rest(x) === rest(sb[i]) && (x[0] === sb[i][0] || unnamed(x[0]) || unnamed(sb[i][0])));
+  return sa.every((x, i) => rest(x) === rest(sb[i]) && x[0] === sb[i][0]);
 }
 
 /** Positions and working orders as the facts hold them (sorted; the contract by its root, as both reads name it). */

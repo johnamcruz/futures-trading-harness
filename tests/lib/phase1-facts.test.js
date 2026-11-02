@@ -132,14 +132,17 @@ test('an absent trading flag or room is a fact of its own: the same key while ab
   assert.notStrictEqual(absent, key({ account: { ...ACCT, remainingBeforeLimit: 2000 } }));
 });
 
-test('contracts compare on one basis (F1): a broker id nothing names and its standard name are the same position when every other field is; any other field still refuses', () => {
+test('contracts always count (fail closed): a broker id nothing names never matches a standard name, even with every other field equal; any other field still refuses', () => {
   const rec = P1.record({ bar: BAR, barMinutes: 3, facts: P1.phase1Facts({ ...IN, account: { ...ACCT, positions: [{ contractId: 'MNQ:2026-12', type: 1, size: 3, averagePrice: 21000.25 }], orders: [{ id: 9, contractId: 'MNQ', type: 4, side: 1, size: 3, stopPrice: 20990 }] } }) });
   const now = new Date(CLOSE + 30000);
   const raw = 'BRK-77X'; // a broker's own id the translator's cache doesn't name
   const ok = { rec, positions: [{ contractId: raw, type: 1, size: 3, averagePrice: 21000.25 }], orders: [{ id: 9, contractId: raw, type: 4, side: 1, size: 3, stopPrice: 20990 }], running: ['acct_a'], now };
-  assert.strictEqual(P1.gateRefusal(ok), null, 'the same position and order, named two ways');
-  assert.match(P1.gateRefusal({ ...ok, positions: [{ ...ok.positions[0], size: 2 }] }) || '', /positions changed/);
-  assert.match(P1.gateRefusal({ ...ok, orders: [{ ...ok.orders[0], stopPrice: 20995 }] }) || '', /working orders changed/);
+  assert.match(P1.gateRefusal(ok) || '', /positions changed/, 'a position named two ways is refused (fail closed)');
+  const same = { ...ok, positions: [{ ...ok.positions[0], contractId: 'MNQ:2026-12' }], orders: [{ ...ok.orders[0], contractId: 'MNQ' }] };
+  assert.strictEqual(P1.gateRefusal(same), null, 'the same position and order, named the same way');
+  assert.match(P1.gateRefusal({ ...same, orders: [{ ...same.orders[0], contractId: raw }] }) || '', /working orders changed/);
+  assert.match(P1.gateRefusal({ ...same, positions: [{ ...same.positions[0], size: 2 }] }) || '', /positions changed/);
+  assert.match(P1.gateRefusal({ ...same, orders: [{ ...same.orders[0], stopPrice: 20995 }] }) || '', /working orders changed/);
   // Both named: the contract counts (a position on another root is another position).
-  assert.match(P1.gateRefusal({ ...ok, positions: [{ ...ok.positions[0], contractId: 'MES' }] }) || '', /positions changed/);
+  assert.match(P1.gateRefusal({ ...same, positions: [{ ...same.positions[0], contractId: 'MES' }] }) || '', /positions changed/);
 });

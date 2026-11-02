@@ -626,8 +626,9 @@ served, the run's environment carries the runner's record of those facts
 record is whole and for the cycle's bar (a bare `FTH_CYCLE_CACHED` naming
 `risk-manager` counts for nothing), and the gateway refuses an entry
 (`[phase1-cache]`) when its own reads (positions, working orders, the running
-attempts, the trading day) differ from the record's facts; a contract one side
-can't name by its standard name is compared by its other fields. A refusal
+attempts, the trading day) differ from the record's facts; the contract always
+counts, so a contract one side can't name by its standard name differs (fail
+closed). A refusal
 drops the cached phase 1, and it isn't cached again under the same facts, so
 the next cycle runs phase 1 fresh.
 

@@ -4702,8 +4702,9 @@ test('MCP gateway wiring: an entry whose cycle was served phase 1 from the cache
   // No record: phase 1 isn't counted as cached at all, so there's nothing for the gateway to check.
   assert.doesNotMatch(await session([], { record: false }), /phase1-cache/);
   // A position the broker names by an id the translator's cache doesn't (the runner's read named it MNQ:2026-12): the
-  // same position by every other field, not refused (F1: no lasting refusal from naming); another size still is.
+  // contract always counts, so it's refused (fail closed; one refused entry, then phase 1 runs fresh: refusedKey).
   const pos = { type: 1, size: 1, averagePrice: 21500 };
-  assert.doesNotMatch(await session([{ contractId: 'MNQ:2026-12', ...pos }], { broker: [{ contractId: 'BRK-77X', ...pos }] }), /phase1-cache/);
+  assert.match(await session([{ contractId: 'MNQ:2026-12', ...pos }], { broker: [{ contractId: 'BRK-77X', ...pos }] }), /\[phase1-cache\][^\n]*positions changed/);
+  assert.doesNotMatch(await session([{ contractId: 'MNQ:2026-12', ...pos }], { broker: [{ contractId: 'MNQ:2026-12', ...pos }] }), /phase1-cache/);
   assert.match(await session([{ contractId: 'MNQ:2026-12', ...pos }], { broker: [{ contractId: 'BRK-77X', ...pos, size: 2 }] }), /\[phase1-cache\][^\n]*positions changed/);
 });
