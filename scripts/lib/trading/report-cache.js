@@ -34,7 +34,9 @@
  *   scopeOf(root)                               the cache's scope: a hash of the harness root's real path
  *   serveReports({ cache, briefings, symbols, frames, frameBriefings, bodyKeys, scope, closeAt })  { roles, reports: [{ role, text, at, until, tf? }] }
  *   recordReports({ prev, output, served, fresh, runs, briefings, symbols, now, frames, frameBriefings, lookups, bodyKeys, scope, closeAt })  the new cache
- *                                               (`phase1`: { facts, key } of the cycle; `runs`: the runner's role record
+ *                                               (`phase1`: { facts, key } of the cycle; `phase1Refused`: the gateway refused
+ *                                               its cached phase 1 ([phase1-cache]): dropped, not cached again under that key;
+ *                                               `runs`: the runner's role record
  *                                               of the cycle, runner-roles.js readRoleRuns: a trade-executor it ran ends
  *                                               phase 1's entry as a launch does)
  *   deniesActiveAttempt(text, account), phase1Holds(text, account)   phase 1's attempt line checks
@@ -250,7 +252,7 @@ function serveReports({ cache, briefings, symbols, account = null, day: _day = n
  * skill-lookups.js; a call without times shows none), and `lookupsKey`, the facts key of the cycle that made them
  * (skill-lookups.js factsKey): they count again only under that key.
  */
-function recordReports({ prev, output, served = [], fresh = [], runs = [], briefings, symbols, account = null, day: _day = null, now, frames = {}, frameBriefings = {}, lookups = [], lookupsKey = null, bodyKeys = {}, scope = undefined, closeAt = null, phase1 = null }) {
+function recordReports({ prev, output, served = [], fresh = [], runs = [], briefings, symbols, account = null, day: _day = null, now, frames = {}, frameBriefings = {}, lookups = [], lookupsKey = null, bodyKeys = {}, scope = undefined, closeAt = null, phase1 = null, phase1Refused = false }) {
   const { lookupsInCall } = require('./skill-lookups');
   // No root resolved: nothing recorded (an empty cache).
   if (scope === null) return { symbols: symbols.map(s => [s.symbol, s.contractId || null]), analysts: {}, phase1: null, at: now.toISOString() };
@@ -288,7 +290,11 @@ function recordReports({ prev, output, served = [], fresh = [], runs = [], brief
   // recorded with the key, unless it is phase 2's (a verdict) or doesn't confirm an active attempt. No key: none.
   const key = phase1 && typeof phase1.key === 'string' ? phase1.key : null;
   const p1Body = keyOf(bodyKeys, PHASE1);
-  if (!key || symbols.length !== 1 || launches.length || unreadable(bodyKeys, PHASE1)) cache.phase1 = null;
+  // The gateway refused this cycle's cached phase 1 ([phase1-cache]: its reads didn't match the facts): dropped, and not
+  // cached again under the same facts (`refusedKey`), so a lasting disagreement costs one refused cycle per facts key.
+  const refusedKey = phase1Refused && key ? key : keep && typeof keep.refusedKey === 'string' ? keep.refusedKey : null;
+  if (refusedKey) cache.refusedKey = refusedKey;
+  if (!key || symbols.length !== 1 || launches.length || unreadable(bodyKeys, PHASE1) || key === refusedKey) cache.phase1 = null;
   else if (served.includes(PHASE1)) cache.phase1 = keep && keep.phase1 && keep.phase1.factsKey === key && (keep.phase1.body ?? null) === p1Body ? keep.phase1 : null;
   else {
     const rm = ran(PHASE1) ? { text: ran(PHASE1).text } : calls.filter(c => c.role === PHASE1).sort((a, b) => a.start - b.start)[0];

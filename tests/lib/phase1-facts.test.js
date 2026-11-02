@@ -42,6 +42,10 @@ test('the key: the same live facts give the same key whatever their order; each 
     'the window': { windowEntries: 'refused: the opening print' },
     'a lesson': { lessons: ['wait for the 15m close', 'skip chop'] },
     'a reviewed trade': { reviewed: ['orb long +1R'] },
+    'canTrade off': { account: { ...ACCT, canTrade: false } },
+    'trading not allowed to the server': { account: { ...ACCT, mcpTradingAllowed: false } },
+    'the room before the daily limit': { account: { ...ACCT, remainingBeforeLimit: 1500 } },
+    'a round trip at zero P&L (a fill, no loss)': { trades: [loss(10, 0)] },
   };
   for (const [label, over] of Object.entries(changes)) assert.notStrictEqual(key(over), k, label);
 });
@@ -49,7 +53,7 @@ test('the key: the same live facts give the same key whatever their order; each 
 test('a loss cooldown is in the key by its remaining whole bars from the bar close: one that ends between two bars is another key', () => {
   // Two losses in a row, the last 20 min before the close: 10 min of the 30 left, 4 bars of 3 min.
   const trades = [loss(40), loss(20)];
-  assert.deepStrictEqual(P1.cooldownBars({ trades, barClose: CLOSE, barMinutes: 3, cooldown: COOLDOWN }), { bars: 4, streak: 2, losses: 2 });
+  assert.deepStrictEqual(P1.cooldownBars({ trades, barClose: CLOSE, barMinutes: 3, cooldown: COOLDOWN }), { bars: 4, streak: 2, losses: 2, fills: 2 });
   // The next bars: 7, then 4, then 1 min left, then over.
   const at = n => P1.cooldownBars({ trades, barClose: CLOSE + n * 180000, barMinutes: 3, cooldown: COOLDOWN });
   assert.deepStrictEqual([0, 1, 2, 3, 4].map(n => at(n).bars), [4, 3, 2, 1, 0]);
@@ -69,6 +73,7 @@ test('any input missing or unreadable gives no facts and no key (nothing served,
     ['positions unknown', { account: { ...ACCT, positions: null } }], ['orders unknown', { account: { ...ACCT, orders: null } }],
     ['fills not read', { trades: null }], ['no bar close', { barClose: NaN }], ['no window state', { windowEntries: null }],
     ['the journal not read', { lessons: null }], ['the reviews not read', { reviewed: null }], ['no day', { day: '' }],
+    ['the day\'s room read failed', { account: { ...ACCT, todayError: 'timeout' } }],
   ]) {
     assert.strictEqual(P1.phase1Facts({ ...IN, ...over }), null, label);
     assert.strictEqual(key(over), null, label);
@@ -118,4 +123,23 @@ test('gateViolations: the gateway\'s [phase1-cache] for an entry only when phase
   assert.deepStrictEqual(P1.gateViolations({ ...cfg, cyclePhase1: null }, reads).map(v => v.check), ['phase1-cache'], 'counted with no record: refused');
   assert.deepStrictEqual(P1.gateViolations({ cycleCached: ['market-structure-analyst'], cyclePhase1: null }, { ...reads, positions: null }), [], 'not cached: nothing to check');
   assert.deepStrictEqual(P1.gateViolations(null, reads), []);
+});
+
+test('an absent trading flag or room is a fact of its own: the same key while absent, another once the server gives one', () => {
+  const absent = key({ account: { ...ACCT, canTrade: undefined, mcpTradingAllowed: undefined, remainingBeforeLimit: undefined } });
+  assert.strictEqual(absent, key({ account: { ...ACCT, canTrade: null, mcpTradingAllowed: null, remainingBeforeLimit: null } }));
+  assert.notStrictEqual(absent, key({ account: { ...ACCT, canTrade: true } }));
+  assert.notStrictEqual(absent, key({ account: { ...ACCT, remainingBeforeLimit: 2000 } }));
+});
+
+test('contracts compare on one basis (F1): a broker id nothing names and its standard name are the same position when every other field is; any other field still refuses', () => {
+  const rec = P1.record({ bar: BAR, barMinutes: 3, facts: P1.phase1Facts({ ...IN, account: { ...ACCT, positions: [{ contractId: 'MNQ:2026-12', type: 1, size: 3, averagePrice: 21000.25 }], orders: [{ id: 9, contractId: 'MNQ', type: 4, side: 1, size: 3, stopPrice: 20990 }] } }) });
+  const now = new Date(CLOSE + 30000);
+  const raw = 'BRK-77X'; // a broker's own id the translator's cache doesn't name
+  const ok = { rec, positions: [{ contractId: raw, type: 1, size: 3, averagePrice: 21000.25 }], orders: [{ id: 9, contractId: raw, type: 4, side: 1, size: 3, stopPrice: 20990 }], running: ['acct_a'], now };
+  assert.strictEqual(P1.gateRefusal(ok), null, 'the same position and order, named two ways');
+  assert.match(P1.gateRefusal({ ...ok, positions: [{ ...ok.positions[0], size: 2 }] }) || '', /positions changed/);
+  assert.match(P1.gateRefusal({ ...ok, orders: [{ ...ok.orders[0], stopPrice: 20995 }] }) || '', /working orders changed/);
+  // Both named: the contract counts (a position on another root is another position).
+  assert.match(P1.gateRefusal({ ...ok, positions: [{ ...ok.positions[0], contractId: 'MES' }] }) || '', /positions changed/);
 });

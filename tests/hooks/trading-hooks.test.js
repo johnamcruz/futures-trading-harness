@@ -4676,10 +4676,10 @@ test('MCP gateway wiring: an entry whose cycle was served phase 1 from the cache
   const P1 = require('../../scripts/lib/trading/phase1-facts');
   const BAR = '2026-10-07T14:24:00.000Z';
   const facts = positions => P1.phase1Facts({ account: { id: '7', balance: 50000, positions, orders: [], workingOrders: 0, attempts: [] }, day: '2026-10-07', trades: [], barClose: Date.parse(BAR) + 180000, barMinutes: 3, cooldown: { maxConsecutiveLosses: 2, lossCooldownMin: 30 }, windowEntries: 'allowed', lessons: [], reviewed: [] });
-  const session = async (recordPositions, { record = true } = {}) => {
+  const session = async (recordPositions, { record = true, broker = [] } = {}) => {
     const dir = tmpDir();
     const env = {
-      PATH: process.env.PATH, HOME: dir, FTH_HOME: dir, FAKE_POSITIONS: '[]', FAKE_ORDERS: '[]',
+      PATH: process.env.PATH, HOME: dir, FTH_HOME: dir, FAKE_POSITIONS: JSON.stringify(broker), FAKE_ORDERS: '[]',
       FTH_BROKERS_FILE: FAKE_BROKERS, FAKE_BROKER_API_URL: 'https://api.fake-broker.test', FAKE_BROKER_ALLOWED_ACCOUNT_IDS: '1,7', FAKE_BROKER_JOURNAL: writeJournal(dir, []),
       FTH_NO_ENTRY_WINDOWS: '', FTH_ENTRY_HOURS: '', FTH_TEST_NOW: TEST_NOW, NODE_ENV: 'test', FTH_GATE_LOG: path.join(dir, 'gate.jsonl'),
       FTH_CYCLE_CACHED: 'market-structure-analyst,trend-momentum-analyst,volume-liquidity-analyst,risk-manager', FTH_CYCLE_BARS: JSON.stringify({ MNQ: BAR }),
@@ -4701,4 +4701,9 @@ test('MCP gateway wiring: an entry whose cycle was served phase 1 from the cache
   assert.doesNotMatch(await session([]), /phase1-cache/);
   // No record: phase 1 isn't counted as cached at all, so there's nothing for the gateway to check.
   assert.doesNotMatch(await session([], { record: false }), /phase1-cache/);
+  // A position the broker names by an id the translator's cache doesn't (the runner's read named it MNQ:2026-12): the
+  // same position by every other field, not refused (F1: no lasting refusal from naming); another size still is.
+  const pos = { type: 1, size: 1, averagePrice: 21500 };
+  assert.doesNotMatch(await session([{ contractId: 'MNQ:2026-12', ...pos }], { broker: [{ contractId: 'BRK-77X', ...pos }] }), /phase1-cache/);
+  assert.match(await session([{ contractId: 'MNQ:2026-12', ...pos }], { broker: [{ contractId: 'BRK-77X', ...pos, size: 2 }] }), /\[phase1-cache\][^\n]*positions changed/);
 });

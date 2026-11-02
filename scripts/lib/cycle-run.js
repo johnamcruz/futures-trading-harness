@@ -184,7 +184,21 @@ async function runCycle(cfg, action, prompt, opts, { timeoutMs = cfg.cycleTimeou
   const intact = guard(killSwitchFile, `during a ${action} run`);
   // End of day did its job if the run succeeded; the guard's verdict is in the kill switch.
   // lookups: the cycle's skill_lookup records, for the report cache (runner-wiring.js record).
-  return cycleOutcome(res, { result, intact, action, lookups, reportedResult, resultNote });
+  // A cached phase 1 the gateway refused this cycle ([phase1-cache], its gate log): the report cache drops it, so the next
+  // cycle runs phase 1 fresh (runner-wiring.js reportCacheFor record).
+  const phase1Refused = phase1RefusedIn(res.env, startedMs, wallNow());
+  return { ...cycleOutcome(res, { result, intact, action, lookups, reportedResult, resultNote }), ...(phase1Refused ? { phase1Refused: true } : {}) };
+}
+
+/** The cycle's gate log holds a [phase1-cache] refusal (its place_order records, cycle-log.js gateOrders), from `fromMs` on. */
+function phase1RefusedIn(env, fromMs, toMs) {
+  if (!env) return false;
+  const slack = require('./tunables').runner().session.gateSlackMs;
+  try {
+    return require('./cycle-log').gateOrders(env, fromMs, toMs + slack).some(e => Array.isArray(e.violations) && e.violations.some(v => v && v.check === 'phase1-cache'));
+  } catch (_err) {
+    return false;
+  }
 }
 
 /**
@@ -247,4 +261,4 @@ function embeddedFor(cfg, root, role, added) {
 /** A role's run as the engine reads it, { text, tools }: Claude Code's stream-json (transcript.js), opencode's events (opencode.js). */
 const runResultOf = (harness, output) => (harness === 'claude' ? require('./transcript').claudeRunResult(output) : require('./opencode').runResult(output));
 
-module.exports = { runCycle, runOnce, runRole, runResultOf };
+module.exports = { runCycle, runOnce, runRole, runResultOf, phase1RefusedIn };

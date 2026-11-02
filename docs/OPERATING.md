@@ -609,11 +609,13 @@ another root or checkout wrote, serves nothing; a key that can't be read (an
 agent or skill file missing, no root) serves and records nothing for it.
 Risk-manager phase 1 states live facts, so it is reused only while every one
 of them is unchanged (`scripts/lib/trading/phase1-facts.js`): each cycle the
-runner reads them fresh (the account's balance, positions and working orders,
-each running attempt, the day's fills for the losses and the loss cooldown's
-remaining whole bars from the bar close, the bar briefing's window state, the
-journal's lessons and reviewed trades, the trading day) and hashes them
-canonically. The bar itself is not in the key (a key that changes every bar
+runner reads them fresh, with the account (the balance with the account's
+`canTrade` and `mcpTradingAllowed` from the same read, the day's
+`remainingBeforeLimit`, positions and working orders, each running attempt,
+the day's fills: their count, the losses and the loss cooldown's remaining
+whole bars from the bar close; the bar briefing's window state, the journal's
+lessons and reviewed trades, the trading day) and hashes them canonically (a
+value the server doesn't give is a fact too). The bar itself is not in the key (a key that changes every bar
 never hits): what depends on the time is, quantised to the bar (the cooldown's
 bars left, the window's state on the bar), and the gate's record must be for
 the cycle's own bar; a cached phase 1 is served only under the same key, the same role
@@ -624,7 +626,10 @@ served, the run's environment carries the runner's record of those facts
 record is whole and for the cycle's bar (a bare `FTH_CYCLE_CACHED` naming
 `risk-manager` counts for nothing), and the gateway refuses an entry
 (`[phase1-cache]`) when its own reads (positions, working orders, the running
-attempts, the trading day) differ from the record's facts.
+attempts, the trading day) differ from the record's facts; a contract one side
+can't name by its standard name is compared by its other fields. A refusal
+drops the cached phase 1, and it isn't cached again under the same facts, so
+the next cycle runs phase 1 fresh.
 
 The runner runs roles on its own only in a full trade cycle on one symbol,
 outside paper mode and cycles that only manage (on Claude Code, only in a cycle

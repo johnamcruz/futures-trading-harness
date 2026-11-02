@@ -349,3 +349,83 @@ test('an unreadable key keys nothing (F4): a role whose agent or skill file can\
   assert.deepStrictEqual(RC.recordReports({ output, briefings: { MNQ: a }, symbols: sym(a), now: new Date(a.closedAt), bodyKeys: keys, scope: null }).analysts, {});
   assert.strictEqual(RC.scopeOf(path.join(root, 'no-such-dir')), null);
 });
+
+test('a [phase1-cache] refusal drops the cached phase 1 (F1), and it is not cached again under the same facts: one refused cycle per facts key, then fresh', () => {
+  const { a, b } = pair();
+  const output = task('risk-manager', '## Risk state: account 7\nAttempt: none', [1, 2]);
+  const cache = RC.recordReports({ output, briefings: { MNQ: a }, symbols: sym(a), account: ACCT, day: DAY, now: new Date(a.closedAt), phase1: p1Of(a) });
+  const serve = (c, phase1) => RC.serveReports({ cache: c, briefings: { MNQ: b }, symbols: sym(b), account: ACCT, day: DAY, now: soon(c), phase1 }).roles;
+  assert.deepStrictEqual(serve(cache, p1Of(b)), ['risk-manager']);
+  // The cycle that served it: the gateway refused its entry.
+  const refused = RC.recordReports({ prev: cache, output: '', served: ['risk-manager'], briefings: { MNQ: b }, symbols: sym(b), account: ACCT, day: DAY, now: soon(cache), phase1: p1Of(b), phase1Refused: true });
+  assert.strictEqual(refused.phase1, null);
+  assert.strictEqual(refused.refusedKey, p1Of(b).key);
+  assert.deepStrictEqual(serve(refused, p1Of(b)), [], 'the next cycle runs phase 1 fresh');
+  // That fresh run, under the same facts: not cached again (a lasting disagreement would refuse every other cycle).
+  const again = RC.recordReports({ prev: refused, output, briefings: { MNQ: b }, symbols: sym(b), account: ACCT, day: DAY, now: soon(refused), phase1: p1Of(b) });
+  assert.strictEqual(again.phase1, null);
+  // Under new facts (the account changed): cached again, the refused key kept aside.
+  const moved = RC.recordReports({ prev: again, output, briefings: { MNQ: b }, symbols: sym(b), account: ACCT, day: DAY, now: soon(again), phase1: p1Of(b, { account: { ...ACCT, balance: 99950 } }) });
+  assert.ok(moved.phase1);
+});
+
+test('phase 1 checks that only one guard catches (F3): a verdict on an account with no attempt is never recorded; a cached denial of an active attempt is never served', () => {
+  const { a, b } = pair();
+  // (a) No attempt: phase1Holds passes anything, so only the verdict check keeps phase 2's report out.
+  const verdict = RC.recordReports({ output: task('risk-manager', 'Plan review\nVERDICT: APPROVE - size 1', [1, 2]), briefings: { MNQ: a }, symbols: sym(a), account: ACCT, day: DAY, now: new Date(a.closedAt), phase1: p1Of(a) });
+  assert.strictEqual(verdict.phase1, null);
+  // (b) A cache file holding a denial under the cycle's very key (an older runner wrote it): not served.
+  const active = { ...ACCT, attempts: [{ account: 'acct_a', status: 'active', balance: 100000, floor: 97000, profit: 0, dayPnl: 0, entryBlock: null }] };
+  const ok = RC.recordReports({ output: task('risk-manager', 'Attempt: acct_a active, cushion $3,000', [1, 2]), briefings: { MNQ: a }, symbols: sym(a), account: active, day: DAY, now: new Date(a.closedAt), phase1: p1Of(a, { account: active }) });
+  const serve = c => RC.serveReports({ cache: c, briefings: { MNQ: b }, symbols: sym(b), account: active, day: DAY, now: soon(c), phase1: p1Of(b, { account: active }) }).roles;
+  assert.deepStrictEqual(serve(ok), ['risk-manager'], 'control');
+  assert.deepStrictEqual(serve({ ...ok, phase1: { ...ok.phase1, text: 'Attempt: acct_a active\nbut no attempt is currently running' } }), []);
+});
+
+test('the runner\'s phase-1 facts (F3): a briefing that isn\'t the cycle\'s bar\'s gives no window state, so no key: phase 1 neither served nor recorded', () => {
+  const { a, b } = pair();
+  const { reportCacheFor } = require('../../scripts/lib/runner-wiring');
+  const home = tmpDir();
+  const rc = reportCacheFor(home, { harness: 'claude', cycle: 'full', timeframe: 3 });
+  const p1 = '## Risk state: account 7\nAttempt: none';
+  const inputs = { fills: [], lessons: [], reviewed: [] };
+  B.writeBriefing(home, a);
+  const s1 = rc.serve({ symbols: sym(a), account: ACCT, now: new Date(a.closedAt), ...inputs });
+  assert.ok(s1.phase1 && s1.phase1.key, 'the cycle\'s own briefing: a key');
+  rc.record({ symbols: sym(a), account: ACCT, now: new Date(a.closedAt), output: task('risk-manager', p1, [1, 2]), served: [], phase1: s1.phase1 });
+  // The next cycle's bar is b, but the briefing on disk is still a's (not rebuilt): no key.
+  const stale = rc.serve({ symbols: sym(b), account: ACCT, now: new Date(b.closedAt), ...inputs });
+  assert.strictEqual(stale.phase1, null);
+  assert.ok(!stale.roles.includes('risk-manager'));
+  B.writeBriefing(home, b);
+  assert.ok(rc.serve({ symbols: sym(b), account: ACCT, now: new Date(b.closedAt), ...inputs }).roles.includes('risk-manager'), 'its own briefing: served');
+});
+
+test('the cycle reports a [phase1-cache] refusal from its gate log (cycle-run.js phase1RefusedIn), and the runner\'s wiring drops the phase 1 on it', () => {
+  const { phase1RefusedIn } = require('../../scripts/lib/cycle-run');
+  const { logDecision } = require('../../scripts/lib/trading/check-order');
+  const home = tmpDir();
+  const env = { FTH_HOME: home, FTH_GATE_LOG: path.join(home, 'gate.jsonl'), FTH_CYCLE_TRANSCRIPT: path.join(home, 'logs', 'cycle-transcript-1.jsonl') };
+  const t0 = Date.now();
+  assert.strictEqual(phase1RefusedIn(env, t0, Date.now()), false, 'no log');
+  logDecision({ source: 'gateway', tool: 'place_order', decision: 'blocked', violations: [{ check: 'roles-ran', message: 'x' }], contractId: 'MNQ', rationale: 'setup:x long' }, env);
+  assert.strictEqual(phase1RefusedIn(env, t0, Date.now()), false, 'another refusal');
+  logDecision({ source: 'gateway', tool: 'place_order', decision: 'blocked', violations: [{ check: 'phase1-cache', message: 'stale' }], contractId: 'MNQ', rationale: 'setup:x long' }, env);
+  assert.strictEqual(phase1RefusedIn(env, t0, Date.now()), true);
+  assert.strictEqual(phase1RefusedIn({ ...env, FTH_CYCLE_TRANSCRIPT: path.join(home, 'logs', 'other.jsonl') }, t0, Date.now()), false, 'another cycle\'s');
+  assert.strictEqual(phase1RefusedIn(env, Date.now() + 60000, Date.now() + 120000), false, 'before the cycle');
+  assert.strictEqual(phase1RefusedIn(null, t0, Date.now()), false);
+  // The wiring: record with it drops the served phase 1.
+  const { a, b } = pair();
+  const { reportCacheFor } = require('../../scripts/lib/runner-wiring');
+  const rc = reportCacheFor(home, { harness: 'claude', cycle: 'full', timeframe: 3 });
+  const inputs = { fills: [], lessons: [], reviewed: [] };
+  B.writeBriefing(home, a);
+  const s1 = rc.serve({ symbols: sym(a), account: ACCT, now: new Date(a.closedAt), ...inputs });
+  rc.record({ symbols: sym(a), account: ACCT, now: new Date(a.closedAt), output: task('risk-manager', '## Risk state\nAttempt: none', [1, 2]), served: [], phase1: s1.phase1 });
+  B.writeBriefing(home, b);
+  const s2 = rc.serve({ symbols: sym(b), account: ACCT, now: new Date(b.closedAt), ...inputs });
+  assert.ok(s2.roles.includes('risk-manager'));
+  rc.record({ symbols: sym(b), account: ACCT, now: new Date(b.closedAt), output: '', served: s2.roles, phase1: s2.phase1, phase1Refused: true });
+  assert.ok(!rc.serve({ symbols: sym(b), account: ACCT, now: new Date(b.closedAt), ...inputs }).roles.includes('risk-manager'));
+});

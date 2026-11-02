@@ -599,3 +599,16 @@ test('closedBars: a limit over one get_bars call (the multi-timeframe window on 
   assert.strictEqual((await createAdapter({ mcp }).closedBars('X', { minutes: 1, limit: 500, now })).length, 500);
   assert.strictEqual(calls.length, 1);
 });
+
+test('the broker client: accountStatus reads the balance and the trading flags from list_accounts (absent flags null); accountToday the snapshot\'s remainingBeforeLimit', async () => {
+  const stub = result => ({ call: async name => result(name), close: () => {} });
+  const accounts = [{ id: 7, balance: 50000, canTrade: true, mcpTradingAllowed: false }, { id: 8, balance: 1000 }];
+  const c = createAdapter({ mcp: stub(name => (name === 'list_accounts' ? accounts : { today: { remainingBeforeLimit: 1500 } })) });
+  assert.deepStrictEqual(await c.accountStatus(7), { balance: 50000, canTrade: true, mcpTradingAllowed: false });
+  assert.deepStrictEqual(await c.accountStatus(8), { balance: 1000, canTrade: null, mcpTradingAllowed: null });
+  await assert.rejects(() => c.accountStatus(9), /account 9 not found/);
+  assert.deepStrictEqual(await c.accountToday(7), { remainingBeforeLimit: 1500 });
+  assert.deepStrictEqual(await createAdapter({ mcp: stub(() => ({ today: { remainingBeforeLimit: null } })) }).accountToday(7), { remainingBeforeLimit: null });
+  assert.deepStrictEqual(await createAdapter({ mcp: stub(() => ({ account: {} })) }).accountToday(7), { remainingBeforeLimit: null });
+  await assert.rejects(() => createAdapter({ mcp: stub(() => null) }).accountToday(7), /get_account_snapshot/);
+});

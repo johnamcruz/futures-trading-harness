@@ -615,10 +615,11 @@ function reportCacheFor(home, cfg, frames = [], env = process.env, root = path.j
     // the cycle's facts key (`laneBars` as serve takes them).
     // `fresh`: the desk's reports this cycle (deskFor), recorded as the roles' own calls are.
     // `phase1`: serve's (the same cycle's facts and key).
-    record: ({ symbols, account, now, output, served, fresh = [], runs = [], lookups = [], laneBars = {}, phase1 = null }) => {
+    // `phase1Refused`: the gateway refused this cycle's cached phase 1 (cycle-run.js phase1RefusedIn).
+    record: ({ symbols, account, now, output, served, fresh = [], runs = [], lookups = [], laneBars = {}, phase1 = null, phase1Refused = false }) => {
       try {
         const b = briefings(symbols);
-        return RC.writeCache(home, RC.recordReports({ prev: RC.readCache(home), output, served, fresh, runs, briefings: b, symbols, account, day: tradingDayKey(now), now, ...own(symbols), lookups, lookupsKey: keyOf(b, symbols, now, laneBars), bodyKeys: bodyKeys(), scope, closeAt: closeOf(laneBars), phase1 }));
+        return RC.writeCache(home, RC.recordReports({ prev: RC.readCache(home), output, served, fresh, runs, briefings: b, symbols, account, day: tradingDayKey(now), now, ...own(symbols), lookups, lookupsKey: keyOf(b, symbols, now, laneBars), bodyKeys: bodyKeys(), scope, closeAt: closeOf(laneBars), phase1, phase1Refused }));
       } catch (err) {
         RC.removeCache(home); // a cache that can't be written is none: every role runs next cycle
         throw err;

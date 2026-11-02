@@ -30,7 +30,7 @@ Recorded after the cycle at bar 1245 (keys):
   },
   "scope": "root-1",
   "phase1": {
-    "factsKey": "4994034b31cbfac57827d32ba2c43558520470dff241c31edd78b0fa0ea17a58",
+    "factsKey": "40bf5a8200f78b5cf306466d8fb32973ea6a786500e3d21555c285208485d0be",
     "body": "body-risk-manager"
   }
 }

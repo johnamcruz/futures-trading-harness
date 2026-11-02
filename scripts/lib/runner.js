@@ -1501,19 +1501,33 @@ function createRunner(deps) {
    * or slow read (over accountReadMs) is reported in the prompt, never hidden,
    * and never holds the run up.
    */
-  async function accountSnapshot(now) {
+  async function accountSnapshot(now, { phase1 = false } = {}) {
     const hasState = typeof client.accountState === 'function';
     const hasBalance = typeof client.accountBalance === 'function';
-    if (!cfg.account || (!hasState && !hasBalance)) return null;
+    // The balance with the account's trading flags from the same read (accountStatus), else the balance alone; the day's
+    // room (accountToday) and the day's fills (phase 1's live facts, trading/phase1-facts.js) read at once with them.
+    const hasStatus = typeof client.accountStatus === 'function';
+    const hasToday = typeof client.accountToday === 'function';
+    if (!cfg.account || (!hasState && !hasBalance && !hasStatus)) return null;
     let timer;
     const deadline = new Promise((_, reject) => {
       timer = setTimeout(() => reject(new Error(`no answer within ${accountReadMs / 1000} s`)), accountReadMs);
     });
+    // Phase 1's reads (`phase1`: a trade cycle's), at once with the account's and apart from them: one that fails or
+    // outlasts the account read gives its error, never the snapshot's (phase 1 then has no key: it runs).
+    const soft = f => Promise.race([Promise.resolve().then(f).then(v => ({ v }), e => ({ e: (e && e.message) || String(e) })),
+      new Promise(resolve => setTimeout(() => resolve({ e: `no answer within ${accountReadMs / 1000} s` }), accountReadMs).unref())]);
+    const extra = phase1 ? Promise.all([
+      hasToday ? soft(() => client.accountToday(cfg.account)) : { v: null },
+      soft(() => historyFills(tradingDayStart(now).getTime(), null).then(f => { if (!Array.isArray(f)) throw new Error('the fills could not be read'); return f; })),
+    ]) : null;
     try {
-      const [state, balance] = await Promise.race([Promise.all([
+      const [state, status] = await Promise.race([Promise.all([
         hasState ? client.accountState(cfg.account) : null,
-        hasBalance ? client.accountBalance(cfg.account) : NaN,
+        hasStatus ? client.accountStatus(cfg.account) : hasBalance ? client.accountBalance(cfg.account).then(b => ({ balance: b })) : { balance: NaN },
       ]), deadline]);
+      const [today, fills] = extra ? await extra : [{ v: null }, { e: 'not read' }];
+      const balance = status.balance;
       let attempts = [];
       if (prop && typeof prop.summaries === 'function') {
         try {
@@ -1531,6 +1545,10 @@ function createRunner(deps) {
         // Each working entry's bracket from the runner's record (attaches on the fill): a fact, not a model claim.
         entryLines: state ? workingEntryLines(state.orders, entryOrders(), now) : [],
         attempts,
+        // Phase 1's further live facts: the trading flags (null when the server gives none), the day's room, the fills.
+        canTrade: status.canTrade ?? null, mcpTradingAllowed: status.mcpTradingAllowed ?? null,
+        ...(today.e ? { todayError: today.e } : { remainingBeforeLimit: today.v ? today.v.remainingBeforeLimit ?? null : null }),
+        dayFills: fills.e ? null : fills.v,
       };
     } catch (err) {
       log(`account state for the prompt unavailable (${err.message})`, 'error');
@@ -1941,7 +1959,7 @@ function createRunner(deps) {
         let timeoutMs = limitFor(again.action, cycleNow, budgetMin);
         let acct = null;
         if (run.length && timeoutMs >= 30000) {
-          acct = await accountSnapshot(cycleNow);
+          acct = await accountSnapshot(cycleNow, { phase1: Boolean(reportCache) && !manageOnly && !cfg.paper });
           // The time limit counts from after the account read.
           cycleNow = clock.now();
           timeoutMs = limitFor(again.action, cycleNow, budgetMin);
@@ -2036,10 +2054,9 @@ function createRunner(deps) {
             return current ? f.clock.lastBarT : x.bar.t;
           };
           const cacheSymbols = ordered.filter((x, i) => !items[i].repeat).map(x => ({ symbol: x.symbol, bar: briefingBar(x), contractId: x.bar.contractId || null }));
-          // Phase 1's live inputs read fresh (the day's fills; the journal's lessons and reviewed trades: none when it wasn't
-          // read), for the smart phase-1 cache (runner-wiring.js reportCacheFor, trading/phase1-facts.js).
-          const p1Fills = reportCache && !manageOnly && !cfg.paper ? await historyFills(tradingDayStart(cycleNow).getTime(), null) : null;
-          const fromCache = reportCache && !manageOnly && !cfg.paper ? attempt('the report cache: every role runs this cycle', () => reportCache.serve({ symbols: cacheSymbols, account: acct, now: cycleNow, laneBars: multi ? laneBarsOf(run) : {}, fills: p1Fills, lessons: entries ? lessonLines : null, reviewed: entries ? tradeLines : null }), null) : null;
+          // Phase 1's live inputs read fresh (the day's fills, read with the account; the journal's lessons and reviewed
+          // trades: none when it wasn't read), for the smart phase-1 cache (runner-wiring.js reportCacheFor, phase1-facts.js).
+          const fromCache = reportCache && !manageOnly && !cfg.paper ? attempt('the report cache: every role runs this cycle', () => reportCache.serve({ symbols: cacheSymbols, account: acct, now: cycleNow, laneBars: multi ? laneBarsOf(run) : {}, fills: acct ? acct.dayFills : null, lessons: entries ? lessonLines : null, reviewed: entries ? tradeLines : null }), null) : null;
           // Several lanes: an analyst's report is served only until its parts' time (`until`, the next 15m close): a
           // first lane slower than that, or a bar of it that didn't arrive, never hands a report past it.
           const live = r => !r.until || Date.parse(r.until) > cycleNow.getTime();
@@ -2260,7 +2277,7 @@ function createRunner(deps) {
           }
           // The reports this cycle's roles returned, for the next cycles while what they rest on holds.
           // Only a trade cycle's roles (a manage-only or paper cycle's risk-manager isn't phase 1), from the stdout the gate reads.
-          if (reportCache && r && !manageOnly && !cfg.paper) attempt('recording the report cache', () => reportCache.record({ symbols: cacheSymbols, account: acct, now: cycleNow, output: r.transcript || '', served: cached ? cached.roles : [], fresh: deskReports, runs: ranRuns, lookups: Array.isArray(r.lookups) ? r.lookups : [], laneBars: multi ? laneBarsOf(run) : {}, phase1: fromCache ? fromCache.phase1 : null }), null);
+          if (reportCache && r && !manageOnly && !cfg.paper) attempt('recording the report cache', () => reportCache.record({ symbols: cacheSymbols, account: acct, now: cycleNow, output: r.transcript || '', served: cached ? cached.roles : [], fresh: deskReports, runs: ranRuns, lookups: Array.isArray(r.lookups) ? r.lookups : [], laneBars: multi ? laneBarsOf(run) : {}, phase1: fromCache ? fromCache.phase1 : null, phase1Refused: Boolean(r.phase1Refused) }), null);
           state = recordRun(state, 'trade', cycleNow);
           // The model's own recent decisions, carried into the next prompts (and across restarts with the state).
           // Several lanes: each entry tagged with its cycle's lanes, and kept to 10 per lane (not 10 in all).

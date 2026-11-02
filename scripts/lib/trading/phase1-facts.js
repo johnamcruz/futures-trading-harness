@@ -8,10 +8,11 @@
  * against its own reads (config.js, mcp-gateway.js), so the two can't drift. Any input missing or unreadable: no facts,
  * no key (nothing served, nothing recorded).
  *
- *   The facts: the trading day; the account (id, balance; each position's contract root, side, size and average price;
- *   each working order's id, root, type, side, size and prices); each running attempt as the runner gives it (status,
+ *   The facts: the trading day; the account (id, balance, its trading flags canTrade and mcpTradingAllowed and the day's
+ *   remainingBeforeLimit as the server gives them; each position's contract, side, size and average price; each working
+ *   order's id, contract, type, side, size and prices); each running attempt as the runner gives it (status,
  *   balance, floor, cushion, profit, day P&L, entry block, sessions, budgets and its facts: room, trades, losses,
- *   streak); the loss state from the day's fills (losing closes, streak) and the loss cooldown's remaining time in
+ *   streak); the loss state from the day's fills (their count, losing closes, streak) and the loss cooldown's remaining time in
  *   whole bars from the cycle's bar close (0: none), so a cooldown that ends between two bars is another key; the
  *   window's entry state on the cycle's bar (the briefing's windowEntries: a stand-down by the time); the journal's
  *   lessons and reviewed trades lines (phase 1's lessons).
@@ -32,7 +33,7 @@
  */
 
 const crypto = require('crypto');
-const { contractRoot } = require('./journal');
+const { resolveContract } = require('./journal');
 
 const ENV = 'FTH_CYCLE_PHASE1';
 const isObj = x => Boolean(x) && typeof x === 'object' && !Array.isArray(x);
@@ -45,13 +46,25 @@ function canonical(v) {
   return JSON.stringify(v === undefined ? null : v);
 }
 const sha = text => crypto.createHash('sha256').update(text).digest('hex');
-const root = id => (typeof id === 'string' && id ? contractRoot(id) : null);
+// A contract by the translator's standard name (its root), or `raw:<id>` when nothing names it (journal.js resolveContract):
+// two reads that name one contract two ways compare by the rest of their fields (sameList).
+const root = id => { if (typeof id !== 'string' || !id) return null; const r = resolveContract(id); return r.named ? r.root : `raw:${id}`; };
+const unnamed = c => typeof c !== 'string' || c.startsWith('raw:');
+/** Two lists of [contract, ...fields] the same: each field equal, the contract too unless either side's is unnamed. */
+function sameList(a, b) {
+  if (!Array.isArray(a) || !Array.isArray(b) || a.length !== b.length) return false;
+  const rest = x => canonical(x.slice(1));
+  const by = (x, y) => (rest(x) < rest(y) ? -1 : rest(x) > rest(y) ? 1 : 0);
+  const sa = [...a].sort(by);
+  const sb = [...b].sort(by);
+  return sa.every((x, i) => rest(x) === rest(sb[i]) && (x[0] === sb[i][0] || unnamed(x[0]) || unnamed(sb[i][0])));
+}
 
 /** Positions and working orders as the facts hold them (sorted; the contract by its root, as both reads name it). */
 function gateParts({ positions, orders }) {
   if (!Array.isArray(positions) || !Array.isArray(orders)) return null;
   const pos = positions.filter(p => isObj(p) && num(p.size)).map(p => [root(p.contractId), num(p.type), num(p.size), num(p.averagePrice)]);
-  const ord = orders.filter(isObj).map(o => [String(o.id ?? ''), root(o.contractId), num(o.type), num(o.side), num(o.size), num(o.limitPrice), num(o.stopPrice)]);
+  const ord = orders.filter(isObj).map(o => [root(o.contractId), String(o.id ?? ''), num(o.type), num(o.side), num(o.size), num(o.limitPrice), num(o.stopPrice)]);
   const by = (a, b) => (canonical(a) < canonical(b) ? -1 : canonical(a) > canonical(b) ? 1 : 0);
   return { positions: pos.sort(by), orders: ord.sort(by) };
 }
@@ -65,15 +78,17 @@ function cooldownBars({ trades, carried = null, barClose, barMinutes, cooldown }
   if (!Array.isArray(trades) || !Number.isFinite(barClose) || !(barMinutes > 0) || !isObj(cooldown)) return null;
   const { fillLossState } = require('./account-gate');
   const s = fillLossState(trades, carried);
-  if (!(s.streak >= cooldown.maxConsecutiveLosses) || s.lastLossTs === null) return { bars: 0, streak: s.streak, losses: s.losses };
+  // `fills`: the day's fills, so a round trip at zero P&L (no loss, no balance change) is another key too.
+  const fills = trades.length;
+  if (!(s.streak >= cooldown.maxConsecutiveLosses) || s.lastLossTs === null) return { bars: 0, streak: s.streak, losses: s.losses, fills };
   const left = s.lastLossTs + cooldown.lossCooldownMin * 60000 - barClose;
-  return { bars: left > 0 ? Math.ceil(left / (barMinutes * 60000)) : 0, streak: s.streak, losses: s.losses };
+  return { bars: left > 0 ? Math.ceil(left / (barMinutes * 60000)) : 0, streak: s.streak, losses: s.losses, fills };
 }
 
 const ATTEMPT_KEYS = ['account', 'status', 'balance', 'floor', 'cushion', 'profit', 'dayPnl', 'entryBlock', 'sessionsDone', 'sessionsLeft', 'budgets', 'facts'];
 
 function phase1Facts({ account, day, trades, carried = null, barClose, barMinutes, cooldown, windowEntries, lessons, reviewed }) {
-  if (!isObj(account) || account.error || num(account.balance) === null || typeof day !== 'string' || !day) return null;
+  if (!isObj(account) || account.error || account.todayError || num(account.balance) === null || typeof day !== 'string' || !day) return null;
   const parts = gateParts({ positions: account.positions, orders: account.orders });
   if (!parts) return null;
   const loss = cooldownBars({ trades, carried, barClose, barMinutes, cooldown });
@@ -82,7 +97,13 @@ function phase1Facts({ account, day, trades, carried = null, barClose, barMinute
   if (!Array.isArray(lessons) || !Array.isArray(reviewed)) return null;
   const attempts = (Array.isArray(account.attempts) ? account.attempts : []).filter(isObj).map(a => Object.fromEntries(ATTEMPT_KEYS.map(k => [k, a[k] === undefined ? null : a[k]])));
   return {
-    day, account: { id: account.id === undefined ? null : String(account.id), balance: num(account.balance), workingOrders: num(account.workingOrders) },
+    day,
+    // The trading flags and the day's room, as the server gives them (an absent one, null, is a fact too).
+    account: {
+      id: account.id === undefined ? null : String(account.id), balance: num(account.balance), workingOrders: num(account.workingOrders),
+      canTrade: typeof account.canTrade === 'boolean' ? account.canTrade : null, mcpTradingAllowed: typeof account.mcpTradingAllowed === 'boolean' ? account.mcpTradingAllowed : null,
+      remainingBeforeLimit: num(account.remainingBeforeLimit),
+    },
     ...parts, attempts, loss, windowEntries, lessons: lessons.map(String), reviewed: reviewed.map(String),
   };
 }
@@ -118,8 +139,8 @@ function gateRefusal({ rec, positions, orders, running = [], now }) {
   if (f.day !== tradingDayKey(now)) return `its facts are of trading day ${f.day}, not ${tradingDayKey(now)}`;
   const parts = gateParts({ positions, orders });
   if (!parts) return 'the positions or working orders could not be read';
-  if (canonical(parts.positions) !== canonical(f.positions)) return 'the positions changed since it was made';
-  if (canonical(parts.orders) !== canonical(f.orders)) return 'the working orders changed since it was made';
+  if (!sameList(parts.positions, f.positions)) return 'the positions changed since it was made';
+  if (!sameList(parts.orders, f.orders)) return 'the working orders changed since it was made';
   const named = new Set((Array.isArray(f.attempts) ? f.attempts : []).map(a => a && a.account));
   const extra = (Array.isArray(running) ? running : []).filter(a => !named.has(a));
   if (extra.length) return `an attempt runs that its facts don't hold (${extra.join(', ')})`;
