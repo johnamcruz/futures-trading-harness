@@ -303,6 +303,35 @@ test('grading: the prepare-ahead questions grade the LEADING verdict: a held-out
   }
 });
 
+test('grading: the standing-scenario questions (q45-q48) grade the LEADING verdict: a held-out set (written before the regexes)', () => {
+  // [answer, shouldPass]. q45/q46: any closing candle meets a standing TAKE, so confirm through compose_check (an invented
+  // pattern, a wait for a confirming close, the plan's own wick condition are the traps); q47/q48: compose_check refused,
+  // so pass (the plan's TAKE, its limit, a wider stop are the traps).
+  const cases = {
+    q45: [['Confirm: compose_check with the at-close reads.', true], ['Confirm; a standing setup needs no candle pattern.', true], ['Compose it now with the at-close reads.', true],
+      ['Take it: any closing candle meets a standing TAKE.', true], ['Yes, confirm via compose_check.', true], ['Confirm, unless compose_check refuses.', true],
+      ['Go long: compose_check on the at-close reads.', true], ['Confirm; the doji is no reason to pass.', true], ['Confirm — PASS is only a compose_check refusal.', true],
+      ['Pass: no lower wick.', false], ['Pass, the doji shows no rejection.', false], ['Wait for a confirming close.', false], ['No: the candle is indecisive.', false],
+      ['Skip it; wait for a bullish close.', false], ['Do not confirm: no wick.', false], ['Hold off until a 3m close above the high.', false], ['Not yet: wait for the next bar.', false],
+      ['Confirm only after the next candle closes green.', false], ['Confirm nothing: the doji is weak.', false]],
+    q46: [['Confirm: a standing scenario has no candle condition; compose_check with the at-close reads.', true], ['Confirm via compose_check; the plan\'s wick condition was invented.', true],
+      ['Compose with the at-close reads.', true], ['Confirm; the missing wick is no reason to pass.', true], ['Take it: any close meets its TAKE.', true], ['Confirm, not pass: the setup candle already closed.', true],
+      ['Pass: TAKE not met, no lower wick.', false], ['Pass.', false], ['Pass; the plan said a lower wick.', false], ['No wick, so pass.', false], ['Do not confirm without the wick.', false],
+      ['Wait for a 3m candle with a lower wick.', false], ['Skip: the plan\'s condition failed.', false], ['Confirm only if a wick prints.', false], ['Not met: pass.', false]],
+    q47: [['Pass: compose_check refused it.', true], ['Pass.', true], ['No trade: the refusal is the pass.', true], ['Skip: the stop is not on the losing side.', true], ['Pass; never enter past the stop.', true],
+      ['Do not confirm; compose_check refused.', true], ['Stand down: compose refused.', true],
+      ['Confirm: a standing setup meets its TAKE with any close.', false], ['Confirm.', false], ['Take it anyway: the setup stands.', false], ['Confirm; place it at the plan\'s limit.', false],
+      ['Yes, confirm.', false], ['Go long anyway.', false], ['Not a pass: confirm.', false]],
+    q48: [['Pass: compose_check refused (R:R).', true], ['Pass; the plan\'s TAKE is no reason to take.', true], ['No trade: the entry ran away.', true], ['Skip it: refused.', true],
+      ['Do not confirm: R:R under the minimum.', true], ['Pass, never late.', true], ['Pass. The plan said take, but the refusal is the pass.', true],
+      ['Confirm: the plan said TAKE.', false], ['Take it at the plan\'s limit.', false], ['Confirm at the planned entry.', false], ['Yes, take it as planned.', false], ['Chase it: the setup stands.', false],
+      ['Confirm; the R:R is close enough.', false], ['Not a pass: take it at the plan\'s price.', false], ['Place a limit at the plan\'s level and take it.', false]],
+  };
+  for (const [id, list] of Object.entries(cases)) {
+    for (const [a, want] of list) assert.strictEqual(pass(id, `ANSWER: ${a}`), want, `${id} ${want ? 'right' : 'wrong'}: ${a}`);
+  }
+});
+
 test('grading: every forbidden pattern of q41-q44 and b8 does work (its removal lets a wrong answer through)', () => {
   // [id, forbidden index, a wrong answer that leads with a right-looking verdict, so only that pattern fails it]
   const work = [
@@ -321,15 +350,41 @@ test('grading: every forbidden pattern of q41-q44 and b8 does work (its removal 
   }
 });
 
+test('grading: every forbidden pattern of q45-q48 does work (its removal lets a wrong answer through), and negated or right-looking variants grade right', () => {
+  // [id, forbidden index, a wrong answer that leads with a right-looking verdict, so only that pattern fails it]
+  const work = [
+    ['q45', 0, 'Confirm, but wait for the next close first.'], ['q45', 1, 'Confirm only after the next candle closes green.'], ['q45', 2, 'Yes, pass.'],
+    ['q46', 0, 'Confirm, but wait for a wick first.'], ['q46', 1, 'Confirm only if a wick prints.'], ['q46', 2, 'Yes, pass: no wick.'],
+    ['q47', 0, 'Not a pass: confirm.'], ['q47', 1, 'No, take it.'],
+    ['q48', 0, 'Not a pass: confirm at the planned entry.'], ['q48', 1, 'Not a pass: take it at the plan\'s price.'], ['q48', 2, 'No, chase it.'],
+  ];
+  for (const id of ['q45', 'q46', 'q47', 'q48']) assert.strictEqual(q(id).forbidden.length, work.filter(w => w[0] === id).length, `${id}: a case for each forbidden pattern`);
+  for (const [id, i, answer] of work) {
+    assert.strictEqual(pass(id, `ANSWER: ${answer}`), false, `${id} fails: ${answer}`);
+    const without = { ...q(id), forbidden: q(id).forbidden.filter((_, j) => j !== i) };
+    assert.strictEqual(Q.gradeAnswer(QUIZ, without, `ANSWER: ${answer}`).pass, true, `${id} forbidden[${i}] matters: ${answer}`);
+  }
+  // A forbidden word negated, or a compose-bound condition, is no fail; a confirm of nothing is no confirm.
+  for (const [id, a, want] of [
+    ['q45', 'Confirm; do not wait for a confirming close.', true], ['q45', 'Confirm only if compose_check passes.', true], ['q45', 'Confirming nothing: pass.', false],
+    ['q46', 'Confirm: no need to wait for a wick.', true], ['q46', 'Confirm nothing.', false],
+    ['q47', 'Pass; do not confirm.', true], ['q47', 'Pass: never take it past the stop.', true], ['q47', 'Confirm nothing: pass.', true],
+    ['q48', 'Pass; never chase.', true], ['q48', 'Pass: don\'t take it at the plan\'s limit.', true], ['q48', 'Confirm nothing: refused.', true],
+    // A lead that is no pass (and names no confirm): the required verdict alone fails it (mutation check: required made '.').
+    ['q47', 'Wait for the next close.', false], ['q47', 'Yes.', false], ['q47', 'Buy at the plan\'s limit.', false], ['q47', 'Keep the plan\'s limit working.', false],
+    ['q48', 'Wait for a pullback to the plan\'s limit.', false], ['q48', 'Yes.', false], ['q48', 'Rest the limit at the planned entry.', false],
+  ]) assert.strictEqual(pass(id, `ANSWER: ${a}`), want, `${id} ${want ? 'right' : 'wrong'}: ${a}`);
+});
+
 test('summary: correct on all K, answered both ways, the totals, the bar; compare names each change', () => {
   const rows = [];
   for (const x of QUIZ.questions) for (let k = 1; k <= 5; k += 1) rows.push({ id: x.id, k, pass: true });
   for (const x of QUIZ.partB) for (let k = 1; k <= 5; k += 1) rows.push({ id: x.id, k, pass: true });
   const all = Q.summarize(QUIZ, rows, 5);
-  assert.deepStrictEqual([all.partA.allCorrect, all.partA.bothWays, all.partB.allCorrect, all.meetsBar], [42, 0, 8, true]);
+  assert.deepStrictEqual([all.partA.allCorrect, all.partA.bothWays, all.partB.allCorrect, all.meetsBar], [46, 0, 8, true]);
   const one = rows.map(r => (r.id === 'q6' && r.k === 2 ? { ...r, pass: false } : r));
   const s = Q.summarize(QUIZ, one, 5);
-  assert.deepStrictEqual([s.partA.allCorrect, s.partA.bothWays, s.partA.total, s.meetsBar], [41, 1, 209, false]);
+  assert.deepStrictEqual([s.partA.allCorrect, s.partA.bothWays, s.partA.total, s.meetsBar], [45, 1, 229, false]);
   // Too few runs is never correct on all K.
   assert.strictEqual(Q.summarize(QUIZ, rows.filter(r => r.k <= 3), 5).partA.allCorrect, 0);
   const d = Q.compare(all, s).find(x => x.id === 'q6');

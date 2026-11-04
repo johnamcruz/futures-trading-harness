@@ -23,7 +23,7 @@
   "unsure": "it depends|unsure|not sure|unclear|ambiguous|can't tell|cannot tell|depends on",
   "passBar": {
     "partA": {
-      "allCorrect": 42,
+      "allCorrect": 46,
       "bothWays": 0
     },
     "partB": {
@@ -798,6 +798,81 @@
         "\\bfrom the plan\\b",
         "\\bnoisy\\b|\\b(?:at-close|at the close|facts|close)\\b(?:\\s+\\w+){0,2}\\s+(?:lags?|stale|late)\\b",
         "\\bwhichever\\b"
+      ],
+      "lookup": [
+        "prepare-ahead"
+      ]
+    },
+    {
+      "id": "q45",
+      "layer": "entry",
+      "prompt": "lookup",
+      "text": "Prepare ahead is on. Your plan said: scenario 2: P3 \"15m rejected prior poc up\" (a standing scenario: its line fired \"whatever its range, volume and close\") -> TAKE if the Standard plan holds at the close | PASS if compose_check refuses it; reads: \"15m rejected prior poc up\". The closing 3m is a small doji with no lower wick, inside the prior 3m candle's range. Confirm or pass?",
+      "rule": "a standing scenario's candle has closed: any closing candle meets its TAKE; confirm through compose_check, never an invented pattern",
+      "anchor": "any closing candle meets its TAKE",
+      "required": [
+        "^[\\W_]*(confirm\\w*\\b(?!\\s+nothing)|take\\b(?!\\s+(not|no)\\b)|compos\\w*|enter|go long|long|yes)"
+      ],
+      "forbidden": [
+        "\\bwait\\w*|\\bhold off\\b",
+        "\\bonly (after|if|when|once)\\b(?![^.;]*compos)",
+        "^[\\W_]*(?:yes|yep)\\b[\\W_]*(?:pass|skip|no trade|wait)"
+      ],
+      "lookup": [
+        "prepare-ahead"
+      ]
+    },
+    {
+      "id": "q46",
+      "layer": "entry",
+      "prompt": "lookup",
+      "text": "Prepare ahead is on. Your plan said: scenario 2: P3 \"15m rejected prior poc up\" (a standing scenario: its line fired \"whatever its range, volume and close\") -> TAKE if the 3m closes with a lower wick | PASS if not; reads: \"15m rejected prior poc up\". The closing 3m has no lower wick; the 15m rejection still stands. Confirm or pass?",
+      "rule": "a standing scenario's TAKE is met by any close, whatever pattern the plan wrote: confirm through compose_check, not a pass on the plan's invented condition",
+      "anchor": "whatever pattern the plan wrote",
+      "required": [
+        "^[\\W_]*(confirm\\w*\\b(?!\\s+nothing)|take\\b(?!\\s+(not|no)\\b)|compos\\w*|enter|go long|long|yes)"
+      ],
+      "forbidden": [
+        "\\bwait\\w*|\\bhold off\\b",
+        "\\bonly (after|if|when|once)\\b(?![^.;]*compos)",
+        "^[\\W_]*(?:yes|yep)\\b[\\W_]*(?:pass|skip|no trade|wait)"
+      ],
+      "lookup": [
+        "prepare-ahead"
+      ]
+    },
+    {
+      "id": "q47",
+      "layer": "entry",
+      "prompt": "lookup",
+      "text": "Prepare ahead is on. Your plan said: scenario 2: P3 \"15m rejected prior poc up\" (a standing scenario: its line fired \"whatever its range, volume and close\") -> TAKE if the Standard plan holds at the close | PASS if compose_check refuses it; reads: \"15m rejected prior poc up\". The closing 3m closed below the 15m candle's low, and compose_check at the close refused it: the stop is not on the losing side of the entry. Confirm or pass?",
+      "rule": "a standing scenario: compose_check refusing it is the pass",
+      "anchor": "compose_check refusing it is the pass.",
+      "required": [
+        "^[\\W_]*(pass\\w*|skip\\w*|no\\b|nope|not\\b|no trade|confirm nothing|stand down|decline|do not|don'?t)"
+      ],
+      "forbidden": [
+        "\\b(?:confirm(?:ed|s)?|go long|enter long)\\b(?!\\s+nothing)",
+        "\\btake (it|the)\\b"
+      ],
+      "lookup": [
+        "prepare-ahead"
+      ]
+    },
+    {
+      "id": "q48",
+      "layer": "entry",
+      "prompt": "lookup",
+      "text": "Prepare ahead is on. Your plan said: scenario 2: P3 \"15m rejected prior poc up\" (a standing scenario: its line fired \"whatever its range, volume and close\") -> TAKE if the Standard plan holds at the close | PASS if compose_check refuses it; reads: \"15m rejected prior poc up\". You were sure of this plan and wrote that you would take it. By the close price ran 30 points up, away from the plan's limit, and compose_check at the close refused it: R:R under the minimum. Confirm or pass?",
+      "rule": "a standing scenario whose entry ran away: compose_check refuses, so pass; the plan's TAKE and its limit are no reason to take",
+      "anchor": "PASS if compose_check refuses it.",
+      "required": [
+        "^[\\W_]*(pass\\w*|skip\\w*|no\\b|nope|not\\b|no trade|confirm nothing|stand down|decline|do not|don'?t)"
+      ],
+      "forbidden": [
+        "\\b(?:confirm(?:ed|s)?|go long|enter long)\\b(?!\\s+nothing)",
+        "\\btake (it|the)\\b",
+        "\\bchase\\w*"
       ],
       "lookup": [
         "prepare-ahead"

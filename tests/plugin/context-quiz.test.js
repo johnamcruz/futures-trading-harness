@@ -68,6 +68,13 @@ test('context quiz: the prepare-ahead questions (q40-q44, b8) are asked against 
   for (const [id, re] of [['q40', /Closed candle meets the scenario's TAKE conditions: confirm\./], ['q41', /Closed candle does not meet them: pass, with why in the CYCLE RESULT\./], ['q42', /A plan that said take is no reason to take\./], ['q43', /a plan that said pass is no reason to pass\./], ['q44', /with the reads as the at-close facts give them \(not as the plan wrote them\)/]]) {
     assert.deepStrictEqual(Q.anchorsMissing(QUIZ, cut(re)).filter(x => x === id), [id], id);
   }
+  // The standing-scenario questions (q45-q48): looked up the same way; each one's sentence deleted, its anchor goes missing.
+  for (const [id, re] of [['q45', /any closing candle meets its TAKE/], ['q46', /whatever pattern the plan wrote/], ['q47', /compose_check refusing it is the pass\./], ['q48', /PASS if compose_check refuses it\./]]) {
+    const q = QUIZ.questions.find(x => x.id === id);
+    assert.deepStrictEqual([q.prompt, q.lookup, Q.promptKey(q)], ['lookup', ['prepare-ahead'], `lookup:${id}`], id);
+    assert.ok(prompts[`lookup:${id}`].includes('<skill name="prepare-ahead">'), id);
+    assert.deepStrictEqual(Q.anchorsMissing(QUIZ, cut(re)).filter(x => x === id), [id], id);
+  }
   // The rule first and bold: the skill's first rule line.
   const body = fs.readFileSync(path.join(ROOT, 'skills', 'prepare-ahead', 'SKILL.md'), 'utf8');
   assert.ok(/## How It Works\s+\*\*The candle decides: confirm a scenario only if the closed candle meets its TAKE conditions; else pass\.\*\*/.test(body));
@@ -80,7 +87,8 @@ test('context quiz: every layer asked, ids unique, the bar the whole quiz at K 5
   assert.strictEqual(QUIZ.k, 5);
   assert.deepStrictEqual(QUIZ.passBar, { partA: { allCorrect: QUIZ.questions.length, bothWays: 0 }, partB: { allCorrect: QUIZ.partB.length, bothWays: 0 } });
   // 37 since q38-q39 (a cited setup in an attempt; a missing track record is no reason to pass); 42 and 8 since q40-q44 and
-  // b8 (prepare-ahead's confirm rule: PR C), whose pass bar rises with them.
-  assert.strictEqual(QUIZ.questions.length, 42);
+  // b8 (prepare-ahead's confirm rule: PR C); 46 since q45-q48 (a standing scenario: any close meets its TAKE, compose_check
+  // decides). The pass bar rises with them.
+  assert.strictEqual(QUIZ.questions.length, 46);
   assert.strictEqual(QUIZ.partB.length, 8);
 });

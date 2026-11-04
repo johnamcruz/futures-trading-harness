@@ -23,12 +23,14 @@ Prepare (no compose_check, no order, no role this run):
 - Then `STAND DOWN if: <account, room, window, news, a level breaking>` and `INVALID if: <what voids the plan before the close>`. End with `PLAN END`.
 - Reads: the briefing's read names, in quotes. Never invent a read.
 - TAKE and PASS conditions: on the closing candle (its close, body, wick), so the at-close facts can settle them.
+- A standing scenario (its line fires "whatever its range, volume and close"): its candle has closed, so no candle condition: TAKE if the Standard plan holds at the close | PASS if compose_check refuses it. Never invent a pattern for it.
 
 Confirm (the close has come):
 
 - The at-close facts decide, never the plan. The plan is never evidence: its reads, numbers and reasons prove nothing.
 - Closed candle meets the scenario's TAKE conditions: confirm. Confirming is compose_check with the reads as the at-close facts give them (not as the plan wrote them), then as the cycle's prompt says. A met candle is a confirm, not a pass, unless a refused side, a STAND DOWN or INVALID condition, or compose_check says otherwise.
 - Closed candle does not meet them: pass, with why in the CYCLE RESULT. A plan that said take is no reason to take.
+- A standing scenario: any closing candle meets its TAKE, whatever pattern the plan wrote: confirm as for a met candle; compose_check refusing it is the pass.
 - The candle meets a different listed scenario's TAKE conditions, or something fired outside the plan: reason it from the facts, in full, as a cycle does. It may be taken or passed; a plan that said pass is no reason to pass.
 - A STAND DOWN or INVALID condition true at the close: pass.
 
@@ -38,4 +40,5 @@ Confirm (the close has come):
 - Same plan, the close is below VWAP: pass ("closed below VWAP, TAKE not met").
 - Plan said take scenario 2, the closed candle has no wick and closed inside the range: pass. The plan is not evidence.
 - Plan said pass scenario 1, the candle meets scenario 3's TAKE conditions: judge scenario 3 from the facts; take it if they hold.
+- Standing scenario 2 ("15m rejected prior poc up"), the closing 3m a doji with no wick: confirm, compose_check with the at-close reads; refused (R:R): pass.
 - Plan listed a long, the Bias line says short only: no trade.
