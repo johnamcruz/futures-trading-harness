@@ -65,6 +65,17 @@ async function day({ shadow = false, script = shadowScript(), kill = null, preHo
   return { w, fake, passes };
 }
 
+/**
+ * The shadow confirms of the plan made for `bar`'s close (forks resuming its prepare's session). The 04:06 cycle's
+ * prepare lists the 15m reaction still standing at the 04:12 close (next-close.js standing candidates), so the 04:09 bar
+ * has a plan and a shadow confirm of its own: the tests below are about the 04:12 bar's.
+ */
+const forksAt = (fake, w, bar) => {
+  const plan = PA.readPlan(w.home, 'MNQ', bar);
+  assert.ok(plan, `a plan for the bar opening ${bar}`);
+  return fake.calls.filter(c => c.source === 'fork' && c.argv[c.argv.indexOf('--resume') + 1] === plan.session.id);
+};
+
 const cycleRecords = w => {
   const dir = path.join(w.home, 'logs', 'cycles');
   return fs.readdirSync(dir).sort().flatMap(d => fs.readdirSync(path.join(dir, d)).sort().map(f => JSON.parse(fs.readFileSync(path.join(dir, d, f), 'utf8'))));
@@ -86,7 +97,10 @@ test('shadow e2e: the cycle, then the prepare (its plan written with its session
   const { w, fake, passes } = await day({ shadow: true });
   const recs = cycleRecords(w);
   assert.strictEqual(recs.length, 3);
-  // 04:09's cycle: no plan for its close; the prepare for 04:12's bar.
+  // 04:09's cycle: its own plan (a 15m reaction standing at its close, made after 04:06's cycle) and its shadow confirm;
+  // then the prepare for 04:12's bar.
+  assert.strictEqual(recs[1].prepare.shadow.status, 'valid', JSON.stringify(recs[1].prepare.shadow));
+  assert.ok(PA.readPlan(w.home, 'MNQ', FIRED_BAR).candidates.some(c => c.kind === 'standing' && c.read === recs[1].prepare.shadow.match.read));
   const made = recs[1].prepare.made;
   assert.strictEqual(made.outcome, 'done', JSON.stringify(recs[1].prepare));
   const plan = PA.readPlan(w.home, 'MNQ', NEXT_BAR);
@@ -110,8 +124,8 @@ test('shadow e2e: the cycle, then the prepare (its plan written with its session
   // Valid at 04:15 (nothing it rested on changed), and what fired is one of its scenarios: the 15m rejection of the prior VAH.
   assert.deepStrictEqual([sh.status, sh.match.read, sh.fired], ['valid', '15m rejected prior vah up', ['15m rejected prior vah up']], JSON.stringify(sh));
   {
-    const conf = fake.calls.find(c => c.source === 'fork');
-    assert.ok(conf, 'the confirm forked the prepare\'s session');
+    const [conf, ...more] = forksAt(fake, w, NEXT_BAR);
+    assert.ok(conf && !more.length, 'the confirm forked the prepare\'s session, once');
     assert.strictEqual(conf.argv[conf.argv.indexOf('--resume') + 1], plan.session.id);
     assert.notStrictEqual(conf.session, plan.session.id, 'a new session of its own');
     // The fork's transcript: the prepare's lines with their own uuids, each stamped with the fork's session.
@@ -152,7 +166,7 @@ test('shadow e2e (the property, a fill): a position opens before the plan\'s clo
   assert.match(last.result, /^CYCLE RESULT: managed/);
   assert.deepStrictEqual([last.prepare.shadow.status, last.prepare.shadow.reason], ['void', 'facts']);
   assert.deepStrictEqual([last.prepare.made.outcome, last.prepare.made.why], ['skipped', 'not-flat']);
-  assert.ok(!on.fake.calls.some(c => c.source === 'fork'), 'no confirm');
+  assert.deepStrictEqual(forksAt(on.fake, on.w, NEXT_BAR), [], 'no confirm at the close');
 });
 
 test('shadow e2e: a manage-only cycle (the day\'s cap reached, a position open) runs no shadow: no prepare field and no extra account read', async () => {
@@ -251,7 +265,7 @@ test('shadow e2e: the agreement check can fail and can hold: a PASS beside the c
 test('shadow e2e: the kill switch on: no shadow confirm, no prepare (on before the close: no trade cycle at all; turned on during the cycle: the shadow stands down after it)', async () => {
   const a = await day({ shadow: true, kill: NEXT_BAR });
   assert.strictEqual(cycleRecords(a.w).length, 2, 'no trade cycle under the kill switch');
-  assert.ok(!a.fake.calls.some(c => c.source === 'fork'), 'no confirm');
+  assert.deepStrictEqual(forksAt(a.fake, a.w, NEXT_BAR), [], 'no confirm at the close');
   // On during the plan's close's cycle (the head trader's run arms it): the shadow neither confirms nor prepares.
   const w = D.world({ harness: 'claude' });
   w.cfg = { ...w.cfg, prepareAhead: 'shadow' };
@@ -277,5 +291,5 @@ test('shadow e2e: the prepare session lost (its transcript gone) before the clos
   await D.pass(w, decisionAt(NEXT_BAR), D.passCycle(w, 'x'), opts);
   const sh = cycleRecords(w).at(-1).prepare.shadow;
   assert.deepStrictEqual([sh.status, sh.reason], ['void', 'session-missing']);
-  assert.ok(!fake.calls.some(c => c.source === 'fork'));
+  assert.deepStrictEqual(forksAt(fake, w, NEXT_BAR), [], 'no confirm at the close');
 });

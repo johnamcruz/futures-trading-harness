@@ -33,6 +33,10 @@
  * is no deadline: neither overran nor missed is counted.
  *
  *   transcriptTimes(text, lineTimes)   { roles: [{ role, start, end, ok }], resultAt, orders: [{ ms, entry }] } (wall ms)
+ *   composeResults(text, lineTimes)    the wall ms each of the head's own compose_check calls was answered
+ *   confirmTurn({ text, lineTimes, spawnMs, runEndMs })   prepareAhead "on": the confirm turn's own time (spawn to its
+ *                                      last compose's result, else its decision line, else its run's end), apart from
+ *                                      the run's end: { turnMs, turnTo, composes, runMs }
  *   gateEntries(env, fromMs, toMs)     [{ ms, decision, entry, expired }] this cycle's place_order decisions in the gate log
  *                                      (expired: refused because its compose record's time ran out: lifecycle-gate.js)
  *   barWindow(context, minutes)        { barClose, nextClose, setup, deadline } (ms; nulls without bars or a session)
@@ -135,6 +139,43 @@ function transcriptTimes(text, lineTimes = null) {
   // The head trader's last decision line (a later one restates or replaces an earlier one).
   const resultAt = decided.length ? decided.at(-1) : null;
   return { roles: roles.filter(r => r.role), resultAt, orders: orders.filter(o => o.ms !== null) };
+}
+
+const COMPOSE_TOOL = /(^|__)compose_check$/;
+/**
+ * The times (wall ms, as transcriptTimes reads them) the head's own compose_check calls were answered: Claude
+ * stream-json's tool_use answered by its tool_result, never a subagent's or a sidechain's; a call never answered, none.
+ */
+function composeResults(text, lineTimes = null) {
+  const own = ev => !ev.parent_tool_use_id && ev.isSidechain !== true;
+  const asked = new Set();
+  const out = [];
+  for (const { ev, line } of events(text)) {
+    if (!own(ev)) continue;
+    const at = msOf(ev.timestamp) ?? (line !== null && Array.isArray(lineTimes) ? num(lineTimes[line]) : null);
+    const msg = isObj(ev.message) ? ev.message : {};
+    for (const c of Array.isArray(msg.content) ? msg.content : []) {
+      if (!isObj(c)) continue;
+      if (c.type === 'tool_use' && COMPOSE_TOOL.test(String(c.name || ''))) asked.add(c.id);
+      else if (c.type === 'tool_result' && asked.has(c.tool_use_id) && at !== null) out.push(at);
+    }
+  }
+  return out;
+}
+
+/**
+ * prepareAhead "on": the confirm turn's own time, apart from its run's end and the entry after it (phase 2, the
+ * executor). From its spawn (`spawnMs`, wall) to the result of its last compose_check (the compose its entry runs on:
+ * `turnTo` compose), else to its decision line (a pass: result), else to its run's end (`runEndMs`: end).
+ * { turnMs, turnTo, composes, runMs }; an unreadable spawn: nulls.
+ */
+function confirmTurn({ text = '', lineTimes = null, spawnMs, runEndMs }) {
+  const composes = composeResults(text, lineTimes);
+  if (!Number.isFinite(spawnMs)) return { turnMs: null, turnTo: null, composes: composes.length, runMs: null };
+  const runMs = Number.isFinite(runEndMs) ? Math.max(0, runEndMs - spawnMs) : null;
+  const decided = transcriptTimes(text, lineTimes).resultAt;
+  const [at, to] = composes.length ? [composes.at(-1), 'compose'] : decided !== null ? [decided, 'result'] : [runEndMs, 'end'];
+  return { turnMs: Number.isFinite(at) ? Math.max(0, at - spawnMs) : null, turnTo: Number.isFinite(at) ? to : null, composes: composes.length, runMs };
 }
 
 /**
@@ -276,4 +317,4 @@ function runTiming({ res, cfg, context, env, startedMs, endedMs, now, result }) 
   }
 }
 
-module.exports = { stat, transcriptTimes, gateEntries, barWindow, cycleTiming, runTiming, timingReport };
+module.exports = { stat, transcriptTimes, composeResults, confirmTurn, gateEntries, barWindow, cycleTiming, runTiming, timingReport };

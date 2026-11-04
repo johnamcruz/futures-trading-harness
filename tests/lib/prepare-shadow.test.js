@@ -91,8 +91,11 @@ test('shadow: no plan for this close, a prepare for the next: its plan written (
   assert.strictEqual(plan.session.id, 'ses-prepare-1');
   assert.strictEqual(plan.versions.asOf, PREP.bar.t);
   assert.strictEqual(plan.versions.factsKey, 'k1');
-  assert.deepStrictEqual(plan.candidates.map(x => [x.id, x.side, x.read]), [['P1', 'short', 'momentum_continuation fired down']]);
-  assert.strictEqual(plan.scenarios.length, 1);
+  // The momentum fire, then the 15m reactions at fixed key levels still standing at that close (it completes no 15m
+  // candle: next-close.js standing candidates).
+  assert.deepStrictEqual(plan.candidates.map(x => [x.id, x.kind, x.side, x.read]), [['P1', 'momentum', 'short', 'momentum_continuation fired down'],
+    ['P2', 'standing', 'short', '15m rejected opening range high down'], ['P3', 'standing', 'short', '15m rejected 15m swing high 16664 down'], ['P4', 'standing', 'short', '15m broke overnight low down']]);
+  assert.strictEqual(plan.scenarios.length, plan.candidates.length, 'one per candidate (the fake prepare)');
   // The prepare's prompt: the prepare briefing with the section, from these closed bars.
   assert.match(r.cli.runs[0].prompt, /Possible at the next close/);
   assert.match(r.cli.runs[0].prompt, /P1 momentum_continuation short "momentum_continuation fired down"/);

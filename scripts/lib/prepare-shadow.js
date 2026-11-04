@@ -193,12 +193,19 @@ function createShadow({ cfg, root, home, runPrepare, now, sectionOpts = () => ({
     try { rec = JSON.parse(fs.readFileSync(x.cycleLog, 'utf8')); } catch (_err) { rec = null; }
     const ctx = rec && isObj(rec.context) ? rec.context : {};
     const lat = rec && isObj(rec.timing) && isObj(rec.timing.latencyMs) ? rec.timing.latencyMs.order : null;
+    // The entry's parts (runner-entry.js entry.timing): phase 2's and the executor's runs, apart from the confirm's turn.
+    const et = rec && isObj(rec.entry) && isObj(rec.entry.timing) ? rec.entry.timing : {};
+    const fin = v => (Number.isFinite(v) ? v : null);
+    // The confirm's own turn (cycle-run.js: spawn to its compose's result or its pass), its run, its reads; none when it
+    // fell back (the full head trader decided) or the record predates them.
+    const turn = c ? { turnMs: fin(c.turnMs), turnTo: typeof c.turnTo === 'string' ? c.turnTo : null, composes: Number.isInteger(c.composes) ? c.composes : null, runMs: fin(c.runMs), readsMs: fin(c.readsMs) } : {};
     return {
       ...(x.on || { mode: 'on', path: 'unknown' }),
-      ...(c ? { confirm: { outcome: c.outcome, ms: c.ms, fellBack: c.fellBack, ...(Array.isArray(c.tools) ? { tools: c.tools } : {}), ...(typeof c.tail === 'string' ? { tail: c.tail } : {}) } } : {}),
+      ...(c ? { confirm: { outcome: c.outcome, ms: c.ms, fellBack: c.fellBack, ...turn, ...(Array.isArray(c.tools) ? { tools: c.tools } : {}), ...(typeof c.tail === 'string' ? { tail: c.tail } : {}) } } : {}),
       ...(c && Array.isArray(c.late) ? { late: c.late } : {}),
       closeToOrderMs: Number.isFinite(lat) ? lat : null,
       desk: isObj(ctx.desk) ? 'ran' : Array.isArray(ctx.cachedRoles) && ctx.cachedRoles.length ? 'cached' : 'none',
+      phase2Ms: fin(et.phase2Ms), executorMs: fin(et.executorMs),
     };
   }
 

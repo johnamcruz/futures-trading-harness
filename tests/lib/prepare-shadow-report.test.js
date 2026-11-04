@@ -122,6 +122,52 @@ test('report "on": the path shares, the confirm outcomes and fallbacks, close to
   for (const s of ['"on": 6 closes: confirm 3 (50%), outside 1 (17%), void 1 (17%), no-plan 1 (17%)', 'close to order ms: median 40000, p90 90000', 'desk ran: median 40000', 'desk cached: median 30000', 'late refusals: chased-entry 1, missed-entry 1', 'outside the plan by kind: vwap 2, fvg 1', 'confirms: done 2, error 1, fellBack 1']) assert.ok(text.includes(s), `${s}\n${text}`);
 });
 
+// The confirm's own turn and the entry's parts (PR A2): each close with its path, desk, close to order and timings.
+const turn = (turnMs, turnTo, runMs, readsMs = 0) => ({ turnMs, turnTo, composes: turnTo === 'compose' ? 1 : 0, runMs, readsMs });
+const ON2 = [
+  onRec({ mode: 'on', path: 'confirm', confirm: { outcome: 'done', ms: 30000, fellBack: false, ...turn(6000, 'compose', 9000, 300) }, closeToOrderMs: 40000, desk: 'cached', phase2Ms: 22000, executorMs: 6000 }),
+  onRec({ mode: 'on', path: 'confirm', confirm: { outcome: 'done', ms: 32000, fellBack: false, ...turn(10000, 'compose', 14000, 500) }, closeToOrderMs: 80000, desk: 'ran', phase2Ms: 24000, executorMs: 7000 }),
+  onRec({ mode: 'on', path: 'confirm', confirm: { outcome: 'done', ms: 5000, fellBack: false, ...turn(4000, 'result', 5000) }, closeToOrderMs: null, desk: 'cached', phase2Ms: null, executorMs: null }),
+  onRec({ mode: 'on', path: 'confirm', confirm: { outcome: 'timeout', ms: 90000, fellBack: true, turnMs: null, turnTo: null, composes: null, runMs: null, readsMs: null }, closeToOrderMs: 150000, desk: 'cached', phase2Ms: 23000, executorMs: 6000 }),
+  onRec({ mode: 'on', path: 'outside', closeToOrderMs: 70000, desk: 'cached', unplannedKinds: { vwap: 1 }, phase2Ms: 21000, executorMs: 5000 }),
+  onRec({ mode: 'on', path: 'outside', closeToOrderMs: 100000, desk: 'ran', unplannedKinds: { fvg: 1 }, phase2Ms: 25000, executorMs: 8000 }),
+  onRec({ mode: 'on', path: 'void', reason: 'htf-close:h1', closeToOrderMs: 90000, desk: 'cached', phase2Ms: 20000, executorMs: 6000 }),
+];
+
+test('report "on": the confirm turn\'s own time (median, p90; where it ended), and close to order split by the path (the confirm, each fallback by its reason) and by desk ran or cached; phase 2 and the executor by the confirm and the fallback', () => {
+  const on = R.report(R.readRecords(home(ON2))).on;
+  // The turns of the confirms that decided (not those that fell back): spawn to the compose's result, or to the pass.
+  assert.deepStrictEqual(on.confirmTurn, {
+    ms: { n: 3, median: 6000, p90: 10000, max: 10000 }, runMs: { n: 3, median: 9000, p90: 14000, max: 14000 }, readsMs: { n: 3, median: 300, p90: 500, max: 500 }, to: { compose: 2, result: 1 },
+  });
+  const by = on.closeToOrder.byPath;
+  assert.deepStrictEqual(Object.keys(by).sort(), ['confirm', 'fallback:confirm-timeout', 'fallback:outside', 'fallback:void:htf-close:h1']);
+  assert.deepStrictEqual(by.confirm, { all: { n: 2, median: 40000, p90: 80000, max: 80000 }, deskRan: { n: 1, median: 80000, p90: 80000, max: 80000 }, deskCached: { n: 1, median: 40000, p90: 40000, max: 40000 } });
+  assert.deepStrictEqual(by['fallback:outside'], { all: { n: 2, median: 70000, p90: 100000, max: 100000 }, deskRan: { n: 1, median: 100000, p90: 100000, max: 100000 }, deskCached: { n: 1, median: 70000, p90: 70000, max: 70000 } });
+  assert.deepStrictEqual(by['fallback:confirm-timeout'].all, { n: 1, median: 150000, p90: 150000, max: 150000 });
+  assert.deepStrictEqual(by['fallback:void:htf-close:h1'].deskCached, { n: 1, median: 90000, p90: 90000, max: 90000 });
+  // The confirm and the fallback pooled, by desk.
+  assert.deepStrictEqual(on.closeToOrder.fallback, { all: { n: 4, median: 90000, p90: 150000, max: 150000 }, deskRan: { n: 1, median: 100000, p90: 100000, max: 100000 }, deskCached: { n: 3, median: 90000, p90: 150000, max: 150000 } });
+  // Phase 2 and the executor: the confirm's entries and the fallbacks' apart.
+  assert.deepStrictEqual(on.phase2Ms, { confirm: { n: 2, median: 22000, p90: 24000, max: 24000 }, fallback: { n: 4, median: 21000, p90: 25000, max: 25000 } });
+  assert.deepStrictEqual(on.executorMs, { confirm: { n: 2, median: 6000, p90: 7000, max: 7000 }, fallback: { n: 4, median: 6000, p90: 8000, max: 8000 } });
+  const text = R.text({ ...R.report(R.readRecords(home(ON2))) });
+  for (const s of [
+    '"on" confirm turn ms (spawn to its compose\'s result, or its pass): median 6000, p90 10000, max 10000 (n 3); ended at: compose 2, result 1; its run: median 9000',
+    '"on" close to order ms by path: confirm: median 40000, p90 80000, max 80000 (n 2) (desk ran: median 80000, p90 80000, max 80000 (n 1); desk cached: median 40000, p90 40000, max 40000 (n 1))',
+    'fallback:outside: median 70000, p90 100000',
+    '"on" phase 2 ms: confirm median 22000, p90 24000, max 24000 (n 2); fallback median 21000',
+    '"on" executor ms: confirm median 6000',
+  ]) assert.ok(text.includes(s), `${s}\n${text}`);
+});
+
+test('report "on": records from before the turn was timed (no turn, no phase 2 fields) read as none, never as zero', () => {
+  const on = R.report(R.readRecords(home(ON))).on;
+  assert.deepStrictEqual(on.confirmTurn, { ms: { n: 0, median: null, p90: null, max: null }, runMs: { n: 0, median: null, p90: null, max: null }, readsMs: { n: 0, median: null, p90: null, max: null }, to: {} });
+  assert.deepStrictEqual(on.phase2Ms.confirm.n, 0);
+  assert.strictEqual(on.closeToOrder.byPath.confirm.all.n, 2);
+});
+
 test('report: a shadow-only home says nothing of "on" (and an "on" home nothing of the shadow\'s agreement)', () => {
   assert.strictEqual(R.report(R.readRecords(home(RECORDS))).on, null);
   assert.ok(!R.text(R.report(R.readRecords(home(RECORDS)))).includes('"on":'));

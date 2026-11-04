@@ -66,7 +66,7 @@ async function afterAt(home, c, o = {}) {
   const cli = o.cli || fakeCli(clock, o.transcript === undefined ? sessionFile(home) : o.transcript);
   const log = path.join(home, 'logs', 'cycles', 'x', `${Date.parse(c.bar.t)}-trade.json`);
   fs.mkdirSync(path.dirname(log), { recursive: true });
-  fs.writeFileSync(log, JSON.stringify({ result: 'CYCLE RESULT: no-trade - x', context: o.context || {}, ...(o.timing ? { timing: o.timing } : {}) }, null, 2));
+  fs.writeFileSync(log, JSON.stringify({ result: 'CYCLE RESULT: no-trade - x', context: o.context || {}, ...(o.timing ? { timing: o.timing } : {}), ...(o.entry ? { entry: o.entry } : {}) }, null, 2));
   const shadow = shadowOf(home, clock, cli, o);
   const r = await shadow.after({
     symbol: 'MNQ', minutes: 3, bar: c.bar, bars: c.bars, windowBars: null, briefing: c.briefing, factsKey: 'k1', reports: [], scan: c.scan, listed: c.listed,
@@ -157,11 +157,19 @@ test('"on" at the close, every fallback row: the full head trader runs (no confi
 test('"on" after the cycle: the record adds the confirm\'s outcome, the close-to-order time, whether the desk ran or was cached, the late refusals; after a failed cycle the record is written and no prepare runs', async () => {
   const home = tmp();
   const on = { mode: 'on', path: 'confirm', planId: 'p' };
-  const r = await afterAt(home, FIRED, { on, cycle: { ok: true, confirm: { outcome: 'done', ms: 7000, fellBack: false, late: ['chased-entry'] } }, timing: { latencyMs: { order: 21000 } }, context: { desk: { ms: 25000 } } });
-  assert.deepStrictEqual(r.log.prepare.on, { ...on, confirm: { outcome: 'done', ms: 7000, fellBack: false }, late: ['chased-entry'], closeToOrderMs: 21000, desk: 'ran' });
-  // A confirm that failed before a compose: what it did is in the record (its tool calls, its output's end).
+  // The confirm's own turn (spawn to its compose's result), its run, its reads; phase 2 and the executor from the entry's
+  // timing: each apart, so close to order can be read by its parts.
+  const turn = { turnMs: 6000, turnTo: 'compose', composes: 1, runMs: 9000, readsMs: 400 };
+  const r = await afterAt(home, FIRED, { on, cycle: { ok: true, confirm: { outcome: 'done', ms: 7000, fellBack: false, late: ['chased-entry'], ...turn } }, timing: { latencyMs: { order: 21000 } }, context: { desk: { ms: 25000 } }, entry: { timing: { headMs: 12000, phase2Ms: 15000, executorMs: 5000, orderMs: 21000 } } });
+  assert.deepStrictEqual(r.log.prepare.on, { ...on, confirm: { outcome: 'done', ms: 7000, fellBack: false, ...turn }, late: ['chased-entry'], closeToOrderMs: 21000, desk: 'ran', phase2Ms: 15000, executorMs: 5000 });
+  // A confirm that failed before a compose: what it did is in the record (its tool calls, its output's end); no turn of
+  // its own (the full head trader decided), no entry.
   const failedConfirm = await afterAt(tmp(), FIRED, { on, cycle: { ok: true, confirm: { outcome: 'error', ms: 3000, fellBack: true, late: [], tools: ['mcp__harness__bar_briefing'], tail: '...API Error: overloaded' } } });
-  assert.deepStrictEqual(failedConfirm.log.prepare.on.confirm, { outcome: 'error', ms: 3000, fellBack: true, tools: ['mcp__harness__bar_briefing'], tail: '...API Error: overloaded' });
+  assert.deepStrictEqual(failedConfirm.log.prepare.on.confirm, { outcome: 'error', ms: 3000, fellBack: true, turnMs: null, turnTo: null, composes: null, runMs: null, readsMs: null, tools: ['mcp__harness__bar_briefing'], tail: '...API Error: overloaded' });
+  assert.deepStrictEqual([failedConfirm.log.prepare.on.phase2Ms, failedConfirm.log.prepare.on.executorMs], [null, null]);
+  // An entry of the full head trader's (a fallback path): its phase 2 and executor times too.
+  const fallback = await afterAt(tmp(), FIRED, { on: { mode: 'on', path: 'outside' }, cycle: { ok: true }, entry: { timing: { phase2Ms: 22000, executorMs: 6000 } } });
+  assert.deepStrictEqual([fallback.log.prepare.on.phase2Ms, fallback.log.prepare.on.executorMs, 'confirm' in fallback.log.prepare.on], [22000, 6000, false]);
   const cached = await afterAt(tmp(), FIRED, { on, cycle: { ok: true }, timing: { latencyMs: { order: null } }, context: { cachedRoles: ['risk-manager'] } });
   assert.strictEqual(cached.log.prepare.on.desk, 'cached');
   assert.strictEqual(cached.log.prepare.on.closeToOrderMs, null);

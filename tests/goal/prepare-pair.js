@@ -11,6 +11,7 @@
  *   decisionsOf(result)         a tier2-day.js result as compared
  *   pairProblems(off, on)       [problem]: each field whose values differ, with the first difference
  *   prepareOf(w)                in the day's process: the confirms the mock played and the path each close took
+ *   pairRuns({ runDays, dir })  the goal files' runs: { offFor (made once, shared), onOf, pair, sum }
  */
 
 const fs = require('fs');
@@ -69,4 +70,23 @@ function prepareOf(w) {
   return { confirms: c.confirms || 0, entered, voidConfirms: c.voidConfirms || 0, armed: c.armed || 0, paths, fellBack, made: recs.filter(x => isObj(x.prepare) && isObj(x.prepare.made) && x.prepare.made.outcome === 'done').length };
 }
 
-module.exports = { decisionsOf, pairProblems, prepareOf };
+/**
+ * The runs a prepare goal file pairs (tier2-prepare.goal.js, tier2-prepare-rows.goal.js): `runDays` tier2-run.js's.
+ * offFor(days, extra): the days with the key off (`extra` the world's options, a P&L change), each made once per process
+ * and shared (tests running side by side asking at once share the one run); onOf(days, extra): "on", as asked;
+ * pair(off, on): every problem; sum(results, key): a prepareOf count over the days.
+ */
+function pairRuns({ runDays, dir }) {
+  const memo = new Map();
+  const offFor = (days, extra = {}) => {
+    const k = JSON.stringify([days, extra]);
+    if (!memo.has(k)) memo.set(k, runDays(days, { claude: { on: false, ...extra }, dir }).then(rs => Object.fromEntries(rs.map(r => [r.day, r]))));
+    return memo.get(k);
+  };
+  const onOf = (days, extra = {}) => runDays(days, { claude: { prepareAhead: 'on', ...extra }, dir });
+  const pair = (off, on) => on.flatMap(r => pairProblems(off[r.day], r));
+  const sum = (rs, k) => rs.reduce((n, r) => n + r.prepare[k], 0);
+  return { offFor, onOf, pair, sum };
+}
+
+module.exports = { decisionsOf, pairProblems, prepareOf, pairRuns };

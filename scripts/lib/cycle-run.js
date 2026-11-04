@@ -138,9 +138,14 @@ async function runCycle(cfg, action, prompt, opts, limits = {}, deps = {}) {
     try { overlap = overlapHook({ env: runEnv, startedWall: startedMs, budgetMs: Math.max(0, timeoutMs - (wallNow() - startedMs)) }) || null; } catch (e) { err(`[autotrader] phase 2 can't start at the compose (${e.message}): it runs after the head trader's run\n`); }
   }
   let res;
-  const runMs = confirm ? (pre ? Math.max(0, confirmMs - (wallNow() - startedMs)) : confirmMs) : pre ? Math.max(timeoutMs - (wallNow() - startedMs), Math.min(minHeadMs(), timeoutMs)) : timeoutMs;
+  // The run's spawn and end (wall): a confirm's own turn is timed from them (cycle-timing.js confirmTurn). Read only for
+  // a confirm (any other run reads the clock exactly as before).
+  const spawnMs = confirm ? wallNow() : null;
+  let runEndMs = null;
+  const runMs = confirm ?(pre ? Math.max(0, confirmMs - (wallNow() - startedMs)) : confirmMs) : pre ? Math.max(timeoutMs - (wallNow() - startedMs), Math.min(minHeadMs(), timeoutMs)) : timeoutMs;
   try {
     res = await runOnce(cfg, argv, runMs, context, { ...deps, env }, runEnv);
+    if (confirm) runEndMs = wallNow();
   } finally {
     if (overlap) overlap.halt();
   }
@@ -235,8 +240,21 @@ async function runCycle(cfg, action, prompt, opts, limits = {}, deps = {}) {
   const phase1Refused = phase1RefusedIn(res.env, startedMs, wallNow());
   // "on" only (a confirm, or the full run it fell back to): the late-entry refusals of this cycle's orders, by kind.
   const late = confirm || measureLate ? lateKindsIn(res.env, startedMs, wallNow()) : null;
-  const confirmed = confirm ? { confirm: { outcome: res.ok && !res.timedOut ? 'done' : res.timedOut ? 'timeout' : 'error', ms: Math.max(0, endedMs - startedMs), fellBack: false, late } } : measureLate ? { late } : {};
+  // ("on": `ms` the whole cycle's run with its entry; the turn apart: spawn to its compose's result or its pass, its
+  // run's end, and the reads before its spawn.)
+  const turn = confirm ? confirmTurnOf(res, spawnMs, runEndMs) : null;
+  const confirmed = confirm ? { confirm: { outcome: res.ok && !res.timedOut ? 'done' : res.timedOut ? 'timeout' : 'error', ms: Math.max(0, endedMs - startedMs), fellBack: false, late, ...turn, readsMs: Math.max(0, spawnMs - startedMs) } } : measureLate ? { late } : {};
   return { ...cycleOutcome(res, { result, intact, action, lookups, reportedResult, resultNote }), ...(phase1Refused ? { phase1Refused: true } : {}), ...confirmed };
+}
+
+/** A confirm's own turn (cycle-timing.js confirmTurn) from its run's stream and line times; nulls when unreadable. */
+function confirmTurnOf(res, spawnMs, runEndMs) {
+  const lineTimes = Array.isArray(res.lineTimes) ? res.lineTimes : null;
+  try {
+    return require('./cycle-timing').confirmTurn({ text: lineTimes ? res.stdout : res.output, lineTimes, spawnMs, runEndMs });
+  } catch (_err) {
+    return { turnMs: null, turnTo: null, composes: null, runMs: null };
+  }
 }
 
 /** The late-entry refusals (late-entry.js kinds) in the cycle's gate log between fromMs and toMs (cycle-log.js gateOrders). */
