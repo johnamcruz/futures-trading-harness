@@ -227,12 +227,21 @@ result is final, the runner (`scripts/lib/prepare-shadow.js`, wired by
    (written whole) holds the session id and its transcript (the SessionStart
    hook's record), the input versions and the text.
 
-Both stop by the next close less `prepare.marginMs` (config/runner.json, the
-harness clock), at the end of day, or after `prepare.maxMs` for the two runs
-together (the confirm's time comes off the prepare's, so a replay step with a
-frozen clock stays inside the two minutes it has past its cycle's limit);
-`prepare.effort` is null (the CLI's default effort). In replay they run in the
-same step, after the cycle, so the step's time charges them.
+Both stop by the earliest of the next close less `prepare.marginMs`
+(config/runner.json, the harness clock), the end of day less the same margin,
+and `prepare.maxMs` less the account read for the two runs together (the
+confirm's time comes off the prepare's, so a replay step with a frozen clock
+stays inside the two minutes it has past its cycle's limit); each bound less
+the kill grace (`runner.killGraceMs`), so a run stopped there is gone before it
+and the end of day's flatten is never held; with less than the grace left
+neither runs. `prepare.effort` is null (the CLI's default effort). Neither runs
+after a cycle that failed or timed out, in paper mode, in a manage-only cycle
+or with several trading lanes. In replay they run in the same step, after the
+cycle, so the step's time charges them. The runner tracks their CLIs as it
+tracks its roles: its stop (SIGINT, SIGTERM, the replay driver's step kill)
+kills them and their process groups. Their account reads are quiet: a failure
+says nothing in the old path's log. The kill switch is read at the start of
+each step, as before (no file is watched during a run).
 
 **Their runs** (`autotrader.js` `buildCommand` `prepare`): the head trader's
 argv, the same `--disallowedTools`, model, plugin dir, system-prompt file and
@@ -243,8 +252,18 @@ refuses the rest and the prompt cache's tool list stays the head trader's.
 Their environment says which run it is (`FTH_PREPARE`: the stop hook asks it
 for nothing; `FTH_PREPARE_SESSION`: the file its SessionStart hook records the
 session in) and never carries the cycle's id, entry, role record or phase-1
-record. A forked or resumed session's SessionStart gives the day's state again
-but not the lessons (they are in its history). The gate is unchanged.
+record. Their gate log is the shadow's own (`<home>/prepare/gate-log.jsonl`,
+`FTH_GATE_LOG`; the gateway they start inherits it): the CLI fires its
+PreToolUse hooks before the dontAsk denial, so an order a prepare tries is
+refused by the order gate's hook into that file, never the old path's log. A
+forked or resumed session's SessionStart gives the day's state again but not
+the lessons (they are in its history). The gate's logic is unchanged.
+
+The section reads what the close's own code reads (`runner-wiring.js`
+`sectionInputsFor`): the selected contracts, the first lane's strategies, and as
+`compose_check` reads them the attempt policy's entry rule, whether an attempt
+runs, the paper flag and the sizing facts at the cap in force
+(`size-translate.js` `sizingFacts`, the facts `noSizeFits` sizes with).
 
 **Validity** (`prepare-ahead.js` `validate`; any change voids):
 
@@ -262,7 +281,9 @@ but not the lessons (they are in its history). The gate is unchanged.
 
 A plan for another bar is never read (stale). Outside the plan (something
 fired that no scenario names) and nothing fired are logged with what fired and
-the moving levels' kind (VWAP, profile, FVG, other); no confirm runs then.
+the moving levels' kind (VWAP, profile, FVG, other); no confirm runs then. A
+plan void only by the 1h close also records what it would have been without
+that rule (`ifHourIgnored`: valid and matched, or why not), a record only.
 
 **Logged** in the cycle's record only, as its `prepare` field:
 `{ shadow, made }`. `shadow`: the plan id, its prepare ms, the status (valid,
@@ -270,8 +291,12 @@ void with the reason, outside, nothing-fired, none, stale, kill-switch), the
 match, what fired, the confirm (outcome, decision, ms, session, tokens and
 cache reads), the full cycle's decision (`executed` a take with its side, the
 head trader's `no-trade` a pass; blocked, vetoed or an error none) and
-`agreesWithFull`. `made`: the outcome (done, aborted, skipped with why, error),
-the plan id, ms, tokens and the deadline.
+`agreesWithFull` (a take on an unknown side is no verdict). `made`: the outcome
+(done, aborted, skipped with why, error), the plan id, ms, tokens and the
+deadline. Each run also records what it tried and was refused (`denied`, the
+CLI's permission denials; `gateRefusals`, the lines it added to the shadow's
+gate log), its spawn-to-init time, and the confirm its first turn's cache
+creation (the first fork's cost).
 
 ### Reading a shadow replay
 
@@ -285,9 +310,22 @@ node scripts/prepare-shadow.js --home <run home> [--from YYYY-MM-DD] [--to YYYY-
 It prints the closes by status, the void rate by reason and the outside-plan
 rate by level kind (over the closes that had a plan), the agreement with the
 full cycle (of the confirms with a verdict both ways), the confirm and
-prepare times (median, p90, max), the deadline aborts, and the tokens. The
-agreement is judged against the noise floor (two runs of the old path), never
-against 100%.
+prepare times (median, p90, max), the deadline aborts, the hourly-close
+counterfactual, the spawn-to-init times, the forbidden-tool attempts, and the
+tokens. The agreement is judged against the noise floor (two runs of the old
+path), never against 100%.
+
+### Off is the harness as before (a permanent regression)
+
+`tests/e2e/prepare-ahead-off-regression.test.js` (in `npm test`) holds the key
+absent and `"off"`, and the old path's outputs in `"shadow"`, to origin/main's
+own outputs on a no-fill, a fill and a manage-only day
+(`tests/fixtures/prepare-off/main-outputs.json`, written by
+`tests/fixtures/prepare-off/generate.js` in a scratch checkout of main, never on
+a branch; a change to it is a golden change, explained). It also holds that the
+shadow's leftovers never move the old path, that off loads none of prepare
+ahead's modules (poisoned, the off day is unchanged), that a failure inside
+prepare ahead never moves the old path, and that a leak is caught.
 
 ## Freshness
 
