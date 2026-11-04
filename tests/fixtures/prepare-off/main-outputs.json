@@ -1,5 +1,5 @@
 {
- "commit": "0d50dae7d",
+ "commit": "e5e353de9",
  "days": {
   "no-fill": {
    "passes": [
@@ -8,7 +8,7 @@
      "ran": [
       {
        "action": "trade",
-       "prompt": "sha256:9c4666810ff95a634b3acf5d3acc7dc7e2ecbb9ea70cac037fb5efdc59195e9b (50171 chars)",
+       "prompt": "sha256:bcd9868a2d29f2574e009cb84b0a24ca4605f9b3b3649fbde73812fc0ca43f1b (50171 chars)",
        "result": "CYCLE RESULT: no-trade - nothing to take",
        "ok": true,
        "timedOut": false
@@ -91,7 +91,7 @@
      "ran": [
       {
        "action": "trade",
-       "prompt": "sha256:19897c6edcdf19ef8bb52738d79c203c15ded973d1a2154a0146f960580d5313 (47601 chars)",
+       "prompt": "sha256:c5f9f87841c8b395f2a11d04d4fd09440407537c7de48a2d956241f70b04328a (47601 chars)",
        "result": "CYCLE RESULT: no-trade - nothing to take",
        "ok": true,
        "timedOut": false
@@ -186,7 +186,7 @@
      "ran": [
       {
        "action": "trade",
-       "prompt": "sha256:cb60216bf96a9b62e68491a4b55285ba5d125cfe5882b51650957fa11c116ef3 (47451 chars)",
+       "prompt": "sha256:dbe1997c1036159222150707459fecc36b9793f4b7dbe44abd163de4bd03269e (47451 chars)",
        "result": "CYCLE RESULT: no-trade - nothing to take",
        "ok": true,
        "timedOut": false
@@ -385,7 +385,7 @@
        "complete": true,
        "decided": true
       },
-      "prompt": "sha256:9c4666810ff95a634b3acf5d3acc7dc7e2ecbb9ea70cac037fb5efdc59195e9b (50171 chars)",
+      "prompt": "sha256:bcd9868a2d29f2574e009cb84b0a24ca4605f9b3b3649fbde73812fc0ca43f1b (50171 chars)",
       "context": {
        "symbols": [
         {
@@ -576,7 +576,7 @@
        "--allowedTools",
        "sha256:380008c318d527601c52f139dce060c7d0b15c4dc5c499843787b98f802077e0 (454 chars)",
        "--disallowedTools",
-       "sha256:df22928c446af5f1d44cfcb94a2d266a7717546f351f752a1fd64cdfdd6a5d00 (658 chars)",
+       "sha256:fb5761709d3d392b46917adf4ba2cdc2c45161b9bdbfdea3cc4ca75f0efb77ba (658 chars)",
        "--strict-mcp-config",
        "--mcp-config",
        "{\"mcpServers\":{\"broker\":{\"command\":\"node\",\"args\":[\"<root>/scripts/mcp-gateway.js\"]},\"harness\":{\"command\":\"node\",\"args\":[\"<root>/scripts/harness-tools-mcp.js\"]}}}"
@@ -684,7 +684,7 @@
        "complete": true,
        "decided": true
       },
-      "prompt": "sha256:19897c6edcdf19ef8bb52738d79c203c15ded973d1a2154a0146f960580d5313 (47601 chars)",
+      "prompt": "sha256:c5f9f87841c8b395f2a11d04d4fd09440407537c7de48a2d956241f70b04328a (47601 chars)",
       "context": {
        "symbols": [
         {
@@ -947,7 +947,7 @@
        "--allowedTools",
        "sha256:380008c318d527601c52f139dce060c7d0b15c4dc5c499843787b98f802077e0 (454 chars)",
        "--disallowedTools",
-       "sha256:df22928c446af5f1d44cfcb94a2d266a7717546f351f752a1fd64cdfdd6a5d00 (658 chars)",
+       "sha256:fb5761709d3d392b46917adf4ba2cdc2c45161b9bdbfdea3cc4ca75f0efb77ba (658 chars)",
        "--strict-mcp-config",
        "--mcp-config",
        "{\"mcpServers\":{\"broker\":{\"command\":\"node\",\"args\":[\"<root>/scripts/mcp-gateway.js\"]},\"harness\":{\"command\":\"node\",\"args\":[\"<root>/scripts/harness-tools-mcp.js\"]}}}"
@@ -1055,7 +1055,7 @@
        "complete": true,
        "decided": true
       },
-      "prompt": "sha256:cb60216bf96a9b62e68491a4b55285ba5d125cfe5882b51650957fa11c116ef3 (47451 chars)",
+      "prompt": "sha256:dbe1997c1036159222150707459fecc36b9793f4b7dbe44abd163de4bd03269e (47451 chars)",
       "context": {
        "symbols": [
         {
@@ -1309,7 +1309,7 @@
        "--allowedTools",
        "sha256:380008c318d527601c52f139dce060c7d0b15c4dc5c499843787b98f802077e0 (454 chars)",
        "--disallowedTools",
-       "sha256:df22928c446af5f1d44cfcb94a2d266a7717546f351f752a1fd64cdfdd6a5d00 (658 chars)",
+       "sha256:fb5761709d3d392b46917adf4ba2cdc2c45161b9bdbfdea3cc4ca75f0efb77ba (658 chars)",
        "--strict-mcp-config",
        "--mcp-config",
        "{\"mcpServers\":{\"broker\":{\"command\":\"node\",\"args\":[\"<root>/scripts/mcp-gateway.js\"]},\"harness\":{\"command\":\"node\",\"args\":[\"<root>/scripts/harness-tools-mcp.js\"]}}}"
@@ -1635,7 +1635,7 @@
     ],
     [
      "brokers.json",
-     "sha256:1177f92732ab6b5a185d62e6aa24943734fcce990e5be2c0b8fc2768f5886d69 (454 chars)"
+     "sha256:2a8d11064ee6ccff644a5b2198c660d6f03be4bf94f49e2322cc7e415b6d9c86 (428 chars)"
     ],
     [
      "clock.json",
@@ -1813,7 +1813,7 @@
      "ran": [
       {
        "action": "trade",
-       "prompt": "sha256:9c4666810ff95a634b3acf5d3acc7dc7e2ecbb9ea70cac037fb5efdc59195e9b (50171 chars)",
+       "prompt": "sha256:bcd9868a2d29f2574e009cb84b0a24ca4605f9b3b3649fbde73812fc0ca43f1b (50171 chars)",
        "result": "CYCLE RESULT: no-trade - nothing to take",
        "ok": true,
        "timedOut": false
@@ -1896,7 +1896,7 @@
      "ran": [
       {
        "action": "trade",
-       "prompt": "sha256:19897c6edcdf19ef8bb52738d79c203c15ded973d1a2154a0146f960580d5313 (47601 chars)",
+       "prompt": "sha256:c5f9f87841c8b395f2a11d04d4fd09440407537c7de48a2d956241f70b04328a (47601 chars)",
        "result": "CYCLE RESULT: no-trade - nothing to take",
        "ok": true,
        "timedOut": false
@@ -1991,7 +1991,7 @@
      "ran": [
       {
        "action": "trade",
-       "prompt": "sha256:b1d8205e51cc02a605821cfa8e2dd2bce1546d3e32f5709d4d9ac77afbb05087 (22664 chars)",
+       "prompt": "sha256:72fe56c0e699d5cf7c9b9ffc3e412efbede544f74697a87988f9eaa6c7fb1011 (22664 chars)",
        "result": "CYCLE RESULT: managed - the open long",
        "ok": true,
        "timedOut": false
@@ -2191,7 +2191,7 @@
        "complete": true,
        "decided": true
       },
-      "prompt": "sha256:9c4666810ff95a634b3acf5d3acc7dc7e2ecbb9ea70cac037fb5efdc59195e9b (50171 chars)",
+      "prompt": "sha256:bcd9868a2d29f2574e009cb84b0a24ca4605f9b3b3649fbde73812fc0ca43f1b (50171 chars)",
       "context": {
        "symbols": [
         {
@@ -2382,7 +2382,7 @@
        "--allowedTools",
        "sha256:380008c318d527601c52f139dce060c7d0b15c4dc5c499843787b98f802077e0 (454 chars)",
        "--disallowedTools",
-       "sha256:df22928c446af5f1d44cfcb94a2d266a7717546f351f752a1fd64cdfdd6a5d00 (658 chars)",
+       "sha256:fb5761709d3d392b46917adf4ba2cdc2c45161b9bdbfdea3cc4ca75f0efb77ba (658 chars)",
        "--strict-mcp-config",
        "--mcp-config",
        "{\"mcpServers\":{\"broker\":{\"command\":\"node\",\"args\":[\"<root>/scripts/mcp-gateway.js\"]},\"harness\":{\"command\":\"node\",\"args\":[\"<root>/scripts/harness-tools-mcp.js\"]}}}"
@@ -2490,7 +2490,7 @@
        "complete": true,
        "decided": true
       },
-      "prompt": "sha256:19897c6edcdf19ef8bb52738d79c203c15ded973d1a2154a0146f960580d5313 (47601 chars)",
+      "prompt": "sha256:c5f9f87841c8b395f2a11d04d4fd09440407537c7de48a2d956241f70b04328a (47601 chars)",
       "context": {
        "symbols": [
         {
@@ -2753,7 +2753,7 @@
        "--allowedTools",
        "sha256:380008c318d527601c52f139dce060c7d0b15c4dc5c499843787b98f802077e0 (454 chars)",
        "--disallowedTools",
-       "sha256:df22928c446af5f1d44cfcb94a2d266a7717546f351f752a1fd64cdfdd6a5d00 (658 chars)",
+       "sha256:fb5761709d3d392b46917adf4ba2cdc2c45161b9bdbfdea3cc4ca75f0efb77ba (658 chars)",
        "--strict-mcp-config",
        "--mcp-config",
        "{\"mcpServers\":{\"broker\":{\"command\":\"node\",\"args\":[\"<root>/scripts/mcp-gateway.js\"]},\"harness\":{\"command\":\"node\",\"args\":[\"<root>/scripts/harness-tools-mcp.js\"]}}}"
@@ -2841,7 +2841,7 @@
        "complete": false,
        "decided": true
       },
-      "prompt": "sha256:b1d8205e51cc02a605821cfa8e2dd2bce1546d3e32f5709d4d9ac77afbb05087 (22664 chars)",
+      "prompt": "sha256:72fe56c0e699d5cf7c9b9ffc3e412efbede544f74697a87988f9eaa6c7fb1011 (22664 chars)",
       "context": {
        "symbols": [
         {
@@ -3083,7 +3083,7 @@
        "--allowedTools",
        "sha256:380008c318d527601c52f139dce060c7d0b15c4dc5c499843787b98f802077e0 (454 chars)",
        "--disallowedTools",
-       "sha256:df22928c446af5f1d44cfcb94a2d266a7717546f351f752a1fd64cdfdd6a5d00 (658 chars)",
+       "sha256:fb5761709d3d392b46917adf4ba2cdc2c45161b9bdbfdea3cc4ca75f0efb77ba (658 chars)",
        "--strict-mcp-config",
        "--mcp-config",
        "{\"mcpServers\":{\"broker\":{\"command\":\"node\",\"args\":[\"<root>/scripts/mcp-gateway.js\"]},\"harness\":{\"command\":\"node\",\"args\":[\"<root>/scripts/harness-tools-mcp.js\"]}}}"
@@ -3392,7 +3392,7 @@
     ],
     [
      "brokers.json",
-     "sha256:1177f92732ab6b5a185d62e6aa24943734fcce990e5be2c0b8fc2768f5886d69 (454 chars)"
+     "sha256:2a8d11064ee6ccff644a5b2198c660d6f03be4bf94f49e2322cc7e415b6d9c86 (428 chars)"
     ],
     [
      "clock.json",
@@ -3570,7 +3570,7 @@
      "ran": [
       {
        "action": "trade",
-       "prompt": "sha256:396e5b03c9ee533cb301293708b61b4f3e55350865d4d13729dc8de06cc01d4d (50237 chars)",
+       "prompt": "sha256:74098a79c9c79ae88a6458d29b446d87459b7de7db64e6cfc09179dc60de4b47 (50237 chars)",
        "result": "CYCLE RESULT: no-trade - nothing to take",
        "ok": true,
        "timedOut": false
@@ -3663,7 +3663,7 @@
      "ran": [
       {
        "action": "manage",
-       "prompt": "sha256:d68f0df8f42ffc9473eb420460f9b4b631de39abe6faa094a60147f1ea20e384 (22251 chars)",
+       "prompt": "sha256:6cc43b58a6fc329c051afc440b4b45ddd9dc7eb6e1caa983fb7cc6dd9f2e0651 (22251 chars)",
        "result": "CYCLE RESULT: managed - the open long",
        "ok": true,
        "timedOut": false
@@ -3860,7 +3860,7 @@
        "complete": true,
        "decided": true
       },
-      "prompt": "sha256:396e5b03c9ee533cb301293708b61b4f3e55350865d4d13729dc8de06cc01d4d (50237 chars)",
+      "prompt": "sha256:74098a79c9c79ae88a6458d29b446d87459b7de7db64e6cfc09179dc60de4b47 (50237 chars)",
       "context": {
        "symbols": [
         {
@@ -4051,7 +4051,7 @@
        "--allowedTools",
        "sha256:380008c318d527601c52f139dce060c7d0b15c4dc5c499843787b98f802077e0 (454 chars)",
        "--disallowedTools",
-       "sha256:df22928c446af5f1d44cfcb94a2d266a7717546f351f752a1fd64cdfdd6a5d00 (658 chars)",
+       "sha256:fb5761709d3d392b46917adf4ba2cdc2c45161b9bdbfdea3cc4ca75f0efb77ba (658 chars)",
        "--strict-mcp-config",
        "--mcp-config",
        "{\"mcpServers\":{\"broker\":{\"command\":\"node\",\"args\":[\"<root>/scripts/mcp-gateway.js\"]},\"harness\":{\"command\":\"node\",\"args\":[\"<root>/scripts/harness-tools-mcp.js\"]}}}"
@@ -4122,7 +4122,7 @@
        "complete": true,
        "decided": true
       },
-      "prompt": "sha256:d68f0df8f42ffc9473eb420460f9b4b631de39abe6faa094a60147f1ea20e384 (22251 chars)",
+      "prompt": "sha256:6cc43b58a6fc329c051afc440b4b45ddd9dc7eb6e1caa983fb7cc6dd9f2e0651 (22251 chars)",
       "context": {
        "symbols": [
         {
@@ -4346,7 +4346,7 @@
        "--allowedTools",
        "sha256:380008c318d527601c52f139dce060c7d0b15c4dc5c499843787b98f802077e0 (454 chars)",
        "--disallowedTools",
-       "sha256:df22928c446af5f1d44cfcb94a2d266a7717546f351f752a1fd64cdfdd6a5d00 (658 chars)",
+       "sha256:fb5761709d3d392b46917adf4ba2cdc2c45161b9bdbfdea3cc4ca75f0efb77ba (658 chars)",
        "--strict-mcp-config",
        "--mcp-config",
        "{\"mcpServers\":{\"broker\":{\"command\":\"node\",\"args\":[\"<root>/scripts/mcp-gateway.js\"]},\"harness\":{\"command\":\"node\",\"args\":[\"<root>/scripts/harness-tools-mcp.js\"]}}}"
@@ -4546,7 +4546,7 @@
     ],
     [
      "brokers.json",
-     "sha256:1177f92732ab6b5a185d62e6aa24943734fcce990e5be2c0b8fc2768f5886d69 (454 chars)"
+     "sha256:2a8d11064ee6ccff644a5b2198c660d6f03be4bf94f49e2322cc7e415b6d9c86 (428 chars)"
     ],
     [
      "clock.json",
@@ -4707,7 +4707,7 @@
      "ran": [
       {
        "action": "trade",
-       "prompt": "sha256:9c4666810ff95a634b3acf5d3acc7dc7e2ecbb9ea70cac037fb5efdc59195e9b (50171 chars)",
+       "prompt": "sha256:bcd9868a2d29f2574e009cb84b0a24ca4605f9b3b3649fbde73812fc0ca43f1b (50171 chars)",
        "result": "CYCLE RESULT: no-trade - nothing to take",
        "ok": true,
        "timedOut": false
@@ -4790,7 +4790,7 @@
      "ran": [
       {
        "action": "trade",
-       "prompt": "sha256:19897c6edcdf19ef8bb52738d79c203c15ded973d1a2154a0146f960580d5313 (47601 chars)",
+       "prompt": "sha256:c5f9f87841c8b395f2a11d04d4fd09440407537c7de48a2d956241f70b04328a (47601 chars)",
        "result": "CYCLE RESULT: executed - fx_break long MNQ 1",
        "ok": true,
        "timedOut": false
@@ -4885,7 +4885,7 @@
      "ran": [
       {
        "action": "trade",
-       "prompt": "sha256:5bcb746b54223f1ec71886e63c6e6896d5b8b73e139d7b7f480e4206360654a6 (22672 chars)",
+       "prompt": "sha256:b957a73c06b54e0f933293a16a18101f89ea567f6b5ef56d6e9a0356905ec1df (22672 chars)",
        "result": "CYCLE RESULT: managed - the open long",
        "ok": true,
        "timedOut": false
@@ -5085,7 +5085,7 @@
        "complete": true,
        "decided": true
       },
-      "prompt": "sha256:9c4666810ff95a634b3acf5d3acc7dc7e2ecbb9ea70cac037fb5efdc59195e9b (50171 chars)",
+      "prompt": "sha256:bcd9868a2d29f2574e009cb84b0a24ca4605f9b3b3649fbde73812fc0ca43f1b (50171 chars)",
       "context": {
        "symbols": [
         {
@@ -5276,7 +5276,7 @@
        "--allowedTools",
        "sha256:380008c318d527601c52f139dce060c7d0b15c4dc5c499843787b98f802077e0 (454 chars)",
        "--disallowedTools",
-       "sha256:df22928c446af5f1d44cfcb94a2d266a7717546f351f752a1fd64cdfdd6a5d00 (658 chars)",
+       "sha256:fb5761709d3d392b46917adf4ba2cdc2c45161b9bdbfdea3cc4ca75f0efb77ba (658 chars)",
        "--strict-mcp-config",
        "--mcp-config",
        "{\"mcpServers\":{\"broker\":{\"command\":\"node\",\"args\":[\"<root>/scripts/mcp-gateway.js\"]},\"harness\":{\"command\":\"node\",\"args\":[\"<root>/scripts/harness-tools-mcp.js\"]}}}"
@@ -5441,7 +5441,7 @@
        "complete": true,
        "decided": true
       },
-      "prompt": "sha256:19897c6edcdf19ef8bb52738d79c203c15ded973d1a2154a0146f960580d5313 (47601 chars)",
+      "prompt": "sha256:c5f9f87841c8b395f2a11d04d4fd09440407537c7de48a2d956241f70b04328a (47601 chars)",
       "context": {
        "symbols": [
         {
@@ -5704,7 +5704,7 @@
        "--allowedTools",
        "sha256:380008c318d527601c52f139dce060c7d0b15c4dc5c499843787b98f802077e0 (454 chars)",
        "--disallowedTools",
-       "sha256:df22928c446af5f1d44cfcb94a2d266a7717546f351f752a1fd64cdfdd6a5d00 (658 chars)",
+       "sha256:fb5761709d3d392b46917adf4ba2cdc2c45161b9bdbfdea3cc4ca75f0efb77ba (658 chars)",
        "--strict-mcp-config",
        "--mcp-config",
        "{\"mcpServers\":{\"broker\":{\"command\":\"node\",\"args\":[\"<root>/scripts/mcp-gateway.js\"]},\"harness\":{\"command\":\"node\",\"args\":[\"<root>/scripts/harness-tools-mcp.js\"]}}}"
@@ -5792,7 +5792,7 @@
        "complete": false,
        "decided": true
       },
-      "prompt": "sha256:5bcb746b54223f1ec71886e63c6e6896d5b8b73e139d7b7f480e4206360654a6 (22672 chars)",
+      "prompt": "sha256:b957a73c06b54e0f933293a16a18101f89ea567f6b5ef56d6e9a0356905ec1df (22672 chars)",
       "context": {
        "symbols": [
         {
@@ -6032,7 +6032,7 @@
        "--allowedTools",
        "sha256:380008c318d527601c52f139dce060c7d0b15c4dc5c499843787b98f802077e0 (454 chars)",
        "--disallowedTools",
-       "sha256:df22928c446af5f1d44cfcb94a2d266a7717546f351f752a1fd64cdfdd6a5d00 (658 chars)",
+       "sha256:fb5761709d3d392b46917adf4ba2cdc2c45161b9bdbfdea3cc4ca75f0efb77ba (658 chars)",
        "--strict-mcp-config",
        "--mcp-config",
        "{\"mcpServers\":{\"broker\":{\"command\":\"node\",\"args\":[\"<root>/scripts/mcp-gateway.js\"]},\"harness\":{\"command\":\"node\",\"args\":[\"<root>/scripts/harness-tools-mcp.js\"]}}}"
@@ -6379,7 +6379,7 @@
     ],
     [
      "brokers.json",
-     "sha256:1177f92732ab6b5a185d62e6aa24943734fcce990e5be2c0b8fc2768f5886d69 (454 chars)"
+     "sha256:2a8d11064ee6ccff644a5b2198c660d6f03be4bf94f49e2322cc7e415b6d9c86 (428 chars)"
     ],
     [
      "clock.json",

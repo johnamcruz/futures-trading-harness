@@ -12,6 +12,9 @@
  * The file names the commit it was made from. A change to it is a golden change (CONTRIBUTING.md, "Golden files").
  */
 
+// The user's home pinned before anything reads it (os.homedir is in the prompt and the deny rules): the fixture is
+// the same on every machine.
+process.env.HOME = require('./outputs').PINNED_HOME;
 const fs = require('fs');
 const { allDays } = require('./outputs');
 

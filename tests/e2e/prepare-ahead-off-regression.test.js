@@ -19,6 +19,9 @@
  *   5. The check can fail: a leak (an extra log line, an env var) is reported.
  */
 
+// The user's home pinned before the harness loads (os.homedir is in the prompt and the deny rules), as generate.js
+// pins it: the expected outputs hold on every machine (tests/e2e/prepare-ahead-off-portable.test.js).
+process.env.HOME = require('../fixtures/prepare-off/outputs').PINNED_HOME;
 const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');

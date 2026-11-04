@@ -30,6 +30,10 @@ const fs = require('fs');
 const path = require('path');
 
 const DAYS = ['no-fill', 'fill', 'manage-only', 'entry'];
+// The HOME the generator and the suite run under (they set it before the harness loads): the user's home is in the
+// head trader's prompt and deny rules (os.homedir), so a fixed one keeps the fixture the same on every machine, and the
+// normalizer names it too (belt and braces).
+const PINNED_HOME = '/home/fth-off-regression';
 // A cycle record's fields that are wall-clock (when it was written, how long it took, its timing) or the shadow's own.
 const WALL = new Set(['at', 'durationMs', 'timing', 'prepare']);
 // The files a shadow writes (its plans, session records and gate log under prepare/, its CLI's session store, its runs'
@@ -61,6 +65,9 @@ function normalizer(w, root) {
       .split(scope).join('<scope>')
       .split(w.home).join('<home>')
       .split(root).join('<root>')
+      // The machine's own: the user's home (os.homedir: the deny rules, the default harness home) and the node binary.
+      .split(process.execPath).join('<node>')
+      .split(require('os').homedir()).join('<user-home>')
       .replace(/cycle-transcript-\d+-[0-9a-f]+/g, m => `<transcript${id(m)}>`)
       .replace(/"ts":"[^"]*"/g, '"ts":"<ts>"')
       // A wall-clock time (a journal line's, a reply's): any instant within two days of the run's own wall clock (the
@@ -150,4 +157,4 @@ function firstDiff(a, b, at = '') {
   return { at, got: String(JSON.stringify(a)).slice(0, 400), want: String(JSON.stringify(b)).slice(0, 400) };
 }
 
-module.exports = { DAYS, SHADOW_OWN, runDay, allDays, firstDiff, normalizer };
+module.exports = { DAYS, PINNED_HOME, SHADOW_OWN, runDay, allDays, firstDiff, normalizer };
