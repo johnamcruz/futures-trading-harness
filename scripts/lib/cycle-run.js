@@ -82,15 +82,34 @@ async function precollected(cfg, prompt, context, precollect, deps, budgetMs) {
   return { runEnv, prompt: withData, context: { ...(context || {}), precollected: CD.records(got), ...(missing.length ? { notCollected: missing } : {}) } };
 }
 
-async function runCycle(cfg, action, prompt, opts, { timeoutMs = cfg.cycleTimeoutMinutes * 60000, context = null, entry: entryHook = null, precollect = null, overlap: overlapHook = null, onLog = null } = {}, deps = {}) {
+async function runCycle(cfg, action, prompt, opts, limits = {}, deps = {}) {
+  const { timeoutMs = cfg.cycleTimeoutMinutes * 60000, entry: entryHook = null, precollect = null, overlap: overlapHook = null, onLog = null, confirm = null, measureLate = false } = limits;
+  let { context = null } = limits;
   // The workspace guard is the caller's to give: a missing one would let a run that changed the instructions go on.
   if (typeof deps.guard !== 'function') throw new Error('cycle-run: deps.guard (the workspace guard) is required');
   const { guard } = deps;
   const env = deps.env || process.env;
   const out = deps.out || (() => {});
   const err = deps.err || (() => {});
+  // prepareAhead "on" (`confirm`, runner.js: { session, base, suffix, timeoutMs, composed }): the head trader's run at
+  // this close is the confirm, a fork of the prepare's session, within its own bound and above the head trader's floor
+  // (so the full head trader can still run). None left, or a base its env would not carry: the full head trader runs
+  // instead (the old path, its own prompt and env), the confirm's outcome in the result only.
+  const prompt0 = prompt;
+  const fallBack = async (outcome, ms = 0, lim = {}) => {
+    const { late, ...r } = await runCycle(cfg, action, prompt0, opts, { ...limits, ...lim, confirm: null, measureLate: true }, deps);
+    return { ...r, confirm: { outcome, ms, fellBack: true, late: late || [] } };
+  };
+  const confirmMs = confirm ? Math.min(confirm.timeoutMs, timeoutMs - minHeadMs()) : 0;
+  if (confirm && !(confirmMs > 0)) return fallBack('no-time');
+  if (confirm) {
+    context = { ...(context || {}), confirmBase: confirm.base };
+    if (childEnv(cfg, deps.root, env, context).FTH_CONFIRM_BASE !== confirm.base) return fallBack('no-base');
+  }
+  if (confirm && !(opts && opts.dryRun) && typeof precollect !== 'function') prompt = `${prompt}${confirm.suffix}`;
   const now = (deps.now || (() => new Date()))();
-  let argv = buildCommand(cfg, prompt, deps.root, env);
+  const argOpts = confirm ? { confirm: confirm.session } : {};
+  let argv = buildCommand(cfg, prompt, deps.root, env, argOpts);
   if (opts && opts.dryRun) {
     out(`${JSON.stringify(argv)}\n`);
     return { ok: true, timedOut: false };
@@ -101,11 +120,12 @@ async function runCycle(cfg, action, prompt, opts, { timeoutMs = cfg.cycleTimeou
   const wallNow = deps.wallNow || Date.now;
   const startedMs = wallNow();
   // This machine's opt-in only (cycleDataInPrompt): the cycle's reads made first, in its time, with the run's own environment.
-  const pre = typeof precollect === 'function' ? await precollected(cfg, prompt, context, precollect, { ...deps, env }, timeoutMs - minHeadMs()) : null;
+  // (The confirm: its reads with the at-close facts first, then the plan's line and the rule, after them.)
+  const pre = typeof precollect === 'function' ? await precollected(cfg, prompt, context, precollect, { ...deps, env }, (confirm ? confirmMs : timeoutMs - minHeadMs())) : null;
   if (pre) {
-    prompt = pre.prompt;
+    prompt = confirm ? `${pre.prompt}${confirm.suffix}` : pre.prompt;
     context = pre.context;
-    argv = buildCommand(cfg, prompt, deps.root, env);
+    argv = buildCommand(cfg, prompt, deps.root, env, argOpts);
   }
   // The run gets what is left of the cycle's limit after the reads (none made: the whole limit, as without them).
   // (Never under its floor because of them: a deadline's lag aside, as the runner's desk leaves it.)
@@ -118,10 +138,33 @@ async function runCycle(cfg, action, prompt, opts, { timeoutMs = cfg.cycleTimeou
     try { overlap = overlapHook({ env: runEnv, startedWall: startedMs, budgetMs: Math.max(0, timeoutMs - (wallNow() - startedMs)) }) || null; } catch (e) { err(`[autotrader] phase 2 can't start at the compose (${e.message}): it runs after the head trader's run\n`); }
   }
   let res;
+  const runMs = confirm ? (pre ? Math.max(0, confirmMs - (wallNow() - startedMs)) : confirmMs) : pre ? Math.max(timeoutMs - (wallNow() - startedMs), Math.min(minHeadMs(), timeoutMs)) : timeoutMs;
   try {
-    res = await runOnce(cfg, argv, pre ? Math.max(timeoutMs - (wallNow() - startedMs), Math.min(minHeadMs(), timeoutMs)) : timeoutMs, context, { ...deps, env }, runEnv);
+    res = await runOnce(cfg, argv, runMs, context, { ...deps, env }, runEnv);
   } finally {
     if (overlap) overlap.halt();
+  }
+  // The confirm erred or timed out before a compose (none recorded at this close since it started): the full head trader
+  // runs with what is left of the cycle's limit, exactly as without prepare ahead. One that composed never runs it again.
+  let composedFirst = false;
+  if (confirm) { try { composedFirst = Boolean(confirm.composed()); } catch (_err) { composedFirst = true; } }
+  if (confirm && (!res.ok || res.timedOut) && !composedFirst) {
+    if (overlap) overlap.finish('the confirm failed before a compose: the full head trader runs');
+    // Its run's own lookups files (keyed by its transcript; the cycle log that would remove them is the fallback's).
+    for (const file of [require('./trading/skill-lookups').lookupsFile, require('./learning/experience-lookups').lookupsFile]) {
+      try { require('fs').unlinkSync(file(res.transcript)); } catch (_err) { /* none */ }
+    }
+    const ms = Math.max(0, wallNow() - startedMs);
+    // What it did, kept (no cycle log of its own): its tool calls and the end of its output, capped, in its record and
+    // the day log, before the full head trader's run.
+    const outcome = res.timedOut ? 'timeout' : 'error';
+    const output = typeof res.stdout === 'string' && res.stdout ? res.stdout : (res.output || '');
+    const tail = output.slice(-require('./tunables').runner().prepare.confirmTailChars);
+    let tools;
+    try { tools = require('./cycle-log').toolCalls(output).map(c => c.name).filter(Boolean); } catch (_err) { tools = []; }
+    if (deps.appendLog) deps.appendLog(now, `\n===== ${now.toISOString()} ${action} the confirm (failed before a compose: ${outcome}; the full head trader runs)\n$ ${argv.map(a => JSON.stringify(a)).join(' ')}\n${tail}\n`);
+    const r = await fallBack(outcome, ms, { timeoutMs: Math.max(0, timeoutMs - ms) });
+    return { ...r, confirm: { ...r.confirm, tools, tail } };
   }
   // The result as scored (autotrader.js scoreRun: a `blocked` with no order call is no-trade), the agent's own kept.
   const scored = scoreRun(res, { action, harness: cfg.harness });
@@ -190,7 +233,21 @@ async function runCycle(cfg, action, prompt, opts, { timeoutMs = cfg.cycleTimeou
   // A cached phase 1 the gateway refused this cycle ([phase1-cache], its gate log): the report cache drops it, so the next
   // cycle runs phase 1 fresh (runner-wiring.js reportCacheFor record).
   const phase1Refused = phase1RefusedIn(res.env, startedMs, wallNow());
-  return { ...cycleOutcome(res, { result, intact, action, lookups, reportedResult, resultNote }), ...(phase1Refused ? { phase1Refused: true } : {}) };
+  // "on" only (a confirm, or the full run it fell back to): the late-entry refusals of this cycle's orders, by kind.
+  const late = confirm || measureLate ? lateKindsIn(res.env, startedMs, wallNow()) : null;
+  const confirmed = confirm ? { confirm: { outcome: res.ok && !res.timedOut ? 'done' : res.timedOut ? 'timeout' : 'error', ms: Math.max(0, endedMs - startedMs), fellBack: false, late } } : measureLate ? { late } : {};
+  return { ...cycleOutcome(res, { result, intact, action, lookups, reportedResult, resultNote }), ...(phase1Refused ? { phase1Refused: true } : {}), ...confirmed };
+}
+
+/** The late-entry refusals (late-entry.js kinds) in the cycle's gate log between fromMs and toMs (cycle-log.js gateOrders). */
+function lateKindsIn(env, fromMs, toMs) {
+  if (!env) return [];
+  const slack = require('./tunables').runner().session.gateSlackMs;
+  try {
+    return require('./cycle-log').gateOrders(env, fromMs, toMs + slack).flatMap(e => (Array.isArray(e.violations) ? e.violations : []).filter(v => v && v.check === 'late-entry').map(v => (v.late && v.late.kind) || 'unknown'));
+  } catch (_err) {
+    return [];
+  }
 }
 
 /** The cycle's gate log holds a [phase1-cache] refusal (its place_order records, cycle-log.js gateOrders), from `fromMs` on. */
@@ -294,7 +351,9 @@ async function runPrepare(cfg, kind, prompt, { timeoutMs, context = null, resume
   const denied = T.documents(output).filter(e => e && e.type === 'result' && Array.isArray(e.permission_denials)).flatMap(e => e.permission_denials.map(d => (d && d.tool_name) || null)).filter(Boolean);
   // Spawn to init: from the spawn to the stream's first line (the CLI's start, its MCP servers), measurement only.
   const initMs = Array.isArray(res.lineTimes) && Number.isFinite(res.lineTimes[0]) ? Math.max(0, res.lineTimes[0] - t0) : null;
-  return { ok: Boolean(res.ok), timedOut: Boolean(res.timedOut), text: text || '', sessionId: rec ? rec.sessionId : streamed, transcript: rec ? rec.transcript : null, source: rec ? rec.source : null, usage: T.claudeRunUsage(output), ms, initMs, denied, gateRefusals: Math.max(0, gateLines() - gate0) };
+  // Every forbidden attempt, from its own transcript (a hook's refusal comes before the CLI's denial, so is not among them).
+  const forbidden = PA.forbiddenIn(output, String(argv[argv.indexOf('--allowedTools') + 1] || '').split(','));
+  return { ok: Boolean(res.ok), timedOut: Boolean(res.timedOut), text: text || '', sessionId: rec ? rec.sessionId : streamed, transcript: rec ? rec.transcript : null, source: rec ? rec.source : null, usage: T.claudeRunUsage(output), ms, initMs, denied, forbidden, gateRefusals: Math.max(0, gateLines() - gate0) };
 }
 
 /** The skills a role's prompt held whole: its prompt addition (Claude Code, roleSkillsInPrompt), or opencode's role prompt; else none. */

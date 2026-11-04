@@ -357,3 +357,34 @@ test('the size cap: the section stays under prompt.cycleDataMaxBytes, the larges
   assert.deepStrictEqual(line.context.precollected, []);
   assert.match(line.context.notCollected[0].why, /cycleDataMaxBytes/);
 });
+
+test('cycle data: the "on" confirm (FTH_CONFIRM_BASE, its own run variable) reads in the same cycle as the desk and the head trader: the store serves it the reads made this cycle', () => {
+  const home = tmpDir();
+  const cfg = validateConfig({ harness: 'claude', premarketAt: '', symbols: ['MNQ'], prepareAhead: 'on', headSkillsInPrompt: true, cycleDataInPrompt: true });
+  const base = { FTH_HOME: home, HOME: home, PATH: process.env.PATH };
+  const ctx = { action: 'trade', symbols: [{ symbol: 'MNQ', bar: { t: '2026-04-28T04:12:00.000Z' } }] };
+  const head = childEnv(cfg, path.resolve(__dirname, '..', '..'), base, ctx);
+  const confirm = childEnv(cfg, path.resolve(__dirname, '..', '..'), base, { ...ctx, confirmBase: path.join(home, 'prepare', 'MNQ-20260428T041200000Z.json') });
+  assert.ok(confirm.FTH_CONFIRM_BASE, 'the confirm names its base');
+  assert.strictEqual(CD.cycleOf(confirm), CD.cycleOf(head), 'the same cycle\'s reads');
+  // Anything else that differs is still another cycle's (the check can fail).
+  assert.notStrictEqual(CD.cycleOf({ ...confirm, FTH_CYCLE_BARS: '{}' }), CD.cycleOf(head));
+});
+
+test('cycle data: the "on" confirm\'s pre-collected reads come from the cycle\'s store the desk filled (its briefing taken, the account read again): no store of its own', async () => {
+  const w = home();
+  const cfg = validateConfig({ harness: 'claude', premarketAt: '', timeframe: 3, account: '7', symbols: ['MNQ'], prepareAhead: 'on', headSkillsInPrompt: true, cycleDataInPrompt: true });
+  const base = { FTH_HOME: w.h, HOME: w.h, NODE_ENV: 'test', FTH_TEST_NOW: w.b.closedAt };
+  const desk = childEnv(cfg, ROOT, base, { ...w.context, roleRun: 'market-structure-analyst' });
+  const confirm = childEnv(cfg, ROOT, base, { ...w.context, confirmBase: path.join(w.h, 'prepare', 'MNQ-20260428T041200000Z.json') });
+  const broker = { call: async (tool, args) => ({ text: `${tool} ${JSON.stringify(args)}` }) };
+  const store = CD.createStore({ root: ROOT, broker });
+  // The desk's fill: the bar briefing (made whole) and the account's reads.
+  const got = await store.fill([{ tool: 'bar_briefing', args: { symbol: 'MNQ' } }, ...CD.READS.map(tool => ({ tool, args: { accountId: 7 } }))], { env: desk });
+  assert.ok(got[0].ok, JSON.stringify(got[0]));
+  const before = store.made;
+  await CD.collect({ symbols: ['MNQ'], accountId: 7, env: confirm, root: ROOT, broker, store });
+  // From the same store: only the account's reads are made again (VOLATILE); the briefing is the desk's.
+  assert.strictEqual(store.matches(confirm), true);
+  assert.strictEqual(store.made - before, CD.READS.length, 'the confirm read the account again, and nothing else, in the cycle\'s store');
+});

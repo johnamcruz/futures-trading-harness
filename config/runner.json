@@ -144,6 +144,6 @@
   "monteCarlo": { "paths": 2000, "reps": 2000, "max": 20000 },
   "desk": { "concurrency": 4, "harnessConcurrency": { "opencode": 2 }, "timeoutMinutes": 8, "managedBudgetShare": 0.5 },
   "entry": { "timeoutMinutes": 6, "phase2RestateRetries": 1, "overlapPhase2": true, "overlapPollMs": 250 },
-  "prepare": { "marginMs": 20000, "maxMs": 100000, "effort": null },
+  "prepare": { "marginMs": 20000, "maxMs": 100000, "confirmMs": 90000, "confirmTailChars": 4000, "effort": null },
   "reviews": { "scratchR": 0.2 }
 }

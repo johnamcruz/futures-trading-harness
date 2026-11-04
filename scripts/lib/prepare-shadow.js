@@ -18,7 +18,9 @@
  * else. Every time is the injected clock's (`now`: the runner's harness clock); the wall clock is never read here.
  *
  *   createShadow({ cfg, root, home, runPrepare, now, sectionOpts, newsAt, chainSideOf })
- *     .after(input) -> { shadow, made }
+ *     .mode                 "shadow" or "on" (the runner config's prepareAhead)
+ *     .after(input) -> { shadow, made }   ("on": { on, made }: no shadow confirm, the confirm was the cycle's run)
+ *     .atClose(input) -> { record, confirm? }   ("on" only: before the head trader's run, the confirm or the full one)
  *   input: { symbol, minutes, bar, bars, windowBars, briefing, factsKey, reports, scan, listed, result, cycleLog,
  *            killSwitch(), accountAfter(), phase1KeyOf(acct), reportsAfter(acct), eodMs, inSession(date) }
  */
@@ -40,8 +42,8 @@ function chainSideOn(bars, minutes) {
 /** The kinds of the reads no scenario covered: { kind: count } (prepare-ahead.js readKind). */
 const kindsOf = reads => (reads || []).reduce((o, r) => { const k = PA.readKind(r); o[k] = (o[k] || 0) + 1; return o; }, {});
 
-/** What a run tried and was refused: the CLI's permission denials and the gate refusals in the shadow's log. */
-const tried = res => ({ denied: Array.isArray(res.denied) ? res.denied : [], gateRefusals: Number.isInteger(res.gateRefusals) ? res.gateRefusals : 0, initMs: Number.isFinite(res.initMs) ? res.initMs : null });
+/** What a run tried and was refused: the CLI's permission denials, every forbidden attempt (its transcript), the gate refusals in the shadow's log. */
+const tried = res => ({ denied: Array.isArray(res.denied) ? res.denied : [], forbidden: Array.isArray(res.forbidden) ? res.forbidden : [], gateRefusals: Number.isInteger(res.gateRefusals) ? res.gateRefusals : 0, initMs: Number.isFinite(res.initMs) ? res.initMs : null });
 
 /** The account read after the cycle is flat: no position and no working order (an unread one is not). */
 const flatOf = a => (isObj(a) && !a.error && Array.isArray(a.positions) && Array.isArray(a.orders) ? !a.positions.length && !a.orders.length : null);
@@ -49,6 +51,8 @@ const flatOf = a => (isObj(a) && !a.error && Array.isArray(a.positions) && Array
 function createShadow({ cfg, root, home, runPrepare, now, sectionOpts = () => ({}), newsAt = () => ({ inBlackout: null }), chainSideOf = chainSideOn }) {
   const RT = require('./tunables').runner();
   const T = RT.prepare;
+  // The runner config's mode: "shadow" (B1: the confirm beside the old path) or "on" (B2: the confirm decides at the close).
+  const mode = PA.onOn(cfg) ? 'on' : 'shadow';
   // Every bound keeps the kill grace (a run stopped at it is gone before the bound: runHarness's SIGKILL after it), and
   // the two runs together get maxMs less the account read the prepare makes between them.
   const GRACE = RT.runner.killGraceMs;
@@ -148,15 +152,69 @@ function createShadow({ cfg, root, home, runPrepare, now, sectionOpts = () => ({
     const { res, aborted } = run;
     if (aborted) return { outcome: 'aborted', ms: res.ms, usage: res.usage || null, ...tried(res), ...at };
     if (!res.ok || !res.sessionId) return { outcome: 'error', why: !res.ok ? 'the run failed' : 'no session id', ms: res.ms, ...tried(res), ...at };
-    const plan = PA.makePlan({ symbol: x.symbol, bar: x.bar.t, next, madeAt, ms: res.ms, session: { id: res.sessionId, transcript: res.transcript }, versions, candidates: section.candidates, text: res.text, usage: res.usage || null });
+    // The prepare session's uuids, sealed (confirm-base.js): "on" names them to the confirm, whose fork copies them first.
+    const base = res.transcript ? require('./trading/confirm-base').baseOf(res.transcript) : null;
+    const plan = PA.makePlan({ symbol: x.symbol, bar: x.bar.t, next, madeAt, ms: res.ms, session: { id: res.sessionId, transcript: res.transcript }, versions, candidates: section.candidates, text: res.text, usage: res.usage || null, base });
     PA.writePlan(home, plan);
     return { outcome: 'done', planId: plan.id, ms: res.ms, scenarios: plan.scenarios.length, candidates: plan.candidates.length, usage: plan.usage, ...tried(res), ...at };
+  }
+
+  /**
+   * "on", at the close before the head trader's run (runner.js): the confirm or the full head trader (PA.confirmPath on
+   * the inputs the cycle starts from; what fired from the real at-close scan). { record, confirm? }: the record for the
+   * cycle log's prepare field; `confirm` the cycle's run limits (cycle-run.js runCycle confirm): the prepare's session,
+   * its plan record as the base (FTH_CONFIRM_BASE), the message after the at-close facts, its bound (prepare.confirmMs)
+   * and composed() (a compose record on this bar since now: the confirm composed, so it never falls back).
+   * input: { symbol, minutes, bar, bars, briefing, factsKey, reports, scan, listed, killSwitch(), flat }
+   */
+  function atClose(x) {
+    if (mode !== 'on') throw new Error('prepare ahead: the confirm decides at the close in "on" only');
+    const plan = PA.readPlan(home, x.symbol, x.bar.t);
+    const closeAt = new Date(Date.parse(x.bar.t) + x.minutes * 60000);
+    const at = PA.versionsOf({ briefing: x.briefing, chainSide: chainSideOf(x.bars, x.minutes), factsKey: x.factsKey, desk: PA.deskKeys(x.reports), day: tradingDayKey(closeAt), news: newsAt(closeAt) });
+    const fired = PA.firedReads({ scan: x.scan, listed: x.listed });
+    const p = PA.confirmPath({ plan, at, fired, killSwitch: Boolean(x.killSwitch()), flat: x.flat });
+    const record = {
+      mode: 'on', path: p.path, planId: plan ? plan.id : null, ...(plan ? { prepareMs: plan.ms } : {}), ...(p.reason ? { reason: p.reason } : {}), ...(p.detail ? { detail: p.detail } : {}),
+      fired, ...(p.match ? { match: p.match } : {}), unplannedKinds: kindsOf(p.path === 'confirm' ? p.unplanned : p.path === 'outside' ? fired : []),
+    };
+    if (p.path !== 'confirm') return { record };
+    const TL = require('./trading/trade-lifecycle');
+    const day = TL.shardDay({ bar: x.bar.t });
+    const composedHere = () => TL.readRecords(home, x.symbol, { days: [day] }).filter(r => r && r.bar === x.bar.t).length;
+    const before = composedHere();
+    return { record, confirm: { session: plan.session.id, base: PA.planFile(home, x.symbol, x.bar.t), suffix: PA.confirmSuffix({ scenario: p.scenario, unplanned: p.unplanned }), timeoutMs: T.confirmMs, composed: () => composedHere() > before } };
+  }
+
+  /** "on": the at-close record with what the cycle did: the confirm's outcome, the late refusals, close to order, the desk. */
+  function onRecord(x) {
+    const c = x.cycle && x.cycle.confirm ? x.cycle.confirm : null;
+    let rec;
+    try { rec = JSON.parse(fs.readFileSync(x.cycleLog, 'utf8')); } catch (_err) { rec = null; }
+    const ctx = rec && isObj(rec.context) ? rec.context : {};
+    const lat = rec && isObj(rec.timing) && isObj(rec.timing.latencyMs) ? rec.timing.latencyMs.order : null;
+    return {
+      ...(x.on || { mode: 'on', path: 'unknown' }),
+      ...(c ? { confirm: { outcome: c.outcome, ms: c.ms, fellBack: c.fellBack, ...(Array.isArray(c.tools) ? { tools: c.tools } : {}), ...(typeof c.tail === 'string' ? { tail: c.tail } : {}) } } : {}),
+      ...(c && Array.isArray(c.late) ? { late: c.late } : {}),
+      closeToOrderMs: Number.isFinite(lat) ? lat : null,
+      desk: isObj(ctx.desk) ? 'ran' : Array.isArray(ctx.cachedRoles) && ctx.cachedRoles.length ? 'cached' : 'none',
+    };
   }
 
   async function after(x) {
     // The deadline both steps share: the close of the bar now forming, less the margin (and the end of day, the most a run takes).
     const nextCloseMs = Date.parse(x.bar.t) + 2 * x.minutes * 60000;
     const deadline = () => PA.deadlineOf({ nowMs: nowMs(), nextCloseMs, eodMs: x.eodMs, marginMs: T.marginMs, maxMs: PAIR_MS, graceMs: GRACE });
+    if (mode === 'on') {
+      // The confirm was the cycle's own run (atClose): here only the record and, after a cycle that ended, the next prepare.
+      const on = onRecord(x);
+      let made;
+      if (x.cycle && x.cycle.ok === false) made = { outcome: 'skipped', why: 'cycle-failed' };
+      else { try { made = await prepare(x, nextCloseMs, PAIR_MS); } catch (err) { made = { outcome: 'error', why: err.message }; } }
+      if (x.cycleLog) { try { require('./cycle-log').amendCycleLog(x.cycleLog, 'prepare', { mode, on, made }); } catch (_err) { /* the record only */ } }
+      return { on, made };
+    }
     let shadow;
     try { shadow = await confirm(x, deadline()); } catch (err) { shadow = { status: 'error', reason: 'error', detail: err.message, planId: null }; }
     let made;
@@ -164,11 +222,11 @@ function createShadow({ cfg, root, home, runPrepare, now, sectionOpts = () => ({
     // on a frozen replay clock the step never outlasts what its cycle left (the next close bounds them on a running one).
     const confirmMs = shadow && shadow.confirm && Number.isFinite(shadow.confirm.ms) ? shadow.confirm.ms : 0;
     try { made = await prepare(x, nextCloseMs, PAIR_MS - confirmMs); } catch (err) { made = { outcome: 'error', why: err.message }; }
-    if (x.cycleLog) { try { require('./cycle-log').amendCycleLog(x.cycleLog, 'prepare', { shadow, made }); } catch (_err) { /* the record only */ } }
+    if (x.cycleLog) { try { require('./cycle-log').amendCycleLog(x.cycleLog, 'prepare', { mode, shadow, made }); } catch (_err) { /* the record only */ } }
     return { shadow, made };
   }
 
-  return { after };
+  return { mode, after, atClose };
 }
 
 module.exports = { createShadow, chainSideOn, flatOf };

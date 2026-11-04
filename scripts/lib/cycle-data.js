@@ -79,7 +79,7 @@ const HARNESS_READS = Object.freeze([BRIEFING, 'strategies_list', 'combine_statu
 // Broker reads that change with fills or the market within a cycle: read again for each later reader, never handed on.
 const VOLATILE = Object.freeze([...READS, 'get_quote']);
 // The variables childEnv sets for each run of a cycle on its own (its transcript, its role, its records): not the reads'.
-const PER_RUN = Object.freeze(['FTH_CYCLE_TRANSCRIPT', 'FTH_ROLE_RUN', 'FTH_ROLE_SKILLS', 'FTH_HEAD_PROMPT', 'FTH_CYCLE_ROLES', 'FTH_CYCLE_DESK', 'FTH_CYCLE_CACHED', 'FTH_CYCLE_CACHED_LOOKUPS', 'FTH_CYCLE_ENTRY', 'FTH_CYCLE_MANAGE', 'FTH_CYCLE_ID']);
+const PER_RUN = Object.freeze(['FTH_CYCLE_TRANSCRIPT', 'FTH_ROLE_RUN', 'FTH_ROLE_SKILLS', 'FTH_HEAD_PROMPT', 'FTH_CYCLE_ROLES', 'FTH_CYCLE_DESK', 'FTH_CYCLE_CACHED', 'FTH_CYCLE_CACHED_LOOKUPS', 'FTH_CYCLE_ENTRY', 'FTH_CYCLE_MANAGE', 'FTH_CYCLE_ID', 'FTH_CONFIRM_BASE']);
 const RISK_MANAGER = 'risk-manager';
 // Each read's kind: `preload` when its answer doesn't depend on the bar about to close nor on the clock, the account
 // or the journal (the strategies registered: their files), so a later preloader may make it between cycles (preload);

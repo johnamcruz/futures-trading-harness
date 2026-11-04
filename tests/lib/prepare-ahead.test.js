@@ -51,17 +51,24 @@ const makePlan = (o = {}) => PA.makePlan({ symbol: 'MNQ', bar: T, next: NEXT, ma
 
 // --- The mode key ---------------------------------------------------------------------------------------------------
 
-test('prepare-ahead: the mode key takes off and shadow on Claude Code; on is refused until B2, anything else is refused, another harness is refused', () => {
-  assert.deepStrictEqual([...PA.MODES], ['off', 'shadow']);
+test('prepare-ahead: the mode key takes off, shadow and on on Claude Code; anything else is refused, another harness is refused', () => {
+  assert.deepStrictEqual([...PA.MODES], ['off', 'shadow', 'on']);
   assert.strictEqual(PA.modeProblem(undefined, 'claude'), null);
   assert.strictEqual(PA.modeProblem('off', 'claude'), null);
   assert.strictEqual(PA.modeProblem('shadow', 'claude'), null);
-  assert.match(PA.modeProblem('on', 'claude'), /"on" is not built yet .*B2.*shadow/);
-  for (const bad of [true, false, 'yes', 1, null]) assert.match(PA.modeProblem(bad, 'claude'), /prepareAhead: "off" or "shadow"/, String(bad));
-  assert.match(PA.modeProblem('shadow', 'opencode'), /for harness "claude" only/);
+  assert.strictEqual(PA.modeProblem('on', 'claude'), null);
+  for (const bad of [true, false, 'yes', 1, null, 'ON']) assert.match(PA.modeProblem(bad, 'claude'), /prepareAhead: "off", "shadow" or "on"/, String(bad));
+  for (const m of ['shadow', 'on']) assert.match(PA.modeProblem(m, 'opencode'), /for harness "claude" only/);
   assert.strictEqual(PA.modeProblem('off', 'opencode'), null, 'off is no delivery on any harness');
   assert.strictEqual(PA.shadowOn({ harness: 'claude', prepareAhead: 'shadow' }), true);
-  for (const cfg of [{ harness: 'claude' }, { harness: 'claude', prepareAhead: 'off' }, { harness: 'opencode', prepareAhead: 'shadow' }, null]) assert.strictEqual(PA.shadowOn(cfg), false, JSON.stringify(cfg));
+  assert.strictEqual(PA.onOn({ harness: 'claude', prepareAhead: 'on' }), true);
+  // Each mode is its own: shadow is never on, on is never shadow.
+  assert.strictEqual(PA.shadowOn({ harness: 'claude', prepareAhead: 'on' }), false);
+  assert.strictEqual(PA.onOn({ harness: 'claude', prepareAhead: 'shadow' }), false);
+  for (const cfg of [{ harness: 'claude' }, { harness: 'claude', prepareAhead: 'off' }, { harness: 'opencode', prepareAhead: 'shadow' }, { harness: 'opencode', prepareAhead: 'on' }, null]) {
+    assert.strictEqual(PA.shadowOn(cfg), false, JSON.stringify(cfg));
+    assert.strictEqual(PA.onOn(cfg), false, JSON.stringify(cfg));
+  }
 });
 
 // --- The deadline: the next close minus the margin, the end of day, the most a prepare may take; the harness clock -----
@@ -358,6 +365,85 @@ test('prepare-ahead: the outside-plan reads are told apart by the level kind v1 
   assert.strictEqual(PA.readKind('momentum_continuation fired up'), 'momentum');
 });
 
+test('prepare-ahead: the forbidden-tool attempts of a run, from its own transcript: every call of a tool its allow list does not hold (refused by a hook before the permission check, or by dontAsk), and a shell command the CLI denied', () => {
+  const use = (id, name, input = {}) => JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', id, name, input }] } });
+  const res = (id, text, err) => JSON.stringify({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: id, content: [{ type: 'text', text }], is_error: err }] } });
+  const out = [
+    use('a', 'mcp__harness__bar_briefing'), res('a', '{}', false),
+    // Refused by the desk rule's hook (exit 2) before the permission check: the CLI's denials never name it.
+    use('b', 'mcp__harness__compose_check'), res('b', '[desk] compose_check composes the trade from the desk', true),
+    use('c', 'mcp__broker__journal_add'), res('c', 'Permission to use mcp__broker__journal_add has been denied because Claude Code is running in don\'t ask mode.', true),
+    use('d', 'mcp__broker__get_account_snapshot'), res('d', '{}', false),
+    use('e', 'Bash', { command: 'rm -rf /tmp/x' }), res('e', 'Permission to use Bash has been denied because Claude Code is running in don\'t ask mode.', true),
+    use('f', 'Bash', { command: 'echo hi' }), res('f', 'hi', false),
+    use('g', 'Agent', { subagent_type: 'risk-manager' }), res('g', 'denied', true),
+    'not json',
+  ].join('\n');
+  const allowed = ['mcp__harness__bar_briefing', 'mcp__broker', 'Skill', 'Bash(node /r/scripts/mtf.js:*)'];
+  // A whole server allowed (mcp__broker) holds its tools: journal_add is allowed by that rule (the dontAsk denial still counts it).
+  assert.deepStrictEqual(PA.forbiddenIn(out, allowed), ['mcp__harness__compose_check', 'mcp__broker__journal_add', 'Bash', 'Agent']);
+  assert.deepStrictEqual(PA.forbiddenIn(out, ['mcp__harness__bar_briefing', 'mcp__broker__get_account_snapshot', 'Bash(node /r/scripts/mtf.js:*)']), ['mcp__harness__compose_check', 'mcp__broker__journal_add', 'Bash', 'Agent']);
+  assert.deepStrictEqual(PA.forbiddenIn('', allowed), []);
+  assert.deepStrictEqual(PA.forbiddenIn(null, allowed), []);
+});
+
+// --- "on": at the close, the confirm or the full head trader (confirmPath), one test per fallback row --------------------
+
+const CB = require('../../scripts/lib/trading/confirm-base');
+const withBase = (o = {}) => ({ ...makePlan(o), base: CB.baseRecord('/t/ses-prep.jsonl', ['u1', 'u2']) });
+const onPath = (o = {}) => PA.confirmPath({ plan: 'plan' in o ? o.plan : withBase(), at: o.at || closeVersions(), fired: o.fired || ['momentum_continuation fired up'], killSwitch: o.killSwitch || false, flat: 'flat' in o ? o.flat : true });
+
+test('prepare-ahead "on": valid and matched: the confirm, with its scenario', () => {
+  const p = onPath();
+  assert.strictEqual(p.path, 'confirm');
+  assert.deepStrictEqual({ k: p.match.k, id: p.match.id, read: p.match.read, side: p.match.side }, { k: 1, id: 'P1', read: 'momentum_continuation fired up', side: 'long' });
+  assert.strictEqual(p.scenario.k, 1);
+  assert.match(p.scenario.line, /^SCENARIO 1: P1 momentum_continuation/);
+});
+
+test('prepare-ahead "on": every other row falls back to the full head trader, saying why: the kill switch, an open position, no plan, stale, a void plan (each reason), no base, outside the plan, nothing fired', () => {
+  const rows = [
+    ['kill-switch', { killSwitch: true }],
+    ['not-flat', { flat: false }],
+    ['not-flat', { flat: null }],
+    ['no-plan', { plan: null }],
+    ['stale', { at: PA.versionsOf({ briefing: briefingAt({ asOf: '2021-05-24T13:45:00.000Z', closedAt: '2021-05-24T13:48:00.000Z' }), chainSide: 1, factsKey: 'k1', desk: PA.deskKeys(DESK), day: '2021-05-24', news: { inBlackout: false } }) }],
+    ['void', { at: closeVersions({ factsKey: 'k2' }) }, 'facts'],
+    ['void', { at: closeVersions({ chainSide: -1 }) }, 'chain-side'],
+    ['void', { at: closeVersions({ news: { inBlackout: true } }) }, 'news'],
+    ['void', { plan: { ...withBase(), session: { id: 'ses-prep', transcript: '/gone/ses-prep.jsonl' } } }, 'session-missing'],
+    ['no-base', { plan: makePlan() }],
+    ['no-base', { plan: { ...withBase(), base: { ...withBase().base, uuids: ['u1'] } } }],
+    ['outside', { fired: ['15m rejected VWAP up'] }],
+    ['nothing-fired', { fired: [] }],
+  ];
+  for (const [path, o, reason] of rows) {
+    const p = onPath(o);
+    assert.strictEqual(p.path, path, JSON.stringify(o));
+    if (reason) assert.strictEqual(p.reason, reason);
+    assert.ok(!('scenario' in p), `${path}: no scenario to confirm`);
+  }
+  // The order: the kill switch before anything; an open position before the plan is read.
+  assert.strictEqual(onPath({ killSwitch: true, flat: false, plan: null }).path, 'kill-switch');
+  assert.strictEqual(onPath({ flat: false, plan: null }).path, 'not-flat');
+  // What fired outside the plan is said with its kind (the report's outside-plan by level kind).
+  assert.deepStrictEqual(onPath({ fired: ['15m rejected VWAP up'] }).fired, ['15m rejected VWAP up']);
+});
+
+test('prepare-ahead "on": the confirm\'s user message after the at-close facts: "your plan said: scenario k", the candle-decides rule, and what fired outside the plan; no shadow DECISION line', () => {
+  const plan = withBase();
+  const text = PA.confirmSuffix({ scenario: plan.scenarios[0], unplanned: ['15m rejected VWAP up'] });
+  assert.ok(text.startsWith('\n'));
+  const said = text.indexOf('Your plan said: scenario 1:');
+  const rule = text.indexOf('The candle decides: confirm a scenario only if the closed candle meets its TAKE conditions; else pass.');
+  assert.ok(said >= 0 && rule > said, 'the plan, then the rule');
+  assert.ok(text.includes(plan.scenarios[0].line));
+  assert.match(text, /compose_check/);
+  assert.match(text, /"15m rejected VWAP up"/);
+  assert.doesNotMatch(text, /DECISION:/);
+  assert.doesNotMatch(PA.confirmSuffix({ scenario: plan.scenarios[0], unplanned: [] }), /outside your plan/);
+});
+
 // --- The shadow confirm's decision, the full cycle's, and the agreement -------------------------------------------------
 
 test('prepare-ahead: parseDecision reads the last line-start DECISION line: TAKE k or PASS; anything else is none', () => {
@@ -453,11 +539,13 @@ test('prepare-ahead: deskKeys keys each report by its role and text, with its en
   assert.deepStrictEqual(PA.deskKeys(null), {});
 });
 
-test('prepare-ahead: its tunables are config (config/runner.json prepare): the deadline margin, the most a run takes, and the effort (none: the CLI default)', () => {
+test('prepare-ahead: its tunables are config (config/runner.json prepare): the deadline margin, the most a run takes, the confirm\'s bound ("on") and the effort (none: the CLI default)', () => {
   const T = require('../../scripts/lib/tunables');
   const P = T.runner().prepare;
-  assert.deepStrictEqual(Object.keys(P).sort(), ['effort', 'marginMs', 'maxMs']);
+  assert.deepStrictEqual(Object.keys(P).sort(), ['confirmMs', 'confirmTailChars', 'effort', 'marginMs', 'maxMs']);
   assert.ok(Number.isInteger(P.marginMs) && P.marginMs > 0 && Number.isInteger(P.maxMs) && P.maxMs > 0);
+  // The confirm's own bound: past it (hung), the full head trader runs with what is left (cycle-run.js).
+  assert.ok(Number.isInteger(P.confirmMs) && P.confirmMs > 0);
   assert.strictEqual(P.effort, null, 'the CLI\'s default effort: --effort low is never on until the owner says so');
   assert.deepStrictEqual(T.BUILT_IN.runner.prepare, P);
   // The effort: none, or one of the CLI's levels; anything else is refused when the file loads.

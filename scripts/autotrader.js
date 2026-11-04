@@ -230,7 +230,7 @@ function buildRunner(cfg, dataDir, opts, client, log, event, tap) {
     cfg, root: ROOT, home: HOME_DIR, env: process.env, client, prop: prop.accounts().length ? prop : null, dataDir, now: runnerNow, log, event, onBarClosed: tap.bar,
     runCycle: (action, prompt, limits) => runCycle(cfg, action, prompt, opts, limits),
     runRole: (role, request, limits) => runRoleWith(cfg, role, request, limits, { root: ROOT, home: HOME_DIR, env: process.env, run: runHarness, onChild: c => { if (c) { roleChildren.add(c); c.once('exit', () => roleChildren.delete(c)); } } }),
-    runPrepare: (c, kind, prompt, limits) => runPrepareWith(c, kind, prompt, limits, { root: ROOT, home: HOME_DIR, env: process.env, run: runHarness, onChild: shadowChildren.track }), // prepareAhead "shadow" only
+    runPrepare: (c, kind, prompt, limits) => runPrepareWith(c, kind, prompt, limits, { root: ROOT, home: HOME_DIR, env: process.env, run: runHarness, onChild: shadowChildren.track }), // prepareAhead "shadow" or "on"
     loadState: () => loadState(cfg), saveState: s => writeJsonAtomic(STATE_FILE, s), killSwitchFile: loadConfig(process.env).killSwitchFile,
   });
 }

@@ -18,14 +18,22 @@ const { validateConfig, buildCommand, childEnv, claudeTools } = A;
 const flag = (argv, f) => argv[argv.indexOf(f) + 1];
 const ORDERS = ['place_order', 'modify_order', 'cancel_order', 'close_position', 'partial_close_position'];
 
-test('prepareAhead (the runner config): off or shadow for Claude Code; "on" refused until B2; "off" is no key at all', () => {
+test('prepareAhead (the runner config): off, shadow or on for Claude Code; "off" is no key at all', () => {
   assert.strictEqual(validateConfig({ harness: 'claude', prepareAhead: 'shadow' }).prepareAhead, 'shadow');
+  assert.strictEqual(validateConfig({ harness: 'claude', prepareAhead: 'on', headSkillsInPrompt: true }).prepareAhead, 'on');
   assert.ok(!('prepareAhead' in validateConfig({ harness: 'claude', prepareAhead: 'off' })), '"off" is as absent');
   assert.ok(!('prepareAhead' in validateConfig({ harness: 'claude' })));
-  assert.throws(() => validateConfig({ harness: 'claude', prepareAhead: 'on' }), /prepareAhead: "on" is not built yet .*B2/);
-  for (const v of [true, 'yes', 1, null]) assert.throws(() => validateConfig({ harness: 'claude', prepareAhead: v }), /prepareAhead: "off" or "shadow"/, String(v));
-  for (const harness of ['opencode', 'codex', 'qwen']) assert.throws(() => validateConfig({ harness, prepareAhead: 'shadow' }), /prepareAhead: for harness "claude" only/, harness);
+  for (const v of [true, 'yes', 1, null]) assert.throws(() => validateConfig({ harness: 'claude', prepareAhead: v }), /prepareAhead: "off", "shadow" or "on"/, String(v));
+  for (const harness of ['opencode', 'codex', 'qwen']) for (const m of ['shadow', 'on']) assert.throws(() => validateConfig({ harness, prepareAhead: m }), /prepareAhead: for harness "claude" only/, harness);
   assert.ok(!('prepareAhead' in validateConfig({ harness: 'opencode', prepareAhead: 'off' })));
+});
+
+test('prepareAhead "on" requires headSkillsInPrompt: refused loudly without it (every confirm entry would be refused at the executor); shadow and off need nothing', () => {
+  assert.strictEqual(validateConfig({ harness: 'claude', prepareAhead: 'on', headSkillsInPrompt: true }).prepareAhead, 'on');
+  for (const hsip of [undefined, false]) {
+    assert.throws(() => validateConfig({ harness: 'claude', prepareAhead: 'on', ...(hsip === undefined ? {} : { headSkillsInPrompt: hsip }) }), /prepareAhead: "on" needs headSkillsInPrompt: true .*\[skills-loaded\]/, String(hsip));
+  }
+  for (const m of ['shadow', 'off', undefined]) assert.doesNotThrow(() => validateConfig({ harness: 'claude', ...(m ? { prepareAhead: m } : {}) }), String(m));
 });
 
 test('prepareAhead is a head trader delivery key: a shadow run is never pooled with one without it; "off" is the same delivery as no key', () => {
@@ -44,7 +52,11 @@ test('prepareAhead is a head trader delivery key: a shadow run is never pooled w
   assert.strictEqual(A.deliveryToken('cycleDataInPrompt', true), 'cycleDataInPrompt');
   assert.strictEqual(A.deliveryToken('cycleDataInPrompt', false), null);
   assert.strictEqual(A.deliveryProblem('prepareAhead', 'shadow', 'claude'), null);
-  assert.match(A.deliveryProblem('prepareAhead', 'on', 'claude'), /B2/);
+  assert.strictEqual(A.deliveryProblem('prepareAhead', 'on', 'claude'), null);
+  assert.match(A.deliveryProblem('prepareAhead', 'on', 'opencode'), /for harness "claude" only/);
+  // "on" is its own delivery: never pooled with shadow's, nor with none.
+  assert.strictEqual(A.headDeliveryOf(null, validateConfig({ harness: 'claude', prepareAhead: 'on', headSkillsInPrompt: true })), 'headSkillsInPrompt,stableFirstPrompt,prepareAhead=on');
+  assert.strictEqual(A.deliveryToken('prepareAhead', 'on'), 'prepareAhead=on');
   assert.match(A.deliveryProblem('headSkillsInPrompt', 'yes', 'claude'), /true or false/);
 });
 
@@ -144,4 +156,52 @@ test('PA and autotrader agree on the prepare\'s denied tools (one home: prepare-
   assert.deepStrictEqual([...PA.PREPARE_DENIED.harness].sort(), ['bars_fetch', 'blackouts_add', 'compose_check', 'reconcile']);
   assert.deepStrictEqual([...PA.PREPARE_DENIED.broker].sort(), ['get_bars', 'get_quote']);
   assert.deepStrictEqual([...PA.PREPARE_SCRIPTS].sort(), ['market-snapshot.js', 'mtf.js', 'strategies.js']);
+});
+
+// --- prepareAhead "on" (PR B2): the confirm IS the head trader's run at the close, a fork of the prepare's session ------
+
+test('"on": the confirm\'s argv is the head trader\'s own, whole (its full --allowedTools, the same --disallowedTools, model, plugin dir, system-prompt file, MCP config), plus --resume <prepare session> --fork-session; no --effort', () => {
+  const home = tmpDir();
+  const env = { FTH_HOME: home, HOME: home, FTH_REPLAY_NOW: '2026-04-28T14:00:00.000Z' };
+  for (const c of [validateConfig({ harness: 'claude', model: 'm1', prepareAhead: 'on', headSkillsInPrompt: true }), validateConfig({ harness: 'claude', headSkillsInPrompt: true, prepareAhead: 'on', extraArgs: ['--x'] })]) {
+    const head = buildCommand(c, 'P', ROOT, env);
+    const conf = buildCommand(c, 'P', ROOT, env, { confirm: 'ses-123' });
+    const r = conf.indexOf('--resume');
+    assert.ok(r > 0);
+    assert.deepStrictEqual(conf.slice(r, r + 3), ['--resume', 'ses-123', '--fork-session']);
+    // Everything else exactly the head trader's: its tools whole (it composes through compose_check as the head does).
+    assert.deepStrictEqual([...conf.slice(0, r), ...conf.slice(r + 3)], head);
+    assert.ok(flag(conf, '--allowedTools').split(',').includes('mcp__harness'), 'compose_check with the harness tools');
+    assert.ok(!conf.includes('--effort'), 'the confirm\'s effort is the head trader\'s (an open owner decision: none)');
+  }
+  const c = validateConfig({ harness: 'claude', prepareAhead: 'on', headSkillsInPrompt: true });
+  assert.throws(() => buildCommand(validateConfig({ harness: 'opencode' }), 'P', ROOT, env, { confirm: 'ses-1' }), /prepare ahead runs on Claude Code only/);
+  for (const bad of ['', 7, {}]) assert.throws(() => buildCommand(c, 'P', ROOT, env, { confirm: bad }), /the confirm resumes the prepare's session/, String(bad));
+  assert.throws(() => buildCommand(c, 'P', ROOT, env, { confirm: 'ses-1', agent: 'risk-manager' }), /never a role's run/);
+  assert.throws(() => buildCommand(c, 'P', ROOT, env, { confirm: 'ses-1', prepare: 'prepare' }), /a shadow run or the confirm, never both/);
+});
+
+test('childEnv "on": the confirm runs under the close\'s cycle env (its entry, roles; the normal gate log), with FTH_CONFIRM_BASE its plan record; never FTH_PREPARE; no other run has the base, an inherited one is dropped', () => {
+  const c = validateConfig({ harness: 'claude', prepareAhead: 'on', headSkillsInPrompt: true });
+  const home = tmpDir();
+  const base = { FTH_HOME: home, FTH_GATE_LOG: '/old/gate.jsonl', FTH_CONFIRM_BASE: '/inherited.json', FTH_PREPARE: 'confirm' };
+  const plan = path.join(home, 'prepare', 'MNQ-20260428T041200000Z.json');
+  const ctx = { action: 'trade', entry: true, rolesFile: path.join(home, 'roles.jsonl'), confirmBase: plan };
+  const conf = childEnv(c, ROOT, base, ctx);
+  const head = childEnv(c, ROOT, base, { action: 'trade', entry: true, rolesFile: path.join(home, 'roles.jsonl') });
+  assert.strictEqual(conf.FTH_CONFIRM_BASE, plan);
+  assert.ok(!('FTH_PREPARE' in conf) && !('FTH_PREPARE_SESSION' in conf), 'the stop hook asks it for its CYCLE RESULT, as the head trader');
+  assert.strictEqual(conf.FTH_GATE_LOG, '/old/gate.jsonl', 'the normal gate log: it is the close\'s real head run');
+  // The head trader's env but the base and its own transcript (so its own cycle id, which the head prompt's attestation
+  // names: headSkillsInPrompt, which "on" requires).
+  const { FTH_CONFIRM_BASE: _b, FTH_CYCLE_TRANSCRIPT: t1, FTH_HEAD_PROMPT: a1, ...restConf } = conf;
+  const { FTH_CYCLE_TRANSCRIPT: t2, FTH_HEAD_PROMPT: a2, ...restHead } = head;
+  assert.deepStrictEqual(restConf, restHead);
+  const att = x => { const { cycle: _c, ...rest } = JSON.parse(x); return rest; };
+  assert.deepStrictEqual(att(a1), att(a2), 'the same attestation but its cycle');
+  assert.ok(t1 && t2 && t1 !== t2);
+  // Any other run: no base, inherited or not; a base not in <home>/prepare/, or not absolute, is never given.
+  for (const other of [null, { action: 'trade' }, { action: 'trade', roleRun: 'trade-executor', confirmBase: plan }, { action: 'trade', prepare: 'prepare', confirmBase: plan }, { action: 'trade', confirmBase: 'prepare/x.json' }, { action: 'trade', confirmBase: path.join(home, 'x.json') }]) {
+    assert.ok(!('FTH_CONFIRM_BASE' in childEnv(c, ROOT, base, other)), JSON.stringify(other));
+  }
 });

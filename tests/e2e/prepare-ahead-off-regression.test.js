@@ -178,6 +178,91 @@ test('off regression 1 (the gate): on the entry day the old path\'s gate decisio
   assert.ok(lines.length >= 1 && lines.every(e => e.source === 'hook' && e.tool === 'place_order' && e.decision === 'blocked'), JSON.stringify(lines));
 });
 
+// --- prepareAhead "on" (PR B2): what it leaves never moves the old path; a failure inside it falls back to the old path ---
+
+/**
+ * "on"'s runs, every Claude Code run (the prepare's and the head trader's, the confirm a fork) played by one fake CLI
+ * per world; `inject(kind, w)`: 'throw' or 'hang' for a prepare ('prepare') or a confirm ('confirm', a head trader's run
+ * that resumes) in its place.
+ */
+function onRuns(inject = () => null) {
+  const fakes = new WeakMap();
+  const fakeOf = (w, script) => {
+    if (!fakes.has(w)) fakes.set(w, { script: null, fake: fakeClaude({ dir: path.join(w.home, 'claude-sessions'), script: (prompt, env) => (env.FTH_PREPARE === 'prepare' ? [{ result: [...prompt.matchAll(/^ {2}- (P\d+) \S+ (long|short) "([^"]+)"/gm)].map((m, j) => `SCENARIO ${j + 1}: ${m[1]} "${m[3]}" → TAKE if a | PASS if b; reads: "${m[3]}"; why: w`).join('\n') }] : fakes.get(w).script) }) });
+    if (script) fakes.get(w).script = script;
+    return fakes.get(w).fake;
+  };
+  const hang = { ok: false, timedOut: true, code: null, output: '', stdout: '' };
+  return {
+    runPrepare: w => env => async (c, kind, prompt, limits) => {
+      const hit = inject(kind, w);
+      if (hit === 'throw') throw new Error(`injected: the ${kind} crashed`);
+      if (hit === 'hang') return { ok: false, timedOut: true, text: '', sessionId: null, transcript: null, source: null, usage: null, ms: limits.timeoutMs, denied: [], forbidden: [], gateRefusals: 0, initMs: null };
+      return runPrepare(c, kind, prompt, limits, { root: ROOT, home: w.home, env, run: fakeOf(w) });
+    },
+    headRun: (w, script) => {
+      const fake = fakeOf(w, script);
+      return async (argv, o) => {
+        const hit = argv.includes('--resume') ? inject('confirm', w) : null;
+        if (hit === 'throw') return { ok: false, timedOut: false, code: 1, output: '', stdout: '' };
+        if (hit === 'hang') return hang;
+        return fake(argv, o);
+      };
+    },
+  };
+}
+/** What the old path decided and did: each cycle's result, the gate's decisions (as normalized), the orders, the decision record. */
+const decisionsOf = out => ({
+  results: out.passes.map(p => p.ran.map(x => ({ action: x.action, result: x.result, ok: x.ok, timedOut: x.timedOut }))),
+  gate: out.gate,
+  orders: out.orders, history: out.history,
+});
+
+test('off regression 2 ("on"): what "on" leaves (plans with their sealed base, its CLI sessions), restarted with the key off, never moves the old path', async () => {
+  // The first two passes "on" (the 04:09 cycle's prepare writes the 04:12 bar's plan, with its base and session), the
+  // last one off: restarted, the plan made for its close is never read.
+  const runs = onRuns();
+  const { w, out } = await O.runDay('no-fill', { cfgAt: bar => (bar !== NEXT_BAR ? { prepareAhead: 'on' } : {}), runPrepare: runs.runPrepare, headRun: runs.headRun, own: O.SHADOW_OWN });
+  const plan = require('../../scripts/lib/prepare-ahead').readPlan(w.home, 'MNQ', NEXT_BAR);
+  assert.ok(plan && plan.base, 'the "on" passes left the plan for the off pass\'s close, with a base');
+  const main = MAIN.days['no-fill'];
+  // The off pass: main's, its prompt, argv and env included (its head trader played by the fake CLI as a fresh session).
+  const offPass = ({ env: _e, ...p }) => p;
+  sameAs(offPass(out.passes[2]), offPass(main.passes[2]), 'the off pass');
+  assert.deepStrictEqual(decisionsOf(out), decisionsOf(main));
+});
+
+test('off regression 4 ("on"): a failure inside prepare ahead (the prepare or the confirm throwing or hanging, a corrupt plan, a lost session) falls back to the full head trader: the results, the gate decisions, the orders and the decision record are main\'s', async () => {
+  const cases = {
+    'nothing injected': () => null,
+    'the prepare throws': kind => (kind === 'prepare' ? 'throw' : null),
+    'the prepare hangs to its deadline': kind => (kind === 'prepare' ? 'hang' : null),
+    'the confirm errors': kind => (kind === 'confirm' ? 'throw' : null),
+    'the confirm hangs to its bound': kind => (kind === 'confirm' ? 'hang' : null),
+    'a corrupt plan file before the close': [() => null, (bar, w) => { if (bar !== '2026-04-28T04:06:00.000Z' && fs.existsSync(path.join(w.home, 'prepare'))) for (const f of fs.readdirSync(path.join(w.home, 'prepare')).filter(x => /^MNQ-/.test(x))) fs.writeFileSync(path.join(w.home, 'prepare', f), '{"v":1,'); }],
+    // (The prepare's own session file: the CLI's session store stays.)
+    'the session lost before the confirm': [() => null, (bar, w) => { const p = require('../../scripts/lib/prepare-ahead').readPlan(w.home, 'MNQ', bar); if (p && p.session.transcript) fs.rmSync(p.session.transcript, { force: true }); }],
+  };
+  for (const day of ['no-fill', 'entry']) {
+    for (const [name, c] of Object.entries(cases)) {
+      const [inject, beforePass] = Array.isArray(c) ? c : [c, null];
+      const runs = onRuns(inject);
+      // The runner driven with "on" but not headSkillsInPrompt (which validateConfig requires with it: autotrader-prepare
+      // tests), so the head trader's own run is main's and its outputs compare with main's; no fingerprint for it.
+      const { w, out } = await O.runDay(day, { extra: { prepareAhead: 'on' }, runPrepare: runs.runPrepare, headRun: runs.headRun, own: O.SHADOW_OWN, fingerprint: false, ...(beforePass ? { beforePass } : {}) });
+      assert.deepStrictEqual(decisionsOf(out), decisionsOf(MAIN.days[day]), `${day}, ${name}`);
+      // Not vacuous: on the no-fill day the 04:12 close's plan is valid and matched, so the confirm ran (or failed and fell back).
+      if (day === 'no-fill') {
+        const recs = fs.readdirSync(path.join(w.home, 'logs', 'cycles')).flatMap(d => fs.readdirSync(path.join(w.home, 'logs', 'cycles', d)).sort().map(f => JSON.parse(fs.readFileSync(path.join(w.home, 'logs', 'cycles', d, f), 'utf8'))));
+        const on = recs.at(-1).prepare.on;
+        const want = { 'nothing injected': ['confirm', false], 'the confirm errors': ['confirm', true], 'the confirm hangs to its bound': ['confirm', true] }[name];
+        if (want) assert.deepStrictEqual([on.path, on.confirm && on.confirm.fellBack], want, `${name}: ${JSON.stringify(on)}`);
+        else assert.notStrictEqual(on.path, 'confirm', `${name}: the full head trader (${on.path})`);
+      }
+    }
+  }
+});
+
 test('off regression 5: the check can fail: a leak (an extra day-log line, an env var, a state file) is reported against main', () => {
   const main = MAIN.days['no-fill'];
   const leak = f => { const x = JSON.parse(JSON.stringify(main)); f(x); return x; };

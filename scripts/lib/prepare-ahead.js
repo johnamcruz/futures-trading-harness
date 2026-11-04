@@ -12,7 +12,7 @@
  * Every time comes from the caller (the runner's harness clock, trading/harness-now.js); this module never reads the
  * wall clock.
  *
- *   MODES, modeProblem(value, harness), shadowOn(cfg)      the runner config's key ("on" is refused until B2)
+ *   MODES, modeProblem(value, harness), shadowOn(cfg)      the runner config's key (off, shadow, on), onOn(cfg)
  *   deadlineOf({ nowMs, nextCloseMs, eodMs, marginMs, maxMs })  { atMs, budgetMs, by }: the earliest of the next close
  *                                                         minus the margin, the end of day and now plus the most a run takes
  *   overran(deadline, nowMs)                              done after the deadline (an unreadable clock: yes)
@@ -25,6 +25,9 @@
  *   makePlan(parts), parsePlan(text)                      the plan record and its SCENARIO / STAND DOWN / INVALID lines
  *   firedReads({ scan, listed }), matchScenario(plan, fired), readKind(read)   the at-close match
  *   preparePrompt(parts), confirmPrompt(parts)            the two runs' prompts
+ *   confirmPath({ plan, at, fired, killSwitch, flat })    "on" at the close: the confirm, or the full head trader and why
+ *   confirmSuffix({ scenario, unplanned })                "on": the confirm's message after the at-close facts
+ *   forbiddenIn(output, allowed)                          a run's forbidden-tool attempts, from its transcript
  *   parseDecision(text), fullDecisionOf({ result, entry }), agreement(shadow, full)   the comparison
  */
 
@@ -33,7 +36,7 @@ const fs = require('fs');
 const path = require('path');
 const { writeJsonAtomic } = require('./harness-run');
 
-const MODES = Object.freeze(['off', 'shadow']);
+const MODES = Object.freeze(['off', 'shadow', 'on']);
 /**
  * What the prepare and the shadow confirm may not use, beyond the head trader's own deny rules (kept identical, for the
  * prompt cache): by name from the harness tools' registry (harness-tools/registry.js) and the broker interface (autotrader.js claudePrepareTools takes
@@ -53,13 +56,17 @@ const sha = s => crypto.createHash('sha256').update(String(s)).digest('hex');
 /** The runner config's prepareAhead: the problem with it, or null (absent or "off": no delivery on any harness). */
 function modeProblem(v, harness) {
   if (v === undefined || v === 'off') return null;
-  if (v === 'on') return 'prepareAhead: "on" is not built yet (the confirm deciding comes in PR B2); use "shadow" to measure it beside the old path, or "off"';
-  if (v !== 'shadow') return `prepareAhead: "off" or "shadow" (got ${JSON.stringify(v)})`;
+  if (v !== 'shadow' && v !== 'on') return `prepareAhead: "off", "shadow" or "on" (got ${JSON.stringify(v)})`;
   return harness === 'claude' ? null : `prepareAhead: for harness "claude" only (harness ${harness})`;
 }
 
+/** "on" needs headSkillsInPrompt (autotrader.js validateConfig refuses it otherwise, as does the training preflight). */
+const ON_NEEDS = 'prepareAhead: "on" needs headSkillsInPrompt: true (the head trader\'s skills embedded and attested on the confirm\'s own run: the prepare\'s skill loads are never in the confirm\'s stream, so without it every confirm\'s entry is refused at the executor [skills-loaded])';
+
 /** Shadow mode on (Claude Code, prepareAhead "shadow"). */
 const shadowOn = cfg => Boolean(cfg) && cfg.harness === 'claude' && cfg.prepareAhead === 'shadow';
+/** "on" (Claude Code, prepareAhead "on"): the confirm decides (PR B2). */
+const onOn = cfg => Boolean(cfg) && cfg.harness === 'claude' && cfg.prepareAhead === 'on';
 
 /**
  * The deadline: the earliest of the next close less the margin, the end of day less the margin, and now plus the most a
@@ -253,11 +260,54 @@ function parsePlan(text) {
   return { scenarios, standDown, invalid };
 }
 
-/** The plan record: the session, the input versions, the section's candidates, the text and its parse, an id. */
-function makePlan({ symbol, bar, next, madeAt, ms, session, versions, candidates, text, usage = null }) {
+/**
+ * The plan record: the session, the input versions, the section's candidates, the text and its parse, an id; `base`: the
+ * prepare session's message uuids, sealed (trading/confirm-base.js baseOf: the runner's, read from its session file),
+ * which "on" names to the confirm (FTH_CONFIRM_BASE) so the gate reads the fork without them.
+ */
+function makePlan({ symbol, bar, next, madeAt, ms, session, versions, candidates, text, usage = null, base = null }) {
   const parsed = parsePlan(text);
   const id = sha(`${symbol}|${next.t}|${(session || {}).id || ''}|${madeAt}`);
-  return { v: 1, id, symbol, bar, next, madeAt, ms, session: { id: (session || {}).id || null, transcript: (session || {}).transcript || null }, versions, candidates: (candidates || []).map(c => ({ id: c.id, kind: c.kind, read: c.read, side: c.side, tf: c.tf })), text, ...parsed, usage };
+  return { v: 1, id, symbol, bar, next, madeAt, ms, session: { id: (session || {}).id || null, transcript: (session || {}).transcript || null }, versions, candidates: (candidates || []).map(c => ({ id: c.id, kind: c.kind, read: c.read, side: c.side, tf: c.tf })), text, ...parsed, usage, ...(base ? { base } : {}) };
+}
+
+/** A plan's base whole: its uuids, sealed by the runner (trading/confirm-base.js baseRecord). */
+const baseWhole = plan => {
+  const b = isObj(plan) && isObj(plan.base) ? plan.base : null;
+  if (!b || !Array.isArray(b.uuids) || !b.uuids.length || !b.uuids.every(u => typeof u === 'string' && u)) return false;
+  return require('./trading/confirm-base').baseRecord(b.transcript, b.uuids).sha === b.sha;
+};
+
+/**
+ * "on", at the close (docs/PREPARE-AHEAD.md, "On: the confirm decides"): the confirm, or the full head trader's run and
+ * why. In order: the kill switch; an open position or working order (`flat` not true: management); no plan, a stale one,
+ * a void one (validate: every input version, the session's file); a plan without its whole base (the confirm could not
+ * be told from the prepare); what fired outside the plan, or nothing. What fired is always the real at-close scan's
+ * (`fired`: firedReads); the plan's thresholds never decide. { path: 'confirm', match, scenario, fired, unplanned } or
+ * { path: kill-switch | not-flat | no-plan | stale | void | no-base | outside | nothing-fired, reason?, detail?, fired }.
+ */
+function confirmPath({ plan, at, fired = [], killSwitch = true, flat = null }) {
+  if (killSwitch !== false) return { path: 'kill-switch', fired };
+  if (flat !== true) return { path: 'not-flat', fired };
+  if (!isObj(plan)) return { path: 'no-plan', fired };
+  const v = validate(plan, at);
+  if (v.status !== 'valid') return { path: v.status === 'void' ? 'void' : v.status === 'stale' ? 'stale' : 'no-plan', ...(v.status === 'void' ? { reason: v.reason } : {}), ...(v.detail ? { detail: v.detail } : {}), fired };
+  if (!baseWhole(plan)) return { path: 'no-base', fired };
+  const m = matchScenario(plan, fired);
+  if (m.status !== 'matched') return { path: m.status, fired };
+  const scenario = (plan.scenarios || []).find(s => s.k === m.k);
+  return { path: 'confirm', match: { k: m.k, id: m.id, read: m.read, side: m.side }, scenario, fired, unplanned: m.unplanned };
+}
+
+/**
+ * The confirm's user message after the at-close facts (the cycle's own prompt and its reads, which come first): the
+ * plan's scenario, the rule (rule first, bold in the skills: PR C), what fired outside the plan. It composes through
+ * compose_check as the cycle's prompt says, or passes.
+ */
+function confirmSuffix({ scenario, unplanned = [] }) {
+  const more = (unplanned || []).length ? `\nAlso fired at this close, outside your plan: ${unplanned.map(f => `"${f}"`).join(', ')}: judge it from the facts above, in full.` : '';
+  return `\n\nPrepare ahead: you planned this close during the bar (above in this session, from closed bars only). Your plan said: scenario ${scenario.k}:\n${scenario.line}\n`
+    + `The candle decides: confirm a scenario only if the closed candle meets its TAKE conditions; else pass. The at-close facts above decide, never the plan: confirming is compose_check with the reads as these facts give them, then as this cycle's prompt says; passing is its CYCLE RESULT with why.${more}`;
 }
 
 /** What fired at the close: the rules strategies the real scan fired, then the at-close briefing's setups to check. */
@@ -309,6 +359,39 @@ function confirmPrompt({ atCloseText, fired = [], scenario, next }) {
     + `This is a shadow run beside the real cycle: do not call compose_check, place no order and launch no role. End with exactly one line: DECISION: TAKE ${scenario.k} | DECISION: PASS - <why>.`;
 }
 
+const DENIED_BY_CLI = /^Permission to use \S+ has been denied/;
+/**
+ * A run's forbidden-tool attempts, from its own transcript (its stream-json `output`): each tool_use, in order, of a tool
+ * its allow list (`allowed`, its --allowedTools: a tool by name or a whole MCP server) does not hold, and each answered
+ * by the CLI's own denial (a shell command, which its read-only commands make no allow rule decide). The CLI runs its
+ * PreToolUse hooks before the permission check (docs/PREPARE-AHEAD.md), so a call a hook refused is never among its
+ * permission_denials: only the transcript shows every attempt. Its tools' names.
+ */
+function forbiddenIn(output, allowed) {
+  const list = Array.isArray(allowed) ? allowed : [];
+  const holds = name => list.includes(name) || list.some(a => /^mcp__[a-z0-9-]+$/.test(a) && name.startsWith(`${a}__`));
+  const uses = new Map();
+  const out = [];
+  for (const line of String(output || '').split('\n')) {
+    let ev;
+    try { ev = JSON.parse(line); } catch (_err) { continue; }
+    const content = isObj(ev) && isObj(ev.message) && Array.isArray(ev.message.content) ? ev.message.content : [];
+    for (const c of content) {
+      if (!isObj(c)) continue;
+      if (c.type === 'tool_use' && typeof c.name === 'string' && typeof c.id === 'string') {
+        uses.set(c.id, c.name);
+        if (c.name !== 'Bash' && !holds(c.name)) out.push({ id: c.id, name: c.name });
+      }
+      if (c.type === 'tool_result' && c.is_error === true && uses.has(c.tool_use_id) && !out.some(x => x.id === c.tool_use_id)) {
+        const text = typeof c.content === 'string' ? c.content : (Array.isArray(c.content) ? c.content.map(b => (isObj(b) ? b.text || '' : '')).join('') : '');
+        if (DENIED_BY_CLI.test(text.trim())) out.push({ id: c.tool_use_id, name: uses.get(c.tool_use_id) });
+      }
+    }
+  }
+  const order = [...uses.keys()];
+  return out.sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id)).map(x => x.name);
+}
+
 /** The shadow confirm's decision: its last line-start DECISION line (TAKE k or PASS), or null. */
 function parseDecision(text) {
   const lines = [...strip(String(text || '')).matchAll(/^[ \t>*-]*DECISION:\s*(TAKE\s+(\d+)|PASS)\b/gim)];
@@ -337,6 +420,6 @@ function agreement(shadow, full) {
 }
 
 module.exports = {
-  MODES, PLAN_DIR, PREPARE_DENIED, PREPARE_SCRIPTS, modeProblem, shadowOn, deadlineOf, overran, shouldPrepare, windowOf, sectionFor, deskKeys, versionsOf, validate,
-  recordSession, readSession, shadowGateLog, planFile, writePlan, readPlan, makePlan, parsePlan, firedReads, matchScenario, readKind, preparePrompt, confirmPrompt, parseDecision, fullDecisionOf, agreement,
+  MODES, ON_NEEDS, PLAN_DIR, PREPARE_DENIED, PREPARE_SCRIPTS, modeProblem, shadowOn, onOn, deadlineOf, overran, shouldPrepare, windowOf, sectionFor, deskKeys, versionsOf, validate,
+  recordSession, readSession, shadowGateLog, planFile, writePlan, readPlan, makePlan, parsePlan, confirmPath, confirmSuffix, firedReads, matchScenario, readKind, preparePrompt, confirmPrompt, forbiddenIn, parseDecision, fullDecisionOf, agreement,
 };

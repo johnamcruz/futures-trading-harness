@@ -81,6 +81,8 @@ jobs:
             file: tests/goal/tier2-states.goal.js
           - part: floor
             file: tests/goal/tier2-floor.goal.js
+          - part: prepare
+            file: tests/goal/tier2-prepare.goal.js
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-node@v4

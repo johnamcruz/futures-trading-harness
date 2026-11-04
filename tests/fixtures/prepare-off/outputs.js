@@ -104,7 +104,7 @@ function stateOf(w, own) {
  * One day: a fresh world (its runner config with `extra`), its three passes, `opts.runPrepare(w)` the shadow's runs
  * (none: the old path alone). Returns { passes, after } in normalized text, and the world.
  */
-async function runDay(day, { extra = {}, runPrepare = null, before = null, cfgAt = null, beforePass = null, own = null } = {}) {
+async function runDay(day, { extra = {}, runPrepare = null, headRun = null, before = null, cfgAt = null, beforePass = null, own = null, fingerprint = true } = {}) {
   const ROOT = path.resolve(__dirname, '..', '..', '..');
   const D = require(path.join(ROOT, 'tests', 'fixtures', 'decision-path'));
   const exchange = require(path.join(ROOT, 'tests', 'fixtures', 'mock-exchange'));
@@ -122,7 +122,12 @@ async function runDay(day, { extra = {}, runPrepare = null, before = null, cfgAt
     const filled = day !== 'no-fill' && bar === D.NEXT_BAR;
     if (filled) exchange.handle(w.state, 'place_order', { accountId: 7, contractId: D.MNQ_ID, side: 'buy', type: 'market', size: 1, stopLossBracket: { ticks: 40 } }, {});
     const script = filled ? [{ result: 'CYCLE RESULT: managed - the open long' }] : day === 'entry' && bar === D.FIRED_BAR ? D.entryCycle(w) : D.passCycle(w, 'nothing to take');
-    const r = await D.pass(w, D.decisionAt(bar), script, runPrepare ? { runPrepare: runPrepare(w) } : {});
+    // (`headRun(w, script)`: the branch's own: the head trader's runs played by another stand-in, prepare ahead "on".)
+    // (Its last run's env stands for the scripted model's: the pass's env as main records it, for the normalizer too.)
+    let headEnv = null;
+    const hr = headRun ? headRun(w, script) : null;
+    const r = await D.pass(w, D.decisionAt(bar), script, { ...(runPrepare ? { runPrepare: runPrepare(w) } : {}), ...(hr ? { headRun: (argv, o) => { headEnv = o.env; return hr(argv, o); } } : {}) });
+    if (hr && headEnv) r.ctx = { env: headEnv };
     const env = r.ctx && r.ctx.env ? Object.fromEntries(Object.entries(r.ctx.env).filter(([k]) => /^(FTH_|CLAUDE_)/.test(k)).sort(([a], [b]) => a.localeCompare(b))) : null;
     passes.push({
       bar,
@@ -140,11 +145,13 @@ async function runDay(day, { extra = {}, runPrepare = null, before = null, cfgAt
   const runnerState = JSON.parse(fs.readFileSync(w.stateFile, 'utf8'));
   const { validateConfig, headDeliveryOf } = require(path.join(ROOT, 'scripts', 'lib', 'autotrader'));
   const raw = { harness: 'claude', cycle: 'full', premarketAt: '', timeframe: 3, account: '7', symbols: ['MNQ'], bars: 1400, ...(day === 'manage-only' ? { maxCyclesPerDay: 1 } : {}), ...extra };
-  const cfg = validateConfig(raw);
+  // (`fingerprint: false`, the branch's own: a runner config the run drives directly but validateConfig would refuse,
+  // prepare ahead "on" without headSkillsInPrompt, kept so its old path compares with main's; no fingerprint then.)
+  const cfg = fingerprint ? validateConfig(raw) : null;
   const out = {
     passes, records, lines, gate: fs.existsSync(w.env.FTH_GATE_LOG) ? fs.readFileSync(w.env.FTH_GATE_LOG, 'utf8').trim().split('\n').filter(Boolean) : [], orders: exchange.read(w.state).calls.filter(c => c.tool === 'place_order').map(c => JSON.stringify(c.args)),
     calls: exchangeCalls(w.state), state, history: runnerState.history,
-    fingerprint: { cfg: { ...cfg, dataDir: null, workdir: null }, delivery: headDeliveryOf(null, cfg) },
+    fingerprint: cfg ? { cfg: { ...cfg, dataDir: null, workdir: null }, delivery: headDeliveryOf(null, cfg) } : null,
   };
   return { w, out: compact(JSON.parse(norm(JSON.stringify(out)))) };
 }

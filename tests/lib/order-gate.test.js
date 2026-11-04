@@ -1985,6 +1985,102 @@ test('roles-ran: an autonomous full cycle enters only after the analysts and bot
   assert.match(run(entryOrder(), { ...auto, cycleTranscript: `${file}.gone` }).violations.find(v => v.check === 'roles-ran').message, /can't be read/);
 });
 
+// --- Prepare ahead "on": the confirm's hook transcript is a fork of the prepare's session (confirm-base.js). ---
+// A Claude Code session file's lines (each event top-level with its uuid), as the fork copies the prepare's.
+const ccLine = (uuid, ev) => JSON.stringify({ ...ev, uuid, parentUuid: null, sessionId: 'ses-fork' });
+const ccUse = (id, name, input) => ({ type: 'assistant', message: { role: 'assistant', content: [{ type: 'tool_use', id, name, input }] } });
+const ccResult = (id, text, err = false) => ({ type: 'user', message: { role: 'user', content: [{ type: 'tool_result', tool_use_id: id, content: [{ type: 'text', text }], is_error: err }] } });
+const ccSkills = tag => ['trade-session', 'multi-timeframe-analysis', 'strategy-library', 'strategy-scan', 'strategy-gate-checks', 'setup-judgment', 'trade-plan'].flatMap((s, i) => [ccUse(`${tag}s${i}`, 'Skill', { skill: s }), ccResult(`${tag}s${i}`, `Launching skill: ${s}`)]);
+const ccRoles = tag => ['market-structure-analyst', 'trend-momentum-analyst', 'volume-liquidity-analyst', 'risk-manager', 'risk-manager'].flatMap((r, i) => [ccUse(`${tag}r${i}`, 'Agent', { subagent_type: r, description: r, prompt: 'the cycle' }), ccResult(`${tag}r${i}`, 'VERDICT: APPROVE - size 1')]);
+/** A home with the prepare's plan record holding its base (the runner's), and the confirm's fork: the prepare's lines, then `own`. */
+function confirmFork({ prep, own }) {
+  const CB = require('../../scripts/lib/trading/confirm-base');
+  const home = trendHome();
+  fs.mkdirSync(path.join(home, 'prepare'), { recursive: true });
+  const prepLines = prep.map((ev, i) => ccLine(`prep-${i}`, ev));
+  const base = path.join(home, 'prepare', 'MNQ-20260428T041200000Z.json');
+  fs.writeFileSync(base, JSON.stringify({ v: 1, id: 'plan', symbol: 'MNQ', base: CB.baseRecord('/sessions/ses-prep.jsonl', prepLines.map((_l, i) => `prep-${i}`)) }));
+  const fork = path.join(home, 'sessions', 'ses-fork.jsonl');
+  fs.mkdirSync(path.dirname(fork), { recursive: true });
+  fs.writeFileSync(fork, [...prepLines, ...own.map((ev, i) => ccLine(`own-${i}`, ev))].join('\n'));
+  // The confirm's own stream (the gateway's view): its lines only, as a forked run prints them.
+  const stream = path.join(home, 'logs', 'cycle-transcript-1-abc.jsonl');
+  fs.mkdirSync(path.dirname(stream), { recursive: true });
+  fs.writeFileSync(stream, own.map(ev => JSON.stringify(ev)).join('\n'));
+  return { home, base, fork, stream };
+}
+const confirmRun = (w, { base = w.base, hook = w.fork } = {}) => evaluateOrder({ input: entryOrder(), entries: [plan()], now: NOW, config: { ...config, home: w.home, autonomous: true, cycle: 'full', cycleTranscript: w.stream, confirmBase: base }, transcriptPath: hook });
+
+test('confirm attribution: on the confirm\'s hook transcript (a fork), the prepare\'s role calls and phase-2 report never satisfy roles-ran; without the cut they would (the attack); the close\'s own still do', () => {
+  // The attack: the prepare's history holds a whole desk and an approving phase 2 (a prepare whose Agent tool was not
+  // denied, say by a user's own allow rule); the confirm itself ran none. Without the cut its hook would pass the entry.
+  const attack = confirmFork({ prep: [...ccSkills('p'), ...ccRoles('p')], own: [] });
+  assert.deepStrictEqual(confirmRun(attack, { base: null }).violations.filter(v => v.check === 'roles-ran'), [], 'the attack: no cut, the prepare\'s roles count');
+  const cutRun = confirmRun(attack);
+  assert.deepStrictEqual(checks(cutRun), ['roles-ran'], JSON.stringify(cutRun.violations));
+  assert.match(cutRun.violations[0].message, /not returned yet: market-structure-analyst, trend-momentum-analyst, volume-liquidity-analyst, risk-manager/);
+  // The close's own desk (after the copied lines) counts; the prepare's skill loads still count (the same conversation).
+  const legit = confirmFork({ prep: ccSkills('p'), own: ccRoles('c') });
+  assert.deepStrictEqual(confirmRun(legit).violations, [], 'the prepare\'s skills and the close\'s roles: an entry');
+  // Only the prepare's phase 2 approved (the close's desk ran, its phase 2 did not): no approval at the close.
+  const p2 = confirmFork({ prep: [...ccSkills('p'), ...ccRoles('p').slice(8)], own: ccRoles('c').slice(0, 8) });
+  assert.deepStrictEqual(confirmRun(p2, { base: null }).violations.filter(v => v.check === 'roles-ran'), [], 'without the cut the prepare\'s phase 2 approves');
+  const r = confirmRun(p2);
+  assert.deepStrictEqual(checks(r), ['roles-ran']);
+  assert.match(r.violations[0].message, /risk-manager phase 2/);
+});
+
+test('confirm attribution: a base named but missing, unreadable, forged, outside the prepare folder, or a hook transcript that is not its fork refuses the entry, on the hook and the gateway alike; exits still go', () => {
+  const w = confirmFork({ prep: ccSkills('p'), own: ccRoles('c') });
+  const refused = (what, o) => {
+    const r = confirmRun(w, o);
+    assert.deepStrictEqual(checks(r).filter(c => c === 'roles-ran'), ['roles-ran'], what);
+    assert.match(r.violations.find(v => v.check === 'roles-ran').message, /confirm's base|not the fork/, what);
+    // Exits and protective stops never wait for it.
+    assert.deepStrictEqual(evaluateOrder({ input: entryOrder({ rationale: '[exit] flatten' }), entries: [plan()], now: NOW, config: { ...config, home: w.home, autonomous: true, cycle: 'full', cycleTranscript: w.stream, confirmBase: o.base || w.base }, transcriptPath: o.hook === undefined ? w.fork : o.hook }).violations, [], `${what}: an exit`);
+  };
+  refused('a missing base', { base: path.join(w.home, 'prepare', 'gone.json') });
+  refused('the gateway, a missing base', { base: path.join(w.home, 'prepare', 'gone.json'), hook: null });
+  const forged = path.join(w.home, 'prepare', 'forged.json');
+  const rec = JSON.parse(fs.readFileSync(w.base, 'utf8'));
+  fs.writeFileSync(forged, JSON.stringify({ ...rec, base: { ...rec.base, uuids: rec.base.uuids.slice(1) } }));
+  refused('a forged base', { base: forged });
+  refused('the gateway, a forged base', { base: forged, hook: null });
+  const outside = path.join(w.home, 'base.json');
+  fs.copyFileSync(w.base, outside);
+  refused('a base outside the prepare folder', { base: outside });
+  // Another session's transcript (not the fork of this prepare): none of the base's lines first.
+  const other = path.join(w.home, 'sessions', 'ses-other.jsonl');
+  fs.writeFileSync(other, [...ccSkills('o'), ...ccRoles('o')].map((ev, i) => ccLine(`o-${i}`, ev)).join('\n'));
+  refused('a hook transcript that is not the fork', { hook: other });
+  // A subagent of the confirm (its hook transcript under the fork's folder): the fork, its main session, must be read to
+  // be cut; gone, refused (never only the subagent's own lines).
+  const sub = path.join(path.dirname(w.fork), 'ses-gone', 'subagents', 'agent-1.jsonl');
+  fs.mkdirSync(path.dirname(sub), { recursive: true });
+  fs.writeFileSync(sub, ccRoles('s').map((ev, i) => ccLine(`s-${i}`, ev)).join('\n'));
+  refused('a subagent whose main session (the fork) is gone', { hook: sub });
+  // Control: the base and its fork as the runner made them: no refusal.
+  assert.deepStrictEqual(confirmRun(w).violations, []);
+  // The gateway's view (no hook transcript): the confirm's own stream, no prepare line in it; a whole base is accepted.
+  const own = confirmFork({ prep: ccSkills('p'), own: [...ccSkills('c'), ...ccRoles('c')] });
+  assert.deepStrictEqual(confirmRun(own, { hook: null }).violations, []);
+});
+
+test('confirm attribution (decided, fails closed): the gateway reads the confirm\'s own stream, which never holds the prepare\'s skill loads; the hook\'s fork does and counts them', () => {
+  // The prepare loaded the skills; the confirm composed without loading them again. Its hook (the fork: the same
+  // conversation) counts them; the gateway (authoritative) sees only the confirm's stream and refuses: the confirm loads
+  // or looks up what an entry needs itself (a turn), never an entry on a load the gateway can't see.
+  const w = confirmFork({ prep: ccSkills('p'), own: ccRoles('c') });
+  assert.deepStrictEqual(confirmRun(w).violations, [], 'the hook: the prepare\'s loads count');
+  assert.deepStrictEqual(checks(confirmRun(w, { hook: null })), ['skills-at-entry', 'skills-loaded'], 'the gateway: not in its stream');
+});
+
+test('confirm attribution: the cut is only the confirm\'s: no base named (any other run), a hook transcript is read whole, as before', () => {
+  const w = confirmFork({ prep: [...ccSkills('p'), ...ccRoles('p')], own: [] });
+  // A transcript holding uuids is not by itself a confirm: without FTH_CONFIRM_BASE nothing is cut.
+  assert.deepStrictEqual(confirmRun(w, { base: null }).violations, []);
+});
+
 // --- Fact-checked reasons: the facts phase 2 approved on, against the cycle's bar briefing (fact-claims.js, R29). ---
 test('phase2-facts: the order\'s own setup - its setup tag and side; a policy strategy\'s is the component its latest verdict trades', () => {
   const { factsOrder } = require('../../scripts/lib/trading/order-gate');
