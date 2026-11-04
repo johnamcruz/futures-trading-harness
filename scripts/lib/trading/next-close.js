@@ -79,7 +79,7 @@
 const path = require('path');
 const { buildBriefing, renderBriefing, candleLevelsAt, sessionWindow, newsState } = require('./briefing');
 const CF = require('./candle-facts');
-const { momentumRead, RANGE_ATR, VOL_RATIO } = require('./momentum');
+const { momentumRead, RANGE_ATR, VOL_RATIO, THIRD } = require('./momentum');
 const { normalizeBars } = require('./indicators');
 const { tickOf, levelOnTick } = require('./contracts');
 const { MARKET_TZ } = require('./clock');
@@ -236,7 +236,7 @@ function momentumCandidates(x) {
       const stop = s.risk && s.risk.stop ? (isObj(s.risk.stop) ? s.risk.stop[side] : s.risk.stop) : null;
       out.push({
         kind: 'momentum', name: s.name, side, dir: word, read: reads[0].read, tf,
-        trigger: { at: next.t, dir: word, ticks: t.ticks, range: t.range, volume: t.volume, third: word === 'up' ? 'top' : 'bottom', basis: { prev: basis.prev ? { o: basis.prev.o, h: basis.prev.h, l: basis.prev.l, c: basis.prev.c, v: basis.prev.v } : null, atrPrev: basis.atrPrev, avg: basis.avg, n: basis.n } },
+        trigger: { at: next.t, dir: word, ticks: t.ticks, range: t.range, volume: t.volume, third: THIRD[word], basis: { prev: basis.prev ? { o: basis.prev.o, h: basis.prev.h, l: basis.prev.l, c: basis.prev.c, v: basis.prev.v } : null, atrPrev: basis.atrPrev, avg: basis.avg, n: basis.n } },
         preconditions: rule.others,
         rule: { entry: 'market from the close', stop: stop ? `${stop}${num(s.risk.stop_min) ? `, at least ${s.risk.stop_min} pts` : ''} (${s.name}'s risk.stop), ceil to ticks` : `${s.name}'s risk.stop`, target: s.exit && num(s.exit.target_r) ? `${s.exit.target_r}R (its exit.target_r; past it the policy's exit trails)` : 'its own' },
         threshold: { bar: probe, reads: reads.map(y => y.read), plan: planFacts(planned.plan, planned.problems, sizing) },
@@ -246,8 +246,11 @@ function momentumCandidates(x) {
   return out;
 }
 
-/** The final setup-frame candle once the closing bar is in: open known, range so far, the bar's high, low and close. */
-const finalCandle = (f, bar) => ({ o: f.o, h: Math.max(f.h, bar.h), l: Math.min(f.l, bar.l), c: bar.c });
+/**
+ * The final setup-frame candle once the closing bar is in: open known, range so far, the bar's high, low and close
+ * (candle-facts.js extendCandle, completedSeries' roll-up).
+ */
+const finalCandle = (f, bar) => CF.extendCandle(f, bar);
 
 /** A tick price `k` ticks from `p` on the tick grid (p's tick floor or ceiling first). */
 const ticksFrom = (p, k, tick, up) => levelOnTick((up ? Math.floor(p / tick + 1e-9) + k : Math.ceil(p / tick - 1e-9) - k) * tick, tick);
@@ -297,8 +300,9 @@ function reactionCandidates(x) {
   // Only at a close that completes a setup-frame candle, with at least one of its bars closed already.
   if (!completes) return [];
   if (cand.first >= n) { skipped.push(`${stf}: none of its bars has closed yet`); return []; }
-  const subs = bars.slice(cand.first, n);
-  const f = { t: cand.t, o: bars[cand.first].o, h: Math.max(...subs.map(b => b.h)), l: Math.min(...subs.map(b => b.l)) };
+  // The candle its closed bars make so far (candle-facts.js formingCandle): its open, high and low.
+  const so = CF.formingCandle(bars, cand.first, n - 1);
+  const f = { t: cand.t, o: so.o, h: so.h, l: so.l };
   const prev = j > 0 ? s.candles[j - 1] : null;
   const prevClose = prev ? prev.c : NaN;
   const closeOf = k => Date.parse(bars[k].t) + minutes * 60000;
@@ -400,8 +404,8 @@ function standingCandidates(x) {
 function reactionKinds(f, L, prevClose, tick) {
   const rel = c => CF.relation(c, L, prevClose);
   const out = [];
-  // A break's close is at most |L - open| beyond L (most of the body beyond): the search never needs more ticks.
-  const span = (Math.ceil(Math.abs(L - f.o) / tick) + 1) * 2;
+  // A break's least close lies about candle-facts.js breakReach beyond L (relation's rule): the search never needs more ticks.
+  const span = (Math.ceil(CF.breakReach(f.o, L) / tick) + 1) * 2;
   for (const up of [true, false]) {
     // A break: the least close beyond L (from L outward) that relation reads as broke that way.
     const closeAt = k => ticksFrom(L, k, tick, up);
@@ -419,7 +423,7 @@ function reactionKinds(f, L, prevClose, tick) {
     const c = { h: up ? extreme : back, l: up ? back : extreme, c: back };
     const r = rel(finalCandle(f, c));
     if (r.relation === 'rejected' && r.dir === dir) {
-      const done = up ? f.h > L : f.l < L;
+      const done = CF.tradedBeyond(f, L, up ? 'above' : 'below');
       out.push({ rel: 'rejected', dir, facts: { close: back, closeOp: up ? '<=' : '>=', extreme: done ? null : beyond, extremeOp: up ? '>=' : '<=', tradedBeyond: done },
         bar: open => ({ o: open, h: Math.max(open, back, done ? back : beyond), l: Math.min(open, back, done ? back : beyond), c: back }) });
     }
@@ -489,9 +493,11 @@ function triggerText(c, base) {
   }
   const f = t.candle;
   const so = `the ${c.tf} candle (opened ${etClock(f.t)}, open ${f.o}, so far high ${f.h} low ${f.l})`;
-  if (t.rel === 'broke') return `${so} closes ${op(t.closeOp)} ${t.close}: beyond ${c.name}${String(c.name).endsWith(String(c.price)) ? '' : ` ${c.price}`} with most of its body beyond`;
+  // The level as said (its name, with its price unless the name ends with it), and relation's rule in candle-facts' words.
+  const level = `${c.name}${String(c.name).endsWith(String(c.price)) ? '' : ` ${c.price}`}`;
+  if (t.rel === 'broke') return `${so} closes ${op(t.closeOp)} ${t.close}: ${CF.relationRuleText('broke', t.dir, level)}`;
   const beyond = t.tradedBeyond ? `has traded ${t.extremeOp === '>=' ? 'above' : 'below'} it already` : `trades ${op(t.extremeOp)} ${t.extreme}`;
-  return `${so} ${beyond} and closes ${op(t.closeOp)} ${t.close}: back ${t.closeOp === '<=' ? 'below' : 'above'} ${c.name}${String(c.name).endsWith(String(c.price)) ? '' : ` ${c.price}`}`;
+  return `${so} ${beyond} and closes ${op(t.closeOp)} ${t.close}: ${CF.relationRuleText('rejected', t.dir, level)}`;
 }
 
 /** The section as briefing lines (et: a time formatter, the briefing's). */
