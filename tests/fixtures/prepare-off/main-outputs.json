@@ -25,8 +25,8 @@
       "FTH_CYCLE": "full",
       "FTH_CYCLE_BARS": "{\"MNQ\":\"2026-04-28T04:06:00.000Z\"}",
       "FTH_CYCLE_DESK": "market-structure-analyst,trend-momentum-analyst,volume-liquidity-analyst,risk-manager",
-      "FTH_CYCLE_SKILLS": "sha256:4e6eb3da83b41614928bcd4e2c07c51b92cb3c6985cf0ea20d45fdea4bd80594 (450 chars)",
-      "FTH_CYCLE_TRANSCRIPT": "<home>/logs/<transcript0>.jsonl",
+      "FTH_CYCLE_SKILLS": "sha256:54a016b07c58cb9b9a390534201e0dc4b50616fa73a3440a78bd89a3b28e9b1a (453 chars)",
+      "FTH_CYCLE_TRANSCRIPT": "<home>/logs/<transcript3>.jsonl",
       "FTH_EARLY_CLOSE_DATES": "2026-11-27,2026-12-24,2027-11-26",
       "FTH_ENTRY_HOURS": "",
       "FTH_GATE_LOG": "<home>/gate.jsonl",
@@ -110,8 +110,8 @@
       "FTH_CYCLE_CACHED": "risk-manager",
       "FTH_CYCLE_DESK": "market-structure-analyst,trend-momentum-analyst,volume-liquidity-analyst",
       "FTH_CYCLE_PHASE1": "sha256:382d258861f0a1e503af28b693e076f76ded653c08a9f09a8df8a4cac1670afe (424 chars)",
-      "FTH_CYCLE_SKILLS": "sha256:cc333d682d9eb656f111bec6bf71ababc12509042a946b0db6f5d1b57197d47d (443 chars)",
-      "FTH_CYCLE_TRANSCRIPT": "<home>/logs/<transcript1>.jsonl",
+      "FTH_CYCLE_SKILLS": "sha256:d2c3c8cf4ec6d3682545e569f5b41c48f5d40cdea2ec634b0427cb9a72231466 (446 chars)",
+      "FTH_CYCLE_TRANSCRIPT": "<home>/logs/<transcript4>.jsonl",
       "FTH_EARLY_CLOSE_DATES": "2026-11-27,2026-12-24,2027-11-26",
       "FTH_ENTRY_HOURS": "",
       "FTH_GATE_LOG": "<home>/gate.jsonl",
@@ -205,8 +205,8 @@
       "FTH_CYCLE_CACHED": "risk-manager",
       "FTH_CYCLE_DESK": "market-structure-analyst,trend-momentum-analyst,volume-liquidity-analyst",
       "FTH_CYCLE_PHASE1": "sha256:23be06cd1a6cf7a49df11ec98ddb54a291c3c4a0f959c8b2def48c18ab63c7b1 (424 chars)",
-      "FTH_CYCLE_SKILLS": "sha256:fe44003b63aa9fbc50b4542f1eceb2ccbc5957f442953be93d3948b770c81921 (443 chars)",
-      "FTH_CYCLE_TRANSCRIPT": "<home>/logs/<transcript2>.jsonl",
+      "FTH_CYCLE_SKILLS": "sha256:c6ec3f3fa5471cc8bd0e88cf635b8df40290fa650dcaf6e7b5ba0ea21ff3540c (446 chars)",
+      "FTH_CYCLE_TRANSCRIPT": "<home>/logs/<transcript5>.jsonl",
       "FTH_EARLY_CLOSE_DATES": "2026-11-27,2026-12-24,2027-11-26",
       "FTH_ENTRY_HOURS": "",
       "FTH_GATE_LOG": "<home>/gate.jsonl",
@@ -1590,7 +1590,40 @@
      }
     }
    ],
-   "gate": "",
+   "gate": [],
+   "orders": [],
+   "calls": [
+    "search_contracts {\"searchText\":\"MNQ\",\"live\":false}",
+    "search_contracts {\"searchText\":\"NQ\",\"live\":false}",
+    "get_bars {\"includePartialBar\":false,\"contractId\":\"fake:MNQ:Z26\",\"unit\":\"minute\",\"unitNumber\":3,\"limit\":1400,\"startTime\":\"2026-04-18T08:09:02.000Z\",\"endTime\":\"2026-04-28T04:09:02.000Z\"}",
+    "list_open_positions {\"accountId\":7}",
+    "list_open_orders {\"accountId\":7}",
+    "list_open_positions {\"accountId\":7}",
+    "list_open_orders {\"accountId\":7}",
+    "list_accounts {\"onlyActiveAccounts\":false}",
+    "get_account_snapshot {\"accountId\":7}",
+    "search_trades {\"accountId\":7,\"startTimestamp\":\"2026-04-27T22:00:00.000Z\"}",
+    "search_contracts {\"searchText\":\"MNQ\",\"live\":false}",
+    "search_contracts {\"searchText\":\"NQ\",\"live\":false}",
+    "get_bars {\"includePartialBar\":false,\"contractId\":\"fake:MNQ:Z26\",\"unit\":\"minute\",\"unitNumber\":3,\"limit\":1400,\"startTime\":\"2026-04-18T08:12:02.000Z\",\"endTime\":\"2026-04-28T04:12:02.000Z\"}",
+    "list_open_positions {\"accountId\":7}",
+    "list_open_orders {\"accountId\":7}",
+    "list_open_positions {\"accountId\":7}",
+    "list_open_orders {\"accountId\":7}",
+    "list_accounts {\"onlyActiveAccounts\":false}",
+    "get_account_snapshot {\"accountId\":7}",
+    "search_trades {\"accountId\":7,\"startTimestamp\":\"2026-04-27T22:00:00.000Z\"}",
+    "search_contracts {\"searchText\":\"MNQ\",\"live\":false}",
+    "search_contracts {\"searchText\":\"NQ\",\"live\":false}",
+    "get_bars {\"includePartialBar\":false,\"contractId\":\"fake:MNQ:Z26\",\"unit\":\"minute\",\"unitNumber\":3,\"limit\":1400,\"startTime\":\"2026-04-18T08:15:02.000Z\",\"endTime\":\"2026-04-28T04:15:02.000Z\"}",
+    "list_open_positions {\"accountId\":7}",
+    "list_open_orders {\"accountId\":7}",
+    "list_open_positions {\"accountId\":7}",
+    "list_open_orders {\"accountId\":7}",
+    "list_accounts {\"onlyActiveAccounts\":false}",
+    "get_account_snapshot {\"accountId\":7}",
+    "search_trades {\"accountId\":7,\"startTimestamp\":\"2026-04-27T22:00:00.000Z\"}"
+   ],
    "state": [
     [
      "bars/MNQ-3m.json",
@@ -1618,7 +1651,7 @@
     ],
     [
      "exchange.json",
-     "sha256:86255f1e14cc6150d79d397c6a6107c26e6028bed8ebdb6aee9c4174544f0bbc (133460 chars)"
+     "sha256:5b2dd2f8eaeed4aa6611eda7fbed97e8f8773b86f23175dc82ca08cbe8e6378e (133449 chars)"
     ],
     [
      "head-prompt/cycle-skills-8f5a8972d559404d9c96b32e9eaa6142d23f13178401882c37ba5134f53acfe1.md",
@@ -1797,8 +1830,8 @@
       "FTH_CYCLE": "full",
       "FTH_CYCLE_BARS": "{\"MNQ\":\"2026-04-28T04:06:00.000Z\"}",
       "FTH_CYCLE_DESK": "market-structure-analyst,trend-momentum-analyst,volume-liquidity-analyst,risk-manager",
-      "FTH_CYCLE_SKILLS": "sha256:4e6eb3da83b41614928bcd4e2c07c51b92cb3c6985cf0ea20d45fdea4bd80594 (450 chars)",
-      "FTH_CYCLE_TRANSCRIPT": "<home>/logs/<transcript0>.jsonl",
+      "FTH_CYCLE_SKILLS": "sha256:54a016b07c58cb9b9a390534201e0dc4b50616fa73a3440a78bd89a3b28e9b1a (453 chars)",
+      "FTH_CYCLE_TRANSCRIPT": "<home>/logs/<transcript3>.jsonl",
       "FTH_EARLY_CLOSE_DATES": "2026-11-27,2026-12-24,2027-11-26",
       "FTH_ENTRY_HOURS": "",
       "FTH_GATE_LOG": "<home>/gate.jsonl",
@@ -1882,8 +1915,8 @@
       "FTH_CYCLE_CACHED": "risk-manager",
       "FTH_CYCLE_DESK": "market-structure-analyst,trend-momentum-analyst,volume-liquidity-analyst",
       "FTH_CYCLE_PHASE1": "sha256:382d258861f0a1e503af28b693e076f76ded653c08a9f09a8df8a4cac1670afe (424 chars)",
-      "FTH_CYCLE_SKILLS": "sha256:cc333d682d9eb656f111bec6bf71ababc12509042a946b0db6f5d1b57197d47d (443 chars)",
-      "FTH_CYCLE_TRANSCRIPT": "<home>/logs/<transcript1>.jsonl",
+      "FTH_CYCLE_SKILLS": "sha256:d2c3c8cf4ec6d3682545e569f5b41c48f5d40cdea2ec634b0427cb9a72231466 (446 chars)",
+      "FTH_CYCLE_TRANSCRIPT": "<home>/logs/<transcript4>.jsonl",
       "FTH_EARLY_CLOSE_DATES": "2026-11-27,2026-12-24,2027-11-26",
       "FTH_ENTRY_HOURS": "",
       "FTH_GATE_LOG": "<home>/gate.jsonl",
@@ -1975,8 +2008,8 @@
       "FTH_CYCLE": "full",
       "FTH_CYCLE_BARS": "{\"MNQ\":\"2026-04-28T04:12:00.000Z\"}",
       "FTH_CYCLE_DESK": "market-structure-analyst,trend-momentum-analyst,volume-liquidity-analyst,risk-manager",
-      "FTH_CYCLE_SKILLS": "sha256:55ebe8fc7bb775d90ffb9d3fa1db0be693ab7b6ba692ce913124df0b90cb3b27 (320 chars)",
-      "FTH_CYCLE_TRANSCRIPT": "<home>/logs/<transcript2>.jsonl",
+      "FTH_CYCLE_SKILLS": "sha256:662037f2afc3a4c89e71c3fc64b23b37baf0e3fb74bcf0c264fafab18d946eab (323 chars)",
+      "FTH_CYCLE_TRANSCRIPT": "<home>/logs/<transcript5>.jsonl",
       "FTH_EARLY_CLOSE_DATES": "2026-11-27,2026-12-24,2027-11-26",
       "FTH_ENTRY_HOURS": "",
       "FTH_GATE_LOG": "<home>/gate.jsonl",
@@ -3311,7 +3344,43 @@
      }
     }
    ],
-   "gate": "",
+   "gate": [],
+   "orders": [
+    "{\"accountId\":7,\"contractId\":\"fake:MNQ:Z26\",\"side\":\"buy\",\"type\":\"market\",\"size\":1,\"stopLossBracket\":{\"ticks\":40}}"
+   ],
+   "calls": [
+    "search_contracts {\"searchText\":\"MNQ\",\"live\":false}",
+    "search_contracts {\"searchText\":\"NQ\",\"live\":false}",
+    "get_bars {\"includePartialBar\":false,\"contractId\":\"fake:MNQ:Z26\",\"unit\":\"minute\",\"unitNumber\":3,\"limit\":1400,\"startTime\":\"2026-04-18T08:09:02.000Z\",\"endTime\":\"2026-04-28T04:09:02.000Z\"}",
+    "list_open_positions {\"accountId\":7}",
+    "list_open_orders {\"accountId\":7}",
+    "list_open_positions {\"accountId\":7}",
+    "list_open_orders {\"accountId\":7}",
+    "list_accounts {\"onlyActiveAccounts\":false}",
+    "get_account_snapshot {\"accountId\":7}",
+    "search_trades {\"accountId\":7,\"startTimestamp\":\"2026-04-27T22:00:00.000Z\"}",
+    "search_contracts {\"searchText\":\"MNQ\",\"live\":false}",
+    "search_contracts {\"searchText\":\"NQ\",\"live\":false}",
+    "get_bars {\"includePartialBar\":false,\"contractId\":\"fake:MNQ:Z26\",\"unit\":\"minute\",\"unitNumber\":3,\"limit\":1400,\"startTime\":\"2026-04-18T08:12:02.000Z\",\"endTime\":\"2026-04-28T04:12:02.000Z\"}",
+    "list_open_positions {\"accountId\":7}",
+    "list_open_orders {\"accountId\":7}",
+    "list_open_positions {\"accountId\":7}",
+    "list_open_orders {\"accountId\":7}",
+    "list_accounts {\"onlyActiveAccounts\":false}",
+    "get_account_snapshot {\"accountId\":7}",
+    "search_trades {\"accountId\":7,\"startTimestamp\":\"2026-04-27T22:00:00.000Z\"}",
+    "place_order {\"accountId\":7,\"contractId\":\"fake:MNQ:Z26\",\"side\":\"buy\",\"type\":\"market\",\"size\":1,\"stopLossBracket\":{\"ticks\":40}}",
+    "search_contracts {\"searchText\":\"MNQ\",\"live\":false}",
+    "search_contracts {\"searchText\":\"NQ\",\"live\":false}",
+    "get_bars {\"includePartialBar\":false,\"contractId\":\"fake:MNQ:Z26\",\"unit\":\"minute\",\"unitNumber\":3,\"limit\":1400,\"startTime\":\"2026-04-18T08:15:02.000Z\",\"endTime\":\"2026-04-28T04:15:02.000Z\"}",
+    "list_open_positions {\"accountId\":7}",
+    "list_open_orders {\"accountId\":7}",
+    "list_open_positions {\"accountId\":7}",
+    "list_open_orders {\"accountId\":7}",
+    "list_accounts {\"onlyActiveAccounts\":false}",
+    "get_account_snapshot {\"accountId\":7}",
+    "search_trades {\"accountId\":7,\"startTimestamp\":\"2026-04-27T22:00:00.000Z\"}"
+   ],
    "state": [
     [
      "bars/MNQ-3m.json",
@@ -3339,7 +3408,7 @@
     ],
     [
      "exchange.json",
-     "sha256:6c9c38bb48cda97a27fbda3c37f88a6229700b5340195b17cae5e7261c13998f (134564 chars)"
+     "sha256:8958c92cf593bd05692ee4d6acc6e57af3982754417c4bd8dba205b76d902c70 (134398 chars)"
     ],
     [
      "head-prompt/cycle-skills-4b09265779aed0724bd98fb1345ec6728429d6567ed0c0521b721cf1fbd7db39.md",
@@ -3518,8 +3587,8 @@
       "FTH_CYCLE": "full",
       "FTH_CYCLE_BARS": "{\"MNQ\":\"2026-04-28T04:06:00.000Z\"}",
       "FTH_CYCLE_DESK": "market-structure-analyst,trend-momentum-analyst,volume-liquidity-analyst,risk-manager",
-      "FTH_CYCLE_SKILLS": "sha256:a399c5325946a3d77f8d2f30dbd7324618fe5e9c64b2af3ea17226eba8225e98 (450 chars)",
-      "FTH_CYCLE_TRANSCRIPT": "<home>/logs/<transcript0>.jsonl",
+      "FTH_CYCLE_SKILLS": "sha256:54a016b07c58cb9b9a390534201e0dc4b50616fa73a3440a78bd89a3b28e9b1a (453 chars)",
+      "FTH_CYCLE_TRANSCRIPT": "<home>/logs/<transcript2>.jsonl",
       "FTH_EARLY_CLOSE_DATES": "2026-11-27,2026-12-24,2027-11-26",
       "FTH_ENTRY_HOURS": "",
       "FTH_GATE_LOG": "<home>/gate.jsonl",
@@ -3610,8 +3679,8 @@
       "FTH_CLOSED_DATES": "2026-01-01,2026-01-19,2026-02-16,2026-04-03,2026-05-25,2026-06-19,2026-07-03,2026-09-07,2026-11-26,2026-12-25,2027-01-01,2027-01-18,2027-02-15,2027-03-26,2027-05-31,2027-06-18,2027-07-05,2027-09-06,2027-11-25,2027-12-24",
       "FTH_CYCLE": "full",
       "FTH_CYCLE_BARS": "{\"MNQ\":\"2026-04-28T04:12:00.000Z\"}",
-      "FTH_CYCLE_SKILLS": "sha256:3e8da2d2b1cc4ead5a57645efec539887f68032d05d23fe9202788a568802d95 (320 chars)",
-      "FTH_CYCLE_TRANSCRIPT": "<home>/logs/<transcript1>.jsonl",
+      "FTH_CYCLE_SKILLS": "sha256:7a086cfcac6cbc7c795a18700b5b3e75654f3621593c622c6c9725ebe47e5c17 (323 chars)",
+      "FTH_CYCLE_TRANSCRIPT": "<home>/logs/<transcript3>.jsonl",
       "FTH_EARLY_CLOSE_DATES": "2026-11-27,2026-12-24,2027-11-26",
       "FTH_ENTRY_HOURS": "",
       "FTH_GATE_LOG": "<home>/gate.jsonl",
@@ -4432,7 +4501,40 @@
      }
     }
    ],
-   "gate": "",
+   "gate": [],
+   "orders": [
+    "{\"accountId\":7,\"contractId\":\"fake:MNQ:Z26\",\"side\":\"buy\",\"type\":\"market\",\"size\":1,\"stopLossBracket\":{\"ticks\":40}}"
+   ],
+   "calls": [
+    "search_contracts {\"searchText\":\"MNQ\",\"live\":false}",
+    "search_contracts {\"searchText\":\"NQ\",\"live\":false}",
+    "get_bars {\"includePartialBar\":false,\"contractId\":\"fake:MNQ:Z26\",\"unit\":\"minute\",\"unitNumber\":3,\"limit\":1400,\"startTime\":\"2026-04-18T08:09:02.000Z\",\"endTime\":\"2026-04-28T04:09:02.000Z\"}",
+    "list_open_positions {\"accountId\":7}",
+    "list_open_orders {\"accountId\":7}",
+    "list_open_positions {\"accountId\":7}",
+    "list_open_orders {\"accountId\":7}",
+    "list_accounts {\"onlyActiveAccounts\":false}",
+    "get_account_snapshot {\"accountId\":7}",
+    "search_trades {\"accountId\":7,\"startTimestamp\":\"2026-04-27T22:00:00.000Z\"}",
+    "search_contracts {\"searchText\":\"MNQ\",\"live\":false}",
+    "search_contracts {\"searchText\":\"NQ\",\"live\":false}",
+    "get_bars {\"includePartialBar\":false,\"contractId\":\"fake:MNQ:Z26\",\"unit\":\"minute\",\"unitNumber\":3,\"limit\":1400,\"startTime\":\"2026-04-18T08:12:02.000Z\",\"endTime\":\"2026-04-28T04:12:02.000Z\"}",
+    "list_open_positions {\"accountId\":7}",
+    "list_open_orders {\"accountId\":7}",
+    "list_open_positions {\"accountId\":7}",
+    "list_open_orders {\"accountId\":7}",
+    "place_order {\"accountId\":7,\"contractId\":\"fake:MNQ:Z26\",\"side\":\"buy\",\"type\":\"market\",\"size\":1,\"stopLossBracket\":{\"ticks\":40}}",
+    "search_contracts {\"searchText\":\"MNQ\",\"live\":false}",
+    "search_contracts {\"searchText\":\"NQ\",\"live\":false}",
+    "get_bars {\"includePartialBar\":false,\"contractId\":\"fake:MNQ:Z26\",\"unit\":\"minute\",\"unitNumber\":3,\"limit\":1400,\"startTime\":\"2026-04-18T08:15:02.000Z\",\"endTime\":\"2026-04-28T04:15:02.000Z\"}",
+    "list_open_positions {\"accountId\":7}",
+    "list_open_orders {\"accountId\":7}",
+    "list_open_positions {\"accountId\":7}",
+    "list_open_orders {\"accountId\":7}",
+    "list_open_positions {\"accountId\":7}",
+    "list_open_orders {\"accountId\":7}",
+    "list_accounts {\"onlyActiveAccounts\":false}"
+   ],
    "state": [
     [
      "bars/MNQ-3m.json",
@@ -4460,7 +4562,7 @@
     ],
     [
      "exchange.json",
-     "sha256:6c9c38bb48cda97a27fbda3c37f88a6229700b5340195b17cae5e7261c13998f (134564 chars)"
+     "sha256:8958c92cf593bd05692ee4d6acc6e57af3982754417c4bd8dba205b76d902c70 (134398 chars)"
     ],
     [
      "head-prompt/cycle-skills-4b09265779aed0724bd98fb1345ec6728429d6567ed0c0521b721cf1fbd7db39.md",
@@ -4557,6 +4659,1858 @@
      "eodReview": true,
      "weekdaysOnly": true,
      "maxCyclesPerDay": 1,
+     "cycleTimeoutMinutes": 6,
+     "cycle": "full",
+     "earlyCloseDates": [
+      "2026-11-27",
+      "2026-12-24",
+      "2027-11-26"
+     ],
+     "closedDates": [
+      "2026-01-01",
+      "2026-01-19",
+      "2026-02-16",
+      "2026-04-03",
+      "2026-05-25",
+      "2026-06-19",
+      "2026-07-03",
+      "2026-09-07",
+      "2026-11-26",
+      "2026-12-25",
+      "2027-01-01",
+      "2027-01-18",
+      "2027-02-15",
+      "2027-03-26",
+      "2027-05-31",
+      "2027-06-18",
+      "2027-07-05",
+      "2027-09-06",
+      "2027-11-25",
+      "2027-12-24"
+     ],
+     "earlyCloseEodAt": "12:50@America/New_York",
+     "maxConsecutiveErrors": 3,
+     "alertWebhook": "",
+     "alertCommand": null,
+     "paper": false,
+     "model": "",
+     "extraArgs": [],
+     "stableFirstPrompt": true
+    },
+    "delivery": "stableFirstPrompt"
+   }
+  },
+  "entry": {
+   "passes": [
+    {
+     "bar": "2026-04-28T04:06:00.000Z",
+     "ran": [
+      {
+       "action": "trade",
+       "prompt": "sha256:9c4666810ff95a634b3acf5d3acc7dc7e2ecbb9ea70cac037fb5efdc59195e9b (50171 chars)",
+       "result": "CYCLE RESULT: no-trade - nothing to take",
+       "ok": true,
+       "timedOut": false
+      }
+     ],
+     "env": {
+      "CLAUDE_CODE_DISABLE_BACKGROUND_TASKS": "1",
+      "CLAUDE_CODE_PROMPT_CACHE_TTL": "5m",
+      "FTH_ACCOUNTS_DIRS": "<home>/no-accounts",
+      "FTH_AUTONOMOUS": "1",
+      "FTH_BARS_DIR": "<home>/bars",
+      "FTH_BLACKOUTS_FILE": "<home>/blackouts.json",
+      "FTH_CLOSED_DATES": "2026-01-01,2026-01-19,2026-02-16,2026-04-03,2026-05-25,2026-06-19,2026-07-03,2026-09-07,2026-11-26,2026-12-25,2027-01-01,2027-01-18,2027-02-15,2027-03-26,2027-05-31,2027-06-18,2027-07-05,2027-09-06,2027-11-25,2027-12-24",
+      "FTH_CYCLE": "full",
+      "FTH_CYCLE_BARS": "{\"MNQ\":\"2026-04-28T04:06:00.000Z\"}",
+      "FTH_CYCLE_DESK": "market-structure-analyst,trend-momentum-analyst,volume-liquidity-analyst,risk-manager",
+      "FTH_CYCLE_SKILLS": "sha256:54a016b07c58cb9b9a390534201e0dc4b50616fa73a3440a78bd89a3b28e9b1a (453 chars)",
+      "FTH_CYCLE_TRANSCRIPT": "<home>/logs/<transcript3>.jsonl",
+      "FTH_EARLY_CLOSE_DATES": "2026-11-27,2026-12-24,2027-11-26",
+      "FTH_ENTRY_HOURS": "",
+      "FTH_GATE_LOG": "<home>/gate.jsonl",
+      "FTH_HOME": "<home>",
+      "FTH_KILL_SWITCH_FILE": "<home>/STOP",
+      "FTH_NO_ENTRY_WINDOWS": "",
+      "FTH_REPLAY_NOW": "2026-04-28T04:09:02.000Z",
+      "FTH_ROLE_SKILLS": "full",
+      "FTH_ROOT": "<root>",
+      "FTH_STRATEGIES_DIRS": "<root>/tests/fixtures/strategies-fx",
+      "FTH_SYMBOLS": "MNQ"
+     },
+     "logs": [
+      "info MNQ: active contract MNQ",
+      "info MNQ bar 2026-04-28T04:06:00.000Z close 27412.25: cycle (bar closed)",
+      "info trade: CYCLE RESULT: no-trade - nothing to take"
+     ],
+     "events": [
+      {
+       "at": "2026-04-28T04:09:02.000Z",
+       "kind": "account",
+       "id": "7",
+       "balance": 50000,
+       "positions": [],
+       "workingOrders": 0,
+       "attempts": []
+      },
+      {
+       "at": "2026-04-28T04:09:02.000Z",
+       "kind": "cycle_start",
+       "action": "trade",
+       "timeoutMs": 360000,
+       "symbols": [
+        "MNQ"
+       ],
+       "bars": [
+        "2026-04-28T04:06:00.000Z"
+       ],
+       "manageOnly": false,
+       "cached": []
+      },
+      {
+       "at": "2026-04-28T04:09:02.000Z",
+       "kind": "cycle_end",
+       "action": "trade",
+       "ok": true,
+       "timedOut": false,
+       "result": "CYCLE RESULT: no-trade - nothing to take",
+       "symbols": [
+        "MNQ"
+       ],
+       "bars": [
+        "2026-04-28T04:06:00.000Z"
+       ],
+       "manageOnly": false,
+       "cached": []
+      }
+     ]
+    },
+    {
+     "bar": "2026-04-28T04:09:00.000Z",
+     "ran": [
+      {
+       "action": "trade",
+       "prompt": "sha256:19897c6edcdf19ef8bb52738d79c203c15ded973d1a2154a0146f960580d5313 (47601 chars)",
+       "result": "CYCLE RESULT: executed - fx_break long MNQ 1",
+       "ok": true,
+       "timedOut": false
+      }
+     ],
+     "env": {
+      "CLAUDE_CODE_DISABLE_BACKGROUND_TASKS": "1",
+      "CLAUDE_CODE_PROMPT_CACHE_TTL": "5m",
+      "FTH_ACCOUNTS_DIRS": "<home>/no-accounts",
+      "FTH_AUTONOMOUS": "1",
+      "FTH_BARS_DIR": "<home>/bars",
+      "FTH_BLACKOUTS_FILE": "<home>/blackouts.json",
+      "FTH_CLOSED_DATES": "2026-01-01,2026-01-19,2026-02-16,2026-04-03,2026-05-25,2026-06-19,2026-07-03,2026-09-07,2026-11-26,2026-12-25,2027-01-01,2027-01-18,2027-02-15,2027-03-26,2027-05-31,2027-06-18,2027-07-05,2027-09-06,2027-11-25,2027-12-24",
+      "FTH_CYCLE": "full",
+      "FTH_CYCLE_BARS": "{\"MNQ\":\"2026-04-28T04:09:00.000Z\"}",
+      "FTH_CYCLE_CACHED": "risk-manager",
+      "FTH_CYCLE_DESK": "market-structure-analyst,trend-momentum-analyst,volume-liquidity-analyst",
+      "FTH_CYCLE_PHASE1": "sha256:382d258861f0a1e503af28b693e076f76ded653c08a9f09a8df8a4cac1670afe (424 chars)",
+      "FTH_CYCLE_SKILLS": "sha256:d2c3c8cf4ec6d3682545e569f5b41c48f5d40cdea2ec634b0427cb9a72231466 (446 chars)",
+      "FTH_CYCLE_TRANSCRIPT": "<home>/logs/<transcript4>.jsonl",
+      "FTH_EARLY_CLOSE_DATES": "2026-11-27,2026-12-24,2027-11-26",
+      "FTH_ENTRY_HOURS": "",
+      "FTH_GATE_LOG": "<home>/gate.jsonl",
+      "FTH_HOME": "<home>",
+      "FTH_KILL_SWITCH_FILE": "<home>/STOP",
+      "FTH_NO_ENTRY_WINDOWS": "",
+      "FTH_REPLAY_NOW": "2026-04-28T04:12:02.000Z",
+      "FTH_ROLE_SKILLS": "full",
+      "FTH_ROOT": "<root>",
+      "FTH_STRATEGIES_DIRS": "<root>/tests/fixtures/strategies-fx",
+      "FTH_SYMBOLS": "MNQ"
+     },
+     "logs": [
+      "info MNQ: active contract MNQ",
+      "info MNQ bar 2026-04-28T04:09:00.000Z close 27427.5: cycle (bar closed)",
+      "info trade: CYCLE RESULT: executed - fx_break long MNQ 1"
+     ],
+     "events": [
+      {
+       "at": "2026-04-28T04:12:02.000Z",
+       "kind": "account",
+       "id": "7",
+       "balance": 50000,
+       "positions": [],
+       "workingOrders": 0,
+       "attempts": []
+      },
+      {
+       "at": "2026-04-28T04:12:02.000Z",
+       "kind": "cycle_start",
+       "action": "trade",
+       "timeoutMs": 360000,
+       "symbols": [
+        "MNQ"
+       ],
+       "bars": [
+        "2026-04-28T04:09:00.000Z"
+       ],
+       "manageOnly": false,
+       "cached": [
+        "risk-manager"
+       ],
+       "history": [
+        "00:09 MNQ 3m no-trade @27412.25: nothing to take; since +61t"
+       ]
+      },
+      {
+       "at": "2026-04-28T04:12:02.000Z",
+       "kind": "cycle_end",
+       "action": "trade",
+       "ok": true,
+       "timedOut": false,
+       "result": "CYCLE RESULT: executed - fx_break long MNQ 1",
+       "symbols": [
+        "MNQ"
+       ],
+       "bars": [
+        "2026-04-28T04:09:00.000Z"
+       ],
+       "manageOnly": false,
+       "cached": [
+        "risk-manager"
+       ],
+       "history": [
+        "00:09 MNQ 3m no-trade @27412.25: nothing to take; since +61t"
+       ]
+      }
+     ]
+    },
+    {
+     "bar": "2026-04-28T04:12:00.000Z",
+     "ran": [
+      {
+       "action": "trade",
+       "prompt": "sha256:5bcb746b54223f1ec71886e63c6e6896d5b8b73e139d7b7f480e4206360654a6 (22672 chars)",
+       "result": "CYCLE RESULT: managed - the open long",
+       "ok": true,
+       "timedOut": false
+      }
+     ],
+     "env": {
+      "CLAUDE_CODE_DISABLE_BACKGROUND_TASKS": "1",
+      "CLAUDE_CODE_PROMPT_CACHE_TTL": "5m",
+      "FTH_ACCOUNTS_DIRS": "<home>/no-accounts",
+      "FTH_AUTONOMOUS": "1",
+      "FTH_BARS_DIR": "<home>/bars",
+      "FTH_BLACKOUTS_FILE": "<home>/blackouts.json",
+      "FTH_CLOSED_DATES": "2026-01-01,2026-01-19,2026-02-16,2026-04-03,2026-05-25,2026-06-19,2026-07-03,2026-09-07,2026-11-26,2026-12-25,2027-01-01,2027-01-18,2027-02-15,2027-03-26,2027-05-31,2027-06-18,2027-07-05,2027-09-06,2027-11-25,2027-12-24",
+      "FTH_CYCLE": "full",
+      "FTH_CYCLE_BARS": "{\"MNQ\":\"2026-04-28T04:12:00.000Z\"}",
+      "FTH_CYCLE_DESK": "market-structure-analyst,trend-momentum-analyst,volume-liquidity-analyst,risk-manager",
+      "FTH_CYCLE_SKILLS": "sha256:662037f2afc3a4c89e71c3fc64b23b37baf0e3fb74bcf0c264fafab18d946eab (323 chars)",
+      "FTH_CYCLE_TRANSCRIPT": "<home>/logs/<transcript5>.jsonl",
+      "FTH_EARLY_CLOSE_DATES": "2026-11-27,2026-12-24,2027-11-26",
+      "FTH_ENTRY_HOURS": "",
+      "FTH_GATE_LOG": "<home>/gate.jsonl",
+      "FTH_HOME": "<home>",
+      "FTH_KILL_SWITCH_FILE": "<home>/STOP",
+      "FTH_NO_ENTRY_WINDOWS": "",
+      "FTH_REPLAY_NOW": "2026-04-28T04:15:02.000Z",
+      "FTH_ROLE_SKILLS": "full",
+      "FTH_ROOT": "<root>",
+      "FTH_STRATEGIES_DIRS": "<root>/tests/fixtures/strategies-fx",
+      "FTH_SYMBOLS": "MNQ"
+     },
+     "logs": [
+      "info MNQ: active contract MNQ",
+      "info MNQ bar 2026-04-28T04:12:00.000Z close 27424.25: cycle (bar closed)",
+      "info trade: CYCLE RESULT: managed - the open long"
+     ],
+     "events": [
+      {
+       "at": "2026-04-28T04:15:02.000Z",
+       "kind": "account",
+       "id": "7",
+       "balance": 49999.63,
+       "positions": [
+        {
+         "contractId": "MNQ",
+         "side": "long",
+         "size": 1,
+         "averagePrice": 27427.5
+        }
+       ],
+       "workingOrders": 1,
+       "attempts": []
+      },
+      {
+       "at": "2026-04-28T04:15:02.000Z",
+       "kind": "cycle_start",
+       "action": "trade",
+       "timeoutMs": 360000,
+       "symbols": [
+        "MNQ"
+       ],
+       "bars": [
+        "2026-04-28T04:12:00.000Z"
+       ],
+       "manageOnly": false,
+       "cached": [],
+       "history": [
+        "00:09 MNQ 3m no-trade @27412.25: nothing to take; since +48t",
+        "00:12 MNQ 3m entered @27427.5: fx_break long MNQ 1; since -13t, no order of its own seen: outcome unknown"
+       ]
+      },
+      {
+       "at": "2026-04-28T04:15:02.000Z",
+       "kind": "cycle_end",
+       "action": "trade",
+       "ok": true,
+       "timedOut": false,
+       "result": "CYCLE RESULT: managed - the open long",
+       "symbols": [
+        "MNQ"
+       ],
+       "bars": [
+        "2026-04-28T04:12:00.000Z"
+       ],
+       "manageOnly": false,
+       "cached": [],
+       "history": [
+        "00:09 MNQ 3m no-trade @27412.25: nothing to take; since +48t",
+        "00:12 MNQ 3m entered @27427.5: fx_break long MNQ 1; since -13t, no order of its own seen: outcome unknown"
+       ]
+      }
+     ]
+    }
+   ],
+   "records": [
+    [
+     "2026-04-28/040902-trade.json",
+     {
+      "cycleAt": "2026-04-28T04:09:02.000Z",
+      "action": "trade",
+      "harness": "claude",
+      "ok": true,
+      "timedOut": false,
+      "result": "CYCLE RESULT: no-trade - nothing to take",
+      "summary": {
+       "skills": [],
+       "tools": {
+        "mcp__harness__bar_briefing": 1,
+        "Task": 4
+       },
+       "commands": [],
+       "orders": [],
+       "missingSkills": [],
+       "embeddedSkills": [
+        "rejection",
+        "cisd",
+        "candle-reading",
+        "momentum-and-volume",
+        "top-down-entry",
+        "invalidation",
+        "take-profit",
+        "position-sizing",
+        "levels-and-reactions",
+        "vwap-volume-profile",
+        "mtf-bias-filter",
+        "daily-bias",
+        "bos-vs-choch"
+       ],
+       "cycleSkills": {
+        "stages": [
+         "setup",
+         "entry",
+         "risk",
+         "location",
+         "bias"
+        ],
+        "skills": [
+         "rejection",
+         "cisd",
+         "candle-reading",
+         "momentum-and-volume",
+         "top-down-entry",
+         "invalidation",
+         "take-profit",
+         "position-sizing",
+         "levels-and-reactions",
+         "vwap-volume-profile",
+         "mtf-bias-filter",
+         "daily-bias",
+         "bos-vs-choch"
+        ],
+        "sections": [],
+        "bytes": 46608,
+        "over": []
+       },
+       "skillLookups": {
+        "mode": "full",
+        "lookups": 2,
+        "byRole": {
+         "market-structure-analyst": 2
+        },
+        "requiredCalls": 0,
+        "met": 0
+       },
+       "setupsListed": 1,
+       "setupSkips": [
+        {
+         "setup": "15m rejected prior vah up",
+         "reason": null
+        }
+       ]
+      },
+      "factCheck": {
+       "reports": [],
+       "counts": {
+        "reports": 0,
+        "claims": 0,
+        "true": 0,
+        "false": 0,
+        "unchecked": 0
+       }
+      },
+      "desk": {
+       "expected": [
+        "market-structure-analyst",
+        "trend-momentum-analyst",
+        "volume-liquidity-analyst",
+        "risk-manager"
+       ],
+       "ran": [
+        "market-structure-analyst",
+        "trend-momentum-analyst",
+        "volume-liquidity-analyst",
+        "risk-manager"
+       ],
+       "missing": [],
+       "failed": [],
+       "complete": true,
+       "decided": true
+      },
+      "prompt": "sha256:9c4666810ff95a634b3acf5d3acc7dc7e2ecbb9ea70cac037fb5efdc59195e9b (50171 chars)",
+      "context": {
+       "symbols": [
+        {
+         "symbol": "MNQ",
+         "bar": {
+          "t": "2026-04-28T04:06:00.000Z",
+          "c": 27412.25,
+          "contractId": "MNQ",
+          "file": "<home>/bars/MNQ-3m.json"
+         },
+         "trend": "Trend rule: LONG allowed (prevailing 4h up); no short against it.",
+         "day": "MNQ overnight (Globex since 18:00 ET; market open now): range 27386-27512 so far, last 27412.25; prior RTH day 27298.5-27454.75, close 27445, value area 27336-27408 (POC 27372.75): price above the prior value area; RTH (the 09:30 ET cash open, not the market open) in 9 h 21 min.",
+         "plan": "MNQ: no premarket plan in the journal for today.",
+         "fired": [],
+         "verdicts": []
+        }
+       ],
+       "account": {
+        "id": "7",
+        "balance": 50000,
+        "positions": [],
+        "workingOrders": 0,
+        "attempts": []
+       },
+       "openTrades": [],
+       "openTradeLines": [],
+       "manageAlso": [],
+       "recent": [
+        {
+         "symbol": "MNQ",
+         "bars": [
+          {
+           "t": "2026-04-28T03:39:00.000Z",
+           "o": 27425.25,
+           "h": 27426.5,
+           "l": 27421,
+           "c": 27424,
+           "v": 95
+          },
+          {
+           "t": "2026-04-28T03:42:00.000Z",
+           "o": 27424.25,
+           "h": 27426.25,
+           "l": 27421.25,
+           "c": 27421.75,
+           "v": 112
+          },
+          {
+           "t": "2026-04-28T03:45:00.000Z",
+           "o": 27421.25,
+           "h": 27421.75,
+           "l": 27410.75,
+           "c": 27414,
+           "v": 306
+          },
+          {
+           "t": "2026-04-28T03:48:00.000Z",
+           "o": 27414,
+           "h": 27415.75,
+           "l": 27408.5,
+           "c": 27408.75,
+           "v": 100
+          },
+          {
+           "t": "2026-04-28T03:51:00.000Z",
+           "o": 27409,
+           "h": 27411,
+           "l": 27406.25,
+           "c": 27409.5,
+           "v": 118
+          },
+          {
+           "t": "2026-04-28T03:54:00.000Z",
+           "o": 27409.5,
+           "h": 27414,
+           "l": 27408.25,
+           "c": 27412.25,
+           "v": 68
+          },
+          {
+           "t": "2026-04-28T03:57:00.000Z",
+           "o": 27411,
+           "h": 27412.25,
+           "l": 27408.5,
+           "c": 27409.5,
+           "v": 76
+          },
+          {
+           "t": "2026-04-28T04:00:00.000Z",
+           "o": 27412.75,
+           "h": 27419.25,
+           "l": 27409,
+           "c": 27414.25,
+           "v": 167
+          },
+          {
+           "t": "2026-04-28T04:03:00.000Z",
+           "o": 27415,
+           "h": 27415,
+           "l": 27404.75,
+           "c": 27405.75,
+           "v": 194
+          },
+          {
+           "t": "2026-04-28T04:06:00.000Z",
+           "o": 27405.25,
+           "h": 27414.5,
+           "l": 27405,
+           "c": 27412.25,
+           "v": 155
+          }
+         ]
+        }
+       ],
+       "attempts": [],
+       "mode": {
+        "paper": false,
+        "cycle": "full"
+       },
+       "eodAt": "2026-04-28T19:50:00.000Z",
+       "cyclesLeft": 449,
+       "news": "No news blackout recorded for the rest of today.",
+       "lessons": [],
+       "trades": [],
+       "tradesSummary": null,
+       "history": [],
+       "historyLines": [],
+       "manageOnly": false,
+       "recovered": false,
+       "unavailable": [],
+       "action": "trade",
+       "cachedRoles": [],
+       "setupsListed": [
+        "15m rejected prior vah up"
+       ],
+       "cycleSkills": {
+        "skills": [
+         "rejection",
+         "cisd",
+         "candle-reading",
+         "momentum-and-volume",
+         "top-down-entry",
+         "invalidation",
+         "take-profit",
+         "position-sizing",
+         "levels-and-reactions",
+         "vwap-volume-profile",
+         "mtf-bias-filter",
+         "daily-bias",
+         "bos-vs-choch"
+        ],
+        "sections": [],
+        "over": [],
+        "why": [
+         "a level rejected on the Setups to check",
+         "a 3m or 5m CISD to time an entry",
+         "a setup listed: its entry read",
+         "a setup listed: its stop, target and size",
+         "price at a key level",
+         "VWAP and value",
+         "the trend rule",
+         "the day's bias",
+         "the last structure break"
+        ],
+        "stages": [
+         "setup",
+         "entry",
+         "risk",
+         "location",
+         "bias"
+        ],
+        "bytes": 46608
+       },
+       "cachedLookups": {}
+      },
+      "transcript": "sha256:d5a2e5e364dc8f5834a43b84adf54b2ead7891ac0e753613127173c901f2b53f (22583 chars)",
+      "argv": [
+       "claude",
+       "-p",
+       "<prompt>",
+       "--plugin-dir",
+       "<root>",
+       "--output-format",
+       "stream-json",
+       "--verbose",
+       "--permission-mode",
+       "dontAsk",
+       "--allowedTools",
+       "sha256:380008c318d527601c52f139dce060c7d0b15c4dc5c499843787b98f802077e0 (454 chars)",
+       "--disallowedTools",
+       "sha256:df22928c446af5f1d44cfcb94a2d266a7717546f351f752a1fd64cdfdd6a5d00 (658 chars)",
+       "--strict-mcp-config",
+       "--mcp-config",
+       "{\"mcpServers\":{\"broker\":{\"command\":\"node\",\"args\":[\"<root>/scripts/mcp-gateway.js\"]},\"harness\":{\"command\":\"node\",\"args\":[\"<root>/scripts/harness-tools-mcp.js\"]}}}"
+      ]
+     }
+    ],
+    [
+     "2026-04-28/041202-trade.json",
+     {
+      "cycleAt": "2026-04-28T04:12:02.000Z",
+      "action": "trade",
+      "harness": "claude",
+      "ok": true,
+      "timedOut": false,
+      "result": "CYCLE RESULT: executed - fx_break long MNQ 1",
+      "summary": {
+       "skills": [
+        "strategy-library",
+        "strategy-scan",
+        "strategy-gate-checks"
+       ],
+       "tools": {
+        "mcp__harness__bar_briefing": 1,
+        "Task": 6,
+        "mcp__harness__skill_lookup": 3,
+        "mcp__harness__order_plan": 1,
+        "mcp__broker__journal_add": 1
+       },
+       "commands": [],
+       "orders": [
+        {
+         "contractId": "MNQ",
+         "side": "buy",
+         "size": 1,
+         "type": "market",
+         "rationale": "setup:fx_break long at market from 27427.50 (the signal bar's close), stop 27423.00 (18 ticks), 1 MNQ risks $9.00",
+         "gate": "blocked",
+         "via": "gate-log"
+        }
+       ],
+       "missingSkills": [
+        "trade-session",
+        "multi-timeframe-analysis",
+        "setup-judgment",
+        "trade-plan"
+       ],
+       "embeddedSkills": [
+        "rejection",
+        "candle-reading",
+        "momentum-and-volume",
+        "top-down-entry",
+        "invalidation",
+        "take-profit",
+        "position-sizing",
+        "levels-and-reactions",
+        "vwap-volume-profile",
+        "mtf-bias-filter",
+        "daily-bias",
+        "bos-vs-choch"
+       ],
+       "cycleSkills": {
+        "stages": [
+         "setup",
+         "entry",
+         "risk",
+         "location",
+         "bias"
+        ],
+        "skills": [
+         "rejection",
+         "candle-reading",
+         "momentum-and-volume",
+         "top-down-entry",
+         "invalidation",
+         "take-profit",
+         "position-sizing",
+         "levels-and-reactions",
+         "vwap-volume-profile",
+         "mtf-bias-filter",
+         "daily-bias",
+         "bos-vs-choch"
+        ],
+        "sections": [],
+        "bytes": 43129,
+        "over": []
+       },
+       "skillLookups": {
+        "mode": "full",
+        "lookups": 2,
+        "byRole": {
+         "market-structure-analyst": 2
+        },
+        "requiredCalls": 0,
+        "met": 0
+       },
+       "setupsListed": 1,
+       "setupSkips": [
+        {
+         "setup": "15m rejected prior vah up",
+         "reason": null
+        }
+       ]
+      },
+      "factCheck": {
+       "reports": [
+        {
+         "verdict": "APPROVE",
+         "symbol": "MNQ",
+         "stated": true,
+         "status": "confirmed",
+         "claims": [
+          {
+           "type": "trend",
+           "text": "trend long allowed",
+           "side": "long",
+           "value": "allowed",
+           "check": true,
+           "fact": "Trend rule: LONG allowed (prevailing 4h up); no short against it."
+          },
+          {
+           "type": "vwap",
+           "text": "vwap below",
+           "value": "below",
+           "check": true,
+           "fact": "price below the VWAP (session)"
+          },
+          {
+           "type": "value",
+           "text": "value above",
+           "value": "above",
+           "check": true,
+           "fact": "price above the prior value area"
+          }
+         ],
+         "unavailable": null,
+         "verdictProblem": null,
+         "labels": 1,
+         "symbols": []
+        }
+       ],
+       "counts": {
+        "reports": 1,
+        "claims": 3,
+        "true": 3,
+        "false": 0,
+        "unchecked": 0
+       }
+      },
+      "desk": {
+       "expected": [
+        "market-structure-analyst",
+        "trend-momentum-analyst",
+        "volume-liquidity-analyst"
+       ],
+       "ran": [
+        "market-structure-analyst",
+        "trend-momentum-analyst",
+        "volume-liquidity-analyst"
+       ],
+       "missing": [],
+       "failed": [],
+       "complete": true,
+       "decided": true
+      },
+      "prompt": "sha256:19897c6edcdf19ef8bb52738d79c203c15ded973d1a2154a0146f960580d5313 (47601 chars)",
+      "context": {
+       "symbols": [
+        {
+         "symbol": "MNQ",
+         "bar": {
+          "t": "2026-04-28T04:09:00.000Z",
+          "c": 27427.5,
+          "contractId": "MNQ",
+          "file": "<home>/bars/MNQ-3m.json"
+         },
+         "trend": "Trend rule: LONG allowed (prevailing 4h up); no short against it.",
+         "day": "MNQ overnight (Globex since 18:00 ET; market open now): range 27386-27512 so far, last 27427.5; prior RTH day 27298.5-27454.75, close 27445, value area 27336-27408 (POC 27372.75): price above the prior value area; RTH (the 09:30 ET cash open, not the market open) in 9 h 18 min.",
+         "plan": "MNQ: no premarket plan in the journal for today.",
+         "fired": [
+          {
+           "name": "fx_break",
+           "direction": "long",
+           "status": "active",
+           "regime": "transition",
+           "confluence": {
+            "with": [
+             "fx_cross"
+            ],
+            "against": []
+           },
+           "record": "track record: no backtest recorded (the user records one: backtest.js --record); live: no reviewed trades yet"
+          },
+          {
+           "name": "fx_cross",
+           "direction": "long",
+           "status": "active",
+           "regime": "transition",
+           "confluence": {
+            "with": [
+             "fx_break"
+            ],
+            "against": []
+           },
+           "record": "track record: no backtest recorded (the user records one: backtest.js --record); live: no reviewed trades yet"
+          }
+         ],
+         "verdicts": []
+        }
+       ],
+       "account": {
+        "id": "7",
+        "balance": 50000,
+        "positions": [],
+        "workingOrders": 0,
+        "attempts": []
+       },
+       "openTrades": [],
+       "openTradeLines": [],
+       "manageAlso": [],
+       "recent": [
+        {
+         "symbol": "MNQ",
+         "bars": [
+          {
+           "t": "2026-04-28T03:42:00.000Z",
+           "o": 27424.25,
+           "h": 27426.25,
+           "l": 27421.25,
+           "c": 27421.75,
+           "v": 112
+          },
+          {
+           "t": "2026-04-28T03:45:00.000Z",
+           "o": 27421.25,
+           "h": 27421.75,
+           "l": 27410.75,
+           "c": 27414,
+           "v": 306
+          },
+          {
+           "t": "2026-04-28T03:48:00.000Z",
+           "o": 27414,
+           "h": 27415.75,
+           "l": 27408.5,
+           "c": 27408.75,
+           "v": 100
+          },
+          {
+           "t": "2026-04-28T03:51:00.000Z",
+           "o": 27409,
+           "h": 27411,
+           "l": 27406.25,
+           "c": 27409.5,
+           "v": 118
+          },
+          {
+           "t": "2026-04-28T03:54:00.000Z",
+           "o": 27409.5,
+           "h": 27414,
+           "l": 27408.25,
+           "c": 27412.25,
+           "v": 68
+          },
+          {
+           "t": "2026-04-28T03:57:00.000Z",
+           "o": 27411,
+           "h": 27412.25,
+           "l": 27408.5,
+           "c": 27409.5,
+           "v": 76
+          },
+          {
+           "t": "2026-04-28T04:00:00.000Z",
+           "o": 27412.75,
+           "h": 27419.25,
+           "l": 27409,
+           "c": 27414.25,
+           "v": 167
+          },
+          {
+           "t": "2026-04-28T04:03:00.000Z",
+           "o": 27415,
+           "h": 27415,
+           "l": 27404.75,
+           "c": 27405.75,
+           "v": 194
+          },
+          {
+           "t": "2026-04-28T04:06:00.000Z",
+           "o": 27405.25,
+           "h": 27414.5,
+           "l": 27405,
+           "c": 27412.25,
+           "v": 155
+          },
+          {
+           "t": "2026-04-28T04:09:00.000Z",
+           "o": 27411.25,
+           "h": 27427.5,
+           "l": 27411.25,
+           "c": 27427.5,
+           "v": 207
+          }
+         ]
+        }
+       ],
+       "attempts": [],
+       "mode": {
+        "paper": false,
+        "cycle": "full"
+       },
+       "eodAt": "2026-04-28T19:50:00.000Z",
+       "cyclesLeft": 448,
+       "news": "No news blackout recorded for the rest of today.",
+       "lessons": [],
+       "trades": [],
+       "tradesSummary": null,
+       "history": [
+        {
+         "at": "2026-04-28T04:09:02.000Z",
+         "symbols": [
+          "MNQ"
+         ],
+         "result": "CYCLE RESULT: no-trade - nothing to take",
+         "symbol": "MNQ",
+         "tf": 3,
+         "bar": "2026-04-28T04:06:00.000Z",
+         "price": 27412.25,
+         "tick": 0.25,
+         "contract": "MNQ",
+         "action": "no-trade"
+        }
+       ],
+       "historyLines": [
+        "00:09 MNQ 3m no-trade @27412.25: nothing to take; since +61t"
+       ],
+       "manageOnly": false,
+       "recovered": false,
+       "unavailable": [],
+       "action": "trade",
+       "cachedRoles": [
+        "risk-manager"
+       ],
+       "phase1Cache": {
+        "bar": "2026-04-28T04:09:00.000Z",
+        "barMinutes": 3,
+        "factsKey": "0d439e59133030a24f5303f4197b65c99e9e3e547c7bd78ef0ae1acf6d7f5459",
+        "facts": {
+         "day": "2026-04-28",
+         "account": {
+          "id": "7",
+          "balance": 50000,
+          "workingOrders": 0,
+          "canTrade": true,
+          "mcpTradingAllowed": true,
+          "remainingBeforeLimit": null
+         },
+         "positions": [],
+         "orders": [],
+         "attempts": [],
+         "loss": {
+          "bars": 0,
+          "streak": 0,
+          "losses": 0,
+          "fills": 0
+         },
+         "windowEntries": "allowed",
+         "lessons": [],
+         "reviewed": []
+        }
+       },
+       "setupsListed": [
+        "15m rejected prior vah up"
+       ],
+       "cycleSkills": {
+        "skills": [
+         "rejection",
+         "candle-reading",
+         "momentum-and-volume",
+         "top-down-entry",
+         "invalidation",
+         "take-profit",
+         "position-sizing",
+         "levels-and-reactions",
+         "vwap-volume-profile",
+         "mtf-bias-filter",
+         "daily-bias",
+         "bos-vs-choch"
+        ],
+        "sections": [],
+        "over": [],
+        "why": [
+         "a level rejected on the Setups to check",
+         "a setup listed: its entry read",
+         "a setup listed: its stop, target and size",
+         "price at a key level",
+         "VWAP and value",
+         "the trend rule",
+         "the day's bias",
+         "the last structure break"
+        ],
+        "stages": [
+         "setup",
+         "entry",
+         "risk",
+         "location",
+         "bias"
+        ],
+        "bytes": 43129
+       },
+       "cachedLookups": {}
+      },
+      "transcript": "sha256:0901b48acd14e58fd0b09074ce8206e96578c82e615e03ab24e2346081366642 (39231 chars)",
+      "argv": [
+       "claude",
+       "-p",
+       "<prompt>",
+       "--plugin-dir",
+       "<root>",
+       "--output-format",
+       "stream-json",
+       "--verbose",
+       "--permission-mode",
+       "dontAsk",
+       "--allowedTools",
+       "sha256:380008c318d527601c52f139dce060c7d0b15c4dc5c499843787b98f802077e0 (454 chars)",
+       "--disallowedTools",
+       "sha256:df22928c446af5f1d44cfcb94a2d266a7717546f351f752a1fd64cdfdd6a5d00 (658 chars)",
+       "--strict-mcp-config",
+       "--mcp-config",
+       "{\"mcpServers\":{\"broker\":{\"command\":\"node\",\"args\":[\"<root>/scripts/mcp-gateway.js\"]},\"harness\":{\"command\":\"node\",\"args\":[\"<root>/scripts/harness-tools-mcp.js\"]}}}"
+      ]
+     }
+    ],
+    [
+     "2026-04-28/041502-trade.json",
+     {
+      "cycleAt": "2026-04-28T04:15:02.000Z",
+      "action": "trade",
+      "harness": "claude",
+      "ok": true,
+      "timedOut": false,
+      "result": "CYCLE RESULT: managed - the open long",
+      "summary": {
+       "skills": [],
+       "tools": {},
+       "commands": [],
+       "orders": [],
+       "missingSkills": [],
+       "embeddedSkills": [
+        "manage-position",
+        "pullback-vs-reversal",
+        "take-profit",
+        "daily-bias",
+        "bos-vs-choch"
+       ],
+       "cycleSkills": {
+        "stages": [
+         "management",
+         "bias"
+        ],
+        "skills": [
+         "manage-position",
+         "pullback-vs-reversal",
+         "take-profit",
+         "daily-bias",
+         "bos-vs-choch"
+        ],
+        "sections": [],
+        "bytes": 18693,
+        "over": []
+       },
+       "skillLookups": {
+        "mode": "full",
+        "lookups": 0,
+        "byRole": {},
+        "requiredCalls": 0,
+        "met": 0
+       },
+       "setupsListed": 1,
+       "setupSkips": [
+        {
+         "setup": "15m rejected prior vah up",
+         "reason": null
+        }
+       ]
+      },
+      "factCheck": {
+       "reports": [],
+       "counts": {
+        "reports": 0,
+        "claims": 0,
+        "true": 0,
+        "false": 0,
+        "unchecked": 0
+       }
+      },
+      "desk": {
+       "expected": [
+        "market-structure-analyst",
+        "trend-momentum-analyst",
+        "volume-liquidity-analyst",
+        "risk-manager"
+       ],
+       "ran": [],
+       "missing": [
+        "market-structure-analyst",
+        "trend-momentum-analyst",
+        "volume-liquidity-analyst",
+        "risk-manager"
+       ],
+       "failed": [],
+       "complete": false,
+       "decided": true
+      },
+      "prompt": "sha256:5bcb746b54223f1ec71886e63c6e6896d5b8b73e139d7b7f480e4206360654a6 (22672 chars)",
+      "context": {
+       "symbols": [
+        {
+         "symbol": "MNQ",
+         "bar": {
+          "t": "2026-04-28T04:12:00.000Z",
+          "c": 27424.25,
+          "contractId": "MNQ",
+          "file": "<home>/bars/MNQ-3m.json"
+         },
+         "trend": "Trend rule: LONG allowed (prevailing 4h up); no short against it.",
+         "day": "MNQ overnight (Globex since 18:00 ET; market open now): range 27386-27512 so far, last 27424.25; prior RTH day 27298.5-27454.75, close 27445, value area 27336-27408 (POC 27372.75): price above the prior value area; RTH (the 09:30 ET cash open, not the market open) in 9 h 15 min.",
+         "plan": "MNQ: no premarket plan in the journal for today.",
+         "fired": [],
+         "verdicts": []
+        }
+       ],
+       "account": {
+        "id": "7",
+        "balance": 49999.63,
+        "positions": [
+         {
+          "contractId": "MNQ",
+          "side": "long",
+          "size": 1,
+          "averagePrice": 27427.5
+         }
+        ],
+        "workingOrders": 1,
+        "attempts": []
+       },
+       "openTrades": [
+        {
+         "contractId": "MNQ",
+         "side": "long",
+         "sign": 1,
+         "size": 1,
+         "entry": 27427.5,
+         "openedAt": "2026-04-28T04:12:02.000Z",
+         "setup": null,
+         "initialStop": 27417.5,
+         "risk": 10,
+         "stop": 27417.5,
+         "target": null,
+         "last": null,
+         "rNow": null,
+         "mfeR": null,
+         "maeR": null,
+         "barsHeld": 0,
+         "noBars": false,
+         "stepMs": 180000,
+         "notes": [
+          "initial stop unknown: risk from the working stop"
+         ]
+        }
+       ],
+       "openTradeLines": [
+        "sha256:eebff881c1443e535dfd462078c39615e9877acee47a68a03b2ae47a9c2a9ee4 (350 chars)"
+       ],
+       "manageAlso": [],
+       "recent": [
+        {
+         "symbol": "MNQ",
+         "bars": [
+          {
+           "t": "2026-04-28T03:45:00.000Z",
+           "o": 27421.25,
+           "h": 27421.75,
+           "l": 27410.75,
+           "c": 27414,
+           "v": 306
+          },
+          {
+           "t": "2026-04-28T03:48:00.000Z",
+           "o": 27414,
+           "h": 27415.75,
+           "l": 27408.5,
+           "c": 27408.75,
+           "v": 100
+          },
+          {
+           "t": "2026-04-28T03:51:00.000Z",
+           "o": 27409,
+           "h": 27411,
+           "l": 27406.25,
+           "c": 27409.5,
+           "v": 118
+          },
+          {
+           "t": "2026-04-28T03:54:00.000Z",
+           "o": 27409.5,
+           "h": 27414,
+           "l": 27408.25,
+           "c": 27412.25,
+           "v": 68
+          },
+          {
+           "t": "2026-04-28T03:57:00.000Z",
+           "o": 27411,
+           "h": 27412.25,
+           "l": 27408.5,
+           "c": 27409.5,
+           "v": 76
+          },
+          {
+           "t": "2026-04-28T04:00:00.000Z",
+           "o": 27412.75,
+           "h": 27419.25,
+           "l": 27409,
+           "c": 27414.25,
+           "v": 167
+          },
+          {
+           "t": "2026-04-28T04:03:00.000Z",
+           "o": 27415,
+           "h": 27415,
+           "l": 27404.75,
+           "c": 27405.75,
+           "v": 194
+          },
+          {
+           "t": "2026-04-28T04:06:00.000Z",
+           "o": 27405.25,
+           "h": 27414.5,
+           "l": 27405,
+           "c": 27412.25,
+           "v": 155
+          },
+          {
+           "t": "2026-04-28T04:09:00.000Z",
+           "o": 27411.25,
+           "h": 27427.5,
+           "l": 27411.25,
+           "c": 27427.5,
+           "v": 207
+          },
+          {
+           "t": "2026-04-28T04:12:00.000Z",
+           "o": 27426.5,
+           "h": 27428,
+           "l": 27423.5,
+           "c": 27424.25,
+           "v": 59
+          }
+         ]
+        }
+       ],
+       "attempts": [],
+       "mode": {
+        "paper": false,
+        "cycle": "full"
+       },
+       "eodAt": "2026-04-28T19:50:00.000Z",
+       "cyclesLeft": 447,
+       "news": "No news blackout recorded for the rest of today.",
+       "lessons": [],
+       "trades": [],
+       "tradesSummary": null,
+       "history": [
+        {
+         "at": "2026-04-28T04:09:02.000Z",
+         "symbols": [
+          "MNQ"
+         ],
+         "result": "CYCLE RESULT: no-trade - nothing to take",
+         "symbol": "MNQ",
+         "tf": 3,
+         "bar": "2026-04-28T04:06:00.000Z",
+         "price": 27412.25,
+         "tick": 0.25,
+         "contract": "MNQ",
+         "action": "no-trade"
+        },
+        {
+         "at": "2026-04-28T04:12:02.000Z",
+         "symbols": [
+          "MNQ"
+         ],
+         "result": "CYCLE RESULT: executed - fx_break long MNQ 1",
+         "symbol": "MNQ",
+         "tf": 3,
+         "bar": "2026-04-28T04:09:00.000Z",
+         "price": 27427.5,
+         "tick": 0.25,
+         "contract": "MNQ",
+         "action": "entered",
+         "noOrder": true
+        }
+       ],
+       "historyLines": [
+        "00:09 MNQ 3m no-trade @27412.25: nothing to take; since +48t",
+        "00:12 MNQ 3m entered @27427.5: fx_break long MNQ 1; since -13t, no order of its own seen: outcome unknown"
+       ],
+       "manageOnly": false,
+       "recovered": false,
+       "unavailable": [],
+       "action": "trade",
+       "cachedRoles": [],
+       "setupsListed": [
+        "15m rejected prior vah up"
+       ],
+       "cycleSkills": {
+        "skills": [
+         "manage-position",
+         "pullback-vs-reversal",
+         "take-profit",
+         "daily-bias",
+         "bos-vs-choch"
+        ],
+        "sections": [],
+        "over": [],
+        "why": [
+         "a position or a working entry is open",
+         "the day's bias",
+         "the last structure break"
+        ],
+        "stages": [
+         "management",
+         "bias"
+        ],
+        "bytes": 18693
+       },
+       "cachedLookups": {}
+      },
+      "transcript": "sha256:609dd394f776675c612b924cf5cc3cb0d3e89f42cdd03f8cb8d8a493838823c4 (376 chars)",
+      "argv": [
+       "claude",
+       "-p",
+       "<prompt>",
+       "--plugin-dir",
+       "<root>",
+       "--output-format",
+       "stream-json",
+       "--verbose",
+       "--permission-mode",
+       "dontAsk",
+       "--allowedTools",
+       "sha256:380008c318d527601c52f139dce060c7d0b15c4dc5c499843787b98f802077e0 (454 chars)",
+       "--disallowedTools",
+       "sha256:df22928c446af5f1d44cfcb94a2d266a7717546f351f752a1fd64cdfdd6a5d00 (658 chars)",
+       "--strict-mcp-config",
+       "--mcp-config",
+       "{\"mcpServers\":{\"broker\":{\"command\":\"node\",\"args\":[\"<root>/scripts/mcp-gateway.js\"]},\"harness\":{\"command\":\"node\",\"args\":[\"<root>/scripts/harness-tools-mcp.js\"]}}}"
+      ]
+     }
+    ]
+   ],
+   "lines": [
+    {
+     "cycleAt": "2026-04-28T04:09:02.000Z",
+     "action": "trade",
+     "harness": "claude",
+     "ok": true,
+     "timedOut": false,
+     "result": "CYCLE RESULT: no-trade - nothing to take",
+     "file": "<home>/logs/cycles/2026-04-28/040902-trade.json",
+     "skills": [],
+     "tools": {
+      "mcp__harness__bar_briefing": 1,
+      "Task": 4
+     },
+     "commands": 0,
+     "orders": [],
+     "missingSkills": [],
+     "embeddedSkills": [
+      "rejection",
+      "cisd",
+      "candle-reading",
+      "momentum-and-volume",
+      "top-down-entry",
+      "invalidation",
+      "take-profit",
+      "position-sizing",
+      "levels-and-reactions",
+      "vwap-volume-profile",
+      "mtf-bias-filter",
+      "daily-bias",
+      "bos-vs-choch"
+     ],
+     "cycleSkills": {
+      "stages": [
+       "setup",
+       "entry",
+       "risk",
+       "location",
+       "bias"
+      ],
+      "skills": [
+       "rejection",
+       "cisd",
+       "candle-reading",
+       "momentum-and-volume",
+       "top-down-entry",
+       "invalidation",
+       "take-profit",
+       "position-sizing",
+       "levels-and-reactions",
+       "vwap-volume-profile",
+       "mtf-bias-filter",
+       "daily-bias",
+       "bos-vs-choch"
+      ],
+      "sections": [],
+      "bytes": 46608,
+      "over": []
+     },
+     "skillLookups": {
+      "mode": "full",
+      "lookups": 2,
+      "byRole": {
+       "market-structure-analyst": 2
+      },
+      "requiredCalls": 0,
+      "met": 0
+     },
+     "setupsListed": 1,
+     "setupSkips": [
+      {
+       "setup": "15m rejected prior vah up",
+       "reason": null
+      }
+     ],
+     "desk": {
+      "expected": [
+       "market-structure-analyst",
+       "trend-momentum-analyst",
+       "volume-liquidity-analyst",
+       "risk-manager"
+      ],
+      "ran": [
+       "market-structure-analyst",
+       "trend-momentum-analyst",
+       "volume-liquidity-analyst",
+       "risk-manager"
+      ],
+      "missing": [],
+      "failed": [],
+      "complete": true,
+      "decided": true
+     }
+    },
+    {
+     "cycleAt": "2026-04-28T04:12:02.000Z",
+     "action": "trade",
+     "harness": "claude",
+     "ok": true,
+     "timedOut": false,
+     "result": "CYCLE RESULT: executed - fx_break long MNQ 1",
+     "file": "<home>/logs/cycles/2026-04-28/041202-trade.json",
+     "skills": [
+      "strategy-library",
+      "strategy-scan",
+      "strategy-gate-checks"
+     ],
+     "tools": {
+      "mcp__harness__bar_briefing": 1,
+      "Task": 6,
+      "mcp__harness__skill_lookup": 3,
+      "mcp__harness__order_plan": 1,
+      "mcp__broker__journal_add": 1
+     },
+     "commands": 0,
+     "orders": [
+      {
+       "contractId": "MNQ",
+       "side": "buy",
+       "size": 1,
+       "type": "market",
+       "rationale": "setup:fx_break long at market from 27427.50 (the signal bar's close), stop 27423.00 (18 ticks), 1 MNQ risks $9.00",
+       "gate": "blocked",
+       "via": "gate-log"
+      }
+     ],
+     "missingSkills": [
+      "trade-session",
+      "multi-timeframe-analysis",
+      "setup-judgment",
+      "trade-plan"
+     ],
+     "embeddedSkills": [
+      "rejection",
+      "candle-reading",
+      "momentum-and-volume",
+      "top-down-entry",
+      "invalidation",
+      "take-profit",
+      "position-sizing",
+      "levels-and-reactions",
+      "vwap-volume-profile",
+      "mtf-bias-filter",
+      "daily-bias",
+      "bos-vs-choch"
+     ],
+     "cycleSkills": {
+      "stages": [
+       "setup",
+       "entry",
+       "risk",
+       "location",
+       "bias"
+      ],
+      "skills": [
+       "rejection",
+       "candle-reading",
+       "momentum-and-volume",
+       "top-down-entry",
+       "invalidation",
+       "take-profit",
+       "position-sizing",
+       "levels-and-reactions",
+       "vwap-volume-profile",
+       "mtf-bias-filter",
+       "daily-bias",
+       "bos-vs-choch"
+      ],
+      "sections": [],
+      "bytes": 43129,
+      "over": []
+     },
+     "skillLookups": {
+      "mode": "full",
+      "lookups": 2,
+      "byRole": {
+       "market-structure-analyst": 2
+      },
+      "requiredCalls": 0,
+      "met": 0
+     },
+     "setupsListed": 1,
+     "setupSkips": [
+      {
+       "setup": "15m rejected prior vah up",
+       "reason": null
+      }
+     ],
+     "factCheck": {
+      "reports": 1,
+      "claims": 3,
+      "true": 3,
+      "false": 0,
+      "unchecked": 0
+     },
+     "desk": {
+      "expected": [
+       "market-structure-analyst",
+       "trend-momentum-analyst",
+       "volume-liquidity-analyst"
+      ],
+      "ran": [
+       "market-structure-analyst",
+       "trend-momentum-analyst",
+       "volume-liquidity-analyst"
+      ],
+      "missing": [],
+      "failed": [],
+      "complete": true,
+      "decided": true
+     }
+    },
+    {
+     "cycleAt": "2026-04-28T04:15:02.000Z",
+     "action": "trade",
+     "harness": "claude",
+     "ok": true,
+     "timedOut": false,
+     "result": "CYCLE RESULT: managed - the open long",
+     "file": "<home>/logs/cycles/2026-04-28/041502-trade.json",
+     "skills": [],
+     "tools": {},
+     "commands": 0,
+     "orders": [],
+     "missingSkills": [],
+     "embeddedSkills": [
+      "manage-position",
+      "pullback-vs-reversal",
+      "take-profit",
+      "daily-bias",
+      "bos-vs-choch"
+     ],
+     "cycleSkills": {
+      "stages": [
+       "management",
+       "bias"
+      ],
+      "skills": [
+       "manage-position",
+       "pullback-vs-reversal",
+       "take-profit",
+       "daily-bias",
+       "bos-vs-choch"
+      ],
+      "sections": [],
+      "bytes": 18693,
+      "over": []
+     },
+     "skillLookups": {
+      "mode": "full",
+      "lookups": 0,
+      "byRole": {},
+      "requiredCalls": 0,
+      "met": 0
+     },
+     "setupsListed": 1,
+     "setupSkips": [
+      {
+       "setup": "15m rejected prior vah up",
+       "reason": null
+      }
+     ],
+     "desk": {
+      "expected": [
+       "market-structure-analyst",
+       "trend-momentum-analyst",
+       "volume-liquidity-analyst",
+       "risk-manager"
+      ],
+      "ran": [],
+      "missing": [
+       "market-structure-analyst",
+       "trend-momentum-analyst",
+       "volume-liquidity-analyst",
+       "risk-manager"
+      ],
+      "failed": [],
+      "complete": false,
+      "decided": true
+     }
+    }
+   ],
+   "gate": [
+    "sha256:e045d98980b8e8a0e4915c074df74702261757ade285de5db019e16c858a7985 (912 chars)"
+   ],
+   "orders": [
+    "{\"accountId\":7,\"contractId\":\"fake:MNQ:Z26\",\"side\":\"buy\",\"type\":\"market\",\"size\":1,\"stopLossBracket\":{\"ticks\":40}}"
+   ],
+   "calls": [
+    "search_contracts {\"searchText\":\"MNQ\",\"live\":false}",
+    "search_contracts {\"searchText\":\"NQ\",\"live\":false}",
+    "get_bars {\"includePartialBar\":false,\"contractId\":\"fake:MNQ:Z26\",\"unit\":\"minute\",\"unitNumber\":3,\"limit\":1400,\"startTime\":\"2026-04-18T08:09:02.000Z\",\"endTime\":\"2026-04-28T04:09:02.000Z\"}",
+    "list_open_positions {\"accountId\":7}",
+    "list_open_orders {\"accountId\":7}",
+    "list_open_positions {\"accountId\":7}",
+    "list_open_orders {\"accountId\":7}",
+    "list_accounts {\"onlyActiveAccounts\":false}",
+    "get_account_snapshot {\"accountId\":7}",
+    "search_trades {\"accountId\":7,\"startTimestamp\":\"2026-04-27T22:00:00.000Z\"}",
+    "search_contracts {\"searchText\":\"MNQ\",\"live\":false}",
+    "search_contracts {\"searchText\":\"NQ\",\"live\":false}",
+    "get_bars {\"includePartialBar\":false,\"contractId\":\"fake:MNQ:Z26\",\"unit\":\"minute\",\"unitNumber\":3,\"limit\":1400,\"startTime\":\"2026-04-18T08:12:02.000Z\",\"endTime\":\"2026-04-28T04:12:02.000Z\"}",
+    "list_open_positions {\"accountId\":7}",
+    "list_open_orders {\"accountId\":7}",
+    "list_open_positions {\"accountId\":7}",
+    "list_open_orders {\"accountId\":7}",
+    "list_accounts {\"onlyActiveAccounts\":false}",
+    "get_account_snapshot {\"accountId\":7}",
+    "search_trades {\"accountId\":7,\"startTimestamp\":\"2026-04-27T22:00:00.000Z\"}",
+    "journal_add {\"kind\":\"plan\",\"contractId\":\"MNQ\",\"tags\":[\"setup:fx_break\",\"MNQ\"],\"text\":\"fx_break long, stop 27423\"}",
+    "get_contract {\"contractId\":\"MNQ\"}",
+    "get_server_config {}",
+    "list_open_positions {\"accountId\":7}",
+    "list_open_orders {\"accountId\":7}",
+    "search_trades {\"accountId\":7}",
+    "get_bars {\"contractId\":\"fake:MNQ:Z26\",\"unit\":\"minute\",\"unitNumber\":3,\"limit\":500,\"includePartialBar\":false}",
+    "place_order {\"accountId\":7,\"contractId\":\"fake:MNQ:Z26\",\"side\":\"buy\",\"type\":\"market\",\"size\":1,\"stopLossBracket\":{\"ticks\":40}}",
+    "search_contracts {\"searchText\":\"MNQ\",\"live\":false}",
+    "search_contracts {\"searchText\":\"NQ\",\"live\":false}",
+    "get_bars {\"includePartialBar\":false,\"contractId\":\"fake:MNQ:Z26\",\"unit\":\"minute\",\"unitNumber\":3,\"limit\":1400,\"startTime\":\"2026-04-18T08:15:02.000Z\",\"endTime\":\"2026-04-28T04:15:02.000Z\"}",
+    "list_open_positions {\"accountId\":7}",
+    "list_open_orders {\"accountId\":7}",
+    "list_open_positions {\"accountId\":7}",
+    "list_open_orders {\"accountId\":7}",
+    "list_accounts {\"onlyActiveAccounts\":false}",
+    "get_account_snapshot {\"accountId\":7}",
+    "search_trades {\"accountId\":7,\"startTimestamp\":\"2026-04-27T22:00:00.000Z\"}"
+   ],
+   "state": [
+    [
+     "bars/MNQ-3m.json",
+     "sha256:f1c2aa03459d03c2703c128ff5fde7cde1157dfc8c6169cc45f6216f570cb2e2 (205762 chars)"
+    ],
+    [
+     "briefing/MNQ.json",
+     "sha256:c868cc57bfc1c91c5a29cd54304e4be48236e0612732fa9897a7cbb6f4cb7659 (17618 chars)"
+    ],
+    [
+     "brokers.json",
+     "sha256:1177f92732ab6b5a185d62e6aa24943734fcce990e5be2c0b8fc2768f5886d69 (454 chars)"
+    ],
+    [
+     "clock.json",
+     "{\"now\":\"2026-04-28T04:15:02.000Z\"}"
+    ],
+    [
+     "contracts-replaymock.2026-04-28.json",
+     "sha256:3f29135eb3758f8a81d93939b3e2558923c5d50c7be7f13e49b542452e83bf41 (1009 chars)"
+    ],
+    [
+     "contracts-replaymock.json",
+     "sha256:2ea3e12f46509037714c9dc55f57f19e6ba7b801a80a15f2c920242ad95e8184 (610 chars)"
+    ],
+    [
+     "exchange.json",
+     "sha256:8958c92cf593bd05692ee4d6acc6e57af3982754417c4bd8dba205b76d902c70 (134398 chars)"
+    ],
+    [
+     "gate.jsonl",
+     "sha256:2f9210306288c02aec6ca7444e56220899c4750fa2d36dedf2c2584018fe983b (913 chars)"
+    ],
+    [
+     "head-prompt/cycle-skills-4b09265779aed0724bd98fb1345ec6728429d6567ed0c0521b721cf1fbd7db39.md",
+     "sha256:4b09265779aed0724bd98fb1345ec6728429d6567ed0c0521b721cf1fbd7db39 (18963 chars)"
+    ],
+    [
+     "head-prompt/cycle-skills-8f5a8972d559404d9c96b32e9eaa6142d23f13178401882c37ba5134f53acfe1.md",
+     "sha256:8f5a8972d559404d9c96b32e9eaa6142d23f13178401882c37ba5134f53acfe1 (43606 chars)"
+    ],
+    [
+     "journal.jsonl",
+     "{\"ts\":\"<wall>\",\"kind\":\"plan\",\"contractId\":\"MNQ\",\"tags\":[\"setup:fx_break\",\"MNQ\"],\"text\":\"fx_break long, stop 27423\"}\n"
+    ],
+    [
+     "logs/scans-2026-04-28.jsonl",
+     "sha256:dbfec68d338ea980cbebeaa9fed9de104b5f3a164e66f4ad46b4bcd4df799326 (3326 chars)"
+    ],
+    [
+     "mtf/MNQ.json",
+     "sha256:11f5a08b3ad550f4805ba175689e7e45b1c60a3eb861459d0e8ccc4908f79b75 (626 chars)"
+    ],
+    [
+     "report-cache.json",
+     "{\"symbols\":[[\"MNQ\",\"MNQ\"]],\"scope\":\"<scope>\",\"analysts\":{},\"phase1\":null,\"at\":\"2026-04-28T04:15:02.000Z\"}\n"
+    ],
+    [
+     "runner-state.json",
+     "sha256:c1f330c952677d6504d527e8217c7aa83c0dbabfbfb7d23559ea80055236f248 (885 chars)"
+    ],
+    [
+     "sessions/2026-04-28/bars-2026-04-28.idx.json",
+     "{\"MNQ|MNQ|3\":\"2026-04-28T04:12:00.000Z\",\"#bytes\":24308}"
+    ],
+    [
+     "sessions/2026-04-28/bars-2026-04-28.jsonl.gz",
+     "sha256:47e5425b1899fe64f0b0bc9f903a4114fe749e488a323539cf338959f87b1059 (22999 chars)"
+    ],
+    [
+     "signals/MNQ-3m.json",
+     "{\n  \"symbol\": \"MNQ\",\n  \"timeframe\": \"3m\",\n  \"asOf\": \"2026-04-28T04:12:00.000Z\",\n  \"closedAt\": \"2026-04-28T04:15:00.000Z\",\n  \"recordedAt\": \"2026-04-28T04:15:02.000Z\",\n  \"source\": null,\n  \"candidates\": [],\n  \"setups\": []\n}\n"
+    ]
+   ],
+   "history": [
+    {
+     "at": "2026-04-28T04:09:02.000Z",
+     "symbols": [
+      "MNQ"
+     ],
+     "result": "CYCLE RESULT: no-trade - nothing to take",
+     "symbol": "MNQ",
+     "tf": 3,
+     "bar": "2026-04-28T04:06:00.000Z",
+     "price": 27412.25,
+     "tick": 0.25,
+     "contract": "MNQ",
+     "action": "no-trade"
+    },
+    {
+     "at": "2026-04-28T04:12:02.000Z",
+     "symbols": [
+      "MNQ"
+     ],
+     "result": "CYCLE RESULT: executed - fx_break long MNQ 1",
+     "symbol": "MNQ",
+     "tf": 3,
+     "bar": "2026-04-28T04:09:00.000Z",
+     "price": 27427.5,
+     "tick": 0.25,
+     "contract": "MNQ",
+     "action": "entered",
+     "noOrder": true
+    },
+    {
+     "at": "2026-04-28T04:15:02.000Z",
+     "symbols": [
+      "MNQ"
+     ],
+     "result": "CYCLE RESULT: managed - the open long",
+     "symbol": "MNQ",
+     "tf": 3,
+     "bar": "2026-04-28T04:12:00.000Z",
+     "price": 27424.25,
+     "tick": 0.25,
+     "contract": "MNQ",
+     "action": "managed"
+    }
+   ],
+   "fingerprint": {
+    "cfg": {
+     "harness": "claude",
+     "command": null,
+     "symbols": [
+      "MNQ"
+     ],
+     "account": "7",
+     "workdir": null,
+     "timeframe": 3,
+     "trigger": "bar",
+     "bars": 1400,
+     "dataDir": null,
+     "barDelaySeconds": 2,
+     "barPollSeconds": 2,
+     "barTimeoutSeconds": 60,
+     "sessions": [
+      "18:00-15:50@America/New_York"
+     ],
+     "premarketAt": "",
+     "eodAt": "15:50@America/New_York",
+     "eodReview": true,
+     "weekdaysOnly": true,
+     "maxCyclesPerDay": 450,
      "cycleTimeoutMinutes": 6,
      "cycle": "full",
      "earlyCloseDates": [

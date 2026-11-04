@@ -253,7 +253,8 @@ Their environment says which run it is (`FTH_PREPARE`: the stop hook asks it
 for nothing; `FTH_PREPARE_SESSION`: the file its SessionStart hook records the
 session in) and never carries the cycle's id, entry, role record or phase-1
 record. Their gate log is the shadow's own (`<home>/prepare/gate-log.jsonl`,
-`FTH_GATE_LOG`; the gateway they start inherits it): the CLI fires its
+`FTH_GATE_LOG`, reset for each run, so it stays bounded; the gateway they
+start inherits it): the CLI fires its
 PreToolUse hooks before the dontAsk denial, so an order a prepare tries is
 refused by the order gate's hook into that file, never the old path's log. A
 forked or resumed session's SessionStart gives the day's state again but not
@@ -319,7 +320,11 @@ path), never against 100%.
 
 `tests/e2e/prepare-ahead-off-regression.test.js` (in `npm test`) holds the key
 absent and `"off"`, and the old path's outputs in `"shadow"`, to origin/main's
-own outputs on a no-fill, a fill and a manage-only day
+own outputs on a no-fill, a fill, a manage-only and an entry day (the head
+trader's entry through the real gateway, so the gate log and the orders
+compare), the broker's whole call log included (an extra read while off is a
+leak; in shadow only the shadow's own reads may be added) and the tool-call logs
+(left out, with the shadow's plans and sessions, only in shadow)
 (`tests/fixtures/prepare-off/main-outputs.json`, written by
 `tests/fixtures/prepare-off/generate.js` in a scratch checkout of main, never on
 a branch; a change to it is a golden change, explained). It also holds that the

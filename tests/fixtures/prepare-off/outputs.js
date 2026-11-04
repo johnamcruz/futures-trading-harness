@@ -12,43 +12,66 @@
  *   no-fill      every cycle passes, flat all day
  *   fill         a position opens before the 04:12 pass (at the exchange): that cycle manages it
  *   manage-only  as fill, with the day's cap at one cycle: the 04:12 cycle is manage-only
+ *   entry        at 04:09 the head trader sends its entry through the real gateway (decision-path.js entryCycle): the
+ *                gate decides it (in this world it refuses it, [skills-loaded]: the gate log and the orders compare)
  *
  * Each pass's outputs: the prompt, the head trader's argv (the prompt elided) and child environment, the cycle record
  * (less its wall-clock fields and the prepare field), the cycle log's summary line, the runner's events and day-log
- * lines, and after the day the gate log, every state file in the home (less prepare/ and the shadow's session store)
- * and the decision record (the runner state's history), plus the run fingerprint (the validated runner config as the
- * run hashes it, and its HEAD_DELIVERY token list). normalize() names each world's home, the repo root, the runs'
- * random file names and the cycle ids alike, so two worlds compare byte for byte.
+ * lines, and after the day the gate log, every state file in the home (the tool-call logs included; `own`: the files
+ * a shadow wrote, left out only in shadow mode), the broker's whole call log (reads included: an extra read is a leak
+ * against the live rate limits), the decision record (the runner state's history), plus the run fingerprint (the
+ * validated runner config as the run hashes it, and its HEAD_DELIVERY token list). normalize() names each world's home,
+ * the repo root, the report cache's scope, the runs' random transcript names and the cycle ids derived from them
+ * (check-order.js cycleId), the gate log's time stamps and any wall-clock instant (within two days of the run) alike;
+ * nothing else (any other value that changes shows).
  */
 
 const fs = require('fs');
 const path = require('path');
 
-const DAYS = ['no-fill', 'fill', 'manage-only'];
+const DAYS = ['no-fill', 'fill', 'manage-only', 'entry'];
 // A cycle record's fields that are wall-clock (when it was written, how long it took, its timing) or the shadow's own.
 const WALL = new Set(['at', 'durationMs', 'timing', 'prepare']);
-// Files of a home that are no state of the old path's: the shadow's own (prepare/: plans, session records, its gate
-// log) and its CLI's session store; the live transcripts are removed by each run.
-const NOT_STATE = /^(prepare|claude-sessions)(\/|$)/;
+// The files a shadow writes (its plans, session records and gate log under prepare/, its CLI's session store, its runs'
+// tool-call logs): left out only in shadow mode (`own: SHADOW_OWN`); with the key off every file of the home compares.
+const SHADOW_OWN = /^(prepare|claude-sessions|logs\/toolcall)(\/|$)/;
 
+/**
+ * Names each world's own values alike: the home, the repo root, the report cache's scope (a hash of the root's real path,
+ * report-cache.js scopeOf), each run's random transcript file (in first-seen order) and the cycle id derived from it
+ * (check-order.js cycleId: the same placeholder number), and the gate log's time stamps. What it can still hide: a run
+ * whose transcript (and so its cycle id) is another run's in the same position, which is how runs are told apart anyway.
+ */
 function normalizer(w, root) {
   const ids = new Map();
-  const id = (kind, v) => { const k = `${kind}:${v}`; if (!ids.has(k)) ids.set(k, `<${kind}${ids.size}>`); return ids.get(k); };
-  // The report cache's scope is a hash of the root's real path (report-cache.js scopeOf): another checkout, another hash.
+  const id = v => { if (!ids.has(v)) ids.set(v, ids.size); return ids.get(v); };
   const scope = require(path.join(root, 'scripts', 'lib', 'trading', 'report-cache')).scopeOf(root);
-  return text => String(text)
-    .split(scope).join('<scope>')
-    .split(w.home).join('<home>')
-    .split(root).join('<root>')
-    .replace(/cycle-transcript-\d+-[0-9a-f]+/g, m => id('transcript', m))
-    .replace(/\b[0-9a-f]{16}\b/g, m => id('id', m))
-    .replace(/"ts":"[^"]*"/g, '"ts":"<ts>"');
+  const crypto = require('crypto');
+  const wall = Date.now();
+  return text => {
+    let s = String(text);
+    // Each transcript path seen, and the cycle id the gate derives from it.
+    const paths = [...new Set([...s.matchAll(/[^"\s]*cycle-transcript-\d+-[0-9a-f]+\.jsonl/g)].map(m => m[0]))];
+    for (const p of paths) {
+      const n = id(p.replace(/^.*\//, ''));
+      const cyc = crypto.createHash('sha256').update(p).digest('hex').slice(0, 16);
+      s = s.split(cyc).join(`<cycle${n}>`);
+    }
+    return s
+      .split(scope).join('<scope>')
+      .split(w.home).join('<home>')
+      .split(root).join('<root>')
+      .replace(/cycle-transcript-\d+-[0-9a-f]+/g, m => `<transcript${id(m)}>`)
+      .replace(/"ts":"[^"]*"/g, '"ts":"<ts>"')
+      // A wall-clock time (a journal line's, a reply's): any instant within two days of the run's own wall clock (the
+      // replayed day is months before it, so a replay time never reads as one).
+      .replace(/\d{4}-\d{2}-\d{2}T\d{2}:\d{2}:\d{2}(\.\d+)?Z/g, t => (Math.abs(Date.parse(t) - wall) < 2 * 86400000 ? '<wall>' : t));
+  };
 }
 
-// The mock exchange's state as the old path left it: its book and every order call; its log of reads (an account read
-// changes nothing at a broker) left out.
-const ORDER_CALL = /^(place_order|modify_order|cancel_order|close_position|partial_close_position)$/;
-const exchangeState = p => { const s = JSON.parse(fs.readFileSync(p, 'utf8')); return JSON.stringify({ ...s, calls: (s.calls || []).filter(c => ORDER_CALL.test(c.tool)) }); };
+// The mock exchange's state less its call log (the call log is its own output, `calls`, every call in order).
+const exchangeState = p => { const s = JSON.parse(fs.readFileSync(p, 'utf8')); return JSON.stringify({ ...s, calls: undefined }); };
+const exchangeCalls = p => (JSON.parse(fs.readFileSync(p, 'utf8')).calls || []).map(c => `${c.tool} ${JSON.stringify(c.args || {})}`);
 
 const readTree = (dir, base = dir) => (fs.existsSync(dir) ? fs.readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name)).flatMap(e => {
   const p = path.join(dir, e.name);
@@ -59,7 +82,7 @@ const readTree = (dir, base = dir) => (fs.existsSync(dir) ? fs.readdirSync(dir, 
  * One day: a fresh world (its runner config with `extra`), its three passes, `opts.runPrepare(w)` the shadow's runs
  * (none: the old path alone). Returns { passes, after } in normalized text, and the world.
  */
-async function runDay(day, { extra = {}, runPrepare = null, before = null, cfgAt = null, beforePass = null } = {}) {
+async function runDay(day, { extra = {}, runPrepare = null, before = null, cfgAt = null, beforePass = null, own = null } = {}) {
   const ROOT = path.resolve(__dirname, '..', '..', '..');
   const D = require(path.join(ROOT, 'tests', 'fixtures', 'decision-path'));
   const exchange = require(path.join(ROOT, 'tests', 'fixtures', 'mock-exchange'));
@@ -76,7 +99,7 @@ async function runDay(day, { extra = {}, runPrepare = null, before = null, cfgAt
     if (beforePass) beforePass(bar, w);
     const filled = day !== 'no-fill' && bar === D.NEXT_BAR;
     if (filled) exchange.handle(w.state, 'place_order', { accountId: 7, contractId: D.MNQ_ID, side: 'buy', type: 'market', size: 1, stopLossBracket: { ticks: 40 } }, {});
-    const script = filled ? [{ result: 'CYCLE RESULT: managed - the open long' }] : D.passCycle(w, 'nothing to take');
+    const script = filled ? [{ result: 'CYCLE RESULT: managed - the open long' }] : day === 'entry' && bar === D.FIRED_BAR ? D.entryCycle(w) : D.passCycle(w, 'nothing to take');
     const r = await D.pass(w, D.decisionAt(bar), script, runPrepare ? { runPrepare: runPrepare(w) } : {});
     const env = r.ctx && r.ctx.env ? Object.fromEntries(Object.entries(r.ctx.env).filter(([k]) => /^(FTH_|CLAUDE_)/.test(k)).sort(([a], [b]) => a.localeCompare(b))) : null;
     passes.push({
@@ -91,14 +114,15 @@ async function runDay(day, { extra = {}, runPrepare = null, before = null, cfgAt
   const dir = path.join(w.home, 'logs', 'cycles');
   const records = readTree(dir).map(([rel, p]) => { const { argv, ...rec } = JSON.parse(fs.readFileSync(p, 'utf8')); return [rel, { ...Object.fromEntries(Object.entries(rec).filter(([k]) => !WALL.has(k))), argv }]; });
   const lines = fs.readdirSync(path.join(w.home, 'logs')).filter(f => /^cycles-.*\.jsonl$/.test(f)).sort().flatMap(f => fs.readFileSync(path.join(w.home, 'logs', f), 'utf8').trim().split('\n').map(l => { const { at: _a, durationMs: _d, timing: _t, promptChars: _p, ...x } = JSON.parse(l); return x; }));
-  const state = readTree(w.home).filter(([rel]) => !NOT_STATE.test(rel) && !/^logs\/cycles\//.test(rel) && !/^logs\/cycles-.*\.jsonl$/.test(rel) && !/^logs\/toolcall\//.test(rel))
+  const state = readTree(w.home).filter(([rel]) => !(own && own.test(rel)) && !/^logs\/cycles\//.test(rel) && !/^logs\/cycles-.*\.jsonl$/.test(rel))
     .map(([rel, p]) => [rel, rel === 'exchange.json' ? exchangeState(p) : fs.readFileSync(p, 'utf8')]);
   const runnerState = JSON.parse(fs.readFileSync(w.stateFile, 'utf8'));
   const { validateConfig, headDeliveryOf } = require(path.join(ROOT, 'scripts', 'lib', 'autotrader'));
   const raw = { harness: 'claude', cycle: 'full', premarketAt: '', timeframe: 3, account: '7', symbols: ['MNQ'], bars: 1400, ...(day === 'manage-only' ? { maxCyclesPerDay: 1 } : {}), ...extra };
   const cfg = validateConfig(raw);
   const out = {
-    passes, records, lines, gate: fs.existsSync(w.env.FTH_GATE_LOG) ? fs.readFileSync(w.env.FTH_GATE_LOG, 'utf8') : '', state, history: runnerState.history,
+    passes, records, lines, gate: fs.existsSync(w.env.FTH_GATE_LOG) ? fs.readFileSync(w.env.FTH_GATE_LOG, 'utf8').trim().split('\n').filter(Boolean) : [], orders: exchange.read(w.state).calls.filter(c => c.tool === 'place_order').map(c => JSON.stringify(c.args)),
+    calls: exchangeCalls(w.state), state, history: runnerState.history,
     fingerprint: { cfg: { ...cfg, dataDir: null, workdir: null }, delivery: headDeliveryOf(null, cfg) },
   };
   return { w, out: compact(JSON.parse(norm(JSON.stringify(out)))) };
@@ -126,4 +150,4 @@ function firstDiff(a, b, at = '') {
   return { at, got: String(JSON.stringify(a)).slice(0, 400), want: String(JSON.stringify(b)).slice(0, 400) };
 }
 
-module.exports = { DAYS, runDay, allDays, firstDiff, normalizer };
+module.exports = { DAYS, SHADOW_OWN, runDay, allDays, firstDiff, normalizer };
