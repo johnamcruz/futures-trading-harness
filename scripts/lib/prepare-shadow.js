@@ -105,7 +105,7 @@ function createShadow({ cfg, root, home, runPrepare, now, sectionOpts = () => ({
     const flat = flatOf(acct);
     let section;
     try {
-      section = flat ? PA.sectionFor({ symbol: x.symbol, bars: x.bars, minutes: x.minutes, briefing: x.briefing, flat: true, windowBars: x.windowBars, ...sectionOpts() }) : null;
+      section = flat ? PA.sectionFor({ symbol: x.symbol, bars: x.bars, minutes: x.minutes, briefing: x.briefing, flat: true, windowBars: x.windowBars, ...sectionOpts(x.symbol) }) : null;
     } catch (err) {
       return { outcome: 'error', why: `the section: ${err.message}`, ...at };
     }

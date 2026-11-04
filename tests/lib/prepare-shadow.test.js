@@ -296,6 +296,21 @@ test('wiring: the shadow only with prepareAhead "shadow" on Claude Code and a ru
   assert.strictEqual(prepareShadowFor({ ...base, cfg: { ...validateConfig({ harness: 'opencode', premarketAt: '' }), prepareAhead: 'shadow' }, runPrepare }), null, 'another harness');
 });
 
+test('wiring: the section reads what the close\'s own code reads: the selected contracts, the lane\'s strategies, the paper flag, and (no attempt running) no entry rule, no size and not in an attempt', () => {
+  const { sectionInputsFor } = require('../../scripts/lib/runner-wiring');
+  const { laneStrategies, lanesOf } = require('../../scripts/lib/lanes');
+  const home = tmp();
+  for (const c of [cfg, { ...cfg, paper: true, symbols: ['NQ'] }]) {
+    const o = sectionInputsFor({ cfg: c, root: ROOT, home, env: { FTH_HOME: home, HOME: home }, strategies: () => REG })('MNQ');
+    assert.deepStrictEqual(o.selected, c.symbols);
+    assert.deepStrictEqual(o.strategies.map(s => s.name), laneStrategies(REG, lanesOf(c)[0]).map(s => s.name));
+    assert.strictEqual(o.registry, REG);
+    assert.strictEqual(o.paper, Boolean(c.paper));
+    assert.deepStrictEqual([o.inAttempt, o.entryRule, o.sizing], [false, null, null]);
+    assert.ok(o.blackouts && o.clock, 'the briefing\'s own facts');
+  }
+});
+
 test('wiring: phase 1\'s key for the prepare is the report cache\'s own (the key a cycle serves phase 1 under), from the same facts', () => {
   const { reportCacheFor } = require('../../scripts/lib/runner-wiring');
   const home = tmp();

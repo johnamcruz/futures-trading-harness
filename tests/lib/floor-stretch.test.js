@@ -269,6 +269,20 @@ test('noSizeFits with a stretch: OK while it takes the floor; else the problem s
   assert.match(one(198, trendHome()).problem, /the attempt state is unreadable$/);
 });
 
+test('sizingFacts: the facts noSizeFits sizes with (the cap in force, the floor in the order\'s contracts, the tick value, slippage, fees, the stretch), for the prepare\'s plans (next-close.js sizing); floorFit on them is compose_check\'s answer', () => {
+  const { sizingFacts, floorFit } = require('../../scripts/lib/prop/size-translate');
+  const pol = policy();
+  const f = sizingFacts({ policy: pol, account: BIG, capUsd: 300, root: 'MNQ', spec: specOf('MNQ'), specOf, home: home() });
+  assert.deepStrictEqual(f, { capUsd: 300, floor: 3, tickValue: 0.5, slipTicks: pol.sizing.stop_slippage_ticks, feePerSide: FEE.MNQ, stretchUsd: 500 });
+  // compose_check's refusal is floorFit on these facts, less the stretch while healthy.
+  for (const t of [150, 197, 198, 330, 331]) {
+    const fit = floorFit({ ...f, stopTicks: t });
+    const refused = noSizeFits({ policy: pol, account: BIG, capUsd: 300, stop: { ticks: t, floorTicks: 1 }, spec: specOf('MNQ'), root: 'MNQ', strategy: 'trade_lifecycle', specOf, home: home() });
+    assert.strictEqual(Boolean(refused), !fit.fits && !fit.stretchFits, String(t));
+  }
+  assert.strictEqual(sizingFacts({ policy: null, account: BIG, capUsd: 300, root: 'MNQ', spec: specOf('MNQ'), specOf }), null, 'no attempt: none');
+});
+
 test('the attempt simulator: a loss then a win today keeps the stretch off for the rest of the day; the next day takes it again', () => {
   const at = require('../../scripts/lib/prop/attempts');
   const pol = policy();
