@@ -542,7 +542,7 @@ test('prepare-ahead: deskKeys keys each report by its role and text, with its en
 test('prepare-ahead: its tunables are config (config/runner.json prepare): the deadline margin, the most a run takes, the confirm\'s bound ("on") and the effort (none: the CLI default)', () => {
   const T = require('../../scripts/lib/tunables');
   const P = T.runner().prepare;
-  assert.deepStrictEqual(Object.keys(P).sort(), ['confirmMs', 'effort', 'marginMs', 'maxMs']);
+  assert.deepStrictEqual(Object.keys(P).sort(), ['confirmMs', 'confirmTailChars', 'effort', 'marginMs', 'maxMs']);
   assert.ok(Number.isInteger(P.marginMs) && P.marginMs > 0 && Number.isInteger(P.maxMs) && P.maxMs > 0);
   // The confirm's own bound: past it (hung), the full head trader runs with what is left (cycle-run.js).
   assert.ok(Number.isInteger(P.confirmMs) && P.confirmMs > 0);

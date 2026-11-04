@@ -195,7 +195,7 @@ function createShadow({ cfg, root, home, runPrepare, now, sectionOpts = () => ({
     const lat = rec && isObj(rec.timing) && isObj(rec.timing.latencyMs) ? rec.timing.latencyMs.order : null;
     return {
       ...(x.on || { mode: 'on', path: 'unknown' }),
-      ...(c ? { confirm: { outcome: c.outcome, ms: c.ms, fellBack: c.fellBack } } : {}),
+      ...(c ? { confirm: { outcome: c.outcome, ms: c.ms, fellBack: c.fellBack, ...(Array.isArray(c.tools) ? { tools: c.tools } : {}), ...(typeof c.tail === 'string' ? { tail: c.tail } : {}) } } : {}),
       ...(c && Array.isArray(c.late) ? { late: c.late } : {}),
       closeToOrderMs: Number.isFinite(lat) ? lat : null,
       desk: isObj(ctx.desk) ? 'ran' : Array.isArray(ctx.cachedRoles) && ctx.cachedRoles.length ? 'cached' : 'none',

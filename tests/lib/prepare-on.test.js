@@ -159,6 +159,9 @@ test('"on" after the cycle: the record adds the confirm\'s outcome, the close-to
   const on = { mode: 'on', path: 'confirm', planId: 'p' };
   const r = await afterAt(home, FIRED, { on, cycle: { ok: true, confirm: { outcome: 'done', ms: 7000, fellBack: false, late: ['chased-entry'] } }, timing: { latencyMs: { order: 21000 } }, context: { desk: { ms: 25000 } } });
   assert.deepStrictEqual(r.log.prepare.on, { ...on, confirm: { outcome: 'done', ms: 7000, fellBack: false }, late: ['chased-entry'], closeToOrderMs: 21000, desk: 'ran' });
+  // A confirm that failed before a compose: what it did is in the record (its tool calls, its output's end).
+  const failedConfirm = await afterAt(tmp(), FIRED, { on, cycle: { ok: true, confirm: { outcome: 'error', ms: 3000, fellBack: true, late: [], tools: ['mcp__harness__bar_briefing'], tail: '...API Error: overloaded' } } });
+  assert.deepStrictEqual(failedConfirm.log.prepare.on.confirm, { outcome: 'error', ms: 3000, fellBack: true, tools: ['mcp__harness__bar_briefing'], tail: '...API Error: overloaded' });
   const cached = await afterAt(tmp(), FIRED, { on, cycle: { ok: true }, timing: { latencyMs: { order: null } }, context: { cachedRoles: ['risk-manager'] } });
   assert.strictEqual(cached.log.prepare.on.desk, 'cached');
   assert.strictEqual(cached.log.prepare.on.closeToOrderMs, null);

@@ -129,3 +129,23 @@ test('runCycle without confirm: exactly as before (no resume, no base, no confir
   assert.ok(!seen[0].argv.includes('--resume') && !('FTH_CONFIRM_BASE' in seen[0].o.env));
   assert.ok(!('confirm' in r));
 });
+
+test('runCycle confirm: one that errs or times out before a compose keeps what it did (its tool calls, the tail of its output, capped) in its result\'s confirm and the day log, so a fallback can be told why', async () => {
+  const s = setup();
+  const T = require('../../scripts/lib/tunables').runner().prepare;
+  const big = 'x'.repeat(T.confirmTailChars * 3);
+  const failing = async (argv, o) => {
+    if (!argv.includes('--resume')) return { ok: true, timedOut: false, code: 0, output: out('CYCLE RESULT: no-trade - nothing', 's'), stdout: out('CYCLE RESULT: no-trade - nothing', 's') };
+    const lines = [{ type: 'system', subtype: 'init', session_id: 'f' }, { type: 'assistant', message: { content: [{ type: 'tool_use', id: 't1', name: 'mcp__harness__bar_briefing', input: { symbol: 'MNQ' } }] } }, { type: 'assistant', message: { content: [{ type: 'text', text: big }] } }, { type: 'result', subtype: 'error_during_execution', is_error: true, result: 'API Error: overloaded' }].map(e => JSON.stringify(e)).join('\n');
+    void o;
+    return { ok: false, timedOut: false, code: 1, output: lines, stdout: lines };
+  };
+  const logged = [];
+  const r = await runCycle(cfg, 'trade', 'CYCLE PROMPT', {}, { timeoutMs: 360000, context: s.context, confirm: { session: 'ses-prep', base: s.base, suffix: SUFFIX, timeoutMs: 90000, composed: () => false } }, deps(s, failing, { appendLog: (_now, text) => logged.push(text) }));
+  assert.strictEqual(r.confirm.fellBack, true);
+  assert.deepStrictEqual(r.confirm.tools, ['mcp__harness__bar_briefing']);
+  assert.ok(typeof r.confirm.tail === 'string' && r.confirm.tail.length <= T.confirmTailChars, 'capped');
+  assert.match(r.confirm.tail, /API Error: overloaded/, 'the end of its output');
+  // The day log has the failed confirm's run before the full head trader's.
+  assert.ok(logged.length === 2 && /the confirm \(failed before a compose: error;/.test(logged[0]) && /API Error: overloaded/.test(logged[0]), logged.map(x => x.slice(0, 120)).join(' | '));
+});

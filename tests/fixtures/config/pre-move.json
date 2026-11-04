@@ -1337,6 +1337,10 @@
    "value": 90000,
    "from": "new in feat/prepare-ahead-on (the most the confirm may take at the close; past it the full head trader runs with what is left)"
   },
+  "prepare.confirmTailChars": {
+   "value": 4000,
+   "from": "new in feat/prepare-ahead-on (how much of a failed confirm's output, its end, its record and the day log keep)"
+  },
   "prepare.effort": {
    "value": null,
    "from": "new in feat/prepare-ahead-shadow (the CLI's --effort for them; null: the CLI's default, until the owner says otherwise)"
