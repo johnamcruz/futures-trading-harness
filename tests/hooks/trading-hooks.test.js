@@ -1390,6 +1390,58 @@ test('stop hook asks once for a review of unreviewed entries', () => {
   assert.strictEqual(run({ stop_hook_active: false }).code, 2);
 });
 
+test('stop hook: a prepare or a shadow confirm (FTH_PREPARE, prepare-ahead.js) is never asked for a review or a cycle result; any other value is no such run', () => {
+  const { env } = setup([placed(1, 'setup:orb long stop 1', true)].map(e => ({ ...e, ts: new Date(Date.parse(TEST_NOW) - 60000).toISOString() })));
+  const hook = require(path.join(REPO, 'scripts', 'hooks', 'trading-stop-review.js'));
+  for (const kind of ['prepare', 'confirm']) {
+    assert.strictEqual(hook.run('{}', {}, { env: { ...env, FTH_AUTONOMOUS: '1', FTH_PREPARE: kind }, now: new Date(TEST_NOW) }), '', kind);
+    assert.strictEqual(runHook('stop:trading:review-reminder', 'scripts/hooks/trading-stop-review.js', 'standard,strict', { stop_hook_active: false }, { ...env, FTH_PREPARE: kind }).code, 0, `${kind}: the wired hook`);
+  }
+  assert.strictEqual(hook.run('{}', {}, { env: { ...env, FTH_AUTONOMOUS: '1', FTH_PREPARE: 'other' }, now: new Date(TEST_NOW) }).exitCode, 2, 'another value: the head trader\'s run, asked');
+});
+
+test('session-start: a forked or resumed session (the shadow confirm) gets the trading day fresh and not the lessons again (they are in its history); a new one gets them', () => {
+  const { env } = setup([{ ts: minutesAgo(20, new Date(TEST_NOW)), kind: 'lesson', text: 'Wait for the ORB retest', tags: ['setup:orb'] }]);
+  const start = source => runHook('session-start:trading:briefing', 'scripts/hooks/trading-session-start.js', 'minimal,standard,strict', source ? { source, session_id: 's1', transcript_path: '/t/s1.jsonl' } : {}, env);
+  for (const s of [null, 'startup', 'clear', 'compact']) {
+    const r = start(s);
+    assert.match(r.stdout, /Wait for the ORB retest/, String(s));
+  }
+  for (const s of ['fork', 'resume']) {
+    const r = start(s);
+    assert.strictEqual(r.code, 0);
+    assert.match(r.stdout, /Trading harness briefing/, s);
+    assert.match(r.stdout, /Today: \d+ orders placed/, `${s}: the day's state, fresh`);
+    assert.doesNotMatch(r.stdout, /Wait for the ORB retest|### Lessons \(advice/, `${s}: the lessons are in the history already`);
+    assert.match(r.stdout, /Lessons and instincts: as at this session's start, above/, s);
+  }
+});
+
+test('session-start: a prepare or a shadow confirm records its session (id, transcript, source) in the runner\'s file, whole; no other run writes it', () => {
+  const { env } = setup([]);
+  const dir = fs.mkdtempSync(path.join(require('os').tmpdir(), 'fth-prep-ses-'));
+  const file = path.join(dir, 'prepare', 'session-1.json');
+  const payload = { source: 'startup', session_id: 'ses-abc', transcript_path: '/t/ses-abc.jsonl', hook_event_name: 'SessionStart' };
+  const r = runHook('session-start:trading:briefing', 'scripts/hooks/trading-session-start.js', 'minimal,standard,strict', payload, { ...env, FTH_PREPARE: 'prepare', FTH_PREPARE_SESSION: file });
+  assert.strictEqual(r.code, 0);
+  assert.deepStrictEqual(JSON.parse(fs.readFileSync(file, 'utf8')), { sessionId: 'ses-abc', transcript: '/t/ses-abc.jsonl', source: 'startup' });
+  assert.deepStrictEqual(fs.readdirSync(path.dirname(file)), ['session-1.json'], 'no temp file left');
+  // The confirm's fork: its own session, source fork.
+  const f2 = path.join(dir, 'prepare', 'session-2.json');
+  runHook('session-start:trading:briefing', 'scripts/hooks/trading-session-start.js', 'minimal,standard,strict', { ...payload, source: 'fork', session_id: 'ses-fork' }, { ...env, FTH_PREPARE: 'confirm', FTH_PREPARE_SESSION: f2 });
+  assert.strictEqual(JSON.parse(fs.readFileSync(f2, 'utf8')).source, 'fork');
+  // Not a prepare run (no FTH_PREPARE), a relative path, or a payload without a session id: nothing written.
+  const f3 = path.join(dir, 'prepare', 'session-3.json');
+  runHook('session-start:trading:briefing', 'scripts/hooks/trading-session-start.js', 'minimal,standard,strict', payload, { ...env, FTH_PREPARE_SESSION: f3 });
+  runHook('session-start:trading:briefing', 'scripts/hooks/trading-session-start.js', 'minimal,standard,strict', payload, { ...env, FTH_PREPARE: 'prepare', FTH_PREPARE_SESSION: 'prepare/session-3.json' });
+  runHook('session-start:trading:briefing', 'scripts/hooks/trading-session-start.js', 'minimal,standard,strict', { source: 'startup' }, { ...env, FTH_PREPARE: 'prepare', FTH_PREPARE_SESSION: f3 });
+  assert.ok(!fs.existsSync(f3));
+  // A file that can't be written never blocks the session.
+  const r4 = runHook('session-start:trading:briefing', 'scripts/hooks/trading-session-start.js', 'minimal,standard,strict', payload, { ...env, FTH_PREPARE: 'prepare', FTH_PREPARE_SESSION: path.join(file, 'under-a-file.json') });
+  assert.strictEqual(r4.code, 0);
+  assert.match(r4.stdout, /Trading harness briefing/);
+});
+
 test('MCP gateway blocks a bad order end to end and forwards everything else', async () => {
   const { spawn } = require('child_process');
   const dir = tmpDir();

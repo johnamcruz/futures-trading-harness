@@ -48,7 +48,7 @@ const PLAN_DIR = 'prepare';
 const SECTIONS = ['m3', 'm15', 'h1', 'day'];
 const isObj = x => Boolean(x) && typeof x === 'object' && !Array.isArray(x);
 const norm = s => String(s || '').toLowerCase().replace(/\s+/g, ' ').trim();
-const sha = (s, n) => crypto.createHash('sha256').update(String(s)).digest('hex').slice(0, n);
+const sha = s => crypto.createHash('sha256').update(String(s)).digest('hex');
 
 /** The runner config's prepareAhead: the problem with it, or null (absent or "off": no delivery on any harness). */
 function modeProblem(v, harness) {
@@ -104,7 +104,7 @@ function deskKeys(reports) {
   const out = {};
   for (const r of Array.isArray(reports) ? reports : []) {
     if (!r || typeof r.role !== 'string') continue;
-    out[r.role] = { key: sha(`${r.role}\n${r.text || ''}`, 16), until: typeof r.until === 'string' ? r.until : null };
+    out[r.role] = { key: sha(`${r.role}\n${r.text || ''}`), until: typeof r.until === 'string' ? r.until : null };
   }
   return out;
 }
@@ -164,6 +164,28 @@ function validate(plan, at) {
   return { status: 'valid' };
 }
 
+/**
+ * The SessionStart hook's record of a prepare's or a shadow confirm's session (env FTH_PREPARE prepare or confirm, and
+ * FTH_PREPARE_SESSION an absolute file the runner named): { sessionId, transcript, source }, written whole. Any other
+ * run, or an input without a session id: nothing written (false).
+ */
+function recordSession(env, input) {
+  const file = env && env.FTH_PREPARE_SESSION;
+  if (!['prepare', 'confirm'].includes(env && env.FTH_PREPARE) || typeof file !== 'string' || !path.isAbsolute(file)) return false;
+  if (!isObj(input) || typeof input.session_id !== 'string' || !input.session_id) return false;
+  writeJsonAtomic(file, { sessionId: input.session_id, transcript: typeof input.transcript_path === 'string' ? input.transcript_path : null, source: typeof input.source === 'string' ? input.source : null });
+  return true;
+}
+/** The session record (recordSession), or null. */
+function readSession(file) {
+  try {
+    const s = JSON.parse(fs.readFileSync(file, 'utf8'));
+    return isObj(s) && typeof s.sessionId === 'string' && s.sessionId ? s : null;
+  } catch (_err) {
+    return null;
+  }
+}
+
 /** The plan file for a symbol's bar (the bar the plan is for: the next bar's open time). */
 const planFile = (home, symbol, barT) => path.join(home, PLAN_DIR, `${String(symbol).replace(/[^A-Za-z0-9]/g, '_')}-${String(barT).replace(/[^0-9TZ]/g, '')}.json`);
 /** The plan written whole (a temp file renamed over it: harness-run.js writeJsonAtomic); its path. */
@@ -211,7 +233,7 @@ function parsePlan(text) {
 /** The plan record: the session, the input versions, the section's candidates, the text and its parse, an id. */
 function makePlan({ symbol, bar, next, madeAt, ms, session, versions, candidates, text, usage = null }) {
   const parsed = parsePlan(text);
-  const id = sha(`${symbol}|${next.t}|${(session || {}).id || ''}|${madeAt}`, 12);
+  const id = sha(`${symbol}|${next.t}|${(session || {}).id || ''}|${madeAt}`);
   return { v: 1, id, symbol, bar, next, madeAt, ms, session: { id: (session || {}).id || null, transcript: (session || {}).transcript || null }, versions, candidates: (candidates || []).map(c => ({ id: c.id, kind: c.kind, read: c.read, side: c.side, tf: c.tf })), text, ...parsed, usage };
 }
 
@@ -291,5 +313,5 @@ function agreement(shadow, full) {
 
 module.exports = {
   MODES, PLAN_DIR, PREPARE_DENIED, PREPARE_SCRIPTS, modeProblem, shadowOn, deadlineOf, overran, shouldPrepare, windowOf, sectionFor, deskKeys, versionsOf, validate,
-  planFile, writePlan, readPlan, makePlan, parsePlan, firedReads, matchScenario, readKind, preparePrompt, confirmPrompt, parseDecision, fullDecisionOf, agreement,
+  recordSession, readSession, planFile, writePlan, readPlan, makePlan, parsePlan, firedReads, matchScenario, readKind, preparePrompt, confirmPrompt, parseDecision, fullDecisionOf, agreement,
 };

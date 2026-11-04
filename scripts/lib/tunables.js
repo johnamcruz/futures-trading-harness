@@ -194,6 +194,10 @@ const RUNNER = {
   // overlapPhase2: risk-manager phase 2 starts at the head trader's OK compose (runner-entry.js overlapFor), where the
   // desk runs two or more roles at once (runner-wiring.js entryFor); overlapPollMs: how often the compose records are read.
   entry: { timeoutMinutes: int(1), phase2RestateRetries: int(0, 1), overlapPhase2: bool(), overlapPollMs: int(1) },
+  // Prepare ahead (prepare-ahead.js, the runner config's prepareAhead): marginMs, how long before the next close a prepare
+  // or a shadow confirm must be done; maxMs, the most one run may take; effort, the CLI's --effort for them, or null for
+  // the CLI's default (the owner's call: never on in a test arm without a yes).
+  prepare: { marginMs: int(1), maxMs: int(1), effort: shapes.custom(v => (v === null || ['low', 'medium', 'high', 'xhigh', 'max'].includes(v) ? null : 'null or one of low, medium, high, xhigh, max'), 'null or one of low, medium, high, xhigh, max') },
   reviews: { scratchR: nonneg() },
 };
 
@@ -328,6 +332,7 @@ const BUILT_IN = deepFreeze({
     monteCarlo: { paths: 2000, reps: 2000, max: 20000 },
     desk: { concurrency: 4, harnessConcurrency: { opencode: 2 }, timeoutMinutes: 8, managedBudgetShare: 0.5 },
     entry: { timeoutMinutes: 6, phase2RestateRetries: 1, overlapPhase2: true, overlapPollMs: 250 },
+    prepare: { marginMs: 20000, maxMs: 150000, effort: null },
     reviews: { scratchR: 0.2 },
   },
   analysis: {

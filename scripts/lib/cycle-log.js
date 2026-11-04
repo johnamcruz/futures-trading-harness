@@ -254,6 +254,20 @@ function roleSkillsMissing(context, entry) {
   return out;
 }
 
+/**
+ * Prepare ahead's shadow record (runner.js, prepareAhead "shadow"): the `prepare` field added to a cycle's record after
+ * the cycle, the record rewritten whole (atomic); everything else as written. Only that field. false: no record there.
+ */
+function amendCycleLog(file, field, value) {
+  if (field !== 'prepare') throw new Error('amendCycleLog: only the prepare field is added after the cycle');
+  let body;
+  try { body = JSON.parse(fs.readFileSync(file, 'utf8')); } catch (_err) { return false; }
+  const tmp = `${file}.${process.pid}.${require('crypto').randomBytes(6).toString('hex')}.tmp`;
+  fs.writeFileSync(tmp, JSON.stringify({ ...body, [field]: value }, null, 2), { flag: 'wx' });
+  fs.renameSync(tmp, file);
+  return true;
+}
+
 function writeCycleLog(home, { at = new Date(), env = null, action, harness, prompt, context = null, argv = [], output = '', result = null, reportedResult = null, resultNote = null, ok = null, timedOut = false, durationMs = null, transcript = null, roleSkills = null, headPrompt = null, timing = null, desk = null, entry = null, overlap = null }) {
   const { cycleAt, laneBars } = cycleClock(env, at);
   const day = tradingDayKey(cycleAt);
@@ -379,4 +393,4 @@ function cycleExperienceLookups(transcript) {
   }
 }
 
-module.exports = { toolCalls, summarize, writeCycleLog, cycleLookups, cycleExperienceLookups, cycleClock, gateOrders, RISK_REDUCING };
+module.exports = { toolCalls, summarize, writeCycleLog, amendCycleLog, cycleLookups, cycleExperienceLookups, cycleClock, gateOrders, RISK_REDUCING };

@@ -151,7 +151,7 @@ test('prepare-ahead: the plan write is atomic: a write that fails leaves the ear
 
 test('prepare-ahead: the plan records the session, the input versions and the plan text, with an id of its own', () => {
   const plan = makePlan({ transcript: '/tmp/x.jsonl' });
-  assert.match(plan.id, /^[0-9a-f]{12}$/);
+  assert.match(plan.id, /^[0-9a-f]{64}$/);
   assert.deepStrictEqual(plan.session, { id: 'ses-prep', transcript: '/tmp/x.jsonl' });
   assert.strictEqual(plan.next.t, NEXT.t);
   assert.strictEqual(plan.versions.factsKey, 'k1');
@@ -385,8 +385,23 @@ test('prepare-ahead: the section adapter reads only the closed bars up to the br
 test('prepare-ahead: deskKeys keys each report by its role and text, with its end', () => {
   const k = PA.deskKeys(DESK);
   assert.deepStrictEqual(Object.keys(k), ['market-structure-analyst', 'trend-momentum-analyst', 'risk-manager']);
-  assert.match(k['market-structure-analyst'].key, /^[0-9a-f]{16}$/);
+  assert.match(k['market-structure-analyst'].key, /^[0-9a-f]{64}$/);
   assert.strictEqual(k['market-structure-analyst'].until, '2021-05-24T13:45:00.000Z');
   assert.notStrictEqual(PA.deskKeys([{ ...DESK[0], text: 'other' }])['market-structure-analyst'].key, k['market-structure-analyst'].key);
   assert.deepStrictEqual(PA.deskKeys(null), {});
+});
+
+test('prepare-ahead: its tunables are config (config/runner.json prepare): the deadline margin, the most a run takes, and the effort (none: the CLI default)', () => {
+  const T = require('../../scripts/lib/tunables');
+  const P = T.runner().prepare;
+  assert.deepStrictEqual(Object.keys(P).sort(), ['effort', 'marginMs', 'maxMs']);
+  assert.ok(Number.isInteger(P.marginMs) && P.marginMs > 0 && Number.isInteger(P.maxMs) && P.maxMs > 0);
+  assert.strictEqual(P.effort, null, 'the CLI\'s default effort: --effort low is never on until the owner says so');
+  assert.deepStrictEqual(T.BUILT_IN.runner.prepare, P);
+  // The effort: none, or one of the CLI's levels; anything else is refused when the file loads.
+  const file = JSON.parse(fs.readFileSync(path.join(ROOT, 'config', 'runner.json'), 'utf8'));
+  const dir = tmp();
+  const loadWith = effort => { const f = path.join(dir, 'runner.json'); fs.writeFileSync(f, JSON.stringify({ ...file, prepare: { ...file.prepare, effort } })); return T.load('runner', f); };
+  for (const effort of ['low', 'high', null]) assert.strictEqual(loadWith(effort).prepare.effort, effort);
+  for (const effort of ['turbo', 3, '']) assert.throws(() => loadWith(effort), /prepare\.effort/, String(effort));
 });

@@ -4,6 +4,11 @@
  * SessionStart hook: briefs the model with its lessons (advice with their record: trading/lesson-advice.js) and the
  * trading-day state from the broker MCP server's journal, so every session starts
  * from its own track record. Never blocks.
+ *
+ * A session forked or resumed (source fork or resume: the shadow confirm forks the prepare's session) gets the day's
+ * state fresh but not the lessons and instincts again: they are in its history. A prepare or a shadow confirm
+ * (FTH_PREPARE, the runner's: prepare-ahead.js) records its session (id, transcript, source) in the runner's file
+ * (FTH_PREPARE_SESSION), whole.
  */
 
 const fs = require('fs');
@@ -48,7 +53,7 @@ function clip(text) {
   return t.length > MAX_TEXT ? `${t.slice(0, MAX_TEXT - 1)}…` : t;
 }
 
-function buildBriefing(entries, now, config, root = null, home = null) {
+function buildBriefing(entries, now, config, root = null, home = null, { lessonsShown = true } = {}) {
   const dayStart = tradingDayStart(now);
   const today = entriesSince(entries, dayStart);
   // The run's own lessons (by now), each as advice with its date and record.
@@ -81,6 +86,10 @@ function buildBriefing(entries, now, config, root = null, home = null) {
   lines.push('', 'Know the account before every decision: get_account_snapshot (balance, today\'s P&L, open positions, working orders).');
   const attempts = home ? attemptLines(home, now) : [];
   if (attempts.length) lines.push('', '### Prop attempts (the order gate enforces these)', ...attempts);
+  if (!lessonsShown) {
+    lines.push('', 'Lessons and instincts: as at this session\'s start, above (a forked or resumed session: not repeated).');
+    return lines.join('\n');
+  }
   lines.push('', '### Lessons (advice with their record, never rules: rules/trading/journaling.md)');
   if (lessons.length === 0) {
     lines.push('- none yet');
@@ -110,14 +119,18 @@ function exportRoot(root, env) {
   }
 }
 
-function run(_rawInput, ctx = {}, deps = {}) {
+function run(rawInput, ctx = {}, deps = {}) {
   const env = deps.env || process.env;
   const root = ctx.pluginRoot || path.resolve(__dirname, '..', '..');
   exportRoot(root, env);
+  let input = {};
+  try { input = JSON.parse(String(rawInput || '{}')) || {}; } catch (_err) { input = {}; }
+  // A prepare or a shadow confirm: its session for the runner (best effort: never blocks the session).
+  try { require('../lib/prepare-ahead').recordSession(env, input); } catch (_err) { /* the runner finds no session record: no plan */ }
   try {
     const entries = readJournal(resolveJournalPath(env));
     const config = loadConfig(env);
-    return buildBriefing(entries, deps.now || harnessNow(env), config, root, config.home);
+    return buildBriefing(entries, deps.now || harnessNow(env), config, root, config.home, { lessonsShown: !['fork', 'resume'].includes(input.source) });
   } catch (err) {
     return { stderr: `[TradingSessionStart] journal unavailable: ${err.message}`, exitCode: 0 };
   }
