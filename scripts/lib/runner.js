@@ -201,6 +201,11 @@ function createRunner(deps) {
     // Setup-focused practice (learning/setup-moments.js selectBar, wired only on a practice replay): (item, open) ->
     // { run, why, reason }, whether a bar the trigger would run a cycle on runs one. null: every bar as live.
     practiceSelect = null,
+    // Prepare ahead's shadow (prepare-shadow.js createShadow; runner-wiring.js prepareShadowFor: the runner config's
+    // prepareAhead "shadow" only): after(input) once a one-symbol, one-lane trade cycle's result is final: the shadow
+    // confirm of this close's plan, then the next bar's prepare, recorded in the cycle log's `prepare` field only. null:
+    // nothing of it runs (as before).
+    prepareShadow = null,
   } = deps;
   const entryOrderIds = () => new Set(entryOrders().map(e => Number(e.orderId)));
   // The composed entries this process cancelled at their record's expiry: their review is due at once (runner-reviews.js).
@@ -264,7 +269,7 @@ function createRunner(deps) {
    * The prop hooks' read is reused only when this pass's snapshot made it (`snapshotAt`, its time) and it covers
    * `sinceMs`; else one adapter read.
    */
-  async function historyFills(sinceMs, snapshotAt) {
+  async function historyFills(sinceMs, snapshotAt, { quiet = false } = {}) {
     if (sinceMs === null || !cfg.account || cfg.paper || typeof client.fillsSince !== 'function') return null;
     const read = prop && typeof prop.recentFills === 'function' ? prop.recentFills() : null;
     if (read && Array.isArray(read.fills) && snapshotAt !== null && read.atMs === snapshotAt && read.sinceMs <= sinceMs) return read.fills;
@@ -272,7 +277,7 @@ function createRunner(deps) {
       const fills = await client.fillsSince(cfg.account, new Date(sinceMs));
       return Array.isArray(fills) ? fills : null;
     } catch (err) {
-      log(`history: the fills could not be read (${err.message}); closed entries' outcomes stay unknown`, 'error');
+      if (!quiet) log(`history: the fills could not be read (${err.message}); closed entries' outcomes stay unknown`, 'error');
       return null;
     }
   }
@@ -1501,7 +1506,7 @@ function createRunner(deps) {
    * or slow read (over accountReadMs) is reported in the prompt, never hidden,
    * and never holds the run up.
    */
-  async function accountSnapshot(now, { phase1 = false } = {}) {
+  async function accountSnapshot(now, { phase1 = false, quiet = false } = {}) {
     const hasState = typeof client.accountState === 'function';
     const hasBalance = typeof client.accountBalance === 'function';
     // The balance with the account's trading flags from the same read (accountStatus), else the balance alone; the day's
@@ -1519,7 +1524,7 @@ function createRunner(deps) {
       new Promise(resolve => setTimeout(() => resolve({ e: `no answer within ${accountReadMs / 1000} s` }), accountReadMs).unref())]);
     const extra = phase1 ? Promise.all([
       hasToday ? soft(() => client.accountToday(cfg.account)) : { v: null },
-      soft(() => historyFills(tradingDayStart(now).getTime(), null).then(f => { if (!Array.isArray(f)) throw new Error('the fills could not be read'); return f; })),
+      soft(() => historyFills(tradingDayStart(now).getTime(), null, { quiet }).then(f => { if (!Array.isArray(f)) throw new Error('the fills could not be read'); return f; })),
     ]) : null;
     try {
       const [state, status] = await Promise.race([Promise.all([
@@ -1533,7 +1538,7 @@ function createRunner(deps) {
         try {
           attempts = prop.summaries(now, balance);
         } catch (err) {
-          log(`prop attempt state unavailable for the prompt (${err.message})`, 'error');
+          if (!quiet) log(`prop attempt state unavailable for the prompt (${err.message})`, 'error');
         }
       }
       return {
@@ -1551,7 +1556,7 @@ function createRunner(deps) {
         dayFills: fills.e ? null : fills.v,
       };
     } catch (err) {
-      log(`account state for the prompt unavailable (${err.message})`, 'error');
+      if (!quiet) log(`account state for the prompt unavailable (${err.message})`, 'error');
       return { id: cfg.account, error: err.message };
     } finally {
       clearTimeout(timer);
@@ -2260,10 +2265,16 @@ function createRunner(deps) {
             symbols: [...new Set(items.map(x => x.symbol))], accountId: Number.isInteger(Number(cfg.account)) && Number(cfg.account) >= 1 ? Number(cfg.account) : null,
             env: runEnv, root, broker: client, now: () => clock.now(), paper: Boolean(cfg.paper), store: cycleStore,
           }) : null;
+          // Prepare ahead's shadow (prepareShadow): a one-symbol, one-lane trade cycle that may enter; the briefing its prompt
+          // was built on (this close's), and the cycle log's file once written. Nothing of it reaches the cycle itself.
+          const shadowHere = Boolean(prepareShadow) && !manageOnly && !cfg.paper && !multi && run.length === 1 && cacheSymbols.length === 1;
+          let shadowLog = null;
+          let shadowBriefing = null;
+          if (shadowHere) { try { shadowBriefing = briefingFor(run[0].symbol); } catch (_err) { shadowBriefing = null; } }
           let r;
           let ranRuns = [];
           try {
-            r = await timedCycle(again.action, prompt, { timeoutMs, context, ...(entryHook ? { entry: entryHook } : {}), ...(overlapHook ? { overlap: overlapHook } : {}), ...(precollect ? { precollect } : {}) }, { symbols: run.map(x => x.symbol), bars: run.map(x => x.bar.t), manageOnly, cached: served ? served.roles : [], ...(multi ? { lanes: run.map(x => `${x.minutes}m`) } : {}), ...(historyShown.length ? { history: historyShown } : {}) });
+            r = await timedCycle(again.action, prompt, { timeoutMs, context, ...(entryHook ? { entry: entryHook } : {}), ...(overlapHook ? { overlap: overlapHook } : {}), ...(precollect ? { precollect } : {}), ...(shadowHere ? { onLog: f => { shadowLog = f; } } : {}) }, { symbols: run.map(x => x.symbol), bars: run.map(x => x.bar.t), manageOnly, cached: served ? served.roles : [], ...(multi ? { lanes: run.map(x => `${x.minutes}m`) } : {}), ...(historyShown.length ? { history: historyShown } : {}) });
           } finally {
             stopWatch();
             stopPrices();
@@ -2304,6 +2315,36 @@ function createRunner(deps) {
           state = { ...state, history: multi ? boundHistory(history, firstLane) : history.slice(-10) };
           saveState(state);
           record(r.ok, r.timedOut, cycleNow);
+          // Prepare ahead's shadow, after the cycle's result is final (prepare-shadow.js): it decides nothing, and its
+          // failures stay in its own record. Never after a cycle that failed or timed out (its time is the step's).
+          if (shadowHere && r && r.ok && !r.timedOut) {
+            try {
+              const at = clock.now();
+              const eodIn = msToEod(at);
+              await prepareShadow.after({
+                symbol: run[0].symbol, minutes: cfg.timeframe, bar: run[0].bar, bars: run[0].bars, windowBars: cfg.bars, briefing: shadowBriefing,
+                factsKey: fromCache && fromCache.phase1 ? fromCache.phase1.key : null, reports: served ? served.reports : [], scan: run[0].scan, listed: context.setupsListed,
+                result: r.result, cycleLog: shadowLog, killSwitch: () => isKillSwitchOn(), eodMs: Number.isFinite(eodIn) ? at.getTime() + eodIn : null, inSession: t => inSession(cfg, t),
+                // A fresh read after the cycle (flat: no position, no working order), and phase 1's key on it as the next
+                // cycle will read it (runner-wiring.js reportCacheFor phase1Key: the same facts, the journal read now).
+                // Quiet: a read of the shadow's own that fails says nothing in the old path's log (its record says it).
+                accountAfter: () => accountSnapshot(clock.now(), { phase1: true, quiet: true }),
+                phase1KeyOf: a => {
+                  if (!reportCache || typeof reportCache.phase1Key !== 'function' || !a || a.error) return null;
+                  const j = journalEntries() || [];
+                  return reportCache.phase1Key({ symbols: cacheSymbols, account: a, now: clock.now(), fills: a.dayFills, lessons: lessons({ entries: j }) || [], reviewed: recentTrades({ entries: j }) || [] });
+                },
+                // The desk's latest valid reports with their ends: the report cache as the next cycle would serve it.
+                reportsAfter: a => {
+                  if (!reportCache || !a || a.error) return null;
+                  const j = journalEntries() || [];
+                  return reportCache.serve({ symbols: cacheSymbols, account: a, now: clock.now(), fills: a.dayFills, lessons: lessons({ entries: j }) || [], reviewed: recentTrades({ entries: j }) || [] }).reports;
+                },
+              });
+            } catch (_err) {
+              // the shadow's record only
+            }
+          }
           if (!r || !r.ok || r.timedOut) cycleFailed = true;
         }
       }

@@ -30,6 +30,8 @@ function run(rawInput, _ctx = {}, deps = {}) {
 
   const env = deps.env || process.env;
   if (env.FTH_ROLE_RUN) return '';
+  // A prepare or a shadow confirm (prepare-ahead.js): no trade to review, no cycle result of its own.
+  if (env.FTH_PREPARE === 'prepare' || env.FTH_PREPARE === 'confirm') return '';
   let pending;
   try {
     // The gate's clock (harness-now.js): the wall clock, or a replay broker's replayed time.

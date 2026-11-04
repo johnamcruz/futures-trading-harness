@@ -816,8 +816,12 @@ would.
 The prepare briefing ([PREPARE-AHEAD.md](PREPARE-AHEAD.md)) is the bar
 briefing with one more summary section, "Possible at the next close": what
 can fire at the close of the bar forming, its triggers on the closing candle
-and its plans, from closed bars only, for a flat account. Nothing sets it in
-a run yet; the briefing the roles read is unchanged.
+and its plans, from closed bars only, for a flat account. The runner config's
+`prepareAhead: "shadow"` (Claude Code) runs a prepare on it after each flat
+trade cycle and a shadow confirm at the plan's close, beside the old path,
+logged in the cycle record's `prepare` field only (`node
+scripts/prepare-shadow.js --home <run home>` reads them back); the briefing the
+roles read is unchanged.
 
 ### The rationale convention
 

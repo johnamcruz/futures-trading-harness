@@ -82,7 +82,7 @@ async function precollected(cfg, prompt, context, precollect, deps, budgetMs) {
   return { runEnv, prompt: withData, context: { ...(context || {}), precollected: CD.records(got), ...(missing.length ? { notCollected: missing } : {}) } };
 }
 
-async function runCycle(cfg, action, prompt, opts, { timeoutMs = cfg.cycleTimeoutMinutes * 60000, context = null, entry: entryHook = null, precollect = null, overlap: overlapHook = null } = {}, deps = {}) {
+async function runCycle(cfg, action, prompt, opts, { timeoutMs = cfg.cycleTimeoutMinutes * 60000, context = null, entry: entryHook = null, precollect = null, overlap: overlapHook = null, onLog = null } = {}, deps = {}) {
   // The workspace guard is the caller's to give: a missing one would let a run that changed the instructions go on.
   if (typeof deps.guard !== 'function') throw new Error('cycle-run: deps.guard (the workspace guard) is required');
   const { guard } = deps;
@@ -172,6 +172,9 @@ async function runCycle(cfg, action, prompt, opts, { timeoutMs = cfg.cycleTimeou
   }) : null;
   // What the model saw and did: the prompt, every tool call, skills loaded, orders sent (logs/cycles/).
   const { summary, file: cycleFile, lookups } = writeCycleLog(deps.home, { at: now, action, harness: cfg.harness, prompt, context, argv, output: res.output, result, reportedResult, resultNote, ok: res.ok, timedOut: res.timedOut, durationMs: Date.now() - now.getTime(), transcript: res.transcript, roleSkills: res.roleSkills, headPrompt: res.headPrompt, env: res.env || null, timing, desk, entry, ...(overlapRuns.length ? { overlap: overlapRuns } : {}) });
+  // Prepare ahead's shadow (runner.js, prepareAhead "shadow" only): told where the cycle's record is, to add its `prepare`
+  // field once the shadow work after the cycle is done (cycle-log.js amendCycleLog). Absent: as before.
+  if (typeof onLog === 'function') { try { onLog(cycleFile); } catch (_err) { /* the shadow's record only */ } }
   out(`[autotrader] cycle log ${cycleFile}: skills ${summary.skills.join(', ') || 'none seen'}; ${Object.entries(summary.tools).map(([k, n]) => `${k} x${n}`).join(', ') || 'no tool calls seen'}\n`);
   const deskWarn = deskWarning(desk);
   if (deskWarn) err(`[autotrader] ${deskWarn}\n`);
@@ -244,6 +247,56 @@ async function runRole(cfg, role, request, { timeoutMs, context = null, signal =
   return { ok: Boolean(res.ok), timedOut: Boolean(res.timedOut), output: res.output || '', transcript: res.transcript || null, text, tools, lookups, skills, ...(usage ? { usage } : {}) };
 }
 
+/**
+ * One prepare or shadow confirm (prepare-ahead.js, the runner's shadow mode; Claude Code only): the head trader's argv
+ * narrowed (autotrader.js buildCommand `prepare`; the confirm `--resume <resume> --fork-session`), in the head trader's
+ * workspace, with its own environment (childEnv `prepare`: FTH_PREPARE, the session record's file `sessionFile`, its own
+ * transcript; never the cycle's id, entry or roles), within `timeoutMs`, stopped by `signal`. Its result: { ok, timedOut,
+ * text (its final message), sessionId, transcript (Claude Code's session file, from the SessionStart record), source,
+ * usage, ms (the wall time it took: measurement only) }. The session: the SessionStart hook's record, else the stream's.
+ */
+async function runPrepare(cfg, kind, prompt, { timeoutMs, context = null, resume = null, signal = null, sessionFile = null } = {}, deps = {}) {
+  if (cfg.harness !== 'claude') throw new Error(`cycle-run: prepare ahead runs on Claude Code only (harness ${cfg.harness})`);
+  const PA = require('./prepare-ahead');
+  const env = deps.env || process.env;
+  const ctx = { ...(context || {}), prepare: kind, ...(sessionFile ? { prepareSession: sessionFile } : {}) };
+  const runEnv = childEnv(cfg, deps.root, env, ctx);
+  // Its gate log must be the shadow's own (childEnv routes it for a prepare or a confirm): a context that keeps the live
+  // log (a role's) is refused before anything runs, so the live gate log is never reset below.
+  if (runEnv.FTH_GATE_LOG !== PA.shadowGateLog(harnessHome(env))) throw new Error(`cycle-run: a prepare or a confirm writes only the shadow's own gate log (${PA.shadowGateLog(harnessHome(env))}), not ${runEnv.FTH_GATE_LOG || 'none'}`);
+  // Never through a link: the shadow's gate log, or its prepare/ folder, pointing elsewhere (the live log) is refused
+  // before anything runs, so the reset below can only empty the shadow's own file.
+  for (const p of [path.dirname(runEnv.FTH_GATE_LOG), runEnv.FTH_GATE_LOG]) {
+    let st;
+    try { st = require('fs').lstatSync(p); } catch (_err) { st = null; }
+    if (st && st.isSymbolicLink()) throw new Error(`cycle-run: the shadow's gate log path ${p} is a link: refused (it is reset each run)`);
+  }
+  const argv = buildCommand(cfg, prompt, deps.root, runEnv, { prepare: kind, resume, effort: require('./tunables').runner().prepare.effort });
+  const wallNow = deps.wallNow || Date.now;
+  // The shadow's gate log (childEnv routes it): reset for each run, so it never grows without bound and holds this run's
+  // refusals only (each run's count is in its record).
+  const gateLines = () => { try { return require('fs').readFileSync(runEnv.FTH_GATE_LOG, 'utf8').split('\n').filter(Boolean).length; } catch (_err) { return 0; } };
+  try { require('fs').mkdirSync(path.dirname(runEnv.FTH_GATE_LOG), { recursive: true }); require('fs').writeFileSync(runEnv.FTH_GATE_LOG, ''); } catch (_err) { /* counted from what is there */ }
+  const gate0 = gateLines();
+  const t0 = wallNow();
+  const res = await runOnce(cfg, argv, timeoutMs, ctx, { ...deps, env, ...(signal ? { signal } : {}) }, runEnv);
+  const ms = Math.max(0, wallNow() - t0);
+  const output = typeof res.stdout === 'string' ? res.stdout : (res.output || '');
+  const T = require('./transcript');
+  const { text } = T.claudeRunResult(output);
+  // Its skill lookups' file (keyed by its own transcript): never a cycle's.
+  for (const file of [require('./trading/skill-lookups').lookupsFile, require('./learning/experience-lookups').lookupsFile]) {
+    try { require('fs').unlinkSync(file(res.transcript)); } catch (_err) { /* none */ }
+  }
+  const rec = sessionFile ? PA.readSession(sessionFile) : null;
+  const streamed = T.documents(output).map(e => (e && typeof e.session_id === 'string' ? e.session_id : null)).find(Boolean) || null;
+  // What it tried and was refused: the CLI's permission denials (its result event, dontAsk) and the gate's refusals.
+  const denied = T.documents(output).filter(e => e && e.type === 'result' && Array.isArray(e.permission_denials)).flatMap(e => e.permission_denials.map(d => (d && d.tool_name) || null)).filter(Boolean);
+  // Spawn to init: from the spawn to the stream's first line (the CLI's start, its MCP servers), measurement only.
+  const initMs = Array.isArray(res.lineTimes) && Number.isFinite(res.lineTimes[0]) ? Math.max(0, res.lineTimes[0] - t0) : null;
+  return { ok: Boolean(res.ok), timedOut: Boolean(res.timedOut), text: text || '', sessionId: rec ? rec.sessionId : streamed, transcript: rec ? rec.transcript : null, source: rec ? rec.source : null, usage: T.claudeRunUsage(output), ms, initMs, denied, gateRefusals: Math.max(0, gateLines() - gate0) };
+}
+
 /** The skills a role's prompt held whole: its prompt addition (Claude Code, roleSkillsInPrompt), or opencode's role prompt; else none. */
 function embeddedFor(cfg, root, role, added) {
   const { embeddedSkills } = require('./head-prompt');
@@ -261,4 +314,4 @@ function embeddedFor(cfg, root, role, added) {
 /** A role's run as the engine reads it, { text, tools }: Claude Code's stream-json (transcript.js), opencode's events (opencode.js). */
 const runResultOf = (harness, output) => (harness === 'claude' ? require('./transcript').claudeRunResult(output) : require('./opencode').runResult(output));
 
-module.exports = { runCycle, runOnce, runRole, runResultOf, phase1RefusedIn };
+module.exports = { runCycle, runOnce, runRole, runPrepare, runResultOf, phase1RefusedIn };

@@ -592,6 +592,8 @@ function reportCacheFor(home, cfg, frames = [], env = process.env, root = path.j
     // `laneBars`: several lanes, the other lanes whose bar closed this cycle ({ ROOT: { minutes: "<bar open>" } }).
     // `fills`, `lessons`, `reviewed`: phase 1's live inputs read this cycle (phase1Of). The result carries `phase1` (its
     // facts and key, for record) and, when phase 1 is served, `phase1Record`: the runner's record the gate checks it by.
+    // Phase 1's facts key on these inputs (phase1Of), or null: prepare ahead's version of the account (prepare-ahead.js).
+    phase1Key: ({ symbols, account, now, fills = null, lessons = null, reviewed = null }) => { const p = phase1Of({ symbols, b: briefings(symbols), account, now, fills, lessons, reviewed }); return p ? p.key : null; },
     serve: ({ symbols, account, now, laneBars = {}, fills = null, lessons = null, reviewed = null }) => {
       const b = briefings(symbols);
       const key = keyOf(b, symbols, now, laneBars);
@@ -689,7 +691,50 @@ function exitsOnly(env, log, critical = require('./tunables').critical()) {
   return true;
 }
 
-function wireRunner({ cfg, root, home, env = process.env, client, prop = null, dataDir, now, runCycle, runRole = null, loadState, saveState, killSwitchFile, log, event, onBarClosed = () => {}, agents = null, configCritical = undefined, maxPromptBytes = null, entryOverlap = null }) {
+/**
+ * Prepare ahead's shadow (prepare-shadow.js; docs/PREPARE-AHEAD.md): with the runner config's prepareAhead "shadow" and a
+ * `runPrepare` (cycle-run.js runPrepare, the caller's), else null. The section reads the runner's strategies and the
+ * briefing's own facts (the news blackouts, the gate's entry clock, the round-number steps), as the bar briefing does.
+ */
+/**
+ * What the prepare's section reads for a symbol, as the close's own code reads it (next-close.js possibleAtNextClose):
+ * the loaded strategies and the first lane's (runnerScan), the selected contracts, and as compose_check reads them
+ * (harness-tools/compose.js) the attempt policy's entry rule, whether an attempt runs (an unreadable one: yes), the paper
+ * flag and the account's sizing facts at the cap in force (size-translate.js sizingFacts); the briefing's own facts (the
+ * news blackouts, the gate's entry clock, the round-number steps).
+ */
+function sectionInputsFor({ cfg, root, home, env = process.env, strategies }) {
+  const blackouts = () => { try { return readBlackouts(loadConfig(env).blackoutsFile); } catch (err) { return { items: [], error: err.message }; } };
+  return symbol => {
+    const all = strategies();
+    let c;
+    let clock;
+    try { c = loadConfig(env); clock = { entryHours: c.entryHours, noEntryWindows: c.noEntryWindows }; } catch (err) { c = null; clock = { error: err.message }; }
+    const { STRATEGY } = require('./trading/trade-lifecycle');
+    const doc = all.find(s => s.name === STRATEGY && s.valid) || null;
+    let policy = null;
+    let inAttempt;
+    try { policy = doc ? require('./trading/lifecycle-order').attemptPolicy(home, doc, all, symbol) : null; inAttempt = Boolean(policy); } catch (_err) { inAttempt = true; }
+    const entryRule = policy ? require('./trading/entry-rule').entryRuleOf(policy.entry) : null;
+    let sizing;
+    try {
+      const account = policy ? loadAccounts(root, env).accounts.find(a => a.name === policy.account && a.valid) : null;
+      const specOf = require('./trading/broker-specs').liveSpecs(env);
+      sizing = account ? require('./prop/size-translate').sizingFacts({ policy, account, capUsd: doc.risk.max_risk_usd, root: symbol, spec: specOf(symbol), specOf, home }) : null;
+    } catch (_err) { sizing = null; }
+    return { registry: all, strategies: laneStrategies(all, lanesOf(cfg)[0]), selected: cfg.symbols, entryRule, inAttempt, paper: Boolean(cfg.paper), sizing, blackouts: blackouts(), clock, ...(c ? { roundSteps: c.roundSteps } : {}) };
+  };
+}
+
+function prepareShadowFor({ cfg, root, home, env = process.env, runPrepare = null, now, strategies }) {
+  // Off loads none of prepare ahead's modules (tests/e2e/prepare-ahead-off-regression.test.js).
+  if (!runPrepare || cfg.prepareAhead !== 'shadow' || !require('./prepare-ahead').shadowOn(cfg)) return null;
+  const blackouts = () => { try { return readBlackouts(loadConfig(env).blackoutsFile); } catch (err) { return { items: [], error: err.message }; } };
+  const sectionOpts = sectionInputsFor({ cfg, root, home, env, strategies });
+  return require('./prepare-shadow').createShadow({ cfg, root, home, runPrepare, now, sectionOpts, newsAt: at => require('./trading/briefing').newsState(blackouts(), at) });
+}
+
+function wireRunner({ cfg, root, home, env = process.env, client, prop = null, dataDir, now, runCycle, runRole = null, runPrepare = null, loadState, saveState, killSwitchFile, log, event, onBarClosed = () => {}, agents = null, configCritical = undefined, maxPromptBytes = null, entryOverlap = null }) {
   const strategies = () => loadStrategies(root, env).strategies;
   // A user's own strategy under a retired name: it trades as theirs; said at start so a stale copy is noticed.
   try { for (const m of retiredCopies(strategies())) log(m, 'error'); } catch (_err) { /* the strategies load again at each scan */ }
@@ -823,7 +868,9 @@ function wireRunner({ cfg, root, home, env = process.env, client, prop = null, d
     ...passHold(env),
     // Setup-focused practice: only a practice replay's selected bars run a cycle (refused anywhere else).
     practiceSelect: practiceSelector(cfg, home, env),
+    // Prepare ahead's shadow (prepareShadowFor): prepareAhead "shadow" with a `runPrepare` only, else null (as before).
+    prepareShadow: prepareShadowFor({ cfg, root, home, env, runPrepare, now, strategies }),
   });
 }
 
-module.exports = { deskFor, deskConcurrencyOf, managedDeskNote, entryFor, lookupsKeyOf, exitsOnly, laneSignals, lookupRoles, lookupNeeds, openRunnerBroker, manualRunBroker, holdAccountLock, wireRunner, dayLine, passHold, practiceSelector, barRecorder, briefingRecorder, reportCacheFor, runnerScan, replayUnattested, closedBarsOnly };
+module.exports = { prepareShadowFor, sectionInputsFor, deskFor, deskConcurrencyOf, managedDeskNote, entryFor, lookupsKeyOf, exitsOnly, laneSignals, lookupRoles, lookupNeeds, openRunnerBroker, manualRunBroker, holdAccountLock, wireRunner, dayLine, passHold, practiceSelector, barRecorder, briefingRecorder, reportCacheFor, runnerScan, replayUnattested, closedBarsOnly };

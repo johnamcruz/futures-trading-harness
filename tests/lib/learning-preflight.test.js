@@ -632,13 +632,18 @@ test('head-delivery: the run\'s head trader delivery keys (autotrader.js HEAD_DE
   const of = cfg => P.headDelivery({ run: { cfg } });
   assert.deepStrictEqual([of({ harness: 'claude' }).status, of({ harness: 'claude' }).detail], [P.PASS, 'none: the head trader loads its skills and makes its reads itself']);
   assert.strictEqual(of({ harness: 'opencode', cycleDataInPrompt: false, headSkillsInPrompt: false }).detail, 'none: the head trader loads its skills and makes its reads itself');
-  for (const k of require('../../scripts/lib/autotrader').HEAD_DELIVERY_KEYS) {
-    const on = of({ harness: 'claude', [k]: true });
-    assert.deepStrictEqual([on.status, on.detail.startsWith(`on: ${k} `)], [P.PASS, true], k);
+  const { HEAD_DELIVERY_KEYS, deliveryOnValue, deliveryToken } = require('../../scripts/lib/autotrader');
+  for (const k of HEAD_DELIVERY_KEYS) {
+    const v = deliveryOnValue(k);
+    const on = of({ harness: 'claude', [k]: v });
+    assert.deepStrictEqual([on.status, on.detail.startsWith(`on: ${deliveryToken(k, v)} `)], [P.PASS, true], k);
     // A config validateConfig would refuse: FAIL, never a PASS.
-    assert.strictEqual(of({ harness: 'opencode', [k]: true }).status, P.FAIL, k);
+    assert.strictEqual(of({ harness: 'opencode', [k]: v }).status, P.FAIL, k);
     assert.strictEqual(of({ harness: 'claude', [k]: 'yes' }).status, P.FAIL, k);
   }
+  // prepareAhead: "off" is none; "on" (not built yet) and true are refused.
+  assert.strictEqual(of({ harness: 'claude', prepareAhead: 'off' }).detail, 'none: the head trader loads its skills and makes its reads itself');
+  for (const v of ['on', true]) assert.strictEqual(of({ harness: 'claude', prepareAhead: v }).status, P.FAIL, String(v));
   assert.match(of({ harness: 'claude', headSkillsInPrompt: true, cycleDataInPrompt: true }).detail, /^on: headSkillsInPrompt, cycleDataInPrompt .*never pooled with a run without them/);
   assert.strictEqual(P.headDelivery({ run: {} }).status, P.PASS, 'no runner config: none');
 });

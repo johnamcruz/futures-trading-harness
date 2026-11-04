@@ -201,6 +201,159 @@ section)` is the briefing's text with them after its summary. The at-close
 briefing (`renderBriefing`) never has the section, and nothing in production
 asks for it yet: every existing briefing, golden and prompt is unchanged.
 
+## Shadow mode (built: PR B1)
+
+The old path keeps deciding everything. With the runner config's
+`prepareAhead: "shadow"` (Claude Code only; `"off"` or absent: as before;
+`"on"` is refused until PR B2), after a one-symbol, one-lane trade cycle whose
+result is final, the runner (`scripts/lib/prepare-shadow.js`, wired by
+`runner-wiring.js` `prepareShadowFor`):
+
+1. **Shadow confirm** of the plan made for this close, if one exists: the plan
+   (`<home>/prepare/<symbol>-<bar>.json`, keyed by the bar it is for) is
+   validated against the inputs the real cycle at this close started from;
+   what fired in the real at-close scan (the rules setups fired and the
+   briefing's setups to check) is matched to its scenarios by read name. Valid
+   and matched: a confirm run, `--resume <prepare session> --fork-session`, its
+   prompt the at-close facts first (the briefing's summary, what fired), then
+   "your plan said: scenario k". In shadow it ends with
+   `DECISION: TAKE <k> | DECISION: PASS - <why>` and calls no compose_check.
+2. **Prepare** of the next bar's plan, when the account is flat by a fresh
+   read (no position, no working order), the section lists a candidate, the
+   next close is in a session window, the kill switch is off and time is left:
+   a run on the prepare briefing (the section above, from closed bars only:
+   the cycle's bars up to its bar, the window the close will read), writing
+   `SCENARIO k: ...`, `STAND DOWN if: ...`, `INVALID if: ...`. The plan file
+   (written whole) holds the session id and its transcript (the SessionStart
+   hook's record), the input versions and the text.
+
+Both stop by the earliest of the next close less `prepare.marginMs`
+(config/runner.json, the harness clock), the end of day less the same margin,
+and `prepare.maxMs` less the account read for the two runs together (the
+confirm's time comes off the prepare's, so a replay step with a frozen clock
+stays inside the two minutes it has past its cycle's limit); each bound less
+the kill grace (`runner.killGraceMs`), so a run stopped there is gone before it
+and the end of day's flatten is never held; with less than the grace left
+neither runs. `prepare.effort` is null (the CLI's default effort). Neither runs
+after a cycle that failed or timed out, in paper mode, in a manage-only cycle
+or with several trading lanes. In replay they run in the same step, after the
+cycle, so the step's time charges them. The runner tracks their CLIs as it
+tracks its roles: its stop (SIGINT, SIGTERM, the replay driver's step kill)
+kills them and their process groups. Their account reads are quiet: a failure
+says nothing in the old path's log. The kill switch is read at the start of
+each step, as before (no file is watched during a run).
+
+**Their runs** (`autotrader.js` `buildCommand` `prepare`): the head trader's
+argv, the same `--disallowedTools`, model, plugin dir, system-prompt file and
+MCP config, in the same workspace; only `--allowedTools` is narrower
+(`claudePrepareTools`: no subagent tool, no `compose_check`, no order tool or
+journal write, no bars or quote fetch, no writing script), so `dontAsk`
+refuses the rest and the prompt cache's tool list stays the head trader's.
+Their environment says which run it is (`FTH_PREPARE`: the stop hook asks it
+for nothing; `FTH_PREPARE_SESSION`: the file its SessionStart hook records the
+session in) and never carries the cycle's id, entry, role record or phase-1
+record. Their gate log is the shadow's own (`<home>/prepare/gate-log.jsonl`,
+`FTH_GATE_LOG`, reset for each run, so it stays bounded; the gateway they
+start inherits it): the CLI fires its
+PreToolUse hooks before the dontAsk denial, so an order a prepare tries is
+refused by the order gate's hook into that file, never the old path's log. A
+forked or resumed session's SessionStart gives the day's state again but not
+the lessons (they are in its history). The gate's logic is unchanged.
+
+The section reads what the close's own code reads (`runner-wiring.js`
+`sectionInputsFor`): the selected contracts, the first lane's strategies, and as
+`compose_check` reads them the attempt policy's entry rule, whether an attempt
+runs, the paper flag and the sizing facts at the cap in force
+(`size-translate.js` `sizingFacts`, the facts `noSizeFits` sizes with).
+
+**Validity** (`prepare-ahead.js` `validate`; any change voids):
+
+| Input | Void when |
+|---|---|
+| The phase-1 facts key (a fill, a position, the P&L) | it differs, or is unknown |
+| The trading day | it differs |
+| The 3m part | it is not the plan's bar plus exactly one |
+| The 15m part | it rolled when the plan's held past the close, or did not roll when the plan's ended at it |
+| The 1h and day parts | they close at the next close (`htf-close`: no scenario covers it), or changed |
+| The chain side, the trend rule | either differs |
+| The window, the news | entries not allowed, or a blackout (or an unreadable blackouts file) at the close |
+| The desk's reports | one expected to hold past the close changed |
+| The prepare's session | its transcript is gone |
+
+A plan for another bar is never read (stale); writing a plan removes the
+symbol's plans of earlier trading days, so `prepare/` holds a day's at most. A
+stand-down window is checked before the facts key (which reads the window
+too), so the report counts it as the window. Outside the plan (something
+fired that no scenario names) and nothing fired are logged with what fired and
+the moving levels' kind (VWAP, profile, FVG, other); no confirm runs then. A
+plan void only by the 1h close also records what it would have been without
+that rule (`ifHourIgnored`: valid and matched, or why not), a record only.
+
+**Logged** in the cycle's record only, as its `prepare` field:
+`{ shadow, made }`. `shadow`: the plan id, its prepare ms, the status (valid,
+void with the reason, outside, nothing-fired, none, stale, kill-switch), the
+match, what fired, the confirm (outcome, decision, ms, session, tokens and
+cache reads), the full cycle's decision (`executed` a take with its side, the
+head trader's `no-trade` a pass; blocked, vetoed or an error none) and
+`agreesWithFull` (a take on an unknown side is no verdict). `made`: the outcome
+(done, aborted, skipped with why, error), the plan id, ms, tokens and the
+deadline. Each run also records what it tried and was refused (`denied`, the
+CLI's permission denials; `gateRefusals`, the lines it added to the shadow's
+gate log), its spawn-to-init time, and the confirm its first turn's cache
+creation (the first fork's cost).
+
+**Decisions (the owner's review, 2026-11-03):**
+
+- **The shadow confirm is not gated on flat.** When the full cycle has just
+  entered, the confirm still runs beside the fresh position: that take beside a
+  take is where the agreement data comes from. The protective stop is a
+  broker-side bracket, and the confirm ends at least the margin and the kill
+  grace before the next close.
+- **The prepare's read tools are not frozen at the bar's close.** `mtf_read`,
+  `market_snapshot` and `bar_briefing` read the bars as they stand when called:
+  live, a 1m bar that closed inside the forming bar can show, as the replay
+  broker shows it at the replay clock. The section and the briefing the prepare
+  is given are built from closed bars only; its own reads are its own.
+
+### Reading a shadow replay
+
+Run a replay with `"prepareAhead": "shadow"` in its runner config (Claude
+Code). Then:
+
+```bash
+node scripts/prepare-shadow.js --home <run home> [--from YYYY-MM-DD] [--to YYYY-MM-DD] [--json]
+```
+
+A shadow replay is not a pure observer of the old path: the shadow's wall time
+is charged as latency (it runs inside the step), so an off replay and a shadow
+replay of the same day can diverge in the old path through lateness (a later
+next cycle). Compare the old path's own results across arms with that in mind;
+the shadow's record is measured beside the cycle it ran after.
+
+It prints the closes by status, the void rate by reason and the outside-plan
+rate by level kind (over the closes that had a plan), the agreement with the
+full cycle (of the confirms with a verdict both ways), the confirm and
+prepare times (median, p90, max), the deadline aborts, the hourly-close
+counterfactual, the spawn-to-init times, the forbidden-tool attempts, and the
+tokens. The agreement is judged against the noise floor (two runs of the old
+path), never against 100%.
+
+### Off is the harness as before (a permanent regression)
+
+`tests/e2e/prepare-ahead-off-regression.test.js` (in `npm test`) holds the key
+absent and `"off"`, and the old path's outputs in `"shadow"`, to origin/main's
+own outputs on a no-fill, a fill, a manage-only and an entry day (the head
+trader's entry through the real gateway, so the gate log and the orders
+compare), the broker's whole call log included (an extra read while off is a
+leak; in shadow only the shadow's own reads may be added) and the tool-call logs
+(left out, with the shadow's plans and sessions, only in shadow)
+(`tests/fixtures/prepare-off/main-outputs.json`, written by
+`tests/fixtures/prepare-off/generate.js` in a scratch checkout of main, never on
+a branch; a change to it is a golden change, explained). It also holds that the
+shadow's leftovers never move the old path, that off loads none of prepare
+ahead's modules (poisoned, the off day is unchanged), that a failure inside
+prepare ahead never moves the old path, and that a leak is caught.
+
 ## Freshness
 
 - **Prepare:** closed bars only, and versioned.
@@ -318,7 +471,9 @@ Each is its own PR, with the adversarial review and the goal regression.
 2. **B:** the runner's prepare and confirm (resume, versions, void,
    fallback, deadline, skip), the opt-in key, the logging, the hook and
    gateway wiring tests for the cycle attribution, the tier-2 mock with both
-   phases.
+   phases. **B1 (built): shadow mode** (above): the old path decides, the
+   prepare and the shadow confirm run beside it and are measured. **B2:** the
+   confirm decides (`"on"`), the transcript cut, the tier-2 mock.
 3. **C:** the skills (the prepare format and the confirm rule), the context
    quiz and its new questions (confirm on a met candle, pass on an unmet
    one, the anchoring trap).

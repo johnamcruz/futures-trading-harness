@@ -124,6 +124,25 @@ function runHarness(argv, { cwd, env, timeoutMs, onChild = () => {}, liveFile = 
 }
 
 /**
+ * The runs a process has going (each spawned detached, its own process group): track(child) from runHarness's onChild,
+ * until it exits; children() the ones still running. killChildren(list, sig) signals each one's group (its harness and
+ * what it started: MCP servers, subagents), as the runner's stop does on SIGINT / SIGTERM.
+ */
+function childTracker() {
+  const set = new Set();
+  return {
+    track: c => { if (c && typeof c.once === 'function') { set.add(c); c.once('exit', () => set.delete(c)); } },
+    children: () => [...set],
+  };
+}
+function killChildren(list, sig) {
+  for (const c of list || []) {
+    if (!c || !c.pid) continue;
+    try { process.kill(-c.pid, sig); } catch (_err) { try { c.kill(sig); } catch (_e) { /* already exited */ } }
+  }
+}
+
+/**
  * Files in the run's working directory that every harness trusts: operator
  * instructions and project settings. A run must not change them (a Codex run
  * can write its working directory), so the runner fingerprints them before
@@ -207,4 +226,4 @@ function entryOrders(stateDir) {
   return (Array.isArray(list) ? list : []).filter(e => e && Number.isFinite(Number(e.orderId)));
 }
 
-module.exports = { readJson, writeJsonAtomic, runHarness, entryOrders, TRUSTED_WORKSPACE_FILES, TRUSTED_WORKSPACE_DIRS, fileDigest, dirDigest, workspaceFingerprint, changedFiles };
+module.exports = { readJson, writeJsonAtomic, runHarness, childTracker, killChildren, entryOrders, TRUSTED_WORKSPACE_FILES, TRUSTED_WORKSPACE_DIRS, fileDigest, dirDigest, workspaceFingerprint, changedFiles };

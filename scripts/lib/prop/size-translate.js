@@ -304,6 +304,20 @@ function floorFit({ capUsd, floor, stopTicks, tickValue, slipTicks, feePerSide, 
 const money = x => (Number.isInteger(x) ? `$${x}` : usd(x));
 
 /**
+ * The account's sizing facts noSizeFits sizes with, in a running attempt: { capUsd (the per-trade cap in force,
+ * riskCapOf: the healthy cap while the attempt is healthy, else the composed cap), floor (the rulebook's, in the order's
+ * own contracts), tickValue, slipTicks, feePerSide, stretchUsd }, or null without a policy, account or spec. The prepare's
+ * plans read them (next-close.js `sizing`), so its "fits" is compose_check's.
+ */
+function sizingFacts({ policy, account, capUsd, root, spec, specOf, home = null }) {
+  if (!policy || !account || !spec || typeof specOf !== 'function') return null;
+  return {
+    capUsd: riskCapOf({ capUsd, healthyUsd: healthyOf(policy), state: liveState(home, account) }).capUsd, floor: prop.minContractsIn(policy, account, root, specOf),
+    tickValue: spec.tickValue, slipTicks: policy.sizing ? policy.sizing.stop_slippage_ticks : null, feePerSide: feePerSideOf(account, root), stretchUsd: stretchOf(policy),
+  };
+}
+
+/**
  * compose_check's "no size fits" (owner-approved 2026-10-24): in a running attempt, the floor of the policy's rulebook
  * (sizing.min_contracts, in the order's own contracts) at the record's stop, all in as translateSize counts it
  * (floorFit), over the composed strategy's risk.max_risk_usd, and not within the floor stretch (its cost over
@@ -314,12 +328,12 @@ const money = x => (Number.isInteger(x) ? `$${x}` : usd(x));
  * plan's { ticks, floorTicks }.
  */
 function noSizeFits({ policy, account, capUsd, stop, spec, root, strategy, specOf, home = null }) {
-  if (!policy || !account || !stop || !spec || typeof specOf !== 'function') return null;
-  const stretchUsd = stretchOf(policy);
-  // The per-trade cap in force (riskCapOf): the healthy cap while the attempt is healthy, else the composed cap.
-  capUsd = riskCapOf({ capUsd, healthyUsd: healthyOf(policy), state: liveState(home, account) }).capUsd;
-  const fit = floorFit({ capUsd, floor: prop.minContractsIn(policy, account, root, specOf), stopTicks: stop.ticks, tickValue: spec.tickValue,
-    slipTicks: policy.sizing ? policy.sizing.stop_slippage_ticks : null, feePerSide: feePerSideOf(account, root), stretchUsd });
+  if (!stop) return null;
+  const facts = sizingFacts({ policy, account, capUsd, root, spec, specOf, home });
+  if (!facts) return null;
+  const { stretchUsd } = facts;
+  capUsd = facts.capUsd;
+  const fit = floorFit({ ...facts, stopTicks: stop.ticks });
   if (!fit || fit.fits) return null;
   const st = floorStretch({ floor: fit.floor, perContract: fit.perContract, capUsd, stretchUsd, state: liveState(home, account) });
   if (st && st.size) return null;
@@ -345,4 +359,4 @@ function translatorFor({ home, root, policy, account, strategy, verdict, specOf,
   });
 }
 
-module.exports = { translateSize, translatorFor, capsOf, limitPlan, entryPlan, riskCapOf, allInRisk, floorFit, noSizeFits, attemptHealth, floorStretch, stretchedEntry };
+module.exports = { translateSize, translatorFor, capsOf, limitPlan, entryPlan, riskCapOf, allInRisk, floorFit, noSizeFits, sizingFacts, attemptHealth, floorStretch, stretchedEntry };
