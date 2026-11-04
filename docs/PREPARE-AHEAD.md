@@ -423,11 +423,18 @@ not that fork (none of the base's lines, or one after the fork's own), refuse
 the entry in `roles-ran`, on the hook and the gateway alike; exits and stops
 always go. Without `FTH_CONFIRM_BASE` (any other run) nothing is cut.
 
-**Decided, fails closed:** the gateway and compose's READ FIRST read the
-confirm's own stream, which never holds the prepare's skill loads. A confirm
-that composes without loading again what an entry needs is refused there, and
-looks it up again (a turn). Crediting the prepare's loads on the stream side
-would be a new credit path in the gate; not built.
+**Open (an owner decision), measured on tier 2's first day:** the gateway,
+compose's READ FIRST and the runner's role record (what the executor's entry
+is credited with) read the confirm's own stream, which never holds the
+prepare's skill loads. With `headSkillsInPrompt` on, the head trader's skills
+are embedded and attested on the fork's stream, and a confirm that loads
+nothing again enters exactly as the key off does (tier 2 holds it). With it
+off, such a confirm's entry is refused at the executor (`[skills-loaded]`),
+and only a confirm that loads its skills again (as the tier-2 mock does)
+enters. Crediting the prepare's loads on the stream side would be a new
+credit path in the gate, so it is not built; the choices are to require
+`headSkillsInPrompt` with `"on"`, to teach the confirm to load again (PR C), or
+to add that credit path.
 
 ### Tier 2 with prepare ahead
 
@@ -438,12 +445,16 @@ CLI that keeps sessions), each with the key off and `"on"`. The mock
 SCENARIO line per listed candidate; the head trader's run, a fresh one or the
 confirm, follows the plan-following mock on the at-close briefing. "On" must
 give exactly "off"'s trades, order calls, gate decisions, compose records,
-cycle results and R (`tests/goal/prepare-pair.js`), with confirms run, and
-under every fallback row armed (the session lost, a corrupt plan, the confirm
-erring or hanging). The check can fail: a confirm that trusts the plan (it
-decides on the briefing the prepare was made on), with the validity check
-broken so a void plan reaches it, makes them differ. The opencode world, main's
-tier 2 baseline and the move goldens are untouched.
+cycle results and R (`tests/goal/prepare-pair.js`), with confirms run and one
+entering, and under every fallback row armed (the session lost, a corrupt
+plan, the confirm erring or hanging, a P&L change voiding every plan); with
+`headSkillsInPrompt`, a confirm that loads nothing again too. The check can
+fail: on a day where every plan is void (the P&L change), a confirm that
+trusts the plan (it decides on the briefing the prepare was made on), reached
+only through the validity check broken, makes them differ. The mock's confirm
+loads its skills again where an entry needs them (see the open decision
+above). The opencode world, main's tier 2 baseline and the move goldens are
+untouched.
 
 ### Flags
 

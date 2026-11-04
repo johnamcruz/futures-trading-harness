@@ -105,7 +105,7 @@ function dayWorld(bars, day, { account, suggest = 3, fault = null, state = null,
   const h = holidayDates(new Date(`${day}T00:00:00Z`), new Date(`${day}T00:00:00Z`));
   // `claude` (tests/goal/tier2-prepare.goal.js only; null: the opencode world, as before): the same world on Claude Code,
   // its runs played by the fake CLI that keeps sessions (fake-claude-sessions.js), with `claude.prepareAhead` its key.
-  const cfg = validateConfig({ harness: claude ? 'claude' : 'opencode', cycle: 'full', premarketAt: '', timeframe: 3, account: '7', symbols: ['MNQ'], dataDir: path.join(home, 'bars'), bars: bars.length, closedDates: h.closed, earlyCloseDates: h.early, ...(claude && claude.prepareAhead ? { prepareAhead: claude.prepareAhead } : {}) });
+  const cfg = validateConfig({ harness: claude ? 'claude' : 'opencode', cycle: 'full', premarketAt: '', timeframe: 3, account: '7', symbols: ['MNQ'], dataDir: path.join(home, 'bars'), bars: bars.length, closedDates: h.closed, earlyCloseDates: h.early, ...(claude && claude.prepareAhead ? { prepareAhead: claude.prepareAhead } : {}), ...(claude && claude.headSkillsInPrompt ? { headSkillsInPrompt: true } : {}) });
   // A mid-attempt state (the state days): the attempt started a session earlier and closed it at `balance` (the
   // exchange's balance with it), so the cushion, the floor and the room to the target are that state's.
   if (state) {
@@ -195,7 +195,7 @@ function decide(b) {
 function headScript(w, decisions) {
   return prompt => {
     // A confirm that trusts the plan (the negative control, prepare-mock.js): the prepare's briefing, not the close's.
-    const b = w.claude && w.claude.trusting && /Your plan said: scenario/.test(String(prompt || '')) ? require('./prepare-mock').preparedBriefing(w) || readBriefing(w.home, 'MNQ') : readBriefing(w.home, 'MNQ');
+    const b = w.claude && w.claude.trusting && w.claude.bypassNow && /Your plan said: scenario/.test(String(prompt || '')) ? require('./prepare-mock').preparedBriefing(w) || readBriefing(w.home, 'MNQ') : readBriefing(w.home, 'MNQ');
     const open = exchange.read(w.state).positions.some(p => p.contractId === MNQ_ID);
     if (open) return [{ harness: 'bar_briefing', args: { symbol: 'MNQ', json: true } }, ...(w.probe && !w.probedOpen && w.lastArgs ? openProbes(w) : []), { result: 'CYCLE RESULT: managed - holding, the stop untouched (the runner\'s exit manages it)' }];
     const d = decide(b);
@@ -217,8 +217,10 @@ function headScript(w, decisions) {
     // composes first and reacts to compose_check's READ FIRST line as a live head trader would: it looks the skill up and
     // composes again (the warning's path, warn -> lookup -> compose again); without it the gate refuses the entry.
     const compose = { harness: 'compose_check', args: { symbol: 'MNQ', side: d.side, reads: d.reads, size: w.suggest } };
-    // Claude Code (full mode): the skills an entry needs, loaded in the run (the gate reads them in its transcript).
-    const loads = w.claude ? CLAUDE_LOADS.map(x => ({ load: x })) : [];
+    // Claude Code (full mode): the skills an entry needs, loaded in the run (the gate reads them in its transcript). A
+    // confirm of the `skipLoads` mock (prepare-mock.js) relies on the prepare's loads instead (they are in its context).
+    const confirming = /Your plan said: scenario/.test(String(prompt || ''));
+    const loads = w.claude && !(w.claude.skipLoads && confirming) ? CLAUDE_LOADS.map(x => ({ load: x })) : [];
     const react = { then: ctx => (/READ FIRST: [^\n]*candle-reading/.test(String(ctx.results.compose_check || '')) ? [{ harness: 'skill_lookup', args: { skill: 'candle-reading' } }, { ...compose }] : []) };
     return [
       { harness: 'bar_briefing', args: { symbol: 'MNQ', json: true } },

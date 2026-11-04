@@ -150,6 +150,10 @@ async function runCycle(cfg, action, prompt, opts, limits = {}, deps = {}) {
   if (confirm) { try { composedFirst = Boolean(confirm.composed()); } catch (_err) { composedFirst = true; } }
   if (confirm && (!res.ok || res.timedOut) && !composedFirst) {
     if (overlap) overlap.finish('the confirm failed before a compose: the full head trader runs');
+    // Its run's own lookups files (keyed by its transcript; the cycle log that would remove them is the fallback's).
+    for (const file of [require('./trading/skill-lookups').lookupsFile, require('./learning/experience-lookups').lookupsFile]) {
+      try { require('fs').unlinkSync(file(res.transcript)); } catch (_err) { /* none */ }
+    }
     const ms = Math.max(0, wallNow() - startedMs);
     return fallBack(res.timedOut ? 'timeout' : 'error', ms, { timeoutMs: Math.max(0, timeoutMs - ms) });
   }

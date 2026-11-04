@@ -54,13 +54,19 @@ function prepareOf(w) {
   const recs = fs.existsSync(dir) ? fs.readdirSync(dir).sort().flatMap(d => fs.readdirSync(path.join(dir, d)).sort().map(f => { try { return JSON.parse(fs.readFileSync(path.join(dir, d, f), 'utf8')); } catch (_err) { return null; } })).filter(Boolean) : [];
   const paths = {};
   let fellBack = 0;
+  let entered = 0;
   for (const x of recs) {
     const on = isObj(x.prepare) && isObj(x.prepare.on) ? x.prepare.on : null;
     if (!on) continue;
-    paths[on.path] = (paths[on.path] || 0) + 1;
+    // A void plan by its reason (void:session-missing), so a fault row shows it was hit.
+    const key = on.path === 'void' && on.reason ? `void:${on.reason}` : on.path;
+    paths[key] = (paths[key] || 0) + 1;
     if (on.confirm && on.confirm.fellBack) fellBack += 1;
+    // A close the confirm decided that entered: compose, phase 2, the executor and the gateway on a fork.
+    if (on.path === 'confirm' && on.confirm && !on.confirm.fellBack && /^CYCLE RESULT: executed/.test(String(x.result || ''))) entered += 1;
   }
-  return { confirms: (w.claude && w.claude.confirms) || 0, voidConfirms: (w.claude && w.claude.voidConfirms) || 0, paths, fellBack, made: recs.filter(x => isObj(x.prepare) && isObj(x.prepare.made) && x.prepare.made.outcome === 'done').length };
+  const c = w.claude || {};
+  return { confirms: c.confirms || 0, entered, voidConfirms: c.voidConfirms || 0, armed: c.armed || 0, paths, fellBack, made: recs.filter(x => isObj(x.prepare) && isObj(x.prepare.made) && x.prepare.made.outcome === 'done').length };
 }
 
 module.exports = { decisionsOf, pairProblems, prepareOf };

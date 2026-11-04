@@ -28,6 +28,8 @@ function runOf(seen, plays) {
   return async (argv, o) => {
     const p = plays[Math.min(seen.length, plays.length - 1)];
     seen.push({ argv, o });
+    // A run's skill and experience lookups, next to its transcript (the cycle log removes them; a failed confirm has none).
+    if (p.lookups && o.env.FTH_CYCLE_TRANSCRIPT) for (const f of [`${o.env.FTH_CYCLE_TRANSCRIPT}.lookups.jsonl`, require('../../scripts/lib/learning/experience-lookups').lookupsFile(o.env.FTH_CYCLE_TRANSCRIPT)]) { require('fs').mkdirSync(path.dirname(f), { recursive: true }); require('fs').writeFileSync(f, '{}\n'); }
     if (p.hang) await new Promise(r => setTimeout(r, p.hang));
     const text = p.text || 'CYCLE RESULT: no-trade - the candle did not meet it';
     return { ok: p.ok !== false, timedOut: Boolean(p.timedOut), code: p.ok === false ? 1 : 0, output: out(text, 's'), stdout: out(text, 's') };
@@ -70,7 +72,7 @@ test('runCycle confirm: the pre-collected reads stay with the at-close facts: th
 });
 
 test('runCycle confirm: one that errors or times out before a compose falls back to the full head trader\'s run, exactly the old path\'s (prompt, argv, env); its failure is the result\'s confirm only', async () => {
-  for (const [what, play] of [['an error', { ok: false }], ['a timeout', { timedOut: true }]]) {
+  for (const [what, play] of [['an error', { ok: false, lookups: true }], ['a timeout', { timedOut: true, lookups: true }]]) {
     const s = setup();
     const seen = [];
     const old = [];
@@ -84,6 +86,9 @@ test('runCycle confirm: one that errors or times out before a compose falls back
     assert.ok(seen[1].o.timeoutMs <= 360000 && seen[1].o.timeoutMs >= 360000 - 90000 - 5000, `${what}: what the cycle has left`);
     assert.strictEqual(r.result, 'CYCLE RESULT: no-trade - nothing');
     assert.deepStrictEqual({ outcome: r.confirm.outcome, fellBack: r.confirm.fellBack }, { outcome: play.ok === false ? 'error' : 'timeout', fellBack: true }, what);
+    // The failed confirm's own lookups files are removed (no cycle log of its own removes them).
+    const t = seen[0].o.env.FTH_CYCLE_TRANSCRIPT;
+    for (const f of [`${t}.lookups.jsonl`, require('../../scripts/lib/learning/experience-lookups').lookupsFile(t)]) assert.ok(!require('fs').existsSync(f), `${what}: ${f} removed`);
   }
 });
 

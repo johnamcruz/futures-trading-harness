@@ -9,9 +9,10 @@
  * the at-close briefing as the full head trader does. So "on" must give exactly "off"'s trades, order calls, gate
  * decisions, compose records, cycle results and R (tests/goal/prepare-pair.js), on every day and under every fallback
  * row armed (prepare-mock.js FAULTS: the session lost, a corrupt plan, the confirm erring or hanging before a compose),
- * with confirms actually run. And the check can fail: a confirm that trusts the plan over the at-close facts (it decides
- * on the briefing the prepare was made on), with the runner's validity check broken so a void plan reaches it, makes
- * "on" differ from "off".
+ * with confirms actually run and one entering. With headSkillsInPrompt, a confirm that loads nothing again is still "off".
+ * And the check can fail: on a day where every plan is void (a P&L change before each close), a confirm that trusts the
+ * plan over the at-close facts (it decides on the briefing the prepare was made on), reached only through the runner's
+ * validity check broken, makes "on" differ from "off".
  *
  * The opencode world, main's tier 2 baseline and the move goldens are untouched (tier2.goal.js runs the key absent).
  */
@@ -43,9 +44,12 @@ test('tier 2 "on": on every day the same trades, order calls, gate decisions, co
   const paths = on.map(r => `${r.day}: ${JSON.stringify(r.prepare)}`);
   process.stdout.write(`${paths.join('\n')}\n`);
   assert.deepStrictEqual(problems, [], `"on" moved away from "off":\n${problems.join('\n')}`);
-  // Not vacuous: the confirm decided at some close, on the fork of its prepare's session, and plans were made.
-  assert.ok(on.reduce((n, r) => n + r.prepare.confirms, 0) > 0, `no confirm ran:\n${paths.join('\n')}`);
-  assert.ok(on.every(r => r.prepare.made > 0), 'a prepare on every day');
+  // Not vacuous: plans were made, the confirm decided closes on the fork of its prepare's session, and at least one of
+  // those closes entered (compose, phase 2, the executor and the gateway after a confirm).
+  const sum = k => on.reduce((n, r) => n + r.prepare[k], 0);
+  assert.ok(sum('made') > 0, 'prepares made');
+  assert.ok(sum('confirms') > 0, `no confirm ran:\n${paths.join('\n')}`);
+  assert.ok(sum('entered') > 0, `no confirm entered a trade:\n${paths.join('\n')}`);
   // Off is the old path: no prepare field at all.
   assert.ok(Object.values(off).every(r => r.prepare.made === 0 && Object.keys(r.prepare.paths).length === 0));
 });
@@ -53,19 +57,30 @@ test('tier 2 "on": on every day the same trades, order calls, gate decisions, co
 test('tier 2 "on", every fallback row armed (the session lost, a corrupt plan, the confirm erring or hanging before a compose): the same as "off"', { skip }, async () => {
   const off = byDay(await offRuns());
   for (const fault of FAULTS) {
+    // (A P&L change is the account's, so the off world has it too.)
+    const base = fault === 'pnl-change' ? byDay(await T.runDays(FAULT_DAYS, { claude: { on: false, fault }, dir: OUT })) : off;
     const on = await T.runDays(FAULT_DAYS, { claude: { prepareAhead: 'on', fault }, dir: OUT });
-    const problems = on.flatMap(r => PP.pairProblems(off[r.day], r));
+    const problems = on.flatMap(r => PP.pairProblems(base[r.day], r));
     assert.deepStrictEqual(problems, [], `${fault}:\n${problems.join('\n')}`);
-    // The row was hit: the confirm fell back (erring, hanging), or no close reached the confirm (no session, no plan).
-    const hit = on.reduce((n, r) => n + (fault.startsWith('confirm-') ? r.prepare.fellBack : (r.prepare.paths.void || 0) + (r.prepare.paths['no-plan'] || 0)), 0);
+    // The row was hit: the confirm fell back (erring, hanging); a plan void by its lost session; a plan file corrupted.
+    const hitOf = r => (fault.startsWith('confirm-') ? r.prepare.fellBack : fault === 'session-missing' ? (r.prepare.paths['void:session-missing'] || 0) : fault === 'pnl-change' ? (r.prepare.paths['void:facts'] || 0) : r.prepare.armed);
+    const hit = on.reduce((n, r) => n + hitOf(r), 0);
     assert.ok(hit > 0, `${fault}: the row was never hit (${JSON.stringify(on.map(r => r.prepare))})`);
     if (!fault.startsWith('confirm-')) assert.ok(on.every(r => !r.prepare.paths.confirm), `${fault}: no confirm without its session or plan`);
   }
 });
 
-test('tier 2 "on" (the check can fail): a confirm that trusts the plan over the at-close facts, a void plan let through, makes "on" differ from "off"', { skip }, async () => {
-  const off = byDay(await offRuns());
-  const on = await T.runDays(FAULT_DAYS, { claude: { prepareAhead: 'on', trusting: true, voidBypass: true }, dir: OUT });
+test('tier 2 "on" with headSkillsInPrompt: a confirm that loads nothing again (the prepare\'s loads in its context, the head trader\'s skills embedded and attested on the fork) gives the same as "off"', { skip }, async () => {
+  const off = byDay(await T.runDays(FAULT_DAYS, { claude: { on: false, headSkillsInPrompt: true }, dir: OUT }));
+  const on = await T.runDays(FAULT_DAYS, { claude: { prepareAhead: 'on', headSkillsInPrompt: true, skipLoads: true }, dir: OUT });
+  const problems = on.flatMap(r => PP.pairProblems(off[r.day], r));
+  assert.deepStrictEqual(problems, [], problems.join('\n'));
+  assert.ok(on.reduce((n, r) => n + r.prepare.confirms, 0) > 0, 'confirms ran');
+});
+
+test('tier 2 "on" (the check can fail): a confirm that trusts the plan over the at-close facts, reached only by void plans let through (every plan void by a P&L change), makes "on" differ from "off"', { skip }, async () => {
+  const off = byDay(await T.runDays(FAULT_DAYS, { claude: { on: false, fault: 'pnl-change' }, dir: OUT }));
+  const on = await T.runDays(FAULT_DAYS, { claude: { prepareAhead: 'on', fault: 'pnl-change', trusting: true, voidBypass: true }, dir: OUT });
   const problems = on.flatMap(r => PP.pairProblems(off[r.day], r));
   assert.ok(on.reduce((n, r) => n + r.prepare.voidConfirms, 0) > 0, `no void plan reached the confirm: ${JSON.stringify(on.map(r => r.prepare))}`);
   assert.ok(problems.length > 0, 'the trusting confirm went unseen: the comparison cannot fail');
