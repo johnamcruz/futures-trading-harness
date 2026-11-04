@@ -107,6 +107,8 @@ test('prepare-ahead skill: its format lines are the runner\'s FORMAT, and its bo
   // Several scenarios matched (PR C3), standing and not mixed, with something outside the plan, in both the confirm and
   // the shadow confirm: still no lookup, no skill named, the bold rule and the "on" phrases kept, and the standing phrases.
   // (The standing one with a computed trigger as next-close.js renders it, so its words are checked too.)
+  // The runner's fixed TAKE/PASS for a standing scenario (STANDING_TAKE_PASS) is the skill's own, clause for clause.
+  assert.ok(BODY.includes(PA.STANDING_TAKE_PASS.replace('TAKE: ', 'TAKE if ').replace('PASS: ', 'PASS if ')), PA.STANDING_TAKE_PASS);
   const fires = require('../../scripts/lib/trading/next-close').triggerText({ kind: 'standing', tf: '15m', trigger: { at: '2021-05-24T13:48:00.000Z', candle: { t: '2021-05-24T13:30:00.000Z', closedAt: '2021-05-24T13:45:00.000Z' }, until: '2021-05-24T14:00:00.000Z' } }, '3m');
   const matched = [{ scenario: { k: 1, line: 'L' }, kind: 'momentum' }, { scenario: { k: 2, id: 'P2', line: 'L', why: 'w' }, kind: 'standing', candidate: { id: 'P2', kind: 'standing', read: 'r', fires } }, { scenario: { k: 3, line: 'L' }, kind: 'reaction' }];
   const multi = PA.confirmSuffix({ matched, unplanned: ['x'] });

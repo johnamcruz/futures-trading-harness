@@ -125,7 +125,9 @@ test('shadow: at the close the plan was made for, valid and matched: the confirm
   assert.deepStrictEqual(m.matches.map(x => [x.k, x.kind]), [[1, 'momentum'], [2, 'standing'], [3, 'standing'], [4, 'standing']]);
   // The momentum scenario as written; the standing ones said by code, never as the prepare wrote them (as "on" says them).
   assert.ok(conf.prompt.includes(plan.scenarios[0].line));
-  for (const s of plan.scenarios.slice(1)) assert.ok(!conf.prompt.includes(s.line) && conf.prompt.includes(PA.standingScenarioLine(s, plan.candidates.find(c => c.id === s.id))), s.line);
+  // (One shared trigger: in full for scenario 2, the others pointing to it.)
+  for (const s of plan.scenarios.slice(1)) assert.ok(!conf.prompt.includes(s.line) && conf.prompt.includes(PA.standingScenarioLine(s, plan.candidates.find(c => c.id === s.id), { firesAs: s.k === 2 ? null : 2 })), s.line);
+  assert.strictEqual(conf.prompt.split('(code: fires if ').length, 2, 'the shared trigger once');
   assert.ok(!conf.prompt.slice(conf.prompt.indexOf('scenario 2:')).includes('TAKE if the candle meets it'), 'no model condition after scenario 1');
   for (const k of [2, 3, 4]) assert.ok(conf.prompt.includes(`Scenario ${k} is a standing setup: the setup is the reaction the briefing lists`), `${k}`);
   assert.ok(!conf.prompt.includes('Scenario 1 is a standing setup'));
@@ -153,12 +155,12 @@ test('shadow C3: a take of the second matched scenario reads its own side; the s
   const f = PA.planFile(home, 'MNQ', FIRE);
   const plan = PA.readPlan(home, 'MNQ', FIRE);
   // Only the momentum candidate made standing (the first candidate), the rest reactions: a line for scenario 1 only.
-  fs.writeFileSync(f, JSON.stringify({ ...plan, candidates: plan.candidates.map(c => ({ ...c, kind: c.id === 'P1' ? 'standing' : 'reaction' })) }));
+  fs.writeFileSync(f, JSON.stringify({ ...plan, candidates: plan.candidates.map(c => ({ ...c, kind: c.id === 'P1' ? 'standing' : 'reaction', side: c.id === 'P3' ? 'long' : c.side })) }));
   const r = await after(home, FIRED, { fake: { decision: 'DECISION: TAKE 3' } });
   const conf = r.cli.runs.find(x => x.kind === 'confirm');
   assert.ok(conf.prompt.includes('Scenario 1 is a standing setup'));
   for (const k of [2, 3, 4]) assert.ok(!conf.prompt.includes(`Scenario ${k} is a standing setup`), `${k}`);
-  assert.deepStrictEqual(r.shadow.confirm.decision, { decision: 'take', k: 3, side: 'short' });
+  assert.deepStrictEqual(r.shadow.confirm.decision, { decision: 'take', k: 3, side: 'long' });
 });
 
 test('shadow: prepare.maxMs bounds both runs together: on a frozen replay clock the confirm\'s own time comes off the prepare\'s budget (a replay step never outlasts its cycle\'s leftover)', async () => {

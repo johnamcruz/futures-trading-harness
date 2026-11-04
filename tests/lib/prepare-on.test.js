@@ -143,7 +143,9 @@ test('"on" at the close: the confirm\'s message carries the standing line for ea
     const sc = plan.scenarios.find(s => s.k === k);
     const cand = plan.candidates.find(c => c.id === sc.id);
     assert.match(cand.fires, /whatever its range, volume and close/, 'the plan keeps the computed trigger');
-    assert.ok(asMade.includes(`scenario ${k}:\n${PA.standingScenarioLine(sc, cand)}\n`), `scenario ${k}'s line by code`);
+    // The three share one 15m candle, so one trigger: in full for scenario 2, the others pointing to it (review P2).
+    assert.strictEqual(cand.fires, plan.candidates.find(c => c.id === plan.scenarios.find(s => s.k === 2).id).fires);
+    assert.ok(asMade.includes(`scenario ${k}:\n${PA.standingScenarioLine(sc, cand, { firesAs: k === 2 ? null : 2 })}\n`), `scenario ${k}'s line by code`);
     assert.ok(!asMade.includes(sc.line), `scenario ${k}: not the prepare's line`);
   }
   assert.ok(asMade.includes(plan.scenarios[0].line), 'the momentum scenario as written');

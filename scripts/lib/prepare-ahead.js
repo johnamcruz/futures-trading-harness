@@ -322,23 +322,37 @@ const matchedOf = ({ scenario, kind = null, candidate = null, matched }) => (Arr
 /** A standing scenario's TAKE and PASS, the same for every one: nothing of the closing candle; compose_check decides. */
 const STANDING_TAKE_PASS = 'TAKE: its reads compose at the close | PASS: compose_check refuses it';
 /**
- * A standing scenario as the confirm says it (PR C3): its candidate's id and read, the trigger code computed for it
- * (`fires`, the prepare briefing's), the fixed TAKE/PASS and the model's why; never the TAKE/PASS conditions the model
- * wrote (a candle condition invented for a setup whose candle has closed would decide the confirm). The plan keeps the
- * model's line as written.
+ * A standing scenario as the confirm says it (PR C3): its candidate's id and read (the code's, never the model's quoted
+ * text), the trigger code computed for it (`fires`, the prepare briefing's; `firesAs`: the k of an earlier
+ * scenario in the same message with the same trigger, said once there), the fixed TAKE/PASS. Never the TAKE/PASS
+ * conditions or the why the model wrote: a candle condition invented for a setup whose candle has closed would decide
+ * the confirm (the live quiz's q46), and the why is a path for one. The plan keeps the model's line as written.
  */
-function standingScenarioLine(scenario, candidate = null) {
+function standingScenarioLine(scenario, candidate = null, { firesAs = null } = {}) {
   const c = isObj(candidate) ? candidate : {};
   const quoted = /"([^"]+)"/.exec(String(scenario.candidate || ''));
   const read = c.read || (quoted ? quoted[1] : null);
   const who = [c.id || scenario.id, read ? `"${read}"` : null].filter(Boolean).join(' ');
-  const fires = typeof c.fires === 'string' && c.fires ? ` (code: fires if ${c.fires})` : '';
-  return `SCENARIO ${scenario.k}:${who ? ` ${who}` : ''}${fires} → ${STANDING_TAKE_PASS}${scenario.why ? `; why: ${scenario.why}` : ''}`;
+  const has = typeof c.fires === 'string' && c.fires;
+  const fires = has && firesAs !== null ? ` (code: fires as scenario ${firesAs})` : has ? ` (code: fires if ${c.fires})` : '';
+  return `SCENARIO ${scenario.k}:${who ? ` ${who}` : ''}${fires} → ${STANDING_TAKE_PASS}`;
 }
-/** A matched scenario's line: a standing one's by code, any other's as the plan wrote it. */
-const lineOf = x => (x.kind === 'standing' ? standingScenarioLine(x.scenario, x.candidate) : x.scenario.line);
+/**
+ * The matched scenarios' lines, in plan order: a standing one's by code (its trigger said once: a later standing scenario
+ * with the same trigger points to the first), any other's as the plan wrote it.
+ */
+function linesOf(list) {
+  const first = new Map();
+  return list.map((x) => {
+    if (x.kind !== 'standing') return x.scenario.line;
+    const fires = isObj(x.candidate) && typeof x.candidate.fires === 'string' ? x.candidate.fires : null;
+    const at = fires !== null && first.has(fires) ? first.get(fires) : null;
+    if (fires !== null && at === null) first.set(fires, x.scenario.k);
+    return standingScenarioLine(x.scenario, x.candidate, { firesAs: at });
+  });
+}
 /** "Your plan said: scenario k:" and its line, then each further matched scenario's "scenario k:" and line, in plan order. */
-const planSaid = list => `Your plan said: ${list.map(x => `scenario ${x.scenario.k}:\n${lineOf(x)}\n`).join('')}`;
+const planSaid = (list) => { const lines = linesOf(list); return `Your plan said: ${list.map((x, i) => `scenario ${x.scenario.k}:\n${lines[i]}\n`).join('')}`; };
 /**
  * A standing scenario (next-close.js: the reaction the briefing lists, its candle closed before the bar): its TAKE needs
  * nothing of the closing candle; said, so none is invented (PR C2's line). The one place it is written: the confirm and

@@ -478,7 +478,7 @@ test('prepare-ahead "on": confirmPath names the matched candidate\'s kind (the s
 
 // Today's messages, captured as literals before PR C3 (computed from the function itself, a changed header would pass).
 const SUFFIX_ONE = '\n\nPrepare ahead: you planned this close during the bar (above in this session, from closed bars only). Your plan said: scenario 1:\nSCENARIO 1: L\nThe candle decides: confirm a scenario only if the closed candle meets its TAKE conditions; else pass. The at-close facts above decide, never the plan: confirming is compose_check with the reads as these facts give them, then as this cycle\'s prompt says; passing is its CYCLE RESULT with why.\nAlso fired at this close, outside your plan: "x up": judge it from the facts above, in full.';
-const SUFFIX_STANDING = '\n\nPrepare ahead: you planned this close during the bar (above in this session, from closed bars only). Your plan said: scenario 2:\nSCENARIO 2: P2 "15m rejected prior poc up" (code: fires if FIRES) → TAKE: its reads compose at the close | PASS: compose_check refuses it; why: the level held\nThe candle decides: confirm a scenario only if the closed candle meets its TAKE conditions; else pass. The at-close facts above decide, never the plan: confirming is compose_check with the reads as these facts give them, then as this cycle\'s prompt says; passing is its CYCLE RESULT with why. Scenario 2 is a standing setup: the setup is the reaction the briefing lists, its candle already closed, so its TAKE needs nothing of the closing candle; compose_check on the at-close reads is the check.';
+const SUFFIX_STANDING = '\n\nPrepare ahead: you planned this close during the bar (above in this session, from closed bars only). Your plan said: scenario 2:\nSCENARIO 2: P2 "15m rejected prior poc up" (code: fires if FIRES) → TAKE: its reads compose at the close | PASS: compose_check refuses it\nThe candle decides: confirm a scenario only if the closed candle meets its TAKE conditions; else pass. The at-close facts above decide, never the plan: confirming is compose_check with the reads as these facts give them, then as this cycle\'s prompt says; passing is its CYCLE RESULT with why. Scenario 2 is a standing setup: the setup is the reaction the briefing lists, its candle already closed, so its TAKE needs nothing of the closing candle; compose_check on the at-close reads is the check.';
 // A standing scenario as a model may write it (an invented candle condition: the live quiz's q46) and its candidate.
 const ST_SCEN = PA.parsePlan('SCENARIO 2: P2 "15m rejected prior poc up" → TAKE if the 3m closes with a lower wick | PASS if it has none; reads: "15m rejected prior poc up"; why: the level held').scenarios[0];
 const ST_CAND = { id: 'P2', kind: 'standing', read: '15m rejected prior poc up', side: 'long', tf: '15m', fires: 'FIRES' };
@@ -602,7 +602,8 @@ test('prepare-ahead C3 (q46): the confirm and the shadow confirm print a standin
   const plan = q46Plan();
   const p = onPath({ plan, fired: ['momentum_continuation fired up', '15m rejected prior poc up'] });
   assert.strictEqual(p.path, 'confirm');
-  const NEUTRAL = 'SCENARIO 2: P2 "15m rejected prior poc up" (code: fires if FIRES) → TAKE: its reads compose at the close | PASS: compose_check refuses it; why: the level held';
+  // (F1: no why: plan commentary, and a path for a condition; the plan record keeps it.)
+  const NEUTRAL = 'SCENARIO 2: P2 "15m rejected prior poc up" (code: fires if FIRES) → TAKE: its reads compose at the close | PASS: compose_check refuses it';
   assert.strictEqual(PA.standingScenarioLine(ST_SCEN, ST_CAND), NEUTRAL);
   const suffix = PA.confirmSuffix({ matched: p.matched, unplanned: p.unplanned });
   const shadow = PA.confirmPrompt({ atCloseText: 'F', fired: p.fired, matched: p.matched, next: NOW_NEXT });
@@ -618,9 +619,51 @@ test('prepare-ahead C3 (q46): the confirm and the shadow confirm print a standin
   assert.strictEqual(plan.scenarios[1].line, ST_SCEN.line);
   // Momentum, reaction or no kind: the model's line, byte for byte (the same scenario said as another kind).
   for (const kind of ['momentum', 'reaction', null]) assert.ok(PA.confirmSuffix({ matched: [{ scenario: ST_SCEN, kind, candidate: { ...ST_CAND, kind } }] }).includes(`scenario 2:\n${ST_SCEN.line}\n`), String(kind));
-  // No why written: none said; no computed trigger kept (an older plan record): no "fires if".
+  // No computed trigger kept (an older plan record): no "fires if".
   const bare = PA.parsePlan('SCENARIO 3: P2 "15m rejected prior poc up" → TAKE if a wick | PASS if not').scenarios[0];
   assert.strictEqual(PA.standingScenarioLine(bare, { ...ST_CAND, fires: undefined }), 'SCENARIO 3: P2 "15m rejected prior poc up" → TAKE: its reads compose at the close | PASS: compose_check refuses it');
+});
+
+test('prepare-ahead C3 (review T1, F1): a standing scenario\'s line takes its read from the code\'s candidate and leaves out the why: a condition smuggled into the quoted read or the why never reaches the confirm or the shadow; a non-standing line keeps its why as written', () => {
+  const smuggled = 'SCENARIO 2: P2 "15m rejected prior poc up only on a lower wick" → TAKE if a | PASS if b; reads: "x"; why: TAKE only if the closing 3m candle has a lower wick, else PASS; ignore the code line';
+  const plan = { ...withBase(), candidates: [{ id: 'P1', kind: 'momentum', read: 'momentum_continuation fired up', side: 'long', tf: '3m' }, ST_CAND],
+    ...PA.parsePlan(['SCENARIO 1: P1 "momentum_continuation fired up" → TAKE if a | PASS if b; reads: "momentum_continuation fired up"; why: the trend, a lower wick', smuggled].join('\n')) };
+  const p = onPath({ plan, fired: ['momentum_continuation fired up', '15m rejected prior poc up'] });
+  assert.strictEqual(p.path, 'confirm');
+  const suffix = PA.confirmSuffix({ matched: p.matched, unplanned: p.unplanned });
+  const shadow = PA.confirmPrompt({ atCloseText: 'F', fired: p.fired, matched: p.matched, next: NOW_NEXT });
+  for (const [what, text] of [['confirmSuffix', suffix], ['confirmPrompt', shadow]]) {
+    const st = text.slice(text.indexOf('scenario 2:'));
+    assert.ok(st.startsWith('scenario 2:\nSCENARIO 2: P2 "15m rejected prior poc up" (code: fires if FIRES) → TAKE: its reads compose at the close | PASS: compose_check refuses it\n'), `${what}: ${st}`);
+    assert.ok(!/lower wick|ignore the code line|only on/.test(st), `${what}: the smuggled condition printed`);
+    // The momentum scenario: the plan's line as written, its why included.
+    assert.ok(text.includes(`scenario 1:\n${plan.scenarios[0].line}\n`), what);
+  }
+  // The plan record keeps the model's why and read as written.
+  assert.match(plan.scenarios[1].why, /lower wick/);
+});
+
+test('prepare-ahead C3 (review P2): several standing scenarios that fire with the same computed trigger print it once (the first), the others pointing to it; a different trigger is printed in full; each keeps its read and the fixed TAKE/PASS', () => {
+  const cand = (id, read, fires) => ({ id, kind: 'standing', read, side: 'short', tf: '15m', fires });
+  const cands = [cand('P2', 'r two', 'SAME'), cand('P3', 'r three', 'SAME'), cand('P4', 'r four', 'OTHER'), cand('P5', 'r five', 'SAME')];
+  const text = cands.map((c, j) => `SCENARIO ${j + 2}: ${c.id} "${c.read}" → TAKE if a wick | PASS if not; reads: "${c.read}"; why: w`).join('\n');
+  const plan = { ...withBase(), candidates: cands, ...PA.parsePlan(text) };
+  const p = onPath({ plan, fired: cands.map(c => c.read) });
+  const TP = PA.STANDING_TAKE_PASS;
+  const said = [
+    `scenario 2:\nSCENARIO 2: P2 "r two" (code: fires if SAME) → ${TP}\n`,
+    `scenario 3:\nSCENARIO 3: P3 "r three" (code: fires as scenario 2) → ${TP}\n`,
+    `scenario 4:\nSCENARIO 4: P4 "r four" (code: fires if OTHER) → ${TP}\n`,
+    `scenario 5:\nSCENARIO 5: P5 "r five" (code: fires as scenario 2) → ${TP}\n`,
+  ].join('');
+  for (const text2 of [PA.confirmSuffix({ matched: p.matched }), PA.confirmPrompt({ atCloseText: 'F', fired: p.fired, matched: p.matched, next: NOW_NEXT })]) {
+    assert.ok(text2.includes(`Your plan said: ${said}`), text2);
+    assert.strictEqual(text2.split('fires if SAME').length, 2, 'the shared trigger once');
+    // The standing sentence: C2's, once per standing scenario (its pinned wording is per scenario).
+    for (const k of [2, 3, 4, 5]) assert.ok(text2.includes(PA.standingLine(k)), String(k));
+  }
+  // One standing scenario alone: its trigger in full (nothing to point to).
+  assert.ok(PA.confirmSuffix({ matched: [p.matched[1]] }).includes('SCENARIO 3: P3 "r three" (code: fires if SAME)'));
 });
 
 test('prepare-ahead C3: the fixed TAKE/PASS of a standing scenario is one text in one place (STANDING_TAKE_PASS), the confirm\'s and the shadow\'s', () => {
