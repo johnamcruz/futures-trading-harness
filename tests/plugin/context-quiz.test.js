@@ -65,7 +65,17 @@ test('context quiz: the prepare-ahead questions (q40-q44, b8) are asked against 
   // The confirm rule deleted from the skill, or the trap sentences: their anchors go missing.
   const flat = t => t.replace(/\s+/g, ' ');
   const cut = (re) => Object.fromEntries(Object.entries(prompts).map(([k, v]) => [k, flat(v).replace(re, '')]));
-  for (const [id, re] of [['q40', /Closed candle meets the scenario's TAKE conditions: confirm\./], ['q41', /Closed candle does not meet them: pass, with why in the CYCLE RESULT\./], ['q42', /A plan that said take is no reason to take\./], ['q43', /a plan that said pass is no reason to pass\./], ['q44', /with the reads as the at-close facts give them \(not as the plan wrote them\)/]]) {
+  for (const [id, re] of [['q40', /A met TAKE is a confirm:/], ['q41', /A pass is the CYCLE RESULT, with why\./], ['q42', /a plan that said take is no reason to take/], ['q43', /a plan that said pass is no reason to pass\./], ['q44', /with the reads as the at-close facts give them \(not as the plan wrote them\)/]]) {
+    assert.deepStrictEqual(Q.anchorsMissing(QUIZ, cut(re)).filter(x => x === id), [id], id);
+  }
+  // The standing-scenario questions (q47-q49; q46 removed: the standing line prints the computed trigger, PR C3; q45 removed:
+  // 7/10 in the live run, kept for the paired test): prepare-ahead and candle-reading looked up (the confirm reads the closing
+  // candle as candle-reading does; a cycle that composes a rejection or a break looks it up: trade-lifecycle); each one's
+  // sentence deleted, its anchor goes missing.
+  for (const [id, re] of [['q47', /compose_check refusing is the pass/], ['q48', /PASS if compose_check refuses it\./], ['q49', /read that candle as candle-reading does/]]) {
+    const q = QUIZ.questions.find(x => x.id === id);
+    assert.deepStrictEqual([q.prompt, q.lookup, Q.promptKey(q)], ['lookup', ['prepare-ahead', 'candle-reading'], `lookup:${id}`], id);
+    assert.ok(prompts[`lookup:${id}`].includes('<skill name="prepare-ahead">') && prompts[`lookup:${id}`].includes('<skill name="candle-reading">'), id);
     assert.deepStrictEqual(Q.anchorsMissing(QUIZ, cut(re)).filter(x => x === id), [id], id);
   }
   // The rule first and bold: the skill's first rule line.
@@ -80,7 +90,13 @@ test('context quiz: every layer asked, ids unique, the bar the whole quiz at K 5
   assert.strictEqual(QUIZ.k, 5);
   assert.deepStrictEqual(QUIZ.passBar, { partA: { allCorrect: QUIZ.questions.length, bothWays: 0 }, partB: { allCorrect: QUIZ.partB.length, bothWays: 0 } });
   // 37 since q38-q39 (a cited setup in an attempt; a missing track record is no reason to pass); 42 and 8 since q40-q44 and
-  // b8 (prepare-ahead's confirm rule: PR C), whose pass bar rises with them.
-  assert.strictEqual(QUIZ.questions.length, 42);
+  // b8 (prepare-ahead's confirm rule: PR C); 45 since q47-q49 (a standing scenario: compose_check decides; the closing
+  // candle read as candle-reading does). q46 went with PR C3's computed trigger; q45 (the 3m doji, a yes/no) measured 7/10
+  // live and is out of the bar, noted for the paired test. The pass bar rises with them.
+  assert.strictEqual(QUIZ.questions.length, 45);
   assert.strictEqual(QUIZ.partB.length, 8);
+});
+
+test('context quiz: q45 and q46 are out of the bar (q46: the standing line prints the computed trigger, PR C3; q45: 7/10 live)', () => {
+  for (const id of ['q45', 'q46']) assert.ok(!QUIZ.questions.some(x => x.id === id), id);
 });

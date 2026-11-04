@@ -183,7 +183,7 @@ function createShadow({ cfg, root, home, runPrepare, now, sectionOpts = () => ({
     const day = TL.shardDay({ bar: x.bar.t });
     const composedHere = () => TL.readRecords(home, x.symbol, { days: [day] }).filter(r => r && r.bar === x.bar.t).length;
     const before = composedHere();
-    return { record, confirm: { session: plan.session.id, base: PA.planFile(home, x.symbol, x.bar.t), suffix: PA.confirmSuffix({ scenario: p.scenario, unplanned: p.unplanned }), timeoutMs: T.confirmMs, composed: () => composedHere() > before } };
+    return { record, confirm: { session: plan.session.id, base: PA.planFile(home, x.symbol, x.bar.t), suffix: PA.confirmSuffix({ scenario: p.scenario, unplanned: p.unplanned, kind: p.kind }), timeoutMs: T.confirmMs, composed: () => composedHere() > before } };
   }
 
   /** "on": the at-close record with what the cycle did: the confirm's outcome, the late refusals, close to order, the desk. */

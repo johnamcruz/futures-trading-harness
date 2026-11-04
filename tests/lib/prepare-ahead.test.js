@@ -446,6 +446,32 @@ test('prepare-ahead "on": the confirm\'s user message after the at-close facts: 
   assert.ok(!text.includes(PA.SKILL_NOTE) && !/skill_lookup/.test(text));
 });
 
+test('prepare-ahead "on": a standing scenario\'s confirm says the setup is the listed reaction (its TAKE needs nothing of the closing candle) and compose_check is the check (kind standing only); every other kind\'s message is unchanged', () => {
+  const s = withBase().scenarios[0];
+  const plain = PA.confirmSuffix({ scenario: s, unplanned: [] });
+  const LINE = `Scenario ${s.k} is a standing setup: the setup is the reaction the briefing lists, its candle already closed, so its TAKE needs nothing of the closing candle; compose_check on the at-close reads is the check.`;
+  const standing = PA.confirmSuffix({ scenario: s, unplanned: [], kind: 'standing' });
+  assert.ok(standing.includes(LINE), standing);
+  // The line after the rule, before what fired outside the plan; otherwise the same message.
+  const withMore = PA.confirmSuffix({ scenario: s, unplanned: ['15m rejected VWAP up'], kind: 'standing' });
+  assert.ok(withMore.indexOf(LINE) > withMore.indexOf('else pass.') && withMore.indexOf(LINE) < withMore.indexOf('outside your plan'));
+  assert.strictEqual(standing.replace(` ${LINE}`, ''), plain);
+  // Any other kind (or none): byte-identical to the message without one.
+  for (const kind of [undefined, null, 'momentum', 'reaction', 'Standing', 'standing ']) assert.strictEqual(PA.confirmSuffix({ scenario: s, unplanned: [], kind }), plain, String(kind));
+  // The line orders no lookup and names no skill (the confirm carries the rule inline).
+  assert.ok(!/skill|look[ -]?up|read the|\bload\b|prepare-ahead/i.test(standing));
+});
+
+test('prepare-ahead "on": confirmPath names the matched candidate\'s kind (the scenario k matched, not the first candidate)', () => {
+  const base = withBase();
+  const cands = [{ id: 'P1', kind: 'momentum', read: 'momentum_continuation fired down', side: 'short', tf: '3m' }, { id: 'P2', kind: 'standing', read: '15m rejected prior vah down', side: 'short', tf: '15m' }];
+  const scenarios = [{ k: 1, id: 'P1', candidate: 'P1 "momentum_continuation fired down"', line: 'L1' }, { k: 2, id: 'P2', candidate: 'P2 "15m rejected prior vah down"', line: 'L2' }];
+  const plan = { ...base, candidates: cands, scenarios };
+  const of = fired => onPath({ plan, fired });
+  assert.deepStrictEqual([of(['15m rejected prior vah down']).kind, of(['15m rejected prior vah down']).match.k], ['standing', 2]);
+  assert.deepStrictEqual([of(['momentum_continuation fired down']).kind, of(['momentum_continuation fired down']).match.k], ['momentum', 1]);
+});
+
 test('prepare-ahead: the one sentence that names the skill (read it with skill_lookup) is in the prepare prompt only, not in the confirm message or the shadow confirm prompt', () => {
   assert.strictEqual(PA.SKILL_NOTE, 'Read the prepare-ahead skill with skill_lookup for the format and the rule.');
   const p = PA.preparePrompt({ head: 'Autonomous cycle.', briefingText: 'B', next: NEXT });

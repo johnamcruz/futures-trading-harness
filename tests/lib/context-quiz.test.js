@@ -303,6 +303,23 @@ test('grading: the prepare-ahead questions grade the LEADING verdict: a held-out
   }
 });
 
+test('grading: the standing-scenario questions (q47, q48) grade the LEADING verdict: a held-out set (written before the regexes)', () => {
+  // [answer, shouldPass]. q47/q48: compose_check refused, so pass (the plan's TAKE, its limit, a wider stop are the traps).
+  const cases = {
+    q47: [['Pass: compose_check refused it.', true], ['Pass.', true], ['No trade: the refusal is the pass.', true], ['Skip: the stop is not on the losing side.', true], ['Pass; never enter past the stop.', true],
+      ['Do not confirm; compose_check refused.', true], ['Stand down: compose refused.', true],
+      ['Confirm: a standing setup meets its TAKE with any close.', false], ['Confirm.', false], ['Take it anyway: the setup stands.', false], ['Confirm; place it at the plan\'s limit.', false],
+      ['Yes, confirm.', false], ['Go long anyway.', false], ['Not a pass: confirm.', false]],
+    q48: [['Pass: compose_check refused (R:R).', true], ['Pass; the plan\'s TAKE is no reason to take.', true], ['No trade: the entry ran away.', true], ['Skip it: refused.', true],
+      ['Do not confirm: R:R under the minimum.', true], ['Pass, never late.', true], ['Pass. The plan said take, but the refusal is the pass.', true],
+      ['Confirm: the plan said TAKE.', false], ['Take it at the plan\'s limit.', false], ['Confirm at the planned entry.', false], ['Yes, take it as planned.', false], ['Chase it: the setup stands.', false],
+      ['Confirm; the R:R is close enough.', false], ['Not a pass: take it at the plan\'s price.', false], ['Place a limit at the plan\'s level and take it.', false]],
+  };
+  for (const [id, list] of Object.entries(cases)) {
+    for (const [a, want] of list) assert.strictEqual(pass(id, `ANSWER: ${a}`), want, `${id} ${want ? 'right' : 'wrong'}: ${a}`);
+  }
+});
+
 test('grading: every forbidden pattern of q41-q44 and b8 does work (its removal lets a wrong answer through)', () => {
   // [id, forbidden index, a wrong answer that leads with a right-looking verdict, so only that pattern fails it]
   const work = [
@@ -321,15 +338,192 @@ test('grading: every forbidden pattern of q41-q44 and b8 does work (its removal 
   }
 });
 
+test('grading: q49 (a standing scenario, the closing 3m back through the level, still inside the setup candle): no pass by itself, and never ignored: a held-out set (written before the regexes)', () => {
+  // candle-reading: a read, never a veto (the count decides); the 3m only times the entry; alone it can be noise.
+  const cases = [
+    ['No: it is context to weigh; compose_check decides.', true], ['No. The 3m only times the entry; weigh it in the count.', true], ['No, not by itself: weigh it, then compose_check.', true],
+    ['Not by itself; it counts against, maybe half size.', true], ['No — a read against, never a veto; the 15m setup still stands.', true],
+    ['Nope: compose_check with the at-close reads; the close is a read against.', true], ['No; alone the 3m can be noise.', true],
+    ['Yes, pass.', false], ['Yes: the rejection failed.', false], ['Pass: it closed through the level.', false], ['No, ignore it.', false], ['No: the 3m close does not matter.', false],
+    ['No, it is irrelevant: take it at full size.', false], ['Yes, the level broke.', false], ['It invalidates the setup: pass.', false], ['No, pass.', false],
+  ];
+  for (const [a, want] of cases) assert.strictEqual(pass('q49', `ANSWER: ${a}`), want, `q49 ${want ? 'right' : 'wrong'}: ${a}`);
+  // The live run (k 10, this skill text): two right answers the grader failed, "the pass condition is" and a compose_check
+  // result named "passing"; a pass verdict in -ing form still fails.
+  for (const [a, want] of [
+    ['No. The 3m close below the prior POC is not by itself a reason to pass; the scenario\'s TAKE condition is "its reads compose at the close," and the pass condition is "compose_check refuses it."', true],
+    ['No. The 3m close alone is not a reason to pass; the TAKE is met by compose_check passing, not by the closing 3m candle.', true],
+    ['No, but I am passing it anyway.', false],
+  ]) assert.strictEqual(pass('q49', `ANSWER: ${a}`), want, `q49 ${want ? 'right' : 'wrong'}: ${a}`);
+  // Added after the regexes: a negated ignore is no fail.
+  for (const [id, a, want] of [['q49', 'No; don\'t ignore it, weigh it.', true], ['q49', 'Never by itself: weigh it in the count.', true],
+    ]) assert.strictEqual(pass(id, `ANSWER: ${a}`), want, `${id} ${want ? 'right' : 'wrong'}: ${a}`);
+});
+
+test('grading: every forbidden pattern of q47-q49 does work (its removal lets a wrong answer through), and negated or right-looking variants grade right', () => {
+  // [id, forbidden index, a wrong answer that leads with a right-looking verdict, so only that pattern fails it]
+  const work = [
+    ['q49', 0, 'No, ignore it.'], ['q49', 1, 'No, irrelevant.'], ['q49', 2, 'No: it does not matter.'], ['q49', 3, 'No, it has no effect.'], ['q49', 4, 'No, I\'d pass.'], ['q49', 5, 'No; take the short instead.'],
+    ['q47', 0, 'Not a pass: confirm.'], ['q47', 1, 'No, take it.'], ['q47', 2, 'Pass on the plan\'s stop; recompose with a wider stop.'], ['q47', 3, 'Pass; go short, the rejection failed.'],
+    ['q48', 0, 'Not a pass: confirm at the planned entry.'], ['q48', 1, 'Not a pass: take it at the plan\'s price.'], ['q48', 2, 'No, chase it.'], ['q48', 3, 'Pass at this price; recompose with a closer target.'],
+  ];
+  for (const id of ['q47', 'q48', 'q49']) assert.strictEqual(q(id).forbidden.length, work.filter(w => w[0] === id).length, `${id}: a case for each forbidden pattern`);
+  for (const [id, i, answer] of work) {
+    assert.strictEqual(pass(id, `ANSWER: ${answer}`), false, `${id} fails: ${answer}`);
+    const without = { ...q(id), forbidden: q(id).forbidden.filter((_, j) => j !== i) };
+    assert.strictEqual(Q.gradeAnswer(QUIZ, without, `ANSWER: ${answer}`).pass, true, `${id} forbidden[${i}] matters: ${answer}`);
+  }
+  // A forbidden word negated, or a compose-bound condition, is no fail; a confirm of nothing is no confirm.
+  for (const [id, a, want] of [
+    ['q47', 'Pass; do not confirm.', true], ['q47', 'Pass: never take it past the stop.', true], ['q47', 'Confirm nothing: pass.', true],
+    ['q48', 'Pass; never chase.', true], ['q48', 'Pass: don\'t take it at the plan\'s limit.', true], ['q48', 'Confirm nothing: refused.', true],
+    // A lead that is no pass (and names no confirm): the required verdict alone fails it (mutation check: required made '.').
+    // Review round (pc2-opus): a wait on the noun "close" (F1); a re-compose or a moved stop (F2), negated forms still right;
+    // a confirm after a full stop, a "Yes, I'd pass" (low items).
+    ['q47', 'Pass, then recompose with a new stop below the close.', false], ['q47', 'Pass the first compose, re-run compose_check with a stop below the 3m low and take it if OK.', false],
+    ['q47', 'Not as planned: recompose below the new low and go long.', false], ['q47', 'Pass; move the stop under the 3m low and enter.', false],
+    ['q48', 'Pass; redo compose_check with a different stop.', false],
+    ['q47', 'Pass: I won\'t recompose with a different stop.', true], ['q47', 'Pass; never widen the stop.', true], ['q47', 'Pass: no recompose.', true],
+    ['q47', 'Pass. Don\'t move the stop.', true], ['q48', 'Pass; nothing to recompose.', true],
+    ['q47', 'Pass. Confirm it with a stop under the 3m low.', false], ['q48', 'Pass. Take it at the plan\'s limit.', false], ['q47', 'Pass. The refusal is the pass; never confirm it.', true],
+    // The reviewer's post-read probes (pc2-opus post.json): a confirm deferred to a later candle, a bare "Long" lead, a pass
+    // after a compose lead.
+    ['q47', 'Wait for the next close.', false], ['q47', 'Yes.', false], ['q47', 'Buy at the plan\'s limit.', false], ['q47', 'Keep the plan\'s limit working.', false],
+    ['q48', 'Wait for a pullback to the plan\'s limit.', false], ['q48', 'Yes.', false], ['q48', 'Rest the limit at the planned entry.', false],
+  ]) assert.strictEqual(pass(id, `ANSWER: ${a}`), want, `${id} ${want ? 'right' : 'wrong'}: ${a}`);
+});
+
+test('grading: q47, q48, answers that echo the skill\'s own sentences (added after the regexes, a second probe): no misgrade', () => {
+  // A conditional pass ("pass only if it refuses"), a confirm named but not the verdict ("I would confirm, but compose_check
+  // refused it"): right. A confirm or take as the verdict after a lead or a "but"/"then": wrong.
+  const cases = {
+    q47: [
+      ['Pass — I would confirm, but compose_check refused it.', true], ['Pass: compose_check refusing it is the pass.', true],
+      ['Pass: any close meets its TAKE, but compose_check refused it.', true], ['Pass; a standing setup is confirmed only through compose_check, and it refused.', true],
+      ['Pass: it would be a confirm as for a met candle, but the refusal is the pass.', true], ['Pass; refused, so no confirm.', true],
+      ['Pass: the close is past the stop; the setup is invalidated.', true], ['Pass, with why: compose_check refused (stop not on the losing side).', true],
+      ['Not a pass: confirm.', false], ['No, take it.', false], ['Pass? No: confirm it.', false],
+    ],
+    q48: [
+      ['Pass: the entry ran away; I\'d only take it at the plan\'s limit if compose_check agreed.', true], ['Pass: compose_check refusing it is the pass.', true],
+      ['Pass; a plan that said take is no reason to take.', true], ['Pass — I planned to confirm it, but compose_check refused (R:R).', true],
+      ['Pass: the plan said TAKE, but the at-close facts decide.', true], ['Pass; never chase the plan\'s limit.', true],
+      ['Pass, with why: R:R under the minimum.', true], ['Pass: refused; confirming would be anchoring on the plan.', true],
+      ['Not a pass: confirm at the planned entry.', false], ['Not a pass: take it at the plan\'s price.', false], ['No, chase it.', false],
+    ],
+  };
+  cases.q47.push(['Pass, but confirm it.', false]);
+  cases.q48.push(['Pass, then take it at the plan\'s limit.', false]);
+  for (const [id, list] of Object.entries(cases)) {
+    for (const [a, want] of list) assert.strictEqual(pass(id, `ANSWER: ${a}`), want, `${id} ${want ? 'right' : 'wrong'}: ${a}`);
+  }
+});
+
+test('grading: q47-q49, the round-2 review\'s answers (its q45/q46 ones left out: q45 is now a yes/no, q46 is gone): a blind set (written before reading the regexes), its post-read probes (3 contrived ones left out, LOW) and echoes of the owning skills', () => {
+  // [id, answer, shouldPass], as the reviewer graded them (scratchpad tools, copied here so the set is held in the repo).
+  const cases = [
+    ["q47", "ANSWER: Pass: compose_check refused it (the stop is not on the losing side).", true],
+    ["q47", "ANSWER: Pass. compose_check refusing is the pass.", true],
+    ["q47", "ANSWER: Pass - the refusal decides; CYCLE RESULT: refused, stop not on losing side.", true],
+    ["q47", "ANSWER: Pass, no trade; I won't move the stop to make it compose.", true],
+    ["q47", "ANSWER: Pass; never widen the stop.", true],
+    ["q47", "ANSWER: Do not confirm: pass, compose_check refused.", true],
+    ["q47", "ANSWER: Confirm: the standing setup needs nothing of the closing candle.", false],
+    ["q47", "ANSWER: Confirm and recompose with the stop below the 3m low.", false],
+    ["q47", "ANSWER: Pass on this compose, then re-run compose_check with a wider stop and go long.", false],
+    ["q47", "ANSWER: Move the stop below the new low and take it.", false],
+    ["q47", "ANSWER: Take it - the plan said take.", false],
+    ["q47", "ANSWER: Go long at market with a new stop under the 3m close.", false],
+    ["q47", "ANSWER: Confirm; the 3m only times the entry, so it's noise.", false],
+    ["q47", "ANSWER: Enter short: the rejection failed.", false],
+    ["q48", "ANSWER: Pass: compose_check refused it, R:R under the minimum.", true],
+    ["q48", "ANSWER: Pass. The plan's take and its limit are no reason to take; the refusal is the pass.", true],
+    ["q48", "ANSWER: Pass, the entry ran away; don't chase.", true],
+    ["q48", "ANSWER: Pass - refused for R:R; no recompose.", true],
+    ["q48", "ANSWER: Pass; CYCLE RESULT: R:R refused.", true],
+    ["q48", "ANSWER: Confirm: I was sure and the plan said take.", false],
+    ["q48", "ANSWER: Take it at market, the trend is running.", false],
+    ["q48", "ANSWER: Chase it with a smaller size.", false],
+    ["q48", "ANSWER: Recompose with a further target so the R:R clears, then take it.", false],
+    ["q48", "ANSWER: Place the plan's limit 30 points below and wait for a fill.", false],
+    ["q48", "ANSWER: Confirm with a tighter stop to fix the R:R.", false],
+    ["q48", "ANSWER: Go long; the plan is the plan.", false],
+    ["q48", "ANSWER: Pass the compose, then move the stop closer and take it.", false],
+    ["q49", "ANSWER: No: a 3m close is a read, never a veto; weigh it with the count.", true],
+    ["q49", "ANSWER: No - the 3m only times the entry; it is context to weigh, not a pass by itself.", true],
+    ["q49", "ANSWER: No. Not by itself; read it as candle-reading does and let compose_check and the count decide.", true],
+    ["q49", "ANSWER: No, it's a read against to weigh; compose_check still decides.", true],
+    ["q49", "ANSWER: No; it's weak context, the setup still stands above the setup candle's low.", true],
+    ["q49", "ANSWER: Not by itself: context to weigh.", true],
+    ["q49", "ANSWER: Yes: the 3m closed back through the level, the rejection failed: pass.", false],
+    ["q49", "ANSWER: Yes, pass - a close back below the level is invalidation.", false],
+    ["q49", "ANSWER: Yes. The level is lost.", false],
+    ["q49", "ANSWER: No, ignore it: the standing setup needs nothing of the closing candle.", false],
+    ["q49", "ANSWER: No, it doesn't matter at all; confirm.", false],
+    ["q49", "ANSWER: No, it's irrelevant for a standing setup.", false],
+    ["q49", "ANSWER: Pass.", false],
+    ["q49", "ANSWER: No, pass: wait for the next 3m to reclaim the POC.", false],
+    ["q49", "ANSWER: It is a reason to pass: the failed rejection is a short setup.", false],
+    ["q49", "ANSWER: No - it has no effect on a standing scenario.", false],
+    ["q40", "ANSWER: Confirm: compose_check with the at-close reads.", true],
+    ["q40", "ANSWER: Pass, the plan is never evidence.", false],
+    ["q40", "ANSWER: Wait for the 3m to confirm before composing.", false],
+    ["q41", "ANSWER: Pass: TAKE not met, it closed below the prior VAH.", true],
+    ["q41", "ANSWER: Confirm, the plan said take.", false],
+    ["q41", "ANSWER: Confirm; the closing candle is just noise.", false],
+    ["q42", "ANSWER: No: pass; the plan is not evidence and TAKE was not met.", true],
+    ["q42", "ANSWER: Yes, take it as planned.", false],
+    ["q42", "ANSWER: Yes - I was sure.", false],
+    ["q43", "ANSWER: No: judge scenario 3 from the at-close facts; it may be taken.", true],
+    ["q43", "ANSWER: Yes, scenario 1 said pass so no trade.", false],
+    ["q44", "ANSWER: The at-close facts: the 1 pt wick.", true],
+    ["q44", "ANSWER: The plan's read, 4 pts.", false],
+    ["b8", "ANSWER: No: the Bias line refuses the long, no trade.", true],
+    ["b8", "ANSWER: Yes, confirm the long; the candle met TAKE.", false],
+    ["b8", "ANSWER: Confirm: the plan listed it and TAKE is met.", false],
+    ["q47", "ANSWER: Pass on the long; go short, the rejection failed.", false],
+    ["q47", "ANSWER: Pass; flip short below the setup candle's low.", false],
+    ["q49", "ANSWER: No, but I'd pass anyway.", false],
+    ["q49", "ANSWER: No — skip it though, the POC is lost.", false],
+    ["q49", "ANSWER: No, I'd pass.", false],
+    ["q49", "ANSWER: No; take the short instead.", false],
+    ["q49", "ANSWER: Not by itself, but with the level lost I pass.", false],
+    ["q49", "ANSWER: No, it's noise: confirm.", true],
+    ["q49", "ANSWER: No. The 3m only times the entry; alone it can be noise.", true],
+    ["q49", "ANSWER: No: a read, never a veto; the count decides.", true],
+    ["q49", "ANSWER: Never by itself; weigh it.", true],
+    ["q47", "ANSWER: Pass. compose_check refusing is the pass.", true],
+    ["q47", "ANSWER: No trade: compose_check refused.", true],
+    ["q48", "ANSWER: No trade; I would not chase.", true],
+    ["q48", "ANSWER: Pass: refused (R:R). Do not chase.", true],
+    ["q49", "ANSWER: No, the 3m close is not by itself a reason to pass.", true],
+    ["q49", "ANSWER: No: a read, never a veto; only a compose_check refusal is a pass.", true],
+    ["q49", "ANSWER: No; context to weigh, pass only if compose_check refuses.", true],
+    ["q49", "ANSWER: No: read that candle as candle-reading does; it is context, compose_check decides.", true],
+    ["q47", "ANSWER: Pass: compose_check refusing is the pass; never short against the trend.", true],
+    ["q47", "ANSWER: Pass; don't flip short.", true],
+    // N1: a confirm deferred to a later candle (no "only"); the trade-lifecycle echo "the entry, on the next 3m bar" stays right.
+    // N2: the skill's own examples, verbatim, and a pass after a refusal in its clause: right; ", so pass" still wrong.
+    // N3: q49, a pass after a leading "No"/"Not by itself"; the negated or conditional forms stay right.
+    ['q49', 'ANSWER: No, I\'d pass.', false], ['q49', 'ANSWER: No, but I\'d pass anyway.', false], ['q49', 'ANSWER: No — skip it though, the POC is lost.', false],
+    ['q49', 'ANSWER: Not by itself, but with the level lost I pass.', false],
+    ['q49', 'ANSWER: No, the 3m close is not by itself a reason to pass.', true], ['q49', 'ANSWER: No: a read, never a veto; only a compose_check refusal is a pass.', true],
+    ['q49', 'ANSWER: No; context to weigh, pass only if compose_check refuses.', true], ['q49', 'ANSWER: No: never a pass by itself', true],
+    // Low: a counter-trend short (the trend rule allows a long) on q47 and q49.
+    ['q47', 'ANSWER: Pass on the long; go short, the rejection failed.', false], ['q47', 'ANSWER: Pass; flip short here.', false], ['q49', 'ANSWER: No; take the short instead.', false],
+  ];
+  for (const [id, a, want] of cases) assert.strictEqual(Q.gradeAnswer(QUIZ, q(id), a).pass, want, `${id} ${want ? 'right' : 'wrong'}: ${a.split('\n')[0]}`);
+});
+
 test('summary: correct on all K, answered both ways, the totals, the bar; compare names each change', () => {
   const rows = [];
   for (const x of QUIZ.questions) for (let k = 1; k <= 5; k += 1) rows.push({ id: x.id, k, pass: true });
   for (const x of QUIZ.partB) for (let k = 1; k <= 5; k += 1) rows.push({ id: x.id, k, pass: true });
   const all = Q.summarize(QUIZ, rows, 5);
-  assert.deepStrictEqual([all.partA.allCorrect, all.partA.bothWays, all.partB.allCorrect, all.meetsBar], [42, 0, 8, true]);
+  assert.deepStrictEqual([all.partA.allCorrect, all.partA.bothWays, all.partB.allCorrect, all.meetsBar], [45, 0, 8, true]);
   const one = rows.map(r => (r.id === 'q6' && r.k === 2 ? { ...r, pass: false } : r));
   const s = Q.summarize(QUIZ, one, 5);
-  assert.deepStrictEqual([s.partA.allCorrect, s.partA.bothWays, s.partA.total, s.meetsBar], [41, 1, 209, false]);
+  assert.deepStrictEqual([s.partA.allCorrect, s.partA.bothWays, s.partA.total, s.meetsBar], [44, 1, 224, false]);
   // Too few runs is never correct on all K.
   assert.strictEqual(Q.summarize(QUIZ, rows.filter(r => r.k <= 3), 5).partA.allCorrect, 0);
   const d = Q.compare(all, s).find(x => x.id === 'q6');
