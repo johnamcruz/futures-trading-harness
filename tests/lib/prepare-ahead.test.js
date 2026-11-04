@@ -152,6 +152,23 @@ test('prepare-ahead: the plan file is keyed by symbol and the bar it is for, wri
   assert.strictEqual(PA.readPlan(home, 'MNQ', NEXT.t), null);
 });
 
+test('prepare-ahead: writing a plan prunes the plans of earlier trading days (a day\'s plans kept, never another symbol\'s), so the folder stays bounded', () => {
+  const home = tmp();
+  const old = makePlan({ plan: { next: { t: '2021-05-21T13:42:00.000Z', closedAt: '2021-05-21T13:45:00.000Z' } } });
+  PA.writePlan(home, old);
+  const earlier = makePlan({ plan: { next: { t: '2021-05-24T13:39:00.000Z', closedAt: '2021-05-24T13:42:00.000Z' } } });
+  PA.writePlan(home, earlier);
+  const mes = { ...makePlan({ plan: { next: { t: '2021-05-21T13:42:00.000Z', closedAt: '2021-05-21T13:45:00.000Z' } } }), symbol: 'MES' };
+  PA.writePlan(home, mes);
+  fs.writeFileSync(path.join(home, 'prepare', 'gate-log.jsonl'), '');
+  PA.writePlan(home, makePlan());
+  assert.strictEqual(PA.readPlan(home, 'MNQ', '2021-05-21T13:42:00.000Z'), null, 'an earlier day\'s plan pruned');
+  assert.ok(PA.readPlan(home, 'MNQ', '2021-05-24T13:39:00.000Z'), 'the same day\'s kept');
+  assert.ok(PA.readPlan(home, 'MNQ', NEXT.t));
+  assert.ok(PA.readPlan(home, 'MES', '2021-05-21T13:42:00.000Z'), 'another symbol\'s untouched');
+  assert.ok(fs.existsSync(path.join(home, 'prepare', 'gate-log.jsonl')), 'no other file touched');
+});
+
 test('prepare-ahead: the plan write is atomic: a write that fails leaves the earlier file whole and no temp file', () => {
   const home = tmp();
   const plan = makePlan();
@@ -188,6 +205,10 @@ test('prepare-ahead: validate: no plan, or a stale plan from an earlier bar, is 
   // The close is a later bar than the plan was for: stale.
   const later = PA.versionsOf({ briefing: briefingAt({ asOf: '2021-05-24T13:45:00.000Z', closedAt: '2021-05-24T13:48:00.000Z' }), chainSide: 1, factsKey: 'k1', desk: PA.deskKeys(DESK), day: '2021-05-24', news: { inBlackout: false } });
   assert.deepStrictEqual(PA.validate(makePlan(), later), { status: 'stale', reason: 'stale', detail: `the plan is for the bar opening ${NEXT.t}, the close is ${'2021-05-24T13:45:00.000Z'}'s` });
+});
+
+test('prepare-ahead: validate: a stand-down window is said as the window even when the facts changed too (the window first, so the report counts it)', () => {
+  assert.strictEqual(PA.validate(makePlan(), closeVersions({ b: { windowEntries: 'none' }, factsKey: 'k2' })).reason, 'window');
 });
 
 test('prepare-ahead: validate: a fill, a position or a P&L change (the phase-1 facts key) voids; an unknown key voids', () => {

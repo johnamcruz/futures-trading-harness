@@ -280,7 +280,10 @@ runs, the paper flag and the sizing facts at the cap in force
 | The desk's reports | one expected to hold past the close changed |
 | The prepare's session | its transcript is gone |
 
-A plan for another bar is never read (stale). Outside the plan (something
+A plan for another bar is never read (stale); writing a plan removes the
+symbol's plans of earlier trading days, so `prepare/` holds a day's at most. A
+stand-down window is checked before the facts key (which reads the window
+too), so the report counts it as the window. Outside the plan (something
 fired that no scenario names) and nothing fired are logged with what fired and
 the moving levels' kind (VWAP, profile, FVG, other); no confirm runs then. A
 plan void only by the 1h close also records what it would have been without
@@ -299,6 +302,19 @@ CLI's permission denials; `gateRefusals`, the lines it added to the shadow's
 gate log), its spawn-to-init time, and the confirm its first turn's cache
 creation (the first fork's cost).
 
+**Decisions (the owner's review, 2026-11-03):**
+
+- **The shadow confirm is not gated on flat.** When the full cycle has just
+  entered, the confirm still runs beside the fresh position: that take beside a
+  take is where the agreement data comes from. The protective stop is a
+  broker-side bracket, and the confirm ends at least the margin and the kill
+  grace before the next close.
+- **The prepare's read tools are not frozen at the bar's close.** `mtf_read`,
+  `market_snapshot` and `bar_briefing` read the bars as they stand when called:
+  live, a 1m bar that closed inside the forming bar can show, as the replay
+  broker shows it at the replay clock. The section and the briefing the prepare
+  is given are built from closed bars only; its own reads are its own.
+
 ### Reading a shadow replay
 
 Run a replay with `"prepareAhead": "shadow"` in its runner config (Claude
@@ -307,6 +323,12 @@ Code). Then:
 ```bash
 node scripts/prepare-shadow.js --home <run home> [--from YYYY-MM-DD] [--to YYYY-MM-DD] [--json]
 ```
+
+A shadow replay is not a pure observer of the old path: the shadow's wall time
+is charged as latency (it runs inside the step), so an off replay and a shadow
+replay of the same day can diverge in the old path through lateness (a later
+next cycle). Compare the old path's own results across arms with that in mind;
+the shadow's record is measured beside the cycle it ran after.
 
 It prints the closes by status, the void rate by reason and the outside-plan
 rate by level kind (over the closes that had a plan), the agreement with the

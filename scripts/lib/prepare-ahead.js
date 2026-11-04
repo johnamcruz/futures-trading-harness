@@ -145,6 +145,8 @@ function validate(plan, at, { ignoreHourClose = false } = {}) {
   if (!isObj(at) || at.asOf !== next.t) return { status: 'stale', reason: 'stale', detail: `the plan is for the bar opening ${next.t}, the close is ${at && at.asOf}'s` };
   const ses = plan.session || {};
   if (!ses.id || (ses.transcript && !fs.existsSync(ses.transcript))) return voidOf('session-missing', 'the prepare session\'s file is missing');
+  // A stand-down window first: the facts key reads the window too, so a window change would void as `facts` otherwise.
+  if (at.window !== 'allowed') return voidOf('window', `entries at the close: ${at.window}`);
   if (!p.factsKey || !at.factsKey) return voidOf('facts-unknown', 'the account\'s facts key is unknown');
   if (p.factsKey !== at.factsKey) return voidOf('facts', 'the account\'s facts changed (a fill, a position or the P&L)');
   if (p.day !== at.day) return voidOf('day', 'the trading day changed');
@@ -161,7 +163,6 @@ function validate(plan, at, { ignoreHourClose = false } = {}) {
   }
   if (!Number.isFinite(p.chainSide) || p.chainSide !== at.chainSide) return voidOf('chain-side', `the chain side is ${at.chainSide}, the plan's ${p.chainSide}`);
   if (!p.trendRule || p.trendRule !== at.trendRule) return voidOf('trend-rule', 'the trend rule changed');
-  if (at.window !== 'allowed') return voidOf('window', `entries at the close: ${at.window}`);
   if (!at.news || at.news.inBlackout !== false) return voidOf('news', 'a news blackout (or an unreadable blackouts file) at the close');
   for (const [role, k] of Object.entries(p.desk || {})) {
     if (!k || !k.until || Date.parse(k.until) <= closeMs) continue;
@@ -198,10 +199,22 @@ const shadowGateLog = home => path.join(home, PLAN_DIR, 'gate-log.jsonl');
 
 /** The plan file for a symbol's bar (the bar the plan is for: the next bar's open time). */
 const planFile = (home, symbol, barT) => path.join(home, PLAN_DIR, `${String(symbol).replace(/[^A-Za-z0-9]/g, '_')}-${String(barT).replace(/[^0-9TZ]/g, '')}.json`);
-/** The plan written whole (a temp file renamed over it: harness-run.js writeJsonAtomic); its path. */
+/**
+ * The plan written whole (a temp file renamed over it: harness-run.js writeJsonAtomic); its path. The symbol's plans of
+ * earlier trading days are removed then (a plan is read only at its own close), so the folder holds a day's at most.
+ */
 function writePlan(home, plan) {
   const file = planFile(home, plan.symbol, plan.next.t);
   writeJsonAtomic(file, plan);
+  const { tradingDayKey } = require('./trading/clock');
+  const day = tradingDayKey(new Date(plan.next.t));
+  const dir = path.dirname(file);
+  const own = `${String(plan.symbol).replace(/[^A-Za-z0-9]/g, '_')}-`;
+  for (const f of fs.readdirSync(dir).filter(x => x.startsWith(own) && x.endsWith('.json') && path.join(dir, x) !== file)) {
+    let t;
+    try { t = JSON.parse(fs.readFileSync(path.join(dir, f), 'utf8')).next.t; } catch (_err) { t = null; }
+    if (t && tradingDayKey(new Date(t)) < day) { try { fs.unlinkSync(path.join(dir, f)); } catch (_err) { /* gone */ } }
+  }
   return file;
 }
 /** The plan for a symbol's bar, or null (none, unreadable, or a file whose own bar or symbol is another's). */
