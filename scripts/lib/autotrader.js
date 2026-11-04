@@ -431,6 +431,11 @@ function validateConfig(raw) {
   // absent or false as before.
   if (cfg.deskBriefReports !== undefined && typeof cfg.deskBriefReports !== 'boolean') errors.push('deskBriefReports: true or false, or absent (as before: the desk\'s requests as they are)');
   if (cfg.deskBriefReports === true && cfg.harness !== 'claude') errors.push(`deskBriefReports: for harness "claude" only (harness ${cfg.harness})`);
+  // disableCliTelemetry true: Claude Code's CLI telemetry off in every run the runner starts (childEnv: CLI_TELEMETRY_ENV), which
+  // ends each run's process right after its result. Changes no model input, tool, gate or prompt, so it is no HEAD_DELIVERY_KEYS
+  // key. Static (read at start, a change takes effect after a restart); absent or false as before.
+  if (cfg.disableCliTelemetry !== undefined && typeof cfg.disableCliTelemetry !== 'boolean') errors.push('disableCliTelemetry: true or false, or absent (as before: the CLI keeps its telemetry)');
+  if (cfg.disableCliTelemetry === true && cfg.harness !== 'claude') errors.push(`disableCliTelemetry: for harness "claude" only (harness ${cfg.harness})`);
   // stableFirstPrompt: the trade cycle's prompt in its stable-first order (prompts().trade, TRADE_ORDER). Claude Code's
   // default, so it is set (true) when absent: the run's config, hashes and setup record name it, and its decisions are never
   // pooled with ones made under the old order (HEAD_DELIVERY_KEYS). false: the order as before. Claude Code only.
@@ -816,6 +821,8 @@ function stableHead(root = '') {
  */
 /** Claude Code's prompt-cache lifetime for its run's main conversation ('5m' or '1h'; childEnv sets it per run). */
 const CLAUDE_CACHE_TTL_ENV = 'CLAUDE_CODE_PROMPT_CACHE_TTL';
+/** Claude Code's telemetry switch (the runner config's disableCliTelemetry; childEnv sets it on every Claude Code run). */
+const CLI_TELEMETRY_ENV = 'DISABLE_TELEMETRY';
 const TRADE_ORDER = Object.freeze(['stable', 'instructions', 'situation', 'time', 'facts', 'desk', 'result']);
 const TRADE_ORDER_BEFORE = Object.freeze(['stable', 'time', 'facts', 'instructions', 'desk', 'situation', 'result']);
 const stableFirstOn = cfg => Boolean(cfg) && cfg.harness === 'claude' && cfg.stableFirstPrompt === true;
@@ -1049,6 +1056,8 @@ function childEnv(cfg, root, base = process.env, context = null) {
     try { ttl = require('./prompt-cache-ttl').ttlOfRun(cfg, role, role ? require('./harness-sync').loadAgents(PLUGIN_ROOT) : []); } catch (_err) { ttl = null; }
     if (ttl) env[CLAUDE_CACHE_TTL_ENV] = ttl;
   }
+  // Claude Code: its telemetry off for every run this machine's config asks (disableCliTelemetry): no exit tail after the result.
+  if (cfg.harness === 'claude' && cfg.disableCliTelemetry === true) env[CLI_TELEMETRY_ENV] = '1';
   // opencode: reading the runner's directories (the committed workspace/opencode.json can't name them) and its lock-down.
   if (cfg.harness === 'opencode') {
     // How its roles' prompts carry their skills (role-skills.js; index by default): the gate enforces index mode's lookups,
@@ -1503,6 +1512,7 @@ function runnerArgv(argv) {
 module.exports = {
   TRADE_ORDER,
   CLAUDE_CACHE_TTL_ENV,
+  CLI_TELEMETRY_ENV,
   TRADE_ORDER_BEFORE,
   stableFirstOn,
   tradeOrder,
