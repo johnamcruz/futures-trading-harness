@@ -30,8 +30,14 @@ const ROOT = path.resolve(__dirname, '..', '..');
 const flagOf = (argv, f) => (argv.includes(f) ? argv[argv.indexOf(f) + 1] : null);
 const uuid = () => crypto.randomUUID();
 
+// The shell commands Claude Code approves without a rule (read-only), as dontAsk leaves them: any other command needs an
+// allow rule (Bash(<prefix>:*)) or is refused.
+const READ_ONLY = /^(echo|ls|pwd|cat|head|tail|wc|grep|date)(\s|$)/;
+const bashAllowed = (list, cmd) => READ_ONLY.test(cmd) || list.some(a => { const m = /^Bash\((.*):\*\)$/.exec(a); return m && (cmd === m[1] || cmd.startsWith(`${m[1]} `)); });
+
 /** The Claude Code name a scripted step calls, or null (a step that calls no tool). */
 function toolOf(step) {
+  if (step.bash) return 'Bash';
   if (step.load) return 'Skill';
   if (step.lookup) return 'mcp__harness__skill_lookup';
   if (step.harness) return `mcp__harness__${step.harness}`;
@@ -77,8 +83,11 @@ function fakeClaude({ dir, script, preHooks: runHooks = true }) {
         call.hooked.push({ hook, name, code: r.status });
       }
     };
+    call.ran = [];
     const held = steps.map(s => {
       const name = toolOf(s);
+      // A shell command: approved read-only or by an allow rule (noted as run), else refused; no shell is run here.
+      if (name === 'Bash') return { act: () => { if (!dontAsk || bashAllowed(allowed, s.bash)) call.ran.push(s.bash); else call.refused.push('Bash'); } };
       if (!name || !dontAsk || allowedBy(allowed, name)) return s;
       return { act: () => { if (runHooks) preHooks(name, typeof s.args === 'function' ? {} : (s.args || {})); call.refused.push(name); } };
     });
@@ -101,4 +110,4 @@ function fakeClaude({ dir, script, preHooks: runHooks = true }) {
   return run;
 }
 
-module.exports = { fakeClaude, toolOf, allowedBy };
+module.exports = { fakeClaude, toolOf, allowedBy, bashAllowed };

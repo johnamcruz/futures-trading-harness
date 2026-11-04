@@ -144,6 +144,9 @@ test('prepare-ahead: the plan file is keyed by symbol and the bar it is for, wri
   // A plan file whose own bar isn't the one asked for (renamed, copied): refused, never read as this bar's.
   fs.copyFileSync(file, PA.planFile(home, 'MNQ', '2021-05-24T13:45:00.000Z'));
   assert.strictEqual(PA.readPlan(home, 'MNQ', '2021-05-24T13:45:00.000Z'), null);
+  // A plan file of another symbol at this symbol's name: refused.
+  fs.copyFileSync(file, PA.planFile(home, 'MES', NEXT.t));
+  assert.strictEqual(PA.readPlan(home, 'MES', NEXT.t), null);
   // A torn or unreadable file: none.
   fs.writeFileSync(file, '{"v":1,');
   assert.strictEqual(PA.readPlan(home, 'MNQ', NEXT.t), null);

@@ -34,6 +34,12 @@ const shadowScript = (o = {}) => (prompt, _env, { resumed }) => [
   { broker: 'journal_add', args: { kind: 'plan', text: 'shadow plan', contractId: 'MNQ' } },
   { harness: 'bars_fetch', args: { symbol: 'MNQ', minutes: 1, count: 5 } },
   { role: 'trade-executor', lookups: [], report: 'EXECUTED' },
+  // Shell commands: a read-only one (approved without a rule), a reading script the prepare is allowed, a bars fetch
+  // and a write (refused: no rule allows them).
+  { bash: 'echo checking' },
+  { bash: `node ${D.ROOT}/scripts/strategies.js list` },
+  { bash: `node ${D.ROOT}/scripts/bars.js --symbol MNQ` },
+  { bash: 'rm -rf /tmp/x' },
   { result: resumed
     ? (o.decision ? o.decision(prompt) : `DECISION: TAKE ${(/Your plan said: scenario (\d+)/.exec(prompt) || [])[1]}`)
     : [...prompt.matchAll(/^ {2}- (P\d+) \S+ (long|short) "([^"]+)"/gm)].map((m, j) => `SCENARIO ${j + 1}: ${m[1]} "${m[3]}" → TAKE if the 15m closes as listed | PASS if not; reads: "${m[3]}"; why: the bias`).concat(['STAND DOWN if: a news window', 'INVALID if: a fill', 'PLAN END']).join('\n') },
@@ -91,8 +97,9 @@ test('shadow e2e: the cycle, then the prepare (its plan written with its session
   assert.ok(prep, 'the prepare\'s own session');
   assert.strictEqual(plan.session.transcript, fake.file(plan.session.id), 'the transcript from the SessionStart hook\'s record');
   assert.strictEqual(prep.env.FTH_PREPARE, 'prepare');
+  assert.deepStrictEqual(prep.ran, ['echo checking', `node ${D.ROOT}/scripts/strategies.js list`], 'a read-only command and a reading script run; the bars fetch and the write are refused');
   // Every forbidden call refused by the narrower tools, none reaching its tool.
-  assert.deepStrictEqual(prep.refused, ['mcp__harness__compose_check', 'mcp__broker__place_order', 'mcp__broker__journal_add', 'mcp__harness__bars_fetch', 'Agent']);
+  assert.deepStrictEqual(prep.refused, ['mcp__harness__compose_check', 'mcp__broker__place_order', 'mcp__broker__journal_add', 'mcp__harness__bars_fetch', 'Agent', 'Bash', 'Bash']);
   // 04:12's cycle (the plan's close): the shadow confirm, a fork of the prepare's session.
   const sh = recs[2].prepare.shadow;
   assert.strictEqual(sh.planId, plan.id);
@@ -224,7 +231,7 @@ test('shadow e2e: the CLI runs PreToolUse hooks before dontAsk refuses a call: a
   assert.ok(lines.length >= 1 && lines.every(e => e.source === 'hook' && e.decision === 'blocked' && e.tool === 'place_order'), JSON.stringify(lines));
   const made = cycleRecords(on.w)[1].prepare.made;
   assert.ok(made.gateRefusals >= 1, JSON.stringify(made));
-  assert.deepStrictEqual(made.denied, ['mcp__harness__compose_check', 'mcp__broker__place_order', 'mcp__broker__journal_add', 'mcp__harness__bars_fetch', 'Agent']);
+  assert.deepStrictEqual(made.denied, ['mcp__harness__compose_check', 'mcp__broker__place_order', 'mcp__broker__journal_add', 'mcp__harness__bars_fetch', 'Agent', 'Bash', 'Bash']);
   assert.deepStrictEqual(D.placedAtBroker(on.w), []);
 });
 

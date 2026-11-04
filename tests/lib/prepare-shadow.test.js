@@ -199,6 +199,19 @@ test('shadow: on a frozen replay clock the two runs together get prepare.maxMs l
   assert.strictEqual(prep.limits.timeoutMs, pair - 5000);
 });
 
+test('shadow: the plan\'s facts key is phase 1\'s on the account read after the cycle (as the next cycle will read it), never the cycle\'s own', async () => {
+  const home = tmp();
+  await after(home, PREP, { factsKey: 'k-cycle-start', nextKey: 'k-after' });
+  assert.strictEqual(PA.readPlan(home, 'MNQ', FIRE).versions.factsKey, 'k-after');
+});
+
+test('shadow: the kill switch is read again once the account read is back: on by then, no prepare', async () => {
+  let n = 0;
+  const r = await after(tmp(), PREP, { killSwitch: () => (n += 1) > 2 });
+  assert.deepStrictEqual([r.made.outcome, r.made.why], ['skipped', 'kill-switch']);
+  assert.deepStrictEqual(r.cli.runs, []);
+});
+
 test('shadow: the agreement check can fail: a deliberately wrong shadow decision is logged as a disagreement', async () => {
   const home = tmp();
   await after(home, PREP);
