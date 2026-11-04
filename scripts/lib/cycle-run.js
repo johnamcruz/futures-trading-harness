@@ -82,15 +82,34 @@ async function precollected(cfg, prompt, context, precollect, deps, budgetMs) {
   return { runEnv, prompt: withData, context: { ...(context || {}), precollected: CD.records(got), ...(missing.length ? { notCollected: missing } : {}) } };
 }
 
-async function runCycle(cfg, action, prompt, opts, { timeoutMs = cfg.cycleTimeoutMinutes * 60000, context = null, entry: entryHook = null, precollect = null, overlap: overlapHook = null, onLog = null } = {}, deps = {}) {
+async function runCycle(cfg, action, prompt, opts, limits = {}, deps = {}) {
+  const { timeoutMs = cfg.cycleTimeoutMinutes * 60000, entry: entryHook = null, precollect = null, overlap: overlapHook = null, onLog = null, confirm = null } = limits;
+  let { context = null } = limits;
   // The workspace guard is the caller's to give: a missing one would let a run that changed the instructions go on.
   if (typeof deps.guard !== 'function') throw new Error('cycle-run: deps.guard (the workspace guard) is required');
   const { guard } = deps;
   const env = deps.env || process.env;
   const out = deps.out || (() => {});
   const err = deps.err || (() => {});
+  // prepareAhead "on" (`confirm`, runner.js: { session, base, suffix, timeoutMs, composed }): the head trader's run at
+  // this close is the confirm, a fork of the prepare's session, within its own bound and above the head trader's floor
+  // (so the full head trader can still run). None left, or a base its env would not carry: the full head trader runs
+  // instead (the old path, its own prompt and env), the confirm's outcome in the result only.
+  const fallBack = async (outcome, ms = 0) => {
+    const r = await runCycle(cfg, action, prompt, opts, { ...limits, confirm: null }, deps);
+    return { ...r, confirm: { outcome, ms, fellBack: true } };
+  };
+  const confirmMs = confirm ? Math.min(confirm.timeoutMs, timeoutMs - minHeadMs()) : 0;
+  if (confirm && !(confirmMs > 0)) return fallBack('no-time');
+  if (confirm) {
+    context = { ...(context || {}), confirmBase: confirm.base };
+    if (childEnv(cfg, deps.root, env, context).FTH_CONFIRM_BASE !== confirm.base) return fallBack('no-base');
+  }
+  const promptIn = prompt;
+  if (confirm && !(opts && opts.dryRun) && typeof precollect !== 'function') prompt = `${prompt}${confirm.suffix}`;
   const now = (deps.now || (() => new Date()))();
-  let argv = buildCommand(cfg, prompt, deps.root, env);
+  const argOpts = confirm ? { confirm: confirm.session } : {};
+  let argv = buildCommand(cfg, prompt, deps.root, env, argOpts);
   if (opts && opts.dryRun) {
     out(`${JSON.stringify(argv)}\n`);
     return { ok: true, timedOut: false };
@@ -101,11 +120,12 @@ async function runCycle(cfg, action, prompt, opts, { timeoutMs = cfg.cycleTimeou
   const wallNow = deps.wallNow || Date.now;
   const startedMs = wallNow();
   // This machine's opt-in only (cycleDataInPrompt): the cycle's reads made first, in its time, with the run's own environment.
-  const pre = typeof precollect === 'function' ? await precollected(cfg, prompt, context, precollect, { ...deps, env }, timeoutMs - minHeadMs()) : null;
+  // (The confirm: its reads with the at-close facts first, then the plan's line and the rule, after them.)
+  const pre = typeof precollect === 'function' ? await precollected(cfg, prompt, context, precollect, { ...deps, env }, (confirm ? confirmMs : timeoutMs - minHeadMs())) : null;
   if (pre) {
-    prompt = pre.prompt;
+    prompt = confirm ? `${pre.prompt}${confirm.suffix}` : pre.prompt;
     context = pre.context;
-    argv = buildCommand(cfg, prompt, deps.root, env);
+    argv = buildCommand(cfg, prompt, deps.root, env, argOpts);
   }
   // The run gets what is left of the cycle's limit after the reads (none made: the whole limit, as without them).
   // (Never under its floor because of them: a deadline's lag aside, as the runner's desk leaves it.)
@@ -118,10 +138,21 @@ async function runCycle(cfg, action, prompt, opts, { timeoutMs = cfg.cycleTimeou
     try { overlap = overlapHook({ env: runEnv, startedWall: startedMs, budgetMs: Math.max(0, timeoutMs - (wallNow() - startedMs)) }) || null; } catch (e) { err(`[autotrader] phase 2 can't start at the compose (${e.message}): it runs after the head trader's run\n`); }
   }
   let res;
+  const runMs = confirm ? Math.max(0, confirmMs - (wallNow() - startedMs)) : pre ? Math.max(timeoutMs - (wallNow() - startedMs), Math.min(minHeadMs(), timeoutMs)) : timeoutMs;
   try {
-    res = await runOnce(cfg, argv, pre ? Math.max(timeoutMs - (wallNow() - startedMs), Math.min(minHeadMs(), timeoutMs)) : timeoutMs, context, { ...deps, env }, runEnv);
+    res = await runOnce(cfg, argv, runMs, context, { ...deps, env }, runEnv);
   } finally {
     if (overlap) overlap.halt();
+  }
+  // The confirm erred or timed out before a compose (none recorded at this close since it started): the full head trader
+  // runs with what is left of the cycle's limit, exactly as without prepare ahead. One that composed never runs it again.
+  let composedFirst = false;
+  if (confirm) { try { composedFirst = Boolean(confirm.composed()); } catch (_err) { composedFirst = true; } }
+  if (confirm && (!res.ok || res.timedOut) && !composedFirst) {
+    if (overlap) overlap.finish('the confirm failed before a compose: the full head trader runs');
+    const ms = Math.max(0, wallNow() - startedMs);
+    const r = await runCycle(cfg, action, promptIn, opts, { ...limits, confirm: null, timeoutMs: Math.max(0, timeoutMs - ms) }, deps);
+    return { ...r, confirm: { outcome: res.timedOut ? 'timeout' : 'error', ms, fellBack: true } };
   }
   // The result as scored (autotrader.js scoreRun: a `blocked` with no order call is no-trade), the agent's own kept.
   const scored = scoreRun(res, { action, harness: cfg.harness });
@@ -190,7 +221,8 @@ async function runCycle(cfg, action, prompt, opts, { timeoutMs = cfg.cycleTimeou
   // A cached phase 1 the gateway refused this cycle ([phase1-cache], its gate log): the report cache drops it, so the next
   // cycle runs phase 1 fresh (runner-wiring.js reportCacheFor record).
   const phase1Refused = phase1RefusedIn(res.env, startedMs, wallNow());
-  return { ...cycleOutcome(res, { result, intact, action, lookups, reportedResult, resultNote }), ...(phase1Refused ? { phase1Refused: true } : {}) };
+  const confirmed = confirm ? { confirm: { outcome: res.ok && !res.timedOut ? 'done' : res.timedOut ? 'timeout' : 'error', ms: Math.max(0, endedMs - startedMs), fellBack: false } } : {};
+  return { ...cycleOutcome(res, { result, intact, action, lookups, reportedResult, resultNote }), ...(phase1Refused ? { phase1Refused: true } : {}), ...confirmed };
 }
 
 /** The cycle's gate log holds a [phase1-cache] refusal (its place_order records, cycle-log.js gateOrders), from `fromMs` on. */

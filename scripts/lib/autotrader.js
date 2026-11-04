@@ -1012,6 +1012,13 @@ function childEnv(cfg, root, base = process.env, context = null) {
   // run starts with this environment) records a refused order of a prepare there, never in the old path's log. The
   // gate's logic is unchanged; only where it writes. Any other run keeps the log it was given.
   if (prep) env.FTH_GATE_LOG = require('./prepare-ahead').shadowGateLog(harnessHome(base));
+  // prepareAhead "on": the confirm (the head trader's real run at the close, a fork of the prepare's session) names the
+  // prepare's plan record (FTH_CONFIRM_BASE, an absolute file in <home>/prepare/): the gate reads the fork's transcript
+  // without the prepare's lines for the roles that ran (trading/confirm-base.js). Only the confirm's: never a role's or a
+  // shadow run's, never inherited.
+  const confirmBase = context && !env.FTH_ROLE_RUN && !prep && typeof context.confirmBase === 'string' ? context.confirmBase : null;
+  if (confirmBase && path.isAbsolute(confirmBase) && path.dirname(confirmBase) === path.join(harnessHome(base), 'prepare')) env.FTH_CONFIRM_BASE = confirmBase;
+  else delete env.FTH_CONFIRM_BASE;
   // Phase 2 started at the head trader's compose (runner-entry.js overlapFor): its policy verdicts go to its own stage
   // (trading/verdict-stage.js), promoted only when the entry adopts it. Never inherited (the head trader's run never has one).
   if (context && typeof context.verdictStage === 'string' && context.verdictStage) env.FTH_VERDICT_STAGE = context.verdictStage;
@@ -1130,12 +1137,20 @@ const writeRolePrompt = (cfg, root, env, role) => (claudeRolesOn(cfg) ? require(
  * argv for one headless run; `agent`: one role run on its own by the runner (ROLE_RUNS only, else throws). `prepare`
  * (prepare-ahead.js, Claude Code only): "prepare" or "confirm", the head trader's argv with its allowed tools narrowed
  * (claudePrepareTools) and, for the confirm, `--resume <resume> --fork-session` (a new session forked from the prepare's);
- * `effort`: its --effort, when config/runner.json prepare.effort names one (none: the CLI's default).
+ * `effort`: its --effort, when config/runner.json prepare.effort names one (none: the CLI's default). `confirm`
+ * (prepareAhead "on", Claude Code only): the prepare's session id: the head trader's own argv whole (its full tools: it
+ * composes as the head trader does) plus `--resume <confirm> --fork-session`.
  */
-function buildCommand(cfg, prompt, root, env = process.env, { agent = null, prepare = null, resume = null, effort = null } = {}) {
+function buildCommand(cfg, prompt, root, env = process.env, { agent = null, prepare = null, resume = null, effort = null, confirm = null } = {}) {
   const extra = cfg.extraArgs.map(String);
   const model = cfg.model ? String(cfg.model) : '';
   if (agent && !ROLE_RUNS.has(cfg.harness)) throw new Error(`autotrader: ${cfg.harness} runs no role on its own (its head trader launches its roles)`);
+  if (confirm !== null) {
+    if (cfg.harness !== 'claude') throw new Error(`autotrader: prepare ahead runs on Claude Code only (harness ${cfg.harness})`);
+    if (!(typeof confirm === 'string' && confirm)) throw new Error('autotrader: the confirm resumes the prepare\'s session (a session id)');
+    if (agent) throw new Error('autotrader: the confirm is the head trader\'s run, never a role\'s run');
+    if (prepare !== null || resume !== null) throw new Error('autotrader: a shadow run or the confirm, never both');
+  }
   if (prepare !== null || resume !== null) {
     if (cfg.harness !== 'claude') throw new Error(`autotrader: prepare ahead runs on Claude Code only (harness ${cfg.harness})`);
     if (!['prepare', 'confirm'].includes(prepare)) throw new Error(`autotrader: prepare: "prepare" or "confirm" (got ${JSON.stringify(prepare)})`);
@@ -1163,6 +1178,8 @@ function buildCommand(cfg, prompt, root, env = process.env, { agent = null, prep
         ...(replay ? ['--strict-mcp-config', '--mcp-config', JSON.stringify(replayMcpConfig(root))] : []),
         // The shadow confirm: a new session forked from the prepare's (its history, cached), never the prepare's own.
         ...(prepare === 'confirm' ? ['--resume', resume, '--fork-session'] : []),
+        // prepareAhead "on": the confirm, the head trader's own run whole, on a fork of the prepare's session.
+        ...(confirm !== null ? ['--resume', confirm, '--fork-session'] : []),
         ...(prepare && effort ? ['--effort', String(effort)] : []),
         ...(model ? ['--model', model] : []), ...extra];
     }

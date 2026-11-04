@@ -149,3 +149,48 @@ test('PA and autotrader agree on the prepare\'s denied tools (one home: prepare-
   assert.deepStrictEqual([...PA.PREPARE_DENIED.broker].sort(), ['get_bars', 'get_quote']);
   assert.deepStrictEqual([...PA.PREPARE_SCRIPTS].sort(), ['market-snapshot.js', 'mtf.js', 'strategies.js']);
 });
+
+// --- prepareAhead "on" (PR B2): the confirm IS the head trader's run at the close, a fork of the prepare's session ------
+
+test('"on": the confirm\'s argv is the head trader\'s own, whole (its full --allowedTools, the same --disallowedTools, model, plugin dir, system-prompt file, MCP config), plus --resume <prepare session> --fork-session; no --effort', () => {
+  const home = tmpDir();
+  const env = { FTH_HOME: home, HOME: home, FTH_REPLAY_NOW: '2026-04-28T14:00:00.000Z' };
+  for (const c of [validateConfig({ harness: 'claude', model: 'm1', prepareAhead: 'on' }), validateConfig({ harness: 'claude', headSkillsInPrompt: true, prepareAhead: 'on', extraArgs: ['--x'] })]) {
+    const head = buildCommand(c, 'P', ROOT, env);
+    const conf = buildCommand(c, 'P', ROOT, env, { confirm: 'ses-123' });
+    const r = conf.indexOf('--resume');
+    assert.ok(r > 0);
+    assert.deepStrictEqual(conf.slice(r, r + 3), ['--resume', 'ses-123', '--fork-session']);
+    // Everything else exactly the head trader's: its tools whole (it composes through compose_check as the head does).
+    assert.deepStrictEqual([...conf.slice(0, r), ...conf.slice(r + 3)], head);
+    assert.ok(flag(conf, '--allowedTools').split(',').includes('mcp__harness'), 'compose_check with the harness tools');
+    assert.ok(!conf.includes('--effort'), 'the confirm\'s effort is the head trader\'s (an open owner decision: none)');
+  }
+  const c = validateConfig({ harness: 'claude', prepareAhead: 'on' });
+  assert.throws(() => buildCommand(validateConfig({ harness: 'opencode' }), 'P', ROOT, env, { confirm: 'ses-1' }), /prepare ahead runs on Claude Code only/);
+  for (const bad of ['', 7, {}]) assert.throws(() => buildCommand(c, 'P', ROOT, env, { confirm: bad }), /the confirm resumes the prepare's session/, String(bad));
+  assert.throws(() => buildCommand(c, 'P', ROOT, env, { confirm: 'ses-1', agent: 'risk-manager' }), /never a role's run/);
+  assert.throws(() => buildCommand(c, 'P', ROOT, env, { confirm: 'ses-1', prepare: 'prepare' }), /a shadow run or the confirm, never both/);
+});
+
+test('childEnv "on": the confirm runs under the close\'s cycle env (its entry, roles; the normal gate log), with FTH_CONFIRM_BASE its plan record; never FTH_PREPARE; no other run has the base, an inherited one is dropped', () => {
+  const c = validateConfig({ harness: 'claude', prepareAhead: 'on' });
+  const home = tmpDir();
+  const base = { FTH_HOME: home, FTH_GATE_LOG: '/old/gate.jsonl', FTH_CONFIRM_BASE: '/inherited.json', FTH_PREPARE: 'confirm' };
+  const plan = path.join(home, 'prepare', 'MNQ-20260428T041200000Z.json');
+  const ctx = { action: 'trade', entry: true, rolesFile: path.join(home, 'roles.jsonl'), confirmBase: plan };
+  const conf = childEnv(c, ROOT, base, ctx);
+  const head = childEnv(c, ROOT, base, { action: 'trade', entry: true, rolesFile: path.join(home, 'roles.jsonl') });
+  assert.strictEqual(conf.FTH_CONFIRM_BASE, plan);
+  assert.ok(!('FTH_PREPARE' in conf) && !('FTH_PREPARE_SESSION' in conf), 'the stop hook asks it for its CYCLE RESULT, as the head trader');
+  assert.strictEqual(conf.FTH_GATE_LOG, '/old/gate.jsonl', 'the normal gate log: it is the close\'s real head run');
+  // The head trader's env but the base and its own transcript (so its own cycle id).
+  const { FTH_CONFIRM_BASE: _b, FTH_CYCLE_TRANSCRIPT: t1, ...restConf } = conf;
+  const { FTH_CYCLE_TRANSCRIPT: t2, ...restHead } = head;
+  assert.deepStrictEqual(restConf, restHead);
+  assert.ok(t1 && t2 && t1 !== t2);
+  // Any other run: no base, inherited or not; a base not in <home>/prepare/, or not absolute, is never given.
+  for (const other of [null, { action: 'trade' }, { action: 'trade', roleRun: 'trade-executor', confirmBase: plan }, { action: 'trade', prepare: 'prepare', confirmBase: plan }, { action: 'trade', confirmBase: 'prepare/x.json' }, { action: 'trade', confirmBase: path.join(home, 'x.json') }]) {
+    assert.ok(!('FTH_CONFIRM_BASE' in childEnv(c, ROOT, base, other)), JSON.stringify(other));
+  }
+});
