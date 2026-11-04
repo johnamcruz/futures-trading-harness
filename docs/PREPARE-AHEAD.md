@@ -167,6 +167,34 @@ trusted by any check, so nothing can fail open on it.
   gaps' edges (read through the gap's side). One of those reacting at the
   close is outside the plan, and the confirm reasons fully on it.
 
+### Standing candidates (at a close that completes no 15m candle; PR A2)
+
+- **When:** the next close completes no candle of the setup frame. The two
+  kinds share one check (`setupFrameAt`), so at any close exactly one of the
+  reaction and standing kinds applies.
+- **Which:** the setup frame's last completed candle is the one the close
+  will read, whatever the closing bar does. Each of its reactions at a fixed
+  key level (the reactions' levels: never the VWAP, the session profile or a
+  gap's edge; never a compression break or a CISD) that the at-close "Setups
+  to check" line lists is a candidate. The list comes from the close's own
+  code: `setup-moments.js` `listedReads` and `setupMoment` on the at-close
+  briefing, built from the closed bars plus a closing bar. The read is that
+  line's read, quoted.
+- **The trigger:** still standing and unchanged at the next close. As a
+  condition on the closing candle: the next bar (by its open time, as every
+  trigger), with any range, volume and close. The section names the setup
+  candle's open and close and the close at which it stops being the last
+  completed one. A later bar (after a data gap) is another close
+  (`triggerMet` false).
+- **Sides and plan:** as the reactions'. A side the trend rule refuses now is
+  left out with the reason. Otherwise the side's precondition is the close's
+  trend rule. The plan is the Standard plan's (`composeAt`) at the closing
+  bar, checked with the attempt policy's entry rule.
+- The property test (`tests/lib/next-close-standing.test.js`) checks both
+  directions on random, huge and gapping closing bars: the close lists a
+  standing candidate exactly when its trigger is met, and every fixed-level
+  setup the close lists on an allowed side was a candidate.
+
 ### The plan, for each candidate
 
 - The rule in words, from the strategies' own numbers: the entry, the stop
@@ -399,6 +427,26 @@ the confirm takes the head trader's place.
    record and the day log. `node scripts/prepare-shadow.js` reports the path shares,
    close to order (median, p90) by desk ran and desk cached, the late refusals
    by kind and outside the plan by level kind.
+5. **Timed by its parts (PR A2).** The confirm's `ms` is the whole cycle run,
+   phase 2 and the executor included. Its own turn is recorded apart, from
+   the run's line times (`cycle-timing.js` `confirmTurn`):
+   - `turnMs`: from its spawn to the result of its last `compose_check`
+     (`turnTo` `compose`). With no compose, to its CYCLE RESULT line (a
+     pass: `result`). With neither timed, to its run's end (`end`).
+   - `composes`: how many `compose_check` calls it made.
+   - `runMs`: from its spawn to its run's end.
+   - `precollectMs`: the reads made before its spawn.
+
+   A confirm that fell back has none of these. The record also carries
+   phase 2's and the executor's run times from the entry's timing
+   (`phase2Ms`, `executorMs`), on every path. The report adds:
+   - the confirm turn's time (median, p90) and where each turn ended;
+   - close to order by path, each split by desk ran and desk cached. The
+     paths are `confirm` and each fallback by its reason: `fallback:outside`,
+     `fallback:void:<reason>`, `fallback:confirm-<outcome>`;
+   - the fallbacks pooled;
+   - phase 2 and the executor, on the confirm's closes and on the
+     fallbacks', each apart.
 
 A confirm's failure does not count toward `maxConsecutiveErrors`: it falls
 back to a working head trader's run (a degradation, not an outage); its share
@@ -463,10 +511,11 @@ was made on) makes them differ, on valid plans (the anchoring risk) and, on a
 day where every plan is void (the P&L change), reached only through the
 validity check broken. The mock's confirm
 also enters without loading again (`skipLoads`); the fake CLI fires the
-plugin's PreToolUse and PostToolUse hooks as the real one does. On these days
-the mock takes the `outside` path on 10 to 12 of about 21 closes a day (the
-moving levels and gap edges v1 does not list), so the confirm decides 2 to 6
-closes a day. The rows and the controls run on the first day, the off runs
+plugin's PreToolUse and PostToolUse hooks as the real one does. Before PR A2,
+the mock took the `outside` path on 10 to 12 of about 21 closes a day (the
+moving levels and gap edges v1 does not list, and the standing 15m
+reactions), and the confirm decided 2 to 6 closes a day. With the standing
+candidates listed, those shares are not yet measured. The rows and the controls run on the first day, the off runs
 once (about 21 day-runs, 7 to 12 minutes on CI's runner). The opencode world,
 main's tier 2 baseline and the move goldens are untouched.
 
@@ -513,8 +562,11 @@ each step.
   same window the close will.
 - **Standing setups.** At the next close "Setups to check" still lists the
   setups standing from earlier closes (a 15m reaction's confirmation phase,
-  a compression break, a live CISD), whatever the closing candle does. They
-  are not in this section; matching them is the confirm's.
+  a compression break, a live CISD), whatever the closing candle does. The
+  15m reactions at a fixed key level are in this section as standing
+  candidates (above, PR A2). The confirm's match (`matchScenario`) finds
+  their scenarios by read name, as any other's. A compression break, a CISD
+  or a moving level standing there is still outside the plan.
 - **Moving levels and gap edges** (above): outside the plan in v1, by the
   owner's decision (momentum and the fixed key levels only).
 - **The inputs the runner passes** (above): its lane's strategies and
@@ -603,7 +655,10 @@ with no precondition flipping (`tests/lib/next-close.test.js`).
 
 Each is its own PR, with the adversarial review and the goal regression.
 
-1. **A (this):** the briefing section, its tests, this document.
+1. **A (this):** the briefing section, its tests, this document. **A2
+   (built):** the standing candidates (above), and the on mode's timing by
+   its parts (the confirm's turn, phase 2 and the executor apart; close to
+   order by path and desk).
 2. **B:** the runner's prepare and confirm (resume, versions, void,
    fallback, deadline, skip), the opt-in key, the logging, the hook and
    gateway wiring tests for the cycle attribution, the tier-2 mock with both

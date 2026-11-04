@@ -291,3 +291,34 @@ test('harness run: each standard-output line\'s arrival time, in order (lineTime
   assert.ok(r.lineTimes.every((t, i) => t >= written[i] && (i === 0 || t >= r.lineTimes[i - 1])), JSON.stringify({ written, at: r.lineTimes }));
   assert.ok(r.lineTimes[2] >= written[0] + 40, 'the late line arrived late');
 });
+
+// --- prepare ahead "on": the confirm turn's own time (spawn to its compose_check's result, or to its pass) ---------
+
+/** A Claude stream-json run: [event, wall second] pairs; its lines and their arrival times (harness-run.js lineTimes). */
+const streamOf = pairs => ({ text: `${pairs.map(([e]) => JSON.stringify(e)).join('\n')}\n`, lineTimes: pairs.map(([, s]) => w(s)) });
+const use = (id, name, extra = {}) => ({ type: 'assistant', ...extra, message: { content: [{ type: 'tool_use', id, name, input: {} }] } });
+const answer = (id, extra = {}) => ({ type: 'user', ...extra, message: { content: [{ type: 'tool_result', tool_use_id: id, content: 'x' }] } });
+const say = (text, extra = {}) => ({ type: 'assistant', ...extra, message: { content: [{ type: 'text', text }] } });
+
+test('confirm turn: spawn to its last compose_check result (a refused compose then an OK one: the second); the run\'s end apart', () => {
+  const { text, lineTimes } = streamOf([
+    [{ type: 'system', subtype: 'init' }, 2], [use('a', 'mcp__harness__bar_briefing'), 3], [answer('a'), 4],
+    [use('c1', 'mcp__harness__compose_check'), 6], [answer('c1'), 7], [use('c2', 'mcp__harness__compose_check'), 9], [answer('c2'), 10],
+    [use('r', 'mcp__harness__reason_check'), 12], [answer('r'), 13], [say('CYCLE RESULT: planned - trade_lifecycle long 3'), 17],
+  ]);
+  assert.deepStrictEqual(T.confirmTurn({ text, lineTimes, spawnMs: w(0), runEndMs: w(18) }), { turnMs: 10000, turnTo: 'compose', composes: 2, runMs: 18000 });
+});
+
+test('confirm turn: a pass (no compose) ends at its CYCLE RESULT line; neither timed: the run\'s end; a subagent\'s compose is not the head\'s', () => {
+  const pass = streamOf([[{ type: 'system', subtype: 'init' }, 1], [say('CYCLE RESULT: no-trade - the candle did not meet it'), 6], [{ type: 'result', subtype: 'success', result: 'CYCLE RESULT: no-trade - the candle did not meet it' }, 7]]);
+  assert.deepStrictEqual(T.confirmTurn({ ...pass, spawnMs: w(0), runEndMs: w(8) }), { turnMs: 7000, turnTo: 'result', composes: 0, runMs: 8000 });
+  // No line times (a transcript that carries none): the run's end.
+  assert.deepStrictEqual(T.confirmTurn({ text: pass.text, lineTimes: null, spawnMs: w(0), runEndMs: w(8) }), { turnMs: 8000, turnTo: 'end', composes: 0, runMs: 8000 });
+  // A compose inside a subagent's (or a sidechain's) stream: not the confirm's own.
+  const sub = streamOf([[use('c', 'mcp__harness__compose_check', { parent_tool_use_id: 't' }), 2], [answer('c', { parent_tool_use_id: 't' }), 3], [use('d', 'mcp__harness__compose_check', { isSidechain: true }), 4], [answer('d', { isSidechain: true }), 5], [say('CYCLE RESULT: no-trade - x'), 6]]);
+  assert.deepStrictEqual(T.confirmTurn({ ...sub, spawnMs: w(0), runEndMs: w(7) }), { turnMs: 6000, turnTo: 'result', composes: 0, runMs: 7000 });
+  // A compose call never answered (the run died in it): no compose end; an unreadable spawn: nothing.
+  const open = streamOf([[use('c', 'mcp__harness__compose_check'), 2]]);
+  assert.deepStrictEqual(T.confirmTurn({ ...open, spawnMs: w(0), runEndMs: w(4) }), { turnMs: 4000, turnTo: 'end', composes: 0, runMs: 4000 });
+  assert.deepStrictEqual(T.confirmTurn({ ...open, spawnMs: NaN, runEndMs: w(4) }), { turnMs: null, turnTo: null, composes: 0, runMs: null });
+});

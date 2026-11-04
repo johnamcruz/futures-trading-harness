@@ -58,6 +58,36 @@ test('runCycle confirm: the head trader\'s argv whole plus the fork of the prepa
   assert.deepStrictEqual({ outcome: r.confirm.outcome, fellBack: r.confirm.fellBack }, { outcome: 'done', fellBack: false });
 });
 
+test('runCycle confirm: its turn\'s own time apart from the run and the entry: spawn to its compose_check\'s result (the stream\'s line times, on the clock its spawn was read on), the run\'s end, the reads before it', async () => {
+  const s = setup();
+  // The wall clock: the cycle starts at 1000; the reads take 500; the spawn at 1500; the run's lines at 2000..9000; it
+  // ends at 9500; the runner's entry (phase 2, the executor) takes 30 s after it.
+  let wall = 1000;
+  const wallNow = () => wall;
+  const lines = [
+    { type: 'system', subtype: 'init', session_id: 's' },
+    { type: 'assistant', message: { content: [{ type: 'tool_use', id: 'c', name: 'mcp__harness__compose_check', input: {} }] } },
+    { type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: 'c', content: 'OK' }] } },
+    { type: 'assistant', message: { content: [{ type: 'text', text: 'CYCLE RESULT: planned - trade_lifecycle long 3' }] } },
+    { type: 'result', subtype: 'success', result: 'CYCLE RESULT: planned - trade_lifecycle long 3' },
+  ].map(e => JSON.stringify(e)).join('\n');
+  const run = async () => { wall = 9500; return { ok: true, timedOut: false, code: 0, output: lines, stdout: lines, lineTimes: [2000, 3000, 6500, 8000, 9000] }; };
+  const precollect = () => { wall = 1500; return { blocks: [], missing: [] }; };
+  const entry = async () => { wall = 39500; return null; };
+  const r = await runCycle(cfg, 'trade', 'CYCLE PROMPT', {}, { timeoutMs: 360000, context: s.context, precollect, entry, confirm: { session: 'ses-prep', base: s.base, suffix: SUFFIX, timeoutMs: 90000, composed: () => true } }, deps(s, run, { wallNow }));
+  assert.deepStrictEqual(r.confirm, { outcome: 'done', ms: 38500, fellBack: false, late: [], turnMs: 5000, turnTo: 'compose', composes: 1, runMs: 8000, precollectMs: 500 });
+  // A pass (no compose): the turn ends at its CYCLE RESULT line.
+  wall = 1000;
+  const passLines = [{ type: 'system', subtype: 'init', session_id: 's' }, { type: 'assistant', message: { content: [{ type: 'text', text: 'CYCLE RESULT: no-trade - not met' }] } }].map(e => JSON.stringify(e)).join('\n');
+  const passRun = async () => { wall = 7000; return { ok: true, timedOut: false, code: 0, output: passLines, stdout: passLines, lineTimes: [2000, 4000] }; };
+  const p = await runCycle(cfg, 'trade', 'CYCLE PROMPT', {}, { timeoutMs: 360000, context: s.context, confirm: { session: 'ses-prep', base: s.base, suffix: SUFFIX, timeoutMs: 90000, composed: () => false } }, deps(s, passRun, { wallNow }));
+  assert.deepStrictEqual([p.confirm.turnMs, p.confirm.turnTo, p.confirm.composes, p.confirm.runMs, p.confirm.precollectMs], [3000, 'result', 0, 6000, 0]);
+  // A confirm that failed and fell back: no turn of its own to time (the full head trader decided).
+  const failed = await runCycle(cfg, 'trade', 'CYCLE PROMPT', {}, { timeoutMs: 360000, context: s.context, confirm: { session: 'ses-prep', base: s.base, suffix: SUFFIX, timeoutMs: 90000, composed: () => false } }, deps(s, runOf([], [{ ok: false }, {}])));
+  assert.strictEqual(failed.confirm.fellBack, true);
+  assert.ok(!('turnMs' in failed.confirm), JSON.stringify(failed.confirm));
+});
+
 test('runCycle confirm: the pre-collected reads stay with the at-close facts: the plan\'s line and the rule come after them', async () => {
   const s = setup();
   const seen = [];

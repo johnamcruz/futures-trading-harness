@@ -9,8 +9,11 @@
  *                                       outsideByKind, agreement: { agree, disagree, unknown, rate }, confirms, confirmMs,
  *                                       made, skippedBy, prepareMs, aborted, tokens: { prepare, confirm },
  *                                       forbidden: { denied: { tool: n }, attempted: { tool: n }, gateRefusals },
- *                                       on: { closes, paths, shares, voidBy, confirms, closeToOrder: { all, deskRan, deskCached,
- *                                       confirmed }, late, outsideByKind } | null }
+ *                                       on: { closes, paths, shares, voidBy, confirms, confirmTurn: { ms, runMs, precollectMs,
+ *                                       to }, closeToOrder: { all, deskRan, deskCached, confirmed, fallback, byPath: { confirm |
+ *                                       fallback:<path> | fallback:void:<reason> | fallback:confirm-<outcome>: { all, deskRan,
+ *                                       deskCached } } }, phase2Ms: { confirm, fallback }, executorMs: { confirm, fallback },
+ *                                       late, outsideByKind } | null }
  *   text(report)                      the report as lines
  */
 
@@ -45,7 +48,9 @@ const tokensOf = list => list.reduce((t, u) => {
  * "on" (PR B2): each close's path (the confirm, or why the full head trader ran), the confirms' outcomes and fallbacks,
  * close to order (the cycle timing's latencyMs.order) of the closes that ordered, all, by whether the desk ran this close
  * or was served cached, and of the closes the confirm decided; the late refusals by kind; outside the plan by level kind.
- * null when no record is an "on" one.
+ * PR A2: the confirm turn's own time (spawn to its compose's result, or its pass; of the confirms that decided), close to
+ * order by path (the confirm, each fallback by its reason) each by desk ran or cached, and phase 2's and the executor's
+ * runs on the confirm's closes and the fallbacks' apart. null when no record is an "on" one.
  */
 function onReport(ons) {
   if (!ons.length) return null;
@@ -63,9 +68,26 @@ function onReport(ons) {
   }
   const ordered = ons.filter(o => Number.isFinite(o.closeToOrderMs));
   const ms = list => msOf(list.map(o => o.closeToOrderMs));
+  const byDesk = list => ({ all: ms(list), deskRan: ms(list.filter(o => o.desk === 'ran')), deskCached: ms(list.filter(o => o.desk === 'cached')) });
+  // The closes the confirm decided; every other one ran the full head trader (a fallback, by its reason).
+  const decided = o => o.path === 'confirm' && !(isObj(o.confirm) && o.confirm.fellBack);
+  const pathKey = o => (decided(o) ? 'confirm' : o.path === 'confirm' ? `fallback:confirm-${(o.confirm && o.confirm.outcome) || 'unknown'}` : o.path === 'void' ? `fallback:void:${o.reason || 'unknown'}` : `fallback:${o.path}`);
+  const keys = [...new Set(ordered.map(pathKey))].sort();
+  const turns = ons.filter(o => decided(o) && isObj(o.confirm));
+  const finite = (list, f) => list.map(f).filter(Number.isFinite);
+  const to = {};
+  for (const o of turns) if (typeof o.confirm.turnTo === 'string') count(to, o.confirm.turnTo);
+  const parts = k => ({ confirm: msOf(finite(ons.filter(decided), o => o[k])), fallback: msOf(finite(ons.filter(o => !decided(o)), o => o[k])) });
   return {
     closes: ons.length, paths, shares: Object.fromEntries(Object.entries(paths).map(([k, n]) => [k, n / ons.length])), voidBy, confirms,
-    closeToOrder: { all: ms(ordered), deskRan: ms(ordered.filter(o => o.desk === 'ran')), deskCached: ms(ordered.filter(o => o.desk === 'cached')), confirmed: ms(ordered.filter(o => o.path === 'confirm' && !(o.confirm && o.confirm.fellBack))) },
+    // The confirm turn's own time (spawn to its compose's result, or its pass), its run, the reads before its spawn.
+    confirmTurn: { ms: msOf(finite(turns, o => o.confirm.turnMs)), runMs: msOf(finite(turns, o => o.confirm.runMs)), precollectMs: msOf(finite(turns, o => o.confirm.precollectMs)), to },
+    closeToOrder: {
+      ...byDesk(ordered), confirmed: ms(ordered.filter(decided)), fallback: byDesk(ordered.filter(o => !decided(o))),
+      byPath: Object.fromEntries(keys.map(k => [k, byDesk(ordered.filter(o => pathKey(o) === k))])),
+    },
+    // Phase 2's and the executor's runs (the entry's timing), on the confirm's closes and the fallbacks' apart.
+    phase2Ms: parts('phase2Ms'), executorMs: parts('executorMs'),
     late, outsideByKind,
   };
 }
@@ -133,6 +155,10 @@ function onText(o) {
     `"on": ${o.closes} closes: ${Object.entries(o.paths).map(([k, n]) => `${k} ${n} (${pct(n / o.closes)})`).join(', ')}`,
     `"on" void by: ${kv(o.voidBy)}; confirms: ${kv(o.confirms)}`,
     `"on" close to order ms: ${ms(o.closeToOrder.all)}; desk ran: ${ms(o.closeToOrder.deskRan)}; desk cached: ${ms(o.closeToOrder.deskCached)}; confirmed: ${ms(o.closeToOrder.confirmed)}`,
+    `"on" confirm turn ms (spawn to its compose's result, or its pass): ${ms(o.confirmTurn.ms)}; ended at: ${kv(o.confirmTurn.to)}; its run: ${ms(o.confirmTurn.runMs)}; the reads before it: ${ms(o.confirmTurn.precollectMs)}`,
+    `"on" close to order ms by path: ${Object.entries(o.closeToOrder.byPath).map(([k, s]) => `${k}: ${ms(s.all)} (desk ran: ${ms(s.deskRan)}; desk cached: ${ms(s.deskCached)})`).join('; ') || 'none'}`,
+    `"on" phase 2 ms: confirm ${ms(o.phase2Ms.confirm)}; fallback ${ms(o.phase2Ms.fallback)}`,
+    `"on" executor ms: confirm ${ms(o.executorMs.confirm)}; fallback ${ms(o.executorMs.fallback)}`,
     `"on" late refusals: ${kv(o.late)}; outside the plan by kind: ${kv(o.outsideByKind)}`,
   ];
 }

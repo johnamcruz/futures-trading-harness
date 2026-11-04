@@ -66,10 +66,22 @@ const decided = w => ({
 });
 const headCalls = fake => fake.calls.filter(c => !c.env.FTH_PREPARE);
 const promptOf = c => c.argv[c.argv.indexOf('-p') + 1];
+/**
+ * The confirms of the plan made for `bar`'s close (forks resuming its prepare's session). The 04:06 cycle's prepare
+ * lists the 15m reaction still standing at the 04:12 close (next-close.js standing candidates), so the 04:09 bar has a
+ * plan and a confirm of its own: the rows below are about the 04:12 bar's.
+ */
+const forksAt = (fake, w, bar) => {
+  const plan = PA.readPlan(w.home, 'MNQ', bar);
+  assert.ok(plan, `a plan for the bar opening ${bar}`);
+  return fake.calls.filter(c => c.source === 'fork' && c.argv[c.argv.indexOf('--resume') + 1] === plan.session.id);
+};
 
 test('"on" e2e: the prepare after the 04:09 cycle; at the 04:12 close the confirm is the head trader\'s run: a fork of the prepare\'s session, its full tools, the close\'s cycle env and FTH_CONFIRM_BASE, the cycle\'s prompt then the plan', async () => {
   const off = await day();
-  const { w, fake } = await day({ on: true });
+  // Each line's arrival time, as the real run reports it (harness-run.js lineTimes): the confirm's turn is timed by them.
+  const timed = (argv, res) => (argv.includes('--resume') ? { ...res, lineTimes: String(res.stdout).split('\n').map(() => Date.now()) } : null);
+  const { w, fake } = await day({ on: true, afterRun: timed });
   const plan = PA.readPlan(w.home, 'MNQ', NEXT_BAR);
   assert.ok(plan && plan.base && plan.base.uuids.length > 0, 'the plan, with its sealed base');
   const heads = headCalls(fake);
@@ -92,9 +104,18 @@ test('"on" e2e: the prepare after the 04:09 cycle; at the 04:12 close the confir
   // The record: the mode, the path, the confirm's outcome, close to order (no order here), the desk.
   assert.deepStrictEqual([onRec.prepare.mode, onRec.prepare.on.path, onRec.prepare.on.confirm.outcome, onRec.prepare.on.confirm.fellBack], ['on', 'confirm', 'done', false], JSON.stringify(onRec.prepare));
   assert.ok('closeToOrderMs' in onRec.prepare.on);
-  // The first two closes had no plan of their own: the full head trader, as before.
-  assert.deepStrictEqual(cycleRecords(w).slice(0, 2).map(x => x.prepare.on.path), ['no-plan', 'no-plan']);
-  assert.deepStrictEqual(heads.slice(0, 2).map(c => c.argv.includes('--resume')), [false, false]);
+  // The confirm's own turn, apart from its run and the entry: a pass here, so it ends at its CYCLE RESULT line.
+  const c = onRec.prepare.on.confirm;
+  assert.deepStrictEqual([c.turnTo, c.composes], ['result', 0], JSON.stringify(c));
+  assert.ok(Number.isFinite(c.turnMs) && c.turnMs >= 0 && c.turnMs <= c.runMs && c.runMs <= c.ms, JSON.stringify(c));
+  assert.ok(Number.isFinite(c.precollectMs) && c.precollectMs >= 0);
+  assert.deepStrictEqual([onRec.prepare.on.phase2Ms, onRec.prepare.on.executorMs], [null, null], 'no entry: no phase 2 or executor time');
+  // The first close had no plan of its own: the full head trader, as before. The second's plan (made after the first
+  // close) lists the 15m reaction still standing at its close, and what fired there matches it: a confirm too.
+  assert.deepStrictEqual(cycleRecords(w).slice(0, 2).map(x => x.prepare.on.path), ['no-plan', 'confirm']);
+  assert.deepStrictEqual(heads.slice(0, 2).map(c => c.argv.includes('--resume')), [false, true]);
+  const second = PA.readPlan(w.home, 'MNQ', FIRED_BAR);
+  assert.ok(second.candidates.some(c => c.kind === 'standing' && c.read === cycleRecords(w)[1].prepare.on.match.read), JSON.stringify(cycleRecords(w)[1].prepare.on));
   // The property here: the same results, gate decisions and orders.
   assert.deepStrictEqual(decided(w), decided(off.w));
 });
@@ -139,7 +160,7 @@ test('"on" e2e: an open position at the close (a fill before it): the management
   const rec = cycleRecords(w)[2];
   assert.strictEqual(rec.prepare.on.path, 'not-flat');
   assert.deepStrictEqual([rec.prepare.made.outcome, rec.prepare.made.why], ['skipped', 'not-flat']);
-  assert.ok(!fake.calls.some(c => c.source === 'fork'));
+  assert.deepStrictEqual(forksAt(fake, w, NEXT_BAR), [], 'no confirm at the close');
   assert.deepStrictEqual(decided(w), decided(off.w));
 });
 
@@ -147,7 +168,7 @@ test('"on" e2e: the kill switch on: no trade cycle, no confirm, no prepare (as b
   const kill = { [NEXT_BAR]: w => fs.writeFileSync(w.env.FTH_KILL_SWITCH_FILE, 'test\n') };
   const off = await day({ beforePass: kill });
   const { w, fake } = await day({ on: true, beforePass: kill });
-  assert.ok(!fake.calls.some(c => c.source === 'fork'));
+  assert.deepStrictEqual(forksAt(fake, w, NEXT_BAR), [], 'no confirm at the close');
   assert.deepStrictEqual(decided(w), decided(off.w));
 });
 
