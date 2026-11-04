@@ -114,6 +114,21 @@ test('runPrepare: its skill-lookup and experience-lookup records (keyed by its o
   assert.ok(!fs.existsSync(require('../../scripts/lib/learning/experience-lookups').lookupsFile(tr)));
 });
 
+test('runPrepare: its spawn-to-init time: from the spawn to the stream\'s first line (the CLI\'s start and MCP servers)', async () => {
+  const home = tmpDir();
+  let clock = 1000;
+  const run = async () => {
+    const out = [JSON.stringify({ type: 'system', subtype: 'init', session_id: 's' }), JSON.stringify({ type: 'result', subtype: 'success', result: 'x', session_id: 's' })].join('\n');
+    clock = 1500;
+    return { ok: true, timedOut: false, code: 0, output: out, stdout: out, lineTimes: [1240, 1490] };
+  };
+  const r = await runPrepare(cfg, 'prepare', 'P', { timeoutMs: 5000, context: { action: 'trade' } }, { root: ROOT, home, env: { FTH_HOME: home, HOME: home }, run, wallNow: () => clock });
+  assert.strictEqual(r.initMs, 240);
+  assert.strictEqual(r.ms, 500);
+  const none = await runPrepare(cfg, 'prepare', 'P', { timeoutMs: 5000, context: { action: 'trade' } }, { root: ROOT, home, env: { FTH_HOME: home, HOME: home }, run: async () => ({ ok: false, output: '', stdout: '' }) });
+  assert.strictEqual(none.initMs, null);
+});
+
 test('runCycle: onLog, when given, hears the cycle log\'s file once it is written; without it the cycle is as before', async () => {
   const home = tmpDir();
   const run = async () => ({ ok: true, timedOut: false, code: 0, output: 'CYCLE RESULT: no-trade - x\n', stdout: 'CYCLE RESULT: no-trade - x\n' });

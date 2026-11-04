@@ -71,6 +71,13 @@ function report(records) {
     prepareMs: msOf(mades.filter(m => m.outcome === 'done' || m.outcome === 'aborted').map(m => m.ms).filter(Number.isFinite)),
     aborted: made.aborted || 0,
     tokens: { prepare: tokensOf(mades.map(m => m.usage)), confirm: tokensOf(confirmed.map(s => s.confirm.usage)) },
+    // The hourly-close counterfactual: the plans void only by the 1h close, and of them those valid, and matched, without it.
+    hourClose: shadows.filter(s => s.reason === 'htf-close:h1').reduce((h, s) => {
+      h.void += 1;
+      if (s.ifHourIgnored && s.ifHourIgnored.status === 'valid') { h.wouldBeValid += 1; if (s.ifHourIgnored.match === 'matched') h.wouldMatch += 1; }
+      return h;
+    }, { void: 0, wouldBeValid: 0, wouldMatch: 0 }),
+    initMs: msOf([...mades, ...confirmed.map(s => s.confirm)].map(r => r.initMs).filter(Number.isFinite)),
     // The forbidden-tool attempts of every run: the CLI's denials by tool, and the gate's refusals in the shadow's log.
     forbidden: [...mades, ...confirmed.map(s => s.confirm)].reduce((f, r) => {
       for (const t of Array.isArray(r.denied) ? r.denied : []) f.denied[t] = (f.denied[t] || 0) + 1;
@@ -97,6 +104,8 @@ function text(r) {
     `prepares: ${kv(r.made)}; skipped: ${kv(r.skippedBy)}`,
     `prepare ms: ${ms(r.prepareMs)}`,
     `aborted at the deadline: ${r.aborted}`,
+    `hourly closes: ${r.hourClose.void} void by the 1h close; without that rule ${r.hourClose.wouldBeValid} valid, ${r.hourClose.wouldMatch} matched`,
+    `spawn to init ms: ${ms(r.initMs)}`,
     `forbidden tool attempts: denied ${kv(Object.fromEntries(Object.entries(r.forbidden.denied).sort()))}; gate refusals ${r.forbidden.gateRefusals}`,
     `tokens: prepare ${tok(r.tokens.prepare)}; confirm ${tok(r.tokens.confirm)}`,
   ].join('\n');

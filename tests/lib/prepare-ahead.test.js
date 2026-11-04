@@ -244,6 +244,20 @@ test('prepare-ahead: validate: a 1h or day close at the next close voids (no sce
   assert.strictEqual(PA.validate(makePlan(), closeVersions({ b: { day: '2021-05-22T22:00:00.000Z' } })).reason, 'bars:day');
 });
 
+test('prepare-ahead: validate, the hourly-close counterfactual: ignoring only the 1h close (the 1h part rolled to the close as expected), every other input is still checked', () => {
+  const hourly = makePlan({ b: { h1Until: NEXT.closedAt } });
+  const rolled = { b: { h1: NEXT.closedAt, h1Until: '2021-05-24T15:00:00.000Z' } };
+  assert.strictEqual(PA.validate(hourly, closeVersions(rolled)).reason, 'htf-close:h1');
+  assert.deepStrictEqual(PA.validate(hourly, closeVersions(rolled), { ignoreHourClose: true }), { status: 'valid' });
+  // The chain side, the trend rule, the window still decide.
+  assert.strictEqual(PA.validate(hourly, closeVersions({ ...rolled, chainSide: -1 }), { ignoreHourClose: true }).reason, 'chain-side');
+  assert.strictEqual(PA.validate(hourly, closeVersions({ b: { ...rolled.b, trendRule: 'Trend rule: long refused, short allowed' } }), { ignoreHourClose: true }).reason, 'trend-rule');
+  // A 1h part that did not roll to the close: still void (a changed part, not the expected close).
+  assert.strictEqual(PA.validate(hourly, closeVersions(), { ignoreHourClose: true }).reason, 'bars:h1');
+  // The day's close is never ignored.
+  assert.strictEqual(PA.validate(makePlan({ b: { dayUntil: NEXT.closedAt } }), closeVersions({ b: { dayUntil: NEXT.closedAt } }), { ignoreHourClose: true }).reason, 'htf-close:day');
+});
+
 test('prepare-ahead: validate: a desk report expected to hold past the close that changed voids; one ending by the close may change', () => {
   // The market structure report ends at the next close: a fresh one there is expected.
   const fresh = DESK.map(r => (r.role === 'market-structure-analyst' ? { ...r, text: '## ms\nBias: short' } : r));

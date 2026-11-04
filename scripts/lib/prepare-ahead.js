@@ -138,7 +138,7 @@ const voidOf = (reason, detail) => ({ status: 'void', reason, detail });
  * The plan against the close's versions (docs/PREPARE-AHEAD.md, the failure table): valid, or why not. The close is
  * compared by the inputs the real cycle at the close started from.
  */
-function validate(plan, at) {
+function validate(plan, at, { ignoreHourClose = false } = {}) {
   if (!isObj(plan)) return { status: 'none', reason: 'no-plan' };
   const p = plan.versions || {};
   const next = plan.next || {};
@@ -153,7 +153,9 @@ function validate(plan, at) {
     const was = (p.sections || {})[part] || {};
     const now = (at.sections || {})[part] || {};
     const rolls = part === 'm3' || Date.parse(was.until) <= closeMs;
-    if (rolls && (part === 'h1' || part === 'day')) return voidOf(`htf-close:${part}`, `the ${part} part closes at the next close: no scenario covers it`);
+    // ignoreHourClose: the counterfactual the shadow log reports (the 1h close as if a scenario covered it; it must
+    // still have rolled to the close, and every other input is checked). The day's close is never ignored.
+    if (rolls && (part === 'day' || (part === 'h1' && !ignoreHourClose))) return voidOf(`htf-close:${part}`, `the ${part} part closes at the next close: no scenario covers it`);
     const want = rolls ? `${part}@${next.closedAt}` : was.version;
     if (!want || now.version !== want) return voidOf(`bars:${part}`, `the ${part} part is ${now.version}, the plan expected ${want}`);
   }

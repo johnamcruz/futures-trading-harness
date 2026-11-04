@@ -35,7 +35,7 @@ const RECORDS = [
   { prepare: { shadow: valid(false, 8000), made: made('aborted', 160000) } },
   { prepare: { shadow: { status: 'void', reason: 'facts', planId: 'p' }, made: made('skipped', undefined, { why: 'not-flat' }) } },
   { prepare: { shadow: { status: 'outside', fired: ['15m rejected vwap up'], unplannedKinds: { vwap: 1 }, planId: 'p' }, made: made('skipped', undefined, { why: 'nothing-can-fire' }) } },
-  { prepare: { shadow: { status: 'void', reason: 'htf-close:h1', planId: 'p' }, made: made('error', 100, { why: 'the run failed' }) }, day: '2026-05-05' },
+  { prepare: { shadow: { status: 'void', reason: 'htf-close:h1', planId: 'p', ifHourIgnored: { status: 'valid', match: 'matched', read: 'r' } }, made: made('error', 100, { why: 'the run failed' }) }, day: '2026-05-05' },
   { prepare: { shadow: valid(null, 4000), made: made('done', 30000) }, day: '2026-05-05' },
   {}, // the key off: no prepare field
 ];
@@ -62,6 +62,8 @@ test('shadow report: counts by status and reason, the agreement against the full
   assert.deepStrictEqual(rep.tokens.prepare, { input: 20, cacheRead: 200, cacheCreation: 2, output: 4 });
   assert.deepStrictEqual(rep.tokens.confirm, { input: 15, cacheRead: 270, cacheCreation: 3, output: 6 });
   // The forbidden-tool attempts: the CLI's denials by tool, and the gate's refusals in the shadow's log.
+  // The hourly-close counterfactual: of the plans void only by the 1h close, those valid and matched without it.
+  assert.deepStrictEqual(rep.hourClose, { void: 1, wouldBeValid: 1, wouldMatch: 1 });
   assert.deepStrictEqual(rep.forbidden, { denied: { 'mcp__harness__compose_check': 1, 'mcp__broker__place_order': 1, Agent: 3 }, gateRefusals: 4 });
   // One day.
   assert.strictEqual(R.report(R.readRecords(home(RECORDS), { from: '2026-05-05', to: '2026-05-05' })).shadowed, 2);

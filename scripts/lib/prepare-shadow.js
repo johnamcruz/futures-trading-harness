@@ -41,7 +41,7 @@ function chainSideOn(bars, minutes) {
 const kindsOf = reads => (reads || []).reduce((o, r) => { const k = PA.readKind(r); o[k] = (o[k] || 0) + 1; return o; }, {});
 
 /** What a run tried and was refused: the CLI's permission denials and the gate refusals in the shadow's log. */
-const tried = res => ({ denied: Array.isArray(res.denied) ? res.denied : [], gateRefusals: Number.isInteger(res.gateRefusals) ? res.gateRefusals : 0 });
+const tried = res => ({ denied: Array.isArray(res.denied) ? res.denied : [], gateRefusals: Number.isInteger(res.gateRefusals) ? res.gateRefusals : 0, initMs: Number.isFinite(res.initMs) ? res.initMs : null });
 
 /** The account read after the cycle is flat: no position and no working order (an unread one is not). */
 const flatOf = a => (isObj(a) && !a.error && Array.isArray(a.positions) && Array.isArray(a.orders) ? !a.positions.length && !a.orders.length : null);
@@ -84,8 +84,15 @@ function createShadow({ cfg, root, home, runPrepare, now, sectionOpts = () => ({
     const full = PA.fullDecisionOf({ result: x.result, entry });
     const base = { planId, prepareMs: plan.ms, full };
     const v = PA.validate(plan, at);
-    if (v.status !== 'valid') return { status: v.status, reason: v.reason, ...(v.detail ? { detail: v.detail } : {}), ...base, agreesWithFull: null };
     const fired = PA.firedReads({ scan: x.scan, listed: x.listed });
+    // Void only by the hourly close: what it would have been without that rule (a record only; no confirm runs).
+    const ifHour = () => {
+      const w = PA.validate(plan, at, { ignoreHourClose: true });
+      if (w.status !== 'valid') return { status: w.status, reason: w.reason };
+      const m = PA.matchScenario(plan, fired);
+      return { status: 'valid', match: m.status, ...(m.status === 'matched' ? { read: m.read } : {}) };
+    };
+    if (v.status !== 'valid') return { status: v.status, reason: v.reason, ...(v.detail ? { detail: v.detail } : {}), ...(v.reason === 'htf-close:h1' ? { ifHourIgnored: ifHour() } : {}), ...base, agreesWithFull: null };
     const m = PA.matchScenario(plan, fired);
     if (m.status !== 'matched') return { status: m.status, fired, unplannedKinds: kindsOf(fired), ...base, agreesWithFull: null };
     const match = { k: m.k, id: m.id, read: m.read, side: m.side };
@@ -99,7 +106,9 @@ function createShadow({ cfg, root, home, runPrepare, now, sectionOpts = () => ({
     const parsed = !aborted && res.ok ? PA.parseDecision(res.text) : null;
     const decision = parsed ? { ...parsed, side: parsed.decision === 'take' ? (plan.candidates.find(c => c.id === (plan.scenarios.find(s => s.k === parsed.k) || {}).id) || {}).side || null : null } : null;
     const outcome = aborted ? 'aborted' : !res.ok ? 'error' : parsed ? 'done' : 'no-decision';
-    return { status: 'valid', ...rest, confirm: { outcome, decision, ms: res.ms, sessionId: res.sessionId, usage: res.usage || null, ...tried(res) }, agreesWithFull: PA.agreement(decision, full) };
+    // The fork's first turn: what it created in the cache (the first fork after the prepare pays it: plan section 1).
+    const first = res.usage && res.usage.first && Number.isFinite(res.usage.first.cacheCreation) ? res.usage.first.cacheCreation : null;
+    return { status: 'valid', ...rest, confirm: { outcome, decision, ms: res.ms, sessionId: res.sessionId, usage: res.usage || null, firstCacheCreation: first, ...tried(res) }, agreesWithFull: PA.agreement(decision, full) };
   }
 
   /** Step 2: the prepare of the next bar's plan. */

@@ -55,7 +55,7 @@ function fakeCli(clock, o = {}) {
     const text = kind === 'prepare'
       ? [...prompt.matchAll(/^ {2}- (P\d+) \S+ (long|short) "([^"]+)"/gm)].map((m, j) => `SCENARIO ${j + 1}: ${m[1]} "${m[3]}" → TAKE if the candle meets it | PASS if not; reads: "${m[3]}"; why: the trend`).concat(['STAND DOWN if: a news window', 'INVALID if: a fill', 'PLAN END']).join('\n')
       : (o.decision || `DECISION: TAKE ${/Your plan said: scenario (\d+)/.exec(prompt)[1]}`);
-    return { ok: true, timedOut: false, text, sessionId: id, transcript: o.transcript === undefined ? o.sessionFile : o.transcript, source: kind === 'confirm' ? 'fork' : 'startup', usage: { total: { input: 1, cacheRead: 9, cacheCreation: 0, output: 2 } }, ms: o.reportMs || o.advanceMs || 20000, denied: o.denied || [], gateRefusals: o.gateRefusals || 0 };
+    return { ok: true, timedOut: false, text, sessionId: id, transcript: o.transcript === undefined ? o.sessionFile : o.transcript, source: kind === 'confirm' ? 'fork' : 'startup', usage: o.usage || { total: { input: 1, cacheRead: 9, cacheCreation: 0, output: 2 } }, ms: o.reportMs || o.advanceMs || 20000, denied: o.denied || [], gateRefusals: o.gateRefusals || 0, initMs: o.initMs ?? null };
   };
   return { run, runs };
 }
@@ -210,6 +210,28 @@ test('shadow: the kill switch is read again once the account read is back: on by
   const r = await after(tmp(), PREP, { killSwitch: () => (n += 1) > 2 });
   assert.deepStrictEqual([r.made.outcome, r.made.why], ['skipped', 'kill-switch']);
   assert.deepStrictEqual(r.cli.runs, []);
+});
+
+test('shadow: a plan void only by the hourly close records what it would have been (valid and matched, or why not)', async () => {
+  const home = tmp();
+  await after(home, PREP);
+  const plan = PA.readPlan(home, 'MNQ', FIRE);
+  plan.versions.sections.h1.until = new Date(closeMs(FIRED)).toISOString();
+  PA.writePlan(home, plan);
+  const rolled = { ...FIRED, briefing: { ...FIRED.briefing, sections: { ...FIRED.briefing.sections, h1: { ...FIRED.briefing.sections.h1, version: `h1@${new Date(closeMs(FIRED)).toISOString()}` } } } };
+  const r = await after(home, rolled);
+  assert.deepStrictEqual([r.shadow.status, r.shadow.reason], ['void', 'htf-close:h1']);
+  assert.deepStrictEqual(r.shadow.ifHourIgnored, { status: 'valid', match: 'matched', read: 'momentum_continuation fired down' });
+  assert.ok(!r.cli.runs.some(x => x.kind === 'confirm'), 'still no confirm: the counterfactual is a record only');
+});
+
+test('shadow: each run\'s spawn-to-init time is recorded (and the confirm\'s first-turn cache creation, the first fork\'s cost)', async () => {
+  const home = tmp();
+  const a = await after(home, PREP, { fake: { initMs: 140 } });
+  assert.strictEqual(a.made.initMs, 140);
+  const b = await after(home, FIRED, { fake: { initMs: 90, usage: { total: { input: 1, cacheRead: 9, cacheCreation: 13400, output: 2 }, first: { input: 1, cacheRead: 5, cacheCreation: 13400, output: 1 } } } });
+  assert.strictEqual(b.shadow.confirm.initMs, 90);
+  assert.strictEqual(b.shadow.confirm.firstCacheCreation, 13400);
 });
 
 test('shadow: the agreement check can fail: a deliberately wrong shadow decision is logged as a disagreement', async () => {
