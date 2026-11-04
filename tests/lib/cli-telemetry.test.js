@@ -70,6 +70,15 @@ test('off or absent: the env has no such variable and is the same as a config wi
   }
 });
 
+test('off or absent leaves a machine-exported DISABLE_TELEMETRY exactly as inherited (byte-identical to today), and on overrides it to 1', () => {
+  const seeded = { ...BASE, [CLI_TELEMETRY_ENV]: 'inherited-value' };
+  for (const [name, ctx] of Object.entries(RUNS)) {
+    assert.strictEqual(childEnv(cfgOf({}), ROOT, seeded, ctx)[CLI_TELEMETRY_ENV], 'inherited-value', `${name}: absent keeps it`);
+    assert.strictEqual(childEnv(cfgOf({ disableCliTelemetry: false }), ROOT, seeded, ctx)[CLI_TELEMETRY_ENV], 'inherited-value', `${name}: false keeps it`);
+    assert.strictEqual(childEnv(cfgOf({ disableCliTelemetry: true }), ROOT, seeded, ctx)[CLI_TELEMETRY_ENV], '1', `${name}: true sets 1`);
+  }
+});
+
 test('never set for another harness (it is refused there; a raw cfg that carries it still gets none)', () => {
   for (const harness of ['opencode', 'codex', 'qwen']) {
     const env = childEnv({ ...validateConfig({ harness, dataDir: path.join(home, 'bars') }), disableCliTelemetry: true }, ROOT, BASE, RUNS.head);
