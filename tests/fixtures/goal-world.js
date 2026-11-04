@@ -75,7 +75,7 @@ const DECIDE_MS = 2000; // a replay's decision time: 2 s after its bar closed (d
 const iso = ms => new Date(ms).toISOString();
 const minuteOf = ms => minutesOfDay(new Date(ms), ET);
 
-function dayWorld(bars, day, { account, suggest = 3, fault = null, state = null, probe = false } = {}) {
+function dayWorld(bars, day, { account, suggest = 3, fault = null, state = null, probe = false, claude = null } = {}) {
   if (fault && !FAULTS[fault]) throw new Error(`fault ${fault}: one of ${Object.keys(FAULTS).join(', ')}`);
   const home = tmpDir();
   recordBrokerSpecs(home, { broker: 'replaymock', roots: ['MNQ', 'NQ', 'MES', 'ES'] });
@@ -103,7 +103,9 @@ function dayWorld(bars, day, { account, suggest = 3, fault = null, state = null,
   };
   // The exchange calendar as the runner's clock has it (setup-library.js runnerClock): the day's closed and early dates.
   const h = holidayDates(new Date(`${day}T00:00:00Z`), new Date(`${day}T00:00:00Z`));
-  const cfg = validateConfig({ harness: 'opencode', cycle: 'full', premarketAt: '', timeframe: 3, account: '7', symbols: ['MNQ'], dataDir: path.join(home, 'bars'), bars: bars.length, closedDates: h.closed, earlyCloseDates: h.early });
+  // `claude` (tests/goal/tier2-prepare.goal.js only; null: the opencode world, as before): the same world on Claude Code,
+  // its runs played by the fake CLI that keeps sessions (fake-claude-sessions.js), with `claude.prepareAhead` its key.
+  const cfg = validateConfig({ harness: claude ? 'claude' : 'opencode', cycle: 'full', premarketAt: '', timeframe: 3, account: '7', symbols: ['MNQ'], dataDir: path.join(home, 'bars'), bars: bars.length, closedDates: h.closed, earlyCloseDates: h.early, ...(claude && claude.prepareAhead ? { prepareAhead: claude.prepareAhead } : {}) });
   // A mid-attempt state (the state days): the attempt started a session earlier and closed it at `balance` (the
   // exchange's balance with it), so the cushion, the floor and the room to the target are that state's.
   if (state) {
@@ -113,7 +115,9 @@ function dayWorld(bars, day, { account, suggest = 3, fault = null, state = null,
   } else prop.startAttempt(home, account, new Date(first.ms));
   // The runner's end of day for the session (setup-library.js runnerClock: its sessions and the calendar's early closes).
   const eodMs = runnerClock({ from: day, to: day }).eodOf(dayBars.at(-1).ms);
-  return { probe, probes: [], sent: [], faults: [], snaps: [], fault, faulted: false, walkedTo: -Infinity, clockMs: first.ms, eodMs, home, state: statePath, journal, clock, env, cfg, day, list, dayBars, account, suggest, stateFile: path.join(home, 'runner-state.json') };
+  const w = { probe, probes: [], sent: [], faults: [], snaps: [], fault, faulted: false, walkedTo: -Infinity, clockMs: first.ms, eodMs, home, state: statePath, journal, clock, env, cfg, day, list, dayBars, account, suggest, stateFile: path.join(home, 'runner-state.json') };
+  if (claude) w.claude = { ...claude, confirms: 0, head: null, fake: require('./prepare-mock').fakeFor(w) };
+  return w;
 }
 
 /** The quoted reads of the briefing's "Setups to check" line, each with the side it points. */
@@ -189,8 +193,9 @@ function decide(b) {
 
 /** The head trader's cycle: the briefing, then the mock's choice composed, or a pass; with a position, hold. */
 function headScript(w, decisions) {
-  return () => {
-    const b = readBriefing(w.home, 'MNQ');
+  return prompt => {
+    // A confirm that trusts the plan (the negative control, prepare-mock.js): the prepare's briefing, not the close's.
+    const b = w.claude && w.claude.trusting && /Your plan said: scenario/.test(String(prompt || '')) ? require('./prepare-mock').preparedBriefing(w) || readBriefing(w.home, 'MNQ') : readBriefing(w.home, 'MNQ');
     const open = exchange.read(w.state).positions.some(p => p.contractId === MNQ_ID);
     if (open) return [{ harness: 'bar_briefing', args: { symbol: 'MNQ', json: true } }, ...(w.probe && !w.probedOpen && w.lastArgs ? openProbes(w) : []), { result: 'CYCLE RESULT: managed - holding, the stop untouched (the runner\'s exit manages it)' }];
     const d = decide(b);
@@ -212,9 +217,12 @@ function headScript(w, decisions) {
     // composes first and reacts to compose_check's READ FIRST line as a live head trader would: it looks the skill up and
     // composes again (the warning's path, warn -> lookup -> compose again); without it the gate refuses the entry.
     const compose = { harness: 'compose_check', args: { symbol: 'MNQ', side: d.side, reads: d.reads, size: w.suggest } };
+    // Claude Code (full mode): the skills an entry needs, loaded in the run (the gate reads them in its transcript).
+    const loads = w.claude ? CLAUDE_LOADS.map(x => ({ load: x })) : [];
     const react = { then: ctx => (/READ FIRST: [^\n]*candle-reading/.test(String(ctx.results.compose_check || '')) ? [{ harness: 'skill_lookup', args: { skill: 'candle-reading' } }, { ...compose }] : []) };
     return [
       { harness: 'bar_briefing', args: { symbol: 'MNQ', json: true } },
+      ...loads,
       ...biasProbe,
       ...setupProbe,
       compose,
@@ -228,6 +236,8 @@ function headScript(w, decisions) {
     ];
   };
 }
+
+const CLAUDE_LOADS = [...new Set([...require('../../scripts/lib/trading/skills-loaded').REQUIRED_FOR_COMPOSED, ...require('../../scripts/lib/trading/skills-loaded').REQUIRED_AT_ENTRY])];
 
 const named = prompt => { const m = /The entry's size is (\d+) MNQ/.exec(prompt); return m ? Number(m[1]) : null; };
 const requestedArgs = prompt => JSON.parse(/built by the runner from this bar's compose record: (\{.*\})\. Send them as given/.exec(prompt)[1]);
@@ -279,7 +289,7 @@ function roles(w, at, opts) {
         ];
       };
     }
-    const model = scriptedModel(script, { format: 'opencode' });
+    const model = scriptedModel(script, { format: w.claude ? 'claude' : 'opencode' });
     const roleAt = iso(w.clockMs);
     // When the executor's order goes, by the replay clock (the trace's order step: seconds from the bar close).
     if (role === 'trade-executor') w.sent.push({ at: roleAt, barClose: iso(Date.parse(at) - DECIDE_MS) });
@@ -351,6 +361,8 @@ function advance(w, by) {
 /** One pass of the runner at `at`. */
 async function pass(w, at, script, opts, sink) {
   const ms = Date.parse(at);
+  // Claude Code with prepare ahead (w.claude): its fault armed before each pass (prepare-mock.js FAULTS).
+  if (w.claude) require('./prepare-mock').beforePass(w);
   w.clockMs = ms;
   fs.writeFileSync(w.clock, JSON.stringify({ now: at }));
   exchange.update(w.state, x => { x.nowMs = ms; });
@@ -358,6 +370,10 @@ async function pass(w, at, script, opts, sink) {
   // The runner's clock: the pass's time (moved on only by the order-latency self-test's injected stub).
   const now = () => new Date(w.clockMs);
   const model = scriptedModel(script, { format: 'opencode' });
+  // Claude Code (w.claude): the head trader's runs (a fresh one, or the confirm forking the prepare's session) and the
+  // prepares through the fake CLI (prepare-mock.js); the head trader plays this pass's script either way.
+  if (w.claude) w.claude.head = script;
+  const headRun = w.claude ? require('./prepare-mock').headRunOf(w) : model;
   const client = openAdapter({ root: ROOT, env, timeoutMs: 30000 });
   try {
     const runner = wireRunner({
@@ -367,7 +383,8 @@ async function pass(w, at, script, opts, sink) {
       // run races the poll, so the goal numbers measure phase 2 after the run, as before (deterministic).
       entryOverlap: false,
       prop: require('../../scripts/lib/prop/live-runner').createPropHooks({ root: ROOT, env, home: w.home, client, accountId: w.cfg.account, strategies: () => require('../../scripts/lib/trading/strategies').loadStrategies(ROOT, env).strategies, log: m => sink.logs.push(m) }),
-      runCycle: async (action, prompt, limits) => runCycle(w.cfg, action, prompt, {}, limits, { root: ROOT, home: w.home, env, run: model, guard: () => true }),
+      runCycle: async (action, prompt, limits) => runCycle(w.cfg, action, prompt, {}, limits, { root: ROOT, home: w.home, env, run: headRun, guard: () => true }),
+      ...(w.claude && w.claude.prepareAhead ? { runPrepare: require('./prepare-mock').runPrepareOf(w, env) } : {}),
       loadState: () => (fs.existsSync(w.stateFile) ? JSON.parse(fs.readFileSync(w.stateFile, 'utf8')) : null),
       saveState: x => fs.writeFileSync(w.stateFile, JSON.stringify(x)),
       killSwitchFile: w.env.FTH_KILL_SWITCH_FILE, log: (m, level) => sink.logs.push(`${level || 'info'} ${m}`), event: e => sink.events.push({ at: iso(w.clockMs), ...e }),

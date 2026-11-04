@@ -17,8 +17,9 @@
  *   baseOn(base, days)                       main's tier 2 on some days only (no summary: the aggregate judges the sum)
  *   moveBehaviour(golden, now, results)      [problem]: each move day behaving as its label says
  *   floorDays()                              the floor days: [{ day, bind }] (goal-synth.js floor)
- *   runDays(days, { breakName, latencyMs, fault, parallel, dir })   [day result] (tier2-day.js's JSON); latencyMs only for
- *                                            the order-latency self-test (an injected stub), fault a broker-fault day
+ *   runDays(days, { breakName, latencyMs, fault, claude, parallel, dir })   [day result] (tier2-day.js's JSON); latencyMs only
+ *                                            for the order-latency self-test (an injected stub), fault a broker-fault day,
+ *                                            claude the Claude Code world with prepare ahead (tier2-prepare.goal.js)
  *   readTier2(results)                       { trades, summary, problems }: the trades, their summary, the trace problems
  *                                            and the sizing problems (sizingProblems: goal-sizing.js sizingChecks)
  *   judge(base, now, results)                { rows, changes, problems, fail }: base/now the tier 2 baselines' shape
@@ -45,12 +46,12 @@ const BASELINE_FILE = () => set().baselineFile;
 
 const tier2Days = () => GP.pickDays(set().doc.blocks, CFG());
 
-function runOne(day, { breakName = null, latencyMs = 0, fault = null, state = null, probe = false, root = ROOT, dir }) {
-  const out = path.join(dir, `${day}${breakName ? `-${breakName}` : ''}${latencyMs ? `-late${latencyMs}` : ''}${fault ? `-${fault}` : ''}${state ? `-${state.name}` : ''}-${crypto.randomBytes(4).toString('hex')}.json`);
+function runOne(day, { breakName = null, latencyMs = 0, fault = null, state = null, probe = false, claude = null, root = ROOT, dir }) {
+  const out = path.join(dir, `${day}${breakName ? `-${breakName}` : ''}${latencyMs ? `-late${latencyMs}` : ''}${fault ? `-${fault}` : ''}${state ? `-${state.name}` : ''}${claude ? '-claude' : ''}-${crypto.randomBytes(4).toString('hex')}.json`);
   const env = { ...process.env, ...(breakName ? { FTH_GOAL_BREAK: breakName } : {}) };
   if (!breakName) delete env.FTH_GOAL_BREAK;
   delete env.NODE_OPTIONS;
-  const args = [...(breakName ? ['--require', path.join(root, 'tests', 'goal', 'breaks.js')] : []), path.join(root, 'tests', 'goal', 'tier2-day.js'), JSON.stringify({ day, out, latencyMs, fault, state, probe })];
+  const args = [...(breakName ? ['--require', path.join(root, 'tests', 'goal', 'breaks.js')] : []), path.join(root, 'tests', 'goal', 'tier2-day.js'), JSON.stringify({ day, out, latencyMs, fault, state, probe, ...(claude ? { claude } : {}) })];
   return new Promise((resolve, reject) => {
     const child = spawn(process.execPath, args, { cwd: root, env, stdio: ['ignore', 'ignore', 'pipe'] });
     let err = '';
@@ -59,10 +60,10 @@ function runOne(day, { breakName = null, latencyMs = 0, fault = null, state = nu
   });
 }
 
-async function runDays(days, { breakName = null, latencyMs = 0, fault = null, state = null, probe = false, root = ROOT, parallel = CFG().parallel, dir = fs.mkdtempSync(path.join(os.tmpdir(), 'fth-goal-')) } = {}) {
+async function runDays(days, { breakName = null, latencyMs = 0, fault = null, state = null, probe = false, claude = null, root = ROOT, parallel = CFG().parallel, dir = fs.mkdtempSync(path.join(os.tmpdir(), 'fth-goal-')) } = {}) {
   const out = new Array(days.length);
   let next = 0;
-  const worker = async () => { while (next < days.length) { const i = next; next += 1; out[i] = await runOne(days[i], { breakName, latencyMs, fault, state, probe, root, dir }); } };
+  const worker = async () => { while (next < days.length) { const i = next; next += 1; out[i] = await runOne(days[i], { breakName, latencyMs, fault, state, probe, claude, root, dir }); } };
   await Promise.all(Array.from({ length: Math.min(parallel, days.length) }, worker));
   return out;
 }
