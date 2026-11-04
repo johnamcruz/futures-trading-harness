@@ -48,14 +48,14 @@ function fakeCli(clock, o = {}) {
   const runs = [];
   const run = async (_cfg, kind, prompt, limits) => {
     runs.push({ kind, prompt, limits });
-    clock.ms += o.advanceMs || 20000;
+    clock.ms += o.advanceMs ?? 20000;
     if (o.throws) throw new Error('spawn claude ENOENT');
     if (o.fail === kind) return { ok: false, timedOut: false, text: '', sessionId: null, transcript: null, source: null, usage: null, ms: 1 };
     const id = `ses-${kind}-${runs.length}`;
     const text = kind === 'prepare'
       ? [...prompt.matchAll(/^ {2}- (P\d+) \S+ (long|short) "([^"]+)"/gm)].map((m, j) => `SCENARIO ${j + 1}: ${m[1]} "${m[3]}" → TAKE if the candle meets it | PASS if not; reads: "${m[3]}"; why: the trend`).concat(['STAND DOWN if: a news window', 'INVALID if: a fill', 'PLAN END']).join('\n')
       : (o.decision || `DECISION: TAKE ${/Your plan said: scenario (\d+)/.exec(prompt)[1]}`);
-    return { ok: true, timedOut: false, text, sessionId: id, transcript: o.transcript === undefined ? o.sessionFile : o.transcript, source: kind === 'confirm' ? 'fork' : 'startup', usage: { total: { input: 1, cacheRead: 9, cacheCreation: 0, output: 2 } }, ms: o.advanceMs || 20000 };
+    return { ok: true, timedOut: false, text, sessionId: id, transcript: o.transcript === undefined ? o.sessionFile : o.transcript, source: kind === 'confirm' ? 'fork' : 'startup', usage: { total: { input: 1, cacheRead: 9, cacheCreation: 0, output: 2 } }, ms: o.reportMs || o.advanceMs || 20000 };
   };
   return { run, runs };
 }
@@ -124,6 +124,22 @@ test('shadow: at the close the plan was made for, valid and matched: the confirm
   assert.ok(r.shadow.unplanned.includes('15m broke vwap rth down'));
   assert.strictEqual(r.shadow.unplannedKinds.vwap, 1);
   assert.deepStrictEqual(r.log.prepare.shadow, JSON.parse(JSON.stringify(r.shadow)));
+});
+
+test('shadow: prepare.maxMs bounds both runs together: on a frozen replay clock the confirm\'s own time comes off the prepare\'s budget (a replay step never outlasts its cycle\'s leftover)', async () => {
+  const T = require('../../scripts/lib/tunables').runner().prepare;
+  const home = tmp();
+  await after(home, PREP);
+  const clock = { ms: closeMs(FIRED) + 2000 };
+  const r = await after(home, FIRED, { clock, fake: { advanceMs: 0, reportMs: 30000 } });
+  assert.strictEqual(r.shadow.confirm.ms, 30000);
+  const [conf, prep] = ['confirm', 'prepare'].map(k => r.cli.runs.find(x => x.kind === k));
+  assert.strictEqual(conf.limits.timeoutMs, T.maxMs, 'the frozen clock: the cap');
+  assert.strictEqual(prep.limits.timeoutMs, T.maxMs - 30000, 'the cap less what the confirm took');
+  // A confirm that took the whole cap: no prepare.
+  await after(home, PREP);
+  const r2 = await after(home, FIRED, { clock: { ms: closeMs(FIRED) + 2000 }, fake: { advanceMs: 0, reportMs: T.maxMs } });
+  assert.deepStrictEqual([r2.made.outcome, r2.made.why], ['skipped', 'no-time']);
 });
 
 test('shadow: the agreement check can fail: a deliberately wrong shadow decision is logged as a disagreement', async () => {

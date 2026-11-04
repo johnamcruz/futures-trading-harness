@@ -1330,8 +1330,8 @@
    "from": "new in feat/prepare-ahead-shadow (the prepare and the shadow confirm are done by the next close less this)"
   },
   "prepare.maxMs": {
-   "value": 150000,
-   "from": "new in feat/prepare-ahead-shadow (the most one prepare or shadow confirm run may take)"
+   "value": 100000,
+   "from": "new in feat/prepare-ahead-shadow (the most the prepare and the shadow confirm after a cycle may take together)"
   },
   "prepare.effort": {
    "value": null,

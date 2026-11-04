@@ -228,7 +228,9 @@ result is final, the runner (`scripts/lib/prepare-shadow.js`, wired by
    hook's record), the input versions and the text.
 
 Both stop by the next close less `prepare.marginMs` (config/runner.json, the
-harness clock), at the end of day, or after `prepare.maxMs`;
+harness clock), at the end of day, or after `prepare.maxMs` for the two runs
+together (the confirm's time comes off the prepare's, so a replay step with a
+frozen clock stays inside the two minutes it has past its cycle's limit);
 `prepare.effort` is null (the CLI's default effort). In replay they run in the
 same step, after the cycle, so the step's time charges them.
 

@@ -95,8 +95,8 @@ function createShadow({ cfg, root, home, runPrepare, now, sectionOpts = () => ({
   }
 
   /** Step 2: the prepare of the next bar's plan. */
-  async function prepare(x, nextCloseMs) {
-    const deadlineAt = () => PA.deadlineOf({ nowMs: nowMs(), nextCloseMs, eodMs: x.eodMs, marginMs: T.marginMs, maxMs: T.maxMs });
+  async function prepare(x, nextCloseMs, maxMs) {
+    const deadlineAt = () => PA.deadlineOf({ nowMs: nowMs(), nextCloseMs, eodMs: x.eodMs, marginMs: T.marginMs, maxMs: Math.max(0, maxMs) });
     const deadline = deadlineAt();
     const at = { deadline: { atMs: deadline.atMs, by: deadline.by } };
     if (x.killSwitch()) return { outcome: 'skipped', why: 'kill-switch', ...at };
@@ -139,7 +139,10 @@ function createShadow({ cfg, root, home, runPrepare, now, sectionOpts = () => ({
     let shadow;
     try { shadow = await confirm(x, deadline()); } catch (err) { shadow = { status: 'error', reason: 'error', detail: err.message, planId: null }; }
     let made;
-    try { made = await prepare(x, nextCloseMs); } catch (err) { made = { outcome: 'error', why: err.message }; }
+    // prepare.maxMs bounds both runs together: what the confirm took (its run's own measure) comes off the prepare's, so
+    // on a frozen replay clock the step never outlasts what its cycle left (the next close bounds them on a running one).
+    const confirmMs = shadow && shadow.confirm && Number.isFinite(shadow.confirm.ms) ? shadow.confirm.ms : 0;
+    try { made = await prepare(x, nextCloseMs, T.maxMs - confirmMs); } catch (err) { made = { outcome: 'error', why: err.message }; }
     if (x.cycleLog) { try { require('./cycle-log').amendCycleLog(x.cycleLog, 'prepare', { shadow, made }); } catch (_err) { /* the record only */ } }
     return { shadow, made };
   }
