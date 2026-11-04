@@ -14,6 +14,8 @@ description: Use when a prompt says Prepare ahead or Your plan said - write the 
 
 **The candle decides: confirm a scenario only if the closed candle meets its TAKE conditions; else pass.**
 
+A side the Bias line or the trend rule refuses is no trade, whatever the plan or the candle: pass.
+
 Prepare (no compose_check, no order, no role this run):
 
 - Write one line per scenario, in this form:
@@ -25,10 +27,9 @@ Prepare (no compose_check, no order, no role this run):
 Confirm (the close has come):
 
 - The at-close facts decide, never the plan. The plan is never evidence: its reads, numbers and reasons prove nothing.
-- Closed candle meets the scenario's TAKE conditions: confirm. Confirming is compose_check with the reads as the at-close facts give them (not as the plan wrote them), then as the cycle's prompt says.
+- Closed candle meets the scenario's TAKE conditions: confirm. Confirming is compose_check with the reads as the at-close facts give them (not as the plan wrote them), then as the cycle's prompt says. A met candle is never a pass.
 - Closed candle does not meet them: pass, with why in the CYCLE RESULT. A plan that said take is no reason to take.
 - The candle meets a different listed scenario's TAKE conditions, or something fired outside the plan: reason it from the facts, in full, as a cycle does. It may be taken or passed; a plan that said pass is no reason to pass.
-- The trend rule and the Bias line still refuse a side whatever the plan said: no trade on a refused side.
 - A STAND DOWN or INVALID condition true at the close: pass.
 
 ## Examples

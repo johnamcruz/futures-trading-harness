@@ -714,12 +714,9 @@
       "rule": "a closed candle that meets the scenario's TAKE conditions is confirmed: compose_check with the at-close reads",
       "anchor": "Closed candle meets the scenario's TAKE conditions: confirm.",
       "required": [
-        "\\b(confirm\\w*|take|compos\\w*|enter|go long|long)\\b"
+        "^[\\W_]*(confirm\\w*|take\\b(?!\\s+(not|no)\\b)|take met|compos\\w*|enter|go long|long|yes)"
       ],
-      "forbidden": [
-        "^\\s*(no\\b|n,)",
-        "\\b(pass\\w*|skip\\w*|no trade|stand down)\\b"
-      ],
+      "forbidden": [],
       "lookup": [
         "prepare-ahead"
       ]
@@ -732,11 +729,11 @@
       "rule": "a closed candle that does not meet the TAKE conditions: pass, with why",
       "anchor": "Closed candle does not meet them: pass, with why in the CYCLE RESULT.",
       "required": [
-        "\\b(pass\\w*|skip\\w*|no trade|not met|stand down)\\b"
+        "^[\\W_]*(pass\\w*|skip\\w*|no\\b|nope|not met|take not met|stand down|decline)"
       ],
       "forbidden": [
-        "^\\s*(yes\\b|y,)",
-        "\\b(confirm\\w*|take it|compos\\w*|enter)\\b"
+        "^[\\W_]*(yes|confirm\\w*|take\\b(?!\\s+(not|no)\\b)|enter|go long|long)",
+        "\\b(go long|buy it|take the (long|trade))\\b"
       ],
       "lookup": [
         "prepare-ahead"
@@ -750,13 +747,12 @@
       "rule": "anchoring trap: the plan said take, the candle did not meet TAKE: pass; the plan is never evidence",
       "anchor": "A plan that said take is no reason to take.",
       "required": [
-        "\\b(pass\\w*|skip\\w*|no trade|not met|confirm nothing|no)\\b"
+        "^[\\W_]*(no\\b|nope|pass\\w*|skip\\w*|not met|take not met|confirm nothing|don'?t|do not)"
       ],
       "forbidden": [
-        "^\\s*(yes\\b|y,)",
-        "\\b(take|confirm\\w*|enter) (it|the (trade|long|scenario))\\b",
-        "\\bas planned\\b",
-        "\\bgo long\\b"
+        "\\b(still|anyway) (take|confirm)\\b",
+        "\\b(take|confirm) (it )?anyway\\b",
+        "\\bno (need|recheck|second-guess)\\w*"
       ],
       "lookup": [
         "prepare-ahead"
@@ -770,14 +766,14 @@
       "rule": "opposite trap: the candle meets a different listed scenario's TAKE conditions: judge it from the facts, it may be taken",
       "anchor": "a plan that said pass is no reason to pass.",
       "required": [
-        "^\\W*no\\b|\\bjudge\\b|\\bfrom the facts\\b|\\bown facts\\b|\\bmay be taken\\b|\\btake it\\b|\\bnot off the table\\b"
+        "^[\\W_]*(no\\b|nope|not\\b)|\\bjudge|\\bfrom the facts\\b|\\bown facts\\b|\\b(may|can) be taken\\b|\\bindependent\\b|\\bstill (live|open|valid)\\b"
       ],
       "forbidden": [
-        "^\\s*(yes\\b|y,)",
+        "^[\\W_]*(yes|effectively yes)\\b",
         "\\boff the table\\b",
         "\\bnot (tradeable|tradable|a trade)\\b",
-        "\\bno trade\\b",
-        "\\b(must|should|have to) pass\\b"
+        "\\b(must|should|have to|still|so) pass\\b",
+        "\\bpass anyway\\b"
       ],
       "lookup": [
         "prepare-ahead"
@@ -791,14 +787,15 @@
       "rule": "the plan is never evidence: compose with the reads as the at-close facts give them",
       "anchor": "with the reads as the at-close facts give them (not as the plan wrote them)",
       "required": [
-        "at-close|at the close|\\b1 pt\\b"
+        "at-close|at the close|\\b1 pt\\b|\\bfacts\\b"
       ],
       "forbidden": [
-        "^\\W*(the )?plan\\W*$",
-        "\\bplan'?s read\\b",
-        "\\b4 pt\\b",
+        "^[\\W_]*(?:(?:compose with|use|go with|trust|keep) )?(?:the )?plan(?:'s)?(?![\\w'])(?!\\s+(?:reads?\\s+)?(?:is|are|was)\\s+(?:never|not)\\b)",
+        "\\b(use|compose with|go with|trust|keep|over) (the )?plan(?:'s)?(?![\\w'])",
+        "plan(?:'s)?(?![\\w'])[^.;]*\\bover the at-close",
         "\\bfrom the plan\\b",
-        "\\bnoisy\\b"
+        "\\b(noisy|lag|lags|stale|late)\\b",
+        "\\bwhichever\\b"
       ],
       "lookup": [
         "prepare-ahead"
@@ -1063,15 +1060,13 @@
       "text": "Prepare ahead is on. Your plan said: scenario 1: P1 \"15m rejection at VWAP\" -> TAKE if the 3m closes back above VWAP with a lower wick | PASS if it closes below VWAP; reads: \"15m rejection at VWAP\". The 3m closed above VWAP with a lower wick, meeting TAKE. The plan listed this long. Confirm the long?",
       "rule": "the Bias line refuses the long though the plan listed it: no trade",
       "required": [
-        "\\b(no|not|never|pass|refus\\w*|skip)\\b"
+        "^[\\W_]*(no\\b|nope|not\\b|pass\\w*|skip\\w*|refus\\w*|confirm nothing|take no|don'?t|do not)"
       ],
       "forbidden": [
-        "^\\s*(yes\\b|y,)",
-        "\\b(confirm|take|enter) (it|the long)\\b",
         "\\bgo long\\b",
         "\\bnot refused\\b",
         "\\bno conflict\\b",
-        "^\\W*(confirm|take)\\W*$"
+        "\\bonly if compose_check\\b"
       ],
       "lookup": [
         "prepare-ahead"

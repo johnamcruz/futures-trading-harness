@@ -271,6 +271,31 @@ test('grading: the prepare-ahead questions (q40-q44, b8) grade the right answers
   }
 });
 
+test('grading: the prepare-ahead questions grade the LEADING verdict: a held-out set of fresh right and wrong variants (written apart from the regexes)', () => {
+  // [answer, shouldPass]. The verdict leads (the answer format asks for it); a verdict-less or reversed lead fails.
+  const cases = {
+    q40: [['Confirm: the candle closed above VWAP with a lower wick, TAKE met.', true], ['Take it: TAKE met.', true], ['Compose the long now.', true], ['Enter long; TAKE is met.', true],
+      ['Yes, confirm.', true], ['Confirm; PASS not triggered.', true], ['Confirm; the PASS condition is not met.', true],
+      ['Do not confirm.', false], ['Don\'t take it yet.', false], ['Pass: TAKE not met.', false], ['Wait for the next close before confirming.', false], ['Skip.', false], ['No, hold off.', false]],
+    q41: [['Pass.', true], ['Pass, wait to confirm on the next bar.', true], ['Pass: I\'d only confirm on a close back above.', true], ['No trade: the close is below VWAP.', true],
+      ['Skip: TAKE is not met.', true], ['Decline; the candle failed TAKE.', true], ['Stand down.', true], ['TAKE not met: pass.', true],
+      ['Confirm.', false], ['Take the long.', false], ['Yes, confirm it.', false], ['Enter long.', false], ['Not a pass: take the long.', false], ['Don\'t pass; go long.', false]],
+    q42: [['Pass.', true], ['No: TAKE not met.', true], ['Skip it.', true], ['Do not take it; pass.', true], ['Pass. The plan said take, but the candle failed TAKE.', true], ['Pass: taking it as planned would be anchoring.', true],
+      ['Trust the plan: no recheck needed.', false], ['Yes, take it.', false], ['Proceed as planned.', false], ['Take it anyway.', false], ['Stick to the plan.', false], ['Confirm scenario 1 as planned.', false], ['Go ahead, the plan was sure.', false]],
+    q43: [['No. Scenario 3 is judged on its own facts.', true], ['Judge scenario 3 from the facts; its TAKE is met.', true], ['Scenario 3 can be taken: its conditions hold.', true], ['Nope, scenario 3 still stands.', true],
+      ['Not off the table: take scenario 3.', true], ['Yes, it is off the table.', false], ['Off the table, pass.', false], ['Pass: scenario 1 said pass.', false], ['Scenario 3 is not tradeable.', false], ['Yes.', false]],
+    q44: [['The at-close facts: compose with the 1 pt wick.', true], ['At-close facts (1 pt wick); the plan\'s read is not evidence.', true], ['The plan\'s read is never evidence: use the at-close 1 pt.', true],
+      ['The plan is not evidence; the facts at the close.', true], ['The 1 pt wick, read at the close.', true], ['Compose with the at-close facts, never the plan\'s.', true],
+      ['The plan\'s read.', false], ['Use the plan\'s 4 pt wick.', false], ['The plan\'s wick, 4 pts, over the at-close 1 pt.', false], ['Compose with the plan\'s read.', false], ['The plan\'s version; the at-close facts lag.', false],
+      ['The at-close facts lag; go with the plan\'s 4 pt wick.', false]],
+    b8: [['No trade: the Bias line refuses the long.', true], ['Pass; the long is refused.', true], ['Do not confirm; the trend rule refuses it.', true], ['Skip: Bias says no longs.', true], ['Confirm nothing.', true],
+      ['Confirm the long, TAKE met.', false], ['Yes, take it.', false], ['Take the long; the plan listed it.', false], ['Go long.', false], ['Confirm: nothing refuses it.', false], ['Yes, confirm the long only if compose_check passes.', false]],
+  };
+  for (const [id, list] of Object.entries(cases)) {
+    for (const [a, want] of list) assert.strictEqual(pass(id, `ANSWER: ${a}`), want, `${id} ${want ? 'right' : 'wrong'}: ${a}`);
+  }
+});
+
 test('summary: correct on all K, answered both ways, the totals, the bar; compare names each change', () => {
   const rows = [];
   for (const x of QUIZ.questions) for (let k = 1; k <= 5; k += 1) rows.push({ id: x.id, k, pass: true });

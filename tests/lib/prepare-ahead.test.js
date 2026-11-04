@@ -442,17 +442,16 @@ test('prepare-ahead "on": the confirm\'s user message after the at-close facts: 
   assert.match(text, /"15m rejected VWAP up"/);
   assert.doesNotMatch(text, /DECISION:/);
   assert.doesNotMatch(PA.confirmSuffix({ scenario: plan.scenarios[0], unplanned: [] }), /outside your plan/);
-  // The skill is named once, with how to read it (PR C), after the rule and before what fired outside the plan.
-  assert.strictEqual(text.split(PA.SKILL_NOTE).length - 1, 1);
-  assert.ok(text.indexOf(PA.SKILL_NOTE) > rule && text.indexOf(PA.SKILL_NOTE) < text.indexOf('Also fired at this close'));
+  // The confirm forks the prepare's session and carries the rule inline: it never sends a skill lookup (PR C, coordinator decision).
+  assert.ok(!text.includes(PA.SKILL_NOTE) && !/skill_lookup/.test(text));
 });
 
-test('prepare-ahead: the one sentence that names the skill (read it with skill_lookup) is in the prepare prompt, the confirm message and the shadow confirm prompt', () => {
+test('prepare-ahead: the one sentence that names the skill (read it with skill_lookup) is in the prepare prompt only, not in the confirm message or the shadow confirm prompt', () => {
   assert.strictEqual(PA.SKILL_NOTE, 'Read the prepare-ahead skill with skill_lookup for the format and the rule.');
   const p = PA.preparePrompt({ head: 'Autonomous cycle.', briefingText: 'B', next: NEXT });
   assert.ok(p.endsWith(` ${PA.SKILL_NOTE}`), 'last in the prepare prompt, nothing before it moved');
   const s = makePlan().scenarios[0];
-  assert.ok(PA.confirmPrompt({ atCloseText: 'F', fired: [], scenario: s, next: NEXT }).includes(PA.SKILL_NOTE));
+  assert.ok(!PA.confirmPrompt({ atCloseText: 'F', fired: [], scenario: s, next: NEXT }).includes(PA.SKILL_NOTE));
 });
 
 // --- The shadow confirm's decision, the full cycle's, and the agreement -------------------------------------------------

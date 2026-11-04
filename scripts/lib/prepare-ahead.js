@@ -299,18 +299,18 @@ function confirmPath({ plan, at, fired = [], killSwitch = true, flat = null }) {
   return { path: 'confirm', match: { k: m.k, id: m.id, read: m.read, side: m.side }, scenario, fired, unplanned: m.unplanned };
 }
 
+/** The one sentence that names the skill teaching the format and the rule (skills/prepare-ahead), in the prepare prompt only: the confirm forks the prepare's session and carries the rule inline, so a lookup there would add a tool turn to the close-to-order path. */
+const SKILL_NOTE = 'Read the prepare-ahead skill with skill_lookup for the format and the rule.';
+
 /**
  * The confirm's user message after the at-close facts (the cycle's own prompt and its reads, which come first): the
  * plan's scenario, the rule (rule first, bold in the skills: PR C), what fired outside the plan. It composes through
  * compose_check as the cycle's prompt says, or passes.
  */
-/** The one sentence that names the skill teaching the format and the rule (skills/prepare-ahead), in the three prompts. */
-const SKILL_NOTE = 'Read the prepare-ahead skill with skill_lookup for the format and the rule.';
-
 function confirmSuffix({ scenario, unplanned = [] }) {
   const more = (unplanned || []).length ? `\nAlso fired at this close, outside your plan: ${unplanned.map(f => `"${f}"`).join(', ')}: judge it from the facts above, in full.` : '';
   return `\n\nPrepare ahead: you planned this close during the bar (above in this session, from closed bars only). Your plan said: scenario ${scenario.k}:\n${scenario.line}\n`
-    + `The candle decides: confirm a scenario only if the closed candle meets its TAKE conditions; else pass. The at-close facts above decide, never the plan: confirming is compose_check with the reads as these facts give them, then as this cycle's prompt says; passing is its CYCLE RESULT with why. ${SKILL_NOTE}${more}`;
+    + `The candle decides: confirm a scenario only if the closed candle meets its TAKE conditions; else pass. The at-close facts above decide, never the plan: confirming is compose_check with the reads as these facts give them, then as this cycle's prompt says; passing is its CYCLE RESULT with why.${more}`;
 }
 
 /** What fired at the close: the rules strategies the real scan fired, then the at-close briefing's setups to check. */
@@ -358,7 +358,7 @@ function preparePrompt({ head, account = '', reports = [], briefingText, next })
 /** The shadow confirm's prompt: the at-close facts first, then the plan's scenario, the rule, the DECISION line. */
 function confirmPrompt({ atCloseText, fired = [], scenario, next }) {
   return `The bar opening ${next.t} has closed (${next.closedAt}). The at-close facts (code, read fresh at the close; they decide, never the plan):\n${atCloseText}\nWhat fired at the close: ${fired.length ? fired.map(f => `"${f}"`).join(', ') : 'nothing'}.\n`
-    + `Your plan said: scenario ${scenario.k}:\n${scenario.line}\nThe candle decides: confirm a scenario only if the closed candle meets its TAKE conditions; else pass. ${SKILL_NOTE}\n`
+    + `Your plan said: scenario ${scenario.k}:\n${scenario.line}\nThe candle decides: confirm a scenario only if the closed candle meets its TAKE conditions; else pass.\n`
     + `This is a shadow run beside the real cycle: do not call compose_check, place no order and launch no role. End with exactly one line: DECISION: TAKE ${scenario.k} | DECISION: PASS - <why>.`;
 }
 
