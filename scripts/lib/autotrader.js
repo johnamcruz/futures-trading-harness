@@ -318,7 +318,7 @@ function deliveryToken(k, v) {
 const deliveryOnValue = k => (MODE_KEYS.has(k) ? 'shadow' : true);
 /** A delivery key's value on a harness: what validateConfig would refuse, or null (absent, false or "off" is fine anywhere). */
 function deliveryProblem(k, v, harness) {
-  if (MODE_KEYS.has(k)) return require('./prepare-ahead').modeProblem(v, harness);
+  if (MODE_KEYS.has(k)) return v === undefined || v === 'off' ? null : require('./prepare-ahead').modeProblem(v, harness);
   if (v === undefined || v === false) return null;
   if (v !== true) return `${k}: true or false`;
   return harness === 'claude' ? null : `${k}: for harness "claude" only`;
@@ -440,10 +440,11 @@ function validateConfig(raw) {
   // prepareAhead (prepare-ahead.js, docs/PREPARE-AHEAD.md): "shadow" runs the prepare and the shadow confirm beside the old
   // path (Claude Code only); "off" or absent: as before (no key kept, so its config and hashes are a run's without it).
   // "on" is refused until the confirm decides (PR B2).
-  if (cfg.prepareAhead !== undefined) {
+  // Off (absent or "off") loads none of prepare ahead's modules (tests/e2e/prepare-ahead-off-regression.test.js).
+  if (cfg.prepareAhead === 'off') delete cfg.prepareAhead;
+  else if (cfg.prepareAhead !== undefined) {
     const p = require('./prepare-ahead').modeProblem(cfg.prepareAhead, cfg.harness);
     if (p) errors.push(p);
-    else if (cfg.prepareAhead === 'off') delete cfg.prepareAhead;
   }
   if (cfg.harness === 'opencode') {
     // opencode names a model provider/model (the provider is the user's own opencode config).

@@ -727,7 +727,8 @@ function sectionInputsFor({ cfg, root, home, env = process.env, strategies }) {
 }
 
 function prepareShadowFor({ cfg, root, home, env = process.env, runPrepare = null, now, strategies }) {
-  if (!runPrepare || !require('./prepare-ahead').shadowOn(cfg)) return null;
+  // Off loads none of prepare ahead's modules (tests/e2e/prepare-ahead-off-regression.test.js).
+  if (!runPrepare || cfg.prepareAhead !== 'shadow' || !require('./prepare-ahead').shadowOn(cfg)) return null;
   const blackouts = () => { try { return readBlackouts(loadConfig(env).blackoutsFile); } catch (err) { return { items: [], error: err.message }; } };
   const sectionOpts = sectionInputsFor({ cfg, root, home, env, strategies });
   return require('./prepare-shadow').createShadow({ cfg, root, home, runPrepare, now, sectionOpts, newsAt: at => require('./trading/briefing').newsState(blackouts(), at) });
