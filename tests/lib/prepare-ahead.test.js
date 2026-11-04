@@ -199,6 +199,13 @@ test('prepare-ahead: validate: the base bars must advance by exactly one bar (a 
   assert.strictEqual(PA.validate(makePlan(), skipped).reason, 'bars:m3');
   const same = closeVersions({ b: { m3: NEXT.t } });
   assert.strictEqual(PA.validate(makePlan(), same).reason, 'bars:m3');
+  // The 3m always rolls, whatever end its part claims: a plan whose 3m part says it holds past the close, met by the
+  // same part at the close, is no plan of the bar before (the base bar did not advance).
+  const plan = makePlan();
+  plan.versions.sections.m3.until = '2021-05-24T14:30:00.000Z';
+  const unrolled = closeVersions();
+  unrolled.sections.m3 = { ...plan.versions.sections.m3 };
+  assert.strictEqual(PA.validate(plan, unrolled).reason, 'bars:m3');
 });
 
 test('prepare-ahead: validate: the 15m may roll only at a close the plan was made for (its part ending by then); else it must be as planned', () => {
