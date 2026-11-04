@@ -201,9 +201,10 @@ function createRunner(deps) {
     // Setup-focused practice (learning/setup-moments.js selectBar, wired only on a practice replay): (item, open) ->
     // { run, why, reason }, whether a bar the trigger would run a cycle on runs one. null: every bar as live.
     practiceSelect = null,
-    // Prepare ahead's shadow (prepare-shadow.js createShadow; runner-wiring.js prepareShadowFor: the runner config's
-    // prepareAhead "shadow" only): after(input) once a one-symbol, one-lane trade cycle's result is final: the shadow
-    // confirm of this close's plan, then the next bar's prepare, recorded in the cycle log's `prepare` field only. null:
+    // Prepare ahead (prepare-shadow.js createShadow; runner-wiring.js prepareShadowFor: the runner config's prepareAhead
+    // "shadow" or "on"): after(input) once a one-symbol, one-lane trade cycle's result is final: in shadow the shadow
+    // confirm of this close's plan, then the next bar's prepare, recorded in the cycle log's `prepare` field only; "on":
+    // atClose(input) before the head trader's run (the confirm in its place, or the full run), then after(). null:
     // nothing of it runs (as before).
     prepareShadow = null,
   } = deps;
@@ -2271,10 +2272,22 @@ function createRunner(deps) {
           let shadowLog = null;
           let shadowBriefing = null;
           if (shadowHere) { try { shadowBriefing = briefingFor(run[0].symbol); } catch (_err) { shadowBriefing = null; } }
+          // prepareAhead "on" (prepare-shadow.js atClose): at this close, the confirm (a fork of the prepare's session) in
+          // place of the head trader's full run, or the full run and why; validated against the inputs this cycle starts
+          // from, what fired from its real scan. Anything off (an error here too): the full head trader, as before.
+          let onAt = null;
+          if (shadowHere && prepareShadow.mode === 'on') {
+            const flat = acct && !acct.error && Array.isArray(acct.positions) && Array.isArray(acct.orders) ? !acct.positions.length && !acct.orders.length : null;
+            try {
+              onAt = prepareShadow.atClose({ symbol: run[0].symbol, minutes: cfg.timeframe, bar: run[0].bar, bars: run[0].bars, briefing: shadowBriefing, factsKey: fromCache && fromCache.phase1 ? fromCache.phase1.key : null, reports: served ? served.reports : [], scan: run[0].scan, listed: context.setupsListed, killSwitch: () => isKillSwitchOn(), flat });
+            } catch (err) {
+              onAt = { record: { mode: 'on', path: 'error', why: err.message } };
+            }
+          }
           let r;
           let ranRuns = [];
           try {
-            r = await timedCycle(again.action, prompt, { timeoutMs, context, ...(entryHook ? { entry: entryHook } : {}), ...(overlapHook ? { overlap: overlapHook } : {}), ...(precollect ? { precollect } : {}), ...(shadowHere ? { onLog: f => { shadowLog = f; } } : {}) }, { symbols: run.map(x => x.symbol), bars: run.map(x => x.bar.t), manageOnly, cached: served ? served.roles : [], ...(multi ? { lanes: run.map(x => `${x.minutes}m`) } : {}), ...(historyShown.length ? { history: historyShown } : {}) });
+            r = await timedCycle(again.action, prompt, { timeoutMs, context, ...(entryHook ? { entry: entryHook } : {}), ...(overlapHook ? { overlap: overlapHook } : {}), ...(precollect ? { precollect } : {}), ...(shadowHere ? { onLog: f => { shadowLog = f; } } : {}), ...(onAt && onAt.confirm ? { confirm: onAt.confirm } : {}) }, { symbols: run.map(x => x.symbol), bars: run.map(x => x.bar.t), manageOnly, cached: served ? served.roles : [], ...(multi ? { lanes: run.map(x => `${x.minutes}m`) } : {}), ...(historyShown.length ? { history: historyShown } : {}) });
           } finally {
             stopWatch();
             stopPrices();
@@ -2317,14 +2330,16 @@ function createRunner(deps) {
           record(r.ok, r.timedOut, cycleNow);
           // Prepare ahead's shadow, after the cycle's result is final (prepare-shadow.js): it decides nothing, and its
           // failures stay in its own record. Never after a cycle that failed or timed out (its time is the step's).
-          if (shadowHere && r && r.ok && !r.timedOut) {
+          // ("on": its record after any cycle; the next prepare only after one that ended.)
+          if (shadowHere && r && (prepareShadow.mode === 'on' || (r.ok && !r.timedOut))) {
             try {
               const at = clock.now();
               const eodIn = msToEod(at);
               await prepareShadow.after({
                 symbol: run[0].symbol, minutes: cfg.timeframe, bar: run[0].bar, bars: run[0].bars, windowBars: cfg.bars, briefing: shadowBriefing,
                 factsKey: fromCache && fromCache.phase1 ? fromCache.phase1.key : null, reports: served ? served.reports : [], scan: run[0].scan, listed: context.setupsListed,
-                result: r.result, cycleLog: shadowLog, killSwitch: () => isKillSwitchOn(), eodMs: Number.isFinite(eodIn) ? at.getTime() + eodIn : null, inSession: t => inSession(cfg, t),
+                result: r.result, cycleLog: shadowLog, killSwitch: () => isKillSwitchOn(),
+                ...(onAt ? { on: onAt.record, cycle: { ok: Boolean(r.ok && !r.timedOut), confirm: r.confirm || null } } : {}), eodMs: Number.isFinite(eodIn) ? at.getTime() + eodIn : null, inSession: t => inSession(cfg, t),
                 // A fresh read after the cycle (flat: no position, no working order), and phase 1's key on it as the next
                 // cycle will read it (runner-wiring.js reportCacheFor phase1Key: the same facts, the journal read now).
                 // Quiet: a read of the shadow's own that fails says nothing in the old path's log (its record says it).

@@ -83,7 +83,7 @@ async function precollected(cfg, prompt, context, precollect, deps, budgetMs) {
 }
 
 async function runCycle(cfg, action, prompt, opts, limits = {}, deps = {}) {
-  const { timeoutMs = cfg.cycleTimeoutMinutes * 60000, entry: entryHook = null, precollect = null, overlap: overlapHook = null, onLog = null, confirm = null } = limits;
+  const { timeoutMs = cfg.cycleTimeoutMinutes * 60000, entry: entryHook = null, precollect = null, overlap: overlapHook = null, onLog = null, confirm = null, measureLate = false } = limits;
   let { context = null } = limits;
   // The workspace guard is the caller's to give: a missing one would let a run that changed the instructions go on.
   if (typeof deps.guard !== 'function') throw new Error('cycle-run: deps.guard (the workspace guard) is required');
@@ -95,9 +95,10 @@ async function runCycle(cfg, action, prompt, opts, limits = {}, deps = {}) {
   // this close is the confirm, a fork of the prepare's session, within its own bound and above the head trader's floor
   // (so the full head trader can still run). None left, or a base its env would not carry: the full head trader runs
   // instead (the old path, its own prompt and env), the confirm's outcome in the result only.
-  const fallBack = async (outcome, ms = 0) => {
-    const r = await runCycle(cfg, action, prompt, opts, { ...limits, confirm: null }, deps);
-    return { ...r, confirm: { outcome, ms, fellBack: true } };
+  const prompt0 = prompt;
+  const fallBack = async (outcome, ms = 0, lim = {}) => {
+    const { late, ...r } = await runCycle(cfg, action, prompt0, opts, { ...limits, ...lim, confirm: null, measureLate: true }, deps);
+    return { ...r, confirm: { outcome, ms, fellBack: true, late: late || [] } };
   };
   const confirmMs = confirm ? Math.min(confirm.timeoutMs, timeoutMs - minHeadMs()) : 0;
   if (confirm && !(confirmMs > 0)) return fallBack('no-time');
@@ -105,7 +106,6 @@ async function runCycle(cfg, action, prompt, opts, limits = {}, deps = {}) {
     context = { ...(context || {}), confirmBase: confirm.base };
     if (childEnv(cfg, deps.root, env, context).FTH_CONFIRM_BASE !== confirm.base) return fallBack('no-base');
   }
-  const promptIn = prompt;
   if (confirm && !(opts && opts.dryRun) && typeof precollect !== 'function') prompt = `${prompt}${confirm.suffix}`;
   const now = (deps.now || (() => new Date()))();
   const argOpts = confirm ? { confirm: confirm.session } : {};
@@ -138,7 +138,7 @@ async function runCycle(cfg, action, prompt, opts, limits = {}, deps = {}) {
     try { overlap = overlapHook({ env: runEnv, startedWall: startedMs, budgetMs: Math.max(0, timeoutMs - (wallNow() - startedMs)) }) || null; } catch (e) { err(`[autotrader] phase 2 can't start at the compose (${e.message}): it runs after the head trader's run\n`); }
   }
   let res;
-  const runMs = confirm ? Math.max(0, confirmMs - (wallNow() - startedMs)) : pre ? Math.max(timeoutMs - (wallNow() - startedMs), Math.min(minHeadMs(), timeoutMs)) : timeoutMs;
+  const runMs = confirm ? (pre ? Math.max(0, confirmMs - (wallNow() - startedMs)) : confirmMs) : pre ? Math.max(timeoutMs - (wallNow() - startedMs), Math.min(minHeadMs(), timeoutMs)) : timeoutMs;
   try {
     res = await runOnce(cfg, argv, runMs, context, { ...deps, env }, runEnv);
   } finally {
@@ -151,8 +151,7 @@ async function runCycle(cfg, action, prompt, opts, limits = {}, deps = {}) {
   if (confirm && (!res.ok || res.timedOut) && !composedFirst) {
     if (overlap) overlap.finish('the confirm failed before a compose: the full head trader runs');
     const ms = Math.max(0, wallNow() - startedMs);
-    const r = await runCycle(cfg, action, promptIn, opts, { ...limits, confirm: null, timeoutMs: Math.max(0, timeoutMs - ms) }, deps);
-    return { ...r, confirm: { outcome: res.timedOut ? 'timeout' : 'error', ms, fellBack: true } };
+    return fallBack(res.timedOut ? 'timeout' : 'error', ms, { timeoutMs: Math.max(0, timeoutMs - ms) });
   }
   // The result as scored (autotrader.js scoreRun: a `blocked` with no order call is no-trade), the agent's own kept.
   const scored = scoreRun(res, { action, harness: cfg.harness });
@@ -221,8 +220,21 @@ async function runCycle(cfg, action, prompt, opts, limits = {}, deps = {}) {
   // A cached phase 1 the gateway refused this cycle ([phase1-cache], its gate log): the report cache drops it, so the next
   // cycle runs phase 1 fresh (runner-wiring.js reportCacheFor record).
   const phase1Refused = phase1RefusedIn(res.env, startedMs, wallNow());
-  const confirmed = confirm ? { confirm: { outcome: res.ok && !res.timedOut ? 'done' : res.timedOut ? 'timeout' : 'error', ms: Math.max(0, endedMs - startedMs), fellBack: false } } : {};
+  // "on" only (a confirm, or the full run it fell back to): the late-entry refusals of this cycle's orders, by kind.
+  const late = confirm || measureLate ? lateKindsIn(res.env, startedMs, wallNow()) : null;
+  const confirmed = confirm ? { confirm: { outcome: res.ok && !res.timedOut ? 'done' : res.timedOut ? 'timeout' : 'error', ms: Math.max(0, endedMs - startedMs), fellBack: false, late } } : measureLate ? { late } : {};
   return { ...cycleOutcome(res, { result, intact, action, lookups, reportedResult, resultNote }), ...(phase1Refused ? { phase1Refused: true } : {}), ...confirmed };
+}
+
+/** The late-entry refusals (late-entry.js kinds) in the cycle's gate log between fromMs and toMs (cycle-log.js gateOrders). */
+function lateKindsIn(env, fromMs, toMs) {
+  if (!env) return [];
+  const slack = require('./tunables').runner().session.gateSlackMs;
+  try {
+    return require('./cycle-log').gateOrders(env, fromMs, toMs + slack).flatMap(e => (Array.isArray(e.violations) ? e.violations : []).filter(v => v && v.check === 'late-entry').map(v => (v.late && v.late.kind) || 'unknown'));
+  } catch (_err) {
+    return [];
+  }
 }
 
 /** The cycle's gate log holds a [phase1-cache] refusal (its place_order records, cycle-log.js gateOrders), from `fromMs` on. */
