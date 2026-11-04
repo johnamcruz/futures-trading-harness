@@ -415,13 +415,17 @@ the confirm takes the head trader's place.
    needs nothing of the closing candle and `compose_check` is the check
    (`standingLine`, the one place it is written), and what else fired outside
    the plan (`confirmSuffix`). A standing scenario's line is said by code,
-   never as the prepare wrote it (`standingScenarioLine`): its id and read, the
-   trigger code computed for it (next-close.js `triggerText`, kept on the plan
-   record's candidate as `fires`), the fixed `STANDING_TAKE_PASS` ("TAKE: its
-   reads compose at the close | PASS: compose_check refuses it") and the
-   model's why. A model that invents a candle condition for it (the live
-   quiz's q46: a lower wick) no longer turns the confirm into a pass on that
-   condition. The plan record keeps the model's line as written. One
+   never as the prepare wrote it (`standingScenarioLine`): its candidate's id
+   and read (the code's, not the model's quoted text), the trigger code
+   computed for it (next-close.js `triggerText`, kept on the plan record's
+   candidate as `fires`; said once when several standing scenarios share it,
+   the others "fires as scenario k") and the fixed `STANDING_TAKE_PASS`
+   ("TAKE: its reads compose at the close | PASS: compose_check refuses it",
+   the skill's own clauses). No model text: not its TAKE/PASS conditions, not
+   its why (a path for a condition). A model that invents a candle condition
+   for it (the live quiz's q46: a lower wick) no longer turns the confirm into
+   a pass on that condition. The plan record keeps the model's line, read and
+   why as written. One
    non-standing scenario matched, the message is as before PR C3. The
    record's `match` stays the first matched scenario. It composes
    through `compose_check` as the head trader
