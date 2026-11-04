@@ -120,7 +120,7 @@ test('"on" e2e: the prepare after the 04:09 cycle; at the 04:12 close the confir
   const kinds = [[FIRED_BAR, 1], [NEXT_BAR, 2]].map(([bar, i]) => {
     const m = cycleRecords(w)[i].prepare.on.match;
     const k = PA.readPlan(w.home, 'MNQ', bar).candidates.find(c => c.id === m.id).kind;
-    assert.strictEqual(promptOf(heads[i]).includes(`Scenario ${m.k} is a standing setup: its candle has closed`), k === 'standing', `${bar}: ${k}`);
+    assert.strictEqual(promptOf(heads[i]).includes(`Scenario ${m.k} is a standing setup: the setup is the reaction the briefing lists`), k === 'standing', `${bar}: ${k}`);
     return k;
   });
   assert.strictEqual(kinds[0], 'standing');

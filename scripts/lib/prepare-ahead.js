@@ -311,8 +311,8 @@ const SKILL_NOTE = 'Read the prepare-ahead skill with skill_lookup for the forma
  */
 function confirmSuffix({ scenario, unplanned = [], kind = null }) {
   const more = (unplanned || []).length ? `\nAlso fired at this close, outside your plan: ${unplanned.map(f => `"${f}"`).join(', ')}: judge it from the facts above, in full.` : '';
-  // A standing scenario (next-close.js: its setup candle closed before the bar) has no candle to meet: said, so no pattern is invented for it.
-  const standing = kind === 'standing' ? ` Scenario ${scenario.k} is a standing setup: its candle has closed, so any closing candle meets its TAKE; compose_check on the at-close reads is the check, not a candle pattern.` : '';
+  // A standing scenario (next-close.js: the reaction the briefing lists, its candle closed before the bar): its TAKE needs nothing of the closing candle; said, so none is invented.
+  const standing = kind === 'standing' ? ` Scenario ${scenario.k} is a standing setup: the setup is the reaction the briefing lists, its candle already closed, so its TAKE needs nothing of the closing candle; compose_check on the at-close reads is the check.` : '';
   return `\n\nPrepare ahead: you planned this close during the bar (above in this session, from closed bars only). Your plan said: scenario ${scenario.k}:\n${scenario.line}\n`
     + `The candle decides: confirm a scenario only if the closed candle meets its TAKE conditions; else pass. The at-close facts above decide, never the plan: confirming is compose_check with the reads as these facts give them, then as this cycle's prompt says; passing is its CYCLE RESULT with why.${standing}${more}`;
 }

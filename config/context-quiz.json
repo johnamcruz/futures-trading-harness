@@ -23,7 +23,7 @@
   "unsure": "it depends|unsure|not sure|unclear|ambiguous|can't tell|cannot tell|depends on",
   "passBar": {
     "partA": {
-      "allCorrect": 46,
+      "allCorrect": 47,
       "bothWays": 0
     },
     "partB": {
@@ -710,9 +710,9 @@
       "id": "q40",
       "layer": "entry",
       "prompt": "lookup",
-      "text": "Prepare ahead is on. Your plan said: scenario 1: P1 \"15m rejection at VWAP\" -> TAKE if the 3m closes back above VWAP with a lower wick | PASS if it closes below VWAP; reads: \"15m rejection at VWAP\". The 3m closed above VWAP with a lower wick. Confirm or pass?",
+      "text": "Prepare ahead is on. Your plan said: scenario 1: P1 \"15m rejected prior vah up\" -> TAKE if the 15m closes back above the prior VAH | PASS if it closes below it; reads: \"15m rejected prior vah up\". The 15m closed back above the prior VAH: the briefing lists \"15m rejected prior vah up\". Confirm or pass?",
       "rule": "a closed candle that meets the scenario's TAKE conditions is confirmed: compose_check with the at-close reads",
-      "anchor": "Closed candle meets the scenario's TAKE conditions: confirm.",
+      "anchor": "A met TAKE is a confirm:",
       "required": [
         "^[\\W_]*(confirm\\w*|take\\b(?!\\s+(not|no)\\b)|take met|compos\\w*|enter|go long|long|yes)"
       ],
@@ -725,9 +725,9 @@
       "id": "q41",
       "layer": "entry",
       "prompt": "lookup",
-      "text": "Prepare ahead is on. Your plan said: scenario 1: P1 \"15m rejection at VWAP\" -> TAKE if the 3m closes back above VWAP with a lower wick | PASS if it closes below VWAP; reads: \"15m rejection at VWAP\". The 3m closed below VWAP. Confirm or pass?",
+      "text": "Prepare ahead is on. Your plan said: scenario 1: P1 \"15m rejected prior vah up\" -> TAKE if the 15m closes back above the prior VAH | PASS if it closes below it; reads: \"15m rejected prior vah up\". The 15m closed below the prior VAH: the briefing does not list \"15m rejected prior vah up\". Confirm or pass?",
       "rule": "a closed candle that does not meet the TAKE conditions: pass, with why",
-      "anchor": "Closed candle does not meet them: pass, with why in the CYCLE RESULT.",
+      "anchor": "A pass is the CYCLE RESULT, with why.",
       "required": [
         "^[\\W_]*(pass\\w*|skip\\w*|no\\b|nope|not\\b|not met|take not met|confirm nothing|stand down|decline|do not|don'?t)"
       ],
@@ -743,9 +743,9 @@
       "id": "q42",
       "layer": "entry",
       "prompt": "lookup",
-      "text": "Prepare ahead is on. Your plan said: scenario 1: P1 \"15m rejection at VWAP\" -> TAKE if the 3m closes back above VWAP with a lower wick | PASS if it closes below VWAP; reads: \"15m rejection at VWAP\". You were sure of this plan and wrote that you would take it, but the 3m closed below VWAP with no lower wick. Take it as planned?",
+      "text": "Prepare ahead is on. Your plan said: scenario 1: P1 \"15m rejected prior vah up\" -> TAKE if the 15m closes back above the prior VAH | PASS if it closes below it; reads: \"15m rejected prior vah up\". You were sure of this plan and wrote that you would take it, but the 15m closed below the prior VAH: the briefing does not list \"15m rejected prior vah up\". Take it as planned?",
       "rule": "anchoring trap: the plan said take, the candle did not meet TAKE: pass; the plan is never evidence",
-      "anchor": "A plan that said take is no reason to take.",
+      "anchor": "a plan that said take is no reason to take",
       "required": [
         "^[\\W_]*(no\\b|nope|not\\b|pass\\w*|skip\\w*|not met|take not met|confirm nothing|don'?t|do not)"
       ],
@@ -764,7 +764,7 @@
       "id": "q43",
       "layer": "entry",
       "prompt": "lookup",
-      "text": "Prepare ahead is on. Your plan said: scenario 1: P1 \"15m rejection at VWAP\" -> TAKE if the 3m closes back above VWAP with a lower wick | PASS if it closes below VWAP; reads: \"15m rejection at VWAP\". Scenario 3 was: TAKE if the 3m closes above the session POC with a lower wick. The 3m closed below VWAP (scenario 1's PASS) but above the session POC with a lower wick. Is scenario 3 off the table because scenario 1 said pass?",
+      "text": "Prepare ahead is on. Your plan said: scenario 1: P1 \"15m rejected prior vah up\" -> TAKE if the 15m closes back above the prior VAH | PASS if it closes below it; reads: \"15m rejected prior vah up\". Scenario 3 was: P2 \"15m rejected prior poc up\" -> TAKE if the 15m closes back above the prior POC. The 15m closed below the prior VAH (scenario 1's PASS) but back above the prior POC: the briefing lists \"15m rejected prior poc up\". Is scenario 3 off the table because scenario 1 said pass?",
       "rule": "opposite trap: the candle meets a different listed scenario's TAKE conditions: judge it from the facts, it may be taken",
       "anchor": "a plan that said pass is no reason to pass.",
       "required": [
@@ -785,7 +785,7 @@
       "id": "q44",
       "layer": "entry",
       "prompt": "lookup",
-      "text": "Prepare ahead is on. Your plan said: scenario 1: P1 \"15m rejection at VWAP\" -> TAKE if the 3m closes back above VWAP with a lower wick | PASS if it closes below VWAP; reads: \"15m rejection at VWAP\". The plan wrote the read as \"15m rejection at VWAP, wick 4 pts\"; the at-close facts show the rejection with a 1 pt wick. Which do you compose with: the plan's read or the at-close facts?",
+      "text": "Prepare ahead is on. Your plan said: scenario 1: P1 \"15m rejected prior vah up\" -> TAKE if the 15m closes back above the prior VAH | PASS if it closes below it; reads: \"15m rejected prior vah up\". The plan wrote the read as \"15m rejected prior vah up, wick 4 pts\"; the at-close facts show the rejection with a 1 pt wick. Which do you compose with: the plan's read or the at-close facts?",
       "rule": "the plan is never evidence: compose with the reads as the at-close facts give them",
       "anchor": "with the reads as the at-close facts give them (not as the plan wrote them)",
       "required": [
@@ -807,75 +807,108 @@
       "id": "q45",
       "layer": "entry",
       "prompt": "lookup",
-      "text": "Prepare ahead is on. Your plan said: scenario 2: P3 \"15m rejected prior poc up\" (a standing scenario: its line fired \"whatever its range, volume and close\") -> TAKE if the Standard plan holds at the close | PASS if compose_check refuses it; reads: \"15m rejected prior poc up\". The closing 3m is a small doji with no lower wick, inside the prior 3m candle's range. Confirm or pass?",
-      "rule": "a standing scenario's candle has closed: any closing candle meets its TAKE; confirm through compose_check, never an invented pattern",
-      "anchor": "any closing candle meets its TAKE",
+      "text": "Prepare ahead is on. The briefing's Setups to check: \"15m rejected prior poc up\" (long; setup candle: hammer, close top third); the setup still stands: no confirming read needed. The trend rule allows a long. Your plan said: scenario 2: P3 \"15m rejected prior poc up\" (a standing scenario: its line fired \"whatever its range, volume and close\") -> TAKE if its reads compose at the close | PASS if compose_check refuses it; reads: \"15m rejected prior poc up\". The closing 3m: pattern doji, close middle third. Confirm or pass?",
+      "rule": "a standing scenario: the setup is the listed reaction, its candle closed; its TAKE needs nothing of the closing candle (a 3m doji decides nothing: candle-reading); confirm through compose_check",
+      "anchor": "its TAKE needs nothing of the closing candle",
       "required": [
-        "^[\\W_]*(confirm\\w*\\b(?!\\s+nothing)|take\\b(?!\\s+(not|no)\\b)|compos\\w*|enter|go long|long|yes)"
+        "^[\\W_]*(confirm\\w*\\b(?!\\s+nothing)|take\\b(?!\\s+(not|no)\\b)|compos\\w*|enter|go long|yes)"
       ],
       "forbidden": [
         "\\bwait\\w*|\\bhold off\\b",
-        "\\bonly (after|if|when|once)\\b(?![^.;]*compos)[^.;]*\\b(candle|bar|closes|closed|wick|green|red|prints?)\\b",
-        "^[\\W_]*(?:yes|yep)\\b[\\W_]*(?:pass|skip|no trade|wait)"
+        "\\bonly (after|if|when|once|on)\\b(?![^.;]*compos)[^.;]*\\b(candle|bar|close[sd]?|wick|green|red|prints?)\\b",
+        "^[\\W_]*(?:yes|yep)\\b[\\W_]*(?:(?:i'?d|i would|i will|i'll)\\s+)?(?:pass|skip|no trade|wait)",
+        "\\b(?:the )?doji (?:confirms|is (?:a |the )?confirmation)\\b",
+        "\\b(?:once|if|when|after|on|until)\\s+(?:the\\s+|a\\s+)?(?:next|another|later|new)\\b|\\blater\\b",
+        "[,;:]\\s*(?:so\\s+|then\\s+)?pass\\b(?!\\s+(?:only|if|when|unless|on)\\b)"
       ],
       "lookup": [
-        "prepare-ahead"
+        "prepare-ahead",
+        "candle-reading"
       ]
     },
     {
       "id": "q46",
       "layer": "entry",
       "prompt": "lookup",
-      "text": "Prepare ahead is on. Your plan said: scenario 2: P3 \"15m rejected prior poc up\" (a standing scenario: its line fired \"whatever its range, volume and close\") -> TAKE if the 3m closes with a lower wick | PASS if not; reads: \"15m rejected prior poc up\". The closing 3m has no lower wick; the 15m rejection still stands. Confirm or pass?",
-      "rule": "a standing scenario's TAKE is met by any close, whatever pattern the plan wrote: confirm through compose_check, not a pass on the plan's invented condition",
-      "anchor": "whatever pattern the plan wrote",
+      "text": "Prepare ahead is on. The briefing's Setups to check: \"15m rejected prior poc up\" (long; setup candle: hammer, close top third); the setup still stands: no confirming read needed. The trend rule allows a long. Your plan said: scenario 2: P3 \"15m rejected prior poc up\" (a standing scenario: its line fired \"whatever its range, volume and close\") -> TAKE if the 3m closes with a lower wick | PASS if not; reads: \"15m rejected prior poc up\". The closing 3m: no lower wick, pattern none, close middle third. Confirm or pass?",
+      "rule": "a standing scenario's TAKE needs nothing of the closing candle, whatever the plan wrote: confirm through compose_check, not a pass on the plan's invented condition",
+      "anchor": "whatever the plan wrote",
       "required": [
-        "^[\\W_]*(confirm\\w*\\b(?!\\s+nothing)|take\\b(?!\\s+(not|no)\\b)|compos\\w*|enter|go long|long|yes)"
+        "^[\\W_]*(confirm\\w*\\b(?!\\s+nothing)|take\\b(?!\\s+(not|no)\\b)|compos\\w*|enter|go long|yes)"
       ],
       "forbidden": [
         "\\bwait\\w*|\\bhold off\\b",
-        "\\bonly (after|if|when|once)\\b(?![^.;]*compos)[^.;]*\\b(candle|bar|closes|closed|wick|green|red|prints?)\\b",
-        "^[\\W_]*(?:yes|yep)\\b[\\W_]*(?:pass|skip|no trade|wait)"
+        "\\bonly (after|if|when|once|on)\\b(?![^.;]*compos)[^.;]*\\b(candle|bar|close[sd]?|wick|green|red|prints?)\\b",
+        "^[\\W_]*(?:yes|yep)\\b[\\W_]*(?:(?:i'?d|i would|i will|i'll)\\s+)?(?:pass|skip|no trade|wait)",
+        "\\b(?:once|if|when|after|on|until)\\s+(?:the\\s+|a\\s+)?(?:next|another|later|new)\\b|\\blater\\b",
+        "[,;:]\\s*(?:so\\s+|then\\s+)?pass\\b(?!\\s+(?:only|if|when|unless|on)\\b)"
       ],
       "lookup": [
-        "prepare-ahead"
+        "prepare-ahead",
+        "candle-reading"
       ]
     },
     {
       "id": "q47",
       "layer": "entry",
       "prompt": "lookup",
-      "text": "Prepare ahead is on. Your plan said: scenario 2: P3 \"15m rejected prior poc up\" (a standing scenario: its line fired \"whatever its range, volume and close\") -> TAKE if the Standard plan holds at the close | PASS if compose_check refuses it; reads: \"15m rejected prior poc up\". The closing 3m closed below the 15m candle's low, and compose_check at the close refused it: the stop is not on the losing side of the entry. Confirm or pass?",
+      "text": "Prepare ahead is on. The briefing's Setups to check: \"15m rejected prior poc up\" (long; setup candle: hammer, close top third); the setup still stands: no confirming read needed. The trend rule allows a long. Your plan said: scenario 2: P3 \"15m rejected prior poc up\" (a standing scenario: its line fired \"whatever its range, volume and close\") -> TAKE if its reads compose at the close | PASS if compose_check refuses it; reads: \"15m rejected prior poc up\". The closing 3m closed below the 15m setup candle's low, and compose_check at the close refused it: the stop is not on the losing side of the entry. Confirm or pass?",
       "rule": "a standing scenario: compose_check refusing it is the pass",
-      "anchor": "compose_check refusing it is the pass.",
+      "anchor": "compose_check refusing is the pass",
       "required": [
         "^[\\W_]*(pass\\w*|skip\\w*|no\\b|nope|not\\b|no trade|confirm nothing|stand down|decline|do not|don'?t)"
       ],
       "forbidden": [
-        "(?:(?<=^[\\W_]*)|(?<=[:;,—–-]\\s*)|(?<=[:;,—–-]\\s*(?:then|and|so|but|just)\\s+))\\b(?:confirm(?:ed|s)?|go long|enter long)\\b(?!\\s+nothing)",
-        "(?:(?<=^[\\W_]*)|(?<=[:;,—–-]\\s*)|(?<=[:;,—–-]\\s*(?:then|and|so|but|just)\\s+))\\btake (it|the)\\b"
+        "(?:(?<=^[\\W_]*)|(?<=[:;,.—–-]\\s*)|(?<=[:;,.—–-]\\s*(?:then|and|so|but|just)\\s+))\\b(?:confirm(?:ed|s)?|go long|enter long)\\b(?!\\s+nothing)",
+        "(?:(?<=^[\\W_]*)|(?<=[:;,.—–-]\\s*)|(?<=[:;,.—–-]\\s*(?:then|and|so|but|just)\\s+))\\btake (it|the)\\b",
+        "\\brecompos\\w*|\\bre-?(?:run|do|send) (?:the )?compose_check\\b|\\b(?:wider|widen\\w*|move\\w*|new|different) (?:the )?stop\\b"
       ],
       "lookup": [
-        "prepare-ahead"
+        "prepare-ahead",
+        "candle-reading"
       ]
     },
     {
       "id": "q48",
       "layer": "entry",
       "prompt": "lookup",
-      "text": "Prepare ahead is on. Your plan said: scenario 2: P3 \"15m rejected prior poc up\" (a standing scenario: its line fired \"whatever its range, volume and close\") -> TAKE if the Standard plan holds at the close | PASS if compose_check refuses it; reads: \"15m rejected prior poc up\". You were sure of this plan and wrote that you would take it. By the close price ran 30 points up, away from the plan's limit, and compose_check at the close refused it: R:R under the minimum. Confirm or pass?",
+      "text": "Prepare ahead is on. The briefing's Setups to check: \"15m rejected prior poc up\" (long; setup candle: hammer, close top third); the setup still stands: no confirming read needed. The trend rule allows a long. Your plan said: scenario 2: P3 \"15m rejected prior poc up\" (a standing scenario: its line fired \"whatever its range, volume and close\") -> TAKE if its reads compose at the close | PASS if compose_check refuses it; reads: \"15m rejected prior poc up\". You were sure of this plan and wrote that you would take it. By the close price ran 30 points up, away from the plan's limit, and compose_check at the close refused it: R:R under the minimum. Confirm or pass?",
       "rule": "a standing scenario whose entry ran away: compose_check refuses, so pass; the plan's TAKE and its limit are no reason to take",
       "anchor": "PASS if compose_check refuses it.",
       "required": [
         "^[\\W_]*(pass\\w*|skip\\w*|no\\b|nope|not\\b|no trade|confirm nothing|stand down|decline|do not|don'?t)"
       ],
       "forbidden": [
-        "(?:(?<=^[\\W_]*)|(?<=[:;,—–-]\\s*)|(?<=[:;,—–-]\\s*(?:then|and|so|but|just)\\s+))\\b(?:confirm(?:ed|s)?|go long|enter long)\\b(?!\\s+nothing)",
-        "(?:(?<=^[\\W_]*)|(?<=[:;,—–-]\\s*)|(?<=[:;,—–-]\\s*(?:then|and|so|but|just)\\s+))\\btake (it|the)\\b",
-        "\\bchase\\w*"
+        "(?:(?<=^[\\W_]*)|(?<=[:;,.—–-]\\s*)|(?<=[:;,.—–-]\\s*(?:then|and|so|but|just)\\s+))\\b(?:confirm(?:ed|s)?|go long|enter long)\\b(?!\\s+nothing)",
+        "(?:(?<=^[\\W_]*)|(?<=[:;,.—–-]\\s*)|(?<=[:;,.—–-]\\s*(?:then|and|so|but|just)\\s+))\\btake (it|the)\\b",
+        "\\bchase\\w*",
+        "\\brecompos\\w*|\\bre-?(?:run|do|send) (?:the )?compose_check\\b|\\b(?:wider|widen\\w*|move\\w*|new|different) (?:the )?stop\\b"
       ],
       "lookup": [
-        "prepare-ahead"
+        "prepare-ahead",
+        "candle-reading"
+      ]
+    },
+    {
+      "id": "q49",
+      "layer": "entry",
+      "prompt": "lookup",
+      "text": "Prepare ahead is on. The briefing's Setups to check: \"15m rejected prior poc up\" (long; setup candle: hammer, close top third); the setup still stands: no confirming read needed. The trend rule allows a long. Your plan said: scenario 2: P3 \"15m rejected prior poc up\" (a standing scenario: its line fired \"whatever its range, volume and close\") -> TAKE if its reads compose at the close | PASS if compose_check refuses it; reads: \"15m rejected prior poc up\". The closing 3m closed back below the prior POC, still above the 15m setup candle's low. Is that 3m close by itself a reason to pass?",
+      "rule": "a standing scenario: read the closing candle as candle-reading does (a read, never a veto; the 3m only times the entry): context to weigh, never a pass by itself, never ignored",
+      "anchor": "read that candle as candle-reading does",
+      "required": [
+        "^[\\W_]*(no\\b|nope|not\\b|never)"
+      ],
+      "forbidden": [
+        "\\bignor\\w*",
+        "\\birrelevant\\b",
+        "\\b(?:does not|doesn'?t|won'?t) matter\\b",
+        "\\bno (?:effect|bearing|weight)\\b",
+        "^[\\W_]*(?:no|nope)\\b[\\W_]*pass\\b"
+      ],
+      "lookup": [
+        "prepare-ahead",
+        "candle-reading"
       ]
     }
   ],
@@ -1134,7 +1167,7 @@
           "t15": 1
         }
       },
-      "text": "Prepare ahead is on. Your plan said: scenario 1: P1 \"15m rejection at VWAP\" -> TAKE if the 3m closes back above VWAP with a lower wick | PASS if it closes below VWAP; reads: \"15m rejection at VWAP\". The 3m closed above VWAP with a lower wick, meeting TAKE. The plan listed this long. Confirm the long?",
+      "text": "Prepare ahead is on. Your plan said: scenario 1: P1 \"15m rejected prior vah up\" -> TAKE if the 15m closes back above the prior VAH | PASS if it closes below it; reads: \"15m rejected prior vah up\". The 15m closed back above the prior VAH, meeting TAKE. The plan listed this long. Confirm the long?",
       "rule": "the Bias line refuses the long though the plan listed it: no trade",
       "required": [
         "^[\\W_]*(no\\b|nope|not\\b|pass\\w*|skip\\w*|refus\\w*|confirm nothing|take no|don'?t|do not)"

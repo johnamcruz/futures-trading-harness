@@ -446,10 +446,10 @@ test('prepare-ahead "on": the confirm\'s user message after the at-close facts: 
   assert.ok(!text.includes(PA.SKILL_NOTE) && !/skill_lookup/.test(text));
 });
 
-test('prepare-ahead "on": a standing scenario\'s confirm says its candle has closed and compose_check is the check (kind standing only); every other kind\'s message is unchanged', () => {
+test('prepare-ahead "on": a standing scenario\'s confirm says the setup is the listed reaction (its TAKE needs nothing of the closing candle) and compose_check is the check (kind standing only); every other kind\'s message is unchanged', () => {
   const s = withBase().scenarios[0];
   const plain = PA.confirmSuffix({ scenario: s, unplanned: [] });
-  const LINE = `Scenario ${s.k} is a standing setup: its candle has closed, so any closing candle meets its TAKE; compose_check on the at-close reads is the check, not a candle pattern.`;
+  const LINE = `Scenario ${s.k} is a standing setup: the setup is the reaction the briefing lists, its candle already closed, so its TAKE needs nothing of the closing candle; compose_check on the at-close reads is the check.`;
   const standing = PA.confirmSuffix({ scenario: s, unplanned: [], kind: 'standing' });
   assert.ok(standing.includes(LINE), standing);
   // The line after the rule, before what fired outside the plan; otherwise the same message.
