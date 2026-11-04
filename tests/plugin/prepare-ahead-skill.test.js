@@ -13,6 +13,7 @@ const assert = require('node:assert');
 const fs = require('fs');
 const path = require('path');
 const { parseFrontmatter } = require('../../scripts/lib/frontmatter');
+const PA = require('../../scripts/lib/prepare-ahead');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const RAW = fs.readFileSync(path.join(ROOT, 'skills', 'prepare-ahead', 'SKILL.md'), 'utf8');
@@ -79,4 +80,15 @@ test('prepare-ahead skill: no line trusts the plan, composes without compose_che
   }
   // Every mention of compose_check confirms through it or forbids it in a prepare.
   for (const m of BODY.matchAll(/[^.]*compose_check[^.]*\./g)) assert.ok(/no compose_check|Confirming is compose_check|compose_check with the at-close reads|then as the cycle/.test(m[0]), m[0]);
+});
+
+test('prepare-ahead skill: its format lines are the runner\'s FORMAT, and its bold rule is the rule the confirm carries', () => {
+  assert.ok(Array.isArray(PA.FORMAT) && PA.FORMAT.length === 3);
+  for (const line of PA.FORMAT) assert.ok(BODY.includes(line), `the skill lacks the runner's line: ${line}`);
+  // The skill's bold rule sentence is in the confirm message and in the shadow confirm prompt, word for word.
+  const rule = RAW.match(/## How It Works\s+\*\*(.+?)\*\*/)[1];
+  assert.ok(PA.confirmSuffix({ scenario: { k: 1, line: 'L' }, unplanned: [] }).includes(rule), 'confirmSuffix');
+  assert.ok(PA.confirmPrompt({ atCloseText: 'F', fired: [], scenario: { k: 1, line: 'L' }, next: { t: 'T', closedAt: 'C' } }).includes(rule), 'confirmPrompt');
+  // The runner\'s prepare prompt carries the same lines.
+  assert.ok(PA.preparePrompt({ head: 'H', briefingText: 'B', next: { t: 'T', closedAt: 'C' } }).includes(PA.FORMAT.join('\n')));
 });
