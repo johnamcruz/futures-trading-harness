@@ -57,9 +57,9 @@ const ALLOWED = {
   'manage-position': 'trade-session steps 1 and 3 point to it while a position is open; not on the load list',
   'leftover-orders': 'trade-session step 1 points to it when flat with working orders; not on the load list',
   'entry-outcome': 'trade-session step 6 points to it after an entry is placed; not on the load list',
-  // PR C of prepare ahead (docs/PREPARE-AHEAD.md): read with skill_lookup by the prepare and the confirm runs, never on a load list (a list would embed or index it in the prompt of every cycle, prepare ahead off included, and move the off path's prompts).
-  'prepare-ahead': 'the prepare and confirm runs of prepare ahead look it up (skill_lookup, prepare-ahead-skill.test.js); never on a role\'s or the head trader\'s list, so the prompts of a run with prepare ahead off do not change',
-  'gate-refusals-skills':'the [skills-at-entry] refusal\'s row; the head trader finds it by its index line (workspace/AGENTS.md) when refused',
+  // PR C of prepare ahead (docs/PREPARE-AHEAD.md): read with skill_lookup by the prepare and the confirm runs, never on a load list (a list would embed it in the prompt of every cycle). It still gains one index line, in the Claude head trader's index-mode file and in workspace/AGENTS.md's catalog.
+  'prepare-ahead': 'the prepare and confirm runs of prepare ahead look it up (skill_lookup, prepare-ahead-skill.test.js); on no role\'s or head trader\'s list, so with prepare ahead off only its index and catalog lines are added',
+  'gate-refusals-skills': 'the [skills-at-entry] refusal\'s row; the head trader finds it by its index line (workspace/AGENTS.md) when refused',
 };
 
 // Descriptions over the limit when the limit came in (skill-descriptions.pins.json: skill -> its length): each pin

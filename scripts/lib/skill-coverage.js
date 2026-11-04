@@ -35,7 +35,7 @@ const WORKFLOW = Object.freeze({
   'live-session-records': 'the live session\'s records: harness operations',
   'order-plan': 'reading order_plan\'s numbers: the trade-executor\'s tool output',
   'premarket': 'the premarket cycle\'s own skill: its prompt names it',
-  'prepare-ahead': 'the prepare and confirm runs of prepare ahead look it up (skill_lookup); no cycle prompt names it, so prepare ahead off is unchanged',
+  'prepare-ahead': 'the prepare and confirm runs of prepare ahead look it up (skill_lookup); no cycle prompt names it; with prepare ahead off it adds only its index line (the Claude head file) and its catalog line (AGENTS.md)',
   'prop-evaluator': 'the prop evaluator CLI: a training and analysis tool',
   'replay': 'running a replay: training operations',
   'replay-labels': 'replay labels: training data',

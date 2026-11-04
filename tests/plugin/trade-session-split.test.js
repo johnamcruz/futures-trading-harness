@@ -396,9 +396,10 @@ test('trade-session split: trade-plan is step 4 byte for byte (tests/plugin/harn
 const OLD_AGENTS_MD = 24466;
 // Raised pins (each by only the bytes its line needs): leftover-orders' [cancel-protection] line for a fill reported
 // late: the skill file grew 1272 -> 1427 bytes (+155); the budget's +154 (88394 -> 88548) is the measured need of the
-// worst path; owner-approved: improves context. Plus 130 for prepare-ahead's index line in AGENTS.md (PR C: the one
-// line a new skill adds to the catalog the opencode and Codex head traders read; 88669 -> 88799 is the measured need of
-// the worst path). The skill itself is looked up by prepare ahead's runs only and is on no list.
+// worst path; owner-approved: improves context. Plus 130 for prepare-ahead's catalog line in AGENTS.md (PR C): raised
+// under the owner's standing rule (raise a skill size cap or pin when it improves context; never cut context to fit),
+// by only the measured need of the worst path (88669 -> 88799), no more. The skill itself is looked up by prepare
+// ahead's runs only and is on no list.
 const RAISED = 154 + 130;
 const EVERY_CYCLE = ['multi-timeframe-analysis', 'strategy-library', 'strategy-scan', 'strategy-gate-checks', 'trader-process', 'htf-to-ltf', 'autonomous-trading'];
 const PATHS = {

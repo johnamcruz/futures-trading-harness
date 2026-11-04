@@ -242,18 +242,32 @@ test('the reaction questions (q23-q35, feat/sweep-candle-control): answer-first 
   }
 });
 
-test('grading: the prepare-ahead questions (q40-q44, b8) pass the right answer and fail the trap answer', () => {
+test('grading: the prepare-ahead questions (q40-q44, b8) grade the right answers and the trap answers, in the skill\'s own words and negated', () => {
+  // [answer, shouldPass]: the review's probe (every misgrade it found) and the negated nuances.
   const cases = {
-    q40: [['Confirm: compose_check with the at-close reads.', 'Confirm it; the candle met TAKE.'], ['Pass.', 'No, pass.']],
-    q41: [['Pass: TAKE is not met, the close is below VWAP.'], ['Confirm.', 'Take it.', 'Yes, confirm.']],
-    q42: [['No. Pass: the candle did not meet TAKE and the plan is not evidence.'], ['Yes, take it as planned.', 'Confirm.', 'Take it.']],
-    q43: [['No. Judge scenario 3 from the facts; its TAKE is met, so take it.', 'Not off the table: the candle meets scenario 3.'], ['Yes, scenario 3 is off the table.', 'Yes, pass.']],
-    q44: [['The at-close facts: compose with the 1 pt wick.', 'The reads the facts give at the close, never the plan.'], ['The plan\'s read.', 'The plan.']],
-    b8: [['No trade: the Bias line refuses the long.', 'Pass; the Bias line says no long.'], ['Yes, confirm the long.', 'Confirm.', 'Take it.']],
+    q40: [['Do not take it; pass.', false], ['I would not confirm: pass.', false], ['Skip it, don\'t compose.', false], ['Pass.', false], ['No, pass.', false],
+      ['Confirmed: the candle met TAKE.', true], ['Yes, go long: TAKE met.', true], ['Composing now with the at-close reads.', true], ['Enter the long.', true],
+      ['Confirm: compose_check with the at-close reads.', true], ['Confirm; do not pass.', true]],
+    q41: [['Don\'t pass; confirm it.', false], ['I would not pass: take it.', false], ['Confirm.', false], ['Take it.', false], ['Yes, confirm.', false],
+      ['No trade: TAKE not met.', true], ['TAKE not met, so pass.', true], ['Passing: closed below VWAP.', true], ['Skip: closed below VWAP.', true],
+      ['Pass: TAKE is not met, the close is below VWAP.', true], ['Pass; do not confirm.', true]],
+    q42: [['Absolutely, take it as planned; no need to recheck.', false], ['I\'d take it as planned, the wick does not matter.', false], ['Sure, take it; the plan is not wrong.', false],
+      ['Yes, take it as planned.', false], ['Confirm it.', false],
+      ['TAKE not met: pass.', true], ['Pass.', true], ['Confirm nothing: TAKE not met.', true], ['Skip it: below VWAP, no wick.', true],
+      ['No. Pass: the candle did not meet TAKE and the plan is not evidence.', true], ['Do not take it; pass.', true]],
+    q43: [['Off the table: the plan said pass, no trade.', false], ['Scenario 3 is not tradeable since scenario 1 passed.', false], ['It is off the table; I will not take it.', false],
+      ['Yes, scenario 3 is off the table.', false], ['Yes, pass.', false],
+      ['Judge scenario 3 from the facts: its TAKE is met, take it.', true], ['Scenario 3 stands on its own facts; it may be taken.', true], ['No.', true],
+      ['No. Judge scenario 3 from the facts; its TAKE is met, so take it.', true], ['Not off the table: the candle meets scenario 3.', true]],
+    q44: [['Compose with the plan\'s read (4 pt wick); the facts are noisy.', false], ['Use the 4 pt wick from the plan, not the at-close 1 pt.', false], ['The plan.', false], ['The plan\'s read.', false],
+      ['The plan is never evidence: compose with the at-close facts.', true], ['Plan reads are not evidence: use the at-close facts.', true], ['The at-close facts.', true], ['The 1 pt wick read at the close.', true],
+      ['The at-close facts: compose with the 1 pt wick, not the plan\'s 4 pt.', true]],
+    b8: [['I\'d confirm it: the plan listed it, no conflict.', false], ['Go long: TAKE met, not refused.', false], ['Yes, confirm the long.', false], ['Confirm.', false], ['Take it.', false],
+      ['Confirm nothing: the Bias line refuses longs.', true], ['Take no trade: the long is refused.', true], ['No trade.', true], ['Refused: 4h and 1h are down, so no long.', true],
+      ['No trade: the Bias line refuses the long.', true], ['Do not confirm; the Bias line refuses it.', true], ['Pass; the Bias line says no long.', true]],
   };
-  for (const [id, [right, wrong]] of Object.entries(cases)) {
-    for (const a of right) assert.ok(pass(id, `ANSWER: ${a}`), `${id} right: ${a}`);
-    for (const a of wrong) assert.ok(!pass(id, `ANSWER: ${a}`), `${id} wrong: ${a}`);
+  for (const [id, list] of Object.entries(cases)) {
+    for (const [a, want] of list) assert.strictEqual(pass(id, `ANSWER: ${a}`), want, `${id} ${want ? 'right' : 'wrong'}: ${a}`);
   }
 });
 

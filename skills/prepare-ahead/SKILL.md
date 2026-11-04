@@ -33,7 +33,7 @@ Confirm (the close has come):
 
 ## Examples
 
-- Plan: `SCENARIO 1: P1 "15m rejection at VWAP" → TAKE if the 3m closes back above VWAP with a lower wick | PASS if it closes below VWAP`. The close is above VWAP with the lower wick: confirm, compose_check with the at-close reads.
+- Plan: `SCENARIO 1: P1 "15m rejection at VWAP" → TAKE if the 3m closes back above VWAP with a lower wick | PASS if it closes below VWAP; reads: "15m rejection at VWAP"; why: the level held`. The close is above VWAP with the lower wick: confirm, compose_check with the at-close reads.
 - Same plan, the close is below VWAP: pass ("closed below VWAP, TAKE not met").
 - Plan said take scenario 2, the closed candle has no wick and closed inside the range: pass. The plan is not evidence.
 - Plan said pass scenario 1, the candle meets scenario 3's TAKE conditions: judge scenario 3 from the facts; take it if they hold.
