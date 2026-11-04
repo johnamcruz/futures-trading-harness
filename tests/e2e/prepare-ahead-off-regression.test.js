@@ -33,7 +33,10 @@ const { runPrepare } = require('../../scripts/lib/cycle-run');
 
 const ROOT = path.resolve(__dirname, '..', '..');
 const MAIN = require('../fixtures/prepare-off/main-outputs.json');
-const sameAs = (got, want, what) => assert.strictEqual(O.firstDiff(got, want), null, `${what}: ${JSON.stringify(O.firstDiff(got, want))}`);
+// Every difference at once (all days, all fields; at most 50, each with its path), so one failing run shows them all.
+const sameAs = (got, want, what) => { const d = O.allDiffs(got, want); assert.strictEqual(d.length, 0, `${what}: ${d.length} difference(s):\n${d.map(x => JSON.stringify(x)).join('\n')}`); };
+/** Every day's outputs against main's at once. */
+const allSame = (got, what, of = x => x) => sameAs(Object.fromEntries(O.DAYS.map(d => [d, of(got[d])])), Object.fromEntries(O.DAYS.map(d => [d, of(MAIN.days[d])])), what);
 /** The old path's outputs: all but the run fingerprint (shadow names its key there, by design) and the broker's call log. */
 const oldOf = ({ fingerprint: _f, calls: _c, ...rest }) => rest;
 // The shadow's own broker reads: its account read after the cycle (runner.js accountSnapshot: the account, positions,
@@ -67,16 +70,17 @@ const shadowSame = (got, want, what) => { sameAs(oldOf(got), oldOf(want), what);
 
 test('off regression 1: the key absent is main, byte for byte, on every day (fingerprint included)', async () => {
   const got = await O.allDays({});
-  for (const d of O.DAYS) sameAs(got[d], MAIN.days[d], d);
+  allSame(got, 'key absent');
 });
 
 test('off regression 1: the key "off" is main, byte for byte, on every day (fingerprint included: "off" is no delivery)', async () => {
   const got = await O.allDays({ extra: { prepareAhead: 'off' } });
-  for (const d of O.DAYS) sameAs(got[d], MAIN.days[d], d);
+  allSame(got, 'key off');
 });
 
 test('off regression 1: in "shadow" the old path\'s outputs are main\'s on every day (only the fingerprint names the key)', async () => {
   const got = await O.allDays(shadowWith(() => null));
+  allSame(got, 'shadow, the old path', oldOf);
   for (const d of O.DAYS) {
     shadowSame(got[d], MAIN.days[d], d);
     assert.strictEqual(got[d].fingerprint.delivery, `${MAIN.days[d].fingerprint.delivery},prepareAhead=shadow`);
@@ -98,7 +102,7 @@ test('off regression 2: toggled on, then off: the shadow\'s leftovers (plans for
     // The leftovers themselves are left out of the comparison (main has none), and checked unchanged.
     const planted = new Map();
     const got = await O.allDays({ extra, own: /^prepare\//, before: w => { plant(w); for (const f of fs.readdirSync(path.join(w.home, 'prepare'))) planted.set(f, fs.readFileSync(path.join(w.home, 'prepare', f), 'utf8')); planted.home = w.home; } });
-    for (const d of O.DAYS) sameAs(got[d], MAIN.days[d], `${JSON.stringify(extra)} ${d}`);
+    allSame(got, JSON.stringify(extra));
     for (const [f, text] of planted) assert.strictEqual(fs.readFileSync(path.join(planted.home, 'prepare', f), 'utf8'), text, `${f} untouched`);
   }
 });

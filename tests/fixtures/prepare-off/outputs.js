@@ -80,10 +80,25 @@ function normalizer(w, root) {
 const exchangeState = p => { const s = JSON.parse(fs.readFileSync(p, 'utf8')); return JSON.stringify({ ...s, calls: undefined }); };
 const exchangeCalls = p => (JSON.parse(fs.readFileSync(p, 'utf8')).calls || []).map(c => `${c.tool} ${JSON.stringify(c.args || {})}`);
 
-const readTree = (dir, base = dir) => (fs.existsSync(dir) ? fs.readdirSync(dir, { withFileTypes: true }).sort((a, b) => a.name.localeCompare(b.name)).flatMap(e => {
+// A directory's entries in code-unit order (never the platform's listing order, never the locale's collation).
+const byName = (a, b) => (a.name < b.name ? -1 : a.name > b.name ? 1 : 0);
+const readTree = (dir, base = dir) => (fs.existsSync(dir) ? fs.readdirSync(dir, { withFileTypes: true }).sort(byName).flatMap(e => {
   const p = path.join(dir, e.name);
   return e.isDirectory() ? readTree(p, base) : [[path.relative(base, p), p]];
 }) : []);
+
+/**
+ * Every state file of a world's home, [relative path, text] in code-unit order: the cycle records and lines are their
+ * own outputs; `own` (a pattern) the files left out (the shadow's, in shadow mode); the exchange's state less its call
+ * log (its own output).
+ */
+// A file's text; a gzip file's DECOMPRESSED text: its compressed bytes are the platform's (the header's OS byte, the
+// zlib build and level), never the old path's output.
+const textOf = p => (p.endsWith('.gz') ? require('zlib').gunzipSync(fs.readFileSync(p)).toString('utf8') : fs.readFileSync(p, 'utf8'));
+function stateOf(w, own) {
+  return readTree(w.home).filter(([rel]) => !(own && own.test(rel)) && !/^logs\/cycles\//.test(rel) && !/^logs\/cycles-.*\.jsonl$/.test(rel))
+    .map(([rel, p]) => [rel.split(path.sep).join('/'), rel === 'exchange.json' ? exchangeState(p) : textOf(p)]);
+}
 
 /**
  * One day: a fresh world (its runner config with `extra`), its three passes, `opts.runPrepare(w)` the shadow's runs
@@ -121,8 +136,7 @@ async function runDay(day, { extra = {}, runPrepare = null, before = null, cfgAt
   const dir = path.join(w.home, 'logs', 'cycles');
   const records = readTree(dir).map(([rel, p]) => { const { argv, ...rec } = JSON.parse(fs.readFileSync(p, 'utf8')); return [rel, { ...Object.fromEntries(Object.entries(rec).filter(([k]) => !WALL.has(k))), argv }]; });
   const lines = fs.readdirSync(path.join(w.home, 'logs')).filter(f => /^cycles-.*\.jsonl$/.test(f)).sort().flatMap(f => fs.readFileSync(path.join(w.home, 'logs', f), 'utf8').trim().split('\n').map(l => { const { at: _a, durationMs: _d, timing: _t, promptChars: _p, ...x } = JSON.parse(l); return x; }));
-  const state = readTree(w.home).filter(([rel]) => !(own && own.test(rel)) && !/^logs\/cycles\//.test(rel) && !/^logs\/cycles-.*\.jsonl$/.test(rel))
-    .map(([rel, p]) => [rel, rel === 'exchange.json' ? exchangeState(p) : fs.readFileSync(p, 'utf8')]);
+  const state = stateOf(w, own);
   const runnerState = JSON.parse(fs.readFileSync(w.stateFile, 'utf8'));
   const { validateConfig, headDeliveryOf } = require(path.join(ROOT, 'scripts', 'lib', 'autotrader'));
   const raw = { harness: 'claude', cycle: 'full', premarketAt: '', timeframe: 3, account: '7', symbols: ['MNQ'], bars: 1400, ...(day === 'manage-only' ? { maxCyclesPerDay: 1 } : {}), ...extra };
@@ -148,6 +162,17 @@ async function allDays(opts = {}) {
   return res;
 }
 
+/** Every difference between two outputs, in path order, at most `cap` (50): [{ at, got, want }]. */
+function allDiffs(a, b, at = '', out = [], cap = 50) {
+  if (out.length >= cap || JSON.stringify(a) === JSON.stringify(b)) return out;
+  if (a && b && typeof a === 'object' && typeof b === 'object') {
+    for (const k of new Set([...Object.keys(a), ...Object.keys(b)])) { allDiffs(a[k], b[k], `${at}/${k}`, out, cap); if (out.length >= cap) break; }
+    return out;
+  }
+  out.push({ at, got: String(JSON.stringify(a)).slice(0, 400), want: String(JSON.stringify(b)).slice(0, 400) });
+  return out;
+}
+
 /** The first difference between two outputs, as a path and the two values (null: equal). For a failing test's message. */
 function firstDiff(a, b, at = '') {
   if (JSON.stringify(a) === JSON.stringify(b)) return null;
@@ -157,4 +182,4 @@ function firstDiff(a, b, at = '') {
   return { at, got: String(JSON.stringify(a)).slice(0, 400), want: String(JSON.stringify(b)).slice(0, 400) };
 }
 
-module.exports = { DAYS, PINNED_HOME, SHADOW_OWN, runDay, allDays, firstDiff, normalizer };
+module.exports = { DAYS, PINNED_HOME, SHADOW_OWN, stateOf, allDiffs, runDay, allDays, firstDiff, normalizer };
