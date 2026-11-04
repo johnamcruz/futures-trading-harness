@@ -98,6 +98,22 @@ test('runPrepare: what the run tried and was refused: the stream\'s permission d
   assert.strictEqual(r2.gateRefusals, 1);
 });
 
+test('runPrepare: its skill-lookup and experience-lookup records (keyed by its own transcript) are removed when it ends', async () => {
+  const home = tmpDir();
+  let tr;
+  const run = async (argv, o) => {
+    tr = o.env.FTH_CYCLE_TRANSCRIPT;
+    fs.mkdirSync(path.dirname(tr), { recursive: true });
+    fs.writeFileSync(require('../../scripts/lib/trading/skill-lookups').lookupsFile(tr), '{}\n');
+    fs.writeFileSync(require('../../scripts/lib/learning/experience-lookups').lookupsFile(tr), '{}\n');
+    const out = JSON.stringify({ type: 'result', subtype: 'success', result: 'x', session_id: 's' });
+    return { ok: true, timedOut: false, code: 0, output: out, stdout: out, transcript: tr };
+  };
+  await runPrepare(cfg, 'prepare', 'P', { timeoutMs: 5000, context: { action: 'trade' } }, { root: ROOT, home, env: { FTH_HOME: home, HOME: home }, run });
+  assert.ok(!fs.existsSync(require('../../scripts/lib/trading/skill-lookups').lookupsFile(tr)));
+  assert.ok(!fs.existsSync(require('../../scripts/lib/learning/experience-lookups').lookupsFile(tr)));
+});
+
 test('runCycle: onLog, when given, hears the cycle log\'s file once it is written; without it the cycle is as before', async () => {
   const home = tmpDir();
   const run = async () => ({ ok: true, timedOut: false, code: 0, output: 'CYCLE RESULT: no-trade - x\n', stdout: 'CYCLE RESULT: no-trade - x\n' });

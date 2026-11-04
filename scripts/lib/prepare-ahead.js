@@ -61,12 +61,17 @@ function modeProblem(v, harness) {
 /** Shadow mode on (Claude Code, prepareAhead "shadow"). */
 const shadowOn = cfg => Boolean(cfg) && cfg.harness === 'claude' && cfg.prepareAhead === 'shadow';
 
-/** The deadline: the earliest of the next close minus the margin, the end of day, and now plus the most a run may take. */
-function deadlineOf({ nowMs, nextCloseMs, eodMs = null, marginMs, maxMs }) {
-  const cands = [['next-close', nextCloseMs - marginMs], ['end-of-day', Number.isFinite(eodMs) ? eodMs : Infinity], ['max', nowMs + maxMs]];
-  const [by, atMs] = cands.reduce((a, b) => (b[1] < a[1] ? b : a));
-  const budgetMs = Number.isFinite(nowMs) && Number.isFinite(atMs) ? Math.max(0, atMs - nowMs) : 0;
-  return { atMs, budgetMs, by };
+/**
+ * The deadline: the earliest of the next close less the margin, the end of day less the margin, and now plus the most a
+ * run may take, each less the kill grace (`graceMs`: a run stopped at its deadline is gone before the bound, the SIGKILL
+ * after SIGTERM included). Less than the grace left: no time (0).
+ */
+function deadlineOf({ nowMs, nextCloseMs, eodMs = null, marginMs, maxMs, graceMs = 0 }) {
+  const cands = [['next-close', nextCloseMs - marginMs], ['end-of-day', Number.isFinite(eodMs) ? eodMs - marginMs : Infinity], ['max', nowMs + maxMs]];
+  const [by, bound] = cands.reduce((a, b) => (b[1] < a[1] ? b : a));
+  const atMs = bound - graceMs;
+  const left = Number.isFinite(nowMs) && Number.isFinite(atMs) ? Math.max(0, atMs - nowMs) : 0;
+  return { atMs, budgetMs: left < graceMs ? 0 : left, by };
 }
 
 /** A run done after its deadline (judged by the clock given): aborted. An unreadable clock: aborted. */
@@ -311,7 +316,9 @@ function fullDecisionOf({ result, entry }) {
 function agreement(shadow, full) {
   if (!shadow || !full || !shadow.decision || !full.decision) return null;
   if (shadow.decision !== full.decision) return false;
-  return shadow.decision === 'pass' || !shadow.side || !full.side || shadow.side === full.side;
+  if (shadow.decision === 'pass') return true;
+  // A take on an unknown side (either one): no verdict.
+  return shadow.side && full.side ? shadow.side === full.side : null;
 }
 
 module.exports = {

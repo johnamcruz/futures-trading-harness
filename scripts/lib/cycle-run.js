@@ -273,7 +273,9 @@ async function runPrepare(cfg, kind, prompt, { timeoutMs, context = null, resume
   const T = require('./transcript');
   const { text } = T.claudeRunResult(output);
   // Its skill lookups' file (keyed by its own transcript): never a cycle's.
-  try { require('fs').unlinkSync(require('./trading/skill-lookups').lookupsFile(res.transcript)); } catch (_err) { /* none */ }
+  for (const file of [require('./trading/skill-lookups').lookupsFile, require('./learning/experience-lookups').lookupsFile]) {
+    try { require('fs').unlinkSync(file(res.transcript)); } catch (_err) { /* none */ }
+  }
   const rec = sessionFile ? PA.readSession(sessionFile) : null;
   const streamed = T.documents(output).map(e => (e && typeof e.session_id === 'string' ? e.session_id : null)).find(Boolean) || null;
   // What it tried and was refused: the CLI's permission denials (its result event, dontAsk) and the gate's refusals.

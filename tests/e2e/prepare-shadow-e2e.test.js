@@ -40,9 +40,9 @@ const shadowScript = (o = {}) => (prompt, _env, { resumed }) => [
 ];
 
 /** A replay day of the three bars: each pass's head trader passes; `shadow` turns prepareAhead on with the fake CLI. */
-async function day({ shadow = false, script = shadowScript(), kill = null, preHooks = true, fill = null } = {}) {
+async function day({ shadow = false, script = shadowScript(), kill = null, preHooks = true, fill = null, cfg = {}, heads = {}, acts = {}, before: beforePass = {} } = {}) {
   const w = D.world({ harness: 'claude' });
-  if (shadow) w.cfg = { ...w.cfg, prepareAhead: 'shadow' };
+  w.cfg = { ...w.cfg, ...cfg, ...(shadow ? { prepareAhead: 'shadow' } : {}) };
   const fake = fakeClaude({ dir: path.join(w.home, 'claude-sessions'), script, preHooks });
   const passes = [];
   for (const bar of BARS) {
@@ -50,8 +50,11 @@ async function day({ shadow = false, script = shadowScript(), kill = null, preHo
     // A fill before this bar's cycle (an entry of the old path's, at the exchange): the account is no longer flat.
     if (fill === bar) require('../fixtures/mock-exchange').handle(w.state, 'place_order', { accountId: 7, contractId: D.MNQ_ID, side: 'buy', type: 'market', size: 1, stopLossBracket: { ticks: 40 } }, {});
     const at = decisionAt(bar);
-    const r = await D.pass(w, at, fill && Date.parse(bar) >= Date.parse(fill) ? [{ result: 'CYCLE RESULT: managed - the open long' }] : D.passCycle(w, 'nothing to take'), shadow ? { runPrepare: env => (c, kind, prompt, limits) => runPrepare(c, kind, prompt, limits, { root: D.ROOT, home: w.home, env, run: fake }) } : {});
-    passes.push(r);
+    if (beforePass[bar]) beforePass[bar](w);
+    const before = require('../fixtures/mock-exchange').read(w.state).calls.length;
+    const head = heads[bar] ? heads[bar](w) : fill && Date.parse(bar) >= Date.parse(fill) ? [{ result: 'CYCLE RESULT: managed - the open long' }] : D.passCycle(w, 'nothing to take');
+    const r = await D.pass(w, at, [...(acts[bar] ? [{ act: () => acts[bar](w) }] : []), ...head], shadow ? { runPrepare: env => (c, kind, prompt, limits) => runPrepare(c, kind, prompt, limits, { root: D.ROOT, home: w.home, env, run: fake }) } : {});
+    passes.push({ ...r, brokerCalls: require('../fixtures/mock-exchange').read(w.state).calls.slice(before).map(c => c.tool) });
   }
   return { w, fake, passes };
 }
@@ -139,6 +142,61 @@ test('shadow e2e (the property, a fill): a position opens before the plan\'s clo
   assert.deepStrictEqual([last.prepare.shadow.status, last.prepare.shadow.reason], ['void', 'facts']);
   assert.deepStrictEqual([last.prepare.made.outcome, last.prepare.made.why], ['skipped', 'not-flat']);
   assert.ok(!on.fake.calls.some(c => c.source === 'fork'), 'no confirm');
+});
+
+test('shadow e2e: a manage-only cycle (the day\'s cap reached, a position open) runs no shadow: no prepare field and no extra account read', async () => {
+  const cfg = { maxCyclesPerDay: 1 };
+  const off = await day({ fill: NEXT_BAR, cfg });
+  const on = await day({ shadow: true, fill: NEXT_BAR, cfg });
+  const last = cycleRecords(on.w).at(-1);
+  assert.strictEqual(last.context.manageOnly, true, 'the cycle after the cap is manage-only');
+  assert.ok(!('prepare' in last));
+  assert.deepStrictEqual(on.passes.at(-1).brokerCalls, off.passes.at(-1).brokerCalls, 'no broker call of its own');
+  assert.deepStrictEqual(oldPath(on.w), oldPath(off.w));
+});
+
+test('shadow e2e: a cycle that failed (the head trader\'s error, a timeout) runs no shadow', async () => {
+  const heads = { [FIRED_BAR]: () => [{ result: 'CYCLE RESULT: error - the model lost the thread' }] };
+  const on = await day({ shadow: true, heads });
+  const rec = cycleRecords(on.w).find(r => /CYCLE RESULT: error/.test(r.result || ''));
+  assert.ok(rec, 'the failed cycle');
+  assert.ok(!('prepare' in rec), JSON.stringify(rec.prepare));
+});
+
+test('shadow e2e: the shadow\'s own account reads leave no line in the old path\'s log when they fail', async () => {
+  // The broker's account read fails from the 04:12 pass on: the cycle's own read fails in both worlds alike, and the
+  // shadow's read after it fails too, silently.
+  const before = { [NEXT_BAR]: w => require('../fixtures/mock-exchange').update(w.state, s => { s.failBalance = true; }) };
+  const off = await day({ before });
+  const on = await day({ shadow: true, before });
+  assert.ok(off.passes.at(-1).logs.some(l => /account state for the prompt unavailable/.test(l)), 'the old path\'s own read failed and said so');
+  assert.deepStrictEqual(on.passes.map(p => p.logs), off.passes.map(p => p.logs));
+  assert.deepStrictEqual(oldPath(on.w), oldPath(off.w));
+});
+
+test('shadow e2e: the full cycle takes the trade (a fill at its close): the confirm runs beside the fresh position on the inputs the cycle started from, a take beside a take; no prepare after', async () => {
+  const heads = { [NEXT_BAR]: () => [{ result: 'CYCLE RESULT: executed - trade_lifecycle long 1 MNQ' }] };
+  const acts = { [NEXT_BAR]: w => require('../fixtures/mock-exchange').handle(w.state, 'place_order', { accountId: 7, contractId: D.MNQ_ID, side: 'buy', type: 'market', size: 1, stopLossBracket: { ticks: 40 } }, {}) };
+  const on = await day({ shadow: true, heads, acts });
+  const p = cycleRecords(on.w).at(-1).prepare;
+  assert.strictEqual(p.shadow.status, 'valid', JSON.stringify(p.shadow));
+  assert.deepStrictEqual(p.shadow.full, { decision: 'take', side: 'long', why: null });
+  assert.deepStrictEqual(p.shadow.confirm.decision, { decision: 'take', k: p.shadow.match.k, side: 'long' });
+  assert.strictEqual(p.shadow.agreesWithFull, true);
+  assert.deepStrictEqual([p.made.outcome, p.made.why], ['skipped', 'not-flat']);
+});
+
+test('shadow e2e: several trading lanes run no shadow (one lane only in v1)', async () => {
+  const { validateConfig } = require('../../scripts/lib/autotrader');
+  const w = D.world({ harness: 'claude', dataLane: true });
+  w.cfg = { ...validateConfig({ harness: 'claude', cycle: 'full', premarketAt: '', account: '7', symbols: ['MNQ'], dataDir: w.cfg.dataDir, bars: 1400, lanes: [{ timeframe: 3, trigger: 'bar' }, { timeframe: 1, trigger: 'signal' }] }), prepareAhead: 'shadow' };
+  const fake = fakeClaude({ dir: path.join(w.home, 'claude-sessions'), script: shadowScript() });
+  const opts = { runPrepare: env => (c, kind, prompt, limits) => runPrepare(c, kind, prompt, limits, { root: D.ROOT, home: w.home, env, run: fake }) };
+  for (const bar of [FIRED_BAR, NEXT_BAR]) await D.pass(w, decisionAt(bar), D.passCycle(w, 'x'), opts);
+  const recs = cycleRecords(w);
+  assert.ok(recs.length >= 1);
+  assert.ok(recs.every(r => !('prepare' in r)));
+  assert.deepStrictEqual(fake.calls, []);
 });
 
 test('shadow e2e: paper mode: no shadow run and no prepare field', async () => {

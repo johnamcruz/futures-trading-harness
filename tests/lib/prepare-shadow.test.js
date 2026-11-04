@@ -97,8 +97,11 @@ test('shadow: no plan for this close, a prepare for the next: its plan written (
   assert.match(r.cli.runs[0].prompt, /Possible at the next close/);
   assert.match(r.cli.runs[0].prompt, /P1 momentum_continuation short "momentum_continuation fired down"/);
   // Its deadline: the next close less the margin (config/runner.json prepare), from the harness clock.
-  const T = require('../../scripts/lib/tunables').runner().prepare;
-  assert.strictEqual(r.cli.runs[0].limits.timeoutMs, Math.min(Date.parse(FIRE) + STEP - T.marginMs - (closeMs(PREP) + 40000), T.maxMs));
+  const RT = require('../../scripts/lib/tunables').runner();
+  const T = RT.prepare;
+  const grace = RT.runner.killGraceMs;
+  // (No plan here, so no confirm: the prepare has the pair's budget, maxMs less the account read, each bound less the grace.)
+  assert.strictEqual(r.cli.runs[0].limits.timeoutMs, Math.min(Date.parse(FIRE) + STEP - T.marginMs, closeMs(PREP) + 40000 + T.maxMs - RT.runner.accountReadMs) - grace - (closeMs(PREP) + 40000));
   assert.strictEqual(r.log.prepare.made.planId, plan.id);
   assert.strictEqual(r.log.prepare.shadow.status, 'none');
 });
@@ -134,8 +137,10 @@ test('shadow: prepare.maxMs bounds both runs together: on a frozen replay clock 
   const r = await after(home, FIRED, { clock, fake: { advanceMs: 0, reportMs: 30000 } });
   assert.strictEqual(r.shadow.confirm.ms, 30000);
   const [conf, prep] = ['confirm', 'prepare'].map(k => r.cli.runs.find(x => x.kind === k));
-  assert.strictEqual(conf.limits.timeoutMs, T.maxMs, 'the frozen clock: the cap');
-  assert.strictEqual(prep.limits.timeoutMs, T.maxMs - 30000, 'the cap less what the confirm took');
+  const R = require('../../scripts/lib/tunables').runner();
+  const pair = T.maxMs - R.runner.accountReadMs - R.runner.killGraceMs;
+  assert.strictEqual(conf.limits.timeoutMs, pair, 'the frozen clock: the cap');
+  assert.strictEqual(prep.limits.timeoutMs, pair - 30000, 'the cap less what the confirm took');
   // A confirm that took the whole cap: no prepare.
   await after(home, PREP);
   const r2 = await after(home, FIRED, { clock: { ms: closeMs(FIRED) + 2000 }, fake: { advanceMs: 0, reportMs: T.maxMs } });
@@ -158,6 +163,40 @@ test('shadow: what each run tried and was refused (the CLI\'s permission denials
   assert.deepStrictEqual([a.made.denied, a.made.gateRefusals], [['mcp__harness__compose_check'], 1]);
   const b = await after(home, FIRED, { fake: { denied: ['Agent', 'mcp__broker__place_order'], gateRefusals: 2 } });
   assert.deepStrictEqual([b.shadow.confirm.denied, b.shadow.confirm.gateRefusals], [['Agent', 'mcp__broker__place_order'], 2]);
+});
+
+test('shadow: near the end of day (a 15:48 cycle, or an early close\'s 12:48) the runs end by the end of day less the margin and the kill grace; under the grace neither runs, so the flatten is never held', async () => {
+  const R = require('../../scripts/lib/tunables').runner();
+  const T = R.prepare;
+  const grace = R.runner.killGraceMs;
+  for (const left of [70000, 45000]) {
+    const home = tmp();
+    await after(home, PREP);
+    const start = closeMs(FIRED) + 2000;
+    const eodMs = start + left; // the end of day `left` ms after the shadow starts (15:50 or an early close's 12:50)
+    const r = await after(home, FIRED, { clock: { ms: start }, eodMs, fake: { advanceMs: 0 } });
+    const conf = r.cli.runs.find(x => x.kind === 'confirm');
+    assert.strictEqual(conf.limits.timeoutMs, eodMs - T.marginMs - grace - start, `${left}`);
+  }
+  // Under the grace left: no confirm, no prepare.
+  const home = tmp();
+  await after(home, PREP);
+  const start = closeMs(FIRED) + 2000;
+  const r = await after(home, FIRED, { clock: { ms: start }, eodMs: start + T.marginMs + grace + grace - 1, fake: { advanceMs: 0 } });
+  assert.deepStrictEqual(r.cli.runs, []);
+  assert.strictEqual(r.shadow.confirm.outcome, 'no-time');
+  assert.deepStrictEqual([r.made.outcome, r.made.why], ['skipped', 'no-time']);
+});
+
+test('shadow: on a frozen replay clock the two runs together get prepare.maxMs less the account read and the kill grace (inside the step\'s headroom past its cycle)', async () => {
+  const R = require('../../scripts/lib/tunables').runner();
+  const home = tmp();
+  await after(home, PREP);
+  const r = await after(home, FIRED, { clock: { ms: closeMs(FIRED) + 2000 }, fake: { advanceMs: 0, reportMs: 5000 } });
+  const [conf, prep] = ['confirm', 'prepare'].map(k => r.cli.runs.find(x => x.kind === k));
+  const pair = R.prepare.maxMs - R.runner.accountReadMs - R.runner.killGraceMs;
+  assert.strictEqual(conf.limits.timeoutMs, pair);
+  assert.strictEqual(prep.limits.timeoutMs, pair - 5000);
 });
 
 test('shadow: the agreement check can fail: a deliberately wrong shadow decision is logged as a disagreement', async () => {

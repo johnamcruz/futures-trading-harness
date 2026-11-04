@@ -47,7 +47,12 @@ const tried = res => ({ denied: Array.isArray(res.denied) ? res.denied : [], gat
 const flatOf = a => (isObj(a) && !a.error && Array.isArray(a.positions) && Array.isArray(a.orders) ? !a.positions.length && !a.orders.length : null);
 
 function createShadow({ cfg, root, home, runPrepare, now, sectionOpts = () => ({}), newsAt = () => ({ inBlackout: null }), chainSideOf = chainSideOn }) {
-  const T = require('./tunables').runner().prepare;
+  const RT = require('./tunables').runner();
+  const T = RT.prepare;
+  // Every bound keeps the kill grace (a run stopped at it is gone before the bound: runHarness's SIGKILL after it), and
+  // the two runs together get maxMs less the account read the prepare makes between them.
+  const GRACE = RT.runner.killGraceMs;
+  const PAIR_MS = T.maxMs - RT.runner.accountReadMs;
   const nowMs = () => { const d = now(); return d instanceof Date ? d.getTime() : NaN; };
   const sessionFile = () => path.join(home, PA.PLAN_DIR, `session-${crypto.randomBytes(8).toString('hex')}.json`);
 
@@ -99,7 +104,7 @@ function createShadow({ cfg, root, home, runPrepare, now, sectionOpts = () => ({
 
   /** Step 2: the prepare of the next bar's plan. */
   async function prepare(x, nextCloseMs, maxMs) {
-    const deadlineAt = () => PA.deadlineOf({ nowMs: nowMs(), nextCloseMs, eodMs: x.eodMs, marginMs: T.marginMs, maxMs: Math.max(0, maxMs) });
+    const deadlineAt = () => PA.deadlineOf({ nowMs: nowMs(), nextCloseMs, eodMs: x.eodMs, marginMs: T.marginMs, maxMs: Math.max(0, maxMs), graceMs: GRACE });
     const deadline = deadlineAt();
     const at = { deadline: { atMs: deadline.atMs, by: deadline.by } };
     if (x.killSwitch()) return { outcome: 'skipped', why: 'kill-switch', ...at };
@@ -142,14 +147,14 @@ function createShadow({ cfg, root, home, runPrepare, now, sectionOpts = () => ({
   async function after(x) {
     // The deadline both steps share: the close of the bar now forming, less the margin (and the end of day, the most a run takes).
     const nextCloseMs = Date.parse(x.bar.t) + 2 * x.minutes * 60000;
-    const deadline = () => PA.deadlineOf({ nowMs: nowMs(), nextCloseMs, eodMs: x.eodMs, marginMs: T.marginMs, maxMs: T.maxMs });
+    const deadline = () => PA.deadlineOf({ nowMs: nowMs(), nextCloseMs, eodMs: x.eodMs, marginMs: T.marginMs, maxMs: PAIR_MS, graceMs: GRACE });
     let shadow;
     try { shadow = await confirm(x, deadline()); } catch (err) { shadow = { status: 'error', reason: 'error', detail: err.message, planId: null }; }
     let made;
     // prepare.maxMs bounds both runs together: what the confirm took (its run's own measure) comes off the prepare's, so
     // on a frozen replay clock the step never outlasts what its cycle left (the next close bounds them on a running one).
     const confirmMs = shadow && shadow.confirm && Number.isFinite(shadow.confirm.ms) ? shadow.confirm.ms : 0;
-    try { made = await prepare(x, nextCloseMs, T.maxMs - confirmMs); } catch (err) { made = { outcome: 'error', why: err.message }; }
+    try { made = await prepare(x, nextCloseMs, PAIR_MS - confirmMs); } catch (err) { made = { outcome: 'error', why: err.message }; }
     if (x.cycleLog) { try { require('./cycle-log').amendCycleLog(x.cycleLog, 'prepare', { shadow, made }); } catch (_err) { /* the record only */ } }
     return { shadow, made };
   }

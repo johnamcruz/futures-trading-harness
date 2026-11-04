@@ -71,7 +71,8 @@ test('prepare-ahead: the deadline is the earliest of the next close minus the ma
   const next = Date.parse(NEXT.closedAt);
   assert.deepStrictEqual(PA.deadlineOf({ nowMs: now, nextCloseMs: next, eodMs: null, marginMs: 20000, maxMs: 600000 }), { atMs: next - 20000, budgetMs: next - 20000 - now, by: 'next-close' });
   assert.deepStrictEqual(PA.deadlineOf({ nowMs: now, nextCloseMs: next, eodMs: null, marginMs: 20000, maxMs: 60000 }), { atMs: now + 60000, budgetMs: 60000, by: 'max' });
-  assert.deepStrictEqual(PA.deadlineOf({ nowMs: now, nextCloseMs: next, eodMs: now + 30000, marginMs: 20000, maxMs: 600000 }), { atMs: now + 30000, budgetMs: 30000, by: 'end-of-day' });
+  // The end of day keeps the margin too.
+  assert.deepStrictEqual(PA.deadlineOf({ nowMs: now, nextCloseMs: next, eodMs: now + 30000, marginMs: 20000, maxMs: 600000 }), { atMs: now + 10000, budgetMs: 10000, by: 'end-of-day' });
   // Past it: no time left (never a negative budget).
   assert.deepStrictEqual(PA.deadlineOf({ nowMs: next - 5000, nextCloseMs: next, eodMs: null, marginMs: 20000, maxMs: 600000 }), { atMs: next - 20000, budgetMs: 0, by: 'next-close' });
   // At the deadline exactly: no time left.
@@ -79,6 +80,19 @@ test('prepare-ahead: the deadline is the earliest of the next close minus the ma
   assert.strictEqual(PA.deadlineOf({ nowMs: next - 20001, nextCloseMs: next, eodMs: null, marginMs: 20000, maxMs: 600000 }).budgetMs, 1);
   // A clock that can't be read: no time.
   assert.strictEqual(PA.deadlineOf({ nowMs: NaN, nextCloseMs: next, eodMs: null, marginMs: 20000, maxMs: 600000 }).budgetMs, 0);
+});
+
+test('prepare-ahead: the deadline keeps the margin before the end of day too, and every bound keeps the kill grace (a run stopped there is gone before the bound); under the grace there is no time', () => {
+  const now = Date.parse('2021-05-24T19:48:40.000Z');
+  const next = Date.parse('2021-05-24T19:51:00.000Z');
+  const eod = Date.parse('2021-05-24T19:50:00.000Z'); // 15:50 ET
+  const d = PA.deadlineOf({ nowMs: now, nextCloseMs: next, eodMs: eod, marginMs: 20000, maxMs: 600000, graceMs: 10000 });
+  assert.deepStrictEqual(d, { atMs: eod - 20000 - 10000, budgetMs: eod - 30000 - now, by: 'end-of-day' });
+  assert.strictEqual(PA.deadlineOf({ nowMs: now, nextCloseMs: next, eodMs: null, marginMs: 20000, maxMs: 600000, graceMs: 10000 }).atMs, next - 30000);
+  assert.strictEqual(PA.deadlineOf({ nowMs: now, nextCloseMs: next, eodMs: null, marginMs: 20000, maxMs: 30000, graceMs: 10000 }).atMs, now + 20000);
+  // Less than the grace left: none.
+  assert.strictEqual(PA.deadlineOf({ nowMs: eod - 39999, nextCloseMs: next, eodMs: eod, marginMs: 20000, maxMs: 600000, graceMs: 10000 }).budgetMs, 0);
+  assert.strictEqual(PA.deadlineOf({ nowMs: eod - 40000, nextCloseMs: next, eodMs: eod, marginMs: 20000, maxMs: 600000, graceMs: 10000 }).budgetMs, 10000);
 });
 
 test('prepare-ahead: a run done after its deadline is aborted, judged by the clock given (never the wall clock)', () => {
@@ -338,6 +352,9 @@ test('prepare-ahead: agreement: the same decision (a take on the same side) agre
   assert.strictEqual(PA.agreement(take, pass), false);
   assert.strictEqual(PA.agreement(pass, take), false);
   assert.strictEqual(PA.agreement({ decision: 'take', side: 'short' }, take), false, 'the other side');
+  // A take whose side is unknown on either side: no verdict, never an agreement.
+  assert.strictEqual(PA.agreement({ decision: 'take', side: null }, take), null);
+  assert.strictEqual(PA.agreement(take, { decision: 'take', side: null }), null);
   // Unknown on either side: no verdict.
   assert.strictEqual(PA.agreement(null, take), null);
   assert.strictEqual(PA.agreement(take, { decision: null, side: null, why: 'blocked' }), null);
