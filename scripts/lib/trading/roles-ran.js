@@ -61,10 +61,11 @@
  *   cycleCalls(transcriptText, rolesFile)        roleCalls(transcriptText) with the record's runs: what the gate judges
  *   rolesInTranscript(text)                      Map role -> calls that count
  *   missingRoles(calls, cycle, cached)           what a cycle still lacks, as text, [] when complete
- *   checkRolesRan(transcriptPath, cycle, cached, lookups, rolesFile)   the gate's message, or null; `lookups`: (call) -> the
+ *   checkRolesRan(transcriptPath, cycle, cached, lookups, rolesFile, { base })   the gate's message, or null (`base`: the
+ *                                                confirm's, readTranscript); `lookups`: (call) -> the
  *                                                required skills it didn't look up (skill-lookups.js lookupRule):
  *                                                such a call doesn't count; `rolesFile`: the runner's role record
- *   approvedPhase2(transcriptPath, cycle, cached, lookups, rolesFile) the phase-2 report that approves this entry, judged as
+ *   approvedPhase2(transcriptPath, cycle, cached, lookups, rolesFile, { base }) the phase-2 report that approves this entry, judged as
  *                                                checkRolesRan judges it: { text } | { error } | null
  *   approvalReadAsVeto(text)                     an approving VERDICT line in a report that reads as a veto: { why, line }
  *                                                | null (the runner's reporting; the gate's reading is verdictOf's)
@@ -794,12 +795,19 @@ function assessRound(found, cycle, cached = [], lookups = null) {
 /** What the cycle still lacks before this entry, from the calls since the last trade-executor call ended. */
 const missingRoles = (rc, cycle, cached = []) => assessRound(rc, cycle, cached).missing;
 
-/** The cycle's transcript (with its main session's, for a Claude subagent): { text }, or { error } when the named file can't be read. */
-function readTranscript(transcriptPath) {
+/**
+ * The cycle's transcript (with its main session's, for a Claude subagent): { text }, or { error } when the named file can't
+ * be read. `base` (prepare ahead "on": the confirm's, confirm-base.js readBase, for a hook's transcript of the confirm, a
+ * fork of the prepare's session): the prepare's copied lines left out of every file, the main session's file required to
+ * be that fork; a base that is itself an error, or a transcript that is not its fork, is an error (the check refuses).
+ */
+function readTranscript(transcriptPath, { base = null } = {}) {
+  if (base && base.error) return { error: `the confirm's base: ${base.error}` };
   // A Claude subagent's hook gets its own transcript: the roles ran in its main session's.
-  const files = transcriptFiles(transcriptPath).reverse();
+  const files = transcriptFiles(transcriptPath);
+  const main = files[files.length - 1];
   const texts = [];
-  for (const file of files) {
+  for (const file of files.reverse()) {
     try {
       const st = fs.statSync(file);
       const fd = fs.openSync(file, 'r');
@@ -807,9 +815,17 @@ function readTranscript(transcriptPath) {
       const buf = Buffer.alloc(len);
       fs.readSync(fd, buf, 0, len, 0);
       fs.closeSync(fd);
-      texts.push(buf.toString('utf8'));
+      let text = buf.toString('utf8');
+      if (base) {
+        const c = require('./confirm-base').cut(text, base, { main: file === main });
+        if (c.error) return { error: `the confirm's base: ${c.error}` };
+        text = c.text;
+      }
+      texts.push(text);
     } catch (err) {
       if (file === transcriptPath) return { error: err.code || err.message };
+      // The fork must be read to be cut: its main session's file unreadable is an error too.
+      if (base && file === main) return { error: `the confirm's base: its fork ${file} can't be read` };
     }
   }
   return { text: texts.join('\n') };
@@ -820,9 +836,9 @@ function readTranscript(transcriptPath) {
  * { text }; { error } when the transcript can't be read; null when the round isn't complete or its latest phase-2
  * report doesn't approve (checkRolesRan refuses then).
  */
-function approvedPhase2(transcriptPath, cycle, cached = [], lookups = null, rolesFile = null) {
+function approvedPhase2(transcriptPath, cycle, cached = [], lookups = null, rolesFile = null, { base = null } = {}) {
   if (!transcriptPath || !CYCLES.includes(cycle)) return null;
-  const t = readTranscript(transcriptPath);
+  const t = readTranscript(transcriptPath, { base });
   if (t.error) return { error: t.error };
   const { missing, report } = assessRound(cycleCalls(t.text, rolesFile), cycle, cached, lookups);
   return missing.length || !report ? null : { text: report.text };
@@ -833,9 +849,9 @@ function approvedPhase2(transcriptPath, cycle, cached = [], lookups = null, role
  * transcript or no cycle (an interactive session) -> null. A transcript the
  * runner named but that can't be read -> refused (fails closed).
  */
-function checkRolesRan(transcriptPath, cycle, cached = [], lookups = null, rolesFile = null) {
+function checkRolesRan(transcriptPath, cycle, cached = [], lookups = null, rolesFile = null, { base = null } = {}) {
   if (!transcriptPath || !CYCLES.includes(cycle)) return null;
-  const t = readTranscript(transcriptPath);
+  const t = readTranscript(transcriptPath, { base });
   if (t.error) return `The cycle's transcript can't be read (${t.error}), so the gate can't see which roles ran: no entry this cycle.`;
   const { missing, unmet } = assessRound(cycleCalls(t.text, rolesFile), cycle, cached, lookups);
   return missing.length

@@ -210,6 +210,10 @@ function loadConfig(env = process.env) {
     // cycleTranscript, the cycle this process runs in (check-order.js cycleId), for which alone a Claude Code head
     // trader's attestation holds (order-gate.js, head-prompt.js claudeAttested).
     cycleIdGiven: String(env.FTH_CYCLE_ID || '').trim() || null,
+    // Prepare ahead "on": the plan record of the prepare session this run (the confirm) forked (FTH_CONFIRM_BASE, set by
+    // the runner only for a confirm: autotrader.js childEnv), as given. The gate reads the hook's transcript of it without
+    // the prepare's lines for the roles that ran (confirm-base.js); a base named but unusable refuses the entry.
+    confirmBase: String(env.FTH_CONFIRM_BASE || '').trim() || null,
     // How the roles' prompts carry their skills (FTH_ROLE_SKILLS, role-skills.js; the runner sets it for every harness:
     // opencode's mode, full for the others, whose roles load every skill as their body says): in index mode, the
     // default, a role's report counts only with the lookups the bar requires (skill-lookups.js). Only an explicit

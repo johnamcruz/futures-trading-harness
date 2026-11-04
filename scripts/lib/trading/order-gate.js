@@ -396,6 +396,12 @@ function evaluateOrder({ input = {}, entries = [], now = new Date(), config, bla
   // whether or not the strategy document loads: a trade_lifecycle entry goes only on its compose record for this
   // cycle's bar and side, every read re-checked now (lifecycle-gate.js). It stands in for trigger-fired.
   const transcript = transcriptPath || config.cycleTranscript;
+  // Prepare ahead "on" (FTH_CONFIRM_BASE: the confirm, a fork of the prepare's session): the roles that ran and the phase-2
+  // report are the close's only, so a hook's transcript of the confirm is read without the prepare's lines (confirm-base.js;
+  // the skills it loaded still count: the same conversation). The runner's stream (the gateway's) is the confirm's own
+  // lines: nothing to cut, but a base named and unusable refuses there too (fails closed in both).
+  const confirmBase = config.confirmBase ? require('./confirm-base').readBase(config.confirmBase, config.home) : null;
+  const rolesBase = confirmBase && (confirmBase.error || transcriptPath) ? confirmBase : null;
   // The briefing counts on the bar the runner's cycle decides, however long the cycle runs (a delegated cycle outlasts
   // its bar's validUntil); outside a cycle, while it holds at now (skill-lookups.js briefingHolds).
   const factsBar = briefingBarOf(config, contractRoot(input.contractId));
@@ -403,7 +409,7 @@ function evaluateOrder({ input = {}, entries = [], now = new Date(), config, bla
   const lookups = config.autonomous && config.roleSkills === 'index' ? lookupRule({ home: config.home, transcript, contractId: input.contractId, now, cycleBar: factsBar, laneBars: config.cycleLaneBars, cachedLookups: config.cycleCachedLookups || {} }) : null;
   // The approving report, read once for the facts and the size checks (a read that throws: the facts check refuses).
   let p2 = null;
-  const p2Report = () => (p2 || (p2 = { r: approvedPhase2(transcript, config.cycle, config.cycleCached || [], lookups, config.cycleRoles || null) })).r;
+  const p2Report = () => (p2 || (p2 = { r: approvedPhase2(transcript, config.cycle, config.cycleCached || [], lookups, config.cycleRoles || null, { base: rolesBase }) })).r;
   // Phase 2's approved size, where an approving report is known (roles-ran.js approvedSize; none readable: unknown here,
   // the phase2-size check refuses it): a composed entry is exactly the smaller of it and the record's (composed-reads).
   const p2Size = () => { try { const r = config.autonomous ? p2Report() : null; const a = r && !r.error ? approvedSize(r.text) : null; return a && !a.error ? a.size : null; } catch (_err) { return null; } };
@@ -588,7 +594,7 @@ function evaluateOrder({ input = {}, entries = [], now = new Date(), config, bla
   // In index mode (the default, FTH_ROLE_SKILLS not full), a role's report counts only with the lookups this bar requires of it.
   // A role served from the report cache: the lookups its cached report's own call made count (cycleCachedLookups).
   // The roles the runner ran itself (its role record, FTH_CYCLE_ROLES: runner-roles.js) are judged with the transcript's.
-  add('roles-ran', config.autonomous ? checkRolesRan(transcript, config.cycle, config.cycleCached || [], lookups, config.cycleRoles || null) : null);
+  add('roles-ran', config.autonomous ? checkRolesRan(transcript, config.cycle, config.cycleCached || [], lookups, config.cycleRoles || null, { base: rolesBase }) : null);
   // Hard rule: the facts phase 2 approved on, checked against this cycle's bar briefing (fact-claims.js, R29): a
   // false one, or stated ones that can't be checked, refuse the entry. The report is the one roles-ran approves on:
   // the same selection (roles-ran assessRound), the same cached list and the same lookups.

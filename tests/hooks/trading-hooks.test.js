@@ -1390,6 +1390,50 @@ test('stop hook asks once for a review of unreviewed entries', () => {
   assert.strictEqual(run({ stop_hook_active: false }).code, 2);
 });
 
+test('order gate (hook, prepare ahead "on"): the confirm\'s transcript_path is a fork of the prepare\'s session: the prepare\'s roles never count for its entry (FTH_CONFIRM_BASE), its skills do; a base missing or forged refuses; an exit always goes', () => {
+  const CB = require(path.join(REPO, 'scripts', 'lib', 'trading', 'confirm-base'));
+  const { env, dir } = setup([{ ts: minutesAgo(5), kind: 'plan', contractId: entryOrder().contractId, text: 'plan' }]);
+  const line = (uuid, ev) => JSON.stringify({ ...ev, uuid, parentUuid: null, sessionId: 'ses-fork' });
+  const use = (id, name, input) => ({ type: 'assistant', message: { content: [{ type: 'tool_use', id, name, input }] } });
+  const result = (id, text) => ({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: id, content: [{ type: 'text', text }], is_error: false }] } });
+  const skills = ['trade-session', 'multi-timeframe-analysis', 'strategy-library', 'strategy-scan', 'strategy-gate-checks', 'setup-judgment', 'trade-plan'].flatMap((s, i) => [use(`s${i}`, 'Skill', { skill: s }), result(`s${i}`, `Launching skill: ${s}`)]);
+  const roles = tag => ['market-structure-analyst', 'trend-momentum-analyst', 'volume-liquidity-analyst', 'risk-manager', 'risk-manager'].flatMap((r, i) => [use(`${tag}${i}`, 'Agent', { subagent_type: r }), result(`${tag}${i}`, 'VERDICT: APPROVE - size 1')]);
+  // The prepare's session: the skills, and (as if its Agent tool were allowed) a whole desk with phase 2 approving.
+  const prep = [...skills, ...roles('p')].map((ev, i) => line(`prep-${i}`, ev));
+  fs.mkdirSync(path.join(env.FTH_HOME, 'prepare'), { recursive: true });
+  const base = path.join(env.FTH_HOME, 'prepare', 'MNQ-20261007T142700000Z.json');
+  fs.writeFileSync(base, JSON.stringify({ v: 1, id: 'plan', base: CB.baseRecord('/s/prep.jsonl', prep.map((_l, i) => `prep-${i}`)) }));
+  const fork = path.join(dir, 'ses-fork.jsonl');
+  fs.writeFileSync(fork, prep.join('\n'));
+  const stream = path.join(dir, 'cycle-transcript-1-abc.jsonl');
+  fs.writeFileSync(stream, '');
+  const auto = { ...env, FTH_AUTONOMOUS: '1', FTH_SYMBOLS: 'MNQ', FTH_ROLE_SKILLS: 'full', FTH_CYCLE: 'full', FTH_CYCLE_TRANSCRIPT: stream };
+  const rolesRan = /\[roles-ran\]/;
+  // The attack, without the base: the prepare's roles would pass the hook's roles-ran.
+  assert.doesNotMatch(gate({ ...orderPayload(), transcript_path: fork }, auto).stderr, rolesRan, 'no base: the history read whole, as before');
+  // The confirm (FTH_CONFIRM_BASE): its own turns only for the roles; the skills the prepare loaded still count.
+  const cutRun = gate({ ...orderPayload(), transcript_path: fork }, { ...auto, FTH_CONFIRM_BASE: base });
+  assert.strictEqual(cutRun.code, 2);
+  assert.match(cutRun.stderr, /\[roles-ran\][^\n]*not returned yet: market-structure-analyst/);
+  assert.doesNotMatch(cutRun.stderr, /\[skills-loaded\]|\[skills-at-entry\]/);
+  // The close's own desk in the fork, after the copied lines: allowed.
+  fs.writeFileSync(fork, [...prep, ...roles('c').map((ev, i) => line(`own-${i}`, ev))].join('\n'));
+  const ok = gate({ ...orderPayload(), transcript_path: fork }, { ...auto, FTH_CONFIRM_BASE: base });
+  assert.doesNotMatch(ok.stderr, rolesRan, ok.stderr);
+  // A base missing or forged: refused, on the hook and on the gateway's view (no transcript_path) alike.
+  const forged = path.join(env.FTH_HOME, 'prepare', 'forged.json');
+  fs.writeFileSync(forged, JSON.stringify({ v: 1, base: { ...CB.baseRecord('/s/prep.jsonl', ['prep-0']), uuids: ['prep-0', 'prep-1'] } }));
+  for (const b of [path.join(env.FTH_HOME, 'prepare', 'gone.json'), forged]) {
+    for (const payload of [{ ...orderPayload(), transcript_path: fork }, orderPayload()]) {
+      const r = gate(payload, { ...auto, FTH_CONFIRM_BASE: b });
+      assert.strictEqual(r.code, 2, b);
+      assert.match(r.stderr, /\[roles-ran\][^\n]*the confirm's base/, b);
+    }
+    const exit = gate({ ...orderPayload({ ...EXIT_BASE, contractId: entryOrder().contractId, size: 1, side: 'sell', rationale: '[exit] flatten' }), transcript_path: fork }, { ...auto, FTH_CONFIRM_BASE: b });
+    assert.strictEqual(exit.code, 0, exit.stderr);
+  }
+});
+
 test('stop hook: a prepare or a shadow confirm (FTH_PREPARE, prepare-ahead.js) is never asked for a review or a cycle result; any other value is no such run', () => {
   const { env } = setup([placed(1, 'setup:orb long stop 1', true)].map(e => ({ ...e, ts: new Date(Date.parse(TEST_NOW) - 60000).toISOString() })));
   const hook = require(path.join(REPO, 'scripts', 'hooks', 'trading-stop-review.js'));
