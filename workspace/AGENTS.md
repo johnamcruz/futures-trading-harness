@@ -217,6 +217,7 @@ user; numbers here are the harness defaults, not any firm's official limits.
 - `order-types` (skills/order-types/SKILL.md): Use when building an order - its type, side and stop bracket.
 - `position-sizing` (skills/position-sizing/SKILL.md): Use when sizing a trade plan - risk per contract, the budget, the caps, a policy verdict's size.
 - `premarket` (skills/premarket/SKILL.md): Read-only game plan for the day, placing no orders. Use at the start of the trading day (just after the 18:00 ET open) or when the user asks for a plan.
+- `prepare-ahead` (skills/prepare-ahead/SKILL.md): Use when a prompt says Prepare ahead or Your plan said - write the bar plan during the bar, then confirm at the close only what the closed candle meets.
 - `prop-challenge-pacing` (skills/prop-challenge-pacing/SKILL.md): Use when a policy strategy trades a harness-tracked prop attempt - its state, its verdicts, the gate's refusals.
 - `prop-evaluator` (skills/prop-evaluator/SKILL.md): Use when reading or reporting a replay run's prop score (pass, blow and timeout rates, days to pass).
 - `prop-pacing-judgment` (skills/prop-pacing-judgment/SKILL.md): Use when pacing a prop account with no running attempt (daily budget, pace, consistency, stand-downs).

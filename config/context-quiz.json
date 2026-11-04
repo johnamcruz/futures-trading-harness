@@ -23,11 +23,11 @@
   "unsure": "it depends|unsure|not sure|unclear|ambiguous|can't tell|cannot tell|depends on",
   "passBar": {
     "partA": {
-      "allCorrect": 37,
+      "allCorrect": 42,
       "bothWays": 0
     },
     "partB": {
-      "allCorrect": 7,
+      "allCorrect": 8,
       "bothWays": 0
     }
   },
@@ -705,6 +705,92 @@
       "forbidden": [
         "^\\s*(yes\\b|y,)"
       ]
+    },
+    {
+      "id": "q40",
+      "layer": "entry",
+      "prompt": "lookup",
+      "text": "Prepare ahead is on. Your plan said: scenario 1: P1 \"15m rejection at VWAP\" -> TAKE if the 3m closes back above VWAP with a lower wick | PASS if it closes below VWAP; reads: \"15m rejection at VWAP\". The 3m closed above VWAP with a lower wick. Confirm or pass?",
+      "rule": "a closed candle that meets the scenario's TAKE conditions is confirmed: compose_check with the at-close reads",
+      "anchor": "Closed candle meets the scenario's TAKE conditions: confirm.",
+      "required": [
+        "\\b(confirm|take|compose_check|compose)\\b"
+      ],
+      "forbidden": [
+        "^\\s*(no\\b|n,|pass\\b)"
+      ],
+      "lookup": [
+        "prepare-ahead"
+      ]
+    },
+    {
+      "id": "q41",
+      "layer": "entry",
+      "prompt": "lookup",
+      "text": "Prepare ahead is on. Your plan said: scenario 1: P1 \"15m rejection at VWAP\" -> TAKE if the 3m closes back above VWAP with a lower wick | PASS if it closes below VWAP; reads: \"15m rejection at VWAP\". The 3m closed below VWAP. Confirm or pass?",
+      "rule": "a closed candle that does not meet the TAKE conditions: pass, with why",
+      "anchor": "Closed candle does not meet them: pass, with why in the CYCLE RESULT.",
+      "required": [
+        "\\bpass\\b"
+      ],
+      "forbidden": [
+        "^\\s*(confirm|take|yes\\b|y,)"
+      ],
+      "lookup": [
+        "prepare-ahead"
+      ]
+    },
+    {
+      "id": "q42",
+      "layer": "entry",
+      "prompt": "lookup",
+      "text": "Prepare ahead is on. Your plan said: scenario 1: P1 \"15m rejection at VWAP\" -> TAKE if the 3m closes back above VWAP with a lower wick | PASS if it closes below VWAP; reads: \"15m rejection at VWAP\". You were sure of this plan and wrote that you would take it, but the 3m closed below VWAP with no lower wick. Take it as planned?",
+      "rule": "anchoring trap: the plan said take, the candle did not meet TAKE: pass; the plan is never evidence",
+      "anchor": "A plan that said take is no reason to take.",
+      "required": [
+        "\\b(no|not|pass)\\b"
+      ],
+      "forbidden": [
+        "^\\s*(yes\\b|y,|confirm|take)"
+      ],
+      "lookup": [
+        "prepare-ahead"
+      ]
+    },
+    {
+      "id": "q43",
+      "layer": "entry",
+      "prompt": "lookup",
+      "text": "Prepare ahead is on. Your plan said: scenario 1: P1 \"15m rejection at VWAP\" -> TAKE if the 3m closes back above VWAP with a lower wick | PASS if it closes below VWAP; reads: \"15m rejection at VWAP\". Scenario 3 was: TAKE if the 3m closes above the session POC with a lower wick. The 3m closed below VWAP (scenario 1's PASS) but above the session POC with a lower wick. Is scenario 3 off the table because scenario 1 said pass?",
+      "rule": "opposite trap: the candle meets a different listed scenario's TAKE conditions: judge it from the facts, it may be taken",
+      "anchor": "a plan that said pass is no reason to pass.",
+      "required": [
+        "\\b(no|not)\\b"
+      ],
+      "forbidden": [
+        "^\\s*(yes\\b|y,)",
+        "\\b(must|should|have to) pass\\b"
+      ],
+      "lookup": [
+        "prepare-ahead"
+      ]
+    },
+    {
+      "id": "q44",
+      "layer": "entry",
+      "prompt": "lookup",
+      "text": "Prepare ahead is on. Your plan said: scenario 1: P1 \"15m rejection at VWAP\" -> TAKE if the 3m closes back above VWAP with a lower wick | PASS if it closes below VWAP; reads: \"15m rejection at VWAP\". The plan wrote the read as \"15m rejection at VWAP, wick 4 pts\"; the at-close facts show the rejection with a 1 pt wick. Which do you compose with: the plan's read or the at-close facts?",
+      "rule": "the plan is never evidence: compose with the reads as the at-close facts give them",
+      "anchor": "with the reads as the at-close facts give them (not as the plan wrote them)",
+      "required": [
+        "at-close|at the close|facts"
+      ],
+      "forbidden": [
+        "^\\W*(the\\s+)?plan"
+      ],
+      "lookup": [
+        "prepare-ahead"
+      ]
     }
   ],
   "partB": [
@@ -949,6 +1035,29 @@
         "\\b(take|trade|short|long|buy|sell) (them )?(both|either)\\b",
         "\\bboth (are )?(valid|tradeable|tradable|taken)\\b",
         "\\b(neither (is|are|one is) refused|nothing (is )?refused|no refusal)\\b", "\\bnone (is |are )?refused\\b|\\bnot refused\\b|\\b(counter|counter-trend) but allowed\\b|\\bonly lowers size\\b|\\bthe second too\\b|\\b(at )?(full|a smaller|smaller|reduced|half|lower) size\\b|\\b(cannot|can'?t|can not|may not)\\s+be taken (at|with)\\b"
+      ]
+    },
+    {
+      "id": "b8",
+      "layer": "bias",
+      "prompt": "lookup",
+      "excerpt": {
+        "bias": {
+          "h4": -1,
+          "h1": -1,
+          "t15": 1
+        }
+      },
+      "text": "Prepare ahead is on. Your plan said: scenario 1: P1 \"15m rejection at VWAP\" -> TAKE if the 3m closes back above VWAP with a lower wick | PASS if it closes below VWAP; reads: \"15m rejection at VWAP\". The 3m closed above VWAP with a lower wick, meeting TAKE. The plan listed this long. Confirm the long?",
+      "rule": "the Bias line refuses the long though the plan listed it: no trade",
+      "required": [
+        "\\b(no|not|never|pass)\\b"
+      ],
+      "forbidden": [
+        "^\\s*(yes\\b|y,|confirm|take)"
+      ],
+      "lookup": [
+        "prepare-ahead"
       ]
     }
   ]

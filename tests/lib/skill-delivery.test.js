@@ -97,7 +97,7 @@ const EXPECTED = {
     'strategy-library', 'strategy-rules', 'strategy-scan', 'strategy-tools', 'tool-arguments', 'trade-journal',
     'trade-review', 'trading-agent-security', 'trend-momentum-indicators'],
   d: ['broker-bar-fields', 'design-self-review', 'end-of-day', 'gate-refusals-skills', 'kill-switch', 'lean-cycle',
-    'live-session-records', 'order-plan', 'premarket', 'prop-evaluator', 'replay', 'replay-labels', 'replay-resume',
+    'live-session-records', 'order-plan', 'premarket', 'prepare-ahead', 'prop-evaluator', 'replay', 'replay-labels', 'replay-resume',
     'replay-scorecard', 'runner-lanes', 'runner-logs', 'strategy-backtest', 'timeframe-sources', 'training-loop',
     'training-verdict', 'user-commands'],
   e: ['bar-briefing', 'role-round', 'trader-process'],

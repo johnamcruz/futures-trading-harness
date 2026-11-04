@@ -242,15 +242,30 @@ test('the reaction questions (q23-q35, feat/sweep-candle-control): answer-first 
   }
 });
 
+test('grading: the prepare-ahead questions (q40-q44, b8) pass the right answer and fail the trap answer', () => {
+  const cases = {
+    q40: [['Confirm: compose_check with the at-close reads.', 'Confirm it; the candle met TAKE.'], ['Pass.', 'No, pass.']],
+    q41: [['Pass: TAKE is not met, the close is below VWAP.'], ['Confirm.', 'Take it.', 'Yes, confirm.']],
+    q42: [['No. Pass: the candle did not meet TAKE and the plan is not evidence.'], ['Yes, take it as planned.', 'Confirm.', 'Take it.']],
+    q43: [['No. Judge scenario 3 from the facts; its TAKE is met, so take it.', 'Not off the table: the candle meets scenario 3.'], ['Yes, scenario 3 is off the table.', 'Yes, pass.']],
+    q44: [['The at-close facts: compose with the 1 pt wick.', 'The reads the facts give at the close, never the plan.'], ['The plan\'s read.', 'The plan.']],
+    b8: [['No trade: the Bias line refuses the long.', 'Pass; the Bias line says no long.'], ['Yes, confirm the long.', 'Confirm.', 'Take it.']],
+  };
+  for (const [id, [right, wrong]] of Object.entries(cases)) {
+    for (const a of right) assert.ok(pass(id, `ANSWER: ${a}`), `${id} right: ${a}`);
+    for (const a of wrong) assert.ok(!pass(id, `ANSWER: ${a}`), `${id} wrong: ${a}`);
+  }
+});
+
 test('summary: correct on all K, answered both ways, the totals, the bar; compare names each change', () => {
   const rows = [];
   for (const x of QUIZ.questions) for (let k = 1; k <= 5; k += 1) rows.push({ id: x.id, k, pass: true });
   for (const x of QUIZ.partB) for (let k = 1; k <= 5; k += 1) rows.push({ id: x.id, k, pass: true });
   const all = Q.summarize(QUIZ, rows, 5);
-  assert.deepStrictEqual([all.partA.allCorrect, all.partA.bothWays, all.partB.allCorrect, all.meetsBar], [37, 0, 7, true]);
+  assert.deepStrictEqual([all.partA.allCorrect, all.partA.bothWays, all.partB.allCorrect, all.meetsBar], [42, 0, 8, true]);
   const one = rows.map(r => (r.id === 'q6' && r.k === 2 ? { ...r, pass: false } : r));
   const s = Q.summarize(QUIZ, one, 5);
-  assert.deepStrictEqual([s.partA.allCorrect, s.partA.bothWays, s.partA.total, s.meetsBar], [36, 1, 184, false]);
+  assert.deepStrictEqual([s.partA.allCorrect, s.partA.bothWays, s.partA.total, s.meetsBar], [41, 1, 209, false]);
   // Too few runs is never correct on all K.
   assert.strictEqual(Q.summarize(QUIZ, rows.filter(r => r.k <= 3), 5).partA.allCorrect, 0);
   const d = Q.compare(all, s).find(x => x.id === 'q6');
