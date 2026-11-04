@@ -80,6 +80,24 @@ test('runPrepare: no session record (the hook did not run): the session from the
   await assert.rejects(runPrepare(validateConfig({ harness: 'opencode' }), 'prepare', 'P', { timeoutMs: 1, context: {} }, { root: ROOT, home, env: {}, run: runOf([]) }), /Claude Code only/);
 });
 
+test('runPrepare: what the run tried and was refused: the stream\'s permission denials (dontAsk) and the gate refusals its run logged in the shadow\'s gate log', async () => {
+  const home = tmpDir();
+  const run = async (argv, o) => {
+    // As the order gate's hook on a refused place_order: one line in the run's gate log (the shadow's own).
+    fs.mkdirSync(path.dirname(o.env.FTH_GATE_LOG), { recursive: true });
+    fs.appendFileSync(o.env.FTH_GATE_LOG, `${JSON.stringify({ source: 'hook', tool: 'place_order', decision: 'blocked' })}\n`);
+    const out = [JSON.stringify({ type: 'system', subtype: 'init', session_id: 's' }), JSON.stringify({ type: 'result', subtype: 'success', result: 'PLAN END', session_id: 's', permission_denials: [{ tool_name: 'mcp__broker__place_order', tool_use_id: 'a' }, { tool_name: 'Agent', tool_use_id: 'b' }] })].join('\n');
+    return { ok: true, timedOut: false, code: 0, output: out, stdout: out };
+  };
+  const r = await runPrepare(cfg, 'prepare', 'P', { timeoutMs: 5000, context: { action: 'trade' } }, { root: ROOT, home, env: { FTH_HOME: home, HOME: home, FTH_GATE_LOG: path.join(home, 'old-gate.jsonl') }, run });
+  assert.deepStrictEqual(r.denied, ['mcp__broker__place_order', 'Agent']);
+  assert.strictEqual(r.gateRefusals, 1);
+  assert.ok(!fs.existsSync(path.join(home, 'old-gate.jsonl')), 'the old path\'s gate log untouched');
+  // A second run counts only its own.
+  const r2 = await runPrepare(cfg, 'prepare', 'P', { timeoutMs: 5000, context: { action: 'trade' } }, { root: ROOT, home, env: { FTH_HOME: home, HOME: home }, run });
+  assert.strictEqual(r2.gateRefusals, 1);
+});
+
 test('runCycle: onLog, when given, hears the cycle log\'s file once it is written; without it the cycle is as before', async () => {
   const home = tmpDir();
   const run = async () => ({ ok: true, timedOut: false, code: 0, output: 'CYCLE RESULT: no-trade - x\n', stdout: 'CYCLE RESULT: no-trade - x\n' });

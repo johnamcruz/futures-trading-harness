@@ -7,7 +7,8 @@
  *   readRecords(home, { from, to })   every cycle record of the days from..to (YYYY-MM-DD, inclusive; none: all)
  *   report(records)                   { cycles, shadowed, status, voidBy, planned, rates: { void, outside, nothingFired },
  *                                       outsideByKind, agreement: { agree, disagree, unknown, rate }, confirms, confirmMs,
- *                                       made, skippedBy, prepareMs, aborted, tokens: { prepare, confirm } }
+ *                                       made, skippedBy, prepareMs, aborted, tokens: { prepare, confirm },
+ *                                       forbidden: { denied: { tool: n }, gateRefusals } }
  *   text(report)                      the report as lines
  */
 
@@ -70,6 +71,12 @@ function report(records) {
     prepareMs: msOf(mades.filter(m => m.outcome === 'done' || m.outcome === 'aborted').map(m => m.ms).filter(Number.isFinite)),
     aborted: made.aborted || 0,
     tokens: { prepare: tokensOf(mades.map(m => m.usage)), confirm: tokensOf(confirmed.map(s => s.confirm.usage)) },
+    // The forbidden-tool attempts of every run: the CLI's denials by tool, and the gate's refusals in the shadow's log.
+    forbidden: [...mades, ...confirmed.map(s => s.confirm)].reduce((f, r) => {
+      for (const t of Array.isArray(r.denied) ? r.denied : []) f.denied[t] = (f.denied[t] || 0) + 1;
+      f.gateRefusals += Number.isInteger(r.gateRefusals) ? r.gateRefusals : 0;
+      return f;
+    }, { denied: {}, gateRefusals: 0 }),
   };
 }
 
@@ -90,6 +97,7 @@ function text(r) {
     `prepares: ${kv(r.made)}; skipped: ${kv(r.skippedBy)}`,
     `prepare ms: ${ms(r.prepareMs)}`,
     `aborted at the deadline: ${r.aborted}`,
+    `forbidden tool attempts: denied ${kv(Object.fromEntries(Object.entries(r.forbidden.denied).sort()))}; gate refusals ${r.forbidden.gateRefusals}`,
     `tokens: prepare ${tok(r.tokens.prepare)}; confirm ${tok(r.tokens.confirm)}`,
   ].join('\n');
 }

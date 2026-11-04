@@ -263,6 +263,9 @@ async function runPrepare(cfg, kind, prompt, { timeoutMs, context = null, resume
   const runEnv = childEnv(cfg, deps.root, env, ctx);
   const argv = buildCommand(cfg, prompt, deps.root, runEnv, { prepare: kind, resume, effort: require('./tunables').runner().prepare.effort });
   const wallNow = deps.wallNow || Date.now;
+  // The shadow's gate log (childEnv routes it): its lines before the run, so the run's own refusals are counted.
+  const gateLines = () => { try { return require('fs').readFileSync(runEnv.FTH_GATE_LOG, 'utf8').split('\n').filter(Boolean).length; } catch (_err) { return 0; } };
+  const gate0 = gateLines();
   const t0 = wallNow();
   const res = await runOnce(cfg, argv, timeoutMs, ctx, { ...deps, env, ...(signal ? { signal } : {}) }, runEnv);
   const ms = Math.max(0, wallNow() - t0);
@@ -273,7 +276,9 @@ async function runPrepare(cfg, kind, prompt, { timeoutMs, context = null, resume
   try { require('fs').unlinkSync(require('./trading/skill-lookups').lookupsFile(res.transcript)); } catch (_err) { /* none */ }
   const rec = sessionFile ? PA.readSession(sessionFile) : null;
   const streamed = T.documents(output).map(e => (e && typeof e.session_id === 'string' ? e.session_id : null)).find(Boolean) || null;
-  return { ok: Boolean(res.ok), timedOut: Boolean(res.timedOut), text: text || '', sessionId: rec ? rec.sessionId : streamed, transcript: rec ? rec.transcript : null, source: rec ? rec.source : null, usage: T.claudeRunUsage(output), ms };
+  // What it tried and was refused: the CLI's permission denials (its result event, dontAsk) and the gate's refusals.
+  const denied = T.documents(output).filter(e => e && e.type === 'result' && Array.isArray(e.permission_denials)).flatMap(e => e.permission_denials.map(d => (d && d.tool_name) || null)).filter(Boolean);
+  return { ok: Boolean(res.ok), timedOut: Boolean(res.timedOut), text: text || '', sessionId: rec ? rec.sessionId : streamed, transcript: rec ? rec.transcript : null, source: rec ? rec.source : null, usage: T.claudeRunUsage(output), ms, denied, gateRefusals: Math.max(0, gateLines() - gate0) };
 }
 
 /** The skills a role's prompt held whole: its prompt addition (Claude Code, roleSkillsInPrompt), or opencode's role prompt; else none. */

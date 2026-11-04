@@ -713,10 +713,10 @@ function sectionInputsFor({ cfg, root, home, env = process.env, strategies }) {
     const { STRATEGY } = require('./trading/trade-lifecycle');
     const doc = all.find(s => s.name === STRATEGY && s.valid) || null;
     let policy = null;
-    let inAttempt = false;
+    let inAttempt;
     try { policy = doc ? require('./trading/lifecycle-order').attemptPolicy(home, doc, all, symbol) : null; inAttempt = Boolean(policy); } catch (_err) { inAttempt = true; }
     const entryRule = policy ? require('./trading/entry-rule').entryRuleOf(policy.entry) : null;
-    let sizing = null;
+    let sizing;
     try {
       const account = policy ? loadAccounts(root, env).accounts.find(a => a.name === policy.account && a.valid) : null;
       const specOf = require('./trading/broker-specs').liveSpecs(env);

@@ -40,7 +40,7 @@ const shadowScript = (o = {}) => (prompt, _env, { resumed }) => [
 ];
 
 /** A replay day of the three bars: each pass's head trader passes; `shadow` turns prepareAhead on with the fake CLI. */
-async function day({ shadow = false, script = shadowScript(), kill = null, preHooks = false, fill = null } = {}) {
+async function day({ shadow = false, script = shadowScript(), kill = null, preHooks = true, fill = null } = {}) {
   const w = D.world({ harness: 'claude' });
   if (shadow) w.cfg = { ...w.cfg, prepareAhead: 'shadow' };
   const fake = fakeClaude({ dir: path.join(w.home, 'claude-sessions'), script, preHooks });
@@ -155,15 +155,18 @@ test('shadow e2e: paper mode: no shadow run and no prepare field', async () => {
   }
 });
 
-test('shadow e2e, a gap for the coordinator: if the CLI ran PreToolUse hooks before dontAsk refuses a call (not measured), a shadow run\'s order attempt would be logged blocked by the order gate\'s hook; nothing else of the old path moves and nothing reaches the broker', async () => {
+test('shadow e2e: the CLI runs PreToolUse hooks before dontAsk refuses a call: a shadow run\'s order attempt is refused by the order gate\'s hook into the shadow\'s own gate log; the old path\'s gate log is unchanged, the attempt counted', async () => {
   const off = await day({ shadow: false });
-  const on = await day({ shadow: true, preHooks: true });
-  const a = oldPath(on.w);
-  const b = oldPath(off.w);
-  const extra = a.gate.filter(e => !b.gate.some(x => JSON.stringify(x) === JSON.stringify(e)));
-  assert.ok(extra.length >= 1, 'the hook\'s refusal is logged');
-  assert.ok(extra.every(e => e.source === 'hook' && e.decision === 'blocked' && e.tool === 'place_order'), JSON.stringify(extra));
-  assert.deepStrictEqual({ ...a, gate: a.gate.filter(e => !extra.includes(e)) }, b);
+  const on = await day({ shadow: true });
+  assert.deepStrictEqual(oldPath(on.w).gate, oldPath(off.w).gate, 'the old path\'s gate log as with the key off');
+  assert.deepStrictEqual(oldPath(on.w), oldPath(off.w));
+  const shadowLog = PA.shadowGateLog(on.w.home);
+  assert.ok(fs.existsSync(shadowLog), 'the hook\'s refusal went to the shadow\'s gate log');
+  const lines = fs.readFileSync(shadowLog, 'utf8').trim().split('\n').map(l => JSON.parse(l));
+  assert.ok(lines.length >= 1 && lines.every(e => e.source === 'hook' && e.decision === 'blocked' && e.tool === 'place_order'), JSON.stringify(lines));
+  const made = cycleRecords(on.w)[1].prepare.made;
+  assert.ok(made.gateRefusals >= 1, JSON.stringify(made));
+  assert.deepStrictEqual(made.denied, ['mcp__harness__compose_check', 'mcp__broker__place_order', 'mcp__broker__journal_add', 'mcp__harness__bars_fetch', 'Agent']);
   assert.deepStrictEqual(D.placedAtBroker(on.w), []);
 });
 

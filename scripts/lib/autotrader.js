@@ -1000,6 +1000,10 @@ function childEnv(cfg, root, base = process.env, context = null) {
   else delete env.FTH_PREPARE;
   if (prep && typeof context.prepareSession === 'string' && path.isAbsolute(context.prepareSession)) env.FTH_PREPARE_SESSION = context.prepareSession;
   else delete env.FTH_PREPARE_SESSION;
+  // Its gate log is the shadow's own (prepare-ahead.js shadowGateLog): the order gate's hook (and the gateway, which the
+  // run starts with this environment) records a refused order of a prepare there, never in the old path's log. The
+  // gate's logic is unchanged; only where it writes. Any other run keeps the log it was given.
+  if (prep) env.FTH_GATE_LOG = require('./prepare-ahead').shadowGateLog(harnessHome(base));
   // Phase 2 started at the head trader's compose (runner-entry.js overlapFor): its policy verdicts go to its own stage
   // (trading/verdict-stage.js), promoted only when the entry adopts it. Never inherited (the head trader's run never has one).
   if (context && typeof context.verdictStage === 'string' && context.verdictStage) env.FTH_VERDICT_STAGE = context.verdictStage;

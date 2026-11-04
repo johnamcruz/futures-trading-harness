@@ -186,6 +186,9 @@ function readSession(file) {
   }
 }
 
+/** The gate log of the shadow's runs (<home>/prepare/gate-log.jsonl: autotrader.js childEnv), apart from the old path's. */
+const shadowGateLog = home => path.join(home, PLAN_DIR, 'gate-log.jsonl');
+
 /** The plan file for a symbol's bar (the bar the plan is for: the next bar's open time). */
 const planFile = (home, symbol, barT) => path.join(home, PLAN_DIR, `${String(symbol).replace(/[^A-Za-z0-9]/g, '_')}-${String(barT).replace(/[^0-9TZ]/g, '')}.json`);
 /** The plan written whole (a temp file renamed over it: harness-run.js writeJsonAtomic); its path. */
@@ -313,5 +316,5 @@ function agreement(shadow, full) {
 
 module.exports = {
   MODES, PLAN_DIR, PREPARE_DENIED, PREPARE_SCRIPTS, modeProblem, shadowOn, deadlineOf, overran, shouldPrepare, windowOf, sectionFor, deskKeys, versionsOf, validate,
-  recordSession, readSession, planFile, writePlan, readPlan, makePlan, parsePlan, firedReads, matchScenario, readKind, preparePrompt, confirmPrompt, parseDecision, fullDecisionOf, agreement,
+  recordSession, readSession, shadowGateLog, planFile, writePlan, readPlan, makePlan, parsePlan, firedReads, matchScenario, readKind, preparePrompt, confirmPrompt, parseDecision, fullDecisionOf, agreement,
 };

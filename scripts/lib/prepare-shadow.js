@@ -40,6 +40,9 @@ function chainSideOn(bars, minutes) {
 /** The kinds of the reads no scenario covered: { kind: count } (prepare-ahead.js readKind). */
 const kindsOf = reads => (reads || []).reduce((o, r) => { const k = PA.readKind(r); o[k] = (o[k] || 0) + 1; return o; }, {});
 
+/** What a run tried and was refused: the CLI's permission denials and the gate refusals in the shadow's log. */
+const tried = res => ({ denied: Array.isArray(res.denied) ? res.denied : [], gateRefusals: Number.isInteger(res.gateRefusals) ? res.gateRefusals : 0 });
+
 /** The account read after the cycle is flat: no position and no working order (an unread one is not). */
 const flatOf = a => (isObj(a) && !a.error && Array.isArray(a.positions) && Array.isArray(a.orders) ? !a.positions.length && !a.orders.length : null);
 
@@ -91,7 +94,7 @@ function createShadow({ cfg, root, home, runPrepare, now, sectionOpts = () => ({
     const parsed = !aborted && res.ok ? PA.parseDecision(res.text) : null;
     const decision = parsed ? { ...parsed, side: parsed.decision === 'take' ? (plan.candidates.find(c => c.id === (plan.scenarios.find(s => s.k === parsed.k) || {}).id) || {}).side || null : null } : null;
     const outcome = aborted ? 'aborted' : !res.ok ? 'error' : parsed ? 'done' : 'no-decision';
-    return { status: 'valid', ...rest, confirm: { outcome, decision, ms: res.ms, sessionId: res.sessionId, usage: res.usage || null }, agreesWithFull: PA.agreement(decision, full) };
+    return { status: 'valid', ...rest, confirm: { outcome, decision, ms: res.ms, sessionId: res.sessionId, usage: res.usage || null, ...tried(res) }, agreesWithFull: PA.agreement(decision, full) };
   }
 
   /** Step 2: the prepare of the next bar's plan. */
@@ -129,11 +132,11 @@ function createShadow({ cfg, root, home, runPrepare, now, sectionOpts = () => ({
       return { outcome: 'error', why: err.message, ...at };
     }
     const { res, aborted } = run;
-    if (aborted) return { outcome: 'aborted', ms: res.ms, usage: res.usage || null, ...at };
-    if (!res.ok || !res.sessionId) return { outcome: 'error', why: !res.ok ? 'the run failed' : 'no session id', ms: res.ms, ...at };
+    if (aborted) return { outcome: 'aborted', ms: res.ms, usage: res.usage || null, ...tried(res), ...at };
+    if (!res.ok || !res.sessionId) return { outcome: 'error', why: !res.ok ? 'the run failed' : 'no session id', ms: res.ms, ...tried(res), ...at };
     const plan = PA.makePlan({ symbol: x.symbol, bar: x.bar.t, next, madeAt, ms: res.ms, session: { id: res.sessionId, transcript: res.transcript }, versions, candidates: section.candidates, text: res.text, usage: res.usage || null });
     PA.writePlan(home, plan);
-    return { outcome: 'done', planId: plan.id, ms: res.ms, scenarios: plan.scenarios.length, candidates: plan.candidates.length, usage: plan.usage, ...at };
+    return { outcome: 'done', planId: plan.id, ms: res.ms, scenarios: plan.scenarios.length, candidates: plan.candidates.length, usage: plan.usage, ...tried(res), ...at };
   }
 
   async function after(x) {

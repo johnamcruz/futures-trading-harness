@@ -127,6 +127,19 @@ test('childEnv: a prepare run and a shadow confirm say so (FTH_PREPARE) with the
   assert.ok(!('FTH_PREPARE_SESSION' in childEnv(c, ROOT, base, { action: 'trade', prepare: 'prepare', prepareSession: 'rel/s.json' })));
 });
 
+test('childEnv: a prepare and a shadow confirm write the gate\'s log to the shadow\'s own file (<home>/prepare/gate-log.jsonl), never the old path\'s; every other run keeps its own', () => {
+  const c = validateConfig({ harness: 'claude', prepareAhead: 'shadow' });
+  const home = tmpDir();
+  const base = { FTH_HOME: home, FTH_GATE_LOG: '/old/gate.jsonl' };
+  for (const kind of ['prepare', 'confirm']) {
+    const env = childEnv(c, ROOT, base, { action: 'trade', prepare: kind });
+    assert.strictEqual(env.FTH_GATE_LOG, path.join(home, 'prepare', 'gate-log.jsonl'), kind);
+    assert.strictEqual(require('../../scripts/lib/trading/check-order').gateLogPath(env), path.join(home, 'prepare', 'gate-log.jsonl'));
+  }
+  assert.strictEqual(PA.shadowGateLog(home), path.join(home, 'prepare', 'gate-log.jsonl'));
+  for (const ctx of [null, { action: 'trade' }, { action: 'trade', roleRun: 'trade-executor', prepare: 'prepare' }]) assert.strictEqual(childEnv(c, ROOT, base, ctx).FTH_GATE_LOG, '/old/gate.jsonl', JSON.stringify(ctx));
+});
+
 test('PA and autotrader agree on the prepare\'s denied tools (one home: prepare-ahead.js)', () => {
   assert.deepStrictEqual([...PA.PREPARE_DENIED.harness].sort(), ['bars_fetch', 'blackouts_add', 'compose_check', 'reconcile']);
   assert.deepStrictEqual([...PA.PREPARE_DENIED.broker].sort(), ['get_bars', 'get_quote']);

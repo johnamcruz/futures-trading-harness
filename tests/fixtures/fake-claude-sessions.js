@@ -17,7 +17,8 @@
  * The run plays `script(prompt, env, { resumed })` with the scripted model (tests/fixtures/scripted-model.js, Claude's
  * stream-json), so every allowed tool goes to the real harness tools server and the real order gateway.
  *   fakeClaude({ dir, script, preHooks }) -> run, with run.calls [{ argv, env, session, source, refused, hooked }]
- *   (preHooks: the plugin's PreToolUse hooks run on a call before the allowed list refuses it; off by default)
+ *   (preHooks, on by default as the real CLI does: the plugin's PreToolUse hooks run on a call before dontAsk refuses
+ *   it; the refused calls are the result event's permission_denials, as the CLI reports them)
  */
 
 const fs = require('fs');
@@ -40,7 +41,7 @@ function toolOf(step) {
 }
 const allowedBy = (list, name) => list.includes(name) || list.some(a => /^mcp__[a-z]+$/.test(a) && name.startsWith(`${a}__`));
 
-function fakeClaude({ dir, script, preHooks: runHooks = false }) {
+function fakeClaude({ dir, script, preHooks: runHooks = true }) {
   fs.mkdirSync(dir, { recursive: true });
   const calls = [];
   const file = id => path.join(dir, `${id}.jsonl`);
@@ -64,7 +65,7 @@ function fakeClaude({ dir, script, preHooks: runHooks = false }) {
     require(path.join(ROOT, 'scripts', 'hooks', 'trading-session-start.js')).run(JSON.stringify({ source, session_id: id, transcript_path: file(id), hook_event_name: 'SessionStart' }), { pluginRoot: ROOT }, { env: opts.env });
     // The script, each tool call held to the allowed list (dontAsk refuses the rest, never reaching the tool).
     const steps = script(String(argv[argv.indexOf('-p') + 1] || ''), opts.env, { resumed: Boolean(resume), history });
-    // `preHooks` (pessimistic about the CLI's order, not measured): the plugin's PreToolUse hooks (hooks/hooks.json: the order gate
+    // `preHooks` (the CLI's order: hooks fire before the dontAsk denial): the plugin's PreToolUse hooks (hooks/hooks.json: the order gate
     // on place_order and modify_order, the tool-call rules on every call) run on a call before the permission check
     // refuses it, with the run's environment; what they write is the run's (call.hooked).
     call.hooked = [];
@@ -83,7 +84,12 @@ function fakeClaude({ dir, script, preHooks: runHooks = false }) {
     });
     const model = scriptedModel(held, { format: 'claude' });
     const res = await model(argv, opts);
-    const output = res.output.replace(/"session_id":"ses_scripted"/g, `"session_id":"${id}"`);
+    // The CLI's result event names each call dontAsk refused (permission_denials).
+    const output = res.output.replace(/"session_id":"ses_scripted"/g, `"session_id":"${id}"`).split('\n').map(l => {
+      let e;
+      try { e = JSON.parse(l); } catch (_err) { return l; }
+      return e && e.type === 'result' ? JSON.stringify({ ...e, permission_denials: call.refused.map((n, k) => ({ tool_name: n, tool_use_id: `denied_${k}` })) }) : l;
+    }).join('\n');
     // The transcript: the history (as kept), then this run's own lines.
     let parent = kept.length ? kept[kept.length - 1].uuid : null;
     const own = output.trim().split('\n').filter(Boolean).map(l => { const u = uuid(); const e = { uuid: u, parentUuid: parent, sessionId: id, event: JSON.parse(l) }; parent = u; return e; });

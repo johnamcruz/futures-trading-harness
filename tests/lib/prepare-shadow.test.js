@@ -55,7 +55,7 @@ function fakeCli(clock, o = {}) {
     const text = kind === 'prepare'
       ? [...prompt.matchAll(/^ {2}- (P\d+) \S+ (long|short) "([^"]+)"/gm)].map((m, j) => `SCENARIO ${j + 1}: ${m[1]} "${m[3]}" → TAKE if the candle meets it | PASS if not; reads: "${m[3]}"; why: the trend`).concat(['STAND DOWN if: a news window', 'INVALID if: a fill', 'PLAN END']).join('\n')
       : (o.decision || `DECISION: TAKE ${/Your plan said: scenario (\d+)/.exec(prompt)[1]}`);
-    return { ok: true, timedOut: false, text, sessionId: id, transcript: o.transcript === undefined ? o.sessionFile : o.transcript, source: kind === 'confirm' ? 'fork' : 'startup', usage: { total: { input: 1, cacheRead: 9, cacheCreation: 0, output: 2 } }, ms: o.reportMs || o.advanceMs || 20000 };
+    return { ok: true, timedOut: false, text, sessionId: id, transcript: o.transcript === undefined ? o.sessionFile : o.transcript, source: kind === 'confirm' ? 'fork' : 'startup', usage: { total: { input: 1, cacheRead: 9, cacheCreation: 0, output: 2 } }, ms: o.reportMs || o.advanceMs || 20000, denied: o.denied || [], gateRefusals: o.gateRefusals || 0 };
   };
   return { run, runs };
 }
@@ -150,6 +150,14 @@ test('shadow: the plan keys the desk\'s reports as the cache serves them after t
   assert.strictEqual(plan.versions.desk['trend-momentum-analyst'].until, '2021-05-17T14:30:00.000Z');
   const r = await after(home, FIRED, { reports: [{ role: 'trend-momentum-analyst', text: 'Bias: up', until: '2021-05-17T14:30:00.000Z' }] });
   assert.deepStrictEqual([r.shadow.status, r.shadow.reason], ['void', 'desk']);
+});
+
+test('shadow: what each run tried and was refused (the CLI\'s permission denials, the gate refusals in the shadow\'s log) is in its record', async () => {
+  const home = tmp();
+  const a = await after(home, PREP, { fake: { denied: ['mcp__harness__compose_check'], gateRefusals: 1 } });
+  assert.deepStrictEqual([a.made.denied, a.made.gateRefusals], [['mcp__harness__compose_check'], 1]);
+  const b = await after(home, FIRED, { fake: { denied: ['Agent', 'mcp__broker__place_order'], gateRefusals: 2 } });
+  assert.deepStrictEqual([b.shadow.confirm.denied, b.shadow.confirm.gateRefusals], [['Agent', 'mcp__broker__place_order'], 2]);
 });
 
 test('shadow: the agreement check can fail: a deliberately wrong shadow decision is logged as a disagreement', async () => {
