@@ -382,11 +382,14 @@ test('wiring: the section reads what the close\'s own code reads: the selected c
   const { sectionInputsFor } = require('../../scripts/lib/runner-wiring');
   const { laneStrategies, lanesOf } = require('../../scripts/lib/lanes');
   const home = tmp();
+  // A strategy on another timeframe is no strategy of the first lane's: the section never scans it.
+  const all = [...REG, { ...REG.find(s => s.name === 'momentum_continuation'), name: 'other_tf', timeframe: '1h' }];
   for (const c of [cfg, { ...cfg, paper: true, symbols: ['NQ'] }]) {
-    const o = sectionInputsFor({ cfg: c, root: ROOT, home, env: { FTH_HOME: home, HOME: home }, strategies: () => REG })('MNQ');
+    const o = sectionInputsFor({ cfg: c, root: ROOT, home, env: { FTH_HOME: home, HOME: home }, strategies: () => all })('MNQ');
     assert.deepStrictEqual(o.selected, c.symbols);
-    assert.deepStrictEqual(o.strategies.map(s => s.name), laneStrategies(REG, lanesOf(c)[0]).map(s => s.name));
-    assert.strictEqual(o.registry, REG);
+    assert.deepStrictEqual(o.strategies.map(s => s.name), laneStrategies(all, lanesOf(c)[0]).map(s => s.name));
+    assert.ok(!o.strategies.some(s => s.name === 'other_tf'));
+    assert.strictEqual(o.registry, all);
     assert.strictEqual(o.paper, Boolean(c.paper));
     assert.deepStrictEqual([o.inAttempt, o.entryRule, o.sizing], [false, null, null]);
     assert.ok(o.blackouts && o.clock, 'the briefing\'s own facts');

@@ -100,7 +100,8 @@ test('off regression 3: off, prepare ahead\'s modules are never loaded; poisoned
     (async () => {
       const res = {};
       for (const extra of [{}, { prepareAhead: 'off' }]) {
-        const got = await O.allDays({ extra });
+        // The shadow's runner wired as the CLI always wires it: off, it is never called.
+        const got = await O.allDays({ extra, runPrepare: () => () => async () => { throw new Error('a shadow run while off'); } });
         res[JSON.stringify(extra)] = O.DAYS.map(d => O.firstDiff(got[d], MAIN.days[d]));
       }
       process.stdout.write(JSON.stringify(res));

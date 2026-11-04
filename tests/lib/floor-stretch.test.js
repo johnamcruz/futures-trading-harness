@@ -281,6 +281,10 @@ test('sizingFacts: the facts noSizeFits sizes with (the cap in force, the floor 
     assert.strictEqual(Boolean(refused), !fit.fits && !fit.stretchFits, String(t));
   }
   assert.strictEqual(sizingFacts({ policy: null, account: BIG, capUsd: 300, root: 'MNQ', spec: specOf('MNQ'), specOf }), null, 'no attempt: none');
+  // A healthy cap (sizing.healthy_risk_usd) in force while healthy, the composed cap after a loss today: the cap in force.
+  const hp = policy({ healthy_risk_usd: 400 });
+  assert.strictEqual(sizingFacts({ policy: hp, account: BIG, capUsd: 300, root: 'MNQ', spec: specOf('MNQ'), specOf, home: home() }).capUsd, 400);
+  assert.strictEqual(sizingFacts({ policy: hp, account: BIG, capUsd: 300, root: 'MNQ', spec: specOf('MNQ'), specOf, home: home(100400, { eod: 100400, trades: [-25, 40] }) }).capUsd, 300);
 });
 
 test('the attempt simulator: a loss then a win today keeps the stretch off for the rest of the day; the next day takes it again', () => {
