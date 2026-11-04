@@ -11,6 +11,7 @@
  *     session with no transcript fails (exit 1, an error result), as the CLI does.
  *   - SessionStart runs the plugin's real hook (scripts/hooks/trading-session-start.js) with { source: startup | fork |
  *     resume, session_id, transcript_path }, with the run's environment.
+ *   - Its run's signal (opts.signal, the deadline's abort) stops it at once, cancelled, as a killed CLI.
  *   - `--permission-mode dontAsk` with `--allowedTools`: a tool call not allowed (by name, or its whole MCP server) is
  *     refused and never reaches the tool; it is recorded in `refused`.
  *
@@ -92,7 +93,15 @@ function fakeClaude({ dir, script, preHooks: runHooks = true }) {
       return { act: () => { if (runHooks) preHooks(name, typeof s.args === 'function' ? {} : (s.args || {})); call.refused.push(name); } };
     });
     const model = scriptedModel(held, { format: 'claude' });
-    const res = await model(argv, opts);
+    // Stopped (its signal: what runHarness kills the process group on, the deadline's abort): it ends at once, cancelled,
+    // as a killed CLI ends; nothing more is written for it.
+    const stopped = opts.signal ? new Promise(resolve => { const end = () => resolve({ cancelled: true }); if (opts.signal.aborted) end(); else opts.signal.addEventListener('abort', end, { once: true }); }) : new Promise(() => {});
+    const raced = await Promise.race([model(argv, opts), stopped]);
+    if (raced && raced.cancelled) {
+      call.cancelled = true;
+      return { ok: false, timedOut: false, cancelled: true, code: 143, output: '\n[autotrader] run cancelled; killing run\n', stdout: '' };
+    }
+    const res = raced;
     // The CLI's result event names each call dontAsk refused (permission_denials).
     const output = res.output.replace(/"session_id":"ses_scripted"/g, `"session_id":"${id}"`).split('\n').map(l => {
       let e;

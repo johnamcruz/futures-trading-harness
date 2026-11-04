@@ -261,6 +261,9 @@ async function runPrepare(cfg, kind, prompt, { timeoutMs, context = null, resume
   const env = deps.env || process.env;
   const ctx = { ...(context || {}), prepare: kind, ...(sessionFile ? { prepareSession: sessionFile } : {}) };
   const runEnv = childEnv(cfg, deps.root, env, ctx);
+  // Its gate log must be the shadow's own (childEnv routes it for a prepare or a confirm): a context that keeps the live
+  // log (a role's) is refused before anything runs, so the live gate log is never reset below.
+  if (runEnv.FTH_GATE_LOG !== PA.shadowGateLog(harnessHome(env))) throw new Error(`cycle-run: a prepare or a confirm writes only the shadow's own gate log (${PA.shadowGateLog(harnessHome(env))}), not ${runEnv.FTH_GATE_LOG || 'none'}`);
   const argv = buildCommand(cfg, prompt, deps.root, runEnv, { prepare: kind, resume, effort: require('./tunables').runner().prepare.effort });
   const wallNow = deps.wallNow || Date.now;
   // The shadow's gate log (childEnv routes it): reset for each run, so it never grows without bound and holds this run's

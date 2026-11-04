@@ -132,6 +132,17 @@ test('runPrepare: its spawn-to-init time: from the spawn to the stream\'s first 
   assert.strictEqual(none.initMs, null);
 });
 
+test('runPrepare: never a run whose gate log is not the shadow\'s own (a role\'s context keeps the live log): refused, the live gate log untouched, nothing run', async () => {
+  const home = tmpDir();
+  const live = path.join(home, 'gate.jsonl');
+  fs.writeFileSync(live, `${JSON.stringify({ decision: 'allowed' })}\n`);
+  let ran = false;
+  const run = async () => { ran = true; return { ok: true, output: '', stdout: '' }; };
+  await assert.rejects(runPrepare(cfg, 'prepare', 'P', { timeoutMs: 5000, context: { action: 'trade', roleRun: 'risk-manager' } }, { root: ROOT, home, env: { FTH_HOME: home, HOME: home, FTH_GATE_LOG: live }, run }), /the shadow's own gate log/);
+  assert.strictEqual(fs.readFileSync(live, 'utf8'), `${JSON.stringify({ decision: 'allowed' })}\n`);
+  assert.strictEqual(ran, false);
+});
+
 test('runCycle: onLog, when given, hears the cycle log\'s file once it is written; without it the cycle is as before', async () => {
   const home = tmpDir();
   const run = async () => ({ ok: true, timedOut: false, code: 0, output: 'CYCLE RESULT: no-trade - x\n', stdout: 'CYCLE RESULT: no-trade - x\n' });

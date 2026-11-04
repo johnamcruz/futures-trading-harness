@@ -234,6 +234,26 @@ test('shadow: each run\'s spawn-to-init time is recorded (and the confirm\'s fir
   assert.strictEqual(b.shadow.confirm.firstCacheCreation, 13400);
 });
 
+test('shadow: a run that hangs is stopped at its deadline end to end: the wall timer aborts the production runPrepare\'s run (its signal), the prepare is aborted, no plan written', async () => {
+  const { fakeClaude } = require('../fixtures/fake-claude-sessions');
+  const { runPrepare: realRunPrepare } = require('../../scripts/lib/cycle-run');
+  const RT = require('../../scripts/lib/tunables').runner();
+  const home = tmp();
+  // The CLI hangs until it is stopped (its signal: what runHarness kills the process group on).
+  const fake = fakeClaude({ dir: path.join(home, 'claude-sessions'), preHooks: false, script: () => [{ act: () => new Promise(() => {}) }, { result: 'PLAN END' }] });
+  const runPrepare = (c, kind, prompt, limits) => realRunPrepare(c, kind, prompt, limits, { root: ROOT, home, env: { FTH_HOME: home, HOME: home }, run: fake });
+  // The least budget a run is given (the kill grace) plus 200 ms before the deadline: the run gets that long, then stops.
+  const start = Date.parse(FIRE) + STEP - RT.prepare.marginMs - RT.runner.killGraceMs - (RT.runner.killGraceMs + 200);
+  const clock = { ms: start };
+  const t0 = Date.now();
+  const r = await after(home, PREP, { clock, cli: { run: runPrepare, runs: [] } });
+  assert.strictEqual(r.made.outcome, 'aborted', JSON.stringify(r.made));
+  assert.ok(Date.now() - t0 < RT.runner.killGraceMs + 10000, 'stopped at its deadline, not left to hang');
+  assert.strictEqual(fake.calls.length, 1);
+  assert.strictEqual(fake.calls[0].cancelled, true, 'the run saw its signal');
+  assert.strictEqual(PA.readPlan(home, 'MNQ', FIRE), null);
+});
+
 test('shadow: the agreement check can fail: a deliberately wrong shadow decision is logged as a disagreement', async () => {
   const home = tmp();
   await after(home, PREP);

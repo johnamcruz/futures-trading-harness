@@ -14,7 +14,7 @@
  *      shadow's own reads: main's log is that log with some reads taken out, never an order or a call out of order.
  *   2. Toggled on, then off: what the shadow left (plan files, session records, its gate log) never moves the old path.
  *   3. Off, prepare ahead's modules are never loaded: poisoned, the off day is still main's.
- *   4. A failure inside prepare ahead (an exception in the prepare or the confirm, a run that hangs until it is killed,
+ *   4. A failure inside prepare ahead (an exception in the prepare or the confirm, a run killed at its deadline,
  *      a corrupt plan file, a lost session) never moves the old path; the error is in the prepare field only.
  *   5. The check can fail: a leak (an extra log line, an env var) is reported.
  */
@@ -36,13 +36,15 @@ const MAIN = require('../fixtures/prepare-off/main-outputs.json');
 const sameAs = (got, want, what) => assert.strictEqual(O.firstDiff(got, want), null, `${what}: ${JSON.stringify(O.firstDiff(got, want))}`);
 /** The old path's outputs: all but the run fingerprint (shadow names its key there, by design) and the broker's call log. */
 const oldOf = ({ fingerprint: _f, calls: _c, ...rest }) => rest;
-const READ = /^(get_|list_|search_|journal_read )/;
-/** Main's call log is the shadow's with only reads taken out (the shadow's own), in order: true, or the first problem. */
+// The shadow's own broker reads: its account read after the cycle (runner.js accountSnapshot: the account, positions,
+// orders, the day's room and fills). Nothing else: a bars or quote read by shadow code (a forming-bar read, live) fails.
+const READ = /^(list_accounts|list_open_positions|list_open_orders|get_account_snapshot|search_trades) /;
+/** Main's call log is the shadow's with only its own account reads taken out, in order: true, or the first problem. */
 function onlyReadsAdded(got, want) {
   let i = 0;
   for (const c of got) {
     if (i < want.length && c === want[i]) { i += 1; continue; }
-    if (!READ.test(c)) return `an extra call that is no read: ${c.slice(0, 200)}`;
+    if (!READ.test(c)) return `an extra call that is not the shadow's own account read: ${c.slice(0, 200)}`;
   }
   return i === want.length ? true : `main's call ${i} is missing: ${String(want[i]).slice(0, 200)}`;
 }
@@ -143,8 +145,10 @@ test('off regression 4: a failure inside prepare ahead never moves the old path;
   const cases = {
     'the prepare throws': kind => (kind === 'prepare' ? 'throw' : null),
     'the confirm throws': kind => (kind === 'confirm' ? 'throw' : null),
-    'the prepare hangs until killed': kind => (kind === 'prepare' ? 'hang' : null),
-    'the confirm hangs until killed': kind => (kind === 'confirm' ? 'hang' : null),
+    // (What a hung run returns once it is killed at its deadline; the stop itself, end to end through the production
+    // runPrepare, is tests/lib/prepare-shadow.test.js "a run that hangs is stopped at its deadline end to end".)
+    'the prepare returns as a run killed at its deadline': kind => (kind === 'prepare' ? 'hang' : null),
+    'the confirm returns as a run killed at its deadline': kind => (kind === 'confirm' ? 'hang' : null),
     'a corrupt plan file before the close': [() => null, (bar, w) => { if (bar === NEXT_BAR) for (const f of fs.readdirSync(path.join(w.home, 'prepare')).filter(x => /^MNQ-/.test(x))) fs.writeFileSync(path.join(w.home, 'prepare', f), '{"v":1,'); }],
     'the session lost before the confirm': [() => null, (bar, w) => { if (bar === NEXT_BAR) fs.rmSync(path.join(w.home, 'claude-sessions'), { recursive: true, force: true }); }],
   };
@@ -180,7 +184,10 @@ test('off regression 5: the check can fail: a leak (an extra day-log line, an en
   assert.ok(O.firstDiff(leak(x => x.calls.push('get_account_snapshot {"accountId":7}')), main), 'an extra broker read');
   // In shadow, an extra order call or a missing call is refused; an extra read is the shadow's own.
   assert.strictEqual(onlyReadsAdded([...main.calls, 'get_account_snapshot {"accountId":7}'], main.calls), true);
-  assert.match(String(onlyReadsAdded([...main.calls, 'place_order {"size":1}'], main.calls)), /no read/);
-  assert.match(String(onlyReadsAdded(main.calls.slice(1), main.calls)), /missing/);
+  assert.match(String(onlyReadsAdded([...main.calls, 'place_order {"size":1}'], main.calls)), /not the shadow's own account read/);
+  assert.match(String(onlyReadsAdded([...main.calls, 'get_bars {"contractId":"MNQ"}'], main.calls)), /not the shadow's own account read/, 'a bars read by shadow code');
+  assert.match(String(onlyReadsAdded([...main.calls, 'get_quote {"contractId":"MNQ"}'], main.calls)), /not the shadow's own account read/);
+  assert.notStrictEqual(onlyReadsAdded(main.calls.slice(1), main.calls), true, 'a call of main\'s missing');
+  assert.match(String(onlyReadsAdded(main.calls.slice(0, -1), main.calls)), /missing/);
   assert.strictEqual(O.firstDiff(leak(() => {}), main), null, 'unchanged: no difference');
 });
