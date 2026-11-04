@@ -444,7 +444,7 @@ function validateConfig(raw) {
   if (cfg.harness === 'claude' && cfg.stableFirstPrompt === undefined) cfg.stableFirstPrompt = true;
   // prepareAhead (prepare-ahead.js, docs/PREPARE-AHEAD.md): "shadow" runs the prepare and the shadow confirm beside the old
   // path (Claude Code only); "off" or absent: as before (no key kept, so its config and hashes are a run's without it).
-  // "on" is refused until the confirm decides (PR B2).
+  // "on": the confirm decides at the close (PR B2: prepare-ahead.js, runner.js).
   // Off (absent or "off") loads none of prepare ahead's modules (tests/e2e/prepare-ahead-off-regression.test.js).
   if (cfg.prepareAhead === 'off') delete cfg.prepareAhead;
   else if (cfg.prepareAhead !== undefined) {

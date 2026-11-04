@@ -12,7 +12,7 @@
  * Every time comes from the caller (the runner's harness clock, trading/harness-now.js); this module never reads the
  * wall clock.
  *
- *   MODES, modeProblem(value, harness), shadowOn(cfg)      the runner config's key ("on" is refused until B2)
+ *   MODES, modeProblem(value, harness), shadowOn(cfg)      the runner config's key (off, shadow, on), onOn(cfg)
  *   deadlineOf({ nowMs, nextCloseMs, eodMs, marginMs, maxMs })  { atMs, budgetMs, by }: the earliest of the next close
  *                                                         minus the margin, the end of day and now plus the most a run takes
  *   overran(deadline, nowMs)                              done after the deadline (an unreadable clock: yes)
@@ -33,7 +33,7 @@ const fs = require('fs');
 const path = require('path');
 const { writeJsonAtomic } = require('./harness-run');
 
-const MODES = Object.freeze(['off', 'shadow']);
+const MODES = Object.freeze(['off', 'shadow', 'on']);
 /**
  * What the prepare and the shadow confirm may not use, beyond the head trader's own deny rules (kept identical, for the
  * prompt cache): by name from the harness tools' registry (harness-tools/registry.js) and the broker interface (autotrader.js claudePrepareTools takes
@@ -53,13 +53,14 @@ const sha = s => crypto.createHash('sha256').update(String(s)).digest('hex');
 /** The runner config's prepareAhead: the problem with it, or null (absent or "off": no delivery on any harness). */
 function modeProblem(v, harness) {
   if (v === undefined || v === 'off') return null;
-  if (v === 'on') return 'prepareAhead: "on" is not built yet (the confirm deciding comes in PR B2); use "shadow" to measure it beside the old path, or "off"';
-  if (v !== 'shadow') return `prepareAhead: "off" or "shadow" (got ${JSON.stringify(v)})`;
+  if (v !== 'shadow' && v !== 'on') return `prepareAhead: "off", "shadow" or "on" (got ${JSON.stringify(v)})`;
   return harness === 'claude' ? null : `prepareAhead: for harness "claude" only (harness ${harness})`;
 }
 
 /** Shadow mode on (Claude Code, prepareAhead "shadow"). */
 const shadowOn = cfg => Boolean(cfg) && cfg.harness === 'claude' && cfg.prepareAhead === 'shadow';
+/** "on" (Claude Code, prepareAhead "on"): the confirm decides (PR B2). */
+const onOn = cfg => Boolean(cfg) && cfg.harness === 'claude' && cfg.prepareAhead === 'on';
 
 /**
  * The deadline: the earliest of the next close less the margin, the end of day less the margin, and now plus the most a
@@ -309,6 +310,39 @@ function confirmPrompt({ atCloseText, fired = [], scenario, next }) {
     + `This is a shadow run beside the real cycle: do not call compose_check, place no order and launch no role. End with exactly one line: DECISION: TAKE ${scenario.k} | DECISION: PASS - <why>.`;
 }
 
+const DENIED_BY_CLI = /^Permission to use \S+ has been denied/;
+/**
+ * A run's forbidden-tool attempts, from its own transcript (its stream-json `output`): each tool_use, in order, of a tool
+ * its allow list (`allowed`, its --allowedTools: a tool by name or a whole MCP server) does not hold, and each answered
+ * by the CLI's own denial (a shell command, which its read-only commands make no allow rule decide). The CLI runs its
+ * PreToolUse hooks before the permission check (docs/PREPARE-AHEAD.md), so a call a hook refused is never among its
+ * permission_denials: only the transcript shows every attempt. Its tools' names.
+ */
+function forbiddenIn(output, allowed) {
+  const list = Array.isArray(allowed) ? allowed : [];
+  const holds = name => list.includes(name) || list.some(a => /^mcp__[a-z0-9-]+$/.test(a) && name.startsWith(`${a}__`));
+  const uses = new Map();
+  const out = [];
+  for (const line of String(output || '').split('\n')) {
+    let ev;
+    try { ev = JSON.parse(line); } catch (_err) { continue; }
+    const content = isObj(ev) && isObj(ev.message) && Array.isArray(ev.message.content) ? ev.message.content : [];
+    for (const c of content) {
+      if (!isObj(c)) continue;
+      if (c.type === 'tool_use' && typeof c.name === 'string' && typeof c.id === 'string') {
+        uses.set(c.id, c.name);
+        if (c.name !== 'Bash' && !holds(c.name)) out.push({ id: c.id, name: c.name });
+      }
+      if (c.type === 'tool_result' && c.is_error === true && uses.has(c.tool_use_id) && !out.some(x => x.id === c.tool_use_id)) {
+        const text = typeof c.content === 'string' ? c.content : (Array.isArray(c.content) ? c.content.map(b => (isObj(b) ? b.text || '' : '')).join('') : '');
+        if (DENIED_BY_CLI.test(text.trim())) out.push({ id: c.tool_use_id, name: uses.get(c.tool_use_id) });
+      }
+    }
+  }
+  const order = [...uses.keys()];
+  return out.sort((a, b) => order.indexOf(a.id) - order.indexOf(b.id)).map(x => x.name);
+}
+
 /** The shadow confirm's decision: its last line-start DECISION line (TAKE k or PASS), or null. */
 function parseDecision(text) {
   const lines = [...strip(String(text || '')).matchAll(/^[ \t>*-]*DECISION:\s*(TAKE\s+(\d+)|PASS)\b/gim)];
@@ -337,6 +371,6 @@ function agreement(shadow, full) {
 }
 
 module.exports = {
-  MODES, PLAN_DIR, PREPARE_DENIED, PREPARE_SCRIPTS, modeProblem, shadowOn, deadlineOf, overran, shouldPrepare, windowOf, sectionFor, deskKeys, versionsOf, validate,
-  recordSession, readSession, shadowGateLog, planFile, writePlan, readPlan, makePlan, parsePlan, firedReads, matchScenario, readKind, preparePrompt, confirmPrompt, parseDecision, fullDecisionOf, agreement,
+  MODES, PLAN_DIR, PREPARE_DENIED, PREPARE_SCRIPTS, modeProblem, shadowOn, onOn, deadlineOf, overran, shouldPrepare, windowOf, sectionFor, deskKeys, versionsOf, validate,
+  recordSession, readSession, shadowGateLog, planFile, writePlan, readPlan, makePlan, parsePlan, firedReads, matchScenario, readKind, preparePrompt, confirmPrompt, forbiddenIn, parseDecision, fullDecisionOf, agreement,
 };

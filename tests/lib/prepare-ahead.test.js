@@ -51,17 +51,24 @@ const makePlan = (o = {}) => PA.makePlan({ symbol: 'MNQ', bar: T, next: NEXT, ma
 
 // --- The mode key ---------------------------------------------------------------------------------------------------
 
-test('prepare-ahead: the mode key takes off and shadow on Claude Code; on is refused until B2, anything else is refused, another harness is refused', () => {
-  assert.deepStrictEqual([...PA.MODES], ['off', 'shadow']);
+test('prepare-ahead: the mode key takes off, shadow and on on Claude Code; anything else is refused, another harness is refused', () => {
+  assert.deepStrictEqual([...PA.MODES], ['off', 'shadow', 'on']);
   assert.strictEqual(PA.modeProblem(undefined, 'claude'), null);
   assert.strictEqual(PA.modeProblem('off', 'claude'), null);
   assert.strictEqual(PA.modeProblem('shadow', 'claude'), null);
-  assert.match(PA.modeProblem('on', 'claude'), /"on" is not built yet .*B2.*shadow/);
-  for (const bad of [true, false, 'yes', 1, null]) assert.match(PA.modeProblem(bad, 'claude'), /prepareAhead: "off" or "shadow"/, String(bad));
-  assert.match(PA.modeProblem('shadow', 'opencode'), /for harness "claude" only/);
+  assert.strictEqual(PA.modeProblem('on', 'claude'), null);
+  for (const bad of [true, false, 'yes', 1, null, 'ON']) assert.match(PA.modeProblem(bad, 'claude'), /prepareAhead: "off", "shadow" or "on"/, String(bad));
+  for (const m of ['shadow', 'on']) assert.match(PA.modeProblem(m, 'opencode'), /for harness "claude" only/);
   assert.strictEqual(PA.modeProblem('off', 'opencode'), null, 'off is no delivery on any harness');
   assert.strictEqual(PA.shadowOn({ harness: 'claude', prepareAhead: 'shadow' }), true);
-  for (const cfg of [{ harness: 'claude' }, { harness: 'claude', prepareAhead: 'off' }, { harness: 'opencode', prepareAhead: 'shadow' }, null]) assert.strictEqual(PA.shadowOn(cfg), false, JSON.stringify(cfg));
+  assert.strictEqual(PA.onOn({ harness: 'claude', prepareAhead: 'on' }), true);
+  // Each mode is its own: shadow is never on, on is never shadow.
+  assert.strictEqual(PA.shadowOn({ harness: 'claude', prepareAhead: 'on' }), false);
+  assert.strictEqual(PA.onOn({ harness: 'claude', prepareAhead: 'shadow' }), false);
+  for (const cfg of [{ harness: 'claude' }, { harness: 'claude', prepareAhead: 'off' }, { harness: 'opencode', prepareAhead: 'shadow' }, { harness: 'opencode', prepareAhead: 'on' }, null]) {
+    assert.strictEqual(PA.shadowOn(cfg), false, JSON.stringify(cfg));
+    assert.strictEqual(PA.onOn(cfg), false, JSON.stringify(cfg));
+  }
 });
 
 // --- The deadline: the next close minus the margin, the end of day, the most a prepare may take; the harness clock -----
@@ -356,6 +363,28 @@ test('prepare-ahead: the outside-plan reads are told apart by the level kind v1 
   assert.strictEqual(PA.readKind('15m rejected 15m FVG top up'), 'fvg');
   assert.strictEqual(PA.readKind('15m compression break up'), 'other');
   assert.strictEqual(PA.readKind('momentum_continuation fired up'), 'momentum');
+});
+
+test('prepare-ahead: the forbidden-tool attempts of a run, from its own transcript: every call of a tool its allow list does not hold (refused by a hook before the permission check, or by dontAsk), and a shell command the CLI denied', () => {
+  const use = (id, name, input = {}) => JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', id, name, input }] } });
+  const res = (id, text, err) => JSON.stringify({ type: 'user', message: { content: [{ type: 'tool_result', tool_use_id: id, content: [{ type: 'text', text }], is_error: err }] } });
+  const out = [
+    use('a', 'mcp__harness__bar_briefing'), res('a', '{}', false),
+    // Refused by the desk rule's hook (exit 2) before the permission check: the CLI's denials never name it.
+    use('b', 'mcp__harness__compose_check'), res('b', '[desk] compose_check composes the trade from the desk', true),
+    use('c', 'mcp__broker__journal_add'), res('c', 'Permission to use mcp__broker__journal_add has been denied because Claude Code is running in don\'t ask mode.', true),
+    use('d', 'mcp__broker__get_account_snapshot'), res('d', '{}', false),
+    use('e', 'Bash', { command: 'rm -rf /tmp/x' }), res('e', 'Permission to use Bash has been denied because Claude Code is running in don\'t ask mode.', true),
+    use('f', 'Bash', { command: 'echo hi' }), res('f', 'hi', false),
+    use('g', 'Agent', { subagent_type: 'risk-manager' }), res('g', 'denied', true),
+    'not json',
+  ].join('\n');
+  const allowed = ['mcp__harness__bar_briefing', 'mcp__broker', 'Skill', 'Bash(node /r/scripts/mtf.js:*)'];
+  // A whole server allowed (mcp__broker) holds its tools: journal_add is allowed by that rule (the dontAsk denial still counts it).
+  assert.deepStrictEqual(PA.forbiddenIn(out, allowed), ['mcp__harness__compose_check', 'mcp__broker__journal_add', 'Bash', 'Agent']);
+  assert.deepStrictEqual(PA.forbiddenIn(out, ['mcp__harness__bar_briefing', 'mcp__broker__get_account_snapshot', 'Bash(node /r/scripts/mtf.js:*)']), ['mcp__harness__compose_check', 'mcp__broker__journal_add', 'Bash', 'Agent']);
+  assert.deepStrictEqual(PA.forbiddenIn('', allowed), []);
+  assert.deepStrictEqual(PA.forbiddenIn(null, allowed), []);
 });
 
 // --- The shadow confirm's decision, the full cycle's, and the agreement -------------------------------------------------

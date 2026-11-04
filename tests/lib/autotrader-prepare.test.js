@@ -18,13 +18,13 @@ const { validateConfig, buildCommand, childEnv, claudeTools } = A;
 const flag = (argv, f) => argv[argv.indexOf(f) + 1];
 const ORDERS = ['place_order', 'modify_order', 'cancel_order', 'close_position', 'partial_close_position'];
 
-test('prepareAhead (the runner config): off or shadow for Claude Code; "on" refused until B2; "off" is no key at all', () => {
+test('prepareAhead (the runner config): off, shadow or on for Claude Code; "off" is no key at all', () => {
   assert.strictEqual(validateConfig({ harness: 'claude', prepareAhead: 'shadow' }).prepareAhead, 'shadow');
+  assert.strictEqual(validateConfig({ harness: 'claude', prepareAhead: 'on' }).prepareAhead, 'on');
   assert.ok(!('prepareAhead' in validateConfig({ harness: 'claude', prepareAhead: 'off' })), '"off" is as absent');
   assert.ok(!('prepareAhead' in validateConfig({ harness: 'claude' })));
-  assert.throws(() => validateConfig({ harness: 'claude', prepareAhead: 'on' }), /prepareAhead: "on" is not built yet .*B2/);
-  for (const v of [true, 'yes', 1, null]) assert.throws(() => validateConfig({ harness: 'claude', prepareAhead: v }), /prepareAhead: "off" or "shadow"/, String(v));
-  for (const harness of ['opencode', 'codex', 'qwen']) assert.throws(() => validateConfig({ harness, prepareAhead: 'shadow' }), /prepareAhead: for harness "claude" only/, harness);
+  for (const v of [true, 'yes', 1, null]) assert.throws(() => validateConfig({ harness: 'claude', prepareAhead: v }), /prepareAhead: "off", "shadow" or "on"/, String(v));
+  for (const harness of ['opencode', 'codex', 'qwen']) for (const m of ['shadow', 'on']) assert.throws(() => validateConfig({ harness, prepareAhead: m }), /prepareAhead: for harness "claude" only/, harness);
   assert.ok(!('prepareAhead' in validateConfig({ harness: 'opencode', prepareAhead: 'off' })));
 });
 
@@ -44,7 +44,11 @@ test('prepareAhead is a head trader delivery key: a shadow run is never pooled w
   assert.strictEqual(A.deliveryToken('cycleDataInPrompt', true), 'cycleDataInPrompt');
   assert.strictEqual(A.deliveryToken('cycleDataInPrompt', false), null);
   assert.strictEqual(A.deliveryProblem('prepareAhead', 'shadow', 'claude'), null);
-  assert.match(A.deliveryProblem('prepareAhead', 'on', 'claude'), /B2/);
+  assert.strictEqual(A.deliveryProblem('prepareAhead', 'on', 'claude'), null);
+  assert.match(A.deliveryProblem('prepareAhead', 'on', 'opencode'), /for harness "claude" only/);
+  // "on" is its own delivery: never pooled with shadow's, nor with none.
+  assert.strictEqual(A.headDeliveryOf(null, validateConfig({ harness: 'claude', prepareAhead: 'on' })), 'stableFirstPrompt,prepareAhead=on');
+  assert.strictEqual(A.deliveryToken('prepareAhead', 'on'), 'prepareAhead=on');
   assert.match(A.deliveryProblem('headSkillsInPrompt', 'yes', 'claude'), /true or false/);
 });
 

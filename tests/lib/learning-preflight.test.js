@@ -641,9 +641,11 @@ test('head-delivery: the run\'s head trader delivery keys (autotrader.js HEAD_DE
     assert.strictEqual(of({ harness: 'opencode', [k]: v }).status, P.FAIL, k);
     assert.strictEqual(of({ harness: 'claude', [k]: 'yes' }).status, P.FAIL, k);
   }
-  // prepareAhead: "off" is none; "on" (not built yet) and true are refused.
+  // prepareAhead: "off" is none; "on" is its own delivery (prepareAhead=on); true or another word is refused.
   assert.strictEqual(of({ harness: 'claude', prepareAhead: 'off' }).detail, 'none: the head trader loads its skills and makes its reads itself');
-  for (const v of ['on', true]) assert.strictEqual(of({ harness: 'claude', prepareAhead: v }).status, P.FAIL, String(v));
+  assert.match(of({ harness: 'claude', prepareAhead: 'on' }).detail, /^on: prepareAhead=on /);
+  assert.strictEqual(of({ harness: 'opencode', prepareAhead: 'on' }).status, P.FAIL);
+  for (const v of ['ON', true]) assert.strictEqual(of({ harness: 'claude', prepareAhead: v }).status, P.FAIL, String(v));
   assert.match(of({ harness: 'claude', headSkillsInPrompt: true, cycleDataInPrompt: true }).detail, /^on: headSkillsInPrompt, cycleDataInPrompt .*never pooled with a run without them/);
   assert.strictEqual(P.headDelivery({ run: {} }).status, P.PASS, 'no runner config: none');
 });
