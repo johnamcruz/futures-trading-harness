@@ -52,8 +52,10 @@ const val = (x, ctx) => (typeof x === 'function' ? x(ctx) : x);
 const sleep = ms => new Promise(r => setTimeout(r, ms));
 
 /** A run (argv, { env, liveFile }) -> { ok, timedOut, code, output, stdout } that plays `script(prompt, env)`. */
-function scriptedModel(script, { format = 'opencode' } = {}) {
+function scriptedModel(script, { format = 'opencode', session = SESSION } = {}) {
   const claude = format === 'claude';
+  // `session` (Claude Code's format): the session id the stream names (its init event and every event), as a real run's.
+  const SESSION_ID = claude ? session : SESSION;
   const scripted = async (argv, { env, liveFile, stream = null }) => {
     // The request: Claude Code's after `-p` (claude -p <prompt> ...), opencode's last.
     const prompt = String((argv[0] === 'claude' ? argv[argv.indexOf('-p') + 1] : argv[argv.length - 1]) || '');
@@ -72,7 +74,7 @@ function scriptedModel(script, { format = 'opencode' } = {}) {
     // Wall-clock ms, strictly increasing: a call's window starts after the one before it ended.
     const tick = async () => { await sleep(2); last = Math.max(Date.now(), last + 1); return last; };
     const emit = ev => {
-      const line = `${JSON.stringify(claude ? { ...ev, session_id: SESSION } : { ...ev, timestamp: Date.now(), sessionID: SESSION })}\n`;
+      const line = `${JSON.stringify(claude ? { ...ev, session_id: SESSION_ID } : { ...ev, timestamp: Date.now(), sessionID: SESSION })}\n`;
       out += line;
       if (stream) stream(line);
       if (liveFile) try { fs.appendFileSync(liveFile, line); } catch (_err) { /* removed by the test: the gate reads none */ }
@@ -177,6 +179,9 @@ function scriptedModel(script, { format = 'opencode' } = {}) {
           toolEvent('task', { description: 'execute', prompt: 'the plan and the verdict line', subagent_type: 'trade-executor' }, {
             status: 'completed', output: `<task id="ses_exec" state="completed">\n<task_result>\n${said.join('\n')}\n</task_result>\n</task>`, time: { start, end },
           });
+        } else if (step.refused && claude) {
+          // A call the CLI refused before the tool (a hook's block, dontAsk's denial): its tool_use answered by an error.
+          claudeResult(claudeUse(step.refused, val(step.input, ctx) || {}), val(step.text, ctx), true);
         } else if (step.act) {
           await step.act(ctx);
         } else if (step.then) {

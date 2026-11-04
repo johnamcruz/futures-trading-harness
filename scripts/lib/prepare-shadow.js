@@ -40,8 +40,8 @@ function chainSideOn(bars, minutes) {
 /** The kinds of the reads no scenario covered: { kind: count } (prepare-ahead.js readKind). */
 const kindsOf = reads => (reads || []).reduce((o, r) => { const k = PA.readKind(r); o[k] = (o[k] || 0) + 1; return o; }, {});
 
-/** What a run tried and was refused: the CLI's permission denials and the gate refusals in the shadow's log. */
-const tried = res => ({ denied: Array.isArray(res.denied) ? res.denied : [], gateRefusals: Number.isInteger(res.gateRefusals) ? res.gateRefusals : 0, initMs: Number.isFinite(res.initMs) ? res.initMs : null });
+/** What a run tried and was refused: the CLI's permission denials, every forbidden attempt (its transcript), the gate refusals in the shadow's log. */
+const tried = res => ({ denied: Array.isArray(res.denied) ? res.denied : [], forbidden: Array.isArray(res.forbidden) ? res.forbidden : [], gateRefusals: Number.isInteger(res.gateRefusals) ? res.gateRefusals : 0, initMs: Number.isFinite(res.initMs) ? res.initMs : null });
 
 /** The account read after the cycle is flat: no position and no working order (an unread one is not). */
 const flatOf = a => (isObj(a) && !a.error && Array.isArray(a.positions) && Array.isArray(a.orders) ? !a.positions.length && !a.orders.length : null);

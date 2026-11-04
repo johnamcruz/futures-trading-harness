@@ -98,8 +98,12 @@ test('shadow e2e: the cycle, then the prepare (its plan written with its session
   assert.strictEqual(plan.session.transcript, fake.file(plan.session.id), 'the transcript from the SessionStart hook\'s record');
   assert.strictEqual(prep.env.FTH_PREPARE, 'prepare');
   assert.deepStrictEqual(prep.ran, ['echo checking', `node ${D.ROOT}/scripts/strategies.js list`], 'a read-only command and a reading script run; the bars fetch and the write are refused');
-  // Every forbidden call refused by the narrower tools, none reaching its tool.
-  assert.deepStrictEqual(prep.refused, ['mcp__harness__compose_check', 'mcp__broker__place_order', 'mcp__broker__journal_add', 'mcp__harness__bars_fetch', 'Agent', 'Bash', 'Bash']);
+  // Every forbidden call refused, none reaching its tool: compose_check and the order by their hooks (the desk rule, the
+  // order gate: the CLI runs PreToolUse hooks before the permission check), the rest by the narrower tools (dontAsk).
+  assert.deepStrictEqual(prep.hooked.filter(h => h.code === 2).map(h => h.name), ['mcp__harness__compose_check', 'mcp__broker__place_order']);
+  assert.deepStrictEqual(prep.refused, ['mcp__broker__journal_add', 'mcp__harness__bars_fetch', 'Agent', 'Bash', 'Bash']);
+  // The record counts every attempt from the run's own transcript, the hooks' refusals with the CLI's denials.
+  assert.deepStrictEqual(made.forbidden, ['mcp__harness__compose_check', 'mcp__broker__place_order', 'mcp__broker__journal_add', 'mcp__harness__bars_fetch', 'Agent', 'Bash', 'Bash']);
   // 04:12's cycle (the plan's close): the shadow confirm, a fork of the prepare's session.
   const sh = recs[2].prepare.shadow;
   assert.strictEqual(sh.planId, plan.id);
@@ -231,7 +235,8 @@ test('shadow e2e: the CLI runs PreToolUse hooks before dontAsk refuses a call: a
   assert.ok(lines.length >= 1 && lines.every(e => e.source === 'hook' && e.decision === 'blocked' && e.tool === 'place_order'), JSON.stringify(lines));
   const made = cycleRecords(on.w)[1].prepare.made;
   assert.ok(made.gateRefusals >= 1, JSON.stringify(made));
-  assert.deepStrictEqual(made.denied, ['mcp__harness__compose_check', 'mcp__broker__place_order', 'mcp__broker__journal_add', 'mcp__harness__bars_fetch', 'Agent', 'Bash', 'Bash']);
+  assert.deepStrictEqual(made.denied, ['mcp__broker__journal_add', 'mcp__harness__bars_fetch', 'Agent', 'Bash', 'Bash'], 'the CLI\'s own denials: not the calls a hook refused first');
+  assert.deepStrictEqual(made.forbidden, ['mcp__harness__compose_check', 'mcp__broker__place_order', 'mcp__broker__journal_add', 'mcp__harness__bars_fetch', 'Agent', 'Bash', 'Bash'], 'every attempt, from the transcript');
   assert.deepStrictEqual(D.placedAtBroker(on.w), []);
 });
 

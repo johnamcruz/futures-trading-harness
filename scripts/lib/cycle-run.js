@@ -294,7 +294,9 @@ async function runPrepare(cfg, kind, prompt, { timeoutMs, context = null, resume
   const denied = T.documents(output).filter(e => e && e.type === 'result' && Array.isArray(e.permission_denials)).flatMap(e => e.permission_denials.map(d => (d && d.tool_name) || null)).filter(Boolean);
   // Spawn to init: from the spawn to the stream's first line (the CLI's start, its MCP servers), measurement only.
   const initMs = Array.isArray(res.lineTimes) && Number.isFinite(res.lineTimes[0]) ? Math.max(0, res.lineTimes[0] - t0) : null;
-  return { ok: Boolean(res.ok), timedOut: Boolean(res.timedOut), text: text || '', sessionId: rec ? rec.sessionId : streamed, transcript: rec ? rec.transcript : null, source: rec ? rec.source : null, usage: T.claudeRunUsage(output), ms, initMs, denied, gateRefusals: Math.max(0, gateLines() - gate0) };
+  // Every forbidden attempt, from its own transcript (a hook's refusal comes before the CLI's denial, so is not among them).
+  const forbidden = PA.forbiddenIn(output, String(argv[argv.indexOf('--allowedTools') + 1] || '').split(','));
+  return { ok: Boolean(res.ok), timedOut: Boolean(res.timedOut), text: text || '', sessionId: rec ? rec.sessionId : streamed, transcript: rec ? rec.transcript : null, source: rec ? rec.source : null, usage: T.claudeRunUsage(output), ms, initMs, denied, forbidden, gateRefusals: Math.max(0, gateLines() - gate0) };
 }
 
 /** The skills a role's prompt held whole: its prompt addition (Claude Code, roleSkillsInPrompt), or opencode's role prompt; else none. */
