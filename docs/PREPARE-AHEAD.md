@@ -245,9 +245,9 @@ result is final, the runner (`scripts/lib/prepare-shadow.js`, wired by
    and matched: a confirm run, `--resume <prepare session> --fork-session`, its
    prompt the at-close facts first (the briefing's summary, what fired), then
    "your plan said: scenario k" with each matched scenario's line in plan
-   order, the rule and, for each standing one, the same standing line "on"
-   sends (PR C3: so shadow agreement at a standing close measures what "on"
-   sends). In shadow it ends with `DECISION: TAKE <k> | DECISION: PASS - <why>`
+   order (a standing one said by code, as "on" says it), the rule and, for
+   each standing one, the same standing line "on" sends (PR C3: so shadow
+   agreement at a standing close measures what "on" sends). In shadow it ends with `DECISION: TAKE <k> | DECISION: PASS - <why>`
    (a `TAKE` per matched scenario) and calls no compose_check.
 2. **Prepare** of the next bar's plan, when the account is flat by a fresh
    read (no position, no working order), the section lists a candidate, the
@@ -414,8 +414,16 @@ the confirm takes the head trader's place.
    the line that the setup is the reaction the briefing lists, so its TAKE
    needs nothing of the closing candle and `compose_check` is the check
    (`standingLine`, the one place it is written), and what else fired outside
-   the plan (`confirmSuffix`). One scenario matched, the message is as before
-   PR C3. The record's `match` stays the first matched scenario. It composes
+   the plan (`confirmSuffix`). A standing scenario's line is said by code,
+   never as the prepare wrote it (`standingScenarioLine`): its id and read, the
+   trigger code computed for it (next-close.js `triggerText`, kept on the plan
+   record's candidate as `fires`), the fixed `STANDING_TAKE_PASS` ("TAKE: its
+   reads compose at the close | PASS: compose_check refuses it") and the
+   model's why. A model that invents a candle condition for it (the live
+   quiz's q46: a lower wick) no longer turns the confirm into a pass on that
+   condition. The plan record keeps the model's line as written. One
+   non-standing scenario matched, the message is as before PR C3. The
+   record's `match` stays the first matched scenario. It composes
    through `compose_check` as the head trader
    does; phase 2, the overlap, the executor, the gate and the late-entry check
    are unchanged.
