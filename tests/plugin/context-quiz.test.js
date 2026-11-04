@@ -6,6 +6,7 @@
 
 const test = require('node:test');
 const assert = require('node:assert');
+const fs = require('fs');
 const path = require('path');
 const Q = require('../../scripts/lib/eval/context-quiz');
 
@@ -48,13 +49,38 @@ test('context quiz: a lookup question is asked against the head prompt plus the 
   assert.ok(Q.quizErrors({ ...QUIZ, questions: [{ ...QUIZ.questions.find(x => x.id === 'q31'), lookup: undefined }] }).some(e => /lookup/.test(e)));
 });
 
+test('context quiz: the prepare-ahead questions (q40-q44, b8) are asked against the head prompt plus the prepare-ahead skill, looked up', () => {
+  const prompts = Q.buildPrompts(ROOT, QUIZ);
+  const ids = ['q40', 'q41', 'q42', 'q43', 'q44', 'b8'];
+  for (const id of ids) {
+    const q = [...QUIZ.questions, ...QUIZ.partB].find(x => x.id === id);
+    assert.deepStrictEqual([q.prompt, q.lookup, Q.promptKey(q)], ['lookup', ['prepare-ahead'], `lookup:${id}`]);
+    const p = prompts[`lookup:${id}`];
+    assert.ok(p.startsWith(prompts.head) && p.includes('<skill name="prepare-ahead">'), id);
+  }
+  // The skill is delivered by lookup only: it is in no other prompt, so the head prompt (the prompt of every cycle, prepare ahead off) is unchanged.
+  assert.ok(!prompts.head.includes('<skill name="prepare-ahead">') && !prompts['head+risk'].includes('<skill name="prepare-ahead">'));
+  // b8 is Part B: the Bias line (long refused) with the plan listing the long.
+  assert.deepStrictEqual(QUIZ.partB.find(x => x.id === 'b8').excerpt, { bias: { h4: -1, h1: -1, t15: 1 } });
+  // The confirm rule deleted from the skill, or the trap sentences: their anchors go missing.
+  const flat = t => t.replace(/\s+/g, ' ');
+  const cut = (re) => Object.fromEntries(Object.entries(prompts).map(([k, v]) => [k, flat(v).replace(re, '')]));
+  for (const [id, re] of [['q40', /Closed candle meets the scenario's TAKE conditions: confirm\./], ['q41', /Closed candle does not meet them: pass, with why in the CYCLE RESULT\./], ['q42', /A plan that said take is no reason to take\./], ['q43', /a plan that said pass is no reason to pass\./], ['q44', /with the reads as the at-close facts give them \(not as the plan wrote them\)/]]) {
+    assert.deepStrictEqual(Q.anchorsMissing(QUIZ, cut(re)).filter(x => x === id), [id], id);
+  }
+  // The rule first and bold: the skill's first rule line.
+  const body = fs.readFileSync(path.join(ROOT, 'skills', 'prepare-ahead', 'SKILL.md'), 'utf8');
+  assert.ok(/## How It Works\s+\*\*The candle decides: confirm a scenario only if the closed candle meets its TAKE conditions; else pass\.\*\*/.test(body));
+});
+
 test('context quiz: every layer asked, ids unique, the bar the whole quiz at K 5', () => {
   const all = [...QUIZ.questions, ...QUIZ.partB];
   assert.deepStrictEqual([...new Set(QUIZ.questions.map(x => x.layer))].sort(), [...Q.LAYERS].sort());
   assert.strictEqual(new Set(all.map(x => x.id)).size, all.length);
   assert.strictEqual(QUIZ.k, 5);
   assert.deepStrictEqual(QUIZ.passBar, { partA: { allCorrect: QUIZ.questions.length, bothWays: 0 }, partB: { allCorrect: QUIZ.partB.length, bothWays: 0 } });
-  // 37 since q38-q39 (a cited setup in an attempt; a missing track record is no reason to pass).
-  assert.strictEqual(QUIZ.questions.length, 37);
-  assert.strictEqual(QUIZ.partB.length, 7);
+  // 37 since q38-q39 (a cited setup in an attempt; a missing track record is no reason to pass); 42 and 8 since q40-q44 and
+  // b8 (prepare-ahead's confirm rule: PR C), whose pass bar rises with them.
+  assert.strictEqual(QUIZ.questions.length, 42);
+  assert.strictEqual(QUIZ.partB.length, 8);
 });

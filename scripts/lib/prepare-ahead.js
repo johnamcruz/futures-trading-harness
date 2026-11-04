@@ -299,6 +299,9 @@ function confirmPath({ plan, at, fired = [], killSwitch = true, flat = null }) {
   return { path: 'confirm', match: { k: m.k, id: m.id, read: m.read, side: m.side }, scenario, fired, unplanned: m.unplanned };
 }
 
+/** The one sentence that names the skill teaching the format and the rule (skills/prepare-ahead), in the prepare prompt only: the confirm forks the prepare's session and carries the rule inline, so a lookup there would add a tool turn to the close-to-order path. */
+const SKILL_NOTE = 'Read the prepare-ahead skill with skill_lookup for the format and the rule.';
+
 /**
  * The confirm's user message after the at-close facts (the cycle's own prompt and its reads, which come first): the
  * plan's scenario, the rule (rule first, bold in the skills: PR C), what fired outside the plan. It composes through
@@ -349,7 +352,7 @@ const FORMAT = [
 function preparePrompt({ head, account = '', reports = [], briefingText, next }) {
   const desk = (reports || []).filter(r => r && r.text).map(r => `\n[${r.role}]\n${r.text}`).join('');
   return `${head} Prepare ahead (a bar plan, no trade this run): the bar opening ${next.t} closes at ${next.closedAt}. Reason through the trader process on the closed bars below, as for a cycle, at the same depth, and write the bar plan for that close; no compose_check, no order and no role this run (their tools are not available).${account}`
-    + `${desk ? `\nThe desk's latest reports:${desk}` : ''}\nThe prepare briefing (closed bars only):\n${briefingText}\nWrite one line per scenario, then the two lines after them, in exactly this form:\n${FORMAT.join('\n')}\nEnd with the line PLAN END.`;
+    + `${desk ? `\nThe desk's latest reports:${desk}` : ''}\nThe prepare briefing (closed bars only):\n${briefingText}\nWrite one line per scenario, then the two lines after them, in exactly this form:\n${FORMAT.join('\n')}\nEnd with the line PLAN END. ${SKILL_NOTE}`;
 }
 
 /** The shadow confirm's prompt: the at-close facts first, then the plan's scenario, the rule, the DECISION line. */
@@ -420,6 +423,6 @@ function agreement(shadow, full) {
 }
 
 module.exports = {
-  MODES, ON_NEEDS, PLAN_DIR, PREPARE_DENIED, PREPARE_SCRIPTS, modeProblem, shadowOn, onOn, deadlineOf, overran, shouldPrepare, windowOf, sectionFor, deskKeys, versionsOf, validate,
+  MODES, ON_NEEDS, FORMAT, SKILL_NOTE, PLAN_DIR, PREPARE_DENIED, PREPARE_SCRIPTS, modeProblem, shadowOn, onOn, deadlineOf, overran, shouldPrepare, windowOf, sectionFor, deskKeys, versionsOf, validate,
   recordSession, readSession, shadowGateLog, planFile, writePlan, readPlan, makePlan, parsePlan, confirmPath, confirmSuffix, firedReads, matchScenario, readKind, preparePrompt, confirmPrompt, forbiddenIn, parseDecision, fullDecisionOf, agreement,
 };
