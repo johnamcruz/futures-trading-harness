@@ -106,7 +106,9 @@ test('prepare-ahead skill: its format lines are the runner\'s FORMAT, and its bo
   assert.ok(!/skill|look[ -]?up|read the|\bload\b|prepare-ahead/i.test(standing), 'the standing line orders no lookup, names no skill');
   // Several scenarios matched (PR C3), standing and not mixed, with something outside the plan, in both the confirm and
   // the shadow confirm: still no lookup, no skill named, the bold rule and the "on" phrases kept, and the standing phrases.
-  const matched = [{ scenario: { k: 1, line: 'L' }, kind: 'momentum' }, { scenario: { k: 2, line: 'L' }, kind: 'standing' }, { scenario: { k: 3, line: 'L' }, kind: 'reaction' }];
+  // (The standing one with a computed trigger as next-close.js renders it, so its words are checked too.)
+  const fires = require('../../scripts/lib/trading/next-close').triggerText({ kind: 'standing', tf: '15m', trigger: { at: '2021-05-24T13:48:00.000Z', candle: { t: '2021-05-24T13:30:00.000Z', closedAt: '2021-05-24T13:45:00.000Z' }, until: '2021-05-24T14:00:00.000Z' } }, '3m');
+  const matched = [{ scenario: { k: 1, line: 'L' }, kind: 'momentum' }, { scenario: { k: 2, id: 'P2', line: 'L', why: 'w' }, kind: 'standing', candidate: { id: 'P2', kind: 'standing', read: 'r', fires } }, { scenario: { k: 3, line: 'L' }, kind: 'reaction' }];
   const multi = PA.confirmSuffix({ matched, unplanned: ['x'] });
   const multiShadow = PA.confirmPrompt({ atCloseText: 'F', fired: ['x'], matched, next: { t: 'T', closedAt: 'C' } });
   const standingShadow = PA.confirmPrompt({ atCloseText: 'F', fired: [], scenario: { k: 2, line: 'L' }, kind: 'standing', next: { t: 'T', closedAt: 'C' } });

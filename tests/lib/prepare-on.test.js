@@ -139,8 +139,14 @@ test('"on" at the close: the confirm\'s message carries the standing line for ea
   assert.ok(!asMade.includes(lineOf(1)), 'none for the momentum scenario');
   for (const k of [2, 3, 4]) {
     assert.ok(asMade.includes(lineOf(k)), `${k}: ${asMade}`);
-    assert.ok(asMade.includes(plan.scenarios.find(s => s.k === k).line), `scenario ${k}'s line`);
+    // Each standing scenario said by code (its candidate's computed trigger, the fixed TAKE/PASS), never as the prepare wrote it.
+    const sc = plan.scenarios.find(s => s.k === k);
+    const cand = plan.candidates.find(c => c.id === sc.id);
+    assert.match(cand.fires, /whatever its range, volume and close/, 'the plan keeps the computed trigger');
+    assert.ok(asMade.includes(`scenario ${k}:\n${PA.standingScenarioLine(sc, cand)}\n`), `scenario ${k}'s line by code`);
+    assert.ok(!asMade.includes(sc.line), `scenario ${k}: not the prepare's line`);
   }
+  assert.ok(asMade.includes(plan.scenarios[0].line), 'the momentum scenario as written');
   // A standing candidate that did not fire (with a scenario of its own): no line for it.
   const extra = { ...plan, candidates: plan.candidates.concat([{ id: 'P99', kind: 'standing', read: 'nothing fires this', side: 'short', tf: '15m' }]), scenarios: plan.scenarios.concat([{ k: 99, id: 'P99', candidate: 'P99 "nothing fires this"', line: 'SCENARIO 99: P99' }]) };
   fs.writeFileSync(f, JSON.stringify(extra));

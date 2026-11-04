@@ -123,7 +123,10 @@ test('shadow: at the close the plan was made for, valid and matched: the confirm
   // scenario's line in plan order, the standing line for each standing one), with a DECISION line listing each.
   const m = PA.matchScenario(plan, r.shadow.fired);
   assert.deepStrictEqual(m.matches.map(x => [x.k, x.kind]), [[1, 'momentum'], [2, 'standing'], [3, 'standing'], [4, 'standing']]);
-  for (const s of plan.scenarios) assert.ok(conf.prompt.includes(s.line), s.line);
+  // The momentum scenario as written; the standing ones said by code, never as the prepare wrote them (as "on" says them).
+  assert.ok(conf.prompt.includes(plan.scenarios[0].line));
+  for (const s of plan.scenarios.slice(1)) assert.ok(!conf.prompt.includes(s.line) && conf.prompt.includes(PA.standingScenarioLine(s, plan.candidates.find(c => c.id === s.id))), s.line);
+  assert.ok(!conf.prompt.slice(conf.prompt.indexOf('scenario 2:')).includes('TAKE if the candle meets it'), 'no model condition after scenario 1');
   for (const k of [2, 3, 4]) assert.ok(conf.prompt.includes(`Scenario ${k} is a standing setup: the setup is the reaction the briefing lists`), `${k}`);
   assert.ok(!conf.prompt.includes('Scenario 1 is a standing setup'));
   assert.ok(conf.prompt.endsWith('DECISION: TAKE 1 | DECISION: TAKE 2 | DECISION: TAKE 3 | DECISION: TAKE 4 | DECISION: PASS - <why>.'), conf.prompt.slice(-200));

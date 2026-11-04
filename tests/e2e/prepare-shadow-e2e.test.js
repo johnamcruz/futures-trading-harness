@@ -109,6 +109,8 @@ test('shadow e2e: the cycle, then the prepare (its plan written with its session
     const k = recs[1].prepare.shadow.match.k;
     assert.strictEqual(p1.split(PA.standingLine(k)).length, 2, p1);
     assert.ok(p1.endsWith(`DECISION: TAKE ${k} | DECISION: PASS - <why>.`));
+    // Its scenario said by code, as "on" says it: the fixed TAKE/PASS and the computed trigger, not the prepare's condition.
+    assert.ok(!p1.includes('TAKE if the 15m closes as listed') && p1.includes(PA.STANDING_TAKE_PASS) && p1.includes('whatever its range, volume and close'), p1.slice(-900));
   }
   const made = recs[1].prepare.made;
   assert.strictEqual(made.outcome, 'done', JSON.stringify(recs[1].prepare));

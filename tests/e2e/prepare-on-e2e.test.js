@@ -124,6 +124,9 @@ test('"on" e2e: the prepare after the 04:09 cycle; at the 04:12 close the confir
     return k;
   });
   assert.strictEqual(kinds[0], 'standing');
+  // PR C3: the standing confirm says its scenario by code (the fixed TAKE/PASS), never the prepare's condition; the reaction one as written.
+  assert.ok(!promptOf(heads[1]).includes('TAKE if the 15m closes as listed') && promptOf(heads[1]).includes(PA.STANDING_TAKE_PASS), promptOf(heads[1]).slice(-900));
+  assert.ok(promptOf(heads[2]).includes('TAKE if the 15m closes as listed') && !promptOf(heads[2]).includes(PA.STANDING_TAKE_PASS));
   // The property here: the same results, gate decisions and orders.
   assert.deepStrictEqual(decided(w), decided(off.w));
 });
@@ -147,8 +150,11 @@ test('"on" e2e (PR C3): two planned scenarios fire at one close (a momentum fire
   assert.deepStrictEqual(rec.prepare.on.match, { k: 1, id: 'P9', read: 'fx_break fired up', side: 'long' }, 'the record: the first in plan order, as before');
   const plan = PA.readPlan(w.home, 'MNQ', FIRED_BAR);
   const prompt = promptOf(headCalls(fake)[1]);
-  const [one, two] = plan.scenarios.map(s => prompt.indexOf(`${s.line}\n`));
-  assert.ok(prompt.includes(`Your plan said: scenario 1:\n${plan.scenarios[0].line}\nscenario 2:\n${plan.scenarios[1].line}\n`), prompt.slice(prompt.indexOf('Prepare ahead')));
+  // The momentum scenario as written; the standing one said by code (its computed trigger, the fixed TAKE/PASS), not as written.
+  const standingSaid = PA.standingScenarioLine(plan.scenarios[1], plan.candidates.find(c => c.id === plan.scenarios[1].id));
+  assert.ok(!prompt.includes(plan.scenarios[1].line) && /whatever its range, volume and close/.test(standingSaid));
+  const [one, two] = [plan.scenarios[0].line, standingSaid].map(l => prompt.indexOf(`${l}\n`));
+  assert.ok(prompt.includes(`Your plan said: scenario 1:\n${plan.scenarios[0].line}\nscenario 2:\n${PA.standingScenarioLine(plan.scenarios[1], plan.candidates.find(c => c.id === plan.scenarios[1].id))}\n`), prompt.slice(prompt.indexOf('Prepare ahead')));
   assert.ok(one > 0 && two > one, 'plan order');
   assert.ok(prompt.includes(PA.standingLine(2)) && !prompt.includes('Scenario 1 is a standing setup'));
   // fx_cross fired too, with no scenario: still outside the plan.

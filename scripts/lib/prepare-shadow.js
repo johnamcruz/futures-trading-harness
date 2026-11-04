@@ -155,7 +155,7 @@ function createShadow({ cfg, root, home, runPrepare, now, sectionOpts = () => ({
     if (!res.ok || !res.sessionId) return { outcome: 'error', why: !res.ok ? 'the run failed' : 'no session id', ms: res.ms, ...tried(res), ...at };
     // The prepare session's uuids, sealed (confirm-base.js): "on" names them to the confirm, whose fork copies them first.
     const base = res.transcript ? require('./trading/confirm-base').baseOf(res.transcript) : null;
-    const plan = PA.makePlan({ symbol: x.symbol, bar: x.bar.t, next, madeAt, ms: res.ms, session: { id: res.sessionId, transcript: res.transcript }, versions, candidates: section.candidates, text: res.text, usage: res.usage || null, base });
+    const plan = PA.makePlan({ symbol: x.symbol, bar: x.bar.t, next, madeAt, ms: res.ms, session: { id: res.sessionId, transcript: res.transcript }, versions, candidates: section.candidates, minutes: section.minutes, text: res.text, usage: res.usage || null, base });
     PA.writePlan(home, plan);
     return { outcome: 'done', planId: plan.id, ms: res.ms, scenarios: plan.scenarios.length, candidates: plan.candidates.length, usage: plan.usage, ...tried(res), ...at };
   }

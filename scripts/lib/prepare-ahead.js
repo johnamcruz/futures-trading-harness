@@ -263,14 +263,25 @@ function parsePlan(text) {
 }
 
 /**
- * The plan record: the session, the input versions, the section's candidates, the text and its parse, an id; `base`: the
+ * The plan record: the session, the input versions, the section's candidates (a standing one with its computed trigger,
+ * `fires`), the text and its parse (the model's lines as written), an id; `base`: the
  * prepare session's message uuids, sealed (trading/confirm-base.js baseOf: the runner's, read from its session file),
  * which "on" names to the confirm (FTH_CONFIRM_BASE) so the gate reads the fork without them.
  */
-function makePlan({ symbol, bar, next, madeAt, ms, session, versions, candidates, text, usage = null, base = null }) {
+/**
+ * A standing candidate's trigger as the prepare briefing printed it (next-close.js triggerText on the bar's minutes), kept
+ * on the plan record so the confirm says the scenario by code (standingScenarioLine); none without the minutes or a
+ * trigger to read.
+ */
+function firesOf(c, minutes) {
+  if (!c || c.kind !== 'standing' || !isObj(c.trigger) || !Number.isFinite(minutes)) return {};
+  try { return { fires: require('./trading/next-close').triggerText(c, require('./trading/candle-facts').label(minutes)) }; } catch (_err) { return {}; }
+}
+
+function makePlan({ symbol, bar, next, madeAt, ms, session, versions, candidates, text, usage = null, base = null, minutes = null }) {
   const parsed = parsePlan(text);
   const id = sha(`${symbol}|${next.t}|${(session || {}).id || ''}|${madeAt}`);
-  return { v: 1, id, symbol, bar, next, madeAt, ms, session: { id: (session || {}).id || null, transcript: (session || {}).transcript || null }, versions, candidates: (candidates || []).map(c => ({ id: c.id, kind: c.kind, read: c.read, side: c.side, tf: c.tf })), text, ...parsed, usage, ...(base ? { base } : {}) };
+  return { v: 1, id, symbol, bar, next, madeAt, ms, session: { id: (session || {}).id || null, transcript: (session || {}).transcript || null }, versions, candidates: (candidates || []).map(c => ({ id: c.id, kind: c.kind, read: c.read, side: c.side, tf: c.tf, ...firesOf(c, minutes) })), text, ...parsed, usage, ...(base ? { base } : {}) };
 }
 
 /** A plan's base whole: its uuids, sealed by the runner (trading/confirm-base.js baseRecord). */
@@ -306,10 +317,28 @@ function confirmPath({ plan, at, fired = [], killSwitch = true, flat = null }) {
 /** The one sentence that names the skill teaching the format and the rule (skills/prepare-ahead), in the prepare prompt only: the confirm forks the prepare's session and carries the rule inline, so a lookup there would add a tool turn to the close-to-order path. */
 const SKILL_NOTE = 'Read the prepare-ahead skill with skill_lookup for the format and the rule.';
 
-/** The matched scenarios: `matched` ([{ scenario, kind }], plan order), else the one `scenario` with its `kind`. */
-const matchedOf = ({ scenario, kind = null, matched }) => (Array.isArray(matched) && matched.length ? matched : [{ scenario, kind }]);
+/** The matched scenarios: `matched` ([{ scenario, kind, candidate }], plan order), else the one `scenario` with its `kind` and `candidate`. */
+const matchedOf = ({ scenario, kind = null, candidate = null, matched }) => (Array.isArray(matched) && matched.length ? matched : [{ scenario, kind, candidate }]);
+/** A standing scenario's TAKE and PASS, the same for every one: nothing of the closing candle; compose_check decides. */
+const STANDING_TAKE_PASS = 'TAKE: its reads compose at the close | PASS: compose_check refuses it';
+/**
+ * A standing scenario as the confirm says it (PR C3): its candidate's id and read, the trigger code computed for it
+ * (`fires`, the prepare briefing's), the fixed TAKE/PASS and the model's why; never the TAKE/PASS conditions the model
+ * wrote (a candle condition invented for a setup whose candle has closed would decide the confirm). The plan keeps the
+ * model's line as written.
+ */
+function standingScenarioLine(scenario, candidate = null) {
+  const c = isObj(candidate) ? candidate : {};
+  const quoted = /"([^"]+)"/.exec(String(scenario.candidate || ''));
+  const read = c.read || (quoted ? quoted[1] : null);
+  const who = [c.id || scenario.id, read ? `"${read}"` : null].filter(Boolean).join(' ');
+  const fires = typeof c.fires === 'string' && c.fires ? ` (code: fires if ${c.fires})` : '';
+  return `SCENARIO ${scenario.k}:${who ? ` ${who}` : ''}${fires} → ${STANDING_TAKE_PASS}${scenario.why ? `; why: ${scenario.why}` : ''}`;
+}
+/** A matched scenario's line: a standing one's by code, any other's as the plan wrote it. */
+const lineOf = x => (x.kind === 'standing' ? standingScenarioLine(x.scenario, x.candidate) : x.scenario.line);
 /** "Your plan said: scenario k:" and its line, then each further matched scenario's "scenario k:" and line, in plan order. */
-const planSaid = list => `Your plan said: ${list.map(({ scenario: s }) => `scenario ${s.k}:\n${s.line}\n`).join('')}`;
+const planSaid = list => `Your plan said: ${list.map(x => `scenario ${x.scenario.k}:\n${lineOf(x)}\n`).join('')}`;
 /**
  * A standing scenario (next-close.js: the reaction the briefing lists, its candle closed before the bar): its TAKE needs
  * nothing of the closing candle; said, so none is invented (PR C2's line). The one place it is written: the confirm and
@@ -324,8 +353,8 @@ const standingLines = list => list.filter(x => x.kind === 'standing').map(({ sce
  * the skills: PR C), the standing line for each standing one, what fired outside the plan. It composes through
  * compose_check as the cycle's prompt says, or passes.
  */
-function confirmSuffix({ scenario, unplanned = [], kind = null, matched = null }) {
-  const list = matchedOf({ scenario, kind, matched });
+function confirmSuffix({ scenario, unplanned = [], kind = null, candidate = null, matched = null }) {
+  const list = matchedOf({ scenario, kind, candidate, matched });
   const more = (unplanned || []).length ? `\nAlso fired at this close, outside your plan: ${unplanned.map(f => `"${f}"`).join(', ')}: judge it from the facts above, in full.` : '';
   return `\n\nPrepare ahead: you planned this close during the bar (above in this session, from closed bars only). ${planSaid(list)}`
     + `The candle decides: confirm a scenario only if the closed candle meets its TAKE conditions; else pass. The at-close facts above decide, never the plan: confirming is compose_check with the reads as these facts give them, then as this cycle's prompt says; passing is its CYCLE RESULT with why.${standingLines(list)}${more}`;
@@ -372,7 +401,7 @@ function matchScenario(plan, fired) {
 function matchedScenarios(plan, m) {
   if (!m || m.status !== 'matched') return [];
   const fired = new Set((m.matches || []).map(x => norm(x.read)));
-  return scenarioCandidates(plan).filter(x => fired.has(norm(x.c.read))).map(x => ({ scenario: x.s, kind: x.c.kind || null }));
+  return scenarioCandidates(plan).filter(x => fired.has(norm(x.c.read))).map(x => ({ scenario: x.s, kind: x.c.kind || null, candidate: x.c }));
 }
 
 /** A fired read's level kind (v1 lists the fixed levels and momentum only): vwap | profile | fvg | momentum | other. */
@@ -402,8 +431,8 @@ function preparePrompt({ head, account = '', reports = [], briefingText, next })
  * names them: `matched`, or the one `scenario` and its `kind`), the rule, the standing line for each standing one (what
  * "on" sends), the DECISION line (a TAKE per matched scenario, or PASS).
  */
-function confirmPrompt({ atCloseText, fired = [], scenario, kind = null, matched = null, next }) {
-  const list = matchedOf({ scenario, kind, matched });
+function confirmPrompt({ atCloseText, fired = [], scenario, kind = null, candidate = null, matched = null, next }) {
+  const list = matchedOf({ scenario, kind, candidate, matched });
   return `The bar opening ${next.t} has closed (${next.closedAt}). The at-close facts (code, read fresh at the close; they decide, never the plan):\n${atCloseText}\nWhat fired at the close: ${fired.length ? fired.map(f => `"${f}"`).join(', ') : 'nothing'}.\n`
     + `${planSaid(list)}The candle decides: confirm a scenario only if the closed candle meets its TAKE conditions; else pass.${standingLines(list)}\n`
     + `This is a shadow run beside the real cycle: do not call compose_check, place no order and launch no role. End with exactly one line: ${list.map(({ scenario: s }) => `DECISION: TAKE ${s.k} | `).join('')}DECISION: PASS - <why>.`;
@@ -471,5 +500,5 @@ function agreement(shadow, full) {
 
 module.exports = {
   MODES, ON_NEEDS, FORMAT, SKILL_NOTE, PLAN_DIR, PREPARE_DENIED, PREPARE_SCRIPTS, modeProblem, shadowOn, onOn, deadlineOf, overran, shouldPrepare, windowOf, sectionFor, deskKeys, versionsOf, validate,
-  recordSession, readSession, shadowGateLog, planFile, writePlan, readPlan, makePlan, parsePlan, confirmPath, confirmSuffix, standingLine, firedReads, matchScenario, matchedScenarios, readKind, preparePrompt, confirmPrompt, forbiddenIn, parseDecision, fullDecisionOf, agreement,
+  recordSession, readSession, shadowGateLog, planFile, writePlan, readPlan, makePlan, parsePlan, confirmPath, confirmSuffix, standingLine, standingScenarioLine, STANDING_TAKE_PASS, firedReads, matchScenario, matchedScenarios, readKind, preparePrompt, confirmPrompt, forbiddenIn, parseDecision, fullDecisionOf, agreement,
 };
