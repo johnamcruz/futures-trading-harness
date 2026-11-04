@@ -813,6 +813,12 @@ reason in the briefing. A family not listed shows none. A replay's run home
 is seeded with the resolved steps and refusals, so replay shows what live
 would.
 
+The prepare briefing ([PREPARE-AHEAD.md](PREPARE-AHEAD.md)) is the bar
+briefing with one more summary section, "Possible at the next close": what
+can fire at the close of the bar forming, its triggers on the closing candle
+and its plans, from closed bars only, for a flat account. Nothing sets it in
+a run yet; the briefing the roles read is unchanged.
+
 ### The rationale convention
 
 `place_order` rationales start with `setup:<strategy> ...` for entries,

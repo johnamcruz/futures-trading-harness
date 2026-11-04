@@ -222,9 +222,11 @@ request, every time, whatever the size of the change:
    study the rulebook's exit points to), `docs/research/retest-entry-study.md`
    (the retest-entry study the `breakout` skill cites), `docs/TRAINING.md`
    (the training guide the replay's stages and the training preflight
-   point to), and `docs/TOOL-CALLS-AND-ORCHESTRATION.md` (the tool-call and
+   point to), `docs/TOOL-CALLS-AND-ORCHESTRATION.md` (the tool-call and
    orchestration design the workflows, the runner's desk and the tool-call
-   rules are built from).
+   rules are built from), and `docs/PREPARE-AHEAD.md` (the prepare-ahead
+   design the prepare briefing's "Possible at the next close" section is
+   built from).
 
 Never open a pull request with a failing regression or an unaddressed
 confirmed finding. The pull request description says what was run and what
