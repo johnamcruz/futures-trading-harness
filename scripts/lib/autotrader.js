@@ -138,6 +138,24 @@ function claudeTools(root, { home = os.homedir(), dataDir = resolveDataDir({}, h
 }
 
 /**
+ * Claude Code's allow rules for a prepare or a shadow confirm (prepare-ahead.js): the head trader's (claudeTools), less
+ * the subagent tool, each MCP server given tool by tool instead of whole (the broker's reads from its interface, the
+ * harness tools from their registry, less prepare-ahead.js PREPARE_DENIED: compose_check, the data fetches, the writes;
+ * never an order tool or the journal's write), and the scripts that only read (PREPARE_SCRIPTS, and the attempt's
+ * status). Its deny rules stay the head trader's (claudeDenied), so the prompt cache's tool list is the same: dontAsk
+ * refuses anything not allowed here.
+ */
+function claudePrepareTools(root, opts = {}) {
+  const PA = require('./prepare-ahead');
+  const { TOOLS: BROKER_TOOLS } = require('./broker/interface');
+  const { TOOLS: HARNESS_TOOLS } = require('./harness-tools/registry');
+  const broker = Object.entries(BROKER_TOOLS).filter(([n, d]) => (d.role === 'read' || n === 'journal_read') && !PA.PREPARE_DENIED.broker.includes(n)).map(([n]) => `mcp__${SERVER_NAME}__${n}`);
+  const harness = HARNESS_TOOLS.map(t => t.name).filter(n => !PA.PREPARE_DENIED.harness.includes(n)).map(n => `mcp__${HARNESS_SERVER}__${n}`);
+  const scripts = new Set([...PA.PREPARE_SCRIPTS.map(x => `Bash(node ${root}/scripts/${x}:*)`), `Bash(node ${root}/scripts/combine.js status:*)`]);
+  return claudeTools(root, opts).flatMap(t => (t === 'Agent' ? [] : t === `mcp__${SERVER_NAME}` ? broker : t === `mcp__${HARNESS_SERVER}` ? harness : t.startsWith('Bash(') && !scripts.has(t) ? [] : [t]));
+}
+
+/**
  * Claude Code's cross-session tools: listing the agents running on the machine and messaging one. A trading session
  * (the head trader, every role the runner runs) reaches no session but its own: denied to all of them (claudeDenied).
  * The head trader keeps `Agent`, its fallback when the runner's desk didn't run.
@@ -287,17 +305,34 @@ function deskConcurrencyProblem(v) {
 // here so a run with it is never pooled with one without it either.
 // stableFirstPrompt is the order of the head trader's cycle prompt (Claude Code's default: validateConfig sets it), listed
 // so a run in the stable-first order is never pooled with one made before it, in the old order.
-const HEAD_DELIVERY_KEYS = Object.freeze(['headSkillsInPrompt', 'cycleDataInPrompt', 'roleSkillsInPrompt', 'deskBriefReports', 'stableFirstPrompt']);
+// prepareAhead (prepare-ahead.js: "shadow", PR B1) is the one key with a mode, not a boolean: its delivery names the mode
+// (prepareAhead=shadow), so a later mode is never pooled with it either; "off" is no delivery (as absent).
+const HEAD_DELIVERY_KEYS = Object.freeze(['headSkillsInPrompt', 'cycleDataInPrompt', 'roleSkillsInPrompt', 'deskBriefReports', 'stableFirstPrompt', 'prepareAhead']);
+const MODE_KEYS = new Set(['prepareAhead']);
+/** A delivery key's value as its delivery token: the key when a boolean key is on, `key=mode` for a mode key not "off"; else null. */
+function deliveryToken(k, v) {
+  if (MODE_KEYS.has(k)) return typeof v === 'string' && v && v !== 'off' ? `${k}=${v}` : null;
+  return v ? k : null;
+}
+/** The value that turns a delivery key on (a boolean key's true, prepareAhead's "shadow"): the tests' and a reader's. */
+const deliveryOnValue = k => (MODE_KEYS.has(k) ? 'shadow' : true);
+/** A delivery key's value on a harness: what validateConfig would refuse, or null (absent, false or "off" is fine anywhere). */
+function deliveryProblem(k, v, harness) {
+  if (MODE_KEYS.has(k)) return require('./prepare-ahead').modeProblem(v, harness);
+  if (v === undefined || v === false) return null;
+  if (v !== true) return `${k}: true or false`;
+  return harness === 'claude' ? null : `${k}: for harness "claude" only`;
+}
 /**
- * The delivery keys a run was made under, present and truthy: from its setup record's config (cfg.<key>, JSON values,
- * written at its fresh start) or a runner config of it (as the replay driver wrote it). 'a,b' in the list's order, or
- * null when none is on (then every learning record of the run is the one it had before the keys existed).
+ * The delivery keys a run was made under, present and on (deliveryToken): from its setup record's config (cfg.<key>, JSON
+ * values, written at its fresh start) or a runner config of it (as the replay driver wrote it). 'a,b' in the list's
+ * order, or null when none is on (then every learning record of the run is the one it had before the keys existed).
  */
 function headDeliveryOf(setup, ...runCfgs) {
   const isObj = x => Boolean(x) && typeof x === 'object' && !Array.isArray(x);
   const conf = setup && isObj(setup.config) ? setup.config : {};
   const parsed = v => { try { return JSON.parse(v); } catch (_err) { return v; } };
-  const on = HEAD_DELIVERY_KEYS.filter(k => Boolean(parsed(conf[`cfg.${k}`])) || runCfgs.some(c => isObj(c) && Boolean(c[k])));
+  const on = HEAD_DELIVERY_KEYS.map(k => deliveryToken(k, parsed(conf[`cfg.${k}`])) || runCfgs.map(c => (isObj(c) ? deliveryToken(k, c[k]) : null)).find(Boolean) || null).filter(Boolean);
   return on.length ? on.join(',') : null;
 }
 /** The one delivery of a pool of records (each one's `delivery`, absent for none), or throws naming them (`what`). */
@@ -402,6 +437,14 @@ function validateConfig(raw) {
   if (cfg.stableFirstPrompt !== undefined && typeof cfg.stableFirstPrompt !== 'boolean') errors.push('stableFirstPrompt: true or false, or absent (Claude Code: true; false keeps the order as before)');
   if (cfg.stableFirstPrompt === true && cfg.harness !== 'claude') errors.push(`stableFirstPrompt: for harness "claude" only (harness ${cfg.harness})`);
   if (cfg.harness === 'claude' && cfg.stableFirstPrompt === undefined) cfg.stableFirstPrompt = true;
+  // prepareAhead (prepare-ahead.js, docs/PREPARE-AHEAD.md): "shadow" runs the prepare and the shadow confirm beside the old
+  // path (Claude Code only); "off" or absent: as before (no key kept, so its config and hashes are a run's without it).
+  // "on" is refused until the confirm decides (PR B2).
+  if (cfg.prepareAhead !== undefined) {
+    const p = require('./prepare-ahead').modeProblem(cfg.prepareAhead, cfg.harness);
+    if (p) errors.push(p);
+    else if (cfg.prepareAhead === 'off') delete cfg.prepareAhead;
+  }
   if (cfg.harness === 'opencode') {
     // opencode names a model provider/model (the provider is the user's own opencode config).
     if (cfg.model && !/^[^/\s]+\/\S+$/.test(String(cfg.model))) errors.push('model: for harness "opencode", "<provider>/<model>" from your opencode config, or "" for its default');
@@ -949,6 +992,14 @@ function childEnv(cfg, root, base = process.env, context = null) {
   // trader's (the stop-review reminder asks only the head trader for its CYCLE RESULT line). Never inherited.
   if (context && typeof context.roleRun === 'string' && context.roleRun) env.FTH_ROLE_RUN = context.roleRun;
   else delete env.FTH_ROLE_RUN;
+  // A prepare or a shadow confirm (prepare-ahead.js, the runner's shadow runs): which (FTH_PREPARE: the stop hook asks it
+  // for no cycle result) and the file its SessionStart hook records the session in (FTH_PREPARE_SESSION, absolute). Never
+  // inherited, never a role's run.
+  const prep = context && !env.FTH_ROLE_RUN && ['prepare', 'confirm'].includes(context.prepare) ? context.prepare : null;
+  if (prep) env.FTH_PREPARE = prep;
+  else delete env.FTH_PREPARE;
+  if (prep && typeof context.prepareSession === 'string' && path.isAbsolute(context.prepareSession)) env.FTH_PREPARE_SESSION = context.prepareSession;
+  else delete env.FTH_PREPARE_SESSION;
   // Phase 2 started at the head trader's compose (runner-entry.js overlapFor): its policy verdicts go to its own stage
   // (trading/verdict-stage.js), promoted only when the entry adopts it. Never inherited (the head trader's run never has one).
   if (context && typeof context.verdictStage === 'string' && context.verdictStage) env.FTH_VERDICT_STAGE = context.verdictStage;
@@ -1061,11 +1112,23 @@ const rolePromptFile = (root, env, role) => { const RP = require('./role-prompt'
 /** A role's prompt addition written for its run (claudeRolesOn only): { file, text }, or null with the key off. */
 const writeRolePrompt = (cfg, root, env, role) => (claudeRolesOn(cfg) ? require('./role-prompt').writeClaudeRole(harnessHome(env), root, role) : null);
 
-/** argv for one headless run; `agent`: one role run on its own by the runner (ROLE_RUNS only, else throws). */
-function buildCommand(cfg, prompt, root, env = process.env, { agent = null } = {}) {
+/**
+ * argv for one headless run; `agent`: one role run on its own by the runner (ROLE_RUNS only, else throws). `prepare`
+ * (prepare-ahead.js, Claude Code only): "prepare" or "confirm", the head trader's argv with its allowed tools narrowed
+ * (claudePrepareTools) and, for the confirm, `--resume <resume> --fork-session` (a new session forked from the prepare's);
+ * `effort`: its --effort, when config/runner.json prepare.effort names one (none: the CLI's default).
+ */
+function buildCommand(cfg, prompt, root, env = process.env, { agent = null, prepare = null, resume = null, effort = null } = {}) {
   const extra = cfg.extraArgs.map(String);
   const model = cfg.model ? String(cfg.model) : '';
   if (agent && !ROLE_RUNS.has(cfg.harness)) throw new Error(`autotrader: ${cfg.harness} runs no role on its own (its head trader launches its roles)`);
+  if (prepare !== null || resume !== null) {
+    if (cfg.harness !== 'claude') throw new Error(`autotrader: prepare ahead runs on Claude Code only (harness ${cfg.harness})`);
+    if (!['prepare', 'confirm'].includes(prepare)) throw new Error(`autotrader: prepare: "prepare" or "confirm" (got ${JSON.stringify(prepare)})`);
+    if (agent) throw new Error('autotrader: a prepare or a confirm is the head trader\'s run, never a role\'s run');
+    if (prepare === 'confirm' && !(typeof resume === 'string' && resume)) throw new Error('autotrader: the confirm resumes the prepare\'s session (a session id)');
+    if (prepare === 'prepare' && resume !== null) throw new Error('autotrader: only the confirm resumes a session');
+  }
   switch (cfg.harness) {
     case 'claude': {
       const replay = isReplay(env);
@@ -1080,10 +1143,13 @@ function buildCommand(cfg, prompt, root, env = process.env, { agent = null } = {
       // stream-json: every tool call and skill load lands in the cycle log (cycle-log.js).
       return ['claude', '-p', prompt, '--plugin-dir', root, ...(role ? ['--agent', `${pluginName()}:${role.name}`] : []), ...head,
         '--output-format', 'stream-json', '--verbose', '--permission-mode', 'dontAsk',
-        '--allowedTools', (role ? claudeRoleTools(root, role, opts) : claudeTools(root, opts)).join(','),
+        '--allowedTools', (role ? claudeRoleTools(root, role, opts) : prepare ? claudePrepareTools(root, opts) : claudeTools(root, opts)).join(','),
         '--disallowedTools', [...claudeDenied(root, { stateDir: harnessHome(env), journal: activeBroker(env).journalPath, replay }), ...(role ? claudeRoleDenied(role) : [])].join(','),
         // A replay: only the harness's own MCP servers load (no user server reaches the web).
         ...(replay ? ['--strict-mcp-config', '--mcp-config', JSON.stringify(replayMcpConfig(root))] : []),
+        // The shadow confirm: a new session forked from the prepare's (its history, cached), never the prepare's own.
+        ...(prepare === 'confirm' ? ['--resume', resume, '--fork-session'] : []),
+        ...(prepare && effort ? ['--effort', String(effort)] : []),
         ...(model ? ['--model', model] : []), ...extra];
     }
     case 'codex':
@@ -1456,6 +1522,10 @@ module.exports = {
   stableHead,
   withCycleData,
   HEAD_DELIVERY_KEYS,
+  deliveryToken,
+  deliveryOnValue,
+  deliveryProblem,
+  claudePrepareTools,
   headDeliveryOf,
   oneDelivery,
   RESULT_LINE,

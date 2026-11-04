@@ -336,7 +336,7 @@ test('examplesOf: the head trader\'s turns by default; the fingerprint names the
 });
 
 // --- The head trader's machine-local delivery keys (autotrader.js HEAD_DELIVERY_KEYS): never pooled.
-const { HEAD_DELIVERY_KEYS } = require('../../scripts/lib/autotrader');
+const { HEAD_DELIVERY_KEYS, deliveryOnValue, deliveryToken } = require('../../scripts/lib/autotrader');
 /** A run's delivery keys, as its setup record's config (cfg.<key>, JSON values) or its runner config (autotrader.json) holds them. */
 function withDelivery(r, keys, { via = 'setup' } = {}) {
   if (via === 'setup') {
@@ -371,16 +371,20 @@ test('a delivery key on: the decisions\' digest names it, the dataset is another
   for (const k of HEAD_DELIVERY_KEYS) {
     for (const via of ['setup', 'runner']) {
       const r = runs();
-      for (const x of [r.t1, r.t2, r.v]) withDelivery(x, { [k]: true }, { via });
-      assert.ok(sourceOf(r.t1).decisions.every(d => d.digest.delivery === k), `${k} via ${via}`);
+      // Each key's own "on" value (a boolean key's true, prepareAhead's "shadow"), named by its token.
+      const tok = deliveryToken(k, deliveryOnValue(k));
+      for (const x of [r.t1, r.t2, r.v]) withDelivery(x, { [k]: deliveryOnValue(k) }, { via });
+      assert.ok(sourceOf(r.t1).decisions.every(d => d.digest.delivery === tok), `${k} via ${via}`);
       const on = build3(r.t1, r.t2, r.v);
       assert.notStrictEqual(on.dataset.fingerprint, base.dataset.fingerprint, `${k} via ${via}`);
-      assert.strictEqual(on.dataset.delivery, k);
-      assert.ok(lines(on.files['meta.jsonl']).every(m => m.digest.delivery === k));
+      assert.strictEqual(on.dataset.delivery, tok);
+      assert.ok(lines(on.files['meta.jsonl']).every(m => m.digest.delivery === tok));
     }
   }
   // Every one: in the list's order, one delivery.
-  assert.strictEqual(DS.deliveryOf({ config: Object.fromEntries([...HEAD_DELIVERY_KEYS].reverse().map(k => [`cfg.${k}`, 'true'])) }, null), HEAD_DELIVERY_KEYS.join(','));
+  assert.strictEqual(DS.deliveryOf({ config: Object.fromEntries([...HEAD_DELIVERY_KEYS].reverse().map(k => [`cfg.${k}`, JSON.stringify(deliveryOnValue(k))])) }, null), HEAD_DELIVERY_KEYS.map(k => deliveryToken(k, deliveryOnValue(k))).join(','));
+  // prepareAhead "off" is no delivery (as absent).
+  assert.strictEqual(DS.deliveryOf({ config: { 'cfg.prepareAhead': '"off"' } }, { prepareAhead: 'off' }), null);
   assert.strictEqual(DS.deliveryOf({ config: { 'cfg.cycleDataInPrompt': 'true', 'cfg.headSkillsInPrompt': 'true' } }, null), 'headSkillsInPrompt,cycleDataInPrompt');
   assert.strictEqual(DS.deliveryOf(null, { roleSkillsInPrompt: true }), 'roleSkillsInPrompt');
   assert.strictEqual(DS.deliveryOf(null, { cycleDataInPrompt: true }), 'cycleDataInPrompt');
@@ -391,7 +395,7 @@ test('a delivery key on: the decisions\' digest names it, the dataset is another
 test('a mixed pool (decisions made with a delivery key on and without it) is refused, in a set or across train and validate', () => {
   const r = runs();
   withDelivery(r.t2, { cycleDataInPrompt: true });
-  assert.throws(() => build3(r.t1, r.t2, r.v), /made under 2 head trader deliveries \(none \| cycleDataInPrompt; the runner config's headSkillsInPrompt, cycleDataInPrompt, roleSkillsInPrompt, deskBriefReports, stableFirstPrompt\): build from runs under one/);
+  assert.throws(() => build3(r.t1, r.t2, r.v), /made under 2 head trader deliveries \(none \| cycleDataInPrompt; the runner config's headSkillsInPrompt, cycleDataInPrompt, roleSkillsInPrompt, deskBriefReports, stableFirstPrompt, prepareAhead\): build from runs under one/);
   const r2 = runs();
   withDelivery(r2.v, { headSkillsInPrompt: true }, { via: 'runner' });
   assert.throws(() => build3(r2.t1, r2.t2, r2.v), /2 head trader deliveries/);

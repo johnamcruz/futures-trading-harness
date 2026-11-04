@@ -196,11 +196,13 @@ function headComposedReads(ctx) {
  */
 function headDelivery(ctx) {
   const cfg = ctx.run.cfg || {};
-  const set = require('../autotrader').HEAD_DELIVERY_KEYS.filter(k => cfg[k] !== undefined && cfg[k] !== false);
+  const A = require('../autotrader');
+  // Set: anything but absent, false or prepareAhead's "off" (as validateConfig reads them: autotrader.js deliveryProblem).
+  const set = A.HEAD_DELIVERY_KEYS.filter(k => cfg[k] !== undefined && cfg[k] !== false && !(k === 'prepareAhead' && cfg[k] === 'off'));
   if (!set.length) return r('head-delivery', PASS, 'none: the head trader loads its skills and makes its reads itself');
-  const bad = set.filter(k => cfg[k] !== true || cfg.harness !== 'claude');
-  if (bad.length) return r('head-delivery', FAIL, `${bad.map(k => `${k} ${JSON.stringify(cfg[k])}`).join(', ')} on harness ${cfg.harness}: true or false, for harness claude only`);
-  return r('head-delivery', PASS, `on: ${set.join(', ')} (the run's setup and its decisions name them, so it is never pooled with a run without them)`);
+  const bad = set.filter(k => A.deliveryProblem(k, cfg[k], cfg.harness) !== null);
+  if (bad.length) return r('head-delivery', FAIL, `${bad.map(k => `${k} ${JSON.stringify(cfg[k])}`).join(', ')} on harness ${cfg.harness}: true or false (prepareAhead "off" or "shadow"), for harness claude only`);
+  return r('head-delivery', PASS, `on: ${set.map(k => A.deliveryToken(k, cfg[k])).join(', ')} (the run's setup and its decisions name them, so it is never pooled with a run without them)`);
 }
 
 /**

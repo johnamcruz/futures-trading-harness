@@ -1685,10 +1685,10 @@ test('deskBriefReports (this machine\'s runner config): a boolean or absent, for
   assert.strictEqual(validateConfig({ harness: 'opencode', deskBriefReports: false }).deskBriefReports, false);
 });
 
-test('HEAD_DELIVERY_KEYS: every head trader delivery key is validated (a boolean or absent, claude only)', () => {
+test('HEAD_DELIVERY_KEYS: every head trader delivery key is validated (a boolean or absent, claude only; prepareAhead a mode: tests/lib/autotrader-prepare.test.js)', () => {
   const { HEAD_DELIVERY_KEYS } = require('../../scripts/lib/autotrader');
-  assert.deepStrictEqual([...HEAD_DELIVERY_KEYS], ['headSkillsInPrompt', 'cycleDataInPrompt', 'roleSkillsInPrompt', 'deskBriefReports', 'stableFirstPrompt']);
-  for (const k of HEAD_DELIVERY_KEYS) {
+  assert.deepStrictEqual([...HEAD_DELIVERY_KEYS], ['headSkillsInPrompt', 'cycleDataInPrompt', 'roleSkillsInPrompt', 'deskBriefReports', 'stableFirstPrompt', 'prepareAhead']);
+  for (const k of HEAD_DELIVERY_KEYS.filter(x => x !== 'prepareAhead')) {
     assert.strictEqual(validateConfig({ harness: 'claude', [k]: true })[k], true, k);
     assert.throws(() => validateConfig({ harness: 'claude', [k]: 'yes' }), new RegExp(`${k}: true or false`), k);
     for (const harness of ['opencode', 'codex', 'qwen']) assert.throws(() => validateConfig({ harness, [k]: true }), new RegExp(`${k}: for harness "claude" only`), `${k} ${harness}`);
