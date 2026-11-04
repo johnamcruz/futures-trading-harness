@@ -247,7 +247,9 @@ test('off regression 4 ("on"): a failure inside prepare ahead (the prepare or th
     for (const [name, c] of Object.entries(cases)) {
       const [inject, beforePass] = Array.isArray(c) ? c : [c, null];
       const runs = onRuns(inject);
-      const { w, out } = await O.runDay(day, { extra: { prepareAhead: 'on' }, runPrepare: runs.runPrepare, headRun: runs.headRun, own: O.SHADOW_OWN, ...(beforePass ? { beforePass } : {}) });
+      // The runner driven with "on" but not headSkillsInPrompt (which validateConfig requires with it: autotrader-prepare
+      // tests), so the head trader's own run is main's and its outputs compare with main's; no fingerprint for it.
+      const { w, out } = await O.runDay(day, { extra: { prepareAhead: 'on' }, runPrepare: runs.runPrepare, headRun: runs.headRun, own: O.SHADOW_OWN, fingerprint: false, ...(beforePass ? { beforePass } : {}) });
       assert.deepStrictEqual(decisionsOf(out), decisionsOf(MAIN.days[day]), `${day}, ${name}`);
       // Not vacuous: on the no-fill day the 04:12 close's plan is valid and matched, so the confirm ran (or failed and fell back).
       if (day === 'no-fill') {

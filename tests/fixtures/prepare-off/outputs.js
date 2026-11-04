@@ -104,7 +104,7 @@ function stateOf(w, own) {
  * One day: a fresh world (its runner config with `extra`), its three passes, `opts.runPrepare(w)` the shadow's runs
  * (none: the old path alone). Returns { passes, after } in normalized text, and the world.
  */
-async function runDay(day, { extra = {}, runPrepare = null, headRun = null, before = null, cfgAt = null, beforePass = null, own = null } = {}) {
+async function runDay(day, { extra = {}, runPrepare = null, headRun = null, before = null, cfgAt = null, beforePass = null, own = null, fingerprint = true } = {}) {
   const ROOT = path.resolve(__dirname, '..', '..', '..');
   const D = require(path.join(ROOT, 'tests', 'fixtures', 'decision-path'));
   const exchange = require(path.join(ROOT, 'tests', 'fixtures', 'mock-exchange'));
@@ -145,11 +145,13 @@ async function runDay(day, { extra = {}, runPrepare = null, headRun = null, befo
   const runnerState = JSON.parse(fs.readFileSync(w.stateFile, 'utf8'));
   const { validateConfig, headDeliveryOf } = require(path.join(ROOT, 'scripts', 'lib', 'autotrader'));
   const raw = { harness: 'claude', cycle: 'full', premarketAt: '', timeframe: 3, account: '7', symbols: ['MNQ'], bars: 1400, ...(day === 'manage-only' ? { maxCyclesPerDay: 1 } : {}), ...extra };
-  const cfg = validateConfig(raw);
+  // (`fingerprint: false`, the branch's own: a runner config the run drives directly but validateConfig would refuse,
+  // prepare ahead "on" without headSkillsInPrompt, kept so its old path compares with main's; no fingerprint then.)
+  const cfg = fingerprint ? validateConfig(raw) : null;
   const out = {
     passes, records, lines, gate: fs.existsSync(w.env.FTH_GATE_LOG) ? fs.readFileSync(w.env.FTH_GATE_LOG, 'utf8').trim().split('\n').filter(Boolean) : [], orders: exchange.read(w.state).calls.filter(c => c.tool === 'place_order').map(c => JSON.stringify(c.args)),
     calls: exchangeCalls(w.state), state, history: runnerState.history,
-    fingerprint: { cfg: { ...cfg, dataDir: null, workdir: null }, delivery: headDeliveryOf(null, cfg) },
+    fingerprint: cfg ? { cfg: { ...cfg, dataDir: null, workdir: null }, delivery: headDeliveryOf(null, cfg) } : null,
   };
   return { w, out: compact(JSON.parse(norm(JSON.stringify(out)))) };
 }
