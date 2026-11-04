@@ -405,7 +405,9 @@ the confirm takes the head trader's place.
    message is the cycle's own prompt and its pre-collected reads (the at-close
    facts first), then "Your plan said: scenario k", the rule (**the candle
    decides: confirm a scenario only if the closed candle meets its TAKE
-   conditions; else pass**) and what else fired outside the plan
+   conditions; else pass**), for a standing scenario (the matched candidate's
+   kind) the line that its candle has closed, so any closing candle meets its
+   TAKE and `compose_check` is the check, and what else fired outside the plan
    (`confirmSuffix`). It composes through `compose_check` as the head trader
    does; phase 2, the overlap, the executor, the gate and the late-entry check
    are unchanged.

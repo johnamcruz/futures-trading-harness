@@ -26,7 +26,7 @@
  *   firedReads({ scan, listed }), matchScenario(plan, fired), readKind(read)   the at-close match
  *   preparePrompt(parts), confirmPrompt(parts)            the two runs' prompts
  *   confirmPath({ plan, at, fired, killSwitch, flat })    "on" at the close: the confirm, or the full head trader and why
- *   confirmSuffix({ scenario, unplanned })                "on": the confirm's message after the at-close facts
+ *   confirmSuffix({ scenario, unplanned, kind })          "on": the confirm's message after the at-close facts
  *   forbiddenIn(output, allowed)                          a run's forbidden-tool attempts, from its transcript
  *   parseDecision(text), fullDecisionOf({ result, entry }), agreement(shadow, full)   the comparison
  */
@@ -283,7 +283,8 @@ const baseWhole = plan => {
  * why. In order: the kill switch; an open position or working order (`flat` not true: management); no plan, a stale one,
  * a void one (validate: every input version, the session's file); a plan without its whole base (the confirm could not
  * be told from the prepare); what fired outside the plan, or nothing. What fired is always the real at-close scan's
- * (`fired`: firedReads); the plan's thresholds never decide. { path: 'confirm', match, scenario, fired, unplanned } or
+ * (`fired`: firedReads); the plan's thresholds never decide. { path: 'confirm', match, scenario, kind (the matched
+ * candidate's), fired, unplanned } or
  * { path: kill-switch | not-flat | no-plan | stale | void | no-base | outside | nothing-fired, reason?, detail?, fired }.
  */
 function confirmPath({ plan, at, fired = [], killSwitch = true, flat = null }) {
@@ -296,7 +297,8 @@ function confirmPath({ plan, at, fired = [], killSwitch = true, flat = null }) {
   const m = matchScenario(plan, fired);
   if (m.status !== 'matched') return { path: m.status, fired };
   const scenario = (plan.scenarios || []).find(s => s.k === m.k);
-  return { path: 'confirm', match: { k: m.k, id: m.id, read: m.read, side: m.side }, scenario, fired, unplanned: m.unplanned };
+  const cand = (plan.candidates || []).find(c => c.id === m.id);
+  return { path: 'confirm', match: { k: m.k, id: m.id, read: m.read, side: m.side }, scenario, kind: cand ? cand.kind : null, fired, unplanned: m.unplanned };
 }
 
 /** The one sentence that names the skill teaching the format and the rule (skills/prepare-ahead), in the prepare prompt only: the confirm forks the prepare's session and carries the rule inline, so a lookup there would add a tool turn to the close-to-order path. */
@@ -307,10 +309,12 @@ const SKILL_NOTE = 'Read the prepare-ahead skill with skill_lookup for the forma
  * plan's scenario, the rule (rule first, bold in the skills: PR C), what fired outside the plan. It composes through
  * compose_check as the cycle's prompt says, or passes.
  */
-function confirmSuffix({ scenario, unplanned = [] }) {
+function confirmSuffix({ scenario, unplanned = [], kind = null }) {
   const more = (unplanned || []).length ? `\nAlso fired at this close, outside your plan: ${unplanned.map(f => `"${f}"`).join(', ')}: judge it from the facts above, in full.` : '';
+  // A standing scenario (next-close.js: its setup candle closed before the bar) has no candle to meet: said, so no pattern is invented for it.
+  const standing = kind === 'standing' ? ` Scenario ${scenario.k} is a standing setup: its candle has closed, so any closing candle meets its TAKE; compose_check on the at-close reads is the check, not a candle pattern.` : '';
   return `\n\nPrepare ahead: you planned this close during the bar (above in this session, from closed bars only). Your plan said: scenario ${scenario.k}:\n${scenario.line}\n`
-    + `The candle decides: confirm a scenario only if the closed candle meets its TAKE conditions; else pass. The at-close facts above decide, never the plan: confirming is compose_check with the reads as these facts give them, then as this cycle's prompt says; passing is its CYCLE RESULT with why.${more}`;
+    + `The candle decides: confirm a scenario only if the closed candle meets its TAKE conditions; else pass. The at-close facts above decide, never the plan: confirming is compose_check with the reads as these facts give them, then as this cycle's prompt says; passing is its CYCLE RESULT with why.${standing}${more}`;
 }
 
 /** What fired at the close: the rules strategies the real scan fired, then the at-close briefing's setups to check. */

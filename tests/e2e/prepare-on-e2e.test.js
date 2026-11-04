@@ -116,6 +116,14 @@ test('"on" e2e: the prepare after the 04:09 cycle; at the 04:12 close the confir
   assert.deepStrictEqual(heads.slice(0, 2).map(c => c.argv.includes('--resume')), [false, true]);
   const second = PA.readPlan(w.home, 'MNQ', FIRED_BAR);
   assert.ok(second.candidates.some(c => c.kind === 'standing' && c.read === cycleRecords(w)[1].prepare.on.match.read), JSON.stringify(cycleRecords(w)[1].prepare.on));
+  // Each confirm's prompt says "a standing setup" exactly when its matched candidate is standing (the 04:09 bar's is).
+  const kinds = [[FIRED_BAR, 1], [NEXT_BAR, 2]].map(([bar, i]) => {
+    const m = cycleRecords(w)[i].prepare.on.match;
+    const k = PA.readPlan(w.home, 'MNQ', bar).candidates.find(c => c.id === m.id).kind;
+    assert.strictEqual(promptOf(heads[i]).includes(`Scenario ${m.k} is a standing setup: its candle has closed`), k === 'standing', `${bar}: ${k}`);
+    return k;
+  });
+  assert.strictEqual(kinds[0], 'standing');
   // The property here: the same results, gate decisions and orders.
   assert.deepStrictEqual(decided(w), decided(off.w));
 });
