@@ -104,3 +104,18 @@ test('fake CLI: dontAsk\'s refusal of a call not allowed is a tool_use answered 
   assert.match(text, /"is_error":true/);
   assert.match(res.output, /"permission_denials":\[\{"tool_name":"mcp__harness__compose_check"/);
 });
+
+test('fake CLI: PostToolUse (the plugin\'s tool-call rules) fires after each call that ran, so the rules\' state (a role reported) is the real CLI\'s: a compose_check after the desk\'s reports is not held', async () => {
+  const dir = tmp();
+  const home = path.join(dir, 'home');
+  fs.mkdirSync(home, { recursive: true });
+  const env = { FTH_HOME: home, HOME: home, FTH_AUTONOMOUS: '1', FTH_CYCLE_DESK: 'risk-manager', PATH: process.env.PATH };
+  const run = fakeClaude({ dir: path.join(dir, 's'), script: () => [{ role: 'risk-manager', report: 'Risk state' }, { refused: 'probe', input: {}, text: 'x' }, { result: 'done' }] });
+  await run(argv('go', []), { env });
+  const hooked = run.calls[0].hooked;
+  assert.deepStrictEqual(hooked.filter(h => h.hook === 'post:toolcall:rules').map(h => [h.name, h.code]), [['Agent', 0]]);
+  // The desk rule's state saw the report: the call log holds the role's post event.
+  const log = fs.readdirSync(path.join(home, 'logs', 'toolcall')).map(f => fs.readFileSync(path.join(home, 'logs', 'toolcall', f), 'utf8')).join('');
+  assert.match(log, /"event":"post"/);
+  assert.match(log, /risk-manager/);
+});

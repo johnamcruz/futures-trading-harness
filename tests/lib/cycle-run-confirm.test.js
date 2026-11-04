@@ -15,7 +15,7 @@ const { validateConfig, buildCommand } = require('../../scripts/lib/autotrader')
 const { tmpDir } = require('../helpers');
 
 const ROOT = path.resolve(__dirname, '..', '..');
-const cfg = validateConfig({ harness: 'claude', premarketAt: '', symbols: ['MNQ'], prepareAhead: 'on' });
+const cfg = validateConfig({ harness: 'claude', premarketAt: '', symbols: ['MNQ'], prepareAhead: 'on', headSkillsInPrompt: true });
 const out = (text, session) => [
   { type: 'system', subtype: 'init', session_id: session },
   { type: 'assistant', message: { content: [{ type: 'text', text }] }, session_id: session },
@@ -80,7 +80,8 @@ test('runCycle confirm: one that errors or times out before a compose falls back
     await runCycle(cfg, 'trade', 'CYCLE PROMPT', {}, { timeoutMs: 360000, context: s.context }, deps(s, runOf(old, [{ text: 'CYCLE RESULT: no-trade - nothing' }])));
     assert.strictEqual(seen.length, 2, what);
     assert.deepStrictEqual(seen[1].argv, old[0].argv, `${what}: the old path's argv`);
-    const envOf = o => Object.fromEntries(Object.entries(o.env).filter(([k]) => k !== 'FTH_CYCLE_TRANSCRIPT'));
+    // (Each run's own: its transcript, and the head prompt's attestation that names its cycle.)
+    const envOf = o => Object.fromEntries(Object.entries(o.env).filter(([k]) => k !== 'FTH_CYCLE_TRANSCRIPT' && k !== 'FTH_HEAD_PROMPT'));
     assert.deepStrictEqual(envOf(seen[1].o), envOf(old[0].o), `${what}: the old path's env (no base)`);
     assert.ok(!('FTH_CONFIRM_BASE' in seen[1].o.env));
     assert.ok(seen[1].o.timeoutMs <= 360000 && seen[1].o.timeoutMs >= 360000 - 90000 - 5000, `${what}: what the cycle has left`);

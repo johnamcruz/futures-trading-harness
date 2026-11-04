@@ -26,7 +26,7 @@ const BARS = FX.load();
 const FIRE = FX.CENSUS_BG[0][0]; // a short fires at this bar's close
 const I = BARS.findIndex(b => b.t === FIRE);
 const STEP = 180000;
-const cfg = validateConfig({ harness: 'claude', premarketAt: '', symbols: ['MNQ'], prepareAhead: 'on' });
+const cfg = validateConfig({ harness: 'claude', premarketAt: '', symbols: ['MNQ'], prepareAhead: 'on', headSkillsInPrompt: true });
 const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'fth-on-'));
 const RT = require('../../scripts/lib/tunables').runner();
 

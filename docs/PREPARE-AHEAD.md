@@ -394,9 +394,17 @@ the confirm takes the head trader's place.
    kinds outside the plan, the confirm's outcome (`done`, `error`, `timeout`,
    `no-time`, `no-base`) and whether it fell back, the late refusals by kind,
    close to order (the cycle timing's `latencyMs.order`) and whether the desk
-   ran or was cached. `node scripts/prepare-shadow.js` reports the path shares,
+   ran or was cached; a confirm that failed before a compose also keeps its
+   tool calls and the end of its output (`prepare.confirmTailChars`), in the
+   record and the day log. `node scripts/prepare-shadow.js` reports the path shares,
    close to order (median, p90) by desk ran and desk cached, the late refusals
    by kind and outside the plan by level kind.
+
+A confirm's failure does not count toward `maxConsecutiveErrors`: it falls
+back to a working head trader's run (a degradation, not an outage); its share
+is the report's `fellBack`. A confirm reads in its cycle's store (its
+`FTH_CONFIRM_BASE` is a run's own variable, `cycle-data.js` `PER_RUN`), so with
+`cycleDataInPrompt` it takes the desk's reads as the head trader would.
 
 ### The transcript cut
 
@@ -423,18 +431,19 @@ not that fork (none of the base's lines, or one after the fork's own), refuse
 the entry in `roles-ran`, on the hook and the gateway alike; exits and stops
 always go. Without `FTH_CONFIRM_BASE` (any other run) nothing is cut.
 
-**Open (an owner decision), measured on tier 2's first day:** the gateway,
-compose's READ FIRST and the runner's role record (what the executor's entry
-is credited with) read the confirm's own stream, which never holds the
-prepare's skill loads. With `headSkillsInPrompt` on, the head trader's skills
-are embedded and attested on the fork's stream, and a confirm that loads
-nothing again enters exactly as the key off does (tier 2 holds it). With it
-off, such a confirm's entry is refused at the executor (`[skills-loaded]`),
-and only a confirm that loads its skills again (as the tier-2 mock does)
-enters. Crediting the prepare's loads on the stream side would be a new
-credit path in the gate, so it is not built; the choices are to require
-`headSkillsInPrompt` with `"on"`, to teach the confirm to load again (PR C), or
-to add that credit path.
+**`"on"` requires `headSkillsInPrompt: true`** (the coordinator's decision,
+delegated by the owner; `validateConfig` and the training preflight refuse
+`"on"` without it, loudly). The gateway, compose's READ FIRST and the runner's
+role record (what the executor's entry is credited with) read the confirm's
+own stream, which never holds the prepare's skill loads. With
+`headSkillsInPrompt`, the head trader's skills are embedded and attested on the
+fork's stream, and a confirm that loads nothing again enters exactly as the key
+off does (tier 2 holds it). Without it (measured on tier 2's first day), such a
+confirm's entry would be refused at the executor (`[skills-loaded]`) every time.
+
+**Measured on the real CLI:** a forked run's stream-json holds only its own
+turn's events, no replayed history, so the gateway (which reads that stream)
+needs no cut. The first real confirm's check stays in the runbook.
 
 ### Tier 2 with prepare ahead
 
@@ -449,12 +458,17 @@ cycle results and R (`tests/goal/prepare-pair.js`), with confirms run and one
 entering, and under every fallback row armed (the session lost, a corrupt
 plan, the confirm erring or hanging, a P&L change voiding every plan); with
 `headSkillsInPrompt`, a confirm that loads nothing again too. The check can
-fail: on a day where every plan is void (the P&L change), a confirm that
-trusts the plan (it decides on the briefing the prepare was made on), reached
-only through the validity check broken, makes them differ. The mock's confirm
-loads its skills again where an entry needs them (see the open decision
-above). The opencode world, main's tier 2 baseline and the move goldens are
-untouched.
+fail: a confirm that trusts the plan (it decides on the briefing the prepare
+was made on) makes them differ, on valid plans (the anchoring risk) and, on a
+day where every plan is void (the P&L change), reached only through the
+validity check broken. The mock's confirm
+also enters without loading again (`skipLoads`); the fake CLI fires the
+plugin's PreToolUse and PostToolUse hooks as the real one does. On these days
+the mock takes the `outside` path on 10 to 12 of about 21 closes a day (the
+moving levels and gap edges v1 does not list), so the confirm decides 2 to 6
+closes a day. The rows and the controls run on the first day, the off runs
+once (about 21 day-runs, 7 to 12 minutes on CI's runner). The opencode world,
+main's tier 2 baseline and the move goldens are untouched.
 
 ### Flags
 
@@ -462,9 +476,17 @@ Static config only, read at the runner's start (a change takes effect after a
 restart; nothing is re-read per cycle, no file is watched): the runner config's
 `prepareAhead` (absent or `"off"`: the old path, byte for byte,
 `tests/e2e/prepare-ahead-off-regression.test.js`; `"shadow"`; `"on"`), and
-`config/runner.json` `prepare.marginMs`, `prepare.maxMs`, `prepare.confirmMs`
-and `prepare.effort` (null: the CLI's default; `--effort low` is an open owner
-decision, as is the CLI telemetry). The kill switch is read at the start of
+`config/runner.json` `prepare.marginMs`, `prepare.maxMs`, `prepare.confirmMs`,
+`prepare.confirmTailChars` and `prepare.effort` (null: the CLI's default;
+`--effort low` is an open owner decision, as is the CLI telemetry). `"on"`
+needs `headSkillsInPrompt: true` in the same runner config.
+
+**Operator note:** a change to any of them takes effect at the runner's next
+start. Off never reads what `"shadow"` or `"on"` left in the run home (the off
+regression); `"shadow"` and `"on"` write the same plan records, so after a
+restart from one to the other a plan made for the next close is validated
+like any other. A run's records name its mode (its delivery), so its decisions
+are never pooled with another mode's. The kill switch is read at the start of
 each step.
 
 ## Freshness

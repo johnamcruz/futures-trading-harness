@@ -160,7 +160,7 @@ async function runCycle(cfg, action, prompt, opts, limits = {}, deps = {}) {
     const outcome = res.timedOut ? 'timeout' : 'error';
     const output = typeof res.stdout === 'string' && res.stdout ? res.stdout : (res.output || '');
     const tail = output.slice(-require('./tunables').runner().prepare.confirmTailChars);
-    let tools = [];
+    let tools;
     try { tools = require('./cycle-log').toolCalls(output).map(c => c.name).filter(Boolean); } catch (_err) { tools = []; }
     if (deps.appendLog) deps.appendLog(now, `\n===== ${now.toISOString()} ${action} the confirm (failed before a compose: ${outcome}; the full head trader runs)\n$ ${argv.map(a => JSON.stringify(a)).join(' ')}\n${tail}\n`);
     const r = await fallBack(outcome, ms, { timeoutMs: Math.max(0, timeoutMs - ms) });

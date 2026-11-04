@@ -60,6 +60,9 @@ function modeProblem(v, harness) {
   return harness === 'claude' ? null : `prepareAhead: for harness "claude" only (harness ${harness})`;
 }
 
+/** "on" needs headSkillsInPrompt (autotrader.js validateConfig refuses it otherwise, as does the training preflight). */
+const ON_NEEDS = 'prepareAhead: "on" needs headSkillsInPrompt: true (the head trader\'s skills embedded and attested on the confirm\'s own run: the prepare\'s skill loads are never in the confirm\'s stream, so without it every confirm\'s entry is refused at the executor [skills-loaded])';
+
 /** Shadow mode on (Claude Code, prepareAhead "shadow"). */
 const shadowOn = cfg => Boolean(cfg) && cfg.harness === 'claude' && cfg.prepareAhead === 'shadow';
 /** "on" (Claude Code, prepareAhead "on"): the confirm decides (PR B2). */
@@ -417,6 +420,6 @@ function agreement(shadow, full) {
 }
 
 module.exports = {
-  MODES, PLAN_DIR, PREPARE_DENIED, PREPARE_SCRIPTS, modeProblem, shadowOn, onOn, deadlineOf, overran, shouldPrepare, windowOf, sectionFor, deskKeys, versionsOf, validate,
+  MODES, ON_NEEDS, PLAN_DIR, PREPARE_DENIED, PREPARE_SCRIPTS, modeProblem, shadowOn, onOn, deadlineOf, overran, shouldPrepare, windowOf, sectionFor, deskKeys, versionsOf, validate,
   recordSession, readSession, shadowGateLog, planFile, writePlan, readPlan, makePlan, parsePlan, confirmPath, confirmSuffix, firedReads, matchScenario, readKind, preparePrompt, confirmPrompt, forbiddenIn, parseDecision, fullDecisionOf, agreement,
 };

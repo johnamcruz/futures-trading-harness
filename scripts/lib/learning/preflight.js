@@ -201,6 +201,8 @@ function headDelivery(ctx) {
   const set = A.HEAD_DELIVERY_KEYS.filter(k => cfg[k] !== undefined && cfg[k] !== false && !(k === 'prepareAhead' && cfg[k] === 'off'));
   if (!set.length) return r('head-delivery', PASS, 'none: the head trader loads its skills and makes its reads itself');
   const bad = set.filter(k => A.deliveryProblem(k, cfg[k], cfg.harness) !== null);
+  // prepareAhead "on" needs headSkillsInPrompt (prepare-ahead.js ON_NEEDS), as validateConfig refuses it.
+  if (cfg.prepareAhead === 'on' && cfg.headSkillsInPrompt !== true) return r('head-delivery', FAIL, require('../prepare-ahead').ON_NEEDS);
   if (bad.length) return r('head-delivery', FAIL, `${bad.map(k => `${k} ${JSON.stringify(cfg[k])}`).join(', ')} on harness ${cfg.harness}: true or false (prepareAhead "off", "shadow" or "on"), for harness claude only`);
   return r('head-delivery', PASS, `on: ${set.map(k => A.deliveryToken(k, cfg[k])).join(', ')} (the run's setup and its decisions name them, so it is never pooled with a run without them)`);
 }

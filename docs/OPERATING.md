@@ -842,9 +842,10 @@ runs, and no file is watched):
 
 | Flag | Where | Values | Default |
 |---|---|---|---|
-| `prepareAhead` | the runner config | absent or `"off"` (the old path, unchanged), `"shadow"`, `"on"` | absent |
+| `prepareAhead` | the runner config | absent or `"off"` (the old path, unchanged), `"shadow"`, `"on"` (needs `headSkillsInPrompt: true`, refused without it) | absent |
 | `prepare.marginMs`, `prepare.maxMs` | `config/runner.json` | the prepare's deadline margin, the most its runs take | 20000, 100000 |
 | `prepare.confirmMs` | `config/runner.json` | the most the `"on"` confirm may take before the full head trader runs | 90000 |
+| `prepare.confirmTailChars` | `config/runner.json` | how much of a failed confirm's output its record and the day log keep | 4000 |
 | `prepare.effort` | `config/runner.json` | the prepare's and shadow confirm's CLI effort | null (the CLI's default) |
 
 The kill switch keeps its effect: read at the start of each step, it stops any

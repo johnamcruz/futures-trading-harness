@@ -30,15 +30,18 @@ const PLAN_LINES = prompt => [...prompt.matchAll(/^ {2}- (P\d+) \S+ (long|short)
  * trader's run (a fresh one or the confirm) plays `heads[bar]` (default: the old path's pass). `on`: prepareAhead "on".
  * `beforePass[bar](w, fake)`: acting before a pass; `cli(kind, argv)`: a run's result replaced (an error, a hang).
  */
-async function day({ on = false, heads = {}, beforePass = {}, cfg = {}, cli = null } = {}) {
+async function day({ on = false, heads = {}, beforePass = {}, cfg = {}, cli = null, afterRun = null } = {}) {
   const w = D.world({ harness: 'claude' });
-  w.cfg = { ...w.cfg, ...cfg, ...(on ? { prepareAhead: 'on' } : {}) };
+  // headSkillsInPrompt in both worlds: "on" requires it (autotrader.js validateConfig).
+  w.cfg = { ...w.cfg, headSkillsInPrompt: true, ...cfg, ...(on ? { prepareAhead: 'on' } : {}) };
   let head = null;
   const fake = fakeClaude({ dir: path.join(w.home, 'claude-sessions'), script: (prompt, env, info) => (env.FTH_PREPARE === 'prepare' ? [{ harness: 'bar_briefing', args: { symbol: 'MNQ', json: true } }, { result: PLAN_LINES(prompt) }] : head(prompt, env, info)) });
   const run = async (argv, o) => {
     const hit = cli ? cli(argv, o, w) : null;
     if (hit) return hit;
-    return fake(argv, o);
+    // `afterRun(argv, res)`: the run played, then its result replaced (a CLI that errs after its calls).
+    const res = await fake(argv, o);
+    return (afterRun && afterRun(argv, res)) || res;
   };
   const passes = [];
   for (const bar of BARS) {
@@ -154,4 +157,21 @@ test('"on" e2e (the check can fail): a confirm that trusts the plan over the at-
   const heads = { [NEXT_BAR]: w => [{ act: () => {} }, ...D.passCycle(w, 'x').slice(0, -1), { result: 'CYCLE RESULT: executed - trade_lifecycle long 1 MNQ (the plan said take)' }] };
   const { w } = await day({ on: true, heads });
   assert.notDeepStrictEqual(decided(w), decided(off.w), 'the comparison sees a confirm that does not decide as the head trader would');
+});
+
+test('"on" e2e: a confirm that composes (a real compose_check at the close) and then errs is never followed by a second head trader\'s run: one compose record at the close, no double entry', async () => {
+  const TL = require('../../scripts/lib/trading/trade-lifecycle');
+  const compose = { harness: 'compose_check', args: { symbol: 'MNQ', side: 'long', reads: [{ step: 'setup', skill: 'rejection', read: '15m rejected prior vah up' }], size: 1 } };
+  // (The world's own round of roles first: the head trader launches its desk here, and the desk rule holds compose_check.)
+  const heads = { [NEXT_BAR]: w => [...D.passCycle(w, 'x').slice(0, -1), compose, { result: 'CYCLE RESULT: planned - trade_lifecycle long 1' }] };
+  // The confirm's CLI plays its run (the compose reaches the real harness tools server), then exits in error.
+  const { w, fake } = await day({ on: true, heads, afterRun: argv => (argv.includes('--resume') ? { ok: false, timedOut: false, code: 1, output: '', stdout: '' } : null) });
+  const rec = cycleRecords(w)[2];
+  assert.strictEqual(rec.prepare.on.path, 'confirm');
+  assert.deepStrictEqual([rec.prepare.on.confirm.outcome, rec.prepare.on.confirm.fellBack], ['error', false], 'composed: no fallback');
+  const at = headCalls(fake).filter(c => c.env.FTH_CYCLE_BARS && JSON.parse(c.env.FTH_CYCLE_BARS).MNQ === NEXT_BAR);
+  assert.strictEqual(at.length, 1, 'one head trader\'s run at the close: the confirm, never a second');
+  const records = TL.readRecords(w.home, 'MNQ').filter(r => r.bar === NEXT_BAR);
+  assert.strictEqual(records.length, 1, `exactly one compose record at the close (${JSON.stringify(TL.readRecords(w.home, 'MNQ').map(r => r.bar))})`);
+  assert.deepStrictEqual(D.placedAtBroker(w), [], 'no order: the confirm failed, nothing ran after it');
 });

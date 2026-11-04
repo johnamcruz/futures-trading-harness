@@ -17,7 +17,8 @@
  *     `refused` and in the result event's permission_denials, as the CLI reports them.
  *   - PreToolUse hooks fire on EVERY call, allowed or not, before the permission check (measured: plan section 9), with
  *     the session's file as it stands as transcript_path; a hook's refusal (exit 2) blocks the call (a tool_use answered
- *     by the hook's reason, an error), never reaching the tool.
+ *     by the hook's reason, an error), never reaching the tool. PostToolUse fires after each call that ran, with its
+ *     reply (the tool-call rules' state, the desk's reports among it, is built from them).
  *   - The session file is the CLI's shape: one event a line at the top level (type, message, ...) with its uuid,
  *     parentUuid and sessionId, written as the run goes; the stream (stdout, the runner's live file) names the session.
  *
@@ -107,6 +108,17 @@ function fakeClaude({ dir, script, preHooks: runHooks = true }) {
       }
       return { code: 0, stderr: '' };
     };
+    // PostToolUse (hooks/hooks.json: the tool-call rules' after hook on every call), after a call that ran, with its
+    // reply: the rules' state (the desk's reports, a failed call) is built from these, as in the real CLI. Only the
+    // plugin's own hooks (a test's function stands in for the PreToolUse ones only).
+    const postHooks = (name, input, ctx, step) => {
+      if (runHooks !== true) return;
+      const last = ctx.calls.at(-1);
+      const response = step.role ? String(step.report || '') : last ? last.text : '';
+      const payload = { hook_event_name: 'PostToolUse', tool_name: name, tool_input: input, tool_response: response, session_id: id, transcript_path: file(id) };
+      const r = require('child_process').spawnSync(process.execPath, [path.join(ROOT, 'scripts', 'hooks', 'run-with-flags.js'), 'post:toolcall:rules', 'scripts/hooks/toolcall.js', 'standard,strict'], { input: JSON.stringify(payload), encoding: 'utf8', env: { ...opts.env, CLAUDE_PLUGIN_ROOT: ROOT } });
+      call.hooked.push({ hook: 'post:toolcall:rules', name, code: r.status });
+    };
     call.ran = [];
     const denial = name => `Permission to use ${name} has been denied because Claude Code is running in don't ask mode.`;
     const held = steps.map(s => {
@@ -123,7 +135,7 @@ function fakeClaude({ dir, script, preHooks: runHooks = true }) {
           call.refused.push('Bash');
           return [{ refused: 'Bash', input, text: denial('Bash') }];
         }
-        if (!dontAsk || allowedBy(allowed, name)) return [typeof s.args === 'function' ? { ...s, args: input } : s];
+        if (!dontAsk || allowedBy(allowed, name)) return [typeof s.args === 'function' ? { ...s, args: input } : s, { act: ctx => postHooks(name, input, ctx, s) }];
         call.refused.push(name);
         return [{ refused: name, input, text: denial(name) }];
       } };

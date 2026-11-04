@@ -450,6 +450,9 @@ function validateConfig(raw) {
   else if (cfg.prepareAhead !== undefined) {
     const p = require('./prepare-ahead').modeProblem(cfg.prepareAhead, cfg.harness);
     if (p) errors.push(p);
+    // "on" needs the head trader's skills embedded and attested (headSkillsInPrompt): the confirm's stream never holds
+    // the prepare's skill loads, so without it every confirm's entry is refused at the executor ([skills-loaded]).
+    else if (cfg.prepareAhead === 'on' && cfg.headSkillsInPrompt !== true) errors.push(require('./prepare-ahead').ON_NEEDS);
   }
   if (cfg.harness === 'opencode') {
     // opencode names a model provider/model (the provider is the user's own opencode config).
