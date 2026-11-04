@@ -330,3 +330,7 @@ test('candle facts: formingCandle and extendCandle are completedSeries\' roll-up
   assert.ok(Number.isNaN(CF.extendCandle({ o: 1, h: 2, l: 0, c: 1, v: 5 }, { h: 3, l: 1, c: 2 }).v));
   assert.deepStrictEqual(CF.extendCandle({ o: 1, h: 2, l: 0, c: 1, v: 5 }, { h: 3, l: 1, c: 2, v: 4 }), { o: 1, h: 3, l: 0, c: 2, v: 9 });
 });
+
+test('candle facts: formingCandle keeps a missing first-bar volume as NaN (the roll-up never invents a volume)', () => {
+  assert.ok(Number.isNaN(CF.formingCandle([{ o: 1, h: 2, l: 0, c: 1, v: NaN }], 0, 0).v));
+});
