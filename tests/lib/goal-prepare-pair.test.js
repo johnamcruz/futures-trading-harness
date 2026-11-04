@@ -50,3 +50,22 @@ test('prepare pair: the check can fail: an order, a gate decision, a compose rec
     assert.match(p[0], new RegExp(`^2021-05-26: ${field} differ`), field);
   }
 });
+
+test('prepare pair: the off runs, each made once (asked for at once by tests running side by side, they share one run), keyed by the days and the world\'s options; "on" runs go as asked', async () => {
+  const calls = [];
+  const runDays = async (days, o) => { calls.push({ days, claude: o.claude }); await new Promise(r => setTimeout(r, 5)); return days.map(d => ({ day: d, k: JSON.stringify(o.claude) })); };
+  const R = P.pairRuns({ runDays, dir: '/x' });
+  const [a, b, c] = await Promise.all([R.offFor(['d1']), R.offFor(['d1']), R.offFor(['d1'], { fault: 'pnl-change' })]);
+  assert.strictEqual(a, b, 'one run shared');
+  assert.deepStrictEqual(Object.keys(a), ['d1']);
+  assert.strictEqual(c.d1.k, JSON.stringify({ on: false, fault: 'pnl-change' }));
+  assert.deepStrictEqual(calls.map(x => [x.days, x.claude]), [[['d1'], { on: false }], [['d1'], { on: false, fault: 'pnl-change' }]], 'two off runs, never a third');
+  await R.offFor(['d1']);
+  assert.strictEqual(calls.length, 2);
+  // "on": never memoised (each test's own world).
+  await R.onOf(['d1'], { fault: 'x' });
+  await R.onOf(['d1'], { fault: 'x' });
+  assert.deepStrictEqual(calls.slice(2).map(x => x.claude), [{ prepareAhead: 'on', fault: 'x' }, { prepareAhead: 'on', fault: 'x' }]);
+  // The pair and the sums.
+  assert.deepStrictEqual(R.sum([{ prepare: { made: 2 } }, { prepare: { made: 3 } }], 'made'), 5);
+});

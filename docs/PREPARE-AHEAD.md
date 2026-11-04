@@ -515,9 +515,14 @@ plugin's PreToolUse and PostToolUse hooks as the real one does. Before PR A2,
 the mock took the `outside` path on 10 to 12 of about 21 closes a day (the
 moving levels and gap edges v1 does not list, and the standing 15m
 reactions), and the confirm decided 2 to 6 closes a day. With the standing
-candidates listed, those shares are not yet measured. The rows and the controls run on the first day, the off runs
-once (about 21 day-runs, 7 to 12 minutes on CI's runner). The opencode world,
-main's tier 2 baseline and the move goldens are untouched.
+candidates listed, those shares are not yet measured.
+
+It runs as two CI parts side by side. `tier2-prepare.goal.js` runs every
+day, off and `"on"`. `tests/goal/tier2-prepare-rows.goal.js` runs the
+fallback rows and the controls on the first day, each its own test, at tier
+2's configured parallel. Each off run is made once (`prepare-pair.js`
+`pairRuns`). The opencode world, main's tier 2 baseline and the move goldens
+are untouched.
 
 ### Flags
 
