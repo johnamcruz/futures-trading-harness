@@ -62,7 +62,7 @@ The owner's rule for it: accurate, not stale, and not late.
    change voids the plan, and the full cycle runs.
 2. **Code: does it match?** Is what the at-close briefing says fired (its
    "Setups to check" or its rules setups) one of the plan's scenarios, by
-   read name?
+   read name? Every scenario that fired is matched, in plan order (PR C3).
 3. **The head's confirm turn:** it resumes the prepare session (its prefix
    cached, its own reasoning in context), the at-close facts first (the new
    candle, the reaction, what fired, the Standard plan), then "your plan
@@ -244,8 +244,11 @@ result is final, the runner (`scripts/lib/prepare-shadow.js`, wired by
    briefing's setups to check) is matched to its scenarios by read name. Valid
    and matched: a confirm run, `--resume <prepare session> --fork-session`, its
    prompt the at-close facts first (the briefing's summary, what fired), then
-   "your plan said: scenario k". In shadow it ends with
-   `DECISION: TAKE <k> | DECISION: PASS - <why>` and calls no compose_check.
+   "your plan said: scenario k" with each matched scenario's line in plan
+   order, the rule and, for each standing one, the same standing line "on"
+   sends (PR C3: so shadow agreement at a standing close measures what "on"
+   sends). In shadow it ends with `DECISION: TAKE <k> | DECISION: PASS - <why>`
+   (a `TAKE` per matched scenario) and calls no compose_check.
 2. **Prepare** of the next bar's plan, when the account is flat by a fresh
    read (no position, no working order), the section lists a candidate, the
    next close is in a session window, the kill switch is off and time is left:
@@ -403,13 +406,17 @@ the confirm takes the head trader's place.
    env (cycle id, briefing bars, entry, role record, the normal gate log) with
    `FTH_CONFIRM_BASE` naming the plan record, never `FTH_PREPARE`. Its user
    message is the cycle's own prompt and its pre-collected reads (the at-close
-   facts first), then "Your plan said: scenario k", the rule (**the candle
+   facts first), then "Your plan said: scenario k" with the line of each
+   scenario that fired, in plan order (PR C3: two or more can fire at one
+   close, a momentum fire and a standing 15m reaction), the rule (**the candle
    decides: confirm a scenario only if the closed candle meets its TAKE
-   conditions; else pass**), for a standing scenario (the matched candidate's
-   kind) the line that the setup is the reaction the briefing lists, so its
-   TAKE needs nothing of the closing candle and `compose_check` is the check,
-   and what else fired outside the plan
-   (`confirmSuffix`). It composes through `compose_check` as the head trader
+   conditions; else pass**), for each standing scenario (its candidate's kind)
+   the line that the setup is the reaction the briefing lists, so its TAKE
+   needs nothing of the closing candle and `compose_check` is the check
+   (`standingLine`, the one place it is written), and what else fired outside
+   the plan (`confirmSuffix`). One scenario matched, the message is as before
+   PR C3. The record's `match` stays the first matched scenario. It composes
+   through `compose_check` as the head trader
    does; phase 2, the overlap, the executor, the gate and the late-entry check
    are unchanged.
 3. **Anything else runs today's full head trader, unchanged** (the old path's
@@ -573,7 +580,8 @@ each step.
   a compression break, a live CISD), whatever the closing candle does. The
   15m reactions at a fixed key level are in this section as standing
   candidates (above, PR A2). The confirm's match (`matchScenario`) finds
-  their scenarios by read name, as any other's. A compression break, a CISD
+  their scenarios by read name, as any other's, and every one that fired
+  beside another scenario is named too (PR C3). A compression break, a CISD
   or a moving level standing there is still outside the plan.
 - **Moving levels and gap edges** (above): outside the plan in v1, by the
   owner's decision (momentum and the fixed key levels only).
