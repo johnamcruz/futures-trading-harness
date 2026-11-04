@@ -43,7 +43,9 @@
  * plan code makes for the threshold candle (the at-close briefing built on the closed bars plus that candle): a momentum
  * candidate's is compose_check's of its cited reads (composed-reads.js checkReads with the attempt policy's entry rule,
  * then trade-lifecycle.js planOf with the in-attempt flag; its refusals but the steps the bar plan states), a
- * reaction's is the Standard plan's (setup-library.js composeAt, as standardPlans calls it). The size: with the
+ * reaction's is the Standard plan's (setup-library.js composeAt, as standardPlans calls it), with the attempt policy's
+ * entry rule as compose_check applies it (so it can be refused where the at-close Standard plan line, which reads no
+ * entry rule, says OK: compose is the authority). The size: with the
  * account's sizing facts (`sizing`, the caller's: { capUsd, floor, tickValue, slipTicks, feePerSide, stretchUsd }),
  * size-translate.js floorFit at the plan's stop, and the widest stop the floor fits; without them, not stated.
  * Every read is the briefing's read name, so a bar plan's reads parse in compose_check.
@@ -241,6 +243,12 @@ const finalCandle = (f, bar) => ({ o: f.o, h: Math.max(f.h, bar.h), l: Math.min(
 /** A tick price `k` ticks from `p` on the tick grid (p's tick floor or ceiling first). */
 const ticksFrom = (p, k, tick, up) => levelOnTick((up ? Math.floor(p / tick + 1e-9) + k : Math.ceil(p / tick - 1e-9) - k) * tick, tick);
 
+/** The fixed key levels among a candle's levels (setup-moments.js KEY_LEVEL, never a moving one), each name once (its first). */
+function keyLevelsOf(list) {
+  const seen = new Set();
+  return list.filter(([name, p]) => Number.isFinite(p) && SM.KEY_LEVEL.test(name) && !CF.MOVING_LEVEL.test(name) && !seen.has(name) && seen.add(name));
+}
+
 /**
  * The levels in reach of a forming candle `f` ({ h, l } so far): those inside its range (its high and low included), and
  * the nearest beyond its high and beyond its low (every level at that price).
@@ -255,7 +263,7 @@ function reachOf(levels, f) {
 
 /** The reaction candidates (see the header). */
 function reactionCandidates(x) {
-  const { bars, minutes, symbol, tick, next, sizing, blackouts, clock, roundSteps, skipped, briefing, setupTf } = x;
+  const { bars, minutes, symbol, tick, next, sizing, blackouts, clock, roundSteps, skipped, briefing, setupTf, entryRule } = x;
   const stf = tfLabel(setupTf);
   const n = bars.length;
   const last = bars[n - 1];
@@ -274,9 +282,7 @@ function reactionCandidates(x) {
   const closeOf = k => Date.parse(bars[k].t) + minutes * 60000;
   let openIdx = n - 1;
   while (openIdx >= 0 && closeOf(openIdx) > Date.parse(cand.t)) openIdx -= 1;
-  const seen = new Set();
-  const levels = candleLevelsAt(bars, minutes, [])(n - 1, openIdx, cand.first)
-    .filter(([name, p]) => Number.isFinite(p) && SM.KEY_LEVEL.test(name) && !CF.MOVING_LEVEL.test(name) && !seen.has(name) && seen.add(name));
+  const levels = keyLevelsOf(candleLevelsAt(bars, minutes, [])(n - 1, openIdx, cand.first));
   const reach = reachOf(levels, f);
   const rule = trendRuleOf(((briefing.sections.m3 || {}).data || {}).trendRule);
   const out = [];
@@ -292,7 +298,7 @@ function reactionCandidates(x) {
       const reaction = mo.reactions.find(r => r.name === name && r.rel === kind.rel && r.dir === kind.dir);
       const read = `${stf} ${kind.rel} ${levelName(name)} ${kind.dir}`;
       if (!reaction) { skipped.push(`${read}: the at-close read doesn't list it for the threshold candle`); continue; }
-      const composed = require('../learning/setup-library').composeAt(pb, reaction, { side, tick, setupTf, mark: true });
+      const composed = require('../learning/setup-library').composeAt(pb, reaction, { side, tick, setupTf, mark: true, entryRule: entryRule || null });
       const plan = composed.plan ? planFacts(composed.plan, [], sizing) : { status: composed.status, why: composed.why };
       out.push({
         kind: 'reaction', name, price: L, side, dir: kind.dir, read, tf: stf, rel: kind.rel,
@@ -350,7 +356,7 @@ function triggerMet(cand, bar) {
   if (!isObj(cand) || !isObj(cand.trigger) || !isObj(bar)) return false;
   const t = cand.trigger;
   // Only the bar it was prepared for (the next bar's open): after a data gap the bar that closes is another one.
-  if (typeof t.at !== 'string' || bar.t !== t.at) return false;
+  if (!(Date.parse(bar.t) === Date.parse(t.at))) return false;
   if (cand.kind === 'momentum') return momentumRead(CF.factOf(bar, t.basis)) === t.dir;
   if (cand.kind === 'reaction') {
     const r = CF.relation(finalCandle(t.candle, bar), t.level, num(t.prevClose) === null ? NaN : t.prevClose);
@@ -430,4 +436,4 @@ function renderPrepareBriefing(b, section, { now = new Date() } = {}) {
   return cut < 0 ? `${text}${lines.join('\n')}\n` : `${text.slice(0, cut)}\n${lines.join('\n')}${text.slice(cut)}`;
 }
 
-module.exports = { NONE, SECTION, possibleAtNextClose, triggerMet, possibleLines, renderPrepareBriefing, momentumThresholds, reactionKinds, reachOf };
+module.exports = { NONE, SECTION, possibleAtNextClose, triggerMet, possibleLines, renderPrepareBriefing, momentumThresholds, reactionKinds, reachOf, keyLevelsOf };

@@ -303,7 +303,8 @@ test('next close: the momentum window\'s edges, by the next bar\'s open (minute_
   assert.match(ends('09:52').none, /no entries at the next close/);
 });
 
-test('next close: the momentum plan is compose_check\'s, with the attempt policy\'s entry rule (on and off) and the attempt flag', () => {
+// compose_check itself, in a running attempt of the shipped policy with one rulebook entry key turned on (key: [name, from]).
+const C = (() => {
   const fs = require('fs');
   const prop = require('../../scripts/lib/trading/prop-state');
   const { accountNamed } = require('../../scripts/lib/trading/accounts');
@@ -312,22 +313,36 @@ test('next close: the momentum plan is compose_check\'s, with the attempt policy
   const { readRecords } = require('../../scripts/lib/trading/trade-lifecycle');
   const { tmpDir, recordBrokerSpecs } = require('../helpers');
   const acct = POLICY.account;
-  const rootWith = key => {
+  const rootWith = (key, from = 'off') => {
     const r = tmpDir();
     for (const s of ['trade_lifecycle', 'prop_portfolio', 'momentum_continuation']) fs.cpSync(path.join(ROOT, 'strategies', s), path.join(r, 'strategies', s), { recursive: true });
     fs.cpSync(path.join(ROOT, 'accounts', acct), path.join(r, 'accounts', acct), { recursive: true });
     fs.symlinkSync(path.join(ROOT, 'skills'), path.join(r, 'skills'));
     const book = path.join(r, 'accounts', acct, 'RULEBOOK.md');
     const text = fs.readFileSync(book, 'utf8');
-    if (key) { assert.match(text, new RegExp(`^ {6}${key}: off `, 'm')); fs.writeFileSync(book, text.replace(new RegExp(`^( {6}${key}: )off`, 'm'), '$1on')); }
-    return r;
+    if (key) { assert.match(text, new RegExp(`^ {6}${key}: ${from} `, 'm')); fs.writeFileSync(book, text.replace(new RegExp(`^( {6}${key}: )${from}`, 'm'), '$1on')); }
+    const reg = loadStrategies(r, {}).strategies;
+    return { r, reg, entryRule: entryRuleOf(reg.find(x => x.name === 'prop_portfolio').entry) };
   };
+  /** compose_check's record for these reads on the briefing pb (written as the cycle's), in a healthy attempt. */
+  const compose = (r, pb, side, reads) => {
+    const home = tmpDir();
+    recordBrokerSpecs(home);
+    B.writeBriefing(home, pb);
+    const account = accountNamed(r, acct, {});
+    prop.startAttempt(home, account, new Date(Date.parse(pb.closedAt) - 3600000));
+    prop.snapshot(home, account, account.starting_balance, new Date(Date.parse(pb.closedAt) - 3500000));
+    const ctx = { env: { FTH_HOME: home, FTH_CYCLE_BARS: JSON.stringify({ MNQ: pb.asOf }) }, now: () => new Date(Date.parse(pb.closedAt) + 5000), root: r };
+    composeCheck({ symbol: 'MNQ', side, reads, size: SIZING.floor }, ctx);
+    return readRecords(home, 'MNQ').pop();
+  };
+  return { rootWith, compose };
+})();
+
+test('next close: the momentum plan is compose_check\'s, with the attempt policy\'s entry rule (on and off) and the attempt flag', () => {
   const seen = new Set();
   for (const key of [null, 'regime_against', 'leg_turned']) {
-    const r = rootWith(key);
-    const reg = loadStrategies(r, {}).strategies;
-    const policy = reg.find(s => s.name === 'prop_portfolio');
-    const entryRule = entryRuleOf(policy.entry);
+    const { r, reg, entryRule } = C.rootWith(key);
     for (const t of ['2021-05-18T13:42:00.000Z', '2021-05-24T13:45:00.000Z', '2021-05-21T13:51:00.000Z']) {
       const i = at(t);
       const sub = BARS.slice(0, i + 1);
@@ -337,20 +352,12 @@ test('next close: the momentum plan is compose_check\'s, with the attempt policy
       // compose_check itself on the threshold candle's briefing, in a running attempt of that policy.
       const w = [...sub, c.threshold.bar];
       const pb = B.buildBriefing({ symbol: 'MNQ', bars: w, minutes: 3, scan: scan(reg, w, { symbol: 'MNQ' }) });
-      const home = tmpDir();
-      recordBrokerSpecs(home);
-      B.writeBriefing(home, pb);
-      const account = accountNamed(r, acct, {});
-      prop.startAttempt(home, account, new Date(Date.parse(pb.closedAt) - 3600000));
-      prop.snapshot(home, account, account.starting_balance, new Date(Date.parse(pb.closedAt) - 3500000));
       const h = pb.sections.h1.data;
       const way = c.side === 'long' ? 'up' : 'down';
       const bias = h.h4.trend === way ? `4h ${way}` : `1h ${h.h1.trend}`;
       const reads = [{ step: 'bias', skill: 'mtf-bias-filter', read: bias }, { step: 'location', skill: 'levels-and-reactions', read: `vwap ${pb.sections.m3.data.vwap.side}` },
         ...c.threshold.reads.map((read, k) => ({ step: ['setup', 'entry', 'stop', 'target'][k], skill: ['trade-lifecycle', 'candle-reading', 'invalidation', 'take-profit'][k], read }))];
-      const ctx = { env: { FTH_HOME: home, FTH_CYCLE_BARS: JSON.stringify({ MNQ: pb.asOf }) }, now: () => new Date(Date.parse(pb.closedAt) + 5000), root: r };
-      composeCheck({ symbol: 'MNQ', side: c.side, reads, size: SIZING.floor }, ctx);
-      const rec = readRecords(home, 'MNQ').pop();
+      const rec = C.compose(r, pb, c.side, reads);
       const entryProblem = rec.problems.find(p => /^entry rule:/.test(p));
       assert.strictEqual(c.threshold.plan.status === 'ok', rec.ok, `${key || 'off'} ${t}: the section's plan OK iff compose's (${rec.problems.join('; ')} | ${c.threshold.plan.why || ''})`);
       if (entryProblem) assert.strictEqual(c.threshold.plan.why, entryProblem, 'the same refusal');
@@ -358,6 +365,49 @@ test('next close: the momentum plan is compose_check\'s, with the attempt policy
     }
   }
   assert.deepStrictEqual([...seen].sort(), ['ok', 'refused'], 'both outcomes exercised');
+});
+
+test('next close: a reaction\'s plan is compose_check\'s too: the attempt policy\'s entry rule (on and off) refuses it as compose does', () => {
+  const SKILL = require('../../scripts/lib/learning/setup-library').SKILL;
+  const seen = new Set();
+  // The reads the plan composes with the keys off (the shipped rule), per bar and reaction: what compose is asked to
+  // check with each key on (a plan the rule refuses has no reads of its own).
+  const shippedReads = new Map();
+  for (const [key, from] of [[null], ['regime_against'], ['bias_agree', 'neutral-15m-declared']]) {
+    const { r, reg, entryRule } = C.rootWith(key, from);
+    for (const t of ['2021-05-20T13:39:00.000Z', '2021-05-24T13:39:00.000Z']) {
+      const i = at(t);
+      const sub = BARS.slice(0, i + 1);
+      const sec = sectionAt(i, { registry: reg, entryRule, inAttempt: true });
+      for (const c of sec.candidates.filter(x => x.kind === 'reaction')) {
+        if (!key && c.threshold.reads.length) shippedReads.set(`${t}|${c.read}`, c.threshold.reads);
+        const list = shippedReads.get(`${t}|${c.read}`);
+        if (!list) continue;
+        const pb = B.buildBriefing({ symbol: 'MNQ', bars: [...sub, c.threshold.bar], minutes: 3, scan: [] });
+        // The Standard plan's reads, in its step order (bias, location, setup, an optional entry, stop, target).
+        const steps = ['bias', 'location', 'setup', ...(list.length === 6 ? ['entry'] : []), 'stop', 'target'];
+        const reads = list.map((read, k) => ({ step: steps[k], skill: steps[k] === 'setup' ? SKILL[c.rel] : SKILL[steps[k]], read }));
+        const rec = C.compose(r, pb, c.side, reads);
+        // compose's own size floor (no size fits) aside: the section states the size apart (its size.fits).
+        const others = rec.problems.filter(p => !/^no size fits/.test(p));
+        assert.strictEqual(c.threshold.plan.status === 'ok', others.length === 0, `${key || 'off'} ${t} ${c.read}: the section's plan OK iff compose's (${rec.problems.join('; ')} | ${c.threshold.plan.why || ''})`);
+        const entryProblem = rec.problems.find(p => /^entry rule:/.test(p));
+        if (entryProblem) assert.match(c.threshold.plan.why, /entry rule:/, 'refused for the entry rule');
+        seen.add(`${key || 'off'}:${others.length ? 'refused' : 'ok'}`);
+      }
+    }
+  }
+  assert.ok(['off:ok', 'regime_against:refused', 'bias_agree:refused'].every(k => seen.has(k)), [...seen].join(', '));
+});
+
+test('next close: the in-attempt flag is compose\'s: outside an attempt a size over the cap is refused, in one it is a suggestion', () => {
+  const i = at('2021-05-24T13:45:00.000Z');
+  const big = { ...SIZING, floor: 40 };
+  const plan = inAttempt => sectionAt(i, { sizing: big, inAttempt }).candidates.find(c => c.kind === 'momentum').threshold.plan;
+  const out = plan(false);
+  assert.strictEqual(out.status, 'refused');
+  assert.match(out.why, /^size 40 risks \$\d+(\.\d+)?, over the strategy's risk\.max_risk_usd \$300/);
+  assert.strictEqual(plan(true).status, 'ok');
 });
 
 test('next close: a cited setup in paper status is a candidate only in a paper run (citedSetups { paper })', () => {
@@ -374,13 +424,17 @@ test('next close: a reaction\'s edges: a level exactly at the high or low so far
   assert.deepStrictEqual([rej.dir, rej.facts.tradedBeyond, rej.facts.extreme], ['down', false, 110.25]);
   const rejLow = NC.reactionKinds(f, 95, NaN, TICK).find(k => k.rel === 'rejected');
   assert.deepStrictEqual([rejLow.dir, rejLow.facts.tradedBeyond, rejLow.facts.extreme], ['up', false, 94.75]);
+  // The key levels a reaction is read at: fixed, key, one per name (the first, as candle-facts lists a candle's).
+  assert.deepStrictEqual(NC.keyLevelsOf([['prior RTH high', 1], ['prior RTH high', 2], ['VWAP (rth)', 3], ['round number', 4], ['overnight high', NaN], ['overnight low', 5]]),
+    [['prior RTH high', 1], ['overnight low', 5]]);
   // In reach: a level exactly at the high or the low so far is inside the range; the nearest beyond each side too.
   const levels = [['a', 95], ['b', 110], ['c', 120], ['d', 130], ['e', 90], ['f', 80]];
   assert.deepStrictEqual(NC.reachOf(levels, f).map(([n]) => n), ['a', 'b', 'c', 'e']);
   // An open exactly on the level: where price came from is the previous candle's close (relation's rule).
-  const on = { kind: 'reaction', trigger: { rel: 'broke', dir: 'up', level: 100, candle: { o: 100, h: 101, l: 99 }, prevClose: 99, at: 'x' } };
-  assert.strictEqual(NC.triggerMet(on, { t: 'x', h: 102, l: 100, c: 101.5 }), true);
-  assert.strictEqual(NC.triggerMet({ ...on, trigger: { ...on.trigger, prevClose: 101 } }, { t: 'x', h: 102, l: 100, c: 101.5 }), false, 'from above, no break up');
+  const on = { kind: 'reaction', trigger: { rel: 'broke', dir: 'up', level: 100, candle: { o: 100, h: 101, l: 99 }, prevClose: 99, at: '2021-05-24T13:42:00.000Z' } };
+  const closing = { t: '2021-05-24T13:42:00.000Z', h: 102, l: 100, c: 101.5 };
+  assert.strictEqual(NC.triggerMet(on, closing), true);
+  assert.strictEqual(NC.triggerMet({ ...on, trigger: { ...on.trigger, prevClose: 101 } }, closing), false, 'from above, no break up');
   // The levels as they stood at the candle's open: a 15m swing low its own bars broke still counts (2021-05-17 09:30).
   const s = sectionAt(at('2021-05-17T13:39:00.000Z'));
   const named = [...s.candidates.map(c => c.read), ...s.skipped].join('\n');
@@ -388,16 +442,22 @@ test('next close: a reaction\'s edges: a level exactly at the high or low so far
 });
 
 test('next close: hardening: absurd prints end at once with a reason; a zero average says so; a trigger tests only its own bar', { timeout: 10000 }, () => {
-  const prev = { o: 1, h: 2, l: 1, c: 2, v: 1 };
-  for (const [basis, why] of [[{ prev, atrPrev: 1e300, avg: 1e300, n: 20 }, /no range reads as momentum/], [{ prev, atrPrev: Infinity, avg: 100, n: 20 }, /the ATR\(14\) of the candles before it is unknown/],
-    [{ prev, atrPrev: 10, avg: Infinity, n: 20 }, /the average volume of the candles before it is unknown/]]) {
-    assert.match(NC.momentumThresholds(basis, 'up', TICK, 100).reason || '', why, JSON.stringify(basis));
-  }
-  assert.match(NC.momentumThresholds({ prev, atrPrev: 10, avg: 0, n: 20 }, 'up', TICK, 100).reason, /average volume of the candles before it is 0/);
+  // In a child process with a real kill, so a loop that can't end fails in seconds instead of hanging the run.
+  const probe = `const NC = require(${JSON.stringify(require.resolve('../../scripts/lib/trading/next-close'))});
+    const prev = { o: 1, h: 2, l: 1, c: 2, v: 1 };
+    const out = [[1e300, 1e300], [Infinity, 100], [10, Infinity], [10, 0]].map(([atrPrev, avg]) => NC.momentumThresholds({ prev, atrPrev, avg, n: 20 }, 'up', 0.25, 100).reason);
+    process.stdout.write(JSON.stringify(out));`;
+  const run = require('child_process').spawnSync(process.execPath, ['-e', probe], { encoding: 'utf8', timeout: 5000, killSignal: 'SIGKILL' });
+  assert.ok(!run.error && run.status === 0, `the probe ended (${run.error ? run.error.code : run.status}): ${run.stderr}`);
+  const reasons = JSON.parse(run.stdout);
+  [/no range reads as momentum/, /the ATR\(14\) of the candles before it is unknown/, /the average volume of the candles before it is unknown/, /average volume of the candles before it is 0/]
+    .forEach((why, k) => assert.match(reasons[k] || '', why, String(k)));
   // A data gap: the bar that closes next isn't the one the trigger was prepared for.
   const sec = sectionAt(at('2021-05-24T13:39:00.000Z'));
   for (const c of sec.candidates) {
     assert.strictEqual(NC.triggerMet(c, c.threshold.bar), true, c.read);
+    // The same instant in another ISO form (no milliseconds, an offset): the same bar.
+    for (const t of [c.threshold.bar.t.replace('.000Z', 'Z'), c.threshold.bar.t.replace('.000Z', '+00:00')]) assert.strictEqual(NC.triggerMet(c, { ...c.threshold.bar, t }), true, `${c.read}: ${t}`);
     assert.strictEqual(NC.triggerMet(c, { ...c.threshold.bar, t: new Date(Date.parse(c.threshold.bar.t) + 180000).toISOString() }), false, `${c.read}: another bar`);
   }
 });

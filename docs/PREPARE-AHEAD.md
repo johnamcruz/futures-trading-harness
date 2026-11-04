@@ -95,7 +95,8 @@ trusted by any check, so nothing can fail open on it.
     candle is scanned with them, at the next close (`now`).
   - `entryRule`, `inAttempt`, `paper`: what `compose_check` uses (the attempt
     policy's entry rule, `entryRuleOf`; whether an attempt is running, so the
-    size is a suggestion; `FTH_PAPER`).
+    size is a suggestion; `FTH_PAPER`), for the momentum and the reaction
+    plans alike.
   - `sizing`, `blackouts`, `clock`, `roundSteps`: below, and as the
     briefing's.
   - `setupTf`: the setup frame (default the 15m, `setup-moments.js`).
@@ -179,7 +180,11 @@ trusted by any check, so nothing can fail open on it.
   - **reaction:** the Standard plan's (`setup-library.js` `composeAt`, the
     call `standardPlans` makes): a limit at the close, the stop one buffer
     beyond the candle's far side, the first named level at the Standard
-    plan's min R:R, else the 2R mark.
+    plan's min R:R, else the 2R mark. It is checked with the attempt
+    policy's entry rule, as `compose_check` applies it (`bias_agree`,
+    `regime_against`, `leg_turned`). The at-close Standard plan line reads no
+    entry rule, so the section can say refused where that line says OK:
+    `compose_check` is the authority.
 - **Size:** with the account's sizing facts (`sizing`: `{ capUsd, floor,
   tickValue, slipTicks, feePerSide, stretchUsd }`; the caller gives the cap
   in force), `size-translate.js` `floorFit` at the plan's stop: how many fit
@@ -228,8 +233,10 @@ asks for it yet: every existing briefing, golden and prompt is unchanged.
   selected contracts, and compose's entry rule, attempt and paper flags, so
   the threshold scan and plan are the ones the close runs.
 - **A trigger tests only its own bar.** `triggerMet` is false for a bar
-  whose `t` is not the next bar's open the section was prepared for (a data
-  gap, a late bar): the confirm matches the bar by time first.
+  whose `t` is not the next bar's open the section was prepared for,
+  compared as instants (`Date.parse`: an ISO time with or without
+  milliseconds or an offset is the same bar), so a data gap or a late bar
+  never tests the wrong candle. The confirm matches the bar by time first.
 - **A roll or a back-adjusted history.** Either changes the bars and the
   levels between the prepare and the close; the plan's recorded bar
   versions must void it.
