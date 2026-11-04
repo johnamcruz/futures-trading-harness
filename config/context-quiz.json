@@ -729,11 +729,11 @@
       "rule": "a closed candle that does not meet the TAKE conditions: pass, with why",
       "anchor": "Closed candle does not meet them: pass, with why in the CYCLE RESULT.",
       "required": [
-        "^[\\W_]*(pass\\w*|skip\\w*|no\\b|nope|not met|take not met|stand down|decline)"
+        "^[\\W_]*(pass\\w*|skip\\w*|no\\b|nope|not\\b|not met|take not met|confirm nothing|stand down|decline|do not|don'?t)"
       ],
       "forbidden": [
-        "^[\\W_]*(yes|confirm\\w*|take\\b(?!\\s+(not|no)\\b)|enter|go long|long)",
-        "\\b(go long|buy it|take the (long|trade))\\b"
+        "\\b(go long|buy it|take the (long|trade))\\b",
+        "\\b(confirm|take) it\\b"
       ],
       "lookup": [
         "prepare-ahead"
@@ -747,12 +747,14 @@
       "rule": "anchoring trap: the plan said take, the candle did not meet TAKE: pass; the plan is never evidence",
       "anchor": "A plan that said take is no reason to take.",
       "required": [
-        "^[\\W_]*(no\\b|nope|pass\\w*|skip\\w*|not met|take not met|confirm nothing|don'?t|do not)"
+        "^[\\W_]*(no\\b|nope|not\\b|pass\\w*|skip\\w*|not met|take not met|confirm nothing|don'?t|do not)"
       ],
       "forbidden": [
         "\\b(still|anyway) (take|confirm)\\b",
         "\\b(take|confirm) (it )?anyway\\b",
-        "\\bno (need|recheck|second-guess)\\w*"
+        "\\bno (need|recheck|second-guess)\\w*",
+        "^[\\W_]*(?:no|nope|don'?t|do not|not)\\b[^.;:]*[:;,]\\s*(?:take|confirm|proceed|go)\\s+(?:it|the|ahead|as)\\b",
+        "\\btake it as planned\\b"
       ],
       "lookup": [
         "prepare-ahead"
@@ -794,7 +796,7 @@
         "\\b(use|compose with|go with|trust|keep|over) (the )?plan(?:'s)?(?![\\w'])",
         "plan(?:'s)?(?![\\w'])[^.;]*\\bover the at-close",
         "\\bfrom the plan\\b",
-        "\\b(noisy|lag|lags|stale|late)\\b",
+        "\\bnoisy\\b|\\b(?:at-close|at the close|facts|close)\\b[^.;,]{0,20}\\b(?:lags?|stale|late)\\b",
         "\\bwhichever\\b"
       ],
       "lookup": [
@@ -1066,7 +1068,8 @@
         "\\bgo long\\b",
         "\\bnot refused\\b",
         "\\bno conflict\\b",
-        "\\bonly if compose_check\\b"
+        "\\bonly if compose_check\\b",
+        "\\bconfirm\\b(?!\\s+nothing)"
       ],
       "lookup": [
         "prepare-ahead"

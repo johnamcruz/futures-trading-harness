@@ -79,7 +79,7 @@ test('prepare-ahead skill: no line trusts the plan, composes without compose_che
     assert.ok(!m, `the skill says: ${m && m[0]}`);
   }
   // Every mention of compose_check confirms through it or forbids it in a prepare.
-  for (const m of BODY.matchAll(/[^.]*compose_check[^.]*\./g)) assert.ok(/no compose_check|Confirming is compose_check|compose_check with the at-close reads|then as the cycle/.test(m[0]), m[0]);
+  for (const m of BODY.matchAll(/[^.]*compose_check[^.]*\./g)) assert.ok(/no compose_check|Confirming is compose_check|compose_check with the at-close reads|then as the cycle|compose_check says otherwise/.test(m[0]), m[0]);
 });
 
 test('prepare-ahead skill: its format lines are the runner\'s FORMAT, and its bold rule is the rule the confirm carries', () => {
@@ -96,12 +96,14 @@ test('prepare-ahead skill: its format lines are the runner\'s FORMAT, and its bo
   assert.ok(suffix.includes('reads as these facts give them'), 'confirmSuffix: reads as these facts give them');
   assert.ok(shadow.includes('they decide, never the plan'), 'confirmPrompt: they decide, never the plan');
   assert.ok(BODY.includes('The at-close facts decide, never the plan.') && BODY.includes('the reads as the at-close facts give them'));
+  // The confirm names no skill and orders no lookup, in any wording (it forks the prepare's session and carries the rule inline).
+  for (const [what, text] of [['confirmSuffix', suffix], ['confirmPrompt', shadow]]) assert.ok(!/skill|look[ -]?up|read the|\bload\b/i.test(text.replace('Read-only', '')), `${what} orders no lookup`);
   // The runner\'s prepare prompt carries the same lines.
   assert.ok(PA.preparePrompt({ head: 'H', briefingText: 'B', next: { t: 'T', closedAt: 'C' } }).includes(PA.FORMAT.join('\n')));
 });
 
 // The sections whole (the reviewed text): a line added to How It Works or to the Examples, or any line changed, fails here until reviewed.
-const HOW_IT_WORKS = "## How It Works\n\n**The candle decides: confirm a scenario only if the closed candle meets its TAKE conditions; else pass.**\n\nA side the Bias line or the trend rule refuses is no trade, whatever the plan or the candle: pass.\n\nPrepare (no compose_check, no order, no role this run):\n\n- Write one line per scenario, in this form:\n  `SCENARIO k: <candidate id and its read, from \"Possible at the next close\"> → TAKE if <conditions on the closing candle> | PASS if <...>; reads: <the compose reads, each in quotes, in the briefing's read names>; why: <one line>`.\n- Then `STAND DOWN if: <account, room, window, news, a level breaking>` and `INVALID if: <what voids the plan before the close>`. End with `PLAN END`.\n- Reads: the briefing's read names, in quotes. Never invent a read.\n- TAKE and PASS conditions: on the closing candle (its close, body, wick), so the at-close facts can settle them.\n\nConfirm (the close has come):\n\n- The at-close facts decide, never the plan. The plan is never evidence: its reads, numbers and reasons prove nothing.\n- Closed candle meets the scenario's TAKE conditions: confirm. Confirming is compose_check with the reads as the at-close facts give them (not as the plan wrote them), then as the cycle's prompt says. A met candle is never a pass.\n- Closed candle does not meet them: pass, with why in the CYCLE RESULT. A plan that said take is no reason to take.\n- The candle meets a different listed scenario's TAKE conditions, or something fired outside the plan: reason it from the facts, in full, as a cycle does. It may be taken or passed; a plan that said pass is no reason to pass.\n- A STAND DOWN or INVALID condition true at the close: pass.\n\n";
+const HOW_IT_WORKS = "## How It Works\n\n**The candle decides: confirm a scenario only if the closed candle meets its TAKE conditions; else pass.**\n\nA side the Bias line or the trend rule refuses is no trade, whatever the plan or the candle: pass.\n\nPrepare (no compose_check, no order, no role this run):\n\n- Write one line per scenario, in this form:\n  `SCENARIO k: <candidate id and its read, from \"Possible at the next close\"> → TAKE if <conditions on the closing candle> | PASS if <...>; reads: <the compose reads, each in quotes, in the briefing's read names>; why: <one line>`.\n- Then `STAND DOWN if: <account, room, window, news, a level breaking>` and `INVALID if: <what voids the plan before the close>`. End with `PLAN END`.\n- Reads: the briefing's read names, in quotes. Never invent a read.\n- TAKE and PASS conditions: on the closing candle (its close, body, wick), so the at-close facts can settle them.\n\nConfirm (the close has come):\n\n- The at-close facts decide, never the plan. The plan is never evidence: its reads, numbers and reasons prove nothing.\n- Closed candle meets the scenario's TAKE conditions: confirm. Confirming is compose_check with the reads as the at-close facts give them (not as the plan wrote them), then as the cycle's prompt says. A met candle is a confirm, not a pass, unless a refused side, a STAND DOWN or INVALID condition, or compose_check says otherwise.\n- Closed candle does not meet them: pass, with why in the CYCLE RESULT. A plan that said take is no reason to take.\n- The candle meets a different listed scenario's TAKE conditions, or something fired outside the plan: reason it from the facts, in full, as a cycle does. It may be taken or passed; a plan that said pass is no reason to pass.\n- A STAND DOWN or INVALID condition true at the close: pass.\n\n";
 const EXAMPLES = "## Examples\n\n- Plan: `SCENARIO 1: P1 \"15m rejection at VWAP\" → TAKE if the 3m closes back above VWAP with a lower wick | PASS if it closes below VWAP; reads: \"15m rejection at VWAP\"; why: the level held`. The close is above VWAP with the lower wick: confirm, compose_check with the at-close reads.\n- Same plan, the close is below VWAP: pass (\"closed below VWAP, TAKE not met\").\n- Plan said take scenario 2, the closed candle has no wick and closed inside the range: pass. The plan is not evidence.\n- Plan said pass scenario 1, the candle meets scenario 3's TAKE conditions: judge scenario 3 from the facts; take it if they hold.\n- Plan listed a long, the Bias line says short only: no trade.\n";
 
 test('prepare-ahead skill: How It Works and Examples are pinned whole (an added or changed line fails)', () => {
@@ -111,5 +113,16 @@ test('prepare-ahead skill: How It Works and Examples are pinned whole (an added 
 
 test('prepare-ahead skill: the refused-side rule comes first, right after the bold rule', () => {
   assert.ok(/\*\*\n\nA side the Bias line or the trend rule refuses is no trade, whatever the plan or the candle: pass\.\n\nPrepare/.test(RAW));
-  assert.ok(BODY.includes('A met candle is never a pass.'));
+  assert.ok(BODY.includes('A met candle is a confirm, not a pass, unless a refused side, a STAND DOWN or INVALID condition, or compose_check says otherwise.') && !/never a pass/.test(BODY), 'a met candle: a confirm unless something refuses; no absolute');
+});
+
+const WHEN_TO_USE = "## When to Use\n\n- The prompt says \"Prepare ahead\": you write the plan for the next close, from closed bars only.\n- The prompt says \"Your plan said: scenario k\": the close has come; you confirm or pass.\n\n";
+
+test('prepare-ahead skill: When to Use is pinned whole (an added line fails)', () => {
+  assert.strictEqual(RAW.slice(RAW.indexOf('## When to Use'), RAW.indexOf('## How It Works')), WHEN_TO_USE);
+});
+
+test('prepare-ahead skill: the met-candle sentence agrees with the refusals (no absolute "never a pass")', () => {
+  assert.ok(!/never a pass/i.test(RAW));
+  for (const refusal of ['refused side', 'STAND DOWN or INVALID condition', 'compose_check says otherwise']) assert.ok(BODY.includes(refusal), refusal);
 });

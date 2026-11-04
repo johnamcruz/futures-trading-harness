@@ -279,20 +279,42 @@ test('grading: the prepare-ahead questions grade the LEADING verdict: a held-out
       ['Do not confirm.', false], ['Don\'t take it yet.', false], ['Pass: TAKE not met.', false], ['Wait for the next close before confirming.', false], ['Skip.', false], ['No, hold off.', false]],
     q41: [['Pass.', true], ['Pass, wait to confirm on the next bar.', true], ['Pass: I\'d only confirm on a close back above.', true], ['No trade: the close is below VWAP.', true],
       ['Skip: TAKE is not met.', true], ['Decline; the candle failed TAKE.', true], ['Stand down.', true], ['TAKE not met: pass.', true],
-      ['Confirm.', false], ['Take the long.', false], ['Yes, confirm it.', false], ['Enter long.', false], ['Not a pass: take the long.', false], ['Don\'t pass; go long.', false]],
+      ['Confirm.', false], ['Take the long.', false], ['Yes, confirm it.', false], ['Enter long.', false], ['Not a pass: take the long.', false], ['Don\'t pass; go long.', false],
+      ['Do not confirm; pass.', true], ['Confirm nothing: pass.', true]],
     q42: [['Pass.', true], ['No: TAKE not met.', true], ['Skip it.', true], ['Do not take it; pass.', true], ['Pass. The plan said take, but the candle failed TAKE.', true], ['Pass: taking it as planned would be anchoring.', true],
-      ['Trust the plan: no recheck needed.', false], ['Yes, take it.', false], ['Proceed as planned.', false], ['Take it anyway.', false], ['Stick to the plan.', false], ['Confirm scenario 1 as planned.', false], ['Go ahead, the plan was sure.', false]],
+      ['Trust the plan: no recheck needed.', false], ['Yes, take it.', false], ['Proceed as planned.', false], ['Take it anyway.', false], ['Stick to the plan.', false], ['Confirm scenario 1 as planned.', false], ['Go ahead, the plan was sure.', false],
+      ['No hesitation: take it.', false], ['Don\'t overthink it: take it as planned.', false], ['Not as planned: pass.', true]],
     q43: [['No. Scenario 3 is judged on its own facts.', true], ['Judge scenario 3 from the facts; its TAKE is met.', true], ['Scenario 3 can be taken: its conditions hold.', true], ['Nope, scenario 3 still stands.', true],
       ['Not off the table: take scenario 3.', true], ['Yes, it is off the table.', false], ['Off the table, pass.', false], ['Pass: scenario 1 said pass.', false], ['Scenario 3 is not tradeable.', false], ['Yes.', false]],
     q44: [['The at-close facts: compose with the 1 pt wick.', true], ['At-close facts (1 pt wick); the plan\'s read is not evidence.', true], ['The plan\'s read is never evidence: use the at-close 1 pt.', true],
       ['The plan is not evidence; the facts at the close.', true], ['The 1 pt wick, read at the close.', true], ['Compose with the at-close facts, never the plan\'s.', true],
       ['The plan\'s read.', false], ['Use the plan\'s 4 pt wick.', false], ['The plan\'s wick, 4 pts, over the at-close 1 pt.', false], ['Compose with the plan\'s read.', false], ['The plan\'s version; the at-close facts lag.', false],
-      ['The at-close facts lag; go with the plan\'s 4 pt wick.', false]],
+      ['The at-close facts lag; go with the plan\'s 4 pt wick.', false],
+      ['The at-close facts; the plan\'s read is stale.', true], ['The at-close facts; the plan\'s read lags the close.', true]],
     b8: [['No trade: the Bias line refuses the long.', true], ['Pass; the long is refused.', true], ['Do not confirm; the trend rule refuses it.', true], ['Skip: Bias says no longs.', true], ['Confirm nothing.', true],
-      ['Confirm the long, TAKE met.', false], ['Yes, take it.', false], ['Take the long; the plan listed it.', false], ['Go long.', false], ['Confirm: nothing refuses it.', false], ['Yes, confirm the long only if compose_check passes.', false]],
+      ['Confirm the long, TAKE met.', false], ['Yes, take it.', false], ['Take the long; the plan listed it.', false], ['Go long.', false], ['Confirm: nothing refuses it.', false], ['Yes, confirm the long only if compose_check passes.', false],
+      ['No issues: TAKE met, confirm.', false], ['Not blocked: confirm.', false]],
   };
   for (const [id, list] of Object.entries(cases)) {
     for (const [a, want] of list) assert.strictEqual(pass(id, `ANSWER: ${a}`), want, `${id} ${want ? 'right' : 'wrong'}: ${a}`);
+  }
+});
+
+test('grading: every forbidden pattern of q41-q44 and b8 does work (its removal lets a wrong answer through)', () => {
+  // [id, forbidden index, a wrong answer that leads with a right-looking verdict, so only that pattern fails it]
+  const work = [
+    ['q41', 0, 'No, go long.'], ['q41', 1, 'No, take it.'],
+    ['q42', 0, 'No, still take it.'], ['q42', 1, 'Pass, take it anyway.'], ['q42', 2, 'No recheck needed: the plan said so.'], ['q42', 3, 'No hesitation: take it.'], ['q42', 4, 'Pass, then take it as planned.'],
+    ['q43', 0, 'Yes, judge scenario 3 from the facts.'], ['q43', 1, 'No, it is off the table.'], ['q43', 2, 'No, scenario 3 is not tradeable.'], ['q43', 3, 'No, you must pass.'], ['q43', 4, 'No. Pass anyway.'],
+    ['q44', 0, 'The plan\'s read, not the at-close facts.'], ['q44', 1, 'At-close facts exist, but use the plan\'s read.'], ['q44', 2, 'At-close 1 pt, but the plan\'s wick sits over the at-close.'],
+    ['q44', 3, 'At-close facts, but 4 pts from the plan.'], ['q44', 4, 'The at-close facts lag.'], ['q44', 5, 'At-close facts or the plan, whichever.'],
+    ['b8', 0, 'No issues: go long.'], ['b8', 1, 'Not refused: take it.'], ['b8', 2, 'No conflict, TAKE met: take it.'], ['b8', 3, 'No, take the long only if compose_check passes.'], ['b8', 4, 'No issues: TAKE met, confirm.'],
+  ];
+  for (const id of ['q41', 'q42', 'q43', 'q44', 'b8']) assert.strictEqual(q(id).forbidden.length, work.filter(w => w[0] === id).length, `${id}: a case for each forbidden pattern`);
+  for (const [id, i, answer] of work) {
+    assert.strictEqual(pass(id, `ANSWER: ${answer}`), false, `${id} fails: ${answer}`);
+    const without = { ...q(id), forbidden: q(id).forbidden.filter((_, j) => j !== i) };
+    assert.strictEqual(Q.gradeAnswer(QUIZ, without, `ANSWER: ${answer}`).pass, true, `${id} forbidden[${i}] matters: ${answer}`);
   }
 });
 
