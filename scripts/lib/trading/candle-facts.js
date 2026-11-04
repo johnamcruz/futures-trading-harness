@@ -30,6 +30,11 @@
  *   patternsOf(c, prev, atrPrev)           every pattern that holds, in label priority; patternLabel: the first, else 'none'
  *   factsOf(candles)                       per candle: shape, closeLocation, rangeAtr (ATR as of the candle before), volRatio,
  *                                          patterns and pattern (one pass; the momentum read reads these)
+ *   basisOf(candles, j, atr) / factOf(c, basis)   factsOf's two halves: what candle j is read against (the previous
+ *                                          candle, the ATR(14) as of it, the volume average of the candles before it),
+ *                                          and its facts on that basis
+ *   nextBasisOf(candles)                   the basis of the candle that completes next (the prepare's momentum trigger,
+ *                                          next-close.js: never the candle's own range or volume)
  *   insideStackOf(candles, j)              { insideStack, mother } of candle j (the candles in a row inside one mother), or {}
  *                                          (insideStacks(candles): every candle's, one pass)
  *   relation(c, level, prevClose)          { relation: 'rejected' | 'broke' | 'touched' | 'none', dir } or null (no level)
@@ -269,19 +274,39 @@ function candleFactsList(bars, minutes, base) {
 function factsOf(cs) {
   const atr = cs.length ? atrOf(cs, ATR_LEN) : [];
   const stacks = insideStacks(cs);
-  return cs.map((c, j) => {
-    const prev = j > 0 ? cs[j - 1] : null;
-    const atrPrev = j > 0 ? atr[j - 1] : NaN;
-    const vols = cs.slice(Math.max(0, j - VOL_LEN), j).map(x => x.v);
-    const avg = vols.length >= VOL_MIN && vols.every(Number.isFinite) ? vols.reduce((a, b) => a + b, 0) / vols.length : NaN;
-    const patterns = patternsOf(c, prev, atrPrev);
-    return {
-      ...shape(c), closeLocation: closeLocation(c), prev,
-      rangeAtr: atrPrev > 0 ? (c.h - c.l) / atrPrev : NaN,
-      volRatio: avg > 0 && Number.isFinite(c.v) ? c.v / avg : NaN,
-      patterns, pattern: patternLabel(patterns), ...stacks[j],
-    };
-  });
+  return cs.map((c, j) => ({ ...factOf(c, basisOf(cs, j, atr)), ...stacks[j] }));
+}
+
+/**
+ * What candle j's facts are read against, from the candles before it only: the previous candle, the ATR(14) as of it
+ * (`atr`: atrOf(cs) up to j - 1 at least) and the mean volume of up to the VOL_LEN candles before it (at least VOL_MIN,
+ * all known; else NaN). The candle's own range and volume are in neither.
+ */
+function basisOf(cs, j, atr) {
+  const prev = j > 0 ? cs[j - 1] : null;
+  const atrPrev = j > 0 ? atr[j - 1] : NaN;
+  const vols = cs.slice(Math.max(0, j - VOL_LEN), j).map(x => x.v);
+  const avg = vols.length >= VOL_MIN && vols.every(Number.isFinite) ? vols.reduce((a, b) => a + b, 0) / vols.length : NaN;
+  return { prev, atrPrev, avg, n: vols.length };
+}
+
+/** A candle's facts on its basis (basisOf): shape, close location, range in ATR, volume against its average, patterns. */
+function factOf(c, { prev, atrPrev, avg }) {
+  const patterns = patternsOf(c, prev, atrPrev);
+  return {
+    ...shape(c), closeLocation: closeLocation(c), prev,
+    rangeAtr: atrPrev > 0 ? (c.h - c.l) / atrPrev : NaN,
+    volRatio: avg > 0 && Number.isFinite(c.v) ? c.v / avg : NaN,
+    patterns, pattern: patternLabel(patterns),
+  };
+}
+
+/**
+ * The basis the NEXT completed candle of `cs` will be read on (basisOf at j = cs.length): the facts a candle closing
+ * after these gets (factOf(candle, nextBasisOf(cs))) are the ones factsOf gives it once it is appended.
+ */
+function nextBasisOf(cs) {
+  return basisOf(cs, cs.length, cs.length ? atrOf(cs, ATR_LEN) : []);
 }
 
 /**
@@ -730,5 +755,5 @@ function completedCandlesAt({ bars, base, fine = null, minutes, at = bars.length
 module.exports = {
   TIMEFRAMES, DEF, LABELS, MAX_LEVELS, LEVEL_ORDER, label, completedSeries, shape, closeLocation, patternsOf, patternLabel, relation,
   candleSeries, relationSeries, swingTargetSeries, holdingSwingsAt, briefingCandles, briefingTargets, RELATION_TEXT,
-  prevSweep, RANGE_FRAMES, briefingRangeTargets, completedCandlesAt, gapRelation, insideStackOf, insideStacks, factsOf, levelReactionsOf, confirmedText, MOVING_LEVEL,
+  prevSweep, RANGE_FRAMES, briefingRangeTargets, completedCandlesAt, gapRelation, insideStackOf, insideStacks, factsOf, basisOf, factOf, nextBasisOf, levelReactionsOf, confirmedText, MOVING_LEVEL,
 };

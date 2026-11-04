@@ -505,6 +505,15 @@ head trader's run, before the cycle log; per role `config/runner.json`
    (`factCheck`) and the desk check from the record; the decision history reads
    a veto from it.
 
+### Prepare ahead (designed, being built)
+
+[PREPARE-AHEAD.md](PREPARE-AHEAD.md) moves the head trader's reasoning for
+the next close into the bar before it: a prepare turn on closed bars, then a
+short confirm at the close, with the desk, phase 2, the executor and the gate
+as above. Its first part, the prepare briefing's "Possible at the next close"
+section (`scripts/lib/trading/next-close.js`), exists; nothing in the runner
+asks for it yet.
+
 ## What each earlier fix becomes
 
 | Fix | Becomes |

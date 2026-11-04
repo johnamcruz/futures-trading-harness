@@ -262,6 +262,29 @@ function namedLevels(x) {
   ].filter(([, p]) => Number.isFinite(p));
 }
 
+/**
+ * The key levels a completed candle is read against as they stood (computeSections' rule, said there), as a function
+ * levelsAt(idx, openIdx, firstIdx) of the base bars: the FIXED ones as of the candle's open (overnight and IB on the last
+ * bar closed by it, openIdx; the opening range, the prior day and the prior profile on its first bar, firstIdx; the 15m
+ * and 1h swings holding at openIdx) and the MOVING ones at idx (on the last bar: `ownLevels`, this bar's own values).
+ * The briefing's candles read it, and so does the prepare's list of what can fire at the next close (next-close.js),
+ * so a level has one value in both.
+ */
+function candleLevelsAt(bars, minutes, ownLevels = []) {
+  const asOf = new Map();
+  const named = k => { if (!asOf.has(k)) asOf.set(k, k >= 0 ? namedLevels(levelsAsOf(bars, k)) : []); return asOf.get(k); };
+  // At a new session's first candle (18:00 ET, Sunday's open) the last session's overnight range and IB are stale: no
+  // level (the opening range reads the candle's own first bar, so it is the new session's; the prior RTH day is the
+  // day that just closed). The rules language does the same (candle-facts.js relationSeries, `session`).
+  const sameSession = (a, b) => a >= 0 && b >= 0 && sessionKey(bars[a].t, GLOBEX_OPEN_MIN) === sessionKey(bars[b].t, GLOBEX_OPEN_MIN);
+  return (idx, openIdx, firstIdx) => [
+    ...(sameSession(openIdx, firstIdx) ? named(openIdx).filter(([name]) => AT_OPEN.test(name)) : []),
+    ...named(firstIdx).filter(([name]) => !AT_OPEN.test(name) && !MOVING.test(name)),
+    ...(idx === bars.length - 1 ? ownLevels : named(idx)).filter(([name]) => MOVING.test(name)),
+    ...(openIdx >= 0 ? [15, 60].flatMap(m => holdingSwingsAt(bars, m, minutes, openIdx)) : []).map(x => [`${x.label} swing ${x.type} ${x.price}`, x.price]),
+  ];
+}
+
 /** Each section's data and expiry, from this bar's snapshot and read. */
 function computeSections({ bars, fine = null, c15, c60, snap, snap15, read, read15, readH1, scan, scanError, minutes, closedAt, blackouts, clock, tick, grid = null, roundStep = null, roundError = null, own = false, keyLevels = null }) {
   // A price level as the model reads it, on the contract's tick (grid: contracts.js; two decimals for a root it doesn't
@@ -377,18 +400,7 @@ function computeSections({ bars, fine = null, c15, c60, snap, snap15, read, read
   // after they complete, from earlier bars only). A MOVING one (VWAP, the developing session profile) at the candle's
   // CLOSE (base bar idx: this bar's are the briefing's own, one value per level as above).
   const ownLevels = levels.filter(([name]) => CANDLE_LEVELS.test(name));
-  const asOf = new Map();
-  const named = k => { if (!asOf.has(k)) asOf.set(k, k >= 0 ? namedLevels(levelsAsOf(bars, k)) : []); return asOf.get(k); };
-  // At a new session's first candle (18:00 ET, Sunday's open) the last session's overnight range and IB are stale: no
-  // level (the opening range reads the candle's own first bar, so it is the new session's; the prior RTH day is the
-  // day that just closed). The rules language does the same (candle-facts.js relationSeries, `session`).
-  const sameSession = (a, b) => a >= 0 && b >= 0 && sessionKey(bars[a].t, GLOBEX_OPEN_MIN) === sessionKey(bars[b].t, GLOBEX_OPEN_MIN);
-  const levelsAt = (idx, openIdx, firstIdx) => [
-    ...(sameSession(openIdx, firstIdx) ? named(openIdx).filter(([name]) => AT_OPEN.test(name)) : []),
-    ...named(firstIdx).filter(([name]) => !AT_OPEN.test(name) && !MOVING.test(name)),
-    ...(idx === bars.length - 1 ? ownLevels : named(idx)).filter(([name]) => MOVING.test(name)),
-    ...(openIdx >= 0 ? [15, 60].flatMap(m => holdingSwingsAt(bars, m, minutes, openIdx)) : []).map(x => [`${x.label} swing ${x.type} ${x.price}`, x.price]),
-  ];
+  const levelsAt = candleLevelsAt(bars, minutes, ownLevels);
   // The fair value gaps' edges as of a base bar (a candle's open), once per bar: the candles' fvgRelations.
   const zones = new Map();
   const zonesOf = (k, until) => {
@@ -1193,7 +1205,7 @@ function removeFrameBriefing(home, root, minutes) {
   try { fs.unlinkSync(frameBriefingFile(home, root, minutes)); } catch (_err) { /* none */ }
 }
 
-module.exports = { gateValidBars, htfTrendsOf,
+module.exports = { gateValidBars, htfTrendsOf, candleLevelsAt,
   SECTIONS, WINDOWS, nextClose, nextRthRoll, sessionWindow, newsState, buildBriefing, candidate, current, renderBriefing, briefingFile, writeBriefing, readBriefing, removeBriefing,
   roundNumbers, sharedParts, buildFrameBriefing, frameHolds, frameUntil, wholeBars, renderFrameBriefing, frameBriefingFile, writeFrameBriefing, readFrameBriefing, removeFrameBriefing,
   gapText, candleLines,
