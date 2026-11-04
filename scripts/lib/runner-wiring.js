@@ -592,6 +592,8 @@ function reportCacheFor(home, cfg, frames = [], env = process.env, root = path.j
     // `laneBars`: several lanes, the other lanes whose bar closed this cycle ({ ROOT: { minutes: "<bar open>" } }).
     // `fills`, `lessons`, `reviewed`: phase 1's live inputs read this cycle (phase1Of). The result carries `phase1` (its
     // facts and key, for record) and, when phase 1 is served, `phase1Record`: the runner's record the gate checks it by.
+    // Phase 1's facts key on these inputs (phase1Of), or null: prepare ahead's version of the account (prepare-ahead.js).
+    phase1Key: ({ symbols, account, now, fills = null, lessons = null, reviewed = null }) => { const p = phase1Of({ symbols, b: briefings(symbols), account, now, fills, lessons, reviewed }); return p ? p.key : null; },
     serve: ({ symbols, account, now, laneBars = {}, fills = null, lessons = null, reviewed = null }) => {
       const b = briefings(symbols);
       const key = keyOf(b, symbols, now, laneBars);
@@ -689,7 +691,23 @@ function exitsOnly(env, log, critical = require('./tunables').critical()) {
   return true;
 }
 
-function wireRunner({ cfg, root, home, env = process.env, client, prop = null, dataDir, now, runCycle, runRole = null, loadState, saveState, killSwitchFile, log, event, onBarClosed = () => {}, agents = null, configCritical = undefined, maxPromptBytes = null, entryOverlap = null }) {
+/**
+ * Prepare ahead's shadow (prepare-shadow.js; docs/PREPARE-AHEAD.md): with the runner config's prepareAhead "shadow" and a
+ * `runPrepare` (cycle-run.js runPrepare, the caller's), else null. The section reads the runner's strategies and the
+ * briefing's own facts (the news blackouts, the gate's entry clock, the round-number steps), as the bar briefing does.
+ */
+function prepareShadowFor({ cfg, root, home, env = process.env, runPrepare = null, now, strategies }) {
+  if (!runPrepare || !require('./prepare-ahead').shadowOn(cfg)) return null;
+  const blackouts = () => { try { return readBlackouts(loadConfig(env).blackoutsFile); } catch (err) { return { items: [], error: err.message }; } };
+  const sectionOpts = () => {
+    let c;
+    try { c = loadConfig(env); } catch (err) { return { registry: strategies(), blackouts: blackouts(), clock: { error: err.message } }; }
+    return { registry: strategies(), blackouts: blackouts(), clock: { entryHours: c.entryHours, noEntryWindows: c.noEntryWindows }, roundSteps: c.roundSteps };
+  };
+  return require('./prepare-shadow').createShadow({ cfg, root, home, runPrepare, now, sectionOpts, newsAt: at => require('./trading/briefing').newsState(blackouts(), at) });
+}
+
+function wireRunner({ cfg, root, home, env = process.env, client, prop = null, dataDir, now, runCycle, runRole = null, runPrepare = null, loadState, saveState, killSwitchFile, log, event, onBarClosed = () => {}, agents = null, configCritical = undefined, maxPromptBytes = null, entryOverlap = null }) {
   const strategies = () => loadStrategies(root, env).strategies;
   // A user's own strategy under a retired name: it trades as theirs; said at start so a stale copy is noticed.
   try { for (const m of retiredCopies(strategies())) log(m, 'error'); } catch (_err) { /* the strategies load again at each scan */ }
@@ -823,7 +841,9 @@ function wireRunner({ cfg, root, home, env = process.env, client, prop = null, d
     ...passHold(env),
     // Setup-focused practice: only a practice replay's selected bars run a cycle (refused anywhere else).
     practiceSelect: practiceSelector(cfg, home, env),
+    // Prepare ahead's shadow (prepareShadowFor): prepareAhead "shadow" with a `runPrepare` only, else null (as before).
+    prepareShadow: prepareShadowFor({ cfg, root, home, env, runPrepare, now, strategies }),
   });
 }
 
-module.exports = { deskFor, deskConcurrencyOf, managedDeskNote, entryFor, lookupsKeyOf, exitsOnly, laneSignals, lookupRoles, lookupNeeds, openRunnerBroker, manualRunBroker, holdAccountLock, wireRunner, dayLine, passHold, practiceSelector, barRecorder, briefingRecorder, reportCacheFor, runnerScan, replayUnattested, closedBarsOnly };
+module.exports = { prepareShadowFor, deskFor, deskConcurrencyOf, managedDeskNote, entryFor, lookupsKeyOf, exitsOnly, laneSignals, lookupRoles, lookupNeeds, openRunnerBroker, manualRunBroker, holdAccountLock, wireRunner, dayLine, passHold, practiceSelector, barRecorder, briefingRecorder, reportCacheFor, runnerScan, replayUnattested, closedBarsOnly };

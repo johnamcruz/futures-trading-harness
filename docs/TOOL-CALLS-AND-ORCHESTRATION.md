@@ -511,8 +511,10 @@ head trader's run, before the cycle log; per role `config/runner.json`
 the next close into the bar before it: a prepare turn on closed bars, then a
 short confirm at the close, with the desk, phase 2, the executor and the gate
 as above. Its first part, the prepare briefing's "Possible at the next close"
-section (`scripts/lib/trading/next-close.js`), exists; nothing in the runner
-asks for it yet.
+section (`scripts/lib/trading/next-close.js`), exists, and so does its shadow
+mode (`prepareAhead: "shadow"`, `scripts/lib/prepare-shadow.js`): the prepare
+and a shadow confirm run after the cycle, with the head trader's argv and a
+narrower `--allowedTools`, and decide nothing.
 
 ## What each earlier fix becomes
 

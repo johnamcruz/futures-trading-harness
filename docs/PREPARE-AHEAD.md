@@ -201,6 +201,92 @@ section)` is the briefing's text with them after its summary. The at-close
 briefing (`renderBriefing`) never has the section, and nothing in production
 asks for it yet: every existing briefing, golden and prompt is unchanged.
 
+## Shadow mode (built: PR B1)
+
+The old path keeps deciding everything. With the runner config's
+`prepareAhead: "shadow"` (Claude Code only; `"off"` or absent: as before;
+`"on"` is refused until PR B2), after a one-symbol, one-lane trade cycle whose
+result is final, the runner (`scripts/lib/prepare-shadow.js`, wired by
+`runner-wiring.js` `prepareShadowFor`):
+
+1. **Shadow confirm** of the plan made for this close, if one exists: the plan
+   (`<home>/prepare/<symbol>-<bar>.json`, keyed by the bar it is for) is
+   validated against the inputs the real cycle at this close started from;
+   what fired in the real at-close scan (the rules setups fired and the
+   briefing's setups to check) is matched to its scenarios by read name. Valid
+   and matched: a confirm run, `--resume <prepare session> --fork-session`, its
+   prompt the at-close facts first (the briefing's summary, what fired), then
+   "your plan said: scenario k". In shadow it ends with
+   `DECISION: TAKE <k> | DECISION: PASS - <why>` and calls no compose_check.
+2. **Prepare** of the next bar's plan, when the account is flat by a fresh
+   read (no position, no working order), the section lists a candidate, the
+   next close is in a session window, the kill switch is off and time is left:
+   a run on the prepare briefing (the section above, from closed bars only:
+   the cycle's bars up to its bar, the window the close will read), writing
+   `SCENARIO k: ...`, `STAND DOWN if: ...`, `INVALID if: ...`. The plan file
+   (written whole) holds the session id and its transcript (the SessionStart
+   hook's record), the input versions and the text.
+
+Both stop by the next close less `prepare.marginMs` (config/runner.json, the
+harness clock), at the end of day, or after `prepare.maxMs`;
+`prepare.effort` is null (the CLI's default effort). In replay they run in the
+same step, after the cycle, so the step's time charges them.
+
+**Their runs** (`autotrader.js` `buildCommand` `prepare`): the head trader's
+argv, the same `--disallowedTools`, model, plugin dir, system-prompt file and
+MCP config, in the same workspace; only `--allowedTools` is narrower
+(`claudePrepareTools`: no subagent tool, no `compose_check`, no order tool or
+journal write, no bars or quote fetch, no writing script), so `dontAsk`
+refuses the rest and the prompt cache's tool list stays the head trader's.
+Their environment says which run it is (`FTH_PREPARE`: the stop hook asks it
+for nothing; `FTH_PREPARE_SESSION`: the file its SessionStart hook records the
+session in) and never carries the cycle's id, entry, role record or phase-1
+record. A forked or resumed session's SessionStart gives the day's state again
+but not the lessons (they are in its history). The gate is unchanged.
+
+**Validity** (`prepare-ahead.js` `validate`; any change voids):
+
+| Input | Void when |
+|---|---|
+| The phase-1 facts key (a fill, a position, the P&L) | it differs, or is unknown |
+| The trading day | it differs |
+| The 3m part | it is not the plan's bar plus exactly one |
+| The 15m part | it rolled when the plan's held past the close, or did not roll when the plan's ended at it |
+| The 1h and day parts | they close at the next close (`htf-close`: no scenario covers it), or changed |
+| The chain side, the trend rule | either differs |
+| The window, the news | entries not allowed, or a blackout (or an unreadable blackouts file) at the close |
+| The desk's reports | one expected to hold past the close changed |
+| The prepare's session | its transcript is gone |
+
+A plan for another bar is never read (stale). Outside the plan (something
+fired that no scenario names) and nothing fired are logged with what fired and
+the moving levels' kind (VWAP, profile, FVG, other); no confirm runs then.
+
+**Logged** in the cycle's record only, as its `prepare` field:
+`{ shadow, made }`. `shadow`: the plan id, its prepare ms, the status (valid,
+void with the reason, outside, nothing-fired, none, stale, kill-switch), the
+match, what fired, the confirm (outcome, decision, ms, session, tokens and
+cache reads), the full cycle's decision (`executed` a take with its side, the
+head trader's `no-trade` a pass; blocked, vetoed or an error none) and
+`agreesWithFull`. `made`: the outcome (done, aborted, skipped with why, error),
+the plan id, ms, tokens and the deadline.
+
+### Reading a shadow replay
+
+Run a replay with `"prepareAhead": "shadow"` in its runner config (Claude
+Code). Then:
+
+```bash
+node scripts/prepare-shadow.js --home <run home> [--from YYYY-MM-DD] [--to YYYY-MM-DD] [--json]
+```
+
+It prints the closes by status, the void rate by reason and the outside-plan
+rate by level kind (over the closes that had a plan), the agreement with the
+full cycle (of the confirms with a verdict both ways), the confirm and
+prepare times (median, p90, max), the deadline aborts, and the tokens. The
+agreement is judged against the noise floor (two runs of the old path), never
+against 100%.
+
 ## Freshness
 
 - **Prepare:** closed bars only, and versioned.
@@ -318,7 +404,9 @@ Each is its own PR, with the adversarial review and the goal regression.
 2. **B:** the runner's prepare and confirm (resume, versions, void,
    fallback, deadline, skip), the opt-in key, the logging, the hook and
    gateway wiring tests for the cycle attribution, the tier-2 mock with both
-   phases.
+   phases. **B1 (built): shadow mode** (above): the old path decides, the
+   prepare and the shadow confirm run beside it and are measured. **B2:** the
+   confirm decides (`"on"`), the transcript cut, the tier-2 mock.
 3. **C:** the skills (the prepare format and the confirm rule), the context
    quiz and its new questions (confirm on a met candle, pass on an unmet
    one, the anchoring trap).

@@ -61,7 +61,7 @@ const { readJson, writeJsonAtomic, runHarness, workspaceFingerprint, changedFile
 const { qwenWorkspaceSettings } = require('./lib/install');
 const { harnessHome } = require('./lib/paths');
 const { createAlerter, writeHeartbeat, watchdogStatus } = require('./lib/alerts');
-const { runCycle: runCycleWith, runRole: runRoleWith } = require('./lib/cycle-run');
+const { runCycle: runCycleWith, runRole: runRoleWith, runPrepare: runPrepareWith } = require('./lib/cycle-run');
 const { lockHolderAlive } = require('./lib/runner-lock');
 const { passTap, noDecision } = require('./lib/session/record');
 const { createLiveSession } = require('./lib/session/live');
@@ -235,6 +235,7 @@ function buildRunner(cfg, dataDir, opts, client, log, event, tap) {
     cfg, root: ROOT, home: HOME_DIR, env: process.env, client, prop: prop.accounts().length ? prop : null, dataDir, now: runnerNow, log, event, onBarClosed: tap.bar,
     runCycle: (action, prompt, limits) => runCycle(cfg, action, prompt, opts, limits),
     runRole: (role, request, limits) => runRoleWith(cfg, role, request, limits, { root: ROOT, home: HOME_DIR, env: process.env, run: runHarness, onChild: c => { if (c) { roleChildren.add(c); c.once('exit', () => roleChildren.delete(c)); } } }),
+    runPrepare: (c, kind, prompt, limits) => runPrepareWith(c, kind, prompt, limits, { root: ROOT, home: HOME_DIR, env: process.env, run: runHarness }), // prepareAhead "shadow" only
     loadState: () => loadState(cfg), saveState: s => writeJsonAtomic(STATE_FILE, s), killSwitchFile: loadConfig(process.env).killSwitchFile,
   });
 }

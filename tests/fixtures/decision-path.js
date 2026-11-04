@@ -138,6 +138,9 @@ async function pass(w, at, script, o = {}) {
       cfg: w.cfg, root: ROOT, home: w.home, env, client: closedBarsOnly(client, now), dataDir: w.cfg.dataDir, now,
       // `o.runRole`: the runner runs the desk itself (runner-wiring.js deskFor), each role's run scripted.
       ...(o.runRole ? { runRole: o.runRole } : {}),
+      // `o.runPrepare`: prepare ahead's shadow runs (cycle-run.js runPrepare's caller; the config's prepareAhead "shadow"),
+      // made with the pass's environment.
+      ...(o.runPrepare ? { runPrepare: o.runPrepare(env) } : {}),
       // `o.maxPromptBytes`: the cycle prompt's limit (a small one: no situational skill embedded).
       ...(o.maxPromptBytes ? { maxPromptBytes: o.maxPromptBytes } : {}),
       // Phase 2 started at the head trader's OK compose (runner-entry.js overlapFor) only with `o.overlap` (its own e2e):

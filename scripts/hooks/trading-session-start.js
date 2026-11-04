@@ -123,7 +123,7 @@ function run(rawInput, ctx = {}, deps = {}) {
   const env = deps.env || process.env;
   const root = ctx.pluginRoot || path.resolve(__dirname, '..', '..');
   exportRoot(root, env);
-  let input = {};
+  let input;
   try { input = JSON.parse(String(rawInput || '{}')) || {}; } catch (_err) { input = {}; }
   // A prepare or a shadow confirm: its session for the runner (best effort: never blocks the session).
   try { require('../lib/prepare-ahead').recordSession(env, input); } catch (_err) { /* the runner finds no session record: no plan */ }

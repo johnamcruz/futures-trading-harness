@@ -1325,6 +1325,18 @@
    "value": 250,
    "from": "new in feat/entry-latency-overlap (how often the compose records are read while the head trader's run goes)"
   },
+  "prepare.marginMs": {
+   "value": 20000,
+   "from": "new in feat/prepare-ahead-shadow (the prepare and the shadow confirm are done by the next close less this)"
+  },
+  "prepare.maxMs": {
+   "value": 150000,
+   "from": "new in feat/prepare-ahead-shadow (the most one prepare or shadow confirm run may take)"
+  },
+  "prepare.effort": {
+   "value": null,
+   "from": "new in feat/prepare-ahead-shadow (the CLI's --effort for them; null: the CLI's default, until the owner says otherwise)"
+  },
   "reviews.scratchR": {
    "value": 0.2,
    "from": "new in fix/runner-writes-reviews (the runner's factual review: a trade inside 0.2R is a scratch, as skills/trade-review/SKILL.md defines it)"

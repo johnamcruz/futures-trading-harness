@@ -36,7 +36,7 @@ const { writeJsonAtomic } = require('./harness-run');
 const MODES = Object.freeze(['off', 'shadow']);
 /**
  * What the prepare and the shadow confirm may not use, beyond the head trader's own deny rules (kept identical, for the
- * prompt cache): by name from the harness-tools registry and the broker interface (autotrader.js claudePrepareTools takes
+ * prompt cache): by name from the harness tools' registry (harness-tools/registry.js) and the broker interface (autotrader.js claudePrepareTools takes
  * every other read from them). compose_check (the confirm decides nothing in shadow), the data fetches (a bar closing
  * inside the forming bar is a look-ahead: bars_fetch, get_bars, get_quote), the writes (blackouts_add; reconcile's
  * records). The order tools and the journal's write are no reads of the interface's; the subagent tool is never given.

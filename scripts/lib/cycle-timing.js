@@ -228,13 +228,15 @@ const quantile = (xs, q) => {
   return s[Math.min(s.length - 1, Math.ceil(q * s.length) - 1)];
 };
 
+/** A list of times as the timing report states them: { n, median, p90 } (nearest rank; null when empty). */
+const stat = xs => ({ n: xs.length, median: quantile(xs, 0.5), p90: quantile(xs, 0.9) });
+
 function group(timings) {
   const lat = k => timings.map(x => x.latencyMs && num(x.latencyMs[k])).filter(x => x !== null);
   const roles = {};
   for (const r of timings.flatMap(x => x.roles || [])) if (r && r.role && num(r.ms) !== null) (roles[r.role] = roles[r.role] || []).push(r.ms);
   const missedBy = {};
   for (const x of timings) if (x.setupMissed) missedBy[x.setupMissed] = (missedBy[x.setupMissed] || 0) + 1;
-  const stat = xs => ({ n: xs.length, median: quantile(xs, 0.5), p90: quantile(xs, 0.9) });
   return {
     cycles: timings.length, replay: timings.filter(x => x.clock === 'replay').length, charged: timings.filter(x => x.charged === true).length,
     expired: timings.reduce((n, x) => n + (Number.isInteger(x.expired) ? x.expired : 0), 0),
@@ -274,4 +276,4 @@ function runTiming({ res, cfg, context, env, startedMs, endedMs, now, result }) 
   }
 }
 
-module.exports = { transcriptTimes, gateEntries, barWindow, cycleTiming, runTiming, timingReport };
+module.exports = { stat, transcriptTimes, gateEntries, barWindow, cycleTiming, runTiming, timingReport };

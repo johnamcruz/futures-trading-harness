@@ -1,0 +1,292 @@
+'use strict';
+
+// Prepare ahead, shadow mode (scripts/lib/prepare-shadow.js, PR B1): after a cycle's result is final, the shadow confirm
+// of the plan made for this close (logged beside the cycle's own decision), then the prepare of the next bar's plan.
+// On real bars (the momentum_continuation census: a short that fires at the 14:06 close of 2021-05-17), with the runs
+// played by a fake CLI that answers as the prepare and the confirm do. Every row of the failure table end to end, and
+// nothing written but the plan files and the cycle log's `prepare` field.
+
+const test = require('node:test');
+const assert = require('node:assert');
+const fs = require('fs');
+const os = require('os');
+const path = require('path');
+const S = require('../../scripts/lib/prepare-shadow');
+const PA = require('../../scripts/lib/prepare-ahead');
+const B = require('../../scripts/lib/trading/briefing');
+const { loadStrategies, scan } = require('../../scripts/lib/trading/strategies');
+const { listedReads } = require('../../scripts/lib/learning/setup-moments');
+const { validateConfig } = require('../../scripts/lib/autotrader');
+const FX = require('../fixtures/momentum-continuation');
+
+const ROOT = path.resolve(__dirname, '..', '..');
+const REG = loadStrategies(ROOT, {}).strategies;
+const BARS = FX.load();
+const FIRE = FX.CENSUS_BG[0][0]; // a short fires at this bar's close (it opens at 14:06 UTC)
+const I = BARS.findIndex(b => b.t === FIRE);
+const STEP = 180000;
+const cfg = validateConfig({ harness: 'claude', premarketAt: '', symbols: ['MNQ'], prepareAhead: 'shadow' });
+const tmp = () => fs.mkdtempSync(path.join(os.tmpdir(), 'fth-shadow-'));
+
+/** One cycle's close (bar index k): its bars, briefing (built on the one before, as the runner's), scan and listed setups. */
+function closeAt(k, prev = null) {
+  const bars = BARS.slice(0, k + 1);
+  const sc = scan(REG, bars, { symbol: 'MNQ' });
+  const briefing = B.buildBriefing({ symbol: 'MNQ', bars, minutes: 3, scan: sc, prev });
+  return { bars, briefing, scan: sc, listed: listedReads(briefing), bar: { t: bars[k].t, c: bars[k].c, contractId: 'MNQ', file: '/bars.json' } };
+}
+const PREP = closeAt(I - 1);
+const FIRED = closeAt(I, PREP.briefing);
+const closeMs = c => Date.parse(c.bar.t) + STEP;
+
+/**
+ * The fake CLI (cycle-run.js runPrepare's shape): a prepare writes one SCENARIO per candidate its prompt lists, a confirm
+ * takes its scenario (or `o.decision`); each records its session as the SessionStart hook does. `o.advanceMs`: the harness
+ * clock moves that much during the run; `o.fail`: the run fails; `o.throws`; `o.transcript`: the session's file.
+ */
+function fakeCli(clock, o = {}) {
+  const runs = [];
+  const run = async (_cfg, kind, prompt, limits) => {
+    runs.push({ kind, prompt, limits });
+    clock.ms += o.advanceMs || 20000;
+    if (o.throws) throw new Error('spawn claude ENOENT');
+    if (o.fail === kind) return { ok: false, timedOut: false, text: '', sessionId: null, transcript: null, source: null, usage: null, ms: 1 };
+    const id = `ses-${kind}-${runs.length}`;
+    const text = kind === 'prepare'
+      ? [...prompt.matchAll(/^ {2}- (P\d+) \S+ (long|short) "([^"]+)"/gm)].map((m, j) => `SCENARIO ${j + 1}: ${m[1]} "${m[3]}" → TAKE if the candle meets it | PASS if not; reads: "${m[3]}"; why: the trend`).concat(['STAND DOWN if: a news window', 'INVALID if: a fill', 'PLAN END']).join('\n')
+      : (o.decision || `DECISION: TAKE ${/Your plan said: scenario (\d+)/.exec(prompt)[1]}`);
+    return { ok: true, timedOut: false, text, sessionId: id, transcript: o.transcript === undefined ? o.sessionFile : o.transcript, source: kind === 'confirm' ? 'fork' : 'startup', usage: { total: { input: 1, cacheRead: 9, cacheCreation: 0, output: 2 } }, ms: o.advanceMs || 20000 };
+  };
+  return { run, runs };
+}
+
+/** The shadow after a cycle at close `c`: its inputs as the runner gives them; `o` overrides. */
+async function after(home, c, o = {}) {
+  const clock = o.clock || { ms: closeMs(c) + 40000 };
+  const sessionFile = path.join(home, 'claude-session.jsonl');
+  fs.writeFileSync(sessionFile, '{}\n');
+  const cli = o.cli || fakeCli(clock, { sessionFile, ...(o.fake || {}) });
+  const log = path.join(home, 'logs', 'cycles', 'x', `${Date.parse(c.bar.t)}-trade.json`);
+  fs.mkdirSync(path.dirname(log), { recursive: true });
+  fs.writeFileSync(log, JSON.stringify({ result: o.result || 'CYCLE RESULT: no-trade - x', ...(o.entry ? { entry: o.entry } : {}) }, null, 2));
+  const shadow = S.createShadow({ cfg, root: ROOT, home, runPrepare: cli.run, now: () => new Date(clock.ms), sectionOpts: () => ({ registry: REG }), newsAt: o.newsAt || (() => ({ inBlackout: false })), ...(o.chainSideOf ? { chainSideOf: o.chainSideOf } : {}) });
+  const acct = o.acct || { id: '7', at: new Date(clock.ms).toISOString(), balance: 50000, positions: [], orders: [], workingOrders: 0 };
+  const r = await shadow.after({
+    symbol: 'MNQ', minutes: 3, bar: c.bar, bars: c.bars, windowBars: null, briefing: c.briefing, factsKey: o.factsKey || 'k1', reports: o.reports || [], scan: c.scan, listed: c.listed,
+    result: o.result || 'CYCLE RESULT: no-trade - x', cycleLog: log, killSwitch: o.killSwitch || (() => false), accountAfter: async () => acct, phase1KeyOf: () => o.nextKey || 'k1',
+    eodMs: o.eodMs ?? null, inSession: () => true,
+  });
+  return { ...r, cli, clock, log: JSON.parse(fs.readFileSync(log, 'utf8')) };
+}
+
+test('shadow: no plan for this close, a prepare for the next: its plan written (keyed by the next bar) with its session and versions; the cycle log carries both', async () => {
+  const home = tmp();
+  const r = await after(home, PREP);
+  assert.deepStrictEqual(r.shadow, { status: 'none', reason: 'no-plan', planId: null });
+  assert.deepStrictEqual(r.cli.runs.map(x => x.kind), ['prepare']);
+  assert.strictEqual(r.made.outcome, 'done');
+  const plan = PA.readPlan(home, 'MNQ', FIRE);
+  assert.ok(plan, 'the plan for the bar opening at the fire');
+  assert.strictEqual(r.made.planId, plan.id);
+  assert.strictEqual(plan.session.id, 'ses-prepare-1');
+  assert.strictEqual(plan.versions.asOf, PREP.bar.t);
+  assert.strictEqual(plan.versions.factsKey, 'k1');
+  assert.deepStrictEqual(plan.candidates.map(x => [x.id, x.side, x.read]), [['P1', 'short', 'momentum_continuation fired down']]);
+  assert.strictEqual(plan.scenarios.length, 1);
+  // The prepare's prompt: the prepare briefing with the section, from these closed bars.
+  assert.match(r.cli.runs[0].prompt, /Possible at the next close/);
+  assert.match(r.cli.runs[0].prompt, /P1 momentum_continuation short "momentum_continuation fired down"/);
+  // Its deadline: the next close less the margin (config/runner.json prepare), from the harness clock.
+  const T = require('../../scripts/lib/tunables').runner().prepare;
+  assert.strictEqual(r.cli.runs[0].limits.timeoutMs, Math.min(Date.parse(FIRE) + STEP - T.marginMs - (closeMs(PREP) + 40000), T.maxMs));
+  assert.strictEqual(r.log.prepare.made.planId, plan.id);
+  assert.strictEqual(r.log.prepare.shadow.status, 'none');
+});
+
+test('shadow: at the close the plan was made for, valid and matched: the confirm forks the prepare\'s session with the at-close facts first, and its decision is logged beside the full cycle\'s', async () => {
+  const home = tmp();
+  await after(home, PREP);
+  const plan = PA.readPlan(home, 'MNQ', FIRE);
+  const r = await after(home, FIRED, { result: 'CYCLE RESULT: executed - trade_lifecycle short 3', entry: { outcome: 'executed' } });
+  const conf = r.cli.runs.find(x => x.kind === 'confirm');
+  assert.ok(conf, 'the confirm ran');
+  assert.strictEqual(conf.limits.resume, plan.session.id);
+  assert.ok(conf.prompt.indexOf('Bar briefing MNQ 3m') < conf.prompt.indexOf('Your plan said: scenario 1'), 'the at-close facts first');
+  assert.match(conf.prompt, /What fired at the close: "momentum_continuation fired down"/);
+  assert.deepStrictEqual({ status: r.shadow.status, planId: r.shadow.planId, k: r.shadow.match.k, read: r.shadow.match.read }, { status: 'valid', planId: plan.id, k: 1, read: 'momentum_continuation fired down' });
+  assert.deepStrictEqual(r.shadow.confirm.decision, { decision: 'take', k: 1, side: 'short' });
+  assert.deepStrictEqual(r.shadow.full, { decision: 'take', side: 'short', why: null });
+  assert.strictEqual(r.shadow.agreesWithFull, true);
+  assert.strictEqual(r.shadow.prepareMs, plan.ms);
+  assert.ok(Number.isFinite(r.shadow.confirm.ms));
+  assert.deepStrictEqual(r.shadow.confirm.usage, { total: { input: 1, cacheRead: 9, cacheCreation: 0, output: 2 } });
+  // The setups the plan did not cover, by level kind (v1 lists no moving level).
+  assert.ok(r.shadow.unplanned.includes('15m broke vwap rth down'));
+  assert.strictEqual(r.shadow.unplannedKinds.vwap, 1);
+  assert.deepStrictEqual(r.log.prepare.shadow, JSON.parse(JSON.stringify(r.shadow)));
+});
+
+test('shadow: the agreement check can fail: a deliberately wrong shadow decision is logged as a disagreement', async () => {
+  const home = tmp();
+  await after(home, PREP);
+  const r = await after(home, FIRED, { result: 'CYCLE RESULT: no-trade - the candle was weak', fake: { decision: 'DECISION: TAKE 1' } });
+  assert.deepStrictEqual(r.shadow.full, { decision: 'pass', side: null, why: null });
+  assert.strictEqual(r.shadow.agreesWithFull, false);
+  const r2 = await after(tmp(), FIRED, {});
+  assert.strictEqual(r2.shadow.status, 'none');
+});
+
+test('shadow: a confirm that states no DECISION line is no decision (no agreement either way)', async () => {
+  const home = tmp();
+  await after(home, PREP);
+  const r = await after(home, FIRED, { fake: { decision: 'I think it fits.' }, result: 'CYCLE RESULT: no-trade - x' });
+  assert.strictEqual(r.shadow.confirm.decision, null);
+  assert.strictEqual(r.shadow.agreesWithFull, null);
+});
+
+// --- The failure table, end to end ----------------------------------------------------------------------------------
+
+test('failure row: a prepare done after its deadline is aborted: no plan file; the next close finds none', async () => {
+  const home = tmp();
+  const r = await after(home, PREP, { fake: { advanceMs: 200000 } });
+  assert.strictEqual(r.made.outcome, 'aborted');
+  assert.strictEqual(PA.readPlan(home, 'MNQ', FIRE), null);
+  assert.strictEqual((await after(home, FIRED)).shadow.reason, 'no-plan');
+});
+
+test('failure row: the deadline passed already (no time left): no prepare', async () => {
+  const home = tmp();
+  const r = await after(home, PREP, { clock: { ms: Date.parse(FIRE) + STEP - 1000 } });
+  assert.deepStrictEqual([r.made.outcome, r.made.why], ['skipped', 'no-time']);
+  assert.deepStrictEqual(r.cli.runs, []);
+});
+
+test('failure row: a prepare that fails or crashes leaves no plan file', async () => {
+  for (const fake of [{ fail: 'prepare' }, { throws: true }]) {
+    const home = tmp();
+    const r = await after(home, PREP, { fake });
+    assert.strictEqual(r.made.outcome, 'error', JSON.stringify(fake));
+    assert.strictEqual(PA.readPlan(home, 'MNQ', FIRE), null);
+  }
+});
+
+test('failure row: a fill or P&L change (the facts key) before the close voids the plan: no confirm', async () => {
+  const home = tmp();
+  await after(home, PREP);
+  const r = await after(home, FIRED, { factsKey: 'k2' });
+  assert.deepStrictEqual([r.shadow.status, r.shadow.reason], ['void', 'facts']);
+  assert.ok(!r.cli.runs.some(x => x.kind === 'confirm'));
+});
+
+test('failure row: the chain side flipping at the close voids the plan', async () => {
+  const home = tmp();
+  await after(home, PREP, { chainSideOf: () => -1 });
+  const r = await after(home, FIRED, { chainSideOf: () => 1 });
+  assert.deepStrictEqual([r.shadow.status, r.shadow.reason], ['void', 'chain-side']);
+});
+
+test('failure row: a news window starting at the close voids the plan', async () => {
+  const home = tmp();
+  await after(home, PREP);
+  const r = await after(home, FIRED, { newsAt: () => ({ inBlackout: true, reason: 'CPI' }) });
+  assert.deepStrictEqual([r.shadow.status, r.shadow.reason], ['void', 'news']);
+});
+
+test('failure row: what fired is not a scenario of the plan: outside the plan, no confirm, the reads and their kinds logged', async () => {
+  const home = tmp();
+  await after(home, PREP);
+  const outside = { ...FIRED, scan: [], listed: ['15m broke vwap rth down'] };
+  const r = await after(home, outside);
+  assert.deepStrictEqual([r.shadow.status, r.shadow.fired], ['outside', ['15m broke vwap rth down']]);
+  assert.deepStrictEqual(r.shadow.unplannedKinds, { vwap: 1 });
+  assert.ok(!r.cli.runs.some(x => x.kind === 'confirm'));
+  const none = await after(tmp(), PREP);
+  void none;
+});
+
+test('failure row: the prepare session\'s file missing: void, no confirm', async () => {
+  const home = tmp();
+  await after(home, PREP, { fake: { transcript: path.join(home, 'gone.jsonl') } });
+  const r = await after(home, FIRED);
+  assert.deepStrictEqual([r.shadow.status, r.shadow.reason], ['void', 'session-missing']);
+  assert.ok(!r.cli.runs.some(x => x.kind === 'confirm'));
+});
+
+test('failure row: the confirm past its budget is aborted: no decision; the full cycle\'s stands', async () => {
+  const home = tmp();
+  await after(home, PREP);
+  const r = await after(home, FIRED, { fake: { advanceMs: 200000 } });
+  assert.strictEqual(r.shadow.confirm.outcome, 'aborted');
+  assert.strictEqual(r.shadow.confirm.decision, null);
+  assert.strictEqual(r.shadow.agreesWithFull, null);
+});
+
+test('failure row: the kill switch on: no confirm and no prepare', async () => {
+  const home = tmp();
+  await after(home, PREP);
+  const r = await after(home, FIRED, { killSwitch: () => true });
+  assert.deepStrictEqual(r.shadow, { status: 'kill-switch', reason: 'kill-switch', planId: PA.readPlan(home, 'MNQ', FIRE).id });
+  assert.deepStrictEqual([r.made.outcome, r.made.why], ['skipped', 'kill-switch']);
+  assert.deepStrictEqual(r.cli.runs, []);
+});
+
+test('failure row: a stale plan from an earlier bar is never this close\'s (keyed by bar)', async () => {
+  const home = tmp();
+  await after(home, closeAt(I - 3));
+  // The plan made two bars back is for the bar before the fire, not the fire's.
+  const r = await after(home, FIRED);
+  assert.strictEqual(r.shadow.reason, 'no-plan');
+});
+
+test('failure row: an open position (or a working order) after the cycle: no prepare (management first)', async () => {
+  for (const acct of [{ id: '7', positions: [{ contractId: 'MNQ', size: 1, type: 2 }], orders: [] }, { id: '7', positions: [], orders: [{ id: 1 }] }, { id: '7', error: 'timeout' }]) {
+    const r = await after(tmp(), PREP, { acct });
+    assert.deepStrictEqual([r.made.outcome, r.made.why], ['skipped', 'not-flat'], JSON.stringify(acct));
+    assert.deepStrictEqual(r.cli.runs, []);
+  }
+});
+
+test('shadow writes nothing but the plan files under <home>/prepare and the cycle log\'s prepare field (no compose record, verdict or journal)', async () => {
+  const home = tmp();
+  const before = new Set();
+  const walk = d => (fs.existsSync(d) ? fs.readdirSync(d, { withFileTypes: true }).flatMap(e => (e.isDirectory() ? walk(path.join(d, e.name)) : [path.join(d, e.name)])) : []);
+  await after(home, PREP);
+  for (const f of walk(home)) before.add(path.relative(home, f));
+  const r = await after(home, FIRED, { result: 'CYCLE RESULT: executed - trade_lifecycle short 3', entry: { outcome: 'executed' } });
+  assert.strictEqual(r.shadow.status, 'valid');
+  const added = walk(home).map(f => path.relative(home, f)).filter(f => !before.has(f));
+  for (const f of added) assert.ok(/^prepare\//.test(f) || /^logs\/cycles\//.test(f) || f === 'claude-session.jsonl', f);
+  for (const f of walk(home).map(x => path.relative(home, x))) assert.ok(!/compose|verdict|journal|lifecycle/.test(f), f);
+});
+
+test('wiring: the shadow only with prepareAhead "shadow" on Claude Code and a runPrepare; else none (the runner as before)', () => {
+  const { prepareShadowFor } = require('../../scripts/lib/runner-wiring');
+  const runPrepare = async () => ({});
+  const base = { root: ROOT, home: tmp(), now: () => new Date(), strategies: () => REG };
+  assert.strictEqual(typeof prepareShadowFor({ ...base, cfg, runPrepare }).after, 'function');
+  assert.strictEqual(prepareShadowFor({ ...base, cfg }), null, 'no runPrepare');
+  assert.strictEqual(prepareShadowFor({ ...base, cfg: validateConfig({ harness: 'claude', premarketAt: '' }), runPrepare }), null, 'the key off');
+  assert.strictEqual(prepareShadowFor({ ...base, cfg: validateConfig({ harness: 'claude', premarketAt: '', prepareAhead: 'off' }), runPrepare }), null, 'off');
+  assert.strictEqual(prepareShadowFor({ ...base, cfg: { ...validateConfig({ harness: 'opencode', premarketAt: '' }), prepareAhead: 'shadow' }, runPrepare }), null, 'another harness');
+});
+
+test('wiring: phase 1\'s key for the prepare is the report cache\'s own (the key a cycle serves phase 1 under), from the same facts', () => {
+  const { reportCacheFor } = require('../../scripts/lib/runner-wiring');
+  const home = tmp();
+  B.writeBriefing(home, PREP.briefing);
+  const rc = reportCacheFor(home, { harness: 'claude', cycle: 'full', timeframe: 3 }, [], { FTH_HOME: home, HOME: home });
+  const account = { id: '7', balance: 50000, positions: [], orders: [], canTrade: true, mcpTradingAllowed: true, remainingBeforeLimit: 1000, attempts: [] };
+  const now = new Date(closeMs(PREP) + 30000);
+  const symbols = [{ symbol: 'MNQ', bar: PREP.bar.t, contractId: 'MNQ' }];
+  const facts = { symbols, account, now, fills: [], lessons: [], reviewed: [] };
+  const key = rc.phase1Key(facts);
+  assert.match(key, /^[0-9a-f]{64}$/);
+  assert.strictEqual(key, rc.serve(facts).phase1.key);
+  assert.notStrictEqual(rc.phase1Key({ ...facts, account: { ...account, balance: 49900 } }), key, 'a P&L change: another key');
+  assert.strictEqual(rc.phase1Key({ ...facts, fills: null }), null, 'a fact unread: no key');
+});
+
+test('the shadow\'s module never reads the wall clock', () => {
+  const src = fs.readFileSync(path.join(ROOT, 'scripts', 'lib', 'prepare-shadow.js'), 'utf8').replace(/\/\*[\s\S]*?\*\/|\/\/[^\n]*/g, '');
+  assert.ok(!/Date\.now|new Date\(\s*\)|performance\.now/.test(src));
+});
