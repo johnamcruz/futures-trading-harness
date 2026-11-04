@@ -138,7 +138,9 @@ trusted by any check, so nothing can fail open on it.
   rejection needs the candle to have traded beyond the level (already, or at
   a stated price) and the close back on the near side. `relation` decides
   every threshold.
-- **Sides:** only those the trend rule allows (as `standardPlans`).
+- **Sides:** only those the trend rule allows as it reads now (the bar
+  T briefing's; `standardPlans` refuses the others the same way). The
+  close's own trend rule decides: it is the candidate's precondition.
 - **Not listed in v1:** the moving levels (the VWAP and the session profile:
   their value at the close moves with the closing bar) and the fair value
   gaps' edges (read through the gap's side). One of those reacting at the
@@ -201,6 +203,9 @@ asks for it yet: every existing briefing, golden and prompt is unchanged.
   a compression break, a live CISD), whatever the closing candle does. They
   are not in this section; matching them is the confirm's.
 - **Moving levels and gap edges** (above): outside the plan in v1.
+- **The contract selection:** the threshold candle's scan takes no
+  `selected` contracts; the runner's prepare must pass the same selection
+  its at-close scan uses.
 - **Volumes:** the stated volume threshold is the least whole number; the
   trigger itself (`triggerMet`) is the rule's own ratio.
 

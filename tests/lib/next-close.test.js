@@ -112,15 +112,13 @@ test('next close: synthetic closing candles just below, at and just above each t
     assert.deepStrictEqual([NC.triggerMet(c, bar(wide, volume, back)), NC.triggerMet(c, bar(wide, volume, back + 1))], [true, false]);
     // The rounding band: a volume just under the average reads 1.00x (rounded) in the briefing, momentum shown, but the
     // rule reads the unrounded ratio: no momentum, no trigger.
-    let v = volume - 1;
-    while (v > 0 && Math.round((v / c.trigger.basis.avg) * 100) / 100 >= 1 && Math.round(((v - 1) / c.trigger.basis.avg) * 100) / 100 >= 1) v -= 1;
+    const v = volume - 1;
+    assert.ok(v / c.trigger.basis.avg < 1 && Math.round((v / c.trigger.basis.avg) * 100) / 100 >= 1, `${t}: one contract under the threshold is in the rounding band`);
     const band = bar(ticks + 2, v);
-    if (Math.round((v / c.trigger.basis.avg) * 100) / 100 >= 1) {
-      assert.strictEqual(rule(band), false);
-      assert.strictEqual(NC.triggerMet(c, band), false);
-      const shown = B.buildBriefing({ symbol: 'MNQ', bars: [...sub, band], minutes: 3, scan: [] }).sections.m3.data.candles['3m'].momentum;
-      assert.strictEqual(shown, up ? 'up' : 'down', 'the rounded read shows momentum');
-    }
+    assert.strictEqual(rule(band), false);
+    assert.strictEqual(NC.triggerMet(c, band), false);
+    const shown = B.buildBriefing({ symbol: 'MNQ', bars: [...sub, band], minutes: 3, scan: [] }).sections.m3.data.candles['3m'];
+    assert.deepStrictEqual([shown.volRatio, shown.momentum], [1, up ? 'up' : 'down'], 'the rounded read shows 1x and momentum');
     // The scan itself (the at-close Setups line): fires at the threshold, not a tick under.
     const fires = b => { const r = scan([S2], [...sub, b], { symbol: 'MNQ' })[0]; return r.candidate && r.direction === side; };
     assert.deepStrictEqual([fires(bar(ticks - 1, volume)), fires(bar(ticks, volume)), fires(bar(ticks, volume - 1))], [false, true, false], t);
@@ -155,9 +153,10 @@ test('next close: over the census sessions, a listed momentum candidate fires at
   assert.strictEqual(flips, 0, 'no precondition flipped on these bars');
 });
 
-test('next close: at a 15m close, a listed reaction fires at the close (the at-close setup moment) iff its trigger is met, at the threshold and a tick short', () => {
-  let n = 0;
-  for (const t of ['2021-05-24T13:39:00.000Z', '2021-05-21T13:54:00.000Z']) {
+test('next close: at a 15m close, a listed reaction fires at the close (the at-close setup moment) iff its trigger is met: both sides, just short, at and past each threshold', () => {
+  const sides = new Set();
+  let extremes = 0;
+  for (const t of ['2021-05-24T13:39:00.000Z', '2021-05-21T13:54:00.000Z', '2021-05-20T13:39:00.000Z']) {
     const i = at(t);
     const sub = BARS.slice(0, i + 1);
     const sec = sectionAt(i);
@@ -171,18 +170,27 @@ test('next close: at a 15m close, a listed reaction fires at the close (the at-c
     // The actual closing bar.
     const actual = listed(BARS[i + 1]);
     for (const c of reactions) assert.strictEqual(has(actual, c), NC.triggerMet(c, BARS[i + 1]), `${t} ${c.read}: the actual close`);
-    // The threshold candle fires it; a tick short of the close does not.
-    for (const c of reactions.slice(0, 3)) {
+    for (const c of reactions) {
+      sides.add(c.side);
       const th = c.threshold.bar;
-      assert.ok(NC.triggerMet(c, th) && has(listed(th), c), `${c.read}: the threshold candle`);
-      const away = c.trigger.closeOp === '>=' ? -TICK : TICK;
-      const short = { ...th, c: th.c + away, h: Math.max(th.h, th.c + away), l: Math.min(th.l, th.c + away) };
-      assert.strictEqual(NC.triggerMet(c, short), false, `${c.read}: a tick short`);
-      assert.strictEqual(has(listed(short), c), false, `${c.read}: a tick short, the at-close read`);
-      n += 1;
+      const closeAt = (b, x) => ({ ...b, c: x, h: Math.max(b.h, x), l: Math.min(b.l, x) });
+      const way = c.trigger.closeOp === '>=' ? TICK : -TICK;
+      const variants = [['at', th, true], ['a tick short of the close', closeAt(th, th.c - way), false], ['a tick past the close', closeAt(th, th.c + way), true]];
+      // A rejection not traded beyond yet: its extreme a tick short of the level's far side.
+      if (c.rel === 'rejected' && !c.trigger.tradedBeyond) {
+        const ext = c.trigger.extreme;
+        const shortOf = c.trigger.extremeOp === '<=' ? { ...th, l: Math.min(th.o, th.c, ext + TICK) } : { ...th, h: Math.max(th.o, th.c, ext - TICK) };
+        variants.push(['its extreme a tick short', shortOf, false]);
+        extremes += 1;
+      }
+      for (const [what, b, expect] of variants) {
+        assert.strictEqual(NC.triggerMet(c, b), expect, `${c.read}: ${what}`);
+        assert.strictEqual(has(listed(b), c), expect, `${c.read}: ${what}, the at-close read`);
+      }
     }
   }
-  assert.ok(n >= 3);
+  assert.deepStrictEqual([...sides].sort(), ['long', 'short'], 'both sides');
+  assert.ok(extremes >= 1, 'a rejection that has not traded beyond yet');
 });
 
 test('next close: each candidate\'s plan is the at-close plan of a candle meeting its trigger (compose\'s for momentum, the Standard plan\'s for a reaction)', () => {
