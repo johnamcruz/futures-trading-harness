@@ -108,7 +108,7 @@ test('"on" e2e: the prepare after the 04:09 cycle; at the 04:12 close the confir
   const c = onRec.prepare.on.confirm;
   assert.deepStrictEqual([c.turnTo, c.composes], ['result', 0], JSON.stringify(c));
   assert.ok(Number.isFinite(c.turnMs) && c.turnMs >= 0 && c.turnMs <= c.runMs && c.runMs <= c.ms, JSON.stringify(c));
-  assert.ok(Number.isFinite(c.precollectMs) && c.precollectMs >= 0);
+  assert.ok(Number.isFinite(c.readsMs) && c.readsMs >= 0);
   assert.deepStrictEqual([onRec.prepare.on.phase2Ms, onRec.prepare.on.executorMs], [null, null], 'no entry: no phase 2 or executor time');
   // The first close had no plan of its own: the full head trader, as before. The second's plan (made after the first
   // close) lists the 15m reaction still standing at its close, and what fired there matches it: a confirm too.

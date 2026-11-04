@@ -159,13 +159,13 @@ test('"on" after the cycle: the record adds the confirm\'s outcome, the close-to
   const on = { mode: 'on', path: 'confirm', planId: 'p' };
   // The confirm's own turn (spawn to its compose's result), its run, its reads; phase 2 and the executor from the entry's
   // timing: each apart, so close to order can be read by its parts.
-  const turn = { turnMs: 6000, turnTo: 'compose', composes: 1, runMs: 9000, precollectMs: 400 };
+  const turn = { turnMs: 6000, turnTo: 'compose', composes: 1, runMs: 9000, readsMs: 400 };
   const r = await afterAt(home, FIRED, { on, cycle: { ok: true, confirm: { outcome: 'done', ms: 7000, fellBack: false, late: ['chased-entry'], ...turn } }, timing: { latencyMs: { order: 21000 } }, context: { desk: { ms: 25000 } }, entry: { timing: { headMs: 12000, phase2Ms: 15000, executorMs: 5000, orderMs: 21000 } } });
   assert.deepStrictEqual(r.log.prepare.on, { ...on, confirm: { outcome: 'done', ms: 7000, fellBack: false, ...turn }, late: ['chased-entry'], closeToOrderMs: 21000, desk: 'ran', phase2Ms: 15000, executorMs: 5000 });
   // A confirm that failed before a compose: what it did is in the record (its tool calls, its output's end); no turn of
   // its own (the full head trader decided), no entry.
   const failedConfirm = await afterAt(tmp(), FIRED, { on, cycle: { ok: true, confirm: { outcome: 'error', ms: 3000, fellBack: true, late: [], tools: ['mcp__harness__bar_briefing'], tail: '...API Error: overloaded' } } });
-  assert.deepStrictEqual(failedConfirm.log.prepare.on.confirm, { outcome: 'error', ms: 3000, fellBack: true, turnMs: null, turnTo: null, composes: null, runMs: null, precollectMs: null, tools: ['mcp__harness__bar_briefing'], tail: '...API Error: overloaded' });
+  assert.deepStrictEqual(failedConfirm.log.prepare.on.confirm, { outcome: 'error', ms: 3000, fellBack: true, turnMs: null, turnTo: null, composes: null, runMs: null, readsMs: null, tools: ['mcp__harness__bar_briefing'], tail: '...API Error: overloaded' });
   assert.deepStrictEqual([failedConfirm.log.prepare.on.phase2Ms, failedConfirm.log.prepare.on.executorMs], [null, null]);
   // An entry of the full head trader's (a fallback path): its phase 2 and executor times too.
   const fallback = await afterAt(tmp(), FIRED, { on: { mode: 'on', path: 'outside' }, cycle: { ok: true }, entry: { timing: { phase2Ms: 22000, executorMs: 6000 } } });

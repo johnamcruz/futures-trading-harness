@@ -198,7 +198,7 @@ function createShadow({ cfg, root, home, runPrepare, now, sectionOpts = () => ({
     const fin = v => (Number.isFinite(v) ? v : null);
     // The confirm's own turn (cycle-run.js: spawn to its compose's result or its pass), its run, its reads; none when it
     // fell back (the full head trader decided) or the record predates them.
-    const turn = c ? { turnMs: fin(c.turnMs), turnTo: typeof c.turnTo === 'string' ? c.turnTo : null, composes: Number.isInteger(c.composes) ? c.composes : null, runMs: fin(c.runMs), precollectMs: fin(c.precollectMs) } : {};
+    const turn = c ? { turnMs: fin(c.turnMs), turnTo: typeof c.turnTo === 'string' ? c.turnTo : null, composes: Number.isInteger(c.composes) ? c.composes : null, runMs: fin(c.runMs), readsMs: fin(c.readsMs) } : {};
     return {
       ...(x.on || { mode: 'on', path: 'unknown' }),
       ...(c ? { confirm: { outcome: c.outcome, ms: c.ms, fellBack: c.fellBack, ...turn, ...(Array.isArray(c.tools) ? { tools: c.tools } : {}), ...(typeof c.tail === 'string' ? { tail: c.tail } : {}) } } : {}),

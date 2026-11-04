@@ -435,7 +435,7 @@ the confirm takes the head trader's place.
      pass: `result`). With neither timed, to its run's end (`end`).
    - `composes`: how many `compose_check` calls it made.
    - `runMs`: from its spawn to its run's end.
-   - `precollectMs`: the reads made before its spawn.
+   - `readsMs`: the reads made before its spawn.
 
    A confirm that fell back has none of these. The record also carries
    phase 2's and the executor's run times from the entry's timing

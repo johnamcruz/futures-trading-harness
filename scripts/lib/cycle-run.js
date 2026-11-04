@@ -243,7 +243,7 @@ async function runCycle(cfg, action, prompt, opts, limits = {}, deps = {}) {
   // ("on": `ms` the whole cycle's run with its entry; the turn apart: spawn to its compose's result or its pass, its
   // run's end, and the reads before its spawn.)
   const turn = confirm ? confirmTurnOf(res, spawnMs, runEndMs) : null;
-  const confirmed = confirm ? { confirm: { outcome: res.ok && !res.timedOut ? 'done' : res.timedOut ? 'timeout' : 'error', ms: Math.max(0, endedMs - startedMs), fellBack: false, late, ...turn, precollectMs: Math.max(0, spawnMs - startedMs) } } : measureLate ? { late } : {};
+  const confirmed = confirm ? { confirm: { outcome: res.ok && !res.timedOut ? 'done' : res.timedOut ? 'timeout' : 'error', ms: Math.max(0, endedMs - startedMs), fellBack: false, late, ...turn, readsMs: Math.max(0, spawnMs - startedMs) } } : measureLate ? { late } : {};
   return { ...cycleOutcome(res, { result, intact, action, lookups, reportedResult, resultNote }), ...(phase1Refused ? { phase1Refused: true } : {}), ...confirmed };
 }
 

@@ -9,7 +9,7 @@
  *                                       outsideByKind, agreement: { agree, disagree, unknown, rate }, confirms, confirmMs,
  *                                       made, skippedBy, prepareMs, aborted, tokens: { prepare, confirm },
  *                                       forbidden: { denied: { tool: n }, attempted: { tool: n }, gateRefusals },
- *                                       on: { closes, paths, shares, voidBy, confirms, confirmTurn: { ms, runMs, precollectMs,
+ *                                       on: { closes, paths, shares, voidBy, confirms, confirmTurn: { ms, runMs, readsMs,
  *                                       to }, closeToOrder: { all, deskRan, deskCached, confirmed, fallback, byPath: { confirm |
  *                                       fallback:<path> | fallback:void:<reason> | fallback:confirm-<outcome>: { all, deskRan,
  *                                       deskCached } } }, phase2Ms: { confirm, fallback }, executorMs: { confirm, fallback },
@@ -81,7 +81,7 @@ function onReport(ons) {
   return {
     closes: ons.length, paths, shares: Object.fromEntries(Object.entries(paths).map(([k, n]) => [k, n / ons.length])), voidBy, confirms,
     // The confirm turn's own time (spawn to its compose's result, or its pass), its run, the reads before its spawn.
-    confirmTurn: { ms: msOf(finite(turns, o => o.confirm.turnMs)), runMs: msOf(finite(turns, o => o.confirm.runMs)), precollectMs: msOf(finite(turns, o => o.confirm.precollectMs)), to },
+    confirmTurn: { ms: msOf(finite(turns, o => o.confirm.turnMs)), runMs: msOf(finite(turns, o => o.confirm.runMs)), readsMs: msOf(finite(turns, o => o.confirm.readsMs)), to },
     closeToOrder: {
       ...byDesk(ordered), confirmed: ms(ordered.filter(decided)), fallback: byDesk(ordered.filter(o => !decided(o))),
       byPath: Object.fromEntries(keys.map(k => [k, byDesk(ordered.filter(o => pathKey(o) === k))])),
@@ -155,7 +155,7 @@ function onText(o) {
     `"on": ${o.closes} closes: ${Object.entries(o.paths).map(([k, n]) => `${k} ${n} (${pct(n / o.closes)})`).join(', ')}`,
     `"on" void by: ${kv(o.voidBy)}; confirms: ${kv(o.confirms)}`,
     `"on" close to order ms: ${ms(o.closeToOrder.all)}; desk ran: ${ms(o.closeToOrder.deskRan)}; desk cached: ${ms(o.closeToOrder.deskCached)}; confirmed: ${ms(o.closeToOrder.confirmed)}`,
-    `"on" confirm turn ms (spawn to its compose's result, or its pass): ${ms(o.confirmTurn.ms)}; ended at: ${kv(o.confirmTurn.to)}; its run: ${ms(o.confirmTurn.runMs)}; the reads before it: ${ms(o.confirmTurn.precollectMs)}`,
+    `"on" confirm turn ms (spawn to its compose's result, or its pass): ${ms(o.confirmTurn.ms)}; ended at: ${kv(o.confirmTurn.to)}; its run: ${ms(o.confirmTurn.runMs)}; the reads before it: ${ms(o.confirmTurn.readsMs)}`,
     `"on" close to order ms by path: ${Object.entries(o.closeToOrder.byPath).map(([k, s]) => `${k}: ${ms(s.all)} (desk ran: ${ms(s.deskRan)}; desk cached: ${ms(s.deskCached)})`).join('; ') || 'none'}`,
     `"on" phase 2 ms: confirm ${ms(o.phase2Ms.confirm)}; fallback ${ms(o.phase2Ms.fallback)}`,
     `"on" executor ms: confirm ${ms(o.executorMs.confirm)}; fallback ${ms(o.executorMs.fallback)}`,
