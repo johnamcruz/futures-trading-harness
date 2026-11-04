@@ -16,11 +16,13 @@
 
 const RANGE_ATR = require('../tunables').analysis().momentum.rangeAtr; // config/analysis.json momentum
 const VOL_RATIO = require('../tunables').analysis().momentum.volRatio;
+// The far third per direction (candle-facts.js closeLocation's thirds): the one home (next-close.js's trigger says it).
+const THIRD = Object.freeze({ up: 'top', down: 'bottom' });
 
 function momentumRead(c) {
   if (!c || !Number.isFinite(c.rangeAtr) || !Number.isFinite(c.volRatio) || !c.closeLocation) return null;
   if (!(c.rangeAtr >= RANGE_ATR && c.volRatio >= VOL_RATIO)) return 'none';
-  return c.closeLocation === 'top' ? 'up' : c.closeLocation === 'bottom' ? 'down' : 'none';
+  return c.closeLocation === THIRD.up ? 'up' : c.closeLocation === THIRD.down ? 'down' : 'none';
 }
 
-module.exports = { RANGE_ATR, VOL_RATIO, momentumRead };
+module.exports = { RANGE_ATR, VOL_RATIO, THIRD, momentumRead };

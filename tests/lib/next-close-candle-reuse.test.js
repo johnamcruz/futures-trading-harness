@@ -115,3 +115,67 @@ test('next close candle reuse: the sections prepared on the fixture are byte-ide
   ]);
 });
 
+// One source: next-close follows candle-facts (and momentum.js). Each replaced spot reads the candle reading at call
+// time, so a changed definition there changes the prepared trigger with it.
+const stub = (obj, key, fn, body) => { const was = obj[key]; obj[key] = fn; try { return body(); } finally { obj[key] = was; } };
+
+test('next close candle reuse: the trigger words are candle-facts\' relation words (a change there follows here)', () => {
+  for (const [k, c] of Object.entries(CASES)) {
+    const t = c.trigger;
+    const at = `${c.name}${String(c.name).endsWith(String(c.price)) ? '' : ` ${c.price}`}`;
+    assert.ok(triggerWords(c).endsWith(`: ${CF.relationRuleText(t.rel, t.dir, at)}`), k);
+    const said = stub(CF, 'relationRuleText', (rel, dir, x) => `<${rel} ${dir} ${x}>`, () => triggerWords(c));
+    assert.ok(said.endsWith(`: <${t.rel} ${t.dir} ${at}>`), `${k}: follows candle-facts`);
+  }
+});
+
+test('next close candle reuse: the break search bound is candle-facts\' breakReach (a change there follows here)', () => {
+  // From 90 to 100 the least break close is 110.25 (41 ticks): a bound of 0 points can't reach it.
+  const f = { t: '2021-05-24T13:30:00.000Z', o: 90, h: 99, l: 89 };
+  const broke = () => NC.reactionKinds(f, 100, NaN, TICK).filter(k => k.rel === 'broke').map(k => k.dir);
+  assert.deepStrictEqual(broke(), ['up']);
+  assert.deepStrictEqual(stub(CF, 'breakReach', () => 0, broke), [], 'follows candle-facts');
+});
+
+test('next close candle reuse: the rejection\'s "traded beyond already" is candle-facts\' tradedBeyond (a change there follows here)', () => {
+  // From 100, a high so far of 110 above the level 105: the rejection down has traded beyond it already.
+  const f = { t: '2021-05-24T13:30:00.000Z', o: 100, h: 110, l: 95 };
+  const done = () => NC.reactionKinds(f, 105, NaN, TICK).filter(k => k.rel === 'rejected').map(k => [k.dir, k.facts.tradedBeyond]);
+  assert.deepStrictEqual(done(), [['down', true]]);
+  assert.deepStrictEqual(stub(CF, 'tradedBeyond', () => false, done), [['down', false]], 'follows candle-facts');
+});
+
+test('next close candle reuse: the final candle is candle-facts\' extendCandle (a change there follows here)', () => {
+  const cand = { kind: 'reaction', trigger: { at: AT, rel: 'broke', dir: 'up', level: 100, candle: { t: '2021-05-24T13:30:00.000Z', o: 99, h: 100.5, l: 98.75 }, prevClose: null } };
+  const bar = { t: AT, h: 101.5, l: 100, c: 101.25 };
+  assert.strictEqual(NC.triggerMet(cand, bar), true);
+  assert.strictEqual(stub(CF, 'extendCandle', (k, b) => ({ o: k.o, h: Math.max(k.h, b.h), l: Math.min(k.l, b.l), c: k.o }), () => NC.triggerMet(cand, bar)), false, 'follows candle-facts');
+});
+
+test('next close candle reuse: the forming setup-frame candle is candle-facts\' formingCandle (a change there follows here)', () => {
+  const REG = loadStrategies(path.resolve(__dirname, '..', '..'), {}).strategies;
+  const BARS = FX.load();
+  const i = BARS.findIndex(b => b.t === '2021-05-24T13:39:00.000Z');
+  const bars = BARS.slice(0, i + 1);
+  const candles = () => {
+    const sec = NC.possibleAtNextClose({ symbol: 'MNQ', bars, minutes: 3, briefing: B.buildBriefing({ symbol: 'MNQ', bars, minutes: 3, scan: [] }), flat: true, registry: REG });
+    return [...new Set(sec.candidates.filter(c => c.kind === 'reaction').map(c => JSON.stringify(c.trigger.candle)))];
+  };
+  assert.deepStrictEqual(candles(), ['{"t":"2021-05-24T13:30:00.000Z","o":16845.25,"h":16916,"l":16829.75}']);
+  const real = CF.formingCandle;
+  const moved = stub(CF, 'formingCandle', (b, first, upto) => ({ ...real(b, first, upto), o: 16850 }), candles);
+  assert.deepStrictEqual(moved, ['{"t":"2021-05-24T13:30:00.000Z","o":16850,"h":16916,"l":16829.75}'], 'follows candle-facts');
+});
+
+test('next close candle reuse: the momentum third is momentum.js\' (the read the trigger names)', () => {
+  const M = require('../../scripts/lib/trading/momentum');
+  for (const dir of ['up', 'down']) assert.strictEqual(M.momentumRead({ rangeAtr: 9, volRatio: 9, closeLocation: M.THIRD[dir] }), dir);
+});
+
+test('next close candle reuse: next-close.js states no candle rule of its own (no copy of the words, the bound, the roll-up or the third)', () => {
+  const src = require('fs').readFileSync(path.join(__dirname, '..', '..', 'scripts', 'lib', 'trading', 'next-close.js'), 'utf8');
+  const code = src.split('\n').filter(l => !/^\s*(\*|\/\/|\/\*\*)/.test(l)).join('\n');
+  for (const re of [/most of its body/, /back (above|below)|back \$\{/,/Math\.abs\(L - f\.o\)/, /Math\.max\(f\.h, bar\.h\)/, /subs\.map/, /'top' : 'bottom'/, /f\.h > L|f\.l < L/]) {
+    assert.doesNotMatch(code, re, `next-close.js restates ${re}`);
+  }
+});

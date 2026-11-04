@@ -39,6 +39,11 @@
  *   insideStackOf(candles, j)              { insideStack, mother } of candle j (the candles in a row inside one mother), or {}
  *                                          (insideStacks(candles): every candle's, one pass)
  *   relation(c, level, prevClose)          { relation: 'rejected' | 'broke' | 'touched' | 'none', dir } or null (no level)
+ *   tradedBeyond / breakReach / RELATION_RULE / relationRuleText   relation's rules in parts: a rejection's wick
+ *                                          (strictly beyond), how far beyond a break's least close lies from the open,
+ *                                          and the rules in words (next-close.js's prepared triggers use them)
+ *   extendCandle(c, b) / formingCandle(bars, first, upto)   completedSeries' roll-up: a candle with one more sub-bar,
+ *                                          and the candle a run of bars makes so far
  *   candleSeries(bars, minutes, base)      per-bar facts (the rules language's htfd_* series), memoised on the bars
  *   relationSeries(bars, minutes, base, level, { at })   per-bar relation to a level series ('open', 'close', 'now')
  *   swingTargetSeries(bars, minutes, base) per bar: the nearest untaken confirmed swing high above / low below the close
@@ -195,6 +200,21 @@ function completedSeries(bars, minutes, base) {
   });
 }
 
+/**
+ * A candle `c` with one more sub-bar `b` in, as completedSeries rolls its candles up: its open stays, the high and low
+ * widen to b's, the close is b's, the volume adds (unknown once either is). next-close.js's forming candle and final
+ * candle are this, never a copy (tests/lib/candle-facts.test.js ties it to completedSeries).
+ */
+const extendCandle = (c, b) => ({ o: c.o, h: Math.max(c.h, b.h), l: Math.min(c.l, b.l), c: b.c, v: Number.isFinite(c.v) && Number.isFinite(b.v) ? c.v + b.v : NaN });
+
+/** The candle the bars first..upto make so far (extendCandle over them, from the first bar's): { o, h, l, c, v }. */
+function formingCandle(bars, first, upto) {
+  const b0 = bars[first];
+  let c = { o: b0.o, h: b0.h, l: b0.l, c: b0.c, v: Number.isFinite(b0.v) ? b0.v : NaN };
+  for (let i = first + 1; i <= upto; i += 1) c = extendCandle(c, bars[i]);
+  return c;
+}
+
 /** Body and wick shares of the range, and where the close sits in it (0 low, 1 high); null at zero range. */
 function shape(c) {
   const R = c.h - c.l;
@@ -245,13 +265,29 @@ function relation(c, level, prevClose = NaN) {
     : Number.isFinite(prevClose) && prevClose !== level ? (prevClose < level ? 'below' : 'above') : null;
   if (from === 'below') {
     if (c.c > level && (c.o + c.c) / 2 > level) return { relation: 'broke', dir: 'up' };
-    if (c.h > level && c.c < level) return { relation: 'rejected', dir: 'down' };
+    if (tradedBeyond(c, level, 'above') && c.c < level) return { relation: 'rejected', dir: 'down' };
   } else if (from === 'above') {
     if (c.c < level && (c.o + c.c) / 2 < level) return { relation: 'broke', dir: 'down' };
-    if (c.l < level && c.c > level) return { relation: 'rejected', dir: 'up' };
+    if (tradedBeyond(c, level, 'below') && c.c > level) return { relation: 'rejected', dir: 'up' };
   }
   return { relation: 'touched', dir: null };
 }
+
+// relation's rules in parts, one home (next-close.js's prepared triggers search and say them by these, never a copy).
+/** Whether candle c traded beyond `level` on `side` ('above' | 'below'): strictly, as a rejection's wick must. */
+function tradedBeyond(c, level, side) {
+  return side === 'above' ? c.h > level : c.l < level;
+}
+/**
+ * How far beyond `level` (points) a break's least close lies, from the candle's open `o`: a break closes beyond the
+ * level with most of its body beyond ((open + close) / 2 beyond it), so a close more than |level - open| beyond breaks
+ * and one at it never does (an open on the level: any close beyond).
+ */
+const breakReach = (o, level) => Math.abs(level - o);
+/** relation's rules in words: a break closes beyond the level with most of its body beyond, a rejection closes back. */
+const RELATION_RULE = { broke: 'with most of its body beyond', rejected: { up: 'back above', down: 'back below' } };
+/** The rule of a break or a rejection `dir` at `at` (a level as said: its name, with its price) in words. */
+const relationRuleText = (rel, dir, at) => (rel === 'broke' ? `beyond ${at} ${RELATION_RULE.broke}` : `${RELATION_RULE.rejected[dir]} ${at}`);
 
 /**
  * Whether candle c traded beyond its previous candle's high (low), and where it closed: back inside prev's range
@@ -440,7 +476,7 @@ const levelRank = name => { const k = LEVEL_ORDER.findIndex(re => re.test(name))
 // bar, so the same name is the same level at another price (briefing.js levelsAt reads them so; the one home of the rule).
 const MOVING_LEVEL = /^(VWAP|session (POC|VAH|VAL))/;
 
-const RELATION_TEXT = { rejected: { up: 'rejected: closed back above', down: 'rejected: closed back below' }, broke: { up: 'broke above', down: 'broke below' } };
+const RELATION_TEXT = { rejected: { up: `rejected: closed ${RELATION_RULE.rejected.up}`, down: `rejected: closed ${RELATION_RULE.rejected.down}` }, broke: { up: 'broke above', down: 'broke below' } };
 
 /**
  * The swings of completed m-minute candles as they stood at bar `idx`'s close (structure-events pivots, k = 2,
@@ -757,4 +793,5 @@ module.exports = {
   TIMEFRAMES, DEF, LABELS, MAX_LEVELS, LEVEL_ORDER, label, completedSeries, boundaryOpen, shape, closeLocation, patternsOf, patternLabel, relation,
   candleSeries, relationSeries, swingTargetSeries, holdingSwingsAt, briefingCandles, briefingTargets, RELATION_TEXT,
   prevSweep, RANGE_FRAMES, briefingRangeTargets, completedCandlesAt, gapRelation, insideStackOf, insideStacks, factsOf, basisOf, factOf, nextBasisOf, levelReactionsOf, confirmedText, MOVING_LEVEL,
+  tradedBeyond, breakReach, RELATION_RULE, relationRuleText, extendCandle, formingCandle,
 };

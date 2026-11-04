@@ -279,3 +279,54 @@ test('round numbers: the multiples of the family\'s step inside the candle\'s ra
   assert.ok(Object.keys(CF.briefingCandles({ bars: b, base: 3, roundStep: 1, timeframes: [15] })['15m'].levels).includes('round number 100'));
   assert.ok(!Object.keys(CF.briefingCandles({ bars: b, base: 3, roundStep: null, timeframes: [15] })['15m'].levels).some(n => /^round number/.test(n)));
 });
+
+// The relation rules' parts, one home next to relation (next-close.js's prepared triggers search and say them so).
+test('candle facts: breakReach is relation\'s break geometry: a close more than it beyond the level breaks, one at it does not (open behind, on the level)', () => {
+  const T = 0.25;
+  let checked = 0;
+  for (const L of [100, 100.25, 99.5]) {
+    for (const o of [90, 97.75, 99.5, 100, 100.25, 101, 104.5, 110]) {
+      for (const dir of ['up', 'down']) {
+        const up = dir === 'up';
+        // Where price came from: the open, or the previous close when it opened on the level.
+        if ((up && o > L) || (!up && o < L)) continue;
+        const prevClose = o === L ? (up ? L - 1 : L + 1) : NaN;
+        const reach = CF.breakReach(o, L);
+        assert.ok(reach >= 0, 'a distance');
+        const at = cl => CF.relation({ o, h: Math.max(o, cl, L), l: Math.min(o, cl, L), c: cl }, L, prevClose);
+        const past = up ? L + reach + T : L - reach - T;
+        assert.deepStrictEqual(at(past), { relation: 'broke', dir }, `${dir} from ${o} at ${L}: a tick past the reach`);
+        if (reach > 0) assert.notStrictEqual(at(up ? L + reach : L - reach).relation, 'broke', `${dir} from ${o} at ${L}: at the reach`);
+        checked += 1;
+      }
+    }
+  }
+  assert.ok(checked >= 20);
+});
+
+test('candle facts: tradedBeyond is relation\'s rejection wick (strictly beyond), and the relation words build RELATION_TEXT', () => {
+  const k = { o: 99, h: 100, l: 98, c: 99.5 };
+  assert.deepStrictEqual([CF.tradedBeyond(k, 100, 'above'), CF.tradedBeyond(k, 99.75, 'above'), CF.tradedBeyond(k, 98, 'below'), CF.tradedBeyond(k, 98.25, 'below')], [false, true, false, true]);
+  // At the high: no rejection (relation's wick is strictly beyond); a tick inside it: rejected.
+  assert.strictEqual(CF.relation(k, 100).relation, 'touched');
+  assert.deepStrictEqual(CF.relation(k, 99.75), { relation: 'rejected', dir: 'down' });
+  for (const dir of ['up', 'down']) assert.strictEqual(CF.RELATION_TEXT.rejected[dir], `rejected: closed ${CF.RELATION_RULE.rejected[dir]}`);
+  assert.strictEqual(CF.relationRuleText('broke', 'up', 'X 1'), `beyond X 1 ${CF.RELATION_RULE.broke}`);
+  assert.strictEqual(CF.relationRuleText('rejected', 'down', 'X 1'), `${CF.RELATION_RULE.rejected.down} X 1`);
+});
+
+test('candle facts: formingCandle and extendCandle are completedSeries\' roll-up: every completed candle is its sub-bars folded', () => {
+  const FX = require('../fixtures/momentum-continuation');
+  const BARS = FX.load().slice(0, 2000);
+  for (const m of [15, 60]) {
+    const s = CF.completedSeries(BARS, m, 3);
+    assert.ok(s.candles.length > 10);
+    for (const k of s.candles) {
+      const f = CF.formingCandle(BARS, k.first, k.last);
+      assert.strictEqual(JSON.stringify([f.o, f.h, f.l, f.c, f.v]), JSON.stringify([k.o, k.h, k.l, k.c, k.v]), `${m}m ${k.t}`);
+    }
+  }
+  // A missing volume makes the candle's unknown, as completedSeries sums it.
+  assert.ok(Number.isNaN(CF.extendCandle({ o: 1, h: 2, l: 0, c: 1, v: 5 }, { h: 3, l: 1, c: 2 }).v));
+  assert.deepStrictEqual(CF.extendCandle({ o: 1, h: 2, l: 0, c: 1, v: 5 }, { h: 3, l: 1, c: 2, v: 4 }), { o: 1, h: 3, l: 0, c: 2, v: 9 });
+});
