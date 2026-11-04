@@ -304,16 +304,6 @@ function floorFit({ capUsd, floor, stopTicks, tickValue, slipTicks, feePerSide, 
 const money = x => (Number.isInteger(x) ? `$${x}` : usd(x));
 
 /**
- * compose_check's "no size fits" (owner-approved 2026-10-24): in a running attempt, the floor of the policy's rulebook
- * (sizing.min_contracts, in the order's own contracts) at the record's stop, all in as translateSize counts it
- * (floorFit), over the composed strategy's risk.max_risk_usd, and not within the floor stretch (its cost over
- * sizing.floor_stretch_max_usd, or the attempt in `home` not healthy now: floorStretch): order_plan could only skip
- * the record. { problem, hint } (the hint names the widest stop that fits the cap, in ticks and points of the order's
- * own contract, and with a stretch the widest within it, only while the attempt is healthy; none at or over the
- * record's minimum stop: skip), or null (the floor fits, the stretch takes it, or it can't be priced). `stop`: the
- * plan's { ticks, floorTicks }.
- */
-/**
  * The account's sizing facts noSizeFits sizes with, in a running attempt: { capUsd (the per-trade cap in force,
  * riskCapOf: the healthy cap while the attempt is healthy, else the composed cap), floor (the rulebook's, in the order's
  * own contracts), tickValue, slipTicks, feePerSide, stretchUsd }, or null without a policy, account or spec. The prepare's
@@ -327,6 +317,16 @@ function sizingFacts({ policy, account, capUsd, root, spec, specOf, home = null 
   };
 }
 
+/**
+ * compose_check's "no size fits" (owner-approved 2026-10-24): in a running attempt, the floor of the policy's rulebook
+ * (sizing.min_contracts, in the order's own contracts) at the record's stop, all in as translateSize counts it
+ * (floorFit), over the composed strategy's risk.max_risk_usd, and not within the floor stretch (its cost over
+ * sizing.floor_stretch_max_usd, or the attempt in `home` not healthy now: floorStretch): order_plan could only skip
+ * the record. { problem, hint } (the hint names the widest stop that fits the cap, in ticks and points of the order's
+ * own contract, and with a stretch the widest within it, only while the attempt is healthy; none at or over the
+ * record's minimum stop: skip), or null (the floor fits, the stretch takes it, or it can't be priced). `stop`: the
+ * plan's { ticks, floorTicks }.
+ */
 function noSizeFits({ policy, account, capUsd, stop, spec, root, strategy, specOf, home = null }) {
   if (!stop) return null;
   const facts = sizingFacts({ policy, account, capUsd, root, spec, specOf, home });

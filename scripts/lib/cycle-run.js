@@ -263,8 +263,10 @@ async function runPrepare(cfg, kind, prompt, { timeoutMs, context = null, resume
   const runEnv = childEnv(cfg, deps.root, env, ctx);
   const argv = buildCommand(cfg, prompt, deps.root, runEnv, { prepare: kind, resume, effort: require('./tunables').runner().prepare.effort });
   const wallNow = deps.wallNow || Date.now;
-  // The shadow's gate log (childEnv routes it): its lines before the run, so the run's own refusals are counted.
+  // The shadow's gate log (childEnv routes it): reset for each run, so it never grows without bound and holds this run's
+  // refusals only (each run's count is in its record).
   const gateLines = () => { try { return require('fs').readFileSync(runEnv.FTH_GATE_LOG, 'utf8').split('\n').filter(Boolean).length; } catch (_err) { return 0; } };
+  try { require('fs').mkdirSync(path.dirname(runEnv.FTH_GATE_LOG), { recursive: true }); require('fs').writeFileSync(runEnv.FTH_GATE_LOG, ''); } catch (_err) { /* counted from what is there */ }
   const gate0 = gateLines();
   const t0 = wallNow();
   const res = await runOnce(cfg, argv, timeoutMs, ctx, { ...deps, env, ...(signal ? { signal } : {}) }, runEnv);

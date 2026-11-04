@@ -93,9 +93,12 @@ test('runPrepare: what the run tried and was refused: the stream\'s permission d
   assert.deepStrictEqual(r.denied, ['mcp__broker__place_order', 'Agent']);
   assert.strictEqual(r.gateRefusals, 1);
   assert.ok(!fs.existsSync(path.join(home, 'old-gate.jsonl')), 'the old path\'s gate log untouched');
-  // A second run counts only its own.
+  // A second run counts only its own, and the shadow's gate log holds only the last run's lines (reset per run: it never
+  // grows without bound; each run's count is in its record).
   const r2 = await runPrepare(cfg, 'prepare', 'P', { timeoutMs: 5000, context: { action: 'trade' } }, { root: ROOT, home, env: { FTH_HOME: home, HOME: home }, run });
   assert.strictEqual(r2.gateRefusals, 1);
+  const log = require('../../scripts/lib/prepare-ahead').shadowGateLog(home);
+  assert.strictEqual(fs.readFileSync(log, 'utf8').trim().split('\n').length, 1);
 });
 
 test('runPrepare: its skill-lookup and experience-lookup records (keyed by its own transcript) are removed when it ends', async () => {

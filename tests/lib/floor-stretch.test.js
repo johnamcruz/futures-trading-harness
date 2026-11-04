@@ -285,6 +285,14 @@ test('sizingFacts: the facts noSizeFits sizes with (the cap in force, the floor 
   const hp = policy({ healthy_risk_usd: 400 });
   assert.strictEqual(sizingFacts({ policy: hp, account: BIG, capUsd: 300, root: 'MNQ', spec: specOf('MNQ'), specOf, home: home() }).capUsd, 400);
   assert.strictEqual(sizingFacts({ policy: hp, account: BIG, capUsd: 300, root: 'MNQ', spec: specOf('MNQ'), specOf, home: home(100400, { eod: 100400, trades: [-25, 40] }) }).capUsd, 300);
+  // compose_check's refusal and its floor stretch read the cap in force: the healthy $400 while healthy, never the composed $300.
+  const healthy = noSizeFits({ policy: hp, account: BIG, capUsd: 300, stop: { ticks: 331, floorTicks: 1 }, spec: specOf('MNQ'), root: 'MNQ', strategy: 'trade_lifecycle', specOf, home: home() });
+  assert.match(healthy.problem, /over trade_lifecycle's risk\.max_risk_usd \$400/);
+  // A healthy cap above the stretch: the stretch never applies (it is no stretch above the cap in force): refused.
+  const big = policy({ healthy_risk_usd: 600 });
+  const atBig = t => noSizeFits({ policy: big, account: BIG, capUsd: 300, stop: { ticks: t, floorTicks: 1 }, spec: specOf('MNQ'), root: 'MNQ', strategy: 'trade_lifecycle', specOf, home: home() });
+  assert.strictEqual(atBig(300), null, 'the floor fits the healthy $600');
+  assert.match(atBig(400).problem, /over trade_lifecycle's risk\.max_risk_usd \$600$/);
 });
 
 test('the attempt simulator: a loss then a win today keeps the stretch off for the rest of the day; the next day takes it again', () => {
