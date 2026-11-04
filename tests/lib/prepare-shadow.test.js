@@ -74,7 +74,7 @@ async function after(home, c, o = {}) {
   const r = await shadow.after({
     symbol: 'MNQ', minutes: 3, bar: c.bar, bars: c.bars, windowBars: null, briefing: c.briefing, factsKey: o.factsKey || 'k1', reports: o.reports || [], scan: c.scan, listed: c.listed,
     result: o.result || 'CYCLE RESULT: no-trade - x', cycleLog: log, killSwitch: o.killSwitch || (() => false), accountAfter: async () => acct, phase1KeyOf: () => o.nextKey || 'k1',
-    eodMs: o.eodMs ?? null, inSession: () => true,
+    eodMs: o.eodMs ?? null, inSession: () => true, ...(o.reportsAfter ? { reportsAfter: o.reportsAfter } : {}),
   });
   return { ...r, cli, clock, log: JSON.parse(fs.readFileSync(log, 'utf8')) };
 }
@@ -140,6 +140,16 @@ test('shadow: prepare.maxMs bounds both runs together: on a frozen replay clock 
   await after(home, PREP);
   const r2 = await after(home, FIRED, { clock: { ms: closeMs(FIRED) + 2000 }, fake: { advanceMs: 0, reportMs: T.maxMs } });
   assert.deepStrictEqual([r2.made.outcome, r2.made.why], ['skipped', 'no-time']);
+});
+
+test('shadow: the plan keys the desk\'s reports as the cache serves them after the cycle (with their ends), so a report expected to hold that changes voids', async () => {
+  const home = tmp();
+  const held = [{ role: 'trend-momentum-analyst', text: 'Bias: down', until: '2021-05-17T14:30:00.000Z' }];
+  await after(home, PREP, { reports: [{ role: 'trend-momentum-analyst', text: 'Bias: down' }], reportsAfter: () => held });
+  const plan = PA.readPlan(home, 'MNQ', FIRE);
+  assert.strictEqual(plan.versions.desk['trend-momentum-analyst'].until, '2021-05-17T14:30:00.000Z');
+  const r = await after(home, FIRED, { reports: [{ role: 'trend-momentum-analyst', text: 'Bias: up', until: '2021-05-17T14:30:00.000Z' }] });
+  assert.deepStrictEqual([r.shadow.status, r.shadow.reason], ['void', 'desk']);
 });
 
 test('shadow: the agreement check can fail: a deliberately wrong shadow decision is logged as a disagreement', async () => {

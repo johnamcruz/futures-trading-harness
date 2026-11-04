@@ -2333,6 +2333,12 @@ function createRunner(deps) {
                   const j = journalEntries() || [];
                   return reportCache.phase1Key({ symbols: cacheSymbols, account: a, now: clock.now(), fills: a.dayFills, lessons: lessons({ entries: j }) || [], reviewed: recentTrades({ entries: j }) || [] });
                 },
+                // The desk's latest valid reports with their ends: the report cache as the next cycle would serve it.
+                reportsAfter: a => {
+                  if (!reportCache || !a || a.error) return null;
+                  const j = journalEntries() || [];
+                  return reportCache.serve({ symbols: cacheSymbols, account: a, now: clock.now(), fills: a.dayFills, lessons: lessons({ entries: j }) || [], reviewed: recentTrades({ entries: j }) || [] }).reports;
+                },
               });
             } catch (_err) {
               // the shadow's record only

@@ -40,15 +40,17 @@ const shadowScript = (o = {}) => (prompt, _env, { resumed }) => [
 ];
 
 /** A replay day of the three bars: each pass's head trader passes; `shadow` turns prepareAhead on with the fake CLI. */
-async function day({ shadow = false, script = shadowScript(), kill = null } = {}) {
+async function day({ shadow = false, script = shadowScript(), kill = null, preHooks = false, fill = null } = {}) {
   const w = D.world({ harness: 'claude' });
   if (shadow) w.cfg = { ...w.cfg, prepareAhead: 'shadow' };
-  const fake = fakeClaude({ dir: path.join(w.home, 'claude-sessions'), script });
+  const fake = fakeClaude({ dir: path.join(w.home, 'claude-sessions'), script, preHooks });
   const passes = [];
   for (const bar of BARS) {
     if (kill === bar) fs.writeFileSync(w.env.FTH_KILL_SWITCH_FILE, 'test\n');
+    // A fill before this bar's cycle (an entry of the old path's, at the exchange): the account is no longer flat.
+    if (fill === bar) require('../fixtures/mock-exchange').handle(w.state, 'place_order', { accountId: 7, contractId: D.MNQ_ID, side: 'buy', type: 'market', size: 1, stopLossBracket: { ticks: 40 } }, {});
     const at = decisionAt(bar);
-    const r = await D.pass(w, at, D.passCycle(w, 'nothing to take'), shadow ? { runPrepare: env => (c, kind, prompt, limits) => runPrepare(c, kind, prompt, limits, { root: D.ROOT, home: w.home, env, run: fake }) } : {});
+    const r = await D.pass(w, at, fill && Date.parse(bar) >= Date.parse(fill) ? [{ result: 'CYCLE RESULT: managed - the open long' }] : D.passCycle(w, 'nothing to take'), shadow ? { runPrepare: env => (c, kind, prompt, limits) => runPrepare(c, kind, prompt, limits, { root: D.ROOT, home: w.home, env, run: fake }) } : {});
     passes.push(r);
   }
   return { w, fake, passes };
@@ -125,6 +127,44 @@ test('shadow e2e (the property): the old path is the same with prepareAhead off 
   assert.deepStrictEqual(D.placedAtBroker(on.w), []);
   assert.ok(D.gateLog(on.w).every(e => !/place_order|compose/.test(String(e.tool || ''))), 'no order or compose went to the gate');
   assert.ok(on.fake.calls.length >= 1);
+});
+
+test('shadow e2e (the property, a fill): a position opens before the plan\'s close (04:12): the cycle manages it, the plan is void (the facts key), no prepare after; off and shadow give the same old path', async () => {
+  const off = await day({ fill: NEXT_BAR });
+  const on = await day({ shadow: true, fill: NEXT_BAR });
+  assert.ok(D.position(on.w), 'the position is open');
+  assert.deepStrictEqual(oldPath(on.w), oldPath(off.w));
+  const last = cycleRecords(on.w).at(-1);
+  assert.match(last.result, /^CYCLE RESULT: managed/);
+  assert.deepStrictEqual([last.prepare.shadow.status, last.prepare.shadow.reason], ['void', 'facts']);
+  assert.deepStrictEqual([last.prepare.made.outcome, last.prepare.made.why], ['skipped', 'not-flat']);
+  assert.ok(!on.fake.calls.some(c => c.source === 'fork'), 'no confirm');
+});
+
+test('shadow e2e: paper mode: no shadow run and no prepare field', async () => {
+  for (const extra of [{ paper: true }]) {
+    const w = D.world({ harness: 'claude' });
+    w.cfg = { ...w.cfg, prepareAhead: 'shadow', ...extra };
+    const fake = fakeClaude({ dir: path.join(w.home, 'claude-sessions'), script: shadowScript() });
+    const opts = { runPrepare: env => (c, kind, prompt, limits) => runPrepare(c, kind, prompt, limits, { root: D.ROOT, home: w.home, env, run: fake }) };
+    for (const bar of BARS) await D.pass(w, decisionAt(bar), D.passCycle(w, 'x'), opts);
+    const recs = cycleRecords(w).filter(r => extra.paper || r.context.manageOnly === true);
+    assert.ok(recs.length >= 1, `${JSON.stringify(extra)}: such a cycle ran`);
+    for (const r of recs) assert.ok(!('prepare' in r), `${JSON.stringify(extra)}: ${JSON.stringify(r.prepare)}`);
+    if (extra.paper) assert.deepStrictEqual(fake.calls, []);
+  }
+});
+
+test('shadow e2e, a gap for the coordinator: if the CLI ran PreToolUse hooks before dontAsk refuses a call (not measured), a shadow run\'s order attempt would be logged blocked by the order gate\'s hook; nothing else of the old path moves and nothing reaches the broker', async () => {
+  const off = await day({ shadow: false });
+  const on = await day({ shadow: true, preHooks: true });
+  const a = oldPath(on.w);
+  const b = oldPath(off.w);
+  const extra = a.gate.filter(e => !b.gate.some(x => JSON.stringify(x) === JSON.stringify(e)));
+  assert.ok(extra.length >= 1, 'the hook\'s refusal is logged');
+  assert.ok(extra.every(e => e.source === 'hook' && e.decision === 'blocked' && e.tool === 'place_order'), JSON.stringify(extra));
+  assert.deepStrictEqual({ ...a, gate: a.gate.filter(e => !extra.includes(e)) }, b);
+  assert.deepStrictEqual(D.placedAtBroker(on.w), []);
 });
 
 test('shadow e2e: the agreement check can fail and can hold: a PASS beside the cycle\'s pass agrees', async () => {

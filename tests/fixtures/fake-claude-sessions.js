@@ -16,7 +16,8 @@
  *
  * The run plays `script(prompt, env, { resumed })` with the scripted model (tests/fixtures/scripted-model.js, Claude's
  * stream-json), so every allowed tool goes to the real harness tools server and the real order gateway.
- *   fakeClaude({ dir, script }) -> run, with run.calls [{ argv, env, session, source, refused }]
+ *   fakeClaude({ dir, script, preHooks }) -> run, with run.calls [{ argv, env, session, source, refused, hooked }]
+ *   (preHooks: the plugin's PreToolUse hooks run on a call before the allowed list refuses it; off by default)
  */
 
 const fs = require('fs');
@@ -39,7 +40,7 @@ function toolOf(step) {
 }
 const allowedBy = (list, name) => list.includes(name) || list.some(a => /^mcp__[a-z]+$/.test(a) && name.startsWith(`${a}__`));
 
-function fakeClaude({ dir, script }) {
+function fakeClaude({ dir, script, preHooks: runHooks = false }) {
   fs.mkdirSync(dir, { recursive: true });
   const calls = [];
   const file = id => path.join(dir, `${id}.jsonl`);
@@ -63,10 +64,22 @@ function fakeClaude({ dir, script }) {
     require(path.join(ROOT, 'scripts', 'hooks', 'trading-session-start.js')).run(JSON.stringify({ source, session_id: id, transcript_path: file(id), hook_event_name: 'SessionStart' }), { pluginRoot: ROOT }, { env: opts.env });
     // The script, each tool call held to the allowed list (dontAsk refuses the rest, never reaching the tool).
     const steps = script(String(argv[argv.indexOf('-p') + 1] || ''), opts.env, { resumed: Boolean(resume), history });
+    // `preHooks` (pessimistic about the CLI's order, not measured): the plugin's PreToolUse hooks (hooks/hooks.json: the order gate
+    // on place_order and modify_order, the tool-call rules on every call) run on a call before the permission check
+    // refuses it, with the run's environment; what they write is the run's (call.hooked).
+    call.hooked = [];
+    const preHooks = (name, input) => {
+      const payload = JSON.stringify({ hook_event_name: 'PreToolUse', tool_name: name, tool_input: input, session_id: id, transcript_path: file(id) });
+      const hooks = [...(/^mcp__.*__(place_order|modify_order)$/.test(name) ? [['pre:trading:order-gate', 'scripts/hooks/trading-order-gate.js', 'minimal,standard,strict']] : []), ['pre:toolcall:rules', 'scripts/hooks/toolcall.js', 'standard,strict']];
+      for (const [hook, script, profiles] of hooks) {
+        const r = require('child_process').spawnSync(process.execPath, [path.join(ROOT, 'scripts', 'hooks', 'run-with-flags.js'), hook, script, profiles], { input: payload, encoding: 'utf8', env: { ...opts.env, CLAUDE_PLUGIN_ROOT: ROOT } });
+        call.hooked.push({ hook, name, code: r.status });
+      }
+    };
     const held = steps.map(s => {
       const name = toolOf(s);
       if (!name || !dontAsk || allowedBy(allowed, name)) return s;
-      return { act: () => { call.refused.push(name); } };
+      return { act: () => { if (runHooks) preHooks(name, typeof s.args === 'function' ? {} : (s.args || {})); call.refused.push(name); } };
     });
     const model = scriptedModel(held, { format: 'claude' });
     const res = await model(argv, opts);

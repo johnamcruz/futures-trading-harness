@@ -20,7 +20,7 @@
  *   createShadow({ cfg, root, home, runPrepare, now, sectionOpts, newsAt, chainSideOf })
  *     .after(input) -> { shadow, made }
  *   input: { symbol, minutes, bar, bars, windowBars, briefing, factsKey, reports, scan, listed, result, cycleLog,
- *            killSwitch(), accountAfter(), phase1KeyOf(acct), eodMs, inSession(date) }
+ *            killSwitch(), accountAfter(), phase1KeyOf(acct), reportsAfter(acct), eodMs, inSession(date) }
  */
 
 const crypto = require('crypto');
@@ -112,10 +112,14 @@ function createShadow({ cfg, root, home, runPrepare, now, sectionOpts = () => ({
     const next = section ? section.next : null;
     const should = PA.shouldPrepare({ killSwitch: x.killSwitch(), flat, section, inSession: next ? x.inSession(new Date(next.closedAt)) : false, budgetMs: deadlineAt().budgetMs });
     if (!should.ok) return { outcome: 'skipped', why: should.why, ...(section && section.none ? { none: section.none } : {}), ...at };
-    const versions = PA.versionsOf({ briefing: x.briefing, chainSide: chainSideOf(x.bars, x.minutes), factsKey: x.phase1KeyOf(acct), desk: PA.deskKeys(x.reports), day: tradingDayKey(new Date(next.closedAt)), news: newsAt(new Date(next.closedAt)) });
+    // The desk's latest valid reports, with their ends (the report cache served after the cycle: a report the desk ran
+    // this cycle has its end there), else the cycle's own.
+    let reports = x.reports;
+    try { const r = typeof x.reportsAfter === 'function' ? x.reportsAfter(acct) : null; if (Array.isArray(r)) reports = r; } catch (_err) { /* the cycle's own */ }
+    const versions = PA.versionsOf({ briefing: x.briefing, chainSide: chainSideOf(x.bars, x.minutes), factsKey: x.phase1KeyOf(acct), desk: PA.deskKeys(reports), day: tradingDayKey(new Date(next.closedAt)), news: newsAt(new Date(next.closedAt)) });
     const A = require('./autotrader');
     const briefingText = require('./trading/next-close').renderPrepareBriefing(x.briefing, section, { now: now() });
-    const prompt = PA.preparePrompt({ head: A.stableHead(root), account: A.accountText(acct), reports: x.reports, briefingText, next });
+    const prompt = PA.preparePrompt({ head: A.stableHead(root), account: A.accountText(acct), reports, briefingText, next });
     const left = deadlineAt();
     const madeAt = new Date(nowMs()).toISOString();
     let run;
