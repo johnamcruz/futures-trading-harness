@@ -25,6 +25,9 @@
  *   makePlan(parts), parsePlan(text)                      the plan record and its SCENARIO / STAND DOWN / INVALID lines
  *   firedReads({ scan, listed }), matchScenario(plan, fired), readKind(read)   the at-close match
  *   preparePrompt(parts), confirmPrompt(parts)            the two runs' prompts
+ *   confirmPath({ plan, at, fired, killSwitch, flat })    "on" at the close: the confirm, or the full head trader and why
+ *   confirmSuffix({ scenario, unplanned })                "on": the confirm's message after the at-close facts
+ *   forbiddenIn(output, allowed)                          a run's forbidden-tool attempts, from its transcript
  *   parseDecision(text), fullDecisionOf({ result, entry }), agreement(shadow, full)   the comparison
  */
 
@@ -254,11 +257,54 @@ function parsePlan(text) {
   return { scenarios, standDown, invalid };
 }
 
-/** The plan record: the session, the input versions, the section's candidates, the text and its parse, an id. */
-function makePlan({ symbol, bar, next, madeAt, ms, session, versions, candidates, text, usage = null }) {
+/**
+ * The plan record: the session, the input versions, the section's candidates, the text and its parse, an id; `base`: the
+ * prepare session's message uuids, sealed (trading/confirm-base.js baseOf: the runner's, read from its session file),
+ * which "on" names to the confirm (FTH_CONFIRM_BASE) so the gate reads the fork without them.
+ */
+function makePlan({ symbol, bar, next, madeAt, ms, session, versions, candidates, text, usage = null, base = null }) {
   const parsed = parsePlan(text);
   const id = sha(`${symbol}|${next.t}|${(session || {}).id || ''}|${madeAt}`);
-  return { v: 1, id, symbol, bar, next, madeAt, ms, session: { id: (session || {}).id || null, transcript: (session || {}).transcript || null }, versions, candidates: (candidates || []).map(c => ({ id: c.id, kind: c.kind, read: c.read, side: c.side, tf: c.tf })), text, ...parsed, usage };
+  return { v: 1, id, symbol, bar, next, madeAt, ms, session: { id: (session || {}).id || null, transcript: (session || {}).transcript || null }, versions, candidates: (candidates || []).map(c => ({ id: c.id, kind: c.kind, read: c.read, side: c.side, tf: c.tf })), text, ...parsed, usage, ...(base ? { base } : {}) };
+}
+
+/** A plan's base whole: its uuids, sealed by the runner (trading/confirm-base.js baseRecord). */
+const baseWhole = plan => {
+  const b = isObj(plan) && isObj(plan.base) ? plan.base : null;
+  if (!b || !Array.isArray(b.uuids) || !b.uuids.length || !b.uuids.every(u => typeof u === 'string' && u)) return false;
+  return require('./trading/confirm-base').baseRecord(b.transcript, b.uuids).sha === b.sha;
+};
+
+/**
+ * "on", at the close (docs/PREPARE-AHEAD.md, "On: the confirm decides"): the confirm, or the full head trader's run and
+ * why. In order: the kill switch; an open position or working order (`flat` not true: management); no plan, a stale one,
+ * a void one (validate: every input version, the session's file); a plan without its whole base (the confirm could not
+ * be told from the prepare); what fired outside the plan, or nothing. What fired is always the real at-close scan's
+ * (`fired`: firedReads); the plan's thresholds never decide. { path: 'confirm', match, scenario, fired, unplanned } or
+ * { path: kill-switch | not-flat | no-plan | stale | void | no-base | outside | nothing-fired, reason?, detail?, fired }.
+ */
+function confirmPath({ plan, at, fired = [], killSwitch = true, flat = null }) {
+  if (killSwitch !== false) return { path: 'kill-switch', fired };
+  if (flat !== true) return { path: 'not-flat', fired };
+  if (!isObj(plan)) return { path: 'no-plan', fired };
+  const v = validate(plan, at);
+  if (v.status !== 'valid') return { path: v.status === 'void' ? 'void' : v.status === 'stale' ? 'stale' : 'no-plan', ...(v.status === 'void' ? { reason: v.reason } : {}), ...(v.detail ? { detail: v.detail } : {}), fired };
+  if (!baseWhole(plan)) return { path: 'no-base', fired };
+  const m = matchScenario(plan, fired);
+  if (m.status !== 'matched') return { path: m.status, fired };
+  const scenario = (plan.scenarios || []).find(s => s.k === m.k);
+  return { path: 'confirm', match: { k: m.k, id: m.id, read: m.read, side: m.side }, scenario, fired, unplanned: m.unplanned };
+}
+
+/**
+ * The confirm's user message after the at-close facts (the cycle's own prompt and its reads, which come first): the
+ * plan's scenario, the rule (rule first, bold in the skills: PR C), what fired outside the plan. It composes through
+ * compose_check as the cycle's prompt says, or passes.
+ */
+function confirmSuffix({ scenario, unplanned = [] }) {
+  const more = (unplanned || []).length ? `\nAlso fired at this close, outside your plan: ${unplanned.map(f => `"${f}"`).join(', ')}: judge it from the facts above, in full.` : '';
+  return `\n\nPrepare ahead: you planned this close during the bar (above in this session, from closed bars only). Your plan said: scenario ${scenario.k}:\n${scenario.line}\n`
+    + `The candle decides: confirm a scenario only if the closed candle meets its TAKE conditions; else pass. The at-close facts above decide, never the plan: confirming is compose_check with the reads as these facts give them, then as this cycle's prompt says; passing is its CYCLE RESULT with why.${more}`;
 }
 
 /** What fired at the close: the rules strategies the real scan fired, then the at-close briefing's setups to check. */
@@ -372,5 +418,5 @@ function agreement(shadow, full) {
 
 module.exports = {
   MODES, PLAN_DIR, PREPARE_DENIED, PREPARE_SCRIPTS, modeProblem, shadowOn, onOn, deadlineOf, overran, shouldPrepare, windowOf, sectionFor, deskKeys, versionsOf, validate,
-  recordSession, readSession, shadowGateLog, planFile, writePlan, readPlan, makePlan, parsePlan, firedReads, matchScenario, readKind, preparePrompt, confirmPrompt, forbiddenIn, parseDecision, fullDecisionOf, agreement,
+  recordSession, readSession, shadowGateLog, planFile, writePlan, readPlan, makePlan, parsePlan, confirmPath, confirmSuffix, firedReads, matchScenario, readKind, preparePrompt, confirmPrompt, forbiddenIn, parseDecision, fullDecisionOf, agreement,
 };

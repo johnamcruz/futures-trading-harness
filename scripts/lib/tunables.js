@@ -198,7 +198,9 @@ const RUNNER = {
   // or a shadow confirm must be done; maxMs, the most the two runs after a cycle may take together (inside the 2 minutes a
   // replay step leaves past its cycle's limit); effort, the CLI's --effort for them, or null for
   // the CLI's default (the owner's call: never on in a test arm without a yes).
-  prepare: { marginMs: int(1), maxMs: int(1), effort: shapes.custom(v => (v === null || ['low', 'medium', 'high', 'xhigh', 'max'].includes(v) ? null : 'null or one of low, medium, high, xhigh, max'), 'null or one of low, medium, high, xhigh, max') },
+  // confirmMs ("on"): the most the confirm (the head trader's run at the close, a fork of the prepare) may take; past it
+  // the full head trader runs with what is left (cycle-run.js runCycle confirm), above the head trader's floor.
+  prepare: { marginMs: int(1), maxMs: int(1), confirmMs: int(1), effort: shapes.custom(v => (v === null || ['low', 'medium', 'high', 'xhigh', 'max'].includes(v) ? null : 'null or one of low, medium, high, xhigh, max'), 'null or one of low, medium, high, xhigh, max') },
   reviews: { scratchR: nonneg() },
 };
 
@@ -333,7 +335,7 @@ const BUILT_IN = deepFreeze({
     monteCarlo: { paths: 2000, reps: 2000, max: 20000 },
     desk: { concurrency: 4, harnessConcurrency: { opencode: 2 }, timeoutMinutes: 8, managedBudgetShare: 0.5 },
     entry: { timeoutMinutes: 6, phase2RestateRetries: 1, overlapPhase2: true, overlapPollMs: 250 },
-    prepare: { marginMs: 20000, maxMs: 100000, effort: null },
+    prepare: { marginMs: 20000, maxMs: 100000, confirmMs: 90000, effort: null },
     reviews: { scratchR: 0.2 },
   },
   analysis: {

@@ -387,6 +387,63 @@ test('prepare-ahead: the forbidden-tool attempts of a run, from its own transcri
   assert.deepStrictEqual(PA.forbiddenIn(null, allowed), []);
 });
 
+// --- "on": at the close, the confirm or the full head trader (confirmPath), one test per fallback row --------------------
+
+const CB = require('../../scripts/lib/trading/confirm-base');
+const withBase = (o = {}) => ({ ...makePlan(o), base: CB.baseRecord('/t/ses-prep.jsonl', ['u1', 'u2']) });
+const onPath = (o = {}) => PA.confirmPath({ plan: 'plan' in o ? o.plan : withBase(), at: o.at || closeVersions(), fired: o.fired || ['momentum_continuation fired up'], killSwitch: o.killSwitch || false, flat: 'flat' in o ? o.flat : true });
+
+test('prepare-ahead "on": valid and matched: the confirm, with its scenario', () => {
+  const p = onPath();
+  assert.strictEqual(p.path, 'confirm');
+  assert.deepStrictEqual({ k: p.match.k, id: p.match.id, read: p.match.read, side: p.match.side }, { k: 1, id: 'P1', read: 'momentum_continuation fired up', side: 'long' });
+  assert.strictEqual(p.scenario.k, 1);
+  assert.match(p.scenario.line, /^SCENARIO 1: P1 momentum_continuation/);
+});
+
+test('prepare-ahead "on": every other row falls back to the full head trader, saying why: the kill switch, an open position, no plan, stale, a void plan (each reason), no base, outside the plan, nothing fired', () => {
+  const rows = [
+    ['kill-switch', { killSwitch: true }],
+    ['not-flat', { flat: false }],
+    ['not-flat', { flat: null }],
+    ['no-plan', { plan: null }],
+    ['stale', { at: PA.versionsOf({ briefing: briefingAt({ asOf: '2021-05-24T13:45:00.000Z', closedAt: '2021-05-24T13:48:00.000Z' }), chainSide: 1, factsKey: 'k1', desk: PA.deskKeys(DESK), day: '2021-05-24', news: { inBlackout: false } }) }],
+    ['void', { at: closeVersions({ factsKey: 'k2' }) }, 'facts'],
+    ['void', { at: closeVersions({ chainSide: -1 }) }, 'chain-side'],
+    ['void', { at: closeVersions({ news: { inBlackout: true } }) }, 'news'],
+    ['void', { plan: { ...withBase(), session: { id: 'ses-prep', transcript: '/gone/ses-prep.jsonl' } } }, 'session-missing'],
+    ['no-base', { plan: makePlan() }],
+    ['no-base', { plan: { ...withBase(), base: { ...withBase().base, uuids: ['u1'] } } }],
+    ['outside', { fired: ['15m rejected VWAP up'] }],
+    ['nothing-fired', { fired: [] }],
+  ];
+  for (const [path, o, reason] of rows) {
+    const p = onPath(o);
+    assert.strictEqual(p.path, path, JSON.stringify(o));
+    if (reason) assert.strictEqual(p.reason, reason);
+    assert.ok(!('scenario' in p), `${path}: no scenario to confirm`);
+  }
+  // The order: the kill switch before anything; an open position before the plan is read.
+  assert.strictEqual(onPath({ killSwitch: true, flat: false, plan: null }).path, 'kill-switch');
+  assert.strictEqual(onPath({ flat: false, plan: null }).path, 'not-flat');
+  // What fired outside the plan is said with its kind (the report's outside-plan by level kind).
+  assert.deepStrictEqual(onPath({ fired: ['15m rejected VWAP up'] }).fired, ['15m rejected VWAP up']);
+});
+
+test('prepare-ahead "on": the confirm\'s user message after the at-close facts: "your plan said: scenario k", the candle-decides rule, and what fired outside the plan; no shadow DECISION line', () => {
+  const plan = withBase();
+  const text = PA.confirmSuffix({ scenario: plan.scenarios[0], unplanned: ['15m rejected VWAP up'] });
+  assert.ok(text.startsWith('\n'));
+  const said = text.indexOf('Your plan said: scenario 1:');
+  const rule = text.indexOf('The candle decides: confirm a scenario only if the closed candle meets its TAKE conditions; else pass.');
+  assert.ok(said >= 0 && rule > said, 'the plan, then the rule');
+  assert.ok(text.includes(plan.scenarios[0].line));
+  assert.match(text, /compose_check/);
+  assert.match(text, /"15m rejected VWAP up"/);
+  assert.doesNotMatch(text, /DECISION:/);
+  assert.doesNotMatch(PA.confirmSuffix({ scenario: plan.scenarios[0], unplanned: [] }), /outside your plan/);
+});
+
 // --- The shadow confirm's decision, the full cycle's, and the agreement -------------------------------------------------
 
 test('prepare-ahead: parseDecision reads the last line-start DECISION line: TAKE k or PASS; anything else is none', () => {
@@ -482,11 +539,13 @@ test('prepare-ahead: deskKeys keys each report by its role and text, with its en
   assert.deepStrictEqual(PA.deskKeys(null), {});
 });
 
-test('prepare-ahead: its tunables are config (config/runner.json prepare): the deadline margin, the most a run takes, and the effort (none: the CLI default)', () => {
+test('prepare-ahead: its tunables are config (config/runner.json prepare): the deadline margin, the most a run takes, the confirm\'s bound ("on") and the effort (none: the CLI default)', () => {
   const T = require('../../scripts/lib/tunables');
   const P = T.runner().prepare;
-  assert.deepStrictEqual(Object.keys(P).sort(), ['effort', 'marginMs', 'maxMs']);
+  assert.deepStrictEqual(Object.keys(P).sort(), ['confirmMs', 'effort', 'marginMs', 'maxMs']);
   assert.ok(Number.isInteger(P.marginMs) && P.marginMs > 0 && Number.isInteger(P.maxMs) && P.maxMs > 0);
+  // The confirm's own bound: past it (hung), the full head trader runs with what is left (cycle-run.js).
+  assert.ok(Number.isInteger(P.confirmMs) && P.confirmMs > 0);
   assert.strictEqual(P.effort, null, 'the CLI\'s default effort: --effort low is never on until the owner says so');
   assert.deepStrictEqual(T.BUILT_IN.runner.prepare, P);
   // The effort: none, or one of the CLI's levels; anything else is refused when the file loads.
