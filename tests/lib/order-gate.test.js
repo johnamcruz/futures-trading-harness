@@ -2053,6 +2053,12 @@ test('confirm attribution: a base named but missing, unreadable, forged, outside
   const other = path.join(w.home, 'sessions', 'ses-other.jsonl');
   fs.writeFileSync(other, [...ccSkills('o'), ...ccRoles('o')].map((ev, i) => ccLine(`o-${i}`, ev)).join('\n'));
   refused('a hook transcript that is not the fork', { hook: other });
+  // A subagent of the confirm (its hook transcript under the fork's folder): the fork, its main session, must be read to
+  // be cut; gone, refused (never only the subagent's own lines).
+  const sub = path.join(path.dirname(w.fork), 'ses-gone', 'subagents', 'agent-1.jsonl');
+  fs.mkdirSync(path.dirname(sub), { recursive: true });
+  fs.writeFileSync(sub, ccRoles('s').map((ev, i) => ccLine(`s-${i}`, ev)).join('\n'));
+  refused('a subagent whose main session (the fork) is gone', { hook: sub });
   // Control: the base and its fork as the runner made them: no refusal.
   assert.deepStrictEqual(confirmRun(w).violations, []);
   // The gateway's view (no hook transcript): the confirm's own stream, no prepare line in it; a whole base is accepted.
