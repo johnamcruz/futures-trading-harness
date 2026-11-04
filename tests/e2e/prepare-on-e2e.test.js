@@ -128,6 +128,34 @@ test('"on" e2e: the prepare after the 04:09 cycle; at the 04:12 close the confir
   assert.deepStrictEqual(decided(w), decided(off.w));
 });
 
+test('"on" e2e (PR C3): two planned scenarios fire at one close (a momentum fire and the standing 15m reaction): the confirm names both lines in plan order, the standing line for the standing one only; the record keeps the first; the same results, gate decisions and orders as off', async () => {
+  const off = await day();
+  // The 04:09 bar's plan (made after the 04:06 cycle: the standing reaction) given a momentum scenario first, for a
+  // rules setup that fires at that close.
+  const MOM = { id: 'P9', kind: 'momentum', read: 'fx_break fired up', side: 'long', tf: '3m' };
+  const add = w => {
+    const f = PA.planFile(w.home, 'MNQ', FIRED_BAR);
+    const p = JSON.parse(fs.readFileSync(f, 'utf8'));
+    const [s] = p.scenarios;
+    const mom = { k: 1, id: 'P9', candidate: 'P9 "fx_break fired up"', take: 'x', pass: 'y', reads: ['fx_break fired up'], why: 'w', line: 'SCENARIO 1: P9 "fx_break fired up" → TAKE if the 3m closes up | PASS if not; reads: "fx_break fired up"; why: w' };
+    fs.writeFileSync(f, JSON.stringify({ ...p, candidates: [MOM, ...p.candidates], scenarios: [mom, { ...s, k: 2, line: s.line.replace(/SCENARIO 1:/, 'SCENARIO 2:') }] }));
+  };
+  const { w, fake } = await day({ on: true, beforePass: { [FIRED_BAR]: add } });
+  const rec = cycleRecords(w)[1];
+  assert.strictEqual(rec.prepare.on.path, 'confirm', JSON.stringify(rec.prepare.on));
+  assert.ok(rec.prepare.on.fired.includes('fx_break fired up') && rec.prepare.on.fired.includes('15m rejected prior vah up'), JSON.stringify(rec.prepare.on.fired));
+  assert.deepStrictEqual(rec.prepare.on.match, { k: 1, id: 'P9', read: 'fx_break fired up', side: 'long' }, 'the record: the first in plan order, as before');
+  const plan = PA.readPlan(w.home, 'MNQ', FIRED_BAR);
+  const prompt = promptOf(headCalls(fake)[1]);
+  const [one, two] = plan.scenarios.map(s => prompt.indexOf(`${s.line}\n`));
+  assert.ok(prompt.includes(`Your plan said: scenario 1:\n${plan.scenarios[0].line}\nscenario 2:\n${plan.scenarios[1].line}\n`), prompt.slice(prompt.indexOf('Prepare ahead')));
+  assert.ok(one > 0 && two > one, 'plan order');
+  assert.ok(prompt.includes(PA.standingLine(2)) && !prompt.includes('Scenario 1 is a standing setup'));
+  // fx_cross fired too, with no scenario: still outside the plan.
+  assert.match(prompt, /outside your plan: "fx_cross fired up"/);
+  assert.deepStrictEqual(decided(w), decided(off.w));
+});
+
 test('"on" e2e, every fallback row: the full head trader\'s run at the close, exactly as with the key off (its prompt and argv), and the same results, gate decisions and orders', async () => {
   const off = await day();
   // Each world's own home named alike (the prompt names it).

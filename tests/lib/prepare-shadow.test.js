@@ -119,6 +119,16 @@ test('shadow: at the close the plan was made for, valid and matched: the confirm
   assert.strictEqual(conf.limits.resume, plan.session.id);
   assert.ok(conf.prompt.indexOf('Bar briefing MNQ 3m') < conf.prompt.indexOf('Your plan said: scenario 1'), 'the at-close facts first');
   assert.match(conf.prompt, /What fired at the close: "momentum_continuation fired down"/);
+  // PR C3: the momentum fire and the three standing 15m reactions all fired: the prompt is what "on" sends (each
+  // scenario's line in plan order, the standing line for each standing one), with a DECISION line listing each.
+  const m = PA.matchScenario(plan, r.shadow.fired);
+  assert.deepStrictEqual(m.matches.map(x => [x.k, x.kind]), [[1, 'momentum'], [2, 'standing'], [3, 'standing'], [4, 'standing']]);
+  for (const s of plan.scenarios) assert.ok(conf.prompt.includes(s.line), s.line);
+  for (const k of [2, 3, 4]) assert.ok(conf.prompt.includes(`Scenario ${k} is a standing setup: the setup is the reaction the briefing lists`), `${k}`);
+  assert.ok(!conf.prompt.includes('Scenario 1 is a standing setup'));
+  assert.ok(conf.prompt.endsWith('DECISION: TAKE 1 | DECISION: TAKE 2 | DECISION: TAKE 3 | DECISION: TAKE 4 | DECISION: PASS - <why>.'), conf.prompt.slice(-200));
+  const tail = s => s.slice(s.indexOf('Your plan said'));
+  assert.strictEqual(tail(conf.prompt), tail(PA.confirmPrompt({ atCloseText: '', fired: [], matched: PA.matchedScenarios(plan, m), next: { t: 'x', closedAt: 'x' } })));
   assert.deepStrictEqual({ status: r.shadow.status, planId: r.shadow.planId, k: r.shadow.match.k, read: r.shadow.match.read }, { status: 'valid', planId: plan.id, k: 1, read: 'momentum_continuation fired down' });
   assert.deepStrictEqual(r.shadow.confirm.decision, { decision: 'take', k: 1, side: 'short' });
   assert.deepStrictEqual(r.shadow.full, { decision: 'take', side: 'short', why: null });
@@ -130,6 +140,22 @@ test('shadow: at the close the plan was made for, valid and matched: the confirm
   assert.ok(r.shadow.unplanned.includes('15m broke vwap rth down'));
   assert.strictEqual(r.shadow.unplannedKinds.vwap, 1);
   assert.deepStrictEqual(r.log.prepare.shadow, JSON.parse(JSON.stringify(r.shadow)));
+  // The record keeps the primary only (as before C3).
+  assert.ok(!('matches' in r.shadow) && !('matched' in r.shadow) && !('kind' in r.shadow.match));
+});
+
+test('shadow C3: a take of the second matched scenario reads its own side; the shadow confirm\'s standing line follows the matched candidate\'s kind, not the first candidate\'s', async () => {
+  const home = tmp();
+  await after(home, PREP);
+  const f = PA.planFile(home, 'MNQ', FIRE);
+  const plan = PA.readPlan(home, 'MNQ', FIRE);
+  // Only the momentum candidate made standing (the first candidate), the rest reactions: a line for scenario 1 only.
+  fs.writeFileSync(f, JSON.stringify({ ...plan, candidates: plan.candidates.map(c => ({ ...c, kind: c.id === 'P1' ? 'standing' : 'reaction' })) }));
+  const r = await after(home, FIRED, { fake: { decision: 'DECISION: TAKE 3' } });
+  const conf = r.cli.runs.find(x => x.kind === 'confirm');
+  assert.ok(conf.prompt.includes('Scenario 1 is a standing setup'));
+  for (const k of [2, 3, 4]) assert.ok(!conf.prompt.includes(`Scenario ${k} is a standing setup`), `${k}`);
+  assert.deepStrictEqual(r.shadow.confirm.decision, { decision: 'take', k: 3, side: 'short' });
 });
 
 test('shadow: prepare.maxMs bounds both runs together: on a frozen replay clock the confirm\'s own time comes off the prepare\'s budget (a replay step never outlasts its cycle\'s leftover)', async () => {

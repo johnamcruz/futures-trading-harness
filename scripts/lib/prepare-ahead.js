@@ -23,10 +23,12 @@
  *   validate(plan, atClose)                               { status: valid | none | stale | void, reason, detail }
  *   planFile, writePlan, readPlan                         <home>/prepare/<symbol>-<bar>.json, atomic, keyed by the bar
  *   makePlan(parts), parsePlan(text)                      the plan record and its SCENARIO / STAND DOWN / INVALID lines
- *   firedReads({ scan, listed }), matchScenario(plan, fired), readKind(read)   the at-close match
+ *   firedReads({ scan, listed }), matchScenario(plan, fired), readKind(read)   the at-close match (every scenario that fired)
+ *   matchedScenarios(plan, match)                         the matched scenarios themselves, in plan order, with their kinds
  *   preparePrompt(parts), confirmPrompt(parts)            the two runs' prompts
  *   confirmPath({ plan, at, fired, killSwitch, flat })    "on" at the close: the confirm, or the full head trader and why
- *   confirmSuffix({ scenario, unplanned, kind })          "on": the confirm's message after the at-close facts
+ *   confirmSuffix({ matched | scenario, kind, unplanned })   "on": the confirm's message after the at-close facts
+ *   standingLine(k)                                       a standing scenario's line (the confirm's and the shadow's)
  *   forbiddenIn(output, allowed)                          a run's forbidden-tool attempts, from its transcript
  *   parseDecision(text), fullDecisionOf({ result, entry }), agreement(shadow, full)   the comparison
  */
@@ -283,8 +285,9 @@ const baseWhole = plan => {
  * why. In order: the kill switch; an open position or working order (`flat` not true: management); no plan, a stale one,
  * a void one (validate: every input version, the session's file); a plan without its whole base (the confirm could not
  * be told from the prepare); what fired outside the plan, or nothing. What fired is always the real at-close scan's
- * (`fired`: firedReads); the plan's thresholds never decide. { path: 'confirm', match, scenario, kind (the matched
- * candidate's), fired, unplanned } or
+ * (`fired`: firedReads); the plan's thresholds never decide. { path: 'confirm', match, scenario, kind (the primary's: the
+ * first matched in plan order, its candidate's kind), matched (every matched scenario in plan order: matchedScenarios),
+ * fired, unplanned } or
  * { path: kill-switch | not-flat | no-plan | stale | void | no-base | outside | nothing-fired, reason?, detail?, fired }.
  */
 function confirmPath({ plan, at, fired = [], killSwitch = true, flat = null }) {
@@ -296,25 +299,36 @@ function confirmPath({ plan, at, fired = [], killSwitch = true, flat = null }) {
   if (!baseWhole(plan)) return { path: 'no-base', fired };
   const m = matchScenario(plan, fired);
   if (m.status !== 'matched') return { path: m.status, fired };
-  const scenario = (plan.scenarios || []).find(s => s.k === m.k);
-  const cand = (plan.candidates || []).find(c => c.id === m.id);
-  return { path: 'confirm', match: { k: m.k, id: m.id, read: m.read, side: m.side }, scenario, kind: cand ? cand.kind : null, fired, unplanned: m.unplanned };
+  const matched = matchedScenarios(plan, m);
+  return { path: 'confirm', match: { k: m.k, id: m.id, read: m.read, side: m.side }, scenario: matched[0].scenario, kind: matched[0].kind, matched, fired, unplanned: m.unplanned };
 }
 
 /** The one sentence that names the skill teaching the format and the rule (skills/prepare-ahead), in the prepare prompt only: the confirm forks the prepare's session and carries the rule inline, so a lookup there would add a tool turn to the close-to-order path. */
 const SKILL_NOTE = 'Read the prepare-ahead skill with skill_lookup for the format and the rule.';
 
+/** The matched scenarios: `matched` ([{ scenario, kind }], plan order), else the one `scenario` with its `kind`. */
+const matchedOf = ({ scenario, kind = null, matched }) => (Array.isArray(matched) && matched.length ? matched : [{ scenario, kind }]);
+/** "Your plan said: scenario k:" and its line, then each further matched scenario's "scenario k:" and line, in plan order. */
+const planSaid = list => `Your plan said: ${list.map(({ scenario: s }) => `scenario ${s.k}:\n${s.line}\n`).join('')}`;
 /**
- * The confirm's user message after the at-close facts (the cycle's own prompt and its reads, which come first): the
- * plan's scenario, the rule (rule first, bold in the skills: PR C), what fired outside the plan. It composes through
+ * A standing scenario (next-close.js: the reaction the briefing lists, its candle closed before the bar): its TAKE needs
+ * nothing of the closing candle; said, so none is invented (PR C2's line). The one place it is written: the confirm and
+ * the shadow confirm both say it, once per matched standing scenario.
+ */
+const standingLine = k => `Scenario ${k} is a standing setup: the setup is the reaction the briefing lists, its candle already closed, so its TAKE needs nothing of the closing candle; compose_check on the at-close reads is the check.`;
+const standingLines = list => list.filter(x => x.kind === 'standing').map(({ scenario: s }) => ` ${standingLine(s.k)}`).join('');
+
+/**
+ * The confirm's user message after the at-close facts (the cycle's own prompt and its reads, which come first): each
+ * matched scenario's line in plan order (`matched`, or the one `scenario` and its `kind`), the rule (rule first, bold in
+ * the skills: PR C), the standing line for each standing one, what fired outside the plan. It composes through
  * compose_check as the cycle's prompt says, or passes.
  */
-function confirmSuffix({ scenario, unplanned = [], kind = null }) {
+function confirmSuffix({ scenario, unplanned = [], kind = null, matched = null }) {
+  const list = matchedOf({ scenario, kind, matched });
   const more = (unplanned || []).length ? `\nAlso fired at this close, outside your plan: ${unplanned.map(f => `"${f}"`).join(', ')}: judge it from the facts above, in full.` : '';
-  // A standing scenario (next-close.js: the reaction the briefing lists, its candle closed before the bar): its TAKE needs nothing of the closing candle; said, so none is invented.
-  const standing = kind === 'standing' ? ` Scenario ${scenario.k} is a standing setup: the setup is the reaction the briefing lists, its candle already closed, so its TAKE needs nothing of the closing candle; compose_check on the at-close reads is the check.` : '';
-  return `\n\nPrepare ahead: you planned this close during the bar (above in this session, from closed bars only). Your plan said: scenario ${scenario.k}:\n${scenario.line}\n`
-    + `The candle decides: confirm a scenario only if the closed candle meets its TAKE conditions; else pass. The at-close facts above decide, never the plan: confirming is compose_check with the reads as these facts give them, then as this cycle's prompt says; passing is its CYCLE RESULT with why.${standing}${more}`;
+  return `\n\nPrepare ahead: you planned this close during the bar (above in this session, from closed bars only). ${planSaid(list)}`
+    + `The candle decides: confirm a scenario only if the closed candle meets its TAKE conditions; else pass. The at-close facts above decide, never the plan: confirming is compose_check with the reads as these facts give them, then as this cycle's prompt says; passing is its CYCLE RESULT with why.${standingLines(list)}${more}`;
 }
 
 /** What fired at the close: the rules strategies the real scan fired, then the at-close briefing's setups to check. */
@@ -325,16 +339,40 @@ function firedReads({ scan, listed }) {
   return [...new Set(out)];
 }
 
-/** The scenario what fired at the close is (by its candidate's read), or outside the plan, or nothing fired. */
+/** Each of a plan's scenarios with its candidate (by its id, else by the read it names), in plan order; none: dropped. */
+function scenarioCandidates(plan) {
+  const cands = (plan && plan.candidates) || [];
+  const readOf = s => { const c = s.id ? cands.find(x => x.id === s.id) : cands.find(x => norm(s.candidate).includes(norm(`"${x.read}"`)) || norm(s.candidate) === norm(x.read)); return c || null; };
+  return ((plan && plan.scenarios) || []).map(s => ({ s, c: readOf(s) })).filter(x => x.c);
+}
+
+/**
+ * The scenarios what fired at the close is (by their candidates' reads), or outside the plan, or nothing fired. Matched:
+ * `matches`, every scenario that fired, in plan order (each { k, id, read, side, kind }: its candidate's), the first also
+ * as the top-level k, id, read, side (the primary, as before PR C3); `unplanned` what fired that no scenario covers.
+ */
 function matchScenario(plan, fired) {
   const list = (fired || []).filter(Boolean);
   if (!list.length) return { status: 'nothing-fired', fired: [] };
-  const cands = (plan && plan.candidates) || [];
-  const readOf = s => { const c = s.id ? cands.find(x => x.id === s.id) : cands.find(x => norm(s.candidate).includes(norm(`"${x.read}"`)) || norm(s.candidate) === norm(x.read)); return c || null; };
-  const scen = ((plan && plan.scenarios) || []).map(s => ({ s, c: readOf(s) })).filter(x => x.c);
-  const hit = scen.find(x => list.some(f => norm(f) === norm(x.c.read)));
-  if (!hit) return { status: 'outside', fired: list };
-  return { status: 'matched', k: hit.s.k, id: hit.c.id, read: hit.c.read, side: hit.c.side, unplanned: list.filter(f => !scen.some(x => norm(x.c.read) === norm(f))) };
+  const scen = scenarioCandidates(plan);
+  const hits = scen.filter(x => list.some(f => norm(f) === norm(x.c.read)));
+  if (!hits.length) return { status: 'outside', fired: list };
+  const [hit] = hits;
+  return {
+    status: 'matched', k: hit.s.k, id: hit.c.id, read: hit.c.read, side: hit.c.side,
+    matches: hits.map(x => ({ k: x.s.k, id: x.c.id, read: x.c.read, side: x.c.side, kind: x.c.kind || null })),
+    unplanned: list.filter(f => !scen.some(x => norm(x.c.read) === norm(f))),
+  };
+}
+
+/**
+ * The matched scenarios themselves, in plan order: [{ scenario, kind }] (each its own line, so a plan that numbers two
+ * lines alike names both), for the confirm's message and the shadow confirm's prompt. Not matched: [].
+ */
+function matchedScenarios(plan, m) {
+  if (!m || m.status !== 'matched') return [];
+  const fired = new Set((m.matches || []).map(x => norm(x.read)));
+  return scenarioCandidates(plan).filter(x => fired.has(norm(x.c.read))).map(x => ({ scenario: x.s, kind: x.c.kind || null }));
 }
 
 /** A fired read's level kind (v1 lists the fixed levels and momentum only): vwap | profile | fvg | momentum | other. */
@@ -359,11 +397,16 @@ function preparePrompt({ head, account = '', reports = [], briefingText, next })
     + `${desk ? `\nThe desk's latest reports:${desk}` : ''}\nThe prepare briefing (closed bars only):\n${briefingText}\nWrite one line per scenario, then the two lines after them, in exactly this form:\n${FORMAT.join('\n')}\nEnd with the line PLAN END. ${SKILL_NOTE}`;
 }
 
-/** The shadow confirm's prompt: the at-close facts first, then the plan's scenario, the rule, the DECISION line. */
-function confirmPrompt({ atCloseText, fired = [], scenario, next }) {
+/**
+ * The shadow confirm's prompt: the at-close facts first, then each matched scenario's line in plan order (as the confirm
+ * names them: `matched`, or the one `scenario` and its `kind`), the rule, the standing line for each standing one (what
+ * "on" sends), the DECISION line (a TAKE per matched scenario, or PASS).
+ */
+function confirmPrompt({ atCloseText, fired = [], scenario, kind = null, matched = null, next }) {
+  const list = matchedOf({ scenario, kind, matched });
   return `The bar opening ${next.t} has closed (${next.closedAt}). The at-close facts (code, read fresh at the close; they decide, never the plan):\n${atCloseText}\nWhat fired at the close: ${fired.length ? fired.map(f => `"${f}"`).join(', ') : 'nothing'}.\n`
-    + `Your plan said: scenario ${scenario.k}:\n${scenario.line}\nThe candle decides: confirm a scenario only if the closed candle meets its TAKE conditions; else pass.\n`
-    + `This is a shadow run beside the real cycle: do not call compose_check, place no order and launch no role. End with exactly one line: DECISION: TAKE ${scenario.k} | DECISION: PASS - <why>.`;
+    + `${planSaid(list)}The candle decides: confirm a scenario only if the closed candle meets its TAKE conditions; else pass.${standingLines(list)}\n`
+    + `This is a shadow run beside the real cycle: do not call compose_check, place no order and launch no role. End with exactly one line: ${list.map(({ scenario: s }) => `DECISION: TAKE ${s.k} | `).join('')}DECISION: PASS - <why>.`;
 }
 
 const DENIED_BY_CLI = /^Permission to use \S+ has been denied/;
@@ -428,5 +471,5 @@ function agreement(shadow, full) {
 
 module.exports = {
   MODES, ON_NEEDS, FORMAT, SKILL_NOTE, PLAN_DIR, PREPARE_DENIED, PREPARE_SCRIPTS, modeProblem, shadowOn, onOn, deadlineOf, overran, shouldPrepare, windowOf, sectionFor, deskKeys, versionsOf, validate,
-  recordSession, readSession, shadowGateLog, planFile, writePlan, readPlan, makePlan, parsePlan, confirmPath, confirmSuffix, firedReads, matchScenario, readKind, preparePrompt, confirmPrompt, forbiddenIn, parseDecision, fullDecisionOf, agreement,
+  recordSession, readSession, shadowGateLog, planFile, writePlan, readPlan, makePlan, parsePlan, confirmPath, confirmSuffix, standingLine, firedReads, matchScenario, matchedScenarios, readKind, preparePrompt, confirmPrompt, forbiddenIn, parseDecision, fullDecisionOf, agreement,
 };

@@ -110,9 +110,11 @@ test('"on" at the plan\'s close, valid and matched: the confirm\'s limits: the p
   assert.strictEqual(a.confirm.base, PA.planFile(home, 'MNQ', FIRE));
   assert.strictEqual(a.confirm.timeoutMs, RT.prepare.confirmMs);
   // What else fired at this close (the real scan: the 15m reactions here) is said, outside the plan.
-  const unplanned = PA.matchScenario(plan, a.record.fired).unplanned;
-  assert.ok(unplanned.length > 0);
-  assert.strictEqual(a.confirm.suffix, PA.confirmSuffix({ scenario: plan.scenarios[0], unplanned }));
+  const m = PA.matchScenario(plan, a.record.fired);
+  assert.ok(m.unplanned.length > 0);
+  // PR C3: the momentum fire and the three standing 15m reactions all fired here: each scenario named, in plan order.
+  assert.deepStrictEqual(m.matches.map(x => x.k), [1, 2, 3, 4]);
+  assert.strictEqual(a.confirm.suffix, PA.confirmSuffix({ matched: PA.matchedScenarios(plan, m), unplanned: m.unplanned }));
   // composed(): a compose record on this bar after the check (the compose_check the confirm makes), none before.
   assert.strictEqual(a.confirm.composed(), false);
   // Another bar's record is no compose of this close's.
@@ -122,27 +124,36 @@ test('"on" at the plan\'s close, valid and matched: the confirm\'s limits: the p
   assert.strictEqual(a.confirm.composed(), true);
 });
 
-test('"on" at the close: the confirm\'s message carries the standing line when the MATCHED candidate is standing, and not when another candidate is', async () => {
+test('"on" at the close: the confirm\'s message carries the standing line for each MATCHED standing scenario (PR C3: the momentum primary\'s too), and not for a standing candidate that did not fire', async () => {
   const home = tmp();
   await afterAt(home, PREP);
   const f = PA.planFile(home, 'MNQ', FIRE);
   const plan = PA.readPlan(home, 'MNQ', FIRE);
   const matched = PA.matchScenario(plan, atCloseOf(home, FIRED).record.fired);
   assert.strictEqual(matched.status, 'matched');
-  const LINE = `Scenario ${matched.k} is a standing setup`;
-  // As made (the matched candidate a momentum one): no standing line.
-  assert.ok(!atCloseOf(home, FIRED).confirm.suffix.includes('is a standing setup'));
-  // Another candidate standing, the matched one not: still none (the kind is the matched candidate's).
-  const rewrite = fn => fs.writeFileSync(f, JSON.stringify({ ...plan, candidates: plan.candidates.map(fn).concat([{ id: 'P99', kind: 'standing', read: 'nothing fires this', side: 'short', tf: '15m' }]) }));
-  rewrite(c => c);
-  assert.ok(!atCloseOf(home, FIRED).confirm.suffix.includes('is a standing setup'));
-  // The matched candidate standing: the line, in the confirm's message.
-  rewrite(c => (c.id === matched.id ? { ...c, kind: 'standing' } : c));
+  const lineOf = k => `Scenario ${k} is a standing setup`;
+  // As made: the primary is the momentum fire (scenario 1); scenarios 2-4 are standing 15m reactions that fired too
+  // (before C3 none of them was named, nor had its line).
+  assert.deepStrictEqual(matched.matches.map(x => [x.k, x.kind]), [[1, 'momentum'], [2, 'standing'], [3, 'standing'], [4, 'standing']]);
+  const asMade = atCloseOf(home, FIRED).confirm.suffix;
+  assert.ok(!asMade.includes(lineOf(1)), 'none for the momentum scenario');
+  for (const k of [2, 3, 4]) {
+    assert.ok(asMade.includes(lineOf(k)), `${k}: ${asMade}`);
+    assert.ok(asMade.includes(plan.scenarios.find(s => s.k === k).line), `scenario ${k}'s line`);
+  }
+  // A standing candidate that did not fire (with a scenario of its own): no line for it.
+  const extra = { ...plan, candidates: plan.candidates.concat([{ id: 'P99', kind: 'standing', read: 'nothing fires this', side: 'short', tf: '15m' }]), scenarios: plan.scenarios.concat([{ k: 99, id: 'P99', candidate: 'P99 "nothing fires this"', line: 'SCENARIO 99: P99' }]) };
+  fs.writeFileSync(f, JSON.stringify(extra));
   const a = atCloseOf(home, FIRED);
   assert.strictEqual(a.record.path, 'confirm');
-  assert.ok(a.confirm.suffix.includes(LINE), a.confirm.suffix);
-  assert.strictEqual(a.confirm.suffix, PA.confirmSuffix({ scenario: plan.scenarios.find(s => s.k === matched.k), unplanned: matched.unplanned, kind: 'standing' }));
-  assert.ok(!('kind' in a.record), 'the record is as before');
+  assert.ok(!a.confirm.suffix.includes(lineOf(99)) && !a.confirm.suffix.includes('SCENARIO 99'), a.confirm.suffix);
+  assert.strictEqual(a.confirm.suffix, PA.confirmSuffix({ matched: PA.matchedScenarios(extra, matched), unplanned: matched.unplanned }));
+  // The primary standing too: its line, first.
+  fs.writeFileSync(f, JSON.stringify({ ...plan, candidates: plan.candidates.map(c => (c.id === matched.id ? { ...c, kind: 'standing' } : c)) }));
+  assert.ok(atCloseOf(home, FIRED).confirm.suffix.includes(`${lineOf(1)}: the setup is the reaction the briefing lists`));
+  // The record is as before: the primary's match only, no kind, no list.
+  assert.ok(!('kind' in a.record) && !('matches' in a.record) && !('matched' in a.record), 'the record is as before');
+  assert.deepStrictEqual(a.record.match, { k: 1, id: 'P1', read: 'momentum_continuation fired down', side: 'short' });
 });
 
 test('"on" at the close, every fallback row: the full head trader runs (no confirm limits), the record saying why', async () => {

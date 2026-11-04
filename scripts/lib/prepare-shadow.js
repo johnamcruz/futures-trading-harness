@@ -100,12 +100,13 @@ function createShadow({ cfg, root, home, runPrepare, now, sectionOpts = () => ({
     const m = PA.matchScenario(plan, fired);
     if (m.status !== 'matched') return { status: m.status, fired, unplannedKinds: kindsOf(fired), ...base, agreesWithFull: null };
     const match = { k: m.k, id: m.id, read: m.read, side: m.side };
-    const scenario = plan.scenarios.find(s => s.k === m.k);
+    // Every matched scenario, in plan order, with its kind: the prompt carries what "on" sends at this close (PR C3).
+    const matched = PA.matchedScenarios(plan, m);
     const rest = { match, fired, unplanned: m.unplanned, unplannedKinds: kindsOf(m.unplanned), ...base };
     if (!(deadline.budgetMs > 0)) return { status: 'valid', ...rest, confirm: { outcome: 'no-time', decision: null }, agreesWithFull: null };
     const text = require('./trading/briefing').renderBriefing(x.briefing, { now: now() });
     const atCloseText = text.includes(SUMMARY_END) ? text.slice(0, text.indexOf(SUMMARY_END)) : text;
-    const prompt = PA.confirmPrompt({ atCloseText, fired, scenario, next: { t: x.bar.t, closedAt: closeAt.toISOString() } });
+    const prompt = PA.confirmPrompt({ atCloseText, fired, matched, next: { t: x.bar.t, closedAt: closeAt.toISOString() } });
     const { res, aborted } = await timed('confirm', prompt, deadline, { resume: plan.session.id, context: { action: 'trade', symbols: [{ symbol: x.symbol, bar: { t: x.bar.t, contractId: x.bar.contractId, file: x.bar.file } }] } });
     const parsed = !aborted && res.ok ? PA.parseDecision(res.text) : null;
     const decision = parsed ? { ...parsed, side: parsed.decision === 'take' ? (plan.candidates.find(c => c.id === (plan.scenarios.find(s => s.k === parsed.k) || {}).id) || {}).side || null : null } : null;
@@ -183,7 +184,7 @@ function createShadow({ cfg, root, home, runPrepare, now, sectionOpts = () => ({
     const day = TL.shardDay({ bar: x.bar.t });
     const composedHere = () => TL.readRecords(home, x.symbol, { days: [day] }).filter(r => r && r.bar === x.bar.t).length;
     const before = composedHere();
-    return { record, confirm: { session: plan.session.id, base: PA.planFile(home, x.symbol, x.bar.t), suffix: PA.confirmSuffix({ scenario: p.scenario, unplanned: p.unplanned, kind: p.kind }), timeoutMs: T.confirmMs, composed: () => composedHere() > before } };
+    return { record, confirm: { session: plan.session.id, base: PA.planFile(home, x.symbol, x.bar.t), suffix: PA.confirmSuffix({ matched: p.matched, unplanned: p.unplanned }), timeoutMs: T.confirmMs, composed: () => composedHere() > before } };
   }
 
   /** "on": the at-close record with what the cycle did: the confirm's outcome, the late refusals, close to order, the desk. */

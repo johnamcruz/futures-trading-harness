@@ -343,8 +343,9 @@ test('prepare-ahead: what fired at the close is the real at-close scan (rules fi
 
 test('prepare-ahead: match: a fired read that is a scenario\'s candidate is matched (by its id\'s read); one that is not is outside the plan; nothing fired is said', () => {
   const plan = makePlan();
-  assert.deepStrictEqual(PA.matchScenario(plan, ['momentum_continuation fired up']), { status: 'matched', k: 1, id: 'P1', read: 'momentum_continuation fired up', side: 'long', unplanned: [] });
-  assert.deepStrictEqual(PA.matchScenario(plan, ['15m  Rejected prior VAH up']), { status: 'matched', k: 2, id: 'P2', read: '15m rejected prior VAH up', side: 'long', unplanned: [] }, 'case and spaces');
+  // (PR C3: `matches`, every matched scenario in plan order; the top-level fields the first of them, as before.)
+  assert.deepStrictEqual(PA.matchScenario(plan, ['momentum_continuation fired up']), { status: 'matched', k: 1, id: 'P1', read: 'momentum_continuation fired up', side: 'long', matches: [{ k: 1, id: 'P1', read: 'momentum_continuation fired up', side: 'long', kind: 'momentum' }], unplanned: [] });
+  assert.deepStrictEqual(PA.matchScenario(plan, ['15m  Rejected prior VAH up']), { status: 'matched', k: 2, id: 'P2', read: '15m rejected prior VAH up', side: 'long', matches: [{ k: 2, id: 'P2', read: '15m rejected prior VAH up', side: 'long', kind: 'reaction' }], unplanned: [] }, 'case and spaces');
   assert.deepStrictEqual(PA.matchScenario(plan, ['15m rejected VWAP up', 'momentum_continuation fired up']).unplanned, ['15m rejected VWAP up']);
   assert.deepStrictEqual(PA.matchScenario(plan, ['15m rejected VWAP up']), { status: 'outside', fired: ['15m rejected VWAP up'] });
   assert.deepStrictEqual(PA.matchScenario(plan, []), { status: 'nothing-fired', fired: [] });
@@ -470,6 +471,118 @@ test('prepare-ahead "on": confirmPath names the matched candidate\'s kind (the s
   const of = fired => onPath({ plan, fired });
   assert.deepStrictEqual([of(['15m rejected prior vah down']).kind, of(['15m rejected prior vah down']).match.k], ['standing', 2]);
   assert.deepStrictEqual([of(['momentum_continuation fired down']).kind, of(['momentum_continuation fired down']).match.k], ['momentum', 1]);
+});
+
+// --- Several scenarios fired at one close (PR C3): each named, in plan order --------------------------------------------
+
+// Today's messages, captured as literals before PR C3 (computed from the function itself, a changed header would pass).
+const SUFFIX_ONE = '\n\nPrepare ahead: you planned this close during the bar (above in this session, from closed bars only). Your plan said: scenario 1:\nSCENARIO 1: L\nThe candle decides: confirm a scenario only if the closed candle meets its TAKE conditions; else pass. The at-close facts above decide, never the plan: confirming is compose_check with the reads as these facts give them, then as this cycle\'s prompt says; passing is its CYCLE RESULT with why.\nAlso fired at this close, outside your plan: "x up": judge it from the facts above, in full.';
+const SUFFIX_STANDING = '\n\nPrepare ahead: you planned this close during the bar (above in this session, from closed bars only). Your plan said: scenario 2:\nSCENARIO 2: S\nThe candle decides: confirm a scenario only if the closed candle meets its TAKE conditions; else pass. The at-close facts above decide, never the plan: confirming is compose_check with the reads as these facts give them, then as this cycle\'s prompt says; passing is its CYCLE RESULT with why. Scenario 2 is a standing setup: the setup is the reaction the briefing lists, its candle already closed, so its TAKE needs nothing of the closing candle; compose_check on the at-close reads is the check.';
+const PROMPT_ONE = 'The bar opening T has closed (C). The at-close facts (code, read fresh at the close; they decide, never the plan):\nF\nWhat fired at the close: "a".\nYour plan said: scenario 1:\nSCENARIO 1: L\nThe candle decides: confirm a scenario only if the closed candle meets its TAKE conditions; else pass.\nThis is a shadow run beside the real cycle: do not call compose_check, place no order and launch no role. End with exactly one line: DECISION: TAKE 1 | DECISION: PASS - <why>.';
+// The standing line: C2's one sentence (prepare-ahead.js standingLine; its words pinned by the C2 test above and SUFFIX_STANDING).
+const STANDING_LINE = PA.standingLine;
+const NOW_NEXT = { t: 'T', closedAt: 'C' };
+
+test('prepare-ahead C3: the standing line is one sentence in one place (standingLine), the confirm\'s and the shadow\'s alike', () => {
+  assert.strictEqual(PA.standingLine(2), 'Scenario 2 is a standing setup: the setup is the reaction the briefing lists, its candle already closed, so its TAKE needs nothing of the closing candle; compose_check on the at-close reads is the check.');
+  const src = require('fs').readFileSync(require.resolve('../../scripts/lib/prepare-ahead'), 'utf8');
+  assert.strictEqual(src.split('is a standing setup:').length, 2, 'the sentence is written once in the source');
+});
+
+test('prepare-ahead C3: a single match\'s confirm message and shadow prompt are byte-identical to before (literals)', () => {
+  assert.strictEqual(PA.confirmSuffix({ scenario: { k: 1, line: 'SCENARIO 1: L' }, unplanned: ['x up'] }), SUFFIX_ONE);
+  assert.strictEqual(PA.confirmSuffix({ scenario: { k: 2, line: 'SCENARIO 2: S' }, unplanned: [], kind: 'standing' }), SUFFIX_STANDING);
+  assert.strictEqual(PA.confirmPrompt({ atCloseText: 'F', fired: ['a'], scenario: { k: 1, line: 'SCENARIO 1: L' }, next: NOW_NEXT }), PROMPT_ONE);
+  // The same with the list given (one entry): the same bytes.
+  assert.strictEqual(PA.confirmSuffix({ matched: [{ scenario: { k: 1, line: 'SCENARIO 1: L' }, kind: 'momentum' }], unplanned: ['x up'] }), SUFFIX_ONE);
+  assert.strictEqual(PA.confirmSuffix({ matched: [{ scenario: { k: 2, line: 'SCENARIO 2: S' }, kind: 'standing' }], unplanned: [] }), SUFFIX_STANDING);
+  assert.strictEqual(PA.confirmPrompt({ atCloseText: 'F', fired: ['a'], matched: [{ scenario: { k: 1, line: 'SCENARIO 1: L' }, kind: 'reaction' }], next: NOW_NEXT }), PROMPT_ONE);
+});
+
+/** A plan of four scenarios (momentum, standing, reaction, standing), the candidates listed in another order. */
+const multiPlan = () => {
+  const cands = [{ id: 'P4', kind: 'standing', read: '15m broke overnight low down', side: 'short', tf: '15m' }, { id: 'P1', kind: 'momentum', read: 'momentum_continuation fired down', side: 'short', tf: '3m' },
+    { id: 'P2', kind: 'standing', read: '15m rejected opening range high down', side: 'short', tf: '15m' }, { id: 'P3', kind: 'reaction', read: '15m rejected prior vah down', side: 'short', tf: '15m' }];
+  const text = [
+    'SCENARIO 1: P1 "momentum_continuation fired down" → TAKE if a | PASS if b; reads: "momentum_continuation fired down"; why: w',
+    'SCENARIO 2: P2 "15m rejected opening range high down" → TAKE if a | PASS if b; reads: "15m rejected opening range high down"; why: w',
+    'SCENARIO 3: P3 "15m rejected prior vah down" → TAKE if a | PASS if b; reads: "15m rejected prior vah down"; why: w',
+    'SCENARIO 4: P4 "15m broke overnight low down" → TAKE if a | PASS if b; reads: "15m broke overnight low down"; why: w',
+  ].join('\n');
+  return { ...withBase(), candidates: cands, ...PA.parsePlan(text), text };
+};
+
+test('prepare-ahead C3: matchScenario returns every matched scenario in plan order (the first still the primary); unplanned is what no scenario covers', () => {
+  const plan = multiPlan();
+  // Fired in another order than the plan's.
+  const m = PA.matchScenario(plan, ['15m broke overnight low down', '15m broke vwap rth down', 'momentum_continuation fired down', '15m rejected opening range high down']);
+  assert.strictEqual(m.status, 'matched');
+  assert.deepStrictEqual([m.k, m.id, m.read, m.side], [1, 'P1', 'momentum_continuation fired down', 'short'], 'the first in plan order is the primary');
+  assert.deepStrictEqual(m.matches, [
+    { k: 1, id: 'P1', read: 'momentum_continuation fired down', side: 'short', kind: 'momentum' },
+    { k: 2, id: 'P2', read: '15m rejected opening range high down', side: 'short', kind: 'standing' },
+    { k: 4, id: 'P4', read: '15m broke overnight low down', side: 'short', kind: 'standing' },
+  ]);
+  assert.deepStrictEqual(m.unplanned, ['15m broke vwap rth down'], 'a matched scenario\'s read is never outside the plan');
+  // One match: matches holds it alone.
+  assert.deepStrictEqual(PA.matchScenario(plan, ['15m rejected prior vah down']).matches, [{ k: 3, id: 'P3', read: '15m rejected prior vah down', side: 'short', kind: 'reaction' }]);
+  // Plan order is the order the plan wrote its lines, not k's.
+  const swapped = { ...plan, scenarios: [plan.scenarios[3], plan.scenarios[0]] };
+  assert.deepStrictEqual(PA.matchScenario(swapped, ['momentum_continuation fired down', '15m broke overnight low down']).matches.map(x => x.k), [4, 1]);
+});
+
+test('prepare-ahead C3: matchedScenarios gives each matched scenario object (its own line) with its candidate\'s kind; a plan writing one k twice names each line', () => {
+  const plan = multiPlan();
+  const m = PA.matchScenario(plan, ['15m broke overnight low down', 'momentum_continuation fired down']);
+  assert.deepStrictEqual(PA.matchedScenarios(plan, m).map(x => [x.scenario.k, x.kind, x.scenario.line]), [[1, 'momentum', plan.scenarios[0].line], [4, 'standing', plan.scenarios[3].line]]);
+  // Two lines numbered 1 (a model's slip), for two candidates: both lines, each its own.
+  const dup = { ...plan, scenarios: PA.parsePlan(plan.text.replace('SCENARIO 4:', 'SCENARIO 1:')).scenarios };
+  const md = PA.matchScenario(dup, ['15m broke overnight low down', 'momentum_continuation fired down']);
+  assert.deepStrictEqual(PA.matchedScenarios(dup, md).map(x => x.scenario.line), [dup.scenarios[0].line, dup.scenarios[3].line]);
+  assert.deepStrictEqual(PA.matchedScenarios(plan, { status: 'outside' }), []);
+});
+
+test('prepare-ahead C3 "on": confirmPath keeps the primary (match, scenario, kind) and gives every matched scenario in plan order', () => {
+  const plan = multiPlan();
+  const p = onPath({ plan, fired: ['15m broke overnight low down', 'momentum_continuation fired down', '15m rejected opening range high down'] });
+  assert.strictEqual(p.path, 'confirm');
+  assert.deepStrictEqual(p.match, { k: 1, id: 'P1', read: 'momentum_continuation fired down', side: 'short' });
+  assert.strictEqual(p.scenario, plan.scenarios[0]);
+  assert.strictEqual(p.kind, 'momentum');
+  assert.deepStrictEqual(p.matched.map(x => [x.scenario.k, x.kind]), [[1, 'momentum'], [2, 'standing'], [4, 'standing']]);
+  assert.deepStrictEqual(p.unplanned, []);
+});
+
+test('prepare-ahead C3 "on": the confirm message names each matched scenario\'s line in plan order, the standing line for each standing one, the rule once, then what fired outside the plan', () => {
+  const S1 = { k: 1, line: 'SCENARIO 1: L1' };
+  const S2 = { k: 2, line: 'SCENARIO 2: L2' };
+  const S4 = { k: 4, line: 'SCENARIO 4: L4' };
+  const text = PA.confirmSuffix({ matched: [{ scenario: S1, kind: 'momentum' }, { scenario: S2, kind: 'standing' }, { scenario: S4, kind: 'standing' }], unplanned: ['x up'] });
+  const RULE = 'The candle decides: confirm a scenario only if the closed candle meets its TAKE conditions; else pass. The at-close facts above decide, never the plan: confirming is compose_check with the reads as these facts give them, then as this cycle\'s prompt says; passing is its CYCLE RESULT with why.';
+  assert.strictEqual(text, `\n\nPrepare ahead: you planned this close during the bar (above in this session, from closed bars only). Your plan said: scenario 1:\nSCENARIO 1: L1\nscenario 2:\nSCENARIO 2: L2\nscenario 4:\nSCENARIO 4: L4\n${RULE} ${STANDING_LINE(2)} ${STANDING_LINE(4)}\nAlso fired at this close, outside your plan: "x up": judge it from the facts above, in full.`);
+  assert.ok(!text.includes(STANDING_LINE(1)), 'no standing line for the momentum scenario');
+  // A standing scenario second, not first: its line all the same (the bug before C3: the primary's kind only).
+  assert.ok(PA.confirmSuffix({ matched: [{ scenario: S1, kind: 'momentum' }, { scenario: S2, kind: 'standing' }] }).includes(STANDING_LINE(2)));
+  // Only "standing" adds it, exactly.
+  for (const kind of [null, 'reaction', 'Standing', 'standing ']) assert.ok(!/standing setup/.test(PA.confirmSuffix({ matched: [{ scenario: S1, kind: 'momentum' }, { scenario: S2, kind }] })), String(kind));
+  // The rule once, never a DECISION line.
+  assert.strictEqual(text.split('The candle decides').length, 2);
+  assert.doesNotMatch(text, /DECISION:/);
+});
+
+test('prepare-ahead C3 shadow: the shadow confirm prompt carries what "on" sends: each matched scenario\'s line, the standing line per standing one, and a DECISION line listing each', () => {
+  const S1 = { k: 1, line: 'SCENARIO 1: L1' };
+  const S3 = { k: 3, line: 'SCENARIO 3: L3' };
+  const p = PA.confirmPrompt({ atCloseText: 'F', fired: ['a', 'b'], matched: [{ scenario: S1, kind: 'momentum' }, { scenario: S3, kind: 'standing' }], next: NOW_NEXT });
+  assert.strictEqual(p, `The bar opening T has closed (C). The at-close facts (code, read fresh at the close; they decide, never the plan):\nF\nWhat fired at the close: "a", "b".\nYour plan said: scenario 1:\nSCENARIO 1: L1\nscenario 3:\nSCENARIO 3: L3\nThe candle decides: confirm a scenario only if the closed candle meets its TAKE conditions; else pass. ${STANDING_LINE(3)}\nThis is a shadow run beside the real cycle: do not call compose_check, place no order and launch no role. End with exactly one line: DECISION: TAKE 1 | DECISION: TAKE 3 | DECISION: PASS - <why>.`);
+  // A single standing match: the line too (shadow parity with "on"), the DECISION line as before.
+  const one = PA.confirmPrompt({ atCloseText: 'F', fired: ['a'], scenario: S3, kind: 'standing', next: NOW_NEXT });
+  assert.ok(one.includes(`else pass. ${STANDING_LINE(3)}\nThis is a shadow run`), one);
+  assert.ok(one.endsWith('DECISION: TAKE 3 | DECISION: PASS - <why>.'));
+  // The standing line is the same sentence "on" sends.
+  assert.ok(PA.confirmSuffix({ scenario: S3, kind: 'standing' }).includes(STANDING_LINE(3)));
+  // Each listed TAKE parses (the contract of parseDecision is unchanged).
+  assert.deepStrictEqual(PA.parseDecision('DECISION: TAKE 3'), { decision: 'take', k: 3 });
 });
 
 test('prepare-ahead: the one sentence that names the skill (read it with skill_lookup) is in the prepare prompt only, not in the confirm message or the shadow confirm prompt', () => {
