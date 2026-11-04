@@ -818,8 +818,8 @@
         "\\bonly (after|if|when|once|on)\\b(?![^.;]*compos)[^.;]*\\b(candle|bar|close[sd]?|wick|green|red|prints?)\\b",
         "^[\\W_]*(?:yes|yep)\\b[\\W_]*(?:(?:i'?d|i would|i will|i'll)\\s+)?(?:pass|skip|no trade|wait)",
         "\\b(?:the )?doji (?:confirms|is (?:a |the )?confirmation)\\b",
-        "\\b(?:once|if|when|after|on|until)\\s+(?:the\\s+|a\\s+)?(?:next|another|later|new)\\b|\\blater\\b",
-        "[,;:]\\s*(?:so\\s+|then\\s+)?pass\\b(?!\\s+(?:only|if|when|unless|on)\\b)"
+        "(?<!\\bentry,?\\s)\\b(?:once|if|when|after|on|until|at|by|for)\\s+(?:the\\s+|a\\s+)?(?:next|another|later|new|following)\\b|\\blater\\b|\\bone more\\b|\\blet the next\\b|\\bprovided\\b|\\bon (?:a |the )?break\\w*\\b|\\bbreaks? (?:above |below )?(?:the |its )?doji\\b",
+        "(?<!\\brefus\\w*(?:\\s*\\([^)]*\\))?[^.;,:()]*)[,;:]\\s*(?:then\\s+)?pass\\b(?!\\s+(?:only|if|when|unless|on)\\b)|[,;:]\\s*so\\s+pass\\b"
       ],
       "lookup": [
         "prepare-ahead",
@@ -840,8 +840,8 @@
         "\\bwait\\w*|\\bhold off\\b",
         "\\bonly (after|if|when|once|on)\\b(?![^.;]*compos)[^.;]*\\b(candle|bar|close[sd]?|wick|green|red|prints?)\\b",
         "^[\\W_]*(?:yes|yep)\\b[\\W_]*(?:(?:i'?d|i would|i will|i'll)\\s+)?(?:pass|skip|no trade|wait)",
-        "\\b(?:once|if|when|after|on|until)\\s+(?:the\\s+|a\\s+)?(?:next|another|later|new)\\b|\\blater\\b",
-        "[,;:]\\s*(?:so\\s+|then\\s+)?pass\\b(?!\\s+(?:only|if|when|unless|on)\\b)"
+        "(?<!\\bentry,?\\s)\\b(?:once|if|when|after|on|until|at|by|for)\\s+(?:the\\s+|a\\s+)?(?:next|another|later|new|following)\\b|\\blater\\b|\\bone more\\b|\\blet the next\\b|\\bprovided\\b|\\bon (?:a |the )?break\\w*\\b|\\bbreaks? (?:above |below )?(?:the |its )?doji\\b",
+        "(?<!\\brefus\\w*(?:\\s*\\([^)]*\\))?[^.;,:()]*)[,;:]\\s*(?:then\\s+)?pass\\b(?!\\s+(?:only|if|when|unless|on)\\b)|[,;:]\\s*so\\s+pass\\b"
       ],
       "lookup": [
         "prepare-ahead",
@@ -861,7 +861,8 @@
       "forbidden": [
         "(?:(?<=^[\\W_]*)|(?<=[:;,.—–-]\\s*)|(?<=[:;,.—–-]\\s*(?:then|and|so|but|just)\\s+))\\b(?:confirm(?:ed|s)?|go long|enter long)\\b(?!\\s+nothing)",
         "(?:(?<=^[\\W_]*)|(?<=[:;,.—–-]\\s*)|(?<=[:;,.—–-]\\s*(?:then|and|so|but|just)\\s+))\\btake (it|the)\\b",
-        "\\brecompos\\w*|\\bre-?(?:run|do|send) (?:the )?compose_check\\b|\\b(?:wider|widen\\w*|move\\w*|new|different) (?:the )?stop\\b"
+        "\\brecompos\\w*|\\bre-?(?:run|do|send) (?:the )?compose_check\\b|\\b(?:wider|widen\\w*|move\\w*|new|different) (?:the )?stop\\b",
+        "\\b(?:go|enter|take|flip|sell)\\s+(?:the\\s+|it\\s+)?short\\b|\\bshort (?:it|instead)\\b"
       ],
       "lookup": [
         "prepare-ahead",
@@ -904,7 +905,8 @@
         "\\birrelevant\\b",
         "\\b(?:does not|doesn'?t|won'?t) matter\\b",
         "\\bno (?:effect|bearing|weight)\\b",
-        "^[\\W_]*(?:no|nope)\\b[\\W_]*pass\\b"
+        "(?<!\\brefus\\w*[^.;]*)(?<!reason to\\s)\\b(?:i'?d\\s+|i would\\s+|then\\s+|so\\s+)?(?:pass|skip)(?:es|ed|ing)?\\b(?!\\s+(?:only|if|when|unless|by itself|alone|on (?:it|that|this) alone)\\b)",
+        "\\b(?:go|enter|take|flip|sell)\\s+(?:the\\s+|it\\s+)?short\\b|\\bshort (?:it|instead)\\b"
       ],
       "lookup": [
         "prepare-ahead",
