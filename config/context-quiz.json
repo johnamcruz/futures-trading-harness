@@ -23,7 +23,7 @@
   "unsure": "it depends|unsure|not sure|unclear|ambiguous|can't tell|cannot tell|depends on",
   "passBar": {
     "partA": {
-      "allCorrect": 47,
+      "allCorrect": 45,
       "bothWays": 0
     },
     "partB": {
@@ -804,51 +804,6 @@
       ]
     },
     {
-      "id": "q45",
-      "layer": "entry",
-      "prompt": "lookup",
-      "text": "Prepare ahead is on. The briefing's Setups to check: \"15m rejected prior poc up\" (long; setup candle: hammer, close top third); the setup still stands: no confirming read needed. The trend rule allows a long. Your plan said: scenario 2: P3 \"15m rejected prior poc up\" (a standing scenario: its line fired \"whatever its range, volume and close\") -> TAKE if its reads compose at the close | PASS if compose_check refuses it; reads: \"15m rejected prior poc up\". The closing 3m: pattern doji, close middle third. Confirm or pass?",
-      "rule": "a standing scenario: the setup is the listed reaction, its candle closed; its TAKE needs nothing of the closing candle (a 3m doji decides nothing: candle-reading); confirm through compose_check",
-      "anchor": "its TAKE needs nothing of the closing candle",
-      "required": [
-        "^[\\W_]*(confirm\\w*\\b(?!\\s+nothing)|take\\b(?!\\s+(not|no)\\b)|compos\\w*|enter|go long|yes)"
-      ],
-      "forbidden": [
-        "\\bwait\\w*|\\bhold off\\b",
-        "\\bonly (after|if|when|once|on)\\b(?![^.;]*compos)[^.;]*\\b(candle|bar|close[sd]?|wick|green|red|prints?)\\b",
-        "^[\\W_]*(?:yes|yep)\\b[\\W_]*(?:(?:i'?d|i would|i will|i'll)\\s+)?(?:pass|skip|no trade|wait)",
-        "\\b(?:the )?doji (?:confirms|is (?:a |the )?confirmation)\\b",
-        "(?<!\\bentry,?\\s)\\b(?:once|if|when|after|on|until|at|by|for)\\s+(?:the\\s+|a\\s+)?(?:next|another|later|new|following)\\b|\\blater\\b|\\bone more\\b|\\blet the next\\b|\\bprovided\\b|\\bon (?:a |the )?break\\w*\\b|\\bbreaks? (?:above |below )?(?:the |its )?doji\\b",
-        "(?<!\\brefus\\w*(?:\\s*\\([^)]*\\))?[^.;,:()]*)[,;:]\\s*(?:then\\s+)?pass\\b(?!\\s+(?:only|if|when|unless|on)\\b)|[,;:]\\s*so\\s+pass\\b"
-      ],
-      "lookup": [
-        "prepare-ahead",
-        "candle-reading"
-      ]
-    },
-    {
-      "id": "q46",
-      "layer": "entry",
-      "prompt": "lookup",
-      "text": "Prepare ahead is on. The briefing's Setups to check: \"15m rejected prior poc up\" (long; setup candle: hammer, close top third); the setup still stands: no confirming read needed. The trend rule allows a long. Your plan said: scenario 2: P3 \"15m rejected prior poc up\" (a standing scenario: its line fired \"whatever its range, volume and close\") -> TAKE if the 3m closes with a lower wick | PASS if not; reads: \"15m rejected prior poc up\". The closing 3m: no lower wick, pattern none, close middle third. Confirm or pass?",
-      "rule": "a standing scenario's TAKE needs nothing of the closing candle, whatever the plan wrote: confirm through compose_check, not a pass on the plan's invented condition",
-      "anchor": "whatever the plan wrote",
-      "required": [
-        "^[\\W_]*(confirm\\w*\\b(?!\\s+nothing)|take\\b(?!\\s+(not|no)\\b)|compos\\w*|enter|go long|yes)"
-      ],
-      "forbidden": [
-        "\\bwait\\w*|\\bhold off\\b",
-        "\\bonly (after|if|when|once|on)\\b(?![^.;]*compos)[^.;]*\\b(candle|bar|close[sd]?|wick|green|red|prints?)\\b",
-        "^[\\W_]*(?:yes|yep)\\b[\\W_]*(?:(?:i'?d|i would|i will|i'll)\\s+)?(?:pass|skip|no trade|wait)",
-        "(?<!\\bentry,?\\s)\\b(?:once|if|when|after|on|until|at|by|for)\\s+(?:the\\s+|a\\s+)?(?:next|another|later|new|following)\\b|\\blater\\b|\\bone more\\b|\\blet the next\\b|\\bprovided\\b|\\bon (?:a |the )?break\\w*\\b|\\bbreaks? (?:above |below )?(?:the |its )?doji\\b",
-        "(?<!\\brefus\\w*(?:\\s*\\([^)]*\\))?[^.;,:()]*)[,;:]\\s*(?:then\\s+)?pass\\b(?!\\s+(?:only|if|when|unless|on)\\b)|[,;:]\\s*so\\s+pass\\b"
-      ],
-      "lookup": [
-        "prepare-ahead",
-        "candle-reading"
-      ]
-    },
-    {
       "id": "q47",
       "layer": "entry",
       "prompt": "lookup",
@@ -905,7 +860,7 @@
         "\\birrelevant\\b",
         "\\b(?:does not|doesn'?t|won'?t) matter\\b",
         "\\bno (?:effect|bearing|weight)\\b",
-        "(?<!\\brefus\\w*[^.;]*)(?<!reason to\\s)\\b(?:i'?d\\s+|i would\\s+|then\\s+|so\\s+)?(?:pass|skip)(?:es|ed|ing)?\\b(?!\\s+(?:only|if|when|unless|by itself|alone|on (?:it|that|this) alone)\\b)",
+        "(?<!\\brefus\\w*[^.;]*)(?<!reason to\\s)(?<!\\bcompose_check\\s)\\b(?:i'?d\\s+|i would\\s+|then\\s+|so\\s+)?(?:pass|skip)(?:es|ed|ing)?\\b(?!\\s+(?:only|if|when|unless|by itself|alone|condition|on (?:it|that|this) alone)\\b)",
         "\\b(?:go|enter|take|flip|sell)\\s+(?:the\\s+|it\\s+)?short\\b|\\bshort (?:it|instead)\\b"
       ],
       "lookup": [

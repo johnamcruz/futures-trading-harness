@@ -303,21 +303,9 @@ test('grading: the prepare-ahead questions grade the LEADING verdict: a held-out
   }
 });
 
-test('grading: the standing-scenario questions (q45-q48) grade the LEADING verdict: a held-out set (written before the regexes)', () => {
-  // [answer, shouldPass]. q45/q46: any closing candle meets a standing TAKE, so confirm through compose_check (an invented
-  // pattern, a wait for a confirming close, the plan's own wick condition are the traps); q47/q48: compose_check refused,
-  // so pass (the plan's TAKE, its limit, a wider stop are the traps).
+test('grading: the standing-scenario questions (q47, q48) grade the LEADING verdict: a held-out set (written before the regexes)', () => {
+  // [answer, shouldPass]. q47/q48: compose_check refused, so pass (the plan's TAKE, its limit, a wider stop are the traps).
   const cases = {
-    q45: [['Confirm: compose_check with the at-close reads.', true], ['Confirm; a standing setup needs no candle pattern.', true], ['Compose it now with the at-close reads.', true],
-      ['Take it: any closing candle meets a standing TAKE.', true], ['Yes, confirm via compose_check.', true], ['Confirm, unless compose_check refuses.', true],
-      ['Go long: compose_check on the at-close reads.', true], ['Confirm; the doji is no reason to pass.', true], ['Confirm — PASS is only a compose_check refusal.', true],
-      ['Pass: no lower wick.', false], ['Pass, the doji shows no rejection.', false], ['Wait for a confirming close.', false], ['No: the candle is indecisive.', false],
-      ['Skip it; wait for a bullish close.', false], ['Do not confirm: no wick.', false], ['Hold off until a 3m close above the high.', false], ['Not yet: wait for the next bar.', false],
-      ['Confirm only after the next candle closes green.', false], ['Confirm nothing: the doji is weak.', false]],
-    q46: [['Confirm: a standing scenario has no candle condition; compose_check with the at-close reads.', true], ['Confirm via compose_check; the plan\'s wick condition was invented.', true],
-      ['Compose with the at-close reads.', true], ['Confirm; the missing wick is no reason to pass.', true], ['Take it: any close meets its TAKE.', true], ['Confirm, not pass: the setup candle already closed.', true],
-      ['Pass: TAKE not met, no lower wick.', false], ['Pass.', false], ['Pass; the plan said a lower wick.', false], ['No wick, so pass.', false], ['Do not confirm without the wick.', false],
-      ['Wait for a 3m candle with a lower wick.', false], ['Skip: the plan\'s condition failed.', false], ['Confirm only if a wick prints.', false], ['Not met: pass.', false]],
     q47: [['Pass: compose_check refused it.', true], ['Pass.', true], ['No trade: the refusal is the pass.', true], ['Skip: the stop is not on the losing side.', true], ['Pass; never enter past the stop.', true],
       ['Do not confirm; compose_check refused.', true], ['Stand down: compose refused.', true],
       ['Confirm: a standing setup meets its TAKE with any close.', false], ['Confirm.', false], ['Take it anyway: the setup stands.', false], ['Confirm; place it at the plan\'s limit.', false],
@@ -360,22 +348,26 @@ test('grading: q49 (a standing scenario, the closing 3m back through the level, 
     ['No, it is irrelevant: take it at full size.', false], ['Yes, the level broke.', false], ['It invalidates the setup: pass.', false], ['No, pass.', false],
   ];
   for (const [a, want] of cases) assert.strictEqual(pass('q49', `ANSWER: ${a}`), want, `q49 ${want ? 'right' : 'wrong'}: ${a}`);
-  // Added after the regexes: a negated ignore is no fail; a doji named as no confirmation (q45) is right, as a confirmation wrong.
+  // The live run (k 10, this skill text): two right answers the grader failed, "the pass condition is" and a compose_check
+  // result named "passing"; a pass verdict in -ing form still fails.
+  for (const [a, want] of [
+    ['No. The 3m close below the prior POC is not by itself a reason to pass; the scenario\'s TAKE condition is "its reads compose at the close," and the pass condition is "compose_check refuses it."', true],
+    ['No. The 3m close alone is not a reason to pass; the TAKE is met by compose_check passing, not by the closing 3m candle.', true],
+    ['No, but I am passing it anyway.', false],
+  ]) assert.strictEqual(pass('q49', `ANSWER: ${a}`), want, `q49 ${want ? 'right' : 'wrong'}: ${a}`);
+  // Added after the regexes: a negated ignore is no fail.
   for (const [id, a, want] of [['q49', 'No; don\'t ignore it, weigh it.', true], ['q49', 'Never by itself: weigh it in the count.', true],
-    ['q45', 'Confirm: the doji decides nothing; compose_check with the at-close reads.', true], ['q45', 'Confirm; the doji isn\'t a confirmation, the 15m setup is.', true],
-    ['q45', 'Confirm: the doji is the confirmation.', false]]) assert.strictEqual(pass(id, `ANSWER: ${a}`), want, `${id} ${want ? 'right' : 'wrong'}: ${a}`);
+    ]) assert.strictEqual(pass(id, `ANSWER: ${a}`), want, `${id} ${want ? 'right' : 'wrong'}: ${a}`);
 });
 
-test('grading: every forbidden pattern of q45-q49 does work (its removal lets a wrong answer through), and negated or right-looking variants grade right', () => {
+test('grading: every forbidden pattern of q47-q49 does work (its removal lets a wrong answer through), and negated or right-looking variants grade right', () => {
   // [id, forbidden index, a wrong answer that leads with a right-looking verdict, so only that pattern fails it]
   const work = [
-    ['q45', 0, 'Confirm, but wait a bit first.'], ['q45', 1, 'Confirm only if the 3m closes green.'], ['q45', 2, 'Yes, I\'d pass.'], ['q45', 3, 'Confirm: the doji confirms it.'], ['q45', 4, 'Confirm at the following 3m close above the doji.'], ['q45', 5, 'Compose_check would refuse it, so pass.'],
     ['q49', 0, 'No, ignore it.'], ['q49', 1, 'No, irrelevant.'], ['q49', 2, 'No: it does not matter.'], ['q49', 3, 'No, it has no effect.'], ['q49', 4, 'No, I\'d pass.'], ['q49', 5, 'No; take the short instead.'],
-    ['q46', 0, 'Confirm, but wait for a wick first.'], ['q46', 1, 'Confirm only if a wick prints.'], ['q46', 2, 'Yes, I would pass: no wick.'], ['q46', 3, 'Confirm later, after another candle.'], ['q46', 4, 'Compose it; then pass.'],
     ['q47', 0, 'Not a pass: confirm.'], ['q47', 1, 'No, take it.'], ['q47', 2, 'Pass on the plan\'s stop; recompose with a wider stop.'], ['q47', 3, 'Pass; go short, the rejection failed.'],
     ['q48', 0, 'Not a pass: confirm at the planned entry.'], ['q48', 1, 'Not a pass: take it at the plan\'s price.'], ['q48', 2, 'No, chase it.'], ['q48', 3, 'Pass at this price; recompose with a closer target.'],
   ];
-  for (const id of ['q45', 'q46', 'q47', 'q48', 'q49']) assert.strictEqual(q(id).forbidden.length, work.filter(w => w[0] === id).length, `${id}: a case for each forbidden pattern`);
+  for (const id of ['q47', 'q48', 'q49']) assert.strictEqual(q(id).forbidden.length, work.filter(w => w[0] === id).length, `${id}: a case for each forbidden pattern`);
   for (const [id, i, answer] of work) {
     assert.strictEqual(pass(id, `ANSWER: ${answer}`), false, `${id} fails: ${answer}`);
     const without = { ...q(id), forbidden: q(id).forbidden.filter((_, j) => j !== i) };
@@ -383,15 +375,11 @@ test('grading: every forbidden pattern of q45-q49 does work (its removal lets a 
   }
   // A forbidden word negated, or a compose-bound condition, is no fail; a confirm of nothing is no confirm.
   for (const [id, a, want] of [
-    ['q45', 'Confirm; do not wait for a confirming close.', true], ['q45', 'Confirm only if compose_check passes.', true], ['q45', 'Confirming nothing: pass.', false],
-    ['q46', 'Confirm: no need to wait for a wick.', true], ['q46', 'Confirm nothing.', false],
     ['q47', 'Pass; do not confirm.', true], ['q47', 'Pass: never take it past the stop.', true], ['q47', 'Confirm nothing: pass.', true],
     ['q48', 'Pass; never chase.', true], ['q48', 'Pass: don\'t take it at the plan\'s limit.', true], ['q48', 'Confirm nothing: refused.', true],
     // A lead that is no pass (and names no confirm): the required verdict alone fails it (mutation check: required made '.').
     // Review round (pc2-opus): a wait on the noun "close" (F1); a re-compose or a moved stop (F2), negated forms still right;
     // a confirm after a full stop, a "Yes, I'd pass" (low items).
-    ['q45', 'Confirm only after a 3m close above the doji\'s high.', false], ['q46', 'Confirm only after the next close shows a wick.', false],
-    ['q45', 'Confirm only if compose_check passes at the close.', true],
     ['q47', 'Pass, then recompose with a new stop below the close.', false], ['q47', 'Pass the first compose, re-run compose_check with a stop below the 3m low and take it if OK.', false],
     ['q47', 'Not as planned: recompose below the new low and go long.', false], ['q47', 'Pass; move the stop under the 3m low and enter.', false],
     ['q48', 'Pass; redo compose_check with a different stop.', false],
@@ -400,34 +388,15 @@ test('grading: every forbidden pattern of q45-q49 does work (its removal lets a 
     ['q47', 'Pass. Confirm it with a stop under the 3m low.', false], ['q48', 'Pass. Take it at the plan\'s limit.', false], ['q47', 'Pass. The refusal is the pass; never confirm it.', true],
     // The reviewer's post-read probes (pc2-opus post.json): a confirm deferred to a later candle, a bare "Long" lead, a pass
     // after a compose lead.
-    ['q45', 'Confirm if the next candle closes above the doji.', false], ['q45', 'Confirm on the next bar\'s close above the doji high.', false],
-    ['q45', 'Confirm only on a 3m close above the doji.', false], ['q45', 'Long setups need a wick; pass.', false], ['q46', 'Long setups need a wick; pass.', false], ['q45', 'Long setups want a wick here.', false], ['q46', 'Long setups want a wick here.', false],
-    ['q45', 'Confirm; no need to wait for the next bar.', true], ['q45', 'Confirm: compose_check now, not on a later close.', true], ['q46', 'Confirm, pass only if compose_check refuses.', true],
-    ['q45', 'Yes, I\'d pass.', false], ['q46', 'Yes, I would pass.', false], ['q45', 'Yes, I\'d confirm.', true],
     ['q47', 'Wait for the next close.', false], ['q47', 'Yes.', false], ['q47', 'Buy at the plan\'s limit.', false], ['q47', 'Keep the plan\'s limit working.', false],
     ['q48', 'Wait for a pullback to the plan\'s limit.', false], ['q48', 'Yes.', false], ['q48', 'Rest the limit at the planned entry.', false],
   ]) assert.strictEqual(pass(id, `ANSWER: ${a}`), want, `${id} ${want ? 'right' : 'wrong'}: ${a}`);
 });
 
-test('grading: q45-q48, answers that echo the skill\'s own sentences (added after the regexes, a second probe): no misgrade', () => {
+test('grading: q47, q48, answers that echo the skill\'s own sentences (added after the regexes, a second probe): no misgrade', () => {
   // A conditional pass ("pass only if it refuses"), a confirm named but not the verdict ("I would confirm, but compose_check
   // refused it"): right. A confirm or take as the verdict after a lead or a "but"/"then": wrong.
   const cases = {
-    q45: [
-      ['Confirm via compose_check; pass only if it refuses.', true], ['Confirm: any closing candle meets its TAKE; compose_check on the at-close reads.', true],
-      ['Confirm as for a met candle: compose_check with the at-close reads.', true], ['Confirm; its candle has closed, so no candle condition.', true],
-      ['Confirm: the Standard plan decides, not a candle pattern.', true], ['Confirm — compose_check refusing it is the only pass.', true],
-      ['Confirm: never invent a pattern for a standing scenario.', true], ['Confirm; the doji does not matter, only compose_check does.', true],
-      ['Confirm; pass only when compose_check refuses it.', true], ['Compose_check with the at-close reads: confirm unless it refuses.', true],
-      ['Confirm only after the next candle closes green.', false], ['Confirm only if a wick prints.', false], ['Confirm, but wait for the next close first.', false],
-    ],
-    q46: [
-      ['Confirm via compose_check; pass only if it refuses.', true], ['Confirm: any closing candle meets its TAKE, whatever pattern the plan wrote.', true],
-      ['Confirm as for a met candle; the plan\'s wick condition is not one.', true], ['Confirm: the plan should never have invented a wick.', true],
-      ['Confirm; compose_check refusing it is the pass, not the missing wick.', true], ['Confirm; only compose_check can make it a pass.', true],
-      ['Confirm: its candle has closed, so there is no candle condition.', true], ['Confirm; the wick was invented, so it counts for nothing.', true],
-      ['Confirm only if a wick prints.', false], ['Confirm only once the 3m candle shows a wick.', false],
-    ],
     q47: [
       ['Pass — I would confirm, but compose_check refused it.', true], ['Pass: compose_check refusing it is the pass.', true],
       ['Pass: any close meets its TAKE, but compose_check refused it.', true], ['Pass; a standing setup is confirmed only through compose_check, and it refused.', true],
@@ -450,41 +419,9 @@ test('grading: q45-q48, answers that echo the skill\'s own sentences (added afte
   }
 });
 
-test('grading: q45-q49, the round-2 review\'s answers: a blind set (91, written before reading the regexes), its post-read probes (26; 3 contrived ones left out, LOW) and echoes of the owning skills (10)', () => {
+test('grading: q47-q49, the round-2 review\'s answers (its q45/q46 ones left out: q45 is now a yes/no, q46 is gone): a blind set (written before reading the regexes), its post-read probes (3 contrived ones left out, LOW) and echoes of the owning skills', () => {
   // [id, answer, shouldPass], as the reviewer graded them (scratchpad tools, copied here so the set is held in the repo).
   const cases = [
-    ["q45", "ANSWER: Confirm: compose_check with the at-close reads.\nThe standing setup needs nothing of the closing 3m; a doji decides nothing.", true],
-    ["q45", "ANSWER: Confirm. The doji on the 3m decides nothing; the 15m rejection is the setup.", true],
-    ["q45", "ANSWER: Confirm scenario 2 and compose_check it with the at-close reads.", true],
-    ["q45", "ANSWER: Confirm, compose_check; if it refuses, pass.", true],
-    ["q45", "ANSWER: Confirm - its TAKE needs nothing of the closing candle.", true],
-    ["q45", "ANSWER: Go long: confirm through compose_check with \"15m rejected prior poc up\".", true],
-    ["q45", "ANSWER: Confirm; the 3m only times the entry and the setup still stands.", true],
-    ["q45", "ANSWER: Pass: a doji is indecision, no one took control.", false],
-    ["q45", "ANSWER: Pass, the closing 3m is a doji so the reaction is not confirmed.", false],
-    ["q45", "ANSWER: Wait for the next 3m candle to close above the doji before confirming.", false],
-    ["q45", "ANSWER: Confirm only after the next 3m closes green.", false],
-    ["q45", "ANSWER: Hold off: the doji stalls, so the next candle's close decides; confirm then.", false],
-    ["q45", "ANSWER: Confirm once the next 3m candle closes above the doji's high.", false],
-    ["q45", "ANSWER: Not yet - wait for confirmation on the next bar.", false],
-    ["q45", "ANSWER: Pass; stall candle, let the next close decide.", false],
-    ["q45", "ANSWER: Confirm at the next close if it breaks the doji high.", false],
-    ["q45", "ANSWER: Skip it: middle-third close shows no conviction.", false],
-    ["q45", "ANSWER: The doji confirms the rejection: confirm.", false],
-    ["q46", "ANSWER: Confirm: compose_check with the at-close reads; the plan's wick condition is not needed for a standing setup.", true],
-    ["q46", "ANSWER: Confirm. A standing scenario's TAKE needs nothing of the closing candle, whatever the plan wrote.", true],
-    ["q46", "ANSWER: Confirm through compose_check; the missing lower wick is no reason to pass.", true],
-    ["q46", "ANSWER: Confirm - the plan's invented wick condition doesn't count.", true],
-    ["q46", "ANSWER: Confirm and compose_check; the plan is never evidence.", true],
-    ["q46", "ANSWER: Confirm scenario 2; pass only if compose_check refuses.", true],
-    ["q46", "ANSWER: Pass: the TAKE condition (a lower wick) was not met.", false],
-    ["q46", "ANSWER: Pass - the candle decides and it has no lower wick.", false],
-    ["q46", "ANSWER: Pass, the plan said TAKE only with a lower wick and there is none.", false],
-    ["q46", "ANSWER: No confirm: TAKE not met.", false],
-    ["q46", "ANSWER: Wait for a 3m with a lower wick, then confirm.", false],
-    ["q46", "ANSWER: Confirm only if the next 3m prints a lower wick.", false],
-    ["q46", "ANSWER: Stand aside until a candle with a lower wick closes.", false],
-    ["q46", "ANSWER: Pass; plan not met, no trade.", false],
     ["q47", "ANSWER: Pass: compose_check refused it (the stop is not on the losing side).", true],
     ["q47", "ANSWER: Pass. compose_check refusing is the pass.", true],
     ["q47", "ANSWER: Pass - the refusal decides; CYCLE RESULT: refused, stop not on losing side.", true],
@@ -544,17 +481,6 @@ test('grading: q45-q49, the round-2 review\'s answers: a blind set (91, written 
     ["b8", "ANSWER: No: the Bias line refuses the long, no trade.", true],
     ["b8", "ANSWER: Yes, confirm the long; the candle met TAKE.", false],
     ["b8", "ANSWER: Confirm: the plan listed it and TAKE is met.", false],
-    ["q45", "ANSWER: Confirm, compose_check with the at-close reads; refused (R:R): pass.", true],
-    ["q45", "ANSWER: Confirm, compose_check with the at-close reads; if refused: pass.", true],
-    ["q45", "ANSWER: Confirm: compose_check with the at-close reads, then as the cycle's prompt says; compose_check refusing is the pass.", true],
-    ["q46", "ANSWER: Confirm, compose_check with the at-close reads; refused: pass.", true],
-    ["q45", "ANSWER: Confirm at the next close if it breaks the doji high.", false],
-    ["q45", "ANSWER: Confirm at the following 3m close above the doji.", false],
-    ["q45", "ANSWER: Confirm after one more 3m candle closes above the doji's high.", false],
-    ["q45", "ANSWER: Confirm, but let the next 3m close above the doji first.", false],
-    ["q45", "ANSWER: Confirm on a break of the doji's high.", false],
-    ["q46", "ANSWER: Confirm at the next 3m that prints a lower wick.", false],
-    ["q46", "ANSWER: Confirm, provided the next candle shows a lower wick.", false],
     ["q47", "ANSWER: Pass on the long; go short, the rejection failed.", false],
     ["q47", "ANSWER: Pass; flip short below the setup candle's low.", false],
     ["q49", "ANSWER: No, but I'd pass anyway.", false],
@@ -570,10 +496,6 @@ test('grading: q45-q49, the round-2 review\'s answers: a blind set (91, written 
     ["q47", "ANSWER: No trade: compose_check refused.", true],
     ["q48", "ANSWER: No trade; I would not chase.", true],
     ["q48", "ANSWER: Pass: refused (R:R). Do not chase.", true],
-    ["q45", "ANSWER: Confirm: the setup is the entry, on the next 3m bar; no confirming close to wait for.", true],
-    ["q46", "ANSWER: Confirm: the setup is the entry on the next 3m bar, compose_check with the at-close reads.", true],
-    ["q45", "ANSWER: Confirm; a stall decides nothing here, the 15m setup is the entry.", true],
-    ["q45", "ANSWER: Confirm, compose_check: its TAKE needs nothing of the closing candle, whatever the plan wrote.", true],
     ["q49", "ANSWER: No, the 3m close is not by itself a reason to pass.", true],
     ["q49", "ANSWER: No: a read, never a veto; only a compose_check refusal is a pass.", true],
     ["q49", "ANSWER: No; context to weigh, pass only if compose_check refuses.", true],
@@ -581,15 +503,7 @@ test('grading: q45-q49, the round-2 review\'s answers: a blind set (91, written 
     ["q47", "ANSWER: Pass: compose_check refusing is the pass; never short against the trend.", true],
     ["q47", "ANSWER: Pass; don't flip short.", true],
     // N1: a confirm deferred to a later candle (no "only"); the trade-lifecycle echo "the entry, on the next 3m bar" stays right.
-    ['q45', 'ANSWER: Confirm at the next close if it breaks the doji high.', false], ['q45', 'ANSWER: Confirm at the following 3m close above the doji.', false],
-    ['q45', 'ANSWER: Confirm after one more 3m candle closes above the doji\'s high.', false], ['q45', 'ANSWER: Confirm, but let the next 3m close above the doji first.', false],
-    ['q45', 'ANSWER: Confirm on a break of the doji\'s high.', false], ['q46', 'ANSWER: Confirm at the next 3m that prints a lower wick.', false],
-    ['q46', 'ANSWER: Confirm, provided the next candle shows a lower wick.', false],
-    ['q45', 'ANSWER: Confirm: the setup is the entry, on the next 3m bar; no confirming close to wait for.', true],
     // N2: the skill's own examples, verbatim, and a pass after a refusal in its clause: right; ", so pass" still wrong.
-    ['q45', 'ANSWER: Confirm, compose_check with the at-close reads; refused (R:R): pass.', true], ['q46', 'ANSWER: Confirm, compose_check with the at-close reads; refused (R:R): pass.', true],
-    ['q45', 'ANSWER: Confirm, compose_check with the at-close reads; if refused: pass.', true], ['q46', 'ANSWER: Confirm, compose_check; if it refuses, pass.', true],
-    ['q45', 'ANSWER: Confirm, compose_check with the at-close reads.', true], ['q45', 'ANSWER: Compose it, so pass.', false],
     // N3: q49, a pass after a leading "No"/"Not by itself"; the negated or conditional forms stay right.
     ['q49', 'ANSWER: No, I\'d pass.', false], ['q49', 'ANSWER: No, but I\'d pass anyway.', false], ['q49', 'ANSWER: No — skip it though, the POC is lost.', false],
     ['q49', 'ANSWER: Not by itself, but with the level lost I pass.', false],
@@ -606,10 +520,10 @@ test('summary: correct on all K, answered both ways, the totals, the bar; compar
   for (const x of QUIZ.questions) for (let k = 1; k <= 5; k += 1) rows.push({ id: x.id, k, pass: true });
   for (const x of QUIZ.partB) for (let k = 1; k <= 5; k += 1) rows.push({ id: x.id, k, pass: true });
   const all = Q.summarize(QUIZ, rows, 5);
-  assert.deepStrictEqual([all.partA.allCorrect, all.partA.bothWays, all.partB.allCorrect, all.meetsBar], [47, 0, 8, true]);
+  assert.deepStrictEqual([all.partA.allCorrect, all.partA.bothWays, all.partB.allCorrect, all.meetsBar], [45, 0, 8, true]);
   const one = rows.map(r => (r.id === 'q6' && r.k === 2 ? { ...r, pass: false } : r));
   const s = Q.summarize(QUIZ, one, 5);
-  assert.deepStrictEqual([s.partA.allCorrect, s.partA.bothWays, s.partA.total, s.meetsBar], [46, 1, 234, false]);
+  assert.deepStrictEqual([s.partA.allCorrect, s.partA.bothWays, s.partA.total, s.meetsBar], [44, 1, 224, false]);
   // Too few runs is never correct on all K.
   assert.strictEqual(Q.summarize(QUIZ, rows.filter(r => r.k <= 3), 5).partA.allCorrect, 0);
   const d = Q.compare(all, s).find(x => x.id === 'q6');
