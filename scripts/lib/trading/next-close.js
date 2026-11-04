@@ -22,10 +22,12 @@
  *              momentum (found by asking momentumRead itself, unrounded, as the rules engine reads it), and the close
  *              in the far third (candle-facts.js closeLocation). It is listed when the strategy's scan (strategies.js
  *              scan, the evaluator) fires its side on the closed bars plus the threshold candle (the least such candle,
- *              opening at the last close): its other rules (the entry rule's side, the window) and the evaluator's
- *              checks (session, trend rule, filters) hold for it. They are PRECONDITIONS: code evaluates them again at
- *              the close, and the side (chain_side) can move with the closing candle (the declared trend reads its
- *              close; a 15m or 1h close updates the frames).
+ *              opening at the last close), scanned as the runner scans (its lane's strategies, its selected contracts,
+ *              at the next close). Its other rules (the entry rule's side, the window) are its listed PRECONDITIONS:
+ *              they hold for the threshold candle, code evaluates them again at the close, and the side (chain_side)
+ *              can move with the closing candle (the declared trend reads its close; a 15m or 1h close updates the
+ *              frames). The evaluator's own checks (session, trend rule, filters) passed for it too; not listed, the
+ *              close's scan runs them again.
  *   reaction   at a close that completes a setup-frame candle (setup-moments.js DEFAULTS.setupTf, the 15m): each
  *              rejection or break of a FIXED key level (setup-moments.js KEY_LEVEL, read as it stood at the candle's
  *              open: briefing.js candleLevelsAt) in reach (the levels inside the candle's range so far, and the nearest
@@ -34,20 +36,29 @@
  *              is the oracle: the thresholds are the least tick closes (and highs or lows) it reads as the reaction.
  *              Not listed in v1: the moving levels (the VWAP, the session profile: their value at the close moves
  *              with the closing bar) and the fair value gaps' edges (read through the gap's side); one of them
- *              reacting at the close is outside the plan. Only the sides the trend rule allows (as standardPlans).
+ *              reacting at the close is outside the plan. A side the trend rule refuses now (trendRuleOf false) is left
+ *              out, as standardPlans refuses it; one it can't read is listed, its precondition saying so.
  *
  * The plan, per candidate, as a function of the trigger: the rule in words from the strategies' own numbers, and the
  * plan code makes for the threshold candle (the at-close briefing built on the closed bars plus that candle): a momentum
- * candidate's is compose_check's of its cited reads (composed-reads.js checkReads, then trade-lifecycle.js planOf), a
+ * candidate's is compose_check's of its cited reads (composed-reads.js checkReads with the attempt policy's entry rule,
+ * then trade-lifecycle.js planOf with the in-attempt flag; its refusals but the steps the bar plan states), a
  * reaction's is the Standard plan's (setup-library.js composeAt, as standardPlans calls it). The size: with the
  * account's sizing facts (`sizing`, the caller's: { capUsd, floor, tickValue, slipTicks, feePerSide, stretchUsd }),
  * size-translate.js floorFit at the plan's stop, and the widest stop the floor fits; without them, not stated.
  * Every read is the briefing's read name, so a bar plan's reads parse in compose_check.
  *
- *   possibleAtNextClose({ symbol, bars, minutes, briefing, flat, registry, sizing, blackouts, clock, roundSteps })
- *       null (not flat) | { asOf, closedAt, next: { t, closedAt }, none: reason | null, candidates, skipped }
+ *   possibleAtNextClose({ symbol, bars, minutes, briefing, flat, registry, strategies, selected, entryRule, inAttempt,
+ *       paper, sizing, blackouts, clock, roundSteps, setupTf })
+ *       null (not flat) | { asOf, closedAt, next: { t, closedAt }, none: reason | null, candidates, skipped }; throws when
+ *       the briefing isn't built from exactly these bars (a bundle holding the bar forming or later ones is refused).
+ *       registry: the loaded strategies (production passes them; without, the shipped tree, cached for the process);
+ *       strategies and selected: the runner's scan's (runner-wiring.js runnerScan: the lane's strategies, cfg.symbols);
+ *       entryRule, inAttempt, paper: compose_check's (the attempt policy's entryRuleOf, an attempt running, FTH_PAPER)
  *   triggerMet(candidate, bar)   whether the closing bar meets the candidate's trigger (the same code the at-close
- *                                read runs); preconditions aside
+ *                                read runs); false for a bar other than the one it was prepared for (bar.t the next
+ *                                bar's open); preconditions aside
+ *   reachOf(levels, f)           the levels in reach of a forming candle
  *   possibleLines(section, et)   the section as briefing lines
  *   renderPrepareBriefing(b, section, { now })   the prepare briefing: the briefing's text with the section after its
  *                                summary (the at-close briefing never has it)
@@ -92,6 +103,8 @@ const shippedRegistry = () => {
 
 /** The least whole k from `start` (k >= lo) for which `meets(k)` holds, `meets` growing with k; null past `max`. */
 function least(meets, start, lo, max) {
+  // Past 2^53 a step adds nothing (k + 1 === k): no whole count to find there, so none (never a loop that can't end).
+  if (!Number.isSafeInteger(start) || !Number.isSafeInteger(max)) return null;
   let k = Math.max(lo, start);
   while (k > lo && meets(k - 1)) k -= 1;
   while (!meets(k)) { k += 1; if (k > max) return null; }
@@ -120,8 +133,9 @@ const preconditionText = r => {
  * the least whole volume momentumRead reads as momentum that way, the close in the far third; or { reason }.
  */
 function momentumThresholds(basis, dir, tick, open) {
-  if (!(basis.atrPrev > 0)) return { reason: 'the ATR(14) of the candles before it is unknown' };
-  if (!(basis.avg > 0)) return { reason: 'the average volume of the candles before it is unknown (too few)' };
+  if (!(Number.isFinite(basis.atrPrev) && basis.atrPrev > 0)) return { reason: 'the ATR(14) of the candles before it is unknown' };
+  if (!Number.isFinite(basis.avg)) return { reason: 'the average volume of the candles before it is unknown (too few candles, or a volume missing)' };
+  if (!(basis.avg > 0)) return { reason: `the average volume of the candles before it is ${basis.avg}: no volume reads as momentum` };
   const up = dir === 'up';
   const candle = (k, v) => {
     const far = levelOnTick(open + (up ? k : -k) * tick, tick);
@@ -162,9 +176,10 @@ function planFacts(plan, problems, sizing) {
 
 /** The momentum candidates (see the header). */
 function momentumCandidates(x) {
-  const { bars, minutes, symbol, registry, tick, next, sizing, blackouts, clock, roundSteps, skipped } = x;
+  const { bars, minutes, symbol, registry, scanWith, selected, entryRule, inAttempt, paper, tick, next, sizing, blackouts, clock, roundSteps, skipped } = x;
   const tf = tfLabel(minutes);
-  const cited = require('./strategies').citedSetups(registry, LIFECYCLE);
+  // The setups a record may cite, as compose_check reads them (a paper run cites paper ones too).
+  const cited = require('./strategies').citedSetups(registry, LIFECYCLE, { paper: paper === true });
   const lifecycle = registry.find(s => s && s.name === LIFECYCLE && s.valid);
   const own = registry.filter(s => s && s.valid && cited.has(s.name) && s.signal === 'rules' && s.timeframe === tf);
   if (!own.length) return [];
@@ -181,7 +196,8 @@ function momentumCandidates(x) {
       if (t.reason) { skipped.push(`${s.name} ${side}: ${t.reason}`); continue; }
       const probe = barOf(next.t, t.candle);
       const withProbe = [...bars, probe];
-      const results = require('./strategies').scan(registry, withProbe, { symbol });
+      // The runner's scan (runner-wiring.js runnerScan): its lane's strategies, its selected contracts, at the bar's close.
+      const results = require('./strategies').scan(scanWith, withProbe, { symbol, now: new Date(next.closedAt), selected });
       const r = results.find(y => y && y.name === s.name);
       if (!r || !r.candidate || r.direction !== side) {
         const why = !r ? 'not scanned for this contract' : r.direction !== side ? `its rules don't fire ${side} with the threshold candle (${(r.rules && r.rules[side] ? r.rules[side] : []).filter(y => !y.ok).map(y => y.rule).join(', ') || 'both sides fire'})`
@@ -197,15 +213,19 @@ function momentumCandidates(x) {
         { step: 'stop', skill: 'invalidation', read: `stop ${tf} ${side === 'long' ? 'low' : 'high'} ${side === 'long' ? probe.l : probe.h}` },
         { step: 'target', skill: 'take-profit', read: 'target 2r' },
       ];
-      const checked = checkReads({ reads, side, briefing: pb, tick, cited });
+      // compose_check's check and plan (harness-tools/compose.js): the attempt policy's entry rule, the in-attempt flag.
+      const checked = checkReads({ reads, side, briefing: pb, tick, entryRule: entryRule || null, cited });
       const untrue = checked.reads.find(y => y.check !== true);
+      // Its problems but the steps left to the model's bar plan (the bias and the location: its reads, not code's).
+      const refusals = checked.problems.filter(p => !/^steps not stated:/.test(p));
       const risk = lifecycle ? lifecycle.risk : null;
       const planned = untrue || !risk ? { plan: null, problems: [untrue ? `"${untrue.read}" is not true for the threshold candle: ${untrue.fact}` : `the ${LIFECYCLE} strategy can't be read`] }
-        : planOf({ checked, briefing: pb, side, size: isObj(sizing) && Number.isInteger(sizing.floor) ? sizing.floor : 1, tick, tickValue: isObj(sizing) && num(sizing.tickValue) ? sizing.tickValue : tick, minRR: risk.min_rr, maxRiskUsd: risk.max_risk_usd, stopRule: stopRuleOf(risk), suggestion: true });
+        : planOf({ checked, briefing: pb, side, size: isObj(sizing) && Number.isInteger(sizing.floor) ? sizing.floor : 1, tick, tickValue: isObj(sizing) && num(sizing.tickValue) ? sizing.tickValue : tick, minRR: risk.min_rr, maxRiskUsd: risk.max_risk_usd, stopRule: stopRuleOf(risk), suggestion: inAttempt === true });
+      if (planned.plan) planned.problems = [...refusals, ...planned.problems];
       const stop = s.risk && s.risk.stop ? (isObj(s.risk.stop) ? s.risk.stop[side] : s.risk.stop) : null;
       out.push({
         kind: 'momentum', name: s.name, side, dir: word, read: reads[0].read, tf,
-        trigger: { dir: word, ticks: t.ticks, range: t.range, volume: t.volume, third: word === 'up' ? 'top' : 'bottom', basis: { prev: basis.prev ? { o: basis.prev.o, h: basis.prev.h, l: basis.prev.l, c: basis.prev.c, v: basis.prev.v } : null, atrPrev: basis.atrPrev, avg: basis.avg, n: basis.n } },
+        trigger: { at: next.t, dir: word, ticks: t.ticks, range: t.range, volume: t.volume, third: word === 'up' ? 'top' : 'bottom', basis: { prev: basis.prev ? { o: basis.prev.o, h: basis.prev.h, l: basis.prev.l, c: basis.prev.c, v: basis.prev.v } : null, atrPrev: basis.atrPrev, avg: basis.avg, n: basis.n } },
         preconditions: rule.others,
         rule: { entry: 'market from the close', stop: stop ? `${stop}${num(s.risk.stop_min) ? `, at least ${s.risk.stop_min} pts` : ''} (${s.name}'s risk.stop), ceil to ticks` : `${s.name}'s risk.stop`, target: s.exit && num(s.exit.target_r) ? `${s.exit.target_r}R (its exit.target_r; past it the policy's exit trails)` : 'its own' },
         threshold: { bar: probe, reads: reads.map(y => y.read), plan: planFacts(planned.plan, planned.problems, sizing) },
@@ -220,6 +240,18 @@ const finalCandle = (f, bar) => ({ o: f.o, h: Math.max(f.h, bar.h), l: Math.min(
 
 /** A tick price `k` ticks from `p` on the tick grid (p's tick floor or ceiling first). */
 const ticksFrom = (p, k, tick, up) => levelOnTick((up ? Math.floor(p / tick + 1e-9) + k : Math.ceil(p / tick - 1e-9) - k) * tick, tick);
+
+/**
+ * The levels in reach of a forming candle `f` ({ h, l } so far): those inside its range (its high and low included), and
+ * the nearest beyond its high and beyond its low (every level at that price).
+ */
+function reachOf(levels, f) {
+  const above = levels.filter(([, p]) => p > f.h).map(([, p]) => p);
+  const below = levels.filter(([, p]) => p < f.l).map(([, p]) => p);
+  const nearUp = above.length ? Math.min(...above) : null;
+  const nearDown = below.length ? Math.max(...below) : null;
+  return levels.filter(([, p]) => (p >= f.l && p <= f.h) || p === nearUp || p === nearDown);
+}
 
 /** The reaction candidates (see the header). */
 function reactionCandidates(x) {
@@ -245,12 +277,7 @@ function reactionCandidates(x) {
   const seen = new Set();
   const levels = candleLevelsAt(bars, minutes, [])(n - 1, openIdx, cand.first)
     .filter(([name, p]) => Number.isFinite(p) && SM.KEY_LEVEL.test(name) && !CF.MOVING_LEVEL.test(name) && !seen.has(name) && seen.add(name));
-  // In reach: inside the range so far, and the nearest beyond its high and beyond its low (every level at that price).
-  const above = levels.filter(([, p]) => p > f.h).map(([, p]) => p);
-  const below = levels.filter(([, p]) => p < f.l).map(([, p]) => p);
-  const nearUp = above.length ? Math.min(...above) : null;
-  const nearDown = below.length ? Math.max(...below) : null;
-  const reach = levels.filter(([, p]) => (p >= f.l && p <= f.h) || p === nearUp || p === nearDown);
+  const reach = reachOf(levels, f);
   const rule = trendRuleOf(((briefing.sections.m3 || {}).data || {}).trendRule);
   const out = [];
   for (const [name, L] of reach) {
@@ -269,7 +296,7 @@ function reactionCandidates(x) {
       const plan = composed.plan ? planFacts(composed.plan, [], sizing) : { status: composed.status, why: composed.why };
       out.push({
         kind: 'reaction', name, price: L, side, dir: kind.dir, read, tf: stf, rel: kind.rel,
-        trigger: { rel: kind.rel, dir: kind.dir, level: L, candle: f, prevClose: Number.isFinite(prevClose) ? prevClose : null, ...kind.facts },
+        trigger: { at: next.t, rel: kind.rel, dir: kind.dir, level: L, candle: f, prevClose: Number.isFinite(prevClose) ? prevClose : null, ...kind.facts },
         // The side as the trend rule allows it now; the close's own trend rule decides (a 15m close can move it).
         preconditions: [`the trend rule allows a ${side} (${rule[side] === true ? 'it does now' : 'unknown now'})`],
         rule: { entry: 'a limit at the close (it fills if a later bar trades to it within the record\'s valid_bars)',
@@ -322,6 +349,8 @@ function reactionKinds(f, L, prevClose, tick) {
 function triggerMet(cand, bar) {
   if (!isObj(cand) || !isObj(cand.trigger) || !isObj(bar)) return false;
   const t = cand.trigger;
+  // Only the bar it was prepared for (the next bar's open): after a data gap the bar that closes is another one.
+  if (typeof t.at !== 'string' || bar.t !== t.at) return false;
   if (cand.kind === 'momentum') return momentumRead(CF.factOf(bar, t.basis)) === t.dir;
   if (cand.kind === 'reaction') {
     const r = CF.relation(finalCandle(t.candle, bar), t.level, num(t.prevClose) === null ? NaN : t.prevClose);
@@ -331,7 +360,7 @@ function triggerMet(cand, bar) {
 }
 
 /** The section (see the header), or null when the account isn't flat. */
-function possibleAtNextClose({ symbol, bars: raw, minutes, briefing, flat = false, registry = null, sizing = null, blackouts = null, clock = null, roundSteps = null, setupTf = SM.DEFAULTS.setupTf }) {
+function possibleAtNextClose({ symbol, bars: raw, minutes, briefing, flat = false, registry = null, strategies = null, selected = null, entryRule = null, inAttempt = false, paper = false, sizing = null, blackouts = null, clock = null, roundSteps = null, setupTf = SM.DEFAULTS.setupTf }) {
   if (flat !== true) return null;
   const bars = normalizeBars(raw);
   const last = bars[bars.length - 1];
@@ -348,7 +377,8 @@ function possibleAtNextClose({ symbol, bars: raw, minutes, briefing, flat = fals
   const tick = tickOf(symbol);
   if (!tick) return none(['the contract\'s tick is unknown']);
   const skipped = [];
-  const x = { bars, minutes, symbol, registry: Array.isArray(registry) ? registry : shippedRegistry(), tick, next, sizing, blackouts, clock, roundSteps, skipped, briefing, setupTf };
+  const reg = Array.isArray(registry) ? registry : shippedRegistry();
+  const x = { bars, minutes, symbol, registry: reg, scanWith: Array.isArray(strategies) ? strategies : reg, selected, entryRule, inAttempt, paper, tick, next, sizing, blackouts, clock, roundSteps, skipped, briefing, setupTf };
   const candidates = [...momentumCandidates(x), ...reactionCandidates(x)].map((c, i) => ({ id: `P${i + 1}`, ...c }));
   if (!candidates.length) return none(skipped.length ? skipped : ['nothing in reach can fire']);
   return { ...head, none: null, candidates, skipped };
@@ -400,4 +430,4 @@ function renderPrepareBriefing(b, section, { now = new Date() } = {}) {
   return cut < 0 ? `${text}${lines.join('\n')}\n` : `${text.slice(0, cut)}\n${lines.join('\n')}${text.slice(cut)}`;
 }
 
-module.exports = { NONE, SECTION, possibleAtNextClose, triggerMet, possibleLines, renderPrepareBriefing, momentumThresholds, reactionKinds };
+module.exports = { NONE, SECTION, possibleAtNextClose, triggerMet, possibleLines, renderPrepareBriefing, momentumThresholds, reactionKinds, reachOf };

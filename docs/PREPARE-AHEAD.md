@@ -82,10 +82,23 @@ trusted by any check, so nothing can fail open on it.
 
 ### When it applies
 
-- `possibleAtNextClose({ symbol, bars, minutes, briefing, flat, registry, sizing, blackouts, clock, roundSteps })`
+- `possibleAtNextClose({ symbol, bars, minutes, briefing, flat, registry, strategies, selected, entryRule, inAttempt, paper, sizing, blackouts, clock, roundSteps, setupTf })`
   takes the closed bars the briefing for bar T was built from (its `asOf`
-  must be their last bar, else it throws) and lists what can fire at the
-  close of bar T+1.
+  must be their last bar, else it throws: a bundle that holds the bar
+  forming or later ones is refused) and lists what can fire at the close of
+  bar T+1. What the runner passes, as its own at-close code uses it:
+  - `registry`: the loaded strategies (`loadStrategies`, as the gate loads
+    them). Production passes it; without it the shipped tree is loaded once
+    and cached for the process.
+  - `strategies` and `selected`: the lane's strategies and the runner's
+    symbols, as its scan (`runner-wiring.js` `runnerScan`); the threshold
+    candle is scanned with them, at the next close (`now`).
+  - `entryRule`, `inAttempt`, `paper`: what `compose_check` uses (the attempt
+    policy's entry rule, `entryRuleOf`; whether an attempt is running, so the
+    size is a suggestion; `FTH_PAPER`).
+  - `sizing`, `blackouts`, `clock`, `roundSteps`: below, and as the
+    briefing's.
+  - `setupTf`: the setup frame (default the 15m, `setup-moments.js`).
 - `flat` must be `true` (no position, no working order); otherwise it
   returns null and there is no section. A management cycle is untouched.
 - No entries at the next close (its session window, `sessionWindow`, or a
@@ -118,9 +131,14 @@ trusted by any check, so nothing can fail open on it.
 - **Listed** when the strategy's scan (`strategies.js` `scan`) fires that
   side on the closed bars plus the threshold candle (the least candle that
   meets the trigger, opening at the last close). Its other rules (the entry
-  rule's side, `chain_side`; the window, `minute_et`) and the evaluator's
-  checks (session, trend rule, filters) are **preconditions**: they hold for
-  the threshold candle, and code evaluates them again at the close.
+  rule's side, `chain_side`; the window, `minute_et`) are its listed
+  **preconditions**: they hold for the threshold candle, and code evaluates
+  them again at the close. The evaluator's own checks (session, trend rule,
+  filters) passed for the threshold candle too; they are not listed, and the
+  close's scan runs them again.
+- **Not computable:** an ATR or a volume average that is unknown or not
+  finite, an average of 0, or a threshold past whole-number counts: no
+  candidate, with the reason.
 
 ### Reaction candidates (at a 15m close)
 
@@ -138,9 +156,11 @@ trusted by any check, so nothing can fail open on it.
   rejection needs the candle to have traded beyond the level (already, or at
   a stated price) and the close back on the near side. `relation` decides
   every threshold.
-- **Sides:** only those the trend rule allows as it reads now (the bar
-  T briefing's; `standardPlans` refuses the others the same way). The
-  close's own trend rule decides: it is the candidate's precondition.
+- **Sides:** a side the trend rule refuses as it reads now (the bar T
+  briefing's line, `trendRuleOf` false) is left out, as `standardPlans`
+  refuses it. A side whose trend rule can't be read is listed, its
+  precondition saying so ("unknown now"). The close's own trend rule
+  decides: it is the candidate's precondition.
 - **Not listed in v1:** the moving levels (the VWAP and the session profile:
   their value at the close moves with the closing bar) and the fair value
   gaps' edges (read through the gap's side). One of those reacting at the
@@ -202,12 +222,40 @@ asks for it yet: every existing briefing, golden and prompt is unchanged.
   setups standing from earlier closes (a 15m reaction's confirmation phase,
   a compression break, a live CISD), whatever the closing candle does. They
   are not in this section; matching them is the confirm's.
-- **Moving levels and gap edges** (above): outside the plan in v1.
-- **The contract selection:** the threshold candle's scan takes no
-  `selected` contracts; the runner's prepare must pass the same selection
-  its at-close scan uses.
+- **Moving levels and gap edges** (above): outside the plan in v1, by the
+  owner's decision (momentum and the fixed key levels only).
+- **The inputs the runner passes** (above): its lane's strategies and
+  selected contracts, and compose's entry rule, attempt and paper flags, so
+  the threshold scan and plan are the ones the close runs.
+- **A trigger tests only its own bar.** `triggerMet` is false for a bar
+  whose `t` is not the next bar's open the section was prepared for (a data
+  gap, a late bar): the confirm matches the bar by time first.
+- **A roll or a back-adjusted history.** Either changes the bars and the
+  levels between the prepare and the close; the plan's recorded bar
+  versions must void it.
+- **Measure the outside-plan share on actual entries,** by level class
+  (listed, VWAP and session profile, gap edges, standing setups, a trend
+  rule flip), not only on the census reactions below.
 - **Volumes:** the stated volume threshold is the least whole number; the
   trigger itself (`triggerMet`) is the rule's own ratio.
+
+## Coverage on the fixture
+
+On the momentum fixture's census days (`tests/fixtures/momentum-continuation`,
+NQ 3m, 2021-05-17 to 2021-05-24), at every 15m close from 09:45 to 15:45 ET
+that allowed entries (126 closes), a scratch scan compared the listed
+reactions with the at-close setup moment:
+
+- the 422 listed reactions agreed with the at-close read every time;
+- of the 146 directional reactions that fired at those closes, 57 were on a
+  side the close's trend rule refuses;
+- of the other 89, 72 (81%) were listed and 17 (19%) were outside the plan:
+  9 at a moving level (the VWAP), 6 at a gap edge, and 2 on a side the trend
+  rule refused at the prepare and allowed at the close;
+- no fixed key level on an allowed side and in reach fired unlisted.
+
+On the 29 census momentum fires, every one was listed and its trigger met,
+with no precondition flipping (`tests/lib/next-close.test.js`).
 
 ## Process model
 
