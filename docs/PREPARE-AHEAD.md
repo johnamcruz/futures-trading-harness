@@ -205,7 +205,7 @@ asks for it yet: every existing briefing, golden and prompt is unchanged.
 
 The old path keeps deciding everything. With the runner config's
 `prepareAhead: "shadow"` (Claude Code only; `"off"` or absent: as before;
-`"on"` is refused until PR B2), after a one-symbol, one-lane trade cycle whose
+`"on"`: below), after a one-symbol, one-lane trade cycle whose
 result is final, the runner (`scripts/lib/prepare-shadow.js`, wired by
 `runner-wiring.js` `prepareShadowFor`):
 
@@ -290,7 +290,7 @@ plan void only by the 1h close also records what it would have been without
 that rule (`ifHourIgnored`: valid and matched, or why not), a record only.
 
 **Logged** in the cycle's record only, as its `prepare` field:
-`{ shadow, made }`. `shadow`: the plan id, its prepare ms, the status (valid,
+`{ mode, shadow, made }` (`mode` `"shadow"`). `shadow`: the plan id, its prepare ms, the status (valid,
 void with the reason, outside, nothing-fired, none, stale, kill-switch), the
 match, what fired, the confirm (outcome, decision, ms, session, tokens and
 cache reads), the full cycle's decision (`executed` a take with its side, the
@@ -298,9 +298,12 @@ head trader's `no-trade` a pass; blocked, vetoed or an error none) and
 `agreesWithFull` (a take on an unknown side is no verdict). `made`: the outcome
 (done, aborted, skipped with why, error), the plan id, ms, tokens and the
 deadline. Each run also records what it tried and was refused (`denied`, the
-CLI's permission denials; `gateRefusals`, the lines it added to the shadow's
-gate log), its spawn-to-init time, and the confirm its first turn's cache
-creation (the first fork's cost).
+CLI's permission denials; `forbidden`, every forbidden attempt read from its
+own transcript, since the CLI runs its PreToolUse hooks before the permission
+check and a call a hook refused is never among the denials:
+`prepare-ahead.js` `forbiddenIn`; `gateRefusals`, the lines it added to the
+shadow's gate log), its spawn-to-init time, and the confirm its first turn's
+cache creation (the first fork's cost).
 
 **Decisions (the owner's review, 2026-11-03):**
 
@@ -353,6 +356,105 @@ a branch; a change to it is a golden change, explained). It also holds that the
 shadow's leftovers never move the old path, that off loads none of prepare
 ahead's modules (poisoned, the off day is unchanged), that a failure inside
 prepare ahead never moves the old path, and that a leak is caught.
+
+## On: the confirm decides (built: PR B2)
+
+With `prepareAhead: "on"` (Claude Code only) the prepare runs as in shadow
+mode after each one-lane trade cycle, and at the close its plan was made for
+the confirm takes the head trader's place.
+
+1. **At the close, before the head trader's run** (`prepare-shadow.js`
+   `atClose`, after the desk at a 15m close; `prepare-ahead.js` `confirmPath`):
+   the plan is validated against the inputs this cycle starts from (the
+   validity table above) and what fired in the real at-close scan is matched
+   to its scenarios. The prepared thresholds never decide anything.
+2. **Valid and matched: the confirm** (`cycle-run.js` `runCycle` `confirm`):
+   the head trader's own argv whole (its full `--allowedTools`; the same
+   `--disallowedTools`, model, plugin dir, system-prompt file and MCP config)
+   plus `--resume <prepare session> --fork-session`, under the close's cycle
+   env (cycle id, briefing bars, entry, role record, the normal gate log) with
+   `FTH_CONFIRM_BASE` naming the plan record, never `FTH_PREPARE`. Its user
+   message is the cycle's own prompt and its pre-collected reads (the at-close
+   facts first), then "Your plan said: scenario k", the rule (**the candle
+   decides: confirm a scenario only if the closed candle meets its TAKE
+   conditions; else pass**) and what else fired outside the plan
+   (`confirmSuffix`). It composes through `compose_check` as the head trader
+   does; phase 2, the overlap, the executor, the gate and the late-entry check
+   are unchanged.
+3. **Anything else runs today's full head trader, unchanged** (the old path's
+   own prompt, argv and env): the kill switch, an open position or working
+   order (management), no plan, a stale or void plan (the session's file gone
+   included), a plan whose base is not whole (`no-base`), outside the plan,
+   nothing fired; and a confirm that errs or times out (its bound,
+   `prepare.confirmMs`, above the head trader's floor) before a compose. One
+   that composed and then failed never runs the head trader again (no second
+   compose). A confirm's argv is never built without its base in its env.
+4. **Logged**: the `prepare` field `{ mode: "on", on, made }`: `on` the path
+   (`confirm` or the fallback's reason), the plan, what fired, the match, the
+   kinds outside the plan, the confirm's outcome (`done`, `error`, `timeout`,
+   `no-time`, `no-base`) and whether it fell back, the late refusals by kind,
+   close to order (the cycle timing's `latencyMs.order`) and whether the desk
+   ran or was cached. `node scripts/prepare-shadow.js` reports the path shares,
+   close to order (median, p90) by desk ran and desk cached, the late refusals
+   by kind and outside the plan by level kind.
+
+### The transcript cut
+
+A fork's session file copies the prepare's lines first, each with its
+original message uuid and the fork's new `sessionId` (so the session id can't
+tell them apart), then its own. The runner seals the prepare session's uuids
+into the plan record (`base`, `trading/confirm-base.js` `baseOf`); the confirm's
+`FTH_CONFIRM_BASE` names that record. Every consumer of a transcript, and what
+it does with the prepare's turns:
+
+| Consumer | Reads | Prepare turns | Why |
+|---|---|---|---|
+| `roles-ran` (`checkRolesRan`) on a hook's `transcript_path` | the fork | **cut** | the roles that ran must be the close's; a prepare whose Agent tool a user's own allow rule let through would otherwise satisfy it (tested: the attack passes without the cut) |
+| the phase-2 report (`approvedPhase2`: the verdict, the facts, the size) | the fork | **cut** | a verdict must come from the close |
+| `skills-loaded`, `skills-at-entry`, `skill_lookup` loads (`claudeLooked`) on the hook | the fork | counted | the same conversation: the confirm has them in its context |
+| `claudeAttested`, the cycle-skills attestation | the session's id only | none | they match the hook's session to the stream's, no turn content |
+| `lookupRule` (the roles' lookups file) | keyed by the run's stream | none | the hook path's file is never the stream's; the session's own lookups are only ever left out |
+| the gateway (authoritative), `reaction-lookup` (compose's READ FIRST), the skill and experience lookups files, `cycleId`, the cycle log, the desk check, the role record's head skills, the timing | the confirm's own stream (`FTH_CYCLE_TRANSCRIPT`) | none there | a forked run's stream holds only its own lines |
+| the tool-call rules' call log | keyed by `session_id` | none | the fork's session id is new: its state starts fresh, as a head trader's run's |
+
+A base named but missing, unreadable, outside `<home>/prepare/`, through a
+link or forged (its uuids not the ones sealed), and a hook transcript that is
+not that fork (none of the base's lines, or one after the fork's own), refuse
+the entry in `roles-ran`, on the hook and the gateway alike; exits and stops
+always go. Without `FTH_CONFIRM_BASE` (any other run) nothing is cut.
+
+**Decided, fails closed:** the gateway and compose's READ FIRST read the
+confirm's own stream, which never holds the prepare's skill loads. A confirm
+that composes without loading again what an entry needs is refused there, and
+looks it up again (a turn). Crediting the prepare's loads on the stream side
+would be a new credit path in the gate; not built.
+
+### Tier 2 with prepare ahead
+
+`tests/goal/tier2-prepare.goal.js` (its own CI part) plays tier 2's days on
+Claude Code (`tests/fixtures/goal-world.js` `claude`, every run through the fake
+CLI that keeps sessions), each with the key off and `"on"`. The mock
+(`tests/fixtures/prepare-mock.js`) plays both phases: the prepare writes a
+SCENARIO line per listed candidate; the head trader's run, a fresh one or the
+confirm, follows the plan-following mock on the at-close briefing. "On" must
+give exactly "off"'s trades, order calls, gate decisions, compose records,
+cycle results and R (`tests/goal/prepare-pair.js`), with confirms run, and
+under every fallback row armed (the session lost, a corrupt plan, the confirm
+erring or hanging). The check can fail: a confirm that trusts the plan (it
+decides on the briefing the prepare was made on), with the validity check
+broken so a void plan reaches it, makes them differ. The opencode world, main's
+tier 2 baseline and the move goldens are untouched.
+
+### Flags
+
+Static config only, read at the runner's start (a change takes effect after a
+restart; nothing is re-read per cycle, no file is watched): the runner config's
+`prepareAhead` (absent or `"off"`: the old path, byte for byte,
+`tests/e2e/prepare-ahead-off-regression.test.js`; `"shadow"`; `"on"`), and
+`config/runner.json` `prepare.marginMs`, `prepare.maxMs`, `prepare.confirmMs`
+and `prepare.effort` (null: the CLI's default; `--effort low` is an open owner
+decision, as is the CLI telemetry). The kill switch is read at the start of
+each step.
 
 ## Freshness
 
@@ -422,8 +524,9 @@ with no precondition flipping (`tests/lib/next-close.test.js`).
 - **v1: resume.** The confirm is a new CLI process that resumes the
   prepare's session at the close, with the close's cycle env, so the hook,
   the gateway and `compose_check` attribute it to the close's cycle
-  unchanged. Every transcript-based gate check judges only the confirm's
-  turns. Prepare runs are denied `compose_check` and every order tool.
+  unchanged. The checks that must judge only the close's turns read the fork
+  without the prepare's (the transcript cut, above). Prepare runs are denied
+  `compose_check` and every order tool.
 - **v2: a warm process** (later, only if needed: a gate change).
 
 ## The desk and phase 2
@@ -472,8 +575,9 @@ Each is its own PR, with the adversarial review and the goal regression.
    fallback, deadline, skip), the opt-in key, the logging, the hook and
    gateway wiring tests for the cycle attribution, the tier-2 mock with both
    phases. **B1 (built): shadow mode** (above): the old path decides, the
-   prepare and the shadow confirm run beside it and are measured. **B2:** the
-   confirm decides (`"on"`), the transcript cut, the tier-2 mock.
+   prepare and the shadow confirm run beside it and are measured. **B2
+   (built):** the confirm decides (`"on"`), the transcript cut, the tier-2
+   mock (above).
 3. **C:** the skills (the prepare format and the confirm rule), the context
    quiz and its new questions (confirm on a met candle, pass on an unmet
    one, the anchoring trap).

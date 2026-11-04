@@ -188,7 +188,7 @@ test('off regression 1 (the gate): on the entry day the old path\'s gate decisio
 function onRuns(inject = () => null) {
   const fakes = new WeakMap();
   const fakeOf = (w, script) => {
-    if (!fakes.has(w)) fakes.set(w, { script: null, fake: fakeClaude({ dir: path.join(w.home, 'claude-sessions'), script: (prompt, env, info) => (env.FTH_PREPARE === 'prepare' ? [{ result: [...prompt.matchAll(/^ {2}- (P\d+) \S+ (long|short) "([^"]+)"/gm)].map((m, j) => `SCENARIO ${j + 1}: ${m[1]} "${m[3]}" → TAKE if a | PASS if b; reads: "${m[3]}"; why: w`).join('\n') }] : fakes.get(w).script) }) });
+    if (!fakes.has(w)) fakes.set(w, { script: null, fake: fakeClaude({ dir: path.join(w.home, 'claude-sessions'), script: (prompt, env) => (env.FTH_PREPARE === 'prepare' ? [{ result: [...prompt.matchAll(/^ {2}- (P\d+) \S+ (long|short) "([^"]+)"/gm)].map((m, j) => `SCENARIO ${j + 1}: ${m[1]} "${m[3]}" → TAKE if a | PASS if b; reads: "${m[3]}"; why: w`).join('\n') }] : fakes.get(w).script) }) });
     if (script) fakes.get(w).script = script;
     return fakes.get(w).fake;
   };

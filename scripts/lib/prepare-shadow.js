@@ -189,7 +189,7 @@ function createShadow({ cfg, root, home, runPrepare, now, sectionOpts = () => ({
   /** "on": the at-close record with what the cycle did: the confirm's outcome, the late refusals, close to order, the desk. */
   function onRecord(x) {
     const c = x.cycle && x.cycle.confirm ? x.cycle.confirm : null;
-    let rec = null;
+    let rec;
     try { rec = JSON.parse(fs.readFileSync(x.cycleLog, 'utf8')); } catch (_err) { rec = null; }
     const ctx = rec && isObj(rec.context) ? rec.context : {};
     const lat = rec && isObj(rec.timing) && isObj(rec.timing.latencyMs) ? rec.timing.latencyMs.order : null;

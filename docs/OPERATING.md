@@ -831,7 +831,24 @@ and its plans, from closed bars only, for a flat account. The runner config's
 trade cycle and a shadow confirm at the plan's close, beside the old path,
 logged in the cycle record's `prepare` field only (`node
 scripts/prepare-shadow.js --home <run home>` reads them back); the briefing the
-roles read is unchanged.
+roles read is unchanged. `prepareAhead: "on"` (Claude Code) lets the confirm
+decide: at a one-lane trade close with a valid plan whose scenario fired, the
+head trader's run is the confirm (a fork of the prepare's session); any other
+close runs the full head trader as before.
+
+Prepare ahead's flags are static config, read once at the runner's start and
+changed only by editing the config and restarting (nothing is switched while it
+runs, and no file is watched):
+
+| Flag | Where | Values | Default |
+|---|---|---|---|
+| `prepareAhead` | the runner config | absent or `"off"` (the old path, unchanged), `"shadow"`, `"on"` | absent |
+| `prepare.marginMs`, `prepare.maxMs` | `config/runner.json` | the prepare's deadline margin, the most its runs take | 20000, 100000 |
+| `prepare.confirmMs` | `config/runner.json` | the most the `"on"` confirm may take before the full head trader runs | 90000 |
+| `prepare.effort` | `config/runner.json` | the prepare's and shadow confirm's CLI effort | null (the CLI's default) |
+
+The kill switch keeps its effect: read at the start of each step, it stops any
+new prepare or confirm, as it stops cycles.
 
 ### The rationale convention
 
