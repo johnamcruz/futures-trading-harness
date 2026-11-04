@@ -376,6 +376,47 @@ test('grading: every forbidden pattern of q45-q48 does work (its removal lets a 
   ]) assert.strictEqual(pass(id, `ANSWER: ${a}`), want, `${id} ${want ? 'right' : 'wrong'}: ${a}`);
 });
 
+test('grading: q45-q48, answers that echo the skill\'s own sentences (added after the regexes, a second probe): no misgrade', () => {
+  // A conditional pass ("pass only if it refuses"), a confirm named but not the verdict ("I would confirm, but compose_check
+  // refused it"): right. A confirm or take as the verdict after a lead or a "but"/"then": wrong.
+  const cases = {
+    q45: [
+      ['Confirm via compose_check; pass only if it refuses.', true], ['Confirm: any closing candle meets its TAKE; compose_check on the at-close reads.', true],
+      ['Confirm as for a met candle: compose_check with the at-close reads.', true], ['Confirm; its candle has closed, so no candle condition.', true],
+      ['Confirm: the Standard plan decides, not a candle pattern.', true], ['Confirm — compose_check refusing it is the only pass.', true],
+      ['Confirm: never invent a pattern for a standing scenario.', true], ['Confirm; the doji does not matter, only compose_check does.', true],
+      ['Confirm; pass only when compose_check refuses it.', true], ['Compose_check with the at-close reads: confirm unless it refuses.', true],
+      ['Confirm only after the next candle closes green.', false], ['Confirm only if a wick prints.', false], ['Confirm, but wait for the next close first.', false],
+    ],
+    q46: [
+      ['Confirm via compose_check; pass only if it refuses.', true], ['Confirm: any closing candle meets its TAKE, whatever pattern the plan wrote.', true],
+      ['Confirm as for a met candle; the plan\'s wick condition is not one.', true], ['Confirm: the plan should never have invented a wick.', true],
+      ['Confirm; compose_check refusing it is the pass, not the missing wick.', true], ['Confirm; only compose_check can make it a pass.', true],
+      ['Confirm: its candle has closed, so there is no candle condition.', true], ['Confirm; the wick was invented, so it counts for nothing.', true],
+      ['Confirm only if a wick prints.', false], ['Confirm only once the 3m candle shows a wick.', false],
+    ],
+    q47: [
+      ['Pass — I would confirm, but compose_check refused it.', true], ['Pass: compose_check refusing it is the pass.', true],
+      ['Pass: any close meets its TAKE, but compose_check refused it.', true], ['Pass; a standing setup is confirmed only through compose_check, and it refused.', true],
+      ['Pass: it would be a confirm as for a met candle, but the refusal is the pass.', true], ['Pass; refused, so no confirm.', true],
+      ['Pass: the close is past the stop; the setup is invalidated.', true], ['Pass, with why: compose_check refused (stop not on the losing side).', true],
+      ['Not a pass: confirm.', false], ['No, take it.', false], ['Pass? No: confirm it.', false],
+    ],
+    q48: [
+      ['Pass: the entry ran away; I\'d only take it at the plan\'s limit if compose_check agreed.', true], ['Pass: compose_check refusing it is the pass.', true],
+      ['Pass; a plan that said take is no reason to take.', true], ['Pass — I planned to confirm it, but compose_check refused (R:R).', true],
+      ['Pass: the plan said TAKE, but the at-close facts decide.', true], ['Pass; never chase the plan\'s limit.', true],
+      ['Pass, with why: R:R under the minimum.', true], ['Pass: refused; confirming would be anchoring on the plan.', true],
+      ['Not a pass: confirm at the planned entry.', false], ['Not a pass: take it at the plan\'s price.', false], ['No, chase it.', false],
+    ],
+  };
+  cases.q47.push(['Pass, but confirm it.', false]);
+  cases.q48.push(['Pass, then take it at the plan\'s limit.', false]);
+  for (const [id, list] of Object.entries(cases)) {
+    for (const [a, want] of list) assert.strictEqual(pass(id, `ANSWER: ${a}`), want, `${id} ${want ? 'right' : 'wrong'}: ${a}`);
+  }
+});
+
 test('summary: correct on all K, answered both ways, the totals, the bar; compare names each change', () => {
   const rows = [];
   for (const x of QUIZ.questions) for (let k = 1; k <= 5; k += 1) rows.push({ id: x.id, k, pass: true });
