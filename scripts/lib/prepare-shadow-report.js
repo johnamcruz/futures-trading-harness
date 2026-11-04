@@ -8,7 +8,9 @@
  *   report(records)                   { cycles, shadowed, status, voidBy, planned, rates: { void, outside, nothingFired },
  *                                       outsideByKind, agreement: { agree, disagree, unknown, rate }, confirms, confirmMs,
  *                                       made, skippedBy, prepareMs, aborted, tokens: { prepare, confirm },
- *                                       forbidden: { denied: { tool: n }, gateRefusals } }
+ *                                       forbidden: { denied: { tool: n }, attempted: { tool: n }, gateRefusals },
+ *                                       on: { closes, paths, shares, voidBy, confirms, closeToOrder: { all, deskRan, deskCached,
+ *                                       confirmed }, late, outsideByKind } | null }
  *   text(report)                      the report as lines
  */
 
@@ -39,11 +41,41 @@ const tokensOf = list => list.reduce((t, u) => {
   return t;
 }, { input: 0, cacheRead: 0, cacheCreation: 0, output: 0 });
 
+/**
+ * "on" (PR B2): each close's path (the confirm, or why the full head trader ran), the confirms' outcomes and fallbacks,
+ * close to order (the cycle timing's latencyMs.order) of the closes that ordered, all, by whether the desk ran this close
+ * or was served cached, and of the closes the confirm decided; the late refusals by kind; outside the plan by level kind.
+ * null when no record is an "on" one.
+ */
+function onReport(ons) {
+  if (!ons.length) return null;
+  const paths = {};
+  const voidBy = {};
+  const confirms = {};
+  const late = {};
+  const outsideByKind = {};
+  for (const o of ons) {
+    count(paths, o.path);
+    if (o.path === 'void') count(voidBy, o.reason);
+    if (isObj(o.confirm)) { count(confirms, o.confirm.outcome); if (o.confirm.fellBack) count(confirms, 'fellBack'); }
+    for (const k of Array.isArray(o.late) ? o.late : []) count(late, k);
+    if (o.path === 'outside') for (const [k, n] of Object.entries(o.unplannedKinds || {})) outsideByKind[k] = (outsideByKind[k] || 0) + n;
+  }
+  const ordered = ons.filter(o => Number.isFinite(o.closeToOrderMs));
+  const ms = list => msOf(list.map(o => o.closeToOrderMs));
+  return {
+    closes: ons.length, paths, shares: Object.fromEntries(Object.entries(paths).map(([k, n]) => [k, n / ons.length])), voidBy, confirms,
+    closeToOrder: { all: ms(ordered), deskRan: ms(ordered.filter(o => o.desk === 'ran')), deskCached: ms(ordered.filter(o => o.desk === 'cached')), confirmed: ms(ordered.filter(o => o.path === 'confirm' && !(o.confirm && o.confirm.fellBack))) },
+    late, outsideByKind,
+  };
+}
+
 function report(records) {
   const all = records || [];
   const p = all.map(r => (r && isObj(r.prepare) ? r.prepare : null)).filter(Boolean);
   const shadows = p.map(x => x.shadow).filter(isObj);
   const mades = p.map(x => x.made).filter(isObj);
+  const ons = p.map(x => x.on).filter(isObj);
   const status = {};
   const voidBy = {};
   const outsideByKind = {};
@@ -78,12 +110,15 @@ function report(records) {
       return h;
     }, { void: 0, wouldBeValid: 0, wouldMatch: 0 }),
     initMs: msOf([...mades, ...confirmed.map(s => s.confirm)].map(r => r.initMs).filter(Number.isFinite)),
-    // The forbidden-tool attempts of every run: the CLI's denials by tool, and the gate's refusals in the shadow's log.
+    // The forbidden-tool attempts of every run: the CLI's denials by tool, every attempt from the run's own transcript (a
+    // hook's refusal comes before the CLI's denial: prepare-ahead.js forbiddenIn), the gate's refusals in the shadow's log.
     forbidden: [...mades, ...confirmed.map(s => s.confirm)].reduce((f, r) => {
       for (const t of Array.isArray(r.denied) ? r.denied : []) f.denied[t] = (f.denied[t] || 0) + 1;
+      for (const t of Array.isArray(r.forbidden) ? r.forbidden : []) f.attempted[t] = (f.attempted[t] || 0) + 1;
       f.gateRefusals += Number.isInteger(r.gateRefusals) ? r.gateRefusals : 0;
       return f;
-    }, { denied: {}, gateRefusals: 0 }),
+    }, { denied: {}, attempted: {}, gateRefusals: 0 }),
+    on: onReport(ons),
   };
 }
 
@@ -91,6 +126,16 @@ const pct = x => (x === null ? 'n/a' : `${Math.round(x * 100)}%`);
 const kv = o => Object.entries(o).map(([k, n]) => `${k} ${n}`).join(', ') || 'none';
 const ms = s => `median ${s.median ?? 'n/a'}, p90 ${s.p90 ?? 'n/a'}, max ${s.max ?? 'n/a'} (n ${s.n})`;
 const tok = t => `input ${t.input}, cache read ${t.cacheRead}, cache created ${t.cacheCreation}, output ${t.output}`;
+
+function onText(o) {
+  if (!o) return [];
+  return [
+    `"on": ${o.closes} closes: ${Object.entries(o.paths).map(([k, n]) => `${k} ${n} (${pct(n / o.closes)})`).join(', ')}`,
+    `"on" void by: ${kv(o.voidBy)}; confirms: ${kv(o.confirms)}`,
+    `"on" close to order ms: ${ms(o.closeToOrder.all)}; desk ran: ${ms(o.closeToOrder.deskRan)}; desk cached: ${ms(o.closeToOrder.deskCached)}; confirmed: ${ms(o.closeToOrder.confirmed)}`,
+    `"on" late refusals: ${kv(o.late)}; outside the plan by kind: ${kv(o.outsideByKind)}`,
+  ];
+}
 
 function text(r) {
   const a = r.agreement;
@@ -106,8 +151,9 @@ function text(r) {
     `aborted at the deadline: ${r.aborted}`,
     `hourly closes: ${r.hourClose.void} void by the 1h close; without that rule ${r.hourClose.wouldBeValid} valid, ${r.hourClose.wouldMatch} matched`,
     `spawn to init ms: ${ms(r.initMs)}`,
-    `forbidden tool attempts: denied ${kv(Object.fromEntries(Object.entries(r.forbidden.denied).sort()))}; gate refusals ${r.forbidden.gateRefusals}`,
+    `forbidden tool attempts: denied ${kv(Object.fromEntries(Object.entries(r.forbidden.denied).sort()))}; gate refusals ${r.forbidden.gateRefusals}; attempted (transcripts) ${kv(Object.fromEntries(Object.entries(r.forbidden.attempted).sort()))}`,
     `tokens: prepare ${tok(r.tokens.prepare)}; confirm ${tok(r.tokens.confirm)}`,
+    ...onText(r.on),
   ].join('\n');
 }
 
