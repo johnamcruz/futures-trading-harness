@@ -251,10 +251,15 @@ test('next close: only for a flat account; no entries at the next close or nothi
   // A news blackout over the next close.
   const nb = sectionAt(i, { blackouts: { items: [{ start: '2021-05-24T13:50:00.000Z', end: '2021-05-24T14:00:00.000Z', reason: 'test event' }] } });
   assert.match(nb.none, /a news blackout at the next close \(test event\)/);
-  // After the momentum window, at a close that completes no 15m candle: nothing can fire.
+  // After the momentum window, at a close that completes no 15m candle: no momentum candidate, only the 15m reaction
+  // still standing there (next-close.js standing candidates).
   const late = sectionAt(at('2021-05-21T16:03:00.000Z'));
-  assert.deepStrictEqual(late.candidates, []);
-  assert.match(late.none, /momentum_continuation long: its rules don't fire long with the threshold candle \(minute_et <= 714\)/);
+  assert.deepStrictEqual(late.candidates.map(c => [c.kind, c.read]), [['standing', '15m rejected prior val up']]);
+  assert.ok(late.skipped.some(s => /momentum_continuation long: its rules don't fire long with the threshold candle \(minute_et <= 714\)/.test(s)), late.skipped.join('; '));
+  // A close after it whose 15m candle met no fixed key level: nothing can fire.
+  const none = sectionAt(at('2021-05-21T16:12:00.000Z'));
+  assert.deepStrictEqual(none.candidates, []);
+  assert.match(none.none, /momentum_continuation long: its rules don't fire long with the threshold candle \(minute_et <= 714\)/);
   assert.strictEqual(NC.NONE, 'NONE');
 });
 

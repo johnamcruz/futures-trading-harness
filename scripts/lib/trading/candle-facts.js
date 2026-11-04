@@ -25,7 +25,8 @@
  *
  *   completedSeries(bars, minutes, base)   { available, reason, candles, lastAt }: lastAt[i] the index of the last
  *                                          candle completed by bar i's close (-1 none)
- *   shape(c)                               { body, upperWick, lowerWick, closeAt } shares of the range (null at zero range)
+ *   boundaryOpen(ms, minutes)              the open of the 18:00 ET grid's `minutes` candle holding the time ms
+ *   shape(c)                              { body, upperWick, lowerWick, closeAt } shares of the range (null at zero range)
  *   closeLocation(c)                       'top' | 'middle' | 'bottom' (third of the range), null at zero range
  *   patternsOf(c, prev, atrPrev)           every pattern that holds, in label priority; patternLabel: the first, else 'none'
  *   factsOf(candles)                       per candle: shape, closeLocation, rangeAtr (ATR as of the candle before), volRatio,
@@ -753,7 +754,7 @@ function completedCandlesAt({ bars, base, fine = null, minutes, at = bars.length
 }
 
 module.exports = {
-  TIMEFRAMES, DEF, LABELS, MAX_LEVELS, LEVEL_ORDER, label, completedSeries, shape, closeLocation, patternsOf, patternLabel, relation,
+  TIMEFRAMES, DEF, LABELS, MAX_LEVELS, LEVEL_ORDER, label, completedSeries, boundaryOpen, shape, closeLocation, patternsOf, patternLabel, relation,
   candleSeries, relationSeries, swingTargetSeries, holdingSwingsAt, briefingCandles, briefingTargets, RELATION_TEXT,
   prevSweep, RANGE_FRAMES, briefingRangeTargets, completedCandlesAt, gapRelation, insideStackOf, insideStacks, factsOf, basisOf, factOf, nextBasisOf, levelReactionsOf, confirmedText, MOVING_LEVEL,
 };

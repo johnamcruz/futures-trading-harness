@@ -38,12 +38,21 @@
  *              with the closing bar) and the fair value gaps' edges (read through the gap's side); one of them
  *              reacting at the close is outside the plan. A side the trend rule refuses now (trendRuleOf false) is left
  *              out, as standardPlans refuses it; one it can't read is listed, its precondition saying so.
+ *   standing   at a close that completes NO setup-frame candle: each reaction at a fixed key level (as above: never a
+ *              moving level, a gap's edge, a compression break or a CISD) of the setup frame's last completed candle
+ *              that the at-close "Setups to check" line lists (setup-moments.js listedReads and setupMoment, run on the
+ *              at-close briefing built from the closed bars plus a closing bar: the close's own code). That candle is
+ *              the one the close reads whatever the closing bar does (it completes none), so the read is listed there
+ *              unchanged: the trigger is the closing bar itself (the next bar, by its open time; a later one after a
+ *              data gap is another close). The side as the reactions' (the trend rule now; the close's decides), the
+ *              plan the Standard plan's at the closing bar (composeAt), as a reaction's. Exactly one of reaction and
+ *              standing applies at a close (setupFrameAt).
  *
  * The plan, per candidate, as a function of the trigger: the rule in words from the strategies' own numbers, and the
  * plan code makes for the threshold candle (the at-close briefing built on the closed bars plus that candle): a momentum
  * candidate's is compose_check's of its cited reads (composed-reads.js checkReads with the attempt policy's entry rule,
  * then trade-lifecycle.js planOf with the in-attempt flag; its refusals but the steps the bar plan states), a
- * reaction's is the Standard plan's (setup-library.js composeAt, as standardPlans calls it), with the attempt policy's
+ * reaction's (and a standing one's) is the Standard plan's (setup-library.js composeAt, as standardPlans calls it), with the attempt policy's
  * entry rule as compose_check applies it (so it can be refused where the at-close Standard plan line, which reads no
  * entry rule, says OK: compose is the authority). The size: with the
  * account's sizing facts (`sizing`, the caller's: { capUsd, floor, tickValue, slipTicks, feePerSide, stretchUsd }),
@@ -59,7 +68,7 @@
  *       entryRule, inAttempt, paper: compose_check's (the attempt policy's entryRuleOf, an attempt running, FTH_PAPER)
  *   triggerMet(candidate, bar)   whether the closing bar meets the candidate's trigger (the same code the at-close
  *                                read runs); false for a bar other than the one it was prepared for (bar.t the next
- *                                bar's open); preconditions aside
+ *                                bar's open); preconditions aside (a standing candidate: its own bar, any candle)
  *   reachOf(levels, f)           the levels in reach of a forming candle
  *   possibleLines(section, et)   the section as briefing lines
  *   renderPrepareBriefing(b, section, { now })   the prepare briefing: the briefing's text with the section after its
@@ -261,19 +270,32 @@ function reachOf(levels, f) {
   return levels.filter(([, p]) => (p >= f.l && p <= f.h) || p === nearUp || p === nearDown);
 }
 
+/**
+ * The setup frame at the next close (candle-facts.js completedSeries on the closed bars plus the closing bar, whose
+ * range does not move a candle's bounds): { series, j, cand, completes } (completes: the next close completes a
+ * setup-frame candle, `cand`; null series when the frame can't be read). The reaction and the standing candidates
+ * both read it, so exactly one of them applies at any close.
+ */
+function setupFrameAt({ bars, minutes, next, setupTf }) {
+  const n = bars.length;
+  const last = bars[n - 1];
+  const flat = { t: next.t, o: last.c, h: last.c, l: last.c, c: last.c, v: last.v };
+  const s = CF.completedSeries([...bars, flat], setupTf, minutes);
+  if (!s.available) return { series: null, j: -1, cand: null, completes: false };
+  const j = s.lastAt[n];
+  const cand = j >= 0 ? s.candles[j] : null;
+  return { series: s, j, cand, completes: Boolean(cand) && cand.last === n && Date.parse(cand.closedAt) === Date.parse(next.closedAt) };
+}
+
 /** The reaction candidates (see the header). */
 function reactionCandidates(x) {
   const { bars, minutes, symbol, tick, next, sizing, blackouts, clock, roundSteps, skipped, briefing, setupTf, entryRule } = x;
   const stf = tfLabel(setupTf);
   const n = bars.length;
   const last = bars[n - 1];
-  const flat = { t: next.t, o: last.c, h: last.c, l: last.c, c: last.c, v: last.v };
-  const s = CF.completedSeries([...bars, flat], setupTf, minutes);
-  if (!s.available) return [];
-  const j = s.lastAt[n];
-  const cand = j >= 0 ? s.candles[j] : null;
+  const { series: s, j, cand, completes } = setupFrameAt(x);
   // Only at a close that completes a setup-frame candle, with at least one of its bars closed already.
-  if (!cand || cand.last !== n || Date.parse(cand.closedAt) !== Date.parse(next.closedAt)) return [];
+  if (!completes) return [];
   if (cand.first >= n) { skipped.push(`${stf}: none of its bars has closed yet`); return []; }
   const subs = bars.slice(cand.first, n);
   const f = { t: cand.t, o: bars[cand.first].o, h: Math.max(...subs.map(b => b.h)), l: Math.min(...subs.map(b => b.l)) };
@@ -312,6 +334,60 @@ function reactionCandidates(x) {
         threshold: { bar, reads: (composed.reads || []).map(y => y.read), plan },
       });
     }
+  }
+  return out;
+}
+
+/**
+ * The standing candidates (see the header): at a close that completes no setup-frame candle, the reactions at a fixed
+ * key level the at-close "Setups to check" line lists (setup-moments.js listedReads and setupMoment, on the at-close
+ * briefing built from the closed bars plus a closing bar: the close's own code). The setup frame's last completed
+ * candle is the one the close reads whatever the closing bar does, so each is listed there unchanged.
+ */
+function standingCandidates(x) {
+  const { bars, minutes, symbol, tick, next, sizing, blackouts, clock, roundSteps, skipped, briefing, setupTf, entryRule } = x;
+  const stf = tfLabel(setupTf);
+  const { series, j, completes } = setupFrameAt(x);
+  // A close that completes one: its candle's reactions are the reaction candidates (the standing one superseded).
+  if (!series || completes || j < 0) return [];
+  const setup = series.candles[j];
+  const last = bars[bars.length - 1];
+  // A closing bar (any: the setup candle is the same whatever it does), with a range, opening at the last close.
+  const bar = { t: next.t, o: last.c, h: levelOnTick(last.c + tick, tick), l: levelOnTick(last.c - tick, tick), c: last.c, v: last.v };
+  let pb;
+  try {
+    pb = buildBriefing({ symbol, bars: [...bars, bar], minutes, scan: [], blackouts, clock, roundSteps });
+  } catch (err) {
+    skipped.push(`${stf} standing setups: the at-close briefing can't be built (${err.message})`);
+    return [];
+  }
+  const listed = new Set(SM.listedReads(pb));
+  const mo = SM.setupMoment(pb.sections.m3.data.candles, { setupTf, barClose: Date.parse(next.closedAt) });
+  if (!mo.moment || !mo.candle || Date.parse(mo.candle.closedAt) !== Date.parse(setup.closedAt)) return [];
+  const rule = trendRuleOf(((briefing.sections.m3 || {}).data || {}).trendRule);
+  const until = new Date(CF.boundaryOpen(Date.parse(next.t), setupTf) + setupTf * 60000).toISOString();
+  const out = [];
+  const seen = new Set();
+  for (const reaction of mo.reactions) {
+    // Only the fixed key levels (never a moving one, a gap's edge, a previous candle's), with a side.
+    if (reaction.kind !== 'level' || !SM.KEY_LEVEL.test(reaction.name) || CF.MOVING_LEVEL.test(reaction.name)) continue;
+    const side = sideOf(reaction.dir);
+    const read = `${stf} ${reaction.rel} ${levelName(reaction.name)} ${reaction.dir}`;
+    // As the close lists it (its cap and its one-per-price rule included), once.
+    if (!side || !listed.has(read) || seen.has(read)) continue;
+    seen.add(read);
+    if (rule[side] === false) { skipped.push(`${read}: against the trend rule`); continue; }
+    const composed = require('../learning/setup-library').composeAt(pb, reaction, { side, tick, setupTf, mark: true, entryRule: entryRule || null });
+    const plan = composed.plan ? planFacts(composed.plan, [], sizing) : { status: composed.status, why: composed.why };
+    out.push({
+      kind: 'standing', name: reaction.name, price: reaction.price, side, dir: reaction.dir, read, tf: stf, rel: reaction.rel,
+      trigger: { at: next.t, candle: { t: setup.t, closedAt: setup.closedAt, o: setup.o, h: setup.h, l: setup.l, c: setup.c }, until },
+      preconditions: [`the trend rule allows a ${side} (${rule[side] === true ? 'it does now' : 'unknown now'})`],
+      rule: { entry: 'a limit at the close (it fills if a later bar trades to it within the record\'s valid_bars)',
+        stop: `the ${LIFECYCLE} stop buffer beyond the ${stf} candle's ${side === 'long' ? `low ${setup.l}` : `high ${setup.h}`}, never under compose's floor`,
+        target: `the first named level ahead at ${require('../learning/setup-library').MIN_RR}:1 or more from the close (the Standard plan's), else the 2R mark` },
+      threshold: { bar, reads: (composed.reads || []).map(y => y.read), plan },
+    });
   }
   return out;
 }
@@ -362,6 +438,8 @@ function triggerMet(cand, bar) {
     const r = CF.relation(finalCandle(t.candle, bar), t.level, num(t.prevClose) === null ? NaN : t.prevClose);
     return Boolean(r) && r.relation === t.rel && r.dir === t.dir;
   }
+  // Standing: the setup candle is the close's whatever the bar does (it completes none); its own bar is the condition.
+  if (cand.kind === 'standing') return true;
   return false;
 }
 
@@ -385,7 +463,7 @@ function possibleAtNextClose({ symbol, bars: raw, minutes, briefing, flat = fals
   const skipped = [];
   const reg = Array.isArray(registry) ? registry : shippedRegistry();
   const x = { bars, minutes, symbol, registry: reg, scanWith: Array.isArray(strategies) ? strategies : reg, selected, entryRule, inAttempt, paper, tick, next, sizing, blackouts, clock, roundSteps, skipped, briefing, setupTf };
-  const candidates = [...momentumCandidates(x), ...reactionCandidates(x)].map((c, i) => ({ id: `P${i + 1}`, ...c }));
+  const candidates = [...momentumCandidates(x), ...reactionCandidates(x), ...standingCandidates(x)].map((c, i) => ({ id: `P${i + 1}`, ...c }));
   if (!candidates.length) return none(skipped.length ? skipped : ['nothing in reach can fire']);
   return { ...head, none: null, candidates, skipped };
 }
@@ -400,11 +478,14 @@ function planText(p, root) {
 
 const op = o => (o === '>=' ? 'at or above' : 'at or below');
 /** One candidate's trigger as conditions on the closing candle. */
-function triggerText(c) {
+function triggerText(c, base) {
   const t = c.trigger;
   if (c.kind === 'momentum') {
     const b = t.basis;
     return `the closing ${c.tf} candle has range >= ${t.range} pts (${t.ticks} ticks; ${RANGE_ATR} x ATR(14) ${r2(b.atrPrev)} as of the candle before it), volume >= ${t.volume} (${VOL_RATIO} x the average ${r2(b.avg)} of the ${b.n} candles before it; whole contracts), and closes in its ${t.third} third (candle-facts closeLocation)`;
+  }
+  if (c.kind === 'standing') {
+    return `the closing ${base} candle is the one opening ${etClock(t.at)} ET, whatever its range, volume and close: the ${c.tf} candle (opened ${etClock(t.candle.t)}, closed ${etClock(t.candle.closedAt)}) stays the last completed ${c.tf} candle until ${etClock(t.until)} ET, so its reaction still stands, unchanged (a later bar, after a data gap, is another close)`;
   }
   const f = t.candle;
   const so = `the ${c.tf} candle (opened ${etClock(f.t)}, open ${f.o}, so far high ${f.h} low ${f.l})`;
@@ -422,7 +503,7 @@ function possibleLines(section, et = etClock) {
   const out = [`- ${SECTION} (${when}; code's list for a bar plan: at the close the closed candle decides, on the at-close briefing):`];
   for (const c of section.candidates) {
     const pre = c.preconditions.length ? `; preconditions (code evaluates them again at the close): ${c.preconditions.map(preconditionText).join(', ')}` : '';
-    out.push(`  - ${c.id} ${c.kind === 'momentum' ? c.name : c.tf} ${c.side} "${c.read}": fires if ${triggerText(c)}${pre}. Plan (code): ${c.rule.entry}; stop ${c.rule.stop}; target ${c.rule.target}. At the threshold candle (O ${c.threshold.bar.o} H ${c.threshold.bar.h} L ${c.threshold.bar.l} C ${c.threshold.bar.c}): ${planText(c.threshold.plan, root)}${c.threshold.reads.length ? `; reads ${c.threshold.reads.map(r => `"${r}"`).join(', ')}` : ''}.`);
+    out.push(`  - ${c.id} ${c.kind === 'momentum' ? c.name : c.tf} ${c.side} "${c.read}": fires if ${triggerText(c, tfLabel(section.minutes))}${pre}. Plan (code): ${c.rule.entry}; stop ${c.rule.stop}; target ${c.rule.target}. At the threshold candle (O ${c.threshold.bar.o} H ${c.threshold.bar.h} L ${c.threshold.bar.l} C ${c.threshold.bar.c}): ${planText(c.threshold.plan, root)}${c.threshold.reads.length ? `; reads ${c.threshold.reads.map(r => `"${r}"`).join(', ')}` : ''}.`);
   }
   return out;
 }
