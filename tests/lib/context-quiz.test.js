@@ -283,17 +283,20 @@ test('grading: the prepare-ahead questions grade the LEADING verdict: a held-out
       ['Do not confirm; pass.', true], ['Confirm nothing: pass.', true]],
     q42: [['Pass.', true], ['No: TAKE not met.', true], ['Skip it.', true], ['Do not take it; pass.', true], ['Pass. The plan said take, but the candle failed TAKE.', true], ['Pass: taking it as planned would be anchoring.', true],
       ['Trust the plan: no recheck needed.', false], ['Yes, take it.', false], ['Proceed as planned.', false], ['Take it anyway.', false], ['Stick to the plan.', false], ['Confirm scenario 1 as planned.', false], ['Go ahead, the plan was sure.', false],
-      ['No hesitation: take it.', false], ['Don\'t overthink it: take it as planned.', false], ['Not as planned: pass.', true]],
+      ['No hesitation: take it.', false], ['Don\'t overthink it: take it as planned.', false], ['Not as planned: pass.', true], ['No. Take it as planned would be anchoring; pass.', true]],
     q43: [['No. Scenario 3 is judged on its own facts.', true], ['Judge scenario 3 from the facts; its TAKE is met.', true], ['Scenario 3 can be taken: its conditions hold.', true], ['Nope, scenario 3 still stands.', true],
       ['Not off the table: take scenario 3.', true], ['Yes, it is off the table.', false], ['Off the table, pass.', false], ['Pass: scenario 1 said pass.', false], ['Scenario 3 is not tradeable.', false], ['Yes.', false]],
     q44: [['The at-close facts: compose with the 1 pt wick.', true], ['At-close facts (1 pt wick); the plan\'s read is not evidence.', true], ['The plan\'s read is never evidence: use the at-close 1 pt.', true],
       ['The plan is not evidence; the facts at the close.', true], ['The 1 pt wick, read at the close.', true], ['Compose with the at-close facts, never the plan\'s.', true],
       ['The plan\'s read.', false], ['Use the plan\'s 4 pt wick.', false], ['The plan\'s wick, 4 pts, over the at-close 1 pt.', false], ['Compose with the plan\'s read.', false], ['The plan\'s version; the at-close facts lag.', false],
       ['The at-close facts lag; go with the plan\'s 4 pt wick.', false],
-      ['The at-close facts; the plan\'s read is stale.', true], ['The at-close facts; the plan\'s read lags the close.', true]],
+      ['The at-close facts; the plan\'s read is stale.', true], ['The at-close facts; the plan\'s read lags the close.', true],
+      ['The at-close facts not the plan\'s stale read.', true], ['The at-close facts over the plan\'s read.', true]],
     b8: [['No trade: the Bias line refuses the long.', true], ['Pass; the long is refused.', true], ['Do not confirm; the trend rule refuses it.', true], ['Skip: Bias says no longs.', true], ['Confirm nothing.', true],
       ['Confirm the long, TAKE met.', false], ['Yes, take it.', false], ['Take the long; the plan listed it.', false], ['Go long.', false], ['Confirm: nothing refuses it.', false], ['Yes, confirm the long only if compose_check passes.', false],
-      ['No issues: TAKE met, confirm.', false], ['Not blocked: confirm.', false]],
+      ['No issues: TAKE met, confirm.', false], ['Not blocked: confirm.', false], ['No issues: TAKE met, confirm it.', false],
+      ['No. Confirm only the short side; the long is refused by the briefing\'s bias, so the plan\'s long is not a trade.', true],
+      ['No. The plan\'s long is refused; to confirm it would counter the HTF.', true], ['No: the long is refused; I\'d confirm a short only if one is planned.', true]],
   };
   for (const [id, list] of Object.entries(cases)) {
     for (const [a, want] of list) assert.strictEqual(pass(id, `ANSWER: ${a}`), want, `${id} ${want ? 'right' : 'wrong'}: ${a}`);

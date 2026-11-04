@@ -98,6 +98,8 @@ test('prepare-ahead skill: its format lines are the runner\'s FORMAT, and its bo
   assert.ok(BODY.includes('The at-close facts decide, never the plan.') && BODY.includes('the reads as the at-close facts give them'));
   // The confirm names no skill and orders no lookup, in any wording (it forks the prepare's session and carries the rule inline).
   for (const [what, text] of [['confirmSuffix', suffix], ['confirmPrompt', shadow]]) assert.ok(!/skill|look[ -]?up|read the|\bload\b/i.test(text.replace('Read-only', '')), `${what} orders no lookup`);
+  // Nor does it name the skill in any wording ("Check the prepare-ahead rules first."): the static text carries no skill name.
+  for (const [what, text] of [['confirmSuffix', suffix], ['confirmPrompt', shadow]]) assert.ok(!/prepare-ahead/i.test(text), `${what} names the skill`);
   // The runner\'s prepare prompt carries the same lines.
   assert.ok(PA.preparePrompt({ head: 'H', briefingText: 'B', next: { t: 'T', closedAt: 'C' } }).includes(PA.FORMAT.join('\n')));
 });
