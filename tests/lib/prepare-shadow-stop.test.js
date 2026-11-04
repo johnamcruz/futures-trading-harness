@@ -18,21 +18,26 @@ const until = async (f, ms = 15000) => { const t0 = Date.now(); while (!f()) { i
 
 for (const kind of ['prepare', 'confirm']) {
   for (const sig of ['SIGTERM', 'SIGINT']) {
-    test(`the runner stopped (${sig}) mid-${kind}: the shadow run's CLI and its process group are killed, nothing survives`, async () => {
+    test(`the runner stopped (${sig}) mid-${kind}: the shadow run's CLI and its process group are killed, nothing survives`, { timeout: 60000 }, async () => {
       const dir = fs.mkdtempSync(path.join(os.tmpdir(), 'fth-shadow-stop-'));
       const pidFile = path.join(dir, 'pids.json');
       const runner = spawn(process.execPath, [path.join(ROOT, 'tests', 'fixtures', 'shadow-stop.js'), pidFile, kind, dir], { stdio: 'ignore' });
       assert.ok(await until(() => fs.existsSync(pidFile) && fs.readFileSync(pidFile, 'utf8').length > 2), 'the run started');
       const pids = JSON.parse(fs.readFileSync(pidFile, 'utf8'));
-      assert.ok(pids.every(alive));
-      runner.kill(sig);
-      assert.ok(await until(() => runner.exitCode !== null || runner.signalCode !== null), 'the runner exits');
-      assert.ok(await until(() => !pids.some(alive)), `no child survives: ${pids.filter(alive)}`);
+      try {
+        assert.ok(pids.every(alive));
+        runner.kill(sig);
+        assert.ok(await until(() => runner.exitCode !== null || runner.signalCode !== null), 'the runner exits');
+        assert.ok(await until(() => !pids.some(alive)), `no child survives: ${pids.filter(alive)}`);
+      } finally {
+        // A failing case never leaves its processes behind (a CI machine's): whatever is still alive is killed.
+        for (const pid of [runner.pid, ...pids]) { try { process.kill(pid, 'SIGKILL'); } catch (_err) { /* gone */ } }
+      }
     });
   }
 }
 
-test('childTracker: tracks a child until it exits; killChildren reaches each tracked child\'s group', async () => {
+test('childTracker: tracks a child until it exits; killChildren reaches each tracked child\'s group', { timeout: 60000 }, async () => {
   const t = childTracker();
   const c = spawn(process.execPath, ['-e', 'setInterval(() => {}, 1000)'], { detached: true, stdio: 'ignore' });
   t.track(c);

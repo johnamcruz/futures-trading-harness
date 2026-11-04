@@ -234,7 +234,7 @@ test('shadow: each run\'s spawn-to-init time is recorded (and the confirm\'s fir
   assert.strictEqual(b.shadow.confirm.firstCacheCreation, 13400);
 });
 
-test('shadow: a run that hangs is stopped at its deadline end to end: the wall timer aborts the production runPrepare\'s run (its signal), the prepare is aborted, no plan written', async () => {
+test('shadow: a run that hangs is stopped at its deadline end to end: the wall timer aborts the production runPrepare\'s run (its signal), the prepare is aborted, no plan written', { timeout: 60000 }, async () => {
   const { fakeClaude } = require('../fixtures/fake-claude-sessions');
   const { runPrepare: realRunPrepare } = require('../../scripts/lib/cycle-run');
   const RT = require('../../scripts/lib/tunables').runner();

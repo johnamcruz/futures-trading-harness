@@ -143,6 +143,26 @@ test('runPrepare: never a run whose gate log is not the shadow\'s own (a role\'s
   assert.strictEqual(ran, false);
 });
 
+test('runPrepare: a shadow gate log (or prepare/ folder) that is a link elsewhere is refused before anything runs: the file it points at is never reset', { timeout: 60000 }, async () => {
+  for (const kind of ['file', 'dir']) {
+    const home = tmpDir();
+    const live = path.join(home, 'logs', 'gate-log.jsonl');
+    fs.mkdirSync(path.dirname(live), { recursive: true });
+    fs.writeFileSync(live, `${JSON.stringify({ decision: 'allowed' })}\n`);
+    if (kind === 'file') {
+      fs.mkdirSync(path.join(home, 'prepare'), { recursive: true });
+      fs.symlinkSync(live, path.join(home, 'prepare', 'gate-log.jsonl'));
+    } else {
+      fs.symlinkSync(path.dirname(live), path.join(home, 'prepare'));
+    }
+    let ran = false;
+    const run = async () => { ran = true; return { ok: true, output: '', stdout: '' }; };
+    await assert.rejects(runPrepare(cfg, 'prepare', 'P', { timeoutMs: 5000, context: { action: 'trade' } }, { root: ROOT, home, env: { FTH_HOME: home, HOME: home }, run }), /a link/, kind);
+    assert.strictEqual(fs.readFileSync(live, 'utf8'), `${JSON.stringify({ decision: 'allowed' })}\n`, `${kind}: the linked file untouched`);
+    assert.strictEqual(ran, false, kind);
+  }
+});
+
 test('runCycle: onLog, when given, hears the cycle log\'s file once it is written; without it the cycle is as before', async () => {
   const home = tmpDir();
   const run = async () => ({ ok: true, timedOut: false, code: 0, output: 'CYCLE RESULT: no-trade - x\n', stdout: 'CYCLE RESULT: no-trade - x\n' });
