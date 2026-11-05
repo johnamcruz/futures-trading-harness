@@ -42,11 +42,20 @@ test('setup capture: every uncaught reason, from the run\'s own logs', () => {
     'late-beyond-stop': { cycles: [{ i: 3, entry: late('r1', 'beyond-stop') }], records: [ok('r1', 3)] },
     'gate-refusal': { cycles: quiet([3]), records: [ok('r1', 3)], gate },
     'risk-veto': { cycles: [{ i: 3, entry: { record: 'r1', outcome: 'vetoed', why: 'VERDICT: VETO - serious against' } }], records: [ok('r1', 3)] },
+    // Phase 2 approved but the runner could not read it: not the risk manager saying no.
+    'verdict-unread': { cycles: [{ i: 3, entry: { record: 'r1', outcome: 'vetoed', why: '## Phase 2 verdict: MNQ long, size 6' } }], records: [ok('r1', 3)] },
+    'min-contracts': { cycles: [{ i: 3, entry: { record: 'r1', outcome: 'vetoed', why: 'VERDICT: VETO - min-contracts: size 2 under the floor of 3' } }], records: [ok('r1', 3)] },
     execution: { cycles: [{ i: 3, entry: { record: 'r1', outcome: 'blocked', why: 'ABORTED Orders: none sent' } }], records: [ok('r1', 3)] },
     'passed-by-head': { cycles: quiet([3]), records: [ok('r1', 3)] },
     'compose-refused': { cycles: quiet([3]), records: [{ ...ok('r1', 3), ok: false }] },
-    'position-open': { cycles: [{ i: 3, result: `${R}managed - a long open` }] },
+    // A position held through the catch window: the leg's own side (already riding the move), the other side, or none seen.
+    'position-open-own-side': { cycles: [{ i: 3, action: 'manage', result: `${R}managed - a long open`, positions: ['long'] }] },
+    'position-open-opposite': { cycles: [{ i: 3, result: `${R}managed - a short open`, positions: ['short'] }] },
+    'position-open-unknown': { cycles: [{ i: 3, result: `${R}managed - a long open` }] },
     'account-blocked': { cycles: [{ i: 3, blocked: true }] },
+    'account-blocked ': { cycles: [{ i: 3, blocked: true, result: `${R}no-trade - entries not allowed now (news blackout)` }] },
+    // An entry block that only says a position is open is the position's, not the attempt's.
+    'no-setup-listed  ': { cycles: [{ i: 3, blocked: 'a position is open on the account (MNQ); manage it first' }] },
     rule: { cycles: [{ i: 3, result: `${R}no-trade - entries not allowed now (news blackout)` }] },
     'cycle-overran': { cycles: quiet([2, 5]), skipped: [3, 4] },
     'cycle-overran ': { cycles: [{ i: 3, overran: true }] },
@@ -119,6 +128,7 @@ test('setup capture: a short leg (one catch bar) and a day the census lacks', ()
   const h = SC.readHome(F.makeHome(tmpDir(), 'h', { cycles: quiet([3]) }), { census: other });
   assert.deepStrictEqual([h.legs, h.notRun, h.missingDays], [[], [], [F.DAY]]);
   assert.deepStrictEqual(SC.armSummary({ homes: [h] }).missingDays, [F.DAY]);
+  assert.deepStrictEqual(SC.armProblems({ homes: [h] }), [{ kind: 'missing-census-day', detail: `h: ${F.DAY}` }]);
 });
 
 test('setup capture: the setups listed and fired, by kind and outcome, and by prepare path on an "on" run', () => {
@@ -126,10 +136,13 @@ test('setup capture: the setups listed and fired, by kind and outcome, and by pr
     cycles: [
       { i: 3, listed: ['15m rejected VWAP (rth) up', '15m broke opening range high up'], fired: [{ name: 'momentum_continuation', direction: 'long' }], entry: late('m1', 'chased-entry'), skips: [{ setup: '15m broke opening range high up', reason: null }], on: { path: 'confirm', confirm: { fellBack: false } } },
       { i: 4, listed: ['1h cisd up', '15m compression break up'], entry: { record: 'c1', outcome: 'executed' }, on: { path: 'void', reason: 'stale' } },
-      { i: 11, listed: ['15m rejected VWAP rth down'], fired: [{ name: 'momentum_continuation', direction: 'short' }] },
+      { i: 11, listed: ['15m rejected VWAP rth down', '15m broke IB low down'], fired: [{ name: 'momentum_continuation', direction: 'short' }], skips: [{ setup: '15m broke ib low down', reason: 'no room to the target' }] },
+      { i: 12, listed: ['15m rejected VWAP rth down'], entry: { record: 'e1', outcome: 'vetoed', why: 'VERDICT: VETO - serious against' } },
+      { i: 13, listed: ['15m rejected VWAP rth down'] },
     ],
     // x1: the other side's record with the breakout's read: never the long setup's.
-    records: [{ ...ok('m1', 3), reads: ['momentum_continuation fired up'] }, { ...ok('v1', 3), ok: false }, { id: 'x1', side: 'short', i: 3, ok: false, reads: ['15m broke opening range high up'] }, ok('c1', 4, 'long', ['1h cisd up']), { ...ok('d1', 11), side: 'short', reads: ['15m rejected VWAP (rth) down'] }],
+    records: [{ ...ok('m1', 3), reads: ['momentum_continuation fired up'] }, { ...ok('v1', 3), ok: false }, { id: 'x1', side: 'short', i: 3, ok: false, reads: ['15m broke opening range high up'] }, ok('c1', 4, 'long', ['1h cisd up']), { ...ok('d1', 11), side: 'short', reads: ['15m rejected VWAP (rth) down'] },
+      { ...ok('e1', 12), side: 'short', reads: ['15m rejected VWAP (rth) down'] }, { ...ok('o1', 13), side: 'short', reads: ['15m rejected VWAP (rth) down'] }],
     gate: [{ tool: 'place_order', decision: 'refused', rationale: 'record d1', violations: [{ check: 'max-risk' }] }],
   });
   const got = h.setups.map(s => [s.bar.slice(11, 16), s.kind, s.side, s.source, s.outcome, s.path]);
@@ -138,14 +151,19 @@ test('setup capture: the setups listed and fired, by kind and outcome, and by pr
     ['13:36', 'breakout', 'long', 'listed', 'passed-no-reason', 'confirm'],
     ['13:36', 'momentum_continuation', 'long', 'fired', 'late-chased', 'confirm'],
     ['13:39', 'cisd', 'long', 'listed', 'taken', 'fallback:void:stale'],
-    ['13:39', 'compression', 'long', 'listed', 'passed', 'fallback:void:stale'],
+    // Listed, never composed, and no row for it in the cycle's setup skips: nothing recorded either way.
+    ['13:39', 'compression', 'long', 'listed', 'unrecorded', 'fallback:void:stale'],
     ['14:00', 'rejection', 'short', 'listed', 'gate-refusal', null],
-    ['14:00', 'momentum_continuation', 'short', 'fired', 'passed', null],
+    ['14:00', 'breakout', 'short', 'listed', 'passed', null],
+    // A fired scan setup never composed: the setup skips list listed setups only, so none says why.
+    ['14:00', 'momentum_continuation', 'short', 'fired', 'fired-not-composed', null],
+    ['14:03', 'rejection', 'short', 'listed', 'risk-veto', null],
+    ['14:06', 'rejection', 'short', 'listed', 'passed-by-head', null],
   ]);
   assert.ok(h.setups.every(s => SC.SETUP_OUTCOMES.includes(s.outcome)));
   const s = SC.armSummary({ homes: [h] });
-  assert.deepStrictEqual(s.totals.setups.byKind.momentum_continuation, { 'late-chased': 1, passed: 1 });
-  assert.deepStrictEqual(s.totals.setups.byPath, { confirm: { 'compose-refused': 1, 'late-chased': 1, 'passed-no-reason': 1 }, 'fallback:void:stale': { passed: 1, taken: 1 } });
+  assert.deepStrictEqual(s.totals.setups.byKind.momentum_continuation, { 'fired-not-composed': 1, 'late-chased': 1 });
+  assert.deepStrictEqual(s.totals.setups.byPath, { confirm: { 'compose-refused': 1, 'late-chased': 1, 'passed-no-reason': 1 }, 'fallback:void:stale': { taken: 1, unrecorded: 1 } });
   assert.deepStrictEqual(s.totals.entryPaths, { 'fallback:void:stale': 1 });
   // An uncaught leg on an "on" run carries the path of the cycle that blocked it (the latest at the furthest stage: c1's
   // entry, placed and never filled).
@@ -177,6 +195,59 @@ test('setup capture: property: caught + uncaught + not-run = the day\'s census l
   }
 });
 
+test('setup capture: a setup listed or fired on the other side is no setup the leg\'s way', () => {
+  const down = spec => legOf(read(spec), SHORT);
+  assert.strictEqual(down({ cycles: [{ i: 11, listed: ['15m rejected VWAP (rth) up'], fired: [{ name: 'momentum_continuation', direction: 'long' }] }] }).reason, 'no-setup-listed');
+  assert.strictEqual(down({ cycles: [{ i: 11, listed: ['15m rejected VWAP (rth) down'] }] }).reason, 'setup-passed');
+  assert.strictEqual(down({ cycles: [{ i: 11, fired: [{ name: 'momentum_continuation', direction: 'short' }] }] }).reason, 'setup-passed');
+});
+
+test('setup capture: a leg whose catch steps served no new bar is not-served: no-cycle, out of the default rate', () => {
+  const h = read({ stale: [2, 3, 4, 5], cycles: quiet([10, 11]) });
+  const up = legOf(h, LONG);
+  assert.deepStrictEqual([up.reason, up.notServed], ['no-cycle', true]);
+  assert.strictEqual(legOf(h, SHORT).notServed, false);
+  const t = SC.legTotals(h.legs);
+  assert.deepStrictEqual([t.legs, t.notServed, t.caught, t.withNotServed.legs], [1, 1, 0, 2]);
+  assert.deepStrictEqual(t.reasons, { 'no-setup-listed': 1 }, 'the not-served leg is no miss of the default count');
+  // One step of the window served its bar: in scope as before; a manage-only step (no cycle, a new bar) is served too.
+  assert.strictEqual(legOf(read({ stale: [2, 3], cycles: quiet([10]) }), LONG).notServed, false);
+  assert.strictEqual(legOf(read({ stale: [2, 3, 4, 5], cycles: quiet([3]) }), LONG).notServed, false, 'a step that ran a cycle served its bar');
+  assert.strictEqual(legOf(read({ cycles: [] }), LONG).notServed, false);
+});
+
+test('setup capture: an overrun is counted once: the overran cycle and the decision time it swallowed are one lost bar', () => {
+  const h = read({ cycles: [{ i: 3, overran: true }, ...quiet([5, 6])], skipped: [4] });
+  assert.deepStrictEqual([h.decisions.skipped, h.decisions.overran, h.decisions.lost], [1, 1, 1]);
+  const s = SC.armSummary({ homes: [h] });
+  assert.strictEqual(s.totals.decisions.overranShare, Math.round((1 / h.decisions.times) * 10000) / 10000);
+  // An overrun with no time skipped (the next bar outside the run's steps) still loses its next bar.
+  const o = read({ cycles: [{ i: 3, overran: true }] });
+  assert.deepStrictEqual([o.decisions.skipped, o.decisions.lost], [0, 1]);
+  assert.strictEqual(SC.armSummary({ homes: [o] }).totals.decisions.overranShare, Math.round((1 / o.decisions.times) * 10000) / 10000);
+});
+
+test('setup capture: R share of the caught legs; an arm\'s problems: errors, skipped folders, missing days, no cycle logs, duplicate days', () => {
+  const t = SC.legTotals([{ id: 'a', day: F.DAY, side: 'long', caught: true, entry: { at: 'x', r: 1 }, availableR: 2, reason: null }, { id: 'b', day: F.DAY, side: 'long', caught: false, availableR: 2, reason: 'rule' }]);
+  assert.deepStrictEqual([t.rate, t.rCaught, t.rAvailable, t.share], [0.5, 1, 4, 0.25]);
+  const root = tmpDir();
+  F.makeHome(root, 'day-a', { cycles: quiet([3]) });
+  F.makeHome(root, 'day-b', {}); // no cycle logs at all
+  require('fs').mkdirSync(require('path').join(root, 'notes'));
+  const arm = SC.readArm([root], { census: CENSUS });
+  assert.deepStrictEqual(arm.skipped, ['notes']);
+  const p = SC.armProblems(arm);
+  assert.deepStrictEqual(p.map(x => x.kind), ['duplicate-day', 'no-cycle-logs', 'not-a-home']);
+  assert.match(p[0].detail, /2021-06-14: day-a, day-b/);
+  assert.deepStrictEqual(SC.armSummary(arm).problems, p);
+});
+
+test('setup capture: the same home given twice (another spelling) is read once', () => {
+  const root = tmpDir();
+  const h = F.makeHome(root, 'day-a', { cycles: quiet([3]) });
+  assert.strictEqual(SC.homesOf([h, `${h}${require('path').sep}`, root]).length, 1);
+});
+
 test('setup capture: one entry that caught two legs (adjacent, the same side) banks its R once', () => {
   const at = '2021-06-14T14:03:30.000Z';
   const two = [
@@ -184,7 +255,7 @@ test('setup capture: one entry that caught two legs (adjacent, the same side) ba
     { id: 'b', day: F.DAY, side: 'long', caught: true, entry: { at, r: 1 }, availableR: 3, reason: null },
     { id: 'c', day: F.DAY, side: 'long', caught: true, entry: { at: '2021-06-14T15:00:00.000Z', r: -1 }, availableR: 1, reason: null },
   ];
-  assert.deepStrictEqual(SC.legTotals(two), { legs: 3, caught: 3, rate: 1, rCaught: 0, rAvailable: 6, share: 0, reasons: {} });
+  assert.deepStrictEqual(SC.legTotals(two), { legs: 3, caught: 3, rate: 1, rCaught: 0, rAvailable: 6, share: 0, reasons: {}, notServed: 0, withNotServed: { legs: 3, caught: 3, rate: 1 } });
 });
 
 test('setup capture: homes from run homes or folders of them, sorted; a folder of neither refuses; several runs in one home refuse', () => {

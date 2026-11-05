@@ -1125,33 +1125,63 @@ and adds no new detector:
   catch window, meaning a decision time of the run (a day record's, or one
   skipped while a cycle ran) fell on one of its catch bars. A stepped-windows
   run covers its windows' legs, and a whole-session run covers every leg of
-  its days. The rest are `not-run`: never a miss. Aligned legs are those
+  its days. The rest are `not-run`: never a miss. A covered leg whose catch
+  steps ran no cycle on a stale bar (the replay served no new bar) is
+  `not-served`. It keeps the reason `no-cycle`, and the default caught rate
+  leaves it out; the rate with it is printed beside. A step that only managed
+  a held position served its bar and stays in scope. Aligned legs are those
   where the 4h and 1h both trend the leg's way at its start
   (`train/trend-align.js`, on the run's own served bars).
 - **Why a leg was missed:** one reason per leg, from its blocker (the
-  cycle that came closest to an entry, as the trend capture picks it). The
-  reasons are refused late by kind (`late-chased`, `late-missed`,
-  `late-beyond-stop`), `gate-refusal`, `execution`, `risk-veto`,
-  `passed-by-head`, `compose-refused`, `position-open`, `account-blocked`,
-  `rule`, `cycle-overran` (no plan, and a catch bar passed while a cycle ran
-  or a cycle overran its bar), `setup-passed` (a setup was listed or fired
-  its way, and none was composed), `no-setup-listed`, and `no-cycle`. On an
-  "on" run each missed leg also carries its blocking cycle's prepare path
-  (`confirm` or `fallback:<why>`, as `prepare-shadow.js` names them).
+  cycle that came closest to an entry, as the trend capture picks it):
+  - refused late, by kind: `late-chased`, `late-missed`, `late-beyond-stop`;
+  - `gate-refusal`, for an order the gate refused that the runner's entry
+    record does not hold (a refusal the runner logged as its entry's outcome
+    shows as `execution`);
+  - `execution`: an executor abort or block, or an entry placed and never
+    filled;
+  - phase 2 apart: `risk-veto` (a VETO), `verdict-unread` (the runner could
+    not read the verdict, an approval included) and `min-contracts` (the
+    sizing floor);
+  - `passed-by-head` (an OK record not placed) and `compose-refused`;
+  - a position held through the catch window, by its side:
+    `position-open-own-side` (already riding the move),
+    `position-open-opposite` or `position-open-unknown`;
+  - `account-blocked`: the attempt's entry block (one that only says a
+    position is open is the position's), and `rule`;
+  - `cycle-overran`: no plan, and a catch bar passed while a cycle ran or a
+    cycle overran its bar;
+  - `setup-passed` (a setup was listed or fired its way, and none was
+    composed), `no-setup-listed` and `no-cycle`.
+
+  On an "on" run each missed leg also carries its blocking cycle's prepare
+  path (`confirm` or `fallback:<why>`, as `prepare-shadow-report.js`
+  `pathKey` names them). The path is a dimension of the leg, not a reason.
 - **Setups:** each listed setup and fired scan setup, by kind (the read's:
   rejection, breakout, cisd, compression, or the strategy's name), with its
-  outcome: taken, refused late by kind, gate refusal, execution, risk veto,
-  passed by the head trader, compose refused, or passed (with or without a
-  SKIP reason). Each also carries its prepare path on an "on" run. The late
-  refusals' counterfactual (target or stop first) is the late report's
+  outcome: taken, refused late by kind, gate refusal, execution, the three
+  phase-2 outcomes, passed by the head trader, or compose refused. A setup
+  never composed is `passed` when the cycle's SKIP line gave a reason,
+  `passed-no-reason` when its skip row has none, `unrecorded` when the cycle
+  holds no skip row for it, and `fired-not-composed` for a fired scan setup
+  (the setup skips list listed setups only). Each also carries its prepare
+  path on an "on" run. The setups of a decision time skipped while a cycle
+  ran are unknown (no briefing was built): they count only as bars lost. The
+  late refusals' counterfactual (target or stop first) is the late report's
   (`replay/late-skips.js`).
-- **Two arms:** legs pair by census id on the legs both arms covered. The
-  report shows each side's caught rate with its Wilson interval, the
-  difference's interval (Newcombe's, from the two Wilson intervals), the
-  McNemar tail, and the discordant legs (caught by one arm only) with each
-  side's R and the net R. It also shows late refusals by kind on the days
-  both arms ran, decision times skipped or overrun, and entries by prepare
-  path.
+- **Two arms:** legs pair by census id on the legs both arms covered and
+  served. The report shows each side's caught rate with its Wilson interval,
+  the difference's interval (Newcombe's, from the two Wilson intervals: the
+  unpaired form, conservative on paired legs), the McNemar tail, and the
+  discordant legs (caught by one arm only) with each side's R and the net R.
+  It also shows late refusals by kind per decision time on the days both arms
+  ran, the bars lost to latency (each once: skipped while a cycle ran, or
+  after a cycle that overran its bar), and entries by prepare path.
+- **Input problems are never dropped:** a home with no replay run, a folder's
+  child that is no run home, a run day the census lacks, a home with no trade
+  cycle log, and two homes on one day are listed in the report. A leg in two
+  homes of one arm is left out of the pairing and flagged. The same home
+  given twice (another spelling of its path) is read once.
 
 ```bash
 node scripts/setup-capture.js report --census <leg-census.json> --a <home|folder>... [--b <home|folder>...] [--names control,on] [--json] [--out <file>]
@@ -1161,19 +1191,44 @@ node scripts/setup-capture.js accept --census <leg-census.json> --a <homes> --b 
 `accept` judges a criteria file and exits 0 on PASS, 1 on FAIL, 2 on
 insufficient data, and 3 on a usage or criteria error. It prints one line per
 criterion (sorted by id) with the measured value, the threshold and the
-verdict, and says which sample was too small. FAIL outranks insufficient.
-The thresholds live only in the file passed in, never in the repo. A
-criterion that lacks one of its keys refuses the whole file. The kinds:
+verdict, says which sample was too small, and prints each input problem.
+FAIL outranks insufficient. Any input problem makes the verdict insufficient,
+or FAIL when the file sets `"badHomes": "fail"`.
+
+The thresholds live only in the file passed in, never in the repo. The file
+is refused (exit 3) before any home is read when:
+
+- it lacks `level` (the Wilson level), or any key of a criterion;
+- a minimum (`minLegs`, `minA`, `minDecisions`, `minEntries`,
+  `minDiscordant`, `minPairs`) is not a whole number of 1 or more, so no data
+  is never a pass;
+- a name is outside its set: `reason` one of the reasons above (and `any` for
+  `caught-a-uncaught-b`), `lateKind` one of `chased-entry`, `missed-entry`,
+  `beyond-stop`, `path` one of `confirm`, `fallback`, `fallback:<why>`.
+
+A value nothing measured is insufficient, never compared as 0. The kinds:
 
 | Kind | Keys | Passes when |
 |---|---|---|
 | `caught-rate` | `legs` (all, aligned), `margin`, `minLegs` | the lower bound of b's rate − a's ≥ −margin |
-| `late-refusals` | `lateKind`, `maxRatio`, `minA` | b's refusals of that kind ≤ maxRatio × a's |
-| `overran-share` | `arm`, `max`, `minDecisions` | (skipped + overran) / decision times ≤ max |
+| `late-refusals` | `lateKind`, `maxRatio`, `minA` | b's refusals of that kind per decision time ≤ maxRatio × a's (the paired days) |
+| `overran-share` | `arm`, `max`, `minDecisions` | the bars lost to latency / decision times ≤ max |
 | `path-share` | `arm`, `path`, `min`, `minEntries` | the share of the arm's entries placed (its executed entry cycles) on the path (`fallback`: any) ≥ min |
 | `uncaught-reason-share` | `arm`, `legs`, `reason`, `max`, `minLegs` | the share of the arm's uncaught legs with that reason ≤ max |
 | `discordant-net-r` | `min`, `minDiscordant` | the net R of the discordant legs ≥ min |
-| `caught-a-uncaught-b` | `reason` (or `any`), `max` | the legs a caught and b missed for that reason ≤ max |
+| `caught-a-uncaught-b` | `reason` (or `any`), `max`, `minPairs` | the legs a caught and b missed for that reason ≤ max |
+
+Known limits, stated:
+
+- A leg's delay is from the leg's start to the entry order's placement, not
+  its fill.
+- The catch window and the gate-refusal match are computed beside
+  `captureReport`'s own, by the same rule; a change to the trend capture's
+  window changes both.
+- One entry that caught a discordant leg and an adjacent concordant one
+  charges all its R to the discordant leg's net R.
+- Each arm reads aligned on its own served bars. The report counts the paired
+  legs whose two reads differ, and the aligned scope needs both.
 
 An example only. Its values are illustrative, in the form a pre-registered
 run kit keeps its own file. They are not repo tunables, and nothing reads
@@ -1182,6 +1237,7 @@ this block:
 ```json
 {
   "level": 0.9,
+  "badHomes": "insufficient",
   "criteria": [
     { "id": "legs-not-worse", "kind": "caught-rate", "legs": "aligned", "margin": 0.1, "minLegs": 20 },
     { "id": "chased-falls", "kind": "late-refusals", "lateKind": "chased-entry", "maxRatio": 0.5, "minA": 5 },
@@ -1189,7 +1245,7 @@ this block:
     { "id": "confirm-decides", "kind": "path-share", "arm": "b", "path": "confirm", "min": 0.5, "minEntries": 5 },
     { "id": "late-not-the-reason", "kind": "uncaught-reason-share", "arm": "b", "legs": "aligned", "reason": "late-chased", "max": 0.1, "minLegs": 20 },
     { "id": "discordant-pays", "kind": "discordant-net-r", "min": 0, "minDiscordant": 3 },
-    { "id": "none-lost-to-overruns", "kind": "caught-a-uncaught-b", "reason": "cycle-overran", "max": 0 }
+    { "id": "none-lost-to-overruns", "kind": "caught-a-uncaught-b", "reason": "cycle-overran", "max": 0, "minPairs": 20 }
   ]
 }
 ```

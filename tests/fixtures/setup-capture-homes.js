@@ -44,7 +44,9 @@ function census(legs = [LONG, SHORT]) {
 /**
  * A run home under root/name. spec:
  *   times: bar indices with a decision time (default: every session bar); skipped: those passed while a cycle ran
- *   cycles: [{ i, result, entry, listed, fired: [{ name, direction }], on (prepare.on), overran, blocked, skips }]
+ *   cycles: [{ i, action, result, entry, listed, fired: [{ name, direction }], on (prepare.on), overran, blocked (true, or
+ *            the entry block's text), positions: [side], skips }]
+ *   stale: bar indices whose step served no new base bar (its record's lastBarT the bar before)
  *   records: [{ id, side, i, ok, reads: [read], stopTicks }]   (reads: setup reads; bias etc. are not needed)
  *   orders: [{ orderId, i, record, side, entry, at? }]; fills: [{ orderId, i, r }] (an opening fill and its round trip)
  *   gate: gate-log lines; sessionBars: the session's bar indices
@@ -65,20 +67,30 @@ function makeHome(root, name, spec = {}) {
     { orderId: f.orderId, profitAndLoss: null, roundTripId: f.orderId, creationTimestamp: plus(closeT(f.i), 10), price: String(bars[f.i].c) },
     { orderId: f.orderId + 1000, profitAndLoss: f.r * 10, roundTripId: f.orderId, exitReason: f.r > 0 ? 'target' : 'stop', creationTimestamp: plus(closeT(f.i + 3), 10), roundTrip: { r: f.r, entryTime: plus(closeT(f.i), 10), exitTime: plus(closeT(f.i + 3), 10) } },
   ]);
-  const lines = times.filter(i => !skipped.has(i)).map(i => ({ v: 1, t: plus(closeT(i), 2), day: DAY, kind: 'trade', trades: trades(i), skipped: [...skipped].filter(s => s > i && !times.some(j => j > i && j < s && !skipped.has(j))).map(s => plus(closeT(s), 2)) }));
+  // Each step's record: the cycles it ran, and the newest base bar the runner had (stale: no new bar served, as a
+  // replay server's gap leaves it).
+  const stale = new Set(spec.stale || []);
+  const ranAt = new Set((spec.cycles || []).map(c => c.i));
+  const lines = times.filter(i => !skipped.has(i)).map(i => ({
+    v: 1, t: plus(closeT(i), 2), day: DAY, kind: 'trade', ran: ranAt.has(i) ? [{ action: 'trade', ok: true }] : [], bars: [{ symbol: 'MNQ', lastBarT: stale.has(i) ? barT(i - 1) : barT(i) }],
+    trades: trades(i), skipped: [...skipped].filter(s => s > i && !times.some(j => j > i && j < s && !skipped.has(j))).map(s => plus(closeT(s), 2)),
+  }));
   fs.writeFileSync(path.join(runDir, `${DAY}.jsonl`), `${lines.map(l => JSON.stringify(l)).join('\n')}\n`);
   const cdir = path.join(home, 'logs', 'cycles', DAY);
   fs.mkdirSync(cdir, { recursive: true });
   for (const c of spec.cycles || []) {
     const log = {
-      action: 'trade', cycleAt: plus(closeT(c.i), 3), result: c.result || 'CYCLE RESULT: no-trade - nothing',
-      timing: { barClose: closeT(c.i), overran: c.overran === true },
-      context: { setupsListed: c.listed || [], symbols: [{ symbol: 'MNQ', fired: c.fired || [] }], account: { attempts: [{ status: 'active', entryBlock: c.blocked ? 'the attempt is blocked' : null }] } },
+      action: c.action || 'trade', cycleAt: plus(closeT(c.i), 3), result: c.result || 'CYCLE RESULT: no-trade - nothing',
+      timing: { barClose: closeT(c.i), nextBarClose: closeT(c.i + 1), overran: c.overran === true },
+      context: {
+        setupsListed: c.listed || [], symbols: [{ symbol: 'MNQ', fired: c.fired || [] }],
+        account: { positions: (c.positions || []).map(side => ({ contractId: 'MNQ', side, size: 3 })), attempts: [{ status: 'active', entryBlock: c.blocked === true ? 'the attempt is blocked' : c.blocked || null }] },
+      },
       summary: { setupSkips: c.skips || [] },
       ...(c.entry ? { entry: c.entry } : {}),
       ...(c.on ? { prepare: { on: c.on } } : {}),
     };
-    fs.writeFileSync(path.join(cdir, `${closeT(c.i).slice(11, 19).replace(/:/g, '')}-trade.json`), JSON.stringify(log));
+    fs.writeFileSync(path.join(cdir, `${closeT(c.i).slice(11, 19).replace(/:/g, '')}-${log.action}.json`), JSON.stringify(log));
   }
   const lc = path.join(home, 'trade-lifecycle', 'MNQ');
   fs.mkdirSync(lc, { recursive: true });

@@ -30,8 +30,9 @@ function setup() {
   });
   const on = { path: 'confirm', confirm: { fellBack: false } };
   F.makeHome(b, 'day-20210614', {
-    cycles: [...quiet([2, 3, 10]), { i: 4, entry: { record: 'l1', outcome: 'executed' }, on }, { i: 11, entry: { record: 's1', outcome: 'executed' }, on }],
-    records: [ok('l1', 4, 'long'), ok('s1', 11, 'short')], orders: [{ orderId: 7, i: 4, record: 'l1', side: 'long' }, { orderId: 8, i: 11, record: 's1', side: 'short' }],
+    // and one chased refusal of its own, after both legs (as many per decision time as control: 1 of 27)
+    cycles: [...quiet([2, 3, 10]), { i: 4, entry: { record: 'l1', outcome: 'executed' }, on }, { i: 11, entry: { record: 's1', outcome: 'executed' }, on }, { i: 24, entry: { record: 's2', outcome: 'late', why: 'chased', late: { kind: 'chased-entry', side: 'short', entry: 21490, stop: 21500, target: 21470, price: 21486, movedR: 0.4, record: 's2' } } }],
+    records: [ok('l1', 4, 'long'), ok('s1', 11, 'short'), ok('s2', 24, 'short')], orders: [{ orderId: 7, i: 4, record: 'l1', side: 'long' }, { orderId: 8, i: 11, record: 's1', side: 'short' }],
     fills: [{ orderId: 7, i: 4, r: 2 }, { orderId: 8, i: 11, r: 1.5 }], skipped: [20], // one decision time passed while a cycle ran (1 of 27)
   });
   return { root, census, a, b };
@@ -59,19 +60,19 @@ test('setup-capture CLI: accept: PASS exits 0, one line per criterion with its m
   const { root, census, a, b } = setup();
   const crit = criteriaFile(root, [
     { id: 'caught', kind: 'caught-rate', legs: 'all', margin: 0.5, minLegs: 2 },
-    { id: 'chased', kind: 'late-refusals', lateKind: 'chased-entry', maxRatio: 0.5, minA: 1 },
+    { id: 'chased', kind: 'late-refusals', lateKind: 'chased-entry', maxRatio: 1, minA: 1 },
     { id: 'overran', kind: 'overran-share', arm: 'b', max: 0.05, minDecisions: 2 },
     { id: 'confirm', kind: 'path-share', arm: 'b', path: 'confirm', min: 1, minEntries: 2 },
     { id: 'late-share', kind: 'uncaught-reason-share', arm: 'b', legs: 'all', reason: 'late-chased', max: 0, minLegs: 2 },
     { id: 'net', kind: 'discordant-net-r', min: 1, minDiscordant: 1 },
-    { id: 'lost', kind: 'caught-a-uncaught-b', reason: 'any', max: 0 },
+    { id: 'lost', kind: 'caught-a-uncaught-b', reason: 'any', max: 0, minPairs: 2 },
   ]);
   const out = path.join(root, 'out', 'report.json');
   const r = run(['accept', '--census', census, '--a', a, '--b', b, '--criteria', crit, '--out', out]);
   assert.strictEqual(r.status, 0, r.stdout + r.stderr);
   const lines = r.stdout.trim().split('\n');
   assert.deepStrictEqual(lines.slice(0, 7).map(l => l.split(' ')[0]), ['caught', 'chased', 'confirm', 'late-share', 'lost', 'net', 'overran']);
-  assert.match(lines.find(l => l.startsWith('chased')), /measured 0, threshold <= 0\.5: PASS/);
+  assert.match(lines.find(l => l.startsWith('chased')), /measured 0\.037, threshold <= 0\.037: PASS \(a 1 of 27 decision times, b 1 of 27/);
   assert.match(lines.find(l => l.startsWith('net')), /measured 1\.5, threshold >= 1: PASS/);
   assert.strictEqual(lines[lines.length - 1], 'verdict: PASS');
   const doc = JSON.parse(fs.readFileSync(out, 'utf8'));
@@ -82,12 +83,12 @@ test('setup-capture CLI: accept: each FAIL kind exits 1', () => {
   const { root, census, a, b } = setup();
   const fails = [
     [{ kind: 'caught-rate', legs: 'all', margin: 0, minLegs: 2 }, true],
-    [{ kind: 'late-refusals', lateKind: 'chased-entry', maxRatio: 1, minA: 0 }, true],
+    [{ kind: 'late-refusals', lateKind: 'chased-entry', maxRatio: 0.5, minA: 1 }, false],
     [{ kind: 'overran-share', arm: 'b', max: 0.03, minDecisions: 2 }, false],
     [{ kind: 'path-share', arm: 'a', path: 'confirm', min: 0.5, minEntries: 1 }, false],
     [{ kind: 'uncaught-reason-share', arm: 'a', legs: 'all', reason: 'late-chased', max: 0.5, minLegs: 2 }, false],
     [{ kind: 'discordant-net-r', min: 2, minDiscordant: 1 }, false],
-    [{ kind: 'caught-a-uncaught-b', reason: 'late-chased', max: 0 }, true],
+    [{ kind: 'caught-a-uncaught-b', reason: 'late-chased', max: 0, minPairs: 1 }, true],
   ];
   fails.forEach(([c, swap], k) => {
     const crit = criteriaFile(root, [{ id: `c${k}`, ...c }], `fail-${k}.json`);
@@ -111,7 +112,27 @@ test('setup-capture CLI: accept: too little to judge exits 2 and says which; a m
   // The criteria are checked before any home is read: a bad file refuses even with homes that don't exist.
   const first = run(['accept', '--census', census, '--a', path.join(root, 'nowhere'), '--b', b, '--criteria', bad]);
   assert.deepStrictEqual([first.status, /needs margin/.test(first.stderr)], [3, true], first.stderr);
+  // A misspelled reason is refused too, before any home is read.
+  const typo = criteriaFile(root, [{ id: 't', kind: 'caught-a-uncaught-b', reason: 'cycle-overrun', max: 0, minPairs: 1 }], 'typo.json');
+  const t = run(['accept', '--census', census, '--a', path.join(root, 'nowhere'), '--b', b, '--criteria', typo]);
+  assert.deepStrictEqual([t.status, /reason cycle-overrun/.test(t.stderr)], [3, true], t.stderr);
   const usage = run(['accept', '--census', census, '--a', a]);
   assert.strictEqual(usage.status, 3);
   assert.match(usage.stderr, /usage/);
+});
+
+test('setup-capture CLI: accept takes its Wilson level from the file, and a folder child that is no run home is a problem (exit 2)', () => {
+  const { root, census, a, b } = setup();
+  const crit = path.join(root, 'level.json');
+  fs.writeFileSync(crit, JSON.stringify({ level: 0.8, criteria: [{ id: 'net', kind: 'discordant-net-r', min: 1, minDiscordant: 1 }] }));
+  const out = path.join(root, 'level-report.json');
+  const r = run(['accept', '--census', census, '--a', a, '--b', b, '--criteria', crit, '--out', out]);
+  assert.strictEqual(r.status, 0, r.stdout + r.stderr);
+  const doc = JSON.parse(fs.readFileSync(out, 'utf8'));
+  assert.deepStrictEqual([doc.compare.level, doc.compare.legs.all.a.wilson.level], [0.8, 0.8]);
+  fs.mkdirSync(path.join(b, 'notes'));
+  const p = run(['accept', '--census', census, '--a', a, '--b', b, '--criteria', crit]);
+  assert.strictEqual(p.status, 2, p.stdout + p.stderr);
+  assert.match(p.stdout, /^problem: b not-a-home: notes: no replay folder$/m);
+  assert.match(run(['report', '--census', census, '--a', b]).stdout, /^problem: not-a-home: notes: no replay folder$/m);
 });

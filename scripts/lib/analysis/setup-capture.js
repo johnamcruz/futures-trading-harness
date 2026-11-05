@@ -21,21 +21,29 @@
  *
  * An uncaught leg's reason, one each (REASONS, a partition), from its blocker (the cycle that came closest to an
  * entry, captureReport's): late-chased | late-missed | late-beyond-stop | late-unknown (the late-entry rule, by kind),
- * gate-refusal (another gate check), execution (an executor abort or block, an entry unfilled), risk-veto (phase 2),
- * passed-by-head (an OK record not placed), compose-refused, position-open, account-blocked (the attempt's entry block in
- * a span cycle's account), rule (a named rule: news, opening print, a stop), cycle-overran (no plan, and a catch bar
- * passed while a cycle ran or a cycle overran its bar), setup-passed (no plan, a setup listed or fired its way),
- * no-setup-listed (no plan, none listed), no-cycle (its catch bars had decision times but no trade cycle ran: no new bar
- * served, say), other.
+ * gate-refusal (another gate check; one the runner logged as its entry's outcome is execution), execution (an executor
+ * abort or block, an entry unfilled), risk-veto | verdict-unread | min-contracts (phase 2: a VETO, a verdict the runner
+ * could not read, the sizing floor), passed-by-head (an OK record not placed), compose-refused, position-open-own-side |
+ * position-open-opposite | position-open-unknown (a position held in the catch window, by its side against the leg's),
+ * account-blocked (the attempt's entry block in a span cycle's account, not one that only says a position is open),
+ * rule (a named rule: news, opening print, a stop), cycle-overran (no plan, and a catch bar passed while a cycle ran or
+ * a cycle overran its bar), setup-passed (no plan, a setup listed or fired its way), no-setup-listed (no plan, none
+ * listed), no-cycle (its catch bars had decision times but no trade cycle ran), other. A leg whose catch steps ran no
+ * cycle on a stale bar (the replay served no new bar) is notServed: legTotals leaves it out of the default count.
  *
- *   REASONS, SETUP_OUTCOMES
- *   readHome(home, { census, alignedOf })   one run home's facts: { home, name, runId, days, missingDays, legs, notRun, entries, entryCycles,
- *                                           setups, decisions, late } (alignedOf(leg): an override of aligned, tests)
- *   readArm(homes, { census })               { homes: [readHome] } sorted by name
- *   homesOf(paths)                           run homes, or folders of them, as the homes (sorted by name)
- *   armSummary(arm)                          { homes, errors, missingDays, days: { day: totals }, totals: { all, aligned,
- *                                           notRun, entries, setups: { byKind, byPath }, decisions, late, entryPaths } }
- *   legTotals(legs)                          { legs, caught, rate, rCaught, rAvailable, share, reasons }
+ *   REASONS, SETUP_OUTCOMES, LATE_KINDS
+ *   readHome(home, { census, alignedOf })   one run home's facts: { home, name, runId, days, missingDays, legs, notRun,
+ *                                           entries, entryCycles, setups, decisions: { times, ran, skipped, cycles,
+ *                                           overran, lost, byDay }, late } (alignedOf(leg): an override of aligned, tests)
+ *   readArm(paths, { census })               { homes: [readHome], skipped } (scanHomes)
+ *   scanHomes(paths), homesOf(paths)        run homes, or folders of them, each once by its real path, sorted by name;
+ *                                           scanHomes: { homes, skipped (a folder's children with no replay folder) }
+ *   armProblems(arm)                         [{ kind, detail }]: what the arm's input lacks (see the function)
+ *   armSummary(arm)                          { homes, errors, missingDays, problems, days: { day: totals }, totals: { all,
+ *                                           aligned, notRun, entries, setups: { byKind, byPath }, decisions, late, entryPaths } }
+ *   legTotals(legs)                          { legs, caught, rate, rCaught, rAvailable, share, reasons, notServed,
+ *                                           withNotServed: { legs, caught, rate } }
+ *   bankedR(caught)                          the caught legs' R, each entry once
  *   armLines(summary, name)                  the summary as text lines
  *   reasonOf(leg, ctx)                       the reason of one uncaught leg (pure; ctx: the span's facts)
  *   setupOutcome(setup, ctx)                 one listed or fired setup's outcome (pure)
@@ -55,10 +63,22 @@ const { tradingDayKey } = require('../trading/clock');
 
 const dayOf = t => tradingDayKey(new Date(t));
 
-const REASONS = Object.freeze(['late-chased', 'late-missed', 'late-beyond-stop', 'late-unknown', 'gate-refusal', 'execution', 'risk-veto', 'passed-by-head', 'compose-refused', 'position-open', 'account-blocked', 'rule', 'cycle-overran', 'setup-passed', 'no-setup-listed', 'no-cycle', 'other']);
-const SETUP_OUTCOMES = Object.freeze(['taken', 'late-chased', 'late-missed', 'late-beyond-stop', 'late-unknown', 'gate-refusal', 'execution', 'risk-veto', 'passed-by-head', 'compose-refused', 'passed', 'passed-no-reason']);
-const LATE = { 'chased-entry': 'late-chased', 'missed-entry': 'late-missed', 'beyond-stop': 'late-beyond-stop' };
+const REASONS = Object.freeze([
+  'late-chased', 'late-missed', 'late-beyond-stop', 'late-unknown', 'gate-refusal', 'execution', 'risk-veto', 'verdict-unread', 'min-contracts',
+  'passed-by-head', 'compose-refused', 'position-open-own-side', 'position-open-opposite', 'position-open-unknown', 'account-blocked', 'rule',
+  'cycle-overran', 'setup-passed', 'no-setup-listed', 'no-cycle', 'other',
+]);
+const SETUP_OUTCOMES = Object.freeze([
+  'taken', 'late-chased', 'late-missed', 'late-beyond-stop', 'late-unknown', 'gate-refusal', 'execution', 'risk-veto', 'verdict-unread', 'min-contracts',
+  'passed-by-head', 'compose-refused', 'passed', 'passed-no-reason', 'unrecorded', 'fired-not-composed',
+]);
+const LATE = Object.freeze({ 'chased-entry': 'late-chased', 'missed-entry': 'late-missed', 'beyond-stop': 'late-beyond-stop' });
+const LATE_KINDS = Object.freeze(Object.keys(LATE));
 const lateReason = kind => LATE[kind] || 'late-unknown';
+// Phase 2's refusal by what it said (trend-capture.js classifyCycle's codes): the sizing floor, a veto, or an approval
+// the runner could not read (not the risk manager saying no).
+const PHASE2 = Object.freeze({ veto: 'risk-veto', 'verdict-unread': 'verdict-unread', 'min-contracts': 'min-contracts' });
+const phase2Of = why => (/min[-_ ]contracts|floor/i.test(why) ? 'min-contracts' : /VERDICT:\s*VETO/i.test(why) ? 'risk-veto' : 'verdict-unread');
 
 const isObj = x => Boolean(x) && typeof x === 'object' && !Array.isArray(x);
 const num = x => (typeof x === 'number' && Number.isFinite(x) ? x : null);
@@ -89,24 +109,31 @@ function runDirOf(home) {
   return ids.length ? path.join(home, 'replay', ids[0]) : null;
 }
 
-/** The trade cycle logs of a home by bar close (ms), each with its file's day. */
+/** A home's cycle logs by bar close (ms): { trade (the trade cycles), any (trade or manage, the trade one first) }. */
 function cycleLogs(home) {
-  const out = new Map();
-  for (const c of tc.cyclesOf(home)) if (c.action === 'trade') out.set(Date.parse(c.timing.barClose), c);
-  return out;
+  const trade = new Map();
+  const any = new Map();
+  for (const c of tc.cyclesOf(home)) {
+    const k = Date.parse(c.timing.barClose);
+    if (c.action === 'trade') { trade.set(k, c); any.set(k, c); } else if (!any.has(k)) any.set(k, c);
+  }
+  return { trade, any };
 }
 
-/** The reason of an uncaught, covered leg (see the header). ctx: { blocker, lateKind, skipped, overran, listed, blocked }. */
+/**
+ * The reason of an uncaught, covered leg (see the header). ctx: { blocker, lateKind, skipped, overran, listed, blocked,
+ * positionSide ('own' | 'opposite' | null: the side of the position the span's cycles show) }.
+ */
 function reasonOf(leg, ctx = {}) {
   const b = isObj(ctx.blocker) ? ctx.blocker : isObj(leg.blocker) ? leg.blocker : null;
   const quiet = !b || b.code === 'no-plan' || b.code === 'outside-session';
   if (b && b.code === 'late-entry') return lateReason(ctx.lateKind);
   if (b && b.by === 'gate') return 'gate-refusal';
   if (b && (b.by === 'executor' || b.code === 'unfilled')) return 'execution';
-  if (b && b.by === 'phase2') return 'risk-veto';
+  if (b && b.by === 'phase2') return PHASE2[b.code] || 'risk-veto';
   if (b && b.code === 'head-pass') return 'passed-by-head';
   if (b && b.by === 'compose_check') return 'compose-refused';
-  if (b && b.code === 'position-open') return 'position-open';
+  if (b && b.code === 'position-open') return ctx.positionSide === 'own' ? 'position-open-own-side' : ctx.positionSide === 'opposite' ? 'position-open-opposite' : 'position-open-unknown';
   if (ctx.blocked && (quiet || b.by === 'rule')) return 'account-blocked';
   if (b && b.by === 'rule' && b.code !== 'outside-session') return 'rule';
   if (quiet && (ctx.skipped || ctx.overran)) return 'cycle-overran';
@@ -126,16 +153,22 @@ function setupOutcome(setup, { records = [], entry = null, refusedIds = new Set(
   if (isObj(entry) && ids.has(entry.record)) {
     if (entry.outcome === 'executed') return 'taken';
     if (entry.outcome === 'late') return lateReason(lateKind || (isObj(entry.late) ? entry.late.kind : null));
-    if (entry.outcome === 'vetoed') return 'risk-veto';
+    if (entry.outcome === 'vetoed') return phase2Of(String(entry.why || ''));
     return 'execution';
   }
   if (mine.some(r => refusedIds.has(r.id))) return 'gate-refusal';
   if (mine.some(r => r.ok)) return 'passed-by-head';
   if (mine.length) return 'compose-refused';
-  return isObj(skip) && skip.reason === null ? 'passed-no-reason' : 'passed';
+  // Never composed: a fired scan setup has no skip row (the setup skips list listed setups only); a listed one says why
+  // (passed), says nothing (passed-no-reason), or has no row at all (unrecorded).
+  if (setup.source === 'fired') return 'fired-not-composed';
+  if (!isObj(skip)) return 'unrecorded';
+  return skip.reason === null ? 'passed-no-reason' : 'passed';
 }
 
-const blockedIn = c => isObj(c && c.context) && isObj(c.context.account) && (c.context.account.attempts || []).some(a => isObj(a) && a.entryBlock);
+// The attempt's entry block in a cycle's account, unless it only says a position is open (the position's, not the attempt's).
+const blockedIn = c => isObj(c && c.context) && isObj(c.context.account) && (c.context.account.attempts || []).some(a => isObj(a) && a.entryBlock && !/position is open/i.test(String(a.entryBlock)));
+const sidesHeld = c => (isObj(c && c.context) && isObj(c.context.account) && Array.isArray(c.context.account.positions) ? c.context.account.positions : []).map(p => isObj(p) && p.side).filter(Boolean);
 const onOf = c => (isObj(c && c.prepare) && isObj(c.prepare.on) ? c.prepare.on : null);
 const pathOf = c => (onOf(c) ? pathKey(onOf(c)) : null);
 
@@ -143,7 +176,7 @@ const pathOf = c => (onOf(c) ? pathKey(onOf(c)) : null);
 function readHome(home, { census, alignedOf = null } = {}) {
   const runDir = runDirOf(home);
   const name = path.basename(home);
-  if (!runDir) return { home, name, runId: null, error: 'no replay run in this home', days: [], missingDays: [], legs: [], notRun: [], entries: [], entryCycles: [], setups: [], decisions: { times: 0, skipped: 0, overran: 0, cycles: 0 }, late: { total: 0, byKind: {}, rows: [] } };
+  if (!runDir) return { home, name, runId: null, error: 'no replay run in this home', days: [], missingDays: [], legs: [], notRun: [], entries: [], entryCycles: [], setups: [], decisions: { times: 0, ran: 0, skipped: 0, cycles: 0, overran: 0, lost: 0, byDay: {} }, late: { total: 0, byKind: {}, rows: [] } };
   const run = readRun(runDir);
   const cfg = readJson(path.join(runDir, 'autotrader.json')) || {};
   const minutes = Number(cfg.timeframe) || null;
@@ -158,10 +191,18 @@ function readHome(home, { census, alignedOf = null } = {}) {
   // The run's decision times by bar close: those it ran, and those that passed while a cycle ran (skipped).
   const ranAt = new Set();
   const skippedAt = new Set();
+  // A step served its bar when it ran a cycle, or the runner's newest base bar was the one that just closed (a step
+  // that ran nothing on a stale bar: the replay served no new bar). A record that names no bars: served (unknown).
+  const servedAt = new Set();
   for (const d of days) for (const r of run.days[d]) {
     if (!isObj(r)) continue;
-    if (r.kind === 'trade' && Number.isFinite(Date.parse(r.t))) ranAt.add(closeOf(r.t));
-    for (const t of Array.isArray(r.skipped) ? r.skipped : []) if (Number.isFinite(Date.parse(t))) skippedAt.add(closeOf(t));
+    if (r.kind === 'trade' && Number.isFinite(Date.parse(r.t))) {
+      const t = closeOf(r.t);
+      ranAt.add(t);
+      const newest = Array.isArray(r.bars) ? r.bars.map(x => Date.parse(isObj(x) ? x.lastBarT : null)).filter(Number.isFinite) : [];
+      if ((Array.isArray(r.ran) && r.ran.length) || !Array.isArray(r.bars) || newest.some(ms => ms >= t - step)) servedAt.add(t);
+    }
+    for (const t of Array.isArray(r.skipped) ? r.skipped : []) if (Number.isFinite(Date.parse(t))) { skippedAt.add(closeOf(t)); servedAt.add(closeOf(t)); }
   }
   const spanOf = g => {
     const t0 = Date.parse(g.start);
@@ -174,7 +215,7 @@ function readHome(home, { census, alignedOf = null } = {}) {
   const inScope = dayLegs.filter(g => spanOf(g).some(t => ranAt.has(t) || skippedAt.has(t)));
   const scopeIds = new Set(inScope.map(g => g.id));
   const cap = tc.captureReport({ runDir, days: run.days, manifest: run.manifest, legs: inScope, context: dayLegs.filter(g => !scopeIds.has(g.id)) });
-  const logs = cycleLogs(home);
+  const { trade: logs, any: anyLogs } = cycleLogs(home);
   const recs = readRecords(home);
   const onBar = new Map();
   for (const r of recs) { const k = Date.parse(r.bar) + step; if (!onBar.has(k)) onBar.set(k, []); onBar.get(k).push(r); }
@@ -198,19 +239,24 @@ function readHome(home, { census, alignedOf = null } = {}) {
   const legs = cap.legs.map(l => {
     const span = spanOf(l);
     const cs = span.map(t => logs.get(t)).filter(Boolean);
+    const held = span.map(t => anyLogs.get(t)).filter(Boolean).flatMap(sidesHeld);
     const b = l.blocker;
     const last = b ? [...l.cycles].reverse().find(c => c.code === b.code) : null;
     const at = last ? Date.parse(last.bar) : NaN;
     const bc = Number.isFinite(at) ? logs.get(at) : null;
     const barRecs = Number.isFinite(at) ? (onBar.get(at) || []).filter(r => r.side === l.side) : [];
     const lateKind = b && b.code === 'late-entry' ? (bc && isObj(bc.entry) && isObj(bc.entry.late) && bc.entry.late.kind) || barRecs.map(r => lateOfRecord.get(r.id)).find(Boolean) || null : null;
-    const ctx = { blocker: b, lateKind, skipped: span.some(t => skippedAt.has(t)), overran: cs.some(c => isObj(c.timing) && (c.timing.overran === true || c.timing.setupMissed === 'overran')), listed: cs.some(c => listedSide(c, l.side)), blocked: cs.some(blockedIn) };
+    const ctx = { blocker: b, lateKind, skipped: span.some(t => skippedAt.has(t)), overran: cs.some(c => isObj(c.timing) && (c.timing.overran === true || c.timing.setupMissed === 'overran')), listed: cs.some(c => listedSide(c, l.side)), blocked: cs.some(blockedIn),
+      positionSide: held.includes(l.side) ? 'own' : held.length ? 'opposite' : null };
+    // Not served: every decision time on its catch bars came with no new bar (and none passed while a cycle ran).
+    const covered = span.filter(t => ranAt.has(t) || skippedAt.has(t));
+    const notServed = !l.captured && covered.length > 0 && covered.every(t => !servedAt.has(t));
     const entries = cap.entries.filter(e => e.kind === 'in-trend' && e.leg === l.id);
     const delayMin = l.captured && l.entry ? round4((Date.parse(l.entry.at) - Date.parse(l.start)) / 60000) : null;
     return {
       id: l.id, day: l.day, side: l.side, start: l.start, end: l.end, points: l.move.points, aligned: aligned(l), caught: l.captured === true,
       entry: l.entry ? { at: l.entry.at, filled: l.entry.filled, r: num(l.entry.r), delayMin } : null, availableR: num(l.availableR), estimated: l.estimated === true,
-      inLegEntries: entries.length, reason: l.captured ? null : reasonOf(l, ctx), blocker: b ? { step: b.step, code: b.code, by: b.by } : null, lateKind, skippedInSpan: ctx.skipped,
+      inLegEntries: entries.length, reason: l.captured ? null : reasonOf(l, ctx), notServed, blocker: b ? { step: b.step, code: b.code, by: b.by } : null, lateKind, skippedInSpan: ctx.skipped,
       path: l.captured ? null : pathOf(bc),
     };
   }).sort((a, b) => (a.id < b.id ? -1 : 1));
@@ -218,8 +264,15 @@ function readHome(home, { census, alignedOf = null } = {}) {
   // The setups each trade cycle's briefing listed and its scans fired, with their outcome.
   const setups = [];
   let overran = 0;
+  // The bars lost to latency, each once: a decision time skipped while a cycle ran, and the next bar of a cycle that
+  // overran its bar (the same bar when the overrun swallowed a decision time).
+  const lost = new Set(skippedAt);
   for (const [ms, c] of [...logs.entries()].sort((a, b) => a[0] - b[0])) {
-    if (isObj(c.timing) && (c.timing.overran === true || c.timing.setupMissed === 'overran')) overran += 1;
+    if (isObj(c.timing) && (c.timing.overran === true || c.timing.setupMissed === 'overran')) {
+      overran += 1;
+      const next = Date.parse(c.timing.nextBarClose);
+      lost.add(Number.isFinite(next) ? next : ms + step);
+    }
     const ctxt = isObj(c.context) ? c.context : {};
     const skips = isObj(c.summary) && Array.isArray(c.summary.setupSkips) ? c.summary.setupSkips : [];
     const listed = (Array.isArray(ctxt.setupsListed) ? ctxt.setupsListed : []).map(read => ({ read, source: 'listed', ...setupKind(read) }));
@@ -235,30 +288,62 @@ function readHome(home, { census, alignedOf = null } = {}) {
   }
   const entries = cap.entries.map(e => ({ at: e.at, side: e.side, record: e.record, kind: e.kind, leg: e.leg, r: num(e.r), caughtLeg: cap.legs.some(l => l.captured && l.entry && l.entry.at === e.at && l.side === e.side) }))
     .sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0));
+  const times = new Set([...ranAt, ...skippedAt]);
   const entryCycles = [...logs.values()].filter(c => isObj(c.entry) && c.entry.outcome === 'executed').map(c => ({ bar: c.timing.barClose, path: pathOf(c) })).sort((a, b) => (a.bar < b.bar ? -1 : 1));
   return {
     home, name, runId: run.manifest.runId || path.basename(runDir), days, missingDays: days.filter(d => !censusDays.has(d)),
     legs, notRun, entries, entryCycles, setups,
-    decisions: { times: ranAt.size + skippedAt.size, ran: ranAt.size, skipped: skippedAt.size, cycles: logs.size, overran },
+    decisions: { times: times.size, ran: ranAt.size, skipped: skippedAt.size, cycles: logs.size, overran, lost: lost.size, byDay: sorted([...times].reduce((o, t) => count(o, dayOf(t - 1)), {})) },
     late: { total: late.total, byKind: sorted(late.byKind), rows: late.rows.map(x => ({ at: x.at, side: x.side, kind: x.kind, record: x.record, first: x.first, from: x.from })) },
   };
 }
 
-/** Homes given as run homes or folders of them (a folder whose children hold replay runs), sorted by name. */
-function homesOf(paths) {
-  const out = [];
+
+/**
+ * Homes given as run homes or folders of them (a folder whose children hold replay runs), each once by its real path,
+ * sorted by name: { homes, skipped } (skipped: a folder's children that hold no replay folder, by name).
+ */
+function scanHomes(paths) {
+  const out = new Map();
+  const skipped = [];
+  const add = p => { const real = fs.realpathSync(p); if (!out.has(real)) out.set(real, p.replace(/[\\/]+$/, '')); };
   for (const p of paths) {
-    if (fs.existsSync(path.join(p, 'replay'))) { out.push(p); continue; }
-    let kids = [];
-    try { kids = fs.readdirSync(p).map(n => path.join(p, n)).filter(k => fs.existsSync(path.join(k, 'replay'))); } catch (_err) { /* none */ }
+    if (fs.existsSync(path.join(p, 'replay'))) { add(p); continue; }
+    let names = [];
+    try { names = fs.readdirSync(p).sort(); } catch (_err) { /* none */ }
+    const kids = names.filter(n => fs.existsSync(path.join(p, n, 'replay')));
     if (!kids.length) throw new Error(`${p}: not a run home, nor a folder of run homes`);
-    out.push(...kids);
+    for (const n of names) if (!kids.includes(n) && fs.statSync(path.join(p, n)).isDirectory()) skipped.push(n);
+    for (const n of kids) add(path.join(p, n));
   }
-  return [...new Set(out)].sort((a, b) => (path.basename(a) < path.basename(b) ? -1 : 1));
+  return { homes: [...out.values()].sort((a, b) => (path.basename(a) < path.basename(b) ? -1 : 1)), skipped: [...new Set(skipped)].sort() };
 }
 
+const homesOf = paths => scanHomes(paths).homes;
+
 function readArm(paths, { census, alignedOf = null } = {}) {
-  return { homes: homesOf(paths).map(h => readHome(h, { census, alignedOf })) };
+  const { homes, skipped } = scanHomes(paths);
+  return { homes: homes.map(h => readHome(h, { census, alignedOf })), skipped };
+}
+
+/**
+ * What an arm's input lacks, never dropped silently: [{ kind, detail }] sorted, kinds: error (a home with no replay run),
+ * not-a-home (a folder's child with no replay folder), missing-census-day (a run day the census has no legs for),
+ * no-cycle-logs (a home with decision times but no trade cycle log), duplicate-day (two homes on one session day).
+ */
+function armProblems(arm) {
+  const out = [];
+  const homes = arm.homes || [];
+  for (const h of homes) {
+    if (h.error) out.push({ kind: 'error', detail: `${h.name}: ${h.error}` });
+    else if (isObj(h.decisions) && h.decisions.cycles === 0) out.push({ kind: 'no-cycle-logs', detail: `${h.name}: ${h.decisions.times} decision time(s), no trade cycle log` });
+    for (const d of h.missingDays || []) out.push({ kind: 'missing-census-day', detail: `${h.name}: ${d}` });
+  }
+  for (const n of arm.skipped || []) out.push({ kind: 'not-a-home', detail: `${n}: no replay folder` });
+  const byDay = {};
+  for (const h of homes) for (const d of h.days || []) (byDay[d] = byDay[d] || []).push(h.name);
+  for (const [d, names] of Object.entries(byDay)) if (names.length > 1) out.push({ kind: 'duplicate-day', detail: `${d}: ${[...names].sort().join(', ')}` });
+  return out.sort((a, b) => (`${a.kind}|${a.detail}` < `${b.kind}|${b.detail}` ? -1 : 1));
 }
 
 /**
@@ -277,14 +362,24 @@ function bankedR(caught) {
   return round4(r);
 }
 
-/** Counts of one list of legs: covered, caught, R caught over R available (bankedR), uncaught by reason. */
+const rateOf = (k, n) => (n ? round4(k / n) : null);
+
+/**
+ * Counts of one list of legs, the not-served ones left out (their steps served no bar: no miss): covered, caught, R
+ * caught over R available (bankedR), uncaught by reason; notServed, and the count and rate with them (withNotServed).
+ */
 function legTotals(legs) {
-  const caught = legs.filter(l => l.caught);
+  const served = legs.filter(l => !l.notServed);
+  const caught = served.filter(l => l.caught);
   const rCaught = bankedR(caught);
-  const rAvailable = legs.reduce((s, l) => s + (num(l.availableR) || 0), 0);
+  const rAvailable = served.reduce((s, l) => s + (num(l.availableR) || 0), 0);
   const reasons = {};
-  for (const l of legs.filter(x => !x.caught)) count(reasons, l.reason);
-  return { legs: legs.length, caught: caught.length, rate: legs.length ? round4(caught.length / legs.length) : null, rCaught: round4(rCaught), rAvailable: round4(rAvailable), share: rAvailable > 0 ? round4(rCaught / rAvailable) : null, reasons: sorted(reasons) };
+  for (const l of served.filter(x => !x.caught)) count(reasons, l.reason);
+  const all = legs.filter(l => l.caught).length;
+  return {
+    legs: served.length, caught: caught.length, rate: rateOf(caught.length, served.length), rCaught: round4(rCaught), rAvailable: round4(rAvailable), share: rAvailable > 0 ? round4(rCaught / rAvailable) : null, reasons: sorted(reasons),
+    notServed: legs.length - served.length, withNotServed: { legs: legs.length, caught: all, rate: rateOf(all, legs.length) },
+  };
 }
 
 /** An arm's summary: per day and in total, all legs and the aligned ones, setups by kind and outcome, entries, late. */
@@ -305,44 +400,44 @@ function armSummary(arm) {
   for (const r of homes.flatMap(h => h.late.rows)) { count(lateBy, r.kind || 'unknown'); const k = (lateFirst[r.kind || 'unknown'] = lateFirst[r.kind || 'unknown'] || {}); count(k, r.first); }
   const paths = {};
   for (const e of homes.flatMap(h => h.entryCycles)) count(paths, e.path || 'n/a');
-  const dec = homes.reduce((s, h) => ({ times: s.times + h.decisions.times, skipped: s.skipped + h.decisions.skipped, cycles: s.cycles + h.decisions.cycles, overran: s.overran + h.decisions.overran }), { times: 0, skipped: 0, cycles: 0, overran: 0 });
+  const dec = homes.reduce((s, h) => ({ times: s.times + h.decisions.times, skipped: s.skipped + h.decisions.skipped, cycles: s.cycles + h.decisions.cycles, overran: s.overran + h.decisions.overran, lost: s.lost + h.decisions.lost }), { times: 0, skipped: 0, cycles: 0, overran: 0, lost: 0 });
   const days = {};
   for (const d of [...new Set(homes.flatMap(h => h.days))].sort()) {
     const hs = homes.filter(h => h.days.includes(d));
     const late = {};
     for (const r of hs.flatMap(h => h.late.rows).filter(r => dayOf(r.at) === d)) count(late, r.kind || 'unknown');
-    days[d] = { ...legTotals(legs.filter(l => l.day === d)), aligned: legTotals(legs.filter(l => l.day === d && l.aligned)), entries: entries.filter(e => dayOf(e.at) === d).length, late: sorted(late) };
+    days[d] = { ...legTotals(legs.filter(l => l.day === d)), aligned: legTotals(legs.filter(l => l.day === d && l.aligned)), entries: entries.filter(e => dayOf(e.at) === d).length, late: sorted(late), homes: hs.map(h => h.name).sort() };
   }
   return {
-    homes: homes.length, errors: homes.filter(h => h.error).map(h => `${h.name}: ${h.error}`), missingDays: [...new Set(homes.flatMap(h => h.missingDays))].sort(),
+    homes: homes.length, errors: homes.filter(h => h.error).map(h => `${h.name}: ${h.error}`), missingDays: [...new Set(homes.flatMap(h => h.missingDays))].sort(), problems: armProblems(arm),
     days,
     totals: {
       all: legTotals(legs), aligned: legTotals(legs.filter(l => l.aligned)), notRun: homes.reduce((s, h) => s + h.notRun.length, 0),
       entries: { filled: entries.length, onCaughtLeg: entries.filter(e => e.caughtLeg).length, inLeg: entries.filter(e => e.kind === 'in-trend').length, counter: entries.filter(e => e.kind === 'counter').length, none: entries.filter(e => e.kind === 'none').length },
       setups: { n: setups.length, byKind: setupsBy(setups), byPath: sorted(Object.fromEntries(Object.entries(byPath).map(([k, v]) => [k, sorted(v)]))) },
-      decisions: { ...dec, overranShare: dec.times ? round4((dec.skipped + dec.overran) / dec.times) : null },
+      decisions: { ...dec, overranShare: rateOf(dec.lost, dec.times) },
       late: { total: Object.values(lateBy).reduce((a, b) => a + b, 0), byKind: sorted(lateBy), firstByKind: sorted(Object.fromEntries(Object.entries(lateFirst).map(([k, v]) => [k, sorted(v)]))) },
       entryPaths: sorted(paths),
     },
   };
 }
 
-const totalText = t => `${t.caught}/${t.legs} caught (${t.rate === null ? '-' : t.rate}); R caught ${t.rCaught} of ${t.rAvailable} available (${t.share === null ? '-' : t.share}); uncaught by reason ${JSON.stringify(t.reasons)}`;
+const totalText = t => `${t.caught}/${t.legs} caught (${t.rate === null ? '-' : t.rate}); R caught ${t.rCaught} of ${t.rAvailable} available (${t.share === null ? '-' : t.share}); uncaught by reason ${JSON.stringify(t.reasons)}; not served (no bar, not counted) ${t.notServed}: with them ${t.withNotServed.caught}/${t.withNotServed.legs} (${t.withNotServed.rate === null ? '-' : t.withNotServed.rate})`;
 
-/** An arm's summary as text lines: totals, then one line per day. */
+/** An arm's summary as text lines: its problems, totals, then one line per day. */
 function armLines(s, name = 'arm') {
   const t = s.totals;
   const L = [
-    `== ${name}: ${s.homes} home(s)${s.errors.length ? `; errors: ${s.errors.join('; ')}` : ''}${s.missingDays.length ? `; days the census lacks: ${s.missingDays.join(', ')}` : ''}`,
+    `== ${name}: ${s.homes} home(s)`, ...s.problems.map(p => `problem: ${p.kind}: ${p.detail}`),
     `legs (all): ${totalText(t.all)}`, `legs (aligned 4h+1h): ${totalText(t.aligned)}`, `census legs the run never stepped (not-run, out of scope): ${t.notRun}`,
     `entries filled ${t.entries.filled}: caught a leg ${t.entries.onCaughtLeg}, in a leg its way ${t.entries.inLeg}, against a leg ${t.entries.counter}, in none ${t.entries.none}`,
-    `decision times ${t.decisions.times}: skipped while a cycle ran ${t.decisions.skipped}, cycles that overran their bar ${t.decisions.overran} (share ${t.decisions.overranShare === null ? '-' : t.decisions.overranShare})`,
+    `decision times ${t.decisions.times}: skipped while a cycle ran ${t.decisions.skipped}, cycles that overran their bar ${t.decisions.overran}, bars lost ${t.decisions.lost} (share ${t.decisions.overranShare === null ? '-' : t.decisions.overranShare})`,
     `late refusals ${t.late.total}: ${JSON.stringify(t.late.byKind)}; then first (target / stop / neither / unknown): ${JSON.stringify(t.late.firstByKind)}`,
     `setups listed or fired ${t.setups.n}, by kind and outcome: ${JSON.stringify(t.setups.byKind)}`,
   ];
   if (Object.keys(t.setups.byPath).length) L.push(`setups by prepare path: ${JSON.stringify(t.setups.byPath)}`, `entries by prepare path: ${JSON.stringify(t.entryPaths)}`);
-  for (const [d, x] of Object.entries(s.days)) L.push(`  ${d}: ${x.caught}/${x.legs} legs (aligned ${x.aligned.caught}/${x.aligned.legs}), R ${x.rCaught}/${x.rAvailable}, entries ${x.entries}, late ${JSON.stringify(x.late)}`);
+  for (const [d, x] of Object.entries(s.days)) L.push(`  ${d}${x.homes.length > 1 ? ` (${x.homes.length} homes: ${x.homes.join(', ')})` : ''}: ${x.caught}/${x.legs} legs (aligned ${x.aligned.caught}/${x.aligned.legs}), R ${x.rCaught}/${x.rAvailable}, entries ${x.entries}, late ${JSON.stringify(x.late)}`);
   return L;
 }
 
-module.exports = { REASONS, SETUP_OUTCOMES, setupKind, reasonOf, setupOutcome, runDirOf, homesOf, readHome, readArm, bankedR, legTotals, armSummary, armLines };
+module.exports = { REASONS, SETUP_OUTCOMES, LATE_KINDS, setupKind, reasonOf, setupOutcome, runDirOf, homesOf, scanHomes, readHome, readArm, armProblems, bankedR, legTotals, armSummary, armLines };
