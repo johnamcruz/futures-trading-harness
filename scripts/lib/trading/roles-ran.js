@@ -219,8 +219,11 @@ const NOT_APPROVED = 'risk-manager phase 2 approving the plan (its latest verdic
 // "a decision on ...") decides nothing. Owner-approved 2026-10-24 (a replay's approvals read as vetoes by prose naming
 // the verdict). A decision occurrence: after it, qualifier tokens (final, phase, risk, overall, a
 // number) and anything in (), [] or \u00ab\u00bb are skipped, then the first token after any separators (':', '-', '|', '/', '=',
-// arrows, ellipses, spaces) is the decision. "is", "was", "to", "says" or "said" right after the word is prose: that
-// occurrence isn't read (the veto rule still reads its line). Nothing after it: the
+// arrows, ellipses, spaces) is the decision. "is", "was", "to", "says", "said" or a word that only introduces the subject
+// ("for", "on", "of", "in", "at": "Phase 2 verdict for MNQ long, ...") right after the word is prose: that occurrence
+// isn't read as a decision (the veto rule still reads its line, and a line-start keyword's prose still refuses when a
+// label separator follows it with a refusal word or a number after: "Phase 2 verdict for MNQ long: reduce to 2"). In
+// mid-line prose a target's multiple ("full verdict, 2R") is no number of contracts. Nothing after it: the
 // next non-empty line's first token (a heading), unless that line holds the word itself. Only brackets after it: the
 // bracketed token is the decision; only numbers: the number is (no letters, so it refuses). The order's own setup,
 // side and size are what the gate checks, so several APPROVE lines are one approval, whatever else they say.
@@ -243,7 +246,16 @@ const startIndex = l => { const m = LINE_START.exec(l); return m ? m[0].length -
 // ellipsis or a dash (a hyphen only spaced: "decision-making" is a word). The match ends at the separator.
 const LABEL = /^(?:[\s*_]*(?:\([^)\n]*\)|\[[^\]\n]*\]))?(?:[\s*_]+[A-Za-z]{1,12}){0,3}?[\s*_]*(?:[:=|\u2192\u21d2\u2026\u2013\u2014]|->|\.{3}|-(?=\s))/;
 const QUALIFIERS = new Set(['final', 'phase', 'risk', 'overall']);
-const PROSE = new Set(['is', 'was', 'to', 'says', 'said']);
+// Words right after the keyword that are prose, not a decision: "the decision is ...", and the ones that only introduce the
+// subject ("Phase 2 verdict for MNQ long, ..."; a replay's five approvals read as vetoes because "for" decided). The
+// keyword's sentence still refuses when it states a refusal (sentenceRefusal).
+const PROSE = new Set(['is', 'was', 'to', 'says', 'said', 'for', 'on', 'of', 'in', 'at']);
+// A target's multiple right after the keyword ("..., full verdict, 2R with the record's trail target"): not a decision and
+// not a number of contracts, so it neither approves nor refuses.
+const R_MULTIPLE = /^[^A-Za-z0-9]*\d+(?:\.\d+)?R\b/i;
+// The first label separator in the prose that follows a line-start keyword (':', '=', '|', an arrow, an ellipsis, a dash),
+// not followed by a digit: "verdict for MNQ long: reduce" (the ":" in "15:45" is no separator).
+const PROSE_SEPARATOR = /(?:[:=|\u2192\u21d2\u2026\u2013\u2014]|->|\.{3}|-(?=\s))(?![0-9])/;
 const BRACKETS = { '(': ')', '[': ']', '\u00ab': '\u00bb' };
 const VETO_WORD = /\bveto(?:ed|es)?\b/i;
 const VETO_CAPS = /\bVETO(?:ED|ES)?\b/;
@@ -326,6 +338,7 @@ function headingRefusal(lines, i, rest) {
  * no number), refuses when it is a refusal or that line is a bare number, unless that line holds the word itself.
  */
 function proseRefusal(lines, i, rest) {
+  if (R_MULTIPLE.test(rest)) return sentenceRefusal(lines[i], rest);
   if (/[A-Za-z0-9]/.test(rest)) {
     const lead = /^\s+([A-Za-z]+)\b/.exec(rest);
     const word = lead && PROSE.has(lead[1].toLowerCase()) ? '' : firstWord(rest);
@@ -376,11 +389,22 @@ function decisionLines(text) {
         if (refused) out.push({ keyword: m[1].toLowerCase(), word: refused.word, line: refused.line });
         continue;
       }
-      const d = decisionAfter(sep ? ` :${after.slice(sep[0].length)}` : after);
+      // A mid-line label's value that is a target's multiple ("the verdict: 3R target kept") decides nothing; a keyword that
+      // starts its line always decides (an R multiple there is a refusal like any other non-approval).
+      const multiple = Boolean(sep) && R_MULTIPLE.test(after.slice(sep[0].length));
+      const d = multiple ? null : decisionAfter(sep ? ` :${after.slice(sep[0].length)}` : after);
       if (d === null) {
         // Prose after it ("Decision is skip", "the decision was to pass"): its sentence still refuses.
         const refused = sentenceRefusal(lines[i], after);
         if (refused) out.push({ keyword: m[1].toLowerCase(), word: refused.word, line: refused.line });
+        // A keyword that starts its line, then prose, then a separator ("Phase 2 verdict for MNQ long: reduce to 2"): what
+        // follows the separator still decides when it states a refusal word or a number. A time of day ("15:45") is no
+        // separator (one is not followed by a digit).
+        const labelled = label ? null : PROSE_SEPARATOR.exec(after);
+        if (labelled) {
+          const word = firstWord(after.slice(labelled.index + labelled[0].length));
+          if (REFUSALS.has(word) || /^\d/.test(word)) out.push({ keyword: m[1].toLowerCase(), word, line: lines[i] });
+        }
         continue;
       }
       let { word } = d;

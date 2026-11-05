@@ -204,3 +204,77 @@ test('a prose Size line: no error; every cut in it binds, the smaller of it and 
     'Size: the translated 4\nVERDICT: APPROVE - risk $150', // the VERDICT line still states its size
   ]) assert.ok(R.approvedSize(text).error, text);
 });
+
+// A replay's six approvals read as vetoes (a 37-day replay), two causes in the decision reader. The shapes below are
+// minimal copies of the real reports' lines; the reports themselves carry an account name and stay out of the repo.
+//   1. A report opening "Phase 2 verdict for MNQ long ..." (5 of 6): the keyword starts its line, so the first word after
+//      it decides, and "for" is no approval. A word that only introduces the subject ("for", "on", "of", "in", "at") is
+//      prose, as "is", "was" and "to" are; the sentence still refuses when it states a refusal.
+//   2. An approving VERDICT line closing "..., full verdict, 2R with the record's trail target" (1 of 6): a keyword in
+//      mid-line prose read a number right after it as a refusal, and "2R" is the target's multiple, not a number of
+//      contracts.
+const approving = (opening, line = 'VERDICT: APPROVE - size 5, risk $250.00, trade_lifecycle long with the 4h and 1h up, 2R target') =>
+  `${opening}\n\n7 Risk: stop 100 ticks, target 200 ticks (2R). No pacing rule holds, so no cut.\n\nSize: 5\n${line}\nFACTS: window opening drive; entries allowed`;
+
+test('verdictOf: a report opening "Phase 2 verdict for/on/of/in/at <subject>" is still its VERDICT line\'s approval', () => {
+  for (const opening of [
+    'Phase 2 verdict for MNQ trade_lifecycle long on the 10:06 ET bar (record 29c4d1ed728d34fb). I\'m approving at the translated size of 5.',
+    'Phase 2 verdict for MNQ long, 3m bar closed 15:45 UTC (10:45 ET):',
+    'Phase 2 verdict for MNQ long, trade_lifecycle (momentum_continuation), on the 3m bar opened 10:03 ET (14:03Z).',
+    'Phase 2 verdict for MNQ long, from the record\'s reads checked against this bar\'s briefing and `order_plan`.',
+    'Phase 2 verdict on MNQ long, 3m bar closed 15:45 UTC.',
+    'Verdict of the risk review for MNQ long.',
+    'Phase 2 verdict in the opening drive for MNQ long.',
+    'Decision at the 10:06 ET bar for MNQ long.',
+  ]) assert.strictEqual(R.verdictOf(approving(opening)), 'APPROVE', opening);
+});
+
+test('verdictOf: the same opening never turns a refusal into an approval', () => {
+  const O = 'Phase 2 verdict for MNQ long, 3m bar closed 15:45 UTC';
+  // The VERDICT line itself refuses (any decision but approve), or the report says veto: a veto, as before.
+  for (const line of ['VERDICT: PASS - size 0', 'VERDICT: VETO - the 1h CHoCH is against', 'VERDICT: SKIP', 'VERDICT: REDUCE - size 2']) {
+    assert.strictEqual(R.verdictOf(approving(O, line)), 'VETO', line);
+  }
+  // The opening sentence states the refusal: the sentence refuses even though its first word is prose.
+  for (const opening of ['Phase 2 verdict for MNQ long: skip.', 'Phase 2 verdict for MNQ long: pass on this one.', 'Phase 2 verdict for MNQ long: no trade.', 'Phase 2 verdict for MNQ long: veto.', 'Phase 2 verdict for MNQ long: stand aside.']) {
+    assert.strictEqual(R.verdictOf(approving(opening)), 'VETO', opening);
+  }
+  // The prose word does not hide a refusal behind a separator (review: each was a veto before the prose words, and must stay one).
+  for (const opening of ['Phase 2 verdict for MNQ long: reduce to 2.', 'Phase 2 verdict for MNQ long: hold.', 'Phase 2 verdict for MNQ long: cut to 2', 'Phase 2 verdict for MNQ long: half size',
+    'Phase 2 verdict for MNQ long: wait for the retest', 'Phase 2 verdict for MNQ long: defer', 'Phase 2 verdict for MNQ long: conditional on the 1h', 'Phase 2 verdict for MNQ long: pending',
+    'Phase 2 verdict for MNQ long: partial', 'Phase 2 verdict for MNQ long: fail', 'Phase 2 verdict for MNQ long: block', 'Phase 2 verdict for MNQ long: not now', 'Phase 2 verdict for MNQ long: no',
+    'Phase 2 verdict for MNQ long: 0 contracts', 'Phase 2 verdict for MNQ long: 2 contracts', 'Verdict on the plan: reduce', 'Verdict in doubt: wait', 'Decision at this bar: hold',
+    'Verdict for MNQ: half', 'Decision on MNQ long: cut to 1', 'Phase 2 verdict for MNQ long - reduce to 2', 'Phase 2 verdict for MNQ long = skip', 'Phase 2 verdict for MNQ:reduce']) {
+    assert.strictEqual(R.verdictOf(approving(opening)), 'VETO', opening);
+  }
+  // A time of day in the subject is no separator ("15:45"), and a colon that ends the line states nothing: still an approval.
+  for (const opening of ['Phase 2 verdict for MNQ long, 3m bar closed 15:45 UTC (10:45 ET):', 'Phase 2 verdict for MNQ long: approved at size 5.']) {
+    assert.strictEqual(R.verdictOf(approving(opening)), 'APPROVE', opening);
+  }
+  // The opening alone, with no VERDICT line of its own: no approval (null), never an approval from prose.
+  assert.strictEqual(R.verdictOf(`${O}.\n\nSize: 5`), null);
+  assert.strictEqual(R.verdictOf(`${O}: approved at size 5.`), null);
+  // The line-start rule is unchanged for a real decision word: "Verdict: reduce" and "Decision pass" still refuse.
+  assert.strictEqual(R.verdictOf('Verdict: reduce\nVERDICT: APPROVE - size 3'), 'VETO');
+  assert.strictEqual(R.verdictOf('Decision pass\nVERDICT: APPROVE - size 3'), 'VETO');
+});
+
+test('verdictOf: an approving VERDICT line ending "..., full verdict, 2R with the trail target" is an approval; a number of contracts after the word still refuses', () => {
+  const line = t => `VERDICT: APPROVE - size 7, risk $266.00, trade_lifecycle long on the 15m broke overnight high setup, ${t}`;
+  for (const tail of ['full verdict, 2R with the record\'s trail target', 'full verdict, 2R', 'verdict 1.5R target', 'the verdict: 3R target kept']) {
+    assert.strictEqual(R.verdictOf(approving('Plan.', line(tail))), 'APPROVE', tail);
+  }
+  // A keyword that STARTS its line decides, whatever follows (an R multiple is no escape): a veto, never an approval, never a throw.
+  for (const bad of ['VERDICT: 2R - reduce to 1', 'Decision: 2R\nskip', 'VERDICT: 0R', 'VERDICT: 2R APPROVE', 'VERDICT: 2R']) {
+    assert.strictEqual(R.verdictOf(`${bad}\nVERDICT: APPROVE - size 5, risk $250.00`), 'VETO', bad);
+  }
+  assert.strictEqual(R.verdictOf('VERDICT: 2R'), 'VETO', 'alone');
+  for (const text of ['VERDICT:\n2R', 'Decision:\n1.5R', 'verdict\n2R target']) {
+    assert.doesNotThrow(() => R.verdictOf(text), text);
+    assert.notStrictEqual(R.verdictOf(`${text}\nVERDICT: APPROVE - size 5, risk $250.00`), 'APPROVE', text);
+  }
+  // A number that is not an R multiple right after the word is still a refusal (a size of 0, a count): fails closed.
+  for (const tail of ['verdict 0 contracts', 'full verdict, 0', 'the decision 2 contracts']) {
+    assert.strictEqual(R.verdictOf(approving('Plan.', line(tail))), 'VETO', tail);
+  }
+});
