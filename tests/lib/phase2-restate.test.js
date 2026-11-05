@@ -229,3 +229,66 @@ test('a Size- or VERDICT-led line in the FACTS block that the readers don\'t rea
   assert.strictEqual(R.statesSize('Size: vwap above'), false);
   assert.strictEqual(R.statesSize('Size: the record\'s 2'), true);
 });
+
+// A replay's approval lost to a prose sentence: "The verdict cuts nothing: no pacing rule holds" in a Risk line. A keyword
+// in the middle of a line, then a colon, then "no" or "not", reads as a label whose decision is "no", so the report
+// read as a veto AND counted as a refusing verdict line, which the runner never restates. The strict reading stays (the
+// report is still no approval); the restatement is what rescues it: asked once for Size and the VERDICT line, read by
+// the same readers, a veto in the answer a veto. Only a mid-line "no"/"not" with no refusal in its own sentence is
+// eligible; a refusing sentence ("no trade", "skip", "pass"), a line-start decision and a plain veto are never restated.
+const midReport = risk => `7 Risk: stop 26 ticks at 15363.75, target 107 ticks (4.12R), 21 MNQ. ${risk}\n\nSize: 21\nVERDICT: APPROVE - size 21, risk $273.00, trade_lifecycle long limit 15370.25\nFACTS: window opening drive; entries allowed; news clear; trend long allowed; read long aligned`;
+
+test('restateDue: an approval vetoed only by a mid-line "verdict ...: no/not" sentence is restated once; the strict reading is unchanged', () => {
+  for (const risk of [
+    'The verdict cuts nothing: no pacing rule holds (flat, 0 losses, cushion $3,000).',
+    'The verdict stands: not cut in a prop attempt.',
+    'The sizing verdict: no cut, the full size stands.',
+    'Pacing: the verdict here: no loss streak, no soft stop.',
+    'The sized verdict is the full one, not a skipped one.',
+    'This is a full verdict, not a pass.',
+    'The verdict: not a veto, the full size stands.',
+  ]) {
+    const text = midReport(risk);
+    assert.strictEqual(R.verdictOf(text), 'VETO', `${risk} (still read strictly as a veto)`);
+    const due = P.restateDue(text);
+    assert.ok(due, `${risk} (restated)`);
+    assert.strictEqual(due.kind, 'reads-as-veto', risk);
+    assert.strictEqual(due.ceiling, 21, risk);
+  }
+});
+
+test('restateDue never restates a refusing sentence, a line-start decision, or a plain veto (the mid-line negation rule is narrow)', () => {
+  for (const risk of [
+    'The verdict cuts nothing: no trade here.',
+    'The verdict here: no entry.',
+    'My verdict here: skip.',
+    'The sizing verdict: pass.',
+    'The verdict: stand aside, no pacing rule holds.',
+    'The verdict: veto.',
+    'The verdict: reject, no pacing rule holds.',
+    'The verdict is not a full one, skip it.',
+    'The verdict, not now: pass.',
+    'The verdict: not a veto, but skip.',
+    // Review round 1 (all genuine refusals, each restated before the tightening): a decision word that is not no/not, with a
+    // negation elsewhere in the sentence ...
+    'The verdict: hold, not a veto but hold.', 'The verdict: reduce, not a veto.', 'The verdict: wait, never a pass.', 'The sizing verdict: cut to 1, not a veto.',
+    'The verdict: none, not a veto.', 'The verdict: 2, not a veto', 'The sizing verdict 0 contracts, not a veto.',
+    // ... a refusal in the next sentence of the same line ...
+    'The verdict cuts nothing: no. Skip it.', 'The verdict: no. Stand aside.', 'The verdict: no; pass on it.', 'The verdict: never a veto. Skip it.',
+    'The verdict: not a veto; skip', 'The verdict: not blocked; blocked anyway.',
+    // ... a refusal on the next line ...
+    'The sizing verdict\nNo trade here.', 'The verdict:\nno trade',
+    // ... and a "no"/"not" that is a refusal, not a negated noun phrase.
+    'The sizing verdict: not now.', 'My verdict here: not enough room.', 'The verdict: not allowed', 'The verdict: not approved.', 'The verdict: no, wait for the retest.',
+    'The verdict: no, stand down.', 'The verdict: no, sit this one out.', 'The verdict: no, stay flat.', 'The verdict: no, avoid.', 'The verdict: no, cancel.', 'The verdict: no, stop.',
+    'The verdict: no, defer to the next bar.', 'The verdict: no size fits.', 'The verdict: not this bar.', 'The verdict: not yet, wait.',
+    // Review round 2: "not passed" means failed; a refusal word after a benign noun; the empty and one-letter decision words.
+    'The verdict: not passed.', 'The verdict: not passing the checks.',
+    'The verdict: no cut, hold.', 'The verdict: no cut, wait.', 'The verdict: no cut, reduce to 2.', 'The verdict: no cut, half.', 'The verdict: no cut, stop.',
+    'The verdict is full, not a skipped one; hold.',
+    'The verdict here: a hold, not a veto.', 'The verdict here: a reduced one, not a veto.',
+  ]) assert.strictEqual(P.restateDue(midReport(risk)), null, risk);
+  // A line-start verdict "no" is a real refusal: no restatement. (A line-start Decision line is restated today, by design:
+  // the restatement is read strictly and a veto in the answer is a veto.)
+  assert.strictEqual(P.restateDue(`Verdict: no\n${midReport('')}`), null, 'line-start verdict: no');
+});
