@@ -821,6 +821,12 @@ test('runEntry: a managed cycle\'s exit skills in the head trader\'s prompt are 
   fs.unlinkSync(headEnv.FTH_CYCLE_TRANSCRIPT);
   await E.runEntry(s.deps, s.cycle({ output, headEnv: { ...headEnv, [ES.ATTEST_ENV]: JSON.stringify(att) }, context: { cycleSkills: { skills: ['manage-position', 'pullback-vs-reversal', 'take-profit'], sections: [], over: [], why: ['a position or a working entry is open'] } } }));
   assert.deepStrictEqual(RR.readHeadSkills(s.rolesFile), ['manage-position', 'pullback-vs-reversal', 'take-profit', 'trade-lifecycle']);
+  // A real stream opens with SessionStart hook events before init: still the run's own transcript (the attested
+  // situational skills count; they did not before, and the order gate then refused the entry as "not loaded").
+  const hookEvents = ['hook_started', 'hook_response'].map(subtype => JSON.stringify({ type: 'system', subtype, hook_name: 'SessionStart:startup', hook_event: 'SessionStart', session_id: 'head-session' }));
+  s = setup();
+  await E.runEntry(s.deps, s.cycle({ output: [...hookEvents, output].join('\n'), headEnv: { ...headEnv, [ES.ATTEST_ENV]: JSON.stringify(att) }, context: { cycleSkills: { skills: ['manage-position', 'pullback-vs-reversal', 'take-profit'], sections: [], over: [], why: ['a position or a working entry is open'] } } }));
+  assert.deepStrictEqual(RR.readHeadSkills(s.rolesFile), ['manage-position', 'pullback-vs-reversal', 'take-profit', 'trade-lifecycle'], 'hook events before init');
   // A captured output that isn't a run's own transcript (no init event first): the Skill load only (fails closed).
   s = setup();
   await E.runEntry(s.deps, s.cycle({ output: skill, headEnv: { ...headEnv, [ES.ATTEST_ENV]: JSON.stringify(att) } }));
