@@ -8,7 +8,7 @@
  * attests { kind: 'cycle-skills', config, sha256, skills, cycle } for its cycle (ATTEST_ENV, FTH_CYCLE_SKILLS). At
  * judgment time it holds only when everything checks: the cycle is this process's (check-order.js cycleId), the file
  * still hashes to the attested hash and embeds each named skill's current text whole, and the transcript is the run's
- * own (a Claude Code stream and, for a hook, that run's session; an opencode cycle transcript, never a hook's). Any
+ * own (a Claude Code stream, its init event after any SessionStart hook events, and, for a hook, that run's session; an opencode cycle transcript, never a hook's). Any
  * other harness, or anything off: none counts, and the transcript decides as before.
  *
  *   ATTEST_ENV, KIND, FILE
@@ -66,13 +66,18 @@ function fileText(file) {
  * The run's own transcript: the runner's cycle stream a Claude Code run's (and a hook's, that run's session), or an
  * opencode run's (never a hook's: a hook is another harness's session). Anything else: no.
  */
-/** A captured transcript's own run: a Claude Code stream (its init event first) or an opencode run's first event. */
+/** A captured transcript's own run: a Claude Code stream (its init event, after any SessionStart hook events) or an opencode run's first event. */
 function ownText(text) {
   for (const line of String(text || '').slice(0, 64 * 1024).split('\n')) {
     let ev;
     try { ev = JSON.parse(line); } catch (_err) { continue; }
     if (!ev || typeof ev !== 'object') return false;
-    if (ev.type === 'system') return ev.subtype === 'init' && typeof ev.session_id === 'string' && ev.session_id.length > 0;
+    // SessionStart hook events (hook_started, hook_response) come before init in a real stream: read past them, as
+    // head-prompt.js claudeStreamSession does for the live file. The run's own stream still needs its init and session.
+    if (ev.type === 'system') {
+      if (ev.subtype !== 'init') continue;
+      return typeof ev.session_id === 'string' && ev.session_id.length > 0;
+    }
     return require('./transcript').isOpencodeEvent(ev);
   }
   return false;
