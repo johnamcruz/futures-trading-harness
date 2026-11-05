@@ -430,7 +430,12 @@ head trader's run, before the cycle log; per role `config/runner.json`
    whose decision refuses, beside an approving one or not, or a line starting
    with a veto: `verdictLineRefuses`; a negated veto word on an approving
    VERDICT line, "no veto needed", is restated, decided in review
-   2026-10-24), no approving VERDICT line, a failed run, an approval
+   2026-10-24; so is a prose sentence that only holds the word mid-line,
+   "The verdict cuts nothing: no pacing rule holds" or "a full verdict, not a
+   skipped one", when nothing else in the rest of that line or the next line
+   refuses and its "no" or "not" is a negated noun phrase: the strict reading
+   still calls the report a veto, only the restatement can approve it),
+   no approving VERDICT line, a failed run, an approval
    that read fine, or a report that stated no size (a Size line of 0, none,
    n/a; no VERDICT size). The bound is every size the report stated, the
    smallest (`restateCeiling`: the VERDICT size, each number-led Size line and

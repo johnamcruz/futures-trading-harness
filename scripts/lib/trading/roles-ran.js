@@ -364,7 +364,13 @@ function sentenceRefusal(line, rest) {
   return m ? { word: m[0].toLowerCase().split(/[\s-]+/)[0], line } : null;
 }
 
-/** Every decision in a text: [{ keyword, word (lower case), line }], one per occurrence of the word. */
+// What follows a keyword: the rest of its line and the next non-empty line (a refusal may sit in either).
+const restOf = (lines, i, after) => {
+  const j = lines.findIndex((l, k) => k > i && l.trim());
+  return `${after} ${j === -1 ? '' : lines[j]}`;
+};
+
+/** Every decision in a text: [{ keyword, word (lower case), line }], one per occurrence of the word; `mid` and `rest` on one that is not at its line's start (the sentence after the keyword). */
 function decisionLines(text) {
   const lines = String(text || '').replace(/\r\n|[\r\u2028\u2029\u0085]/g, '\n').split('\n').map(plainLine);
   const out = [];
@@ -386,7 +392,7 @@ function decisionLines(text) {
       const sep = label ? LABEL.exec(after) : null;
       if (label && !sep) {
         const refused = proseRefusal(lines, i, after);
-        if (refused) out.push({ keyword: m[1].toLowerCase(), word: refused.word, line: refused.line });
+        if (refused) out.push({ keyword: m[1].toLowerCase(), word: refused.word, line: refused.line, mid: true, rest: restOf(lines, i, after) });
         continue;
       }
       // A mid-line label's value that is a target's multiple ("the verdict: 3R target kept") decides nothing; a keyword that
@@ -396,7 +402,7 @@ function decisionLines(text) {
       if (d === null) {
         // Prose after it ("Decision is skip", "the decision was to pass"): its sentence still refuses.
         const refused = sentenceRefusal(lines[i], after);
-        if (refused) out.push({ keyword: m[1].toLowerCase(), word: refused.word, line: refused.line });
+        if (refused) out.push({ keyword: m[1].toLowerCase(), word: refused.word, line: refused.line, mid: label, rest: restOf(lines, i, after) });
         // A keyword that starts its line, then prose, then a separator ("Phase 2 verdict for MNQ long: reduce to 2"): what
         // follows the separator still decides when it states a refusal word or a number. A time of day ("15:45") is no
         // separator (one is not followed by a digit).
@@ -417,7 +423,7 @@ function decisionLines(text) {
         line = `${lines[i]} ${j === -1 ? '' : lines[j]}`;
       }
       if (label && AGREE.has(word)) continue;
-      out.push({ keyword: m[1].toLowerCase(), word, line });
+      out.push({ keyword: m[1].toLowerCase(), word, line, mid: label, rest: restOf(lines, i, after) });
     }
   }
   return out;
@@ -644,8 +650,35 @@ function verdictSize(text) {
  * never lose a good setup to the reading). The runner never restates a refusing report (phase2-restate.js).
  */
 const STARTS_VETO = /^[\s>#*_`|+\-\u2022]*(?:\d+[.)][\s>#*_`|]*)?veto(?:ed|es)?\b/i;
+// A mid-line "...verdict cuts nothing: no pacing rule holds" reads as a label whose decision is "no": the report is no
+// approval (verdictOf), but it is not a verdict LINE that refuses, so it is restated like any approval the strict reading
+// takes as a veto. Only when the rest of the line and the next line hold no refusal, and the "no"/"not" is a negated noun
+// phrase ("no pacing rule", "no cut", "not cutting") or the sentence itself negates the refusal word it found ("a full
+// verdict, not a skipped one", "not a veto"); a "no"/"not" that refuses ("not now", "no, wait", "no size fits") and a
+// line-start verdict stay refusals (the owner's rule: never restate a real veto).
+const NEGATED_REFUSAL = /\b(?:not|never)\s+(?:an?\s+|the\s+)?(?:skip(?:ped|ping|s)?|veto(?:ed|es)?|reject(?:ed|s|ion)?|declin(?:e|ed|es|ing)|abort(?:ed|s)?|refus(?:e|ed|es)|blocked)(?:\s+one)?\b|\b(?:not|never)\s+(?:an?|the)\s+pass(?:ed|ing)?\b/gi;
+const STRONG_REFUSAL = /\b(?:stand(?:s|ing)?\s+(?:aside|down)|sit(?:ting)?\s+(?:out|this)|stay(?:s|ing)?\s+flat|wait(?:ing)?\s+for|defer(?:red)?|avoid|cancel(?:l?ed)?|stop(?:ped)?\s+(?:out|here)|not\s+(?:now|yet|enough|allowed|approved|this|here|today))\b/i;
+const BENIGN_NO = /^\s*(?:pacing|cuts?|cutting|loss(?:es)?|soft|decisive|serious|streak|cooldown|reduction|adjustment|change|extra|further|additional|hard|other)\b/i;
+// A refusal word left in the rest after the negated phrases are removed ("no cut, hold."); never "flat" or a digit ("flat, 0 losses").
+const TAIL_REFUSAL = /\b(?:hold|held|wait|reduce|reduced|half|defer|pending|cancel|partial)\b|[,;:]\s*stop\b/i;
+const LEAD_DECISION = /\d|\b(?:hold|held|holding|reduce|reduced|wait|waiting|half|none|partial|defer|deferred|pending|conditional|fail|failed|block|blocked)\b/i;
+const midNegation = l => {
+  if (l.mid !== true) return false;
+  const rest = String(l.rest || '');
+  const left = rest.replace(NEGATED_REFUSAL, ' ');
+  if (SENTENCE_REFUSAL.test(left) || STRONG_REFUSAL.test(left) || TAIL_REFUSAL.test(left)) return false;
+  const negated = left !== rest;
+  const matches = (rest.match(NEGATED_REFUSAL) || []).join(' ').toLowerCase();
+  // What leads up to the "no"/"not" must not be a decision itself ("verdict: 2, not a veto", "hold, not a veto").
+  const lead = word => { const at = new RegExp(`\\b${word}\\b`, 'i').exec(rest); return at ? rest.slice(0, at.index) : rest; };
+  if (negated && (l.word === 'no' || l.word === 'not') && !LEAD_DECISION.test(lead(l.word))) return true;
+  if (negated && /^[a-z]{2,}$/.test(l.word) && new RegExp(`\\b${l.word}\\b`).test(matches) && !LEAD_DECISION.test(lead(l.word))) return true;
+  if (l.word !== 'no' && l.word !== 'not') return false;
+  const at = new RegExp(`\\b${l.word}\\b([\\s\\S]{0,40})`, 'i').exec(rest);
+  return Boolean(at) && !LEAD_DECISION.test(lead(l.word)) && BENIGN_NO.test(at[1]);
+};
 function verdictLineRefuses(text) {
-  if (decisionLines(text).some(l => l.keyword === 'verdict' && !AGREE.has(l.word))) return true;
+  if (decisionLines(text).some(l => l.keyword === 'verdict' && !AGREE.has(l.word) && !midNegation(l))) return true;
   return String(text || '').replace(/\r\n|[\r\u2028\u2029\u0085]/g, '\n').split('\n').some(l => STARTS_VETO.test(plainLine(l)));
 }
 
