@@ -104,6 +104,23 @@ test('prepare-ahead skill: its format lines are the runner\'s FORMAT, and its bo
   assert.ok(standing.includes('Scenario 2 is a standing setup: the setup is the reaction the briefing lists, its candle already closed, so its TAKE needs nothing of the closing candle; compose_check on the at-close reads is the check.'), standing);
   for (const phrase of ['the setup is the reaction the briefing lists', 'its TAKE needs nothing of the closing candle']) assert.ok(BODY.includes(phrase) && standing.includes(phrase), phrase);
   assert.ok(!/skill|look[ -]?up|read the|\bload\b|prepare-ahead/i.test(standing), 'the standing line orders no lookup, names no skill');
+  // Several scenarios matched (PR C3), standing and not mixed, with something outside the plan, in both the confirm and
+  // the shadow confirm: still no lookup, no skill named, the bold rule and the "on" phrases kept, and the standing phrases.
+  // (The standing one with a computed trigger as next-close.js renders it, so its words are checked too.)
+  // The runner's fixed TAKE/PASS for a standing scenario (STANDING_TAKE_PASS) is the skill's own, clause for clause.
+  assert.ok(BODY.includes(PA.STANDING_TAKE_PASS.replace('TAKE: ', 'TAKE if ').replace('PASS: ', 'PASS if ')), PA.STANDING_TAKE_PASS);
+  const fires = require('../../scripts/lib/trading/next-close').triggerText({ kind: 'standing', tf: '15m', trigger: { at: '2021-05-24T13:48:00.000Z', candle: { t: '2021-05-24T13:30:00.000Z', closedAt: '2021-05-24T13:45:00.000Z' }, until: '2021-05-24T14:00:00.000Z' } }, '3m');
+  const matched = [{ scenario: { k: 1, line: 'L' }, kind: 'momentum' }, { scenario: { k: 2, id: 'P2', line: 'L', why: 'w' }, kind: 'standing', candidate: { id: 'P2', kind: 'standing', read: 'r', fires } }, { scenario: { k: 3, line: 'L' }, kind: 'reaction' }];
+  const multi = PA.confirmSuffix({ matched, unplanned: ['x'] });
+  const multiShadow = PA.confirmPrompt({ atCloseText: 'F', fired: ['x'], matched, next: { t: 'T', closedAt: 'C' } });
+  const standingShadow = PA.confirmPrompt({ atCloseText: 'F', fired: [], scenario: { k: 2, line: 'L' }, kind: 'standing', next: { t: 'T', closedAt: 'C' } });
+  for (const [what, text] of [['confirmSuffix (several)', multi], ['confirmPrompt (several)', multiShadow], ['confirmPrompt (standing)', standingShadow]]) {
+    assert.ok(!/skill|look[ -]?up|read the|\bload\b|prepare-ahead/i.test(text.replace('Read-only', '')), `${what} orders no lookup, names no skill`);
+    assert.ok(text.includes(rule), `${what}: the bold rule`);
+    for (const phrase of ['the setup is the reaction the briefing lists', 'its TAKE needs nothing of the closing candle']) assert.ok(text.includes(phrase), `${what}: ${phrase}`);
+  }
+  assert.ok(multi.includes('The at-close facts above decide, never the plan') && multi.includes('reads as these facts give them'));
+  assert.ok(multiShadow.includes('they decide, never the plan') && standingShadow.includes('they decide, never the plan'));
   // The runner\'s prepare prompt carries the same lines.
   assert.ok(PA.preparePrompt({ head: 'H', briefingText: 'B', next: { t: 'T', closedAt: 'C' } }).includes(PA.FORMAT.join('\n')));
 });

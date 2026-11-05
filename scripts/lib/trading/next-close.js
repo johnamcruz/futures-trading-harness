@@ -523,4 +523,4 @@ function renderPrepareBriefing(b, section, { now = new Date() } = {}) {
   return cut < 0 ? `${text}${lines.join('\n')}\n` : `${text.slice(0, cut)}\n${lines.join('\n')}${text.slice(cut)}`;
 }
 
-module.exports = { NONE, SECTION, possibleAtNextClose, triggerMet, possibleLines, renderPrepareBriefing, momentumThresholds, reactionKinds, reachOf, keyLevelsOf };
+module.exports = { NONE, SECTION, possibleAtNextClose, triggerMet, triggerText, possibleLines, renderPrepareBriefing, momentumThresholds, reactionKinds, reachOf, keyLevelsOf };

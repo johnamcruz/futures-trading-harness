@@ -101,6 +101,17 @@ test('shadow e2e: the cycle, then the prepare (its plan written with its session
   // then the prepare for 04:12's bar.
   assert.strictEqual(recs[1].prepare.shadow.status, 'valid', JSON.stringify(recs[1].prepare.shadow));
   assert.ok(PA.readPlan(w.home, 'MNQ', FIRED_BAR).candidates.some(c => c.kind === 'standing' && c.read === recs[1].prepare.shadow.match.read));
+  // Its shadow confirm says what "on" says at a standing close (PR C3: shadow parity): the standing line, once.
+  {
+    const [c1, ...more] = forksAt(fake, w, FIRED_BAR);
+    assert.ok(c1 && !more.length);
+    const p1 = c1.argv[c1.argv.indexOf('-p') + 1];
+    const k = recs[1].prepare.shadow.match.k;
+    assert.strictEqual(p1.split(PA.standingLine(k)).length, 2, p1);
+    assert.ok(p1.endsWith(`DECISION: TAKE ${k} | DECISION: PASS - <why>.`));
+    // Its scenario said by code, as "on" says it: the fixed TAKE/PASS and the computed trigger, not the prepare's condition.
+    assert.ok(!p1.includes('TAKE if the 15m closes as listed') && p1.includes(PA.STANDING_TAKE_PASS) && p1.includes('whatever its range, volume and close'), p1.slice(-900));
+  }
   const made = recs[1].prepare.made;
   assert.strictEqual(made.outcome, 'done', JSON.stringify(recs[1].prepare));
   const plan = PA.readPlan(w.home, 'MNQ', NEXT_BAR);

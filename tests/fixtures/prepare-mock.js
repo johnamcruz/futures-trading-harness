@@ -89,7 +89,9 @@ function beforePass(w) {
       w.claude.voidConfirms = (w.claude.voidConfirms || 0) + 1;
       // The trusting confirm trusts only here (goal-world.js headScript): any divergence is a void plan's.
       w.claude.bypassNow = true;
-      return { path: 'confirm', match: { k: m.k, id: m.id, read: m.read, side: m.side }, scenario: args.plan.scenarios.find(s => s.k === m.k), fired: args.fired, unplanned: m.unplanned, bypassed: r.reason || r.path };
+      // confirmPath's own confirm shape (every matched scenario, the primary first), so the confirm's message builds.
+      const matched = PA.matchedScenarios(args.plan, m);
+      return { path: 'confirm', match: { k: m.k, id: m.id, read: m.read, side: m.side }, scenario: matched[0].scenario, kind: matched[0].kind, matched, fired: args.fired, unplanned: m.unplanned, bypassed: r.reason || r.path };
     };
     w.claude.bypassed = true;
   }
