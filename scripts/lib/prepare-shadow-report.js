@@ -15,6 +15,8 @@
  *                                       deskCached } } }, phase2Ms: { confirm, fallback }, executorMs: { confirm, fallback },
  *                                       late, outsideByKind } | null }
  *   text(report)                      the report as lines
+ *   pathKey(on)                       an "on" record's path: 'confirm' (the confirm decided) or 'fallback:<path>'
+ *                                     ('fallback:void:<reason>', 'fallback:confirm-<outcome>')
  */
 
 const fs = require('fs');
@@ -44,6 +46,11 @@ const tokensOf = list => list.reduce((t, u) => {
   return t;
 }, { input: 0, cacheRead: 0, cacheCreation: 0, output: 0 });
 
+// The closes the confirm decided; every other one ran the full head trader (a fallback, by its reason).
+const decided = o => o.path === 'confirm' && !(isObj(o.confirm) && o.confirm.fellBack);
+/** An "on" record's path key: 'confirm' (the confirm decided), else 'fallback:<path>' (void: by its reason). */
+const pathKey = o => (decided(o) ? 'confirm' : o.path === 'confirm' ? `fallback:confirm-${(o.confirm && o.confirm.outcome) || 'unknown'}` : o.path === 'void' ? `fallback:void:${o.reason || 'unknown'}` : `fallback:${o.path}`);
+
 /**
  * "on" (PR B2): each close's path (the confirm, or why the full head trader ran), the confirms' outcomes and fallbacks,
  * close to order (the cycle timing's latencyMs.order) of the closes that ordered, all, by whether the desk ran this close
@@ -69,9 +76,6 @@ function onReport(ons) {
   const ordered = ons.filter(o => Number.isFinite(o.closeToOrderMs));
   const ms = list => msOf(list.map(o => o.closeToOrderMs));
   const byDesk = list => ({ all: ms(list), deskRan: ms(list.filter(o => o.desk === 'ran')), deskCached: ms(list.filter(o => o.desk === 'cached')) });
-  // The closes the confirm decided; every other one ran the full head trader (a fallback, by its reason).
-  const decided = o => o.path === 'confirm' && !(isObj(o.confirm) && o.confirm.fellBack);
-  const pathKey = o => (decided(o) ? 'confirm' : o.path === 'confirm' ? `fallback:confirm-${(o.confirm && o.confirm.outcome) || 'unknown'}` : o.path === 'void' ? `fallback:void:${o.reason || 'unknown'}` : `fallback:${o.path}`);
   const keys = [...new Set(ordered.map(pathKey))].sort();
   const turns = ons.filter(o => decided(o) && isObj(o.confirm));
   const finite = (list, f) => list.map(f).filter(Number.isFinite);
@@ -183,4 +187,4 @@ function text(r) {
   ].join('\n');
 }
 
-module.exports = { readRecords, report, text };
+module.exports = { readRecords, report, text, pathKey };
