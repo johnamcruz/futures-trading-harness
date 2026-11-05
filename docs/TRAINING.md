@@ -1107,6 +1107,173 @@ date with the loop's seeded split, so an edit tuned on one half is
 confirmed on dates it never saw: the probe round's trend set
 (Propose–Probe–Compose above, `probe.trend`: a batch of the pool's legs each round).
 
+### Setup capture
+
+`node scripts/setup-capture.js` asks whether an arm's runs catch the
+census's trend legs and the setups their briefings list, and compares two
+arms (a control and a treatment, or a new round against a recorded one).
+Like the trend capture, it is analysis after the run, read only, never shown
+to the model (`scripts/lib/analysis/setup-capture.js`,
+`scripts/lib/analysis/capture-compare.js`). It measures with the tools above
+and adds no new detector:
+
+- **Legs** are the leg census's (`learning/leg-census.js`). A leg is caught as
+  the loop counts it: `captureReport` with the census's legs given, so an
+  entry its way that filled in its first `catchShare`. An entry later in the
+  leg counts as an in-leg entry (`inLegEntries`, the entries' `in-trend`),
+  not a catch. A leg is in scope for a run only when the run covered its
+  catch window, meaning a decision time of the run (a day record's, or one
+  skipped while a cycle ran) fell on one of its catch bars. A stepped-windows
+  run covers its windows' legs, and a whole-session run covers every leg of
+  its days. The rest are `not-run`: never a miss. A covered leg whose catch
+  steps ran no cycle on a stale bar (the replay served no new bar) is
+  `not-served`. It keeps the reason `no-cycle`, and the default caught rate
+  leaves it out; the rate with it is printed beside. A step that only managed
+  a held position served its bar and stays in scope. Aligned legs are those
+  where the 4h and 1h both trend the leg's way at its start
+  (`train/trend-align.js`, on the run's own served bars).
+- **Why a leg was missed:** one reason per leg, from its blocker (the
+  cycle that came closest to an entry, as the trend capture picks it):
+  - refused late, by kind: `late-chased`, `late-missed`, `late-beyond-stop`;
+  - `gate-refusal`, for an order the gate refused that the runner's entry
+    record does not hold (a refusal the runner logged as its entry's outcome
+    shows as `execution`);
+  - `execution`: an executor abort or block, or an entry placed and never
+    filled;
+  - phase 2 apart: `risk-veto` (a VETO), `verdict-unread` (the runner could
+    not read the verdict, an approval included) and `min-contracts` (the
+    sizing floor);
+  - `passed-by-head` (an OK record not placed) and `compose-refused`;
+  - a position held through the catch window, by its side:
+    `position-open-own-side` (already riding the move),
+    `position-open-opposite`, or `position-open-unknown` (the cycles managed
+    with no position seen: on recorded runs, the leg's own entry order still
+    working, unfilled);
+  - `account-blocked`: the attempt's entry block (one that only says a
+    position is open is the position's), and `rule`;
+  - `cycle-overran`: no plan, and a catch bar passed while a cycle ran or a
+    cycle overran its bar;
+  - `setup-passed` (a setup was listed or fired its way, and none was
+    composed), `no-setup-listed` and `no-cycle`.
+
+  On an "on" run each missed leg also carries its blocking cycle's prepare
+  path (`confirm` or `fallback:<why>`, as `prepare-shadow-report.js`
+  `pathKey` names them). The path is a dimension of the leg, not a reason.
+- **Setups:** each listed setup and fired scan setup, by kind (the read's:
+  rejection, breakout, cisd, compression, or the strategy's name), with its
+  outcome: taken, refused late by kind, gate refusal, execution, the three
+  phase-2 outcomes, passed by the head trader, or compose refused. A setup
+  never composed is `passed` when the cycle's SKIP line gave a reason,
+  `passed-no-reason` when its skip row has none, `unrecorded` when the cycle
+  holds no skip row for it, and `fired-not-composed` for a fired scan setup
+  (the setup skips list listed setups only). Each also carries its prepare
+  path on an "on" run. The setups of a decision time skipped while a cycle
+  ran are unknown (no briefing was built): they count only as bars lost. The
+  late refusals' counterfactual (target or stop first) is the late report's
+  (`replay/late-skips.js`).
+- **Two arms:** legs pair by census id on the legs both arms covered and
+  served. The report shows each side's caught rate with its Wilson interval,
+  the difference's interval (Newcombe's, from the two Wilson intervals: the
+  unpaired form, conservative on paired legs), the McNemar tail, and the
+  discordant legs (caught by one arm only) with each side's R and the net R.
+  It also shows late refusals by kind per decision time on the days both arms
+  ran, the bars lost to latency (each once: skipped while a cycle ran, or
+  after a cycle that overran its bar), and entries by prepare path.
+- **Input problems are never dropped:** a home with no replay run, a folder's
+  child that is no run home, a run day the census lacks, a home with no trade
+  cycle log, and two homes on one day are listed in the report. So are the
+  signs of a day file that lost records:
+  - `day-file-short`: the driver's `steps.log` (each step's header and the
+    runner's `REPLAY STEP` line, distinct steps, so a step logged twice
+    counts once) holds more of the day's steps than the day file holds
+    decision records (trade and end of day). A day stopped mid-window is no
+    problem: its steps log stops with it.
+  - `no-steps-log`: no `steps.log` beside the day records, so their
+    completeness can't be checked; this fails closed.
+  - `no-decision-times` (a day with trade cycle logs and no decision time)
+    and `cycle-log-no-decision-time` (trade cycle logs at bars the day file
+    has no decision time for). Most decision times have no cycle log, so
+    these are an extra check, not the completeness test.
+
+  A run
+  day the census lacks can't be told from a quiet session with no census leg
+  (the census lists only days with legs), so such a day fails closed. A leg in two
+  homes of one arm is left out of the pairing and flagged. The same home
+  given twice (another spelling of its path) is read once.
+
+```bash
+node scripts/setup-capture.js report --census <leg-census.json> --a <home|folder>... [--b <home|folder>...] [--names control,on] [--json] [--out <file>]
+node scripts/setup-capture.js accept --census <leg-census.json> --a <homes> --b <homes> --criteria <criteria.json> [--out <report.json>]
+```
+
+`accept` judges a criteria file and exits 0 on PASS, 1 on FAIL, 2 on
+insufficient data, and 3 on a usage or criteria error. It prints one line per
+criterion (sorted by id) with the measured value, the threshold and the
+verdict, says which sample was too small, and prints each input problem.
+FAIL outranks insufficient. Any input problem makes the verdict insufficient,
+or FAIL when the file sets `"badHomes": "fail"`.
+
+The thresholds live only in the file passed in, never in the repo. The file
+is refused (exit 3) before any home is read when:
+
+- it lacks `level` (the Wilson level, a number), or any key of a criterion,
+  or it holds a key it doesn't know (at the top: `level`, `badHomes`,
+  `criteria`; in a criterion: `id`, `kind` and the kind's keys), so a typo
+  can't change a verdict silently;
+- a minimum (`minLegs`, `minA`, `minDecisions`, `minEntries`,
+  `minDiscordant`, `minPairs`) is not a whole number of 1 or more, so no data
+  is never a pass;
+- a name is outside its set: `reason` one of the reasons above (and `any` for
+  `caught-a-uncaught-b`), `lateKind` one of `chased-entry`, `missed-entry`,
+  `beyond-stop`, `path` one of `confirm`, `fallback`, `fallback:<why>`.
+
+A value nothing measured is insufficient, never compared as 0: late refusals
+with either arm at no decision time on the paired days, and an uncaught share
+with no uncaught leg (whose `minLegs` counts the uncaught legs, its sample).
+The kinds:
+
+| Kind | Keys | Passes when |
+|---|---|---|
+| `caught-rate` | `legs` (all, aligned), `margin`, `minLegs` | the lower bound of b's rate − a's ≥ −margin |
+| `late-refusals` | `lateKind`, `maxRatio`, `minA` | b's refusals of that kind per decision time ≤ maxRatio × a's (the paired days) |
+| `overran-share` | `arm`, `max`, `minDecisions` | the bars lost to latency / decision times ≤ max |
+| `path-share` | `arm`, `path`, `min`, `minEntries` | the share of the arm's entries placed (its executed entry cycles) on the path (`fallback`: any) ≥ min |
+| `uncaught-reason-share` | `arm`, `legs`, `reason`, `max`, `minLegs` (uncaught legs) | the share of the arm's uncaught legs with that reason ≤ max |
+| `discordant-net-r` | `min`, `minDiscordant` | the net R of the discordant legs ≥ min |
+| `caught-a-uncaught-b` | `reason` (or `any`), `max`, `minPairs` | the legs a caught and b missed for that reason ≤ max |
+
+Known limits, stated:
+
+- A leg's delay is from the leg's start to the entry order's placement, not
+  its fill.
+- The catch window and the gate-refusal match are computed beside
+  `captureReport`'s own, by the same rule; a change to the trend capture's
+  window changes both.
+- One entry that caught a discordant leg and an adjacent concordant one
+  charges all its R to the discordant leg's net R.
+- Each arm reads aligned on its own served bars. The report counts the paired
+  legs whose two reads differ, and the aligned scope needs both.
+
+An example only. Its values are illustrative, in the form a pre-registered
+run kit keeps its own file. They are not repo tunables, and nothing reads
+this block:
+
+```json
+{
+  "level": 0.9,
+  "badHomes": "insufficient",
+  "criteria": [
+    { "id": "legs-not-worse", "kind": "caught-rate", "legs": "aligned", "margin": 0.1, "minLegs": 20 },
+    { "id": "chased-falls", "kind": "late-refusals", "lateKind": "chased-entry", "maxRatio": 0.5, "minA": 5 },
+    { "id": "few-overruns", "kind": "overran-share", "arm": "b", "max": 0.05, "minDecisions": 100 },
+    { "id": "confirm-decides", "kind": "path-share", "arm": "b", "path": "confirm", "min": 0.5, "minEntries": 5 },
+    { "id": "late-not-the-reason", "kind": "uncaught-reason-share", "arm": "b", "legs": "aligned", "reason": "late-chased", "max": 0.1, "minLegs": 20 },
+    { "id": "discordant-pays", "kind": "discordant-net-r", "min": 0, "minDiscordant": 3 },
+    { "id": "none-lost-to-overruns", "kind": "caught-a-uncaught-b", "reason": "cycle-overran", "max": 0, "minPairs": 20 }
+  ]
+}
+```
+
 ## 5. Stage 2: pass prop
 
 The `stage: 2` preset is stage 1 plus:
