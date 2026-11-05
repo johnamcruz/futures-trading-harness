@@ -28,7 +28,8 @@
  *   KINDS                      each criterion kind's required keys
  *   compareLines(cmp, names)   the comparison's text lines
  *
- * The criteria file states every threshold (none here) and its Wilson `level` (required). Each kind's minimum sample
+ * The criteria file states every threshold (none here) and its Wilson `level` (required, a number); a key it doesn't
+ * know, at the top or in a criterion, refuses it. Each kind's minimum sample
  * (min*) is a whole number of 1 or more, so no data is never a pass: below it, or with nothing measured, a criterion is
  * INSUFFICIENT. Names are checked against their sets: reason (setup-capture.js REASONS; 'any' too for
  * caught-a-uncaught-b), lateKind (chased-entry, missed-entry, beyond-stop), path (confirm, fallback, fallback:<why>). An
@@ -43,6 +44,7 @@
  *                             while a cycle ran, or after a cycle that overran its bar, each once) over the decision times
  *   path-share                arm, path, min, minEntries: the share of the arm's entries placed on the prepare path
  *   uncaught-reason-share     arm, legs, reason, max, minLegs: the share of the arm's uncaught legs with that reason
+ *                             (the uncaught legs are its sample: fewer than minLegs, or none, insufficient)
  *   discordant-net-r          min, minDiscordant: netR at least min
  *   caught-a-uncaught-b       reason (or 'any'), max, minPairs: legs a caught and b missed for that reason, at most max
  */
@@ -67,6 +69,7 @@ const KINDS = Object.freeze({
 const MINIMA = new Set(['minLegs', 'minA', 'minDecisions', 'minEntries', 'minDiscordant', 'minPairs']);
 const NUMERIC = new Set(['margin', 'maxRatio', 'max', 'min', ...MINIMA]);
 const BAD_HOMES = Object.freeze(['insufficient', 'fail']);
+const TOP_KEYS = Object.freeze(['level', 'badHomes', 'criteria']);
 
 const isObj = x => Boolean(x) && typeof x === 'object' && !Array.isArray(x);
 const num = x => (typeof x === 'number' && Number.isFinite(x) ? x : null);
@@ -168,7 +171,9 @@ function compare(a, b, { level }) {
 /** The criteria file checked (see the header); throws on the first problem. */
 function checkCriteria(doc) {
   if (!isObj(doc) || !Array.isArray(doc.criteria)) throw new Error('criteria: { level, criteria: [{ id, kind, ... }] }');
+  for (const k of Object.keys(doc)) if (!TOP_KEYS.includes(k)) throw new Error(`criteria: unknown key ${k}; the keys are ${TOP_KEYS.join(', ')}`);
   if (doc.level === undefined) throw new Error('criteria: level: required (the Wilson level, one prop/stats.js wilson takes)');
+  if (num(doc.level) === null) throw new Error(`criteria: level ${JSON.stringify(doc.level)}: a number, one Wilson takes (prop/stats.js wilson)`);
   try { wilson(0, 1, doc.level); } catch (err) { throw new Error(`criteria: level ${JSON.stringify(doc.level)}: one Wilson takes (prop/stats.js wilson)`, { cause: err }); }
   if (doc.badHomes !== undefined && !BAD_HOMES.includes(doc.badHomes)) throw new Error(`criteria: badHomes: ${BAD_HOMES.join(' or ')}, not ${JSON.stringify(doc.badHomes)}`);
   if (!doc.criteria.length) throw new Error('criteria: no criteria listed');
@@ -179,6 +184,7 @@ function checkCriteria(doc) {
     seen.add(c.id);
     const keys = KINDS[c.kind];
     if (!keys) throw new Error(`criteria: ${c.id}: kind ${c.kind}; one of ${Object.keys(KINDS).join(', ')}`);
+    for (const k of Object.keys(c)) if (!(k === 'id' || k === 'kind' || keys.includes(k))) throw new Error(`criteria: ${c.id}: unknown key ${k}; ${c.kind} takes ${keys.join(', ')}`);
     for (const k of keys) {
       if (c[k] === undefined) throw new Error(`criteria: ${c.id}: ${c.kind} needs ${k}`);
       if (NUMERIC.has(k) && num(c[k]) === null) throw new Error(`criteria: ${c.id}: ${k}: a number, not ${JSON.stringify(c[k])}`);
@@ -212,11 +218,12 @@ function judge(cmp, c) {
     const nb = cmp.late.b[c.lateKind] || 0;
     const { a: ta, b: tb } = cmp.lateRate.times;
     const rb = tb ? round4(nb / tb) : null;
-    const cap = ta ? round4((c.maxRatio * na) / ta) : null;
-    if (na < c.minA) return result(c, rb, `<= ${cap}`, null, short(na, `${c.lateKind} refusals in a`, 'minA', c.minA));
-    if (!tb) return result(c, rb, `<= ${cap}`, null, short(tb, 'decision times of b on the paired days', 'a sample of', 1));
+    const cap = ta ? `<= ${round4((c.maxRatio * na) / ta)}` : `<= ${c.maxRatio} x a's rate`;
+    if (na < c.minA) return result(c, rb, cap, null, short(na, `${c.lateKind} refusals in a`, 'minA', c.minA));
+    // No decision time of an arm on the paired days: no rate to compare (a zero denominator passes any bound).
+    for (const [who, t] of [['a', ta], ['b', tb]]) if (!t) return result(c, rb, cap, null, short(t, `decision times of ${who} on the paired days`, 'a sample of', 1));
     // Per decision time, cross-multiplied (no rounding at the bound): nb / tb <= maxRatio x na / ta.
-    return result(c, rb, `<= ${cap}`, nb * ta <= c.maxRatio * na * tb, `a ${na} of ${ta} decision times, b ${nb} of ${tb}, on ${cmp.days.paired.length} paired days`);
+    return result(c, rb, cap, nb * ta <= c.maxRatio * na * tb, `a ${na} of ${ta} decision times, b ${nb} of ${tb}, on ${cmp.days.paired.length} paired days`);
   }
   if (c.kind === 'overran-share') {
     const o = cmp.overran[c.arm];
@@ -235,8 +242,9 @@ function judge(cmp, c) {
     const legs = cmp.arms[c.arm].legs[c.legs];
     const un = legs.filter(l => !l.caught);
     const k = un.filter(l => l.reason === c.reason).length;
-    const share = un.length ? round4(k / un.length) : 0;
-    if (legs.length < c.minLegs) return result(c, share, `<= ${c.max}`, null, short(legs.length, `${c.legs} legs`, 'minLegs', c.minLegs));
+    // The share of the uncaught legs: they are its sample (minLegs), and none uncaught measures nothing.
+    const share = un.length ? round4(k / un.length) : null;
+    if (un.length < c.minLegs) return result(c, share, `<= ${c.max}`, null, short(un.length, `uncaught ${c.legs} legs`, 'minLegs', c.minLegs));
     return result(c, share, `<= ${c.max}`, share <= c.max, `${k} of ${un.length} uncaught ${c.legs} legs`);
   }
   if (c.kind === 'discordant-net-r') {

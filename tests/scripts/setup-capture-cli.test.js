@@ -63,7 +63,7 @@ test('setup-capture CLI: accept: PASS exits 0, one line per criterion with its m
     { id: 'chased', kind: 'late-refusals', lateKind: 'chased-entry', maxRatio: 1, minA: 1 },
     { id: 'overran', kind: 'overran-share', arm: 'b', max: 0.05, minDecisions: 2 },
     { id: 'confirm', kind: 'path-share', arm: 'b', path: 'confirm', min: 1, minEntries: 2 },
-    { id: 'late-share', kind: 'uncaught-reason-share', arm: 'b', legs: 'all', reason: 'late-chased', max: 0, minLegs: 2 },
+    { id: 'late-share', kind: 'uncaught-reason-share', arm: 'a', legs: 'all', reason: 'rule', max: 0, minLegs: 1 }, // a's 1 uncaught leg was refused late, not by a rule
     { id: 'net', kind: 'discordant-net-r', min: 1, minDiscordant: 1 },
     { id: 'lost', kind: 'caught-a-uncaught-b', reason: 'any', max: 0, minPairs: 2 },
   ]);
@@ -86,7 +86,7 @@ test('setup-capture CLI: accept: each FAIL kind exits 1', () => {
     [{ kind: 'late-refusals', lateKind: 'chased-entry', maxRatio: 0.5, minA: 1 }, false],
     [{ kind: 'overran-share', arm: 'b', max: 0.03, minDecisions: 2 }, false],
     [{ kind: 'path-share', arm: 'a', path: 'confirm', min: 0.5, minEntries: 1 }, false],
-    [{ kind: 'uncaught-reason-share', arm: 'a', legs: 'all', reason: 'late-chased', max: 0.5, minLegs: 2 }, false],
+    [{ kind: 'uncaught-reason-share', arm: 'a', legs: 'all', reason: 'late-chased', max: 0.5, minLegs: 1 }, false],
     [{ kind: 'discordant-net-r', min: 2, minDiscordant: 1 }, false],
     [{ kind: 'caught-a-uncaught-b', reason: 'late-chased', max: 0, minPairs: 1 }, true],
   ];
@@ -135,4 +135,16 @@ test('setup-capture CLI: accept takes its Wilson level from the file, and a fold
   assert.strictEqual(p.status, 2, p.stdout + p.stderr);
   assert.match(p.stdout, /^problem: b not-a-home: notes: no replay folder$/m);
   assert.match(run(['report', '--census', census, '--a', b]).stdout, /^problem: not-a-home: notes: no replay folder$/m);
+});
+
+test('setup-capture CLI: an arm whose day lost its decision times (cycle logs kept) is a problem, never a late-refusals PASS', () => {
+  const { root, census, b } = setup();
+  const a = path.join(root, 'lost');
+  const home = F.makeHome(a, 'day-20210614', { cycles: quiet([11, 12]) });
+  fs.writeFileSync(path.join(home, 'replay', 'day-20210614', `${F.DAY}.jsonl`), `${JSON.stringify({ v: 1, t: F.plus(F.closeT(1), 2), day: F.DAY, kind: 'premarket', ran: [] })}\n`);
+  const crit = criteriaFile(root, [{ id: 'chased-falls', kind: 'late-refusals', lateKind: 'chased-entry', maxRatio: 0.5, minA: 1 }], 'ta0.json');
+  const r = run(['accept', '--census', census, '--a', a, '--b', b, '--criteria', crit]);
+  assert.strictEqual(r.status, 2, r.stdout + r.stderr);
+  assert.match(r.stdout, /^problem: a no-decision-times: day-20210614: 2021-06-14: 2 trade cycle log\(s\), no decision time$/m);
+  assert.doesNotMatch(r.stdout, /threshold <= null/);
 });

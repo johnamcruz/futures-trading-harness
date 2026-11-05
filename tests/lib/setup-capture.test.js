@@ -52,6 +52,8 @@ test('setup capture: every uncaught reason, from the run\'s own logs', () => {
     'position-open-own-side': { cycles: [{ i: 3, action: 'manage', result: `${R}managed - a long open`, positions: ['long'] }] },
     'position-open-opposite': { cycles: [{ i: 3, result: `${R}managed - a short open`, positions: ['short'] }] },
     'position-open-unknown': { cycles: [{ i: 3, result: `${R}managed - a long open` }] },
+    // Both sides held over the window (a reversal inside it): the leg's own side was ridden at some bar.
+    'position-open-own-side ': { cycles: [{ i: 2, result: `${R}managed - a short open`, positions: ['short'] }, { i: 3, action: 'manage', result: `${R}managed - a long open`, positions: ['long'] }] },
     'account-blocked': { cycles: [{ i: 3, blocked: true }] },
     'account-blocked ': { cycles: [{ i: 3, blocked: true, result: `${R}no-trade - entries not allowed now (news blackout)` }] },
     // An entry block that only says a position is open is the position's, not the attempt's.
@@ -213,6 +215,11 @@ test('setup capture: a leg whose catch steps served no new bar is not-served: no
   // One step of the window served its bar: in scope as before; a manage-only step (no cycle, a new bar) is served too.
   assert.strictEqual(legOf(read({ stale: [2, 3], cycles: quiet([10]) }), LONG).notServed, false);
   assert.strictEqual(legOf(read({ stale: [2, 3, 4, 5], cycles: quiet([3]) }), LONG).notServed, false, 'a step that ran a cycle served its bar');
+  // A stale window with a decision time skipped while a cycle ran: the harness was busy, not unserved: in scope, overran.
+  const busy = legOf(read({ stale: [2, 3, 5], skipped: [4], cycles: [] }), LONG);
+  assert.deepStrictEqual([busy.notServed, busy.reason], [false, 'cycle-overran']);
+  // R available leaves the not-served leg out too.
+  assert.strictEqual(SC.legTotals([{ ...up, availableR: 5 }, { ...legOf(h, SHORT), availableR: 2 }]).rAvailable, 2);
   assert.strictEqual(legOf(read({ cycles: [] }), LONG).notServed, false);
 });
 
@@ -240,6 +247,15 @@ test('setup capture: R share of the caught legs; an arm\'s problems: errors, ski
   assert.deepStrictEqual(p.map(x => x.kind), ['duplicate-day', 'no-cycle-logs', 'not-a-home']);
   assert.match(p[0].detail, /2021-06-14: day-a, day-b/);
   assert.deepStrictEqual(SC.armSummary(arm).problems, p);
+});
+
+test('setup capture: a day with cycle logs but no decision time (its day file lost its trade records) is a problem', () => {
+  const home = F.makeHome(tmpDir(), 'h1', { cycles: quiet([11, 12]) });
+  const dayFile = require('path').join(home, 'replay', 'h1', `${F.DAY}.jsonl`);
+  require('fs').writeFileSync(dayFile, `${JSON.stringify({ v: 1, t: F.plus(F.closeT(1), 2), day: F.DAY, kind: 'premarket', ran: [] })}\n`);
+  const h = SC.readHome(home, { census: CENSUS });
+  assert.deepStrictEqual([h.decisions.times, h.cycleDays], [0, { [F.DAY]: 2 }]);
+  assert.deepStrictEqual(SC.armProblems({ homes: [h] }), [{ kind: 'no-decision-times', detail: `h1: ${F.DAY}: 2 trade cycle log(s), no decision time` }]);
 });
 
 test('setup capture: the same home given twice (another spelling) is read once', () => {

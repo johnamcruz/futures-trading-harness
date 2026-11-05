@@ -293,6 +293,8 @@ function readHome(home, { census, alignedOf = null } = {}) {
   return {
     home, name, runId: run.manifest.runId || path.basename(runDir), days, missingDays: days.filter(d => !censusDays.has(d)),
     legs, notRun, entries, entryCycles, setups,
+    // The trading days of its trade cycle logs, each with how many (a day with logs but no decision time is a problem).
+    cycleDays: sorted([...logs.keys()].reduce((o, ms) => count(o, dayOf(ms - 1)), {})),
     decisions: { times: times.size, ran: ranAt.size, skipped: skippedAt.size, cycles: logs.size, overran, lost: lost.size, byDay: sorted([...times].reduce((o, t) => count(o, dayOf(t - 1)), {})) },
     late: { total: late.total, byKind: sorted(late.byKind), rows: late.rows.map(x => ({ at: x.at, side: x.side, kind: x.kind, record: x.record, first: x.first, from: x.from })) },
   };
@@ -329,7 +331,9 @@ function readArm(paths, { census, alignedOf = null } = {}) {
 /**
  * What an arm's input lacks, never dropped silently: [{ kind, detail }] sorted, kinds: error (a home with no replay run),
  * not-a-home (a folder's child with no replay folder), missing-census-day (a run day the census has no legs for),
- * no-cycle-logs (a home with decision times but no trade cycle log), duplicate-day (two homes on one session day).
+ * no-cycle-logs (a home with decision times but no trade cycle log), no-decision-times (a day with trade cycle logs
+ * but no decision time: its day file lost its records), duplicate-day (two homes on one session day). missing-census-day
+ * can't tell a day the census lacks from a quiet session (the census lists only days with legs): it fails closed.
  */
 function armProblems(arm) {
   const out = [];
@@ -337,6 +341,7 @@ function armProblems(arm) {
   for (const h of homes) {
     if (h.error) out.push({ kind: 'error', detail: `${h.name}: ${h.error}` });
     else if (isObj(h.decisions) && h.decisions.cycles === 0) out.push({ kind: 'no-cycle-logs', detail: `${h.name}: ${h.decisions.times} decision time(s), no trade cycle log` });
+    for (const [d, n] of Object.entries(h.cycleDays || {})) if (!((h.decisions && h.decisions.byDay) || {})[d]) out.push({ kind: 'no-decision-times', detail: `${h.name}: ${d}: ${n} trade cycle log(s), no decision time` });
     for (const d of h.missingDays || []) out.push({ kind: 'missing-census-day', detail: `${h.name}: ${d}` });
   }
   for (const n of arm.skipped || []) out.push({ kind: 'not-a-home', detail: `${n}: no replay folder` });

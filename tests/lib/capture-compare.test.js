@@ -234,6 +234,48 @@ test('capture compare: late refusals compare per decision time on the paired day
   assert.deepStrictEqual(c.lateRate, { a: { 'chased-entry': 0.1 }, b: { 'chased-entry': 0.3 }, times: { a: 40, b: 10 } });
   const r = CC.evaluate(c, crit([{ id: 'x', kind: 'late-refusals', lateKind: 'chased-entry', maxRatio: 1, minA: 1 }])).results[0];
   assert.deepStrictEqual([r.verdict, r.measured], ['FAIL', 0.3], 'b refused 3 of 10 decision times, a 4 of 40: three times the rate, though fewer refusals');
+  // b's decision times on a day a never ran don't dilute its rate (the paired days' alone count).
+  const b2 = { homes: [home('b', ['2021-06-14', '2021-06-15'], [leg(L('2021-06-14'))], { ...rows(3), decisions: { times: 1010, byDay: { '2021-06-14': 10, '2021-06-15': 1000 } } })] };
+  const c2 = CC.compare(a, b2, { level: 0.9 });
+  assert.deepStrictEqual(c2.lateRate.times, { a: 40, b: 10 });
+  assert.strictEqual(CC.evaluate(c2, crit([{ id: 'x', kind: 'late-refusals', lateKind: 'chased-entry', maxRatio: 1, minA: 1 }])).results[0].verdict, 'FAIL');
+});
+
+test('capture compare: late refusals with no decision time on the paired days in either arm are insufficient, never PASS', () => {
+  const rows = n => ({ late: { rows: Array.from({ length: n }, (_, i) => ({ at: `2021-06-14T13:${30 + i}:00Z`, kind: 'chased-entry' })) } });
+  const arm = (who, n, times) => ({ homes: [home(who, ['2021-06-14'], [leg(L('2021-06-14'))], { ...rows(n), decisions: { times, byDay: times ? { '2021-06-14': times } : {} } })] });
+  const x = { id: 'x', kind: 'late-refusals', lateKind: 'chased-entry', maxRatio: 0.5, minA: 2 };
+  for (const [a, b, who] of [[arm('a', 2, 0), arm('b', 3, 27), 'a'], [arm('a', 2, 27), arm('b', 3, 0), 'b']]) {
+    const r = CC.evaluate(CC.compare(a, b, { level: 0.9 }), crit([x])).results[0];
+    assert.strictEqual(r.verdict, 'INSUFFICIENT', `${who}: ${JSON.stringify(r)}`);
+    assert.match(r.why, new RegExp(`0 decision times of ${who} on the paired days`));
+    assert.doesNotMatch(String(r.threshold), /null/);
+  }
+});
+
+test('capture compare: uncaught-reason-share with nothing uncaught measures nothing (insufficient); minLegs counts the uncaught legs', () => {
+  const all = who => ({ homes: [home(who, ['2021-06-14'], Array.from({ length: 20 }, (_, i) => caught(`2021-06-14|long|2021-06-14T13:${10 + i}:00.000Z`, 1)))] });
+  const doc = crit([{ id: 'late-not-the-reason', kind: 'uncaught-reason-share', arm: 'b', legs: 'aligned', reason: 'late-chased', max: 0.1, minLegs: 20 }]);
+  const r = CC.evaluate(CC.compare(all('a'), all('b'), { level: 0.9 }), doc).results[0];
+  assert.deepStrictEqual([r.verdict, r.measured], ['INSUFFICIENT', null], JSON.stringify(r));
+  assert.match(r.why, /0 uncaught aligned legs under minLegs 20/);
+  // 3 uncaught of 25 legs: the 3 are the sample, under a minimum of 4.
+  const some = { homes: [home('b', ['2021-06-14'], [...all('b').homes[0].legs, ...[1, 2, 3].map(i => leg(`2021-06-14|long|2021-06-14T14:0${i}:00.000Z`, { reason: 'rule' }))])] };
+  const s = CC.evaluate(CC.compare(all('a'), some, { level: 0.9 }), crit([{ id: 'y', kind: 'uncaught-reason-share', arm: 'b', legs: 'all', reason: 'rule', max: 1, minLegs: 4 }])).results[0];
+  assert.deepStrictEqual([s.verdict, s.why], ['INSUFFICIENT', '3 uncaught all legs under minLegs 4']);
+});
+
+test('capture compare: a criteria file with an unknown key, a fractional minimum, a string level or a loose path is refused', () => {
+  const { a, b } = arms();
+  const c = CC.compare(a, b, { level: 0.9 });
+  const refuses = (doc, re) => assert.throws(() => CC.evaluate(c, doc), re, JSON.stringify(doc));
+  const one = x => crit([{ id: 'x', ...x }]);
+  refuses({ ...one({ kind: 'discordant-net-r', min: 0, minDiscordant: 1 }), badhomes: 'fail' }, /criteria: unknown key badhomes/);
+  refuses(one({ kind: 'caught-rate', legs: 'all', margin: 0, minLegs: 2, minLeg: 9 }), /x: unknown key minLeg/);
+  refuses(one({ kind: 'caught-a-uncaught-b', reason: 'any', max: 0, minPairs: 1, legs: 'aligned' }), /x: unknown key legs/);
+  refuses(one({ kind: 'caught-rate', legs: 'all', margin: 0, minLegs: 1.5 }), /minLegs: a whole number of 1 or more/);
+  refuses({ ...one({ kind: 'discordant-net-r', min: 0, minDiscordant: 1 }), level: '0.9' }, /level "0.9"/);
+  for (const p of ['fallbacks', 'fallback:', 'Confirm']) refuses(one({ kind: 'path-share', arm: 'b', path: p, min: 0, minEntries: 1 }), /path .*: confirm, fallback or fallback:<why>/);
 });
 
 test('capture compare: an arm with a bad home is insufficient (or FAIL when the file says so), and its problems are printed', () => {

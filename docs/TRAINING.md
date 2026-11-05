@@ -1146,7 +1146,9 @@ and adds no new detector:
   - `passed-by-head` (an OK record not placed) and `compose-refused`;
   - a position held through the catch window, by its side:
     `position-open-own-side` (already riding the move),
-    `position-open-opposite` or `position-open-unknown`;
+    `position-open-opposite`, or `position-open-unknown` (the cycles managed
+    with no position seen: on recorded runs, the leg's own entry order still
+    working, unfilled);
   - `account-blocked`: the attempt's entry block (one that only says a
     position is open is the position's), and `rule`;
   - `cycle-overran`: no plan, and a catch bar passed while a cycle ran or a
@@ -1179,7 +1181,10 @@ and adds no new detector:
   after a cycle that overran its bar), and entries by prepare path.
 - **Input problems are never dropped:** a home with no replay run, a folder's
   child that is no run home, a run day the census lacks, a home with no trade
-  cycle log, and two homes on one day are listed in the report. A leg in two
+  cycle log, a day with trade cycle logs but no decision time (its day file
+  lost its records), and two homes on one day are listed in the report. A run
+  day the census lacks can't be told from a quiet session with no census leg
+  (the census lists only days with legs), so such a day fails closed. A leg in two
   homes of one arm is left out of the pairing and flagged. The same home
   given twice (another spelling of its path) is read once.
 
@@ -1198,7 +1203,10 @@ or FAIL when the file sets `"badHomes": "fail"`.
 The thresholds live only in the file passed in, never in the repo. The file
 is refused (exit 3) before any home is read when:
 
-- it lacks `level` (the Wilson level), or any key of a criterion;
+- it lacks `level` (the Wilson level, a number), or any key of a criterion,
+  or it holds a key it doesn't know (at the top: `level`, `badHomes`,
+  `criteria`; in a criterion: `id`, `kind` and the kind's keys), so a typo
+  can't change a verdict silently;
 - a minimum (`minLegs`, `minA`, `minDecisions`, `minEntries`,
   `minDiscordant`, `minPairs`) is not a whole number of 1 or more, so no data
   is never a pass;
@@ -1206,7 +1214,10 @@ is refused (exit 3) before any home is read when:
   `caught-a-uncaught-b`), `lateKind` one of `chased-entry`, `missed-entry`,
   `beyond-stop`, `path` one of `confirm`, `fallback`, `fallback:<why>`.
 
-A value nothing measured is insufficient, never compared as 0. The kinds:
+A value nothing measured is insufficient, never compared as 0: late refusals
+with either arm at no decision time on the paired days, and an uncaught share
+with no uncaught leg (whose `minLegs` counts the uncaught legs, its sample).
+The kinds:
 
 | Kind | Keys | Passes when |
 |---|---|---|
@@ -1214,7 +1225,7 @@ A value nothing measured is insufficient, never compared as 0. The kinds:
 | `late-refusals` | `lateKind`, `maxRatio`, `minA` | b's refusals of that kind per decision time ≤ maxRatio × a's (the paired days) |
 | `overran-share` | `arm`, `max`, `minDecisions` | the bars lost to latency / decision times ≤ max |
 | `path-share` | `arm`, `path`, `min`, `minEntries` | the share of the arm's entries placed (its executed entry cycles) on the path (`fallback`: any) ≥ min |
-| `uncaught-reason-share` | `arm`, `legs`, `reason`, `max`, `minLegs` | the share of the arm's uncaught legs with that reason ≤ max |
+| `uncaught-reason-share` | `arm`, `legs`, `reason`, `max`, `minLegs` (uncaught legs) | the share of the arm's uncaught legs with that reason ≤ max |
 | `discordant-net-r` | `min`, `minDiscordant` | the net R of the discordant legs ≥ min |
 | `caught-a-uncaught-b` | `reason` (or `any`), `max`, `minPairs` | the legs a caught and b missed for that reason ≤ max |
 
