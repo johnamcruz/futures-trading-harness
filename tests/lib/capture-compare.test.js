@@ -9,7 +9,7 @@ const assert = require('node:assert');
 const CC = require('../../scripts/lib/analysis/capture-compare');
 const { wilson } = require('../../scripts/lib/prop/stats');
 
-const leg = (id, o = {}) => ({ id, day: id.slice(0, 10), side: 'long', aligned: true, caught: false, entry: null, availableR: 2, reason: 'no-setup-listed', ...o });
+const leg = (id, o = {}) => ({ id, day: id.slice(0, 10), side: id.split('|')[1], aligned: true, caught: false, entry: null, availableR: 2, reason: 'no-setup-listed', ...o });
 const caught = (id, r, o = {}) => leg(id, { caught: true, entry: { r, at: `${id.slice(0, 10)}T14:00:00.000Z` }, reason: null, ...o });
 const home = (name, days, legs, o = {}) => ({ name, days, legs, late: { rows: [] }, decisions: { times: 10, skipped: 0, overran: 0, cycles: 10 }, entryCycles: [], ...o });
 const L = d => `${d}|long|${d}T13:30:00.000Z`;
@@ -183,9 +183,14 @@ test('capture compare: a criteria file states every threshold: a missing one, an
 test('capture compare: one entry that caught two legs banks its R once on each side\'s R caught', () => {
   const at = '2021-06-14T14:03:30.000Z';
   const x = id => caught(id, 2, { entry: { at, r: 2 } });
-  const a = { homes: [home('a', ['2021-06-14'], [x(L('2021-06-14')), x(S('2021-06-14'))])] };
-  const b = { homes: [home('b', ['2021-06-14'], [x(L('2021-06-14')), leg(S('2021-06-14'))])] };
+  // Two adjacent long legs (the zigzag split one move), one fill in both.
+  const L2 = '2021-06-14|long|2021-06-14T13:45:00.000Z';
+  const a = { homes: [home('a', ['2021-06-14'], [x(L('2021-06-14')), x(L2)])] };
+  const b = { homes: [home('b', ['2021-06-14'], [x(L('2021-06-14')), leg(L2)])] };
   assert.deepStrictEqual(CC.compare(a, b, { level: 0.9 }).legs.all.rCaught, { a: 2, b: 2 });
+  // Two discordant legs a caught with that one entry: the net R counts its R once (the rows keep each leg's).
+  const c = CC.compare(a, { homes: [home('b', ['2021-06-14'], [leg(L('2021-06-14')), leg(L2)])] }, { level: 0.9 });
+  assert.deepStrictEqual([c.discordant.map(d => d.a.r), c.netR], [[2, 2], -2]);
 });
 
 test('capture compare: the report lines are deterministic (same input, same text) and name both arms', () => {

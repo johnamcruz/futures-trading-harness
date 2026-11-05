@@ -32,7 +32,7 @@ function setup() {
   F.makeHome(b, 'day-20210614', {
     cycles: [...quiet([2, 3, 10]), { i: 4, entry: { record: 'l1', outcome: 'executed' }, on }, { i: 11, entry: { record: 's1', outcome: 'executed' }, on }],
     records: [ok('l1', 4, 'long'), ok('s1', 11, 'short')], orders: [{ orderId: 7, i: 4, record: 'l1', side: 'long' }, { orderId: 8, i: 11, record: 's1', side: 'short' }],
-    fills: [{ orderId: 7, i: 4, r: 2 }, { orderId: 8, i: 11, r: 1.5 }],
+    fills: [{ orderId: 7, i: 4, r: 2 }, { orderId: 8, i: 11, r: 1.5 }], skipped: [20], // one decision time passed while a cycle ran (1 of 27)
   });
   return { root, census, a, b };
 }
@@ -60,7 +60,7 @@ test('setup-capture CLI: accept: PASS exits 0, one line per criterion with its m
   const crit = criteriaFile(root, [
     { id: 'caught', kind: 'caught-rate', legs: 'all', margin: 0.5, minLegs: 2 },
     { id: 'chased', kind: 'late-refusals', lateKind: 'chased-entry', maxRatio: 0.5, minA: 1 },
-    { id: 'overran', kind: 'overran-share', arm: 'b', max: 0, minDecisions: 2 },
+    { id: 'overran', kind: 'overran-share', arm: 'b', max: 0.05, minDecisions: 2 },
     { id: 'confirm', kind: 'path-share', arm: 'b', path: 'confirm', min: 1, minEntries: 2 },
     { id: 'late-share', kind: 'uncaught-reason-share', arm: 'b', legs: 'all', reason: 'late-chased', max: 0, minLegs: 2 },
     { id: 'net', kind: 'discordant-net-r', min: 1, minDiscordant: 1 },
@@ -83,7 +83,7 @@ test('setup-capture CLI: accept: each FAIL kind exits 1', () => {
   const fails = [
     [{ kind: 'caught-rate', legs: 'all', margin: 0, minLegs: 2 }, true],
     [{ kind: 'late-refusals', lateKind: 'chased-entry', maxRatio: 1, minA: 0 }, true],
-    [{ kind: 'overran-share', arm: 'b', max: -1, minDecisions: 2 }, false],
+    [{ kind: 'overran-share', arm: 'b', max: 0.03, minDecisions: 2 }, false],
     [{ kind: 'path-share', arm: 'a', path: 'confirm', min: 0.5, minEntries: 1 }, false],
     [{ kind: 'uncaught-reason-share', arm: 'a', legs: 'all', reason: 'late-chased', max: 0.5, minLegs: 2 }, false],
     [{ kind: 'discordant-net-r', min: 2, minDiscordant: 1 }, false],

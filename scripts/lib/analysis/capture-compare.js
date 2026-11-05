@@ -117,7 +117,8 @@ function compare(a, b, { level }) {
     days: { paired, aOnly: [...da].filter(d => !db.has(d)).sort(byKey), bOnly: [...db].filter(d => !da.has(d)).sort(byKey) },
     legs: { all: pairStats(ids, A, B, level), aligned: pairStats(ids.filter(id => A.get(id).aligned && B.get(id).aligned), A, B, level), unpaired: { a: A.size - ids.length, b: B.size - ids.length } },
     discordant,
-    netR: round4(sum(discordant.filter(d => d.caughtBy === 'b').map(d => d.b.r)) - sum(discordant.filter(d => d.caughtBy === 'a').map(d => d.a.r))),
+    // Each side's entries banked once (bankedR: one fill can catch two adjacent legs).
+    netR: round4(bankedR(discordant.filter(d => d.caughtBy === 'b').map(d => B.get(d.id))) - bankedR(discordant.filter(d => d.caughtBy === 'a').map(d => A.get(d.id)))),
     caughtAUncaughtB: sorted(discordant.filter(d => d.caughtBy === 'a').reduce((o, d) => count(o, d.b.reason || 'other'), {})),
     reasons: { a: reasons(A), b: reasons(B) },
     late: { a: late(a), b: late(b) },
