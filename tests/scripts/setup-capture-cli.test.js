@@ -148,3 +148,27 @@ test('setup-capture CLI: an arm whose day lost its decision times (cycle logs ke
   assert.match(r.stdout, /^problem: a no-decision-times: day-20210614: 2021-06-14: 2 trade cycle log\(s\), no decision time$/m);
   assert.doesNotMatch(r.stdout, /threshold <= null/);
 });
+
+test('setup-capture CLI: a control day file cut short (cycle logs and steps log kept) never passes late-refusals', () => {
+  const { root, census } = setup();
+  const late = (i, rec) => ({ i, entry: { record: rec, outcome: 'late', why: 'chased', late: { kind: 'chased-entry', side: 'short', entry: 21528, stop: 21538, target: 21508, price: 21524, movedR: 0.4, record: rec } } });
+  const recs = ['s1', 's2', 's3'].map((id, k) => ({ id, side: 'short', i: 11 + k, ok: true, reads: ['15m rejected VWAP (rth) down'] }));
+  const crit = criteriaFile(root, [{ id: 'chased-falls', kind: 'late-refusals', lateKind: 'chased-entry', maxRatio: 1, minA: 2 }], 'cut.json');
+  const failing = path.join(root, 'cut-fail.json');
+  fs.writeFileSync(failing, JSON.stringify({ ...JSON.parse(fs.readFileSync(crit, 'utf8')), badHomes: 'fail' }));
+  const b = path.join(root, 'b3');
+  F.makeHome(b, 'h1', { cycles: [late(11, 's1'), late(12, 's2'), late(13, 's3')], records: recs });
+  // Cut after bar 12: with quiet cycles after it (orphaned logs), and with none (cut after the last cycle).
+  for (const [name, after] of [['orphaned', quiet([14, 16, 18, 20, 22, 24])], ['tail', []]]) {
+    const a = path.join(root, name);
+    const home = F.makeHome(a, 'h1', { cycles: [late(11, 's1'), late(12, 's2'), ...after], records: recs });
+    const whole = run(['accept', '--census', census, '--a', a, '--b', b, '--criteria', crit]);
+    assert.strictEqual(whole.status, 1, `${name} whole: ${whole.stdout}`);
+    F.cutDayFile(home, 12);
+    const r = run(['accept', '--census', census, '--a', a, '--b', b, '--criteria', crit]);
+    assert.strictEqual(r.status, 2, `${name}: ${r.stdout}${r.stderr}`);
+    assert.match(r.stdout, /^problem: a day-file-short: h1: 2021-06-14: 27 step\(s\) in steps.log, 11 decision record\(s\) in the day file$/m);
+    assert.match(run(['report', '--census', census, '--a', a]).stdout, /^problem: day-file-short: /m);
+    assert.strictEqual(run(['accept', '--census', census, '--a', a, '--b', b, '--criteria', failing]).status, 1);
+  }
+});

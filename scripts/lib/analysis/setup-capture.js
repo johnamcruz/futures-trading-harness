@@ -101,6 +101,27 @@ function setupKind(read) {
   return { kind: 'other', side: null };
 }
 
+// The decision kinds a day file records and the driver logs a step for (an end-of-day retry is an end of day).
+const DECISION_KINDS = Object.freeze(['trade', 'eod', 'eod-retry']);
+
+/**
+ * The steps the driver logged, by trading day (replay/driver.js: a "===== <time> <kind>" header per step, then its
+ * output, the runner's REPLAY STEP line among it): distinct (time, kind) steps whose output holds that line, so a step
+ * logged twice counts once. null when the run has no steps.log.
+ */
+function stepsLogDays(runDir) {
+  let text;
+  try { text = fs.readFileSync(path.join(runDir, 'steps.log'), 'utf8'); } catch (_err) { return null; }
+  const steps = new Set();
+  let head = null;
+  for (const line of text.split('\n')) {
+    const m = /^===== (\S+) (\S+)/.exec(line);
+    if (m) { head = DECISION_KINDS.includes(m[2]) && Number.isFinite(Date.parse(m[1])) ? `${m[1]}|${m[2] === 'eod-retry' ? 'eod' : m[2]}` : null; continue; }
+    if (head && line.startsWith('REPLAY STEP ')) steps.add(head);
+  }
+  return sorted([...steps].reduce((o, k) => count(o, dayOf(k.split('|')[0])), {}));
+}
+
 /** The run's single replay folder under <home>/replay (refused when it holds several: their logs would mix). */
 function runDirOf(home) {
   let ids = [];
@@ -289,12 +310,18 @@ function readHome(home, { census, alignedOf = null } = {}) {
   const entries = cap.entries.map(e => ({ at: e.at, side: e.side, record: e.record, kind: e.kind, leg: e.leg, r: num(e.r), caughtLeg: cap.legs.some(l => l.captured && l.entry && l.entry.at === e.at && l.side === e.side) }))
     .sort((a, b) => (a.at < b.at ? -1 : a.at > b.at ? 1 : 0));
   const times = new Set([...ranAt, ...skippedAt]);
+  // The decision records against the steps the driver logged (steps.log, an independent file): a day file that lost
+  // records shows fewer of them than steps. null: no steps log (completeness unchecked).
+  const stepsByDay = stepsLogDays(runDir);
+  const recordsByDay = sorted(days.reduce((o, d) => ({ ...o, [d]: run.days[d].filter(r => isObj(r) && DECISION_KINDS.includes(r.kind)).length }), {}));
+  // Trade cycle logs at bars with no decision time, by day.
+  const orphanDays = sorted([...logs.keys()].filter(ms => !times.has(ms)).reduce((o, ms) => count(o, dayOf(ms - 1)), {}));
   const entryCycles = [...logs.values()].filter(c => isObj(c.entry) && c.entry.outcome === 'executed').map(c => ({ bar: c.timing.barClose, path: pathOf(c) })).sort((a, b) => (a.bar < b.bar ? -1 : 1));
   return {
     home, name, runId: run.manifest.runId || path.basename(runDir), days, missingDays: days.filter(d => !censusDays.has(d)),
     legs, notRun, entries, entryCycles, setups,
     // The trading days of its trade cycle logs, each with how many (a day with logs but no decision time is a problem).
-    cycleDays: sorted([...logs.keys()].reduce((o, ms) => count(o, dayOf(ms - 1)), {})),
+    cycleDays: sorted([...logs.keys()].reduce((o, ms) => count(o, dayOf(ms - 1)), {})), orphanDays, stepsByDay, recordsByDay,
     decisions: { times: times.size, ran: ranAt.size, skipped: skippedAt.size, cycles: logs.size, overran, lost: lost.size, byDay: sorted([...times].reduce((o, t) => count(o, dayOf(t - 1)), {})) },
     late: { total: late.total, byKind: sorted(late.byKind), rows: late.rows.map(x => ({ at: x.at, side: x.side, kind: x.kind, record: x.record, first: x.first, from: x.from })) },
   };
@@ -332,7 +359,10 @@ function readArm(paths, { census, alignedOf = null } = {}) {
  * What an arm's input lacks, never dropped silently: [{ kind, detail }] sorted, kinds: error (a home with no replay run),
  * not-a-home (a folder's child with no replay folder), missing-census-day (a run day the census has no legs for),
  * no-cycle-logs (a home with decision times but no trade cycle log), no-decision-times (a day with trade cycle logs
- * but no decision time: its day file lost its records), duplicate-day (two homes on one session day). missing-census-day
+ * but no decision time: its day file lost its records), cycle-log-no-decision-time (trade cycle logs at bars the day
+ * file has no decision time for), day-file-short (steps.log holds more of a day's steps than the day file holds decision
+ * records: the completeness test), no-steps-log (none: completeness unchecked, fails closed), duplicate-day (two homes
+ * on one session day). missing-census-day
  * can't tell a day the census lacks from a quiet session (the census lists only days with legs): it fails closed.
  */
 function armProblems(arm) {
@@ -342,6 +372,9 @@ function armProblems(arm) {
     if (h.error) out.push({ kind: 'error', detail: `${h.name}: ${h.error}` });
     else if (isObj(h.decisions) && h.decisions.cycles === 0) out.push({ kind: 'no-cycle-logs', detail: `${h.name}: ${h.decisions.times} decision time(s), no trade cycle log` });
     for (const [d, n] of Object.entries(h.cycleDays || {})) if (!((h.decisions && h.decisions.byDay) || {})[d]) out.push({ kind: 'no-decision-times', detail: `${h.name}: ${d}: ${n} trade cycle log(s), no decision time` });
+    for (const [d, n] of Object.entries(h.orphanDays || {})) if (((h.decisions && h.decisions.byDay) || {})[d]) out.push({ kind: 'cycle-log-no-decision-time', detail: `${h.name}: ${d}: ${n} trade cycle log(s) at bars with no decision time` });
+    if (!h.error && h.stepsByDay === null && (h.days || []).length) out.push({ kind: 'no-steps-log', detail: `${h.name}: no steps.log beside the day records (their completeness unchecked)` });
+    for (const [d, n] of Object.entries(h.stepsByDay || {})) if (n > ((h.recordsByDay || {})[d] || 0)) out.push({ kind: 'day-file-short', detail: `${h.name}: ${d}: ${n} step(s) in steps.log, ${(h.recordsByDay || {})[d] || 0} decision record(s) in the day file` });
     for (const d of h.missingDays || []) out.push({ kind: 'missing-census-day', detail: `${h.name}: ${d}` });
   }
   for (const n of arm.skipped || []) out.push({ kind: 'not-a-home', detail: `${n}: no replay folder` });

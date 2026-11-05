@@ -347,3 +347,9 @@ test('capture compare: the report lines are deterministic (same input, same text
   assert.deepStrictEqual(t1, t2);
   assert.match(t1.join('\n'), /legs caught \(all\): control 1\/6 .* on 3\/6/);
 });
+
+test('capture compare: a kind named like an object\'s own property (constructor, toString, __proto__) is refused with the list of kinds', () => {
+  const { a, b } = arms();
+  const c = CC.compare(a, b, { level: 0.9 });
+  for (const kind of ['constructor', 'toString', '__proto__', 'hasOwnProperty']) assert.throws(() => CC.evaluate(c, crit([{ id: 'x', kind }])), /x: kind .*; one of caught-rate, late-refusals/, kind);
+});

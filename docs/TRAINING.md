@@ -1181,8 +1181,21 @@ and adds no new detector:
   after a cycle that overran its bar), and entries by prepare path.
 - **Input problems are never dropped:** a home with no replay run, a folder's
   child that is no run home, a run day the census lacks, a home with no trade
-  cycle log, a day with trade cycle logs but no decision time (its day file
-  lost its records), and two homes on one day are listed in the report. A run
+  cycle log, and two homes on one day are listed in the report. So are the
+  signs of a day file that lost records:
+  - `day-file-short`: the driver's `steps.log` (each step's header and the
+    runner's `REPLAY STEP` line, distinct steps, so a step logged twice
+    counts once) holds more of the day's steps than the day file holds
+    decision records (trade and end of day). A day stopped mid-window is no
+    problem: its steps log stops with it.
+  - `no-steps-log`: no `steps.log` beside the day records, so their
+    completeness can't be checked; this fails closed.
+  - `no-decision-times` (a day with trade cycle logs and no decision time)
+    and `cycle-log-no-decision-time` (trade cycle logs at bars the day file
+    has no decision time for). Most decision times have no cycle log, so
+    these are an extra check, not the completeness test.
+
+  A run
   day the census lacks can't be told from a quiet session with no census leg
   (the census lists only days with legs), so such a day fails closed. A leg in two
   homes of one arm is left out of the pairing and flagged. The same home

@@ -182,7 +182,7 @@ function checkCriteria(doc) {
     if (!isObj(c) || typeof c.id !== 'string' || !c.id) throw new Error('criteria: each criterion has an id');
     if (seen.has(c.id)) throw new Error(`criteria: ${c.id} twice`);
     seen.add(c.id);
-    const keys = KINDS[c.kind];
+    const keys = Object.prototype.hasOwnProperty.call(KINDS, c.kind) ? KINDS[c.kind] : null;
     if (!keys) throw new Error(`criteria: ${c.id}: kind ${c.kind}; one of ${Object.keys(KINDS).join(', ')}`);
     for (const k of Object.keys(c)) if (!(k === 'id' || k === 'kind' || keys.includes(k))) throw new Error(`criteria: ${c.id}: unknown key ${k}; ${c.kind} takes ${keys.join(', ')}`);
     for (const k of keys) {

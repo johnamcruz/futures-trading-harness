@@ -255,7 +255,37 @@ test('setup capture: a day with cycle logs but no decision time (its day file lo
   require('fs').writeFileSync(dayFile, `${JSON.stringify({ v: 1, t: F.plus(F.closeT(1), 2), day: F.DAY, kind: 'premarket', ran: [] })}\n`);
   const h = SC.readHome(home, { census: CENSUS });
   assert.deepStrictEqual([h.decisions.times, h.cycleDays], [0, { [F.DAY]: 2 }]);
-  assert.deepStrictEqual(SC.armProblems({ homes: [h] }), [{ kind: 'no-decision-times', detail: `h1: ${F.DAY}: 2 trade cycle log(s), no decision time` }]);
+  assert.deepStrictEqual(SC.armProblems({ homes: [h] }), [
+    { kind: 'day-file-short', detail: `h1: ${F.DAY}: 27 step(s) in steps.log, 0 decision record(s) in the day file` },
+    { kind: 'no-decision-times', detail: `h1: ${F.DAY}: 2 trade cycle log(s), no decision time` },
+  ]);
+});
+
+test('setup capture: a day file that lost some records (its steps log kept) is a problem, with or without orphaned cycle logs', () => {
+  const late = (i, rec) => ({ i, entry: { record: rec, outcome: 'late', why: 'chased', late: { kind: 'chased-entry', side: 'short', entry: 21528, stop: 21538, target: 21508, price: 21524, movedR: 0.4, record: rec } } });
+  // Cut after bar 12 with cycles after it (their logs orphaned), then after the last cycle (nothing orphaned).
+  const orphaned = F.makeHome(tmpDir(), 'h1', { cycles: [late(11, 's1'), late(12, 's2'), ...quiet([14, 16, 18, 20, 22, 24])] });
+  F.cutDayFile(orphaned, 12);
+  assert.deepStrictEqual(SC.armProblems({ homes: [SC.readHome(orphaned, { census: CENSUS })] }).map(p => p.detail), [
+    `h1: ${F.DAY}: 6 trade cycle log(s) at bars with no decision time`,
+    `h1: ${F.DAY}: 27 step(s) in steps.log, 11 decision record(s) in the day file`,
+  ]);
+  const tail = F.makeHome(tmpDir(), 'h1', { cycles: [late(11, 's1'), late(12, 's2')] });
+  F.cutDayFile(tail, 12);
+  assert.deepStrictEqual(SC.armProblems({ homes: [SC.readHome(tail, { census: CENSUS })] }).map(p => p.kind), ['day-file-short']);
+  // One record short is enough.
+  const one = F.makeHome(tmpDir(), 'h1', { cycles: quiet([3]) });
+  F.cutDayFile(one, 27);
+  assert.deepStrictEqual(SC.armProblems({ homes: [SC.readHome(one, { census: CENSUS })] }).map(p => p.detail), [`h1: ${F.DAY}: 27 step(s) in steps.log, 26 decision record(s) in the day file`]);
+  // No steps log: completeness can't be checked, so it is a problem (fails closed).
+  const none = SC.readHome(F.makeHome(tmpDir(), 'h1', { cycles: quiet([3]), stepsLog: false }), { census: CENSUS });
+  assert.deepStrictEqual(SC.armProblems({ homes: [none] }), [{ kind: 'no-steps-log', detail: 'h1: no steps.log beside the day records (their completeness unchecked)' }]);
+  // A step logged twice (a retried step: one header time) is one step; a complete home has no problem.
+  const retried = F.makeHome(tmpDir(), 'h1', { cycles: quiet([3]) });
+  const log = require('path').join(retried, 'replay', 'h1', 'steps.log');
+  const first = require('fs').readFileSync(log, 'utf8').split('\n===== ')[1];
+  require('fs').appendFileSync(log, `\n===== ${first}`);
+  assert.deepStrictEqual(SC.armProblems({ homes: [SC.readHome(retried, { census: CENSUS })] }), []);
 });
 
 test('setup capture: the same home given twice (another spelling) is read once', () => {

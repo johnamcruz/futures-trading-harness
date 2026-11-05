@@ -47,6 +47,8 @@ function census(legs = [LONG, SHORT]) {
  *   cycles: [{ i, action, result, entry, listed, fired: [{ name, direction }], on (prepare.on), overran, blocked (true, or
  *            the entry block's text), positions: [side], skips }]
  *   stale: bar indices whose step served no new base bar (its record's lastBarT the bar before)
+ *   stepsLog: false for no steps.log (the driver's log of each step's REPLAY STEP line); cutDayFile(home, i) keeps the
+ *            day file's records up to bar i's (a damaged day file, its steps log and cycle logs kept)
  *   records: [{ id, side, i, ok, reads: [read], stopTicks }]   (reads: setup reads; bias etc. are not needed)
  *   orders: [{ orderId, i, record, side, entry, at? }]; fills: [{ orderId, i, r }] (an opening fill and its round trip)
  *   gate: gate-log lines; sessionBars: the session's bar indices
@@ -76,6 +78,8 @@ function makeHome(root, name, spec = {}) {
     trades: trades(i), skipped: [...skipped].filter(s => s > i && !times.some(j => j > i && j < s && !skipped.has(j))).map(s => plus(closeT(s), 2)),
   }));
   fs.writeFileSync(path.join(runDir, `${DAY}.jsonl`), `${lines.map(l => JSON.stringify(l)).join('\n')}\n`);
+  // The driver's steps log: a header and the runner's REPLAY STEP line for each step run (stepsLog false: none written).
+  if (spec.stepsLog !== false) fs.writeFileSync(path.join(runDir, 'steps.log'), lines.map(l => `\n===== ${l.t} ${l.kind} (exit 0)\n[runner] a line\nREPLAY STEP ${JSON.stringify({ asked: l.kind, at: l.t, ran: l.ran })}\n`).join(''));
   const cdir = path.join(home, 'logs', 'cycles', DAY);
   fs.mkdirSync(cdir, { recursive: true });
   for (const c of spec.cycles || []) {
@@ -101,4 +105,12 @@ function makeHome(root, name, spec = {}) {
   return home;
 }
 
-module.exports = { DAY, SESSION, MIN3, CLOSES, LONG, SHORT, legId, barsOf, barT, closeT, plus, census, makeHome };
+/** Cut a home's day file after bar i's record (the run's folder named as the home). */
+function cutDayFile(home, i) {
+  const file = path.join(home, 'replay', path.basename(home), `${DAY}.jsonl`);
+  const lines = fs.readFileSync(file, 'utf8').trim().split('\n');
+  const at = lines.findIndex(l => JSON.parse(l).t === plus(closeT(i), 2));
+  fs.writeFileSync(file, `${lines.slice(0, at + 1).join('\n')}\n`);
+}
+
+module.exports = { cutDayFile, DAY, SESSION, MIN3, CLOSES, LONG, SHORT, legId, barsOf, barT, closeT, plus, census, makeHome };
