@@ -11,14 +11,16 @@
  *   \s \s+ \s* \s?   only directly between literal text (a non-space character, a class or a group on both sides, \b
  *                    aside)
  *   [...]            letters, digits, ranges and punctuation, never negated, never a space or an escape; at most ? after
- *   (...) (?:...)    literal alternatives only (a|the), none empty, no nesting; at most ? after
+ *   (...) (?:...)    literal alternatives only (a|the), none empty, no nesting, pairwise distinct and none a prefix of
+ *                    another (case-blind: (a|ab) never); at most ? after; at most limits.maxGroups groups in all
  *   ^ $              at the start, at the end
  *   a gap            .{0,N} .{1,N} \w{0,N} \S{1,N} ...: N at most limits.maxGapChars, at most limits.maxGaps of them, each
  *                    preceded by literal text (or the start) and followed by literal text (unbounded .* or \w+ never)
- * At most limits.maxOptionals optional parts (x?, [..]?, (..)?). With gaps bounded and every repeat between disjoint
- * neighbours, a match costs at most about maxGapChars^maxGaps steps a start.
+ * At most limits.maxOptionals optional parts (x?, [..]?, (..)?). The backtracking a start can take is then bounded by
+ * the product of each group's alternatives (at most maxGroups groups), 2^maxOptionals and maxGapChars^maxGaps, each
+ * branch checked against literal text: no input length makes it grow (a pattern's length is gate.maxPatternChars).
  *
- *   grammarErrors(src, { maxGaps, maxGapChars, maxOptionals })   [error]: the rule each part breaks (the quiz file's gate)
+ *   grammarErrors(src, { maxGaps, maxGapChars, maxOptionals, maxGroups })   [error]: the rule each part breaks (the quiz file's gate)
  */
 
 const ESCAPABLE = '.?()[]{}*+|^$\\/-,:;\'"!#%&=<>~@';
@@ -29,9 +31,9 @@ const isClassChar = c => isAlnum(c) || (c !== ' ' && c !== '\\' && c !== ']' && 
 const GAP = /^\{([01]),(\d+)\}/;
 
 function grammarErrors(src, limits = {}) {
-  const { maxGaps, maxGapChars, maxOptionals } = limits;
+  const { maxGaps, maxGapChars, maxOptionals, maxGroups } = limits;
   // Whole numbers (the quiz file's validation, eval/context-quiz.js quizErrors, holds their ranges).
-  if (![maxGaps, maxGapChars, maxOptionals].every(Number.isInteger)) throw new Error('grammarErrors: limits { maxGaps, maxGapChars, maxOptionals } (the quiz file\'s gate)');
+  if (![maxGaps, maxGapChars, maxOptionals, maxGroups].every(Number.isInteger)) throw new Error('grammarErrors: limits { maxGaps, maxGapChars, maxOptionals, maxGroups } (the quiz file\'s gate)');
   const s = String(src);
   const errors = [];
   const toks = [];
@@ -77,6 +79,9 @@ function grammarErrors(src, limits = {}) {
       const alts = body === null ? [] : body.split('|');
       const altOk = a => a.length > 0 && /^(?:\\[^A-Za-z0-9]|[^\\()[\]{}.*+?|^$])+$/.test(a) && [...a.replace(/\\./g, '')].every(isLiteral);
       if (body === null || !alts.every(altOk)) errors.push(`a group at ${at}: literal alternatives only, such as (a|the) or (?:wait|hold), none empty, nothing nested`);
+      // Two alternatives that can match the same text (equal, or one a prefix of the other) double the paths a start.
+      const low = alts.map(a => a.toLowerCase());
+      if (low.some((a, j) => low.some((b, m) => m !== j && b.startsWith(a)))) errors.push(`a group at ${at}: distinct alternatives, none a prefix of another (case-blind; (a|ab) never)`);
       i = end < 0 ? s.length : end;
       const opt = optional();
       if (repeatAfter(i + 1)) errors.push(`a group at ${at}: no repeat after it (at most ?): a repeated group backtracks without end`);
@@ -102,6 +107,8 @@ function grammarErrors(src, limits = {}) {
   });
   const gaps = toks.filter(t => t.k === 'gap').length;
   if (gaps > maxGaps) errors.push(`at most ${maxGaps} wildcard gaps (the quiz file's gate.maxGaps): this has ${gaps}`);
+  const groups = toks.filter(t => t.k === 'group').length;
+  if (groups > maxGroups) errors.push(`at most ${maxGroups} groups (the quiz file's gate.maxGroups): this has ${groups}`);
   const opts = toks.filter(t => t.opt).length;
   if (opts > maxOptionals) errors.push(`at most ${maxOptionals} optional parts (the quiz file's gate.maxOptionals): this has ${opts}`);
   return errors;

@@ -431,8 +431,19 @@ iteration of the loop then runs these steps (`scripts/lib/train/probe.js`):
    word (the quiz file's `polar`: above/below, long/short,
    premium/discount, buy/sell, ...: each with the same neighbours on its
    line before and after), is never a consolidation, a removal too, and
-   needs a question (a pure deletion of a line holding any of them then has
-   no new text to anchor one in, so the gate blocks it: strict by design).
+   needs a question, and so does a deletion that removes a condition word
+   (the quiz file's `conditions`: while, if, least, both, ...) or any word
+   holding a digit ("a 1h CHoCH while the 4h and 1h agree" made "a 1h
+   CHoCH", "at least 2" made "2"), which narrows or widens the rule. A pure
+   deletion of a line holding any of them then has no new text to anchor a
+   question in, so the gate blocks it: strict by design. An edit refused for
+   its question (at the proposal or by its anchor), an inconclusive run, or
+   a harness the quiz could not ask is never barred: the same edit with a
+   sound question runs next round (`lessons.js` `barsReproposal`); a
+   replay verdict, a quiz reject or a content refusal (the champion already
+   answers it, the edit does not teach it) bars it. Patterns hold at most
+   `gate.maxGroups` (3) groups, each of distinct alternatives, none a
+   prefix of another.
 
    **The quiz gate, before any replay** (`scripts/lib/train/quiz-phase.js`,
    phases `<n>:quiz-champion` and `<n>:quiz:<id>`, files in the round's

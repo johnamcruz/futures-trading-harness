@@ -22,6 +22,8 @@
  *   appendKeep(file, { proposalId, iteration, keep, windows })   the keep rule's verdict on a combined change
  *   appendQuiz(file, { proposalId, iteration, skill | agent, kind, windows, quiz, why, stage })   an edit the quiz gate stopped
  *                                      (reject or blocked) before any replay; summarized apart from the replays' verdicts
+ *   barsReproposal(entry)              [bool] the line bars the same edit next time (a replay verdict, a keep line, a
+ *                                      quiz reject or content refusal; never a question, inconclusive or harness refusal)
  *   readLessons(file)                  [entry]
  *   practiceOnly(windows)              true when every window lies in practice-train
  *   summarize(entries, { maxLines, maxChars })   the proposer's text
@@ -90,6 +92,20 @@ function appendQuiz(file, entry) {
   if (errors.length) throw new Error(`a quiz lesson names ${errors.join('; ')}`);
   fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
   fs.appendFileSync(file, `${JSON.stringify({ v: 1, at: new Date().toISOString(), ...e })}\n`);
+}
+
+// The quiz gate's content refusals (train/quiz-phase.js red/green): the edit itself, not its question, failed.
+const CONTENT_WHY = Object.freeze(['the champion already answers the question', 'the edit does not teach its own question']);
+/**
+ * Whether a lessons line bars the same edit (its proposal id) from being proposed again: a replay's verdict, a keep line,
+ * a quiz reject, or a content refusal (CONTENT_WHY). A refusal of its question (at the proposal or its anchor), an
+ * inconclusive run or a harness the quiz could not ask never does: the same edit with a sound question runs.
+ */
+function barsReproposal(e) {
+  if (!e || typeof e.proposalId !== 'string') return false;
+  if (typeof e.quiz !== 'string' || typeof e.verdict === 'string') return true;
+  if (e.quiz === 'reject') return true;
+  return typeof e.why === 'string' && CONTENT_WHY.some(w => e.why.startsWith(w));
 }
 
 function readLessons(file) {
@@ -162,4 +178,4 @@ function summarize(entries, { maxLines = MAX_LINES, maxChars = MAX_CHARS } = {})
   return clip(out, maxChars);
 }
 
-module.exports = { FILE, MAX_LINES, MAX_CHARS, REFUSED_CHARS, QUIZ_VERDICTS, appendLesson, appendKeep, appendQuiz, readLessons, practiceOnly, summarize };
+module.exports = { FILE, MAX_LINES, MAX_CHARS, REFUSED_CHARS, QUIZ_VERDICTS, CONTENT_WHY, barsReproposal, appendLesson, appendKeep, appendQuiz, readLessons, practiceOnly, summarize };

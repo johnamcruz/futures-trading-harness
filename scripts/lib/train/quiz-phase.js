@@ -114,8 +114,9 @@ async function gateEdit({ quiz, hash, question, consolidation = false, championR
       const { problems, ...shown } = r;
       out.redGreen = shown;
       if (problems.length) return done('blocked', `inconclusive after one retry: ${problems.join('; ')}`);
-      if (!r.red) return done('blocked', 'the champion already answers the question: no edit is needed or the question is too easy');
-      if (!r.green) return done('blocked', 'the edit does not teach its own question');
+      // Content refusals (lessons.js CONTENT_WHY): the edit, not its question, failed; it is never proposed again.
+      if (!r.red) return done('blocked', `${LS.CONTENT_WHY[0]}: no edit is needed or the question is too easy`);
+      if (!r.green) return done('blocked', LS.CONTENT_WHY[1]);
     }
     // The whole quiz against the champion's.
     out.stage = 'regression';
@@ -204,7 +205,7 @@ async function quizRound(ctx, { n, champion, edits, api, work, dir, lessonsFile,
     fresh(phaseKey, file);
     const r = await api.phase(ctx, phaseKey, file, async () => {
       // A consolidation (a pure deletion: probe-question.js isConsolidation) has no question of its own.
-      const consolidation = PQ.isConsolidation(e, champion.dir, { negations: quiz.negations, restrictions: quiz.restrictions, polar: quiz.polar });
+      const consolidation = PQ.isConsolidation(e, champion.dir, { negations: quiz.negations, restrictions: quiz.restrictions, polar: quiz.polar, conditions: quiz.conditions });
       const blocked = why => ({ verdict: 'blocked', stage: 'question', why, quizHash: hash, regressions: [], flagged: [], slips: [], gains: [], redGreen: consolidation ? SKIPPED : null, asked: 0 });
       const qe = consolidation ? [] : PQ.questionErrors(e.question, quiz.gate);
       if (qe.length) return blocked(qe.join('; '));

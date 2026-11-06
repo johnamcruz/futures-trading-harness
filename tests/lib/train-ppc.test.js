@@ -344,8 +344,9 @@ test('the probe prompt names every rule the quiz gate enforces on a question, fr
   // The consolidation rule (probe-question.js isConsolidation): a pure deletion touching no negation, restriction or polar
   // word needs no question; each example the prompt names is one of the quiz file's own words.
   assert.match(prompt, /No "question" only for a pure deletion/);
+  assert.match(prompt, /condition \([^)]*\) or number\)?/, 'a deleted condition word or number needs a question');
   const named = kind => { const m = new RegExp(`${kind} \\(([^)]*)\\)`).exec(prompt); assert.ok(m, kind); return m[1].match(/"([^"]+)"/g).map(w => w.slice(1, -1)); };
-  for (const [kind, list] of [['negation', quiz.negations], ['restriction', quiz.restrictions], ['polar word', quiz.polar]]) {
+  for (const [kind, list] of [['negation', quiz.negations], ['restriction', quiz.restrictions], ['polar word', quiz.polar], ['condition', quiz.conditions]]) {
     const words = named(kind);
     assert.ok(words.length >= 2, kind);
     for (const w of words) assert.ok(list.includes(w) || (kind === 'negation' && w.endsWith("n't")), `${kind} ${w}: not in the quiz file's list`);
@@ -1560,6 +1561,41 @@ test('the quiz gate in the loop: a question refused at the proposal reaches the 
   // Once per edit: a resume writes no second line.
   const lines = LS.readLessons(path.join(w.paths.dir, LS.FILE)).filter(l => l.proposalId === id);
   assert.deepStrictEqual(lines.map(l => [l.stage, l.quiz]), [['proposal', 'blocked']]);
+});
+
+test('the quiz gate in the loop: a question refused at the proposal never bars the same edit with a fixed question; a content reject does', async () => {
+  const reportAt = (w, n) => JSON.parse(fs.readFileSync(path.join(w.paths.iter(n), 'probe-report.json'), 'utf8'));
+  const loop = { limits: { maxIterations: 2, maxModelCalls: 10000, maxWallMinutes: 30 } };
+  const plain = tagged('a', 'F1', 'rule', '- line one', '- line one\n- GOOD → read it');
+  const broken = { ...plain, question: { layer: 'entry', prompt: 'head', text: 'Does the edit read right?', rule: 'r', anchor: 'GOOD → read it', required: ['(line|one)+'], forbidden: [] } };
+  // Round 1 refuses its question; round 2 proposes the same edit (the same id) with a sound one: it is quizzed and runs.
+  const w = world({ proposals: r => (r === 1 ? [broken] : [plain]), loop });
+  await run(w);
+  const id = reportAt(w, 1).edits[0].id;
+  assert.ok(reportAt(w, 1).edits[0].errors.length > 0);
+  const second = reportAt(w, 2);
+  assert.deepStrictEqual([second.edits[0].id, second.edits[0].probedBefore], [id, false]);
+  assert.strictEqual(second.quiz.edits[id].verdict, 'pass', JSON.stringify(second.quiz.edits[id]));
+  assert.ok(probedRuns(w, id).length > 0, 'replayed');
+  // A resume writes the proposal-stage line no second time.
+  await run(w).catch(() => null);
+  assert.deepStrictEqual(LS.readLessons(path.join(w.paths.dir, LS.FILE)).filter(l => l.proposalId === id && l.stage === 'proposal').length, 1);
+  // A content refusal (a confirmed regression): the same edit next round is skipped as probed before.
+  const regress = tagged('a', 'F1', 'rule', '- line two', '- line two\n- GOOD too → BREAKS-sb', 'breaks a rule');
+  const v = world({ proposals: () => [regress], loop });
+  await run(v);
+  const rid = reportAt(v, 1).edits[0].id;
+  assert.strictEqual(reportAt(v, 1).quiz.edits[rid].verdict, 'reject');
+  assert.strictEqual(reportAt(v, 2).edits[0].probedBefore, true);
+});
+
+test('lessons barsReproposal: replay verdicts and content refusals bar the same edit; a question, inconclusive or harness refusal does not', () => {
+  const W = [{ from: '2022-03-07', to: '2022-03-19' }];
+  const q = (quiz, stage, why) => ({ proposalId: 'p', iteration: 1, skill: 'a', kind: 'rule', windows: W, quiz, stage, why });
+  for (const e of [{ proposalId: 'p', verdict: 'helped' }, { proposalId: 'p', composed: true, keep: 'kept' }, q('reject', 'regression', 'regressed: a2'),
+    q('blocked', 'red-green', 'the champion already answers the question: no edit is needed or the question is too easy'), q('blocked', 'red-green', 'the edit does not teach its own question')]) assert.strictEqual(LS.barsReproposal(e), true, JSON.stringify(e));
+  for (const e of [q('blocked', 'proposal', 'question.required[0]: a group'), q('blocked', 'question', 'question.anchor: not in the edited tree'), q('blocked', 'red-green', 'inconclusive after one retry: x'),
+    q('blocked', 'regression', 'inconclusive after one retry: y'), q('blocked', 'question', 'the quiz could not run: z'), q('blocked', 'question', 'the prompts could not be built: w'), q('blocked', 'regression', 'a confirm run is still needed: v')]) assert.strictEqual(LS.barsReproposal(e), false, JSON.stringify(e));
 });
 
 test('the quiz gate in the loop: a crash after the quiz and before the replay never quizzes again on resume', async () => {

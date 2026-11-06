@@ -27,7 +27,7 @@
  *   KEYS
  *   questionErrors(raw, gate)               [error] for the question as the proposer wrote it (missing: named); gate:
  *                                           the run's quiz file's limits
- *   isConsolidation(e, root, { negations, restrictions, polar })   [bool] the edit teaches nothing new: its question optional, never asked
+ *   isConsolidation(e, root, { negations, restrictions, polar, conditions })   [bool] the edit teaches nothing new: its question optional, never asked
  *   literalRun(src, n)                      [bool] a regex source that requires a run of n letters or digits
  *   questionOf(raw, proposalId)             the question with its code-given id
  *   anchorErrors(q, { editPrompts, championPrompts, maxLineChars })   [error]: prompts as eval/context-quiz.js buildPrompts
@@ -109,6 +109,13 @@ const words = t => new Set(tokens(t));
 const negated = (t, list) => tokens(t).some(w => list.includes(w) || w.endsWith("n't"));
 /** The restriction words a text holds, counted per word ("only", "must", "unless": the quiz file's restrictions). */
 const restrictionsIn = (t, list) => tokens(t).filter(w => list.includes(w)).sort().join(' ');
+/** The words of a that b leaves out, b's words matched in order (b a pure deletion of a: subsequence). */
+function deleted(a, b) {
+  const out = [];
+  let j = 0;
+  for (const w of a) { if (j < b.length && w === b[j]) j += 1; else out.push(w); }
+  return out;
+}
 /** Whether b's words are a's in order, some left out: a pure deletion. */
 function subsequence(a, b) {
   let j = 0;
@@ -129,14 +136,17 @@ const polarSig = (t, list) => String(t).split('\n').flatMap(line => {
  * negations, or a word ending in n't: one added, dropped or moved flips or shifts a rule in the document's own words),
  * when it adds or removes a restriction word (the quiz file's restrictions: "only", "must", "unless"), or when it adds,
  * removes or moves a polar word (the quiz file's polar: above/below, long/short, premium/discount, ...: each with its
- * neighbours on its line the same before and after; a deletion of a line holding one is then never one: strict).
+ * neighbours on its line the same before and after; a deletion of a line holding one is then never one: strict), or
+ * when it deletes a condition word (the quiz file's conditions: while, if, least, both) or any word holding a digit.
  */
-function isConsolidation(e, root, { negations = Q.loadQuiz().value.negations, restrictions = Q.loadQuiz().value.restrictions, polar = Q.loadQuiz().value.polar } = {}) {
+function isConsolidation(e, root, { negations = Q.loadQuiz().value.negations, restrictions = Q.loadQuiz().value.restrictions, polar = Q.loadQuiz().value.polar, conditions = Q.loadQuiz().value.conditions } = {}) {
   if (!e || !isObj(e.proposal) || !Array.isArray(e.proposal.edits) || !e.proposal.edits.length) return false;
   const shifts = x => !isObj(x) || typeof x.find !== 'string' || typeof x.replace !== 'string' || negated(x.find, negations) || negated(x.replace, negations)
     || restrictionsIn(x.find, restrictions) !== restrictionsIn(x.replace, restrictions);
   if (e.proposal.edits.some(shifts)) return false;
   if (!e.proposal.edits.every(x => subsequence(tokens(x.find), tokens(x.replace)) && polarSig(x.find, polar) === polarSig(x.replace, polar))) return false;
+  // A condition word (while, if, least, both: the quiz file's conditions) or a number deleted narrows or widens a rule.
+  if (e.proposal.edits.some(x => deleted(tokens(x.find), tokens(x.replace)).some(w => conditions.includes(w) || /\d/.test(w)))) return false;
   if (e.tag && e.tag.kind === 'removal') return true;
   const fs = require('fs');
   const path = require('path');

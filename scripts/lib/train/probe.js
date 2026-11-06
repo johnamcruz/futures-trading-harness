@@ -511,7 +511,9 @@ async function probeRound(ctx, { n, champion, api }) {
   }
   const edits = await api.phase(ctx, `${n}:probe-proposals`, path.join(dir, 'probe-proposals.json'), async () => {
     const lessons = LS.readLessons(lessonsFile);
-    const before = new Set(lessons.map(e => e.proposalId));
+    // Only an edit judged on its content is never proposed again (lessons.js barsReproposal): one refused for its
+    // question, an inconclusive run or a harness the quiz could not ask comes back with a sound question.
+    const before = new Set(lessons.filter(LS.barsReproposal).map(e => e.proposalId));
     ctx.call();
     // The proposer reads its own copy of the champion's documents, never the trees the runs use.
     const scratch = path.join(work, 'proposer');
@@ -534,7 +536,7 @@ async function probeRound(ctx, { n, champion, api }) {
       // Its own quiz question (probe-question.js), written first: missing or malformed, the edit never runs. A
       // consolidation (a pure deletion: probe-question.js isConsolidation) teaches nothing new: its question is optional
       // (one written is still checked).
-      const optional = PQ.isConsolidation(x, champion.dir, { negations: quizFile.negations, restrictions: quizFile.restrictions, polar: quizFile.polar }) && (x.question === undefined || x.question === null);
+      const optional = PQ.isConsolidation(x, champion.dir, { negations: quizFile.negations, restrictions: quizFile.restrictions, polar: quizFile.polar, conditions: quizFile.conditions }) && (x.question === undefined || x.question === null);
       const errors = [...P.validateProposal(x.proposal, { root: champion.dir }), ...PE.tagErrors(x.tag, x.proposal, { findings }), ...(optional ? [] : PQ.questionErrors(x.question, quizFile.gate))];
       if (!errors.length) errors.push(...PE.styleErrors(x.proposal, { root: champion.dir, kind: x.tag.kind }));
       const finding = findings.find(f => x.tag && f.id === x.tag.finding) || null;

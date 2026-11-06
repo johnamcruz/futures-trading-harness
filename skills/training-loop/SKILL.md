@@ -80,7 +80,9 @@ the whole context quiz must not regress. A pure deletion (a removal, or a
 trim that keeps the rest in order) needs no question and must pass the
 whole quiz without a confirmed regression; one near a "not" or "never", or
 that changes an "only", "must" or "unless" or a polar word ("above",
-"long", "premium"), needs a question. Quiz patterns are plain phrases
+"long", "premium"), or deletes a condition ("while", "at least") or a
+number, needs a question. An edit refused only for its question comes back
+with a sound one. Quiz patterns are plain phrases
 (`docs/TRAINING.md`, the pattern grammar). An edit of an analyst's or
 the executor's file alone is in no quiz prompt: not quizzed, it goes to the
 replay; a skill edit is always quizzed. Quiz asks count toward `maxModelCalls`. A rejected or

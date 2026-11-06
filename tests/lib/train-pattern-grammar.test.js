@@ -10,7 +10,7 @@ const G = require('../../scripts/lib/train/pattern-grammar');
 const Q = require('../../scripts/lib/eval/context-quiz');
 
 const GATE = Q.loadQuiz().value.gate;
-const LIMITS = { maxGaps: GATE.maxGaps, maxGapChars: GATE.maxGapChars, maxOptionals: GATE.maxOptionals };
+const LIMITS = { maxGaps: GATE.maxGaps, maxGapChars: GATE.maxGapChars, maxOptionals: GATE.maxOptionals, maxGroups: GATE.maxGroups };
 
 const OK = ['\\bwait\\b', 'wait', '(enter|take) now', 'retest (a|the)', '(no)?\\s+wait', 'wait(s|ed)?', 'three\\s+pushes', 'long.{0,40}ok',
   '\\bclose[sd]?\\b', 'needs?', '(?:wait|hold) for', '^wait', 'wait$', 'size: full', "don't enter", 'stop\\. then', 'retest.{0,30}wait.{0,20}close',
@@ -37,6 +37,34 @@ test('the grammar: the patterns a proposer needs are accepted; every other form 
   // The limits are the caller's: none, and a gap is refused.
   assert.match(G.grammarErrors('long.{0,40}ok', { ...LIMITS, maxGaps: 0 }).join(), /at most 0 wildcard gaps/);
   assert.throws(() => G.grammarErrors('wait', {}), /maxGaps/);
+  assert.throws(() => G.grammarErrors('wait', { ...LIMITS, maxGroups: undefined }), /maxGroups/);
+});
+
+test('the grammar: groups are bounded: at most gate.maxGroups of them, each of distinct alternatives none a prefix of another', () => {
+  const k = LIMITS.maxGroups;
+  assert.ok(Number.isInteger(k) && k >= 1 && k <= 4, String(k));
+  // The review's examples: a run of groups whose alternatives match the same text (2^n paths on an ordinary line).
+  for (const src of [`${'(-|-)'.repeat(23)}z`, `${'(e|e)'.repeat(23)}wait`, `wait${'( | )'.repeat(9)}x`, `${'(a|aa)'.repeat(17)}wait`]) {
+    const t = Date.now();
+    assert.ok(G.grammarErrors(src, LIMITS).length > 0, src);
+    assert.ok(Date.now() - t < 200);
+  }
+  assert.match(G.grammarErrors(`${'(enter|take) '.repeat(k + 1)}now`, LIMITS).join(), new RegExp(`at most ${k} groups \\(the quiz file's gate\\.maxGroups\\): this has ${k + 1}`));
+  assert.match(G.grammarErrors('(wait|wait) now', LIMITS).join(), /distinct alternatives, none a prefix of another/);
+  assert.match(G.grammarErrors('(Wait|wait) now', LIMITS).join(), /distinct alternatives/, 'case-blind, as the grader reads');
+  assert.match(G.grammarErrors('(a|ab) wait', LIMITS).join(), /none a prefix of another/);
+  assert.match(G.grammarErrors('(enter|enter now) wait', LIMITS).join(), /none a prefix of another/);
+  for (const ok of ['(enter|take) now', 'retest (a|the)', 'wait(s|ed)?', '(?:wait|hold) for']) assert.deepStrictEqual(G.grammarErrors(ok, LIMITS), [], ok);
+  // Optional groups count too.
+  assert.match(G.grammarErrors(`wait${'(s|ed)?'.repeat(k + 1)}`, { ...LIMITS, maxOptionals: k + 1 }).join(), /at most \d+ groups/);
+});
+
+test('the grammar: a gap followed by an optional letter, and a space in a class beside \\s+, are refused', () => {
+  assert.match(G.grammarErrors('wait.{0,9}e?nd', LIMITS).join(), /a gap at 4: followed by literal text/);
+  assert.deepStrictEqual(G.grammarErrors('wait.{0,9}end', LIMITS), []);
+  assert.match(G.grammarErrors('wait[a ]\\s+now', LIMITS).join(), /a class at 4: letters, digits, ranges and punctuation only/);
+  assert.match(G.grammarErrors('[ ]wait', LIMITS).join(), /a class at 0/);
+  assert.deepStrictEqual(G.grammarErrors('wait[ab]\\s+now', LIMITS), []);
 });
 
 test('the grammar: every example the review found is refused fast, and an accepted pattern runs fast on a long hostile line', () => {
@@ -60,31 +88,34 @@ test('the grammar, property-style: random patterns built from its own parts neve
   // A seeded generator of patterns the grammar accepts (the composer's draw kept only when the grammar takes it).
   let seed = 7;
   const rnd = n => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed % n; };
-  const words = ['a', 'aa', 'wait', 'the', 'z', 'zz', 'ab', 'retest'];
+  const words = ['a', 'aa', 'wait', 'the', 'z', 'zz', 'ab', 'retest', '-', '--', 'e', 'ee', ' ', 'a b'];
   const part = () => {
     const k = rnd(7);
     if (k === 0) return '\\b';
     if (k === 1) return `[${['az', 'a-z', 'sd'][rnd(3)]}]${rnd(2) ? '?' : ''}`;
-    if (k === 2) return `(${words[rnd(words.length)]}|${words[rnd(words.length)]})${rnd(2) ? '?' : ''}`;
+    if (k === 2) return `(${Array.from({ length: 2 + rnd(3) }, () => words[rnd(words.length)]).join('|')})${rnd(2) ? '?' : ''}`;
     if (k === 3) return `${words[rnd(words.length)]}?`;
     if (k === 4) return `.{0,${1 + rnd(LIMITS.maxGapChars)}}`;
     if (k === 5) return ['\\s+', '\\s*', '\\s?'][rnd(3)];
     return words[rnd(words.length)];
   };
   let accepted = 0;
+  let grouped = 0;
   let worst = 0;
-  for (let i = 0; i < 4000 && accepted < 300; i += 1) {
+  for (let i = 0; i < 8000 && accepted < 300; i += 1) {
     const src = Array.from({ length: 2 + rnd(9) }, part).join('');
     if (G.grammarErrors(src, LIMITS).length) continue;
     accepted += 1;
+    if (src.includes('|')) grouped += 1;
     const re = new RegExp(src, 'i');
     const letters = src.replace(/[^a-z]/g, '') || 'a';
-    for (const line of ['a'.repeat(1000), 'z'.repeat(1000), ' '.repeat(1000), letters.repeat(1000).slice(0, 1000), `${letters} `.repeat(1000).slice(0, 1000)]) {
+    for (const line of ['a'.repeat(1000), 'z'.repeat(1000), ' '.repeat(1000), '-'.repeat(1000), 'e'.repeat(1000), 'a b '.repeat(250), letters.repeat(1000).slice(0, 1000), `${letters} `.repeat(1000).slice(0, 1000)]) {
       const t = process.hrtime.bigint();
       re.test(line);
       worst = Math.max(worst, Number(process.hrtime.bigint() - t) / 1e6);
     }
   }
   assert.ok(accepted >= 100, `only ${accepted} accepted: the generator exercises too little`);
+  assert.ok(grouped >= 30, `only ${grouped} with a group`);
   assert.ok(worst < 200, `worst ${worst} ms`);
 });

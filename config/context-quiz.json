@@ -27,6 +27,10 @@
     "uptrend", "downtrend", "support", "resistance", "rising", "falling", "rise", "fall", "top", "tops", "bottom",
     "bottoms", "inside", "outside"
   ],
+  "conditions": [
+    "while", "when", "whenever", "if", "once", "least", "most", "than", "fewer", "more", "less", "agree", "agrees",
+    "both", "all", "any", "each", "every", "same", "within", "between", "either", "first", "last", "next", "again"
+  ],
   "restrictions": [
     "only",
     "always",
@@ -52,6 +56,7 @@
     "maxGaps": 2,
     "maxGapChars": 60,
     "maxOptionals": 3,
+    "maxGroups": 3,
     "maxGradedLineChars": 1000
   },
   "passBar": {

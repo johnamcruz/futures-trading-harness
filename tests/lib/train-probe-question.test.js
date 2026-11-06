@@ -162,8 +162,13 @@ test('gradeAnswer: an answer line longer than gate.maxGradedLineChars fails clos
   assert.match(g.why, new RegExp(`longer than gate\\.maxGradedLineChars \\(${cap}\\)`));
   assert.strictEqual(g.line, long, 'the whole line, never a silently cut one');
   // At the cap: graded as before.
-  const ok = `wait for the retest${' '.repeat(cap - 19)}`.slice(0, cap);
+  const ok = `wait for the retest ${'x'.repeat(cap - 20)}`;
   assert.strictEqual(Q.gradeAnswer(quiz, q, `ANSWER: ${ok}`).pass, true);
+  // The boundary: exactly the cap is graded; one character more fails, ungraded.
+  assert.strictEqual(ok.length, cap);
+  const over = Q.gradeAnswer(quiz, q, `ANSWER: ${ok}x`);
+  assert.deepStrictEqual([over.pass, over.line.length, typeof over.why], [false, cap + 1, 'string']);
+  assert.strictEqual(Q.gradeAnswer(quiz, q, `ANSWER: ${ok}`).why, undefined);
   // A pattern that would backtrack on a long line is never run on one.
   const slow = { ...q, required: ['\\w*\\w*\\w*!'] };
   const t = Date.now();
@@ -282,6 +287,26 @@ test('isConsolidation: a polar word (above/below, long/short, premium/discount, 
   assert.ok(['above', 'below', 'long', 'short', 'premium', 'discount', 'buy', 'sell', 'high', 'low'].every(w => quiz.polar.includes(w)), JSON.stringify(quiz.polar));
   assert.strictEqual(PQ.isConsolidation(e('- line two\n', '', 'removal'), root, { polar: ['two'] }), false, 'the list given');
   assert.match(Q.quizErrors({ ...quiz, polar: [] }).join(), /polar: /);
+});
+
+test('isConsolidation: a deletion of a condition word or a number narrows or widens a rule: never one', () => {
+  const root = require('../helpers').tmpDir();
+  const fs = require('fs');
+  const path = require('path');
+  fs.mkdirSync(path.join(root, 'skills', 'a'), { recursive: true });
+  // The bos-vs-choch and cisd skills' own lines.
+  fs.writeFileSync(path.join(root, 'skills/a/SKILL.md'), '---\nname: a\ndescription: d\n---\n\n# A\n\ndeveloping; a 1h CHoCH while the 4h and 1h agree is context.\n\n1. A down run: at least 2 consecutive bearish completed candles.\n\n- read the close of the third candle\n\n- line two\n');
+  const e = (find, replace, kind = 'rule') => ({ tag: { skill: 'a', kind }, proposal: { ...PROPOSAL, edits: [{ file: 'skills/a/SKILL.md', find, replace }] } });
+  const quiz = Q.loadQuiz().value;
+  assert.ok(['while', 'least', 'agree', 'both', 'if', 'when'].every(w => quiz.conditions.includes(w)), JSON.stringify(quiz.conditions));
+  assert.strictEqual(PQ.isConsolidation(e('a 1h CHoCH while the 4h and 1h agree is context.', 'a 1h CHoCH is context.'), root), false, 'while ... agree deleted');
+  assert.strictEqual(PQ.isConsolidation(e('at least 2 consecutive', '2 consecutive'), root), false, 'at least deleted');
+  assert.strictEqual(PQ.isConsolidation(e('A down run: at least 2 consecutive', 'A down run: at least consecutive'), root), false, 'a digit deleted');
+  assert.strictEqual(PQ.isConsolidation(e('- read the close of the third candle', '- read the close'), root), true, 'a plain trim stays one');
+  // Kept, not deleted: a condition word or a digit in what stays is no change.
+  assert.strictEqual(PQ.isConsolidation(e('a 1h CHoCH while the 4h and 1h agree is context.', 'a 1h CHoCH while the 4h and 1h agree.'), root), true, 'the condition kept');
+  assert.strictEqual(PQ.isConsolidation(e('- line two\n', '', 'removal'), root, { conditions: ['two'] }), false, 'the list given');
+  assert.match(Q.quizErrors({ ...quiz, conditions: [] }).join(), /conditions: /);
 });
 
 test('isConsolidation: a pure in-order deletion only (a removal, or a trim); its question is optional', () => {

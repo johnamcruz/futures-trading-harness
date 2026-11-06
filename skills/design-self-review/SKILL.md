@@ -102,7 +102,7 @@ Rules:
 - "targets" lists the failure categories the edit fixes, from: {{CATEGORIES}}.
 - Write the quiz question that your edit teaches first, as the edit's "question": it must be a question you would answer wrongly now and rightly after the edit; write its answer as required and forbidden phrases
 - "anchor" is a phrase copied exactly from your new text; "required" uses whole words the file has. "layer" is one of: {{LAYERS}}.
-- No "question" only for a pure deletion (a "removal", or a trim keeping the rest word for word, in order) touching no negation ("not", "never", "don't"), restriction ("only", "must", "unless") or polar word ("above", "below", "long", "short", "premium", "discount"). Any other edit needs one, or it is refused.
+- No "question" only for a pure deletion (a "removal", or a trim keeping the rest word for word, in order) touching no negation ("not", "never", "don't"), restriction ("only", "must", "unless"), polar word ("above", "below", "long", "short", "premium", "discount"), condition ("while", "if", "both") or number. Any other edit needs one, or it is refused.
 - Patterns: plain phrases only: words, (a|b) for alternatives, \s+ between words (\\s+ in JSON), at most {{MAX_GAPS}} gaps written .{0,{{GAP_CHARS}}}, each followed by a word. No other regex: it is refused.
 - You propose. Code tests each edit on the same decisions. Do not claim it works.
 
