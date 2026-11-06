@@ -21,6 +21,12 @@
   ],
   "negationWindow": 4,
   "unsure": "it depends|unsure|not sure|unclear|ambiguous|can't tell|cannot tell|depends on",
+  "gate": {
+    "flagDrop": 0.4,
+    "alpha": 0.05,
+    "maxSlips": 8,
+    "confirmRuns": 10
+  },
   "passBar": {
     "partA": {
       "allCorrect": 45,
