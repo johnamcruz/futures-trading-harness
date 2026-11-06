@@ -31,6 +31,9 @@ const WINDOW = [{ from: '2022-03-07', to: '2022-03-19' }];
 
 const EXECUTOR = 'agents/trade-executor.md';
 const RISK = 'agents/risk-manager.md';
+const ANALYST = 'agents/market-structure-analyst.md';
+// A skill the head reads only as needed (a lookup): in no prompt but a lookup question's naming it.
+const LOOKUP = 'skills/b/SKILL.md';
 const ROLE = name => `---\nname: ${name}\ndescription: a test role\n---\n\nYou are the ${name}.\n\n- role line one\n\n- role line two\n`;
 /** A tree holding skill a, and the risk manager and the trade executor. */
 function tree(text = TEXT) {
@@ -40,6 +43,9 @@ function tree(text = TEXT) {
   fs.writeFileSync(path.join(dir, SKILL), text);
   fs.writeFileSync(path.join(dir, RISK), ROLE('risk-manager'));
   fs.writeFileSync(path.join(dir, EXECUTOR), ROLE('trade-executor'));
+  fs.writeFileSync(path.join(dir, ANALYST), ROLE('market-structure-analyst'));
+  fs.mkdirSync(path.join(dir, 'skills', 'b'), { recursive: true });
+  fs.writeFileSync(path.join(dir, LOOKUP), '---\nname: b\ndescription: a looked-up skill\n---\n\n# B\n\n- b line one\n');
   return dir;
 }
 /**
@@ -51,7 +57,8 @@ const body = t => t.replace(/^---[\s\S]*?\n---\n/, '');
 function realPrompts(root, quiz) {
   const head = fs.readFileSync(path.join(root, SKILL), 'utf8');
   const out = { head, 'head+risk': `${head}\n${body(fs.readFileSync(path.join(root, RISK), 'utf8'))}` };
-  for (const q of [...quiz.questions, ...quiz.partB]) if (q.prompt === 'situational' || q.prompt === 'lookup') out[Q.promptKey(q)] = `${head}\n(${q.prompt})`;
+  for (const q of [...quiz.questions, ...quiz.partB]) if (q.prompt === 'situational') out[Q.promptKey(q)] = `${head}\n(situational)`;
+  for (const q of [...quiz.questions, ...quiz.partB]) if (q.prompt === 'lookup') out[Q.promptKey(q)] = `${head}\n${q.lookup.map(k => fs.readFileSync(path.join(root, 'skills', k, 'SKILL.md'), 'utf8')).join('\n')}`;
   return out;
 }
 /** The prompts a tree gives every question asked of it: its skill's text (a stand-in for the head prompt). */
@@ -362,6 +369,67 @@ function roleEdit(file, find, replace, question, kind = 'rule') {
   const p = { targets: ['wrong stated reason'], expects: 'fewer early entries', edits: [{ file, find, replace }] };
   return { id: P.proposalId(p), tag: { agent: path.basename(file, '.md'), finding: 'F1', kind }, finding: { id: 'F1', kind: 'misread' }, proposal: p, question, errors: [] };
 }
+
+/** A proposal over several files, tagged by its first. */
+function multiEdit(edits, question, tag) {
+  const p = { targets: ['wrong stated reason'], expects: 'fewer early entries', edits };
+  return { id: P.proposalId(p), tag: { ...tag, finding: 'F1', kind: 'rule' }, finding: { id: 'F1', kind: 'misread' }, proposal: p, question, errors: [] };
+}
+
+test('quizRound: a skill the head reads only as needed, asked of the head prompt, is still quizzed (a skills/ file always is)', async () => {
+  // The quiz holds no lookup of b, and the question asks the head prompt: every prompt is byte-identical on both trees.
+  const w = round();
+  w.ctx.steps.quizPrompts = realPrompts;
+  const e = multiEdit([{ file: LOOKUP, find: '- b line one', replace: '- b line one\n- LOOK → wait for the retest' }], { ...QUESTION, prompt: 'head', anchor: 'LOOK → wait for the retest' }, { skill: 'b' });
+  const { passed, report } = await w.go(1, [e]);
+  assert.notStrictEqual(report.edits[e.id].verdict, QP.NOT_QUIZZED);
+  assert.deepStrictEqual(passed, []);
+  assert.match(report.edits[e.id].why, /question\.anchor: not in the edited tree's head prompt/);
+  // Asked as the lookup of b it names: gated (red/green run on its own prompt).
+  const v = round();
+  v.ctx.steps.quizPrompts = realPrompts;
+  const l = multiEdit(e.proposal.edits, { ...QUESTION, prompt: 'lookup', lookup: ['b'], anchor: 'LOOK → wait for the retest', required: ['\\bline\\b'] }, { skill: 'b' });
+  const out = await v.go(1, [l]);
+  assert.strictEqual(out.report.edits[l.id].verdict, 'pass', out.report.edits[l.id].why);
+  assert.ok(v.f.calls.some(c => c.dir === 'red'));
+});
+
+test('quizRound: an analyst edit is not quizzed; a proposal touching a skill and an analyst file is quizzed', async () => {
+  const w = round();
+  w.ctx.steps.quizPrompts = realPrompts;
+  const q = { ...QUESTION, anchor: 'MS → mark the swing' };
+  const analyst = roleEdit(ANALYST, '- role line one', '- role line one\n- MS → mark the swing', q);
+  const mixed = multiEdit([{ file: LOOKUP, find: '- b line one', replace: '- b line one\n- b line one, again' }, { file: ANALYST, find: '- role line two', replace: '- role line two\n- MS → mark the swing' }], q, { skill: 'b' });
+  const { report } = await w.go(1, [analyst, mixed]);
+  assert.strictEqual(report.edits[analyst.id].verdict, QP.NOT_QUIZZED);
+  assert.notStrictEqual(report.edits[mixed.id].verdict, QP.NOT_QUIZZED);
+  assert.match(report.edits[mixed.id].why, /question\.anchor: not in the edited tree's head prompt/);
+});
+
+test('quizRound: an analyst edit whose own question\'s prompt holds the analyst\'s text is quizzed (the prompts compared include it)', async () => {
+  // A prompt kind that carries a role's text for the question it asks (none does today): its prompt differs between the
+  // trees, so the quiz can measure the edit, and it is gated.
+  const w = round();
+  w.ctx.steps.quizPrompts = (root, quiz) => {
+    const out = realPrompts(root, { ...quiz, questions: quiz.questions.filter(q => !(q.lookup || []).includes('desk')) });
+    for (const q of quiz.questions.filter(x => (x.lookup || []).includes('desk'))) out[Q.promptKey(q)] = `${out.head}\n${body(fs.readFileSync(path.join(root, ANALYST), 'utf8'))}`;
+    return out;
+  };
+  const q = { ...QUESTION, prompt: 'lookup', lookup: ['desk'], anchor: 'MS → mark the swing' };
+  const e = roleEdit(ANALYST, '- role line one', '- role line one\n- MS → mark the swing', q);
+  const { report } = await w.go(1, [e]);
+  assert.notStrictEqual(report.edits[e.id].verdict, QP.NOT_QUIZZED);
+  assert.ok(w.f.calls.some(c => c.dir === 'red'), JSON.stringify(report.edits[e.id]));
+});
+
+test('quizTarget: only agents/<role>.md files of a role no quiz prompt carries; anything else (fails closed) is quizzed', () => {
+  const p = (...files) => ({ edits: files.map(file => ({ file, find: 'x', replace: 'y' })) });
+  assert.strictEqual(QP.unquizzedTarget(p(ANALYST)), true);
+  assert.strictEqual(QP.unquizzedTarget(p(EXECUTOR, 'agents/volume-liquidity-analyst.md')), true);
+  for (const bad of [p(RISK), p('agents/head-trader.md'), p(SKILL), p(LOOKUP, ANALYST), p('agents/../skills/a/SKILL.md'), p('agents/trade-reviewer.md'), p(), { edits: null }, null]) {
+    assert.strictEqual(QP.unquizzedTarget(bad), false, JSON.stringify(bad));
+  }
+});
 
 test('quizRound: an executor edit is in no quiz prompt: not quizzed (no model call, never blocked by its anchor), it goes on to the replay', async () => {
   const w = round();

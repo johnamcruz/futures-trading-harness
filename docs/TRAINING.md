@@ -401,17 +401,23 @@ iteration of the loop then runs these steps (`scripts/lib/train/probe.js`):
    reason named. Its id is code's (`e-<proposal id>`), never the proposer's.
    Its `required` and `forbidden` patterns are bounded: each at most the quiz
    file's `gate.maxPatternChars` (120) characters, none with a nested
-   quantifier such as `(a+)+`, and each `required` one holds a literal
+   quantifier such as `(a+)+`, no repeated group (`(a|b)*`, `(ab)+`,
+   `(ab){2}`: an optional `(ab)?` is fine), at most
+   `gate.maxUnboundedQuantifiers` (2) unbounded repeats (`*`, `+`,
+   `{n,}`), and each `required` one holds a literal
    word: a run of `gate.minLiteralRun` (4) letters or digits in every
    alternative, escapes, classes and optional parts not counted (a `.` or
-   `\bno\b` would match any answer). A consolidation (an edit of kind
+   `\bno\b` would match any answer). The grader tests every pattern on the
+   answer's line cut at `gate.maxGradedLineChars` (1000). A consolidation (an edit of kind
    removal, or one whose new text adds no word its document lacks: a trim or
    a merge in its own words) teaches nothing new, so its question is optional
-   and never asked; an edit that drops a negation (one of the quiz file's
-   `negations`, or a word ending in n't: "must not" made "must") flips the
-   rule in the document's own words, so it is never a consolidation, a
-   removal too, and needs a question (a pure deletion of such a line then
-   has no new text to anchor one in, so the gate blocks it).
+   and never asked. An edit whose find or replace holds a negation (one of
+   the quiz file's `negations`, or a word ending in n't: added, dropped or
+   moved, it flips or shifts a rule in the document's own words), or that
+   adds or removes a restriction word (the quiz file's `restrictions`:
+   "only", "must", "unless", ...), is never a consolidation, a removal too,
+   and needs a question (a pure deletion of such a line then has no new text
+   to anchor one in, so the gate blocks it).
 
    **The quiz gate, before any replay** (`scripts/lib/train/quiz-phase.js`,
    phases `<n>:quiz-champion` and `<n>:quiz:<id>`, files in the round's
@@ -457,9 +463,12 @@ iteration of the loop then runs these steps (`scripts/lib/train/probe.js`):
    records the quiz's hash: under a changed quiz it is redone on fresh runs
    (an edit's runs are kept per quiz hash too), never read back. Only prompts the
    quiz builds can be asked: a skill's question is a `lookup` of it, the risk
-   manager's `head+risk`. An edit whose target no quiz prompt holds (an
-   analyst's or the executor's text: every prompt the quiz, and the edit's
-   question, is asked of is byte-identical on both trees) is not quizzed: no
+   manager's `head+risk`. An edit whose target no quiz prompt holds is not
+   quizzed, on both conditions (failing closed): every file it edits is an
+   analyst's or the executor's `agents/<role>.md` (never the head trader's
+   or the risk manager's, never a `skills/` file: a skill the head reads as
+   needed is always quizzed), and every prompt the quiz, and the edit's
+   question, is asked of is byte-identical on both trees. Then: no
    model call, verdict `not-quizzed` ("no quiz prompt holds this target: not
    quizzed"), replayed as before the gate (under a harness the quiz cannot
    ask too), its probe's lessons line carrying `notQuizzed`, and counted

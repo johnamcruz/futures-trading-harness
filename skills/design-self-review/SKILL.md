@@ -101,7 +101,7 @@ Rules:
 - "kind" is one of: {{KINDS}}.
 - "targets" lists the failure categories the edit fixes, from: {{CATEGORIES}}.
 - Write the quiz question that your edit teaches first, as the edit's "question": it must be a question you would answer wrongly now and rightly after the edit; write its answer as required and forbidden phrases
-- "anchor" is a phrase copied exactly from your new text; "required" uses whole words the file has. "layer" is one of: {{LAYERS}}. A "removal" keeping "not"/"never" needs no "question".
+- "anchor" is a phrase copied exactly from your new text; "required" uses whole words the file has. "layer" is one of: {{LAYERS}}. A "removal" free of "not"/"only" needs no "question".
 - You propose. Code tests each edit on the same decisions. Do not claim it works.
 
 Reply with one line per edit, and nothing else on that line. For a skill:

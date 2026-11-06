@@ -435,6 +435,7 @@ const categoryOf = (b, i) => (b === 'bad' ? 'wrong-side entry' : b === 'good' ||
 // when the prompt holds its anchor. quizScript({ dir, id, run, system }) may answer instead ({ stdout } or { error }).
 const QZ = require('../../scripts/lib/eval/context-quiz');
 const QP = require('../../scripts/lib/train/quiz-phase');
+const ANALYST_FILE = 'agents/market-structure-analyst.md';
 const QUIZ_BASE = QZ.loadQuiz().value;
 const STUB_QUIZ = { ...QUIZ_BASE, k: 2, questions: ['sa', 'sb', 'sc'].map(id => ({ id, layer: 'entry', prompt: 'head', text: `Stub ${id}?`, rule: 'r', anchor: `stub ${id}`, required: ['\\byes\\b'], forbidden: ['\\bno\\b'] })), partB: [] };
 const flatText = t => String(t).replace(/\s+/g, ' ');
@@ -447,7 +448,7 @@ function stubQuestion(proposal, tree) {
   return { layer: 'entry', prompt: 'head', text: 'Does the edit read right?', rule: 'what the edit teaches', anchor: line, required: ['\\bline\\b'], forbidden: ['\\bno\\b'] };
 }
 
-function world({ proposals, verdict = 'kept', loop: over = {}, trend = false, trendBatch = {}, exits = false, incompleteDay = null, claimed = null, curriculum = undefined, entered = false, trades = false, quizScript = () => null } = {}) {
+function world({ proposals, verdict = 'kept', loop: over = {}, trend = false, trendBatch = {}, exits = false, incompleteDay = null, claimed = null, curriculum = undefined, entered = false, trades = false, quizScript = () => null, quiz: quizOver = {} } = {}) {
   const user = tmpDir();
   const env = { PATH: process.env.PATH, HOME: user, FTH_HOME: path.join(user, 'home') };
   fs.mkdirSync(env.FTH_HOME);
@@ -471,6 +472,9 @@ function world({ proposals, verdict = 'kept', loop: over = {}, trend = false, tr
       fs.mkdirSync(path.join(dir, 'skills', 'a'), { recursive: true }); fs.writeFileSync(path.join(dir, SKILL), TEXT); fs.mkdirSync(path.join(dir, 'workspace'));
       // With exits: an exit finding's owner in the tree (exit-findings.js OWNERS), the skill its edit changes.
       if (exits) { fs.mkdirSync(path.join(dir, 'skills', 'manage-position'), { recursive: true }); fs.writeFileSync(path.join(dir, MP), TEXT.replace('name: a', 'name: manage-position')); }
+      // A desk analyst (no quiz prompt holds its text): its role file.
+      fs.mkdirSync(path.join(dir, 'agents'), { recursive: true });
+      fs.writeFileSync(path.join(dir, ANALYST_FILE), '---\nname: market-structure-analyst\ndescription: a test analyst\ntools: Read\nrole-skills: [a]\nmodel: inherit\n---\n\nYou read structure. Load the skill `a` first.\n\n- role line one\n\n- role line two\n');
       return 'c0ffee';
     },
     prepareTree: (dir, { proposal }) => { if (proposal) require('../../scripts/lib/train/proposal').applyProposal(proposal, dir); },
@@ -569,7 +573,7 @@ function world({ proposals, verdict = 'kept', loop: over = {}, trend = false, tr
     // it teaches, as the prompt asks (a given `question`, even null, is kept as written).
     proposeProbes: async opts => { calls.proposeProbes.push(opts); return { proposals: (typeof proposals === 'function' ? proposals(calls.proposeProbes.length) : proposals).map(p => (p.proposal && !('question' in p) ? { ...p, question: stubQuestion(p.proposal, opts.tree) } : { ...p })) }; },
     // The quiz gate: the stub quiz, each tree's prompt its skills' text, the real runner with a fake ask.
-    loadQuiz: () => ({ value: STUB_QUIZ, hash: 'stub-quiz' }),
+    loadQuiz: () => ({ value: { ...STUB_QUIZ, ...quizOver, gate: { ...STUB_QUIZ.gate, ...(quizOver.gate || {}) } }, hash: 'stub-quiz' }),
     quizPrompts: (root, quiz) => Object.fromEntries(['head', 'head+risk', ...[...quiz.questions, ...quiz.partB].map(QZ.promptKey)].map(k => [k, treePrompt(root)])),
     quizRun: opts => {
       calls.quiz.push({ dir: path.relative(w.paths.dir, opts.dir), k: opts.k, only: opts.only || null });
@@ -1485,9 +1489,9 @@ test('the quiz gate in the loop: a removal needs no question; it is quizzed unde
 });
 
 test('the quiz gate in the loop: an edit no quiz prompt holds is not quizzed, replayed, and its probe\'s lessons line says so', async () => {
-  // Every prompt the same on both trees (the edit's target is in none, as an analyst's or the executor's text).
-  const w = world({ proposals: [tagged('a', 'F1', 'rule', '- line one', '- line one\n- GOOD → read it')] });
-  w.steps.quizPrompts = (_root, quiz) => Object.fromEntries(['head', 'head+risk', ...[...quiz.questions, ...quiz.partB].map(QZ.promptKey)].map(k => [k, 'the head prompt, no edited text']));
+  // An analyst's edit: its text is in no prompt (the stub's prompts are the skills' text), so both trees' are the same.
+  const p = { tag: { agent: 'market-structure-analyst', finding: 'F2', kind: 'rule' }, proposal: { targets: ['wrong stated reason'], expects: 'fewer misreads', edits: [{ file: ANALYST_FILE, find: '- role line one', replace: '- role line one\n- GOOD → read it' }] } };
+  const w = world({ proposals: [{ ...p, question: { layer: 'entry', prompt: 'head', text: 'Does the edit read right?', rule: 'r', anchor: 'GOOD → read it', required: ['\\bline\\b'], forbidden: [] } }] });
   await run(w);
   const report = reportOf(w);
   const id = report.edits[0].id;
@@ -1497,6 +1501,21 @@ test('the quiz gate in the loop: an edit no quiz prompt holds is not quizzed, re
   const lines = LS.readLessons(path.join(w.paths.dir, LS.FILE)).filter(l => l.proposalId === id && !l.composed);
   assert.deepStrictEqual(lines.map(l => [l.notQuizzed, typeof l.verdict, 'quiz' in l]), [[QP.NOT_HELD, 'string', false]]);
   assert.doesNotMatch(LS.summarize(lines), /stopped by the quiz gate/);
+});
+
+test('the quiz gate in the loop: the proposal checks read the configured quiz file: its minLiteralRun, negations and restrictions', async () => {
+  const question = { layer: 'entry', prompt: 'head', text: 'Does the edit read right?', rule: 'r', anchor: 'GOOD → read it', required: ['\\bthree\\b'], forbidden: [] };
+  const p = { ...tagged('a', 'F1', 'rule', '- line one', '- line one\n- GOOD → read it'), question };
+  const errorsOf = async quiz => { const w = world({ proposals: [p], quiz }); await run(w); return reportOf(w).edits[0].errors.join('; '); };
+  // A five-letter word: refused under a minLiteralRun of six, valid under the stub's own.
+  assert.match(await errorsOf({ gate: { minLiteralRun: 6 } }), /question\.required\[0\]: no literal run of 6 letters or digits/);
+  assert.doesNotMatch(await errorsOf({}), /no literal run/);
+  // A removal of a line holding the configured negation (or restriction) word needs a question; otherwise it does not.
+  const removal = { tag: { skill: 'a', finding: 'F1', kind: 'removal' }, question: null, proposal: edit('- line three\n', '') };
+  const removalErrors = async quiz => { const w = world({ proposals: [removal], quiz }); await run(w); return reportOf(w).edits[0].errors.join('; '); };
+  assert.strictEqual(await removalErrors({}), '');
+  assert.match(await removalErrors({ negations: [...STUB_QUIZ.negations, 'three'] }), /^question: the quiz question the edit teaches/);
+  assert.match(await removalErrors({ restrictions: ['three'] }), /^question: the quiz question the edit teaches/);
 });
 
 test('the quiz gate in the loop: a crash after the quiz and before the replay never quizzes again on resume', async () => {

@@ -20,6 +20,17 @@
     "won't"
   ],
   "negationWindow": 4,
+  "restrictions": [
+    "only",
+    "always",
+    "must",
+    "unless",
+    "until",
+    "except",
+    "wait",
+    "skip",
+    "avoid"
+  ],
   "unsure": "it depends|unsure|not sure|unclear|ambiguous|can't tell|cannot tell|depends on",
   "gate": {
     "flagDrop": 0.4,
@@ -30,7 +41,9 @@
     "greenMinShare": 0.8,
     "questionRuns": 5,
     "maxPatternChars": 120,
-    "minLiteralRun": 4
+    "minLiteralRun": 4,
+    "maxUnboundedQuantifiers": 2,
+    "maxGradedLineChars": 1000
   },
   "passBar": {
     "partA": {

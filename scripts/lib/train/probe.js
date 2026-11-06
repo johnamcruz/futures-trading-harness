@@ -535,7 +535,7 @@ async function probeRound(ctx, { n, champion, api }) {
       // Its own quiz question (probe-question.js), written first: missing or malformed, the edit never runs. A
       // consolidation (a removal, or new text in the document's own words) teaches nothing new: its question is optional
       // (one written is still checked).
-      const optional = PQ.isConsolidation(x, champion.dir, { negations: quizFile.negations }) && (x.question === undefined || x.question === null);
+      const optional = PQ.isConsolidation(x, champion.dir, { negations: quizFile.negations, restrictions: quizFile.restrictions }) && (x.question === undefined || x.question === null);
       const errors = [...P.validateProposal(x.proposal, { root: champion.dir }), ...PE.tagErrors(x.tag, x.proposal, { findings }), ...(optional ? [] : PQ.questionErrors(x.question, { maxPatternChars, minLiteralRun }))];
       if (!errors.length) errors.push(...PE.styleErrors(x.proposal, { root: champion.dir, kind: x.tag.kind }));
       const finding = findings.find(f => x.tag && f.id === x.tag.finding) || null;

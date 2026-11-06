@@ -40,6 +40,7 @@ const Q = require('../eval/context-quiz');
 const { decide } = require('./quiz-gate');
 const PQ = require('./probe-question');
 const LS = require('./lessons');
+const AE = require('./agent-edit');
 const { dirDigest, writeJsonAtomic, readJson } = require('../harness-run');
 
 const OFF = 'the quiz gate is off (the loop config\'s quizGate: false): no edit was quizzed';
@@ -48,6 +49,18 @@ const label = s => `${s.passes}/${s.n}`;
 // An edit whose target no quiz prompt holds: replayed unquizzed, counted apart from the gate's verdicts.
 const NOT_QUIZZED = 'not-quizzed';
 const NOT_HELD = 'no quiz prompt holds this target: not quizzed';
+/**
+ * Whether a proposal's target is one no quiz prompt carries: every file it edits an agents/<role>.md of an editable role
+ * whose text no prompt holds (an analyst's, the executor's; never the head trader's or the risk manager's, never a
+ * skills/ file). Anything else, or a malformed proposal: false (quizzed).
+ */
+function unquizzedTarget(proposal) {
+  const edits = proposal && Array.isArray(proposal.edits) ? proposal.edits : [];
+  return edits.length > 0 && edits.every(x => {
+    const role = x && typeof x.file === 'string' ? AE.roleOfFile(x.file) : null;
+    return Boolean(role) && !Q.PROMPT_ROLES.includes(role);
+  });
+}
 /** Two trees' prompts the same, key by key (the same keys, each text byte-equal). */
 function samePrompts(a, b) {
   const keys = Object.keys(a);
@@ -191,17 +204,18 @@ async function quizRound(ctx, { n, champion, edits, api, work, dir, lessonsFile,
     fresh(phaseKey, file);
     const r = await api.phase(ctx, phaseKey, file, async () => {
       // A consolidation (a removal, or new text in the document's own words) has no question of its own.
-      const consolidation = PQ.isConsolidation(e, champion.dir, { negations: quiz.negations });
+      const consolidation = PQ.isConsolidation(e, champion.dir, { negations: quiz.negations, restrictions: quiz.restrictions });
       const blocked = why => ({ verdict: 'blocked', stage: 'question', why, quizHash: hash, regressions: [], flagged: [], slips: [], gains: [], redGreen: consolidation ? SKIPPED : null, asked: 0 });
       const qe = consolidation ? [] : PQ.questionErrors(e.question, { maxPatternChars: quiz.gate.maxPatternChars, minLiteralRun: quiz.gate.minLiteralRun });
       if (qe.length) return blocked(qe.join('; '));
       ctx.check();
       const tree = await api.candidateTree(ctx, { dir: work, id: `p-${e.id}`, proposal: e.proposal, champion });
-      // A target no quiz prompt holds (an analyst's or the executor's text): every prompt the quiz (and the edit's own
-      // question) is asked of is the same on both trees, so the quiz can measure nothing: not quizzed, no model call.
+      // A target no quiz prompt holds (an analyst's or the executor's text): both conditions, failing closed: every file
+      // it edits such a role's (unquizzedTarget; a skills/ file is always quizzed, a skill the head reads as needed too),
+      // and every prompt the quiz (and the edit's own question) is asked of the same on both trees: not quizzed.
       const asked = consolidation ? quiz : { ...quiz, questions: [...quiz.questions, PQ.questionOf(e.question, e.id)] };
       let same;
-      try { same = samePrompts(prompts(champion.dir, asked), prompts(tree.dir, asked)); } catch (err) { return blocked(`the prompts could not be built: ${err.message}`); }
+      try { same = unquizzedTarget(e.proposal) && samePrompts(prompts(champion.dir, asked), prompts(tree.dir, asked)); } catch (err) { return blocked(`the prompts could not be built: ${err.message}`); }
       if (same) return { verdict: NOT_QUIZZED, stage: 'target', why: NOT_HELD, quizHash: hash, regressions: [], flagged: [], slips: [], gains: [], redGreen: null, asked: 0 };
       // A harness the quiz cannot ask: an edit it would quiz is blocked (an unquizzed one above needs no quiz).
       if (refused) return blocked(refused);
@@ -218,4 +232,4 @@ async function quizRound(ctx, { n, champion, edits, api, work, dir, lessonsFile,
   return { passed, report };
 }
 
-module.exports = { OFF, NOT_QUIZZED, NOT_HELD, gateEdit, redGreen, samePrompts, quizRound };
+module.exports = { OFF, NOT_QUIZZED, NOT_HELD, gateEdit, redGreen, samePrompts, unquizzedTarget, quizRound };
