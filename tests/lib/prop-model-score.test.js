@@ -444,6 +444,11 @@ test('scoreRun: a finished practice-validate run scored end to end, logged besid
   const text = scoreText(r);
   for (const want of [/1\. Zero blows \(hard gate\): held/, /2\. Pass within 30 trading days/, /3\. Days to pass: median/, /4\. Blow rate/, /Promotion gate: n\/a \(practice-validate is not out of sample; it would refuse: /]) assert.match(text, want);
   assert.ok(text.indexOf('1. Zero') < text.indexOf('2. Pass') && text.indexOf('2. Pass') < text.indexOf('3. Days') && text.indexOf('3. Days') < text.indexOf('4. Blow'), 'the owner\'s order');
+  // One account chained through every day, no session cap: where it stands, in dollars from the start.
+  assert.match(text, /Chained account \(one balance through all 2 day\(s\), no session cap\): unfinished after 2 session\(s\), \$-?[\d.]+ from the start \(peak \$-?[\d.]+, lowest \$-?[\d.]+\)/);
+  const passedChain = scoreText({ ...r, chained: { status: 'passed', endedOn: '2022-05-03', sessions: 40, profit: 6012.5, peak: 6012.5, lowest: -420, taken: 61, skipped: 3 } });
+  assert.match(passedChain, /Chained account \(one balance through all 2 day\(s\), no session cap\): passed on 2022-05-03 after 40 session\(s\), \$6012\.5 from the start \(peak \$6012\.5, lowest \$-420\)/);
+  assert.match(scoreText({ ...r, chained: { ...r.chained, status: 'blown', endedOn: '2022-02-01' } }), /Chained account .*: blown on 2022-02-01 after/);
   // Two days hold no whole attempt: the first line says the resampled numbers are not evidence, and the resampled
   // interval is labelled conditional on the run's days, never a count of independent attempts.
   assert.match(text.split('\n')[0], /^0 independent attempts: resampled only, not evidence\. Prop Monte Carlo/);
