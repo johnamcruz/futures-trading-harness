@@ -434,6 +434,7 @@ const categoryOf = (b, i) => (b === 'bad' ? 'wrong-side entry' : b === 'good' ||
 // skills' text. A question is answered right unless the prompt holds BREAKS-<id>; an edit's own question (e-...) only
 // when the prompt holds its anchor. quizScript({ dir, id, run, system }) may answer instead ({ stdout } or { error }).
 const QZ = require('../../scripts/lib/eval/context-quiz');
+const QP = require('../../scripts/lib/train/quiz-phase');
 const QUIZ_BASE = QZ.loadQuiz().value;
 const STUB_QUIZ = { ...QUIZ_BASE, k: 2, questions: ['sa', 'sb', 'sc'].map(id => ({ id, layer: 'entry', prompt: 'head', text: `Stub ${id}?`, rule: 'r', anchor: `stub ${id}`, required: ['\\byes\\b'], forbidden: ['\\bno\\b'] })), partB: [] };
 const flatText = t => String(t).replace(/\s+/g, ' ');
@@ -1420,7 +1421,7 @@ test('the quiz gate in the loop: inconclusive is retried once, then blocked (fai
 
 test('the quiz gate in the loop: red/green and the question\'s checks: no edit is needed, or a question it does not teach, never replays', async () => {
   // The champion already states the anchor: the question is checked before any model call.
-  const known = world({ proposals: [{ ...tagged('a', 'F1', 'rule', '- line one', '- line one\n- GOOD → read it'), question: { layer: 'entry', prompt: 'head', text: 'Q?', rule: 'r', anchor: 'line two', required: ['yes'], forbidden: [] } }] });
+  const known = world({ proposals: [{ ...tagged('a', 'F1', 'rule', '- line one', '- line one\n- GOOD → read it'), question: { layer: 'entry', prompt: 'head', text: 'Q?', rule: 'r', anchor: 'line two', required: ['line'], forbidden: [] } }] });
   await run(known);
   const k = reportOf(known);
   assert.match(k.quiz.edits[k.edits[0].id].why, /the champion's head prompt already states it/);
@@ -1453,7 +1454,7 @@ test('the quiz gate in the loop: an edit without its question, or with a malform
   assert.strictEqual(report.edits[0].id, require('../../scripts/lib/train/proposal').proposalId(edit('- line one', '- line one\n- GOOD → read it')));
 });
 
-test('the quiz gate in the loop: a removal needs no question; it is quizzed with no slip allowed and replayed when nothing falls', async () => {
+test('the quiz gate in the loop: a removal needs no question; it is quizzed under the quiz\'s own gate and replayed unless a regression confirms', async () => {
   const w = world({ proposals: [{ tag: { skill: 'a', finding: 'F1', kind: 'removal' }, question: null, proposal: edit('- line two\n\n', '') }] });
   await run(w);
   const report = reportOf(w);
@@ -1462,13 +1463,40 @@ test('the quiz gate in the loop: a removal needs no question; it is quizzed with
   assert.deepStrictEqual([report.quiz.edits[id].verdict, report.quiz.edits[id].redGreen], ['pass', 'skipped (removal)']);
   assert.ok(!w.calls.quiz.some(c => /\/(red|green)$/.test(c.dir)), 'no red/green run');
   assert.ok(probedRuns(w, id).length > 0, 'replayed');
-  // One slip of a stable question: blocked before any replay.
-  const s = world({ proposals: [{ tag: { skill: 'a', finding: 'F1', kind: 'removal' }, question: null, proposal: edit('- line two\n\n', '') }], quizScript: ({ dir, id: q, run: i }) => (dir === 'edit' && q === 'sa' && i === 1 ? { stdout: 'ANSWER: no' } : null) });
+  // Every quiz ask is charged to the loop's model calls: the same round with the gate off spends exactly that many fewer.
+  const off = world({ proposals: [{ tag: { skill: 'a', finding: 'F1', kind: 'removal' }, question: null, proposal: edit('- line two\n\n', '') }], loop: { quizGate: false } });
+  await run(off);
+  const spent = x => JSON.parse(fs.readFileSync(x.paths.state, 'utf8')).modelCalls;
+  assert.ok(w.calls.asks.length > 0);
+  assert.strictEqual(spent(w) - spent(off), w.calls.asks.length, 'the quiz asks charged, one call each');
+  // One slip of a stable question (noise within maxSlips): it passes and is replayed.
+  const n = world({ proposals: [{ tag: { skill: 'a', finding: 'F1', kind: 'removal' }, question: null, proposal: edit('- line two\n\n', '') }], quizScript: ({ dir, id: q, run: i }) => (dir === 'edit' && q === 'sa' && i === 1 ? { stdout: 'ANSWER: no' } : null) });
+  await run(n);
+  const rn = reportOf(n);
+  assert.strictEqual(rn.quiz.edits[rn.edits[0].id].verdict, 'pass', rn.quiz.edits[rn.edits[0].id].why);
+  assert.ok(probedRuns(n, rn.edits[0].id).length > 0, 'replayed');
+  // A confirmed regression of a stable question: rejected before any replay.
+  const s = world({ proposals: [{ tag: { skill: 'a', finding: 'F1', kind: 'removal' }, question: null, proposal: edit('- line two\n\n', '') }], quizScript: ({ dir, id: q }) => ((dir === 'edit' || dir === 'confirm-edit') && q === 'sa' ? { stdout: 'ANSWER: no' } : null) });
   await run(s);
   const r = reportOf(s);
   assert.strictEqual(r.quiz.edits[r.edits[0].id].verdict, 'reject');
   assert.deepStrictEqual(probedRuns(s, r.edits[0].id), []);
   assert.deepStrictEqual(LS.readLessons(path.join(s.paths.dir, LS.FILE)).map(l => [l.quiz, l.redGreen]), [['reject', 'skipped (removal)']]);
+});
+
+test('the quiz gate in the loop: an edit no quiz prompt holds is not quizzed, replayed, and its probe\'s lessons line says so', async () => {
+  // Every prompt the same on both trees (the edit's target is in none, as an analyst's or the executor's text).
+  const w = world({ proposals: [tagged('a', 'F1', 'rule', '- line one', '- line one\n- GOOD → read it')] });
+  w.steps.quizPrompts = (_root, quiz) => Object.fromEntries(['head', 'head+risk', ...[...quiz.questions, ...quiz.partB].map(QZ.promptKey)].map(k => [k, 'the head prompt, no edited text']));
+  await run(w);
+  const report = reportOf(w);
+  const id = report.edits[0].id;
+  assert.deepStrictEqual([report.quiz.edits[id].verdict, report.quiz.edits[id].why], [QP.NOT_QUIZZED, QP.NOT_HELD]);
+  assert.deepStrictEqual(w.calls.asks, [], 'no model call');
+  assert.ok(probedRuns(w, id).length > 0, 'replayed');
+  const lines = LS.readLessons(path.join(w.paths.dir, LS.FILE)).filter(l => l.proposalId === id && !l.composed);
+  assert.deepStrictEqual(lines.map(l => [l.notQuizzed, typeof l.verdict, 'quiz' in l]), [[QP.NOT_HELD, 'string', false]]);
+  assert.doesNotMatch(LS.summarize(lines), /stopped by the quiz gate/);
 });
 
 test('the quiz gate in the loop: a crash after the quiz and before the replay never quizzes again on resume', async () => {

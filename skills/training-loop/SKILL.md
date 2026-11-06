@@ -77,8 +77,11 @@ date, seeded) and the combined change judged on the other. Each edit
 carries the quiz question it teaches; before any replay its tree takes the
 quiz gate: the champion must fail that question and the edit pass it, and
 the whole context quiz must not regress. A removal (or a trim in the
-skill's own words) needs no question and must pass the quiz with no slip
-at all. A rejected or blocked edit is never
+skill's own words) needs no question and must pass the whole quiz without
+a confirmed regression; one that drops a "not" or "never" needs a question.
+An analyst's or the executor's edit is in no quiz prompt: not quizzed, it
+goes to the replay. Quiz asks count toward `maxModelCalls`. A rejected or
+blocked edit is never
 replayed (`probe-report.json` `quiz`, a lessons line). `quizGate: false` in
 the config turns the gate off, only explicitly. With `probe`,
 the champion's tuning-window replays run only once a round first has a

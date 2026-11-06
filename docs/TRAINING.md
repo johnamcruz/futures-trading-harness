@@ -401,10 +401,17 @@ iteration of the loop then runs these steps (`scripts/lib/train/probe.js`):
    reason named. Its id is code's (`e-<proposal id>`), never the proposer's.
    Its `required` and `forbidden` patterns are bounded: each at most the quiz
    file's `gate.maxPatternChars` (120) characters, none with a nested
-   quantifier such as `(a+)+`. A consolidation (an edit of kind removal, or
-   one whose new text adds no word its document lacks: a trim or a merge in
-   its own words) teaches nothing new, so its question is optional and never
-   asked.
+   quantifier such as `(a+)+`, and each `required` one holds a literal
+   word: a run of `gate.minLiteralRun` (4) letters or digits in every
+   alternative, escapes, classes and optional parts not counted (a `.` or
+   `\bno\b` would match any answer). A consolidation (an edit of kind
+   removal, or one whose new text adds no word its document lacks: a trim or
+   a merge in its own words) teaches nothing new, so its question is optional
+   and never asked; an edit that drops a negation (one of the quiz file's
+   `negations`, or a word ending in n't: "must not" made "must") flips the
+   rule in the document's own words, so it is never a consolidation, a
+   removal too, and needs a question (a pure deletion of such a line then
+   has no new text to anchor one in, so the gate blocks it).
 
    **The quiz gate, before any replay** (`scripts/lib/train/quiz-phase.js`,
    phases `<n>:quiz-champion` and `<n>:quiz:<id>`, files in the round's
@@ -430,8 +437,11 @@ iteration of the loop then runs these steps (`scripts/lib/train/probe.js`):
 
    A consolidation skips the question and red/green (`redGreen: "skipped
    (removal)"` in the report and its lessons line) and must pass the whole
-   quiz with no slip at all (the gate's `maxSlips` taken as 0 for it), so
-   skills can be trimmed of what they repeat.
+   quiz under the quiz's own gate (flag, confirm on fresh runs, the exact
+   test, `maxSlips`): a confirmed regression rejects it, noise within
+   `maxSlips` does not (no slips at all would reject most edits that change
+   nothing, on the questions' own run-to-run rates), so skills can be
+   trimmed of what they repeat.
 
    A summary short of its runs (a run that kept failing; the runner asks an
    errored run once more; an empty reply or a harness that exits non-zero is
@@ -447,8 +457,16 @@ iteration of the loop then runs these steps (`scripts/lib/train/probe.js`):
    records the quiz's hash: under a changed quiz it is redone on fresh runs
    (an edit's runs are kept per quiz hash too), never read back. Only prompts the
    quiz builds can be asked: a skill's question is a `lookup` of it, the risk
-   manager's `head+risk`; an analyst's or the executor's edit has none and is
-   blocked. The loop config's `quizGate: false` turns the gate off, only
+   manager's `head+risk`. An edit whose target no quiz prompt holds (an
+   analyst's or the executor's text: every prompt the quiz, and the edit's
+   question, is asked of is byte-identical on both trees) is not quizzed: no
+   model call, verdict `not-quizzed` ("no quiz prompt holds this target: not
+   quizzed"), replayed as before the gate (under a harness the quiz cannot
+   ask too), its probe's lessons line carrying `notQuizzed`, and counted
+   apart in the iteration's record (never a pass, never stopped). Every quiz ask is one
+   model call charged to the loop's `limits.maxModelCalls` (the budget
+   checked before each ask, so the limit stops a quiz mid-run; a resume asks,
+   and charges, only the answers not yet stored). The loop config's `quizGate: false` turns the gate off, only
    explicitly: the report says so. On, the runner config must be a harness
    the quiz can ask (claude or custom). The setting is in the loop's hash: a
    loop started before the gate (or with it set otherwise) is another loop
@@ -2014,8 +2032,9 @@ step 2), with the same runner (`scripts/lib/eval/quiz-run.js`, which the CLI's
 `run` also uses), plus the edit's own question red/green: the quiz file's
 `gate` also holds `redMaxShare` (0.4: the champion's share of right answers to
 it, at most), `greenMinShare` (0.8: the edit's, at least), `questionRuns` (5
-runs a side) and `maxPatternChars` (120: the longest pattern a proposer may
-write). In `run` (by hand too), an empty reply, or a harness that exits
+runs a side), `maxPatternChars` (120: the longest pattern a proposer may
+write) and `minLiteralRun` (4: the literal run of letters or digits each of its
+required patterns must hold). In `run` (by hand too), an empty reply, or a harness that exits
 non-zero, is recorded as an error and not graded; nothing else about `run`
 changed (each run is asked once, as before). With 53 questions at K runs each, a plain per-question drop rule
 falsely rejects an unchanged edit (30 to 80% at 3 runs), so: any question whose

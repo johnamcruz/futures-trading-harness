@@ -29,12 +29,30 @@ const SKILL = 'skills/a/SKILL.md';
 const TEXT = '---\nname: a\ndescription: a test skill\n---\n\n# A\n\n- line one\n\n- line two\n';
 const WINDOW = [{ from: '2022-03-07', to: '2022-03-19' }];
 
-/** A tree holding skill a. */
+const EXECUTOR = 'agents/trade-executor.md';
+const RISK = 'agents/risk-manager.md';
+const ROLE = name => `---\nname: ${name}\ndescription: a test role\n---\n\nYou are the ${name}.\n\n- role line one\n\n- role line two\n`;
+/** A tree holding skill a, and the risk manager and the trade executor. */
 function tree(text = TEXT) {
   const dir = tmpDir();
   fs.mkdirSync(path.join(dir, 'skills', 'a'), { recursive: true });
+  fs.mkdirSync(path.join(dir, 'agents'), { recursive: true });
   fs.writeFileSync(path.join(dir, SKILL), text);
+  fs.writeFileSync(path.join(dir, RISK), ROLE('risk-manager'));
+  fs.writeFileSync(path.join(dir, EXECUTOR), ROLE('trade-executor'));
   return dir;
+}
+/**
+ * The prompts as eval/context-quiz.js buildPrompts shapes them: `head` the head trader's skills, `head+risk` that plus
+ * the risk manager's body, a situational or lookup question's the head plus its skills. No analyst's or the executor's
+ * text is in any of them (the real buildPrompts holds neither).
+ */
+const body = t => t.replace(/^---[\s\S]*?\n---\n/, '');
+function realPrompts(root, quiz) {
+  const head = fs.readFileSync(path.join(root, SKILL), 'utf8');
+  const out = { head, 'head+risk': `${head}\n${body(fs.readFileSync(path.join(root, RISK), 'utf8'))}` };
+  for (const q of [...quiz.questions, ...quiz.partB]) if (q.prompt === 'situational' || q.prompt === 'lookup') out[Q.promptKey(q)] = `${head}\n(${q.prompt})`;
+  return out;
 }
 /** The prompts a tree gives every question asked of it: its skill's text (a stand-in for the head prompt). */
 const prompts = (root, quiz) => Object.fromEntries(['head', 'head+risk', ...[...quiz.questions, ...quiz.partB].map(Q.promptKey)].map(k => [k, fs.readFileSync(path.join(root, SKILL), 'utf8')]));
@@ -242,10 +260,14 @@ test('quizRound: an edit without a question (a round recorded before questions) 
 
 test('quizRound: a harness the quiz cannot ask is blocked with the reason and the off switch named; a broken prompt build blocks too', async () => {
   const w = round({ cfg: { harness: 'codex' } });
-  const { passed, report } = await w.go();
-  assert.deepStrictEqual(passed, []);
+  w.ctx.steps.quizPrompts = realPrompts;
+  // An executor edit needs no quiz: under a harness the quiz cannot ask it is not quizzed and goes on, as anywhere.
+  const exec = roleEdit(EXECUTOR, '- role line one', '- role line one\n- EXEC → confirm the fill', { ...QUESTION, anchor: 'EXEC → confirm the fill' });
+  const { passed, report } = await w.go(1, [...w.edits, exec]);
+  assert.deepStrictEqual(passed.map(e => e.id), [exec.id]);
+  assert.strictEqual(report.edits[exec.id].verdict, QP.NOT_QUIZZED);
   for (const e of w.edits) assert.match(report.edits[e.id].why, /the quiz could not run: context quiz: the codex harness takes no system-prompt file.* \(the loop config's quizGate: false turns the gate off\)/);
-  assert.deepStrictEqual([w.f.calls, w.built], [[], []], 'no tree built, no model asked');
+  assert.deepStrictEqual(w.f.calls, [], 'no model asked');
   // A run that throws is a crash, never a verdict: the phase is not recorded, a resume runs it again.
   const c = round();
   c.ctx.steps.quizRun = () => { throw new Error('killed'); };
@@ -278,15 +300,30 @@ test('a pure deletion: no question, red/green skipped; it passes the whole quiz 
   assert.deepStrictEqual(f.calls.map(c => c.dir), ['champion', 'edit'], 'only the whole quiz, both trees');
 });
 
-test('a deletion: one slip of a stable question blocks it (no slip allowed), where an edit that teaches may slip', async () => {
-  const slip = ({ dir, id, run }) => (dir === 'edit' && id === 'a1' && run === 1 ? { stdout: 'ANSWER: no' } : null);
-  const del = await gate({ consolidation: true, find: '- line two\n', replace: '', script: slip });
-  assert.strictEqual(del.r.verdict, 'reject');
-  assert.match(del.r.why, /1 questions slipped \(more than the 0 the gate allows\): a1/);
-  assert.deepStrictEqual(del.r.slips.map(x => x.id), ['a1']);
-  // The same slip on an edit with its own question: within the quiz file's maxSlips.
-  assert.ok(G.maxSlips > 0);
-  assert.strictEqual((await gate({ script: slip })).r.verdict, 'pass');
+test('a deletion is judged by the quiz\'s own gate: stable questions that wobble within maxSlips pass it, as for any edit', async () => {
+  // A no-op deletion; each stable question slips one run on the edit (noise, never confirmed): the gate's maxSlips,
+  // never zero (zero rejects most no-op edits on the per-question rates a real quiz has).
+  assert.ok(G.maxSlips >= QUIZ.questions.length, 'the quiz file allows at least this many slips');
+  const wobble = ({ dir, run }) => (dir === 'edit' && run === 1 ? { stdout: 'ANSWER: no' } : null);
+  const one = ({ dir, id, run }) => (dir === 'edit' && id === 'a1' && run === 1 ? { stdout: 'ANSWER: no' } : null);
+  for (const script of [one, wobble]) {
+    const del = await gate({ consolidation: true, find: '- line two\n', replace: '', script });
+    assert.strictEqual(del.r.verdict, 'pass', del.r.why);
+    assert.strictEqual(del.r.redGreen, 'skipped (removal)');
+    // The same wobble on an edit with its own question: the same verdict (one gate for both).
+    assert.strictEqual((await gate({ script })).r.verdict, del.r.verdict);
+  }
+  // More slips than maxSlips still reject a deletion, as any edit: a quiz with more stable questions than maxSlips.
+  const many = Array.from({ length: G.maxSlips + 1 }, (_, i) => `m${i}`);
+  const big = { ...QUIZ, questions: many.map(ask3) };
+  const champ = tree();
+  const edited = tree(TEXT.replace('- line two\n', ''));
+  const dir = tmpDir();
+  const f = fakeRun(({ dir: d, run }) => (d === 'edit' && run === 1 ? { stdout: 'ANSWER: no' } : null));
+  const champion = async () => f.run({ root: champ, quiz: big, hash: HASH, k: big.k, dir: path.join(dir, 'champion'), prompts: prompts(champ, big) });
+  const r = await QP.gateEdit({ quiz: big, hash: HASH, question: null, consolidation: true, championRoot: champ, editRoot: edited, dir: path.join(dir, 'edit'), run: f.run, prompts, champion });
+  assert.strictEqual(r.verdict, 'reject');
+  assert.match(r.why, new RegExp(`${G.maxSlips + 1} questions slipped \\(more than the ${G.maxSlips} the gate allows\\)`));
 });
 
 test('a deletion that makes the model read a rule worse is rejected', async () => {
@@ -305,8 +342,8 @@ test('quizRound: a removal (or a merge in the document\'s own words) needs no qu
   assert.deepStrictEqual(passed.map(e => e.id), [del.id, merge.id]);
   for (const e of [del, merge]) assert.strictEqual(report.edits[e.id].redGreen, 'skipped (removal)');
   assert.ok(!w.f.calls.some(c => c.dir === 'red' || c.dir === 'green'));
-  // One stopped: its lessons line records the skip.
-  const s = round({ script: ({ dir, id, run }) => (dir === 'edit' && id === 'a3' && run === 1 ? { stdout: 'ANSWER: no' } : null) });
+  // One stopped (a confirmed regression of a3): its lessons line records the skip.
+  const s = round({ script: ({ dir, id }) => ((dir === 'edit' || dir === 'confirm-edit') && id === 'a3' ? { stdout: 'ANSWER: no' } : null) });
   const d = s.edit('', null, { kind: 'removal', find: '- line two\n' });
   const out = await s.go(1, [d]);
   assert.deepStrictEqual(out.passed, []);
@@ -316,6 +353,71 @@ test('quizRound: a removal (or a merge in the document\'s own words) needs no qu
   const t = round();
   const r = await t.go(1, [t.edit('- line one\n- GOOD → wait for the retest', null)]);
   assert.match(Object.values(r.report.edits)[0].why, /^question: the quiz question the edit teaches/);
+});
+
+// --- a target no quiz prompt holds (an analyst's or the executor's text): not quizzed, no model call ----------------
+
+/** A role edit, tagged as the proposer tags one ("agent"), on agents/<role>.md. */
+function roleEdit(file, find, replace, question, kind = 'rule') {
+  const p = { targets: ['wrong stated reason'], expects: 'fewer early entries', edits: [{ file, find, replace }] };
+  return { id: P.proposalId(p), tag: { agent: path.basename(file, '.md'), finding: 'F1', kind }, finding: { id: 'F1', kind: 'misread' }, proposal: p, question, errors: [] };
+}
+
+test('quizRound: an executor edit is in no quiz prompt: not quizzed (no model call, never blocked by its anchor), it goes on to the replay', async () => {
+  const w = round();
+  w.ctx.steps.quizPrompts = realPrompts;
+  const q = { ...QUESTION, prompt: 'head', anchor: 'EXEC → confirm the fill' };
+  const rule = roleEdit(EXECUTOR, '- role line one', '- role line one\n- EXEC → confirm the fill', q);
+  const removal = roleEdit(EXECUTOR, '- role line two\n', '', null, 'removal');
+  const skill = w.edit('- line one\n- GOOD → wait for the retest');
+  const { passed, report } = await w.go(1, [rule, removal, skill]);
+  // Both role edits go on; the skill edit is quizzed as before (and passes).
+  assert.deepStrictEqual(passed.map(e => e.id), [rule.id, removal.id, skill.id]);
+  for (const e of [rule, removal]) {
+    const r = report.edits[e.id];
+    assert.deepStrictEqual([r.verdict, r.why, r.asked, r.quizHash], [QP.NOT_QUIZZED, 'no quiz prompt holds this target: not quizzed', 0, HASH]);
+  }
+  assert.strictEqual(report.edits[skill.id].verdict, 'pass');
+  // No ask for the role edits: no quiz run is on a tree whose executor text was edited.
+  assert.ok(w.f.calls.length > 0, 'the skill edit is quizzed');
+  assert.strictEqual(w.f.calls.filter(c => c.root && fs.readFileSync(path.join(c.root, EXECUTOR), 'utf8') !== ROLE('trade-executor')).length, 0);
+  // Never a lessons line (it is replayed), and the round's record counts it apart: no pass, not stopped.
+  assert.deepStrictEqual(LS.readLessons(path.join(w.loopDir, LS.FILE)), []);
+  const IR = require('../../scripts/lib/train/iteration-report');
+  const rec = IR.build({ probeReport: { iteration: 1, edits: [rule, removal, skill].map(e => ({ id: e.id, tag: e.tag, errors: [] })), probes: [], quiz: report } });
+  assert.deepStrictEqual(rec.quiz, { off: false, pass: 1, reject: 0, blocked: 0, notQuizzed: 2, stopped: [] });
+  assert.match(IR.line(rec), /proposed 3 \(0 refused, 2 not quizzed: no quiz prompt holds their target\)/);
+  // A resume asks nothing and keeps the verdicts.
+  const before = w.f.asks.length;
+  const again = await w.go(1, [rule, removal, skill]);
+  assert.strictEqual(w.f.asks.length, before);
+  assert.strictEqual(again.report.edits[rule.id].verdict, QP.NOT_QUIZZED);
+});
+
+test('quizRound: a round of executor edits alone asks the model nothing at all (not even the champion\'s quiz)', async () => {
+  const w = round();
+  w.ctx.steps.quizPrompts = realPrompts;
+  const removal = roleEdit(EXECUTOR, '- role line two\n', '', null, 'removal');
+  const { passed } = await w.go(1, [removal]);
+  assert.deepStrictEqual(passed.map(e => e.id), [removal.id]);
+  assert.deepStrictEqual([w.f.calls, w.f.asks], [[], []]);
+});
+
+test('quizRound: a risk-manager edit is in the head+risk prompt: quizzed as a skill edit is (its anchor checked, red/green run)', async () => {
+  const w = round();
+  w.ctx.steps.quizPrompts = realPrompts;
+  const q = { ...QUESTION, prompt: 'head+risk', anchor: 'RISK → size from the stop' };
+  const e = roleEdit(RISK, '- role line one', '- role line one\n- RISK → size from the stop', q);
+  const { report } = await w.go(1, [e]);
+  const r = report.edits[e.id];
+  assert.notStrictEqual(r.verdict, QP.NOT_QUIZZED);
+  assert.ok(w.f.calls.some(c => c.dir === 'red') && w.f.calls.some(c => c.dir === 'green'), JSON.stringify(w.f.calls));
+  // A risk-manager edit whose anchor is not in its new text: blocked by the anchor check, as before.
+  const v = round();
+  v.ctx.steps.quizPrompts = realPrompts;
+  const bad = roleEdit(RISK, '- role line one', '- role line one\n- RISK → size from the stop', { ...q, anchor: 'never written' });
+  const out = await v.go(1, [bad]);
+  assert.match(out.report.edits[bad.id].why, /question\.anchor: not in the edited tree's head\+risk prompt/);
 });
 
 // --- the mutants review found surviving -----------------------------------------------------------------------------
@@ -359,6 +461,37 @@ test('quizRound: the budget and live-runner check runs before every quiz run, an
   assert.ok(s.f.calls.length <= 2, String(s.f.calls.length));
 });
 
+test('quizRound: every quiz ask is charged to the loop\'s model calls, stopped at the limit mid-run; a resume charges only new asks', async () => {
+  const S = require('../../scripts/lib/train/state');
+  // The loop's own budget (train/loop.js open: ctx.call = check, then spend one), the real budgetLeft and spend.
+  const budgeted = (w, limit) => {
+    w.ctx.state.modelCalls = 0;
+    w.ctx.state.iterations = [];
+    const limits = { maxIterations: 1, maxModelCalls: limit, maxWallMinutes: 60 };
+    w.ctx.check = () => { const why = S.budgetLeft(w.ctx.state, limits, { startedMs: Date.now() }); if (why) throw new Error(why); };
+    w.ctx.call = () => { w.ctx.check(); S.spend(w.ctx.state, 1); };
+    w.limits = limits;
+  };
+  // The whole round, unlimited: what it asks in all.
+  const all = round();
+  budgeted(all, 1e6);
+  await all.go();
+  const total = all.f.asks.length;
+  assert.ok(total > 2 * G.questionRuns, String(total));
+  assert.strictEqual(all.ctx.state.modelCalls, total, 'one model call per ask');
+  // Limited mid-way through the first edit's red/green: the round stops at the limit, inside a quiz run.
+  const w = round();
+  const limit = G.questionRuns + 2;
+  budgeted(w, limit);
+  await assert.rejects(w.go(), /max model calls reached/);
+  assert.deepStrictEqual([w.ctx.state.modelCalls, w.f.asks.length], [limit, limit]);
+  // Resumed with more budget: the answers stored are never asked or charged again.
+  w.limits.maxModelCalls = 1e6;
+  await w.go();
+  assert.strictEqual(w.ctx.state.modelCalls, w.f.asks.length);
+  assert.strictEqual(w.f.asks.length, total, 'no ask repeated across the stop');
+});
+
 test('quizRound: the gate is off only for an explicit false; a missing or null setting is on', async () => {
   for (const loop of [{}, { quizGate: null }, { quizGate: undefined }, { quizGate: 'false' }]) {
     const w = round();
@@ -391,7 +524,7 @@ test('the iteration\'s record and line: the edits the quiz gate stopped, or the 
   const edits = [{ id: 'e1', tag: { skill: 'a', finding: 'F1', kind: 'rule' }, errors: [] }, { id: 'e2', tag: { skill: 'a', finding: 'F1', kind: 'rule' }, errors: [] }];
   const quiz = { quizHash: 'h', champion: null, edits: { e1: { verdict: 'pass', why: 'no regression' }, e2: { verdict: 'blocked', why: 'the edit does not teach its own question' } } };
   const rec = IR.build({ probeReport: { iteration: 1, edits, probes: [], quiz } });
-  assert.deepStrictEqual(rec.quiz, { off: false, pass: 1, reject: 0, blocked: 1, stopped: [{ id: 'e2', verdict: 'blocked', why: 'the edit does not teach its own question' }] });
+  assert.deepStrictEqual(rec.quiz, { off: false, pass: 1, reject: 0, blocked: 1, notQuizzed: 0, stopped: [{ id: 'e2', verdict: 'blocked', why: 'the edit does not teach its own question' }] });
   assert.match(IR.line(rec), /^iteration 1: proposed 2 \(0 refused, 1 stopped by the quiz gate\), screened none;/);
   const off = IR.build({ probeReport: { iteration: 1, edits, probes: [], quiz: { off: true, why: QP.OFF } } });
   assert.deepStrictEqual(off.quiz, { off: true });

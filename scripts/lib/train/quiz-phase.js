@@ -14,19 +14,24 @@
  *              unchanged): a `confirm` asks the flagged ids again, confirmRuns more on BOTH trees, in fresh directories
  *              (never the first runs: the flag selected on them), then decides again
  * A summary short of its runs (a run that kept failing) is retried once, then the edit is blocked: inconclusive is never
- * a pass. Only `pass` goes on to the replay. The champion's quiz runs once a round, in a directory keyed by its tree's
- * digest and the quiz's hash, so a resumed or later round asks it nothing new. Every model call is the quiz runner's
- * (`run`, the loop's `quizRun` step); the verdicts are code's.
+ * a pass. A consolidation (probe-question.js isConsolidation) has no question and no red/green, and is judged by the
+ * quiz's own gate. An edit whose target no quiz prompt holds (an analyst's or the executor's text: every prompt the quiz
+ * and its question are asked of byte-identical on both trees) is NOT_QUIZZED: no model call, replayed as before the gate,
+ * never counted a pass. Only `pass` and NOT_QUIZZED go on to the replay. The champion's quiz runs once a round, in a
+ * directory keyed by its tree's digest and the quiz's hash, so a resumed or later round asks it nothing new. Every model
+ * call is the quiz runner's (`run`, the loop's `quizRun` step), each ask charged to the loop's model calls first
+ * (ctx.call, the runner's onCall: the budget stops a quiz mid-run); the verdicts are code's.
  *
  *   gateEdit({ quiz, hash, question, championRoot, editRoot, dir, run, prompts, champion })
  *        { verdict: 'pass' | 'reject' | 'blocked', stage, why, regressions, flagged, slips, gains, redGreen, asked }
  *        run(opts) -> a quiz summary (eval/quiz-run.js runQuiz); prompts(root, quiz) -> the tree's prompts;
  *        champion({ retry }) -> the champion's whole-quiz summary
  *   redGreen(gate, champion, edit, id)       { red, green, champion: 'p/n', edit: 'p/n', problems }
+ *   samePrompts(a, b)                        [bool] two trees' prompts the same keys, each text byte-equal
  *   quizRound(ctx, { n, champion, edits, api, work, dir, lessonsFile, lessonWindows, seed, cfg })
  *        { passed, report }: the round's phases (`${n}:quiz-champion`, `${n}:quiz:<id>`), each a file in the round's
- *        directory; a non-passing edit gets a lessons line (lessons.js appendQuiz). The loop config's quizGate: false
- *        (only explicitly) passes every edit, and the report says so
+ *        directory; a stopped edit (reject, blocked) gets a lessons line (lessons.js appendQuiz), a NOT_QUIZZED one none.
+ *        The loop config's quizGate: false (only explicitly) passes every edit, and the report says so
  */
 
 const crypto = require('crypto');
@@ -40,6 +45,14 @@ const { dirDigest, writeJsonAtomic, readJson } = require('../harness-run');
 const OFF = 'the quiz gate is off (the loop config\'s quizGate: false): no edit was quizzed';
 const SWITCH = '(the loop config\'s quizGate: false turns the gate off)';
 const label = s => `${s.passes}/${s.n}`;
+// An edit whose target no quiz prompt holds: replayed unquizzed, counted apart from the gate's verdicts.
+const NOT_QUIZZED = 'not-quizzed';
+const NOT_HELD = 'no quiz prompt holds this target: not quizzed';
+/** Two trees' prompts the same, key by key (the same keys, each text byte-equal). */
+function samePrompts(a, b) {
+  const keys = Object.keys(a);
+  return keys.length === Object.keys(b).length && keys.every(k => typeof a[k] === 'string' && a[k] === b[k]);
+}
 // A consolidation's red/green, as the report and the lessons record say it.
 const SKIPPED = 'skipped (removal)';
 /** A directory's tag from a text: its digest, its length capped. */
@@ -59,11 +72,11 @@ function redGreen(g, champion, edit, id) {
   return { champion: label(c), edit: label(e), red: c.n > 0 && c.passes / c.n <= g.redMaxShare, green: e.n > 0 && e.passes / e.n >= g.greenMinShare, problems };
 }
 
-async function gateEdit({ quiz: given, hash, question, consolidation = false, championRoot, editRoot, dir, run, prompts, champion }) {
-  const g = given.gate || {};
+async function gateEdit({ quiz, hash, question, consolidation = false, championRoot, editRoot, dir, run, prompts, champion }) {
+  const g = quiz.gate || {};
   if (![g.redMaxShare, g.greenMinShare, g.questionRuns].every(x => typeof x === 'number')) throw new Error('quiz gate: the quiz file has no red/green thresholds (config/context-quiz.json "gate")');
-  // A consolidation teaches nothing new: no question, and no stable question may fall at all (a copy of the gate).
-  const quiz = consolidation ? { ...given, gate: { ...g, maxSlips: 0 } } : given;
+  // A consolidation teaches nothing new: no question and no red/green; the whole quiz under the quiz's own gate (a
+  // stricter copy would reject most edits that change nothing, on the noise of the questions' own rates).
   const out = { verdict: 'blocked', stage: consolidation ? 'regression' : 'question', why: '', quizHash: hash, regressions: [], flagged: [], slips: [], gains: [], redGreen: consolidation ? SKIPPED : null, asked: 0 };
   const done = (verdict, why) => Object.assign(out, { verdict, why });
   const side = async (root, texts, sub, doc, k, only = null) => {
@@ -146,7 +159,8 @@ async function quizRound(ctx, { n, champion, edits, api, work, dir, lessonsFile,
   if (!edits.length) return { passed: [], report };
   const { value: quiz, hash } = (ctx.steps.loadQuiz || Q.loadQuiz)();
   report.quizHash = hash;
-  const run = opts => ctx.steps.quizRun({ ...opts, cfg });
+  // Every ask charged to the loop's model calls (ctx.call: the budget checked first), so the limit stops a quiz mid-run.
+  const run = opts => ctx.steps.quizRun({ ...opts, cfg, onCall: ctx.call });
   const prompts = ctx.steps.quizPrompts || Q.buildPrompts;
   // A runner config the quiz cannot ask (a harness that takes no system-prompt file): every edit blocked, said so.
   let refused = null;
@@ -177,23 +191,31 @@ async function quizRound(ctx, { n, champion, edits, api, work, dir, lessonsFile,
     fresh(phaseKey, file);
     const r = await api.phase(ctx, phaseKey, file, async () => {
       // A consolidation (a removal, or new text in the document's own words) has no question of its own.
-      const consolidation = PQ.isConsolidation(e, champion.dir);
+      const consolidation = PQ.isConsolidation(e, champion.dir, { negations: quiz.negations });
       const blocked = why => ({ verdict: 'blocked', stage: 'question', why, quizHash: hash, regressions: [], flagged: [], slips: [], gains: [], redGreen: consolidation ? SKIPPED : null, asked: 0 });
-      const qe = consolidation ? [] : PQ.questionErrors(e.question, { maxPatternChars: quiz.gate.maxPatternChars });
+      const qe = consolidation ? [] : PQ.questionErrors(e.question, { maxPatternChars: quiz.gate.maxPatternChars, minLiteralRun: quiz.gate.minLiteralRun });
       if (qe.length) return blocked(qe.join('; '));
-      if (refused) return blocked(refused);
       ctx.check();
       const tree = await api.candidateTree(ctx, { dir: work, id: `p-${e.id}`, proposal: e.proposal, champion });
+      // A target no quiz prompt holds (an analyst's or the executor's text): every prompt the quiz (and the edit's own
+      // question) is asked of is the same on both trees, so the quiz can measure nothing: not quizzed, no model call.
+      const asked = consolidation ? quiz : { ...quiz, questions: [...quiz.questions, PQ.questionOf(e.question, e.id)] };
+      let same;
+      try { same = samePrompts(prompts(champion.dir, asked), prompts(tree.dir, asked)); } catch (err) { return blocked(`the prompts could not be built: ${err.message}`); }
+      if (same) return { verdict: NOT_QUIZZED, stage: 'target', why: NOT_HELD, quizHash: hash, regressions: [], flagged: [], slips: [], gains: [], redGreen: null, asked: 0 };
+      // A harness the quiz cannot ask: an edit it would quiz is blocked (an unquizzed one above needs no quiz).
+      if (refused) return blocked(refused);
       // The edit's runs keyed by the quiz's hash too: a changed quiz never regrades old answers.
       return gateEdit({ quiz, hash, question: consolidation ? null : PQ.questionOf(e.question, e.id), consolidation, championRoot: champion.dir, editRoot: tree.dir, dir: path.join(dir, 'quiz', e.id, tagOf(hash)), run: async o => { ctx.check(); return run(o); }, prompts, champion: championQuiz });
     });
     report.edits[e.id] = r;
     ctx.log(`iteration ${n}: quiz gate ${e.id}: ${r.verdict}${r.why ? `: ${r.why}` : ''}`);
-    if (r.verdict === 'pass') passed.push(e);
+    // Not quizzed goes on to the replay as before the gate (its probe's lessons line is the replay's); never a pass.
+    if (r.verdict === 'pass' || r.verdict === NOT_QUIZZED) passed.push(e);
     else quizLesson(lessonsFile, e, r, { n, windows: lessonWindows, seed });
   }
   if (memo && !report.champion) report.champion = { dir: path.relative(ctx.paths.dir, champDir), asked: memo.asked || 0 };
   return { passed, report };
 }
 
-module.exports = { OFF, gateEdit, redGreen, quizRound };
+module.exports = { OFF, NOT_QUIZZED, NOT_HELD, gateEdit, redGreen, samePrompts, quizRound };

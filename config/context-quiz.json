@@ -29,7 +29,8 @@
     "redMaxShare": 0.4,
     "greenMinShare": 0.8,
     "questionRuns": 5,
-    "maxPatternChars": 120
+    "maxPatternChars": 120,
+    "minLiteralRun": 4
   },
   "passBar": {
     "partA": {

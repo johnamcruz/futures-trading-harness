@@ -77,6 +77,24 @@ test('runQuiz: resumable (answers recorded without error are never asked again);
   assert.deepStrictEqual(s3.partA.per.map(x => [x.id, x.n]), [['a1', 3], ['a2', 0]]);
 });
 
+test('runQuiz: onCall before every ask (a re-ask too); one that throws stops the run, nothing recorded for that ask', async () => {
+  const dir = tmpDir();
+  const events = [];
+  const { ask } = asker((id, run, n) => (id === 'a1' && run === 1 && n === 1 ? { error: new Error('busy') } : null));
+  const traced = async (argv, o) => { events.push(`ask ${o.id}:${o.run}`); return ask(argv, o); };
+  await QR.runQuiz({ quiz: QUIZ, hash: 'H', cfg: CFG, k: 2, dir, ask: traced, prompts: PROMPTS, onCall: () => events.push('call') });
+  // a1 run 1 errs and is re-asked: five asks, each right after its own onCall.
+  assert.deepStrictEqual(events, ['call', 'ask a1:1', 'call', 'ask a1:1', 'call', 'ask a1:2', 'call', 'ask a2:1', 'call', 'ask a2:2']);
+  // A budget stop on the third ask: it propagates (never an errored answer row), the two asks before it stay recorded.
+  const stop = tmpDir();
+  let n = 0;
+  const { ask: ok, calls } = asker();
+  await assert.rejects(QR.runQuiz({ quiz: QUIZ, hash: 'H', cfg: CFG, k: 2, dir: stop, ask: ok, prompts: PROMPTS, onCall: () => { n += 1; if (n === 3) throw new Error('max model calls reached'); } }), /max model calls reached/);
+  assert.strictEqual(calls.length, 2);
+  const rows = fs.readFileSync(path.join(stop, 'answers.jsonl'), 'utf8').trim().split('\n').map(l => JSON.parse(l));
+  assert.deepStrictEqual(rows.map(r => [r.id, r.k, Boolean(r.error)]), [['a1', 1, false], ['a1', 2, false]]);
+});
+
 test('runQuiz: an errored run is recorded and re-asked once; still errored, the summary is short', async () => {
   const dir = tmpDir();
   // a1 run 1 fails once, then answers; a2 run 1 always fails (a thrown spawn, an is_error reply).

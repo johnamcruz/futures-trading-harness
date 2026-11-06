@@ -101,12 +101,12 @@ Rules:
 - "kind" is one of: {{KINDS}}.
 - "targets" lists the failure categories the edit fixes, from: {{CATEGORIES}}.
 - Write the quiz question that your edit teaches first, as the edit's "question": it must be a question you would answer wrongly now and rightly after the edit; write its answer as required and forbidden phrases
-- "anchor" is a phrase copied exactly from your new text; "required" uses words the file already has. "layer" is one of: {{LAYERS}}. A "removal" needs no "question".
+- "anchor" is a phrase copied exactly from your new text; "required" uses whole words the file has. "layer" is one of: {{LAYERS}}. A "removal" keeping "not"/"never" needs no "question".
 - You propose. Code tests each edit on the same decisions. Do not claim it works.
 
 Reply with one line per edit, and nothing else on that line. For a skill:
 PROPOSAL {"tag":{"skill":"<skill>","finding":"<id>","kind":"<kind>"},"question":{"layer":"<layer>","prompt":"lookup","lookup":["<skill>"],"text":"<the question>","rule":"<the rule it tests>","anchor":"<a phrase of your new text>","required":["<phrase>"],"forbidden":["<phrase>"]},"targets":["<category>"],"expects":"<the effect, one sentence>","why":"<what misled you>","edits":[{"file":"skills/<skill>/SKILL.md","find":"<exact text>","replace":"<new text>"}]}
-For a role, the tag names it ("agent" in place of "skill") and the file is agents/<role>.md; the risk manager's question has "prompt":"head+risk" and no "lookup". The other roles have no quiz: edit a skill.
+For a role, the tag names it ("agent" in place of "skill") and the file is agents/<role>.md; the risk manager's question has "prompt":"head+risk" and no "lookup". Other roles: not quizzed.
 
 If no change would help, reply: NO PROPOSAL
 ```

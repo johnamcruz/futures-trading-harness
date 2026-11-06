@@ -6,7 +6,7 @@
  * (scripts/context-quiz.js run) and the training loop's quiz gate (train/quiz-phase.js) both run it. It calls a model
  * only through `ask`: the default spawns the argv the user's runner config gives (Q.quizCommand); a test injects a fake.
  *
- *   runQuiz({ root, quiz, hash, cfg, k, only, dir, ask, prompts, reask, env, timeoutMs, log })
+ *   runQuiz({ root, quiz, hash, cfg, k, only, dir, ask, prompts, reask, env, timeoutMs, log, onCall })
  *        the prompts of the tree at `root` (Q.buildPrompts, unless `prompts` are given) written into `dir`; each question
  *        of `quiz` (or of `only`) asked k times through ask(argv, { cwd, env, timeoutMs, systemFile, id, run }) ->
  *        { stdout, error }, in an empty directory of `dir`'s own. answers.jsonl is appended row by row; a run recorded
@@ -14,7 +14,9 @@
  *        the CLI passes 0). Then grades.json and summary.json, graded with the quiz given (never the file's: a probe
  *        edit's own question is in no file), and the summary returned: Q.summarize's, with `quizHash` (as `grade`
  *        writes it), `asked` (the asks this call made) and `errors` (those that errored). A question still short of its
- *        runs leaves its row short: the quiz gate says inconclusive, never pass.
+ *        runs leaves its row short: the quiz gate says inconclusive, never pass. onCall() runs before every ask (a
+ *        re-ask too; the training loop's ctx.call: its budget checked, one model call charged); one that throws stops
+ *        the run there, the answers stored before it kept (a resume asks, and charges, only the rest).
  *   fileOf(key)          the prompt's file name in the directory (head.md, head+risk.md, lookup-q31.md, ...)
  *   defaultAsk(argv, { cwd, env, timeoutMs })   spawnSync: { stdout, error }; a non-zero exit is an error
  */
@@ -49,7 +51,7 @@ function gradeDir(quiz, dir, k) {
   return graded;
 }
 
-async function runQuiz({ root = null, quiz, hash, cfg, k, only = null, dir, ask = defaultAsk, prompts = null, reask = 1, env = null, timeoutMs = null, log = () => {} }) {
+async function runQuiz({ root = null, quiz, hash, cfg, k, only = null, dir, ask = defaultAsk, prompts = null, reask = 1, env = null, timeoutMs = null, log = () => {}, onCall = () => {} }) {
   if (!hash) throw new Error('runQuiz: the quiz hash its summary is graded with (a summary without it can never pass the gate)');
   if (!(Number.isInteger(k) && k >= 1)) throw new Error('runQuiz: k: a whole number, 1 or more');
   const asked = [...quiz.questions, ...quiz.partB].filter(q => !only || only.includes(q.id));
@@ -73,6 +75,8 @@ async function runQuiz({ root = null, quiz, hash, cfg, k, only = null, dir, ask 
       if (done.has(`${q.id}:${i}`)) continue;
       const argv = argvOf(q);
       for (let attempt = 0; attempt <= reask; attempt += 1) {
+        // The caller's budget first (the loop's: check, then charge one call): a refusal stops the run, never an answer.
+        onCall();
         const t = Date.now();
         let r;
         try { r = await ask(argv, { cwd: empty, env, timeoutMs, systemFile: systemOf(q), id: q.id, run: i }); } catch (err) { r = { error: err }; }

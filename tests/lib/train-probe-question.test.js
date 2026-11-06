@@ -115,11 +115,54 @@ test('questionErrors: the proposer\'s patterns are bounded: compiled, at most ga
     assert.match(PQ.questionErrors({ ...QUESTION, required: [bad] }, { maxPatternChars: max }).join(), /question\.required\[0\]: a nested quantifier/, bad);
   }
   for (const ok of ['\\bwait\\b', '(enter|take) now', 'a+b*', '(no)?\\s+wait', '\\(a+\\)+']) {
-    assert.deepStrictEqual(PQ.questionErrors({ ...QUESTION, required: [ok] }, { maxPatternChars: max }), [], ok);
+    assert.deepStrictEqual(PQ.questionErrors({ ...QUESTION, forbidden: [ok] }, { maxPatternChars: max }), [], ok);
   }
   assert.match(PQ.questionErrors({ ...QUESTION, required: ['('] }, { maxPatternChars: max }).join(), /not a regex/);
   // The bound read from the quiz file when not given.
   assert.match(PQ.questionErrors({ ...QUESTION, required: ['x'.repeat(max + 1)] }).join(), /at most/);
+});
+
+test('questionErrors: each required pattern holds a literal run of gate.minLiteralRun letters or digits (no "." or short word)', () => {
+  const gate = Q.loadQuiz().value.gate;
+  const n = gate.minLiteralRun;
+  assert.strictEqual(n, 4, 'the quiz file\'s gate');
+  const opts = { maxPatternChars: gate.maxPatternChars, minLiteralRun: n };
+  for (const bad of ['.', '.*', '\\w+', '\\bno\\b', '\\bthe\\b', '[a-z]{4,}', '\\w\\w\\w\\w', 'abc', '(.|wait)', 'wait|.', '(wait)?', 'wai?t', '(?!wait).', 'w-a-i-t', '.{0,1000}', '\\w{1,1000}', '\\S{1,9999}', '((wait))?', '(?:(?:wait))?', '(?<word>.)', '(?<word>.)\\k<word>', '(?<!wait).', '(?:wait|.)+', 'wait{0}', '(wait){0,3}']) {
+    assert.match(PQ.questionErrors({ ...QUESTION, required: [bad] }, opts).join(), new RegExp(`question\\.required\\[0\\]: no literal run of ${n} letters or digits`), bad);
+  }
+  for (const ok of ['\\bwait\\b', 'wait', '(enter|take) now', '(no)?\\s+wait', 'retest', 'wait(s|ed)?', '\\bclose[sd]?\\b', '2021', 'retest (a|the)', '(a|the) retest', '(?:wait|hold) (on|for)', '(?<verb>wait)', '((wait))', 'wait{2}', '(?=wait)wait']) {
+    assert.deepStrictEqual(PQ.questionErrors({ ...QUESTION, required: [ok] }, opts), [], ok);
+  }
+  // Forbidden patterns are never required to match anything: a short one stays fine.
+  assert.deepStrictEqual(PQ.questionErrors({ ...QUESTION, forbidden: ['\\bno\\b'] }, opts), []);
+  // Read from the quiz file when not given; the file's gate refuses a missing or broken key.
+  assert.match(PQ.questionErrors({ ...QUESTION, required: ['.'] }).join(), /no literal run/);
+  const quiz = Q.loadQuiz().value;
+  const { minLiteralRun: _m, ...noKey } = quiz.gate;
+  assert.match(Q.quizErrors({ ...quiz, gate: noKey }).join(), /minLiteralRun: a whole number, 1 or more/);
+  assert.match(Q.quizErrors({ ...quiz, gate: { ...quiz.gate, minLiteralRun: 0 } }).join(), /minLiteralRun/);
+});
+
+test('isConsolidation: a rule inversion (a negation dropped: not, never, no, n\'t, cannot, must not) is never one: it needs a question', () => {
+  const root = require('../helpers').tmpDir();
+  const fs = require('fs');
+  const path = require('path');
+  fs.mkdirSync(path.join(root, 'skills', 'a'), { recursive: true });
+  fs.writeFileSync(path.join(root, 'skills/a/SKILL.md'), '---\nname: a\ndescription: d\n---\n\n# A\n\n- never enter before the close\n\n- you must not chase; wait\n\n- do not add, don\'t fade, you cannot trail\n\n- no entry on a wick\n\n- line two\n');
+  const e = (find, replace, kind = 'rule') => ({ tag: { skill: 'a', kind }, proposal: { ...PROPOSAL, edits: [{ file: 'skills/a/SKILL.md', find, replace }] } });
+  // Each in the document's own words, yet the rule flipped.
+  assert.strictEqual(PQ.isConsolidation(e('- never enter before the close', '- enter before the close'), root), false, 'never');
+  assert.strictEqual(PQ.isConsolidation(e('- you must not chase; wait', '- you must chase; wait'), root), false, 'must not');
+  assert.strictEqual(PQ.isConsolidation(e('don\'t fade', 'fade'), root), false, "n't");
+  assert.strictEqual(PQ.isConsolidation(e('don\'t fade', 'don’t fade, fade'), root), true, 'a curly apostrophe is the same negation');
+  assert.strictEqual(PQ.isConsolidation(e('you cannot trail', 'you trail'), root), false, 'cannot');
+  assert.strictEqual(PQ.isConsolidation(e('- no entry on a wick', '- entry on a wick'), root), false, 'no');
+  assert.strictEqual(PQ.isConsolidation(e('do not add, don\'t fade', 'do not add, fade'), root), false, 'one of two negations dropped');
+  // A removal tag is no exemption: a deleted negated rule needs a question too; a deleted plain line does not.
+  assert.strictEqual(PQ.isConsolidation(e('- never enter before the close\n\n', '', 'removal'), root), false, 'a removal of a never rule');
+  assert.strictEqual(PQ.isConsolidation(e('- line two\n', '', 'removal'), root), true);
+  // The negations kept: still a consolidation.
+  assert.strictEqual(PQ.isConsolidation(e('- never enter before the close', '- never enter before the close; wait'), root), true);
 });
 
 test('isConsolidation: a removal, or an edit whose new text adds no word the champion\'s document lacks; its question is optional', () => {

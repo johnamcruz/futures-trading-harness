@@ -15,15 +15,20 @@
  *   none, probe-edit.js styleErrors) (anchorErrors).
  *
  * - every `required` pattern matches text the champion's prompt already holds (the answer's words exist, so a champion
- *   failure is a real misreading: a phrase the edit coins is no test); its patterns are bounded (at most the quiz file's
+ *   failure is a real misreading: a phrase the edit coins is no test) and holds a literal word: a run of the quiz file's
+ *   gate.minLiteralRun letters or digits in every alternative, outside escapes, classes, optional parts and negative
+ *   lookarounds (a "." or a short common word matches any answer); its patterns are bounded (at most the quiz file's
  *   gate.maxPatternChars, no nested quantifier) since they run on every answer.
  *
  * Then the quiz phase runs it red/green: the champion must fail it, the edit pass it (the quiz file's gate). A
- * consolidation (isConsolidation: a removal, or new text in the document's own words) has no question of its own.
+ * consolidation (isConsolidation: a removal, or new text in the document's own words, that drops no negation) has no
+ * question of its own.
  *
  *   KEYS
- *   questionErrors(raw, { maxPatternChars })   [error] for the question as the proposer wrote it (missing: named)
- *   isConsolidation(e, root)                [bool] the edit teaches nothing new: its question optional, never asked
+ *   questionErrors(raw, { maxPatternChars, minLiteralRun })   [error] for the question as the proposer wrote it (missing:
+ *                                           named)
+ *   isConsolidation(e, root, { negations })   [bool] the edit teaches nothing new: its question optional, never asked
+ *   literalRun(src, n)                      [bool] a regex source that requires a run of n letters or digits
  *   nestedQuantifier(src)                   [bool] a regex source with a quantified group inside a quantified group
  *   questionOf(raw, proposalId)             the question with its code-given id
  *   anchorErrors(q, { editPrompts, championPrompts })   [error]: prompts as eval/context-quiz.js buildPrompts gives them
@@ -68,8 +73,37 @@ function nestedQuantifier(src) {
   return false;
 }
 
-/** The proposer's regexes, bounded: at most maxPatternChars each, no nested quantifier (they run on every answer). */
-function patternErrors(raw, maxPatternChars) {
+/**
+ * Whether every string a regex source matches holds a run of n letters or digits, read conservatively: escapes (\b, \w,
+ * \., \k<name>), character classes and quantifier braces count for nothing; an optional part (x?, x*, x{0,m}, (...)?,
+ * (...)*) and a negative lookaround too; a group name is no text; a group with a | holds a run only when each of its
+ * branches does, and so does each top-level alternative ("(.|wait)" and "wait|." do not; "(enter|take) now" does).
+ */
+function literalRun(src, n) {
+  const run = new RegExp(`[A-Za-z0-9]{${n},}`);
+  const every = t => t.split('|').every(p => run.test(p));
+  let s = String(src).replace(/\\k<[^>]*>/g, ' ').replace(/\\./g, ' ').replace(/\[[^\]]*\]/g, ' ');
+  // x{0}, x{0,m}, x{0,}: optional; any other brace a repeat of at least one (its digits never text).
+  s = s.replace(/\{0(?:,\d*)?\}/g, '?').replace(/\{\d+(?:,\d*)?\}/g, '');
+  s = s.replace(/[A-Za-z0-9][?*]/g, ' ');
+  // Innermost groups first: an optional group or a negative lookaround is nothing, an alternation a run only when every
+  // branch has one, any other group its own content.
+  for (let prev = null; prev !== s;) {
+    prev = s;
+    s = s.replace(/\((\?(?:[:=!]|<[=!]|<[A-Za-z_$][\w$]*>))?([^()]*)\)([?*]?)/g, (_m, pre, body, q) => {
+      if (q || pre === '?!' || pre === '?<!') return ' ';
+      if (body.includes('|')) return every(body) ? ` ${'a'.repeat(n)} ` : ' ';
+      return body;
+    });
+  }
+  return every(s);
+}
+
+/**
+ * The proposer's regexes, bounded: at most maxPatternChars each, no nested quantifier (they run on every answer); each
+ * required one a literal word (literalRun: a "." or "\\bno\\b" passes any answer).
+ */
+function patternErrors(raw, maxPatternChars, minLiteralRun) {
   const errors = [];
   for (const k of ['required', 'forbidden']) {
     if (!Array.isArray(raw[k])) continue;
@@ -77,12 +111,13 @@ function patternErrors(raw, maxPatternChars) {
       if (typeof src !== 'string') return;
       if (src.length > maxPatternChars) errors.push(`question.${k}[${i}]: at most ${maxPatternChars} characters (the quiz file's gate.maxPatternChars)`);
       if (nestedQuantifier(src)) errors.push(`question.${k}[${i}]: a nested quantifier (such as (a+)+): it can backtrack without end; write plain phrases`);
+      if (k === 'required' && !literalRun(src, minLiteralRun)) errors.push(`question.${k}[${i}]: no literal run of ${minLiteralRun} letters or digits (the quiz file's gate.minLiteralRun): write the answer's own word, not "." or a short common word`);
     });
   }
   return errors;
 }
 
-function questionErrors(raw, { maxPatternChars = Q.loadQuiz().value.gate.maxPatternChars } = {}) {
+function questionErrors(raw, { maxPatternChars = Q.loadQuiz().value.gate.maxPatternChars, minLiteralRun = Q.loadQuiz().value.gate.minLiteralRun } = {}) {
   if (!isObj(raw)) return ['question: the quiz question the edit teaches, written first ({ layer, prompt, text, rule, anchor, required, forbidden }): one you would answer wrongly before the edit and rightly after it'];
   const errors = [];
   if ('id' in raw) errors.push('question.id: assigned by code (e-<proposal id>), never written by the proposer');
@@ -91,19 +126,26 @@ function questionErrors(raw, { maxPatternChars = Q.loadQuiz().value.gate.maxPatt
   const { id: _id, ...rest } = raw;
   // The quiz file's checks on a Part A question, under a stand-in id (the real one is code's).
   errors.push(...Q.questionErrors({ ...rest, id: 'e-check' }, { part: 'questions', at: 'question' }));
-  errors.push(...patternErrors(raw, maxPatternChars));
+  errors.push(...patternErrors(raw, maxPatternChars, minLiteralRun));
   return errors;
 }
 
-const words = t => new Set(String(t).toLowerCase().match(/[a-z0-9']+/g) || []);
+const tokens = t => String(t).toLowerCase().replace(/[\u2018\u2019]/g, "'").match(/[a-z0-9']+/g) || [];
+const words = t => new Set(tokens(t));
+/** The negations a text holds: the quiz file's negation words, and any word ending in n't. */
+const negationsIn = (t, list) => tokens(t).filter(w => list.includes(w) || w.endsWith("n't")).length;
 
 /**
  * A consolidation: an edit of kind removal, or one whose new text adds no word the champion's document lacks (a merge or
  * a trim in its own words). It teaches nothing new, so it has no question of its own (optional, never asked): it must
- * pass the whole quiz with no slip at all (quiz-phase.js). A document that can't be read: never one (fails closed).
+ * pass the whole quiz under the quiz's own gate (quiz-phase.js). A document that can't be read: never one (fails closed).
+ * Never one when an edit drops a negation (the quiz file's negation words, or a word ending in n't: "must not", "never"
+ * gone flips the rule in the document's own words), a removal too: it needs a question.
  */
-function isConsolidation(e, root) {
+function isConsolidation(e, root, { negations = Q.loadQuiz().value.negations } = {}) {
   if (!e || !isObj(e.proposal) || !Array.isArray(e.proposal.edits) || !e.proposal.edits.length) return false;
+  const drops = x => !isObj(x) || negationsIn(x.find, negations) > negationsIn(x.replace, negations);
+  if (e.proposal.edits.some(drops)) return false;
   if (e.tag && e.tag.kind === 'removal') return true;
   const fs = require('fs');
   const path = require('path');
@@ -145,4 +187,4 @@ function anchorErrors(q, { editPrompts, championPrompts }) {
 
 const miniQuiz = (quiz, q) => ({ ...quiz, questions: [q], partB: [] });
 
-module.exports = { KEYS, questionErrors, questionOf, anchorErrors, miniQuiz, isConsolidation, nestedQuantifier };
+module.exports = { KEYS, questionErrors, questionOf, anchorErrors, miniQuiz, isConsolidation, nestedQuantifier, literalRun };

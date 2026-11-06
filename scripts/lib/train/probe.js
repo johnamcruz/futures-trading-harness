@@ -525,7 +525,8 @@ async function probeRound(ctx, { n, champion, api }) {
     if (api.guarded(ctx, champion) !== guard) throw new Error('the proposer\'s run changed the loop\'s state, the look ledger or the champion\'s tree: the loop stops; check them before resuming');
     const ids = [];
     // The proposer's quiz patterns are bounded by the quiz file's gate (probe-question.js).
-    const maxPatternChars = (ctx.steps.loadQuiz || require('../eval/context-quiz').loadQuiz)().value.gate.maxPatternChars;
+    const quizFile = (ctx.steps.loadQuiz || require('../eval/context-quiz').loadQuiz)().value;
+    const { maxPatternChars, minLiteralRun } = quizFile.gate;
     return res.proposals.slice(0, cfg.k).map(x => {
       if (x.error) return { id: null, errors: [x.error], line: x.line };
       const id = P.proposalId(x.proposal);
@@ -534,8 +535,8 @@ async function probeRound(ctx, { n, champion, api }) {
       // Its own quiz question (probe-question.js), written first: missing or malformed, the edit never runs. A
       // consolidation (a removal, or new text in the document's own words) teaches nothing new: its question is optional
       // (one written is still checked).
-      const optional = PQ.isConsolidation(x, champion.dir) && (x.question === undefined || x.question === null);
-      const errors = [...P.validateProposal(x.proposal, { root: champion.dir }), ...PE.tagErrors(x.tag, x.proposal, { findings }), ...(optional ? [] : PQ.questionErrors(x.question, { maxPatternChars }))];
+      const optional = PQ.isConsolidation(x, champion.dir, { negations: quizFile.negations }) && (x.question === undefined || x.question === null);
+      const errors = [...P.validateProposal(x.proposal, { root: champion.dir }), ...PE.tagErrors(x.tag, x.proposal, { findings }), ...(optional ? [] : PQ.questionErrors(x.question, { maxPatternChars, minLiteralRun }))];
       if (!errors.length) errors.push(...PE.styleErrors(x.proposal, { root: champion.dir, kind: x.tag.kind }));
       const finding = findings.find(f => x.tag && f.id === x.tag.finding) || null;
       return { id, tag: x.tag, finding, proposal: x.proposal, question: x.question === undefined ? null : x.question, errors, probedBefore: before.has(id) };
@@ -574,12 +575,15 @@ async function probeRound(ctx, { n, champion, api }) {
     const measures = { ...compact(m), ...(tm ? { trend: tm } : {}), ...(rm ? { regression: rm } : {}), ...(isTrend ? { target: tm.capture } : {}) };
     return { id: e.id, tag: e.tag, finding: e.finding, proposal: e.proposal, measures, screen, ride: ts ? TSC.rideOfSide(ts.side, ts.rides) : null, cycles: side.cycles + (ts ? ts.cycles : 0) + (rs ? rs.cycles : 0), ...(ts ? { skipped: TW.skippedShare([...ts.sessions, ...(rs ? rs.sessions : [])]) } : {}) };
   }));
-  // The lessons record: one line per probe, written once (a resume finds its lines by iteration and id).
+  // The lessons record: one line per probe, written once (a resume finds its lines by iteration and id). An edit the
+  // quiz gate left unquizzed (quiz-phase.js NOT_QUIZZED: no quiz prompt holds its target) says so (never `quiz`: that
+  // key is a stopped edit's).
   const recorded = new Set(LS.readLessons(lessonsFile).filter(e => e.iteration === n && !e.composed).map(e => e.proposalId));
+  const unquizzed = id => (report.quiz && report.quiz.edits && report.quiz.edits[id] && report.quiz.edits[id].verdict === QP.NOT_QUIZZED ? { notQuizzed: QP.NOT_HELD } : {});
   for (const p of probes.filter(x => !recorded.has(x.id))) {
     LS.appendLesson(lessonsFile, {
       proposalId: p.id, iteration: n, ...(p.tag.agent ? { agent: p.tag.agent } : { skill: p.tag.skill }), kind: p.tag.kind, finding: { id: p.finding.id, kind: p.finding.kind, line: F.findingLine(p.finding) },
-      findingKind: p.finding.kind, windows: lessonWindows, seed, half: 'probe', measures: p.measures, verdict: p.screen.verdict, n: p.measures.target.pairs, ...(draw ? { trendBatch: { index: n - 1, set: trend.set.fingerprint, probe: split.probe.legs.length, confirm: split.confirm.legs.length } } : {}),
+      findingKind: p.finding.kind, windows: lessonWindows, seed, half: 'probe', measures: p.measures, verdict: p.screen.verdict, n: p.measures.target.pairs, ...(draw ? { trendBatch: { index: n - 1, set: trend.set.fingerprint, probe: split.probe.legs.length, confirm: split.confirm.legs.length } } : {}), ...unquizzed(p.id),
     });
   }
   report.probes = probes.map(p => ({ ...(p.skipped ? { skipped: p.skipped } : {}), ...(p.ride ? { ride: p.ride } : {}), id: p.id, tag: p.tag, finding: p.finding.id, verdict: p.screen.verdict, harms: p.screen.harms, target: p.measures.target, ...(p.measures.trend ? { trend: { capture: p.measures.trend.capture, sides: p.measures.trend.sides } } : {}), ...(p.measures.regression ? { regression: { capture: p.measures.regression.capture } } : {}) }));

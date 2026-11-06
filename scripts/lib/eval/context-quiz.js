@@ -61,13 +61,14 @@ function quizErrors(v) {
   // whose share drops by flagDrop or more is asked again (confirmRuns more); a regression needs an exact test at alpha; up to
   // maxSlips smaller drops are noise. A probe edit's own question (train/quiz-phase.js): the champion's share of passing
   // answers at most redMaxShare (it fails it), the edit's at least greenMinShare (it passes it), questionRuns runs a side;
-  // the proposer's patterns at most maxPatternChars each (train/probe-question.js).
+  // the proposer's patterns at most maxPatternChars each, each required one holding a literal run of minLiteralRun letters
+  // or digits (train/probe-question.js).
   const g = v.gate;
   const share = (x, lo, hi) => typeof x === 'number' && x >= lo && x <= hi;
   if (!isObj(g) || !(typeof g.flagDrop === 'number' && g.flagDrop > 0 && g.flagDrop <= 1) || !(typeof g.alpha === 'number' && g.alpha > 0 && g.alpha < 1) || !(Number.isInteger(g.maxSlips) && g.maxSlips >= 0) || !(Number.isInteger(g.confirmRuns) && g.confirmRuns >= 1)
     || !(share(g.redMaxShare, 0, 1) && g.redMaxShare < 1) || !(share(g.greenMinShare, 0, 1) && g.greenMinShare > 0) || !(g.redMaxShare < g.greenMinShare) || !(Number.isInteger(g.questionRuns) && g.questionRuns >= 1)
-    || !(Number.isInteger(g.maxPatternChars) && g.maxPatternChars >= 1)) {
-    out.push('gate: { flagDrop: a share in (0, 1], alpha: in (0, 1), maxSlips: a whole number, 0 or more, confirmRuns: a whole number, 1 or more, redMaxShare: a share in [0, 1), greenMinShare: a share in (0, 1] above redMaxShare, questionRuns: a whole number, 1 or more, maxPatternChars: a whole number, 1 or more }');
+    || !(Number.isInteger(g.maxPatternChars) && g.maxPatternChars >= 1) || !(Number.isInteger(g.minLiteralRun) && g.minLiteralRun >= 1)) {
+    out.push('gate: { flagDrop: a share in (0, 1], alpha: in (0, 1), maxSlips: a whole number, 0 or more, confirmRuns: a whole number, 1 or more, redMaxShare: a share in [0, 1), greenMinShare: a share in (0, 1] above redMaxShare, questionRuns: a whole number, 1 or more, maxPatternChars: a whole number, 1 or more, minLiteralRun: a whole number, 1 or more }');
   }
   const bar = v.passBar;
   if (!isObj(bar) || !['partA', 'partB'].every(p => isObj(bar[p]) && Number.isInteger(bar[p].allCorrect) && Number.isInteger(bar[p].bothWays))) out.push('passBar: { partA, partB } each { allCorrect, bothWays }');

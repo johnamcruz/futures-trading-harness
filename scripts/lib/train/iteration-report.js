@@ -39,6 +39,7 @@ const TR = require('../replay/trend-ride');
 const CU = require('./curriculum');
 const RS = require('./risk-stats');
 const LD = require('./loss-diagnostics');
+const { NOT_QUIZZED } = require('./quiz-phase');
 
 const net = t => (t && Number.isInteger(t.pairs) ? { fixed: t.b, broken: t.c, pairs: t.pairs } : null);
 const targetLabel = tag => (tag ? (tag.agent ? `agent ${tag.agent}` : tag.skill || '?') : '?');
@@ -122,7 +123,9 @@ function quizOf(q) {
   if (q.off) return { off: true };
   const list = Object.entries(q.edits || {});
   const count = v => list.filter(([, x]) => x && x.verdict === v).length;
-  return { off: false, pass: count('pass'), reject: count('reject'), blocked: count('blocked'), stopped: list.filter(([, x]) => x && x.verdict !== 'pass').map(([id, x]) => ({ id, verdict: x.verdict, why: x.why })) };
+  // An edit whose target no quiz prompt holds (quiz-phase.js NOT_QUIZZED) is replayed unquizzed: neither a pass nor stopped.
+  const stopped = list.filter(([, x]) => x && x.verdict !== 'pass' && x.verdict !== NOT_QUIZZED);
+  return { off: false, pass: count('pass'), reject: count('reject'), blocked: count('blocked'), notQuizzed: count(NOT_QUIZZED), stopped: stopped.map(([id, x]) => ({ id, verdict: x.verdict, why: x.why })) };
 }
 
 function build({ probeReport = null, entries = [], previous = [], keepRuleRuns = null } = {}) {
@@ -184,8 +187,9 @@ function line(x) {
   const skipped = sk ? `; skipped bars: champion ${share(sk.champion)}${Object.entries(sk.edits || {}).map(([id, s]) => `, ${id} ${share(s)}`).join('')}${sk.composed ? `, combined ${share(sk.composed)}` : ''}` : '';
   const d = x.deltas;
   const deltas = d ? `; confirm deltas: reads ${d.reads ? `+${d.reads.fixed}/-${d.reads.broken} of ${d.reads.pairs}` : 'n/a'}, process ${d.process ? `+${d.process.fixed}/-${d.process.broken} of ${d.process.pairs}` : 'n/a'}, R/decision ${d.rPerDecision && d.rPerDecision.diff !== null && d.rPerDecision.diff !== undefined ? d.rPerDecision.diff : 'n/a'}${d.capture ? `, legs caught +${d.capture.fixed}/-${d.capture.broken} of ${d.capture.pairs} (${d.capture.rate.champion} -> ${d.capture.rate.probe}), net R/window ${d.capture.netR.diff === null ? 'n/a' : d.capture.netR.diff}` : ''}` : '';
-  // The quiz gate, said only when it was off or stopped an edit.
-  const quiz = x.quiz ? (x.quiz.off ? ', the quiz gate off' : x.quiz.stopped.length ? `, ${x.quiz.stopped.length} stopped by the quiz gate` : '') : '';
+  // The quiz gate, said only when it was off, stopped an edit or left one unquizzed.
+  const unquizzed = x.quiz && x.quiz.notQuizzed ? `, ${x.quiz.notQuizzed} not quizzed: no quiz prompt holds their target` : '';
+  const quiz = x.quiz ? (x.quiz.off ? ', the quiz gate off' : `${x.quiz.stopped.length ? `, ${x.quiz.stopped.length} stopped by the quiz gate` : ''}${unquizzed}`) : '';
   return `iteration ${x.iteration}: proposed ${x.proposed.length} (${x.proposed.filter(p => p.refused).length} refused${quiz}), screened ${screened}`
     + `${x.trend ? `; trend batch ${x.trend.batch.index} (probe ${x.trend.probe.legs} legs on ${x.trend.probe.days} day(s), confirm ${x.trend.confirm.legs} on ${x.trend.confirm.days})` : ''}`
     + `${x.trend ? `, ${x.trend.batch.trigger} (${x.trend.outcome})` : ''}`
