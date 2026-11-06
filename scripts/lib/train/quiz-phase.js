@@ -104,7 +104,7 @@ async function gateEdit({ quiz, hash, question, consolidation = false, championR
       const mini = PQ.miniQuiz(quiz, question);
       const ep = built(editRoot, mini);
       const cp = built(championRoot, mini);
-      const errs = PQ.anchorErrors(question, { editPrompts: ep, championPrompts: cp });
+      const errs = PQ.anchorErrors(question, { editPrompts: ep, championPrompts: cp, maxLineChars: g.maxGradedLineChars });
       if (errs.length) return done('blocked', errs.join('; '));
       // Red/green: the champion fails it, the edit passes it.
       out.stage = 'red-green';
@@ -203,10 +203,10 @@ async function quizRound(ctx, { n, champion, edits, api, work, dir, lessonsFile,
     const file = path.join(dir, `quiz-${e.id}.json`);
     fresh(phaseKey, file);
     const r = await api.phase(ctx, phaseKey, file, async () => {
-      // A consolidation (a removal, or new text in the document's own words) has no question of its own.
-      const consolidation = PQ.isConsolidation(e, champion.dir, { negations: quiz.negations, restrictions: quiz.restrictions });
+      // A consolidation (a pure deletion: probe-question.js isConsolidation) has no question of its own.
+      const consolidation = PQ.isConsolidation(e, champion.dir, { negations: quiz.negations, restrictions: quiz.restrictions, polar: quiz.polar });
       const blocked = why => ({ verdict: 'blocked', stage: 'question', why, quizHash: hash, regressions: [], flagged: [], slips: [], gains: [], redGreen: consolidation ? SKIPPED : null, asked: 0 });
-      const qe = consolidation ? [] : PQ.questionErrors(e.question, { maxPatternChars: quiz.gate.maxPatternChars, minLiteralRun: quiz.gate.minLiteralRun });
+      const qe = consolidation ? [] : PQ.questionErrors(e.question, quiz.gate);
       if (qe.length) return blocked(qe.join('; '));
       ctx.check();
       const tree = await api.candidateTree(ctx, { dir: work, id: `p-${e.id}`, proposal: e.proposal, champion });

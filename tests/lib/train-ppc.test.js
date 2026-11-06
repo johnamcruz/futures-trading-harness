@@ -1510,6 +1510,11 @@ test('the quiz gate in the loop: the proposal checks read the configured quiz fi
   // A five-letter word: refused under a minLiteralRun of six, valid under the stub's own.
   assert.match(await errorsOf({ gate: { minLiteralRun: 6 } }), /question\.required\[0\]: no literal run of 6 letters or digits/);
   assert.doesNotMatch(await errorsOf({}), /no literal run/);
+  // Its pattern grammar's limits too: no gap allowed, a gap is refused.
+  const gapped = { ...p, question: { ...question, required: ['line.{0,9}three'] } };
+  const gapErrors = async quiz => { const w = world({ proposals: [gapped], quiz }); await run(w); return reportOf(w).edits[0].errors.join('; '); };
+  assert.match(await gapErrors({ gate: { maxGaps: 0 } }), /question\.required\[0\]: at most 0 wildcard gaps/);
+  assert.doesNotMatch(await gapErrors({}), /wildcard gaps/);
   // A removal of a line holding the configured negation (or restriction) word needs a question; otherwise it does not.
   const removal = { tag: { skill: 'a', finding: 'F1', kind: 'removal' }, question: null, proposal: edit('- line three\n', '') };
   const removalErrors = async quiz => { const w = world({ proposals: [removal], quiz }); await run(w); return reportOf(w).edits[0].errors.join('; '); };

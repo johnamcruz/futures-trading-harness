@@ -341,10 +341,10 @@ test('a deletion that makes the model read a rule worse is rejected', async () =
   assert.strictEqual(r.redGreen, 'skipped (removal)');
 });
 
-test('quizRound: a removal (or a merge in the document\'s own words) needs no question; the report and its lessons line say red/green was skipped', async () => {
+test('quizRound: a removal (or a trim: a pure deletion) needs no question; the report and its lessons line say red/green was skipped', async () => {
   const w = round();
   const del = w.edit('', null, { kind: 'removal', find: '- line two\n' });
-  const merge = w.edit('- line one, line two', null);
+  const merge = w.edit('- line two', null, { find: '- line one\n\n- line two' });
   const { passed, report } = await w.go(1, [del, merge]);
   assert.deepStrictEqual(passed.map(e => e.id), [del.id, merge.id]);
   for (const e of [del, merge]) assert.strictEqual(report.edits[e.id].redGreen, 'skipped (removal)');
@@ -558,6 +558,20 @@ test('quizRound: every quiz ask is charged to the loop\'s model calls, stopped a
   await w.go();
   assert.strictEqual(w.ctx.state.modelCalls, w.f.asks.length);
   assert.strictEqual(w.f.asks.length, total, 'no ask repeated across the stop');
+});
+
+test('quizRound: the question\'s pattern limits are the run\'s quiz file\'s (its gate), never the repo file\'s', async () => {
+  // A gap in a forbidden pattern (the grammar holds for both).
+  const q = { ...QUESTION, forbidden: ['nope.{0,9}line'] };
+  const go = async gate => {
+    const w = round();
+    w.ctx.steps.loadQuiz = () => ({ value: { ...QUIZ, gate: { ...G, ...gate } }, hash: HASH });
+    const e = w.edit('- line one\n- GOOD → wait for the retest', q);
+    return (await w.go(1, [e])).report.edits[e.id];
+  };
+  assert.match((await go({ maxGaps: 0 })).why, /question\.forbidden\[0\]: at most 0 wildcard gaps/);
+  assert.strictEqual((await go({})).verdict, 'pass');
+  assert.match((await go({ maxGradedLineChars: 3 })).why, /question\.required\[0\]: matches nothing in the champion's head prompt/);
 });
 
 test('quizRound: the gate is off only for an explicit false; a missing or null setting is on', async () => {

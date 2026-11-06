@@ -526,17 +526,16 @@ async function probeRound(ctx, { n, champion, api }) {
     const ids = [];
     // The proposer's quiz patterns are bounded by the quiz file's gate (probe-question.js).
     const quizFile = (ctx.steps.loadQuiz || require('../eval/context-quiz').loadQuiz)().value;
-    const { maxPatternChars, minLiteralRun } = quizFile.gate;
     return res.proposals.slice(0, cfg.k).map(x => {
       if (x.error) return { id: null, errors: [x.error], line: x.line };
       const id = P.proposalId(x.proposal);
       if (ids.includes(id)) return null;
       ids.push(id);
       // Its own quiz question (probe-question.js), written first: missing or malformed, the edit never runs. A
-      // consolidation (a removal, or new text in the document's own words) teaches nothing new: its question is optional
+      // consolidation (a pure deletion: probe-question.js isConsolidation) teaches nothing new: its question is optional
       // (one written is still checked).
-      const optional = PQ.isConsolidation(x, champion.dir, { negations: quizFile.negations, restrictions: quizFile.restrictions }) && (x.question === undefined || x.question === null);
-      const errors = [...P.validateProposal(x.proposal, { root: champion.dir }), ...PE.tagErrors(x.tag, x.proposal, { findings }), ...(optional ? [] : PQ.questionErrors(x.question, { maxPatternChars, minLiteralRun }))];
+      const optional = PQ.isConsolidation(x, champion.dir, { negations: quizFile.negations, restrictions: quizFile.restrictions, polar: quizFile.polar }) && (x.question === undefined || x.question === null);
+      const errors = [...P.validateProposal(x.proposal, { root: champion.dir }), ...PE.tagErrors(x.tag, x.proposal, { findings }), ...(optional ? [] : PQ.questionErrors(x.question, quizFile.gate))];
       if (!errors.length) errors.push(...PE.styleErrors(x.proposal, { root: champion.dir, kind: x.tag.kind }));
       const finding = findings.find(f => x.tag && f.id === x.tag.finding) || null;
       return { id, tag: x.tag, finding, proposal: x.proposal, question: x.question === undefined ? null : x.question, errors, probedBefore: before.has(id) };

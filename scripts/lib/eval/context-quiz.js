@@ -58,6 +58,7 @@ function quizErrors(v) {
   if (!str(v.answerFormat)) out.push('answerFormat: the text appended to each question');
   if (!Array.isArray(v.negations) || !v.negations.every(str)) out.push('negations: a list of words');
   if (!(Number.isInteger(v.negationWindow) && v.negationWindow >= 1)) out.push('negationWindow: the words before a match a negation reaches');
+  if (!(Array.isArray(v.polar) && v.polar.length && v.polar.every(w => typeof w === 'string' && /^[a-z']+$/.test(w)))) out.push('polar: a list of lower-case words (above, below, long, short, ...)');
   // The words whose change makes a probe edit teach (train/probe-question.js isConsolidation): it needs a question.
   if (!(Array.isArray(v.restrictions) && v.restrictions.length && v.restrictions.every(w => typeof w === 'string' && /^[a-z']+$/.test(w)))) out.push('restrictions: a list of lower-case words ("only", "must", "unless")');
   out.push(...regexErrors([v.unsure], 'unsure'));
@@ -72,8 +73,8 @@ function quizErrors(v) {
   if (!isObj(g) || !(typeof g.flagDrop === 'number' && g.flagDrop > 0 && g.flagDrop <= 1) || !(typeof g.alpha === 'number' && g.alpha > 0 && g.alpha < 1) || !(Number.isInteger(g.maxSlips) && g.maxSlips >= 0) || !(Number.isInteger(g.confirmRuns) && g.confirmRuns >= 1)
     || !(share(g.redMaxShare, 0, 1) && g.redMaxShare < 1) || !(share(g.greenMinShare, 0, 1) && g.greenMinShare > 0) || !(g.redMaxShare < g.greenMinShare) || !(Number.isInteger(g.questionRuns) && g.questionRuns >= 1)
     || !(Number.isInteger(g.maxPatternChars) && g.maxPatternChars >= 1) || !(Number.isInteger(g.minLiteralRun) && g.minLiteralRun >= 1)
-    || !(Number.isInteger(g.maxUnboundedQuantifiers) && g.maxUnboundedQuantifiers >= 0) || !(Number.isInteger(g.maxGradedLineChars) && g.maxGradedLineChars >= 1)) {
-    out.push('gate: { flagDrop: a share in (0, 1], alpha: in (0, 1), maxSlips: a whole number, 0 or more, confirmRuns: a whole number, 1 or more, redMaxShare: a share in [0, 1), greenMinShare: a share in (0, 1] above redMaxShare, questionRuns: a whole number, 1 or more, maxPatternChars: a whole number, 1 or more, minLiteralRun: a whole number, 1 or more, maxUnboundedQuantifiers: a whole number, 0 or more, maxGradedLineChars: a whole number, 1 or more }');
+    || ![g.maxGaps, g.maxGapChars, g.maxOptionals].every(x => Number.isInteger(x) && x >= 0) || !(Number.isInteger(g.maxGradedLineChars) && g.maxGradedLineChars >= 1)) {
+    out.push('gate: { flagDrop: a share in (0, 1], alpha: in (0, 1), maxSlips: a whole number, 0 or more, confirmRuns: a whole number, 1 or more, redMaxShare: a share in [0, 1), greenMinShare: a share in (0, 1] above redMaxShare, questionRuns: a whole number, 1 or more, maxPatternChars: a whole number, 1 or more, minLiteralRun: a whole number, 1 or more, maxGaps, maxGapChars, maxOptionals: whole numbers, 0 or more, maxGradedLineChars: a whole number, 1 or more }');
   }
   const bar = v.passBar;
   if (!isObj(bar) || !['partA', 'partB'].every(p => isObj(bar[p]) && Number.isInteger(bar[p].allCorrect) && Number.isInteger(bar[p].bothWays))) out.push('passBar: { partA, partB } each { allCorrect, bothWays }');
@@ -202,9 +203,11 @@ function matchesUnnegated(line, src, negations, window) {
 }
 
 function gradeAnswer(quiz, q, answer) {
-  const { line: whole, fmt } = answerLine(answer);
-  // Every pattern runs on the line cut at the gate's maxGradedLineChars: a long answer never makes one backtrack for long.
-  const line = whole.slice(0, quiz.gate.maxGradedLineChars);
+  const { line, fmt } = answerLine(answer);
+  // A line past the gate's maxGradedLineChars is never graded (no pattern runs on it, nor on a cut of it, where a
+  // forbidden phrase past the cut would hide): a fail, said so.
+  const cap = quiz.gate.maxGradedLineChars;
+  if (line.length > cap) return { id: q.id, line, fmt, pass: false, miss: [...q.required], forb: [], unsure: false, why: `the answer line is longer than gate.maxGradedLineChars (${cap}): not graded, a fail` };
   const miss = q.required.filter(src => !re(src).test(line));
   const forb = q.forbidden.filter(src => matchesUnnegated(line, src, quiz.negations, quiz.negationWindow));
   return { id: q.id, line, fmt, pass: !miss.length && !forb.length, miss, forb, unsure: re(quiz.unsure).test(line) };

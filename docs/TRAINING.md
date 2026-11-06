@@ -400,24 +400,39 @@ iteration of the loop then runs these steps (`scripts/lib/train/probe.js`):
    before. A missing or malformed question makes the edit invalid, with the
    reason named. Its id is code's (`e-<proposal id>`), never the proposer's.
    Its `required` and `forbidden` patterns are bounded: each at most the quiz
-   file's `gate.maxPatternChars` (120) characters, none with a nested
-   quantifier such as `(a+)+`, no repeated group (`(a|b)*`, `(ab)+`,
-   `(ab){2}`: an optional `(ab)?` is fine), at most
-   `gate.maxUnboundedQuantifiers` (2) unbounded repeats (`*`, `+`,
-   `{n,}`), and each `required` one holds a literal
+   file's `gate.maxPatternChars` (120) characters, and written in the
+   pattern grammar (`scripts/lib/train/pattern-grammar.js`, a whitelist:
+   anything else is refused with the rule it breaks): literal text and
+   escaped punctuation (one letter may be optional: `needs?`), `\b`,
+   `\s`/`\s+`/`\s*` only between literal text, character classes with
+   at most `?` after, groups of literal alternatives (`(a|the)`) with at
+   most `?` after, `^` and `$` at the ends, at most `gate.maxOptionals`
+   (3) optional parts, and at most `gate.maxGaps` (2) wildcard gaps
+   `.{0,N}` (or `\w{0,N}`, `\S{1,N}`), N at most `gate.maxGapChars`
+   (60), each preceded by literal text or the start and followed by literal
+   text; an unbounded `.*` or `\w+`, a repeated group, a lookaround or a
+   back reference never. Each `required` one also holds a literal
    word: a run of `gate.minLiteralRun` (4) letters or digits in every
    alternative, escapes, classes and optional parts not counted (a `.` or
-   `\bno\b` would match any answer). The grader tests every pattern on the
-   answer's line cut at `gate.maxGradedLineChars` (1000). A consolidation (an edit of kind
-   removal, or one whose new text adds no word its document lacks: a trim or
-   a merge in its own words) teaches nothing new, so its question is optional
-   and never asked. An edit whose find or replace holds a negation (one of
+   `\bno\b` would match any answer), and is tested on the champion's
+   prompt line by line, each line cut at `gate.maxGradedLineChars` (a gap's
+   bounds are no numbers the question adds). The grader fails, ungraded, any
+   answer line longer than `gate.maxGradedLineChars` (1000), with the
+   reason (a cut line could hide a forbidden phrase past the cut). A
+   consolidation (a pure in-order deletion: an edit of kind removal, or a
+   trim whose replace is its find's words in order with some left out;
+   never a word added, even the document's own, never words reordered)
+   teaches nothing new, so its question is optional and never asked. An
+   edit whose find or replace holds a negation (one of
    the quiz file's `negations`, or a word ending in n't: added, dropped or
    moved, it flips or shifts a rule in the document's own words), or that
    adds or removes a restriction word (the quiz file's `restrictions`:
-   "only", "must", "unless", ...), is never a consolidation, a removal too,
-   and needs a question (a pure deletion of such a line then has no new text
-   to anchor one in, so the gate blocks it).
+   "only", "must", "unless", ...), or that adds, removes or moves a polar
+   word (the quiz file's `polar`: above/below, long/short,
+   premium/discount, buy/sell, ...: each with the same neighbours on its
+   line before and after), is never a consolidation, a removal too, and
+   needs a question (a pure deletion of a line holding any of them then has
+   no new text to anchor one in, so the gate blocks it: strict by design).
 
    **The quiz gate, before any replay** (`scripts/lib/train/quiz-phase.js`,
    phases `<n>:quiz-champion` and `<n>:quiz:<id>`, files in the round's
@@ -2042,7 +2057,9 @@ step 2), with the same runner (`scripts/lib/eval/quiz-run.js`, which the CLI's
 `gate` also holds `redMaxShare` (0.4: the champion's share of right answers to
 it, at most), `greenMinShare` (0.8: the edit's, at least), `questionRuns` (5
 runs a side), `maxPatternChars` (120: the longest pattern a proposer may
-write) and `minLiteralRun` (4: the literal run of letters or digits each of its
+write), `maxGaps` (2), `maxGapChars` (60) and `maxOptionals` (3) (the
+pattern grammar's limits), `maxGradedLineChars` (1000: a longer answer line
+fails, ungraded) and `minLiteralRun` (4: the literal run of letters or digits each of its
 required patterns must hold). In `run` (by hand too), an empty reply, or a harness that exits
 non-zero, is recorded as an error and not graded; nothing else about `run`
 changed (each run is asked once, as before). With 53 questions at K runs each, a plain per-question drop rule

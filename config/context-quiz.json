@@ -20,6 +20,13 @@
     "won't"
   ],
   "negationWindow": 4,
+  "polar": [
+    "above", "below", "over", "under", "upper", "high", "highs", "higher", "highest", "low", "lows", "lower", "lowest",
+    "long", "longs", "short", "shorts", "buy", "buys", "buyer", "buyers", "sell", "sells", "seller", "sellers",
+    "bid", "ask", "premium", "discount", "bullish", "bearish", "bull", "bear", "before", "after", "up", "down",
+    "uptrend", "downtrend", "support", "resistance", "rising", "falling", "rise", "fall", "top", "tops", "bottom",
+    "bottoms", "inside", "outside"
+  ],
   "restrictions": [
     "only",
     "always",
@@ -42,7 +49,9 @@
     "questionRuns": 5,
     "maxPatternChars": 120,
     "minLiteralRun": 4,
-    "maxUnboundedQuantifiers": 2,
+    "maxGaps": 2,
+    "maxGapChars": 60,
+    "maxOptionals": 3,
     "maxGradedLineChars": 1000
   },
   "passBar": {

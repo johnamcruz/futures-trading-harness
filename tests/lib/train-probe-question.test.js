@@ -104,55 +104,73 @@ test('anchorErrors: every required pattern matches text the champion\'s prompt a
   assert.match(PQ.anchorErrors(mixed, { editPrompts: edited, championPrompts: champion }).join(), /question\.required\[1\]: matches nothing/);
 });
 
-test('questionErrors: the proposer\'s patterns are bounded: compiled, at most gate.maxPatternChars, no nested quantifier', () => {
-  const max = Q.loadQuiz().value.gate.maxPatternChars;
+test('anchorErrors: each required pattern is tested line by line on the champion\'s prompt, each line cut at gate.maxGradedLineChars', { timeout: 10000 }, () => {
+  const cap = Q.loadQuiz().value.gate.maxGradedLineChars;
+  const q = PQ.questionOf({ ...QUESTION, text: 'Does the sweep wait?', anchor: 'NEW → wait', required: ['wait.{0,60}retest.{0,60}close'] }, 'x');
+  // A gap's bounds are no numbers the question adds.
+  // A long prompt (as the head's, about 85k characters flattened), its words on one line: matched, and fast.
+  const lines = Array.from({ length: 1700 }, (_, i) => `- line ${'abcd '.repeat(9)}${i % 2 ? 'wait' : 'retest'}`);
+  const champion = { head: [...lines, '- wait for the retest at the close'].join('\n') };
+  assert.ok(champion.head.length > 80000);
+  const edited = { head: `${champion.head}\n- NEW → wait` };
+  let t = Date.now();
+  assert.deepStrictEqual(PQ.anchorErrors(q, { editPrompts: edited, championPrompts: champion, maxLineChars: cap }), []);
+  assert.ok(Date.now() - t < 200, String(Date.now() - t));
+  // The words split over two lines: no line holds the answer (no match across a line break).
+  const split = { head: [...lines, '- wait for the', 'retest at the close'].join('\n') };
+  assert.match(PQ.anchorErrors(q, { editPrompts: { head: `${split.head}\n- NEW → wait` }, championPrompts: split, maxLineChars: cap }).join(), /question\.required\[0\]: matches nothing/);
+  // A line past the cap is tested on its first maxLineChars characters only (a hostile long line stays fast).
+  const longLine = { head: `${'wait '.repeat(cap)}retest at the close` };
+  t = Date.now();
+  assert.match(PQ.anchorErrors(q, { editPrompts: { head: `${longLine.head}\n- NEW → wait` }, championPrompts: longLine, maxLineChars: cap }).join(), /matches nothing/);
+  assert.ok(Date.now() - t < 200);
+  // The cap read from the quiz file when not given.
+  assert.deepStrictEqual(PQ.anchorErrors(q, { editPrompts: edited, championPrompts: champion }), []);
+});
+
+test('questionErrors: the proposer\'s patterns are bounded: compiled, at most gate.maxPatternChars, in the pattern grammar', () => {
+  const gate = Q.loadQuiz().value.gate;
+  const max = gate.maxPatternChars;
   assert.strictEqual(max, 120);
-  assert.deepStrictEqual(PQ.questionErrors(QUESTION, { maxPatternChars: max }), []);
-  assert.match(PQ.questionErrors({ ...QUESTION, required: ['x'.repeat(max + 1)] }, { maxPatternChars: max }).join(), new RegExp(`question\\.required\\[0\\]: at most ${max} characters`));
-  assert.deepStrictEqual(PQ.questionErrors({ ...QUESTION, required: ['x'.repeat(max)] }, { maxPatternChars: max }), []);
-  assert.match(PQ.questionErrors({ ...QUESTION, forbidden: ['x'.repeat(max + 1)] }, { maxPatternChars: max }).join(), /question\.forbidden\[0\]: at most/);
-  for (const bad of ['(a+)+', '(.*)*', '(\\w+\\s?)*', '(?:x*)+y', '(a{1,3})+', '((ab)+)*']) {
-    assert.match(PQ.questionErrors({ ...QUESTION, required: [bad] }, { maxPatternChars: max }).join(), /question\.required\[0\]: a nested quantifier/, bad);
+  assert.deepStrictEqual(PQ.questionErrors(QUESTION, gate), []);
+  assert.match(PQ.questionErrors({ ...QUESTION, required: ['x'.repeat(max + 1)] }, gate).join(), new RegExp(`question\\.required\\[0\\]: at most ${max} characters`));
+  assert.deepStrictEqual(PQ.questionErrors({ ...QUESTION, required: ['x'.repeat(max)] }, gate), []);
+  assert.match(PQ.questionErrors({ ...QUESTION, forbidden: ['x'.repeat(max + 1)] }, gate).join(), /question\.forbidden\[0\]: at most/);
+  // Every form outside the grammar (scripts/lib/train/pattern-grammar.js), required or forbidden, named by its rule.
+  for (const bad of ['(a+)+', '(.*)*', '(\\w+\\s?)*', '(?:x*)+y', '(a{1,3})+', '((ab)+)*', 'abcd(\\w|\\d)*!', '.{0,60}.{0,60}.{0,60}.{0,60}!', '\\w*\\w{0,999}\\w*!', '.*.*zzzz', 'a+b*']) {
+    for (const k of ['required', 'forbidden']) assert.match(PQ.questionErrors({ ...QUESTION, [k]: [bad] }, gate).join(), new RegExp(`question\\.${k}\\[0\\]: (?!at most ${max})`), `${k} ${bad}`);
   }
-  for (const ok of ['\\bwait\\b', '(enter|take) now', 'a+b*', '(no)?\\s+wait', '\\(a+\\)+']) {
-    assert.deepStrictEqual(PQ.questionErrors({ ...QUESTION, forbidden: [ok] }, { maxPatternChars: max }), [], ok);
+  for (const ok of ['\\bwait\\b', '(enter|take) now', 'retest (a|the)', '(no)?\\s+wait', 'wait(s|ed)?', 'three\\s+pushes', 'long.{0,40}okay']) {
+    for (const k of ['required', 'forbidden']) assert.deepStrictEqual(PQ.questionErrors({ ...QUESTION, [k]: [ok] }, gate), [], ok);
   }
-  assert.match(PQ.questionErrors({ ...QUESTION, required: ['('] }, { maxPatternChars: max }).join(), /not a regex/);
-  // The bound read from the quiz file when not given.
+  assert.match(PQ.questionErrors({ ...QUESTION, required: ['('] }, gate).join(), /not a regex/);
+  // The limits are the caller's (the run's quiz file): none given, the repo's.
+  assert.match(PQ.questionErrors({ ...QUESTION, required: ['long.{0,40}okay'] }, { ...gate, maxGaps: 0 }).join(), /question\.required\[0\]: at most 0 wildcard gaps/);
   assert.match(PQ.questionErrors({ ...QUESTION, required: ['x'.repeat(max + 1)] }).join(), /at most/);
 });
 
-test('questionErrors: no repeated group and at most gate.maxUnboundedQuantifiers unbounded repeats (they backtrack without end); the grader caps the line', () => {
+test('gradeAnswer: an answer line longer than gate.maxGradedLineChars fails closed, never graded on a cut line', { timeout: 10000 }, () => {
   const quiz = Q.loadQuiz().value;
-  const gate = quiz.gate;
-  const opts = { maxPatternChars: gate.maxPatternChars, minLiteralRun: gate.minLiteralRun, maxUnbounded: gate.maxUnboundedQuantifiers };
-  // The adversarial one: a group of overlapping branches, repeated. Unrefused it takes seconds on a short line.
-  const bad = 'abcd(\\w|\\d)*!';
+  const cap = quiz.gate.maxGradedLineChars;
+  assert.strictEqual(cap, 1000);
+  const q = { id: 'x', layer: 'entry', prompt: 'head', text: 't', rule: 'r', anchor: 'a', required: ['\\bwait\\b'], forbidden: ['\\benter now\\b'] };
+  // 1110 characters: the answer's words up front, a forbidden phrase past the cap.
+  const long = `wait for the retest, ${'and so on '.repeat(108)}enter now`;
+  assert.ok(long.length > cap && long.length < 1200, String(long.length));
+  const g = Q.gradeAnswer(quiz, q, `ANSWER: ${long}`);
+  assert.strictEqual(g.pass, false);
+  assert.match(g.why, new RegExp(`longer than gate\\.maxGradedLineChars \\(${cap}\\)`));
+  assert.strictEqual(g.line, long, 'the whole line, never a silently cut one');
+  // At the cap: graded as before.
+  const ok = `wait for the retest${' '.repeat(cap - 19)}`.slice(0, cap);
+  assert.strictEqual(Q.gradeAnswer(quiz, q, `ANSWER: ${ok}`).pass, true);
+  // A pattern that would backtrack on a long line is never run on one.
+  const slow = { ...q, required: ['\\w*\\w*\\w*!'] };
   const t = Date.now();
-  assert.match(PQ.questionErrors({ ...QUESTION, required: [bad] }, opts).join(), /question\.required\[0\]: a repeated group/);
-  assert.ok(Date.now() - t < 500);
-  for (const g of ['(a|b)+wait', '(wait)*', '(wait){2}', '(wait){1,}', '(wait){2,5}', '(?:wait\\s)+', '(wait){0,2}']) {
-    for (const k of ['required', 'forbidden']) assert.match(PQ.questionErrors({ ...QUESTION, [k]: [g] }, opts).join(), new RegExp(`question\\.${k}\\[0\\]: a repeated group`), `${k} ${g}`);
-  }
-  for (const ok of ['(enter|take) now', 'retest (a|the)', '(no)?\\s+wait', 'wait(s|ed)?', '(wait){1}', 'wait (now){0,1}', '\\(wait\\)+', 'wait[(]+']) {
-    assert.deepStrictEqual(PQ.questionErrors({ ...QUESTION, required: [ok] }, opts), [], ok);
-  }
-  // Unbounded repeats: up to the gate's count.
-  const n = gate.maxUnboundedQuantifiers;
-  assert.strictEqual(n, 2);
-  assert.deepStrictEqual(PQ.questionErrors({ ...QUESTION, required: ['wait\\s+for\\s*it'] }, opts), []);
-  assert.match(PQ.questionErrors({ ...QUESTION, required: ['\\w*\\w*\\w*wait'] }, opts).join(), new RegExp(`at most ${n} unbounded repeats`));
-  assert.match(PQ.questionErrors({ ...QUESTION, forbidden: ['a.*b.+c{2,}wait'] }, opts).join(), /question\.forbidden\[0\]: at most/);
-  // The grader tests a pattern on the answer's line cut at gate.maxGradedLineChars, whatever the model wrote.
-  const cap = gate.maxGradedLineChars;
-  assert.ok(Number.isInteger(cap) && cap > 0);
-  const q = { id: 'x', layer: 'entry', prompt: 'head', text: 't', rule: 'r', anchor: 'a', required: ['\\w*\\w*!'], forbidden: [] };
-  const t2 = Date.now();
-  const g = Q.gradeAnswer(quiz, q, `ANSWER: ${'a'.repeat(cap * 20)}`);
-  assert.strictEqual(g.line.length, cap);
-  assert.ok(Date.now() - t2 < 5000, String(Date.now() - t2));
-  for (const key of ['maxGradedLineChars', 'maxUnboundedQuantifiers']) {
-    const { [key]: _x, ...rest } = gate;
+  assert.strictEqual(Q.gradeAnswer(quiz, slow, `ANSWER: ${'a'.repeat(cap * 20)}`).pass, false);
+  assert.ok(Date.now() - t < 200);
+  for (const key of ['maxGradedLineChars', 'maxGaps', 'maxGapChars', 'maxOptionals']) {
+    const { [key]: _x, ...rest } = quiz.gate;
     assert.match(Q.quizErrors({ ...quiz, gate: rest }).join(), new RegExp(key));
   }
 });
@@ -168,11 +186,16 @@ test('questionErrors: each required pattern holds a literal run of gate.minLiter
   const gate = Q.loadQuiz().value.gate;
   const n = gate.minLiteralRun;
   assert.strictEqual(n, 4, 'the quiz file\'s gate');
-  const opts = { maxPatternChars: gate.maxPatternChars, minLiteralRun: n };
-  for (const bad of ['.', '.*', '\\w+', '\\bno\\b', '\\bthe\\b', '[a-z]{4,}', '\\w\\w\\w\\w', 'abc', '(.|wait)', 'wait|.', '(wait)?', 'wai?t', '(?!wait).', 'w-a-i-t', '.{0,1000}', '\\w{1,1000}', '\\S{1,9999}', '((wait))?', '(?:(?:wait))?', '(?<word>.)', '(?<word>.)\\k<word>', '(?<!wait).', '(?:wait|.)+', 'wait{0}', '(wait){0,3}']) {
+  const opts = gate;
+  // In the grammar, yet no literal word: refused by the literal-run rule itself.
+  for (const bad of ['\\bno\\b', '\\bthe\\b', 'abc', '(wait)?', 'wai?t', 'w-a-i-t', '(a|wait) x', 'the.{0,9}end']) {
     assert.match(PQ.questionErrors({ ...QUESTION, required: [bad] }, opts).join(), new RegExp(`question\\.required\\[0\\]: no literal run of ${n} letters or digits`), bad);
   }
-  for (const ok of ['\\bwait\\b', 'wait', '(enter|take) now', '(no)?\\s+wait', 'retest', 'wait(s|ed)?', '\\bclose[sd]?\\b', '2021', 'retest (a|the)', '(a|the) retest', '(?:wait|hold) (on|for)', '(?<verb>wait)', '((wait))', 'wait{2}', '(?=wait)wait']) {
+  // Outside the grammar: refused whatever their words.
+  for (const bad of ['.', '.*', '\\w+', '[a-z]{4,}', '\\w\\w\\w\\w', '(.|wait)', 'wait|.', '(?!wait).', '.{0,1000}', '\\w{1,1000}', '\\S{1,9999}', '((wait))?', '(?:(?:wait))?', '(?<word>.)', '(?<word>.)\\k<word>', '(?<!wait).', '(?:wait|.)+', 'wait{0}', '(wait){0,3}', '(?<verb>wait)', '((wait))', 'wait{2}', '(?=wait)wait']) {
+    assert.ok(PQ.questionErrors({ ...QUESTION, required: [bad] }, opts).length > 0, bad);
+  }
+  for (const ok of ['\\bwait\\b', 'wait', '(enter|take) now', '(no)?\\s+wait', 'retest', 'wait(s|ed)?', '\\bclose[sd]?\\b', '2021', 'retest (a|the)', '(a|the) retest', '(?:wait|hold) (on|for)']) {
     assert.deepStrictEqual(PQ.questionErrors({ ...QUESTION, required: [ok] }, opts), [], ok);
   }
   // Forbidden patterns are never required to match anything: a short one stays fine.
@@ -226,7 +249,7 @@ test('isConsolidation: a negation added, a word ending in n\'t, or a restriction
   assert.strictEqual(PQ.isConsolidation(e('- line two, the close', '- line two, only the close'), root), false, 'only added');
   assert.strictEqual(PQ.isConsolidation(e('- only longs, and you must hold unless the close breaks\n\n', '', 'removal'), root), false, 'a removal of a restricted rule');
   // A restriction kept as it is, word for word: a trim around it stays one.
-  assert.strictEqual(PQ.isConsolidation(e('- only longs, and you must hold unless the close breaks', '- only longs: you must hold unless the close breaks'), root), true);
+  assert.strictEqual(PQ.isConsolidation(e('- only longs, and you must hold unless the close breaks', '- only longs, and you must hold unless close breaks'), root), true);
   assert.strictEqual(PQ.isConsolidation(e('- line two, the close\n', '', 'removal'), root), true);
   // The lists are the quiz file's (or given): a word of one's own counts.
   assert.ok(['only', 'must', 'unless'].every(w => quiz.restrictions.includes(w)), JSON.stringify(quiz.restrictions));
@@ -236,7 +259,32 @@ test('isConsolidation: a negation added, a word ending in n\'t, or a restriction
   assert.match(Q.quizErrors({ ...quiz, restrictions: ['Only'] }).join(), /restrictions: /);
 });
 
-test('isConsolidation: a removal, or an edit whose new text adds no word the champion\'s document lacks; its question is optional', () => {
+test('isConsolidation: a polar word (above/below, long/short, premium/discount, ...) added, removed or moved: never one', () => {
+  const root = require('../helpers').tmpDir();
+  const fs = require('fs');
+  const path = require('path');
+  fs.mkdirSync(path.join(root, 'skills', 'a'), { recursive: true });
+  // The fib-retracement and VWAP skills' own lines.
+  fs.writeFileSync(path.join(root, 'skills/a/SKILL.md'), '---\nname: a\ndescription: d\n---\n\n# A\n\n**Premium and discount.** Above the leg\'s 0.5\nlevel is premium, below it discount: a long from a bullish leg\'s discount,\na short from a bearish leg\'s premium (hypothesis).\n\nback in the leg\'s direction: for a bullish leg, above the zone\'s top, or\n\n- Price above a rising RTH VWAP, with pullbacks holding it → buyers in\n\n- buy low and then sell high\n\n- line two\n');
+  const e = (find, replace, kind = 'rule') => ({ tag: { skill: 'a', kind }, proposal: { ...PROPOSAL, edits: [{ file: 'skills/a/SKILL.md', find, replace }] } });
+  const quiz = Q.loadQuiz().value;
+  assert.strictEqual(PQ.isConsolidation(e('level is premium, below it discount', 'level is discount, below it premium'), root), false, 'premium/discount swapped');
+  assert.strictEqual(PQ.isConsolidation(e('above the zone\'s top', 'below the zone\'s top'), root), false, 'above the zone -> below');
+  assert.strictEqual(PQ.isConsolidation(e('- Price above a rising RTH VWAP', '- Price below a rising RTH VWAP'), root), false, 'vwap above -> below');
+  assert.strictEqual(PQ.isConsolidation(e('a long from a bullish', 'a short from a bullish'), root), false, 'a long from -> a short from');
+  // A deletion that leaves "a long from a bullish leg's premium": polar words gone, the rule flipped.
+  assert.strictEqual(PQ.isConsolidation(e('a long from a bullish leg\'s discount,\na short from a bearish leg\'s premium', 'a long from a bullish leg\'s premium', 'removal'), root), false, 'a removal that flips the rule');
+  // Every polar word kept, but a neighbour changed: never one either.
+  assert.strictEqual(PQ.isConsolidation(e('- buy low and then sell high', '- buy low sell high'), root), false, 'a polar word moved beside another');
+  // A deletion of a whole line holding a polar word blocks too (strict, failing closed); one beside it does not.
+  assert.strictEqual(PQ.isConsolidation(e('- buy low and then sell high\n\n', '', 'removal'), root), false);
+  assert.strictEqual(PQ.isConsolidation(e('- buy low and then sell high\n\n- line two', '- buy low and then sell high'), root), true, 'the next line deleted');
+  assert.ok(['above', 'below', 'long', 'short', 'premium', 'discount', 'buy', 'sell', 'high', 'low'].every(w => quiz.polar.includes(w)), JSON.stringify(quiz.polar));
+  assert.strictEqual(PQ.isConsolidation(e('- line two\n', '', 'removal'), root, { polar: ['two'] }), false, 'the list given');
+  assert.match(Q.quizErrors({ ...quiz, polar: [] }).join(), /polar: /);
+});
+
+test('isConsolidation: a pure in-order deletion only (a removal, or a trim); its question is optional', () => {
   const root = require('../helpers').tmpDir();
   const fs = require('fs');
   const path = require('path');
@@ -244,9 +292,12 @@ test('isConsolidation: a removal, or an edit whose new text adds no word the cha
   fs.writeFileSync(path.join(root, 'skills/a/SKILL.md'), '---\nname: a\ndescription: d\n---\n\n# A\n\n- line one\n\n- line two\n\n- wait for the close\n');
   const e = (replace, kind = 'rule', find = '- line one') => ({ tag: { skill: 'a', kind }, proposal: { ...PROPOSAL, edits: [{ file: 'skills/a/SKILL.md', find, replace }] } });
   assert.strictEqual(PQ.isConsolidation(e('', 'removal', '- line two\n'), root), true, 'a removal');
-  assert.strictEqual(PQ.isConsolidation(e('- line one; the close'), root), true, 'a merge in the document\'s own words');
+  assert.strictEqual(PQ.isConsolidation(e('- line two', 'rule', '- line one\n\n- line two'), root), true, 'a trim: a line deleted');
+  assert.strictEqual(PQ.isConsolidation(e('- LINE ONE.', 'rule', '- line one'), root), true, 'case and punctuation are no words');
+  // Not a deletion: the document's own words added, or the same words reordered.
+  assert.strictEqual(PQ.isConsolidation(e('- line one; the close'), root), false, 'words the find lacks, even the document\'s own');
+  assert.strictEqual(PQ.isConsolidation(e('- line two, line one', 'rule', '- line one, line two'), root), false, 'reordered');
   assert.strictEqual(PQ.isConsolidation(e('- line one\n- a stall-break → enter'), root), false, 'a new word');
-  assert.strictEqual(PQ.isConsolidation(e('- LINE ONE, two'), root), true, 'case and punctuation are no words');
   assert.strictEqual(PQ.isConsolidation({ tag: null, proposal: null }, root), false);
   assert.strictEqual(PQ.isConsolidation(e('- line one, three'), path.join(root, 'none')), false, 'no document: never a consolidation (fails closed)');
 });
