@@ -672,7 +672,7 @@ test('with a trend set: its missed legs are findings first; an edit that catches
   assert.deepStrictEqual([report.trend.probe.legs, report.trend.confirm.legs], [split.probe.legs, split.confirm.legs]);
   // The probe half's missed legs counted (every one learnable here: the trendFacts step's), the facts worked out only
   // for the champion's probe-half runs (the findings' half), never a confirm, regression or edit run.
-  assert.deepStrictEqual(report.trend.missed, { missed, learnable: missed, noValidPlan: 0, unknown: 0 });
+  assert.deepStrictEqual(report.trend.missed, { missed, learnable: missed, noValidPlan: 0, unknown: 0, timing: 0 });
   const probeDay = r => split.probe.days.some(d => r.includes(`t${d.replace(/-/g, '')}.`));
   assert.ok(w.calls.trendFacts.length && w.calls.trendFacts.every(r => r.startsWith('l1-pc') && probeDay(r)), w.calls.trendFacts.join());
   // Given the day's control windows; the base rate in the report; the base rate and the plan that lost in the prompt.
