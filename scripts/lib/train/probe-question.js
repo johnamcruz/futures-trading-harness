@@ -1,0 +1,148 @@
+'use strict';
+
+/**
+ * A probe edit's own quiz question (Propose-Probe-Compose, docs/TRAINING.md): test-driven skill editing. The proposer
+ * writes the question its edit teaches first, as the edit's `question` (probe-edit.js splitTagged: metadata, never part
+ * of the proposal or its id), in the quiz file's shape (config/context-quiz.json, a Part A question): { layer, prompt,
+ * text, rule, anchor, required, forbidden } (and `state` or `lookup` as its prompt needs). Code checks it before any
+ * model call:
+ *
+ * - its shape is the quiz file's (eval/context-quiz.js questionErrors), no other key; its id is code's, e-<proposal id>,
+ *   never written by the proposer (questionErrors, questionOf), in the probe-proposals phase;
+ * - against the two trees' prompts, built for it (the quiz phase, train/quiz-phase.js, before any quiz call): its anchor
+ *   is in the edited tree's prompt and NOT in the champion's (an anchor the champion already holds is a question it can
+ *   read the answer off: no edit is needed), and it adds no number the champion's prompt does not hold (the edit adds
+ *   none, probe-edit.js styleErrors) (anchorErrors).
+ *
+ * - every `required` pattern matches text the champion's prompt already holds (the answer's words exist, so a champion
+ *   failure is a real misreading: a phrase the edit coins is no test); its patterns are bounded (at most the quiz file's
+ *   gate.maxPatternChars, no nested quantifier) since they run on every answer.
+ *
+ * Then the quiz phase runs it red/green: the champion must fail it, the edit pass it (the quiz file's gate). A
+ * consolidation (isConsolidation: a removal, or new text in the document's own words) has no question of its own.
+ *
+ *   KEYS
+ *   questionErrors(raw, { maxPatternChars })   [error] for the question as the proposer wrote it (missing: named)
+ *   isConsolidation(e, root)                [bool] the edit teaches nothing new: its question optional, never asked
+ *   nestedQuantifier(src)                   [bool] a regex source with a quantified group inside a quantified group
+ *   questionOf(raw, proposalId)             the question with its code-given id
+ *   anchorErrors(q, { editPrompts, championPrompts })   [error]: prompts as eval/context-quiz.js buildPrompts gives them
+ *   miniQuiz(quiz, q)                       the quiz's settings with the question alone (its runs apart from the quiz's)
+ */
+
+const Q = require('../eval/context-quiz');
+const { numbers } = require('./probe-edit');
+
+const KEYS = Object.freeze(['layer', 'prompt', 'text', 'rule', 'anchor', 'required', 'forbidden', 'state', 'lookup']);
+const isObj = x => Boolean(x) && typeof x === 'object' && !Array.isArray(x);
+const flat = t => String(t).replace(/\s+/g, ' ');
+
+/**
+ * Whether a regex source nests a quantifier inside a quantified group ((a+)+, (.*)*, ((ab)+)*): catastrophic
+ * backtracking on a long answer. Escapes and character classes are skipped; a `?` is no repeat.
+ */
+function nestedQuantifier(src) {
+  const s = String(src);
+  const stack = [];
+  let lastGroup = null;
+  const repeatAt = i => s[i] === '*' || s[i] === '+' || (s[i] === '{' && /\d/.test(s[i + 1] || ''));
+  for (let i = 0; i < s.length; i += 1) {
+    const c = s[i];
+    if (c === '\\') { i += 1; lastGroup = null; continue; }
+    if (c === '[') {
+      for (i += 1; i < s.length && s[i] !== ']'; i += 1) if (s[i] === '\\') i += 1;
+      lastGroup = null;
+      continue;
+    }
+    if (c === '(') { stack.push(false); lastGroup = null; continue; }
+    if (c === ')') { lastGroup = stack.length ? stack.pop() : false; continue; }
+    if (repeatAt(i)) {
+      if (lastGroup === true) return true;
+      if (stack.length) stack[stack.length - 1] = true;
+      // A quantified group counts as a repeat inside the group around it.
+      lastGroup = null;
+      continue;
+    }
+    lastGroup = null;
+  }
+  return false;
+}
+
+/** The proposer's regexes, bounded: at most maxPatternChars each, no nested quantifier (they run on every answer). */
+function patternErrors(raw, maxPatternChars) {
+  const errors = [];
+  for (const k of ['required', 'forbidden']) {
+    if (!Array.isArray(raw[k])) continue;
+    raw[k].forEach((src, i) => {
+      if (typeof src !== 'string') return;
+      if (src.length > maxPatternChars) errors.push(`question.${k}[${i}]: at most ${maxPatternChars} characters (the quiz file's gate.maxPatternChars)`);
+      if (nestedQuantifier(src)) errors.push(`question.${k}[${i}]: a nested quantifier (such as (a+)+): it can backtrack without end; write plain phrases`);
+    });
+  }
+  return errors;
+}
+
+function questionErrors(raw, { maxPatternChars = Q.loadQuiz().value.gate.maxPatternChars } = {}) {
+  if (!isObj(raw)) return ['question: the quiz question the edit teaches, written first ({ layer, prompt, text, rule, anchor, required, forbidden }): one you would answer wrongly before the edit and rightly after it'];
+  const errors = [];
+  if ('id' in raw) errors.push('question.id: assigned by code (e-<proposal id>), never written by the proposer');
+  const extra = Object.keys(raw).filter(k => k !== 'id' && !KEYS.includes(k));
+  if (extra.length) errors.push(`question: unknown keys: ${extra.join(', ')}`);
+  const { id: _id, ...rest } = raw;
+  // The quiz file's checks on a Part A question, under a stand-in id (the real one is code's).
+  errors.push(...Q.questionErrors({ ...rest, id: 'e-check' }, { part: 'questions', at: 'question' }));
+  errors.push(...patternErrors(raw, maxPatternChars));
+  return errors;
+}
+
+const words = t => new Set(String(t).toLowerCase().match(/[a-z0-9']+/g) || []);
+
+/**
+ * A consolidation: an edit of kind removal, or one whose new text adds no word the champion's document lacks (a merge or
+ * a trim in its own words). It teaches nothing new, so it has no question of its own (optional, never asked): it must
+ * pass the whole quiz with no slip at all (quiz-phase.js). A document that can't be read: never one (fails closed).
+ */
+function isConsolidation(e, root) {
+  if (!e || !isObj(e.proposal) || !Array.isArray(e.proposal.edits) || !e.proposal.edits.length) return false;
+  if (e.tag && e.tag.kind === 'removal') return true;
+  const fs = require('fs');
+  const path = require('path');
+  return e.proposal.edits.every(x => {
+    if (!isObj(x) || typeof x.replace !== 'string' || typeof x.file !== 'string') return false;
+    let had;
+    try { had = words(fs.readFileSync(path.join(root, x.file), 'utf8')); } catch (_err) { return false; }
+    return [...words(x.replace)].every(w => had.has(w));
+  });
+}
+
+function questionOf(raw, proposalId) {
+  if (typeof proposalId !== 'string' || !proposalId) throw new Error('questionOf: the proposal id its question is named by');
+  const { id: _id, ...rest } = raw;
+  return { ...rest, id: `e-${proposalId}` };
+}
+
+function anchorErrors(q, { editPrompts, championPrompts }) {
+  const key = Q.promptKey(q);
+  const edited = editPrompts && editPrompts[key];
+  const before = championPrompts && championPrompts[key];
+  if (typeof edited !== 'string' || typeof before !== 'string') return [`question.prompt: no ${key} prompt for the trees (it is asked of a prompt the quiz builds: the head trader's, with the risk manager's, a situational or a lookup one)`];
+  const errors = [];
+  if (!flat(edited).includes(flat(q.anchor))) errors.push(`question.anchor: not in the edited tree's ${key} prompt: copy the phrase from the edit's new text`);
+  if (flat(before).includes(flat(q.anchor))) errors.push(`question.anchor: the champion's ${key} prompt already states it: the champion can read the answer off, so no edit is needed`);
+  // The answer's words already in the champion's prompt: its failure is then a misreading, never a missing token (a
+  // phrase the edit coins makes red trivially true and green a quote).
+  (q.required || []).forEach((src, i) => {
+    let hit;
+    try { hit = new RegExp(src, 'i').test(flat(before)); } catch (_err) { hit = false; }
+    if (!hit) errors.push(`question.required[${i}]: matches nothing in the champion's ${key} prompt: the answer's words must already be there (a phrase the edit coins is no test)`);
+  });
+  const had = numbers(before);
+  const asked = [q.text, q.rule, q.anchor, ...(q.required || []), ...(q.forbidden || [])].join('\n');
+  const added = [...numbers(asked)].filter(x => !had.has(x));
+  if (added.length) errors.push(`question: no numbers: it adds ${added.join(', ')}`);
+  return errors;
+}
+
+const miniQuiz = (quiz, q) => ({ ...quiz, questions: [q], partB: [] });
+
+module.exports = { KEYS, questionErrors, questionOf, anchorErrors, miniQuiz, isConsolidation, nestedQuantifier };

@@ -23,6 +23,18 @@ test('the quiz file loads and checks: a broken question is refused, every proble
   for (const want of [/^k: /m, /layer: one of/, /anchor: the phrase/, /required\[0\]: not a regex/, /\[1\]\.id: unique/]) assert.match(errs, want);
 });
 
+test('one question checks alone as the quiz file checks it (questionErrors: a probe edit\'s question reuses it)', () => {
+  const ok = QUIZ.questions[0];
+  assert.deepStrictEqual(Q.questionErrors(ok, { part: 'questions', at: 'question' }), []);
+  // The same messages as the file's check, under the given name.
+  const errs = Q.questionErrors({ ...ok, layer: 'vibes', anchor: '', required: ['('], id: '' }, { part: 'questions', at: 'question' }).join('\n');
+  for (const want of [/^question\.id: unique, given$/m, /^question\.layer: one of/m, /^question\.anchor: the phrase/m, /^question\.required\[0\]: not a regex/m]) assert.match(errs, want);
+  assert.match(Q.questionErrors({ ...ok, id: 'q1' }, { part: 'questions', at: 'question', ids: new Set(['q1']) }).join(), /question\.id: unique/);
+  assert.match(Q.questionErrors(null, { part: 'questions', at: 'question' }).join(), /question: an object/);
+  assert.match(Q.questionErrors({ ...ok, prompt: 'lookup' }, { part: 'questions', at: 'question' }).join(), /question\.lookup/);
+  assert.deepStrictEqual(Q.questionErrors({ ...ok, required: [] }, { part: 'questions', at: 'question' }), ['question.required: at least one']);
+});
+
 test('grading: the ANSWER line, the required terms, and a forbidden term only when not negated', () => {
   assert.deepStrictEqual(Q.answerLine('blah\n**ANSWER:** No, never counter.\nwhy'), { line: 'No, never counter.', fmt: true });
   assert.deepStrictEqual(Q.answerLine('No side.\nmore'), { line: 'No side.', fmt: false });
@@ -540,6 +552,8 @@ test('the headless argv comes from the user\'s runner config: its model, its ext
   assert.throws(() => Q.quizCommand({ harness: 'codex' }, 'Q', '/f'), /takes no system-prompt file/);
   assert.deepStrictEqual(Q.replyOf({ harness: 'claude' }, JSON.stringify({ result: 'ANSWER: no', is_error: false })), { answer: 'ANSWER: no', error: false });
   assert.strictEqual(Q.replyOf({ harness: 'claude' }, 'not json').error, true);
+  // An empty answer is no answer: an error (asked again), never graded as a wrong one (it would poison a cached run).
+  for (const result of ['', '   \n', undefined]) assert.strictEqual(Q.replyOf({ harness: 'claude' }, JSON.stringify({ result, is_error: false })).error, true, JSON.stringify(result));
   assert.deepStrictEqual(Q.replyOf({ harness: 'custom' }, ' ANSWER: no \n'), { answer: 'ANSWER: no', error: false });
 });
 

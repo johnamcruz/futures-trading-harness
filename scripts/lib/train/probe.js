@@ -16,7 +16,13 @@
  *   propose   one model call: the proposer writes up to k small, independent edits, each to one skill or one desk
  *             role's body (agent-edit.js), tagged with its target, the finding it addresses and its kind (probe-edit.js),
  *             reading the findings by flow step and the lessons record's capped summary (lessons.js). Each is checked in
- *             code (proposal.js, probe-edit.js, agent-edit.js); an edit probed before is not re-run
+ *             code (proposal.js, probe-edit.js, agent-edit.js); an edit probed before is not re-run. Each carries the quiz
+ *             question it teaches, written first (probe-question.js: missing or malformed, the edit is invalid)
+ *   quiz      the quiz gate, before any replay (quiz-phase.js): each edit's tree is quizzed: its own question must fail
+ *             on the champion and pass on the edit (red/green), and the whole context quiz must not regress against the
+ *             champion's (quiz-gate.js decide: a confirm run on fresh runs, a short summary retried once, then blocked).
+ *             Only a pass is replayed; a reject or block is in the report (`quiz`) and the lessons record. The loop
+ *             config's quizGate: false turns it off, only explicitly, and the report says so
  *   probe     each edit's tree replays the SAME probe-half moments with the SAME replay config and seed (never the
  *             confirm half); code pairs it with the champion decision by decision and screens it (screen.js): helped, no effect or
  *             hurt. `parallel` probes at once (default 1; more only without latency charged: probe-config.js). The
@@ -55,6 +61,8 @@ const S = require('./state');
 const T = require('./tree');
 const P = require('./proposal');
 const PE = require('./probe-edit');
+const PQ = require('./probe-question');
+const QP = require('./quiz-phase');
 const F = require('./findings');
 const SC = require('./screen');
 const C = require('./compose');
@@ -516,19 +524,37 @@ async function probeRound(ctx, { n, champion, api }) {
     const res = await ctx.steps.proposeProbes({ cfg: ctx.loop.proposer, tree: own, findings, controls, lessons: LS.summarize(lessons), home: path.join(scratch, 'home'), baseEnv: ctx.env, k: cfg.k });
     if (api.guarded(ctx, champion) !== guard) throw new Error('the proposer\'s run changed the loop\'s state, the look ledger or the champion\'s tree: the loop stops; check them before resuming');
     const ids = [];
+    // The proposer's quiz patterns are bounded by the quiz file's gate (probe-question.js).
+    const maxPatternChars = (ctx.steps.loadQuiz || require('../eval/context-quiz').loadQuiz)().value.gate.maxPatternChars;
     return res.proposals.slice(0, cfg.k).map(x => {
       if (x.error) return { id: null, errors: [x.error], line: x.line };
       const id = P.proposalId(x.proposal);
       if (ids.includes(id)) return null;
       ids.push(id);
-      const errors = [...P.validateProposal(x.proposal, { root: champion.dir }), ...PE.tagErrors(x.tag, x.proposal, { findings })];
+      // Its own quiz question (probe-question.js), written first: missing or malformed, the edit never runs. A
+      // consolidation (a removal, or new text in the document's own words) teaches nothing new: its question is optional
+      // (one written is still checked).
+      const optional = PQ.isConsolidation(x, champion.dir) && (x.question === undefined || x.question === null);
+      const errors = [...P.validateProposal(x.proposal, { root: champion.dir }), ...PE.tagErrors(x.tag, x.proposal, { findings }), ...(optional ? [] : PQ.questionErrors(x.question, { maxPatternChars }))];
       if (!errors.length) errors.push(...PE.styleErrors(x.proposal, { root: champion.dir, kind: x.tag.kind }));
       const finding = findings.find(f => x.tag && f.id === x.tag.finding) || null;
-      return { id, tag: x.tag, finding, proposal: x.proposal, errors, probedBefore: before.has(id) };
+      return { id, tag: x.tag, finding, proposal: x.proposal, question: x.question === undefined ? null : x.question, errors, probedBefore: before.has(id) };
     }).filter(Boolean);
   });
   report.edits = edits.map(e => ({ id: e.id, tag: e.tag, errors: e.errors, probedBefore: e.probedBefore }));
-  const runnable = edits.filter(e => e.id && !e.errors.length && !e.probedBefore);
+  const valid = edits.filter(e => e.id && !e.errors.length && !e.probedBefore);
+  // The quiz gate (quiz-phase.js), before any replay: each edit's own question red/green, then the whole quiz against the
+  // champion's. Only a pass is replayed; the others are in the report and the lessons record. The loop config's
+  // quizGate: false (only explicitly) passes every edit, said in the report.
+  const quizzed = await QP.quizRound(ctx, { n, champion, edits: valid, api, work, dir, lessonsFile, lessonWindows, seed, cfg: ctx.loop.quizGate === false ? null : require('../autotrader').validateConfig(ctx.loop.replay.autotrader) });
+  report.quiz = quizzed.report;
+  const runnable = quizzed.passed;
+  if (valid.length && !runnable.length) {
+    report.why = 'no edit passed the quiz gate';
+    writeReport();
+    ctx.log(`iteration ${n}: ${report.why}`);
+    return { proposals: [], report };
+  }
   // Each edit alone, on the champion's moments and seed; `parallel` at once, each run's calls a share of those left.
   const probes = await pool(runnable, cfg.parallel, e => api.phase(ctx, `${n}:probe:${e.id}`, path.join(dir, `probe-${e.id}.json`), async () => {
     const tree = await api.candidateTree(ctx, { dir: work, id: `p-${e.id}`, proposal: e.proposal, champion });

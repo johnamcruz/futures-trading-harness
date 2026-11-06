@@ -32,6 +32,9 @@
  *                   Carlo and the paired decision measures). With it, tuningWindows lie in practice-train and heldOutWindows
  *                   each in one held-back learning window (practice-validate, test, final), read through learning looks,
  *                   and the replay config names no curated list (the keep rule pairs full-day windows only)
+ *   quizGate        with probe: the probe round's quiz gate (train/quiz-phase.js), true when left out; false turns it
+ *                   off, only explicitly (each round's report says so). On, the loop's runner config (its replay's
+ *                   autotrader: the model the replays run) must be a harness the quiz asks headless (claude, custom)
  *
  *   resolveLoop(raw, { baseDir, env, root })   the resolved config, with `hash` (limits left out: they may be raised on resume)
  *   windowRange(w)                             { start, end } Dates: session `from`'s start to session `to`'s start
@@ -50,6 +53,8 @@ const MV = require('./model-verifier');
 const { resolveProbe } = require('./probe-config');
 
 const LOOP_ID = /^[A-Za-z0-9][A-Za-z0-9._-]{0,47}$/;
+// The harnesses the context quiz can ask headless with a system-prompt file (eval/context-quiz.js quizCommand).
+const QUIZ_HARNESSES = Object.freeze(['claude', 'custom']);
 const DATE = /^\d{4}-\d{2}-\d{2}$/;
 // [default, min, max] of each setting and budget (config/training.json loop; the budgets' maxima only fall).
 const LOOP = require('../tunables').training().loop;
@@ -131,6 +136,17 @@ function resolveLoop(raw, { baseDir = process.cwd() } = {}) {
   let trader = replay ? replay.autotrader : null;
   try { if (typeof trader === 'string') trader = readSpec(trader, baseDir, 'replay.autotrader'); } catch (_err) { trader = null; }
   try { probe = resolveProbe(r.probe, { read: spec => readReplaySpec(spec, baseDir, 'probe.replay'), readCensus: file => require('../learning/leg-census').readCensus(path.resolve(baseDir, expandHome(String(file)))), readBars: (file, minutes) => require('../learning/setup-library').baseBars(require('../backtest/data').loadBars(file), minutes), resolvePath: p => path.resolve(baseDir, expandHome(String(p))), modelScore: r.modelScore, autotrader: trader, tuningWindows: r.tuningWindows }); } catch (err) { errors.push(err.message); }
+  // The probe round's quiz gate (train/quiz-phase.js): on unless the config turns it off, explicitly.
+  let quizGate = true;
+  if (r.quizGate !== undefined && typeof r.quizGate !== 'boolean') errors.push('quizGate: true or false (the probe round\'s quiz gate; on when left out)');
+  else if (r.quizGate !== undefined) quizGate = r.quizGate;
+  if (r.quizGate !== undefined && r.probe === undefined) errors.push('quizGate: the probe round\'s quiz gate: set probe (or leave quizGate out)');
+  if (r.probe !== undefined && quizGate && trader && typeof trader === 'object') {
+    // The quiz asks the loop's own runner config (the model the replays run) headless, its prompt a system-prompt file.
+    let harness = null;
+    try { harness = validateConfig(trader).harness; } catch (_err) { /* the replay's own errors name it */ }
+    if (harness && !QUIZ_HARNESSES.includes(harness)) errors.push(`quizGate: the quiz asks the runner config's harness (${harness}) headless with a system-prompt file, which only ${QUIZ_HARNESSES.join(' or ')} take: set quizGate: false to run the probe round without the gate`);
+  }
   let modelScore = null;
   try { modelScore = MV.resolveModelScore(r.modelScore); } catch (err) { errors.push(err.message); }
   if (modelScore) {
@@ -153,6 +169,9 @@ function resolveLoop(raw, { baseDir = process.cwd() } = {}) {
     ...(learning ? { learning } : {}),
     ...(modelScore ? { modelScore } : {}),
     ...(probe ? { probe } : {}),
+    // With probe, the quiz gate's setting always (in the hash: a loop started before the gate, or with it otherwise, is
+    // another loop, never resumed into rounds of the other kind).
+    ...(probe ? { quizGate } : {}),
     workDir: path.join(path.resolve(expandHome(replay.workDir)), r.loopId),
     // Every run trades inside a fresh attempt each session day, sized as live (train/loop.js windowRun,
     // replay/day-attempts.js): in the hash, so a loop started before them is another loop (its runs never pool with these).

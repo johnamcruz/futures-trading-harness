@@ -108,7 +108,7 @@ function readProbeTemplate(root) {
   const text = fs.readFileSync(path.join(root, SKILL), 'utf8');
   const m = /### The probe prompt\n[^#]*?```text\n([\s\S]*?)\n```/.exec(text);
   if (!m) throw new Error(`${SKILL}: no "### The probe prompt" section with a text block`);
-  for (const k of ['{{FLOW}}', '{{FINDINGS}}', '{{LESSONS}}', '{{FILES}}', '{{CATEGORIES}}', '{{KINDS}}', '{{K}}']) if (!m[1].includes(k)) throw new Error(`${SKILL}: the probe prompt has no ${k}`);
+  for (const k of ['{{FLOW}}', '{{FINDINGS}}', '{{LESSONS}}', '{{FILES}}', '{{CATEGORIES}}', '{{KINDS}}', '{{LAYERS}}', '{{K}}']) if (!m[1].includes(k)) throw new Error(`${SKILL}: the probe prompt has no ${k}`);
   return m[1];
 }
 
@@ -134,11 +134,13 @@ function probePrompt({ template, findings, lessons, files, k, controls = '' }) {
     .replace('{{FILES}}', () => files.join('\n'))
     .replace('{{CATEGORIES}}', () => FAILURES.join(', '))
     .replace('{{KINDS}}', () => KINDS.join(', '))
+    // The quiz's layers (eval/context-quiz.js): the edit's own question names one (probe-question.js).
+    .replace('{{LAYERS}}', () => require('../eval/context-quiz').LAYERS.join(', '))
     .replace('{{K}}', () => String(k))}`;
 }
 
 /**
- * Up to k tagged skill edits (probe-edit.js): { proposals: [{ proposal, tag } | { error, line }], output, code, prompt }.
+ * Up to k tagged skill edits (probe-edit.js): { proposals: [{ proposal, tag, question } | { error, line }], output, code, prompt }.
  * One model call. The proposer proposes; the probe screen (screen.js) and the keep rule judge.
  */
 async function proposeProbes({ cfg, tree, findings, lessons, home, baseEnv = process.env, k = 4, run = runHarness, controls = '' }) {

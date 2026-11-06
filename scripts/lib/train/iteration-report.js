@@ -117,6 +117,14 @@ function lossOf(r, risk) {
 const previousPoints = previous => (previous || []).map(x => x && x.curvePoint).filter(Boolean);
 const curveOfPrevious = previous => TC.curveOf(previousPoints(previous));
 
+/** The round's quiz gate: off, or its verdicts and the edits it stopped before any replay. */
+function quizOf(q) {
+  if (q.off) return { off: true };
+  const list = Object.entries(q.edits || {});
+  const count = v => list.filter(([, x]) => x && x.verdict === v).length;
+  return { off: false, pass: count('pass'), reject: count('reject'), blocked: count('blocked'), stopped: list.filter(([, x]) => x && x.verdict !== 'pass').map(([id, x]) => ({ id, verdict: x.verdict, why: x.why })) };
+}
+
 function build({ probeReport = null, entries = [], previous = [], keepRuleRuns = null } = {}) {
   const r = probeReport || {};
   const findings = new Map((r.findings || []).map(f => [f.id, f]));
@@ -130,6 +138,8 @@ function build({ probeReport = null, entries = [], previous = [], keepRuleRuns =
       const f = e.tag ? findings.get(e.tag.finding) : null;
       return { id: e.id, target: targetLabel(e.tag), finding: e.tag ? e.tag.finding : null, step: f && f.step !== undefined ? f.step : null, kind: e.tag ? e.tag.kind : null, refused: (e.errors || []).length ? e.errors : null, probedBefore: Boolean(e.probedBefore) };
     }),
+    // The quiz gate (train/quiz-phase.js) before the replays: its verdicts, and the edits it stopped (null: a round from before it).
+    quiz: r.quiz ? quizOf(r.quiz) : null,
     screened: (r.probes || []).map(p => ({ id: p.id, target: targetLabel(p.tag), verdict: p.verdict, n: p.target ? p.target.pairs : null, harms: p.harms || [] })),
     composed: r.composed ? { id: r.composed.id, verdict: r.composed.verdict, parts: r.composition ? r.composition.parts : [], cancelled: r.composed.cancelled || [] } : null,
     kept: kept ? { proposalId: kept.proposalId, verdict: kept.verdict, reasons: kept.reasons || [] } : null,
@@ -174,7 +184,9 @@ function line(x) {
   const skipped = sk ? `; skipped bars: champion ${share(sk.champion)}${Object.entries(sk.edits || {}).map(([id, s]) => `, ${id} ${share(s)}`).join('')}${sk.composed ? `, combined ${share(sk.composed)}` : ''}` : '';
   const d = x.deltas;
   const deltas = d ? `; confirm deltas: reads ${d.reads ? `+${d.reads.fixed}/-${d.reads.broken} of ${d.reads.pairs}` : 'n/a'}, process ${d.process ? `+${d.process.fixed}/-${d.process.broken} of ${d.process.pairs}` : 'n/a'}, R/decision ${d.rPerDecision && d.rPerDecision.diff !== null && d.rPerDecision.diff !== undefined ? d.rPerDecision.diff : 'n/a'}${d.capture ? `, legs caught +${d.capture.fixed}/-${d.capture.broken} of ${d.capture.pairs} (${d.capture.rate.champion} -> ${d.capture.rate.probe}), net R/window ${d.capture.netR.diff === null ? 'n/a' : d.capture.netR.diff}` : ''}` : '';
-  return `iteration ${x.iteration}: proposed ${x.proposed.length} (${x.proposed.filter(p => p.refused).length} refused), screened ${screened}`
+  // The quiz gate, said only when it was off or stopped an edit.
+  const quiz = x.quiz ? (x.quiz.off ? ', the quiz gate off' : x.quiz.stopped.length ? `, ${x.quiz.stopped.length} stopped by the quiz gate` : '') : '';
+  return `iteration ${x.iteration}: proposed ${x.proposed.length} (${x.proposed.filter(p => p.refused).length} refused${quiz}), screened ${screened}`
     + `${x.trend ? `; trend batch ${x.trend.batch.index} (probe ${x.trend.probe.legs} legs on ${x.trend.probe.days} day(s), confirm ${x.trend.confirm.legs} on ${x.trend.confirm.days})` : ''}`
     + `${x.trend ? `, ${x.trend.batch.trigger} (${x.trend.outcome})` : ''}`
     + `${x.trend && x.trend.missed ? `; probe missed legs ${x.trend.missed.missed}: learnable ${x.trend.missed.learnable}, no valid plan ${x.trend.missed.noValidPlan} (a correct pass), unknown ${x.trend.missed.unknown}${x.trend.missed.timing ? `, timing ${x.trend.missed.timing} (a late or unfilled entry: not findings)` : ''}` : ''}`

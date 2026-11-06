@@ -25,7 +25,11 @@
     "flagDrop": 0.4,
     "alpha": 0.05,
     "maxSlips": 8,
-    "confirmRuns": 10
+    "confirmRuns": 10,
+    "redMaxShare": 0.4,
+    "greenMinShare": 0.8,
+    "questionRuns": 5,
+    "maxPatternChars": 120
   },
   "passBar": {
     "partA": {

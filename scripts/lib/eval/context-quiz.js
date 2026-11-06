@@ -9,6 +9,7 @@
  *
  *   loadQuiz({ file })                 the quiz file, checked (config-files.js: fail closed): { value, hash }
  *   quizErrors(value)                  [problem] for a quiz document
+ *   questionErrors(q, { part, at, ids })   [problem] for one question, as quizErrors names them (a probe edit's own question)
  *   buildPrompts(root, quiz)           { head, 'head+risk', 'situational:<id>', 'lookup:<id>' }: the head trader's index-mode
  *                                      prompt (head-prompt.js claudeHeadText) and that plus the risk manager's (role-prompt.js
  *                                      claudeRoleText) with its agent body; a lookup question's: the head prompt plus the
@@ -58,31 +59,45 @@ function quizErrors(v) {
   out.push(...regexErrors([v.unsure], 'unsure'));
   // The gate a proposed skill edit passes before any replay (train/quiz-gate.js): a question the champion answered every time
   // whose share drops by flagDrop or more is asked again (confirmRuns more); a regression needs an exact test at alpha; up to
-  // maxSlips smaller drops are noise.
+  // maxSlips smaller drops are noise. A probe edit's own question (train/quiz-phase.js): the champion's share of passing
+  // answers at most redMaxShare (it fails it), the edit's at least greenMinShare (it passes it), questionRuns runs a side;
+  // the proposer's patterns at most maxPatternChars each (train/probe-question.js).
   const g = v.gate;
-  if (!isObj(g) || !(typeof g.flagDrop === 'number' && g.flagDrop > 0 && g.flagDrop <= 1) || !(typeof g.alpha === 'number' && g.alpha > 0 && g.alpha < 1) || !(Number.isInteger(g.maxSlips) && g.maxSlips >= 0) || !(Number.isInteger(g.confirmRuns) && g.confirmRuns >= 1)) out.push('gate: { flagDrop: a share in (0, 1], alpha: in (0, 1), maxSlips: a whole number, 0 or more, confirmRuns: a whole number, 1 or more }');
+  const share = (x, lo, hi) => typeof x === 'number' && x >= lo && x <= hi;
+  if (!isObj(g) || !(typeof g.flagDrop === 'number' && g.flagDrop > 0 && g.flagDrop <= 1) || !(typeof g.alpha === 'number' && g.alpha > 0 && g.alpha < 1) || !(Number.isInteger(g.maxSlips) && g.maxSlips >= 0) || !(Number.isInteger(g.confirmRuns) && g.confirmRuns >= 1)
+    || !(share(g.redMaxShare, 0, 1) && g.redMaxShare < 1) || !(share(g.greenMinShare, 0, 1) && g.greenMinShare > 0) || !(g.redMaxShare < g.greenMinShare) || !(Number.isInteger(g.questionRuns) && g.questionRuns >= 1)
+    || !(Number.isInteger(g.maxPatternChars) && g.maxPatternChars >= 1)) {
+    out.push('gate: { flagDrop: a share in (0, 1], alpha: in (0, 1), maxSlips: a whole number, 0 or more, confirmRuns: a whole number, 1 or more, redMaxShare: a share in [0, 1), greenMinShare: a share in (0, 1] above redMaxShare, questionRuns: a whole number, 1 or more, maxPatternChars: a whole number, 1 or more }');
+  }
   const bar = v.passBar;
   if (!isObj(bar) || !['partA', 'partB'].every(p => isObj(bar[p]) && Number.isInteger(bar[p].allCorrect) && Number.isInteger(bar[p].bothWays))) out.push('passBar: { partA, partB } each { allCorrect, bothWays }');
   const ids = new Set();
   for (const [part, list] of [['questions', v.questions], ['partB', v.partB]]) {
     if (!Array.isArray(list) || !list.length) { out.push(`${part}: a list of questions`); continue; }
-    list.forEach((q, i) => {
-      const at = `${part}[${i}]`;
-      if (!isObj(q)) { out.push(`${at}: an object`); return; }
-      if (!str(q.id) || ids.has(q.id)) out.push(`${at}.id: unique, given`);
-      ids.add(q.id);
-      if (!LAYERS.includes(q.layer)) out.push(`${at}.layer: one of ${LAYERS.join(', ')}`);
-      if (!PROMPTS.includes(q.prompt)) out.push(`${at}.prompt: one of ${PROMPTS.join(', ')}`);
-      if (q.prompt === 'situational' && !(isObj(q.state) && Array.isArray(q.state.positions))) out.push(`${at}.state: the account state its situational skills are chosen for ({ positions, workingOrders, ... })`);
-      if (q.prompt === 'lookup' && !(Array.isArray(q.lookup) && q.lookup.length && q.lookup.every(s => typeof s === 'string' && /^[a-z0-9-]+$/.test(s)))) out.push(`${at}.lookup: the skills the head trader looks up for it (skill names)`);
-      for (const k of ['text', 'rule']) if (!str(q[k])) out.push(`${at}.${k}: given`);
-      if (part === 'questions' && !str(q.anchor)) out.push(`${at}.anchor: the phrase of the prompt that states the rule`);
-      const caseOk = x => isObj(x) && isObj(x.bias) && ['tf', 'rel', 'dir', 'level', 'reaction'].every(k => str(x[k]));
-      if (part === 'partB' && !(isObj(q.excerpt) && (isObj(q.excerpt.bias) || (isObj(q.excerpt.size) && isObj(q.excerpt.size.facts)) || (Array.isArray(q.excerpt.cases) && q.excerpt.cases.length && q.excerpt.cases.every(caseOk))))) out.push(`${at}.excerpt: { bias: { h4, h1, t15, declared } }, { size: { facts, riskUsd, minContracts, stretchUsd, capUsd } } or { cases: [{ bias, tf, rel, dir, level, reaction }] }`);
-      out.push(...regexErrors(q.required, `${at}.required`), ...regexErrors(q.forbidden, `${at}.forbidden`));
-      if (Array.isArray(q.required) && !q.required.length) out.push(`${at}.required: at least one`);
-    });
+    list.forEach((q, i) => out.push(...questionErrors(q, { part, at: `${part}[${i}]`, ids })));
   }
+  return out;
+}
+
+/**
+ * One question's problems, as the quiz file's check names them (`at` the name it is given). part: 'questions' (Part A:
+ * an anchor) or 'partB' (an excerpt). ids: the ids seen so far (a repeated id is refused); its own id is added.
+ */
+function questionErrors(q, { part = 'questions', at = 'question', ids = new Set() } = {}) {
+  const out = [];
+  if (!isObj(q)) return [`${at}: an object`];
+  if (!str(q.id) || ids.has(q.id)) out.push(`${at}.id: unique, given`);
+  ids.add(q.id);
+  if (!LAYERS.includes(q.layer)) out.push(`${at}.layer: one of ${LAYERS.join(', ')}`);
+  if (!PROMPTS.includes(q.prompt)) out.push(`${at}.prompt: one of ${PROMPTS.join(', ')}`);
+  if (q.prompt === 'situational' && !(isObj(q.state) && Array.isArray(q.state.positions))) out.push(`${at}.state: the account state its situational skills are chosen for ({ positions, workingOrders, ... })`);
+  if (q.prompt === 'lookup' && !(Array.isArray(q.lookup) && q.lookup.length && q.lookup.every(s => typeof s === 'string' && /^[a-z0-9-]+$/.test(s)))) out.push(`${at}.lookup: the skills the head trader looks up for it (skill names)`);
+  for (const k of ['text', 'rule']) if (!str(q[k])) out.push(`${at}.${k}: given`);
+  if (part === 'questions' && !str(q.anchor)) out.push(`${at}.anchor: the phrase of the prompt that states the rule`);
+  const caseOk = x => isObj(x) && isObj(x.bias) && ['tf', 'rel', 'dir', 'level', 'reaction'].every(k => str(x[k]));
+  if (part === 'partB' && !(isObj(q.excerpt) && (isObj(q.excerpt.bias) || (isObj(q.excerpt.size) && isObj(q.excerpt.size.facts)) || (Array.isArray(q.excerpt.cases) && q.excerpt.cases.length && q.excerpt.cases.every(caseOk))))) out.push(`${at}.excerpt: { bias: { h4, h1, t15, declared } }, { size: { facts, riskUsd, minContracts, stretchUsd, capUsd } } or { cases: [{ bias, tf, rel, dir, level, reaction }] }`);
+  out.push(...regexErrors(q.required, `${at}.required`), ...regexErrors(q.forbidden, `${at}.forbidden`));
+  if (Array.isArray(q.required) && !q.required.length) out.push(`${at}.required: at least one`);
   return out;
 }
 
@@ -224,7 +239,8 @@ function replyOf(cfg, stdout) {
   if (cfg.harness !== 'claude') return { answer: String(stdout || '').trim(), error: !String(stdout || '').trim() };
   try {
     const d = JSON.parse(stdout);
-    return { answer: String(d.result || ''), error: Boolean(d.is_error) };
+    // An empty answer is no answer: an error (asked again), never graded as a wrong one.
+    return { answer: String(d.result || ''), error: Boolean(d.is_error) || !String(d.result || '').trim() };
   } catch (_e) { return { answer: String(stdout || ''), error: true }; }
 }
 
@@ -245,4 +261,4 @@ function compare(a, b) {
   });
 }
 
-module.exports = { VERDICT, LAYERS, PROMPTS, loadQuiz, quizErrors, promptKey, buildPrompts, excerptOf, questionText, answerLine, negated, gradeAnswer, summarize, compare, quizCommand, replyOf, anchorsMissing };
+module.exports = { VERDICT, LAYERS, PROMPTS, loadQuiz, quizErrors, questionErrors, promptKey, buildPrompts, excerptOf, questionText, answerLine, negated, gradeAnswer, summarize, compare, quizCommand, replyOf, anchorsMissing };

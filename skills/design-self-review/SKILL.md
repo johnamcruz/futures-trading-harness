@@ -63,7 +63,10 @@ in order, `{{FINDINGS}}` the round's findings grouped by the step they
 block (in rank order inside a step; a trend finding lists a few of its
 legs, each with what you said and the plan that passed there, never a date, time or price, then the base rate of valid plans on
 bars with no leg, its split by setup type (small n) and a few such plans that lost), `{{LESSONS}}` a short summary of
-what earlier probes showed, with sample sizes, `{{K}}` the number of edits.
+what earlier probes showed, with sample sizes, `{{K}}` the number of edits,
+`{{LAYERS}}` the quiz's layers. Each edit carries the quiz question it
+teaches; before any replay the champion must fail it, the edit pass it, and
+the whole context quiz must not get worse.
 Each edit is tested alone on the same practice moments (an exit finding's on
 the R banked by the trades both sides opened), then the ones that helped are
 combined by code: beside a trend or exit part, a read part need only do no
@@ -97,11 +100,13 @@ Rules:
 - "find" is text copied exactly from the file. It must appear exactly once in that file.
 - "kind" is one of: {{KINDS}}.
 - "targets" lists the failure categories the edit fixes, from: {{CATEGORIES}}.
+- Write the quiz question that your edit teaches first, as the edit's "question": it must be a question you would answer wrongly now and rightly after the edit; write its answer as required and forbidden phrases
+- "anchor" is a phrase copied exactly from your new text; "required" uses words the file already has. "layer" is one of: {{LAYERS}}. A "removal" needs no "question".
 - You propose. Code tests each edit on the same decisions. Do not claim it works.
 
 Reply with one line per edit, and nothing else on that line. For a skill:
-PROPOSAL {"tag":{"skill":"<skill>","finding":"<id>","kind":"<kind>"},"targets":["<category>"],"expects":"<the effect, one sentence>","why":"<what misled you>","edits":[{"file":"skills/<skill>/SKILL.md","find":"<exact text>","replace":"<new text>"}]}
-For a role, the tag names it ("agent" in place of "skill") and the file is agents/<role>.md.
+PROPOSAL {"tag":{"skill":"<skill>","finding":"<id>","kind":"<kind>"},"question":{"layer":"<layer>","prompt":"lookup","lookup":["<skill>"],"text":"<the question>","rule":"<the rule it tests>","anchor":"<a phrase of your new text>","required":["<phrase>"],"forbidden":["<phrase>"]},"targets":["<category>"],"expects":"<the effect, one sentence>","why":"<what misled you>","edits":[{"file":"skills/<skill>/SKILL.md","find":"<exact text>","replace":"<new text>"}]}
+For a role, the tag names it ("agent" in place of "skill") and the file is agents/<role>.md; the risk manager's question has "prompt":"head+risk" and no "lookup". The other roles have no quiz: edit a skill.
 
 If no change would help, reply: NO PROPOSAL
 ```
