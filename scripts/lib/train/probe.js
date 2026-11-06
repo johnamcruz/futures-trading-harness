@@ -542,6 +542,15 @@ async function probeRound(ctx, { n, champion, api }) {
     }).filter(Boolean);
   });
   report.edits = edits.map(e => ({ id: e.id, tag: e.tag, errors: e.errors, probedBefore: e.probedBefore }));
+  // A question refused here (its shape, its patterns: probe-question.js) is a lessons line (once), so the next proposer
+  // reads why: an edit whose tag names no target is no lesson (its skill or role unknown).
+  const lessonsNow = LS.readLessons(lessonsFile);
+  for (const e of edits.filter(x => x.id && !x.probedBefore && x.errors.some(m => /^question/.test(m)))) {
+    const t = e.tag || {};
+    if (!(typeof t.skill === 'string' || typeof t.agent === 'string') || !PE.KINDS.includes(t.kind)) continue;
+    if (lessonsNow.some(l => l.iteration === n && l.proposalId === e.id && typeof l.quiz === 'string')) continue;
+    LS.appendQuiz(lessonsFile, { proposalId: e.id, iteration: n, ...(t.agent ? { agent: t.agent } : { skill: t.skill }), kind: t.kind, windows: lessonWindows, seed, quiz: 'blocked', stage: 'proposal', why: e.errors.filter(m => /^question/.test(m)).join('; ') });
+  }
   const valid = edits.filter(e => e.id && !e.errors.length && !e.probedBefore);
   // The quiz gate (quiz-phase.js), before any replay: each edit's own question red/green, then the whole quiz against the
   // champion's. Only a pass is replayed; the others are in the report and the lessons record. The loop config's

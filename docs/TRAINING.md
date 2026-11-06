@@ -470,7 +470,10 @@ iteration of the loop then runs these steps (`scripts/lib/train/probe.js`):
    inconclusive is never a pass. Only a pass is replayed. A rejected or
    blocked edit is in `probe-report.json` `quiz` (per edit its verdict, why,
    regressions, flagged, slips, gains and red/green) and gets a lessons line,
-   so the next proposer reads that the gate stopped it (and the same edit is
+   so the next proposer reads that the gate stopped it, and why: one line per refused
+   probe, newest first, its id, stage and first reason, at most
+   `lessons.refusedChars` (160, `config/training.json`) characters; a
+   question refused at the proposal (its shape, its patterns) gets one too (and the same edit is
    not tried again). With none passing, the round ends: "no edit passed the
    quiz gate". The champion's quiz runs once a round, in a directory keyed by
    its tree and the quiz's hash, so a resumed or later round asks it nothing

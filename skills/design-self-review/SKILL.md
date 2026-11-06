@@ -101,12 +101,14 @@ Rules:
 - "kind" is one of: {{KINDS}}.
 - "targets" lists the failure categories the edit fixes, from: {{CATEGORIES}}.
 - Write the quiz question that your edit teaches first, as the edit's "question": it must be a question you would answer wrongly now and rightly after the edit; write its answer as required and forbidden phrases
-- "anchor" is a phrase copied exactly from your new text; "required" uses whole words the file has. "layer" is one of: {{LAYERS}}. A "removal" free of "not"/"only" needs no "question".
+- "anchor" is a phrase copied exactly from your new text; "required" uses whole words the file has. "layer" is one of: {{LAYERS}}.
+- No "question" only for a pure deletion (a "removal", or a trim keeping the rest word for word, in order) touching no negation ("not", "never", "don't"), restriction ("only", "must", "unless") or polar word ("above", "below", "long", "short", "premium", "discount"). Any other edit needs one, or it is refused.
+- Patterns: plain phrases only: words, (a|b) for alternatives, \s+ between words (\\s+ in JSON), at most {{MAX_GAPS}} gaps written .{0,{{GAP_CHARS}}}, each followed by a word. No other regex: it is refused.
 - You propose. Code tests each edit on the same decisions. Do not claim it works.
 
 Reply with one line per edit, and nothing else on that line. For a skill:
 PROPOSAL {"tag":{"skill":"<skill>","finding":"<id>","kind":"<kind>"},"question":{"layer":"<layer>","prompt":"lookup","lookup":["<skill>"],"text":"<the question>","rule":"<the rule it tests>","anchor":"<a phrase of your new text>","required":["<phrase>"],"forbidden":["<phrase>"]},"targets":["<category>"],"expects":"<the effect, one sentence>","why":"<what misled you>","edits":[{"file":"skills/<skill>/SKILL.md","find":"<exact text>","replace":"<new text>"}]}
-For a role, the tag names it ("agent" in place of "skill") and the file is agents/<role>.md; the risk manager's question has "prompt":"head+risk" and no "lookup". Other roles: not quizzed.
+For a role, the tag names it ("agent" in place of "skill") and the file is agents/<role>.md; the risk manager's question has "prompt":"head+risk" and no "lookup". An analyst's or the executor's file is not quizzed (still write its "question").
 
 If no change would help, reply: NO PROPOSAL
 ```

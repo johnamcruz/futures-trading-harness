@@ -158,7 +158,7 @@ function quizLesson(file, e, r, { n, windows, seed }) {
   const tag = e.tag || {};
   LS.appendQuiz(file, {
     proposalId: e.id, iteration: n, ...(tag.agent ? { agent: tag.agent } : { skill: tag.skill }), kind: tag.kind,
-    ...(e.finding ? { finding: { id: e.finding.id, kind: e.finding.kind }, findingKind: e.finding.kind } : {}), windows, seed, quiz: r.verdict, why: r.why,
+    ...(e.finding ? { finding: { id: e.finding.id, kind: e.finding.kind }, findingKind: e.finding.kind } : {}), windows, seed, quiz: r.verdict, why: r.why, ...(r.stage ? { stage: r.stage } : {}),
     ...(typeof r.redGreen === 'string' ? { redGreen: r.redGreen } : {}),
   });
 }

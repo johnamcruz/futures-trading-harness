@@ -337,14 +337,39 @@ test('the lessons record: the keep rule\'s verdict on a combined change, so a sc
   assert.throws(() => LS.appendKeep(file, { proposalId: 'c1', iteration: 1, windows: WINDOW }), /keep: the keep rule's verdict/);
 });
 
+test('the probe prompt names every rule the quiz gate enforces on a question, from the quiz file (prompt and code cannot drift)', () => {
+  const quiz = QZ.loadQuiz().value;
+  const g = quiz.gate;
+  const prompt = proposer.probePrompt({ template: proposer.readProbeTemplate(ROOT), findings: [], lessons: null, files: ['skills/a/SKILL.md'], k: 2 });
+  // The consolidation rule (probe-question.js isConsolidation): a pure deletion touching no negation, restriction or polar
+  // word needs no question; each example the prompt names is one of the quiz file's own words.
+  assert.match(prompt, /No "question" only for a pure deletion/);
+  const named = kind => { const m = new RegExp(`${kind} \\(([^)]*)\\)`).exec(prompt); assert.ok(m, kind); return m[1].match(/"([^"]+)"/g).map(w => w.slice(1, -1)); };
+  for (const [kind, list] of [['negation', quiz.negations], ['restriction', quiz.restrictions], ['polar word', quiz.polar]]) {
+    const words = named(kind);
+    assert.ok(words.length >= 2, kind);
+    for (const w of words) assert.ok(list.includes(w) || (kind === 'negation' && w.endsWith("n't")), `${kind} ${w}: not in the quiz file's list`);
+  }
+  // The pattern grammar (pattern-grammar.js): its parts, and the gate's gap limits as the quiz file states them.
+  assert.ok(prompt.includes(`at most ${g.maxGaps} gaps written .{0,${g.maxGapChars}}, each followed by a word`), 'the gap limits');
+  assert.ok(prompt.includes('(a|b)') && prompt.includes('\\s+') && prompt.includes('No other regex'), 'the grammar\'s parts');
+  for (const p of ['(enter|take) now', 'three\\s+pushes', `long.{0,${g.maxGapChars}}okay`]) assert.deepStrictEqual(require('../../scripts/lib/train/pattern-grammar').grammarErrors(p, g), [], p);
+  // A role with no quiz prompt: said, and still a question.
+  assert.match(prompt, /An analyst's or the executor's file is not quizzed/);
+  assert.doesNotMatch(prompt, /\{\{/);
+});
+
 test('the probe prompt: the skill\'s text block, its placeholders filled; proposeProbes reads tagged PROPOSAL lines in one call', async () => {
   const t = proposer.readProbeTemplate(ROOT);
-  for (const k of ['{{FINDINGS}}', '{{LESSONS}}', '{{FILES}}', '{{CATEGORIES}}', '{{KINDS}}', '{{LAYERS}}', '{{K}}']) assert.ok(t.includes(k), k);
+  for (const k of ['{{FINDINGS}}', '{{LESSONS}}', '{{FILES}}', '{{CATEGORIES}}', '{{KINDS}}', '{{LAYERS}}', '{{MAX_GAPS}}', '{{GAP_CHARS}}', '{{K}}']) assert.ok(t.includes(k), k);
   // Raised from 2500 to 3100 under the owner's standing rule (a pin may be raised when it improves the context; context
   // is never cut to fit): the prompt now asks for the quiz question each edit teaches, written first (probe-question.js:
   // one rule line, the anchor and layer line, the question in the PROPOSAL example, the risk manager's prompt), about
-  // 3000 characters with it. Still a ceiling: the prompt may not grow past it.
-  assert.ok(t.length < 3100, `${t.length} characters`);
+  // 3000 characters with it. Raised again from 3100 to 3700 under the same rule: the prompt states the rules the quiz
+  // gate enforces on a question (a pure deletion touching no negation, restriction or polar word needs none; the pattern
+  // grammar: literal alternatives, \s+, the gap limits), so a proposer stops writing edits the gate refuses; about 3615
+  // characters with them. Still a ceiling: the prompt may not grow past it.
+  assert.ok(t.length < 3700, `${t.length} characters`);
   assert.match(t, /You propose\. Code tests each edit/);
   const prompt = proposer.probePrompt({ template: t, findings: [{ id: 'F1', skill: 'a', kind: 'misread', count: 3, of: 9, detail: '' }], lessons: 'LESSONS-HERE', files: ['skills/a/SKILL.md'], k: 3 });
   assert.match(prompt, /F1\. a: misread: 3 of 9 claimed reads refused/);
@@ -1521,6 +1546,20 @@ test('the quiz gate in the loop: the proposal checks read the configured quiz fi
   assert.strictEqual(await removalErrors({}), '');
   assert.match(await removalErrors({ negations: [...STUB_QUIZ.negations, 'three'] }), /^question: the quiz question the edit teaches/);
   assert.match(await removalErrors({ restrictions: ['three'] }), /^question: the quiz question the edit teaches/);
+});
+
+test('the quiz gate in the loop: a question refused at the proposal reaches the next round\'s proposer (its id, stage, first reason)', async () => {
+  const question = { layer: 'entry', prompt: 'head', text: 'Does the edit read right?', rule: 'r', anchor: 'GOOD → read it', required: ['(line|one)+'], forbidden: [] };
+  const bad = { ...tagged('a', 'F1', 'rule', '- line one', '- line one\n- GOOD → read it'), question };
+  const w = world({ proposals: r => (r === 1 ? [bad] : []), loop: { limits: { maxIterations: 2, maxModelCalls: 10000, maxWallMinutes: 30 } } });
+  await run(w);
+  assert.ok(w.calls.proposeProbes.length >= 2, String(w.calls.proposeProbes.length));
+  const id = reportOf(w).edits[0].id;
+  const said = w.calls.proposeProbes[1].lessons;
+  assert.match(said, new RegExp(`- refused ${id} \\(proposal, blocked\\): question\\.required\\[0\\]: a group at 0: no repeat after it`));
+  // Once per edit: a resume writes no second line.
+  const lines = LS.readLessons(path.join(w.paths.dir, LS.FILE)).filter(l => l.proposalId === id);
+  assert.deepStrictEqual(lines.map(l => [l.stage, l.quiz]), [['proposal', 'blocked']]);
 });
 
 test('the quiz gate in the loop: a crash after the quiz and before the replay never quizzes again on resume', async () => {

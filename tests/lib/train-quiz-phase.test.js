@@ -616,6 +616,24 @@ test('the iteration\'s record and line: the edits the quiz gate stopped, or the 
   assert.strictEqual(IR.build({ probeReport: { iteration: 1, edits, probes: [] } }).quiz, null, 'a round from before the gate');
 });
 
+test('the lessons record: each refused probe\'s id, stage and first reason reach the proposer, one line each of at most 160 characters', async () => {
+  const file = path.join(tmpDir(), LS.FILE);
+  LS.appendQuiz(file, { proposalId: 'e1', iteration: 1, skill: 'a', kind: 'rule', windows: WINDOW, quiz: 'blocked', stage: 'question', why: 'question.required[0]: a group at 0: no repeat after it (at most ?): a repeated group backtracks without end; write plain phrases; question.anchor: not in the edited tree' });
+  LS.appendQuiz(file, { proposalId: 'e2', iteration: 1, skill: 'a', kind: 'rule', windows: WINDOW, quiz: 'reject', stage: 'regression', why: `regressed: a2 ${'x'.repeat(300)}` });
+  const text = LS.summarize(LS.readLessons(file));
+  const lines = text.split('\n').filter(l => l.startsWith('- refused '));
+  assert.deepStrictEqual(lines.map(l => l.slice(0, 36)), ['- refused e2 (regression, reject): r', '- refused e1 (question, blocked): qu']);
+  assert.match(lines[1], /^- refused e1 \(question, blocked\): question\.required\[0\]: a group at 0: no repeat after it \(at most \?\): a repeated group backtracks without end$/);
+  assert.ok(lines.every(l => l.length <= LS.REFUSED_CHARS), lines.map(l => l.length).join());
+  // The quiz gate writes the stage of each edit it stopped.
+  const w = round();
+  const bad = w.edit('- line one\n- GOOD → wait for the retest', { ...QUESTION, anchor: 'never written anywhere' });
+  await w.go(1, [bad]);
+  const [line] = LS.readLessons(path.join(w.loopDir, LS.FILE));
+  assert.deepStrictEqual([line.stage, line.quiz], ['question', 'blocked']);
+  assert.match(LS.summarize([line]), new RegExp(`- refused ${bad.id} \\(question, blocked\\): question\\.anchor: not in the edited tree's head prompt`));
+});
+
 test('the lessons record: a quiz-gate line, practice-train only, named; the proposer reads it apart from the replays\' verdicts', () => {
   const file = path.join(tmpDir(), LS.FILE);
   LS.appendQuiz(file, { proposalId: 'e1', iteration: 1, skill: 'a', kind: 'rule', findingKind: 'misread', windows: WINDOW, quiz: 'blocked', why: 'the edit does not teach its own question' });

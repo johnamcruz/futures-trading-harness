@@ -20,7 +20,7 @@
  *   FILE, MAX_LINES, MAX_CHARS
  *   appendLesson(file, entry)          one line; refuses an entry without its fields or outside practice-train
  *   appendKeep(file, { proposalId, iteration, keep, windows })   the keep rule's verdict on a combined change
- *   appendQuiz(file, { proposalId, iteration, skill | agent, kind, windows, quiz, why })   an edit the quiz gate stopped
+ *   appendQuiz(file, { proposalId, iteration, skill | agent, kind, windows, quiz, why, stage })   an edit the quiz gate stopped
  *                                      (reject or blocked) before any replay; summarized apart from the replays' verdicts
  *   readLessons(file)                  [entry]
  *   practiceOnly(windows)              true when every window lies in practice-train
@@ -39,6 +39,8 @@ const FILE = 'lessons.jsonl';
 const QUIZ_VERDICTS = Object.freeze(['reject', 'blocked']);
 const MAX_LINES = require('../tunables').training().lessons.maxLines; // config/training.json lessons
 const MAX_CHARS = require('../tunables').training().lessons.maxChars;
+// A refused probe's line (its id, stage, first reason) at most this long (config/training.json lessons.refusedChars).
+const REFUSED_CHARS = require('../tunables').training().lessons.refusedChars;
 
 function practiceOnly(windows) {
   if (!Array.isArray(windows) || !windows.length) return false;
@@ -128,6 +130,10 @@ function summarize(entries, { maxLines = MAX_LINES, maxChars = MAX_CHARS } = {})
     stopped.set(key, g);
   }
   const quizLines = [...stopped].map(([key, g]) => `- ${key}: stopped by the quiz gate before any replay: ${QUIZ_VERDICTS.filter(v => g[v]).map(v => `${v} ${g[v]}`).join(', ')}`);
+  // Each refused probe, newest first: its id, stage and first reason, so the next proposer writes what the gate takes.
+  const refused = list.filter(x => QUIZ_VERDICTS.includes(x.quiz) && typeof x.verdict !== 'string' && typeof x.why === 'string').reverse()
+    .map(x => clip(`- refused ${x.proposalId} (${x.stage || 'quiz'}, ${x.quiz}): ${x.why.split('; ')[0]}`, REFUSED_CHARS));
+  quizLines.push(...refused);
   if (!usable.length && !quizLines.length) return 'none yet';
   const groups = new Map();
   usable.forEach((e, i) => {
@@ -156,4 +162,4 @@ function summarize(entries, { maxLines = MAX_LINES, maxChars = MAX_CHARS } = {})
   return clip(out, maxChars);
 }
 
-module.exports = { FILE, MAX_LINES, MAX_CHARS, QUIZ_VERDICTS, appendLesson, appendKeep, appendQuiz, readLessons, practiceOnly, summarize };
+module.exports = { FILE, MAX_LINES, MAX_CHARS, REFUSED_CHARS, QUIZ_VERDICTS, appendLesson, appendKeep, appendQuiz, readLessons, practiceOnly, summarize };
