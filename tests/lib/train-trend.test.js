@@ -166,13 +166,14 @@ test('trend findings: missed legs grouped by step and owner, ranked by the R the
     leg('2022-03-08|d', { availableR: 9, blocker: { step: null, code: 'news', by: 'rule' } }),
     leg('2022-03-08|e', { availableR: 9, blocker: { step: null, code: 'position-open', by: 'head' } }),
     leg('2022-03-09|f', { availableR: 9, captured: true }),
-    leg('2022-03-09|g', { availableR: 1.5, blocker: { step: 'execution', code: 'unfilled', by: 'gate' }, cycles: [cyc('unfilled', 'gate', 'execution')] }),
+    // An unfilled entry is the executor's, and the runner's own timing: counted, never a finding (see train-trend-facts.test.js).
+    leg('2022-03-09|g', { availableR: 1.5, blocker: { step: 'execution', code: 'unfilled', by: 'executor' }, cycles: [cyc('entered', 'executor', 'execution')] }),
     leg('2022-03-09|h', { availableR: null, blocker: { step: 'execution', code: 'executor-abort', by: 'executor' }, cycles: [cyc('executor-abort', 'executor', 'execution', [], 'ABORTED')] }),
     leg('2022-03-10|i', { availableR: 1, blocker: { step: 'stop', code: 'stop:wide', by: 'compose_check' }, cycles: [cyc('stop:wide', 'compose_check', 'stop', [read('position-sizing', false, 'stop')])] }),
   ];
   const found = TF.trendFindings([{ legs }]);
   assert.deepStrictEqual(found.map(f => [f.step, f.skill || f.agent || null, f.count, f.cost, f.code]), [
-    ['entry', 'candle-reading', 2, 5, 'entry:close'], ['risk', 'risk-manager', 1, 4, 'veto'], ['execution', null, 1, 1.5, 'unfilled'],
+    ['entry', 'candle-reading', 2, 5, 'entry:close'], ['risk', 'risk-manager', 1, 4, 'veto'],
     ['stop', null, 1, 1, 'stop:wide'], ['execution', 'trade-executor', 1, 0, 'executor-abort'],
   ]);
   assert.ok(found.every(f => f.kind === 'trend-blocker' && f.of === legs.length));

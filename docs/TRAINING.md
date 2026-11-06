@@ -589,10 +589,15 @@ and leg ids; the lessons lines record the batch too.
   at the model's stop (`min-contracts`, phase 2's or the gate's) is the head
   trader's stop choice. It is filed under the flow step `stop` and owned by the
   skill of its plan's stop read, never by the risk manager: the floor is the
-  rulebook's. A late or unfilled entry, or the head trader's pass, names no
-  owner. A rule (the clock, the account's stops, news), a bar outside the
-  session and a position already open are never findings: those are code
-  and the rulebook.
+  rulebook's. The head trader's pass names no owner. A rule (the clock, the
+  account's stops, news), a bar outside the session, a position already open
+  and a leg lost only to the runner's own timing (its late entry, computed from
+  the price against the plan, and the executor's unfilled one: no skill edit
+  can change either) are never findings: those are code and the rulebook. A
+  leg whose model passed a valid plan earlier, or whose late entry is only the
+  first check a gate refusal names, stays a finding. The timing legs are
+  counted in the round's report, apart from the learnable, no-valid-plan and
+  unknown ones.
 - **Exit findings** (`scripts/lib/train/exit-findings.js`, kind
   `exit-decision`). Each run's trend-capture report scores every exit and
   every stop the model tightened by what price did next on the closed bars,
@@ -728,8 +733,7 @@ and leg ids; the lessons lines record the batch too.
   scrubbed as what was said.
 - **What the proposer sees.** Each trend finding lists up to `examples`
   of its legs (`config/training.json` `trendFindings`), the costliest
-  first, each clipped to `exampleChars` at a clause boundary. A late or
-  unfilled entry's legs (the runner's execution) give none. Each example
+  first, each clipped to `exampleChars` at a clause boundary. Each example
   gives the side, what the model said (its CYCLE RESULT line, clipped to
   `saidChars`; the runner's own words labelled "the runner") and, for a
   refused plan, its reads. Then it gives the passing plan's reads, or why
