@@ -1940,7 +1940,37 @@ practice round:
 ```bash
 node scripts/context-quiz.js run --config <your runner config.json> --out <dir outside the repo>
 node scripts/context-quiz.js compare <the base's dir> <dir>
+node scripts/context-quiz.js gate <the base's dir> <dir> [--confirm <the base's confirm dir> <confirm dir>]
 ```
+
+`gate` holds an edited tree's quiz against the base's, as a proposed skill edit
+must pass it before any replay (`train/quiz-gate.js`, its thresholds the quiz
+file's `gate`). With 53 questions at K runs each, a plain per-question drop rule
+falsely rejects an unchanged edit (30 to 80% at 3 runs), so: any question whose
+share of passing answers drops by `flagDrop` or more is FLAGGED; a flagged
+question is asked `confirmRuns` more times on both trees (`run --only <ids> --k
+<confirmRuns>` into a new directory each), and it is a regression only when
+those confirm runs alone (the flag selected on noise, so the first runs are not
+reused) are worse by an exact one-sided test at `alpha` shared out over the
+flagged questions, and the pooled runs are worse by `flagDrop`; a smaller drop of
+a stable question (one the base answered on every run) is a slip, and more than
+`maxSlips` of them (or a flagged stable one that did not confirm) rejects. A
+seeded Monte Carlo in the tests pins the rates (53 questions, K 5, `confirmRuns`
+10; 4000 trials): an unchanged edit is rejected about 1% of the time on a stable
+quiz and on a deliberately flaky one; one stable question broken from 1.0 to 0.3
+is caught 93%, 1.0 to 0.6 about a third, a flaky question (0.8) dropped to 0
+99%, three questions to 0.7 about 14%, eight to 0.6 about 60%. Mild or broad
+damage is often not caught: the gate is a filter, not a verdict. A flagged
+flaky question that does not confirm is not a slip (it has no baseline to lose).
+Summaries, the confirm runs' too, must carry the quiz
+hash they were graded with (`grade` writes it), equal to the current quiz's; a
+missing or unreadable summary, a quiz file that does not load, a different K,
+fewer runs than the quiz file's K (or than `confirmRuns` for a confirm) or a
+corrupt row is inconclusive, never a pass; a confirmed regression or too many
+slips still rejects beside such a problem. Exit 0 pass, 1 reject, 2
+inconclusive, 3 a confirm run is needed, 4 usage. The quiz only filters (a
+perfect score is necessary, not sufficient: the trades decide); it saves the
+hours of a replay for an edit that already makes the model read a rule worse.
 
 It calls the model the runner config names (no tools, no project settings, no
 session kept), so it never runs in CI. CI checks it offline: every question's

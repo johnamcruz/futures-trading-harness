@@ -11,6 +11,8 @@
  *   node scripts/context-quiz.js run --config <runner config.json> --out <dir> [--harness <name>] [--k 5] [--only q1,b2]
  *   node scripts/context-quiz.js grade <dir>
  *   node scripts/context-quiz.js compare <dirA> <dirB>
+ *   node scripts/context-quiz.js gate <champion dir> <edit dir> [--confirm <champion dir> <edit dir>]
+ *       a proposed edit against the champion (train/quiz-gate.js): exit 0 pass, 1 reject, 2 inconclusive, 3 confirm run needed, 4 usage
  */
 
 const fs = require('fs');
@@ -78,7 +80,7 @@ function run(argv) {
 }
 
 function grade(dir) {
-  const quiz = Q.loadQuiz().value;
+  const { value: quiz, hash } = Q.loadQuiz();
   const all = [...quiz.questions, ...quiz.partB];
   const graded = readRows(path.join(dir, 'answers.jsonl')).filter(r => !r.error).map(r => {
     const q = all.find(x => x.id === r.id);
@@ -86,7 +88,7 @@ function grade(dir) {
   }).filter(Boolean);
   fs.writeFileSync(path.join(dir, 'grades.json'), `${JSON.stringify(graded, null, 1)}\n`);
   const k = Math.max(1, ...graded.map(g => g.k));
-  const s = Q.summarize(quiz, graded, k);
+  const s = { ...Q.summarize(quiz, graded, k), quizHash: hash };
   fs.writeFileSync(path.join(dir, 'summary.json'), `${JSON.stringify(s, null, 1)}\n`);
   for (const p of ['partA', 'partB']) {
     for (const x of s[p].per) console.log(`${x.id}\t${x.layer}\t${x.passes}/${x.n}${x.bothWays ? '\tanswered both ways' : ''}`);
@@ -101,13 +103,46 @@ function compare(a, b) {
   for (const x of Q.compare(sum(a), sum(b))) console.log(`${x.id}\t${x.from} -> ${x.to}${x.delta ? `  ${x.delta > 0 ? '+' : ''}${x.delta}` : ''}`);
 }
 
+/** The gate's verdicts in exit-code order: 0 pass, 1 reject, 2 inconclusive, 3 confirm; a usage error is the next code after them. */
+const VERDICTS = Object.freeze(['pass', 'reject', 'inconclusive', 'confirm']);
+
+/** A proposed skill edit's quiz against the champion's, by the quiz file's gate; the exit code is the verdict. */
+function gate(rest) {
+  const at = rest.indexOf('--confirm');
+  // exactly <champion dir> <edit dir>, or those and --confirm <champion dir> <edit dir>: a pair of directories, twice
+  const pair = ['champion dir', 'edit dir'];
+  const shape = at < 0 ? rest.length === pair.length : at === pair.length && rest.length === pair.length * 2 + 1;
+  if (!shape) { console.error('usage: context-quiz.js gate <champion dir> <edit dir> [--confirm <champion dir> <edit dir>]'); process.exitCode = VERDICTS.length; return; }
+  const [a, b] = rest;
+  const more = at >= 0 ? rest.slice(at + 1) : [];
+  // An unreadable summary.json, or a quiz file that does not load, is no verdict (inconclusive), never a reject.
+  const sum = d => { try { return JSON.parse(fs.readFileSync(path.join(path.resolve(d), 'summary.json'), 'utf8')); } catch (_e) { return null; } };
+  let r;
+  try {
+    const { value, hash } = Q.loadQuiz();
+    const confirm = more.length ? { champion: sum(more[0]), edit: sum(more[1]) } : null;
+    r = require('./lib/train/quiz-gate').decide(value, sum(a), sum(b), { confirm, quizHash: hash });
+  } catch (e) {
+    console.error(`inconclusive: the gate could not run: ${e.message}`);
+    process.exitCode = VERDICTS.indexOf('inconclusive');
+    return;
+  }
+  console.log(`${r.verdict}: ${r.why}`);
+  for (const [name, list] of [['regressions', r.regressions], ['flagged', r.flagged], ['slips', r.slips], ['gains', r.gains]]) {
+    if (list.length) console.log(`${name}:\n${list.map(x => `  ${x.id}\t${x.from} -> ${x.to}${x.p !== undefined ? `  p ${x.p}` : ''}`).join('\n')}`);
+  }
+  if (r.confirm) console.log(`next: on both trees, run --only ${r.confirm.ids.join(',')} --k ${r.confirm.runs} into a new dir each, then gate again with --confirm <champion dir> <edit dir>`);
+  process.exitCode = VERDICTS.indexOf(r.verdict);
+}
+
 function main(argv) {
   const [cmd, ...rest] = argv;
   if (cmd === 'build') return build(outDir(arg(rest, '--out')));
   if (cmd === 'run') return run(rest);
   if (cmd === 'grade' && rest[0]) return grade(path.resolve(rest[0]));
   if (cmd === 'compare' && rest[0] && rest[1]) return compare(rest[0], rest[1]);
-  throw new Error('usage: context-quiz.js build --out <dir> | run --config <file> --out <dir> [--harness <name>] [--k N] [--only ids] | grade <dir> | compare <a> <b>');
+  if (cmd === 'gate') return gate(rest);
+  throw new Error('usage: context-quiz.js build --out <dir> | run --config <file> --out <dir> [--harness <name>] [--k N] [--only ids] | grade <dir> | compare <a> <b> | gate <champion dir> <edit dir> [--confirm <champion dir> <edit dir>]');
 }
 
 if (require.main === module) {

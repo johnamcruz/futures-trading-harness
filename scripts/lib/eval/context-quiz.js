@@ -56,6 +56,11 @@ function quizErrors(v) {
   if (!Array.isArray(v.negations) || !v.negations.every(str)) out.push('negations: a list of words');
   if (!(Number.isInteger(v.negationWindow) && v.negationWindow >= 1)) out.push('negationWindow: the words before a match a negation reaches');
   out.push(...regexErrors([v.unsure], 'unsure'));
+  // The gate a proposed skill edit passes before any replay (train/quiz-gate.js): a question the champion answered every time
+  // whose share drops by flagDrop or more is asked again (confirmRuns more); a regression needs an exact test at alpha; up to
+  // maxSlips smaller drops are noise.
+  const g = v.gate;
+  if (!isObj(g) || !(typeof g.flagDrop === 'number' && g.flagDrop > 0 && g.flagDrop <= 1) || !(typeof g.alpha === 'number' && g.alpha > 0 && g.alpha < 1) || !(Number.isInteger(g.maxSlips) && g.maxSlips >= 0) || !(Number.isInteger(g.confirmRuns) && g.confirmRuns >= 1)) out.push('gate: { flagDrop: a share in (0, 1], alpha: in (0, 1), maxSlips: a whole number, 0 or more, confirmRuns: a whole number, 1 or more }');
   const bar = v.passBar;
   if (!isObj(bar) || !['partA', 'partB'].every(p => isObj(bar[p]) && Number.isInteger(bar[p].allCorrect) && Number.isInteger(bar[p].bothWays))) out.push('passBar: { partA, partB } each { allCorrect, bothWays }');
   const ids = new Set();
