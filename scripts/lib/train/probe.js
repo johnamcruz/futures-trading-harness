@@ -438,7 +438,7 @@ async function probeRound(ctx, { n, champion, api }) {
     // The champion's catch & ride on the probe half (trend-ride.js): what each edit's own is read against.
     report.trend.probeRide = TSC.rideOfSide(trendBase.side, trendBase.rides);
     const t = report.trend.missed;
-    ctx.log(`iteration ${n}: trend probe half: ${t.missed} missed leg(s): ${t.learnable} learnable, ${t.noValidPlan} no valid plan at the time (a correct pass), ${t.unknown} facts unknown`);
+    ctx.log(`iteration ${n}: trend probe half: ${t.missed} missed leg(s): ${t.learnable} learnable, ${t.noValidPlan} no valid plan at the time (a correct pass), ${t.unknown} facts unknown${t.timing ? `, ${t.timing} lost to a late or unfilled entry (timing, not findings)` : ''}`);
   }
   const regBase = trend ? await trendSide('pc', champion.dir, 1, 'regression') : null;
   // The champion's confirm half too, every round: the learning curve reads it (trend-curve.js); nothing of it reaches the

@@ -211,7 +211,7 @@ function capture() {
 
 test('trend findings: learnable legs only; the others counted as a correct pass or unknown, never findings', () => {
   const doc = capture();
-  assert.deepStrictEqual(TF.missedTally([doc]), { missed: 5, learnable: 2, noValidPlan: 1, unknown: 2 });
+  assert.deepStrictEqual(TF.missedTally([doc]), { missed: 5, learnable: 2, noValidPlan: 1, unknown: 2, timing: 0 });
   const found = TF.trendFindings([doc]);
   assert.deepStrictEqual(found.map(f => [f.step, f.skill, f.count, f.cost, f.code, f.of]), [[null, null, 2, 4, 'no-plan', 7]]);
   // Up to the configured examples, the costliest leg first: what was said beside the plan that passed.
@@ -221,10 +221,66 @@ test('trend findings: learnable legs only; the others counted as a correct pass 
   assert.match(found[0].examples[0], /^long: what you said: "no-trade - the long at on: no rejection at a key level, price"\. A plan that passed there: "1h up", "at prior vah", "15m rejected prior vah up", "3m close top", "stop 15m low", "target 1h swing high"; timing there: no HTF side, a turn back in the window: no$/);
   assert.doesNotMatch(found[0].examples[0], /15m bos up|3m bos up/, 'never the whole list of TRUE reads');
   assert.doesNotMatch(found[0].examples[0], /Contradiction/, 'what was said is never parsed');
-  // A late or unfilled entry's legs (the runner's execution) give no example.
-  const late = { legs: [{ ...doc.legs[0], blocker: { step: 'execution', code: 'late-entry', by: 'gate' } }] };
-  assert.deepStrictEqual(TF.trendFindings([late])[0].examples, []);
-  assert.deepStrictEqual(TF.missedTally([]), { missed: 0, learnable: 0, noValidPlan: 0, unknown: 0 });
+  // A late or unfilled entry's legs (the runner's own timing: the price moved past the plan before the order could go) are
+  // never a finding; see the timing test below.
+  assert.deepStrictEqual(TF.missedTally([]), { missed: 0, learnable: 0, noValidPlan: 0, unknown: 0, timing: 0 });
+});
+
+// About half the decisions PPC labels "expected take, did none" were the runner's late-entry or unfilled check (two real
+// replay runs: 16 of 35 and 8 of 17): the model decided to enter and the order did not go. No skill edit can make the price
+// wait, so they are timing: counted (missedTally.timing), never a finding the proposer is asked to fix. But only when
+// nothing model-fixable hides behind them (a valid plan the model passed earlier on the same leg, a gate refusal that only
+// lists late-entry first), and only for the code AND the source that set it (trend-capture.js classifyCycle).
+test('trend findings: a leg lost only to the runner\'s late or unfilled entry is timing, counted and never a finding; the others stay', () => {
+  const b = brief();
+  const said = 'CYCLE RESULT: no-trade - the long at 10:45 ET on 2026-04-23: no rejection at a key level, price 21540.25';
+  const withFacts = l => ({ ...l, facts: X.legFacts(l, ctxOf(b, { cycleAt: () => ({ result: said }) })) });
+  const learnable = withFacts(legOf([cyc('no-plan', 'head')], { id: 'a', availableR: 3 }));
+  // The runner's own late entry carries movedR (classifyCycle's entry.outcome 'late'); an unfilled one is an entered cycle.
+  const timingLeg = (id, code, by, bars = [{ bar: 'b1', code, valid: true, known: true }]) => ({
+    ...learnable, id, availableR: 6, blocker: { step: 'execution', code, by },
+    cycles: code === 'late-entry' ? [cyc('late-entry', 'gate', 'execution', [], 'moved past the plan')].map(c => ({ ...c, movedR: 0.8 })) : [cyc('entered', 'executor', 'execution')],
+    facts: { learnable: true, bars, owner: null },
+  });
+  for (const [code, by] of [['late-entry', 'gate'], ['unfilled', 'executor']]) {
+    const doc = { legs: [timingLeg(`t-${code}`, code, by)] };
+    assert.deepStrictEqual(TF.trendFindings([doc]), [], `${code}: no finding`);
+    assert.deepStrictEqual(TF.missedTally([doc]), { missed: 1, learnable: 0, noValidPlan: 0, unknown: 0, timing: 1 }, `${code}: counted as timing`);
+  }
+  // A timing leg is not also counted learnable, no valid plan or unknown.
+  const mixed = { legs: [learnable, timingLeg('t1', 'late-entry', 'gate'), timingLeg('t2', 'unfilled', 'executor')] };
+  assert.deepStrictEqual(TF.missedTally([mixed]), { missed: 3, learnable: 1, noValidPlan: 0, unknown: 0, timing: 2 });
+  assert.strictEqual(TF.trendFindings([mixed]).reduce((n, f) => n + f.count, 0), 1, 'only the real miss is a finding');
+  // The model's own earlier passes on the same leg are not timing: a valid plan at an earlier entry bar that ended in a head
+  // pass or a veto, then a late entry.
+  const hidden = timingLeg('h1', 'late-entry', 'gate', [{ bar: 'b0', code: 'no-plan', valid: true, known: true }, { bar: 'b1', code: 'head-pass', valid: true, known: true }, { bar: 'b2', code: 'late-entry', valid: true, known: true }]);
+  assert.strictEqual(TF.missedTally([{ legs: [hidden] }]).timing, 0);
+  assert.strictEqual(TF.trendFindings([{ legs: [hidden] }]).reduce((n, f) => n + f.count, 0), 1, 'a model miss hidden behind a late entry stays a finding');
+  // An earlier bar with NO valid plan (a correct pass) hides nothing: still timing.
+  const clean = timingLeg('h2', 'late-entry', 'gate', [{ bar: 'b0', code: 'no-plan', valid: false, known: true }, { bar: 'b1', code: 'late-entry', valid: true, known: true }]);
+  assert.strictEqual(TF.missedTally([{ legs: [clean] }]).timing, 1);
+  // An earlier late or unfilled bar is timing too (it does not hide a model pass).
+  const twice = timingLeg('h3', 'late-entry', 'gate', [{ bar: 'b0', code: 'late-entry', valid: true, known: true }, { bar: 'b1', code: 'late-entry', valid: true, known: true }]);
+  assert.strictEqual(TF.missedTally([{ legs: [twice] }]).timing, 1);
+  // A gate refusal that only LISTS late-entry first (no movedR: the gate's log, not the runner's own computation) may hide
+  // another check behind it: it stays a finding.
+  const listed = { ...timingLeg('g1', 'late-entry', 'gate'), cycles: [cyc('late-entry', 'gate', 'execution', [], 'a refusal')] };
+  assert.strictEqual(TF.missedTally([{ legs: [listed] }]).timing, 0);
+  assert.strictEqual(TF.trendFindings([{ legs: [listed] }]).reduce((n, f) => n + f.count, 0), 1);
+  // Everything else is filed as before: another gate refusal, an executor block or abort, a phase-2 veto, a head pass, a
+  // floor refusal. (Their words are never read: only the blocker's code and who set it.)
+  const lost = (id, code, by, step = 'execution') => ({ ...learnable, id, availableR: 6, blocker: { step, code, by } });
+  const keep = [
+    lost('k1', 'blocked', 'executor'), lost('k2', 'executor-abort', 'executor'), lost('k3', 'skills-loaded', 'gate'),
+    lost('k4', 'veto', 'phase2', 'risk'), lost('k5', 'verdict-unread', 'phase2', 'risk'), lost('k6', 'min-contracts', 'phase2', 'risk'),
+    lost('k7', 'head-pass', 'head', 'risk'),
+  ];
+  const tally = TF.missedTally([{ legs: keep }]);
+  assert.strictEqual(tally.timing, 0);
+  assert.strictEqual(tally.missed, keep.length);
+  assert.strictEqual(TF.trendFindings([{ legs: keep }]).reduce((n, f) => n + f.count, 0), keep.length);
+  // Only a gate's late-entry or an executor's unfilled is timing: the same words from another source are not.
+  assert.strictEqual(TF.missedTally([{ legs: [lost('o1', 'unfilled', 'gate'), lost('o2', 'late-entry', 'executor')] }]).timing, 0, 'the code alone is not enough: who set it counts');
 });
 
 test('trend facts: the runner\'s words are labelled the runner\'s', () => {
@@ -347,6 +403,10 @@ test('the iteration\'s status line counts the probe half\'s missed legs and the 
   assert.deepStrictEqual([rec.trend.missed, rec.trend.baseRate], [trend.missed, trend.baseRate]);
   assert.match(IR.line(rec), /; probe missed legs 5: learnable 2, no valid plan 1 \(a correct pass\), unknown 2, valid plan on 60% \(n 10\) of leg bars vs 55% \(n 20\) of control bar-sides \(won 3, lost 4, undecided 4\)/);
   assert.doesNotMatch(IR.line(IR.build({ probeReport: { iteration: 1, trend: { ...trend, missed: undefined, baseRate: undefined }, findings: [], edits: [], probes: [] } })), /probe missed legs|control bars/);
+  // Legs lost to the runner's own timing are said, never silent: counted beside the others, not findings.
+  const lost = IR.line(IR.build({ probeReport: { iteration: 1, trend: { ...trend, missed: { missed: 7, learnable: 2, noValidPlan: 1, unknown: 2, timing: 2 } }, findings: [], edits: [], probes: [] } }));
+  assert.match(lost, /; probe missed legs 7: learnable 2, no valid plan 1 \(a correct pass\), unknown 2, timing 2 \(a late or unfilled entry: not findings\)/);
+  assert.doesNotMatch(IR.line(rec), /timing/, 'none counted: not said');
 });
 
 // --- the run home, read only -----------------------------------------------------------------------------------------

@@ -12,8 +12,7 @@
  * (count), the R they left (cost: the sum of each leg's availableR, its move from the first bar an entry could be on to
  * its end, in its planned stop or the run's; legs with no R counted as none), its codes, and up to `examples` legs
  * (config/training.json trendFindings), the costliest first, each as trend-facts.js exampleLine gives it (what the model
- * said beside the plan that passed: no date, time or price); a late or unfilled entry's legs (the runner's
- * execution, not a read) give no example. The owner:
+ * said beside the plan that passed: no date, time or price). The owner:
  *   compose_check   the skill of the blocking cycle's first unverified read at the failing step (the read the check
  *                   refused); none when no read names a skill there
  *   phase2          agents/risk-manager.md (a veto, an unread verdict)
@@ -22,9 +21,10 @@
  *   executor        agents/trade-executor.md (an abort, a block)
  *   no-plan         the earliest step where a read the model composed the leg's way was not verified (trend-facts.js
  *                   owner) and that read's skill; none when it composed none
- *   anything else   none (the gate's late or unfilled entry, the head trader's pass): any skill or role may be edited
+ *   anything else   none (the head trader's pass, another gate refusal): any skill or role may be edited
  * Never a finding: a leg blocked by a rule (the gate's clock, the account's stops, news: code and the rulebook, the
- * owner's), outside the session, or behind a position already open. A size or management skill (no read), the loop's
+ * owner's), outside the session, behind a position already open, or lost only to the runner's own timing (its late entry,
+ * the executor's unfilled one; counted, `timing`; not when the model passed a valid plan earlier on the same leg). A size or management skill (no read), the loop's
  * own skills and a skill the tree doesn't hold own nothing (the finding stays, unowned).
  *
  *   KIND
@@ -33,8 +33,9 @@
  *   trendFindings(captures, { exists, max })   [{ kind, step, skill?, agent?, code, count, cost, of, detail, examples }],
  *                                              ranked by cost, then count, then step order and owner; at most max (none:
  *                                              all); its detail clipped where the round merges it (findings.js mergeFindings)
- *   missedTally(captures)                      { missed, learnable, noValidPlan, unknown }: the legs a finding could be
- *                                              made of, and how many were (the round's report and status)
+ *   missedTally(captures)                      { missed, learnable, noValidPlan, unknown, timing }: the legs a finding could
+ *                                              be made of, and how many were; `timing` the late or unfilled ones, left out
+ *                                              of the other three (the round's report and status)
  *   findingCost(f)                             its cost, for the merged ranking
  */
 
@@ -54,8 +55,23 @@ const num = x => (typeof x === 'number' && Number.isFinite(x) ? x : 0);
 const r2 = x => Math.round(x * 100) / 100;
 
 const FLOOR = 'min-contracts';
-// The codes of the runner's own execution (a late or unfilled entry): no reading to show in an example.
-const EXECUTION_CODES = new Set(['late-entry', 'unfilled']);
+// The runner's own timing: the gate's late entry (the runner found the plan's entry missed or run away from) and the
+// executor's unfilled one (the order rested and never filled). About half the decisions PPC labelled "expected take, did
+// none" were these, and no skill edit can make the price wait: counted (missedTally.timing), never a finding the proposer
+// is asked to fix. Only when nothing model-fixable hides behind them, and only for the code AND the source that set it:
+//   - the model's own earlier passes on the same leg are not timing (a valid plan at an earlier entry bar that ended in
+//     anything but a late or unfilled entry stays a finding: the blocker is only the furthest stage the leg reached);
+//   - a late entry is the runner's own computation only when its cycle carries movedR (trend-capture.js classifyCycle,
+//     entry.outcome 'late'): a gate refusal that merely lists late-entry first may hide another check behind it.
+const TIMING = Object.freeze({ gate: 'late-entry', executor: 'unfilled' });
+const TIMING_CODES = new Set(Object.values(TIMING));
+const timing = leg => {
+  const b = leg.blocker;
+  if (TIMING[b.by] !== b.code) return false;
+  if (b.code === TIMING.gate) { const c = blockingCycle(leg); if (!c || !Object.hasOwn(c, 'movedR')) return false; }
+  const bars = isObj(leg.facts) && Array.isArray(leg.facts.bars) ? leg.facts.bars : [];
+  return !bars.some(x => isObj(x) && x.valid === true && !TIMING_CODES.has(x.code));
+};
 
 /** The skill trend-facts.js credits a leg to (its owner's), when the tree holds it and it reads; else none. */
 function ownSkill(leg, exists) {
@@ -95,8 +111,9 @@ const learnable = leg => isObj(leg.facts) && leg.facts.learnable === true;
 
 function missedTally(captures) {
   const legs = (Array.isArray(captures) ? captures : []).flatMap(doc => (isObj(doc) && Array.isArray(doc.legs) ? doc.legs : [])).filter(eligible);
-  const n = test => legs.filter(test).length;
-  return { missed: legs.length, learnable: n(learnable), noValidPlan: n(l => isObj(l.facts) && l.facts.learnable === false), unknown: n(l => !isObj(l.facts) || (l.facts.learnable !== true && l.facts.learnable !== false)) };
+  const read = legs.filter(l => !timing(l));
+  const n = test => read.filter(test).length;
+  return { missed: legs.length, learnable: n(learnable), noValidPlan: n(l => isObj(l.facts) && l.facts.learnable === false), unknown: n(l => !isObj(l.facts) || (l.facts.learnable !== true && l.facts.learnable !== false)), timing: legs.length - read.length };
 }
 
 function trendFindings(captures, { exists = () => true, max } = {}) {
@@ -105,7 +122,7 @@ function trendFindings(captures, { exists = () => true, max } = {}) {
   for (const doc of Array.isArray(captures) ? captures : []) {
     for (const leg of isObj(doc) && Array.isArray(doc.legs) ? doc.legs : []) {
       legs += 1;
-      if (!eligible(leg) || !learnable(leg)) continue;
+      if (!eligible(leg) || timing(leg) || !learnable(leg)) continue;
       const b = leg.blocker;
       const owner = ownerOf(leg, { exists });
       const step = stepOfLeg(leg);
@@ -127,7 +144,7 @@ function trendFindings(captures, { exists = () => true, max } = {}) {
       const codes = [...g.codes].sort((a, b) => b[1] - a[1] || a[0].localeCompare(b[0])).slice(0, TOP);
       // The costliest legs first (the id breaks a tie): what the proposer reads of each, clipped.
       const examples = [...g.members].sort((a, b) => num(b.availableR) - num(a.availableR) || String(a.id).localeCompare(String(b.id)))
-        .filter(l => !EXECUTION_CODES.has(l.blocker.code)).map(l => exampleLine(l)).filter(Boolean).slice(0, EX.examples).map(x => (x.length > EX.exampleChars ? `${x.slice(0, EX.exampleChars - 3)}...` : x));
+        .map(l => exampleLine(l)).filter(Boolean).slice(0, EX.examples).map(x => (x.length > EX.exampleChars ? `${x.slice(0, EX.exampleChars - 3)}...` : x));
       return {
         kind: KIND, step: g.step, ...(g.skill ? { skill: g.skill } : g.agent ? { agent: g.agent } : { skill: null }), code: codes[0][0], count: g.legs, cost: r2(g.cost), of: legs,
         detail: codes.map(([c, n]) => `${c} (${n})`).join('; '), examples,
