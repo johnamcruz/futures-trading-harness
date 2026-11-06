@@ -232,13 +232,13 @@ const pct = x => (x === null || x === undefined ? '-' : `${(x * 100).toFixed(1)}
 const iv = i => (i && i.lo !== null && i.lo !== undefined ? `[${pct(i.lo)}, ${pct(i.hi)}]` : '[-]');
 const num = x => (x === null || x === undefined ? '-' : String(x));
 
-/** The score's lines, in the owner's order. */
 /** The chained account's line (evaluator.js chainedAccount): one balance through every day, where it ended. */
 function chainedLine(r) {
   const c = r.chained;
   const end = c.status === 'unfinished' ? `unfinished after ${c.sessions} session(s)` : `${c.status} on ${c.endedOn} after ${c.sessions} session(s)`;
-  return `Chained account (one balance through all ${r.runDays} day(s), no session cap): ${end}, $${c.profit} from the start (peak $${c.peak}, lowest $${c.lowest})`;
+  return `Chained account (one balance through all ${c.days} day(s), no session cap): ${end}, $${c.profit} from the start (peak $${c.peak}, lowest $${c.lowest})`;
 }
+/** The score's lines, in the owner's order. */
 function scoreLines(r) {
   const S = r.inputs.sessions;
   const rs = r.resampled;
@@ -254,7 +254,7 @@ function scoreLines(r) {
     `2. Pass within ${S} trading days: ${pct(r.passRate)} of ${r.attempts} real attempts (bootstrap ${iv(r.intervals.pass)}, Wilson at ${r.ess} independent ${iv(r.intervals.passAtEss)}); resampled ${pct(rs.passRate)} of ${rs.paths} paths (Wilson ${iv(rs.mcInterval)}, conditional on these ${D} days)`,
     `3. Days to pass: median ${num(r.medianDaysToPass)}, p90 ${num(r.p90DaysToPass)} (real); median ${num(rs.medianDaysToPass)}, p90 ${num(rs.p90DaysToPass)} (resampled)`,
     `4. Blow rate ${pct(r.blowRate)} (bootstrap ${iv(r.intervals.blow)}, Wilson at ${r.real.ess} independent ${iv(r.intervals.blowAtEss)}), timeout rate ${pct(r.timeoutRate)} (bootstrap ${iv(r.intervals.timeout)}, Wilson at ${r.ess} independent ${iv(r.intervals.timeoutAtEss)}) (real); resampled blow ${pct(rs.blowRate)}, timeout ${pct(rs.timeoutRate)}`,
-    chainedLine(r),
+    ...(r.chained ? [chainedLine(r)] : []),
     ['test', 'final'].includes(r.window.role)
       ? `Promotion gate: ${r.promotion.passes ? 'passes' : `refused: ${r.promotion.failures.join('; ')}`}`
       : `Promotion gate: n/a (${r.window.role} is not out of sample${r.promotion.passes ? '' : `; it would refuse: ${r.promotion.failures.join('; ')}`})`,

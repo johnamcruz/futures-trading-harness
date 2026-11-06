@@ -486,6 +486,8 @@ test('evaluator: the chained account blows on the day the trailing floor is touc
   assert.strictEqual(r.chained.endedOn, list[3]);
   assert.ok(r.chained.lowest <= -1000 && r.chained.profit === r.chained.lowest, JSON.stringify(r.chained));
   assert.strictEqual(r.chained.peak, 0);
+  assert.strictEqual(r.chained.sessions, 4, 'the blow day counts as a session, as a pass day does');
+  assert.strictEqual(r.chained.days, 10);
 });
 
 test('evaluator: a chained account that neither passes nor blows is unfinished, with its end balance, peak and lowest point', () => {
@@ -497,7 +499,8 @@ test('evaluator: a chained account that neither passes nor blows is unfinished, 
   assert.strictEqual(r.chained.status, 'unfinished');
   assert.strictEqual(r.chained.endedOn, null);
   assert.strictEqual(r.chained.sessions, 4);
-  assert.ok(r.chained.peak > r.chained.profit && r.chained.lowest < r.chained.peak, JSON.stringify(r.chained));
+  // The dip below the start is mid-run (day 2: 92.60 - 107.80), so only a running low shows it.
+  assert.deepStrictEqual([r.chained.profit, r.chained.peak, r.chained.lowest], [10.4, 92.6, -14.8]);
 });
 
 test('evaluator: the chained account does not change any capped-attempt number', () => {
@@ -507,4 +510,17 @@ test('evaluator: the chained account does not change any capped-attempt number',
   assert.deepStrictEqual([r.attempts, r.passed, r.blown, r.timeout], [55, 55, 0, 0]);
   assert.strictEqual(r.chained.status, 'passed');
   assert.strictEqual(r.chained.sessions, 4);
+});
+
+test('evaluator: the chained account is not paced to the capped attempts\' horizon: clock_k is off for it, on for the others', () => {
+  const list = sessionDays('2022-03-01', 12);
+  const s = streamOf(list, () => [trade(20)]);
+  const seen = [];
+  const size = args => { seen.push(args.sizing.clock_k); return ten(); };
+  const sizing = { ...TEST_SIZING, clock_k: 2 };
+  const r = scoreStream(s, { ...opts(checkWindow({ from: list[0], to: nextDay(list[11]) }), { size, paths: 5, reps: 20 }), rulebook: { sizing } });
+  assert.strictEqual(r.chained.status, 'passed');
+  // The chain runs first (one sizing call per trade, 11 days to the pass), then the capped attempts.
+  assert.ok(seen.slice(0, r.chained.taken).every(k => k === 0), 'the chain sizes without pacing');
+  assert.ok(seen.length > r.chained.taken && seen.slice(r.chained.taken).every(k => k === 2), 'every capped attempt keeps the rulebook\'s clock_k');
 });
