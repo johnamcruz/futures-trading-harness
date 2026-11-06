@@ -20,6 +20,10 @@
  *   FILE, MAX_LINES, MAX_CHARS
  *   appendLesson(file, entry)          one line; refuses an entry without its fields or outside practice-train
  *   appendKeep(file, { proposalId, iteration, keep, windows })   the keep rule's verdict on a combined change
+ *   appendQuiz(file, { proposalId, iteration, skill | agent, kind, windows, quiz, why, stage })   an edit the quiz gate stopped
+ *                                      (reject or blocked) before any replay; summarized apart from the replays' verdicts
+ *   barsReproposal(entry)              [bool] the line bars the same edit next time (a replay verdict, a keep line, a
+ *                                      quiz reject or content refusal; never a question, inconclusive or harness refusal)
  *   readLessons(file)                  [entry]
  *   practiceOnly(windows)              true when every window lies in practice-train
  *   summarize(entries, { maxLines, maxChars })   the proposer's text
@@ -33,8 +37,12 @@ const { VERDICTS } = require('./screen');
 const { KINDS } = require('./probe-edit');
 
 const FILE = 'lessons.jsonl';
+// The quiz gate's verdicts on an edit it stopped (train/quiz-phase.js): never a replay's (VERDICTS).
+const QUIZ_VERDICTS = Object.freeze(['reject', 'blocked']);
 const MAX_LINES = require('../tunables').training().lessons.maxLines; // config/training.json lessons
 const MAX_CHARS = require('../tunables').training().lessons.maxChars;
+// A refused probe's line (its id, stage, first reason) at most this long (config/training.json lessons.refusedChars).
+const REFUSED_CHARS = require('../tunables').training().lessons.refusedChars;
 
 function practiceOnly(windows) {
   if (!Array.isArray(windows) || !windows.length) return false;
@@ -73,6 +81,33 @@ function appendKeep(file, entry) {
   fs.appendFileSync(file, `${JSON.stringify({ v: 1, at: new Date().toISOString(), composed: true, proposalId: e.proposalId, iteration: e.iteration, keep: e.keep, windows: e.windows })}\n`);
 }
 
+/** An edit the quiz gate stopped before any replay (train/quiz-phase.js): its skill or role, kind and the gate's verdict. */
+function appendQuiz(file, entry) {
+  const e = entry || {};
+  const errors = [];
+  if (typeof e.proposalId !== 'string' || !Number.isInteger(e.iteration)) errors.push('proposalId and iteration');
+  if (!QUIZ_VERDICTS.includes(e.quiz)) errors.push(`quiz: ${QUIZ_VERDICTS.join(' or ')} (an edit that passed is replayed, its line the probe's)`);
+  if (!((typeof e.skill === 'string' || typeof e.agent === 'string') && KINDS.includes(e.kind))) errors.push(`skill (or agent) and kind (${KINDS.join(', ')})`);
+  if (!practiceOnly(e.windows)) errors.push('windows: practice-train only (the round\'s windows; a lesson never holds validate, test or final outcomes)');
+  if (errors.length) throw new Error(`a quiz lesson names ${errors.join('; ')}`);
+  fs.mkdirSync(path.dirname(file), { recursive: true, mode: 0o700 });
+  fs.appendFileSync(file, `${JSON.stringify({ v: 1, at: new Date().toISOString(), ...e })}\n`);
+}
+
+// The quiz gate's content refusals (train/quiz-phase.js red/green): the edit itself, not its question, failed.
+const CONTENT_WHY = Object.freeze(['the champion already answers the question', 'the edit does not teach its own question']);
+/**
+ * Whether a lessons line bars the same edit (its proposal id) from being proposed again: a replay's verdict, a keep line,
+ * a quiz reject, or a content refusal (CONTENT_WHY). A refusal of its question (at the proposal or its anchor), an
+ * inconclusive run or a harness the quiz could not ask never does: the same edit with a sound question runs.
+ */
+function barsReproposal(e) {
+  if (!e || typeof e.proposalId !== 'string') return false;
+  if (typeof e.quiz !== 'string' || typeof e.verdict === 'string') return true;
+  if (e.quiz === 'reject') return true;
+  return typeof e.why === 'string' && CONTENT_WHY.some(w => e.why.startsWith(w));
+}
+
 function readLessons(file) {
   let text;
   try {
@@ -102,7 +137,20 @@ function summarize(entries, { maxLines = MAX_LINES, maxChars = MAX_CHARS } = {})
     if (v) for (const id of c.partIds) if (!keeps.has(`${c.iteration}|part:${id}`)) keeps.set(`${c.iteration}|part:${id}`, v);
   }
   const usable = list.filter(e => typeof e.keep !== 'string' && VERDICTS.includes(e.verdict) && Number.isInteger(e.n) && e.n > 0);
-  if (!usable.length) return 'none yet';
+  // The edits the quiz gate stopped before any replay, by skill (or role) and kind: shown apart, never a replay verdict.
+  const stopped = new Map();
+  for (const e of list.filter(x => QUIZ_VERDICTS.includes(x.quiz) && typeof x.verdict !== 'string')) {
+    const key = `${e.skill || `agent ${e.agent}`}, ${e.kind}${e.findingKind ? ` (${e.findingKind})` : ''}`;
+    const g = stopped.get(key) || { reject: 0, blocked: 0 };
+    g[e.quiz] += 1;
+    stopped.set(key, g);
+  }
+  const quizLines = [...stopped].map(([key, g]) => `- ${key}: stopped by the quiz gate before any replay: ${QUIZ_VERDICTS.filter(v => g[v]).map(v => `${v} ${g[v]}`).join(', ')}`);
+  // Each refused probe, newest first: its id, stage and first reason, so the next proposer writes what the gate takes.
+  const refused = list.filter(x => QUIZ_VERDICTS.includes(x.quiz) && typeof x.verdict !== 'string' && typeof x.why === 'string').reverse()
+    .map(x => clip(`- refused ${x.proposalId} (${x.stage || 'quiz'}, ${x.quiz}): ${x.why.split('; ')[0]}`, REFUSED_CHARS));
+  quizLines.push(...refused);
+  if (!usable.length && !quizLines.length) return 'none yet';
   const groups = new Map();
   usable.forEach((e, i) => {
     const key = e.composed ? `combined changes (${e.parts || '?'} parts)` : `${e.skill || `agent ${e.agent}`}, ${e.kind}${e.findingKind ? ` (${e.findingKind})` : ''}`;
@@ -123,9 +171,11 @@ function summarize(entries, { maxLines = MAX_LINES, maxChars = MAX_CHARS } = {})
       return `- ${g.key}: helped ${g.helped} of ${g.ns.length}, no effect ${g['no effect']}, hurt ${g.hurt} (n per probe: ${ns})${keep}`;
     });
   const head = 'Evidence only, from practice-train probes; n is the paired decisions each probe was judged on, and a small n shows little. A probe that helped can still fail the keep rule.';
-  let out = [head, ...lines].join('\n');
-  if (groups.size > lines.length) out += `\n- ${groups.size - lines.length} more group(s) not shown`;
+  const shownQuiz = quizLines.slice(0, Math.max(0, maxLines - lines.length));
+  let out = [head, ...lines, ...shownQuiz].join('\n');
+  const hidden = groups.size - lines.length + quizLines.length - shownQuiz.length;
+  if (hidden > 0) out += `\n- ${hidden} more group(s) not shown`;
   return clip(out, maxChars);
 }
 
-module.exports = { FILE, MAX_LINES, MAX_CHARS, appendLesson, appendKeep, readLessons, practiceOnly, summarize };
+module.exports = { FILE, MAX_LINES, MAX_CHARS, REFUSED_CHARS, QUIZ_VERDICTS, CONTENT_WHY, barsReproposal, appendLesson, appendKeep, appendQuiz, readLessons, practiceOnly, summarize };

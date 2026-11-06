@@ -3,7 +3,8 @@
 /**
  * A probe edit (Propose-Probe-Compose, docs/TRAINING.md): one small edit the proposer writes for one finding of a
  * probe round, to one skill or to one desk role's body (agent-edit.js), tagged with what it is: { skill | agent,
- * finding, kind }. The proposer writes it on one PROPOSAL line, the proposal's own fields (proposal.js) plus `tag`.
+ * finding, kind }. The proposer writes it on one PROPOSAL line, the proposal's own fields (proposal.js) plus `tag` and
+ * `question`, the quiz question the edit teaches (probe-question.js; never part of the proposal or its id).
  * Code checks it before anything runs it:
  *
  * - the tag: exactly one target, the skill or the role the edit changes; a finding id the round listed (a finding that
@@ -20,7 +21,8 @@
  * - the frontmatter is never edited: no find may reach into it, and it reads the same after.
  *
  *   KINDS, MAX_LINE, NUMBER_WORDS, FRACTIONS, GROW_BYTES
- *   splitTagged(raw)                         { tag, proposal }: a PROPOSAL object split into its tag and the proposal
+ *   splitTagged(raw)                         { tag, question?, proposal }: a PROPOSAL object split into its tag, its
+ *                                            question (when written) and the proposal
  *   targetOf(tag)                            { kind: 'skill' | 'agent', name, file, label } of a tag, or null
  *   tagErrors(tag, proposal, { findings })   [error]
  *   styleErrors(proposal, { root, kind })    [error]
@@ -61,8 +63,9 @@ const isObj = x => Boolean(x) && typeof x === 'object' && !Array.isArray(x);
 
 function splitTagged(raw) {
   if (!isObj(raw)) return { tag: null, proposal: raw };
-  const { tag = null, ...proposal } = raw;
-  return { tag, proposal };
+  // The question (probe-question.js) is metadata beside the tag: never in the proposal, so its id is the edit's alone.
+  const { tag = null, question, ...proposal } = raw;
+  return { tag, ...('question' in raw ? { question } : {}), proposal };
 }
 
 /** The document a tag targets: a skill ({ skill }) or a desk role ({ agent }), never both; null when neither is valid. */

@@ -146,6 +146,12 @@ function defaultSteps({ root, env = process.env }) {
     // A trend-set run's capture report and days (train/probe.js trendData, replay/trend-capture.js).
     trendData: opts => require('./probe').trendData(opts),
     probeData: opts => require('./probe').probeData(opts),
+    // The probe round's quiz gate (train/quiz-phase.js): one tree's context quiz (eval/quiz-run.js), asked headless with
+    // the loop's runner config (opts.cfg) in a scratch harness home of the quiz directory's own (the kill switch on,
+    // paper, every live broker disabled: proposer.js proposerEnv), each ask within the runner config's cycle timeout.
+    quizRun: opts => require('../eval/quiz-run').runQuiz({ ...opts, env: proposer.proposerEnv(env, path.join(opts.dir, 'home')), timeoutMs: opts.cfg.cycleTimeoutMinutes * 60000 }),
+    quizPrompts: (dir, quiz) => require('../eval/context-quiz').buildPrompts(dir, quiz),
+    loadQuiz: () => require('../eval/context-quiz').loadQuiz(),
     writeBranch: (opts) => T.writeBranch(root, opts),
   };
 }
@@ -700,4 +706,4 @@ function importProposal({ loop, env = process.env, root, proposal, approvedBy })
   return { id, file };
 }
 
-module.exports = { Stop, checkedScorecard, defaultSteps, scorecardDecisions, runLoop, judgeHeldOut, importProposal, refuseIfLive, windowRun, windowRuns };
+module.exports = { Stop, checkedScorecard, defaultSteps, scorecardDecisions, runLoop, judgeHeldOut, importProposal, refuseIfLive, windowRun, windowRuns, phase };

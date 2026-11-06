@@ -16,7 +16,13 @@
  *   propose   one model call: the proposer writes up to k small, independent edits, each to one skill or one desk
  *             role's body (agent-edit.js), tagged with its target, the finding it addresses and its kind (probe-edit.js),
  *             reading the findings by flow step and the lessons record's capped summary (lessons.js). Each is checked in
- *             code (proposal.js, probe-edit.js, agent-edit.js); an edit probed before is not re-run
+ *             code (proposal.js, probe-edit.js, agent-edit.js); an edit probed before is not re-run. Each carries the quiz
+ *             question it teaches, written first (probe-question.js: missing or malformed, the edit is invalid)
+ *   quiz      the quiz gate, before any replay (quiz-phase.js): each edit's tree is quizzed: its own question must fail
+ *             on the champion and pass on the edit (red/green), and the whole context quiz must not regress against the
+ *             champion's (quiz-gate.js decide: a confirm run on fresh runs, a short summary retried once, then blocked).
+ *             Only a pass is replayed; a reject or block is in the report (`quiz`) and the lessons record. The loop
+ *             config's quizGate: false turns it off, only explicitly, and the report says so
  *   probe     each edit's tree replays the SAME probe-half moments with the SAME replay config and seed (never the
  *             confirm half); code pairs it with the champion decision by decision and screens it (screen.js): helped, no effect or
  *             hurt. `parallel` probes at once (default 1; more only without latency charged: probe-config.js). The
@@ -55,6 +61,8 @@ const S = require('./state');
 const T = require('./tree');
 const P = require('./proposal');
 const PE = require('./probe-edit');
+const PQ = require('./probe-question');
+const QP = require('./quiz-phase');
 const F = require('./findings');
 const SC = require('./screen');
 const C = require('./compose');
@@ -503,7 +511,9 @@ async function probeRound(ctx, { n, champion, api }) {
   }
   const edits = await api.phase(ctx, `${n}:probe-proposals`, path.join(dir, 'probe-proposals.json'), async () => {
     const lessons = LS.readLessons(lessonsFile);
-    const before = new Set(lessons.map(e => e.proposalId));
+    // Only an edit judged on its content is never proposed again (lessons.js barsReproposal): one refused for its
+    // question, an inconclusive run or a harness the quiz could not ask comes back with a sound question.
+    const before = new Set(lessons.filter(LS.barsReproposal).map(e => e.proposalId));
     ctx.call();
     // The proposer reads its own copy of the champion's documents, never the trees the runs use.
     const scratch = path.join(work, 'proposer');
@@ -516,19 +526,46 @@ async function probeRound(ctx, { n, champion, api }) {
     const res = await ctx.steps.proposeProbes({ cfg: ctx.loop.proposer, tree: own, findings, controls, lessons: LS.summarize(lessons), home: path.join(scratch, 'home'), baseEnv: ctx.env, k: cfg.k });
     if (api.guarded(ctx, champion) !== guard) throw new Error('the proposer\'s run changed the loop\'s state, the look ledger or the champion\'s tree: the loop stops; check them before resuming');
     const ids = [];
+    // The proposer's quiz patterns are bounded by the quiz file's gate (probe-question.js).
+    const quizFile = (ctx.steps.loadQuiz || require('../eval/context-quiz').loadQuiz)().value;
     return res.proposals.slice(0, cfg.k).map(x => {
       if (x.error) return { id: null, errors: [x.error], line: x.line };
       const id = P.proposalId(x.proposal);
       if (ids.includes(id)) return null;
       ids.push(id);
-      const errors = [...P.validateProposal(x.proposal, { root: champion.dir }), ...PE.tagErrors(x.tag, x.proposal, { findings })];
+      // Its own quiz question (probe-question.js), written first: missing or malformed, the edit never runs. A
+      // consolidation (a pure deletion: probe-question.js isConsolidation) teaches nothing new: its question is optional
+      // (one written is still checked).
+      const optional = PQ.isConsolidation(x, champion.dir, { negations: quizFile.negations, restrictions: quizFile.restrictions, polar: quizFile.polar, conditions: quizFile.conditions }) && (x.question === undefined || x.question === null);
+      const errors = [...P.validateProposal(x.proposal, { root: champion.dir }), ...PE.tagErrors(x.tag, x.proposal, { findings }), ...(optional ? [] : PQ.questionErrors(x.question, quizFile.gate))];
       if (!errors.length) errors.push(...PE.styleErrors(x.proposal, { root: champion.dir, kind: x.tag.kind }));
       const finding = findings.find(f => x.tag && f.id === x.tag.finding) || null;
-      return { id, tag: x.tag, finding, proposal: x.proposal, errors, probedBefore: before.has(id) };
+      return { id, tag: x.tag, finding, proposal: x.proposal, question: x.question === undefined ? null : x.question, errors, probedBefore: before.has(id) };
     }).filter(Boolean);
   });
   report.edits = edits.map(e => ({ id: e.id, tag: e.tag, errors: e.errors, probedBefore: e.probedBefore }));
-  const runnable = edits.filter(e => e.id && !e.errors.length && !e.probedBefore);
+  // A question refused here (its shape, its patterns: probe-question.js) is a lessons line (once), so the next proposer
+  // reads why: an edit whose tag names no target is no lesson (its skill or role unknown).
+  const lessonsNow = LS.readLessons(lessonsFile);
+  for (const e of edits.filter(x => x.id && !x.probedBefore && x.errors.some(m => /^question/.test(m)))) {
+    const t = e.tag || {};
+    if (!(typeof t.skill === 'string' || typeof t.agent === 'string') || !PE.KINDS.includes(t.kind)) continue;
+    if (lessonsNow.some(l => l.iteration === n && l.proposalId === e.id && typeof l.quiz === 'string')) continue;
+    LS.appendQuiz(lessonsFile, { proposalId: e.id, iteration: n, ...(t.agent ? { agent: t.agent } : { skill: t.skill }), kind: t.kind, windows: lessonWindows, seed, quiz: 'blocked', stage: 'proposal', why: e.errors.filter(m => /^question/.test(m)).join('; ') });
+  }
+  const valid = edits.filter(e => e.id && !e.errors.length && !e.probedBefore);
+  // The quiz gate (quiz-phase.js), before any replay: each edit's own question red/green, then the whole quiz against the
+  // champion's. Only a pass is replayed; the others are in the report and the lessons record. The loop config's
+  // quizGate: false (only explicitly) passes every edit, said in the report.
+  const quizzed = await QP.quizRound(ctx, { n, champion, edits: valid, api, work, dir, lessonsFile, lessonWindows, seed, cfg: ctx.loop.quizGate === false ? null : require('../autotrader').validateConfig(ctx.loop.replay.autotrader) });
+  report.quiz = quizzed.report;
+  const runnable = quizzed.passed;
+  if (valid.length && !runnable.length) {
+    report.why = 'no edit passed the quiz gate';
+    writeReport();
+    ctx.log(`iteration ${n}: ${report.why}`);
+    return { proposals: [], report };
+  }
   // Each edit alone, on the champion's moments and seed; `parallel` at once, each run's calls a share of those left.
   const probes = await pool(runnable, cfg.parallel, e => api.phase(ctx, `${n}:probe:${e.id}`, path.join(dir, `probe-${e.id}.json`), async () => {
     const tree = await api.candidateTree(ctx, { dir: work, id: `p-${e.id}`, proposal: e.proposal, champion });
@@ -548,12 +585,15 @@ async function probeRound(ctx, { n, champion, api }) {
     const measures = { ...compact(m), ...(tm ? { trend: tm } : {}), ...(rm ? { regression: rm } : {}), ...(isTrend ? { target: tm.capture } : {}) };
     return { id: e.id, tag: e.tag, finding: e.finding, proposal: e.proposal, measures, screen, ride: ts ? TSC.rideOfSide(ts.side, ts.rides) : null, cycles: side.cycles + (ts ? ts.cycles : 0) + (rs ? rs.cycles : 0), ...(ts ? { skipped: TW.skippedShare([...ts.sessions, ...(rs ? rs.sessions : [])]) } : {}) };
   }));
-  // The lessons record: one line per probe, written once (a resume finds its lines by iteration and id).
+  // The lessons record: one line per probe, written once (a resume finds its lines by iteration and id). An edit the
+  // quiz gate left unquizzed (quiz-phase.js NOT_QUIZZED: no quiz prompt holds its target) says so (never `quiz`: that
+  // key is a stopped edit's).
   const recorded = new Set(LS.readLessons(lessonsFile).filter(e => e.iteration === n && !e.composed).map(e => e.proposalId));
+  const unquizzed = id => (report.quiz && report.quiz.edits && report.quiz.edits[id] && report.quiz.edits[id].verdict === QP.NOT_QUIZZED ? { notQuizzed: QP.NOT_HELD } : {});
   for (const p of probes.filter(x => !recorded.has(x.id))) {
     LS.appendLesson(lessonsFile, {
       proposalId: p.id, iteration: n, ...(p.tag.agent ? { agent: p.tag.agent } : { skill: p.tag.skill }), kind: p.tag.kind, finding: { id: p.finding.id, kind: p.finding.kind, line: F.findingLine(p.finding) },
-      findingKind: p.finding.kind, windows: lessonWindows, seed, half: 'probe', measures: p.measures, verdict: p.screen.verdict, n: p.measures.target.pairs, ...(draw ? { trendBatch: { index: n - 1, set: trend.set.fingerprint, probe: split.probe.legs.length, confirm: split.confirm.legs.length } } : {}),
+      findingKind: p.finding.kind, windows: lessonWindows, seed, half: 'probe', measures: p.measures, verdict: p.screen.verdict, n: p.measures.target.pairs, ...(draw ? { trendBatch: { index: n - 1, set: trend.set.fingerprint, probe: split.probe.legs.length, confirm: split.confirm.legs.length } } : {}), ...unquizzed(p.id),
     });
   }
   report.probes = probes.map(p => ({ ...(p.skipped ? { skipped: p.skipped } : {}), ...(p.ride ? { ride: p.ride } : {}), id: p.id, tag: p.tag, finding: p.finding.id, verdict: p.screen.verdict, harms: p.screen.harms, target: p.measures.target, ...(p.measures.trend ? { trend: { capture: p.measures.trend.capture, sides: p.measures.trend.sides } } : {}), ...(p.measures.regression ? { regression: { capture: p.measures.regression.capture } } : {}) }));

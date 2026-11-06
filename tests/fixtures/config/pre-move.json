@@ -332,6 +332,10 @@
    "value": 1200,
    "from": "train/lessons.js MAX_CHARS"
   },
+  "lessons.refusedChars": {
+   "value": 160,
+   "from": "new in feat/proposer-quiz-in-loop (before it, a refused probe's reason never reached the proposer; the first reason of each refused probe is one line in the next round's lessons, clipped to this many characters)"
+  },
   "probeEdit.maxLine": {
    "value": 120,
    "from": "train/probe-edit.js MAX_LINE"

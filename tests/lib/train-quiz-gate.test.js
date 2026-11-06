@@ -43,6 +43,20 @@ test('the quiz file carries the gate\'s thresholds and the file check names a ba
   }
 });
 
+test('the quiz file carries the red/green thresholds of a probe edit\'s own question, checked', () => {
+  const g = QUIZ.gate;
+  // The champion must fail the edit's question (its pass share at most redMaxShare), the edit pass it (at least
+  // greenMinShare), each over questionRuns runs a side.
+  assert.deepStrictEqual([g.redMaxShare, g.greenMinShare, g.questionRuns], [0.4, 0.8, 5]);
+  for (const bad of [{ ...g, redMaxShare: -0.1 }, { ...g, redMaxShare: 1 }, { ...g, greenMinShare: 0 }, { ...g, greenMinShare: 1.2 }, { ...g, redMaxShare: 0.8, greenMinShare: 0.8 },
+    { ...g, questionRuns: 0 }, { ...g, questionRuns: 2.5 }, { ...g, redMaxShare: undefined }, { ...g, greenMinShare: undefined }, { ...g, questionRuns: undefined }]) {
+    assert.match(Q.quizErrors({ ...QUIZ, gate: bad }).join('\n'), /gate: \{ .*redMaxShare/, JSON.stringify(bad));
+  }
+  // The bound on a proposer's regex (train/probe-question.js): a whole number of characters.
+  assert.strictEqual(g.maxPatternChars, 120);
+  for (const bad of [0, -1, 2.5, '120', undefined]) assert.match(Q.quizErrors({ ...QUIZ, gate: { ...g, maxPatternChars: bad } }).join('\n'), /maxPatternChars/, String(bad));
+});
+
 test('decide: an edit that changes nothing, or answers better, passes; the gains are listed', () => {
   const champ = summary({ q8: 3, q10: 1 });
   assert.strictEqual(decide(champ, summary({ q8: 3, q10: 1 })).verdict, 'pass');

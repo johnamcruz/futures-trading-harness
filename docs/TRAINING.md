@@ -390,6 +390,127 @@ iteration of the loop then runs these steps (`scripts/lib/train/probe.js`):
    re-checks, and the contract match an exit needs. The edit's tree is synced (`sync-harness`), so every harness's
    adapter carries it, and it is probed, composed and kept exactly as a
    skill edit is.
+
+   **Its question, written first.** Each edit carries the quiz question it
+   teaches (`question`: the shape of a Part A question of
+   `config/context-quiz.json`, `layer`, `prompt`, `text`, `rule`, `anchor`,
+   `required`, `forbidden`; `scripts/lib/train/probe-question.js`), one the
+   model would answer wrongly before the edit and rightly after it. It is
+   metadata: the proposal's id is the edit's alone, so duplicates are found as
+   before. A missing or malformed question makes the edit invalid, with the
+   reason named. Its id is code's (`e-<proposal id>`), never the proposer's.
+   Its `required` and `forbidden` patterns are bounded: each at most the quiz
+   file's `gate.maxPatternChars` (120) characters, and written in the
+   pattern grammar (`scripts/lib/train/pattern-grammar.js`, a whitelist:
+   anything else is refused with the rule it breaks): literal text and
+   escaped punctuation (one letter may be optional: `needs?`; no whitespace
+   but the plain space, never at a group alternative's edge or beside
+   `\s`, so repeats of `\s+` stay disjoint), `\b`,
+   `\s`/`\s+`/`\s*` only between literal text, character classes with
+   at most `?` after, groups of literal alternatives (`(a|the)`) with at
+   most `?` after, `^` and `$` at the ends, at most `gate.maxOptionals`
+   (3) optional parts, and at most `gate.maxGaps` (2) wildcard gaps
+   `.{0,N}` (or `\w{0,N}`, `\S{1,N}`), N at most `gate.maxGapChars`
+   (60), each preceded by literal text or the start and followed by literal
+   text; an unbounded `.*` or `\w+`, a repeated group, a lookaround or a
+   back reference never. Each `required` one also holds a literal
+   word: a run of `gate.minLiteralRun` (4) letters or digits in every
+   alternative, escapes, classes and optional parts not counted (a `.` or
+   `\bno\b` would match any answer), and is tested on the champion's
+   prompt line by line, each line cut at `gate.maxGradedLineChars` (a gap's
+   bounds are no numbers the question adds). The grader fails, ungraded, any
+   answer line longer than `gate.maxGradedLineChars` (1000), with the
+   reason (a cut line could hide a forbidden phrase past the cut). A
+   consolidation (a pure in-order deletion: an edit of kind removal, or a
+   trim whose replace is its find's words in order with some left out;
+   never a word added, even the document's own, never words reordered)
+   teaches nothing new, so its question is optional and never asked. An
+   edit whose find or replace holds a negation (one of
+   the quiz file's `negations`, or a word ending in n't: added, dropped or
+   moved, it flips or shifts a rule in the document's own words), or that
+   adds or removes a restriction word (the quiz file's `restrictions`:
+   "only", "must", "unless", ...), or that adds, removes or moves a polar
+   word (the quiz file's `polar`: above/below, long/short,
+   premium/discount, buy/sell, ...: each with the same neighbours on its
+   line before and after), is never a consolidation, a removal too, and
+   needs a question, and so does a deletion that removes a condition word
+   (the quiz file's `conditions`: while, if, least, both, ...) or any word
+   holding a digit ("a 1h CHoCH while the 4h and 1h agree" made "a 1h
+   CHoCH", "at least 2" made "2"), which narrows or widens the rule. A pure
+   deletion of a line holding any of them then has no new text to anchor a
+   question in, so the gate blocks it: strict by design. An edit refused for
+   its question (at the proposal or by its anchor), an inconclusive run, or
+   a harness the quiz could not ask is never barred: the same edit with a
+   sound question runs next round (`lessons.js` `barsReproposal`); a
+   replay verdict, a quiz reject or a content refusal (the champion already
+   answers it, the edit does not teach it) bars it. Patterns hold at most
+   `gate.maxGroups` (3) groups, each of distinct alternatives, none a
+   prefix of another.
+
+   **The quiz gate, before any replay** (`scripts/lib/train/quiz-phase.js`,
+   phases `<n>:quiz-champion` and `<n>:quiz:<id>`, files in the round's
+   directory). Each valid edit's tree is quizzed with the loop's runner
+   config (its replay's `autotrader`, the model the replays run; asked
+   headless in a scratch harness home):
+   - the question's anchor must be in the edited tree's prompt and not in
+     the champion's (one the champion already holds is a question it can read
+     the answer off: no edit is needed), every `required` pattern matches
+     text the champion's prompt already holds (the answer's words exist, so a
+     champion failure is a misreading; a phrase the edit coins is no test),
+     and it adds no number the champion's prompt lacks; checked before any
+     model call;
+   - red/green: the question alone, `questionRuns` runs on each tree. The
+     champion's share of right answers must be at most `redMaxShare` (else
+     "the champion already answers the question: no edit is needed or the
+     question is too easy"), the edit's at least `greenMinShare` (else "the
+     edit does not teach its own question");
+   - the whole quiz on the edit's tree against the champion's (the quiz
+     gate below, `train/quiz-gate.js`): a `confirm` asks the flagged
+     questions `confirmRuns` more times on both trees, in fresh directories,
+     then decides again.
+
+   A consolidation skips the question and red/green (`redGreen: "skipped
+   (removal)"` in the report and its lessons line) and must pass the whole
+   quiz under the quiz's own gate (flag, confirm on fresh runs, the exact
+   test, `maxSlips`): a confirmed regression rejects it, noise within
+   `maxSlips` does not (no slips at all would reject most edits that change
+   nothing, on the questions' own run-to-run rates), so skills can be
+   trimmed of what they repeat.
+
+   A summary short of its runs (a run that kept failing; the runner asks an
+   errored run once more; an empty reply or a harness that exits non-zero is
+   an error, never a wrong answer) is retried once, then the edit is blocked:
+   inconclusive is never a pass. Only a pass is replayed. A rejected or
+   blocked edit is in `probe-report.json` `quiz` (per edit its verdict, why,
+   regressions, flagged, slips, gains and red/green) and gets a lessons line,
+   so the next proposer reads that the gate stopped it, and why: one line per refused
+   probe, newest first, its id, stage and first reason, at most
+   `lessons.refusedChars` (160, `config/training.json`) characters; a
+   question refused at the proposal (its shape, its patterns) gets one too (and the same edit is
+   not tried again). With none passing, the round ends: "no edit passed the
+   quiz gate". The champion's quiz runs once a round, in a directory keyed by
+   its tree and the quiz's hash, so a resumed or later round asks it nothing
+   new; a crash after an edit's quiz never quizzes it again. Each verdict
+   records the quiz's hash: under a changed quiz it is redone on fresh runs
+   (an edit's runs are kept per quiz hash too), never read back. Only prompts the
+   quiz builds can be asked: a skill's question is a `lookup` of it, the risk
+   manager's `head+risk`. An edit whose target no quiz prompt holds is not
+   quizzed, on both conditions (failing closed): every file it edits is an
+   analyst's or the executor's `agents/<role>.md` (never the head trader's
+   or the risk manager's, never a `skills/` file: a skill the head reads as
+   needed is always quizzed), and every prompt the quiz, and the edit's
+   question, is asked of is byte-identical on both trees. Then: no
+   model call, verdict `not-quizzed` ("no quiz prompt holds this target: not
+   quizzed"), replayed as before the gate (under a harness the quiz cannot
+   ask too), its probe's lessons line carrying `notQuizzed`, and counted
+   apart in the iteration's record (never a pass, never stopped). Every quiz ask is one
+   model call charged to the loop's `limits.maxModelCalls` (the budget
+   checked before each ask, so the limit stops a quiz mid-run; a resume asks,
+   and charges, only the answers not yet stored). The loop config's `quizGate: false` turns the gate off, only
+   explicitly: the report says so. On, the runner config must be a harness
+   the quiz can ask (claude or custom). The setting is in the loop's hash: a
+   loop started before the gate (or with it set otherwise) is another loop
+   and does not resume; start a new `loopId`.
 3. **Probe.** Each edit's tree replays the same curated moments with the
    same replay config and seed as the champion. Code pairs the two runs
    decision by decision on the probe half only
@@ -1945,7 +2066,19 @@ node scripts/context-quiz.js gate <the base's dir> <dir> [--confirm <the base's 
 
 `gate` holds an edited tree's quiz against the base's, as a proposed skill edit
 must pass it before any replay (`train/quiz-gate.js`, its thresholds the quiz
-file's `gate`). With 53 questions at K runs each, a plain per-question drop rule
+file's `gate`). The training loop's probe round runs the same gate on every
+edit, between its checks and its replay (`train/quiz-phase.js`; Propose–Probe–Compose,
+step 2), with the same runner (`scripts/lib/eval/quiz-run.js`, which the CLI's
+`run` also uses), plus the edit's own question red/green: the quiz file's
+`gate` also holds `redMaxShare` (0.4: the champion's share of right answers to
+it, at most), `greenMinShare` (0.8: the edit's, at least), `questionRuns` (5
+runs a side), `maxPatternChars` (120: the longest pattern a proposer may
+write), `maxGaps` (2), `maxGapChars` (60) and `maxOptionals` (3) (the
+pattern grammar's limits), `maxGradedLineChars` (1000: a longer answer line
+fails, ungraded) and `minLiteralRun` (4: the literal run of letters or digits each of its
+required patterns must hold). In `run` (by hand too), an empty reply, or a harness that exits
+non-zero, is recorded as an error and not graded; nothing else about `run`
+changed (each run is asked once, as before). With 53 questions at K runs each, a plain per-question drop rule
 falsely rejects an unchanged edit (30 to 80% at 3 runs), so: any question whose
 share of passing answers drops by `flagDrop` or more is FLAGGED; a flagged
 question is asked `confirmRuns` more times on both trees (`run --only <ids> --k

@@ -20,12 +20,44 @@
     "won't"
   ],
   "negationWindow": 4,
+  "polar": [
+    "above", "below", "over", "under", "upper", "high", "highs", "higher", "highest", "low", "lows", "lower", "lowest",
+    "long", "longs", "short", "shorts", "buy", "buys", "buyer", "buyers", "sell", "sells", "seller", "sellers",
+    "bid", "ask", "premium", "discount", "bullish", "bearish", "bull", "bear", "before", "after", "up", "down",
+    "uptrend", "downtrend", "support", "resistance", "rising", "falling", "rise", "fall", "top", "tops", "bottom",
+    "bottoms", "inside", "outside"
+  ],
+  "conditions": [
+    "while", "when", "whenever", "if", "once", "least", "most", "than", "fewer", "more", "less", "agree", "agrees",
+    "both", "all", "any", "each", "every", "same", "within", "between", "either", "first", "last", "next", "again"
+  ],
+  "restrictions": [
+    "only",
+    "always",
+    "must",
+    "unless",
+    "until",
+    "except",
+    "wait",
+    "skip",
+    "avoid"
+  ],
   "unsure": "it depends|unsure|not sure|unclear|ambiguous|can't tell|cannot tell|depends on",
   "gate": {
     "flagDrop": 0.4,
     "alpha": 0.05,
     "maxSlips": 8,
-    "confirmRuns": 10
+    "confirmRuns": 10,
+    "redMaxShare": 0.4,
+    "greenMinShare": 0.8,
+    "questionRuns": 5,
+    "maxPatternChars": 120,
+    "minLiteralRun": 4,
+    "maxGaps": 2,
+    "maxGapChars": 60,
+    "maxOptionals": 3,
+    "maxGroups": 3,
+    "maxGradedLineChars": 1000
   },
   "passBar": {
     "partA": {

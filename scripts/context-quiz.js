@@ -17,13 +17,12 @@
 
 const fs = require('fs');
 const path = require('path');
-const { spawnSync } = require('child_process');
 const Q = require('./lib/eval/context-quiz');
+const QR = require('./lib/eval/quiz-run');
 
 const ROOT = path.resolve(__dirname, '..');
 const arg = (argv, name) => { const i = argv.indexOf(name); return i >= 0 ? argv[i + 1] : null; };
-const FILES = { head: 'head.md', 'head+risk': 'head+risk.md' };
-const fileOf = key => FILES[key] || `${key.replace(/[^a-z0-9+]+/gi, '-')}.md`; // a situational or lookup question's own prompt
+const { fileOf } = QR; // a situational or lookup question's own prompt file
 
 /** The output directory: given, made, and never inside the repository. */
 function outDir(dir) {
@@ -48,34 +47,19 @@ function build(dir) {
 
 const readRows = file => (fs.existsSync(file) ? fs.readFileSync(file, 'utf8').split('\n').filter(Boolean).map(l => JSON.parse(l)) : []);
 
-function run(argv) {
+/** The runner is the library's (eval/quiz-run.js); here each run is asked once: an error is recorded, not asked again. */
+async function run(argv) {
   const configPath = arg(argv, '--config');
   if (!configPath) throw new Error('run: --config <runner config.json> (the model and the harness are the user\'s own)');
   const { validateConfig } = require('./lib/autotrader');
   const cfg = validateConfig(JSON.parse(fs.readFileSync(configPath, 'utf8')));
   if (arg(argv, '--harness')) cfg.harness = arg(argv, '--harness');
   const dir = outDir(arg(argv, '--out'));
-  const { value, asked } = build(dir);
+  const { value } = build(dir);
   const k = Number(arg(argv, '--k') || value.k);
   if (!(Number.isInteger(k) && k >= 1)) throw new Error('--k: a whole number, 1 or more');
   const only = arg(argv, '--only') ? arg(argv, '--only').split(',') : null;
-  const file = path.join(dir, 'answers.jsonl');
-  const done = new Set(readRows(file).filter(r => !r.error).map(r => `${r.id}:${r.k}`));
-  // No project, no memory: each question runs in an empty directory of the output's own.
-  const empty = path.join(dir, 'empty');
-  fs.mkdirSync(empty, { recursive: true });
-  for (const q of asked) {
-    if (only && !only.includes(q.id)) continue;
-    for (let i = 1; i <= k; i += 1) {
-      if (done.has(`${q.id}:${i}`)) continue;
-      const [bin, ...args] = Q.quizCommand(cfg, q.text, path.join(dir, fileOf(q.prompt)));
-      const t = Date.now();
-      const r = spawnSync(bin, args, { cwd: empty, encoding: 'utf8' });
-      const reply = r.error ? { answer: r.error.message, error: true } : Q.replyOf(cfg, r.stdout);
-      fs.appendFileSync(file, `${JSON.stringify({ id: q.id, k: i, ms: Date.now() - t, ...reply })}\n`);
-      console.log(q.id, i, reply.error ? 'error' : 'ok');
-    }
-  }
+  await QR.runQuiz({ root: ROOT, quiz: value, hash: Q.loadQuiz().hash, cfg, k, only, dir, reask: 0, log: (id, i, how) => console.log(id, i, how) });
   grade(dir);
 }
 
@@ -147,7 +131,7 @@ function main(argv) {
 
 if (require.main === module) {
   const [, , ...args] = process.argv;
-  try { main(args); } catch (e) { console.error(e.message); process.exitCode = 1; }
+  Promise.resolve().then(() => main(args)).catch(e => { console.error(e.message); process.exitCode = 1; });
 }
 
 module.exports = { main };

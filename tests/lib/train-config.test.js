@@ -49,6 +49,28 @@ test('resolveLoop: refuses a bad id, window, limit, a loosened rule, a relative 
   assert.strictEqual(resolveLoop(JSON.parse(fs.readFileSync(ex, 'utf8')), { baseDir: path.dirname(ex) }).loopId, 'nq-skills-1');
 });
 
+test('quizGate: the probe round\'s quiz gate, on unless the config turns it off explicitly; in the hash; refused where it cannot run', () => {
+  const probe = { replay: { stage: 1, curatedList: { file: 'c.json', list: 'mix' }, practice: { mode: 'setup-focus' } }, windows: [{ from: '2022-03-07', to: '2022-03-19' }] };
+  const withProbe = (over = {}) => raw({ tuningWindows: [{ from: '2022-06-06', to: '2022-06-18' }], modelScore: { account: 'acct_a', paths: 500 }, probe, ...over });
+  const on = resolveLoop(withProbe());
+  assert.strictEqual(on.quizGate, true, 'on by default');
+  const off = resolveLoop(withProbe({ quizGate: false }));
+  assert.strictEqual(off.quizGate, false);
+  // In the hash: a loop started before the gate (or with it off) is another loop, never resumed into a different round.
+  assert.notStrictEqual(off.hash, on.hash);
+  assert.strictEqual(resolveLoop(withProbe({ quizGate: true })).hash, on.hash, 'said or not, on is on');
+  for (const v of ['no', 0, null, 'false']) assert.throws(() => resolveLoop(withProbe({ quizGate: v })), /quizGate: true or false/, String(v));
+  // Only the probe round has one; a loop without it keeps its hash.
+  assert.throws(() => resolveLoop(raw({ quizGate: false })), /quizGate: the probe round's quiz gate: set probe/);
+  assert.ok(!('quizGate' in resolveLoop(raw())));
+  // The quiz asks the loop's own runner config headless with a system-prompt file: a harness that takes none is refused
+  // up front, naming the switch (never a silent pass, never a round of blocked edits).
+  const other = { ...trader, harness: 'codex', command: undefined };
+  const replay = { workDir: '/tmp/fth-train', broker: 'sim', autotrader: other };
+  assert.throws(() => resolveLoop(withProbe({ replay, proposer: other })), /quizGate: the quiz asks the runner config's harness \(codex\) headless.*set quizGate: false/);
+  assert.strictEqual(resolveLoop(withProbe({ replay, proposer: other, quizGate: false })).quizGate, false);
+});
+
 test('windowRange and replayFor: session from\'s start to session to\'s start, as one replay run per window', () => {
   // Session 2022-03-07 (a Monday) starts Sunday 18:00 New York time; session 2022-03-12 (a Saturday, none) at Friday 18:00.
   assert.deepStrictEqual(windowRange({ from: '2022-03-07', to: '2022-03-12' }), { start: new Date('2022-03-06T23:00:00Z'), end: new Date('2022-03-11T23:00:00Z') });

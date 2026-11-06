@@ -337,10 +337,40 @@ test('the lessons record: the keep rule\'s verdict on a combined change, so a sc
   assert.throws(() => LS.appendKeep(file, { proposalId: 'c1', iteration: 1, windows: WINDOW }), /keep: the keep rule's verdict/);
 });
 
+test('the probe prompt names every rule the quiz gate enforces on a question, from the quiz file (prompt and code cannot drift)', () => {
+  const quiz = QZ.loadQuiz().value;
+  const g = quiz.gate;
+  const prompt = proposer.probePrompt({ template: proposer.readProbeTemplate(ROOT), findings: [], lessons: null, files: ['skills/a/SKILL.md'], k: 2 });
+  // The consolidation rule (probe-question.js isConsolidation): a pure deletion touching no negation, restriction or polar
+  // word needs no question; each example the prompt names is one of the quiz file's own words.
+  assert.match(prompt, /No "question" only for a pure deletion/);
+  assert.match(prompt, /condition \([^)]*\) or number\)?/, 'a deleted condition word or number needs a question');
+  const named = kind => { const m = new RegExp(`${kind} \\(([^)]*)\\)`).exec(prompt); assert.ok(m, kind); return m[1].match(/"([^"]+)"/g).map(w => w.slice(1, -1)); };
+  for (const [kind, list] of [['negation', quiz.negations], ['restriction', quiz.restrictions], ['polar word', quiz.polar], ['condition', quiz.conditions]]) {
+    const words = named(kind);
+    assert.ok(words.length >= 2, kind);
+    for (const w of words) assert.ok(list.includes(w) || (kind === 'negation' && w.endsWith("n't")), `${kind} ${w}: not in the quiz file's list`);
+  }
+  // The pattern grammar (pattern-grammar.js): its parts, and the gate's gap limits as the quiz file states them.
+  assert.ok(prompt.includes(`at most ${g.maxGaps} gaps written .{0,${g.maxGapChars}}, each followed by a word`), 'the gap limits');
+  assert.ok(prompt.includes('(a|b)') && prompt.includes('\\s+') && prompt.includes('No other regex'), 'the grammar\'s parts');
+  for (const p of ['(enter|take) now', 'three\\s+pushes', `long.{0,${g.maxGapChars}}okay`]) assert.deepStrictEqual(require('../../scripts/lib/train/pattern-grammar').grammarErrors(p, g), [], p);
+  // A role with no quiz prompt: said, and still a question.
+  assert.match(prompt, /An analyst's or the executor's file is not quizzed/);
+  assert.doesNotMatch(prompt, /\{\{/);
+});
+
 test('the probe prompt: the skill\'s text block, its placeholders filled; proposeProbes reads tagged PROPOSAL lines in one call', async () => {
   const t = proposer.readProbeTemplate(ROOT);
-  for (const k of ['{{FINDINGS}}', '{{LESSONS}}', '{{FILES}}', '{{CATEGORIES}}', '{{KINDS}}', '{{K}}']) assert.ok(t.includes(k), k);
-  assert.ok(t.length < 2500, `${t.length} characters`);
+  for (const k of ['{{FINDINGS}}', '{{LESSONS}}', '{{FILES}}', '{{CATEGORIES}}', '{{KINDS}}', '{{LAYERS}}', '{{MAX_GAPS}}', '{{GAP_CHARS}}', '{{K}}']) assert.ok(t.includes(k), k);
+  // Raised from 2500 to 3100 under the owner's standing rule (a pin may be raised when it improves the context; context
+  // is never cut to fit): the prompt now asks for the quiz question each edit teaches, written first (probe-question.js:
+  // one rule line, the anchor and layer line, the question in the PROPOSAL example, the risk manager's prompt), about
+  // 3000 characters with it. Raised again from 3100 to 3700 under the same rule: the prompt states the rules the quiz
+  // gate enforces on a question (a pure deletion touching no negation, restriction or polar word needs none; the pattern
+  // grammar: literal alternatives, \s+, the gap limits), so a proposer stops writing edits the gate refuses; about 3615
+  // characters with them. Still a ceiling: the prompt may not grow past it.
+  assert.ok(t.length < 3700, `${t.length} characters`);
   assert.match(t, /You propose\. Code tests each edit/);
   const prompt = proposer.probePrompt({ template: t, findings: [{ id: 'F1', skill: 'a', kind: 'misread', count: 3, of: 9, detail: '' }], lessons: 'LESSONS-HERE', files: ['skills/a/SKILL.md'], k: 3 });
   assert.match(prompt, /F1\. a: misread: 3 of 9 claimed reads refused/);
@@ -425,7 +455,26 @@ const behaviour = text => (text.includes('LUCKY') ? 'lucky' : text.includes('BAD
 const stateOf = (b, i) => (b === 'lucky' ? (i % 2 || SC.halfOf(dayOfT(TIMES[i]), 3) === 'probe' ? 'right' : 'misread') : b === 'bad' ? 'misread' : b === 'good' || i % 2 || (b === 'some' && i < 16) ? 'right' : 'misread');
 const categoryOf = (b, i) => (b === 'bad' ? 'wrong-side entry' : b === 'good' || b === 'reason' || i % 2 ? 'right' : 'wrong stated reason');
 
-function world({ proposals, verdict = 'kept', loop: over = {}, trend = false, trendBatch = {}, exits = false, incompleteDay = null, claimed = null, curriculum = undefined, entered = false, trades = false } = {}) {
+// The quiz gate's stub world (train/quiz-phase.js): a small quiz of the file's own settings, three questions asked of
+// the head prompt; the quiz's real runner (eval/quiz-run.js) with a fake ask, never a model. A tree's prompt is its
+// skills' text. A question is answered right unless the prompt holds BREAKS-<id>; an edit's own question (e-...) only
+// when the prompt holds its anchor. quizScript({ dir, id, run, system }) may answer instead ({ stdout } or { error }).
+const QZ = require('../../scripts/lib/eval/context-quiz');
+const QP = require('../../scripts/lib/train/quiz-phase');
+const ANALYST_FILE = 'agents/market-structure-analyst.md';
+const QUIZ_BASE = QZ.loadQuiz().value;
+const STUB_QUIZ = { ...QUIZ_BASE, k: 2, questions: ['sa', 'sb', 'sc'].map(id => ({ id, layer: 'entry', prompt: 'head', text: `Stub ${id}?`, rule: 'r', anchor: `stub ${id}`, required: ['\\byes\\b'], forbidden: ['\\bno\\b'] })), partB: [] };
+const flatText = t => String(t).replace(/\s+/g, ' ');
+const treePrompt = root => fs.readdirSync(path.join(root, 'skills')).sort().map(s => fs.readFileSync(path.join(root, 'skills', s, 'SKILL.md'), 'utf8')).join('\n');
+/** The question the stub proposer writes for an edit: its anchor the first new line of its text (as the prompt asks). */
+function stubQuestion(proposal, tree) {
+  const e = proposal.edits[0];
+  const had = flatText(fs.readFileSync(path.join(tree, e.file), 'utf8'));
+  const line = e.replace.split('\n').map(l => l.replace(/^- /, '').trim()).find(l => l && !had.includes(flatText(l))) || e.replace.trim();
+  return { layer: 'entry', prompt: 'head', text: 'Does the edit read right?', rule: 'what the edit teaches', anchor: line, required: ['\\bline\\b'], forbidden: ['\\bno\\b'] };
+}
+
+function world({ proposals, verdict = 'kept', loop: over = {}, trend = false, trendBatch = {}, exits = false, incompleteDay = null, claimed = null, curriculum = undefined, entered = false, trades = false, quizScript = () => null, quiz: quizOver = {} } = {}) {
   const user = tmpDir();
   const env = { PATH: process.env.PATH, HOME: user, FTH_HOME: path.join(user, 'home') };
   fs.mkdirSync(env.FTH_HOME);
@@ -439,7 +488,7 @@ function world({ proposals, verdict = 'kept', loop: over = {}, trend = false, tr
     limits: { maxIterations: 1, maxModelCalls: 10000, maxWallMinutes: 30 }, ...over,
   });
   loop.probe = { ...loop.probe, replay: { ...replay, latency: false, practice: { mode: 'setup-focus', setupTf: 15, quietSample: 0.15, seed: 7 } } };
-  const calls = { proposeProbes: [], runs: [], probeData: [], verifier: [], branches: [], propose: 0, halves: [], trendData: [], preflight: [] };
+  const calls = { proposeProbes: [], runs: [], probeData: [], verifier: [], branches: [], propose: 0, halves: [], trendData: [], preflight: [], quiz: [], asks: [] };
   const trees = new Map();
   const textOf = dir => fs.readFileSync(path.join(dir, SKILL), 'utf8');
   const steps = {
@@ -449,6 +498,9 @@ function world({ proposals, verdict = 'kept', loop: over = {}, trend = false, tr
       fs.mkdirSync(path.join(dir, 'skills', 'a'), { recursive: true }); fs.writeFileSync(path.join(dir, SKILL), TEXT); fs.mkdirSync(path.join(dir, 'workspace'));
       // With exits: an exit finding's owner in the tree (exit-findings.js OWNERS), the skill its edit changes.
       if (exits) { fs.mkdirSync(path.join(dir, 'skills', 'manage-position'), { recursive: true }); fs.writeFileSync(path.join(dir, MP), TEXT.replace('name: a', 'name: manage-position')); }
+      // A desk analyst (no quiz prompt holds its text): its role file.
+      fs.mkdirSync(path.join(dir, 'agents'), { recursive: true });
+      fs.writeFileSync(path.join(dir, ANALYST_FILE), '---\nname: market-structure-analyst\ndescription: a test analyst\ntools: Read\nrole-skills: [a]\nmodel: inherit\n---\n\nYou read structure. Load the skill `a` first.\n\n- role line one\n\n- role line two\n');
       return 'c0ffee';
     },
     prepareTree: (dir, { proposal }) => { if (proposal) require('../../scripts/lib/train/proposal').applyProposal(proposal, dir); },
@@ -543,8 +595,28 @@ function world({ proposals, verdict = 'kept', loop: over = {}, trend = false, tr
       const lost = { bar: '2022-03-07T15:00:00.000Z', known: true, valid: true, side: 'long', planReads: ['15m up'], shown: 'no-trade - waiting', outcome: 'lost' };
       return { ...capture, legs: capture.legs.map(l => (l.captured ? l : { ...l, facts: { learnable: true, why: 'the standard plan passes', bars: [{ known: true, valid: true }], owner: null } })), controls: [lost] };
     },
-    // proposals: a list, or a function of the round (1, 2, ...) giving that round's list.
-    proposeProbes: async opts => { calls.proposeProbes.push(opts); return { proposals: (typeof proposals === 'function' ? proposals(calls.proposeProbes.length) : proposals).map(p => ({ ...p })) }; },
+    // proposals: a list, or a function of the round (1, 2, ...) giving that round's list. Each edit carries the question
+    // it teaches, as the prompt asks (a given `question`, even null, is kept as written).
+    proposeProbes: async opts => { calls.proposeProbes.push(opts); return { proposals: (typeof proposals === 'function' ? proposals(calls.proposeProbes.length) : proposals).map(p => (p.proposal && !('question' in p) ? { ...p, question: stubQuestion(p.proposal, opts.tree) } : { ...p })) }; },
+    // The quiz gate: the stub quiz, each tree's prompt its skills' text, the real runner with a fake ask.
+    loadQuiz: () => ({ value: { ...STUB_QUIZ, ...quizOver, gate: { ...STUB_QUIZ.gate, ...(quizOver.gate || {}) } }, hash: 'stub-quiz' }),
+    quizPrompts: (root, quiz) => Object.fromEntries(['head', 'head+risk', ...[...quiz.questions, ...quiz.partB].map(QZ.promptKey)].map(k => [k, treePrompt(root)])),
+    quizRun: opts => {
+      calls.quiz.push({ dir: path.relative(w.paths.dir, opts.dir), k: opts.k, only: opts.only || null });
+      return require('../../scripts/lib/eval/quiz-run').runQuiz({
+        ...opts,
+        ask: async (_argv, o) => {
+          const system = fs.readFileSync(o.systemFile, 'utf8');
+          const dirName = path.basename(opts.dir);
+          calls.asks.push({ dir: path.relative(w.paths.dir, opts.dir), id: o.id, run: o.run });
+          const said = quizScript({ dir: dirName, id: o.id, run: o.run, system });
+          if (said) return said;
+          const q = opts.quiz.questions.find(x => x.id === o.id);
+          const right = o.id.startsWith('e-') ? flatText(system).includes(flatText(q.anchor)) : !system.includes(`BREAKS-${o.id}`);
+          return { stdout: right ? 'ANSWER: yes, the line' : 'ANSWER: no' };
+        },
+      });
+    },
     propose: async () => { calls.propose += 1; return { proposals: [] }; },
     evaluator: async () => ({ available: false, why: 'stub' }),
     modelVerifier: opts => { calls.verifier.push(opts); return { available: true, verdict, reasons: [`model ${verdict}`], windows: [] }; },
@@ -1319,4 +1391,258 @@ test('curriculum trend: an exit edit\'s trades pair once, by their scored exits,
   assert.deepStrictEqual(p.target.unmatched, { champion: 0, probe: 0 });
   // The combined change, on the confirm half: its trades pair once too.
   assert.strictEqual(report.composed.measures.target.pairs, ROUND1.confirm.days.length * EXIT_TRADES, JSON.stringify(report.composed.measures.target));
+});
+
+// --- the quiz gate in the loop (train/quiz-phase.js), between the edits' checks and their replays ------------------
+
+const reportOf = w => JSON.parse(fs.readFileSync(path.join(w.paths.iter(1), 'probe-report.json'), 'utf8'));
+const probedRuns = (w, id) => w.calls.runs.filter(r => r.runId.startsWith(`l1-p-${id}-`));
+
+test('the quiz gate in the loop: a good edit passes and is replayed; a regressing one is rejected before any replay of it', async () => {
+  const w = world({ proposals: [tagged('a', 'F1', 'rule', '- line one', '- line one\n- GOOD → read it'), tagged('a', 'F1', 'rule', '- line two', '- line two\n- GOOD too → BREAKS-sb', 'breaks a rule')] });
+  await run(w);
+  const report = reportOf(w);
+  const [good, bad] = report.edits.map(e => e.id);
+  assert.deepStrictEqual([report.quiz.edits[good].verdict, report.quiz.edits[bad].verdict], ['pass', 'reject'], JSON.stringify(report.quiz));
+  assert.deepStrictEqual(report.quiz.edits[bad].regressions.map(r => r.id), ['sb']);
+  assert.ok(['why', 'regressions', 'flagged', 'slips', 'gains'].every(k => k in report.quiz.edits[bad]));
+  // The rejected edit is never replayed; the good one is, and goes on as before.
+  assert.deepStrictEqual(probedRuns(w, bad), []);
+  assert.ok(probedRuns(w, good).length > 0);
+  assert.deepStrictEqual(report.probes.map(p => p.id), [good]);
+  // Its lessons line: the next proposer reads that the quiz gate stopped it (and the same edit is never quizzed again).
+  const lines = LS.readLessons(path.join(w.paths.dir, LS.FILE));
+  assert.deepStrictEqual(lines.filter(l => l.quiz).map(l => [l.proposalId, l.quiz]), [[bad, 'reject']]);
+  assert.match(LS.summarize(lines), /stopped by the quiz gate before any replay: reject 1/);
+  // The quiz ran on the trees before any probe replay: the champion's once.
+  assert.strictEqual(w.calls.quiz.filter(c => /^quiz\/champion-/.test(c.dir)).length, 1);
+  const rec = JSON.parse(fs.readFileSync(path.join(w.paths.iter(1), 'iteration-report.json'), 'utf8'));
+  assert.deepStrictEqual([rec.quiz.pass, rec.quiz.reject], [1, 1]);
+  assert.match(IR.line(rec), /proposed 2 \(0 refused, 1 stopped by the quiz gate\)/);
+});
+
+test('the quiz gate in the loop: a flagged question confirms on fresh runs of both trees; noise passes and is replayed', async () => {
+  // The edit's first runs of sa come out wrong by chance; its confirm runs answer right.
+  const w = world({ proposals: [tagged('a', 'F1', 'rule', '- line one', '- line one\n- GOOD → read it')], quizScript: ({ dir, id }) => (dir === 'edit' && id === 'sa' ? { stdout: 'ANSWER: no' } : null) });
+  await run(w);
+  const report = reportOf(w);
+  const id = report.edits[0].id;
+  assert.strictEqual(report.quiz.edits[id].verdict, 'pass', report.quiz.edits[id].why);
+  assert.deepStrictEqual(report.quiz.edits[id].flagged.map(x => x.id), ['sa']);
+  const confirm = w.calls.quiz.filter(c => /confirm-/.test(c.dir));
+  assert.deepStrictEqual(confirm.map(c => [path.basename(c.dir), c.k, c.only]), [['confirm-champion', STUB_QUIZ.gate.confirmRuns, ['sa']], ['confirm-edit', STUB_QUIZ.gate.confirmRuns, ['sa']]]);
+  assert.ok(probedRuns(w, id).length > 0, 'passed: replayed');
+});
+
+test('the quiz gate in the loop: inconclusive is retried once, then blocked (fail closed); with no edit left the round says so', async () => {
+  const w = world({ proposals: [tagged('a', 'F1', 'rule', '- line one', '- line one\n- GOOD → read it')], quizScript: ({ dir, id }) => (dir === 'edit' && id === 'sc' ? { error: new Error('spawn x ENOENT') } : null) });
+  await run(w);
+  const report = reportOf(w);
+  const id = report.edits[0].id;
+  assert.strictEqual(report.quiz.edits[id].verdict, 'blocked');
+  assert.match(report.quiz.edits[id].why, /^inconclusive after one retry: .*sc/);
+  assert.strictEqual(w.calls.quiz.filter(c => c.dir.startsWith(path.join('iter-1', 'quiz', id)) && path.basename(c.dir) === 'edit').length, 2, 'the edit\'s quiz asked again once');
+  assert.strictEqual(report.why, 'no edit passed the quiz gate');
+  assert.deepStrictEqual(probedRuns(w, id), [], 'never replayed');
+  assert.strictEqual(report.probes, undefined);
+  assert.strictEqual(w.calls.verifier.length, 0);
+  assert.deepStrictEqual(LS.readLessons(path.join(w.paths.dir, LS.FILE)).map(l => l.quiz), ['blocked']);
+});
+
+test('the quiz gate in the loop: red/green and the question\'s checks: no edit is needed, or a question it does not teach, never replays', async () => {
+  // The champion already states the anchor: the question is checked before any model call.
+  const known = world({ proposals: [{ ...tagged('a', 'F1', 'rule', '- line one', '- line one\n- GOOD → read it'), question: { layer: 'entry', prompt: 'head', text: 'Q?', rule: 'r', anchor: 'line two', required: ['line'], forbidden: [] } }] });
+  await run(known);
+  const k = reportOf(known);
+  assert.match(k.quiz.edits[k.edits[0].id].why, /the champion's head prompt already states it/);
+  assert.ok(!known.calls.asks.some(a => a.id.startsWith('e-')), 'no model call for it');
+  assert.deepStrictEqual(probedRuns(known, k.edits[0].id), []);
+  // The edit does not teach its question: its runs on the edit's tree answer it wrong.
+  const weak = world({ proposals: [tagged('a', 'F1', 'rule', '- line one', '- line one\n- GOOD → read it')], quizScript: ({ dir, id }) => (dir === 'green' && id.startsWith('e-') ? { stdout: 'ANSWER: no' } : null) });
+  await run(weak);
+  const r = reportOf(weak);
+  assert.strictEqual(r.quiz.edits[r.edits[0].id].why, 'the edit does not teach its own question');
+  assert.deepStrictEqual(probedRuns(weak, r.edits[0].id), []);
+  // The champion already answers it: no edit is needed, or the question is too easy.
+  const easy = world({ proposals: [tagged('a', 'F1', 'rule', '- line one', '- line one\n- GOOD → read it')], quizScript: ({ dir, id }) => (dir === 'red' && id.startsWith('e-') ? { stdout: 'ANSWER: yes, the line' } : null) });
+  await run(easy);
+  const e = reportOf(easy);
+  assert.strictEqual(e.quiz.edits[e.edits[0].id].why, 'the champion already answers the question: no edit is needed or the question is too easy');
+  assert.deepStrictEqual(probedRuns(easy, e.edits[0].id), []);
+});
+
+test('the quiz gate in the loop: an edit without its question, or with a malformed one, is invalid, never quizzed or run', async () => {
+  const w = world({ proposals: [{ ...tagged('a', 'F1', 'rule', '- line one', '- line one\n- GOOD → read it'), question: null }, { ...tagged('a', 'F1', 'rule', '- line two', '- line two\n- GOOD → read it'), question: { layer: 'vibes', prompt: 'head', text: 'Q?', rule: 'r', anchor: 'GOOD', required: ['yes'], forbidden: [], id: 'q1' } }] });
+  await run(w);
+  const report = reportOf(w);
+  assert.match(report.edits[0].errors.join(), /^question: the quiz question the edit teaches/);
+  assert.match(report.edits[1].errors.join(), /question\.id: assigned by code/);
+  assert.match(report.edits[1].errors.join(), /question\.layer: one of/);
+  assert.deepStrictEqual(w.calls.quiz, []);
+  assert.deepStrictEqual(w.calls.runs.filter(r => /^l1-p-/.test(r.runId)), []);
+  // The question is metadata: the edit's id is its proposal's alone.
+  assert.strictEqual(report.edits[0].id, require('../../scripts/lib/train/proposal').proposalId(edit('- line one', '- line one\n- GOOD → read it')));
+});
+
+test('the quiz gate in the loop: a removal needs no question; it is quizzed under the quiz\'s own gate and replayed unless a regression confirms', async () => {
+  const w = world({ proposals: [{ tag: { skill: 'a', finding: 'F1', kind: 'removal' }, question: null, proposal: edit('- line two\n\n', '') }] });
+  await run(w);
+  const report = reportOf(w);
+  const id = report.edits[0].id;
+  assert.deepStrictEqual(report.edits[0].errors, []);
+  assert.deepStrictEqual([report.quiz.edits[id].verdict, report.quiz.edits[id].redGreen], ['pass', 'skipped (removal)']);
+  assert.ok(!w.calls.quiz.some(c => /\/(red|green)$/.test(c.dir)), 'no red/green run');
+  assert.ok(probedRuns(w, id).length > 0, 'replayed');
+  // Every quiz ask is charged to the loop's model calls: the same round with the gate off spends exactly that many fewer.
+  const off = world({ proposals: [{ tag: { skill: 'a', finding: 'F1', kind: 'removal' }, question: null, proposal: edit('- line two\n\n', '') }], loop: { quizGate: false } });
+  await run(off);
+  const spent = x => JSON.parse(fs.readFileSync(x.paths.state, 'utf8')).modelCalls;
+  assert.ok(w.calls.asks.length > 0);
+  assert.strictEqual(spent(w) - spent(off), w.calls.asks.length, 'the quiz asks charged, one call each');
+  // One slip of a stable question (noise within maxSlips): it passes and is replayed.
+  const n = world({ proposals: [{ tag: { skill: 'a', finding: 'F1', kind: 'removal' }, question: null, proposal: edit('- line two\n\n', '') }], quizScript: ({ dir, id: q, run: i }) => (dir === 'edit' && q === 'sa' && i === 1 ? { stdout: 'ANSWER: no' } : null) });
+  await run(n);
+  const rn = reportOf(n);
+  assert.strictEqual(rn.quiz.edits[rn.edits[0].id].verdict, 'pass', rn.quiz.edits[rn.edits[0].id].why);
+  assert.ok(probedRuns(n, rn.edits[0].id).length > 0, 'replayed');
+  // A confirmed regression of a stable question: rejected before any replay.
+  const s = world({ proposals: [{ tag: { skill: 'a', finding: 'F1', kind: 'removal' }, question: null, proposal: edit('- line two\n\n', '') }], quizScript: ({ dir, id: q }) => ((dir === 'edit' || dir === 'confirm-edit') && q === 'sa' ? { stdout: 'ANSWER: no' } : null) });
+  await run(s);
+  const r = reportOf(s);
+  assert.strictEqual(r.quiz.edits[r.edits[0].id].verdict, 'reject');
+  assert.deepStrictEqual(probedRuns(s, r.edits[0].id), []);
+  assert.deepStrictEqual(LS.readLessons(path.join(s.paths.dir, LS.FILE)).map(l => [l.quiz, l.redGreen]), [['reject', 'skipped (removal)']]);
+});
+
+test('the quiz gate in the loop: an edit no quiz prompt holds is not quizzed, replayed, and its probe\'s lessons line says so', async () => {
+  // An analyst's edit: its text is in no prompt (the stub's prompts are the skills' text), so both trees' are the same.
+  const p = { tag: { agent: 'market-structure-analyst', finding: 'F2', kind: 'rule' }, proposal: { targets: ['wrong stated reason'], expects: 'fewer misreads', edits: [{ file: ANALYST_FILE, find: '- role line one', replace: '- role line one\n- GOOD → read it' }] } };
+  const w = world({ proposals: [{ ...p, question: { layer: 'entry', prompt: 'head', text: 'Does the edit read right?', rule: 'r', anchor: 'GOOD → read it', required: ['\\bline\\b'], forbidden: [] } }] });
+  await run(w);
+  const report = reportOf(w);
+  const id = report.edits[0].id;
+  assert.deepStrictEqual([report.quiz.edits[id].verdict, report.quiz.edits[id].why], [QP.NOT_QUIZZED, QP.NOT_HELD]);
+  assert.deepStrictEqual(w.calls.asks, [], 'no model call');
+  assert.ok(probedRuns(w, id).length > 0, 'replayed');
+  const lines = LS.readLessons(path.join(w.paths.dir, LS.FILE)).filter(l => l.proposalId === id && !l.composed);
+  assert.deepStrictEqual(lines.map(l => [l.notQuizzed, typeof l.verdict, 'quiz' in l]), [[QP.NOT_HELD, 'string', false]]);
+  assert.doesNotMatch(LS.summarize(lines), /stopped by the quiz gate/);
+});
+
+test('the quiz gate in the loop: the proposal checks read the configured quiz file: its minLiteralRun, negations and restrictions', async () => {
+  const question = { layer: 'entry', prompt: 'head', text: 'Does the edit read right?', rule: 'r', anchor: 'GOOD → read it', required: ['\\bthree\\b'], forbidden: [] };
+  const p = { ...tagged('a', 'F1', 'rule', '- line one', '- line one\n- GOOD → read it'), question };
+  const errorsOf = async quiz => { const w = world({ proposals: [p], quiz }); await run(w); return reportOf(w).edits[0].errors.join('; '); };
+  // A five-letter word: refused under a minLiteralRun of six, valid under the stub's own.
+  assert.match(await errorsOf({ gate: { minLiteralRun: 6 } }), /question\.required\[0\]: no literal run of 6 letters or digits/);
+  assert.doesNotMatch(await errorsOf({}), /no literal run/);
+  // Its pattern grammar's limits too: no gap allowed, a gap is refused.
+  const gapped = { ...p, question: { ...question, required: ['line.{0,9}three'] } };
+  const gapErrors = async quiz => { const w = world({ proposals: [gapped], quiz }); await run(w); return reportOf(w).edits[0].errors.join('; '); };
+  assert.match(await gapErrors({ gate: { maxGaps: 0 } }), /question\.required\[0\]: at most 0 wildcard gaps/);
+  assert.doesNotMatch(await gapErrors({}), /wildcard gaps/);
+  // A removal of a line holding the configured negation (or restriction) word needs a question; otherwise it does not.
+  const removal = { tag: { skill: 'a', finding: 'F1', kind: 'removal' }, question: null, proposal: edit('- line three\n', '') };
+  const removalErrors = async quiz => { const w = world({ proposals: [removal], quiz }); await run(w); return reportOf(w).edits[0].errors.join('; '); };
+  assert.strictEqual(await removalErrors({}), '');
+  assert.match(await removalErrors({ negations: [...STUB_QUIZ.negations, 'three'] }), /^question: the quiz question the edit teaches/);
+  assert.match(await removalErrors({ restrictions: ['three'] }), /^question: the quiz question the edit teaches/);
+  assert.match(await removalErrors({ conditions: [...STUB_QUIZ.conditions, 'three'] }), /^question: the quiz question the edit teaches/);
+});
+
+test('the quiz gate in the loop: a question refused at the proposal reaches the next round\'s proposer (its id, stage, first reason)', async () => {
+  const question = { layer: 'entry', prompt: 'head', text: 'Does the edit read right?', rule: 'r', anchor: 'GOOD → read it', required: ['(line|one)+'], forbidden: [] };
+  const bad = { ...tagged('a', 'F1', 'rule', '- line one', '- line one\n- GOOD → read it'), question };
+  const w = world({ proposals: r => (r === 1 ? [bad] : []), loop: { limits: { maxIterations: 2, maxModelCalls: 10000, maxWallMinutes: 30 } } });
+  await run(w);
+  assert.ok(w.calls.proposeProbes.length >= 2, String(w.calls.proposeProbes.length));
+  const id = reportOf(w).edits[0].id;
+  const said = w.calls.proposeProbes[1].lessons;
+  assert.match(said, new RegExp(`- refused ${id} \\(proposal, blocked\\): question\\.required\\[0\\]: a group at 0: no repeat after it`));
+  // Once per edit: a resume writes no second line.
+  const lines = LS.readLessons(path.join(w.paths.dir, LS.FILE)).filter(l => l.proposalId === id);
+  assert.deepStrictEqual(lines.map(l => [l.stage, l.quiz]), [['proposal', 'blocked']]);
+});
+
+test('the quiz gate in the loop: a question refused at the proposal never bars the same edit with a fixed question; a content reject does', async () => {
+  const reportAt = (w, n) => JSON.parse(fs.readFileSync(path.join(w.paths.iter(n), 'probe-report.json'), 'utf8'));
+  const loop = { limits: { maxIterations: 2, maxModelCalls: 10000, maxWallMinutes: 30 } };
+  const plain = tagged('a', 'F1', 'rule', '- line one', '- line one\n- GOOD → read it');
+  const broken = { ...plain, question: { layer: 'entry', prompt: 'head', text: 'Does the edit read right?', rule: 'r', anchor: 'GOOD → read it', required: ['(line|one)+'], forbidden: [] } };
+  // Round 1 refuses its question; round 2 proposes the same edit (the same id) with a sound one: it is quizzed and runs.
+  const w = world({ proposals: r => (r === 1 ? [broken] : [plain]), loop });
+  await run(w);
+  const id = reportAt(w, 1).edits[0].id;
+  assert.ok(reportAt(w, 1).edits[0].errors.length > 0);
+  const second = reportAt(w, 2);
+  assert.deepStrictEqual([second.edits[0].id, second.edits[0].probedBefore], [id, false]);
+  assert.strictEqual(second.quiz.edits[id].verdict, 'pass', JSON.stringify(second.quiz.edits[id]));
+  assert.ok(probedRuns(w, id).length > 0, 'replayed');
+  // A resume writes the proposal-stage line no second time.
+  await run(w).catch(() => null);
+  assert.deepStrictEqual(LS.readLessons(path.join(w.paths.dir, LS.FILE)).filter(l => l.proposalId === id && l.stage === 'proposal').length, 1);
+  // A content refusal (a confirmed regression): the same edit next round is skipped as probed before.
+  const regress = tagged('a', 'F1', 'rule', '- line two', '- line two\n- GOOD too → BREAKS-sb', 'breaks a rule');
+  const v = world({ proposals: () => [regress], loop });
+  await run(v);
+  const rid = reportAt(v, 1).edits[0].id;
+  assert.strictEqual(reportAt(v, 1).quiz.edits[rid].verdict, 'reject');
+  assert.strictEqual(reportAt(v, 2).edits[0].probedBefore, true);
+});
+
+test('lessons barsReproposal: replay verdicts and content refusals bar the same edit; a question, inconclusive or harness refusal does not', () => {
+  const W = [{ from: '2022-03-07', to: '2022-03-19' }];
+  const q = (quiz, stage, why) => ({ proposalId: 'p', iteration: 1, skill: 'a', kind: 'rule', windows: W, quiz, stage, why });
+  for (const e of [{ proposalId: 'p', verdict: 'helped' }, { proposalId: 'p', composed: true, keep: 'kept' }, q('reject', 'regression', 'regressed: a2'),
+    q('blocked', 'red-green', 'the champion already answers the question: no edit is needed or the question is too easy'), q('blocked', 'red-green', 'the edit does not teach its own question')]) assert.strictEqual(LS.barsReproposal(e), true, JSON.stringify(e));
+  for (const e of [q('blocked', 'proposal', 'question.required[0]: a group'), q('blocked', 'question', 'question.anchor: not in the edited tree'), q('blocked', 'red-green', 'inconclusive after one retry: x'),
+    q('blocked', 'regression', 'inconclusive after one retry: y'), q('blocked', 'question', 'the quiz could not run: z'), q('blocked', 'question', 'the prompts could not be built: w'), q('blocked', 'regression', 'a confirm run is still needed: v')]) assert.strictEqual(LS.barsReproposal(e), false, JSON.stringify(e));
+  // A content reason quoted inside another refusal is no content refusal (it must lead the reason); no id bars nothing.
+  assert.strictEqual(LS.barsReproposal(q('blocked', 'red-green', 'inconclusive after one retry: the edit does not teach its own question')), false);
+  assert.strictEqual(LS.barsReproposal(q('blocked', 'question', 'question.rule: the champion already answers the question')), false);
+  for (const e of [{ verdict: 'helped' }, { composed: true, keep: 'kept' }, { proposalId: 7, verdict: 'hurt' }, { ...q('reject', 'regression', 'r'), proposalId: undefined }, null]) assert.strictEqual(LS.barsReproposal(e), false, JSON.stringify(e));
+});
+
+test('the quiz gate in the loop: a crash after the quiz and before the replay never quizzes again on resume', async () => {
+  const w = world({ proposals: [tagged('a', 'F1', 'rule', '- line one', '- line one\n- GOOD → read it')] });
+  const replay = w.steps.runReplay;
+  let crashed = false;
+  w.steps.runReplay = async opts => { if (!crashed && /^l1-p-/.test(opts.run.runId)) { crashed = true; throw new Error('killed'); } return replay(opts); };
+  await assert.rejects(run(w), /killed/);
+  const [{ id }] = JSON.parse(fs.readFileSync(path.join(w.paths.iter(1), 'probe-proposals.json'), 'utf8'));
+  const st = JSON.parse(fs.readFileSync(w.paths.state, 'utf8'));
+  assert.ok(st.done[`1:quiz:${id}`] && st.done['1:quiz-champion'], JSON.stringify(Object.keys(st.done)));
+  const quizzes = w.calls.quiz.length;
+  const asks = w.calls.asks.length;
+  await run(w);
+  assert.strictEqual(w.calls.quiz.length, quizzes, 'no quiz run again');
+  assert.strictEqual(w.calls.asks.length, asks);
+  assert.strictEqual(reportOf(w).quiz.edits[id].verdict, 'pass');
+  assert.ok(probedRuns(w, id).length > 0, 'replayed on resume');
+  // The probe look: logged once, the proposer called once (its state and ledger guard intact).
+  assert.deepStrictEqual(S.readLedger(w.paths.ledger).filter(l => l.candidate === 'l1/probe').map(l => l.purpose), ['tuning']);
+  assert.strictEqual(w.calls.proposeProbes.length, 1);
+});
+
+test('the quiz gate in the loop: off only when the loop config says quizGate: false; the round report and the line say so', async () => {
+  const w = world({ proposals: [tagged('a', 'F1', 'rule', '- line two', '- line two\n- GOOD too → BREAKS-sb', 'breaks a rule')], loop: { quizGate: false } });
+  assert.strictEqual(w.loop.quizGate, false);
+  await run(w);
+  const report = reportOf(w);
+  assert.deepStrictEqual(report.quiz, { off: true, why: 'the quiz gate is off (the loop config\'s quizGate: false): no edit was quizzed' });
+  assert.deepStrictEqual(w.calls.quiz, []);
+  assert.ok(probedRuns(w, report.edits[0].id).length > 0, 'replayed without a quiz');
+  const rec = JSON.parse(fs.readFileSync(path.join(w.paths.iter(1), 'iteration-report.json'), 'utf8'));
+  assert.match(IR.line(rec), /\(0 refused, the quiz gate off\)/);
+  // Left out, it is on.
+  assert.strictEqual(world({ proposals: [] }).loop.quizGate, true);
+});
+
+test('the quiz gate in the loop: a later round reuses the champion\'s quiz (keyed by its tree and the quiz), asking it nothing new', async () => {
+  const w = world({ proposals: r => [tagged('a', 'F1', 'rule', '- line three', `- line three, plain ${'x'.repeat(r)}`, `neutral ${r}`)], loop: { limits: { maxIterations: 2, maxModelCalls: 10000, maxWallMinutes: 30 } } });
+  await run(w);
+  const champ = w.calls.quiz.filter(c => /^quiz\/champion-/.test(c.dir));
+  assert.strictEqual(champ.length, 2, 'one a round');
+  assert.strictEqual(new Set(champ.map(c => c.dir)).size, 1, 'one directory');
+  assert.strictEqual(w.calls.asks.filter(a => a.dir === champ[0].dir).length, STUB_QUIZ.questions.length * STUB_QUIZ.k, 'asked once, in round 1 only');
 });

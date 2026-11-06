@@ -73,7 +73,22 @@ needs `modelScore`), each iteration's proposal comes from a probe round:
 same curated moments and seed as the champion and screened by code, the
 ones that helped combined by code and probed once more, then the full keep
 rule. Edits are screened on one half of the moments (split by session
-date, seeded) and the combined change judged on the other. With `probe`,
+date, seeded) and the combined change judged on the other. Each edit
+carries the quiz question it teaches; before any replay its tree takes the
+quiz gate: the champion must fail that question and the edit pass it, and
+the whole context quiz must not regress. A pure deletion (a removal, or a
+trim that keeps the rest in order) needs no question and must pass the
+whole quiz without a confirmed regression; one near a "not" or "never", or
+that changes an "only", "must" or "unless" or a polar word ("above",
+"long", "premium"), or deletes a condition ("while", "at least") or a
+number, needs a question. An edit refused only for its question comes back
+with a sound one. Quiz patterns are plain phrases
+(`docs/TRAINING.md`, the pattern grammar). An edit of an analyst's or
+the executor's file alone is in no quiz prompt: not quizzed, it goes to the
+replay; a skill edit is always quizzed. Quiz asks count toward `maxModelCalls`. A rejected or
+blocked edit is never
+replayed (`probe-report.json` `quiz`, a lessons line). `quizGate: false` in
+the config turns the gate off, only explicitly. With `probe`,
 the champion's tuning-window replays run only once a round first has a
 runnable proposal: a round whose probes pass nothing never pays for them. The
 iteration's `probe-report.json` and the loop's `lessons.jsonl` say what

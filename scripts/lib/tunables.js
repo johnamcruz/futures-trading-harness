@@ -82,7 +82,7 @@ const TRAINING = {
   // key, so no other skill can be given more room here.
   skillCaps: { skillBytes: int(1), setupSkillBytes: int(1), perSkill: { 'candle-reading': int(1) } },
   compose: { maxExpects: int(1), maxWhy: int(1) },
-  lessons: { maxLines: int(1), maxChars: int(1) },
+  lessons: { maxLines: int(1), maxChars: int(1), refusedChars: int(1) },
   probeEdit: { maxLine: int(1), growBytes: int(0) },
   skillUsage: { top: int(1) },
   trendBatch: { start: int(2), max: int(2), half: num({ min: 0.1, max: 0.9 }), growAfter: int(1), growFactor: int(2), plateauRounds: int(1) },
