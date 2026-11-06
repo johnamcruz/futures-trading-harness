@@ -5,14 +5,16 @@
  * written in: a whitelist, so no form that backtracks without end on a long answer reaches the grader (a blacklist of
  * bad forms kept leaking). Accepted, and nothing else:
  *
- *   literal text     letters, digits, spaces, common punctuation and any non-ASCII character; any punctuation escaped
+ *   literal text     letters, digits, the plain space, common punctuation and any non-ASCII character but whitespace (no
+ *                    tab, no-break or em space: \s matches those); any punctuation escaped
  *                    (\. \? \( ...); one letter or digit may be optional (needs?)
  *   \b               anywhere
  *   \s \s+ \s* \s?   only directly between literal text (a non-space character, a class or a group on both sides, \b
  *                    aside)
- *   [...]            letters, digits, ranges and punctuation, never negated, never a space or an escape; at most ? after
+ *   [...]            letters, digits, ranges and punctuation, never negated, never whitespace or an escape; at most ? after
  *   (...) (?:...)    literal alternatives only (a|the), none empty, no nesting, pairwise distinct and none a prefix of
- *                    another (case-blind: (a|ab) never); at most ? after; at most limits.maxGroups groups in all
+ *                    another (case-blind: (a|ab) never), a plain space only inside one (never at its edge); at most ?
+ *                    after; at most limits.maxGroups groups in all
  *   ^ $              at the start, at the end
  *   a gap            .{0,N} .{1,N} \w{0,N} \S{1,N} ...: N at most limits.maxGapChars, at most limits.maxGaps of them, each
  *                    preceded by literal text (or the start) and followed by literal text (unbounded .* or \w+ never)
@@ -25,9 +27,10 @@
 
 const ESCAPABLE = '.?()[]{}*+|^$\\/-,:;\'"!#%&=<>~@';
 const isAlnum = c => /^[A-Za-z0-9]$/.test(c);
-// Literal text unescaped: letters, digits, space and punctuation a regex gives no meaning, and any non-ASCII character.
-const isLiteral = c => isAlnum(c) || c === ' ' || ',;:\'"!%&/#@=<>~-_`'.includes(c) || c > '\x7f';
-const isClassChar = c => isAlnum(c) || (c !== ' ' && c !== '\\' && c !== ']' && c !== '^' && c !== '[' && (isLiteral(c) || '.?()*+|$'.includes(c)));
+// Literal text unescaped: letters, digits, the plain space and punctuation a regex gives no meaning, and any non-ASCII
+// character but whitespace (no-break space, em space, line separator: \s matches them, so a \s+ beside one overlaps).
+const isLiteral = c => isAlnum(c) || c === ' ' || ',;:\'"!%&/#@=<>~-_`'.includes(c) || (c > '\x7f' && !/\s/.test(c));
+const isClassChar = c => isAlnum(c) || (!/\s/.test(c) && c !== '\\' && c !== ']' && c !== '^' && c !== '[' && (isLiteral(c) || '.?()*+|$'.includes(c)));
 const GAP = /^\{([01]),(\d+)\}/;
 
 function grammarErrors(src, limits = {}) {
@@ -77,8 +80,9 @@ function grammarErrors(src, limits = {}) {
       let body = end < 0 ? null : s.slice(i + 1, end);
       if (body) body = body.replace(/^\?:/, '');
       const alts = body === null ? [] : body.split('|');
-      const altOk = a => a.length > 0 && /^(?:\\[^A-Za-z0-9]|[^\\()[\]{}.*+?|^$])+$/.test(a) && [...a.replace(/\\./g, '')].every(isLiteral);
-      if (body === null || !alts.every(altOk)) errors.push(`a group at ${at}: literal alternatives only, such as (a|the) or (?:wait|hold), none empty, nothing nested`);
+      // A plain space only strictly between two other characters, no other whitespace: a group beside \s+ stays disjoint.
+      const altOk = a => a.length > 0 && /^(?:\\[^A-Za-z0-9]|[^\\()[\]{}.*+?|^$])+$/.test(a) && [...a.replace(/\\./g, '')].every(isLiteral) && !/^\s|\s$/.test(a);
+      if (body === null || !alts.every(altOk)) errors.push(`a group at ${at}: literal alternatives only, such as (a|the) or (?:wait|hold), none empty, nothing nested, no space at an edge`);
       // Two alternatives that can match the same text (equal, or one a prefix of the other) double the paths a start.
       const low = alts.map(a => a.toLowerCase());
       if (low.some((a, j) => low.some((b, m) => m !== j && b.startsWith(a)))) errors.push(`a group at ${at}: distinct alternatives, none a prefix of another (case-blind; (a|ab) never)`);

@@ -84,15 +84,34 @@ test('the grammar: every example the review found is refused fast, and an accept
   }
 });
 
-test('the grammar, property-style: random patterns built from its own parts never take long on a 1000-character hostile line', () => {
+// Hostile lines: runs of one character, whitespace of every kind \s matches among them.
+const HOSTILE = ['a', 'z', ' ', '-', 'e', '\u00a0', '\t', '\u2003', '\u2028', '\u3000'].map(c => c.repeat(1000)).concat(['a b '.repeat(250), ' \u00a0\t'.repeat(334).slice(0, 1000)]);
+
+test('the grammar: whitespace \\s matches is never literal text, class content, or at a group alternative\'s edge (repeats of \\s+ stay disjoint)', { timeout: 20000 }, () => {
+  for (const src of ['xxxx\\s+( )\\s+( )\\s+( )\\s+y', 'wait\u00a0now', 'wait\tnow', 'wait\u2028now', '[ ]wait', '[\u00a0]wait', 'wait[a\u3000]', '( |a) wait', '(a | b) wait', '( a|b) wait', '(b |a) wait', '(\u00a0|x) wait', '(wait\u00a0now|hold)', 'wait \\s+now', 'wait\\s+ now', 'wait\u2003now', '(\u2003|x) wait', '[\t]wait']) {
+    assert.ok(G.grammarErrors(src, LIMITS).length > 0, JSON.stringify(src));
+  }
+  for (const ok of ['(enter|take) now', 'retest (a|the)', 'wait(s|ed)?', 'three\\s+pushes', '(wait now|hold) for', 'size: full']) assert.deepStrictEqual(G.grammarErrors(ok, LIMITS), [], ok);
+  // Every accepted pattern, on a 1000-character run of whitespace of each kind: fast.
+  for (const src of OK) {
+    const re = new RegExp(src, 'i');
+    for (const line of HOSTILE.concat([`xxxx${' '.repeat(996)}`, `wait${' '.repeat(996)}`])) {
+      const t = Date.now();
+      re.test(line);
+      assert.ok(Date.now() - t < 200, `${src} on ${JSON.stringify(line.slice(0, 6))}`);
+    }
+  }
+});
+
+test('the grammar, property-style: random patterns built from its own parts never take long on a 1000-character hostile line', { timeout: 60000 }, () => {
   // A seeded generator of patterns the grammar accepts (the composer's draw kept only when the grammar takes it).
   let seed = 7;
   const rnd = n => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed % n; };
-  const words = ['a', 'aa', 'wait', 'the', 'z', 'zz', 'ab', 'retest', '-', '--', 'e', 'ee', ' ', 'a b'];
+  const words = ['a', 'aa', 'wait', 'the', 'z', 'zz', 'ab', 'retest', '-', '--', 'e', 'ee', ' ', 'a b', '\u00a0', '\t', '\u2028', '\u3000', ' a', 'b '];
   const part = () => {
     const k = rnd(7);
     if (k === 0) return '\\b';
-    if (k === 1) return `[${['az', 'a-z', 'sd'][rnd(3)]}]${rnd(2) ? '?' : ''}`;
+    if (k === 1) return `[${['az', 'a-z', 'sd', ' ', '\u00a0', 'a '][rnd(6)]}]${rnd(2) ? '?' : ''}`;
     if (k === 2) return `(${Array.from({ length: 2 + rnd(3) }, () => words[rnd(words.length)]).join('|')})${rnd(2) ? '?' : ''}`;
     if (k === 3) return `${words[rnd(words.length)]}?`;
     if (k === 4) return `.{0,${1 + rnd(LIMITS.maxGapChars)}}`;
@@ -109,7 +128,7 @@ test('the grammar, property-style: random patterns built from its own parts neve
     if (src.includes('|')) grouped += 1;
     const re = new RegExp(src, 'i');
     const letters = src.replace(/[^a-z]/g, '') || 'a';
-    for (const line of ['a'.repeat(1000), 'z'.repeat(1000), ' '.repeat(1000), '-'.repeat(1000), 'e'.repeat(1000), 'a b '.repeat(250), letters.repeat(1000).slice(0, 1000), `${letters} `.repeat(1000).slice(0, 1000)]) {
+    for (const line of [...HOSTILE, letters.repeat(1000).slice(0, 1000), `${letters} `.repeat(1000).slice(0, 1000), `xxxx${' '.repeat(996)}`]) {
       const t = process.hrtime.bigint();
       re.test(line);
       worst = Math.max(worst, Number(process.hrtime.bigint() - t) / 1e6);

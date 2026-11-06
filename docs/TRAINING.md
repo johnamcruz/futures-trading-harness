@@ -403,7 +403,9 @@ iteration of the loop then runs these steps (`scripts/lib/train/probe.js`):
    file's `gate.maxPatternChars` (120) characters, and written in the
    pattern grammar (`scripts/lib/train/pattern-grammar.js`, a whitelist:
    anything else is refused with the rule it breaks): literal text and
-   escaped punctuation (one letter may be optional: `needs?`), `\b`,
+   escaped punctuation (one letter may be optional: `needs?`; no whitespace
+   but the plain space, never at a group alternative's edge or beside
+   `\s`, so repeats of `\s+` stay disjoint), `\b`,
    `\s`/`\s+`/`\s*` only between literal text, character classes with
    at most `?` after, groups of literal alternatives (`(a|the)`) with at
    most `?` after, `^` and `$` at the ends, at most `gate.maxOptionals`

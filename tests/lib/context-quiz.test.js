@@ -581,3 +581,19 @@ test('the CLI builds and grades into a directory of the user\'s, never the repos
   assert.match(g.stdout, /^q6\tlevels\t1\/1$/m);
   assert.match(run(['build', '--out', path.join(__dirname, 'x')]).stderr, /inside the repository/);
 });
+
+test('quizErrors: each of the gate\'s whole-number limits absent, negative or fractional is refused, and so at load', () => {
+  const keys = { maxGroups: 0, maxGaps: 0, maxGapChars: 0, maxOptionals: 0, minLiteralRun: 1, maxGradedLineChars: 1, maxPatternChars: 1, questionRuns: 1 };
+  for (const [key, least] of Object.entries(keys)) {
+    const { [key]: _x, ...rest } = QUIZ.gate;
+    for (const gate of [rest, { ...QUIZ.gate, [key]: least - 1 }, { ...QUIZ.gate, [key]: least + 0.5 }, { ...QUIZ.gate, [key]: String(least) }]) {
+      assert.match(Q.quizErrors({ ...QUIZ, gate }).join('\n'), /^gate: /m, `${key}: ${JSON.stringify(gate[key])}`);
+    }
+    assert.deepStrictEqual(Q.quizErrors({ ...QUIZ, gate: { ...QUIZ.gate, [key]: least } }), [], `${key} at its least`);
+  }
+  // A quiz file with one refused is never loaded.
+  const dir = tmpDir();
+  const file = path.join(dir, 'context-quiz.json');
+  fs.writeFileSync(file, JSON.stringify({ ...QUIZ, gate: { ...QUIZ.gate, maxGroups: -1 } }));
+  assert.throws(() => Q.loadQuiz({ file }), /gate/);
+});

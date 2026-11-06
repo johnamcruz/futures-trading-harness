@@ -1547,6 +1547,7 @@ test('the quiz gate in the loop: the proposal checks read the configured quiz fi
   assert.strictEqual(await removalErrors({}), '');
   assert.match(await removalErrors({ negations: [...STUB_QUIZ.negations, 'three'] }), /^question: the quiz question the edit teaches/);
   assert.match(await removalErrors({ restrictions: ['three'] }), /^question: the quiz question the edit teaches/);
+  assert.match(await removalErrors({ conditions: [...STUB_QUIZ.conditions, 'three'] }), /^question: the quiz question the edit teaches/);
 });
 
 test('the quiz gate in the loop: a question refused at the proposal reaches the next round\'s proposer (its id, stage, first reason)', async () => {
@@ -1596,6 +1597,10 @@ test('lessons barsReproposal: replay verdicts and content refusals bar the same 
     q('blocked', 'red-green', 'the champion already answers the question: no edit is needed or the question is too easy'), q('blocked', 'red-green', 'the edit does not teach its own question')]) assert.strictEqual(LS.barsReproposal(e), true, JSON.stringify(e));
   for (const e of [q('blocked', 'proposal', 'question.required[0]: a group'), q('blocked', 'question', 'question.anchor: not in the edited tree'), q('blocked', 'red-green', 'inconclusive after one retry: x'),
     q('blocked', 'regression', 'inconclusive after one retry: y'), q('blocked', 'question', 'the quiz could not run: z'), q('blocked', 'question', 'the prompts could not be built: w'), q('blocked', 'regression', 'a confirm run is still needed: v')]) assert.strictEqual(LS.barsReproposal(e), false, JSON.stringify(e));
+  // A content reason quoted inside another refusal is no content refusal (it must lead the reason); no id bars nothing.
+  assert.strictEqual(LS.barsReproposal(q('blocked', 'red-green', 'inconclusive after one retry: the edit does not teach its own question')), false);
+  assert.strictEqual(LS.barsReproposal(q('blocked', 'question', 'question.rule: the champion already answers the question')), false);
+  for (const e of [{ verdict: 'helped' }, { composed: true, keep: 'kept' }, { proposalId: 7, verdict: 'hurt' }, { ...q('reject', 'regression', 'r'), proposalId: undefined }, null]) assert.strictEqual(LS.barsReproposal(e), false, JSON.stringify(e));
 });
 
 test('the quiz gate in the loop: a crash after the quiz and before the replay never quizzes again on resume', async () => {

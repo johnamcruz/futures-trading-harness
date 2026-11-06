@@ -574,6 +574,17 @@ test('quizRound: the question\'s pattern limits are the run\'s quiz file\'s (its
   assert.match((await go({ maxGradedLineChars: 3 })).why, /question\.required\[0\]: matches nothing in the champion's head prompt/);
 });
 
+test('quizRound: a trim deleting one of the run\'s quiz file\'s condition words needs a question (its lists, never the repo file\'s)', async () => {
+  const go = async conditions => {
+    const w = round();
+    w.ctx.steps.loadQuiz = () => ({ value: { ...QUIZ, conditions }, hash: HASH });
+    const e = w.edit('', null, { kind: 'removal', find: '- line two\n' });
+    return (await w.go(1, [e])).report.edits[e.id];
+  };
+  assert.match((await go([...QUIZ.conditions, 'two'])).why, /^question: the quiz question the edit teaches/);
+  assert.strictEqual((await go(QUIZ.conditions)).verdict, 'pass');
+});
+
 test('quizRound: the gate is off only for an explicit false; a missing or null setting is on', async () => {
   for (const loop of [{}, { quizGate: null }, { quizGate: undefined }, { quizGate: 'false' }]) {
     const w = round();
