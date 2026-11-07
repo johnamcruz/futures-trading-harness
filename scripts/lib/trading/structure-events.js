@@ -96,7 +96,7 @@ function sweeps(bars, levels, n = AN.structure.sweepBars) {
       if (i === undefined) continue;
       const span = bars.slice(i, j + 1);
       const wick = side === 'high' ? Math.max(...span.map(b => b.h)) : Math.min(...span.map(b => b.l));
-      out.push({ name, price, side, key, at: bars[i].t, back: bars[j].t, bars: j - i + 1, wick, close: bars[j].c, ...sweepSize(bars, i, span, price, side, wick) });
+      out.push({ name, price, side, key, at: bars[i].t, back: bars[j].t, bars: j - i + 1, wick, close: bars[j].c, wickShare: wickShare(span, price, side, wick) });
       break;
     }
   }
@@ -104,23 +104,16 @@ function sweeps(bars, levels, n = AN.structure.sweepBars) {
 }
 
 /**
- * How big a sweep was, as two facts (a read, never a veto): `relVol`, the sweep bars' top volume over the mean volume of the
- * 20 bars before them (null before 20 bars, or without volume); `wickShare`, the part of the sweep bars' range beyond the
- * level (null when a bar's range is unknown). The filters practitioners use, kept as facts the model reads: neither has
- * a measured edge yet, so nothing here decides.
+ * How deep a sweep went, as one fact (a read, never a veto): `wickShare`, the part of the sweep bars' range beyond the level
+ * (null when the range is unknown). Measured on real bars it did not separate good sweeps from bad (breakout-vs-fakeout), so
+ * it is shown, not used; nothing here decides. Volume is not a sweep field: `m3.participation` owns it, and a mean taken over
+ * the bars before the sweep would mix in the premarket's thin bars at the open.
  */
-const SWEEP_BASE_BARS = 20;
 const round2 = x => Math.round(100 * x) / 100;
-function sweepSize(bars, i, span, price, side, wick) {
-  const base = i >= SWEEP_BASE_BARS ? bars.slice(i - SWEEP_BASE_BARS, i).map(b => b.v) : [];
-  const mean = base.length === SWEEP_BASE_BARS && base.every(Number.isFinite) ? base.reduce((a, b) => a + b, 0) / SWEEP_BASE_BARS : null;
-  const top = Math.max(...span.map(b => b.v));
+function wickShare(span, price, side, wick) {
   const range = Math.max(...span.map(b => b.h)) - Math.min(...span.map(b => b.l));
   const beyond = side === 'high' ? wick - price : price - wick;
-  return {
-    relVol: mean > 0 && Number.isFinite(top) ? round2(top / mean) : null,
-    wickShare: range > 0 ? round2(beyond / range) : null,
-  };
+  return range > 0 ? round2(beyond / range) : null;
 }
 
 /**

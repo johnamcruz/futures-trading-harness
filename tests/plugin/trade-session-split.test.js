@@ -488,8 +488,11 @@ test('trade-session split: no head-trader path reads more than the base\'s every
 // Then feat/stable-first-prompt (owner rule: raise a pin when it improves context): gate-refusals' [phase1-cache] row, the
 // gateway's refusal of a cached phase 1 its reads no longer match: the row costs 182 bytes, and the trade-executor's prompt
 // sat 4 under its pins, so they move +178 each mode (30670, 30659); every other role within its pin.
+// Then feat/sweep-volume-facts (owner rule: raise a pin when it improves context): breakout-vs-fakeout names `wickShare` and its
+// measured evidence, momentum-and-volume's push evidence: full mode only (index mode is within its pins): market-structure +390
+// (94379), trend-momentum +84 (54624), volume-liquidity +232 (48856).
 const ROLE_PROMPTS = {
-  full: { 'market-structure-analyst': 93989, 'news-calendar-analyst': 10182, 'risk-manager': 92762, 'strategy-researcher': 25650, 'trade-executor': 30670, 'trade-reviewer': 9454, 'trend-momentum-analyst': 54540, 'volume-liquidity-analyst': 48624 },
+  full: { 'market-structure-analyst': 94379, 'news-calendar-analyst': 10182, 'risk-manager': 92762, 'strategy-researcher': 25650, 'trade-executor': 30670, 'trade-reviewer': 9454, 'trend-momentum-analyst': 54624, 'volume-liquidity-analyst': 48856 },
   index: { 'market-structure-analyst': 43175, 'news-calendar-analyst': 10182, 'risk-manager': 78639, 'strategy-researcher': 25650, 'trade-executor': 30659, 'trade-reviewer': 9454, 'trend-momentum-analyst': 40023, 'volume-liquidity-analyst': 33256 },
 };
 

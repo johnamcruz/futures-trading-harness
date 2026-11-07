@@ -77,9 +77,9 @@ test('sweeps: a close beyond the level and a close back inside within the next t
   assert.deepStrictEqual(order.map(o => o.name), ['PDH', 'minor']);
 });
 
-// The sweep's own volume and wick, on real bars (tests/fixtures/data/real-sweeps-3m.json: 28 real 3m bars around each of two
+// A sweep's wick share, on real bars (tests/fixtures/sweeps/real-sweeps-3m.json: 28 real 3m bars around each of two
 // stop-run sweeps of a bounce high, as the replay showed them). The expected values are worked out here from the raw bars.
-const REAL = require('../fixtures/data/real-sweeps-3m.json');
+const REAL = require('../fixtures/sweeps/real-sweeps-3m.json');
 const realSweep = day => {
   const { level, sweepBar, levelName } = REAL.sweptHighs[day];
   const all = REAL.days[day];
@@ -88,41 +88,30 @@ const realSweep = day => {
   return { x, bars, level };
 };
 
-test('sweeps: relVol is the sweep bars\' top volume over the mean of the 20 bars before them, wickShare the part of their range beyond the level (real bars)', () => {
+test('sweeps: wickShare is the part of the sweep bars\' range beyond the level (real bars)', () => {
   for (const day of ['2022-03-07', '2022-04-11']) {
     const { x, bars, level } = realSweep(day);
     const i = bars.length - 1; // a one-bar sweep: the last bar wicked above the level and closed back below
-    const before = bars.slice(i - 20, i).reduce((a, b) => a + b.v, 0) / 20;
     assert.strictEqual(x.bars, 1);
-    // Two decimals: the briefing is read by a model, 2.0353479922794535 is noise.
-    assert.strictEqual(x.relVol, Math.round(100 * bars[i].v / before) / 100, `${day} relVol ${x.relVol}`);
+    // Two decimals: the briefing is read by a model, 0.4285714285714286 is noise.
     assert.strictEqual(x.wickShare, Math.round(100 * (bars[i].h - level) / (bars[i].h - bars[i].l)) / 100, `${day} wickShare ${x.wickShare}`);
+    assert.strictEqual(x.relVol, undefined, 'volume is the participation fields\' job: a sweep carries no volume ratio');
   }
-  // The two real events, pinned: a light-volume sweep (11:18 ET, 0.94x) and a heavy one (10:00 ET, 1.79x).
-  const a = realSweep('2022-03-07').x;
-  const b = realSweep('2022-04-11').x;
-  assert.deepStrictEqual([a.relVol, a.wickShare], [0.94, 0.43]);
-  assert.deepStrictEqual([b.relVol, b.wickShare], [1.79, 0.23]);
-  assert.ok(a.relVol < 1 && b.relVol >= 1.5, 'the reading separates a light sweep from a heavy one');
+  // The two real events, pinned: a deep wick (11:18 ET) and a shallow one (10:00 ET).
+  assert.strictEqual(realSweep('2022-03-07').x.wickShare, 0.43);
+  assert.strictEqual(realSweep('2022-04-11').x.wickShare, 0.23);
 });
 
-test('sweeps: a multi-bar sweep takes its top volume and its range from every bar of the sweep; short history or no volume is null', () => {
-  const vol = (rows, v) => mk(rows).map((b, i) => ({ ...b, v: v[i] }));
+test('sweeps: a multi-bar sweep takes its range from every bar; a low sweep measures below the level; the share is never negative', () => {
   const rows = [...Array(20).fill([10.8, 10, 10.5]), [11.6, 10.6, 11.4], [11.8, 11.1, 11.5], [11.6, 10.4, 10.7]];
-  const v = [...Array(20).fill(100), 150, 300, 200];
-  const [m] = sweeps(vol(rows, v), [{ name: 'PDH', price: 11, side: 'high' }], 10);
+  const [m] = sweeps(mk(rows), [{ name: 'PDH', price: 11, side: 'high' }], 10);
   assert.strictEqual(m.bars, 3);
-  assert.strictEqual(m.relVol, 3); // 300 over the 100 mean of the 20 bars before the sweep
   assert.strictEqual(m.wickShare, 0.57); // 11.8 over 11, in a 10.4-11.8 range: 0.8 / 1.4
-  // Fewer than 20 bars before the sweep: unknown, never a guess.
-  const [short] = sweeps(vol(rows.slice(5), v.slice(5)), [{ name: 'PDH', price: 11, side: 'high' }], 10);
-  assert.strictEqual(short.relVol, null);
-  assert.ok(short.wickShare > 0);
-  // No volume on the bars (or all zero): unknown.
-  const none = mk(rows).map(b => ({ ...b, v: undefined }));
-  assert.strictEqual(sweeps(none, [{ name: 'PDH', price: 11, side: 'high' }], 10)[0].relVol, null);
-  const zeros = vol(rows, Array(23).fill(0));
-  assert.strictEqual(sweeps(zeros, [{ name: 'PDH', price: 11, side: 'high' }], 10)[0].relVol, null);
+  // The mirror: a low at 11 wicked down to 10.2 and closed back above, in a 10.2-11.4 range: 0.8 / 1.2.
+  const low = [...Array(20).fill([12, 11.2, 11.6]), [11.4, 10.2, 11.3]];
+  const [l] = sweeps(mk(low), [{ name: 'PDL', price: 11, side: 'low' }], 10);
+  assert.strictEqual(l.wickShare, 0.67);
+  assert.ok(l.wickShare >= 0 && l.wickShare <= 1);
 });
 
 test('untestedSwings: a swing with an end (its candle\'s close) is tested only by bars from that end on', () => {
