@@ -19,7 +19,9 @@ hypotheses; a missing field is `unknown`.
   inside and closed back inside within 1-3 bars, in the last 10 bars:
   `m3.sweeps[].name`, `m3.sweeps[].price`, `m3.sweeps[].key` (prior RTH
   or overnight extreme), `m3.sweeps[].back`, `m3.sweeps[].bars`,
-  `m3.sweeps[].wick` (the extreme), `m3.sweeps[].close`. Never by eye.
+  `m3.sweeps[].wick` (the extreme), `m3.sweeps[].close`, `m3.sweeps[].relVol`
+  (its top volume over the mean of the 20 bars before it), `m3.sweeps[].wickShare`
+  (the share of its range beyond the level). Never by eye.
   Read: `swept <level>`.
 - **A candle's sweep** is another fact: a completed candle that traded
   beyond its previous candle's high or low and closed back inside
@@ -39,12 +41,14 @@ hypotheses; a missing field is `unknown`.
   `unknown`. No call before the close.
 
 **Evidence** (Train, docs/research/mtf-setup-catalog.md): fading every
-sweep of the previous hour's high or low lost after costs (F1). The levels
-in `m3.sweeps` differ and were not tested; read a sweep alone as no
-reversal signal. A
-first 3m close through the IB high on volume lost (F8A); its retest (F8B)
-was positive on 38 trades, interval straddling zero; level retests (F9)
-fired too rarely to say.
+sweep of the previous hour's high or low lost after costs (F1). On 5,002
+`m3.sweeps` events in real NQ (tuned 2021-22, checked 2023-24): faded, -0.05R;
+with the trend at a key level, +0.08R then +0.13R over about 168 a half
+(interval holds zero); against it, -0.10R. `relVol` and `wickShare` did not
+separate them; a re-entry or a flip after a stop-out made 0R. Read a sweep
+alone as no reversal signal. A first 3m close through the IB high on volume
+lost (F8A); its retest (F8B) was positive on 38 trades, interval straddling
+zero; level retests (F9) fired too rarely to say.
 
 ## Examples
 
