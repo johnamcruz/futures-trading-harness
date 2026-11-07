@@ -58,10 +58,7 @@ Trend (ADX, EMAs) is separate. Fading: ADX falling, ranges shrinking,
 closes mid-range. High volume with little range: `absorption`.
 
 **Evidence**: above-average volume on a first close through the IB high
-did not save it on Train (F8A, docs/research/mtf-setup-catalog.md). Entries
-on a trigger bar under 1.0 ATR (no momentum read) lost: -0.13R in total over 22;
-1.0-1.5 ATR made +2.44R in total over 37; 4 of the 5 days entered before a trend leg
-began were under 1.0 ATR (descriptive, overlapping days).
+did not save it on Train (F8A, docs/research/mtf-setup-catalog.md).
 
 ## Examples
 
