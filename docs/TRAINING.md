@@ -1692,13 +1692,13 @@ by window, the two runs are scored:
   runs go through the same start days, the same resampled day blocks and the
   same faults. Each side is scored as the model traded: every entry at its
   own filled share of the code's ceiling, and at its own exit where it took
-  itself out (an early exit, a tightened stop). An exit the runner made (its
-  trail or time stop, read from the run's event log) is the policy's, not the
-  model's. The policy's exit re-exits every trade the model didn't take out
-  itself. So a challenger that cuts losers near
+  itself out (an early exit, a tightened stop). No policy exit re-exits a trade: the run's exits stand as they
+  were managed, the model's own and the runner's (a re-exit on a recorded
+  path ends early where the path does and scored the model below how it
+  traded). So a challenger that cuts losers near
   the max loss limit scores apart from one that holds, and one that sizes up
-  pays for it. The ceiling-sized result (every entry at the ceiling under the
-  policy's exit) is printed beside it, labelled, and never judged. Every
+  pays for it. The ceiling-sized result (every entry at the ceiling, exits as
+  recorded) is printed beside it, labelled, and never judged. Every
   difference is champion minus challenger, with a 90%
   paired interval. Two kinds of attempt come out of it:
   - **real attempts**, one per start day of the window. Their interval is a

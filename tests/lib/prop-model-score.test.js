@@ -352,6 +352,9 @@ test('policyRulebook: a policy\'s whole entry as the Monte Carlo applies it; its
   assert.strictEqual(policyRulebook({ sizing: null, multipliers: [] }).multiplier(t), 1);
   assert.strictEqual(policyRulebook(null).candidate, undefined);
   assert.strictEqual(policyRulebook({ sizing: {} }).exit, undefined);
+  // recorded: the model's own exits, the policy's exit left out (pairRuns scores the model as it exited).
+  assert.strictEqual(policyRulebook({ sizing: {}, exit: { mode: 'target' } }, { recorded: true }).exit, undefined);
+  assert.deepStrictEqual(policyRulebook({ sizing: {}, exit: { mode: 'target' } }).exit, { mode: 'target' });
 });
 
 test('risk attribution: by account state, with the decisions that cost attempts flagged; the risk record under 4 KB with its sample sizes', () => {
@@ -662,6 +665,14 @@ test('keepOne takes one micro, never a whole mini; the risk record refuses an at
   // One micro: +200 ticks x $0.50 = $100 a day, under the $3,000 target in 30 days: never a pass (one mini would pass in 3).
   assert.strictEqual(r.base.passRate, 0);
   assert.throws(() => rr({ states: {}, cells: [], role: 'test' }), /judged, never shown/);
+});
+
+test('pairRuns: the two-rulebook score keeps the model\'s own exits, never the policy\'s exit (the real exit, not the harness one)', () => {
+  // Both sides' rulebooks are made recorded (policyRulebook drops the exit, tested above); the score has no field to see it, so the wiring is pinned.
+  const src = require('fs').readFileSync(path.join(__dirname, '../../scripts/lib/prop/model-score.js'), 'utf8');
+  const body = src.slice(src.indexOf('function pairRuns('), src.indexOf('function parseFaults('));
+  assert.strictEqual((body.match(/policyRulebook\([^)]*recorded: true/g) || []).length, 2, 'side A and side B');
+  assert.ok(!/policyRulebook\((policy|pB)\)/.test(body));
 });
 
 test('pairRuns never reads a stepped-windows run (the training loop\'s trend set: stretches of days, never whole ones)', () => {
