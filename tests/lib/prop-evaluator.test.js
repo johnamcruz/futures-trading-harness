@@ -461,3 +461,66 @@ test('trade stream: one position at a time across the markets, as an attempt tra
     .map(t => [Date.parse(t.entryTime), Date.parse(t.exitTime)]).sort((a, b) => a[0] - b[0]);
   assert.ok(free.some((x, k) => k > 0 && x[0] < free[k - 1][1]), 'without it the markets overlap');
 });
+
+// ---- The chained account: every window's trades on one running balance, no session cap ----
+
+test('evaluator: the chained account carries one balance across every day and passes where each capped attempt times out', () => {
+  const list = sessionDays('2022-03-01', 30);
+  // +20 ticks a day: about $92.60 net at 10 micros, so the 5-session attempts time out, but one account passes on day 11.
+  const s = streamOf(list, () => [trade(20)]);
+  const r = scoreStream(s, opts(checkWindow({ from: list[0], to: nextDay(list[29]) })));
+  assert.strictEqual(r.passed, 0, 'every 5-session attempt times out');
+  assert.strictEqual(r.chained.status, 'passed');
+  assert.strictEqual(r.chained.endedOn, list[10]);
+  assert.strictEqual(r.chained.sessions, 11);
+  assert.ok(r.chained.profit >= 1000 && r.chained.profit < 1100, String(r.chained.profit));
+  assert.strictEqual(r.chained.peak, r.chained.profit);
+  assert.strictEqual(r.chained.taken, 11, 'it stops at the pass: later days are never traded');
+});
+
+test('evaluator: the chained account blows on the day the trailing floor is touched', () => {
+  const list = sessionDays('2022-03-01', 10);
+  const s = streamOf(list, () => [trade(-60)]);
+  const r = scoreStream(s, opts(checkWindow({ from: list[0], to: nextDay(list[9]) })));
+  assert.strictEqual(r.chained.status, 'blown');
+  assert.strictEqual(r.chained.endedOn, list[3]);
+  assert.ok(r.chained.lowest <= -1000 && r.chained.profit === r.chained.lowest, JSON.stringify(r.chained));
+  assert.strictEqual(r.chained.peak, 0);
+  assert.strictEqual(r.chained.sessions, 4, 'the blow day counts as a session, as a pass day does');
+  assert.strictEqual(r.chained.days, 10);
+});
+
+test('evaluator: a chained account that neither passes nor blows is unfinished, with its end balance, peak and lowest point', () => {
+  const list = sessionDays('2022-03-01', 4);
+  // Day 1 +20 ticks, day 2 -20 ticks, then flat-ish days.
+  const moves = [20, -20, 4, 4];
+  const s = streamOf(list, (_d, k) => [trade(moves[k])]);
+  const r = scoreStream(s, opts(checkWindow({ from: list[0], to: nextDay(list[3]) })));
+  assert.strictEqual(r.chained.status, 'unfinished');
+  assert.strictEqual(r.chained.endedOn, null);
+  assert.strictEqual(r.chained.sessions, 4);
+  // The dip below the start is mid-run (day 2: 92.60 - 107.80), so only a running low shows it.
+  assert.deepStrictEqual([r.chained.profit, r.chained.peak, r.chained.lowest], [10.4, 92.6, -14.8]);
+});
+
+test('evaluator: the chained account does not change any capped-attempt number', () => {
+  const list = sessionDays('2022-03-01', 60);
+  const s = streamOf(list, () => [trade(60)]);
+  const r = scoreStream(s, opts(checkWindow({ from: list[0], to: nextDay(list[59]) })));
+  assert.deepStrictEqual([r.attempts, r.passed, r.blown, r.timeout], [55, 55, 0, 0]);
+  assert.strictEqual(r.chained.status, 'passed');
+  assert.strictEqual(r.chained.sessions, 4);
+});
+
+test('evaluator: the chained account is not paced to the capped attempts\' horizon: clock_k is off for it, on for the others', () => {
+  const list = sessionDays('2022-03-01', 12);
+  const s = streamOf(list, () => [trade(20)]);
+  const seen = [];
+  const size = args => { seen.push(args.sizing.clock_k); return ten(); };
+  const sizing = { ...TEST_SIZING, clock_k: 2 };
+  const r = scoreStream(s, { ...opts(checkWindow({ from: list[0], to: nextDay(list[11]) }), { size, paths: 5, reps: 20 }), rulebook: { sizing } });
+  assert.strictEqual(r.chained.status, 'passed');
+  // The chain runs first (one sizing call per trade, 11 days to the pass), then the capped attempts.
+  assert.ok(seen.slice(0, r.chained.taken).every(k => k === 0), 'the chain sizes without pacing');
+  assert.ok(seen.length > r.chained.taken && seen.slice(r.chained.taken).every(k => k === 2), 'every capped attempt keeps the rulebook\'s clock_k');
+});

@@ -202,6 +202,35 @@ function daysFor(stream, pass, rulebook, { keepOwnExits = false } = {}) {
   return days;
 }
 
+/**
+ * One account carried through every day of the window in date order, with no session cap: each trade adds to or
+ * subtracts from the same balance under the account's rules, and it stops at the pass or the blow. The windows may be
+ * far apart; the gaps between them are not sessions. Returns { status (passed | blown | unfinished), endedOn (the day
+ * it passed or blew, else null), sessions, days (the days chained), profit, peak, lowest (profit, from the start), taken, skipped }.
+ */
+function chainedAccount(days, ctx) {
+  // No pacing: clock_k paces the risk to a capped attempt's horizon, which the chain does not have.
+  const account = { ...ctx.account, sessions: days.length + 1 };
+  const sizing = { ...ctx.sizing, clock_k: 0 };
+  let peak = 0;
+  let lowest = 0;
+  let last = -1;
+  const o = at.runAttempt(days, {
+    ...ctx, account, sizing,
+    onDay: (_cs, d) => { last = d; },
+    onTrade: ({ after }) => {
+      const p = after.balance - after.start;
+      peak = Math.max(peak, p);
+      lowest = Math.min(lowest, p);
+    },
+  });
+  // A pass is decided as its last day closes and a blow on a trade: either way, the last day the account opened.
+  const endedOn = o.status === 'unfinished' || last < 0 ? null : days[last].day;
+  // The day of a blow never closes, so its session is counted here, as a pass day's is.
+  const sessions = o.status === 'unfinished' ? o.sessions : last + 1;
+  return { status: o.status, endedOn, sessions, days: days.length, profit: o.profit, peak: Math.round(peak * 100) / 100, lowest: Math.round(lowest * 100) / 100, taken: o.taken, skipped: o.skipped };
+}
+
 /** Layer 2's context: the account, the rulebook's sizing and multiplier, the sizing function, each market's legs. */
 function contextFor({ account, rulebook, size, contracts, maxDailyLoss, gate }) {
   // rulebook.limits: the live entry's limits over the sizing (prop/size-translate.js: the composed cap, the broker's max).
@@ -243,6 +272,9 @@ function scoreStream(stream, opts) {
   const { sizing } = ctx;
   const branch = Array.isArray(stream.fieldBranch) && stream.fieldBranch.length > 0;
   const covers = d => !branch || attemptFlowCovered(d, S);
+
+  // A reweighted (diagnostic) stream's days are drawn, not dated: there is no order to chain.
+  const chained = pass.synthetic ? null : chainedAccount(days, ctx);
 
   // Real paths: every distinct start day leaving room for a whole attempt before the window ends.
   const startIdx = [];
@@ -344,7 +376,7 @@ function scoreStream(stream, opts) {
       blowAtEss: stats.wilson(all.attempts ? (all.blown / all.attempts) * essAll : 0, essAll, level),
       timeoutAtEss: stats.wilson(pop.attempts ? (pop.timeout / pop.attempts) * ess : 0, ess, level),
     },
-    ess, blows,
+    ess, blows, chained,
     real: { ...finish(all), ess: essAll, attempts: all.attempts, list: real.map(({ index: _i, ...o }) => o) },
     resampled: { ...shapeResampled(base), meanBlock, regimeMatched: true, overshootRedrawn: true, faults: faultCount },
     cuts: cutResults,
