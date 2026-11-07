@@ -524,3 +524,72 @@ test('evaluator: the chained account is not paced to the capped attempts\' horiz
   assert.ok(seen.slice(0, r.chained.taken).every(k => k === 0), 'the chain sizes without pacing');
   assert.ok(seen.length > r.chained.taken && seen.slice(r.chained.taken).every(k => k === 2), 'every capped attempt keeps the rulebook\'s clock_k');
 });
+
+// ---- The attempt sequence: back-to-back capped attempts, each day used once ----
+
+test('evaluator: the attempt sequence restarts a fresh account after each pass and counts passes against the days', () => {
+  const list = sessionDays('2022-03-01', 60);
+  // Every day +60 ticks: each 5-session attempt passes on its 4th day, so 60 days hold 15 passes, one day used once each.
+  const r = scoreStream(streamOf(list, () => [trade(60)]), opts(checkWindow({ from: list[0], to: nextDay(list[59]) })));
+  const q = r.sequence;
+  assert.deepStrictEqual([q.passed, q.blown, q.timeout, q.attempts.length], [15, 0, 0, 15]);
+  assert.strictEqual(q.unfinished, null);
+  assert.deepStrictEqual([q.days, q.medianDaysToPass, q.meanDaysToPass, q.passesPer100Days], [60, 4, 4, 25]);
+  assert.deepStrictEqual([q.attempts[0].endedOn, q.attempts[1].endedOn, q.attempts[14].endedOn], [list[3], list[7], list[59]]);
+  assert.ok(q.attempts.every(a => a.status === 'passed' && a.sessions === 4 && a.profit >= 1000 && a.peak === a.profit));
+});
+
+test('evaluator: a blown attempt uses its blow day and the next account starts the day after; the days left over are reported unfinished', () => {
+  const list = sessionDays('2022-03-01', 10);
+  const r = scoreStream(streamOf(list, () => [trade(-60)]), opts(checkWindow({ from: list[0], to: nextDay(list[9]) })));
+  const q = r.sequence;
+  // Each account blows on its 4th day: days 1-4 and 5-8; days 9-10 are a part of a third.
+  assert.deepStrictEqual([q.passed, q.blown, q.timeout], [0, 2, 0]);
+  assert.deepStrictEqual(q.attempts.map(a => [a.endedOn, a.sessions]), [[list[3], 4], [list[7], 4]]);
+  assert.deepStrictEqual([q.unfinished.start, q.unfinished.sessions], [list[8], 2]);
+  assert.ok(q.unfinished.profit < 0);
+  assert.strictEqual(q.passesPer100Days, 0);
+});
+
+test('evaluator: an attempt that neither passes nor blows within the session cap is a timeout, and the next starts the day after', () => {
+  const list = sessionDays('2022-03-01', 12);
+  // +20 ticks a day is about $92.60: 5 sessions are not enough for 1000.
+  const r = scoreStream(streamOf(list, () => [trade(20)]), opts(checkWindow({ from: list[0], to: nextDay(list[11]) })));
+  const q = r.sequence;
+  assert.deepStrictEqual([q.passed, q.blown, q.timeout], [0, 0, 2]);
+  assert.deepStrictEqual(q.attempts.map(a => [a.status, a.endedOn, a.sessions]), [['timeout', list[4], 5], ['timeout', list[9], 5]]);
+  assert.strictEqual(q.unfinished.sessions, 2);
+  assert.strictEqual(q.medianDaysToPass, null);
+});
+
+test('evaluator: every day belongs to one attempt only; the sequence changes no capped-attempt number and no chained one', () => {
+  const list = sessionDays('2022-03-01', 37);
+  const moves = [60, 60, -60, -60, -60, -60, 60];
+  const r = scoreStream(streamOf(list, (_d, k) => [trade(moves[k % moves.length])]), opts(checkWindow({ from: list[0], to: nextDay(list[36]) })));
+  const q = r.sequence;
+  const used = q.attempts.reduce((n, a) => n + a.sessions, 0) + (q.unfinished ? q.unfinished.sessions : 0);
+  assert.strictEqual(used, 37, 'every day in exactly one attempt (a blown one counts its blow day)');
+  assert.ok(q.attempts.length >= 5 && new Set(q.attempts.map(a => a.status)).size >= 2, JSON.stringify(q.attempts.map(a => a.status)));
+  assert.ok(r.chained && r.attempts > 0, 'the chained account and the capped attempts are still scored');
+});
+
+test('evaluator: days to pass are the mean and the (upper) median of the passes, and the days per 100 include the unfinished part', () => {
+  const list = sessionDays('2022-03-01', 9);
+  // Two attempts pass in 2 days (+120 ticks), one in 4 (+60 ticks), then one day of +10 ticks starts a part-attempt.
+  const moves = [120, 120, 120, 120, 60, 60, 60, 60, 10];
+  const r = scoreStream(streamOf(list, (_d, k) => [trade(moves[k])]), opts(checkWindow({ from: list[0], to: nextDay(list[8]) })));
+  const q = r.sequence;
+  assert.deepStrictEqual([q.passed, q.attempts.map(a => a.sessions)], [3, [2, 2, 4]]);
+  assert.deepStrictEqual([q.meanDaysToPass, q.medianDaysToPass], [2.67, 2], 'mean and median differ here');
+  assert.strictEqual(q.unfinished.sessions, 1);
+  assert.strictEqual(q.passesPer100Days, 33.33, '3 passes over all 9 days, the part-attempt\'s one included');
+});
+
+test('evaluator: each attempt of the sequence keeps its own peak and lowest, from its own start', () => {
+  const list = sessionDays('2022-03-01', 8);
+  // The first account blows in 4 days (-60 ticks); the second starts at zero again and blows too.
+  const r = scoreStream(streamOf(list, () => [trade(-60)]), opts(checkWindow({ from: list[0], to: nextDay(list[7]) })));
+  const [a, b] = r.sequence.attempts;
+  assert.ok(a.lowest <= -1000 && a.lowest === a.profit && a.peak === 0, JSON.stringify(a));
+  assert.ok(b.lowest <= -1000 && b.peak === 0, 'the second account does not inherit the first\'s low');
+});

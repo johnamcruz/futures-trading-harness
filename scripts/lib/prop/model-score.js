@@ -238,6 +238,13 @@ function chainedLine(r) {
   const end = c.status === 'unfinished' ? `unfinished after ${c.sessions} session(s)` : `${c.status} on ${c.endedOn} after ${c.sessions} session(s)`;
   return `Chained account (one balance through all ${c.days} day(s), no session cap): ${end}, $${c.profit} from the start (peak $${c.peak}, lowest $${c.lowest})`;
 }
+/** The attempt sequence's line (evaluator.js attemptSequence): back-to-back capped attempts, passes against the days. */
+function sequenceLine(r) {
+  const q = r.sequence;
+  const toPass = q.passed ? `mean ${num(q.meanDaysToPass)}, median ${num(q.medianDaysToPass)}` : 'none';
+  const left = q.unfinished ? `; ${q.unfinished.sessions} day(s) left in an attempt not finished ($${q.unfinished.profit} so far)` : '';
+  return `Back-to-back attempts (a fresh account after each end, each day used once): ${q.attempts.length} attempt(s) over ${q.days} day(s): ${q.passed} passed, ${q.blown} blown, ${q.timeout} timed out; days to pass: ${toPass}; ${num(q.passesPer100Days)} passes per 100 days${left}`;
+}
 /** The score's lines, in the owner's order. */
 function scoreLines(r) {
   const S = r.inputs.sessions;
@@ -255,6 +262,7 @@ function scoreLines(r) {
     `3. Days to pass: median ${num(r.medianDaysToPass)}, p90 ${num(r.p90DaysToPass)} (real); median ${num(rs.medianDaysToPass)}, p90 ${num(rs.p90DaysToPass)} (resampled)`,
     `4. Blow rate ${pct(r.blowRate)} (bootstrap ${iv(r.intervals.blow)}, Wilson at ${r.real.ess} independent ${iv(r.intervals.blowAtEss)}), timeout rate ${pct(r.timeoutRate)} (bootstrap ${iv(r.intervals.timeout)}, Wilson at ${r.ess} independent ${iv(r.intervals.timeoutAtEss)}) (real); resampled blow ${pct(rs.blowRate)}, timeout ${pct(rs.timeoutRate)}`,
     ...(r.chained ? [chainedLine(r)] : []),
+    ...(r.sequence ? [sequenceLine(r)] : []),
     ['test', 'final'].includes(r.window.role)
       ? `Promotion gate: ${r.promotion.passes ? 'passes' : `refused: ${r.promotion.failures.join('; ')}`}`
       : `Promotion gate: n/a (${r.window.role} is not out of sample${r.promotion.passes ? '' : `; it would refuse: ${r.promotion.failures.join('; ')}`})`,
