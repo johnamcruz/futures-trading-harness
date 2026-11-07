@@ -840,7 +840,7 @@ after costs (Train, F1, docs/research/mtf-setup-catalog.md).
 2023-01 to 2024-06; mean R per event): faded, -0.05R; with the trend at a key
 level, +0.08R then +0.13R over about 168 events a half (interval holds zero);
 against it, -0.10R.
-  `wickShare` and the volume fields did not separate them; a
+  `wickShare` and `m3.participation` did not separate them; a
 re-entry or a flip after a stop-out made 0R.
   Read a sweep alone as no reversal
 signal.
@@ -2064,7 +2064,7 @@ after costs (Train, F1, docs/research/mtf-setup-catalog.md).
 2023-01 to 2024-06; mean R per event): faded, -0.05R; with the trend at a key
 level, +0.08R then +0.13R over about 168 events a half (interval holds zero);
 against it, -0.10R.
-  `wickShare` and the volume fields did not separate them; a
+  `wickShare` and `m3.participation` did not separate them; a
 re-entry or a flip after a stop-out made 0R.
   Read a sweep alone as no reversal
 signal.

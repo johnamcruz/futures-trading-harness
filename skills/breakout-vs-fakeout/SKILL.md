@@ -45,7 +45,7 @@ after costs (Train, F1, docs/research/mtf-setup-catalog.md). Separately, on
 5,002 `m3.sweeps` events in real NQ 3m bars (tuned 2021-05 to 2022-12, checked
 2023-01 to 2024-06; mean R per event): faded, -0.05R; with the trend at a key
 level, +0.08R then +0.13R over about 168 events a half (interval holds zero);
-against it, -0.10R. `wickShare` and the volume fields did not separate them; a
+against it, -0.10R. `wickShare` and `m3.participation` did not separate them; a
 re-entry or a flip after a stop-out made 0R. Read a sweep alone as no reversal
 signal. A first 3m close through the IB high on volume
 lost (F8A); its retest (F8B) was positive on 38 trades, interval straddling
