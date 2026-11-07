@@ -640,13 +640,13 @@ function scorePaired(streamA, streamB, opts) {
   // The model's own: each entry at its own filled share of the ceiling, out where it took itself out.
   const main = pairedScore(...both(own), { ...shared, decide: own ? ownShare : null });
   main.sizedAs = sized;
-  // Beside it, labelled and never judged: every entry at the code's ceiling under the policy's exit.
+  // Beside it, labelled and never judged: every entry at the code's ceiling, exits as the rulebook gives them.
   if (own) main.ceiling = { sizedAs: 'ceiling', label: CEILING_LABEL, ...pick(pairedScore(...both(false), { ...shared, decide: null }), ['a', 'b', 'diff', 'verdict', 'blows']) };
   return main;
 }
 
 const SIZED = Object.freeze(['ceiling', 'own']);
-const CEILING_LABEL = 'every entry at the code\'s ceiling (the verdict\'s size) under the policy\'s exit, not the model\'s own size or exits: reported beside, never judged';
+const CEILING_LABEL = 'every entry at the code\'s ceiling (the verdict\'s size) not the model\'s own size, exits as the rulebook gives them (none: as the run recorded them): reported beside, never judged';
 const pick = (o, keys) => Object.fromEntries(keys.map(k => [k, o[k]]));
 
 /** One paired scoring of two runs' days (scorePaired's body); decide: each trade's share (ownShare), or null for the ceiling. */

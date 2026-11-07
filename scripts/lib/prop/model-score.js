@@ -36,7 +36,7 @@
  *       out), the ceiling-sized result beside it (`ceiling`, labelled, never judged). A curated run is refused
  *       (refuseCurated). With accountB or policyB,
  *       each side is scored under its own policy's whole entry (policyRulebook); candidateB: B's is a candidate rulebook
- *   policyRulebook(policy, { candidate })   { sizing, exit, multiplier, candidate? }: a policy's entry as the Monte Carlo applies it
+ *   policyRulebook(policy, { candidate, recorded })   { sizing, exit (none when recorded), multiplier, candidate? }: a policy's entry as the Monte Carlo applies it
  *   propScoreSection(runDir, { root, env, override, rates, barsFiles, faults })   { result, text, markdown } (never throws)
  *   parseFaults(text)   the fault rates of `--faults stop=<rate>,outage=<rate>` ({} without it: faults not measured)
  *   scoreText(result), scoreMarkdown(result), scoreSummary(result)
