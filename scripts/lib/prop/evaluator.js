@@ -231,6 +231,49 @@ function chainedAccount(days, ctx) {
   return { status: o.status, endedOn, sessions, days: days.length, profit: o.profit, peak: Math.round(peak * 100) / 100, lowest: Math.round(lowest * 100) / 100, taken: o.taken, skipped: o.skipped };
 }
 
+/**
+ * Back-to-back capped attempts through the window's days in date order: each starts on a fresh account the day after
+ * the last one ended (passed, blown on its blow day, or timed out at the account's session cap), under the account's
+ * rules as every capped attempt, so each day belongs to one attempt only and the attempts are independent. The days
+ * left at the end are a part of an attempt (unfinished), not counted. Returns { attempts: [{ start, endedOn, status,
+ * sessions, profit, peak, lowest }], passed, blown, timeout, unfinished (null, or { start, sessions, profit }), days,
+ * medianDaysToPass, meanDaysToPass, passesPer100Days (passes over all the days, the part-attempt's included) }.
+ */
+function attemptSequence(days, ctx) {
+  const attempts = [];
+  let unfinished = null;
+  let i = 0;
+  while (i < days.length) {
+    let peak = 0;
+    let lowest = 0;
+    let last = -1;
+    const o = at.runAttempt(days.slice(i), {
+      ...ctx,
+      onDay: (_cs, d) => { last = d; },
+      onTrade: ({ after }) => {
+        const p = after.balance - after.start;
+        peak = Math.max(peak, p);
+        lowest = Math.min(lowest, p);
+      },
+    });
+    if (o.status === 'unfinished') { unfinished = { start: days[i].day, sessions: days.length - i, profit: o.profit }; break; }
+    // A pass or a timeout is decided as its last day closes and a blow on a trade: the last day the account opened.
+    attempts.push({
+      start: days[i].day, endedOn: days[i + last].day, status: o.status, sessions: last + 1, profit: o.profit,
+      peak: Math.round(peak * 100) / 100, lowest: Math.round(lowest * 100) / 100,
+    });
+    i += last + 1;
+  }
+  const count = k => attempts.filter(a => a.status === k).length;
+  const toPass = attempts.filter(a => a.status === 'passed').map(a => a.sessions);
+  const passed = count('passed');
+  return {
+    attempts, passed, blown: count('blown'), timeout: count('timeout'), unfinished, days: days.length,
+    medianDaysToPass: stats.median(toPass), meanDaysToPass: toPass.length ? Math.round((toPass.reduce((a, x) => a + x, 0) / toPass.length) * 100) / 100 : null,
+    passesPer100Days: days.length ? Math.round((passed / days.length) * 10000) / 100 : null,
+  };
+}
+
 /** Layer 2's context: the account, the rulebook's sizing and multiplier, the sizing function, each market's legs. */
 function contextFor({ account, rulebook, size, contracts, maxDailyLoss, gate }) {
   // rulebook.limits: the live entry's limits over the sizing (prop/size-translate.js: the composed cap, the broker's max).
@@ -275,6 +318,7 @@ function scoreStream(stream, opts) {
 
   // A reweighted (diagnostic) stream's days are drawn, not dated: there is no order to chain.
   const chained = pass.synthetic ? null : chainedAccount(days, ctx);
+  const sequence = pass.synthetic ? null : attemptSequence(days, ctx);
 
   // Real paths: every distinct start day leaving room for a whole attempt before the window ends.
   const startIdx = [];
@@ -376,7 +420,7 @@ function scoreStream(stream, opts) {
       blowAtEss: stats.wilson(all.attempts ? (all.blown / all.attempts) * essAll : 0, essAll, level),
       timeoutAtEss: stats.wilson(pop.attempts ? (pop.timeout / pop.attempts) * ess : 0, ess, level),
     },
-    ess, blows, chained,
+    ess, blows, chained, sequence,
     real: { ...finish(all), ess: essAll, attempts: all.attempts, list: real.map(({ index: _i, ...o }) => o) },
     resampled: { ...shapeResampled(base), meanBlock, regimeMatched: true, overshootRedrawn: true, faults: faultCount },
     cuts: cutResults,

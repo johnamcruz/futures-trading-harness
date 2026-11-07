@@ -154,6 +154,7 @@ test('a curated run\'s score is "diagnostic (reweighted)" and the promotion gate
   assert.deepStrictEqual([r.score, r.diagnostic, r.promotion.passes], ['diagnostic (reweighted)', true, false]);
   assert.match(r.promotion.failures[0], /diagnostic \(reweighted\)\) is never a promotion score/);
   assert.strictEqual(r.chained, null, 'a reweighted stream\'s days are drawn, not dated: nothing to chain');
+  assert.strictEqual(r.sequence, null, 'nor to run attempts back to back');
   // The rebuilt days go through the gate's loss limits too (the env's by default, as live).
   assert.deepStrictEqual(r.inputs.gate, at.gateLimits());
   const strict = scoreStream(rw, { ...quick, pass: checkModelWindow({ run: run(), diagnostic: 'reweighted' }), gate: { maxDailyLosses: 1, maxConsecutiveLosses: 99, lossCooldownMin: 0 } });
@@ -449,6 +450,12 @@ test('scoreRun: a finished practice-validate run scored end to end, logged besid
   assert.match(text, /Chained account \(one balance through all 2 day\(s\), no session cap\): unfinished after 2 session\(s\), \$-?[\d.]+ from the start \(peak \$-?[\d.]+, lowest \$-?[\d.]+\)/);
   const passedChain = scoreText({ ...r, chained: { status: 'passed', endedOn: '2022-05-03', sessions: 40, profit: 6012.5, peak: 6012.5, lowest: -420, taken: 61, skipped: 3, days: 2 } });
   assert.match(passedChain, /Chained account \(one balance through all 2 day\(s\), no session cap\): passed on 2022-05-03 after 40 session\(s\), \$6012\.5 from the start \(peak \$6012\.5, lowest \$-420\)/);
+  // Back-to-back capped attempts through the days, a fresh account after each end: passes against the days.
+  const seq = { attempts: [{}, {}, {}, {}], passed: 2, blown: 1, timeout: 1, unfinished: { start: '2022-05-01', sessions: 6, profit: 120.5 }, days: 70, medianDaysToPass: 18, meanDaysToPass: 17.5, passesPer100Days: 2.86 };
+  assert.match(scoreText({ ...r, sequence: seq }), /Back-to-back attempts \(a fresh account after each end, each day used once\): 4 attempt\(s\) over 70 day\(s\): 2 passed, 1 blown, 1 timed out; days to pass: mean 17\.5, median 18; 2\.86 passes per 100 days; 6 day\(s\) left in an attempt not finished \(\$120\.5 so far\)/);
+  assert.match(scoreText({ ...r, sequence: { ...seq, passed: 0, medianDaysToPass: null, meanDaysToPass: null, passesPer100Days: 0, unfinished: null } }), /2 passed|0 passed, 1 blown, 1 timed out; days to pass: none; 0 passes per 100 days/);
+  assert.doesNotMatch(scoreText({ ...r, sequence: null }), /Back-to-back attempts/, 'a drawn (reweighted) run has no order to run attempts in');
+  assert.match(scoreText(r), /Back-to-back attempts/, 'a real score carries it');
   assert.doesNotMatch(scoreText({ ...r, chained: null }), /Chained account/, 'a drawn (reweighted) run has no dates to chain');
   assert.match(scoreText({ ...r, chained: { ...r.chained, status: 'blown', endedOn: '2022-02-01' } }), /Chained account .*: blown on 2022-02-01 after/);
   // Two days hold no whole attempt: the first line says the resampled numbers are not evidence, and the resampled
