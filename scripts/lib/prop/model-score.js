@@ -238,14 +238,14 @@ function chainedLine(r) {
   const end = c.status === 'unfinished' ? `unfinished after ${c.sessions} session(s)` : `${c.status} on ${c.endedOn} after ${c.sessions} session(s)`;
   return `Chained account (one balance through all ${c.days} day(s), no session cap): ${end}, $${c.profit} from the start (peak $${c.peak}, lowest $${c.lowest})`;
 }
-/** The score's lines, in the owner's order. */
 /** The attempt sequence's line (evaluator.js attemptSequence): back-to-back capped attempts, passes against the days. */
 function sequenceLine(r) {
   const q = r.sequence;
   const toPass = q.passed ? `mean ${num(q.meanDaysToPass)}, median ${num(q.medianDaysToPass)}` : 'none';
   const left = q.unfinished ? `; ${q.unfinished.sessions} day(s) left in an attempt not finished ($${q.unfinished.profit} so far)` : '';
-  return `Back-to-back attempts (a fresh account after each end, each day used once): ${q.attempts.length} attempt(s) over ${q.days} day(s): ${q.passed} passed, ${q.blown} blown, ${q.timeout} timed out; days to pass: ${toPass}; ${q.passesPer100Days} passes per 100 days${left}`;
+  return `Back-to-back attempts (a fresh account after each end, each day used once): ${q.attempts.length} attempt(s) over ${q.days} day(s): ${q.passed} passed, ${q.blown} blown, ${q.timeout} timed out; days to pass: ${toPass}; ${num(q.passesPer100Days)} passes per 100 days${left}`;
 }
+/** The score's lines, in the owner's order. */
 function scoreLines(r) {
   const S = r.inputs.sessions;
   const rs = r.resampled;

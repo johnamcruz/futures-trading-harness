@@ -453,7 +453,7 @@ test('scoreRun: a finished practice-validate run scored end to end, logged besid
   // Back-to-back capped attempts through the days, a fresh account after each end: passes against the days.
   const seq = { attempts: [{}, {}, {}, {}], passed: 2, blown: 1, timeout: 1, unfinished: { start: '2022-05-01', sessions: 6, profit: 120.5 }, days: 70, medianDaysToPass: 18, meanDaysToPass: 17.5, passesPer100Days: 2.86 };
   assert.match(scoreText({ ...r, sequence: seq }), /Back-to-back attempts \(a fresh account after each end, each day used once\): 4 attempt\(s\) over 70 day\(s\): 2 passed, 1 blown, 1 timed out; days to pass: mean 17\.5, median 18; 2\.86 passes per 100 days; 6 day\(s\) left in an attempt not finished \(\$120\.5 so far\)/);
-  assert.match(scoreText({ ...r, sequence: { ...seq, passed: 0, medianDaysToPass: null, meanDaysToPass: null, passesPer100Days: 0, unfinished: null } }), /2 passed|0 passed, 1 blown, 1 timed out; days to pass: none; 0 passes per 100 days/);
+  assert.match(scoreText({ ...r, sequence: { ...seq, passed: 0, medianDaysToPass: null, meanDaysToPass: null, passesPer100Days: 0, unfinished: null } }), /0 passed, 1 blown, 1 timed out; days to pass: none; 0 passes per 100 days/);
   assert.doesNotMatch(scoreText({ ...r, sequence: null }), /Back-to-back attempts/, 'a drawn (reweighted) run has no order to run attempts in');
   assert.match(scoreText(r), /Back-to-back attempts/, 'a real score carries it');
   assert.doesNotMatch(scoreText({ ...r, chained: null }), /Chained account/, 'a drawn (reweighted) run has no dates to chain');

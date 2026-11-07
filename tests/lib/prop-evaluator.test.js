@@ -572,3 +572,24 @@ test('evaluator: every day belongs to one attempt only; the sequence changes no 
   assert.ok(q.attempts.length >= 5 && new Set(q.attempts.map(a => a.status)).size >= 2, JSON.stringify(q.attempts.map(a => a.status)));
   assert.ok(r.chained && r.attempts > 0, 'the chained account and the capped attempts are still scored');
 });
+
+test('evaluator: days to pass are the mean and the (upper) median of the passes, and the days per 100 include the unfinished part', () => {
+  const list = sessionDays('2022-03-01', 9);
+  // Two attempts pass in 2 days (+120 ticks), one in 4 (+60 ticks), then one day of +10 ticks starts a part-attempt.
+  const moves = [120, 120, 120, 120, 60, 60, 60, 60, 10];
+  const r = scoreStream(streamOf(list, (_d, k) => [trade(moves[k])]), opts(checkWindow({ from: list[0], to: nextDay(list[8]) })));
+  const q = r.sequence;
+  assert.deepStrictEqual([q.passed, q.attempts.map(a => a.sessions)], [3, [2, 2, 4]]);
+  assert.deepStrictEqual([q.meanDaysToPass, q.medianDaysToPass], [2.67, 2], 'mean and median differ here');
+  assert.strictEqual(q.unfinished.sessions, 1);
+  assert.strictEqual(q.passesPer100Days, 33.33, '3 passes over all 9 days, the part-attempt\'s one included');
+});
+
+test('evaluator: each attempt of the sequence keeps its own peak and lowest, from its own start', () => {
+  const list = sessionDays('2022-03-01', 8);
+  // The first account blows in 4 days (-60 ticks); the second starts at zero again and blows too.
+  const r = scoreStream(streamOf(list, () => [trade(-60)]), opts(checkWindow({ from: list[0], to: nextDay(list[7]) })));
+  const [a, b] = r.sequence.attempts;
+  assert.ok(a.lowest <= -1000 && a.lowest === a.profit && a.peak === 0, JSON.stringify(a));
+  assert.ok(b.lowest <= -1000 && b.peak === 0, 'the second account does not inherit the first\'s low');
+});
