@@ -337,7 +337,7 @@ function windowOut(w) {
     resampled: { conditional: RESAMPLED, passRate: ivOf(rs.passRate), blowRate: ivOf(rs.blowRate), medianDaysToPass: ivOf(rs.medianDaysToPass) },
     champion: m.a && m.a.real, challenger: m.b && m.b.real, score: m.b && m.b.score, adherence: w.adherence, reads: w.reads, readsWhy: w.readsWhy,
     sizedAs: m.sizedAs || 'ceiling',
-    // Beside the judged result: every entry at the code's ceiling under the policy exit, labelled, never judged.
+    // Beside the judged result: every entry at the code's ceiling, exits as recorded, labelled, never judged.
     ...(m.ceiling ? { ceiling: { label: m.ceiling.label, blows: m.ceiling.blows, verdict: m.ceiling.verdict, passRate: ivOf(m.ceiling.diff.real.passRate), blowRate: ivOf(m.ceiling.diff.real.blowRate) } } : {}),
   };
 }

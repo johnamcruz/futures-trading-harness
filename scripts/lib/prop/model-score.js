@@ -36,7 +36,7 @@
  *       out), the ceiling-sized result beside it (`ceiling`, labelled, never judged). A curated run is refused
  *       (refuseCurated). With accountB or policyB,
  *       each side is scored under its own policy's whole entry (policyRulebook); candidateB: B's is a candidate rulebook
- *   policyRulebook(policy, { candidate })   { sizing, exit, multiplier, candidate? }: a policy's entry as the Monte Carlo applies it
+ *   policyRulebook(policy, { candidate, recorded })   { sizing, exit (none when recorded), multiplier, candidate? }: a policy's entry as the Monte Carlo applies it
  *   propScoreSection(runDir, { root, env, override, rates, barsFiles, faults })   { result, text, markdown } (never throws)
  *   parseFaults(text)   the fault rates of `--faults stop=<rate>,outage=<rate>` ({} without it: faults not measured)
  *   scoreText(result), scoreMarkdown(result), scoreSummary(result)
@@ -155,8 +155,9 @@ function scoreRun(runDir, { root = null, account, policy = null, limits = null, 
  * A policy's whole rulebook entry as the Monte Carlo applies it: its sizing, its exit (each trade re-exited from its
  * recorded path, attempts.js exitAs) and its verdict multipliers on each trade's recorded facts (trading/rulebook.js
  * ceiling, as the live verdict; a missing fact skips the trade: fails closed). candidate: a rulebook not the account's.
+ * recorded: no exit, so each trade keeps the exit the model managed (pairRuns scores the model as it traded).
  */
-function policyRulebook(policy, { candidate = false } = {}) {
+function policyRulebook(policy, { candidate = false, recorded = false } = {}) {
   const items = policy && Array.isArray(policy.multipliers) ? policy.multipliers : [];
   const multiplier = t => {
     if (!items.length) return 1;
@@ -164,7 +165,7 @@ function policyRulebook(policy, { candidate = false } = {}) {
     const facts = Object.fromEntries(Object.entries(t.facts || {}).filter(([, v]) => v !== null && v !== undefined).map(([k, v]) => [k, { value: v, at: t0 }]));
     return ceiling(items, facts, new Date(t0)).multiplier;
   };
-  return { sizing: policy ? policy.sizing || null : null, ...(policy && policy.exit ? { exit: policy.exit } : {}), multiplier, ...(candidate ? { candidate: true } : {}) };
+  return { sizing: policy ? policy.sizing || null : null, ...(policy && policy.exit && !recorded ? { exit: policy.exit } : {}), multiplier, ...(candidate ? { candidate: true } : {}) };
 }
 
 /**
@@ -197,11 +198,11 @@ function pairRuns(runDirA, runDirB, { root = null, rootB = null, account, policy
   const a = streamAndPass(runDirA, { root, barsFiles, faults, env, now });
   // rootB: the tree run B ran on, when it is another (the training loop's challenger); its records are read with its documents.
   const b = streamAndPass(runDirB, { root: rootB || root, barsFiles, faults, env, now, candidateRulebook: two && candidateB });
-  const rulebook = two ? policyRulebook(policy) : { sizing: policy ? policy.sizing || null : null };
+  const rulebook = two ? policyRulebook(policy, { recorded: true }) : { sizing: policy ? policy.sizing || null : null };
   const pB = policyB === undefined ? policy : policyB;
   const res = scorePaired(a.stream, b.stream, {
     passA: a.pass, passB: b.pass, account, rulebook, contracts: (policy && policy.contracts) || 'auto', gate: gateLimits(env), seed, paths, reps, faults, sized: 'own',
-    ...(two ? { accountB: accountB || account, rulebookB: policyRulebook(pB, { candidate: candidateB }), contractsB: (pB && pB.contracts) || 'auto' } : {}),
+    ...(two ? { accountB: accountB || account, rulebookB: policyRulebook(pB, { candidate: candidateB, recorded: true }), contractsB: (pB && pB.contracts) || 'auto' } : {}),
   });
   return { ...res, runs: { a: a.run.runId, b: b.run.runId }, account: account.name };
 }
