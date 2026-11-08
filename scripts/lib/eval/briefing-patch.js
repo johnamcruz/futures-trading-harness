@@ -234,7 +234,7 @@ function loadFrameState(req = require) {
   return m;
 }
 
-// ---- the blocks' seals (cycle-data.js: "--- end of <tool> <args> (sha256 <hex of the block's text>) ---")
+// ---- the blocks' seals (the runner's cycle data code writes: "--- end of <tool> <args> (sha256 <hex of the block's text>) ---")
 
 const FOOTER = /^--- end of (\S+) .*\(sha256 ([0-9a-f]+)\) ---$/gm;
 const sha256 = text => crypto.createHash('sha256').update(String(text)).digest('hex');
