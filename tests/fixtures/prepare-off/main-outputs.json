@@ -1,5 +1,5 @@
 {
- "commit": "e5e353de9",
+ "commit": "5c31d216d",
  "days": {
   "no-fill": {
    "passes": [
@@ -1675,7 +1675,7 @@
     ],
     [
      "report-cache.json",
-     "sha256:5513ab2e0a031dc37dc67201924415d1583e9535f2d330bd8660ea1b45bfb48a (341 chars)"
+     "{\"symbols\":[[\"MNQ\",\"MNQ\"]],\"scope\":\"<scope>\",\"analysts\":{},\"phase1\":{\"text\":\"Phase 1: flat, budget 1 trade, no daily stop\",\"factsKey\":\"0d439e59133030a24f5303f4197b65c99e9e3e547c7bd78ef0ae1acf6d7f5459\",\"body\":\"<body:risk-manager>\",\"at\":\"2026-04-28T04:09:02.000Z\"},\"at\":\"2026-04-28T04:15:02.000Z\"}\n"
     ],
     [
      "runner-state.json",
@@ -4586,7 +4586,7 @@
     ],
     [
      "report-cache.json",
-     "sha256:23e3979fc5aac18dce4fbf7852cb1d7a5b1407b8dcdee66344cf308fc6ffe0ac (341 chars)"
+     "{\"symbols\":[[\"MNQ\",\"MNQ\"]],\"scope\":\"<scope>\",\"analysts\":{},\"phase1\":{\"text\":\"Phase 1: flat, budget 1 trade, no daily stop\",\"factsKey\":\"0d439e59133030a24f5303f4197b65c99e9e3e547c7bd78ef0ae1acf6d7f5459\",\"body\":\"<body:risk-manager>\",\"at\":\"2026-04-28T04:09:02.000Z\"},\"at\":\"2026-04-28T04:09:02.000Z\"}\n"
     ],
     [
      "runner-state.json",
