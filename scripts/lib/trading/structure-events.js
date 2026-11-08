@@ -96,11 +96,24 @@ function sweeps(bars, levels, n = AN.structure.sweepBars) {
       if (i === undefined) continue;
       const span = bars.slice(i, j + 1);
       const wick = side === 'high' ? Math.max(...span.map(b => b.h)) : Math.min(...span.map(b => b.l));
-      out.push({ name, price, side, key, at: bars[i].t, back: bars[j].t, bars: j - i + 1, wick, close: bars[j].c });
+      out.push({ name, price, side, key, at: bars[i].t, back: bars[j].t, bars: j - i + 1, wick, close: bars[j].c, wickShare: wickShare(span, price, side, wick) });
       break;
     }
   }
   return out.sort((a, b) => (b.key - a.key) || Date.parse(b.back) - Date.parse(a.back));
+}
+
+/**
+ * How deep a sweep went, as one fact (a read, never a veto): `wickShare`, the part of the sweep bars' range beyond the level
+ * (null when the range is unknown). Measured on real bars it did not separate good sweeps from bad (breakout-vs-fakeout), so
+ * it is shown, not used; nothing here decides. Volume is not a sweep field: `m3.participation` owns it, and a mean taken over
+ * the bars before the sweep would mix in the premarket's thin bars at the open.
+ */
+const round2 = x => Math.round(100 * x) / 100;
+function wickShare(span, price, side, wick) {
+  const range = Math.max(...span.map(b => b.h)) - Math.min(...span.map(b => b.l));
+  const beyond = side === 'high' ? wick - price : price - wick;
+  return range > 0 ? round2(beyond / range) : null;
 }
 
 /**

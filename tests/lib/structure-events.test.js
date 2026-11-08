@@ -77,6 +77,43 @@ test('sweeps: a close beyond the level and a close back inside within the next t
   assert.deepStrictEqual(order.map(o => o.name), ['PDH', 'minor']);
 });
 
+// A sweep's wick share, on real bars (tests/fixtures/sweeps/real-sweeps-3m.json: 28 real 3m bars around each of two
+// stop-run sweeps of a bounce high, as the replay showed them). The expected values are worked out here from the raw bars.
+const REAL = require('../fixtures/sweeps/real-sweeps-3m.json');
+const realSweep = day => {
+  const { level, sweepBar, levelName } = REAL.sweptHighs[day];
+  const all = REAL.days[day];
+  const bars = all.slice(0, all.findIndex(b => b.t === sweepBar) + 1);
+  const [x] = sweeps(bars, [{ name: levelName, price: level, side: 'high' }], 10);
+  return { x, bars, level };
+};
+
+test('sweeps: wickShare is the part of the sweep bars\' range beyond the level (real bars)', () => {
+  for (const day of ['2022-03-07', '2022-04-11']) {
+    const { x, bars, level } = realSweep(day);
+    const i = bars.length - 1; // a one-bar sweep: the last bar wicked above the level and closed back below
+    assert.strictEqual(x.bars, 1);
+    // Two decimals: the briefing is read by a model, 0.4285714285714286 is noise.
+    assert.strictEqual(x.wickShare, Math.round(100 * (bars[i].h - level) / (bars[i].h - bars[i].l)) / 100, `${day} wickShare ${x.wickShare}`);
+    assert.strictEqual(x.relVol, undefined, 'volume is the participation fields\' job: a sweep carries no volume ratio');
+  }
+  // The two real events, pinned: a deep wick (11:18 ET) and a shallow one (10:00 ET).
+  assert.strictEqual(realSweep('2022-03-07').x.wickShare, 0.43);
+  assert.strictEqual(realSweep('2022-04-11').x.wickShare, 0.23);
+});
+
+test('sweeps: a multi-bar sweep takes its range from every bar; a low sweep measures below the level; the share is never negative', () => {
+  const rows = [...Array(20).fill([10.8, 10, 10.5]), [11.6, 10.6, 11.4], [11.8, 11.1, 11.5], [11.6, 10.4, 10.7]];
+  const [m] = sweeps(mk(rows), [{ name: 'PDH', price: 11, side: 'high' }], 10);
+  assert.strictEqual(m.bars, 3);
+  assert.strictEqual(m.wickShare, 0.57); // 11.8 over 11, in a 10.4-11.8 range: 0.8 / 1.4
+  // The mirror: a low at 11 wicked down to 10.2 and closed back above, in a 10.2-11.4 range: 0.8 / 1.2.
+  const low = [...Array(20).fill([12, 11.2, 11.6]), [11.4, 10.2, 11.3]];
+  const [l] = sweeps(mk(low), [{ name: 'PDL', price: 11, side: 'low' }], 10);
+  assert.strictEqual(l.wickShare, 0.67);
+  assert.ok(l.wickShare >= 0 && l.wickShare <= 1);
+});
+
 test('untestedSwings: a swing with an end (its candle\'s close) is tested only by bars from that end on', () => {
   // A 1h swing high 14 made by the third 3m bar of its hour: the bars inside the hour don't test it.
   const hour = Date.UTC(2026, 5, 1, 14, 0);
