@@ -73,7 +73,8 @@ const PINS = {
     'a level traded through from inside and closed back inside within 1-3 bars, in the last 10 bars',
     'Never by eye.',
     'No call before the close.',
-    'sweep of the previous hour\'s high or low lost after costs (F1). The levels in `m3.sweeps` differ and were not tested',
+    'sweep of the previous hour\'s high or low lost after costs (Train, F1, docs/research/mtf-setup-catalog.md). Separately, on 5,002',
+    'Read a sweep alone as no reversal signal.',
   ],
   'levels-and-reactions': [
     'No reaction is not a rejection.',
