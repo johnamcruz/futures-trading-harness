@@ -9,7 +9,10 @@
  *                  missed_fill  the runner's entry: price had moved past the plan's entry (late-entry.js missed or
  *                               chased entry): no late entry
  *                  invalidated  the runner's entry: price beyond the plan's stop before the order went
- *                  unfilled     the order went and never filled (it expired, or was cancelled, unfilled)
+ *                  unfilled     the order went and never filled (it expired, or was cancelled, unfilled); this
+ *                               includes the head trader cancelling its own working entry in a later cycle, which
+ *                               the entry record (written when the order went) can't tell apart: read that cycle
+ *                               for it
  *                  vetoed       risk-manager phase 2 vetoed it (or its approval read as a veto): `vetoBasis` says on what
  *                  blocked      the order gate refused the entry order
  *                  runner_skip  the runner placed nothing for its own reason (the record expired first, no price,

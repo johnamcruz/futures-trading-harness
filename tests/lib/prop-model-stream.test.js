@@ -159,6 +159,15 @@ test('day-stop: a pass after a loss that day (gross, as the gate counts), only w
   // A scratch: out at its entry price. Gross 0 is no loss, as attempts.js and the live gate count one.
   assert.strictEqual(kind([ent('s', '2023-03-15T14:30:00.000Z', '2023-03-15T14:36:00.000Z', 100), pass]), 'pass', 'a scratch is no loss');
   assert.strictEqual(kind([ent('t', '2023-03-15T14:30:00.000Z', '2023-03-15T14:36:00.000Z', 99.75), pass]), 'day-stop', 'one tick lost is a loss');
+  // A pass the model didn't make (the experience log's passClass: phase 2 vetoed it, the runner missed the fill) is no
+  // action of the model's: after a loss it is never its day-stop, and it is neither listed nor counted as its pass.
+  const day = decisions => modelStream({ decisions, dayKeys: ['2023-03-15'], tfMs: M3 }).days[0];
+  for (const passClass of ['vetoed', 'missed_fill', 'unfilled', 'invalidated', 'runner_skip']) {
+    const d = day([loss, { ...pass, passClass, vetoBasis: passClass === 'vetoed' ? 'lesson' : undefined }]);
+    assert.deepStrictEqual([d.passed.length, d.passes], [0, 0], passClass);
+  }
+  assert.strictEqual(day([loss, { ...pass, passClass: 'declined' }]).passed[0].actions[0], 'day-stop', 'the model\'s own pass, as before');
+  assert.strictEqual(day([loss, { ...pass, passClass: 'declined' }]).passes, 1);
 });
 
 test('early-exit hold: the real fill\'s price, the bracket placed from it (a mid-bar fill at 100.00, the bar opening at 99.50)', () => {
@@ -210,12 +219,13 @@ test('bracketExit: on the fill bar only the worse is taken (the stop at its fill
   const t0 = Date.parse('2023-03-15T14:00:00.000Z');
   const args = { tfMs: M3, side: 'long', fill: 100, risk: 2, targetDist: 4, tick: 0.25 };
   // The fill bar opened at 97.00 (before the fill) and dipped to 97.90: stopped at 97.75, not at the open.
-  assert.deepStrictEqual(bracketExit({ ...args, bars: [{ ms: t0, o: 97, h: 100.5, l: 97.9, c: 100 }], i: 0, partial: true }), { exitPrice: 97.75, exitMs: t0 + M3, reason: 'stop', maeR: -1.125, mfeR: 0 });
+  assert.deepStrictEqual(bracketExit({ ...args, bars: [{ ms: t0, o: 97, h: 100.5, l: 97.9, c: 100 }], i: 0, partial: true }), { exitPrice: 97.75, exitMs: t0 + M3, reason: 'stop', maeR: null, mfeR: null });
   // Its high reached the 104 target: not credited on the fill bar; the next bar's is. MAE and MFE as a real trade's: the
-  // fill bar (its order unknown) and a bar the stop or target exits inside are left out; the exit price counts.
+  // fill bar (its order unknown) and a bar the stop or target exits inside are left out, so with no bar held whole
+  // they are unknown (null), never the exit alone.
   const up = [{ ms: t0, o: 99.5, h: 104.5, l: 99, c: 101 }, { ms: t0 + M3, o: 101, h: 104.25, l: 100.5, c: 104 }];
-  assert.deepStrictEqual(bracketExit({ ...args, bars: up, i: 0, partial: true }), { exitPrice: 104, exitMs: t0 + 2 * M3, reason: 'target', maeR: 0, mfeR: 2 });
-  assert.deepStrictEqual(bracketExit({ ...args, bars: up, i: 0, partial: false }), { exitPrice: 104, exitMs: t0 + M3, reason: 'target', maeR: 0, mfeR: 2 }, 'a fill at the bar\'s open: the whole bar follows it');
+  assert.deepStrictEqual(bracketExit({ ...args, bars: up, i: 0, partial: true }), { exitPrice: 104, exitMs: t0 + 2 * M3, reason: 'target', maeR: null, mfeR: null });
+  assert.deepStrictEqual(bracketExit({ ...args, bars: up, i: 0, partial: false }), { exitPrice: 104, exitMs: t0 + M3, reason: 'target', maeR: null, mfeR: null }, 'a fill at the bar\'s open: the whole bar follows it');
   assert.strictEqual(bracketExit({ ...args, bars: [{ ms: t0, o: 100, h: 101, l: 99, c: 100 }], i: 0, partial: true }), null, 'the bars end first');
 });
 

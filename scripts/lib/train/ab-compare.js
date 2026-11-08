@@ -32,7 +32,7 @@
  *   r-trade      R per trade, both runs entered                               interval verdict
  *   reads        correct-read rate (reads verified true), decisions both read  judge (McNemar)
  *   process      the scorecard's categories (scorecard.jsonl, by root and time) judge (McNemar), each category apart
- *   entries      entries taken against passed                                  descriptive
+ *   entries      entries taken against passed (taken: entered, or a pass the model didn't make: pass-class.js)  descriptive
  *   skills       per skill used, correct and missed (learning/skill-usage.js, when present)   descriptive
  *   mc           stage 2: the 30-day Monte Carlo paired difference (prop/model-score.js pairRuns, when present)
  * An interval verdict needs DECISION_RULE.minPairs pairs and an interval clear of 0. The result: "B worse" when any
@@ -50,6 +50,7 @@
 const crypto = require('crypto');
 const fs = require('fs');
 const path = require('path');
+const { ownPass } = require('../learning/pass-class');
 const { setupHash, setupBase, setupFixed, lookArm, runSettings, configHash } = require('../replay/config');
 const { treeDigest, HARNESS_DIRS, CODE_DIRS } = require('../session/record');
 const { CATEGORIES } = require('../replay/scorecard');
@@ -265,9 +266,11 @@ function decisionsByKey(decisions) {
   for (const d of decisions || []) {
     if (!d || !d.root || !d.bar) continue;
     const k = `${d.root}|${d.bar}`;
-    const x = m.get(k) || { key: k, composed: false, entered: false, legs: [], reads: null };
+    const x = m.get(k) || { key: k, composed: false, entered: false, took: false, legs: [], reads: null };
     if (d.decision && d.decision !== 'none') x.composed = true;
     if (d.decision === 'entered') { x.entered = true; x.legs.push(d.outcome && isR(d.outcome.R) ? d.outcome.R : null); }
+    // The model's choice to take: entered, or a pass it didn't make (learning/pass-class.js: a veto, a missed fill).
+    if (d.decision === 'entered' || (d.decision === 'passed' && !ownPass(d))) x.took = true;
     if (!x.reads && Array.isArray(d.reads) && d.reads.length) x.reads = d.reads;
     m.set(k, x);
   }
@@ -313,7 +316,7 @@ function readsRow(ma, mb) {
 
 function entriesRow(ma, mb) {
   const keys = [...ma.keys()].filter(k => ma.get(k).composed && mb.has(k) && mb.get(k).composed);
-  const e = (m, k) => (m.get(k).entered ? 1 : 0);
+  const e = (m, k) => (m.get(k).took ? 1 : 0);
   const more = keys.filter(k => e(mb, k) > e(ma, k)).length;
   const fewer = keys.filter(k => e(mb, k) < e(ma, k)).length;
   const iv = pairedInterval(keys.map(k => e(mb, k) - e(ma, k)), 'entries');

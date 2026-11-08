@@ -40,6 +40,23 @@ test('vetoBasis: a veto naming a hard step is hard-step, even beside a lesson; a
   for (const t of LESSON) assert.strictEqual(vetoBasis(t), 'lesson', t);
 });
 
+test('vetoBasis: a hard-step word in passing (budget, cap, floor, room, size) never makes a lesson veto hard-step; as the failed check it does', () => {
+  for (const t of [
+    'VERDICT: VETO - restriction: prop_portfolio entries stay restricted (lesson 2024-05-24); the room, the budget and the cap are fine otherwise; stand aside',
+    'VERDICT: VETO - phase-1 stand-down: the lesson bars entries; size 3 is above the floor, but no lift is journaled',
+    'VERDICT: VETO - restricted size by lesson: the 2024-05-24 lesson keeps prop_portfolio at size 1; stand aside',
+  ]) assert.strictEqual(vetoBasis(t), 'lesson', t);
+  for (const t of ['VERDICT: VETO - budget: 3 MNQ at $221 is over it', 'VERDICT: VETO - floor: 2 MNQ under it', 'VERDICT: VETO - size: no size fits at this stop']) assert.strictEqual(vetoBasis(t), 'hard-step', t);
+});
+
+test('vetoBasis on a replay run\'s 36 phase-2 vetoes (their result lines): 27 on a lesson alone, 6 on a hard step, 3 approvals misread', () => {
+  const { cycleClass } = require('../../scripts/lib/learning/pass-class');
+  const lines = require('../fixtures/phase2-vetoes-replay.json');
+  const count = {};
+  for (const result of lines) { const b = cycleClass({ result }).vetoBasis; count[b] = (count[b] || 0) + 1; }
+  assert.deepStrictEqual(count, { lesson: 27, 'hard-step': 6, misread: 3 });
+});
+
 test('vetoBasis: a veto naming neither is unstated; nothing to read is null; the bases are the module\'s', () => {
   assert.strictEqual(vetoBasis('risk-manager vetoed the trade_lifecycle long 1 MNQ: Phase 2 verdict for MNQ long, 3m bar 14:00Z. I\'m standing aside.'), 'unstated');
   assert.strictEqual(vetoBasis('PLAN 5 Confluence: the compose record for trade_lifecycle short is OK. Its reads hold.'), 'unstated');

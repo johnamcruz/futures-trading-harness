@@ -260,4 +260,9 @@ test('series: one symbol and timeframe across every day file, oldest first, each
   assert.strictEqual(A.archivedBars(dir).series('MNQ', 3).length, 1);
   assert.deepStrictEqual(A.archivedBars(dir).series('NQ', 1), [], 'no such symbol: none');
   assert.deepStrictEqual(A.archivedBars(path.join(dir, 'none')).series('MNQ', 1), [], 'no dir: none');
+  // A later day's file holding earlier bars (archived out of time order): the series is in time order all the same.
+  const back = tmpDir();
+  A.appendBars(back, '2026-10-07', { symbol: 'MNQ', contractId: 'C1', minutes: 1, bars: range(5, 8).map(bar) });
+  A.appendBars(back, '2026-10-08', { symbol: 'MNQ', contractId: 'C2', minutes: 1, bars: range(0, 3).map(bar) });
+  assert.deepStrictEqual(A.archivedBars(back).series('MNQ', 1).map(b => b.ms), [0, 1, 2, 5, 6, 7].map(k => T0 + k * 60000));
 });
