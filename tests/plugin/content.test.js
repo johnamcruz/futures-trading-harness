@@ -461,6 +461,26 @@ test('the priority order is written once, in strategy-library, and every role th
   assert.match(oc.agent['risk-manager'].prompt, /### The priority order: the rule for every setup[^]*?7\. \*\*Secondary context\*\*/);
 });
 
+test('a phase-1 stand-down rests only on the account\'s facts and the stops on them, never on a lesson (a replay vetoed 42 times on one)', () => {
+  // A replay's last 14 sessions made no entry: phase 1 read a journal lesson as a stand-down, and phase 2 vetoed on it
+  // as a hard step. The priority order's step 1 says what a stand-down may rest on; every real hard stop stays.
+  const flat = t => t.replace(/\s+/g, ' ');
+  const sl = flat(read('skills/strategy-library/SKILL.md'));
+  const STEP1 = '**Hard stops → no trade**: the candidate is `blocked` (a news blackout or the news unknown, a no-entry window), a phase-1 stand-down, or a gate refusal.';
+  const BASIS = 'A phase-1 stand-down rests only on the account\'s facts and the stops on them: not tradable, the daily loss limit or soft stop, a loss streak\'s cooldown, the floor or cushion, the attempt\'s entry block (`combine_status`), the pacing rules (`prop-pacing-judgment`), a news blackout or no-entry window, a gate refusal. Never on a lesson, a review\'s notes or earlier reasoning: a lesson is advice, a read in the count (`confluence-counting`), never the reason to pass.';
+  assert.ok(sl.includes(`1. ${STEP1} ${BASIS}`), 'step 1, then what a stand-down rests on, in the same step');
+  // The documents it agrees with: the risk manager's phase 1 lists no lesson as a stand-down and counts lessons; a
+  // lesson is never a rule or a block.
+  const rm = flat(read('agents/risk-manager.md'));
+  assert.ok(rm.includes('Stand-down conditions: <any that apply now, never a lesson>'));
+  assert.ok(rm.includes('8. Analysts\' reads against, lessons: in the count.'));
+  assert.ok(rm.includes('VETO only on a decisive 1h CHoCH against or a failed hard step.'));
+  assert.ok(flat(read('rules/trading/journaling.md')).includes('Never a rule or a block (only the gate and rulebook block): shown with its record. Defying one is no mistake.'));
+  // Every role that loads strategy-library has it; opencode's risk manager carries it in its prompt.
+  const oc = JSON.parse(read('workspace/opencode.json'));
+  assert.ok(flat(oc.agent['risk-manager'].prompt).includes(BASIS), 'opencode risk-manager prompt');
+});
+
 test('fact-checked reasons: the risk manager and the head trader check every reason with reason_check before they decide, in every adapter', () => {
   // Line breaks fall differently in each document: compare with the whitespace collapsed.
   const flat = text => text.replace(/\s+/g, ' ');
