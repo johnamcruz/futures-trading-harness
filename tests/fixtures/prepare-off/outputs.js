@@ -138,9 +138,12 @@ async function runDay(day, { extra = {}, runPrepare = null, headRun = null, befo
     });
   }
   // The cycle records (less their wall-clock fields), the summary lines, the gate log, every state file, the history.
+  // (`stateRead`, the branch's own measurement field: the head trader's STATE read, trading/state-read.js, recorded on
+  // every trade cycle's record and line after main's outputs were taken; left out of both, never decided on.)
+  const BRANCH_FIELDS = new Set(['stateRead']);
   const dir = path.join(w.home, 'logs', 'cycles');
-  const records = readTree(dir).map(([rel, p]) => { const { argv, ...rec } = JSON.parse(fs.readFileSync(p, 'utf8')); return [rel, { ...Object.fromEntries(Object.entries(rec).filter(([k]) => !WALL.has(k))), argv }]; });
-  const lines = fs.readdirSync(path.join(w.home, 'logs')).filter(f => /^cycles-.*\.jsonl$/.test(f)).sort().flatMap(f => fs.readFileSync(path.join(w.home, 'logs', f), 'utf8').trim().split('\n').map(l => { const { at: _a, durationMs: _d, timing: _t, promptChars: _p, ...x } = JSON.parse(l); return x; }));
+  const records = readTree(dir).map(([rel, p]) => { const { argv, ...rec } = JSON.parse(fs.readFileSync(p, 'utf8')); return [rel, { ...Object.fromEntries(Object.entries(rec).filter(([k]) => !WALL.has(k) && !BRANCH_FIELDS.has(k))), argv }]; });
+  const lines = fs.readdirSync(path.join(w.home, 'logs')).filter(f => /^cycles-.*\.jsonl$/.test(f)).sort().flatMap(f => fs.readFileSync(path.join(w.home, 'logs', f), 'utf8').trim().split('\n').map(l => { const { at: _a, durationMs: _d, timing: _t, promptChars: _p, stateRead: _s, ...x } = JSON.parse(l); return x; }));
   const state = stateOf(w, own);
   const runnerState = JSON.parse(fs.readFileSync(w.stateFile, 'utf8'));
   const { validateConfig, headDeliveryOf } = require(path.join(ROOT, 'scripts', 'lib', 'autotrader'));

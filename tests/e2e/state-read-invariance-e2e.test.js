@@ -26,7 +26,7 @@ const flip = { up: 'down', down: 'up', range: 'up' };
 function stateFrom(w, wrong = false) {
   const b = readBriefing(w.home, 'MNQ').sections;
   const f = t => (wrong ? flip[t] || 'up' : t || 'unknown');
-  return `STATE: 4h ${f(b.h1.data.h4.trend)} | 1h ${f(b.h1.data.h1.trend)} | 15m ${f(b.m15.data.frame.trend)} | day unknown | frames ${wrong ? 'agree' : 'disagree'}`;
+  return `STATE: 4h ${f(b.h1.data.h4.trend)} | 1h ${f(b.h1.data.h1.trend)} | 15m ${f(b.m15.data.frame.trend)} | frames ${wrong ? 'agree' : 'disagree'}`;
 }
 
 const VARIANTS = {
@@ -120,5 +120,9 @@ test('state read invariance: no module that decides reaches state-read.js, throu
     return out.sort();
   };
   assert.deepStrictEqual(naming(/require\([^)]*state-read/), ['scripts/lib/cycle-log.js', 'scripts/lib/learning/read-accuracy.js']);
+  // And no module but the recorder and the module itself names a way to the read: the head's own text, the record's
+  // builder, the parser or the scorer (a decider calling require('../cycle-log').headOwnText would be one).
+  assert.deepStrictEqual(naming(/\b(?:headOwnText|cycleStateRecord|cycleStateRead|parseStateLine|parseState|scoreState)\b/), ['scripts/lib/cycle-log.js', 'scripts/lib/trading/state-read.js']);
+  assert.ok(!('cycleStateRecord' in require('../../scripts/lib/cycle-log')), 'the record\'s builder is the cycle log\'s own');
   assert.deepStrictEqual(naming(/\bstateRead\b/), ['scripts/lib/cycle-log.js', 'scripts/lib/learning/experience-log.js', 'scripts/lib/learning/read-accuracy.js', 'scripts/lib/learning/run-experience.js', 'scripts/lib/replay/store.js']);
 });

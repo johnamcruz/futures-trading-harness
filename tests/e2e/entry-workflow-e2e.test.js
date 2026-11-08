@@ -1043,7 +1043,7 @@ test('entry workflow: the head trader\'s STATE line (trading/state-read.js) is a
   const stateOf = (w, wrong) => {
     const b = require('../../scripts/lib/trading/briefing').readBriefing(w.home, 'MNQ').sections;
     const f = t => (wrong ? ({ up: 'down', down: 'up' }[t] || 'up') : t || 'unknown');
-    return `STATE: 4h ${f(b.h1.data.h4.trend)} | 1h ${f(b.h1.data.h1.trend)} | 15m ${f(b.m15.data.frame.trend)} | day unknown | frames ${wrong ? 'agree' : 'disagree'}`;
+    return `STATE: 4h ${f(b.h1.data.h4.trend)} | 1h ${f(b.h1.data.h1.trend)} | 15m ${f(b.m15.data.frame.trend)} | frames ${wrong ? 'agree' : 'disagree'}`;
   };
   const variants = {
     absent: () => PLANNED,

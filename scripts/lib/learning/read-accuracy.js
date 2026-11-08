@@ -9,8 +9,9 @@
  * Per field: stated (cycles whose read states it), match, mismatch, unknown (and why: state-read.js), n = match +
  * mismatch, days (trading days with n), agreement = match / n, and its interval from resampling whole trading days (a
  * day's cycles count together: they share one market), at the experience index's level, seed and repetitions
- * (config/training.json experienceIndex); fewer than two days: none. The confusion table counts each read word
- * against the code's fact (the day field: the briefing's day type as written; none: the briefing had none).
+ * (config/training.json experienceIndex); under its minimum n or days: `tooFew`, no interval. The confusion table
+ * counts each read word against the code's fact (none: it had none). `frames` is scored against the labels and
+ * `frames-own` against the read's own frame words (its internal consistency), apart.
  *
  *   runCycles(runDir)        a replay run's trade cycles: [{ day, at, stateRead }] (its store lines' last trade cycle)
  *   homeCycles(home)         a run home's trade cycles from its cycle logs (logs/cycles-<day>.jsonl)
@@ -52,9 +53,8 @@ function homeCycles(home) {
   }).filter(x => x && x.action === 'trade').map(x => ({ day: LOG.exec(f)[1], at: x.cycleAt || x.at, result: typeof x.result === 'string' ? x.result : null, stateRead: x.stateRead && typeof x.stateRead === 'object' ? x.stateRead : null })));
 }
 
-/** sum(num) / sum(den) over whole days resampled: { lo, hi } at the level, or nulls with fewer than two days. */
+/** sum(num) / sum(den) over whole days resampled: { lo, hi } at the level (called with at least the minimum days: tally). */
 function dayInterval(days, key) {
-  if (days.length <= 1) return { lo: null, hi: null };
   const rand = streamFor(EI.seed, `read-accuracy|${key}`);
   const ratios = [];
   for (let r = 0; r < EI.reps; r += 1) {
@@ -91,7 +91,7 @@ function tally(cycles) {
       a.stated += 1;
       a[f.result] += 1;
       if (f.result === 'unknown') a.unknownWhy[f.why || 'unknown'] = (a.unknownWhy[f.why || 'unknown'] || 0) + 1;
-      const fact = f.dayType !== undefined ? f.dayType || 'none' : f.fact || 'none';
+      const fact = f.fact || 'none';
       a.confusion[f.read] = a.confusion[f.read] || {};
       a.confusion[f.read][fact] = (a.confusion[f.read][fact] || 0) + 1;
       if (f.result !== 'unknown') {
@@ -106,7 +106,9 @@ function tally(cycles) {
   for (const [key, a] of Object.entries(acc)) {
     const n = a.match + a.mismatch;
     const { byDay, ...rest } = a;
-    fields[key] = { ...rest, n, days: byDay.size, agreement: n ? round4(a.match / n) : null, ...dayInterval([...byDay.values()], key), level: EI.level };
+    // Under the experience index's minimum n or days (config/training.json experienceIndex): too few for an interval.
+    const tooFew = n < EI.minN || byDay.size < EI.minDays;
+    fields[key] = { ...rest, n, days: byDay.size, agreement: n ? round4(a.match / n) : null, ...(tooFew ? { lo: null, hi: null, tooFew } : dayInterval([...byDay.values()], key)), level: EI.level };
   }
   return { cycles: cycles.length, status, byOutcome, fields };
 }
@@ -121,7 +123,7 @@ function renderReads(t) {
     `Per field, agreement with the briefing's label (match/n, day-clustered ${pct(EI.level)} interval); unknown is never a mismatch:`,
   ];
   for (const [key, f] of Object.entries(t.fields)) {
-    const ci = f.lo === null ? 'no interval (under two days)' : `[${pct(f.lo)}, ${pct(f.hi)}]`;
+    const ci = f.tooFew ? `too few (n ${f.n}, days ${f.days})` : f.lo === null ? 'no interval' : `[${pct(f.lo)}, ${pct(f.hi)}]`;
     out.push(`  ${key}  ${f.match}/${f.n}  ${pct(f.agreement)}  ${ci}  days ${f.days}, stated ${f.stated}, unknown ${f.unknown}`);
     for (const [why, k] of Object.entries(f.unknownWhy)) out.push(`      unknown ${k}: ${why}`);
     for (const [read, facts] of Object.entries(f.confusion)) out.push(`      read ${read}: ${Object.entries(facts).map(([x, k]) => `${x} ${k}`).join(', ')}`);

@@ -399,11 +399,11 @@ const OLD_AGENTS_MD = 24466;
 // worst path; owner-approved: improves context. Plus 130 for prepare-ahead's catalog line in AGENTS.md (PR C): raised
 // under the owner's standing rule (raise a skill size cap or pin when it improves context; never cut context to fit),
 // by only the measured need of the worst path (88669 -> 88799), no more. The skill itself is looked up by prepare
-// ahead's runs only and is on no list. Plus 419 for trade-session step 3's STATE line (feat/state-read): the head
+// ahead's runs only and is on no list. Plus 336 for trade-session step 3's STATE line (feat/state-read): the head
 // trader's closed-form market-state read, recorded and scored against the briefing's labels (trading/state-read.js),
-// the measured need of the worst path (88799 -> 89218), raised under the same standing rule; the skill file grew
-// 8624 -> 9043 bytes.
-const RAISED = 154 + 130 + 419;
+// the measured need of the worst path (88799 -> 89135), raised under the same standing rule; the skill file grew
+// 8624 -> 8960 bytes.
+const RAISED = 154 + 130 + 336;
 const EVERY_CYCLE = ['multi-timeframe-analysis', 'strategy-library', 'strategy-scan', 'strategy-gate-checks', 'trader-process', 'htf-to-ltf', 'autonomous-trading'];
 const PATHS = {
   'full cycle, no candidate': ['role-round', 'setup-judgment', 'day-context'],

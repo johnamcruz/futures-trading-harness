@@ -442,4 +442,4 @@ function cycleExperienceLookups(transcript) {
   }
 }
 
-module.exports = { toolCalls, summarize, writeCycleLog, amendCycleLog, cycleLookups, cycleExperienceLookups, cycleStateRecord, headOwnText, cycleClock, gateOrders, RISK_REDUCING };
+module.exports = { toolCalls, summarize, writeCycleLog, amendCycleLog, cycleLookups, cycleExperienceLookups, headOwnText, cycleClock, gateOrders, RISK_REDUCING };

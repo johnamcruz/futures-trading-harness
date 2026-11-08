@@ -129,10 +129,10 @@ test('writeCycleLog: the head trader\'s STATE line from its own final message, s
   const context = { symbols: [{ symbol: 'MNQ', bar: { t: bar } }] };
   const stream = (final, extra = []) => [JSON.stringify({ type: 'system', subtype: 'init' }), ...extra, JSON.stringify({ type: 'result', result: final })].join('\n');
   const write = (output, action = 'trade') => writeCycleLog(home, { at, action, harness: 'claude', prompt: 'P', context, output, result: 'CYCLE RESULT: no-trade - x', ok: true });
-  const { file } = write(stream('PLAN:\n1 HTF: 4h up, 1h range, 15m up\nSTATE: 4h up | 1h up | 15m up | day rotating | frames agree\nCYCLE RESULT: no-trade - x'));
+  const { file } = write(stream('PLAN:\n1 HTF: 4h up, 1h range, 15m up\nSTATE: 4h up | 1h up | 15m up | frames agree\nCYCLE RESULT: no-trade - x'));
   const rec = JSON.parse(fs.readFileSync(file, 'utf8')).stateRead;
   assert.strictEqual(rec.status, 'read');
-  assert.deepStrictEqual(Object.fromEntries(Object.entries(rec.fields).map(([k, f]) => [k, f.result])), { '4h': 'match', '1h': 'mismatch', '15m': 'match', day: 'match', frames: 'mismatch' });
+  assert.deepStrictEqual(Object.fromEntries(Object.entries(rec.fields).map(([k, f]) => [k, f.result])), { '4h': 'match', '1h': 'mismatch', '15m': 'match', frames: 'mismatch', 'frames-own': 'match' });
   const lines = () => fs.readFileSync(path.join(home, 'logs', 'cycles-2026-03-02.jsonl'), 'utf8').trim().split('\n').map(l => JSON.parse(l));
   assert.deepStrictEqual(lines()[0].stateRead, rec, 'the summary line carries the same record (the store and the experience log read it)');
   // No line in the final message: recorded as none. A STATE line only in a role's report (a subagent's turn) is not the head trader's.

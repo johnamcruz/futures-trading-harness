@@ -24,8 +24,8 @@ function rec(line, b) {
 
 test('tally: per field the agreement over the cycles it could be scored on, n, days, the unknowns by why and a read-by-fact table', () => {
   const cycles = [
-    { day: '2023-03-15', stateRead: rec('STATE: 4h up | 1h up | day trending', briefing({ h1: 'up', dayType: 'trend up' })) },
-    { day: '2023-03-15', stateRead: rec('STATE: 4h up | 1h up | day trending', briefing({ h1: 'range' })) },
+    { day: '2023-03-15', stateRead: rec('STATE: 4h up | 1h up | 15m up | frames agree', briefing({ h1: 'up' })) },
+    { day: '2023-03-15', stateRead: rec('STATE: 4h up | 1h up', briefing({ h1: 'range' })) },
     { day: '2023-03-16', stateRead: rec('STATE: 4h down | 1h transition', briefing({ h4: 'up' })) },
     { day: '2023-03-16', stateRead: rec('CYCLE RESULT: no-trade', briefing()) },
     { day: '2023-03-16', stateRead: rec('STATE: the market is choppy', briefing()) },
@@ -43,18 +43,34 @@ test('tally: per field the agreement over the cycles it could be scored on, n, d
   assert.strictEqual(h4.agreement, 0.6667);
   assert.deepStrictEqual(h4.confusion, { up: { up: 2 }, down: { up: 1 } });
   const h1 = t.fields['1h'];
-  assert.deepStrictEqual([h1.match, h1.mismatch, h1.unknown, h1.n], [1, 1, 1, 2]);
+  assert.deepStrictEqual([h1.match, h1.mismatch, h1.unknown, h1.n, h1.days], [1, 1, 1, 2, 1], 'an unknown counts in no day');
   assert.deepStrictEqual(h1.unknownWhy, { 'the briefing has no transition label for 1h': 1 });
-  // The day: one scored (trend up), one before the initial balance (unknown); the table names the raw day type.
-  const day = t.fields.day;
-  assert.deepStrictEqual([day.match, day.unknown, day.n], [1, 1, 1]);
-  assert.deepStrictEqual(day.confusion, { trending: { 'trend up': 1, none: 1 } });
+  // No day field; frames scored against the labels and against the read's own frames, apart.
+  assert.deepStrictEqual(Object.keys(t.fields), ['4h', '1h', '15m', 'frames', 'frames-own']);
+  assert.deepStrictEqual([t.fields.frames.match, t.fields['frames-own'].match], [1, 1]);
   // A field never stated: zero, no rate.
-  assert.deepStrictEqual([t.fields['15m'].stated, t.fields['15m'].agreement], [0, null]);
-  // Intervals from whole days resampled (seeded: the same tally twice is the same); one day only: none.
-  assert.ok(h4.lo !== null && h4.lo <= h4.agreement && h4.agreement <= h4.hi);
-  assert.deepStrictEqual(RA.tally(cycles).fields['4h'], h4);
-  assert.deepStrictEqual([h1.lo, h1.hi], [null, null], 'scored on one day only: no interval');
+  assert.deepStrictEqual([t.fields['15m'].stated, t.fields['15m'].n], [1, 1]);
+  assert.strictEqual(RA.tally([]).fields['15m'].agreement, null);
+  // Under the experience index's minimum n or days: too few, no interval.
+  assert.deepStrictEqual([h4.lo, h4.hi, h4.tooFew], [null, null, true]);
+  assert.match(RA.renderReads(t), /4h {2}2\/3 {2}67% {2}too few \(n 3, days 2\)/);
+});
+
+test('tally: enough cycles and days: an interval from whole days resampled, seeded (the same tally twice is the same)', () => {
+  const { training } = require('../../scripts/lib/tunables');
+  const { minN, minDays } = training().experienceIndex;
+  const days = minDays + 2;
+  const per = Math.ceil(minN / days) + 1;
+  const cycles = [];
+  for (let d = 0; d < days; d += 1) {
+    for (let k = 0; k < per; k += 1) cycles.push({ day: `2023-04-${String(d + 1).padStart(2, '0')}`, stateRead: rec(`STATE: 4h ${k === 0 && d % 2 ? 'down' : 'up'}`, briefing()) });
+  }
+  const f = RA.tally(cycles).fields['4h'];
+  assert.ok(f.n >= minN && f.days >= minDays && !f.tooFew);
+  assert.ok(f.lo !== null && f.lo <= f.agreement && f.agreement <= f.hi && f.lo < f.hi, JSON.stringify(f));
+  assert.deepStrictEqual(RA.tally(cycles).fields['4h'], f);
+  // One day short of the minimum: too few.
+  assert.ok(RA.tally(cycles.filter(c => c.day !== '2023-04-01' && c.day !== '2023-04-02' && c.day !== '2023-04-03')).fields['4h'].tooFew);
 });
 
 test('runCycles: a replay run\'s trade cycles with their state records, from its store lines; renderReads names agreement, not accuracy', () => {
