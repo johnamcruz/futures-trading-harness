@@ -37,6 +37,9 @@ test('namesConflict: a needed, absent or same-side fact is not a conflict', () =
     [UP_1H, 'a short is only a reversal, and no 1h CHoCH down is present.'],
     [DOWN_1H, 'The 1h CHoCH up is absent, so the label stands.'],
     [DOWN_1H, 'The 11h mark: CHoCH up on the 3m only.'],
+    [DOWN_1H, '1 HTF: 4h range, 1h down, 15m up (CHoCH up at 13189.25), bias short.'],
+    [DOWN_1H, 'the 1h is down and the 15m closed above its high'],
+    [UP_1H, 'HTF: 1h up, 15m up, 3m CHoCH down at 13140.'],
   ];
   for (const [ctx, text] of no) assert.strictEqual(R.namesConflict(text, ctx), false, text);
 });
@@ -62,7 +65,8 @@ test('calledLabelStale: the label is said to lag or not to have flipped yet', ()
   for (const text of ['The 1h trend label lags price after the engulfing.', 'The 1h label is stale.', 'The 1h trend has not flipped yet.',
     "The 1h label hasn't caught up with the move.", 'the 15m trend is lagging the reversal', 'The 1h is still down but has yet to turn.'])
     assert.strictEqual(R.calledLabelStale(text), true, text);
-  for (const text of ['The 1h label is not stale.', 'The 1h trend is down and confirmed.', 'The label is no longer lagging.', 'A lagging indicator, the EMA, is flat.'])
+  for (const text of ['The 1h label is not stale.', 'The 1h trend is down and confirmed.', 'The label is no longer lagging.', 'A lagging indicator, the EMA, is flat.',
+    'The 1h trend has not flipped, so the short stands.', 'The 1h trend has not changed.'])
     assert.strictEqual(R.calledLabelStale(text), false, text);
 });
 

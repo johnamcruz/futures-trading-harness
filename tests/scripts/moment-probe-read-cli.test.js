@@ -76,6 +76,15 @@ test('read CLI: a patch whose anchor is missing fails the run and asks nothing',
   assert.ok(!fs.existsSync(path.join(dir, 'argv.log')), 'no model call');
 });
 
+test('read CLI: a failed ask is shown with its reason and the run exits 1 (its counts are short)', t => {
+  const dir = setup(t);
+  fs.writeFileSync(path.join(dir, 'bin', 'claude'), '#!/bin/sh\nprintf "rate limit\\n" >&2\nexit 2\n', { mode: 0o755 });
+  const r = run(dir, [...base(dir), '--patch', path.join(dir, 'p.json')]);
+  assert.strictEqual(r.status, 1);
+  assert.match(r.stdout, /\nc1\tclaude exited 2: rate limit\n/);
+  assert.strictEqual(JSON.parse(fs.readFileSync(path.join(dir, 'out', 'moment-probe-read.json'), 'utf8')).rows[0].new.errors, 2);
+});
+
 test('read CLI: neither --tree nor --patch is a usage error; the outcome mode still needs no --patch', t => {
   const dir = setup(t);
   const r = run(dir, base(dir));

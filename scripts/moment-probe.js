@@ -25,7 +25,7 @@
  * calledLabelStale, echoesState and its decision (counts, never a pass or fail). Moments: { id, set: "change" | "hold",
  * cycle } (`want` ignored); make them from run homes with scripts/probe-moments.js. --system replaces the recorded system
  * prompt file on both arms (required for a cycle whose argv has none). Every arm is built before any ask: a patch that
- * misses or matches twice fails the run, nothing asked. Exit 0 when the run completes (1 on a usage or patch error).
+ * misses or matches twice fails the run, nothing asked. Exit 0 when every ask answered (1 on a failed ask, a usage or patch error).
  */
 
 const fs = require('fs');
@@ -72,6 +72,7 @@ async function readMode({ specs, tree, k, timeoutMs }) {
   for (const r of result.rows.filter(x => x.errors)) process.stdout.write(`${r.id}\t${r.errors.join('\t')}\n`);
   process.stdout.write(`${JSON.stringify(result.summary)}\n`);
   if (arg('--out')) { fs.mkdirSync(arg('--out'), { recursive: true }); fs.writeFileSync(path.join(arg('--out'), 'moment-probe-read.json'), JSON.stringify({ patch: patchArg, system: arg('--system'), ...result }, null, 1)); }
+  process.exitCode = result.rows.some(r => r.errors) ? 1 : 0; // a failed ask (a rate limit, a timeout): the counts are short
 }
 
 (async () => {

@@ -17,9 +17,10 @@
  *                   its high / below its low). Not when needed, absent or negated: before it "no", "without", "need(s)",
  *                   "would need", "require(s)", "wait for", "until", "absent"; between the frame and the fact "no", "not",
  *                   "without", "need"; after it "absent", "none", "not present", "is not met", "needed", "is missing",
- *                   "does not exist"
- *   calledLabelStale(text)            a label, trend or frame said to lag, be stale or behind price, or not to have
- *                   flipped / turned / caught up yet; not "not stale", "no longer lagging"
+ *                   "does not exist"; nor when another frame is named in between ("1h down, 15m CHoCH up" is the 15m's)
+ *   calledLabelStale(text)            a label, trend or frame said to lag, be stale or behind price, not to have
+ *                   flipped / turned YET, or not to have caught up; not "not stale", "no longer lagging", nor "has not
+ *                   flipped" without "yet" (the trend intact)
  *   echoesState(text, line)           the answer copies a DISAGREE frame's named fact, or the line's fixed phrase
  *                   "label and price disagree", verbatim (a copy is not a read: counted apart)
  *   readOf(text, { labels, line })    -> { namesConflict, calledLabelStale, echoesState, decision }  decision: the
@@ -35,13 +36,14 @@ const SENTENCE = /[^.\n]+/g;
 const NEG_BEFORE = /(?:\bno|\bnot|\bnothing|\bwithout|\bneeds?|\bwould need|\brequires?|\bwait(?:ing)? for|\buntil|\babsent|\bnever)\s+(?:a\s+|an\s+|the\s+|any\s+)?$/i;
 const NEG_AFTER = /^[^.;\n]{0,30}\b(?:absent|none|not present|is not met|needed|is missing|does not exist|doesn't exist)\b/i;
 const NEG_GAP = /\b(?:no|not|without|needs?|never)\b/i;
+const OTHER_FRAME = /\b\d+[mh]\b/i; // a frame named between the frame and the fact: the fact is that frame's
 
 /** Matches of `re` in text whose surroundings do not negate them (`gapOf(m)`: the part between frame and fact, if any). */
 function unnegated(text, re, gapOf = () => '') {
   for (const m of text.matchAll(re)) {
     const before = text.slice(0, m.index).split(/[.;\n]/).at(-1);
     const after = text.slice(m.index + m[0].length);
-    if (NEG_BEFORE.test(before) || NEG_AFTER.test(after) || NEG_GAP.test(gapOf(m))) continue;
+    if (NEG_BEFORE.test(before) || NEG_AFTER.test(after) || NEG_GAP.test(gapOf(m)) || OTHER_FRAME.test(gapOf(m))) continue;
     return true;
   }
   return false;
@@ -80,7 +82,7 @@ function namesConflict(text, { labels = {} } = {}) {
   return false;
 }
 
-const STALE = /\b(?:label|trend|4h|1h|15m)\b[^.\n]{0,40}?\b(lags?|lagging|stale|behind (?:price|the move)|(?:has not|hasn't|not yet|yet to|still to) (?:flip(?:ped)?|turn(?:ed)?|catch up|caught up|change[d]?))\b/gi;
+const STALE = /\b(?:label|trend|4h|1h|15m)\b[^.\n]{0,40}?\b(lags?|lagging|stale|behind (?:price|the move)|(?:has not|hasn't) (?:flipped|turned) yet|(?:not yet|yet to|still to) (?:flip(?:ped)?|turn(?:ed)?)|(?:has not|hasn't|not yet|yet to) (?:catch up|caught up))\b/gi;
 const STALE_NEG = /\b(?:not|isn't|no longer|never)\s+$/i;
 
 function calledLabelStale(text) {
