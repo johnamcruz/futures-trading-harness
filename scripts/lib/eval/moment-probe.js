@@ -41,7 +41,7 @@ function swapSkills(prompt, bodyOf) {
   return { prompt: out, swapped };
 }
 
-// A result line: the label after only marks (list number, heading, bullet, quote, bold) or a short "Word:" lead-in; a label quoted mid-sentence is not one.
+// A result line: the label after only marks (list number, heading, bullet, quote, bold) or a short letters-and-spaces clause ending in a colon (as live reads it); a label inside a longer sentence is not one.
 const LABEL = /^[^a-z]*(?:[a-z ]{1,30}:[*_`]*\s*)?CYCLE RESULT:[*_` \t]*([a-z-]+)/i;
 
 function outcomeOf(text) {

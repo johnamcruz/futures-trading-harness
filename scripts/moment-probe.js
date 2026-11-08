@@ -31,9 +31,9 @@ function ask(byId, cwd, timeoutMs) {
     let err = '';
     child.stdout.on('data', d => { out += d; });
     child.stderr.setEncoding('utf8');
-    child.stderr.on('data', d => { err = (err + d).trimEnd().split('\n').at(-1); }); // drained, so a chatty child cannot block; its last line names a failure
+    child.stderr.on('data', d => { err = (err + d).split('\n').slice(-1 - 1).join('\n'); }); // drained, so a chatty child cannot block; its last non-empty line names a failure (the last two lines kept: a final newline may stand alone)
     child.on('error', reject);
-    child.on('close', code => (code === 0 ? resolve({ text: out }) : reject(new Error(`claude exited ${code}: ${err.trim()}`))));
+    child.on('close', code => (code === 0 ? resolve({ text: out }) : reject(new Error(`claude exited ${code}: ${err.split('\n').filter(l => l.trim()).at(-1) || ''}`))));
   });
 }
 
@@ -56,9 +56,10 @@ function ask(byId, cwd, timeoutMs) {
     return m;
   });
   const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'moment-probe-'));
-  const { rows, summary } = await P.probeMoments({ moments, bodyOf: P.treeBodyOf(path.resolve(tree)), ask: ask(byId, cwd, timeoutMs), k });
+  let result;
+  try { result = await P.probeMoments({ moments, bodyOf: P.treeBodyOf(path.resolve(tree)), ask: ask(byId, cwd, timeoutMs), k }); } finally { fs.rmSync(cwd, { recursive: true, force: true }); }
+  const { rows, summary } = result;
   for (const r of rows) process.stdout.write([r.set, r.id, `want ${r.want}`, `old ${r.before}`, `new ${r.after}`, r.verdict, `swapped ${r.swapped.join(',')}`, ...(r.errors || [])].join('\t') + '\n');
-  fs.rmSync(cwd, { recursive: true, force: true });
   process.stdout.write(`${JSON.stringify(summary)}\n`);
   if (arg('--out')) { fs.mkdirSync(arg('--out'), { recursive: true }); fs.writeFileSync(path.join(arg('--out'), 'moment-probe.json'), JSON.stringify({ rows, summary }, null, 1)); }
   process.exitCode = summary.ok ? 0 : 1;
