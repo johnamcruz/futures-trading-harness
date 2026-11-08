@@ -495,7 +495,7 @@ function computeSections({ bars, fine = null, c15, c60, snap, snap15, read, read
           ...(closes.openingRangeCrossed ? { openingRangeCrossed: closes.openingRangeCrossed } : {}),
           // The day so far and the RTH volatility (day-so-far.js), in RTH on the runner's bars only: presented facts, read
           // by nothing in the gate, compose_check, order_plan, the trend rule or sizing (the summary says them: SUMMARY_ONLY).
-          ...(rth && !own ? { soFar: daySoFar(bars, { minutes, atr: atr14, adr: day.adr }), rthVolatility: rthVolatility(bars, { minutes }) } : {}) },
+          ...(rth && !own ? { soFar: daySoFar(bars, { atr: atr14, adr: day.adr }), rthVolatility: rthVolatility(bars, { minutes }) } : {}) },
         overnight: lv.overnight || null,
         sessionProfile: sess.poc ? { poc: level(sessX.poc), vah: level(sessX.vah), val: level(sessX.val), hvnAbove: level(sessX.hvnAbove), hvnBelow: level(sessX.hvnBelow), lvnAbove: level(sessX.lvnAbove), lvnBelow: level(sessX.lvnBelow) } : null,
         priorProfileNodes: prior.poc ? { hvnAbove: level(priorX.hvnAbove), hvnBelow: level(priorX.hvnBelow), lvnAbove: level(priorX.lvnAbove), lvnBelow: level(priorX.lvnBelow) } : null,

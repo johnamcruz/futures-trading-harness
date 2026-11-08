@@ -30,18 +30,24 @@ description: Use when deciding a cycle - the premarket plan, the news, and the d
   more of the ADR used, the room left is small: say so (a read against).
 - **Day so far line** (code, RTH; is the morning trending, rotating or
   mixed SO FAR): say it in your read ("trending down so far", "rotating
-  so far", "mixed so far"). It describes the morning so far, never the
-  rest: on 100 recorded days it matched the 09:30-12:00 day, but rotating
-  mornings went on to trend about as often as not. So it is no evidence
-  for or against the next leg: never a read for or against in the count,
-  a veto, a size or a filter; you decide. The read: efficiency (net move /
-  the bars' summed range) x sqrt(bars), one scale all morning:
+  so far", "mixed so far"). It describes the RTH morning so far (its
+  bars since 09:30), never the rest: on 56 recorded days it matched the
+  09:30-12:00 day, but its read of the rest of the morning was a coin flip
+  (AUC 0.48-0.56 on 736 days out of sample); rotating mornings trended
+  later about as often as not. So it is no evidence for or against the
+  next leg: never a read for or against in the count, a veto, a size or a
+  filter; you decide. Cumulative, no recency: 30 trending minutes then two
+  hours of range still read `directional`; the candles and `Trend
+  declared?` carry the recent bars. The read: efficiency (net move / the
+  bars' summed range) x sqrt(bars), one scale all morning:
   - `directional up|down`: 0.75+: one-way so far.
   - `rotational`: under 0.34: back and forth so far (many RTH VWAP
     crosses agree).
   - `mixed`: between: neither yet.
-  - `too early (n bars)`: before 09:45 ET: no read.
-  The day's move is the `Trend declared?` line's; the IB day type above.
+  - `too early (n bars, a read from 10)`: no read. Reads on few bars are
+    mostly noise: trust the word from about 10:15 ET.
+  The day's move is the `Trend declared?` line's; range in ADR
+  `today.rangeVsAdr`; the IB day type above.
 - **RTH volatility** (beside the regime's word): the last 30 min's bar
   range vs the same minutes on prior sessions (`high` 1.33x+, `low`
   0.75x-). The regime's word compares ATR(14) with its last 100 bars,

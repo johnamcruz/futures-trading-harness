@@ -62,7 +62,7 @@
     "ruleFrames": [240, 60, 15]
   },
   "dayContext": { "ibMinutes": 60, "openMinutes": 30, "adrDays": 10 },
-  "daySoFar": { "rotational": 0.34, "directional": 0.75, "volMinutes": 30, "volSessions": 10, "volMinSessions": 3, "volLow": 0.75, "volHigh": 1.33 },
+  "daySoFar": { "minBars": 10, "rotational": 0.34, "directional": 0.75, "volMinutes": 30, "volSessions": 10, "volMinSessions": 3, "volLow": 0.75, "volHigh": 1.33 },
   "levelCloses": { "maxCloses": 20 },
   "structure": { "sweepBars": 10, "swingLevels": 3, "m5Recent": 3 },
   "momentum": { "rangeAtr": 1, "volRatio": 1 },

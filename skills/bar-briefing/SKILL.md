@@ -24,10 +24,10 @@ blackouts are `blackouts_list`.
 | `blackouts_list` | none | the news blackout windows | `blackouts.js list` |
 
 `Day so far` line (`m3.today.soFar`; RTH, the runner's briefing): the
-morning since 09:30 ET from its own bars: the read (`directional
-up|down`, `rotational`, `mixed`; `too early (n bars)` before 09:45 ET;
+morning since 09:30 ET from its own bars (their count): the read
+(`directional up|down`, `rotational`, `mixed`; `too early` under 10 bars;
 `unknown`, with why), efficiency and x sqrt(bars), RTH VWAP crosses since
-the open, range in ATR(14) and ADR. A description, never a forecast:
+the open, range in ATR(14). A description, never a forecast:
 `day-context`. `RTH volatility` (`m3.today.rthVolatility`) ends the
 Alignment line, beside the regime's word.
 

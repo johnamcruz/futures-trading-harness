@@ -65,7 +65,8 @@ test('day so far: the runner\'s briefing carries it in RTH from its own bars, on
   assert.match(text, /volatility\. RTH volatility: unknown \(2 prior sessions with these minutes; needs 3\)\.\n/);
   // A read says itself; the rest of the text is unchanged.
   const other = B.renderBriefing(withDay(b, ROTATIONAL, VOL));
-  assert.match(other, /- Day so far \(RTH since 09:30 ET, 30 3m bars; [^)]*\): rotational: efficiency 0\.02/);
+  assert.match(other, /- Day so far \(30 3m bars; `day-context`\): rotational: efficiency 0\.02 /);
+  assert.doesNotMatch(other, /- Day so far[^\n]*(09:30|ADR|never the rest)/, 'no clock time, ADR or disclaimer on the line');
   assert.match(other, /volatility\. RTH volatility: high \(the last 30 min's 3m bar range 1\.6x the same minutes' median on 10 prior sessions\)\.\n/);
   const strip = s => s.split('\n').filter(l => !l.startsWith('- Day so far (')).map(l => l.replace(/ RTH volatility: .*$/, ''));
   assert.deepStrictEqual(strip(other), strip(text));
@@ -77,7 +78,7 @@ test('day so far: the runner\'s briefing carries it in RTH from its own bars, on
 test('day so far: too early at 09:36 ET; none outside RTH; none in an analyst\'s frame briefing', () => {
   const early = build(EARLY_N);
   assert.match(early.sections.m3.data.et, /^09:3/);
-  assert.match(B.renderBriefing(early), /- Day so far \(RTH since 09:30 ET, \d 3m bars; [^)]*\): too early \(\d bars\), RTH VWAP crosses \d+; a read from 09:45 ET\./);
+  assert.match(B.renderBriefing(early), /- Day so far \(3 3m bars; `day-context`\): too early \(3 bars, a read from 10\), RTH VWAP crosses \d+\.\n/);
   const globex = build(GLOBEX_N);
   assert.ok(!('soFar' in (globex.sections.m3.data.today || {})));
   assert.ok(!B.renderBriefing(globex).includes('Day so far') && !B.renderBriefing(globex).includes('RTH volatility'));
@@ -130,6 +131,15 @@ test('day so far: order_plan\'s composed order is the same whatever it says', ()
   assert.match(base, /"limitPrice":/);
   assert.strictEqual(plan(DIRECTIONAL, VOL), base);
   assert.strictEqual(plan(ROTATIONAL, { ...VOL, word: 'low', ratio: 0.5 }), base);
+  // In a prop attempt the rulebook's translated size is 5: a read that cut or raised it would show (size 1 can't).
+  const prop = (s, v) => {
+    const { home } = P.propHome({ size: 5, b: withDay(F.briefing(), s, v) });
+    return composedOrder({ home, root: 'MNQ', side: 'long', now: P.NOW, cycleBars: { MNQ: F.BAR }, strategy: P.LC_DOC, strategies: P.registry(), accounts: [P.MINI], specOf: SPEC, accountId: 1, selected: ['MNQ'] });
+  };
+  const p0 = prop(undefined, undefined);
+  assert.strictEqual(p0.args.size, 5);
+  assert.strictEqual(JSON.stringify(prop(DIRECTIONAL, VOL)), JSON.stringify(p0));
+  assert.strictEqual(JSON.stringify(prop(ROTATIONAL, { ...VOL, word: 'low', ratio: 0.5 })), JSON.stringify(p0));
 });
 
 test('day so far: the gate\'s required skills, the trend rule and the regime never turn on it', () => {

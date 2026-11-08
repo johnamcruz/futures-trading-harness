@@ -84,17 +84,29 @@ test('daySoFar: a rotating morning reads rotational; between the bands is mixed'
   assert.strictEqual(D.readOf((CFG.rotational + CFG.directional) / 2), 'mixed');
 });
 
-test('daySoFar: before the opening range completes it is too early: the counts only, never a read', () => {
-  // 09:30-09:39: 4 bars, 12 minutes (the 15-minute opening range is not done).
-  const d = D.daySoFar(TREND.slice(0, 5), OPTS);
+test('daySoFar: the word is decided on the score as the line prints it', () => {
+  // 16 RTH bars of range 10, net +13.404: efficiency 0.083775, x sqrt(16) = 0.3351, printed 0.34: mixed, never rotational.
+  const t0 = Date.parse('2024-05-23T13:27:00Z');
+  const bars = Array.from({ length: 17 }, (_, k) => ({ t: new Date(t0 + k * 180000).toISOString(), o: 100, h: 110, l: 100, c: 100, v: 10 }));
+  bars[16] = { ...bars[16], o: 105, h: 113.404, l: 103.404, c: 113.404 };
+  const d = D.daySoFar(bars, OPTS);
+  assert.deepStrictEqual([d.bars, d.score, d.read], [16, 0.34, 'mixed']);
+  assert.strictEqual(d.read, D.readOf(d.score));
+});
+
+test('daySoFar: under the minimum bars (config daySoFar.minBars) it is too early: the counts only, never a read', () => {
+  assert.strictEqual(CFG.minBars, 10);
+  // 09:30-09:57: 9 bars.
+  const d = D.daySoFar(TREND.slice(0, 10), OPTS);
   assert.strictEqual(d.status, 'too early');
-  assert.strictEqual(d.bars, 4);
+  assert.strictEqual(d.bars, 9);
   for (const k of ['read', 'direction', 'efficiency', 'score']) assert.ok(!(k in d), k);
   const line = D.daySoFarLine(d, { tf: '3m' });
-  assert.match(line, /too early \(4 bars\)/);
+  assert.strictEqual(line, '- Day so far (9 3m bars; `day-context`): too early (9 bars, a read from 10), RTH VWAP crosses 2.');
   assert.doesNotMatch(line, /directional|rotational|mixed|efficiency/);
-  // At the opening range's close (5 bars, 15 minutes) the read starts.
-  assert.strictEqual(D.daySoFar(TREND.slice(0, 6), OPTS).status, 'read');
+  assert.strictEqual(D.daySoFar(TREND.slice(0, 5), OPTS).status, 'too early', 'at 4 bars, too');
+  // At 10 bars (the 10:00 ET close) the read starts.
+  assert.strictEqual(D.daySoFar(TREND.slice(0, 11), OPTS).status, 'read');
 });
 
 test('daySoFar: missing data is unknown, never a guess; outside RTH there is none', () => {
@@ -120,7 +132,8 @@ test('daySoFar: missing data is unknown, never a guess; outside RTH there is non
 
 test('daySoFarLine: the read, its numbers, and where the rest is said, in one line', () => {
   const line = D.daySoFarLine(D.daySoFar(TREND, OPTS), { tf: '3m', dayType: 'trend down' });
-  assert.strictEqual(line, '- Day so far (RTH since 09:30 ET, 25 3m bars; describes the morning so far, never the rest; `day-context`): directional down: efficiency 0.31 (x sqrt(bars) 1.55), RTH VWAP crosses 2, range 13.44 x 3m ATR(14) (0.67 ADR), net down (its size: Trend declared? day\'s move); IB day type: today.dayType.');
+  // No clock time, no disclaimer (the skill says it once), no ADR (today.rangeVsAdr says it).
+  assert.strictEqual(line, '- Day so far (25 3m bars; `day-context`): directional down: efficiency 0.31 (x sqrt(bars) 1.55), RTH VWAP crosses 2, range 13.44 x 3m ATR(14), net down (its size: Trend declared? day\'s move); IB day type: today.dayType.');
   const chop = D.daySoFarLine(D.daySoFar(CHOP, OPTS), { tf: '3m' });
   assert.match(chop, /: rotational: efficiency 0\.0\d \(x sqrt\(bars\) 0\.\d\d\), RTH VWAP crosses \d+,/);
   assert.doesNotMatch(chop, /IB day type/);
