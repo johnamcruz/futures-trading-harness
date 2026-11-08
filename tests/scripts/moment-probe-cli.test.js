@@ -32,6 +32,7 @@ test('CLI: a failed ask is unanswered with its stderr reason in --out, and the r
   const dir = setup();
   const r = run(dir, ['--timeout-ms', '20000']);
   assert.strictEqual(r.status, 1);
+  assert.match(r.stdout, /unanswered\tswapped candle-reading\tclaude exited 2: rate limit é/, 'the swapped skills and the reason are on screen');
   const out = JSON.parse(fs.readFileSync(path.join(dir, 'out', 'moment-probe.json'), 'utf8'));
   assert.strictEqual(out.rows[0].verdict, 'unanswered');
   assert.match(out.rows[0].errors[0], /claude exited 2: rate limit é/);

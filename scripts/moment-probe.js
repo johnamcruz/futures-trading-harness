@@ -57,7 +57,8 @@ function ask(byId, cwd, timeoutMs) {
   });
   const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'moment-probe-'));
   const { rows, summary } = await P.probeMoments({ moments, bodyOf: P.treeBodyOf(path.resolve(tree)), ask: ask(byId, cwd, timeoutMs), k });
-  for (const r of rows) process.stdout.write([r.set, r.id, `want ${r.want}`, `old ${r.before}`, `new ${r.after}`, r.verdict].join('\t') + '\n');
+  for (const r of rows) process.stdout.write([r.set, r.id, `want ${r.want}`, `old ${r.before}`, `new ${r.after}`, r.verdict, `swapped ${r.swapped.join(',')}`, ...(r.errors || [])].join('\t') + '\n');
+  fs.rmSync(cwd, { recursive: true, force: true });
   process.stdout.write(`${JSON.stringify(summary)}\n`);
   if (arg('--out')) { fs.mkdirSync(arg('--out'), { recursive: true }); fs.writeFileSync(path.join(arg('--out'), 'moment-probe.json'), JSON.stringify({ rows, summary }, null, 1)); }
   process.exitCode = summary.ok ? 0 : 1;
