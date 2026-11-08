@@ -759,8 +759,10 @@ against it, -0.10R.
 re-entry or a flip after a stop-out made 0R.
   Read a sweep alone as no reversal
 signal.
-  A reversal needs a confirmed trend change first: a 3m CHoCH against the sweep (`bos-vs-choch`), then price back at that level, with the 4h and 1h trend agreeing.
-  Even so, sweep, CHoCH, retest entries made -0.17R then +0.24R (about 110 a half, intervals hold zero): context.
+  A sweep is context.
+  A reversal read against the sweep's 3m leg needs a change of character first (a 3m CHoCH, an early sign: `bos-vs-choch`), then price back at the CHoCH level, with the 4h and 1h both trending the reversal's way.
+  A sweep with the 4h and 1h trend at a key level is unchanged.
+  Sweep, CHoCH, retest of the CHoCH level entries (no 4h or 1h filter; 09:30-12:00 ET, 2R target, 2021-04 to 2024-06) made -0.17R then +0.24R, about 110 a half, intervals hold zero: context.
   A first 3m close through the IB high on volume
 lost (F8A); its retest (F8B) was positive on 38 trades, interval straddling
 zero; level retests (F9) fired too rarely to say.
@@ -1897,8 +1899,10 @@ against it, -0.10R.
 re-entry or a flip after a stop-out made 0R.
   Read a sweep alone as no reversal
 signal.
-  A reversal needs a confirmed trend change first: a 3m CHoCH against the sweep (`bos-vs-choch`), then price back at that level, with the 4h and 1h trend agreeing.
-  Even so, sweep, CHoCH, retest entries made -0.17R then +0.24R (about 110 a half, intervals hold zero): context.
+  A sweep is context.
+  A reversal read against the sweep's 3m leg needs a change of character first (a 3m CHoCH, an early sign: `bos-vs-choch`), then price back at the CHoCH level, with the 4h and 1h both trending the reversal's way.
+  A sweep with the 4h and 1h trend at a key level is unchanged.
+  Sweep, CHoCH, retest of the CHoCH level entries (no 4h or 1h filter; 09:30-12:00 ET, 2R target, 2021-04 to 2024-06) made -0.17R then +0.24R, about 110 a half, intervals hold zero: context.
   A first 3m close through the IB high on volume
 lost (F8A); its retest (F8B) was positive on 38 trades, interval straddling
 zero; level retests (F9) fired too rarely to say.
@@ -3035,8 +3039,10 @@ against it, -0.10R.
 re-entry or a flip after a stop-out made 0R.
   Read a sweep alone as no reversal
 signal.
-  A reversal needs a confirmed trend change first: a 3m CHoCH against the sweep (`bos-vs-choch`), then price back at that level, with the 4h and 1h trend agreeing.
-  Even so, sweep, CHoCH, retest entries made -0.17R then +0.24R (about 110 a half, intervals hold zero): context.
+  A sweep is context.
+  A reversal read against the sweep's 3m leg needs a change of character first (a 3m CHoCH, an early sign: `bos-vs-choch`), then price back at the CHoCH level, with the 4h and 1h both trending the reversal's way.
+  A sweep with the 4h and 1h trend at a key level is unchanged.
+  Sweep, CHoCH, retest of the CHoCH level entries (no 4h or 1h filter; 09:30-12:00 ET, 2R target, 2021-04 to 2024-06) made -0.17R then +0.24R, about 110 a half, intervals hold zero: context.
   A first 3m close through the IB high on volume
 lost (F8A); its retest (F8B) was positive on 38 trades, interval straddling
 zero; level retests (F9) fired too rarely to say.
@@ -4164,8 +4170,10 @@ against it, -0.10R.
 re-entry or a flip after a stop-out made 0R.
   Read a sweep alone as no reversal
 signal.
-  A reversal needs a confirmed trend change first: a 3m CHoCH against the sweep (`bos-vs-choch`), then price back at that level, with the 4h and 1h trend agreeing.
-  Even so, sweep, CHoCH, retest entries made -0.17R then +0.24R (about 110 a half, intervals hold zero): context.
+  A sweep is context.
+  A reversal read against the sweep's 3m leg needs a change of character first (a 3m CHoCH, an early sign: `bos-vs-choch`), then price back at the CHoCH level, with the 4h and 1h both trending the reversal's way.
+  A sweep with the 4h and 1h trend at a key level is unchanged.
+  Sweep, CHoCH, retest of the CHoCH level entries (no 4h or 1h filter; 09:30-12:00 ET, 2R target, 2021-04 to 2024-06) made -0.17R then +0.24R, about 110 a half, intervals hold zero: context.
   A first 3m close through the IB high on volume
 lost (F8A); its retest (F8B) was positive on 38 trades, interval straddling
 zero; level retests (F9) fired too rarely to say.
@@ -5390,8 +5398,10 @@ against it, -0.10R.
 re-entry or a flip after a stop-out made 0R.
   Read a sweep alone as no reversal
 signal.
-  A reversal needs a confirmed trend change first: a 3m CHoCH against the sweep (`bos-vs-choch`), then price back at that level, with the 4h and 1h trend agreeing.
-  Even so, sweep, CHoCH, retest entries made -0.17R then +0.24R (about 110 a half, intervals hold zero): context.
+  A sweep is context.
+  A reversal read against the sweep's 3m leg needs a change of character first (a 3m CHoCH, an early sign: `bos-vs-choch`), then price back at the CHoCH level, with the 4h and 1h both trending the reversal's way.
+  A sweep with the 4h and 1h trend at a key level is unchanged.
+  Sweep, CHoCH, retest of the CHoCH level entries (no 4h or 1h filter; 09:30-12:00 ET, 2R target, 2021-04 to 2024-06) made -0.17R then +0.24R, about 110 a half, intervals hold zero: context.
   A first 3m close through the IB high on volume
 lost (F8A); its retest (F8B) was positive on 38 trades, interval straddling
 zero; level retests (F9) fired too rarely to say.
@@ -6613,8 +6623,10 @@ against it, -0.10R.
 re-entry or a flip after a stop-out made 0R.
   Read a sweep alone as no reversal
 signal.
-  A reversal needs a confirmed trend change first: a 3m CHoCH against the sweep (`bos-vs-choch`), then price back at that level, with the 4h and 1h trend agreeing.
-  Even so, sweep, CHoCH, retest entries made -0.17R then +0.24R (about 110 a half, intervals hold zero): context.
+  A sweep is context.
+  A reversal read against the sweep's 3m leg needs a change of character first (a 3m CHoCH, an early sign: `bos-vs-choch`), then price back at the CHoCH level, with the 4h and 1h both trending the reversal's way.
+  A sweep with the 4h and 1h trend at a key level is unchanged.
+  Sweep, CHoCH, retest of the CHoCH level entries (no 4h or 1h filter; 09:30-12:00 ET, 2R target, 2021-04 to 2024-06) made -0.17R then +0.24R, about 110 a half, intervals hold zero: context.
   A first 3m close through the IB high on volume
 lost (F8A); its retest (F8B) was positive on 38 trades, interval straddling
 zero; level retests (F9) fired too rarely to say.
@@ -7757,8 +7769,10 @@ against it, -0.10R.
 re-entry or a flip after a stop-out made 0R.
   Read a sweep alone as no reversal
 signal.
-  A reversal needs a confirmed trend change first: a 3m CHoCH against the sweep (`bos-vs-choch`), then price back at that level, with the 4h and 1h trend agreeing.
-  Even so, sweep, CHoCH, retest entries made -0.17R then +0.24R (about 110 a half, intervals hold zero): context.
+  A sweep is context.
+  A reversal read against the sweep's 3m leg needs a change of character first (a 3m CHoCH, an early sign: `bos-vs-choch`), then price back at the CHoCH level, with the 4h and 1h both trending the reversal's way.
+  A sweep with the 4h and 1h trend at a key level is unchanged.
+  Sweep, CHoCH, retest of the CHoCH level entries (no 4h or 1h filter; 09:30-12:00 ET, 2R target, 2021-04 to 2024-06) made -0.17R then +0.24R, about 110 a half, intervals hold zero: context.
   A first 3m close through the IB high on volume
 lost (F8A); its retest (F8B) was positive on 38 trades, interval straddling
 zero; level retests (F9) fired too rarely to say.
@@ -8901,8 +8915,10 @@ against it, -0.10R.
 re-entry or a flip after a stop-out made 0R.
   Read a sweep alone as no reversal
 signal.
-  A reversal needs a confirmed trend change first: a 3m CHoCH against the sweep (`bos-vs-choch`), then price back at that level, with the 4h and 1h trend agreeing.
-  Even so, sweep, CHoCH, retest entries made -0.17R then +0.24R (about 110 a half, intervals hold zero): context.
+  A sweep is context.
+  A reversal read against the sweep's 3m leg needs a change of character first (a 3m CHoCH, an early sign: `bos-vs-choch`), then price back at the CHoCH level, with the 4h and 1h both trending the reversal's way.
+  A sweep with the 4h and 1h trend at a key level is unchanged.
+  Sweep, CHoCH, retest of the CHoCH level entries (no 4h or 1h filter; 09:30-12:00 ET, 2R target, 2021-04 to 2024-06) made -0.17R then +0.24R, about 110 a half, intervals hold zero: context.
   A first 3m close through the IB high on volume
 lost (F8A); its retest (F8B) was positive on 38 trades, interval straddling
 zero; level retests (F9) fired too rarely to say.
@@ -10118,8 +10134,10 @@ against it, -0.10R.
 re-entry or a flip after a stop-out made 0R.
   Read a sweep alone as no reversal
 signal.
-  A reversal needs a confirmed trend change first: a 3m CHoCH against the sweep (`bos-vs-choch`), then price back at that level, with the 4h and 1h trend agreeing.
-  Even so, sweep, CHoCH, retest entries made -0.17R then +0.24R (about 110 a half, intervals hold zero): context.
+  A sweep is context.
+  A reversal read against the sweep's 3m leg needs a change of character first (a 3m CHoCH, an early sign: `bos-vs-choch`), then price back at the CHoCH level, with the 4h and 1h both trending the reversal's way.
+  A sweep with the 4h and 1h trend at a key level is unchanged.
+  Sweep, CHoCH, retest of the CHoCH level entries (no 4h or 1h filter; 09:30-12:00 ET, 2R target, 2021-04 to 2024-06) made -0.17R then +0.24R, about 110 a half, intervals hold zero: context.
   A first 3m close through the IB high on volume
 lost (F8A); its retest (F8B) was positive on 38 trades, interval straddling
 zero; level retests (F9) fired too rarely to say.
@@ -12319,8 +12337,10 @@ against it, -0.10R.
 re-entry or a flip after a stop-out made 0R.
   Read a sweep alone as no reversal
 signal.
-  A reversal needs a confirmed trend change first: a 3m CHoCH against the sweep (`bos-vs-choch`), then price back at that level, with the 4h and 1h trend agreeing.
-  Even so, sweep, CHoCH, retest entries made -0.17R then +0.24R (about 110 a half, intervals hold zero): context.
+  A sweep is context.
+  A reversal read against the sweep's 3m leg needs a change of character first (a 3m CHoCH, an early sign: `bos-vs-choch`), then price back at the CHoCH level, with the 4h and 1h both trending the reversal's way.
+  A sweep with the 4h and 1h trend at a key level is unchanged.
+  Sweep, CHoCH, retest of the CHoCH level entries (no 4h or 1h filter; 09:30-12:00 ET, 2R target, 2021-04 to 2024-06) made -0.17R then +0.24R, about 110 a half, intervals hold zero: context.
   A first 3m close through the IB high on volume
 lost (F8A); its retest (F8B) was positive on 38 trades, interval straddling
 zero; level retests (F9) fired too rarely to say.
