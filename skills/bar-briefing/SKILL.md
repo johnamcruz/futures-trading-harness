@@ -23,6 +23,14 @@ blackouts are `blackouts_list`.
 | `mtf_read` | `bars`, `timeframes`?, `daily`?, `json`?, `record`?, `symbol`? | the multi-timeframe read; `record` (with `symbol`) records it; in an autonomous cycle whose bar briefing is current, the default read instead points to it (its `m15` and `h1` hold the frames and the alignment, `m3` `trendRule` the trend rule); `daily`, other `timeframes` or `json` still read | `mtf.js <bars> [--tf=15,60,240] [--daily=<file>] [--json] [--record --symbol MNQ]` |
 | `blackouts_list` | none | the news blackout windows | `blackouts.js list` |
 
+`Day so far` line (`m3.today.soFar`; RTH, the runner's briefing): the
+morning since 09:30 ET from its own bars: the read (`directional
+up|down`, `rotational`, `mixed`; `too early (n bars)` before 09:45 ET;
+`unknown`, with why), efficiency and x sqrt(bars), RTH VWAP crosses since
+the open, range in ATR(14) and ADR. A description, never a forecast:
+`day-context`. `RTH volatility` (`m3.today.rthVolatility`) ends the
+Alignment line, beside the regime's word.
+
 ## Examples
 
 ```text

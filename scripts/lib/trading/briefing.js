@@ -28,7 +28,9 @@
  *          (fvg-frames.js), and the 5m structure (the latest BOS or CHoCH on 5m candles, from 1m bars when the base
  *          bars can't: m5-structure.js), and per timeframe (3m, 5m, 15m, 1h) the compression box and its turn into
  *          expansion with the key levels it sits at (compression.js), and in RTH whether the day's trend has
- *          declared itself each side's way (side-signed, in ATR(14): trend-declared.js)   until the next base-bar close
+ *          declared itself each side's way (side-signed, in ATR(14): trend-declared.js), and in RTH how the morning has
+ *          behaved so far and its volatility against the same minutes on the prior sessions (`today.soFar`,
+ *          `today.rthVolatility`: day-so-far.js)   until the next base-bar close
  *   m15    the 15m read (trend, structure, swings, the latest BOS or CHoCH), the alignment per side,
  *          and the 15m candles' indicators (regime, EMAs, ADX and its slope,
  *          SuperTrend, Keltner, ATR), all from completed 15m candles
@@ -107,6 +109,7 @@ const { VOLUME_HIGH, netAtrOf } = require('./composed-reads');
 const { structure5m, structureLine } = require('./m5-structure');
 const { compressionFrames, compressionLine } = require('./compression');
 const { declaredFacts, declaredLine } = require('./trend-declared');
+const { daySoFar, daySoFarLine, rthVolatility, volatilityText } = require('./day-so-far');
 const { biasLine } = require('./bias-line');
 const { GLOBEX_OPEN_MIN, RTH_OPEN_MIN, RTH_CLOSE_MIN } = require('./clock'); // the session boundaries' one home
 
@@ -489,7 +492,10 @@ function computeSections({ bars, fine = null, c15, c60, snap, snap15, read, read
         nearestLiquidity: room,
         // Today so far and the developing levels: they move bar by bar.
         today: { open: day.open, gap: day.gap, openVs: day.openVs, openType: day.openType, openingRange: lv.openingRange || null, high: day.high, low: day.low, range: day.range, ibHigh: day.ibHigh, ibLow: day.ibLow, ibRange: day.ibRange, extUp: day.extUp, extDown: day.extDown, dayType: day.dayType, rangeVsAdr: day.adr ? round2(day.range / day.adr) : null,
-          ...(closes.openingRangeCrossed ? { openingRangeCrossed: closes.openingRangeCrossed } : {}) },
+          ...(closes.openingRangeCrossed ? { openingRangeCrossed: closes.openingRangeCrossed } : {}),
+          // The day so far and the RTH volatility (day-so-far.js), in RTH on the runner's bars only: presented facts, read
+          // by nothing in the gate, compose_check, order_plan, the trend rule or sizing (the summary says them: SUMMARY_ONLY).
+          ...(rth && !own ? { soFar: daySoFar(bars, { minutes, atr: atr14, adr: day.adr }), rthVolatility: rthVolatility(bars, { minutes }) } : {}) },
         overnight: lv.overnight || null,
         sessionProfile: sess.poc ? { poc: level(sessX.poc), vah: level(sessX.vah), val: level(sessX.val), hvnAbove: level(sessX.hvnAbove), hvnBelow: level(sessX.hvnBelow), lvnAbove: level(sessX.lvnAbove), lvnBelow: level(sessX.lvnBelow) } : null,
         priorProfileNodes: prior.poc ? { hvnAbove: level(priorX.hvnAbove), hvnBelow: level(priorX.hvnBelow), lvnAbove: level(priorX.lvnAbove), lvnBelow: level(priorX.lvnBelow) } : null,
@@ -802,8 +808,9 @@ function summaryLines(b, et) {
   const m15 = (b.sections.m15 || {}).data || {};
   const al = m15.alignment || {};
   // A briefing on 1h bars shares no m15 part (it changes faster than its bars).
-  const alignment = b.sections.m15 ? `- Alignment: long ${al.long || '?'}, short ${al.short || '?'}. Regime: ${(m3.regime || {}).primary || '?'}, ${(m3.regime || {}).volatility || '?'} volatility.`
-    : `- Alignment: not in a ${b.minutes}m briefing (the 15m read changes faster than its bars). Regime: ${(m3.regime || {}).primary || '?'}, ${(m3.regime || {}).volatility || '?'} volatility.`;
+  // The RTH volatility beside the regime's word, under its own name (day-so-far.js volatilityText; '' without one).
+  const alignment = (b.sections.m15 ? `- Alignment: long ${al.long || '?'}, short ${al.short || '?'}. Regime: ${(m3.regime || {}).primary || '?'}, ${(m3.regime || {}).volatility || '?'} volatility.`
+    : `- Alignment: not in a ${b.minutes}m briefing (the 15m read changes faster than its bars). Regime: ${(m3.regime || {}).primary || '?'}, ${(m3.regime || {}).volatility || '?'} volatility.`) + volatilityText((m3.today || {}).rthVolatility, `${b.minutes}m`);
   const rule = String(m3.trendRule || '').replace(/^Trend rule: /, '');
   const vw = m3.vwap || {};
   const news = m3.news || {};
@@ -846,6 +853,9 @@ function summaryLines(b, et) {
   // Compression only when a timeframe is compressing or broke out of a box in its last candles (compression.js).
   const comp = compressionLine(m3.compression, et);
   if (comp) out.push(comp);
+  // How the RTH morning has behaved so far, in RTH on the runner's briefing only (day-so-far.js daySoFarLine).
+  const soFar = daySoFarLine((m3.today || {}).soFar, { tf, dayType: (m3.today || {}).dayType });
+  if (soFar) out.push(soFar);
   // Whether the trend has declared itself each side's way, in RTH only (trend-declared.js declaredLine).
   const declared = declaredLine(m3.declared, tf);
   if (declared) out.push(declared);
@@ -921,7 +931,7 @@ const targets = list => list.reduce((out, x) => {
 const CHAIN_FRAMES = (C => C.chainOf(C.SHIPPED))(require('./chain'));
 const SUMMARY_FIELDS = ['swingTargets', 'rangeTargets', 'fvgs', 'structure5m', 'compression', 'declared', 'timing'];
 // What the summary's "This bar's close" line says in full, left out of the detail (only present when it happened).
-const SUMMARY_ONLY = { vwap: ['crossed'], today: ['openingRangeCrossed'], location: ['closesBeyondValue', 'backInsideValue'] };
+const SUMMARY_ONLY = { vwap: ['crossed'], today: ['openingRangeCrossed', 'soFar', 'rthVolatility'], location: ['closesBeyondValue', 'backInsideValue'] };
 
 /**
  * A section's data as the detail shows it: what the summary already says in full is left out (SUMMARY_FIELDS: the

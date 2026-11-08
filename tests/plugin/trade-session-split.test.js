@@ -399,8 +399,9 @@ const OLD_AGENTS_MD = 24466;
 // worst path; owner-approved: improves context. Plus 130 for prepare-ahead's catalog line in AGENTS.md (PR C): raised
 // under the owner's standing rule (raise a skill size cap or pin when it improves context; never cut context to fit),
 // by only the measured need of the worst path (88669 -> 88799), no more. The skill itself is looked up by prepare
-// ahead's runs only and is on no list.
-const RAISED = 154 + 130;
+// ahead's runs only and is on no list. Plus 1368 for day-context's Day so far and RTH volatility reads (feat/day-so-far,
+// the same rule): the skill file grew 1471 -> 2839 bytes, on every path that reads it (the worst path's 90167).
+const RAISED = 154 + 130 + 1368;
 const EVERY_CYCLE = ['multi-timeframe-analysis', 'strategy-library', 'strategy-scan', 'strategy-gate-checks', 'trader-process', 'htf-to-ltf', 'autonomous-trading'];
 const PATHS = {
   'full cycle, no candidate': ['role-round', 'setup-judgment', 'day-context'],
@@ -490,9 +491,14 @@ test('trade-session split: no head-trader path reads more than the base\'s every
 // sat 4 under its pins, so they move +178 each mode (30670, 30659); every other role within its pin.
 // Then feat/sweep-volume-facts (owner rule: raise a pin when it improves context): breakout-vs-fakeout names `wickShare` and its
 // measured evidence: full mode only, the market-structure analyst +391 (94380); every other role within its pin.
+// Then feat/day-so-far (owner rule: raise a pin when it improves context; the day so far was never stated by code):
+// bar-briefing's Day so far paragraph, +460 bytes in every role that embeds it: full mode the market-structure analyst
+// 94840 (the pin +460), the risk manager 93180 (+418), the trend-momentum analyst 54852 (+312), the volume-liquidity
+// analyst 49084 (+460); index mode the market-structure analyst 43268 (+93), the risk manager 79068 (+429), the
+// trend-momentum analyst 40462 (+439), the volume-liquidity analyst 33716 (+460); every other role unchanged.
 const ROLE_PROMPTS = {
-  full: { 'market-structure-analyst': 94380, 'news-calendar-analyst': 10182, 'risk-manager': 92762, 'strategy-researcher': 25650, 'trade-executor': 30670, 'trade-reviewer': 9454, 'trend-momentum-analyst': 54540, 'volume-liquidity-analyst': 48624 },
-  index: { 'market-structure-analyst': 43175, 'news-calendar-analyst': 10182, 'risk-manager': 78639, 'strategy-researcher': 25650, 'trade-executor': 30659, 'trade-reviewer': 9454, 'trend-momentum-analyst': 40023, 'volume-liquidity-analyst': 33256 },
+  full: { 'market-structure-analyst': 94840, 'news-calendar-analyst': 10182, 'risk-manager': 93180, 'strategy-researcher': 25650, 'trade-executor': 30670, 'trade-reviewer': 9454, 'trend-momentum-analyst': 54852, 'volume-liquidity-analyst': 49084 },
+  index: { 'market-structure-analyst': 43268, 'news-calendar-analyst': 10182, 'risk-manager': 79068, 'strategy-researcher': 25650, 'trade-executor': 30659, 'trade-reviewer': 9454, 'trend-momentum-analyst': 40462, 'volume-liquidity-analyst': 33716 },
 };
 
 test('trade-session split: no role prompt grows, in full or index mode, and no role lists a piece', () => {
