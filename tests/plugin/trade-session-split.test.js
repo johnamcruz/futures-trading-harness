@@ -500,8 +500,10 @@ test('trade-session split: no head-trader path reads more than the base\'s every
 // depth, and that a missing volume or range phrase means not computable (+55 in every role that embeds bar-briefing).
 // Then its review: no line in the ~30 min before a top's 15m swing confirms (absence is no read), a swing is broken by a
 // close since the extreme, the bars counted since the extreme, the volume ratio not time-of-day adjusted (+124 each).
+// Then pullback-vs-reversal's Swing row names each source's rule (the line: closes since the extreme; htfLevels: since
+// the swing formed): +52, full mode, the two analysts that embed it (95344, 55356).
 const ROLE_PROMPTS = {
-  full: { 'market-structure-analyst': 95292, 'news-calendar-analyst': 10182, 'risk-manager': 93353, 'strategy-researcher': 25650, 'trade-executor': 30670, 'trade-reviewer': 9454, 'trend-momentum-analyst': 55304, 'volume-liquidity-analyst': 49257 },
+  full: { 'market-structure-analyst': 95344, 'news-calendar-analyst': 10182, 'risk-manager': 93353, 'strategy-researcher': 25650, 'trade-executor': 30670, 'trade-reviewer': 9454, 'trend-momentum-analyst': 55356, 'volume-liquidity-analyst': 49257 },
   index: { 'market-structure-analyst': 43441, 'news-calendar-analyst': 10182, 'risk-manager': 79241, 'strategy-researcher': 25650, 'trade-executor': 30659, 'trade-reviewer': 9454, 'trend-momentum-analyst': 40635, 'volume-liquidity-analyst': 33889 },
 };
 

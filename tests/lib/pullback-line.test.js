@@ -47,7 +47,7 @@ test('pullback line: the runner\'s briefing carries the read of its own bars, on
   assert.ok(!/\n {2}pullback: /.test(text), 'the detail leaves it out (the summary says it)');
   // Another read is said; the rest of the text unchanged.
   const deep = B.renderBriefing(withPb(b, DEEP));
-  assert.match(deep, /- Pullback \(15m, short leg 21600 -> 21500\): the leg given back past its origin; 30 bars since the extreme; 15m swing 21600 broken by a close, 1h swing 21640 holds; 15m break against: CHoCH up 21590 \(2 bars ago\), 1h: CHoCH up 21610 \(0 bars ago\); stacked\./);
+  assert.match(deep, /- Pullback \(15m, short leg 21600 -> 21500\): the leg given back past its origin; 30 bars since the extreme; swings since the extreme: 15m 21600 broken by a close, 1h 21640 holds; 15m break against: CHoCH up 21590 \(2 bars ago\), 1h: CHoCH up 21610 \(0 bars ago\); stacked\./);
   assert.deepStrictEqual(deep.split('\n').filter(l => !l.startsWith('- Pullback (')), text.split('\n').filter(l => !l.startsWith('- Pullback (')));
   // Without one (with the trend, or an older file), no line.
   assert.deepStrictEqual(lineOf(B.renderBriefing(withPb(b, undefined))), []);
@@ -71,7 +71,7 @@ test('pullback line: no trend rule read yet (too few 4h candles): no line, even 
   assert.strictEqual(b.sections.m3.data.pullback, null);
 });
 
-test('pullback line: a swing it says holds is one the briefing\'s htfLevels has unbroken (one rule)', () => {
+test('pullback line: a swing it says broken (since the extreme) is broken in htfLevels (since it formed); unbroken there holds here', () => {
   let checked = 0;
   for (const n of [700, 900, 1100, 1300, 1499]) {
     const b = B.buildBriefing({ symbol: 'MNQ', contractId: 'MNQ', bars: BARS.slice(0, n), minutes: 3 });
@@ -81,11 +81,25 @@ test('pullback line: a swing it says holds is one the briefing\'s htfLevels has 
     for (const [tf, x] of Object.entries(m3.pullback.swing)) {
       const lv = x && (m3.htfLevels || []).find(l => l.name === `${tf} swing ${type}` && l.price === x.price);
       if (!lv) continue;
-      assert.strictEqual(lv.brokenAt === null, x.holds, `${n} ${tf} ${x.price}`);
+      // Closes since the extreme are a subset of closes since the swing formed.
+      if (!x.holds) assert.ok(lv.brokenAt, `${n} ${tf} ${x.price}`);
+      if (lv.brokenAt === null) assert.strictEqual(x.holds, true, `${n} ${tf} ${x.price}`);
       checked += 1;
     }
   }
   assert.ok(checked >= 2, `swings checked ${checked}`);
+});
+
+test('pullback line: its swing counts closes since the extreme, htfLevels since the swing formed: both true, each says its rule', () => {
+  // Recorded 2023-08-04 10:42 ET: the leg's own closes went above the 1h swing high 15558.25 before its extreme; none since.
+  const bars = require('../fixtures/pullback/swing-before-leg-2023-08-04.json').map(([t, o, h, l, c, v]) => ({ t: `${t}:00.000Z`, o, h, l, c, v }));
+  const b = B.buildBriefing({ symbol: 'MNQ', contractId: 'MNQ', bars, minutes: 3 });
+  const lv = b.sections.m3.data.htfLevels.find(x => x.name === '1h swing high' && x.price === 15558.25);
+  assert.strictEqual(lv.brokenAt, '2023-08-04T13:33:00.000Z', 'htfLevels: broken since the swing formed');
+  const p = PR.pullbackRead({ bars, base: 3, prevailing: '4h down' });
+  assert.ok(Date.parse(lv.brokenAt) < Date.parse(p.leg.at), 'broken before the extreme');
+  assert.deepStrictEqual(p.swing['1h'], { price: 15558.25, holds: true });
+  assert.match(PR.pullbackLine(p), /; swings since the extreme: 15m 15583\.5 holds, 1h 15558\.25 holds; /);
 });
 
 test('pullback line: the gate\'s composed-entry check, compose_check and the composed reads are the same whatever it says', () => {

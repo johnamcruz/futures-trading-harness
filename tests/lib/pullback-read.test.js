@@ -88,7 +88,7 @@ test('pullbackRead: a fall through the leg\'s origin: depth past 100%, the 15m s
   // Given back past its origin: no depth number (the skill's Depth row), the swings and breaks still said.
   assert.match(PR.pullbackLine(p), /\): the leg given back past its origin; /);
   assert.ok(!/% of the leg/.test(PR.pullbackLine(p)));
-  assert.match(PR.pullbackLine(p), /15m swing 21059 broken by a close/);
+  assert.match(PR.pullbackLine(p), /swings since the extreme: 15m 21059 broken by a close/);
   // At exactly 100% (back at the origin) it is given back too.
   assert.strictEqual(p.pastOrigin, true);
   // Given back: the stale window's volume and range ratios are left out (they add nothing then).
@@ -177,7 +177,7 @@ test('pullbackLine: facts in order, no verdict word; the leg by its endpoints', 
   const p = read(mk(legs(21000, [...UP, [20, -1]]), { vol: i => (i >= 220 ? 60 : 100) }));
   const line = PR.pullbackLine(p);
   assert.strictEqual(line, '- Pullback (15m, long leg 21059 -> 21101): depth 50% of the leg; 20 bars since the extreme, volume 0.6x the leg\'s per bar (falling), range 1x; '
-    + `15m swing 21059 holds, 1h swing ${p.swing['1h'] ? `${p.swing['1h'].price} holds` : 'unknown'}; 15m break against: none, 1h: none.`);
+    + `swings since the extreme: 15m 21059 holds, 1h ${p.swing['1h'] ? `${p.swing['1h'].price} holds` : 'unknown'}; 15m break against: none, 1h: none.`);
   // No conclusion a rule could read: no verdict word after the line's name; nothing another line says (the price, the
   // prevailing side, the clock) and no disclaimer (the skills say it once).
   const rest = line.replace(/^- Pullback /, '');
@@ -220,7 +220,18 @@ test('pullbackRead: a swing is broken only by a close after the leg\'s extreme (
   assert.deepStrictEqual(p.swing['1h'], { price: 15558.25, holds: true });
   assert.ok(!bars.some(b => b.t > p.leg.at && b.c > 15558.25), 'no close above it since the extreme');
   assert.ok(bars.some(b => b.t <= p.leg.at && b.c > 15558.25), 'closes above it before the extreme (the leg\'s own)');
-  assert.match(PR.pullbackLine(p), /1h swing 15558\.25 holds/);
+  assert.match(PR.pullbackLine(p), /swings since the extreme: 15m 15583\.5 holds, 1h 15558\.25 holds/);
+});
+
+test('swingOf: broken by a close after both the swing\'s candle closed and the extreme; the bar at the candle\'s close counts', () => {
+  // A 1h swing low at 100 whose candle (14:00-15:00Z) holds the leg's extreme (14:30Z).
+  const sw = { price: 100, t: '2026-10-05T14:00:00.000Z' };
+  const bar = (t, c) => ({ t, o: c, h: c, l: c, c, v: 1 });
+  const after = Date.parse('2026-10-05T14:30:00.000Z');
+  assert.deepStrictEqual(PR.swingOf(sw, 60, [bar('2026-10-05T15:00:00.000Z', 99)], 1, after), { price: 100, holds: false }, 'the first bar at the close');
+  assert.strictEqual(PR.swingOf(sw, 60, [bar('2026-10-05T14:57:00.000Z', 99)], 1, after).holds, true, 'inside its own candle');
+  assert.strictEqual(PR.swingOf(sw, 60, [bar('2026-10-05T15:00:00.000Z', 99)], 1, Date.parse('2026-10-05T15:00:00.000Z')).holds, true, 'the extreme\'s own bar');
+  assert.strictEqual(PR.swingOf(null, 60, [], 1, after), null);
 });
 
 test('pullbackLine: an older or malformed record never prints undefined or an empty phrase', () => {
@@ -243,5 +254,5 @@ test('pullbackRead: a recorded given-back leg (2021-06-04 09:48 ET bar, the 4h d
   assert.ok(!/520|% of the leg/.test(line), line);
   assert.strictEqual(p.leg.atr, 2.63, 'over the floor: measured, and given back');
   assert.match(line, /\): the leg given back past its origin; 147 bars since the extreme; /);
-  assert.match(line, /15m swing 13531\.75 broken by a close, 1h swing 13533 broken by a close; 15m break against: BOS up 13542\.5 \(10 bars ago\), 1h: BOS up 13546\.5 \(1 bars ago\); stacked\.$/);
+  assert.match(line, /swings since the extreme: 15m 13531\.75 broken by a close, 1h 13533 broken by a close; 15m break against: BOS up 13542\.5 \(10 bars ago\), 1h: BOS up 13546\.5 \(1 bars ago\); stacked\.$/);
 });

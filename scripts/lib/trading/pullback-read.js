@@ -24,8 +24,9 @@
  *                    (the line shows no depth under pullbackRead.minLegAtr, nor past the origin)
  *     depth, close   the share of the leg the last close gave back (past 1: beyond the origin)
  *     swing          per frame (15m, 1h) the leg's swing against (15m: impulseOf's; 1h: the last confirmed 1h swing
- *                    against before the extreme) and whether it `holds`: no base close beyond it since its candle closed
- *                    (the briefing's m3.htfLevels brokenAt rule); null when there is none
+ *                    against before the extreme) and whether it `holds`: no base close beyond it after both its candle
+ *                    closed and the extreme (the pullback's closes; m3.htfLevels brokenAt counts every close since the
+ *                    swing formed, so a leg's own close can break it there and not here: the line names its rule)
  *     counter        { bars, volRatio, volume, rangeRatio }: the base candles since the extreme, their mean volume and
  *                    range per bar against the leg's (origin to extreme), only when every bar of both is in one session
  *                    part (RTH or not: the open's volume never compared with the night's); volume 'falling' (< 1),
@@ -166,10 +167,12 @@ function pullbackLine(p, { level = x => x } = {}) {
   // says what a missing phrase means).
   const ratios = given ? [] : [fin(c.volRatio) && c.volume ? `volume ${c.volRatio}x the leg's per bar (${c.volume})` : null, fin(c.rangeRatio) ? `range ${c.rangeRatio}x` : null].filter(Boolean);
   const bars = [Number.isInteger(c.bars) ? `${c.bars} bars since the extreme` : null, ...ratios].filter(Boolean).join(', ');
-  const swings = Object.entries(isObj(p.swing) ? p.swing : {}).map(([tf, x]) => (!isObj(x) ? `${tf} swing unknown` : fin(x.price) && typeof x.holds === 'boolean' ? `${tf} swing ${level(x.price)} ${x.holds ? 'holds' : 'broken by a close'}` : null)).filter(Boolean).join(', ');
+  // The swings' rule named once: closes since the extreme (htfLevels' brokenAt counts since the swing formed).
+  const sw = Object.entries(isObj(p.swing) ? p.swing : {}).map(([tf, x]) => (!isObj(x) ? `${tf} unknown` : fin(x.price) && typeof x.holds === 'boolean' ? `${tf} ${level(x.price)} ${x.holds ? 'holds' : 'broken by a close'}` : null)).filter(Boolean);
+  const swings = sw.length ? `swings since the extreme: ${sw.join(', ')}` : '';
   const brk = Object.entries(isObj(p.against) ? p.against : {}).map(([tf, x], i) => `${i ? `${tf}` : `${tf} break against`}: ${isObj(x) && x.kind ? `${x.kind} ${x.direction} ${level(x.level)} (${x.barsAgo} bars ago)` : 'none'}`).join(', ');
   const parts = [depth, bars, swings, brk && `${brk}${p.stacked === true ? '; stacked' : ''}`].filter(Boolean);
   return `- Pullback (${p.frame}, ${p.side} leg ${level(p.leg.origin)} -> ${level(p.leg.extreme)}): ${parts.join('; ')}.`;
 }
 
-module.exports = { impulseOf, pullbackRead, pullbackLine };
+module.exports = { impulseOf, swingOf, pullbackRead, pullbackLine };

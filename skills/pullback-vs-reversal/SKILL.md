@@ -20,7 +20,7 @@ hypotheses; a missing field is `unknown`. "Last 10 bars": the prompt's `V`, `(c-
 |---|---|---|---|
 | HTF break | with the trend | a CHoCH against it | `m15.lastBreak.last`, `h1.lastBreak.last`; `Pullback` breaks |
 | Depth | up to about 50-62% of the leg (hypothesis) | past the impulse origin | flat: `Pullback` depth; open: Trade read |
-| Swing | the leg's 15m/1h swing holds | a 3m close broke it | `Pullback` swings; `m3.htfLevels` `brokenAt` |
+| Swing | the leg's 15m/1h swing holds | a 3m close broke it | `Pullback` swings (closes since the extreme); `m3.htfLevels` `brokenAt` (since the swing formed) |
 | Volume, bars | falling, shrinking | rising, wide against it | `Pullback` volume, range vs the leg; last 10 bars |
 
 **Flat**: the `Pullback` line (price against the prevailing side on the
