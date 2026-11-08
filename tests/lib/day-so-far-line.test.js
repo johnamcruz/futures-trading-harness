@@ -78,7 +78,7 @@ test('day so far: the runner\'s briefing carries it in RTH from its own bars, on
 test('day so far: too early at 09:36 ET; none outside RTH; none in an analyst\'s frame briefing', () => {
   const early = build(EARLY_N);
   assert.match(early.sections.m3.data.et, /^09:3/);
-  assert.match(B.renderBriefing(early), /- Day so far \(3 3m bars; `day-context`\): too early \(3 bars, a read from 10\), RTH VWAP crosses \d+\.\n/);
+  assert.match(B.renderBriefing(early), /- Day so far \(3 3m bars; `day-context`\): too early \(a read from 10 bars\), RTH VWAP crosses \d+\.\n/);
   const globex = build(GLOBEX_N);
   assert.ok(!('soFar' in (globex.sections.m3.data.today || {})));
   assert.ok(!B.renderBriefing(globex).includes('Day so far') && !B.renderBriefing(globex).includes('RTH volatility'));

@@ -102,7 +102,7 @@ test('daySoFar: under the minimum bars (config daySoFar.minBars) it is too early
   assert.strictEqual(d.bars, 9);
   for (const k of ['read', 'direction', 'efficiency', 'score']) assert.ok(!(k in d), k);
   const line = D.daySoFarLine(d, { tf: '3m' });
-  assert.strictEqual(line, '- Day so far (9 3m bars; `day-context`): too early (9 bars, a read from 10), RTH VWAP crosses 2.');
+  assert.strictEqual(line, '- Day so far (9 3m bars; `day-context`): too early (a read from 10 bars), RTH VWAP crosses 2.');
   assert.doesNotMatch(line, /directional|rotational|mixed|efficiency/);
   assert.strictEqual(D.daySoFar(TREND.slice(0, 5), OPTS).status, 'too early', 'at 4 bars, too');
   // At 10 bars (the 10:00 ET close) the read starts.

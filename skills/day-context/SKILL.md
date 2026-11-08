@@ -33,18 +33,17 @@ description: Use when deciding a cycle - the premarket plan, the news, and the d
   so far", "mixed so far"). It describes the RTH morning so far (its
   bars since 09:30), never the rest: on 56 recorded days it matched the
   09:30-12:00 day, but its read of the rest of the morning was a coin flip
-  (AUC 0.48-0.56 on 736 days out of sample); rotating mornings trended
-  later about as often as not. So it is no evidence for or against the
-  next leg: never a read for or against in the count, a veto, a size or a
-  filter; you decide. Cumulative, no recency: 30 trending minutes then two
-  hours of range still read `directional`; the candles and `Trend
-  declared?` carry the recent bars. The read: efficiency (net move / the
+  (AUC 0.56/0.48/0.52/0.48 at 09:45/10:15/10:45/11:15 on 736 days out of
+  sample); rotating mornings trended later about as often as not.
+  Cumulative, no recency: 30 trending minutes then two hours of range
+  still read `directional`; the candles and `Trend declared?` carry the
+  recent bars. The read: efficiency (net move / the
   bars' summed range) x sqrt(bars), one scale all morning:
   - `directional up|down`: 0.75+: one-way so far.
   - `rotational`: under 0.34: back and forth so far (many RTH VWAP
     crosses agree).
   - `mixed`: between: neither yet.
-  - `too early (n bars, a read from 10)`: no read. Reads on few bars are
+  - `too early (a read from 10 bars)`: no read. Reads on few bars are
     mostly noise: trust the word from about 10:15 ET.
   The day's move is the `Trend declared?` line's; range in ADR
   `today.rangeVsAdr`; the IB day type above.
@@ -57,6 +56,6 @@ description: Use when deciding a cycle - the premarket plan, the news, and the d
 
 ```text
 trend day up, 85% ADR used -> little room left: a read against
-Day so far: rotational (x sqrt(bars) 0.21), RTH VWAP crosses 12 -> "rotating so far"; the setup's own reads decide
+Day so far: rotational (x sqrt(bars) 0.21), RTH VWAP crosses 12 -> "rotating so far"
 Day so far: directional down (x sqrt(bars) 1.55) -> "trending down so far": a description, not a forecast
 ```

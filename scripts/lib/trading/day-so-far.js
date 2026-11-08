@@ -103,7 +103,7 @@ function daySoFarLine(d, { tf = '3m', dayType = null } = {}) {
   if (d.status === 'unknown') return `- Day so far: unknown (${d.reason}).`;
   // No clock time (the owner: a time only when it adds value): the RTH bars counted, the rest in `day-context`.
   const head = `- Day so far (${d.bars} ${tf} bars; \`day-context\`)`;
-  if (d.status === 'too early') return `${head}: too early (${d.bars} bars, a read from ${d.readFrom}), RTH VWAP crosses ${d.vwapCrosses}.`;
+  if (d.status === 'too early') return `${head}: too early (a read from ${d.readFrom} bars), RTH VWAP crosses ${d.vwapCrosses}.`;
   const word = d.read === 'rotational' ? d.read : `${d.read} ${d.direction}`;
   // Its range in ADR is today.rangeVsAdr in the detail: not said twice.
   const range = `range ${d.rangeAtr ?? '?'} x ${tf} ATR(14)`;
