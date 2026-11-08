@@ -63,6 +63,11 @@ test('vetoBasis on a replay run\'s 36 phase-2 vetoes (their result lines): 27 on
   assert.deepStrictEqual(count, { lesson: 27, 'hard-step': 6, misread: 3 });
 });
 
+test('vetoBasis: a clause end between a "no"/"not" and a hard step breaks the negation; an allowing trend rule is no hard step', () => {
+  for (const x of ['8 Decision: stand aside: no entry; in a cooldown after two losses', 'PLAN 8 Decision: No trade: at the daily limit.', 'No entry, at the loss-streak stop.']) assert.strictEqual(vetoBasis(x), 'hard-step', x);
+  for (const x of ['The trend rule allows the long; the restriction in the journal stands.', 'Not counter to the 4h trend; the journaled lesson says stand aside.']) assert.notStrictEqual(vetoBasis(x), 'hard-step', x);
+});
+
 test('vetoBasis: a veto naming neither is unstated; nothing to read is null; the bases are the module\'s', () => {
   assert.strictEqual(vetoBasis('risk-manager vetoed the trade_lifecycle long 1 MNQ: Phase 2 verdict for MNQ long, 3m bar 14:00Z. I\'m standing aside.'), 'unstated');
   assert.strictEqual(vetoBasis('PLAN 5 Confluence: the compose record for trade_lifecycle short is OK. Its reads hold.'), 'unstated');

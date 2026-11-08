@@ -37,7 +37,7 @@ const HARD = new RegExp([
   '\\bstop\\s+on\\s+the\\s+wrong\\s+side\\b', '\\bnot\\s+tradable\\b', '\\bunprotected\\s+position\\b',
 ].join('|'), 'gi');
 // A negation just before a phrase ("not counter to", "no unprotected position", "isn't in a blackout").
-const NEGATED = /\b(?:not|no|never|without|isn't|aren't|wasn't)\s+(?:\S+\s+)?$/i;
+const NEGATED = /\b(?:not|no|never|without|isn't|aren't|wasn't)\s+(?:[^\s.,;:]+\s+)?$/i;
 const failing = t => [...t.matchAll(HARD)].some(m => !NEGATED.test(t.slice(0, m.index)));
 // A hard step named as the VETO line's failed check (`VERDICT: VETO - <check>: ...`, agents/risk-manager.md).
 const CHECK = /\bVETO\s*[-:]\s*([^:]{1,40}):/i;
