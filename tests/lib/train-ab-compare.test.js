@@ -208,6 +208,19 @@ test('pairing: one decision per (root, bar); an entry\'s legs averaged, a pass 0
   assert.strictEqual(r.rows[0].diff, 3);
 });
 
+test('entry rate: a pass the model didn\'t make (passClass: a veto, a missed fill) is its choice to take, never a pass; its realized R is 0', () => {
+  const unplaced = (bar, passClass) => ({ ...decision(bar, { entered: false }), passClass });
+  const m = AB.decisionsByKey([decision(BARS[0]), unplaced(BARS[1], 'vetoed'), unplaced(BARS[2], 'missed_fill'), unplaced(BARS[3], 'declined'), decision(BARS[4], { entered: false })]);
+  assert.deepStrictEqual([...m.values()].map(x => [x.entered, x.took, x.R]), [[true, true, 1], [false, true, 0], [false, true, 0], [false, false, 0], [false, false, 0]]);
+  const w = world();
+  const a = makeRun(w, 'a', { decisions: [unplaced(BARS[0], 'vetoed'), decision(BARS[1], { entered: false })] });
+  const b = makeRun(w, 'b', { root: w.roots.skill, decisions: [decision(BARS[0]), decision(BARS[1])] });
+  const r = compare(a, b, { metrics: ['entries'] });
+  assert.strictEqual(r.refused, false, (r.refusals || []).join('\n'));
+  const e = r.rows.find(x => /^entry rate/.test(x.measure));
+  assert.deepStrictEqual([e.a, e.b, e.measure], [0.5, 1, 'entry rate (taken of composed; B took 1 A passed, 0 the reverse)'], 'the veto A\'s choice to take: only bar 1 differs');
+});
+
 function scripted(w, { better }) {
   const decA = BARS.map((bar, i) => decision(bar, { R: i % 3 ? -1 : 1, reads: i < 12 ? ['true', 'false'] : ['true', 'true'] }));
   const decB = better ? BARS.map((bar, i) => decision(bar, { R: i % 3 ? 1.5 : 2, reads: ['true', 'true'] })) : decA;

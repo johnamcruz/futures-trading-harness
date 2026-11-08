@@ -42,6 +42,9 @@ test('limitOutcome: the limit fills at the reference or better, then target, sto
   assert.strictEqual(E.limitOutcome({ ...plan({ rows: [] }) }).exitReason, 'no bars after the decision');
 });
 
+// The bars of a long held from 14:01 to 14:20 (100 to 98.5): the 14:03 bar's high 101 its best, the exit its worst.
+const TRADE_ROWS = [[100.5, 100.75, 99.75, 100.25], [100.25, 101, 99.5, 100.5], [100.5, 100.75, 99, 99.5], [99.5, 100, 99, 99.5], [99.5, 100, 99, 99.5], [99.5, 100, 99, 99.5], [99.5, 99.5, 98, 98.5]];
+
 const trip = (openIso, closeIso, entryPx, exitPx, side = 'buy') => ({
   family: 'MNQ', side, openMs: ms(openIso), closeMs: closeIso ? ms(closeIso) : null,
   opens: [{ price: entryPx, size: 1 }], closes: closeIso ? [{ price: exitPx, size: 1 }] : [],
@@ -66,7 +69,7 @@ test('buildDecisions: entered from real fills, passed by counterfactual, refused
   assert.deepStrictEqual([entered.outcome.source, entered.outcome.R, entered.grade], ['fills', 1.5, 'win']);
   // MAE and MFE from the bars wholly inside the trade and its exit: the low 99.5 (-0.25R), the exit 103 (+1.5R).
   assert.deepStrictEqual([entered.outcome.maeR, entered.outcome.mfeR], [-0.25, 1.5]);
-  assert.deepStrictEqual([passed.outcome.maeR, passed.outcome.mfeR], [0, 2], 'the counterfactual\'s: filled inside the second bar (left out), out at its target');
+  assert.deepStrictEqual([passed.outcome.maeR, passed.outcome.mfeR], [null, null], 'the counterfactual\'s: filled inside the second bar, out inside the third: no bar held whole, unknown');
   assert.deepStrictEqual([passed.outcome.source, passed.outcome.entryPrice, passed.outcome.exitReason, passed.outcome.R, passed.grade], ['counterfactual', 100, 'target', 2, 'missed-win']);
   assert.deepStrictEqual([tried.checked, tried.signatures.skill, nothing.checked], [1, null, 0]);
   assert.deepStrictEqual([refused.refusal, refused.side, refused.outcome.exitReason, refused.grade], ['trade-lifecycle-reads', 'short', 'target', 'refused-would-win']);
@@ -87,6 +90,45 @@ test('grades: a pass that would have lost is a good pass; unfilled is neutral', 
   assert.strictEqual(E.gradeOf('none', null), null);
   // The gate's refusals are graded apart from the model's passes.
   assert.deepStrictEqual(['refused'].flatMap(d => [-1, 1, null].map(R => E.gradeOf(d, { R }))), ['refused-would-lose', 'refused-would-win', 'refused-neutral']);
+});
+
+test('passClass: a pass is the model\'s (declined) only when it passed; a missed fill, a veto, a gate block are graded apart, never good-pass, missed-win or neutral-pass', () => {
+  const t = i => new Date(ms(T0) + i * M3).toISOString();
+  // Real result lines (the runner's wording): a missed entry, a lesson veto, the head trader's own pass, an order that
+  // went and never filled, a gate block, and a cycle from before the record (no result: the line as it was).
+  const results = [
+    'CYCLE RESULT: no-trade - the runner\'s entry: missed the plan\'s entry 100 (price 100.75 is 0.75 points past it against the long): no late entry',
+    'CYCLE RESULT: no-trade - risk-manager vetoed the trade_lifecycle long 1 MNQ: VERDICT: VETO - phase 1 stand-down: prop_portfolio entries stand down until the target-leg cancel cause is journaled; stand aside',
+    'CYCLE RESULT: no-trade - compose_check OK, passed: the 3m trend is up against the short',
+    'CYCLE RESULT: executed - trade_lifecycle long 1 MNQ (the runner\'s entry: phase 2 approved, the order is working, unfilled: order 4, limit 100)',
+    'CYCLE RESULT: blocked - the order gate refused the trade_lifecycle long 1 MNQ: [phase2-facts] an item the gate can\'t read',
+    undefined,
+  ];
+  const cycles = results.map((result, i) => ({ at: t(i * 10), roots: ['MNQ'], ...(result ? { result } : {}) }));
+  const records = results.map((_r, i) => fromLifecycleRecord(record({ at: t(i * 10) })));
+  // The limit fills and wins at its target in each window.
+  const rows = [];
+  for (let i = 0; i < 70; i += 1) rows.push(i % 10 === 0 ? [100.25, 100.5, 99.75, 100.25] : i % 10 === 1 ? [100.25, 104.25, 100, 104] : [100.25, 100.5, 100.25, 100.25]);
+  const out = E.buildDecisions({ cycles, records, gateRefusals: [{ cycleAt: t(40), root: null, check: 'phase2-facts' }], barsFor: () => bars(T0, rows), tfMs: M3, tickOf: () => 0.25, runId: 'run1' });
+  assert.deepStrictEqual(out.map(d => [d.decision, d.passClass, d.vetoBasis, d.grade]), [
+    ['passed', 'missed_fill', undefined, 'unplaced-would-win'],
+    ['passed', 'vetoed', 'lesson', 'unplaced-would-win'],
+    ['passed', 'declined', undefined, 'missed-win'],
+    ['passed', 'unfilled', undefined, 'unplaced-would-win'],
+    ['refused', 'blocked', undefined, 'refused-would-win'],
+    ['passed', undefined, undefined, 'missed-win'],
+  ]);
+  assert.ok(out.every(d => d.outcome.R === 2), 'the counterfactual stays: a vetoed setup\'s R is still evidence about the setup');
+  assert.deepStrictEqual(out.map(d => require('../../scripts/lib/learning/pass-class').ownPass(d)), [false, false, true, false, false, true]);
+  assert.deepStrictEqual(['passed'].flatMap(d => [-1, 1, null].map(R => E.gradeOf(d, { R }, 'vetoed'))), ['unplaced-would-lose', 'unplaced-would-win', 'unplaced-neutral']);
+  assert.strictEqual(E.gradeOf('passed', { R: -1 }, 'declined'), 'good-pass');
+  // Both sides composed in one cycle: the veto is the latest record's (the one planned); the other side the model passed.
+  const two = E.buildDecisions({
+    cycles: [{ at: t(0), roots: ['MNQ'], result: results[1] }],
+    records: [record({ at: t(0) }), record({ at: new Date(ms(t(0)) + 1000).toISOString(), side: 'short', entry: 101, stop: 103, target: 97 })].map(fromLifecycleRecord),
+    barsFor: () => bars(T0, rows), tfMs: M3, tickOf: () => 0.25, runId: 'run1',
+  });
+  assert.deepStrictEqual(two.map(d => [d.side, d.passClass, d.vetoBasis]), [['long', 'declined', undefined], ['short', 'vetoed', 'lesson']]);
 });
 
 test('a round trip is credited to the latest ok record before its fill, not an earlier one still open (A then B)', () => {
@@ -168,7 +210,8 @@ test('writeRunExperience: a finished practice run\'s log in its home; an unfinis
     { id: 1, contractId: 'MNQ:2023-06', creationTimestamp: '2023-03-15T14:01:00Z', price: 100, size: 1, side: 0, profitAndLoss: null },
     { id: 2, contractId: 'MNQ:2023-06', creationTimestamp: '2023-03-15T14:20:00Z', price: 98.5, size: 1, side: 1, profitAndLoss: -3 },
   ];
-  const { home, dir } = runDir({ times, fills, records: [record({ at: T0 })], barRows: [[100.5, 100.75, 99.75, 100.25], [100.25, 101, 99.5, 100.5]] });
+  // Every bar of the trade (14:00 to 14:18): its excursions are measured only on bars that cover it.
+  const { home, dir } = runDir({ times, fills, records: [record({ at: T0 })], barRows: TRADE_ROWS });
   const r = writeRunExperience(dir, { now: new Date('2026-10-14T00:00:00Z') });
   assert.strictEqual(r.file, path.join(fs.realpathSync(home), 'experience', 'decisions.jsonl'));
   assert.deepStrictEqual([r.role, r.hidden], ['practice-train', false]);
@@ -321,7 +364,7 @@ test('checked: a cycle\'s records of a side with no ok record count on its lates
   assert.deepStrictEqual(out.map(d => [d.side, d.checked]), [['long', 2]]);
   const file = path.join(tmpHome(), 'experience', 'decisions.jsonl');
   E.appendDecisions(file, [{ id: 'old', v: 1, runId: 'r1' }]);
-  assert.throws(() => E.appendDecisions(file, [{ id: 'new', v: E.VERSION, runId: 'r1' }]), /run r1's decisions were written by experience log version 1, not 2: delete that run's lines/);
+  assert.throws(() => E.appendDecisions(file, [{ id: 'new', v: E.VERSION, runId: 'r1' }]), new RegExp(`run r1's decisions were written by experience log version 1, not ${E.VERSION}: rebuild them \\(replay\\.js experience --rebuild\\)`));
   assert.deepStrictEqual(E.appendDecisions(file, [{ id: 'other', v: E.VERSION, runId: 'r2' }]), { added: 1, kept: 0 });
 });
 
@@ -423,11 +466,15 @@ test('MAE and MFE in R: the counterfactual\'s and the fills\' from the bars held
   // target inside the third (left out; the exit +2R).
   const win = E.limitOutcome(plan({ rows: [[100.5, 100.75, 99.75, 100.25], [100.25, 102, 99.5, 101.75], [101.75, 104.25, 101.5, 104]] }));
   assert.deepStrictEqual([win.maeR, win.mfeR], [-0.25, 2], 'the held bar\'s low 99.5');
-  // Stopped: the stop's fill with slippage (97.75, -1.125R); the stop bar itself left out.
+  // Stopped on the bar after the fill: no bar held whole (the fill bar and the stop bar both left out), so the move
+  // while held can't be told: unknown, never the exit alone (it was -1.125R and 0).
   const loss = E.limitOutcome(plan({ rows: [[100.5, 100.75, 99.75, 100.25], [100.25, 100.5, 97.5, 98]] }));
-  assert.deepStrictEqual([loss.maeR, loss.mfeR], [-1.125, 0]);
-  const short = E.limitOutcome({ ...plan({ rows: [[99.5, 100.25, 99.25, 99.75], [99.75, 100, 95.75, 96]], side: 'short', stop: 102, target: 96 }) });
-  assert.deepStrictEqual([short.maeR, short.mfeR], [0, 2], 'a short, mirrored');
+  assert.deepStrictEqual([loss.R, loss.maeR, loss.mfeR], [-1.125, null, null]);
+  // Held one bar whole, then stopped: that bar and the stop's fill.
+  const held = E.limitOutcome(plan({ rows: [[100.5, 100.75, 99.75, 100.25], [100.25, 101, 99.5, 100.5], [100.5, 100.5, 97.5, 98]] }));
+  assert.deepStrictEqual([held.maeR, held.mfeR], [-1.125, 0.5]);
+  const short = E.limitOutcome({ ...plan({ rows: [[99.5, 100.25, 99.25, 99.75], [99.75, 99.75, 98.5, 99], [99, 99, 95.75, 96]], side: 'short', stop: 102, target: 96 }) });
+  assert.deepStrictEqual([short.R, short.maeR, short.mfeR], [2, 0, 2], 'a short, mirrored: the held bar never above the fill, the target');
   const unfilled = E.limitOutcome(plan({ rows: [[100.5, 101, 100.25, 100.75], [100.75, 101, 99.5, 100]] }));
   assert.deepStrictEqual([unfilled.maeR, unfilled.mfeR], [null, null]);
   // A round trip: the bars wholly inside it (99 low: -0.5R; 104 high: +2R) and its exit.
@@ -438,6 +485,117 @@ test('MAE and MFE in R: the counterfactual\'s and the fills\' from the bars held
   assert.deepStrictEqual([E.tripOutcome(rt, { entry: 100, stop: 98 }, 'long').maeR, E.tripOutcome(rt, { entry: 100, stop: 98 }, 'long').mfeR], [null, null], 'no bars: unknown, never the exit alone');
   const open = E.tripOutcome({ ...rt, closeMs: null, closes: [] }, { entry: 100, stop: 98 }, 'long', { bars: rows, tfMs: M3 });
   assert.deepStrictEqual([open.R, open.maeR, open.mfeR], [null, null, null]);
+  // Held under one bar (in at 14:01, out at 14:02): no bar wholly inside it, so unknown, never the exit alone.
+  const sub = E.tripOutcome({ ...rt, openMs: ms(T0) + 60000, closeMs: ms(T0) + 120000, closes: [{ price: 99, size: 1 }] }, { entry: 100, stop: 98 }, 'long', { bars: rows, tfMs: M3 });
+  assert.deepStrictEqual([sub.R, sub.maeR, sub.mfeR], [-0.5, null, null]);
+});
+
+test('MAE and MFE: bars that do not cover the trade (another day\'s, or a gap inside it) are unknown, never the exit alone', () => {
+  const rt = { openMs: ms(T0), closeMs: ms(T0) + 3 * M3, opens: [{ price: 100, size: 1 }], closes: [{ price: 103, size: 1 }] };
+  // The run home's bars file held only a later window (a replay's last snapshot): no bar of the trade.
+  const later = bars(new Date(ms(T0) + 86400000).toISOString(), [[100, 101, 99, 100.5], [100.5, 104, 100, 103.5]]);
+  const o = E.tripOutcome(rt, { entry: 100, stop: 98 }, 'long', { bars: later, tfMs: M3 });
+  assert.deepStrictEqual([o.R, o.maeR, o.mfeR], [1.5, null, null]);
+  // A bar missing inside the trade: its excursion can't be told.
+  const all = bars(T0, [[100, 101, 99, 100.5], [100.5, 104, 100, 103.5], [103.5, 103.5, 102, 103]]);
+  const gap = E.tripOutcome(rt, { entry: 100, stop: 98 }, 'long', { bars: [all[0], all[2]], tfMs: M3 });
+  assert.deepStrictEqual([gap.maeR, gap.mfeR], [null, null]);
+  // Covered: as before.
+  assert.deepStrictEqual([E.tripOutcome(rt, { entry: 100, stop: 98 }, 'long', { bars: all, tfMs: M3 }).maeR], [-0.5]);
+});
+
+test('limitOutcome: no bar at the decision (the bars are another day\'s) is unknown, never unfilled; its pass is ungraded', () => {
+  const later = new Date(ms(T0) + 86400000).toISOString();
+  const o = E.limitOutcome({ ...plan({ rows: [] }), bars: bars(later, [[100.5, 100.75, 99.75, 100.25], [99, 99, 98, 98.5]]) });
+  assert.deepStrictEqual([o.filled, o.exitReason, o.R, o.maeR, o.mfeR], [null, 'no bars at the decision', null, null, null]);
+  assert.strictEqual(E.gradeOf('passed', o), null, 'no outcome known: no grade');
+  // The bar in progress at the decision is there: an ordinary unfilled limit, as before.
+  const end = E.limitOutcome(plan({ rows: [[100.5, 101, 100.25, 100.75]], expiry: 1 }));
+  assert.deepStrictEqual([end.filled, end.exitReason], [false, 'unfilled']);
+});
+
+test('writeRunExperience: the run\'s archived bars (bars-<day>.jsonl.gz), not only the home\'s last snapshot, score its decisions', () => {
+  const A = require('../../scripts/lib/session/bars-archive');
+  const times = [T0, new Date(ms(T0) + M3).toISOString()];
+  const fills = [
+    { id: 1, contractId: 'MNQ:2023-06', creationTimestamp: '2023-03-15T14:01:00Z', price: 100, size: 1, side: 0, profitAndLoss: null },
+    { id: 2, contractId: 'MNQ:2023-06', creationTimestamp: '2023-03-15T14:20:00Z', price: 98.5, size: 1, side: 1, profitAndLoss: -3 },
+  ];
+  // The home's bars file: a later day's window only (the runner rewrites it every bar).
+  const { home, dir } = runDir({ times, fills, records: [record({ at: T0 })], barRows: [[1, 1, 1, 1]], barsStart: '2023-03-17T14:00:00.000Z' });
+  A.appendBars(dir, '2023-03-15', { symbol: 'MNQ', contractId: 'MNQ', minutes: 3, bars: bars(T0, TRADE_ROWS) });
+  const r = writeRunExperience(dir, { now: new Date('2026-10-14T00:00:00Z') });
+  assert.ok(fs.realpathSync(home));
+  // The 14:03 bar wholly inside the trade (its high 101, +0.5R) and the exit (98.5, -0.75R): from the archive.
+  assert.deepStrictEqual([r.decisions[0].decision, r.decisions[0].outcome.maeR, r.decisions[0].outcome.mfeR], ['entered', -0.75, 0.5]);
+});
+
+test('writeRunExperience: each pass\'s class from the store line\'s entry record (or its result line), in the log', () => {
+  const t1 = new Date(ms(T0) + 10 * M3).toISOString();
+  const { dir } = runDir({
+    times: [T0, t1], records: [record({ at: T0 }), record({ at: t1 })], barRows: TRADE_ROWS,
+    cycleOf: {
+      [T0]: { result: 'CYCLE RESULT: no-trade - the runner\'s entry: ...', entry: { outcome: 'late', late: 'missed-entry' } },
+      [t1]: { result: 'CYCLE RESULT: no-trade - risk-manager vetoed the trade_lifecycle long 1 MNQ: VERDICT: VETO - stand aside', entry: { outcome: 'vetoed', vetoBasis: 'unstated' } },
+    },
+  });
+  const r = writeRunExperience(dir, { now: new Date('2026-10-14T00:00:00Z') });
+  assert.deepStrictEqual(E.readDecisions(r.file).map(d => [d.decision, d.passClass, d.vetoBasis]), [['passed', 'missed_fill', undefined], ['passed', 'vetoed', 'unstated']]);
+});
+
+test('VERSION 3: grades name the model\'s passes apart (passClass); an older log still reads; a run logged by an older version is refused unless rebuilt', () => {
+  assert.strictEqual(E.VERSION, 3);
+  const file = path.join(tmpHome(), 'experience', 'decisions.jsonl');
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const old = { v: 2, id: 'old', runId: 'r1', decision: 'passed', grade: 'neutral-pass' };
+  fs.writeFileSync(file, `${JSON.stringify(old)}\n${JSON.stringify({ v: 2, id: 'keep', runId: 'r2' })}\n`);
+  assert.deepStrictEqual(E.readDecisions(file).map(d => [d.id, d.v]), [['old', 2], ['keep', 2]], 'old lines read as written');
+  assert.throws(() => E.appendDecisions(file, [{ id: 'new', v: 3, runId: 'r1' }]), /version 2, not 3/);
+  // Replaced: that run's lines (any version) out, the new ones in; every other run's line kept as written.
+  assert.deepStrictEqual(E.replaceDecisions(file, 'r1', [{ id: 'new', v: 3, runId: 'r1' }]), { removed: 1, added: 1 });
+  assert.deepStrictEqual(E.readDecisions(file).map(d => [d.id, d.runId]), [['keep', 'r2'], ['new', 'r1']]);
+  assert.throws(() => E.replaceDecisions(file, 'r1', [{ id: 'x', v: 3, runId: 'r9' }]), /another run/);
+});
+
+test('writeRunExperience --rebuild: a log written before a fix is rewritten (append-only keeps it), and indexes built from it set aside', () => {
+  const X = require('../../scripts/lib/learning/experience-index');
+  const { home, dir } = runDir({ times: [T0], records: [record({ at: T0 })], barRows: TRADE_ROWS });
+  const file = E.logFile(home);
+  // The log as an older writer left it: the same ids, other grades (version 2).
+  const first = writeRunExperience(dir, { now: new Date('2026-10-14T00:00:00Z') });
+  const lines = fs.readFileSync(first.file, 'utf8').trim().split('\n').map(JSON.parse);
+  fs.writeFileSync(first.file, lines.map(l => `${JSON.stringify({ ...l, v: 2, grade: 'neutral-pass', outcome: { ...l.outcome, maeR: -9 } })}\n`).join(''));
+  assert.throws(() => writeRunExperience(dir), /version 2, not 3/, 'appending never fixes it');
+  // An index built from the run's log, one from another run, and the same index pinned by this run's home and by
+  // another run's (pinIndex: a frozen index-<hash>.json beside pinned.json, which names it).
+  const idxDir = path.join(tmpHome(), 'experience');
+  fs.mkdirSync(idxDir, { recursive: true });
+  const built = X.writeIndex(idxDir, X.buildIndex(E.readDecisions(file).map(d => ({ ...d, v: 3 })), { runs: [{ runId: 'run1', file, sha256: 'a' }] }));
+  const other = path.join(idxDir, 'index-0000.json');
+  fs.writeFileSync(other, JSON.stringify({ v: 3, runs: [{ runId: 'run9' }] }));
+  const homeB = tmpHome();
+  X.pinIndex(home, built);
+  X.pinIndex(homeB, built);
+  // A copy set aside by an earlier rebuild: never overwritten.
+  fs.writeFileSync(`${built}.stale`, 'earlier');
+  const r = writeRunExperience(dir, { rebuild: true, indexDirs: [idxDir, path.join(homeB, 'experience')], now: new Date('2026-10-15T00:00:00Z') });
+  assert.deepStrictEqual([r.added, r.rebuilt.removed], [lines.length, lines.length]);
+  assert.ok(E.readDecisions(file).every(d => d.v === 3 && !(d.outcome && d.outcome.maeR === -9)), 'every line the fixed writer\'s');
+  assert.deepStrictEqual(r.rebuilt.staleIndexes, [built]);
+  assert.ok(!fs.existsSync(built) && fs.existsSync(`${built}.stale.1`), 'set aside, never deleted');
+  assert.strictEqual(fs.readFileSync(`${built}.stale`, 'utf8'), 'earlier', 'the earlier set-aside copy kept');
+  assert.ok(fs.existsSync(other), 'another run\'s index untouched');
+  assert.strictEqual(X.loadPinned(home).hash, X.loadPinned(homeB).hash, 'both runs\' pinned copies still load');
+  assert.match(require('../../scripts/lib/learning/run-experience').experienceLine(r), /rebuilt run run1: 1 line\(s\) replaced by 1 \(practice-train\) in .*; 1 index\(es\) built from it set aside \(rebuild them\): index-/);
+});
+
+test('replaceDecisions: a rebuild that finds no line for a run that had some is refused (a pruned store would erase it), unless allowed', () => {
+  const file = path.join(tmpHome(), 'experience', 'decisions.jsonl');
+  E.appendDecisions(file, [{ id: 'a', v: E.VERSION, runId: 'r1' }, { id: 'b', v: E.VERSION, runId: 'r2' }]);
+  assert.throws(() => E.replaceDecisions(file, 'r1', []), /run r1 had 1 line\(s\) and the rebuild computed none: refused \(--allow-empty to erase them\)/);
+  assert.deepStrictEqual(E.readDecisions(file).map(d => d.id), ['a', 'b'], 'nothing written');
+  assert.deepStrictEqual(E.replaceDecisions(file, 'r1', [], { allowEmpty: true }), { removed: 1, added: 0 });
+  assert.deepStrictEqual(E.replaceDecisions(file, 'r3', []), { removed: 0, added: 0 }, 'a run with none: nothing to lose');
 });
 
 test('writeRunExperience: a curated run\'s lines are tagged curated (outcome-balanced: the experience index labels them)', () => {

@@ -24,7 +24,8 @@
  *       missing and the launches that failed (trading/desk-check.js), so a cycle decided without its desk shows
  *   entry (in both, when the runner ran its entry: runner-entry.js): its outcome (executed, blocked, vetoed,
  *       no-trade, expired, unknown, process-failure, error, not-run), the roles it ran, the compose record, any
- *       failure, and its timing (ms from the bar's close to the head trader's planned and to the order, each role's ms);
+ *       failure, and its timing (ms from the bar's close to the head trader's planned and to the order, each role's ms),
+ *       a late pass's kind (`late`: late-entry.js) and a veto's basis (`vetoBasis`: trading/veto-basis.js);
  *       the cycle's record alone also holds its `why` and phase 2's report (`phase2`: { chars, text, cut })
  *   timing (in both, when the runner gave one): when the cycle acted against
  *       its bar (cycle-timing.js: the bar's close, the roles' calls, the
@@ -349,7 +350,7 @@ function writeCycleLog(home, { at = new Date(), env = null, action, harness, pro
       ...(composed.length ? { composed: { calls: composed.length, ok: composed.filter(x => x.ok).length, signatures: [...new Set(composed.filter(x => x.ok).map(x => x.signature))] } } : {}),
       ...(timing ? { timing } : {}),
       ...(desk ? { desk } : {}),
-      ...(entry ? { entry: { outcome: entry.outcome || null, ran: (entry.ran || []).map(x => x.role), ...(perRole(entry.ran) ? { skills: perRole(entry.ran) } : {}), ...(entry.record ? { record: entry.record } : {}), ...(entry.failure ? { failure: entry.failure } : {}), ...(entry.timing ? { timing: entry.timing } : {}), ...(entry.restated ? { restated: { kind: entry.restated.kind, outcome: entry.restated.outcome, ...(entry.restated.size ? { size: entry.restated.size } : {}) } } : {}), ...(entry.cutRestored ? { cutRestored: { from: entry.cutRestored.from, to: entry.cutRestored.to, note: entry.cutRestored.note } } : {}) } } : {}),
+      ...(entry ? { entry: { outcome: entry.outcome || null, ran: (entry.ran || []).map(x => x.role), ...(perRole(entry.ran) ? { skills: perRole(entry.ran) } : {}), ...(entry.record ? { record: entry.record } : {}), ...(entry.failure ? { failure: entry.failure } : {}), ...(entry.timing ? { timing: entry.timing } : {}), ...(entry.restated ? { restated: { kind: entry.restated.kind, outcome: entry.restated.outcome, ...(entry.restated.size ? { size: entry.restated.size } : {}) } } : {}), ...(entry.cutRestored ? { cutRestored: { from: entry.cutRestored.from, to: entry.cutRestored.to, note: entry.cutRestored.note } } : {}), ...(entry.late && typeof entry.late.kind === 'string' ? { late: entry.late.kind } : {}), ...(typeof entry.vetoBasis === 'string' ? { vetoBasis: entry.vetoBasis } : {}) } } : {}),
       ...(overlap ? { overlap: overlap.map(o => ({ record: o.record, outcome: o.outcome })) } : {}),
       // The roles the runner ran without some of their skills (role-skills-record.js; the cycle's desk and entry records).
       ...roleSkillsMissing(context, entry),

@@ -180,6 +180,18 @@ test('the tool: schema, arguments, a short description (its listing under 1 KB),
   assert.match(cli.stderr, /^\[experience-lookup\] no verified trade_lifecycle record for MNQ/);
 });
 
+test('experience_lookup: a pass the model didn\'t make reads in plain words (not placed, why, what the setup did), never as its pass', () => {
+  const E = require('../../scripts/lib/learning/experience-log');
+  const ex = { day: '2022-03-11', side: 'long', decision: 'passed', reads: [{ step: 'bias', read: '1h bos up' }], R: 2, grade: E.gradeOf('passed', { R: 2 }, 'vetoed'), passClass: 'vetoed' };
+  assert.strictEqual(H.exampleLines(ex), '- 2022-03-11 long not placed (the risk manager vetoed it), the setup 2.00R (would have won): bias 1h bos up');
+  assert.strictEqual(H.exampleLines({ ...ex, R: -1, grade: 'unplaced-would-lose', passClass: 'missed_fill' }), '- 2022-03-11 long not placed (price ran past the entry), the setup -1.00R (would have lost): bias 1h bos up');
+  assert.strictEqual(H.exampleLines({ ...ex, grade: 'missed-win', passClass: 'declined' }), '- 2022-03-11 long passed, 2.00R missed-win: bias 1h bos up', 'the model\'s own pass: as before');
+  const c = { enough: true, n: 3, days: 3, entries: 1, passes: 1, unplaced: 1, winRate: { rate: 0.5, lo: 0, hi: 1 }, meanR: { mean: 0, lo: -1, hi: 1 }, lastSeen: '2022-03-11', mae: {}, mfe: {} };
+  assert.match(H.cellLine('x', c), /n 3 \(3 days; 1 entered, 1 passed, 1 not placed\)/);
+  assert.match(H.cellLine('x', { ...c, unplaced: 0 }), /n 3 \(3 days; 1 entered, 1 passed\)/);
+  assert.match(H.cellLine('x', { ...c, unplaced: 0, refused: 2 }), /n 3 \(3 days; 1 entered, 1 passed, 2 refused by the gate\)/);
+});
+
 test('experience_lookup: each cell with enough samples shows its median MAE and MFE in R and n; too few, so said; the sign once; past decisions their own', () => {
   // Winners ran clean (MAE -0.25R, MFE 2R), the passes that would have lost went deep (MAE -1.05R, MFE 0.5R).
   const { ctx } = home({ excursion: i => (i % 2 ? { maeR: -0.25, mfeR: 2 } : { maeR: -1.05, mfeR: 0.5 }) });

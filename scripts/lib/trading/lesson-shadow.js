@@ -57,8 +57,9 @@ function recordShadow(home, { root, bars, minutes, tick, now, eodOf = () => Infi
       bars: closed, tfMs, side: r.side, entry: priceOf(r.plan.entry), stop: priceOf(r.plan.stop), target: priceOf(r.plan.target),
       fromMs: barMs + tfMs, expiresMs: Date.parse(r.expiresAt), eodMs: eodOf(barMs + tfMs), tick: Number(r.plan.tick) || tick,
     });
-    // Settled: filled and out by now, or never filled (its window closed by now). Otherwise it waits for a later bar.
-    const unfilled = !o.filled && o.exitReason === 'unfilled' && Date.parse(r.expiresAt) <= at;
+    // Settled: filled and out by now, or never filled (its window closed by now; or no bar at its decision, a data gap:
+    // no outcome either). Otherwise it waits for a later bar.
+    const unfilled = !o.filled && (o.exitReason === 'unfilled' || o.exitReason === 'no bars at the decision') && Date.parse(r.expiresAt) <= at;
     if (!unfilled && !(o.filled && Number.isFinite(o.R))) continue;
     seen.add(r.id);
     fresh.push({ id: r.id, root: r.root, side: r.side, at: r.at, bar: r.bar, entryTime: o.entryTime || null, exitTime: o.exitTime || new Date(at).toISOString(), exitReason: o.exitReason, R: unfilled ? null : o.R });

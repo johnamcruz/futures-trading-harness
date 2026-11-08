@@ -42,7 +42,8 @@
  *                     policy's, never an early exit (`exitBy`, runnerExit: the runner's event log shows it closed the
  *                     position, or the trade filled at the stop the runner last trailed it to); a stop the model tightened
  *                     and a manual close are one action (nothing recorded tells those two apart).
- * Each day also lists the model's passes on valid composed setups as the trades they would have been (`passed`: the
+ * Each day also lists the model's own passes (learning/pass-class.js ownPass: never a veto, a missed or unfilled entry
+ * or a runner skip) on valid composed setups as the trades they would have been (`passed`: the
  * limitOutcome counterfactual the experience log keeps; `day-stop` when an entry of that day had already closed at a loss
  * before fees (a scratch is none), and the model entered nothing later that day; else `pass`); the score never takes them.
  * Every session day the run replayed is a day of the stream: a day the model passed (passes, plain passes, refusals)
@@ -72,6 +73,7 @@ const { noStopPath, dayRegimes, pricePath, pathEnds, swingPath } = require('./tr
 const { runDecisions } = require('../learning/run-experience');
 const { parseAt } = require('../autotrader');
 const { bracketExit } = require('../learning/experience-log');
+const { ownPass } = require('../learning/pass-class');
 const { eodOf } = require('../replay/labels');
 const { readVerdicts } = require('../trading/prop-state');
 
@@ -341,7 +343,9 @@ function modelStream({ decisions = [], dayKeys = [], barsFor = () => [], tfMs, e
   const passesOn = new Map();
   const passedOn = new Map();
   for (const d of decisions) {
-    if (!d || d.decision !== 'passed') continue;
+    // The model's own passes only (learning/pass-class.js ownPass): a veto, a missed or unfilled entry or a runner skip
+    // is no action of the model's, never its pass or its day-stop (a line from before the class: its own, as before).
+    if (!d || d.decision !== 'passed' || !ownPass(d)) continue;
     passesOn.set(d.day, (passesOn.get(d.day) || 0) + 1);
     // Standing down for the day: a pass after an entry of the day closed at a loss before fees (as attempts.js and the
     // gate count one: a scratch is none), with no entry later that day. A pass followed by an entry is a pass.

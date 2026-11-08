@@ -42,7 +42,7 @@ function tmpHome(prefix = 'fth-learn-') {
  * A finished replay run under <home>/replay/<runId>: one day, trade cycles at `times`, fills in the first line,
  * the records in their day shards under <home>/trade-lifecycle/MNQ/ and bars in <home>/bars/MNQ-3m.json.
  */
-function runDir({ home = tmpHome(), day = '2023-03-15', times = [], fills = [], refusals = {}, records = [], barRows = [], barsStart = null, runId = 'run1', gate = undefined, exit = undefined } = {}) {
+function runDir({ home = tmpHome(), day = '2023-03-15', times = [], fills = [], refusals = {}, records = [], barRows = [], barsStart = null, runId = 'run1', gate = undefined, exit = undefined, cycleOf = {} } = {}) {
   const dir = path.join(home, 'replay', runId);
   fs.mkdirSync(dir, { recursive: true });
   // `exit`: the exit plan the driver records at seed time (experience-log.js exitRecord); none: a run started before it.
@@ -52,7 +52,8 @@ function runDir({ home = tmpHome(), day = '2023-03-15', times = [], fills = [], 
   // Kept with the run record (its run dir), with the run home's copy (run-gate.js).
   if (g) for (const d of [dir, home]) fs.writeFileSync(path.join(d, 'learning-run.json'), JSON.stringify(g));
   fs.writeFileSync(path.join(dir, 'autotrader.json'), JSON.stringify({ timeframe: 3, symbols: ['MNQ'] }));
-  const lines = times.map((t, i) => ({ t, day, kind: 'trade', ran: [{ action: 'trade', ok: true }], cycles: [{ action: 'trade', at: t, ok: true }], refusals: refusals[t] || [], trades: i === times.length - 1 ? fills : [] }));
+  // `cycleOf`: a cycle's store fields by its time (its result line, the runner's entry: store.js cycleSummary).
+  const lines = times.map((t, i) => ({ t, day, kind: 'trade', ran: [{ action: 'trade', ok: true }], cycles: [{ action: 'trade', at: t, ok: true, ...(cycleOf[t] || {}) }], refusals: refusals[t] || [], trades: i === times.length - 1 ? fills : [] }));
   fs.writeFileSync(path.join(dir, `${day}.jsonl`), lines.map(l => `${JSON.stringify(l)}\n`).join(''));
   // Filed as compose_check files them: one shard per family and trading day (trade-lifecycle.js appendRecord).
   fs.mkdirSync(path.join(home, 'trade-lifecycle'), { recursive: true });

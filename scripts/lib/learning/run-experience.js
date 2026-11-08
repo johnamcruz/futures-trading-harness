@@ -4,7 +4,7 @@
  * A finished replay run's experience log (experience-log.js), read from what the run wrote: the store lines (each
  * trade cycle that ran, the fills, the gate's refusals), the trade_lifecycle records in the run home
  * (lifecycle-record.js), the gateway's stamps on the entries it placed (entry-orders.json), and the replayed bars
- * (the run's own bars files, or --bars data as the labels read it).
+ * (--bars data as the labels read it, else the run's bars archive with its home's bars files: barsFor).
  * Written to <run home>/experience/decisions.jsonl, never the repository.
  *
  * Only a learning run that passed the gate (learning/run-gate.js, <run home>/learning-run.json) has one: its window
@@ -21,7 +21,10 @@
  *                                                          before the record: its brackets, hash null (untagged)
  *   plannedExit(run, { root, env })                        the exit a replay run trades: its manifest's once started,
  *                                                          else the one its seed will record (the preflight's)
- *   writeRunExperience(runDir, { root, barsFiles, now })   { file, added, kept, decisions, role, hidden }
+ *   writeRunExperience(runDir, { root, barsFiles, now, rebuild, allowEmpty, indexDirs })   { file, added, kept, decisions, role, hidden,
+ *                                                          rebuilt? }: `rebuild` replaces the run's lines (any version)
+ *                                                          and sets aside the indexes built from them (rebuilt:
+ *                                                          { runId, removed, staleIndexes })
  *   experienceLine(result)                                 the CLI's one line
  */
 
@@ -32,10 +35,11 @@ const { entryOrders } = require('../harness-run');
 const labels = require('../replay/labels');
 const { specFor, familyRoot } = require('../trading/contracts');
 const { readRecords } = require('./lifecycle-record');
-const { buildDecisions, appendDecisions, logFile, legsOf, BRACKETS, exitHash, exitRecord } = require('./experience-log');
+const { buildDecisions, appendDecisions, replaceDecisions, logFile, legsOf, BRACKETS, exitHash, exitRecord } = require('./experience-log');
+const { harnessHome } = require('../paths');
 const { roleOf } = require('./splits');
 const { readLearningRun } = require('./run-gate');
-const { curatedLog } = require('./experience-index');
+const { curatedLog, staleIndexes } = require('./experience-index');
 
 const ENTRY_TOOL = /(?:^|__)place_order$/;
 
@@ -95,6 +99,13 @@ function runDelivery(dir, manifest = null) {
   return per[0] === 'none' ? null : per[0];
 }
 
+/** Bars by time, oldest first: the first list's bar at a time kept, the second's only where the first has none. */
+function mergeBars(first, second) {
+  const byMs = new Map();
+  for (const b of [...first, ...second]) if (b && Number.isFinite(b.ms) && [b.h, b.l, b.c].every(Number.isFinite) && !byMs.has(b.ms)) byMs.set(b.ms, b);
+  return [...byMs.values()].sort((a, b) => a.ms - b.ms);
+}
+
 function runDecisions(runDir, { root = null, barsFiles = {}, now = new Date() } = {}) {
   const dir = labels.realDir(runDir);
   const home = path.resolve(dir, '..', '..');
@@ -111,7 +122,13 @@ function runDecisions(runDir, { root = null, barsFiles = {}, now = new Date() } 
   const tfMs = tf ? tf * 60000 : 0;
   const roots = (Array.isArray(cfg.symbols) ? cfg.symbols : []).map(familyRoot);
   const lines = dayKeys.flatMap(d => days[d]).filter(r => r && Number.isFinite(Date.parse(r.t))).sort((a, b) => Date.parse(a.t) - Date.parse(b.t));
-  const cycles = lines.filter(r => r.kind === 'trade' && Array.isArray(r.cycles) && r.cycles.length).map(r => ({ at: r.t, roots }));
+  // Each trade cycle with its result line and the runner's entry outcome (store.js cycleSummary), which say why a
+  // composed decision didn't trade (pass-class.js).
+  const lastTrade = r => r.cycles.filter(x => x && x.action === 'trade').pop() || null;
+  const cycles = lines.filter(r => r.kind === 'trade' && Array.isArray(r.cycles) && r.cycles.length).map(r => {
+    const c = lastTrade(r);
+    return { at: r.t, roots, ...(c && typeof c.result === 'string' ? { result: c.result } : {}), ...(c && c.entry && typeof c.entry === 'object' ? { entry: c.entry } : {}) };
+  });
   const gateRefusals = lines.flatMap(r => (Array.isArray(r.refusals) ? r.refusals : [])
     .filter(x => x && ENTRY_TOOL.test(String(x.tool || '')))
     .map(x => ({ cycleAt: r.t, root: null, check: (x.checks || []).join(',') || 'refused' })));
@@ -122,8 +139,20 @@ function runDecisions(runDir, { root = null, barsFiles = {}, now = new Date() } 
   const trips = legsOf(labels.roundTrips(labels.allFills(lines), cache));
   const outcomeBars = labels.outcomeBarsFor(dir, barsFiles);
   const bars = new Map();
+  // The bars the run used: --bars data when given; else the run's archive (every bar its sessions polled, by day:
+  // session/bars-archive.js) with the run home's bars files (the runner rewrites them every bar: only the last window).
+  let archive = null;
   const barsFor = r => {
-    if (!bars.has(r)) bars.set(r, labels.outcomeFor(outcomeBars, r, tf) || labels.loadBars(home, r, tf));
+    if (!bars.has(r)) {
+      let got = labels.outcomeFor(outcomeBars, r, tf);
+      if (!got) {
+        if (!archive) archive = require('../session/bars-archive').archivedBars(dir);
+        // The archive keys the runner's symbols (MNQ or NQ: one family, one root here).
+        const syms = [...new Set([r, ...(Array.isArray(cfg.symbols) ? cfg.symbols : []).filter(s => familyRoot(s) === r)])];
+        got = mergeBars(syms.flatMap(s => archive.series(s, tf)), labels.loadBars(home, r, tf));
+      }
+      bars.set(r, got);
+    }
     return bars.get(r);
   };
   const decisions = buildDecisions({
@@ -135,7 +164,7 @@ function runDecisions(runDir, { root = null, barsFiles = {}, now = new Date() } 
   return { dir, home, manifest, days, dayKeys, gate, cfg, tfMs, decisions: delivery ? decisions.map(d => ({ ...d, delivery })) : decisions, delivery, barsFor, trips };
 }
 
-function writeRunExperience(runDir, { root = null, barsFiles = {}, now = new Date() } = {}) {
+function writeRunExperience(runDir, { root = null, barsFiles = {}, now = new Date(), rebuild = false, allowEmpty = false, indexDirs = null } = {}) {
   const run = runDecisions(runDir, { root, barsFiles, now });
   const { manifest, gate, dayKeys, home } = run;
   if (!gate || gate.learning !== true) throw new Error(`run ${manifest.runId} is ${gate ? 'declared not learning' : 'not a learning run (no learning-run.json: started before the gate)'}: no experience log`);
@@ -147,10 +176,20 @@ function writeRunExperience(runDir, { root = null, barsFiles = {}, now = new Dat
   // A curated run's moments are outcome-balanced: tagged, so the experience index weighs them (curated-weights.js).
   if (curatedLog(logFile(home))) decisions = decisions.map(d => ({ ...d, curated: true }));
   const file = logFile(home);
+  // A rebuild (replay.js experience --rebuild): the run's lines replaced by these (append-only keeps a log written
+  // before a writer's fix as it was), and the indexes built from them set aside (default: the log's folder and the
+  // harness home's experience folder).
+  if (rebuild) {
+    const { removed, added } = replaceDecisions(file, manifest.runId, decisions, { allowEmpty });
+    const dirs = indexDirs || [path.dirname(file), path.join(harnessHome(), 'experience')];
+    return { file, added, kept: 0, decisions, role: gate.role, hidden: Boolean(gate.hideOutcomes), rebuilt: { runId: manifest.runId, removed, staleIndexes: staleIndexes([path.dirname(file), ...dirs], manifest.runId) } };
+  }
   const { added, kept } = appendDecisions(file, decisions);
   return { file, added, kept, decisions, role: gate.role, hidden: Boolean(gate.hideOutcomes) };
 }
 
-const experienceLine = r => `experience: ${r.added} decision(s) added, ${r.kept} already logged (${r.role}${r.hidden ? ', outcomes hidden: a reasoning-fix look' : ''}) in ${r.file}`;
+const experienceLine = r => (r.rebuilt
+  ? `experience: rebuilt run ${r.rebuilt.runId}: ${r.rebuilt.removed} line(s) replaced by ${r.added} (${r.role}${r.hidden ? ', outcomes hidden: a reasoning-fix look' : ''}) in ${r.file}${r.rebuilt.staleIndexes.length ? `; ${r.rebuilt.staleIndexes.length} index(es) built from it set aside (rebuild them): ${r.rebuilt.staleIndexes.map(f => path.basename(f)).join(', ')}` : ''}`
+  : `experience: ${r.added} decision(s) added, ${r.kept} already logged (${r.role}${r.hidden ? ', outcomes hidden: a reasoning-fix look' : ''}) in ${r.file}`);
 
 module.exports = { runDelivery, runDecisions, writeRunExperience, experienceLine, runExit, manifestExit, plannedExit };

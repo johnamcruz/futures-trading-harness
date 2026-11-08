@@ -10,7 +10,10 @@
  * the run's pinned index (experience-index.js), the record the model was shown.
  *
  * Measures:
- *   decisions        composed (an ok record: entered, passed, refused) and plain passes (none)
+ *   decisions        composed (an ok record: entered, passed, refused) and plain passes (none); `passed` the model's
+ *                    own (pass-class.js ownPass), `unplaced` the passes it didn't make (a missed fill, an unfilled
+ *                    order, a veto, a runner skip: never graded as its passes; `unplaced` at the top, by class); in the
+ *                    record, an unplaced pass counts as the entry the model chose
  *   steps            the trader-process steps a composed decision's reads cover: mean, and how many cover all six
  *   skillsPerTrade   distinct skills per entered trade, mean
  *   reads            every read of every record: how many, verified (check true), the rate; records ok of all
@@ -56,6 +59,7 @@
 const fs = require('fs');
 const path = require('path');
 const { readDecisions, logFile, frameOf } = require('./experience-log');
+const { ownPass } = require('./pass-class');
 const { readRecords, STEPS, CONTEXT_KEYS } = require('./lifecycle-record');
 const { loadPinned, cellAt, cellKey, contextKey, decisionDay } = require('./experience-index');
 const { readLearningRun } = require('./run-gate');
@@ -87,7 +91,9 @@ function followOf(d, index) {
   const any = sideOf(cellAt(index, cellKey('skill', d.signatures.skill), before));
   if (here === null || any === null) return 'no-evidence';
   if (here === 0 || any === 0 || here !== any) return 'neutral';
-  return (here > 0) === (d.decision === 'entered') ? 'followed' : 'against';
+  // The model's choice: to enter, also when the entry never placed or filled (a pass it didn't make: pass-class.js).
+  const took = d.decision === 'entered' || (d.decision === 'passed' && !ownPass(d));
+  return (here > 0) === took ? 'followed' : 'against';
 }
 
 function follows(list, index) {
@@ -105,7 +111,9 @@ function learningMeasures({ decisions = [], records = [], lookups = [], index = 
   for (const d of composed) sigs.set(d.signatures.skill, (sigs.get(d.signatures.skill) || 0) + 1);
   const top = [...sigs].sort((a, b) => b[1] - a[1])[0] || null;
   const entropy = sigs.size > 1 ? -[...sigs.values()].reduce((a, k) => a + (k / composed.length) * Math.log(k / composed.length), 0) / Math.log(sigs.size) : sigs.size ? 0 : null;
+  // The model's own passes (an unplaced pass has its own grade: pass-class.js), and those it didn't make, apart.
   const graded = composed.filter(d => d.decision === 'passed' && hasR(d));
+  const unplaced = composed.filter(d => d.decision === 'passed' && !ownPass(d));
   const good = graded.filter(d => d.grade === 'good-pass').length;
   const missed = graded.filter(d => d.grade === 'missed-win').length;
   const looked = new Set(lookups.map(l => `${l.root}|${l.bar}`));
@@ -115,12 +123,13 @@ function learningMeasures({ decisions = [], records = [], lookups = [], index = 
     practice: practice || null,
     library: library || null,
     prop: prop || null,
-    decisions: { total: decisions.length, composed: composed.length, entered: entered.length, passed: composed.filter(d => d.decision === 'passed').length, refused: composed.filter(d => d.decision === 'refused').length, none: decisions.length - composed.length },
+    decisions: { total: decisions.length, composed: composed.length, entered: entered.length, passed: composed.filter(ownPass).length, unplaced: unplaced.length, refused: composed.filter(d => d.decision === 'refused').length, none: decisions.length - composed.length },
     steps: { mean: r4(mean(composed.map(stepsOf))), allSix: composed.filter(d => stepsOf(d) === STEPS.length).length },
     skillsPerTrade: r4(mean(entered.map(d => new Set((d.reads || []).map(r => r.skill)).size))),
     reads: { reads: reads.length, verified: reads.filter(r => r.check === 'true').length, rate: rate(reads.filter(r => r.check === 'true').length, reads.length), records: records.length, recordsOk: records.filter(r => r.ok).length },
     diversity: { signatures: sigs.size, entropy: r4(entropy), top: top ? top[0] : null, topShare, collapsed: composed.length >= MIN_COLLAPSE && topShare >= COLLAPSE_SHARE },
     passes: { good, missed, neutral: composed.filter(d => d.grade === 'neutral-pass').length, goodRate: rate(good, good + missed) },
+    unplaced: Object.fromEntries([...new Set(unplaced.map(d => d.passClass))].sort().map(c => [c, unplaced.filter(d => d.passClass === c).length])),
     refusals: { wouldLose: composed.filter(d => d.grade === 'refused-would-lose').length, wouldWin: composed.filter(d => d.grade === 'refused-would-win').length, neutral: composed.filter(d => d.grade === 'refused-neutral').length },
     lookups: { calls: lookups.length, decisions: withLookup.length, rate: rate(withLookup.length, composed.length) },
     record: { index: index ? index.hash.slice(0, 16) : null, indexError, all: follows(composed, index), withLookup: follows(withLookup, index) },
@@ -166,7 +175,7 @@ function curve(decisions, lookups, index) {
     const today = decisions.filter(d => d.day === day);
     const taken = takenOn(day);
     const window = days.slice(Math.max(0, i - ROLLING_DAYS + 1), i + 1).flatMap(takenOn);
-    const passes = today.filter(d => d.decision === 'passed' && hasR(d));
+    const passes = today.filter(d => ownPass(d) && hasR(d));
     const f = follows(today.filter(d => d.decision !== 'none'), index);
     return {
       day, role: today[0].role || null, decisions: today.length, taken: taken.length,
@@ -227,9 +236,12 @@ const f2 = x => (x === null || x === undefined ? '-' : Number(x).toFixed(2));
 const propLine = p => `${p.realAttempts === 0 ? '0 independent attempts: resampled only, not evidence; ' : ''}prop Monte Carlo (${p.score}, ${p.days ?? '?'} distinct days, ${p.independentAttempts ?? '?'} independent attempts, sized at the code's ceiling): zero blows ${p.zeroBlows ? 'held' : 'FAILED'}, pass within ${p.sessions || '?'} days ${f2(p.passRate)} real / ${f2(p.resampledPassRate)} resampled (conditional on these days), `
   + `days to pass median ${p.medianDaysToPass ?? '-'} p90 ${p.p90DaysToPass ?? '-'}, blow ${f2(p.blowRate)} (resampled ${f2(p.resampledBlowRate)}), timeout ${f2(p.timeoutRate)}`;
 
+/** The composed passes the model didn't make (pass-class.js), when there are any: ", n not placed" (by class with `by`). */
+const notPlaced = (d, by = null) => (d.unplaced ? `, ${d.unplaced} not placed${by ? ` (${Object.entries(by).map(([c, n]) => `${c} ${n}`).join(', ')})` : ''}` : '');
+
 function learningText(m) {
   const d = m.decisions;
-  return `learning${m.practice ? ' (setup-focused practice)' : ''}: ${d.composed} composed (${d.entered} entered, ${d.passed} passed, ${d.refused} refused), ${d.none} plain passes; steps ${f2(m.steps.mean)} (${m.steps.allSix} all six); `
+  return `learning${m.practice ? ' (setup-focused practice)' : ''}: ${d.composed} composed (${d.entered} entered, ${d.passed} passed${notPlaced(d)}, ${d.refused} refused), ${d.none} plain passes; steps ${f2(m.steps.mean)} (${m.steps.allSix} all six); `
     + `reads verified ${f2(m.reads.rate)} of ${m.reads.reads}; ${m.diversity.signatures} combinations, entropy ${f2(m.diversity.entropy)}, top share ${f2(m.diversity.topShare)}${m.diversity.collapsed ? ' (collapsed)' : ''}; `
     + `good passes ${m.passes.good} of ${m.passes.good + m.passes.missed}; lookups ${m.lookups.calls} (${f2(m.lookups.rate)} of composed); record followed ${m.record.all.followed}, against ${m.record.all.against}${m.prop ? `; ${propLine(m.prop)}` : ''}\n${usageText(m.skillUsage)}`;
 }
@@ -241,7 +253,7 @@ function learningMarkdown(m) {
     '## Learning', '',
     ...(m.practice ? [`- This run was ${practiceLine(m.practice)}.`] : []),
     ...(m.library ? [`- History library ${m.library.hash || `unreadable (${m.library.error})`} pinned: code-measured, ${m.library.shown ? 'shown in experience_lookup apart' : 'not shown to the model (its display off)'}; never counted below or as the model's record.`] : []),
-    `- Decisions: ${d.total} (${d.composed} composed: ${d.entered} entered, ${d.passed} passed, ${d.refused} refused; ${d.none} plain passes)`,
+    `- Decisions: ${d.total} (${d.composed} composed: ${d.entered} entered, ${d.passed} passed${notPlaced(d, m.unplaced)}, ${d.refused} refused; ${d.none} plain passes)`,
     `- Steps covered per composed decision: ${f2(m.steps.mean)} (${m.steps.allSix} cover all six); distinct skills per trade: ${f2(m.skillsPerTrade)}`,
     `- Reads verified: ${m.reads.verified} of ${m.reads.reads} (${f2(m.reads.rate)}); records ok: ${m.reads.recordsOk} of ${m.reads.records}`,
     `- Combinations: ${m.diversity.signatures}, entropy ${f2(m.diversity.entropy)}, top share ${f2(m.diversity.topShare)}${m.diversity.collapsed ? ' (collapsed onto one)' : ''}`,

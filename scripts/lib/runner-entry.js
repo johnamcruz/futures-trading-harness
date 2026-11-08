@@ -21,7 +21,8 @@
  *      entry record's `overlap`: { adopted, record | why }; timing.phase2EarlyMs, how long it ran before the entry
  *      began); any other is dropped, never recorded for the gate, and phase 2 runs now, as without it;
  *   4. between the phases, in code: phase 2's verdict (roles-ran.js verdictOf: anything but APPROVE stops the entry, a
- *      VETO is the cycle's no-trade with its line; an APPROVE line the reading still takes as a veto, the same outcome
+ *      VETO is the cycle's no-trade with its line, what it rests on recorded as `vetoBasis` (trading/veto-basis.js; a
+ *      lesson-only veto also logged as a process failure; 'misread' for an approval read as one); an APPROVE line the reading still takes as a veto, the same outcome
  *      with the reading's reason: roles-ran.js approvalReadAsVeto; but first, an approving VERDICT line the reading
  *      refuses, as a veto or for its size, is restated once: trading/phase2-restate.js, config/runner.json
  *      entry.phase2RestateRetries; approved, its size at most the first VERDICT line's, the decisive record the gate's;
@@ -71,6 +72,7 @@ const fs = require('fs');
 const { outcomeOf } = require('./autotrader');
 const { verdictOf, approvalReadAsVeto, approvedSize, decisiveLine } = require('./trading/roles-ran');
 const { restateDue, readRestatement } = require('./trading/phase2-restate');
+const { vetoBasis } = require('./trading/veto-basis');
 const { restate: restateRequest, REQUESTS } = require('./orchestrate/requests');
 const { recordsAt } = require('./trading/lifecycle-gate');
 const { renderRecord } = require('./trading/trade-lifecycle');
@@ -707,8 +709,14 @@ async function runEntry(deps, c) {
     }
     // A misread approval's result names the parser's reason without its quote (the role's words aren't the result's
     // reasons, which the scorecard checks); the entry's `why` keeps the quote.
-    if (stop.outcome === 'vetoed' && stop.readAs) return say('vetoed', `CYCLE RESULT: no-trade - risk-manager phase 2's report reads as a veto ${short(`(${stop.readAs.why.replace(/ \("[^]*"\)$/, '')}): ${stop.readAs.line}`)}`, { why: stop.why });
-    if (stop.outcome === 'vetoed') return say('vetoed', `CYCLE RESULT: no-trade - risk-manager vetoed the ${label}: ${short(stop.why)}`, { why: stop.why });
+    if (stop.outcome === 'vetoed' && stop.readAs) return say('vetoed', `CYCLE RESULT: no-trade - risk-manager phase 2's report reads as a veto ${short(`(${stop.readAs.why.replace(/ \("[^]*"\)$/, '')}): ${stop.readAs.line}`)}`, { why: stop.why, vetoBasis: 'misread' });
+    if (stop.outcome === 'vetoed') {
+      // What the veto rests on (trading/veto-basis.js), recorded for learning; the veto stands whatever it is. One on a
+      // lesson, the journal or a phase-1 restriction alone breaks the role's rule (agents/risk-manager.md): logged.
+      const basis = vetoBasis(stop.why);
+      if (basis === 'lesson') log(`the entry: phase 2 vetoed on a lesson, the journal or a phase-1 restriction, naming no hard step: a process failure (${short(stop.why)})`, 'error');
+      return say('vetoed', `CYCLE RESULT: no-trade - risk-manager vetoed the ${label}: ${short(stop.why)}`, { why: stop.why, ...(basis ? { vetoBasis: basis } : {}) });
+    }
     log(`the entry: ${stop.why}: no order`, 'error');
     return say('no-trade', `CYCLE RESULT: no-trade - the runner's entry: ${short(stop.why)}: no order`, { why: stop.why });
   }
