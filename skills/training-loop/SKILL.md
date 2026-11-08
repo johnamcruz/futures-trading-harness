@@ -110,6 +110,32 @@ one brings its proposal with
 `node scripts/train-loop.js import-proposal --config loop.json --file
 proposal.json --approved-by <name>`, and it is judged like any other.
 
+**Moment probe** (user-run, calls a model; minutes, before any replay):
+the recorded prompt vs a changed one on recorded cycles.
+
+- Skill fix, outcome word: `node scripts/moment-probe.js --moments
+  m.json --tree <root> --k 3 --timeout-ms 600000`.
+- Briefing change, reads: `--patch <patch.json>` (a JSON patch: works
+  now) or `--patch state-line` (each cycle's State line read back from its
+  briefing). Moments: `node scripts/probe-moments.js --home <run home>
+  --days <days> --out m.json` (`change`: a 1h/15m disagreement; `hold`:
+  the frames agree).
+- The State-line patch and `probe-moments.js` need the State line's module and its
+  `stateRangeAtr` config (branch `feat/state-line`): merge it first; they
+  refuse, saying so, until then.
+- Counts per arm an opposing fact in own words (the headline), words
+  only, echo, calledLabelStale, decision: data, never a pass. A hold's
+  conflict is a false one.
+- The scorer is a regex heuristic: about 1.00 precision, 0.9 recall on
+  adversarial answers (`read-score.js` header). A screen: check a sample
+  of answers by hand.
+- `read-back unknown`: a frame the recorded text can't read (an omitted
+  4h) that live would; weigh those moments apart.
+- Ids end in the cycle file's UTC HHMMSS; the briefing's times are ET.
+- A cycle with no system file in its argv: `--system <head prompt file>`
+  (both arms). `--system-new <file>`: the new arm's own; it confounds the
+  line with its skill text, so never compare it with a same-system run.
+
 **Safety.** One loop at a time (`<FTH_HOME>/training/loop.lock`). It
 refuses to run while a live runner holds the account. The limits stop it
 between model calls; a re-run resumes where it stopped. A model's proposals
