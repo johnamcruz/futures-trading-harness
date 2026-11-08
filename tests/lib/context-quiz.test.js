@@ -541,6 +541,12 @@ test('grading: q50-q63, the market-context questions: right and wrong answers pe
     ['q59', 'ANSWER: No: a pause inside the trend.', true], ['q59', 'ANSWER: Yes, the market is ranging.', false],
     ['q60', 'ANSWER: A pullback: the CHoCH is inside an intact higher structure.', true], ['q60', 'ANSWER: Reversal.', false],
     ['q61', 'ANSWER: A reversal developing; the 1h CHoCH against is decisive: pass on the long.', true], ['q61', 'ANSWER: Pullback; take the long.', false],
+    ['q55', 'ANSWER: CHoCH: the trend has reversed.', false], ['q56', 'ANSWER: A trend up but not yet declared.', false], ['q56', 'ANSWER: Uptrend, declared.', true],
+    ['q57', 'ANSWER: Still an uptrend on the 15m, with the regime in transition.', false], ['q57', 'ANSWER: Transitional: the CHoCH disagrees with the trend read.', true],
+    ['q61', 'ANSWER: Reversal; the long is still valid against the 1h.', false], ['q63', 'ANSWER: It is reversing; the weakening signs confirm it: exit.', false],
+    ['q50', 'ANSWER: Not a rejection: a sweep.', false], ['q60', 'ANSWER: The start of a reversal, not a pullback.', false],
+    ['q51', 'ANSWER: Nothing has happened: no rejection yet.', true], ['q52', 'ANSWER: Yes, acceptance: both closes hold above.', true], ['q59', 'ANSWER: Not really; it is a breather inside the trend.', true],
+    ['q61', 'ANSWER: Pullback is ruled out; a reversal is developing, so no long.', true],
     ['q62', 'ANSWER: No: depth alone is no edge.', true], ['q62', 'ANSWER: Yes, a 50% retrace is the entry.', false],
     ['q63', 'ANSWER: Weakening, not a reversal without a 15m break.', true], ['q63', 'ANSWER: Yes, a reversal: exit.', false],
   ];

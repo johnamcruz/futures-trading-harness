@@ -920,7 +920,8 @@
         "\\brejection\\b|\\brejected\\b"
       ],
       "forbidden": [
-        "^\\W*(an? )?(acceptance|accepted|breakout|breakdown)"
+        "^\\W*(an? )?(acceptance|accepted|breakout|breakdown)",
+        "\\bnot an? (long-wick )?rejection\\b"
       ]
     },
     {
@@ -934,7 +935,7 @@
       "rule": "not reached means no reaction; no reaction is not a rejection",
       "anchor": "No reaction is not a rejection",
       "required": [
-        "^\\W*(no|not)\\b|\\bnot (a )?reject\\w*|\\bno reaction\\b"
+        "^\\W*(no|not)\\b|\\bnot (a )?reject\\w*|\\bno reaction\\b|\\bnothing\\b|\\bno rejection\\b"
       ],
       "forbidden": [
         "^\\W*(yes\\b|y,)"
@@ -955,7 +956,7 @@
       ],
       "forbidden": [
         "^\\W*(a )?(long-wick )?rejection\\b(?!\\s+is not)",
-        "^\\W*yes\\b"
+        "^\\W*yes\\b(?!.{0,12}accept)"
       ]
     },
     {
@@ -990,7 +991,8 @@
       ],
       "forbidden": [
         "^\\W*(a )?reversal\\b",
-        "^\\W*yes\\b"
+        "^\\W*yes\\b",
+        "\\b(has )?reversed\\b"
       ]
     },
     {
@@ -1004,10 +1006,11 @@
       "rule": "a trend, declared (overnight range broke out its way)",
       "anchor": "overnight range broke out its way",
       "required": [
-        "\\btrend(ing|s)?\\b"
+        "\\b(up|down)?trend(ing|s)?\\b"
       ],
       "forbidden": [
-        "^\\W*(range|ranging|transition|chop)\\b"
+        "^\\W*(range|ranging|transition|chop)\\b",
+        "\\bnot (yet )?declared\\b"
       ]
     },
     {
@@ -1021,10 +1024,11 @@
       "rule": "transition: regime and structure disagree",
       "anchor": "regime and structure disagree",
       "required": [
-        "\\btransition\\b"
+        "\\btransition(al)?\\b"
       ],
       "forbidden": [
-        "^\\W*(trend|trending|range|ranging)\\b"
+        "^\\W*(trend|trending|range|ranging)\\b",
+        "^\\W*still an? (up|down)?trend"
       ]
     },
     {
@@ -1055,7 +1059,7 @@
       "rule": "a 3m range inside a 15m trend is a pause",
       "anchor": "A 3m range inside a 15m trend is a pause",
       "required": [
-        "\\bpause\\b|^\\W*no\\b|\\bnot (a )?range\\b|\\bnot ranging\\b"
+        "\\bpause\\b|^\\W*no\\b|^\\W*not\\b|\\bnot (a )?range\\b|\\bnot ranging\\b|\\bbreather\\b"
       ],
       "forbidden": [
         "^\\W*(yes\\b|ranging\\b)"
@@ -1075,7 +1079,8 @@
         "\\bpullback\\b"
       ],
       "forbidden": [
-        "^\\W*(a )?reversal\\b"
+        "^\\W*(a )?reversal\\b",
+        "\\bnot an? pullback\\b"
       ]
     },
     {
@@ -1090,11 +1095,12 @@
       "anchor": "the 1h CHoCH against is decisive",
       "required": [
         "\\breversal\\b",
-        "\\b(pass\\w*|skip\\w*|no\\b|not|don'?t|decline|against|decisive|refus\\w*)\\b"
+        "\\b(pass\\w*|skip\\w*|no\\b|not|don'?t|decline|decisive|refus\\w*)\\b"
       ],
       "forbidden": [
-        "^\\W*(a )?pullback\\b(?!\\s+(doesn'?t|does not|isn'?t|is not|vs|-vs))",
-        "\\b(take|enter|go) (the |a )?long\\b(?!.{0,30}\\b(not|no|never|don'?t)\\b)"
+        "^\\W*(a )?pullback\\b(?!\\s+(doesn'?t|does not|isn'?t|is not|is ruled out|ruled out|vs|-vs))",
+        "\\b(take|enter|go) (the |a )?long\\b(?!.{0,30}\\b(not|no|never|don'?t)\\b)",
+        "\\b(long|trade) is (still )?(valid|fine|on)\\b"
       ]
     },
     {
@@ -1128,7 +1134,8 @@
         "\\bweaken\\w*\\b|^\\W*no\\b|\\bnot (yet )?(a )?reversal\\b"
       ],
       "forbidden": [
-        "^\\W*(yes\\b|a reversal\\b|reversal\\b)"
+        "^\\W*(yes\\b|a reversal\\b|reversal\\b)",
+        "\\breversing\\b"
       ]
     }
   ],
