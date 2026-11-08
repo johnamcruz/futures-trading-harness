@@ -35,7 +35,7 @@ test('measures: decisions, steps, skills per trade, verified reads, diversity, p
   const records = [record(), record({ ok: false })].map(fromLifecycleRecord);
   records[1].reads[0].check = 'false';
   const m = M.learningMeasures({ decisions, records, lookups: [] });
-  assert.deepStrictEqual(m.decisions, { total: 6, composed: 5, entered: 2, passed: 2, refused: 1, none: 1 });
+  assert.deepStrictEqual(m.decisions, { total: 6, composed: 5, entered: 2, passed: 2, unplaced: 0, refused: 1, none: 1 });
   assert.deepStrictEqual(m.steps, { mean: 5.4, allSix: 4 });
   assert.strictEqual(m.skillsPerTrade, 4.5, 'six skills, then three');
   assert.deepStrictEqual(m.reads, { reads: 12, verified: 11, rate: 0.9167, records: 2, recordsOk: 1 });
@@ -74,6 +74,10 @@ test('following the record: both the context cell and the any-context cell, befo
   assert.strictEqual(M.followOf(d('2022-03-01', 'entered', 1), index), 'followed');
   assert.strictEqual(M.followOf(d('2022-03-01', 'passed', 1), index), 'against');
   assert.strictEqual(M.followOf(d('2022-03-01', 'passed', 1, { sig: ALT }), index), 'followed');
+  // A pass the model didn't make (the runner missed the fill, phase 2 vetoed): its choice was the entry.
+  assert.strictEqual(M.followOf({ ...d('2022-03-01', 'passed', 1), passClass: 'missed_fill' }, index), 'followed');
+  assert.strictEqual(M.followOf({ ...d('2022-03-01', 'passed', 1, { sig: ALT }), passClass: 'vetoed' }, index), 'against');
+  assert.strictEqual(M.followOf({ ...d('2022-03-01', 'passed', 1), passClass: 'declined' }, index), 'against');
   assert.strictEqual(M.followOf(d('2022-03-01', 'entered', 1, { sig: ALT }), index), 'against');
   assert.strictEqual(M.followOf(d('2022-03-01', 'entered', 1, { sig: MIXED }), index), 'neutral', 'this context below zero, any context above');
   assert.strictEqual(M.followOf(d('2022-03-01', 'entered', 1, { sig: 'thin' }), index), 'no-evidence');
@@ -111,6 +115,21 @@ test('the gate\'s refusals are counted apart from the model\'s passes', () => {
   assert.match(M.learningMarkdown(M.learningMeasures({ decisions: [], indexError: 'the pinned index is not an index file' })), /index unreadable: the pinned index is not an index file/);
 });
 
+
+test('a pass the model didn\'t make (a missed fill, a veto: passClass) is never counted or graded as its own; a line without a class is', () => {
+  const unplaced = (day, R, passClass, i) => ({ ...d(day, 'passed', R, { i }), passClass, grade: gradeOf('passed', { R }, passClass) });
+  const decisions = [
+    { ...d('2022-03-01', 'passed', -1), passClass: 'declined' }, d('2022-03-01', 'passed', 1, { i: 1 }),
+    unplaced('2022-03-01', 2, 'missed_fill', 2), unplaced('2022-03-01', -1, 'vetoed', 3), unplaced('2022-03-01', 3, 'unfilled', 4),
+  ];
+  const m = M.learningMeasures({ decisions });
+  assert.deepStrictEqual([m.decisions.passed, m.decisions.unplaced], [2, 3]);
+  assert.deepStrictEqual(m.passes, { good: 1, missed: 1, neutral: 0, goodRate: 0.5 }, 'the model\'s two passes only');
+  assert.strictEqual(m.curve[0].passQuality, 0.5);
+  assert.match(M.learningText(m), /5 composed \(0 entered, 2 passed, 3 not placed, 0 refused\)/);
+  assert.match(M.learningMarkdown(m), /3 not placed \(missed_fill 1, unfilled 1, vetoed 1\)/);
+  assert.match(M.learningText(M.learningMeasures({ decisions: decisions.slice(0, 2) })), /2 composed \(0 entered, 2 passed, 0 refused\)/, 'none: the text as before');
+});
 
 test('readLearning and the report text: from a run home; none without an experience log; the cycle log keeps the lookups', () => {
   const home = tmpHome();

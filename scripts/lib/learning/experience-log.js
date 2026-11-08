@@ -29,11 +29,16 @@
  * run started before the record): an index never mixes two plans (experience-index.js).
  * Grade: an entry's result (win, loss, scratch); a pass whose counterfactual lost is a `good-pass`, one that would
  * have won a `missed-win`, unfilled or flat a `neutral-pass`; a gate refusal apart (refused-would-lose, refused-would-win,
- * refused-neutral), never counted as the model's pass. A round trip belongs to the record the gateway stamped on its
+ * refused-neutral), never counted as the model's pass; nor a pass the model didn't make (`passClass`, pass-class.js:
+ * from the cycle's runner entry record or result line, on its latest ok record; another side's record in the cycle
+ * `declined`): a missed fill, an unfilled order, a veto (with `vetoBasis`), a runner skip are graded
+ * unplaced-would-lose, unplaced-would-win or unplaced-neutral, their counterfactual R kept (a setup's evidence); a line
+ * from before the class has none and keeps its grade. A round trip belongs to the record the gateway stamped on its
  * opening order at placement (entry-orders.json composed.record, by the fill's order id); without a stamp, to the latest
  * ok record at or before its opening fill whose order could have filled it (side, root, before the record expired).
  *
  * The line (VERSION 2): { v, id, runId, root, contract, lane, cycleAt, bar, day, role, decision, refusal, side,
+ *   passClass and vetoBasis (a passed or refused decision whose cycle says why; lines written before them lack them),
  *   exploratory, verified, checked, reads, signatures, context, plan, outcome: { source, filled, entryPrice,
  *   exitPrice, entryTime (the opening fill's time, or the counterfactual fill bar's; lines written before it lack it),
  *   size (fills only: the contracts opened), exitTime, exitReason, R, maeR, mfeR (the worst and best move while held,
@@ -45,6 +50,8 @@
  *   limitOutcome({ bars, tfMs, side, entry, stop, target, fromMs, expiresMs, eodMs, tick, plan, market })   the counterfactual
  *                                         (`market`: a cited setup's market entry, filled at the open of the bar it was sent in)
  *   buildDecisions({ cycles, records, trips, stamps, gateRefusals, barsFor, tickOf, eodOf, runId, now, exit })   the lines
+ *                                         (each cycle { at, roots, result?, entry? }: its result line and the runner's
+ *                                         entry outcome, store.js cycleSummary, for passClass)
  *                                         (`exit`: { plan, mode, hash } the run's exit, BRACKETS by default)
  *   exitRecord(exit), exitHash(exit)      an exit as a manifest records it ({ mode, plan, hash }), its hash
  *   appendDecisions(file, lines)          append the lines whose id isn't in the file yet; { added, kept }
@@ -62,6 +69,7 @@ const { roleOf } = require('./splits');
 const { formOf } = require('./lifecycle-record');
 const { afterTargetStep, swingSeries } = require('../trading/exit-trail');
 const { trailStep } = require('../trading/trail');
+const { cycleClass } = require('./pass-class');
 
 // 2: decisions per cycle, root and side, trades by the gateway's stamp (a version-1 line's id may name another record).
 const VERSION = 2;
@@ -293,7 +301,7 @@ function tripOutcome(trip, plan, side, { bars = [], tfMs = 0 } = {}) {
   };
 }
 
-function gradeOf(decision, outcome) {
+function gradeOf(decision, outcome, passClass = null) {
   if (decision === 'none') return null;
   // No bar at the decision (limitOutcome: filled null): what the order would have done is unknown, so no grade.
   if (decision !== 'entered' && outcome && outcome.filled === null) return null;
@@ -301,6 +309,8 @@ function gradeOf(decision, outcome) {
   if (decision === 'entered') return resultOf(R);
   // The gate's refusal is not the model's pass: graded apart, so pass quality is the model's own.
   if (decision === 'refused') return R === null || R === 0 ? 'refused-neutral' : R < 0 ? 'refused-would-lose' : 'refused-would-win';
+  // Nor is a pass the model didn't make (pass-class.js: a missed fill, an unfilled order, a veto, a runner skip).
+  if (passClass && passClass !== 'declined') return R === null || R === 0 ? 'unplaced-neutral' : R < 0 ? 'unplaced-would-lose' : 'unplaced-would-win';
   if (R === null || R === 0) return 'neutral-pass';
   return R < 0 ? 'good-pass' : 'missed-win';
 }
@@ -319,6 +329,7 @@ const idOf = parts => crypto.createHash('sha256').update(parts.join('|')).digest
  */
 function buildDecisions({ cycles = [], records = [], trips = [], stamps = {}, gateRefusals = [], barsFor = () => [], tfMs = 0, tickOf = () => null, eodOf = () => Infinity, runId = null, now = new Date(), exit = BRACKETS }) {
   const times = cycles.map(c => Date.parse(c.at)).filter(Number.isFinite).sort((a, b) => a - b);
+  const cycleByAt = new Map(cycles.map(c => [Date.parse(c.at), c]));
   const marks = times.map(t => ({ ms: t }));
   const cycleOf = ms => { const k = lowerBound(marks, ms + 1) - 1; return k >= 0 ? times[k] : null; };
   // Records by (cycle, root): the cycle is the latest cycle at or before the record.
@@ -400,6 +411,9 @@ function buildDecisions({ cycles = [], records = [], trips = [], stamps = {}, ga
     let decision = 'passed';
     let refusal = null;
     let outcome;
+    // Why it didn't trade (pass-class.js): the cycle's outcome is its latest ok record's (the one the head trader
+    // planned and the runner entered from); another side's record in the cycle was the model's own pass.
+    let why = { passClass: null, vetoBasis: null };
     if (trip) {
       decision = 'entered';
       outcome = tripOutcome(trip, ok.plan, ok.side, { bars: barsFor(root), tfMs });
@@ -407,12 +421,16 @@ function buildDecisions({ cycles = [], records = [], trips = [], stamps = {}, ga
       // A refusal names no side: it stays with the cycle's latest ok record (the one order_plan plans from).
       const refused = slot.latest && gateRefusals.find(g => Date.parse(g.cycleAt) === at && (!g.root || familyRoot(g.root) === familyRoot(root)));
       if (refused) { decision = 'refused'; refusal = refused.check || 'refused'; }
+      const cyc = cycleByAt.get(at);
+      if (refused) why = { passClass: 'blocked', vetoBasis: null };
+      else if (cyc && (cyc.entry || cyc.result)) why = slot.latest ? cycleClass(cyc) : { passClass: 'declined', vetoBasis: null };
       outcome = limitOutcome({ bars: barsFor(root), tfMs, side: ok.side, entry: ok.plan.entry, stop: ok.plan.stop, target: ok.plan.target, fromMs, expiresMs, eodMs: eodOf(fromMs), tick: tickOf(root), plan: exit.plan, market: ok.plan.entryType === 'market' });
     }
     out.push({
       ...base, id: idOf([runId, root, base.cycleAt, ok.bar, ok.side, ok.signatures.read]), contract: ok.contract, bar: ok.bar, day: tradingDayKey(new Date(Date.parse(ok.bar))),
       role: safeRole(Date.parse(ok.bar)), decision, refusal, side: ok.side, exploratory: ok.exploratory, verified: ok.ok,
-      reads: ok.reads, signatures: ok.signatures, context: ok.context, plan: { ...ok.plan, expiresAt: ok.expiresAt }, outcome, grade: gradeOf(decision, outcome),
+      ...(why.passClass ? { passClass: why.passClass } : {}), ...(why.vetoBasis ? { vetoBasis: why.vetoBasis } : {}),
+      reads: ok.reads, signatures: ok.signatures, context: ok.context, plan: { ...ok.plan, expiresAt: ok.expiresAt }, outcome, grade: gradeOf(decision, outcome, why.passClass),
       settledDay: settledDay(tradingDayKey(new Date(Date.parse(ok.bar))), outcome), frame: frameOf(ok.reads),
     });
   }

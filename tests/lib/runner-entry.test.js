@@ -364,6 +364,15 @@ test('runEntry: a VETO (or no approval) stops before the order: no order built, 
   }
 });
 
+test('runEntry: a veto resting only on a lesson or a phase-1 restriction stands, recorded as such (vetoBasis lesson) and logged as a process failure', async () => {
+  // A real phase-2 veto (a replay run): no hard step named, only the lessons' restriction.
+  const text = 'Phase 2.\nVERDICT: VETO - phase 1 stand-down: prop_portfolio entries stand down until the target-leg cancel cause is journaled, and it is still open; stand aside\nFACTS: window asia; trend long allowed';
+  const s = setup({ roles: { phase2: { ok: true, timedOut: false, text, tools: ['harness_order_plan'], lookups: [], output: '' } } });
+  const r = await E.runEntry(s.deps, s.cycle());
+  assert.deepStrictEqual([r.entry.outcome, r.entry.vetoBasis, s.calls.map(c => c.role), s.journal], ['vetoed', 'lesson', ['phase2'], []], 'the veto stands: no restatement, no order');
+  assert.ok(s.logs.some(l => /^error the entry: phase 2 vetoed on a lesson, the journal or a phase-1 restriction, naming no hard step: a process failure/.test(l)), s.logs.join('\n'));
+});
+
 test('runEntry: an APPROVE line the gate\'s reading takes as a veto stops as vetoed, with the reading\'s reason (never the APPROVE line as a veto); a genuine VETO is unchanged; phase 2\'s report is kept in the entry record', async () => {
   const misread = 'Phase 2.\nDecision: cut to size 1\nVERDICT: APPROVE - size 1, risk $20.00\nFACTS: window opening drive; trend long allowed';
   let built = false;
@@ -374,6 +383,7 @@ test('runEntry: an APPROVE line the gate\'s reading takes as a veto stops as vet
   assert.strictEqual(r.entry.restated.outcome, 'unreadable');
   assert.strictEqual(r.entry.outcome, 'vetoed', 'learning counts the same outcome');
   assert.strictEqual(r.entry.why, 'phase 2\'s report reads as a veto: a decision line decides cut, not APPROVE ("Decision: cut to size 1")');
+  assert.strictEqual(r.entry.vetoBasis, 'misread', 'an approval the reading refused: never the risk manager\'s veto');
   assert.strictEqual(r.result, 'CYCLE RESULT: no-trade - risk-manager phase 2\'s report reads as a veto (a decision line decides cut, not APPROVE): VERDICT: APPROVE - size 1, risk $20.00');
   assert.deepStrictEqual(r.entry.phase2, { chars: misread.length, text: misread });
   assert.ok(s.logs.some(l => l === 'error the entry: phase 2\'s report reads as a veto: a decision line decides cut, not APPROVE ("Decision: cut to size 1"): no order'), s.logs.join('\n'));
@@ -386,6 +396,7 @@ test('runEntry: an APPROVE line the gate\'s reading takes as a veto stops as vet
   s = setup({ roles: { phase2: { ok: true, timedOut: false, text: veto, tools: ['harness_order_plan'], lookups: [], output: '' } } });
   r = await E.runEntry(s.deps, s.cycle());
   assert.deepStrictEqual([r.entry.outcome, r.entry.why, r.result], ['vetoed', 'VERDICT: VETO - room: stand aside', 'CYCLE RESULT: no-trade - risk-manager vetoed the trade_lifecycle long 1 MNQ: VERDICT: VETO - room: stand aside']);
+  assert.strictEqual(r.entry.vetoBasis, 'hard-step', 'the veto names a hard step (room)');
   assert.deepStrictEqual(r.entry.phase2, { chars: veto.length, text: veto });
   assert.ok(!s.logs.some(l => /reads as a veto/.test(l)));
   // An approval: its report kept; over the limit (config/runner.json prompt.reportMaxText), cut and marked.

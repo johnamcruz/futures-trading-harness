@@ -92,6 +92,45 @@ test('grades: a pass that would have lost is a good pass; unfilled is neutral', 
   assert.deepStrictEqual(['refused'].flatMap(d => [-1, 1, null].map(R => E.gradeOf(d, { R }))), ['refused-would-lose', 'refused-would-win', 'refused-neutral']);
 });
 
+test('passClass: a pass is the model\'s (declined) only when it passed; a missed fill, a veto, a gate block are graded apart, never good-pass, missed-win or neutral-pass', () => {
+  const t = i => new Date(ms(T0) + i * M3).toISOString();
+  // Real result lines (the runner's wording): a missed entry, a lesson veto, the head trader's own pass, an order that
+  // went and never filled, a gate block, and a cycle from before the record (no result: the line as it was).
+  const results = [
+    'CYCLE RESULT: no-trade - the runner\'s entry: missed the plan\'s entry 100 (price 100.75 is 0.75 points past it against the long): no late entry',
+    'CYCLE RESULT: no-trade - risk-manager vetoed the trade_lifecycle long 1 MNQ: VERDICT: VETO - phase 1 stand-down: prop_portfolio entries stand down until the target-leg cancel cause is journaled; stand aside',
+    'CYCLE RESULT: no-trade - compose_check OK, passed: the 3m trend is up against the short',
+    'CYCLE RESULT: executed - trade_lifecycle long 1 MNQ (the runner\'s entry: phase 2 approved, the order is working, unfilled: order 4, limit 100)',
+    'CYCLE RESULT: blocked - the order gate refused the trade_lifecycle long 1 MNQ: [phase2-facts] an item the gate can\'t read',
+    undefined,
+  ];
+  const cycles = results.map((result, i) => ({ at: t(i * 10), roots: ['MNQ'], ...(result ? { result } : {}) }));
+  const records = results.map((_r, i) => fromLifecycleRecord(record({ at: t(i * 10) })));
+  // The limit fills and wins at its target in each window.
+  const rows = [];
+  for (let i = 0; i < 70; i += 1) rows.push(i % 10 === 0 ? [100.25, 100.5, 99.75, 100.25] : i % 10 === 1 ? [100.25, 104.25, 100, 104] : [100.25, 100.5, 100.1, 100.25]);
+  const out = E.buildDecisions({ cycles, records, gateRefusals: [{ cycleAt: t(40), root: null, check: 'phase2-facts' }], barsFor: () => bars(T0, rows), tfMs: M3, tickOf: () => 0.25, runId: 'run1' });
+  assert.deepStrictEqual(out.map(d => [d.decision, d.passClass, d.vetoBasis, d.grade]), [
+    ['passed', 'missed_fill', undefined, 'unplaced-would-win'],
+    ['passed', 'vetoed', 'lesson', 'unplaced-would-win'],
+    ['passed', 'declined', undefined, 'missed-win'],
+    ['passed', 'unfilled', undefined, 'unplaced-would-win'],
+    ['refused', 'blocked', undefined, 'refused-would-win'],
+    ['passed', undefined, undefined, 'missed-win'],
+  ]);
+  assert.ok(out.every(d => d.outcome.R === 2), 'the counterfactual stays: a vetoed setup\'s R is still evidence about the setup');
+  assert.deepStrictEqual(out.map(d => require('../../scripts/lib/learning/pass-class').ownPass(d)), [false, false, true, false, false, true]);
+  assert.deepStrictEqual(['passed'].flatMap(d => [-1, 1, null].map(R => E.gradeOf(d, { R }, 'vetoed'))), ['unplaced-would-lose', 'unplaced-would-win', 'unplaced-neutral']);
+  assert.strictEqual(E.gradeOf('passed', { R: -1 }, 'declined'), 'good-pass');
+  // Both sides composed in one cycle: the veto is the latest record's (the one planned); the other side the model passed.
+  const two = E.buildDecisions({
+    cycles: [{ at: t(0), roots: ['MNQ'], result: results[1] }],
+    records: [record({ at: t(0) }), record({ at: new Date(ms(t(0)) + 1000).toISOString(), side: 'short', entry: 101, stop: 103, target: 97 })].map(fromLifecycleRecord),
+    barsFor: () => bars(T0, rows), tfMs: M3, tickOf: () => 0.25, runId: 'run1',
+  });
+  assert.deepStrictEqual(two.map(d => [d.side, d.passClass, d.vetoBasis]), [['long', 'declined', undefined], ['short', 'vetoed', 'lesson']]);
+});
+
 test('a round trip is credited to the latest ok record before its fill, not an earlier one still open (A then B)', () => {
   const t = i => new Date(ms(T0) + i * M3).toISOString();
   // A at t0 and B at t1 both long, A valid three bars, B one; the fill comes after B's record: B entered, A passed.
@@ -482,6 +521,19 @@ test('writeRunExperience: the run\'s archived bars (bars-<day>.jsonl.gz), not on
   assert.ok(fs.realpathSync(home));
   // The 14:03 bar wholly inside the trade (its high 101, +0.5R) and the exit (98.5, -0.75R): from the archive.
   assert.deepStrictEqual([r.decisions[0].decision, r.decisions[0].outcome.maeR, r.decisions[0].outcome.mfeR], ['entered', -0.75, 0.5]);
+});
+
+test('writeRunExperience: each pass\'s class from the store line\'s entry record (or its result line), in the log', () => {
+  const t1 = new Date(ms(T0) + 10 * M3).toISOString();
+  const { dir } = runDir({
+    times: [T0, t1], records: [record({ at: T0 }), record({ at: t1 })], barRows: TRADE_ROWS,
+    cycleOf: {
+      [T0]: { result: 'CYCLE RESULT: no-trade - the runner\'s entry: ...', entry: { outcome: 'late', late: 'missed-entry' } },
+      [t1]: { result: 'CYCLE RESULT: no-trade - risk-manager vetoed the trade_lifecycle long 1 MNQ: VERDICT: VETO - stand aside', entry: { outcome: 'vetoed', vetoBasis: 'unstated' } },
+    },
+  });
+  const r = writeRunExperience(dir, { now: new Date('2026-10-14T00:00:00Z') });
+  assert.deepStrictEqual(E.readDecisions(r.file).map(d => [d.decision, d.passClass, d.vetoBasis]), [['passed', 'missed_fill', undefined], ['passed', 'vetoed', 'unstated']]);
 });
 
 test('writeRunExperience: a curated run\'s lines are tagged curated (outcome-balanced: the experience index labels them)', () => {

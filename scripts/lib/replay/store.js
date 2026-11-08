@@ -194,6 +194,9 @@ function cycleSummary(line) {
     ...(line.entry && line.entry.restated && typeof line.entry.restated === 'object' ? { restated: line.entry.restated } : {}),
     // Phase 2 cut a healthy account's translated size with no pacing rule: placed at it (runner-entry.js), a process note.
     ...(line.entry && line.entry.cutRestored && typeof line.entry.cutRestored === 'object' ? { cutRestored: line.entry.cutRestored } : {}),
+    // The runner's entry outcome, its late-entry kind and a veto's basis: why a composed decision didn't trade
+    // (learning/pass-class.js, the experience log's passClass).
+    ...(line.entry && typeof line.entry.outcome === 'string' ? { entry: { outcome: line.entry.outcome, ...(typeof line.entry.late === 'string' ? { late: line.entry.late } : {}), ...(typeof line.entry.vetoBasis === 'string' ? { vetoBasis: line.entry.vetoBasis } : {}) } } : {}),
   };
 }
 
