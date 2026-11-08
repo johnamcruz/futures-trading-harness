@@ -496,9 +496,11 @@ test('trade-session split: no head-trader path reads more than the base\'s every
 // trend-momentum analyst +733 (55125, the pin +585), the risk manager +454 (93174, the pin +412), the volume-liquidity
 // analyst +454 (49078); index mode +454 each (the market-structure analyst 43262, the pin +87; the risk manager 79062, the
 // pin +423; the trend-momentum analyst 40456, the pin +433; the volume-liquidity analyst 33710); every other role unchanged.
+// Then the owner's review of it: the paragraph says a leg given back past its origin or under the ATR floor shows no
+// depth, and that a missing volume or range phrase means not computable (+55 in every role that embeds bar-briefing).
 const ROLE_PROMPTS = {
-  full: { 'market-structure-analyst': 95113, 'news-calendar-analyst': 10182, 'risk-manager': 93174, 'strategy-researcher': 25650, 'trade-executor': 30670, 'trade-reviewer': 9454, 'trend-momentum-analyst': 55125, 'volume-liquidity-analyst': 49078 },
-  index: { 'market-structure-analyst': 43262, 'news-calendar-analyst': 10182, 'risk-manager': 79062, 'strategy-researcher': 25650, 'trade-executor': 30659, 'trade-reviewer': 9454, 'trend-momentum-analyst': 40456, 'volume-liquidity-analyst': 33710 },
+  full: { 'market-structure-analyst': 95168, 'news-calendar-analyst': 10182, 'risk-manager': 93229, 'strategy-researcher': 25650, 'trade-executor': 30670, 'trade-reviewer': 9454, 'trend-momentum-analyst': 55180, 'volume-liquidity-analyst': 49133 },
+  index: { 'market-structure-analyst': 43317, 'news-calendar-analyst': 10182, 'risk-manager': 79117, 'strategy-researcher': 25650, 'trade-executor': 30659, 'trade-reviewer': 9454, 'trend-momentum-analyst': 40511, 'volume-liquidity-analyst': 33765 },
 };
 
 test('trade-session split: no role prompt grows, in full or index mode, and no role lists a piece', () => {

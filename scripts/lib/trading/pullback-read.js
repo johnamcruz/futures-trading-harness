@@ -19,16 +19,17 @@
  *                    structure-frame break its way in the bars, or no counter-move (fewer than swingK completed
  *                    structure-frame candles since the extreme's: price is with the trend). Else:
  *     side, frame, prevailing
- *     leg            { origin, extreme, at }: the best base price since the open of the structure frame's last break the
- *                    prevailing way (the first base candle at it), its origin by impulseOf
+ *     leg            { origin, extreme, at, atr }: the best base price since the open of the structure frame's last break
+ *                    the prevailing way (the first base candle at it), its origin by impulseOf, its size in base ATR(14)
+ *                    (the line shows no depth under pullbackRead.minLegAtr, nor past the origin)
  *     depth, close   the share of the leg the last close gave back (past 1: beyond the origin)
  *     swing          per frame (15m, 1h) the leg's swing against (15m: impulseOf's; 1h: the last confirmed 1h swing
  *                    against before the extreme) and whether it `holds`: no base close beyond it since its candle closed
  *                    (the briefing's m3.htfLevels brokenAt rule); null when there is none
  *     counter        { bars, volRatio, volume, rangeRatio }: the base candles since the extreme, their mean volume and
- *                    range per bar against the leg's (origin to extreme), each part in the last bar's session part (RTH
- *                    or not: the open's volume never compared with the night's); volume 'falling' (< 1), 'rising'
- *                    (> 1) or 'even', a plain comparison; null when unknown
+ *                    range per bar against the leg's (origin to extreme), only when every bar of both is in one session
+ *                    part (RTH or not: the open's volume never compared with the night's); volume 'falling' (< 1),
+ *                    'rising' (> 1) or 'even', a plain comparison; null when not computable (the line then says nothing)
  *     against        per frame (15m, 1h) its last structure break (structure-events.js lastBreaks) when it is against
  *                    the leg: { kind, direction, level, barsAgo }, else null
  *     stacked        both frames' last breaks against the leg
@@ -38,6 +39,7 @@
 const { pivots, breaksOf, lastBreaks } = require('./structure-events');
 const { completedCandlesAt } = require('./candle-facts');
 const { label, RULE_FRAMES } = require('./mtf');
+const ind = require('./indicators');
 const { RTH_OPEN_MIN, RTH_CLOSE_MIN, MARKET_TZ, minutesOfDay } = require('./clock');
 
 const AN = require('../tunables').analysis(); // config/analysis.json: the swing confirmation, the read's structure frame
@@ -46,7 +48,11 @@ const FRAME = Math.max(...AN.tradeRead.frames); // the structure frame (the Trad
 // The frame above it: the trend rule's next frame up (config/analysis.json mtf.ruleFrames: the 1h above the 15m).
 const HOUR = Math.min(...RULE_FRAMES.filter(m => m > FRAME));
 
+// The smallest leg a depth is measured against, in base ATR(14) (config/analysis.json pullbackRead.minLegAtr): a floor
+// against measuring a pullback on a leg of a few ticks, not a tuned value.
+const MIN_LEG_ATR = AN.pullbackRead.minLegAtr;
 const r2 = x => (Number.isFinite(x) ? Math.round(x * 100) / 100 : null);
+const lastOf = xs => { for (let i = xs.length - 1; i >= 0; i -= 1) if (Number.isFinite(xs[i])) return xs[i]; return null; };
 const opp = d => (d === 'up' ? 'down' : 'up');
 
 /** The completed `minutes` candles as of the last bar ([] when unavailable). */
@@ -84,13 +90,14 @@ function againstOf(cs, way) {
 const rth = c => { const m = minutesOfDay(new Date(c.t), MARKET_TZ); return m >= RTH_OPEN_MIN && m < RTH_CLOSE_MIN; };
 const mean = xs => xs.reduce((a, b) => a + b, 0) / xs.length;
 
-/** The counter-move's bars against the leg's: { bars, volRatio, volume, rangeRatio }. */
+/** The counter-move's bars against the leg's: { bars, volRatio, volume, rangeRatio } (ratios null when not comparable). */
 function counterOf(cs, o, iBest) {
-  const part = rth(cs[cs.length - 1]);
-  const leg = cs.slice(o, iBest + 1).filter(c => rth(c) === part);
-  const ctr = cs.slice(iBest + 1).filter(c => rth(c) === part);
+  const leg = cs.slice(o, iBest + 1);
+  const ctr = cs.slice(iBest + 1);
+  // Comparable only when every bar of both is in one session part (RTH or not): the open's bars never against the night's.
+  const one = [...leg, ...ctr].every(c => rth(c) === rth(cs[cs.length - 1]));
   const ratio = f => {
-    if (!leg.length || !ctr.length || ![...leg, ...ctr].every(c => Number.isFinite(f(c)))) return null;
+    if (!one || !leg.length || !ctr.length || ![...leg, ...ctr].every(c => Number.isFinite(f(c)))) return null;
     const l = mean(leg.map(f));
     return l > 0 ? r2(mean(ctr.map(f)) / l) : null;
   };
@@ -126,9 +133,10 @@ function pullbackRead({ bars, base, prevailing } = {}) {
   const h1Swing = [...pivots(h1, K)].reverse().find(p => p.type === (s > 0 ? 'low' : 'high') && Date.parse(p.t) < tBest) || null;
   const tfH = label(FRAME);
   const against = { [tfH]: againstOf(hc, way), [label(HOUR)]: h1.length ? againstOf(h1, way) : null };
+  const atr = lastOf(ind.atr(cs, ind.ATR_PERIOD));
   return {
     side: s > 0 ? 'long' : 'short', frame: tfH, prevailing: `${m[1]} ${way}`,
-    leg: { origin: imp.origin, extreme: imp.best, at: cs[iBest].t },
+    leg: { origin: imp.origin, extreme: imp.best, at: cs[iBest].t, atr: atr > 0 ? r2((s * (imp.best - imp.origin)) / atr) : null },
     depth: imp.depth, close: cs[cs.length - 1].c,
     swing: { [tfH]: imp.back ? swingOf(imp.back, FRAME, cs, s) : null, [label(HOUR)]: swingOf(h1Swing, HOUR, cs, s) },
     counter: counterOf(cs, imp.o, iBest),
@@ -141,12 +149,17 @@ function pullbackRead({ bars, base, prevailing } = {}) {
 function pullbackLine(p, { level = x => x } = {}) {
   if (!p || typeof p !== 'object' || !p.leg) return null;
   const c = p.counter || {};
-  const depth = p.depth === null ? 'depth unknown' : `depth ${Math.round(p.depth * 100)}% of the leg${p.depth > 1 ? ' (past its origin)' : ''}`;
-  const vol = c.volRatio === null || c.volRatio === undefined ? 'volume unknown' : `volume ${c.volRatio}x the leg's per bar (${c.volume})`;
-  const range = c.rangeRatio === null || c.rangeRatio === undefined ? 'range unknown' : `range ${c.rangeRatio}x`;
+  const known = x => x !== null && x !== undefined;
+  // No depth number on a leg too small to measure one against, nor once the leg is given back past its origin (the
+  // skill's Depth row: past the impulse origin); never another leg in its place.
+  const small = known(p.leg.atr) && p.leg.atr < MIN_LEG_ATR;
+  const depth = small ? `leg ${p.leg.atr}x ATR(14), under the ${MIN_LEG_ATR}x floor: no depth`
+    : !known(p.depth) ? 'depth unknown' : p.depth >= 1 ? 'the leg given back past its origin' : `depth ${Math.round(p.depth * 100)}% of the leg`;
+  // Volume and range only when comparable; not computable: no words (the skill says what a missing phrase means).
+  const ratios = [known(c.volRatio) ? `volume ${c.volRatio}x the leg's per bar (${c.volume})` : null, known(c.rangeRatio) ? `range ${c.rangeRatio}x` : null].filter(Boolean);
   const swings = Object.entries(p.swing || {}).map(([tf, x]) => (x ? `${tf} swing ${level(x.price)} ${x.holds ? 'holds' : 'broken by a close'}` : `${tf} swing unknown`)).join(', ');
   const brk = Object.entries(p.against || {}).map(([tf, x], i) => `${i ? `${tf}` : `${tf} break against`}: ${x ? `${x.kind} ${x.direction} ${level(x.level)} (${x.barsAgo} bars ago)` : 'none'}`).join(', ');
-  return `- Pullback (${p.frame}, ${p.side} leg ${level(p.leg.origin)} -> ${level(p.leg.extreme)}): ${depth}; ${c.bars} bars against it, ${vol}, ${range}; ${swings}; ${brk}${p.stacked ? '; stacked' : ''}.`;
+  return `- Pullback (${p.frame}, ${p.side} leg ${level(p.leg.origin)} -> ${level(p.leg.extreme)}): ${depth}; ${[`${c.bars} bars against it`, ...ratios].join(', ')}; ${swings}; ${brk}${p.stacked ? '; stacked' : ''}.`;
 }
 
 module.exports = { impulseOf, pullbackRead, pullbackLine };

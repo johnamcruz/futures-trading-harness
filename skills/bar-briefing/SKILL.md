@@ -25,11 +25,12 @@ blackouts are `blackouts_list`.
 
 **The `Pullback` line** (the runner's briefing; price against the trend
 rule's prevailing side on the 15m, none with it): the leg (origin ->
-extreme), the share of it given back, its 15m and 1h swings (holds or
+extreme), the share of it given back (past its origin: given back; no
+depth on a leg under the ATR floor), its 15m and 1h swings (holds or
 broken by a close), the bars against it with volume and range per bar
-vs the leg's (within the RTH or night part; unknown when the leg has
-none there), the 15m and 1h breaks against it (`stacked`: both). Weigh
-it with `pullback-vs-reversal`.
+vs the leg's (both in one session part; no phrase: not computable), the
+15m and 1h breaks against it (`stacked`: both). Weigh it with
+`pullback-vs-reversal`.
 
 ## Examples
 

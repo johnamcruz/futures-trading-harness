@@ -47,7 +47,7 @@ test('pullback line: the runner\'s briefing carries the read of its own bars, on
   assert.ok(!/\n {2}pullback: /.test(text), 'the detail leaves it out (the summary says it)');
   // Another read is said; the rest of the text unchanged.
   const deep = B.renderBriefing(withPb(b, DEEP));
-  assert.match(deep, /- Pullback \(15m, short leg 21600 -> 21500\): depth 120% of the leg \(past its origin\); 30 bars against it, volume 1\.8x the leg's per bar \(rising\), range 1\.6x; 15m swing 21600 broken by a close, 1h swing 21640 holds; 15m break against: CHoCH up 21590 \(2 bars ago\), 1h: CHoCH up 21610 \(0 bars ago\); stacked\./);
+  assert.match(deep, /- Pullback \(15m, short leg 21600 -> 21500\): the leg given back past its origin; 30 bars against it, volume 1\.8x the leg's per bar \(rising\), range 1\.6x; 15m swing 21600 broken by a close, 1h swing 21640 holds; 15m break against: CHoCH up 21590 \(2 bars ago\), 1h: CHoCH up 21610 \(0 bars ago\); stacked\./);
   assert.deepStrictEqual(deep.split('\n').filter(l => !l.startsWith('- Pullback (')), text.split('\n').filter(l => !l.startsWith('- Pullback (')));
   // Without one (with the trend, or an older file), no line.
   assert.deepStrictEqual(lineOf(B.renderBriefing(withPb(b, undefined))), []);
