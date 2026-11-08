@@ -27,6 +27,9 @@
  *       failure, and its timing (ms from the bar's close to the head trader's planned and to the order, each role's ms),
  *       a late pass's kind (`late`: late-entry.js) and a veto's basis (`vetoBasis`: trading/veto-basis.js);
  *       the cycle's record alone also holds its `why` and phase 2's report (`phase2`: { chars, text, cut })
+ *   stateRead (in both, a trade cycle): the head trader's STATE line read from its own final message and scored
+ *       per field against its cycle bar's briefing (trading/state-read.js; status none when it wrote none), for
+ *       measurement only: nothing that decides reads it
  *   timing (in both, when the runner gave one): when the cycle acted against
  *       its bar (cycle-timing.js: the bar's close, the roles' calls, the
  *       decision, the order, the end; latencies, overran, setup caught/missed)
@@ -319,6 +322,9 @@ function writeCycleLog(home, { at = new Date(), env = null, action, harness, pro
     summary.setupsListed = context.setupsListed.length;
     summary.setupSkips = require('./setup-skips').setupSkips({ listed: context.setupsListed, composed, text });
   }
+  // The head trader's STATE line (trading/state-read.js), read from its own final message and scored against its cycle
+  // bar's briefing: a record for measurement only; a cycle without it is recorded as such. Never throws.
+  const stateRead = action === 'trade' ? cycleStateRecord({ home, harness, output, context, now: cycleAt }) : null;
   const stamp = cycleAt.toISOString().slice(11, 19).replace(/:/g, '');
   const dir = path.join(home, 'logs', 'cycles', day);
   let file = path.join(dir, `${stamp}-${action}.json`);
@@ -329,6 +335,7 @@ function writeCycleLog(home, { at = new Date(), env = null, action, harness, pro
       // resultNote: why (scored otherwise, or the line taken from an earlier message: the final message had none).
       at: at.toISOString(), cycleAt: cycleAt.toISOString(), action, harness, ok, timedOut, durationMs, result, ...(reportedResult ? { reportedResult } : {}), ...(resultNote ? { resultNote } : {}), summary, factCheck, ...(timing ? { timing } : {}), ...(desk ? { desk } : {}), ...(entry ? { entry } : {}), ...(overlap ? { overlap } : {}),
       ...(composed.length ? { composed } : {}),
+      ...(stateRead ? { stateRead } : {}),
       // context: what the prompt was built from (runner.js), so a line can be checked against its inputs.
       prompt, context, argv: argv.map(a => (a === prompt ? '<prompt>' : a)), transcript: output,
     }, null, 2);
@@ -352,6 +359,7 @@ function writeCycleLog(home, { at = new Date(), env = null, action, harness, pro
       ...(desk ? { desk } : {}),
       ...(entry ? { entry: { outcome: entry.outcome || null, ran: (entry.ran || []).map(x => x.role), ...(perRole(entry.ran) ? { skills: perRole(entry.ran) } : {}), ...(entry.record ? { record: entry.record } : {}), ...(entry.failure ? { failure: entry.failure } : {}), ...(entry.timing ? { timing: entry.timing } : {}), ...(entry.restated ? { restated: { kind: entry.restated.kind, outcome: entry.restated.outcome, ...(entry.restated.size ? { size: entry.restated.size } : {}) } } : {}), ...(entry.cutRestored ? { cutRestored: { from: entry.cutRestored.from, to: entry.cutRestored.to, note: entry.cutRestored.note } } : {}), ...(entry.late && typeof entry.late.kind === 'string' ? { late: entry.late.kind } : {}), ...(typeof entry.vetoBasis === 'string' ? { vetoBasis: entry.vetoBasis } : {}) } } : {}),
       ...(overlap ? { overlap: overlap.map(o => ({ record: o.record, outcome: o.outcome })) } : {}),
+      ...(stateRead ? { stateRead } : {}),
       // The roles the runner ran without some of their skills (role-skills-record.js; the cycle's desk and entry records).
       ...roleSkillsMissing(context, entry),
     })}\n`);
@@ -382,6 +390,19 @@ function cycleLookups({ home, output, transcript, context, roleSkills, at, laneB
   }
 }
 
+/**
+ * The head trader's STATE line from its own final message (autotrader.js finalMessage: never a role's report or a
+ * tool's reply), scored against the cycle bar's briefing (trading/state-read.js). Never throws.
+ */
+function cycleStateRecord({ home, harness, output, context, now }) {
+  try {
+    const { final } = require('./autotrader').finalMessage(output);
+    return require('./trading/state-read').cycleStateRead({ home, text: final || '', context, now });
+  } catch (err) {
+    return { error: err.message, harness };
+  }
+}
+
 /** The cycle's experience_lookup records, read once and their file removed (it lives beside the transcript). Never throws. */
 function cycleExperienceLookups(transcript) {
   try {
@@ -394,4 +415,4 @@ function cycleExperienceLookups(transcript) {
   }
 }
 
-module.exports = { toolCalls, summarize, writeCycleLog, amendCycleLog, cycleLookups, cycleExperienceLookups, cycleClock, gateOrders, RISK_REDUCING };
+module.exports = { toolCalls, summarize, writeCycleLog, amendCycleLog, cycleLookups, cycleExperienceLookups, cycleStateRecord, cycleClock, gateOrders, RISK_REDUCING };

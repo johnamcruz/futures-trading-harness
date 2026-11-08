@@ -99,7 +99,9 @@ test('CORE: the composed bar\'s reads the gate requires (SITUATIONAL taught in t
   // Then 75962 (review): trade-lifecycle's stall line says the limit rests `valid_bars`, a later bar fills it or it expires (+10).
   // Then 76057 (fix/quiz-side-doji, the context quiz's q19 answered "Yes"): autonomous-trading's phase-2 size line says a
   // prose Size line beside a bare approval is not a trade yet (+95).
-  assert.ok(Buffer.byteLength(prompt) <= 76057, `the head prompt is ${Buffer.byteLength(prompt)} bytes`);
+  // Then 76476 (feat/state-read, the owner's goal of measuring the model's reads): trade-session step 3's STATE line, the
+  // head trader's closed-form market-state read, recorded and scored against the briefing's labels, never a step (+419).
+  assert.ok(Buffer.byteLength(prompt) <= 76476,`the head prompt is ${Buffer.byteLength(prompt)} bytes`);
   // Only the head trader's prompt grows: no other role's prompt embeds trade-lifecycle (the risk manager's embeds
   // confluence-counting and invalidation as before; its prompt is unchanged, pinned in trade-session-split.test.js).
   for (const [name, a] of Object.entries(index.agent)) if (name !== H.HEAD_AGENT && a.prompt) assert.ok(!a.prompt.includes('<skill name="trade-lifecycle">'), name);
