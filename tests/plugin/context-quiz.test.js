@@ -92,8 +92,8 @@ test('context quiz: every layer asked, ids unique, the bar the whole quiz at K 5
   // 37 since q38-q39 (a cited setup in an attempt; a missing track record is no reason to pass); 42 and 8 since q40-q44 and
   // b8 (prepare-ahead's confirm rule: PR C); 45 since q47-q49 (a standing scenario: compose_check decides; the closing
   // candle read as candle-reading does). q46 went with PR C3's computed trigger; q45 (the 3m doji, a yes/no) measured 7/10
-  // live and is out of the bar, noted for the paired test. The pass bar rises with them.
-  assert.strictEqual(QUIZ.questions.length, 45);
+  // live and is out of the bar, noted for the paired test. 58 since q50-q63 less q53 (a 3m swing is stop structure, not a level: measured 6/10, out of the bar; market context: levels and reactions, structure breaks, trend vs range, pullback vs reversal; each anchored in the skill that states it). The pass bar rises with them.
+  assert.strictEqual(QUIZ.questions.length, 58);
   assert.strictEqual(QUIZ.partB.length, 8);
 });
 
