@@ -272,3 +272,19 @@ test('review 2: a cycle log with no prompt is refused; a failed ask leaves its r
   const { rows } = await P.probeMoments({ moments: [{ id: 'c', set: 'change', want: 'planned', prompt: PROMPT, recorded: 'planned' }], bodyOf: n => (n === 'candle-reading' ? 'new' : null), ask, k: 2 });
   assert.match(rows[0].errors[0], /boom/);
 });
+
+// Review round 3.
+test('review 3: a result line may follow a list number, heading, bullet, quote or bold lead-in; the last one wins, as live reads it', () => {
+  for (const l of ['1. CYCLE RESULT: planned - x', '## CYCLE RESULT: planned - x', '**Decision:** CYCLE RESULT: planned - x', '\u2022 CYCLE RESULT: planned - x', '+ CYCLE RESULT: planned - x', '**CYCLE RESULT:** planned - x', 'CYCLE RESULT: Planned - x']) {
+    assert.strictEqual(P.outcomeOf(l), 'planned', l);
+  }
+  assert.strictEqual(P.outcomeOf('CYCLE RESULT: planned - long\nOn reflection no.\n1. CYCLE RESULT: no-trade - wide'), 'no-trade');
+  assert.strictEqual(P.outcomeOf('CYCLE RESULT: no-trade - wait\nRevised:\n**Final answer:** CYCLE RESULT: planned - long'), 'planned');
+  assert.strictEqual(P.outcomeOf('(I would have said CYCLE RESULT: planned - x)'), null);
+});
+
+test('review 3: a thrown non-Error leaves a reason, and an error line is held once', async () => {
+  const throwing = async () => { throw 'plain string'; };
+  const { rows } = await P.probeMoments({ moments: [{ id: 'c', set: 'change', want: 'planned', prompt: PROMPT, recorded: 'planned' }], bodyOf: n => (n === 'candle-reading' ? 'new' : null), ask: throwing, k: 3 });
+  assert.deepStrictEqual(rows[0].errors, ['plain string']);
+});

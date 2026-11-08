@@ -30,7 +30,8 @@ function ask(byId, cwd, timeoutMs) {
     let out = '';
     let err = '';
     child.stdout.on('data', d => { out += d; });
-    child.stderr.on('data', d => { err = String(d); }); // drained, so a chatty child cannot block; the last chunk names a failure
+    child.stderr.setEncoding('utf8');
+    child.stderr.on('data', d => { err = (err + d).trimEnd().split('\n').at(-1); }); // drained, so a chatty child cannot block; its last line names a failure
     child.on('error', reject);
     child.on('close', code => (code === 0 ? resolve({ text: out }) : reject(new Error(`claude exited ${code}: ${err.trim()}`))));
   });

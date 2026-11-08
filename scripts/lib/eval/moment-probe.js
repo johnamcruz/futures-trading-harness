@@ -41,10 +41,13 @@ function swapSkills(prompt, bodyOf) {
   return { prompt: out, swapped };
 }
 
+// A result line: the label after only marks (list number, heading, bullet, quote, bold) or a short "Word:" lead-in; a label quoted mid-sentence is not one.
+const LABEL = /^[^a-z]*(?:[a-z ]{1,30}:[*_`]*\s*)?CYCLE RESULT:[*_` \t]*([a-z-]+)/i;
+
 function outcomeOf(text) {
   // Only a line that starts with the label is the answer: a model quoting the label mid-line is not deciding.
-  const found = String(text || '').split('\n').map(l => /^[\s*_`>-]*CYCLE RESULT:[*_` \t]*([a-z-]+)/.exec(l)).filter(Boolean);
-  return found.length ? found.at(-1)[1] : null;
+  const found = String(text || '').split('\n').map(l => LABEL.exec(l)).filter(Boolean);
+  return found.length ? found.at(-1)[1].toLowerCase() : null;
 }
 
 const enters = outcome => outcome === 'planned' || outcome === 'executed';
@@ -88,7 +91,7 @@ async function probeMoments({ moments, bodyOf, ask, k = 1 }) {
     if (!swapped.length) { rows.push({ id: m.id, set: m.set, want: m.want, before: null, after: null, swapped, verdict: 'untestable' }); continue; }
     const errors = [];
     const answers = (prompt, arm) => Promise.all(Array.from({ length: k }, async () => {
-      try { return outcomeOf((await ask(prompt, { id: m.id, arm })).text); } catch (e) { errors.push(String(e && e.message).split('\n')[0]); return null; }
+      try { return outcomeOf((await ask(prompt, { id: m.id, arm })).text); } catch (e) { errors.push(String((e && e.message) || e).split('\n')[0]); return null; }
     }));
     const row = (before, after, rest) => ({ id: m.id, set: m.set, want: m.want, before, after, swapped, ...(errors.length ? { errors: [...new Set(errors)] } : {}), ...rest });
     const before = majorityOutcome(await answers(m.prompt, 'old'));
