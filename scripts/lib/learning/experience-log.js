@@ -55,7 +55,7 @@
  *                                         (`exit`: { plan, mode, hash } the run's exit, BRACKETS by default)
  *   exitRecord(exit), exitHash(exit)      an exit as a manifest records it ({ mode, plan, hash }), its hash
  *   appendDecisions(file, lines)          append the lines whose id isn't in the file yet; { added, kept }
- *   replaceDecisions(file, runId, lines)  a run's lines replaced (a rebuild); { removed, added }
+ *   replaceDecisions(file, runId, lines, { allowEmpty })  a run's lines replaced (a rebuild); { removed, added }
  *   readDecisions(file)                   every line, [] without a file
  *   logFile(runHome)                      <run home>/experience/decisions.jsonl
  */
@@ -488,14 +488,17 @@ function appendDecisions(file, lines) {
 /**
  * A run's lines replaced (a rebuild: a log written before a writer's fix, which appendDecisions keeps as written): every
  * line of `runId` removed, whatever its version, the new ones appended; every other line kept as written. Atomic.
+ * None computed for a run that had lines: refused unless `allowEmpty`.
  */
-function replaceDecisions(file, runId, lines) {
+function replaceDecisions(file, runId, lines, { allowEmpty = false } = {}) {
   if (lines.some(l => l.runId !== runId)) throw new Error(`replaceDecisions: a line of another run than ${runId}`);
   let text = '';
   try { text = fs.readFileSync(file, 'utf8'); } catch (_err) { /* none yet */ }
   const ofRun = l => { try { const d = JSON.parse(l); return Boolean(d) && d.runId === runId; } catch (_err) { return false; } };
   const old = text.split('\n').filter(l => l.trim());
   const kept = old.filter(l => !ofRun(l));
+  // A rebuild that found nothing for a run that had lines (a pruned or moved store) would erase its record: refused.
+  if (!lines.length && kept.length < old.length && !allowEmpty) throw new Error(`run ${runId} had ${old.length - kept.length} line(s) and the rebuild computed none: refused (--allow-empty to erase them)`);
   fs.mkdirSync(path.dirname(file), { recursive: true });
   const tmp = `${file}.${process.pid}.tmp`;
   fs.writeFileSync(tmp, [...kept, ...lines.map(l => JSON.stringify(l))].map(l => `${l}\n`).join(''));

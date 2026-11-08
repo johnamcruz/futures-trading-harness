@@ -30,7 +30,7 @@
  *       judging, --ledger <file> (required for judging; an allowed look is appended to it), --candidate <name>
  *   node scripts/replay.js experience <run dir> [--bars SYM=file ...] [--rebuild]   the experience log (<run home>/experience/
  *       decisions.jsonl; learning/run-experience.js) of a learning run that passed the gate (`run` writes it when it
- *       finishes; --rebuild replaces the run's lines, its indexes set aside); `report` adds the learning measures.
+ *       finishes; --rebuild replaces the run's lines, its indexes set aside, never with none unless --allow-empty).
  *   report, labels and scorecard read a live session's folder (<FTH_HOME>/sessions/<day>, session/live.js) as a run's
  *
  * Config: mcp-configs/replay.example.json (scripts/lib/replay/config.js).
@@ -66,7 +66,7 @@ const learning = require('./lib/learning/learning-report');
 const { loadStrategies } = require('./lib/trading/strategies');
 
 const ROOT = path.resolve(__dirname, '..');
-const USAGE = 'usage: replay.js run --config <replay.json> [--max-cycles N] [--bars SYM=file ...] [--faults stop=R,outage=R] [--validate [--candidate name] | --candidate name --evaluation id [--reasoning-fix]] | points --config <replay.json> | report <run dir> [--bars SYM=file ...] | report --config <replay.json> [--account <name>] [--natural-rates file] [--faults stop=R,outage=R] | labels <run dir> [--budget USD] [--bars SYM=file ...] [--out dir] | scorecard <run dir> [--bars SYM=file ...] [--out dir] [--purpose reasoning-fix|tuning|judging] [--ledger file] [--candidate name] | experience <run dir> [--bars SYM=file ...] [--rebuild]';
+const USAGE = 'usage: replay.js run --config <replay.json> [--max-cycles N] [--bars SYM=file ...] [--faults stop=R,outage=R] [--validate [--candidate name] | --candidate name --evaluation id [--reasoning-fix]] | points --config <replay.json> | report <run dir> [--bars SYM=file ...] | report --config <replay.json> [--account <name>] [--natural-rates file] [--faults stop=R,outage=R] | labels <run dir> [--budget USD] [--bars SYM=file ...] [--out dir] | scorecard <run dir> [--bars SYM=file ...] [--out dir] [--purpose reasoning-fix|tuning|judging] [--ledger file] [--candidate name] | experience <run dir> [--bars SYM=file ...] [--rebuild [--allow-empty]]';
 
 function arg(argv, name) {
   const i = argv.indexOf(name);
@@ -189,7 +189,7 @@ async function main(argv) {
   if (cmd === 'report') return report(argv);
   if (cmd === 'labels') return labels(argv);
   if (cmd === 'scorecard') return score(argv);
-  if (cmd === 'experience') { say(experienceLine(writeRunExperience(argv[1] && !argv[1].startsWith('--') ? argv[1] : '', { root: ROOT, barsFiles: barsArgs(argv), rebuild: argv.includes('--rebuild') }))); return 0; }
+  if (cmd === 'experience') { say(experienceLine(writeRunExperience(argv[1] && !argv[1].startsWith('--') ? argv[1] : '', { root: ROOT, barsFiles: barsArgs(argv), rebuild: argv.includes('--rebuild'), allowEmpty: argv.includes('--allow-empty') }))); return 0; }
   throw new Error(USAGE);
 }
 

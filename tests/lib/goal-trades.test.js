@@ -61,8 +61,11 @@ test('blockTrades on a fixture block: deterministic; every trade on the entry ru
     const j = ix.get(t.decidedAt);
     const floor = stopFloorTicks({ sections: { m3: { data: { referenceStop: { distance: Math.round(snap * atr20[j] * 1e4) / 1e4 } } } } }, 0.25, P.stopRule);
     assert.ok(t.stopTicks >= floor, `${t.decidedAt}: ${t.stopTicks} ticks, the floor ${floor}`);
-    assert.ok(Number.isFinite(t.R) && t.mfeR >= 0 && t.maeR <= 0);
+    assert.ok(Number.isFinite(t.R), `${t.decidedAt}: R`);
+    // MAE and MFE: both unknown (null: no bar held whole), or both measured, MFE >= 0 >= MAE (null >= 0 holds in JS: checked apart).
+    assert.ok((t.mfeR === null && t.maeR === null) || (Number.isFinite(t.mfeR) && Number.isFinite(t.maeR) && t.mfeR >= 0 && t.maeR <= 0), `${t.decidedAt}: MAE ${t.maeR}, MFE ${t.mfeR}`);
   }
+  assert.ok(r.trades.some(t => Number.isFinite(t.mfeR)), 'some trade held a bar whole: its excursions measured');
   for (let i = 1; i < r.trades.length; i += 1) assert.ok(Date.parse(r.trades[i].entryTime) >= Date.parse(r.trades[i - 1].exitTime), 'one position at a time');
   // The candidates: every fill in entry order (the attempts decide the slot after sizing), the one-at-a-time list among them.
   assert.ok(r.candidates.length >= r.trades.length);

@@ -175,4 +175,13 @@ test('scripts/replay.js: experience writes the log, and report adds the learning
   const rb = spawnSync(process.execPath, [cli, 'experience', dir, '--rebuild'], { encoding: 'utf8', env });
   assert.strictEqual(rb.status, 0, rb.stderr);
   assert.match(rb.stdout, /experience: rebuilt run run1: 1 line\(s\) replaced by 1 \(practice-train\)/);
+  // A run whose store now yields no decision: the rebuild refuses to erase its lines, unless --allow-empty.
+  const empty = runDir({ times: [], records: [] });
+  appendDecisions(logFile(empty.home), [{ id: 'kept', v: 3, runId: 'run1' }]);
+  const refused = spawnSync(process.execPath, [cli, 'experience', empty.dir, '--rebuild'], { encoding: 'utf8', env });
+  assert.notStrictEqual(refused.status, 0);
+  assert.match(refused.stderr + refused.stdout, /had 1 line\(s\) and the rebuild computed none: refused \(--allow-empty to erase them\)/);
+  const erased = spawnSync(process.execPath, [cli, 'experience', empty.dir, '--rebuild', '--allow-empty'], { encoding: 'utf8', env });
+  assert.strictEqual(erased.status, 0, erased.stderr);
+  assert.match(erased.stdout, /1 line\(s\) replaced by 0/);
 });

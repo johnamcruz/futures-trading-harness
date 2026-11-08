@@ -82,7 +82,7 @@ function cellLine(label, c) {
   if (!c) return `- ${label}: no record`;
   if (!c.enough) return `- ${label}: ${c.note}`;
   const shift = c.shifted ? `, shifted (${c.latestYear.year}: mean R ${f2(c.latestYear.meanR)} over n ${c.latestYear.n}, the other sign)` : '';
-  return `- ${label}: n ${c.n} (${c.days} days; ${c.entries} entered, ${c.passes} passed${c.unplaced ? `, ${c.unplaced} not placed` : ''}${curatedText(c)}), win ${f2(c.winRate.rate)} [${f2(c.winRate.lo)}, ${f2(c.winRate.hi)}], mean R ${f2(c.meanR.mean)} [${f2(c.meanR.lo)}, ${f2(c.meanR.hi)}]${excursionText(c)}, last ${c.lastSeen}${shift}`;
+  return `- ${label}: n ${c.n} (${c.days} days; ${c.entries} entered, ${c.passes} passed${c.unplaced ? `, ${c.unplaced} not placed` : ''}${c.refused ? `, ${c.refused} refused by the gate` : ''}${curatedText(c)}), win ${f2(c.winRate.rate)} [${f2(c.winRate.lo)}, ${f2(c.winRate.hi)}], mean R ${f2(c.meanR.mean)} [${f2(c.meanR.lo)}, ${f2(c.meanR.hi)}]${excursionText(c)}, last ${c.lastSeen}${shift}`;
 }
 
 /** The skill signature with one step's skills replaced. */

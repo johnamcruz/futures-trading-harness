@@ -21,7 +21,7 @@
  *                                                          before the record: its brackets, hash null (untagged)
  *   plannedExit(run, { root, env })                        the exit a replay run trades: its manifest's once started,
  *                                                          else the one its seed will record (the preflight's)
- *   writeRunExperience(runDir, { root, barsFiles, now, rebuild, indexDirs })   { file, added, kept, decisions, role, hidden,
+ *   writeRunExperience(runDir, { root, barsFiles, now, rebuild, allowEmpty, indexDirs })   { file, added, kept, decisions, role, hidden,
  *                                                          rebuilt? }: `rebuild` replaces the run's lines (any version)
  *                                                          and sets aside the indexes built from them (rebuilt:
  *                                                          { runId, removed, staleIndexes })
@@ -164,7 +164,7 @@ function runDecisions(runDir, { root = null, barsFiles = {}, now = new Date() } 
   return { dir, home, manifest, days, dayKeys, gate, cfg, tfMs, decisions: delivery ? decisions.map(d => ({ ...d, delivery })) : decisions, delivery, barsFor, trips };
 }
 
-function writeRunExperience(runDir, { root = null, barsFiles = {}, now = new Date(), rebuild = false, indexDirs = null } = {}) {
+function writeRunExperience(runDir, { root = null, barsFiles = {}, now = new Date(), rebuild = false, allowEmpty = false, indexDirs = null } = {}) {
   const run = runDecisions(runDir, { root, barsFiles, now });
   const { manifest, gate, dayKeys, home } = run;
   if (!gate || gate.learning !== true) throw new Error(`run ${manifest.runId} is ${gate ? 'declared not learning' : 'not a learning run (no learning-run.json: started before the gate)'}: no experience log`);
@@ -180,7 +180,7 @@ function writeRunExperience(runDir, { root = null, barsFiles = {}, now = new Dat
   // before a writer's fix as it was), and the indexes built from them set aside (default: the log's folder and the
   // harness home's experience folder).
   if (rebuild) {
-    const { removed, added } = replaceDecisions(file, manifest.runId, decisions);
+    const { removed, added } = replaceDecisions(file, manifest.runId, decisions, { allowEmpty });
     const dirs = indexDirs || [path.dirname(file), path.join(harnessHome(), 'experience')];
     return { file, added, kept: 0, decisions, role: gate.role, hidden: Boolean(gate.hideOutcomes), rebuilt: { runId: manifest.runId, removed, staleIndexes: staleIndexes([path.dirname(file), ...dirs], manifest.runId) } };
   }

@@ -566,20 +566,36 @@ test('writeRunExperience --rebuild: a log written before a fix is rewritten (app
   const lines = fs.readFileSync(first.file, 'utf8').trim().split('\n').map(JSON.parse);
   fs.writeFileSync(first.file, lines.map(l => `${JSON.stringify({ ...l, v: 2, grade: 'neutral-pass', outcome: { ...l.outcome, maeR: -9 } })}\n`).join(''));
   assert.throws(() => writeRunExperience(dir), /version 2, not 3/, 'appending never fixes it');
-  // An index built from the run's log, one from another run, and a run's pinned copy.
+  // An index built from the run's log, one from another run, and the same index pinned by this run's home and by
+  // another run's (pinIndex: a frozen index-<hash>.json beside pinned.json, which names it).
   const idxDir = path.join(tmpHome(), 'experience');
   fs.mkdirSync(idxDir, { recursive: true });
   const built = X.writeIndex(idxDir, X.buildIndex(E.readDecisions(file).map(d => ({ ...d, v: 3 })), { runs: [{ runId: 'run1', file, sha256: 'a' }] }));
   const other = path.join(idxDir, 'index-0000.json');
   fs.writeFileSync(other, JSON.stringify({ v: 3, runs: [{ runId: 'run9' }] }));
-  fs.writeFileSync(path.join(idxDir, 'pinned.json'), JSON.stringify({ v: 3, runs: [{ runId: 'run1' }] }));
-  const r = writeRunExperience(dir, { rebuild: true, indexDirs: [idxDir], now: new Date('2026-10-15T00:00:00Z') });
+  const homeB = tmpHome();
+  X.pinIndex(home, built);
+  X.pinIndex(homeB, built);
+  // A copy set aside by an earlier rebuild: never overwritten.
+  fs.writeFileSync(`${built}.stale`, 'earlier');
+  const r = writeRunExperience(dir, { rebuild: true, indexDirs: [idxDir, path.join(homeB, 'experience')], now: new Date('2026-10-15T00:00:00Z') });
   assert.deepStrictEqual([r.added, r.rebuilt.removed], [lines.length, lines.length]);
   assert.ok(E.readDecisions(file).every(d => d.v === 3 && !(d.outcome && d.outcome.maeR === -9)), 'every line the fixed writer\'s');
   assert.deepStrictEqual(r.rebuilt.staleIndexes, [built]);
-  assert.ok(!fs.existsSync(built) && fs.existsSync(`${built}.stale`), 'set aside, never deleted');
-  assert.ok(fs.existsSync(other) && fs.existsSync(path.join(idxDir, 'pinned.json')), 'another run\'s index and a pinned copy untouched');
+  assert.ok(!fs.existsSync(built) && fs.existsSync(`${built}.stale.1`), 'set aside, never deleted');
+  assert.strictEqual(fs.readFileSync(`${built}.stale`, 'utf8'), 'earlier', 'the earlier set-aside copy kept');
+  assert.ok(fs.existsSync(other), 'another run\'s index untouched');
+  assert.strictEqual(X.loadPinned(home).hash, X.loadPinned(homeB).hash, 'both runs\' pinned copies still load');
   assert.match(require('../../scripts/lib/learning/run-experience').experienceLine(r), /rebuilt run run1: 1 line\(s\) replaced by 1 \(practice-train\) in .*; 1 index\(es\) built from it set aside \(rebuild them\): index-/);
+});
+
+test('replaceDecisions: a rebuild that finds no line for a run that had some is refused (a pruned store would erase it), unless allowed', () => {
+  const file = path.join(tmpHome(), 'experience', 'decisions.jsonl');
+  E.appendDecisions(file, [{ id: 'a', v: E.VERSION, runId: 'r1' }, { id: 'b', v: E.VERSION, runId: 'r2' }]);
+  assert.throws(() => E.replaceDecisions(file, 'r1', []), /run r1 had 1 line\(s\) and the rebuild computed none: refused \(--allow-empty to erase them\)/);
+  assert.deepStrictEqual(E.readDecisions(file).map(d => d.id), ['a', 'b'], 'nothing written');
+  assert.deepStrictEqual(E.replaceDecisions(file, 'r1', [], { allowEmpty: true }), { removed: 1, added: 0 });
+  assert.deepStrictEqual(E.replaceDecisions(file, 'r3', []), { removed: 0, added: 0 }, 'a run with none: nothing to lose');
 });
 
 test('writeRunExperience: a curated run\'s lines are tagged curated (outcome-balanced: the experience index labels them)', () => {

@@ -40,6 +40,20 @@ test('index: a pass the model didn\'t make (passClass) keeps its R as the setup\
   assert.deepStrictEqual([own.passes, own.unplaced], [20, 0], 'declined: the model\'s own');
 });
 
+test('index: a gate refusal is not the model\'s pass either: counted apart (refused), its R the setup\'s', () => {
+  const ds = decisions(30, 12, i => (i % 2 ? 2 : -1)).map((d, i) => (d.decision === 'passed' && i % 2 ? { ...d, decision: 'refused' } : d));
+  const all = X.cellAt(X.buildIndex(ds, { seed: 7, reps: 300 }), ALL);
+  assert.deepStrictEqual([all.n, all.entries, all.passes, all.refused, all.unplaced], [30, 10, 10, 10, 0]);
+});
+
+test('index: refused over experience-log lines older than the log\'s version (a v2 grade is any pass\'s), naming the rebuild', () => {
+  const { VERSION } = require('../../scripts/lib/learning/experience-log');
+  const ds = decisions(24, 12, i => (i % 2 ? 2 : -1)).map((d, i) => ({ ...d, v: i < 12 ? VERSION - 1 : VERSION }));
+  assert.throws(() => X.buildIndex(ds, { seed: 7, reps: 100 }), new RegExp(`12 experience-log line\\(s\\) of version ${VERSION - 1}, not ${VERSION}, in run r1: rebuild them first \\(replay\\.js experience <run dir> --rebuild\\)`));
+  assert.ok(X.buildIndex(ds.slice(12), { seed: 7, reps: 100 }).decisions > 0, 'the current version builds');
+  assert.ok(X.buildIndex(ds.map(({ v: _v, ...d }) => d), { seed: 7, reps: 100 }).decisions > 0, 'a line without a version (a test or older tool): as before');
+});
+
 test('index: the cells per signature, per context key and the full context; counts, and day-bootstrap intervals for the win rate and the mean R', () => {
   const ds = decisions(30, 12, i => (i % 2 ? 2 : -1));
   const doc = X.buildIndex(ds, { seed: 7, reps: 500, now: new Date('2026-10-14T00:00:00Z') });

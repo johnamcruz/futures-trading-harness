@@ -45,6 +45,12 @@ test('vetoBasis: a hard-step word in passing (budget, cap, floor, room, size) ne
     'VERDICT: VETO - restriction: prop_portfolio entries stay restricted (lesson 2024-05-24); the room, the budget and the cap are fine otherwise; stand aside',
     'VERDICT: VETO - phase-1 stand-down: the lesson bars entries; size 3 is above the floor, but no lift is journaled',
     'VERDICT: VETO - restricted size by lesson: the 2024-05-24 lesson keeps prop_portfolio at size 1; stand aside',
+    // Every hard step needs a failure: named in passing, or as passing, it is none.
+    'VERDICT: VETO - restriction: the lesson stands; the R:R 2.5 is fine',
+    'VERDICT: VETO - restriction: the lesson stands, though the short is not counter to the 4h trend',
+    'VERDICT: VETO - restriction: the lesson stands; the daily limit is far',
+    'VERDICT: VETO - restriction: the lesson stands; the 1h CHoCH up supports the long',
+    'VERDICT: VETO - restriction: the lesson stands; no unprotected position, not in a blackout, no loss-streak stop',
   ]) assert.strictEqual(vetoBasis(t), 'lesson', t);
   for (const t of ['VERDICT: VETO - budget: 3 MNQ at $221 is over it', 'VERDICT: VETO - floor: 2 MNQ under it', 'VERDICT: VETO - size: no size fits at this stop']) assert.strictEqual(vetoBasis(t), 'hard-step', t);
 });

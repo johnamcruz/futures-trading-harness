@@ -189,6 +189,7 @@ test('experience_lookup: a pass the model didn\'t make reads in plain words (not
   const c = { enough: true, n: 3, days: 3, entries: 1, passes: 1, unplaced: 1, winRate: { rate: 0.5, lo: 0, hi: 1 }, meanR: { mean: 0, lo: -1, hi: 1 }, lastSeen: '2022-03-11', mae: {}, mfe: {} };
   assert.match(H.cellLine('x', c), /n 3 \(3 days; 1 entered, 1 passed, 1 not placed\)/);
   assert.match(H.cellLine('x', { ...c, unplaced: 0 }), /n 3 \(3 days; 1 entered, 1 passed\)/);
+  assert.match(H.cellLine('x', { ...c, unplaced: 0, refused: 2 }), /n 3 \(3 days; 1 entered, 1 passed, 2 refused by the gate\)/);
 });
 
 test('experience_lookup: each cell with enough samples shows its median MAE and MFE in R and n; too few, so said; the sign once; past decisions their own', () => {
