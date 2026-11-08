@@ -1,0 +1,22 @@
+{
+ "why": "Round-3 adversarial answers for the read scorer (scripts/lib/eval/read-score.js), reworded: a negation earlier in the clause (nothing, no sign of), a negated disagreement, a stale question answered no, a fact credited to a frame named after it, historical facts. `conflict`: own-words conflict expected (the State line shown); `stale`; `words`: conflictWords expected, read without a line. Labels: 4h range, 1h up, 15m range.",
+ "labels": { "4h": "range", "1h": "up", "15m": "range" },
+ "line": "- State (each frame's label vs its own last break and last candle; a read, not a rule): 4h range | 1h up: DISAGREE - last break CHoCH down (known 09:45) -> label and price disagree: transition | 15m range.",
+ "answers": [
+  { "text": "Nothing on the 1h looks like a CHoCH down.", "conflict": false, "stale": false, "words": false },
+  { "text": "I see no sign of a 1h CHoCH down.", "conflict": false, "stale": false, "words": false },
+  { "text": "There is no evidence of a 1h bearish engulfing.", "conflict": false, "stale": false, "words": false },
+  { "text": "Neither the 4h nor the 1h shows a CHoCH down.", "conflict": false, "stale": false, "words": false },
+  { "text": "The 4h and 1h don't disagree.", "conflict": false, "stale": false, "words": false },
+  { "text": "The 1h label isn't at odds with price.", "conflict": false, "stale": false, "words": false },
+  { "text": "Is the 1h label stale? No, it flipped.", "conflict": false, "stale": false, "words": false },
+  { "text": "Is the 1h label stale?", "conflict": false, "stale": false, "words": false },
+  { "text": "Is the 1h label stale? Yes: price ran away from it.", "conflict": false, "stale": true, "words": false },
+  { "text": "Nothing here says the 1h label is stale.", "conflict": false, "stale": false, "words": false },
+  { "text": "The 1h stays up, a bearish engulfing on the 15m.", "conflict": false, "stale": false, "words": false },
+  { "text": "The last 1h CHoCH down was three days ago.", "conflict": false, "stale": false, "words": false },
+  { "text": "The 1h label was stale yesterday.", "conflict": false, "stale": false, "words": false },
+  { "text": "The 1h printed a CHoCH down at 09:45: the up label is stale.", "conflict": true, "stale": true, "words": false },
+  { "text": "The 1h up label and its CHoCH down disagree.", "conflict": true, "stale": false, "words": true }
+ ]
+}
