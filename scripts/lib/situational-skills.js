@@ -20,7 +20,8 @@
  *   risk        a setup listed: invalidation, take-profit, position-sizing; in a prop attempt prop-challenge-pacing
  *   location    price at a key level (a reaction, a compression box at one): levels-and-reactions; a liquidity sweep
  *               (breakout-vs-fakeout); VWAP and value (vwap-volume-profile)
- *   bias        the trend rule's filter (mtf-bias-filter, the standard plan's bias skill), the day's bias (daily-bias), the last structure break (bos-vs-choch), a window refusing entries
+ *   bias        the trend rule's filter (mtf-bias-filter, the standard plan's bias skill), the day's bias (daily-bias), price
+ *               against the prevailing side (the Pullback line: pullback-vs-reversal, flat only), the last structure break (bos-vs-choch), a window refusing entries
  *               (session-timing: the opening print, lunch), and the "Trend declared?" line (trend-vs-range's
  *               "Declared yet?" part only, SECTIONS: read from the skill file at run time, never a load, so never
  *               credited)
@@ -103,6 +104,10 @@ const TABLE = Object.freeze([
   { id: 'declared', stage: 'bias', facts: ['declared'], section: 'declared', why: 'the Trend declared? line', when: c => c.briefings.some(b => require('./trading/trend-declared').declaredLine(m3Of(b).declared)) },
   { id: 'trend', stage: 'bias', facts: ['trendRule'], skills: [setupSkill.bias], why: 'the trend rule', when: c => nonEmpty(c.flat) },
   { id: 'day', stage: 'bias', facts: ['today', 'overnight'], skills: [S.bias.priorRth], why: 'the day\'s bias', when: c => nonEmpty(c.briefings) },
+  // Price against the prevailing side on the 15m (the Pullback line, trading/pullback-read.js): the skill that weighs its
+  // pieces, after the trend rule's skill and the day's bias (on a full budget they stay, it is named). Flat with entries
+  // allowed only (the entry decision); embedded, never required.
+  { id: 'pullback', stage: 'bias', facts: ['pullback'], skills: ['pullback-vs-reversal'], why: 'price against the prevailing side (the Pullback line)', when: c => c.flat.some(b => isObj(m3Of(b).pullback)) },
   { id: 'structure', stage: 'bias', facts: ['lastBreak'], skills: [S.bias.break], why: 'the last structure break', when: c => c.briefings.some(b => isObj(m3Of(b).lastBreak) && isObj(m3Of(b).lastBreak.last)) },
   { id: 'window', stage: 'bias', facts: ['windowEntries'], skills: ['session-timing'], why: 'the window refuses entries', when: c => c.briefings.some(b => m3Of(b).windowEntries && m3Of(b).windowEntries !== 'allowed') },
 ].map(e => Object.freeze({ ...e, facts: Object.freeze(e.facts), ...(e.skills ? { skills: Object.freeze(e.skills) } : {}) })));

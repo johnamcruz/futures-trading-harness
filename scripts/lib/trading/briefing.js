@@ -108,6 +108,7 @@ const { structure5m, structureLine } = require('./m5-structure');
 const { compressionFrames, compressionLine } = require('./compression');
 const { declaredFacts, declaredLine } = require('./trend-declared');
 const { biasLine } = require('./bias-line');
+const { pullbackRead, pullbackLine } = require('./pullback-read');
 const { GLOBEX_OPEN_MIN, RTH_OPEN_MIN, RTH_CLOSE_MIN } = require('./clock'); // the session boundaries' one home
 
 const SECTIONS = ['m3', 'm15', 'h1', 'day'];
@@ -708,6 +709,10 @@ function buildBriefing({ symbol, contractId = null, bars: raw, minutes, fineBars
     const f15 = (fresh.m15 && fresh.m15.data && fresh.m15.data.frame) || {};
     m3.timing = timingOf({ trends: { '4h': (h.h4 || {}).trend, '1h': (h.h1 || {}).trend }, t15: f15.trend || null, declared: m3.declared || null, regime: (m3.regime || {}).primary, bars, minutes, breaks: breaksOf(bars), compression: comp });
   }
+  // The Pullback read (pullback-read.js): price against the trend rule's prevailing side on the 15m, from these closed
+  // bars; the runner's briefing only; null without a counter-move or before the trend rule has its read (its line names
+  // the prevailing side then). A presented fact: nothing in the gate, compose_check, order_plan or the trend rule reads it.
+  if (!own) fresh.m3.data.pullback = read.rule.ready ? pullbackRead({ bars, base: minutes, prevailing: read.rule.prevailing }) : null;
   // Same symbol, bar size and contract (a roll to the next month is new prices, never the old month's levels).
   const usable = prev && prev.symbol === symbol && prev.minutes === minutes && (prev.contractId || null) === contractId && Date.parse(prev.closedAt) < closedAt.getTime();
   const sections = {};
@@ -852,6 +857,9 @@ function summaryLines(b, et) {
   // The base timeframe's timing against the side the entry rule allows (ltf-timing.js timingLine).
   const timing = timingLine(m3.timing, et, tf);
   if (timing) out.push(timing);
+  // Price against the prevailing side on the 15m: the leg, its depth, swings, counter-move and breaks (pullback-read.js).
+  const pullback = own ? null : pullbackLine(m3.pullback);
+  if (pullback) out.push(pullback);
   // The setup moment (learning/setup-moments.js): the reactions the model composes on, said as facts.
   // And the briefing's own setups on an allowed side (setupChecks: a compression break, a live CISD) on the same line;
   // the standard plan below stays the setup moment's.
@@ -919,7 +927,7 @@ const targets = list => list.reduce((out, x) => {
 
 // The m3 fields the summary says in full (one line each), left out of the detail whole.
 const CHAIN_FRAMES = (C => C.chainOf(C.SHIPPED))(require('./chain'));
-const SUMMARY_FIELDS = ['swingTargets', 'rangeTargets', 'fvgs', 'structure5m', 'compression', 'declared', 'timing'];
+const SUMMARY_FIELDS = ['swingTargets', 'rangeTargets', 'fvgs', 'structure5m', 'compression', 'declared', 'timing', 'pullback'];
 // What the summary's "This bar's close" line says in full, left out of the detail (only present when it happened).
 const SUMMARY_ONLY = { vwap: ['crossed'], today: ['openingRangeCrossed'], location: ['closesBeyondValue', 'backInsideValue'] };
 

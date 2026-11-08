@@ -73,6 +73,8 @@ const FIXTURES = {
   declared: { present: { state: FLAT, briefings: [brief({ declared: DECLARED })] }, absent: { state: FLAT, briefings: [brief({})] } },
   trend: { present: { state: FLAT, briefings: [brief({})] }, absent: { state: OPEN, briefings: [brief({})] } },
   day: { present: { state: FLAT, briefings: [brief({})] }, absent: { state: FLAT } },
+  // Price against the prevailing side on the 15m (the Pullback line), and price with it (null: no counter-move).
+  pullback: { present: { state: FLAT, briefings: [brief({ pullback: { side: 'long', frame: '15m', leg: { origin: 21480, extreme: 21530.5 }, depth: 0.41 } })] }, absent: { state: FLAT, briefings: [brief({ pullback: null })] } },
   structure: { present: { state: FLAT, briefings: [brief({ lastBreak: { last: { kind: 'BOS' } } })] }, absent: { state: FLAT, briefings: [brief({ lastBreak: { last: null } })] } },
   window: { present: { state: FLAT, briefings: [brief({ windowEntries: 'refused' })] }, absent: { state: FLAT, briefings: [brief({})] } },
 };
