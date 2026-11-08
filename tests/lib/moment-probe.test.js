@@ -230,3 +230,45 @@ test('probeArgs: the tools, the user settings, MCP servers and session files are
   assert.deepStrictEqual(a.slice(a.indexOf('--model'), a.indexOf('--model') + 2), ['--model', 'model-a']);
   assert.ok(!P.probeArgs({ prompt: 'p', system: '/s.md', model: null }).includes('--model'));
 });
+
+// Review round 2.
+test('review 2: a result line must start the line; text that quotes the label later in a line is not the answer', () => {
+  assert.strictEqual(P.outcomeOf('CYCLE RESULT: no-trade - x\n(I would have said CYCLE RESULT: planned - long if the stop fit)'), 'no-trade');
+  assert.strictEqual(P.outcomeOf('maybe CYCLE RESULT: planned - x'), null);
+  assert.strictEqual(P.outcomeOf('  > **CYCLE RESULT: planned - x**'), 'planned');
+});
+
+test('review 2: the majority is over all k asks; failed asks are not dropped, so one answer of three decides nothing', async () => {
+  assert.strictEqual(P.majorityOutcome(['planned', null, null]), null);
+  assert.strictEqual(P.majorityOutcome(['planned', 'planned', null]), 'planned');
+  assert.strictEqual(P.majorityOutcome(['planned', 'executed']), 'planned');
+  assert.strictEqual(P.majorityOutcome(['planned', null]), null);
+  let n = 0;
+  const flaky = async () => { n += 1; if (n % 3) throw new Error('rate limit'); return { text: 'CYCLE RESULT: planned - x' }; };
+  const moments = [{ id: 'c', set: 'change', want: 'planned', prompt: PROMPT, recorded: 'planned' }, { id: 'h', set: 'hold', want: 'planned', prompt: PROMPT, recorded: 'planned' }];
+  const { summary, rows } = await P.probeMoments({ moments, bodyOf: n2 => (n2 === 'candle-reading' ? 'new' : null), ask: flaky, k: 3 });
+  assert.strictEqual(summary.ok, false);
+  assert.ok(rows.every(r => r.verdict === 'unanswered'), JSON.stringify(rows));
+});
+
+test('review 2: ids 1 and "1" are one id (the CLI keys moments by the string form)', async () => {
+  const ms = [{ id: 1, set: 'change', want: 'planned', prompt: PROMPT }, { id: '1', set: 'change', want: 'planned', prompt: PROMPT }];
+  await assert.rejects(P.probeMoments({ moments: ms, bodyOf: () => 'x', ask: async () => ({ text: '' }), k: 1 }), /duplicate/);
+});
+
+test('review 2: the argv carries the prompt at -p, the system prompt file, and text output', () => {
+  const a = P.probeArgs({ prompt: 'THE PROMPT', system: '/s.md', model: null });
+  assert.strictEqual(a[0], '-p');
+  assert.strictEqual(a[1], 'THE PROMPT');
+  assert.deepStrictEqual(a.slice(a.indexOf('--append-system-prompt-file'), a.indexOf('--append-system-prompt-file') + 2), ['--append-system-prompt-file', '/s.md']);
+  assert.deepStrictEqual(a.slice(a.indexOf('--output-format'), a.indexOf('--output-format') + 2), ['--output-format', 'text']);
+});
+
+test('review 2: a cycle log with no prompt is refused; a failed ask leaves its reason on the row', async () => {
+  const argv = ['claude', '--append-system-prompt-file', '/s.md'];
+  assert.throws(() => P.momentFromCycle({ result: 'CYCLE RESULT: planned - x', argv }, { id: 'e', set: 'change', want: 'no-trade' }), /no prompt/);
+  assert.throws(() => P.momentFromCycle({ prompt: '', result: 'CYCLE RESULT: planned - x', argv }, { id: 'e', set: 'change', want: 'no-trade' }), /no prompt/);
+  const ask = async () => { throw new Error('claude exited 1: boom'); };
+  const { rows } = await P.probeMoments({ moments: [{ id: 'c', set: 'change', want: 'planned', prompt: PROMPT, recorded: 'planned' }], bodyOf: n => (n === 'candle-reading' ? 'new' : null), ask, k: 2 });
+  assert.match(rows[0].errors[0], /boom/);
+});

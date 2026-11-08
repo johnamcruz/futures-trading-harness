@@ -25,12 +25,14 @@ const arg = name => { const i = process.argv.indexOf(name); return i >= 0 ? proc
 
 function ask(byId, cwd, timeoutMs) {
   return (prompt, { id }) => new Promise((resolve, reject) => {
-    const m = byId[id];
+    const m = byId[String(id)];
     const child = spawn('claude', P.probeArgs({ prompt, system: m.system, model: m.model }), { cwd, timeout: timeoutMs });
     let out = '';
+    let err = '';
     child.stdout.on('data', d => { out += d; });
+    child.stderr.on('data', d => { err = String(d); }); // drained, so a chatty child cannot block; the last chunk names a failure
     child.on('error', reject);
-    child.on('close', code => (code === 0 ? resolve({ text: out }) : reject(new Error(`claude exited ${code}`))));
+    child.on('close', code => (code === 0 ? resolve({ text: out }) : reject(new Error(`claude exited ${code}: ${err.trim()}`))));
   });
 }
 
@@ -39,7 +41,7 @@ function ask(byId, cwd, timeoutMs) {
   const tree = arg('--tree');
   const k = Number(arg('--k'));
   const timeoutMs = Number(arg('--timeout-ms'));
-  if (!file || !tree || !Number.isInteger(k) || k < 1 || !(timeoutMs > 0)) {
+  if (!file || !tree || !Number.isInteger(k) || k < 1 || timeoutMs < 1 || timeoutMs !== (timeoutMs | 0) /* a whole number a timer takes */) {
     process.stderr.write('usage: moment-probe.js --moments <file.json> --tree <root> --k <asks per arm, whole> --timeout-ms <per ask> [--out <dir>]\n');
     process.exitCode = 1;
     return;
@@ -49,7 +51,7 @@ function ask(byId, cwd, timeoutMs) {
   const moments = specs.map(s => {
     const log = JSON.parse(fs.readFileSync(s.cycle, 'utf8'));
     const m = P.momentFromCycle(log, s);
-    byId[m.id] = m;
+    byId[String(m.id)] = m;
     return m;
   });
   const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'moment-probe-'));

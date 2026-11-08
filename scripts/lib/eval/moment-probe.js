@@ -26,7 +26,6 @@
 
 const fs = require('fs');
 const path = require('path');
-const { cycleResult } = require('../autotrader');
 const { parseFrontmatter } = require('../frontmatter');
 
 const BLOCK = /<skill name="([a-z0-9][a-z0-9-]{0,63})">\n([\s\S]*?)\n<\/skill>/g;
@@ -43,20 +42,20 @@ function swapSkills(prompt, bodyOf) {
 }
 
 function outcomeOf(text) {
-  const line = cycleResult(String(text || ''));
-  const m = line && /CYCLE RESULT:\s*([a-z-]+)/.exec(line);
-  return m ? m[1] : null;
+  // Only a line that starts with the label is the answer: a model quoting the label mid-line is not deciding.
+  const found = String(text || '').split('\n').map(l => /^[\s*_`>-]*CYCLE RESULT:[*_` \t]*([a-z-]+)/.exec(l)).filter(Boolean);
+  return found.length ? found.at(-1)[1] : null;
 }
 
 const enters = outcome => outcome === 'planned' || outcome === 'executed';
 const norm = o => (enters(o) ? 'planned' : o);
 
-/** The commonest outcome of several asks (planned and executed are one); null on a tie or when none answered. */
+/** The outcome more than half of ALL the asks gave (planned and executed are one); a failed ask counts against it, so null otherwise. */
 function majorityOutcome(outcomes) {
   const n = {};
   for (const o of outcomes) if (o) n[norm(o)] = (n[norm(o)] || 0) + 1;
-  const ranked = Object.entries(n).sort((a, b) => b[1] - a[1]);
-  return ranked.length && (ranked.length === 1 || ranked[0][1] > ranked[1][1]) ? ranked[0][0] : null;
+  const [top] = Object.entries(n).sort((a, b) => b[1] - a[1]);
+  return top && top[1] > outcomes.length - top[1] ? top[0] : null;
 }
 
 /** One moment's verdict. A "hold" moment compares entering (planned vs executed is no flip); a "change" moment, the outcome. */
@@ -80,23 +79,25 @@ function summarize(rows) {
 }
 
 async function probeMoments({ moments, bodyOf, ask, k = 1 }) {
-  const ids = moments.map(m => m.id);
+  const ids = moments.map(m => String(m.id));
   if (new Set(ids).size !== ids.length) throw new Error('moments: duplicate id (each moment needs its own)');
   const rows = [];
   for (const m of moments) {
     const { prompt: next, swapped } = swapSkills(m.prompt, bodyOf);
     // The fix cannot reach a prompt that holds none of the changed skills: reported, never asked, never a pass.
     if (!swapped.length) { rows.push({ id: m.id, set: m.set, want: m.want, before: null, after: null, swapped, verdict: 'untestable' }); continue; }
+    const errors = [];
     const answers = (prompt, arm) => Promise.all(Array.from({ length: k }, async () => {
-      try { return outcomeOf((await ask(prompt, { id: m.id, arm })).text); } catch { return null; }
+      try { return outcomeOf((await ask(prompt, { id: m.id, arm })).text); } catch (e) { errors.push(String(e && e.message).split('\n')[0]); return null; }
     }));
+    const row = (before, after, rest) => ({ id: m.id, set: m.set, want: m.want, before, after, swapped, ...(errors.length ? { errors: [...new Set(errors)] } : {}), ...rest });
     const before = majorityOutcome(await answers(m.prompt, 'old'));
     // Calibration: the tool-less model must reproduce what the real cycle did, or its verdict here means nothing.
     // No answer at all (every ask failed, or a tie) is no calibration: unanswered, never a quiet pass.
-    if (m.recorded && before === null) { rows.push({ id: m.id, set: m.set, want: m.want, before, after: null, swapped, verdict: 'unanswered' }); continue; }
-    if (m.recorded && before !== norm(m.recorded)) { rows.push({ id: m.id, set: m.set, want: m.want, before, after: null, swapped, verdict: 'uncalibrated' }); continue; }
+    if (m.recorded && before === null) { rows.push(row(before, null, { verdict: 'unanswered' })); continue; }
+    if (m.recorded && before !== norm(m.recorded)) { rows.push(row(before, null, { verdict: 'uncalibrated' })); continue; }
     const after = majorityOutcome(await answers(next, 'new'));
-    rows.push({ id: m.id, set: m.set, want: m.want, before, after, swapped, ...judge(m, before, after) });
+    rows.push(row(before, after, judge(m, before, after)));
   }
   return { rows, summary: summarize(rows) };
 }
