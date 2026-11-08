@@ -42,6 +42,9 @@ test('limitOutcome: the limit fills at the reference or better, then target, sto
   assert.strictEqual(E.limitOutcome({ ...plan({ rows: [] }) }).exitReason, 'no bars after the decision');
 });
 
+// The bars of a long held from 14:01 to 14:20 (100 to 98.5): the 14:03 bar's high 101 its best, the exit its worst.
+const TRADE_ROWS = [[100.5, 100.75, 99.75, 100.25], [100.25, 101, 99.5, 100.5], [100.5, 100.75, 99, 99.5], [99.5, 100, 99, 99.5], [99.5, 100, 99, 99.5], [99.5, 100, 99, 99.5], [99.5, 99.5, 98, 98.5]];
+
 const trip = (openIso, closeIso, entryPx, exitPx, side = 'buy') => ({
   family: 'MNQ', side, openMs: ms(openIso), closeMs: closeIso ? ms(closeIso) : null,
   opens: [{ price: entryPx, size: 1 }], closes: closeIso ? [{ price: exitPx, size: 1 }] : [],
@@ -168,7 +171,8 @@ test('writeRunExperience: a finished practice run\'s log in its home; an unfinis
     { id: 1, contractId: 'MNQ:2023-06', creationTimestamp: '2023-03-15T14:01:00Z', price: 100, size: 1, side: 0, profitAndLoss: null },
     { id: 2, contractId: 'MNQ:2023-06', creationTimestamp: '2023-03-15T14:20:00Z', price: 98.5, size: 1, side: 1, profitAndLoss: -3 },
   ];
-  const { home, dir } = runDir({ times, fills, records: [record({ at: T0 })], barRows: [[100.5, 100.75, 99.75, 100.25], [100.25, 101, 99.5, 100.5]] });
+  // Every bar of the trade (14:00 to 14:18): its excursions are measured only on bars that cover it.
+  const { home, dir } = runDir({ times, fills, records: [record({ at: T0 })], barRows: TRADE_ROWS });
   const r = writeRunExperience(dir, { now: new Date('2026-10-14T00:00:00Z') });
   assert.strictEqual(r.file, path.join(fs.realpathSync(home), 'experience', 'decisions.jsonl'));
   assert.deepStrictEqual([r.role, r.hidden], ['practice-train', false]);
@@ -438,6 +442,46 @@ test('MAE and MFE in R: the counterfactual\'s and the fills\' from the bars held
   assert.deepStrictEqual([E.tripOutcome(rt, { entry: 100, stop: 98 }, 'long').maeR, E.tripOutcome(rt, { entry: 100, stop: 98 }, 'long').mfeR], [null, null], 'no bars: unknown, never the exit alone');
   const open = E.tripOutcome({ ...rt, closeMs: null, closes: [] }, { entry: 100, stop: 98 }, 'long', { bars: rows, tfMs: M3 });
   assert.deepStrictEqual([open.R, open.maeR, open.mfeR], [null, null, null]);
+});
+
+test('MAE and MFE: bars that do not cover the trade (another day\'s, or a gap inside it) are unknown, never the exit alone', () => {
+  const rt = { openMs: ms(T0), closeMs: ms(T0) + 3 * M3, opens: [{ price: 100, size: 1 }], closes: [{ price: 103, size: 1 }] };
+  // The run home's bars file held only a later window (a replay's last snapshot): no bar of the trade.
+  const later = bars(new Date(ms(T0) + 86400000).toISOString(), [[100, 101, 99, 100.5], [100.5, 104, 100, 103.5]]);
+  const o = E.tripOutcome(rt, { entry: 100, stop: 98 }, 'long', { bars: later, tfMs: M3 });
+  assert.deepStrictEqual([o.R, o.maeR, o.mfeR], [1.5, null, null]);
+  // A bar missing inside the trade: its excursion can't be told.
+  const all = bars(T0, [[100, 101, 99, 100.5], [100.5, 104, 100, 103.5], [103.5, 103.5, 102, 103]]);
+  const gap = E.tripOutcome(rt, { entry: 100, stop: 98 }, 'long', { bars: [all[0], all[2]], tfMs: M3 });
+  assert.deepStrictEqual([gap.maeR, gap.mfeR], [null, null]);
+  // Covered: as before.
+  assert.deepStrictEqual([E.tripOutcome(rt, { entry: 100, stop: 98 }, 'long', { bars: all, tfMs: M3 }).maeR], [-0.5]);
+});
+
+test('limitOutcome: no bar at the decision (the bars are another day\'s) is unknown, never unfilled; its pass is ungraded', () => {
+  const later = new Date(ms(T0) + 86400000).toISOString();
+  const o = E.limitOutcome({ ...plan({ rows: [] }), bars: bars(later, [[100.5, 100.75, 99.75, 100.25], [99, 99, 98, 98.5]]) });
+  assert.deepStrictEqual([o.filled, o.exitReason, o.R, o.maeR, o.mfeR], [null, 'no bars at the decision', null, null, null]);
+  assert.strictEqual(E.gradeOf('passed', o), null, 'no outcome known: no grade');
+  // The bar in progress at the decision is there: an ordinary unfilled limit, as before.
+  const end = E.limitOutcome(plan({ rows: [[100.5, 101, 100.25, 100.75]], expiry: 1 }));
+  assert.deepStrictEqual([end.filled, end.exitReason], [false, 'unfilled']);
+});
+
+test('writeRunExperience: the run\'s archived bars (bars-<day>.jsonl.gz), not only the home\'s last snapshot, score its decisions', () => {
+  const A = require('../../scripts/lib/session/bars-archive');
+  const times = [T0, new Date(ms(T0) + M3).toISOString()];
+  const fills = [
+    { id: 1, contractId: 'MNQ:2023-06', creationTimestamp: '2023-03-15T14:01:00Z', price: 100, size: 1, side: 0, profitAndLoss: null },
+    { id: 2, contractId: 'MNQ:2023-06', creationTimestamp: '2023-03-15T14:20:00Z', price: 98.5, size: 1, side: 1, profitAndLoss: -3 },
+  ];
+  // The home's bars file: a later day's window only (the runner rewrites it every bar).
+  const { home, dir } = runDir({ times, fills, records: [record({ at: T0 })], barRows: [[1, 1, 1, 1]], barsStart: '2023-03-17T14:00:00.000Z' });
+  A.appendBars(dir, '2023-03-15', { symbol: 'MNQ', contractId: 'MNQ', minutes: 3, bars: bars(T0, TRADE_ROWS) });
+  const r = writeRunExperience(dir, { now: new Date('2026-10-14T00:00:00Z') });
+  assert.ok(fs.realpathSync(home));
+  // The 14:03 bar wholly inside the trade (its high 101, +0.5R) and the exit (98.5, -0.75R): from the archive.
+  assert.deepStrictEqual([r.decisions[0].decision, r.decisions[0].outcome.maeR, r.decisions[0].outcome.mfeR], ['entered', -0.75, 0.5]);
 });
 
 test('writeRunExperience: a curated run\'s lines are tagged curated (outcome-balanced: the experience index labels them)', () => {

@@ -26,7 +26,8 @@
  *   readArchive(file)                       [{ symbol, contractId, minutes, bar }]: every whole gzip member
  *   readArchiveChecked(file)                { lines, error }: error when unreadable or nothing decodes
  *   archivedBars(dir, { log })              { get(symbol, contractId, minutes, t) -> bar | null, errors } over the
- *                                           dir's day files (contractId null: only when one contract has that bar)
+ *                                           dir's day files (contractId null: only when one contract has that bar);
+ *                                           series(symbol, minutes) -> every such bar, oldest first, each with its ms
  *   retention(env)                          { days, mb, warning? } (days capped at MAX_DAYS)
  *   pruneArchives(home, { days, mb, keep }) the live files removed, each leaving bars-<day>.pruned.json
  *   prunedFile(dir, day), wasPruned(dir, day)   that marker, and whether the day's archive was pruned
@@ -206,6 +207,11 @@ function archivedBars(dir, { log = () => {} } = {}) {
       const ms = Date.parse(t);
       if (contractId !== null && contractId !== undefined) return exact.get(`${symbol}|${contractId}|${minutes}|${ms}`) || null;
       return loose.get(`${symbol}|${minutes}|${ms}`) || null;
+    },
+    // Every bar of a symbol and timeframe, oldest first, each time once (get's: the first archived), with its ms.
+    series(symbol, minutes) {
+      const head = `${symbol}|${minutes}|`;
+      return [...loose].filter(([k]) => k.startsWith(head)).map(([k, b]) => ({ ...b, ms: Number(k.slice(head.length)) })).sort((a, b) => a.ms - b.ms);
     },
   };
 }

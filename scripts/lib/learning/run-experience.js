@@ -4,7 +4,7 @@
  * A finished replay run's experience log (experience-log.js), read from what the run wrote: the store lines (each
  * trade cycle that ran, the fills, the gate's refusals), the trade_lifecycle records in the run home
  * (lifecycle-record.js), the gateway's stamps on the entries it placed (entry-orders.json), and the replayed bars
- * (the run's own bars files, or --bars data as the labels read it).
+ * (--bars data as the labels read it, else the run's bars archive with its home's bars files: barsFor).
  * Written to <run home>/experience/decisions.jsonl, never the repository.
  *
  * Only a learning run that passed the gate (learning/run-gate.js, <run home>/learning-run.json) has one: its window
@@ -95,6 +95,13 @@ function runDelivery(dir, manifest = null) {
   return per[0] === 'none' ? null : per[0];
 }
 
+/** Bars by time, oldest first: the first list's bar at a time kept, the second's only where the first has none. */
+function mergeBars(first, second) {
+  const byMs = new Map();
+  for (const b of [...first, ...second]) if (b && Number.isFinite(b.ms) && [b.h, b.l, b.c].every(Number.isFinite) && !byMs.has(b.ms)) byMs.set(b.ms, b);
+  return [...byMs.values()].sort((a, b) => a.ms - b.ms);
+}
+
 function runDecisions(runDir, { root = null, barsFiles = {}, now = new Date() } = {}) {
   const dir = labels.realDir(runDir);
   const home = path.resolve(dir, '..', '..');
@@ -122,8 +129,20 @@ function runDecisions(runDir, { root = null, barsFiles = {}, now = new Date() } 
   const trips = legsOf(labels.roundTrips(labels.allFills(lines), cache));
   const outcomeBars = labels.outcomeBarsFor(dir, barsFiles);
   const bars = new Map();
+  // The bars the run used: --bars data when given; else the run's archive (every bar its sessions polled, by day:
+  // session/bars-archive.js) with the run home's bars files (the runner rewrites them every bar: only the last window).
+  let archive = null;
   const barsFor = r => {
-    if (!bars.has(r)) bars.set(r, labels.outcomeFor(outcomeBars, r, tf) || labels.loadBars(home, r, tf));
+    if (!bars.has(r)) {
+      let got = labels.outcomeFor(outcomeBars, r, tf);
+      if (!got) {
+        if (!archive) archive = require('../session/bars-archive').archivedBars(dir);
+        // The archive keys the runner's symbols (MNQ or NQ: one family, one root here).
+        const syms = [...new Set([r, ...(Array.isArray(cfg.symbols) ? cfg.symbols : []).filter(s => familyRoot(s) === r)])];
+        got = mergeBars(syms.flatMap(s => archive.series(s, tf)), labels.loadBars(home, r, tf));
+      }
+      bars.set(r, got);
+    }
     return bars.get(r);
   };
   const decisions = buildDecisions({

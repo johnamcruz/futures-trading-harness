@@ -17,7 +17,8 @@
  *   entered  the real round trip from the replay broker's fills (size-weighted entry and exit prices);
  *   passed, refused   the counterfactual of the same order on the bars after the decision (limitOutcome): a limit at
  *            the entry reference, filled at it or better (a bar opening through it fills at its open) on the first
- *            bar that trades it before the record expires, else `unfilled` (R null); then the record's stop and
+ *            bar that trades it before the record expires, else `unfilled` (R null; no bar at the decision at all, the
+ *            bars another stretch's: `no bars at the decision`, filled null, ungraded); then the record's stop and
  *            target, the stop checked first on every bar (a bar touching both is a loss) and alone on the fill bar,
  *            the stop filled SLIPPAGE_TICKS worse (the backtester's market-stop slippage), the target at its price,
  *            out at the close of the bar that reaches end of day or the last bar of the trading day; under the run's
@@ -99,6 +100,10 @@ function limitOutcome({ bars, tfMs, side, entry, stop, target, fromMs, expiresMs
   const end = Number.isFinite(expiresMs) ? expiresMs : fromMs + tfMs;
   let i = lowerBound(bars, fromMs);
   if (i >= bars.length) return none('no bars after the decision');
+  // No bar at the decision (neither the one in progress nor the next): the bars given are another stretch's (a run
+  // home's last snapshot), so nothing about this order can be told: unknown, never an unfilled limit.
+  const k0 = lowerBound(bars, fromMs - tfMs);
+  if (tfMs > 0 && !(k0 < bars.length && bars[k0].ms <= fromMs + tfMs)) return none('no bars at the decision', { filled: null });
   const day = tradingDayKey(new Date(bars[i].ms));
   let fill = null;
   // A market entry (a cited setup's record) fills at once: at the open of the bar in progress when it was sent (the
@@ -235,9 +240,25 @@ function settledDay(day, outcome) {
 }
 
 /**
- * A round trip's real outcome in R of the record's stop. maeR and mfeR (closed, with the run's bars): the worst and best
- * move from the entry over the bars wholly inside the trade (opening at or after the fill, closing by the exit: an edge
- * bar's extremes may fall outside it) and the exit price (replay/counterfactual.js fromFills' rule); else null.
+ * The bars hold every bar of a span: from the one the span opens in to the one it ends in, one tfMs apart (no gap).
+ * Bars of another stretch (a run home's last snapshot) or a missing bar inside it: false, and nothing is measured.
+ */
+function covers(bars, tfMs, fromMs, toMs) {
+  const a = lowerBound(bars, fromMs + 1) - 1;
+  if (a < 0 || bars[a].ms + tfMs <= fromMs) return false;
+  let j = a;
+  while (bars[j].ms + tfMs < toMs) {
+    if (j + 1 >= bars.length || bars[j + 1].ms - bars[j].ms > tfMs) return false;
+    j += 1;
+  }
+  return true;
+}
+
+/**
+ * A round trip's real outcome in R of the record's stop. maeR and mfeR (closed, with the run's bars covering the trade:
+ * every bar from its fill's to its exit's, `covers`): the worst and best move from the entry over the bars wholly
+ * inside the trade (opening at or after the fill, closing by the exit: an edge bar's extremes may fall outside it) and
+ * the exit price (replay/counterfactual.js fromFills' rule); else null, never the exit alone.
  */
 function tripOutcome(trip, plan, side, { bars = [], tfMs = 0 } = {}) {
   const s = sgn(side);
@@ -252,7 +273,7 @@ function tripOutcome(trip, plan, side, { bars = [], tfMs = 0 } = {}) {
   const risk = Number.isFinite(plan.stop) && Number.isFinite(plan.entry) ? Math.abs(plan.entry - plan.stop) : null;
   let maeR = null;
   let mfeR = null;
-  if (closed && risk && Number.isFinite(entryPrice) && Number.isFinite(exitPrice) && Number.isFinite(trip.openMs) && tfMs > 0 && Array.isArray(bars) && bars.length) {
+  if (closed && risk && Number.isFinite(entryPrice) && Number.isFinite(exitPrice) && Number.isFinite(trip.openMs) && tfMs > 0 && Array.isArray(bars) && covers(bars, tfMs, trip.openMs, trip.closeMs)) {
     let adv = Math.min(0, s * (exitPrice - entryPrice));
     let fav = Math.max(0, s * (exitPrice - entryPrice));
     for (const b of bars) {
@@ -274,6 +295,8 @@ function tripOutcome(trip, plan, side, { bars = [], tfMs = 0 } = {}) {
 
 function gradeOf(decision, outcome) {
   if (decision === 'none') return null;
+  // No bar at the decision (limitOutcome: filled null): what the order would have done is unknown, so no grade.
+  if (decision !== 'entered' && outcome && outcome.filled === null) return null;
   const R = outcome ? outcome.R : null;
   if (decision === 'entered') return resultOf(R);
   // The gate's refusal is not the model's pass: graded apart, so pass quality is the model's own.

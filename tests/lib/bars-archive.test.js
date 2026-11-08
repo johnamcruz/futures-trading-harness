@@ -244,3 +244,20 @@ test('archiver: the live session\'s dir, or a replay step\'s record dir; prunes 
   assert.strictEqual(errors.length, 1);
   assert.match(errors[0][0], /MNQ: could not archive the bars/);
 });
+
+test('series: one symbol and timeframe across every day file, oldest first, each time once (the first archived), with ms', () => {
+  const dir = tmpDir();
+  // Day 1 archives bars 0..4; day 2's first poll its window from bar 3 on another contract (the roll): the first
+  // archived bar at a time is the one kept (the front's when it closed).
+  A.appendBars(dir, '2026-10-07', { symbol: 'MNQ', contractId: 'C1', minutes: 1, bars: range(0, 5).map(bar) });
+  A.appendBars(dir, '2026-10-08', { symbol: 'MNQ', contractId: 'C2', minutes: 1, bars: range(3, 9).map(k => ({ ...bar(k), c: 9 })) });
+  A.appendBars(dir, '2026-10-08', { symbol: 'MNQ', contractId: 'C2', minutes: 3, bars: [bar(0)] });
+  A.appendBars(dir, '2026-10-08', { symbol: 'MES', contractId: 'C3', minutes: 1, bars: [bar(20)] });
+  const s = A.archivedBars(dir).series('MNQ', 1);
+  assert.deepStrictEqual(s.map(b => b.ms), range(0, 9).map(k => T0 + k * 60000));
+  assert.deepStrictEqual(s.map(b => b.c), [1, 1, 1, 1, 1, 9, 9, 9, 9], 'bars 3 and 4: the first archived (C1)');
+  assert.strictEqual(s[0].t, bar(0).t, 'the bar as archived, with its ms');
+  assert.strictEqual(A.archivedBars(dir).series('MNQ', 3).length, 1);
+  assert.deepStrictEqual(A.archivedBars(dir).series('NQ', 1), [], 'no such symbol: none');
+  assert.deepStrictEqual(A.archivedBars(path.join(dir, 'none')).series('MNQ', 1), [], 'no dir: none');
+});
