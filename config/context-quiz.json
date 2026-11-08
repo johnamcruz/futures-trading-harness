@@ -61,7 +61,7 @@
   },
   "passBar": {
     "partA": {
-      "allCorrect": 51,
+      "allCorrect": 52,
       "bothWays": 0
     },
     "partB": {
@@ -1001,6 +1001,23 @@
       "text": "A 15m rejection at the prior RTH high (long upper wick, closes back inside) is a valid short setup, the 4h and 1h both trend down. A 3m candle also swept that high first. Does the sweep count against taking the short? Start the answer with yes or no.",
       "rule": "a sweep with the 4h and 1h trend at a key level is unchanged",
       "anchor": "A sweep with the 4h and 1h trend at a key level is unchanged.",
+      "required": [
+        "^\\W*no\\b"
+      ],
+      "forbidden": [
+        "^\\W*yes\\b"
+      ]
+    },
+    {
+      "id": "q56",
+      "layer": "setup",
+      "prompt": "lookup",
+      "lookup": [
+        "bos-vs-choch"
+      ],
+      "text": "A 15m CHoCH breaks the last 15m swing against the structure. No liquidity sweep came before it. Does the CHoCH need a sweep before it to count as a CHoCH? Start the answer with yes or no.",
+      "rule": "a CHoCH does not wait for a sweep; a sweep is confirmed by a CHoCH, not the reverse",
+      "anchor": "the working structure shifting",
       "required": [
         "^\\W*no\\b"
       ],

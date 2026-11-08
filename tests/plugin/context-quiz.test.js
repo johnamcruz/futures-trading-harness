@@ -93,7 +93,7 @@ test('context quiz: every layer asked, ids unique, the bar the whole quiz at K 5
   // b8 (prepare-ahead's confirm rule: PR C); 45 since q47-q49 (a standing scenario: compose_check decides; the closing
   // candle read as candle-reading does). q46 went with PR C3's computed trigger; q45 (the 3m doji, a yes/no) measured 7/10
   // live and is out of the bar, noted for the paired test. The pass bar rises with them.
-  assert.strictEqual(QUIZ.questions.length, 51);
+  assert.strictEqual(QUIZ.questions.length, 52);
   assert.strictEqual(QUIZ.partB.length, 8);
 });
 
