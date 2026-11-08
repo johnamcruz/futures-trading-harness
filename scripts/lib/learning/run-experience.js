@@ -21,7 +21,10 @@
  *                                                          before the record: its brackets, hash null (untagged)
  *   plannedExit(run, { root, env })                        the exit a replay run trades: its manifest's once started,
  *                                                          else the one its seed will record (the preflight's)
- *   writeRunExperience(runDir, { root, barsFiles, now })   { file, added, kept, decisions, role, hidden }
+ *   writeRunExperience(runDir, { root, barsFiles, now, rebuild, indexDirs })   { file, added, kept, decisions, role, hidden,
+ *                                                          rebuilt? }: `rebuild` replaces the run's lines (any version)
+ *                                                          and sets aside the indexes built from them (rebuilt:
+ *                                                          { runId, removed, staleIndexes })
  *   experienceLine(result)                                 the CLI's one line
  */
 
@@ -32,10 +35,11 @@ const { entryOrders } = require('../harness-run');
 const labels = require('../replay/labels');
 const { specFor, familyRoot } = require('../trading/contracts');
 const { readRecords } = require('./lifecycle-record');
-const { buildDecisions, appendDecisions, logFile, legsOf, BRACKETS, exitHash, exitRecord } = require('./experience-log');
+const { buildDecisions, appendDecisions, replaceDecisions, logFile, legsOf, BRACKETS, exitHash, exitRecord } = require('./experience-log');
+const { harnessHome } = require('../paths');
 const { roleOf } = require('./splits');
 const { readLearningRun } = require('./run-gate');
-const { curatedLog } = require('./experience-index');
+const { curatedLog, staleIndexes } = require('./experience-index');
 
 const ENTRY_TOOL = /(?:^|__)place_order$/;
 
@@ -160,7 +164,7 @@ function runDecisions(runDir, { root = null, barsFiles = {}, now = new Date() } 
   return { dir, home, manifest, days, dayKeys, gate, cfg, tfMs, decisions: delivery ? decisions.map(d => ({ ...d, delivery })) : decisions, delivery, barsFor, trips };
 }
 
-function writeRunExperience(runDir, { root = null, barsFiles = {}, now = new Date() } = {}) {
+function writeRunExperience(runDir, { root = null, barsFiles = {}, now = new Date(), rebuild = false, indexDirs = null } = {}) {
   const run = runDecisions(runDir, { root, barsFiles, now });
   const { manifest, gate, dayKeys, home } = run;
   if (!gate || gate.learning !== true) throw new Error(`run ${manifest.runId} is ${gate ? 'declared not learning' : 'not a learning run (no learning-run.json: started before the gate)'}: no experience log`);
@@ -172,10 +176,20 @@ function writeRunExperience(runDir, { root = null, barsFiles = {}, now = new Dat
   // A curated run's moments are outcome-balanced: tagged, so the experience index weighs them (curated-weights.js).
   if (curatedLog(logFile(home))) decisions = decisions.map(d => ({ ...d, curated: true }));
   const file = logFile(home);
+  // A rebuild (replay.js experience --rebuild): the run's lines replaced by these (append-only keeps a log written
+  // before a writer's fix as it was), and the indexes built from them set aside (default: the log's folder and the
+  // harness home's experience folder).
+  if (rebuild) {
+    const { removed, added } = replaceDecisions(file, manifest.runId, decisions);
+    const dirs = indexDirs || [path.dirname(file), path.join(harnessHome(), 'experience')];
+    return { file, added, kept: 0, decisions, role: gate.role, hidden: Boolean(gate.hideOutcomes), rebuilt: { runId: manifest.runId, removed, staleIndexes: staleIndexes([path.dirname(file), ...dirs], manifest.runId) } };
+  }
   const { added, kept } = appendDecisions(file, decisions);
   return { file, added, kept, decisions, role: gate.role, hidden: Boolean(gate.hideOutcomes) };
 }
 
-const experienceLine = r => `experience: ${r.added} decision(s) added, ${r.kept} already logged (${r.role}${r.hidden ? ', outcomes hidden: a reasoning-fix look' : ''}) in ${r.file}`;
+const experienceLine = r => (r.rebuilt
+  ? `experience: rebuilt run ${r.rebuilt.runId}: ${r.rebuilt.removed} line(s) replaced by ${r.added} (${r.role}${r.hidden ? ', outcomes hidden: a reasoning-fix look' : ''}) in ${r.file}${r.rebuilt.staleIndexes.length ? `; ${r.rebuilt.staleIndexes.length} index(es) built from it set aside (rebuild them): ${r.rebuilt.staleIndexes.map(f => path.basename(f)).join(', ')}` : ''}`
+  : `experience: ${r.added} decision(s) added, ${r.kept} already logged (${r.role}${r.hidden ? ', outcomes hidden: a reasoning-fix look' : ''}) in ${r.file}`);
 
 module.exports = { runDelivery, runDecisions, writeRunExperience, experienceLine, runExit, manifestExit, plannedExit };

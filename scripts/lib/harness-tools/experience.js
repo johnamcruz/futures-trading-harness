@@ -82,7 +82,7 @@ function cellLine(label, c) {
   if (!c) return `- ${label}: no record`;
   if (!c.enough) return `- ${label}: ${c.note}`;
   const shift = c.shifted ? `, shifted (${c.latestYear.year}: mean R ${f2(c.latestYear.meanR)} over n ${c.latestYear.n}, the other sign)` : '';
-  return `- ${label}: n ${c.n} (${c.days} days; ${c.entries} entered, ${c.passes} passed${curatedText(c)}), win ${f2(c.winRate.rate)} [${f2(c.winRate.lo)}, ${f2(c.winRate.hi)}], mean R ${f2(c.meanR.mean)} [${f2(c.meanR.lo)}, ${f2(c.meanR.hi)}]${excursionText(c)}, last ${c.lastSeen}${shift}`;
+  return `- ${label}: n ${c.n} (${c.days} days; ${c.entries} entered, ${c.passes} passed${c.unplaced ? `, ${c.unplaced} not placed` : ''}${curatedText(c)}), win ${f2(c.winRate.rate)} [${f2(c.winRate.lo)}, ${f2(c.winRate.hi)}], mean R ${f2(c.meanR.mean)} [${f2(c.meanR.lo)}, ${f2(c.meanR.hi)}]${excursionText(c)}, last ${c.lastSeen}${shift}`;
 }
 
 /** The skill signature with one step's skills replaced. */
@@ -97,9 +97,14 @@ function swapStep(sig, step, skill) {
 /** Context keys in common with the candidate's. */
 const closeness = (a, b) => CONTEXT_KEYS.filter(k => a && b && a[k] !== null && a[k] === b[k]).length;
 
+// A composed decision that never traded for a reason not the model's (learning/pass-class.js), in plain words.
+const NOT_PLACED = { missed_fill: 'price ran past the entry', invalidated: 'invalidated before the order', unfilled: 'the order never filled', vetoed: 'the risk manager vetoed it', blocked: 'the gate refused it', runner_skip: 'the runner placed nothing' };
+const WOULD = { 'unplaced-would-win': 'would have won', 'unplaced-would-lose': 'would have lost', 'unplaced-neutral': 'flat or unfilled' };
+
 function exampleLines(ex) {
   const reads = ex.reads.map(r => `${r.step} ${r.read}${r.why ? ` (${r.why})` : ''}`).join('; ');
   const x = Number.isFinite(ex.maeR) && Number.isFinite(ex.mfeR) ? `, MAE ${f2(ex.maeR)} MFE ${f2(ex.mfeR)}` : '';
+  if (WOULD[ex.grade]) return `- ${ex.day} ${ex.side || ''} not placed (${NOT_PLACED[ex.passClass] || 'not the model\'s pass'})${ex.curated ? ' (curated)' : ''}, the setup ${f2(ex.R)}R (${WOULD[ex.grade]})${x}: ${reads}`;
   return `- ${ex.day} ${ex.side || ''} ${ex.decision}${ex.curated ? ' (curated)' : ''}, ${f2(ex.R)}R${ex.grade ? ` ${ex.grade}` : ''}${x}: ${reads}`;
 }
 
@@ -243,4 +248,4 @@ function parseArgv(argv) {
   return o;
 }
 
-module.exports = { USAGE, MAX_BYTES, experienceLookup, parseArgv, swapStep, librarySection, capped };
+module.exports = { USAGE, MAX_BYTES, experienceLookup, parseArgv, swapStep, librarySection, capped, exampleLines, cellLine };

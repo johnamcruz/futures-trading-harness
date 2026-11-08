@@ -30,6 +30,16 @@ function decisions(n, days, rFor, o = {}) {
   }));
 }
 
+test('index: a pass the model didn\'t make (passClass) keeps its R as the setup\'s evidence, counted apart from the model\'s passes', () => {
+  const ds = decisions(30, 12, i => (i % 2 ? 2 : -1)).map((d, i) => (d.decision === 'passed' && i % 2 ? { ...d, passClass: 'vetoed' } : d));
+  const doc = X.buildIndex(ds, { seed: 7, reps: 300 });
+  const all = X.cellAt(doc, ALL);
+  assert.deepStrictEqual([all.n, all.entries, all.passes, all.unplaced], [30, 10, 10, 10]);
+  assert.strictEqual(all.meanR.mean, 0.5, 'the same R: what the setup did');
+  const own = X.cellAt(X.buildIndex(ds.map(d => (d.passClass ? { ...d, passClass: 'declined' } : d)), { seed: 7, reps: 300 }), ALL);
+  assert.deepStrictEqual([own.passes, own.unplaced], [20, 0], 'declined: the model\'s own');
+});
+
 test('index: the cells per signature, per context key and the full context; counts, and day-bootstrap intervals for the win rate and the mean R', () => {
   const ds = decisions(30, 12, i => (i % 2 ? 2 : -1));
   const doc = X.buildIndex(ds, { seed: 7, reps: 500, now: new Date('2026-10-14T00:00:00Z') });

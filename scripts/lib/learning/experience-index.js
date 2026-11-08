@@ -5,7 +5,8 @@
  * (experience-log.js), per signature and context, which experience_lookup shows the model. Built between sessions,
  * never by the runner; frozen per run (pinIndex: the run home holds its own copy and its hash).
  *
- * Walk-forward: the index keeps each cell's decisions as rows (ROW: [day, R, entered, regime, maeR, mfeR, curated, weight]),
+ * Walk-forward: the index keeps each cell's decisions as rows (ROW: [day, R, entered, regime, maeR, mfeR, curated, weight];
+ * entered 1, a pass the model made 0, one it didn't make 'unplaced': learning/pass-class.js, its R the setup's evidence),
  * and every statistic is computed for a day (cellStats `before`): only from trading days strictly before it. A
  * practice run in 2022 is shown what happened before its bar's session, never after, though the index spans
  * 2020-2024. The examples are kept with their days and filtered the same way.
@@ -14,7 +15,7 @@
  *   <kind>|<signature>|*                   the signature in any context
  *   <kind>|<signature>|<key>=<value>       one context key at a time (CONTEXT_KEYS)
  *   <kind>|<signature>|<the full context>  every key, `regime=..;volatility=..;...`
- * Per cell, at a day: n (decisions with an R), entries and passes apart, unfilled (no R), distinct days, wins, the win
+ * Per cell, at a day: n (decisions with an R), entries, the model's passes and those it didn't make (unplaced) apart, unfilled (no R), distinct days, wins, the win
  * rate and the mean R each with a 90% interval from resampling whole trading days (a day's cluster counts once;
  * every cell is one of many, so an interval describes and never proves), first and last day seen, the split by year
  * and by regime, and `shifted` when the latest year, itself at least MIN_N decisions over MIN_DAYS days, has the
@@ -51,6 +52,7 @@
  *   cellAt(index, key, before)          cellStats of an index's cell, or null when the cell has no rows
  *   examplesBefore(index, skillSig, before)   the examples before a day, latest first
  *   indexHash(doc), writeIndex(dir, doc), readIndex(file)
+ *   staleIndexes(dirs, runId)           the indexes built from a run's rebuilt log, set aside (<file>.stale)
  *   pinIndex(runHome, file)             the run's own frozen copy (pinned.json); a run keeps the index it pinned
  *   armOf(file)                         the arm a run pinning it is (with:<hash>, shuffled:<hash>; no file: without)
  *   loadPinned(home)                    the pinned index, its hash checked; null when none is pinned or the run is
@@ -64,6 +66,9 @@ const fs = require('fs');
 const path = require('path');
 const { streamFor, pick, quantile, round4 } = require('../prop/stats');
 const { roleOf, sessionDate } = require('./splits');
+const { ownPass } = require('./pass-class');
+// The row's `entered` column for a pass the model didn't make (an entry 1, the model's own pass 0).
+const UNPLACED = 'unplaced';
 const { CONTEXT_KEYS } = require('./lifecycle-record');
 
 // 3: rows carry the decision's maeR and mfeR (a version-2 row has neither: refused, rebuilt).
@@ -223,7 +228,7 @@ function cellStats(rows, { before = null, seed = EI.seed, reps = EI.reps, key = 
   const years = sumBy(used, r => r[0].slice(0, 4));
   const fmt = g => Object.fromEntries(Object.entries(g).sort().map(([k, v]) => [k, { n: v.n, meanR: round4(v.sum / v.w) }]));
   const cell = {
-    n, nEff: round4(nEff), weighted, entries: withR.filter(r => r[2] === 1).length, passes: withR.filter(r => r[2] !== 1).length, unfilled: seen.length - n,
+    n, nEff: round4(nEff), weighted, entries: withR.filter(r => r[2] === 1).length, passes: withR.filter(r => r[2] !== 1 && r[2] !== UNPLACED).length, unplaced: withR.filter(r => r[2] === UNPLACED).length, unfilled: seen.length - n,
     curated: withR.filter(r => r[CURATED] === 1).length, unweighted: n - used.length, days: byDay.size, wins, firstSeen: days[0] || null, lastSeen: days[days.length - 1] || null,
     byYear: fmt(years), byRegime: fmt(sumBy(used, r => r[3] || '-')), before,
   };
@@ -282,7 +287,7 @@ function examplesOf(scored) {
     list.push({
       day, decision: d.decision, side: d.side || null, context: d.context || null,
       reads: (Array.isArray(d.reads) ? d.reads : []).map(r => ({ step: r.step, skill: r.skill, read: r.read, why: r.why ? String(r.why).slice(0, WHY_CHARS) : null })),
-      R: d.outcome.R, maeR: excursion(d, 'maeR'), mfeR: excursion(d, 'mfeR'), grade: d.grade || null, curated: d.curated === true,
+      R: d.outcome.R, maeR: excursion(d, 'maeR'), mfeR: excursion(d, 'mfeR'), grade: d.grade || null, ...(d.passClass ? { passClass: d.passClass } : {}), curated: d.curated === true,
     });
   }
   return Object.fromEntries([...by].sort((a, b) => a[0].localeCompare(b[0])));
@@ -377,7 +382,7 @@ function buildIndex(decisions, { runs = [], seed = EI.seed, reps = EI.reps, shuf
   let cells = {};
   const add = (k, row) => { (cells[k] = cells[k] || []).push(row); };
   for (const d of scored) {
-    const row = [knownDay(d), hasR(d) ? d.outcome.R : null, d.decision === 'entered' ? 1 : 0, (d.context && d.context.regime) || '-', excursion(d, 'maeR'), excursion(d, 'mfeR'), d.curated === true ? 1 : 0, weightFor(d)];
+    const row = [knownDay(d), hasR(d) ? d.outcome.R : null, d.decision === 'entered' ? 1 : d.decision === 'passed' && !ownPass(d) ? UNPLACED : 0, (d.context && d.context.regime) || '-', excursion(d, 'maeR'), excursion(d, 'mfeR'), d.curated === true ? 1 : 0, weightFor(d)];
     for (const kind of KINDS) {
       const sig = d.signatures[kind];
       if (!sig) continue;
@@ -414,6 +419,28 @@ function writeIndex(dir, doc) {
   fs.writeFileSync(tmp, `${JSON.stringify(doc)}\n`);
   fs.renameSync(tmp, file);
   return file;
+}
+
+/**
+ * The indexes (index-<hash>.json, writeIndex's) in `dirs` built from a run's log (their `runs` name it), set aside as
+ * <file>.stale after that log was rebuilt: their numbers came from the lines replaced. Never a run's pinned copy (a run
+ * keeps the index it pinned), never deleted. Returns the files set aside.
+ */
+function staleIndexes(dirs, runId) {
+  const out = [];
+  for (const dir of [...new Set(dirs.filter(Boolean).map(d => path.resolve(d)))]) {
+    let names;
+    try { names = fs.readdirSync(dir).filter(n => /^index-[0-9a-f]+\.json$/.test(n)).sort(); } catch (_err) { continue; }
+    for (const n of names) {
+      const file = path.join(dir, n);
+      let doc;
+      try { doc = JSON.parse(fs.readFileSync(file, 'utf8')); } catch (_err) { continue; }
+      if (!doc || !Array.isArray(doc.runs) || !doc.runs.some(r => r && r.runId === runId)) continue;
+      fs.renameSync(file, `${file}.stale`);
+      out.push(file);
+    }
+  }
+  return out;
 }
 
 function readIndex(file) {
@@ -474,6 +501,7 @@ function loadPinned(home) {
 }
 
 module.exports = {
+  staleIndexes,
   VERSION, MIN_N, MIN_DAYS, LEVEL, KINDS, buildIndex, withRunDelivery, cellStats, cellAt, examplesBefore, indexHash, writeIndex, readIndex, pinIndex, loadPinned, armOf,
   cellKey, contextKey, decisionDay, knownDay, assertPracticeTrain, exitOf, curatedLog,
 };

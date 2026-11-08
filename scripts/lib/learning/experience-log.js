@@ -37,7 +37,7 @@
  * opening order at placement (entry-orders.json composed.record, by the fill's order id); without a stamp, to the latest
  * ok record at or before its opening fill whose order could have filled it (side, root, before the record expired).
  *
- * The line (VERSION 2): { v, id, runId, root, contract, lane, cycleAt, bar, day, role, decision, refusal, side,
+ * The line (VERSION 3): { v, id, runId, root, contract, lane, cycleAt, bar, day, role, decision, refusal, side,
  *   passClass and vetoBasis (a passed or refused decision whose cycle says why; lines written before them lack them),
  *   exploratory, verified, checked, reads, signatures, context, plan, outcome: { source, filled, entryPrice,
  *   exitPrice, entryTime (the opening fill's time, or the counterfactual fill bar's; lines written before it lack it),
@@ -55,6 +55,7 @@
  *                                         (`exit`: { plan, mode, hash } the run's exit, BRACKETS by default)
  *   exitRecord(exit), exitHash(exit)      an exit as a manifest records it ({ mode, plan, hash }), its hash
  *   appendDecisions(file, lines)          append the lines whose id isn't in the file yet; { added, kept }
+ *   replaceDecisions(file, runId, lines)  a run's lines replaced (a rebuild); { removed, added }
  *   readDecisions(file)                   every line, [] without a file
  *   logFile(runHome)                      <run home>/experience/decisions.jsonl
  */
@@ -72,7 +73,9 @@ const { trailStep } = require('../trading/trail');
 const { cycleClass } = require('./pass-class');
 
 // 2: decisions per cycle, root and side, trades by the gateway's stamp (a version-1 line's id may name another record).
-const VERSION = 2;
+// 3: a pass graded the model's (good-pass, missed-win, neutral-pass) only when it made it (passClass: pass-class.js);
+// a version-2 grade is any pass's. Older lines still read; a run's own lines are of one version (appendDecisions).
+const VERSION = 3;
 /** The exit of a run whose composed trades keep their brackets (no policy lists the strategy: evaluator.js composedExit). */
 const BRACKETS = Object.freeze({ plan: null, mode: 'brackets' });
 
@@ -170,11 +173,13 @@ function bracketExit({ bars, i, partial = false, tfMs, side, fill, risk, targetD
   const targetPx = targetDist > 0 ? fill + s * targetDist : null;
   let adv = 0;
   let fav = 0;
+  // Bars held whole: none (out inside the fill bar or the next) leaves the move while held unknown, never the exit alone.
+  let whole = 0;
   const move = px => s * (px - fill);
   const out = (price, bar, reason) => {
     adv = Math.min(adv, move(price));
     fav = Math.max(fav, move(price));
-    return { exitPrice: price, exitMs: bar.ms + tfMs, reason, maeR: round(adv / risk), mfeR: round(fav / risk) };
+    return { exitPrice: price, exitMs: bar.ms + tfMs, reason, maeR: whole ? round(adv / risk) : null, mfeR: whole ? round(fav / risk) : null };
   };
   let last = bars[i];
   for (let j = i; j < bars.length; j += 1) {
@@ -186,6 +191,7 @@ function bracketExit({ bars, i, partial = false, tfMs, side, fill, risk, targetD
     if (!fillBar && !after && targetPx !== null && (s > 0 ? b.h >= targetPx : b.l <= targetPx)) return out(targetPx, b, 'target');
     // Held the whole bar (no exit inside it, the fill before it): both extremes count, as tripOutcome's bars inside.
     if (!fillBar) {
+      whole += 1;
       adv = Math.min(adv, move(s > 0 ? b.l : b.h));
       fav = Math.max(fav, move(s > 0 ? b.h : b.l));
     }
@@ -284,13 +290,18 @@ function tripOutcome(trip, plan, side, { bars = [], tfMs = 0 } = {}) {
   if (closed && risk && Number.isFinite(entryPrice) && Number.isFinite(exitPrice) && Number.isFinite(trip.openMs) && tfMs > 0 && Array.isArray(bars) && covers(bars, tfMs, trip.openMs, trip.closeMs)) {
     let adv = Math.min(0, s * (exitPrice - entryPrice));
     let fav = Math.max(0, s * (exitPrice - entryPrice));
+    let whole = 0;
     for (const b of bars) {
       if (b.ms < trip.openMs || b.ms + tfMs > trip.closeMs) continue;
+      whole += 1;
       adv = Math.min(adv, s * ((s > 0 ? b.l : b.h) - entryPrice));
       fav = Math.max(fav, s * ((s > 0 ? b.h : b.l) - entryPrice));
     }
-    maeR = round(adv / risk);
-    mfeR = round(fav / risk);
+    // No bar wholly inside the trade (held under one bar): its move while held is unknown, never the exit alone.
+    if (whole) {
+      maeR = round(adv / risk);
+      mfeR = round(fav / risk);
+    }
   }
   return {
     source: 'fills', filled: true, entryPrice: round(entryPrice, 6), exitPrice: round(exitPrice, 6),
@@ -463,7 +474,7 @@ function appendDecisions(file, lines) {
   const old = readDecisions(file);
   const runs = new Set(lines.map(l => l.runId));
   const stale = old.find(d => runs.has(d.runId) && Number.isInteger(d.v) && d.v !== VERSION);
-  if (stale) throw new Error(`${file}: run ${stale.runId}'s decisions were written by experience log version ${stale.v}, not ${VERSION}: delete that run's lines and write them again`);
+  if (stale) throw new Error(`${file}: run ${stale.runId}'s decisions were written by experience log version ${stale.v}, not ${VERSION}: rebuild them (replay.js experience --rebuild)`);
   const have = new Set(old.map(d => d.id));
   const fresh = lines.filter(l => !have.has(l.id));
   if (fresh.length) {
@@ -474,4 +485,22 @@ function appendDecisions(file, lines) {
   return { added: fresh.length, kept: lines.length - fresh.length };
 }
 
-module.exports = { VERSION, BRACKETS, exitHash, exitRecord, FRAME, limitOutcome, bracketExit, tripOutcome, legsOf, settledDay, frameOf, buildDecisions, appendDecisions, readDecisions, logFile, gradeOf };
+/**
+ * A run's lines replaced (a rebuild: a log written before a writer's fix, which appendDecisions keeps as written): every
+ * line of `runId` removed, whatever its version, the new ones appended; every other line kept as written. Atomic.
+ */
+function replaceDecisions(file, runId, lines) {
+  if (lines.some(l => l.runId !== runId)) throw new Error(`replaceDecisions: a line of another run than ${runId}`);
+  let text = '';
+  try { text = fs.readFileSync(file, 'utf8'); } catch (_err) { /* none yet */ }
+  const ofRun = l => { try { const d = JSON.parse(l); return Boolean(d) && d.runId === runId; } catch (_err) { return false; } };
+  const old = text.split('\n').filter(l => l.trim());
+  const kept = old.filter(l => !ofRun(l));
+  fs.mkdirSync(path.dirname(file), { recursive: true });
+  const tmp = `${file}.${process.pid}.tmp`;
+  fs.writeFileSync(tmp, [...kept, ...lines.map(l => JSON.stringify(l))].map(l => `${l}\n`).join(''));
+  fs.renameSync(tmp, file);
+  return { removed: old.length - kept.length, added: lines.length };
+}
+
+module.exports = { VERSION, replaceDecisions, BRACKETS, exitHash, exitRecord, FRAME, limitOutcome, bracketExit, tripOutcome, legsOf, settledDay, frameOf, buildDecisions, appendDecisions, readDecisions, logFile, gradeOf };

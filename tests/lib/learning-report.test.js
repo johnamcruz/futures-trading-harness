@@ -170,4 +170,9 @@ test('scripts/replay.js: experience writes the log, and report adds the learning
   assert.strictEqual(rep.status, 0, rep.stderr);
   assert.match(rep.stdout, /learning: 1 composed \(0 entered, 1 passed, 0 refused\)/);
   assert.match(fs.readFileSync(path.join(dir, 'report.md'), 'utf8'), /## Learning\n/);
+  // Written again: kept as it was; --rebuild replaces the run's lines.
+  assert.match(spawnSync(process.execPath, [cli, 'experience', dir], { encoding: 'utf8', env }).stdout, /0 decision\(s\) added, 1 already logged/);
+  const rb = spawnSync(process.execPath, [cli, 'experience', dir, '--rebuild'], { encoding: 'utf8', env });
+  assert.strictEqual(rb.status, 0, rb.stderr);
+  assert.match(rb.stdout, /experience: rebuilt run run1: 1 line\(s\) replaced by 1 \(practice-train\)/);
 });
