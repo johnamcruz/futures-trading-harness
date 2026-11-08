@@ -1845,6 +1845,10 @@
   "tradeRead.minSigns": {
    "value": 2,
    "from": "new in feat/ride-or-exit (P1 item F, the owner: \"The model needs to learn when to ride trend and when to exit\"): weakening needs at least this many independent signs (the count decides; review round 2: one sign alone fired on most healthy trend bars)"
+  },
+  "pullbackRead.minLegAtr": {
+   "value": 1,
+   "from": "new in feat/pullback-read (the briefing's Pullback line): a leg under this many ATR(14) shows no depth (the leg is too small to measure a pullback against); a floor, not a tuned value"
   }
  }
 }
