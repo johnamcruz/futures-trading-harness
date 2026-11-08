@@ -8,15 +8,18 @@
  *   change  moments where the old answer was wrong and the fix should move it (`want`: the outcome it should reach)
  *   hold    moments where the old answer was right (an entry that banked R) and the fix must not flip it
  * It screens, a long replay confirms: a few moments cannot prove a gain. Nothing here calls a model: `ask` is injected
- * (the CLI, scripts/moment-probe.js, spawns the user's runner argv).
+ * (the CLI, scripts/moment-probe.js, spawns claude with probeArgs). Only a cycle of a Claude head run that wrote its system
+ * prompt file (--append-system-prompt-file in its recorded argv) can be probed; the skills embedded in that system file are
+ * never swapped, so an edit to one of them is always `untestable`.
  *
  *   swapSkills(prompt, bodyOf)  -> { prompt, swapped }  each <skill name="N"> block whose bodyOf(N) differs, replaced
  *   outcomeOf(text)             -> the last `CYCLE RESULT: <outcome> - ...` outcome, or null
  *   enters(outcome)             -> planned or executed
  *   judge(moment, old, new)     -> { verdict }  fixed | unchanged | already | broke | held | unanswered (probeMoments adds untestable)
- *   summarize(rows)             -> counts by set and verdict; `ok`: nothing broke or is unanswered, something is fixed
+ *   summarize(rows)             -> counts by set and verdict; `ok`: nothing broke or is unanswered, something is fixed, a hold moment held
  *   probeMoments({ moments, bodyOf, ask }) -> { rows, summary }
  *   momentFromCycle(log, { id, set, want }) -> a moment from a recorded cycle log (logs/cycles/DAY/HHMMSS-trade.json)
+ *   probeArgs({ prompt, system, model }) -> the argv of one ask: the tools, user settings, MCP servers and session files off
  *   treeBodyOf(root)            -> bodyOf(name): the body of root's skills/<name>/SKILL.md, or null
  *   PROBE_SUFFIX                the one instruction ending both arms' prompts: the tools are off, so the decision is a line
  */
@@ -59,8 +62,9 @@ function majorityOutcome(outcomes) {
 /** One moment's verdict. A "hold" moment compares entering (planned vs executed is no flip); a "change" moment, the outcome. */
 function judge(moment, before, after) {
   if (before === null || after === null) return { verdict: 'unanswered' };
-  if (moment.set === 'hold') return { verdict: enters(before) === enters(after) && (enters(before) || before === after) ? 'held' : 'broke' };
-  const same = (a, b) => a === b || (enters(a) && enters(b));
+  // A hold moment is an entry that banked R: one the model does not enter before the fix tests nothing.
+  if (moment.set === 'hold') return enters(before) ? { verdict: enters(after) ? 'held' : 'broke' } : { verdict: 'uncalibrated' };
+  const same = (a, b) => norm(a) === norm(b);
   if (same(after, moment.want)) return { verdict: same(before, moment.want) ? 'already' : 'fixed' };
   return { verdict: same(before, moment.want) ? 'broke' : 'unchanged' };
 }
@@ -71,11 +75,13 @@ function summarize(rows) {
   const hold = { total: rows.filter(r => r.set === 'hold').length };
   for (const v of ['fixed', 'unchanged', 'already', 'broke', 'unanswered', 'untestable', 'uncalibrated']) change[v] = count('change', v);
   for (const v of ['held', 'broke', 'unanswered', 'untestable', 'uncalibrated']) hold[v] = count('hold', v);
-  const ok = rows.length > 0 && change.broke === 0 && change.unanswered === 0 && hold.broke === 0 && hold.unanswered === 0 && change.fixed > 0;
+  const ok = rows.length > 0 && hold.held > 0 && change.broke === 0 && change.unanswered === 0 && hold.broke === 0 && hold.unanswered === 0 && change.fixed > 0;
   return { change, hold, ok };
 }
 
 async function probeMoments({ moments, bodyOf, ask, k = 1 }) {
+  const ids = moments.map(m => m.id);
+  if (new Set(ids).size !== ids.length) throw new Error('moments: duplicate id (each moment needs its own)');
   const rows = [];
   for (const m of moments) {
     const { prompt: next, swapped } = swapSkills(m.prompt, bodyOf);
@@ -86,6 +92,8 @@ async function probeMoments({ moments, bodyOf, ask, k = 1 }) {
     }));
     const before = majorityOutcome(await answers(m.prompt, 'old'));
     // Calibration: the tool-less model must reproduce what the real cycle did, or its verdict here means nothing.
+    // No answer at all (every ask failed, or a tie) is no calibration: unanswered, never a quiet pass.
+    if (m.recorded && before === null) { rows.push({ id: m.id, set: m.set, want: m.want, before, after: null, swapped, verdict: 'unanswered' }); continue; }
     if (m.recorded && before !== norm(m.recorded)) { rows.push({ id: m.id, set: m.set, want: m.want, before, after: null, swapped, verdict: 'uncalibrated' }); continue; }
     const after = majorityOutcome(await answers(next, 'new'));
     rows.push({ id: m.id, set: m.set, want: m.want, before, after, swapped, ...judge(m, before, after) });
@@ -106,7 +114,16 @@ function momentFromCycle(log, { id, set, want }) {
   const system = at('--append-system-prompt-file');
   if (!system) throw new Error(`moment ${id}: its recorded argv names no system prompt file (--append-system-prompt-file)`);
   if (typeof log.prompt !== 'string' || !log.prompt) throw new Error(`moment ${id}: the cycle log holds no prompt`);
-  return { id, set, want, prompt: log.prompt + PROBE_SUFFIX, system, model: at('--model'), recorded: outcomeOf(log.result) ? norm(outcomeOf(log.result)) : null };
+  const recorded = outcomeOf(log.result) ? norm(outcomeOf(log.result)) : null;
+  if (!recorded) throw new Error(`moment ${id}: the cycle log holds no recorded CYCLE RESULT outcome to calibrate against`);
+  if (set === 'hold' && !enters(recorded)) throw new Error(`moment ${id}: a hold moment is an entry that banked R, and this cycle recorded ${recorded}: the recorded cycle entered nothing`);
+  return { id, set, want, prompt: log.prompt + PROBE_SUFFIX, system, model: at('--model'), recorded };
+}
+
+/** The argv of one ask: no tools, no user settings, no MCP servers, no session file (the context quiz's own flags). */
+function probeArgs({ prompt, system, model }) {
+  return ['-p', prompt, ...(model ? ['--model', model] : []), '--append-system-prompt-file', system, '--permission-mode', 'dontAsk',
+    '--output-format', 'text', '--tools', '', '--setting-sources', '', '--strict-mcp-config', '--no-session-persistence'];
 }
 
 function treeBodyOf(root) {
@@ -117,4 +134,4 @@ function treeBodyOf(root) {
   };
 }
 
-module.exports = { swapSkills, outcomeOf, enters, majorityOutcome, judge, summarize, probeMoments, momentFromCycle, treeBodyOf, PROBE_SUFFIX };
+module.exports = { swapSkills, outcomeOf, enters, majorityOutcome, judge, summarize, probeMoments, momentFromCycle, treeBodyOf, probeArgs, PROBE_SUFFIX };

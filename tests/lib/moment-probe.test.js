@@ -116,14 +116,14 @@ test('probeMoments: the old arm gets the recorded prompt unchanged, the new arm 
 });
 
 test('momentFromCycle: a recorded cycle log becomes a moment: its prompt with the probe instruction, its system file and model from the recorded argv', () => {
-  const log = { prompt: PROMPT, argv: ['claude', '-p', '<prompt>', '--model', 'haiku', '--append-system-prompt-file', '/runs/x/head.md', '--permission-mode', 'dontAsk'] };
+  const log = { prompt: PROMPT, result: 'CYCLE RESULT: planned - x', argv: ['claude', '-p', '<prompt>', '--model', 'model-a', '--append-system-prompt-file', '/runs/x/head.md', '--permission-mode', 'dontAsk'] };
   const m = P.momentFromCycle(log, { id: 'e', set: 'change', want: 'no-trade' });
-  assert.deepStrictEqual([m.id, m.set, m.want, m.system, m.model], ['e', 'change', 'no-trade', '/runs/x/head.md', 'haiku']);
+  assert.deepStrictEqual([m.id, m.set, m.want, m.system, m.model], ['e', 'change', 'no-trade', '/runs/x/head.md', 'model-a']);
   assert.ok(m.prompt.startsWith(PROMPT) && m.prompt.endsWith(P.PROBE_SUFFIX), 'the same instruction ends both arms\' prompts');
   assert.match(P.PROBE_SUFFIX, /not available/);
   assert.match(P.PROBE_SUFFIX, /CYCLE RESULT: planned/);
   assert.match(P.PROBE_SUFFIX, /CYCLE RESULT: no-trade/);
-  assert.throws(() => P.momentFromCycle({ prompt: PROMPT, argv: ['claude'] }, { id: 'e', set: 'change', want: 'no-trade' }), /system prompt file/);
+  assert.throws(() => P.momentFromCycle({ prompt: PROMPT, result: 'CYCLE RESULT: planned - x', argv: ['claude'] }, { id: 'e', set: 'change', want: 'no-trade' }), /system prompt file/);
   assert.throws(() => P.momentFromCycle(log, { id: 'e', set: 'other', want: 'no-trade' }), /set/);
   assert.throws(() => P.momentFromCycle(log, { id: 'e', set: 'hold', want: 'maybe' }), /want/);
 });
@@ -150,8 +150,7 @@ test('majorityOutcome: the commonest outcome (planned and executed count as one)
 test('momentFromCycle: the recorded outcome of the cycle is kept for calibration', () => {
   const argv = ['claude', '-p', '<prompt>', '--append-system-prompt-file', '/s.md'];
   assert.strictEqual(P.momentFromCycle({ prompt: PROMPT, argv, result: 'CYCLE RESULT: executed - short 5 MNQ' }, { id: 'a', set: 'hold', want: 'planned' }).recorded, 'planned');
-  assert.strictEqual(P.momentFromCycle({ prompt: PROMPT, argv, result: 'CYCLE RESULT: no-trade - x' }, { id: 'a', set: 'hold', want: 'planned' }).recorded, 'no-trade');
-  assert.strictEqual(P.momentFromCycle({ prompt: PROMPT, argv }, { id: 'a', set: 'hold', want: 'planned' }).recorded, null);
+  assert.strictEqual(P.momentFromCycle({ prompt: PROMPT, argv, result: 'CYCLE RESULT: no-trade - x' }, { id: 'a', set: 'change', want: 'no-trade' }).recorded, 'no-trade');
 });
 
 test('probeMoments with k: the old arm asked k times first; a moment whose majority is not the recorded outcome is uncalibrated, and its new arm is never asked', async () => {
@@ -164,6 +163,7 @@ test('probeMoments with k: the old arm asked k times first; a moment whose major
   const moments = [
     { id: 'early', set: 'change', want: 'no-trade', recorded: 'planned', prompt: PROMPT },
     { id: 'drift', set: 'hold', want: 'planned', recorded: 'planned', prompt: PROMPT },
+    { id: 'steady', set: 'hold', want: 'planned', recorded: 'planned', prompt: PROMPT },
   ];
   const out = await P.probeMoments({ moments, bodyOf: n => (n === 'breakout-vs-fakeout' ? 'NEW' : null), ask, k: 3 });
   assert.strictEqual(calls.filter(c => c === 'early:old').length, 3);
@@ -175,4 +175,58 @@ test('probeMoments with k: the old arm asked k times first; a moment whose major
   assert.strictEqual(by.drift.verdict, 'uncalibrated');
   assert.strictEqual(out.summary.hold.uncalibrated, 1);
   assert.strictEqual(out.summary.ok, true, 'an uncalibrated moment is reported, not counted for or against');
+});
+
+test('review fix: an old arm whose asks all fail is unanswered, never uncalibrated; and ok needs a tested hold moment', async () => {
+  const ask = async () => { throw new Error('rate limited'); };
+  const moments = [{ id: 'h', set: 'hold', want: 'planned', recorded: 'planned', prompt: PROMPT }];
+  const out = await P.probeMoments({ moments, bodyOf: n => (n === 'breakout-vs-fakeout' ? 'NEW' : null), ask, k: 3 });
+  assert.strictEqual(out.rows[0].verdict, 'unanswered');
+  assert.strictEqual(out.summary.ok, false);
+  // One change moment fixed and every hold moment unreadable: nothing shows the winners held.
+  const s = P.summarize([{ id: 'a', set: 'change', verdict: 'fixed' }, { id: 'b', set: 'hold', verdict: 'uncalibrated' }]);
+  assert.strictEqual(s.ok, false, 'no hold moment was tested');
+});
+
+test('review fix: a hold moment is a recorded entry; one that never entered is refused, not "held"', () => {
+  const argv = ['claude', '-p', '<prompt>', '--append-system-prompt-file', '/s.md'];
+  assert.throws(() => P.momentFromCycle({ prompt: PROMPT, argv, result: 'CYCLE RESULT: no-trade - x' }, { id: 'h', set: 'hold', want: 'planned' }), /hold moment.*entered/);
+  assert.throws(() => P.momentFromCycle({ prompt: PROMPT, argv }, { id: 'h', set: 'hold', want: 'planned' }), /recorded/);
+  assert.throws(() => P.momentFromCycle({ prompt: PROMPT, argv }, { id: 'c', set: 'change', want: 'no-trade' }), /recorded/);
+  assert.strictEqual(P.judge({ set: 'hold', want: 'planned' }, 'no-trade', 'no-trade').verdict, 'uncalibrated', 'a hold moment that does not enter is no test');
+});
+
+test('review fix: ok needs no broken or unanswered change moment; executed counts as the wanted planned', () => {
+  const held = [{ id: 'h', set: 'hold', verdict: 'held' }, { id: 'f', set: 'change', verdict: 'fixed' }];
+  assert.strictEqual(P.summarize(held).ok, true);
+  assert.strictEqual(P.summarize([...held, { id: 'x', set: 'change', verdict: 'broke' }]).ok, false);
+  assert.strictEqual(P.summarize([...held, { id: 'x', set: 'change', verdict: 'unanswered' }]).ok, false);
+  assert.strictEqual(P.judge({ set: 'change', want: 'executed' }, 'no-trade', 'planned').verdict, 'fixed');
+  assert.strictEqual(P.judge({ set: 'change', want: 'planned' }, 'no-trade', 'executed').verdict, 'fixed');
+});
+
+test('review fix: a whitespace-only difference is no swap; a traversal name reads nothing even when the file exists', () => {
+  assert.deepStrictEqual(P.swapSkills(PROMPT, n => (n === 'candle-reading' ? '  candle text \n' : null)).swapped, []);
+  const fs = require('fs'); const path = require('path'); const os = require('os');
+  const root = fs.mkdtempSync(path.join(os.tmpdir(), 'mp2-'));
+  fs.mkdirSync(path.join(root, 'skills'), { recursive: true });
+  fs.mkdirSync(path.join(root, 'x'), { recursive: true });
+  fs.writeFileSync(path.join(root, 'x', 'SKILL.md'), '---\nname: x\n---\nsecret\n');
+  assert.strictEqual(P.treeBodyOf(root)('../x'), null);
+});
+
+test('review fix: duplicate moment ids are refused (they would share one binary, model and system file)', async () => {
+  const m = { id: 'same', set: 'change', want: 'no-trade', prompt: PROMPT };
+  await assert.rejects(P.probeMoments({ moments: [m, m], bodyOf: () => 'x', ask: async () => ({ text: '' }), k: 1 }), /duplicate/);
+});
+
+test('probeArgs: the tools, the user settings, MCP servers and session files are all off, like the context quiz', () => {
+  const a = P.probeArgs({ prompt: 'p', system: '/s.md', model: 'model-a' });
+  assert.strictEqual(a[0], '-p');
+  assert.ok(a.includes('--strict-mcp-config') && a.includes('--no-session-persistence'));
+  assert.deepStrictEqual(a.slice(a.indexOf('--tools'), a.indexOf('--tools') + 2), ['--tools', '']);
+  assert.deepStrictEqual(a.slice(a.indexOf('--setting-sources'), a.indexOf('--setting-sources') + 2), ['--setting-sources', '']);
+  assert.deepStrictEqual(a.slice(a.indexOf('--permission-mode'), a.indexOf('--permission-mode') + 2), ['--permission-mode', 'dontAsk']);
+  assert.deepStrictEqual(a.slice(a.indexOf('--model'), a.indexOf('--model') + 2), ['--model', 'model-a']);
+  assert.ok(!P.probeArgs({ prompt: 'p', system: '/s.md', model: null }).includes('--model'));
 });

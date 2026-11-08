@@ -26,12 +26,11 @@ const arg = name => { const i = process.argv.indexOf(name); return i >= 0 ? proc
 function ask(byId, cwd, timeoutMs) {
   return (prompt, { id }) => new Promise((resolve, reject) => {
     const m = byId[id];
-    const args = ['-p', prompt, ...(m.model ? ['--model', m.model] : []), '--append-system-prompt-file', m.system, '--permission-mode', 'dontAsk', '--output-format', 'text'];
-    const child = spawn(m.bin, args, { cwd, timeout: timeoutMs });
+    const child = spawn('claude', P.probeArgs({ prompt, system: m.system, model: m.model }), { cwd, timeout: timeoutMs });
     let out = '';
     child.stdout.on('data', d => { out += d; });
     child.on('error', reject);
-    child.on('close', code => (code === 0 ? resolve({ text: out }) : reject(new Error(`${m.bin} exited ${code}`))));
+    child.on('close', code => (code === 0 ? resolve({ text: out }) : reject(new Error(`claude exited ${code}`))));
   });
 }
 
@@ -50,7 +49,7 @@ function ask(byId, cwd, timeoutMs) {
   const moments = specs.map(s => {
     const log = JSON.parse(fs.readFileSync(s.cycle, 'utf8'));
     const m = P.momentFromCycle(log, s);
-    byId[m.id] = { ...m, bin: log.argv[0] };
+    byId[m.id] = m;
     return m;
   });
   const cwd = fs.mkdtempSync(path.join(os.tmpdir(), 'moment-probe-'));
