@@ -14,7 +14,8 @@
  *
  *   runCycles(runDir)        a replay run's trade cycles: [{ day, at, stateRead }] (its store lines' last trade cycle)
  *   homeCycles(home)         a run home's trade cycles from its cycle logs (logs/cycles-<day>.jsonl)
- *   tally(cycles)            { cycles, status: { read, none, unparsable, conflicting, unrecorded, error }, fields }
+ *   tally(cycles)            { cycles, status: { read, none, unparsable, conflicting, unrecorded, error }, byOutcome (the
+ *                            status by the cycle result's outcome word: a managed cycle ends before step 3), fields }
  *   renderReads(tally)       the report as text
  */
 
@@ -34,9 +35,12 @@ function runCycles(runDir) {
     .filter(r => r && r.kind === 'trade' && Array.isArray(r.cycles))
     .map(r => {
       const c = r.cycles.filter(x => x && x.action === 'trade').pop() || null;
-      return { day, at: r.t, stateRead: c && c.stateRead && typeof c.stateRead === 'object' ? c.stateRead : null };
+      return { day, at: r.t, result: c && typeof c.result === 'string' ? c.result : null, stateRead: c && c.stateRead && typeof c.stateRead === 'object' ? c.stateRead : null };
     }));
 }
+
+/** A cycle result line's outcome word (no-trade, managed, executed, planned...), or 'unknown'. */
+const outcomeOf = result => ((/CYCLE RESULT:[\s*_`]*([a-z][a-z-]*)/i.exec(String(result || '')) || [])[1] || 'unknown').toLowerCase();
 
 /** A run home's trade cycles from its cycle logs (live or replay), dated by each log's own trading day. */
 function homeCycles(home) {
@@ -45,7 +49,7 @@ function homeCycles(home) {
   const files = fs.readdirSync(dir).filter(f => LOG.test(f)).sort();
   return files.flatMap(f => fs.readFileSync(path.join(dir, f), 'utf8').split('\n').filter(l => l.trim()).flatMap(l => {
     try { return [JSON.parse(l)]; } catch (_err) { return []; }
-  }).filter(x => x && x.action === 'trade').map(x => ({ day: LOG.exec(f)[1], at: x.cycleAt || x.at, stateRead: x.stateRead && typeof x.stateRead === 'object' ? x.stateRead : null })));
+  }).filter(x => x && x.action === 'trade').map(x => ({ day: LOG.exec(f)[1], at: x.cycleAt || x.at, result: typeof x.result === 'string' ? x.result : null, stateRead: x.stateRead && typeof x.stateRead === 'object' ? x.stateRead : null })));
 }
 
 /** sum(num) / sum(den) over whole days resampled: { lo, hi } at the level, or nulls with fewer than two days. */
@@ -71,11 +75,16 @@ function dayInterval(days, key) {
 function tally(cycles) {
   const status = { ...Object.fromEntries(STATUSES.map(s => [s, 0])), unrecorded: 0, error: 0 };
   const acc = Object.fromEntries(REGISTRY.map(e => [e.key, { stated: 0, match: 0, mismatch: 0, unknown: 0, unknownWhy: {}, confusion: {}, byDay: new Map() }]));
+  // The status by the cycle's outcome: a managed cycle never reaches step 3, so its line's absence reads apart.
+  const byOutcome = {};
   for (const c of cycles) {
     const s = c && c.stateRead;
-    if (!s) { status.unrecorded += 1; continue; }
-    if (s.error || !STATUSES.includes(s.status)) { status.error += 1; continue; }
-    status[s.status] += 1;
+    const kind = !s ? 'unrecorded' : s.error || !STATUSES.includes(s.status) ? 'error' : s.status;
+    const o = outcomeOf(c && c.result);
+    byOutcome[o] = byOutcome[o] || {};
+    byOutcome[o][kind] = (byOutcome[o][kind] || 0) + 1;
+    status[kind] += 1;
+    if (!STATUSES.includes(kind)) continue;
     for (const [key, f] of Object.entries(s.fields || {})) {
       const a = acc[key];
       if (!a || !f || !['match', 'mismatch', 'unknown'].includes(f.result)) continue;
@@ -99,7 +108,7 @@ function tally(cycles) {
     const { byDay, ...rest } = a;
     fields[key] = { ...rest, n, days: byDay.size, agreement: n ? round4(a.match / n) : null, ...dayInterval([...byDay.values()], key), level: EI.level };
   }
-  return { cycles: cycles.length, status, fields };
+  return { cycles: cycles.length, status, byOutcome, fields };
 }
 
 const pct = x => (x === null ? '-' : x.toLocaleString('en-US', { style: 'percent' }));
@@ -108,6 +117,7 @@ function renderReads(t) {
   const s = t.status;
   const out = [
     `STATE reads over ${t.cycles} trade cycles: read ${s.read}, no state line ${s.none}, unparsable ${s.unparsable}, conflicting ${s.conflicting}, no state record ${s.unrecorded}${s.error ? `, record error ${s.error}` : ''}`,
+    `By outcome: ${Object.entries(t.byOutcome || {}).map(([o, k]) => `${o} (${Object.entries(k).map(([x, n]) => `${x} ${n}`).join(', ')})`).join('; ')}`,
     `Per field, agreement with the briefing's label (match/n, day-clustered ${pct(EI.level)} interval); unknown is never a mismatch:`,
   ];
   for (const [key, f] of Object.entries(t.fields)) {

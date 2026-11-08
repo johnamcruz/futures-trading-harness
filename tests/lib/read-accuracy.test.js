@@ -31,9 +31,13 @@ test('tally: per field the agreement over the cycles it could be scored on, n, d
     { day: '2023-03-16', stateRead: rec('STATE: the market is choppy', briefing()) },
     { day: '2023-03-17', stateRead: null },
   ];
+  cycles[3].result = 'CYCLE RESULT: managed - MNQ long held';
+  cycles[0].result = '**CYCLE RESULT:** no-trade - x';
   const t = RA.tally(cycles);
   assert.strictEqual(t.cycles, 6);
   assert.deepStrictEqual(t.status, { read: 3, none: 1, unparsable: 1, conflicting: 0, unrecorded: 1, error: 0 });
+  // By the cycle's outcome: a managed cycle's missing line reads apart from a flat one's.
+  assert.deepStrictEqual(t.byOutcome, { 'no-trade': { read: 1 }, unknown: { read: 2, unparsable: 1, unrecorded: 1 }, managed: { none: 1 } });
   const h4 = t.fields['4h'];
   assert.deepStrictEqual([h4.stated, h4.match, h4.mismatch, h4.unknown, h4.n, h4.days], [3, 2, 1, 0, 3, 2]);
   assert.strictEqual(h4.agreement, 0.6667);

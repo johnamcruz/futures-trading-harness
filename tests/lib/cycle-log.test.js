@@ -144,6 +144,28 @@ test('writeCycleLog: the head trader\'s STATE line from its own final message, s
   assert.strictEqual(lines()[2].stateRead.status, 'unparsable');
   write(stream('STATE: 4h up\nCYCLE RESULT: no-trade - x'), 'premarket');
   assert.ok(!('stateRead' in lines()[3]));
+  // A managed cycle: the PLAN and its STATE line in an earlier own turn, the final turn the management report.
+  const earlier = JSON.stringify({ type: 'assistant', message: { content: [{ type: 'text', text: 'PLAN:\nSTATE: 4h up | 1h range' }] } });
+  const last = JSON.stringify({ type: 'assistant', message: { content: [{ type: 'text', text: 'CYCLE RESULT: managed - x' }] } });
+  write(stream('CYCLE RESULT: managed - x', [earlier, last]));
+  assert.deepStrictEqual([lines()[4].stateRead.status, lines()[4].stateRead.counts], ['read', { match: 2, mismatch: 0, unknown: 0 }]);
+});
+
+test('headOwnText: every top-level turn of the head trader\'s own session (a managed cycle\'s PLAN sits before its last turn), never a subagent\'s or another session\'s', () => {
+  const { headOwnText } = require('../../scripts/lib/cycle-log');
+  const say = (text, extra = {}) => JSON.stringify({ type: 'assistant', ...extra, message: { content: [{ type: 'text', text }] } });
+  // Claude Code: the PLAN in an earlier turn, a tool call, then the final turn; a subagent's and a sidechain's text left out.
+  const claude = [say('PLAN:\nSTATE: 4h up'), use('mcp__broker__modify_order', {}), say('STATE: 4h down', { parent_tool_use_id: 't1' }), say('STATE: 1h down', { isSidechain: true }), say('CYCLE RESULT: managed - x'), JSON.stringify({ type: 'result', result: 'CYCLE RESULT: managed - x' })].join('\n');
+  assert.strictEqual(headOwnText(claude), 'PLAN:\nSTATE: 4h up\nCYCLE RESULT: managed - x');
+  // opencode: the run's own session's text parts; another session's (a subagent's) left out.
+  const oc = (sessionID, text) => JSON.stringify({ type: 'text', sessionID, timestamp: 1, part: { type: 'text', text } });
+  assert.strictEqual(headOwnText([oc('ses_head', 'STATE: 4h up'), oc('ses_role', 'STATE: 4h down'), oc('ses_head', 'CYCLE RESULT: no-trade - x')].join('\n')), 'STATE: 4h up\nCYCLE RESULT: no-trade - x');
+  // Codex: its agent messages.
+  assert.strictEqual(headOwnText(JSON.stringify({ type: 'item.completed', item: { type: 'agent_message', text: 'STATE: 15m range' } })), 'STATE: 15m range');
+  // Nothing recognised (a stream with only its result event, or plain text): the final message.
+  assert.strictEqual(headOwnText(JSON.stringify({ type: 'result', result: 'STATE: 4h up\nCYCLE RESULT: no-trade - x' })), 'STATE: 4h up\nCYCLE RESULT: no-trade - x');
+  assert.strictEqual(headOwnText(''), '');
+  assert.strictEqual(headOwnText('plain text\nSTATE: 4h up'), 'plain text\nSTATE: 4h up', 'a transcript in no structured format');
 });
 
 test('writeCycleLog: a replayed cycle is filed and judged at the replay clock\'s time, its `at` the wall clock; a time run again keeps both records', () => {

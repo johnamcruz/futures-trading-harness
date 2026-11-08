@@ -27,7 +27,7 @@
  *       failure, and its timing (ms from the bar's close to the head trader's planned and to the order, each role's ms),
  *       a late pass's kind (`late`: late-entry.js) and a veto's basis (`vetoBasis`: trading/veto-basis.js);
  *       the cycle's record alone also holds its `why` and phase 2's report (`phase2`: { chars, text, cut })
- *   stateRead (in both, a trade cycle): the head trader's STATE line read from its own final message and scored
+ *   stateRead (in both, a trade cycle): the head trader's STATE line read from its own text (headOwnText) and scored
  *       per field against its cycle bar's briefing (trading/state-read.js; status none when it wrote none), for
  *       measurement only: nothing that decides reads it
  *   timing (in both, when the runner gave one): when the cycle acted against
@@ -322,7 +322,7 @@ function writeCycleLog(home, { at = new Date(), env = null, action, harness, pro
     summary.setupsListed = context.setupsListed.length;
     summary.setupSkips = require('./setup-skips').setupSkips({ listed: context.setupsListed, composed, text });
   }
-  // The head trader's STATE line (trading/state-read.js), read from its own final message and scored against its cycle
+  // The head trader's STATE line (trading/state-read.js), read from its own text and scored against its cycle
   // bar's briefing: a record for measurement only; a cycle without it is recorded as such. Never throws.
   const stateRead = action === 'trade' ? cycleStateRecord({ home, harness, output, context, now: cycleAt }) : null;
   const stamp = cycleAt.toISOString().slice(11, 19).replace(/:/g, '');
@@ -391,13 +391,40 @@ function cycleLookups({ home, output, transcript, context, roleSkills, at, laneB
 }
 
 /**
- * The head trader's STATE line from its own final message (autotrader.js finalMessage: never a role's report or a
- * tool's reply), scored against the cycle bar's briefing (trading/state-read.js). Never throws.
+ * The head trader's own text: every top-level turn of its session (Claude Code's and Qwen Code's assistant messages
+ * outside a subagent, opencode's text parts of the run's own session, Codex's agent messages), never a role's report or
+ * a tool's reply; none recognised: its final message (autotrader.js finalMessage). A managed cycle writes its PLAN in
+ * an earlier turn than the final one, so the whole session's own text is read.
  */
+function headOwnText(output) {
+  const texts = [];
+  let session = null;
+  for (const doc of documents(output)) {
+    for (const ev of Array.isArray(doc) ? doc : [doc]) {
+      if (!ev || typeof ev !== 'object') continue;
+      if (isOpencodeEvent(ev)) {
+        if (session === null) session = ev.sessionID;
+        if (ev.sessionID === session && ev.type === 'text' && ev.part && typeof ev.part.text === 'string' && !ev.part.synthetic && !ev.part.ignored) texts.push(ev.part.text);
+        continue;
+      }
+      const item = ev.type === 'item.completed' && ev.item;
+      if (item && (item.type === 'agent_message' || item.type === 'assistant_message') && typeof item.text === 'string') texts.push(item.text);
+      const msg = ev.type === 'assistant' && !ev.parent_tool_use_id && ev.isSidechain !== true ? ev.message : null;
+      if (msg && typeof msg === 'object' && msg.model !== '<synthetic>' && Array.isArray(msg.content)) {
+        for (const c of msg.content) if (c && c.type === 'text' && typeof c.text === 'string') texts.push(c.text);
+      }
+    }
+  }
+  if (texts.length) return texts.join('\n');
+  // No turn recognised: the final message; a transcript in no structured format is the model's text itself.
+  const fm = require('./autotrader').finalMessage(output);
+  return fm.final || (fm.structured ? '' : String(output || ''));
+}
+
+/** The head trader's STATE line from its own text (headOwnText), scored against the cycle bar's briefing (trading/state-read.js). Never throws. */
 function cycleStateRecord({ home, harness, output, context, now }) {
   try {
-    const { final } = require('./autotrader').finalMessage(output);
-    return require('./trading/state-read').cycleStateRead({ home, text: final || '', context, now });
+    return require('./trading/state-read').cycleStateRead({ home, text: headOwnText(output), context, now });
   } catch (err) {
     return { error: err.message, harness };
   }
@@ -415,4 +442,4 @@ function cycleExperienceLookups(transcript) {
   }
 }
 
-module.exports = { toolCalls, summarize, writeCycleLog, amendCycleLog, cycleLookups, cycleExperienceLookups, cycleStateRecord, cycleClock, gateOrders, RISK_REDUCING };
+module.exports = { toolCalls, summarize, writeCycleLog, amendCycleLog, cycleLookups, cycleExperienceLookups, cycleStateRecord, headOwnText, cycleClock, gateOrders, RISK_REDUCING };
