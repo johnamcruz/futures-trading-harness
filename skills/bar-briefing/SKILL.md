@@ -24,12 +24,14 @@ blackouts are `blackouts_list`.
 | `blackouts_list` | none | the news blackout windows | `blackouts.js list` |
 
 **The `Pullback` line** (the runner's briefing; price against the trend
-rule's prevailing side on the 15m, none with it): the leg (origin ->
-extreme), the share of it given back (past its origin: given back; no
-depth on a leg under the ATR floor), its 15m and 1h swings (holds or
-broken by a close), the bars against it with volume and range per bar
-vs the leg's (both in one session part; no phrase: not computable), the
-15m and 1h breaks against it (`stacked`: both). Weigh it with
+rule's prevailing side on the 15m, none with it, nor in the ~30 min
+after a top before its 15m swing confirms: absence is not "no pullback"):
+the leg (origin -> extreme), the share of it given back (past its
+origin: given back; no depth on a leg under the ATR floor), its 15m and
+1h swings (broken: a close since the extreme), the bars since the
+extreme with volume and range per bar vs the leg's (one session part,
+not time-of-day adjusted; no phrase: not computable), the 15m and 1h
+breaks against it (`stacked`: both). Weigh it with
 `pullback-vs-reversal`.
 
 ## Examples

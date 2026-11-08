@@ -54,6 +54,7 @@ const MIN_LEG_ATR = AN.pullbackRead.minLegAtr;
 const r2 = x => (Number.isFinite(x) ? Math.round(x * 100) / 100 : null);
 const lastOf = xs => { for (let i = xs.length - 1; i >= 0; i -= 1) if (Number.isFinite(xs[i])) return xs[i]; return null; };
 const opp = d => (d === 'up' ? 'down' : 'up');
+const isObj = x => Boolean(x) && typeof x === 'object' && !Array.isArray(x);
 
 /** The completed `minutes` candles as of the last bar ([] when unavailable). */
 function candlesOf(bars, base, minutes) {
@@ -71,14 +72,18 @@ function impulseOf({ cs, hc, s, iBest, fromMs, search = true }) {
   let o = iBest;
   for (let i = 0; i <= iBest; i += 1) if (Date.parse(cs[i].t) >= from && lo(cs[i]) < lo(cs[o])) o = i;
   const span = hi(cs[iBest]) - lo(cs[o]);
-  return { o, back, origin: s * lo(cs[o]), best: s * hi(cs[iBest]), depth: span > 0 ? r2((hi(cs[iBest]) - s * now) / span) : null };
+  const raw = span > 0 ? (hi(cs[iBest]) - s * now) / span : null;
+  return { o, back, origin: s * lo(cs[o]), best: s * hi(cs[iBest]), depth: r2(raw), raw };
 }
 
-/** The swing `p` on `minutes` candles cs: { price, holds } (no base close beyond it since its candle closed), or null. */
-function swingOf(p, minutes, base, s) {
+/**
+ * The swing `p` on `minutes` candles: { price, holds }, holds while no base close beyond it came after both its candle's
+ * close and the leg's extreme (`afterMs`): the pullback broke it, never the leg's own bars before the extreme. Or null.
+ */
+function swingOf(p, minutes, base, s, afterMs) {
   if (!p) return null;
   const end = Date.parse(p.t) + minutes * 60000;
-  return { price: p.price, holds: !base.some(c => Date.parse(c.t) >= end && (s > 0 ? c.c < p.price : c.c > p.price)) };
+  return { price: p.price, holds: !base.some(c => Date.parse(c.t) >= end && Date.parse(c.t) > afterMs && (s > 0 ? c.c < p.price : c.c > p.price)) };
 }
 
 /** The last break on candles cs when it is against `way`: { kind, direction, level, barsAgo }, else null. */
@@ -137,8 +142,9 @@ function pullbackRead({ bars, base, prevailing } = {}) {
   return {
     side: s > 0 ? 'long' : 'short', frame: tfH, prevailing: `${m[1]} ${way}`,
     leg: { origin: imp.origin, extreme: imp.best, at: cs[iBest].t, atr: atr > 0 ? r2((s * (imp.best - imp.origin)) / atr) : null },
-    depth: imp.depth, close: cs[cs.length - 1].c,
-    swing: { [tfH]: imp.back ? swingOf(imp.back, FRAME, cs, s) : null, [label(HOUR)]: swingOf(h1Swing, HOUR, cs, s) },
+    // pastOrigin from the unrounded depth: 0.996 is a depth (shown 100%), never given back.
+    depth: imp.depth, pastOrigin: imp.raw !== null && imp.raw >= 1, close: cs[cs.length - 1].c,
+    swing: { [tfH]: imp.back ? swingOf(imp.back, FRAME, cs, s, tBest) : null, [label(HOUR)]: swingOf(h1Swing, HOUR, cs, s, tBest) },
     counter: counterOf(cs, imp.o, iBest),
     against, stacked: Object.values(against).every(Boolean),
   };
@@ -147,19 +153,23 @@ function pullbackRead({ bars, base, prevailing } = {}) {
 // The line says only what no other summary line does (the owner: no redundant bytes): the price, the clock and the
 // prevailing side are on their own lines, and that it is a read to weigh is said once, in the skills.
 function pullbackLine(p, { level = x => x } = {}) {
-  if (!p || typeof p !== 'object' || !p.leg) return null;
-  const c = p.counter || {};
-  const known = x => x !== null && x !== undefined;
+  if (!p || typeof p !== 'object' || !isObj(p.leg) || !Number.isFinite(p.leg.origin) || !Number.isFinite(p.leg.extreme)) return null;
+  const c = isObj(p.counter) ? p.counter : {};
+  const fin = Number.isFinite;
   // No depth number on a leg too small to measure one against, nor once the leg is given back past its origin (the
-  // skill's Depth row: past the impulse origin); never another leg in its place.
-  const small = known(p.leg.atr) && p.leg.atr < MIN_LEG_ATR;
+  // skill's Depth row: past the impulse origin; an older record without pastOrigin: its depth); never another leg.
+  const small = fin(p.leg.atr) && p.leg.atr < MIN_LEG_ATR;
+  const given = typeof p.pastOrigin === 'boolean' ? p.pastOrigin : fin(p.depth) && p.depth >= 1;
   const depth = small ? `leg ${p.leg.atr}x ATR(14), under the ${MIN_LEG_ATR}x floor: no depth`
-    : !known(p.depth) ? 'depth unknown' : p.depth >= 1 ? 'the leg given back past its origin' : `depth ${Math.round(p.depth * 100)}% of the leg`;
-  // Volume and range only when comparable; not computable: no words (the skill says what a missing phrase means).
-  const ratios = [known(c.volRatio) ? `volume ${c.volRatio}x the leg's per bar (${c.volume})` : null, known(c.rangeRatio) ? `range ${c.rangeRatio}x` : null].filter(Boolean);
-  const swings = Object.entries(p.swing || {}).map(([tf, x]) => (x ? `${tf} swing ${level(x.price)} ${x.holds ? 'holds' : 'broken by a close'}` : `${tf} swing unknown`)).join(', ');
-  const brk = Object.entries(p.against || {}).map(([tf, x], i) => `${i ? `${tf}` : `${tf} break against`}: ${x ? `${x.kind} ${x.direction} ${level(x.level)} (${x.barsAgo} bars ago)` : 'none'}`).join(', ');
-  return `- Pullback (${p.frame}, ${p.side} leg ${level(p.leg.origin)} -> ${level(p.leg.extreme)}): ${depth}; ${[`${c.bars} bars against it`, ...ratios].join(', ')}; ${swings}; ${brk}${p.stacked ? '; stacked' : ''}.`;
+    : given ? 'the leg given back past its origin' : fin(p.depth) ? `depth ${Math.round(p.depth * 100)}% of the leg` : 'depth unknown';
+  // Volume and range only when comparable, and not on a leg given back (its window is stale): no words then (the skill
+  // says what a missing phrase means).
+  const ratios = given ? [] : [fin(c.volRatio) && c.volume ? `volume ${c.volRatio}x the leg's per bar (${c.volume})` : null, fin(c.rangeRatio) ? `range ${c.rangeRatio}x` : null].filter(Boolean);
+  const bars = [Number.isInteger(c.bars) ? `${c.bars} bars since the extreme` : null, ...ratios].filter(Boolean).join(', ');
+  const swings = Object.entries(isObj(p.swing) ? p.swing : {}).map(([tf, x]) => (!isObj(x) ? `${tf} swing unknown` : fin(x.price) && typeof x.holds === 'boolean' ? `${tf} swing ${level(x.price)} ${x.holds ? 'holds' : 'broken by a close'}` : null)).filter(Boolean).join(', ');
+  const brk = Object.entries(isObj(p.against) ? p.against : {}).map(([tf, x], i) => `${i ? `${tf}` : `${tf} break against`}: ${isObj(x) && x.kind ? `${x.kind} ${x.direction} ${level(x.level)} (${x.barsAgo} bars ago)` : 'none'}`).join(', ');
+  const parts = [depth, bars, swings, brk && `${brk}${p.stacked === true ? '; stacked' : ''}`].filter(Boolean);
+  return `- Pullback (${p.frame}, ${p.side} leg ${level(p.leg.origin)} -> ${level(p.leg.extreme)}): ${parts.join('; ')}.`;
 }
 
 module.exports = { impulseOf, pullbackRead, pullbackLine };

@@ -90,8 +90,15 @@ test('pullbackRead: a fall through the leg\'s origin: depth past 100%, the 15m s
   assert.ok(!/% of the leg/.test(PR.pullbackLine(p)));
   assert.match(PR.pullbackLine(p), /15m swing 21059 broken by a close/);
   // At exactly 100% (back at the origin) it is given back too.
-  assert.match(PR.pullbackLine({ ...p, depth: 1 }), /the leg given back past its origin/);
-  assert.match(PR.pullbackLine({ ...p, depth: 0.99 }), /depth 99% of the leg/);
+  assert.strictEqual(p.pastOrigin, true);
+  // Given back: the stale window's volume and range ratios are left out (they add nothing then).
+  const vol = read(mk(legs(21000, [...UP, [40, -1.5]]), { vol: i => (i >= 220 ? 60 : 100) }));
+  assert.ok(vol.counter.volRatio !== null && !/volume|range/.test(PR.pullbackLine(vol)), PR.pullbackLine(vol));
+  // An older record without pastOrigin: its depth decides.
+  const { pastOrigin, ...old } = p;
+  assert.strictEqual(pastOrigin, true);
+  assert.match(PR.pullbackLine({ ...old, depth: 1 }), /the leg given back past its origin/);
+  assert.match(PR.pullbackLine({ ...old, depth: 0.99 }), /depth 99% of the leg/);
   assert.match(PR.pullbackLine(p), /15m break against: (?:BOS|CHoCH) down [\d.]+ \(\d+ bars ago\)/);
 });
 
@@ -132,14 +139,14 @@ test('pullbackRead: the counter-move\'s volume and range against the leg\'s, in 
   const none = read(mk(closes, { vol: () => undefined }));
   assert.deepStrictEqual([none.counter.volRatio, none.counter.volume], [null, null]);
   // Not computable: no words for it (the skill says a missing phrase means that); the range still said.
-  assert.match(PR.pullbackLine(none), /; 20 bars against it, range 1x; /);
+  assert.match(PR.pullbackLine(none), /; 20 bars since the extreme, range 1x; /);
   assert.ok(!/volume/.test(PR.pullbackLine(none)));
   // The leg built before the 09:30 open, the counter-move after it: the leg has no RTH bars to compare: unknown.
   const shift = Date.parse('2026-10-05T13:30:00.000Z') - 220 * STEP; // bar 220 opens at 09:30 ET (EDT)
   const open = read(mk(closes, { start: shift, vol: i => (i >= 220 ? 300 : 100) }));
   assert.deepStrictEqual([open.counter.volRatio, open.counter.volume, open.counter.rangeRatio], [null, null, null], 'no leg bars in the RTH part of the session');
   assert.strictEqual(open.counter.bars, 20);
-  assert.match(PR.pullbackLine(open), /; 20 bars against it; /, 'neither phrase when neither is computable');
+  assert.match(PR.pullbackLine(open), /; 20 bars since the extreme; /, 'neither phrase when neither is computable');
   // The leg straddling the open (its first bars before 09:30): not comparable either, never its RTH part alone.
   const straddle = read(mk(closes, { start: Date.parse('2026-10-05T13:30:00.000Z') - 200 * STEP, vol: i => (i >= 220 ? 300 : 100) }));
   assert.deepStrictEqual([straddle.counter.volRatio, straddle.counter.rangeRatio], [null, null]);
@@ -169,7 +176,7 @@ test('pullbackRead: the leg\'s numbers equal the Trade read\'s once a trade open
 test('pullbackLine: facts in order, no verdict word; the leg by its endpoints', () => {
   const p = read(mk(legs(21000, [...UP, [20, -1]]), { vol: i => (i >= 220 ? 60 : 100) }));
   const line = PR.pullbackLine(p);
-  assert.strictEqual(line, '- Pullback (15m, long leg 21059 -> 21101): depth 50% of the leg; 20 bars against it, volume 0.6x the leg\'s per bar (falling), range 1x; '
+  assert.strictEqual(line, '- Pullback (15m, long leg 21059 -> 21101): depth 50% of the leg; 20 bars since the extreme, volume 0.6x the leg\'s per bar (falling), range 1x; '
     + `15m swing 21059 holds, 1h swing ${p.swing['1h'] ? `${p.swing['1h'].price} holds` : 'unknown'}; 15m break against: none, 1h: none.`);
   // No conclusion a rule could read: no verdict word after the line's name; nothing another line says (the price, the
   // prevailing side, the clock) and no disclaimer (the skills say it once).
@@ -194,6 +201,38 @@ test('pullbackLine: a leg under the floor (config/analysis.json pullbackRead.min
   assert.match(PR.pullbackLine({ ...p, leg: { ...p.leg, atr: null } }), /depth 50% of the leg/);
 });
 
+test('pullbackRead: given back is the unrounded depth past 1 (99.6% shows as a depth, never as given back)', () => {
+  // A 250-point leg (trough low 21079, top 21329) given back 249: 0.996, rounded 1.
+  const p = read(mk(legs(21000, [...UP, [20, -1], [124, 2], [124, -2]])));
+  assert.deepStrictEqual([p.leg.origin, p.leg.extreme, p.close, p.depth, p.pastOrigin], [21079, 21329, 21080, 1, false]);
+  assert.match(PR.pullbackLine(p), /\): depth 100% of the leg; /);
+  // One more point: the close on the origin (exactly 1): given back.
+  const at = read(mk(legs(21000, [...UP, [20, -1], [124, 2], [124, -2], [1, -1]])));
+  assert.deepStrictEqual([at.close, at.leg.origin, at.pastOrigin], [21079, 21079, true]);
+});
+
+test('pullbackRead: a swing is broken only by a close after the leg\'s extreme (the pullback\'s), never by the leg\'s own bars', () => {
+  // Recorded 2023-08-04 10:42 ET bar (the 4h down; 200 real 3m bars): the short leg 15583.5 -> 15392.75 began with closes
+  // above the 1h swing high 15558.25 (the leg's own bars, before its extreme); the pullback never closed above it.
+  const bars = require('../fixtures/pullback/swing-before-leg-2023-08-04.json').map(([t, o, h, l, c, v]) => ({ t: `${t}:00.000Z`, o, h, l, c, v }));
+  const p = PR.pullbackRead({ bars, base: 3, prevailing: '4h down' });
+  assert.deepStrictEqual([p.leg.origin, p.leg.extreme, p.depth], [15583.5, 15392.75, 0.57]);
+  assert.deepStrictEqual(p.swing['1h'], { price: 15558.25, holds: true });
+  assert.ok(!bars.some(b => b.t > p.leg.at && b.c > 15558.25), 'no close above it since the extreme');
+  assert.ok(bars.some(b => b.t <= p.leg.at && b.c > 15558.25), 'closes above it before the extreme (the leg\'s own)');
+  assert.match(PR.pullbackLine(p), /1h swing 15558\.25 holds/);
+});
+
+test('pullbackLine: an older or malformed record never prints undefined or an empty phrase', () => {
+  const rec = { side: 'long', frame: '15m', leg: { origin: 21480, extreme: 21530.5 }, depth: 0.41, counter: {}, swing: {}, against: {} };
+  const line = PR.pullbackLine(rec);
+  assert.strictEqual(line, '- Pullback (15m, long leg 21480 -> 21530.5): depth 41% of the leg.');
+  for (const r of [{ ...rec, counter: undefined, swing: null, against: 'x' }, { ...rec, counter: { bars: 'x' }, swing: { '15m': {} } }]) {
+    const l = PR.pullbackLine(r);
+    assert.ok(!/undefined|NaN|null|; ;|;;|, ,|\[object/.test(l), l);
+  }
+});
+
 test('pullbackRead: a recorded given-back leg (2021-06-04 09:48 ET bar, the 4h down): 520% of a 39-point leg is said as given back', () => {
   // 300 real 3m bars (a small slice; the leg made overnight, the counter-move into the RTH open).
   const bars = require('../fixtures/pullback/given-back-2021-06-04.json').map(([t, o, h, l, c, v]) => ({ t: `${t}:00.000Z`, o, h, l, c, v }));
@@ -203,6 +242,6 @@ test('pullbackRead: a recorded given-back leg (2021-06-04 09:48 ET bar, the 4h d
   const line = PR.pullbackLine(p);
   assert.ok(!/520|% of the leg/.test(line), line);
   assert.strictEqual(p.leg.atr, 2.63, 'over the floor: measured, and given back');
-  assert.match(line, /\): the leg given back past its origin; 147 bars against it; /);
+  assert.match(line, /\): the leg given back past its origin; 147 bars since the extreme; /);
   assert.match(line, /15m swing 13531\.75 broken by a close, 1h swing 13533 broken by a close; 15m break against: BOS up 13542\.5 \(10 bars ago\), 1h: BOS up 13546\.5 \(1 bars ago\); stacked\.$/);
 });
