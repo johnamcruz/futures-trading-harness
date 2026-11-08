@@ -10,19 +10,23 @@
  *                   (CHoCH or BOS the other way), its candle (that side's engulfing, a displacement that way, closed
  *                   above its high / below its low); "1h ... CHoCH up" (within a few words, no other frame named in
  *                   between) or "CHoCH up on the 1h". Not when negated, needed or absent ("no", "without", "need(s)",
- *                   "would need", "require(s)", "wait for", "until", "absent" before it; "no", "not", "without", "need"
- *                   between; "absent", "none", "not present", "is not met", "needed", "is missing", "does not exist"
- *                   after), nor conditional ("would", "could", "might", "if", "whether", "unless" in its clause before
- *                   it or between; "would", "could", "might" just after), nor asked ("... CHoCH up? Not printed")
+ *                   "would need", "require(s)", "wait / watch / look for", "only after", "until", "absent" before it;
+ *                   "no", "not", any n't, "without", "need", "lack(s)", "missing" between; "absent", "none", "not
+ *                   present", "is not met", "needed", "(still) required", "is missing", "does not exist" after), nor
+ *                   conditional ("would", "could", "might", "should", "if", "whether", "unless" in its clause before it;
+ *                   those and "may" between; "would", "could", "might" just after), nor asked ("... CHoCH up? Not
+ *                   printed"). The vocabulary is closed: the briefing's fact names only ("engulfed bullishly" is a miss)
  *   conflictWords(text)             "transition" said of the market (not the regime's label, "Regime: transition"; not the
- *                   session's: "morning transition", "transition period", "transition into lunch"), or disagree /
+ *                   session's: "morning transition", "transition period", "transition into lunch"; nor "a transition
+ *                   regime"), or disagree /
  *                   contradict / conflicts with / a conflict / at odds in a sentence naming a label, trend, frame,
  *                   structure, "label and price" or a frame (4h, 1h, 15m); the same negation, conditional and question
  *                   guards; the candle reaction "conflicting" is not one
  *   namesConflict(text, ctx)        opposingFact or conflictWords (the raw read, either way)
  *   calledLabelStale(text)          a label, trend or frame said to lag, be stale or behind price, not to have flipped
  *                   / turned YET, or not to have caught up; not negated in its clause ("not stale", "would not call
- *                   it stale", "no longer lagging"), not conditional, not "a lagging indicator", nor "has not flipped"
+ *                   it stale", "no longer lagging", "far from stale") or denied later in its sentence ("looks lagging
+ *                   but I would not call it stale"), not conditional, not "a lagging indicator", nor "has not flipped"
  *                   without "yet" (the trend intact)
  *   echoesState(text, line)         the answer copies a DISAGREE frame's named fact, or the line's fixed phrase
  *                   "label and price disagree", verbatim
@@ -39,10 +43,10 @@ const { outcomeOf, enters } = require('./moment-probe');
 const FRAMES = ['4h', '1h', '15m'];
 const SENTENCE = /[^.\n]+/g;
 
-const NEG_BEFORE = /(?:\bno|\bnot|\bnothing|\bwithout|\bneeds?|\bwould need|\brequires?|\bwait(?:ing)? for|\buntil|\babsent|\bnever)\s+(?:a\s+|an\s+|the\s+|any\s+)?$/i;
-const NEG_AFTER = /^[^.;\n]{0,30}\b(?:absent|none|not present|is not met|needed|is missing|does not exist|doesn't exist)\b/i;
-const NEG_GAP = /\b(?:no|not|without|needs?|never|would|could|might|if)\b/i;
-const COND = /\b(?:would|could|might|if|whether|unless)\b/i;
+const NEG_BEFORE = /(?:\bno|\bnot|\bnothing|\bwithout|\bneeds?|\bwould need|\brequires?|\bwait(?:ing)? for|\bwatch(?:ing)? for|\blook(?:ing)? for|\bonly after|\buntil|\babsent|\bnever)\s+(?:a\s+|an\s+|the\s+|any\s+)?$/i;
+const NEG_AFTER = /^[^.;\n]{0,30}\b(?:absent|none|not present|is not met|needed|(?:still )?required|is missing|does not exist|doesn't exist)\b/i;
+const NEG_GAP = /\b(?:no|not|without|needs?|never|would|could|might|may|should|if|lacks?|lacking|missing)\b|n't\b/i;
+const COND = /\b(?:would|could|might|should|if|whether|unless)\b/i;
 const COND_AFTER = /^[^.;\n,]{0,25}\b(?:would|could|might)\b/i;
 const QUESTION = /^[^.;\n!]*\?/;
 
@@ -76,7 +80,7 @@ function opposingFact(text, { labels = {} } = {}) {
 const TRANSITION = /\btransition\b/gi;
 const REGIME_BEFORE = /\bregime\b[^.\n]{0,20}$/i;
 const SESSION_BEFORE = /\b(?:session|morning|midday|lunch|opening|open|time|clock|hour|window|day)\s+$/i;
-const SESSION_AFTER = /^\s*(?:period|window|hour|time|phase|zone|into|to|at)\b/i;
+const SESSION_AFTER = /^\s*(?:period|window|hour|time|phase|zone|regime|into|to|at)\b/i;
 const DISAGREE = /\b(?:disagree(?:s|ment)?|contradict(?:s|ed|ion|ing)?|conflicts? with|a conflict|at odds)\b/gi;
 const STATE_WORD = /\b(?:labels?|trends?|frames?|structure|4h|1h|15m)\b/i;
 
@@ -94,7 +98,9 @@ function conflictWords(text) {
 const namesConflict = (text, ctx = {}) => opposingFact(text, ctx) || conflictWords(text);
 
 const STALE = /\b(?:label|trend|4h|1h|15m)\b[^.\n]{0,40}?\b(lags?|lagging|stale|behind (?:price|the move)|(?:has not|hasn't) (?:flipped|turned) yet|(?:not yet|yet to|still to) (?:flip(?:ped)?|turn(?:ed)?)|(?:has not|hasn't|not yet|yet to) (?:catch up|caught up))\b/gi;
-const STALE_NEG = /\b(?:not|never|no longer)\b|n't\b/i;
+const STALE_NEG = /\b(?:not|never|no longer|far from)\b|n't\b/i;
+// Later in the same sentence, the answer's own verdict denies it ("looks lagging but I would not call it stale").
+const STALE_DENIED = /^[^.;\n]*?(?:\b(?:not|never)\b|n't\b)[^.;\n]{0,25}\b(?:stale|lagging|lags?)\b/i;
 
 function calledLabelStale(text) {
   const t = String(text || '');
@@ -102,7 +108,7 @@ function calledLabelStale(text) {
     const at = m.index + m[0].length - m[1].length;
     const clause = t.slice(0, at).split(/[.;:\n]/).at(-1);
     if (COND.test(clause)) continue;
-    if (/^(?:lag|stale|behind)/i.test(m[1]) && STALE_NEG.test(clause)) continue;
+    if (/^(?:lag|stale|behind)/i.test(m[1]) && (STALE_NEG.test(clause) || STALE_DENIED.test(t.slice(m.index + m[0].length)))) continue;
     if (/^lag/i.test(m[1]) && /^\s+indicator/i.test(t.slice(m.index + m[0].length))) continue;
     return true;
   }

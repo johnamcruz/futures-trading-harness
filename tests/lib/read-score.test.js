@@ -64,7 +64,7 @@ test('namesConflict: transition and disagreement words, never the regime\'s own 
 test('conflictWords: not the session\'s transition, not a conditional or a question, not price against a stop', () => {
   for (const text of ['We are in the morning transition period before 10:00.', 'Transition into lunch: stand aside.', 'Session transition at 11:00 ET.',
     'Regime transitional phase; volume thin.', 'It would be in transition if the 1h closed above its high.', 'Is the 1h in transition? It is not.',
-    'Price and my stop disagree by two ticks.', 'If the 1h label and its candle disagree, I wait.', 'The morning transition is over; flat.'])
+    'Price and my stop disagree by two ticks.', 'If the 1h label and its candle disagree, I wait.', 'The morning transition is over; flat.', 'ADX 19, a transition regime on the 3m.'])
     assert.strictEqual(R.conflictWords(text), false, text);
   for (const text of ['The 1h is in transition.', 'A transition: the 1h label is down, its candle up.', 'The 1h label and price disagree.'])
     assert.strictEqual(R.conflictWords(text), true, text);
@@ -74,7 +74,7 @@ test('opposingFact: the fact named before its frame counts; a conditional, a que
   for (const text of ['CHoCH up on the 1h at 09:45.', 'A bullish engulfing on the 1h.', 'The 1h label is down, yet the 1h CHoCH up says it turned.', 'The 1h down label is contradicted by its own CHoCH up.'])
     assert.strictEqual(R.opposingFact(text, DOWN_1H), true, text);
   for (const text of ['If the 1h prints a CHoCH up, the short is off.', 'The 1h might be turning: a CHoCH up would confirm.', 'The 1h CHoCH up? Not printed.',
-    'A 1h displacement up would end it.', 'The 1h could print a CHoCH up later.', '4h range, 1h down, 15m up (CHoCH up), short only.', 'CHoCH up on the 15m, the 1h still down.'])
+    'A 1h displacement up would end it.', 'The 1h could print a CHoCH up later.', 'Only after a 1h CHoCH up do I consider longs.','4h range, 1h down, 15m up (CHoCH up), short only.', 'CHoCH up on the 15m, the 1h still down.'])
     assert.strictEqual(R.opposingFact(text, DOWN_1H), false, text);
 });
 
@@ -122,6 +122,15 @@ test('readOf: a fact copied verbatim from the line is an echo, not an opposing f
   assert.strictEqual(r.opposingFact, false);
   assert.strictEqual(r.ownConflict, false);
   assert.strictEqual(R.readOf(copy, { ...DOWN_1H, line: null }).opposingFact, true, 'no line shown: nothing to copy, its own words');
+});
+
+test('the round-2 adversarial answers (tests/fixtures/read-score/adversarial-2.json): each exact; an accepted miss stays a miss', () => {
+  const fx = require('../fixtures/read-score/adversarial-2.json');
+  for (const a of fx.answers) {
+    const r = R.readOf(a.text, { labels: fx.labels, line: fx.line });
+    assert.strictEqual(r.ownConflict, a.conflict && !a.accepted, `conflict: ${a.text}`);
+    assert.strictEqual(r.calledLabelStale, a.stale, `stale: ${a.text}`);
+  }
 });
 
 test('the adversarial answers (tests/fixtures/read-score/adversarial.json): own-words conflict and stale, each exact', () => {

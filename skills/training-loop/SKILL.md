@@ -115,10 +115,14 @@ the recorded prompt vs a changed one on recorded cycles.
 
 - Skill fix, outcome word: `node scripts/moment-probe.js --moments
   m.json --tree <root> --k 3 --timeout-ms 600000`.
-- Briefing change, reads: `--patch <patch.json | state-line>` (a patch
-  file, or each cycle's State line read back from its briefing). Moments:
-  `node scripts/probe-moments.js --home <run home> --days <d1,d2> --out
-  m.json` (`change`: a 1h/15m disagreement; `hold`: the frames agree).
+- Briefing change, reads: `--patch <patch.json>` (a JSON patch: works
+  now) or `--patch state-line` (each cycle's State line read back from its
+  briefing). Moments: `node scripts/probe-moments.js --home <run home>
+  --days <d1,d2> --out m.json` (`change`: a 1h/15m disagreement; `hold`:
+  the frames agree).
+- `state-line` and `probe-moments.js` need the State line's module and its
+  `stateRangeAtr` config (branch `feat/state-line`): merge it first; they
+  refuse, saying so, until then.
 - Counts per arm an opposing fact in own words (the headline), words
   only, echo, calledLabelStale, decision: data, never a pass. A hold's
   conflict is a false one.

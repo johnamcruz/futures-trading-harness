@@ -7,7 +7,8 @@
  * logs/cycles/DAY/*-trade.json, classified by its own State (scripts/lib/trading/frame-state.js, read back from the
  * recorded briefing): `change` when its 1h or 15m label disagrees with its own last break or strong last candle, `hold`
  * when the frames agree (none disagrees or is unknown, at least one agrees), holds from the change cycles' days only.
- * Reads only; the moments file stays outside the repo.
+ * Reads only; the moments file stays outside the repo. Needs scripts/lib/trading/frame-state.js and config/analysis.json
+ * briefing.stateRangeAtr (the feat/state-line branch: merge it first; until then it refuses, naming what is missing).
  *
  *   node scripts/probe-moments.js --home <run home> [--home <run home> ...] [--days 2021-05-11,2021-05-19] [--all-days] --out <moments.json>
  *

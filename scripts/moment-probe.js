@@ -21,7 +21,9 @@
  * The new arm is the recorded prompt patched: a patch file (one patch or a list, briefing-patch.js: anchor `line` or
  * `match`, op before | after | replace | remove, `text`, `within`, `unless`), or `state-line`: each cycle's own State
  * line (scripts/lib/trading/frame-state.js, read back from its recorded briefing) inserted before `- Alignment:`; a
- * patched block's footer sha256 is recomputed. With --tree, the tree's skill blocks too. Both arms are asked k times,
+ * patched block's footer sha256 is recomputed. A patch file works on any checkout; `state-line` (and
+ * scripts/probe-moments.js) needs scripts/lib/trading/frame-state.js and config/analysis.json briefing.stateRangeAtr,
+ * which come with the feat/state-line branch: merge it first (until then both refuse, naming what is missing). With --tree, the tree's skill blocks too. Both arms are asked k times,
  * always; each answer is scored for an opposing fact in its own words (the headline), conflict words, calledLabelStale,
  * echoesState and its decision (counts, never a pass or fail). Moments: { id, set: "change" | "hold", cycle } (`want`
  * ignored; ids end in the cycle file's UTC HHMMSS, the briefing's times are ET); make them from run homes with
