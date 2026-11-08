@@ -110,6 +110,19 @@ one brings its proposal with
 `node scripts/train-loop.js import-proposal --config loop.json --file
 proposal.json --approved-by <name>`, and it is judged like any other.
 
+**Moment probe** (user-run, calls a model; minutes, before any replay):
+the recorded prompt vs a changed one on recorded cycles.
+
+- Skill fix, outcome word: `node scripts/moment-probe.js --moments
+  m.json --tree <root> --k 3 --timeout-ms 600000`.
+- Briefing change, reads: `--patch <patch.json | state-line>` (a patch
+  file, or each cycle's State line read back from its briefing). Moments:
+  `node scripts/probe-moments.js --home <run home> --days <d1,d2> --out
+  m.json` (`change`: a 1h/15m disagreement; `hold`: the frames agree).
+- Counts per arm namesConflict, calledLabelStale, echo, decision: data,
+  never a pass. A hold's namesConflict is a false one.
+- A cycle with no system file in its argv: `--system <head prompt file>`.
+
 **Safety.** One loop at a time (`<FTH_HOME>/training/loop.lock`). It
 refuses to run while a live runner holds the account. The limits stop it
 between model calls; a re-run resumes where it stopped. A model's proposals
