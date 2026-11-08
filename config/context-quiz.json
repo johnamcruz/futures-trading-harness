@@ -910,16 +910,16 @@
       "id": "q70",
       "layer": "approval",
       "prompt": "head+risk",
-      "text": "Phase 1 reads the journal: the account is tradable, no daily limit, cooldown, floor, blackout or entry block applies, and a lesson from three weeks ago says \"target-leg cancel: its cause is not journaled, and no lift appears\". May phase 1 list a stand-down that bars all of today's entries on that lesson?",
+      "text": "Phase 1 reads the journal: the account is tradable, no daily limit, cooldown, floor, blackout or entry block applies, and a lesson from three weeks ago says \"target-leg cancel: its cause is not journaled, and no lift appears\". May phase 1 base a stand-down on that lesson alone?",
       "rule": "a phase-1 stand-down rests only on the account's facts and the stops on them (strategy-library, the priority order's step 1); a lesson is advice, a read in the count, never the reason to pass",
       "anchor": "Never on a lesson, a review's notes or earlier reasoning: a lesson is advice",
       "required": [
         "^[\\W_]*(no\\b|nope|not\\b|never)",
-        "\\baccount\\b|\\bhard[- ]stops?\\b|\\bstops on them\\b|\\badvice\\b|\\bweigh\\w*|\\bthe count\\b|\\ba read\\b|\\brule or a block\\b|\\bgate\\b|\\brulebook\\b"
+        "\\baccount\\b|\\bhard[- ]stops?\\b|\\bstops on them\\b|\\badvice\\b|\\bweigh\\w*|\\bthe count\\b|\\ba read\\b|\\brule or a block\\b|\\bgate\\b|\\brulebook\\b|\\bnot\\b[^.;]*\\blessons?\\b|\\blessons?\\b[^.;]*\\b(?:not|never|only)\\b"
       ],
       "forbidden": [
-        "(?<!\\bmak(?:e|es|ing)\\s+(?:phase[- ]1\\s+|it\\s+|the\\s+desk\\s+)?)\\bstand(?:s|ing)?\\s+(?:down|aside)\\b(?!\\s+only\\b)",
-        "(?<!\\b(?:stops?|facts?|limits?|gate|blocks?)\\s+(?:can\\s+|may\\s+|do\\s+)?)\\b(?:bars?|blocks?|restricts?)\\s+(?:today'?s\\s+|all\\s+|the\\s+)?entries\\b|\\bentries\\s+(?:are\\s+|stay\\s+|remain\\s+)?(?:barred|blocked|restricted)\\b",
+        "(?<!\\bonly\\s+)(?<!\\bmak(?:e|es|ing)\\s+(?:phase[- ]1\\s+|it\\s+|the\\s+desk\\s+)?)\\bstand(?:s|ing)?\\s+(?:down|aside)\\b(?!\\s+only\\b)",
+        "(?<!\\breason\\s+to\\s+)(?<!\\bstand[- ]down\\s+that\\s+)(?<!\\b(?:stops?|facts?|limits?|gate|blocks?)\\s+(?:can\\s+|may\\s+|do\\s+)?)\\b(?:bars?|blocks?|restricts?)\\s+(?:today'?s\\s+|all\\s+|the\\s+)?entries\\b|\\bentries\\s+(?:are\\s+|stay\\s+|remain\\s+)?(?:barred|blocked|restricted)\\b",
         "(?<!\\breason\\s+to\\s+)(?<!\\breason\\s+to\\s+veto\\s+or\\s+)\\b(?:i'?d\\s+|i would\\s+|then\\s+|so\\s+|still\\s+)?(?:veto|pass|skip)(?:es|ed|ing)?\\b(?!\\s+(?:only|if|when|unless)\\b)",
         "\\buntil\\b[^.;]*\\b(?:journal\\w*|lift\\w*|cleared|fixed|explained)\\b",
         "\\bignor\\w*|\\birrelevant\\b|\\bdisregard\\w*",
