@@ -36,6 +36,17 @@
  *                   no State line was shown (with one shown, the words alone may be the line's: never own words).
  *                   decision: the CYCLE RESULT outcome (moment-probe outcomeOf; executed counts as planned), or null
  *   FRAMES                          the frames read, top-down: 4h, 1h, 15m
+ *
+ * Further guards on every match: an absence word earlier in its clause ("nothing", "none", "nor", "neither", "no
+ * sign / evidence of"), a frame named right after a fact owns it ("..., a bearish engulfing on the 15m"), and a past fact
+ * ("was ... ago / yesterday / last week") is not the state now; a stale question counts only when answered yes.
+ *
+ * A heuristic, measured (own-words conflict with a State line shown; stale), never perfect: on an independent
+ * reviewer's 43 adversarial answers precision 1.00, recall 0.89 (stale 1.00 / 1.00); on 30 fresh answers written after
+ * the last fix precision 9/9, recall 9/10 (stale 4/4, 4/4); the fixtures in tests/fixtures/read-score/ pass exactly
+ * because they were written with the fixes (optimistic). Known misses: words outside the briefing's vocabulary
+ * ("engulfed bullishly"), "transitioning" (only "transition" is read, by design), a fact after a negated verb in the
+ * gap ("has not caught up with the BOS up"). Read its counts as a screen, and check a sample of answers by hand.
  */
 
 const { outcomeOf, enters } = require('./moment-probe');
@@ -43,18 +54,24 @@ const { outcomeOf, enters } = require('./moment-probe');
 const FRAMES = ['4h', '1h', '15m'];
 const SENTENCE = /[^.\n]+/g;
 
-const NEG_BEFORE = /(?:\bno|\bnot|\bnothing|\bwithout|\bneeds?|\bwould need|\brequires?|\bwait(?:ing)? for|\bwatch(?:ing)? for|\blook(?:ing)? for|\bonly after|\buntil|\babsent|\bnever)\s+(?:a\s+|an\s+|the\s+|any\s+)?$/i;
+const NEG_BEFORE = /(?:\bno|\bnot|n't|\bnothing|\bwithout|\bneeds?|\bwould need|\brequires?|\bwait(?:ing)? for|\bwatch(?:ing)? for|\blook(?:ing)? for|\bonly after|\buntil|\babsent|\bnever)\s+(?:a\s+|an\s+|the\s+|any\s+)?$/i;
 const NEG_AFTER = /^[^.;\n]{0,30}\b(?:absent|none|not present|is not met|needed|(?:still )?required|is missing|does not exist|doesn't exist)\b/i;
 const NEG_GAP = /\b(?:no|not|without|needs?|never|would|could|might|may|should|if|lacks?|lacking|missing)\b|n't\b/i;
 const COND = /\b(?:would|could|might|should|if|whether|unless)\b/i;
 const COND_AFTER = /^[^.;\n,]{0,25}\b(?:would|could|might)\b/i;
 const QUESTION = /^[^.;\n!]*\?/;
+// An absence word anywhere earlier in the clause ("Nothing on the 1h looks like a CHoCH down", "no sign of a ...").
+const CLAUSE_NEG = /\b(?:nothing|none|nor|neither|no (?:sign|evidence|hint) of)\b/i;
+// A past fact, not the state now ("the last 1h CHoCH down was three days ago", "was stale yesterday").
+const HISTORY = /\bwas\b[^.;\n]*\b(?:ago|yesterday|last (?:week|session|month|night))\b/i;
+const clauseOf = (text, start, end) => text.slice(0, start).split(/[.;:\n]/).at(-1) + text.slice(start, end) + text.slice(end).split(/[.;:\n]/)[0];
 
-/** A match at [start, end) stands: not negated, conditional or asked (`gapText`: the frame-to-fact gap). */
+/** A match at [start, end) stands: not negated, conditional, asked or historical (`gapText`: the frame-to-fact gap). */
 function stands(text, start, end, gapText = '') {
   const before = text.slice(0, start).split(/[.;\n]/).at(-1);
   const after = text.slice(end);
-  return !(NEG_BEFORE.test(before) || COND.test(before.split(',').at(-1)) || NEG_AFTER.test(after) || COND_AFTER.test(after) || QUESTION.test(after) || NEG_GAP.test(gapText));
+  return !(NEG_BEFORE.test(before) || CLAUSE_NEG.test(before.split(':').at(-1)) || COND.test(before.split(',').at(-1)) || NEG_AFTER.test(after) || COND_AFTER.test(after)
+    || QUESTION.test(after) || NEG_GAP.test(gapText) || HISTORY.test(clauseOf(text, start, end)));
 }
 
 /** True when one match of `re` in text stands (`gapOf(m)`: its frame-to-fact gap). */
@@ -69,7 +86,9 @@ const AFTER_FACT = gap('15');
 function opposing(tf, label) {
   const up = label === 'down'; // the other way
   const facts = [`(?:choch|bos)\\s+${up ? 'up' : 'down'}`, `${up ? 'bullish' : 'bearish'} engulfing`, `displacement\\s+${up ? 'up' : 'down'}`, `closed ${up ? 'above its high' : 'below its low'}`];
-  return facts.flatMap(f => [new RegExp(`\\b${tf}\\b${NEAR}\\b${f}\\b`, 'gi'), new RegExp(`\\b${f}\\b${AFTER_FACT}\\b(?:on|in|for) (?:the )?${tf}\\b`, 'gi')]);
+  // A frame named right after the fact owns it ("The 1h stays up, a bearish engulfing on the 15m" is the 15m's).
+  const owned = '(?![^.\\n;?]{0,15}?\\b(?:on|in|for) (?:the )?\\d+[mh]\\b)';
+  return facts.flatMap(f => [new RegExp(`\\b${tf}\\b${NEAR}\\b${f}\\b${owned}`, 'gi'), new RegExp(`\\b${f}\\b${AFTER_FACT}\\b(?:on|in|for) (?:the )?${tf}\\b`, 'gi')]);
 }
 
 function opposingFact(text, { labels = {} } = {}) {
@@ -98,7 +117,7 @@ function conflictWords(text) {
 const namesConflict = (text, ctx = {}) => opposingFact(text, ctx) || conflictWords(text);
 
 const STALE = /\b(?:label|trend|4h|1h|15m)\b[^.\n]{0,40}?\b(lags?|lagging|stale|behind (?:price|the move)|(?:has not|hasn't) (?:flipped|turned) yet|(?:not yet|yet to|still to) (?:flip(?:ped)?|turn(?:ed)?)|(?:has not|hasn't|not yet|yet to) (?:catch up|caught up))\b/gi;
-const STALE_NEG = /\b(?:not|never|no longer|far from)\b|n't\b/i;
+const STALE_NEG = /\b(?:not|never|no longer|far from|nothing|no)\b|n't\b/i;
 // Later in the same sentence, the answer's own verdict denies it ("looks lagging but I would not call it stale").
 const STALE_DENIED = /^[^.;\n]*?(?:\b(?:not|never)\b|n't\b)[^.;\n]{0,25}\b(?:stale|lagging|lags?)\b/i;
 
@@ -107,7 +126,10 @@ function calledLabelStale(text) {
   for (const m of t.matchAll(STALE)) {
     const at = m.index + m[0].length - m[1].length;
     const clause = t.slice(0, at).split(/[.;:\n]/).at(-1);
-    if (COND.test(clause)) continue;
+    const after = t.slice(m.index + m[0].length);
+    if (COND.test(clause) || HISTORY.test(clauseOf(t, at, m.index + m[0].length))) continue;
+    // Asked: only an answer of yes calls it stale ("Is the 1h label stale? No, it flipped" does not).
+    if (QUESTION.test(after) && !/^[^?]*\?\s*yes\b/i.test(after)) continue;
     if (/^(?:lag|stale|behind)/i.test(m[1]) && (STALE_NEG.test(clause) || STALE_DENIED.test(t.slice(m.index + m[0].length)))) continue;
     if (/^lag/i.test(m[1]) && /^\s+indicator/i.test(t.slice(m.index + m[0].length))) continue;
     return true;

@@ -124,6 +124,16 @@ test('readOf: a fact copied verbatim from the line is an echo, not an opposing f
   assert.strictEqual(R.readOf(copy, { ...DOWN_1H, line: null }).opposingFact, true, 'no line shown: nothing to copy, its own words');
 });
 
+test('the round-3 adversarial answers (tests/fixtures/read-score/adversarial-3.json): own-words conflict, stale and words, each exact', () => {
+  const fx = require('../fixtures/read-score/adversarial-3.json');
+  for (const a of fx.answers) {
+    const r = R.readOf(a.text, { labels: fx.labels, line: fx.line });
+    assert.strictEqual(r.ownConflict, a.conflict, `conflict: ${a.text}`);
+    assert.strictEqual(r.calledLabelStale, a.stale, `stale: ${a.text}`);
+    assert.strictEqual(R.conflictWords(a.text), a.words, `words: ${a.text}`);
+  }
+});
+
 test('the round-2 adversarial answers (tests/fixtures/read-score/adversarial-2.json): each exact; an accepted miss stays a miss', () => {
   const fx = require('../fixtures/read-score/adversarial-2.json');
   for (const a of fx.answers) {

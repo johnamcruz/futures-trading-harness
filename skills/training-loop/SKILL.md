@@ -126,6 +126,9 @@ the recorded prompt vs a changed one on recorded cycles.
 - Counts per arm an opposing fact in own words (the headline), words
   only, echo, calledLabelStale, decision: data, never a pass. A hold's
   conflict is a false one.
+- The scorer is a regex heuristic: about 1.00 precision, 0.9 recall on
+  adversarial answers (`read-score.js` header). A screen: check a sample
+  of answers by hand.
 - `read-back unknown`: a frame the recorded text can't read (an omitted
   4h) that live would; weigh those moments apart.
 - Ids end in the cycle file's UTC HHMMSS; the briefing's times are ET.
