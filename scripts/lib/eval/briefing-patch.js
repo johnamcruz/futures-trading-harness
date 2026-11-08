@@ -27,7 +27,9 @@
  *   frameStatesFor(cycle, fs?)       -> the frames' states for a recorded cycle, or null
  *   stateLinePatch(line)             -> the patch inserting `line` before `- Alignment:` in the runner's briefing, once
  *   statePatch(cycle, fs?)           -> stateLinePatch of the cycle's own State line, or null
- *   loadFrameState(req?)             -> { frameStates, stateLine } of scripts/lib/trading/frame-state.js
+ *   loadFrameState(req?)             -> { frameStates, stateLine } of scripts/lib/trading/frame-state.js; throws without
+ *                                       it or without config/analysis.json briefing.stateRangeAtr
+ *   reseal(before, after)            -> { prompt, resealed, unsealed }  each changed block's footer sha256 recomputed
  *
  * `fs` is { frameStates, stateLine } with frame-state.js's interface; by default that module, loaded only when asked.
  *
@@ -37,6 +39,8 @@
  * close against its `et` clock), so a time across a DST change is an hour off. Where the live briefing has data the text
  * leaves out (a 4h candle the summary omits: an event frame), the read-back has none and the frame reads unknown.
  */
+
+const crypto = require('crypto');
 
 const BRIEFING = Object.freeze({ from: '--- bar_briefing', to: '--- end of bar_briefing' });
 const OPS = ['before', 'after', 'replace', 'remove'];
@@ -217,13 +221,53 @@ function frameLabels(prompt) {
 // ---- the State line (scripts/lib/trading/frame-state.js, loaded only when asked)
 
 function loadFrameState(req = require) {
+  let m;
   try {
-    const m = req('../trading/frame-state');
+    m = req('../trading/frame-state');
     if (typeof m.frameStates !== 'function' || typeof m.stateLine !== 'function') throw new Error('no frameStates or stateLine');
-    return m;
   } catch (e) {
     throw new Error(`the State line patch needs scripts/lib/trading/frame-state.js (frameStates, stateLine) on this checkout: ${e.message}`, { cause: e });
   }
+  // Its candle strength reads config/analysis.json briefing.stateRangeAtr: a checkout without it would read every candle wrong.
+  const briefing = ((req('../tunables').analysis() || {}).briefing) || {};
+  if (typeof briefing.stateRangeAtr !== 'number' || !Number.isFinite(briefing.stateRangeAtr)) throw new Error('the State line patch needs config/analysis.json briefing.stateRangeAtr (a number) on this checkout');
+  return m;
+}
+
+// ---- the blocks' seals (cycle-data.js: "--- end of <tool> <args> (sha256 <hex of the block's text>) ---")
+
+const FOOTER = /^--- end of (\S+) .*\(sha256 ([0-9a-f]+)\) ---$/gm;
+const sha256 = text => crypto.createHash('sha256').update(String(text)).digest('hex');
+
+/** Each sealed block: { tool, hash, text, at (the hash's index) }; its text is between its header line and its footer. */
+function blocksOf(prompt) {
+  return [...prompt.matchAll(FOOTER)].map(m => {
+    const head = prompt.lastIndexOf(`\n--- ${m[1]} `, m.index - 1);
+    const start = head < 0 && prompt.startsWith(`--- ${m[1]} `) ? 0 : head + 1;
+    const textStart = prompt.indexOf('\n', start) + 1;
+    return { tool: m[1], hash: m[2], text: prompt.slice(textStart, m.index - 1), at: m.index + m[0].lastIndexOf(m[2]) };
+  });
+}
+
+/**
+ * The prompt `after` (a patch of `before`) with each changed block's footer sha256 recomputed, so the seal matches the
+ * text shown; a block whose recorded seal did not match its recorded text is left as recorded (`unsealed`).
+ */
+function reseal(before, after) {
+  const old = blocksOf(String(before));
+  let out = String(after);
+  const resealed = [];
+  const unsealed = [];
+  const now = blocksOf(out);
+  for (let i = now.length - 1; i >= 0; i -= 1) {
+    const b = now[i];
+    if (sha256(b.text) === b.hash) continue;
+    const o = old[i];
+    if (!o || o.tool !== b.tool || sha256(o.text) !== o.hash) { unsealed.unshift(b.tool); continue; }
+    out = out.slice(0, b.at) + sha256(b.text) + out.slice(b.at + b.hash.length);
+    resealed.unshift(b.tool);
+  }
+  return { prompt: out, resealed, unsealed };
 }
 
 function frameStatesFor(cycle, fs = loadFrameState()) {
@@ -246,4 +290,4 @@ function statePatch(cycle, fs = loadFrameState()) {
   return line ? stateLinePatch(line) : null;
 }
 
-module.exports = { BRIEFING, validatePatch, applyPatch, applyPatches, briefingInputs, frameLabels, loadFrameState, frameStatesFor, stateLineFor, stateLinePatch, statePatch };
+module.exports = { BRIEFING, validatePatch, applyPatch, applyPatches, briefingInputs, frameLabels, loadFrameState, frameStatesFor, stateLineFor, stateLinePatch, statePatch, reseal };

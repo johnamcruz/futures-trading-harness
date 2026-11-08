@@ -180,9 +180,34 @@ test('statePatch: inserts the line right before Alignment inside the runner brie
   assert.strictEqual(B.statePatch({ prompt: 'nothing' }, stub), null);
 });
 
-test('loadFrameState: a checkout without the module says what it needs', () => {
+test('loadFrameState: a checkout without the module, or without its stateRangeAtr tunable, says what it needs', () => {
   const req = () => { const e = new Error('Cannot find module'); e.code = 'MODULE_NOT_FOUND'; throw e; };
   assert.throws(() => B.loadFrameState(req), /State line .*frame-state\.js/);
   const mod = { frameStates: () => ({}), stateLine: () => '' };
-  assert.strictEqual(B.loadFrameState(() => mod).frameStates, mod.frameStates);
+  const withRange = v => n => (n === '../tunables' ? { analysis: () => ({ briefing: v === undefined ? {} : { stateRangeAtr: v } }) } : mod);
+  assert.strictEqual(B.loadFrameState(withRange(1.5)).frameStates, mod.frameStates);
+  assert.throws(() => B.loadFrameState(withRange(undefined)), /stateRangeAtr/);
+  assert.throws(() => B.loadFrameState(withRange('1.5')), /stateRangeAtr/);
+});
+
+const crypto = require('crypto');
+const sha = t => crypto.createHash('sha256').update(t).digest('hex');
+const sealed = (text, hash = sha(text)) => `--- bar_briefing {"symbol":"MNQ"} as of 2021-05-11T14:03:00.000Z ---\n${text}\n--- end of bar_briefing {"symbol":"MNQ"} (sha256 ${hash}) ---\n--- get_x {} as of t ---\nx\n--- end of get_x {} (sha256 ${sha('x')}) ---\n`;
+
+test('reseal: a patched block\'s footer sha256 is recomputed from its new text; an untouched block keeps its own', () => {
+  const before = `intro\n${sealed('Summary:\n- Alignment: a.')}`;
+  const after = before.replace('- Alignment: a.', '- State (x): y.\n- Alignment: a.');
+  const r = B.reseal(before, after);
+  assert.strictEqual(r.prompt, `intro\n${sealed('Summary:\n- State (x): y.\n- Alignment: a.')}`);
+  assert.deepStrictEqual(r.resealed, ['bar_briefing']);
+  assert.deepStrictEqual(r.unsealed, []);
+  assert.deepStrictEqual(B.reseal(before, before), { prompt: before, resealed: [], unsealed: [] });
+});
+
+test('reseal: a block whose RECORDED hash did not match its text is left as recorded and reported', () => {
+  const before = sealed('Summary:\n- Alignment: a.', 'f'.repeat(64));
+  const after = before.replace('- Alignment: a.', '- Alignment: b.');
+  const r = B.reseal(before, after);
+  assert.strictEqual(r.prompt, after);
+  assert.deepStrictEqual(r.unsealed, ['bar_briefing']);
 });

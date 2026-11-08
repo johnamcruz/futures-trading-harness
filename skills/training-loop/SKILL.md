@@ -119,9 +119,15 @@ the recorded prompt vs a changed one on recorded cycles.
   file, or each cycle's State line read back from its briefing). Moments:
   `node scripts/probe-moments.js --home <run home> --days <d1,d2> --out
   m.json` (`change`: a 1h/15m disagreement; `hold`: the frames agree).
-- Counts per arm namesConflict, calledLabelStale, echo, decision: data,
-  never a pass. A hold's namesConflict is a false one.
-- A cycle with no system file in its argv: `--system <head prompt file>`.
+- Counts per arm an opposing fact in own words (the headline), words
+  only, echo, calledLabelStale, decision: data, never a pass. A hold's
+  conflict is a false one.
+- `read-back unknown`: a frame the recorded text can't read (an omitted
+  4h) that live would; weigh those moments apart.
+- Ids end in the cycle file's UTC HHMMSS; the briefing's times are ET.
+- A cycle with no system file in its argv: `--system <head prompt file>`
+  (both arms). `--system-new <file>`: the new arm's own; it confounds the
+  line with its skill text, so never compare it with a same-system run.
 
 **Safety.** One loop at a time (`<FTH_HOME>/training/loop.lock`). It
 refuses to run while a live runner holds the account. The limits stop it

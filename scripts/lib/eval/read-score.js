@@ -3,29 +3,35 @@
 /**
  * The read scorer: whether a model answer NAMES a market-state read, from small closed regex families (data, counted;
  * never a pass or fail on the decision: the State line is a fact to weigh, not a rule). Context: `labels`, each frame's
- * trend label ('up' | 'down' | 'range') as the moment's briefing shows it (labelsOf(states)), and `line`, the State line
- * the new arm was shown (for echoesState).
+ * trend label ('up' | 'down' | 'range') as the moment's briefing shows it, and `line`, the State line this arm was shown
+ * (null for the recorded prompt).
  *
- *   namesConflict(text, { labels })   any of:
- *     transition    "transition" said of the market, not of the regime's own label ("Regime: transition", "regime is
- *                   transition"); not negated ("no transition")
- *     disagreement  disagree / contradict / conflicts with / a conflict / at odds, in a sentence naming a label, trend,
- *                   frame, structure, price or a frame (4h, 1h, 15m); not negated ("no conflict", "nothing contradicts");
- *                   the candle reaction "conflicting" is not one
- *     opposing fact per frame labelled up or down, a fact the other way within a few words of the frame: its break
- *                   (CHoCH or BOS that way), its candle (that side's engulfing, a displacement that way, closed above
- *                   its high / below its low). Not when needed, absent or negated: before it "no", "without", "need(s)",
- *                   "would need", "require(s)", "wait for", "until", "absent"; between the frame and the fact "no", "not",
- *                   "without", "need"; after it "absent", "none", "not present", "is not met", "needed", "is missing",
- *                   "does not exist"; nor when another frame is named in between ("1h down, 15m CHoCH up" is the 15m's)
- *   calledLabelStale(text)            a label, trend or frame said to lag, be stale or behind price, not to have
- *                   flipped / turned YET, or not to have caught up; not "not stale", "no longer lagging", nor "has not
- *                   flipped" without "yet" (the trend intact)
- *   echoesState(text, line)           the answer copies a DISAGREE frame's named fact, or the line's fixed phrase
- *                   "label and price disagree", verbatim (a copy is not a read: counted apart)
- *   readOf(text, { labels, line })    -> { namesConflict, calledLabelStale, echoesState, decision }  decision: the
- *                   CYCLE RESULT outcome (moment-probe outcomeOf; executed counts as planned), or null
- *   FRAMES                            the frames read, top-down: 4h, 1h, 15m
+ *   opposingFact(text, { labels })  a fact against a frame labelled up or down, the frame named next to it: its break
+ *                   (CHoCH or BOS the other way), its candle (that side's engulfing, a displacement that way, closed
+ *                   above its high / below its low); "1h ... CHoCH up" (within a few words, no other frame named in
+ *                   between) or "CHoCH up on the 1h". Not when negated, needed or absent ("no", "without", "need(s)",
+ *                   "would need", "require(s)", "wait for", "until", "absent" before it; "no", "not", "without", "need"
+ *                   between; "absent", "none", "not present", "is not met", "needed", "is missing", "does not exist"
+ *                   after), nor conditional ("would", "could", "might", "if", "whether", "unless" in its clause before
+ *                   it or between; "would", "could", "might" just after), nor asked ("... CHoCH up? Not printed")
+ *   conflictWords(text)             "transition" said of the market (not the regime's label, "Regime: transition"; not the
+ *                   session's: "morning transition", "transition period", "transition into lunch"), or disagree /
+ *                   contradict / conflicts with / a conflict / at odds in a sentence naming a label, trend, frame,
+ *                   structure, "label and price" or a frame (4h, 1h, 15m); the same negation, conditional and question
+ *                   guards; the candle reaction "conflicting" is not one
+ *   namesConflict(text, ctx)        opposingFact or conflictWords (the raw read, either way)
+ *   calledLabelStale(text)          a label, trend or frame said to lag, be stale or behind price, not to have flipped
+ *                   / turned YET, or not to have caught up; not negated in its clause ("not stale", "would not call
+ *                   it stale", "no longer lagging"), not conditional, not "a lagging indicator", nor "has not flipped"
+ *                   without "yet" (the trend intact)
+ *   echoesState(text, line)         the answer copies a DISAGREE frame's named fact, or the line's fixed phrase
+ *                   "label and price disagree", verbatim
+ *   readOf(text, { labels, line })  -> { namesConflict, opposingFact, conflictWords, ownConflict, calledLabelStale,
+ *                   echoesState, decision }. opposingFact and conflictWords are read with the line's copied text taken
+ *                   out; ownConflict is the conflict in the model's own words: an opposingFact, or conflictWords when
+ *                   no State line was shown (with one shown, the words alone may be the line's: never own words).
+ *                   decision: the CYCLE RESULT outcome (moment-probe outcomeOf; executed counts as planned), or null
+ *   FRAMES                          the frames read, top-down: 4h, 1h, 15m
  */
 
 const { outcomeOf, enters } = require('./moment-probe');
@@ -35,61 +41,69 @@ const SENTENCE = /[^.\n]+/g;
 
 const NEG_BEFORE = /(?:\bno|\bnot|\bnothing|\bwithout|\bneeds?|\bwould need|\brequires?|\bwait(?:ing)? for|\buntil|\babsent|\bnever)\s+(?:a\s+|an\s+|the\s+|any\s+)?$/i;
 const NEG_AFTER = /^[^.;\n]{0,30}\b(?:absent|none|not present|is not met|needed|is missing|does not exist|doesn't exist)\b/i;
-const NEG_GAP = /\b(?:no|not|without|needs?|never)\b/i;
-const OTHER_FRAME = /\b\d+[mh]\b/i; // a frame named between the frame and the fact: the fact is that frame's
+const NEG_GAP = /\b(?:no|not|without|needs?|never|would|could|might|if)\b/i;
+const COND = /\b(?:would|could|might|if|whether|unless)\b/i;
+const COND_AFTER = /^[^.;\n,]{0,25}\b(?:would|could|might)\b/i;
+const QUESTION = /^[^.;\n!]*\?/;
 
-/** Matches of `re` in text whose surroundings do not negate them (`gapOf(m)`: the part between frame and fact, if any). */
-function unnegated(text, re, gapOf = () => '') {
-  for (const m of text.matchAll(re)) {
-    const before = text.slice(0, m.index).split(/[.;\n]/).at(-1);
-    const after = text.slice(m.index + m[0].length);
-    if (NEG_BEFORE.test(before) || NEG_AFTER.test(after) || NEG_GAP.test(gapOf(m)) || OTHER_FRAME.test(gapOf(m))) continue;
-    return true;
-  }
-  return false;
+/** A match at [start, end) stands: not negated, conditional or asked (`gapText`: the frame-to-fact gap). */
+function stands(text, start, end, gapText = '') {
+  const before = text.slice(0, start).split(/[.;\n]/).at(-1);
+  const after = text.slice(end);
+  return !(NEG_BEFORE.test(before) || COND.test(before.split(',').at(-1)) || NEG_AFTER.test(after) || COND_AFTER.test(after) || QUESTION.test(after) || NEG_GAP.test(gapText));
 }
+
+/** True when one match of `re` in text stands (`gapOf(m)`: its frame-to-fact gap). */
+const unnegated = (text, re, gapOf = () => '') => [...text.matchAll(re)].some(m => stands(text, m.index, m.index + m[0].length, gapOf(m)));
+
+// A gap that never crosses another frame's name ("1h down, 15m CHoCH up" is the 15m's): a tempered token.
+const gap = n => `((?:(?!\\b\\d+[mh]\\b)[^.\\n;?]){0,${n}}?)`;
+const NEAR = gap('40');
+const AFTER_FACT = gap('15');
 
 /** The facts against a label: each pattern's first group is the frame-to-fact gap. */
 function opposing(tf, label) {
   const up = label === 'down'; // the other way
-  const way = up ? 'up' : 'down';
-  const f = `\\b${tf}\\b([^.\\n;]{0,25}?)`;
-  return [
-    new RegExp(`${f}\\b(?:choch|bos)\\s+${way}\\b`, 'gi'),
-    new RegExp(`${f}\\b${up ? 'bullish' : 'bearish'} engulfing\\b`, 'gi'),
-    new RegExp(`${f}\\bdisplacement\\s+${way}\\b`, 'gi'),
-    new RegExp(`\\b${tf}\\b([^.\\n;]{0,40}?)\\bclosed ${up ? 'above its high' : 'below its low'}`, 'gi'),
-  ];
+  const facts = [`(?:choch|bos)\\s+${up ? 'up' : 'down'}`, `${up ? 'bullish' : 'bearish'} engulfing`, `displacement\\s+${up ? 'up' : 'down'}`, `closed ${up ? 'above its high' : 'below its low'}`];
+  return facts.flatMap(f => [new RegExp(`\\b${tf}\\b${NEAR}\\b${f}\\b`, 'gi'), new RegExp(`\\b${f}\\b${AFTER_FACT}\\b(?:on|in|for) (?:the )?${tf}\\b`, 'gi')]);
 }
 
-const TRANSITION = /\btransition(?:al)?\b/gi;
-const REGIME_BEFORE = /\bregime\b[^.\n]{0,20}$/i;
-const DISAGREE = /\b(?:disagree(?:s|ment)?|contradict(?:s|ed|ion|ing)?|conflicts? with|a conflict|at odds)\b/gi;
-const STATE_WORD = /\b(?:labels?|trends?|frames?|structure|price|4h|1h|15m)\b/i;
+function opposingFact(text, { labels = {} } = {}) {
+  const t = String(text || '');
+  return FRAMES.some(tf => (labels[tf] === 'up' || labels[tf] === 'down') && opposing(tf, labels[tf]).some(re => unnegated(t, re, m => m[1] || '')));
+}
 
-function namesConflict(text, { labels = {} } = {}) {
+const TRANSITION = /\btransition\b/gi;
+const REGIME_BEFORE = /\bregime\b[^.\n]{0,20}$/i;
+const SESSION_BEFORE = /\b(?:session|morning|midday|lunch|opening|open|time|clock|hour|window|day)\s+$/i;
+const SESSION_AFTER = /^\s*(?:period|window|hour|time|phase|zone|into|to|at)\b/i;
+const DISAGREE = /\b(?:disagree(?:s|ment)?|contradict(?:s|ed|ion|ing)?|conflicts? with|a conflict|at odds)\b/gi;
+const STATE_WORD = /\b(?:labels?|trends?|frames?|structure|4h|1h|15m)\b/i;
+
+function conflictWords(text) {
   const t = String(text || '');
   for (const m of t.matchAll(TRANSITION)) {
     const before = t.slice(0, m.index);
-    if (REGIME_BEFORE.test(before) || NEG_BEFORE.test(before.split(/[.;\n]/).at(-1))) continue;
-    return true;
+    const after = t.slice(m.index + m[0].length);
+    if (REGIME_BEFORE.test(before) || SESSION_BEFORE.test(before) || SESSION_AFTER.test(after)) continue;
+    if (stands(t, m.index, m.index + m[0].length)) return true;
   }
-  for (const s of t.match(SENTENCE) || []) if (STATE_WORD.test(s) && unnegated(s, DISAGREE)) return true;
-  for (const tf of FRAMES) {
-    if (labels[tf] !== 'up' && labels[tf] !== 'down') continue;
-    if (opposing(tf, labels[tf]).some(re => unnegated(t, re, m => m[1] || ''))) return true;
-  }
-  return false;
+  return (t.match(SENTENCE) || []).some(s => STATE_WORD.test(s) && unnegated(s, DISAGREE));
 }
 
+const namesConflict = (text, ctx = {}) => opposingFact(text, ctx) || conflictWords(text);
+
 const STALE = /\b(?:label|trend|4h|1h|15m)\b[^.\n]{0,40}?\b(lags?|lagging|stale|behind (?:price|the move)|(?:has not|hasn't) (?:flipped|turned) yet|(?:not yet|yet to|still to) (?:flip(?:ped)?|turn(?:ed)?)|(?:has not|hasn't|not yet|yet to) (?:catch up|caught up))\b/gi;
-const STALE_NEG = /\b(?:not|isn't|no longer|never)\s+$/i;
+const STALE_NEG = /\b(?:not|never|no longer)\b|n't\b/i;
 
 function calledLabelStale(text) {
   const t = String(text || '');
   for (const m of t.matchAll(STALE)) {
     const at = m.index + m[0].length - m[1].length;
-    if (/^(?:lag|stale|behind)/i.test(m[1]) && STALE_NEG.test(t.slice(m.index, at))) continue;
+    const clause = t.slice(0, at).split(/[.;:\n]/).at(-1);
+    if (COND.test(clause)) continue;
+    if (/^(?:lag|stale|behind)/i.test(m[1]) && STALE_NEG.test(clause)) continue;
+    if (/^lag/i.test(m[1]) && /^\s+indicator/i.test(t.slice(m.index + m[0].length))) continue;
     return true;
   }
   return false;
@@ -104,12 +118,24 @@ function echoesState(text, line) {
   const facts = factsOf(line);
   if (!facts.length) return false;
   const t = String(text || '');
-  return t.includes(PHRASE) || facts.some(f => t.includes(f));
+  return t.toLowerCase().includes(PHRASE) || facts.some(f => t.includes(f));
+}
+
+/** The answer with the line's copied text taken out (the line itself, its facts, its fixed phrase). */
+function ownWords(text, line) {
+  let t = String(text || '');
+  if (!line) return t;
+  for (const piece of [line, ...factsOf(line)]) t = t.split(piece).join(' ');
+  return t.replace(new RegExp(PHRASE, 'gi'), ' ');
 }
 
 function readOf(text, { labels = {}, line = null } = {}) {
   const o = outcomeOf(text);
-  return { namesConflict: namesConflict(text, { labels }), calledLabelStale: calledLabelStale(text), echoesState: echoesState(text, line), decision: o ? (enters(o) ? 'planned' : o) : null };
+  const own = ownWords(text, line);
+  const fact = opposingFact(own, { labels });
+  const words = conflictWords(own);
+  return { namesConflict: fact || words, opposingFact: fact, conflictWords: words, ownConflict: fact || (words && !line), calledLabelStale: calledLabelStale(text),
+    echoesState: echoesState(text, line), decision: o ? (enters(o) ? 'planned' : o) : null };
 }
 
-module.exports = { FRAMES, namesConflict, calledLabelStale, echoesState, readOf };
+module.exports = { FRAMES, opposingFact, conflictWords, namesConflict, calledLabelStale, echoesState, readOf };

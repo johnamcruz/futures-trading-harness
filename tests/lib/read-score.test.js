@@ -61,12 +61,29 @@ test('namesConflict: transition and disagreement words, never the regime\'s own 
     assert.strictEqual(R.namesConflict(text, DOWN_1H), false, text);
 });
 
+test('conflictWords: not the session\'s transition, not a conditional or a question, not price against a stop', () => {
+  for (const text of ['We are in the morning transition period before 10:00.', 'Transition into lunch: stand aside.', 'Session transition at 11:00 ET.',
+    'Regime transitional phase; volume thin.', 'It would be in transition if the 1h closed above its high.', 'Is the 1h in transition? It is not.',
+    'Price and my stop disagree by two ticks.', 'If the 1h label and its candle disagree, I wait.', 'The morning transition is over; flat.'])
+    assert.strictEqual(R.conflictWords(text), false, text);
+  for (const text of ['The 1h is in transition.', 'A transition: the 1h label is down, its candle up.', 'The 1h label and price disagree.'])
+    assert.strictEqual(R.conflictWords(text), true, text);
+});
+
+test('opposingFact: the fact named before its frame counts; a conditional, a question or another frame between does not', () => {
+  for (const text of ['CHoCH up on the 1h at 09:45.', 'A bullish engulfing on the 1h.', 'The 1h label is down, yet the 1h CHoCH up says it turned.', 'The 1h down label is contradicted by its own CHoCH up.'])
+    assert.strictEqual(R.opposingFact(text, DOWN_1H), true, text);
+  for (const text of ['If the 1h prints a CHoCH up, the short is off.', 'The 1h might be turning: a CHoCH up would confirm.', 'The 1h CHoCH up? Not printed.',
+    'A 1h displacement up would end it.', 'The 1h could print a CHoCH up later.', '4h range, 1h down, 15m up (CHoCH up), short only.', 'CHoCH up on the 15m, the 1h still down.'])
+    assert.strictEqual(R.opposingFact(text, DOWN_1H), false, text);
+});
+
 test('calledLabelStale: the label is said to lag or not to have flipped yet', () => {
   for (const text of ['The 1h trend label lags price after the engulfing.', 'The 1h label is stale.', 'The 1h trend has not flipped yet.',
     "The 1h label hasn't caught up with the move.", 'the 15m trend is lagging the reversal', 'The 1h is still down but has yet to turn.'])
     assert.strictEqual(R.calledLabelStale(text), true, text);
   for (const text of ['The 1h label is not stale.', 'The 1h trend is down and confirmed.', 'The label is no longer lagging.', 'A lagging indicator, the EMA, is flat.',
-    'The 1h trend has not flipped, so the short stands.', 'The 1h trend has not changed.'])
+    'The 1h trend has not flipped, so the short stands.', 'The 1h trend has not changed.', 'If the 1h label is stale, I wait.'])
     assert.strictEqual(R.calledLabelStale(text), false, text);
 });
 
@@ -74,17 +91,45 @@ const LINE = '- State (each frame\'s label vs its own last break and last candle
 
 test('echoesState: the answer copies the State line\'s fixed phrase or a named fact verbatim', () => {
   assert.strictEqual(R.echoesState('1h: label and price disagree: transition, so I weigh both.', LINE), true);
+  assert.strictEqual(R.echoesState('Label and price disagree on the 1h.', LINE), true, 'the phrase in any case');
   assert.strictEqual(R.echoesState('The line says last candle bullish engulfing closed above its high (closed 10:00, range 3.55 ATR).', LINE), true);
   assert.strictEqual(R.echoesState('The 1h bullish engulfing closed above its high: a transition.', LINE), false, 'its own words');
   assert.strictEqual(R.echoesState('label and price disagree', null), false, 'no line: nothing to echo');
   assert.strictEqual(R.echoesState('anything', '- State (x): 4h range | 1h down: agree | 15m range.'), false, 'an agree line has no fact to echo');
 });
 
+const NONE = { namesConflict: false, opposingFact: false, conflictWords: false, ownConflict: false, calledLabelStale: false, echoesState: false, decision: null };
+
 test('readOf: every read and the decision word of one answer', () => {
   const text = 'PLAN: 1h down label but the 1h bullish engulfing closed above its high: a transition.\nCYCLE RESULT: no-trade - the 1h is unresolved';
-  assert.deepStrictEqual(R.readOf(text, { ...DOWN_1H, line: LINE }), { namesConflict: true, calledLabelStale: false, echoesState: false, decision: 'no-trade' });
+  assert.deepStrictEqual(R.readOf(text, { ...DOWN_1H, line: LINE }), { ...NONE, namesConflict: true, opposingFact: true, conflictWords: true, ownConflict: true, decision: 'no-trade' });
   assert.strictEqual(R.readOf('CYCLE RESULT: executed - short', DOWN_1H).decision, 'planned', 'executed is an entry: planned');
   assert.strictEqual(R.readOf('no result line', DOWN_1H).decision, null);
-  assert.deepStrictEqual(R.readOf(null, DOWN_1H), { namesConflict: false, calledLabelStale: false, echoesState: false, decision: null });
+  assert.deepStrictEqual(R.readOf(null, DOWN_1H), NONE);
+});
+
+test('readOf: with a State line shown, transition or disagreement words alone are never own words; without one they are', () => {
+  const words = 'The 1h is in transition, so I stay flat.\nCYCLE RESULT: no-trade - x';
+  assert.deepStrictEqual(R.readOf(words, { ...DOWN_1H, line: LINE }), { ...NONE, namesConflict: true, conflictWords: true, decision: 'no-trade' });
+  assert.strictEqual(R.readOf(words, { ...DOWN_1H, line: null }).ownConflict, true, 'the old arm saw no line: its words are its own');
+  assert.strictEqual(R.readOf(words, { ...DOWN_1H, line: '- State (x): 4h range | 1h down: agree | 15m range.' }).ownConflict, false, 'any shown line');
+});
+
+test('readOf: a fact copied verbatim from the line is an echo, not an opposing fact in own words', () => {
+  const copy = 'The 1h: last candle bullish engulfing closed above its high (closed 10:00, range 3.55 ATR).';
+  const r = R.readOf(copy, { ...DOWN_1H, line: LINE });
+  assert.strictEqual(r.echoesState, true);
+  assert.strictEqual(r.opposingFact, false);
+  assert.strictEqual(r.ownConflict, false);
+  assert.strictEqual(R.readOf(copy, { ...DOWN_1H, line: null }).opposingFact, true, 'no line shown: nothing to copy, its own words');
+});
+
+test('the adversarial answers (tests/fixtures/read-score/adversarial.json): own-words conflict and stale, each exact', () => {
+  const fx = require('../fixtures/read-score/adversarial.json');
+  for (const a of fx.answers) {
+    const r = R.readOf(a.text, { labels: fx.labels, line: LINE });
+    assert.strictEqual(r.ownConflict, a.conflict, `conflict: ${a.text}`);
+    assert.strictEqual(r.calledLabelStale, a.stale, `stale: ${a.text}`);
+  }
 });
 
