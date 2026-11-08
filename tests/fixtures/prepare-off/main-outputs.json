@@ -5689,7 +5689,7 @@
        },
        "cachedLookups": {}
       },
-      "transcript": "sha256:0901b48acd14e58fd0b09074ce8206e96578c82e615e03ab24e2346081366642 (39231 chars)",
+      "transcript": "sha256:56607943e4f9cbba7419318051318ca0d3fc9bfb19159ff42e8c705dbfff8494 (28661 chars)",
       "argv": [
        "claude",
        "-p",

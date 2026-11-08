@@ -21,7 +21,7 @@
  * a shadow wrote, left out only in shadow mode), the broker's whole call log (reads included: an extra read is a leak
  * against the live rate limits), the decision record (the runner state's history), plus the run fingerprint (the
  * validated runner config as the run hashes it, and its HEAD_DELIVERY token list). normalize() names each world's home,
- * the repo root, the report cache's scope and role body keys, the runs' random transcript names and the cycle ids derived from them
+ * the repo root, the report cache's scope and role body keys, the skills' text a lookup returned, the runs' random transcript names and the cycle ids derived from them
  * (check-order.js cycleId), the gate log's time stamps and any wall-clock instant (within two days of the run) alike;
  * nothing else (any other value that changes shows).
  */
@@ -55,6 +55,15 @@ function normalizer(w, root) {
   // scope: a value of the checkout's documents, never of the old path's behaviour (a skill edit changes it on any branch,
   // and main's generator can't make the branch's). That it is recorded, and where, still compares.
   const bodies = (RC.CACHED_ROLES || []).map(r => [RC.roleKey(root, r), `<body:${r}>`]).filter(([k]) => k);
+  // Each skill's text as skill_lookup returns it (harness-tools/skills.js skillLookup, the tool's own function), named
+  // <skill:name> where a transcript holds it: a value of the checkout's documents too (a lookup in a transcript carries
+  // the skill whole, so any edit to a looked-up skill changes it on any branch). Only the lookup's own result form, as a
+  // transcript line holds it (escaped once in the line, once more in the outputs' JSON), longest first; a prompt that
+  // embeds a skill another way still compares. That a lookup was made, of which skill, and where, still compares.
+  const SK = require(path.join(root, 'scripts', 'lib', 'harness-tools', 'skills'));
+  const esc = t => JSON.stringify(t).slice(1, -1);
+  const lookups = SK.skillCatalog(root).map(({ name }) => [esc(esc(SK.skillLookup({ skill: name }, { root }).text)), `<skill:${name}>`])
+    .sort((a, b) => b[0].length - a[0].length);
   const crypto = require('crypto');
   const wall = Date.now();
   return text => {
@@ -67,6 +76,7 @@ function normalizer(w, root) {
       s = s.split(cyc).join(`<cycle${n}>`);
     }
     for (const [k, name] of bodies) s = s.split(k).join(name);
+    for (const [k, name] of lookups) s = s.split(k).join(name);
     return s
       .split(scope).join('<scope>')
       .split(w.home).join('<home>')
