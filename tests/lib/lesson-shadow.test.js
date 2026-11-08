@@ -55,6 +55,15 @@ test('the shadow record: each verified composed plan walked forward on the close
   assert.strictEqual(fs.readFileSync(shadowFile(h), 'utf8').trim().split('\n').length, 3);
 });
 
+test('the shadow record: a plan with no bar at its decision (a data gap) is settled once its window closes, no outcome (R null), never walked again', () => {
+  const h = home([rec('gap', 'long', 100, 98, 104, T0)]);
+  const now = new Date(T0 + 12 * TF);
+  // Bars 0 to 2 missing: nothing at the plan's decision (the bar after T0).
+  assert.strictEqual(recordShadow(h, { root: 'MNQ', bars: bars.slice(3), minutes: 3, tick: 0.25, now }), 1);
+  assert.deepStrictEqual(readShadow(h, now).map(x => [x.id, x.R, x.exitReason]), [['gap', null, 'no bars at the decision']]);
+  assert.strictEqual(recordShadow(h, { root: 'MNQ', bars: bars.slice(3), minutes: 3, tick: 0.25, now }), 0);
+});
+
 test('the shadow record writes nothing without bars, a clock or records', () => {
   const h = tmpDir();
   assert.strictEqual(recordShadow(h, { root: 'MNQ', bars: [], minutes: 3, tick: 0.25, now: new Date(T0) }), 0);

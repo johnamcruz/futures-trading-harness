@@ -108,7 +108,7 @@ test('passClass: a pass is the model\'s (declined) only when it passed; a missed
   const records = results.map((_r, i) => fromLifecycleRecord(record({ at: t(i * 10) })));
   // The limit fills and wins at its target in each window.
   const rows = [];
-  for (let i = 0; i < 70; i += 1) rows.push(i % 10 === 0 ? [100.25, 100.5, 99.75, 100.25] : i % 10 === 1 ? [100.25, 104.25, 100, 104] : [100.25, 100.5, 100.1, 100.25]);
+  for (let i = 0; i < 70; i += 1) rows.push(i % 10 === 0 ? [100.25, 100.5, 99.75, 100.25] : i % 10 === 1 ? [100.25, 104.25, 100, 104] : [100.25, 100.5, 100.25, 100.25]);
   const out = E.buildDecisions({ cycles, records, gateRefusals: [{ cycleAt: t(40), root: null, check: 'phase2-facts' }], barsFor: () => bars(T0, rows), tfMs: M3, tickOf: () => 0.25, runId: 'run1' });
   assert.deepStrictEqual(out.map(d => [d.decision, d.passClass, d.vetoBasis, d.grade]), [
     ['passed', 'missed_fill', undefined, 'unplaced-would-win'],
