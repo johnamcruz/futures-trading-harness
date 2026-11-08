@@ -23,6 +23,14 @@ blackouts are `blackouts_list`.
 | `mtf_read` | `bars`, `timeframes`?, `daily`?, `json`?, `record`?, `symbol`? | the multi-timeframe read; `record` (with `symbol`) records it; in an autonomous cycle whose bar briefing is current, the default read instead points to it (its `m15` and `h1` hold the frames and the alignment, `m3` `trendRule` the trend rule); `daily`, other `timeframes` or `json` still read | `mtf.js <bars> [--tf=15,60,240] [--daily=<file>] [--json] [--record --symbol MNQ]` |
 | `blackouts_list` | none | the news blackout windows | `blackouts.js list` |
 
+**The `Pullback` line** (the runner's briefing; price against the trend
+rule's prevailing side on the 15m, none with it): the leg (origin ->
+extreme), the share of it given back, its 15m and 1h swings (holds or
+broken by a close), the bars against it with volume and range per bar
+vs the leg's (within the RTH or night part; unknown when the leg has
+none there), the 15m and 1h breaks against it (`stacked`: both). Weigh
+it with `pullback-vs-reversal`.
+
 ## Examples
 
 ```text
