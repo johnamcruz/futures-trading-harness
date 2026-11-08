@@ -918,9 +918,9 @@
         "\\baccount\\b|\\bhard[- ]stops?\\b|\\bstops on them\\b|\\badvice\\b|\\bweigh\\w*|\\bthe count\\b|\\ba read\\b|\\brule or a block\\b|\\bgate\\b|\\brulebook\\b"
       ],
       "forbidden": [
-        "(?<!\\b(?:account|hard stops?|stops on them|daily|cooldown|floor|cushion|blackout|gate)\\b[^.;]*)\\bstand(?:s|ing)?\\s+(?:down|aside)\\b(?![^.;]*\\b(?:account|hard stops?|daily|cooldown|floor|cushion|blackout|gate)\\b)",
+        "(?<!\\bmak(?:e|es|ing)\\s+(?:phase[- ]1\\s+|it\\s+|the\\s+desk\\s+)?)\\bstand(?:s|ing)?\\s+(?:down|aside)\\b(?!\\s+only\\b)",
         "(?<!\\b(?:stops?|facts?|limits?|gate|blocks?)\\s+(?:can\\s+|may\\s+|do\\s+)?)\\b(?:bars?|blocks?|restricts?)\\s+(?:today'?s\\s+|all\\s+|the\\s+)?entries\\b|\\bentries\\s+(?:are\\s+|stay\\s+|remain\\s+)?(?:barred|blocked|restricted)\\b",
-        "\\b(?:veto|pass|skip)(?:es|ed|ing)?\\b(?:\\s+[\\w']+){0,3}\\s+(?:on|for|because of)\\s+(?:it|that|this|the lesson)\\b|\\b(?:veto|pass|skip)\\w*\\b[^.;]*\\buntil\\b",
+        "(?<!\\breason\\s+to\\s+)(?<!\\breason\\s+to\\s+veto\\s+or\\s+)\\b(?:i'?d\\s+|i would\\s+|then\\s+|so\\s+|still\\s+)?(?:veto|pass|skip)(?:es|ed|ing)?\\b(?!\\s+(?:only|if|when|unless)\\b)",
         "\\buntil\\b[^.;]*\\b(?:journal\\w*|lift\\w*|cleared|fixed|explained)\\b",
         "\\bignor\\w*|\\birrelevant\\b|\\bdisregard\\w*",
         "\\bunless\\s+(?:the\\s+|that\\s+|a\\s+)?(?:lesson|journal\\w*|cause|lift\\w*)\\b"

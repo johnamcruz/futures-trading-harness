@@ -627,6 +627,13 @@ test('grading: q70 (a three-week-old lesson read as a stand-down): no, and why: 
     ['No, not by itself; but with the account facts clean, still pass on it.', false],
     ['No stand-down; the lesson is advice.', true], ['**No** — a lesson is advice, never a block.', true],
     ['No: phase 1 lists a stand-down only on an account fact or a hard stop (a gate refusal, the daily limit); a lesson is advice to weigh, never a reason to pass.', true],
+    // Review round: a stand-aside after the question's own account facts, a veto or skip as the verdict after a right
+    // lead (the stand-aside and the verdict now fail wherever they stand, unless negated or "only ... make phase 1 stand down").
+    ['No, the account is tradable, but stand aside on the lesson.', false], ['No: weigh the lesson, then veto.', false],
+    ['No, it\'s advice — but I\'d still skip today\'s entries.', false], ['No, it\'s advice; still pass today.', false],
+    ['No: account facts are clean, so I would veto anyway.', false],
+    ['No; a lesson is advice, never a reason to veto or pass.', true],
+    ['No: the account is tradable and no hard stop applies, so no stand-down; the lesson is advice.', true],
   ]) assert.strictEqual(pass('q70', `ANSWER: ${a}`), want, `q70 ${want ? 'right' : 'wrong'}: ${a}`);
 });
 
