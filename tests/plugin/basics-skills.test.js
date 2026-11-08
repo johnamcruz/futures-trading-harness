@@ -75,6 +75,7 @@ const PINS = {
     'No call before the close.',
     'sweep of the previous hour\'s high or low lost after costs (Train, F1, docs/research/mtf-setup-catalog.md). Separately, on 5,002',
     'Read a sweep alone as no reversal signal.',
+    'A reversal needs a confirmed trend change first: a 3m CHoCH against the sweep (`bos-vs-choch`), then price back at that level, with the 4h and 1h trend agreeing.',
   ],
   'levels-and-reactions': [
     'No reaction is not a rejection.',

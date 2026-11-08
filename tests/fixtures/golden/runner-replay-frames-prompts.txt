@@ -840,6 +840,8 @@ against it, -0.10R.
 re-entry or a flip after a stop-out made 0R.
   Read a sweep alone as no reversal
 signal.
+  A reversal needs a confirmed trend change first: a 3m CHoCH against the sweep (`bos-vs-choch`), then price back at that level, with the 4h and 1h trend agreeing.
+  Even so, sweep, CHoCH, retest entries made -0.17R then +0.24R (about 110 a half, intervals hold zero): context.
   A first 3m close through the IB high on volume
 lost (F8A); its retest (F8B) was positive on 38 trades, interval straddling
 zero; level retests (F9) fired too rarely to say.
@@ -2060,6 +2062,8 @@ against it, -0.10R.
 re-entry or a flip after a stop-out made 0R.
   Read a sweep alone as no reversal
 signal.
+  A reversal needs a confirmed trend change first: a 3m CHoCH against the sweep (`bos-vs-choch`), then price back at that level, with the 4h and 1h trend agreeing.
+  Even so, sweep, CHoCH, retest entries made -0.17R then +0.24R (about 110 a half, intervals hold zero): context.
   A first 3m close through the IB high on volume
 lost (F8A); its retest (F8B) was positive on 38 trades, interval straddling
 zero; level retests (F9) fired too rarely to say.
