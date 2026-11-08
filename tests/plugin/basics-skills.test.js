@@ -75,7 +75,8 @@ const PINS = {
     'No call before the close.',
     'sweep of the previous hour\'s high or low lost after costs (Train, F1, docs/research/mtf-setup-catalog.md). Separately, on 5,002',
     'Read a sweep alone as no reversal signal.',
-    'A reversal read against the sweep\'s 3m leg needs a change of character first (a 3m CHoCH, an early sign: `bos-vs-choch`), then price back at the CHoCH level, with the 4h and 1h both trending the reversal\'s way.',
+    'A sweep is context: one liquidity fact, never a veto, an entry or a wait.',
+    'Read it as a reversal only with a CHoCH on the setup frame (15m or higher; a 3m CHoCH is a candle fact, `bos-vs-choch`), price back at that level, and the 4h and 1h both trending the reversal\'s way.',
     'A sweep with the 4h and 1h trend at a key level is unchanged.',
   ],
   'levels-and-reactions': [

@@ -760,10 +760,10 @@ against it, -0.10R.
 re-entry or a flip after a stop-out made 0R.
   Read a sweep alone as no reversal
 signal.
-  A sweep is context.
-  A reversal read against the sweep's 3m leg needs a change of character first (a 3m CHoCH, an early sign: `bos-vs-choch`), then price back at the CHoCH level, with the 4h and 1h both trending the reversal's way.
+  A sweep is context: one liquidity fact, never a veto, an entry or a wait.
+  Read it as a reversal only with a CHoCH on the setup frame (15m or higher; a 3m CHoCH is a candle fact, `bos-vs-choch`), price back at that level, and the 4h and 1h both trending the reversal's way.
   A sweep with the 4h and 1h trend at a key level is unchanged.
-  Sweep, CHoCH, retest of the CHoCH level entries (no 4h or 1h filter; 09:30-12:00 ET, 2R target, 2021-04 to 2024-06) made -0.17R then +0.24R, about 110 a half, intervals hold zero: context.
+  15m CHoCH entries (09:30-12:00 ET, 2R, no 4h or 1h filter): after a sweep +0.09R at the close, +0.01R at the retest; without one +0.19R, +0.27R: a sweep added no edge.
   A first 3m close through the IB high on volume
 lost (F8A); its retest (F8B) was positive on 38 trades, interval straddling
 zero; level retests (F9) fired too rarely to say.

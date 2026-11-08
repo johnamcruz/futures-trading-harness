@@ -915,7 +915,7 @@
       ],
       "text": "A 3m candle sweeps the prior RTH low and closes back inside. The 4h and 1h both trend up. There is no CHoCH. Does the sweep alone support a short reversal? Start the answer with yes or no.",
       "rule": "a sweep alone is context, not a reversal",
-      "anchor": "A sweep is context.",
+      "anchor": "A sweep is context:",
       "required": [
         "^\\W*no\\b"
       ],
@@ -930,9 +930,9 @@
       "lookup": [
         "breakout-vs-fakeout"
       ],
-      "text": "A sweep of the prior RTH high, then a 3m CHoCH down, and price is back at the CHoCH level. The 4h and 1h both trend up. May we enter the reversal short? Start the answer with yes or no.",
+      "text": "A sweep of the prior RTH high, then a 15m CHoCH down, and price is back at the CHoCH level. The 4h and 1h both trend up. May we enter the reversal short? Start the answer with yes or no.",
       "rule": "a reversal read needs the 4h and 1h trending the reversal's way",
-      "anchor": "with the 4h and 1h both trending the reversal's way",
+      "anchor": "the 4h and 1h both trending the reversal's way",
       "required": [
         "^\\W*no\\b"
       ],
@@ -947,9 +947,9 @@
       "lookup": [
         "breakout-vs-fakeout"
       ],
-      "text": "A sweep of the prior RTH low, then a 3m CHoCH up, but price has not come back to the CHoCH level yet. The 4h and 1h both trend up. Enter the long now? Start the answer with yes or no.",
+      "text": "A sweep of the prior RTH low, then a 15m CHoCH up, but price has not come back to the CHoCH level yet. The 4h and 1h both trend up. Enter the long now? Start the answer with yes or no.",
       "rule": "wait for the return to the CHoCH level",
-      "anchor": "then price back at the CHoCH level",
+      "anchor": "price back at that level",
       "required": [
         "^\\W*no\\b"
       ],
@@ -964,9 +964,9 @@
       "lookup": [
         "breakout-vs-fakeout"
       ],
-      "text": "The prior RTH low was swept, then a 3m CHoCH up, then price came back to the CHoCH level. The 4h trends up but the 1h is ranging. Is the reversal long read supported? Start the answer with yes or no.",
+      "text": "The prior RTH low was swept, then a 15m CHoCH up, then price came back to the CHoCH level. The 4h trends up but the 1h is ranging. Is the reversal long read supported? Start the answer with yes or no.",
       "rule": "the 4h and 1h must both trend the reversal's way",
-      "anchor": "with the 4h and 1h both trending the reversal's way",
+      "anchor": "the 4h and 1h both trending the reversal's way",
       "required": [
         "^\\W*no\\b"
       ],
@@ -983,7 +983,7 @@
       ],
       "text": "A 3m candle sweeps the prior RTH high and closes back inside. Nothing else has happened. Is the sweep by itself a signal to enter a short? Start the answer with yes or no.",
       "rule": "a sweep is context, not an entry",
-      "anchor": "A sweep is context.",
+      "anchor": "A sweep is context:",
       "required": [
         "^\\W*no\\b"
       ],
