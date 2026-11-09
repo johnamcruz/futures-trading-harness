@@ -40,7 +40,13 @@ size; the code sets the full verdict size. Not in a prop attempt:
 
 1. **Hard stops → no trade**: the candidate is `blocked` (a news blackout
    or the news unknown, a no-entry window), a phase-1 stand-down, or a gate
-   refusal.
+   refusal. A phase-1 stand-down rests only on the account's facts and the
+   stops on them: not tradable, the daily loss limit or soft stop, a loss
+   streak's cooldown, the floor or cushion, the attempt's entry block
+   (`combine_status`), the pacing rules (`prop-pacing-judgment`), a news
+   blackout or no-entry window, a gate refusal. Never on a lesson, a
+   review's notes or earlier reasoning: a lesson is advice, a read in the
+   count (`confluence-counting`), never the reason to pass.
 2. **The trend rule** (never counter): any setup or strategy against a
    trending 4h or 1h, or with both ranging against the 15m → no trade,
    whatever CHoCH.

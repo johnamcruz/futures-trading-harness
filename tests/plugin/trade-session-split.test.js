@@ -511,9 +511,15 @@ test('trade-session split: no head-trader path reads more than the base\'s every
 // close since the extreme, the bars counted since the extreme, the volume ratio not time-of-day adjusted (+124 each).
 // Then pullback-vs-reversal's Swing row names each source's rule (the line: closes since the extreme; htfLevels: since
 // the swing formed): +52, full mode, the two analysts that embed it (95344, 55356).
+// Then fix/standdown-basis (owner rule: raise a pin when it improves context): strategy-library's step 1 says what a
+// phase-1 stand-down rests on (the account's facts and the stops on them, never a lesson: a replay vetoed 42 times on
+// one), +483 bytes in every role that carries strategy-library, both modes: the market-structure analyst 94380 -> 94863
+// full (base 94380), 43175 -> 43291 index (base 42808); the risk manager 92762 -> 93203 (base 92720), 78639 -> 79091
+// (base 78608); the trend-momentum analyst 54540 -> 54875 (base 54392), 40023 -> 40485 (base 40002); the strategy researcher 25650 -> 25728 both
+// modes (base 25245); every other role within its pin.
 const ROLE_PROMPTS = {
-  full: { 'market-structure-analyst': 95799, 'news-calendar-analyst': 10182, 'risk-manager': 93808, 'strategy-researcher': 25650, 'trade-executor': 30670, 'trade-reviewer': 9454, 'trend-momentum-analyst': 55811, 'volume-liquidity-analyst': 49712 },
-  index: { 'market-structure-analyst': 43896, 'news-calendar-analyst': 10182, 'risk-manager': 79696, 'strategy-researcher': 25650, 'trade-executor': 30659, 'trade-reviewer': 9454, 'trend-momentum-analyst': 41090, 'volume-liquidity-analyst': 34344 },
+  full: { 'market-structure-analyst': 96282, 'news-calendar-analyst': 10182, 'risk-manager': 94291, 'strategy-researcher': 25728, 'trade-executor': 30670, 'trade-reviewer': 9454, 'trend-momentum-analyst': 56294, 'volume-liquidity-analyst': 49712 },
+  index: { 'market-structure-analyst': 44379, 'news-calendar-analyst': 10182, 'risk-manager': 80179, 'strategy-researcher': 25728, 'trade-executor': 30659, 'trade-reviewer': 9454, 'trend-momentum-analyst': 41573, 'volume-liquidity-analyst': 34344 },
 };
 
 test('trade-session split: no role prompt grows, in full or index mode, and no role lists a piece', () => {

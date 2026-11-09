@@ -93,8 +93,20 @@ test('context quiz: every layer asked, ids unique, the bar the whole quiz at K 5
   // b8 (prepare-ahead's confirm rule: PR C); 45 since q47-q49 (a standing scenario: compose_check decides; the closing
   // candle read as candle-reading does). q46 went with PR C3's computed trigger; q45 (the 3m doji, a yes/no) measured 7/10
   // live and is out of the bar, noted for the paired test. 58 since q50-q63 less q53 (a 3m swing is stop structure, not a level: measured 6/10, out of the bar; market context: levels and reactions, structure breaks, trend vs range, pullback vs reversal; each anchored in the skill that states it). The pass bar rises with them.
-  assert.strictEqual(QUIZ.questions.length, 58);
+  // 59 since q70 (a lesson is no phase-1 stand-down: a replay vetoed 42 times on one).
+  assert.strictEqual(QUIZ.questions.length, 59);
   assert.strictEqual(QUIZ.partB.length, 8);
+});
+
+test('context quiz: q70 (a lesson read as a phase-1 stand-down) is asked against head+risk, where strategy-library\'s step 1 says what a stand-down rests on', () => {
+  const prompts = Q.buildPrompts(ROOT, QUIZ);
+  const q = QUIZ.questions.find(x => x.id === 'q70');
+  assert.deepStrictEqual([q.prompt, q.layer, Q.promptKey(q)], ['head+risk', 'approval', 'head+risk']);
+  // The sentence deleted from strategy-library: q70's anchor goes missing.
+  const flat = t => t.replace(/\s+/g, ' ');
+  const cut = Object.fromEntries(Object.entries(prompts).map(([k, v]) => [k, flat(v).replace(/Never on a lesson, a review's notes or earlier reasoning: a lesson is advice, a read in the count \(`confluence-counting`\), never the reason to pass\./g, '')]));
+  assert.deepStrictEqual(Q.anchorsMissing(QUIZ, prompts).filter(x => x === 'q70'), []);
+  assert.deepStrictEqual(Q.anchorsMissing(QUIZ, cut).filter(x => x === 'q70'), ['q70']);
 });
 
 test('context quiz: q45 and q46 are out of the bar (q46: the standing line prints the computed trigger, PR C3; q45: 7/10 live)', () => {

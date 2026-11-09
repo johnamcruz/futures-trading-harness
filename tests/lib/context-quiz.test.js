@@ -558,10 +558,11 @@ test('summary: correct on all K, answered both ways, the totals, the bar; compar
   for (const x of QUIZ.questions) for (let k = 1; k <= 5; k += 1) rows.push({ id: x.id, k, pass: true });
   for (const x of QUIZ.partB) for (let k = 1; k <= 5; k += 1) rows.push({ id: x.id, k, pass: true });
   const all = Q.summarize(QUIZ, rows, 5);
-  assert.deepStrictEqual([all.partA.allCorrect, all.partA.bothWays, all.partB.allCorrect, all.meetsBar], [58, 0, 8, true]);
+  // 59 since q70 (a lesson is no phase-1 stand-down): 59 x 5 runs, one missed = 294.
+  assert.deepStrictEqual([all.partA.allCorrect, all.partA.bothWays, all.partB.allCorrect, all.meetsBar], [59, 0, 8, true]);
   const one = rows.map(r => (r.id === 'q6' && r.k === 2 ? { ...r, pass: false } : r));
   const s = Q.summarize(QUIZ, one, 5);
-  assert.deepStrictEqual([s.partA.allCorrect, s.partA.bothWays, s.partA.total, s.meetsBar], [57, 1, 289, false]);
+  assert.deepStrictEqual([s.partA.allCorrect, s.partA.bothWays, s.partA.total, s.meetsBar], [58, 1, 294, false]);
   // Too few runs is never correct on all K.
   assert.strictEqual(Q.summarize(QUIZ, rows.filter(r => r.k <= 3), 5).partA.allCorrect, 0);
   const d = Q.compare(all, s).find(x => x.id === 'q6');
@@ -622,4 +623,63 @@ test('quizErrors: each of the gate\'s whole-number limits absent, negative or fr
   const file = path.join(dir, 'context-quiz.json');
   fs.writeFileSync(file, JSON.stringify({ ...QUIZ, gate: { ...QUIZ.gate, maxGroups: -1 } }));
   assert.throws(() => Q.loadQuiz({ file }), /gate/);
+});
+
+test('grading: q70 (a three-week-old lesson read as a stand-down): no, and why: a stand-down rests on the account\'s facts and the stops on them, a lesson is advice: a held-out set (written before the regexes)', () => {
+  // strategy-library's priority order, step 1 (a replay vetoed 42 times on a lesson read as a phase-1 stand-down). Both
+  // halves graded: the verdict (a leading no) and its basis (the account's facts, the stops, advice, the count); a no
+  // that still bars the entries, waits for a lift or ignores the lesson is wrong.
+  const cases = [
+    ['No: a stand-down rests only on the account\'s facts and the stops on them; a lesson is advice to weigh in the count.', true],
+    ['No. A lesson is advice, never a rule or a block; weigh it in the count.', true],
+    ['No: only account facts and hard stops make phase 1 stand down; a lesson is advice.', true],
+    ['Never: the lesson is advice shown with its record; defying one is no mistake.', true],
+    ['No, it\'s advice: a read in the count, never the reason to pass.', true],
+    ['No; a lesson never bars entries: weigh it as a read.', true],
+    ['Not on a lesson: only the account\'s facts and the gate\'s and rulebook\'s stops.', true],
+    ['No. Don\'t ignore it: weigh the lesson as a read against.', true],
+    ['No — none of the hard stops applies (daily limit, cooldown, floor, blackout, entry block); the lesson is advice.', true],
+    ['Yes: stand down until the cause is journaled.', false], ['Yes, the lesson bars entries.', false], ['No.', false],
+    ['No, but stand aside until it is journaled.', false], ['No stand-down, but veto every entry until the lift.', false],
+    ['Not a stand-down, but the lesson still blocks entries.', false], ['No, unless the lesson is still open.', false],
+    ['No, ignore the lesson.', false], ['It bars today\'s entries: no lift is journaled.', false],
+    ['No; it\'s advice, but entries stay restricted until the lift is journaled.', false],
+  ];
+  for (const [a, want] of cases) assert.strictEqual(pass('q70', `ANSWER: ${a}`), want, `q70 ${want ? 'right' : 'wrong'}: ${a}`);
+  // Probes added after the regexes: a veto on it past a possessive ("today's entries"), a stand-down said anyway, a
+  // pass on it; a bold lead and a hyphenated "No stand-down" right.
+  for (const [a, want] of [
+    ['No; it is advice, but veto today\'s entries on it.', false], ['No, a lesson is advice; but I would stand down anyway.', false],
+    ['No, not by itself; but with the account facts clean, still pass on it.', false],
+    ['No stand-down; the lesson is advice.', true], ['**No** — a lesson is advice, never a block.', true],
+    ['No: phase 1 lists a stand-down only on an account fact or a hard stop (a gate refusal, the daily limit); a lesson is advice to weigh, never a reason to pass.', true],
+    // Review round: a stand-aside after the question's own account facts, a veto or skip as the verdict after a right
+    // lead (the stand-aside and the verdict now fail wherever they stand, unless negated or "only ... make phase 1 stand down").
+    ['No, the account is tradable, but stand aside on the lesson.', false], ['No: weigh the lesson, then veto.', false],
+    ['No, it\'s advice — but I\'d still skip today\'s entries.', false], ['No, it\'s advice; still pass today.', false],
+    ['No: account facts are clean, so I would veto anyway.', false],
+    ['No; a lesson is advice, never a reason to veto or pass.', true],
+    ['No: the account is tradable and no hard stop applies, so no stand-down; the lesson is advice.', true],
+  ]) assert.strictEqual(pass('q70', `ANSWER: ${a}`), want, `q70 ${want ? 'right' : 'wrong'}: ${a}`);
+});
+
+test('grading: every pattern of q70 does work (its removal lets a wrong answer through)', () => {
+  // [forbidden index, a wrong answer with both required halves, so only that pattern fails it]
+  const work = [
+    [0, 'No: a lesson is advice, but stand aside today.'], [1, 'No: it\'s advice, but the lesson still bars entries.'],
+    [2, 'No stand-down: it\'s advice, but veto on it.'], [3, 'No: it is advice; hold entries until the cause is journaled.'],
+    [4, 'No, only account facts count: ignore the lesson.'], [5, 'No, account facts decide, unless the lesson is still open.'],
+  ];
+  assert.strictEqual(q('q70').forbidden.length, work.length, 'a case for each forbidden pattern');
+  for (const [i, answer] of work) {
+    assert.strictEqual(pass('q70', `ANSWER: ${answer}`), false, `q70 fails: ${answer}`);
+    const without = { ...q('q70'), forbidden: q('q70').forbidden.filter((_, j) => j !== i) };
+    assert.strictEqual(Q.gradeAnswer(QUIZ, without, `ANSWER: ${answer}`).pass, true, `q70 forbidden[${i}] matters: ${answer}`);
+  }
+  // Each required half matters: a yes with the basis, a no without it.
+  for (const [i, answer] of [[0, 'Yes: account facts decide, a lesson is advice.'], [1, 'No, phase 1 may not.']]) {
+    assert.strictEqual(pass('q70', `ANSWER: ${answer}`), false, `q70 fails: ${answer}`);
+    const without = { ...q('q70'), required: q('q70').required.filter((_, j) => j !== i) };
+    assert.strictEqual(Q.gradeAnswer(QUIZ, without, `ANSWER: ${answer}`).pass, true, `q70 required[${i}] matters: ${answer}`);
+  }
 });
