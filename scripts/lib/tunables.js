@@ -237,6 +237,7 @@ const ANALYSIS = {
   },
   briefing: { equalK: int(1), cisdFrames: list(int(1), { min: 1 }) },
   tradeRead: { frames: list(int(1), { min: 1 }), deepPullback: frac(), minSigns: int(1) },
+  pullbackRead: { minLegAtr: pos() },
   evaluator: { windowBars: int(1) },
 };
 
@@ -373,6 +374,7 @@ const BUILT_IN = deepFreeze({
     compression: { frames: [3, 5, 15, 60], nr: [7], maxWidthAtr: 2, poleBars: 3, expandAtr: 1, minBeyondAtr: 0.1, recentBars: 3, maxRunAtr: 1, levelBandAtr: 0.25, maxLevels: 3 },
     briefing: { equalK: 2, cisdFrames: [3, 5, 15, 60] },
     tradeRead: { frames: [15], deepPullback: 0.618, minSigns: 2 },
+    pullbackRead: { minLegAtr: 1 },
     evaluator: { windowBars: 500 },
   },
 });

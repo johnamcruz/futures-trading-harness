@@ -103,10 +103,15 @@ test('CORE: the composed bar\'s reads the gate requires (SITUATIONAL taught in t
   // and RTH volatility reads, with two examples, the line's disclaimer, its recency and its early-noise sentence moved
   // here from the per-cycle line (+1625 file bytes), and bar-briefing's paragraph on the line (+455 file bytes): +2074 as
   // embedded.
-  assert.ok(Buffer.byteLength(prompt) <= 78467, `the head prompt is ${Buffer.byteLength(prompt)} bytes`);
-  // Then 78467 (feat/state-read, the owner's goal of measuring the model's reads): trade-session step 3's STATE line, the
+  // Then 76505 (feat/pullback-read, owner rule: raise a pin when it improves context): bar-briefing's Pullback line
+  // paragraph, what the line says and the skill that weighs it (+454; the pin +448).
+  // Then 76560 (the owner's review of it): a leg given back or under the ATR floor shows no depth; a missing volume or
+  // range phrase means not computable (+55). Then 76684 (its review): no line before a top's 15m swing confirms, a swing
+  // broken by a close since the extreme, bars since the extreme, the volume ratio not time-of-day adjusted (+124).
+  // Then 79100 (feat/state-read, the owner's goal of measuring the model's reads): trade-session step 3's STATE line, the
   // head trader's closed-form market-state read, recorded and scored against the briefing's labels, never a step (+336).
-    // Only the head trader's prompt grows: no other role's prompt embeds trade-lifecycle (the risk manager's embeds
+  assert.ok(Buffer.byteLength(prompt) <= 79100, `the head prompt is ${Buffer.byteLength(prompt)} bytes`);
+  // Only the head trader's prompt grows: no other role's prompt embeds trade-lifecycle (the risk manager's embeds
   // confluence-counting and invalidation as before; its prompt is unchanged, pinned in trade-session-split.test.js).
   for (const [name, a] of Object.entries(index.agent)) if (name !== H.HEAD_AGENT && a.prompt) assert.ok(!a.prompt.includes('<skill name="trade-lifecycle">'), name);
 });

@@ -260,3 +260,22 @@ test('availability: on every bar a candle rejects, breaks or sweeps a level, can
   const room = SS.fit(ROOT, facts, { base: 1000, max: 1000 + size('candle-reading') + 400, loaded: LOADED });
   assert.ok(room.skills.includes('candle-reading'), JSON.stringify(room.skills));
 });
+
+test('the Pullback line embeds pullback-vs-reversal, flat with entries allowed only, after the trend rule\'s skill and the day\'s bias', () => {
+  const PB = { side: 'long', frame: '15m', prevailing: '4h up', leg: { origin: 21480, extreme: 21530.5 }, depth: 0.41 };
+  assert.deepStrictEqual(ids(SS.factsOf({ state: FLAT, briefings: [brief({ pullback: PB })] })), ['trend', 'day', 'pullback']);
+  assert.deepStrictEqual(ids(SS.factsOf({ state: FLAT, briefings: [brief({ pullback: null })] })), ['trend', 'day'], 'with the trend: nothing more');
+  assert.deepStrictEqual(ids(SS.factsOf({ state: FLAT, briefings: [brief({ pullback: PB, windowEntries: 'refused' })] })), ['day', 'window'], 'no entries in the window: nothing');
+  assert.deepStrictEqual(ids(SS.factsOf({ state: OPEN, briefings: [brief({ pullback: PB })] })), ['open', 'day'], 'a trade open: management (it embeds the skill already)');
+  const facts = SS.factsOf({ state: FLAT, briefings: [brief({ pullback: PB })] });
+  const all = SS.choose(ROOT, facts, { budget: 1e9, loaded: LOADED });
+  assert.deepStrictEqual(all.skills, ['mtf-bias-filter', 'daily-bias', 'pullback-vs-reversal']);
+  assert.match(SS.situationText(ROOT, all), /price against the prevailing side \(the Pullback line\)/);
+  // A budget that fits the trend rule's skill and the day's bias but not it: they stay, it is named.
+  const size = s => Buffer.byteLength(HP.block(s, HP.skillBody(ROOT, s)));
+  const c = SS.choose(ROOT, facts, { budget: size('mtf-bias-filter') + size('daily-bias'), loaded: LOADED });
+  assert.deepStrictEqual([c.skills, c.over], [['mtf-bias-filter', 'daily-bias'], ['pullback-vs-reversal']]);
+  // Never required: the gate's table (skills-loaded.js SITUATIONAL) requires the skill only on its own trigger.
+  const { SITUATIONAL } = require('../../scripts/lib/trading/skills-loaded');
+  assert.ok(!SITUATIONAL.some(e => /pullback/.test(e.when)));
+});

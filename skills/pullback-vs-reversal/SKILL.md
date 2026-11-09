@@ -18,10 +18,14 @@ hypotheses; a missing field is `unknown`. "Last 10 bars": the prompt's `V`, `(c-
 
 | Sign | Pullback | Reversal | Field |
 |---|---|---|---|
-| HTF break | with the trend | a CHoCH against it | `m15.lastBreak.last`, `h1.lastBreak.last` |
-| Depth | up to about 50-62% of the leg (hypothesis) | past the impulse origin | `m15.frame.range` |
-| Swing | the leg's 15m/1h swing holds | a 3m close broke it | `m3.htfLevels` `brokenAt` |
-| Volume, bars | falling, shrinking | rising, wide against it | last 10 bars |
+| HTF break | with the trend | a CHoCH against it | `m15.lastBreak.last`, `h1.lastBreak.last`; `Pullback` breaks |
+| Depth | up to about 50-62% of the leg (hypothesis) | past the impulse origin | flat: `Pullback` depth; open: Trade read |
+| Swing | the leg's 15m/1h swing holds | a 3m close broke it | `Pullback` swings (closes since the extreme); `m3.htfLevels` `brokenAt` (since the swing formed) |
+| Volume, bars | falling, shrinking | rising, wide against it | `Pullback` volume, range vs the leg; last 10 bars |
+
+**Flat**: the `Pullback` line (price against the prevailing side on the
+15m) holds these pieces; weigh them with the confirmation at a level. A
+trade open: the Trade read governs.
 
 **Read the breaks top-down** (`bos-vs-choch`). A 15m CHoCH inside an
 intact 1h and 4h structure is a pullback. CHoCHs stacking up the
