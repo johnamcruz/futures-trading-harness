@@ -76,7 +76,7 @@ test('the read tags: one registry entry per read, the reads present at entry (re
 
 test('the behaviour: size, exit, R, MAE and MFE in R from the bars (tripExcursion), bars to MFE, kept share, +1R reached', () => {
   const b = F.behaviourOf({ review: review(), bars: bars(), tfMs: M3 });
-  assert.deepStrictEqual(b, { side: 'long', size: 3, exit: 'trail', R: -0.9, maeR: -0.9, mfeR: 0.3, mfeBars: 2, efficiency: -3, reached1R: false, openMs: ms(T0) });
+  assert.deepStrictEqual(b, { side: 'long', size: 3, exit: 'trail', R: -0.9, grossR: -0.9, maeR: -0.9, mfeR: 0.3, mfeBars: 2, efficiency: -3, reached1R: false, openMs: ms(T0) });
   // No bars covering it: MAE and MFE unknown (null), never 0, and so the rest that hangs on them.
   const none = F.behaviourOf({ review: review(), bars: [], tfMs: M3 });
   assert.deepStrictEqual([none.maeR, none.mfeR, none.mfeBars, none.efficiency, none.reached1R], [null, null, null, null, null]);
@@ -86,7 +86,7 @@ test('the behaviour: size, exit, R, MAE and MFE in R from the bars (tripExcursio
   assert.deepStrictEqual([win.mfeR, win.reached1R, win.efficiency, win.exit], [1.5, true, 1, 'target']);
   // No trip tags (a model's own review): only what it states (its R), the rest unknown.
   const plain = F.behaviourOf({ review: { kind: 'review', tags: ['result:loss', 'r:-1'] } });
-  assert.deepStrictEqual(plain, { side: null, size: null, exit: null, R: -1, maeR: null, mfeR: null, mfeBars: null, efficiency: null, reached1R: null, openMs: null });
+  assert.deepStrictEqual(plain, { side: null, size: null, exit: null, R: -1, grossR: null, maeR: null, mfeR: null, mfeBars: null, efficiency: null, reached1R: null, openMs: null });
 });
 
 test('the line: one compact line per reviewed trade, every unknown said as unknown', () => {
@@ -114,6 +114,11 @@ test('the per-read record: held below the sample floor, n beside every figure ab
   for (const g of four.split(': ').slice(1).join(': ').split('; ')) assert.match(g, /n \d+, avg R .*MAE .* \(n \d+\), MFE .* \(n \d+\)$/);
   // Reviews without feedback in the window: said so ("4 of your last 7"), never counted as tagged.
   assert.match(F.recordText(items, { floor: 3, max: 6, of: 7 }), /^Record per read \(4 of your last 7 reviewed trades;/);
+  // A trade whose R is unknown counts in no group (never a NaN figure).
+  const withUnknown = [...items, it('1h up', null, -0.5, 0.5)];
+  const r = F.recordText(withUnknown, { floor: 3, max: 6 });
+  assert.match(r, /bias 1h up: n 3, avg R 0,/);
+  assert.doesNotMatch(r, /NaN/);
   // The cap keeps the largest groups.
   assert.match(F.recordText(items, { floor: 3, max: 1 }), /: regime trend-up: n 4[^;]*$/);
   // A group whose MFE is all unknown says so.
@@ -193,6 +198,14 @@ test('the prompt\'s trades: the last n reviewed with feedback lines (a plain one
   A.appendBars(A.recordDirFor(home, env, '2021-06-04'), '2021-06-04', { symbol: 'MNQ', contractId: 'MNQ', minutes: 3, bars: bars() });
   const archived = F.tradeFeedback({ entries: [review()], home, env, dataDir, timeframe: 3, n: 10, window: 30, floor: 5, max: 6 });
   assert.match(archived.lines[0], /MAE -0\.9, MFE \+0\.3 at bar 2/);
+  // The record covers the last `window` reviewed trades only, and `n` lines are the last n.
+  const ids = [601, 602, 603, 604, 605, 606];
+  fs.writeFileSync(path.join(home, 'entry-orders.json'), JSON.stringify(ids.map(id => ({ orderId: id, contractId: 'MNQ', at: '2021-06-04T14:41:40.000Z', composed: { record: 'rec-1' } }))));
+  const many = ids.map((id, i) => ({ ...review({ orderId: id }), ts: new Date(Date.parse('2021-06-04T15:01:00Z') + i * 60000).toISOString() }));
+  const win = F.tradeFeedback({ entries: many, home, env, dataDir, timeframe: 3, n: 2, window: 3, floor: 3, max: 6 });
+  assert.strictEqual(win.lines.length, 2);
+  assert.match(win.record, /^Record per read \(your last 3 reviewed trades; groups of 3 or more;/);
+  assert.match(win.record, /bias 1h up: n 3, avg R -0\.9/);
   // No reviews: nothing.
   assert.deepStrictEqual(F.tradeFeedback({ entries: [], home, dataDir, timeframe: 3, n: 10, window: 30, floor: 5, max: 6 }), { lines: [], record: null, tagged: 0 });
 });
@@ -216,6 +229,17 @@ test('one structure for every consumer: the live join and an experience row give
   assert.deepStrictEqual(row.reads, live.reads);
   assert.deepStrictEqual([row.behaviour.maeR, row.behaviour.mfeR, row.behaviour.reached1R, row.behaviour.efficiency], [live.behaviour.maeR, live.behaviour.mfeR, live.behaviour.reached1R, live.behaviour.efficiency]);
   // The derived fields have one definition.
-  assert.deepStrictEqual(F.behaviour({ R: 1, mfeR: 2 }), { side: null, size: null, exit: null, R: 1, maeR: null, mfeR: 2, mfeBars: null, efficiency: 0.5, reached1R: true, openMs: null });
-  assert.deepStrictEqual([F.behaviour({ R: 1, mfeR: 0 }).efficiency, F.behaviour({ R: 1 }).reached1R], [null, null]);
+  assert.deepStrictEqual(F.behaviour({ R: 0.95, grossR: 1, mfeR: 2 }), { side: null, size: null, exit: null, R: 0.95, grossR: 1, maeR: null, mfeR: 2, mfeBars: null, efficiency: 0.5, reached1R: true, openMs: null });
+  assert.deepStrictEqual([F.behaviour({ grossR: 1, mfeR: 0 }).efficiency, F.behaviour({ R: 1 }).reached1R, F.behaviour({ R: 1, mfeR: 2 }).efficiency], [null, null, null], 'no gross R: no efficiency (never net over gross)');
+  // +1R reached at exactly 1.0, not at 0.99.
+  assert.deepStrictEqual([F.behaviour({ mfeR: 1 }).reached1R, F.behaviour({ mfeR: 0.99 }).reached1R], [true, false]);
+});
+
+test('kept share: the price R over the MFE (like for like): a clean target exit keeps all of it, whatever its fees', () => {
+  // +1R before fees (13660 -> 13670 on a 10-point risk), +0.95R net; its best bar at the target, never past it.
+  const tags = ['result:win', 'r:0.95', ...F.tripTags({ side: 'long', size: 3, fill: 13660, exit: 13670, openedAt: T0, closedAt: '2021-06-04T14:57:30.000Z', risk: 10, exitReason: 'target' })];
+  const flat = bars().map(x => ({ ...x, h: Math.min(x.h, 13668), l: Math.max(x.l, 13658) }));
+  const it = F.feedbackItem({ review: review({ tags }), bars: flat, tfMs: M3 });
+  assert.deepStrictEqual([it.behaviour.R, it.behaviour.grossR, it.behaviour.mfeR, it.behaviour.efficiency], [0.95, 1, 1, 1]);
+  assert.match(F.feedbackLine(it), /win R \+0\.95; MAE -0\.2, MFE \+1 at bar \d+, kept 1 of it \(reached \+1R\)/);
 });

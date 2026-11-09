@@ -41,7 +41,7 @@ const { familyRoot } = require('./contracts');
 const { isOpen } = require('./positions');
 const { ownTrade, rOf, sideOf, MIXED } = require('./decision-history');
 const { ORDER_GRACE_MS } = require('./gate-timing');
-const { tripTags, exitReasonOf } = require('./trade-feedback');
+const { tripTags, exitReasonOf } = require('./trip-facts');
 
 const STATUS = require('../broker/interface').ENUMS.orderStatus;
 // An order that ended without working on: its status word.
@@ -161,7 +161,7 @@ function reviewFor({ entry, orderId }, { orders = [], positions = [], fills = []
   const result = rr !== null ? (Math.abs(rr) < scratchR ? 'scratch' : rr > 0 ? 'win' : 'loss') : move > 0 ? 'win' : move < 0 ? 'loss' : 'scratch';
   const rText = net !== null ? `${net > 0 ? '+' : ''}${fmt(net)}R net of fees on the planned ${stopTicks}-tick stop`
     : r !== null ? `${r > 0 ? '+' : ''}${fmt(r)}R before fees on the planned ${stopTicks}-tick stop (its fees unknown)` : 'R unknown (no planned stop recorded)';
-  // The trip's facts for the trade feedback (trade-feedback.js tripTags): its side, size, fill and exit prices and times,
+  // The trip's facts for the trade feedback (trip-facts.js tripTags): its side, size, fill and exit prices and times,
   // the planned risk in points and the exit's reason as the broker's orders tell it (unknown: not written).
   const exitReason = exitReasonOf({ t, side, orderId, fills, history, stopTicks, tick });
   const trip = tripTags({ side, size: t.size, fill: t.fill, exit: t.exit, openedAt: t.openedAt, closedAt: t.closedAt, risk: stopTicks && Number(tick) > 0 ? stopTicks * Number(tick) : null, exitReason });

@@ -84,22 +84,30 @@ function reach(file, stops, seen = new Set()) {
   return seen;
 }
 
-test('trade feedback invariance: no module that decides reaches the feedback but through the runner\'s review and its prompt', () => {
+test('trade feedback invariance: no module that decides, nor the fail-closed review hook, reaches the feedback but through the runner\'s prompt', () => {
   const lib = path.join(D.ROOT, 'scripts', 'lib');
   const FB = path.join(lib, 'trading', 'trade-feedback.js');
-  // The runner's prompt and its factual reviews (which write the trip tags) are the two ways in; the cycle log the recorder.
-  const stops = ['runner.js', 'runner-wiring.js', 'trading/runner-reviews.js', 'autotrader.js', 'cycle-log.js'].map(f => path.join(lib, f));
+  // The runner's prompt is the one way in (the runner's factual reviews write the trip tags through trip-facts.js, a leaf);
+  // the cycle log the recorder.
+  const stops = ['runner.js', 'runner-wiring.js', 'autotrader.js', 'cycle-log.js'].map(f => path.join(lib, f));
   const deciders = [
     'trading/order-gate.js', 'trading/mcp-gateway.js', 'trading/account-gate.js', 'trading/check-order.js', 'trading/trade-lifecycle.js',
     'trading/composed-reads.js', 'trading/lifecycle-gate.js', 'trading/lifecycle-order.js', 'trading/order-plan.js', 'trading/reasons.js',
     'trading/fact-claims.js', 'trading/verdict-stage.js', 'trading/combine.js', 'trading/prop-state.js', 'trading/rulebook.js', 'trading/mtf.js',
     'trading/briefing.js', 'trading/signal-state.js', 'prop/verdict.js', 'prop/size-translate.js', 'prop/composed-verdict.js', 'harness-tools/order-plan.js', 'harness-tools/compose.js',
     'runner-entry.js', 'cycle-data.js', 'trading/exit-trail.js', 'trading/trail.js',
+    // The fail-closed review hook's path (toolcall/rules.js requires runner-reviews.js for its count).
+    'toolcall/rules.js', 'trading/runner-reviews.js',
   ].map(f => path.join(lib, f));
   for (const f of deciders) {
     assert.ok(fs.existsSync(f), f);
     assert.ok(!reach(f, stops).has(FB), `${path.relative(D.ROOT, f)} reaches trade-feedback.js`);
   }
-  // The walk itself: the runner's review reaches it, so a decider requiring it would be caught.
-  assert.ok(reach(path.join(lib, 'trading', 'runner-reviews.js'), []).has(FB));
+  // The walk itself: the runner's prompt reaches it, so a decider requiring it would be caught.
+  assert.ok(reach(path.join(lib, 'runner-wiring.js'), []).has(FB));
+  // And at run time: the review hook's rule module and its count load without it.
+  const probe = "const lib = process.argv[1]; require(lib + '/toolcall/rules.js'); require(lib + '/trading/runner-reviews.js'); process.stdout.write(JSON.stringify(Object.keys(require.cache).filter(k => /trade-feedback|experience-log|lifecycle-record|instincts/.test(k))));";
+  const out = require('child_process').spawnSync(process.execPath, ['-e', probe, lib], { encoding: 'utf8' });
+  assert.strictEqual(out.status, 0, out.stderr);
+  assert.deepStrictEqual(JSON.parse(out.stdout).filter(k => /trade-feedback/.test(k)), []);
 });
