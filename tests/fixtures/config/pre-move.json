@@ -1846,6 +1846,38 @@
    "value": 2,
    "from": "new in feat/ride-or-exit (P1 item F, the owner: \"The model needs to learn when to ride trend and when to exit\"): weakening needs at least this many independent signs (the count decides; review round 2: one sign alone fired on most healthy trend bars)"
   },
+  "daySoFar.minBars": {
+   "value": 10,
+   "from": "new in feat/day-so-far (the briefing's Day so far line): the Day so far read waits for this many RTH 3m bars (a floor from the review, not tuned to a score: 5-bar reads were noise out of sample)"
+  },
+  "daySoFar.rotational": {
+   "value": 0.34,
+   "from": "new in feat/day-so-far (the briefing's Day so far line): the efficiency x sqrt(bars) cut under which the morning so far reads rotational (the audit 0.048 x sqrt(50), derived not fitted)"
+  },
+  "daySoFar.directional": {
+   "value": 0.75,
+   "from": "new in feat/day-so-far (the briefing's Day so far line): the efficiency x sqrt(bars) cut at or over which the morning so far reads directional (the audit 0.106 x sqrt(50), derived not fitted)"
+  },
+  "daySoFar.volMinutes": {
+   "value": 30,
+   "from": "new in feat/day-so-far (the briefing's Day so far line): the RTH volatility compares the last this many minutes with the same minutes on prior sessions"
+  },
+  "daySoFar.volSessions": {
+   "value": 10,
+   "from": "new in feat/day-so-far (the briefing's Day so far line): the RTH volatility uses up to this many prior sessions"
+  },
+  "daySoFar.volMinSessions": {
+   "value": 3,
+   "from": "new in feat/day-so-far (the briefing's Day so far line): the RTH volatility needs at least this many prior sessions, else unknown"
+  },
+  "daySoFar.volLow": {
+   "value": 0.75,
+   "from": "new in feat/day-so-far (the briefing's Day so far line): the RTH volatility reads low under this ratio of the prior sessions' median range"
+  },
+  "daySoFar.volHigh": {
+   "value": 1.33,
+   "from": "new in feat/day-so-far (the briefing's Day so far line): the RTH volatility reads high over this ratio of the prior sessions' median range"
+  },
   "pullbackRead.minLegAtr": {
    "value": 1,
    "from": "new in feat/pullback-read (the briefing's Pullback line): a leg under this many ATR(14) shows no depth (the leg is too small to measure a pullback against); a floor, not a tuned value"
