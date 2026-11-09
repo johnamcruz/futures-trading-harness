@@ -1037,3 +1037,43 @@ test('the desk at four at once (config/runner.json desk.concurrency): the four r
   }
   assert.match(r.ran[0].result, /^CYCLE RESULT: executed/);
 });
+
+test('entry workflow: the head trader\'s STATE line (trading/state-read.js) is a record only: present and right, wrong, malformed, conflicting or absent, compose_check, phase 2\'s and the executor\'s requests, the gate, the order and the outcome are the same', { timeout: 600000 }, async () => {
+  const PLANNED = 'CYCLE RESULT: planned - trade_lifecycle long 1';
+  const stateOf = (w, wrong) => {
+    const b = require('../../scripts/lib/trading/briefing').readBriefing(w.home, 'MNQ').sections;
+    const f = t => (wrong ? ({ up: 'down', down: 'up' }[t] || 'up') : t || 'unknown');
+    return `STATE: 4h ${f(b.h1.data.h4.trend)} | 1h ${f(b.h1.data.h1.trend)} | 15m ${f(b.m15.data.frame.trend)} | frames ${wrong ? 'agree' : 'disagree'}`;
+  };
+  const variants = {
+    absent: () => PLANNED,
+    right: w => `PLAN:\n1 HTF: ...\n${stateOf(w, false)}\n${PLANNED}`,
+    wrong: w => `PLAN:\n1 HTF: ...\n${stateOf(w, true)}\n${PLANNED}`,
+    malformed: () => `STATE: all bullish (4h up!!)\n${PLANNED}`,
+    conflicting: () => `STATE: 4h up\nSTATE: 4h down\n${PLANNED}`,
+  };
+  const VOLATILE = new Set(['ts', 'at', 'time', 'start', 'end', 'durationMs', 'ms', 'timing', 'stateRead', 'file', 'transcript', 'id', 'orderId', 'record', 'creationTimestamp', 'updateTimestamp']);
+  const got = {};
+  for (const [name, final] of Object.entries(variants)) {
+    const w = D.world();
+    const at = decisionAt(FIRED_BAR);
+    const R = roles(w, at);
+    const r = await D.pass(w, at, headPlanned(w, { result: () => final(w) }), { runRole: R.runRole });
+    const line = D.cycleLines(w).at(-1);
+    const plain = s => s.split(w.home).join('<home>').replace(/fth-[0-9a-f]{16}/g, 'fth-<tag>').replace(/\b(?:record|lc)[-_ ][0-9a-z]{6,}\b/gi, '<record>');
+    got[name] = {
+      state: line.stateRead.status,
+      decided: JSON.parse(JSON.stringify({
+        compose: r.ctx.results.compose_check,
+        requests: R.runs.filter(x => x.role === 'risk-manager phase 2' || x.role === 'trade-executor').map(x => [x.role, x.request]),
+        gate: entries(w).map(e => [e.decision, (e.violations || []).map(v => v.check)]),
+        broker: D.placedAtBroker(w).map(c => c.args),
+        result: r.ran[0].result, entry: { outcome: line.entry.outcome, ran: line.entry.ran }, history: r.state.history.map(h => [h.action, h.setup, h.side, h.entrySize]),
+        positions: exchange.read(w.state).positions.map(p => [p.contractId, p.type, p.size, p.averagePrice]),
+      }, (k, v) => (VOLATILE.has(k) ? undefined : typeof v === 'string' ? plain(v) : v))),
+    };
+  }
+  assert.deepStrictEqual(got.absent.decided.gate.map(g => g[0]), ['allowed'], 'the entry went');
+  for (const name of Object.keys(variants)) assert.deepStrictEqual(got[name].decided, got.absent.decided, name);
+  assert.deepStrictEqual(Object.values(got).map(g => g.state), ['none', 'read', 'read', 'unparsable', 'conflicting']);
+});

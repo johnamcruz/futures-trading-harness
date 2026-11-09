@@ -543,6 +543,28 @@ test('writeRunExperience: each pass\'s class from the store line\'s entry record
   assert.deepStrictEqual(E.readDecisions(r.file).map(d => [d.decision, d.passClass, d.vetoBasis]), [['passed', 'missed_fill', undefined], ['passed', 'vetoed', 'unstated']]);
 });
 
+test('stateRead: the cycle\'s STATE read and its score on each of its lines (plain passes too), from the store line to the log; a cycle without one, none', () => {
+  const t1 = new Date(ms(T0) + 10 * M3).toISOString();
+  const t2 = new Date(ms(T0) + 20 * M3).toISOString();
+  const read = { status: 'read', line: 'STATE: 4h up | 1h down', read: { frames: { '4h': 'up', '1h': 'down' }, day: null, agree: null }, missing: ['15m', 'day', 'frames'], bad: [], symbol: 'MNQ', bar: T0, briefing: null, fields: { '4h': { read: 'up', fact: 'up', field: 'h1.h4.trend', result: 'match' }, '1h': { read: 'down', fact: 'up', field: 'h1.h1.trend', result: 'mismatch' } }, counts: { match: 1, mismatch: 1, unknown: 0 }, facts: null };
+  const none = { status: 'none', line: null, read: null, missing: [], bad: [], symbol: 'MNQ', bar: t1, briefing: null, fields: {}, counts: { match: 0, mismatch: 0, unknown: 0 }, facts: null };
+  const { dir } = runDir({
+    times: [T0, t1, t2], records: [record({ at: T0 })], barRows: TRADE_ROWS,
+    cycleOf: { [T0]: { result: 'CYCLE RESULT: no-trade - x', stateRead: read }, [t1]: { result: 'CYCLE RESULT: no-trade - y', stateRead: none } },
+  });
+  const r = writeRunExperience(dir, { now: new Date('2026-10-14T00:00:00Z') });
+  const lines = E.readDecisions(r.file);
+  assert.deepStrictEqual(lines.map(d => [d.decision, d.stateRead ? d.stateRead.status : undefined]), [['passed', 'read'], ['none', 'none'], ['none', undefined]]);
+  assert.deepStrictEqual(lines[0].stateRead, read, 'kept as recorded: the read, each field\'s score, the counts');
+  // Another symbol's read is not this root's: left off its line.
+  const other = E.buildDecisions({ cycles: [{ at: T0, roots: ['MNQ'], stateRead: { ...read, symbol: 'MES' } }], records: [], runId: 'run1' });
+  assert.strictEqual(other[0].stateRead, undefined);
+  // The same family (NQ for MNQ) is the root's.
+  assert.ok(E.buildDecisions({ cycles: [{ at: T0, roots: ['MNQ'], stateRead: { ...read, symbol: 'NQ' } }], records: [], runId: 'run1' })[0].stateRead);
+  // An additive field: the version stays, so a run's older lines still append alongside.
+  assert.strictEqual(E.VERSION, 3);
+});
+
 test('VERSION 3: grades name the model\'s passes apart (passClass); an older log still reads; a run logged by an older version is refused unless rebuilt', () => {
   assert.strictEqual(E.VERSION, 3);
   const file = path.join(tmpHome(), 'experience', 'decisions.jsonl');

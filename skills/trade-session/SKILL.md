@@ -114,6 +114,12 @@ location, setup, confluence, entry, risk, decision, management) and write
 its PLAN block before your result line; the checks below fill its lines.
 It orders the thinking and adds no filter.
 
+Under PLAN line 1, one line, your own read from the bars and facts, not
+the labels copied (a label its last break or candle contradicts can be a
+`transition`, `trend-vs-range`); it is recorded and changes no step:
+`STATE: 4h <f> | 1h <f> | 15m <f> | frames <agree|disagree>`, `<f>` is
+`up`, `down`, `range`, `transition` or `unknown`.
+
 - **The priority order** (the `strategy-library` skill, "The priority order"):
   the rule for every setup, a policy verdict too. Apply its steps in order.
 - **Compose first** (`confluence-counting`): the side rule's side, the

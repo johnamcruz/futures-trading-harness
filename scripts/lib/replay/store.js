@@ -196,6 +196,8 @@ function cycleSummary(line) {
     ...(line.entry && line.entry.cutRestored && typeof line.entry.cutRestored === 'object' ? { cutRestored: line.entry.cutRestored } : {}),
     // The runner's entry outcome, its late-entry kind and a veto's basis: why a composed decision didn't trade
     // (learning/pass-class.js, the experience log's passClass).
+    // The head trader's STATE read and its score (trading/state-read.js), for the experience log and the read report.
+    ...(line.stateRead && typeof line.stateRead === 'object' ? { stateRead: line.stateRead } : {}),
     ...(line.entry && typeof line.entry.outcome === 'string' ? { entry: { outcome: line.entry.outcome, ...(typeof line.entry.late === 'string' ? { late: line.entry.late } : {}), ...(typeof line.entry.vetoBasis === 'string' ? { vetoBasis: line.entry.vetoBasis } : {}) } } : {}),
   };
 }

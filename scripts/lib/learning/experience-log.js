@@ -39,6 +39,9 @@
  *
  * The line (VERSION 3): { v, id, runId, root, contract, lane, cycleAt, bar, day, role, decision, refusal, side,
  *   passClass and vetoBasis (a passed or refused decision whose cycle says why; lines written before them lack them),
+ *   stateRead (the head trader's STATE read of the cycle and its per-field score against the briefing, as the cycle
+ *   log recorded it: trading/state-read.js; on every line of that symbol's family, plain passes too; additive, so the
+ *   version stays: lines written before it, or from a cycle without the record, lack it),
  *   exploratory, verified, checked, reads, signatures, context, plan, outcome: { source, filled, entryPrice,
  *   exitPrice, entryTime (the opening fill's time, or the counterfactual fill bar's; lines written before it lack it),
  *   size (fills only: the contracts opened), exitTime, exitReason, R, maeR, mfeR (the worst and best move while held,
@@ -409,9 +412,14 @@ function buildDecisions({ cycles = [], records = [], trips = [], stamps = {}, ga
     tripOf.set(s, t);
   }
   const out = [];
+  // The cycle's STATE read (cycle-log.js stateRead: its first symbol's), on the lines of that symbol's family only.
+  const stateOf = (at, root) => {
+    const s = (cycleByAt.get(at) || {}).stateRead;
+    return s && typeof s === 'object' && (!s.symbol || familyRoot(s.symbol) === familyRoot(root)) ? { stateRead: s } : {};
+  };
   for (const slot of slots) {
     const { at, root, recs, ok, fromMs, expiresMs } = slot;
-    const base = { v: VERSION, runId, root, lane: ok ? ok.lane : null, cycleAt: new Date(at).toISOString(), checked: recs.length, exit: exit.mode, exitPlan: exit.hash || null, writtenAt: now.toISOString() };
+    const base = { v: VERSION, runId, root, lane: ok ? ok.lane : null, cycleAt: new Date(at).toISOString(), checked: recs.length, exit: exit.mode, exitPlan: exit.hash || null, writtenAt: now.toISOString(), ...stateOf(at, root) };
     if (!ok) {
       const day = tradingDayKey(new Date(at));
       out.push({ ...base, id: idOf([runId, root, base.cycleAt, 'none']), contract: null, bar: null, day, role: safeRole(at), decision: 'none', refusal: null, side: null, frame: null,
