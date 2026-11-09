@@ -64,7 +64,7 @@ const signed = x => `${x > 0 ? '+' : ''}${r2(x)}`;
 const stepReads = step => s => {
   const reads = s.record && Array.isArray(s.record.reads) ? s.record.reads.filter(r => r && r.step === step) : [];
   const words = [...new Set(reads.map(r => formOf(r)).filter(Boolean))];
-  return words.length ? words.join(', ') : null;
+  return words.length ? words.join(' + ') : null;
 };
 const stateFact = key => s => (s.stateRead && isObj(s.stateRead.facts) && typeof s.stateRead.facts[key] === 'string' ? s.stateRead.facts[key] : null);
 
@@ -211,7 +211,7 @@ function feedbackLine(item) {
  * The per-read record over `items`: per read and its words, n trades, average R, MAE and MFE (each with its own n:
  * the known ones), only groups of at least `floor` trades, the largest `max`. Null when none reaches the floor.
  */
-function recordText(items, { floor, max }) {
+function recordText(items, { floor, max, of = null }) {
   const groups = new Map();
   const keys = REGISTRY.map(e => e.key);
   for (const it of items) {
@@ -227,7 +227,7 @@ function recordText(items, { floor, max }) {
   if (!shown.length) return null;
   const part = (name, xs) => (xs.length ? `${name} ${signed(avg(xs))} (n ${xs.length})` : `${name} unknown (n 0)`);
   const body = shown.map(([g, { list }]) => `${g}: n ${list.length}, avg R ${signed(avg(list.map(x => x.R)))}, ${part('MAE', list.map(x => x.maeR).filter(fin))}, ${part('MFE', list.map(x => x.mfeR).filter(fin))}`);
-  return `Record per read (your last ${items.length} reviewed trades; groups of ${floor} or more; MAE/MFE from bar extremes, bar-granular, overstated): ${body.join('; ')}`;
+  return `Record per read (${of && of > items.length ? `${items.length} of your last ${of}` : `your last ${items.length}`} reviewed trades; groups of ${floor} or more; MAE/MFE from bar extremes, bar-granular, overstated): ${body.join('; ')}`;
 }
 
 /** An entered experience log line (v3) as an item: its reads, context and STATE read; its outcome (no exit reason there). */
@@ -249,7 +249,7 @@ const readJson = file => { try { return JSON.parse(fs.readFileSync(file, 'utf8')
 const readLines = file => { try { return fs.readFileSync(file, 'utf8').split('\n').filter(Boolean).flatMap(l => { try { return [JSON.parse(l)]; } catch (_err) { return []; } }); } catch (_err) { return []; } };
 
 /** The joins for the reviews: the stamped record, its cycle's STATE read, the lane's bars; each read once. */
-function joiner({ home, dataDir, timeframe }) {
+function joiner({ home, env, dataDir, timeframe }) {
   const stamps = new Map((Array.isArray(readJson(path.join(home, 'entry-orders.json'))) ? readJson(path.join(home, 'entry-orders.json')) : [])
     .filter(e => isObj(e) && isObj(e.composed) && e.composed.record).map(e => [String(e.orderId), e]));
   const cache = new Map();
@@ -270,10 +270,19 @@ function joiner({ home, dataDir, timeframe }) {
         stateRead = hit.length ? hit[hit.length - 1].stateRead : null;
       }
     }
-    const bars = dataDir && root ? once(`b|${root}`, () => {
+    // The run's bars as the experience log reads them (run-experience.js): the archive of the trade's day (every bar
+    // the session polled: session/bars-archive.js) with the lane's bars file (rewritten each bar: its last window only).
+    const trip = tripOf(review);
+    const day = trip && fin(trip.openMs) ? tradingDayKey(new Date(trip.openMs)) : null;
+    const file = dataDir && root ? once(`b|${root}`, () => {
       const f = readJson(path.join(dataDir, `${root}-${timeframe}m.json`));
-      return f && Array.isArray(f.bars) ? f.bars : [];
+      return (f && Array.isArray(f.bars) ? f.bars : []).map(b => ({ ...b, ms: Date.parse(b.t) }));
     }) || [] : [];
+    const bars = root && day ? once(`a|${root}|${day}`, () => {
+      const A = require('../session/bars-archive');
+      const archived = A.archivedBars(A.recordDirFor(home, env, day)).series(root, Number(timeframe));
+      return require('../learning/run-experience').mergeBars(archived, file);
+    }) || file : file;
     return { record, stateRead, bars, tfMs };
   };
 }
@@ -282,16 +291,16 @@ function joiner({ home, dataDir, timeframe }) {
  * The prompt's reviewed trades: the last `n` of the scoped journal `entries` as lines (the feedback line, else the
  * plain one: instincts.js), and the per-read record over the last `window` (recordText at `floor`, `max`).
  */
-function tradeFeedback({ entries, home, dataDir = null, timeframe, n, window, floor, max }) {
+function tradeFeedback({ entries, home, env = process.env, dataDir = null, timeframe, n, window, floor, max }) {
   const reviews = graded(Array.isArray(entries) ? entries : []);
   if (!reviews.length) return { lines: [], record: null, tagged: 0 };
-  const join = joiner({ home, dataDir, timeframe });
+  const join = joiner({ home, env, dataDir, timeframe });
   const items = new Map();
   const itemOf = r => { if (!items.has(r)) items.set(r, feedbackItem({ review: r, ...join(r) })); return items.get(r); };
   const shown = reviews.slice(-n).map(r => ({ r, it: itemOf(r) }));
   const lines = shown.map(({ r, it }) => (it ? feedbackLine(it) : tradeLine(r)));
   const recent = reviews.slice(-window).map(itemOf).filter(Boolean);
-  return { lines, record: recent.length ? recordText(recent, { floor, max }) : null, tagged: shown.filter(x => x.it).length };
+  return { lines, record: recent.length ? recordText(recent, { floor, max, of: reviews.slice(-window).length }) : null, tagged: shown.filter(x => x.it).length };
 }
 
 module.exports = { REGISTRY, FRAMING, tripTags, tripOf, exitReasonOf, normalizeRecord, readsAt, behaviour, behaviourOf, feedbackItem, feedbackLine, recordText, fromExperienceRow, tradeFeedback };

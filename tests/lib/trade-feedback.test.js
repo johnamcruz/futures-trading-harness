@@ -63,7 +63,7 @@ test('the read tags: one registry entry per read, the reads present at entry (re
   });
   // Prices dropped (a read's form), two reads of a step joined.
   const two = F.readsAt({ record: F.normalizeRecord(record({ reads: [{ step: 'bias', skill: 'a', read: '1h up' }, { step: 'bias', skill: 'b', read: '4h up' }, { step: 'location', skill: 'c', read: 'at 1h swing high 13702.5' }] })) });
-  assert.deepStrictEqual([two.bias, two.location], ['1h up, 4h up', 'at 1h swing high']);
+  assert.deepStrictEqual([two.bias, two.location], ['1h up + 4h up', 'at 1h swing high']);
   // Nothing present: nothing tagged (never a guess); a STATE line the head didn't write is no state read.
   assert.deepStrictEqual(F.readsAt({}), {});
   assert.ok(!('state' in F.readsAt({ stateRead: { status: 'none', read: null, facts: { daySoFar: null, pullback: null } } })));
@@ -112,6 +112,8 @@ test('the per-read record: held below the sample floor, n beside every figure ab
   assert.strictEqual(four, 'Record per read (your last 4 reviewed trades; groups of 3 or more; MAE/MFE from bar extremes, bar-granular, overstated): regime trend-up: n 4, avg R +0.13, MAE -0.65 (n 4), MFE +1.27 (n 3); bias 1h up: n 3, avg R 0, MAE -0.73 (n 3), MFE +1.4 (n 2)');
   // Every figure has its n beside it.
   for (const g of four.split(': ').slice(1).join(': ').split('; ')) assert.match(g, /n \d+, avg R .*MAE .* \(n \d+\), MFE .* \(n \d+\)$/);
+  // Reviews without feedback in the window: said so ("4 of your last 7"), never counted as tagged.
+  assert.match(F.recordText(items, { floor: 3, max: 6, of: 7 }), /^Record per read \(4 of your last 7 reviewed trades;/);
   // The cap keeps the largest groups.
   assert.match(F.recordText(items, { floor: 3, max: 1 }), /: regime trend-up: n 4[^;]*$/);
   // A group whose MFE is all unknown says so.
@@ -182,6 +184,15 @@ test('the prompt\'s trades: the last n reviewed with feedback lines (a plain one
   // Missing files: the line with what is known, never a throw.
   const bare = F.tradeFeedback({ entries: [review()], home: fs.mkdtempSync(path.join(os.tmpdir(), 'fth-feedback-')), dataDir: null, timeframe: 3, n: 10, window: 30, floor: 5, max: 6 });
   assert.match(bare.lines[0], /reads: unknown; 3 MNQ; exit trail; loss R -0\.9; MAE unknown, MFE unknown$/);
+  // The lane file holds only its last window (a later day here): the trade's day comes from the session's bars archive
+  // (session/bars-archive.js), as the experience log reads the run's bars.
+  const A = require('../../scripts/lib/session/bars-archive');
+  const window5 = bars().map(b => ({ ...b, t: new Date(Date.parse(b.t) + 5 * 86400000).toISOString() }));
+  fs.writeFileSync(path.join(dataDir, 'MNQ-3m.json'), JSON.stringify({ bars: window5 }));
+  const env = { FTH_HOME: home };
+  A.appendBars(A.recordDirFor(home, env, '2021-06-04'), '2021-06-04', { symbol: 'MNQ', contractId: 'MNQ', minutes: 3, bars: bars() });
+  const archived = F.tradeFeedback({ entries: [review()], home, env, dataDir, timeframe: 3, n: 10, window: 30, floor: 5, max: 6 });
+  assert.match(archived.lines[0], /MAE -0\.9, MFE \+0\.3 at bar 2/);
   // No reviews: nothing.
   assert.deepStrictEqual(F.tradeFeedback({ entries: [], home, dataDir, timeframe: 3, n: 10, window: 30, floor: 5, max: 6 }), { lines: [], record: null, tagged: 0 });
 });

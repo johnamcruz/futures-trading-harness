@@ -811,7 +811,7 @@ function wireRunner({ cfg, root, home, env = process.env, client, prop = null, d
     // how it behaved, and the per-read record behind config/runner.json prompt.feedbackMinTrades. Information only; phase
     // 1 keeps recentTrades' plain lines.
     tradeFeedback: ({ entries } = {}) => require('./trading/trade-feedback').tradeFeedback({
-      entries: journalSince(entries || journal(), historyFrom(home)), home, dataDir, timeframe: cfg.timeframe,
+      entries: journalSince(entries || journal(), historyFrom(home)), home, env, dataDir, timeframe: cfg.timeframe,
       n: P().reviewedTrades, window: P().instinctsRecentReviews, floor: P().feedbackMinTrades, max: P().feedbackRecordGroups,
     }),
     // The time a fresh combine attempt's in-prompt history starts at (its record's historyFrom), or null.
