@@ -59,6 +59,7 @@ const { mtfRead, label } = require('./mtf');
 const { BIAS_FRAMES } = require('./entry-rule');
 const { swingSeries } = require('./exit-trail');
 const { snapStop } = require('./trail');
+const { impulseOf } = require('./pullback-read');
 const { RTH_OPEN_MIN, RTH_CLOSE_MIN } = require('./clock');
 
 const AN = require('../tunables').analysis(); // config/analysis.json: the swing confirmation, the EMA, the read's settings
@@ -152,7 +153,6 @@ function tradeRead({ side, entry, openedAt, bars, base, tick = null, exit = null
   if (i0 < 0) return { unavailable: 'no closed bar since the fill yet' };
   const way = s > 0 ? 'up' : 'down';
   const hi = c => (s > 0 ? c.h : -c.l); // the trade's way's extreme, as a number that grows the trade's way
-  const lo = c => (s > 0 ? c.l : -c.h);
   const unsign = x => s * x;
   const atr = lastOf(ind.atr(cs, ind.ATR_PERIOD));
   const now = cs[cs.length - 1].c;
@@ -169,13 +169,10 @@ function tradeRead({ side, entry, openedAt, bars, base, tick = null, exit = null
   const failed = pushes.length > 1 ? (s * b.swing <= s * a.swing ? { level: a.swing, swing: b.swing, at: b.at } : false) : null;
   const fading = pushes.length > 1 && a.sizeAtr !== null && b.sizeAtr !== null ? b.sizeAtr < a.sizeAtr && b.momentum <= a.momentum : null;
 
-  // The last impulse: from the extreme against since the last structure-frame swing against before the best, to the best.
-  const back = j0 >= 0 ? [...pivots(hc, K)].reverse().find(p => p.type === (s > 0 ? 'low' : 'high') && Date.parse(hc[p.i].t) < Date.parse(cs[iBest].t)) : null;
-  const fromMs = back ? Date.parse(hc[back.i].t) : opened;
-  let o = iBest;
-  for (let i = 0; i <= iBest; i += 1) if (Date.parse(cs[i].t) >= fromMs && lo(cs[i]) < lo(cs[o])) o = i;
-  const span = hi(cs[iBest]) - lo(cs[o]);
-  const pullback = { origin: unsign(lo(cs[o])), best: extreme.best, depth: span > 0 ? r2((hi(cs[iBest]) - s * now) / span) : null };
+  // The last impulse: from the extreme against since the last structure-frame swing against before the best, to the best
+  // (pullback-read.js impulseOf: one definition, the flat cycle's Pullback read measures its leg with it).
+  const imp = impulseOf({ cs, hc, s, iBest, fromMs: opened, search: j0 >= 0 });
+  const pullback = { origin: imp.origin, best: extreme.best, depth: imp.depth };
 
   const vwap = lastOf(ind.anchoredVwap(cs, RTH_OPEN_MIN, RTH_CLOSE_MIN).slice(-1));
   const ema = lastOf(ind.ema(cs.map(c => c.c), EMA));

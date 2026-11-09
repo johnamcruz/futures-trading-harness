@@ -496,6 +496,18 @@ test('trade-session split: no head-trader path reads more than the base\'s every
 // 94835 (the pin +455), the risk manager 93175 (+413), the trend-momentum analyst 54847 (+307), the volume-liquidity
 // analyst 49079 (+455); index mode the market-structure analyst 43263 (+88), the risk manager 79063 (+424), the
 // trend-momentum analyst 40457 (+434), the volume-liquidity analyst 33711 (+455); every other role unchanged.
+// Then feat/pullback-read (owner rule: raise a pin when it improves context; a flat cycle had no computed pullback facts):
+// bar-briefing's Pullback line paragraph (+454 bytes in every role that embeds it) and pullback-vs-reversal's rows naming
+// the line (+279, full mode, the two analysts that embed it): full mode the market-structure analyst +733 (95113), the
+// trend-momentum analyst +733 (55125, the pin +585), the risk manager +454 (93174, the pin +412), the volume-liquidity
+// analyst +454 (49078); index mode +454 each (the market-structure analyst 43262, the pin +87; the risk manager 79062, the
+// pin +423; the trend-momentum analyst 40456, the pin +433; the volume-liquidity analyst 33710); every other role unchanged.
+// Then the owner's review of it: the paragraph says a leg given back past its origin or under the ATR floor shows no
+// depth, and that a missing volume or range phrase means not computable (+55 in every role that embeds bar-briefing).
+// Then its review: no line in the ~30 min before a top's 15m swing confirms (absence is no read), a swing is broken by a
+// close since the extreme, the bars counted since the extreme, the volume ratio not time-of-day adjusted (+124 each).
+// Then pullback-vs-reversal's Swing row names each source's rule (the line: closes since the extreme; htfLevels: since
+// the swing formed): +52, full mode, the two analysts that embed it (95344, 55356).
 // Then fix/standdown-basis (owner rule: raise a pin when it improves context): strategy-library's step 1 says what a
 // phase-1 stand-down rests on (the account's facts and the stops on them, never a lesson: a replay vetoed 42 times on
 // one), +483 bytes in every role that carries strategy-library, both modes: the market-structure analyst 94380 -> 94863
@@ -503,8 +515,8 @@ test('trade-session split: no head-trader path reads more than the base\'s every
 // (base 78608); the trend-momentum analyst 54540 -> 54875 (base 54392), 40023 -> 40485 (base 40002); the strategy researcher 25650 -> 25728 both
 // modes (base 25245); every other role within its pin.
 const ROLE_PROMPTS = {
-  full: { 'market-structure-analyst': 95318, 'news-calendar-analyst': 10182, 'risk-manager': 93658, 'strategy-researcher': 25728, 'trade-executor': 30670, 'trade-reviewer': 9454, 'trend-momentum-analyst': 55330, 'volume-liquidity-analyst': 49079 },
-  index: { 'market-structure-analyst': 43746, 'news-calendar-analyst': 10182, 'risk-manager': 79546, 'strategy-researcher': 25728, 'trade-executor': 30659, 'trade-reviewer': 9454, 'trend-momentum-analyst': 40940, 'volume-liquidity-analyst': 33711 },
+  full: { 'market-structure-analyst': 96282, 'news-calendar-analyst': 10182, 'risk-manager': 94291, 'strategy-researcher': 25728, 'trade-executor': 30670, 'trade-reviewer': 9454, 'trend-momentum-analyst': 56294, 'volume-liquidity-analyst': 49712 },
+  index: { 'market-structure-analyst': 44379, 'news-calendar-analyst': 10182, 'risk-manager': 80179, 'strategy-researcher': 25728, 'trade-executor': 30659, 'trade-reviewer': 9454, 'trend-momentum-analyst': 41573, 'volume-liquidity-analyst': 34344 },
 };
 
 test('trade-session split: no role prompt grows, in full or index mode, and no role lists a piece', () => {
