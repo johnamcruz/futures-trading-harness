@@ -19,7 +19,7 @@
  *              size cap, the account snapshot, the replay clock, cycles, bars, the prompt's sizes, the live session,
  *              alerts, read-size caps and page sizes, and the Monte Carlo's size (prop/mc-size.js)
  *   analysis   the reads' parameters: indicators, the snapshot, regime, CISD, CRT, volume profile, candles, the
- *              multi-timeframe read, day context, structure, momentum, fair value gaps and the briefing's frames. A
+ *              multi-timeframe read, day context, the day so far, structure, momentum, fair value gaps and the briefing's frames. A
  *              strategy's `params` still override them (market-snapshot.js PARAMS is the defaults a strategy overrides),
  *              and the rules evaluator's window
  *
@@ -222,6 +222,9 @@ const ANALYSIS = {
   reaction: { wickBody: pos(), wickRange: frac(), breakoutBody: frac(), conflict: record(int(1)) },
   mtf: { fast: int(1), slow: int(1), rangeLen: int(1), maxCandles: int(1), historyHours: int(1), historyMarginHours: int(0), legacyHistoryHours: int(1), ruleFrames: list(int(1), { min: 1 }) },
   dayContext: { ibMinutes: int(1), openMinutes: int(1), adrDays: int(1) },
+  // The day so far (day-so-far.js): the RTH bars a read needs (fewer: too early), the read's bands on efficiency x sqrt(bars), and the RTH volatility's window, prior
+  // sessions and bands (its range against the same minutes' median on the prior sessions).
+  daySoFar: { minBars: int(1), rotational: pos(), directional: pos(), volMinutes: int(1), volSessions: int(1), volMinSessions: int(1), volLow: pos(), volHigh: pos() },
   levelCloses: { maxCloses: int(1) },
   structure: { sweepBars: int(1), swingLevels: int(1), m5Recent: int(1) },
   momentum: { rangeAtr: nonneg(), volRatio: nonneg() },
@@ -360,6 +363,7 @@ const BUILT_IN = deepFreeze({
     reaction: { wickBody: 1, wickRange: 0.3333, breakoutBody: 0.7, conflict: { 15: 60 } },
     mtf: { fast: 20, slow: 50, rangeLen: 20, maxCandles: 300, historyHours: 504, historyMarginHours: 10, legacyHistoryHours: 240, ruleFrames: [240, 60, 15] },
     dayContext: { ibMinutes: 60, openMinutes: 30, adrDays: 10 },
+    daySoFar: { minBars: 10, rotational: 0.34, directional: 0.75, volMinutes: 30, volSessions: 10, volMinSessions: 3, volLow: 0.75, volHigh: 1.33 },
     levelCloses: { maxCloses: 20 },
     structure: { sweepBars: 10, swingLevels: 3, m5Recent: 3 },
     momentum: { rangeAtr: 1, volRatio: 1 },
