@@ -67,6 +67,8 @@ test('the read tags: one registry entry per read, the reads present at entry (re
   // Nothing present: nothing tagged (never a guess); a STATE line the head didn't write is no state read.
   assert.deepStrictEqual(F.readsAt({}), {});
   assert.ok(!('state' in F.readsAt({ stateRead: { status: 'none', read: null, facts: { daySoFar: null, pullback: null } } })));
+  // A broken line's partial read (unparsable, conflicting) is no read at entry.
+  assert.ok(!('state' in F.readsAt({ stateRead: stateRead({ status: 'unparsable' }) })));
   // A later read is one entry: a registry with one added tags it with no other change.
   const reg = [...F.REGISTRY, { key: 'vwap', of: s => (s.record ? 'above' : null) }];
   assert.strictEqual(F.readsAt({ record: F.normalizeRecord(record()) }, reg).vwap, 'above');
@@ -168,7 +170,9 @@ test('the prompt\'s trades: the last n reviewed with feedback lines (a plain one
   fs.mkdirSync(path.dirname(shard), { recursive: true });
   fs.writeFileSync(shard, `${JSON.stringify(record())}\n`);
   fs.mkdirSync(path.join(home, 'logs'), { recursive: true });
-  fs.writeFileSync(path.join(home, 'logs', 'cycles-2021-06-04.jsonl'), `${JSON.stringify({ cycleAt: '2021-06-04T14:42:00.000Z', action: 'trade', stateRead: stateRead() })}\n`);
+  // The record's own bar's cycle, never a later cycle's read (another bar: a later STATE line).
+  const later = stateRead({ bar: '2021-06-04T14:51:00.000Z', read: { frames: { '4h': 'down', '1h': 'down', '15m': 'down' }, agree: 'yes' } });
+  fs.writeFileSync(path.join(home, 'logs', 'cycles-2021-06-04.jsonl'), [{ cycleAt: '2021-06-04T14:42:00.000Z', action: 'trade', stateRead: stateRead() }, { cycleAt: '2021-06-04T14:54:00.000Z', action: 'trade', stateRead: later }].map(x => JSON.stringify(x)).join('\n'));
   const plain = { ts: '2021-06-03T15:00:00.000Z', kind: 'review', contractId: 'MNQ', text: 'orb long, R -1.1', tags: ['result:loss', 'setup:orb', 'r:-1.1'] };
   const out = F.tradeFeedback({ entries: [plain, review()], home, dataDir, timeframe: 3, n: 10, window: 30, floor: 5, max: 6 });
   assert.deepStrictEqual(out.lines, ['orb long loss -1.1R', F.feedbackLine(F.feedbackItem({ review: review(), record: F.normalizeRecord(record()), stateRead: stateRead(), bars: bars(), tfMs: M3 }))]);
