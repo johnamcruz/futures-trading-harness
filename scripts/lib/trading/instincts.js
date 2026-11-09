@@ -148,12 +148,15 @@ function lessonLines(entries, { n, now = null, shadow = [] } = {}) {
  * how it ended, and what went wrong ("orb long loss -1.11R [mistake:chased]").
  */
 function recentTrades(entries, n = 10) {
-  return graded(entries).slice(-n).map(r => {
-    const dir = sidesIn(r.text)[0];
-    const rr = reviewR(r);
-    const mistakes = (r.tags || []).filter(t => String(t).toLowerCase().startsWith('mistake:'));
-    return `${tagValue(r, 'setup') || '?'}${dir ? ` ${dir}` : ''} ${reviewResult(r)}${rr === null ? '' : ` ${rr >= 0 ? '+' : ''}${rr}R`}${tagValue(r, 'regime') ? ` in ${tagValue(r, 'regime')}` : ''}${mistakes.length ? ` [${mistakes.join(', ')}]` : ''}`;
-  });
+  return graded(entries).slice(-n).map(tradeLine);
+}
+
+/** One graded review's plain line ("orb long loss -1.11R [mistake:chased]"): a trade with no feedback facts. */
+function tradeLine(r) {
+  const dir = sidesIn(r.text)[0];
+  const rr = reviewR(r);
+  const mistakes = (r.tags || []).filter(t => String(t).toLowerCase().startsWith('mistake:'));
+  return `${tagValue(r, 'setup') || '?'}${dir ? ` ${dir}` : ''} ${reviewResult(r)}${rr === null ? '' : ` ${rr >= 0 ? '+' : ''}${rr}R`}${tagValue(r, 'regime') ? ` in ${tagValue(r, 'regime')}` : ''}${mistakes.length ? ` [${mistakes.join(', ')}]` : ''}`;
 }
 
 /** The form of the last `n` reviewed trades: record, expectancy, and the mistakes that repeat. */
@@ -192,4 +195,4 @@ function formSummary(entries, n = 10) {
   return `${list.filter(r => reviewResult(r) === 'win').length}W/${list.filter(r => reviewResult(r) === 'loss').length}L${e === null ? '' : `, E ${e >= 0 ? '+' : ''}${e}R`}`;
 }
 
-module.exports = { instincts, lessonLines, digest, formSummary, recentTrades, recentForm, reviewR, confidenceFor, graded };
+module.exports = { instincts, lessonLines, digest, formSummary, recentTrades, tradeLine, recentForm, reviewR, confidenceFor, graded };

@@ -219,7 +219,18 @@ function stateFacts(b) {
     dayType: dayTypeOf(b), regime: isObj(m3.regime) && typeof m3.regime.primary === 'string' ? m3.regime.primary : null,
     trendRule: typeof m3.trendRule === 'string' ? m3.trendRule : null,
     breaks: { '1h': breakOf('h1'), '15m': breakOf('m15'), '3m': breakOf('m3') },
+    // The Day so far and Pullback lines' words at this bar (day-so-far.js, pullback-read.js pullbackWord): recorded so a
+    // trade can be tagged with the reads present at its entry (trade-feedback.js), never scored.
+    daySoFar: daySoFarWord(m3), pullback: 'pullback' in m3 ? require('./pullback-read').pullbackWord(m3.pullback) : null,
   };
+}
+
+/** The Day so far line's word at this bar: its read (directional, rotational, mixed), `too early`, else null. */
+function daySoFarWord(m3) {
+  const d = isObj(m3.today) && isObj(m3.today.soFar) ? m3.today.soFar : null;
+  if (!d) return null;
+  if (d.status === 'read' && typeof d.read === 'string') return d.read;
+  return d.status === 'too early' ? 'too early' : null;
 }
 
 function cycleStateRead({ home, text, context = null, now = new Date() }) {

@@ -1027,7 +1027,11 @@ test('mock trading, runner reviews (live): an entry stopped out gets the runner\
   assert.ok(rev, r.logs.join('\n'));
   // Net of its two fills' fees ($0.37 each on the mock exchange) over its risk ($2 a point on MNQ), as trade-review writes r:.
   const gross = Math.round((-(t.risk + 1) / t.risk) * 100) / 100;
-  assert.deepStrictEqual(rev.tags, ['by:runner', 'result:loss', 'setup:fx_break', 'MNQ', `r:${Math.round((gross - 0.74 / (t.risk * 2)) * 100) / 100}`]);
+  assert.deepStrictEqual(rev.tags.filter(x => !x.startsWith('trip-')), ['by:runner', 'result:loss', 'setup:fx_break', 'MNQ', `r:${Math.round((gross - 0.74 / (t.risk * 2)) * 100) / 100}`]);
+  // Its trip for the trade feedback (trade-feedback.js): the broker's own stop leg closed it at the planned stop.
+  const trip = require('../../scripts/lib/trading/trade-feedback').tripOf(rev);
+  assert.deepStrictEqual([trip.side, trip.size, trip.risk, trip.exitReason], ['long', 1, t.risk, 'stop']);
+  assert.ok(trip.closeMs > trip.openMs);
   assert.match(rev.text, /R net of fees on the planned \d+-tick stop/);
   assert.strictEqual(byRunner(w).length, 1, 'once, on every later bar too');
   const next = await nextEntry(w);

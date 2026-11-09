@@ -54,8 +54,10 @@ test('historySince: the last cycles count only the attempt\'s own decisions (at 
 test('wiring: the runner reads its reviewed trades and the attempt\'s start through the scope', () => {
   const fs = require('fs');
   const src = fs.readFileSync(path.join(__dirname, '..', '..', 'scripts', 'lib', 'runner-wiring.js'), 'utf8');
-  assert.match(src, /recentTrades: \(\{ entries \} = \{\}\) => recentTrades\(journalSince\(entries \|\| journal\(\), historyFrom\(home\)\), 10\)/);
-  assert.match(src, /tradesSummary: \(\{ entries \} = \{\}\) => formSummary\(journalSince\(entries \|\| journal\(\), historyFrom\(home\)\), 10\)/);
+  assert.match(src, /recentTrades: \(\{ entries \} = \{\}\) => recentTrades\(journalSince\(entries \|\| journal\(\), historyFrom\(home\)\), P\(\)\.reviewedTrades\)/);
+  assert.match(src, /tradesSummary: \(\{ entries \} = \{\}\) => formSummary\(journalSince\(entries \|\| journal\(\), historyFrom\(home\)\), P\(\)\.reviewedTrades\)/);
+  // The head trader's feedback lines read the same scope (a fresh attempt shows only its own trades).
+  assert.match(src, /tradeFeedback\(\{\n\s+entries: journalSince\(entries \|\| journal\(\), historyFrom\(home\)\),/);
   assert.match(src, /historyFrom: \(\) => historyFrom\(home\)/);
   const runner = fs.readFileSync(path.join(__dirname, '..', '..', 'scripts', 'lib', 'runner.js'), 'utf8');
   assert.match(runner, /const ownHistory = historySince\(\(state && state\.history\) \|\| \[\], attempt\('the attempt\\'s start', \(\) => historyFrom\(\), null\)\);/);

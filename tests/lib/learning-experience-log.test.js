@@ -666,3 +666,31 @@ test('limitOutcome, market (a cited setup\'s record): fills at once at the open 
   assert.deepStrictEqual([rec.plan.entry, rec.plan.entryType], [100, 'market']);
   assert.strictEqual('entryType' in fromLifecycleRecord({ id: 'y', side: 'long', root: 'MNQ', bar: T0, plan: { entry: { type: 'limit', price: 100 } } }).plan, false);
 });
+
+test('trip excursion: tripOutcome\'s one definition of MAE and MFE, with the bars to the best move (the trade feedback reads it)', () => {
+  const rows = bars(T0, [[100, 101, 99, 100.5], [100.5, 104, 100, 103.5], [103.5, 103.5, 102, 103], [103, 110, 90, 100]]);
+  const x = { side: 'long', entryPrice: 100, exitPrice: 103, openMs: ms(T0), closeMs: ms(T0) + 3 * M3, risk: 2, bars: rows, tfMs: M3 };
+  // The best (104) on the fill's bar + 1; tripOutcome reports the same MAE and MFE.
+  assert.deepStrictEqual(E.tripExcursion(x), { maeR: -0.5, mfeR: 2, mfeBars: 1 });
+  const rt = { openMs: x.openMs, closeMs: x.closeMs, opens: [{ price: 100, size: 1 }], closes: [{ price: 103, size: 1 }] };
+  const o = E.tripOutcome(rt, { entry: 100, stop: 98 }, 'long', { bars: rows, tfMs: M3 });
+  assert.deepStrictEqual([o.maeR, o.mfeR], [-0.5, 2]);
+  assert.ok(!('mfeBars' in o), 'the experience line keeps its fields');
+  // The exit beyond every bar held whole: the best is the exit's, on its bar.
+  assert.deepStrictEqual(E.tripExcursion({ ...x, exitPrice: 105 }), { maeR: -0.5, mfeR: 2.5, mfeBars: 2 });
+  // A tie keeps the first bar that reached it.
+  assert.deepStrictEqual(E.tripExcursion({ ...x, exitPrice: 104 }).mfeBars, 1);
+  // Nothing in its favour: no bar to name.
+  const down = bars(T0, [[100, 100, 98.5, 99], [99, 99.5, 98.5, 99]]);
+  assert.deepStrictEqual(E.tripExcursion({ ...x, exitPrice: 98.5, closeMs: ms(T0) + 2 * M3, bars: down }), { maeR: -0.75, mfeR: 0, mfeBars: null });
+  // A short, mirrored.
+  const sh = bars(T0, [[100, 100.5, 99, 99.5], [99.5, 99.5, 97, 97.5]]);
+  assert.deepStrictEqual(E.tripExcursion({ ...x, side: 'short', exitPrice: 98, closeMs: ms(T0) + 2 * M3, bars: sh }), { maeR: -0.25, mfeR: 1.5, mfeBars: 1 });
+  // Unknown, never the exit alone: no bars, a gap, held under one bar, no risk.
+  const none = { maeR: null, mfeR: null, mfeBars: null };
+  assert.deepStrictEqual(E.tripExcursion({ ...x, bars: [] }), none);
+  assert.deepStrictEqual(E.tripExcursion({ ...x, bars: [rows[0], rows[2]] }), none);
+  assert.deepStrictEqual(E.tripExcursion({ ...x, openMs: ms(T0) + 60000, closeMs: ms(T0) + 120000 }), none);
+  assert.deepStrictEqual(E.tripExcursion({ ...x, risk: 0 }), none);
+  assert.deepStrictEqual(E.tripExcursion({ ...x, side: 'flat' }), none);
+});

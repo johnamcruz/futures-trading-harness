@@ -170,8 +170,32 @@ test('state facts: the labels and their context as the code had them, recorded, 
   assert.deepStrictEqual(f, {
     frames: { '4h': 'up', '1h': 'up', '15m': 'up' }, dayType: 'trend up', regime: 'trend-up',
     trendRule: 'Trend rule: LONG allowed (prevailing 4h up); no short against it.', breaks: { '1h': 'down', '15m': 'up', '3m': 'down' },
+    daySoFar: null, pullback: null,
   });
   assert.strictEqual(S.stateFacts(null), null);
+});
+
+test('state facts: the Day so far and Pullback lines\' words as the cycle bar\'s briefing had them (what the trade feedback tags an entry with)', () => {
+  const with_ = (today, pullback) => {
+    const b = briefing();
+    Object.assign(b.sections.m3.data.today, today);
+    if (pullback !== undefined) b.sections.m3.data.pullback = pullback;
+    return S.stateFacts(b);
+  };
+  assert.strictEqual(with_({ soFar: { status: 'read', read: 'directional' } }).daySoFar, 'directional');
+  assert.strictEqual(with_({ soFar: { status: 'read', read: 'rotational' } }).daySoFar, 'rotational');
+  assert.strictEqual(with_({ soFar: { status: 'too early', bars: 3 } }).daySoFar, 'too early');
+  assert.strictEqual(with_({ soFar: { status: 'unknown', reason: 'x' } }).daySoFar, null, 'unknown: no word');
+  assert.strictEqual(with_({}).daySoFar, null, 'outside RTH: none');
+  // The Pullback line: absent (the flat cycle's read found none) is "none"; not computed (another lane's briefing) null.
+  assert.strictEqual(with_({}, null).pullback, 'none');
+  assert.strictEqual(with_({}).pullback, null);
+  const leg = { side: 'long', frame: '15m', leg: { origin: 100, extreme: 110, atr: 3 }, depth: 0.4, pastOrigin: false, stacked: false };
+  assert.strictEqual(with_({}, leg).pullback, 'depth 40%');
+  assert.strictEqual(with_({}, { ...leg, stacked: true }).pullback, 'depth 40%, breaks against stacked');
+  assert.strictEqual(with_({}, { ...leg, pastOrigin: true, depth: 1.2 }).pullback, 'leg given back');
+  assert.strictEqual(with_({}, { ...leg, leg: { ...leg.leg, atr: 0.5 } }).pullback, 'small leg');
+  assert.strictEqual(with_({}, { ...leg, depth: null }).pullback, 'depth unknown');
 });
 
 test('state vocabulary: one registry entry per field, the parser and the scorer read only it', () => {

@@ -175,4 +175,19 @@ function pullbackLine(p, { level = x => x } = {}) {
   return `- Pullback (${p.frame}, ${p.side} leg ${level(p.leg.origin)} -> ${level(p.leg.extreme)}): ${parts.join('; ')}.`;
 }
 
-module.exports = { impulseOf, swingOf, pullbackRead, pullbackLine };
+/**
+ * The Pullback line's few words (pullbackLine's own depth rule): `depth 40%`, `leg given back`, `small leg` or `depth
+ * unknown`, `, breaks against stacked` when both frames' last breaks are against the leg; `none` when the briefing's
+ * read found no pullback (null); null when it wasn't computed (undefined). A record of what the line said (state-read.js
+ * stateFacts; the trade feedback), never read by a decision.
+ */
+function pullbackWord(p) {
+  if (p === null) return 'none';
+  if (!p || typeof p !== 'object' || !isObj(p.leg)) return null;
+  const fin = Number.isFinite;
+  const given = typeof p.pastOrigin === 'boolean' ? p.pastOrigin : fin(p.depth) && p.depth >= 1;
+  const word = fin(p.leg.atr) && p.leg.atr < MIN_LEG_ATR ? 'small leg' : given ? 'leg given back' : fin(p.depth) ? `depth ${Math.round(p.depth * 100)}%` : 'depth unknown';
+  return `${word}${p.stacked === true ? ', breaks against stacked' : ''}`;
+}
+
+module.exports = { impulseOf, swingOf, pullbackRead, pullbackLine, pullbackWord };

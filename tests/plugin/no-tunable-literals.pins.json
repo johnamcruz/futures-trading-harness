@@ -431,7 +431,7 @@
   "scripts/lib/replay/store.js": 3,
   "scripts/lib/replay/web-access.js": 1,
   "scripts/lib/runner-lock.js": 1,
-  "scripts/lib/runner-wiring.js": 4,
+  "scripts/lib/runner-wiring.js": 2,
   "scripts/lib/runner.js": 27,
   "scripts/lib/schedule.js": 3,
   "scripts/lib/secret-scan.js": 2,

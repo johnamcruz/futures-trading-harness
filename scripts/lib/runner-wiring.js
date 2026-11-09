@@ -66,6 +66,8 @@ const CD = require('./cycle-data');
 const { tradingDayKey, tradingDayStart, sessionMinuteOf } = require('./trading/clock');
 const { digest, recentTrades, formSummary } = require('./trading/instincts');
 const { historyFrom, journalSince } = require('./prop/attempt-scope');
+// The prompt's tunables (config/runner.json prompt), read when used.
+const P = () => require('./tunables').runner().prompt;
 const { readShadow, recordShadow } = require('./trading/lesson-shadow');
 const LR = require('./trading/lifecycle-runner');
 const { recordsAt } = require('./trading/lifecycle-gate');
@@ -803,8 +805,15 @@ function wireRunner({ cfg, root, home, env = process.env, client, prop = null, d
     // its experience record, not the journal's instincts (the composed-entry design, PR 14).
     lessons: ({ entries } = {}) => (LR.runsComposed(strategies(), `${cfg.timeframe}m`) ? [] : digest(entries || journal(), 5, { kinds: ['mistake', 'lesson'], form: false, now: now(), shadow: readShadow(home, now()) })),
     // A fresh combine attempt's prompt shows only its own reviewed trades (prop/attempt-scope.js); any other run, all.
-    recentTrades: ({ entries } = {}) => recentTrades(journalSince(entries || journal(), historyFrom(home)), 10),
-    tradesSummary: ({ entries } = {}) => formSummary(journalSince(entries || journal(), historyFrom(home)), 10),
+    recentTrades: ({ entries } = {}) => recentTrades(journalSince(entries || journal(), historyFrom(home)), P().reviewedTrades),
+    tradesSummary: ({ entries } = {}) => formSummary(journalSince(entries || journal(), historyFrom(home)), P().reviewedTrades),
+    // The head trader's view of the same trades (trading/trade-feedback.js): each with the reads present at its entry and
+    // how it behaved, and the per-read record behind config/runner.json prompt.feedbackMinTrades. Information only; phase
+    // 1 keeps recentTrades' plain lines.
+    tradeFeedback: ({ entries } = {}) => require('./trading/trade-feedback').tradeFeedback({
+      entries: journalSince(entries || journal(), historyFrom(home)), home, dataDir, timeframe: cfg.timeframe,
+      n: P().reviewedTrades, window: P().instinctsRecentReviews, floor: P().feedbackMinTrades, max: P().feedbackRecordGroups,
+    }),
     // The time a fresh combine attempt's in-prompt history starts at (its record's historyFrom), or null.
     historyFrom: () => historyFrom(home),
     premarketPlan: (symbol, entries, at) => premarketPlan(entries, symbol, at),
