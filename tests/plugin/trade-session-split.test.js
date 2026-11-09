@@ -401,7 +401,10 @@ const OLD_AGENTS_MD = 24466;
 // by only the measured need of the worst path (88669 -> 88799), no more. The skill itself is looked up by prepare
 // ahead's runs only and is on no list. Plus 1625 for day-context's Day so far and RTH volatility reads (feat/day-so-far,
 // the same rule): the skill file grew 1471 -> 3096 bytes, on every path that reads it (the worst path's 90424).
-const RAISED = 154 + 130 + 1625;
+// Plus 336 for trade-session step 3's STATE line (feat/state-read): the head trader's closed-form market-state read,
+// recorded and scored against the briefing's labels (trading/state-read.js), the measured need of the worst path, raised
+// under the same standing rule; the skill file grew 8624 -> 8960 bytes.
+const RAISED = 154 + 130 + 1625 + 336;
 const EVERY_CYCLE = ['multi-timeframe-analysis', 'strategy-library', 'strategy-scan', 'strategy-gate-checks', 'trader-process', 'htf-to-ltf', 'autonomous-trading'];
 const PATHS = {
   'full cycle, no candidate': ['role-round', 'setup-judgment', 'day-context'],

@@ -127,7 +127,7 @@ function runDecisions(runDir, { root = null, barsFiles = {}, now = new Date() } 
   const lastTrade = r => r.cycles.filter(x => x && x.action === 'trade').pop() || null;
   const cycles = lines.filter(r => r.kind === 'trade' && Array.isArray(r.cycles) && r.cycles.length).map(r => {
     const c = lastTrade(r);
-    return { at: r.t, roots, ...(c && typeof c.result === 'string' ? { result: c.result } : {}), ...(c && c.entry && typeof c.entry === 'object' ? { entry: c.entry } : {}) };
+    return { at: r.t, roots, ...(c && typeof c.result === 'string' ? { result: c.result } : {}), ...(c && c.entry && typeof c.entry === 'object' ? { entry: c.entry } : {}), ...(c && c.stateRead && typeof c.stateRead === 'object' ? { stateRead: c.stateRead } : {}) };
   });
   const gateRefusals = lines.flatMap(r => (Array.isArray(r.refusals) ? r.refusals : [])
     .filter(x => x && ENTRY_TOOL.test(String(x.tool || '')))
