@@ -21,7 +21,7 @@
  * a shadow wrote, left out only in shadow mode), the broker's whole call log (reads included: an extra read is a leak
  * against the live rate limits), the decision record (the runner state's history), plus the run fingerprint (the
  * validated runner config as the run hashes it, and its HEAD_DELIVERY token list). normalize() names each world's home,
- * the repo root, the report cache's scope, the runs' random transcript names and the cycle ids derived from them
+ * the repo root, the report cache's scope and role body keys, the runs' random transcript names and the cycle ids derived from them
  * (check-order.js cycleId), the gate log's time stamps and any wall-clock instant (within two days of the run) alike;
  * nothing else (any other value that changes shows).
  */
@@ -42,14 +42,19 @@ const SHADOW_OWN = /^(prepare|claude-sessions|logs\/toolcall)(\/|$)/;
 
 /**
  * Names each world's own values alike: the home, the repo root, the report cache's scope (a hash of the root's real path,
- * report-cache.js scopeOf), each run's random transcript file (in first-seen order) and the cycle id derived from it
+ * report-cache.js scopeOf) and its cached roles' body keys (roleKey: a hash of the role's documents), each run's random transcript file (in first-seen order) and the cycle id derived from it
  * (check-order.js cycleId: the same placeholder number), and the gate log's time stamps. What it can still hide: a run
  * whose transcript (and so its cycle id) is another run's in the same position, which is how runs are told apart anyway.
  */
 function normalizer(w, root) {
   const ids = new Map();
   const id = v => { if (!ids.has(v)) ids.set(v, ids.size); return ids.get(v); };
-  const scope = require(path.join(root, 'scripts', 'lib', 'trading', 'report-cache')).scopeOf(root);
+  const RC = require(path.join(root, 'scripts', 'lib', 'trading', 'report-cache'));
+  const scope = RC.scopeOf(root);
+  // Each cached role's body key (report-cache.js roleKey: a hash of its agent file and its skills' text), named like the
+  // scope: a value of the checkout's documents, never of the old path's behaviour (a skill edit changes it on any branch,
+  // and main's generator can't make the branch's). That it is recorded, and where, still compares.
+  const bodies = (RC.CACHED_ROLES || []).map(r => [RC.roleKey(root, r), `<body:${r}>`]).filter(([k]) => k);
   const crypto = require('crypto');
   const wall = Date.now();
   return text => {
@@ -61,6 +66,7 @@ function normalizer(w, root) {
       const cyc = crypto.createHash('sha256').update(p).digest('hex').slice(0, 16);
       s = s.split(cyc).join(`<cycle${n}>`);
     }
+    for (const [k, name] of bodies) s = s.split(k).join(name);
     return s
       .split(scope).join('<scope>')
       .split(w.home).join('<home>')
