@@ -527,16 +527,42 @@ test('grading: q47-q49, the round-2 review\'s answers (its q45/q46 ones left out
   for (const [id, a, want] of cases) assert.strictEqual(Q.gradeAnswer(QUIZ, q(id), a).pass, want, `${id} ${want ? 'right' : 'wrong'}: ${a.split('\n')[0]}`);
 });
 
+test('grading: q50-q63, the market-context questions: right and wrong answers per question', () => {
+  const q = id => QUIZ.questions.find(x => x.id === id);
+  const cases = [
+    ['q50', 'ANSWER: A rejection: it traded through the low and closed back.', true], ['q50', 'ANSWER: Acceptance: it broke the low.', false],
+    ['q51', 'ANSWER: No: no reaction is not a rejection.', true], ['q51', 'ANSWER: Yes, the level rejected price.', false],
+    ['q52', 'ANSWER: Acceptance, not rejection: the closes beyond the level hold.', true], ['q52', 'ANSWER: Rejection of the high.', false],
+    ['q54', 'ANSWER: No: a sweep, not a break.', true], ['q54', 'ANSWER: Yes, a BOS down.', false],
+    ['q55', 'ANSWER: CHoCH: an early warning, not a reversal by itself.', true], ['q55', 'ANSWER: Reversal: the trend has turned.', false],
+    ['q56', 'ANSWER: A declared trend up.', true], ['q56', 'ANSWER: Range: nothing has declared.', false],
+    ['q57', 'ANSWER: Transition: regime and structure disagree.', true], ['q57', 'ANSWER: Trend up.', false],
+    ['q58', 'ANSWER: Range: a chop day.', true], ['q58', 'ANSWER: Trend up.', false],
+    ['q59', 'ANSWER: No: a pause inside the trend.', true], ['q59', 'ANSWER: Yes, the market is ranging.', false],
+    ['q60', 'ANSWER: A pullback: the CHoCH is inside an intact higher structure.', true], ['q60', 'ANSWER: Reversal.', false],
+    ['q61', 'ANSWER: A reversal developing; the 1h CHoCH against is decisive: pass on the long.', true], ['q61', 'ANSWER: Pullback; take the long.', false],
+    ['q55', 'ANSWER: CHoCH: the trend has reversed.', false], ['q56', 'ANSWER: A trend up but not yet declared.', false], ['q56', 'ANSWER: Uptrend, declared.', true],
+    ['q57', 'ANSWER: Still an uptrend on the 15m, with the regime in transition.', false], ['q57', 'ANSWER: Transitional: the CHoCH disagrees with the trend read.', true],
+    ['q61', 'ANSWER: Reversal; the long is still valid against the 1h.', false], ['q63', 'ANSWER: It is reversing; the weakening signs confirm it: exit.', false],
+    ['q50', 'ANSWER: Not a rejection: a sweep.', false], ['q60', 'ANSWER: The start of a reversal, not a pullback.', false],
+    ['q51', 'ANSWER: Nothing has happened: no rejection yet.', true], ['q52', 'ANSWER: Yes, acceptance: both closes hold above.', true], ['q59', 'ANSWER: Not really; it is a breather inside the trend.', true],
+    ['q61', 'ANSWER: Pullback is ruled out; a reversal is developing, so no long.', true],
+    ['q62', 'ANSWER: No: depth alone is no edge.', true], ['q62', 'ANSWER: Yes, a 50% retrace is the entry.', false],
+    ['q63', 'ANSWER: Weakening, not a reversal without a 15m break.', true], ['q63', 'ANSWER: Yes, a reversal: exit.', false],
+  ];
+  for (const [id, a, want] of cases) assert.strictEqual(Q.gradeAnswer(QUIZ, q(id), a).pass, want, `${id} ${want ? 'right' : 'wrong'}: ${a.split('\n')[0]}`);
+});
+
 test('summary: correct on all K, answered both ways, the totals, the bar; compare names each change', () => {
   const rows = [];
   for (const x of QUIZ.questions) for (let k = 1; k <= 5; k += 1) rows.push({ id: x.id, k, pass: true });
   for (const x of QUIZ.partB) for (let k = 1; k <= 5; k += 1) rows.push({ id: x.id, k, pass: true });
   const all = Q.summarize(QUIZ, rows, 5);
-  // 46 since q70 (a lesson is no phase-1 stand-down): 46 x 5 runs, one missed = 229.
-  assert.deepStrictEqual([all.partA.allCorrect, all.partA.bothWays, all.partB.allCorrect, all.meetsBar], [46, 0, 8, true]);
+  // 59 since q70 (a lesson is no phase-1 stand-down): 59 x 5 runs, one missed = 294.
+  assert.deepStrictEqual([all.partA.allCorrect, all.partA.bothWays, all.partB.allCorrect, all.meetsBar], [59, 0, 8, true]);
   const one = rows.map(r => (r.id === 'q6' && r.k === 2 ? { ...r, pass: false } : r));
   const s = Q.summarize(QUIZ, one, 5);
-  assert.deepStrictEqual([s.partA.allCorrect, s.partA.bothWays, s.partA.total, s.meetsBar], [45, 1, 229, false]);
+  assert.deepStrictEqual([s.partA.allCorrect, s.partA.bothWays, s.partA.total, s.meetsBar], [58, 1, 294, false]);
   // Too few runs is never correct on all K.
   assert.strictEqual(Q.summarize(QUIZ, rows.filter(r => r.k <= 3), 5).partA.allCorrect, 0);
   const d = Q.compare(all, s).find(x => x.id === 'q6');

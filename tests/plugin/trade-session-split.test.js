@@ -399,8 +399,9 @@ const OLD_AGENTS_MD = 24466;
 // worst path; owner-approved: improves context. Plus 130 for prepare-ahead's catalog line in AGENTS.md (PR C): raised
 // under the owner's standing rule (raise a skill size cap or pin when it improves context; never cut context to fit),
 // by only the measured need of the worst path (88669 -> 88799), no more. The skill itself is looked up by prepare
-// ahead's runs only and is on no list.
-const RAISED = 154 + 130;
+// ahead's runs only and is on no list. Plus 1625 for day-context's Day so far and RTH volatility reads (feat/day-so-far,
+// the same rule): the skill file grew 1471 -> 3096 bytes, on every path that reads it (the worst path's 90424).
+const RAISED = 154 + 130 + 1625;
 const EVERY_CYCLE = ['multi-timeframe-analysis', 'strategy-library', 'strategy-scan', 'strategy-gate-checks', 'trader-process', 'htf-to-ltf', 'autonomous-trading'];
 const PATHS = {
   'full cycle, no candidate': ['role-round', 'setup-judgment', 'day-context'],
@@ -490,6 +491,11 @@ test('trade-session split: no head-trader path reads more than the base\'s every
 // sat 4 under its pins, so they move +178 each mode (30670, 30659); every other role within its pin.
 // Then feat/sweep-volume-facts (owner rule: raise a pin when it improves context): breakout-vs-fakeout names `wickShare` and its
 // measured evidence: full mode only, the market-structure analyst +391 (94380); every other role within its pin.
+// Then feat/day-so-far (owner rule: raise a pin when it improves context; the day so far was never stated by code):
+// bar-briefing's Day so far paragraph, +455 bytes in every role that embeds it: full mode the market-structure analyst
+// 94835 (the pin +455), the risk manager 93175 (+413), the trend-momentum analyst 54847 (+307), the volume-liquidity
+// analyst 49079 (+455); index mode the market-structure analyst 43263 (+88), the risk manager 79063 (+424), the
+// trend-momentum analyst 40457 (+434), the volume-liquidity analyst 33711 (+455); every other role unchanged.
 // Then fix/standdown-basis (owner rule: raise a pin when it improves context): strategy-library's step 1 says what a
 // phase-1 stand-down rests on (the account's facts and the stops on them, never a lesson: a replay vetoed 42 times on
 // one), +483 bytes in every role that carries strategy-library, both modes: the market-structure analyst 94380 -> 94863
@@ -497,8 +503,8 @@ test('trade-session split: no head-trader path reads more than the base\'s every
 // (base 78608); the trend-momentum analyst 54540 -> 54875 (base 54392), 40023 -> 40485 (base 40002); the strategy researcher 25650 -> 25728 both
 // modes (base 25245); every other role within its pin.
 const ROLE_PROMPTS = {
-  full: { 'market-structure-analyst': 94863, 'news-calendar-analyst': 10182, 'risk-manager': 93203, 'strategy-researcher': 25728, 'trade-executor': 30670, 'trade-reviewer': 9454, 'trend-momentum-analyst': 54875, 'volume-liquidity-analyst': 48624 },
-  index: { 'market-structure-analyst': 43291, 'news-calendar-analyst': 10182, 'risk-manager': 79091, 'strategy-researcher': 25728, 'trade-executor': 30659, 'trade-reviewer': 9454, 'trend-momentum-analyst': 40485, 'volume-liquidity-analyst': 33256 },
+  full: { 'market-structure-analyst': 95318, 'news-calendar-analyst': 10182, 'risk-manager': 93658, 'strategy-researcher': 25728, 'trade-executor': 30670, 'trade-reviewer': 9454, 'trend-momentum-analyst': 55330, 'volume-liquidity-analyst': 49079 },
+  index: { 'market-structure-analyst': 43746, 'news-calendar-analyst': 10182, 'risk-manager': 79546, 'strategy-researcher': 25728, 'trade-executor': 30659, 'trade-reviewer': 9454, 'trend-momentum-analyst': 40940, 'volume-liquidity-analyst': 33711 },
 };
 
 test('trade-session split: no role prompt grows, in full or index mode, and no role lists a piece', () => {

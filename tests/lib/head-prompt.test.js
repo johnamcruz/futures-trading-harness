@@ -99,7 +99,11 @@ test('CORE: the composed bar\'s reads the gate requires (SITUATIONAL taught in t
   // Then 75962 (review): trade-lifecycle's stall line says the limit rests `valid_bars`, a later bar fills it or it expires (+10).
   // Then 76057 (fix/quiz-side-doji, the context quiz's q19 answered "Yes"): autonomous-trading's phase-2 size line says a
   // prose Size line beside a bare approval is not a trade yet (+95).
-  assert.ok(Buffer.byteLength(prompt) <= 76057, `the head prompt is ${Buffer.byteLength(prompt)} bytes`);
+  // Then 78131 (feat/day-so-far, the owner's rule: raise a cap when it improves context): day-context's Day so far line
+  // and RTH volatility reads, with two examples, the line's disclaimer, its recency and its early-noise sentence moved
+  // here from the per-cycle line (+1625 file bytes), and bar-briefing's paragraph on the line (+455 file bytes): +2074 as
+  // embedded.
+  assert.ok(Buffer.byteLength(prompt) <= 78131, `the head prompt is ${Buffer.byteLength(prompt)} bytes`);
   // Only the head trader's prompt grows: no other role's prompt embeds trade-lifecycle (the risk manager's embeds
   // confluence-counting and invalidation as before; its prompt is unchanged, pinned in trade-session-split.test.js).
   for (const [name, a] of Object.entries(index.agent)) if (name !== H.HEAD_AGENT && a.prompt) assert.ok(!a.prompt.includes('<skill name="trade-lifecycle">'), name);

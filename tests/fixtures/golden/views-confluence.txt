@@ -126,7 +126,7 @@ Summary (MNQ 3m, 10:33 ET):
 - Price 27325.5. 1R = 14.51 pts (0.5 x 3m ATR(20) 29.03, the 3m reference stop); every distance below is in points and R.
 - Trend rule: SHORT allowed (prevailing 15m down; the 4h and 1h ranging: in a prop attempt only with the trend declared); no long against it.
 - Bias: neutral → 15m down + declared short → short only.
-- Alignment: long mixed, short mixed. Regime: trend-down, high volatility.
+- Alignment: long mixed, short mixed. Regime: trend-down, high volatility. RTH volatility: unknown (2 prior sessions with these minutes; needs 3).
 - VWAP (rth): price below, 1.46 x 3m ATR(14) away. Closes crossing a VWAP in the last 30 bars: the RTH VWAP 6, the session VWAP 0 (the regime's count).
 - News: no blackout ahead.
 - Room above (R = the 3m reference stop): overnight low 27344.25 (18.75 pts, 1.29R), session VAL 27344.75 (19.36 pts, 1.33R), opening range low 27353.5 (28 pts, 1.93R).
@@ -142,6 +142,7 @@ Summary (MNQ 3m, 10:33 ET):
 - FVGs near price or retested (completed candles): 1h bullish 27297.25-27360 (04-24 11:00) filled to 27298.5, retest closed out.
 - CISD (completed candles; a read, not a signal): 3m bearish at 27356.5 (closed 10:33, strong), no key-level sweep, OTE 27359.75-27370.25 (mid 27365), waiting; 15m bearish at 27475.5 (closed 08:15, strong), no key-level sweep, OTE 27423.5-27458 (mid 27440.75), waiting; 1h bearish at 27425 (closed 09:00, strong) after a sweep of the prior RTH high 27462.5, OTE 27423.5-27458 (mid 27440.75), waiting.
 - Compression (completed candles; a read, not a signal): 3m expanding down: inside x1 box 27353.75-27383.25 (29.5 pts, 0.95 ATR, at opening range low 27353.5 (its bottom)), expansion closed 10:33 below it (range 1.26 ATR, 0.91 ATR beyond, volume 2.63x), 0 bars ago; 1h no expansion: nr7 box 27475-27500.25 (25.25 pts, 0.4 ATR, at prior RTH high 27462.5 (its bottom)), expansion closed 09:00 below it (range 1.48 ATR, 0.88 ATR beyond, volume 2.55x), 1 bar ago, late: 1.48 ATR past its close.
+- Day so far (21 3m bars; `day-context`): mixed down: efficiency 0.11 (x sqrt(bars) 0.48), RTH VWAP crosses 6, range 4.44 x 3m ATR(14), net down (its size: Trend declared? day's move); IB day type: today.dayType.
 - Trend declared? (in 3m ATR(14), + = the side's way; `trend-vs-range`): long RTH VWAP -1.46, EMA20 -1.49, overnight range broke out against, day's move -2.77, regime against; short RTH VWAP +1.46, EMA20 +1.49, overnight range broke out its way, day's move +2.77, regime with.
 - 3m timing (short: the entry rule's side; context, the setup is the entry): 3m with the HTF side.
 - Setups to check (the 15m candle closed 10:30): "15m rejected opening range low up" (long, 27353.5; setup candle: inside, close bottom third); the setup still stands: no confirming read needed. Compose and check each (trade-lifecycle, rejection, breakout); pass unless every read is true; SKIP each one you don't compose, with its reason.

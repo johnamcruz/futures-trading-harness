@@ -61,7 +61,7 @@
   },
   "passBar": {
     "partA": {
-      "allCorrect": 46,
+      "allCorrect": 59,
       "bothWays": 0
     },
     "partB": {
@@ -904,6 +904,238 @@
       "lookup": [
         "prepare-ahead",
         "candle-reading"
+      ]
+    },
+    {
+      "id": "q50",
+      "layer": "levels",
+      "prompt": "lookup",
+      "lookup": [
+        "levels-and-reactions"
+      ],
+      "text": "Price traded a few ticks below the prior RTH low and closed back above it. Per levels-and-reactions, is that a rejection or an acceptance?",
+      "rule": "traded through and closed back is a rejection",
+      "anchor": "rejection: traded through, closed back",
+      "required": [
+        "\\brejection\\b|\\brejected\\b"
+      ],
+      "forbidden": [
+        "^\\W*(an? )?(acceptance|accepted|breakout|breakdown)",
+        "\\bnot an? (long-wick )?rejection\\b"
+      ]
+    },
+    {
+      "id": "q51",
+      "layer": "levels",
+      "prompt": "lookup",
+      "lookup": [
+        "levels-and-reactions"
+      ],
+      "text": "Price is 1.5 ATR below the prior value area high and has not reached it. Has the level rejected price?",
+      "rule": "not reached means no reaction; no reaction is not a rejection",
+      "anchor": "No reaction is not a rejection",
+      "required": [
+        "^\\W*(no|not)\\b|\\bnot (a )?reject\\w*|\\bno reaction\\b|\\bnothing\\b|\\bno rejection\\b"
+      ],
+      "forbidden": [
+        "^\\W*(yes\\b|y,)"
+      ]
+    },
+    {
+      "id": "q52",
+      "layer": "levels",
+      "prompt": "lookup",
+      "lookup": [
+        "levels-and-reactions"
+      ],
+      "text": "A 15m candle closes above the prior RTH high and the next 15m candle also closes above it. Rejection or acceptance?",
+      "rule": "closes beyond that hold: acceptance, not a rejection",
+      "anchor": "acceptance: closes beyond that hold",
+      "required": [
+        "\\baccept\\w*\\b|\\bbreakout\\b"
+      ],
+      "forbidden": [
+        "^\\W*(a )?(long-wick )?rejection\\b(?!\\s+is not)",
+        "^\\W*yes\\b(?!.{0,12}accept)"
+      ]
+    },
+    {
+      "id": "q54",
+      "layer": "bias",
+      "prompt": "lookup",
+      "lookup": [
+        "bos-vs-choch"
+      ],
+      "text": "A wick trades above the last confirmed 15m swing high and the candle closes back below it. Is that a BOS?",
+      "rule": "a wick through a swing that closes back inside is a sweep, not a break",
+      "anchor": "A wick through a swing that closes back inside is a sweep",
+      "required": [
+        "\\bsweep\\b|\\bnot a (BOS|break)\\b|^\\W*no\\b"
+      ],
+      "forbidden": [
+        "^\\W*(yes\\b|a BOS\\b|BOS\\b)"
+      ]
+    },
+    {
+      "id": "q55",
+      "layer": "bias",
+      "prompt": "lookup",
+      "lookup": [
+        "bos-vs-choch"
+      ],
+      "text": "The 15m is in an uptrend and prints its first close below the last confirmed swing low. BOS or CHoCH, and has the trend reversed?",
+      "rule": "the first close against the last swing is a CHoCH, an early warning, not a reversal by itself",
+      "anchor": "the first close beyond the last swing against it",
+      "required": [
+        "\\bCHoCH\\b"
+      ],
+      "forbidden": [
+        "^\\W*(a )?reversal\\b",
+        "^\\W*yes\\b",
+        "\\b(has )?reversed\\b"
+      ]
+    },
+    {
+      "id": "q56",
+      "layer": "bias",
+      "prompt": "lookup",
+      "lookup": [
+        "trend-vs-range"
+      ],
+      "text": "The 4h, 1h and 15m are up, the 3m regime is trend-up (ADX 24), and the overnight range broke out upward. What is the market doing, and has the trend declared itself?",
+      "rule": "a trend, declared (overnight range broke out its way)",
+      "anchor": "overnight range broke out its way",
+      "required": [
+        "\\b(up|down)?trend(ing|s)?\\b"
+      ],
+      "forbidden": [
+        "^\\W*(range|ranging|transition|chop)\\b",
+        "\\bnot (yet )?declared\\b"
+      ]
+    },
+    {
+      "id": "q57",
+      "layer": "bias",
+      "prompt": "lookup",
+      "lookup": [
+        "trend-vs-range"
+      ],
+      "text": "The 3m regime is transition (ADX 19), the 15m trend reads up and the 15m just printed a CHoCH down. Per trend-vs-range, what is the 15m: trend, range or transition?",
+      "rule": "transition: regime and structure disagree",
+      "anchor": "regime and structure disagree",
+      "required": [
+        "\\btransition(al)?\\b"
+      ],
+      "forbidden": [
+        "^\\W*(trend|trending|range|ranging)\\b",
+        "^\\W*still an? (up|down)?trend"
+      ]
+    },
+    {
+      "id": "q58",
+      "layer": "bias",
+      "prompt": "lookup",
+      "lookup": [
+        "trend-vs-range"
+      ],
+      "text": "ADX is 16, price crossed the session VWAP 6 times in the last 30 bars, swings are mixed and the last two 15m breaks alternate up and down. Trend or range?",
+      "rule": "range: neither, and ADX under 18 or 5 or more crosses",
+      "anchor": "ADX under 18 or 5 or more crosses",
+      "required": [
+        "\\brange\\b|\\bchop\\w*\\b|\\branging\\b"
+      ],
+      "forbidden": [
+        "^\\W*(a )?(trend|trending|transition)\\b"
+      ]
+    },
+    {
+      "id": "q59",
+      "layer": "bias",
+      "prompt": "lookup",
+      "lookup": [
+        "trend-vs-range"
+      ],
+      "text": "A 3m range forms inside a 15m uptrend. Is the market ranging?",
+      "rule": "a 3m range inside a 15m trend is a pause",
+      "anchor": "A 3m range inside a 15m trend is a pause",
+      "required": [
+        "\\bpause\\b|^\\W*no\\b|^\\W*not\\b|\\bnot (a )?range\\b|\\bnot ranging\\b|\\bbreather\\b"
+      ],
+      "forbidden": [
+        "^\\W*(yes\\b|ranging\\b)"
+      ]
+    },
+    {
+      "id": "q60",
+      "layer": "setup",
+      "prompt": "lookup",
+      "lookup": [
+        "pullback-vs-reversal"
+      ],
+      "text": "The 4h and 1h are up and intact. The 15m prints a CHoCH down. Pullback or reversal?",
+      "rule": "a 15m CHoCH inside an intact 1h and 4h structure is a pullback",
+      "anchor": "intact 1h and 4h structure is a pullback",
+      "required": [
+        "\\bpullback\\b"
+      ],
+      "forbidden": [
+        "^\\W*(a )?reversal\\b",
+        "\\bnot an? pullback\\b"
+      ]
+    },
+    {
+      "id": "q61",
+      "layer": "setup",
+      "prompt": "lookup",
+      "lookup": [
+        "pullback-vs-reversal"
+      ],
+      "text": "The 15m CHoCH down is followed by a 1h CHoCH down; the 15m swing low is broken; the down bars are wide on rising volume. A long is offered. Pullback or reversal, and what does it mean for the long?",
+      "rule": "a reversal developing; the 1h CHoCH against is decisive: pass",
+      "anchor": "the 1h CHoCH against is decisive",
+      "required": [
+        "\\breversal\\b",
+        "\\b(pass\\w*|skip\\w*|no\\b|not|don'?t|decline|decisive|refus\\w*)\\b"
+      ],
+      "forbidden": [
+        "^\\W*(a )?pullback\\b(?!\\s+(doesn'?t|does not|isn'?t|is not|is ruled out|ruled out|vs|-vs))",
+        "\\b(take|enter|go) (the |a )?long\\b(?!.{0,30}\\b(not|no|never|don'?t)\\b)",
+        "\\b(long|trade) is (still )?(valid|fine|on)\\b"
+      ]
+    },
+    {
+      "id": "q62",
+      "layer": "setup",
+      "prompt": "lookup",
+      "lookup": [
+        "pullback-vs-reversal"
+      ],
+      "text": "The 15m retraced 50% of the leg. Is depth alone a reason to take the long?",
+      "rule": "depth alone is no edge",
+      "anchor": "depth alone is no",
+      "required": [
+        "^\\W*(no|not)\\b|\\bno edge\\b|\\bnot (a )?reason\\b"
+      ],
+      "forbidden": [
+        "^\\W*(yes\\b|y,)"
+      ]
+    },
+    {
+      "id": "q63",
+      "layer": "setup",
+      "prompt": "lookup",
+      "lookup": [
+        "pullback-vs-reversal"
+      ],
+      "text": "You hold a long. The 15m push failed to make a new high and the pushes are fading, but there is no 15m break against. Reversal?",
+      "rule": "weakening (two signs), not a reversal without a 15m break",
+      "anchor": "no 15m break -> weakening",
+      "required": [
+        "\\bweaken\\w*\\b|^\\W*no\\b|\\bnot (yet )?(a )?reversal\\b"
+      ],
+      "forbidden": [
+        "^\\W*(yes\\b|a reversal\\b|reversal\\b)",
+        "\\breversing\\b"
       ]
     },
     {
