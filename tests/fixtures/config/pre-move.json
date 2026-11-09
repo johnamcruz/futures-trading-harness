@@ -1877,6 +1877,10 @@
   "daySoFar.volHigh": {
    "value": 1.33,
    "from": "new in feat/day-so-far (the briefing's Day so far line): the RTH volatility reads high over this ratio of the prior sessions' median range"
+  },
+  "pullbackRead.minLegAtr": {
+   "value": 1,
+   "from": "new in feat/pullback-read (the briefing's Pullback line): a leg under this many ATR(14) shows no depth (the leg is too small to measure a pullback against); a floor, not a tuned value"
   }
  }
 }

@@ -145,6 +145,7 @@ Summary (MNQ 3m, 10:33 ET):
 - Day so far (21 3m bars; `day-context`): mixed down: efficiency 0.11 (x sqrt(bars) 0.48), RTH VWAP crosses 6, range 4.44 x 3m ATR(14), net down (its size: Trend declared? day's move); IB day type: today.dayType.
 - Trend declared? (in 3m ATR(14), + = the side's way; `trend-vs-range`): long RTH VWAP -1.46, EMA20 -1.49, overnight range broke out against, day's move -2.77, regime against; short RTH VWAP +1.46, EMA20 +1.49, overnight range broke out its way, day's move +2.77, regime with.
 - 3m timing (short: the entry rule's side; context, the setup is the entry): 3m with the HTF side.
+- Pullback (15m, short leg 27435 -> 27298.5): depth 20% of the leg; 13 bars since the extreme, volume 0.6x the leg's per bar (falling), range 0.6x; swings since the extreme: 15m 27435 holds, 1h 27500.25 holds; 15m break against: none, 1h: BOS up 27462.5 (12 bars ago).
 - Setups to check (the 15m candle closed 10:30): "15m rejected opening range low up" (long, 27353.5; setup candle: inside, close bottom third); the setup still stands: no confirming read needed. Compose and check each (trade-lifecycle, rejection, breakout); pass unless every read is true; SKIP each one you don't compose, with its reason.
 - Standard plan (code, as compose_check plans it): long "15m rejected opening range low up": against the trend rule: only as a reversal (its 1h CHoCH tier).
 - Setups:
