@@ -105,7 +105,8 @@ test('the briefing\'s 4h candle: the sweep of the prior 4h low and the close bac
     assert.ok('sweep' in all[tf], tf);
     if (all[tf].sweep) assert.match(all[tf].sweep.of, new RegExp(`^previous ${tf} (high|low|high and low)$`));
   }
-  // A 4h candle without a sweep says so (null), never leaves it out.
+  // A 4h candle with a previous candle that it stayed inside says so (null); only a candle with no previous one leaves
+  // the field out (unknown, sweepField).
   const quiet = CF.briefingCandles({ bars: sessionBars('2026-06-14T22:00:00Z', '2026-06-15T18:30:00Z'), base: 3 })['4h'];
   assert.strictEqual(quiet.sweep, null);
   // The rendered summary line.

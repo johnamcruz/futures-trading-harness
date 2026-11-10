@@ -550,6 +550,20 @@ test('grading: q50-q63, the market-context questions: right and wrong answers pe
     // An affirmative start with a "not yet" later: the start decides (each forbidden pattern catches one).
     ['q56', 'ANSWER: The trend is declared, not yet extended.', false], ['q56', 'ANSWER: Uptrend declared, not yet at a level.', false],
     ['q56', 'ANSWER: Yes, not yet extended though.', false],
+    // A "not yet" about something else never makes an affirmative right: the no must start the answer, or say not declared.
+    ...["It's declared long, not yet extended.", 'Trend has declared, not yet at a level.', 'Uptrend is declared, not yet extended.',
+      'Long: declared, not yet extended.', 'Bullish, declared; not yet a pullback.', 'Mostly declared, not yet fully.', 'Effectively declared; not yet ideal.',
+      'The 15m trend is declared long; not yet at a level.', 'It has, not yet extended though.', 'The trend has already declared long; not yet at target.',
+      'Declared? Yes, not yet extended.', 'It is declared; not yet confirmed by volume.', 'Trending up, declared, not yet overextended.',
+      'Already declared, not yet extended.', 'Uptrend declared; not yet at a level.', 'Yes.', 'Yes, declared long.',
+      // A "not declared" about the other side never rescues an affirmative start: each forbidden pattern catches one.
+      'Yes: long; the short is not declared.', 'It has declared long; the short has not declared.', 'Trend up, declared; not declared short.'].map(a => ['q56', `ANSWER: ${a}`, false]),
+    ...['No: the close is under the RTH VWAP, so not all four are your way.', 'Not yet: RTH VWAP is below 0.', 'Not declared; the overnight breakout is not part of it.',
+      'No. Declared needs RTH VWAP above 0 too.', 'No — VWAP under 0, so not declared long.', '**No**, not declared: RTH VWAP -0.4.',
+      'Not yet declared: wait for the close above the RTH VWAP.', 'No, it has not declared: one of the four is under 0.',
+      'No; declared long needs all four above 0, and the RTH VWAP is under.', 'Not declared long (RTH VWAP under 0); the 15m is up but it is a false-start sign.',
+      'No: the trend is not declared because RTH VWAP is negative.', 'Not yet. Declared would need VWAP, EMA20 and day move above 0.',
+      'It has not declared: the RTH VWAP is under 0.', 'The trend is not declared: VWAP under 0.', 'Trend up but not declared: RTH VWAP under 0.'].map(a => ['q56', `ANSWER: ${a}`, true]),
     ['q57', 'ANSWER: Still an uptrend on the 15m, with the regime in transition.', false], ['q57', 'ANSWER: Transitional: the CHoCH disagrees with the trend read.', true],
     ['q61', 'ANSWER: Reversal; the long is still valid against the 1h.', false], ['q63', 'ANSWER: It is reversing; the weakening signs confirm it: exit.', false],
     ['q50', 'ANSWER: Not a rejection: a sweep.', false], ['q60', 'ANSWER: The start of a reversal, not a pullback.', false],

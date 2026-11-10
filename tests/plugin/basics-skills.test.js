@@ -392,9 +392,9 @@ test('trend-vs-range: "Declared" names exactly the facts entry-rule.js declaredO
   assert.strictEqual(bias(DECLARED, 'range'), 'Bias: no side yet (15m range)');
   assert.ok(line.includes('With the 4h and 1h ranging and the 15m trending'));
   assert.ok(line.includes('with the 15m ranging too, no side and no declared'));
-  // The not-yet signs keep the overnight range as a size or quality sign, never part of declared.
+  // The not-yet signs keep the overnight range as a quality sign, never part of declared.
   const notYet = (/- Not yet [^]*?(?= ## Examples)/.exec(t) || [''])[0];
-  assert.ok(notYet.includes('inside the overnight range (back third worst; a size or quality sign, not part of declared)'), notYet);
+  assert.ok(notYet.includes('inside the overnight range (back third worst; a quality sign, not part of declared)'), notYet);
 });
 
 test('basics skills: the setups add no filter, equal highs are the code\'s, and the size cuts hold', () => {

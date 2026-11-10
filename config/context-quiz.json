@@ -1006,7 +1006,7 @@
       "rule": "not declared: all four your way (regime with; RTH VWAP, EMA20 and day's move each above 0); the overnight range is not part of it",
       "anchor": "RTH VWAP, EMA20 and day's move each above 0; the overnight range is not part of it",
       "required": [
-        "\\bnot (yet )?declared\\b|\\bnot yet\\b|^\\W*no\\b"
+        "\\bnot (yet )?declared\\b|^\\W*not yet\\b|^\\W*no\\b"
       ],
       "forbidden": [
         "^\\W*yes\\b",

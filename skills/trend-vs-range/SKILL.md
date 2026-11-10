@@ -57,8 +57,8 @@ hypotheses):
   no declared.
 - Not yet (false starts): RTH VWAP and EMA20 under 0 (EMA20 under -1
   worse), regime `against`, inside the overnight range (back third
-  worst; a size or quality sign, not part of declared): wait for it, in the count; size is the verdict's. An unfinished
-  pullback is no chop sign.
+  worst; a quality sign, not part of declared): wait for it, in the
+  count; size is the verdict's. An unfinished pullback is no chop sign.
 
 ## Examples
 

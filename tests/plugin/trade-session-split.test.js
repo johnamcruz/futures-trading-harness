@@ -527,8 +527,9 @@ test('trade-session split: no head-trader path reads more than the base\'s every
 // sentence names the window, 30 bars, against the Day so far line's since the open (+55 in every role that embeds it):
 // full mode the market-structure and trend-momentum analysts +177 (96792, 56804), the risk manager and the
 // volume-liquidity analyst +55 (94524, 49945); index mode +55 each (44612, 80412, 41806, 34577).
+// Then its second review: the overnight range 'a quality sign' (nothing sizes on it), the full-mode analysts -8 (96784, 56796).
 const ROLE_PROMPTS = {
-  full: { 'market-structure-analyst': 96792, 'news-calendar-analyst': 10182, 'risk-manager': 94524, 'strategy-researcher': 25728, 'trade-executor': 30670, 'trade-reviewer': 9454, 'trend-momentum-analyst': 56804, 'volume-liquidity-analyst': 49945 },
+  full: { 'market-structure-analyst': 96784, 'news-calendar-analyst': 10182, 'risk-manager': 94524, 'strategy-researcher': 25728, 'trade-executor': 30670, 'trade-reviewer': 9454, 'trend-momentum-analyst': 56796, 'volume-liquidity-analyst': 49945 },
   index: { 'market-structure-analyst': 44612, 'news-calendar-analyst': 10182, 'risk-manager': 80412, 'strategy-researcher': 25728, 'trade-executor': 30659, 'trade-reviewer': 9454, 'trend-momentum-analyst': 41806, 'volume-liquidity-analyst': 34577 },
 };
 
