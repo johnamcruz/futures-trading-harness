@@ -51,8 +51,8 @@ const c0 = at(A, '16:00');
 const behind = leg(A, 'short', '15:57', { availableR: 1, cycles: [cyc(c0, 'position-open', { message: 'managed - long held' })], blocker: { step: null, code: 'position-open', by: 'head', role: null, skills: [], cycles: 1 } });
 const decisionsA = [
   dec(a0, { stated: 'CYCLE RESULT: no-trade - long "15m broke ib high up" is against the trend rule (4h and 1h down)', counterfactual: { simulated: false, R: 9 } }),
-  dec(a0 + MIN3, { expected: 'take', category: 'excessive abstention', stated: 'CYCLE RESULT: no-trade - compose refused; the setup is stale', counterfactual: { simulated: true, R: 1.5 } }),
-  dec(b0, { stated: 'CYCLE RESULT: no-trade - opening print' }),
+  dec(a0 + MIN3, { expected: 'take', category: 'excessive abstention', stated: 'CYCLE RESULT: no-trade - compose refused; the long setup is stale', counterfactual: { simulated: true, R: 1.5 } }),
+  dec(b0, { category: 'excessive abstention', stated: 'CYCLE RESULT: no-trade - opening print' }),
 ];
 
 // Day B: a leg whose R is unknown (no stop known), missed to no plan; and an estimated one missed to a head pass.
@@ -60,7 +60,7 @@ const B = '2026-03-03';
 const d0 = at(B, '14:30');
 const unknownR = leg(B, 'long', '14:27', { availableR: null, cycles: [cyc(d0, 'no-plan', { message: 'no-trade - no long setup' })], blocker: { step: null, code: 'no-plan', by: 'head', role: 'head trader', skills: [], cycles: 1 } });
 const e0 = at(B, '15:30');
-const headPass = leg(B, 'short', '15:27', { availableR: 5, estimated: true, cycles: [cyc(e0, 'head-pass', { step: 'risk', message: 'no-trade - compose_check short OK but no size fits' })], blocker: { step: 'risk', code: 'head-pass', by: 'head', role: 'head trader', skills: [], cycles: 1 } });
+const headPass = leg(B, 'short', '15:27', { availableR: 5, estimated: true, cycles: [cyc(e0, 'head-pass', { step: 'risk', message: 'no-trade - compose_check OK but the 15m reaction is conflicting' })], blocker: { step: 'risk', code: 'head-pass', by: 'head', role: 'head trader', skills: [], cycles: 1 } });
 
 const runA = { capture: { legs: [missedLoc, caught, behind] }, decisions: decisionsA, minutes: 3, half: 'probe' };
 const runB = { capture: { legs: [unknownR, headPass] }, decisions: [], minutes: 3, half: 'confirm' };
@@ -109,9 +109,19 @@ test('leg ledger: the stated reason is read for the leg\'s own side only; nothin
   assert.strictEqual(s('no-trade - four 15m shorts are against the trend rule (4h and 1h up, LONG allowed only); no long setup fired, and the reversal tier needs a 1h CHoCH down, which is absent.', 'long'), null);
   // The other side's refusal after this side's own (a plan refusal): this side's is the plan's, not the trend rule's.
   assert.strictEqual(s('no-trade - the long is refused by the standard plan (R:R 0.324 under min 2) and both shorts are against the trend rule', 'long'), 'room-rr');
-  assert.strictEqual(s('no-trade - 15m rejected prior close is a conflicting reaction', 'long'), 'entry-reaction');
+  // The soft reasons: on a no-plan cycle only in a clause naming the leg's side first; on a head-pass (own) anywhere.
+  assert.strictEqual(s('no-trade - long "15m rejected prior close" is a conflicting reaction', 'long'), 'entry-reaction');
+  assert.strictEqual(s('no-trade - 15m rejected prior close is a conflicting reaction', 'long'), null);
+  assert.strictEqual(s('no-trade - 15m rejected prior close is a conflicting reaction', 'long', { own: true }), 'entry-reaction');
   assert.strictEqual(s('no-trade - long setup is stale (price 54 pts above the level, a chase)', 'long'), 'late-entry-chase');
-  assert.strictEqual(s('no-trade - standard plan refused (R:R 0.11 under min 2)', 'long'), 'room-rr');
+  assert.strictEqual(s('no-trade - "15m broke poc up" long: standard plan refused (R:R 0.11 under min 2)', 'long'), 'room-rr');
+  assert.strictEqual(s('no-trade - standard plan refused (R:R 0.11 under min 2)', 'long', { own: true }), 'room-rr');
+  // No setup the leg's way is no plan, whatever else the text reads (real wordings, paraphrased).
+  assert.strictEqual(s('no-trade - the only listed setup "15m rejected vwap up" is long, against the trend rule; no short setup on the 15m, and price is above VAH with no rejection', 'short'), null);
+  assert.strictEqual(s('no-trade - the only listed setup, "15m rejected vwap down" (short), is against the trend rule (LONG allowed, no short against it) and its reaction reads plain', 'long'), null);
+  assert.strictEqual(s('no-trade - the short is against the trend rule; no 15m long setup at a level has closed, and the 3m rejection reads plain', 'long'), null);
+  // The other side's reaction read is not this side's.
+  assert.strictEqual(s('no-trade - the short "15m rejected high" is conflicting', 'long'), null);
   assert.strictEqual(s('no-trade - compose_check short OK, but no size fits: pass', 'short'), 'size-floor');
   assert.strictEqual(s('no-trade - no short setup, and the long "15m broke ib" is against the trend rule', 'short'), null);
   // A rule the text names comes first (the capture's own rule codes miss this wording).
@@ -178,14 +188,19 @@ test('leg ledger: aggregates by class carry n beside each figure; unknown R is c
   assert.strictEqual(by['opening-print'].blocked.legs, 0);
   assert.deepStrictEqual(by['no-plan'].refusedIn, { legs: 2, caught: 0, missed: 2, cycles: 2, r: { n: 1, sum: 3, mean: 3, median: 3, unknown: 1, estimated: 0 } });
   // The scorecard's verdict on the class's refusals: expected take, categories, and counterfactual R where recorded.
-  assert.deepStrictEqual(by.location.scorecard, { joined: 1, unjoined: 1, expectedTake: 1, categories: { 'excessive abstention': 1 }, counterfactual: { n: 1, sum: 1.5 } });
-  assert.deepStrictEqual(by['no-plan'].scorecard, { joined: 1, unjoined: 1, expectedTake: 0, categories: { right: 1 }, counterfactual: { n: 0, sum: 0 } });
+  assert.deepStrictEqual(by.location.scorecard, { joined: 1, unjoined: 1, expected: { take: 1 }, categories: { 'excessive abstention': 1 }, counterfactual: { n: 1, sum: 1.5 } });
+  assert.deepStrictEqual(by['no-plan'].scorecard, { joined: 1, unjoined: 1, expected: { 'no-trade': 1 }, categories: { right: 1 }, counterfactual: { n: 0, sum: 0 } });
+  // The scorecard's own abstention under an expected no-trade (a composable setup passed without compose_check) is
+  // tallied as it says, never folded into "take".
+  assert.deepStrictEqual(by['opening-print'].scorecard.expected, { 'no-trade': 1 });
+  assert.deepStrictEqual(by['opening-print'].scorecard.categories, { 'excessive abstention': 1 });
   // Position-open is a blocker, never a refusal (the model held a position, it did not refuse).
   assert.deepStrictEqual([by['position-open'].blocked.legs, by['position-open'].refusedIn.legs], [1, 0]);
   // By stated reason: the no-plan cycle the model said was the trend rule moves there; the blocker keeps its class.
   const byR = Object.fromEntries(led.byReason.map(x => [x.class, x]));
   assert.deepStrictEqual([byR['trend-rule'].refusedIn.legs, byR['no-plan'].refusedIn.legs], [1, 1]);
-  assert.strictEqual(byR['size-floor'].blocked.legs, 1);
+  // A head-pass is about the leg's way's own OK record: its reaction reason counts with no side named.
+  assert.strictEqual(byR['entry-reaction'].blocked.legs, 1);
   assert.strictEqual(byR['head-pass'], undefined);
 });
 
@@ -250,6 +265,8 @@ function home() {
   // Day A: the position-open leg's window never finished (dropped, as the screens drop it).
   fs.writeFileSync(path.join(h, 'probes', 'trend', `pc-${A}-aaaa1111.json`), JSON.stringify(doc(A, [missedLoc, caught, behind], ['w1', 'w1', 'unfinished'])));
   fs.writeFileSync(path.join(h, 'probes', 'trend', `pc-${B}-bbbb2222.json`), JSON.stringify({ ...doc(B, [unknownR, headPass], ['w2', 'w2']), capture: { runId: `fx-pc-t${B.replace(/-/g, '')}.bbbb2222.0`, legs: [unknownR, headPass] } }));
+  // A second champion doc of day A (another round's windows) holding the same leg: kept once, the duplicate listed.
+  fs.writeFileSync(path.join(h, 'probes', 'trend', `pc-${A}-cccc3333.json`), JSON.stringify(doc(A, [missedLoc], ['w9'])));
   // An edit's probe doc (another side) and another day's decisions: never read.
   fs.writeFileSync(path.join(h, 'probes', 'trend', `pe-${A}-aaaa1111.json`), JSON.stringify(doc(A, [missedLoc], ['w1'])));
   fs.writeFileSync(path.join(h, `pc-t${A.replace(/-/g, '')}.aaaa1111.-decisions.json`), JSON.stringify(decisionsA));
@@ -272,6 +289,8 @@ test('leg ledger: readRound picks each half\'s listed legs on finished units, th
   // A listed day with no probe doc, and a leg on an unfinished unit: reported, never silently dropped.
   assert.deepStrictEqual(r.missingDays, [{ half: 'confirm', day: '2026-03-05' }]);
   assert.deepStrictEqual(r.unfinished, [{ half: 'probe', id: behind.id }]);
+  assert.deepStrictEqual(r.duplicates, [{ half: 'probe', id: missedLoc.id, file: `pc-${A}-cccc3333.json` }]);
+  assert.strictEqual(led.rows.filter(x => x.id === missedLoc.id).length, 1);
   // Day B's run has no timeframe: its decisions unjoined; --minutes gives it.
   assert.strictEqual(r.runs.find(x => x.half === 'confirm').minutes, null);
   assert.strictEqual(LL.readRound(h, { iteration: 1, minutes: 3 }).runs.every(x => x.minutes === 3), true);

@@ -35,7 +35,9 @@
  *               estimated)
  *   refusedIn   the legs a flat read of the class refused before any entry on them (legs that ran after that refusal:
  *               caught later or missed), the cycles, and those legs' R available
- *   scorecard   those refusals' scorecard rows: joined, unjoined, how many it expected a take on, its categories, and the
+ *   scorecard   those refusals' scorecard rows: joined, unjoined, the decisions it expected (take, no-trade, hold,
+ *               unchecked: a tally), its categories (an `excessive abstention` under an expected no-trade is its own
+ *               "a composable setup passed without compose_check"), and the
  *               counterfactual R where recorded (n, sum). Leg R is NOT tradeable (a leg's whole move from its first entry
  *               bar, which no entry gets); the counterfactual is the scorecard's own simulated trade: different things
  * Unknown is unknown (trade-feedback.js's rule): an R not known is counted `unknown`, never summed as 0, and a mean or a
@@ -43,13 +45,15 @@
  *
  *   CLASSES                                   [{ key, says }], frozen
  *   codeClass({ code, by, step })             a capture cycle code's class
- *   statedClass(text, side)                   the reason a CYCLE RESULT text states for that side, or null
+ *   statedClass(text, side, { own })          the reason a CYCLE RESULT text states for that side, or null
  *   buildLedger(runs)                         { v, rows, totals, byClass, byReason, byHalf }; runs [{ capture, decisions,
  *                                             minutes, half, include }] (include: the leg ids kept; none: all)
  *   aggregate(rows)                           { totals, byClass, byReason }
  *   priorOnly(ledger, day)                    aggregate of the rows of days strictly before day (YYYY-MM-DD), { before }
- *   readRound(home, { iteration, runs, minutes, prefix })   { runs, missingDays, unfinished }: a training home's round
- *                                             (iter-<n>/probe-report.json halves, the champion's probe docs and decisions;
+ *   readRound(home, { iteration, runs, minutes, prefix })   { runs, missingDays, unfinished, duplicates }: a training
+ *                                             home's round (iter-<n>/probe-report.json halves, the champion's probe docs and
+ *                                             decisions; a leg in two docs of its day kept once, the first by file name,
+ *                                             the others listed in duplicates;
  *                                             a run's timeframe from <runs>/<runId>/replay/<runId>/autotrader.json, else
  *                                             minutes)
  *   ledgerLines(ledger)                       the report's text lines
@@ -117,9 +121,12 @@ function codeClass({ code, by, step } = {}) {
 /**
  * The reason a CYCLE RESULT text states for the leg's side, or null. Clause by clause (split at ';'); the trend rule only
  * when the leg's side is named before the refusal with the other side not between (the other side's setups refused by
- * the trend rule say nothing about this leg); a CHoCH only on the 1h or 4h, the other way, not negated.
+ * the trend rule say nothing about this leg); a CHoCH only on the 1h or 4h, the other way, not negated. The first match
+ * in that order (a rule, the trend rule, a CHoCH, no size, then the soft reasons: room, a chase, the reaction) decides: a
+ * heuristic read of free text, so the report keeps the code's class beside it. own: the text is about the leg's way's
+ * own OK record (a head-pass), so a soft reason needs no side named.
  */
-function statedClass(text, side) {
+function statedClass(text, side, { own = false } = {}) {
   const t = String(text || '');
   if (!t.trim() || (side !== 'long' && side !== 'short')) return null;
   const other = side === 'long' ? 'short' : 'long';
@@ -139,9 +146,15 @@ function statedClass(text, side) {
   const choch = /\b(?:1h|4h)\s+choch(?:\s+(up|down))?\b[^;.]*?\bagainst\b/gi;
   if (clauses.some(c => [...c.matchAll(choch)].some(m => (!m[1] || m[1].toLowerCase() === against) && !/\bno\s+$/i.test(c.slice(0, m.index))))) return 'htf-choch-against';
   if (any(/\bno size fits\b|\bmin_contracts\b|\bsize floor\b/i)) return 'size-floor';
-  if (any(/\bR:R\s+[\d.]+\s+(?:under|below)\b|\bno level at \d+R\b|\bstandard plan refused\b/i)) return 'room-rr';
-  if (any(/\bstale\b|\bchas(?:e|ed|ing)\b|\bmissed the plan's entry\b/i)) return 'late-entry-chase';
-  if (any(/\bconflicting\b|\bplain\b|\bno (?:confirmed )?rejection\b|\bnot a confirmed rejection\b|\bINVALID\b/i)) return 'entry-reaction';
+  // The soft reasons: on a head-pass (own: the text is about the leg's way's own OK record) anywhere; else only in a
+  // clause that names the leg's side before the reason, the other side not between, and that doesn't say there was no
+  // setup that way ("no short setup on the 15m, and ... no rejection" is no plan, not a reaction read).
+  // "no <side> setup", up to two words before the side ("no valid short setup", "no 15m long setup").
+  const noSetup = new RegExp(`\\bno\\s+(?:[\\w-]+\\s+)?(?:[\\w-]+\\s+)?${side}\\s+(?:setup|candidate|rejection|signal)`, 'i');
+  const soft = re => (own ? any(new RegExp(re.source, 'i')) : clauses.some(c => !noSetup.test(c) && new RegExp(`\\b${side}s?\\b${notOther}(?:${re.source})`, 'i').test(c)));
+  if (soft(/\bR:R\s+[\d.]+\s+(?:under|below)\b|\bno level at \d+R\b|\bstandard plan refused\b/)) return 'room-rr';
+  if (soft(/\bstale\b|\bchas(?:e|ed|ing)\b|\bmissed the plan's entry\b/)) return 'late-entry-chase';
+  if (soft(/\bconflicting\b|\bplain\b|\bno (?:confirmed )?rejection\b|\bnot a confirmed rejection\b|\bINVALID\b/)) return 'entry-reaction';
   return null;
 }
 
@@ -169,7 +182,7 @@ function legRow(l, { rows: scored, half }) {
   const reads = cycles.map((c, i) => {
     const d = scored.get(Date.parse(c.bar)) || null;
     const cls = codeClass(c);
-    const stated = cls === 'no-plan' || cls === 'head-pass' ? statedClass(d && d.stated ? d.stated : c.message, l.side) : null;
+    const stated = cls === 'no-plan' || cls === 'head-pass' ? statedClass(d && d.stated ? d.stated : c.message, l.side, { own: cls === 'head-pass' }) : null;
     const flat = cls !== 'position-open' && cls !== 'entered';
     return { bar: c.bar, code: c.code, class: cls, stated, reason: stated || cls, flat, beforeEntry: firstEntry < 0 || i < firstEntry, message: String(c.message || '').slice(0, TUN.messageChars), scorecard: verdictOf(d) };
   });
@@ -217,13 +230,18 @@ function classesOf(rows, key) {
     const legs = [...s.refusedIn];
     const joined = s.refusals.filter(x => x.scorecard);
     const categories = {};
-    for (const x of joined) if (x.scorecard.category) categories[x.scorecard.category] = (categories[x.scorecard.category] || 0) + 1;
+    const expected = {};
+    for (const x of joined) {
+      if (x.scorecard.category) categories[x.scorecard.category] = (categories[x.scorecard.category] || 0) + 1;
+      const e = x.scorecard.expected || 'unknown';
+      expected[e] = (expected[e] || 0) + 1;
+    }
     const cf = joined.map(x => x.scorecard.counterfactualR).filter(v => v !== null);
     return {
       class: k,
       blocked: { legs: s.blocked.length, r: rStats(s.blocked) },
       refusedIn: { legs: legs.length, caught: legs.filter(r => r.captured).length, missed: legs.filter(r => !r.captured).length, cycles: s.cycles, r: rStats(legs) },
-      scorecard: { joined: joined.length, unjoined: s.refusals.length - joined.length, expectedTake: joined.filter(x => x.scorecard.expected === 'take').length, categories, counterfactual: { n: cf.length, sum: r2(cf.reduce((a, b) => a + b, 0)) } },
+      scorecard: { joined: joined.length, unjoined: s.refusals.length - joined.length, expected, categories, counterfactual: { n: cf.length, sum: r2(cf.reduce((a, b) => a + b, 0)) } },
     };
   }).sort((a, b) => b.blocked.legs - a.blocked.legs || b.refusedIn.legs - a.refusedIn.legs || (a.class < b.class ? -1 : 1));
 }
@@ -284,7 +302,8 @@ function readRound(home, { iteration = 1, runs = null, minutes = null, prefix = 
   try { names = fs.readdirSync(dir).sort(); } catch (_err) { /* none */ }
   const re = new RegExp(`^${prefix}-(\\d{4}-\\d{2}-\\d{2})-([0-9a-f]+)\\.json$`);
   const docs = names.map(n => re.exec(n)).filter(Boolean).map(m => ({ day: m[1], hash: m[2], file: path.join(dir, m[0]) }));
-  const out = { runs: [], missingDays: [], unfinished: [] };
+  const out = { runs: [], missingDays: [], unfinished: [], duplicates: [] };
+  const seen = new Set();
   for (const half of halves) {
     const h = report.trend[half];
     if (!isObj(h)) continue;
@@ -300,6 +319,8 @@ function readRound(home, { iteration = 1, runs = null, minutes = null, prefix = 
         const include = [];
         for (const l of Array.isArray(doc.capture.legs) ? doc.capture.legs : []) {
           if (!listed.has(l.id)) continue;
+          if (seen.has(l.id)) { out.duplicates.push({ half, id: l.id, file: path.basename(f.file) }); continue; }
+          seen.add(l.id);
           if (done.has(unitOf.get(l.id))) include.push(l.id); else out.unfinished.push({ half, id: l.id });
         }
         const runId = doc.capture.runId;
@@ -322,12 +343,12 @@ function aggLines(a, label) {
     lines.push(`  by ${what}: class | blocked legs (missed R) | legs refused then ran (caught/missed, cycles; their R) | scorecard on those refusals`);
     for (const x of list) {
       const sc = x.scorecard;
-      const cats = Object.entries(sc.categories).map(([k, n]) => `${k} ${n}`).join(', ');
-      lines.push(`    ${x.class} | ${x.blocked.legs} (${fmtR(x.blocked.r)}) | ${x.refusedIn.legs} (${x.refusedIn.caught}/${x.refusedIn.missed}, ${x.refusedIn.cycles} cyc; ${fmtR(x.refusedIn.r)}) | joined ${sc.joined}/${sc.joined + sc.unjoined}, expected take ${sc.expectedTake}${cats ? `, ${cats}` : ''}, counterfactual ${sc.counterfactual.n ? `n ${sc.counterfactual.n} sum ${sc.counterfactual.sum}R` : 'not recorded'}`);
+      const tally = o => Object.entries(o).map(([k, n]) => `${k} ${n}`).join(', ') || 'none';
+      lines.push(`    ${x.class} | ${x.blocked.legs} (${fmtR(x.blocked.r)}) | ${x.refusedIn.legs} (${x.refusedIn.caught}/${x.refusedIn.missed}, ${x.refusedIn.cycles} cyc; ${fmtR(x.refusedIn.r)}) | joined ${sc.joined}/${sc.joined + sc.unjoined}, expected: ${tally(sc.expected)}; category: ${tally(sc.categories)}; counterfactual ${sc.counterfactual.n ? `n ${sc.counterfactual.n} sum ${sc.counterfactual.sum}R` : 'not recorded'}`);
     }
   };
   table(a.byClass, 'class (the blocker\'s code)');
-  table(a.byReason, 'reason (the model\'s stated reason, else the code)');
+  table(a.byReason, 'reason (the model\'s stated reason, a heuristic parse of its text, else the code)');
   return lines;
 }
 

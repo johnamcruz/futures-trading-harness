@@ -1248,8 +1248,11 @@ the run finished, as the screens pair them), three things:
   position-open, opening-print, executor-blocked, unfilled, ...). A no-plan
   or head-pass cycle also has the reason the model stated for the leg's own
   side, parsed from its CYCLE RESULT text: trend-rule, htf-choch-against,
-  size-floor, room-rr, late-entry-chase, entry-reaction, or a rule. Each
-  cycle also carries the scorecard's own verdict on that decision.
+  size-floor, room-rr, late-entry-chase, entry-reaction, or a rule. The
+  parse is a heuristic. It takes the first match in that order, and on a
+  no-plan cycle it uses only a clause that names the leg's side, never one
+  that says there was no setup that way. Each cycle also carries the
+  scorecard's own verdict on that decision.
 - The outcome: a caught leg's entry lag, peak, banked and giveback R, or a
   missed leg's R and its blocker.
 
@@ -1259,8 +1262,13 @@ Each class shows:
 
 - the missed legs it blocked;
 - the legs a refusal of that class came before, which ran anyway;
-- the scorecard's expected take and categories on those refusals, plus a
-  skip's counterfactual R where the decision rows carry one.
+- the scorecard's expected decisions and categories on those refusals, plus
+  a skip's counterfactual R where the decision rows carry one. The loop's
+  saved decisions don't carry it today, so the column reads "not recorded".
+  An `excessive abstention` under an expected no-trade is the scorecard's
+  "a composable setup passed without compose_check".
+
+A leg found in two probe docs of its day is kept once and listed.
 
 Every figure shows its n. An unknown R counts as unknown, never as 0.
 Leg R is an outcome and not tradeable: it is the leg's whole move from its
