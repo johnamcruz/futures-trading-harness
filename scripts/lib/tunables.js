@@ -21,7 +21,8 @@
  *   analysis   the reads' parameters: indicators, the snapshot, regime, CISD, CRT, volume profile, candles, the
  *              multi-timeframe read, day context, the day so far, structure, momentum, fair value gaps and the briefing's frames. A
  *              strategy's `params` still override them (market-snapshot.js PARAMS is the defaults a strategy overrides),
- *              and the rules evaluator's window
+ *              and the rules evaluator's window; the read audit's forward window and standard stop (learning/read-audit.js:
+ *              an offline measurement, never read by a decision)
  *
  * A broken file is a CRITICAL config error (config-files.js CriticalConfigError): a missing, unreadable, non-JSON,
  * mistyped, incomplete or unknown-keyed file, or a tighten-only key past its pin (PINS), is refused, naming the file,
@@ -239,6 +240,9 @@ const ANALYSIS = {
   tradeRead: { frames: list(int(1), { min: 1 }), deepPullback: frac(), minSigns: int(1) },
   pullbackRead: { minLegAtr: pos() },
   evaluator: { windowBars: int(1) },
+  // The read audit (learning/read-audit.js, an offline report): a pass's forward window in base bars and its standard
+  // stop in ATR(20) multiples, the outcome column only (hindsight; never read by a decision, a read or a prompt).
+  readAudit: { forwardBars: int(1), stopAtr: pos() },
 };
 
 /**
@@ -376,6 +380,7 @@ const BUILT_IN = deepFreeze({
     tradeRead: { frames: [15], deepPullback: 0.618, minSigns: 2 },
     pullbackRead: { minLegAtr: 1 },
     evaluator: { windowBars: 500 },
+    readAudit: { forwardBars: 20, stopAtr: 1 },
   },
 });
 

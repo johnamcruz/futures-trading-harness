@@ -1399,6 +1399,95 @@ this block:
 }
 ```
 
+### The read audit
+
+`node scripts/read-audit.js --run <run home | runs folder | replay run dir>
+--decisions <training home> [--bars MNQ=<data file>] [--days d1,d2] [--json]`
+lays three columns side by side for every decision in a run, then sorts
+each decision by them (`scripts/lib/learning/read-audit.js`). It is a
+measurement only. Nothing that decides reads it: not the gate,
+compose_check, sizing, the exits, the runner, the briefing, a prompt or a
+skill. The model is asked nothing.
+
+1. **What the model read**: its closed-form STATE line (`4h`, `1h`, `15m`,
+   `frames`), as its cycle log recorded it (trading/state-read.js).
+2. **What the market was doing**: the labels that read was scored against
+   (the cycle bar's briefing, built from the bars up to that bar), with
+   their context, as recorded at the cycle. The audit never rebuilds them.
+3. **OUTCOME, what happened next**: hindsight, never an input to a read.
+   - An entry: its exact recorded trade R (`trade.r` on its decision
+     record, the scorecard's per-trade R; the same figure the arm's net R is
+     summed from).
+   - A pass: the forward move of the side its own read points to. That is
+     long when the read's 4h and 1h are both up, short when both are down,
+     and both sides otherwise. It is measured from the cycle bar's close
+     over `config/analysis.json` `readAudit.forwardBars` bars strictly
+     after the cycle bar, in R of a standard stop of `readAudit.stopAtr` x
+     ATR(20) at the cycle bar. A bar that reaches the stop gives -1R (stop
+     first, even if it closes back). Otherwise the last bar's close counts.
+     With fewer bars and no stop, the move is unknown.
+   - A run's own bars archive ends with the run, so give the data it
+     replayed (`--bars`, as the scorecard takes it) to measure its last
+     passes. Its ATR's longer warm-up can move a stop by a few hundredths.
+
+The classes. A decision needs a read, at least one scored field (match or
+mismatch; unknown never counts) and an outcome:
+
+| Class | When |
+|---|---|
+| misread | a scored field (`4h`, `1h`, `15m`, `frames`) mismatches its label |
+| read right / acted wrong | every scored field matches; the entry contradicts the read's own words (below) |
+| read right / market turned | read right, consistent, the trade at or past the stop (R <= -1) |
+| read right / small loss | read right, consistent, between the stop and 0: its own row, never folded into the others |
+| read right / acted right | read right, consistent, the trade positive |
+| read right / passed | read right, a no-trade, reported with its forward move (a pass is never acted wrong in v1) |
+
+Anything else is unscorable and counted on its own, with why. The reasons:
+no state record, no STATE line, no scored field, an entry not filled, no
+decision record joined, no forward bars yet. Its outcome is still shown
+apart. A cycle in a trade is no entry or pass decision; it is counted and
+left out.
+
+The consistency table is the trend rule held to the read's own words, not
+to the labels. It is checked for entries only:
+
+- `counter-own-htf`: the read's 4h or 1h trends against the entry.
+- `counter-own-15m`: the read's 4h and 1h range and its 15m trends against
+  the entry.
+- `no-own-side`: the read's 4h, 1h and 15m all range.
+
+Transition, unknown or an unstated frame gives no trend the read can be
+held to. A rule for a range or transition read against a trend setup is
+left out: the trend rule allows the 15m's way when both frames range.
+
+The report puts n beside every number. It shows, per class, the share of
+scorable decisions, with entries and passes always apart, each with net
+and mean R. Intervals are day-clustered at the experience index's level
+(`config/training.json` `experienceIndex`; under its minN or minDays it
+says too few). Each class is also shown without its best day: the day with
+the most R in that cell. Then come:
+
+- each field split by its result;
+- `frames-own` (the read against itself), beside;
+- the classes by the day so far at the bar (context: the read has no day
+  field);
+- the misread fields by entry R lost, with passes apart;
+- the entry losers (trade R < 0) by class, and the unscorable ones by why.
+
+Limits:
+
+- The read's vocabulary is coarse: three trend words per frame and one
+  agreement word. A label can be stale, so a mismatch can be the better
+  read (read-accuracy.js's caveat).
+- The outcome is hindsight on one path.
+- The forward window and stop are definitions, not a tradeable plan.
+- n is small per run, so intervals need many days.
+- The consistency table holds an entry only to the model's own stated
+  read, never to what the code or the owner would have done. Because the
+  gate enforces the trend rule on the same labels, a read-right entry
+  against its own trending frames should be rare. The table mostly
+  catches entries the read leaves room for.
+
 ## 5. Stage 2: pass prop
 
 The `stage: 2` preset is stage 1 plus:
