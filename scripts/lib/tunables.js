@@ -96,8 +96,9 @@ const TRAINING = {
   // as past -1R when its tick is unknown (else one tick in R), and the bucket size under which a split says no conclusion.
   trendReport: { falseStartPeakR: pos(), loserToleranceR: pos(), smallN: int(1) },
   // The leg ledger (train/leg-ledger.js, report only): the CYCLE RESULT text it parses for a stated reason, at most this
-  // many characters (a parse limit: its regexes grow faster than the text; real texts run under 500).
-  legLedger: { statedChars: int(80) },
+  // many characters (a parse limit: its regexes grow faster than the text; real texts run under 500). The ceiling keeps
+  // a local value from bringing back the slow parse (4000 chars: under half a second at worst).
+  legLedger: { statedChars: int(80, 4000) },
   // The goal regression (eval/goal-check.js, tests/plugin/goal-regression.test.js): the fixture's draw (goal-fixture.js),
   // its combine Monte Carlo, and how far below main's baseline a metric may fall (tighten-only: they only fall).
   goalRegression: {

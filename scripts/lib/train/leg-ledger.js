@@ -100,7 +100,7 @@ const KNOWN = new Set(CLASSES.map(c => c.key));
 // The rules a CYCLE RESULT text may say blocked entries, each only in a wording that blocks ("loss-streak stop", "in a
 // cooldown", "cooldown until"; never "the loss streak is 1" or "waiting for the cooldown to end").
 const STATED_RULES = [
-  ['loss-streak', /\bloss[- ]streak (?:stop|cooldown|limit)\b|\bconsecutive loss(?:es)? (?:stop|limit)\b|\bin (?:a|the) cooldown\b|\bcooldown (?:until|active|in force|holds)\b/i],
+  ['loss-streak', /\bloss[-_ ]streak[-_ ](?:stop|cooldown|limit)\b|\bconsecutive loss(?:es)? (?:stop|limit)\b|\bin (?:a|the) cooldown\b|\bcooldown (?:until|active|in force|holds)\b/i],
   ['daily-stop', /\b(?:daily|soft)(?: daily| loss)? stop (?:hit|reached|holds|in force|active)\b|\bat the (?:daily|soft)(?: loss)? stop\b|\bstopped for the day\b/i],
   ['news', /\bnews blackout\b|\bin (?:a |the )?(?:news )?blackout\b/i], ['opening-print', /\bopening[- ]print\b/i],
 ];
@@ -138,7 +138,14 @@ const NEG = /\b(?:no(?!-)|not|nor|never|without|cannot|hardly|barely|need|needs|
 const LAPSED = /^\s*(?:[\w-]+\s+)?(?:[\w-]+\s+)?(?:yet|absent|passed|over|lifted|ended|cleared|missing|gone)\b/i;
 const lastWords = s => (/(?:\S+\s+){0,3}\S*\s*$/.exec(s) || [''])[0];
 const firstWords = s => (/^\s*(?:\S+\s+){0,3}\S*/.exec(s) || [''])[0];
-const SIDE_WORD = /\b(long|short)s?\b/gi;
+// A side word (a regex source): long(s) or short(s), never a hyphen compound ("long-wick", "long-only", "short-term")
+// but "short-side".
+const sideWord = w => `\\b${w}s?\\b(?!-(?!side\\b))`;
+const SIDE_WORD = new RegExp(`(${sideWord('long')}|${sideWord('short')})`, 'gi');
+const sideOf = w => (/^long/i.test(w) ? 'long' : 'short');
+// A block's own consequence right after a rule ("(no entries until 09:35 ET)", "entries not allowed", "no new entries"):
+// dropped before the after-guard reads, so it never negates the rule it follows.
+const CONSEQUENCE = /\b(?:no|not)\s+(?:new\s+)?entr(?:y|ies)\b|\bentr(?:y|ies)\s+(?:are\s+|is\s+)?not\s+allowed\b/gi;
 // Whether a match of `(subject)(key)` (indices: the d flag) states its reason: nothing in the guard words negates it.
 // after: a rule's key is guarded after it too ("cooldown not active"); other (own, no subject): the side word nearest
 // before the key may not be the other side ("long OK, but the short has no size fits" is the short's).
@@ -146,9 +153,9 @@ const asserted = (c, m, { after = false, other = null } = {}) => {
   const [s0] = m.indices[1];
   const [k0, k1] = m.indices[2];
   if (NEG.test(lastWords(c.slice(0, s0)) + c.slice(s0, k0)) || LAPSED.test(c.slice(k1))) return false;
-  if (after && NEG.test(firstWords(c.slice(k1)))) return false;
+  if (after && NEG.test(firstWords(c.slice(k1).replace(CONSEQUENCE, ' ')))) return false;
   const near = other ? [...c.slice(0, k0).matchAll(SIDE_WORD)].pop() : null;
-  return !(near && near[1].toLowerCase() === other);
+  return !(near && sideOf(near[1]) === other);
 };
 // Whether any clause states the key (a regex source), after the subject (a regex source) when one is given.
 const states = (clauses, key, subject = '', opts = {}) => {
@@ -170,14 +177,14 @@ function statedClass(text, side, { own = false } = {}) {
   if (rule) return rule[0];
   // "<side> ... against|refused by|counter to the <a few plain words> trend": the other side never between, and only
   // words (no punctuation) between the refusal and "trend" ("CHoCH up are against, and the trend is not declared" is not).
-  const notOther = `(?:(?!\\b${other}s?\\b)[^;])*?`;
-  const subject = `\\b${side}s?\\b${notOther}`;
+  const notOther = `(?:(?!${sideWord(other)})[^;])*?`;
+  const subject = `${sideWord(side)}${notOther}`;
   if (states(clauses, '\\b(?:against|refused by|counter to)\\s+(?:[\\w/-]+\\s+)*?trend\\b', subject)
     // "trend rule refuses|blocks|forbids ... <side>": the words between the verb and the side guarded ("blocks no longs").
-    || states(clauses, `\\b${side}s?\\b`, `\\btrend\\s+rule\\s+(?:refuses|blocks|forbids)\\b${notOther}`)) return 'trend-rule';
+    || states(clauses, sideWord(side), `\\btrend\\s+rule\\s+(?:refuses|blocks|forbids)\\b${notOther}`)) return 'trend-rule';
   // A 1h or 4h CHoCH said to be against: its way, when named, the other way; its target, when named, the leg's side; one
   // of the two named (else unsure: left out); not negated, needed or lapsed ("without", "needs", "no longer").
-  const choch = /()\b(?:1h|4h)\s+choch(?:\s+(up|down))?\b([^;.]*?)(\bagainst\b)(?:\s+(?:the|this|a|its?)\b)?(?:\s+(long|short)s?\b)?/gid;
+  const choch = /()\b(?:1h|4h)\s+choch(?:\s+(up|down))?\b([^;.]*?)(\bagainst\b)(?:\s+(?:the|this|a|its?)\b)?(?:\s+(long|short)s?\b(?!-(?!side\b)))?/gid;
   const chochAgainst = (c, m) => (m[2] || m[5]) && (!m[2] || m[2].toLowerCase() === against) && (!m[5] || m[5].toLowerCase() === side)
     && !NEG.test(lastWords(c.slice(0, m.index)) + m[3]) && !LAPSED.test(c.slice(m.index + m[0].length));
   if (clauses.some(c => [...c.matchAll(choch)].some(m => chochAgainst(c, m)))) return 'htf-choch-against';

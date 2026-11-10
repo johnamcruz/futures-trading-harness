@@ -198,6 +198,47 @@ test('leg ledger: a rule counts only in a wording that blocks; a negation after 
   assert.strictEqual(s('no-trade - in the news blackout until 10:05', 'long'), 'news');
 });
 
+test('leg ledger: a rule\'s own consequence after it ("no entries") is no negation of it', () => {
+  const s = LL.statedClass;
+  for (const [t, want] of [
+    ['no-trade - opening print (no entries until 09:35 ET)', 'opening-print'],
+    ['no-trade - opening print (entries not allowed until 09:35 ET)', 'opening-print'],
+    ['no-trade - opening print window (09:30-09:35 ET, no entries) until 09:35 ET', 'opening-print'],
+    ['no-trade - loss-streak stop, no new entries until next session', 'loss-streak'],
+    ['no-trade - news blackout, no entries', 'news'],
+    ['no-trade - daily stop hit, no new entries today', 'daily-stop'],
+    ['no-trade - cooldown until 11:00, no entries', 'loss-streak'],
+    ['no-trade - loss_streak_stop in force until the next session', 'loss-streak'],
+    ['no-trade - the loss streak stop holds', 'loss-streak'],
+  ]) assert.strictEqual(s(t, 'long'), want, t);
+  // Real negations after a rule still void it.
+  assert.strictEqual(s('no-trade - cooldown not active', 'long'), null);
+  assert.strictEqual(s('no-trade - opening print, not a factor now', 'long'), null);
+  // A rule first, before a later clause's soft reason.
+  assert.strictEqual(s('no-trade - loss_streak_stop in force until the next session; the 15m short setups are stale', 'short'), 'loss-streak');
+});
+
+test('leg ledger: the trend rule\'s verb form never reaches past the other side; a hyphen compound is no side', () => {
+  const s = LL.statedClass;
+  assert.strictEqual(s('no-trade - trend rule blocks shorts, longs fine', 'long'), null);
+  assert.strictEqual(s('no-trade - trend rule blocks shorts, longs fine', 'short'), 'trend-rule');
+  // long-wick, long-only, short-term are no side words; short-side is one.
+  assert.strictEqual(s('no-trade - the short is a long-wick stall, plain', 'long'), null);
+  assert.strictEqual(s('no-trade - the long-only bias is plain', 'long'), null);
+  assert.strictEqual(s('no-trade - a short-term chop, the long reaction is plain', 'long'), 'entry-reaction');
+  assert.strictEqual(s('no-trade - the short-side candle is conflicting', 'short'), 'entry-reaction');
+});
+
+test('leg ledger: statedChars has a ceiling (a huge local value can\'t bring back the slow parse)', () => {
+  const T = require('../../scripts/lib/tunables');
+  const cfg = JSON.parse(fs.readFileSync(path.join(__dirname, '..', '..', 'config', 'training.json'), 'utf8'));
+  const at = v => T.SPECS.training.validate({ ...cfg, legLedger: { statedChars: v } });
+  assert.deepStrictEqual(at(cfg.legLedger.statedChars), []);
+  assert.deepStrictEqual(at(4000), []);
+  assert.ok(at(4001).length > 0);
+  assert.ok(at(79).length > 0);
+});
+
 test('leg ledger: on its own OK record a reason still never counts for the leg when the other side is named nearer', () => {
   const s = LL.statedClass;
   assert.strictEqual(s('no-trade - compose_check OK on the long but the short has no size fits', 'long', { own: true }), null);

@@ -1263,28 +1263,39 @@ the run finished, as the screens pair them), three things:
     direction is named and runs the other way, or its target is named and is
     the leg's side. With neither named, it is left out.
   - Rules: not side-gated. Each counts only in a wording that blocks:
-    - loss-streak: a loss-streak stop, cooldown or limit; "in a cooldown";
-      "cooldown until/active". Never "the loss streak is 1".
+    - loss-streak: a loss-streak stop, cooldown or limit (hyphen, space or
+      underscore: `loss_streak_stop`); "in a cooldown"; "cooldown
+      until/active". Never "the loss streak is 1".
     - daily-stop: the daily or soft stop hit, reached or holding, or
       "stopped for the day".
     - news: a news blackout, or "in blackout".
     - opening-print: the opening print.
   - Every reason is guarded the same way. It is left out when a negating
-    word comes in the three words before its subject (or the reason) or
-    between the subject and the reason. The negating words are: "no",
-    "not", "nor", "never", "without", "cannot", "hardly", "barely",
-    "needs" or "requires", "lacks", "absent", or any n't contraction
-    (straight or curly apostrophe). It is also left out when "yet",
-    "passed", "over", "lifted", "ended", "cleared", "missing" or "gone"
-    follows within two words.
-  - A rule is also guarded in the three words after it ("cooldown not
-    active").
+    word comes in the up to four tokens before its subject (or the reason;
+    three words plus the one the subject starts in) or between the subject
+    and the reason. The negating words are:
+    - "no" (never "no-trade"), "not", "nor", "never", "without";
+    - "cannot", "hardly", "barely";
+    - "need", "needs", "needed", "require", "requires", "required";
+    - "lack", "lacks", "lacking", "absent";
+    - any n't contraction (straight or curly apostrophe).
+
+    It is also left out when "yet", "passed", "over", "lifted", "ended",
+    "cleared", "missing" or "gone" is one of the first three words after it.
+  - A rule is also guarded in the up to four tokens after it ("cooldown
+    not active"). A block's own consequence there is not a negation and is
+    dropped before that read: "no entries", "no new entries", "no entry",
+    "entries not allowed" ("opening print (no entries until 09:35 ET)").
+  - A side word is "long(s)" or "short(s)", never a hyphen compound
+    ("long-wick", "long-only", "short-term"), except "short-side" or
+    "long-side".
   - The trend rule's "trend rule blocks ... <side>" form is guarded between
     the verb and the side ("blocks no longs").
   - Examples: "no long setup ... plain" is no plan; "opening print passed"
     is no rule.
   - Only the first `legLedger.statedChars` characters of a text are parsed
-    (`config/training.json`; a parse limit, real texts run under 500).
+    (`config/training.json`; a parse limit, real texts run under 500; the
+    config refuses more than 4000).
   - Each cycle also carries the scorecard's own verdict on that decision.
 - The outcome: a caught leg's entry lag, peak, banked and giveback R, or a
   missed leg's R and its blocker.
