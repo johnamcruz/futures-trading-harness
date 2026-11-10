@@ -796,6 +796,21 @@ test('grading: q71-q82, chop detection: right answers pass, the other classes fa
       ['F1', false], ['F2', false], ['F3', false], ['F1 and F4', false], ['F3, F4', false], ['None: all chop.', false],
     ],
   };
+  // Round 2 (written after the first patterns): the skills' own words ("back and forth so far", "never counter"), a
+  // chop or evidence count said none at the end ("chop signs: none", "(chop: 0)", "zero chop signs", "trend evidence
+  // absent"), and a dash before the other labels: right. The same words with a real count, or the label in the
+  // first clause, stay wrong.
+  cases.q71.push(['Chop evidence: back and forth so far.', true]);
+  cases.q74.push(['Trend evidence: a trend day down; never counter.', true], ['Trend evidence: traded with it; chop signs: none.', true],
+    ['Trend evidence: traded with it; chop signs: two.', false]);
+  cases.q73.push(['Trend evidence: trending up so far; chop signals: none.', true], ['Trend evidence: trending up so far (chop: 0).', true],
+    ['Trend evidence: trending up so far, zero chop signs.', true], ['Trend evidence: trending up so far; chop signals: 2.', false]);
+  cases.q75.push(['No: trend evidence; chop signs: none.', true]);
+  cases.q79.push(['No read yet: too early; chop evidence: none.', true], ['No read yet; trend evidence absent.', true],
+    ['No read yet; trend evidence: 0 crosses.', false]);
+  cases.q80.push(['No read yet: chop evidence none, trend evidence none.', true]);
+  cases.q81.push(['F4 — F3 is only a pullback.', true], ['F3 — and F4.', false]);
+  cases.q82.push(['F4 – F2 is balance.', true]);
   assert.deepStrictEqual(Object.keys(cases).sort(), Object.values(CHOP).flat().sort(), 'cases for each chop question');
   for (const [id, list] of Object.entries(cases)) {
     assert.ok(list.some(([, w]) => w) && list.some(([, w]) => !w), `${id}: right and wrong`);
@@ -846,6 +861,23 @@ test('grading: every pattern of q71-q82 does work (its removal lets a wrong answ
     assert.strictEqual(pass(id, `ANSWER: ${answer}`), false, `${id} fails: ${answer}`);
     const without = { ...q(id), [kind]: q(id)[kind].filter((_, j) => j !== i) };
     assert.strictEqual(Q.gradeAnswer(QUIZ, without, `ANSWER: ${answer}`).pass, true, `${id} ${kind}[${i}] matters: ${answer}`);
+  }
+});
+
+test('grading: q71-q82\'s exemptions each do work (a right answer fails without it): the count said none, "zero", the dash before another label', () => {
+  // [id, forbidden index, what the mutation strips from it, a right answer only the exemption lets through]
+  const NONE = /\(\?!\(\\s\+\(signs\?\|signals\?\|evidence\)\)\?\\s\*\[:=\]\?\\s\*\(none\|0\|absent\)\\b\(\?!\\s\*\\w\)\)/;
+  for (const [id, i, strip, answer] of [
+    ['q73', 1, NONE, 'Trend evidence: trending up so far; chop signals: none.'], ['q73', 1, /\(\?<!\\bzero\\s\)/, 'Trend evidence: trending up so far, zero chop signs.'],
+    ['q74', 1, NONE, 'Trend evidence: traded with it; chop signs: none.'], ['q75', 1, NONE, 'No: trend evidence; chop signs: none.'],
+    ['q79', 1, NONE, 'No read yet; trend evidence absent.'], ['q80', 1, NONE, 'No read yet: chop evidence none, trend evidence none.'],
+    ['q81', 0, /—–/, 'F4 — F3 is only a pullback.'], ['q82', 0, /—–/, 'F4 – F2 is balance.'],
+  ]) {
+    assert.strictEqual(pass(id, `ANSWER: ${answer}`), true, `${id} right: ${answer}`);
+    const src = q(id).forbidden[i];
+    assert.ok(strip.test(src), `${id} forbidden[${i}] holds the exemption`);
+    const without = { ...q(id), forbidden: q(id).forbidden.map((s, j) => (j === i ? s.replace(strip, '') : s)) };
+    assert.strictEqual(Q.gradeAnswer(QUIZ, without, `ANSWER: ${answer}`).pass, false, `${id} forbidden[${i}] without it fails: ${answer}`);
   }
 });
 

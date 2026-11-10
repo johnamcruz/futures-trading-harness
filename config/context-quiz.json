@@ -1168,7 +1168,7 @@
       "anchor": "say it in your read (\"trending down so far\", \"rotating so far\", \"mixed so far\")",
       "required": [
         "\\bchop\\b",
-        "\\brotat\\w*\\b"
+        "\\brotat\\w*\\b|\\bback and forth\\b"
       ],
       "forbidden": [
         "^[\\W_]*(trend|trending|directional|conflict\\w*|mixed|no read|too early)\\b",
@@ -1206,7 +1206,7 @@
       ],
       "forbidden": [
         "^[\\W_]*(chop\\w*|rotat\\w*|range|ranging|conflict\\w*|mixed|balance|no read|too early)\\b",
-        "\\bchop\\w*",
+        "(?<!\\bzero\\s)\\bchop\\w*\\b(?!(\\s+(signs?|signals?|evidence))?\\s*[:=]?\\s*(none|0|absent)\\b(?!\\s*\\w))",
         "\\brotat\\w*",
         "^[\\W_]*(no|not)\\b[^.;:,]{0,20}\\btrend"
       ]
@@ -1220,11 +1220,11 @@
       "anchor": "is traded with it (never faded: never counter)",
       "required": [
         "\\btrend\\b",
-        "\\btraded with\\b|\\bwith (it|the trend|the move|the day)\\b|\\bnever fad\\w*|\\bnot fad\\w*|\\bdon'?t fade\\b|\\bno fad\\w*"
+        "\\btraded with\\b|\\bwith (it|the trend|the move|the day)\\b|\\bnever fad\\w*|\\bnot fad\\w*|\\bdon'?t fade\\b|\\bno fad\\w*|\\bnever counter\\b|\\bdon'?t counter\\b"
       ],
       "forbidden": [
         "^[\\W_]*(chop\\w*|rotat\\w*|range|ranging|conflict\\w*|mixed|balance|no read|too early)\\b",
-        "\\bchop\\w*",
+        "(?<!\\bzero\\s)\\bchop\\w*\\b(?!(\\s+(signs?|signals?|evidence))?\\s*[:=]?\\s*(none|0|absent)\\b(?!\\s*\\w))",
         "\\bfad(e|ed|es|ing)\\b",
         "\\b(buy|go long|take (a |the )?long)\\b"
       ]
@@ -1245,7 +1245,7 @@
       ],
       "forbidden": [
         "^[\\W_]*(yes|chop\\w*|rotat\\w*|range|ranging|conflict\\w*|mixed|balance)\\b",
-        "\\bchop (evidence|sign|signal|day)\\b",
+        "(?<!\\bzero\\s)\\bchop (evidence|signs?|signals?|days?)\\b(?!(\\s+(signs?|signals?|evidence))?\\s*[:=]?\\s*(none|0|absent)\\b(?!\\s*\\w))",
         "\\bconflict\\w*",
         "\\brevers(al|ing)\\b"
       ]
@@ -1319,7 +1319,7 @@
       ],
       "forbidden": [
         "^[\\W_]*(chop\\w*|trend\\w*|directional|rotat\\w*|range|ranging|conflict\\w*|mixed|balance)\\b",
-        "\\b(chop|trend) evidence\\b",
+        "(?<!\\bzero\\s)\\b(chop|trend) evidence\\b(?!(\\s+(signs?|signals?|evidence))?\\s*[:=]?\\s*(none|0|absent)\\b(?!\\s*\\w))",
         "\\b(rotating|trending( up| down)?) so far\\b"
       ]
     },
@@ -1335,7 +1335,7 @@
       ],
       "forbidden": [
         "^[\\W_]*(chop\\w*|trend\\w*|directional|rotat\\w*|range|ranging|conflict\\w*|mixed|balance)\\b",
-        "\\b(chop|trend) evidence\\b",
+        "(?<!\\bzero\\s)\\b(chop|trend) evidence\\b(?!(\\s+(signs?|signals?|evidence))?\\s*[:=]?\\s*(none|0|absent)\\b(?!\\s*\\w))",
         "\\bagainst\\b"
       ]
     },
@@ -1353,7 +1353,7 @@
         "\\bF4\\b"
       ],
       "forbidden": [
-        "(?<=^[^;:(]*)\\bF[123]\\b"
+        "(?<=^[^;:(—–]*)\\bF[123]\\b"
       ]
     },
     {
@@ -1370,7 +1370,7 @@
         "\\bF4\\b"
       ],
       "forbidden": [
-        "(?<=^[^;:(]*)\\bF[123]\\b"
+        "(?<=^[^;:(—–]*)\\bF[123]\\b"
       ]
     }
   ],
