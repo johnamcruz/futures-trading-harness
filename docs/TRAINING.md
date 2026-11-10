@@ -1430,8 +1430,10 @@ skill. The model is asked nothing.
      the run replayed (`--bars`, as the scorecard takes it) is recommended.
      The archive ends with the run, so its last passes have no forward bars:
      on one arm, 177 of 363 passes. The data file has the history before
-     and after. The two sources do not always agree. On that arm, 62 of 363
-     passes got a different stop. Of the 186 passes measurable both ways,
+     and after. The two sources do not always agree. On that arm, 81 of 363
+     passes got a stop that was not exactly equal: 77 differed by more than
+     0.001 points, 62 by more than 0.01 and 37 by more than 0.05. Of the 186
+     passes measurable both ways,
      170 agreed within 0.02R. The largest gaps were 1.633R, 0.273R and
      0.123R. A stop touched in one source and not the other flips a pass by
      more than 1R (1 pass there).
@@ -1474,7 +1476,10 @@ scorable decisions, with entries and passes always apart, each with net
 and mean R. Intervals are day-clustered at the experience index's level
 (`config/training.json` `experienceIndex`; under its minN or minDays it
 says too few). Each class is also shown without its best day: the day with
-the most R in that cell. Then come:
+the most R in that cell. A pass whose read has no side shows each side's
+summed forward R (`longR`, `shortR`) over its known moves only, with their
+counts (`knownLong`, `knownShort`) beside the cell's n. With no known move,
+the count is 0 and the sum is null, never 0. Then come:
 
 - each field split by its result;
 - `frames-own` (the read against itself), beside;

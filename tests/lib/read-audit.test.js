@@ -345,6 +345,7 @@ test('a state record on another lane than the cycle\'s base bar is unscorable un
   assert.strictEqual(s.unscorable.n, 1);
 });
 
+const PINNED = { share: [0.4, 0.5], meanR: [2.3385, 2.7083] };
 test('summary: intervals once the experience index\'s minimum n and days are met', () => {
   const right = stateRead('STATE: 4h up | 1h up | 15m up', UP);
   const wrong = stateRead('STATE: 4h down | 1h up | 15m up', UP);
@@ -354,15 +355,41 @@ test('summary: intervals once the experience index\'s minimum n and days are met
   const rows = [];
   for (let k = 0; k < nDays; k += 1) {
     const day = new Date(Date.parse('2021-07-01T00:00:00Z') + k * 86400000).toISOString().slice(0, 10);
-    rows.push({ ...audit({ stateRead: right, decision: decision('long', 1 + (k % 3)) }), day });
-    rows.push({ ...audit({ stateRead: right, decision: decision('long', 2) }), day });
-    rows.push({ ...audit({ stateRead: wrong, decision: decision('long', -1) }), day });
+    // R and the share vary by day (distinct values), so the intervals move with the bootstrap's reps and stream.
+    rows.push({ ...audit({ stateRead: right, decision: decision('long', 1 + ((k * 7) % 13) / 4) }), day });
+    rows.push({ ...audit({ stateRead: right, decision: decision('long', 2 + ((k * 5) % 11) / 8) }), day });
+    for (let j = 0; j <= k % 4; j += 1) rows.push({ ...audit({ stateRead: wrong, decision: decision('long', -1) }), day });
   }
   const s = A.summarize(rows);
   const c = s.classes['acted-right'];
   assert.ok(!c.tooFew);
   assert.ok(c.lo <= c.share && c.share <= c.hi, JSON.stringify(c));
   assert.ok(c.entries.lo <= c.entries.meanR && c.entries.meanR <= c.entries.hi, JSON.stringify(c.entries));
+  // The intervals are the experience index's own day bootstrap, at its reps, on the audit's seeded stream per cell key.
+  const { dayBootstrap } = require('../../scripts/lib/learning/experience-index');
+  const { streamFor } = require('../../scripts/lib/prop/stats');
+  const perDay = [...new Set(rows.map(r => r.day))].sort().map(d => rows.filter(r => r.day === d));
+  const boot = (key, num, den) => dayBootstrap(perDay, perDay.map(num), perDay.map(den), { reps: EI.reps, rand: streamFor(EI.seed, `read-audit|${key}`) });
+  assert.deepStrictEqual({ lo: c.lo, hi: c.hi }, boot('acted-right|share', d => d.filter(r => r.class === 'acted-right').length, d => d.length));
+  const sumR = d => d.filter(r => r.class === 'acted-right').reduce((x, r) => x + r.outcome.R, 0);
+  assert.deepStrictEqual({ lo: c.entries.lo, hi: c.entries.hi }, boot('acted-right|entries', sumR, d => d.filter(r => r.class === 'acted-right').length));
+  // Pinned on this fixed day set at the committed config (training.json experienceIndex seed, reps, level).
+  assert.deepStrictEqual({ share: [c.lo, c.hi], meanR: [c.entries.lo, c.entries.hi] }, PINNED);
+  // And the bootstrap is called with exactly the experience index's reps and the audit's seeded stream for each cell
+  // (a spy on dayBootstrap, the audit loaded fresh against it): a reps or stream change can't hide in a rounding.
+  const XI = require('../../scripts/lib/learning/experience-index');
+  const real = XI.dayBootstrap;
+  const calls = [];
+  const modPath = require.resolve('../../scripts/lib/learning/read-audit');
+  try {
+    XI.dayBootstrap = (days, num, den, opts) => { calls.push({ reps: opts.reps, first: opts.rand() }); return real(days, num, den, { ...opts, rand: streamFor(EI.seed, 'unused') }); };
+    delete require.cache[modPath];
+    require(modPath).summarize(rows);
+  } finally { XI.dayBootstrap = real; delete require.cache[modPath]; require(modPath); }
+  assert.ok(calls.length > 0);
+  assert.ok(calls.every(x => x.reps === EI.reps), 'the experience index\'s reps');
+  const firsts = ['acted-right|share', 'acted-right|entries'].map(k => streamFor(EI.seed, `read-audit|${k}`)());
+  for (const f of firsts) assert.ok(calls.some(x => x.first === f), 'the audit\'s stream per cell key');
   // Deterministic: the same rows give the same report.
   assert.deepStrictEqual(A.summarize(rows), s);
   const text = A.renderAudit(s);
