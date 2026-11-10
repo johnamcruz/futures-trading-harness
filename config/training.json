@@ -67,6 +67,7 @@
   "trendFindings": { "examples": 2, "exampleChars": 900, "saidChars": 160, "setupTypes": 5, "setupMinN": 3 },
   "exitFindings": { "examples": 2, "exampleChars": 400 },
   "trendReport": { "falseStartPeakR": 0.5, "loserToleranceR": 0.05, "smallN": 30 },
+  "legLedger": { "statedChars": 2000 },
   "goalRegression": {
     "seed": 1,
     "split": "2022-11-23",

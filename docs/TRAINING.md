@@ -1256,18 +1256,35 @@ the run finished, as the screens pair them), three things:
     late-entry-chase, entry-reaction). Each counts only after the leg's side
     is named in its clause, with the other side not between. On a head-pass,
     whose text is about the leg's way's own OK record, size-floor and the
-    soft reasons need no side named.
+    soft reasons need no side named. They are still refused when the side
+    word nearest before the reason is the other side's ("long OK; short is
+    stale" is not the long's).
   - htf-choch-against: on the 1h or 4h only. It counts only when the CHoCH's
     direction is named and runs the other way, or its target is named and is
     the leg's side. With neither named, it is left out.
-  - Rules: not side-gated.
-  - Negation-guarded, every one, rules included. A reason is left out when
-    "no", "not", "never", "without", "needs" or "requires", "lacks",
-    "absent" or "no longer" comes in the three words before its subject or
-    between the subject and the reason. It is also left out when "yet",
+  - Rules: not side-gated. Each counts only in a wording that blocks:
+    - loss-streak: a loss-streak stop, cooldown or limit; "in a cooldown";
+      "cooldown until/active". Never "the loss streak is 1".
+    - daily-stop: the daily or soft stop hit, reached or holding, or
+      "stopped for the day".
+    - news: a news blackout, or "in blackout".
+    - opening-print: the opening print.
+  - Every reason is guarded the same way. It is left out when a negating
+    word comes in the three words before its subject (or the reason) or
+    between the subject and the reason. The negating words are: "no",
+    "not", "nor", "never", "without", "cannot", "hardly", "barely",
+    "needs" or "requires", "lacks", "absent", or any n't contraction
+    (straight or curly apostrophe). It is also left out when "yet",
     "passed", "over", "lifted", "ended", "cleared", "missing" or "gone"
-    follows it. Examples: "no long setup ... plain" is no plan; "opening
-    print passed" is no rule.
+    follows within two words.
+  - A rule is also guarded in the three words after it ("cooldown not
+    active").
+  - The trend rule's "trend rule blocks ... <side>" form is guarded between
+    the verb and the side ("blocks no longs").
+  - Examples: "no long setup ... plain" is no plan; "opening print passed"
+    is no rule.
+  - Only the first `legLedger.statedChars` characters of a text are parsed
+    (`config/training.json`; a parse limit, real texts run under 500).
   - Each cycle also carries the scorecard's own verdict on that decision.
 - The outcome: a caught leg's entry lag, peak, banked and giveback R, or a
   missed leg's R and its blocker.

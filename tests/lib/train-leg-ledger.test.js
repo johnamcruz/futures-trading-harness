@@ -170,6 +170,55 @@ test('leg ledger: a negated, needed or lapsed reason is no reason (precision ove
   assert.strictEqual(s('no-trade - long setup is stale (its entry bar passed, a chase)', 'long'), 'late-entry-chase');
 });
 
+test('leg ledger: every n\'t (straight or curly), cannot, hardly, barely negates', () => {
+  const s = LL.statedClass;
+  for (const t of [
+    'no-trade - the long setup can\'t be called stale',
+    'no-trade - the long setup won\'t be stale until 10:00',
+    'no-trade - the long setup cannot be called stale',
+    'no-trade - the long isn’t against the trend',
+    'no-trade - the long is hardly against the trend',
+    'no-trade - the long is barely against the trend',
+    'no-trade - the long reaction don’t read plain',
+  ]) assert.strictEqual(s(t, 'long'), null, t);
+});
+
+test('leg ledger: a rule counts only in a wording that blocks; a negation after it or between verb and side voids it', () => {
+  const s = LL.statedClass;
+  // A rule negated after its key: the next clause is read instead.
+  assert.strictEqual(s('no-trade - cooldown not active; long reaction is plain', 'long'), 'entry-reaction');
+  assert.strictEqual(s('no-trade - waiting for the cooldown to end', 'long'), null);
+  assert.strictEqual(s('no-trade - the loss streak is 1, under the 2 that stops', 'long'), null);
+  assert.strictEqual(s('no-trade - opening print, not a factor now', 'long'), null);
+  assert.strictEqual(s('no-trade - trend rule blocks no longs', 'long'), null);
+  assert.strictEqual(s('no-trade - trend rule blocks the longs here', 'long'), 'trend-rule');
+  // The blocking wordings still label.
+  assert.strictEqual(s('no-trade - in a cooldown until 11:00', 'long'), 'loss-streak');
+  assert.strictEqual(s('no-trade - the soft daily stop hit, done for the day', 'long'), 'daily-stop');
+  assert.strictEqual(s('no-trade - in the news blackout until 10:05', 'long'), 'news');
+});
+
+test('leg ledger: on its own OK record a reason still never counts for the leg when the other side is named nearer', () => {
+  const s = LL.statedClass;
+  assert.strictEqual(s('no-trade - compose_check OK on the long but the short has no size fits', 'long', { own: true }), null);
+  assert.strictEqual(s('no-trade - long OK; short is stale', 'long', { own: true }), null);
+  assert.strictEqual(s('no-trade - the short is against the trend rule', 'long', { own: true }), null);
+  assert.strictEqual(s('no-trade - compose_check long OK, but no size fits at this stop', 'long', { own: true }), 'size-floor');
+});
+
+test('leg ledger: a long adversarial text is parsed fast (the length capped)', () => {
+  const t0 = Date.now();
+  for (const t of ['long against '.repeat(4000), 'long '.repeat(10000), `${'1h choch down x '.repeat(3000)}against`, 'trend rule blocks '.repeat(3000)]) {
+    LL.statedClass(t, 'long');
+    LL.statedClass(t, 'long', { own: true });
+  }
+  assert.ok(Date.now() - t0 < 2000, `took ${Date.now() - t0} ms`);
+  // The cap is the config's: a reason past it is not read.
+  const cap = require('../../scripts/lib/tunables').training().legLedger.statedChars;
+  assert.strictEqual(LL.statedClass(`${'x '.repeat(cap)}; long setup is stale`, 'long'), null);
+  assert.strictEqual(LL.statedClass('long setup is stale', 'long'), 'late-entry-chase');
+});
+
 test('leg ledger: banked R beside how many caught rides were still open (their R unknown, never 0)', () => {
   const openRide = leg(A, 'long', '17:00', { captured: true, ride: { entryLag: 0.1, peakR: null, givebackR: null, r: null, open: true } });
   const t = LL.buildLedger([{ capture: { legs: [caught, openRide] }, decisions: [], minutes: 3, half: 'probe' }]).totals;

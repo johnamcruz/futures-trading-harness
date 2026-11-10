@@ -443,6 +443,10 @@
    "value": 30,
    "from": "new in feat/ppc-loss-diagnostics (the owner: n < 30 is small n, no conclusion): the round report's chop drag marks a bucket under this many entries, report only"
   },
+  "legLedger.statedChars": {
+   "value": 2000,
+   "from": "new in feat/leg-ledger (round-2 review: a 50k-char text did not finish in 2 min): the leg ledger parses at most this many characters of a CYCLE RESULT text for a stated reason, a parse limit (real texts run under 500), report only"
+  },
   "goalRegression": {
    "value": {
     "seed": 1,

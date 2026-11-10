@@ -97,9 +97,12 @@ const CLASSES = Object.freeze([
   ['unknown', 'a code this ledger does not know'],
 ].map(([key, says]) => Object.freeze({ key, says })));
 const KNOWN = new Set(CLASSES.map(c => c.key));
+// The rules a CYCLE RESULT text may say blocked entries, each only in a wording that blocks ("loss-streak stop", "in a
+// cooldown", "cooldown until"; never "the loss streak is 1" or "waiting for the cooldown to end").
 const STATED_RULES = [
-  ['loss-streak', /\bloss[- ]streak\b|\bconsecutive loss|\bcooldown\b/i], ['daily-stop', /\bdaily (?:loss )?stop\b|\bsoft (?:daily )?stop\b|\bstopped for the day\b/i],
-  ['news', /\bnews blackout\b|\bin blackout\b/i], ['opening-print', /\bopening[- ]print\b/i],
+  ['loss-streak', /\bloss[- ]streak (?:stop|cooldown|limit)\b|\bconsecutive loss(?:es)? (?:stop|limit)\b|\bin (?:a|the) cooldown\b|\bcooldown (?:until|active|in force|holds)\b/i],
+  ['daily-stop', /\b(?:daily|soft)(?: daily| loss)? stop (?:hit|reached|holds|in force|active)\b|\bat the (?:daily|soft)(?: loss)? stop\b|\bstopped for the day\b/i],
+  ['news', /\bnews blackout\b|\bin (?:a |the )?(?:news )?blackout\b/i], ['opening-print', /\bopening[- ]print\b/i],
 ];
 const RULE_CODES = new Set(['opening-print', 'news', 'loss-streak', 'daily-stop', 'window', 'outside-session']);
 
@@ -131,33 +134,47 @@ function codeClass({ code, by, step } = {}) {
  */
 // A reason said not to hold: negated, needed, lapsed ("no-trade", the result's own word, is no negation). Read in the
 // few words before the subject and between the subject and the reason; LAPSED in the words just after the reason.
-const NEG = /\b(?:no(?!-)|not|nor|never|without|need|needs|needed|require|requires|required|lack|lacks|lacking|absent|isn't|aren't|wasn't|weren't|doesn't|didn't|hasn't|haven't)\b/i;
+const NEG = /\b(?:no(?!-)|not|nor|never|without|cannot|hardly|barely|need|needs|needed|require|requires|required|lack|lacks|lacking|absent|\w+n['’]t)\b/i;
 const LAPSED = /^\s*(?:[\w-]+\s+)?(?:[\w-]+\s+)?(?:yet|absent|passed|over|lifted|ended|cleared|missing|gone)\b/i;
 const lastWords = s => (/(?:\S+\s+){0,3}\S*\s*$/.exec(s) || [''])[0];
+const firstWords = s => (/^\s*(?:\S+\s+){0,3}\S*/.exec(s) || [''])[0];
+const SIDE_WORD = /\b(long|short)s?\b/gi;
 // Whether a match of `(subject)(key)` (indices: the d flag) states its reason: nothing in the guard words negates it.
-const asserted = (c, m) => !NEG.test(lastWords(c.slice(0, m.indices[1][0])) + c.slice(m.indices[1][0], m.indices[2][0])) && !LAPSED.test(c.slice(m.indices[2][1]));
-// Whether any clause states the key (a regex source), after the subject (a regex source) when one is given.
-const states = (clauses, key, subject = '') => {
-  const re = new RegExp(`(${subject})(${key})`, 'gid');
-  return clauses.some(c => [...c.matchAll(re)].some(m => asserted(c, m)));
+// after: a rule's key is guarded after it too ("cooldown not active"); other (own, no subject): the side word nearest
+// before the key may not be the other side ("long OK, but the short has no size fits" is the short's).
+const asserted = (c, m, { after = false, other = null } = {}) => {
+  const [s0] = m.indices[1];
+  const [k0, k1] = m.indices[2];
+  if (NEG.test(lastWords(c.slice(0, s0)) + c.slice(s0, k0)) || LAPSED.test(c.slice(k1))) return false;
+  if (after && NEG.test(firstWords(c.slice(k1)))) return false;
+  const near = other ? [...c.slice(0, k0).matchAll(SIDE_WORD)].pop() : null;
+  return !(near && near[1].toLowerCase() === other);
 };
+// Whether any clause states the key (a regex source), after the subject (a regex source) when one is given.
+const states = (clauses, key, subject = '', opts = {}) => {
+  const re = new RegExp(`(${subject})(${key})`, 'gid');
+  return clauses.some(c => [...c.matchAll(re)].some(m => asserted(c, m, opts)));
+};
+const STATED_CHARS = require('../tunables').training().legLedger.statedChars; // config/training.json (a parse limit)
 
 function statedClass(text, side, { own = false } = {}) {
-  const t = String(text || '');
+  // At most statedChars of the text (its regexes grow faster than the text; a reason past the cap is not read).
+  const t = String(text || '').slice(0, STATED_CHARS);
   if (!t.trim() || (side !== 'long' && side !== 'short')) return null;
   const other = side === 'long' ? 'short' : 'long';
   const against = side === 'long' ? 'down' : 'up';
   const clauses = t.split(';');
   // A rule the model said blocked entries (the capture's rule codes miss some wordings: "loss-streak stop"), not negated
-  // or lapsed ("no news blackout", "opening print passed").
-  const rule = STATED_RULES.find(([, re]) => states(clauses, re.source));
+  // or lapsed before or after ("no news blackout", "opening print passed", "cooldown not active").
+  const rule = STATED_RULES.find(([, re]) => states(clauses, re.source, '', { after: true }));
   if (rule) return rule[0];
   // "<side> ... against|refused by|counter to the <a few plain words> trend": the other side never between, and only
   // words (no punctuation) between the refusal and "trend" ("CHoCH up are against, and the trend is not declared" is not).
   const notOther = `(?:(?!\\b${other}s?\\b)[^;])*?`;
   const subject = `\\b${side}s?\\b${notOther}`;
   if (states(clauses, '\\b(?:against|refused by|counter to)\\s+(?:[\\w/-]+\\s+)*?trend\\b', subject)
-    || states(clauses, `\\btrend\\s+rule\\s+(?:refuses|blocks|forbids)\\b${notOther}\\b${side}s?\\b`)) return 'trend-rule';
+    // "trend rule refuses|blocks|forbids ... <side>": the words between the verb and the side guarded ("blocks no longs").
+    || states(clauses, `\\b${side}s?\\b`, `\\btrend\\s+rule\\s+(?:refuses|blocks|forbids)\\b${notOther}`)) return 'trend-rule';
   // A 1h or 4h CHoCH said to be against: its way, when named, the other way; its target, when named, the leg's side; one
   // of the two named (else unsure: left out); not negated, needed or lapsed ("without", "needs", "no longer").
   const choch = /()\b(?:1h|4h)\s+choch(?:\s+(up|down))?\b([^;.]*?)(\bagainst\b)(?:\s+(?:the|this|a|its?)\b)?(?:\s+(long|short)s?\b)?/gid;
@@ -168,7 +185,7 @@ function statedClass(text, side, { own = false } = {}) {
   // about the leg's way's own OK record) anywhere; else only after the leg's side named in its clause, the other side not
   // between. Each one negation-guarded like the others: "no short setup on the 15m, and ... no rejection" says there was no
   // setup that way (the "no" before the side), so no plan, not a reaction read.
-  const leg = key => states(clauses, key, own ? '' : subject);
+  const leg = key => states(clauses, key, own ? '' : subject, own ? { other } : {});
   if (leg('\\bno size fits\\b|\\bmin_contracts\\b|\\bsize floor\\b')) return 'size-floor';
   if (leg('\\bR:R\\s+[\\d.]+\\s+(?:under|below)\\b|\\bno level at \\d+R\\b|\\bstandard plan refused\\b')) return 'room-rr';
   if (leg('\\bstale\\b|\\bchas(?:e|ed|ing)\\b|\\bmissed the plan\'s entry\\b')) return 'late-entry-chase';
