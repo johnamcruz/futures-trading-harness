@@ -2321,7 +2321,10 @@ sizing ones) as the runner builds it, plus 5 with a Bias or Size line from the
 briefing (Part B). The questions, their keys (required and forbidden terms on
 the ANSWER line, a forbidden term counting only when it isn't negated) and the
 pass bar are `config/context-quiz.json`: every question correct on all K runs
-(K 5), none answered both ways, Part B 5 of 5.
+(K 5), none answered both ways, Part B 5 of 5. A question flagged `pending`
+(new, not yet measured at K 5) is asked and reported (`grade` marks it) but
+not counted toward the bar; it joins the bar, the flag dropped, once it
+measures 5 of 5 (one that doesn't leaves the quiz, as q45 and q53 did).
 
 Run it after any skill, rule, agent or briefing-text change, and before a
 practice round:

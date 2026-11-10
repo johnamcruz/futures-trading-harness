@@ -25,7 +25,9 @@
  *                                      ("No," "No -" "Not yet:" "Yes,": VERDICT) answers the question; it never negates
  *                                      the explanation after it
  *   gradeAnswer(quiz, q, answer)       { id, line, fmt, pass, miss, forb, unsure }
- *   summarize(quiz, rows, k)           per question { id, passes, n, allCorrect, bothWays }, per part totals, meetsBar
+ *   summarize(quiz, rows, k)           per question { id, passes, n, allCorrect, bothWays, pending? }, per part totals of
+ *                                      the measured questions and meetsBar on them; a question flagged `pending` (not yet
+ *                                      measured at K) is listed and totalled apart (`pending`), never counted toward the bar
  *   compare(a, b)                      per question the change between two summaries: { id, from, to, delta }
  *   anchorsMissing(quiz, prompts)      the questions whose anchor is not in their prompt (CI, offline)
  *   quizCommand(cfg, text, file)       the argv asking one question headless, from the user's runner config
@@ -106,6 +108,8 @@ function questionErrors(q, { part = 'questions', at = 'question', ids = new Set(
   if (part === 'partB' && !(isObj(q.excerpt) && (isObj(q.excerpt.bias) || (isObj(q.excerpt.size) && isObj(q.excerpt.size.facts)) || (Array.isArray(q.excerpt.cases) && q.excerpt.cases.length && q.excerpt.cases.every(caseOk))))) out.push(`${at}.excerpt: { bias: { h4, h1, t15, declared } }, { size: { facts, riskUsd, minContracts, stretchUsd, capUsd } } or { cases: [{ bias, tf, rel, dir, level, reaction }] }`);
   out.push(...regexErrors(q.required, `${at}.required`), ...regexErrors(q.forbidden, `${at}.forbidden`));
   if (Array.isArray(q.required) && !q.required.length) out.push(`${at}.required: at least one`);
+  // Not yet measured at K (the owner's run): asked and reported, never counted toward the bar (summarize).
+  if ('pending' in q && typeof q.pending !== 'boolean') out.push(`${at}.pending: true or false`);
   return out;
 }
 
@@ -219,11 +223,12 @@ function summarize(quiz, rows, k = quiz.k) {
     const per = list.map(q => {
       const g = rows.filter(r => r.id === q.id);
       const passes = g.filter(r => r.pass).length;
-      return { id: q.id, layer: q.layer, passes, n: g.length, allCorrect: g.length >= k && passes === g.length, bothWays: passes > 0 && passes < g.length };
+      return { id: q.id, layer: q.layer, passes, n: g.length, allCorrect: g.length >= k && passes === g.length, bothWays: passes > 0 && passes < g.length, ...(q.pending === true ? { pending: true } : {}) };
     });
-    const allCorrect = per.filter(x => x.allCorrect).length;
-    const bothWays = per.filter(x => x.bothWays).length;
-    return { per, allCorrect, bothWays, total: per.reduce((n, x) => n + x.passes, 0), asked: per.reduce((n, x) => n + x.n, 0), meetsBar: allCorrect >= bar.allCorrect && bothWays <= bar.bothWays };
+    // The bar counts the measured questions; a pending one (not yet measured at K) is listed and totalled apart.
+    const sum = xs => ({ allCorrect: xs.filter(x => x.allCorrect).length, bothWays: xs.filter(x => x.bothWays).length, total: xs.reduce((n, x) => n + x.passes, 0), asked: xs.reduce((n, x) => n + x.n, 0) });
+    const counted = sum(per.filter(x => !x.pending));
+    return { per, ...counted, pending: sum(per.filter(x => x.pending)), meetsBar: counted.allCorrect >= bar.allCorrect && counted.bothWays <= bar.bothWays };
   };
   const a = part(quiz.questions, quiz.passBar.partA);
   const b = part(quiz.partB, quiz.passBar.partB);

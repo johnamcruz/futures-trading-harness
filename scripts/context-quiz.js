@@ -75,7 +75,7 @@ function grade(dir) {
   const s = { ...Q.summarize(quiz, graded, k), quizHash: hash };
   fs.writeFileSync(path.join(dir, 'summary.json'), `${JSON.stringify(s, null, 1)}\n`);
   for (const p of ['partA', 'partB']) {
-    for (const x of s[p].per) console.log(`${x.id}\t${x.layer}\t${x.passes}/${x.n}${x.bothWays ? '\tanswered both ways' : ''}`);
+    for (const x of s[p].per) console.log(`${x.id}\t${x.layer}\t${x.passes}/${x.n}${x.bothWays ? '\tanswered both ways' : ''}${x.pending ? '\tpending (not in the bar)' : ''}`);
     console.log(`${p}: ${s[p].allCorrect} correct on all ${k}, ${s[p].bothWays} answered both ways, ${s[p].total} of ${s[p].asked}`);
   }
   console.log(s.meetsBar ? 'meets the bar' : 'below the bar');

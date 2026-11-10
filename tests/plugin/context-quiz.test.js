@@ -88,15 +88,25 @@ test('context quiz: every layer asked, ids unique, the bar the whole quiz at K 5
   assert.deepStrictEqual([...new Set(QUIZ.questions.map(x => x.layer))].sort(), [...Q.LAYERS].sort());
   assert.strictEqual(new Set(all.map(x => x.id)).size, all.length);
   assert.strictEqual(QUIZ.k, 5);
-  assert.deepStrictEqual(QUIZ.passBar, { partA: { allCorrect: QUIZ.questions.length, bothWays: 0 }, partB: { allCorrect: QUIZ.partB.length, bothWays: 0 } });
+  // The bar is every measured question: a question flagged `pending` (not yet measured at K 5 by the owner) is asked and
+  // reported, never counted (summarize); it joins the bar, the flag dropped, once measured 5/5 (q45 and q53 measured
+  // 7/10 and 6/10 and left the quiz).
+  const measured = QUIZ.questions.filter(x => !x.pending);
+  assert.deepStrictEqual(QUIZ.passBar, { partA: { allCorrect: measured.length, bothWays: 0 }, partB: { allCorrect: QUIZ.partB.length, bothWays: 0 } });
+  assert.ok(QUIZ.partB.every(x => !x.pending), 'no pending question in Part B');
+  // Pending today: q71-q82 less the dropped q76-q78 (chop detection, added on feat/chop-quiz); every one before them is measured.
+  assert.deepStrictEqual(QUIZ.questions.filter(x => x.pending).map(x => x.id), ['q71', 'q72', 'q73', 'q74', 'q75', 'q79', 'q80', 'q81', 'q82']);
+  assert.strictEqual(measured.length, 59);
   // 37 since q38-q39 (a cited setup in an attempt; a missing track record is no reason to pass); 42 and 8 since q40-q44 and
   // b8 (prepare-ahead's confirm rule: PR C); 45 since q47-q49 (a standing scenario: compose_check decides; the closing
   // candle read as candle-reading does). q46 went with PR C3's computed trigger; q45 (the 3m doji, a yes/no) measured 7/10
   // live and is out of the bar, noted for the paired test. 58 since q50-q63 less q53 (a 3m swing is stop structure, not a level: measured 6/10, out of the bar; market context: levels and reactions, structure breaks, trend vs range, pullback vs reversal; each anchored in the skill that states it). The pass bar rises with them.
   // 59 since q70 (a lesson is no phase-1 stand-down: a replay vetoed 42 times on one). q56 rewritten in place
   // (feat/chop-evidence: declared is all four above 0, never the overnight range; not yet measured live): still 59.
-  // 71 since q71-q82 (chop detection: what the briefing showed, in the owner's four classes; not yet measured live).
-  assert.strictEqual(QUIZ.questions.length, 71);
+  // 68 since q71-q82 less q76-q78 (chop detection: what the briefing showed, in the owner's classes A, B, C and the
+  // which-fact questions; pending, out of the bar until measured). q76-q78 (class D, conflicting) were dropped in review:
+  // each rested on weighing, not on a skill sentence naming the conflict; q81 and q82 (one fact among both kinds) cover D.
+  assert.strictEqual(QUIZ.questions.length, 68);
   assert.strictEqual(QUIZ.partB.length, 8);
 });
 
@@ -123,9 +133,6 @@ test('context quiz: q71-q82 (chop detection) are asked against the prompt holdin
     ['q73', 'head', undefined, /`directional up\|down`: 0\.75\+: one-way so far\./g],
     ['q74', 'head', undefined, /is traded with it \(never faded: never counter\)/g],
     ['q75', 'lookup', ['trend-vs-range'], /An unfinished pullback is no chop sign\./g],
-    ['q76', 'lookup', ['trend-vs-range'], /`mixed`: between: neither yet\./g],
-    ['q77', 'lookup', ['trend-vs-range'], /Cumulative, no recency: 30 trending minutes then two hours of range still read `directional`/g],
-    ['q78', 'lookup', ['trend-vs-range'], /rotating mornings trended later about as often as not/g],
     ['q79', 'head', undefined, /`too early \(a read from 10 bars\)`: no read\./g],
     ['q80', 'head', undefined, /mixed, none or `unknown` → neutral/g],
     ['q81', 'lookup', ['trend-vs-range'], /`rotational`: under 0\.34: back and forth so far/g],
@@ -149,13 +156,15 @@ test('context quiz: q71-q82 (chop detection) are asked against the prompt holdin
   for (const [id, line] of [
     ['q71', day(42, 'rotational', 'up', 0.03, 0.19, 11, 4.1)], ['q71', rot(7, 'inside the initial balance')], ['q72', rot(5, 'inside the initial balance')],
     ['q73', day(40, 'directional', 'up', 0.3, 1.9, 1, 8.6)], ['q73', rot(0, 'trend up')], ['q74', rot(0, 'trend down')],
-    ['q76', day(34, 'mixed', 'up', 0.09, 0.52, 5, 5.2)], ['q76', rot(2, 'neutral')], ['q77', rot(6, 'trend up')], ['q78', day(45, 'rotational', 'up', 0.04, 0.27, 9, 4.6)],
+    ['q81', day(45, 'rotational', 'up', 0.03, 0.2, 10, 4.2)], ['q82', day(48, 'rotational', 'up', 0.02, 0.14, 12, 3.9)],
     ['q79', daySoFarLine({ status: 'too early', bars: 6, readFrom: 10, vwapCrosses: 0 })], ['q79', rot(0, null)],
     ['q80', daySoFarLine({ status: 'unknown', reason: 'no 09:30 ET bar in the data' })],
     ['q80', rotationLine({ vwapCrosses: null, dayType: null, setupCandle: null, entryCandle: null, failedBreak: { '3m': null, '5m': null, '15m': null } }, fr)],
-    ['q76', declaredLine({ long: sd(0.8, 0.5, 'middle third', 1.4, 'with'), short: sd(-0.8, -0.5, 'middle third', -1.4, 'against') })],
-    ['q77', declaredLine({ long: sd(-0.3, -0.5, 'broke out its way', 2.1, 'range'), short: sd(0.3, 0.5, 'broke out against', -2.1, 'range') })],
+    ['q73', declaredLine({ long: sd(1.8, 1.2, 'broke out its way', 4.9, 'with'), short: sd(-1.8, -1.2, 'broke out against', -4.9, 'against') })],
+    ['q82', declaredLine({ long: sd(0.7, 0.4, 'middle third', 0.9, 'with'), short: sd(-0.7, -0.4, 'middle third', -0.9, 'against') })],
   ]) assert.ok(text(id).includes(line), `${id}: ${line}`);
+  // The dropped class-D questions stay out (their ids are not reused).
+  for (const id of ['q76', 'q77', 'q78']) assert.ok(!QUIZ.questions.some(x => x.id === id), id);
   // Each scenario says it is synthetic; none holds a machine path.
   for (const [id] of want) assert.match(text(id), /^Briefing lines \(synthetic, \d\d:\d\d ET\):\n/, id);
 });

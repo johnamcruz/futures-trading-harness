@@ -61,7 +61,7 @@
   },
   "passBar": {
     "partA": {
-      "allCorrect": 71,
+      "allCorrect": 59,
       "bothWays": 0
     },
     "partB": {
@@ -1163,40 +1163,43 @@
       "id": "q71",
       "layer": "bias",
       "prompt": "head",
+      "pending": true,
       "text": "Briefing lines (synthetic, 11:36 ET):\n- Bias: no side yet (15m range).\n- Alignment: long mixed, short mixed. Regime: range, normal volatility.\n- Day so far (42 3m bars; `day-context`): rotational: efficiency 0.03 (x sqrt(bars) 0.19), RTH VWAP crosses 11, range 4.1 x 3m ATR(14), net up (its size: Trend declared? day's move); IB day type: today.dayType.\n- Rotation evidence (values, not a verdict): RTH VWAP crosses in the last 30 bars 7 (the VWAP line's count); IB day type inside the initial balance; 15m setup candle neither, 3m entry candle neither; failed break (swept the previous high or low, closed back inside): 3m no, 5m unknown, 15m no.\nHow is the morning so far, in day-context's words, and do these lines show chop evidence, trend evidence, conflicting, or no read yet? Start with one of those four.",
       "rule": "chop evidence (class B): the Day so far reads rotational, said \"rotating so far\"; the IB, the 15m range and the crosses agree",
       "anchor": "say it in your read (\"trending down so far\", \"rotating so far\", \"mixed so far\")",
       "required": [
-        "\\bchop\\b",
+        "\\bchop\\w*",
         "\\brotat\\w*\\b|\\bback and forth\\b"
       ],
       "forbidden": [
         "^[\\W_]*(trend|trending|directional|conflict\\w*|mixed|no read|too early)\\b",
         "^[\\W_]*(no|not)\\b[^.;:,]{0,20}\\b(chop|rotat)",
-        "\\btrending (up |down )?so far\\b"
+        "^(?=.*?(?<!\\b(?:no|not|never|nor|neither|without|zero|nothing|none|isn't|aren't|don't|doesn't|rather than|instead of|opposite of|turn into|turns into|could become)\\b(?:(?!\\b(?:but|though|yet|and)\\b)[^,;.:!?]){0,25})\\b(?:trend evidence|trending (?:up |down )?so far|conflict\\w*|mixed)\\b(?!(\\s+(signs?|signals?|evidence))?\\s*[:=]?\\s*(none|0|absent)\\b(?!\\s*\\w)))"
       ]
     },
     {
       "id": "q72",
       "layer": "levels",
       "prompt": "head",
+      "pending": true,
       "text": "Briefing lines (synthetic, 11:12 ET):\n- Bias: no side yet (15m range).\n- MNQ day: opened 20100 inside the prior value area, gap -6.5 from the prior close (0.03 ADR); prior day 19980-20180, close 20106.5, value area 20050-20140 (POC 20110); overnight 20070-20125; opening type open-auction; initial balance 20062.5-20137.5 (75 points, 0.31 ADR), extended 0 up and 0 down: inside the initial balance; range so far 75 of a 10-day average 240 (31% used).\n- Rotation evidence (values, not a verdict): RTH VWAP crosses in the last 30 bars 5 (the VWAP line's count); IB day type inside the initial balance; 15m setup candle neither, 3m entry candle neither; failed break (swept the previous high or low, closed back inside): 3m no, 5m unknown, 15m no.\nThe last close, 20101, is in the middle of the initial balance. What does day-context call this day, and do these lines show chop evidence, trend evidence, conflicting, or no read yet? Start with one of those four.",
       "rule": "chop evidence (class B): an open inside the prior value area that stays inside the IB is balance; the middle is a read against",
       "anchor": "an open inside the prior value area that stays inside the IB is balance",
       "required": [
-        "\\bchop\\b",
-        "\\bbalance\\b"
+        "\\bchop\\w*",
+        "\\bbalanced?\\b"
       ],
       "forbidden": [
         "^[\\W_]*(trend|trending|directional|conflict\\w*|mixed|no read|too early)\\b",
         "^[\\W_]*(no|not)\\b[^.;:,]{0,20}\\b(chop|rotat)",
-        "\\b(trend|normal variation|neutral) day\\b"
+        "^(?=.*?(?<!\\b(?:no|not|never|nor|neither|without|zero|nothing|none|isn't|aren't|don't|doesn't|rather than|instead of|opposite of|turn into|turns into|could become)\\b(?:(?!\\b(?:but|though|yet|and)\\b)[^,;.:!?]){0,25})\\b(?:trend evidence|trend day|normal variation(?: day)?|neutral day|conflict\\w*)\\b(?!(\\s+(signs?|signals?|evidence))?\\s*[:=]?\\s*(none|0|absent)\\b(?!\\s*\\w)))"
       ]
     },
     {
       "id": "q73",
       "layer": "bias",
       "prompt": "head",
+      "pending": true,
       "text": "Briefing lines (synthetic, 11:30 ET):\n- Bias: long only (4h up, 1h up; short refused).\n- Alignment: long aligned, short counter. Regime: trend-up, normal volatility.\n- Day so far (40 3m bars; `day-context`): directional up: efficiency 0.3 (x sqrt(bars) 1.9), RTH VWAP crosses 1, range 8.6 x 3m ATR(14), net up (its size: Trend declared? day's move); IB day type: today.dayType.\n- Trend declared? (in 3m ATR(14), + = the side's way; `trend-vs-range`): long RTH VWAP +1.8, EMA20 +1.2, overnight range broke out its way, day's move +4.9, regime with; short RTH VWAP -1.8, EMA20 -1.2, overnight range broke out against, day's move -4.9, regime against.\n- Rotation evidence (values, not a verdict): RTH VWAP crosses in the last 30 bars 0 (the VWAP line's count); IB day type trend up; 15m setup candle neither, 3m entry candle neither; failed break (swept the previous high or low, closed back inside): 3m no, 5m unknown, 15m no.\nHow is the morning so far, in day-context's words, and do these lines show chop evidence, trend evidence, conflicting, or no read yet? Start with one of those four.",
       "rule": "trend evidence (class C, the guard): directional up, said \"trending up so far\"; nothing here is chop",
       "anchor": "`directional up|down`: 0.75+: one-way so far.",
@@ -1206,8 +1209,7 @@
       ],
       "forbidden": [
         "^[\\W_]*(chop\\w*|rotat\\w*|range|ranging|conflict\\w*|mixed|balance|no read|too early)\\b",
-        "(?<!\\bzero\\s)\\bchop\\w*\\b(?!(\\s+(signs?|signals?|evidence))?\\s*[:=]?\\s*(none|0|absent)\\b(?!\\s*\\w))",
-        "\\brotat\\w*",
+        "^(?=.*?(?<!\\b(?:no|not|never|nor|neither|without|zero|nothing|none|isn't|aren't|don't|doesn't|rather than|instead of|opposite of|turn into|turns into|could become)\\b(?:(?!\\b(?:but|though|yet|and)\\b)[^,;.:!?]){0,25})\\b(?:chop\\w*|rotat\\w*|ranging|range-bound|conflict\\w*|mixed)\\b(?!(\\s+(signs?|signals?|evidence))?\\s*[:=]?\\s*(none|0|absent)\\b(?!\\s*\\w)))",
         "^[\\W_]*(no|not)\\b[^.;:,]{0,20}\\btrend"
       ]
     },
@@ -1215,6 +1217,7 @@
       "id": "q74",
       "layer": "bias",
       "prompt": "head",
+      "pending": true,
       "text": "Briefing lines (synthetic, 11:18 ET):\n- Bias: short only (4h down, 1h down; long refused).\n- MNQ day: opened 19940 below the prior range, gap -72.5 from the prior close (0.24 ADR); prior day 19960-20120, close 20012.5, value area 20000-20080 (POC 20040); overnight 19950-20030; opening type open-drive down; initial balance 19870-19945 (75 points, 0.25 ADR), extended 0 up and 150 down: trend down; range so far 225 of a 10-day average 300 (75% used).\n- Day so far (36 3m bars; `day-context`): directional down: efficiency 0.32 (x sqrt(bars) 1.92), RTH VWAP crosses 0, range 9.4 x 3m ATR(14), net down (its size: Trend declared? day's move); IB day type: today.dayType.\n- Rotation evidence (values, not a verdict): RTH VWAP crosses in the last 30 bars 0 (the VWAP line's count); IB day type trend down; 15m setup candle neither, 3m entry candle neither; failed break (swept the previous high or low, closed back inside): 3m no, 5m unknown, 15m no.\nDo these lines show chop evidence, trend evidence, conflicting, or no read yet, and per day-context is this day traded with or faded? Start with one of those four.",
       "rule": "trend evidence (class C, the guard): a trend day (one side extended two IBs) after an open outside the prior range and an open-drive is traded with it, never faded",
       "anchor": "is traded with it (never faded: never counter)",
@@ -1224,8 +1227,8 @@
       ],
       "forbidden": [
         "^[\\W_]*(chop\\w*|rotat\\w*|range|ranging|conflict\\w*|mixed|balance|no read|too early)\\b",
-        "(?<!\\bzero\\s)\\bchop\\w*\\b(?!(\\s+(signs?|signals?|evidence))?\\s*[:=]?\\s*(none|0|absent)\\b(?!\\s*\\w))",
-        "\\bfad(e|ed|es|ing)\\b",
+        "^(?=.*?(?<!\\b(?:no|not|never|nor|neither|without|zero|nothing|none|isn't|aren't|don't|doesn't|rather than|instead of|opposite of|turn into|turns into|could become)\\b(?:(?!\\b(?:but|though|yet|and)\\b)[^,;.:!?]){0,25})\\b(?:chop\\w*|rotat\\w*|ranging|range-bound|conflict\\w*)\\b(?!(\\s+(signs?|signals?|evidence))?\\s*[:=]?\\s*(none|0|absent)\\b(?!\\s*\\w)))",
+        "^(?=.*?(?<!\\b(?:no|not|never|nor|neither|without|zero|nothing|none|isn't|aren't|don't|doesn't|rather than|instead of|opposite of|turn into|turns into|could become)\\b(?:(?!\\b(?:but|though|yet|and)\\b)[^,;.:!?]){0,25})\\b(?:fad(?:e|ed|es|ing))\\b(?!\\s+(?:is|are|was)\\s+(?:never|not)\\b))",
         "\\b(buy|go long|take (a |the )?long)\\b"
       ]
     },
@@ -1236,6 +1239,7 @@
       "lookup": [
         "trend-vs-range"
       ],
+      "pending": true,
       "text": "Briefing lines (synthetic, 11:42 ET):\n- Bias: long only (4h up, 1h up; short refused).\n- Day so far (44 3m bars; `day-context`): directional up: efficiency 0.21 (x sqrt(bars) 1.39), RTH VWAP crosses 2, range 7.8 x 3m ATR(14), net up (its size: Trend declared? day's move); IB day type: today.dayType.\n- Trend declared? (in 3m ATR(14), + = the side's way; `trend-vs-range`): long RTH VWAP +0.9, EMA20 +0.4, overnight range broke out its way, day's move +3.6, regime with; short RTH VWAP -0.9, EMA20 -0.4, overnight range broke out against, day's move -3.6, regime against.\n- Pullback (15m, long leg 20000 -> 20160): depth 38% of the leg; 6 bars since the extreme, volume 0.5x the leg's per bar (falling), range 0.7x; swings since the extreme: 15m 20000 holds, 1h 19950 holds; 15m break against: none, 1h: none.\n- Rotation evidence (values, not a verdict): RTH VWAP crosses in the last 30 bars 1 (the VWAP line's count); IB day type trend up; 15m setup candle neither, 3m entry candle neither; failed break (swept the previous high or low, closed back inside): 3m no, 5m unknown, 15m no.\nIs the pullback a chop sign? Then: do these lines show chop evidence, trend evidence, conflicting, or no read yet?",
       "rule": "no: an unfinished pullback is no chop sign; trend evidence (class C, the guard)",
       "anchor": "An unfinished pullback is no chop sign.",
@@ -1244,73 +1248,16 @@
         "\\btrend\\b"
       ],
       "forbidden": [
-        "^[\\W_]*(yes|chop\\w*|rotat\\w*|range|ranging|conflict\\w*|mixed|balance)\\b",
-        "(?<!\\bzero\\s)\\bchop (evidence|signs?|signals?|days?)\\b(?!(\\s+(signs?|signals?|evidence))?\\s*[:=]?\\s*(none|0|absent)\\b(?!\\s*\\w))",
-        "\\bconflict\\w*",
-        "\\brevers(al|ing)\\b"
-      ]
-    },
-    {
-      "id": "q76",
-      "layer": "bias",
-      "prompt": "lookup",
-      "lookup": [
-        "trend-vs-range"
-      ],
-      "text": "Briefing lines (synthetic, 11:12 ET):\n- Bias: long only (4h up, 1h up; short refused).\n- Alignment: long aligned, short counter. Regime: trend-up, normal volatility.\n- Day so far (34 3m bars; `day-context`): mixed up: efficiency 0.09 (x sqrt(bars) 0.52), RTH VWAP crosses 5, range 5.2 x 3m ATR(14), net up (its size: Trend declared? day's move); IB day type: today.dayType.\n- Trend declared? (in 3m ATR(14), + = the side's way; `trend-vs-range`): long RTH VWAP +0.8, EMA20 +0.5, overnight range middle third, day's move +1.4, regime with; short RTH VWAP -0.8, EMA20 -0.5, overnight range middle third, day's move -1.4, regime against.\n- Rotation evidence (values, not a verdict): RTH VWAP crosses in the last 30 bars 2 (the VWAP line's count); IB day type neutral; 15m setup candle neither, 3m entry candle neither; failed break (swept the previous high or low, closed back inside): 3m no, 5m unknown, 15m no.\nHow is the morning so far, in day-context's words, and do these lines show chop evidence, trend evidence, conflicting, or no read yet? Start with one of those four.",
-      "rule": "conflicting (class D): mixed so far (neither yet) and a neutral, two-sided day against a declared long",
-      "anchor": "`mixed`: between: neither yet.",
-      "required": [
-        "\\bconflict\\w*\\b|\\bboth\\b",
-        "\\bmixed\\b|\\bneither\\b"
-      ],
-      "forbidden": [
-        "^[\\W_]*(chop\\w*|trend|trending|directional|rotat\\w*|range|ranging|balance|no read|too early)\\b",
-        "\\b(chop|trend) evidence (clearly |still )?(outweighs|wins|dominates)\\b",
-        "\\b(rotating|trending( up| down)?) so far\\b"
-      ]
-    },
-    {
-      "id": "q77",
-      "layer": "bias",
-      "prompt": "lookup",
-      "lookup": [
-        "trend-vs-range"
-      ],
-      "text": "Briefing lines (synthetic, 11:54 ET):\n- Bias: long only (4h up, 1h up; short refused).\n- Alignment: long mixed, short mixed. Regime: range, normal volatility.\n- Day so far (48 3m bars; `day-context`): directional up: efficiency 0.12 (x sqrt(bars) 0.83), RTH VWAP crosses 7, range 9.9 x 3m ATR(14), net up (its size: Trend declared? day's move); IB day type: today.dayType.\n- Trend declared? (in 3m ATR(14), + = the side's way; `trend-vs-range`): long RTH VWAP -0.3, EMA20 -0.5, overnight range broke out its way, day's move +2.1, regime range; short RTH VWAP +0.3, EMA20 +0.5, overnight range broke out against, day's move -2.1, regime range.\n- Rotation evidence (values, not a verdict): RTH VWAP crosses in the last 30 bars 6 (the VWAP line's count); IB day type trend up; 15m setup candle neither, 3m entry candle neither; failed break (swept the previous high or low, closed back inside): 3m no, 5m unknown, 15m no.\nDo these lines show chop evidence, trend evidence, conflicting, or no read yet? Start with one of those four.",
-      "rule": "conflicting (class D): the Day so far word is cumulative (an early trend still reads directional); the recent bars (regime range, crosses, not declared) read range",
-      "anchor": "Cumulative, no recency: 30 trending minutes then two hours of range still read `directional`",
-      "required": [
-        "\\bconflict\\w*\\b|\\bboth\\b"
-      ],
-      "forbidden": [
-        "^[\\W_]*(chop\\w*|trend|trending|directional|rotat\\w*|range|ranging|balance|no read|too early)\\b",
-        "\\b(chop|trend) evidence (clearly |still )?(outweighs|wins|dominates)\\b"
-      ]
-    },
-    {
-      "id": "q78",
-      "layer": "bias",
-      "prompt": "lookup",
-      "lookup": [
-        "trend-vs-range"
-      ],
-      "text": "Briefing lines (synthetic, 11:45 ET):\n- Bias: long only (4h up, 1h up; short refused).\n- Alignment: long aligned, short counter. Regime: trend-up, normal volatility.\n- Day so far (45 3m bars; `day-context`): rotational: efficiency 0.04 (x sqrt(bars) 0.27), RTH VWAP crosses 9, range 4.6 x 3m ATR(14), net up (its size: Trend declared? day's move); IB day type: today.dayType.\n- Trend declared? (in 3m ATR(14), + = the side's way; `trend-vs-range`): long RTH VWAP +1.1, EMA20 +0.7, overnight range middle third, day's move +1.3, regime with; short RTH VWAP -1.1, EMA20 -0.7, overnight range middle third, day's move -1.3, regime against.\n- Rotation evidence (values, not a verdict): RTH VWAP crosses in the last 30 bars 2 (the VWAP line's count); IB day type neutral; 15m setup candle neither, 3m entry candle neither; failed break (swept the previous high or low, closed back inside): 3m no, 5m unknown, 15m no.\nDoes the rotating morning say what the rest of it will do, and do these lines show chop evidence, trend evidence, conflicting, or no read yet? Start with one of those four.",
-      "rule": "conflicting (class D): rotating so far, declared long now; rotating mornings trended later about as often as not (a description, never a forecast)",
-      "anchor": "rotating mornings trended later about as often as not",
-      "required": [
-        "\\bconflict\\w*\\b|\\bboth\\b"
-      ],
-      "forbidden": [
-        "^[\\W_]*(chop\\w*|trend|trending|directional|rotat\\w*|range|ranging|balance|no read|too early)\\b",
-        "\\b(chop|trend) evidence (clearly |still )?(outweighs|wins|dominates)\\b",
-        "\\b(will|keeps?|stays?|going to) (rotat\\w*|chop\\w*|rang\\w*)\\b"
+        "^[\\W_]*(yes|chop\\w*|rotat\\w*|range|ranging|conflict\\w*|mixed|balance|no read)\\b",
+        "^(?=.*?(?<!\\b(?:no|not|never|nor|neither|without|zero|nothing|none|isn't|aren't|don't|doesn't|rather than|instead of|opposite of|turn into|turns into|could become)\\b(?:(?!\\b(?:but|though|yet|and)\\b)[^,;.:!?]){0,25})\\b(?:chop\\w*|rotat\\w*|ranging|range-bound|conflict\\w*|mixed|revers(?:al|ing))\\b(?!(\\s+(signs?|signals?|evidence))?\\s*[:=]?\\s*(none|0|absent)\\b(?!\\s*\\w)))",
+        "\\b(?:not|no) (?:a )?trend evidence\\b|\\bnot trending\\b"
       ]
     },
     {
       "id": "q79",
       "layer": "bias",
       "prompt": "head",
+      "pending": true,
       "text": "Briefing lines (synthetic, 09:48 ET):\n- Day so far (6 3m bars; `day-context`): too early (a read from 10 bars), RTH VWAP crosses 0.\n- Rotation evidence (values, not a verdict): RTH VWAP crosses in the last 30 bars 0 (the VWAP line's count); IB day type unknown; 15m setup candle neither, 3m entry candle neither; failed break (swept the previous high or low, closed back inside): 3m no, 5m unknown, 15m no.\nDo these lines show chop evidence, trend evidence, conflicting, or no read yet? Start with one of those four.",
       "rule": "no read yet (class A): too early is no read; no chop or trend sign is shown",
       "anchor": "`too early (a read from 10 bars)`: no read.",
@@ -1319,14 +1266,14 @@
       ],
       "forbidden": [
         "^[\\W_]*(chop\\w*|trend\\w*|directional|rotat\\w*|range|ranging|conflict\\w*|mixed|balance)\\b",
-        "(?<!\\bzero\\s)\\b(chop|trend) evidence\\b(?!(\\s+(signs?|signals?|evidence))?\\s*[:=]?\\s*(none|0|absent)\\b(?!\\s*\\w))",
-        "\\b(rotating|trending( up| down)?) so far\\b"
+        "^(?=.*?(?<!\\b(?:no|not|never|nor|neither|without|zero|nothing|none|isn't|aren't|don't|doesn't|rather than|instead of|opposite of|turn into|turns into|could become)\\b(?:(?!\\b(?:but|though|yet|and)\\b)[^,;.:!?]){0,25})\\b(?:(?:chop|trend) evidence|(?:rotating|trending(?: up| down)?) so far|lean\\w*|directional)\\b(?!(\\s+(signs?|signals?|evidence))?\\s*[:=]?\\s*(none|0|absent)\\b(?!\\s*\\w)))"
       ]
     },
     {
       "id": "q80",
       "layer": "bias",
       "prompt": "head",
+      "pending": true,
       "text": "Briefing lines (synthetic, 10:15 ET):\n- Day so far: unknown (no 09:30 ET bar in the data).\n- Rotation evidence (values, not a verdict): RTH VWAP crosses in the last 30 bars unknown (the VWAP line's count); IB day type unknown; 15m setup candle unknown, 3m entry candle unknown; failed break (swept the previous high or low, closed back inside): 3m unknown, 5m unknown, 15m unknown.\nIs any of this chop evidence or trend evidence? Answer with one of: chop evidence, trend evidence, conflicting, or no read yet.",
       "rule": "no read yet (class A): unknown is neutral, neither chop nor trend",
       "anchor": "mixed, none or `unknown` → neutral",
@@ -1335,8 +1282,7 @@
       ],
       "forbidden": [
         "^[\\W_]*(chop\\w*|trend\\w*|directional|rotat\\w*|range|ranging|conflict\\w*|mixed|balance)\\b",
-        "(?<!\\bzero\\s)\\b(chop|trend) evidence\\b(?!(\\s+(signs?|signals?|evidence))?\\s*[:=]?\\s*(none|0|absent)\\b(?!\\s*\\w))",
-        "\\bagainst\\b"
+        "^(?=.*?(?<!\\b(?:no|not|never|nor|neither|without|zero|nothing|none|isn't|aren't|don't|doesn't|rather than|instead of|opposite of|turn into|turns into|could become)\\b(?:(?!\\b(?:but|though|yet|and)\\b)[^,;.:!?]){0,25})\\b(?:(?:chop|trend) evidence|against|lean\\w*)\\b(?!(\\s+(signs?|signals?|evidence))?\\s*[:=]?\\s*(none|0|absent)\\b(?!\\s*\\w)))"
       ]
     },
     {
@@ -1346,6 +1292,7 @@
       "lookup": [
         "trend-vs-range"
       ],
+      "pending": true,
       "text": "Briefing lines (synthetic, 11:45 ET):\nF1 - Bias: long only (4h up, 1h up; short refused).\nF2 - Trend declared? (in 3m ATR(14), + = the side's way; `trend-vs-range`): long RTH VWAP +1, EMA20 +0.6, overnight range middle third, day's move +1.2, regime with; short RTH VWAP -1, EMA20 -0.6, overnight range middle third, day's move -1.2, regime against.\nF3 - Pullback (15m, long leg 20000 -> 20160): depth 38% of the leg; 6 bars since the extreme, volume 0.5x the leg's per bar (falling), range 0.7x; swings since the extreme: 15m 20000 holds, 1h 19950 holds; 15m break against: none, 1h: none.\nF4 - Day so far (45 3m bars; `day-context`): rotational: efficiency 0.03 (x sqrt(bars) 0.2), RTH VWAP crosses 10, range 4.2 x 3m ATR(14), net up (its size: Trend declared? day's move); IB day type: today.dayType.\nWhich ONE of F1-F4 is chop evidence? Give its label only.",
       "rule": "F4: the Day so far reads rotational (back and forth so far); the Bias, the declared long and an unfinished pullback are not chop",
       "anchor": "`rotational`: under 0.34: back and forth so far",
@@ -1353,7 +1300,7 @@
         "\\bF4\\b"
       ],
       "forbidden": [
-        "(?<=^[^;:(—–]*)\\bF[123]\\b"
+        "\\bF[123]\\b(?!\\s+(?:is|are|was)\\b(?!\\s+(?:also|too|another|chop)\\b))"
       ]
     },
     {
@@ -1363,6 +1310,7 @@
       "lookup": [
         "trend-vs-range"
       ],
+      "pending": true,
       "text": "Briefing lines (synthetic, 11:54 ET):\nF1 - Day so far (48 3m bars; `day-context`): rotational: efficiency 0.02 (x sqrt(bars) 0.14), RTH VWAP crosses 12, range 3.9 x 3m ATR(14), net up (its size: Trend declared? day's move); IB day type: today.dayType.\nF2 - MNQ day: opened 20100 inside the prior value area, gap -6.5 from the prior close (0.03 ADR); prior day 19980-20180, close 20106.5, value area 20050-20140 (POC 20110); overnight 20070-20125; opening type open-auction; initial balance 20062.5-20137.5 (75 points, 0.31 ADR), extended 0 up and 0 down: inside the initial balance; range so far 75 of a 10-day average 240 (31% used).\nF3 - 15m (setup candle, closed 11:45): inside, 1 in a row inside the 11:15 candle 20090-20125, close middle third, range 0.42 ATR, vol 0.61x.\nF4 - Trend declared? (in 3m ATR(14), + = the side's way; `trend-vs-range`): long RTH VWAP +0.7, EMA20 +0.4, overnight range middle third, day's move +0.9, regime with; short RTH VWAP -0.7, EMA20 -0.4, overnight range middle third, day's move -0.9, regime against.\nWhich ONE of F1-F4 is trend evidence for a long? Give its label only.",
       "rule": "F4: declared long (all four your way: regime with, RTH VWAP, EMA20 and day's move above 0); rotational, balance and an inside (stall) candle are not trend evidence",
       "anchor": "all four your way: regime `with`, and RTH VWAP, EMA20 and day's move each above 0",
@@ -1370,7 +1318,7 @@
         "\\bF4\\b"
       ],
       "forbidden": [
-        "(?<=^[^;:(—–]*)\\bF[123]\\b"
+        "\\bF[123]\\b(?!\\s+(?:is|are|was)\\b(?!\\s+(?:also|too|another|trend)\\b))"
       ]
     }
   ],
