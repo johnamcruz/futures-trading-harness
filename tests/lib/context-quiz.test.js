@@ -1177,6 +1177,24 @@ test('grading: the chop questions\' exemptions, anchors and closes each do work:
     ['q82', 'required', 0, '(?!\\s*[-–—,:]?\\s*no\\b)', '', 'F4 - no, F2', false],
     ...['not', 'weak', 'no', 'wrong'].map(w => ['q81', 'required', 0, 'not|weak|no|wrong', 'not|weak|no|wrong'.split('|').filter(x => x !== w).join('|'), `F4 is ${w === 'no' ? 'no good' : `${w} here`}.`, false]),
     ['q81', 'required', 0, "|isn't\\b", '', "F4 isn't it.", false],
+    // Round-3 mutation survivors, each killed: the inner words of a list, the q81/q82 copies of each F4 guard, q72's
+    // clause breaks, the hedged class read only at the start (a later "chop evidence would" is no hedge of the answer).
+    ['q74', 'forbidden', 1, 'rang(?:e|es|ing)', 'rang(?:e|ing)', 'Trend evidence: traded with it, but it ranges.', false],
+    ['q75', 'forbidden', 1, 'rang(?:e|es|ing)', 'rang(?:e|ing)', 'No: trend evidence, but it ranges.', false],
+    ['q74', 'forbidden', 2, '(?:is|are|was|would be)', '(?:is|was|would be)', 'Trend evidence: traded with it; fades are never right.', true],
+    ['q74', 'forbidden', 2, '(?:is|are|was|would be)', '(?:is|are|would be)', 'Trend evidence: traded with it; fading was never allowed.', true],
+    ['q74', 'forbidden', 3, 'take (?:a |the )?long', 'take (?:a )?long', 'Trend evidence: traded with it; take the long here.', false],
+    ['q75', 'forbidden', 2, '|\\bnot trending\\b', '', 'No, a trend but not trending.', false],
+    ['q75', 'forbidden', 2, '(?:not|no) (?:a )?trend', '(?:not) (?:a )?trend', 'No; no trend evidence.', false],
+    ...['q79', 'q80'].flatMap(id => [[id, 'forbidden', 0, '(?:up|down) so far', '(?:up) so far', 'No read yet, but down so far.', false],
+      [id, 'forbidden', 0, 'looks (?:up|down)', 'looks (?:up)', 'No read yet, but it looks down.', false]]),
+    ['q81', 'required', 0, '(?!\\s*[-–—,:]?\\s*no\\b)', '', 'F4 - no, F3', false],
+    ['q82', 'required', 0, '(?!\\s*\\?)', '', 'F4? No, F1.', false],
+    ...['not', 'weak', 'no', 'wrong'].map(w => ['q82', 'required', 0, 'not|weak|no|wrong', 'not|weak|no|wrong'.split('|').filter(x => x !== w).join('|'), `F4 is ${w === 'no' ? 'no good' : `${w} here`}.`, false]),
+    ['q82', 'required', 0, "|isn't\\b", '', "F4 isn't it.", false],
+    ...['but', 'though', 'and'].map(b => ['q72', 'forbidden', 2, '(?:but|though|and)', `(?:${['but', 'though', 'and'].filter(x => x !== b).join('|')})`, `Chop evidence: no trend ${b} balanced.`, true]),
+    ['q72', 'forbidden', 0, '^[\\W_]*', '[\\W_]*', 'Chop evidence: balance; more chop evidence would only confirm it.', true],
+    ['q74', 'forbidden', 0, '^[\\W_]*', '[\\W_]*', 'Trend evidence: traded with it; more trend evidence would only confirm it.', true],
     // The class first: each question's required pattern is anchored at the line's start.
     ...[['q74', 'Traded with it: trend evidence.'], ['q79', 'It is too early: no read yet.'], ['q80', 'It is neutral.'], ['q81', 'Not F3: F4.'], ['q82', 'Not F1: F4.']]
       .map(([id, a]) => [id, 'required', 0, '^', '', a, false]),
@@ -1229,12 +1247,17 @@ test('grading: the chop questions\' clause rule does work: each negation and hed
       assert.strictEqual(pass(id, `ANSWER: ${a}`), false, `${id} wrong: ${a}`);
       assert.strictEqual(graded(src.replace('[^,;.:!?—–]){0,25}', `[^,;.:!?${d === '—' ? '–' : '—'}]){0,25}`), a), true, `${id} forbidden[${i}] without the break ${d}: ${a}`);
     }
-    if (src.includes('(none|0|absent)')) {
+    if (id !== 'q74' || i === 1) {
+      assert.ok(src.includes('(none|0|absent)'), `${id} forbidden[${i}]: the "none" count`);
       for (const [from, to, a] of [['signs?|', '', `${base} ${word} signs: none.`], ['signals?|', '', `${base} ${word} signals: none.`], ['|evidence))', '))', `${base} ${word} evidence: none.`],
         ['(none|0|absent)', '(0|absent)', `${base} ${word}: none.`], ['(none|0|absent)', '(none|absent)', `${base} ${word}: 0.`], ['(none|0|absent)', '(none|0)', `${base} ${word}: absent.`]]) {
         assert.strictEqual(pass(id, `ANSWER: ${a}`), true, `${id} right: ${a}`);
         assert.strictEqual(graded(src.replace(from, to), a), false, `${id} forbidden[${i}] without ${from}: ${a}`);
       }
+      // ...only when the count ends the clause: "<word>: 0 crosses" is a claim, not a count said none.
+      const claim = `${base} ${word}: 0 crosses.`;
+      assert.strictEqual(pass(id, `ANSWER: ${claim}`), false, `${id} wrong: ${claim}`);
+      assert.strictEqual(graded(src.replace('(none|0|absent)\\b(?!\\s*\\w)', '(none|0|absent)\\b'), claim), true, `${id} forbidden[${i}] without the clause end: ${claim}`);
     }
   }
 });
