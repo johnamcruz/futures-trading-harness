@@ -143,9 +143,13 @@ const firstWords = s => (/^\s*(?:\S+\s+){0,3}\S*/.exec(s) || [''])[0];
 const sideWord = w => `\\b${w}s?\\b(?!-(?!side\\b))`;
 const SIDE_WORD = new RegExp(`(${sideWord('long')}|${sideWord('short')})`, 'gi');
 const sideOf = w => (/^long/i.test(w) ? 'long' : 'short');
-// A block's own consequence right after a rule ("(no entries until 09:35 ET)", "entries not allowed", "no new entries"):
-// dropped before the after-guard reads, so it never negates the rule it follows.
-const CONSEQUENCE = /\b(?:no|not)\s+(?:new\s+)?entr(?:y|ies)\b|\bentr(?:y|ies)\s+(?:are\s+|is\s+)?not\s+allowed\b/gi;
+// A block's own consequence right after a rule, dropped before the after-guard reads so it never negates the rule it
+// follows: "no (new) entry/entries" or "entries (are|is) not allowed", and only where it ends (the clause's end, ')',
+// ',', ':', or "until", "today", "this bar", "for the day"): "no entries blocked" or "not allowed to be blocked" stay
+// negations.
+const CONSEQUENCE = /\b(?:no\s+(?:new\s+)?entr(?:y|ies)|entr(?:y|ies)\s+(?:are\s+|is\s+)?not\s+allowed)(?=\s*(?:$|[),:]|until\b|today\b|this\s+bar\b|for\s+the\s+day\b))/gi;
+// A rule said to be off after its key ("loss_streak_stop off", "=false", ": inactive", "disabled", "cleared").
+const RULE_OFF = /^\s*[=:]?\s*(?:[\w-]+\s+)?(?:[\w-]+\s+)?(?:off|inactive|false|disabled|cleared)\b/i;
 // Whether a match of `(subject)(key)` (indices: the d flag) states its reason: nothing in the guard words negates it.
 // after: a rule's key is guarded after it too ("cooldown not active"); other (own, no subject): the side word nearest
 // before the key may not be the other side ("long OK, but the short has no size fits" is the short's).
@@ -153,7 +157,7 @@ const asserted = (c, m, { after = false, other = null } = {}) => {
   const [s0] = m.indices[1];
   const [k0, k1] = m.indices[2];
   if (NEG.test(lastWords(c.slice(0, s0)) + c.slice(s0, k0)) || LAPSED.test(c.slice(k1))) return false;
-  if (after && NEG.test(firstWords(c.slice(k1).replace(CONSEQUENCE, ' ')))) return false;
+  if (after && (RULE_OFF.test(c.slice(k1)) || NEG.test(firstWords(c.slice(k1).replace(CONSEQUENCE, ' '))))) return false;
   const near = other ? [...c.slice(0, k0).matchAll(SIDE_WORD)].pop() : null;
   return !(near && sideOf(near[1]) === other);
 };

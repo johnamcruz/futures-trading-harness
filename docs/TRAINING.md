@@ -1280,12 +1280,24 @@ the run finished, as the screens pair them), three things:
     - "lack", "lacks", "lacking", "absent";
     - any n't contraction (straight or curly apostrophe).
 
-    It is also left out when "yet", "passed", "over", "lifted", "ended",
-    "cleared", "missing" or "gone" is one of the first three words after it.
+    It is also left out when "yet", "absent", "passed", "over", "lifted",
+    "ended", "cleared", "missing" or "gone" is one of the first three words
+    after it.
   - A rule is also guarded in the up to four tokens after it ("cooldown
-    not active"). A block's own consequence there is not a negation and is
-    dropped before that read: "no entries", "no new entries", "no entry",
-    "entries not allowed" ("opening print (no entries until 09:35 ET)").
+    not active"). It is left out when it is said to be off: "off",
+    "inactive", "false", "disabled" or "cleared" among the first three words
+    after it, an `=` or `:` before them allowed ("loss_streak_stop=false",
+    ": inactive").
+  - A block's own consequence after a rule is not a negation. It is dropped
+    before that read, in these forms:
+    - "no entry", "no entries", "no new entry", "no new entries";
+    - "entries (are|is) not allowed".
+
+    It is dropped only where the consequence ends: at the clause's end, or
+    before ")", ",", ":", "until", "today", "this bar" or "for the day".
+    So "opening print (no entries until 09:35 ET)" labels, but "opening
+    print, no entries blocked" and "entries are not allowed to be blocked"
+    stay negations.
   - A side word is "long(s)" or "short(s)", never a hyphen compound
     ("long-wick", "long-only", "short-term"), except "short-side" or
     "long-side".

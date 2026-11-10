@@ -218,6 +218,51 @@ test('leg ledger: a rule\'s own consequence after it ("no entries") is no negati
   assert.strictEqual(s('no-trade - loss_streak_stop in force until the next session; the 15m short setups are stale', 'short'), 'loss-streak');
 });
 
+test('leg ledger: the consequence carve-out holds only where the consequence ends; a rule said off stays unread', () => {
+  const s = LL.statedClass;
+  // Real negations that merely mention entries: never stripped, the rule stays unread.
+  for (const t of [
+    'no-trade - opening print, no entries blocked, longs plain',
+    'no-trade - opening print no entry restriction now',
+    'no-trade - opening print, no entries restricted any more',
+    'no-trade - opening print not entries',
+    'no-trade - opening print entries are not allowed to be blocked',
+    'no-trade - cooldown not active, no entries are being blocked',
+    'no-trade - opening print is over',
+    'no-trade - opening print, no entries needed',
+    'no-trade - loss streak stop lifted, no new entries today',
+  ]) assert.strictEqual(s(t, 'long'), null, t);
+  assert.strictEqual(s('no-trade - opening print, no entries blocked; long setup is stale', 'long'), 'late-entry-chase');
+  // The consequence at its end: the rule labels.
+  for (const [t, want] of [
+    ['no-trade - opening print (no entries until 09:35 ET)', 'opening-print'],
+    ['no-trade - opening print (entries not allowed until 09:35 ET)', 'opening-print'],
+    ['no-trade - opening print (no entries) until 09:35 ET', 'opening-print'],
+    ['no-trade - loss-streak stop, no new entries until next session', 'loss-streak'],
+    ['no-trade - news blackout, no entries', 'news'],
+    ['no-trade - news blackout: entries are not allowed; flat', 'news'],
+    ['no-trade - daily stop hit, no new entries today', 'daily-stop'],
+    ['no-trade - daily stop hit, no new entries for the day', 'daily-stop'],
+    ['no-trade - opening print, no entry this bar', 'opening-print'],
+  ]) assert.strictEqual(s(t, 'long'), want, t);
+  // A rule said to be off, inactive, false, disabled or cleared: the next reason is read.
+  for (const t of [
+    'no-trade - loss_streak_stop off; long setup is stale',
+    'no-trade - loss_streak_stop=false; long setup is stale',
+    'no-trade - loss_streak_stop: inactive; long setup is stale',
+    'no-trade - loss-streak stop disabled; long setup is stale',
+    'no-trade - news blackout cleared; long setup is stale',
+  ]) assert.strictEqual(s(t, 'long'), 'late-entry-chase', t);
+});
+
+test('leg ledger: the nearest side word is read as its side, plural or not; a hyphen compound is no CHoCH target', () => {
+  const s = LL.statedClass;
+  assert.strictEqual(s('no-trade - long OK, but the shorts have no size fits', 'long', { own: true }), null);
+  assert.strictEqual(s('no-trade - compose_check OK on the shorts, but no size fits', 'short', { own: true }), 'size-floor');
+  assert.strictEqual(s('no-trade - the 4h CHoCH is against the short-term structure', 'short'), null);
+  assert.strictEqual(s('no-trade - the 4h CHoCH is against the short', 'short'), 'htf-choch-against');
+});
+
 test('leg ledger: the trend rule\'s verb form never reaches past the other side; a hyphen compound is no side', () => {
   const s = LL.statedClass;
   assert.strictEqual(s('no-trade - trend rule blocks shorts, longs fine', 'long'), null);
