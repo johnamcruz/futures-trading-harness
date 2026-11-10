@@ -1301,6 +1301,25 @@ test('grading: the chop questions\' exemptions, anchors and closes each do work:
     ['q82', 'required', 0, '(?!\\s*\\?)', '', 'F4? No, F1.', false],
     ...['q81', 'q82'].flatMap(id => [...['not', 'weak', 'no', 'wrong'].map(w => [id, 'required', 0, 'not|weak|no|wrong', 'not|weak|no|wrong'.split('|').filter(x => x !== w).join('|'), `F4 is ${w === 'no' ? 'no good' : `${w} here`}.`, false]),
       [id, 'required', 0, "|isn't\\b", '', "F4 isn't it.", false]]),
+    // The label's inner words (round-4 mutation survivors), and the label read from the line's start only.
+    ['q72', 'forbidden', 1, 'trend (?:day|morning|up|down)', 'trend (?:day|morning|up)', 'Chop evidence: balance, but a trend down.', false],
+    ...['q79', 'q80'].flatMap(id => [
+      [id, 'forbidden', 0, '(?:chop|trend) is likely', '(?:trend) is likely', 'No read yet, but chop is likely.', false],
+      [id, 'forbidden', 0, '(?:chop|trend) is likely', '(?:chop) is likely', 'No read yet, but a trend is likely.', false],
+      [id, 'forbidden', 0, 'trend (?:day|morning|sign)', 'trend (?:day|morning)', 'No read yet, but a trend sign.', false],
+      [id, 'forbidden', 0, 'trend (?:day|morning|sign)', 'trend (?:day|sign)', 'No read yet, but a trend morning.', false],
+      [id, 'forbidden', 0, '(?:up|down) so far', '(?:up) so far', 'No read yet, but down so far.', false],
+      [id, 'forbidden', 0, 'looks? (?:up|down)', 'looks? (?:up)', 'No read yet, but it looks down.', false],
+      [id, 'forbidden', 0, 'going (?:up|down)', 'going (?:up)', 'No read yet, but going down.', false],
+    ]),
+    ...['chop', 'trend'].flatMap(w => [
+      ['q80', 'forbidden', 0, 'counts? (?:as (?:chop|trend)|against)', `counts? (?:as (?:${w === 'chop' ? 'trend' : 'chop'})|against)`, `No read yet, but it counts as ${w}.`, false],
+      ['q80', 'forbidden', 0, 'reads? as (?:chop|trend)', `reads? as (?:${w === 'chop' ? 'trend' : 'chop'})`, `No read yet, but it reads as ${w}.`, false],
+      ['q80', 'forbidden', 0, '(?:chop|trend) by default', `(?:${w === 'chop' ? 'trend' : 'chop'}) by default`, `No read yet, but ${w} by default.`, false],
+    ]),
+    ['q74', 'forbidden', 1, '^(?=', '(?=', 'Trend evidence: traded with it; never faded. Chop near the lows is noise.', true],
+    ['q79', 'forbidden', 0, '^(?=', '(?=', 'No read yet; too early. Trending or not, 6 bars decide nothing.', true],
+    ['q80', 'forbidden', 0, '^(?=', '(?=', 'No read yet; all unknown. Leaning on it is no read.', true],
     // The class first: each question's required pattern is anchored at the line's start.
     ...[['q74', 'Traded with it: trend evidence.'], ['q79', 'It is too early: no read yet.'], ['q80', 'It is neutral.'], ['q81', 'Not F3: F4.'], ['q82', 'Not F1: F4.']]
       .map(([id, a]) => [id, 'required', 0, '^', '', a, false]),
@@ -1355,7 +1374,9 @@ test('grading: the chop questions\' clause rule does work: each negation and hed
     if (id !== 'q74' || i === 1) {
       assert.ok(src.includes('(none|0|absent)'), `${id} forbidden[${i}]: the "none" count`);
       for (const [from, to, a] of [['signs?|', '', `${base} ${word} signs: none.`], ['signals?|', '', `${base} ${word} signals: none.`], ['|evidence))', '))', `${base} ${word} evidence: none.`],
-        ['(none|0|absent)', '(0|absent)', `${base} ${word}: none.`], ['(none|0|absent)', '(none|absent)', `${base} ${word}: 0.`], ['(none|0|absent)', '(none|0)', `${base} ${word}: absent.`]]) {
+        ['(none|0|absent)', '(0|absent)', `${base} ${word}: none.`], ['(none|0|absent)', '(none|absent)', `${base} ${word}: 0.`], ['(none|0|absent)', '(none|0)', `${base} ${word}: absent.`],
+        ['(?:is|are|was)\\s+)?(none', '(?:are|was)\\s+)?(none', `${base} ${word} is absent.`], ['(?:is|are|was)\\s+)?(none', '(?:is|was)\\s+)?(none', `${base} ${word} signs are absent.`],
+        ['(?:is|are|was)\\s+)?(none', '(?:is|are)\\s+)?(none', `${base} ${word} was absent.`]]) {
         assert.strictEqual(pass(id, `ANSWER: ${a}`), true, `${id} right: ${a}`);
         assert.strictEqual(graded(src.replace(from, to), a), false, `${id} forbidden[${i}] without ${from}: ${a}`);
       }
