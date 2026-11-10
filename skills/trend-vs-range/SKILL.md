@@ -49,8 +49,10 @@ override it. A 3m range inside a 15m trend is a pause. Side: `htf-to-ltf`.
 **Declared yet?** (`Trend declared?` line; ATR, + your way; census
 hypotheses):
 
-- Declared (any one): regime `with`, overnight range broke out its way,
-  RTH VWAP +1 to +2.5, day's move +3 or more.
+- Declared: all four your way: regime `with`, and RTH VWAP, EMA20 and
+  day's move each above 0; the overnight range is not part of it.
+  With the 4h and 1h ranging the Bias line prints the code's answer,
+  the gate's: `+ declared <side>` or `declared <side>: no|unknown`.
 - Not yet (false starts): RTH VWAP and EMA20 under 0 (EMA20 under -1
   worse), regime `against`, inside the overnight range (back third worst):
   wait for it, in the count; size is the verdict's. An unfinished
