@@ -61,7 +61,7 @@
   },
   "passBar": {
     "partA": {
-      "allCorrect": 68,
+      "allCorrect": 66,
       "bothWays": 0
     },
     "partB": {
@@ -1160,22 +1160,6 @@
       ]
     },
     {
-      "id": "q71",
-      "layer": "bias",
-      "prompt": "head",
-      "text": "Briefing lines (synthetic, 11:36 ET):\n- Bias: no side yet (15m range).\n- Alignment: long mixed, short mixed. Regime: range, normal volatility.\n- Day so far (42 3m bars; `day-context`): rotational: efficiency 0.03 (x sqrt(bars) 0.19), RTH VWAP crosses 11, range 4.1 x 3m ATR(14), net up (its size: Trend declared? day's move); IB day type: today.dayType.\n- Rotation evidence (values, not a verdict): RTH VWAP crosses in the last 30 bars 7 (the VWAP line's count); IB day type inside the initial balance; 15m setup candle neither, 3m entry candle neither; failed break (swept the previous high or low, closed back inside): 3m no, 5m unknown, 15m no.\nHow is the morning so far, in day-context's words, and do these lines show chop evidence, trend evidence, conflicting, or no read yet? Start with one of those four.",
-      "rule": "chop evidence (class B): the Day so far reads rotational, said \"rotating so far\"; the IB, the 15m range and the crosses agree",
-      "anchor": "say it in your read (\"trending down so far\", \"rotating so far\", \"mixed so far\")",
-      "required": [
-        "^[\\W_]*chop(?:py)?\\b",
-        "\\brotat\\w*\\b|\\bback and forth\\b"
-      ],
-      "forbidden": [
-        "^[\\W_]*chop(?:py)?(?: evidence)?\\s*(?:\\?|is (?:absent|weak|missing|lost|gone|not)\\b|isn't\\b|would\\b|could\\b)",
-        "^(?=.*?(?<!\\b(?:no|not|never|nor|neither|without|zero|nothing|none|isn't|aren't|don't|doesn't|rather than|instead of|opposite of|turn into|turns into|could become)\\b(?:(?!\\b(?:but|though|yet|and)\\b)[^,;.:!?]){0,25})\\b(?:trend evidence|trending (?:up |down )?so far|conflict\\w*|mixed|no read|will trend|trends? later|trend is (?:up|down)|trend day)\\b(?!(\\s+(signs?|signals?|evidence))?\\s*[:=]?\\s*(none|0|absent)\\b(?!\\s*\\w)))"
-      ]
-    },
-    {
       "id": "q72",
       "layer": "levels",
       "prompt": "head",
@@ -1187,25 +1171,9 @@
         "(?<!initial )\\bbalanced?\\b"
       ],
       "forbidden": [
-        "^[\\W_]*chop(?:py)?(?: evidence)?\\s*(?:\\?|is (?:absent|weak|missing|lost|gone|not)\\b|isn't\\b|would\\b|could\\b)",
-        "^(?=.*?(?<!\\b(?:no|not|never|nor|neither|without|zero|nothing|none|isn't|aren't|don't|doesn't|rather than|instead of|opposite of|turn into|turns into|could become)\\b(?:(?!\\b(?:but|though|yet|and)\\b)[^,;.:!?]){0,25})\\b(?:trend evidence|trend day|normal variation(?: day)?|neutral day|conflict\\w*|inside day|imbalance\\w*|unbalanced)\\b(?!(\\s+(signs?|signals?|evidence))?\\s*[:=]?\\s*(none|0|absent)\\b(?!\\s*\\w)))",
-        "\\b(?:not|isn't|no)\\s+(?:yet\\s+)?(?:an?\\s+)?balanced?\\b"
-      ]
-    },
-    {
-      "id": "q73",
-      "layer": "bias",
-      "prompt": "head",
-      "text": "Briefing lines (synthetic, 11:30 ET):\n- Bias: long only (4h up, 1h up; short refused).\n- Alignment: long aligned, short counter. Regime: trend-up, normal volatility.\n- Day so far (40 3m bars; `day-context`): directional up: efficiency 0.25 (x sqrt(bars) 1.58), RTH VWAP crosses 1, range 8.6 x 3m ATR(14), net up (its size: Trend declared? day's move); IB day type: today.dayType.\n- Trend declared? (in 3m ATR(14), + = the side's way; `trend-vs-range`): long RTH VWAP +1.8, EMA20 +1.2, overnight range broke out its way, day's move +8, regime with; short RTH VWAP -1.8, EMA20 -1.2, overnight range broke out against, day's move -8, regime against.\n- Rotation evidence (values, not a verdict): RTH VWAP crosses in the last 30 bars 0 (the VWAP line's count); IB day type trend up; 15m setup candle neither, 3m entry candle neither; failed break (swept the previous high or low, closed back inside): 3m no, 5m unknown, 15m no.\nHow is the morning so far, in day-context's words, and do these lines show chop evidence, trend evidence, conflicting, or no read yet? Start with one of those four.",
-      "rule": "trend evidence (class C, the guard): directional up, said \"trending up so far\"; nothing here is chop",
-      "anchor": "`directional up|down`: 0.75+: one-way so far.",
-      "required": [
-        "^[\\W_]*trend evidence\\b",
-        "\\btrending up\\b|\\bone-way\\b|\\bdirectional up\\b"
-      ],
-      "forbidden": [
-        "^[\\W_]*trend evidence\\s*(?:\\?|is (?:absent|weak|missing|lost|gone|not)\\b|isn't\\b|would\\b|could\\b)",
-        "^(?=.*?(?<!\\b(?:no|not|never|nor|neither|without|zero|nothing|none|isn't|aren't|don't|doesn't|rather than|instead of|opposite of|turn into|turns into|could become)\\b(?:(?!\\b(?:but|though|yet|and)\\b)[^,;.:!?]){0,25})\\b(?:chop\\w*|rotat\\w*|(?<!\\b(?:prior|overnight) )rang(?:e|es|ing)(?! (?:\\d|so far))|conflict\\w*|mixed|balance\\w*|revers\\w*|fad(?:e|ed|es|ing))\\b(?!(\\s+(signs?|signals?|evidence))?\\s*[:=]?\\s*(none|0|absent)\\b(?!\\s*\\w)))"
+        "^[\\W_]*chop(?:py)?(?: evidence)?\\s*(?:\\?|(?:[:(]|[-–—])?\\s*(?:is\\s+)?(?:absent|none|weak|missing|lost|gone|lacking)\\b|is\\s+not\\b|isn't\\b|would\\b|could\\b)",
+        "^(?=.*?(?<!(?:\\b(?:no|not|never|nor|neither|without|zero|nothing|none|isn't|aren't|don't|doesn't|can't|cannot|won't|rather than|instead of|opposite of|turn into|turns into|could become|too early|too few|whether|to call|to tell|to read|to say)\\b|\\beither way:?)(?:(?!\\b(?:but|though|yet|and)\\b)[^,;.:!?—–]){0,25})\\b(?:trend\\w*|directional|breakout|out of balance|broke|ended|distribution|normal variation(?: day)?|neutral day|conflict\\w*|inside day|imbalance\\w*|unbalanced)\\b(?!(\\s+(signs?|signals?|evidence))?\\s*[:=]?\\s*(none|0|absent)\\b(?!\\s*\\w)))",
+        "^(?=.*?\\b(?:not|isn't|no|never|hardly|neither)\\b(?:(?!\\b(?:but|though|and)\\b)[^,;.:!?—–]){0,20}\\bbalanced?\\b|.*?\\bbalanced?\\s*(?:\\?|is (?:wrong|not)\\b|isn't\\b))"
       ]
     },
     {
@@ -1220,11 +1188,11 @@
         "\\btraded with\\b|\\bwith (it|the trend|the move|the day)\\b|\\bnever fad\\w*|\\bnot fad\\w*|\\bdon'?t fade\\b|\\bno fad\\w*|\\bnever counter\\b|\\bdon'?t counter\\b"
       ],
       "forbidden": [
-        "^[\\W_]*trend evidence\\s*(?:\\?|is (?:absent|weak|missing|lost|gone|not)\\b|isn't\\b|would\\b|could\\b)",
-        "^(?=.*?(?<!\\b(?:no|not|never|nor|neither|without|zero|nothing|none|isn't|aren't|don't|doesn't|rather than|instead of|opposite of|turn into|turns into|could become)\\b(?:(?!\\b(?:but|though|yet|and)\\b)[^,;.:!?]){0,25})\\b(?:chop\\w*|rotat\\w*|(?<!\\b(?:prior|overnight) )rang(?:e|es|ing)(?! (?:\\d|so far))|conflict\\w*|balance\\w*)\\b(?!(\\s+(signs?|signals?|evidence))?\\s*[:=]?\\s*(none|0|absent)\\b(?!\\s*\\w)))",
-        "^(?=.*?(?<!\\b(?:no|not|never|nor|neither|without|zero|nothing|none|isn't|aren't|don't|doesn't|rather than|instead of|opposite of|turn into|turns into|could become)\\b(?:(?!\\b(?:but|though|yet|and)\\b)[^,;.:!?]){0,25})\\b(?:fad(?:e|ed|es|ing))\\b(?![^,;.:]{0,30}\\b(?:is|are|was|would be)\\s+(?:never|not|wrong|counter)\\b))",
-        "^(?=.*?(?<!\\b(?:no|not|never|nor|neither|without|zero|nothing|none|isn't|aren't|don't|doesn't|rather than|instead of|opposite of|turn into|turns into|could become)\\b(?:(?!\\b(?:but|though|yet|and)\\b)[^,;.:!?]){0,25})\\b(?:buy|go long|take (?:a |the )?long)\\b)",
-        "^(?=.*?(?<!\\b(?:no|not|never|nor|neither|without|zero|nothing|none|isn't|aren't|don't|doesn't|rather than|instead of|opposite of|turn into|turns into|could become|would be)\\b(?:(?!\\b(?:but|though|yet|and)\\b)[^,;.:!?]){0,25})\\b(?:counter(?:-trend)?)\\b)"
+        "^[\\W_]*trend evidence\\s*(?:\\?|(?:[:(]|[-–—])?\\s*(?:is\\s+)?(?:absent|none|weak|missing|lost|gone|lacking)\\b|is\\s+not\\b|isn't\\b|would\\b|could\\b)",
+        "^(?=.*?(?<!(?:\\b(?:no|not|never|nor|neither|without|zero|nothing|none|isn't|aren't|don't|doesn't|can't|cannot|won't|rather than|instead of|opposite of|turn into|turns into|could become|too early|too few|whether|to call|to tell|to read|to say)\\b|\\beither way:?)(?:(?!\\b(?:but|though|yet|and)\\b)[^,;.:!?—–]){0,25})\\b(?:chop\\w*|rotat\\w*|(?<!\\b(?:prior|overnight|ADR|IB|leg's|day's|within) )rang(?:e|es|ing)(?! (?:\\d|so far|extended|of \\d))|conflict\\w*|(?<!\\bout of )balance\\w*|revers\\w*|stall\\w*|trend is up|trend day up)\\b(?!(\\s+(signs?|signals?|evidence))?\\s*[:=]?\\s*(none|0|absent)\\b(?!\\s*\\w)))",
+        "^(?=.*?(?<!(?:\\b(?:no|not|never|nor|neither|without|zero|nothing|none|isn't|aren't|don't|doesn't|can't|cannot|won't|rather than|instead of|opposite of|turn into|turns into|could become|too early|too few|whether|to call|to tell|to read|to say)\\b|\\beither way:?)(?:(?!\\b(?:but|though|yet|and)\\b)[^,;.:!?—–]){0,25})\\b(?:fad(?:e|ed|es|ing))\\b(?!\\?\\s*(?:never|no)\\b)(?![^,;.:]{0,30}\\b(?:is|are|was|would be)\\s+(?:never|not(?!\\s+(?:wrong|off)\\b)|wrong|counter|a mistake|refused)\\b))",
+        "^(?=.*?(?<!(?:\\b(?:no|not|never|nor|neither|without|zero|nothing|none|isn't|aren't|don't|doesn't|can't|cannot|won't|rather than|instead of|opposite of|turn into|turns into|could become|too early|too few|whether|to call|to tell|to read|to say)\\b|\\beither way:?)(?:(?!\\b(?:but|though|yet|and)\\b)[^,;.:!?—–]){0,25})\\b(?:buy|go long|take (?:a |the )?long|flip long|long the)\\b)",
+        "^(?=.*?(?<!(?:\\b(?:no|not|never|nor|neither|without|zero|nothing|none|isn't|aren't|don't|doesn't|can't|cannot|won't|rather than|instead of|opposite of|turn into|turns into|could become|too early|too few|whether|to call|to tell|to read|to say|would be)\\b|\\beither way:?)(?:(?!\\b(?:but|though|yet|and)\\b)[^,;.:!?—–]){0,25})\\b(?:counter(?:-trend)?)\\b(?![^,;.:]{0,30}\\b(?:is|are|was)\\s+(?:refused|never|not)\\b))"
       ]
     },
     {
@@ -1243,8 +1211,8 @@
       ],
       "forbidden": [
         "^[\\W_]*(yes|chop\\w*|rotat\\w*|range|ranging|conflict\\w*|mixed|balance|no read)\\b",
-        "^(?=.*?(?<!\\b(?:no|not|never|nor|neither|without|zero|nothing|none|isn't|aren't|don't|doesn't|rather than|instead of|opposite of|turn into|turns into|could become)\\b(?:(?!\\b(?:but|though|yet|and)\\b)[^,;.:!?]){0,25})\\b(?:chop\\w*|rotat\\w*|(?<!\\b(?:prior|overnight) )rang(?:e|es|ing)(?! (?:\\d|so far))|conflict\\w*|mixed|revers\\w*|(?:is|has|was) over|ended|ending|turning|no read)\\b(?!(\\s+(signs?|signals?|evidence))?\\s*[:=]?\\s*(none|0|absent)\\b(?!\\s*\\w)))",
-        "\\b(?:not|no) (?:a )?trend evidence\\b|\\bnot trending\\b|\\btrend evidence (?:is )?(?:weak|lost|gone|absent)\\b"
+        "^(?=.*?(?<!(?:\\b(?:no|not|never|nor|neither|without|zero|nothing|none|isn't|aren't|don't|doesn't|can't|cannot|won't|rather than|instead of|opposite of|turn into|turns into|could become|too early|too few|whether|to call|to tell|to read|to say)\\b|\\beither way:?)(?:(?!\\b(?:but|though|yet|and)\\b)[^,;.:!?—–]){0,25})\\b(?:chop\\w*|rotat\\w*|(?<!\\b(?:prior|overnight|ADR|IB|leg's|day's|within) )rang(?:e|es|ing)(?! (?:\\d|so far|extended|of \\d))|conflict\\w*|mixed|revers\\w*|(?:is|has|was) over|ended|ending|turning|no read|done|failed|finished|broke|stalled|sideways|end of the trend|trend down)\\b(?!(\\s+(signs?|signals?|evidence))?\\s*[:=]?\\s*(none|0|absent)\\b(?!\\s*\\w)))",
+        "\\b(?:not|no) (?:a )?trend evidence\\b|\\bnot trending\\b|\\btrend evidence(?: is)?\\s*(?:[:?]\\s*)?(?:weak|lost|gone|absent|none|lacking|fading|barely|would|not)\\b|\\btrend evidence isn't\\b"
       ]
     },
     {
@@ -1258,7 +1226,7 @@
         "^[\\W_]*(?:no read(?: yet)?|too early)\\b"
       ],
       "forbidden": [
-        "^(?=.*?(?<!\\b(?:no|not|never|nor|neither|without|zero|nothing|none|isn't|aren't|don't|doesn't|rather than|instead of|opposite of|turn into|turns into|could become)\\b(?:(?!\\b(?:but|though|yet|and)\\b)[^,;.:!?]){0,25})\\b(?:trend\\w*|one-way|chop\\w*|conflict\\w*|mixed|rotat\\w*|directional|lean\\w*)\\b(?!(\\s+(signs?|signals?|evidence))?\\s*[:=]?\\s*(none|0|absent)\\b(?!\\s*\\w)))"
+        "^(?=.*?(?<!(?:\\b(?:no|not|never|nor|neither|without|zero|nothing|none|isn't|aren't|don't|doesn't|can't|cannot|won't|rather than|instead of|opposite of|turn into|turns into|could become|too early|too few|whether|to call|to tell|to read|to say)\\b|\\beither way:?)(?:(?!\\b(?:but|though|yet|and)\\b)[^,;.:!?—–]){0,25})\\b(?:trend\\w*|one-way|chop\\w*|conflict\\w*|mixed|rotat\\w*|directional|lean\\w*|(?:up|down) so far|long bias|short bias|looks (?:up|down))\\b(?!(\\s+(signs?|signals?|evidence))?\\s*[:=]?\\s*(none|0|absent)\\b(?!\\s*\\w)))"
       ]
     },
     {
@@ -1272,7 +1240,7 @@
         "^[\\W_]*(?:no read(?: yet)?|neutral|neither)\\b"
       ],
       "forbidden": [
-        "^(?=.*?(?<!\\b(?:no|not|never|nor|neither|without|zero|nothing|none|isn't|aren't|don't|doesn't|rather than|instead of|opposite of|turn into|turns into|could become)\\b(?:(?!\\b(?:but|though|yet|and)\\b)[^,;.:!?]){0,25})\\b(?:trend\\w*|one-way|chop\\w*|conflict\\w*|mixed|rotat\\w*|against|lean\\w*)\\b(?!(\\s+(signs?|signals?|evidence))?\\s*[:=]?\\s*(none|0|absent)\\b(?!\\s*\\w)))"
+        "^(?=.*?(?<!(?:\\b(?:no|not|never|nor|neither|without|zero|nothing|none|isn't|aren't|don't|doesn't|can't|cannot|won't|rather than|instead of|opposite of|turn into|turns into|could become|too early|too few|whether|to call|to tell|to read|to say)\\b|\\beither way:?)(?:(?!\\b(?:but|though|yet|and)\\b)[^,;.:!?—–]){0,25})\\b(?:trend\\w*|one-way|chop\\w*|conflict\\w*|mixed|rotat\\w*|directional|lean\\w*|(?:up|down) so far|long bias|short bias|looks (?:up|down)|against)\\b(?!(\\s+(signs?|signals?|evidence))?\\s*[:=]?\\s*(none|0|absent)\\b(?!\\s*\\w)))"
       ]
     },
     {
@@ -1286,10 +1254,10 @@
       "rule": "F4: the Day so far reads rotational (back and forth so far); the Bias, the declared long and an unfinished pullback are not chop",
       "anchor": "`rotational`: under 0.34: back and forth so far",
       "required": [
-        "^[\\W_]*F4\\b(?!\\s+(?:is\\s+(?:not|weak|no)\\b|isn't\\b))"
+        "^[\\W_]*(?:(?:only|the answer is|answer|label)\\s*:?\\s*)?F4\\b(?!\\s*\\?)(?!\\s*[-–—,:]?\\s*no\\b)(?!\\s+(?:is\\s+(?:not|weak|no|wrong)\\b|isn't\\b))"
       ],
       "forbidden": [
-        "\\bF[123]\\b(?!\\s+(?:is|are|was)\\s+(?!(?:(?:also|too|another|the|a|an|really|actually|clearly)\\s+)*chop\\b)\\w)"
+        "\\bF[123]\\b(?!(?:\\s*(?:,|and|or|-)\\s*F\\d)*\\s+(?:(?:is|are|was)\\s+|(?=(?:a|an)\\s))(?!(?:(?:also|too|another|the|a|an|really|actually|clearly)\\s+)*chop\\b)\\w)"
       ]
     },
     {
@@ -1303,10 +1271,10 @@
       "rule": "F4: declared long (all four your way: regime with, RTH VWAP, EMA20 and day's move above 0); rotational, balance and an inside (stall) candle are not trend evidence",
       "anchor": "all four your way: regime `with`, and RTH VWAP, EMA20 and day's move each above 0",
       "required": [
-        "^[\\W_]*F4\\b(?!\\s+(?:is\\s+(?:not|weak|no)\\b|isn't\\b))"
+        "^[\\W_]*(?:(?:only|the answer is|answer|label)\\s*:?\\s*)?F4\\b(?!\\s*\\?)(?!\\s*[-–—,:]?\\s*no\\b)(?!\\s+(?:is\\s+(?:not|weak|no|wrong)\\b|isn't\\b))"
       ],
       "forbidden": [
-        "\\bF[123]\\b(?!\\s+(?:is|are|was)\\s+(?!(?:(?:also|too|another|the|a|an|really|actually|clearly)\\s+)*trend\\b)\\w)"
+        "\\bF[123]\\b(?!(?:\\s*(?:,|and|or|-)\\s*F\\d)*\\s+(?:(?:is|are|was)\\s+|(?=(?:a|an)\\s))(?!(?:(?:also|too|another|the|a|an|really|actually|clearly)\\s+)*trend\\b)\\w)"
       ]
     }
   ],
