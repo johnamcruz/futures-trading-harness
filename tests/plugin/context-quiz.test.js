@@ -88,9 +88,8 @@ test('context quiz: every layer asked, ids unique, the bar the whole quiz at K 5
   assert.deepStrictEqual([...new Set(QUIZ.questions.map(x => x.layer))].sort(), [...Q.LAYERS].sort());
   assert.strictEqual(new Set(all.map(x => x.id)).size, all.length);
   assert.strictEqual(QUIZ.k, 5);
-  // The Part A bar stays 59, the questions measured live before q71; q71-q75 and q79-q82 are not yet measured and the
-  // bar is not raised for them (the owner's k=5 run decides).
-  assert.deepStrictEqual(QUIZ.passBar, { partA: { allCorrect: 59, bothWays: 0 }, partB: { allCorrect: QUIZ.partB.length, bothWays: 0 } });
+  // The Part A bar is every Part A question: q71-q75 and q79-q82 measured 5/5 at k=5 (q72 and q75 reworded first), the rest before them.
+  assert.deepStrictEqual(QUIZ.passBar, { partA: { allCorrect: 68, bothWays: 0 }, partB: { allCorrect: QUIZ.partB.length, bothWays: 0 } });
   // 37 since q38-q39 (a cited setup in an attempt; a missing track record is no reason to pass); 42 and 8 since q40-q44 and
   // b8 (prepare-ahead's confirm rule: PR C); 45 since q47-q49 (a standing scenario: compose_check decides; the closing
   // candle read as candle-reading does). q46 went with PR C3's computed trigger; q45 (the 3m doji, a yes/no) measured 7/10
