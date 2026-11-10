@@ -1161,6 +1161,18 @@
    "value": 30,
    "from": "trading/instincts.js RECENT_REVIEWS"
   },
+  "prompt.reviewedTrades": {
+   "value": 10,
+   "from": "new in feat/trade-feedback: the head trader's reviewed-trades line (10 was the literal slice in runner-reviews.js)"
+  },
+  "prompt.feedbackMinTrades": {
+   "value": 5,
+   "from": "new in feat/trade-feedback: a read's own record shows only at this many reviewed trades or more"
+  },
+  "prompt.feedbackRecordGroups": {
+   "value": 6,
+   "from": "new in feat/trade-feedback: how many reads' records the line carries"
+  },
   "session.fillsTimeoutMs": {
    "value": 10000,
    "from": "session/live.js FILLS_TIMEOUT_MS"
