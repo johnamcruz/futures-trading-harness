@@ -1259,8 +1259,10 @@ Loser: 4h up, 1h ranging; a 15m CHoCH down through 21560.00, then a 15m BOS down
 **Declared yet?** (`Trend declared?` line; ATR, + your way; census
 hypotheses):
 
-- Declared (any one): regime `with`, overnight range broke out its way,
-  RTH VWAP +1 to +2.5, day's move +3 or more.
+- Declared: all four your way: regime `with`, and RTH VWAP, EMA20 and
+  day's move each above 0; the overnight range is not part of it.
+  With the 4h and 1h ranging the Bias line prints the code's answer,
+  the gate's: `+ declared <side>` or `declared <side>: no|unknown`.
 - Not yet (false starts): RTH VWAP and EMA20 under 0 (EMA20 under -1
   worse), regime `against`, inside the overnight range (back third worst):
   wait for it, in the count; size is the verdict's.
@@ -2536,8 +2538,10 @@ Loser: 4h up, 1h ranging; a 15m CHoCH down through 21560.00, then a 15m BOS down
 **Declared yet?** (`Trend declared?` line; ATR, + your way; census
 hypotheses):
 
-- Declared (any one): regime `with`, overnight range broke out its way,
-  RTH VWAP +1 to +2.5, day's move +3 or more.
+- Declared: all four your way: regime `with`, and RTH VWAP, EMA20 and
+  day's move each above 0; the overnight range is not part of it.
+  With the 4h and 1h ranging the Bias line prints the code's answer,
+  the gate's: `+ declared <side>` or `declared <side>: no|unknown`.
 - Not yet (false starts): RTH VWAP and EMA20 under 0 (EMA20 under -1
   worse), regime `against`, inside the overnight range (back third worst):
   wait for it, in the count; size is the verdict's.
@@ -3822,8 +3826,10 @@ Loser: 4h up, 1h ranging; a 15m CHoCH down through 21560.00, then a 15m BOS down
 **Declared yet?** (`Trend declared?` line; ATR, + your way; census
 hypotheses):
 
-- Declared (any one): regime `with`, overnight range broke out its way,
-  RTH VWAP +1 to +2.5, day's move +3 or more.
+- Declared: all four your way: regime `with`, and RTH VWAP, EMA20 and
+  day's move each above 0; the overnight range is not part of it.
+  With the 4h and 1h ranging the Bias line prints the code's answer,
+  the gate's: `+ declared <side>` or `declared <side>: no|unknown`.
 - Not yet (false starts): RTH VWAP and EMA20 under 0 (EMA20 under -1
   worse), regime `against`, inside the overnight range (back third worst):
   wait for it, in the count; size is the verdict's.
@@ -5099,8 +5105,10 @@ Loser: 4h up, 1h ranging; a 15m CHoCH down through 21560.00, then a 15m BOS down
 **Declared yet?** (`Trend declared?` line; ATR, + your way; census
 hypotheses):
 
-- Declared (any one): regime `with`, overnight range broke out its way,
-  RTH VWAP +1 to +2.5, day's move +3 or more.
+- Declared: all four your way: regime `with`, and RTH VWAP, EMA20 and
+  day's move each above 0; the overnight range is not part of it.
+  With the 4h and 1h ranging the Bias line prints the code's answer,
+  the gate's: `+ declared <side>` or `declared <side>: no|unknown`.
 - Not yet (false starts): RTH VWAP and EMA20 under 0 (EMA20 under -1
   worse), regime `against`, inside the overnight range (back third worst):
   wait for it, in the count; size is the verdict's.
@@ -6385,8 +6393,10 @@ Loser: 4h up, 1h ranging; a 15m CHoCH down through 21560.00, then a 15m BOS down
 **Declared yet?** (`Trend declared?` line; ATR, + your way; census
 hypotheses):
 
-- Declared (any one): regime `with`, overnight range broke out its way,
-  RTH VWAP +1 to +2.5, day's move +3 or more.
+- Declared: all four your way: regime `with`, and RTH VWAP, EMA20 and
+  day's move each above 0; the overnight range is not part of it.
+  With the 4h and 1h ranging the Bias line prints the code's answer,
+  the gate's: `+ declared <side>` or `declared <side>: no|unknown`.
 - Not yet (false starts): RTH VWAP and EMA20 under 0 (EMA20 under -1
   worse), regime `against`, inside the overnight range (back third worst):
   wait for it, in the count; size is the verdict's.
@@ -7662,8 +7672,10 @@ Loser: 4h up, 1h ranging; a 15m CHoCH down through 21560.00, then a 15m BOS down
 **Declared yet?** (`Trend declared?` line; ATR, + your way; census
 hypotheses):
 
-- Declared (any one): regime `with`, overnight range broke out its way,
-  RTH VWAP +1 to +2.5, day's move +3 or more.
+- Declared: all four your way: regime `with`, and RTH VWAP, EMA20 and
+  day's move each above 0; the overnight range is not part of it.
+  With the 4h and 1h ranging the Bias line prints the code's answer,
+  the gate's: `+ declared <side>` or `declared <side>: no|unknown`.
 - Not yet (false starts): RTH VWAP and EMA20 under 0 (EMA20 under -1
   worse), regime `against`, inside the overnight range (back third worst):
   wait for it, in the count; size is the verdict's.
@@ -8939,8 +8951,10 @@ Loser: 4h up, 1h ranging; a 15m CHoCH down through 21560.00, then a 15m BOS down
 **Declared yet?** (`Trend declared?` line; ATR, + your way; census
 hypotheses):
 
-- Declared (any one): regime `with`, overnight range broke out its way,
-  RTH VWAP +1 to +2.5, day's move +3 or more.
+- Declared: all four your way: regime `with`, and RTH VWAP, EMA20 and
+  day's move each above 0; the overnight range is not part of it.
+  With the 4h and 1h ranging the Bias line prints the code's answer,
+  the gate's: `+ declared <side>` or `declared <side>: no|unknown`.
 - Not yet (false starts): RTH VWAP and EMA20 under 0 (EMA20 under -1
   worse), regime `against`, inside the overnight range (back third worst):
   wait for it, in the count; size is the verdict's.
@@ -10313,8 +10327,10 @@ Loser: 4h up, 1h ranging; a 15m CHoCH down through 21560.00, then a 15m BOS down
 **Declared yet?** (`Trend declared?` line; ATR, + your way; census
 hypotheses):
 
-- Declared (any one): regime `with`, overnight range broke out its way,
-  RTH VWAP +1 to +2.5, day's move +3 or more.
+- Declared: all four your way: regime `with`, and RTH VWAP, EMA20 and
+  day's move each above 0; the overnight range is not part of it.
+  With the 4h and 1h ranging the Bias line prints the code's answer,
+  the gate's: `+ declared <side>` or `declared <side>: no|unknown`.
 - Not yet (false starts): RTH VWAP and EMA20 under 0 (EMA20 under -1
   worse), regime `against`, inside the overnight range (back third worst):
   wait for it, in the count; size is the verdict's.
@@ -11684,8 +11700,10 @@ Loser: 4h up, 1h ranging; a 15m CHoCH down through 21560.00, then a 15m BOS down
 **Declared yet?** (`Trend declared?` line; ATR, + your way; census
 hypotheses):
 
-- Declared (any one): regime `with`, overnight range broke out its way,
-  RTH VWAP +1 to +2.5, day's move +3 or more.
+- Declared: all four your way: regime `with`, and RTH VWAP, EMA20 and
+  day's move each above 0; the overnight range is not part of it.
+  With the 4h and 1h ranging the Bias line prints the code's answer,
+  the gate's: `+ declared <side>` or `declared <side>: no|unknown`.
 - Not yet (false starts): RTH VWAP and EMA20 under 0 (EMA20 under -1
   worse), regime `against`, inside the overnight range (back third worst):
   wait for it, in the count; size is the verdict's.
@@ -13049,8 +13067,10 @@ Loser: 4h up, 1h ranging; a 15m CHoCH down through 21560.00, then a 15m BOS down
 **Declared yet?** (`Trend declared?` line; ATR, + your way; census
 hypotheses):
 
-- Declared (any one): regime `with`, overnight range broke out its way,
-  RTH VWAP +1 to +2.5, day's move +3 or more.
+- Declared: all four your way: regime `with`, and RTH VWAP, EMA20 and
+  day's move each above 0; the overnight range is not part of it.
+  With the 4h and 1h ranging the Bias line prints the code's answer,
+  the gate's: `+ declared <side>` or `declared <side>: no|unknown`.
 - Not yet (false starts): RTH VWAP and EMA20 under 0 (EMA20 under -1
   worse), regime `against`, inside the overnight range (back third worst):
   wait for it, in the count; size is the verdict's.
@@ -14341,8 +14361,10 @@ Loser: 4h up, 1h ranging; a 15m CHoCH down through 21560.00, then a 15m BOS down
 **Declared yet?** (`Trend declared?` line; ATR, + your way; census
 hypotheses):
 
-- Declared (any one): regime `with`, overnight range broke out its way,
-  RTH VWAP +1 to +2.5, day's move +3 or more.
+- Declared: all four your way: regime `with`, and RTH VWAP, EMA20 and
+  day's move each above 0; the overnight range is not part of it.
+  With the 4h and 1h ranging the Bias line prints the code's answer,
+  the gate's: `+ declared <side>` or `declared <side>: no|unknown`.
 - Not yet (false starts): RTH VWAP and EMA20 under 0 (EMA20 under -1
   worse), regime `against`, inside the overnight range (back third worst):
   wait for it, in the count; size is the verdict's.
@@ -15715,8 +15737,10 @@ Loser: 4h up, 1h ranging; a 15m CHoCH down through 21560.00, then a 15m BOS down
 **Declared yet?** (`Trend declared?` line; ATR, + your way; census
 hypotheses):
 
-- Declared (any one): regime `with`, overnight range broke out its way,
-  RTH VWAP +1 to +2.5, day's move +3 or more.
+- Declared: all four your way: regime `with`, and RTH VWAP, EMA20 and
+  day's move each above 0; the overnight range is not part of it.
+  With the 4h and 1h ranging the Bias line prints the code's answer,
+  the gate's: `+ declared <side>` or `declared <side>: no|unknown`.
 - Not yet (false starts): RTH VWAP and EMA20 under 0 (EMA20 under -1
   worse), regime `against`, inside the overnight range (back third worst):
   wait for it, in the count; size is the verdict's.
@@ -17080,8 +17104,10 @@ Loser: 4h up, 1h ranging; a 15m CHoCH down through 21560.00, then a 15m BOS down
 **Declared yet?** (`Trend declared?` line; ATR, + your way; census
 hypotheses):
 
-- Declared (any one): regime `with`, overnight range broke out its way,
-  RTH VWAP +1 to +2.5, day's move +3 or more.
+- Declared: all four your way: regime `with`, and RTH VWAP, EMA20 and
+  day's move each above 0; the overnight range is not part of it.
+  With the 4h and 1h ranging the Bias line prints the code's answer,
+  the gate's: `+ declared <side>` or `declared <side>: no|unknown`.
 - Not yet (false starts): RTH VWAP and EMA20 under 0 (EMA20 under -1
   worse), regime `against`, inside the overnight range (back third worst):
   wait for it, in the count; size is the verdict's.
@@ -18445,8 +18471,10 @@ Loser: 4h up, 1h ranging; a 15m CHoCH down through 21560.00, then a 15m BOS down
 **Declared yet?** (`Trend declared?` line; ATR, + your way; census
 hypotheses):
 
-- Declared (any one): regime `with`, overnight range broke out its way,
-  RTH VWAP +1 to +2.5, day's move +3 or more.
+- Declared: all four your way: regime `with`, and RTH VWAP, EMA20 and
+  day's move each above 0; the overnight range is not part of it.
+  With the 4h and 1h ranging the Bias line prints the code's answer,
+  the gate's: `+ declared <side>` or `declared <side>: no|unknown`.
 - Not yet (false starts): RTH VWAP and EMA20 under 0 (EMA20 under -1
   worse), regime `against`, inside the overnight range (back third worst):
   wait for it, in the count; size is the verdict's.
@@ -19744,8 +19772,10 @@ Loser: 4h up, 1h ranging; a 15m CHoCH down through 21560.00, then a 15m BOS down
 **Declared yet?** (`Trend declared?` line; ATR, + your way; census
 hypotheses):
 
-- Declared (any one): regime `with`, overnight range broke out its way,
-  RTH VWAP +1 to +2.5, day's move +3 or more.
+- Declared: all four your way: regime `with`, and RTH VWAP, EMA20 and
+  day's move each above 0; the overnight range is not part of it.
+  With the 4h and 1h ranging the Bias line prints the code's answer,
+  the gate's: `+ declared <side>` or `declared <side>: no|unknown`.
 - Not yet (false starts): RTH VWAP and EMA20 under 0 (EMA20 under -1
   worse), regime `against`, inside the overnight range (back third worst):
   wait for it, in the count; size is the verdict's.
@@ -21034,8 +21064,10 @@ Loser: 4h up, 1h ranging; a 15m CHoCH down through 21560.00, then a 15m BOS down
 **Declared yet?** (`Trend declared?` line; ATR, + your way; census
 hypotheses):
 
-- Declared (any one): regime `with`, overnight range broke out its way,
-  RTH VWAP +1 to +2.5, day's move +3 or more.
+- Declared: all four your way: regime `with`, and RTH VWAP, EMA20 and
+  day's move each above 0; the overnight range is not part of it.
+  With the 4h and 1h ranging the Bias line prints the code's answer,
+  the gate's: `+ declared <side>` or `declared <side>: no|unknown`.
 - Not yet (false starts): RTH VWAP and EMA20 under 0 (EMA20 under -1
   worse), regime `against`, inside the overnight range (back third worst):
   wait for it, in the count; size is the verdict's.
@@ -22234,8 +22266,10 @@ Loser: 4h up, 1h ranging; a 15m CHoCH down through 21560.00, then a 15m BOS down
 **Declared yet?** (`Trend declared?` line; ATR, + your way; census
 hypotheses):
 
-- Declared (any one): regime `with`, overnight range broke out its way,
-  RTH VWAP +1 to +2.5, day's move +3 or more.
+- Declared: all four your way: regime `with`, and RTH VWAP, EMA20 and
+  day's move each above 0; the overnight range is not part of it.
+  With the 4h and 1h ranging the Bias line prints the code's answer,
+  the gate's: `+ declared <side>` or `declared <side>: no|unknown`.
 - Not yet (false starts): RTH VWAP and EMA20 under 0 (EMA20 under -1
   worse), regime `against`, inside the overnight range (back third worst):
   wait for it, in the count; size is the verdict's.

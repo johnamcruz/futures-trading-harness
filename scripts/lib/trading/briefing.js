@@ -109,6 +109,7 @@ const { VOLUME_HIGH, netAtrOf } = require('./composed-reads');
 const { structure5m, structureLine } = require('./m5-structure');
 const { compressionFrames, compressionLine } = require('./compression');
 const { declaredFacts, declaredLine } = require('./trend-declared');
+const { rotationEvidence, rotationLine } = require('./rotation-evidence');
 const { daySoFar, daySoFarLine, rthVolatility, volatilityText } = require('./day-so-far');
 const { biasLine } = require('./bias-line');
 const { pullbackRead, pullbackLine } = require('./pullback-read');
@@ -864,6 +865,9 @@ function summaryLines(b, et) {
   // Whether the trend has declared itself each side's way, in RTH only (trend-declared.js declaredLine).
   const declared = declaredLine(m3.declared, tf);
   if (declared) out.push(declared);
+  // The rotation evidence: the facts above restated side by side, values only (rotation-evidence.js); in RTH on the
+  // runner's briefing (its day so far), from these fields alone, so no new field and nothing that decides reads it.
+  if (!own && m3.today && m3.today.soFar && typeof m3.today.soFar === 'object') out.push(rotationLine(rotationEvidence(m3, CHAIN_FRAMES), CHAIN_FRAMES));
   // The base timeframe's timing against the side the entry rule allows (ltf-timing.js timingLine).
   const timing = timingLine(m3.timing, et, tf);
   if (timing) out.push(timing);
