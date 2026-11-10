@@ -154,7 +154,8 @@ test('class READ RIGHT / MARKET TURNED: read right, consistent, the trade at or 
 test('read right, consistent, between the stop and 0 is its own row (never folded into turned or right)', () => {
   const row = audit({ stateRead: stateRead('STATE: 4h up | 1h up | 15m up', UP), decision: decision('long', -0.4) });
   assert.strictEqual(row.class, 'small-loss');
-  assert.strictEqual(audit({ stateRead: stateRead('STATE: 4h up | 1h up | 15m up', UP), decision: decision('long', 0) }).class, 'small-loss');
+  assert.strictEqual(audit({ stateRead: stateRead('STATE: 4h up | 1h up | 15m up', UP), decision: decision('long', 0) }).class, 'breakeven', 'exactly 0 is its own row');
+  assert.strictEqual(audit({ stateRead: stateRead('STATE: 4h up | 1h up | 15m up', UP), decision: decision('long', -0.0001) }).class, 'small-loss');
 });
 
 test('class READ RIGHT / ACTED RIGHT: read right, consistent, the trade positive', () => {
@@ -178,6 +179,15 @@ test('a pass is never acted wrong: read right, a no-trade is PASSED with the for
   assert.strictEqual(both.outcome.R, null);
   assert.strictEqual(both.outcome.long, 1.25);
   assert.strictEqual(both.outcome.short, -1);
+  // The no-side cell sums only known moves; an unknown one never moves the sum, and its known n is beside its n.
+  const late = audit({ stateRead: stateRead('STATE: 4h range | 1h up | 15m up', range), decision: decision('none'), bars: bars({ n: CYCLE + 3, after: rising }) });
+  assert.strictEqual(late.outcome.long, null);
+  const cellOf = rows => A.summarize(rows.map(r => ({ ...r, unscorable: null, class: 'passed' }))).classes.passed.passes.noSide;
+  const one = cellOf([both]);
+  const withUnknown = cellOf([both, late]);
+  assert.deepStrictEqual(one, { n: 1, knownLong: 1, longR: 1.25, knownShort: 1, shortR: -1 });
+  assert.deepStrictEqual(withUnknown, { n: 2, knownLong: 1, longR: 1.25, knownShort: 2, shortR: -2 }, 'the late pass\'s short was stopped (known), its long unknown');
+  assert.strictEqual(cellOf([late]).longR, null, 'none known: unknown, never 0');
   // A pass on a read the consistency table would hold an entry to (all ranging: no side) is still passed, nothing broken.
   const flat = briefing('range', 'range', 'range');
   const pass = audit({ stateRead: stateRead('STATE: 4h range | 1h range | 15m range', flat), decision: decision('none') });
@@ -290,7 +300,8 @@ test('summary: without the best day, the cell\'s net R and n drop that day\'s ro
 test('summary: entry losers by class (misread, acted wrong, market turned, small loss, unscorable)', () => {
   const right = stateRead('STATE: 4h up | 1h up | 15m up', UP);
   const s = A.summarize([...sample(), { ...audit({ stateRead: right, decision: decision('long', 0) }), day: '2021-06-12' }]);
-  assert.strictEqual(s.classes['small-loss'].entries.n, 1, 'a scratch at 0 is small loss, and no loser (R < 0)');
+  assert.strictEqual(s.classes.breakeven.entries.n, 1, 'a scratch at exactly 0 is breakeven, and no loser (R < 0)');
+  assert.strictEqual(s.classes['small-loss'].entries.n, 0);
   assert.strictEqual(s.entryLosers.n, 7);
   assert.deepStrictEqual(s.entryLosers.byClass, { misread: 3, 'acted-wrong': 0, 'market-turned': 3, 'small-loss': 0 });
   assert.deepStrictEqual(s.entryLosers.unscorable, { 'no state record': 1 });
@@ -309,6 +320,29 @@ test('summary: the misread fields by forward R lost, and every field split by it
   assert.strictEqual(s.byField.frames.unstated.n, 3, 'the misread rows did not state frames');
   // The day so far (recorded context, never scored): the classes by its word.
   assert.strictEqual(s.byDayState.directional.misread, 3);
+});
+
+test('summary: enough rows on too few days is too few for an interval (the minimum days, not only n)', () => {
+  const EI = require('../../scripts/lib/tunables').training().experienceIndex;
+  const right = stateRead('STATE: 4h up | 1h up | 15m up', UP);
+  const rows = [];
+  for (let k = 0; k < EI.minN * 2; k += 1) rows.push({ ...audit({ stateRead: right, decision: decision('long', 1) }), day: k % 2 ? '2021-07-01' : '2021-07-02' });
+  const c = A.summarize(rows).classes['acted-right'];
+  assert.ok(c.n >= EI.minN && c.days < EI.minDays);
+  assert.strictEqual(c.tooFew, true);
+  assert.strictEqual(c.entries.tooFew, true);
+  assert.strictEqual(c.entries.lo, null);
+});
+
+test('a state record on another lane than the cycle\'s base bar is unscorable under its own reason, never scored', () => {
+  const sr = stateRead('STATE: 4h up | 1h up | 15m up', UP);
+  const base = audit({ stateRead: sr, decision: decision('long', 1), barClose: T(CYCLE + 1), tfMs: TF });
+  assert.strictEqual(base.class, 'acted-right');
+  const other = audit({ stateRead: sr, decision: decision('long', 1), barClose: T(CYCLE + 2), tfMs: TF });
+  assert.strictEqual(other.class, null);
+  assert.match(other.unscorable, /not the cycle's base bar/);
+  const s = A.summarize([other]);
+  assert.strictEqual(s.unscorable.n, 1);
 });
 
 test('summary: intervals once the experience index\'s minimum n and days are met', () => {
@@ -359,9 +393,12 @@ function runHome() {
   const decisions = path.join(home, 'decisions');
   fs.mkdirSync(decisions);
   fs.writeFileSync(path.join(decisions, 'pc-t20210611.abc.-decisions.json'), JSON.stringify([
+    // Another run's records on the same keys: first on one key, last on the other, so a join taking either the first or
+    // the last match is caught.
+    { key: `${T(CYCLE + 1)}|MNQ`, t: T(CYCLE + 1), symbol: 'MNQ', inTrade: false, actual: { action: 'long' }, trade: { r: -5 }, run: 'another-run.0' },
     { key: `${T(CYCLE + 1)}|MNQ`, t: T(CYCLE + 1), symbol: 'MNQ', inTrade: false, actual: { action: 'none' }, trade: null, run: 'pc-t20210611.abc.0' },
     { key: `${T(CYCLE + 1).replace('.000Z', '.500Z')}|MNQ`, t: T(CYCLE + 1).replace('.000Z', '.500Z'), symbol: 'MNQ', inTrade: false, actual: { action: 'long' }, trade: { r: 2.4 }, run: 'pc-t20210611.abc.0' },
-    { key: `${T(CYCLE + 1)}|MNQ`, t: T(CYCLE + 1), symbol: 'MNQ', inTrade: false, actual: { action: 'long' }, trade: { r: -5 }, run: 'another-run.0' },
+    { key: `${T(CYCLE + 1).replace('.000Z', '.500Z')}|MNQ`, t: T(CYCLE + 1).replace('.000Z', '.500Z'), symbol: 'MNQ', inTrade: false, actual: { action: 'none' }, trade: null, run: 'another-run.0' },
   ]));
   return { home, dir, decisions, runId };
 }
@@ -390,6 +427,19 @@ test('a run: the store\'s trade cycles joined to their decision records by exact
   assert.strictEqual(full.outcome.R, 1.25);
   // --days keeps only those days.
   assert.strictEqual(A.runRows(home, { decisions: D, cfg: CFG, days: ['2021-06-12'] }).rows.length, 0);
+});
+
+test('a run: the cycle\'s own bar close (its timing) refuses a state record of another lane', () => {
+  const { home, dir, decisions } = runHome();
+  const file = path.join(dir, '2021-06-11.jsonl');
+  const lines = fs.readFileSync(file, 'utf8').split('\n').filter(Boolean).map(l => JSON.parse(l));
+  const timing = close => ({ barClose: close });
+  lines[0].cycles[0].timing = timing(T(CYCLE + 1)); // the record's bar closes at the cycle's bar close: its base bar
+  lines[1].cycles[0].timing = timing(T(CYCLE + 3)); // another bar's close: the record is another lane's
+  fs.writeFileSync(file, `${lines.map(l => JSON.stringify(l)).join('\n')}\n`);
+  const { rows } = A.runRows(home, { decisions: A.loadDecisions([decisions]), cfg: CFG });
+  assert.strictEqual(rows[0].class, 'passed');
+  assert.match(rows[1].unscorable, /not the cycle's base bar/);
 });
 
 test('the CLI: a run home, a runs folder or a replay run dir; text and --json; a bad path exits 1', () => {

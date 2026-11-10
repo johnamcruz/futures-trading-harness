@@ -26,6 +26,7 @@
  *   acted-wrong    read right, and an entry contradicts the read's own words (CONSISTENCY)
  *   market-turned  read right, consistent, the trade at or past the stop (R <= -1)
  *   small-loss     read right, consistent, between the stop and 0 (a scratch or a partial loss): its own row
+ *   breakeven      read right, consistent, the trade exactly 0R: its own row (neither a loss nor a win)
  *   acted-right    read right, consistent, the trade positive
  *   passed         read right, a no-trade (never acted wrong in v1): reported with its forward move
  * Else unscorable, with why (no record, no line, no scored field, no fill, no decision record, no forward bars yet), and
@@ -39,7 +40,8 @@
  *   readSide(read)                        'long' | 'short' | null
  *   inconsistencies(read, side)           the CONSISTENCY keys an entry on that side breaks
  *   forwardMove({ bars, cycleT, side, forwardBars, stopAtr })   { R, stopped, stop, bars, why }
- *   auditDecision({ day, t, symbol, stateRead, decision, orders, result, bars, cfg })   one row
+ *   auditDecision({ day, t, symbol, stateRead, decision, orders, result, bars, cfg, barClose, tfMs })   one row (barClose,
+ *                                         tfMs: the cycle's base bar close and timeframe, to refuse another lane's record)
  *   summarize(rows)                       the report: per class, by field, by day so far, misread fields, entry losers
  *   renderAudit(summary)                  the report as text
  *   loadDecisions(paths)                  decision records (<run>-decisions.json, scorecard.jsonl) by key
@@ -51,7 +53,8 @@
 
 const fs = require('fs');
 const path = require('path');
-const { streamFor, pick, quantile, round4 } = require('../prop/stats');
+const { streamFor, round4 } = require('../prop/stats');
+const { dayBootstrap } = require('./experience-index');
 const { ATR_PERIOD, loadBars, outcomeBarsFrom } = require('../replay/labels');
 const ind = require('../trading/indicators');
 
@@ -64,6 +67,7 @@ const CLASSES = Object.freeze([
   ['acted-wrong', 'read right / acted wrong: the entry contradicts the read\'s own words'],
   ['market-turned', 'read right / market turned: consistent, the trade at or past the stop'],
   ['small-loss', 'read right / small loss: consistent, between the stop and 0'],
+  ['breakeven', 'read right / breakeven: consistent, the trade exactly 0R'],
   ['acted-right', 'read right / acted right: consistent, the trade positive'],
   ['passed', 'read right / passed: a no-trade, with its forward move'],
 ].map(([key, says]) => Object.freeze({ key, says })));
@@ -76,6 +80,7 @@ const CONSISTENCY = Object.freeze([
   { key: 'no-own-side', says: 'the read\'s own 4h, 1h and 15m all range (no trend on any: no side)', broken: r => ['4h', '1h', '15m'].every(k => frameOf(r, k) === 'range') },
 ].map(Object.freeze));
 
+const { MINUTE } = require('../backtest/data'); // ms in a minute
 const isObj = x => Boolean(x) && typeof x === 'object' && !Array.isArray(x);
 const fin = Number.isFinite;
 const readJson = file => { try { return JSON.parse(fs.readFileSync(file, 'utf8')); } catch (_err) { return null; } };
@@ -120,7 +125,7 @@ function forwardMove({ bars, cycleT, side, forwardBars = CFG.forwardBars, stopAt
   const list = timed(bars);
   const at = Date.parse(cycleT);
   const i = indexAt(list, at);
-  if (i < 0) return out('the cycle bar is not in the bars archive');
+  if (i < 0) return out('the cycle bar is not in the bars archive (another symbol or timeframe?)');
   const atr = atrAtIndex(list, i);
   if (!atr) return out('no ATR at the cycle bar (too few bars before it)');
   const stop = round4(stopAtr * atr);
@@ -178,15 +183,19 @@ function outcomeColumn({ kind, side, decision, read, bars, cycleT, cfg }) {
   return { basis: 'forward', side: null, R: null, long: l.R, short: s.R, stop: l.stop, why: l.R === null || s.R === null ? l.why || s.why : null };
 }
 
-function unscorableWhy(row, s) {
+function unscorableWhy(row, s, { barClose, tfMs }) {
   if (!isObj(s)) return 'no state record';
   if (s.error) return 'state record error';
   if (s.status !== 'read') return s.status === 'none' ? 'no STATE line (status none)' : `STATE line ${s.status || 'unrecorded'}`;
+  // The record's bar must be the cycle's base bar (its close the cycle's bar close): another lane's or timeframe's bar
+  // would be measured against the wrong bars, so it is counted apart, never scored.
+  const close = Date.parse(barClose);
+  if (s.bar && fin(close) && fin(tfMs) && tfMs > 0 && Date.parse(s.bar) + tfMs !== close) return 'the state record\'s bar is not the cycle\'s base bar (another lane or timeframe)';
   if (!row.scored.length) return 'no scored field (every stated field unknown)';
   return row.outcome.why || null;
 }
 
-function auditDecision({ day, t, symbol, stateRead = null, decision = null, orders = [], result = null, bars = [], cfg = CFG }) {
+function auditDecision({ day, t, symbol, stateRead = null, decision = null, orders = [], result = null, bars = [], cfg = CFG, barClose = null, tfMs = null }) {
   const { kind, side } = kindOf({ decision, orders, result });
   const s = isObj(stateRead) ? stateRead : null;
   const state = stateColumn(s);
@@ -203,32 +212,20 @@ function auditDecision({ day, t, symbol, stateRead = null, decision = null, orde
     class: null, unscorable: null,
   };
   if (kind === 'in-trade') return row;
-  row.unscorable = unscorableWhy(row, s);
+  row.unscorable = unscorableWhy(row, s, { barClose, tfMs });
   if (row.unscorable) return row;
   const R = row.outcome.R;
   if (row.misread.length) row.class = 'misread';
   else if (kind === 'pass') row.class = 'passed';
   else if (row.broken.length) row.class = 'acted-wrong';
-  else row.class = R <= -1 ? 'market-turned' : R > 0 ? 'acted-right' : 'small-loss';
+  else row.class = R <= -1 ? 'market-turned' : R > 0 ? 'acted-right' : R === 0 ? 'breakeven' : 'small-loss';
   return row;
 }
 
 // ---- The report ----
 
-/** sum(num) / sum(den) over whole days resampled: { lo, hi } at the experience index's level. */
-function dayInterval(days, key) {
-  const rand = streamFor(EI.seed, `read-audit|${key}`);
-  const ratios = [];
-  for (let r = 0; r < EI.reps; r += 1) {
-    let s = 0;
-    let c = 0;
-    for (let k = 0; k < days.length; k += 1) { const d = days[pick(rand, days.length)]; s += d.num; c += d.den; }
-    if (c) ratios.push(s / c);
-  }
-  ratios.sort((a, b) => a - b);
-  const tail = (1 - EI.level) / 2;
-  return ratios.length ? { lo: round4(quantile(ratios, tail)), hi: round4(quantile(ratios, 1 - tail)) } : { lo: null, hi: null };
-}
+/** sum(num) / sum(den) over whole days resampled: the experience index's own day bootstrap, at its level and reps. */
+const dayInterval = (days, key) => dayBootstrap(days, days.map(d => d.num), days.map(d => d.den), { reps: EI.reps, rand: streamFor(EI.seed, `read-audit|${key}`) });
 const byDay = (rows, num, den) => {
   const m = new Map();
   for (const r of rows) { const d = m.get(r.day) || { num: 0, den: 0 }; d.num += num(r); d.den += den(r); m.set(r.day, d); }
@@ -252,7 +249,9 @@ function cell(rows, key) {
     withoutBest: best ? { day: best[0], n: rows.filter(r => r.day !== best[0]).length, netR: sumR(rest) } : null,
   };
   const noSide = rows.filter(r => r.kind === 'pass' && r.outcome && r.outcome.side === null);
-  if (noSide.length) out.noSide = { n: noSide.length, longR: round4(noSide.reduce((a, r) => a + (r.outcome.long || 0), 0)), shortR: round4(noSide.reduce((a, r) => a + (r.outcome.short || 0), 0)) };
+  // Each side summed over its known moves only (unknown never 0), its known n beside the cell's n.
+  const sideOf = k => { const v = noSide.map(r => r.outcome[k]).filter(fin); return [v.length, v.length ? round4(v.reduce((a, x) => a + x, 0)) : null]; };
+  if (noSide.length) { const [kl, l] = sideOf('long'); const [ks, sh] = sideOf('short'); out.noSide = { n: noSide.length, knownLong: kl, longR: l, knownShort: ks, shortR: sh }; }
   return out;
 }
 const split = (rows, key) => ({ n: rows.length, entries: cell(rows.filter(r => r.kind === 'entry'), `${key}|entries`), passes: cell(rows.filter(r => r.kind === 'pass'), `${key}|passes`) });
@@ -296,7 +295,7 @@ function summarize(rows) {
 const pct = x => (x === null || x === undefined ? '-' : x.toLocaleString('en-US', { style: 'percent' }));
 const rr = x => (x === null || x === undefined ? '-' : `${x > 0 ? '+' : ''}${x}R`);
 const ci = c => (c.tooFew ? 'too few for an interval' : c.lo === null ? 'no interval' : `[${c.lo}, ${c.hi}]`);
-const cellText = c => `n ${c.n}, R known ${c.knownR}, net ${rr(c.netR)}, mean ${rr(c.meanR)} ${ci(c)}${c.withoutBest ? `; without best day ${c.withoutBest.day}: n ${c.withoutBest.n}, net ${rr(c.withoutBest.netR)}` : ''}${c.noSide ? `; no read side n ${c.noSide.n}: long ${rr(c.noSide.longR)}, short ${rr(c.noSide.shortR)}` : ''}`;
+const cellText = c => `n ${c.n}, R known ${c.knownR}, net ${rr(c.netR)}, mean ${rr(c.meanR)} ${ci(c)}${c.withoutBest ? `; without best day ${c.withoutBest.day}: n ${c.withoutBest.n}, net ${rr(c.withoutBest.netR)}` : ''}${c.noSide ? `; no read side n ${c.noSide.n}: long ${rr(c.noSide.longR)} (known ${c.noSide.knownLong}), short ${rr(c.noSide.shortR)} (known ${c.noSide.knownShort})` : ''}`;
 
 function renderAudit(s) {
   const out = [
@@ -376,7 +375,8 @@ function runRows(target, { decisions = null, cfg = CFG, days = null, barsFiles =
       const ran = (Array.isArray(line.ran) ? line.ran : []).find(x => isObj(x) && Array.isArray(x.symbols));
       const symbol = (sr && sr.symbol) || (ran && ran.symbols[0]) || (Array.isArray(at.symbols) ? at.symbols[0] : null);
       if (!barsOf.has(symbol)) barsOf.set(symbol, isObj(barsFiles) && barsFiles[symbol] ? dataOf(barsFiles[symbol], tf) : loadBars(home, symbol, tf));
-      rows.push(auditDecision({ day, t: line.t, symbol, stateRead: sr, decision: joinOf(decisions, `${line.t}|${symbol}`, runId), orders: c.orders, result: c.result, bars: barsOf.get(symbol), cfg }));
+      rows.push(auditDecision({ day, t: line.t, symbol, stateRead: sr, decision: joinOf(decisions, `${line.t}|${symbol}`, runId), orders: c.orders, result: c.result, bars: barsOf.get(symbol), cfg,
+        barClose: isObj(c.timing) ? c.timing.barClose : null, tfMs: tf ? tf * MINUTE : null }));
     }
   }
   return { runId, rows };

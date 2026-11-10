@@ -1426,11 +1426,15 @@ skill. The model is asked nothing.
      ATR(20) at the cycle bar. A bar that reaches the stop gives -1R (stop
      first, even if it closes back). Otherwise the last bar's close counts.
      With fewer bars and no stop, the move is unknown.
-   - A run's own bars archive ends with the run, so give the data it
-     replayed (`--bars`, as the scorecard takes it) to measure its last
-     passes. Its stops and moves can differ slightly from the archive's: on
-     one arm, 170 of 186 passes measurable both ways agreed within 0.02R
-     and the rest within about 0.12R.
+   - The bars come from the run's own archive by default. Passing the data
+     the run replayed (`--bars`, as the scorecard takes it) is recommended.
+     The archive ends with the run, so its last passes have no forward bars:
+     on one arm, 177 of 363 passes. The data file has the history before
+     and after. The two sources do not always agree. On that arm, 62 of 363
+     passes got a different stop. Of the 186 passes measurable both ways,
+     170 agreed within 0.02R. The largest gaps were 1.633R, 0.273R and
+     0.123R. A stop touched in one source and not the other flips a pass by
+     more than 1R (1 pass there).
 
 The classes. A decision needs a read, at least one scored field (match or
 mismatch; unknown never counts) and an outcome:
@@ -1441,12 +1445,15 @@ mismatch; unknown never counts) and an outcome:
 | read right / acted wrong | every scored field matches; the entry contradicts the read's own words (below) |
 | read right / market turned | read right, consistent, the trade at or past the stop (R <= -1) |
 | read right / small loss | read right, consistent, between the stop and 0: its own row, never folded into the others |
+| read right / breakeven | read right, consistent, the trade exactly 0R: its own row (neither a loss nor a win) |
 | read right / acted right | read right, consistent, the trade positive |
 | read right / passed | read right, a no-trade, reported with its forward move (a pass is never acted wrong in v1) |
 
 Anything else is unscorable and counted on its own, with why. The reasons:
-no state record, no STATE line, no scored field, an entry not filled, no
-decision record joined, no forward bars yet. Its outcome is still shown
+no state record, no STATE line, no scored field, a record whose bar is not
+the cycle's base bar (another lane or timeframe), an entry not filled, no
+decision record joined, the cycle bar not in the bars, no forward bars yet.
+Its outcome is still shown
 apart. A cycle in a trade is no entry or pass decision; it is counted and
 left out.
 
@@ -1485,10 +1492,19 @@ Limits:
 - The forward window and stop are definitions, not a tradeable plan.
 - n is small per run, so intervals need many days.
 - The consistency table holds an entry only to the model's own stated
-  read, never to what the code or the owner would have done. Because the
-  gate enforces the trend rule on the same labels, a read-right entry
-  against its own trending frames should be rare. The table mostly
-  catches entries the read leaves room for.
+  read, never to what the code or the owner would have done.
+- Read right / acted wrong is empty by construction. The gate refuses the
+  same contradiction on the same labels. The STATE line also has no field
+  for "I see the risk and take it anyway". So this class cannot measure
+  the judgment audit's failure: an objection stated in free text, then the
+  trade anyway. Measuring that would need the plan's own stated objections
+  recorded in a closed form. That would be a separate change, approved by
+  the owner, and is not part of the audit.
+- The forward window counts bars, not time: a gap in the bars stretches it.
+- A record whose bar is not the cycle's base bar (a multi-lane run) is
+  counted as unscorable under its own reason. A record whose bar is missing
+  from the bars is counted the same way. Neither is scored against another
+  lane's bars.
 
 ## 5. Stage 2: pass prop
 
