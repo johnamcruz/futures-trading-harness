@@ -1345,6 +1345,25 @@ model:
 - `priorOnly` does not filter by half. Its days-before view pools the
   probe and confirm halves.
 
+Known limits of the stated-reason parse. These fail safe: the reason stays
+unclassified and the cycle is filed under its code's class (no-plan). That
+is deliberate. A missed label only lowers recall, while a wrong one would
+teach the model something false. Widening the guards to catch these would
+reopen the false labels closed in review.
+
+- The consequence carve-out is anchored to where the consequence ends. So
+  these real blocking wordings stay unclassified, because the "no"/"not" in
+  them is read as negating the rule:
+  - "opening print: new entries not allowed 09:30-09:35 ET; ..."
+  - "opening print (09:30-09:35 ET), no entries on this bar; ..."
+  - "opening print (...) allows no entries and no setup is clear..."
+  - "news blackout, no entries." (ending in a period)
+  - "no new entries before 09:35"
+  - "no entries yet"
+- `RULE_OFF` (a rule said to be off) is a heuristic that reads only the
+  first words after the rule. It misses "==false", ': "inactive"', "=0"
+  and "status is now off", so such a rule can still label.
+
 Every figure shows its n. An unknown R counts as unknown, never as 0.
 Leg R is an outcome and not tradeable: it is the leg's whole move from its
 first entry bar. The scorecard's figures are a different measure.
