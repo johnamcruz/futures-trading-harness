@@ -1722,3 +1722,96 @@ test('grading: every word of the chop questions\' clause-scoped forbids does wor
     });
   }
 });
+
+test('grading: the chop questions\' clause terminator does work at each place it stands (the label\'s first clause, its end, the label\'s body, the negation window)', () => {
+  // Each pattern holds the terminator several times: in a label pattern, 1 the first clause's scan, 2 its end, 3 the
+  // second clause's scan, 4 the negation window; in a whole-line pattern, the negation window only. Each guard (e.g.,
+  // i.e., vs., etc., '...', a '.' not before whitespace) is cut at one place at a time, and one answer flips. Place 2
+  // is not checked: the first clause's scan (place 1) already stops at the first true end, so a looser end there
+  // changes nothing (an equivalent mutant).
+  const GROUP = '(?:e\\.g|i\\.e|vs|etc)';
+  const guards = [...['e\\.g', 'i\\.e', 'vs', 'etc'].map(g => [GROUP, `(?:${cutAlt(GROUP.slice(3, -1), g)})`, `${g.replace('\\', '')}.`]),
+    ['(?<!\\.\\.)', '', '...'], ['(?=\\s))', ')', 'at 0.31']];
+  const NOTTERM = '(?!(?<!\\.\\.)(?<!\\b(?:e\\.g|i\\.e|vs|etc))[;.](?=\\s))';
+  const nth = (s, from, n, to) => {
+    let at = -1;
+    for (let k = 0; k <= n; k += 1) { at = s.indexOf(from, at + 1); if (at < 0) return null; }
+    return s.slice(0, at) + to + s.slice(at + from.length);
+  };
+  const check = (id, i, from, to, n, answer, right) => {
+    assert.strictEqual(pass(id, `ANSWER: ${answer}`), right, `${id} ${right ? 'right' : 'wrong'}: ${answer}`);
+    const s = nth(q(id).forbidden[i], from, n, to);
+    assert.ok(s, `${id} forbidden[${i}] holds ${from} ${n + 1} times`);
+    const graded = Q.gradeAnswer(QUIZ, { ...q(id), forbidden: q(id).forbidden.map((x, j) => (j === i ? s : x)) }, `ANSWER: ${answer}`).pass;
+    assert.strictEqual(graded, !right, `${id} forbidden[${i}] without ${from} (place ${n + 1}): ${answer}`);
+  };
+  // [id, forbidden index, the label's opening, a filler, a word it forbids]
+  for (const [id, i, L, F, W] of [['q72', 1, 'Chop evidence', 'balance', 'trending'], ['q74', 1, 'Trend evidence', 'traded with it', 'chop'],
+    ['q75', 1, 'No', 'trend evidence', 'chop'], ['q79', 0, 'No read yet', 'six bars', 'trending'], ['q80', 0, 'No read yet', 'all unknown', 'trending']]) {
+    for (const [from, to, g] of guards) {
+      check(id, i, from, to, 0, `${L} ${g} ${F}; ${W}.`, false);
+      check(id, i, from, to, 2, `${L}; ${F} ${g} ${W}.`, false);
+      check(id, i, from, to, 3, `${L}: ${F}, no ${g} ${W}.`, true);
+    }
+    // The terminator's whole guard: the label's body stops at a clause's end; the negation window too.
+    check(id, i, `${NOTTERM}.)*?`, '.)*?', 1, `${L}; ${F}; ${W}.`, true);
+    check(id, i, `${NOTTERM}[^`, '[^', 0, `${L}: ${F}, no. ${W}.`, false);
+  }
+  for (const [id, i, base, W] of [['q74', 2, 'Trend evidence: traded with it,', 'fade'], ['q74', 3, 'Trend evidence: traded with it,', 'buy']]) {
+    for (const [from, to, g] of guards) check(id, i, from, to, 0, `${base} no ${g} ${W}.`, true);
+    check(id, i, `${NOTTERM}[^`, '[^', 0, `${base} no. ${W}.`, false);
+  }
+  // q72's balance taken back: its window stops at a clause's end too.
+  for (const [from, to, g] of guards) check('q72', 2, from, to, 0, `Chop evidence: balance, never ${g} balanced.`, false);
+  check('q72', 2, `${NOTTERM}[^`, '[^', 0, 'Chop evidence: balance, never. Balanced.', true);
+});
+
+test('grading: the chop questions\' inner words each do work (round 5)', () => {
+  const rows = [
+    ['q72', 'forbidden', 1, 'trend (?:day|morning|up|down)', 'trend (?:day|morning|up)', 'Chop evidence: balance, but a trend down.', false],
+    ['q72', 'forbidden', 1, 'trend (?:day|morning|up|down)', 'trend (?:day|morning|down)', 'Chop evidence: balance, but a trend up.', false],
+    ['q72', 'forbidden', 1, 'trend (?:day|morning|up|down)', 'trend (?:day|up|down)', 'Chop evidence: balance, but a trend morning.', false],
+    // q74's long (whole line): refused, counter, never, not, wrong after it (is, are; one word between allowed).
+    ...['refused', 'counter\\w*', 'never', 'not', 'wrong'].map((w, k) => {
+      const list = 'refused|counter\\w*|never|not|wrong';
+      return ['q74', 'forbidden', 3, `(?:${list})`, `(?:${cutAlt(list, w)})`, `Trend evidence: traded with it; never faded; any buy is ${['refused', 'counter-trend', 'never right', 'not allowed', 'wrong'][k]}.`, true];
+    }),
+    ['q74', 'forbidden', 3, '\\s+(?:is|are)\\s+', '\\s+(?:are)\\s+', 'Trend evidence: traded with it; never faded; any buy is refused.', true],
+    ['q74', 'forbidden', 3, '\\s+(?:is|are)\\s+', '\\s+(?:is)\\s+', 'Trend evidence: traded with it; never faded; buy setups are refused.', true],
+    ['q74', 'forbidden', 3, '(?!(?:is|are)\\b)', '', 'Trend evidence: traded with it; never faded; a buy is is refused.', false],
+    ['q74', 'forbidden', 3, '(?!(?:is|are)\\b)', '(?!(?:is)\\b)', 'Trend evidence: traded with it; never faded; a buy are is refused.', false],
+    ['q74', 'forbidden', 3, '(?!(?:is|are)\\b)', '(?!(?:are)\\b)', 'Trend evidence: traded with it; never faded; a buy is is refused.', false],
+    // q79/q80's read words, each inner word.
+    ...['q79', 'q80'].flatMap(id => [
+      [id, 'forbidden', 0, '(?:chop|trend) is likely', '(?:trend) is likely', 'No read yet: too early, but chop is likely.', false],
+      [id, 'forbidden', 0, '(?:chop|trend) is likely', '(?:chop) is likely', 'No read yet: too early, but a trend is likely.', false],
+      [id, 'forbidden', 0, 'trend (?:day|morning|sign)', 'trend (?:day|morning)', 'No read yet: too early, but a trend sign.', false],
+      [id, 'forbidden', 0, 'trend (?:day|morning|sign)', 'trend (?:day|sign)', 'No read yet: too early, but a trend morning.', false],
+      [id, 'forbidden', 0, 'trend (?:day|morning|sign)', 'trend (?:morning|sign)', 'No read yet: too early, but a trend day.', false],
+      [id, 'forbidden', 0, '(?:up|down) so far', '(?:up) so far', 'No read yet: too early, but down so far.', false],
+      [id, 'forbidden', 0, 'looks? (?:up|down)', 'looks? (?:up)', 'No read yet: too early, but it looks down.', false],
+      [id, 'forbidden', 0, 'going (?:up|down)', 'going (?:up)', 'No read yet: too early, but going down.', false],
+      [id, 'forbidden', 0, 'says? (?:trend|chop)', 'says? (?:trend)', 'No read yet: too early, but it says chop.', false],
+      [id, 'forbidden', 0, 'says? (?:trend|chop)', 'says? (?:chop)', 'No read yet: too early, but it says trend.', false],
+      [id, 'forbidden', 0, 'favou?rs? (?:the |a )?long', 'favou?rs? (?:the )?long', 'No read yet: too early, but it favors a long.', false],
+      [id, 'forbidden', 0, 'favou?rs? (?:the |a )?long', 'favou?rs? (?:a )?long', 'No read yet: too early, but it favors the long.', false],
+    ]),
+    ...['chop', 'trend'].flatMap(w => {
+      const other = w === 'chop' ? 'trend' : 'chop';
+      return [
+        ['q80', 'forbidden', 0, '(?:as|for) (?:chop|trend)', `(?:as|for) (?:${other})`, `No read yet: too early, but it counts as ${w}.`, false],
+        ['q80', 'forbidden', 0, 'reads? as (?:chop|trend)', `reads? as (?:${other})`, `No read yet: too early, but it reads as ${w}.`, false],
+        ['q80', 'forbidden', 0, '(?:chop|trend) by default', `(?:${other}) by default`, `No read yet: too early, but ${w} by default.`, false],
+        ['q80', 'forbidden', 0, 'means? (?:chop|trend)', `means? (?:${other})`, `No read yet: too early, but it means ${w}.`, false],
+        ['q80', 'forbidden', 0, ')?as (?:chop|trend)', `)?as (?:${other})`, `No read yet: too early, but treat it as ${w}.`, false],
+      ];
+    }),
+    ['q80', 'forbidden', 0, '(?:as|for) (?:chop|trend)', 'as (?:chop|trend)', 'No read yet: too early, but it counts for chop.', false],
+    ['q80', 'forbidden', 0, '(?:(?:as|for) (?:chop|trend)|against)', '(?:(?:as|for) (?:chop|trend))', 'No read yet: too early, but it counts against.', false],
+    ...['it ', 'unknown ', 'them ', 'the unknowns? '].map(w => {
+      const list = 'it |unknown |them |the unknowns? ';
+      return ['q80', 'forbidden', 0, `(?:${list})?as`, `(?:${cutAlt(list, w)})?as`, `No read yet: too early, but treat ${w.replace('s? ', 's ').trim()} as chop.`, false];
+    }),
+  ];
+  flips(rows);
+});
