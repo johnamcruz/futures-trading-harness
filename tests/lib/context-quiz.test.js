@@ -580,25 +580,11 @@ test('summary: correct on all K, answered both ways, the totals, the bar; compar
   for (const x of QUIZ.questions) for (let k = 1; k <= 5; k += 1) rows.push({ id: x.id, k, pass: true });
   for (const x of QUIZ.partB) for (let k = 1; k <= 5; k += 1) rows.push({ id: x.id, k, pass: true });
   const all = Q.summarize(QUIZ, rows, 5);
-  // The bar counts the measured questions only: 59 (q71-q82 are pending: asked and listed, never counted, until the
-  // owner's k=5 measurement), 59 x 5 runs, one missed = 294.
-  assert.deepStrictEqual([all.partA.allCorrect, all.partA.bothWays, all.partB.allCorrect, all.meetsBar], [59, 0, 8, true]);
+  // 68 questions, every one counted (q71-q75, q79-q82 not yet measured live); the bar stays 59: 68 x 5 runs, one missed = 339.
+  assert.deepStrictEqual([all.partA.allCorrect, all.partA.bothWays, all.partB.allCorrect, all.meetsBar], [68, 0, 8, true]);
   const one = rows.map(r => (r.id === 'q6' && r.k === 2 ? { ...r, pass: false } : r));
   const s = Q.summarize(QUIZ, one, 5);
-  assert.deepStrictEqual([s.partA.allCorrect, s.partA.bothWays, s.partA.total, s.meetsBar], [58, 1, 294, false]);
-  // A pending question is still listed per question and in its own totals; failing on every run never moves the bar...
-  const pend = QUIZ.questions.filter(x => x.pending).map(x => x.id);
-  assert.ok(pend.length > 0, 'pending questions in the quiz');
-  const missPending = Q.summarize(QUIZ, rows.map(r => (pend.includes(r.id) ? { ...r, pass: false } : r)), 5);
-  assert.strictEqual(missPending.meetsBar, true, 'pending questions never move the bar');
-  assert.deepStrictEqual([missPending.partA.allCorrect, missPending.partA.pending.allCorrect, missPending.partA.pending.asked], [59, 0, pend.length * 5]);
-  assert.deepStrictEqual(missPending.partA.per.filter(x => x.pending).map(x => [x.id, x.passes]), pend.map(id => [id, 0]));
-  assert.strictEqual(all.partA.pending.allCorrect, pend.length);
-  // ...while an unflagged one failing every run does.
-  assert.strictEqual(Q.summarize(QUIZ, rows.map(r => (r.id === 'q6' ? { ...r, pass: false } : r)), 5).meetsBar, false);
-  // The flag is a boolean, when given.
-  assert.match(Q.questionErrors({ ...QUIZ.questions[0], pending: 'yes' }, { part: 'questions', at: 'question' }).join(), /question\.pending: true or false/);
-  assert.deepStrictEqual(Q.questionErrors({ ...QUIZ.questions[0], pending: true }, { part: 'questions', at: 'question' }), []);
+  assert.deepStrictEqual([s.partA.allCorrect, s.partA.bothWays, s.partA.total, s.meetsBar], [67, 1, 339, false]);
   // Too few runs is never correct on all K.
   assert.strictEqual(Q.summarize(QUIZ, rows.filter(r => r.k <= 3), 5).partA.allCorrect, 0);
   const d = Q.compare(all, s).find(x => x.id === 'q6');

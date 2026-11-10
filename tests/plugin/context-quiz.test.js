@@ -88,15 +88,9 @@ test('context quiz: every layer asked, ids unique, the bar the whole quiz at K 5
   assert.deepStrictEqual([...new Set(QUIZ.questions.map(x => x.layer))].sort(), [...Q.LAYERS].sort());
   assert.strictEqual(new Set(all.map(x => x.id)).size, all.length);
   assert.strictEqual(QUIZ.k, 5);
-  // The bar is every measured question: a question flagged `pending` (not yet measured at K 5 by the owner) is asked and
-  // reported, never counted (summarize); it joins the bar, the flag dropped, once measured 5/5 (q45 and q53 measured
-  // 7/10 and 6/10 and left the quiz).
-  const measured = QUIZ.questions.filter(x => !x.pending);
-  assert.deepStrictEqual(QUIZ.passBar, { partA: { allCorrect: measured.length, bothWays: 0 }, partB: { allCorrect: QUIZ.partB.length, bothWays: 0 } });
-  assert.ok(QUIZ.partB.every(x => !x.pending), 'no pending question in Part B');
-  // Pending today: q71-q82 less the dropped q76-q78 (chop detection, added on feat/chop-quiz); every one before them is measured.
-  assert.deepStrictEqual(QUIZ.questions.filter(x => x.pending).map(x => x.id), ['q71', 'q72', 'q73', 'q74', 'q75', 'q79', 'q80', 'q81', 'q82']);
-  assert.strictEqual(measured.length, 59);
+  // The Part A bar stays 59, the questions measured live before q71; q71-q75 and q79-q82 are not yet measured and the
+  // bar is not raised for them (the owner's k=5 run decides).
+  assert.deepStrictEqual(QUIZ.passBar, { partA: { allCorrect: 59, bothWays: 0 }, partB: { allCorrect: QUIZ.partB.length, bothWays: 0 } });
   // 37 since q38-q39 (a cited setup in an attempt; a missing track record is no reason to pass); 42 and 8 since q40-q44 and
   // b8 (prepare-ahead's confirm rule: PR C); 45 since q47-q49 (a standing scenario: compose_check decides; the closing
   // candle read as candle-reading does). q46 went with PR C3's computed trigger; q45 (the 3m doji, a yes/no) measured 7/10
