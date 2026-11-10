@@ -1555,6 +1555,118 @@ this block:
 }
 ```
 
+### The read audit
+
+`node scripts/read-audit.js --run <run home | runs folder | replay run dir>
+--decisions <training home> [--bars MNQ=<data file>] [--days d1,d2] [--json]`
+lays three columns side by side for every decision in a run, then sorts
+each decision by them (`scripts/lib/learning/read-audit.js`). It is a
+measurement only. Nothing that decides reads it: not the gate,
+compose_check, sizing, the exits, the runner, the briefing, a prompt or a
+skill. The model is asked nothing.
+
+1. **What the model read**: its closed-form STATE line (`4h`, `1h`, `15m`,
+   `frames`), as its cycle log recorded it (trading/state-read.js).
+2. **What the market was doing**: the labels that read was scored against
+   (the cycle bar's briefing, built from the bars up to that bar), with
+   their context, as recorded at the cycle. The audit never rebuilds them.
+3. **OUTCOME, what happened next**: hindsight, never an input to a read.
+   - An entry: its exact recorded trade R (`trade.r` on its decision
+     record, the scorecard's per-trade R; the same figure the arm's net R is
+     summed from).
+   - A pass: the forward move of the side its own read points to. That is
+     long when the read's 4h and 1h are both up, short when both are down,
+     and both sides otherwise. It is measured from the cycle bar's close
+     over `config/analysis.json` `readAudit.forwardBars` bars strictly
+     after the cycle bar, in R of a standard stop of `readAudit.stopAtr` x
+     ATR(20) at the cycle bar. A bar that reaches the stop gives -1R (stop
+     first, even if it closes back). Otherwise the last bar's close counts.
+     With fewer bars and no stop, the move is unknown.
+   - The bars come from the run's own archive by default. Passing the data
+     the run replayed (`--bars`, as the scorecard takes it) is recommended.
+     The archive ends with the run, so its last passes have no forward bars:
+     on one arm, 177 of 363 passes. The data file has the history before
+     and after. The two sources do not always agree. On that arm, 81 of 363
+     passes got a stop that was not exactly equal: 77 differed by more than
+     0.001 points, 62 by more than 0.01 and 37 by more than 0.05. Of the 186
+     passes measurable both ways,
+     170 agreed within 0.02R. The largest gaps were 1.633R, 0.273R and
+     0.123R. A stop touched in one source and not the other flips a pass by
+     more than 1R (1 pass there).
+
+The classes. A decision needs a read, at least one scored field (match or
+mismatch; unknown never counts) and an outcome:
+
+| Class | When |
+|---|---|
+| misread | a scored field (`4h`, `1h`, `15m`, `frames`) mismatches its label |
+| read right / acted wrong | every scored field matches; the entry contradicts the read's own words (below) |
+| read right / market turned | read right, consistent, the trade at or past the stop (R <= -1) |
+| read right / small loss | read right, consistent, between the stop and 0: its own row, never folded into the others |
+| read right / breakeven | read right, consistent, the trade exactly 0R: its own row (neither a loss nor a win) |
+| read right / acted right | read right, consistent, the trade positive |
+| read right / passed | read right, a no-trade, reported with its forward move (a pass is never acted wrong in v1) |
+
+Anything else is unscorable and counted on its own, with why. The reasons:
+no state record, no STATE line, no scored field, a record whose bar is not
+the cycle's base bar (another lane or timeframe), an entry not filled, no
+decision record joined, the cycle bar not in the bars, no forward bars yet.
+Its outcome is still shown
+apart. A cycle in a trade is no entry or pass decision; it is counted and
+left out.
+
+The consistency table is the trend rule held to the read's own words, not
+to the labels. It is checked for entries only:
+
+- `counter-own-htf`: the read's 4h or 1h trends against the entry.
+- `counter-own-15m`: the read's 4h and 1h range and its 15m trends against
+  the entry.
+- `no-own-side`: the read's 4h, 1h and 15m all range.
+
+Transition, unknown or an unstated frame gives no trend the read can be
+held to. A rule for a range or transition read against a trend setup is
+left out: the trend rule allows the 15m's way when both frames range.
+
+The report puts n beside every number. It shows, per class, the share of
+scorable decisions, with entries and passes always apart, each with net
+and mean R. Intervals are day-clustered at the experience index's level
+(`config/training.json` `experienceIndex`; under its minN or minDays it
+says too few). Each class is also shown without its best day: the day with
+the most R in that cell. A pass whose read has no side shows each side's
+summed forward R (`longR`, `shortR`) over its known moves only, with their
+counts (`knownLong`, `knownShort`) beside the cell's n. With no known move,
+the count is 0 and the sum is null, never 0. Then come:
+
+- each field split by its result;
+- `frames-own` (the read against itself), beside;
+- the classes by the day so far at the bar (context: the read has no day
+  field);
+- the misread fields by entry R lost, with passes apart;
+- the entry losers (trade R < 0) by class, and the unscorable ones by why.
+
+Limits:
+
+- The read's vocabulary is coarse: three trend words per frame and one
+  agreement word. A label can be stale, so a mismatch can be the better
+  read (read-accuracy.js's caveat).
+- The outcome is hindsight on one path.
+- The forward window and stop are definitions, not a tradeable plan.
+- n is small per run, so intervals need many days.
+- The consistency table holds an entry only to the model's own stated
+  read, never to what the code or the owner would have done.
+- Read right / acted wrong is empty by construction. The gate refuses the
+  same contradiction on the same labels. The STATE line also has no field
+  for "I see the risk and take it anyway". So this class cannot measure
+  the judgment audit's failure: an objection stated in free text, then the
+  trade anyway. Measuring that would need the plan's own stated objections
+  recorded in a closed form. That would be a separate change, approved by
+  the owner, and is not part of the audit.
+- The forward window counts bars, not time: a gap in the bars stretches it.
+- A record whose bar is not the cycle's base bar (a multi-lane run) is
+  counted as unscorable under its own reason. A record whose bar is missing
+  from the bars is counted the same way. Neither is scored against another
+  lane's bars.
+
 ## 5. Stage 2: pass prop
 
 The `stage: 2` preset is stage 1 plus:

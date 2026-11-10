@@ -124,7 +124,10 @@ test('state read invariance: no module that decides reaches state-read.js, throu
   // builder, the parser or the scorer (a decider calling require('../cycle-log').headOwnText would be one).
   assert.deepStrictEqual(naming(/\b(?:headOwnText|cycleStateRecord|cycleStateRead|parseStateLine|parseState|scoreState)\b/), ['scripts/lib/cycle-log.js', 'scripts/lib/trading/state-read.js']);
   assert.ok(!('cycleStateRecord' in require('../../scripts/lib/cycle-log')), 'the record\'s builder is the cycle log\'s own');
-  assert.deepStrictEqual(naming(/\bstateRead\b/), ['scripts/lib/cycle-log.js', 'scripts/lib/learning/experience-log.js', 'scripts/lib/learning/read-accuracy.js', 'scripts/lib/learning/run-experience.js', 'scripts/lib/replay/store.js',
+  // The read audit (learning/read-audit.js) reads the record offline beside each decision's outcome: a report, required
+  // by its own CLI only (tests/lib/read-audit.test.js), reached by no decider (below).
+  for (const f of deciders) assert.ok(!reach(f, null).has(path.join(lib, 'learning', 'read-audit.js')), `${path.relative(D.ROOT, f)} reaches read-audit.js`);
+  assert.deepStrictEqual(naming(/\bstateRead\b/), ['scripts/lib/cycle-log.js', 'scripts/lib/learning/experience-log.js', 'scripts/lib/learning/read-accuracy.js', 'scripts/lib/learning/read-audit.js', 'scripts/lib/learning/run-experience.js', 'scripts/lib/replay/store.js',
     // The trade feedback: a past trade's STATE read at its entry, a tag on that trade's line in the head's prompt (what the
     // model learns from); never a check, tool or order path (the deciders above reach none of it).
     'scripts/lib/trading/trade-feedback.js']);

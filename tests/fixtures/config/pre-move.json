@@ -1897,6 +1897,14 @@
   "pullbackRead.minLegAtr": {
    "value": 1,
    "from": "new in feat/pullback-read (the briefing's Pullback line): a leg under this many ATR(14) shows no depth (the leg is too small to measure a pullback against); a floor, not a tuned value"
+  },
+  "readAudit.forwardBars": {
+   "value": 20,
+   "from": "new in feat/read-audit (the read audit, an offline report): a pass's forward move is measured over this many base bars after the cycle bar (an hour on 3m bars); the outcome column only, never read by a decision; a definition, not a tuned value"
+  },
+  "readAudit.stopAtr": {
+   "value": 1,
+   "from": "new in feat/read-audit (the read audit, an offline report): a pass's forward move is in R of a standard stop of this many ATR(20) at the cycle bar; the outcome column only, never read by a decision; a definition, not a tuned value"
   }
  }
 }

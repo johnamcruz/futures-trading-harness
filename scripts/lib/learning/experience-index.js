@@ -520,5 +520,5 @@ function loadPinned(home) {
 module.exports = {
   staleIndexes,
   VERSION, MIN_N, MIN_DAYS, LEVEL, KINDS, buildIndex, withRunDelivery, cellStats, cellAt, examplesBefore, indexHash, writeIndex, readIndex, pinIndex, loadPinned, armOf,
-  cellKey, contextKey, decisionDay, knownDay, assertPracticeTrain, exitOf, curatedLog,
+  cellKey, contextKey, decisionDay, knownDay, assertPracticeTrain, exitOf, curatedLog, dayBootstrap,
 };
