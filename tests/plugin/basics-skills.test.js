@@ -387,6 +387,14 @@ test('trend-vs-range: "Declared" names exactly the facts entry-rule.js declaredO
   assert.match(bias(DECLARED), /\+ declared long → long only/);
   assert.match(bias({ ...DECLARED, vwapAtr: -1 }), /declared long: no\)/);
   assert.ok(line.includes('`+ declared <side>`') && line.includes('`declared <side>: no|unknown`'));
+  // With the 15m ranging too the Bias line prints no declared at all: the skill says so, and only with the 15m trending
+  // does it name the declared words.
+  assert.strictEqual(bias(DECLARED, 'range'), 'Bias: no side yet (15m range)');
+  assert.ok(line.includes('With the 4h and 1h ranging and the 15m trending'));
+  assert.ok(line.includes('with the 15m ranging too, no side and no declared'));
+  // The not-yet signs keep the overnight range as a size or quality sign, never part of declared.
+  const notYet = (/- Not yet [^]*?(?= ## Examples)/.exec(t) || [''])[0];
+  assert.ok(notYet.includes('inside the overnight range (back third worst; a size or quality sign, not part of declared)'), notYet);
 });
 
 test('basics skills: the setups add no filter, equal highs are the code\'s, and the size cuts hold', () => {

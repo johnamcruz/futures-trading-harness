@@ -57,6 +57,8 @@
  *                                          candle forming since has taken (prevSweep), only when it has
  *   completedCandlesAt({ bars, base, fine, minutes, at })   the completed candles as of bar at's close, by the
  *                                          briefing's rule ({ src, upto, candles, j } or { unavailable })
+ *   sweepField(m, c, prev)                 the briefing candle's { sweep } (prevSweep's, named; null: stayed inside), or
+ *                                          {} without a previous candle (no field: unknown)
  *   prevSweep(c, prev)                     { side: 'high' | 'low' | 'both', closedBack, closedBeyond } when c traded
  *                                          beyond prev's high or low (closedBack: closed inside prev's range; closedBeyond:
  *                                          'high' | 'low', the side it closed beyond, else null), else null
@@ -683,9 +685,10 @@ function gapRelation(rel, name, side) {
 
 /**
  * A candle's `sweep` of its previous candle: { of, closedBack, closedBeyond } when it traded beyond its high or low;
- * null when it stayed inside, or without a previous candle.
+ * null when it stayed inside; no field at all without a previous candle (unknown, never 'stayed inside').
  */
 function sweepField(m, c, prev) {
+  if (!prev) return {};
   const s = prevSweep(c, prev);
   return { sweep: s ? { of: `previous ${label(m)} ${s.side === 'both' ? 'high and low' : s.side}`, closedBack: s.closedBack, closedBeyond: s.closedBeyond } : null };
 }
@@ -792,6 +795,6 @@ function completedCandlesAt({ bars, base, fine = null, minutes, at = bars.length
 module.exports = {
   TIMEFRAMES, DEF, LABELS, MAX_LEVELS, LEVEL_ORDER, label, completedSeries, boundaryOpen, shape, closeLocation, patternsOf, patternLabel, relation,
   candleSeries, relationSeries, swingTargetSeries, holdingSwingsAt, briefingCandles, briefingTargets, RELATION_TEXT,
-  prevSweep, RANGE_FRAMES, briefingRangeTargets, completedCandlesAt, gapRelation, insideStackOf, insideStacks, factsOf, basisOf, factOf, nextBasisOf, levelReactionsOf, confirmedText, MOVING_LEVEL,
+  prevSweep, sweepField, RANGE_FRAMES, briefingRangeTargets, completedCandlesAt, gapRelation, insideStackOf, insideStacks, factsOf, basisOf, factOf, nextBasisOf, levelReactionsOf, confirmedText, MOVING_LEVEL,
   tradedBeyond, breakReach, RELATION_RULE, relationRuleText, extendCandle, formingCandle,
 };

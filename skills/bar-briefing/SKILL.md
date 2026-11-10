@@ -30,8 +30,9 @@ morning since 09:30 ET from its own bars (their count): the read
 the open, range in ATR(14). A description, never a forecast:
 `day-context`. `RTH volatility` (`m3.today.rthVolatility`) ends the
 Alignment line, beside the regime's word. `Rotation evidence` (RTH, the
-runner's briefing): RTH VWAP crosses, IB day type, setup and entry candle
-inside or doji, a 3m/5m/15m failed break; values restated, not a verdict.
+runner's briefing): RTH VWAP crosses in the last 30 bars (Day so far
+counts since the open), IB day type, setup and entry candle inside or
+doji, a 3m/5m/15m failed break; values restated, not a verdict.
 
 **The `Pullback` line** (the runner's briefing; price against the trend
 rule's prevailing side on the 15m, none with it, nor in the ~30 min

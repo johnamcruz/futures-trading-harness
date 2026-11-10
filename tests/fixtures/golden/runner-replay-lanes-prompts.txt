@@ -1261,11 +1261,13 @@ hypotheses):
 
 - Declared: all four your way: regime `with`, and RTH VWAP, EMA20 and
   day's move each above 0; the overnight range is not part of it.
-  With the 4h and 1h ranging the Bias line prints the code's answer,
-  the gate's: `+ declared <side>` or `declared <side>: no|unknown`.
+  With the 4h and 1h ranging and the 15m trending the Bias line prints
+  the code's answer, the gate's: `+ declared <side>` or
+  `declared <side>: no|unknown`; with the 15m ranging too, no side and
+  no declared.
 - Not yet (false starts): RTH VWAP and EMA20 under 0 (EMA20 under -1
-  worse), regime `against`, inside the overnight range (back third worst):
-  wait for it, in the count; size is the verdict's.
+  worse), regime `against`, inside the overnight range (back third
+  worst; a size or quality sign, not part of declared): wait for it, in the count; size is the verdict's.
   An unfinished
   pullback is no chop sign.
  End with the cycle result as plain text in your final message, never as a tool call.
@@ -2540,11 +2542,13 @@ hypotheses):
 
 - Declared: all four your way: regime `with`, and RTH VWAP, EMA20 and
   day's move each above 0; the overnight range is not part of it.
-  With the 4h and 1h ranging the Bias line prints the code's answer,
-  the gate's: `+ declared <side>` or `declared <side>: no|unknown`.
+  With the 4h and 1h ranging and the 15m trending the Bias line prints
+  the code's answer, the gate's: `+ declared <side>` or
+  `declared <side>: no|unknown`; with the 15m ranging too, no side and
+  no declared.
 - Not yet (false starts): RTH VWAP and EMA20 under 0 (EMA20 under -1
-  worse), regime `against`, inside the overnight range (back third worst):
-  wait for it, in the count; size is the verdict's.
+  worse), regime `against`, inside the overnight range (back third
+  worst; a size or quality sign, not part of declared): wait for it, in the count; size is the verdict's.
   An unfinished
   pullback is no chop sign.
  End with the cycle result as plain text in your final message, never as a tool call.
@@ -3828,11 +3832,13 @@ hypotheses):
 
 - Declared: all four your way: regime `with`, and RTH VWAP, EMA20 and
   day's move each above 0; the overnight range is not part of it.
-  With the 4h and 1h ranging the Bias line prints the code's answer,
-  the gate's: `+ declared <side>` or `declared <side>: no|unknown`.
+  With the 4h and 1h ranging and the 15m trending the Bias line prints
+  the code's answer, the gate's: `+ declared <side>` or
+  `declared <side>: no|unknown`; with the 15m ranging too, no side and
+  no declared.
 - Not yet (false starts): RTH VWAP and EMA20 under 0 (EMA20 under -1
-  worse), regime `against`, inside the overnight range (back third worst):
-  wait for it, in the count; size is the verdict's.
+  worse), regime `against`, inside the overnight range (back third
+  worst; a size or quality sign, not part of declared): wait for it, in the count; size is the verdict's.
   An unfinished
   pullback is no chop sign.
  End with the cycle result as plain text in your final message, never as a tool call.
@@ -5107,11 +5113,13 @@ hypotheses):
 
 - Declared: all four your way: regime `with`, and RTH VWAP, EMA20 and
   day's move each above 0; the overnight range is not part of it.
-  With the 4h and 1h ranging the Bias line prints the code's answer,
-  the gate's: `+ declared <side>` or `declared <side>: no|unknown`.
+  With the 4h and 1h ranging and the 15m trending the Bias line prints
+  the code's answer, the gate's: `+ declared <side>` or
+  `declared <side>: no|unknown`; with the 15m ranging too, no side and
+  no declared.
 - Not yet (false starts): RTH VWAP and EMA20 under 0 (EMA20 under -1
-  worse), regime `against`, inside the overnight range (back third worst):
-  wait for it, in the count; size is the verdict's.
+  worse), regime `against`, inside the overnight range (back third
+  worst; a size or quality sign, not part of declared): wait for it, in the count; size is the verdict's.
   An unfinished
   pullback is no chop sign.
  End with the cycle result as plain text in your final message, never as a tool call.
@@ -6395,11 +6403,13 @@ hypotheses):
 
 - Declared: all four your way: regime `with`, and RTH VWAP, EMA20 and
   day's move each above 0; the overnight range is not part of it.
-  With the 4h and 1h ranging the Bias line prints the code's answer,
-  the gate's: `+ declared <side>` or `declared <side>: no|unknown`.
+  With the 4h and 1h ranging and the 15m trending the Bias line prints
+  the code's answer, the gate's: `+ declared <side>` or
+  `declared <side>: no|unknown`; with the 15m ranging too, no side and
+  no declared.
 - Not yet (false starts): RTH VWAP and EMA20 under 0 (EMA20 under -1
-  worse), regime `against`, inside the overnight range (back third worst):
-  wait for it, in the count; size is the verdict's.
+  worse), regime `against`, inside the overnight range (back third
+  worst; a size or quality sign, not part of declared): wait for it, in the count; size is the verdict's.
   An unfinished
   pullback is no chop sign.
  End with the cycle result as plain text in your final message, never as a tool call.
@@ -7674,11 +7684,13 @@ hypotheses):
 
 - Declared: all four your way: regime `with`, and RTH VWAP, EMA20 and
   day's move each above 0; the overnight range is not part of it.
-  With the 4h and 1h ranging the Bias line prints the code's answer,
-  the gate's: `+ declared <side>` or `declared <side>: no|unknown`.
+  With the 4h and 1h ranging and the 15m trending the Bias line prints
+  the code's answer, the gate's: `+ declared <side>` or
+  `declared <side>: no|unknown`; with the 15m ranging too, no side and
+  no declared.
 - Not yet (false starts): RTH VWAP and EMA20 under 0 (EMA20 under -1
-  worse), regime `against`, inside the overnight range (back third worst):
-  wait for it, in the count; size is the verdict's.
+  worse), regime `against`, inside the overnight range (back third
+  worst; a size or quality sign, not part of declared): wait for it, in the count; size is the verdict's.
   An unfinished
   pullback is no chop sign.
  End with the cycle result as plain text in your final message, never as a tool call.
@@ -8953,11 +8965,13 @@ hypotheses):
 
 - Declared: all four your way: regime `with`, and RTH VWAP, EMA20 and
   day's move each above 0; the overnight range is not part of it.
-  With the 4h and 1h ranging the Bias line prints the code's answer,
-  the gate's: `+ declared <side>` or `declared <side>: no|unknown`.
+  With the 4h and 1h ranging and the 15m trending the Bias line prints
+  the code's answer, the gate's: `+ declared <side>` or
+  `declared <side>: no|unknown`; with the 15m ranging too, no side and
+  no declared.
 - Not yet (false starts): RTH VWAP and EMA20 under 0 (EMA20 under -1
-  worse), regime `against`, inside the overnight range (back third worst):
-  wait for it, in the count; size is the verdict's.
+  worse), regime `against`, inside the overnight range (back third
+  worst; a size or quality sign, not part of declared): wait for it, in the count; size is the verdict's.
   An unfinished
   pullback is no chop sign.
  End with the cycle result as plain text in your final message, never as a tool call.
@@ -10329,11 +10343,13 @@ hypotheses):
 
 - Declared: all four your way: regime `with`, and RTH VWAP, EMA20 and
   day's move each above 0; the overnight range is not part of it.
-  With the 4h and 1h ranging the Bias line prints the code's answer,
-  the gate's: `+ declared <side>` or `declared <side>: no|unknown`.
+  With the 4h and 1h ranging and the 15m trending the Bias line prints
+  the code's answer, the gate's: `+ declared <side>` or
+  `declared <side>: no|unknown`; with the 15m ranging too, no side and
+  no declared.
 - Not yet (false starts): RTH VWAP and EMA20 under 0 (EMA20 under -1
-  worse), regime `against`, inside the overnight range (back third worst):
-  wait for it, in the count; size is the verdict's.
+  worse), regime `against`, inside the overnight range (back third
+  worst; a size or quality sign, not part of declared): wait for it, in the count; size is the verdict's.
   An unfinished
   pullback is no chop sign.
  End with the cycle result as plain text in your final message, never as a tool call.
@@ -11702,11 +11718,13 @@ hypotheses):
 
 - Declared: all four your way: regime `with`, and RTH VWAP, EMA20 and
   day's move each above 0; the overnight range is not part of it.
-  With the 4h and 1h ranging the Bias line prints the code's answer,
-  the gate's: `+ declared <side>` or `declared <side>: no|unknown`.
+  With the 4h and 1h ranging and the 15m trending the Bias line prints
+  the code's answer, the gate's: `+ declared <side>` or
+  `declared <side>: no|unknown`; with the 15m ranging too, no side and
+  no declared.
 - Not yet (false starts): RTH VWAP and EMA20 under 0 (EMA20 under -1
-  worse), regime `against`, inside the overnight range (back third worst):
-  wait for it, in the count; size is the verdict's.
+  worse), regime `against`, inside the overnight range (back third
+  worst; a size or quality sign, not part of declared): wait for it, in the count; size is the verdict's.
   An unfinished
   pullback is no chop sign.
  End with the cycle result as plain text in your final message, never as a tool call.
@@ -13069,11 +13087,13 @@ hypotheses):
 
 - Declared: all four your way: regime `with`, and RTH VWAP, EMA20 and
   day's move each above 0; the overnight range is not part of it.
-  With the 4h and 1h ranging the Bias line prints the code's answer,
-  the gate's: `+ declared <side>` or `declared <side>: no|unknown`.
+  With the 4h and 1h ranging and the 15m trending the Bias line prints
+  the code's answer, the gate's: `+ declared <side>` or
+  `declared <side>: no|unknown`; with the 15m ranging too, no side and
+  no declared.
 - Not yet (false starts): RTH VWAP and EMA20 under 0 (EMA20 under -1
-  worse), regime `against`, inside the overnight range (back third worst):
-  wait for it, in the count; size is the verdict's.
+  worse), regime `against`, inside the overnight range (back third
+  worst; a size or quality sign, not part of declared): wait for it, in the count; size is the verdict's.
   An unfinished
   pullback is no chop sign.
  End with the cycle result as plain text in your final message, never as a tool call.
@@ -14363,11 +14383,13 @@ hypotheses):
 
 - Declared: all four your way: regime `with`, and RTH VWAP, EMA20 and
   day's move each above 0; the overnight range is not part of it.
-  With the 4h and 1h ranging the Bias line prints the code's answer,
-  the gate's: `+ declared <side>` or `declared <side>: no|unknown`.
+  With the 4h and 1h ranging and the 15m trending the Bias line prints
+  the code's answer, the gate's: `+ declared <side>` or
+  `declared <side>: no|unknown`; with the 15m ranging too, no side and
+  no declared.
 - Not yet (false starts): RTH VWAP and EMA20 under 0 (EMA20 under -1
-  worse), regime `against`, inside the overnight range (back third worst):
-  wait for it, in the count; size is the verdict's.
+  worse), regime `against`, inside the overnight range (back third
+  worst; a size or quality sign, not part of declared): wait for it, in the count; size is the verdict's.
   An unfinished
   pullback is no chop sign.
  End with the cycle result as plain text in your final message, never as a tool call.
@@ -15739,11 +15761,13 @@ hypotheses):
 
 - Declared: all four your way: regime `with`, and RTH VWAP, EMA20 and
   day's move each above 0; the overnight range is not part of it.
-  With the 4h and 1h ranging the Bias line prints the code's answer,
-  the gate's: `+ declared <side>` or `declared <side>: no|unknown`.
+  With the 4h and 1h ranging and the 15m trending the Bias line prints
+  the code's answer, the gate's: `+ declared <side>` or
+  `declared <side>: no|unknown`; with the 15m ranging too, no side and
+  no declared.
 - Not yet (false starts): RTH VWAP and EMA20 under 0 (EMA20 under -1
-  worse), regime `against`, inside the overnight range (back third worst):
-  wait for it, in the count; size is the verdict's.
+  worse), regime `against`, inside the overnight range (back third
+  worst; a size or quality sign, not part of declared): wait for it, in the count; size is the verdict's.
   An unfinished
   pullback is no chop sign.
  End with the cycle result as plain text in your final message, never as a tool call.
@@ -17106,11 +17130,13 @@ hypotheses):
 
 - Declared: all four your way: regime `with`, and RTH VWAP, EMA20 and
   day's move each above 0; the overnight range is not part of it.
-  With the 4h and 1h ranging the Bias line prints the code's answer,
-  the gate's: `+ declared <side>` or `declared <side>: no|unknown`.
+  With the 4h and 1h ranging and the 15m trending the Bias line prints
+  the code's answer, the gate's: `+ declared <side>` or
+  `declared <side>: no|unknown`; with the 15m ranging too, no side and
+  no declared.
 - Not yet (false starts): RTH VWAP and EMA20 under 0 (EMA20 under -1
-  worse), regime `against`, inside the overnight range (back third worst):
-  wait for it, in the count; size is the verdict's.
+  worse), regime `against`, inside the overnight range (back third
+  worst; a size or quality sign, not part of declared): wait for it, in the count; size is the verdict's.
   An unfinished
   pullback is no chop sign.
  End with the cycle result as plain text in your final message, never as a tool call.
@@ -18473,11 +18499,13 @@ hypotheses):
 
 - Declared: all four your way: regime `with`, and RTH VWAP, EMA20 and
   day's move each above 0; the overnight range is not part of it.
-  With the 4h and 1h ranging the Bias line prints the code's answer,
-  the gate's: `+ declared <side>` or `declared <side>: no|unknown`.
+  With the 4h and 1h ranging and the 15m trending the Bias line prints
+  the code's answer, the gate's: `+ declared <side>` or
+  `declared <side>: no|unknown`; with the 15m ranging too, no side and
+  no declared.
 - Not yet (false starts): RTH VWAP and EMA20 under 0 (EMA20 under -1
-  worse), regime `against`, inside the overnight range (back third worst):
-  wait for it, in the count; size is the verdict's.
+  worse), regime `against`, inside the overnight range (back third
+  worst; a size or quality sign, not part of declared): wait for it, in the count; size is the verdict's.
   An unfinished
   pullback is no chop sign.
  End with the cycle result as plain text in your final message, never as a tool call.
@@ -19774,11 +19802,13 @@ hypotheses):
 
 - Declared: all four your way: regime `with`, and RTH VWAP, EMA20 and
   day's move each above 0; the overnight range is not part of it.
-  With the 4h and 1h ranging the Bias line prints the code's answer,
-  the gate's: `+ declared <side>` or `declared <side>: no|unknown`.
+  With the 4h and 1h ranging and the 15m trending the Bias line prints
+  the code's answer, the gate's: `+ declared <side>` or
+  `declared <side>: no|unknown`; with the 15m ranging too, no side and
+  no declared.
 - Not yet (false starts): RTH VWAP and EMA20 under 0 (EMA20 under -1
-  worse), regime `against`, inside the overnight range (back third worst):
-  wait for it, in the count; size is the verdict's.
+  worse), regime `against`, inside the overnight range (back third
+  worst; a size or quality sign, not part of declared): wait for it, in the count; size is the verdict's.
   An unfinished
   pullback is no chop sign.
  End with the cycle result as plain text in your final message, never as a tool call.
@@ -21066,11 +21096,13 @@ hypotheses):
 
 - Declared: all four your way: regime `with`, and RTH VWAP, EMA20 and
   day's move each above 0; the overnight range is not part of it.
-  With the 4h and 1h ranging the Bias line prints the code's answer,
-  the gate's: `+ declared <side>` or `declared <side>: no|unknown`.
+  With the 4h and 1h ranging and the 15m trending the Bias line prints
+  the code's answer, the gate's: `+ declared <side>` or
+  `declared <side>: no|unknown`; with the 15m ranging too, no side and
+  no declared.
 - Not yet (false starts): RTH VWAP and EMA20 under 0 (EMA20 under -1
-  worse), regime `against`, inside the overnight range (back third worst):
-  wait for it, in the count; size is the verdict's.
+  worse), regime `against`, inside the overnight range (back third
+  worst; a size or quality sign, not part of declared): wait for it, in the count; size is the verdict's.
   An unfinished
   pullback is no chop sign.
  End with the cycle result as plain text in your final message, never as a tool call.
@@ -22268,11 +22300,13 @@ hypotheses):
 
 - Declared: all four your way: regime `with`, and RTH VWAP, EMA20 and
   day's move each above 0; the overnight range is not part of it.
-  With the 4h and 1h ranging the Bias line prints the code's answer,
-  the gate's: `+ declared <side>` or `declared <side>: no|unknown`.
+  With the 4h and 1h ranging and the 15m trending the Bias line prints
+  the code's answer, the gate's: `+ declared <side>` or
+  `declared <side>: no|unknown`; with the 15m ranging too, no side and
+  no declared.
 - Not yet (false starts): RTH VWAP and EMA20 under 0 (EMA20 under -1
-  worse), regime `against`, inside the overnight range (back third worst):
-  wait for it, in the count; size is the verdict's.
+  worse), regime `against`, inside the overnight range (back third
+  worst; a size or quality sign, not part of declared): wait for it, in the count; size is the verdict's.
   An unfinished
   pullback is no chop sign.
  End with the cycle result as plain text in your final message, never as a tool call.

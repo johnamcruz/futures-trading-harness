@@ -12,6 +12,7 @@ const path = require('path');
 const R = require('../../scripts/lib/trading/rotation-evidence');
 const B = require('../../scripts/lib/trading/briefing');
 const { dayType } = require('../../scripts/lib/trading/day-context');
+const { sweepField } = require('../../scripts/lib/trading/candle-facts');
 const { readBarsArg } = require('../../scripts/lib/backtest/data');
 
 const ROOT = path.resolve(__dirname, '..', '..');
@@ -70,12 +71,19 @@ test('rotation evidence: anything missing, unavailable or off the vocabulary is 
   // A candle with no sweep field at all (an older briefing) is unknown; sweep null (stayed inside) is no.
   assert.strictEqual(R.rotationEvidence({ candles: { '3m': { pattern: 'none' } } }, FRAMES).failedBreak['3m'], null);
   assert.strictEqual(R.rotationEvidence({ candles: { '3m': { pattern: 'none', sweep: null } } }, FRAMES).failedBreak['3m'], 'no');
+  // candle-facts: a candle without a previous one carries no sweep field (unknown); one that stayed inside its previous, null (no).
+  const C = { o: 10, h: 12, l: 8, c: 11 };
+  assert.deepStrictEqual(sweepField(3, C, null), {});
+  assert.deepStrictEqual(sweepField(3, C, { o: 9, h: 13, l: 7, c: 10 }), { sweep: null });
+  assert.strictEqual(R.rotationEvidence({ candles: { '3m': { pattern: 'none', ...sweepField(3, C, null) } } }, FRAMES).failedBreak['3m'], null);
+  assert.strictEqual(R.rotationEvidence({ candles: { '3m': { pattern: 'none', ...sweepField(3, C, { o: 9, h: 13, l: 7, c: 10 }) } } }, FRAMES).failedBreak['3m'], 'no');
+  assert.strictEqual(R.rotationEvidence({ candles: { '3m': { pattern: 'none', ...sweepField(3, C, { o: 9, h: 11.5, l: 7, c: 10 }) } } }, FRAMES).failedBreak['3m'], 'high');
   // An unavailable frame is unknown whatever else it carries.
   const gone = R.rotationEvidence({ candles: { '3m': { unavailable: 'x', pattern: 'inside', sweep: null } } }, FRAMES);
   assert.deepStrictEqual([gone.entryCandle, gone.failedBreak['3m']], [null, null]);
   const line = R.rotationLine(U, FRAMES);
   assert.ok(!/\b0\b|\bno\b|neither/.test(line), line);
-  assert.strictEqual(line, '- Rotation evidence (values, not a verdict): RTH VWAP crosses unknown (the VWAP line\'s count); IB day type unknown; '
+  assert.strictEqual(line, '- Rotation evidence (values, not a verdict): RTH VWAP crosses in the last 30 bars unknown (the VWAP line\'s count); IB day type unknown; '
     + '15m setup candle unknown, 3m entry candle unknown; failed break (swept the previous high or low, closed back inside): 3m unknown, 5m unknown, 15m unknown.');
 });
 
@@ -89,10 +97,12 @@ test('rotation evidence: the day types are day-context\'s, every one', () => {
 
 test('rotation evidence: the line says the values and nothing to do with them', () => {
   const line = R.rotationLine(R.rotationEvidence(M3, FRAMES), FRAMES);
-  assert.strictEqual(line, '- Rotation evidence (values, not a verdict): RTH VWAP crosses 7 (the VWAP line\'s count); IB day type neutral; '
+  assert.strictEqual(line, '- Rotation evidence (values, not a verdict): RTH VWAP crosses in the last 30 bars 7 (the VWAP line\'s count); IB day type neutral; '
     + '15m setup candle neither, 3m entry candle doji; failed break (swept the previous high or low, closed back inside): 3m high, 5m no, 15m high and low.');
   // No verdict, no advice, no threshold.
   assert.doesNotMatch(line, /\b(chop|range day|trend day|skip|pass|take|wait|avoid|should|weak|strong|rotational|likely)\b/i);
+  // No imperative or advice: nothing tells the reader what to do with it.
+  for (const l of [line, R.rotationLine(R.rotationEvidence({}, FRAMES), FRAMES)]) assert.doesNotMatch(l, /\b(must|consider|prefer|favou?r|fade|enter|exit|buy|sell|stand aside|stay out|do not|don't|never|reduce|size|trade|treat|read it|weigh|use)\b/i, l);
   assert.strictEqual(R.rotationLine(null, FRAMES), null);
 });
 
@@ -105,8 +115,17 @@ test('in the briefing: one summary line after Trend declared?, in RTH on the run
   assert.strictEqual(lines[0], R.rotationLine(R.rotationEvidence(m3, FRAMES), FRAMES));
   // The values are the briefing's own: the VWAP line's RTH count, the day type, the 15m inside, the 3m broke and held.
   assert.ok(text.includes(`the RTH VWAP ${m3.vwap.rthCrossesLast30}, `));
-  assert.match(lines[0], new RegExp(`RTH VWAP crosses ${m3.vwap.rthCrossesLast30} .*IB day type ${m3.today.dayType};`));
+  assert.match(lines[0], new RegExp(`RTH VWAP crosses in the last 30 bars ${m3.vwap.rthCrossesLast30} .*IB day type ${m3.today.dayType};`));
   assert.match(lines[0], /15m setup candle inside, 3m entry candle neither; .*: 3m no, 5m unknown, 15m no\.$/);
+  // Two counts, two labels: the Day so far line's since the open, this line's in the last 30 bars (never the same words).
+  const label = l => (/RTH VWAP crosses( in the last \d+ bars)? (\d+|unknown)/.exec(l) || [])[1] || '';
+  const soFar = text.split('\n').find(l => l.startsWith('- Day so far ('));
+  assert.ok(soFar && /RTH VWAP crosses \d/.test(soFar));
+  assert.notStrictEqual(label(lines[0]), label(soFar));
+  // bar-briefing names the window, and the Day so far line's, in its sentence on the line.
+  const skill = require('fs').readFileSync(path.join(ROOT, 'skills', 'bar-briefing', 'SKILL.md'), 'utf8').replace(/\s+/g, ' ');
+  assert.ok(skill.includes('RTH VWAP crosses in the last 30 bars (Day so far counts since the open)'));
+  assert.ok(lines[0].includes(`RTH VWAP crosses in the last ${require('../../scripts/lib/trading/regime').REGIME_PARAMS.crossBars} bars `));
   const at = s => text.indexOf(s);
   assert.ok(at('- Trend declared?') < at('- Rotation evidence') && at('- Rotation evidence') < at('Detail by timeframe:'));
   assert.ok(!/Rotation evidence|rotation/i.test(text.slice(at('Detail by timeframe:'))), 'no detail field');

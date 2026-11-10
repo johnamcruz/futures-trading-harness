@@ -2,7 +2,7 @@
 
 /**
  * The briefing's Rotation evidence line: four facts the briefing already computes, restated side by side as VALUES (no
- * verdict, no threshold of its own, nothing decides on it): the RTH VWAP crosses (the VWAP line's count,
+ * verdict, no threshold of its own, nothing decides on it): the RTH VWAP crosses in the last crossBars bars (the VWAP line's count, never the Day so far line's since the open:
  * `m3.vwap.rthCrossesLast30`), the IB day type (`m3.today.dayType`, day-context.js), whether the setup and entry
  * candles are inside or doji (`m3.candles`, candle-facts.js patterns: every pattern that holds, so an inside hidden
  * behind a higher label still counts), and per 3m, 5m and 15m whether the last completed candle swept its previous high
@@ -18,6 +18,9 @@
  */
 
 const DAY_TYPES = Object.freeze(['trend up', 'trend down', 'normal variation up', 'normal variation down', 'neutral', 'inside the initial balance']);
+// The window of the VWAP line's RTH count (market-snapshot.js rthCrossesLast30: the regime's crossBars); the Day so far
+// line counts since the open, so each count says its own window.
+const CROSS_BARS = require('./regime').REGIME_PARAMS.crossBars;
 const BREAK_FRAMES = Object.freeze(['3m', '5m', '15m']);
 const SIDES = new Set(['high', 'low', 'high and low']);
 
@@ -33,7 +36,10 @@ function shapeOf(c) {
   return inside && doji ? 'inside and doji' : inside ? 'inside' : doji ? 'doji' : 'neither';
 }
 
-/** A candle's failed break: the side it swept and closed back inside from, 'no', or null (no candle or no sweep field). */
+/**
+ * A candle's failed break: the side it swept and closed back inside from, 'no' (sweep null: it stayed inside its previous
+ * candle), or null (no candle, or no sweep field: candle-facts gives none without a previous candle).
+ */
 function failedOf(c) {
   if (!c) return null;
   if (c.sweep === null) return 'no';
@@ -61,7 +67,7 @@ const say = v => (v === null || v === undefined ? 'unknown' : String(v));
 function rotationLine(e, { setup, entry } = {}) {
   if (!isObj(e) || !isObj(e.failedBreak)) return null;
   const breaks = BREAK_FRAMES.map(tf => `${tf} ${say(e.failedBreak[tf])}`).join(', ');
-  return `- Rotation evidence (values, not a verdict): RTH VWAP crosses ${say(e.vwapCrosses)} (the VWAP line's count); IB day type ${say(e.dayType)}; `
+  return `- Rotation evidence (values, not a verdict): RTH VWAP crosses in the last ${CROSS_BARS} bars ${say(e.vwapCrosses)} (the VWAP line's count); IB day type ${say(e.dayType)}; `
     + `${setup} setup candle ${say(e.setupCandle)}, ${entry} entry candle ${say(e.entryCandle)}; failed break (swept the previous high or low, closed back inside): ${breaks}.`;
 }
 

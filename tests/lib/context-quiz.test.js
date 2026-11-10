@@ -543,6 +543,13 @@ test('grading: q50-q63, the market-context questions: right and wrong answers pe
     ['q61', 'ANSWER: A reversal developing; the 1h CHoCH against is decisive: pass on the long.', true], ['q61', 'ANSWER: Pullback; take the long.', false],
     ['q55', 'ANSWER: CHoCH: the trend has reversed.', false], ['q56', 'ANSWER: A trend up but not yet declared.', true], ['q56', 'ANSWER: Uptrend, declared.', false], ['q56', 'ANSWER: No: all four must be above 0.', true],
     ['q56', 'ANSWER: Declared long.', false], ['q56', 'ANSWER: It has declared long.', false],
+    // A right answer that names "declared" again after the no passes; an affirmative at the start still fails.
+    ['q56', 'ANSWER: Not declared: the overnight breakout doesn\'t make it declared', true], ['q56', 'ANSWER: No. Uptrend declared needs all four', true],
+    ['q56', 'ANSWER: Not yet: the trend has not declared itself long.', true], ['q56', 'ANSWER: A declared trend up.', false],
+    ['q56', 'ANSWER: The trend is declared long.', false], ['q56', 'ANSWER: Trend up, declared; not a range.', false],
+    // An affirmative start with a "not yet" later: the start decides (each forbidden pattern catches one).
+    ['q56', 'ANSWER: The trend is declared, not yet extended.', false], ['q56', 'ANSWER: Uptrend declared, not yet at a level.', false],
+    ['q56', 'ANSWER: Yes, not yet extended though.', false],
     ['q57', 'ANSWER: Still an uptrend on the 15m, with the regime in transition.', false], ['q57', 'ANSWER: Transitional: the CHoCH disagrees with the trend read.', true],
     ['q61', 'ANSWER: Reversal; the long is still valid against the 1h.', false], ['q63', 'ANSWER: It is reversing; the weakening signs confirm it: exit.', false],
     ['q50', 'ANSWER: Not a rejection: a sweep.', false], ['q60', 'ANSWER: The start of a reversal, not a pullback.', false],

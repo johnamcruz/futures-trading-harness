@@ -111,8 +111,9 @@ test('CORE: the composed bar\'s reads the gate requires (SITUATIONAL taught in t
   // Then 79100 (feat/state-read, the owner's goal of measuring the model's reads): trade-session step 3's STATE line, the
   // head trader's closed-form market-state read, recorded and scored against the briefing's labels, never a step (+336).
   // Then 79278 (feat/chop-evidence, owner rule: raise a pin when it improves context): bar-briefing's sentence on the
-  // Rotation evidence line, the briefing's facts restated as values, not a verdict (+178; the pin +178).
-  assert.ok(Buffer.byteLength(prompt) <= 79278, `the head prompt is ${Buffer.byteLength(prompt)} bytes`);
+  // Rotation evidence line, the briefing's facts restated as values, not a verdict (+178; the pin +178). Then 79333 (its
+  // review): the sentence names the line's window, 30 bars, against the Day so far line's since the open (+55).
+  assert.ok(Buffer.byteLength(prompt) <= 79333, `the head prompt is ${Buffer.byteLength(prompt)} bytes`);
   // Only the head trader's prompt grows: no other role's prompt embeds trade-lifecycle (the risk manager's embeds
   // confluence-counting and invalidation as before; its prompt is unchanged, pinned in trade-session-split.test.js).
   for (const [name, a] of Object.entries(index.agent)) if (name !== H.HEAD_AGENT && a.prompt) assert.ok(!a.prompt.includes('<skill name="trade-lifecycle">'), name);

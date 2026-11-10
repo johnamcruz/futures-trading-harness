@@ -1010,8 +1010,8 @@
       ],
       "forbidden": [
         "^\\W*yes\\b",
-        "^\\W*(it )?(has )?declared\\b",
-        "\\b(trend|uptrend|it|has)\\W+declared\\b"
+        "^\\W*(it |the trend )?(has |is )?(already )?declared\\b",
+        "^\\W*(an? )?(declared|(up|down)?trend(ing)?( up| down)?,? declared)\\b"
       ]
     },
     {

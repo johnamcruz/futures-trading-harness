@@ -522,9 +522,14 @@ test('trade-session split: no head-trader path reads more than the base\'s every
 // the two analysts that embed it; bar-briefing's Rotation evidence sentence, +178 in every role that embeds it: full
 // mode the market-structure and trend-momentum analysts +333 (96615, 56627), the risk manager and the volume-liquidity
 // analyst +178 (94469, 49890); index mode +178 each (44557, 80357, 41751, 34522); every other role unchanged.
+// Then its review: trend-vs-range's Bias sentence exact (the 15m trending; with it ranging too, no declared) and the
+// overnight range a size or quality sign, not part of declared (+122, the two full-mode analysts); bar-briefing's
+// sentence names the window, 30 bars, against the Day so far line's since the open (+55 in every role that embeds it):
+// full mode the market-structure and trend-momentum analysts +177 (96792, 56804), the risk manager and the
+// volume-liquidity analyst +55 (94524, 49945); index mode +55 each (44612, 80412, 41806, 34577).
 const ROLE_PROMPTS = {
-  full: { 'market-structure-analyst': 96615, 'news-calendar-analyst': 10182, 'risk-manager': 94469, 'strategy-researcher': 25728, 'trade-executor': 30670, 'trade-reviewer': 9454, 'trend-momentum-analyst': 56627, 'volume-liquidity-analyst': 49890 },
-  index: { 'market-structure-analyst': 44557, 'news-calendar-analyst': 10182, 'risk-manager': 80357, 'strategy-researcher': 25728, 'trade-executor': 30659, 'trade-reviewer': 9454, 'trend-momentum-analyst': 41751, 'volume-liquidity-analyst': 34522 },
+  full: { 'market-structure-analyst': 96792, 'news-calendar-analyst': 10182, 'risk-manager': 94524, 'strategy-researcher': 25728, 'trade-executor': 30670, 'trade-reviewer': 9454, 'trend-momentum-analyst': 56804, 'volume-liquidity-analyst': 49945 },
+  index: { 'market-structure-analyst': 44612, 'news-calendar-analyst': 10182, 'risk-manager': 80412, 'strategy-researcher': 25728, 'trade-executor': 30659, 'trade-reviewer': 9454, 'trend-momentum-analyst': 41806, 'volume-liquidity-analyst': 34577 },
 };
 
 test('trade-session split: no role prompt grows, in full or index mode, and no role lists a piece', () => {
