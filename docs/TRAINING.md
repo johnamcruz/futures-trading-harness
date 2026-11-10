@@ -1232,6 +1232,46 @@ date with the loop's seeded split, so an edit tuned on one half is
 confirmed on dates it never saw: the probe round's trend set
 (Propose–Probe–Compose above, `probe.trend`: a batch of the pool's legs each round).
 
+### The leg ledger
+
+The round report shows the trades the model took, never what its refusals
+cost. `node scripts/leg-ledger.js --home <training home> [--iteration <n>]
+[--runs <runs folder>] [--minutes <tf>] [--before YYYY-MM-DD] [--json]
+[--out <file>]` (`scripts/lib/train/leg-ledger.js`) joins, for each trend
+leg of a round's champion trend runs (each half's listed legs on the units
+the run finished, as the screens pair them), three things:
+
+- The leg's facts, taken from its capture: day, side, `availableR` on the
+  capture's own basis, and `estimated` when it uses the run's stop.
+- The model's reads over the leg's window. Each cycle has a class from its
+  recorded code (location, entry-reaction, head-pass, no-plan,
+  position-open, opening-print, executor-blocked, unfilled, ...). A no-plan
+  or head-pass cycle also has the reason the model stated for the leg's own
+  side, parsed from its CYCLE RESULT text: trend-rule, htf-choch-against,
+  size-floor, room-rr, late-entry-chase, entry-reaction, or a rule. Each
+  cycle also carries the scorecard's own verdict on that decision.
+- The outcome: a caught leg's entry lag, peak, banked and giveback R, or a
+  missed leg's R and its blocker.
+
+The aggregates are grouped two ways: by the blocker's class (the capture's
+codes, so the totals match the trend capture's) and by the stated reason.
+Each class shows:
+
+- the missed legs it blocked;
+- the legs a refusal of that class came before, which ran anyway;
+- the scorecard's expected take and categories on those refusals, plus a
+  skip's counterfactual R where the decision rows carry one.
+
+Every figure shows its n. An unknown R counts as unknown, never as 0.
+Leg R is an outcome and not tradeable: it is the leg's whole move from its
+first entry bar. The scorecard's figures are a different measure.
+
+A read's code and stated reason are what the cycle recorded at its bar.
+The leg, its R, its ride, the scorecard's category and `unfilled` (set
+from later fills) are outcomes. `--before` (`priorOnly`) builds the
+aggregates from the days strictly before a day only. Information only:
+nothing that decides reads it, and no prompt shows it.
+
 ### Setup capture
 
 `node scripts/setup-capture.js` asks whether an arm's runs catch the
