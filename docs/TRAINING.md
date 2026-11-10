@@ -1249,10 +1249,26 @@ the run finished, as the screens pair them), three things:
   or head-pass cycle also has the reason the model stated for the leg's own
   side, parsed from its CYCLE RESULT text: trend-rule, htf-choch-against,
   size-floor, room-rr, late-entry-chase, entry-reaction, or a rule. The
-  parse is a heuristic. It takes the first match in that order, and on a
-  no-plan cycle it uses only a clause that names the leg's side, never one
-  that says there was no setup that way. Each cycle also carries the
-  scorecard's own verdict on that decision.
+  parse is a heuristic, and the first match in that order decides. When
+  it is unsure it leaves the reason unclassified, because a wrong label
+  would teach the model something false.
+  - Side-gated: the trend rule, size-floor and the soft reasons (room-rr,
+    late-entry-chase, entry-reaction). Each counts only after the leg's side
+    is named in its clause, with the other side not between. On a head-pass,
+    whose text is about the leg's way's own OK record, size-floor and the
+    soft reasons need no side named.
+  - htf-choch-against: on the 1h or 4h only. It counts only when the CHoCH's
+    direction is named and runs the other way, or its target is named and is
+    the leg's side. With neither named, it is left out.
+  - Rules: not side-gated.
+  - Negation-guarded, every one, rules included. A reason is left out when
+    "no", "not", "never", "without", "needs" or "requires", "lacks",
+    "absent" or "no longer" comes in the three words before its subject or
+    between the subject and the reason. It is also left out when "yet",
+    "passed", "over", "lifted", "ended", "cleared", "missing" or "gone"
+    follows it. Examples: "no long setup ... plain" is no plan; "opening
+    print passed" is no rule.
+  - Each cycle also carries the scorecard's own verdict on that decision.
 - The outcome: a caught leg's entry lag, peak, banked and giveback R, or a
   missed leg's R and its blocker.
 
@@ -1268,7 +1284,26 @@ Each class shows:
   An `excessive abstention` under an expected no-trade is the scorecard's
   "a composable setup passed without compose_check".
 
-A leg found in two probe docs of its day is kept once and listed.
+A leg found in two probe docs of its day is kept once and listed. Every
+listed leg that never reaches the ledger is listed with why, and the CLI
+prints the count ("N listed leg(s) excluded"). The reasons are:
+
+- no probe doc for its day;
+- its probe doc is unreadable or has no capture (the doc is listed too);
+- not in its day's capture;
+- its window did not finish;
+- its day is not among the half's days.
+
+The banked R of the caught legs shows how many rides were still open
+(`open`). Their R is unknown and counted as unknown.
+
+Documented limits, to be decided before anything shows the ledger to the
+model:
+
+- The scorecard join is per bar, not per side. A cycle's verdict may
+  concern the other side's setup on that bar.
+- `priorOnly` does not filter by half. Its days-before view pools the
+  probe and confirm halves.
 
 Every figure shows its n. An unknown R counts as unknown, never as 0.
 Leg R is an outcome and not tradeable: it is the leg's whole move from its

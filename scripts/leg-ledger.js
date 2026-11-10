@@ -41,7 +41,7 @@ function main(argv) {
   if (minutes !== null && !(minutes > 0)) throw new Error(`--minutes ${o.minutes}: a timeframe in minutes`);
   const round = LL.readRound(path.resolve(o.home), { iteration, runs: o.runs ? path.resolve(o.runs) : null, minutes });
   const ledger = LL.buildLedger(round.runs);
-  const doc = o.before ? LL.priorOnly(ledger, o.before) : { ...ledger, missingDays: round.missingDays, unfinished: round.unfinished, duplicates: round.duplicates };
+  const doc = o.before ? LL.priorOnly(ledger, o.before) : { ...ledger, missingDays: round.missingDays, unfinished: round.unfinished, duplicates: round.duplicates, excluded: round.excluded, badDocs: round.badDocs };
   if (o.out) {
     fs.mkdirSync(path.dirname(path.resolve(o.out)), { recursive: true });
     fs.writeFileSync(o.out, `${JSON.stringify(doc, null, 1)}\n`);
@@ -52,6 +52,8 @@ function main(argv) {
     : [...LL.ledgerLines(ledger),
       `listed days with no champion probe doc: ${round.missingDays.map(d => `${d.half} ${d.day}`).join(', ') || 'none'}`,
       `listed legs on a unit the run did not finish (left out, as the screens leave them): ${round.unfinished.map(d => `${d.half} ${d.id}`).join(', ') || 'none'}`,
+      `${round.excluded.length} listed leg(s) excluded: ${round.excluded.map(d => `${d.half} ${d.id} (${d.why})`).join(', ') || 'none'}`,
+      `probe docs unreadable or without a capture: ${round.badDocs.map(d => `${d.half} ${d.file}`).join(', ') || 'none'}`,
       `listed legs in more than one probe doc (kept once, from the first by name): ${round.duplicates.map(d => `${d.half} ${d.id} (${d.file})`).join(', ') || 'none'}`];
   process.stdout.write(`${lines.join('\n')}\n`);
   return 0;

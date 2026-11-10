@@ -131,6 +131,52 @@ test('leg ledger: the stated reason is read for the leg\'s own side only; nothin
   assert.strictEqual(s(null, 'long'), null);
 });
 
+test('leg ledger: no size fits is the leg\'s side\'s only (named first), or anywhere on its own OK record', () => {
+  const s = LL.statedClass;
+  assert.strictEqual(s('no-trade - no long setup closed; the short "15m broke vwap down": no size fits at its 60-point stop', 'long'), null);
+  assert.strictEqual(s('no-trade - the short at 15430: no size fits', 'long'), null);
+  assert.strictEqual(s('no-trade - the long at 15430: no size fits at this stop', 'long'), 'size-floor');
+  assert.strictEqual(s('no-trade - compose_check OK, but min_contracts is 3 at this stop: no size fits', 'long', { own: true }), 'size-floor');
+});
+
+test('leg ledger: a negated, needed or lapsed reason is no reason (precision over recall: left unclassified)', () => {
+  const s = LL.statedClass;
+  // A CHoCH against: negated, needed, lapsed, or with neither its way nor its target named.
+  for (const [t, side] of [
+    ['no-trade - without a 1h CHoCH down against the long', 'long'],
+    ['no-trade - not yet a 1h CHoCH down against the long', 'long'],
+    ['no-trade - needs a 1h CHoCH down against the shorts', 'long'],
+    ['no-trade - needs a 1h CHoCH down against the shorts', 'short'],
+    ['no-trade - 4h CHoCH down is no longer against the long', 'long'],
+    ['no-trade - the 1h CHoCH against the short is fresh', 'long'],
+    ['no-trade - the 1h CHoCH against is fresh', 'long'],
+    ['no-trade - the 1h CHoCH up is against, a reversal', 'long'],
+    ['no-trade - the 1h CHoCH down against the long is gone', 'long'],
+    // The trend rule, a chase, a reaction, said not to hold.
+    ['no-trade - the long is not against the trend', 'long'],
+    ['no-trade - long setup is not stale yet', 'long'],
+    ['no-trade - long reaction was not plain', 'long'],
+    // A rule said to be over or absent.
+    ['no-trade - opening print passed', 'long'],
+    ['no-trade - no news blackout', 'long'],
+  ]) assert.strictEqual(s(t, side), null, `${side}: ${t}`);
+  // A negated rule leaves the clause after it to be read.
+  assert.strictEqual(s('no-trade - no news blackout; long is against the trend rule', 'long'), 'trend-rule');
+  // The plain statements still label (the real wordings kept).
+  assert.strictEqual(s('no-trade - the 1h CHoCH down is against the long', 'long'), 'htf-choch-against');
+  assert.strictEqual(s('no-trade - the 1h CHoCH against the long is fresh', 'long'), 'htf-choch-against');
+  assert.strictEqual(s('no-trade - opening print (entries refused until 09:35 ET)', 'long'), 'opening-print');
+  assert.strictEqual(s('no-trade - the account\'s loss-streak stop (2 losing trades in a row this session, no new entries until the next session)', 'short'), 'loss-streak');
+  assert.strictEqual(s('no-trade - long setup is stale (its entry bar passed, a chase)', 'long'), 'late-entry-chase');
+});
+
+test('leg ledger: banked R beside how many caught rides were still open (their R unknown, never 0)', () => {
+  const openRide = leg(A, 'long', '17:00', { captured: true, ride: { entryLag: 0.1, peakR: null, givebackR: null, r: null, open: true } });
+  const t = LL.buildLedger([{ capture: { legs: [caught, openRide] }, decisions: [], minutes: 3, half: 'probe' }]).totals;
+  assert.deepStrictEqual(t.rCaught, { n: 1, sum: 1.2, unknown: 1, open: 1 });
+  assert.match(LL.ledgerLines(LL.buildLedger([{ capture: { legs: [caught, openRide] }, decisions: [], minutes: 3 }])).join('\n'), /1 open/);
+});
+
 test('leg ledger: a row joins the leg\'s facts, each cycle\'s recorded read with the scorecard\'s verdict, and the outcome', () => {
   const led = LL.buildLedger([runA, runB]);
   assert.strictEqual(led.rows.length, 5);
@@ -177,7 +223,7 @@ test('leg ledger: aggregates by class carry n beside each figure; unknown R is c
   // R available: 3 + 4 + 1 + 5 over 4 known legs; one unknown, one estimated.
   assert.deepStrictEqual(t.rAvailable, { n: 4, sum: 13, mean: 3.25, median: 3.5, unknown: 1, estimated: 1 });
   assert.deepStrictEqual(t.rMissed, { n: 3, sum: 9, mean: 3, median: 3, unknown: 1, estimated: 1 });
-  assert.deepStrictEqual(t.rCaught, { n: 1, sum: 1.2, unknown: 0 });
+  assert.deepStrictEqual(t.rCaught, { n: 1, sum: 1.2, unknown: 0, open: 0 });
   const by = Object.fromEntries(led.byClass.map(x => [x.class, x]));
   // Blocked: the missed legs whose blocker is of the class; no-plan's leg has no R: n 0, unknown 1, mean null (not 0).
   assert.deepStrictEqual(by['no-plan'].blocked, { legs: 1, r: { n: 0, sum: 0, mean: null, median: null, unknown: 1, estimated: 0 } });
@@ -250,12 +296,25 @@ test('leg ledger: the report lines carry n beside each class and label the leg R
 });
 
 // The round reader: a training home's champion probe docs, its scorecard decisions, the round's halves.
+// Listed legs that never reach the ledger: one absent from its day's capture, one on a day the half doesn't list, one
+// on a listed day with no doc, one whose doc is unreadable, one whose doc has no capture.
+const GHOST = `${A}|short|${A}T19:00:00.000Z`;
+const OFF_DAY = '2026-03-12|long|2026-03-12T14:30:00.000Z';
+const NO_DOC = '2026-03-05|long|2026-03-05T14:30:00.000Z';
+const BROKEN = '2026-03-06|long|2026-03-06T14:30:00.000Z';
+const NO_CAPTURE = '2026-03-09|short|2026-03-09T14:30:00.000Z';
 function home() {
   const h = tmpDir();
   const runs = tmpDir();
   fs.mkdirSync(path.join(h, 'probes', 'trend'), { recursive: true });
   fs.mkdirSync(path.join(h, 'iter-1'), { recursive: true });
-  const half = { probe: { days: [A], legs: [missedLoc.id, caught.id, behind.id] }, confirm: { days: [B, '2026-03-05'], legs: [unknownR.id, headPass.id] } };
+  const half = {
+    probe: { days: [A], legs: [missedLoc.id, caught.id, behind.id, GHOST, OFF_DAY] },
+    confirm: { days: [B, '2026-03-05', '2026-03-06', '2026-03-09'], legs: [unknownR.id, headPass.id, NO_DOC, BROKEN, NO_CAPTURE] },
+  };
+  // Day 03-06's doc does not parse; day 03-09's has no capture.
+  fs.writeFileSync(path.join(h, 'probes', 'trend', 'pc-2026-03-06-dddd4444.json'), '{ not json');
+  fs.writeFileSync(path.join(h, 'probes', 'trend', 'pc-2026-03-09-eeee5555.json'), JSON.stringify({ legs: [], sessions: [] }));
   fs.writeFileSync(path.join(h, 'iter-1', 'probe-report.json'), JSON.stringify({ trend: half }));
   const doc = (day, legs, units) => ({
     legs: legs.map((l, i) => [l.id, { day, captured: l.captured, availableR: l.availableR, unit: units[i] }]),
@@ -291,6 +350,18 @@ test('leg ledger: readRound picks each half\'s listed legs on finished units, th
   assert.deepStrictEqual(r.unfinished, [{ half: 'probe', id: behind.id }]);
   assert.deepStrictEqual(r.duplicates, [{ half: 'probe', id: missedLoc.id, file: `pc-${A}-cccc3333.json` }]);
   assert.strictEqual(led.rows.filter(x => x.id === missedLoc.id).length, 1);
+  // Every listed leg that never reaches the ledger is listed with why; every doc that can't be read too.
+  const byId = Object.fromEntries(r.excluded.map(x => [x.id, x]));
+  assert.deepStrictEqual(Object.keys(byId).sort(), [behind.id, GHOST, OFF_DAY, NO_DOC, BROKEN, NO_CAPTURE].sort());
+  assert.deepStrictEqual(Object.fromEntries(Object.entries(byId).map(([id, x]) => [id, [x.half, x.why]])), {
+    [behind.id]: ['probe', 'its window did not finish'],
+    [GHOST]: ['probe', 'not in its day\'s capture'],
+    [OFF_DAY]: ['probe', 'its day is not among the half\'s days'],
+    [NO_DOC]: ['confirm', 'no probe doc for its day'],
+    [BROKEN]: ['confirm', 'its probe doc is unreadable or has no capture'],
+    [NO_CAPTURE]: ['confirm', 'its probe doc is unreadable or has no capture'],
+  });
+  assert.deepStrictEqual(r.badDocs.map(x => [x.half, x.day, x.file]).sort(), [['confirm', '2026-03-06', 'pc-2026-03-06-dddd4444.json'], ['confirm', '2026-03-09', 'pc-2026-03-09-eeee5555.json']]);
   // Day B's run has no timeframe: its decisions unjoined; --minutes gives it.
   assert.strictEqual(r.runs.find(x => x.half === 'confirm').minutes, null);
   assert.strictEqual(LL.readRound(h, { iteration: 1, minutes: 3 }).runs.every(x => x.minutes === 3), true);

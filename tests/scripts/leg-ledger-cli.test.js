@@ -28,7 +28,7 @@ function home() {
     };
   };
   const legs = { '2026-03-02': mk('2026-03-02', 2, 'location:false'), '2026-03-03': mk('2026-03-03', 5, 'no-plan') };
-  fs.writeFileSync(path.join(h, 'iter-1', 'probe-report.json'), JSON.stringify({ trend: { probe: { days: Object.keys(legs), legs: Object.values(legs).map(l => l.id) } } }));
+  fs.writeFileSync(path.join(h, 'iter-1', 'probe-report.json'), JSON.stringify({ trend: { probe: { days: Object.keys(legs), legs: [...Object.values(legs).map(l => l.id), '2026-03-02|short|2026-03-02T19:00:00.000Z'] } } }));
   for (const [day, l] of Object.entries(legs)) {
     fs.writeFileSync(path.join(h, 'probes', 'trend', `pc-${day}-abcd1234.json`), JSON.stringify({ legs: [[l.id, { day, unit: 'w' }]], sessions: [{ unit: 'w', day, complete: true }], capture: { runId: `r-${day}`, legs: [l] } }));
   }
@@ -44,6 +44,8 @@ test('leg-ledger CLI: prints the round by class with n, the halves, the legs; re
   assert.match(r.stdout, /location \| 1 \(n 1 sum 2R/);
   assert.match(r.stdout, /probe: 2 leg\(s\)/);
   assert.match(r.stdout, /listed days with no champion probe doc: none/);
+  // A listed leg its day's capture never held: counted and named, never silently dropped.
+  assert.match(r.stdout, /1 listed leg\(s\) excluded: probe 2026-03-02\|short\|2026-03-02T19:00:00.000Z \(not in its day's capture\)/);
   assert.deepStrictEqual(fs.readdirSync(h).sort(), before);
 });
 

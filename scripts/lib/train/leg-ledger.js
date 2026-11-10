@@ -121,40 +121,58 @@ function codeClass({ code, by, step } = {}) {
 /**
  * The reason a CYCLE RESULT text states for the leg's side, or null. Clause by clause (split at ';'); the trend rule only
  * when the leg's side is named before the refusal with the other side not between (the other side's setups refused by
- * the trend rule say nothing about this leg); a CHoCH only on the 1h or 4h, the other way, not negated. The first match
- * in that order (a rule, the trend rule, a CHoCH, no size, then the soft reasons: room, a chase, the reaction) decides: a
- * heuristic read of free text, so the report keeps the code's class beside it. own: the text is about the leg's way's
- * own OK record (a head-pass), so a soft reason needs no side named.
+ * the trend rule say nothing about this leg); a CHoCH only on the 1h or 4h, its way (when named) the other way, its
+ * target (when named) the leg's side, one of the two named. The first match in that order (a rule, the trend rule, a
+ * CHoCH, no size, then the soft reasons: room, a chase, the reaction) decides: a heuristic read of free text, so the
+ * report keeps the code's class beside it. Side-gated: the trend rule, no size and the soft reasons (the leg's side named
+ * first in the clause, the other not between); own (the text is about the leg's way's own OK record: a head-pass) lifts
+ * that gate for no size and the soft reasons. Negation-guarded, every one: NEG in the three words before the subject (or
+ * the reason) or between them, LAPSED just after the reason; when unsure, null (a wrong label would teach a falsehood).
  */
+// A reason said not to hold: negated, needed, lapsed ("no-trade", the result's own word, is no negation). Read in the
+// few words before the subject and between the subject and the reason; LAPSED in the words just after the reason.
+const NEG = /\b(?:no(?!-)|not|nor|never|without|need|needs|needed|require|requires|required|lack|lacks|lacking|absent|isn't|aren't|wasn't|weren't|doesn't|didn't|hasn't|haven't)\b/i;
+const LAPSED = /^\s*(?:[\w-]+\s+)?(?:[\w-]+\s+)?(?:yet|absent|passed|over|lifted|ended|cleared|missing|gone)\b/i;
+const lastWords = s => (/(?:\S+\s+){0,3}\S*\s*$/.exec(s) || [''])[0];
+// Whether a match of `(subject)(key)` (indices: the d flag) states its reason: nothing in the guard words negates it.
+const asserted = (c, m) => !NEG.test(lastWords(c.slice(0, m.indices[1][0])) + c.slice(m.indices[1][0], m.indices[2][0])) && !LAPSED.test(c.slice(m.indices[2][1]));
+// Whether any clause states the key (a regex source), after the subject (a regex source) when one is given.
+const states = (clauses, key, subject = '') => {
+  const re = new RegExp(`(${subject})(${key})`, 'gid');
+  return clauses.some(c => [...c.matchAll(re)].some(m => asserted(c, m)));
+};
+
 function statedClass(text, side, { own = false } = {}) {
   const t = String(text || '');
   if (!t.trim() || (side !== 'long' && side !== 'short')) return null;
   const other = side === 'long' ? 'short' : 'long';
   const against = side === 'long' ? 'down' : 'up';
   const clauses = t.split(';');
-  const any = re => clauses.some(c => re.test(c));
-  // A rule the model said blocked entries (the capture's rule codes miss some wordings: "loss-streak stop").
-  const rule = STATED_RULES.find(([, re]) => any(re));
+  // A rule the model said blocked entries (the capture's rule codes miss some wordings: "loss-streak stop"), not negated
+  // or lapsed ("no news blackout", "opening print passed").
+  const rule = STATED_RULES.find(([, re]) => states(clauses, re.source));
   if (rule) return rule[0];
   // "<side> ... against|refused by|counter to the <a few plain words> trend": the other side never between, and only
   // words (no punctuation) between the refusal and "trend" ("CHoCH up are against, and the trend is not declared" is not).
   const notOther = `(?:(?!\\b${other}s?\\b)[^;])*?`;
-  const mine = new RegExp(`\\b${side}s?\\b${notOther}\\b(?:against|refused by|counter to)\\s+(?:[\\w/-]+\\s+)*?trend\\b`, 'i');
-  const ruleOn = new RegExp(`\\btrend\\s+rule\\s+(?:refuses|blocks|forbids)\\b${notOther}\\b${side}s?\\b`, 'i');
-  if (any(mine) || any(ruleOn)) return 'trend-rule';
-  // A 1h or 4h CHoCH said to be against (its way, when named, the other way), not negated ("no 1h CHoCH down").
-  const choch = /\b(?:1h|4h)\s+choch(?:\s+(up|down))?\b[^;.]*?\bagainst\b/gi;
-  if (clauses.some(c => [...c.matchAll(choch)].some(m => (!m[1] || m[1].toLowerCase() === against) && !/\bno\s+$/i.test(c.slice(0, m.index))))) return 'htf-choch-against';
-  if (any(/\bno size fits\b|\bmin_contracts\b|\bsize floor\b/i)) return 'size-floor';
-  // The soft reasons: on a head-pass (own: the text is about the leg's way's own OK record) anywhere; else only in a
-  // clause that names the leg's side before the reason, the other side not between, and that doesn't say there was no
-  // setup that way ("no short setup on the 15m, and ... no rejection" is no plan, not a reaction read).
-  // "no <side> setup", up to two words before the side ("no valid short setup", "no 15m long setup").
-  const noSetup = new RegExp(`\\bno\\s+(?:[\\w-]+\\s+)?(?:[\\w-]+\\s+)?${side}\\s+(?:setup|candidate|rejection|signal)`, 'i');
-  const soft = re => (own ? any(new RegExp(re.source, 'i')) : clauses.some(c => !noSetup.test(c) && new RegExp(`\\b${side}s?\\b${notOther}(?:${re.source})`, 'i').test(c)));
-  if (soft(/\bR:R\s+[\d.]+\s+(?:under|below)\b|\bno level at \d+R\b|\bstandard plan refused\b/)) return 'room-rr';
-  if (soft(/\bstale\b|\bchas(?:e|ed|ing)\b|\bmissed the plan's entry\b/)) return 'late-entry-chase';
-  if (soft(/\bconflicting\b|\bplain\b|\bno (?:confirmed )?rejection\b|\bnot a confirmed rejection\b|\bINVALID\b/)) return 'entry-reaction';
+  const subject = `\\b${side}s?\\b${notOther}`;
+  if (states(clauses, '\\b(?:against|refused by|counter to)\\s+(?:[\\w/-]+\\s+)*?trend\\b', subject)
+    || states(clauses, `\\btrend\\s+rule\\s+(?:refuses|blocks|forbids)\\b${notOther}\\b${side}s?\\b`)) return 'trend-rule';
+  // A 1h or 4h CHoCH said to be against: its way, when named, the other way; its target, when named, the leg's side; one
+  // of the two named (else unsure: left out); not negated, needed or lapsed ("without", "needs", "no longer").
+  const choch = /()\b(?:1h|4h)\s+choch(?:\s+(up|down))?\b([^;.]*?)(\bagainst\b)(?:\s+(?:the|this|a|its?)\b)?(?:\s+(long|short)s?\b)?/gid;
+  const chochAgainst = (c, m) => (m[2] || m[5]) && (!m[2] || m[2].toLowerCase() === against) && (!m[5] || m[5].toLowerCase() === side)
+    && !NEG.test(lastWords(c.slice(0, m.index)) + m[3]) && !LAPSED.test(c.slice(m.index + m[0].length));
+  if (clauses.some(c => [...c.matchAll(choch)].some(m => chochAgainst(c, m)))) return 'htf-choch-against';
+  // The leg-side reasons (no size, then the soft ones: room, a chase, the reaction): on a head-pass (own: the text is
+  // about the leg's way's own OK record) anywhere; else only after the leg's side named in its clause, the other side not
+  // between. Each one negation-guarded like the others: "no short setup on the 15m, and ... no rejection" says there was no
+  // setup that way (the "no" before the side), so no plan, not a reaction read.
+  const leg = key => states(clauses, key, own ? '' : subject);
+  if (leg('\\bno size fits\\b|\\bmin_contracts\\b|\\bsize floor\\b')) return 'size-floor';
+  if (leg('\\bR:R\\s+[\\d.]+\\s+(?:under|below)\\b|\\bno level at \\d+R\\b|\\bstandard plan refused\\b')) return 'room-rr';
+  if (leg('\\bstale\\b|\\bchas(?:e|ed|ing)\\b|\\bmissed the plan\'s entry\\b')) return 'late-entry-chase';
+  if (leg('\\bconflicting\\b|\\bplain\\b|\\bno (?:confirmed )?rejection\\b|\\bnot a confirmed rejection\\b|\\bINVALID\\b')) return 'entry-reaction';
   return null;
 }
 
@@ -256,7 +274,8 @@ function aggregate(rows) {
     totals: {
       legs: list.length, caught: caught.length, missed: list.length - caught.length,
       rAvailable: rStats(list), rMissed: rStats(list.filter(r => !r.captured)),
-      rCaught: { n: banked.length, sum: r2(banked.reduce((a, b) => a + b, 0)), unknown: caught.length - banked.length },
+      // open: caught rides still open at the run's end (no exit: their R unknown, counted in unknown, never 0).
+      rCaught: { n: banked.length, sum: r2(banked.reduce((a, b) => a + b, 0)), unknown: caught.length - banked.length, open: caught.filter(r => r.outcome.open).length },
       scorecard: { joined: reads.filter(x => x.scorecard).length, unjoined: reads.filter(x => !x.scorecard).length },
     },
     byClass: classesOf(list, 'class'),
@@ -302,18 +321,30 @@ function readRound(home, { iteration = 1, runs = null, minutes = null, prefix = 
   try { names = fs.readdirSync(dir).sort(); } catch (_err) { /* none */ }
   const re = new RegExp(`^${prefix}-(\\d{4}-\\d{2}-\\d{2})-([0-9a-f]+)\\.json$`);
   const docs = names.map(n => re.exec(n)).filter(Boolean).map(m => ({ day: m[1], hash: m[2], file: path.join(dir, m[0]) }));
-  const out = { runs: [], missingDays: [], unfinished: [], duplicates: [] };
+  const out = { runs: [], missingDays: [], unfinished: [], duplicates: [], excluded: [], badDocs: [] };
   const seen = new Set();
+  const NO_DOC = 'no probe doc for its day';
+  const BAD_DOC = 'its probe doc is unreadable or has no capture';
   for (const half of halves) {
     const h = report.trend[half];
     if (!isObj(h)) continue;
     const listed = new Set(Array.isArray(h.legs) ? h.legs : []);
-    for (const day of Array.isArray(h.days) ? h.days : []) {
+    const days = Array.isArray(h.days) ? h.days : [];
+    // Why each listed leg was left out (the first reason found stands); the ones kept have none.
+    const why = new Map();
+    const kept = new Set();
+    const onDay = day => [...listed].filter(id => id.startsWith(`${day}|`));
+    const leave = (ids, reason) => ids.forEach(id => { if (!why.has(id)) why.set(id, reason); });
+    for (const day of days) {
       const found = docs.filter(d => d.day === day);
-      if (!found.length) { out.missingDays.push({ half, day }); continue; }
+      if (!found.length) { out.missingDays.push({ half, day }); leave(onDay(day), NO_DOC); continue; }
       for (const f of found) {
         const doc = readJson(f.file);
-        if (!isObj(doc) || !isObj(doc.capture)) continue;
+        if (!isObj(doc) || !isObj(doc.capture)) {
+          out.badDocs.push({ half, day, file: path.basename(f.file), why: BAD_DOC });
+          leave(onDay(day), BAD_DOC);
+          continue;
+        }
         const unitOf = new Map((Array.isArray(doc.legs) ? doc.legs : []).filter(e => Array.isArray(e) && isObj(e[1])).map(([id, x]) => [id, x.unit !== undefined ? x.unit : x.day]));
         const done = new Set((Array.isArray(doc.sessions) ? doc.sessions : []).filter(s => isObj(s) && s.complete).map(s => (s.unit !== undefined ? s.unit : s.day)));
         const include = [];
@@ -321,7 +352,7 @@ function readRound(home, { iteration = 1, runs = null, minutes = null, prefix = 
           if (!listed.has(l.id)) continue;
           if (seen.has(l.id)) { out.duplicates.push({ half, id: l.id, file: path.basename(f.file) }); continue; }
           seen.add(l.id);
-          if (done.has(unitOf.get(l.id))) include.push(l.id); else out.unfinished.push({ half, id: l.id });
+          if (done.has(unitOf.get(l.id))) { include.push(l.id); kept.add(l.id); } else { out.unfinished.push({ half, id: l.id }); why.set(l.id, 'its window did not finish'); }
         }
         const runId = doc.capture.runId;
         const cfg = runs && runId ? readJson(path.join(runs, runId, 'replay', runId, 'autotrader.json')) : null;
@@ -329,6 +360,12 @@ function readRound(home, { iteration = 1, runs = null, minutes = null, prefix = 
         const decisions = readJson(path.join(home, `${prefix}-t${day.replace(/-/g, '')}.${f.hash}.-decisions.json`));
         out.runs.push({ capture: doc.capture, decisions: Array.isArray(decisions) ? decisions : [], minutes: tf, half, include });
       }
+    }
+    // Every listed leg the ledger doesn't hold, with why (never silently dropped).
+    for (const id of listed) {
+      if (kept.has(id)) continue;
+      const day = String(id).split('|')[0];
+      out.excluded.push({ half, id, why: why.get(id) || (days.includes(day) ? 'not in its day\'s capture' : 'its day is not among the half\'s days') });
     }
   }
   return out;
@@ -338,7 +375,7 @@ const fmtR = s => `n ${s.n} sum ${s.sum}R mean ${s.mean ?? '-'} median ${s.media
 
 function aggLines(a, label) {
   const t = a.totals;
-  const lines = [`${label}: ${t.legs} leg(s), ${t.caught} caught, ${t.missed} missed; R available ${fmtR(t.rAvailable)}; missed ${fmtR(t.rMissed)}; caught banked n ${t.rCaught.n} sum ${t.rCaught.sum}R${t.rCaught.unknown ? ` (+${t.rCaught.unknown} unknown)` : ''} (outcome)`];
+  const lines = [`${label}: ${t.legs} leg(s), ${t.caught} caught, ${t.missed} missed; R available ${fmtR(t.rAvailable)}; missed ${fmtR(t.rMissed)}; caught banked n ${t.rCaught.n} sum ${t.rCaught.sum}R${t.rCaught.unknown ? ` (+${t.rCaught.unknown} unknown)` : ''}, ${t.rCaught.open} open (outcome)`];
   const table = (list, what) => {
     lines.push(`  by ${what}: class | blocked legs (missed R) | legs refused then ran (caught/missed, cycles; their R) | scorecard on those refusals`);
     for (const x of list) {
