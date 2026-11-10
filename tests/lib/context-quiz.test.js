@@ -580,11 +580,11 @@ test('summary: correct on all K, answered both ways, the totals, the bar; compar
   for (const x of QUIZ.questions) for (let k = 1; k <= 5; k += 1) rows.push({ id: x.id, k, pass: true });
   for (const x of QUIZ.partB) for (let k = 1; k <= 5; k += 1) rows.push({ id: x.id, k, pass: true });
   const all = Q.summarize(QUIZ, rows, 5);
-  // 59 since q70 (a lesson is no phase-1 stand-down): 59 x 5 runs, one missed = 294.
-  assert.deepStrictEqual([all.partA.allCorrect, all.partA.bothWays, all.partB.allCorrect, all.meetsBar], [59, 0, 8, true]);
+  // 71 since q71-q82 (chop detection: the four classes of what the briefing showed): 71 x 5 runs, one missed = 354.
+  assert.deepStrictEqual([all.partA.allCorrect, all.partA.bothWays, all.partB.allCorrect, all.meetsBar], [71, 0, 8, true]);
   const one = rows.map(r => (r.id === 'q6' && r.k === 2 ? { ...r, pass: false } : r));
   const s = Q.summarize(QUIZ, one, 5);
-  assert.deepStrictEqual([s.partA.allCorrect, s.partA.bothWays, s.partA.total, s.meetsBar], [58, 1, 294, false]);
+  assert.deepStrictEqual([s.partA.allCorrect, s.partA.bothWays, s.partA.total, s.meetsBar], [70, 1, 354, false]);
   // Too few runs is never correct on all K.
   assert.strictEqual(Q.summarize(QUIZ, rows.filter(r => r.k <= 3), 5).partA.allCorrect, 0);
   const d = Q.compare(all, s).find(x => x.id === 'q6');
@@ -703,5 +703,163 @@ test('grading: every pattern of q70 does work (its removal lets a wrong answer t
     assert.strictEqual(pass('q70', `ANSWER: ${answer}`), false, `q70 fails: ${answer}`);
     const without = { ...q('q70'), required: q('q70').required.filter((_, j) => j !== i) };
     assert.strictEqual(Q.gradeAnswer(QUIZ, without, `ANSWER: ${answer}`).pass, true, `q70 required[${i}] matters: ${answer}`);
+  }
+});
+
+// q71-q82: chop DETECTION, the owner's four classes of what the briefing showed at an entry: A no chop or trend sign
+// yet, B chop evidence outweighs, C trend evidence only (the guard: a chop fix must not make a trend read chop), D
+// both shown (conflicting); and two that ask which one fact is chop (or trend) evidence. Each scenario's lines are the
+// code's writers on synthetic values (tests/plugin/context-quiz.test.js checks they still are).
+const CHOP = { B: ['q71', 'q72'], C: ['q73', 'q74', 'q75'], D: ['q76', 'q77', 'q78'], A: ['q79', 'q80'], which: ['q81', 'q82'] };
+
+test('grading: q71-q82, chop detection: right answers pass, the other classes fail (a trend read called chop, a chop read called trend, a conflict called one-sided, a read where there is none)', () => {
+  const cases = {
+    q71: [
+      ['Chop evidence: rotating so far.', true], ['Chop evidence — rotating so far; balance inside the IB, 15m range.', true],
+      ['Chop evidence: rotating so far, not trending.', true], ['**Chop evidence**: rotational so far, many RTH VWAP crosses agree.', true],
+      ['Chop: rotating so far; no trend evidence.', true],
+      ['Trend evidence: trending up so far.', false], ['Conflicting: rotating so far but net up.', false], ['No read yet.', false],
+      ['Mixed so far.', false], ['Not chop: rotating is noise.', false], ['Rotating so far.', false], ['Chop evidence.', false],
+      ['Chop evidence; trending up so far.', false],
+    ],
+    q72: [
+      ['Chop evidence: balance (inside the IB, the middle is a read against).', true], ['Chop evidence: a balance day.', true],
+      ['Chop evidence: balance, not a trend day.', true],
+      ['Trend evidence: a normal variation day.', false], ['Conflicting: balance.', false], ['No read yet: balance.', false],
+      ['Chop evidence: a neutral day.', false], ['Balance.', false], ['Not chop: balance edges are levels.', false],
+      ['Chop evidence: balance, or a normal variation day.', false],
+    ],
+    q73: [
+      ['Trend evidence: trending up so far.', true], ['Trend evidence — directional up, one-way so far; declared long.', true],
+      ['Trend evidence: trending up so far; no chop.', true], ['Trend evidence: trending up so far, not rotating.', true],
+      ['Chop evidence: rotating so far.', false], ['Conflicting: trending up so far.', false], ['Mixed so far.', false],
+      ['Trend evidence, trending up so far, but chop on the 3m.', false], ['Trend evidence: trending up so far, rotating lately.', false],
+      ['Not trend evidence: trending up so far.', false], ['Trend evidence.', false], ['Trending up so far.', false],
+    ],
+    q74: [
+      ['Trend evidence: a trend day down, traded with it (never faded).', true], ['Trend evidence: traded with it, never counter.', true],
+      ['Trend evidence; a trend day, so never fade it.', true], ['Trend evidence: with the trend, don\'t fade it.', true],
+      ['Trend evidence: faded.', false], ['Chop evidence: fade the extension.', false], ['Trend evidence: buy the dip.', false],
+      ['Conflicting: trend day traded with it.', false], ['Trend evidence, traded with it, chop later.', false],
+      ['Trend evidence; with it, but fade the extension.', false], ['Trend evidence: a trend day down.', false], ['Traded with it.', false],
+    ],
+    q75: [
+      ['No: an unfinished pullback is no chop sign; trend evidence.', true], ['No, not a chop sign: trend evidence.', true],
+      ['No — a pause in the trend: trend evidence.', true], ['Not a chop sign; trend evidence (declared long).', true],
+      ['No: a pullback, not a reversal; trend evidence.', true],
+      ['Yes: chop evidence.', false], ['Chop evidence: the pullback.', false], ['Conflicting: the pullback against the trend.', false],
+      ['No, but a chop sign: trend evidence fading.', false], ['Mixed: no chop sign, trend evidence weak.', false],
+      ['No chop sign: trend evidence, conflicting with the pullback.', false], ['No chop sign; trend evidence, but a reversal is developing.', false],
+      ['Trend evidence; the pullback counts as chop.', false], ['No: an unfinished pullback is no chop sign.', false],
+    ],
+    q76: [
+      ['Conflicting: mixed so far (neither yet), declared long, a neutral day.', true], ['Conflicting: mixed so far.', true],
+      ['Conflicting — both: mixed so far and two-sided, but declared long.', true], ['Conflicting: neither yet; trend and chop evidence both shown.', true],
+      ['Trend evidence: declared long.', false], ['Chop evidence: mixed so far, neutral day.', false], ['Trending up so far.', false],
+      ['Trend evidence and chop: conflicting, mixed so far.', false], ['Conflicting, mixed so far, but trend evidence outweighs.', false],
+      ['Conflicting: mixed, and trending up so far.', false], ['Mixed so far: chop evidence.', false], ['Conflicting: declared long but a neutral day.', false],
+    ],
+    q77: [
+      ['Conflicting: directional up so far is cumulative; the recent bars read range.', true], ['Conflicting: both.', true],
+      ['Conflicting — trending up so far, but regime range and not declared long.', true],
+      ['Trend evidence: directional up so far.', false], ['Chop evidence: regime range.', false], ['Trending up so far.', false],
+      ['Conflicting, but chop evidence outweighs.', false], ['Conflicting; trend evidence wins.', false], ['Directional up.', false],
+      ['Range: the recent bars.', false],
+    ],
+    q78: [
+      ['Conflicting: rotating so far, declared long now; no forecast.', true],
+      ['Conflicting: no, rotating mornings trended later about as often as not.', true], ['Conflicting — both shown.', true],
+      ['Chop evidence: rotating so far.', false], ['Trend evidence: declared long.', false], ['Rotating: it will rotate.', false],
+      ['Conflicting; it will rotate the rest of the morning.', false], ['Conflicting, but chop evidence dominates.', false],
+      ['Conflicting: it stays rotational.', false], ['Rotational so far.', false],
+    ],
+    q79: [
+      ['No read yet: too early (a read from 10 bars).', true], ['No read yet; no chop or trend evidence.', true],
+      ['No read yet: neither chop evidence nor trend evidence.', true], ['Too early: no read.', true],
+      ['Trend evidence: 0 crosses.', false], ['Chop evidence.', false], ['Conflicting.', false], ['Rotating so far.', false],
+      ['No read yet; the 0 crosses are trend evidence.', false], ['Too early, but trending up so far.', false],
+      ['Trend: no read yet on the day.', false], ['Nothing yet.', false],
+    ],
+    q80: [
+      ['No read yet: unknown is neutral, neither.', true], ['No read yet; unknown counts as neutral, no chop or trend evidence.', true],
+      ['Neutral: no read yet.', true], ['Neither: all unknown.', true],
+      ['Chop evidence: the unknowns.', false], ['Trend evidence.', false], ['Conflicting.', false], ['Unknown.', false],
+      ['No read yet; unknown counts against.', false], ['No read yet, but chop evidence.', false], ['Mixed: neutral.', false],
+    ],
+    q81: [
+      ['F4', true], ['F4.', true], ['F4 (Day so far rotational).', true], ['F4, not F3: an unfinished pullback is no chop sign.', true],
+      ['F4; F3 is only a pullback.', true], ['F4: rotational (back and forth so far)', true],
+      ['F3', false], ['F3 and F4', false], ['F1', false], ['F2, F4', false], ['None.', false], ['F4 and F3.', false],
+    ],
+    q82: [
+      ['F4', true], ['F4 (declared long: all four above 0).', true], ['F4, not F1 or F3.', true], ['F4; F2 is balance.', true],
+      ['F1', false], ['F2', false], ['F3', false], ['F1 and F4', false], ['F3, F4', false], ['None: all chop.', false],
+    ],
+  };
+  assert.deepStrictEqual(Object.keys(cases).sort(), Object.values(CHOP).flat().sort(), 'cases for each chop question');
+  for (const [id, list] of Object.entries(cases)) {
+    assert.ok(list.some(([, w]) => w) && list.some(([, w]) => !w), `${id}: right and wrong`);
+    for (const [a, want] of list) assert.strictEqual(pass(id, `ANSWER: ${a}`), want, `${id} ${want ? 'right' : 'wrong'}: ${a}`);
+  }
+});
+
+test('grading: every pattern of q71-q82 does work (its removal lets a wrong answer through)', () => {
+  // Per question, per pattern, a wrong answer only that pattern fails: [id, 'required' | 'forbidden', index, answer].
+  const work = [
+    ['q71', 'required', 0, 'Rotating so far: conflicting.'], ['q71', 'required', 1, 'Chop evidence: a range day.'],
+    ['q71', 'forbidden', 0, 'Trend evidence with chop: rotating so far.'], ['q71', 'forbidden', 1, 'Not chop evidence, though rotating so far.'],
+    ['q71', 'forbidden', 2, 'Chop evidence; rotating so far, trending up so far by net.'],
+    ['q72', 'required', 0, 'Balance: trend evidence later.'], ['q72', 'required', 1, 'Chop evidence: a range.'],
+    ['q72', 'forbidden', 0, 'Conflicting: chop, balance.'], ['q72', 'forbidden', 1, 'Not chop: balance.'],
+    ['q72', 'forbidden', 2, 'Chop evidence: balance, or a normal variation day.'],
+    ['q73', 'required', 0, 'Trending up so far.'], ['q73', 'required', 1, 'Trend evidence.'],
+    ['q73', 'forbidden', 0, 'Conflicting: trend evidence, trending up so far.'], ['q73', 'forbidden', 1, 'Trend evidence, trending up so far, but chop on the 3m.'],
+    ['q73', 'forbidden', 2, 'Trend evidence: trending up so far, rotating lately.'], ['q73', 'forbidden', 3, 'Not trend evidence: trending up so far.'],
+    ['q74', 'required', 0, 'Traded with it.'], ['q74', 'required', 1, 'Trend evidence: a trend day down.'],
+    ['q74', 'forbidden', 0, 'Conflicting: trend day traded with it.'], ['q74', 'forbidden', 1, 'Trend evidence, traded with it, chop later.'],
+    ['q74', 'forbidden', 2, 'Trend evidence; with it, but fade the extension.'], ['q74', 'forbidden', 3, 'Trend evidence: traded with it; buy the dip.'],
+    ['q75', 'required', 0, 'Trend evidence; the pullback counts as chop.'], ['q75', 'required', 1, 'No: an unfinished pullback is no chop sign.'],
+    ['q75', 'forbidden', 0, 'Mixed: no chop sign, trend evidence weak.'], ['q75', 'forbidden', 1, 'No, but a chop sign: trend evidence fading.'],
+    ['q75', 'forbidden', 2, 'No chop sign: trend evidence, conflicting with the pullback.'], ['q75', 'forbidden', 3, 'No chop sign; trend evidence, but a reversal is developing.'],
+    ['q76', 'required', 0, 'Mixed so far: chop evidence.'], ['q76', 'required', 1, 'Conflicting: declared long but a neutral day.'],
+    ['q76', 'forbidden', 0, 'Trend evidence and chop: conflicting, mixed so far.'], ['q76', 'forbidden', 1, 'Conflicting, mixed so far, but trend evidence outweighs.'],
+    ['q76', 'forbidden', 2, 'Conflicting: mixed, and trending up so far.'],
+    ['q77', 'required', 0, 'Mixed: the recent bars read range.'],
+    ['q77', 'forbidden', 0, 'Trend evidence and chop evidence both.'], ['q77', 'forbidden', 1, 'Conflicting, but chop evidence outweighs.'],
+    ['q78', 'required', 0, 'Mixed: rotating so far, declared now.'],
+    ['q78', 'forbidden', 0, 'Chop evidence and trend evidence both.'], ['q78', 'forbidden', 1, 'Conflicting, but chop evidence dominates.'],
+    ['q78', 'forbidden', 2, 'Conflicting; it will rotate the rest of the morning.'],
+    ['q79', 'required', 0, 'Nothing yet.'],
+    ['q79', 'forbidden', 0, 'Trend: no read yet on the day.'], ['q79', 'forbidden', 1, 'No read yet; the 0 crosses are trend evidence.'],
+    ['q79', 'forbidden', 2, 'Too early, but trending up so far.'],
+    ['q80', 'required', 0, 'Unknown.'],
+    ['q80', 'forbidden', 0, 'Mixed: neutral.'], ['q80', 'forbidden', 1, 'No read yet, but chop evidence.'], ['q80', 'forbidden', 2, 'No read yet; unknown counts against.'],
+    ['q81', 'required', 0, 'None.'], ['q81', 'forbidden', 0, 'F3 and F4'],
+    ['q82', 'required', 0, 'None: all chop.'], ['q82', 'forbidden', 0, 'F1 and F4'],
+  ];
+  for (const id of Object.values(CHOP).flat()) {
+    for (const kind of ['required', 'forbidden']) {
+      assert.deepStrictEqual(work.filter(w => w[0] === id && w[1] === kind).map(w => w[2]), q(id)[kind].map((_, i) => i), `${id}: a case for each ${kind} pattern`);
+    }
+  }
+  for (const [id, kind, i, answer] of work) {
+    assert.strictEqual(pass(id, `ANSWER: ${answer}`), false, `${id} fails: ${answer}`);
+    const without = { ...q(id), [kind]: q(id)[kind].filter((_, j) => j !== i) };
+    assert.strictEqual(Q.gradeAnswer(QUIZ, without, `ANSWER: ${answer}`).pass, true, `${id} ${kind}[${i}] matters: ${answer}`);
+  }
+});
+
+test('grading: q71-q82\'s patterns stay fast on long hostile lines (no catastrophic backtracking)', () => {
+  const cap = QUIZ.gate.maxGradedLineChars;
+  const lines = ['a', ' ', 'no ', 'not chop ', 'F1 ', 'chop evidence ', 'trending up so far ', 'x;', '(', 'nonono', 'F'].map(s => s.repeat(Math.ceil(cap / s.length)).slice(0, cap));
+  for (const id of Object.values(CHOP).flat()) {
+    for (const src of [...q(id).required, ...q(id).forbidden]) {
+      for (const line of lines) {
+        const t = process.hrtime.bigint();
+        Q.gradeAnswer(QUIZ, { ...q(id), required: [src], forbidden: [src] }, `ANSWER: ${line}`);
+        const ms = Number(process.hrtime.bigint() - t) / 1e6;
+        assert.ok(ms < 250, `${id} ${src} on ${JSON.stringify(line.slice(0, 12))}...: ${ms.toFixed(1)} ms`);
+      }
+    }
   }
 });

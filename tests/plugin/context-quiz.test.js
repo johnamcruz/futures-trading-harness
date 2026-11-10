@@ -95,7 +95,8 @@ test('context quiz: every layer asked, ids unique, the bar the whole quiz at K 5
   // live and is out of the bar, noted for the paired test. 58 since q50-q63 less q53 (a 3m swing is stop structure, not a level: measured 6/10, out of the bar; market context: levels and reactions, structure breaks, trend vs range, pullback vs reversal; each anchored in the skill that states it). The pass bar rises with them.
   // 59 since q70 (a lesson is no phase-1 stand-down: a replay vetoed 42 times on one). q56 rewritten in place
   // (feat/chop-evidence: declared is all four above 0, never the overnight range; not yet measured live): still 59.
-  assert.strictEqual(QUIZ.questions.length, 59);
+  // 71 since q71-q82 (chop detection: what the briefing showed, in the owner's four classes; not yet measured live).
+  assert.strictEqual(QUIZ.questions.length, 71);
   assert.strictEqual(QUIZ.partB.length, 8);
 });
 
@@ -108,6 +109,55 @@ test('context quiz: q70 (a lesson read as a phase-1 stand-down) is asked against
   const cut = Object.fromEntries(Object.entries(prompts).map(([k, v]) => [k, flat(v).replace(/Never on a lesson, a review's notes or earlier reasoning: a lesson is advice, a read in the count \(`confluence-counting`\), never the reason to pass\./g, '')]));
   assert.deepStrictEqual(Q.anchorsMissing(QUIZ, prompts).filter(x => x === 'q70'), []);
   assert.deepStrictEqual(Q.anchorsMissing(QUIZ, cut).filter(x => x === 'q70'), ['q70']);
+});
+
+test('context quiz: q71-q82 (chop detection) are asked against the prompt holding the skill sentence each anchors to, on briefing lines the code writes', () => {
+  const prompts = Q.buildPrompts(ROOT, QUIZ);
+  const flat = t => t.replace(/\s+/g, ' ');
+  const cut = re => Object.fromEntries(Object.entries(prompts).map(([k, v]) => [k, flat(v).replace(re, '')]));
+  // [id, prompt, lookup, the sentence it anchors to, deleted from every prompt]: day-context, bar-briefing's neighbour
+  // confluence-counting (embedded in the head prompt), trend-vs-range (looked up).
+  const want = [
+    ['q71', 'head', undefined, /say it in your read \("trending down so far", "rotating so far", "mixed so far"\)/g],
+    ['q72', 'head', undefined, /an open inside the prior value area that stays inside the IB is balance/g],
+    ['q73', 'head', undefined, /`directional up\|down`: 0\.75\+: one-way so far\./g],
+    ['q74', 'head', undefined, /is traded with it \(never faded: never counter\)/g],
+    ['q75', 'lookup', ['trend-vs-range'], /An unfinished pullback is no chop sign\./g],
+    ['q76', 'lookup', ['trend-vs-range'], /`mixed`: between: neither yet\./g],
+    ['q77', 'lookup', ['trend-vs-range'], /Cumulative, no recency: 30 trending minutes then two hours of range still read `directional`/g],
+    ['q78', 'lookup', ['trend-vs-range'], /rotating mornings trended later about as often as not/g],
+    ['q79', 'head', undefined, /`too early \(a read from 10 bars\)`: no read\./g],
+    ['q80', 'head', undefined, /mixed, none or `unknown` → neutral/g],
+    ['q81', 'lookup', ['trend-vs-range'], /`rotational`: under 0\.34: back and forth so far/g],
+    ['q82', 'lookup', ['trend-vs-range'], /all four your way: regime `with`, and RTH VWAP, EMA20 and day's move each above 0/g],
+  ];
+  assert.deepStrictEqual(Q.anchorsMissing(QUIZ, prompts).filter(x => want.some(w => w[0] === x)), []);
+  for (const [id, prompt, lookup, re] of want) {
+    const q = QUIZ.questions.find(x => x.id === id);
+    assert.deepStrictEqual([q.prompt, q.lookup], [prompt, lookup], id);
+    assert.deepStrictEqual(Q.anchorsMissing(QUIZ, cut(re)).filter(x => x === id), [id], `${id}: its sentence deleted, its anchor goes missing`);
+  }
+  // The scenario lines are the code's writers on synthetic values: a changed line format fails here (rewrite the question).
+  const fr = { setup: '15m', entry: '3m' };
+  const { rotationLine } = require('../../scripts/lib/trading/rotation-evidence');
+  const { daySoFarLine } = require('../../scripts/lib/trading/day-so-far');
+  const { declaredLine } = require('../../scripts/lib/trading/trend-declared');
+  const rot = (vwapCrosses, dayType) => rotationLine({ vwapCrosses, dayType, setupCandle: 'neither', entryCandle: 'neither', failedBreak: { '3m': 'no', '5m': 'unknown', '15m': 'no' } }, fr);
+  const day = (bars, read, direction, efficiency, score, vwapCrosses, rangeAtr) => daySoFarLine({ status: 'read', bars, read, direction, efficiency, score, vwapCrosses, rangeAtr }, { dayType: 'x' });
+  const sd = (v, e, o, m, g) => ({ vwapAtr: v, ema20Atr: e, overnight: o, dayMoveAtr: m, regime: g });
+  const text = id => QUIZ.questions.find(x => x.id === id).text;
+  for (const [id, line] of [
+    ['q71', day(42, 'rotational', 'up', 0.03, 0.19, 11, 4.1)], ['q71', rot(7, 'inside the initial balance')], ['q72', rot(5, 'inside the initial balance')],
+    ['q73', day(40, 'directional', 'up', 0.3, 1.9, 1, 8.6)], ['q73', rot(0, 'trend up')], ['q74', rot(0, 'trend down')],
+    ['q76', day(34, 'mixed', 'up', 0.09, 0.52, 5, 5.2)], ['q76', rot(2, 'neutral')], ['q77', rot(6, 'trend up')], ['q78', day(45, 'rotational', 'up', 0.04, 0.27, 9, 4.6)],
+    ['q79', daySoFarLine({ status: 'too early', bars: 6, readFrom: 10, vwapCrosses: 0 })], ['q79', rot(0, null)],
+    ['q80', daySoFarLine({ status: 'unknown', reason: 'no 09:30 ET bar in the data' })],
+    ['q80', rotationLine({ vwapCrosses: null, dayType: null, setupCandle: null, entryCandle: null, failedBreak: { '3m': null, '5m': null, '15m': null } }, fr)],
+    ['q76', declaredLine({ long: sd(0.8, 0.5, 'middle third', 1.4, 'with'), short: sd(-0.8, -0.5, 'middle third', -1.4, 'against') })],
+    ['q77', declaredLine({ long: sd(-0.3, -0.5, 'broke out its way', 2.1, 'range'), short: sd(0.3, 0.5, 'broke out against', -2.1, 'range') })],
+  ]) assert.ok(text(id).includes(line), `${id}: ${line}`);
+  // Each scenario says it is synthetic; none holds a machine path.
+  for (const [id] of want) assert.match(text(id), /^Briefing lines \(synthetic, \d\d:\d\d ET\):\n/, id);
 });
 
 test('context quiz: q45 and q46 are out of the bar (q46: the standing line prints the computed trigger, PR C3; q45: 7/10 live)', () => {
