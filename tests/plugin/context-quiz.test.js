@@ -97,8 +97,9 @@ test('context quiz: every layer asked, ids unique, the bar the whole quiz at K 5
   // 59 since q70 (a lesson is no phase-1 stand-down: a replay vetoed 42 times on one). q56 rewritten in place
   // (feat/chop-evidence: declared is all four above 0, never the overnight range; not yet measured live): still 59.
   // 68 since q71-q82 less q76-q78 (chop detection: what the briefing showed, in the owner's classes A, B, C and the
-  // which-fact questions; pending, out of the bar until measured). q76-q78 (class D, conflicting) were dropped in review:
-  // each rested on weighing, not on a skill sentence naming the conflict; q81 and q82 (one fact among both kinds) cover D.
+  // which-fact questions; measured 5/5 at k=5, in the bar). q76-q78 (class D, conflicting) were dropped in review: each
+  // rested on weighing, not on a skill sentence naming the conflict. No question asks for class D: q81 and q82 show
+  // facts of both kinds but ask for one fact, never a conflict call.
   assert.strictEqual(QUIZ.questions.length, 68);
   assert.strictEqual(QUIZ.partB.length, 8);
 });
@@ -148,12 +149,16 @@ test('context quiz: q71-q82 (chop detection) are asked against the prompt holdin
   const text = id => QUIZ.questions.find(x => x.id === id).text;
   for (const [id, line] of [
     ['q71', day(42, 'rotational', 'up', 0.03, 0.19, 11, 4.1)], ['q71', rot(7, 'inside the initial balance')], ['q72', rot(5, 'inside the initial balance')],
-    ['q73', day(40, 'directional', 'up', 0.3, 1.9, 1, 8.6)], ['q73', rot(0, 'trend up')], ['q74', rot(0, 'trend down')],
+    // A directional morning's numbers agree with day-so-far.js (efficiency = net move / the bars' summed range, about
+    // 0.8 ATR a bar; net no larger than the range; the net is the Trend declared? line's day's move).
+    ['q73', day(40, 'directional', 'up', 0.25, 1.58, 1, 8.6)], ['q74', day(36, 'directional', 'down', 0.25, 1.5, 0, 9.4)],
+    ['q75', day(44, 'directional', 'up', 0.18, 1.19, 2, 9)],
+    ['q75', declaredLine({ long: sd(0.9, 0.4, 'broke out its way', 6.6, 'with'), short: sd(-0.9, -0.4, 'broke out against', -6.6, 'against') })], ['q73', rot(0, 'trend up')], ['q74', rot(0, 'trend down')],
     ['q81', day(45, 'rotational', 'up', 0.03, 0.2, 10, 4.2)], ['q82', day(48, 'rotational', 'up', 0.02, 0.14, 12, 3.9)],
     ['q79', daySoFarLine({ status: 'too early', bars: 6, readFrom: 10, vwapCrosses: 0 })], ['q79', rot(0, null)],
     ['q80', daySoFarLine({ status: 'unknown', reason: 'no 09:30 ET bar in the data' })],
     ['q80', rotationLine({ vwapCrosses: null, dayType: null, setupCandle: null, entryCandle: null, failedBreak: { '3m': null, '5m': null, '15m': null } }, fr)],
-    ['q73', declaredLine({ long: sd(1.8, 1.2, 'broke out its way', 4.9, 'with'), short: sd(-1.8, -1.2, 'broke out against', -4.9, 'against') })],
+    ['q73', declaredLine({ long: sd(1.8, 1.2, 'broke out its way', 8, 'with'), short: sd(-1.8, -1.2, 'broke out against', -8, 'against') })],
     ['q82', declaredLine({ long: sd(0.7, 0.4, 'middle third', 0.9, 'with'), short: sd(-0.7, -0.4, 'middle third', -0.9, 'against') })],
   ]) assert.ok(text(id).includes(line), `${id}: ${line}`);
   // The dropped class-D questions stay out (their ids are not reused).
