@@ -1428,7 +1428,9 @@ skill. The model is asked nothing.
      With fewer bars and no stop, the move is unknown.
    - A run's own bars archive ends with the run, so give the data it
      replayed (`--bars`, as the scorecard takes it) to measure its last
-     passes. Its ATR's longer warm-up can move a stop by a few hundredths.
+     passes. Its stops and moves can differ slightly from the archive's: on
+     one arm, 170 of 186 passes measurable both ways agreed within 0.02R
+     and the rest within about 0.12R.
 
 The classes. A decision needs a read, at least one scored field (match or
 mismatch; unknown never counts) and an outcome:

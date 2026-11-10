@@ -314,9 +314,12 @@ test('summary: the misread fields by forward R lost, and every field split by it
 test('summary: intervals once the experience index\'s minimum n and days are met', () => {
   const right = stateRead('STATE: 4h up | 1h up | 15m up', UP);
   const wrong = stateRead('STATE: 4h down | 1h up | 15m up', UP);
+  const EI = require('../../scripts/lib/tunables').training().experienceIndex;
+  // Enough days for the minimum days, and two read-right entries a day for the minimum n (pins only tighten: derived).
+  const nDays = Math.max(EI.minDays, Math.ceil(EI.minN / 2)) + 2;
   const rows = [];
-  for (let k = 0; k < 12; k += 1) {
-    const day = `2021-07-${String(1 + k).padStart(2, '0')}`;
+  for (let k = 0; k < nDays; k += 1) {
+    const day = new Date(Date.parse('2021-07-01T00:00:00Z') + k * 86400000).toISOString().slice(0, 10);
     rows.push({ ...audit({ stateRead: right, decision: decision('long', 1 + (k % 3)) }), day });
     rows.push({ ...audit({ stateRead: right, decision: decision('long', 2) }), day });
     rows.push({ ...audit({ stateRead: wrong, decision: decision('long', -1) }), day });
@@ -331,7 +334,7 @@ test('summary: intervals once the experience index\'s minimum n and days are met
   const text = A.renderAudit(s);
   assert.match(text, /OUTCOME/);
   assert.match(text, /acted right/i);
-  assert.match(text, /n 24/);
+  assert.match(text, new RegExp(`n ${2 * nDays}\\b`));
 });
 
 // ---- The run, the CLI ----
