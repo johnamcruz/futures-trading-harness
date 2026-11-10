@@ -1232,6 +1232,162 @@ date with the loop's seeded split, so an edit tuned on one half is
 confirmed on dates it never saw: the probe round's trend set
 (Propose–Probe–Compose above, `probe.trend`: a batch of the pool's legs each round).
 
+### The leg ledger
+
+The round report shows the trades the model took, never what its refusals
+cost. `node scripts/leg-ledger.js --home <training home> [--iteration <n>]
+[--runs <runs folder>] [--minutes <tf>] [--before YYYY-MM-DD] [--json]
+[--out <file>]` (`scripts/lib/train/leg-ledger.js`) joins, for each trend
+leg of a round's champion trend runs (each half's listed legs on the units
+the run finished, as the screens pair them), three things:
+
+- The leg's facts, taken from its capture: day, side, `availableR` on the
+  capture's own basis, and `estimated` when it uses the run's stop.
+- The model's reads over the leg's window. Each cycle has a class from its
+  recorded code (location, entry-reaction, head-pass, no-plan,
+  position-open, opening-print, executor-blocked, unfilled, ...). A no-plan
+  or head-pass cycle also has the reason the model stated for the leg's own
+  side, parsed from its CYCLE RESULT text: trend-rule, htf-choch-against,
+  size-floor, room-rr, late-entry-chase, entry-reaction, or a rule. The
+  parse is a heuristic, and the first match in that order decides. When
+  it is unsure it leaves the reason unclassified, because a wrong label
+  would teach the model something false.
+  - Side-gated: the trend rule, size-floor and the soft reasons (room-rr,
+    late-entry-chase, entry-reaction). Each counts only after the leg's side
+    is named in its clause, with the other side not between. On a head-pass,
+    whose text is about the leg's way's own OK record, size-floor and the
+    soft reasons need no side named. They are still refused when the side
+    word nearest before the reason is the other side's ("long OK; short is
+    stale" is not the long's).
+  - htf-choch-against: on the 1h or 4h only. It counts only when the CHoCH's
+    direction is named and runs the other way, or its target is named and is
+    the leg's side. With neither named, it is left out.
+  - Rules: not side-gated. Each counts only in a wording that blocks:
+    - loss-streak: a loss-streak stop, cooldown or limit (hyphen, space or
+      underscore: `loss_streak_stop`); "in a cooldown"; "cooldown
+      until/active". Never "the loss streak is 1".
+    - daily-stop: the daily or soft stop hit, reached or holding, or
+      "stopped for the day".
+    - news: a news blackout, or "in blackout".
+    - opening-print: the opening print.
+  - Every reason is guarded the same way. It is left out when a negating
+    word comes in the up to four tokens before its subject (or the reason;
+    three words plus the one the subject starts in) or between the subject
+    and the reason. The negating words are:
+    - "no" (never "no-trade"), "not", "nor", "never", "without";
+    - "cannot", "hardly", "barely";
+    - "need", "needs", "needed", "require", "requires", "required";
+    - "lack", "lacks", "lacking", "absent";
+    - any n't contraction (straight or curly apostrophe).
+
+    It is also left out when "yet", "absent", "passed", "over", "lifted",
+    "ended", "cleared", "missing" or "gone" is one of the first three words
+    after it.
+  - A rule is also guarded in the up to four tokens after it ("cooldown
+    not active"). It is also left out when it is said to be off, in three
+    forms:
+    - a value: `=`, `==` or `:` then false, 0, off, inactive, disabled or
+      cleared, quoted or not ("loss_streak_stop==false", "=0",
+      ': "inactive"', "='false'");
+    - words: off, inactive, disabled, false or cleared among the first
+      three words after it ("loss_streak_stop off");
+    - a status: up to two words, then status, state, now or is, more is or
+      now, then off, inactive or disabled ("status is now off").
+
+    "off" never counts inside another word ("offer", "offset", "official"),
+    nor as "off the", "off a", "off its", "off of" or "off from" ("price
+    off the high", "3m off the open"). "false" never counts inside
+    "falsely". A 0 followed by a digit or a point ("=0.5R") is no off.
+  - A block's own consequence after a rule is not a negation. It is dropped
+    before that read, in these forms:
+    - "no entry", "no entries", "no new entry", "no new entries";
+    - "entries (are|is) not allowed".
+
+    It is dropped only where the consequence ends: at the clause's end, or
+    before ")", ",", ":", "until", "today", "this bar" or "for the day".
+    So "opening print (no entries until 09:35 ET)" labels, but "opening
+    print, no entries blocked" and "entries are not allowed to be blocked"
+    stay negations.
+  - A side word is "long(s)" or "short(s)", never a hyphen compound
+    ("long-wick", "long-only", "short-term"), except "short-side" or
+    "long-side".
+  - The trend rule's "trend rule blocks ... <side>" form is guarded between
+    the verb and the side ("blocks no longs").
+  - Examples: "no long setup ... plain" is no plan; "opening print passed"
+    is no rule.
+  - Only the first `legLedger.statedChars` characters of a text are parsed
+    (`config/training.json`; a parse limit, real texts run under 500; the
+    config refuses more than 4000).
+  - Each cycle also carries the scorecard's own verdict on that decision.
+- The outcome: a caught leg's entry lag, peak, banked and giveback R, or a
+  missed leg's R and its blocker.
+
+The aggregates are grouped two ways: by the blocker's class (the capture's
+codes, so the totals match the trend capture's) and by the stated reason.
+Each class shows:
+
+- the missed legs it blocked;
+- the legs a refusal of that class came before, which ran anyway;
+- the scorecard's expected decisions and categories on those refusals, plus
+  a skip's counterfactual R where the decision rows carry one. The loop's
+  saved decisions don't carry it today, so the column reads "not recorded".
+  An `excessive abstention` under an expected no-trade is the scorecard's
+  "a composable setup passed without compose_check".
+
+A leg found in two probe docs of its day is kept once and listed. Every
+listed leg that never reaches the ledger is listed with why, and the CLI
+prints the count ("N listed leg(s) excluded"). The reasons are:
+
+- no probe doc for its day;
+- its probe doc is unreadable or has no capture (the doc is listed too);
+- not in its day's capture;
+- its window did not finish;
+- its day is not among the half's days.
+
+The banked R of the caught legs shows how many rides were still open
+(`open`). Their R is unknown and counted as unknown.
+
+Documented limits, to be decided before anything shows the ledger to the
+model:
+
+- The scorecard join is per bar, not per side. A cycle's verdict may
+  concern the other side's setup on that bar.
+- `priorOnly` does not filter by half. Its days-before view pools the
+  probe and confirm halves.
+
+Known limits of the stated-reason parse. These fail safe: the reason stays
+unclassified and the cycle is filed under its code's class (no-plan). That
+is deliberate. A missed label only lowers recall, while a wrong one would
+teach the model something false. Widening the guards to catch these would
+reopen the false labels closed in review.
+
+- The consequence carve-out is anchored to where the consequence ends. So
+  these real blocking wordings stay unclassified, because the "no"/"not" in
+  them is read as negating the rule:
+  - "opening print: new entries not allowed 09:30-09:35 ET; ..."
+  - "opening print (09:30-09:35 ET), no entries on this bar; ..."
+  - "opening print (...) allows no entries and no setup is clear..."
+  - "news blackout, no entries." (ending in a period)
+  - "no new entries before 09:35"
+  - "no entries yet"
+- `RULE_OFF` (a rule said to be off) is a heuristic that reads only the
+  words just after the rule. An off state said further on, after
+  punctuation, or in another wording still leaves the rule read, so such a
+  rule can still label. Examples: "loss-streak stop, which is now off";
+  "loss-streak stop (status: off)"; "loss-streak stop has since been
+  turned off by the account"; "loss-streak stop expired at 10:00". This is
+  not fail-safe: it is the one direction here that can give a wrong label.
+
+Every figure shows its n. An unknown R counts as unknown, never as 0.
+Leg R is an outcome and not tradeable: it is the leg's whole move from its
+first entry bar. The scorecard's figures are a different measure.
+
+A read's code and stated reason are what the cycle recorded at its bar.
+The leg, its R, its ride, the scorecard's category and `unfilled` (set
+from later fills) are outcomes. `--before` (`priorOnly`) builds the
+aggregates from the days strictly before a day only. Information only:
+nothing that decides reads it, and no prompt shows it.
+
 ### Setup capture
 
 `node scripts/setup-capture.js` asks whether an arm's runs catch the
