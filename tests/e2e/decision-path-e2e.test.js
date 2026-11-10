@@ -961,3 +961,25 @@ test('decision path, runner reviews (replay): a journal_add that fails is logged
   assert.deepStrictEqual(runnerReviews(w).map(e => [e.orderId, e.tags[1]]), [[limit.id, 'result:nofill']]);
   assert.deepStrictEqual(lastEntry(w), { decision: 'allowed', checks: [], messages: '' });
 });
+
+test('decision path, trade feedback: the next cycle\'s prompt shows the per-read record from the gateway\'s stamp, the compose record and the cycle\'s STATE read', async () => {
+  const F = require('../../scripts/lib/trading/trade-feedback');
+  const w = D.world();
+  await D.pass(w, decisionAt(FIRED_BAR), composedCycle(w, { result: 'PLAN:\nSTATE: 4h up | 1h up | 15m up | frames agree\nCYCLE RESULT: executed - trade_lifecycle long MNQ 1' }));
+  const file = path.join(w.home, 'entry-orders.json');
+  const list = JSON.parse(fs.readFileSync(file, 'utf8'));
+  const stamped = list.find(e => e.composed && e.composed.record);
+  assert.ok(stamped, 'the gateway stamped the composed entry');
+  // Five more trades on that same stamped record (a record above the floor of 5), each reviewed with its trip.
+  const ids = [stamped.orderId, 9001, 9002, 9003, 9004, 9005];
+  fs.writeFileSync(file, JSON.stringify([...list, ...ids.slice(1).map(id => ({ ...stamped, orderId: id }))]));
+  const opened = Date.parse(stamped.at) + 60000;
+  fs.appendFileSync(w.journal, `${ids.map((id, i) => JSON.stringify({ ts: new Date(opened + 600000 + i * 1000).toISOString(), kind: 'review', contractId: 'MNQ', orderId: id, text: 'runner: trade_lifecycle long 1 MNQ',
+    tags: ['by:runner', `result:${i % 2 ? 'win' : 'loss'}`, 'setup:trade_lifecycle', 'MNQ', `r:${i % 2 ? 1.5 : -1}`, ...F.tripTags({ side: 'long', size: 1, fill: 27427.5, exit: i % 2 ? 27462 : 27404.5, openedAt: new Date(opened).toISOString(), closedAt: new Date(opened + 540000).toISOString(), risk: 23, exitReason: i % 2 ? 'target' : 'stop' })] })).join('\n')}\n`);
+  const r = await D.pass(w, decisionAt(NEXT_BAR), D.passCycle(w, 'nothing to take'));
+  const prompt = r.ran.map(x => x.prompt).join('\n');
+  assert.match(prompt, /Record per read \(your last 6 reviewed trades; groups of 5 or more; MAE\/MFE from bar extremes, bar-granular, overstated\): /);
+  assert.match(prompt, /bias 4h up \+ trend long allowed: n 6, avg R \+0\.25/);
+  assert.match(prompt, /state 4h up\/1h up\/15m up: n 6/);
+  assert.match(prompt, /long, setup 15m rejected prior vah up; reads: 4h up \+ trend long allowed, value above, 3m close top, regime [a-z-]+, state 4h up\/1h up\/15m up/);
+});

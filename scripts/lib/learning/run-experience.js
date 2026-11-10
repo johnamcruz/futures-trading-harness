@@ -192,4 +192,4 @@ const experienceLine = r => (r.rebuilt
   ? `experience: rebuilt run ${r.rebuilt.runId}: ${r.rebuilt.removed} line(s) replaced by ${r.added} (${r.role}${r.hidden ? ', outcomes hidden: a reasoning-fix look' : ''}) in ${r.file}${r.rebuilt.staleIndexes.length ? `; ${r.rebuilt.staleIndexes.length} index(es) built from it set aside (rebuild them): ${r.rebuilt.staleIndexes.map(f => path.basename(f)).join(', ')}` : ''}`
   : `experience: ${r.added} decision(s) added, ${r.kept} already logged (${r.role}${r.hidden ? ', outcomes hidden: a reasoning-fix look' : ''}) in ${r.file}`);
 
-module.exports = { runDelivery, runDecisions, writeRunExperience, experienceLine, runExit, manifestExit, plannedExit };
+module.exports = { runDelivery, runDecisions, writeRunExperience, experienceLine, runExit, manifestExit, plannedExit, mergeBars };

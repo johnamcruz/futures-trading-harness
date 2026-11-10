@@ -173,6 +173,10 @@ function createRunner(deps) {
     lessons = () => [],
     // The last 10 reviewed trades' outcomes (trading/instincts.js recentTrades), for the prompt.
     recentTrades = () => [],
+    // The same trades as the head trader's prompt shows them (trading/trade-feedback.js): ({ entries }) -> { lines,
+    // record } (each trade with the reads at its entry and how it behaved; the per-read record or null), or null:
+    // the plain lines. Information only; phase 1 keeps recentTrades.
+    tradeFeedback = () => null,
     // When a fresh combine attempt's in-prompt history starts (prop/attempt-scope.js historyFrom: ms), or null: the
     // prompt's last cycles are only its own. null (any other run): every one, as before.
     historyFrom = () => null,
@@ -2045,6 +2049,11 @@ function createRunner(deps) {
           const lessonLines = entries ? attempt('your mistakes and lessons', () => lessons({ entries: journal }) || [], []) : [];
           const tradeLines = entries ? attempt('your reviewed trades', () => recentTrades({ entries: journal }) || [], []) : [];
           const summary = entries ? attempt('your reviewed trades\' record', () => tradesSummary({ entries: journal }), null) : null;
+          // The prompt's view of them: the feedback lines (the reads at entry, how each behaved) and the per-read record;
+          // none or a failure: the plain lines. Phase 1's input stays tradeLines.
+          const feedback = entries ? attempt('your reviewed trades\' feedback (the plain lines shown)', () => tradeFeedback({ entries: journal }), null) : null;
+          const shownTrades = feedback && Array.isArray(feedback.lines) && feedback.lines.length && feedback.tagged > 0 ? feedback.lines : tradeLines;
+          const tradesRecord = feedback && typeof feedback.record === 'string' ? feedback.record : null;
           // Trade cycles left today after this one (the cap counts this cycle).
           const cyclesLeft = Number.isInteger(cfg.maxCyclesPerDay) ? Math.max(0, cfg.maxCyclesPerDay - ((state && state.cycles) || 0) - 1) : null;
           // The reports still valid from earlier cycles (the roles the prompt lists: not when it lists none).
@@ -2180,7 +2189,7 @@ function createRunner(deps) {
           // A cycle in no situation: its prompt as before.
           const promptOpts = {
             manageOnly, recovered: recover, state: acct, history: shownHistory,
-            lessons: lessonLines, trades: tradeLines, tradesSummary: summary, news: newsLine, unavailable,
+            lessons: lessonLines, trades: shownTrades, tradesSummary: summary, tradesFeedback: shownTrades !== tradeLines, tradesRecord, news: newsLine, unavailable,
             cyclesLeft, entry: runsEntry, managedDesk, managedCycle,
             manageAlso, journalRead: entries !== null, cached: served, unreviewed: unreviewedText,
             ...(multi ? { lanes: lanesLine(closedLanes) } : {}),
@@ -2211,7 +2220,7 @@ function createRunner(deps) {
             attempts: (acct && acct.attempts) || [], mode: { paper: Boolean(cfg.paper), cycle: cfg.cycle || null },
             eodAt: (() => { const eod = endOfDayAt(cfg, cycleNow); return eod ? new Date(tradingDayStart(cycleNow).getTime() + sessionMinuteOf(eod, cycleNow) * 60000).toISOString() : null; })(),
             cyclesLeft,
-            news: newsLine, lessons: lessonLines, trades: tradeLines, tradesSummary: summary, history: shownHistory.slice(-(multi ? shownHistory.length : 10)), historyLines: historyShown,
+            news: newsLine, lessons: lessonLines, trades: shownTrades, tradesSummary: summary, ...(tradesRecord ? { tradesRecord } : {}), history: shownHistory.slice(-(multi ? shownHistory.length : 10)), historyLines: historyShown,
             manageOnly, recovered: recover, unavailable,
             // The roles served from the report cache (FTH_CYCLE_CACHED), and those the runner ran itself this cycle, with its
             // record of them (FTH_CYCLE_ROLES): the gate credits each from its own source.

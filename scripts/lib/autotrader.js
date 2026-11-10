@@ -844,7 +844,7 @@ function prompts(cfg, now, root = '') {
      * One cycle for every symbol whose bar just closed. `items` is a symbol
      * string or a list of { symbol, bar } where bar = { t, c, file, contractId }.
      */
-    trade: (items, { manageOnly = false, recovered = false, state = null, history = [], lessons = [], trades = [], tradesSummary = null, news = null, unavailable = [], cyclesLeft = null, manageAlso = [], journalRead = true, cached = null, unreviewed = null, lanes = '', frames = [], entry = false, managedDesk = false, managedCycle = false, cycleSkills: situationText = '' } = {}, { raw = false } = {}) => {
+    trade: (items, { manageOnly = false, recovered = false, state = null, history = [], lessons = [], trades = [], tradesSummary = null, tradesFeedback = false, tradesRecord = null, news = null, unavailable = [], cyclesLeft = null, manageAlso = [], journalRead = true, cached = null, unreviewed = null, lanes = '', frames = [], entry = false, managedDesk = false, managedCycle = false, cycleSkills: situationText = '' } = {}, { raw = false } = {}) => {
       const list = (Array.isArray(items) ? items : [{ symbol: items }]);
       const sentence = t => { const x = String(t).trim(); return /[.!?…]$/.test(x) ? x : `${x}.`; };
       // `minutes`: the lane whose bar closed (none: the runner's timeframe); `repeat`: a further lane of a symbol
@@ -879,7 +879,9 @@ function prompts(cfg, now, root = '') {
       const account = cfg.account ? accountText(state) : ' No account is configured: the runner reads no positions or orders (read get_account_snapshot if you need them).';
       // "None yet" only when the journal was read and holds neither (a failed read is named instead).
       const ownFailed = unavailable.some(u => /reviewed trades|mistakes and lessons/.test(u));
-      const own = trades.length ? ` Your last ${trades.length} reviewed trade(s)${tradesSummary ? ` (${tradesSummary})` : ''}, oldest first: ${trades.join(' | ')}.`
+      // With the feedback (trade-feedback.js: `tradesFeedback`), how to read the lines, and the per-read record when a read
+      // has enough trades (`tradesRecord`).
+      const own = trades.length ? ` Your last ${trades.length} reviewed trade(s)${tradesSummary ? ` (${tradesSummary})` : ''}, oldest first${tradesFeedback ? ` (${require('./trading/trade-feedback').FRAMING})` : ''}: ${trades.join(' | ')}.${tradesRecord ? ` ${tradesRecord}.` : ''}`
         : !journalRead || ownFailed ? ''
           : lessons.length ? ' No reviewed trades in the journal yet.'
             : ' No reviewed trades in the journal yet, so no record of your own results, mistakes, or lessons.';

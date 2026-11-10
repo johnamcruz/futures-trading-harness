@@ -272,6 +272,37 @@ function covers(bars, tfMs, fromMs, toMs) {
 }
 
 /**
+ * A held trade's move while held, the one definition (tripOutcome's, and the trade feedback's: trading/trade-feedback.js):
+ * with the bars covering it (`covers`), the worst and best move from the entry over the bars wholly inside it (opening
+ * at or after the fill, closing by the exit) and the exit price, in R of `risk`; `mfeBars` the bars from the fill's bar
+ * to the one where the best was first reached (the exit's bar when the exit was the best; null when nothing went its
+ * way). No bar wholly inside it, bars that don't cover it, no risk or no side: all null, never the exit alone.
+ */
+function tripExcursion({ side, entryPrice, exitPrice, openMs, closeMs, risk, bars = [], tfMs = 0 }) {
+  const none = { maeR: null, mfeR: null, mfeBars: null };
+  const s = sgn(side);
+  if (!s || !(risk > 0) || !Number.isFinite(entryPrice) || !Number.isFinite(exitPrice) || !Number.isFinite(openMs) || !Number.isFinite(closeMs)
+    || !(tfMs > 0) || !Array.isArray(bars) || !bars.length || !covers(bars, tfMs, openMs, closeMs)) return none;
+  const fillBar = bars[lowerBound(bars, openMs + 1) - 1].ms;
+  const exitMove = s * (exitPrice - entryPrice);
+  let adv = Math.min(0, exitMove);
+  let best = 0;
+  let bestAt = null;
+  let whole = 0;
+  for (const b of bars) {
+    if (b.ms < openMs || b.ms + tfMs > closeMs) continue;
+    whole += 1;
+    adv = Math.min(adv, s * ((s > 0 ? b.l : b.h) - entryPrice));
+    const fav = s * ((s > 0 ? b.h : b.l) - entryPrice);
+    if (fav > best) { best = fav; bestAt = b.ms; }
+  }
+  // No bar wholly inside the trade (held under one bar): its move while held is unknown, never the exit alone.
+  if (!whole) return none;
+  if (exitMove > best) { best = exitMove; bestAt = closeMs - 1; }
+  return { maeR: round(adv / risk), mfeR: round(best / risk), mfeBars: bestAt === null ? null : Math.floor((bestAt - fillBar) / tfMs) };
+}
+
+/**
  * A round trip's real outcome in R of the record's stop. maeR and mfeR (closed, with the run's bars covering the trade:
  * every bar from its fill's to its exit's, `covers`): the worst and best move from the entry over the bars wholly
  * inside the trade (opening at or after the fill, closing by the exit: an edge bar's extremes may fall outside it) and
@@ -288,24 +319,7 @@ function tripOutcome(trip, plan, side, { bars = [], tfMs = 0 } = {}) {
   const exitPrice = closed ? avg(trip.closes) : null;
   // R in the bracket's risk: the record's stop distance, which the bracket places from the fill.
   const risk = Number.isFinite(plan.stop) && Number.isFinite(plan.entry) ? Math.abs(plan.entry - plan.stop) : null;
-  let maeR = null;
-  let mfeR = null;
-  if (closed && risk && Number.isFinite(entryPrice) && Number.isFinite(exitPrice) && Number.isFinite(trip.openMs) && tfMs > 0 && Array.isArray(bars) && covers(bars, tfMs, trip.openMs, trip.closeMs)) {
-    let adv = Math.min(0, s * (exitPrice - entryPrice));
-    let fav = Math.max(0, s * (exitPrice - entryPrice));
-    let whole = 0;
-    for (const b of bars) {
-      if (b.ms < trip.openMs || b.ms + tfMs > trip.closeMs) continue;
-      whole += 1;
-      adv = Math.min(adv, s * ((s > 0 ? b.l : b.h) - entryPrice));
-      fav = Math.max(fav, s * ((s > 0 ? b.h : b.l) - entryPrice));
-    }
-    // No bar wholly inside the trade (held under one bar): its move while held is unknown, never the exit alone.
-    if (whole) {
-      maeR = round(adv / risk);
-      mfeR = round(fav / risk);
-    }
-  }
+  const { maeR, mfeR } = closed ? tripExcursion({ side, entryPrice, exitPrice, openMs: trip.openMs, closeMs: trip.closeMs, risk, bars, tfMs }) : { maeR: null, mfeR: null };
   return {
     source: 'fills', filled: true, entryPrice: round(entryPrice, 6), exitPrice: round(exitPrice, 6),
     entryTime: Number.isFinite(trip.openMs) ? new Date(trip.openMs).toISOString() : null,
@@ -514,4 +528,4 @@ function replaceDecisions(file, runId, lines, { allowEmpty = false } = {}) {
   return { removed: old.length - kept.length, added: lines.length };
 }
 
-module.exports = { VERSION, replaceDecisions, BRACKETS, exitHash, exitRecord, FRAME, limitOutcome, bracketExit, tripOutcome, legsOf, settledDay, frameOf, buildDecisions, appendDecisions, readDecisions, logFile, gradeOf };
+module.exports = { VERSION, replaceDecisions, BRACKETS, exitHash, exitRecord, FRAME, limitOutcome, bracketExit, tripOutcome, tripExcursion, legsOf, settledDay, frameOf, buildDecisions, appendDecisions, readDecisions, logFile, gradeOf };
