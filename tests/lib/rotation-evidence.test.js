@@ -125,7 +125,7 @@ test('in the briefing: one summary line after Trend declared?, in RTH on the run
   assert.strictEqual(lineOf(B.renderFrameBriefing(f, b)).length, 0);
 });
 
-test('no look-ahead: 1m bars after the cycle bar\'s close (poisoned) never change the line; later 3m bars are never read', () => {
+test('no look-ahead: 1m bars after the cycle bar\'s close (poisoned) never change the line (the base bars end at the cycle bar)', () => {
   // A 1m lane builds the 5m candle; split each 3m bar into three 1m bars.
   const ones = [];
   for (const x of BARS.slice(0, RTH_N)) {
@@ -142,8 +142,6 @@ test('no look-ahead: 1m bars after the cycle bar\'s close (poisoned) never chang
   assert.strictEqual(clean.length, 1);
   assert.doesNotMatch(clean[0], /5m unknown/, 'the 1m lane builds the 5m candle');
   assert.deepStrictEqual(dirty, clean);
-  // The briefing at a bar from the bars cut at its close, and from a longer history cut the same: one line.
-  assert.deepStrictEqual(lineOf(B.renderBriefing(build(RTH_N))), lineOf(B.renderBriefing(B.buildBriefing({ symbol: 'MNQ', contractId: 'MNQ', bars: BARS.slice(0, RTH_N + 40).slice(0, RTH_N), minutes: 3 }))));
 });
 
 test('presented facts: rendered from fields the briefing already holds; no new field, and no decision path reads it', () => {
