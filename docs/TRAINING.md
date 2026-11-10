@@ -1284,10 +1284,20 @@ the run finished, as the screens pair them), three things:
     "ended", "cleared", "missing" or "gone" is one of the first three words
     after it.
   - A rule is also guarded in the up to four tokens after it ("cooldown
-    not active"). It is left out when it is said to be off: "off",
-    "inactive", "false", "disabled" or "cleared" among the first three words
-    after it, an `=` or `:` before them allowed ("loss_streak_stop=false",
-    ": inactive").
+    not active"). It is also left out when it is said to be off, in three
+    forms:
+    - a value: `=`, `==` or `:` then false, 0, off, inactive, disabled or
+      cleared, quoted or not ("loss_streak_stop==false", "=0",
+      ': "inactive"', "='false'");
+    - words: off, inactive, disabled, false or cleared among the first
+      three words after it ("loss_streak_stop off");
+    - a status: up to two words, then status, state, now or is, more is or
+      now, then off, inactive or disabled ("status is now off").
+
+    "off" never counts inside another word ("offer", "offset", "official"),
+    nor as "off the", "off a", "off its", "off of" or "off from" ("price
+    off the high", "3m off the open"). "false" never counts inside
+    "falsely". A 0 followed by a digit or a point ("=0.5R") is no off.
   - A block's own consequence after a rule is not a negation. It is dropped
     before that read, in these forms:
     - "no entry", "no entries", "no new entry", "no new entries";
@@ -1361,8 +1371,12 @@ reopen the false labels closed in review.
   - "no new entries before 09:35"
   - "no entries yet"
 - `RULE_OFF` (a rule said to be off) is a heuristic that reads only the
-  first words after the rule. It misses "==false", ': "inactive"', "=0"
-  and "status is now off", so such a rule can still label.
+  words just after the rule. An off state said further on, after
+  punctuation, or in another wording still leaves the rule read, so such a
+  rule can still label. Examples: "loss-streak stop, which is now off";
+  "loss-streak stop (status: off)"; "loss-streak stop has since been
+  turned off by the account"; "loss-streak stop expired at 10:00". This is
+  not fail-safe: it is the one direction here that can give a wrong label.
 
 Every figure shows its n. An unknown R counts as unknown, never as 0.
 Leg R is an outcome and not tradeable: it is the leg's whole move from its

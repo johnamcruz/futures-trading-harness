@@ -255,6 +255,33 @@ test('leg ledger: the consequence carve-out holds only where the consequence end
   ]) assert.strictEqual(s(t, 'long'), 'late-entry-chase', t);
 });
 
+test('leg ledger: a rule said off in a value or a status form is not read; off inside another word or "off the" is no off', () => {
+  const s = LL.statedClass;
+  for (const t of [
+    'no-trade - loss_streak_stop==false; long setup is stale',
+    'no-trade - loss_streak_stop=0; long setup is stale',
+    'no-trade - loss_streak_stop: "inactive"; long setup is stale',
+    'no-trade - loss_streak_stop: "off"; long setup is stale',
+    'no-trade - loss_streak_stop=\'false\'; long setup is stale',
+    'no-trade - loss-streak stop status is now off; long setup is stale',
+    'no-trade - loss-streak stop state now inactive; long setup is stale',
+    'no-trade - the news blackout status disabled; long setup is stale',
+    'no-trade - loss-streak stop rule current status is now off; long setup is stale',
+  ]) assert.strictEqual(s(t, 'long'), 'late-entry-chase', t);
+  for (const [t, want] of [
+    ['no-trade - opening print, official open at 09:30', 'opening-print'],
+    ['no-trade - opening print offer stacked above', 'opening-print'],
+    ['no-trade - opening print offset by a gap', 'opening-print'],
+    ['no-trade - loss-streak stop holds, falsely broken out', 'loss-streak'],
+    ['no-trade - opening print price off the high', 'opening-print'],
+    ['no-trade - opening print 3m off the open', 'opening-print'],
+    ['no-trade - loss_streak_stop=0.5R away; flat', 'loss-streak'],
+    ['no-trade - loss_streak_stop=true; flat', 'loss-streak'],
+    ['no-trade - loss_streak_stop: falsely cleared earlier, it holds', 'loss-streak'],
+    ['no-trade - loss-streak stop falsely reported earlier, it holds', 'loss-streak'],
+  ]) assert.strictEqual(s(t, 'long'), want, t);
+});
+
 test('leg ledger: the nearest side word is read as its side, plural or not; a hyphen compound is no CHoCH target', () => {
   const s = LL.statedClass;
   assert.strictEqual(s('no-trade - long OK, but the shorts have no size fits', 'long', { own: true }), null);

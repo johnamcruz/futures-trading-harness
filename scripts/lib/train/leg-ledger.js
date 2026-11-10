@@ -148,8 +148,17 @@ const sideOf = w => (/^long/i.test(w) ? 'long' : 'short');
 // ',', ':', or "until", "today", "this bar", "for the day"): "no entries blocked" or "not allowed to be blocked" stay
 // negations.
 const CONSEQUENCE = /\b(?:no\s+(?:new\s+)?entr(?:y|ies)|entr(?:y|ies)\s+(?:are\s+|is\s+)?not\s+allowed)(?=\s*(?:$|[),:]|until\b|today\b|this\s+bar\b|for\s+the\s+day\b))/gi;
-// A rule said to be off after its key ("loss_streak_stop off", "=false", ": inactive", "disabled", "cleared").
-const RULE_OFF = /^\s*[=:]?\s*(?:[\w-]+\s+)?(?:[\w-]+\s+)?(?:off|inactive|false|disabled|cleared)\b/i;
+// A rule said to be off after its key, in three forms (an "off" never inside another word, "offer", "official", nor
+// "off the/a/its/of/from": "price off the high", "3m off the open"):
+//   value    = == or : then a value, quoted or not: "=false", "==false", "=0", ': "inactive"', "='false'"
+//   words    up to two words then the off word: "loss_streak_stop off", "disabled", "cleared"
+//   status   up to two words, status|state|now|is, more is|now, then off|inactive|disabled: "status is now off"
+const OFF_WORD = '(?:off(?!\\s+(?:the|a|an|its|of|from)\\b)|inactive|disabled)\\b';
+const RULE_OFF = new RegExp([
+  '^\\s*(?:==?|:)\\s*[\'"]?(?:false\\b|0(?![\\d.])|off\\b|inactive\\b|disabled\\b|cleared\\b)',
+  `^\\s*(?:[\\w-]+\\s+)?(?:[\\w-]+\\s+)?(?:${OFF_WORD}|false\\b|cleared\\b)`,
+  `^\\s*(?:[\\w-]+\\s+)?(?:[\\w-]+\\s+)?(?:status|state|now|is)\\s+(?:(?:is|now)\\s+)*${OFF_WORD}`,
+].join('|'), 'i');
 // Whether a match of `(subject)(key)` (indices: the d flag) states its reason: nothing in the guard words negates it.
 // after: a rule's key is guarded after it too ("cooldown not active"); other (own, no subject): the side word nearest
 // before the key may not be the other side ("long OK, but the short has no size fits" is the short's).
