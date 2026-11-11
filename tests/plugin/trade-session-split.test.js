@@ -403,8 +403,10 @@ const OLD_AGENTS_MD = 24466;
 // the same rule): the skill file grew 1471 -> 3096 bytes, on every path that reads it (the worst path's 90424).
 // Plus 336 for trade-session step 3's STATE line (feat/state-read): the head trader's closed-form market-state read,
 // recorded and scored against the briefing's labels (trading/state-read.js), the measured need of the worst path, raised
-// under the same standing rule; the skill file grew 8624 -> 8960 bytes.
-const RAISED = 154 + 130 + 1625 + 336;
+// under the same standing rule; the skill file grew 8624 -> 8960 bytes. Plus 469 for day-context's naming-the-day bullet
+// (fix/unknown-is-neutral-skill, the same rule): the Day so far word names the class on its score, a field with no read
+// is never a conflict; the skill file grew 3096 -> 3565 bytes, on every path that reads it.
+const RAISED = 154 + 130 + 1625 + 336 + 469;
 const EVERY_CYCLE = ['multi-timeframe-analysis', 'strategy-library', 'strategy-scan', 'strategy-gate-checks', 'trader-process', 'htf-to-ltf', 'autonomous-trading'];
 const PATHS = {
   'full cycle, no candidate': ['role-round', 'setup-judgment', 'day-context'],

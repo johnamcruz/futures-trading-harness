@@ -864,3 +864,38 @@ test('daily-bias and top-down-entry: the examples are tick-correct (NQ 0.25 tick
     assert.ok(!topDownExamples(good.replace(a, b)), b);
   }
 });
+
+// Naming the day (fix/unknown-is-neutral-skill): the quiz's chop questions (q71-q75) were answered "conflicting" on
+// one-sided evidence (an unknown or neither field, the raw efficiency read as the band). day-context, embedded in the
+// head trader's prompt, says how its word names the class, and that a field with no read is never a conflict.
+const NAMING = [
+  'the band on the score, never the raw efficiency (0.25 on 40 bars: 1.58, directional): `directional` is trend evidence, `rotational` chop evidence.',
+  'Conflicting: one field reads trend, one chop; `mixed`, `too early`, `unknown`, `neither` or none is neutral, never a conflict.',
+  'Nothing either way: no read yet.',
+  'An unfinished with-trend pullback is no chop sign (`trend-vs-range`).',
+];
+
+test('day-context: naming the day: its word decides the class on the x sqrt(bars) score; a field with no read is never a conflict', () => {
+  const dc = flat(read(file('day-context')));
+  for (const s of NAMING) assert.ok(dc.includes(s), s);
+  // Inside the Day so far reads, after the bands it names; each sentence deleted fails.
+  const at = dc.indexOf('**Naming the day**');
+  assert.ok(at > dc.indexOf('`too early (a read from 10 bars)`: no read.') && at < dc.indexOf('**RTH volatility**'));
+  for (const s of NAMING) assert.ok(!flat(dc.replace(s, '')).includes(s));
+  // Within the skill cap (tighten-only): no context cut to fit.
+  assert.ok(Buffer.byteLength(parseFrontmatter(read(file('day-context'))).body) <= skillByteCap('day-context'));
+  // True where it quotes the code: the bands sit on the score (efficiency x sqrt(bars)), the skill's numbers are
+  // config/analysis.json's, and the example's 0.25 on 40 bars is 1.58: directional, where the raw 0.25 would read rotational.
+  const D = require('../../scripts/lib/trading/day-so-far');
+  const { daySoFar: cfg } = require('../../config/analysis.json');
+  assert.ok(dc.includes(`\`directional up|down\`: ${cfg.directional}+`) && dc.includes(`\`rotational\`: under ${cfg.rotational}`));
+  const score = Math.round(0.25 * Math.sqrt(40) * 100) / 100;
+  assert.deepStrictEqual([score, D.readOf(score), D.readOf(0.25)], [1.58, 'directional', 'rotational']);
+  const src = read('scripts/lib/trading/day-so-far.js');
+  assert.ok(src.includes('const score = round2(efficiency * Math.sqrt(n));') && src.includes('read: readOf(score)'));
+  // The values it names neutral are ones the briefing writes: Day so far `unknown`, compression's `neither`.
+  assert.strictEqual(D.daySoFarLine({ status: 'unknown', reason: 'x' }), '- Day so far: unknown (x).');
+  assert.ok(read('scripts/lib/trading/compression.js').includes('state: \'neither\''));
+  // The pullback sentence points to trend-vs-range, which still holds the rule.
+  assert.ok(flat(read(file('trend-vs-range'))).includes('An unfinished pullback is no chop sign.'));
+});

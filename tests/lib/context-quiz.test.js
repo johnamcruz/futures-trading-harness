@@ -560,11 +560,12 @@ test('summary: correct on all K, answered both ways, the totals, the bar; compar
   for (const x of QUIZ.questions) for (let k = 1; k <= 5; k += 1) rows.push({ id: x.id, k, pass: true });
   for (const x of QUIZ.partB) for (let k = 1; k <= 5; k += 1) rows.push({ id: x.id, k, pass: true });
   const all = Q.summarize(QUIZ, rows, 5);
-  // 63 since q79-q82 (chop detection, closed choices): 63 x 5 runs, one missed = 314.
-  assert.deepStrictEqual([all.partA.allCorrect, all.partA.bothWays, all.partB.allCorrect, all.meetsBar], [63, 0, 8, true]);
+  // 63 since q79-q82 (chop detection, closed choices); 68 since q71-q75 came back (closed choices, day-context's
+  // naming-the-day lines): 68 x 5 runs, one missed = 339.
+  assert.deepStrictEqual([all.partA.allCorrect, all.partA.bothWays, all.partB.allCorrect, all.meetsBar], [68, 0, 8, true]);
   const one = rows.map(r => (r.id === 'q6' && r.k === 2 ? { ...r, pass: false } : r));
   const s = Q.summarize(QUIZ, one, 5);
-  assert.deepStrictEqual([s.partA.allCorrect, s.partA.bothWays, s.partA.total, s.meetsBar], [62, 1, 314, false]);
+  assert.deepStrictEqual([s.partA.allCorrect, s.partA.bothWays, s.partA.total, s.meetsBar], [67, 1, 339, false]);
   // Too few runs is never correct on all K.
   assert.strictEqual(Q.summarize(QUIZ, rows.filter(r => r.k <= 3), 5).partA.allCorrect, 0);
   const d = Q.compare(all, s).find(x => x.id === 'q6');
@@ -687,16 +688,16 @@ test('grading: every pattern of q70 does work (its removal lets a wrong answer t
 });
 
 // The chop questions (q79-q82): chop DETECTION, the owner's class A of what the briefing showed (no read yet) and the
-// which-fact questions. Graded as a closed choice: the ANSWER line equal to the question's answer, one of its choices
+// which-fact questions; q71-q75: one-sided evidence named by its class (chop, trend; a with-trend pullback: no chop sign). Graded as a closed choice: the ANSWER line equal to the question's answer, one of its choices
 // (case, the markdown or quotes around it and a trailing period aside). A hedge, a second
 // label or anything else on the line is a fail; the why is the second line, read by a person, never graded.
-const CHOP = { q79: 'no read yet', q80: 'no read yet', q81: 'F4', q82: 'F4' };
+const CHOP = { q71: 'chop evidence', q72: 'chop evidence', q73: 'trend evidence', q74: 'trend evidence', q75: 'no', q79: 'no read yet', q80: 'no read yet', q81: 'F4', q82: 'F4' };
 const CLASSES = ['chop evidence', 'trend evidence', 'conflicting', 'no read yet'];
 
 test('the chop questions are closed choices: their answer one of their choices, no regex, asked with the choices', () => {
   for (const [id, answer] of Object.entries(CHOP)) {
     const x = q(id);
-    assert.deepStrictEqual(x.choices, ['q81', 'q82'].includes(id) ? ['F1', 'F2', 'F3', 'F4'] : CLASSES, id);
+    assert.deepStrictEqual(x.choices, ['q81', 'q82'].includes(id) ? ['F1', 'F2', 'F3', 'F4'] : id === 'q75' ? ['yes', 'no'] : CLASSES, id);
     assert.strictEqual(x.answer, answer, id);
     assert.ok(!('required' in x) && !('forbidden' in x), id);
     assert.ok(Q.questionText(QUIZ, x).endsWith(` Answer from your instructions only. First line: ANSWER: <one of: ${x.choices.join(' | ')}>, nothing else. Second line: one short sentence why.`), id);

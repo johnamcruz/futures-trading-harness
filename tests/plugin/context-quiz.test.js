@@ -97,9 +97,10 @@ test('context quiz: every layer asked, ids unique, the bar the whole quiz at K 5
   // detection: what the briefing showed, closed choices; each measured 5/5 at k=5 closed-choice, in the bar). q71 4/5,
   // q72 4/5, q73 4/5, q74 1/5 and q75 4/5 at k=5 were removed, real model misses (the model treats unknown or neutral
   // fields as conflicting, and sometimes calls a with-trend pullback a chop sign), as q45 and q53 were: a skill gap
-  // reported to the owner. q76-q78 (class D, conflicting) were dropped in review.
-  assert.strictEqual(QUIZ.questions.length, 63);
-  for (const id of ['q71', 'q72', 'q73', 'q74', 'q75', 'q76', 'q77', 'q78']) assert.ok(!QUIZ.questions.some(x => x.id === id), id);
+  // reported to the owner. q76-q78 (class D, conflicting) were dropped in review. 68 since q71-q75 came back, closed
+  // choices, with day-context's naming-the-day lines (fix/unknown-is-neutral-skill): the acceptance test of that fix.
+  assert.strictEqual(QUIZ.questions.length, 68);
+  for (const id of ['q76', 'q77', 'q78']) assert.ok(!QUIZ.questions.some(x => x.id === id), id);
   assert.strictEqual(QUIZ.partB.length, 8);
 });
 
@@ -129,6 +130,12 @@ test('context quiz: the chop questions (q79-q82) are asked against the prompt ho
     ['q80', 'head', undefined, /mixed, none or `unknown` → neutral/g],
     ['q81', 'lookup', ['trend-vs-range'], /`rotational`: under 0\.34: back and forth so far/g],
     ['q82', 'lookup', ['trend-vs-range'], /Declared \(any one\): regime `with`/g],
+    // q71-q75: day-context's naming-the-day lines (q72 its balance sentence), the head prompt's.
+    ['q71', 'head', undefined, /`rotational` chop evidence\./g],
+    ['q72', 'head', undefined, /an open inside the prior value area that stays inside the IB is balance/g],
+    ['q73', 'head', undefined, /the band on the score, never the raw efficiency \(0\.25 on 40 bars: 1\.58, directional\)/g],
+    ['q74', 'head', undefined, /Conflicting: one field reads trend, one chop; `mixed`, `too early`, `unknown`, `neither` or none is neutral, never a conflict\./g],
+    ['q75', 'lookup', ['trend-vs-range'], /An unfinished with-trend pullback is no chop sign \(`trend-vs-range`\)\./g],
   ];
   assert.deepStrictEqual(Q.anchorsMissing(QUIZ, prompts).filter(x => want.some(w => w[0] === x)), []);
   for (const [id, prompt, lookup, re] of want) {
@@ -148,6 +155,13 @@ test('context quiz: the chop questions (q79-q82) are asked against the prompt ho
     swing: { '15m': { price: 20000, holds: true }, '1h': { price: 19950, holds: true } }, against: { '15m': null, '1h': null } });
   const mnq = describeDay({ open: 20100, openVs: 'inside the prior value area', gap: -6.5, adr: 240, adrDays: 10, prior: { low: 19980, high: 20180, close: 20106.5, val: 20050, vah: 20140, poc: 20110 },
     overnight: { low: 20070, high: 20125 }, openType: 'open-auction', ibRange: 75, ibLow: 20062.5, ibHigh: 20137.5, extUp: 0, extDown: 0, dayType: 'inside the initial balance', range: 75 }, { symbol: 'MNQ' });
+  const trendDown = describeDay({ open: 19940, openVs: 'below the prior range', gap: -72.5, adr: 300, adrDays: 10, prior: { low: 19960, high: 20120, close: 20012.5, val: 20000, vah: 20080, poc: 20040 },
+    overnight: { low: 19950, high: 20030 }, openType: 'open-drive down', ibRange: 75, ibLow: 19870, ibHigh: 19945, extUp: 0, extDown: 150, dayType: 'trend down', range: 225 }, { symbol: 'MNQ' });
+  // The summary's Alignment line, as renderBriefing writes it (no RTH volatility read: no suffix).
+  const { renderBriefing } = require('../../scripts/lib/trading/briefing');
+  const alignment = (long, short, regime) => renderBriefing({ symbol: 'MNQ', minutes: 3, closedAt: '2026-03-10T15:36:00Z', asOf: '2026-03-10T15:33:00Z', price: 20000,
+    sections: { m3: { version: 1, validUntil: '2026-03-10T15:39:00Z', data: { regime: { primary: regime, volatility: 'normal' } } }, m15: { version: 1, validUntil: '2026-03-10T15:45:00Z', data: { alignment: { long, short } } } } },
+  { now: new Date('2026-03-10T15:36:00Z') }).split('\n').find(l => l.startsWith('- Alignment: '));
   const text = id => QUIZ.questions.find(x => x.id === id).text;
   // A labelled line (F1-F4) is the code's line with its '- ' replaced by the label.
   const as = (label, line) => `${label} - ${line.replace(/^- /, '')}`;
@@ -158,10 +172,22 @@ test('context quiz: the chop questions (q79-q82) are asked against the prompt ho
     ['q81', as('F3', pullback)], ['q81', as('F4', day(45, 'rotational', 'up', 0.03, 0.2, 10, 4.2))],
     ['q82', as('F1', day(48, 'rotational', 'up', 0.02, 0.14, 12, 3.9))], ['q82', as('F2', mnq)],
     ['q82', as('F4', declaredLine({ long: sd(0.7, 0.4, 'middle third', 0.9, 'with'), short: sd(-0.7, -0.4, 'middle third', -0.9, 'against') }))],
+    ['q71', `- ${Q.excerptOf({ bias: { h4: 0, h1: 0, t15: 0 } })[0]}`], ['q71', alignment('mixed', 'mixed', 'range')], ['q71', day(42, 'rotational', 'up', 0.03, 0.19, 11, 4.1)],
+    ['q72', `- ${Q.excerptOf({ bias: { h4: 0, h1: 0, t15: 0 } })[0]}`], ['q72', `- ${mnq}`],
+    ['q73', bias], ['q73', alignment('aligned', 'counter', 'trend-up')], ['q73', day(40, 'directional', 'up', 0.25, 1.58, 1, 8.6)],
+    ['q73', declaredLine({ long: sd(1.8, 1.2, 'broke out its way', 8, 'with'), short: sd(-1.8, -1.2, 'broke out against', -8, 'against') })],
+    ['q74', `- ${Q.excerptOf({ bias: { h4: -1, h1: -1, t15: -1 } })[0]}`], ['q74', `- ${trendDown}`], ['q74', day(36, 'directional', 'down', 0.25, 1.5, 0, 9.4)],
+    ['q75', bias], ['q75', day(44, 'directional', 'up', 0.18, 1.19, 2, 9)], ['q75', pullback],
+    ['q75', declaredLine({ long: sd(0.9, 0.4, 'broke out its way', 6.6, 'with'), short: sd(-0.9, -0.4, 'broke out against', -6.6, 'against') })],
   ]) assert.ok(text(id).includes(`\n${line}\n`), `${id}: ${line}`);
+  // Every line of q71-q75 between the header and the question is one of those writers' (none left unchecked).
+  const lines = { q71: 3, q72: 2, q73: 4, q74: 3, q75: 4 };
+  for (const [id, n] of Object.entries(lines)) assert.strictEqual(text(id).split('\n').filter(l => l.startsWith('- ')).length, n, id);
   // Each scenario says it is synthetic and holds no line the code no longer writes (no Rotation evidence line).
   for (const [id] of want) {
     assert.match(text(id), /^Briefing lines \(synthetic, \d\d:\d\d ET\):\n/, id);
     assert.ok(!/Rotation evidence/.test(text(id)), id);
   }
+  // q71-q74 ask for one of the four classes, as their choices are (no "in day-context's words": one ANSWER line).
+  for (const id of ['q71', 'q72', 'q73', 'q74']) assert.ok(text(id).endsWith('Do these lines show chop evidence, trend evidence, conflicting, or no read yet?'), id);
 });

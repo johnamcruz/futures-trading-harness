@@ -47,6 +47,13 @@ description: Use when deciding a cycle - the premarket plan, the news, and the d
     mostly noise: trust the word from about 10:15 ET.
   The day's move is the `Trend declared?` line's; range in ADR
   `today.rangeVsAdr`; the IB day type above.
+- **Naming the day** (chop evidence, trend evidence, conflicting, no
+  read yet): the band on the score, never the raw efficiency (0.25 on
+  40 bars: 1.58, directional): `directional` is trend evidence,
+  `rotational` chop evidence. Conflicting: one field reads trend, one
+  chop; `mixed`, `too early`, `unknown`, `neither` or none is neutral,
+  never a conflict. Nothing either way: no read yet. An unfinished
+  with-trend pullback is no chop sign (`trend-vs-range`).
 - **RTH volatility** (beside the regime's word): the last 30 min's bar
   range vs the same minutes on prior sessions (`high` 1.33x+, `low`
   0.75x-). The regime's word compares ATR(14) with its last 100 bars,
