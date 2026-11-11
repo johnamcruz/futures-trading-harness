@@ -93,8 +93,12 @@ test('context quiz: every layer asked, ids unique, the bar the whole quiz at K 5
   // b8 (prepare-ahead's confirm rule: PR C); 45 since q47-q49 (a standing scenario: compose_check decides; the closing
   // candle read as candle-reading does). q46 went with PR C3's computed trigger; q45 (the 3m doji, a yes/no) measured 7/10
   // live and is out of the bar, noted for the paired test. 58 since q50-q63 less q53 (a 3m swing is stop structure, not a level: measured 6/10, out of the bar; market context: levels and reactions, structure breaks, trend vs range, pullback vs reversal; each anchored in the skill that states it). The pass bar rises with them.
-  // 59 since q70 (a lesson is no phase-1 stand-down: a replay vetoed 42 times on one).
-  assert.strictEqual(QUIZ.questions.length, 59);
+  // 59 since q70 (a lesson is no phase-1 stand-down: a replay vetoed 42 times on one). 64 since q75, q79-q82 (chop
+  // detection: what the briefing showed, in the owner's classes, closed choices; measured by hand at k=5 before the bar
+  // counts them). q71-q74 (4/5, 4/5, 4/5, 1/5 at k=5: the model treats unknown or neutral fields as conflicting) stay
+  // out, as q45 and q53 did: a skill gap reported to the owner; q76-q78 (class D, conflicting) were dropped in review.
+  assert.strictEqual(QUIZ.questions.length, 64);
+  for (const id of ['q71', 'q72', 'q73', 'q74', 'q76', 'q77', 'q78']) assert.ok(!QUIZ.questions.some(x => x.id === id), id);
   assert.strictEqual(QUIZ.partB.length, 8);
 });
 
@@ -111,4 +115,57 @@ test('context quiz: q70 (a lesson read as a phase-1 stand-down) is asked against
 
 test('context quiz: q45 and q46 are out of the bar (q46: the standing line prints the computed trigger, PR C3; q45: 7/10 live)', () => {
   for (const id of ['q45', 'q46']) assert.ok(!QUIZ.questions.some(x => x.id === id), id);
+});
+
+test('context quiz: the chop questions (q75, q79-q82) are asked against the prompt holding the skill sentence each anchors to, on briefing lines the code writes', () => {
+  const prompts = Q.buildPrompts(ROOT, QUIZ);
+  const flat = t => t.replace(/\s+/g, ' ');
+  const cut = re => Object.fromEntries(Object.entries(prompts).map(([k, v]) => [k, flat(v).replace(re, '')]));
+  // [id, prompt, lookup, the sentence it anchors to, deleted from every prompt]: day-context and confluence-counting
+  // (embedded in the head prompt), trend-vs-range (looked up).
+  const want = [
+    ['q75', 'lookup', ['trend-vs-range'], /An unfinished pullback is no chop sign\./g],
+    ['q79', 'head', undefined, /`too early \(a read from 10 bars\)`: no read\./g],
+    ['q80', 'head', undefined, /mixed, none or `unknown` → neutral/g],
+    ['q81', 'lookup', ['trend-vs-range'], /`rotational`: under 0\.34: back and forth so far/g],
+    ['q82', 'lookup', ['trend-vs-range'], /Declared \(any one\): regime `with`/g],
+  ];
+  assert.deepStrictEqual(Q.anchorsMissing(QUIZ, prompts).filter(x => want.some(w => w[0] === x)), []);
+  for (const [id, prompt, lookup, re] of want) {
+    const q = QUIZ.questions.find(x => x.id === id);
+    assert.deepStrictEqual([q.prompt, q.lookup], [prompt, lookup], id);
+    assert.deepStrictEqual(Q.anchorsMissing(QUIZ, cut(re)).filter(x => x === id), [id], `${id}: its sentence deleted, its anchor goes missing`);
+  }
+  // The scenario lines are the code's writers on synthetic values: a changed line format fails here (rewrite the question).
+  const { daySoFarLine } = require('../../scripts/lib/trading/day-so-far');
+  const { declaredLine } = require('../../scripts/lib/trading/trend-declared');
+  const { pullbackLine } = require('../../scripts/lib/trading/pullback-read');
+  const { describeDay } = require('../../scripts/lib/trading/day-context');
+  const day = (bars, read, direction, efficiency, score, vwapCrosses, rangeAtr) => daySoFarLine({ status: 'read', bars, read, direction, efficiency, score, vwapCrosses, rangeAtr }, { dayType: 'x' });
+  const sd = (v, e, o, m, g) => ({ vwapAtr: v, ema20Atr: e, overnight: o, dayMoveAtr: m, regime: g });
+  const bias = `- ${Q.excerptOf({ bias: { h4: 1, h1: 1, t15: 1 } })[0]}`;
+  const pullback = pullbackLine({ frame: '15m', side: 'long', leg: { origin: 20000, extreme: 20160 }, depth: 0.38, pastOrigin: false, counter: { bars: 6, volRatio: 0.5, volume: 'falling', rangeRatio: 0.7 },
+    swing: { '15m': { price: 20000, holds: true }, '1h': { price: 19950, holds: true } }, against: { '15m': null, '1h': null } });
+  const mnq = describeDay({ open: 20100, openVs: 'inside the prior value area', gap: -6.5, adr: 240, adrDays: 10, prior: { low: 19980, high: 20180, close: 20106.5, val: 20050, vah: 20140, poc: 20110 },
+    overnight: { low: 20070, high: 20125 }, openType: 'open-auction', ibRange: 75, ibLow: 20062.5, ibHigh: 20137.5, extUp: 0, extDown: 0, dayType: 'inside the initial balance', range: 75 }, { symbol: 'MNQ' });
+  const text = id => QUIZ.questions.find(x => x.id === id).text;
+  // A labelled line (F1-F4) is the code's line with its '- ' replaced by the label.
+  const as = (label, line) => `${label} - ${line.replace(/^- /, '')}`;
+  for (const [id, line] of [
+    // A directional morning's numbers agree with day-so-far.js (efficiency = net move / the bars' summed range, about
+    // 0.8 ATR a bar; net no larger than the range; the net is the Trend declared? line's day's move).
+    ['q75', bias], ['q75', day(44, 'directional', 'up', 0.18, 1.19, 2, 9)], ['q75', pullback],
+    ['q75', declaredLine({ long: sd(0.9, 0.4, 'broke out its way', 6.6, 'with'), short: sd(-0.9, -0.4, 'broke out against', -6.6, 'against') })],
+    ['q79', daySoFarLine({ status: 'too early', bars: 6, readFrom: 10, vwapCrosses: 0 })],
+    ['q80', daySoFarLine({ status: 'unknown', reason: 'no 09:30 ET bar in the data' })],
+    ['q81', as('F1', bias)], ['q81', as('F2', declaredLine({ long: sd(1, 0.6, 'middle third', 1.2, 'with'), short: sd(-1, -0.6, 'middle third', -1.2, 'against') }))],
+    ['q81', as('F3', pullback)], ['q81', as('F4', day(45, 'rotational', 'up', 0.03, 0.2, 10, 4.2))],
+    ['q82', as('F1', day(48, 'rotational', 'up', 0.02, 0.14, 12, 3.9))], ['q82', as('F2', mnq)],
+    ['q82', as('F4', declaredLine({ long: sd(0.7, 0.4, 'middle third', 0.9, 'with'), short: sd(-0.7, -0.4, 'middle third', -0.9, 'against') }))],
+  ]) assert.ok(text(id).includes(`\n${line}\n`), `${id}: ${line}`);
+  // Each scenario says it is synthetic and holds no line the code no longer writes (no Rotation evidence line).
+  for (const [id] of want) {
+    assert.match(text(id), /^Briefing lines \(synthetic, \d\d:\d\d ET\):\n/, id);
+    assert.ok(!/Rotation evidence/.test(text(id)), id);
+  }
 });
