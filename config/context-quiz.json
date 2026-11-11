@@ -1002,15 +1002,16 @@
       "lookup": [
         "trend-vs-range"
       ],
-      "text": "The 4h, 1h and 15m are up, the 3m regime is trend-up (ADX 24), and the overnight range broke out upward. What is the market doing, and has the trend declared itself?",
-      "rule": "a trend, declared (overnight range broke out its way)",
-      "anchor": "overnight range broke out its way",
+      "text": "The 4h and 1h range, the 15m is up, the 3m regime is trend-up (ADX 24) and the overnight range broke out upward, but the close is 0.4 ATR under the RTH VWAP (EMA20 and the day's move above 0). Has the trend declared itself long?",
+      "rule": "not declared: all four your way (regime with; RTH VWAP, EMA20 and day's move each above 0); the overnight range is not part of it",
+      "anchor": "RTH VWAP, EMA20 and day's move each above 0; the overnight range is not part of it",
       "required": [
-        "\\b(up|down)?trend(ing|s)?\\b"
+        "\\bnot (yet )?declared\\b|^\\W*not yet\\b|^\\W*no\\b"
       ],
       "forbidden": [
-        "^\\W*(range|ranging|transition|chop)\\b",
-        "\\bnot (yet )?declared\\b"
+        "^\\W*yes\\b",
+        "^\\W*(it |the trend )?(has |is )?(already )?declared\\b",
+        "^\\W*(an? )?(declared|(up|down)?trend(ing)?( up| down)?,? declared)\\b"
       ]
     },
     {

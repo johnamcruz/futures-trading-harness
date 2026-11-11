@@ -354,6 +354,55 @@ test('basics skills: the regime rule is regime.js\'s, and the participation wind
   assert.match(read('scripts/lib/trading/market-snapshot.js'), /const prior20 = mean\(bars\.slice\(Math\.max\(0, i - 23\), i - 2\)\.map\(vol\)\);/);
 });
 
+test('trend-vs-range: "Declared" names exactly the facts entry-rule.js declaredOf requires (all of them), and the Bias line\'s words', () => {
+  // The code is the truth (a 2021-08-03 10:27 read said "trend declared" from the old "any one" wording against the
+  // Bias line's "declared short: no"). Which facts decide, found by flipping each one on a declared briefing.
+  const { declaredOf } = require('../../scripts/lib/trading/entry-rule');
+  const { biasLine } = require('../../scripts/lib/trading/bias-line');
+  const DECLARED = { regime: 'with', vwapAtr: 1, ema20Atr: 1, dayMoveAtr: 1, overnight: 'back third' };
+  const OFF = { regime: 'against', vwapAtr: -1, ema20Atr: -1, dayMoveAtr: -1, overnight: 'broke out against' };
+  const brief = f => ({ sections: { m3: { data: { declared: { long: f, short: f } } } } });
+  assert.strictEqual(declaredOf(brief(DECLARED), 'long'), true);
+  // Each fact's words in the skill's definition sentence.
+  const WORDS = { regime: 'regime `with`', vwapAtr: 'RTH VWAP', ema20Atr: 'EMA20', dayMoveAtr: 'day\'s move', overnight: 'overnight range' };
+  const decisive = Object.keys(WORDS).filter(k => declaredOf(brief({ ...DECLARED, [k]: OFF[k] }), 'long') === false);
+  assert.deepStrictEqual(decisive.sort(), ['dayMoveAtr', 'ema20Atr', 'regime', 'vwapAtr']);
+  // Above 0, not a threshold: a hair over 0 still declares, 0 never does.
+  for (const k of ['vwapAtr', 'ema20Atr', 'dayMoveAtr']) {
+    assert.strictEqual(declaredOf(brief({ ...DECLARED, [k]: 0.01 }), 'long'), true, k);
+    assert.strictEqual(declaredOf(brief({ ...DECLARED, [k]: 0 }), 'long'), false, k);
+  }
+  const t = flat(read(file('trend-vs-range')));
+  const line = (/- Declared: [^\n]*?(?= - Not yet)/.exec(t) || [''])[0];
+  assert.ok(line, 'the Declared definition line');
+  assert.match(line, /\ball four\b/);
+  assert.match(line, /each above 0/);
+  assert.doesNotMatch(line, /any one|\+1 to \+2\.5|\+3 or more/);
+  for (const k of decisive) assert.ok(line.includes(WORDS[k]), k);
+  // The overnight range is named only to say it is not part of it.
+  assert.ok(line.includes('the overnight range is not part of it'));
+  assert.ok(!line.replace('the overnight range is not part of it', '').includes('overnight'));
+  // The Bias line's words the skill quotes are the words biasLine prints (4h and 1h ranging, the 15m up).
+  const bias = (f, t15 = 'up') => biasLine({ minutes: 3, sections: { m3: { data: { declared: { long: f, short: { ...OFF, overnight: null } } } }, m15: { data: { frame: { trend: t15 } } }, h1: { data: { h4: { trend: 'range' }, h1: { trend: 'range' } } } } });
+  assert.match(bias(DECLARED), /\+ declared long → long only/);
+  assert.match(bias({ ...DECLARED, vwapAtr: -1 }), /declared long: no\)/);
+  assert.ok(line.includes('`+ declared <side>`') && line.includes('`declared <side>: no|unknown`'));
+  // With the 15m ranging too the Bias line prints no declared at all: the skill says so, and only with the 15m trending
+  // does it name the declared words.
+  assert.strictEqual(bias(DECLARED, 'range'), 'Bias: no side yet (15m range)');
+  assert.ok(line.includes('With the 4h and 1h ranging and the 15m trending'));
+  assert.ok(line.includes('with the 15m ranging too, no side and no declared'));
+  // The not-yet signs keep the overnight range as a quality sign, never part of declared.
+  const notYet = (/- Not yet [^]*?(?= ## Examples)/.exec(t) || [''])[0];
+  assert.ok(notYet.includes('inside the overnight range (back third worst; a quality sign, not part of declared)'), notYet);
+  // The section header calls declared the code's rule; only the not-yet signs are census hypotheses.
+  const head = (/\*\*Declared yet\?\*\* \([^)]*\):/.exec(t) || [''])[0];
+  assert.ok(head, 'the Declared yet? header');
+  assert.match(head, /declared the code's/);
+  assert.match(head, /not-yet signs census hypotheses/);
+  assert.doesNotMatch(head, /; census hypotheses\)/);
+});
+
 test('basics skills: the setups add no filter, equal highs are the code\'s, and the size cuts hold', () => {
   for (const s of SETUPS) assert.doesNotMatch(flat(read(file(s))), /needs an HTF structure break|is preferred|counts as one AGAINST/, s);
   // The categories (fix/confluence-not-vetoes): six, each once; the HTF break is the side rule's, never a category.
