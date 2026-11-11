@@ -38,6 +38,8 @@ test('one question checks alone as the quiz file checks it (questionErrors: a pr
 test('grading: the ANSWER line, the required terms, and a forbidden term only when not negated', () => {
   assert.deepStrictEqual(Q.answerLine('blah\n**ANSWER:** No, never counter.\nwhy'), { line: 'No, never counter.', fmt: true });
   assert.deepStrictEqual(Q.answerLine('No side.\nmore'), { line: 'No side.', fmt: false });
+  // The label in markdown with the colon outside it ('**ANSWER**: No'): the line after the colon.
+  assert.deepStrictEqual(Q.answerLine('**ANSWER**: No, never counter.'), { line: 'No, never counter.', fmt: true });
   // Q9: the 3m named only to refuse it is no forbidden mention ("not from the 3m", "never the 3m").
   assert.ok(pass('q9', 'ANSWER: The 1h and up, the session and day, the VWAP and the 15m swings, not from the 3m.'));
   assert.ok(pass('q9', 'ANSWER: 1h+, session levels, VWAP, 15m swings; never the 3m.'));
@@ -685,8 +687,8 @@ test('grading: every pattern of q70 does work (its removal lets a wrong answer t
 });
 
 // The chop questions (q79-q82): chop DETECTION, the owner's class A of what the briefing showed (no read yet) and the
-// which-fact questions. Graded as a closed choice: the ANSWER line
-// equal to the question's answer, one of its choices (case, markdown and a trailing period aside). A hedge, a second
+// which-fact questions. Graded as a closed choice: the ANSWER line equal to the question's answer, one of its choices
+// (case, the markdown or quotes around it and a trailing period aside). A hedge, a second
 // label or anything else on the line is a fail; the why is the second line, read by a person, never graded.
 const CHOP = { q79: 'no read yet', q80: 'no read yet', q81: 'F4', q82: 'F4' };
 const CLASSES = ['chop evidence', 'trend evidence', 'conflicting', 'no read yet'];
@@ -701,6 +703,8 @@ test('the chop questions are closed choices: their answer one of their choices, 
   }
   // The other questions keep the quiz's answer format; a question's own `format` replaces it.
   assert.ok(Q.questionText(QUIZ, q('q70')).endsWith(QUIZ.answerFormat));
+  // q80 asks for one of the four classes, as its choices are.
+  assert.ok(q('q80').text.endsWith('\nWhich do these lines show: chop evidence, trend evidence, conflicting, or no read yet?'));
   assert.ok(Q.questionText(QUIZ, { ...q('q79'), format: ' Say it.' }).endsWith('? Say it.'));
   assert.ok(Q.questionText(QUIZ, { ...q('q70'), format: ' Say it.' }).endsWith(' Say it.'));
 });
@@ -713,7 +717,8 @@ test('grading a choice question: the ANSWER line equal to the answer passes; a h
     'ANSWER: no read yet?', 'ANSWER: no read yet; too early', 'ANSWER: ', '', 'No read yet: too early.']) assert.strictEqual(g('q79', a), false, a);
   for (const [id, right, wrong] of [
     ['q79', ['ANSWER: no read yet'], ['ANSWER: no read', 'ANSWER: no read yet: none', 'ANSWER: conflicting']], ['q80', ['ANSWER: No read yet.'], ['ANSWER: neither']],
-    ['q81', ['ANSWER: F4', 'ANSWER: f4.'], ['ANSWER: F4, F3', 'ANSWER: F4 (chop evidence)', 'ANSWER: F1', 'ANSWER: F5']], ['q82', ['ANSWER: F4'], ['ANSWER: F1-F4']]]) {
+    ['q81', ['ANSWER: F4', 'ANSWER: f4.', '**ANSWER**: F4', '**ANSWER:** F4', 'ANSWER: `F4`', 'ANSWER: _F4_', 'ANSWER: "F4"', 'ANSWER: (F4)', 'Answer: F4', 'ANSWER: **`F4`**.'],
+      ['ANSWER: F4, F3', 'ANSWER: F4 (chop evidence)', 'ANSWER: F1', 'ANSWER: F5', 'ANSWER - F4', 'ANSWER: `F4`, `F3`', 'ANSWER: (F4) F3', 'ANSWER: F4 F3', 'ANSWER: maybe F4', 'ANSWER: F4 (I think)', 'ANSWER: F4,', 'ANSWER: F4 (']], ['q82', ['ANSWER: F4'], ['ANSWER: F1-F4']]]) {
     for (const a of right) assert.strictEqual(g(id, a), true, `${id} ${a}`);
     for (const a of wrong) assert.strictEqual(g(id, a), false, `${id} ${a}`);
   }
@@ -729,13 +734,13 @@ test('grading a choice question: the ANSWER line equal to the answer passes; a h
   assert.deepStrictEqual([long.pass, long.miss], [false, ['no read yet']]);
 });
 
-test('questionErrors: a choice question has 2-6 distinct choices, its answer one of them, an optional format, and never a regex', () => {
-  const at = { part: 'questions', at: 'question' };
+test('questionErrors: a choice question has gate.minChoices to gate.maxChoices distinct choices, its answer one of them, an optional format, and never a regex', () => {
+  const at = { part: 'questions', at: 'question', gate: QUIZ.gate };
   const base = q('q79');
   assert.deepStrictEqual(Q.questionErrors(base, at), []);
   const e = x => Q.questionErrors({ ...base, ...x }, at).join('\n');
   assert.match(e({ answer: 'balance' }), /^question\.answer: one of its choices$/m);
-  for (const choices of [['a'], ['a', 'b', 'c', 'd', 'e', 'f', 'g'], ['a', 'A'], ['a', ''], 'a', 'abc', ['a', 1]]) assert.match(e({ choices, answer: 'a' }), /^question\.choices: 2 to 6 distinct phrases$/m, JSON.stringify(choices));
+  for (const choices of [['a'], ['a', 'b', 'c', 'd', 'e', 'f', 'g'], ['a', 'A'], ['a', ''], 'a', 'abc', ['a', 1]]) assert.match(e({ choices, answer: 'a' }), new RegExp(`^question\\.choices: ${QUIZ.gate.minChoices} to ${QUIZ.gate.maxChoices} distinct phrases$`, 'm'), JSON.stringify(choices));
   assert.match(e({ required: ['chop'] }), /^question\.required: never with choices$/m);
   assert.match(e({ forbidden: [] }), /^question\.forbidden: never with choices$/m);
   assert.match(e({ format: '' }), /^question\.format: the text appended to the question$/m);
@@ -747,4 +752,24 @@ test('questionErrors: a choice question has 2-6 distinct choices, its answer one
   const { id: _i, ...noId } = plain;
   // A proposer's question (the training gate) stays on the bounded regex grammar: choices are no key of it.
   assert.match(require('../../scripts/lib/train/probe-question').questionErrors({ ...noId, choices: ['a', 'b'], answer: 'a' }).join('\n'), /unknown keys: choices, answer/);
+});
+
+test('quizErrors: gate.minChoices (2 or more) and gate.maxChoices (minChoices or more) bound a choice question\'s choices', () => {
+  assert.deepStrictEqual([QUIZ.gate.minChoices, QUIZ.gate.maxChoices], [2, 6]);
+  for (const [key, bad] of [['minChoices', [undefined, 1, 2.5, '2']], ['maxChoices', [undefined, 1, 6.5, '6']]]) {
+    for (const v of bad) {
+      const gate = { ...QUIZ.gate, [key]: v };
+      if (v === undefined) delete gate[key];
+      assert.match(Q.quizErrors({ ...QUIZ, gate }).join('\n'), /^gate: /m, `${key}: ${JSON.stringify(v)}`);
+    }
+  }
+  assert.match(Q.quizErrors({ ...QUIZ, gate: { ...QUIZ.gate, minChoices: 5, maxChoices: 4 } }).join('\n'), /^gate: /m);
+  // Each bound below, at and above, on a question checked with the gate { minChoices: 3, maxChoices: 4 }.
+  const gate = { ...QUIZ.gate, minChoices: 3, maxChoices: 4 };
+  const errs = n => Q.questionErrors({ ...q('q79'), choices: ['a', 'b', 'c', 'd', 'e'].slice(0, n), answer: 'a' }, { part: 'questions', at: 'question', gate });
+  for (const [n, ok] of [[2, false], [3, true], [4, true], [5, false]]) assert.deepStrictEqual(errs(n), ok ? [] : ['question.choices: 3 to 4 distinct phrases', 'question.answer: one of its choices'], `${n} choices`);
+  assert.deepStrictEqual(Q.quizErrors({ ...QUIZ, gate: { ...QUIZ.gate, minChoices: 2, maxChoices: 4 } }), []);
+  assert.match(Q.quizErrors({ ...QUIZ, gate: { ...QUIZ.gate, maxChoices: 3 } }).join('\n'), /questions\[\d+\]\.choices: 2 to 3 distinct phrases/);
+  // Without the quiz's gate a choice question is refused (never checked against a bound the code makes up).
+  assert.deepStrictEqual(Q.questionErrors(q('q79'), { part: 'questions', at: 'question' }), ["question.choices: checked against the quiz file's gate.minChoices and gate.maxChoices (none given)"]);
 });

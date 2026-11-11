@@ -57,7 +57,9 @@
     "maxGapChars": 60,
     "maxOptionals": 3,
     "maxGroups": 3,
-    "maxGradedLineChars": 1000
+    "maxGradedLineChars": 1000,
+    "minChoices": 2,
+    "maxChoices": 6
   },
   "passBar": {
     "partA": {
@@ -1172,7 +1174,7 @@
       "id": "q80",
       "layer": "bias",
       "prompt": "head",
-      "text": "Briefing lines (synthetic, 10:15 ET):\n- Day so far: unknown (no 09:30 ET bar in the data).\nIs any of this chop evidence or trend evidence?",
+      "text": "Briefing lines (synthetic, 10:15 ET):\n- Day so far: unknown (no 09:30 ET bar in the data).\nWhich do these lines show: chop evidence, trend evidence, conflicting, or no read yet?",
       "rule": "no read yet (class A): unknown is neutral, neither chop nor trend",
       "anchor": "mixed, none or `unknown` → neutral",
       "choices": ["chop evidence","trend evidence","conflicting","no read yet"],
