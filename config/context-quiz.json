@@ -1168,12 +1168,10 @@
       "anchor": "an open inside the prior value area that stays inside the IB is balance",
       "required": [
         "^[\\W_]*chop(?:py)?\\b",
-        "(?<!initial )\\bbalanced?\\b"
+        "^(?:(?:(?!(?<!\\.\\.)(?<!\\b(?:e\\.g|i\\.e|vs|etc))[;.](?=\\s)).)*?(?<!\\.\\.)(?<!\\b(?:e\\.g|i\\.e|vs|etc))[;.](?=\\s))?(?:(?!(?<!\\.\\.)(?<!\\b(?:e\\.g|i\\.e|vs|etc))[;.](?=\\s)).)*?(?<!initial )\\bbalanced?\\b"
       ],
       "forbidden": [
-        "^[\\W_]*chop(?:py)?(?: evidence)?\\s*(?:\\?|(?:[:(]|[-–—])?\\s*(?:is\\s+)?(?:absent|none|weak|missing|lost|gone|lacking)\\b|is\\s+not\\b|isn't\\b|would\\b|could\\b)",
-        "^(?=(?:(?:(?!(?<!\\.\\.)(?<!\\b(?:e\\.g|i\\.e|vs|etc))[;.](?=\\s)).)*?(?<!\\.\\.)(?<!\\b(?:e\\.g|i\\.e|vs|etc))[;.](?=\\s))?(?:(?!(?<!\\.\\.)(?<!\\b(?:e\\.g|i\\.e|vs|etc))[;.](?=\\s)).)*?(?<!(?:\\b(?:no|not|never|nor|neither|without|zero|nothing|none|isn't|aren't|don't|doesn't|can't|cannot|won't|hasn't|haven't|hadn't|didn't|wasn't|weren't|rather than|instead of|opposite of|turn into|turns into|could become|too early|too few|whether|to call|to tell|to read|to say|unlike|against|before)\\b|\\beither way:?)(?:(?!\\b(?:but|though|and)\\b)(?!(?<!\\.\\.)(?<!\\b(?:e\\.g|i\\.e|vs|etc))[;.](?=\\s))[^,;:!?—–]){0,30})\\b(?:trend evidence|trending|directional|conflict\\w*|trend (?:day|morning|up|down)|normal variation|neutral day|inside day|imbalance\\w*|unbalanced|out of balance)\\b(?!(?:\\s+(?:signs?|signals?|evidence))?(?:\\s+(?:and|or|nor)\\s+[a-z' ]{1,25}?)?\\s*[:=]?\\s*(?:(?:is|are|was|were)\\s+(?:both\\s+|all\\s+)?)?(?:(?:none|absent|lacking|missing)\\b|0\\b(?!\\s*\\w)))(?!(?:\\s+[\\w'-]+){0,3}?\\s+(?:needs?|would(?:\\s+need)?|requires?|waits?|only if|is for|are for|can't be|cannot be)\\b))",
-        "^(?=.*?\\b(?:not|isn't|no|never|hardly|neither)\\b(?:(?!\\b(?:but|though|and)\\b)(?!(?<!\\.\\.)(?<!\\b(?:e\\.g|i\\.e|vs|etc))[;.](?=\\s))[^,;:!?—–]){0,20}(?<!\\binitial )\\bbalanced?\\b|.*?(?<!\\binitial )\\bbalanced?\\s*(?:\\?|is (?:wrong|not)\\b|isn't\\b))"
+        "^[\\W_]*chop(?:py)?(?: evidence)?\\s*(?:\\?|(?:[:(]|[-–—])?\\s*(?:is\\s+)?(?:absent|none|weak|missing|lost|gone|lacking)\\b|is\\s+not\\b|isn't\\b|would\\b|could\\b)"
       ]
     },
     {
@@ -1185,13 +1183,10 @@
       "anchor": "is traded with it (never faded: never counter)",
       "required": [
         "^[\\W_]*trend evidence\\b",
-        "\\btraded with\\b|\\bwith (it|the trend|the move|the day)\\b|\\bnever fad\\w*|\\bnot fad\\w*|\\bdon'?t fade\\b|\\bno fad\\w*|\\bnever counter\\b|\\bdon'?t counter\\b"
+        "^(?:(?:(?!(?<!\\.\\.)(?<!\\b(?:e\\.g|i\\.e|vs|etc))[;.](?=\\s)).)*?(?<!\\.\\.)(?<!\\b(?:e\\.g|i\\.e|vs|etc))[;.](?=\\s))?(?:(?!(?<!\\.\\.)(?<!\\b(?:e\\.g|i\\.e|vs|etc))[;.](?=\\s)).)*?(?:\\btraded with\\b|\\bwith (it|the trend|the move|the day)\\b|\\bnever fad\\w*|\\bnot fad\\w*|\\bdon'?t fade\\b|\\bno fad\\w*|\\bnever counter\\b|\\bdon'?t counter\\b)"
       ],
       "forbidden": [
-        "^[\\W_]*trend evidence\\s*(?:\\?|(?:[:(]|[-–—])?\\s*(?:is\\s+)?(?:absent|none|weak|missing|lost|gone|lacking)\\b|is\\s+not\\b|isn't\\b|would\\b|could\\b)",
-        "^(?=(?:(?:(?!(?<!\\.\\.)(?<!\\b(?:e\\.g|i\\.e|vs|etc))[;.](?=\\s)).)*?(?<!\\.\\.)(?<!\\b(?:e\\.g|i\\.e|vs|etc))[;.](?=\\s))?(?:(?!(?<!\\.\\.)(?<!\\b(?:e\\.g|i\\.e|vs|etc))[;.](?=\\s)).)*?(?<!(?:\\b(?:no|not|never|nor|neither|without|zero|nothing|none|isn't|aren't|don't|doesn't|can't|cannot|won't|hasn't|haven't|hadn't|didn't|wasn't|weren't|rather than|instead of|opposite of|turn into|turns into|could become|too early|too few|whether|to call|to tell|to read|to say|unlike|against|before)\\b|\\beither way:?)(?:(?!\\b(?:but|though|and)\\b)(?!(?<!\\.\\.)(?<!\\b(?:e\\.g|i\\.e|vs|etc))[;.](?=\\s))[^,;:!?—–]){0,30})\\b(?:chop\\w*|rotat\\w*|conflict\\w*|mixed|ranging|range-bound|range day|balance day|revers\\w*|stall\\w*|trend (?:is )?up|trending up|uptrend|up ?trend day|trend day up|directional up|bullish|up day|day is up|open-drive up|(?<!\\bsell(?:ing)? (?:the )?)rall(?:y|ies)|buyers? in control|up(?=\\s*(?:[.;!]|$))|long|(?<!\\b(?:is|be) )counter(?:-trend)?(?!-))\\b(?!(?:\\s+(?:signs?|signals?|evidence))?(?:\\s+(?:and|or|nor)\\s+[a-z' ]{1,25}?)?\\s*[:=]?\\s*(?:(?:is|are|was|were)\\s+(?:both\\s+|all\\s+)?)?(?:(?:none|absent|lacking|missing)\\b|0\\b(?!\\s*\\w)))(?!(?:\\s+[\\w'-]+){0,3}?\\s+(?:needs?|would(?:\\s+need)?|requires?|waits?|only if|is for|are for|can't be|cannot be)\\b)(?!(?:\\s+(?!(?:is|are)\\b)[\\w-]+)?\\s+(?:is|are)\\s+(?:refused|counter\\w*|never|not|wrong)\\b))",
-        "^(?=.*?(?<!(?:\\b(?:no|not|never|nor|neither|without|zero|nothing|none|isn't|aren't|don't|doesn't|can't|cannot|won't|hasn't|haven't|hadn't|didn't|wasn't|weren't|rather than|instead of|opposite of|turn into|turns into|could become|too early|too few|whether|to call|to tell|to read|to say|unlike|against|before)\\b|\\beither way:?)(?:(?!\\b(?:but|though|and)\\b)(?!(?<!\\.\\.)(?<!\\b(?:e\\.g|i\\.e|vs|etc))[;.](?=\\s))[^,;:!?—–]){0,30})\\b(?:fad(?:e|ed|es|ing))\\b(?!\\?\\s*(?:never|no)\\b)(?![^,;.:]{0,30}\\b(?:is|are|was|would be)\\s+(?:never|not(?!\\s+(?:wrong|off)\\b)|wrong|counter\\w*|a mistake|refused)\\b))",
-        "^(?=.*?(?<!(?:\\b(?:no|not|never|nor|neither|without|zero|nothing|none|isn't|aren't|don't|doesn't|can't|cannot|won't|hasn't|haven't|hadn't|didn't|wasn't|weren't|rather than|instead of|opposite of|turn into|turns into|could become|too early|too few|whether|to call|to tell|to read|to say|unlike|against|before)\\b|\\beither way:?)(?:(?!\\b(?:but|though|and)\\b)(?!(?<!\\.\\.)(?<!\\b(?:e\\.g|i\\.e|vs|etc))[;.](?=\\s))[^,;:!?—–]){0,30})\\b(?:buy|buying (?:the )?dips?|go long|take (?:a |the )?long|flip long|long the)\\b(?!(?:\\s+(?!(?:is|are)\\b)[\\w-]+)?\\s+(?:is|are)\\s+(?:refused|counter\\w*|never|not|wrong)\\b))"
+        "^[\\W_]*trend evidence\\s*(?:\\?|(?:[:(]|[-–—])?\\s*(?:is\\s+)?(?:absent|none|weak|missing|lost|gone|lacking)\\b|is\\s+not\\b|isn't\\b|would\\b|could\\b)"
       ]
     },
     {
@@ -1210,8 +1205,7 @@
       ],
       "forbidden": [
         "^[\\W_]*(yes|chop\\w*|rotat\\w*|range|ranging|conflict\\w*|mixed|balance|no read)\\b",
-        "^(?=(?:(?:(?!(?<!\\.\\.)(?<!\\b(?:e\\.g|i\\.e|vs|etc))[;.](?=\\s)).)*?(?<!\\.\\.)(?<!\\b(?:e\\.g|i\\.e|vs|etc))[;.](?=\\s))?(?:(?!(?<!\\.\\.)(?<!\\b(?:e\\.g|i\\.e|vs|etc))[;.](?=\\s)).)*?(?<!(?:\\b(?:no|not|never|nor|neither|without|zero|nothing|none|isn't|aren't|don't|doesn't|can't|cannot|won't|hasn't|haven't|hadn't|didn't|wasn't|weren't|rather than|instead of|opposite of|turn into|turns into|could become|too early|too few|whether|to call|to tell|to read|to say|unlike|against|before)\\b|\\beither way:?)(?:(?!\\b(?:but|though|and)\\b)(?!(?<!\\.\\.)(?<!\\b(?:e\\.g|i\\.e|vs|etc))[;.](?=\\s))[^,;:!?—–]){0,30})\\b(?:chop\\w*|rotat\\w*|conflict\\w*|mixed|ranging|range-bound|revers\\w*|no read|sideways|end of the trend|downtrend|trend (?:is |has |was )?(?:over|ended|ending|turning|failed|done|finished|stalled|broke|down))\\b(?!(?:\\s+(?:signs?|signals?|evidence))?(?:\\s+(?:and|or|nor)\\s+[a-z' ]{1,25}?)?\\s*[:=]?\\s*(?:(?:is|are|was|were)\\s+(?:both\\s+|all\\s+)?)?(?:(?:none|absent|lacking|missing)\\b|0\\b(?!\\s*\\w)))(?!(?:\\s+[\\w'-]+){0,3}?\\s+(?:needs?|would(?:\\s+need)?|requires?|waits?|only if|is for|are for|can't be|cannot be)\\b))",
-        "\\b(?:not|no) (?:a )?trend evidence\\b|\\bnot trending\\b|\\btrend evidence(?: is)?\\s*(?:[:?]\\s*)?(?:weak|lost|gone|absent|none|lacking|fading|faded|barely|would|not)\\b|\\btrend evidence isn't\\b|^[\\W_]*(?:no|not|nope)\\b[\\W_]*trend evidence\\b\\s*(?:[,:;]\\s*)?(?:but\\s+)?(?:for the short|short(?!\\s+side)|bearish|down|sell|go short)\\b"
+        "\\b(?:not|no) (?:a )?trend evidence\\b|\\bnot trending\\b|\\btrend evidence(?: is)?\\s*(?:[:?]\\s*)?(?:weak|lost|gone|absent|none|lacking|fading|faded|barely|would|not)\\b|\\btrend evidence isn't\\b"
       ]
     },
     {
@@ -1224,10 +1218,7 @@
       "required": [
         "^[\\W_]*(?:no read(?: yet)?|too early)\\b"
       ],
-      "forbidden": [
-        "^(?=(?:(?:(?!(?<!\\.\\.)(?<!\\b(?:e\\.g|i\\.e|vs|etc))[;.](?=\\s)).)*?(?<!\\.\\.)(?<!\\b(?:e\\.g|i\\.e|vs|etc))[;.](?=\\s))?(?:(?!(?<!\\.\\.)(?<!\\b(?:e\\.g|i\\.e|vs|etc))[;.](?=\\s)).)*?(?<!(?:\\b(?:no|not|never|nor|neither|without|zero|nothing|none|isn't|aren't|don't|doesn't|can't|cannot|won't|hasn't|haven't|hadn't|didn't|wasn't|weren't|rather than|instead of|opposite of|turn into|turns into|could become|too early|too few|whether|to call|to tell|to read|to say|unlike|against|before)\\b|\\beither way:?)(?:(?!\\b(?:but|though|and)\\b)(?!(?<!\\.\\.)(?<!\\b(?:e\\.g|i\\.e|vs|etc))[;.](?=\\s))[^,;:!?—–]){0,30})\\b(?:trend evidence|chop evidence|trend (?:day|morning|sign)|(?:chop|trend) is likely|trending|rotating|one-way|conflict\\w*|mixed|lean\\w*|(?:up|down) so far|long bias|short bias|bullish|bearish|looks? (?:up|down)|going (?:up|down)|says? (?:trend|chop)|long is favou?red|favou?rs? (?:the |a )?long)\\b(?!(?:\\s+(?:signs?|signals?|evidence))?(?:\\s+(?:and|or|nor)\\s+[a-z' ]{1,25}?)?\\s*[:=]?\\s*(?:(?:is|are|was|were)\\s+(?:both\\s+|all\\s+)?)?(?:(?:none|absent|lacking|missing)\\b|0\\b(?!\\s*\\w)))(?!(?:\\s+[\\w'-]+){0,3}?\\s+(?:needs?|would(?:\\s+need)?|requires?|waits?|only if|is for|are for|can't be|cannot be)\\b))",
-        "^[\\W_]*(?:no read(?: yet)?|too early)\\b[\\s,:;.-]*(?:but\\s+)?(?:it'?s\\s+)?(?:chop\\w*|trend\\w*|rotat\\w*|directional|up|down)\\b(?!\\s+evidence\\b)"
-      ]
+      "forbidden": []
     },
     {
       "id": "q80",
@@ -1239,10 +1230,7 @@
       "required": [
         "^[\\W_]*(?:no read(?: yet)?|neutral|neither)\\b"
       ],
-      "forbidden": [
-        "^(?=(?:(?:(?!(?<!\\.\\.)(?<!\\b(?:e\\.g|i\\.e|vs|etc))[;.](?=\\s)).)*?(?<!\\.\\.)(?<!\\b(?:e\\.g|i\\.e|vs|etc))[;.](?=\\s))?(?:(?!(?<!\\.\\.)(?<!\\b(?:e\\.g|i\\.e|vs|etc))[;.](?=\\s)).)*?(?<!(?:\\b(?:no|not|never|nor|neither|without|zero|nothing|none|isn't|aren't|don't|doesn't|can't|cannot|won't|hasn't|haven't|hadn't|didn't|wasn't|weren't|rather than|instead of|opposite of|turn into|turns into|could become|too early|too few|whether|to call|to tell|to read|to say|unlike|against|before)\\b|\\beither way:?)(?:(?!\\b(?:but|though|and)\\b)(?!(?<!\\.\\.)(?<!\\b(?:e\\.g|i\\.e|vs|etc))[;.](?=\\s))[^,;:!?—–]){0,30})\\b(?:trend evidence|chop evidence|trend (?:day|morning|sign)|(?:chop|trend) is likely|trending|rotating|one-way|conflict\\w*|mixed|lean\\w*|(?:up|down) so far|long bias|short bias|bullish|bearish|looks? (?:up|down)|going (?:up|down)|says? (?:trend|chop)|long is favou?red|favou?rs? (?:the |a )?long|counts? (?:(?:as|for) (?:chop|trend)|against)|reads? as (?:chop|trend)|(?:chop|trend) by default|means? (?:chop|trend)|treat\\w* (?:it |unknown |them |the unknowns? )?as (?:chop|trend))\\b(?!(?:\\s+(?:signs?|signals?|evidence))?(?:\\s+(?:and|or|nor)\\s+[a-z' ]{1,25}?)?\\s*[:=]?\\s*(?:(?:is|are|was|were)\\s+(?:both\\s+|all\\s+)?)?(?:(?:none|absent|lacking|missing)\\b|0\\b(?!\\s*\\w)))(?!(?:\\s+[\\w'-]+){0,3}?\\s+(?:needs?|would(?:\\s+need)?|requires?|waits?|only if|is for|are for|can't be|cannot be)\\b))",
-        "^[\\W_]*(?:no read(?: yet)?|neutral|neither)\\b[\\s,:;.-]*(?:but\\s+)?(?:it'?s\\s+)?(?:chop\\w*|trend\\w*|rotat\\w*|directional|up|down)\\b(?!\\s+evidence\\b)"
-      ]
+      "forbidden": []
     },
     {
       "id": "q81",
@@ -1255,10 +1243,10 @@
       "rule": "F4: the Day so far reads rotational (back and forth so far); the Bias, the declared long and an unfinished pullback are not chop",
       "anchor": "`rotational`: under 0.34: back and forth so far",
       "required": [
-        "^[\\W_]*(?:(?:only|the answer is|the label is|answer|label)\\s*:?\\s*)?F4\\b(?!\\s*\\?)(?!\\s*[-–—,:]?\\s*no\\b(?!\\s+other\\b))(?!\\s*[-–—,:(]?\\s*(?:maybe|perhaps|probably|not really|or)\\b)(?!\\s+(?:is\\s+(?:not|weak|no|wrong)\\b|isn't\\b))"
+        "^[\\W_]*(?:(?:only|the answer is|the label is|answer|label)\\s*:?\\s*)?F4\\b(?!\\s*\\?)(?!\\s*[-–—,:]?\\s*no\\s*[-–—,:;]\\s*F\\d)(?!\\s*[-–—,:(]?\\s*(?:maybe|perhaps|not really|or)\\b)(?!\\s+(?:is\\s+(?:not|weak|no|wrong)\\b|isn't\\b))"
       ],
       "forbidden": [
-        "\\bF[123]\\b(?!'s)(?!(?:\\s*(?:,|and|or|-)\\s*F\\d)*\\s+(?:(?:is|are|was)\\s+|(?=(?:a|an)\\s))(?!(?:(?:also|too|likewise|another|the|a|an|really|actually|clearly)\\s+)*(?:chop\\w*|rotat\\w*)\\b)\\w)(?!\\s+(?!(?:too|also|maybe|perhaps|likewise|as)\\b)(?!(?:chop\\w*|rotat\\w*)\\b)[\\w-]+\\s*[,)])"
+        "^[\\W_]*F4\\b\\s*(?:,|and|&|/)\\s*F[123]\\b"
       ]
     },
     {
@@ -1272,10 +1260,10 @@
       "rule": "F4: declared long (all four your way: regime with, RTH VWAP, EMA20 and day's move above 0); rotational, balance and an inside (stall) candle are not trend evidence",
       "anchor": "all four your way: regime `with`, and RTH VWAP, EMA20 and day's move each above 0",
       "required": [
-        "^[\\W_]*(?:(?:only|the answer is|the label is|answer|label)\\s*:?\\s*)?F4\\b(?!\\s*\\?)(?!\\s*[-–—,:]?\\s*no\\b(?!\\s+other\\b))(?!\\s*[-–—,:(]?\\s*(?:maybe|perhaps|probably|not really|or)\\b)(?!\\s+(?:is\\s+(?:not|weak|no|wrong)\\b|isn't\\b))"
+        "^[\\W_]*(?:(?:only|the answer is|the label is|answer|label)\\s*:?\\s*)?F4\\b(?!\\s*\\?)(?!\\s*[-–—,:]?\\s*no\\s*[-–—,:;]\\s*F\\d)(?!\\s*[-–—,:(]?\\s*(?:maybe|perhaps|not really|or)\\b)(?!\\s+(?:is\\s+(?:not|weak|no|wrong)\\b|isn't\\b))"
       ],
       "forbidden": [
-        "\\bF[123]\\b(?!'s)(?!(?:\\s*(?:,|and|or|-)\\s*F\\d)*\\s+(?:(?:is|are|was)\\s+|(?=(?:a|an)\\s))(?!(?:(?:also|too|likewise|another|the|a|an|really|actually|clearly)\\s+)*(?:trend\\w*|directional)\\b)\\w)(?!\\s+(?!(?:too|also|maybe|perhaps|likewise|as)\\b)(?!(?:trend\\w*|directional)\\b)[\\w-]+\\s*[,)])"
+        "^[\\W_]*F4\\b\\s*(?:,|and|&|/)\\s*F[123]\\b"
       ]
     }
   ],
