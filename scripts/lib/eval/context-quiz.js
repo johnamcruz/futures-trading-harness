@@ -9,7 +9,9 @@
  *
  *   loadQuiz({ file })                 the quiz file, checked (config-files.js: fail closed): { value, hash }
  *   quizErrors(value)                  [problem] for a quiz document
- *   questionErrors(q, { part, at, ids })   [problem] for one question, as quizErrors names them (a probe edit's own question)
+ *   questionErrors(q, { part, at, ids, gate })   [problem] for one question, as quizErrors names them (a probe edit's
+ *                                      own question); gate: the quiz file's, whose minChoices and maxChoices bound a
+ *                                      choice question (none given: a choice question is refused)
  *   buildPrompts(root, quiz)           { head, 'head+risk', 'situational:<id>', 'lookup:<id>' }: the head trader's index-mode
  *                                      prompt (head-prompt.js claudeHeadText) and that plus the risk manager's (role-prompt.js
  *                                      claudeRoleText) with its agent body; a lookup question's: the head prompt plus the
@@ -18,13 +20,15 @@
  *   excerptOf(excerpt)                 Part B's briefing excerpt: the Bias line (bias-line.js), the Size and Min lines, or per
  *                                      case its Bias line and compose_check's REACTION line (reaction-echo.js)
  *                                      (prop/size-line.js), from the code that writes them
- *   questionText(quiz, q)              the text asked: the excerpt (Part B), the question, the answer format
+ *   questionText(quiz, q)              the text asked: the excerpt (Part B), the question, the answer format (a
+ *                                      question's own `format`, or a choice question's naming its choices)
  *   answerLine(answer)                 { line, fmt }: the ANSWER line (fmt false: the first line, no ANSWER label)
  *   negated(line, index, negations, window)   a match at `index` negated within its clause (a negation word in the
  *                                      `window` words before it: the quiz file's negationWindow). A line-leading verdict
  *                                      ("No," "No -" "Not yet:" "Yes,": VERDICT) answers the question; it never negates
  *                                      the explanation after it
- *   gradeAnswer(quiz, q, answer)       { id, line, fmt, pass, miss, forb, unsure }
+ *   gradeAnswer(quiz, q, answer)       { id, line, fmt, pass, miss, forb, unsure }: by its required and forbidden regexes,
+ *                                      or a choice question (`choices`, `answer`) by the ANSWER line equal to its answer
  *   summarize(quiz, rows, k)           per question { id, passes, n, allCorrect, bothWays }, per part totals, meetsBar
  *   compare(a, b)                      per question the change between two summaries: { id, from, to, delta }
  *   anchorsMissing(quiz, prompts)      the questions whose anchor is not in their prompt (CI, offline)
@@ -74,15 +78,16 @@ function quizErrors(v) {
   if (!isObj(g) || !(typeof g.flagDrop === 'number' && g.flagDrop > 0 && g.flagDrop <= 1) || !(typeof g.alpha === 'number' && g.alpha > 0 && g.alpha < 1) || !(Number.isInteger(g.maxSlips) && g.maxSlips >= 0) || !(Number.isInteger(g.confirmRuns) && g.confirmRuns >= 1)
     || !(share(g.redMaxShare, 0, 1) && g.redMaxShare < 1) || !(share(g.greenMinShare, 0, 1) && g.greenMinShare > 0) || !(g.redMaxShare < g.greenMinShare) || !(Number.isInteger(g.questionRuns) && g.questionRuns >= 1)
     || !(Number.isInteger(g.maxPatternChars) && g.maxPatternChars >= 1) || !(Number.isInteger(g.minLiteralRun) && g.minLiteralRun >= 1)
-    || ![g.maxGaps, g.maxGapChars, g.maxOptionals, g.maxGroups].every(x => Number.isInteger(x) && x >= 0) || !(Number.isInteger(g.maxGradedLineChars) && g.maxGradedLineChars >= 1)) {
-    out.push('gate: { flagDrop: a share in (0, 1], alpha: in (0, 1), maxSlips: a whole number, 0 or more, confirmRuns: a whole number, 1 or more, redMaxShare: a share in [0, 1), greenMinShare: a share in (0, 1] above redMaxShare, questionRuns: a whole number, 1 or more, maxPatternChars: a whole number, 1 or more, minLiteralRun: a whole number, 1 or more, maxGaps, maxGapChars, maxOptionals, maxGroups: whole numbers, 0 or more, maxGradedLineChars: a whole number, 1 or more }');
+    || ![g.maxGaps, g.maxGapChars, g.maxOptionals, g.maxGroups].every(x => Number.isInteger(x) && x >= 0) || !(Number.isInteger(g.maxGradedLineChars) && g.maxGradedLineChars >= 1)
+    || !(Number.isInteger(g.minChoices) && g.minChoices > 1 && Number.isInteger(g.maxChoices) && g.maxChoices >= g.minChoices)) {
+    out.push('gate: { flagDrop: a share in (0, 1], alpha: in (0, 1), maxSlips: a whole number, 0 or more, confirmRuns: a whole number, 1 or more, redMaxShare: a share in [0, 1), greenMinShare: a share in (0, 1] above redMaxShare, questionRuns: a whole number, 1 or more, maxPatternChars: a whole number, 1 or more, minLiteralRun: a whole number, 1 or more, maxGaps, maxGapChars, maxOptionals, maxGroups: whole numbers, 0 or more, maxGradedLineChars: a whole number, 1 or more, minChoices: a whole number, 2 or more, maxChoices: a whole number, minChoices or more }');
   }
   const bar = v.passBar;
   if (!isObj(bar) || !['partA', 'partB'].every(p => isObj(bar[p]) && Number.isInteger(bar[p].allCorrect) && Number.isInteger(bar[p].bothWays))) out.push('passBar: { partA, partB } each { allCorrect, bothWays }');
   const ids = new Set();
   for (const [part, list] of [['questions', v.questions], ['partB', v.partB]]) {
     if (!Array.isArray(list) || !list.length) { out.push(`${part}: a list of questions`); continue; }
-    list.forEach((q, i) => out.push(...questionErrors(q, { part, at: `${part}[${i}]`, ids })));
+    list.forEach((q, i) => out.push(...questionErrors(q, { part, at: `${part}[${i}]`, ids, gate: g })));
   }
   return out;
 }
@@ -91,7 +96,7 @@ function quizErrors(v) {
  * One question's problems, as the quiz file's check names them (`at` the name it is given). part: 'questions' (Part A:
  * an anchor) or 'partB' (an excerpt). ids: the ids seen so far (a repeated id is refused); its own id is added.
  */
-function questionErrors(q, { part = 'questions', at = 'question', ids = new Set() } = {}) {
+function questionErrors(q, { part = 'questions', at = 'question', ids = new Set(), gate = null } = {}) {
   const out = [];
   if (!isObj(q)) return [`${at}: an object`];
   if (!str(q.id) || ids.has(q.id)) out.push(`${at}.id: unique, given`);
@@ -104,10 +109,34 @@ function questionErrors(q, { part = 'questions', at = 'question', ids = new Set(
   if (part === 'questions' && !str(q.anchor)) out.push(`${at}.anchor: the phrase of the prompt that states the rule`);
   const caseOk = x => isObj(x) && isObj(x.bias) && ['tf', 'rel', 'dir', 'level', 'reaction'].every(k => str(x[k]));
   if (part === 'partB' && !(isObj(q.excerpt) && (isObj(q.excerpt.bias) || (isObj(q.excerpt.size) && isObj(q.excerpt.size.facts)) || (Array.isArray(q.excerpt.cases) && q.excerpt.cases.length && q.excerpt.cases.every(caseOk))))) out.push(`${at}.excerpt: { bias: { h4, h1, t15, declared } }, { size: { facts, riskUsd, minContracts, stretchUsd, capUsd } } or { cases: [{ bias, tf, rel, dir, level, reaction }] }`);
+  // A closed-choice question (choices, answer, an optional format) is graded by equality, never by a regex; any other by
+  // its required and forbidden regexes.
+  if ('choices' in q) {
+    // Its bounds are the quiz file's gate (minChoices, maxChoices): none given, none made up here.
+    const lo = isObj(gate) ? gate.minChoices : undefined;
+    const hi = isObj(gate) ? gate.maxChoices : undefined;
+    if (!Number.isInteger(lo) || !Number.isInteger(hi)) return [...out, `${at}.choices: checked against the quiz file's gate.minChoices and gate.maxChoices (none given)`];
+    const c = q.choices;
+    const okList = Array.isArray(c) && c.length >= lo && c.length <= hi && c.every(str) && new Set(c.map(norm)).size === c.length;
+    if (!okList) out.push(`${at}.choices: ${lo} to ${hi} distinct phrases`);
+    if (!(okList && str(q.answer) && c.includes(q.answer))) out.push(`${at}.answer: one of its choices`);
+    if ('format' in q && !str(q.format)) out.push(`${at}.format: the text appended to the question`);
+    for (const k of ['required', 'forbidden']) if (k in q) out.push(`${at}.${k}: never with choices`);
+    return out;
+  }
+  for (const k of ['answer', 'format']) if (k in q) out.push(`${at}.${k}: only with choices`);
   out.push(...regexErrors(q.required, `${at}.required`), ...regexErrors(q.forbidden, `${at}.forbidden`));
   if (Array.isArray(q.required) && !q.required.length) out.push(`${at}.required: at least one`);
   return out;
 }
+
+/**
+ * A choice answer as compared: lower case, the markdown, quotes or brackets around it (` _ " ( ) *) and a trailing period
+ * or ! dropped; never a character inside it ('F4, F3' and 'chop evidence (I think)' stay what they are).
+ */
+const norm = s => String(s).toLowerCase().replace(/^[\s`_"(*]+/, '').replace(/[\s`_")*.!]+$/, '');
+/** The format line a choice question is asked with: its own, or its choices named. */
+const choiceFormat = q => q.format || ` Answer from your instructions only. First line: ANSWER: <one of: ${q.choices.join(' | ')}>, nothing else. Second line: one short sentence why.`;
 
 const loadQuiz = ({ file = null } = {}) => loadConfigFile({ name: 'context-quiz', validate: quizErrors }, { file });
 
@@ -172,12 +201,12 @@ function excerptOf(excerpt) {
 
 function questionText(quiz, q) {
   const head = q.excerpt ? `Briefing excerpt:\n${excerptOf(q.excerpt).join('\n')}\n\n` : '';
-  return `${head}${q.text}${quiz.answerFormat}`;
+  return `${head}${q.text}${q.choices ? choiceFormat(q) : q.format || quiz.answerFormat}`;
 }
 
 function answerLine(answer) {
   const a = String(answer || '');
-  const m = /^\s*\**\s*ANSWER\s*:?\**\s*(.*)$/mi.exec(a);
+  const m = /^\s*\**\s*ANSWER\**\s*:?\**\s*(.*)$/mi.exec(a);
   return m ? { line: m[1].trim(), fmt: true } : { line: a.split('\n')[0].trim(), fmt: false };
 }
 
@@ -208,7 +237,12 @@ function gradeAnswer(quiz, q, answer) {
   // A line past the gate's maxGradedLineChars is never graded (no pattern runs on it, nor on a cut of it, where a
   // forbidden phrase past the cut would hide): a fail, said so.
   const cap = quiz.gate.maxGradedLineChars;
-  if (line.length > cap) return { id: q.id, line, fmt, pass: false, miss: [...q.required], forb: [], unsure: false, why: `the answer line is longer than gate.maxGradedLineChars (${cap}): not graded, a fail` };
+  if (line.length > cap) return { id: q.id, line, fmt, pass: false, miss: q.choices ? [q.answer] : [...q.required], forb: [], unsure: false, why: `the answer line is longer than gate.maxGradedLineChars (${cap}): not graded, a fail` };
+  // A choice question: the line equal to its answer (markdown, case and a trailing period aside), nothing else on it.
+  if (q.choices) {
+    const ok = norm(line) === norm(q.answer);
+    return { id: q.id, line, fmt, pass: ok, miss: ok ? [] : [q.answer], forb: [], unsure: re(quiz.unsure).test(line) };
+  }
   const miss = q.required.filter(src => !re(src).test(line));
   const forb = q.forbidden.filter(src => matchesUnnegated(line, src, quiz.negations, quiz.negationWindow));
   return { id: q.id, line, fmt, pass: !miss.length && !forb.length, miss, forb, unsure: re(quiz.unsure).test(line) };

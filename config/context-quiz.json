@@ -57,11 +57,13 @@
     "maxGapChars": 60,
     "maxOptionals": 3,
     "maxGroups": 3,
-    "maxGradedLineChars": 1000
+    "maxGradedLineChars": 1000,
+    "minChoices": 2,
+    "maxChoices": 6
   },
   "passBar": {
     "partA": {
-      "allCorrect": 59,
+      "allCorrect": 63,
       "bothWays": 0
     },
     "partB": {
@@ -1157,6 +1159,52 @@
         "\\bignor\\w*|\\birrelevant\\b|\\bdisregard\\w*",
         "\\bunless\\s+(?:the\\s+|that\\s+|a\\s+)?(?:lesson|journal\\w*|cause|lift\\w*)\\b"
       ]
+    },
+    {
+      "id": "q79",
+      "layer": "bias",
+      "prompt": "head",
+      "text": "Briefing lines (synthetic, 09:48 ET):\n- Day so far (6 3m bars; `day-context`): too early (a read from 10 bars), RTH VWAP crosses 0.\nDo these lines show chop evidence, trend evidence, conflicting, or no read yet?",
+      "rule": "no read yet (class A): too early is no read; no chop or trend sign is shown",
+      "anchor": "`too early (a read from 10 bars)`: no read.",
+      "choices": ["chop evidence","trend evidence","conflicting","no read yet"],
+      "answer": "no read yet"
+    },
+    {
+      "id": "q80",
+      "layer": "bias",
+      "prompt": "head",
+      "text": "Briefing lines (synthetic, 10:15 ET):\n- Day so far: unknown (no 09:30 ET bar in the data).\nWhich do these lines show: chop evidence, trend evidence, conflicting, or no read yet?",
+      "rule": "no read yet (class A): unknown is neutral, neither chop nor trend",
+      "anchor": "mixed, none or `unknown` → neutral",
+      "choices": ["chop evidence","trend evidence","conflicting","no read yet"],
+      "answer": "no read yet"
+    },
+    {
+      "id": "q81",
+      "layer": "bias",
+      "prompt": "lookup",
+      "lookup": [
+        "trend-vs-range"
+      ],
+      "text": "Briefing lines (synthetic, 11:45 ET):\nF1 - Bias: long only (4h up, 1h up; short refused).\nF2 - Trend declared? (in 3m ATR(14), + = the side's way; `trend-vs-range`): long RTH VWAP +1, EMA20 +0.6, overnight range middle third, day's move +1.2, regime with; short RTH VWAP -1, EMA20 -0.6, overnight range middle third, day's move -1.2, regime against.\nF3 - Pullback (15m, long leg 20000 -> 20160): depth 38% of the leg; 6 bars since the extreme, volume 0.5x the leg's per bar (falling), range 0.7x; swings since the extreme: 15m 20000 holds, 1h 19950 holds; 15m break against: none, 1h: none.\nF4 - Day so far (45 3m bars; `day-context`): rotational: efficiency 0.03 (x sqrt(bars) 0.2), RTH VWAP crosses 10, range 4.2 x 3m ATR(14), net up (its size: Trend declared? day's move); IB day type: today.dayType.\nWhich ONE of F1-F4 is chop evidence?",
+      "rule": "F4: the Day so far reads rotational (back and forth so far); the Bias, the declared long and an unfinished pullback are not chop",
+      "anchor": "`rotational`: under 0.34: back and forth so far",
+      "choices": ["F1","F2","F3","F4"],
+      "answer": "F4"
+    },
+    {
+      "id": "q82",
+      "layer": "bias",
+      "prompt": "lookup",
+      "lookup": [
+        "trend-vs-range"
+      ],
+      "text": "Briefing lines (synthetic, 11:54 ET):\nF1 - Day so far (48 3m bars; `day-context`): rotational: efficiency 0.02 (x sqrt(bars) 0.14), RTH VWAP crosses 12, range 3.9 x 3m ATR(14), net up (its size: Trend declared? day's move); IB day type: today.dayType.\nF2 - MNQ day: opened 20100 inside the prior value area, gap -6.5 from the prior close (0.03 ADR); prior day 19980-20180, close 20106.5, value area 20050-20140 (POC 20110); overnight 20070-20125; opening type open-auction; initial balance 20062.5-20137.5 (75 points, 0.31 ADR), extended 0 up and 0 down: inside the initial balance; range so far 75 of a 10-day average 240 (31% used).\nF3 - 15m (setup candle, closed 11:45): inside, 1 in a row inside the 11:15 candle 20090-20125, close middle third, range 0.42 ATR, vol 0.61x.\nF4 - Trend declared? (in 3m ATR(14), + = the side's way; `trend-vs-range`): long RTH VWAP +0.7, EMA20 +0.4, overnight range middle third, day's move +0.9, regime with; short RTH VWAP -0.7, EMA20 -0.4, overnight range middle third, day's move -0.9, regime against.\nWhich ONE of F1-F4 is trend evidence for a long?",
+      "rule": "F4: declared long (any one declares: regime with); rotational, balance and an inside (stall) candle are not trend evidence",
+      "anchor": "Declared (any one): regime `with`",
+      "choices": ["F1","F2","F3","F4"],
+      "answer": "F4"
     }
   ],
   "partB": [
