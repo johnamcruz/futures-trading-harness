@@ -878,7 +878,8 @@ const NAMING = [
 test('day-context: naming the day: its word decides the class on the x sqrt(bars) score; a field with no read is never a conflict', () => {
   const dc = flat(read(file('day-context')));
   for (const s of NAMING) assert.ok(dc.includes(s), s);
-  // Inside the Day so far reads, after the bands it names; each sentence deleted fails.
+  // Inside the Day so far reads, after the bands it names; each sentence stated once (its deletion is caught above and by
+  // the quiz test's anchor cut, tests/plugin/context-quiz.test.js).
   const at = dc.indexOf('**Naming the day**');
   assert.ok(at > dc.indexOf('`too early (a read from 10 bars)`: no read.') && at < dc.indexOf('**RTH volatility**'));
   for (const s of NAMING) assert.ok(!flat(dc.replace(s, '')).includes(s));
