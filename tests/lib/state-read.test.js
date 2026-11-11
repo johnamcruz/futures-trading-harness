@@ -264,16 +264,38 @@ test('state line: the trade-session skill documents the grammar the parser reads
   // The model's own read, not the labels copied; recorded, never a step of its own, and no word of a score to aim at.
   assert.ok(flat.includes('your own read from the bars and facts, not the labels copied'));
   assert.ok(flat.includes('it is recorded and changes no step'));
-  const para = flat.slice(flat.indexOf('Under PLAN line 1'), flat.indexOf('`unknown`.', flat.indexOf('Under PLAN line 1')));
+  const para = flat.slice(flat.indexOf('Last line of the PLAN block'), flat.indexOf('`unknown`.', flat.indexOf('Last line of the PLAN block')));
   assert.doesNotMatch(para, /scor|check|graded|accura/i);
-  // One place: no other skill or agent documents the line.
+  // One grammar: no other skill or agent documents it (trader-process only shows the line in its PLAN template, below).
   for (const dir of ['skills', 'agents']) {
     for (const f of fs.readdirSync(path.join(ROOT, dir))) {
       const file = dir === 'skills' ? path.join(ROOT, dir, f, 'SKILL.md') : path.join(ROOT, dir, f);
-      if (!fs.existsSync(file) || f === 'trade-session') continue;
+      if (!fs.existsSync(file) || f === 'trade-session' || f === 'trader-process') continue;
       assert.doesNotMatch(fs.readFileSync(file, 'utf8'), /^STATE:|`STATE:/m, file);
     }
   }
+});
+
+test('state line: the PLAN template and its example end with the STATE line (a model fills the template it copies), and the grammar stays in trade-session', () => {
+  const ROOT = path.join(__dirname, '..', '..');
+  const tp = fs.readFileSync(path.join(ROOT, 'skills', 'trader-process', 'SKILL.md'), 'utf8');
+  const [spec, examples] = tp.split('## Examples');
+  // The template: the PLAN block's last line, after 9 Manage, a filled-in instance of the trade-session grammar.
+  const tpl = /9 Manage:[^\n]*\n(STATE: [^\n]+)\n```/.exec(spec);
+  assert.ok(tpl, 'the template ends with the STATE line');
+  const filled = tpl[1].replace(/<f>/g, 'range').replace(/frames <[^>]+>/, 'frames agree');
+  assert.deepStrictEqual([S.parseStateLine(filled).status, S.parseStateLine(filled).bad], ['read', []]);
+  // The example block's line reads in full (a complete line, every field).
+  const ex = /9 Manage:[^\n]*\n(STATE: [^\n]+)\n```/.exec(examples);
+  assert.ok(ex, 'the example ends with the STATE line');
+  const r = S.parseStateLine(ex[1]);
+  assert.deepStrictEqual([r.status, r.missing, r.bad], ['read', [], []]);
+  // trade-session says where it goes (the PLAN's last line), still your own read, and records only.
+  const flat = fs.readFileSync(path.join(ROOT, 'skills', 'trade-session', 'SKILL.md'), 'utf8').replace(/\s+/g, ' ');
+  assert.ok(flat.includes('Last line of the PLAN block'), 'trade-session places it');
+  assert.ok(flat.includes('it is recorded and changes no step'));
+  // Every PLAN, an open trade's too (a managed cycle writes one, and 9 in 10 of them left the line out).
+  assert.ok(flat.includes("every PLAN, an open trade's too"));
 });
 
 test('state read: the module decides nothing', () => {
