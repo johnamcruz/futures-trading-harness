@@ -61,7 +61,7 @@
   },
   "passBar": {
     "partA": {
-      "allCorrect": 66,
+      "allCorrect": 64,
       "bothWays": 0
     },
     "partB": {
@@ -1158,26 +1158,6 @@
         "\\bignor\\w*|\\birrelevant\\b|\\bdisregard\\w*",
         "\\bunless\\s+(?:the\\s+|that\\s+|a\\s+)?(?:lesson|journal\\w*|cause|lift\\w*)\\b"
       ]
-    },
-    {
-      "id": "q72",
-      "layer": "levels",
-      "prompt": "head",
-      "text": "Briefing lines (synthetic, 11:12 ET):\n- Bias: no side yet (15m range).\n- MNQ day: opened 20100 inside the prior value area, gap -6.5 from the prior close (0.03 ADR); prior day 19980-20180, close 20106.5, value area 20050-20140 (POC 20110); overnight 20070-20125; opening type open-auction; initial balance 20062.5-20137.5 (75 points, 0.31 ADR), extended 0 up and 0 down: inside the initial balance; range so far 75 of a 10-day average 240 (31% used).\n- Rotation evidence (values, not a verdict): RTH VWAP crosses in the last 30 bars 5 (the VWAP line's count); IB day type inside the initial balance; 15m setup candle neither, 3m entry candle neither; failed break (swept the previous high or low, closed back inside): 3m no, 5m unknown, 15m no.\nThe last close, 20101, is in the middle of the initial balance. Do these lines show chop evidence, trend evidence, conflicting, or no read yet?",
-      "rule": "chop evidence (class B): an open inside the prior value area that stays inside the IB is balance; the middle is a read against",
-      "anchor": "an open inside the prior value area that stays inside the IB is balance",
-      "choices": ["chop evidence","trend evidence","conflicting","no read yet"],
-      "answer": "chop evidence"
-    },
-    {
-      "id": "q74",
-      "layer": "bias",
-      "prompt": "head",
-      "text": "Briefing lines (synthetic, 11:18 ET):\n- Bias: short only (4h down, 1h down; long refused).\n- MNQ day: opened 19940 below the prior range, gap -72.5 from the prior close (0.24 ADR); prior day 19960-20120, close 20012.5, value area 20000-20080 (POC 20040); overnight 19950-20030; opening type open-drive down; initial balance 19870-19945 (75 points, 0.25 ADR), extended 0 up and 150 down: trend down; range so far 225 of a 10-day average 300 (75% used).\n- Day so far (36 3m bars; `day-context`): directional down: efficiency 0.25 (x sqrt(bars) 1.5), RTH VWAP crosses 0, range 9.4 x 3m ATR(14), net down (its size: Trend declared? day's move); IB day type: today.dayType.\n- Rotation evidence (values, not a verdict): RTH VWAP crosses in the last 30 bars 0 (the VWAP line's count); IB day type trend down; 15m setup candle neither, 3m entry candle neither; failed break (swept the previous high or low, closed back inside): 3m no, 5m unknown, 15m no.\nDo these lines show chop evidence, trend evidence, conflicting, or no read yet?",
-      "rule": "trend evidence (class C, the guard): a trend day (one side extended two IBs) after an open outside the prior range and an open-drive is traded with it, never faded",
-      "anchor": "is traded with it (never faded: never counter)",
-      "choices": ["chop evidence","trend evidence","conflicting","no read yet"],
-      "answer": "trend evidence"
     },
     {
       "id": "q75",
