@@ -1673,11 +1673,11 @@ Limits:
   adherence over every trade cycle (a managed cycle's too), the classes by
   source, the four outcomes, the entries by the coded entry class (A no
   signal, B chop outnumbers trend, C trend only, D both) and by each
-  trend signal (T1 Day so far directional, T2 15m frame, T3 3m regime, T7
+  trend signal (S1 Day so far directional, S2 15m frame, S3 3m regime, S7
   IB day type), each net R with and without its best trade. The coded
   signals are only those the recorded facts hold (the Day so far word, the
   frames, the regime, the IB day type); a run from before the Day so far
-  line has no T1 or C1. It decides nothing.
+  line has no S1 or C1. It decides nothing.
 - A record whose bar is not the cycle's base bar (a multi-lane run) is
   counted as unscorable under its own reason. A record whose bar is missing
   from the bars is counted the same way. Neither is scored against another

@@ -51,7 +51,7 @@ test('coded: a cycle with no STATE line is sorted from the briefing\'s labels an
   const own = audit({ stateRead: rec('STATE: 4h up | 1h up | 15m down | frames disagree', UP), decision: decision('long', 1), coded: true });
   assert.deepStrictEqual([own.class, own.source, own.modelStatus], ['misread', 'model', 'read']);
   // The coded read carries its signals (the entry class by the entry's side).
-  assert.deepStrictEqual([coded.coded.cls, coded.coded.trend], ['C', ['T1', 'T2', 'T3']]);
+  assert.deepStrictEqual([coded.coded.cls, coded.coded.trend], ['C', ['S1', 'S2', 'S3']]);
   // No facts (no briefing at the cycle): nothing to restate, unscorable, never a made-up read.
   const bare = audit({ stateRead: { status: 'none', line: null, read: null, symbol: 'MNQ', bar: T(CYCLE), fields: {}, facts: null }, decision: decision('long', 1), coded: true });
   assert.deepStrictEqual([bare.class, bare.source], [null, null]);
@@ -68,7 +68,7 @@ test('coded: its facts\' bar must still be the cycle\'s base bar (the same refus
   assert.match(other.unscorable, /not the cycle's base bar/);
 });
 
-const row = (kind, cls, source, R, over = {}) => ({ day: '2021-06-11', kind, class: cls, source, modelStatus: source === 'model' ? 'read' : 'none', outcome: { R, side: null }, coded: { cls: 'C', day: 'trend', trend: ['T2'], chop: [] }, ...over });
+const row = (kind, cls, source, R, over = {}) => ({ day: '2021-06-11', kind, class: cls, source, modelStatus: source === 'model' ? 'read' : 'none', outcome: { R, side: null }, coded: { cls: 'C', day: 'trend', trend: ['S2'], chop: [] }, ...over });
 
 test('source report: adherence, each class per source, net R with and without the best trade', () => {
   const rows = [
@@ -99,15 +99,15 @@ test('source report: no known R is null, never 0; one entry has nothing left wit
 
 test('source report: entries by the coded entry class A-D and by each trend signal, with and without the best', () => {
   const at = (cls, trend, chop, R) => row('entry', R > 0 ? 'acted-right' : 'market-turned', 'coded', R, { coded: { cls, trend, chop, day: 'trend' } });
-  const s = R.sourceReport([at('C', ['T2'], [], 2), at('C', ['T2', 'T3'], [], -1), at('B', [], ['C2', 'C3'], -1), at('A', [], [], 1), at('D', ['T3'], ['C2'], -1)]);
+  const s = R.sourceReport([at('C', ['S2'], [], 2), at('C', ['S2', 'S3'], [], -1), at('B', [], ['C2', 'C3'], -1), at('A', [], [], 1), at('D', ['S3'], ['C2'], -1)]);
   assert.deepStrictEqual(Object.keys(s.byEntryClass), ['A', 'B', 'C', 'D']);
   assert.deepStrictEqual(s.byEntryClass.C, { n: 2, knownR: 2, netR: 1, meanR: 0.5, best: 2, withoutBestR: -1 });
   assert.strictEqual(s.byEntryClass.B.netR, -1);
   assert.strictEqual(s.byEntryClass.A.n, 1);
   // A trend signal's entries: each entry counts under every signal it had.
-  assert.deepStrictEqual(Object.keys(s.byTrendSignal), ['T1', 'T2', 'T3', 'T7']);
-  assert.deepStrictEqual([s.byTrendSignal.T2.n, s.byTrendSignal.T2.netR, s.byTrendSignal.T3.n, s.byTrendSignal.T3.netR], [2, 1, 2, -2]);
-  assert.strictEqual(s.byTrendSignal.T1.n, 0);
+  assert.deepStrictEqual(Object.keys(s.byTrendSignal), ['S1', 'S2', 'S3', 'S7']);
+  assert.deepStrictEqual([s.byTrendSignal.S2.n, s.byTrendSignal.S2.netR, s.byTrendSignal.S3.n, s.byTrendSignal.S3.netR], [2, 1, 2, -2]);
+  assert.strictEqual(s.byTrendSignal.S1.n, 0);
   // Passes and unscored rows are in no entry class.
   assert.strictEqual(R.sourceReport([row('pass', 'passed', 'coded', 0.4)]).byEntryClass.C.n, 0);
 });

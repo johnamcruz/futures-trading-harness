@@ -18,7 +18,7 @@ const keys = r => [r.chop, r.trend];
 test('day class: trend signals only is trend, chop signals only is chop, both is mixed, none is unknown', () => {
   // The 15m frame, the 3m regime and the IB day type trending one way: trend (up).
   const t = C.codedRead(facts({ regime: 'trend-up', dayType: 'trend up' }));
-  assert.deepStrictEqual([t.day, t.dir, ...keys(t)], ['trend', 'up', [], ['T2', 'T3', 'T7']]);
+  assert.deepStrictEqual([t.day, t.dir, ...keys(t)], ['trend', 'up', [], ['S2', 'S3', 'S7']]);
   // Ranging frame, regime and an IB day: chop; Day so far rotational adds C1.
   const c = C.codedRead(facts({ frames: { '4h': 'up', '1h': 'up', '15m': 'range' }, regime: 'range', dayType: 'inside the initial balance', daySoFar: 'rotational' }));
   assert.deepStrictEqual([c.day, c.dir, ...keys(c)], ['chop', null, ['C1', 'C2', 'C3', 'C8'], []]);
@@ -27,9 +27,9 @@ test('day class: trend signals only is trend, chop signals only is chop, both is
   // Trend signals that disagree on the way: mixed, no direction.
   const x = C.codedRead(facts({ regime: 'trend-down' }));
   assert.deepStrictEqual([x.day, x.dir], ['mixed', null]);
-  // `directional` carries no way (T1): trend on its own, the direction from the other signals.
+  // `directional` carries no way (S1): trend on its own, the direction from the other signals.
   const d = C.codedRead(facts({ frames: { '4h': 'up', '1h': 'up', '15m': 'transition' }, daySoFar: 'directional' }));
-  assert.deepStrictEqual([d.day, d.dir, ...keys(d)], ['trend', null, [], ['T1']]);
+  assert.deepStrictEqual([d.day, d.dir, ...keys(d)], ['trend', null, [], ['S1']]);
   // Nothing the facts can say (too early, unknown labels, a transition): unknown. `mixed` and `too early` Day so far are no signal.
   for (const f of [facts({ frames: { '4h': 'up', '1h': 'up', '15m': 'transition' } }), facts({ frames: { '4h': null, '1h': null, '15m': null }, daySoFar: 'too early' }), facts({ daySoFar: 'mixed', frames: { '4h': 'up', '1h': 'up', '15m': 'unknown' } }), null, {}]) {
     assert.strictEqual(C.codedRead(f).day, 'unknown', JSON.stringify(f));
@@ -44,12 +44,12 @@ test('entry class A-D by side: A no signal, C trend only, B chop outnumbers tren
   assert.strictEqual(cls(facts({ frames: { '4h': 'up', '1h': 'up', '15m': 'range' }, regime: 'range' }), 'long'), 'B');
   // One of each: chop does not outnumber trend: D.
   assert.strictEqual(cls(facts({ frames: { '4h': 'up', '1h': 'up', '15m': 'range' }, regime: 'trend-up' }), 'long'), 'D');
-  // The 15m trending against the entry is C9, chop; the regime with it is T3: one each, D.
+  // The 15m trending against the entry is C9, chop; the regime with it is S3: one each, D.
   const against = C.codedRead(facts({ frames: { '4h': 'up', '1h': 'up', '15m': 'down' }, regime: 'trend-up' }), { side: 'long' });
-  assert.deepStrictEqual([against.cls, ...keys(against)], ['D', ['C9'], ['T3']]);
-  // For a short the same 15m is T2 and the up regime and up IB day are against it (two C9): B.
+  assert.deepStrictEqual([against.cls, ...keys(against)], ['D', ['C9'], ['S3']]);
+  // For a short the same 15m is S2 and the up regime and up IB day are against it (two C9): B.
   const short = C.codedRead(facts({ frames: { '4h': 'up', '1h': 'up', '15m': 'down' }, regime: 'trend-up', dayType: 'trend up' }), { side: 'short' });
-  assert.deepStrictEqual([short.cls, ...keys(short)], ['B', ['C9', 'C9'], ['T2']]);
+  assert.deepStrictEqual([short.cls, ...keys(short)], ['B', ['C9', 'C9'], ['S2']]);
   // The Day so far `directional` is a trend signal for either side (it names no way).
   assert.strictEqual(cls(facts({ frames: { '4h': 'up', '1h': 'up', '15m': 'transition' }, daySoFar: 'directional' }), 'long'), 'C');
   // No side: no entry class.

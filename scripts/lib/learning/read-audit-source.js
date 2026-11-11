@@ -11,7 +11,7 @@
  *                  apart; `other` the rest (a small loss, a breakeven)
  *   bySource       per source: the classes, and the entries' net R with and without the best trade
  *   byEntryClass   the entries by the coded entry class A-D (coded-read.js: no signal, chop outnumbers trend, trend only, both)
- *   byTrendSignal  the entries by each trend signal they had (T1, T2, T3, T7: coded-read.js), an entry under every one it had
+ *   byTrendSignal  the entries by each trend signal they had (S1, S2, S3, S7: coded-read.js), an entry under every one it had
  *   dayClass       every decision by the coded day class (trend, chop, mixed, unknown)
  * An entry's cell: n (every entry), knownR (those with a recorded trade R), netR and meanR over the known only (never a
  * missing R as 0), best (the one best trade), withoutBestR (the net without it).
@@ -77,7 +77,7 @@ function renderSourceReport(s) {
   }
   out.push(`  all entries ${cell(s.all.entries)}`, `Day class (coded): ${Object.entries(s.dayClass).map(([k, n]) => `${k} ${n}`).join(', ')}`, 'Entries by the coded entry class (A no signal, B chop outnumbers trend, C trend only, D both):');
   for (const [k, c] of Object.entries(s.byEntryClass)) out.push(`  entry class ${k}: ${cell(c)}`);
-  out.push('Entries by the trend signal they had (T1 Day so far directional, T2 15m frame, T3 3m regime, T7 IB day type):');
+  out.push('Entries by the trend signal they had (S1 Day so far directional, S2 15m frame, S3 3m regime, S7 IB day type):');
   for (const [k, c] of Object.entries(s.byTrendSignal)) out.push(`  ${k}: ${cell(c)}`);
   return out.join('\n');
 }

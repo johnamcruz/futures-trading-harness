@@ -12,8 +12,8 @@
  * The signals (the chop-class study's, kept to what the recorded facts hold; each names the label it reads):
  *   chop    C1 Day so far `rotational`; C2 the 15m frame `range`; C3 the 3m regime `range`; C8 the IB day type
  *           `inside the initial balance`; C9 (with a side) a trend label against the side
- *   trend   T1 Day so far `directional` (names no way); T2 the 15m frame up or down; T3 the 3m regime trend-up or
- *           trend-down; T7 the IB day type `trend up` or `trend down`
+ *   trend   S1 Day so far `directional` (names no way); S2 the 15m frame up or down; S3 the 3m regime trend-up or
+ *           trend-down; S7 the IB day type `trend up` or `trend down`
  * Not in the recorded facts, so not read: the declared-trend line, the session VWAP's crosses, the bias line, the open
  * against the prior value area (so C8 is the IB word alone). A `mixed` or `too early` Day so far and a `transition` label
  * are no signal.
@@ -23,7 +23,7 @@
  * trend, D the rest (chop at least as many as trend, both present).
  *
  *   codedRead(facts, { side })   { day, dir, chop: [key], trend: [key], cls }  (cls: null without a side)
- *   codedState(record)           the cycle's stateRead record rebuilt from the labels as a read ({ status: 'read',
+ *   codedState(record)           the cycle's STATE record rebuilt from the labels as a read ({ status: 'read',
  *                                source: 'coded', read, fields, ... }), or null when it has no facts
  */
 
@@ -40,10 +40,10 @@ const SIGNALS = Object.freeze([
   { key: 'C2', kind: 'chop', at: f => (isObj(f.frames) && f.frames['15m'] === 'range' ? { dir: null } : null) },
   { key: 'C3', kind: 'chop', at: f => (f.regime === 'range' ? { dir: null } : null) },
   { key: 'C8', kind: 'chop', at: f => (f.dayType === 'inside the initial balance' ? { dir: null } : null) },
-  { key: 'T1', kind: 'trend', at: f => (f.daySoFar === 'directional' ? { dir: null } : null) },
-  { key: 'T2', kind: 'trend', at: f => (isObj(f.frames) && way(f.frames['15m']) ? { dir: f.frames['15m'] } : null) },
-  { key: 'T3', kind: 'trend', at: f => { const [, d] = /^trend-(up|down)$/.exec(String(f.regime)) || []; return d ? { dir: d } : null; } },
-  { key: 'T7', kind: 'trend', at: f => { const [, d] = /^trend (up|down)$/.exec(String(f.dayType)) || []; return d ? { dir: d } : null; } },
+  { key: 'S1', kind: 'trend', at: f => (f.daySoFar === 'directional' ? { dir: null } : null) },
+  { key: 'S2', kind: 'trend', at: f => (isObj(f.frames) && way(f.frames['15m']) ? { dir: f.frames['15m'] } : null) },
+  { key: 'S3', kind: 'trend', at: f => { const [, d] = /^trend-(up|down)$/.exec(String(f.regime)) || []; return d ? { dir: d } : null; } },
+  { key: 'S7', kind: 'trend', at: f => { const [, d] = /^trend (up|down)$/.exec(String(f.dayType)) || []; return d ? { dir: d } : null; } },
 ].map(Object.freeze));
 
 function codedRead(facts, { side = null } = {}) {
@@ -58,7 +58,7 @@ function codedRead(facts, { side = null } = {}) {
   const out = { day, dir, chop, trend: trendHits.map(x => x.s.key), cls: null };
   const sideWay = SIDE_WAY[side];
   if (sideWay) {
-    // A trend label against the side is chop for it (C9); the rest of the trend signals (and T1, which names no way) count.
+    // A trend label against the side is chop for it (C9); the rest of the trend signals (and S1, which names no way) count.
     const against = trendHits.filter(x => x.got.dir === OPPOSITE[sideWay]);
     const c = [...chop, ...against.map(() => 'C9')];
     const t = trendHits.filter(x => !against.includes(x)).map(x => x.s.key);
