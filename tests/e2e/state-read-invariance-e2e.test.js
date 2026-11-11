@@ -122,6 +122,13 @@ test('state read invariance: no module that decides reaches state-read.js, throu
   assert.deepStrictEqual(naming(/require\([^)]*state-read/), ['scripts/lib/cycle-log.js', 'scripts/lib/learning/read-accuracy.js']);
   // And no module but the recorder and the module itself names a way to the read: the head's own text, the record's
   // builder, the parser or the scorer (a decider calling require('../cycle-log').headOwnText would be one).
+  // Who may read the record's field at all (`stateRead`): the recorder, the store that carries it, the learning modules and the
+  // report, and trade-feedback (#325: the reviewed-trades line shows the STATE frames to the head trader, information only).
+  // Anything new that reads it, a runtime path above all, fails here and must be argued for.
+  assert.deepStrictEqual(naming(/\bstateRead\b/), [
+    'scripts/lib/cycle-log.js', 'scripts/lib/learning/experience-log.js', 'scripts/lib/learning/read-accuracy.js', 'scripts/lib/learning/read-audit.js',
+    'scripts/lib/learning/run-experience.js', 'scripts/lib/replay/store.js', 'scripts/lib/trading/trade-feedback.js',
+  ]);
   assert.deepStrictEqual(naming(/\b(?:headOwnText|cycleStateRecord|cycleStateRead|parseStateLine|parseState|scoreState)\b/), ['scripts/lib/cycle-log.js', 'scripts/lib/trading/state-read.js']);
   assert.ok(!('cycleStateRecord' in require('../../scripts/lib/cycle-log')), 'the record\'s builder is the cycle log\'s own');
   // The read audit (learning/read-audit.js) reads the record offline beside each decision's outcome: a report, required

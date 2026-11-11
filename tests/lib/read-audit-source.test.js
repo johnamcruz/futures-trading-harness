@@ -68,6 +68,7 @@ test('coded: its facts\' bar must still be the cycle\'s base bar (the same refus
   assert.match(other.unscorable, /not the cycle's base bar/);
 });
 
+const round = x => Math.round(x * 10000) / 10000;
 const row = (kind, cls, source, R, over = {}) => ({ day: '2021-06-11', kind, class: cls, source, modelStatus: source === 'model' ? 'read' : 'none', outcome: { R, side: null }, coded: { cls: 'C', day: 'trend', trend: ['S2'], chop: [] }, ...over });
 
 test('source report: adherence, each class per source, net R with and without the best trade', () => {
@@ -86,7 +87,22 @@ test('source report: adherence, each class per source, net R with and without th
   assert.deepStrictEqual(s.bySource.model.entries, { n: 2, knownR: 2, netR: 2, meanR: 1, best: 3, withoutBestR: -1 });
   assert.deepStrictEqual(s.all.entries, { n: 5, knownR: 5, netR: 1.5, meanR: 0.3, best: 3, withoutBestR: -1.5 });
   // The four outcomes the owner reads (the audit's classes grouped; passes and the rest apart).
-  assert.deepStrictEqual(s.fourOutcomes, { misread: 0, 'acted-wrong': 0, 'market-turned': 3, 'acted-right': 2, passed: 1, other: 0 });
+  // Per source, never merged: the model's rows are the headline, the coded rows beside.
+  assert.deepStrictEqual(s.fourOutcomes.model, { misread: 0, 'acted-wrong': 0, 'market-turned': 1, 'acted-right': 1, passed: 0, other: 0 });
+  assert.deepStrictEqual(s.fourOutcomes.coded, { misread: 0, 'acted-wrong': 0, 'market-turned': 2, 'acted-right': 1, passed: 1, other: 0 });
+});
+
+test('source report: all entries equal model + coded + none, also when the three differ, and best is rounded like the rest', () => {
+  const s = R.sourceReport([row('entry', 'acted-right', 'model', 1.00004), row('entry', 'acted-right', 'coded', 2), row('entry', 'market-turned', 'coded', -1),
+    row('entry', null, null, 0.5, { coded: null }), row('entry', null, null, null, { coded: null })]);
+  const b = s.bySource;
+  assert.deepStrictEqual([b.model.entries.n, b.coded.entries.n, b.none.entries.n], [1, 2, 2]);
+  assert.strictEqual(s.all.entries.n, b.model.entries.n + b.coded.entries.n + b.none.entries.n);
+  assert.strictEqual(s.all.entries.knownR, b.model.entries.knownR + b.coded.entries.knownR + b.none.entries.knownR);
+  assert.strictEqual(round(s.all.entries.netR), round(b.model.entries.netR + b.coded.entries.netR + b.none.entries.netR));
+  assert.strictEqual(s.bySource.model.entries.best, 1, 'best rounded to four places, as net and mean are');
+  const total = Object.values(b).reduce((a, x) => a + x.n, 0);
+  assert.strictEqual(total, 5);
 });
 
 test('source report: no known R is null, never 0; one entry has nothing left without its best', () => {
@@ -114,8 +130,9 @@ test('source report: entries by the coded entry class A-D and by each trend sign
 
 test('source report: the coded day class over every decision', () => {
   const day = d => row('pass', 'passed', 'coded', 0.1, { coded: { cls: null, day: d, trend: [], chop: [] } });
-  const s = R.sourceReport([day('trend'), day('trend'), day('chop'), day('mixed'), row('pass', null, null, null, { coded: null })]);
-  assert.deepStrictEqual(s.dayClass, { trend: 2, chop: 1, mixed: 1, unknown: 1 });
+  const s = R.sourceReport([day('trend'), day('trend'), day('chop'), day('mixed'), day('unknown'), row('pass', null, null, null, { coded: null })]);
+  // Unknown is two things: no facts recorded at the cycle, or facts that hold no signal.
+  assert.deepStrictEqual(s.dayClass, { trend: 2, chop: 1, mixed: 1, 'unknown-no-facts': 1, 'unknown-no-signal': 1 });
 });
 
 test('render: names the source of every figure and says what the coded read is', () => {
