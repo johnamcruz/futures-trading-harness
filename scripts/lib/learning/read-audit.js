@@ -40,13 +40,15 @@
  *   readSide(read)                        'long' | 'short' | null
  *   inconsistencies(read, side)           the CONSISTENCY keys an entry on that side breaks
  *   forwardMove({ bars, cycleT, side, forwardBars, stopAtr })   { R, stopped, stop, bars, why }
- *   auditDecision({ day, t, symbol, stateRead, decision, orders, result, bars, cfg, barClose, tfMs })   one row (barClose,
- *                                         tfMs: the cycle's base bar close and timeframe, to refuse another lane's record)
+ *   auditDecision({ day, t, symbol, stateRead, decision, orders, result, bars, cfg, barClose, tfMs, coded })   one row (barClose,
+ *                                         tfMs: the cycle's base bar close and timeframe, to refuse another lane's record;
+ *                                         coded: a cycle with no STATE line is read from its recorded labels, row.source says
+ *                                         which: model | coded; read-audit-source.js reports them apart)
  *   summarize(rows)                       the report: per class, by field, by day so far, misread fields, entry losers
  *   renderAudit(summary)                  the report as text
  *   loadDecisions(paths)                  decision records (<run>-decisions.json, scorecard.jsonl) by key
  *   replayDirs(target)                    the replay run dirs under a run home, a runs folder or a replay run dir
- *   runRows(target, { decisions, cfg, days, barsFiles })   { runId, rows } of one run; barsFiles { SYMBOL: data file }
+ *   runRows(target, { decisions, cfg, days, barsFiles, coded })   { runId, rows } of one run; barsFiles { SYMBOL: data file }
  *                                         (the data the run replayed, the scorecard's --bars): the bars the outcome
  *                                         reads, for a forward window past the run's own archive (a short run's last bars)
  */
@@ -57,6 +59,7 @@ const { streamFor, round4 } = require('../prop/stats');
 const { dayBootstrap } = require('./experience-index');
 const { ATR_PERIOD, loadBars, outcomeBarsFrom } = require('../replay/labels');
 const ind = require('../trading/indicators');
+const { codedRead, codedState } = require('../trading/coded-read');
 
 const EI = require('../tunables').training().experienceIndex; // config/training.json: the day resampling's level, seed, reps, minimums
 const CFG = require('../tunables').analysis().readAudit; // config/analysis.json: the forward window and the standard stop
@@ -195,9 +198,13 @@ function unscorableWhy(row, s, { barClose, tfMs }) {
   return row.outcome.why || null;
 }
 
-function auditDecision({ day, t, symbol, stateRead = null, decision = null, orders = [], result = null, bars = [], cfg = CFG, barClose = null, tfMs = null }) {
+function auditDecision({ day, t, symbol, stateRead = null, decision = null, orders = [], result = null, bars = [], cfg = CFG, barClose = null, tfMs = null, coded = false }) {
   const { kind, side } = kindOf({ decision, orders, result });
-  const s = isObj(stateRead) ? stateRead : null;
+  const own = isObj(stateRead) ? stateRead : null;
+  // coded: a cycle without a usable STATE line is read from its recorded briefing labels instead (coded-read.js), and
+  // says so (row.source); the model's own line, when it wrote one, is always the read used.
+  const fromCode = coded && !(own && own.status === 'read') ? codedState(own) : null;
+  const s = fromCode || own;
   const state = stateColumn(s);
   const fields = state ? state.fields : {};
   const read = s && isObj(s.read) ? s.read : null;
@@ -211,6 +218,7 @@ function auditDecision({ day, t, symbol, stateRead = null, decision = null, orde
     outcome: outcomeColumn({ kind, side, decision, read, bars, cycleT, cfg }),
     class: null, unscorable: null,
   };
+  if (coded) Object.assign(row, { source: fromCode ? 'coded' : own && own.status === 'read' ? 'model' : null, modelStatus: own ? (own.error ? 'error' : own.status || null) : null, coded: own && isObj(own.facts) ? codedRead(own.facts, { side }) : null });
   if (kind === 'in-trade') return row;
   row.unscorable = unscorableWhy(row, s, { barClose, tfMs });
   if (row.unscorable) return row;
@@ -355,7 +363,7 @@ function replayDirs(target) {
 const dataBars = new Map(); // file|tf -> bars, read once a process
 const dataOf = (file, tf) => { const k = `${file}|${tf}`; if (!dataBars.has(k)) dataBars.set(k, outcomeBarsFrom(file, tf)); return dataBars.get(k); };
 
-function runRows(target, { decisions = null, cfg = CFG, days = null, barsFiles = {} } = {}) {
+function runRows(target, { decisions = null, cfg = CFG, days = null, barsFiles = {}, coded = false } = {}) {
   const dir = replayDirs(target)[0];
   if (!dir) throw new Error(`${target}: no replay run (manifest.json) here`);
   const home = path.resolve(dir, '..', '..');
@@ -375,7 +383,7 @@ function runRows(target, { decisions = null, cfg = CFG, days = null, barsFiles =
       const ran = (Array.isArray(line.ran) ? line.ran : []).find(x => isObj(x) && Array.isArray(x.symbols));
       const symbol = (sr && sr.symbol) || (ran && ran.symbols[0]) || (Array.isArray(at.symbols) ? at.symbols[0] : null);
       if (!barsOf.has(symbol)) barsOf.set(symbol, isObj(barsFiles) && barsFiles[symbol] ? dataOf(barsFiles[symbol], tf) : loadBars(home, symbol, tf));
-      rows.push(auditDecision({ day, t: line.t, symbol, stateRead: sr, decision: joinOf(decisions, `${line.t}|${symbol}`, runId), orders: c.orders, result: c.result, bars: barsOf.get(symbol), cfg,
+      rows.push(auditDecision({ day, t: line.t, symbol, stateRead: sr, decision: joinOf(decisions, `${line.t}|${symbol}`, runId), orders: c.orders, result: c.result, bars: barsOf.get(symbol), cfg, coded,
         barClose: isObj(c.timing) ? c.timing.barClose : null, tfMs: tf ? tf * MINUTE : null }));
     }
   }

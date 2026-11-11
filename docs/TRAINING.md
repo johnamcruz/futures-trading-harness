@@ -1558,7 +1558,7 @@ this block:
 ### The read audit
 
 `node scripts/read-audit.js --run <run home | runs folder | replay run dir>
---decisions <training home> [--bars MNQ=<data file>] [--days d1,d2] [--json]`
+--decisions <training home> [--bars MNQ=<data file>] [--days d1,d2] [--coded] [--json]`
 lays three columns side by side for every decision in a run, then sorts
 each decision by them (`scripts/lib/learning/read-audit.js`). It is a
 measurement only. Nothing that decides reads it: not the gate,
@@ -1662,6 +1662,22 @@ Limits:
   recorded in a closed form. That would be a separate change, approved by
   the owner, and is not part of the audit.
 - The forward window counts bars, not time: a gap in the bars stretches it.
+- `--coded` (`scripts/lib/learning/read-audit-source.js`,
+  `scripts/lib/trading/coded-read.js`): a cycle with no STATE line (before
+  the line moved into the PLAN template, 91% of them) is sorted by the
+  cycle's recorded briefing labels restated by code, and labelled `coded`.
+  The model's own line, when written, is always the read used. A coded
+  read is the labels restated, so it is never a misread (0 by
+  construction): only the model's lines can show a misread, and the report
+  keeps the two sources apart. The added report is: the STATE-line
+  adherence over every trade cycle (a managed cycle's too), the classes by
+  source, the four outcomes, the entries by the coded entry class (A no
+  signal, B chop outnumbers trend, C trend only, D both) and by each
+  trend signal (T1 Day so far directional, T2 15m frame, T3 3m regime, T7
+  IB day type), each net R with and without its best trade. The coded
+  signals are only those the recorded facts hold (the Day so far word, the
+  frames, the regime, the IB day type); a run from before the Day so far
+  line has no T1 or C1. It decides nothing.
 - A record whose bar is not the cycle's base bar (a multi-lane run) is
   counted as unscorable under its own reason. A record whose bar is missing
   from the bars is counted the same way. Neither is scored against another
