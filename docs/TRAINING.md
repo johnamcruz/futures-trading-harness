@@ -1566,7 +1566,8 @@ compose_check, sizing, the exits, the runner, the briefing, a prompt or a
 skill. The model is asked nothing.
 
 1. **What the model read**: its closed-form STATE line (`4h`, `1h`, `15m`,
-   `frames`), as its cycle log recorded it (trading/state-read.js).
+   `frames`, `day`, `ctx`), as its cycle log recorded it
+   (trading/state-read.js).
 2. **What the market was doing**: the labels that read was scored against
    (the cycle bar's briefing, built from the bars up to that bar), with
    their context, as recorded at the cycle. The audit never rebuilds them.
@@ -1639,10 +1640,39 @@ the count is 0 and the sum is null, never 0. Then come:
 
 - each field split by its result;
 - `frames-own` (the read against itself), beside;
-- the classes by the day so far at the bar (context: the read has no day
-  field);
+- the classes by the day so far at the bar (context, beside the read's
+  own day word);
 - the misread fields by entry R lost, with passes apart;
 - the entry losers (trade R < 0) by class, and the unscorable ones by why.
+
+**Day and ctx** (`scripts/lib/learning/read-audit-day-ctx.js`): the STATE
+line's `day` (`trend`, `chop`, `mixed`, `early`) and `ctx` (`pullback`,
+`reversal`, `continuation`, `unclear`) words, the model's own trend-vs-chop
+and pullback-vs-reversal reads, are scored after the fact from the bars,
+beside the classes and never in them (a mismatch there is no misread):
+
+- The day label is the Day so far read (`day-so-far.js`) of the day's bars
+  through the run's session window's end (`sessions` in its runner config),
+  as a class: directional `trend`, rotational `chop`, `mixed`. No session
+  window, or bars that end before the window does, gives no label. `early`
+  names no class, so it is never right. Reported per label with the words
+  read, and by the cycle bar's ET hour.
+- Copying: the day word against the Day so far word at the bar (too early
+  is `early`), apart when that word was too early. Each departure is
+  scored against the label, beside whether the Day so far word was right.
+- The structure label is the first touch of one unit (`readAudit.stopAtr` x
+  ATR(20) at the cycle bar) over `readAudit.forwardBars` bars, in the read's
+  own side's way (its 4h and 1h both up or both down): `held` the side's
+  way first, `reversed` against it first (both in one bar: reversed),
+  `none`. `pullback` and `continuation` are right on held, `reversal` on
+  reversed, `unclear` when price moved under one unit either way. A
+  side-taking word without a side of the read's own is unscorable.
+- Pre-entry B/D: an entry on a chop-labelled day while the read's own day
+  word said chop, mixed or early.
+
+The state record also scores the two words against the briefing's own words
+(the Day so far line; the labels' context), as agreement only, a measure of
+copying, outside the frames' counts.
 
 Limits:
 

@@ -128,6 +128,7 @@ function renderReads(t) {
     for (const [why, k] of Object.entries(f.unknownWhy)) out.push(`      unknown ${k}: ${why}`);
     for (const [read, facts] of Object.entries(f.confusion)) out.push(`      read ${read}: ${Object.entries(facts).map(([x, k]) => `${x} ${k}`).join(', ')}`);
   }
+  out.push('  day and ctx: agreement with the briefing\'s own words (the Day so far line, the labels\' context) measures copying, not whether the read was right; the read audit scores them after the fact');
   return out.join('\n');
 }
 

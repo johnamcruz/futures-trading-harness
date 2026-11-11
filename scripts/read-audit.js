@@ -21,6 +21,7 @@
 const fs = require('fs');
 const RA = require('./lib/learning/read-audit');
 const RS = require('./lib/learning/read-audit-source');
+const DC = require('./lib/learning/read-audit-day-ctx');
 
 const USAGE = 'usage: read-audit.js --run <run home | runs folder | replay run dir> [--decisions <dir|file>]... [--bars SYMBOL=<file>]... [--days YYYY-MM-DD,...] [--coded] [--json]';
 
@@ -59,8 +60,8 @@ function main(argv) {
     runs.push(got.runId);
     rows.push(...got.rows);
   }
-  const s = { runs, ...RA.summarize(rows), ...(o.coded ? { source: RS.sourceReport(rows) } : {}) };
-  process.stdout.write(o.json ? `${JSON.stringify(s, null, 2)}\n` : `Runs: ${runs.length}${decisions ? '' : ' (no --decisions: entries have no trade R)'}\n${RA.renderAudit(s)}\n${o.coded ? `${RS.renderSourceReport(s.source)}\n` : ''}`);
+  const s = { runs, ...RA.summarize(rows), dayCtx: DC.summarizeDayCtx(rows), ...(o.coded ? { source: RS.sourceReport(rows) } : {}) };
+  process.stdout.write(o.json ? `${JSON.stringify(s, null, 2)}\n` : `Runs: ${runs.length}${decisions ? '' : ' (no --decisions: entries have no trade R)'}\n${RA.renderAudit(s)}\n${DC.renderDayCtx(s.dayCtx)}\n${o.coded ? `${RS.renderSourceReport(s.source)}\n` : ''}`);
   return 0;
 }
 

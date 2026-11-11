@@ -45,8 +45,10 @@ test('tally: per field the agreement over the cycles it could be scored on, n, d
   const h1 = t.fields['1h'];
   assert.deepStrictEqual([h1.match, h1.mismatch, h1.unknown, h1.n, h1.days], [1, 1, 1, 2, 1], 'an unknown counts in no day');
   assert.deepStrictEqual(h1.unknownWhy, { 'the briefing has no transition label for 1h': 1 });
-  // No day field; frames scored against the labels and against the read's own frames, apart.
-  assert.deepStrictEqual(Object.keys(t.fields), ['4h', '1h', '15m', 'frames', 'frames-own']);
+  // The day and ctx fields (agreement with the briefing's own words) beside the frames; frames scored against the labels
+  // and against the read's own frames, apart.
+  assert.deepStrictEqual(Object.keys(t.fields), ['4h', '1h', '15m', 'frames', 'day', 'ctx', 'frames-own']);
+  assert.deepStrictEqual([t.fields.day.stated, t.fields.ctx.stated], [0, 0], 'no line here states them');
   assert.deepStrictEqual([t.fields.frames.match, t.fields['frames-own'].match], [1, 1]);
   // A field never stated: zero, no rate.
   assert.deepStrictEqual([t.fields['15m'].stated, t.fields['15m'].n], [1, 1]);
@@ -54,6 +56,19 @@ test('tally: per field the agreement over the cycles it could be scored on, n, d
   // Under the experience index's minimum n or days: too few, no interval.
   assert.deepStrictEqual([h4.lo, h4.hi, h4.tooFew], [null, null, true]);
   assert.match(RA.renderReads(t), /4h {2}2\/3 {2}67% {2}too few \(n 3, days 2\)/);
+});
+
+test('tally: the day word against the Day so far word is agreement (a copy measure), said so in the report', () => {
+  const b = soFar => { const x = briefing(); x.sections.m3.data.today.soFar = soFar; return x; };
+  const t = RA.tally([
+    { day: '2023-03-15', stateRead: rec('STATE: 4h up | day chop | ctx continuation', b({ status: 'read', read: 'rotational' })) },
+    { day: '2023-03-15', stateRead: rec('STATE: 4h up | day trend | ctx pullback', b({ status: 'read', read: 'rotational' })) },
+    { day: '2023-03-16', stateRead: rec('STATE: 4h up | day early', b({ status: 'too early', bars: 3 })) },
+  ]);
+  assert.deepStrictEqual([t.fields.day.match, t.fields.day.mismatch, t.fields.day.n], [2, 1, 3]);
+  assert.deepStrictEqual(t.fields.day.confusion, { chop: { chop: 1 }, trend: { chop: 1 }, early: { early: 1 } });
+  assert.deepStrictEqual([t.fields.ctx.match, t.fields.ctx.mismatch], [1, 1]);
+  assert.match(RA.renderReads(t), /day and ctx: agreement with the briefing's own words \(the Day so far line, the labels' context\) measures copying, not whether the read was right/);
 });
 
 test('tally: enough cycles and days: an interval from whole days resampled, seeded (the same tally twice is the same)', () => {
