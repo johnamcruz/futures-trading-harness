@@ -733,11 +733,14 @@ test('grading: every pattern of q70 does work (its removal lets a wrong answer t
 //   class word that ends its clause (never its -less or -free form, never 'Trend declared', never the skill name
 //   'trend-vs-range'); after a colon or a dash, the full label, or a class word that ends the label. Not an offer when,
 //   right after it, that class (alone, in a pair 'chop or trend', 'chop/trend', 'chop, trend', or its signs) is said
-//   absent, none, unknown, too early, neither, or to need N bars ('trend signs: none', 'chop or trend needs 10 bars').
-//   q81/q82: F4's own class restated is fine ('F4 (chop evidence)' on q81, 'F4, trending long' on q82).
+//   absent, none, unknown, too early, not yet, neither, or to need N bars ('trend signs: none', 'chop or trend needs 10
+//   bars'), or, after ':', '?' or a dash, no or not (declared, yet, ...) where that ends its clause ('trend? no', 'trend:
+//   not declared'; 'trend: no doubt' offers it). q81/q82: F4's own class restated is fine ('F4 (chop evidence)' on q81,
+//   'F4, trending long' on q82). q79/q80: 'No read yet: none' is the label whole.
 // - The asked fact: q72 balance on the line (never the briefing's 'initial balance'), q74 traded with it; taken back in
 //   the label ('not/no balance', 'not balanced', 'not traded with it', 'fade it', 'faded', unless a negation up to three
-//   words before covers it: 'never countered or faded', 'must never be faded') it fails.
+//   words before covers it, never past a but, yet, then or instead: 'never countered or faded', 'must never be faded';
+//   'not at first but faded' fails) it fails.
 // - q81/q82's second label right after F4 or its lead ('F4, F3', 'F4; F3', 'F4 F3', 'F4 (F3)', 'F4 (or F3)', 'F4 plus
 //   F3', 'F4 → F3', 'F4, actually F3', 'F4 and maybe F3', 'F4 — scratch that, F3', 'Only F4, F3'), unless that label is
 //   explained ('F3 is', 'F1 and F3 are', 'F1-F3', 'F1 to F3', "F3's", 'F1: rotational', 'F2 a balance', 'F1 bias').
@@ -2437,6 +2440,42 @@ test('grading: the chop questions: right answers pass, the other classes fail (a
     ['q74', 'Trend evidence: traded with it; it must never be faded.', true],
   ];
   for (const [id, a, want] of review10) cases[id].push([a, want]);
+  // Round 11: a class word after a joiner said 'no' or 'not (declared, yet, ...)' after ':', '?' or a dash, or 'not yet',
+  // agrees (the briefing's 'Trend declared? no'); 'No read yet: none' is q79/q80's label whole; 'but', 'yet', 'then',
+  // 'instead' break q74's negation window.
+  const review11 = [
+    ['q72', 'Chop evidence (trend: not declared); balance.', true],
+    ['q72', 'Chop evidence (trend: no); balance.', true],
+    ['q72', 'Chop evidence, trend? No; balance.', true],
+    ['q72', 'Chop evidence, trend: not yet; balance.', true],
+    ['q72', 'Chop evidence (trend: not declared, F2); balance.', true],
+    ['q72', 'Chop evidence, trend: no doubt; balance.', false],
+    ['q72', 'Chop evidence, trending; balance.', false],
+    ['q74', 'Trend evidence (chop: no); traded with it, not faded.', true],
+    ['q74', 'Trend evidence, chop? none; traded with it.', true],
+    ['q74', 'Trend evidence: not with it but faded.', false],
+    ['q74', 'Trend evidence: traded with it, not at first but faded.', false],
+    ['q74', 'Trend evidence: traded with it, not long but faded later.', false],
+    ['q74', 'Trend evidence: traded with it; it\'s not one to be faded.', true],
+    ['q74', 'Trend evidence: traded with it, not much later it got faded.', false],
+    ['q75', 'No: trend evidence (chop: no).', true],
+    ['q75', 'No, trend evidence, chop? no.', true],
+    ['q79', 'No read yet (trend? too early).', true],
+    ['q79', 'No read yet (trend: not yet, chop: not yet).', true],
+    ['q79', 'No read yet, trend evidence not yet.', true],
+    ['q79', 'No read yet: none.', true],
+    ['q80', 'No read yet: none.', true],
+    ['q79', 'No read yet: none, maybe.', false],
+    ['q72', 'Chop evidence, trend - no; balance.', true],
+    ['q81', 'F4 (trend: not declared)', true],
+    ['q81', 'F4, trend: no', true],
+    ['q81', 'F4, trend? no', true],
+    ['q81', 'F4, trend evidence', false],
+    ['q82', 'F4 (chop: no)', true],
+    ['q82', 'F4 (chop? no)', true],
+    ['q82', 'F4, chop evidence', false],
+  ];
+  for (const [id, a, want] of review11) cases[id].push([a, want]);
   assert.deepStrictEqual(Object.keys(cases).sort(), Object.values(CHOP).flat().sort(), 'cases for each chop question');
   // A wrong answer whose opening label is right passes whatever its tail says (the tail is not graded): LIMITS, graded
   // as they are graded, so a change that closes one shows up.
@@ -2548,7 +2587,9 @@ test('grading: the chop questions\' one hedge rule does work in each of the seve
       for (const v of x.split('|')) {
         // q74's 'faded' in the label is also its asked fact taken back (forbidden[1]): there the hedge's copy is moot.
         if (id === 'q74' && v === 'faded') continue;
-        w(`(?:${x})`, `(?:${cutAlt(x, v)})`, { paren: ` (${v})`, gone: `: ${v}`, is: ` is ${v} here`, fades: ` ${v} here` }[k]);
+        // ('No read yet: none' is q79/q80's label whole: their gone 'none' is said after a dash.)
+        const nr = (id === 'q79' || id === 'q80') && v === 'none';
+        w(`(?:${x})`, `(?:${cutAlt(x, v)})`, { paren: ` (${v})`, gone: nr ? ` – ${v}` : `: ${v}`, is: ` is ${v} here`, fades: ` ${v} here` }[k]);
       }
     }
     // The listed words: after a space, a comma or a colon (place 1); after a dash or in brackets (place 2), where the word
@@ -2582,7 +2623,7 @@ test('grading: the chop questions\' one hedge rule does work in each of the seve
     // Another class offered: each joiner (each joiner character pinned by a wrong answer), each full label, each bare word
     // where it ends its clause after a joiner or the label after a colon or a dash; never its -less (also hyphened) or
     // -free form, never the skill name trend-vs-range; never when that class (alone, paired, or its signs) is said
-    // absent, none, unknown, too early, neither or to need N bars.
+    // absent, none, unknown, too early, not yet, neither or to need N bars, or after ':', '?' or a dash no / not (...).
     for (const c of [',', '/', '→', '&', '+', '(']) assert.strictEqual(pass(id, `ANSWER: ${pre}${c === ',' ? ',' : ` ${c}`} ${full[0]} here${post}`), false, `${id} the joiner ${c}`);
     const JW = 'but|though|and|or|nor|plus|versus';
     for (const v of JW.split('|')) w(`(?:${JW})\\s+`, `(?:${cutAlt(JW, v)})\\s+`, `, ${v} ${full[0]} here`);
@@ -2605,20 +2646,31 @@ test('grading: the chop questions\' one hedge rule does work in each of the seve
     w(`(?=\\s*(?:${TERM}|[.;!?]?\\s*$))`, '', ` – ${bareSay[0]} later`, true);
     w(`(?=\\s*(?:${TERM}|[.;!?]?\\s*$))`, `(?=\\s*(?:[.;!?]?\\s*$))`, ` – ${bareSay[0]}`, false, 0, ends ? '. Then.' : post);
     if (ends) w(`(?=\\s*(?:${TERM}|[.;!?]?\\s*$))`, `(?=\\s*(?:${TERM}))`, ` – ${bareSay[0]}`, false, 0, '');
-    const EX = '(?!\\s*(?:signs?\\s*)?(?:(?:\\/|,|and|or|nor)\\s*\\w+(?:\\s+\\w+)?\\s*)?(?:(?:is|are)\\s+|:\\s*)?(?:both\\s+)?(?:absent|none|unknown|too early|neither|needs?\\s+\\d+\\s+bars?)\\b)';
+    const EX = `(?!\\s*(?:signs?\\s*)?(?:(?:\\/|,|and|or|nor)\\s*\\w+(?:\\s+\\w+)?\\s*)?(?:(?:(?:is|are)\\s+|[:?]\\s*)?(?:both\\s+)?(?:absent|none|unknown|too early|not yet|neither|needs?\\s+\\d+\\s+bars?)\\b|[:?–—-]\\s*(?:no|not(?:\\s+\\w+)?)${END}))`;
     w(EX, '', `: ${full[0]} is absent`, true);
     w('(?:signs?\\s*)?(?:(?:\\/', '(?:(?:\\/', `: ${full[0]} signs: none`, true);
     w('(?:signs?\\s*)?(?:(?:\\/', '(?:sign\\s*)?(?:(?:\\/', `: ${full[0]} signs: none`, true);
     for (const [v, say] of [['\\/', '/'], [',', ','], ['and', ' and '], ['or', ' or '], ['nor', ' nor ']]) {
       w('(?:\\/|,|and|or|nor)\\s*\\w+', `(?:${cutAlt('\\/|,|and|or|nor', v)})\\s*\\w+`, `: ${full[0]}${say}x: unknown`, true);
     }
-    w('(?:\\s+\\w+)?\\s*)?(?:(?:is', '\\s*)?(?:(?:is', `: ${full[0]} and the rest are unknown`, true);
-    for (const v of ['is', 'are']) w('(?:(?:is|are)\\s+|:', `(?:(?:${cutAlt('is|are', v)})\\s+|:`, `: ${full[0]} ${v} unknown`, true);
-    w('|:\\s*)?(?:both', ')?(?:both', `: ${full[0]}: none`, true);
+    w('(?:\\s+\\w+)?\\s*)?(?:(?:(?:is', '\\s*)?(?:(?:(?:is', `: ${full[0]} and the rest are unknown`, true);
+    for (const v of ['is', 'are']) w('(?:(?:is|are)\\s+|[:?]', `(?:(?:${cutAlt('is|are', v)})\\s+|[:?]`, `: ${full[0]} ${v} unknown`, true);
+    w('|[:?]\\s*)?(?:both', ')?(?:both', `: ${full[0]}: none`, true);
+    w('|[:?]\\s*)?(?:both', '|:\\s*)?(?:both', `: ${full[0]}? none`, true);
     w('(?:both\\s+)?', '', `: ${full[0]} are both unknown`, true);
-    for (const [v, say] of [['absent', 'absent'], ['none', 'none'], ['unknown', 'unknown'], ['too early', 'too early'], ['neither', 'neither'], ['needs?\\s+\\d+\\s+bars?', 'needs 10 bars']]) {
-      w('(?:absent|none|unknown|too early|neither|needs?\\s+\\d+\\s+bars?)\\b)', `(?:${cutAlt('absent|none|unknown|too early|neither|needs?\\s+\\d+\\s+bars?', v)})\\b)`, `: ${full[0]} ${say}`, true);
+    const SAYS = 'absent|none|unknown|too early|not yet|neither|needs?\\s+\\d+\\s+bars?';
+    for (const [v, say] of [['absent', 'absent'], ['none', 'none'], ['unknown', 'unknown'], ['too early', 'too early'], ['not yet', 'not yet'], ['neither', 'neither'],
+      ['needs?\\s+\\d+\\s+bars?', 'needs 10 bars']]) {
+      w(`(?:${SAYS})\\b|`, `(?:${cutAlt(SAYS, v)})\\b|`, `: ${full[0]} ${say}`, true);
     }
+    // Said 'no' or 'not (declared, yet, ...)' after ':', '?' or a dash (the briefing's 'Trend declared? no'), where it ends
+    // its clause ('trend: no doubt' offers it).
+    const NS = ':?–—-';
+    for (const c of NS) w(`|[${NS}]\\s*(?:no|`, `|[${NS.replace(c, '') || 'x'}]\\s*(?:no|`, `: ${full[0]}${c === ':' || c === '?' ? '' : ' '}${c} no`, true);
+    w('(?:no|not(?:\\s+\\w+)?)', '(?:not(?:\\s+\\w+)?)', `: ${full[0]}: no`, true);
+    w('(?:no|not(?:\\s+\\w+)?)', '(?:no)', `: ${full[0]}: not`, true);
+    w('not(?:\\s+\\w+)?)', 'not)', `: ${full[0]}: not declared`, true);
+    w(`not(?:\\s+\\w+)?)${END}`, 'not(?:\\s+\\w+)?)', `: ${full[0]}: no doubt`);
   }
   // 'No, no:' agrees where the label is No itself (q75's opening only).
   rows.push(['q75', 'forbidden', 1, '(?<!\\bno[\\s,:–—-]*)', '', 0, 'No, no: trend evidence.', true]);
@@ -2650,9 +2702,17 @@ test('grading: each other part of the chop questions\' patterns does work: witho
     r('q74', 'forbidden', 1, "(?:never|not|no|don't|than|nor)", `(?:${cutAlt("never|not|no|don't|than|nor", x)})`, `Trend evidence: traded with it, ${x === 'than' ? 'rather than' : x} faded.`, true);
   }
   r('q74', 'forbidden', 1, '(?!\\s*\\?)', '', 'Trend evidence: with it; faded? no.', true);
-  // A negation up to three words before still covers it ('never countered or faded', 'must never be faded').
-  r('q74', 'forbidden', 1, "(?:[\\w'-]+\\s+){0,3}", '', 'Trend evidence: traded with it, never countered or faded.', true);
-  r('q74', 'forbidden', 1, "(?:[\\w'-]+\\s+){0,3}", "(?:[\\w'-]+\\s+){0,1}", 'Trend evidence: traded with it, not countered or faded.', true);
+  // A negation up to three words before still covers it ('never countered or faded', 'must never be faded'): up to three
+  // words, never past a but, yet, then or instead (the window's bound pinned both ways).
+  const WIN = "(?:(?!(?:but|yet|then|instead)\\b)[\\w'-]+\\s+){0,3}";
+  r('q74', 'forbidden', 1, WIN, '', 'Trend evidence: traded with it, never countered or faded.', true);
+  r('q74', 'forbidden', 1, '\\s+){0,3}', '\\s+){0,1}', 'Trend evidence: traded with it, not countered or faded.', true);
+  r('q74', 'forbidden', 1, '\\s+){0,3}', '\\s+){0,2}', "Trend evidence: traded with it; it's not one to be faded.", true);
+  r('q74', 'forbidden', 1, '\\s+){0,3}', '\\s+)*', 'Trend evidence: traded with it, not much later it got faded.', false);
+  for (const x of ['but', 'yet', 'then', 'instead']) {
+    r('q74', 'forbidden', 1, '(?:but|yet|then|instead)', `(?:${cutAlt('but|yet|then|instead', x)})`, `Trend evidence: traded with it, not long ${x} faded.`, false);
+  }
+  r('q74', 'forbidden', 1, '(?:but|yet|then|instead)\\b', '(?:but|yet|then|instead)', 'Trend evidence: traded with it, never thenceforth faded.', true);
   // q75: No, Nope or Not first, or no chop or not (a) chop; never Yes or another class at the opening; the first trend
   // evidence in the label is the class (a later one is the explanation).
   for (const [x, a] of [['nope', 'Nope: trend evidence.'], ['not', 'Not: trend evidence.']]) r('q75', 'required', 0, '(no|not|nope)', `(${cutAlt('no|not|nope', x)})`, a, true);
@@ -2690,6 +2750,9 @@ test('grading: each other part of the chop questions\' patterns does work: witho
     r(id, 'forbidden', 1, '(?:[- ]yet)?', '(?:[-]yet)?', 'No read yet?', false);
     r(id, 'forbidden', 1, 'no[- ]read', 'no read', 'No-read yet?', false);
     r(id, 'forbidden', 1, 'no[- ]read', 'no-read', 'No read yet?', false);
+    // 'No read yet: none' is the label (no class at all), read whole before its hedge, so ': none' is no take-back.
+    r(id, 'forbidden', 1, '(?:\\s*:\\s*none\\b)?', '', 'No read yet: none.', true);
+    r(id, 'forbidden', 1, '\\1', '', 'No read yet?', false);
     const OO = 'chop\\w*|trend\\w*|rotat\\w*|range|ranging|directional|conflict\\w*|mixed|yes|bullish|bearish|balance\\w*|two-sided';
     for (const [x, a] of [['chop\\w*', 'Chop'], ['trend\\w*', 'Trend'], ['rotat\\w*', 'Rotating'], ['range', 'Range'], ['ranging', 'Ranging'], ['directional', 'Directional'],
       ['conflict\\w*', 'Conflicting'], ['mixed', 'Mixed'], ['yes', 'Yes'], ['bullish', 'Bullish'], ['bearish', 'Bearish'], ['balance\\w*', 'Balanced'], ['two-sided', 'Two-sided']]) {
