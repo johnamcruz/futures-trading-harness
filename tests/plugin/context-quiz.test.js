@@ -102,7 +102,9 @@ test('context quiz: every layer asked, ids unique, the bar the whole quiz at K 5
   // each rested on weighing, not on a skill sentence naming the conflict. No question asks for class D: q81 and q82 show
   // facts of both kinds but ask for one fact, never a conflict call. q71 (B, rotating so far) and q73 (C, trending up so
   // far) measured 4/5 at k=5, real model misses ("conflicting" on a clean rotational and on a directional morning), and
-  // were removed as q45 and q53 were: a skill gap reported to the owner.
+  // were removed as q45 and q53 were: a skill gap reported to the owner. The seven are now closed choices (the ANSWER
+  // line equal to one of their choices, eval/context-quiz.js), their 5/5 measured on the regex grading: re-measured by
+  // hand at k=5.
   assert.strictEqual(QUIZ.questions.length, 66);
   for (const id of ['q71', 'q73']) assert.ok(!QUIZ.questions.some(x => x.id === id), id);
   assert.strictEqual(QUIZ.partB.length, 8);
