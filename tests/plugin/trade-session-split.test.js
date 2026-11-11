@@ -517,8 +517,13 @@ test('trade-session split: no head-trader path reads more than the base\'s every
 // full (base 94380), 43175 -> 43291 index (base 42808); the risk manager 92762 -> 93203 (base 92720), 78639 -> 79091
 // (base 78608); the trend-momentum analyst 54540 -> 54875 (base 54392), 40023 -> 40485 (base 40002); the strategy researcher 25650 -> 25728 both
 // modes (base 25245); every other role within its pin.
+// Then fix/declared-skill-wording (owner rule: raise a pin when it improves context): trend-vs-range's Declared line
+// says what the code requires (all four above 0, never "any one"; the Bias line prints the code's answer; the overnight
+// range a quality sign, not part of declared) and its header calls declared the code's, +308 bytes in the two roles
+// that embed it in full mode: the market-structure analyst 96282 -> 96590, the trend-momentum analyst 56294 -> 56602;
+// index mode and every other role unchanged.
 const ROLE_PROMPTS = {
-  full: { 'market-structure-analyst': 96282, 'news-calendar-analyst': 10182, 'risk-manager': 94291, 'strategy-researcher': 25728, 'trade-executor': 30670, 'trade-reviewer': 9454, 'trend-momentum-analyst': 56294, 'volume-liquidity-analyst': 49712 },
+  full: { 'market-structure-analyst': 96590, 'news-calendar-analyst': 10182, 'risk-manager': 94291, 'strategy-researcher': 25728, 'trade-executor': 30670, 'trade-reviewer': 9454, 'trend-momentum-analyst': 56602, 'volume-liquidity-analyst': 49712 },
   index: { 'market-structure-analyst': 44379, 'news-calendar-analyst': 10182, 'risk-manager': 80179, 'strategy-researcher': 25728, 'trade-executor': 30659, 'trade-reviewer': 9454, 'trend-momentum-analyst': 41573, 'volume-liquidity-analyst': 34344 },
 };
 
