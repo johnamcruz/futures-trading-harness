@@ -558,11 +558,11 @@ test('summary: correct on all K, answered both ways, the totals, the bar; compar
   for (const x of QUIZ.questions) for (let k = 1; k <= 5; k += 1) rows.push({ id: x.id, k, pass: true });
   for (const x of QUIZ.partB) for (let k = 1; k <= 5; k += 1) rows.push({ id: x.id, k, pass: true });
   const all = Q.summarize(QUIZ, rows, 5);
-  // 64 since q75, q79-q82 (chop detection, closed choices): 64 x 5 runs, one missed = 319.
-  assert.deepStrictEqual([all.partA.allCorrect, all.partA.bothWays, all.partB.allCorrect, all.meetsBar], [64, 0, 8, true]);
+  // 63 since q79-q82 (chop detection, closed choices): 63 x 5 runs, one missed = 314.
+  assert.deepStrictEqual([all.partA.allCorrect, all.partA.bothWays, all.partB.allCorrect, all.meetsBar], [63, 0, 8, true]);
   const one = rows.map(r => (r.id === 'q6' && r.k === 2 ? { ...r, pass: false } : r));
   const s = Q.summarize(QUIZ, one, 5);
-  assert.deepStrictEqual([s.partA.allCorrect, s.partA.bothWays, s.partA.total, s.meetsBar], [63, 1, 319, false]);
+  assert.deepStrictEqual([s.partA.allCorrect, s.partA.bothWays, s.partA.total, s.meetsBar], [62, 1, 314, false]);
   // Too few runs is never correct on all K.
   assert.strictEqual(Q.summarize(QUIZ, rows.filter(r => r.k <= 3), 5).partA.allCorrect, 0);
   const d = Q.compare(all, s).find(x => x.id === 'q6');
@@ -684,17 +684,17 @@ test('grading: every pattern of q70 does work (its removal lets a wrong answer t
   }
 });
 
-// The chop questions (q75, q79-q82): chop DETECTION, the owner's classes of what the briefing showed (A no read yet, C
-// trend evidence: the pullback is no chop sign) and the which-fact questions. Graded as a closed choice: the ANSWER line
+// The chop questions (q79-q82): chop DETECTION, the owner's class A of what the briefing showed (no read yet) and the
+// which-fact questions. Graded as a closed choice: the ANSWER line
 // equal to the question's answer, one of its choices (case, markdown and a trailing period aside). A hedge, a second
 // label or anything else on the line is a fail; the why is the second line, read by a person, never graded.
-const CHOP = { q75: 'no', q79: 'no read yet', q80: 'no read yet', q81: 'F4', q82: 'F4' };
+const CHOP = { q79: 'no read yet', q80: 'no read yet', q81: 'F4', q82: 'F4' };
 const CLASSES = ['chop evidence', 'trend evidence', 'conflicting', 'no read yet'];
 
 test('the chop questions are closed choices: their answer one of their choices, no regex, asked with the choices', () => {
   for (const [id, answer] of Object.entries(CHOP)) {
     const x = q(id);
-    assert.deepStrictEqual(x.choices, id === 'q75' ? ['yes', 'no'] : ['q81', 'q82'].includes(id) ? ['F1', 'F2', 'F3', 'F4'] : CLASSES, id);
+    assert.deepStrictEqual(x.choices, ['q81', 'q82'].includes(id) ? ['F1', 'F2', 'F3', 'F4'] : CLASSES, id);
     assert.strictEqual(x.answer, answer, id);
     assert.ok(!('required' in x) && !('forbidden' in x), id);
     assert.ok(Q.questionText(QUIZ, x).endsWith(` Answer from your instructions only. First line: ANSWER: <one of: ${x.choices.join(' | ')}>, nothing else. Second line: one short sentence why.`), id);
@@ -712,12 +712,14 @@ test('grading a choice question: the ANSWER line equal to the answer passes; a h
   for (const a of ['ANSWER: no read yet (I think)', 'ANSWER: no read yet, chop evidence', 'ANSWER: maybe no read yet', 'ANSWER: trend evidence', 'ANSWER: too early', 'ANSWER: no read',
     'ANSWER: no read yet?', 'ANSWER: no read yet; too early', 'ANSWER: ', '', 'No read yet: too early.']) assert.strictEqual(g('q79', a), false, a);
   for (const [id, right, wrong] of [
-    ['q75', ['ANSWER: No', 'ANSWER: **no**.'], ['ANSWER: No, trend evidence', 'ANSWER: yes', 'ANSWER: nope']],
     ['q79', ['ANSWER: no read yet'], ['ANSWER: no read', 'ANSWER: no read yet: none', 'ANSWER: conflicting']], ['q80', ['ANSWER: No read yet.'], ['ANSWER: neither']],
     ['q81', ['ANSWER: F4', 'ANSWER: f4.'], ['ANSWER: F4, F3', 'ANSWER: F4 (chop evidence)', 'ANSWER: F1', 'ANSWER: F5']], ['q82', ['ANSWER: F4'], ['ANSWER: F1-F4']]]) {
     for (const a of right) assert.strictEqual(g(id, a), true, `${id} ${a}`);
     for (const a of wrong) assert.strictEqual(g(id, a), false, `${id} ${a}`);
   }
+  // A yes/no choice: the verdict alone.
+  const yn = { ...q('q79'), choices: ['yes', 'no'], answer: 'no' };
+  for (const [a, want] of [['ANSWER: No', true], ['ANSWER: **no**.', true], ['ANSWER: No, trend evidence', false], ['ANSWER: yes', false], ['ANSWER: nope', false]]) assert.strictEqual(Q.gradeAnswer(QUIZ, yn, a).pass, want, a);
   // The result's shape is the regex questions' (quiz-run, quiz-gate and quiz-phase read it): the answer missed, nothing forbidden.
   assert.deepStrictEqual(Q.gradeAnswer(QUIZ, q('q79'), 'ANSWER: trend evidence\nwhy'), { id: 'q79', line: 'trend evidence', fmt: true, pass: false, miss: ['no read yet'], forb: [], unsure: false });
   assert.deepStrictEqual(Q.gradeAnswer(QUIZ, q('q81'), 'F4'), { id: 'q81', line: 'F4', fmt: false, pass: true, miss: [], forb: [], unsure: false });

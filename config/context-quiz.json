@@ -61,7 +61,7 @@
   },
   "passBar": {
     "partA": {
-      "allCorrect": 64,
+      "allCorrect": 63,
       "bothWays": 0
     },
     "partB": {
@@ -1157,19 +1157,6 @@
         "\\bignor\\w*|\\birrelevant\\b|\\bdisregard\\w*",
         "\\bunless\\s+(?:the\\s+|that\\s+|a\\s+)?(?:lesson|journal\\w*|cause|lift\\w*)\\b"
       ]
-    },
-    {
-      "id": "q75",
-      "layer": "setup",
-      "prompt": "lookup",
-      "lookup": [
-        "trend-vs-range"
-      ],
-      "text": "Briefing lines (synthetic, 11:42 ET):\n- Bias: long only (4h up, 1h up; short refused).\n- Day so far (44 3m bars; `day-context`): directional up: efficiency 0.18 (x sqrt(bars) 1.19), RTH VWAP crosses 2, range 9 x 3m ATR(14), net up (its size: Trend declared? day's move); IB day type: today.dayType.\n- Trend declared? (in 3m ATR(14), + = the side's way; `trend-vs-range`): long RTH VWAP +0.9, EMA20 +0.4, overnight range broke out its way, day's move +6.6, regime with; short RTH VWAP -0.9, EMA20 -0.4, overnight range broke out against, day's move -6.6, regime against.\n- Pullback (15m, long leg 20000 -> 20160): depth 38% of the leg; 6 bars since the extreme, volume 0.5x the leg's per bar (falling), range 0.7x; swings since the extreme: 15m 20000 holds, 1h 19950 holds; 15m break against: none, 1h: none.\nIs the pullback a chop sign?",
-      "rule": "no: an unfinished pullback is no chop sign; trend evidence (class C, the guard)",
-      "anchor": "An unfinished pullback is no chop sign.",
-      "choices": ["yes","no"],
-      "answer": "no"
     },
     {
       "id": "q79",

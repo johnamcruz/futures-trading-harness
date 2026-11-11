@@ -93,12 +93,13 @@ test('context quiz: every layer asked, ids unique, the bar the whole quiz at K 5
   // b8 (prepare-ahead's confirm rule: PR C); 45 since q47-q49 (a standing scenario: compose_check decides; the closing
   // candle read as candle-reading does). q46 went with PR C3's computed trigger; q45 (the 3m doji, a yes/no) measured 7/10
   // live and is out of the bar, noted for the paired test. 58 since q50-q63 less q53 (a 3m swing is stop structure, not a level: measured 6/10, out of the bar; market context: levels and reactions, structure breaks, trend vs range, pullback vs reversal; each anchored in the skill that states it). The pass bar rises with them.
-  // 59 since q70 (a lesson is no phase-1 stand-down: a replay vetoed 42 times on one). 64 since q75, q79-q82 (chop
-  // detection: what the briefing showed, in the owner's classes, closed choices; measured by hand at k=5 before the bar
-  // counts them). q71-q74 (4/5, 4/5, 4/5, 1/5 at k=5: the model treats unknown or neutral fields as conflicting) stay
-  // out, as q45 and q53 did: a skill gap reported to the owner; q76-q78 (class D, conflicting) were dropped in review.
-  assert.strictEqual(QUIZ.questions.length, 64);
-  for (const id of ['q71', 'q72', 'q73', 'q74', 'q76', 'q77', 'q78']) assert.ok(!QUIZ.questions.some(x => x.id === id), id);
+  // 59 since q70 (a lesson is no phase-1 stand-down: a replay vetoed 42 times on one). 63 since q79-q82 (chop
+  // detection: what the briefing showed, closed choices; each measured 5/5 at k=5 closed-choice, in the bar). q71 4/5,
+  // q72 4/5, q73 4/5, q74 1/5 and q75 4/5 at k=5 were removed, real model misses (the model treats unknown or neutral
+  // fields as conflicting, and sometimes calls a with-trend pullback a chop sign), as q45 and q53 were: a skill gap
+  // reported to the owner. q76-q78 (class D, conflicting) were dropped in review.
+  assert.strictEqual(QUIZ.questions.length, 63);
+  for (const id of ['q71', 'q72', 'q73', 'q74', 'q75', 'q76', 'q77', 'q78']) assert.ok(!QUIZ.questions.some(x => x.id === id), id);
   assert.strictEqual(QUIZ.partB.length, 8);
 });
 
@@ -117,14 +118,13 @@ test('context quiz: q45 and q46 are out of the bar (q46: the standing line print
   for (const id of ['q45', 'q46']) assert.ok(!QUIZ.questions.some(x => x.id === id), id);
 });
 
-test('context quiz: the chop questions (q75, q79-q82) are asked against the prompt holding the skill sentence each anchors to, on briefing lines the code writes', () => {
+test('context quiz: the chop questions (q79-q82) are asked against the prompt holding the skill sentence each anchors to, on briefing lines the code writes', () => {
   const prompts = Q.buildPrompts(ROOT, QUIZ);
   const flat = t => t.replace(/\s+/g, ' ');
   const cut = re => Object.fromEntries(Object.entries(prompts).map(([k, v]) => [k, flat(v).replace(re, '')]));
   // [id, prompt, lookup, the sentence it anchors to, deleted from every prompt]: day-context and confluence-counting
   // (embedded in the head prompt), trend-vs-range (looked up).
   const want = [
-    ['q75', 'lookup', ['trend-vs-range'], /An unfinished pullback is no chop sign\./g],
     ['q79', 'head', undefined, /`too early \(a read from 10 bars\)`: no read\./g],
     ['q80', 'head', undefined, /mixed, none or `unknown` → neutral/g],
     ['q81', 'lookup', ['trend-vs-range'], /`rotational`: under 0\.34: back and forth so far/g],
@@ -152,10 +152,6 @@ test('context quiz: the chop questions (q75, q79-q82) are asked against the prom
   // A labelled line (F1-F4) is the code's line with its '- ' replaced by the label.
   const as = (label, line) => `${label} - ${line.replace(/^- /, '')}`;
   for (const [id, line] of [
-    // A directional morning's numbers agree with day-so-far.js (efficiency = net move / the bars' summed range, about
-    // 0.8 ATR a bar; net no larger than the range; the net is the Trend declared? line's day's move).
-    ['q75', bias], ['q75', day(44, 'directional', 'up', 0.18, 1.19, 2, 9)], ['q75', pullback],
-    ['q75', declaredLine({ long: sd(0.9, 0.4, 'broke out its way', 6.6, 'with'), short: sd(-0.9, -0.4, 'broke out against', -6.6, 'against') })],
     ['q79', daySoFarLine({ status: 'too early', bars: 6, readFrom: 10, vwapCrosses: 0 })],
     ['q80', daySoFarLine({ status: 'unknown', reason: 'no 09:30 ET bar in the data' })],
     ['q81', as('F1', bias)], ['q81', as('F2', declaredLine({ long: sd(1, 0.6, 'middle third', 1.2, 'with'), short: sd(-1, -0.6, 'middle third', -1.2, 'against') }))],
