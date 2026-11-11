@@ -716,41 +716,45 @@ test('grading: every pattern of q70 does work (its removal lets a wrong answer t
 // and q73 (C) were removed after measuring 4/5 at k=5 (real model misses: "conflicting" on a clean rotational and on a
 // directional morning), as q45 and q53 were. Each scenario's lines are the code's writers on synthetic values
 // (tests/plugin/context-quiz.test.js checks they still are). In the bar: each measured 5/5 at k=5 on its current text.
-// WHAT THE QUIZ GRADES: the opening class label, the question's own format, and nothing else.
-// - THE LABEL is the line's first two clauses; a clause ends at ';' or '.' before whitespace (never a '.' in a number,
-//   '...', e.g., i.e., vs., etc.). The class opens it: q72 chop, q74 trend evidence, q75 No/Nope/Not then trend
-//   evidence in the label, q79/q80 no read yet, too early, neutral or neither in the label (never a class word at the
-//   opening: chop, trend, rotating, range, directional, conflicting, mixed), q81/q82 F4 (after 'only', 'the answer is',
-//   'the label is', 'answer:' or 'label:').
-// - THE ASKED FACT is searched on the whole line (q72 balance, never the briefing's 'initial balance'; q74 traded with
-//   it); its take-back fails only in the label ('not/no balance', 'not traded with it', 'fade it', 'faded').
-// - ONE HEDGE RULE, read right after the opening label in all seven, fails: '?'; '(maybe)', '(unsure)', '(likely)',
-//   '(probably not)', '(not really)', '(not sure)'; maybe, perhaps, likely, 'I think', unsure, 'not really', hardly,
-//   weakly; is not, is no, is wrong, is never, is none, is mixed, is fading, fades, faded, isn't, can't be, cannot be;
-//   a take-back word where its clause ends ('no;', ' - no', 'not.', 'none;', '(weak)', ': absent', unclear, missing,
-//   lost, gone, lacking): 'no doubt', 'no 09:30 ET bar', 'none of these', 'missing data' agree; another class offered
-//   (and, or, /, →, a dash, a colon, a comma, ', but', ', though'): its full label (unless said absent, none or unknown)
-//   or a bare class word that ends its clause ('No read yet – chop.'; 'No read yet: trend or chop needs 10 bars' agrees).
-//   'Probably' is no hedge: 'F4 (probably)' and 'Chop evidence (probably)' pass.
-// - q81/q82: a second label at the opening is a second answer ('F4, F3', 'F4; F3', 'F4 F3', 'F4 + F3', 'F4 (F3)',
-//   'F4 (or F3)', 'F4 plus F3', 'F4 → F3', 'F4, actually F3', 'F4 — scratch that, F3', 'F4, also F1'), unless that label
-//   is explained ('F3 is', 'F1 and F3 are', 'F1-F3', 'F1 to F3', "F3's", 'F2 a balance', 'F1 bias,').
-// Nothing else on the line is graded, inside the label or past it: whether the rest is right is reviewed by reading the
-// answers, which the quiz output shows.
+// WHAT THE QUIZ GRADES, and only this:
+// - The opening class label: q72 chop, q74 trend evidence, q75 No/Nope/Not then trend evidence (never Yes, 'Not sure',
+//   'No/yes', another class at the opening), q79/q80 no read yet, too early, neutral or neither in the label (never a
+//   class word, Yes, Bullish, Bearish, Balanced or Two-sided at the opening), q81/q82 F4 (after 'only', 'the answer is',
+//   'the label is', 'answer:' or 'label:'). The label is the line's first two clauses; a clause ends at ';' or '.'
+//   before whitespace (never a '.' in a number, '...', e.g., i.e., vs., etc.).
+// - The LISTED hedge forms right after that label: '?'; '(maybe)', '(unsure)', '(likely)', '(probably not)', '(not
+//   really)', '(not sure)'; maybe, perhaps, possibly, likely, I think, I guess, arguably, sort of, unsure, not really,
+//   hardly, weakly (also after a dash or in brackets, where the word ends its clause or names a class); is not/no/wrong/
+//   never/none/mixed/fading, fades, faded, isn't, can't be, cannot be; no, not, none, absent, unclear, weak, missing,
+//   lost, gone, lacking where their clause ends ('no;' takes back, 'no doubt', 'none of these', 'missing data' agree).
+//   'Probably' is no hedge.
+// - The LISTED joiners to a second class right after the label: a comma, '/', '→', '&', '+', '(' (each may be followed
+//   by but, though, and, or, nor, plus, versus), and, or, nor, plus, versus, vs; then another class's full label or a
+//   class word (never its -less or -free form, never 'Trend declared'); after a colon or a dash, the full label, or a
+//   class word that ends the label. Never when that class is said absent, none or unknown.
+// - The asked fact: q72 balance on the line (never the briefing's 'initial balance'), q74 traded with it; taken back in
+//   the label ('not/no balance', 'not balanced', 'not traded with it', 'fade it', 'faded') it fails.
+// - q81/q82's second label right after F4 or its lead ('F4, F3', 'F4; F3', 'F4 F3', 'F4 (F3)', 'F4 (or F3)', 'F4 plus
+//   F3', 'F4 → F3', 'F4, actually F3', 'F4 and maybe F3', 'F4 — scratch that, F3', 'Only F4, F3'), unless that label is
+//   explained ('F3 is', 'F1 and F3 are', 'F1-F3', 'F1 to F3', "F3's", 'F1: rotational', 'F2 a balance', 'F1 bias').
+// THE LISTS ARE NOT EXHAUSTIVE: a hedge or a second class said in other words passes, an accepted limit of a pattern
+// grader ('Chop evidence, if any', 'Chop evidence, doubtful', 'F4 with F3', 'F4, then F3', 'No — well, yes'); so does a
+// contradiction later on the line. Whether the rest of an answer is right is reviewed by reading the answers, which the
+// quiz output shows.
 const CHOP = { B: ['q72'], C: ['q74', 'q75'], A: ['q79', 'q80'], which: ['q81', 'q82'] };
-// Wrong answers the graders pass, accepted: the opening label is right and not hedged in a listed form, and the answer
-// contradicts it after that, in the rest of the label or past it, in words the grader does not read (a direction, a
-// later class word, a contradicting clause). Listed so that a change in what passes shows up.
+// Wrong answers the graders pass, accepted: the opening label is right and not hedged or joined in a listed form; the
+// answer contradicts it in words the grader does not read. Listed so that a change in what passes shows up.
 const LIMITS = [
-  'q72 Chop evidence vs. trend evidence: conflicting; balance.', 'q72 Chop evidence, balance? No, a trend day.',
-  'q72 Chop evidence, but neither balanced nor two-sided.', 'q72 Chop evidence: an inside day (inside the initial balance), not a balance day.',
-  'q72 Chop evidence: balance, IB 0.31 ADR. Trending up.', 'q72 Chop evidence: balance, a neutral day.',
-  'q72 Chop evidence: balance, against the trend day: trend day.', 'q72 Chop evidence: balance, or a normal variation day.',
-  'q72 Chop evidence: balance; a breakout day.', 'q72 Chop evidence: balance; a double distribution.', 'q72 Chop evidence: balance; a trend day up.',
-  'q72 Chop evidence: balance; bullish.', 'q72 Chop evidence: balance; one-way.', 'q72 Chop evidence: balance; trend evidence would be the read.',
+  'q72 Chop evidence, balance? No, a trend day.', 'q72 Chop evidence, but neither balanced nor two-sided.',
+  'q72 Chop evidence, could be trend; balance.', 'q72 Chop evidence, doubtful; balance.', 'q72 Chop evidence, if any; balance.',
+  'q72 Chop evidence, not much; balance.', 'q72 Chop evidence, or rather trend evidence: balance.',
+  'q72 Chop evidence: an inside day (inside the initial balance), not a balance day.', 'q72 Chop evidence: balance, IB 0.31 ADR. Trending up.',
+  'q72 Chop evidence: balance, a neutral day.', 'q72 Chop evidence: balance, against the trend day: trend day.',
+  'q72 Chop evidence: balance, or a normal variation day.', 'q72 Chop evidence: balance; a breakout day.',
+  'q72 Chop evidence: balance; a double distribution.', 'q72 Chop evidence: balance; a trend day up.', 'q72 Chop evidence: balance; bullish.',
+  'q72 Chop evidence: balance; one-way.', 'q72 Chop evidence: balance; trend evidence would be the read.',
   'q72 Chop evidence: balance; trending and the balance is missing.', 'q72 Chop evidence: balance; trending.',
-  'q72 Chop evidence: lean trend; balance.', 'q72 Chop evidence: not balanced, rotational.', 'q72 Chop evidence: out of balance.',
-  'q72 Chop evidence: rotational; day type inside the initial balance (not balanced yet).', 'q72 Chop evidence; a breakout from balance, trending.',
+  'q72 Chop evidence: lean trend; balance.', 'q72 Chop evidence: out of balance.', 'q72 Chop evidence; a breakout from balance, trending.',
   'q72 Chop evidence; balance at 0.31 ADR, but a trend day up is starting.', 'q72 Chop evidence; balance broke, now directional.',
   'q72 Chop evidence; balance day (inside the initial balance 20062.5-20137.5), trending up from the middle.',
   'q72 Chop evidence; balance day, but the last close says a trend up is starting.', 'q72 Chop evidence; balance e.g. a trend day up.',
@@ -762,20 +766,22 @@ const LIMITS = [
   'q72 Chop evidence; day-context calls it a double distribution, a balance inside it.',
   'q72 Chop evidence; day-context calls it an inside day, not a balance day.', 'q72 Chop evidence; day-context does not call it balance.',
   'q72 Chop evidence; day-context: balance ended, a double distribution day.', 'q72 Chop evidence; it is hardly balanced.',
-  'q72 Chop evidence; never balanced.', 'q72 Chop evidence; out of balance.', 'q72 Chop evidence; the day is a balance... no, a trend.',
-  'q72 Chop evidence; the day is not yet balance.', 'q72 Chop evidence—hardly; balance.', 'q72 Chop-ish, conflicting: balance.',
+  'q72 Chop evidence; maybe. Balance.', 'q72 Chop evidence; never balanced.', 'q72 Chop evidence; out of balance.',
+  'q72 Chop evidence; the day is a balance... no, a trend.', 'q72 Chop evidence; the day is not yet balance.',
+  'q72 Chop evidence; trend evidence: balance.', 'q72 Chop-ish, conflicting: balance.',
   'q74 Trend evidence (0.25 ADR, 0.25 efficiency), traded with it, a trend day up.', 'q74 Trend evidence vs. balance: traded with it, rotating.',
   'q74 Trend evidence — traded with it — chop.', 'q74 Trend evidence, counter-trend, traded with it.',
-  'q74 Trend evidence, i.e. traded with it, e.g. rotating.', 'q74 Trend evidence, traded with it, chop later.',
-  'q74 Trend evidence, traded with it, until it rotates.', 'q74 Trend evidence, traded with it; balance though.',
-  'q74 Trend evidence. Traded with it, chop.', 'q74 Trend evidence: an up day, traded with it, never faded.',
-  'q74 Trend evidence: chop would follow; traded with it.', 'q74 Trend evidence: counter it, no fading rule applies.',
-  'q74 Trend evidence: counter it, traded with it.', 'q74 Trend evidence: directional up, traded with it, never faded.',
-  'q74 Trend evidence: open-drive up, traded with it, never faded.', 'q74 Trend evidence: traded with it unlike the faders; fade the high.',
-  'q74 Trend evidence: traded with it, a V-bottom.', 'q74 Trend evidence: traded with it, a reversal would follow.',
-  'q74 Trend evidence: traded with it, a trend day up.', 'q74 Trend evidence: traded with it, a.k.a. range day.',
-  'q74 Trend evidence: traded with it, against the reversal? no: reversing.', 'q74 Trend evidence: traded with it, against the trend: long.',
-  'q74 Trend evidence: traded with it, an up day.', 'q74 Trend evidence: traded with it, but 75% ADR used so a fade is possible.',
+  'q74 Trend evidence, doubtful: traded with it.', 'q74 Trend evidence, i.e. traded with it, e.g. rotating.',
+  'q74 Trend evidence, traded with it, chop later.', 'q74 Trend evidence, traded with it, until it rotates.',
+  'q74 Trend evidence, traded with it; balance though.', 'q74 Trend evidence. Traded with it, chop.',
+  'q74 Trend evidence: an up day, traded with it, never faded.', 'q74 Trend evidence: chop would follow; traded with it.',
+  'q74 Trend evidence: counter it, no fading rule applies.', 'q74 Trend evidence: counter it, traded with it.',
+  'q74 Trend evidence: directional up, traded with it, never faded.', 'q74 Trend evidence: open-drive up, traded with it, never faded.',
+  'q74 Trend evidence: traded with it unlike the faders; fade the high.', 'q74 Trend evidence: traded with it, a V-bottom.',
+  'q74 Trend evidence: traded with it, a reversal would follow.', 'q74 Trend evidence: traded with it, a trend day up.',
+  'q74 Trend evidence: traded with it, a.k.a. range day.', 'q74 Trend evidence: traded with it, against the reversal? no: reversing.',
+  'q74 Trend evidence: traded with it, against the trend: long.', 'q74 Trend evidence: traded with it, an up day.',
+  'q74 Trend evidence: traded with it, but 75% ADR used so a fade is possible.',
   'q74 Trend evidence: traded with it, but 75% used, so it may reverse.',
   'q74 Trend evidence: traded with it, but stalling into the 2 IB extension.', 'q74 Trend evidence: traded with it, buyers stepping in.',
   'q74 Trend evidence: traded with it, chop needs a turn, it is chop.', 'q74 Trend evidence: traded with it, chop signs and trend signs: none.',
@@ -797,10 +803,11 @@ const LIMITS = [
   'q74 Trend evidence: traded with it; long the bounce.', 'q74 Trend evidence: traded with it; longs.',
   'q74 Trend evidence: traded with it; look to reverse long at the low.', 'q74 Trend evidence: traded with it; take a long at the low.',
   'q74 Trend evidence: trend up, traded with it, never faded.', 'q74 Trend evidence; a trend day: sell rallies? no, buy the dip with it.',
-  'q74 Trend evidence; an uptrend day, traded with it, never faded.', 'q74 Trend evidence; counter it, never faded, traded with it.',
-  'q74 Trend evidence; trade with it and fade the extremes.', 'q74 Trend evidence; traded with it before reversing.',
-  'q74 Trend evidence; traded with it before the fade.', 'q74 Trend evidence; traded with it — buy.',
-  'q74 Trend evidence; traded with it, a trend up day.', 'q74 Trend evidence; traded with it, never faded (range 9 x ATR), but bullish.',
+  'q74 Trend evidence; an uptrend day, traded with it, never faded.', 'q74 Trend evidence; chop evidence: traded with it.',
+  'q74 Trend evidence; counter it, never faded, traded with it.', 'q74 Trend evidence; trade with it and fade the extremes.',
+  'q74 Trend evidence; traded with it before reversing.', 'q74 Trend evidence; traded with it before the fade.',
+  'q74 Trend evidence; traded with it — buy.', 'q74 Trend evidence; traded with it, a trend up day.',
+  'q74 Trend evidence; traded with it, never faded (range 9 x ATR), but bullish.',
   'q74 Trend evidence; traded with it, never faded (range 9.4 x ATR), but bullish.',
   'q74 Trend evidence; traded with it, never faded, and a long here is fine.',
   'q74 Trend evidence; traded with it, never faded, by buying the dips.', 'q74 Trend evidence; traded with it, never faded, trend day up.',
@@ -811,20 +818,20 @@ const LIMITS = [
   'q74 Trend evidence; with it until 12:00, then reversing.', 'q74 Trend evidence; with it until it turns, then counter it.',
   'q74 Trend evidence; with it, but fade the extension.', 'q74 Trend evidence; with the trend down, short only; fading is the play at 80% ADR.',
   'q75 No chop sign; trend evidence, but a reversal is developing.', 'q75 No chop sign; trend evidence, but it is reversing.',
-  'q75 No: trend evidence (efficiency 0.18; VWAP 0.9), but it\'s a downtrend.', 'q75 No: trend evidence before a reversal, reversing now.',
-  'q75 No: trend evidence down.', 'q75 No: trend evidence for the short.', 'q75 No: trend evidence, a downtrend.',
-  'q75 No: trend evidence, bearish.', 'q75 No: trend evidence, but for the short side.', 'q75 No: trend evidence, but it is choppy.',
-  'q75 No: trend evidence, sell it.', 'q75 No: trend evidence, short.', 'q75 No: trend evidence, unlike the reversal underway.',
-  'q75 No: trend evidence... reversing down.', 'q75 No: trend evidence; a pause before the reversal.',
-  'q75 No: trend evidence; a reversal and no buyers: none.', 'q75 No: trend evidence; a reversal would come next.',
-  'q75 No: trend evidence; bearish.', 'q75 No: trend evidence; chop would be the read.',
+  'q75 No — well, yes: trend evidence.', 'q75 No: trend evidence (efficiency 0.18; VWAP 0.9), but it\'s a downtrend.',
+  'q75 No: trend evidence before a reversal, reversing now.', 'q75 No: trend evidence down.', 'q75 No: trend evidence for the short.',
+  'q75 No: trend evidence, a downtrend.', 'q75 No: trend evidence, bearish.', 'q75 No: trend evidence, but for the short side.',
+  'q75 No: trend evidence, but it is choppy.', 'q75 No: trend evidence, sell it.', 'q75 No: trend evidence, short.',
+  'q75 No: trend evidence, unlike the reversal underway.', 'q75 No: trend evidence... reversing down.',
+  'q75 No: trend evidence; a pause before the reversal.', 'q75 No: trend evidence; a reversal and no buyers: none.',
+  'q75 No: trend evidence; a reversal would come next.', 'q75 No: trend evidence; bearish.', 'q75 No: trend evidence; chop would be the read.',
   'q75 No: trend evidence; day so far 0.18 efficiency, reversing to a downtrend.', 'q75 No: trend evidence; go short.',
   'q75 No: trend evidence; going short.', 'q75 No: trend evidence; reversal is for the next bar.',
   'q75 No: trend evidence; reversal needs nothing more, reversing.', 'q75 No: trend evidence; reversing and the bid is missing.',
   'q75 No: trend evidence; short it.', 'q75 No: trend evidence; the top is in.', 'q75 No: trend evidence; the trend is over.',
   'q75 No: trend evidence; the trend is reversing down.', 'q75 No: trend evidence; the uptrend has ended.', 'q75 No: trend evidence; trend broken.',
-  'q75 No: trend evidence; trend over.', 'q75 No; trend evidence would need a new high.', 'q79 No read yet, but a long is favored.',
-  'q79 No read yet, but a trend is likely.', 'q79 No read yet, but bullish so far.', 'q79 No read yet, but it\'s going up.',
+  'q75 No: trend evidence; trend over.', 'q75 No; chop evidence and trend evidence.', 'q75 No; trend evidence would need a new high.',
+  'q79 No read yet, but a long is favored.', 'q79 No read yet, but a trend is likely.', 'q79 No read yet, but it\'s going up.',
   'q79 No read yet, but leaning trend with 0 crosses.', 'q79 No read yet, but up.', 'q79 No read yet, leaning trend up.',
   'q79 No read yet, though it looks like a trend day.', 'q79 No read yet, though one-way so far.', 'q79 No read yet, though up so far.',
   'q79 No read yet. Too early, but trending.', 'q79 No read yet... actually trend evidence.', 'q79 No read yet... trending up.',
@@ -834,24 +841,24 @@ const LIMITS = [
   'q79 No read yet: too early; 0 crosses = trend.', 'q79 No read yet: too early; leaning long.', 'q79 No read yet: too early; trending up.',
   'q79 No read yet; but 0 crosses is a trend sign.', 'q79 No read yet; it\'s a trend morning with 0 VWAP crosses.', 'q79 No read yet; long bias.',
   'q79 No read yet; one-way so far.', 'q79 No read yet; the 0 crosses are trend evidence.',
-  'q79 No read yet; trend evidence needs 0 crosses: trend.', 'q79 No read yet; trend evidence: 0 crosses.', 'q79 No read yet; trend.',
-  'q79 Too early for a read? No, trending.', 'q79 Too early said nothing; trend evidence.', 'q79 Too early to call it no read: trend evidence.',
-  'q79 Too early, but trending up so far.', 'q79 Too early, though 0 VWAP crosses lean directional.',
+  'q79 No read yet; trend evidence needs 0 crosses: trend.', 'q79 No read yet; trend evidence.', 'q79 No read yet; trend evidence: 0 crosses.',
+  'q79 No read yet; trend.', 'q79 Too early for a read? No, trending.', 'q79 Too early said nothing; trend evidence.',
+  'q79 Too early to call it no read: trend evidence.', 'q79 Too early, though 0 VWAP crosses lean directional.',
   'q80 Neither chop evidence nor no read: trend evidence.', 'q80 Neither chop nor trend evidence: conflicting.',
   'q80 Neither yet, but it leans chop.', 'q80 Neither, so chop.', 'q80 Neither: it\'s conflicting.', 'q80 Neither; unknown reads as chop.',
-  'q80 Neutral, but chop by default.', 'q80 Neutral, i.e. chop.', 'q80 Neutral, lean long.', 'q80 Neutral, which means chop evidence.',
-  'q80 No read yet, but chop is likely.', 'q80 No read yet, but directional up.', 'q80 No read yet, but treat unknown as chop.',
+  'q80 Neutral, i.e. chop.', 'q80 Neutral, lean long.', 'q80 Neutral, which means chop evidence.', 'q80 No read yet, but treat unknown as chop.',
   'q80 No read yet, but unknown counts for chop.', 'q80 No read yet, but unknown means chop.',
-  'q80 No read yet, leaning chop since nothing is moving.', 'q80 No read yet, rotating so far.', 'q80 No read yet, though the open looks up.',
+  'q80 No read yet, leaning chop since nothing is moving.', 'q80 No read yet, though the open looks up.',
   'q80 No read yet. All unknown, but trending.', 'q80 No read yet: the unknowns count as chop.', 'q80 No read yet: the unknowns lean chop.',
   'q80 No read yet: unknown, assume chop.', 'q80 No read yet: unknown, call it chop.', 'q80 No read yet: unknown, conflicting would describe it.',
   'q80 No read yet: unknown; trend.', 'q80 No read yet; a trend morning by its open.', 'q80 No read yet; looks bullish.',
   'q80 No read yet; unknown counts against.', 'q81 F4 (F3 is also rotational).', 'q81 F4 (F3 is chop as well)', 'q81 F4 (F3 is chop too)',
   'q81 F4 (F3 is choppy too).', 'q81 F4 (F3 is likewise chop).', 'q81 F4 (and F3 is chop)', 'q81 F4 (probably).', 'q81 F4 - wait, F3',
-  'q81 F4 and arguably F3', 'q81 F4 and maybe F3', 'q81 F4 and/or F3', 'q81 F4 doesn\'t count; F3.', 'q81 F4 is chop and F3 is chop too.',
-  'q81 F4 is the one... actually F3.', 'q81 F4 no longer; F3', 'q81 F4 vs F3: F3', 'q81 F4, and F3 is also chop', 'q81 F4, but F3 is chop too',
-  'q81 F4, or arguably F3.', 'q81 F4... F3', 'q81 F4; F3 is also a chop sign.', 'q81 F4; F3 is chop too.', 'q82 F4 & F1-F3',
-  'q82 F4 (F1 is also directional).', 'q82 F4 (F2 is also trending).', 'q82 F4 ... F1 too', 'q82 F4 is too weak; F1 is the trend.',
+  'q81 F4 and arguably F3', 'q81 F4 and/or F3', 'q81 F4 as well as F3', 'q81 F4 doesn\'t count; F3.', 'q81 F4 is chop and F3 is chop too.',
+  'q81 F4 is the one... actually F3.', 'q81 F4 no longer; F3', 'q81 F4 or else F3', 'q81 F4 together with F3', 'q81 F4 vs F3: F3', 'q81 F4 with F3',
+  'q81 F4, and F3 is also chop', 'q81 F4, but F3', 'q81 F4, but F3 is chop too', 'q81 F4, if anything', 'q81 F4, or arguably F3.', 'q81 F4, then F3',
+  'q81 F4... F3', 'q81 F4; F3 is also a chop sign.', 'q81 F4; F3 is chop too.', 'q82 F4 & F1-F3', 'q82 F4 (F1 is also directional).',
+  'q82 F4 (F2 is also trending).', 'q82 F4 ... F1 too', 'q82 F4 is too weak; F1 is the trend.', 'q82 F4 with F1', 'q82 F4, but F2',
   'q82 F4, though F1 is trend', 'q82 F4; F1 is trend evidence too.',
 ];
 
@@ -1975,6 +1982,235 @@ test('grading: the chop questions: right answers pass, the other classes fail (a
     ['q82', 'F4 (F1)', false],
   ];
   for (const [id, a, want] of review8) cases[id].push([a, want]);
+  // The adversarial review's round 9: a class word after a colon that does not end the label agrees ('chop: none',
+  // 'chop, trend and conflict all need 10 bars'); -less / -free forms are no class; one joiner set; 'Not sure', 'No/yes',
+  // a Yes or Bullish opening; the listed hedge words after a dash or in brackets.
+  const review9 = [
+    ['q72', 'Chop evidence: trendless; day-context calls it a balance day.', true],
+    ['q72', 'Chop evidence, trendless: balance.', true],
+    ['q72', 'Chop evidence, trend: none; day-context calls it balance.', true],
+    ['q72', 'Chop evidence — trend signs: none; balance day.', true],
+    ['q72', 'Chop evidence (no trend); balance.', true],
+    ['q72', 'Chop evidence: open inside the prior value area, still inside the IB, so day-context calls it balance.', true],
+    ['q72', 'Chop evidence; day-context calls this a balance day (an open inside the prior value area that stays inside the IB).', true],
+    ['q72', 'Chop evidence: a balance day; the middle of the IB is a read against.', true],
+    ['q72', 'Chop evidence, not trend: balance.', true],
+    ['q72', 'Chop evidence — balance (inside the IB, 5 VWAP crosses).', true],
+    ['q72', '**Chop evidence** — balance day.', true],
+    ['q72', 'Chop evidence: 5 VWAP crosses, inside the IB; day type balance.', true],
+    ['q72', 'Chop evidence, no extension and no failed break: balance.', true],
+    ['q72', 'Chop evidence: none of the trend signs; balance.', true],
+    ['q72', 'Chop evidence: directionless, balance.', true],
+    ['q72', 'Chop evidence: non-trending; balance day.', true],
+    ['q72', 'Chop evidence: trend, none; balance.', true],
+    ['q72', 'Chop evidence - trend-free; balance.', true],
+    ['q74', 'Trend evidence: chop-free; traded with it, never faded.', true],
+    ['q74', 'Trend evidence, chop: none; traded with it.', true],
+    ['q74', 'Trend evidence — no rotation, 0 VWAP crosses; traded with it, never faded.', true],
+    ['q74', 'Trend evidence: a trend day down after an open-drive outside the prior range; traded with it, never faded.', true],
+    ['q74', 'Trend evidence; traded with it (never faded, never counter).', true],
+    ['q74', 'Trend evidence, not chop: traded with it.', true],
+    ['q74', 'Trend evidence: chopless, traded with it.', true],
+    ['q74', 'Trend evidence: rotation-free; traded with it.', true],
+    ['q74', 'Trend evidence — trend down, extended 150 below the IB; traded with it.', true],
+    ['q74', 'Trend evidence: no chop, no conflict; traded with it.', true],
+    ['q74', 'Trend evidence, chop or conflict: none; traded with it.', true],
+    ['q74', 'Trend evidence; it is traded with, never faded.', true],
+    ['q75', 'No — trend evidence; an unfinished pullback is no chop sign.', true],
+    ['q75', 'No: an unfinished pullback is no chop sign; trend evidence.', true],
+    ['q75', 'No. Trend evidence: the pullback is unfinished (38%, volume falling, swings hold).', true],
+    ['q75', 'No, the pullback is unfinished; trend evidence.', true],
+    ['q75', 'No chop sign: trend evidence.', true],
+    ['q75', 'No, not a chop sign — trend evidence.', true],
+    ['q75', 'No: trend evidence, chop-free.', true],
+    ['q75', 'No: trend evidence, chop: none.', true],
+    ['q75', 'No — the pullback is a pause in a declared long; the lines show trend evidence.', true],
+    ['q75', 'No. The pullback is unfinished, so no chop sign. Trend evidence.', true],
+    ['q75', 'No: trend evidence (declared long, 1 VWAP cross).', true],
+    ['q75', 'No; trend evidence, not chop.', true],
+    ['q79', 'No read yet: chop, trend and conflict all need a read from 10 bars.', true],
+    ['q79', 'No read yet — chop, trend: both need 10 bars.', true],
+    ['q79', 'No read yet: trend or chop needs 10 bars; 6 so far.', true],
+    ['q79', 'No read yet; too early (6 of 10 bars).', true],
+    ['q79', 'No read yet: too early, trend-free and chop-free so far.', true],
+    ['q79', 'No read yet: 0 VWAP crosses is no chop sign this early.', true],
+    ['q79', 'No read yet — only 6 bars, a read needs 10.', true],
+    ['q79', 'No read yet: trend? Too early to say.', true],
+    ['q80', 'No read yet: chop, trend — all unknown.', true],
+    ['q80', 'No read yet — every line is unknown (no 09:30 ET bar), so neutral.', true],
+    ['q80', 'No read yet: unknown is neutral, neither chop nor trend.', true],
+    ['q80', 'No read yet; trend/chop unknown.', true],
+    ['q80', 'No read yet: chop: unknown, trend: unknown.', true],
+    ['q80', 'No read yet. Unknown is neutral.', true],
+    ['q81', 'F4 — rotational (efficiency 0.03, 10 VWAP crosses).', true],
+    ['q81', 'F4 (F1-F3 are not chop)', true],
+    ['q81', 'F4 (not F1, F2 or F3)', true],
+    ['q81', 'F4, not F3.', true],
+    ['q81', '**F4**', true],
+    ['q81', 'F4 (rotational: back and forth so far)', true],
+    ['q81', 'F4: rotational; F3 is a pullback.', true],
+    ['q81', 'F4 — F3 is an unfinished pullback, not chop.', true],
+    ['q81', 'F4 (F3: unfinished pullback)', true],
+    ['q81', 'F4; F1, F2, F3 are not chop.', true],
+    ['q81', 'F4 (F2 shows declared? no)', true],
+    ['q82', 'F4 (declared long: regime with, all four above 0)', true],
+    ['q82', 'F4 — F1 rotational, F2 balance, F3 inside.', true],
+    ['q82', 'F4 — not F1, F2 or F3.', true],
+    ['q82', 'F4, F1 to F3 are not trend evidence.', true],
+    ['q82', 'F4; F1: rotational.', true],
+    ['q82', 'F4 (F1 is rotational)', true],
+    ['q82', 'F4 → declared long', true],
+    ['q82', 'F4: all four your way.', true],
+    ['q72', 'Chop evidence (or trend evidence): balance.', false],
+    ['q72', 'Chop evidence (conflicting): balance.', false],
+    ['q72', 'Chop evidence (trend evidence?): balance.', false],
+    ['q72', 'Chop evidence plus trend evidence: balance.', false],
+    ['q72', 'Chop evidence & trend evidence: balance.', false],
+    ['q72', 'Chop evidence + trend evidence: balance.', false],
+    ['q72', 'Chop evidence versus trend evidence: balance.', false],
+    ['q72', 'Chop evidence, possibly; balance.', false],
+    ['q72', 'Chop evidence, I guess; balance.', false],
+    ['q72', 'Chop evidence, arguably: balance.', false],
+    ['q72', 'Chop evidence, sort of; balance.', false],
+    ['q72', 'Chop evidence; trend evidence: balance.', false],
+    ['q72', 'Chop evidence nor trend evidence; balance.', false],
+    ['q72', 'Chop evidence, if any; balance.', false],
+    ['q72', 'Chop evidence, not much; balance.', false],
+    ['q72', 'Chop evidence? Hardly. Balance.', false],
+    ['q72', 'Chop evidence, doubtful; balance.', false],
+    ['q72', 'Chop evidence, could be trend; balance.', false],
+    ['q72', 'Chop evidence, or rather trend evidence: balance.', false],
+    ['q72', 'Chop evidence and trend evidence: balance.', false],
+    ['q72', 'Chop evidence is absent; balance.', false],
+    ['q72', 'Chop evidence absent. Balance.', false],
+    ['q72', 'Chop evidence: none. Balance.', false],
+    ['q72', 'Chop evidence — trendy; balance.', false],
+    ['q74', 'Trend evidence (or chop evidence): traded with it.', false],
+    ['q74', 'Trend evidence (conflicting): traded with it.', false],
+    ['q74', 'Trend evidence & chop evidence; traded with it.', false],
+    ['q74', 'Trend evidence plus chop evidence; traded with it.', false],
+    ['q74', 'Trend evidence, possibly; traded with it.', false],
+    ['q74', 'Trend evidence, I guess; traded with it.', false],
+    ['q74', 'Trend evidence, doubtful: traded with it.', false],
+    ['q74', 'Trend evidence; chop evidence: traded with it.', false],
+    ['q74', 'Trend evidence (chop?): traded with it.', false],
+    ['q74', 'Trend evidence: faded, not traded with it.', false],
+    ['q74', 'Trend evidence: fade it, never traded with it.', false],
+    ['q74', 'Trend evidence: faded; traded with it is wrong.', false],
+    ['q74', 'Trend evidence: counter it.', false],
+    ['q74', 'Trend evidence; it is faded (not traded with it).', false],
+    ['q75', 'Not sure; trend evidence.', false],
+    ['q75', 'Not certain: trend evidence.', false],
+    ['q75', 'No/yes: trend evidence.', false],
+    ['q75', 'No, yes: trend evidence.', false],
+    ['q75', 'No — well, yes: trend evidence.', false],
+    ['q75', 'No (or yes): trend evidence.', false],
+    ['q75', 'No, possibly; trend evidence.', false],
+    ['q75', 'No; chop evidence and trend evidence.', false],
+    ['q75', 'No: trend evidence (or chop evidence).', false],
+    ['q75', 'No: trend evidence & chop evidence.', false],
+    ['q75', 'No: trend evidence plus chop.', false],
+    ['q75', 'Not trend evidence; no.', false],
+    ['q75', 'No: not chop; no trend evidence either.', false],
+    ['q75', 'No: no trend evidence.', false],
+    ['q75', 'No: trend evidence lacking.', false],
+    ['q75', 'No: trend evidence is weak.', false],
+    ['q79', 'No read yet (or trend evidence).', false],
+    ['q79', 'No read yet & trend evidence.', false],
+    ['q79', 'No read yet plus trend evidence.', false],
+    ['q79', 'No read yet, possibly trend.', false],
+    ['q79', 'No read yet; trend evidence.', false],
+    ['q79', 'Neutral (chop evidence).', false],
+    ['q79', 'Too early (trend evidence).', false],
+    ['q79', 'No read yet versus trend evidence: trend.', false],
+    ['q79', 'No read yet, chop evidence.', false],
+    ['q79', 'No read yet, chop.', false],
+    ['q79', 'Neither: trending.', false],
+    ['q80', 'No read yet (chop evidence).', false],
+    ['q80', 'No read yet plus chop evidence.', false],
+    ['q80', 'Neutral & chop evidence.', false],
+    ['q80', 'No read yet, I guess; chop.', false],
+    ['q80', 'Bullish: no read yet.', false],
+    ['q80', 'Bearish, no read yet.', false],
+    ['q80', 'Balanced: no read yet.', false],
+    ['q80', 'Two-sided; no read yet.', false],
+    ['q80', 'Rotational — no read yet.', false],
+    ['q80', 'Yes, chop: no read yet.', false],
+    ['q80', 'Yes; no read yet.', false],
+    ['q80', 'Choppy — no read yet.', false],
+    ['q81', 'F4 and maybe F3', false],
+    ['q81', 'F4 and possibly F3', false],
+    ['q81', 'F4 or perhaps F3', false],
+    ['q81', 'F4, possibly F3', false],
+    ['q81', 'F4 with F3', false],
+    ['q81', 'F4 as well as F3', false],
+    ['q81', 'F4, but F3', false],
+    ['q81', 'F4, then F3', false],
+    ['q81', 'F4 (F3?)', false],
+    ['q81', 'F4 versus F3', false],
+    ['q81', 'F4 and also F3', false],
+    ['q81', 'F4 or else F3', false],
+    ['q81', 'F4 & F3', false],
+    ['q81', 'F4/F3', false],
+    ['q81', 'F4, F3 too', false],
+    ['q81', 'F4 together with F3', false],
+    ['q81', 'F4 — or F3', false],
+    ['q81', 'F4; or F3', false],
+    ['q81', 'F4 & also F3', false],
+    ['q81', 'Only F4, F3', false],
+    ['q81', 'Label: F4, F3', false],
+    ['q81', 'F4 F3', false],
+    ['q81', 'F4 possibly', false],
+    ['q81', 'F4 i guess', false],
+    ['q81', 'F4, if anything', false],
+    ['q82', 'F4 and maybe F1', false],
+    ['q82', 'F4, but F2', false],
+    ['q82', 'F4 (F1?)', false],
+    ['q82', 'F4 with F1', false],
+    ['q82', 'F4 possibly', false],
+    ['q82', 'F3 or F4', false],
+    ['q82', 'F1, F4', false],
+    ['q82', 'The answer is F4 or F1', false],
+    ['q72', 'Chop evidence — maybe; balance.', false],
+    ['q72', 'Chop evidence - perhaps; balance.', false],
+    ['q72', 'Chop evidence (perhaps): balance.', false],
+    ['q72', 'Chop evidence (hardly): balance.', false],
+    ['q72', 'Chop evidence (I think): balance.', false],
+    ['q72', 'Chop evidence — I think; balance.', false],
+    ['q72', 'Chop evidence; maybe. Balance.', false],
+    ['q74', 'Trend evidence — unsure; traded with it.', false],
+    ['q74', 'Trend evidence — maybe; traded with it.', false],
+    ['q74', 'Trend evidence (perhaps); traded with it.', false],
+    ['q79', 'No read yet — maybe trend.', false],
+    ['q79', 'No read yet (perhaps); trend.', false],
+    ['q80', 'Neutral — perhaps; chop.', false],
+    ['q81', 'F4 — maybe', false],
+    ['q81', 'F4 (perhaps)', false],
+    ['q81', 'F4 - unsure', false],
+    ['q82', 'F4 — perhaps', false],
+    ['q75', 'No — maybe; trend evidence.', false],
+    ['q75', 'No (perhaps): trend evidence.', false],
+    ['q72', 'Chop evidence: not balanced.', false],
+    ['q72', 'Chop evidence: no balanced day.', false],
+    ['q81', 'F4; F1: rotational.', true],
+    ['q79', 'Yes: no read yet.', false],
+    ['q79', 'Balanced: no read yet.', false],
+    ['q80', 'Two-sided: no read yet.', false],
+    ['q72', 'Chop evidence: not balanced, rotational.', false],
+    ['q72', 'Chop evidence: no balanced day; balance.', false],
+    ['q79', 'No read yet — maybe trend', false],
+    ['q74', 'Trend evidence, arguably; traded with it.', false],
+    ['q74', 'Trend evidence, sort of; traded with it.', false],
+    ['q72', 'Chop evidence—hardly; balance.', false],
+    ['q72', 'Chop evidence, trend evidence: balance', false],
+    ['q72', 'Chop evidence, trending; balance', false],
+    ['q75', 'No, chop evidence; trend evidence', false],
+    ['q79', 'No read yet, trend evidence', false],
+    ['q79', 'Too early, trending', false],
+    ['q81', 'F4, chop evidence', false],
+    ['q82', 'F4, trending', false],
+  ];
+  for (const [id, a, want] of review9) cases[id].push([a, want]);
   assert.deepStrictEqual(Object.keys(cases).sort(), Object.values(CHOP).flat().sort(), 'cases for each chop question');
   // A wrong answer whose opening label is right passes whatever its tail says (the tail is not graded): LIMITS, graded
   // as they are graded, so a change that closes one shows up.
@@ -2041,7 +2277,7 @@ test('grading: the chop questions\' label is the first two clauses, and a clause
   // [id, kind, index, the label's opening, the fact read in the label, whether the fact in the label passes the answer]
   for (const [id, kind, i, L, F, right] of [
     ['q72', 'forbidden', 1, 'Chop evidence: balance', 'no balance', false], ['q74', 'forbidden', 1, 'Trend evidence: traded with it', 'fade it', false],
-    ['q75', 'required', 1, 'No', 'trend evidence', true], ['q79', 'required', 0, 'All unknown', 'no read yet', true], ['q80', 'required', 0, 'All unknown', 'no read yet', true],
+    ['q79', 'required', 0, 'All unknown', 'no read yet', true], ['q80', 'required', 0, 'All unknown', 'no read yet', true],
   ]) {
     const src = q(id)[kind][i];
     const first = src.indexOf(`(?:(?:(?!${TERM}).)*?${TERM})?`);
@@ -2061,7 +2297,7 @@ test('grading: the chop questions\' label is the first two clauses, and a clause
 });
 
 test('grading: the chop questions\' one hedge rule does work in each of the seven', () => {
-  // [id, forbidden index, what comes before the hedge, what comes after it, [full labels, bare class words] it offers]
+  // [id, forbidden index, what comes before the hedge, what comes after it, [full labels, bare class words, a word for each]]
   const OTH = {
     chop: [['trend evidence', 'conflicting', 'no read'], ['trend\\w*', 'conflict\\w*', 'mixed', 'directional', 'bullish', 'bearish'], ['trending', 'conflict', 'mixed', 'directional', 'bullish', 'bearish']],
     trend: [['chop evidence', 'conflicting', 'no read'], ['chop\\w*', 'rotat\\w*', 'ranging', 'range-bound', 'conflict\\w*', 'mixed'], ['choppy', 'rotating', 'ranging', 'range-bound', 'conflict', 'mixed']],
@@ -2072,24 +2308,36 @@ test('grading: the chop questions\' one hedge rule does work in each of the seve
   const sites = [['q72', 0, 'Chop evidence', '; balance.', OTH.chop], ['q74', 0, 'Trend evidence', '; traded with it.', OTH.trend], ['q75', 1, 'Not', '; trend evidence.', OTH.trend],
     ['q75', 2, 'No: trend evidence', '.', OTH.trend], ['q79', 1, 'No read yet', '.', OTH.none], ['q80', 1, 'No read yet', '.', OTH.none], ['q81', 0, 'F4', '.', OTH.f], ['q82', 0, 'F4', '.', OTH.f]];
   const END = '(?=\\s*[,;:.!?)–—-]|\\s*$)';
-  const lists = {
-    paren: 'maybe|unsure|likely|probably not|not really|not sure', words: 'maybe|perhaps|likely|i think|unsure|not really|hardly|weakly',
-    gone: 'absent|none|unclear|weak|missing|lost|gone|lacking', is: 'not|no|wrong|never|none|mixed|fading', fades: 'fades|faded|fading',
-  };
+  const TERM = '(?<!\\.\\.)(?<!\\b(?:e\\.g|i\\.e|vs|etc))[;.](?=\\s)';
+  const WORDS = 'maybe|perhaps|possibly|likely|i think|i guess|arguably|sort of|unsure|not really|hardly|weakly';
+  const STEMS = 'chop|trend|rotat|conflict|mixed|no read|F\\d';
+  const lists = { paren: 'probably not|not sure', gone: 'absent|none|unclear|weak|missing|lost|gone|lacking', is: 'not|no|wrong|never|none|mixed|fading', fades: 'fades|faded|fading' };
   const rows = [];
   for (const [id, i, pre, post, [full, bare, bareSay]] of sites) {
-    // The nth place a text stands in this pattern (the hedge's END stands four times: after a gone word, 'not', 'no', a
-    // bare class word).
     const w = (from, to, hedge, right = false, n = 0, tail = post) => rows.push([id, 'forbidden', i, from, to, n, `${pre}${hedge}${tail}`, right]);
     w('(?:\\s*\\?|', '(?:', '?');
     for (const [k, x] of Object.entries(lists)) {
       for (const v of x.split('|')) {
         // q74's 'faded' in the label is also its asked fact taken back (forbidden[1]): there the hedge's copy is moot.
         if (id === 'q74' && v === 'faded') continue;
-        const say = { paren: ` (${v})`, words: v === 'i think' ? ', I think' : ` ${v}`, gone: `: ${v}`, is: ` is ${v} here`, fades: ` ${v} here` }[k];
-        w(`(?:${x})`, `(?:${cutAlt(x, v)})`, say);
+        w(`(?:${x})`, `(?:${cutAlt(x, v)})`, { paren: ` (${v})`, gone: `: ${v}`, is: ` is ${v} here`, fades: ` ${v} here` }[k]);
       }
     }
+    // The listed words: after a space, a comma or a colon (place 1); after a dash or in brackets (place 2), where the word
+    // ends its clause or names a class.
+    for (const v of WORDS.split('|')) {
+      const say = v === 'i think' ? 'I think' : v === 'i guess' ? 'I guess' : v;
+      w(`(?:${WORDS})`, `(?:${cutAlt(WORDS, v)})`, `, ${say}`, false, 0);
+      w(`(?:${WORDS})`, `(?:${cutAlt(WORDS, v)})`, ` (${say})`, false, 1);
+    }
+    for (const [k, s] of STEMS.split('|').entries()) {
+      w(`\\s+(?:${STEMS}))`, `\\s+(?:${cutAlt(STEMS, s)}))`, ` — maybe ${['chop', 'trend', 'rotating', 'conflict', 'mixed', 'no read', 'F3'][k]} here`);
+    }
+    w(`(?=\\s*[,;:.!?)–—-]|\\s*$|\\s+(?:${STEMS}))`, '', ' — maybe the clearest', true);
+    // (At the line's end only where the line may end after the label: elsewhere its asked fact is still missing.)
+    const ends = post === '.';
+    if (ends) w('|\\s*$|\\s+(?:', '|\\s+(?:', ' — maybe', false, 0, '');
+    w(`(?=\\s*[,;:.!?)–—-]|\\s*$|`, '(?=\\s*$|', ' — maybe');
     // A gone word: after ':' or '(' or a dash, or 'is'.
     w('(?:\\s*[:(]|\\s+[-–—])?', '', ': absent');
     w('(?:\\s*[:(]|\\s+[-–—])?', '(?:\\s+[-–—])?', ': absent');
@@ -2097,31 +2345,49 @@ test('grading: the chop questions\' one hedge rule does work in each of the seve
     w('\\s*(?:is\\s+)?(?:absent', '\\s*(?:absent', ' is absent');
     w("|\\s*isn't\\b", '', " isn't");
     for (const v of ["can't", 'cannot']) w("(?:can't|cannot)", `(?:${cutAlt("can't|cannot", v)})`, ` ${v} be`);
-    // END, at each of its four places: the take-back counts where its clause ends (or the line), never mid-clause.
-    for (const [n, hedge, agree] of [[0, ': absent', ': absent data'], [1, ' not', ' not chop'], [2, ', no', ', no doubt'], [3, ` – ${bareSay[0]}`, ` – ${bareSay[0]} later`]]) {
+    // END, at each of its three places: the take-back counts where its clause ends (or the line), never mid-clause.
+    for (const [n, hedge, agree] of [[0, ': absent', ': absent data'], [1, ' not', ' not chop'], [2, ', no', ', no doubt']]) {
       w(END, '', agree, true, n);
       w(END, '(?=\\s*$)', hedge, false, n);
-      if (id === 'q81' || id === 'q82' || id === 'q79' || id === 'q80') w(END, '(?=\\s*[,;:.!?)–—-])', hedge, false, n, '');
+      if (ends) w(END, '(?=\\s*[,;:.!?)–—-])', hedge, false, n, '');
     }
-    // 'No, no:' agrees where the label is No itself (q75); elsewhere no label ends in no.
-    if (i === 1 && id === 'q75') rows.push([id, 'forbidden', i, '(?<!\\bno[\\s,:–—-]*)', '', 0, 'No, no: trend evidence.', true]);
-    // Another class offered: each joiner, each full label, the full label said absent / none / unknown, each bare word.
-    for (const [v, say] of [[',\\s*(?:but|though)|', ', but '], ['|\\band\\b', ' and '], ['|\\bor\\b', ' or '], ['|\\/', ' / '], ['|→', ' → ']]) w(v, '', `${say}${full[0]} here`);
-    w('(?:but|though)', '(?:though)', `, but ${full[0]} here`);
-    w('(?:but|though)', '(?:but)', `, though ${full[0]} here`);
-    w(`(?:${full.join('|')})`, `(?:${full.slice(1).join('|')})`, `: ${full[0]} here`);
-    for (const v of full.slice(1)) w(`(?:${full.join('|')})`, `(?:${cutAlt(full.join('|'), v)})`, `: ${v} here`);
+    // Another class offered: each joiner, each full label, each bare word, the bare word ending the label after a colon
+    // or a dash; never its -less or -free form, never 'Trend declared'; never when that class is said absent or none.
+    const JW = 'but|though|and|or|nor|plus|versus';
+    for (const v of JW.split('|')) w(`(?:${JW})\\s+`, `(?:${cutAlt(JW, v)})\\s+`, `, ${v} ${full[0]} here`);
+    w(`(?:(?:${JW})\\s+)?`, '', `, but ${full[0]} here`);
+    const JS = 'and|or|nor|plus|versus|vs\\.?';
+    for (const [v, say] of [['and', 'and'], ['or', 'or'], ['nor', 'nor'], ['plus', 'plus'], ['versus', 'versus'], ['vs\\.?', 'vs.']]) w(`(?:${JS})\\s+)`, `(?:${cutAlt(JS, v) || 'x'})\\s+)`, ` ${say} ${full[0]} here`);
+    w('vs\\.?', 'vs', ' vs. trend evidence here'.replace('trend evidence', full[0]));
+    w(`(?:${full.join('|')})\\b|`, `(?:${full.slice(1).join('|')})\\b|`, `, ${full[0]} here`);
+    // ('conflicting' after a joiner is also its class word conflict\w*: that full label is moot there.)
+    for (const v of full.slice(1)) if (v !== 'conflicting') w(`(?:${full.join('|')})\\b|`, `(?:${cutAlt(full.join('|'), v)})\\b|`, `, ${v} here`);
+    for (const v of full) w(`(?:${full.join('|')})\\b|`, `(?:${cutAlt(full.join('|'), v) || 'x'})\\b|`, `: ${v} here`, false, 1);
+    for (const [k, v] of bare.entries()) {
+      w(`(?:${bare.join('|')})`, `(?:${cutAlt(bare.join('|'), v)})`, `, ${bareSay[k]} here`, false, 0);
+      w(`(?:${bare.join('|')})`, `(?:${cutAlt(bare.join('|'), v)})`, ` – ${bareSay[k]}`, false, 1);
+    }
+    w('(?<!less)', '', `, ${bare[0].replace('\\w*', '')}less here`, true, 0);
+    w('(?<!less)', '', ` – ${bare[0].replace('\\w*', '')}less`, true, 1);
+    w('(?!-free|', '(?!', `, ${bare[0].replace('\\w*', '')}-free here`, true, 0);
+    // (After a dash a class word must end the label, so its -free form never counts there either way.)
+    w('(?:declared|evidence)', '(?:evidence)', `, ${bareSay[0]} declared here`, true);
+    // A class word followed by 'evidence' is that full label, read as one (so 'chop evidence: none' agrees).
+    w('(?:declared|evidence)', '(?:declared)', `, ${bare[0].replace('\\w*', '')} evidence: none`, true);
+    w(`(?=\\s*(?:${TERM}|[.;!?]?\\s*$))`, '', ` – ${bareSay[0]} later`, true);
+    w(`(?=\\s*(?:${TERM}|[.;!?]?\\s*$))`, `(?=\\s*(?:[.;!?]?\\s*$))`, ` – ${bareSay[0]}`, false, 0, ends ? '. Then.' : post);
+    if (ends) w(`(?=\\s*(?:${TERM}|[.;!?]?\\s*$))`, `(?=\\s*(?:${TERM}))`, ` – ${bareSay[0]}`, false, 0, '');
     const EX = '(?!\\s*(?:(?:and|or|nor)\\s+\\w+(?:\\s+\\w+)?\\s*)?(?:(?:is|are)\\s+|:\\s*)?(?:both\\s+)?(?:absent|none|unknown)\\b)';
     w(EX, '', `: ${full[0]} is absent`, true);
     for (const v of ['and', 'or', 'nor']) w('(?:and|or|nor)\\s+\\w+', `(?:${cutAlt('and|or|nor', v)})\\s+\\w+`, `: ${full[0]} ${v} the rest are unknown`, true);
     w('(?:\\s+\\w+)?\\s*)?(?:(?:is', '\\s*)?(?:(?:is', `: ${full[0]} and the rest are unknown`, true);
-    w('(?:(?:and|or|nor)\\s+\\w+(?:\\s+\\w+)?\\s*)?', '', `: ${full[0]} and trend are unknown`, true);
     for (const v of ['is', 'are']) w('(?:(?:is|are)\\s+|:', `(?:(?:${cutAlt('is|are', v)})\\s+|:`, `: ${full[0]} ${v} unknown`, true);
     w('|:\\s*)?(?:both', ')?(?:both', `: ${full[0]}: none`, true);
     w('(?:both\\s+)?', '', `: ${full[0]} are both unknown`, true);
     for (const v of ['absent', 'none', 'unknown']) w('(?:absent|none|unknown)\\b)', `(?:${cutAlt('absent|none|unknown', v)})\\b)`, `: ${full[0]} ${v}`, true);
-    for (const [k, v] of bare.entries()) w(`(?:${bare.join('|')})`, `(?:${cutAlt(bare.join('|'), v)})`, ` – ${bareSay[k]}`);
   }
+  // 'No, no:' agrees where the label is No itself (q75's opening only).
+  rows.push(['q75', 'forbidden', 1, '(?<!\\bno[\\s,:–—-]*)', '', 0, 'No, no: trend evidence.', true]);
   flipAt(rows);
 });
 
@@ -2136,6 +2402,7 @@ test('grading: each other part of the chop questions\' patterns does work: witho
   r('q72', 'forbidden', 0, '(?: evidence)?', '', 'Chop evidence? balance.', false);
   r('q72', 'forbidden', 0, '^', '', 'Chop evidence: balance; more chop evidence? Never.', true);
   for (const x of ['not', 'no']) r('q72', 'forbidden', 1, '(?:not|no)', `(?:${cutAlt('not|no', x)})`, `Chop evidence: ${x} balance; balance later.`, false);
+  r('q72', 'forbidden', 1, 'balance\\w*', 'balance\\b', 'Chop evidence: not balanced; balance later.', false);
   // q74: trend evidence first; traded with it anywhere (each way of saying it); not traded with it, fade it, faded in the
   // label, never after never, not, no, don't, than, nor, nor a 'faded?' asked and answered.
   r('q74', 'required', 0, '^', '', 'Traded with it: trend evidence.', false);
@@ -2155,17 +2422,25 @@ test('grading: each other part of the chop questions\' patterns does work: witho
   r('q75', 'required', 0, '|\\bno chop\\b', '', 'Trend evidence; no chop sign.', true);
   r('q75', 'required', 0, '|\\bnot (a )?chop\\b', '', 'Trend evidence; not a chop sign.', true);
   r('q75', 'required', 0, '(a )?', '', 'Trend evidence; not a chop sign.', true);
-  const F0 = 'yes|chop\\w*|rotat\\w*|range|ranging|conflict\\w*|mixed|balance|no read';
+  const F0 = 'yes|chop\\w*|rotat\\w*|range|ranging|conflict\\w*|mixed|balance|no read|not (?:sure|certain)|no\\s*(?:\\/|,|\\(\\s*or)\\s*yes';
   for (const [x, a] of [['yes', 'Yes'], ['chop\\w*', 'Choppy'], ['rotat\\w*', 'Rotating'], ['range', 'Range'], ['ranging', 'Ranging'], ['conflict\\w*', 'Conflicting'], ['mixed', 'Mixed'],
-    ['balance', 'Balance'], ['no read', 'No read']]) r('q75', 'forbidden', 0, `(${F0})`, `(${cutAlt(F0, x)})`, `${a}, not a chop sign; trend evidence.`, false);
+    ['balance', 'Balance'], ['no read', 'No read']]) {
+    r('q75', 'forbidden', 0, `(?:${F0})`, `(?:${F0.replace(x === 'yes' ? 'yes|' : `|${x}|`, x === 'yes' ? '' : '|')})`, `${a}, not a chop sign; trend evidence.`, false);
+  }
+  r('q75', 'forbidden', 0, '|not (?:sure|certain)', '', 'Not sure, not a chop sign; trend evidence.', false);
+  r('q75', 'forbidden', 0, '|no\\s*(?:\\/|,|\\(\\s*or)\\s*yes', '', 'No/yes: trend evidence.', false);
+  for (const [x, a] of [['sure', 'Not sure'], ['certain', 'Not certain']]) r('q75', 'forbidden', 0, '(?:sure|certain)', `(?:${cutAlt('sure|certain', x)})`, `${a}: trend evidence.`, false);
+  for (const [x, a] of [['\\/', 'No/yes'], [',', 'No, yes'], ['\\(\\s*or', 'No (or yes)']]) r('q75', 'forbidden', 0, '(?:\\/|,|\\(\\s*or)', `(?:${cutAlt('\\/|,|\\(\\s*or', x)})`, `${a}: trend evidence.`, false);
   for (const x of ['no', 'nope', 'not']) r('q75', 'forbidden', 1, '(?:no|nope|not)', `(?:${cutAlt('no|nope', x) || 'nope'})`.replace('(?:)', '(?:x)'), `${x[0].toUpperCase()}${x.slice(1)}? trend evidence.`, false);
   r('q75', 'forbidden', 2, '(?<=\\b(?:not|no)\\s(?:a\\s)?)', '(?<=\\bnever\\s)', 'No, not trend evidence.', false);
   r('q75', 'forbidden', 2, '(?:not|no)\\s(?:a', '(?:not)\\s(?:a', 'No; no trend evidence.', false);
   r('q75', 'forbidden', 2, '(?:not|no)\\s(?:a', '(?:no)\\s(?:a', 'No, not trend evidence.', false);
   r('q75', 'forbidden', 2, '(?:a\\s)?', '', 'No, not a trend evidence.', false);
-  r('q75', 'forbidden', 2, '(?!\\btrend evidence\\b)', '', 'No: trend evidence; trend evidence is not weakened.', true, 0);
-  r('q75', 'forbidden', 2, '(?!\\btrend evidence\\b)', '', 'No: trend evidence, but trend evidence is not weakened.', true, 1);
-  // q79/q80: no read (no-read), yet, too early, neutral, neither in the label; never another class at the opening.
+  // The first trend evidence on the line is the class (a later one is the explanation).
+  r('q75', 'forbidden', 2, '(?!\\btrend evidence\\b)', '', 'No: trend evidence; trend evidence is not weakened.', true);
+  r('q75', 'forbidden', 2, '^(?:', '(?:', 'No: trend evidence; trend evidence is not weakened.', true);
+  // q79/q80: no read (no-read), yet, too early, neutral, neither in the label; never another class, Yes, Bullish,
+  // Bearish, Balanced or Two-sided at the opening.
   const NR = "no[- ]read(?:[- ]yet)?|too early|neutral|neither";
   for (const id of ['q79', 'q80']) {
     for (const [x, a] of [['no[- ]read(?:[- ]yet)?', 'No read yet.'], ['too early', 'Too early.'], ['neutral', 'Neutral.'], ['neither', 'Neither.']]) {
@@ -2178,9 +2453,9 @@ test('grading: each other part of the chop questions\' patterns does work: witho
     r(id, 'forbidden', 1, '(?:[- ]yet)?', '(?:[-]yet)?', 'No read yet?', false);
     r(id, 'forbidden', 1, 'no[- ]read', 'no read', 'No-read yet?', false);
     r(id, 'forbidden', 1, 'no[- ]read', 'no-read', 'No read yet?', false);
-    const OO = 'chop\\w*|trend\\w*|rotat\\w*|range|ranging|directional|conflict\\w*|mixed';
+    const OO = 'chop\\w*|trend\\w*|rotat\\w*|range|ranging|directional|conflict\\w*|mixed|yes|bullish|bearish|balance\\w*|two-sided';
     for (const [x, a] of [['chop\\w*', 'Chop'], ['trend\\w*', 'Trend'], ['rotat\\w*', 'Rotating'], ['range', 'Range'], ['ranging', 'Ranging'], ['directional', 'Directional'],
-      ['conflict\\w*', 'Conflicting'], ['mixed', 'Mixed']]) {
+      ['conflict\\w*', 'Conflicting'], ['mixed', 'Mixed'], ['yes', 'Yes'], ['bullish', 'Bullish'], ['bearish', 'Bearish'], ['balance\\w*', 'Balanced'], ['two-sided', 'Two-sided']]) {
       r(id, 'forbidden', 0, `(?:${OO})`, `(?:${cutAlt(OO, x)})`, `${a}: no read yet.`, false);
     }
     r(id, 'forbidden', 0, '^', '', 'No read yet; maybe chop evidence later.', true);
@@ -2189,8 +2464,8 @@ test('grading: each other part of the chop questions\' patterns does work: witho
     }
     r(id, 'forbidden', 1, '^', '', 'No read yet; is it too early? Yes.', true);
   }
-  // q81/q82: F4 first (after only / the answer is / the label is / answer / label); another label after it is a second
-  // answer unless explained.
+  // q81/q82: F4 first (after only / the answer is / the label is / answer / label); another label after it (or after
+  // its lead) is a second answer unless explained.
   const LEAD = 'only|the answer is|the label is|answer|label';
   for (const id of ['q81', 'q82']) {
     for (const [x, a] of [['only', 'Only F4.'], ['the answer is', 'The answer is F4.'], ['the label is', 'The label is F4.'], ['answer', 'Answer F4.'], ['label', 'Label F4.']]) {
@@ -2200,16 +2475,22 @@ test('grading: each other part of the chop questions\' patterns does work: witho
     r(id, 'required', 0, '^', '', 'Not F3: F4.', false);
     r(id, 'required', 0, 'F4\\b', 'F4', 'F45.', false);
     r(id, 'forbidden', 0, '^', '', 'F4: the line; F4? not F3.', true);
+    for (const [x, a] of [['only', 'Only F4, F3'], ['the answer is', 'The answer is F4 or F1'], ['the label is', 'The label is F4, F3'], ['answer', 'Answer F4, F3'], ['label', 'Label: F4, F3']]) {
+      r(id, 'forbidden', 1, `(?:${LEAD})`, `(?:${cutAlt(LEAD, x)})`, a, false);
+    }
+    r(id, 'forbidden', 1, '\\s*:?\\s*)?F4\\b\\s*(?:[', '\\s*)?F4\\b\\s*(?:[', 'Label: F4, F3', false);
     const J = ',;:+&/–—(→-';
     for (const d of J.split('')) r(id, 'forbidden', 1, `[${J}]`, `[${J.replace(d, '')}]`, `F4${d === ',' || d === ';' || d === ':' ? d : ` ${d}`} F3`, false);
-    for (const x of ['and', 'or', 'plus']) r(id, 'forbidden', 1, '(?:and|or|plus)\\s+', `(?:${cutAlt('and|or|plus', x)})\\s+`, `F4 ${x} F3`, false);
-    r(id, 'forbidden', 1, '(?:(?:and|or|plus)\\s+)?', '', 'F4 (or F3)', false);
+    for (const x of ['and', 'or', 'plus', 'versus']) r(id, 'forbidden', 1, '(?:and|or|plus|versus)\\s+', `(?:${cutAlt('and|or|plus|versus', x)})\\s+`, `F4 ${x} F3`, false);
+    r(id, 'forbidden', 1, '(?:(?:and|or|plus|versus)\\s+)?', '', 'F4 (or F3)', false);
     r(id, 'forbidden', 1, '[,;:+&/–—(→-]\\s*)?', '[,;:+&/–—(→-])?', 'F4 ( F3)', false);
-    for (const [x, a] of [['actually,?\\s*|', 'F4, actually F3'], ['scratch that,?\\s*|', 'F4 — scratch that, F3'], ['|also\\s*', 'F4, also F3']]) r(id, 'forbidden', 1, x, '', a, false);
-    r(id, 'forbidden', 1, 'actually,?', 'actually', 'F4, actually, F3', false);
+    const HW = 'actually|maybe|perhaps|possibly';
+    for (const x of HW.split('|')) r(id, 'forbidden', 1, `(?:${HW})`, `(?:${cutAlt(HW, x)})`, `F4 and ${x} F3`, false);
+    r(id, 'forbidden', 1, `(?:${HW}),?`, `(?:${HW})`, 'F4, actually, F3', false);
+    for (const [x, a] of [[`(?:${HW}),?\\s*|`, 'F4, actually F3'], ['scratch that,?\\s*|', 'F4 — scratch that, F3'], ['|also\\s*', 'F4, also F3']]) r(id, 'forbidden', 1, x, '', a, false);
     r(id, 'forbidden', 1, 'scratch that,?', 'scratch that', 'F4 — scratch that, F3', false);
     r(id, 'forbidden', 1, 'F[1-3]\\b', 'F[1-3]', 'F4, F30 is not it.', true);
-    for (const [x, a] of [['is', 'F4, F3 is only a pullback.'], ['are', 'F4, F1 and F3 are not it.'], ['was', 'F4, F3 was only a pullback.']]) {
+    for (const [x, a] of [['is', 'F4, F1 or F3 is not it.'], ['are', 'F4, F1 and F3 are not it.'], ['was', 'F4, F1 or F3 was not it.']]) {
       r(id, 'forbidden', 1, '(?:is|are|was)', `(?:${cutAlt('is|are|was', x)})`, a, true);
     }
     // ...and a list of labels before the verb ('F1, F2 and F3 are not it').
@@ -2217,12 +2498,17 @@ test('grading: each other part of the chop questions\' patterns does work: witho
     for (const [x, a] of [[',', 'F4; F1, F3 are not it.'], ['and', 'F4; F1 and F3 are not it.'], ['or', 'F4; F1 or F3 is not it.']]) {
       r(id, 'forbidden', 1, '(?:,|and|or)\\s*F\\d)*', `(?:${cutAlt(',|and|or', x)})\\s*F\\d)*`, a, true);
     }
-    for (const [x, a] of [["|'s", "F4, F3's pullback is not it."], ['|-F\\d', 'F4, F1-F3 are not it.'], ['|\\s+to\\s+F\\d', 'F4, F1 to F3 are not.']]) r(id, 'forbidden', 1, x, '', a, true);
-    for (const [x, a] of [['a', 'F4; F2 a balance only.'], ['an', 'F4; F3 an inside candle only.']]) r(id, 'forbidden', 1, '(?:a|an)\\s', `(?:${cutAlt('a|an', x)})\\s`, a, true);
-    for (const [x, a] of [[',', 'F4; F1 bias, F3 pullback.'], [':', 'F4; F1 bias: not it.']]) r(id, 'forbidden', 1, '[,:])', `[${',:'.replace(x, '')}])`, a, true);
-    r(id, 'forbidden', 1, '(?!F\\d)[\\w-]+', '[\\w-]+', 'F4, F3 F1, F2', false);
+    for (const [x, a] of [["|'s", "F4, F3's pullback is not it."], ['|-F\\d', 'F4, F1-F3 are not it.'], ['|\\s*:\\s*\\w', 'F4; F1: rotational.']]) {
+      r(id, 'forbidden', 1, x, '', a, true);
+    }
+    // An explaining word after the label ('F1 bias', 'F3 pullback'), never a filler ('F3 too', 'F3 also', 'F3 maybe').
+    r(id, 'forbidden', 1, "|\\s+(?!(?:too|also|maybe|perhaps|likewise|as|and|or|plus|F\\d)\\b)[a-z][\\w-]*)", ')', 'F4 (F3 pullback)', true);
+    const FILL = 'too|also|maybe|perhaps|likewise|as|and|or|plus|F\\d';
+    for (const x of FILL.split('|')) {
+      r(id, 'forbidden', 1, `(?:${FILL})\\b)[a-z]`, `(?:${cutAlt(FILL, x) || 'x'})\\b)[a-z]`, `F4, F3 ${x === 'F\\d' ? 'F1' : x}`, false);
+    }
     // Both F4 forbids read the opening only, and the hedge knows the same leads as the required pattern.
-    r(id, 'forbidden', 1, '^', '', 'F4 alone; F4, F3 would be two answers.', true);
+    r(id, 'forbidden', 1, '^', '', 'F4 alone; the pair F4, F3.', true);
     for (const [x, a] of [['only', 'Only F4?'], ['the answer is', 'The answer is F4?'], ['the label is', 'The label is F4?'], ['answer', 'Answer: F4?'], ['label', 'Label: F4?']]) {
       r(id, 'forbidden', 0, `(?:${LEAD})`, `(?:${cutAlt(LEAD, x)})`, a, false);
     }
@@ -2230,16 +2516,6 @@ test('grading: each other part of the chop questions\' patterns does work: witho
   // The hedge reads the opening label only (q74's trend evidence, q75's No).
   r('q74', 'forbidden', 0, '^', '', 'Trend evidence: traded with it; is it trend evidence? Yes.', true);
   r('q75', 'forbidden', 1, '^', '', 'No: trend evidence; chop, no?', true);
-  // q75's class is the first trend evidence in the label (the first two clauses), read for its hedge.
-  const TERM = '(?<!\\.\\.)(?<!\\b(?:e\\.g|i\\.e|vs|etc))[;.](?=\\s)';
-  const NTE = `(?:(?!\\btrend evidence\\b)(?:(?!${TERM}).))`;
-  const GROUP = '(?:e\\.g|i\\.e|vs|etc)';
-  r('q75', 'forbidden', 2, `(?:${NTE}*?${TERM})?`, '', 'No: a pause; trend evidence?', false);
-  // (Its scan past the label's end is equivalent: the required pattern already wants trend evidence in the label.)
-  for (const [from, to, g] of [...['e\\.g', 'i\\.e', 'vs', 'etc'].map(x => [GROUP, `(?:${cutAlt(GROUP.slice(3, -1), x)})`, `${x.replace('\\', '')}.`]), ['(?<!\\.\\.)', '', '...'], ['(?=\\s)', '', 'at 0.31']]) {
-    r('q75', 'forbidden', 2, from, to, 'No: a pause ' + g + ' then; trend evidence?', false, 0);
-    r('q75', 'forbidden', 2, from, to, 'No: a pause; then, ' + g + ' trend evidence?', false, 2);
-  }
   flipAt(rows);
 });
 
