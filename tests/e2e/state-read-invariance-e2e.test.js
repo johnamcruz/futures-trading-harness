@@ -148,5 +148,5 @@ test('state read invariance: no module that decides reaches state-read.js, throu
     'scripts/lib/trading/trade-feedback.js']);
   // The class word and its cites (feat/class-word): named by the module that reads them and nothing else, so no decider,
   // report or prompt reads them (a later report is its own pull request, added here by name).
-  assert.deepStrictEqual(naming(/\b(?:classWord|classStatus|citesDropped|CLASS_WORDS|CITES)\b/), ['scripts/lib/trading/state-read.js']);
+  assert.deepStrictEqual(naming(/\b(?:classWord|classStatus|citesDropped|CLASS_WORDS|CITES)\b|\.cites\b|\[\s*['"`]cites['"`]\s*\]/), ['scripts/lib/trading/state-read.js']);
 });

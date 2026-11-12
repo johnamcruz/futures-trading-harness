@@ -160,6 +160,8 @@ function readLine(rest, registry) {
     let inCites = false;
     for (const raw of segment.split(',').map(x => x.trim()).filter(x => x && !/^[`*_.\s]*$/.test(x))) {
       const words = normalize(raw).split(' ').filter(Boolean);
+      // A `class` item ends the cites list (no name starts with it): `cites regime, class chop` keeps the class.
+      if (inCites && words[0] === 'class') inCites = false;
       if (!inCites && words[0] === 'cites') {
         inCites = true;
         words.shift();

@@ -263,6 +263,9 @@ test('class word: read by equality from the STATE line, recorded with the cites;
   // Commas everywhere: the items after `cites` are its names.
   const c = S.parseStateLine('STATE: 4h up, 1h up, 15m up, frames agree, class trend-up, cites 4h-trend, trend-rule');
   assert.deepStrictEqual([c.read.agree, c.classWord, c.cites, c.bad], ['yes', 'trend-up', ['4h-trend', 'trend-rule'], []]);
+  // The cites before the class, commas everywhere: the class item ends the list, the class is kept.
+  const before = S.parseStateLine('STATE: 4h up, cites regime, pullback, class chop, 1h up');
+  assert.deepStrictEqual([before.classWord, before.cites, before.citesDropped, before.read.frames], ['chop', ['regime', 'pullback'], 0, { '4h': 'up', '1h': 'up' }]);
   // Spaces between names, a repeat: each name once, in order.
   assert.deepStrictEqual(S.parseStateLine('STATE: cites regime  pullback, regime').cites, ['regime', 'pullback']);
   // The class without cites, the cites without the class.
@@ -302,6 +305,34 @@ test('class word: unstated when the line has none, and on no line, an unparsable
   // The class is never scored: no field, no count.
   const read = S.parseStateLine('STATE: 4h up | class chop | cites regime');
   assert.deepStrictEqual(Object.keys(S.scoreState(read.read, briefing()).fields), ['4h']);
+});
+
+test('class word (property, seeded): any order, separator or junk: the class is null or one of the four, the cites a duplicate-free subset of the names, and the frames read the same with or without them', () => {
+  let seed = 20261111;
+  const rand = n => { seed = (seed * 1103515245 + 12345) % 2147483648; return seed % n; };
+  const pick = xs => xs[rand(xs.length)];
+  const NAMES = Object.keys(S.CITES);
+  const JUNK = ['vwap', 'the', 'bullish', 'trend', 'up', '4h', 'class', 'cites', 'choppy', 'x-y', 'Trend Up', '15-min'];
+  for (let i = 0; i < 500; i += 1) {
+    const frames = ['4h', '1h', '15m'].filter(() => rand(2)).map(k => `${k} ${pick(S.FRAME_VALUES)}`);
+    const cls = rand(3) ? [`class ${rand(4) ? pick(S.CLASS_WORDS) : pick(JUNK)}`] : [];
+    const names = Array.from({ length: rand(4) }, () => (rand(3) ? pick(NAMES) : pick(JUNK)));
+    const cites = rand(3) ? [`cites ${names.join(pick([', ', ' ', ',']))}`] : [];
+    const items = [...frames, ...cls, ...cites].sort(() => rand(3) - 1);
+    const sep = pick([' | ', ' ; ', ' | ']);
+    const line = `STATE: ${items.join(sep)}`;
+    const r = S.parseStateLine(line);
+    assert.ok(r.classWord === null || S.CLASS_WORDS.includes(r.classWord), line);
+    assert.strictEqual(r.classStatus, r.classWord ? 'stated' : 'unstated', line);
+    assert.ok(r.cites.every(n => NAMES.includes(n)) && new Set(r.cites).size === r.cites.length, line);
+    // A stated class word is exactly the line's, when the line's class item is a valid one.
+    if (cls.length && S.CLASS_WORDS.includes(cls[0].slice('class '.length))) assert.strictEqual(r.classWord, cls[0].slice('class '.length), line);
+    // The frames read with the class and cites items removed is the same.
+    if (frames.length) {
+      const plain = S.parseStateLine(`STATE: ${frames.join(sep)}`);
+      assert.deepStrictEqual(r.read && r.read.frames, plain.read.frames, line);
+    }
+  }
 });
 
 test('cycle state read: the record carries the class word and cites as written; nothing fills an unstated class from the briefing', () => {
