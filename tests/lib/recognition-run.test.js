@@ -89,7 +89,7 @@ test('readOf: entry, pass and in-trade from the cycle (the read audit\'s kindOf,
 test('kindOf and replayDirs are the read audit\'s rules (restated: nothing in scripts/ requires the read audit but its CLI)', () => {
   const RA = require('../../scripts/lib/learning/read-audit');
   const results = ['CYCLE RESULT: managed', 'CYCLE RESULT: **managed** the long', 'CYCLE RESULT: entered long', 'CYCLE RESULT: no-trade', 'nothing', null];
-  const orders = [[], [{ gate: 'allowed', side: 'buy' }], [{ gate: 'allowed', side: 'sell' }], [{ gate: 'refused', side: 'buy' }], [{ gate: 'allowed', side: 'flat' }], null];
+  const orders = [[], [{ gate: 'allowed', side: 'buy' }], [{ gate: 'allowed', side: 'sell' }], [{ gate: 'refused', side: 'buy' }], [{ side: 'buy' }], [{ gate: 'held', side: 'sell' }], [{ gate: 'allowed', side: 'flat' }], null];
   for (const result of results) for (const o of orders) assert.deepStrictEqual(R.kindOf({ orders: o, result }), RA.kindOf({ decision: null, orders: o, result }), `${result} ${JSON.stringify(o)}`);
   const home = runHome();
   const runs = tmpDir();
