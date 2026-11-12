@@ -528,14 +528,14 @@ test('state line: the decision follows the model\'s own STATE read (taught, no c
   assert.ok(read('rules/trading/decision.md').includes("The head trader's own STATE read, the last line of its PLAN, off the setup's side (`trade-session`) → pass."));
   // Phase 2 checks what its file lists, never the STATE line: a missing read is no veto (no code forwards it).
   assert.ok(read('agents/risk-manager.md').includes("The head trader's own STATE read (the last line of its PLAN) is the head trader's own step 8, never a check of yours: check what this file lists, never the STATE line; a missing STATE read is no reason to veto."));
-  // The side rule (the owner's never-counter-HTF rule, delegated 11-12: text only, the code's trend rule unchanged): the 4h
-  // and the 1h both the side's way; one or both ranging, no trade. Then the head trader's OWN read (not the labels) decides.
+  // The side rule and its example stay main's (their alignment to the 4h AND 1h rule is its own later pull request); after
+  // it, the head trader's OWN read (not the labels) decides the take, and the briefing's lines are the gate's floor.
   const htf = read('skills/htf-to-ltf/SKILL.md');
-  assert.ok(htf.includes('**The side rule** (in an attempt): the 4h and the 1h both trending your way; else no trade (one or both ranging: no trade).'));
-  assert.doesNotMatch(htf, /neither against|declared short: short only|`Trend declared\?` your way/);
+  assert.ok(htf.includes('**The side rule** (in an attempt): each trending 4h or 1h your way, neither against; both ranging: the 15m and `Trend declared?` your way; else no trade.'));
+  assert.ok(htf.includes('4h and 1h RANGE, 15m DOWN, declared short: short only.'));
   assert.ok(htf.includes("Then the head trader's own STATE read decides the take (`trade-session` step 3): its own 4h and 1h both range, or one of them not trending the side, is `chop` or `unclear` to it; both the side's way, a 15m range or pullback under them, is the side's trend class."));
-  assert.ok(htf.includes('4h UP, 1h RANGE: no trade. 4h and 1h RANGE: no trade.'));
-  assert.ok(htf.includes('Head trader: its own read 4h range, 1h range → class chop or unclear → pass.'));
+  assert.ok(htf.includes("The briefing's `Bias:`/`Trend rule:` lines are the gate's floor (what it refuses), never your side: your own STATE read is stricter."));
+  assert.ok(htf.indexOf('Then the head trader') > htf.indexOf('**The side rule**'), 'after the side rule');
   // The documented example (a full long take) satisfies the taught rule: class trend-up, 4h up, 1h up.
   const ex = /9 Manage:[^\n]*\n(STATE: [^\n]+)\n```/.exec(fs.readFileSync(path.join(ROOT, 'skills', 'trader-process', 'SKILL.md'), 'utf8').split('## Examples')[1]);
   const r = S.parseStateLine(ex[1]);

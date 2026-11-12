@@ -59,7 +59,7 @@ test('documents: the strategy, the agents and the RULEBOOK agree with the chain 
 
 test('skills: the side rule, the setup frame and the entry frame are stated as the chain\'s', () => {
   const htf = flat(read('skills/htf-to-ltf/SKILL.md'));
-  assert.ok(htf.includes(`the ${CHAIN.bias[0]} and the ${CHAIN.bias[1]} both trending your way`), 'htf-to-ltf: the bias frames');
+  assert.ok(htf.includes(`each trending ${CHAIN.bias[0]} or ${CHAIN.bias[1]} your way, neither against`), 'htf-to-ltf: the bias frames');
   assert.ok(htf.includes(`The setup is the ${CHAIN.setup} (or higher)`), 'htf-to-ltf: the setup frame');
   assert.ok(htf.includes(`the ${CHAIN.entry} only times the entry`), 'htf-to-ltf: the entry frame');
   const tl = flat(read('skills/trade-lifecycle/SKILL.md'));

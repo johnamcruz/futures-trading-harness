@@ -113,13 +113,13 @@ test('CORE: the composed bar\'s reads the gate requires (SITUATIONAL taught in t
   // Then 79803 (feat/class-word, owner rule: raise a cap when it improves context): the STATE line is the last line of
   // trader-process's PLAN template and example, `class` and `cites` included, with one sentence (+321), and trade-session's
   // paragraph places it and gives the closed class words, cite names and `none` (+382).
-  // Then 81259 (feat/decision-follows-state, the owner's approval of skill edits for it and his rule: raise a cap when it
+  // Then 81342 (feat/decision-follows-state, the owner's approval of skill edits for it and his rule: raise a cap when it
   // improves context): the decision follows the head trader's own STATE read, taught, no code decides from it;
   // trade-session's block (read first, written last; the class follows the 4h and 1h, a take on its side, compose_check
   // first, then chop, unclear or an unsupported trend class a pass) and Compose first +825, trader-process (step 8, the
-  // opening bullet, the scorecard line saying what the scorecard records) +318, htf-to-ltf (the side rule as the owner's
-  // 4h AND 1h rule, its pointer to the head trader's own read) +313.
-  assert.ok(Buffer.byteLength(prompt) <= 81259, `the head prompt is ${Buffer.byteLength(prompt)} bytes`);
+  // opening bullet, the scorecard line saying what the scorecard records) +318, htf-to-ltf (after main's side rule, the
+  // head trader's own read decides, and the briefing's Bias/Trend rule lines are the gate's floor) +396.
+  assert.ok(Buffer.byteLength(prompt) <= 81342, `the head prompt is ${Buffer.byteLength(prompt)} bytes`);
   // Only the head trader's prompt grows: no other role's prompt embeds trade-lifecycle (the risk manager's embeds
   // confluence-counting and invalidation as before; its prompt is unchanged, pinned in trade-session-split.test.js).
   for (const [name, a] of Object.entries(index.agent)) if (name !== H.HEAD_AGENT && a.prompt) assert.ok(!a.prompt.includes('<skill name="trade-lifecycle">'), name);

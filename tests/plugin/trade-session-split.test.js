@@ -530,11 +530,11 @@ test('trade-session split: no head-trader path reads more than the base\'s every
 // that embeds it, both modes (news-calendar-analyst +306 over its pin, which had 15 bytes of slack); every other role within its pin.
 // Then feat/decision-follows-state (same rule, the owner's approval of skill edits for it): trader-process says the head
 // trader's own STATE read can end a plan (its step 8, the opening bullet, the scorecard line), +250 in every role that embeds
-// it, both modes (+318 after review round 2: the scorecard line says what the scorecard records); htf-to-ltf points from the side rule to it and states the side rule as the owner's 4h AND 1h rule, +313 (the market-structure analyst); the risk manager's phase 2
+// it, both modes (+318 after review round 2: the scorecard line says what the scorecard records); htf-to-ltf points from the side rule (main's text) to it and says the briefing's Bias/Trend rule lines are the gate's floor, +396 (the market-structure analyst); the risk manager's phase 2
 // says it checks what its file lists, never the STATE line, +211; every other role unchanged.
 const ROLE_PROMPTS = {
-  full: { 'market-structure-analyst': 97234, 'news-calendar-analyst': 10806, 'risk-manager': 95141, 'strategy-researcher': 25728, 'trade-executor': 30670, 'trade-reviewer': 9454, 'trend-momentum-analyst': 56933, 'volume-liquidity-analyst': 50351 },
-  index: { 'market-structure-analyst': 45331, 'news-calendar-analyst': 10806, 'risk-manager': 81029, 'strategy-researcher': 25728, 'trade-executor': 30659, 'trade-reviewer': 9454, 'trend-momentum-analyst': 42212, 'volume-liquidity-analyst': 34983 },
+  full: { 'market-structure-analyst': 97317, 'news-calendar-analyst': 10806, 'risk-manager': 95141, 'strategy-researcher': 25728, 'trade-executor': 30670, 'trade-reviewer': 9454, 'trend-momentum-analyst': 56933, 'volume-liquidity-analyst': 50351 },
+  index: { 'market-structure-analyst': 45414, 'news-calendar-analyst': 10806, 'risk-manager': 81029, 'strategy-researcher': 25728, 'trade-executor': 30659, 'trade-reviewer': 9454, 'trend-momentum-analyst': 42212, 'volume-liquidity-analyst': 34983 },
 };
 
 test('trade-session split: no role prompt grows, in full or index mode, and no role lists a piece', () => {

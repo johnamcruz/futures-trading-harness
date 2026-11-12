@@ -78,7 +78,7 @@
       "prompt": "head",
       "text": "The 4h trend is up and the 1h trend is down. Can you take a long? A short?",
       "rule": "no side when the 4h and 1h disagree: never counter",
-      "anchor": "the 4h and the 1h both trending your way; else no trade",
+      "anchor": "each trending 4h or 1h your way, neither against",
       "required": [
         "\\b(no|not|neither|cannot|can't|stand aside|flat)\\b"
       ],
@@ -93,10 +93,11 @@
       "layer": "bias",
       "prompt": "head",
       "text": "The 4h and 1h both range. What sets the side?",
-      "rule": "the 4h and the 1h both trend the side, else no trade: both ranging is no trade (the owner's never-counter-HTF rule, feat/decision-follows-state)",
-      "anchor": "(one or both ranging: no trade)",
+      "rule": "both ranging: the 15m trend and the declared trend",
+      "anchor": "both ranging: the 15m and `Trend declared?` your way",
       "required": [
-        "\\b(no trade|no side|nothing|none|stand aside|sit out|flat)\\b"
+        "15\\s*-?m",
+        "declare"
       ],
       "forbidden": []
     },
