@@ -115,6 +115,17 @@ test('no traced candle (no bars at any cycle): "no candles", never "needs the cl
   assert.deepStrictEqual(s.noCandles, [r.id]);
   assert.deepStrictEqual(s.needsClassWord, []);
   assert.strictEqual(s.scored, null, 'nothing to score');
+  // The report says so, per case and in its summary line, never "needs the class word".
+  const { renderReport } = require('../../scripts/lib/learning/recognition/report');
+  const { _candles, _inLeg, ...c } = r;
+  const text = renderReport({
+    runs: ['r1'], casesSha256: 'ab', definitions: { version: '2' }, coverage: { stated: 0, unstated: 0, invalid: 0, absent: 0, of: 0 },
+    cases: [{ ...c, day: '2021-06-11', run: 'r1', fineLane: true, alsoIn: [], legCandles: 8, circular: false }], summary: s, pass: [],
+  });
+  assert.match(text, /No candles \(no bars at any of the day's cycles; give the data with --bars\): 2021-06-11 trend long/);
+  assert.match(text, /first recognition \(model\): no candles \(no bars at any cycle\)/);
+  assert.match(text, /miss: no candles \(no bars at any cycle\)/);
+  assert.doesNotMatch(text, /needs the class word/);
 });
 
 test('SUPPLEMENTARY per case: the false alarms inside the leg window beside the whole day (a right chop word before a late leg)', () => {

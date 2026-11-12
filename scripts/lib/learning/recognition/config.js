@@ -35,7 +35,7 @@ const schema = {
   chopLabel: { window: custom(v => (parseWindows(v).windows.length === 1 && !parseWindows(v).errors.length ? null : 'one session spec, HH:MM-HH:MM@Zone'), 'a session spec'), minBars: whole, netAtrMax: pos, rangeAtrMin: pos, atrPeriod: whole },
   signals: { crossesChop: whole, crossesTrendMax: whole },
   // A level the Wilson interval knows (prop/stats.js wilson refuses any other).
-  intervalLevel: custom(v => { try { wilson(0, 1, v); return null; } catch (_err) { return 'a level prop/stats.js wilson knows'; } }, 'a Wilson level'),
+  intervalLevel: custom(v => { if (typeof v !== 'number' || !Number.isFinite(v) || !(v > 0 && v < 1)) return 'a number strictly between 0 and 1'; try { wilson(0, 1, v); return null; } catch (_err) { return 'a level prop/stats.js wilson knows'; } }, 'a Wilson level: a number strictly between 0 and 1'),
 };
 const SPEC = { name: 'recognition', validate: v => shapeErrors(schema, v) };
 const DAY = /^\d{4}-\d{2}-\d{2}$/;

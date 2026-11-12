@@ -57,6 +57,7 @@ test('every case is checked against the frozen definitions: margin by kind, pace
   assert.throws(() => RC.load({ file: copy(t => t, { defsEdit: d => ({ ...d, margins: { trend: 5 } }) }) }), /margins/);
   assert.throws(() => RC.load({ file: copy(t => t, { defsEdit: d => ({ ...d, extra: 1 }) }) }), /extra/);
   assert.throws(() => RC.load({ file: copy(t => t, { defsEdit: d => ({ ...d, intervalLevel: 0.97 }) }) }), /intervalLevel/);
+  for (const bad of ['0.95', true, null, 0, 1, -0.95, 95]) assert.throws(() => RC.load({ file: copy(t => t, { defsEdit: d => ({ ...d, intervalLevel: bad }) }) }), /intervalLevel/, `intervalLevel ${JSON.stringify(bad)}: a number strictly between 0 and 1`);
 });
 
 test('another list is taken only with its own sha256 stated', () => {

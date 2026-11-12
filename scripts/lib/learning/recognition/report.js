@@ -65,7 +65,8 @@ function chopLines(c) {
   ];
 }
 
-function scoredLines(s) {
+function scoredLines(s, summary) {
+  if (!s && !summary.needsClassWord.length) return ['model scores: none (no case has a candle to score)'];
   if (!s) return [`model scores: ${NEEDS} (no case's run carries it); never substituted by the coded read or by prose`];
   const k = (name, x) => `${name}: n ${x.n} [${x.cases.join('; ')}], recall ${n4(x.recall)}${ci(x.recallInterval)} (${x.recalled}/${x.n}; coded read ${x.codedRecalled}/${x.n}${ci(x.codedRecallInterval)}), precision ${n4(x.precision)}${ci(x.precisionInterval)}, false-alarm rate ${n4(x.falseAlarmRate)}${ci(x.falseAlarmInterval)} (${x.falseAlarmCandles} candles), wrong way ${x.wrongWay}`;
   const sup = (name, x) => `  SUPPLEMENTARY ${name} (definitions unchanged): recalled from the evidence candle on ${x.supplementary.recalledFromEvidence}/${x.n}; false-alarm rate in the leg windows ${n4(x.supplementary.falseAlarmRateInLeg)}${ci(x.supplementary.falseAlarmInLegInterval)}`;
@@ -97,7 +98,7 @@ function renderReport(doc) {
   out.push('', '== AGGREGATE (trend vs chop only; n small, the cases listed above)',
     `entry vs confirmed on the legs: ${j(doc.summary.entryVsConfirmed)}`,
     `coded read vs the evidence word per candle: ${cases.map(c => `${c.id} ${n4(c.accuracyCoded.accuracy)} (always-trend ${n4(c.accuracyCoded.alwaysTrend)}, always-chop ${n4(c.accuracyCoded.alwaysChop)})`).join('; ')}`,
-    ...scoredLines(doc.summary.scored));
+    ...scoredLines(doc.summary.scored, doc.summary));
   out.push('', `PASS CHECK (hindsight, separate; never a grade of the read): ${doc.pass.map(p => `${p.id} availableR ${p.availableR}`).join('; ') || 'none'}`);
   return out.join('\n');
 }
