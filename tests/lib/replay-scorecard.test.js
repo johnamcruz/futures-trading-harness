@@ -331,7 +331,7 @@ function makeRun({ withBars = true, finished = true, steps = STEPS } = {}) {
       const transcript = (c.orders || []).map((o, j) => JSON.stringify({ type: 'assistant', message: { content: [{ type: 'tool_use', id: `c${i}-${j}`, name: `mcp__broker__${o.tool}`, input: o.input }] } })).join('\n');
       const account = { id: 7, balance: 100000, positions: c.positions || [], workingOrders: 0 };
       const openTrades = (c.positions || []).map(p => ({ contractId: p.contractId, side: p.side, stop: p.averagePrice - 10 }));
-      fs.writeFileSync(file, JSON.stringify({ at: iso(wall), action: 'trade', prompt: `p${i}`, context: { symbols: [{ symbol: 'MNQ', bar: { t: barT, c: 0 } }], account, openTrades, attempts: [ATTEMPT] }, transcript, ...(c.composed ? { composed: c.composed } : {}) }));
+      fs.writeFileSync(file, JSON.stringify({ at: iso(wall), action: 'trade', prompt: `p${i}`, context: { symbols: [{ symbol: 'MNQ', bar: { t: barT, c: 0 } }], account, openTrades, attempts: [ATTEMPT] }, transcript, ...(c.composed ? { composed: c.composed } : {}), ...(c.stateRead ? { stateRead: c.stateRead } : {}) }));
       rec.ran.push({ action: 'trade', ok: c.ok !== false, timedOut: false, result: c.result, symbols: ['MNQ'] });
       rec.cycles.push({ action: 'trade', at: iso(wall), ok: c.ok !== false, timedOut: false, durationMs: 30000, result: c.result, promptHash: `h${i}`, file });
       for (const [j, o] of (c.orders || []).entries()) {
@@ -802,6 +802,56 @@ test('a composed pass: right with no OK record; on one (a valid setup) excessive
   assert.strictEqual(composedSetup(composedRec(), { news: { inBlackout: false } }).blocked, null);
   assert.deepStrictEqual(composedSetupsFrom([composedRec({ symbol: null, contract: 'NQ' })], { root: 'MNQ' }), []);
   assert.strictEqual(composedSetupsFrom([composedRec({ symbol: null, contract: 'MNQ' })], { root: 'MNQ' }).length, 1);
+});
+
+test('a composed pass on the head trader\'s own STATE read off the setup\'s side, named in its reasons, is unchecked (its step 8, judged by hand); anything less stays abstention', () => {
+  const { composedSetup } = require('../../scripts/lib/trading/reasons');
+  const { stateOffSide } = require('../../scripts/lib/replay/scorecard');
+  const f = facts({ setups: [composedSetup(composedRec(), { window: WINDOW.drive })] });
+  const read = (classWord, h4, h1) => ({ status: 'read', classWord, read: { frames: { '4h': h4, '1h': h1, '15m': 'range' } } });
+  const chop = 'CYCLE RESULT: no-trade - my STATE read is chop (4h range, 1h range): not a trend to join';
+  // Off the side: the class not the side's trend class, or the 4h or 1h not the side's way (trade-session step 3).
+  for (const s of [read('chop', 'range', 'range'), read('unclear', 'up', 'up'), read('trend-up', 'range', 'up'), read('trend-up', 'up', 'range'), read('trend-down', 'down', 'down')]) {
+    assert.strictEqual(stateOffSide(s, 'long'), true, JSON.stringify(s));
+  }
+  // On its side, or no read at all (unstated, unparsable, no class): never off, never filled in.
+  for (const s of [read('trend-up', 'up', 'up'), null, undefined, {}, { status: 'none', classWord: null, read: null }, { status: 'unparsable' }, 'chop']) {
+    assert.strictEqual(stateOffSide(s, 'long'), false, JSON.stringify(s));
+  }
+  assert.strictEqual(stateOffSide(read('trend-down', 'down', 'down'), 'short'), false);
+  assert.strictEqual(stateOffSide(read('chop', 'range', 'range'), null), false, 'no side: nothing to be off');
+  // A class without frames: the class alone decides.
+  assert.strictEqual(stateOffSide({ status: 'read', classWord: 'trend-up', read: null }, 'long'), false);
+  assert.strictEqual(stateOffSide({ status: 'read', classWord: 'chop', read: null }, 'long'), true);
+  // Off and named in the pass: unchecked, with why.
+  const off = { ...f, stateRead: read('chop', 'range', 'range') };
+  assert.deepStrictEqual(run(label(), off, chop), { category: 'unchecked', agrees: null, why: ["the head trader's own STATE read off the setup's side (class chop, 4h range, 1h range), named in the pass: its step 8, checked by hand"] });
+  for (const text of ['CYCLE RESULT: no-trade - the class is unclear, passing', 'CYCLE RESULT: no-trade - STATE off the long side']) {
+    assert.strictEqual(run(label(), off, text).category, 'unchecked', text);
+  }
+  // Off but not named (the pass gives another, soft reason): abstention, as before.
+  assert.strictEqual(run(label(), off, 'CYCLE RESULT: no-trade - the reads are thin, passing').category, 'excessive abstention');
+  // Named but the recorded read is on the side, or there is none: abstention (the words alone excuse nothing).
+  assert.strictEqual(run(label(), { ...f, stateRead: read('trend-up', 'up', 'up') }, chop).category, 'excessive abstention');
+  assert.strictEqual(run(label(), f, chop).category, 'excessive abstention');
+  // A false claim beside it stays a wrong stated reason; a true hard ground still decides first.
+  assert.strictEqual(run(label(), off, 'CYCLE RESULT: no-trade - opening print window until 10:00 ET; STATE read chop').category, 'wrong stated reason');
+  // An entry is never touched by it.
+  const entry = { ...label(), teacher: { action: 'long', orders: [{ setup: 'trade_lifecycle', size: 1 }], size: { contracts: 1 } } };
+  assert.strictEqual(run(entry, off, 'CYCLE RESULT: executed - trade_lifecycle long 1 MNQ').category, run(entry, f, 'CYCLE RESULT: executed - trade_lifecycle long 1 MNQ').category);
+});
+
+test('scoreRun: the cycle log\'s STATE read reaches the facts, so a pass on it named in its reasons is unchecked', () => {
+  const steps = [
+    { k: 0, scan: quietScan, cycle: { composed: [composedRec()], stateRead: { status: 'read', classWord: 'chop', read: { frames: { '4h': 'range', '1h': 'range', '15m': 'down' } } }, result: 'CYCLE RESULT: no-trade - STATE read chop: 4h and 1h range' } },
+    { k: 1, scan: quietScan, cycle: { composed: [composedRec({ id: 'rec2', bar: iso(barOf(1)) })], result: 'CYCLE RESULT: no-trade - STATE read chop: 4h and 1h range' } },
+    { t: Date.parse(`${DAY}T20:50:02Z`), kind: 'eod' },
+  ];
+  const strategies = [...STRATS, { name: 'trade_lifecycle', valid: true, signal: 'composed', status: 'active', timeframe: '3m', risk: { min_rr: 2, max_risk_usd: 200 } }];
+  const { records } = scoreRun(makeRun({ steps }).runDir, { strategies, accounts: ACCOUNTS });
+  assert.deepStrictEqual(records.map(r => r.category), ['unchecked', 'excessive abstention']);
+  assert.strictEqual(records[0].facts.stateRead.classWord, 'chop');
+  assert.strictEqual(records[1].facts.stateRead, null);
 });
 
 test('scoreRun and labels: a composed limit entry at its record is right with no clone reason; over its size is bad size; a pass without an OK record is right', () => {

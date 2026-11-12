@@ -73,6 +73,7 @@
  *   writeScorecard(runDir, { root, strategies, accounts, barsFiles, outDir })  scorecard.jsonl, scorecard-summary.json, scorecard.md,
  *                                                                             flagged.jsonl, flagged.md
  *   checkReasons(text, facts), expectedDecision(facts), classify(label, facts, expected, reasons)   the pure steps
+ *   stateOffSide(stateRead, side)        the head trader's own STATE read off the side (a pass on it named: unchecked)
  */
 
 const fs = require('fs');
@@ -135,6 +136,21 @@ const htfAgrees = (htf, side) => {
   const way = side === 'long' ? 'up' : side === 'short' ? 'down' : null;
   return Boolean(way && isObj(htf) && htf['4h'] === way && htf['1h'] === way);
 };
+
+/**
+ * Whether the head trader's own STATE read (the cycle log's stateRead, trading/state-read.js) is off the setup's side,
+ * as trade-session step 3 teaches a take: the class the side's trend class, the 4h and the 1h the side's way. A cycle
+ * with no read (unstated, unparsable, no class) is never off: nothing is filled in.
+ */
+function stateOffSide(stateRead, side) {
+  const way = side === 'long' ? 'up' : side === 'short' ? 'down' : null;
+  if (!way || !isObj(stateRead) || stateRead.status !== 'read' || typeof stateRead.classWord !== 'string' || !stateRead.classWord) return false;
+  if (stateRead.classWord !== `trend-${way}`) return true;
+  const frames = isObj(stateRead.read) && isObj(stateRead.read.frames) ? stateRead.read.frames : null;
+  return Boolean(frames && (frames['4h'] !== way || frames['1h'] !== way));
+}
+// A pass that names the read: its own words for it (the line's name, a class word) in a clause no claim explains.
+const STATE_NAMED = /\bSTATE\b|\bclass\b|\bchop\b|\bunclear\b|\btrend-(?:up|down)\b/i;
 
 /** The failure category of a scored decision, and whether it agrees with the expectation (true | false | null). */
 function classify(label, facts, expected, reasons) {
@@ -199,6 +215,12 @@ function classify(label, facts, expected, reasons) {
   if (expected.composed !== undefined) {
     const hard = reasons.claims.filter(x => x.check === true && COMPOSED_GROUNDS.has(x.kind));
     if (hard.length) return why.push(`a true hard ground: ${hard.map(x => x.kind).join(', ')}`), out('unchecked', null);
+    // The head trader's own STATE read off the setup's side, named in the pass (its step 8, trade-session step 3): a
+    // judgment the record can't check, so by hand; the recorded read must be off the side, the words alone excuse nothing.
+    if (!falseReason && stateOffSide(facts.stateRead, expected.direction) && [...reasons.judgment, ...reasons.unparsed].some(c => STATE_NAMED.test(c))) {
+      const s = facts.stateRead; const fr = isObj(s.read) && isObj(s.read.frames) ? s.read.frames : {};
+      return why.push(`the head trader's own STATE read off the setup's side (class ${s.classWord}, 4h ${fr['4h'] || 'unknown'}, 1h ${fr['1h'] || 'unknown'}), named in the pass: its step 8, checked by hand`), out('unchecked', null);
+    }
     if ([...reasons.judgment, ...reasons.unparsed].some(c => DECISIVE.test(c))) {
       if (!htfAgrees(facts.htf, expected.direction)) return why.push('a decisive reason stated (a 1h CHoCH against): checked by hand'), out('unchecked', null);
       why.push('a 1h CHoCH against stated while the 4h and the 1h both trend the side: context, not decisive');
@@ -531,6 +553,8 @@ function factsAt(label, rec, { tf, count, accounts, doc = null, strategies = [] 
   // The 4h and the 1h at the decision (the briefing's own read): a 1h CHoCH against is decisive only without both its way.
   if (composedSetups.length && rec.barsFor) facts.htf = htfAt(rec, { symbol: label.symbol, barT: label.barT, tf, count });
   facts.attempt = attemptAt(label, facts, { accounts, doc });
+  // The head trader's own STATE read, as the cycle log recorded it (a pass on it is judged by hand: classify).
+  facts.stateRead = isObj(doc) && isObj(doc.stateRead) ? doc.stateRead : null;
   // A pass with no compose call on the bar: whether the briefing held a composable setup (only then rebuilt).
   const act = label.teacher ? label.teacher.action : null;
   if (label.decision !== 'in-trade' && (act === 'none' || act === null) && !composedOf(doc, label).length && !facts.setups.length && rec.barsFor) {
@@ -791,4 +815,4 @@ const summaryText = s => `${s.decisions} decisions: agreement ${pct(s.agreement.
   + (s.outcomes !== 'shown' ? `trades ${s.trades.n}, skipped setups ${s.skipped.n}; outcomes ${s.outcomes}\n`
     : `trades ${s.trades.n} (${s.trades.sumR}R, ${s.trades.net}); skipped setups ${s.skipped.n} (would win ${s.skipped.wouldWin}, lose ${s.skipped.wouldLose})\n`);
 
-module.exports = { VERSION, SCORES_COMPOSED, CATEGORIES, STEPS, withChecks, lookAt, takeLook, scoreRun, writeScorecard, summaryText, toMarkdown, checkReasons, expectedDecision, expectedForEntry, classify, clausesOf, windowAt, planFor, composableSetup };
+module.exports = { VERSION, SCORES_COMPOSED, CATEGORIES, STEPS, withChecks, lookAt, takeLook, scoreRun, writeScorecard, summaryText, toMarkdown, checkReasons, expectedDecision, expectedForEntry, classify, clausesOf, windowAt, planFor, composableSetup, stateOffSide };
