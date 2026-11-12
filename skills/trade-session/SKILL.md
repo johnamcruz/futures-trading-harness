@@ -116,8 +116,8 @@ It orders the thinking and adds no filter.
 
 Last line of the PLAN block, every PLAN, an open trade's too: your own read
 from the bars and facts, not the labels copied (a label its last break or
-candle contradicts can be a `transition`, `trend-vs-range`); it is recorded
-and changes no step:
+candle contradicts can be a `transition`, `trend-vs-range`); read it first,
+write it last; it is recorded, and no code reads it:
 `STATE: 4h <f> | 1h <f> | 15m <f> | frames <agree|disagree> | class <c> | cites <names>`,
 `<f>` is `up`, `down`, `range`, `transition` or `unknown`; `<c>`, the
 market now at this candle, is `trend-up`, `trend-down`, `chop` or
@@ -125,6 +125,18 @@ market now at this candle, is `trend-up`, `trend-down`, `chop` or
 `1h-trend`, `15m-trend`, `trend-rule`, `regime`, `day-type`, `day-so-far`,
 `pullback`, `1h-break`, `15m-break`, `3m-break`; `none` when none supports
 it. No other words.
+
+**The decision follows your STATE read** (taught, no code: the gate and
+`compose_check` don't read it):
+
+- The class follows your frames: a trend class needs your 4h and 1h that
+  way (a 15m pullback or range under them doesn't cancel it); 4h and 1h
+  both `range` → `chop` or `unclear`.
+- A take: `class` on its side (`trend-up` long, `trend-down` short), your
+  4h and 1h too (`up` long, `down` short).
+- `chop`, `unclear`, or a trend class your 4h and 1h don't show
+  (`trend-down` with 4h and 1h `range`) → pass, naming that read: a
+  decisive against.
 
 - **The priority order** (the `strategy-library` skill, "The priority order"):
   the rule for every setup, a policy verdict too. Apply its steps in order.

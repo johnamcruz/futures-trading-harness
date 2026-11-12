@@ -41,8 +41,10 @@ It adds no filter and no veto:
    Read: `candle-reading`, `momentum-and-volume`.
 7. **Risk.** Stop (`invalidation`) and target (`take-profit`) reads,
    size; R:R: the compose record's, never yours.
-8. **Decision.** Compose OK → take (a prop attempt: the full verdict
-   size; else step 5 sizes it); refused → pass. One reason.
+8. **Decision.** Compose OK and the head trader's STATE read on its side
+   (`trade-session`, step 3) → take (a prop attempt: the full verdict
+   size; else step 5 sizes it); refused, or that read off its side →
+   pass. One reason.
 9. **Management.** What invalidates the trade; its exit
    (`manage-position`). Never loosen the stop. Read: `invalidation`.
 

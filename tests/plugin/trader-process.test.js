@@ -19,7 +19,9 @@ const flat = t => t.replace(/\s+/g, ' ');
 
 // The size budget (bytes). The skill is embedded in full in every mapped role's opencode prompt, so it stays small;
 // the cycle prompt names only the first and last step (the skill holds the block).
-const SKILL_MAX = 4800;
+// Raised 4800 -> 4860 (feat/decision-follows-state, owner rule: raise a cap when it improves context): step 8 says the
+// decision follows the head trader's own STATE read (+104; the file is 4860 bytes).
+const SKILL_MAX = 4860;
 const PLAN_BLOCK_MAX = 760;
 const PROMPT_ADDED_MAX = 100;
 
@@ -80,7 +82,8 @@ test('trader-process: it orders the thinking and adds no filter; the count decid
     '**Management always runs.** Managing and exiting a position, and the end-of-day flatten, go ahead whatever steps 1-8 say; no window or wait blocks an exit or a risk reduction.',
     "**`unknown`, never invented.** A value the briefing or a report doesn't give is `unknown` (or `unavailable`); never estimate one.",
     // In a prop attempt the full verdict size (feat/bias-bg: phase 2 cuts only on a pacing rule).
-    '**Decision.** Compose OK → take (a prop attempt: the full verdict size; else step 5 sizes it); refused → pass. One reason.',
+    // The decision follows the head trader's own STATE read (taught, no code reads it; tests/lib/state-read.test.js).
+    "**Decision.** Compose OK and the head trader's STATE read on its side (`trade-session`, step 3) → take (a prop attempt: the full verdict size; else step 5 sizes it); refused, or that read off its side → pass. One reason.",
     // The trigger there and the count for: take it, never wait on (the baseline waited until the setup expired); the 3m only
     // times it (feat/bias-bg: no 3m turn to wait for).
     '**Entry.** The setup is the entry, on the next 3m bar; no confirming close or 3m turn to wait for → `compose_check` now.',

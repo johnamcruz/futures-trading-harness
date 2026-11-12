@@ -113,7 +113,11 @@ test('CORE: the composed bar\'s reads the gate requires (SITUATIONAL taught in t
   // Then 79803 (feat/class-word, owner rule: raise a cap when it improves context): the STATE line is the last line of
   // trader-process's PLAN template and example, `class` and `cites` included, with one sentence (+321), and trade-session's
   // paragraph places it and gives the closed class words, cite names and `none` (+382).
-  assert.ok(Buffer.byteLength(prompt) <= 79803, `the head prompt is ${Buffer.byteLength(prompt)} bytes`);
+  // Then 80501 (feat/decision-follows-state, the owner's approval of skill edits for it and his rule: raise a cap when it
+  // improves context): the decision follows the head trader's own STATE read, taught, no code reads it; trade-session's
+  // paragraph (read first, written last, and the three lines: the class follows the 4h and 1h, a take on its side, chop,
+  // unclear or an unsupported trend class a pass) +594, trader-process's step 8 +104.
+  assert.ok(Buffer.byteLength(prompt) <= 80501, `the head prompt is ${Buffer.byteLength(prompt)} bytes`);
   // Only the head trader's prompt grows: no other role's prompt embeds trade-lifecycle (the risk manager's embeds
   // confluence-counting and invalidation as before; its prompt is unchanged, pinned in trade-session-split.test.js).
   for (const [name, a] of Object.entries(index.agent)) if (name !== H.HEAD_AGENT && a.prompt) assert.ok(!a.prompt.includes('<skill name="trade-lifecycle">'), name);
