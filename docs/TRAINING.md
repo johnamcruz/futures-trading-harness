@@ -1716,6 +1716,23 @@ The five measures, per case:
    with what the evidence showed in the leg (the evidence and coded words
    per candle, the confirmed candles, the mean flow steps met).
 
+Every entry, on a trend leg or a chop day, also carries the model's own
+word at the entry candle (`modelWord`, null when unstated, absent or
+invalid; never filled in from the coded read), its stated frames
+(`frames`: the 4h, 1h and 15m words of the same cycle's STATE record, read
+by equality, null when none is stated) and `wordVsFrames`, a fixed equality
+rule over those two recorded fields only (`scorer.js` `wordVsFrames`,
+pinned by a test, not a tunable): `unstated` when there is no word or no
+frame; a trend word `contradicts` when the 4h and 1h are both `range`, or
+the 4h or the 1h is the opposite way (a 15m against is a pullback, not a
+contradiction); `chop` `contradicts` when the 4h, 1h and 15m are all `up`
+or all `down`; otherwise `agrees` (`unclear` always agrees). The
+aggregate's "Entries by the model's own word" line counts the entries of
+each kind by word and by `wordVsFrames`. It asks whether the model enters
+when its own present read lines up with the setup. It is a count, not a
+grade: it reads only what the record holds, uses no later price and
+changes nothing.
+
 Frozen definitions:
 
 - **The model's vocabulary is closed**: `trend-up`, `trend-down`, `chop`,
