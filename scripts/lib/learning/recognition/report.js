@@ -68,7 +68,7 @@ function renderReport(doc) {
     'Candles = the runner\'s head trade cycles; rel 0 = the first candle after the setup start (a trend leg\'s census start bar, a chop day\'s window open).',
     `Class word in the runs: stated ${cov.stated}, unstated ${cov.unstated}, invalid ${cov.invalid}, absent ${cov.absent} of ${cov.of} candles.`,
   ];
-  if (doc.summary.needsClassWord.length) out.push(`Cases that ${NEEDS} (${doc.summary.needsClassWord.join('; ')}): first recognition (model), evidence then (model, cites), chop-day naming, misses, false alarms, precision and recall are not computed; never substituted by the coded read or by prose.`);
+  if (doc.summary.needsClassWord.length) out.push(`Each of these cases ${NEEDS} (${doc.summary.needsClassWord.join('; ')}): first recognition (model), evidence then (model, cites), chop-day naming, misses, false alarms, precision and recall are not computed; never substituted by the coded read or by prose.`);
   const circ = doc.cases.filter(c => c.circular);
   out.push(`CIRCULAR (picked using words the model sees; reported apart): ${circ.map(c => `${c.id} (${c.circularNote})`).join('; ') || 'none'}`);
   const noFine = cases.filter(c => !c.fineLane);
