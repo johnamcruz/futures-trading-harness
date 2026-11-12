@@ -2,7 +2,7 @@
 
 /**
  * The recognition test's frozen definitions and case list (docs/TRAINING.md, "The recognition test"): config/
- * recognition.json (margins, pace, the chop label's and the signals' thresholds) and the case list it names, refused
+ * recognition.json (margins, pace, the chop label's and the signals' thresholds, the intervals' level) and the case list it names, refused
  * unless the list's bytes hash to its casesSha256 (the list is frozen before any run). Fails closed: a missing,
  * unreadable or refused file throws a CriticalConfigError (config-files.js), every problem named.
  *
@@ -23,6 +23,7 @@ const path = require('path');
 const { CONFIG_DIR, CriticalConfigError, loadConfigFile, fingerprintOf, shapes, shapeErrors } = require('../../config-files');
 const { parseWindows, zonedTimeToUtc } = require('../../trading/clock');
 const { MINUTE } = require('../../backtest/data');
+const { wilson } = require('../../prop/stats');
 
 const { num, str, custom } = shapes;
 const pos = num({ min: Number.MIN_VALUE });
@@ -33,6 +34,8 @@ const schema = {
   margins: { trend: whole, chop: whole }, sharpMaxCandles: whole,
   chopLabel: { window: custom(v => (parseWindows(v).windows.length === 1 && !parseWindows(v).errors.length ? null : 'one session spec, HH:MM-HH:MM@Zone'), 'a session spec'), minBars: whole, netAtrMax: pos, rangeAtrMin: pos, atrPeriod: whole },
   signals: { crossesChop: whole, crossesTrendMax: whole },
+  // A level the Wilson interval knows (prop/stats.js wilson refuses any other).
+  intervalLevel: custom(v => { try { wilson(0, 1, v); return null; } catch (_err) { return 'a level prop/stats.js wilson knows'; } }, 'a Wilson level'),
 };
 const SPEC = { name: 'recognition', validate: v => shapeErrors(schema, v) };
 const DAY = /^\d{4}-\d{2}-\d{2}$/;

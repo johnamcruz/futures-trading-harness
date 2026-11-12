@@ -26,14 +26,30 @@ test('the class word is read from the STATE record by equality: absent, unstated
   assert.deepStrictEqual(S.wordOf({ classWord: ['chop'] }), { status: 'invalid', word: null });
 });
 
-test('cites: the closed field list by equality; an off-list name is counted apart, never matched loosely', () => {
+// The class-word record as feat/class-word's state-read.js parseStateLine writes it (its output copied, not rebuilt):
+// cites is always a list; citesStated says whether the model wrote cites at all (absent), only `none`, or names.
+const REC = {
+  noCites: { classWord: 'trend-down', classStatus: 'stated', cites: [], citesStated: 'absent', citesDropped: 0 }, // STATE: 4h up | 1h up | 15m up | class trend-down
+  none: { classWord: 'chop', classStatus: 'stated', cites: [], citesStated: 'none', citesDropped: 0 }, // ... | class chop | cites none
+  names: { classWord: 'chop', classStatus: 'stated', cites: ['regime'], citesStated: 'names', citesDropped: 1 }, // ... | class chop | cites regime, vwap
+};
+
+test('cites from the real record: citesStated by equality (absent -> unstated, none -> stated empty, names -> the list); never "every met field ignored" when none were written', () => {
+  assert.deepStrictEqual(S.citesOf(REC.noCites), { status: 'unstated', cited: [], offList: [], dropped: 0 });
+  assert.strictEqual(S.citedVsIgnored(S.citesOf(REC.noCites), ['regime', '15m']).ignored, null, 'no cites written: nothing ignored, unknown');
+  assert.deepStrictEqual(S.citesOf(REC.none), { status: 'stated', cited: [], offList: [], dropped: 0 });
+  assert.deepStrictEqual(S.citedVsIgnored(S.citesOf(REC.none), ['regime', '15m']).ignored, ['regime', '15m-trend'], '`cites none` is a statement: the met fields were ignored');
+  assert.deepStrictEqual(S.citesOf(REC.names), { status: 'stated', cited: ['regime'], offList: [], dropped: 1 });
+});
+
+test('cites: absent and invalid records; the closed list by equality, an off-list name counted apart, never matched loosely', () => {
   assert.deepStrictEqual(S.citesOf(null), { status: 'absent', cited: [], offList: [], dropped: 0 });
-  assert.deepStrictEqual(S.citesOf({ classWord: 'chop' }), { status: 'absent', cited: [], offList: [], dropped: 0 });
-  assert.deepStrictEqual(S.citesOf({ cites: null }), { status: 'unstated', cited: [], offList: [], dropped: 0 });
-  assert.deepStrictEqual(S.citesOf({ cites: [], citesDropped: 2 }), { status: 'stated', cited: [], offList: [], dropped: 2 }, 'the record\'s own dropped count');
-  assert.deepStrictEqual(S.citesOf({ cites: ['regime', '15m-trend', 'regime', 'Regime', 'the regime', 7] }), { status: 'stated', cited: ['regime', '15m-trend'], offList: ['Regime', 'the regime', '7'], dropped: 0 });
-  assert.deepStrictEqual(S.citesOf({ cites: ['REGIME', ' regime', '15m trend'] }), { status: 'stated', cited: [], offList: ['REGIME', ' regime', '15m trend'], dropped: 0 }, 'no case folding, no trimming, no respelling');
-  assert.deepStrictEqual(S.citesOf({ cites: 'regime' }), { status: 'invalid', cited: [], offList: [], dropped: 0 });
+  assert.deepStrictEqual(S.citesOf({ classWord: 'chop' }), { status: 'absent', cited: [], offList: [], dropped: 0 }, 'a record without citesStated predates the field');
+  assert.deepStrictEqual(S.citesOf({ cites: ['regime'] }), { status: 'absent', cited: [], offList: [], dropped: 0 }, 'cites without citesStated: not read');
+  assert.deepStrictEqual(S.citesOf({ cites: [], citesStated: 'nothing' }), { status: 'invalid', cited: [], offList: [], dropped: 0 });
+  assert.deepStrictEqual(S.citesOf({ cites: 'regime', citesStated: 'names' }), { status: 'invalid', cited: [], offList: [], dropped: 0 });
+  assert.deepStrictEqual(S.citesOf({ cites: ['regime', '15m-trend', 'regime', 'Regime', 'the regime', 7], citesStated: 'names' }), { status: 'stated', cited: ['regime', '15m-trend'], offList: ['Regime', 'the regime', '7'], dropped: 0 });
+  assert.deepStrictEqual(S.citesOf({ cites: ['REGIME', ' regime', '15m trend'], citesStated: 'names' }), { status: 'stated', cited: [], offList: ['REGIME', ' regime', '15m trend'], dropped: 0 }, 'no case folding, no trimming, no respelling');
 });
 
 test('the cite names are the STATE record\'s closed list (state-read.js CITES once the class word is on the record)', () => {
@@ -87,6 +103,22 @@ test('no evidence candle in the case: naming the class is a guess with no refere
   assert.strictEqual(r.model.counts, false);
 });
 
+test('SUPPLEMENTARY: the first naming at or after the evidence candle (a word named early and held is a guess, yet named from the evidence candle on)', () => {
+  const held = S.recognise(cs([[0, 'unclear', 'x', 'trend-up'], [1, 'unclear', 'x', 'trend-up'], [2, 'trend-up', 'x', 'trend-up'], [3, 'trend-up', 'x', 'trend-up']]), KNOWN, MARGIN);
+  assert.strictEqual(held.model.timing, 'guess', 'the frozen measure is unchanged');
+  assert.strictEqual(held.model.counts, false);
+  assert.deepStrictEqual(held.model.fromEvidence, { first: 2, delay: 0, counts: true });
+  const late = S.recognise(cs([[0, 'trend-up', 'x', 'unclear'], [5, 'trend-up', 'x', 'trend-up']]), KNOWN, MARGIN);
+  assert.deepStrictEqual(late.model.fromEvidence, { first: 5, delay: 5, counts: false });
+  assert.deepStrictEqual(S.recognise(cs([[0, 'unclear', 'x', 'trend-up']]), KNOWN, MARGIN).model.fromEvidence, { first: null, delay: null, counts: false }, 'no evidence candle: none');
+  assert.deepStrictEqual(S.recognise(cs([[0, 'trend-up', 'trend-up', null]]), KNOWN, MARGIN).coded.fromEvidence, { first: 0, delay: 0, counts: true }, 'the coded read by the same rule');
+});
+
+test('Wilson intervals (spec item 7) at the frozen level: the prop stats\' own', () => {
+  assert.deepStrictEqual(S.interval(3, 5, 0.95), require('../../scripts/lib/prop/stats').wilson(3, 5, 0.95));
+  assert.strictEqual(S.interval(0, 0, 0.95).lo, null, 'no denominator: no interval');
+});
+
 test('confusion both ways and the always-trend / always-chop baselines (against the evidence class per candle)', () => {
   const A = S.accuracy(cs([[0, 'trend-up', 'x', 'chop'], [1, 'trend-up', 'x', 'trend-up'], [2, 'chop', 'x', 'trend-up'], [3, 'unclear', 'x', null]]));
   assert.deepStrictEqual(A.confusion['trend-up'], { chop: 1, 'trend-up': 1 });
@@ -113,7 +145,18 @@ test('summary: trend vs chop only; recall, precision, false-alarm rate, the code
     { id: 'b', known: 'chop', margin: 3, pace: null, candles: cs([[0, 'chop', 'chop', 'trend-up'], [1, 'chop', 'unclear', 'chop'], [2, 'chop', 'x', null]]) },
     { id: 'c', known: 'trend-down', margin: 3, pace: 'sharp', candles: cs([[0, 'trend-down', 'unclear', 'chop'], [9, 'trend-down', 'trend-down', 'trend-down']]) },
   ];
-  const s = S.summary(cases);
+  cases[2].inLeg = cases[2].candles.slice(1); // the leg window: the chop named at rel 0 sits before it
+  cases[0].inLeg = cases[0].candles;
+  const s = S.summary(cases, { level: 0.95 });
+  const W = require('../../scripts/lib/prop/stats').wilson;
+  assert.deepStrictEqual(s.trend.recallInterval, W(1, 2, 0.95));
+  assert.deepStrictEqual(s.trend.precisionInterval, W(3, 4, 0.95));
+  assert.deepStrictEqual(s.trend.falseAlarmInterval, W(1, 4, 0.95));
+  assert.deepStrictEqual(s.chop.recallInterval, W(1, 1, 0.95));
+  assert.strictEqual(s.trend.supplementary.recalledFromEvidence, 1, 'supplementary: named from the evidence candle within the margin');
+  assert.strictEqual(s.trend.supplementary.falseAlarmRateInLeg, 0, 'supplementary: inside the leg windows, the chop before the late leg is not counted');
+  assert.deepStrictEqual(s.trend.supplementary.falseAlarmInLegInterval, W(0, 3, 0.95));
+  assert.strictEqual(s.chop.supplementary.falseAlarmRateInLeg, null, 'no leg window on a chop day');
   assert.strictEqual(s.trend.n, 2);
   assert.strictEqual(s.chop.n, 1);
   assert.deepStrictEqual(s.trend.cases, ['a', 'c']);

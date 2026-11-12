@@ -1686,7 +1686,11 @@ and never reaches the model. The list is refused unless its bytes hash to
 `config/recognition.json` `casesSha256`, so it is frozen before any run.
 Another list is taken only with its own sha256 (`--cases-sha`). The
 thresholds below live in `config/recognition.json`; a changed value needs
-a new `version` and a reason in the pull request.
+a new `version` and a reason in the pull request. The list's free-text
+fields (`selectedBy`, `circularNote`, the rule names) name the local
+benchmark files it was frozen with, which are not in the repository; they
+stay as written because an edit would change the frozen sha256. The repo's
+equivalents are `key.js` `evidenceWord` and `codedWord`.
 
 The five measures, per case:
 
@@ -1717,12 +1721,17 @@ Frozen definitions:
 - **The model's vocabulary is closed**: `trend-up`, `trend-down`, `chop`,
   `unclear`. The case buckets (trend legs, chop days, and the entry classes
   A-D) are reporting groups the model never names. The class word and the
-  cited fields arrive on the cycle's STATE record as `classWord` and
-  `cites`. They are read by equality only, never parsed from the line's
-  text or from prose. A record without the key is `absent`: that case is
-  reported as "needs the class word in the run". The key with null is
-  `unstated` (coverage). Anything else is `invalid` and never a naming. An
-  absent or unstated word is never filled in from the coded read.
+  cited fields arrive on the cycle's STATE record as `classWord`,
+  `cites` (always a list), `citesStated` and `citesDropped`. They are read
+  by equality only, never parsed from the line's text or from prose. A
+  record without `classWord` is `absent`: when every candle of a case is,
+  the case is reported as "needs the class word in the run" (a case with
+  no traced candle at all is "no candles" instead). `classWord` null is
+  `unstated` (coverage). Anything else off the list is `invalid` and never
+  a naming. An absent or unstated word is never filled in from the coded
+  read, per candle or per case. The cites follow `citesStated`: `absent`
+  (no cites written) is unstated, so nothing counts as ignored; `none` is
+  a statement that nothing was cited; `names` gives the list.
 - **The closed cite list** (`scorer.js` `CITE_FIELDS`, the STATE record's
   own list): `4h-trend`, `1h-trend`, `15m-trend`, `trend-rule`, `regime`,
   `day-type`, `day-so-far`, `pullback`, `1h-break`, `15m-break`,
@@ -1791,7 +1800,21 @@ recall (cases recognised within the margin) with the coded read's beside
 it, precision, the false-alarm rate, the wrong-way count, delay against
 accuracy per case, and the always-trend and always-chop baselines against
 the evidence word per candle. Per-class splits are n of 1 to 5 and are
-listed, never averaged.
+listed, never averaged. Recall, precision and the false-alarm rates carry
+a Wilson interval at `intervalLevel` (95%), so a rate on n of 5 shows how
+little it pins down.
+
+Supplementary columns, labelled SUPPLEMENTARY in the report. They sit
+beside the frozen measures and change none of them:
+
+- The first naming at or after the evidence candle (with its delay and
+  whether it is within the margin), per case and as a count. It exists
+  because a model that names `trend-up` before the evidence and holds it
+  scores a `guess` by the frozen rule, and a leg it then never re-names
+  is a miss.
+- A trend leg's false alarms inside the leg window, beside the whole-day
+  rate. It exists because a right `chop` word before a late leg starts
+  counts as a false alarm over the whole day.
 
 The leak test (`tests/lib/recognition-trace.test.js`): perturbing,
 poisoning or deleting every bar after a candle, 3m and 1m, leaves its trace

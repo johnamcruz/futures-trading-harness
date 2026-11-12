@@ -47,7 +47,7 @@ function runHome({ word = undefined, cites = undefined } = {}) {
     const inTrade = i > 14 && i < 18;
     const sr = { status: 'read', line: 'STATE: 4h up | 1h up | 15m up | class trend-up', bar: iso(close - TF) };
     if (word !== undefined) sr.classWord = typeof word === 'function' ? word(i) : word;
-    if (cites !== undefined) Object.assign(sr, { cites, citesDropped: 1 });
+    if (cites !== undefined) Object.assign(sr, { cites, citesStated: 'names', citesDropped: 1 });
     const rec = {
       action: 'trade', result: entry ? 'CYCLE RESULT: entered long' : inTrade ? 'CYCLE RESULT: managed' : 'CYCLE RESULT: no-trade',
       summary: { orders: entry ? [{ gate: 'allowed', side: 'buy' }] : [] }, timing: { barClose: iso(close) }, stateRead: sr,
@@ -83,7 +83,7 @@ test('readOf: entry, pass and in-trade from the cycle (the read audit\'s kindOf,
   assert.strictEqual(R.readOf({ ...base, context: { account: { positions: [{ size: 1 }], workingOrders: [] } } }).kind, 'in-trade');
   assert.strictEqual(R.readOf({ ...base, context: { account: { positions: [], workingOrders: [{ id: 1 }] } } }).kind, 'in-trade', 'a working order: in the trade, not flat');
   assert.deepStrictEqual(R.readOf({ ...base, stateRead: { classWord: 'chop', cites: ['regime'] } }).word, { status: 'stated', word: 'chop' });
-  assert.deepStrictEqual(R.readOf({ ...base, stateRead: { classWord: 'chop', cites: ['regime'] } }).basis.cited, ['regime']);
+  assert.deepStrictEqual(R.readOf({ ...base, stateRead: { classWord: 'chop', cites: ['regime'], citesStated: 'names' } }).basis.cited, ['regime']);
 });
 
 test('kindOf and replayDirs are the read audit\'s rules (restated: nothing in scripts/ requires the read audit but its CLI)', () => {
@@ -149,6 +149,10 @@ test('a run with the class word and cites: first recognition, evidence then with
   assert.strictEqual(doc.summary.scored.chop.recall, 0);
   const text = P.renderReport(doc);
   assert.match(text, /first recognition \(model\): candle 1/);
+  assert.match(text, /SUPPLEMENTARY \(definitions unchanged\): first naming from the evidence candle on/, 'the per-case supplementary columns, labelled');
+  assert.match(text, /SUPPLEMENTARY trend \(definitions unchanged\): recalled from the evidence candle on \d\/1; false-alarm rate in the leg windows/);
+  assert.match(text, /trend: n 1 \[[^\]]*\], recall [\d.]+ \[[\d.]+, [\d.]+\]/, 'recall with its Wilson interval');
+  assert.match(text, /precision [\d.-]+( \[[\d.]+, [\d.]+\])?, false-alarm rate [\d.]+ \[[\d.]+, [\d.]+\]/);
   assert.ok(!/NaN|undefined/.test(text), text);
 });
 

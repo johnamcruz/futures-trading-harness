@@ -94,6 +94,42 @@ test('chop day: names chop? which candle; entries before the naming listed with 
   assert.deepStrictEqual(onNaming.entries.map(e => [e.rel, e.beforeNaming]), [[1, false]], 'an entry on the naming candle is not before it');
 });
 
+test('per candle: an unstated candle whose coded word is the known class (at the evidence candle) is no naming; the later stated candle is', () => {
+  // rel -1: evidence and coded both trend-up, the model unstated; rel 0: unclear; rel 1: the model names trend-up.
+  const r = A.analyse(TREND, [mk(0, false, { word: null }), mk(1, false, { word: 'unclear' }), mk(2, false, { word: 'trend-up' })], { minutes: 3 });
+  assert.strictEqual(r.firstEvidenceRel, -1);
+  assert.strictEqual(r.firstCodedRel, -1);
+  assert.strictEqual(r.model.first, 1, 'the stated candle, never the unstated one the coded read names');
+  assert.strictEqual(r.model.timing, 'lag');
+  assert.strictEqual(r.accuracy.named, 2, 'the unstated candle is no naming');
+  assert.strictEqual(r.falseAlarms.named, 1);
+});
+
+test('no traced candle (no bars at any cycle): "no candles", never "needs the class word"', () => {
+  const r = A.analyse(TREND, [mk(0, false, { noBars: true }), mk(1, false, { noBars: true })], { minutes: 3 });
+  assert.strictEqual(r.noCandles, true);
+  assert.strictEqual(r.wordCoverage.needsClassWord, false);
+  assert.strictEqual(r.wordCoverage.of, 0);
+  assert.strictEqual(r.noBars, 2);
+  const s = A.summarize([r]);
+  assert.deepStrictEqual(s.noCandles, [r.id]);
+  assert.deepStrictEqual(s.needsClassWord, []);
+  assert.strictEqual(s.scored, null, 'nothing to score');
+});
+
+test('SUPPLEMENTARY per case: the false alarms inside the leg window beside the whole day (a right chop word before a late leg)', () => {
+  const chopBefore = { key: { cls: { long: 'B', short: 'B', none: 'B' } } };
+  // rel -1 (before the leg): evidence chop, the model says chop (a false alarm over the day); in the leg: trend-up.
+  const r = A.analyse(TREND, [mk(0, false, { ...chopBefore, word: 'chop' }), mk(1, false, { word: 'trend-up' }), mk(2, false, { word: 'trend-up' })], { minutes: 3 });
+  assert.deepStrictEqual([r.falseAlarms.named, r.falseAlarms.opposite], [3, 1]);
+  assert.deepStrictEqual([r.supplementary.falseAlarmsInLeg.named, r.supplementary.falseAlarmsInLeg.opposite], [2, 0]);
+  assert.deepStrictEqual(r.supplementary.fromEvidence, r.model.fromEvidence);
+  const s = A.summarize([r], { level: 0.95 });
+  assert.strictEqual(s.scored.trend.falseAlarmRate, 1 / 3);
+  assert.strictEqual(s.scored.trend.supplementary.falseAlarmRateInLeg, 0);
+  assert.ok(s.scored.trend.recallInterval && s.scored.trend.recallInterval.level === 0.95);
+});
+
 test('unstated candles stay unstated: the coded read never stands in for the model', () => {
   const r = A.analyse(TREND, [mk(0, false, { word: 'unclear' }), mk(1, false, { word: null }), mk(2, false, { word: null })], { minutes: 3 });
   assert.strictEqual(r.coded.first, -1, 'the coded read names the leg');

@@ -22,8 +22,9 @@
  * it: null, never substituted by the coded read or by prose.
  *
  *   analyse(case, candles, { minutes })   one case (case: config.js's, with startClose and endClose)
- *   summarize(analyses)                   scorer.summary over the cases whose run carries the class word, the cases
- *                                         needing it, and the entry vs confirmed tally of the trend legs
+ *   summarize(analyses, { level })        scorer.summary (Wilson intervals at level) over the cases whose run carries
+ *                                         the class word, the cases needing it, those with no candle (no bars at any
+ *                                         cycle: "no candles"), and the entry vs confirmed tally of the trend legs
  */
 
 const { MINUTE } = require('../../backtest/data');
@@ -42,10 +43,13 @@ function confl(c, side) {
 /** Candles with a trace, with rel and the three readers' words (the model's only when stated). */
 function prep(candles, startClose, minutes) {
   const step = minutes * MINUTE;
-  return candles.filter(c => c.trace).map(c => ({
-    ...c, rel: Math.round((c.ms - startClose) / step), evidence: K.evidenceWord(c.trace.key), coded: K.codedWord(c.trace.key),
-    model: c.read.word.status === 'stated' ? c.read.word.word : null, flat: c.read.kind !== 'in-trade',
-  }));
+  return candles.filter(c => c.trace).map(c => {
+    const evidence = K.evidenceWord(c.trace.key);
+    const coded = K.codedWord(c.trace.key);
+    // The model's word only when stated: never the coded word (computed beside it, for this candle), never the evidence.
+    const model = c.read.word.status === 'stated' ? c.read.word.word : null;
+    return { ...c, rel: Math.round((c.ms - startClose) / step), evidence, coded, model, flat: c.read.kind !== 'in-trade' };
+  });
 }
 
 function coverage(P) {
@@ -53,7 +57,8 @@ function coverage(P) {
   const k = tally(P, c => c.read.basis.status);
   const of = P.length;
   return {
-    wordCoverage: { stated: w.stated || 0, unstated: w.unstated || 0, invalid: w.invalid || 0, absent: w.absent || 0, of, needsClassWord: (w.absent || 0) === of },
+    // Needs the class word: candles, every one without the key. No candle at all is "no candles" (noCandles), not this.
+    wordCoverage: { stated: w.stated || 0, unstated: w.unstated || 0, invalid: w.invalid || 0, absent: w.absent || 0, of, needsClassWord: of > 0 && (w.absent || 0) === of },
     basis: { stated: k.stated || 0, unstated: k.unstated || 0, invalid: k.invalid || 0, absent: k.absent || 0, offList: P.reduce((s, c) => s + c.read.basis.offList.length, 0) },
   };
 }
@@ -74,21 +79,26 @@ function analyse(cse, candles, { minutes }) {
   const known = knownOf(cse);
   const side = cse.kind === 'trend' ? cse.side : null;
   const cov = coverage(P);
-  const needs = cov.wordCoverage.needsClassWord;
+  const noCandles = P.length === 0;
+  const needs = cov.wordCoverage.needsClassWord || noCandles; // the model's measures: none to give
   const rec = S.recognise(P, known, cse.margin);
+  const legW = side ? P.filter(c => c.ms >= cse.startClose && c.ms <= cse.endClose) : null;
   const out = {
     id: cse.id, kind: cse.kind, known, side, pace: cse.pace || null, margin: cse.margin,
-    candles: P.length, noBars: candles.length - P.length, inTrade: P.filter(c => !c.flat).length, ...cov,
+    candles: P.length, noCandles, noBars: candles.length - P.length, inTrade: P.filter(c => !c.flat).length, ...cov,
     firstEvidenceRel: rec.evidenceFirst, firstCodedRel: rec.coded.first, coded: rec.coded, model: needs ? null : rec.model,
     evidenceThen: { evidence: evidenceAt(P, rec.evidenceFirst, side, false), coded: evidenceAt(P, rec.coded.first, side, false), model: needs ? null : evidenceAt(P, rec.model.first, side, true) },
     accuracyCoded: S.accuracy(P.map(c => ({ ...c, model: c.coded }))), accuracy: needs ? null : S.accuracy(P), falseAlarms: needs ? null : S.falseAlarms(P, known),
+    // SUPPLEMENTARY (no definition changes): the first naming from the evidence candle on, and a leg's false alarms
+    // inside its window (a right chop word before a late leg is a false alarm over the whole day).
+    supplementary: needs ? null : { fromEvidence: rec.model.fromEvidence, falseAlarmsInLeg: legW ? S.falseAlarms(legW, known) : null },
   };
   if (side) {
     const action = c => (c.read.kind === 'entry' ? (c.read.side && c.read.side !== side ? 'other' : 'enter') : c.read.kind === 'pass' ? 'sit' : 'manage');
     out.entryVsConfirmed = S.entryVsConfirmed(P.map(c => ({ rel: c.rel, confirmed: confl(c, side).confirmed, flat: c.flat, action: action(c) })));
     const en = P.find(c => c.flat && action(c) === 'enter');
     out.entryConfluence = en ? { rel: en.rel, ...confl(en, side), evidence: en.evidence, coded: en.coded, inLeg: en.ms <= cse.endClose } : null;
-    const w = P.filter(c => c.ms >= cse.startClose && c.ms <= cse.endClose);
+    const w = legW;
     out.evidenceInLeg = {
       candles: w.length, evidence: tally(w, c => c.evidence), coded: tally(w, c => c.coded),
       confirmedCandles: w.filter(c => confl(c, side).confirmed).length, meanReqMet: w.length ? w.reduce((s, c) => s + (confl(c, side).reqMet || 0), 0) / w.length : null,
@@ -106,15 +116,16 @@ function analyse(cse, candles, { minutes }) {
     const flat = P.filter(c => c.flat);
     out.sitRate = flat.length ? flat.filter(c => c.read.kind === 'pass').length / flat.length : null;
   }
-  return { ...out, _candles: P };
+  return { ...out, _candles: P, _inLeg: legW };
 }
 
-function summarize(analyses) {
-  const scored = analyses.filter(a => !a.wordCoverage.needsClassWord);
+function summarize(analyses, { level = null } = {}) {
+  const scored = analyses.filter(a => !a.wordCoverage.needsClassWord && !a.noCandles);
   const legs = analyses.filter(a => a.kind === 'trend');
   return {
-    scored: scored.length ? S.summary(scored.map(a => ({ id: a.id, known: a.known, margin: a.margin, pace: a.pace, candles: a._candles }))) : null,
+    scored: scored.length ? S.summary(scored.map(a => ({ id: a.id, known: a.known, margin: a.margin, pace: a.pace, candles: a._candles, ...(a._inLeg ? { inLeg: a._inLeg } : {}) })), { level }) : null,
     needsClassWord: analyses.filter(a => a.wordCoverage.needsClassWord).map(a => a.id),
+    noCandles: analyses.filter(a => a.noCandles).map(a => a.id),
     entryVsConfirmed: { on: 0, before: 0, after: 0, 'no-entry': 0, 'never-confirmed': 0, ...tally(legs, a => a.entryVsConfirmed.timing) },
   };
 }

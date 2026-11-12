@@ -24,7 +24,11 @@ test('the committed list: 5 trend legs and 5 chop days, frozen by sha256, margin
   assert.strictEqual(r.cases.filter(c => c.kind === 'chop').length, 5);
   assert.ok(r.cases.every(c => c.margin === (c.kind === 'trend' ? 5 : 10)));
   assert.deepStrictEqual(r.cases.filter(c => c.pace === 'sharp').map(c => c.day), ['2021-09-01', '2022-05-23']);
-  assert.strictEqual(r.fingerprint.version, '1');
+  assert.strictEqual(r.fingerprint.version, '2');
+  assert.deepStrictEqual({ ...r.definitions.signals }, { crossesChop: 5, crossesTrendMax: 3 }, 'the chop-class signals\' VWAP crosses thresholds, frozen');
+  assert.deepStrictEqual({ ...r.definitions.margins }, { trend: 5, chop: 10 });
+  assert.strictEqual(r.definitions.sharpMaxCandles, 7);
+  assert.strictEqual(r.definitions.intervalLevel, 0.95, 'Wilson intervals at 95% (spec item 7)');
   assert.ok(r.cases.every(c => typeof c.id === 'string' && c.id.startsWith(c.day)));
 });
 
@@ -52,6 +56,7 @@ test('every case is checked against the frozen definitions: margin by kind, pace
   assert.throws(() => RC.load({ file: copy(t => t.replace('"kind": "chop"', '"kind": "range"')) }), /kind/);
   assert.throws(() => RC.load({ file: copy(t => t, { defsEdit: d => ({ ...d, margins: { trend: 5 } }) }) }), /margins/);
   assert.throws(() => RC.load({ file: copy(t => t, { defsEdit: d => ({ ...d, extra: 1 }) }) }), /extra/);
+  assert.throws(() => RC.load({ file: copy(t => t, { defsEdit: d => ({ ...d, intervalLevel: 0.97 }) }) }), /intervalLevel/);
 });
 
 test('another list is taken only with its own sha256 stated', () => {

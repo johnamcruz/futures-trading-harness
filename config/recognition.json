@@ -1,10 +1,11 @@
 {
-  "version": "1",
-  "about": "The recognition test's frozen definitions (docs/TRAINING.md, 'The recognition test'). Read-only measurement: nothing that decides reads this file or the tool; the model is asked nothing. cases: the frozen case list (config/recognition-cases.json), refused unless its bytes hash to casesSha256. margins: the matching rule's maximum delay in candles per case kind, frozen before any model run (every case's own margin must equal its kind's). sharpMaxCandles: a census leg spanning at most this many candles is 'sharp', else 'slow'. chopLabel: the bars-only chop label v2 (window, the eligible bar count, the net move ceiling and range floor in ATR, the ATR length). signals: the chop-class signals' session VWAP crosses thresholds (C7 chop at or above crossesChop; T6 trend at or below crossesTrendMax with price on the side's side of VWAP). A changed value needs a new version and a reason in the pull request.",
+  "version": "2",
+  "about": "The recognition test's frozen definitions (docs/TRAINING.md, 'The recognition test'). Read-only measurement: nothing that decides reads this file or the tool; the model is asked nothing. cases: the frozen case list (config/recognition-cases.json), refused unless its bytes hash to casesSha256. margins: the matching rule's maximum delay in candles per case kind, frozen before any model run (every case's own margin must equal its kind's). sharpMaxCandles: a census leg spanning at most this many candles is 'sharp', else 'slow'. chopLabel: the bars-only chop label v2 (window, the eligible bar count, the net move ceiling and range floor in ATR, the ATR length). signals: the chop-class signals' session VWAP crosses thresholds (C7 chop at or above crossesChop; T6 trend at or below crossesTrendMax with price on the side's side of VWAP). intervalLevel: the level of the Wilson intervals on the rates (spec item 7). A changed value needs a new version and a reason in the pull request (v2 added intervalLevel).",
   "cases": "recognition-cases.json",
   "casesSha256": "b0278dd07ee8937964f5e2a1b6b1fd6aa21a2aead850886da39597d7d43a2959",
   "margins": { "trend": 5, "chop": 10 },
   "sharpMaxCandles": 7,
   "chopLabel": { "window": "09:30-12:00@America/New_York", "minBars": 40, "netAtrMax": 1.5, "rangeAtrMin": 3, "atrPeriod": 14 },
-  "signals": { "crossesChop": 5, "crossesTrendMax": 3 }
+  "signals": { "crossesChop": 5, "crossesTrendMax": 3 },
+  "intervalLevel": 0.95
 }
