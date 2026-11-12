@@ -217,7 +217,7 @@ const setupLine = s => `${s.name}${s.component ? ` (${s.component})` : ''} ${s.d
 function reviewText(r, timing) {
   const parts = [`At ${r.facts.et} ET on ${r.day} (${r.symbol}), you ${r.actual.action === 'long' || r.actual.action === 'short' ? `entered ${r.actual.action}${r.actual.setup ? ` on ${r.actual.setup}` : ''}${r.actual.size ? ` with ${r.actual.size}` : ''}` : r.actual.action === 'exit' ? 'closed the trade' : r.actual.action === 'none' ? 'took no trade' : `did ${r.actual.action}`}`];
   if (r.actual.result) parts.push(` and stated: "${String(r.actual.result).replace(/^\s*CYCLE RESULT:\s*/i, '').replace(/\.\s*$/, '')}"`);
-  parts.push(`. The code scored it ${r.category} (${r.severity})`);
+  parts.push(`. The code scored it ${r.category} (${r.stateReadPass ? 'by hand' : r.severity})`);
   if (r.why.length) parts.push(`: ${r.why.join('; ')}`);
   const wrong = (r.reasons.claims || []).filter(c => c.check === false && !c.incidental);
   if (wrong.length) parts.push(`. False by the facts: ${wrong.map(c => `"${c.clause}" (${c.why})`).join('; ')}`);
@@ -334,7 +334,7 @@ function flaggedMarkdown(runId, entries) {
   const home = entries.length ? entries[0].home : null;
   const out = [`# Flagged decisions: ${runId}`, '', `${entries.length} decisions the code flagged. Each: what the model saw (pointers into the record${home ? `, relative to the run home ${home}` : ''}), what it did, what the code found.`, ''];
   for (const e of entries) {
-    out.push(`## ${e.day} ${e.et} ET ${e.symbol}: ${e.failure.category} (${e.failure.severity})`, '', e.review, '',
+    out.push(`## ${e.day} ${e.et} ET ${e.symbol}: ${e.failure.category} (${e.stateReadPass ? 'by hand' : e.failure.severity})`, '', e.review, '',
       `- Saw: window ${e.saw.window ? `${e.saw.window.name} until ${e.saw.window.until} ET, entries ${e.saw.window.entriesAllowed ? 'allowed' : 'not allowed'}` : 'unknown'}; trend rule ${e.saw.trendRule && e.saw.trendRule.prevailing ? e.saw.trendRule.prevailing : 'none'}; setups ${e.saw.setups.join('; ') || 'none'}.`,
       `- Record: ${e.saw.decisionLine.file} at ${e.t}; cycle ${cell(e.saw.cycleFile)}; prompt ${cell(e.saw.promptHash)}; scan ${e.saw.scanLog.file} bar ${cell(e.barT)}.`,
       `- Did: ${e.did.action}${e.did.setup ? ` ${e.did.setup}` : ''}${e.did.size ? ` ${e.did.size}` : ''}${e.did.gate && e.did.gate.decision ? `; gate ${e.did.gate.decision}` : ''}.`,

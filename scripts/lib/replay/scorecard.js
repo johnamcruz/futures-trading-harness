@@ -157,6 +157,13 @@ function stateOffSide(stateRead, side) {
 // A pass that names the read: its own words for it (the line's name, a class word) in any clause it stated.
 const STATE_NAMED = /\bSTATE\b|\bclass\b|\bchop\b|\bunclear\b|\btrend-(?:up|down)\b/i;
 
+/** A pass on the head trader's own STATE read off every one of the sides, named in any stated clause, no claim false. */
+function stateReadPass(facts, reasons, falseReason, sides) {
+  const clauses = [...reasons.claims.map(x => x.clause || ''), ...reasons.judgment, ...reasons.unparsed];
+  return !falseReason && sides.length > 0 && sides.every(side => stateOffSide(facts.stateRead, side)) && clauses.some(c => STATE_NAMED.test(c));
+}
+const stateWhy = s => { const fr = isObj(s.read) && isObj(s.read.frames) ? s.read.frames : {}; return `the head trader's own STATE read off the setup's side (class ${s.classWord}, 4h ${fr['4h'] || 'unknown'}, 1h ${fr['1h'] || 'unknown'}), named in the pass: its step 8, checked by hand`; };
+
 /** The failure category of a scored decision, and whether it agrees with the expectation (true | false | null). */
 function classify(label, facts, expected, reasons) {
   const act = label.teacher ? label.teacher.action : null;
@@ -207,6 +214,8 @@ function classify(label, facts, expected, reasons) {
     const hard = reasons.claims.filter(x => x.check === true && COMPOSED_GROUNDS.has(x.kind));
     if (hard.length) return why.push(`a true hard ground: ${hard.map(x => x.kind).join(', ')}`), out('unchecked', null);
     if (facts.attempt && facts.attempt.entryBlock) return why.push(`the attempt blocks entries (${facts.attempt.entryBlock})`), out('right', true);
+    // No compose call, the head trader's own STATE read off every composable side, named: the read alone, by hand.
+    if (stateReadPass(facts, reasons, falseReason, facts.composable.sides)) return why.push(`no compose record: the read alone: ${stateWhy(facts.stateRead)}`), { ...out('unchecked', null), stateReadPass: true };
     why.push(`no compose: ${facts.composable.sides.join(' and ')} ${facts.composable.reason}, passed without compose_check`);
     return out(falseReason ? 'wrong stated reason' : 'excessive abstention', false);
   }
@@ -222,12 +231,7 @@ function classify(label, facts, expected, reasons) {
     if (hard.length) return why.push(`a true hard ground: ${hard.map(x => x.kind).join(', ')}`), out('unchecked', null);
     // The head trader's own STATE read off the setup's side, named in the pass (its step 8, trade-session step 3): a
     // judgment the record can't check, so by hand; the recorded read must be off the side, the words alone excuse nothing.
-    const clauses = [...reasons.claims.map(x => x.clause || ''), ...reasons.judgment, ...reasons.unparsed];
-    if (!falseReason && stateOffSide(facts.stateRead, expected.direction) && clauses.some(c => STATE_NAMED.test(c))) {
-      const s = facts.stateRead; const fr = isObj(s.read) && isObj(s.read.frames) ? s.read.frames : {};
-      why.push(`the head trader's own STATE read off the setup's side (class ${s.classWord}, 4h ${fr['4h'] || 'unknown'}, 1h ${fr['1h'] || 'unknown'}), named in the pass: its step 8, checked by hand`);
-      return { ...out('unchecked', null), stateReadPass: true };
-    }
+    if (stateReadPass(facts, reasons, falseReason, [expected.direction])) return why.push(stateWhy(facts.stateRead)), { ...out('unchecked', null), stateReadPass: true };
     if ([...reasons.judgment, ...reasons.unparsed].some(c => DECISIVE.test(c))) {
       if (!htfAgrees(facts.htf, expected.direction)) return why.push('a decisive reason stated (a 1h CHoCH against): checked by hand'), out('unchecked', null);
       why.push('a 1h CHoCH against stated while the 4h and the 1h both trend the side: context, not decisive');

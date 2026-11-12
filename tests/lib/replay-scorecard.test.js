@@ -876,6 +876,9 @@ test('scoreRun: the cycle log\'s STATE read reaches the facts, so a pass on it n
   assert.strictEqual(JSON.parse(fs.readFileSync(path.join(out, 'scorecard-summary.json'), 'utf8')).stateReadPasses, 1);
   const flagged = fs.readFileSync(path.join(out, 'flagged.jsonl'), 'utf8').split('\n').filter(Boolean).map(JSON.parse);
   assert.deepStrictEqual(flagged.filter(x => x.failure.category === 'unchecked').map(x => x.stateReadPass), [true]);
+  // Its heading in flagged.md says it is checked by hand, not a severity.
+  assert.match(fs.readFileSync(path.join(out, 'flagged.md'), 'utf8'), /^## .*: unchecked \(by hand\)$/m);
+  assert.doesNotMatch(fs.readFileSync(path.join(out, 'flagged.md'), 'utf8'), /unchecked \(null\)/);
 });
 
 test('scoreRun: a cycle\'s one STATE read is its first symbol\'s: on another symbol\'s decision it is no read (a two-symbol cycle)', () => {
@@ -1030,4 +1033,19 @@ test('no compose: a pass on a composable setup (trend side, a key-level reaction
   assert.strictEqual(classify(label, noAttempt, expectedDecision(noAttempt), checkReasons('CYCLE RESULT: no-trade - no attempt is running', noAttempt)).category, 'unchecked');
   // A pass in an attempt that blocks entries (a loss-streak cooldown, stated or not) is right, never abstention.
   assert.strictEqual(cls({ ...quiet, attempt: { account: 'a', status: 'active', entryBlock: 'cooldown after 2 losses' }, composable: composableSetup(b(409)) }).category, 'right');
+  // No compose call, the head trader's own STATE read off every composable side (the code's rule allows the short on a 4h
+  // down, 1h range bar; the read says 1h range, chop), named: unchecked, the read alone (judged by hand), counted.
+  const read = (classWord, h4, h1) => ({ status: 'read', classWord, read: { frames: { '4h': h4, '1h': h1, '15m': 'down' } } });
+  const offRead = { ...quiet, composable: composableSetup(b(409)), stateRead: read('chop', 'down', 'range') };
+  const named = 'CYCLE RESULT: no-trade - my STATE read is chop: the 1h ranges';
+  const got = classify(label, offRead, expectedDecision(offRead), checkReasons(named, offRead));
+  assert.deepStrictEqual(got, { category: 'unchecked', agrees: null, stateReadPass: true, why: ["no compose record: the read alone: the head trader's own STATE read off the setup's side (class chop, 4h down, 1h range), named in the pass: its step 8, checked by hand"] });
+  // The read on the side, or not named, or a false reason beside it: as before.
+  const onRead = { ...offRead, stateRead: read('trend-down', 'down', 'down') };
+  assert.strictEqual(classify(label, onRead, expectedDecision(onRead), checkReasons(named, onRead)).category, 'excessive abstention');
+  assert.strictEqual(cls(offRead).category, 'excessive abstention');
+  assert.strictEqual(classify(label, offRead, expectedDecision(offRead), checkReasons('CYCLE RESULT: no-trade - opening print until 10:00 ET; STATE read chop', offRead)).category, 'wrong stated reason');
+  // Off one composable side but on the other: the pass is not excused.
+  const both = { ...offRead, composable: { ...composableSetup(b(409)), sides: ['short', 'long'] }, stateRead: read('trend-up', 'up', 'up') };
+  assert.strictEqual(classify(label, both, expectedDecision(both), checkReasons(named, both)).category, 'excessive abstention');
 });
