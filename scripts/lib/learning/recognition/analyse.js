@@ -128,6 +128,8 @@ function analyse(cse, candles, { minutes }) {
     const flat = P.filter(c => c.flat);
     out.sitRate = flat.length ? flat.filter(c => c.read.kind === 'pass').length / flat.length : null;
   }
+  // Over every traced candle, in-trade ones included (their own column): the class word against its own frames, flips.
+  out.wordStability = S.wordStability(P.map(c => ({ rel: c.rel, word: c.model, frames: c.read.frames || null, inTrade: !c.flat })), side);
   return { ...out, _candles: P, _inLeg: legW };
 }
 
@@ -140,6 +142,7 @@ function summarize(analyses, { level = null } = {}) {
     noCandles: analyses.filter(a => a.noCandles).map(a => a.id),
     // Every entry's own word and frames (not scored, not a grade), by kind of case.
     entryWords: Object.fromEntries(['trend', 'chop'].map(k => [k, S.tallyEntryWords(analyses.filter(a => a.kind === k && !a.notInRuns).flatMap(a => a.entries || []))])),
+    wordStability: Object.fromEntries(['trend', 'chop'].map(k => [k, S.tallyWordStability(analyses.filter(a => a.kind === k && !a.notInRuns).map(a => a.wordStability))])),
     entryVsConfirmed: { on: 0, before: 0, after: 0, 'no-entry': 0, 'never-confirmed': 0, ...tally(legs, a => a.entryVsConfirmed.timing) },
   };
 }

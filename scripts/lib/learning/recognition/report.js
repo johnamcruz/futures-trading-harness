@@ -41,6 +41,11 @@ function supLine(c) {
   return `  SUPPLEMENTARY (definitions unchanged): first naming from the evidence candle on: ${at(f.first)}${f.delay === null ? '' : ` (delay ${f.delay}, within the margin ${yes(f.counts)})`}; false alarms in the leg window ${fa(c.supplementary.falseAlarmsInLeg)} beside the whole day ${fa(c.falseAlarms)}`;
 }
 
+/** The class word against its own frames over every candle (in-trade apart), the word vs the leg's side, and the flips with the frames unchanged. */
+function stabilityText(w) {
+  return `candles ${w.candles}, word vs frames ${j(w.byWordVsFrames)} (in trade ${j(w.inTradeByWordVsFrames)})${w.wordVsSide ? `, word vs the leg's side ${j(w.wordVsSide)}` : ''}; word changes with the frames unchanged ${w.flipsSameFrames} of ${w.pairsSameFrames} such pairs; longest run of one word ${w.longestRun}`;
+}
+
 function trendLines(c) {
   const e = c.entryVsConfirmed;
   const ec = c.entryConfluence;
@@ -51,6 +56,7 @@ function trendLines(c) {
     `  evidence then: ${then('evidence', c.evidenceThen.evidence)}; ${then('coded', c.evidenceThen.coded)}; ${c.model ? then('model', c.evidenceThen.model) : `model: ${blank(c)}`}`,
     `  harness confirmed first: ${at(e.firstConfirmed)}; entry: ${at(e.entry)} (${e.timing}${e.delta === null ? '' : ` by ${e.delta}`}); sit-outs while confirmed ${e.sitOutsWhileConfirmed}`,
     `  entries ${c.entries.length}: ${c.entries.map(e => `candle ${e.rel} word ${e.modelWord || 'unstated'}, frames ${framesText(e.frames)}, vs frames ${e.wordVsFrames}`).join('; ') || 'none'}`,
+    `  class word every candle: ${stabilityText(c.wordStability)}`,
     `  confluence at the entry: ${ec ? `candle ${ec.rel} ${flow(ec)}; evidence ${ec.evidence}, coded ${ec.coded}; inside the leg ${yes(ec.inLeg)}` : 'no entry'}`,
     `  in the leg: candles ${leg.candles}, confirmed ${leg.confirmedCandles}, mean flow steps ${n4(leg.meanReqMet)}; evidence ${j(leg.evidence)}; coded ${j(leg.coded)}`,
     `  miss: ${!c.model ? blank(c) : c.miss ? `not recognised within ${c.margin} candles (first named: ${at(c.miss.namedFirst)}, ${c.miss.timing}); the evidence in the leg as above` : 'no'}`,
@@ -64,6 +70,7 @@ function chopLines(c) {
   return [
     `${c.id}, run ${c.run}: candles ${c.candles}, in-trade ${c.inTrade}, no bars ${c.noBars}; evidence first names chop at ${at(c.firstEvidenceRel)}; coded first ${reader(c.coded, false)}`,
     `  names chop: ${c.namesChop === null ? blank(c) : c.namesChop ? `yes, ${reader(c.model, false)}` : 'no'}; sit rate ${n4(c.sitRate)}; entries ${c.entries.length}${c.entriesBeforeNaming === null ? '' : ` (before the naming ${c.entriesBeforeNaming})`}`,
+    `  class word every candle: ${stabilityText(c.wordStability)}`,
     ...c.entries.map(e => `    entry candle ${e.rel}: model's word ${e.modelWord || 'unstated'}, frames ${framesText(e.frames)}, word vs frames ${e.wordVsFrames}; present class ${e.presentClass || '-'}, evidence ${e.evidence}, coded ${e.coded}; ${flow(e.confluence)}; before the naming ${yes(e.beforeNaming)}`),
     `  chop label (bars only) recomputed: ${lab && lab.eligible ? `chop ${yes(lab.chop)}, efficiency ${n4(lab.efficiency)} (max ${n4(lab.erMax)}), net ${n4(lab.netAtr)} ATR, range ${n4(lab.rangeAtr)} ATR, n ${lab.n}` : `not eligible (n ${lab ? lab.n : 0})`}; frozen: ${fr ? j(fr) : 'none'}`,
   ];
@@ -101,6 +108,7 @@ function renderReport(doc) {
   for (const c of cases.filter(x => x.kind === 'chop')) out.push(...chopLines(c));
   out.push('', '== AGGREGATE (trend vs chop only; n small, the cases listed above)',
     `Entries by the model's own word (its STATE record at the entry candle; vs frames: contradicts = a trend word with the 4h and 1h both range or either the opposite way to the word, chop with 4h, 1h and 15m all one way; else agrees; unstated = no word or no frame): chop days ${doc.summary.entryWords.chop.n} entries: ${tallyText(doc.summary.entryWords.chop)}; trend legs ${doc.summary.entryWords.trend.n} entries: ${tallyText(doc.summary.entryWords.trend)}`,
+    `The class word against its own frames, every candle (in-trade candles included, also counted apart; a word change with the frames unchanged is the read's instability, not a grade of the market; the word vs the leg's side is a report against the answer key): chop days ${stabilityText(doc.summary.wordStability.chop)} over ${doc.summary.wordStability.chop.cases} cases; trend legs ${stabilityText(doc.summary.wordStability.trend)} over ${doc.summary.wordStability.trend.cases} cases`,
     `entry vs confirmed on the legs: ${j(doc.summary.entryVsConfirmed)}`,
     `coded read vs the evidence word per candle: ${cases.map(c => `${c.id} ${n4(c.accuracyCoded.accuracy)} (always-trend ${n4(c.accuracyCoded.alwaysTrend)}, always-chop ${n4(c.accuracyCoded.alwaysChop)})`).join('; ')}`,
     ...scoredLines(doc.summary.scored, doc.summary));

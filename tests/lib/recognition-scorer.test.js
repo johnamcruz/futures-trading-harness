@@ -235,3 +235,69 @@ test('entry words tally by the model\'s word and by word vs frames; unstated, ab
   });
   assert.deepStrictEqual(S.tallyEntryWords([]), { n: 0, byWord: { 'trend-up': 0, 'trend-down': 0, chop: 0, unclear: 0, unstated: 0 }, byWordVsFrames: { agrees: 0, contradicts: 0, unstated: 0 } });
 });
+
+// The word's stability over every candle of a case (measurement only; reads recorded fields, asks nothing).
+const f3 = (a, b, c) => ({ '4h': a, '1h': b, '15m': c });
+const cd = (word, frames, inTrade = false) => ({ word, frames, inTrade });
+
+test('word stability: per-candle word vs frames over all candles, in-trade candles also as their own column', () => {
+  const r = S.wordStability([
+    cd('trend-up', f3('down', 'down', 'range')), // contradicts
+    cd('trend-down', f3('down', 'down', 'range')), // agrees
+    cd('chop', f3('down', 'down', 'down'), true), // contradicts, in trade
+    cd(null, f3('down', 'down', 'down')), // unstated
+    cd('unclear', null, true), // unstated, in trade
+  ], null);
+  assert.deepStrictEqual(r.byWordVsFrames, { agrees: 1, contradicts: 2, unstated: 2 });
+  assert.deepStrictEqual(r.inTradeByWordVsFrames, { agrees: 0, contradicts: 1, unstated: 1 });
+  assert.strictEqual(r.candles, 5);
+  assert.strictEqual(r.wordVsSide, null, 'a chop day has no side');
+});
+
+test('word stability: the word against the leg side is a reporting bucket (same side, opposite side, chop, unclear, unstated)', () => {
+  const rows = [cd('trend-down', null), cd('trend-up', null), cd('chop', null), cd('unclear', null), cd(null, null), cd('trend-down', null, true)];
+  assert.deepStrictEqual(S.wordStability(rows, 'short').wordVsSide, { same: 2, opposite: 1, chop: 1, unclear: 1, unstated: 1 });
+  assert.deepStrictEqual(S.wordStability(rows, 'long').wordVsSide, { same: 1, opposite: 2, chop: 1, unclear: 1, unstated: 1 });
+});
+
+test('word stability: the real finding, frames unchanged while the class word alternates, counts as flips with the same frames', () => {
+  const same = f3('down', 'down', 'range'); // 4h down | 1h down | 15m range, the model's own frames, unchanged
+  const r = S.wordStability(['trend-up', 'trend-down', 'unclear', 'chop', 'chop', 'trend-up'].map(w => cd(w, same, w === 'trend-up')), 'short');
+  assert.strictEqual(r.pairsSameFrames, 5);
+  assert.strictEqual(r.flipsSameFrames, 4, 'up>down, down>unclear, unclear>chop, chop>up; chop>chop is no flip');
+  assert.strictEqual(r.longestRun, 2, 'the two chop candles');
+});
+
+test('word stability: a frames change is not a flip; an unstated word or frame breaks the pair and the run; equality only', () => {
+  const a = f3('down', 'down', 'range');
+  const b = f3('down', 'down', 'down');
+  const r = S.wordStability([cd('chop', a), cd('trend-down', b), cd('trend-down', b), cd(null, b), cd('trend-down', b), cd('chop', null), cd('trend-down', b)], 'short');
+  assert.strictEqual(r.flipsSameFrames, 0, 'chop>trend-down changed the 15m; the null word and null frames pairs are not comparable');
+  assert.strictEqual(r.pairsSameFrames, 1, 'only trend-down>trend-down with equal frames');
+  assert.strictEqual(r.longestRun, 2, 'the unstated word ends the run');
+  assert.deepStrictEqual(S.wordStability([], null), { candles: 0, byWordVsFrames: { agrees: 0, contradicts: 0, unstated: 0 }, inTradeByWordVsFrames: { agrees: 0, contradicts: 0, unstated: 0 }, wordVsSide: null, pairsSameFrames: 0, flipsSameFrames: 0, longestRun: 0 });
+  assert.strictEqual(S.wordStability([cd(null, a), cd(null, a), cd('sideways', a)], null).longestRun, 0, 'candles with no stated word are no run, however many');
+  // frames compared as the three words; a changed 4h alone is a change
+  assert.strictEqual(S.wordStability([cd('chop', a), cd('unclear', f3('up', 'down', 'range'))], null).flipsSameFrames, 0);
+});
+
+test('word stability: consecutive means candle-adjacent (a gap in the candles breaks the pair and the run); a partly stated frames object is no pair', () => {
+  const same = f3('down', 'down', 'range');
+  const at = (rel, word, frames = same) => ({ rel, word, frames, inTrade: false });
+  const gap = S.wordStability([at(0, 'chop'), at(2, 'trend-down'), at(3, 'trend-down')], 'short');
+  assert.deepStrictEqual([gap.pairsSameFrames, gap.flipsSameFrames, gap.longestRun], [1, 0, 2], 'rel 0 and 2 are not consecutive: only 2-3 is a pair, and the chop run does not reach across the gap');
+  const run = S.wordStability([at(0, 'chop'), at(2, 'chop'), at(3, 'chop')], 'short');
+  assert.strictEqual(run.longestRun, 2);
+  const partial = { '4h': 'down', '1h': null, '15m': null };
+  const p = S.wordStability([at(0, 'chop', partial), at(1, 'trend-down', partial)], 'short');
+  assert.deepStrictEqual([p.pairsSameFrames, p.flipsSameFrames], [0, 0], 'a frame word not stated on both candles is not an unchanged frame');
+});
+
+test('word stability totals add the cases by kind', () => {
+  const x = S.wordStability(['chop', 'unclear'].map(w => cd(w, f3('range', 'range', 'range'))), null);
+  const y = S.wordStability([cd('trend-up', f3('up', 'up', 'up')), cd('trend-up', f3('up', 'up', 'up'))], 'long');
+  assert.deepStrictEqual(S.tallyWordStability([x, y]), {
+    cases: 2, candles: 4, byWordVsFrames: { agrees: 4, contradicts: 0, unstated: 0 }, inTradeByWordVsFrames: { agrees: 0, contradicts: 0, unstated: 0 },
+    wordVsSide: { same: 2, opposite: 0, chop: 0, unclear: 0, unstated: 0 }, pairsSameFrames: 2, flipsSameFrames: 1, longestRun: 2,
+  });
+});

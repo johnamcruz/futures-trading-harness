@@ -1734,6 +1734,22 @@ frames that say nothing (all `unknown` or `transition`) counts as `agrees`. It i
 grade: it reads only what the record holds, uses no later price and
 changes nothing.
 
+The same rule is also applied to **every candle** the case covers, not only
+the entries (`scorer.js` `wordStability`; the aggregate line "The class word
+against its own frames, every candle"). Per case, and totalled by kind: the
+candles by `wordVsFrames` (`agrees`, `contradicts`, `unstated`), with the
+in-trade candles also counted apart (an open trade's read is still a read);
+for a trend leg only, `wordVsSide`, the word against the leg's known side
+(`same`, `opposite`, `chop`, `unclear`, `unstated`), a reporting bucket
+against the answer key that the model never sees; and persistence: the
+number of class-word changes between candle-adjacent cycles (a gap in the
+candles breaks the pair and the run) whose three frame words did not change
+(each stated on both, and the same; both words stated; the number of such
+pairs is printed beside it), and the longest run of one stated word. A word
+that changes while the model's own frames stand still is an instability of
+the read, not a view of the market: it is counted, never graded, and uses no
+later price, no gate and no question to the model.
+
 Frozen definitions:
 
 - **The model's vocabulary is closed**: `trend-up`, `trend-down`, `chop`,
