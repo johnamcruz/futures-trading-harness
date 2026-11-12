@@ -281,6 +281,18 @@ test('word stability: a frames change is not a flip; an unstated word or frame b
   assert.strictEqual(S.wordStability([cd('chop', a), cd('unclear', f3('up', 'down', 'range'))], null).flipsSameFrames, 0);
 });
 
+test('word stability: consecutive means candle-adjacent (a gap in the candles breaks the pair and the run); a partly stated frames object is no pair', () => {
+  const same = f3('down', 'down', 'range');
+  const at = (rel, word, frames = same) => ({ rel, word, frames, inTrade: false });
+  const gap = S.wordStability([at(0, 'chop'), at(2, 'trend-down'), at(3, 'trend-down')], 'short');
+  assert.deepStrictEqual([gap.pairsSameFrames, gap.flipsSameFrames, gap.longestRun], [1, 0, 2], 'rel 0 and 2 are not consecutive: only 2-3 is a pair, and the chop run does not reach across the gap');
+  const run = S.wordStability([at(0, 'chop'), at(2, 'chop'), at(3, 'chop')], 'short');
+  assert.strictEqual(run.longestRun, 2);
+  const partial = { '4h': 'down', '1h': null, '15m': null };
+  const p = S.wordStability([at(0, 'chop', partial), at(1, 'trend-down', partial)], 'short');
+  assert.deepStrictEqual([p.pairsSameFrames, p.flipsSameFrames], [0, 0], 'a frame word not stated on both candles is not an unchanged frame');
+});
+
 test('word stability totals add the cases by kind', () => {
   const x = S.wordStability(['chop', 'unclear'].map(w => cd(w, f3('range', 'range', 'range'))), null);
   const y = S.wordStability([cd('trend-up', f3('up', 'up', 'up')), cd('trend-up', f3('up', 'up', 'up'))], 'long');

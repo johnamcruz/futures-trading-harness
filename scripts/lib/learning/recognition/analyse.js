@@ -129,7 +129,7 @@ function analyse(cse, candles, { minutes }) {
     out.sitRate = flat.length ? flat.filter(c => c.read.kind === 'pass').length / flat.length : null;
   }
   // Over every traced candle, in-trade ones included (their own column): the class word against its own frames, flips.
-  out.wordStability = S.wordStability(P.map(c => ({ word: c.model, frames: c.read.frames || null, inTrade: !c.flat })), side);
+  out.wordStability = S.wordStability(P.map(c => ({ rel: c.rel, word: c.model, frames: c.read.frames || null, inTrade: !c.flat })), side);
   return { ...out, _candles: P, _inLeg: legW };
 }
 

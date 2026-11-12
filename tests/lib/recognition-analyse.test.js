@@ -215,3 +215,10 @@ test('every case carries its word stability over all candles (in-trade included,
   const none = A.analyse(CHOP, [mk(0, false), mk(1, false)], { minutes: 3 });
   assert.deepStrictEqual(none.wordStability.byWordVsFrames, { agrees: 0, contradicts: 0, unstated: 2 }, 'a run without the class word: unstated, never filled in');
 });
+
+test('summary: a case that is not in the runs adds nothing to the word stability or entry tallies and never throws', () => {
+  const real = A.analyse(CHOP, [mk(0, true, { word: 'chop' })], { minutes: 3 });
+  const missing = { ...A.analyse({ ...CHOP, id: 'x' }, [mk(0, true)], { minutes: 3 }), notInRuns: true, wordStability: undefined, entries: undefined };
+  const s = A.summarize([real, missing], { level: 0.95 });
+  assert.strictEqual(s.wordStability.chop.cases, 1);
+});

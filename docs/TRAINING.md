@@ -1742,8 +1742,9 @@ in-trade candles also counted apart (an open trade's read is still a read);
 for a trend leg only, `wordVsSide`, the word against the leg's known side
 (`same`, `opposite`, `chop`, `unclear`, `unstated`), a reporting bucket
 against the answer key that the model never sees; and persistence: the
-number of class-word changes between consecutive candles whose three frame
-words did not change (both words and both frames stated; the number of such
+number of class-word changes between candle-adjacent cycles (a gap in the
+candles breaks the pair and the run) whose three frame words did not change
+(each stated on both, and the same; both words stated; the number of such
 pairs is printed beside it), and the longest run of one stated word. A word
 that changes while the model's own frames stand still is an instability of
 the read, not a view of the market: it is counted, never graded, and uses no

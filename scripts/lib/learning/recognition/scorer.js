@@ -101,11 +101,11 @@ function tallyEntryWords(entries) {
 
 const zeroVs = () => ({ agrees: 0, contradicts: 0, unstated: 0 });
 const SIDE_WORD = Object.freeze({ long: 'trend-up', short: 'trend-down' });
-const sameFrames = (a, b) => FRAME_KEYS.every(k => a[k] === b[k]);
+const sameFrames = (a, b) => FRAME_KEYS.every(k => a[k] !== null && a[k] === b[k]); // a frame word stated on both candles, the same
 
 /**
  * The class word against the model's own frames over every candle of a case (measurement only; recorded fields, no
- * hindsight). candles in order: { word (closed word | null), frames (framesOf | null), inTrade }.
+ * hindsight). candles in order: { rel (optional), word (closed word | null), frames (framesOf | null), inTrade }.
  *   byWordVsFrames / inTradeByWordVsFrames   wordVsFrames per candle, all candles and the in-trade ones apart
  *   wordVsSide      a trend leg only (side long | short): the word against the leg's known side, a reporting bucket
  *                   (same | opposite | chop | unclear | unstated), never shown to the model
@@ -121,7 +121,9 @@ function wordStability(candles, side) {
     r.byWordVsFrames[v] += 1;
     if (c.inTrade) r.inTradeByWordVsFrames[v] += 1;
     if (r.wordVsSide) r.wordVsSide[w === null ? 'unstated' : w === 'chop' || w === 'unclear' ? w : w === SIDE_WORD[side] ? 'same' : 'opposite'] += 1;
-    const p = i > 0 ? candles[i - 1] : null;
+    // The previous candle only when it is the adjacent one (rel, when the rows carry it): a gap breaks the pair and the run.
+    const prev = i > 0 ? candles[i - 1] : null;
+    const p = prev && (c.rel === undefined || prev.rel === c.rel - 1) ? prev : null;
     run = w !== null && p && p.word === w ? run + 1 : w !== null ? 1 : 0;
     r.longestRun = Math.max(r.longestRun, run);
     if (w !== null && p && WORDS.includes(p.word) && p.frames && c.frames && sameFrames(p.frames, c.frames)) {
