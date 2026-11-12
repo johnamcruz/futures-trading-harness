@@ -1667,6 +1667,176 @@ Limits:
   from the bars is counted the same way. Neither is scored against another
   lane's bars.
 
+### The recognition test
+
+`node scripts/recognition.js --run <run home | runs folder | replay run dir>...
+[--bars MNQ=<data file>] [--cases <file> --cases-sha <sha256>] [--tree <dir>]
+[--json]` measures, candle by candle and from what was visible then, when
+the model recognises a setup whose class is already known
+(`scripts/lib/learning/recognition/`). It is read-only measurement. It does
+not predict, filter or gate. Nothing that decides reads it: not the gate,
+compose_check, sizing, the exits, the runner, the briefing, a prompt or a
+skill. The model is asked nothing. Every input and every label of a read
+uses only bars closed by that candle. Hindsight (a leg's available R)
+appears only in a separate PASS CHECK block and never grades a read.
+
+The known setups are the answer key: a frozen list of trend legs and chop
+days (`config/recognition-cases.json`). The label picks which cases to test
+and never reaches the model. The list is refused unless its bytes hash to
+`config/recognition.json` `casesSha256`, so it is frozen before any run.
+Another list is taken only with its own sha256 (`--cases-sha`). The
+thresholds below live in `config/recognition.json`; a changed value needs
+a new `version` and a reason in the pull request. The list's free-text
+fields (`selectedBy`, `circularNote`, the rule names) name the local
+benchmark files it was frozen with, which are not in the repository; they
+stay as written because an edit would change the frozen sha256. The repo's
+equivalents are `key.js` `evidenceWord` and `codedWord`.
+
+The five measures, per case:
+
+1. **First recognition**: the first candle where the model's class word
+   names the known class, against the first candle where the visible
+   evidence supports it. Naming it before that candle is a `guess`, on it
+   `on`, after it `lag`, with the delay in candles. The coded read's first
+   candle (the briefing's labels restated) is reported beside the model's;
+   what the model adds is the gap between them.
+2. **Evidence then**: at the evidence's, the coded read's and the model's
+   first candles, the signals met and the confluence for the side (the
+   required flow steps met, confirmed or not, `declaredOf`). At the model's
+   candle, the fields it cited against the fields carrying a met signal:
+   cited, ignored (met, not cited), cited without a signal, and off the
+   list.
+3. **Entry**: the entry candle against the first candle where the harness's
+   confirmation rule holds (before, on or after, in candles), and the
+   sit-outs while confirmed.
+4. **Chop days**: whether the model names chop, at which candle, its sit
+   rate, and every entry with its present class and confluence, flagged
+   before the naming or not.
+5. **Misses**: a trend leg the model never recognises within the margin,
+   with what the evidence showed in the leg (the evidence and coded words
+   per candle, the confirmed candles, the mean flow steps met).
+
+Frozen definitions:
+
+- **The model's vocabulary is closed**: `trend-up`, `trend-down`, `chop`,
+  `unclear`. The case buckets (trend legs, chop days, and the entry classes
+  A-D) are reporting groups the model never names. The class word and the
+  cited fields arrive on the cycle's STATE record as `classWord`,
+  `cites` (always a list), `citesStated` and `citesDropped`. They are read
+  by equality only, never parsed from the line's text or from prose. A
+  record without `classWord` is `absent`: when every candle of a case is,
+  the case is reported as "needs the class word in the run" (a case with
+  no traced candle at all is "no candles" instead). `classWord` null is
+  `unstated` (coverage). Anything else off the list is `invalid` and never
+  a naming. An absent or unstated word is never filled in from the coded
+  read, per candle or per case. The cites follow `citesStated`: `absent`
+  (no cites written) is unstated, so nothing counts as ignored; `none` is
+  a statement that nothing was cited; `names` gives the list.
+- **The closed cite list** (`scorer.js` `CITE_FIELDS`, the STATE record's
+  own list): `4h-trend`, `1h-trend`, `15m-trend`, `trend-rule`, `regime`,
+  `day-type`, `day-so-far`, `pullback`, `1h-break`, `15m-break`,
+  `3m-break`. A name off the list is counted apart (the record's own
+  dropped count, and any other name kept off the list), never matched
+  loosely. A met signal's field maps to its cite name (the 15m to
+  `15m-trend`, the Bias line to `trend-rule`); the VWAP crosses and the
+  declared trend have none, so they are listed as met but uncitable, never
+  as ignored.
+- **The evidence word** (the reference for guess and lag): with exactly one
+  side the trend rule allows (the Bias line's sides), that side's signal
+  class C reads `trend-<way>`, B reads `chop`, A or D reads `unclear`. With
+  no such side, the side-free signals' class B reads `chop`, else
+  `unclear`. The signals per side, each a present fact of the candle's
+  briefing: the day so far rotational (C1) or directional the side's way
+  (T1); the 15m range (C2), the side's way (T2) or against (C9); the 3m
+  regime range (C3), the side's way (T3) or against (C9, once); the Bias
+  line naming no side (C4); session VWAP crosses at or above
+  `signals.crossesChop` (C7) or at or below `signals.crossesTrendMax` with
+  price on the side's side (T6); inside the initial balance after opening
+  inside the prior value area (C8) or an IB trend day the side's way (T7);
+  the day's trend declared for the side (T5). Class A: no signal; C: trend
+  only; B: chop outnumbers trend; D: both, trend at least chop.
+- **The coded read**: the day so far rotational reads `chop`; else the 4h
+  and 1h agreeing up or down read `trend-<way>`; else the 15m and the 3m
+  regime both ranging read `chop`; else `unclear`. It is never the
+  model's.
+- **Confirmation, one rule**: `barFacts.valid` for the side at the candle
+  (the entry check: the window allows entries, the trend rule allows the
+  side, the entry rule including `declaredOf`, a standard plan or a
+  combination of verified reads passing R:R, room and the stop floor), with
+  the plan and entry rule compose_check uses. The required flow steps met
+  (bias, location, setup, stop, target) and `declaredOf` are reported
+  beside it, never as a second definition. The prop size chain is not
+  checked.
+- **The grid**: the runner's head trade cycles, one candle per bar close.
+  rel 0 is the first candle whose close is the setup start plus one bar (a
+  trend leg's census start bar; a chop day's window open). An in-trade
+  cycle (a managed result, or an open position or working order) is
+  counted and labelled, never a sit-out or an entry decision.
+- **The matching rule**: a recognition counts only if the named class is
+  right, not before the evidence candle, and within the case's margin,
+  frozen before any run (`margins`: 5 candles for a trend leg, 10 for a
+  chop day). A later naming is a miss.
+- **False alarms**: on a case, the candles naming the opposite kind (a
+  trend word on a chop day, `chop` on a trend leg) over the candles naming
+  a trend or chop word. A trend word the other way on a trend leg is
+  reported apart as `wrongWay`.
+- **Pace**: a leg spanning at most `sharpMaxCandles` (7) candles is
+  `sharp`, else `slow`; recognition is listed by pace, cases named.
+- **Circularity**: a case picked using words the model sees is flagged
+  (`circular`) and reported apart.
+- **The chop label v2** (bars only; it picks chop days and is recomputed
+  on the run's bars beside the frozen values): on the base bars opening
+  inside `chopLabel.window` (09:30-12:00 New York), with at least
+  `chopLabel.minBars` (40) of them; path efficiency = |last close - first
+  open| / the closes' path; chop when efficiency <= 1/sqrt(n) (a driftless
+  random walk's expectation, derived) and |net move| <= `netAtrMax` (1.5)
+  ATR and range >= `rangeAtrMin` (3) ATR, ATR being Wilder's
+  `atrPeriod` (14). It uses no briefing word, but path efficiency is the
+  same family of idea as the day so far's efficiency, so their agreement
+  is a diagnostic, not independence.
+
+The report aggregates only trend vs chop, with n and the cases listed:
+recall (cases recognised within the margin) with the coded read's beside
+it, precision, the false-alarm rate, the wrong-way count, delay against
+accuracy per case, and the always-trend and always-chop baselines against
+the evidence word per candle. Per-class splits are n of 1 to 5 and are
+listed, never averaged. Recall, precision and the false-alarm rates carry
+a Wilson interval at `intervalLevel` (95%), so a rate on n of 5 shows how
+little it pins down.
+
+Supplementary columns, labelled SUPPLEMENTARY in the report. They sit
+beside the frozen measures and change none of them:
+
+- The first naming at or after the evidence candle (with its delay and
+  whether it is within the margin), per case and as a count. It exists
+  because a model that names `trend-up` before the evidence and holds it
+  scores a `guess` by the frozen rule, and a leg it then never re-names
+  is a miss.
+- A trend leg's false alarms inside the leg window, beside the whole-day
+  rate. It exists because a right `chop` word before a late leg starts
+  counts as a false alarm over the whole day.
+
+The leak test (`tests/lib/recognition-trace.test.js`): perturbing,
+poisoning or deleting every bar after a candle, 3m and 1m, leaves its trace
+identical, the confluence layer included. Changing the last closed 3m or 1m
+bar does change it, so the test can fail.
+
+Limits:
+
+- Until the class word is on the STATE line, a run records neither field.
+  Then only entry vs confirmation, the confluence at the entry and the
+  evidence and coded first candles are computable; every model measure
+  says "needs the class word in the run". The coded read is never offered
+  as a recognition (it agrees with itself by construction).
+- The memorization control (re-asking recorded cycles with dates and
+  symbols masked) and the run-to-run noise floor are model runs; this tool
+  makes none. `scorer.js` `maskedChanged` is the pure comparison for when
+  they are run.
+- The briefing is rebuilt from the bars given; a roll or a back-adjusted
+  series can make it differ from the one the model saw (never a leak).
+- A run home is read once: its cycle logs are the home's, so two replay
+  runs in one home are one run here.
+
 ## 5. Stage 2: pass prop
 
 The `stage: 2` preset is stage 1 plus:

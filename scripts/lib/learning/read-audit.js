@@ -38,6 +38,7 @@
  *
  *   FIELDS, CLASSES, CONSISTENCY
  *   readSide(read)                        'long' | 'short' | null
+ *   kindOf({ decision, orders, result })   { kind: entry | pass | in-trade, side } (learning/cycle-kind.js, re-exported)
  *   inconsistencies(read, side)           the CONSISTENCY keys an entry on that side breaks
  *   forwardMove({ bars, cycleT, side, forwardBars, stopAtr })   { R, stopped, stop, bars, why }
  *   auditDecision({ day, t, symbol, stateRead, decision, orders, result, bars, cfg, barClose, tfMs })   one row (barClose,
@@ -46,6 +47,7 @@
  *   renderAudit(summary)                  the report as text
  *   loadDecisions(paths)                  decision records (<run>-decisions.json, scorecard.jsonl) by key
  *   replayDirs(target)                    the replay run dirs under a run home, a runs folder or a replay run dir
+ *                                         (learning/cycle-kind.js, re-exported)
  *   runRows(target, { decisions, cfg, days, barsFiles })   { runId, rows } of one run; barsFiles { SYMBOL: data file }
  *                                         (the data the run replayed, the scorecard's --bars): the bars the outcome
  *                                         reads, for a forward window past the run's own archive (a short run's last bars)
@@ -140,19 +142,9 @@ function forwardMove({ bars, cycleT, side, forwardBars = CFG.forwardBars, stopAt
   return { R: round4((dir * (after[after.length - 1].c - entry)) / stop), stopped: false, stop, bars: after.length, why: null };
 }
 
-const outcomeWord = result => ((/CYCLE RESULT:[\s*_`]*([a-z][a-z-]*)/i.exec(String(result || '')) || [])[1] || '').toLowerCase();
-
-/** The decision's kind and side: its record's when joined, else the cycle's own (a managed result, an allowed order). */
-function kindOf({ decision, orders, result }) {
-  if (isObj(decision)) {
-    if (decision.inTrade === true || decision.decision === 'in-trade') return { kind: 'in-trade', side: null };
-    const a = isObj(decision.actual) ? decision.actual.action : null;
-    return a === 'long' || a === 'short' ? { kind: 'entry', side: a } : { kind: 'pass', side: null };
-  }
-  if (outcomeWord(result) === 'managed') return { kind: 'in-trade', side: null };
-  const o = (Array.isArray(orders) ? orders : []).find(x => isObj(x) && x.gate === 'allowed' && (x.side === 'buy' || x.side === 'sell'));
-  return o ? { kind: 'entry', side: o.side === 'buy' ? 'long' : 'short' } : { kind: 'pass', side: null };
-}
+// The decision's kind and side (its record's when joined, else the cycle's own) and the run's replay dirs: one home,
+// learning/cycle-kind.js, shared with the recognition test.
+const { kindOf, replayDirs } = require('./cycle-kind');
 
 /** Column 1: the read as recorded. */
 const readColumn = s => (isObj(s) && isObj(s.read) ? { status: s.status, frames: { ...s.read.frames }, agree: s.read.agree ?? null } : isObj(s) ? { status: s.error ? 'error' : s.status || null, frames: null, agree: null } : null);
@@ -344,13 +336,6 @@ function joinOf(byKey, key, runId) {
   return list.find(r => r.run && (r.run === runId || runId.endsWith(`-${r.run}`))) || list.find(r => !r.run) || null;
 }
 
-const hasManifest = d => fs.existsSync(path.join(d, 'manifest.json'));
-const subdirs = d => { try { return fs.readdirSync(d, { withFileTypes: true }).filter(e => e.isDirectory()).map(e => path.join(d, e.name)).sort(); } catch (_err) { return []; } };
-function replayDirs(target) {
-  if (hasManifest(target)) return [target];
-  const own = subdirs(path.join(target, 'replay')).filter(hasManifest);
-  return own.length ? own : subdirs(target).flatMap(h => subdirs(path.join(h, 'replay')).filter(hasManifest));
-}
 
 const dataBars = new Map(); // file|tf -> bars, read once a process
 const dataOf = (file, tf) => { const k = `${file}|${tf}`; if (!dataBars.has(k)) dataBars.set(k, outcomeBarsFrom(file, tf)); return dataBars.get(k); };
@@ -382,4 +367,4 @@ function runRows(target, { decisions = null, cfg = CFG, days = null, barsFiles =
   return { runId, rows };
 }
 
-module.exports = { FIELDS, CLASSES, CONSISTENCY, readSide, inconsistencies, forwardMove, auditDecision, summarize, renderAudit, loadDecisions, replayDirs, runRows };
+module.exports = { FIELDS, CLASSES, CONSISTENCY, readSide, kindOf, inconsistencies, forwardMove, auditDecision, summarize, renderAudit, loadDecisions, replayDirs, runRows };

@@ -1,0 +1,177 @@
+{
+ "version": "v2",
+ "supersedes": "data/present-cases.json (v1, unedited)",
+ "frozenAt": "2026-11-12 after the chop label thresholds were written, before any model run",
+ "grid": "the runner 3m cycles; rel 0 = the first candle whose close is start+3m (trend: the census leg start bar; chop: the 09:30 ET open bar)",
+ "confirmationRule": "barFacts.valid for the side (the entry check: window, trend rule, entry rule incl. declaredOf, R:R, room, stop floor); items reported: required flow steps met, declaredOf",
+ "evidenceRule": "present-key.evidenceWord",
+ "codedRule": "present-key.codedWord",
+ "marginCandlesNote": "frozen in RECOGNITION-TEST.md B: 5 candles trend, 10 chop",
+ "cases": [
+  {
+   "day": "2021-08-03",
+   "kind": "chop",
+   "side": null,
+   "start": "2021-08-03T09:30 America/New_York",
+   "end": null,
+   "legCandles": null,
+   "pace": null,
+   "margin": 10,
+   "selectedBy": "bars-only chop label v2 (RECOGNITION-TEST.md A): dev chop-set days with >=40 cycles, passing, ranked sha256(\"recog-chop-v2|day\"), distinct months",
+   "circular": false,
+   "circularNote": "label uses 3m bar prices only (path efficiency, net move and range in ATR); no day-so-far or briefing word. Same family of idea as day-so-far efficiency: agreement reported as a diagnostic",
+   "label": {
+    "efficiency": 0.0362,
+    "netAtr": 1.138,
+    "rangeAtr": 7.758,
+    "n": 50
+   }
+  },
+  {
+   "day": "2021-09-07",
+   "kind": "chop",
+   "side": null,
+   "start": "2021-09-07T09:30 America/New_York",
+   "end": null,
+   "legCandles": null,
+   "pace": null,
+   "margin": 10,
+   "selectedBy": "bars-only chop label v2 (RECOGNITION-TEST.md A): dev chop-set days with >=40 cycles, passing, ranked sha256(\"recog-chop-v2|day\"), distinct months",
+   "circular": false,
+   "circularNote": "label uses 3m bar prices only (path efficiency, net move and range in ATR); no day-so-far or briefing word. Same family of idea as day-so-far efficiency: agreement reported as a diagnostic",
+   "label": {
+    "efficiency": 0.0433,
+    "netAtr": 1.238,
+    "rangeAtr": 6.513,
+    "n": 50
+   }
+  },
+  {
+   "day": "2021-11-01",
+   "kind": "chop",
+   "side": null,
+   "start": "2021-11-01T09:30 America/New_York",
+   "end": null,
+   "legCandles": null,
+   "pace": null,
+   "margin": 10,
+   "selectedBy": "bars-only chop label v2 (RECOGNITION-TEST.md A): dev chop-set days with >=40 cycles, passing, ranked sha256(\"recog-chop-v2|day\"), distinct months",
+   "circular": false,
+   "circularNote": "label uses 3m bar prices only (path efficiency, net move and range in ATR); no day-so-far or briefing word. Same family of idea as day-so-far efficiency: agreement reported as a diagnostic",
+   "label": {
+    "efficiency": 0.0074,
+    "netAtr": 0.243,
+    "rangeAtr": 9.713,
+    "n": 50
+   }
+  },
+  {
+   "day": "2021-12-01",
+   "kind": "chop",
+   "side": null,
+   "start": "2021-12-01T09:30 America/New_York",
+   "end": null,
+   "legCandles": null,
+   "pace": null,
+   "margin": 10,
+   "selectedBy": "bars-only chop label v2 (RECOGNITION-TEST.md A): dev chop-set days with >=40 cycles, passing, ranked sha256(\"recog-chop-v2|day\"), distinct months",
+   "circular": false,
+   "circularNote": "label uses 3m bar prices only (path efficiency, net move and range in ATR); no day-so-far or briefing word. Same family of idea as day-so-far efficiency: agreement reported as a diagnostic",
+   "label": {
+    "efficiency": 0.0032,
+    "netAtr": -0.088,
+    "rangeAtr": 6.917,
+    "n": 50
+   }
+  },
+  {
+   "day": "2022-04-25",
+   "kind": "chop",
+   "side": null,
+   "start": "2022-04-25T09:30 America/New_York",
+   "end": null,
+   "legCandles": null,
+   "pace": null,
+   "margin": 10,
+   "selectedBy": "bars-only chop label v2 (RECOGNITION-TEST.md A): dev chop-set days with >=40 cycles, passing, ranked sha256(\"recog-chop-v2|day\"), distinct months",
+   "circular": false,
+   "circularNote": "label uses 3m bar prices only (path efficiency, net move and range in ATR); no day-so-far or briefing word. Same family of idea as day-so-far efficiency: agreement reported as a diagnostic",
+   "label": {
+    "efficiency": 0.0205,
+    "netAtr": -0.605,
+    "rangeAtr": 6.207,
+    "n": 50
+   }
+  },
+  {
+   "day": "2021-06-11",
+   "kind": "trend",
+   "side": "long",
+   "start": "2021-06-11T13:30:00.000Z",
+   "end": "2021-06-11T13:51:00.000Z",
+   "legCandles": 8,
+   "pace": "slow",
+   "margin": 5,
+   "selectedBy": "leg census detector on bars (trend-capture legsOf) and size 4-5.5R from the ledger availableR; FIXED-SET.md",
+   "circular": false,
+   "circularNote": "bars-only definition; but the trend-set day label (SPLIT.json) is hindsight and the arm B outcome class selects the T bucket, never the case",
+   "availableR": 5.53
+  },
+  {
+   "day": "2021-09-01",
+   "kind": "trend",
+   "side": "long",
+   "start": "2021-09-01T13:30:00.000Z",
+   "end": "2021-09-01T13:48:00.000Z",
+   "legCandles": 7,
+   "pace": "sharp",
+   "margin": 5,
+   "selectedBy": "leg census detector on bars (trend-capture legsOf) and size 4-5.5R from the ledger availableR; FIXED-SET.md",
+   "circular": false,
+   "circularNote": "bars-only definition; but the trend-set day label (SPLIT.json) is hindsight and the arm B outcome class selects the T bucket, never the case",
+   "availableR": 4.03
+  },
+  {
+   "day": "2022-03-07",
+   "kind": "trend",
+   "side": "short",
+   "start": "2022-03-07T16:18:00.000Z",
+   "end": "2022-03-07T16:39:00.000Z",
+   "legCandles": 8,
+   "pace": "slow",
+   "margin": 5,
+   "selectedBy": "leg census detector on bars (trend-capture legsOf) and size 4-5.5R from the ledger availableR; FIXED-SET.md",
+   "circular": false,
+   "circularNote": "bars-only definition; but the trend-set day label (SPLIT.json) is hindsight and the arm B outcome class selects the T bucket, never the case",
+   "availableR": 7.64
+  },
+  {
+   "day": "2022-04-11",
+   "kind": "trend",
+   "side": "short",
+   "start": "2022-04-11T13:48:00.000Z",
+   "end": "2022-04-11T14:48:00.000Z",
+   "legCandles": 21,
+   "pace": "slow",
+   "margin": 5,
+   "selectedBy": "leg census detector on bars (trend-capture legsOf) and size 4-5.5R from the ledger availableR; FIXED-SET.md",
+   "circular": false,
+   "circularNote": "bars-only definition; but the trend-set day label (SPLIT.json) is hindsight and the arm B outcome class selects the T bucket, never the case",
+   "availableR": 5.05
+  },
+  {
+   "day": "2022-05-23",
+   "kind": "trend",
+   "side": "short",
+   "start": "2022-05-23T13:48:00.000Z",
+   "end": "2022-05-23T14:03:00.000Z",
+   "legCandles": 6,
+   "pace": "sharp",
+   "margin": 5,
+   "selectedBy": "leg census detector on bars (trend-capture legsOf) and size 4-5.5R from the ledger availableR; FIXED-SET.md",
+   "circular": false,
+   "circularNote": "bars-only definition; but the trend-set day label (SPLIT.json) is hindsight and the arm B outcome class selects the T bucket, never the case",
+   "availableR": 4.46
+  }
+ ]
+}
