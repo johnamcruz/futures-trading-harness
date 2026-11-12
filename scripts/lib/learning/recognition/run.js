@@ -18,7 +18,7 @@
  * (autotrader.js recordedBars), with its round-number steps and blackouts, as trend-facts.attachFacts rebuilds it.
  *
  *   kindOf, replayDirs                                  learning/cycle-kind.js's (re-exported)
- *   readOf(cycle)                                       { kind, side, word, basis (its cites) }
+ *   readOf(cycle)                                       { kind, side, word, frames (its stated frame words), basis (its cites) }
  *   recognitionReport({ targets, barsFiles, tree, definitions, cases, casesSha256, fingerprint })
  *       -> { runs, casesSha256, definitions, coverage, cases (analyses, each with its run and the chop label beside the
  *          frozen one), summary, pass (hindsight: availableR only) }
@@ -47,7 +47,7 @@ function readOf(cycle) {
   const acct = isObj(cycle.context) && isObj(cycle.context.account) ? cycle.context.account : null;
   const holding = acct && (count(acct.positions) > 0 || count(acct.workingOrders) > 0);
   const sr = isObj(cycle.stateRead) ? cycle.stateRead : null;
-  return { kind: holding ? 'in-trade' : k.kind, side: holding ? null : k.side, word: S.wordOf(sr), basis: S.citesOf(sr) };
+  return { kind: holding ? 'in-trade' : k.kind, side: holding ? null : k.side, word: S.wordOf(sr), frames: S.framesOf(sr), basis: S.citesOf(sr) };
 }
 
 /** Each run home under the targets (once; its first replay run's config), with its trade cycles by day. */

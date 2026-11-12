@@ -193,3 +193,45 @@ test('entry vs confirmation: before / on / after in candles; in-trade cycles are
 test('memorization control (item 11), pure part: which recorded cycles changed their word when dates are masked', () => {
   assert.deepStrictEqual(S.maskedChanged([{ id: 'a', word: 'chop' }, { id: 'b', word: 'trend-up' }, { id: 'c', word: 'chop' }], [{ id: 'a', word: 'chop' }, { id: 'b', word: 'chop' }]), { compared: 2, changed: ['b'] });
 });
+
+test('the model\'s word against its own frames: a fixed equality rule, pinned (never the briefing, never the evidence)', () => {
+  assert.deepStrictEqual(S.FRAME_KEYS, ['4h', '1h', '15m']);
+  const f = (a, b, c) => ({ '4h': a, '1h': b, '15m': c });
+  const w = S.wordVsFrames;
+  // trend words contradict when 4h and 1h are both range, or 4h or 1h is the opposite way; a 15m pullback does not
+  assert.strictEqual(w('trend-up', f('range', 'range', 'up')), 'contradicts');
+  assert.strictEqual(w('trend-down', f('range', 'range', 'range')), 'contradicts');
+  assert.strictEqual(w('trend-up', f('up', 'down', 'up')), 'contradicts');
+  assert.strictEqual(w('trend-down', f('up', 'down', 'down')), 'contradicts');
+  assert.strictEqual(w('trend-up', f('up', 'range', 'range')), 'agrees', 'one frame ranging is not both');
+  assert.strictEqual(w('trend-up', f('up', 'up', 'down')), 'agrees', '15m against is a pullback, not a contradiction');
+  assert.strictEqual(w('trend-up', f('transition', 'unknown', 'range')), 'agrees');
+  assert.strictEqual(w('trend-down', f('down', 'down', 'range')), 'agrees');
+  // chop contradicts only when 4h, 1h and 15m are the same non-range direction
+  assert.strictEqual(w('chop', f('up', 'up', 'up')), 'contradicts');
+  assert.strictEqual(w('chop', f('down', 'down', 'down')), 'contradicts');
+  assert.strictEqual(w('chop', f('up', 'up', 'range')), 'agrees');
+  assert.strictEqual(w('chop', f('range', 'range', 'range')), 'agrees');
+  assert.strictEqual(w('chop', f('up', 'down', 'up')), 'agrees');
+  assert.strictEqual(w('unclear', f('up', 'up', 'up')), 'agrees', 'unclear contradicts nothing');
+  // unstated: no word, or no frames stated
+  assert.strictEqual(w(null, f('up', 'up', 'up')), 'unstated');
+  assert.strictEqual(w('chop', null), 'unstated');
+});
+
+test('frames are read from the STATE record by equality: closed words only, a missing or odd one is null, no read is null', () => {
+  assert.deepStrictEqual(S.framesOf({ read: { frames: { '4h': 'range', '1h': 'up', '15m': 'sideways' } } }), { '4h': 'range', '1h': 'up', '15m': null });
+  assert.deepStrictEqual(S.framesOf({ read: { frames: { '4h': 'up' } } }), { '4h': 'up', '1h': null, '15m': null });
+  assert.strictEqual(S.framesOf({ status: 'none', read: null }), null);
+  assert.strictEqual(S.framesOf({ line: 'STATE: 4h up' }), null, 'never parsed from the line');
+  assert.strictEqual(S.framesOf(null), null);
+  assert.strictEqual(S.framesOf({ read: { frames: { '4h': null, '1h': null, '15m': null } } }), null, 'no frame stated at all');
+});
+
+test('entry words tally by the model\'s word and by word vs frames; unstated, absent and invalid words are `unstated`', () => {
+  const e = (modelWord, wordVsFrames) => ({ modelWord, wordVsFrames });
+  assert.deepStrictEqual(S.tallyEntryWords([e('unclear', 'agrees'), e('trend-up', 'contradicts'), e('trend-up', 'agrees'), e(null, 'unstated')]), {
+    n: 4, byWord: { 'trend-up': 2, 'trend-down': 0, chop: 0, unclear: 1, unstated: 1 }, byWordVsFrames: { agrees: 2, contradicts: 1, unstated: 1 },
+  });
+  assert.deepStrictEqual(S.tallyEntryWords([]), { n: 0, byWord: { 'trend-up': 0, 'trend-down': 0, chop: 0, unclear: 0, unstated: 0 }, byWordVsFrames: { agrees: 0, contradicts: 0, unstated: 0 } });
+});

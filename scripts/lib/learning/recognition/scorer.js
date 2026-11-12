@@ -34,6 +34,10 @@
  *                                          Wilson interval at level), the coded read's recall beside, SUPPLEMENTARY columns
  *                                          (recalled from the evidence candle on; the false-alarm rate in the leg windows,
  *                                          case.inLeg), delay vs accuracy per case, by pace (listed)
+ *   framesOf(record)                       the record's stated frame words ({ '4h', '1h', '15m' }, each a closed word or null), or null
+ *   wordVsFrames(word, frames)             the model's word against its own frames: agrees | contradicts | unstated (the rule
+ *                                          at the constant below; docs/TRAINING.md "The recognition test"; pinned by a test)
+ *   tallyEntryWords(entries)               { n, byWord (trend-up, trend-down, chop, unclear, unstated), byWordVsFrames }
  *   entryVsConfirmed(candles)              the entry against the first confirmed candle; in-trade cycles counted apart
  *   maskedChanged(real, masked)            item 11's pure part: the cycle ids whose word changed when dates are masked
  */
@@ -47,6 +51,18 @@ const WORDS = Object.freeze(['trend-up', 'trend-down', 'chop', 'unclear']);
 const CITE_FIELDS = Object.freeze(['4h-trend', '1h-trend', '15m-trend', 'trend-rule', 'regime', 'day-type', 'day-so-far', 'pullback', '1h-break', '15m-break', '3m-break']);
 const CITE_OF = Object.freeze({ '15m': '15m-trend', regime: 'regime', 'day-so-far': 'day-so-far', 'day-type': 'day-type', bias: 'trend-rule', vwap: null, declared: null });
 
+// The model's own frames, read from the STATE record's read.frames by equality (state-read.js FRAME_VALUES words).
+const FRAME_KEYS = Object.freeze(['4h', '1h', '15m']);
+const FRAME_WORDS = Object.freeze(['up', 'down', 'range', 'transition', 'unknown']);
+const VS_FRAMES = Object.freeze(['agrees', 'contradicts', 'unstated']);
+// THE rule for a word against the model's own frames (measurement only; a fixed equality rule, never the briefing's labels):
+//   no word, or no frame stated                     unstated
+//   trend-up / trend-down                           contradicts when the 4h and 1h are both `range`, or the 4h or the 1h is
+//                                                   the opposite way (a 15m against is a pullback: agrees)
+//   chop                                            contradicts when the 4h, 1h and 15m are the same way, up or down
+//   anything else (incl. unclear)                   agrees
+const OPPOSITE = Object.freeze({ 'trend-up': 'down', 'trend-down': 'up' });
+
 const has = (o, k) => Boolean(o) && typeof o === 'object' && Object.prototype.hasOwnProperty.call(o, k);
 const isTrend = w => w === 'trend-up' || w === 'trend-down';
 const kindOf = w => (isTrend(w) ? 'trend' : w === 'chop' ? 'chop' : null);
@@ -56,6 +72,31 @@ function wordOf(rec) {
   const w = rec.classWord;
   if (w === null) return { status: 'unstated', word: null };
   return WORDS.includes(w) ? { status: 'stated', word: w } : { status: 'invalid', word: null };
+}
+
+function framesOf(rec) {
+  const fr = has(rec, 'read') && has(rec.read, 'frames') && rec.read.frames && typeof rec.read.frames === 'object' ? rec.read.frames : null;
+  if (!fr) return null;
+  const out = Object.fromEntries(FRAME_KEYS.map(k => [k, FRAME_WORDS.includes(fr[k]) ? fr[k] : null]));
+  return FRAME_KEYS.some(k => out[k] !== null) ? out : null;
+}
+
+function wordVsFrames(word, frames) {
+  if (!WORDS.includes(word) || !frames) return 'unstated';
+  const { '4h': h4, '1h': h1, '15m': m15 } = frames;
+  if (isTrend(word)) return (h4 === 'range' && h1 === 'range') || h4 === OPPOSITE[word] || h1 === OPPOSITE[word] ? 'contradicts' : 'agrees';
+  if (word === 'chop') return (h4 === 'up' || h4 === 'down') && h1 === h4 && m15 === h4 ? 'contradicts' : 'agrees';
+  return 'agrees';
+}
+
+function tallyEntryWords(entries) {
+  const byWord = { 'trend-up': 0, 'trend-down': 0, chop: 0, unclear: 0, unstated: 0 };
+  const byWordVsFrames = { agrees: 0, contradicts: 0, unstated: 0 };
+  for (const e of entries) {
+    byWord[WORDS.includes(e.modelWord) ? e.modelWord : 'unstated'] += 1;
+    byWordVsFrames[VS_FRAMES.includes(e.wordVsFrames) ? e.wordVsFrames : 'unstated'] += 1;
+  }
+  return { n: entries.length, byWord, byWordVsFrames };
 }
 
 // The record's citesStated: absent (no cites item written: unstated), none (`cites none`: stated, nothing cited),
@@ -187,4 +228,4 @@ function maskedChanged(real, masked) {
   return { compared: both.length, changed: both.filter(x => m.get(x.id) !== x.word).map(x => x.id) };
 }
 
-module.exports = { WORDS, CITE_FIELDS, CITE_OF, wordOf, citesOf, citedVsIgnored, recognise, accuracy, falseAlarms, interval, summary, entryVsConfirmed, maskedChanged };
+module.exports = { FRAME_KEYS, framesOf, wordVsFrames, tallyEntryWords, WORDS, CITE_FIELDS, CITE_OF, wordOf, citesOf, citedVsIgnored, recognise, accuracy, falseAlarms, interval, summary, entryVsConfirmed, maskedChanged };
