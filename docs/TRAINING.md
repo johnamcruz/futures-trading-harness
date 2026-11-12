@@ -1659,22 +1659,14 @@ beside the classes and never in them (a mismatch there is no misread):
   read, and by the cycle bar's ET hour.
 - Copying: the day word against the Day so far word at the bar (too early
   is `early`), apart when that word was too early. Each departure is
-  scored against the label, beside whether the Day so far word was right;
-  one whose word is `early`, or on a day with no label, is unscored, so
-  right, wrong and unscored add up to the departures.
+  scored against the label, beside whether the Day so far word was right.
 - The structure label is the first touch of one unit (`readAudit.stopAtr` x
   ATR(20) at the cycle bar) over `readAudit.forwardBars` bars, in the read's
   own side's way (its 4h and 1h both up or both down): `held` the side's
   way first, `reversed` against it first (both in one bar: reversed),
   `none`. `pullback` and `continuation` are right on held, `reversal` on
   reversed, `unclear` when price moved under one unit either way. A
-  side-taking word without a side of the read's own is unscorable. Its ATR
-  is seeded as the plain mean of TR[0..19] (first value at index 19; then
-  Wilder's), where an offline benchmark seeds with the mean of TR[1..20]:
-  the labels differ only within roughly the first 100 bars of a bar list.
-  With too few bars after the cycle bar and no touch in them the label is
-  unknown (`no forward bars yet`) where that benchmark says `none`, so the
-  audit is the more conservative of the two.
+  side-taking word without a side of the read's own is unscorable.
 - Pre-entry B/D: an entry on a chop-labelled day while the read's own day
   word said chop, mixed or early.
 
