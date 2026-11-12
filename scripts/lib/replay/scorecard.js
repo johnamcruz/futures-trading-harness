@@ -154,9 +154,10 @@ function stateOffSide(stateRead, side) {
   const frames = isObj(stateRead.read) && isObj(stateRead.read.frames) ? stateRead.read.frames : null;
   return Boolean(frames && (frames['4h'] !== way || frames['1h'] !== way));
 }
-// A pass that names the read, in any clause it stated: the line's name (STATE, as written), `class <word>`, a trend class,
-// or read/class just before chop or unclear; never a bare class or chop word in another sense ("no class A setup").
-const STATE_WORDS = /\bclass (?:trend-up|trend-down|chop|unclear)\b|\btrend-(?:up|down)\b|\b(?:read|class)\b.{0,20}?\b(?:chop|unclear)\b/i;
+// A pass that names the read, in any clause it stated: the line's name (STATE, as written), a trend class, or read or class
+// tied to chop or unclear with only a copula or punctuation between ("class unclear", "my read is chop", "read: unclear";
+// a bare read needs the copula or the colon: "no read unclear" names nothing); never a class or chop word in another sense.
+const STATE_WORDS = /\btrend-(?:up|down)\b|\breads?\b(?:\s+(?:is|as|was|says)\s+|\s*[:=]\s*)[`"']?(?:chop|unclear)\b|\bclass\b(?:\s+(?:is|as|was|says))?\s*[:=]?\s*[`"']?(?:chop|unclear)\b/i;
 const STATE_NAMED = { test: c => /\bSTATE\b/.test(c) || STATE_WORDS.test(c) };
 
 /** A pass on the head trader's own STATE read off every one of the sides, named in any stated clause, no claim false. */

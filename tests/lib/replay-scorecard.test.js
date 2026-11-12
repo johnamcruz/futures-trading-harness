@@ -829,12 +829,12 @@ test('a composed pass on the head trader\'s own STATE read off the setup\'s side
   for (const text of ['CYCLE RESULT: no-trade - the class is unclear, passing', 'CYCLE RESULT: no-trade - STATE off the long side']) {
     assert.strictEqual(run(label(), off, text).category, 'unchecked', text);
   }
-  // The read named in its own words: the line's name, `class <word>`, a trend class, or read/class just before chop or unclear.
-  for (const text of ['CYCLE RESULT: no-trade - my read is unclear here', 'CYCLE RESULT: no-trade - trend-down class against the long', 'CYCLE RESULT: no-trade - class unclear']) {
+  // The read named in its own words: the line's name, a trend class, or read/class tied to chop or unclear (a copula or punctuation between).
+  for (const text of ['CYCLE RESULT: no-trade - my read is unclear here', 'CYCLE RESULT: no-trade - trend-down class against the long', 'CYCLE RESULT: no-trade - class unclear', 'CYCLE RESULT: no-trade - reads as chop', 'CYCLE RESULT: no-trade - own read: chop', 'CYCLE RESULT: no-trade - class: unclear', 'CYCLE RESULT: no-trade - class is chop', 'CYCLE RESULT: no-trade - the class is unclear, passing']) {
     assert.strictEqual(run(label(), off, text).category, 'unchecked', text);
   }
   // Off but not named (the pass gives another, soft reason, or a class or chop word in another sense): abstention.
-  for (const text of ['CYCLE RESULT: no-trade - the reads are thin, passing', 'CYCLE RESULT: no-trade - the setup is unclear, passing', 'CYCLE RESULT: no-trade - the tape is chop', 'CYCLE RESULT: no-trade - no class A setup', 'CYCLE RESULT: no-trade - the state of the tape is thin']) {
+  for (const text of ['CYCLE RESULT: no-trade - the reads are thin, passing', 'CYCLE RESULT: no-trade - the setup is unclear, passing', 'CYCLE RESULT: no-trade - the tape is chop', 'CYCLE RESULT: no-trade - no class A setup', 'CYCLE RESULT: no-trade - the state of the tape is thin', 'CYCLE RESULT: no-trade - I read the setup as unclear', 'CYCLE RESULT: no-trade - read the tape, unclear setup', 'CYCLE RESULT: no-trade - not a class A setup, chop risk', 'CYCLE RESULT: no-trade - class A setup unclear', 'CYCLE RESULT: no-trade - the read is clear, no chop', 'CYCLE RESULT: no-trade - no read unclear']) {
     assert.strictEqual(run(label(), off, text).category, 'excessive abstention', text);
   }
   // Named but the recorded read is on the side, or there is none: abstention (the words alone excuse nothing).
