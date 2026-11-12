@@ -430,7 +430,9 @@ test('class word: one filled-in example in the skills and agents, and no example
     for (const f of fs.readdirSync(path.join(ROOT, dir))) {
       const file = dir === 'skills' ? path.join(ROOT, dir, f, 'SKILL.md') : path.join(ROOT, dir, f);
       if (!fs.existsSync(file) || !fs.statSync(file).isFile()) continue;
-      for (const line of fs.readFileSync(file, 'utf8').split('\n')) {
+      const text = fs.readFileSync(file, 'utf8');
+      // Every line, and every backticked STATE line inside prose (an inline example).
+      for (const line of [...text.split('\n'), ...[...text.replace(/\s+/g, ' ').matchAll(/`(STATE: [^`]+)`/g)].map(m => m[1])]) {
         const r = S.parseStateLine(line);
         if (r.status === 'read' && r.classWord) examples.push({ file: path.relative(ROOT, file), line, r });
       }
