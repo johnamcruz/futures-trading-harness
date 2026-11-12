@@ -191,7 +191,7 @@ test('report: written share, day recall per label class by hour, copy agreement 
   assert.deepStrictEqual(s.day.byHour, { '09': { chop: { n: 1, right: 0 } }, '10': { chop: { n: 3, right: 1 } }, '11': { trend: { n: 2, right: 2 } } });
   assert.deepStrictEqual(s.day.copy, { n: 6, same: 3, soFarEarly: { n: 1, same: 1 }, soFarRead: { n: 5, same: 2 } });
   // Three departures: two wrong where the Day so far word was right, one right where it was wrong.
-  assert.deepStrictEqual(s.day.departures, { n: 3, right: 1, wrong: 2, soFarRight: 2 });
+  assert.deepStrictEqual(s.day.departures, { n: 3, right: 1, wrong: 2, unscored: 0, soFarRight: 2 });
   assert.deepStrictEqual(s.ctx.byWord, { pullback: { n: 4, right: 2, wrong: 1, unscorable: 1 }, reversal: { n: 1, right: 1, wrong: 0, unscorable: 0 }, continuation: { n: 1, right: 1, wrong: 0, unscorable: 0 } });
   // The 09:36 row has no ATR(20) at its bar yet: its pullback is unscorable, never guessed.
   assert.deepStrictEqual([s.ctx.right, s.ctx.scored, s.ctx.sameAsCoded], [4, 5, 1]);
@@ -203,6 +203,23 @@ test('report: written share, day recall per label class by hour, copy agreement 
   assert.match(text, /copies the Day so far word on 3 of 6/);
   assert.match(text, /pre-entry B\/D entries: 1/);
   assert.doesNotMatch(text, /accura/i);
+});
+
+test('report: a departure that names no class (early against a read Day so far word) or has no day label is unscored, never right or wrong, and never in soFarRight', () => {
+  const rot = { status: 'read', read: 'rotational' };
+  const at = (i, line, label) => A.auditDecision({ day: '2021-06-12', t: T(i + 1), symbol: 'MNQ', bars: bars({ at: i }), cfg: CFG,
+    stateRead: { ...stateRead(line, briefing({ soFar: rot })), bar: T(i) }, decision: { ...decision('none'), barT: T(i) }, dayLabel: { label } });
+  const rows = [
+    at(25, 'STATE: 4h up | 1h up | day early | ctx pullback', 'chop'), // early vs chop: departs, no class -> unscored (its Day so far word chop was right)
+    at(26, 'STATE: 4h up | 1h up | day trend | ctx pullback', null), // trend vs chop on an unlabelled day: departs, unscored
+    at(27, 'STATE: 4h up | 1h up | day trend | ctx pullback', 'chop'), // trend vs chop on a chop day: wrong, the Day so far word right
+    at(28, 'STATE: 4h up | 1h up | day chop | ctx pullback', 'chop'), // a copy: not a departure
+  ];
+  const d = DC.summarizeDayCtx(rows).day.departures;
+  assert.deepStrictEqual(d, { n: 3, right: 0, wrong: 1, unscored: 2, soFarRight: 1 });
+  assert.strictEqual(d.right + d.wrong + d.unscored, d.n, 'every departure is right, wrong or unscored');
+  const text = DC.renderDayCtx(DC.summarizeDayCtx(rows));
+  assert.match(text, /departures 3: right 0, wrong 1, unscored 2 \(early, or no day label\), the Day so far word right on 1 of the 1 scored/);
 });
 
 test('report: no rows, or rows without day or ctx words, report zeros, never a rate from nothing', () => {

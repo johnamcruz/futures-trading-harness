@@ -11,8 +11,9 @@
  *   day          byLabel { trend|chop|mixed: { n, right, words } } (a day word on a labelled day; `early` names no class,
  *                so it is never right), byHour { <ET hour>: { <label>: { n, right } } }, copy (the day word against the
  *                Day so far word at the bar: n, same; apart when that word was too early and when it was a read),
- *                departures (the day word not the Day so far word: right, wrong vs the label, and the Day so far word
- *                itself right on them)
+ *                departures (the day word not the Day so far word: right, wrong vs the label, unscored when the word is
+ *                early or the day has no label, so right + wrong + unscored = n; and the Day so far word itself right
+ *                on the scored ones)
  *   ctx          byWord { <word>: { n, right, wrong, unscorable } }, right, scored, sameAsCoded (the labels' context word)
  *   preEntryBD   entries on a chop-labelled day while the read's own day word said chop, mixed or early
  *
@@ -42,6 +43,8 @@ function summarizeDayCtx(rows) {
   const copied = withDay.filter(r => r.dayCtx.day.copy !== null);
   const copyOf = rs => ({ n: rs.length, same: rs.filter(r => r.dayCtx.day.copy).length });
   const dep = copied.filter(r => !r.dayCtx.day.copy);
+  // Scored only on a class word against a day label (early names no class; no label, no score): the rest are unscored.
+  const depScored = dep.filter(r => r.dayCtx.day.result === 'right' || r.dayCtx.day.result === 'wrong');
   const byWord = {};
   for (const r of withCtx) {
     const c = r.dayCtx.ctx;
@@ -56,8 +59,8 @@ function summarizeDayCtx(rows) {
     day: {
       byLabel, byHour,
       copy: { ...copyOf(copied), soFarEarly: copyOf(copied.filter(r => r.dayCtx.day.soFar === 'early')), soFarRead: copyOf(copied.filter(r => r.dayCtx.day.soFar !== 'early')) },
-      departures: { n: dep.length, right: dep.filter(r => r.dayCtx.day.result === 'right').length, wrong: dep.filter(r => r.dayCtx.day.result === 'wrong').length,
-        soFarRight: dep.filter(r => r.dayCtx.day.label && r.dayCtx.day.soFar === r.dayCtx.day.label).length },
+      departures: { n: dep.length, right: depScored.filter(r => r.dayCtx.day.result === 'right').length, wrong: depScored.filter(r => r.dayCtx.day.result === 'wrong').length,
+        unscored: dep.length - depScored.length, soFarRight: depScored.filter(r => r.dayCtx.day.soFar === r.dayCtx.day.label).length },
     },
     ctx: { byWord, right: scored.filter(r => r.dayCtx.ctx.result === 'right').length, scored: scored.length, sameAsCoded: withCtx.filter(r => r.dayCtx.ctx.read === r.dayCtx.ctx.coded).length },
     preEntryBD: { n: bd.length, entries: bd.map(r => ({ day: r.day, t: r.t, side: r.side, read: r.dayCtx.day.read, R: isObj(r.outcome) ? r.outcome.R ?? null : null })) },
@@ -77,7 +80,7 @@ function renderDayCtx(s) {
   out.push(`    by hour (ET): ${Object.entries(s.day.byHour).sort().map(([h, m]) => `${h} ${Object.entries(m).map(([l, x]) => `${l} ${x.right}/${x.n}`).join(', ')}`).join('; ') || 'none'}`);
   const c = s.day.copy;
   const d = s.day.departures;
-  out.push(`  copies the Day so far word on ${of(c.same, c.n)} (that word too early: ${of(c.soFarEarly.same, c.soFarEarly.n)}; a read: ${of(c.soFarRead.same, c.soFarRead.n)}); departures ${d.n}: right ${d.right}, wrong ${d.wrong}, the Day so far word right on ${d.soFarRight} of them`);
+  out.push(`  copies the Day so far word on ${of(c.same, c.n)} (that word too early: ${of(c.soFarEarly.same, c.soFarEarly.n)}; a read: ${of(c.soFarRead.same, c.soFarRead.n)}); departures ${d.n}: right ${d.right}, wrong ${d.wrong}, unscored ${d.unscored} (early, or no day label), the Day so far word right on ${d.soFarRight} of the ${d.right + d.wrong} scored`);
   out.push(`  ctx vs the first touch in its own side's way (one unit, the read audit's window): right ${of(s.ctx.right, s.ctx.scored)}; by word ${Object.entries(s.ctx.byWord).map(([k, x]) => `${k} n ${x.n} right ${x.right} wrong ${x.wrong} unscorable ${x.unscorable}`).join('; ') || 'none'}; the labels' context word on ${s.ctx.sameAsCoded}`);
   out.push(`  pre-entry B/D entries: ${s.preEntryBD.n} (an entry on a chop-labelled day while its own day word said chop, mixed or early)${s.preEntryBD.entries.map(e => `; ${e.day} ${e.t} ${e.side || '-'} ${e.read} R ${e.R ?? '-'}`).join('')}`);
   return out.join('\n');
