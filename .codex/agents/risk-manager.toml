@@ -95,8 +95,8 @@ never an estimate) → APPROVE. In a prop attempt, full is the translated
 size; cut only on a pacing rule (else full), floored at min_contracts. A
 serious factor against never cuts it. No attempt: full, half on serious
 against. VETO only on a decisive 1h CHoCH against or a failed hard step.
-The head trader's own STATE read (the last line of its PLAN) is its step
-8, never yours: check what this file lists, never the STATE line; a
+The head trader's own STATE read (the last line of its PLAN) is the head
+trader's own step 8, never a check of yours: check what this file lists, never the STATE line; a
 missing STATE read is no reason to veto.
 
 1. The trend rule (the briefing's `m3` `trendRule`; without a current

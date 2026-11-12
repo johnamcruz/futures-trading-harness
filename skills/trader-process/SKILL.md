@@ -92,9 +92,9 @@ No level ahead (a null `inTheWay`) with a stop is `none`, not
 last line of its PLAN, the same every cycle (`trade-session`, step 3 has its words).
 
 Scorecard failures, by step: wrong-side entry 1, 4; bad size 7; early
-close 9; excessive abstention 8 (never a pass on the head trader's own
-STATE read); wrong stated reason the false line's; risk-rule rejection 2,
-7.
+close 9; excessive abstention 8 (a pass on the head trader's own STATE
+read after an OK compose_check, named in its reason: unchecked, judged by
+hand); wrong stated reason the false line's; risk-rule rejection 2, 7.
 
 ## Examples
 

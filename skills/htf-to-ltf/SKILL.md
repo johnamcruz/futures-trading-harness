@@ -29,9 +29,8 @@ From the highest timeframe down, for each side (`m15.alignment`; read
 | `mixed` | timeframes disagree without a clear pullback | Priority step 4; a quiet session is a read against |
 | `counter` | the highest timeframe is against it | No entry: never counter |
 
-**The side rule** (in an attempt): each trending 4h or 1h your way,
-neither against; both ranging: the 15m and `Trend declared?` your way;
-else no trade. A CHoCH against the bias is context, never a way in.
+**The side rule** (in an attempt): the 4h and the 1h both trending your
+way; else no trade (one or both ranging: no trade). A CHoCH against the bias is context, never a way in.
 The setup is the 15m (or higher) reaction or break the
 bias's way (its candle's strength and close: `candle-reading`): it
 is the entry; the 3m only times the entry: the next 3m bar, no
@@ -39,8 +38,8 @@ confirming close, no 3m turn to wait for (waiting cost R).
 Not in a prop attempt: the trend rule alone (both ranging, the 15m's
 side; no trend anywhere, both sides).
 Then the head trader's own STATE read decides the take (`trade-session`
-step 3): both ranging, or a 4h or 1h not trending the side, is `chop` or
-`unclear` to it.
+step 3): its own 4h and 1h both range, or one of them not trending the
+side, is `chop` or `unclear` to it.
 
 ### 2. Levels flow down
 
@@ -56,6 +55,6 @@ levels it met: the `candle-reading` skill. Top down: `top-down-entry`.
 ```text
 4h UP, 1h UP, 15m DOWN: long pullback. The 15m rejected the prior VAH up at 21600.25:
 the setup and the entry, on the next 3m bar; target trail (the 2R mark that arms the trail, not the exit).
-4h UP, 1h DOWN: no side, no entry. 4h and 1h RANGE, 15m DOWN, declared short: short only.
-Head trader: 4h and 1h RANGE is chop or unclear in its STATE read → pass (trade-session step 3).
+4h UP, 1h DOWN: no side, no entry. 4h UP, 1h RANGE: no trade. 4h and 1h RANGE: no trade.
+Head trader: its own read 4h range, 1h range → class chop or unclear → pass.
 ```

@@ -19,9 +19,9 @@ const flat = t => t.replace(/\s+/g, ' ');
 
 // The size budget (bytes). The skill is embedded in full in every mapped role's opencode prompt, so it stays small;
 // the cycle prompt names only the first and last step (the skill holds the block).
-// Raised 4800 -> 5006 (feat/decision-follows-state, owner rule: raise a cap when it improves context): the head trader's
-// own STATE read can end a plan, in step 8, the opening bullet and the scorecard line (+250; the file is 5006 bytes).
-const SKILL_MAX = 5006;
+// Raised 4800 -> 5074 (feat/decision-follows-state, owner rule: raise a cap when it improves context): the head trader's
+// own STATE read can end a plan, in step 8, the opening bullet and the scorecard line (+318; the file is 5074 bytes).
+const SKILL_MAX = 5074;
 const PLAN_BLOCK_MAX = 760;
 const PROMPT_ADDED_MAX = 100;
 

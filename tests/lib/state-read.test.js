@@ -523,16 +523,19 @@ test('state line: the decision follows the model\'s own STATE read (taught, no c
   const tp = read('skills/trader-process/SKILL.md');
   assert.ok(tp.includes("**Decision.** Compose OK → take (a prop attempt: the full verdict size; else step 5 sizes it); refused → pass. The head trader alone: its own STATE read, the last line of its PLAN, off the setup's side → pass (`trade-session`, step 3). One reason."));
   assert.ok(tp.includes("only a decisive against, the head trader's own STATE read off the setup's side (step 8), the hard steps and the gate's end a plan early."));
-  // The scorecard line does not tell the model such a pass is abstention.
-  assert.ok(tp.includes("excessive abstention 8 (never a pass on the head trader's own STATE read)"));
+  // The scorecard line says what the scorecard records (scripts/lib/replay/scorecard.js stateOffSide): plain, true.
+  assert.ok(tp.includes("excessive abstention 8 (a pass on the head trader's own STATE read after an OK compose_check, named in its reason: unchecked, judged by hand)"));
   assert.ok(read('rules/trading/decision.md').includes("The head trader's own STATE read, the last line of its PLAN, off the setup's side (`trade-session`) → pass."));
   // Phase 2 checks what its file lists, never the STATE line: a missing read is no veto (no code forwards it).
-  assert.ok(read('agents/risk-manager.md').includes("The head trader's own STATE read (the last line of its PLAN) is its step 8, never yours: check what this file lists, never the STATE line; a missing STATE read is no reason to veto."));
-  // The side rule points on to it (the rule's own text unchanged).
+  assert.ok(read('agents/risk-manager.md').includes("The head trader's own STATE read (the last line of its PLAN) is the head trader's own step 8, never a check of yours: check what this file lists, never the STATE line; a missing STATE read is no reason to veto."));
+  // The side rule (the owner's never-counter-HTF rule, delegated 11-12: text only, the code's trend rule unchanged): the 4h
+  // and the 1h both the side's way; one or both ranging, no trade. Then the head trader's OWN read (not the labels) decides.
   const htf = read('skills/htf-to-ltf/SKILL.md');
-  assert.ok(htf.includes("Then the head trader's own STATE read decides the take (`trade-session` step 3): both ranging, or a 4h or 1h not trending the side, is `chop` or `unclear` to it."));
-  assert.ok(htf.includes('each trending 4h or 1h your way, neither against; both ranging: the 15m and `Trend declared?` your way; else no trade.'));
-  assert.ok(htf.includes('Head trader: 4h and 1h RANGE is chop or unclear in its STATE read → pass (trade-session step 3).'));
+  assert.ok(htf.includes('**The side rule** (in an attempt): the 4h and the 1h both trending your way; else no trade (one or both ranging: no trade).'));
+  assert.doesNotMatch(htf, /neither against|declared short: short only|`Trend declared\?` your way/);
+  assert.ok(htf.includes("Then the head trader's own STATE read decides the take (`trade-session` step 3): its own 4h and 1h both range, or one of them not trending the side, is `chop` or `unclear` to it."));
+  assert.ok(htf.includes('4h UP, 1h RANGE: no trade. 4h and 1h RANGE: no trade.'));
+  assert.ok(htf.includes('Head trader: its own read 4h range, 1h range → class chop or unclear → pass.'));
   // The documented example (a full long take) satisfies the taught rule: class trend-up, 4h up, 1h up.
   const ex = /9 Manage:[^\n]*\n(STATE: [^\n]+)\n```/.exec(fs.readFileSync(path.join(ROOT, 'skills', 'trader-process', 'SKILL.md'), 'utf8').split('## Examples')[1]);
   const r = S.parseStateLine(ex[1]);
