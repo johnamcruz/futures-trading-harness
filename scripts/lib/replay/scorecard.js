@@ -154,8 +154,10 @@ function stateOffSide(stateRead, side) {
   const frames = isObj(stateRead.read) && isObj(stateRead.read.frames) ? stateRead.read.frames : null;
   return Boolean(frames && (frames['4h'] !== way || frames['1h'] !== way));
 }
-// A pass that names the read: its own words for it (the line's name, a class word) in any clause it stated.
-const STATE_NAMED = /\bSTATE\b|\bclass\b|\bchop\b|\bunclear\b|\btrend-(?:up|down)\b/i;
+// A pass that names the read, in any clause it stated: the line's name (STATE, as written), `class <word>`, a trend class,
+// or read/class just before chop or unclear; never a bare class or chop word in another sense ("no class A setup").
+const STATE_WORDS = /\bclass (?:trend-up|trend-down|chop|unclear)\b|\btrend-(?:up|down)\b|\b(?:read|class)\b.{0,20}?\b(?:chop|unclear)\b/i;
+const STATE_NAMED = { test: c => /\bSTATE\b/.test(c) || STATE_WORDS.test(c) };
 
 /** A pass on the head trader's own STATE read off every one of the sides, named in any stated clause, no claim false. */
 function stateReadPass(facts, reasons, falseReason, sides) {
@@ -792,7 +794,7 @@ function toMarkdown(s, records) {
     ...(s.outcomes !== 'shown' ? [] : ['## Account by day', '', '| day | decisions | agree | disagree | balance | day P&L | floor | cushion | daily headroom | balance check |', '| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |',
       ...s.days.map(d => `| ${d.day} | ${d.decisions} | ${d.agree} | ${d.disagree} | ${cell(d.balance)} | ${cell(d.dayPnl)} | ${cell(d.floor)} | ${cell(d.cushion)} | ${cell(d.dailyHeadroom)} | ${cell(d.balanceCheck)} |`), '']),
     '## Flagged decisions', '', flagged.length ? 'Each in full, for review: flagged.md and flagged.jsonl.\n\n| time (ET) | category | severity | expected | actual | why | false reasons |\n| --- | --- | --- | --- | --- | --- | --- |' : 'None.',
-    ...flagged.map(r => `| ${r.day} ${r.facts.et} | ${r.category} | ${r.severity} | ${r.expected.decision}${r.expected.setup ? ` ${r.expected.setup}` : ''} | ${r.actual.action}${r.actual.size ? ` ${r.actual.size}` : ''} | ${cell(r.why.join('; '))} | ${cell(r.reasons.claims.filter(c => c.check === false).map(c => `"${c.clause}": ${c.why}${c.incidental ? ' (incidental)' : ''}`).join('; '))} |`),
+    ...flagged.map(r => `| ${r.day} ${r.facts.et} | ${r.category} | ${r.stateReadPass ? 'by hand' : r.severity} | ${r.expected.decision}${r.expected.setup ? ` ${r.expected.setup}` : ''} | ${r.actual.action}${r.actual.size ? ` ${r.actual.size}` : ''} | ${cell(r.why.join('; '))} | ${cell(r.reasons.claims.filter(c => c.check === false).map(c => `"${c.clause}": ${c.why}${c.incidental ? ' (incidental)' : ''}`).join('; '))} |`),
     '',
   ].filter(x => x !== null).join('\n');
 }

@@ -829,8 +829,14 @@ test('a composed pass on the head trader\'s own STATE read off the setup\'s side
   for (const text of ['CYCLE RESULT: no-trade - the class is unclear, passing', 'CYCLE RESULT: no-trade - STATE off the long side']) {
     assert.strictEqual(run(label(), off, text).category, 'unchecked', text);
   }
-  // Off but not named (the pass gives another, soft reason): abstention, as before.
-  assert.strictEqual(run(label(), off, 'CYCLE RESULT: no-trade - the reads are thin, passing').category, 'excessive abstention');
+  // The read named in its own words: the line's name, `class <word>`, a trend class, or read/class just before chop or unclear.
+  for (const text of ['CYCLE RESULT: no-trade - my read is unclear here', 'CYCLE RESULT: no-trade - trend-down class against the long', 'CYCLE RESULT: no-trade - class unclear']) {
+    assert.strictEqual(run(label(), off, text).category, 'unchecked', text);
+  }
+  // Off but not named (the pass gives another, soft reason, or a class or chop word in another sense): abstention.
+  for (const text of ['CYCLE RESULT: no-trade - the reads are thin, passing', 'CYCLE RESULT: no-trade - the setup is unclear, passing', 'CYCLE RESULT: no-trade - the tape is chop', 'CYCLE RESULT: no-trade - no class A setup', 'CYCLE RESULT: no-trade - the state of the tape is thin']) {
+    assert.strictEqual(run(label(), off, text).category, 'excessive abstention', text);
+  }
   // Named but the recorded read is on the side, or there is none: abstention (the words alone excuse nothing).
   assert.strictEqual(run(label(), { ...f, stateRead: read('trend-up', 'up', 'up') }, chop).category, 'excessive abstention');
   assert.strictEqual(run(label(), f, chop).category, 'excessive abstention');
@@ -879,6 +885,10 @@ test('scoreRun: the cycle log\'s STATE read reaches the facts, so a pass on it n
   // Its heading in flagged.md says it is checked by hand, not a severity.
   assert.match(fs.readFileSync(path.join(out, 'flagged.md'), 'utf8'), /^## .*: unchecked \(by hand\)$/m);
   assert.doesNotMatch(fs.readFileSync(path.join(out, 'flagged.md'), 'utf8'), /unchecked \(null\)/);
+  // scorecard.md's flagged table lists it (the only unchecked row there), its severity column "by hand", never null.
+  const md = fs.readFileSync(path.join(out, 'scorecard.md'), 'utf8');
+  assert.match(md, /\| unchecked \| by hand \|/);
+  assert.doesNotMatch(md, /\| null \|/);
 });
 
 test('scoreRun: a cycle\'s one STATE read is its first symbol\'s: on another symbol\'s decision it is no read (a two-symbol cycle)', () => {
