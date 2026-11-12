@@ -444,9 +444,9 @@ test('state line: the trade-session skill documents the grammar the parser reads
       }
     }
   }
-  // The model's own read, not the labels copied; read first, written last; recorded, read by no code, and no word of a score to aim at.
+  // The model's own read, not the labels copied; read first, written last; recorded, no code decides from it, and no word of a score to aim at.
   assert.ok(flat.includes('your own read from the bars and facts, not the labels copied'));
-  assert.ok(flat.includes('read it first, write it last; it is recorded, and no code reads it'));
+  assert.ok(flat.includes('read it first, write it last; it is recorded; no code decides from it'));
   assert.ok(!flat.includes('changes no step'), 'the decision follows the read now (taught, below): the old sentence is gone');
   const start = flat.indexOf('Last line of the PLAN block');
   const para = flat.slice(start, flat.indexOf('No other words.', start));
@@ -484,12 +484,12 @@ test('state line: the PLAN template and its example end with the STATE line (a m
   // trade-session says where it goes (the PLAN's last line), still your own read, and records only.
   const flat = fs.readFileSync(path.join(ROOT, 'skills', 'trade-session', 'SKILL.md'), 'utf8').replace(/\s+/g, ' ');
   assert.ok(flat.includes('Last line of the PLAN block'), 'trade-session places it');
-  assert.ok(flat.includes('read it first, write it last; it is recorded, and no code reads it'));
+  assert.ok(flat.includes('read it first, write it last; it is recorded; no code decides from it'));
   // Every PLAN, an open trade's too (a managed cycle writes one, and 9 in 10 of them left the line out).
   assert.ok(flat.includes("every PLAN, an open trade's too"));
 });
 
-test('state line: the decision follows the model\'s own STATE read (taught, no code reads it): a take on its side, chop, unclear or a trend class its own 4h and 1h do not show a pass', () => {
+test('state line: the decision follows the model\'s own STATE read (taught, no code decides from it): a take on its side, chop, unclear or a trend class its own 4h and 1h do not show a pass', () => {
   const ROOT = path.join(__dirname, '..', '..');
   const read = f => fs.readFileSync(path.join(ROOT, f), 'utf8').replace(/\s+/g, ' ');
   const ts = read('skills/trade-session/SKILL.md');
@@ -497,24 +497,42 @@ test('state line: the decision follows the model\'s own STATE read (taught, no c
   assert.ok(start > ts.indexOf('No other words.'), 'after the grammar, outside the paragraph that carries no word of a setup or a check');
   const para = ts.slice(start, ts.indexOf('- **The priority order**', start));
   for (const s of [
-    // Taught, never a gate: the gate and compose_check stay as they are (tests/e2e/state-read-invariance-e2e.test.js).
-    "(taught, no code: the gate and `compose_check` don't read it)",
+    // The head trader's alone; taught, never a gate: the gate and compose_check stay as they are
+    // (tests/e2e/state-read-invariance-e2e.test.js).
+    "(the head trader's own, the last line of its PLAN; taught: the gate and `compose_check` do not read it)",
     // The class follows the frames the model wrote: a trend class needs its 4h and 1h that way.
     "The class follows your frames: a trend class needs your 4h and 1h that way (a 15m pullback or range under them doesn't cancel it); 4h and 1h both `range` → `chop` or `unclear`.",
     // A take agrees with the read: the class and the 4h and 1h on the setup's side (the never-counter-HTF rule, in its own words).
     'A take: `class` on its side (`trend-up` long, `trend-down` short), your 4h and 1h too (`up` long, `down` short).',
-    // Otherwise a pass that names the read: a decisive against, so "pass only on a decisive against" stays true.
-    "`chop`, `unclear`, or a trend class your 4h and 1h don't show (`trend-down` with 4h and 1h `range`) → pass, naming that read: a decisive against.",
+    // compose_check first (its record is what the pass is scored on), then a pass that names the read: the head trader's
+    // own step 8, never called a decisive against (the scorecard's DECISIVE is a 1h CHoCH only).
+    '`compose_check` still runs first (its record is the evidence the pass is scored on).',
+    "Then `chop`, `unclear`, or a trend class your 4h and 1h don't show (`trend-down` with 4h and 1h `range`) → pass, naming that read (your step 8, not a decisive against).",
   ]) assert.ok(para.includes(s), s);
+  assert.ok(para.indexOf('still runs first') < para.indexOf('→ pass, naming that read'), 'compose first, then the pass');
+  assert.doesNotMatch(para.replace('not a decisive against', ''), /decisive/);
+  // The other sentences stay true: pass only on a decisive against or the head trader's own read.
+  assert.ok(ts.includes("pass only on a decisive against, or your own STATE read off the setup's side (above)."));
   // The 15m is no condition: a pullback entry has the 15m ranging or turning (the recorded trend-leg takes: 15m range,
   // transition); it is named once, only to say it doesn't cancel the 4h and 1h.
   assert.strictEqual(para.split('15m').length, 2);
   assert.ok(para.includes("(a 15m pullback or range under them doesn't cancel it)"));
   // No filled-in line here: the one example stays in trader-process (the class-word test below).
   assert.doesNotMatch(para, /`STATE:/);
-  // Step 8 and the always-on decision rule point to it.
-  assert.ok(read('skills/trader-process/SKILL.md').includes("**Decision.** Compose OK and the head trader's STATE read on its side (`trade-session`, step 3) → take (a prop attempt: the full verdict size; else step 5 sizes it); refused, or that read off its side → pass. One reason."));
-  assert.ok(read('rules/trading/decision.md').includes("The head trader's own STATE read off the setup's side (`trade-session`) → pass."));
+  // Step 8 and the always-on decision rule point to it, addressed to the head trader alone.
+  const tp = read('skills/trader-process/SKILL.md');
+  assert.ok(tp.includes("**Decision.** Compose OK → take (a prop attempt: the full verdict size; else step 5 sizes it); refused → pass. The head trader alone: its own STATE read, the last line of its PLAN, off the setup's side → pass (`trade-session`, step 3). One reason."));
+  assert.ok(tp.includes("only a decisive against, the head trader's own STATE read off the setup's side (step 8), the hard steps and the gate's end a plan early."));
+  // The scorecard line does not tell the model such a pass is abstention.
+  assert.ok(tp.includes("excessive abstention 8 (never a pass on the head trader's own STATE read)"));
+  assert.ok(read('rules/trading/decision.md').includes("The head trader's own STATE read, the last line of its PLAN, off the setup's side (`trade-session`) → pass."));
+  // Phase 2 checks what its file lists, never the STATE line: a missing read is no veto (no code forwards it).
+  assert.ok(read('agents/risk-manager.md').includes("The head trader's own STATE read (the last line of its PLAN) is its step 8, never yours: check what this file lists, never the STATE line; a missing STATE read is no reason to veto."));
+  // The side rule points on to it (the rule's own text unchanged).
+  const htf = read('skills/htf-to-ltf/SKILL.md');
+  assert.ok(htf.includes("Then the head trader's own STATE read decides the take (`trade-session` step 3): both ranging, or a 4h or 1h not trending the side, is `chop` or `unclear` to it."));
+  assert.ok(htf.includes('each trending 4h or 1h your way, neither against; both ranging: the 15m and `Trend declared?` your way; else no trade.'));
+  assert.ok(htf.includes('Head trader: 4h and 1h RANGE is chop or unclear in its STATE read → pass (trade-session step 3).'));
   // The documented example (a full long take) satisfies the taught rule: class trend-up, 4h up, 1h up.
   const ex = /9 Manage:[^\n]*\n(STATE: [^\n]+)\n```/.exec(fs.readFileSync(path.join(ROOT, 'skills', 'trader-process', 'SKILL.md'), 'utf8').split('## Examples')[1]);
   const r = S.parseStateLine(ex[1]);

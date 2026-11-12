@@ -19,9 +19,9 @@ const flat = t => t.replace(/\s+/g, ' ');
 
 // The size budget (bytes). The skill is embedded in full in every mapped role's opencode prompt, so it stays small;
 // the cycle prompt names only the first and last step (the skill holds the block).
-// Raised 4800 -> 4860 (feat/decision-follows-state, owner rule: raise a cap when it improves context): step 8 says the
-// decision follows the head trader's own STATE read (+104; the file is 4860 bytes).
-const SKILL_MAX = 4860;
+// Raised 4800 -> 5006 (feat/decision-follows-state, owner rule: raise a cap when it improves context): the head trader's
+// own STATE read can end a plan, in step 8, the opening bullet and the scorecard line (+250; the file is 5006 bytes).
+const SKILL_MAX = 5006;
 const PLAN_BLOCK_MAX = 760;
 const PROMPT_ADDED_MAX = 100;
 
@@ -76,14 +76,16 @@ test('trader-process: it orders the thinking and adds no filter; the count decid
   const pins = [
     'It adds no filter and no veto',
     // The count decides (fix/confluence-not-vetoes): only the hard steps and the gate end a plan early.
-    "**A valid setup is the trade** (`confluence-counting`); only a decisive against, the hard steps and the gate's end a plan early.",
+    // Plus the head trader's own STATE read (feat/decision-follows-state, taught; tests/lib/state-read.test.js).
+    "**A valid setup is the trade** (`confluence-counting`); only a decisive against, the head trader's own STATE read off the setup's side (step 8), the hard steps and the gate's end a plan early.",
     // A setup is the model's combination of reads, which code verifies (the one strategy, trade_lifecycle).
     '**A setup is a combination of reads** you state, step by step, and `compose_check` verifies (`trade-lifecycle`); no one read makes a trade.',
     '**Management always runs.** Managing and exiting a position, and the end-of-day flatten, go ahead whatever steps 1-8 say; no window or wait blocks an exit or a risk reduction.',
     "**`unknown`, never invented.** A value the briefing or a report doesn't give is `unknown` (or `unavailable`); never estimate one.",
     // In a prop attempt the full verdict size (feat/bias-bg: phase 2 cuts only on a pacing rule).
-    // The decision follows the head trader's own STATE read (taught, no code reads it; tests/lib/state-read.test.js).
-    "**Decision.** Compose OK and the head trader's STATE read on its side (`trade-session`, step 3) → take (a prop attempt: the full verdict size; else step 5 sizes it); refused, or that read off its side → pass. One reason.",
+    // The decision follows the head trader's own STATE read, the head trader alone (taught, no code decides from it;
+    // tests/lib/state-read.test.js).
+    "**Decision.** Compose OK → take (a prop attempt: the full verdict size; else step 5 sizes it); refused → pass. The head trader alone: its own STATE read, the last line of its PLAN, off the setup's side → pass (`trade-session`, step 3). One reason.",
     // The trigger there and the count for: take it, never wait on (the baseline waited until the setup expired); the 3m only
     // times it (feat/bias-bg: no 3m turn to wait for).
     '**Entry.** The setup is the entry, on the next 3m bar; no confirming close or 3m turn to wait for → `compose_check` now.',
@@ -263,7 +265,7 @@ test('trader-process: each mapped role lists the skill, says to load it, and nam
   // The gate's news (the briefing's m3.news) wins over the analyst's own read.
   assert.ok(flat(read('agents/news-calendar-analyst.md')).includes("That line is your own read and proposal. The bar briefing's `m3.news` is the gate's and the source of truth: phase 2's line 2 takes the news from it, and it wins when the two differ."));
   assert.match(flat(read('skills/trade-session/SKILL.md')), /Decide top-down in the `trader-process` skill's order[^.]*write its PLAN block before your result line; the checks below fill its lines\. It orders the thinking and adds no filter\./);
-  assert.ok(flat(read('skills/trade-session/SKILL.md')).includes('**Compose first** (`confluence-counting`): the side rule\'s side, the setup (15m) at a key level closed → `compose_check`, never your own R:R. OK → take: in a prop attempt the full verdict size; pass only on a decisive against. Not in a prop attempt: the `position-sizing` skill.'));
+  assert.ok(flat(read('skills/trade-session/SKILL.md')).includes('**Compose first** (`confluence-counting`): the side rule\'s side, the setup (15m) at a key level closed → `compose_check`, never your own R:R. OK → take: in a prop attempt the full verdict size; pass only on a decisive against, or your own STATE read off the setup\'s side (above). Not in a prop attempt: the `position-sizing` skill.'));
 });
 
 test('trader-process: the executor executes; it carries no PLAN and no analysis', () => {

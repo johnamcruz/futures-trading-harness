@@ -51,7 +51,8 @@ Always on, every harness, every bar (the detail: `confluence-counting`).
   full translated size; else full; serious against (a 3m close beyond the leg's 15m swing
   among them) → half; decisive against (a 1h CHoCH against, unless the 4h
   and 1h both your way) → pass. Refused → pass. The head trader's own
-  STATE read off the setup's side (`trade-session`) → pass.
+  STATE read, the last line of its PLAN, off the setup's side
+  (`trade-session`) → pass.
 - Thin volume, the first level ahead, VWAP distance, "chasing", no
   pullback yet: minor, never a reason not to compose.
 

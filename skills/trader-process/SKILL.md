@@ -14,7 +14,8 @@ description: Top-down trade thinking (HTF first) and its PLAN block. It adds no 
 It adds no filter and no veto:
 
 - **A valid setup is the trade** (`confluence-counting`); only a
-  decisive against, the hard steps and the gate's end a plan early.
+  decisive against, the head trader's own STATE read off the setup's
+  side (step 8), the hard steps and the gate's end a plan early.
 - **A setup is a combination of reads** you state, step by step, and
   `compose_check` verifies (`trade-lifecycle`); no one read makes a trade.
 - **Management always runs.** Managing and exiting a position, and the
@@ -41,10 +42,10 @@ It adds no filter and no veto:
    Read: `candle-reading`, `momentum-and-volume`.
 7. **Risk.** Stop (`invalidation`) and target (`take-profit`) reads,
    size; R:R: the compose record's, never yours.
-8. **Decision.** Compose OK and the head trader's STATE read on its side
-   (`trade-session`, step 3) → take (a prop attempt: the full verdict
-   size; else step 5 sizes it); refused, or that read off its side →
-   pass. One reason.
+8. **Decision.** Compose OK → take (a prop attempt: the full verdict
+   size; else step 5 sizes it); refused → pass. The head trader alone:
+   its own STATE read, the last line of its PLAN, off the setup's side →
+   pass (`trade-session`, step 3). One reason.
 9. **Management.** What invalidates the trade; its exit
    (`manage-position`). Never loosen the stop. Read: `invalidation`.
 
@@ -91,8 +92,9 @@ No level ahead (a null `inTheWay`) with a stop is `none`, not
 last line of its PLAN, the same every cycle (`trade-session`, step 3 has its words).
 
 Scorecard failures, by step: wrong-side entry 1, 4; bad size 7; early
-close 9; excessive abstention 8; wrong stated reason the false line's;
-risk-rule rejection 2, 7.
+close 9; excessive abstention 8 (never a pass on the head trader's own
+STATE read); wrong stated reason the false line's; risk-rule rejection 2,
+7.
 
 ## Examples
 

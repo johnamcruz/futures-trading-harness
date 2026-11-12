@@ -38,6 +38,9 @@ is the entry; the 3m only times the entry: the next 3m bar, no
 confirming close, no 3m turn to wait for (waiting cost R).
 Not in a prop attempt: the trend rule alone (both ranging, the 15m's
 side; no trend anywhere, both sides).
+Then the head trader's own STATE read decides the take (`trade-session`
+step 3): both ranging, or a 4h or 1h not trending the side, is `chop` or
+`unclear` to it.
 
 ### 2. Levels flow down
 
@@ -54,4 +57,5 @@ levels it met: the `candle-reading` skill. Top down: `top-down-entry`.
 4h UP, 1h UP, 15m DOWN: long pullback. The 15m rejected the prior VAH up at 21600.25:
 the setup and the entry, on the next 3m bar; target trail (the 2R mark that arms the trail, not the exit).
 4h UP, 1h DOWN: no side, no entry. 4h and 1h RANGE, 15m DOWN, declared short: short only.
+Head trader: 4h and 1h RANGE is chop or unclear in its STATE read → pass (trade-session step 3).
 ```

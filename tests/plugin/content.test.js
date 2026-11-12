@@ -573,7 +573,7 @@ test('the analysts report reads for or against the trend rule\'s side, never adv
   assert.match(read('skills/trade-session/SKILL.md'), /Load\s+`confluence-counting` every cycle too/);
   // The setup (15m) closed is the trigger; in a prop attempt the full size (feat/bias-bg).
   const flatOf = f => read(f).replace(/\s+/g, ' ');
-  assert.ok(flatOf('skills/trade-session/SKILL.md').includes('the setup (15m) at a key level closed → `compose_check`, never your own R:R. OK → take: in a prop attempt the full verdict size; pass only on a decisive against. Not in a prop attempt: the `position-sizing` skill.'));
+  assert.ok(flatOf('skills/trade-session/SKILL.md').includes('the setup (15m) at a key level closed → `compose_check`, never your own R:R. OK → take: in a prop attempt the full verdict size; pass only on a decisive against, or your own STATE read off the setup\'s side (above). Not in a prop attempt: the `position-sizing` skill.'));
   assert.ok(flatOf('skills/trade-lifecycle/SKILL.md').includes('the side rule\'s side, the setup (15m) at a level closed (it is the entry: a limit at the last close when you compose (the setup\'s own close when you compose on its bar), filled within `valid_bars`) → compose (`confluence-counting`); the plan, never you, works out R:R.'));
 });
 
@@ -595,7 +595,7 @@ test('the count is of independent categories, never labels, and every restatemen
     '**The pullback is neutral** (`pullback-vs-reversal`)']) assert.ok(cc.includes(rule), rule);
   // Each restatement: categories, the same threshold, and no against category a pass alone.
   const ts = flat(read('skills/trade-session/SKILL.md'));
-  assert.ok(ts.includes('**Compose first** (`confluence-counting`): the side rule\'s side, the setup (15m) at a key level closed → `compose_check`, never your own R:R. OK → take: in a prop attempt the full verdict size; pass only on a decisive against. Not in a prop attempt: the `position-sizing` skill.'));
+  assert.ok(ts.includes('**Compose first** (`confluence-counting`): the side rule\'s side, the setup (15m) at a key level closed → `compose_check`, never your own R:R. OK → take: in a prop attempt the full verdict size; pass only on a decisive against, or your own STATE read off the setup\'s side (above). Not in a prop attempt: the `position-sizing` skill.'));
   assert.ok(flat(read('skills/trade-lifecycle/SKILL.md')).includes('the side rule\'s side, the setup (15m) at a level closed (it is the entry: a limit at the last close when you compose (the setup\'s own close when you compose on its bar), filled within `valid_bars`) → compose (`confluence-counting`); the plan, never you, works out R:R.'));
   const tp = flat(read('skills/trader-process/SKILL.md'));
   // take or pass first: the decision word the verdict parser reads (roles-ran.js: "take" agrees, a "valid" first word
@@ -670,7 +670,7 @@ test('decisive is a real HTF reversal (a 1h CHoCH against), never a 15m swing br
   assert.ok(cc.includes('or a 3m close beyond the leg\'s 15m swing, `m3.htfLevels` `brokenAt`): in a prop attempt no cut, the full verdict size; outside one, half. Closed back inside, it is a sweep (`breakout-vs-fakeout`): liquidity for.'));
   const restated = {
     'rules/trading/decision.md': ['serious against (a 3m close beyond the leg\'s 15m swing among them) → half', 'decisive against (a 1h CHoCH against, unless the 4h and 1h both your way) → pass'],
-    'skills/trade-session/SKILL.md': ['pass only on a decisive against.'],
+    'skills/trade-session/SKILL.md': ['pass only on a decisive against, or your own STATE read off the setup\'s side (above).'],
     'agents/risk-manager.md': ['VETO only on a decisive 1h CHoCH against or a failed hard step.'],
   };
   for (const [f, list] of Object.entries(restated)) for (const s of list) assert.ok(flat(read(f)).includes(s), `${f}: ${s}`);
