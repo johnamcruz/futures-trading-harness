@@ -110,11 +110,7 @@ test('CORE: the composed bar\'s reads the gate requires (SITUATIONAL taught in t
   // broken by a close since the extreme, bars since the extreme, the volume ratio not time-of-day adjusted (+124).
   // Then 79100 (feat/state-read, the owner's goal of measuring the model's reads): trade-session step 3's STATE line, the
   // head trader's closed-form market-state read, recorded and scored against the briefing's labels, never a step (+336).
-  // Then 79363 (feat/state-read-every-decision, same rule: the STATE line moved into trader-process's PLAN template, its
-  // example and one sentence, +230, and trade-session's sentence placing it, +33; this pin was left at 79100 there).
-  // Then 79641 (feat/state-read-day-ctx, the owner's approval 2026-11-11: the line's day and ctx fields): trade-session's
-  // grammar and closed words (+231) and trader-process's template and example lines (+47).
-  assert.ok(Buffer.byteLength(prompt) <= 79641, `the head prompt is ${Buffer.byteLength(prompt)} bytes`);
+  assert.ok(Buffer.byteLength(prompt) <= 79100, `the head prompt is ${Buffer.byteLength(prompt)} bytes`);
   // Only the head trader's prompt grows: no other role's prompt embeds trade-lifecycle (the risk manager's embeds
   // confluence-counting and invalidation as before; its prompt is unchanged, pinned in trade-session-split.test.js).
   for (const [name, a] of Object.entries(index.agent)) if (name !== H.HEAD_AGENT && a.prompt) assert.ok(!a.prompt.includes('<skill name="trade-lifecycle">'), name);
