@@ -81,10 +81,12 @@ PLAN:
 7 Risk: stop <ticks>, target <R> (compose_check), size <n>, ahead <level R|none>
 8 Decision: <take|pass> - <full|the failed step>, <one main reason>
 9 Manage: <flat | invalidation, exit>
+STATE: 4h <f> | 1h <f> | 15m <f> | frames <agree|disagree> | class <c> | cites <names>
 ```
 
 No level ahead (a null `inTheWay`) with a stop is `none`, not
-`unknown`. The cycle result's reason is line 8's.
+`unknown`. The cycle result's reason is line 8's. The STATE line is the head trader's, the
+last line of its PLAN, the same every cycle (`trade-session`, step 3 has its words).
 
 Scorecard failures, by step: wrong-side entry 1, 4; bad size 7; early
 close 9; excessive abstention 8; wrong stated reason the false line's;
@@ -95,7 +97,7 @@ risk-rule rejection 2, 7.
 ```text
 PLAN:
 1 HTF: 4h up, 1h up, 15m up, bias long, rule LONG allowed (prevailing 4h up)
-2 Context: window opening drive, entries allowed, news clear, regime trend-up, account unknown
+2 Context: window opening drive, entries allowed, news clear, regime range, account unknown
 3 Location: vwap above, value above, nearest prior RTH high above
 4 Setup: long, 15m rejected prior vah up
 5 Confluence: for 4, against 0, neutral 2: structure, level, trigger, VWAP
@@ -103,4 +105,5 @@ PLAN:
 7 Risk: stop 111 ticks, target 2.08R (compose_check), size 1, ahead prior RTH high 1.2R
 8 Decision: take - full, compose_check OK
 9 Manage: flat
+STATE: 4h up | 1h up | 15m transition | frames disagree | class trend-up | cites 15m-break, 3m-break, pullback
 ```

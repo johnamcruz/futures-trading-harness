@@ -45,7 +45,8 @@ function realBriefing() {
 
 const planBlock = text => {
   const m = /```text\nPLAN:\n([^`]*)```/.exec(text);
-  return m ? m[1].trim().split('\n') : null;
+  // The STATE line ends the block (the head trader's record, tests/lib/state-read.test.js): not one of the nine steps.
+  return m ? m[1].trim().split('\n').filter(l => !l.startsWith('STATE: ')) : null;
 };
 
 test('trader-process: frontmatter and the required sections', () => {

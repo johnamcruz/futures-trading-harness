@@ -151,6 +151,29 @@ test('writeCycleLog: the head trader\'s STATE line from its own final message, s
   assert.deepStrictEqual([lines()[4].stateRead.status, lines()[4].stateRead.counts], ['read', { match: 2, mismatch: 0, unknown: 0 }]);
 });
 
+test('writeCycleLog: the STATE record carries the head trader\'s class word and cites as written, in both records; unstated without them, never a role\'s', () => {
+  const home = tmpDir();
+  const at = new Date('2026-03-02T15:03:02Z');
+  const bar = '2026-03-02T15:00:00.000Z';
+  fs.mkdirSync(path.join(home, 'briefing'), { recursive: true });
+  // The briefing's own regime and day type could name a class: the record never takes one from them.
+  fs.writeFileSync(path.join(home, 'briefing', 'MNQ.json'), JSON.stringify({ asOf: bar, sections: { m3: { data: { regime: { primary: 'trend-up' }, today: { dayType: 'trend up' } } }, m15: { data: { frame: { trend: 'up' } } }, h1: { data: { h4: { trend: 'up' }, h1: { trend: 'up' } } } } }));
+  const context = { symbols: [{ symbol: 'MNQ', bar: { t: bar } }] };
+  const stream = (final, extra = []) => [JSON.stringify({ type: 'system', subtype: 'init' }), ...extra, JSON.stringify({ type: 'result', result: final })].join('\n');
+  const write = output => writeCycleLog(home, { at, action: 'trade', harness: 'claude', prompt: 'P', context, output, result: 'CYCLE RESULT: no-trade - x', ok: true });
+  const lines = () => fs.readFileSync(path.join(home, 'logs', 'cycles-2026-03-02.jsonl'), 'utf8').trim().split('\n').map(l => JSON.parse(l));
+  const cls = s => [s.classWord, s.classStatus, s.cites, s.citesDropped];
+  const { file } = write(stream('PLAN:\n9 Manage: flat\nSTATE: 4h up | 1h up | 15m up | frames agree | class chop | cites regime, vwap\nCYCLE RESULT: no-trade - x'));
+  assert.deepStrictEqual(cls(JSON.parse(fs.readFileSync(file, 'utf8')).stateRead), ['chop', 'stated', ['regime'], 1]);
+  assert.deepStrictEqual(cls(lines()[0].stateRead), ['chop', 'stated', ['regime'], 1], 'the summary line carries it too');
+  // No class word on the line: unstated. A class only in a role's report (a subagent's turn) is not the head trader's.
+  write(stream('PLAN:\nSTATE: 4h up | 1h up | 15m up | frames agree\nCYCLE RESULT: no-trade - x'));
+  assert.deepStrictEqual(cls(lines()[1].stateRead), [null, 'unstated', [], 0]);
+  const sub = JSON.stringify({ type: 'assistant', parent_tool_use_id: 'x', message: { content: [{ type: 'text', text: 'STATE: 4h up | class trend-up | cites regime' }] } });
+  write(stream('CYCLE RESULT: no-trade - x', [sub]));
+  assert.deepStrictEqual([lines()[2].stateRead.status, ...cls(lines()[2].stateRead)], ['none', null, 'unstated', [], 0]);
+});
+
 test('headOwnText: every top-level turn of the head trader\'s own session (a managed cycle\'s PLAN sits before its last turn), never a subagent\'s or another session\'s', () => {
   const { headOwnText } = require('../../scripts/lib/cycle-log');
   const say = (text, extra = {}) => JSON.stringify({ type: 'assistant', ...extra, message: { content: [{ type: 'text', text }] } });

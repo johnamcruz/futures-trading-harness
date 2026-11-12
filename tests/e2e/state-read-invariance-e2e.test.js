@@ -35,6 +35,11 @@ const VARIANTS = {
   wrong: w => `PLAN:\n1 HTF: ...\n${stateFrom(w, true)}\n${RESULT}`,
   malformed: () => `PLAN:\n1 HTF: ...\nSTATE: everything looks bullish (4h up!!)\n${RESULT}`,
   conflicting: () => `PLAN:\n1 HTF: ...\nSTATE: 4h up | 1h up\nSTATE: 4h down | 1h up\n${RESULT}`,
+  // The model's own present read in closed words (feat/class-word): the class word and its cites, as the PLAN's last line.
+  classed: w => `PLAN:\n1 HTF: ...\n9 Manage: flat\n${stateFrom(w)} | class chop | cites 15m-trend, day-so-far\n${RESULT}`,
+  classOnly: () => `PLAN:\n1 HTF: ...\nSTATE: class trend-down\n${RESULT}`,
+  badClass: w => `PLAN:\n1 HTF: ...\n${stateFrom(w)} | cites regime, class bullish\n${RESULT}`,
+  unknownCite: w => `PLAN:\n1 HTF: ...\n${stateFrom(w)} | class trend-up | cites vwap, regime, the 4h\n${RESULT}`,
 };
 
 // Wall-clock and per-run fields (times, ids of the tmp home, durations): never what was decided.
@@ -72,9 +77,19 @@ test('state read invariance: present, wrong, malformed, conflicting or absent, t
   assert.ok(got.absent.decided.broker.some(c => c.tool === 'place_order'));
   for (const name of Object.keys(VARIANTS)) assert.deepStrictEqual(got[name].decided, got.absent.decided, `${name}: decided and acted as without the line`);
   // The record is what differs.
-  assert.deepStrictEqual(Object.fromEntries(Object.entries(got).map(([k, v]) => [k, v.state.status])), { absent: 'none', right: 'read', wrong: 'read', malformed: 'unparsable', conflicting: 'conflicting' });
+  assert.deepStrictEqual(Object.fromEntries(Object.entries(got).map(([k, v]) => [k, v.state.status])), { absent: 'none', right: 'read', wrong: 'read', malformed: 'unparsable', conflicting: 'conflicting', classed: 'read', classOnly: 'read', badClass: 'read', unknownCite: 'read' });
   assert.strictEqual(got.right.state.counts.mismatch, 0);
   assert.ok(got.wrong.state.counts.mismatch >= 3, JSON.stringify(got.wrong.state.counts));
+  // The recorded class word and cites, as written, by equality; unstated wherever the line has none (the briefing's own
+  // regime and day type never fill it in).
+  const classOf = s => [s.classWord, s.classStatus, s.cites, s.citesDropped, s.citesStated];
+  assert.deepStrictEqual(Object.fromEntries(Object.entries(got).map(([k, v]) => [k, classOf(v.state)])), {
+    absent: [null, 'unstated', [], 0, 'absent'], right: [null, 'unstated', [], 0, 'absent'], wrong: [null, 'unstated', [], 0, 'absent'], malformed: [null, 'unstated', [], 0, 'absent'], conflicting: [null, 'unstated', [], 0, 'absent'],
+    classed: ['chop', 'stated', ['15m-trend', 'day-so-far'], 0, 'names'], classOnly: ['trend-down', 'stated', [], 0, 'absent'], badClass: [null, 'unstated', ['regime'], 0, 'names'], unknownCite: ['trend-up', 'stated', ['regime'], 3, 'names'],
+  });
+  assert.ok(got.right.state.facts && got.right.state.facts.regime !== undefined, 'the briefing was there to fill it, and nothing did');
+  // The class word is never scored: the frames' fields only.
+  assert.deepStrictEqual(got.classed.state.fields, got.right.state.fields);
 });
 
 /**
@@ -131,4 +146,7 @@ test('state read invariance: no module that decides reaches state-read.js, throu
     // The trade feedback: a past trade's STATE read at its entry, a tag on that trade's line in the head's prompt (what the
     // model learns from); never a check, tool or order path (the deciders above reach none of it).
     'scripts/lib/trading/trade-feedback.js']);
+  // The class word and its cites (feat/class-word): named by the module that reads them and nothing else, so no decider,
+  // report or prompt reads them (a later report is its own pull request, added here by name).
+  assert.deepStrictEqual(naming(/\b(?:classWord|classStatus|citesDropped|citesStated|CLASS_WORDS|CITES|AS_REGIME|classIsRegime)\b|\.cites\b|\[\s*['"`]cites['"`]\s*\]/), ['scripts/lib/trading/state-read.js']);
 });
