@@ -150,6 +150,6 @@ test('state read invariance: no module that decides reaches state-read.js, throu
     // model learns from); never a check, tool or order path (the deciders above reach none of it).
     'scripts/lib/trading/trade-feedback.js']);
   // The class word and its cites (feat/class-word): named by the module that reads them and nothing else, so no decider,
-  // report or prompt reads them (a later report is its own pull request, added here by name).
-  assert.deepStrictEqual(naming(/\b(?:classWord|classStatus|citesDropped|citesStated|CLASS_WORDS|CITES|AS_REGIME|classIsRegime)\b|\.cites\b|\[\s*['"`]cites['"`]\s*\]/), ['scripts/lib/trading/state-read.js']);
+  // report or prompt reads them (the recognition scorer is the one report, a measurement; a later one is its own pull request, added here by name).
+  assert.deepStrictEqual(naming(/\b(?:classWord|classStatus|citesDropped|citesStated|CLASS_WORDS|CITES|AS_REGIME|classIsRegime)\b|\.cites\b|\[\s*['"`]cites['"`]\s*\]/), ['scripts/lib/learning/recognition/scorer.js', 'scripts/lib/trading/state-read.js']);
 });
