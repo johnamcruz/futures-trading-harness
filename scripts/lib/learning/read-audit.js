@@ -19,8 +19,7 @@
  *
  * The read's side: long when its own 4h and 1h are both up, short when both down, else none.
  * The scored fields: 4h, 1h, 15m and frames (against the labels). frames-own (the read against itself) and the day so
- * far are reported beside, never scored here; the read's own day and ctx words are scored after the fact apart (dayCtx below,
- * read-audit-day-ctx.js reports them), never in a class. Unknown is never a mismatch.
+ * far (no day field in the read: #323) are reported beside, never scored here. Unknown is never a mismatch.
  *
  * The classes (CLASSES), for a decision with a read, at least one scored field, and an outcome:
  *   misread        a scored field mismatches its label
@@ -41,10 +40,6 @@
  *   readSide(read)                        'long' | 'short' | null
  *   inconsistencies(read, side)           the CONSISTENCY keys an entry on that side breaks
  *   forwardMove({ bars, cycleT, side, forwardBars, stopAtr })   { R, stopped, stop, bars, why }
- *   firstTouch({ bars, cycleT, side, forwardBars, stopAtr })    { label: held | reversed | none | moved | null, bars, unit, why }
- *   dayLabelOf(bars, { day, session, tfMs })   { label: trend | chop | mixed | null, read, score, why }: the after-the-fact
- *                                         day label; a row's dayCtx column ({ day, ctx, preEntryBD }) scores the read's own
- *                                         day and ctx words against these two
  *   auditDecision({ day, t, symbol, stateRead, decision, orders, result, bars, cfg, barClose, tfMs, coded })   one row (barClose,
  *                                         tfMs: the cycle's base bar close and timeframe, to refuse another lane's record;
  *                                         coded: a cycle with no STATE line is read from its recorded labels, row.source says
@@ -65,8 +60,6 @@ const { dayBootstrap } = require('./experience-index');
 const { ATR_PERIOD, loadBars, outcomeBarsFrom } = require('../replay/labels');
 const ind = require('../trading/indicators');
 const { codedRead, codedState } = require('../trading/coded-read');
-const { daySoFar, DAY_CLASS } = require('../trading/day-so-far');
-const { parseWindows, inWindow, tradingDayKey, MARKET_TZ } = require('../trading/clock');
 
 const EI = require('../tunables').training().experienceIndex; // config/training.json: the day resampling's level, seed, reps, minimums
 const CFG = require('../tunables').analysis().readAudit; // config/analysis.json: the forward window and the standard stop
@@ -150,83 +143,6 @@ function forwardMove({ bars, cycleT, side, forwardBars = CFG.forwardBars, stopAt
   return { R: round4((dir * (after[after.length - 1].c - entry)) / stop), stopped: false, stop, bars: after.length, why: null };
 }
 
-/**
- * The after-the-fact structure label (the discernment set's): from the cycle bar's close, over the forward window, one
- * unit (stopAtr x ATR(20) at the cycle bar) the side's way first `held`, against it first `reversed` (both in one bar:
- * reversed, the adverse touch first, as forwardMove's stop-first), neither `none`; no side: `moved` (a unit either way)
- * or `none`. Too few bars and no touch: unknown (null).
- */
-function firstTouch({ bars, cycleT, side, forwardBars = CFG.forwardBars, stopAtr = CFG.stopAtr }) {
-  const out = (why, extra = {}) => ({ label: null, bars: 0, unit: null, why, ...extra });
-  const list = timed(bars);
-  const i = indexAt(list, Date.parse(cycleT));
-  if (i < 0) return out('the cycle bar is not in the bars archive (another symbol or timeframe?)');
-  const atr = atrAtIndex(list, i);
-  if (!atr) return out('no ATR at the cycle bar (too few bars before it)');
-  const unit = round4(stopAtr * atr);
-  const e = list[i].c;
-  const after = list.slice(i + 1, i + 1 + forwardBars);
-  for (let k = 0; k < after.length; k += 1) {
-    const up = after[k].h >= e + unit;
-    const down = after[k].l <= e - unit;
-    const hit = label => ({ label, bars: k + 1, unit, why: null });
-    if (!side) { if (up || down) return hit('moved'); continue; }
-    if (side === 'long' ? down : up) return hit('reversed');
-    if (side === 'long' ? up : down) return hit('held');
-  }
-  if (after.length < forwardBars) return out(`no forward bars yet (${after.length} of ${forwardBars})`, { unit });
-  return { label: 'none', bars: after.length, unit, why: null };
-}
-
-/**
- * The after-the-fact day label: the Day so far read (day-so-far.js) of the day's bars through the run's session window's
- * end, as a day class (DAY_CLASS: trend, chop, mixed). Unknown (null, with why) without a session window, without the
- * day's bars in it, when the bars end before the window does, or with no read (too early, unknown).
- */
-function dayLabelOf(bars, { day, session, tfMs }) {
-  const out = (why, d = null) => ({ label: null, read: d ? d.read || d.status : null, score: d ? d.score ?? null : null, why });
-  const spec = Array.isArray(session) ? session.join(',') : session;
-  if (!spec) return out('no session window in the run\'s config');
-  const { windows } = parseWindows(spec);
-  const list = timed(bars);
-  const inside = ms => windows.some(w => inWindow(new Date(ms), w));
-  const own = list.filter(b => tradingDayKey(new Date(b.ms)) === day && inside(b.ms));
-  if (!own.length) return out('no bars of the day in the session window');
-  const last = own[own.length - 1];
-  if (inside(last.ms + tfMs)) return out('the day\'s bars end before the session window\'s end');
-  const d = daySoFar(list.filter(b => b.ms <= last.ms));
-  if (!d || d.status !== 'read') return out(`no Day so far read (${d ? d.reason || d.status : 'outside RTH'})`, d);
-  return { label: DAY_CLASS[d.read] || null, read: d.read, score: d.score ?? null, why: null };
-}
-
-const HOUR = new Intl.DateTimeFormat('en-US', { timeZone: MARKET_TZ, hour: '2-digit', hourCycle: 'h23' });
-const DAY_WORDS = ['trend', 'chop', 'mixed', 'early'];
-const CLASS_WORDS = ['trend', 'chop', 'mixed'];
-/** The day and ctx columns: the read's own words against the labels after the fact, beside the class, never in it. */
-function dayCtxColumn({ s, read, kind, bars, cycleT, cfg, dayLabel }) {
-  const word = k => (isObj(read) && typeof read[k] === 'string' ? read[k] : null);
-  const label = isObj(dayLabel) ? dayLabel.label ?? null : null;
-  const soFar = isObj(s) && isObj(s.facts) ? DAY_CLASS[s.facts.daySoFar] || null : null;
-  const d = word('day');
-  const day = { read: d, label, why: isObj(dayLabel) ? dayLabel.why ?? null : 'no day label', result: label && CLASS_WORDS.includes(d) ? (d === label ? 'right' : 'wrong') : null,
-    soFar, copy: d && soFar ? d === soFar : null, hour: fin(Date.parse(cycleT)) ? HOUR.format(new Date(cycleT)) : null };
-  const c = word('ctx');
-  const side = readSide(read);
-  const coded = isObj(s) && isObj(s.fields) && isObj(s.fields.ctx) ? s.fields.ctx.fact ?? null : null;
-  const ctx = { read: c, side, label: null, result: null, coded, why: null };
-  if (c && c !== 'unknown') {
-    if (c !== 'unclear' && !side) ctx.why = 'a side\'s ctx word with no 4h/1h side of the read\'s own';
-    else {
-      const t = firstTouch({ bars, cycleT, side: c === 'unclear' ? null : side, forwardBars: cfg.forwardBars, stopAtr: cfg.stopAtr });
-      ctx.label = t.label;
-      ctx.why = t.why;
-      if (t.label) ctx.result = (c === 'unclear' ? t.label === 'none' : c === 'reversal' ? t.label === 'reversed' : t.label === 'held') ? 'right' : 'wrong';
-    }
-  }
-  const onChopEntry = kind === 'entry' && label === 'chop';
-  return { day, ctx, preEntryBD: onChopEntry ? (DAY_WORDS.includes(d) ? d !== 'trend' : null) : false };
-}
-
 const outcomeWord = result => ((/CYCLE RESULT:[\s*_`]*([a-z][a-z-]*)/i.exec(String(result || '')) || [])[1] || '').toLowerCase();
 
 /** The decision's kind and side: its record's when joined, else the cycle's own (a managed result, an allowed order). */
@@ -282,7 +198,7 @@ function unscorableWhy(row, s, { barClose, tfMs }) {
   return row.outcome.why || null;
 }
 
-function auditDecision({ day, t, symbol, stateRead = null, decision = null, orders = [], result = null, bars = [], cfg = CFG, barClose = null, tfMs = null, coded = false, dayLabel = null }) {
+function auditDecision({ day, t, symbol, stateRead = null, decision = null, orders = [], result = null, bars = [], cfg = CFG, barClose = null, tfMs = null, coded = false }) {
   const { kind, side } = kindOf({ decision, orders, result });
   const own = isObj(stateRead) ? stateRead : null;
   // coded: a cycle without a usable STATE line is read from its recorded briefing labels instead (coded-read.js), and
@@ -302,8 +218,6 @@ function auditDecision({ day, t, symbol, stateRead = null, decision = null, orde
     outcome: outcomeColumn({ kind, side, decision, read, bars, cycleT, cfg }),
     class: null, unscorable: null,
   };
-  // The day class and the structure context, the read's own words scored after the fact (read-audit-day-ctx.js reports).
-  row.dayCtx = dayCtxColumn({ s, read, kind, bars, cycleT, cfg, dayLabel });
   if (coded) Object.assign(row, { source: fromCode ? 'coded' : own && own.status === 'read' ? 'model' : null, modelStatus: own ? (own.error ? 'error' : own.status || null) : null, coded: own && isObj(own.facts) ? codedRead(own.facts, { side }) : null });
   if (kind === 'in-trade') return row;
   row.unscorable = unscorableWhy(row, s, { barClose, tfMs });
@@ -459,7 +373,6 @@ function runRows(target, { decisions = null, cfg = CFG, days = null, barsFiles =
   const at = readJson(path.join(dir, 'autotrader.json')) || {};
   const tf = Number(at.timeframe) || null;
   const barsOf = new Map();
-  const dayLabels = new Map(); // day|symbol -> the after-the-fact day label, once a day
   const rows = [];
   for (const day of Object.keys(run.days).sort().filter(d => !days || days.includes(d))) {
     for (const line of run.days[day]) {
@@ -470,13 +383,11 @@ function runRows(target, { decisions = null, cfg = CFG, days = null, barsFiles =
       const ran = (Array.isArray(line.ran) ? line.ran : []).find(x => isObj(x) && Array.isArray(x.symbols));
       const symbol = (sr && sr.symbol) || (ran && ran.symbols[0]) || (Array.isArray(at.symbols) ? at.symbols[0] : null);
       if (!barsOf.has(symbol)) barsOf.set(symbol, isObj(barsFiles) && barsFiles[symbol] ? dataOf(barsFiles[symbol], tf) : loadBars(home, symbol, tf));
-      const lk = `${day}|${symbol}`;
-      if (!dayLabels.has(lk)) dayLabels.set(lk, dayLabelOf(barsOf.get(symbol), { day, session: at.sessions, tfMs: tf ? tf * MINUTE : null }));
-      rows.push(auditDecision({ day, t: line.t, symbol, stateRead: sr, decision: joinOf(decisions, `${line.t}|${symbol}`, runId), orders: c.orders, result: c.result, bars: barsOf.get(symbol), cfg, coded, dayLabel: dayLabels.get(lk),
+      rows.push(auditDecision({ day, t: line.t, symbol, stateRead: sr, decision: joinOf(decisions, `${line.t}|${symbol}`, runId), orders: c.orders, result: c.result, bars: barsOf.get(symbol), cfg, coded,
         barClose: isObj(c.timing) ? c.timing.barClose : null, tfMs: tf ? tf * MINUTE : null }));
     }
   }
   return { runId, rows };
 }
 
-module.exports = { FIELDS, CLASSES, CONSISTENCY, readSide, inconsistencies, forwardMove, firstTouch, dayLabelOf, auditDecision, summarize, renderAudit, loadDecisions, replayDirs, runRows };
+module.exports = { FIELDS, CLASSES, CONSISTENCY, readSide, inconsistencies, forwardMove, auditDecision, summarize, renderAudit, loadDecisions, replayDirs, runRows };

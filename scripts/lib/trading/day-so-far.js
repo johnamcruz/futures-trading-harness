@@ -162,7 +162,4 @@ function volatilityText(v, tf = '3m') {
   return ` RTH volatility: ${v.word} (the last ${v.windowMinutes} min's ${tf} bar range ${v.ratio}x the same minutes' median on ${v.sessions} prior sessions).`;
 }
 
-/** The read's word as a day class (the head trader's STATE day words; the read audit's day label): one word each. */
-const DAY_CLASS = Object.freeze({ directional: 'trend', rotational: 'chop', mixed: 'mixed', 'too early': 'early' });
-
-module.exports = { DAY_CLASS, daySoFar, readOf, daySoFarLine, windowMeans, rthVolatility, volatilityRead, volatilityText };
+module.exports = { daySoFar, readOf, daySoFarLine, windowMeans, rthVolatility, volatilityRead, volatilityText };

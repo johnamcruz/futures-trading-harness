@@ -81,7 +81,7 @@ PLAN:
 7 Risk: stop <ticks>, target <R> (compose_check), size <n>, ahead <level R|none>
 8 Decision: <take|pass> - <full|the failed step>, <one main reason>
 9 Manage: <flat | invalidation, exit>
-STATE: 4h <f> | 1h <f> | 15m <f> | frames <agree|disagree> | day <d> | ctx <c>
+STATE: 4h <f> | 1h <f> | 15m <f> | frames <agree|disagree>
 ```
 
 No level ahead (a null `inTheWay`) with a stop is `none`, not
@@ -105,5 +105,5 @@ PLAN:
 7 Risk: stop 111 ticks, target 2.08R (compose_check), size 1, ahead prior RTH high 1.2R
 8 Decision: take - full, compose_check OK
 9 Manage: flat
-STATE: 4h up | 1h up | 15m up | frames agree | day early | ctx pullback
+STATE: 4h up | 1h up | 15m up | frames agree
 ```

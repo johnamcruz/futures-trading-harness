@@ -26,8 +26,7 @@ const flip = { up: 'down', down: 'up', range: 'up' };
 function stateFrom(w, wrong = false) {
   const b = readBriefing(w.home, 'MNQ').sections;
   const f = t => (wrong ? flip[t] || 'up' : t || 'unknown');
-  // The day and ctx words ride along (feat/state-read-day-ctx): a read of either changes no decision either.
-  return `STATE: 4h ${f(b.h1.data.h4.trend)} | 1h ${f(b.h1.data.h1.trend)} | 15m ${f(b.m15.data.frame.trend)} | frames ${wrong ? 'agree' : 'disagree'} | day ${wrong ? 'chop' : 'trend'} | ctx ${wrong ? 'reversal' : 'continuation'}`;
+  return `STATE: 4h ${f(b.h1.data.h4.trend)} | 1h ${f(b.h1.data.h1.trend)} | 15m ${f(b.m15.data.frame.trend)} | frames ${wrong ? 'agree' : 'disagree'}`;
 }
 
 const VARIANTS = {

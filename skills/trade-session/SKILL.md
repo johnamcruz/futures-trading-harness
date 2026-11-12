@@ -117,11 +117,8 @@ It orders the thinking and adds no filter.
 Last line of the PLAN block, every PLAN, an open trade's too: your own read
 from the bars and facts, not the labels copied (a label its last break or
 candle contradicts can be a `transition`, `trend-vs-range`); it is recorded
-and changes no step: `STATE: 4h <f> | 1h <f> | 15m <f> | frames <agree|disagree> | day <d> | ctx <c>`,
-`<f>` is `up`, `down`, `range`, `transition` or `unknown`. `<d>`, the day
-so far (`day-context`): `trend`, `chop`, `mixed` or `early`; `<c>`, price
-against the 4h/1h side (`pullback-vs-reversal`): `pullback`, `reversal`,
-`continuation` (with it) or `unclear` (no side).
+and changes no step: `STATE: 4h <f> | 1h <f> | 15m <f> | frames <agree|disagree>`,
+`<f>` is `up`, `down`, `range`, `transition` or `unknown`.
 
 - **The priority order** (the `strategy-library` skill, "The priority order"):
   the rule for every setup, a policy verdict too. Apply its steps in order.

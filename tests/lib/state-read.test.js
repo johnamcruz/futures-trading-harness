@@ -28,29 +28,16 @@ test('state line: the canonical line reads into frames and agree', () => {
   const r = S.parseStateLine('PLAN:\n1 HTF: 4h up, 1h up, 15m range\nSTATE: 4h up | 1h up | 15m range | frames disagree\nCYCLE RESULT: no-trade - x');
   assert.strictEqual(r.status, 'read');
   assert.deepStrictEqual(r.read, { frames: { '4h': 'up', '1h': 'up', '15m': 'range' }, agree: 'no' });
-  assert.deepStrictEqual(r.missing, ['day', 'ctx']);
+  assert.deepStrictEqual(r.missing, []);
   assert.deepStrictEqual(r.bad, []);
   assert.strictEqual(r.lines, 1);
   assert.deepStrictEqual(S.parseState('STATE: 4h up | 1h up | 15m range | frames disagree'), r.read);
 });
 
-test('state line: the day class and the structure context are closed one-word fields (day trend|chop|mixed|early, ctx pullback|reversal|continuation|unclear)', () => {
-  assert.deepStrictEqual(S.REGISTRY.filter(e => !e.derived).map(e => e.key), ['4h', '1h', '15m', 'frames', 'day', 'ctx']);
-  assert.deepStrictEqual(S.DAY_VALUES, ['trend', 'chop', 'mixed', 'early', 'unknown']);
-  assert.deepStrictEqual(S.CTX_VALUES, ['pullback', 'reversal', 'continuation', 'unclear', 'unknown']);
-  const r = S.parseStateLine('STATE: 4h up | 1h up | 15m range | frames disagree | day chop | ctx pullback');
-  assert.deepStrictEqual([r.status, r.missing, r.bad], ['read', [], []]);
-  assert.deepStrictEqual(r.read, { frames: { '4h': 'up', '1h': 'up', '15m': 'range' }, agree: 'no', day: 'chop', ctx: 'pullback' });
-  for (const w of ['trend', 'chop', 'mixed', 'early', 'unknown']) assert.strictEqual(S.parseState(`STATE: day ${w}`).day, w, w);
-  for (const w of ['pullback', 'reversal', 'continuation', 'unclear', 'unknown']) assert.strictEqual(S.parseState(`STATE: ctx ${w}`).ctx, w, w);
-  // The Day so far line's own words read as the class they name; "too early" in one word (an item is two words).
-  assert.deepStrictEqual(['directional', 'rotational', 'too-early', 'Early', 'too_early'].map(w => (S.parseState(`STATE: day ${w}`) || {}).day), ['trend', 'chop', 'early', 'early', 'early']);
-  // Anything else is bad, never guessed: a direction, a second word, free text, another field's word.
-  const bad = S.parseStateLine('STATE: 4h up | day trending | day trend up | ctx pull-back | ctx up | day pullback | ctx chop | day too early');
-  assert.deepStrictEqual([bad.read, bad.bad], [{ frames: { '4h': 'up' }, agree: null }, ['day trending', 'day trend up', 'ctx pull-back', 'ctx up', 'day pullback', 'ctx chop', 'day too early']]);
-  // A line without them reads as before, and lists them as left out.
-  assert.deepStrictEqual(S.parseStateLine('STATE: 4h up | 1h up | 15m up | frames agree').missing, ['day', 'ctx']);
-  assert.ok(!('day' in S.parseState('STATE: 4h up')) && !('ctx' in S.parseState('STATE: 4h up')));
+test('state line: no day field (the owner\'s decision, until the Day so far line\'s words): a day item is bad', () => {
+  assert.deepStrictEqual(S.REGISTRY.filter(e => !e.derived).map(e => e.key), ['4h', '1h', '15m', 'frames']);
+  const r = S.parseStateLine('STATE: 4h up | day trending');
+  assert.deepStrictEqual([r.read, r.bad], [{ frames: { '4h': 'up' }, agree: null }, ['day trending']]);
 });
 
 test('state line: case, spacing, markdown marks, dashes and separators are tolerated; only the spelling changes', () => {
@@ -78,7 +65,7 @@ test('state line: a partial line reads what it states and lists what it left out
   const r = S.parseStateLine('STATE: 4h up | 1h down');
   assert.strictEqual(r.status, 'read');
   assert.deepStrictEqual(r.read, { frames: { '4h': 'up', '1h': 'down' }, agree: null });
-  assert.deepStrictEqual(r.missing, ['15m', 'frames', 'day', 'ctx']);
+  assert.deepStrictEqual(r.missing, ['15m', 'frames']);
 });
 
 test('state line: an item outside the closed vocabulary is bad, never guessed; free text is no read', () => {
@@ -178,40 +165,6 @@ test('state score: frames-own scores the frames word against the model\'s own th
   assert.ok(!('frames-own' in S.scoreState(S.parseState('STATE: 4h up | 1h up | 15m up'), null).fields));
 });
 
-test('state score: day against the Day so far line\'s word (agreement: a copy measure, not accuracy), ctx against the labels\' context; neither in the frame counts', () => {
-  const withDay = (soFar, opts = {}) => { const b = briefing(opts); if (soFar !== undefined) b.sections.m3.data.today.soFar = soFar; return b; };
-  const day = (w, soFar) => S.scoreState(S.parseState(`STATE: day ${w}`), withDay(soFar)).fields.day;
-  assert.deepStrictEqual(day('trend', { status: 'read', read: 'directional', direction: 'up' }), { read: 'trend', fact: 'trend', field: 'the Day so far line (agreement with it: a copy measure, not accuracy)', result: 'match' });
-  assert.strictEqual(day('chop', { status: 'read', read: 'rotational' }).result, 'match');
-  assert.strictEqual(day('mixed', { status: 'read', read: 'mixed' }).result, 'match');
-  assert.strictEqual(day('early', { status: 'too early', bars: 4 }).result, 'match');
-  assert.deepStrictEqual([day('trend', { status: 'read', read: 'rotational' }).result, day('trend', { status: 'read', read: 'rotational' }).fact], ['mismatch', 'chop']);
-  assert.strictEqual(day('chop', { status: 'too early', bars: 4 }).result, 'mismatch');
-  // No word on the line (unknown, outside RTH): unknown, never a mismatch; the read left unknown: unknown.
-  assert.strictEqual(day('trend', { status: 'unknown', reason: 'x' }).result, 'unknown');
-  assert.strictEqual(day('trend').result, 'unknown');
-  assert.strictEqual(day('unknown', { status: 'read', read: 'mixed' }).result, 'unknown');
-  // ctx: the labels' context, in order: no 4h/1h side unclear; a 1h or 15m break against the side reversal; a 3m break
-  // against, the 3m regime trending against, or the 15m trend against pullback; else continuation.
-  const ctx = (w, opts) => S.scoreState(S.parseState(`STATE: ctx ${w}`), briefing(opts)).fields.ctx;
-  assert.deepStrictEqual(ctx('continuation', {}), { read: 'continuation', fact: 'continuation', field: 'the labels\' context (4h/1h side; 1h, 15m, 3m breaks; 3m regime; 15m trend)', result: 'match' });
-  assert.strictEqual(ctx('unclear', { h1: 'down' }).fact, 'unclear');
-  assert.strictEqual(ctx('unclear', { h4: 'range', h1: 'range' }).fact, 'unclear');
-  assert.strictEqual(ctx('reversal', { breaks: { h1: 'down' } }).fact, 'reversal');
-  assert.strictEqual(ctx('reversal', { breaks: { m15: 'down', m3: 'down' } }).fact, 'reversal');
-  assert.strictEqual(ctx('pullback', { breaks: { m3: 'down' } }).fact, 'pullback');
-  assert.strictEqual(ctx('pullback', { regime: 'trend-down' }).fact, 'pullback');
-  assert.strictEqual(ctx('pullback', { m15: 'down' }).fact, 'pullback');
-  assert.strictEqual(ctx('pullback', { h4: 'down', h1: 'down', m15: 'up' }).fact, 'pullback');
-  assert.strictEqual(ctx('continuation', { h4: 'down', h1: 'down', m15: 'down', regime: 'trend-down', breaks: { h1: 'down', m15: 'down', m3: 'down' } }).fact, 'continuation');
-  assert.strictEqual(ctx('reversal', { breaks: { m3: 'down' } }).result, 'mismatch');
-  assert.strictEqual(ctx('unknown', {}).result, 'unknown');
-  assert.strictEqual(S.scoreState(S.parseState('STATE: ctx pullback'), { sections: {} }).fields.ctx.result, 'unknown');
-  // The frame counts stay the frames' own: day and ctx are reported in their fields only.
-  const s = S.scoreState(S.parseState('STATE: 4h up | day chop | ctx reversal'), withDay({ status: 'read', read: 'directional' }));
-  assert.deepStrictEqual([s.fields.day.result, s.fields.ctx.result, s.counts], ['mismatch', 'mismatch', { match: 1, mismatch: 0, unknown: 0 }]);
-});
-
 test('state facts: the labels and their context as the code had them, recorded, never scored', () => {
   const f = S.stateFacts(briefing({ h1: 'up', breaks: { h1: 'down', m15: 'up', m3: 'down' } }));
   assert.deepStrictEqual(f, {
@@ -246,7 +199,7 @@ test('state facts: the Day so far and Pullback lines\' words as the cycle bar\'s
 });
 
 test('state vocabulary: one registry entry per field, the parser and the scorer read only it', () => {
-  assert.deepStrictEqual(S.REGISTRY.map(e => e.key), ['4h', '1h', '15m', 'frames', 'day', 'ctx', 'frames-own']);
+  assert.deepStrictEqual(S.REGISTRY.map(e => e.key), ['4h', '1h', '15m', 'frames', 'frames-own']);
   for (const e of S.REGISTRY) {
     assert.ok(Array.isArray(e.values) && e.values.includes('unknown'), e.key);
     assert.strictEqual(typeof e.fact, 'function', e.key);
@@ -300,24 +253,18 @@ test('state line: the trade-session skill documents the grammar the parser reads
   assert.ok(frameWords, 'the frame words');
   const words = [...frameWords[1].matchAll(/`([a-z]+)`/g)].map(x => x[1]);
   assert.deepStrictEqual(words, S.FRAME_VALUES);
-  // The day and ctx words, as the skill lists them: the registry's closed words but unknown (never taught: a read names one).
-  const listed = tag => { const w = new RegExp(`\`<${tag}>\`[^:]*: ((?:\`[a-z]+\`(?: \\([^)]*\\))?(?:, | or )?)+)`).exec(flat); return w ? [...w[1].matchAll(/`([a-z]+)`/g)].map(x => x[1]) : null; };
-  assert.deepStrictEqual(listed('d'), S.DAY_VALUES.filter(w => w !== 'unknown'));
-  assert.deepStrictEqual(listed('c'), S.CTX_VALUES.filter(w => w !== 'unknown'));
   // Every filled-in instance of the grammar reads in full.
   for (const f of words) {
     for (const a of ['agree', 'disagree']) {
-      for (const [d, c] of listed('d').map((d, i) => [d, listed('c')[i]])) {
-        const line = m[1].replace(/<f>/g, f).replace(/frames <[^>]+>/, `frames ${a}`).replace('<d>', d).replace('<c>', c);
-        const r = S.parseStateLine(line);
-        assert.deepStrictEqual([r.status, r.missing, r.bad], ['read', [], []], line);
-      }
+      const line = m[1].replace(/<f>/g, f).replace(/frames <[^>]+>/, `frames ${a}`);
+      const r = S.parseStateLine(line);
+      assert.deepStrictEqual([r.status, r.missing, r.bad], ['read', [], []], line);
     }
   }
   // The model's own read, not the labels copied; recorded, never a step of its own, and no word of a score to aim at.
   assert.ok(flat.includes('your own read from the bars and facts, not the labels copied'));
   assert.ok(flat.includes('it is recorded and changes no step'));
-  const para = flat.slice(flat.indexOf('Last line of the PLAN block'), flat.indexOf('(no side).', flat.indexOf('Last line of the PLAN block')));
+  const para = flat.slice(flat.indexOf('Last line of the PLAN block'), flat.indexOf('`unknown`.', flat.indexOf('Last line of the PLAN block')));
   assert.doesNotMatch(para, /scor|check|graded|accura/i);
   // One grammar: no other skill or agent documents it (trader-process only shows the line in its PLAN template, below).
   for (const dir of ['skills', 'agents']) {
@@ -336,8 +283,8 @@ test('state line: the PLAN template and its example end with the STATE line (a m
   // The template: the PLAN block's last line, after 9 Manage, a filled-in instance of the trade-session grammar.
   const tpl = /9 Manage:[^\n]*\n(STATE: [^\n]+)\n```/.exec(spec);
   assert.ok(tpl, 'the template ends with the STATE line');
-  const filled = tpl[1].replace(/<f>/g, 'range').replace(/frames <[^>]+>/, 'frames agree').replace('<d>', 'chop').replace('<c>', 'unclear');
-  assert.deepStrictEqual([S.parseStateLine(filled).status, S.parseStateLine(filled).missing, S.parseStateLine(filled).bad], ['read', [], []]);
+  const filled = tpl[1].replace(/<f>/g, 'range').replace(/frames <[^>]+>/, 'frames agree');
+  assert.deepStrictEqual([S.parseStateLine(filled).status, S.parseStateLine(filled).bad], ['read', []]);
   // The example block's line reads in full (a complete line, every field).
   const ex = /9 Manage:[^\n]*\n(STATE: [^\n]+)\n```/.exec(examples);
   assert.ok(ex, 'the example ends with the STATE line');

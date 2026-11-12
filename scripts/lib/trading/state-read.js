@@ -6,7 +6,7 @@
  * briefing's own labels. A record for measurement and for what the model learns from, nothing more: no check, tool,
  * runner step or order path reads it, and a cycle without the line (or with a broken one) runs exactly as before.
  *
- *   STATE: 4h up | 1h up | 15m range | frames disagree | day chop | ctx pullback
+ *   STATE: 4h up | 1h up | 15m range | frames disagree
  *
  *   field       values                                    scored against
  *   4h          up | down | range | transition | unknown   h1.h4.trend
@@ -16,17 +16,9 @@
  *                                                          yes; two known that differ -> no; else unknown
  *   frames-own  (derived, never written) the same word     the read's own three frame words (transition among them):
  *                                                          its internal consistency, scored without a briefing
- *   day         trend | chop | mixed | early | unknown     the Day so far word (directional trend, rotational chop,
- *               (directional, rotational, too-early read   mixed, too early early): AGREEMENT, a copy measure, not
- *               as trend, chop, early)                     accuracy
- *   ctx         pullback | reversal | continuation |       the labels' context (contextOf: no 4h/1h side unclear; a 1h
- *               unclear | unknown                          or 15m break against reversal; a 3m counter-move pullback;
- *                                                          else continuation)
  *
- * day and ctx (the owner's approval, 2026-11-11: the model's own trend-vs-chop and pullback-vs-reversal reads, scored)
- * are scored here only for agreement with the briefing's own words and kept out of `counts` (the frames' agreement);
- * their accuracy is the read audit's, against after-the-fact labels from the bars (learning/read-audit-day-ctx.js).
- * The day type is kept with the record's context (stateFacts).
+ * No day field (the owner's decision): a day word would measure a mapping, not the read; it returns as one registry
+ * entry with the Day so far line's own words. The day type is kept with the record's context (stateFacts).
  *
  * Items are separated by '|', ';', ',' or an en or em dash between spaces; case, spacing, markdown marks, any dash
  * inside an item and spellings like "15-min" or "4 hour" are read as the canonical words. Anything else (free text, a
@@ -71,7 +63,7 @@ function trendOf(b, section, key) {
 const FRAMES = { '4h': ['h1', 'h4', 'h1.h4.trend'], '1h': ['h1', 'h1', 'h1.h1.trend'], '15m': ['m15', 'frame', 'm15.frame.trend'] };
 const frameFact = key => b => ({ value: trendOf(b, FRAMES[key][0], FRAMES[key][1]), field: FRAMES[key][2], missing: `no ${key} trend in the briefing` });
 
-/** The IB day type as the briefing has it (recorded context, never scored). */
+/** The day type so far as the briefing has it (recorded context, not scored: no day field until the Day so far line). */
 function dayTypeOf(b) {
   const m3 = data(b, 'm3');
   return m3 && isObj(m3.today) && typeof m3.today.dayType === 'string' ? m3.today.dayType : null;
@@ -91,46 +83,10 @@ function ownAgreeFact(_b, read) {
   return { value, field: 'the read\'s own 4h, 1h and 15m', missing: 'a frame of the read unstated or unknown' };
 }
 
-// The day class (`day-context`'s Day so far, the model's own read of it) and the structure context (`pullback-vs-reversal`:
-// price against the 4h/1h side). One word each; `early` is "too early" in one word (an item is two words).
-const DAY_VALUES = Object.freeze(['trend', 'chop', 'mixed', 'early', UNKNOWN]);
-const CTX_VALUES = Object.freeze(['pullback', 'reversal', 'continuation', 'unclear', UNKNOWN]);
-// The Day so far line's own words read as the class they name; the canonical words map to themselves.
-const DAY_ALIAS = Object.freeze({ ...Object.fromEntries(DAY_VALUES.map(w => [w, w])), directional: 'trend', rotational: 'chop', 'too-early': 'early', too_early: 'early' });
-const { DAY_CLASS: DAY_OF_SO_FAR } = require('./day-so-far');
-/** The Day so far line's word as a day class: agreement with it is a copy measure, not accuracy. */
-function dayFact(b) {
-  const m3 = data(b, 'm3');
-  const w = m3 ? daySoFarWord(m3) : null;
-  return { value: w ? DAY_OF_SO_FAR[w] || null : null, field: 'the Day so far line (agreement with it: a copy measure, not accuracy)', missing: 'no Day so far word in the briefing' };
-}
-const OPPOSITE = { up: 'down', down: 'up' };
-/**
- * The labels' context, in this order: unclear (no 4h/1h side: both up or both down); reversal (the 1h or the 15m last
- * break against the side); pullback (the 3m last break against it, the 3m regime trending against it, or the 15m trend
- * against it); else continuation. Null when the briefing has neither the 4h nor the 1h label.
- */
-function contextOf(b) {
-  const [a, c] = [frameFact('4h')(b).value, frameFact('1h')(b).value];
-  if (!a && !c) return null;
-  if (!(a === c && OPPOSITE[a])) return 'unclear';
-  const against = OPPOSITE[a];
-  const brk = section => { const s = data(b, section); return s && isObj(s.lastBreak) && isObj(s.lastBreak.last) ? s.lastBreak.last.direction || null : null; };
-  if (brk('h1') === against || brk('m15') === against) return 'reversal';
-  const m3 = data(b, 'm3') || {};
-  if (brk('m3') === against || (isObj(m3.regime) && m3.regime.primary === `trend-${against}`) || frameFact('15m')(b).value === against) return 'pullback';
-  return 'continuation';
-}
-const ctxFact = b => ({ value: contextOf(b), field: 'the labels\' context (4h/1h side; 1h, 15m, 3m breaks; 3m regime; 15m trend)', missing: 'no 4h or 1h trend label in the briefing' });
-
 const REGISTRY = Object.freeze([
   ...Object.keys(FRAMES).map(key => Object.freeze({ key, slot: `frames.${key}`, values: FRAME_VALUES, checkable: v => LABELS.includes(v), fact: frameFact(key) })),
   // `frames agree|disagree` and `agree yes|no` are one field: the read's yes, no or unknown, against the labels.
   Object.freeze({ key: 'frames', slot: 'agree', values: ['yes', 'no', UNKNOWN], alias: { agree: 'yes', disagree: 'no' }, also: 'agree', fact: agreeFact }),
-  // The day class and the structure context: written, scored beside (never in the frame counts). Their after-the-fact
-  // scoring is the read audit's (learning/read-audit-day-ctx.js); here, agreement with the briefing's own words.
-  Object.freeze({ key: 'day', slot: 'day', values: DAY_VALUES, alias: DAY_ALIAS, beside: true, fact: dayFact }),
-  Object.freeze({ key: 'ctx', slot: 'ctx', values: CTX_VALUES, beside: true, fact: ctxFact }),
   // The same word against the read's own frames (its internal consistency): derived, never written, scored without a
   // briefing.
   Object.freeze({ key: 'frames-own', slot: 'agree', values: ['yes', 'no', UNKNOWN], derived: true, fact: ownAgreeFact }),
@@ -240,7 +196,7 @@ function scoreState(read, briefing, registry = REGISTRY) {
     // A derived field reads the read itself (its own consistency): no briefing needed.
     const { value = null, field = null, missing = 'no label in the briefing', ...more } = briefing || e.derived ? e.fact(briefing, read) : {};
     const res = (result, why) => {
-      if (!e.beside) counts[result] += 1;
+      counts[result] += 1;
       fields[e.key] = { read: v, fact: value, field, ...more, result, ...(why ? { why } : {}) };
     };
     if (v === UNKNOWN) res('unknown', 'read unknown');
@@ -296,4 +252,4 @@ function cycleStateRead({ home, text, context = null, now = new Date() }) {
   }
 }
 
-module.exports = { REGISTRY, FRAME_VALUES, DAY_VALUES, CTX_VALUES, parseStateLine, parseState, scoreState, stateFacts, cycleStateRead };
+module.exports = { REGISTRY, FRAME_VALUES, parseStateLine, parseState, scoreState, stateFacts, cycleStateRead };

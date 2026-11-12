@@ -405,10 +405,7 @@ const OLD_AGENTS_MD = 24466;
 // recorded and scored against the briefing's labels (trading/state-read.js), the measured need of the worst path, raised
 // under the same standing rule; the skill file grew 8624 -> 8960 bytes. Plus 33 for the line's place (feat/state-read-every-decision:
 // the PLAN's last line, every PLAN, an open trade's too; 8960 -> 8993 bytes), the measured need of the worst path, same rule.
-// Plus 231 for the line's day and ctx fields (feat/state-read-day-ctx, the owner's approval 2026-11-11: the model's own
-// trend-vs-chop and pullback-vs-reversal reads, scored after the fact by the read audit): the grammar's two fields and their
-// closed words; 8993 -> 9224 bytes, the measured need of the worst path, same rule.
-const RAISED = 154 + 130 + 1625 + 336 + 33 + 231;
+const RAISED = 154 + 130 + 1625 + 336 + 33;
 const EVERY_CYCLE = ['multi-timeframe-analysis', 'strategy-library', 'strategy-scan', 'strategy-gate-checks', 'trader-process', 'htf-to-ltf', 'autonomous-trading'];
 const PATHS = {
   'full cycle, no candidate': ['role-round', 'setup-judgment', 'day-context'],
@@ -525,13 +522,9 @@ test('trade-session split: no head-trader path reads more than the base\'s every
 // cycles because it lived in prose, not the PLAN template the model copies): trader-process's PLAN template, example and one
 // sentence, +230 in every role that embeds it, both modes (news-calendar-analyst +215: its copy holds the template only);
 // every other role within its pin.
-// Then feat/state-read-day-ctx (the owner's approval, 2026-11-11: the model's own day class and structure context on the STATE
-// line, scored after the fact; same standing rule): the PLAN template's STATE line gains ` | day <d> | ctx <c>` (+22) and the
-// example's ` | day early | ctx pullback` (+25), +47 in every role that embeds trader-process, both modes (news-calendar-analyst too:
-// its copy holds both lines); every other role within its pin.
 const ROLE_PROMPTS = {
-  full: { 'market-structure-analyst': 96559, 'news-calendar-analyst': 10444, 'risk-manager': 94568, 'strategy-researcher': 25728, 'trade-executor': 30670, 'trade-reviewer': 9454, 'trend-momentum-analyst': 56571, 'volume-liquidity-analyst': 49989 },
-  index: { 'market-structure-analyst': 44656, 'news-calendar-analyst': 10444, 'risk-manager': 80456, 'strategy-researcher': 25728, 'trade-executor': 30659, 'trade-reviewer': 9454, 'trend-momentum-analyst': 41850, 'volume-liquidity-analyst': 34621 },
+  full: { 'market-structure-analyst': 96512, 'news-calendar-analyst': 10397, 'risk-manager': 94521, 'strategy-researcher': 25728, 'trade-executor': 30670, 'trade-reviewer': 9454, 'trend-momentum-analyst': 56524, 'volume-liquidity-analyst': 49942 },
+  index: { 'market-structure-analyst': 44609, 'news-calendar-analyst': 10397, 'risk-manager': 80409, 'strategy-researcher': 25728, 'trade-executor': 30659, 'trade-reviewer': 9454, 'trend-momentum-analyst': 41803, 'volume-liquidity-analyst': 34574 },
 };
 
 test('trade-session split: no role prompt grows, in full or index mode, and no role lists a piece', () => {
