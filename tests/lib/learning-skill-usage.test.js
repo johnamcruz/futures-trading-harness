@@ -268,6 +268,9 @@ test('skill usage: never shown to the model: only the replay report (and the sta
     .map(f => path.relative(ROOT, f).split(path.sep).join('/')).sort();
   assert.deepStrictEqual(users, [
     'scripts/lib/learning/learning-report.js',
+    // The recognition test's trace (learning/recognition/trace.js): rebuilds a past candle's briefing from bars closed by it,
+    // after the run, for the report only (measurement; never a prompt, tool or order path).
+    'scripts/lib/learning/recognition/trace.js',
     'scripts/lib/replay/stage.js', // the stage report a finished replay run prints to the operator
     'scripts/lib/train/ab-compare.js', // the operator A/B comparison of two finished runs (its CLI scripts/ab-compare.js requires only it): a report, never a prompt or tool
     // The round report's entry reads (train/entry-reaction.js): a past entry's briefing rebuilt with briefingFrom alone,

@@ -467,7 +467,8 @@ test('the trend facts reach no trading prompt: only the training loop requires t
   walk('scripts');
   walk('hooks');
   // entry-reaction.js: the round report's entry reads (its bars only: barsOf), the training loop's too.
-  assert.deepStrictEqual(users.sort(), ['scripts/lib/train/entry-reaction.js', 'scripts/lib/train/probe.js', 'scripts/lib/train/trend-findings.js']);
+  // learning/recognition/{run,trace}.js: the recognition test's report (after the run, a measurement; never a prompt or tool).
+  assert.deepStrictEqual(users.sort(), ['scripts/lib/learning/recognition/run.js', 'scripts/lib/learning/recognition/trace.js', 'scripts/lib/train/entry-reaction.js', 'scripts/lib/train/probe.js', 'scripts/lib/train/trend-findings.js']);
 });
 
 test('sizeWithin: budgetPlan\'s sizing at a budget and room given; budgetPlan works them out only after its checks pass', () => {
