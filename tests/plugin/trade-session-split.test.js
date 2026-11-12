@@ -522,11 +522,11 @@ test('trade-session split: no head-trader path reads more than the base\'s every
 // modes (base 25245); every other role within its pin.
 // Then feat/class-word (owner rule: raise a pin when it improves context; the STATE line lived in prose and was written on
 // few cycles, and it gains the model's own present read in closed words): trader-process's PLAN template and example end
-// with the STATE line, `class` and `cites` included, and one sentence says it is the head trader's, +303 in every role
-// that embeds it, both modes (news-calendar-analyst +288 over its pin, which had 15 bytes of slack); every other role within its pin.
+// with the STATE line, `class` and `cites` included, and one sentence says it is the head trader's, +313 in every role
+// that embeds it, both modes (news-calendar-analyst +298 over its pin, which had 15 bytes of slack); every other role within its pin.
 const ROLE_PROMPTS = {
-  full: { 'market-structure-analyst': 96585, 'news-calendar-analyst': 10470, 'risk-manager': 94594, 'strategy-researcher': 25728, 'trade-executor': 30670, 'trade-reviewer': 9454, 'trend-momentum-analyst': 56597, 'volume-liquidity-analyst': 50015 },
-  index: { 'market-structure-analyst': 44682, 'news-calendar-analyst': 10470, 'risk-manager': 80482, 'strategy-researcher': 25728, 'trade-executor': 30659, 'trade-reviewer': 9454, 'trend-momentum-analyst': 41876, 'volume-liquidity-analyst': 34647 },
+  full: { 'market-structure-analyst': 96595, 'news-calendar-analyst': 10480, 'risk-manager': 94604, 'strategy-researcher': 25728, 'trade-executor': 30670, 'trade-reviewer': 9454, 'trend-momentum-analyst': 56607, 'volume-liquidity-analyst': 50025 },
+  index: { 'market-structure-analyst': 44692, 'news-calendar-analyst': 10480, 'risk-manager': 80492, 'strategy-researcher': 25728, 'trade-executor': 30659, 'trade-reviewer': 9454, 'trend-momentum-analyst': 41886, 'volume-liquidity-analyst': 34657 },
 };
 
 test('trade-session split: no role prompt grows, in full or index mode, and no role lists a piece', () => {

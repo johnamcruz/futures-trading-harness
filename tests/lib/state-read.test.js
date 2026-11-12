@@ -421,6 +421,32 @@ test('state line: the PLAN template and its example end with the STATE line (a m
   assert.ok(flat.includes("every PLAN, an open trade's too"));
 });
 
+test('class word: one filled-in example in the skills and agents, and no example pairs its class word with the same frame or regime word on its line', () => {
+  const ROOT = path.join(__dirname, '..', '..');
+  // The direction a class word names, as a frame word: an example must not show the class copied from the frames.
+  const AS_FRAME = { 'trend-up': 'up', 'trend-down': 'down', chop: 'range' };
+  const examples = [];
+  for (const dir of ['skills', 'agents']) {
+    for (const f of fs.readdirSync(path.join(ROOT, dir))) {
+      const file = dir === 'skills' ? path.join(ROOT, dir, f, 'SKILL.md') : path.join(ROOT, dir, f);
+      if (!fs.existsSync(file) || !fs.statSync(file).isFile()) continue;
+      for (const line of fs.readFileSync(file, 'utf8').split('\n')) {
+        const r = S.parseStateLine(line);
+        if (r.status === 'read' && r.classWord) examples.push({ file: path.relative(ROOT, file), line, r });
+      }
+    }
+  }
+  assert.strictEqual(examples.length, 1, examples.map(e => e.line).join('\n'));
+  for (const { file, line, r } of examples) {
+    const frames = Object.values(r.read.frames);
+    assert.ok(!frames.includes(AS_FRAME[r.classWord]), `${file}: ${line}: the class word repeats a frame word`);
+    // No other item on the line carries the class word (a regime-style word equal to it).
+    const rest = line.replace(`class ${r.classWord}`, '');
+    assert.ok(!rest.includes(r.classWord), `${file}: ${line}: the class word repeats another word on the line`);
+    assert.ok(!r.cites.includes('regime'), `${file}: ${line}: the example cites the regime label`);
+  }
+});
+
 test('state read: the module decides nothing', () => {
   const src = fs.readFileSync(path.join(__dirname, '..', '..', 'scripts', 'lib', 'trading', 'state-read.js'), 'utf8');
   // It reads the briefing and returns a record: no order tool, no write.

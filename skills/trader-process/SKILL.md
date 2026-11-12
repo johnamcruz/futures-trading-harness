@@ -105,5 +105,5 @@ PLAN:
 7 Risk: stop 111 ticks, target 2.08R (compose_check), size 1, ahead prior RTH high 1.2R
 8 Decision: take - full, compose_check OK
 9 Manage: flat
-STATE: 4h up | 1h up | 15m up | frames agree | class trend-up | cites 15m-trend, 3m-break
+STATE: 4h up | 1h up | 15m transition | frames disagree | class unclear | cites 15m-break, pullback
 ```
