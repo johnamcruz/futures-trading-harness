@@ -82,10 +82,10 @@ test('state read invariance: present, wrong, malformed, conflicting or absent, t
   assert.ok(got.wrong.state.counts.mismatch >= 3, JSON.stringify(got.wrong.state.counts));
   // The recorded class word and cites, as written, by equality; unstated wherever the line has none (the briefing's own
   // regime and day type never fill it in).
-  const classOf = s => [s.classWord, s.classStatus, s.cites, s.citesDropped];
+  const classOf = s => [s.classWord, s.classStatus, s.cites, s.citesDropped, s.citesStated];
   assert.deepStrictEqual(Object.fromEntries(Object.entries(got).map(([k, v]) => [k, classOf(v.state)])), {
-    absent: [null, 'unstated', [], 0], right: [null, 'unstated', [], 0], wrong: [null, 'unstated', [], 0], malformed: [null, 'unstated', [], 0], conflicting: [null, 'unstated', [], 0],
-    classed: ['chop', 'stated', ['15m-trend', 'day-so-far'], 0], classOnly: ['trend-down', 'stated', [], 0], badClass: [null, 'unstated', ['regime'], 0], unknownCite: ['trend-up', 'stated', ['regime'], 3],
+    absent: [null, 'unstated', [], 0, 'absent'], right: [null, 'unstated', [], 0, 'absent'], wrong: [null, 'unstated', [], 0, 'absent'], malformed: [null, 'unstated', [], 0, 'absent'], conflicting: [null, 'unstated', [], 0, 'absent'],
+    classed: ['chop', 'stated', ['15m-trend', 'day-so-far'], 0, 'names'], classOnly: ['trend-down', 'stated', [], 0, 'absent'], badClass: [null, 'unstated', ['regime'], 0, 'names'], unknownCite: ['trend-up', 'stated', ['regime'], 3, 'names'],
   });
   assert.ok(got.right.state.facts && got.right.state.facts.regime !== undefined, 'the briefing was there to fill it, and nothing did');
   // The class word is never scored: the frames' fields only.
@@ -148,5 +148,5 @@ test('state read invariance: no module that decides reaches state-read.js, throu
     'scripts/lib/trading/trade-feedback.js']);
   // The class word and its cites (feat/class-word): named by the module that reads them and nothing else, so no decider,
   // report or prompt reads them (a later report is its own pull request, added here by name).
-  assert.deepStrictEqual(naming(/\b(?:classWord|classStatus|citesDropped|CLASS_WORDS|CITES)\b|\.cites\b|\[\s*['"`]cites['"`]\s*\]/), ['scripts/lib/trading/state-read.js']);
+  assert.deepStrictEqual(naming(/\b(?:classWord|classStatus|citesDropped|citesStated|CLASS_WORDS|CITES)\b|\.cites\b|\[\s*['"`]cites['"`]\s*\]/), ['scripts/lib/trading/state-read.js']);
 });

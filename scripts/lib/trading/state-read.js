@@ -157,8 +157,10 @@ function readLine(rest, registry) {
     values[key] = value;
   };
   const citeItems = [];
-  // An item whose first word is a field's (4h, 1h, 15m, frames, agree) or `class` ends the cites list (no name is one).
-  const ends = new Set([...registry.filter(e => !e.derived).flatMap(e => [e.key, e.also].filter(Boolean)), 'class']);
+  let citesStated = 'absent';
+  // An item that reads as a field (readItem) or as `class` with one of CLASS_WORDS ends the cites list; any other item
+  // after `cites` (`15m break`, `class bullish`) is a name, dropped and counted when it is none of CITES.
+  const ends = (raw, [key, word, ...more]) => Boolean(readItem(raw, registry)) || (key === 'class' && !more.length && CLASS_WORDS.includes(word));
   // '|' and ';' (and a spaced dash) end a segment; ',' separates items, and inside a segment every item from `cites` on
   // is its names (a comma list): each kept only when it is a name of CITES, else dropped and counted; `none` and `n/a`
   // are no name (an empty list).
@@ -166,7 +168,7 @@ function readLine(rest, registry) {
     let inCites = false;
     for (const raw of segment.split(',').map(x => x.trim()).filter(x => x && !/^[`*_.\s]*$/.test(x))) {
       const words = normalize(raw).split(' ').filter(Boolean);
-      if (inCites && ends.has(words[0])) inCites = false;
+      if (inCites && ends(raw, words)) inCites = false;
       if (!inCites && words[0] === 'cites') {
         inCites = true;
         words.shift();
@@ -174,7 +176,11 @@ function readLine(rest, registry) {
       }
       if (inCites) {
         citeItems.push(normalize(raw));
-        for (const w of words.filter(x => !NO_NAME.includes(x))) if (!Object.prototype.hasOwnProperty.call(CITES, w)) dropped += 1; else if (!cites.includes(w)) cites.push(w);
+        // `none` (or `n/a`) alone states that nothing cited supports the read; any other word is a name written.
+        const named = words.filter(x => !NO_NAME.includes(x));
+        if (named.length) citesStated = 'names';
+        else if (citesStated === 'absent') citesStated = 'none';
+        for (const w of named) if (!Object.prototype.hasOwnProperty.call(CITES, w)) dropped += 1; else if (!cites.includes(w)) cites.push(w);
         continue;
       }
       // `class <word>`: one of CLASS_WORDS by equality, else a bad item (never mapped).
@@ -189,7 +195,7 @@ function readLine(rest, registry) {
     values.cites = cites.join(',');
     order.splice(citesAt, 0, `cites=${values.cites}`);
   }
-  return { values, order, bad, conflict, dropped, citeItems };
+  return { values, order, bad, conflict, dropped, citeItems, citesStated };
 }
 
 /** Whether one line's items are a strict prefix of the other's (a short draft and the complete line). */
@@ -214,10 +220,12 @@ function parseStateLine(text, registry = REGISTRY) {
   const out = (status, extra = {}) => ({ status, read: null, missing: [], bad: [], lines: found.length, line: found.length ? found[0].l.trim() : null, ...classOf(null), ...extra });
   if (!found.length) return out('none');
   const read = found.map(x => readLine(x.m[1], registry));
-  const bad = [...new Set(read.flatMap(r => r.bad))];
-  // A line with only cites states no read (cites are what a read rests on): unparsable, its cite items listed as bad.
-  const stated = read.filter(r => Object.keys(r.values).some(k => k !== 'cites'));
-  if (!stated.length) return out('unparsable', { bad: [...new Set([...bad, ...read.flatMap(r => r.citeItems)])] });
+  // A line with only cites states no read (cites are what a read rests on): never the read, its cite items listed as bad
+  // so a written cite leaves a trace; with no other line, unparsable.
+  const isRead = r => Object.keys(r.values).some(k => k !== 'cites');
+  const stated = read.filter(isRead);
+  const bad = [...new Set([...read.flatMap(r => r.bad), ...read.filter(r => !isRead(r)).flatMap(r => r.citeItems)])];
+  if (!stated.length) return out('unparsable', { bad });
   if (read.some(r => r.conflict)) return out('conflicting', { bad });
   // The same read, or one line strictly extending the other (its items a prefix): the complete one; else conflicting.
   let chosen = stated[0];
@@ -233,7 +241,7 @@ function parseStateLine(text, registry = REGISTRY) {
 /** The chosen line's class word and cites as written; without a read line, unstated (null, no cites). */
 function classOf(line) {
   const v = line ? line.values : {};
-  return { classWord: v.class || null, classStatus: v.class ? 'stated' : 'unstated', cites: v.cites ? v.cites.split(',') : [], citesDropped: line ? line.dropped : 0 };
+  return { classWord: v.class || null, classStatus: v.class ? 'stated' : 'unstated', cites: v.cites ? v.cites.split(',') : [], citesStated: line ? line.citesStated : 'absent', citesDropped: line ? line.dropped : 0 };
 }
 
 const parseState = (text, registry = REGISTRY) => parseStateLine(text, registry).read;
@@ -305,7 +313,7 @@ function cycleStateRead({ home, text, context = null, now = new Date() }) {
     const score = scoreState(parsed.read, b);
     // An unscored field names why the briefing was unavailable.
     if (!b) for (const f of Object.values(score.fields)) if (f.why === 'no bar briefing') f.why = `no bar briefing (${got.why})`;
-    return { status: parsed.status, line: parsed.line, read: parsed.read, missing: parsed.missing, bad: parsed.bad, classWord: parsed.classWord, classStatus: parsed.classStatus, cites: parsed.cites, citesDropped: parsed.citesDropped, symbol: s ? s.symbol : null, bar, briefing: b ? null : got.why, ...score, facts: stateFacts(b) };
+    return { status: parsed.status, line: parsed.line, read: parsed.read, missing: parsed.missing, bad: parsed.bad, classWord: parsed.classWord, classStatus: parsed.classStatus, cites: parsed.cites, citesStated: parsed.citesStated, citesDropped: parsed.citesDropped, symbol: s ? s.symbol : null, bar, briefing: b ? null : got.why, ...score, facts: stateFacts(b) };
   } catch (err) {
     return { error: err.message };
   }

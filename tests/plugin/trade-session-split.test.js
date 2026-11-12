@@ -403,11 +403,11 @@ const OLD_AGENTS_MD = 24466;
 // the same rule): the skill file grew 1471 -> 3096 bytes, on every path that reads it (the worst path's 90424).
 // Plus 336 for trade-session step 3's STATE line (feat/state-read): the head trader's closed-form market-state read,
 // recorded and scored against the briefing's labels (trading/state-read.js), the measured need of the worst path, raised
-// under the same standing rule; the skill file grew 8624 -> 8960 bytes. Plus 352 for the line's place and its class word
+// under the same standing rule; the skill file grew 8624 -> 8960 bytes. Plus 382 for the line's place and its class word
 // (feat/class-word, same rule: the PLAN's last line, every PLAN, an open trade's too, and the model's own present read in
-// closed words, `class` and `cites`, recorded by equality, never scored; 8960 -> 9312 bytes), the measured need of the
-// worst path (91546 -> 91898).
-const RAISED = 154 + 130 + 1625 + 336 + 352;
+// closed words, `class` and `cites`, recorded by equality, never scored; 8960 -> 9342 bytes, `none` for no supporting name included), the measured need of
+// the worst path (+382).
+const RAISED = 154 + 130 + 1625 + 336 + 382;
 const EVERY_CYCLE = ['multi-timeframe-analysis', 'strategy-library', 'strategy-scan', 'strategy-gate-checks', 'trader-process', 'htf-to-ltf', 'autonomous-trading'];
 const PATHS = {
   'full cycle, no candidate': ['role-round', 'setup-judgment', 'day-context'],

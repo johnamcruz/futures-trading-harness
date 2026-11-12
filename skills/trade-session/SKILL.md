@@ -123,7 +123,8 @@ and changes no step:
 market now at this candle, is `trend-up`, `trend-down`, `chop` or
 `unclear`; `<names>`, the facts it rests on, comma list, from `4h-trend`,
 `1h-trend`, `15m-trend`, `trend-rule`, `regime`, `day-type`, `day-so-far`,
-`pullback`, `1h-break`, `15m-break`, `3m-break`. No other words.
+`pullback`, `1h-break`, `15m-break`, `3m-break`; `none` when none supports
+it. No other words.
 
 - **The priority order** (the `strategy-library` skill, "The priority order"):
   the rule for every setup, a policy verdict too. Apply its steps in order.

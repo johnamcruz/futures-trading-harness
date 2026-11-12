@@ -287,12 +287,32 @@ test('class word: a word outside the four is no class, never mapped; a name outs
   const r = S.parseStateLine('STATE: 4h up | class chop | cites vwap, regime, 1h-trend, the 15m trend');
   assert.deepStrictEqual([r.cites, r.citesDropped, r.bad], [['regime', '1h-trend'], 4, []]);
   assert.deepStrictEqual(S.parseStateLine('STATE: 4h up | cites').cites, []);
-  // `none` and `n/a` are an empty list, not a dropped name.
+  // `none` and `n/a` are an empty list, not a dropped name, and recorded as stated nothing (citesStated none), apart from
+  // a line that has no cites field (absent) and one that names any (names).
   for (const w of ['none', 'n/a', 'None']) {
     const e = S.parseStateLine(`STATE: 4h up | class chop | cites ${w}`);
-    assert.deepStrictEqual([e.cites, e.citesDropped, e.bad], [[], 0, []], w);
+    assert.deepStrictEqual([e.cites, e.citesDropped, e.bad, e.citesStated], [[], 0, [], 'none'], w);
   }
-  assert.deepStrictEqual([S.parseStateLine('STATE: 4h up | cites none, regime').cites, S.parseStateLine('STATE: 4h up | cites none, regime').citesDropped], [['regime'], 0]);
+  const kept = S.parseStateLine('STATE: 4h up | cites none, regime');
+  assert.deepStrictEqual([kept.cites, kept.citesDropped, kept.citesStated], [['regime'], 0, 'names']);
+  assert.strictEqual(S.parseStateLine('STATE: 4h up | class chop').citesStated, 'absent');
+  assert.strictEqual(S.parseStateLine('STATE: 4h up | cites vwap').citesStated, 'names', 'a name written, though dropped');
+  assert.strictEqual(S.parseStateLine('CYCLE RESULT: no-trade - x').citesStated, 'absent');
+});
+
+test('class word: only an item that reads as a field or a class word ends the cites list; a field-like spelling is a dropped name', () => {
+  const r = S.parseStateLine('STATE: 4h up | class trend-up | cites regime, 15m break, pullback');
+  assert.deepStrictEqual([r.cites, r.citesDropped, r.bad, r.read.frames], [['regime', 'pullback'], 2, [], { '4h': 'up' }]);
+  for (const spelling of ['1h break', '4 hour trend', '15m', 'frames', 'agree', 'class bullish']) {
+    const x = S.parseStateLine(`STATE: 4h up | cites regime, ${spelling}, day-so-far`);
+    assert.deepStrictEqual([x.cites, x.bad], [['regime', 'day-so-far'], []], spelling);
+    assert.ok(x.citesDropped >= 1, spelling);
+  }
+  // A field right after a cite ends it: frames agree, agree yes.
+  const f = S.parseStateLine('STATE: 4h up, 1h up, 15m up, cites regime, frames agree');
+  assert.deepStrictEqual([f.read.agree, f.cites, f.citesDropped, f.missing], ['yes', ['regime'], 0, []]);
+  const g = S.parseStateLine('STATE: 4h up, 1h down, cites pullback, agree no');
+  assert.deepStrictEqual([g.read.agree, g.cites, g.citesDropped], ['no', ['pullback'], 0]);
 });
 
 test('class word: a field item ends the cites list, so a comma line with cites before the frames loses none of them', () => {
@@ -308,6 +328,11 @@ test('class word: a line with only cites is no read (unparsable, its items liste
     const r = S.parseStateLine(line);
     assert.deepStrictEqual([r.status, r.read, r.bad, r.classWord, r.cites, r.citesDropped], ['unparsable', null, bad, null, [], 0], line);
   }
+  // Beside a read line, a cites-only line's items are listed as bad: a written cite leaves a trace; the read is the other line.
+  const two = S.parseStateLine('STATE: 4h up | 1h up | class chop\nSTATE: cites regime, vwap');
+  assert.deepStrictEqual([two.status, two.classWord, two.cites, two.bad], ['read', 'chop', [], ['cites regime', 'vwap']]);
+  const conflict = S.parseStateLine('STATE: 4h up\nSTATE: 4h down\nSTATE: cites pullback');
+  assert.deepStrictEqual([conflict.status, conflict.bad], ['conflicting', ['cites pullback']]);
 });
 
 test('class word: unstated when the line has none, and on no line, an unparsable or conflicting one; two lines differing only in the class conflict', () => {
@@ -336,6 +361,7 @@ test('class word (property, seeded): any order, separator or junk: the class is 
   const JUNK = ['vwap', 'the', 'bullish', 'trend', 'up', '4h', 'class', 'cites', 'choppy', 'x-y', 'Trend Up', '15-min'];
   for (let i = 0; i < 500; i += 1) {
     const frames = ['4h', '1h', '15m'].filter(() => rand(2)).map(k => `${k} ${pick(S.FRAME_VALUES)}`);
+    if (rand(2)) frames.push(pick([`frames ${pick(['agree', 'disagree'])}`, `agree ${pick(['yes', 'no', 'unknown'])}`]));
     const cls = rand(3) ? [`class ${rand(4) ? pick(S.CLASS_WORDS) : pick(JUNK)}`] : [];
     const names = Array.from({ length: rand(4) }, () => (rand(3) ? pick(NAMES) : pick(JUNK)));
     const cites = rand(3) ? [`cites ${names.join(pick([', ', ' ', ',']))}`] : [];
@@ -351,7 +377,7 @@ test('class word (property, seeded): any order, separator or junk: the class is 
     // The frames read with the class and cites items removed is the same.
     if (frames.length) {
       const plain = S.parseStateLine(`STATE: ${frames.join(sep)}`);
-      assert.deepStrictEqual(r.read && r.read.frames, plain.read.frames, line);
+      assert.deepStrictEqual(r.read && [r.read.frames, r.read.agree], [plain.read.frames, plain.read.agree], line);
     }
   }
 });
@@ -364,13 +390,14 @@ test('cycle state read: the record carries the class word and cites as written; 
   const context = { symbols: [{ symbol: 'MNQ', bar: { t: '2026-03-02T15:00:00.000Z' } }] };
   const at = new Date('2026-03-02T15:03:02Z');
   const rec = S.cycleStateRead({ home, text: 'STATE: 4h up | 1h up | 15m up | frames agree | class chop | cites regime, vwap', context, now: at });
-  assert.deepStrictEqual([rec.classWord, rec.classStatus, rec.cites, rec.citesDropped], ['chop', 'stated', ['regime'], 1]);
+  assert.deepStrictEqual([rec.classWord, rec.classStatus, rec.cites, rec.citesDropped, rec.citesStated], ['chop', 'stated', ['regime'], 1, 'names']);
+  assert.strictEqual(S.cycleStateRead({ home, text: 'STATE: 4h up | class chop | cites none', context, now: at }).citesStated, 'none');
   // The frames scored as before (frames-own included); the class word and cites never scored.
   assert.deepStrictEqual(Object.keys(rec.fields), ['4h', '1h', '15m', 'frames', 'frames-own']);
   assert.deepStrictEqual(rec.counts, { match: 5, mismatch: 0, unknown: 0 });
   for (const text of ['STATE: 4h up | 1h up | 15m up | frames agree', 'CYCLE RESULT: no-trade - x', 'STATE: nonsense']) {
     const r = S.cycleStateRead({ home, text, context, now: at });
-    assert.deepStrictEqual([r.classWord, r.classStatus, r.cites, r.citesDropped], [null, 'unstated', [], 0], text);
+    assert.deepStrictEqual([r.classWord, r.classStatus, r.cites, r.citesDropped, r.citesStated], [null, 'unstated', [], 0, 'absent'], text);
   }
 });
 
@@ -408,6 +435,10 @@ test('state line: the trade-session skill documents the grammar the parser reads
   const start = flat.indexOf('Last line of the PLAN block');
   const para = flat.slice(start, flat.indexOf('No other words.', start));
   assert.ok(para.includes('`3m-break`'), 'the paragraph runs to its last name');
+  // `none` is taught for a read nothing in the list supports, and the documented line with it reads as stated nothing.
+  assert.ok(para.includes('`3m-break`; `none` when none supports it'), 'none taught');
+  const withNone = S.parseStateLine(m[1].replace(/<f>/g, 'up').replace(/frames <[^>]+>/, 'frames agree').replace('<c>', 'unclear').replace('<names>', 'none'));
+  assert.deepStrictEqual([withNone.status, withNone.bad, withNone.cites, withNone.citesDropped, withNone.citesStated], ['read', [], [], 0, 'none']);
   assert.doesNotMatch(para, /scor|check|graded|accura|\bT[1-5]\b|\bA-D\b|setup/i);
   // One grammar: no other skill or agent documents it (trader-process only shows the line in its PLAN template, below).
   for (const dir of ['skills', 'agents']) {
@@ -469,7 +500,9 @@ test('class word: one filled-in example in the skills and agents; its class word
     // The class word is not the regime label copied: not the PLAN's regime word, not another word on the line, no regime cite.
     const regime = /\bregime ([a-z-]+)/.exec(block);
     assert.ok(regime, `${where}: the example sits in a PLAN with its regime`);
-    assert.notStrictEqual(r.classWord, regime[1], `${where}: the class word is the regime word`);
+    // The same word in the regime's spelling: chop is a range, trend-up and trend-down are their own regime tags.
+    const AS_REGIME = { 'trend-up': 'trend-up', 'trend-down': 'trend-down', chop: 'range' };
+    assert.notStrictEqual(AS_REGIME[r.classWord], regime[1], `${where}: the class word is the regime word`);
     assert.ok(!line.replace(`class ${r.classWord}`, '').includes(r.classWord), `${where}: the class word repeats another word on the line`);
     assert.ok(!r.cites.includes('regime'), `${where}: the example cites the regime label`);
     // The read and the decision agree: a take is on the class word's side; unclear or chop is no full take.
