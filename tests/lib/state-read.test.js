@@ -267,7 +267,7 @@ test('class word: read by equality from the STATE line, recorded with the cites;
   const before = S.parseStateLine('STATE: 4h up, cites regime, pullback, class chop, 1h up');
   assert.deepStrictEqual([before.classWord, before.cites, before.citesDropped, before.read.frames], ['chop', ['regime', 'pullback'], 0, { '4h': 'up', '1h': 'up' }]);
   // Spaces between names, a repeat: each name once, in order.
-  assert.deepStrictEqual(S.parseStateLine('STATE: cites regime  pullback, regime').cites, ['regime', 'pullback']);
+  assert.deepStrictEqual(S.parseStateLine('STATE: 4h up | cites regime  pullback, regime').cites, ['regime', 'pullback']);
   // The class without cites, the cites without the class.
   assert.deepStrictEqual(S.parseStateLine('STATE: 4h up | class unclear').cites, []);
   const only = S.parseStateLine('STATE: 4h up | cites regime');
@@ -284,9 +284,30 @@ test('class word: a word outside the four is no class, never mapped; a name outs
     assert.ok(r.bad.length === 1, `${w}: a bad item`);
     assert.strictEqual(r.status, 'read', `${w}: the frames read stands`);
   }
-  const r = S.parseStateLine('STATE: 4h up | class chop | cites vwap, regime, 4h, 1h-trend, the 15m trend');
-  assert.deepStrictEqual([r.cites, r.citesDropped, r.bad], [['regime', '1h-trend'], 5, []]);
+  const r = S.parseStateLine('STATE: 4h up | class chop | cites vwap, regime, 1h-trend, the 15m trend');
+  assert.deepStrictEqual([r.cites, r.citesDropped, r.bad], [['regime', '1h-trend'], 4, []]);
   assert.deepStrictEqual(S.parseStateLine('STATE: 4h up | cites').cites, []);
+  // `none` and `n/a` are an empty list, not a dropped name.
+  for (const w of ['none', 'n/a', 'None']) {
+    const e = S.parseStateLine(`STATE: 4h up | class chop | cites ${w}`);
+    assert.deepStrictEqual([e.cites, e.citesDropped, e.bad], [[], 0, []], w);
+  }
+  assert.deepStrictEqual([S.parseStateLine('STATE: 4h up | cites none, regime').cites, S.parseStateLine('STATE: 4h up | cites none, regime').citesDropped], [['regime'], 0]);
+});
+
+test('class word: a field item ends the cites list, so a comma line with cites before the frames loses none of them', () => {
+  const r = S.parseStateLine('STATE: 4h up, cites regime, 1h up, 15m up, frames agree');
+  assert.deepStrictEqual([r.status, r.read, r.missing, r.bad, r.cites, r.citesDropped], ['read', { frames: { '4h': 'up', '1h': 'up', '15m': 'up' }, agree: 'yes' }, [], [], ['regime'], 0]);
+  // The `agree` form and a spelled frame (`15-min`) end it too.
+  const a = S.parseStateLine('STATE: cites pullback, 15-min up, agree no');
+  assert.deepStrictEqual([a.read.frames, a.read.agree, a.cites], [{ '15m': 'up' }, 'no', ['pullback']]);
+});
+
+test('class word: a line with only cites is no read (unparsable, its items listed), as before the class word', () => {
+  for (const [line, bad] of [['STATE: cites regime', ['cites regime']], ['STATE: cites vwap', ['cites vwap']], ['STATE: cites regime, vwap', ['cites regime', 'vwap']]]) {
+    const r = S.parseStateLine(line);
+    assert.deepStrictEqual([r.status, r.read, r.bad, r.classWord, r.cites, r.citesDropped], ['unparsable', null, bad, null, [], 0], line);
+  }
 });
 
 test('class word: unstated when the line has none, and on no line, an unparsable or conflicting one; two lines differing only in the class conflict', () => {
@@ -319,7 +340,7 @@ test('class word (property, seeded): any order, separator or junk: the class is 
     const names = Array.from({ length: rand(4) }, () => (rand(3) ? pick(NAMES) : pick(JUNK)));
     const cites = rand(3) ? [`cites ${names.join(pick([', ', ' ', ',']))}`] : [];
     const items = [...frames, ...cls, ...cites].sort(() => rand(3) - 1);
-    const sep = pick([' | ', ' ; ', ' | ']);
+    const sep = pick([' | ', ' ; ', ', ']);
     const line = `STATE: ${items.join(sep)}`;
     const r = S.parseStateLine(line);
     assert.ok(r.classWord === null || S.CLASS_WORDS.includes(r.classWord), line);
@@ -421,31 +442,40 @@ test('state line: the PLAN template and its example end with the STATE line (a m
   assert.ok(flat.includes("every PLAN, an open trade's too"));
 });
 
-test('class word: one filled-in example in the skills and agents, and no example pairs its class word with the same frame or regime word on its line', () => {
+test('class word: one filled-in example in the skills and agents; its class word is not the regime word of its PLAN, it cites no regime, and it agrees with the decision of its PLAN', () => {
   const ROOT = path.join(__dirname, '..', '..');
-  // The direction a class word names, as a frame word: an example must not show the class copied from the frames.
-  const AS_FRAME = { 'trend-up': 'up', 'trend-down': 'down', chop: 'range' };
   const examples = [];
   for (const dir of ['skills', 'agents']) {
     for (const f of fs.readdirSync(path.join(ROOT, dir))) {
       const file = dir === 'skills' ? path.join(ROOT, dir, f, 'SKILL.md') : path.join(ROOT, dir, f);
       if (!fs.existsSync(file) || !fs.statSync(file).isFile()) continue;
       const text = fs.readFileSync(file, 'utf8');
-      // Every line, and every backticked STATE line inside prose (an inline example).
-      for (const line of [...text.split('\n'), ...[...text.replace(/\s+/g, ' ').matchAll(/`(STATE: [^`]+)`/g)].map(m => m[1])]) {
+      // Every line (with the fenced block it closes), and every backticked STATE line inside prose (an inline example).
+      const lines = text.split('\n').map((line, i, all) => {
+        const before = all.slice(0, i);
+        const open = before.lastIndexOf('```text');
+        return { line, block: open >= 0 && !before.slice(open + 1).some(l => l.startsWith('```')) ? before.slice(open + 1).join('\n') : '' };
+      });
+      const inline = [...text.replace(/\s+/g, ' ').matchAll(/`(STATE: [^`]+)`/g)].map(m => ({ line: m[1], block: '' }));
+      for (const { line, block } of [...lines, ...inline]) {
         const r = S.parseStateLine(line);
-        if (r.status === 'read' && r.classWord) examples.push({ file: path.relative(ROOT, file), line, r });
+        if (r.status === 'read' && r.classWord) examples.push({ file: path.relative(ROOT, file), line, block, r });
       }
     }
   }
   assert.strictEqual(examples.length, 1, examples.map(e => e.line).join('\n'));
-  for (const { file, line, r } of examples) {
-    const frames = Object.values(r.read.frames);
-    assert.ok(!frames.includes(AS_FRAME[r.classWord]), `${file}: ${line}: the class word repeats a frame word`);
-    // No other item on the line carries the class word (a regime-style word equal to it).
-    const rest = line.replace(`class ${r.classWord}`, '');
-    assert.ok(!rest.includes(r.classWord), `${file}: ${line}: the class word repeats another word on the line`);
-    assert.ok(!r.cites.includes('regime'), `${file}: ${line}: the example cites the regime label`);
+  for (const { file, line, block, r } of examples) {
+    const where = `${file}: ${line}`;
+    // The class word is not the regime label copied: not the PLAN's regime word, not another word on the line, no regime cite.
+    const regime = /\bregime ([a-z-]+)/.exec(block);
+    assert.ok(regime, `${where}: the example sits in a PLAN with its regime`);
+    assert.notStrictEqual(r.classWord, regime[1], `${where}: the class word is the regime word`);
+    assert.ok(!line.replace(`class ${r.classWord}`, '').includes(r.classWord), `${where}: the class word repeats another word on the line`);
+    assert.ok(!r.cites.includes('regime'), `${where}: the example cites the regime label`);
+    // The read and the decision agree: a take is on the class word's side; unclear or chop is no full take.
+    const side = (/^4 Setup: (long|short)/m.exec(block) || [])[1];
+    const take = /^8 Decision: take - full/m.test(block);
+    if (take) assert.strictEqual(r.classWord, side === 'long' ? 'trend-up' : 'trend-down', `${where}: a full ${side} take with class ${r.classWord}`);
   }
 });
 

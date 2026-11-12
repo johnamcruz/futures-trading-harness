@@ -108,6 +108,8 @@ const CITES = Object.freeze({
   '4h-trend': 'frames.4h', '1h-trend': 'frames.1h', '15m-trend': 'frames.15m', 'trend-rule': 'trendRule', regime: 'regime',
   'day-type': 'dayType', 'day-so-far': 'daySoFar', pullback: 'pullback', '1h-break': 'breaks.1h', '15m-break': 'breaks.15m', '3m-break': 'breaks.3m',
 });
+// `cites none` / `cites n/a`: no name cited, an empty list (not a dropped name).
+const NO_NAME = Object.freeze(['none', 'n/a']);
 
 // The line's label: the word STATE (any case) at the line's start after markdown marks, a list mark or a table pipe,
 // then ':'. Never inside prose ("the state: ..."), never another word ending in it.
@@ -154,21 +156,25 @@ function readLine(rest, registry) {
     if (values[key] === undefined) order.push(`${key}=${value}`);
     values[key] = value;
   };
+  const citeItems = [];
+  // An item whose first word is a field's (4h, 1h, 15m, frames, agree) or `class` ends the cites list (no name is one).
+  const ends = new Set([...registry.filter(e => !e.derived).flatMap(e => [e.key, e.also].filter(Boolean)), 'class']);
   // '|' and ';' (and a spaced dash) end a segment; ',' separates items, and inside a segment every item from `cites` on
-  // is its names (a comma list): each kept only when it is a name of CITES, else dropped and counted.
+  // is its names (a comma list): each kept only when it is a name of CITES, else dropped and counted; `none` and `n/a`
+  // are no name (an empty list).
   for (const segment of rest.replace(DASH_SEPARATOR, ' | ').split(/[|;]/)) {
     let inCites = false;
     for (const raw of segment.split(',').map(x => x.trim()).filter(x => x && !/^[`*_.\s]*$/.test(x))) {
       const words = normalize(raw).split(' ').filter(Boolean);
-      // A `class` item ends the cites list (no name starts with it): `cites regime, class chop` keeps the class.
-      if (inCites && words[0] === 'class') inCites = false;
+      if (inCites && ends.has(words[0])) inCites = false;
       if (!inCites && words[0] === 'cites') {
         inCites = true;
         words.shift();
         if (citesAt === null) citesAt = order.length;
       }
       if (inCites) {
-        for (const w of words) if (!Object.prototype.hasOwnProperty.call(CITES, w)) dropped += 1; else if (!cites.includes(w)) cites.push(w);
+        citeItems.push(normalize(raw));
+        for (const w of words.filter(x => !NO_NAME.includes(x))) if (!Object.prototype.hasOwnProperty.call(CITES, w)) dropped += 1; else if (!cites.includes(w)) cites.push(w);
         continue;
       }
       // `class <word>`: one of CLASS_WORDS by equality, else a bad item (never mapped).
@@ -183,7 +189,7 @@ function readLine(rest, registry) {
     values.cites = cites.join(',');
     order.splice(citesAt, 0, `cites=${values.cites}`);
   }
-  return { values, order, bad, conflict, dropped };
+  return { values, order, bad, conflict, dropped, citeItems };
 }
 
 /** Whether one line's items are a strict prefix of the other's (a short draft and the complete line). */
@@ -209,8 +215,9 @@ function parseStateLine(text, registry = REGISTRY) {
   if (!found.length) return out('none');
   const read = found.map(x => readLine(x.m[1], registry));
   const bad = [...new Set(read.flatMap(r => r.bad))];
-  const stated = read.filter(r => Object.keys(r.values).length);
-  if (!stated.length) return out('unparsable', { bad });
+  // A line with only cites states no read (cites are what a read rests on): unparsable, its cite items listed as bad.
+  const stated = read.filter(r => Object.keys(r.values).some(k => k !== 'cites'));
+  if (!stated.length) return out('unparsable', { bad: [...new Set([...bad, ...read.flatMap(r => r.citeItems)])] });
   if (read.some(r => r.conflict)) return out('conflicting', { bad });
   // The same read, or one line strictly extending the other (its items a prefix): the complete one; else conflicting.
   let chosen = stated[0];

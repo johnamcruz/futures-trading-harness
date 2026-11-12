@@ -97,7 +97,7 @@ risk-rule rejection 2, 7.
 ```text
 PLAN:
 1 HTF: 4h up, 1h up, 15m up, bias long, rule LONG allowed (prevailing 4h up)
-2 Context: window opening drive, entries allowed, news clear, regime trend-up, account unknown
+2 Context: window opening drive, entries allowed, news clear, regime range, account unknown
 3 Location: vwap above, value above, nearest prior RTH high above
 4 Setup: long, 15m rejected prior vah up
 5 Confluence: for 4, against 0, neutral 2: structure, level, trigger, VWAP
@@ -105,5 +105,5 @@ PLAN:
 7 Risk: stop 111 ticks, target 2.08R (compose_check), size 1, ahead prior RTH high 1.2R
 8 Decision: take - full, compose_check OK
 9 Manage: flat
-STATE: 4h up | 1h up | 15m transition | frames disagree | class unclear | cites 15m-break, pullback
+STATE: 4h up | 1h up | 15m transition | frames disagree | class trend-up | cites 15m-break, 3m-break, pullback
 ```
