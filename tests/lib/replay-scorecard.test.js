@@ -825,7 +825,7 @@ test('a composed pass on the head trader\'s own STATE read off the setup\'s side
   assert.strictEqual(stateOffSide({ status: 'read', classWord: 'chop', read: null }, 'long'), true);
   // Off and named in the pass: unchecked, with why.
   const off = { ...f, stateRead: read('chop', 'range', 'range') };
-  assert.deepStrictEqual(run(label(), off, chop), { category: 'unchecked', agrees: null, why: ["the head trader's own STATE read off the setup's side (class chop, 4h range, 1h range), named in the pass: its step 8, checked by hand"] });
+  assert.deepStrictEqual(run(label(), off, chop), { category: 'unchecked', agrees: null, stateReadPass: true, why: ["the head trader's own STATE read off the setup's side (class chop, 4h range, 1h range), named in the pass: its step 8, checked by hand"] });
   for (const text of ['CYCLE RESULT: no-trade - the class is unclear, passing', 'CYCLE RESULT: no-trade - STATE off the long side']) {
     assert.strictEqual(run(label(), off, text).category, 'unchecked', text);
   }
@@ -839,6 +839,20 @@ test('a composed pass on the head trader\'s own STATE read off the setup\'s side
   // An entry is never touched by it.
   const entry = { ...label(), teacher: { action: 'long', orders: [{ setup: 'trade_lifecycle', size: 1 }], size: { contracts: 1 } } };
   assert.strictEqual(run(entry, off, 'CYCLE RESULT: executed - trade_lifecycle long 1 MNQ').category, run(entry, f, 'CYCLE RESULT: executed - trade_lifecycle long 1 MNQ').category);
+  // The verdict says it is one (counted in the summary, shown in the flagged set): only this case.
+  assert.strictEqual(run(label(), off, chop).stateReadPass, true);
+  assert.strictEqual(run(label(), off, 'CYCLE RESULT: no-trade - the reads are thin, passing').stateReadPass, undefined);
+  // The read named in any clause, one a claim explains too (a room claim beside the class word): every clause counts.
+  const oneClause = 'CYCLE RESULT: no-trade - class chop with the first level 0.6R ahead';
+  const rs = checkReasons(oneClause, off);
+  assert.ok(rs.claims.some(c => /class chop/.test(c.clause)) || [...rs.judgment, ...rs.unparsed].some(c => /class chop/.test(c)), 'the clause is read');
+  const got = run(label(), off, oneClause);
+  if (rs.claims.some(c => c.check === false && !c.incidental)) assert.strictEqual(got.category, 'wrong stated reason');
+  else assert.deepStrictEqual([got.category, got.stateReadPass], ['unchecked', true]);
+  // A claim clause naming it, with its claim true or unchecked: named.
+  const claimed = { claims: [{ kind: 'room', check: true, clause: 'class chop with the first level 0.6R ahead', incidental: false }], judgment: [], unparsed: [], stated: 'no-trade', status: 'confirmed' };
+  const ex = expectedDecision(off);
+  assert.deepStrictEqual([classify(label(), off, ex, claimed).category, classify(label(), off, ex, claimed).stateReadPass], ['unchecked', true]);
 });
 
 test('scoreRun: the cycle log\'s STATE read reaches the facts, so a pass on it named in its reasons is unchecked', () => {
@@ -848,10 +862,37 @@ test('scoreRun: the cycle log\'s STATE read reaches the facts, so a pass on it n
     { t: Date.parse(`${DAY}T20:50:02Z`), kind: 'eod' },
   ];
   const strategies = [...STRATS, { name: 'trade_lifecycle', valid: true, signal: 'composed', status: 'active', timeframe: '3m', risk: { min_rr: 2, max_risk_usd: 200 } }];
-  const { records } = scoreRun(makeRun({ steps }).runDir, { strategies, accounts: ACCOUNTS });
+  const { runDir } = makeRun({ steps });
+  const { records, summary } = scoreRun(runDir, { strategies, accounts: ACCOUNTS });
   assert.deepStrictEqual(records.map(r => r.category), ['unchecked', 'excessive abstention']);
   assert.strictEqual(records[0].facts.stateRead.classWord, 'chop');
   assert.strictEqual(records[1].facts.stateRead, null);
+  // Counted where the adherence metric is read: the record, the summary, scorecard.md and the flagged set.
+  assert.deepStrictEqual(records.map(r => r.stateReadPass), [true, false]);
+  assert.strictEqual(summary.stateReadPasses, 1);
+  const out = path.join(tmpDir(), 'sc-state');
+  writeScorecard(runDir, { strategies, accounts: ACCOUNTS, outDir: out });
+  assert.match(fs.readFileSync(path.join(out, 'scorecard.md'), 'utf8'), /1 of them a pass on the head trader's own STATE read off the setup's side \(checked by hand\)/);
+  assert.strictEqual(JSON.parse(fs.readFileSync(path.join(out, 'scorecard-summary.json'), 'utf8')).stateReadPasses, 1);
+  const flagged = fs.readFileSync(path.join(out, 'flagged.jsonl'), 'utf8').split('\n').filter(Boolean).map(JSON.parse);
+  assert.deepStrictEqual(flagged.filter(x => x.failure.category === 'unchecked').map(x => x.stateReadPass), [true]);
+});
+
+test('scoreRun: a cycle\'s one STATE read is its first symbol\'s: on another symbol\'s decision it is no read (a two-symbol cycle)', () => {
+  const chop = sym => ({ status: 'read', symbol: sym, classWord: 'chop', read: { frames: { '4h': 'range', '1h': 'range', '15m': 'down' } } });
+  const text = 'CYCLE RESULT: no-trade - STATE read chop: 4h and 1h range';
+  const steps = [
+    // The cycle's read was the other symbol's (state-read.js records one per cycle, its first symbol's): no read here.
+    { k: 0, scan: quietScan, cycle: { composed: [composedRec()], stateRead: chop('MES'), result: text } },
+    // Its own root, or a read naming no symbol: kept.
+    { k: 1, scan: quietScan, cycle: { composed: [composedRec({ id: 'rec2', bar: iso(barOf(1)) })], stateRead: chop('MNQ'), result: text } },
+    { k: 2, scan: quietScan, cycle: { composed: [composedRec({ id: 'rec3', bar: iso(barOf(2)) })], stateRead: chop(null), result: text } },
+    { t: Date.parse(`${DAY}T20:50:02Z`), kind: 'eod' },
+  ];
+  const strategies = [...STRATS, { name: 'trade_lifecycle', valid: true, signal: 'composed', status: 'active', timeframe: '3m', risk: { min_rr: 2, max_risk_usd: 200 } }];
+  const { records } = scoreRun(makeRun({ steps }).runDir, { strategies, accounts: ACCOUNTS });
+  assert.deepStrictEqual(records.map(r => r.category), ['excessive abstention', 'unchecked', 'unchecked']);
+  assert.deepStrictEqual(records.map(r => r.facts.stateRead && r.facts.stateRead.symbol), [undefined, 'MNQ', null].map(x => (x === undefined ? null : x)));
 });
 
 test('scoreRun and labels: a composed limit entry at its record is right with no clone reason; over its size is bad size; a pass without an OK record is right', () => {
