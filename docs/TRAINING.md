@@ -1723,9 +1723,15 @@ Frozen definitions:
   reported as "needs the class word in the run". The key with null is
   `unstated` (coverage). Anything else is `invalid` and never a naming. An
   absent or unstated word is never filled in from the coded read.
-- **The closed cite list** (`scorer.js` `CITE_FIELDS`): `4h`, `1h`, `15m`,
-  `regime`, `day-so-far`, `vwap`, `day-type`, `bias`, `declared`. A cited
-  name off the list is counted apart, never matched loosely.
+- **The closed cite list** (`scorer.js` `CITE_FIELDS`, the STATE record's
+  own list): `4h-trend`, `1h-trend`, `15m-trend`, `trend-rule`, `regime`,
+  `day-type`, `day-so-far`, `pullback`, `1h-break`, `15m-break`,
+  `3m-break`. A name off the list is counted apart (the record's own
+  dropped count, and any other name kept off the list), never matched
+  loosely. A met signal's field maps to its cite name (the 15m to
+  `15m-trend`, the Bias line to `trend-rule`); the VWAP crosses and the
+  declared trend have none, so they are listed as met but uncitable, never
+  as ignored.
 - **The evidence word** (the reference for guess and lag): with exactly one
   side the trend rule allows (the Bias line's sides), that side's signal
   class C reads `trend-<way>`, B reads `chop`, A or D reads `unclear`. With

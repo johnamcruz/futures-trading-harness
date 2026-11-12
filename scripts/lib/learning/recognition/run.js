@@ -18,7 +18,7 @@
  * (autotrader.js recordedBars), with its round-number steps and blackouts, as trend-facts.attachFacts rebuilds it.
  *
  *   kindOf({ orders, result }), replayDirs(target)      the read audit's rules (see above)
- *   readOf(cycle)                                       { kind, side, word, cites }
+ *   readOf(cycle)                                       { kind, side, word, basis (its cites) }
  *   recognitionReport({ targets, barsFiles, tree, definitions, cases, casesSha256, fingerprint })
  *       -> { runs, casesSha256, definitions, coverage, cases (analyses, each with its run and the chop label beside the
  *          frozen one), summary, pass (hindsight: availableR only) }
@@ -63,7 +63,7 @@ function readOf(cycle) {
   const acct = isObj(cycle.context) && isObj(cycle.context.account) ? cycle.context.account : null;
   const holding = acct && (count(acct.positions) > 0 || count(acct.workingOrders) > 0);
   const sr = isObj(cycle.stateRead) ? cycle.stateRead : null;
-  return { kind: holding ? 'in-trade' : k.kind, side: holding ? null : k.side, word: S.wordOf(sr), cites: S.citesOf(sr) };
+  return { kind: holding ? 'in-trade' : k.kind, side: holding ? null : k.side, word: S.wordOf(sr), basis: S.citesOf(sr) };
 }
 
 /** Each run home under the targets (once; its first replay run's config), with its trade cycles by day. */
@@ -123,10 +123,10 @@ function recognitionReport({ targets, barsFiles = {}, tree, definitions, cases, 
     const candles = cycles.map(x => { const ms = Date.parse(x.timing.barClose); return { ms, trace: run.tracer(ms), read: readOf(x) }; });
     const cse = { ...c, startClose: RC.startCloseOf(c, run.minutes, definitions), endClose: RC.endCloseOf(c, run.minutes) };
     const a = A.analyse(cse, candles, { minutes: run.minutes });
-    analyses.push({ ...a, day: c.day, run: run.runId, alsoIn: holding.slice(1).map(r => r.runId), legCandles: c.legCandles, circular: c.circular, circularNote: c.circularNote, ...(c.kind === 'chop' ? { label: labelOf(run, c, definitions) } : {}) });
+    analyses.push({ ...a, day: c.day, run: run.runId, fineLane: Boolean(run.fine), alsoIn: holding.slice(1).map(r => r.runId), legCandles: c.legCandles, circular: c.circular, circularNote: c.circularNote, ...(c.kind === 'chop' ? { label: labelOf(run, c, definitions) } : {}) });
   }
   const scored = analyses.filter(a => !a.notInRuns);
-  const cov = scored.reduce((m, a) => { for (const k of ['stated', 'unstated', 'invalid', 'absent', 'of']) m[k] += a.classWord[k]; return m; }, { stated: 0, unstated: 0, invalid: 0, absent: 0, of: 0 });
+  const cov = scored.reduce((m, a) => { for (const k of ['stated', 'unstated', 'invalid', 'absent', 'of']) m[k] += a.wordCoverage[k]; return m; }, { stated: 0, unstated: 0, invalid: 0, absent: 0, of: 0 });
   return {
     runs: runs.map(r => r.runId), casesSha256, definitions: fingerprint, coverage: cov,
     cases: analyses.map(({ _candles, ...a }) => a), summary: A.summarize(scored),

@@ -5,7 +5,7 @@
  * over its candles, and the summary over cases. Read-only measurement, pure; nothing that decides reads it.
  *
  * A candle (run.js): { ms (its bar close), trace (trace.js: { key, sides }; null when the bars hold no bar closing
- * there), read: { kind: entry | pass | in-trade, side, word (scorer.wordOf), cites (scorer.citesOf) } }. rel = candles
+ * there), read: { kind: entry | pass | in-trade, side, word (scorer.wordOf), basis (its cites: scorer.citesOf) } }. rel = candles
  * from rel 0 (config.js startCloseOf). An in-trade cycle is counted (`inTrade`), never a sit-out or an entry decision.
  *
  *   1 first recognition   the model's first candle naming the known class: guess | on | lag against the first candle the
@@ -50,22 +50,22 @@ function prep(candles, startClose, minutes) {
 
 function coverage(P) {
   const w = tally(P, c => c.read.word.status);
-  const k = tally(P, c => c.read.cites.status);
+  const k = tally(P, c => c.read.basis.status);
   const of = P.length;
   return {
-    classWord: { stated: w.stated || 0, unstated: w.unstated || 0, invalid: w.invalid || 0, absent: w.absent || 0, of, needsClassWord: (w.absent || 0) === of },
-    cites: { stated: k.stated || 0, unstated: k.unstated || 0, invalid: k.invalid || 0, absent: k.absent || 0, offList: P.reduce((s, c) => s + c.read.cites.offList.length, 0) },
+    wordCoverage: { stated: w.stated || 0, unstated: w.unstated || 0, invalid: w.invalid || 0, absent: w.absent || 0, of, needsClassWord: (w.absent || 0) === of },
+    basis: { stated: k.stated || 0, unstated: k.unstated || 0, invalid: k.invalid || 0, absent: k.absent || 0, offList: P.reduce((s, c) => s + c.read.basis.offList.length, 0) },
   };
 }
 
-function evidenceAt(P, rel, side, withCites) {
+function evidenceAt(P, rel, side, withBasis) {
   const c = rel === null ? null : P.find(x => x.rel === rel);
   if (!c) return null;
   const s = side || c.trace.key.biasSide || null;
   const sig = c.trace.key.signals[s || 'none'];
   return {
     rel, evidence: c.evidence, coded: c.coded, side: s, signals: [...sig.c, ...sig.t], confluence: confl(c, s),
-    ...(withCites ? { cites: S.citedVsIgnored(c.read.cites, K.metFields(c.trace.key, s)) } : {}),
+    ...(withBasis ? { basis: S.citedVsIgnored(c.read.basis, K.metFields(c.trace.key, s)) } : {}),
   };
 }
 
@@ -74,7 +74,7 @@ function analyse(cse, candles, { minutes }) {
   const known = knownOf(cse);
   const side = cse.kind === 'trend' ? cse.side : null;
   const cov = coverage(P);
-  const needs = cov.classWord.needsClassWord;
+  const needs = cov.wordCoverage.needsClassWord;
   const rec = S.recognise(P, known, cse.margin);
   const out = {
     id: cse.id, kind: cse.kind, known, side, pace: cse.pace || null, margin: cse.margin,
@@ -110,11 +110,11 @@ function analyse(cse, candles, { minutes }) {
 }
 
 function summarize(analyses) {
-  const scored = analyses.filter(a => !a.classWord.needsClassWord);
+  const scored = analyses.filter(a => !a.wordCoverage.needsClassWord);
   const legs = analyses.filter(a => a.kind === 'trend');
   return {
     scored: scored.length ? S.summary(scored.map(a => ({ id: a.id, known: a.known, margin: a.margin, pace: a.pace, candles: a._candles }))) : null,
-    needsClassWord: analyses.filter(a => a.classWord.needsClassWord).map(a => a.id),
+    needsClassWord: analyses.filter(a => a.wordCoverage.needsClassWord).map(a => a.id),
     entryVsConfirmed: { on: 0, before: 0, after: 0, 'no-entry': 0, 'never-confirmed': 0, ...tally(legs, a => a.entryVsConfirmed.timing) },
   };
 }

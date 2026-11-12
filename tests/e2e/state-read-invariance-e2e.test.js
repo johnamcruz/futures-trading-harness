@@ -142,7 +142,10 @@ test('state read invariance: no module that decides reaches state-read.js, throu
   // The read audit (learning/read-audit.js) reads the record offline beside each decision's outcome: a report, required
   // by its own CLI only (tests/lib/read-audit.test.js), reached by no decider (below).
   for (const f of deciders) assert.ok(!reach(f, null).has(path.join(lib, 'learning', 'read-audit.js')), `${path.relative(D.ROOT, f)} reaches read-audit.js`);
-  assert.deepStrictEqual(naming(/\bstateRead\b/), ['scripts/lib/cycle-log.js', 'scripts/lib/learning/experience-log.js', 'scripts/lib/learning/read-accuracy.js', 'scripts/lib/learning/read-audit.js', 'scripts/lib/learning/run-experience.js', 'scripts/lib/replay/store.js',
+  // The recognition test (learning/recognition/) reads the record offline the same way: required by its own CLI only
+  // (tests/lib/recognition-run.test.js), reached by no decider; run.js is its one module naming the record.
+  for (const f of deciders) assert.ok(!reach(f, null).has(path.join(lib, 'learning', 'recognition', 'run.js')), `${path.relative(D.ROOT, f)} reaches the recognition test`);
+  assert.deepStrictEqual(naming(/\bstateRead\b/), ['scripts/lib/cycle-log.js', 'scripts/lib/learning/experience-log.js', 'scripts/lib/learning/read-accuracy.js', 'scripts/lib/learning/read-audit.js', 'scripts/lib/learning/recognition/run.js', 'scripts/lib/learning/run-experience.js', 'scripts/lib/replay/store.js',
     // The trade feedback: a past trade's STATE read at its entry, a tag on that trade's line in the head's prompt (what the
     // model learns from); never a check, tool or order path (the deciders above reach none of it).
     'scripts/lib/trading/trade-feedback.js']);

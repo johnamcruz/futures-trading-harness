@@ -21,7 +21,7 @@ function flow(c) {
 }
 function then(label, e) {
   if (!e) return `${label}: none`;
-  const cites = e.cites ? `; cites ${e.cites.status}${e.cites.status === 'stated' ? `: cited [${e.cites.cited.join(' ')}] ignored [${e.cites.ignored.join(' ')}] cited without a signal [${e.cites.citedWithoutSignal.join(' ')}] off the list [${e.cites.offList.join(' | ')}]` : ''}` : '';
+  const cites = e.basis ? `; cites ${e.basis.status}${e.basis.status === 'stated' ? `: cited [${e.basis.cited.join(' ')}] ignored [${e.basis.ignored.join(' ')}] cited without a signal [${e.basis.citedWithoutSignal.join(' ')}] met but no cite name [${e.basis.uncitable.join(' ')}] off the list [${e.basis.offList.join(' | ')}], dropped by the record ${e.basis.dropped}` : ''}` : '';
   return `${label} candle ${e.rel} (evidence ${e.evidence}, coded ${e.coded}; signals [${e.signals.join(' ')}]; ${flow(e.confluence)}${cites})`;
 }
 const reader = (r, needs) => (needs ? NEEDS : r.first === null ? 'never' : `candle ${r.first} (${r.timing}${r.delay === null ? '' : `, delay ${r.delay}`}, counts ${yes(r.counts)})`);
@@ -71,6 +71,8 @@ function renderReport(doc) {
   if (doc.summary.needsClassWord.length) out.push(`Cases that ${NEEDS} (${doc.summary.needsClassWord.join('; ')}): first recognition (model), evidence then (model, cites), chop-day naming, misses, false alarms, precision and recall are not computed; never substituted by the coded read or by prose.`);
   const circ = doc.cases.filter(c => c.circular);
   out.push(`CIRCULAR (picked using words the model sees; reported apart): ${circ.map(c => `${c.id} (${c.circularNote})`).join('; ') || 'none'}`);
+  const noFine = cases.filter(c => !c.fineLane);
+  if (noFine.length) out.push(`No 1m bars (the briefing's 5m facts missing, unlike a run with a 1m lane; give 1m data with --bars): ${noFine.map(c => c.id).join('; ')}`);
   const missing = doc.cases.filter(c => c.notInRuns);
   if (missing.length) out.push(`Not in the runs (no trade cycle on the day): ${missing.map(c => c.id).join('; ')}`);
   out.push('', '== TREND LEGS');

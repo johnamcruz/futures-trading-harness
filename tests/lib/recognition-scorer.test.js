@@ -27,18 +27,25 @@ test('the class word is read from the STATE record by equality: absent, unstated
 });
 
 test('cites: the closed field list by equality; an off-list name is counted apart, never matched loosely', () => {
-  assert.deepStrictEqual(S.citesOf(null), { status: 'absent', cited: [], offList: [] });
-  assert.deepStrictEqual(S.citesOf({ classWord: 'chop' }), { status: 'absent', cited: [], offList: [] });
-  assert.deepStrictEqual(S.citesOf({ cites: null }), { status: 'unstated', cited: [], offList: [] });
-  assert.deepStrictEqual(S.citesOf({ cites: ['regime', 'vwap', 'regime', 'VWAP', 'the vwap', 7] }), { status: 'stated', cited: ['regime', 'vwap'], offList: ['VWAP', 'the vwap', '7'] });
-  assert.deepStrictEqual(S.citesOf({ cites: ['VWAP', 'the regime', ' bias'] }), { status: 'stated', cited: [], offList: ['VWAP', 'the regime', ' bias'] }, 'no case folding, no trimming, no article stripping');
-  assert.deepStrictEqual(S.citesOf({ cites: 'regime' }), { status: 'invalid', cited: [], offList: [] });
-  assert.ok(S.CITE_FIELDS.includes('day-so-far') && S.CITE_FIELDS.includes('declared'));
+  assert.deepStrictEqual(S.citesOf(null), { status: 'absent', cited: [], offList: [], dropped: 0 });
+  assert.deepStrictEqual(S.citesOf({ classWord: 'chop' }), { status: 'absent', cited: [], offList: [], dropped: 0 });
+  assert.deepStrictEqual(S.citesOf({ cites: null }), { status: 'unstated', cited: [], offList: [], dropped: 0 });
+  assert.deepStrictEqual(S.citesOf({ cites: [], citesDropped: 2 }), { status: 'stated', cited: [], offList: [], dropped: 2 }, 'the record\'s own dropped count');
+  assert.deepStrictEqual(S.citesOf({ cites: ['regime', '15m-trend', 'regime', 'Regime', 'the regime', 7] }), { status: 'stated', cited: ['regime', '15m-trend'], offList: ['Regime', 'the regime', '7'], dropped: 0 });
+  assert.deepStrictEqual(S.citesOf({ cites: ['REGIME', ' regime', '15m trend'] }), { status: 'stated', cited: [], offList: ['REGIME', ' regime', '15m trend'], dropped: 0 }, 'no case folding, no trimming, no respelling');
+  assert.deepStrictEqual(S.citesOf({ cites: 'regime' }), { status: 'invalid', cited: [], offList: [], dropped: 0 });
 });
 
-test('cited vs ignored: ignored = fields with a met signal not cited; cited without a met signal listed apart', () => {
-  const r = S.citedVsIgnored({ status: 'stated', cited: ['regime', '4h'], offList: [] }, ['regime', 'vwap', 'day-so-far']);
-  assert.deepStrictEqual(r, { status: 'stated', cited: ['regime', '4h'], ignored: ['vwap', 'day-so-far'], citedWithoutSignal: ['4h'], offList: [] });
+test('the cite names are the STATE record\'s closed list (state-read.js CITES once the class word is on the record)', () => {
+  assert.deepStrictEqual([...S.CITE_FIELDS], ['4h-trend', '1h-trend', '15m-trend', 'trend-rule', 'regime', 'day-type', 'day-so-far', 'pullback', '1h-break', '15m-break', '3m-break']);
+  const SR = require('../../scripts/lib/trading/state-read');
+  if (SR.CITES) assert.deepStrictEqual(Object.keys(SR.CITES), [...S.CITE_FIELDS], 'the record and the scorer name the same cites');
+  for (const v of Object.values(S.CITE_OF)) assert.ok(v === null || S.CITE_FIELDS.includes(v), v);
+});
+
+test('cited vs ignored: ignored = citable fields with a met signal not cited; uncitable met fields and cites without a signal apart', () => {
+  const r = S.citedVsIgnored({ status: 'stated', cited: ['regime', '4h-trend'], offList: [], dropped: 1 }, ['regime', 'vwap', 'day-so-far', '15m', 'bias', 'declared']);
+  assert.deepStrictEqual(r, { status: 'stated', cited: ['regime', '4h-trend'], ignored: ['day-so-far', '15m-trend', 'trend-rule'], citedWithoutSignal: ['4h-trend'], uncitable: ['vwap', 'declared'], offList: [], dropped: 1 });
   assert.strictEqual(S.citedVsIgnored({ status: 'absent', cited: [], offList: [] }, ['regime']).ignored, null, 'no cites in the run: nothing is ignored, it is unknown');
 });
 

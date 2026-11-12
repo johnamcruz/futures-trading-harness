@@ -22,7 +22,7 @@ const sides = conf => ({
 const word = w => (w === undefined ? { status: 'absent', word: null } : w === null ? { status: 'unstated', word: null } : { status: 'stated', word: w });
 const mk = (i, conf, o = {}) => ({
   ms: S0 + i * TF, trace: o.noBars ? null : { key: key(o.key), sides: sides(conf) },
-  read: { kind: 'pass', side: null, word: word(o.word), cites: o.cites || { status: 'absent', cited: [], offList: [] }, ...o.read },
+  read: { kind: 'pass', side: null, word: word(o.word), basis: o.basis || { status: 'absent', cited: [], offList: [], dropped: 0 }, ...o.read },
 });
 const TREND = { id: '2021-06-11 trend long', kind: 'trend', side: 'long', pace: 'slow', margin: 5, startClose: S0 + TF, endClose: S0 + 4 * TF };
 const CHOP = { id: '2021-08-03 chop', kind: 'chop', side: null, pace: null, margin: 10, startClose: S0, endClose: null };
@@ -41,7 +41,7 @@ test('trend leg, a run without the class word: rel from the setup start, the evi
   assert.strictEqual(r.entryConfluence.confirmed, true);
   assert.strictEqual(r.entryConfluence.declared, true);
   assert.strictEqual(r.entryConfluence.inLeg, true);
-  assert.deepStrictEqual(r.classWord, { stated: 0, unstated: 0, invalid: 0, absent: 5, of: 5, needsClassWord: true });
+  assert.deepStrictEqual(r.wordCoverage, { stated: 0, unstated: 0, invalid: 0, absent: 5, of: 5, needsClassWord: true });
   assert.strictEqual(r.model, null, 'never filled in from the coded read');
   assert.strictEqual(r.miss, null);
   assert.strictEqual(r.evidenceThen.model, null);
@@ -54,13 +54,13 @@ test('trend leg, a run without the class word: rel from the setup start, the evi
 
 test('trend leg with class words: guess vs lag, evidence then at the model\'s first candle with its cites, a miss with what the evidence showed', () => {
   const early = { key: { cls: { long: 'B', short: 'B', none: 'A' } } };
-  const cites = { status: 'stated', cited: ['regime', 'vwap'], offList: ['the tape'] };
-  const r = A.analyse(TREND, [mk(0, false, { ...early, word: 'trend-up', cites }), mk(1, false, { word: 'unclear' }), mk(2, false, { word: null })], { minutes: 3 });
+  const basis = { status: 'stated', cited: ['regime', '4h-trend'], offList: ['the tape'], dropped: 0 };
+  const r = A.analyse(TREND, [mk(0, false, { ...early, word: 'trend-up', basis }), mk(1, false, { word: 'unclear' }), mk(2, false, { word: null })], { minutes: 3 });
   assert.strictEqual(r.model.timing, 'guess');
   assert.strictEqual(r.firstEvidenceRel, 0, 'the evidence first supports the leg at rel 0');
   assert.strictEqual(r.evidenceThen.model.rel, -1);
-  assert.deepStrictEqual(r.evidenceThen.model.cites, { status: 'stated', cited: ['regime', 'vwap'], ignored: ['15m'], citedWithoutSignal: ['vwap'], offList: ['the tape'] });
-  assert.deepStrictEqual(r.classWord, { stated: 2, unstated: 1, invalid: 0, absent: 0, of: 3, needsClassWord: false });
+  assert.deepStrictEqual(r.evidenceThen.model.basis, { status: 'stated', cited: ['regime', '4h-trend'], ignored: ['15m-trend'], citedWithoutSignal: ['4h-trend'], uncitable: [], offList: ['the tape'], dropped: 0 });
+  assert.deepStrictEqual(r.wordCoverage, { stated: 2, unstated: 1, invalid: 0, absent: 0, of: 3, needsClassWord: false });
   assert.ok(r.miss, 'a guess never counts: the leg is a miss');
   assert.strictEqual(r.miss.evidence.candles, 2, 'rel 0 to the leg end');
   const named = A.analyse(TREND, [mk(0, false, { word: 'unclear' }), mk(1, false, { word: 'trend-up' })], { minutes: 3 });

@@ -4,20 +4,25 @@
  * The recognition test's scorer (docs/TRAINING.md, "The recognition test"; frozen definitions 2, 3, 4, 8, 10, 11).
  * Read-only measurement, pure: no model, no file, no gate. Nothing that decides reads it.
  *
- * The model's vocabulary is closed (WORDS). Its class word and the fields it cites arrive on the cycle's STATE record as
- * `classWord` and `cites`; they are read by EQUALITY only (wordOf, citesOf), never parsed from the line's text or from
- * prose. A record without the key is `absent` (the run predates the field: "needs the class word in the run"); the key
- * with null is `unstated` (coverage), never filled in from the coded read; anything else outside the list is `invalid`,
- * counted apart and never a naming.
+ * The model's vocabulary is closed (WORDS). Its class word and the fields it cites arrive on the cycle's STATE record
+ * (trading/state-read.js, the class-word change) as `classWord` (a closed word, or null when unstated) and `cites` (a
+ * list of the record's closed cite names, CITE_FIELDS; names off the list dropped and counted in `citesDropped`). This
+ * module is the only one here that names those keys; they are read by EQUALITY only (wordOf, citesOf), never parsed
+ * from the line's text or from prose. A record without the key is `absent` (the run predates the field: "needs the
+ * class word in the run"); null is `unstated` (coverage), never filled in from the coded read; anything else is
+ * `invalid`, counted apart and never a naming.
  *
  * A candle, as the scorer reads it: { rel (candles from the setup start), evidence (the class the visible evidence
  * supports at that candle: key.js evidenceWord), coded (the briefing's labels restated: key.js codedWord), model (the
  * model's closed word, or null for no naming) }.
  *
  *   WORDS, CITE_FIELDS
- *   wordOf(stateRead)                      { status: absent | unstated | invalid | stated, word }
- *   citesOf(stateRead)                     { status, cited (on the list, once each), offList }
- *   citedVsIgnored(cites, metFields)       { status, cited, ignored (met, not cited; null when no cites), citedWithoutSignal, offList }
+ *   wordOf(record)                         { status: absent | unstated | invalid | stated, word }
+ *   citesOf(record)                        { status, cited (on the list, once each), offList, dropped (the record's count) }
+ *   citedVsIgnored(basis, metFields)       metFields: key.js field names of the met signals, mapped to cite names
+ *                                          (CITE_OF; a field with none is `uncitable`, listed apart) -> { status, cited,
+ *                                          ignored (met, citable, not cited; null when no cites), citedWithoutSignal,
+ *                                          uncitable, offList, dropped }
  *   recognise(candles, known, margin)      the evidence candle and each reader's first naming: guess | on | lag | never,
  *                                          the delay, and whether it counts (right class, not before, within the margin)
  *   accuracy(candles)                      confusion (evidence rows, model columns) and the always-trend / always-chop baselines
@@ -30,35 +35,40 @@
  */
 
 const WORDS = Object.freeze(['trend-up', 'trend-down', 'chop', 'unclear']);
-// The closed list of fields the model may cite: the briefing fields the present-fact signals read (key.js FIELD_OF),
-// plus the two higher frames the trend rule and the coded read read. The class-word change must use this list.
-const CITE_FIELDS = Object.freeze(['4h', '1h', '15m', 'regime', 'day-so-far', 'vwap', 'day-type', 'bias', 'declared']);
+// The record's closed cite names (trading/state-read.js CITES on the class-word change; a test holds them equal once it
+// exports them), and the cite name of each field a present-fact signal reads (key.js): none for the VWAP crosses and the
+// declared trend, which the record's list doesn't name (uncitable: met, never counted as ignored).
+const CITE_FIELDS = Object.freeze(['4h-trend', '1h-trend', '15m-trend', 'trend-rule', 'regime', 'day-type', 'day-so-far', 'pullback', '1h-break', '15m-break', '3m-break']);
+const CITE_OF = Object.freeze({ '15m': '15m-trend', regime: 'regime', 'day-so-far': 'day-so-far', 'day-type': 'day-type', bias: 'trend-rule', vwap: null, declared: null });
 
 const has = (o, k) => Boolean(o) && typeof o === 'object' && Object.prototype.hasOwnProperty.call(o, k);
 const isTrend = w => w === 'trend-up' || w === 'trend-down';
 const kindOf = w => (isTrend(w) ? 'trend' : w === 'chop' ? 'chop' : null);
 
-function wordOf(stateRead) {
-  if (!has(stateRead, 'classWord')) return { status: 'absent', word: null };
-  const w = stateRead.classWord;
+function wordOf(rec) {
+  if (!has(rec, 'classWord')) return { status: 'absent', word: null };
+  const w = rec.classWord;
   if (w === null) return { status: 'unstated', word: null };
   return WORDS.includes(w) ? { status: 'stated', word: w } : { status: 'invalid', word: null };
 }
 
-function citesOf(stateRead) {
-  if (!has(stateRead, 'cites')) return { status: 'absent', cited: [], offList: [] };
-  const c = stateRead.cites;
-  if (c === null) return { status: 'unstated', cited: [], offList: [] };
-  if (!Array.isArray(c)) return { status: 'invalid', cited: [], offList: [] };
+function citesOf(rec) {
+  const dropped = has(rec, 'citesDropped') && Number.isInteger(rec.citesDropped) ? rec.citesDropped : 0;
+  if (!has(rec, 'cites')) return { status: 'absent', cited: [], offList: [], dropped };
+  const c = rec.cites;
+  if (c === null) return { status: 'unstated', cited: [], offList: [], dropped };
+  if (!Array.isArray(c)) return { status: 'invalid', cited: [], offList: [], dropped };
   const cited = [...new Set(c.filter(x => CITE_FIELDS.includes(x)))];
   const offList = [...new Set(c.filter(x => !CITE_FIELDS.includes(x)).map(String))];
-  return { status: 'stated', cited, offList };
+  return { status: 'stated', cited, offList, dropped };
 }
 
-function citedVsIgnored(cites, metFields) {
-  const met = [...new Set(metFields || [])];
-  if (!cites || cites.status !== 'stated') return { status: cites ? cites.status : 'absent', cited: [], ignored: null, citedWithoutSignal: [], offList: [] };
-  return { status: 'stated', cited: cites.cited, ignored: met.filter(f => !cites.cited.includes(f)), citedWithoutSignal: cites.cited.filter(f => !met.includes(f)), offList: cites.offList };
+function citedVsIgnored(basis, metFields) {
+  const fields = [...new Set(metFields || [])];
+  const met = [...new Set(fields.map(f => CITE_OF[f]).filter(Boolean))];
+  const uncitable = fields.filter(f => !CITE_OF[f]);
+  if (!basis || basis.status !== 'stated') return { status: basis ? basis.status : 'absent', cited: [], ignored: null, citedWithoutSignal: [], uncitable, offList: [], dropped: basis ? basis.dropped || 0 : 0 };
+  return { status: 'stated', cited: basis.cited, ignored: met.filter(f => !basis.cited.includes(f)), citedWithoutSignal: basis.cited.filter(f => !met.includes(f)), uncitable, offList: basis.offList, dropped: basis.dropped || 0 };
 }
 
 function recognise(candles, known, margin) {
@@ -146,4 +156,4 @@ function maskedChanged(real, masked) {
   return { compared: both.length, changed: both.filter(x => m.get(x.id) !== x.word).map(x => x.id) };
 }
 
-module.exports = { WORDS, CITE_FIELDS, wordOf, citesOf, citedVsIgnored, recognise, accuracy, falseAlarms, summary, entryVsConfirmed, maskedChanged };
+module.exports = { WORDS, CITE_FIELDS, CITE_OF, wordOf, citesOf, citedVsIgnored, recognise, accuracy, falseAlarms, summary, entryVsConfirmed, maskedChanged };
