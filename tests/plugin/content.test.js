@@ -78,7 +78,8 @@ test('agents declare name, description, tools, model; only the executor can writ
 
 test('backticked skill and agent references point at files that exist', () => {
   const { TAGS: REGIME_TAGS } = require('../../scripts/lib/trading/regime');
-  const known = new Set([...skills, ...agents, ...REGIME_TAGS]);
+  // The STATE line's cite names (trade-session step 3, trading/state-read.js CITES) are the record's fields, not files.
+  const known = new Set([...skills, ...agents, ...REGIME_TAGS, ...Object.keys(require('../../scripts/lib/trading/state-read').CITES)]);
   const candidates = /`([a-z]+(?:-[a-z]+)+)`/g;
   const roleOrSkill = /-(analyst|manager|executor|reviewer|researcher)$|^(trade|strategy|market|premarket|end|autonomous|setup|position|prop|session|liquidity|vwap|trend|multi|broker)-/;
   const files = [

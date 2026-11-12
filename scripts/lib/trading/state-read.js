@@ -17,6 +17,15 @@
  *   frames-own  (derived, never written) the same word     the read's own three frame words (transition among them):
  *                                                          its internal consistency, scored without a briefing
  *
+ *   class       trend-up | trend-down | chop | unclear      never scored: the model's own present read at this candle
+ *   cites       a comma list of CITES names (the record's   never scored: the facts the class word rests on; a name
+ *               own stateFacts fields)                      outside the list is dropped and counted (citesDropped)
+ *
+ * The class word and cites are read by equality only (case and markdown marks aside): `class chop` is the word, `class
+ * choppy` or `class trend up` a bad item and no class. A line without the word, no line, or a conflicting or unparsable
+ * one records the class `unstated` (classWord null); nothing fills it in from the briefing. Written last in the PLAN
+ * (trader-process's template, trade-session step 3's words), `STATE: ... | class chop | cites 15m-trend, day-so-far`.
+ *
  * No day field (the owner's decision): a day word would measure a mapping, not the read; it returns as one registry
  * entry with the Day so far line's own words. The day type is kept with the record's context (stateFacts).
  *
@@ -92,6 +101,14 @@ const REGISTRY = Object.freeze([
   Object.freeze({ key: 'frames-own', slot: 'agree', values: ['yes', 'no', UNKNOWN], derived: true, fact: ownAgreeFact }),
 ]);
 
+// The model's own present read of the market at this candle, in closed words, and the facts it names as its basis (the
+// record's own fields, stateFacts). Read by equality, recorded, never scored, never filled in from a briefing word.
+const CLASS_WORDS = Object.freeze(['trend-up', 'trend-down', 'chop', 'unclear']);
+const CITES = Object.freeze({
+  '4h-trend': 'frames.4h', '1h-trend': 'frames.1h', '15m-trend': 'frames.15m', 'trend-rule': 'trendRule', regime: 'regime',
+  'day-type': 'dayType', 'day-so-far': 'daySoFar', pullback: 'pullback', '1h-break': 'breaks.1h', '15m-break': 'breaks.15m', '3m-break': 'breaks.3m',
+});
+
 // The line's label: the word STATE (any case) at the line's start after markdown marks, a list mark or a table pipe,
 // then ':'. Never inside prose ("the state: ..."), never another word ending in it.
 const LABEL = /^[\s>#*_`|+\-\u2022]*(?:\d+[.)][\s>#*_`|]*)?STATE[*_`]*\s*:(.*)$/i;
@@ -123,21 +140,48 @@ function readItem(item, registry) {
   return null;
 }
 
-/** One STATE line's items: { values: { key: value }, order: the key=value of each new item in order, bad, conflict }. */
+/** One STATE line's items: { values: { key: value }, order: the key=value of each new item in order, bad, conflict, dropped }. */
 function readLine(rest, registry) {
-  const items = rest.replace(DASH_SEPARATOR, ' | ').split(/[|;,]/).map(x => x.trim()).filter(x => x && !/^[`*_.\s]*$/.test(x));
   const values = {};
   const order = [];
   const bad = [];
+  const cites = [];
+  let citesAt = null;
+  let dropped = 0;
   let conflict = false;
-  for (const raw of items) {
-    const got = readItem(raw, registry);
-    if (!got) { bad.push(normalize(raw)); continue; }
-    if (values[got.entry.key] !== undefined && values[got.entry.key] !== got.value) conflict = true;
-    if (values[got.entry.key] === undefined) order.push(`${got.entry.key}=${got.value}`);
-    values[got.entry.key] = got.value;
+  const set = (key, value) => {
+    if (values[key] !== undefined && values[key] !== value) conflict = true;
+    if (values[key] === undefined) order.push(`${key}=${value}`);
+    values[key] = value;
+  };
+  // '|' and ';' (and a spaced dash) end a segment; ',' separates items, and inside a segment every item from `cites` on
+  // is its names (a comma list): each kept only when it is a name of CITES, else dropped and counted.
+  for (const segment of rest.replace(DASH_SEPARATOR, ' | ').split(/[|;]/)) {
+    let inCites = false;
+    for (const raw of segment.split(',').map(x => x.trim()).filter(x => x && !/^[`*_.\s]*$/.test(x))) {
+      const words = normalize(raw).split(' ').filter(Boolean);
+      if (!inCites && words[0] === 'cites') {
+        inCites = true;
+        words.shift();
+        if (citesAt === null) citesAt = order.length;
+      }
+      if (inCites) {
+        for (const w of words) if (!Object.prototype.hasOwnProperty.call(CITES, w)) dropped += 1; else if (!cites.includes(w)) cites.push(w);
+        continue;
+      }
+      // `class <word>`: one of CLASS_WORDS by equality, else a bad item (never mapped).
+      const [key, word, ...more] = words;
+      if (key === 'class' && !more.length && CLASS_WORDS.includes(word)) { set('class', word); continue; }
+      const got = readItem(raw, registry);
+      if (!got) { bad.push(normalize(raw)); continue; }
+      set(got.entry.key, got.value);
+    }
   }
-  return { values, order, bad, conflict };
+  if (cites.length) {
+    values.cites = cites.join(',');
+    order.splice(citesAt, 0, `cites=${values.cites}`);
+  }
+  return { values, order, bad, conflict, dropped };
 }
 
 /** Whether one line's items are a strict prefix of the other's (a short draft and the complete line). */
@@ -159,7 +203,7 @@ const sameValues = (a, b) => JSON.stringify(Object.entries(a).sort()) === JSON.s
 function parseStateLine(text, registry = REGISTRY) {
   const lines = String(text === null || text === undefined ? '' : text).replace(/\r\n|[\r\u2028\u2029\u0085]/g, '\n').split('\n');
   const found = lines.map(l => ({ l, m: LABEL.exec(l) })).filter(x => x.m);
-  const out = (status, extra = {}) => ({ status, read: null, missing: [], bad: [], lines: found.length, line: found.length ? found[0].l.trim() : null, ...extra });
+  const out = (status, extra = {}) => ({ status, read: null, missing: [], bad: [], lines: found.length, line: found.length ? found[0].l.trim() : null, ...classOf(null), ...extra });
   if (!found.length) return out('none');
   const read = found.map(x => readLine(x.m[1], registry));
   const bad = [...new Set(read.flatMap(r => r.bad))];
@@ -174,7 +218,13 @@ function parseStateLine(text, registry = REGISTRY) {
     return out('conflicting', { bad });
   }
   const { values } = chosen;
-  return out('read', { read: shape(values, registry), missing: registry.filter(e => !e.derived && values[e.key] === undefined).map(e => e.key), bad });
+  return out('read', { read: shape(values, registry), missing: registry.filter(e => !e.derived && values[e.key] === undefined).map(e => e.key), bad, ...classOf(chosen) });
+}
+
+/** The chosen line's class word and cites as written; without a read line, unstated (null, no cites). */
+function classOf(line) {
+  const v = line ? line.values : {};
+  return { classWord: v.class || null, classStatus: v.class ? 'stated' : 'unstated', cites: v.cites ? v.cites.split(',') : [], citesDropped: line ? line.dropped : 0 };
 }
 
 const parseState = (text, registry = REGISTRY) => parseStateLine(text, registry).read;
@@ -246,10 +296,10 @@ function cycleStateRead({ home, text, context = null, now = new Date() }) {
     const score = scoreState(parsed.read, b);
     // An unscored field names why the briefing was unavailable.
     if (!b) for (const f of Object.values(score.fields)) if (f.why === 'no bar briefing') f.why = `no bar briefing (${got.why})`;
-    return { status: parsed.status, line: parsed.line, read: parsed.read, missing: parsed.missing, bad: parsed.bad, symbol: s ? s.symbol : null, bar, briefing: b ? null : got.why, ...score, facts: stateFacts(b) };
+    return { status: parsed.status, line: parsed.line, read: parsed.read, missing: parsed.missing, bad: parsed.bad, classWord: parsed.classWord, classStatus: parsed.classStatus, cites: parsed.cites, citesDropped: parsed.citesDropped, symbol: s ? s.symbol : null, bar, briefing: b ? null : got.why, ...score, facts: stateFacts(b) };
   } catch (err) {
     return { error: err.message };
   }
 }
 
-module.exports = { REGISTRY, FRAME_VALUES, parseStateLine, parseState, scoreState, stateFacts, cycleStateRead };
+module.exports = { REGISTRY, FRAME_VALUES, CLASS_WORDS, CITES, parseStateLine, parseState, scoreState, stateFacts, cycleStateRead };
