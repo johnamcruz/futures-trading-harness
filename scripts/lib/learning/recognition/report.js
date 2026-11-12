@@ -100,7 +100,7 @@ function renderReport(doc) {
   out.push('', '== CHOP DAYS');
   for (const c of cases.filter(x => x.kind === 'chop')) out.push(...chopLines(c));
   out.push('', '== AGGREGATE (trend vs chop only; n small, the cases listed above)',
-    `Entries by the model's own word (its STATE record at the entry candle; vs frames: contradicts = a trend word with the 4h and 1h both range or either against the side, chop with 4h, 1h and 15m all one way; else agrees; unstated = no word or no frame): chop days ${doc.summary.entryWords.chop.n} entries: ${tallyText(doc.summary.entryWords.chop)}; trend legs ${doc.summary.entryWords.trend.n} entries: ${tallyText(doc.summary.entryWords.trend)}`,
+    `Entries by the model's own word (its STATE record at the entry candle; vs frames: contradicts = a trend word with the 4h and 1h both range or either the opposite way to the word, chop with 4h, 1h and 15m all one way; else agrees; unstated = no word or no frame): chop days ${doc.summary.entryWords.chop.n} entries: ${tallyText(doc.summary.entryWords.chop)}; trend legs ${doc.summary.entryWords.trend.n} entries: ${tallyText(doc.summary.entryWords.trend)}`,
     `entry vs confirmed on the legs: ${j(doc.summary.entryVsConfirmed)}`,
     `coded read vs the evidence word per candle: ${cases.map(c => `${c.id} ${n4(c.accuracyCoded.accuracy)} (always-trend ${n4(c.accuracyCoded.alwaysTrend)}, always-chop ${n4(c.accuracyCoded.alwaysChop)})`).join('; ')}`,
     ...scoredLines(doc.summary.scored, doc.summary));

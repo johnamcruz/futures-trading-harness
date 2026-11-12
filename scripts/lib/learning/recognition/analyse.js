@@ -107,7 +107,9 @@ function analyse(cse, candles, { minutes }) {
     out.entryVsConfirmed = S.entryVsConfirmed(P.map(c => ({ rel: c.rel, confirmed: confl(c, side).confirmed, flat: c.flat, action: action(c) })));
     const en = P.find(c => c.flat && action(c) === 'enter');
     out.entryConfluence = en ? { rel: en.rel, ...confl(en, side), evidence: en.evidence, coded: en.coded, inLeg: en.ms <= cse.endClose } : null;
-    out.entries = P.filter(c => c.flat && action(c) === 'enter').map(c => ({ rel: c.rel, side, evidence: c.evidence, coded: c.coded, ...ownRead(c) }));
+    // Every flat entry candle, an entry against the leg's side too (its own read is the one most worth seeing); a record with no
+    // side takes the leg's (the leg-side measures above keep their own rule).
+    out.entries = P.filter(c => c.flat && c.read.kind === 'entry').map(c => ({ rel: c.rel, side: c.read.side || side, evidence: c.evidence, coded: c.coded, ...ownRead(c) }));
     const w = legW;
     out.evidenceInLeg = {
       candles: w.length, evidence: tally(w, c => c.evidence), coded: tally(w, c => c.coded),

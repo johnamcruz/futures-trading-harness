@@ -1728,8 +1728,9 @@ the 4h or the 1h is the opposite way (a 15m against is a pullback, not a
 contradiction); `chop` `contradicts` when the 4h, 1h and 15m are all `up`
 or all `down`; otherwise `agrees` (`unclear` always agrees). The
 aggregate's "Entries by the model's own word" line counts the entries of
-each kind by word and by `wordVsFrames`. It asks whether the model enters
-when its own present read lines up with the setup. It is a count, not a
+each kind by word and by `wordVsFrames`. It asks whether the model's own word rests on its own frames at the entry;
+the entry's side is carried beside it (`side`) and not compared. A word with
+frames that say nothing (all `unknown` or `transition`) counts as `agrees`. It is a count, not a
 grade: it reads only what the record holds, uses no later price and
 changes nothing.
 

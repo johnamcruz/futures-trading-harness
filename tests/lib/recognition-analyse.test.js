@@ -160,6 +160,17 @@ test('summary: over the cases whose run carries the class word only; the others 
   assert.deepStrictEqual(s.entryVsConfirmed, { on: 0, before: 0, after: 0, 'no-entry': 2, 'never-confirmed': 0 });
 });
 
+test('a trend leg lists an entry against the leg\'s side too, with its own side and word (the entry whose own read is most worth seeing)', () => {
+  const fr = (a, b, c) => ({ '4h': a, '1h': b, '15m': c });
+  const cs = [
+    mk(0, true, { word: 'trend-down', read: { kind: 'entry', side: 'short', frames: fr('down', 'down', 'down') } }),
+    mk(1, true, { word: 'trend-up', read: { kind: 'entry', side: 'long', frames: fr('up', 'up', 'up') } }),
+  ];
+  const t = A.analyse(TREND, cs, { minutes: 3 });
+  assert.deepStrictEqual(t.entries.map(e => [e.rel, e.side, e.modelWord, e.wordVsFrames]), [[-1, 'short', 'trend-down', 'agrees'], [0, 'long', 'trend-up', 'agrees']]);
+  assert.strictEqual(A.summarize([t]).entryWords.trend.n, 2);
+});
+
 test('every entry carries the model\'s own word, its stated frames and the word against them; the summary tallies them by kind', () => {
   const fr = (a, b, c) => ({ '4h': a, '1h': b, '15m': c });
   const withFrames = (frames, o) => ({ ...o, read: { ...o.read, frames } });
