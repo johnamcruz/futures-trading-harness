@@ -194,6 +194,9 @@ test('entries carry the model\'s word, its stated frames and the word against th
   const text = P.renderReport(doc);
   assert.match(text, /Entries by the model's own word[^\n]*chop days 1 entries: \{"trend-up":1,[^\n]*"contradicts":1[^\n]*trend legs 1 entries/);
   assert.match(text, /model's word trend-up, frames 4h range \| 1h range \| 15m up, word vs frames contradicts/);
+  assert.match(text, /The class word against its own frames, every candle[^\n]*chop days candles \d+, word vs frames \{"agrees":\d+,"contradicts":\d+,"unstated":\d+\} \(in trade[^\n]*word changes with the frames unchanged \d+ of \d+ such pairs; longest run of one word \d+ over 1 cases; trend legs[^\n]*word vs the leg's side \{"same":\d+,"opposite":\d+/);
+  assert.match(text, /class word every candle: candles/);
+  assert.strictEqual(doc.summary.wordStability.trend.cases, 1);
   const none = P.renderReport(report(runHome({ word: 'chop' }), tmpDir()));
   assert.match(none, /word chop, frames unstated, vs frames unstated/, 'no frames stated: unstated, never guessed');
   assert.ok(!/NaN|undefined/.test(text + none));

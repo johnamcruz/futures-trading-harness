@@ -99,6 +99,50 @@ function tallyEntryWords(entries) {
   return { n: entries.length, byWord, byWordVsFrames };
 }
 
+const zeroVs = () => ({ agrees: 0, contradicts: 0, unstated: 0 });
+const SIDE_WORD = Object.freeze({ long: 'trend-up', short: 'trend-down' });
+const sameFrames = (a, b) => FRAME_KEYS.every(k => a[k] === b[k]);
+
+/**
+ * The class word against the model's own frames over every candle of a case (measurement only; recorded fields, no
+ * hindsight). candles in order: { word (closed word | null), frames (framesOf | null), inTrade }.
+ *   byWordVsFrames / inTradeByWordVsFrames   wordVsFrames per candle, all candles and the in-trade ones apart
+ *   wordVsSide      a trend leg only (side long | short): the word against the leg's known side, a reporting bucket
+ *                   (same | opposite | chop | unclear | unstated), never shown to the model
+ *   flipsSameFrames the class word changed between consecutive candles whose three frame words did not (both words and
+ *                   both frames stated, pairsSameFrames counts those pairs); longestRun the longest run of one stated word
+ */
+function wordStability(candles, side) {
+  const r = { candles: candles.length, byWordVsFrames: zeroVs(), inTradeByWordVsFrames: zeroVs(), wordVsSide: side ? { same: 0, opposite: 0, chop: 0, unclear: 0, unstated: 0 } : null, pairsSameFrames: 0, flipsSameFrames: 0, longestRun: 0 };
+  let run = 0;
+  candles.forEach((c, i) => {
+    const w = WORDS.includes(c.word) ? c.word : null;
+    const v = wordVsFrames(w, c.frames);
+    r.byWordVsFrames[v] += 1;
+    if (c.inTrade) r.inTradeByWordVsFrames[v] += 1;
+    if (r.wordVsSide) r.wordVsSide[w === null ? 'unstated' : w === 'chop' || w === 'unclear' ? w : w === SIDE_WORD[side] ? 'same' : 'opposite'] += 1;
+    const p = i > 0 ? candles[i - 1] : null;
+    run = w !== null && p && p.word === w ? run + 1 : w !== null ? 1 : 0;
+    r.longestRun = Math.max(r.longestRun, run);
+    if (w !== null && p && WORDS.includes(p.word) && p.frames && c.frames && sameFrames(p.frames, c.frames)) {
+      r.pairsSameFrames += 1;
+      if (p.word !== w) r.flipsSameFrames += 1;
+    }
+  });
+  return r;
+}
+
+/** Cases' wordStability added up (a kind's total): counts summed, the longest run the maximum. */
+function tallyWordStability(list) {
+  const add = (a, b) => Object.fromEntries(Object.keys(a).map(k => [k, a[k] + b[k]]));
+  const sides = list.filter(s => s.wordVsSide);
+  return list.reduce((t, s) => ({
+    cases: t.cases + 1, candles: t.candles + s.candles, byWordVsFrames: add(t.byWordVsFrames, s.byWordVsFrames), inTradeByWordVsFrames: add(t.inTradeByWordVsFrames, s.inTradeByWordVsFrames),
+    wordVsSide: t.wordVsSide && s.wordVsSide ? add(t.wordVsSide, s.wordVsSide) : t.wordVsSide,
+    pairsSameFrames: t.pairsSameFrames + s.pairsSameFrames, flipsSameFrames: t.flipsSameFrames + s.flipsSameFrames, longestRun: Math.max(t.longestRun, s.longestRun),
+  }), { cases: 0, candles: 0, byWordVsFrames: zeroVs(), inTradeByWordVsFrames: zeroVs(), wordVsSide: sides.length ? { same: 0, opposite: 0, chop: 0, unclear: 0, unstated: 0 } : null, pairsSameFrames: 0, flipsSameFrames: 0, longestRun: 0 });
+}
+
 // The record's citesStated: absent (no cites item written: unstated), none (`cites none`: stated, nothing cited),
 // names (a name written, kept or dropped: stated, the list). Read by equality; a record without it is absent.
 const CITES_STATED = Object.freeze({ absent: 'unstated', none: 'stated', names: 'stated' });
@@ -228,4 +272,4 @@ function maskedChanged(real, masked) {
   return { compared: both.length, changed: both.filter(x => m.get(x.id) !== x.word).map(x => x.id) };
 }
 
-module.exports = { FRAME_KEYS, framesOf, wordVsFrames, tallyEntryWords, WORDS, CITE_FIELDS, CITE_OF, wordOf, citesOf, citedVsIgnored, recognise, accuracy, falseAlarms, interval, summary, entryVsConfirmed, maskedChanged };
+module.exports = { FRAME_KEYS, framesOf, wordVsFrames, tallyEntryWords, wordStability, tallyWordStability, WORDS, CITE_FIELDS, CITE_OF, wordOf, citesOf, citedVsIgnored, recognise, accuracy, falseAlarms, interval, summary, entryVsConfirmed, maskedChanged };

@@ -196,3 +196,22 @@ test('every entry carries the model\'s own word, its stated frames and the word 
   assert.strictEqual(sum.entryWords.chop.n, 4);
   assert.deepStrictEqual(sum.entryWords.chop.byWord, { 'trend-up': 1, 'trend-down': 0, chop: 0, unclear: 1, unstated: 2 });
 });
+
+test('every case carries its word stability over all candles (in-trade included, own column); the summary totals it by kind', () => {
+  const same = { '4h': 'down', '1h': 'down', '15m': 'range' };
+  const row = (i, w, kind = 'pass') => mk(i, false, { word: w, read: { kind, frames: same } });
+  const cs = [row(0, 'trend-up'), row(1, 'trend-down'), row(2, 'chop', 'in-trade'), row(3, 'trend-down')];
+  const t = A.analyse({ ...TREND, side: 'short' }, cs, { minutes: 3 });
+  assert.strictEqual(t.wordStability.candles, 4);
+  assert.deepStrictEqual(t.wordStability.inTradeByWordVsFrames, { agrees: 1, contradicts: 0, unstated: 0 });
+  assert.deepStrictEqual(t.wordStability.wordVsSide, { same: 2, opposite: 1, chop: 1, unclear: 0, unstated: 0 });
+  assert.strictEqual(t.wordStability.flipsSameFrames, 3, 'up>down, down>chop, chop>down: frames never changed');
+  const c = A.analyse(CHOP, cs, { minutes: 3 });
+  assert.strictEqual(c.wordStability.wordVsSide, null);
+  const sum = A.summarize([t, c]);
+  assert.strictEqual(sum.wordStability.trend.cases, 1);
+  assert.strictEqual(sum.wordStability.trend.flipsSameFrames, 3);
+  assert.strictEqual(sum.wordStability.chop.candles, 4);
+  const none = A.analyse(CHOP, [mk(0, false), mk(1, false)], { minutes: 3 });
+  assert.deepStrictEqual(none.wordStability.byWordVsFrames, { agrees: 0, contradicts: 0, unstated: 2 }, 'a run without the class word: unstated, never filled in');
+});
