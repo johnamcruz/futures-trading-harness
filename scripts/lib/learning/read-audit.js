@@ -38,6 +38,7 @@
  *
  *   FIELDS, CLASSES, CONSISTENCY
  *   readSide(read)                        'long' | 'short' | null
+ *   kindOf({ decision, orders, result })   { kind: entry | pass | in-trade, side }: the decision record's, else the cycle's own
  *   inconsistencies(read, side)           the CONSISTENCY keys an entry on that side breaks
  *   forwardMove({ bars, cycleT, side, forwardBars, stopAtr })   { R, stopped, stop, bars, why }
  *   auditDecision({ day, t, symbol, stateRead, decision, orders, result, bars, cfg, barClose, tfMs })   one row (barClose,
@@ -382,4 +383,4 @@ function runRows(target, { decisions = null, cfg = CFG, days = null, barsFiles =
   return { runId, rows };
 }
 
-module.exports = { FIELDS, CLASSES, CONSISTENCY, readSide, inconsistencies, forwardMove, auditDecision, summarize, renderAudit, loadDecisions, replayDirs, runRows };
+module.exports = { FIELDS, CLASSES, CONSISTENCY, readSide, kindOf, inconsistencies, forwardMove, auditDecision, summarize, renderAudit, loadDecisions, replayDirs, runRows };
