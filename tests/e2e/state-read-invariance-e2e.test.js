@@ -38,7 +38,7 @@ const VARIANTS = {
   // The model's own present read in closed words (feat/class-word): the class word and its cites, as the PLAN's last line.
   classed: w => `PLAN:\n1 HTF: ...\n9 Manage: flat\n${stateFrom(w)} | class chop | cites 15m-trend, day-so-far\n${RESULT}`,
   classOnly: () => `PLAN:\n1 HTF: ...\nSTATE: class trend-down\n${RESULT}`,
-  badClass: w => `PLAN:\n1 HTF: ...\n${stateFrom(w)} | class bullish | cites regime\n${RESULT}`,
+  badClass: w => `PLAN:\n1 HTF: ...\n${stateFrom(w)} | cites regime, class bullish\n${RESULT}`,
   unknownCite: w => `PLAN:\n1 HTF: ...\n${stateFrom(w)} | class trend-up | cites vwap, regime, the 4h\n${RESULT}`,
 };
 
@@ -148,5 +148,5 @@ test('state read invariance: no module that decides reaches state-read.js, throu
     'scripts/lib/trading/trade-feedback.js']);
   // The class word and its cites (feat/class-word): named by the module that reads them and nothing else, so no decider,
   // report or prompt reads them (a later report is its own pull request, added here by name).
-  assert.deepStrictEqual(naming(/\b(?:classWord|classStatus|citesDropped|citesStated|CLASS_WORDS|CITES)\b|\.cites\b|\[\s*['"`]cites['"`]\s*\]/), ['scripts/lib/trading/state-read.js']);
+  assert.deepStrictEqual(naming(/\b(?:classWord|classStatus|citesDropped|citesStated|CLASS_WORDS|CITES|AS_REGIME|classIsRegime)\b|\.cites\b|\[\s*['"`]cites['"`]\s*\]/), ['scripts/lib/trading/state-read.js']);
 });

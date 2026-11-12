@@ -21,6 +21,9 @@
  *   cites       a comma list of CITES names (the record's   never scored: the facts the class word rests on; a name
  *               own stateFacts fields)                      outside the list is dropped and counted (citesDropped)
  *
+ *   citesStated names | none | absent                       names: a name written (kept or dropped); none: only `none`
+ *                                                           or `n/a` written; absent: no cites field, or a bare label
+ *
  * The class word and cites are read by equality only (case and markdown marks aside): `class chop` is the word, `class
  * choppy` or `class trend up` a bad item and no class. A line without the word, no line, or a conflicting or unparsable
  * one records the class `unstated` (classWord null); nothing fills it in from the briefing. Written last in the PLAN
@@ -110,6 +113,11 @@ const CITES = Object.freeze({
 });
 // `cites none` / `cites n/a`: no name cited, an empty list (not a dropped name).
 const NO_NAME = Object.freeze(['none', 'n/a']);
+// A class word in the regime's spelling (chop is a range; trend-up and trend-down are regime tags too; unclear has none):
+// for a report or a test to tell a class word copied from the regime label. Never a check on a decision.
+const AS_REGIME = Object.freeze({ 'trend-up': 'trend-up', 'trend-down': 'trend-down', chop: 'range' });
+/** Whether a class word is the regime word in another spelling. */
+const classIsRegime = (classWord, regime) => Object.prototype.hasOwnProperty.call(AS_REGIME, classWord) && AS_REGIME[classWord] === regime;
 
 // The line's label: the word STATE (any case) at the line's start after markdown marks, a list mark or a table pipe,
 // then ':'. Never inside prose ("the state: ..."), never another word ending in it.
@@ -158,9 +166,10 @@ function readLine(rest, registry) {
   };
   const citeItems = [];
   let citesStated = 'absent';
-  // An item that reads as a field (readItem) or as `class` with one of CLASS_WORDS ends the cites list; any other item
-  // after `cites` (`15m break`, `class bullish`) is a name, dropped and counted when it is none of CITES.
-  const ends = (raw, [key, word, ...more]) => Boolean(readItem(raw, registry)) || (key === 'class' && !more.length && CLASS_WORDS.includes(word));
+  // An item that reads as a field (readItem) or a two-word `class <x>` item ends the cites list (`class bullish` then a bad
+  // item, never a dropped name); any other item after `cites` (`15m break`, `class chop now`) is a name, dropped and
+  // counted when it is none of CITES.
+  const ends = (raw, [key, word, ...more]) => Boolean(readItem(raw, registry)) || (key === 'class' && word !== undefined && !more.length);
   // '|' and ';' (and a spaced dash) end a segment; ',' separates items, and inside a segment every item from `cites` on
   // is its names (a comma list): each kept only when it is a name of CITES, else dropped and counted; `none` and `n/a`
   // are no name (an empty list).
@@ -176,10 +185,11 @@ function readLine(rest, registry) {
       }
       if (inCites) {
         citeItems.push(normalize(raw));
-        // `none` (or `n/a`) alone states that nothing cited supports the read; any other word is a name written.
+        // `none` (or `n/a`) written, and no name, states that nothing cited supports the read; any other word is a name
+        // written. A bare `cites` label states neither: absent.
         const named = words.filter(x => !NO_NAME.includes(x));
         if (named.length) citesStated = 'names';
-        else if (citesStated === 'absent') citesStated = 'none';
+        else if (citesStated === 'absent' && words.some(x => NO_NAME.includes(x))) citesStated = 'none';
         for (const w of named) if (!Object.prototype.hasOwnProperty.call(CITES, w)) dropped += 1; else if (!cites.includes(w)) cites.push(w);
         continue;
       }
@@ -319,4 +329,4 @@ function cycleStateRead({ home, text, context = null, now = new Date() }) {
   }
 }
 
-module.exports = { REGISTRY, FRAME_VALUES, CLASS_WORDS, CITES, parseStateLine, parseState, scoreState, stateFacts, cycleStateRead };
+module.exports = { REGISTRY, FRAME_VALUES, CLASS_WORDS, CITES, AS_REGIME, classIsRegime, parseStateLine, parseState, scoreState, stateFacts, cycleStateRead };

@@ -286,7 +286,14 @@ test('class word: a word outside the four is no class, never mapped; a name outs
   }
   const r = S.parseStateLine('STATE: 4h up | class chop | cites vwap, regime, 1h-trend, the 15m trend');
   assert.deepStrictEqual([r.cites, r.citesDropped, r.bad], [['regime', '1h-trend'], 4, []]);
-  assert.deepStrictEqual(S.parseStateLine('STATE: 4h up | cites').cites, []);
+  // A bare `cites` label (or `cites:`) names nothing and writes no `none`: absent, never `none`.
+  for (const bare of ['STATE: 4h up | cites', 'STATE: 4h up | cites:']) {
+    const b = S.parseStateLine(bare);
+    assert.deepStrictEqual([b.cites, b.citesDropped, b.citesStated, b.bad], [[], 0, 'absent', []], bare);
+  }
+  // A name and `none`: the name stands, names stated.
+  const both = S.parseStateLine('STATE: 4h up | cites regime, none');
+  assert.deepStrictEqual([both.cites, both.citesDropped, both.citesStated], [['regime'], 0, 'names']);
   // `none` and `n/a` are an empty list, not a dropped name, and recorded as stated nothing (citesStated none), apart from
   // a line that has no cites field (absent) and one that names any (names).
   for (const w of ['none', 'n/a', 'None']) {
@@ -303,11 +310,19 @@ test('class word: a word outside the four is no class, never mapped; a name outs
 test('class word: only an item that reads as a field or a class word ends the cites list; a field-like spelling is a dropped name', () => {
   const r = S.parseStateLine('STATE: 4h up | class trend-up | cites regime, 15m break, pullback');
   assert.deepStrictEqual([r.cites, r.citesDropped, r.bad, r.read.frames], [['regime', 'pullback'], 2, [], { '4h': 'up' }]);
-  for (const spelling of ['1h break', '4 hour trend', '15m', 'frames', 'agree', 'class bullish']) {
+  for (const spelling of ['1h break', '4 hour trend', '15m', 'frames', 'agree', 'class']) {
     const x = S.parseStateLine(`STATE: 4h up | cites regime, ${spelling}, day-so-far`);
     assert.deepStrictEqual([x.cites, x.bad], [['regime', 'day-so-far'], []], spelling);
     assert.ok(x.citesDropped >= 1, spelling);
   }
+  // `class` with more than one word after it is no class item: names, dropped and counted.
+  const longer = S.parseStateLine('STATE: 4h up | cites regime, class chop now');
+  assert.deepStrictEqual([longer.cites, longer.citesDropped, longer.bad, longer.classWord], [['regime'], 3, [], null]);
+  // A two-word `class <x>` ends the list: a class word, or a word outside the four as a bad item, never a dropped name.
+  const bull = S.parseStateLine('STATE: 4h up | cites regime, class bullish');
+  assert.deepStrictEqual([bull.cites, bull.citesDropped, bull.bad, bull.classWord, bull.citesStated], [['regime'], 0, ['class bullish'], null, 'names']);
+  const chop = S.parseStateLine('STATE: 4h up | cites regime, class chop');
+  assert.deepStrictEqual([chop.cites, chop.citesDropped, chop.bad, chop.classWord], [['regime'], 0, [], 'chop']);
   // A field right after a cite ends it: frames agree, agree yes.
   const f = S.parseStateLine('STATE: 4h up, 1h up, 15m up, cites regime, frames agree');
   assert.deepStrictEqual([f.read.agree, f.cites, f.citesDropped, f.missing], ['yes', ['regime'], 0, []]);
@@ -501,8 +516,7 @@ test('class word: one filled-in example in the skills and agents; its class word
     const regime = /\bregime ([a-z-]+)/.exec(block);
     assert.ok(regime, `${where}: the example sits in a PLAN with its regime`);
     // The same word in the regime's spelling: chop is a range, trend-up and trend-down are their own regime tags.
-    const AS_REGIME = { 'trend-up': 'trend-up', 'trend-down': 'trend-down', chop: 'range' };
-    assert.notStrictEqual(AS_REGIME[r.classWord], regime[1], `${where}: the class word is the regime word`);
+    assert.ok(!S.classIsRegime(r.classWord, regime[1]), `${where}: the class word is the regime word`);
     assert.ok(!line.replace(`class ${r.classWord}`, '').includes(r.classWord), `${where}: the class word repeats another word on the line`);
     assert.ok(!r.cites.includes('regime'), `${where}: the example cites the regime label`);
     // The read and the decision agree: a take is on the class word's side; unclear or chop is no full take.
@@ -510,6 +524,20 @@ test('class word: one filled-in example in the skills and agents; its class word
     const take = /^8 Decision: take - full/m.test(block);
     if (take) assert.strictEqual(r.classWord, side === 'long' ? 'trend-up' : 'trend-down', `${where}: a full ${side} take with class ${r.classWord}`);
   }
+});
+
+test('class word: classIsRegime reads a class word in the spelling of the regime (chop is range); AS_REGIME covers every class word but unclear with regime words', () => {
+  assert.strictEqual(S.classIsRegime('chop', 'range'), true);
+  assert.strictEqual(S.classIsRegime('trend-up', 'trend-up'), true);
+  assert.strictEqual(S.classIsRegime('trend-down', 'trend-down'), true);
+  assert.strictEqual(S.classIsRegime('trend-up', 'range'), false);
+  assert.strictEqual(S.classIsRegime('chop', 'trend-up'), false);
+  assert.strictEqual(S.classIsRegime('unclear', 'transition'), false);
+  assert.strictEqual(S.classIsRegime(null, 'range'), false);
+  assert.ok(Object.isFrozen(S.AS_REGIME));
+  assert.deepStrictEqual(Object.keys(S.AS_REGIME).sort(), S.CLASS_WORDS.filter(w => w !== 'unclear').sort());
+  const { PRIMARY } = require('../../scripts/lib/trading/regime');
+  for (const v of Object.values(S.AS_REGIME)) assert.ok(PRIMARY.includes(v), v);
 });
 
 test('state read: the module decides nothing', () => {
