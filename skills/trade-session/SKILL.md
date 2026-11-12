@@ -129,9 +129,9 @@ it. No other words.
 **The decision follows your STATE read** (the head trader's own, the last
 line of its PLAN; taught: the gate and `compose_check` do not read it):
 
-- The class follows your frames: a trend class needs your 4h and 1h that
-  way (a 15m pullback or range under them doesn't cancel it); 4h and 1h
-  both `range` → `chop` or `unclear`.
+- The class follows your frames: your 4h and 1h both one way → that
+  trend class (a 15m pullback or range under them doesn't cancel it or
+  make it `unclear`); one or both `range` → `chop` or `unclear`.
 - A take: `class` on its side (`trend-up` long, `trend-down` short), your
   4h and 1h too (`up` long, `down` short).
 - `compose_check` still runs first (its record is the evidence the pass is
