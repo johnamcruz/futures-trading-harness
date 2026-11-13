@@ -73,6 +73,12 @@
  *   writeScorecard(runDir, { root, strategies, accounts, barsFiles, outDir })  scorecard.jsonl, scorecard-summary.json, scorecard.md,
  *                                                                             flagged.jsonl, flagged.md
  *   checkReasons(text, facts), expectedDecision(facts), classify(label, facts, expected, reasons)   the pure steps
+ *   stateOffSide(stateRead, side)        the head trader's own STATE read off the side (a pass on it named: unchecked)
+ *
+ * A pass on an OK compose record on the head trader's own STATE read off the setup's side (trade-session step 3), named
+ * in its reasons, is unchecked, never abstention: whether the read was right is the hand check, the read audit's misread
+ * bucket (learning/read-audit.js). Counted apart (stateReadPass on the record, summary.stateReadPasses, scorecard.md)
+ * and listed in the flagged set.
  */
 
 const fs = require('fs');
@@ -136,6 +142,31 @@ const htfAgrees = (htf, side) => {
   return Boolean(way && isObj(htf) && htf['4h'] === way && htf['1h'] === way);
 };
 
+/**
+ * Whether the head trader's own STATE read (the cycle log's stateRead, trading/state-read.js) is off the setup's side,
+ * as trade-session step 3 teaches a take: the class the side's trend class, the 4h and the 1h the side's way. A cycle
+ * with no read (unstated, unparsable, no class) is never off: nothing is filled in.
+ */
+function stateOffSide(stateRead, side) {
+  const way = side === 'long' ? 'up' : side === 'short' ? 'down' : null;
+  if (!way || !isObj(stateRead) || stateRead.status !== 'read' || typeof stateRead.classWord !== 'string' || !stateRead.classWord) return false;
+  if (stateRead.classWord !== `trend-${way}`) return true;
+  const frames = isObj(stateRead.read) && isObj(stateRead.read.frames) ? stateRead.read.frames : null;
+  return Boolean(frames && (frames['4h'] !== way || frames['1h'] !== way));
+}
+// A pass that names the read, in any clause it stated: the line's name (STATE, as written), a trend class, or read or class
+// tied to chop or unclear with only a copula or punctuation between ("class unclear", "my read is chop", "read: unclear";
+// a bare read needs the copula or the colon: "no read unclear" names nothing); never a class or chop word in another sense.
+const STATE_WORDS = /\btrend-(?:up|down)\b|\breads?\b(?:\s+(?:is|as|was|says)\s+|\s*[:=]\s*)[`"']?(?:chop|unclear)\b|\bclass\b(?:\s+(?:is|as|was|says))?\s*[:=]?\s*[`"']?(?:chop|unclear)\b/i;
+const STATE_NAMED = { test: c => /\bSTATE\b/.test(c) || STATE_WORDS.test(c) };
+
+/** A pass on the head trader's own STATE read off every one of the sides, named in any stated clause, no claim false. */
+function stateReadPass(facts, reasons, falseReason, sides) {
+  const clauses = [...reasons.claims.map(x => x.clause || ''), ...reasons.judgment, ...reasons.unparsed];
+  return !falseReason && sides.length > 0 && sides.every(side => stateOffSide(facts.stateRead, side)) && clauses.some(c => STATE_NAMED.test(c));
+}
+const stateWhy = s => { const fr = isObj(s.read) && isObj(s.read.frames) ? s.read.frames : {}; return `the head trader's own STATE read off the setup's side (class ${s.classWord}, 4h ${fr['4h'] || 'unknown'}, 1h ${fr['1h'] || 'unknown'}), named in the pass: its step 8, checked by hand`; };
+
 /** The failure category of a scored decision, and whether it agrees with the expectation (true | false | null). */
 function classify(label, facts, expected, reasons) {
   const act = label.teacher ? label.teacher.action : null;
@@ -186,6 +217,8 @@ function classify(label, facts, expected, reasons) {
     const hard = reasons.claims.filter(x => x.check === true && COMPOSED_GROUNDS.has(x.kind));
     if (hard.length) return why.push(`a true hard ground: ${hard.map(x => x.kind).join(', ')}`), out('unchecked', null);
     if (facts.attempt && facts.attempt.entryBlock) return why.push(`the attempt blocks entries (${facts.attempt.entryBlock})`), out('right', true);
+    // No compose call, the head trader's own STATE read off every composable side, named: the read alone, by hand.
+    if (stateReadPass(facts, reasons, falseReason, facts.composable.sides)) return why.push(`no compose record: the read alone: ${stateWhy(facts.stateRead)}`), { ...out('unchecked', null), stateReadPass: true };
     why.push(`no compose: ${facts.composable.sides.join(' and ')} ${facts.composable.reason}, passed without compose_check`);
     return out(falseReason ? 'wrong stated reason' : 'excessive abstention', false);
   }
@@ -199,6 +232,9 @@ function classify(label, facts, expected, reasons) {
   if (expected.composed !== undefined) {
     const hard = reasons.claims.filter(x => x.check === true && COMPOSED_GROUNDS.has(x.kind));
     if (hard.length) return why.push(`a true hard ground: ${hard.map(x => x.kind).join(', ')}`), out('unchecked', null);
+    // The head trader's own STATE read off the setup's side, named in the pass (its step 8, trade-session step 3): a
+    // judgment the record can't check, so by hand; the recorded read must be off the side, the words alone excuse nothing.
+    if (stateReadPass(facts, reasons, falseReason, [expected.direction])) return why.push(stateWhy(facts.stateRead)), { ...out('unchecked', null), stateReadPass: true };
     if ([...reasons.judgment, ...reasons.unparsed].some(c => DECISIVE.test(c))) {
       if (!htfAgrees(facts.htf, expected.direction)) return why.push('a decisive reason stated (a 1h CHoCH against): checked by hand'), out('unchecked', null);
       why.push('a 1h CHoCH against stated while the 4h and the 1h both trend the side: context, not decisive');
@@ -531,6 +567,12 @@ function factsAt(label, rec, { tf, count, accounts, doc = null, strategies = [] 
   // The 4h and the 1h at the decision (the briefing's own read): a 1h CHoCH against is decisive only without both its way.
   if (composedSetups.length && rec.barsFor) facts.htf = htfAt(rec, { symbol: label.symbol, barT: label.barT, tf, count });
   facts.attempt = attemptAt(label, facts, { accounts, doc });
+  // The head trader's own STATE read, as the cycle log recorded it (a pass on it is judged by hand: classify).
+  // The cycle records one read, its first symbol's (trading/state-read.js): kept only for that symbol's root (or a read
+  // naming none), the same root as the composed records; another symbol's decision has no read.
+  const sr = isObj(doc) && isObj(doc.stateRead) ? doc.stateRead : null;
+  const srRoot = sr && sr.symbol ? (parseStandardName(String(sr.symbol)) || {}).root || null : null;
+  facts.stateRead = sr && (!sr.symbol || (srRoot && srRoot === (entryRoot(label) || cycleRoot))) ? sr : null;
   // A pass with no compose call on the bar: whether the briefing held a composable setup (only then rebuilt).
   const act = label.teacher ? label.teacher.action : null;
   if (label.decision !== 'in-trade' && (act === 'none' || act === null) && !composedOf(doc, label).length && !facts.setups.length && rec.barsFor) {
@@ -625,6 +667,7 @@ function scoreRun(runDir, { strategies = [], accounts = [], outcomeBars = null, 
       expected,
       actual: { action: label.teacher ? label.teacher.action : null, setup: label.teacher ? label.teacher.setup : null, size: label.teacher && label.teacher.size ? label.teacher.size.contracts : null, gate: label.gate, result: label.result },
       reasons, incidentalFalse: reasons.claims.filter(c => c.check === false && c.incidental).length, agrees: verdict.agrees, category: verdict.category, why: verdict.why,
+      stateReadPass: verdict.stateReadPass === true,
       severity: null, flow, claimChecks, data: F.dataOf(label, facts), provenance: { cycleFile: cycleFile || null, promptHash: label.provenance ? label.provenance.promptHash : null },
       trade: o && o.filled ? { result: o.result, r: o.r, net: o.net, side: o.side, size: o.size, exitReason: o.exitReason, ...(o.rBasis ? { rBasis: o.rBasis } : {}) } : null,
       counterfactual: label.counterfactualFor === 'skip' && label.counterfactual ? { strategy: label.counterfactual.strategy, direction: label.counterfactual.direction, simulated: label.counterfactual.simulated, result: label.counterfactual.result, R: label.counterfactual.R, net: label.counterfactual.net, reason: label.counterfactual.reason } : null,
@@ -711,6 +754,8 @@ function summarize(records, { runId, unfinished, notScored, labels }) {
     v: VERSION, runId, unfinished: unfinished || null, decisions: records.length, notScored,
     agreement: { overall: all, byStep: tally(records, stepKey), byStrategy: tally(records, r => r.expected.strategy || r.actual.setup || 'none') },
     categories,
+    // Passes on the head trader's own STATE read off the setup's side (unchecked, by hand: the read audit's misread bucket).
+    stateReadPasses: records.filter(r => r.stateReadPass).length,
     reasons: {
       claims: claims.length, true: claims.filter(c => c.check === true).length, false: claims.filter(c => c.check === false).length, unchecked: claims.filter(c => c.check === 'unchecked').length,
       judgmentClauses: records.reduce((a, r) => a + r.reasons.judgment.length, 0), unparsedClauses: records.reduce((a, r) => a + r.reasons.unparsed.length, 0),
@@ -733,11 +778,11 @@ const row = (k, x) => `| ${cell(k)} | ${x.decisions} | ${x.agree} | ${x.disagree
 /** The short Markdown report. */
 function toMarkdown(s, records) {
   const head = '| | decisions | agree | disagree | unchecked | agreement |\n| --- | ---: | ---: | ---: | ---: | ---: |';
-  const flagged = records.filter(r => r.category !== 'right' && r.category !== 'unchecked');
+  const flagged = records.filter(r => (r.category !== 'right' && r.category !== 'unchecked') || r.stateReadPass);
   return [
     `# Adherence scorecard: ${s.runId}`, '',
     s.unfinished ? `The run is not finished (${s.unfinished}): this covers what it has done.\n` : '',
-    `${s.decisions} decisions scored; agreement ${pct(s.agreement.overall.rate)} of those the facts decide (${s.agreement.overall.unchecked} unchecked). Not scored: ${Object.entries(s.notScored).map(([k, v]) => `${k} ${v}`).join(', ') || 'none'}.`, '',
+    `${s.decisions} decisions scored; agreement ${pct(s.agreement.overall.rate)} of those the facts decide (${s.agreement.overall.unchecked} unchecked${s.stateReadPasses ? `; ${s.stateReadPasses} of them a pass on the head trader's own STATE read off the setup's side (checked by hand)` : ''}). Not scored: ${Object.entries(s.notScored).map(([k, v]) => `${k} ${v}`).join(', ') || 'none'}.`, '',
     '## Agreement by priority-order step', '', head, ...Object.entries(s.agreement.byStep).map(([k, x]) => row(k, x)), '',
     '## Agreement by strategy', '', head, ...Object.entries(s.agreement.byStrategy).map(([k, x]) => row(k, x)), '',
     '## Failure categories', '', '| category | decisions |', '| --- | ---: |', ...Object.entries(s.categories).map(([k, v]) => `| ${k} | ${v} |`), '',
@@ -750,7 +795,7 @@ function toMarkdown(s, records) {
     ...(s.outcomes !== 'shown' ? [] : ['## Account by day', '', '| day | decisions | agree | disagree | balance | day P&L | floor | cushion | daily headroom | balance check |', '| --- | ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: | --- |',
       ...s.days.map(d => `| ${d.day} | ${d.decisions} | ${d.agree} | ${d.disagree} | ${cell(d.balance)} | ${cell(d.dayPnl)} | ${cell(d.floor)} | ${cell(d.cushion)} | ${cell(d.dailyHeadroom)} | ${cell(d.balanceCheck)} |`), '']),
     '## Flagged decisions', '', flagged.length ? 'Each in full, for review: flagged.md and flagged.jsonl.\n\n| time (ET) | category | severity | expected | actual | why | false reasons |\n| --- | --- | --- | --- | --- | --- | --- |' : 'None.',
-    ...flagged.map(r => `| ${r.day} ${r.facts.et} | ${r.category} | ${r.severity} | ${r.expected.decision}${r.expected.setup ? ` ${r.expected.setup}` : ''} | ${r.actual.action}${r.actual.size ? ` ${r.actual.size}` : ''} | ${cell(r.why.join('; '))} | ${cell(r.reasons.claims.filter(c => c.check === false).map(c => `"${c.clause}": ${c.why}${c.incidental ? ' (incidental)' : ''}`).join('; '))} |`),
+    ...flagged.map(r => `| ${r.day} ${r.facts.et} | ${r.category} | ${r.stateReadPass ? 'by hand' : r.severity} | ${r.expected.decision}${r.expected.setup ? ` ${r.expected.setup}` : ''} | ${r.actual.action}${r.actual.size ? ` ${r.actual.size}` : ''} | ${cell(r.why.join('; '))} | ${cell(r.reasons.claims.filter(c => c.check === false).map(c => `"${c.clause}": ${c.why}${c.incidental ? ' (incidental)' : ''}`).join('; '))} |`),
     '',
   ].filter(x => x !== null).join('\n');
 }
@@ -778,7 +823,8 @@ function writeScorecard(runDir, { root = null, strategies = [], accounts = [], b
   writeJsonAtomic(path.join(out, 'scorecard-summary.json'), summary);
   fs.writeFileSync(path.join(out, 'scorecard.md'), toMarkdown(summary, records));
   // The flagged decisions, for the self-review: each failure with what the model saw, did, and what the code found.
-  const flagged = records.filter(r => F.TYPES.includes(r.category)).map(r => F.flaggedEntry(r, { runId: summary.runId, home, decisionFile: path.relative(home, path.join(dir, `${r.day}.jsonl`)) }));
+  // A pass on the head trader's own STATE read is unchecked but listed too, for the hand check.
+  const flagged = records.filter(r => F.TYPES.includes(r.category) || r.stateReadPass).map(r => ({ ...F.flaggedEntry(r, { runId: summary.runId, home, decisionFile: path.relative(home, path.join(dir, `${r.day}.jsonl`)) }), ...(r.stateReadPass ? { stateReadPass: true } : {}) }));
   fs.writeFileSync(path.join(out, 'flagged.jsonl'), flagged.map(x => `${JSON.stringify(x)}\n`).join(''));
   fs.writeFileSync(path.join(out, 'flagged.md'), F.flaggedMarkdown(summary.runId, flagged));
   return { file, summary, flagged: flagged.length };
@@ -791,4 +837,4 @@ const summaryText = s => `${s.decisions} decisions: agreement ${pct(s.agreement.
   + (s.outcomes !== 'shown' ? `trades ${s.trades.n}, skipped setups ${s.skipped.n}; outcomes ${s.outcomes}\n`
     : `trades ${s.trades.n} (${s.trades.sumR}R, ${s.trades.net}); skipped setups ${s.skipped.n} (would win ${s.skipped.wouldWin}, lose ${s.skipped.wouldLose})\n`);
 
-module.exports = { VERSION, SCORES_COMPOSED, CATEGORIES, STEPS, withChecks, lookAt, takeLook, scoreRun, writeScorecard, summaryText, toMarkdown, checkReasons, expectedDecision, expectedForEntry, classify, clausesOf, windowAt, planFor, composableSetup };
+module.exports = { VERSION, SCORES_COMPOSED, CATEGORIES, STEPS, withChecks, lookAt, takeLook, scoreRun, writeScorecard, summaryText, toMarkdown, checkReasons, expectedDecision, expectedForEntry, classify, clausesOf, windowAt, planFor, composableSetup, stateOffSide };

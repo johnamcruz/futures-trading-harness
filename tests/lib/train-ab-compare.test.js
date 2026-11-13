@@ -229,6 +229,25 @@ function scripted(w, { better }) {
   return [makeRun(w, 'a', { decisions: decA, scorecard: cardA }), makeRun(w, 'b', { root: w.roots.skill, decisions: decB, scorecard: cardB })];
 }
 
+test('passes on the head trader\'s own STATE read (unchecked, by hand) are counted per side, descriptive, never in the verdict', () => {
+  const w = world();
+  const cardA = BARS.map(bar => card(bar, 'right'));
+  const cardB = BARS.map((bar, i) => (i < 3 ? { ...card(bar, 'unchecked'), stateReadPass: true } : card(bar, 'right')));
+  const a = makeRun(w, 'a', { decisions: BARS.map(bar => decision(bar)), scorecard: cardA });
+  const b = makeRun(w, 'b', { root: w.roots.skill, decisions: BARS.map(bar => decision(bar)), scorecard: cardB });
+  const r = compare(a, b, { metrics: ['process'] });
+  const row = r.rows.find(x => /state-read passes/.test(x.measure));
+  assert.ok(row, r.rows.map(x => x.measure).join('\n'));
+  assert.deepStrictEqual([row.measure, row.a, row.b, row.verdict], ['  state-read passes (unchecked, checked by hand)', 0, 3, 'descriptive']);
+  // None on either side: no row.
+  const w2 = world();
+  const c = makeRun(w2, 'a', { decisions: BARS.map(bar => decision(bar)), scorecard: cardA });
+  const d = makeRun(w2, 'b', { root: w2.roots.skill, decisions: BARS.map(bar => decision(bar)), scorecard: cardA });
+  const none = compare(c, d, { metrics: ['process'] });
+  assert.strictEqual(none.refused, false, (none.refusals || []).join('\n'));
+  assert.ok(none.rows.some(x => x.measure.startsWith('process adherence')) && !none.rows.some(x => /state-read passes/.test(x.measure)));
+});
+
 test('a scripted pair where B is clearly better is "B better"; the same decisions are "no significant difference"; reversed is "B worse"', () => {
   const w = world();
   const [a, b] = scripted(w, { better: true });

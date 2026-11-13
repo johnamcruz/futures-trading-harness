@@ -69,7 +69,9 @@ trend's side, a reaction at a key level, the trigger closed, the stop at
 the invalidation, R:R to the target at least the minimum), at full size, or
 half on serious evidence against; it passes only on a decisive reason (the
 owner's decision, 2026-10-21: a pass on a verified record without one is
-scored excessive abstention, `confluence-counting`). Invalidation is defined before entry,
+scored excessive abstention, `confluence-counting`; one that names the head
+trader's own STATE read off the setup's side is scored unchecked, checked
+by hand). Invalidation is defined before entry,
 every trade is managed and reviewed, and size comes from risk, never
 conviction. The learning loop rewards that discipline (good passes, honest
 reasons), never the number of trades.

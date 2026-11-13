@@ -338,6 +338,9 @@ function processRows(sa, sb) {
   const v = judge({ pairs, targets: FAILURES, failures: FAILURES });
   const j = judgeVerdict(pairs, FAILURES);
   const out = [row('process adherence (scorecard right)', judged.length, avg(judged.map(p => right(p.base))), avg(judged.map(p => right(p.cand))), iv, j.verdict, `judge: ${j.why}`)];
+  // Passes on the head trader's own STATE read off the side (scorecard.js: unchecked, by hand): counted, never judged.
+  const srp = s => (s || []).filter(r => r && r.stateReadPass === true).length;
+  if (srp(sa) || srp(sb)) out.push({ measure: '  state-read passes (unchecked, checked by hand)', n: null, a: srp(sa), b: srp(sb), diff: null, lo: null, hi: null, verdict: 'descriptive', test: 'the read audit\'s misread bucket is the hand check' });
   for (const [k, h] of Object.entries(v.tests.harm)) {
     if (!h.b && !h.c) continue;
     out.push({ measure: `  ${k}: fixed ${h.b}, broken ${h.c}`, n: judged.length, a: null, b: null, diff: null, lo: null, hi: null, verdict: h.n >= DECISION_RULE.minDiscordant && h.pWorse <= DECISION_RULE.alpha ? 'more failures (descriptive)' : h.n >= DECISION_RULE.minDiscordant && h.pBetter <= DECISION_RULE.alpha ? 'fewer failures (descriptive)' : 'descriptive', test: `McNemar p better ${h.pBetter}, worse ${h.pWorse}` });

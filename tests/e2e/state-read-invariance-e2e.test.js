@@ -148,8 +148,14 @@ test('state read invariance: no module that decides reaches state-read.js, throu
   assert.deepStrictEqual(naming(/\bstateRead\b/), ['scripts/lib/cycle-log.js', 'scripts/lib/learning/experience-log.js', 'scripts/lib/learning/read-accuracy.js', 'scripts/lib/learning/read-audit.js', 'scripts/lib/learning/recognition/run.js', 'scripts/lib/learning/run-experience.js', 'scripts/lib/replay/store.js',
     // The trade feedback: a past trade's STATE read at its entry, a tag on that trade's line in the head's prompt (what the
     // model learns from); never a check, tool or order path (the deciders above reach none of it).
-    'scripts/lib/trading/trade-feedback.js']);
+    'scripts/lib/trading/trade-feedback.js',
+    // The adherence scorecard (feat/scorecard-state-read-pass): a pass on the head trader's own STATE read off the side,
+    // named in its reasons, is scored unchecked, never abstention; an offline report reached by no decider (below).
+    'scripts/lib/replay/scorecard.js'].sort());
+  for (const f of deciders) assert.ok(!reach(f, null).has(path.join(lib, 'replay', 'scorecard.js')), `${path.relative(D.ROOT, f)} reaches the scorecard`);
   // The class word and its cites (feat/class-word): named by the module that reads them and nothing else, so no decider,
   // report or prompt reads them (the recognition scorer is the one report, a measurement; a later one is its own pull request, added here by name).
-  assert.deepStrictEqual(naming(/\b(?:classWord|classStatus|citesDropped|citesStated|CLASS_WORDS|CITES|AS_REGIME|classIsRegime)\b|\.cites\b|\[\s*['"`]cites['"`]\s*\]/), ['scripts/lib/learning/recognition/scorer.js', 'scripts/lib/trading/state-read.js']);
+  assert.deepStrictEqual(naming(/\b(?:classWord|classStatus|citesDropped|citesStated|CLASS_WORDS|CITES|AS_REGIME|classIsRegime)\b|\.cites\b|\[\s*['"`]cites['"`]\s*\]/), ['scripts/lib/learning/recognition/scorer.js',
+    // The adherence scorecard's grading of a pass on the read (above): a measurement, added by name.
+    'scripts/lib/replay/scorecard.js', 'scripts/lib/trading/state-read.js']);
 });
