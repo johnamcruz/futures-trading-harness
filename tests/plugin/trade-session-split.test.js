@@ -406,8 +406,12 @@ const OLD_AGENTS_MD = 24466;
 // under the same standing rule; the skill file grew 8624 -> 8960 bytes. Plus 382 for the line's place and its class word
 // (feat/class-word, same rule: the PLAN's last line, every PLAN, an open trade's too, and the model's own present read in
 // closed words, `class` and `cites`, recorded by equality, never scored; 8960 -> 9342 bytes, `none` for no supporting name included), the measured need of
-// the worst path (+382).
-const RAISED = 154 + 130 + 1625 + 336 + 382;
+// the worst path (+382). Plus 916 for the decision following that read (feat/decision-follows-state, same rule, the owner's
+// approval of skill edits for it: taught, no code decides from it): trade-session 9342 -> 10167 (+825: read first, written
+// last, the head trader's own, the class follows the 4h and 1h, a take on its side, compose_check first, then chop, unclear or
+// an unsupported trend class a pass; Compose first names it) and the always-on decision rule's sentence in AGENTS.md (+114),
+// the measured need of the worst path (+939; trader-process and htf-to-ltf are common to both sides).
+const RAISED = 154 + 130 + 1625 + 336 + 382 + 939;
 const EVERY_CYCLE = ['multi-timeframe-analysis', 'strategy-library', 'strategy-scan', 'strategy-gate-checks', 'trader-process', 'htf-to-ltf', 'autonomous-trading'];
 const PATHS = {
   'full cycle, no candidate': ['role-round', 'setup-judgment', 'day-context'],
@@ -524,9 +528,13 @@ test('trade-session split: no head-trader path reads more than the base\'s every
 // few cycles, and it gains the model's own present read in closed words): trader-process's PLAN template and example end
 // with the STATE line, `class` and `cites` included, and one sentence says it is the head trader's, +321 in every role
 // that embeds it, both modes (news-calendar-analyst +306 over its pin, which had 15 bytes of slack); every other role within its pin.
+// Then feat/decision-follows-state (same rule, the owner's approval of skill edits for it): trader-process says the head
+// trader's own STATE read can end a plan (its step 8, the opening bullet, the scorecard line), +250 in every role that embeds
+// it, both modes (+318 after review round 2: the scorecard line says what the scorecard records); htf-to-ltf points from the side rule (main's text) to it and says the briefing's Bias/Trend rule lines are the gate's floor, +396 (the market-structure analyst); the risk manager's phase 2
+// says it checks what its file lists, never the STATE line, +211; every other role unchanged.
 const ROLE_PROMPTS = {
-  full: { 'market-structure-analyst': 96603, 'news-calendar-analyst': 10488, 'risk-manager': 94612, 'strategy-researcher': 25728, 'trade-executor': 30670, 'trade-reviewer': 9454, 'trend-momentum-analyst': 56615, 'volume-liquidity-analyst': 50033 },
-  index: { 'market-structure-analyst': 44700, 'news-calendar-analyst': 10488, 'risk-manager': 80500, 'strategy-researcher': 25728, 'trade-executor': 30659, 'trade-reviewer': 9454, 'trend-momentum-analyst': 41894, 'volume-liquidity-analyst': 34665 },
+  full: { 'market-structure-analyst': 97317, 'news-calendar-analyst': 10806, 'risk-manager': 95141, 'strategy-researcher': 25728, 'trade-executor': 30670, 'trade-reviewer': 9454, 'trend-momentum-analyst': 56933, 'volume-liquidity-analyst': 50351 },
+  index: { 'market-structure-analyst': 45414, 'news-calendar-analyst': 10806, 'risk-manager': 81029, 'strategy-researcher': 25728, 'trade-executor': 30659, 'trade-reviewer': 9454, 'trend-momentum-analyst': 42212, 'volume-liquidity-analyst': 34983 },
 };
 
 test('trade-session split: no role prompt grows, in full or index mode, and no role lists a piece', () => {

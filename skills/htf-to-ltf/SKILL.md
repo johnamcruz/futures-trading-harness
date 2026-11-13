@@ -38,6 +38,12 @@ is the entry; the 3m only times the entry: the next 3m bar, no
 confirming close, no 3m turn to wait for (waiting cost R).
 Not in a prop attempt: the trend rule alone (both ranging, the 15m's
 side; no trend anywhere, both sides).
+Then the head trader's own STATE read decides the take (`trade-session`
+step 3): its own 4h and 1h both range, or one of them not trending the
+side, is `chop` or `unclear` to it; both the side's way, a 15m range or
+pullback under them, is the side's trend class. The briefing's
+`Bias:`/`Trend rule:` lines are the gate's floor (what it refuses),
+never your side: your own STATE read is stricter.
 
 ### 2. Levels flow down
 

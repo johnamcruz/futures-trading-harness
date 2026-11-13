@@ -116,8 +116,8 @@ It orders the thinking and adds no filter.
 
 Last line of the PLAN block, every PLAN, an open trade's too: your own read
 from the bars and facts, not the labels copied (a label its last break or
-candle contradicts can be a `transition`, `trend-vs-range`); it is recorded
-and changes no step:
+candle contradicts can be a `transition`, `trend-vs-range`); read it first,
+write it last; it is recorded; no code decides from it:
 `STATE: 4h <f> | 1h <f> | 15m <f> | frames <agree|disagree> | class <c> | cites <names>`,
 `<f>` is `up`, `down`, `range`, `transition` or `unknown`; `<c>`, the
 market now at this candle, is `trend-up`, `trend-down`, `chop` or
@@ -126,12 +126,25 @@ market now at this candle, is `trend-up`, `trend-down`, `chop` or
 `pullback`, `1h-break`, `15m-break`, `3m-break`; `none` when none supports
 it. No other words.
 
+**The decision follows your STATE read** (the head trader's own, the last
+line of its PLAN; taught: the gate and `compose_check` do not read it):
+
+- The class follows your frames: your 4h and 1h both one way → that
+  trend class (a 15m pullback or range under them doesn't cancel it or
+  make it `unclear`); one or both `range` → `chop` or `unclear`.
+- A take: `class` on its side (`trend-up` long, `trend-down` short), your
+  4h and 1h too (`up` long, `down` short).
+- `compose_check` still runs first (its record is the evidence the pass is
+  scored on). Then `chop`, `unclear`, or a trend class your 4h and 1h
+  don't show (`trend-down` with 4h and 1h `range`) → pass, naming that
+  read (your step 8, not a decisive against).
+
 - **The priority order** (the `strategy-library` skill, "The priority order"):
   the rule for every setup, a policy verdict too. Apply its steps in order.
 - **Compose first** (`confluence-counting`): the side rule's side, the
   setup (15m) at a key level closed → `compose_check`, never your own
   R:R. OK → take: in a prop attempt the full verdict size; pass only on a
-  decisive against.
+  decisive against, or your own STATE read off the setup's side (above).
   Not in a prop attempt: the `position-sizing` skill.
 - **Every decision**: read the `setup-judgment` and `day-context` skills;
   before an entry, `trade-plan` too (the order gate refuses an entry until
