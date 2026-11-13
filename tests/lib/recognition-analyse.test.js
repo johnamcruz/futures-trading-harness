@@ -159,3 +159,66 @@ test('summary: over the cases whose run carries the class word only; the others 
   assert.strictEqual(A.summarize([without]).scored, null);
   assert.deepStrictEqual(s.entryVsConfirmed, { on: 0, before: 0, after: 0, 'no-entry': 2, 'never-confirmed': 0 });
 });
+
+test('a trend leg lists an entry against the leg\'s side too, with its own side and word (the entry whose own read is most worth seeing)', () => {
+  const fr = (a, b, c) => ({ '4h': a, '1h': b, '15m': c });
+  const cs = [
+    mk(0, true, { word: 'trend-down', read: { kind: 'entry', side: 'short', frames: fr('down', 'down', 'down') } }),
+    mk(1, true, { word: 'trend-up', read: { kind: 'entry', side: 'long', frames: fr('up', 'up', 'up') } }),
+  ];
+  const t = A.analyse(TREND, cs, { minutes: 3 });
+  assert.deepStrictEqual(t.entries.map(e => [e.rel, e.side, e.modelWord, e.wordVsFrames]), [[-1, 'short', 'trend-down', 'agrees'], [0, 'long', 'trend-up', 'agrees']]);
+  assert.strictEqual(A.summarize([t]).entryWords.trend.n, 2);
+});
+
+test('every entry carries the model\'s own word, its stated frames and the word against them; the summary tallies them by kind', () => {
+  const fr = (a, b, c) => ({ '4h': a, '1h': b, '15m': c });
+  const withFrames = (frames, o) => ({ ...o, read: { ...o.read, frames } });
+  const cs = [
+    mk(0, false, withFrames(fr('range', 'range', 'up'), { word: 'trend-up', read: { kind: 'entry', side: 'long' } })),
+    mk(1, false, withFrames(fr('up', 'up', 'up'), { word: 'unclear', read: { kind: 'entry', side: 'long' } })),
+    mk(2, false, { word: null, read: { kind: 'entry', side: 'long' } }),
+    mk(3, false, withFrames(fr('up', 'up', 'range'), { word: 'chop', read: { kind: 'pass' } })),
+  ];
+  const t = A.analyse(TREND, cs, { minutes: 3 });
+  assert.deepStrictEqual(t.entries.map(e => [e.rel, e.modelWord, e.frames, e.wordVsFrames]), [
+    [-1, 'trend-up', fr('range', 'range', 'up'), 'contradicts'],
+    [0, 'unclear', fr('up', 'up', 'up'), 'agrees'],
+    [1, null, null, 'unstated'],
+  ]);
+  const c = A.analyse(CHOP, cs, { minutes: 3 });
+  assert.deepStrictEqual(c.entries.map(e => [e.modelWord, e.wordVsFrames]), [['trend-up', 'contradicts'], ['unclear', 'agrees'], [null, 'unstated']]);
+  const none = A.analyse(CHOP, [mk(0, false, { read: { kind: 'entry', side: 'long' } })], { minutes: 3 });
+  assert.deepStrictEqual(none.entries.map(e => [e.modelWord, e.wordVsFrames]), [[null, 'unstated']], 'a run without the class word: null, never filled in from the coded read');
+  const sum = A.summarize([t, c, none], { level: 0.95 });
+  assert.strictEqual(sum.entryWords.trend.n, 3);
+  assert.deepStrictEqual(sum.entryWords.trend.byWordVsFrames, { agrees: 1, contradicts: 1, unstated: 1 });
+  assert.strictEqual(sum.entryWords.chop.n, 4);
+  assert.deepStrictEqual(sum.entryWords.chop.byWord, { 'trend-up': 1, 'trend-down': 0, chop: 0, unclear: 1, unstated: 2 });
+});
+
+test('every case carries its word stability over all candles (in-trade included, own column); the summary totals it by kind', () => {
+  const same = { '4h': 'down', '1h': 'down', '15m': 'range' };
+  const row = (i, w, kind = 'pass') => mk(i, false, { word: w, read: { kind, frames: same } });
+  const cs = [row(0, 'trend-up'), row(1, 'trend-down'), row(2, 'chop', 'in-trade'), row(3, 'trend-down')];
+  const t = A.analyse({ ...TREND, side: 'short' }, cs, { minutes: 3 });
+  assert.strictEqual(t.wordStability.candles, 4);
+  assert.deepStrictEqual(t.wordStability.inTradeByWordVsFrames, { agrees: 1, contradicts: 0, unstated: 0 });
+  assert.deepStrictEqual(t.wordStability.wordVsSide, { same: 2, opposite: 1, chop: 1, unclear: 0, unstated: 0 });
+  assert.strictEqual(t.wordStability.flipsSameFrames, 3, 'up>down, down>chop, chop>down: frames never changed');
+  const c = A.analyse(CHOP, cs, { minutes: 3 });
+  assert.strictEqual(c.wordStability.wordVsSide, null);
+  const sum = A.summarize([t, c]);
+  assert.strictEqual(sum.wordStability.trend.cases, 1);
+  assert.strictEqual(sum.wordStability.trend.flipsSameFrames, 3);
+  assert.strictEqual(sum.wordStability.chop.candles, 4);
+  const none = A.analyse(CHOP, [mk(0, false), mk(1, false)], { minutes: 3 });
+  assert.deepStrictEqual(none.wordStability.byWordVsFrames, { agrees: 0, contradicts: 0, unstated: 2 }, 'a run without the class word: unstated, never filled in');
+});
+
+test('summary: a case that is not in the runs adds nothing to the word stability or entry tallies and never throws', () => {
+  const real = A.analyse(CHOP, [mk(0, true, { word: 'chop' })], { minutes: 3 });
+  const missing = { ...A.analyse({ ...CHOP, id: 'x' }, [mk(0, true)], { minutes: 3 }), notInRuns: true, wordStability: undefined, entries: undefined };
+  const s = A.summarize([real, missing], { level: 0.95 });
+  assert.strictEqual(s.wordStability.chop.cases, 1);
+});

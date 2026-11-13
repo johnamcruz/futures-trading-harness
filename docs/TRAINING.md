@@ -1716,6 +1716,40 @@ The five measures, per case:
    with what the evidence showed in the leg (the evidence and coded words
    per candle, the confirmed candles, the mean flow steps met).
 
+Every entry, on a trend leg or a chop day, also carries the model's own
+word at the entry candle (`modelWord`, null when unstated, absent or
+invalid; never filled in from the coded read), its stated frames
+(`frames`: the 4h, 1h and 15m words of the same cycle's STATE record, read
+by equality, null when none is stated) and `wordVsFrames`, a fixed equality
+rule over those two recorded fields only (`scorer.js` `wordVsFrames`,
+pinned by a test, not a tunable): `unstated` when there is no word or no
+frame; a trend word `contradicts` when the 4h and 1h are both `range`, or
+the 4h or the 1h is the opposite way (a 15m against is a pullback, not a
+contradiction); `chop` `contradicts` when the 4h, 1h and 15m are all `up`
+or all `down`; otherwise `agrees` (`unclear` always agrees). The
+aggregate's "Entries by the model's own word" line counts the entries of
+each kind by word and by `wordVsFrames`. It asks whether the model's own word rests on its own frames at the entry;
+the entry's side is carried beside it (`side`) and not compared. A word with
+frames that say nothing (all `unknown` or `transition`) counts as `agrees`. It is a count, not a
+grade: it reads only what the record holds, uses no later price and
+changes nothing.
+
+The same rule is also applied to **every candle** the case covers, not only
+the entries (`scorer.js` `wordStability`; the aggregate line "The class word
+against its own frames, every candle"). Per case, and totalled by kind: the
+candles by `wordVsFrames` (`agrees`, `contradicts`, `unstated`), with the
+in-trade candles also counted apart (an open trade's read is still a read);
+for a trend leg only, `wordVsSide`, the word against the leg's known side
+(`same`, `opposite`, `chop`, `unclear`, `unstated`), a reporting bucket
+against the answer key that the model never sees; and persistence: the
+number of class-word changes between candle-adjacent cycles (a gap in the
+candles breaks the pair and the run) whose three frame words did not change
+(each stated on both, and the same; both words stated; the number of such
+pairs is printed beside it), and the longest run of one stated word. A word
+that changes while the model's own frames stand still is an instability of
+the read, not a view of the market: it is counted, never graded, and uses no
+later price, no gate and no question to the model.
+
 Frozen definitions:
 
 - **The model's vocabulary is closed**: `trend-up`, `trend-down`, `chop`,

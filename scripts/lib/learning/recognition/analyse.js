@@ -15,6 +15,8 @@
  *                         confluence for the side (required flow steps met, confirmed, declaredOf), and the model's cites
  *                         against the fields carrying a met signal (cited, ignored, cited without a signal, off the list)
  *   3 entry               the entry candle against the first candle barFacts confirms the side (trend legs)
+ *   entries              (both kinds) each entry's modelWord, frames and wordVsFrames (the model's word against its own
+ *                         stated frames, scorer.wordVsFrames), tallied in summarize's entryWords
  *   4 chop days           names chop? at which candle; the sit rate; every entry with its present class and confluence,
  *                         flagged before the naming or not
  *   5 misses              a trend leg the model never recognised within the margin, with what the evidence showed in it
@@ -33,6 +35,13 @@ const S = require('./scorer');
 
 const knownOf = c => (c.kind === 'trend' ? (c.side === 'long' ? 'trend-up' : 'trend-down') : 'chop');
 const tally = (list, f) => list.reduce((m, x) => { const k = f(x); m[k] = (m[k] || 0) + 1; return m; }, {});
+
+/** An entry's own word and frames from its STATE record, and the word against the frames (scorer.wordVsFrames): recorded fields only. */
+function ownRead(c) {
+  const word = c.read.word.status === 'stated' ? c.read.word.word : null;
+  const frames = c.read.frames || null;
+  return { modelWord: word, frames, wordVsFrames: S.wordVsFrames(word, frames) };
+}
 
 function confl(c, side) {
   if (!side) return null;
@@ -98,6 +107,9 @@ function analyse(cse, candles, { minutes }) {
     out.entryVsConfirmed = S.entryVsConfirmed(P.map(c => ({ rel: c.rel, confirmed: confl(c, side).confirmed, flat: c.flat, action: action(c) })));
     const en = P.find(c => c.flat && action(c) === 'enter');
     out.entryConfluence = en ? { rel: en.rel, ...confl(en, side), evidence: en.evidence, coded: en.coded, inLeg: en.ms <= cse.endClose } : null;
+    // Every flat entry candle, an entry against the leg's side too (its own read is the one most worth seeing); a record with no
+    // side takes the leg's (the leg-side measures above keep their own rule).
+    out.entries = P.filter(c => c.flat && c.read.kind === 'entry').map(c => ({ rel: c.rel, side: c.read.side || side, evidence: c.evidence, coded: c.coded, ...ownRead(c) }));
     const w = legW;
     out.evidenceInLeg = {
       candles: w.length, evidence: tally(w, c => c.evidence), coded: tally(w, c => c.coded),
@@ -110,12 +122,14 @@ function analyse(cse, candles, { minutes }) {
     out.firstChopRel = first;
     out.entries = P.filter(c => c.flat && c.read.kind === 'entry').map(c => {
       const s = c.read.side || c.trace.key.biasSide || null;
-      return { rel: c.rel, side: s, evidence: c.evidence, coded: c.coded, presentClass: s ? c.trace.key.cls[s] : null, confluence: confl(c, s), beforeNaming: needs ? null : first === null || c.rel < first };
+      return { rel: c.rel, side: s, evidence: c.evidence, coded: c.coded, ...ownRead(c), presentClass: s ? c.trace.key.cls[s] : null, confluence: confl(c, s), beforeNaming: needs ? null : first === null || c.rel < first };
     });
     out.entriesBeforeNaming = needs ? null : out.entries.filter(e => e.beforeNaming).length;
     const flat = P.filter(c => c.flat);
     out.sitRate = flat.length ? flat.filter(c => c.read.kind === 'pass').length / flat.length : null;
   }
+  // Over every traced candle, in-trade ones included (their own column): the class word against its own frames, flips.
+  out.wordStability = S.wordStability(P.map(c => ({ rel: c.rel, word: c.model, frames: c.read.frames || null, inTrade: !c.flat })), side);
   return { ...out, _candles: P, _inLeg: legW };
 }
 
@@ -126,6 +140,9 @@ function summarize(analyses, { level = null } = {}) {
     scored: scored.length ? S.summary(scored.map(a => ({ id: a.id, known: a.known, margin: a.margin, pace: a.pace, candles: a._candles, ...(a._inLeg ? { inLeg: a._inLeg } : {}) })), { level }) : null,
     needsClassWord: analyses.filter(a => a.wordCoverage.needsClassWord).map(a => a.id),
     noCandles: analyses.filter(a => a.noCandles).map(a => a.id),
+    // Every entry's own word and frames (not scored, not a grade), by kind of case.
+    entryWords: Object.fromEntries(['trend', 'chop'].map(k => [k, S.tallyEntryWords(analyses.filter(a => a.kind === k && !a.notInRuns).flatMap(a => a.entries || []))])),
+    wordStability: Object.fromEntries(['trend', 'chop'].map(k => [k, S.tallyWordStability(analyses.filter(a => a.kind === k && !a.notInRuns).map(a => a.wordStability))])),
     entryVsConfirmed: { on: 0, before: 0, after: 0, 'no-entry': 0, 'never-confirmed': 0, ...tally(legs, a => a.entryVsConfirmed.timing) },
   };
 }

@@ -33,7 +33,7 @@ function casesFile(dir) {
 }
 
 /** A run home: the replay run's manifest and runner config, and one trade cycle log per candle 09:33 to 11:00. */
-function runHome({ word = undefined, cites = undefined } = {}) {
+function runHome({ word = undefined, cites = undefined, frames = undefined } = {}) {
   const home = tmpDir();
   const dir = path.join(home, 'replay', 'r1');
   fs.mkdirSync(dir, { recursive: true });
@@ -47,6 +47,7 @@ function runHome({ word = undefined, cites = undefined } = {}) {
     const inTrade = i > 14 && i < 18;
     const sr = { status: 'read', line: 'STATE: 4h up | 1h up | 15m up | class trend-up', bar: iso(close - TF) };
     if (word !== undefined) sr.classWord = typeof word === 'function' ? word(i) : word;
+    if (frames !== undefined) sr.read = { frames, agree: null };
     if (cites !== undefined) Object.assign(sr, { cites, citesStated: 'names', citesDropped: 1 });
     const rec = {
       action: 'trade', result: entry ? 'CYCLE RESULT: entered long' : inTrade ? 'CYCLE RESULT: managed' : 'CYCLE RESULT: no-trade',
@@ -75,7 +76,8 @@ const report = (home, dir, o = {}) => {
 
 test('readOf: entry, pass and in-trade from the cycle (the read audit\'s kindOf, and an open position or working order); the class word and cites by equality', () => {
   const base = { action: 'trade', result: 'CYCLE RESULT: no-trade', summary: { orders: [] }, context: { account: { positions: [], workingOrders: [] } } };
-  assert.deepStrictEqual(R.readOf(base), { kind: 'pass', side: null, word: { status: 'absent', word: null }, basis: { status: 'absent', cited: [], offList: [], dropped: 0 } });
+  assert.deepStrictEqual(R.readOf(base), { kind: 'pass', side: null, word: { status: 'absent', word: null }, frames: null, basis: { status: 'absent', cited: [], offList: [], dropped: 0 } });
+  assert.deepStrictEqual(R.readOf({ ...base, stateRead: { status: 'read', read: { frames: { '4h': 'range', '1h': 'up', '15m': 'range' } } } }).frames, { '4h': 'range', '1h': 'up', '15m': 'range' });
   assert.deepStrictEqual(R.readOf({ ...base, summary: { orders: [{ gate: 'allowed', side: 'sell' }] } }).kind, 'entry');
   assert.strictEqual(R.readOf({ ...base, summary: { orders: [{ gate: 'allowed', side: 'sell' }] } }).side, 'short');
   assert.strictEqual(R.readOf({ ...base, summary: { orders: [{ gate: 'refused', side: 'sell' }] } }).kind, 'pass', 'a refused order is no entry');
@@ -180,4 +182,22 @@ test('the CLI: a frozen list checked, --bars and --run read, text or JSON; bad a
   assert.match(run().stderr, /no --run/);
   assert.match(run('--run', path.join(dir, 'none')).stderr, /no such path/);
   assert.strictEqual(run('--nope').status, 1);
+});
+
+test('entries carry the model\'s word, its stated frames and the word against them, end to end; the report and the aggregate say so', () => {
+  const dir = tmpDir();
+  const doc = report(runHome({ word: 'trend-up', frames: { '4h': 'range', '1h': 'range', '15m': 'up' } }), dir);
+  const [leg, chop] = doc.cases;
+  assert.deepStrictEqual(leg.entries.map(e => [e.modelWord, e.frames, e.wordVsFrames]), [['trend-up', { '4h': 'range', '1h': 'range', '15m': 'up' }, 'contradicts']]);
+  assert.strictEqual(chop.entries[0].wordVsFrames, 'contradicts');
+  assert.strictEqual(doc.summary.entryWords.chop.byWord['trend-up'], 1);
+  const text = P.renderReport(doc);
+  assert.match(text, /Entries by the model's own word[^\n]*chop days 1 entries: \{"trend-up":1,[^\n]*"contradicts":1[^\n]*trend legs 1 entries/);
+  assert.match(text, /model's word trend-up, frames 4h range \| 1h range \| 15m up, word vs frames contradicts/);
+  assert.match(text, /The class word against its own frames, every candle[^\n]*chop days candles \d+, word vs frames \{"agrees":\d+,"contradicts":\d+,"unstated":\d+\} \(in trade[^\n]*word changes with the frames unchanged \d+ of \d+ such pairs; longest run of one word \d+ over 1 cases; trend legs[^\n]*word vs the leg's side \{"same":\d+,"opposite":\d+/);
+  assert.match(text, /class word every candle: candles/);
+  assert.strictEqual(doc.summary.wordStability.trend.cases, 1);
+  const none = P.renderReport(report(runHome({ word: 'chop' }), tmpDir()));
+  assert.match(none, /word chop, frames unstated, vs frames unstated/, 'no frames stated: unstated, never guessed');
+  assert.ok(!/NaN|undefined/.test(text + none));
 });
