@@ -98,10 +98,10 @@ test('context quiz: every layer asked, ids unique, the bar the whole quiz at K 5
   // q72 4/5, q73 4/5, q74 1/5 and q75 4/5 at k=5 were removed, real model misses (the model treats unknown or neutral
   // fields as conflicting, and sometimes calls a with-trend pullback a chop sign), as q45 and q53 were: a skill gap
   // reported to the owner. q76-q78 (class D, conflicting) were dropped in review.
-  // 84 since q87-q107 (feat/pullback-concept, owner-approved 2026-11-14: the pullback to a broken level, BOS confirms and
+  // 87 since q87-q110 (feat/pullback-concept, owner-approved 2026-11-14: the pullback to a broken level, BOS confirms and
   // CHoCH warns on the 3m and the 15m against the 4h + 1h side, the pause not chop, late, the down mirror, the strict side,
   // the deep case, close to the picture a read, the 15m and 3m CISD; closed choices, each measured at k=3 before it entered the bar).
-  assert.strictEqual(QUIZ.questions.length, 84);
+  assert.strictEqual(QUIZ.questions.length, 87);
   for (const id of ['q71', 'q72', 'q73', 'q74', 'q75', 'q76', 'q77', 'q78']) assert.ok(!QUIZ.questions.some(x => x.id === id), id);
   assert.strictEqual(QUIZ.partB.length, 8);
 });
@@ -169,7 +169,7 @@ test('context quiz: the chop questions (q79-q82) are asked against the prompt ho
   }
 });
 
-test('context quiz: the pullback questions (q87-q107) are asked against the prompt holding the sentence each anchors to, and go missing without it', () => {
+test('context quiz: the pullback questions (q87-q110) are asked against the prompt holding the sentence each anchors to, and go missing without it', () => {
   const prompts = Q.buildPrompts(ROOT, QUIZ);
   const flat = t => t.replace(/\s+/g, ' ');
   const cut = re => Object.fromEntries(Object.entries(prompts).map(([k, v]) => [k, flat(v).replace(re, '')]));
@@ -177,27 +177,30 @@ test('context quiz: the pullback questions (q87-q107) are asked against the prom
   // [id, prompt, lookup, the sentence it anchors to, deleted from every prompt]
   const want = [
     ['q87', 'lookup', PB, /the first 3m BOS or 3m CISD the side's way, near value/g],
-    ['q88', 'lookup', PB, /A 15m BOS the side's way after it: continuation confirmed → hold\./g],
+    ['q88', 'lookup', PB, /A 15m BOS the side's way after the entry: continuation confirmed → hold\./g],
     ['q89', 'lookup', PB, /this pullback failed, a reversal attempt: wait for a new 15m turn the side's way/g],
     ['q90', 'lookup', PB, /a 3m CHoCH against the side inside an intact 15m trend: a pullback starting, wait\./g],
     ['q91', 'lookup', PB, /A 15m `range` or `transition` here is the pause, not chop\./g],
-    ['q92', 'lookup', PB, /Far past the level, no retest: late, not this read's entry\./g],
+    ['q92', 'lookup', PB, /Far past the level, no retest: late, not this read's entry/g],
     ['q93', 'lookup', PB, /up shown, down the mirror/g],
     // A strict-side guard (main's text): one of the 4h and 1h ranging is chop or unclear to the head trader, whatever the 3m.
     ['q94', 'head', undefined, /one or both `range` → `chop` or `unclear`/g],
     ['q95', 'head', undefined, /a 15m pullback, `range` or `transition` under them doesn't cancel it/g],
-    ['q96', 'lookup', PB, /watch for the BOS; not the entry\./g],
-    ['q97', 'lookup', PB, /No BOS after it: no setup, pass\./g],
+    ['q96', 'lookup', PB, /watch for the BOS or CISD; not the entry\./g],
+    ['q97', 'lookup', PB, /No BOS or CISD after it: no setup, pass\./g],
     ['q98', 'lookup', PB, /a candle at the level is no confirmation alone/g],
     ['q99', 'lookup', PB, /The sequence is the reference picture, not a checklist/g],
-    ['q100', 'lookup', PB, /a live 15m CISD the side's way/g],
+    ['q100', 'lookup', PB, /the 15m turn: a live 15m CISD, a 15m BOS or a 15m reaction at the level/g],
     ['q101', 'lookup', PB, /the entry needs a 3m BOS or CISD the side's way and a true 15m setup read the side's way/g],
     ['q102', 'lookup', PB, /`3m cisd up` in the setup step/g],
     ['q103', 'lookup', PB, /A 15m CHoCH or CISD against → this pullback failed/g],
     // The old answer (the 15m setup is the entry, no 3m turn to wait for) as the distractor: a Pullback line printed, the head core says wait.
-    ['q104', 'head', undefined, /unless a `Pullback` line is printed \(below\)/g],
+    ['q104', 'head', undefined, /unless a `Pullback` line prints\./g],
     ['q105', 'lookup', PB, /A 3m CHoCH or CISD against inside it: the watch restarts\./g],
     ['q107', 'head', undefined, /your PLAN's `4 Setup` line is the read chain/g],
+    ['q108', 'lookup', PB, /a 15m BOS far past value \(no 3m BOS or CISD near it\): late, not an entry/g],
+    ['q109', 'lookup', PB, /Counter candles that don't engulf it: a pullback forming, not a reversal/g],
+    ['q110', 'lookup', PB, /a counter candle engulfing it reads as a CHoCH against: wait/g],
     ['q106', 'lookup', PB, /an engulfing confirming candle, `engulfing`, is one: `cisd`\) weighs more in the count/g],
   ];
   assert.deepStrictEqual(Q.anchorsMissing(QUIZ, prompts).filter(x => want.some(w => w[0] === x)), []);

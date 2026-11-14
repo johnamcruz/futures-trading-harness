@@ -44,8 +44,8 @@ harness (Claude Code, Codex, Qwen Code, opencode, or any agent that reads AGENTS
 Always on, every harness, every bar (the detail: `confluence-counting`).
 
 - On the side rule's side (never counter), a 15m rejection or breakout at
-  a key level or FVG closed → call `compose_check` (a `Pullback` line
-  printed: at its 3m BOS or CISD, `pullback-vs-reversal`). Never estimate
+  a key level or FVG closed → call `compose_check`. Its timing: the next 3m bar
+  (unless a `Pullback` line is printed: `pullback-vs-reversal`). Never estimate
   room, R:R or the target yourself: the briefing's "Standard plan" line
   states them, and the refusal is the R:R check. The line refused → pass.
 - `compose_check` OK → a valid setup is the trade: in a prop attempt the

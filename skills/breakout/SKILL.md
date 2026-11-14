@@ -47,7 +47,7 @@ By PLAN step:
    (`bos-vs-choch`).
 - **5 Confluence**: expanding range and volume (`momentum-and-volume`),
    no absorption against it (`absorption`).
-- **6 Entry**: the 15m or 1h close beyond is the entry (a `Pullback` line printed: `pullback-vs-reversal`): a limit at the last close when you compose (the setup's own close when you compose on its bar), filled within `valid_bars`;
+- **6 Entry**: the 15m or 1h close beyond is the entry (unless a `Pullback` line is printed: `pullback-vs-reversal`): a limit at the last close when you compose (the setup's own close when you compose on its bar), filled within `valid_bars`;
    a retest that holds (a pullback: `pullback-vs-reversal`) is support,
    never a wait. Never anticipate it.
 - **7 Risk**: the idea is wrong back inside the level, beyond the retest's

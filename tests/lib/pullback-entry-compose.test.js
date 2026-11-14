@@ -5,7 +5,8 @@
 // top-down chain: the 15m turn is the setup read (a live 15m CISD the side's way, or a 15m reaction still on the last
 // 15m candle), the 3m BOS is stated in the bias step and the 3m CISD in the setup step beside the 15m read, and a 3m read
 // alone is no setup. So what the skill tells the model to compose is what compose_check accepts, and what it says is
-// gone (a weak or dead CISD, a 3m read alone, a break read in the entry step) is what compose_check refuses.
+// gone (a weak or dead CISD, a 3m read alone, a break read in the entry step) is what compose_check refuses. A
+// skill-matches-code contract: tests 1-4 pass on main by design (no code changed); the last test holds the skill's words.
 
 const test = require('node:test');
 const assert = require('node:assert');
@@ -70,7 +71,7 @@ test('pullback entry: a weak, void or expired 15m CISD is no setup read; the 15m
 
 test('pullback entry: the skill states these forms and steps', () => {
   const t = fs.readFileSync(path.join(ROOT, 'skills', 'pullback-vs-reversal', 'SKILL.md'), 'utf8').replace(/\s+/g, ' ');
-  assert.ok(t.includes('the setup `15m cisd up` (or the reaction)'), 'the setup read named');
+  assert.ok(t.includes('the setup `15m cisd up` (or the 15m candle\'s read)'), 'the setup read named');
   assert.ok(t.includes('`3m bos up` in the bias step'), 'the BOS read and its step named');
   assert.ok(t.includes('`3m cisd up` in the setup step'), 'the 3m CISD read and its step named');
 });

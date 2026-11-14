@@ -226,6 +226,8 @@ test('fisherLess: the exact one-sided test that the edit passes less often than 
 // The reason for the design: a noisy quiz must not reject an edit that changes nothing. Seeded Monte Carlo of the whole
 // procedure (the first run, then a confirm run on what it flags), 53 questions with a realistic mix of stable and
 // flaky ones; both sides draw from the same per-question pass rates.
+// At 95 questions (feat/pullback-concept) the quiz file's maxSlips is 9: at 8 the flaky mix rejected 8.5% of unchanged edits;
+// at 9, 0.7% stable and 2.0% flaky, a broken stable question caught 90.5%, a flaky one dropped to 0 98% (600 trials each).
 test('Monte Carlo: an unchanged edit is rarely rejected, one that breaks a stable question usually is', () => {
   let seed = 20260805;
   const rand = () => { seed = (seed * 1664525 + 1013904223) % 4294967296; return seed / 4294967296; };

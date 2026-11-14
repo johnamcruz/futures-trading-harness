@@ -50,10 +50,9 @@ Also: `leg` (`origin`, the run's extreme; `extreme`), `ote`, `status`
 CISD usually comes first: an early sign, not yet a change of structure.
 It is a setup read (`<tf> cisd up|down`), never a trade of its own. By
 timeframe: a 15m (or 1h) CISD the bias's way is the setup read; a 3m
-or 5m one is entry timing, context, never the setup; against the bias,
+or 5m one is entry timing (in a Pullback, beside the 15m read), never the setup alone; against the bias,
 noise. The stronger one has a strong displacement candle (its strength
-and close: an engulfing ranks with other strong ones); the 3m only times
-the entry.
+and close: an engulfing ranks with other strong ones).
 
 **OTE and bounce** (`fib-retracement`): a strong CISD's `leg` gives
 `ote`: support, never a wait (the 15m CISD is the setup). A completed

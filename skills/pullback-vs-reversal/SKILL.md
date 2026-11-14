@@ -32,7 +32,8 @@ the mirror). Open while the briefing prints a `Pullback` line. BOS the
 side's way confirms, CHoCH against warns; a CISD reads as the same: the
 side's way as a BOS, against as a CHoCH, earlier (`cisd`). Strong
 (`displacement` strong; an engulfing confirming candle, `engulfing`, is
-one: `cisd`) weighs more in the count; weak (no zone) weighs less and is
+one: `cisd`) weighs more in the count, by the CISD line, not the candle's
+name; weak (no zone) weighs less and is
 never the composed setup read (`compose_check` takes a live strong one):
 
 1. The 4h + 1h set the side (`htf-to-ltf`); never counter.
@@ -43,26 +44,33 @@ never the composed setup read (`compose_check` takes a live strong one):
    candle's range (`N in a row inside the <time> candle`: `compression`'s
    pennant), `Pullback` volume falling, its 15m swing holding. A 15m
    `range` or `transition` here is the pause, not chop. The label is no
-   evidence of resumption either.
-4. **The 15m turn, the setup read**: a live 15m CISD the side's way
-   (`15m cisd up`, stays true while live), or a 15m reaction at the level
-   closing back the side's way (`15m rejected <level> up`: long-wick,
-   engulfing or confirmed, `candle-reading`; true only while its candle
-   is the last 15m one) → the pullback ended on the 15m.
+   evidence of resumption either. The impulse (a 15m `displacement` the
+   side's way, or the CISD's `leg`) sets the leg: measure the pullback on
+   it (`fib-retracement`, the CISD's `ote`), depth and location only, never
+   an entry or a reversal zone. Counter candles that don't engulf it: a
+   pullback forming, not a reversal; a counter candle engulfing it reads
+   as a CHoCH against: wait.
+4. **The setup**: the 15m turn: a live 15m CISD, a 15m BOS or a 15m
+   reaction at the level, the side's way → the pullback ended on the 15m.
+   Composed as `15m cisd up` (true while live), or that 15m candle's read
+   (`15m rejected <level> up`: long-wick, engulfing or confirmed,
+   `candle-reading`; a BOS's breaking candle `15m broke <level> up`), true
+   only while it is the last 15m candle; `15m bos up` is a bias read.
 5. A 3m CHoCH back the side's way: the 3m counter-move ended; watch for
-   the BOS; not the entry. No BOS after it: no setup, pass.
+   the BOS or CISD; not the entry. No BOS or CISD after it: no setup, pass.
 6. **Entry**: the first 3m BOS or 3m CISD the side's way, near value
    (the `Trend declared?` RTH VWAP or EMA20 within about ±0.5), the step
    4 read true now → compose on that bar: the setup `15m cisd up` (or the
-   reaction), `3m bos up` in the bias step or `3m cisd up` in the setup
-   step; a limit at its close, filled within `valid_bars`
+   15m candle's read), `3m bos up` in the bias step or `3m cisd up` in the
+   setup step; a limit at its close, filled within `valid_bars`
    (`trade-lifecycle`). Never a limit back at the broken or the CHoCH
    level. The step 4 read gone: no setup until a new 15m read. Unfilled
    or run away: no chase. Far past the level, no retest: late, not this
-   read's entry.
-7. A 15m BOS the side's way after it: continuation confirmed → hold.
-   After a failed pullback, a later 15m BOS is a new broken level: its
-   own pullback and steps 4-6 are the entry, never the BOS bar itself.
+   read's entry; a 15m BOS far past value (no 3m BOS or CISD near it):
+   late, not an entry; wait for the next pullback.
+7. A 15m BOS the side's way after the entry: continuation confirmed →
+   hold. After a failed pullback, a later 15m BOS is a new broken level:
+   its own pullback and steps 4-6 are the entry, never the BOS bar itself.
 8. A 15m CHoCH or CISD against → this pullback failed, a reversal
    attempt: wait for a new 15m turn the side's way (step 4); open: the
    Trade read (`manage-position`); never counter. A 3m CHoCH or CISD
@@ -76,7 +84,8 @@ checklist: depth, the pause's shape, the exact touch of the level, the
 candle type and the distance to value weigh in the count
 (`confluence-counting`). Three lines hold, whatever the count: the 4h + 1h side; a 15m CHoCH
 or CISD against → wait; the entry needs a 3m BOS or CISD the side's way
-and a true 15m setup read the side's way (`compose_check` requires it).
+and a true 15m setup read the side's way (`compose_check` requires the
+15m read; the 3m timing and the wait lines are yours).
 
 **Top-down** (`bos-vs-choch`): a 3m CHoCH against the side inside an
 intact 15m trend: a pullback starting, wait. A 15m CHoCH inside an intact
@@ -104,9 +113,10 @@ retest or engulfing-at-the-level read separated resumption from range
 or reversal beyond depth; the 15m label inside a pullback: AUC 0.44. A
 limit back at the broken level earned less on both halves and missed the
 best runners (docs/research/retest-entry-study.md). Entering at the 15m
-BOS back: -0.20R, 79% into the leg; at the first 3m BOS or CHoCH near
+break back (BOS or CHoCH): -0.20R, 79% into the leg; at the first 3m BOS or CHoCH near
 value: +0.05R, n 69, interval spans 0. The 3m BOS or CISD alone, and
-with the 15m CISD: unmeasured. Taught as the read, no edge shown.
+with the 15m CISD: unmeasured. Depth was the one fact that separated outcomes; counter candles not
+engulfing the impulse: unmeasured. Taught as the read, no edge shown.
 
 ## Examples
 

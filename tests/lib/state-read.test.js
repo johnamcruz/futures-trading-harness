@@ -501,7 +501,7 @@ test('state line: the decision follows the model\'s own STATE read (taught, no c
     // (tests/e2e/state-read-invariance-e2e.test.js).
     "(the head trader's own, the last line of its PLAN; taught: the gate and `compose_check` do not read it)",
     // The class follows the frames the model wrote: a trend class needs its 4h and 1h that way.
-    "The class follows your frames: your 4h and 1h both one way → that trend class (a 15m pullback, `range` or `transition` under them doesn't cancel it: never `chop` or `unclear` for it); one or both `range` → `chop` or `unclear`.",
+    "The class follows your frames: your 4h and 1h both one way → that trend class (a 15m pullback, `range` or `transition` under them doesn't cancel it: never `chop` or `unclear` for it, `frames disagree` too); one or both `range` → `chop` or `unclear`.",
     // A take agrees with the read: the class and the 4h and 1h on the setup's side (the never-counter-HTF rule, in its own words).
     'A take: `class` on its side (`trend-up` long, `trend-down` short), your 4h and 1h too (`up` long, `down` short).',
     // compose_check first (its record is what the pass is scored on), then a pass that names the read: the head trader's
@@ -516,7 +516,7 @@ test('state line: the decision follows the model\'s own STATE read (taught, no c
   // The 15m is no condition: a pullback entry has the 15m ranging or turning (the recorded trend-leg takes: 15m range,
   // transition); it is named once, only to say it doesn't cancel the 4h and 1h.
   assert.strictEqual(para.split('15m').length, 2);
-  assert.ok(para.includes("(a 15m pullback, `range` or `transition` under them doesn't cancel it: never `chop` or `unclear` for it)"));
+  assert.ok(para.includes("(a 15m pullback, `range` or `transition` under them doesn't cancel it: never `chop` or `unclear` for it, `frames disagree` too)"));
   // No filled-in line here: the one example stays in trader-process (the class-word test below).
   assert.doesNotMatch(para, /`STATE:/);
   // Step 8 and the always-on decision rule point to it, addressed to the head trader alone.
