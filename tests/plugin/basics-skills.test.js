@@ -71,14 +71,14 @@ const PINS = {
     'Open from the `Pullback` line (steps 6-7 outlive it).',
     'a CISD reads as the same: the side\'s way as a BOS, against as a CHoCH, earlier (`cisd`).',
     'A 3m CHoCH back the side\'s way: the 3m counter-move ended; watch for the BOS or CISD; not the entry. No BOS or CISD after it: no setup, pass.',
-    '**Entry**: the first 3m BOS or 3m CISD the side\'s way, near value (the `Trend declared?` RTH VWAP or EMA20 within about ±0.5), the step 4 read true now',
+    '**Entry**: the first 3m BOS or 3m CISD the side\'s way, near value (the `Trend declared?` RTH VWAP or EMA20 within about ±0.5; + is the side\'s way, a short\'s too), the step 4 read true now',
     'the setup `15m cisd up` (or the 15m candle\'s read), `3m bos up` in the bias step or `3m cisd up` in the setup step',
     'Never a limit back at the broken or the CHoCH level.',
     'A 15m BOS the side\'s way after the entry: continuation confirmed → hold.',
     'A 15m CHoCH or CISD against → this pullback failed, a reversal attempt: wait for a new 15m turn the side\'s way (step 4)',
     'A 15m `range` or `transition` here is the pause, not chop.',
     'Three lines hold, whatever the count: the 4h + 1h side; a 15m CHoCH or CISD against → wait; the entry needs a 3m BOS or CISD the side\'s way and a true 15m setup read the side\'s way (`compose_check` requires the 15m read; the 3m timing and the wait lines are yours).',
-    'Counter candles that don\'t engulf it: a pullback forming, not a reversal; a counter candle engulfing it reads as a CHoCH against: wait.',
+    'Counter candles that don\'t engulf it: a pullback forming, not a reversal (a 15m CISD or CHoCH against overrides: wait, whatever the depth or the engulfing read); a counter candle engulfing it reads as a CHoCH against: wait.',
   ],
   'breakout-vs-fakeout': [
     'a level traded through from inside and closed back inside within 1-3 bars, in the last 10 bars',
@@ -311,9 +311,9 @@ test('basics skills: frontmatter, the sections in order, and small', () => {
     const words = body.split(/\s+/).filter(Boolean).length;
     // candle-reading carries the reaction-at-a-level read (feat/sweep-candle-control, owner-approved 2026-10-31: "This will
     // provide useful context"): the seven reactions, their priority, the context it is read in (then 969: the owner rule, the reaction rules hold on every timeframe and a higher one's reaction is stronger confirmation; then 1023, owner: rejection relies on candle-reading; the side is the candle's (q30); then 1026, owner: no bare rejection (plain is no rejection read); sweeps need candle-reading too; then 1044, owner: q30 side confusion; side rule first; then 1237 (+193), fix/quiz-side-doji, owner: q29/q30/q33 answered correctly: the side never from the bias, the briefing's side, a stall decides nothing, the four side and trend-rule cases, a paired side example) and their evidence.
-    // Then candle-reading 1280 and pullback-vs-reversal 1582 (feat/pullback-concept, owner-approved 2026-11-14: the unlabeled candle
+    // Then candle-reading 1280 and pullback-vs-reversal 1605 (feat/pullback-concept, owner-approved 2026-11-14: the unlabeled candle
     // names; the pullback to a broken level, BOS for continuation, CHoCH for reversal, its 3m entry, the examples).
-    assert.ok(words >= 250 && words <= (s === 'candle-reading' ? 1280 : s === 'pullback-vs-reversal' ? 1582 : 650), `${s}: ${words} words`);
+    assert.ok(words >= 250 && words <= (s === 'candle-reading' ? 1280 : s === 'pullback-vs-reversal' ? 1605 : 650), `${s}: ${words} words`);
     // The two setups also carry a timeframe table (what the setup means on 3m/5m, 15m and 1h/4h): a little more room
     // (scripts/lib/skill-caps.js, the one source the training loop's probe edits read too).
     const max = skillByteCap(s);

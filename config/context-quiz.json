@@ -1321,7 +1321,7 @@
       "lookup": [
         "pullback-vs-reversal"
       ],
-      "text": "Briefing lines (synthetic, 10:24 ET), flat:\n- Bias: short only (4h down, 1h down; long refused).\n- Pullback (15m, short leg 21437.5 -> 21361.25): depth 28% of the leg; 10 bars since the extreme, volume 0.6x the leg's per bar (falling), range 0.5x; swings since the extreme: 15m 21437.5 holds, 1h 21510.75 holds; 15m break against: none, 1h: none.\n- CISD (completed candles; a read, not a signal): 15m bearish at 21402.25 (closed 10:15, strong), no key-level sweep, zone waiting.\n- m3.lastBreak: last BOS down at 21383.25 (barsAgo 0), previous CHoCH down at 21388.75 (barsAgo 2).\n- Trend declared? (in 3m ATR(14), + = the side's way; `trend-vs-range`): long RTH VWAP -0.3, EMA20 -0.2, overnight range broke out against, day's move -1.6, regime against; short RTH VWAP +0.3, EMA20 +0.2, overnight range broke out its way, day's move +1.6, regime with.\nWhat is the read and the action?",
+      "text": "Briefing lines (synthetic, 10:24 ET), flat:\n- Bias: short only (4h down, 1h down; long refused).\n- Pullback (15m, short leg 21437.5 -> 21361.25): depth 28% of the leg; 10 bars since the extreme, volume 0.6x the leg's per bar (falling), range 0.5x; swings since the extreme: 15m 21437.5 holds, 1h 21510.75 holds; 15m break against: none, 1h: none.\n- 15m (setup candle, closed 10:15): none, close bottom third, range 1.1 ATR, vol 1.2x.\n- CISD (completed candles; a read, not a signal): 15m bearish at 21402.25 (closed 10:15, strong), no key-level sweep, zone waiting.\n- m3.lastBreak: last BOS down at 21383.25 (barsAgo 0), previous CHoCH down at 21388.75 (barsAgo 2).\n- Trend declared? (in 3m ATR(14), + = the side's way; `trend-vs-range`): long RTH VWAP -0.3, EMA20 -0.2, overnight range broke out against, day's move -1.6, regime against; short RTH VWAP +0.3, EMA20 +0.2, overnight range broke out its way, day's move +1.6, regime with.\nWhat is the read and the action?",
       "rule": "the down mirror: a live 15m CISD down (the setup read) and the first 3m BOS down near value: short at that 3m close",
       "anchor": "up shown, down the mirror",
       "choices": [
@@ -1479,7 +1479,7 @@
       ],
       "text": "Briefing lines (synthetic, 10:24 ET), flat:\n- Bias: long only (4h up, 1h up; short refused).\n- Pullback (15m, long leg 21462.5 -> 21538.75): depth 47% of the leg; 10 bars since the extreme, volume 0.6x the leg's per bar (falling), range 0.5x; swings since the extreme: 15m 21462.5 holds, 1h 21390.25 holds; 15m break against: none, 1h: none.\n- 15m (setup candle, closed 10:15): bearish engulfing, close bottom third, range 1.2 ATR, vol 1.3x.\n- CISD (completed candles; a read, not a signal): 15m bearish at 21505.00 (closed 10:15, strong), no key-level sweep, zone waiting.\n- Trend declared? (in 3m ATR(14), + = the side's way; `trend-vs-range`): long RTH VWAP +0.3, EMA20 +0.2, overnight range broke out its way, day's move +1.6, regime with; short RTH VWAP -0.3, EMA20 -0.2, overnight range broke out against, day's move -1.6, regime against.\nWhat is the read and the action?",
       "rule": "a 15m CISD against the side during the pullback: a reversal sign, like a 15m CHoCH against: wait, never counter",
-      "anchor": "A 15m CHoCH or CISD against → this pullback failed",
+      "anchor": "a 15m CISD or CHoCH against overrides: wait, whatever the depth or the engulfing read",
       "choices": [
         "a short on the next 3m bar",
         "a deeper discount: long now",
@@ -1627,9 +1627,9 @@
       "id": "q112",
       "layer": "bias",
       "prompt": "head",
-      "text": "Briefing lines (synthetic, 10:42 ET), flat:\n- Bias: long only (4h range, 1h up; short refused).\n- Day so far (24 3m bars; `day-context`): directional up: efficiency 0.52 (x sqrt(bars) 2.5), RTH VWAP crosses 1, range 3.1 x 3m ATR(14), net up (its size: Trend declared? day's move); IB day type: today.dayType.\n- 15m (setup candle, closed 10:30): none, close top third, range 0.7 ATR, vol 0.8x.\nYour own read: 4h range, 1h up, 15m up; the movement is smooth and one-way, no breaks both ways, little overlap. Which class do you write in STATE?",
+      "text": "Briefing lines (synthetic, 10:42 ET), flat:\n- Bias: long only (4h range, 1h up; short refused).\n- Day so far (24 3m bars; `day-context`): directional up: efficiency 0.52 (x sqrt(bars) 2.55), RTH VWAP crosses 1, range 3.1 x 3m ATR(14), net up (its size: Trend declared? day's move); IB day type: today.dayType.\n- 15m (setup candle, closed 10:30): none, close top third, range 0.7 ATR, vol 0.8x.\nYour own read: 4h range, 1h up, 15m up; the movement is smooth and one-way, no breaks both ways, little overlap. Which class do you write in STATE?",
       "rule": "the 4h and 1h not both one way: unclear; chop only when the movement is choppy, and a frame's range alone is never chop",
-      "anchor": "a frame's `range` or `transition` alone is never `chop`",
+      "anchor": "not both one way → `unclear` (never a trend class, smooth or not)",
       "choices": [
         "chop",
         "unclear",

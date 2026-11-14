@@ -186,7 +186,7 @@ test('context quiz: the pullback questions (q87-q112) are asked against the prom
     ['q93', 'lookup', PB, /up shown, down the mirror/g],
     // A strict-side guard (main's text): one of the 4h and 1h ranging is chop or unclear to the head trader, whatever the 3m.
     ['q94', 'head', undefined, /not both one way → `unclear`/g],
-    ['q112', 'head', undefined, /a frame's `range` or `transition` alone is never `chop`/g],
+    ['q112', 'head', undefined, /not both one way → `unclear` \(never a trend class, smooth or not\)/g],
     ['q95', 'head', undefined, /a 15m pullback, `range` or `transition` under them doesn't cancel it/g],
     ['q96', 'lookup', PB, /watch for the BOS or CISD; not the entry\./g],
     ['q97', 'lookup', PB, /No BOS or CISD after it: no setup, pass\./g],
@@ -194,7 +194,7 @@ test('context quiz: the pullback questions (q87-q112) are asked against the prom
     ['q99', 'lookup', PB, /The level: the broken one or a level next to it \(the RTH VWAP, a 15m swing; within about 0\.25 x the 15m ATR, a hypothesis: one zone; `levels-and-reactions`\)\./g],
     ['q101', 'lookup', PB, /the entry needs a 3m BOS or CISD the side's way and a true 15m setup read the side's way/g],
     ['q102', 'lookup', PB, /`3m cisd up` in the setup step/g],
-    ['q103', 'lookup', PB, /A 15m CHoCH or CISD against → this pullback failed/g],
+    ['q103', 'lookup', PB, /a 15m CISD or CHoCH against overrides: wait, whatever the depth or the engulfing read/g],
     // The old answer (the 15m setup is the entry, no 3m turn to wait for) as the distractor: a Pullback line printed, the head core says wait.
     ['q104', 'head', undefined, /unless a `Pullback` line prints\./g],
     ['q105', 'lookup', PB, /A 3m CHoCH or CISD against inside it: the watch restarts\./g],

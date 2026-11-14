@@ -48,7 +48,8 @@ never the composed setup read (`compose_check` takes a live strong one):
    side's way, or the CISD's `leg`) sets the leg: measure the pullback on
    it (`fib-retracement`, the CISD's `ote`), depth and location only, never
    an entry or a reversal zone. Counter candles that don't engulf it: a
-   pullback forming, not a reversal; a counter candle engulfing it reads
+   pullback forming, not a reversal (a 15m CISD or CHoCH against overrides:
+   wait, whatever the depth or the engulfing read); a counter candle engulfing it reads
    as a CHoCH against: wait. "Engulfs it": a counter 15m close back
    through the impulse candle's body (long: below its open), whatever lies
    between; the `engulfing` label and the CISD's `engulfing` compare only
@@ -66,7 +67,8 @@ never the composed setup read (`compose_check` takes a live strong one):
 5. A 3m CHoCH back the side's way: the 3m counter-move ended; watch for
    the BOS or CISD; not the entry. No BOS or CISD after it: no setup, pass.
 6. **Entry**: the first 3m BOS or 3m CISD the side's way, near value
-   (the `Trend declared?` RTH VWAP or EMA20 within about ±0.5), the step
+   (the `Trend declared?` RTH VWAP or EMA20 within about ±0.5; + is the
+   side's way, a short's too), the step
    4 read true now → compose on that bar: the setup `15m cisd up` (or the
    15m candle's read), `3m bos up` in the bias step or `3m cisd up` in the
    setup step (a 3m CISD is the entry as a 3m BOS is, no BOS to wait for
