@@ -121,9 +121,8 @@ can read `breakout`.
 
 **Evidence** (15m sweeps, two halves, descriptive): standalone
 candlestick patterns have weak evidence in general; a name adds no
-strength, the reaction reads who took control; a CISD's `strong` (an
-engulfing confirming candle included) is its displacement's strength, not
-a name (`cisd`). Breakout read as a
+strength, the reaction reads who took control; a CISD's `strong` is the
+CISD's own strength rule (`cisd`), not a name. Breakout read as a
 sweep: worst on both (false starts ~70%, mean R ~-0.34), skipping them
 did not raise the pass rate. Long-wick alone (measured on the whole wick): no edge (0.00 / -0.05 R).
 Engulfing: +0.20 / -0.11 R. Confirmed: false starts 36% / 45% vs 57% /

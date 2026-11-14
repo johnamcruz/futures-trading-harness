@@ -1271,10 +1271,10 @@
       "rule": "a 3m CHoCH against the side inside an intact 15m trend: a pullback starting, not a reversal: wait",
       "anchor": "a 3m CHoCH against the side inside an intact 15m trend: a pullback starting, wait.",
       "choices": [
-        "wait: a pullback starting",
         "short: a reversal",
         "stand aside for the day",
-        "long now"
+        "long now",
+        "wait: a pullback starting"
       ],
       "answer": "wait: a pullback starting"
     },
@@ -1307,8 +1307,8 @@
       "rule": "far past the level, no retest: late, not this read's entry",
       "anchor": "Far past the level, no retest: late, not this read's entry",
       "choices": [
-        "no: late, not the pullback entry",
         "yes: long, a limit at this 3m close",
+        "no: late, not the pullback entry",
         "short: it is extended",
         "wait for a 15m BOS up, then long at its close"
       ],
@@ -1340,9 +1340,9 @@
       "rule": "one of the 4h/1h range: the class is chop or unclear: no take, whatever the 3m",
       "anchor": "one or both `range` → `chop` or `unclear`",
       "choices": [
-        "no take: the class is chop or unclear",
         "long, a limit at this 3m close",
         "short",
+        "no take: the class is chop or unclear",
         "long after a 15m BOS up"
       ],
       "answer": "no take: the class is chop or unclear"
@@ -1373,9 +1373,9 @@
       "rule": "a 3m CHoCH back the side's way: the 3m counter-move ended; watch for the 3m BOS; not the entry",
       "anchor": "watch for the BOS or CISD; not the entry.",
       "choices": [
-        "watch: the entry is the first 3m BOS or CISD up",
         "long, a limit at this 3m close",
         "a reversal against the trend: no long",
+        "watch: the entry is the first 3m BOS or CISD up",
         "chop: pass"
       ],
       "answer": "watch: the entry is the first 3m BOS or CISD up"
@@ -1391,9 +1391,9 @@
       "rule": "the 3m CHoCH up failed with no BOS: no setup; the watch restarts (never counter)",
       "anchor": "No BOS or CISD after it: no setup, pass.",
       "choices": [
-        "no setup: wait",
         "long, a limit at this 3m close",
         "short: the pullback failed",
+        "no setup: wait",
         "long at the 15m close"
       ],
       "answer": "no setup: wait"
@@ -1409,8 +1409,8 @@
       "rule": "a 15m CHoCH against (deep, the 15m swing broken by a close): a reversal attempt: wait for a new 15m turn the side's way; the candle at the level alone is no confirmation",
       "anchor": "a candle at the level is no confirmation alone",
       "choices": [
-        "a reversal attempt: wait for a new 15m turn down",
         "the pullback is over: short at this candle's close",
+        "a reversal attempt: wait for a new 15m turn down",
         "a reversal: long",
         "chop: pass for the day"
       ],
@@ -1423,9 +1423,9 @@
       "lookup": [
         "pullback-vs-reversal"
       ],
-      "text": "Briefing lines (synthetic, 10:27 ET), flat:\n- Bias: long only (4h up, 1h up; short refused).\n- Pullback (15m, long leg 21462.5 -> 21538.75): depth 27% of the leg; 10 bars since the extreme, volume 0.6x the leg's per bar (falling), range 0.5x; swings since the extreme: 15m 21462.5 holds, 1h 21390.25 holds; 15m break against: none, 1h: none.\n- 15m (setup candle, closed 10:15): none, close top third, range 0.8 ATR, vol 0.9x; rejected VWAP (rth) (closed back above; long-wick rejection, long side). The pullback low was 21502.25, 2.25 points above the broken prior RTH high 21500.00.\n- m3.lastBreak: last BOS up at 21517.25 (barsAgo 0), previous CHoCH up at 21510.75 (barsAgo 2).\n- Trend declared? (in 3m ATR(14), + = the side's way; `trend-vs-range`): long RTH VWAP +0.3, EMA20 +0.2, overnight range broke out its way, day's move +1.6, regime with; short RTH VWAP -0.3, EMA20 -0.2, overnight range broke out against, day's move -1.6, regime against.\nNo exact touch of the broken level and no named reversal candle. What is the action?",
+      "text": "Briefing lines (synthetic, 10:27 ET), flat:\n- Bias: long only (4h up, 1h up; short refused).\n- Pullback (15m, long leg 21462.5 -> 21538.75): depth 27% of the leg; 10 bars since the extreme, volume 0.6x the leg's per bar (falling), range 0.5x; swings since the extreme: 15m 21462.5 holds, 1h 21390.25 holds; 15m break against: none, 1h: none.\n- 15m (setup candle, closed 10:15): none, close top third, range 0.8 ATR (15m ATR(14) 12.00), vol 0.9x; rejected VWAP (rth) (closed back above; long-wick rejection, long side). The pullback low was 21502.25, 2.25 points above the broken prior RTH high 21500.00.\n- m3.lastBreak: last BOS up at 21517.25 (barsAgo 0), previous CHoCH up at 21510.75 (barsAgo 2).\n- Trend declared? (in 3m ATR(14), + = the side's way; `trend-vs-range`): long RTH VWAP +0.3, EMA20 +0.2, overnight range broke out its way, day's move +1.6, regime with; short RTH VWAP -0.3, EMA20 -0.2, overnight range broke out against, day's move -1.6, regime against.\nNo exact touch of the broken level and no named reversal candle. What is the action?",
       "rule": "close to the reference picture: the three lines hold (the 4h + 1h side, no CHoCH or CISD against, the 3m BOS up with a true 15m setup read up); the soft pieces weigh in the count: a take",
-      "anchor": "The level: the broken one or a level next to it (the RTH VWAP, a 15m swing).",
+      "anchor": "The level: the broken one or a level next to it (the RTH VWAP, a 15m swing; within about 0.25 x the 15m ATR: one zone, `levels-and-reactions`).",
       "choices": [
         "take: close to the picture, the three lines hold",
         "pass: not perfect",
@@ -1445,9 +1445,9 @@
       "rule": "the 15m turn (a live 15m CISD up) without the 3m BOS or CISD up: watch; not the entry yet",
       "anchor": "the entry needs a 3m BOS or CISD the side's way and a true 15m setup read the side's way",
       "choices": [
-        "watch: the 15m turned; the entry is the first 3m BOS or CISD up",
         "long, a limit at this 3m close",
         "short: the 3m is down",
+        "watch: the 15m turned; the entry is the first 3m BOS or CISD up",
         "chop: pass for the day"
       ],
       "answer": "watch: the 15m turned; the entry is the first 3m BOS or CISD up"
@@ -1459,12 +1459,12 @@
       "lookup": [
         "pullback-vs-reversal"
       ],
-      "text": "Briefing lines (synthetic, 10:24 ET), flat:\n- Bias: long only (4h up, 1h up; short refused).\n- Pullback (15m, long leg 21462.5 -> 21538.75): depth 33% of the leg; 10 bars since the extreme, volume 0.6x the leg's per bar (falling), range 0.5x; swings since the extreme: 15m 21462.5 holds, 1h 21390.25 holds; 15m break against: none, 1h: none.\n- 15m (setup candle, closed 10:15): none, close middle third, range 0.6 ATR, vol 0.6x.\n- CISD (completed candles; a read, not a signal): 3m bullish at 21512.00 (closed 10:24, strong), no key-level sweep, zone waiting; 15m bullish at 21497.25 (closed 10:00, strong), no key-level sweep, zone waiting.\n- m3.lastBreak: last CHoCH up at 21509.00 (barsAgo 3); no 3m BOS up since.\n- Trend declared? (in 3m ATR(14), + = the side's way; `trend-vs-range`): long RTH VWAP +0.3, EMA20 +0.2, overnight range broke out its way, day's move +1.6, regime with; short RTH VWAP -0.3, EMA20 -0.2, overnight range broke out against, day's move -1.6, regime against.\nWhat is the read and the action?",
+      "text": "Briefing lines (synthetic, 10:24 ET), flat:\n- Bias: long only (4h up, 1h up; short refused).\n- Pullback (15m, long leg 21462.5 -> 21538.75): depth 33% of the leg; 10 bars since the extreme, volume 0.6x the leg's per bar (falling), range 0.5x; swings since the extreme: 15m 21462.5 holds, 1h 21390.25 holds; 15m break against: none, 1h: none.\n- 15m (setup candle, closed 10:15): none, close middle third, range 0.6 ATR, vol 0.6x.\n- CISD (completed candles; a read, not a signal): 3m bullish at 21512.00 (closed 10:24, strong), no key-level sweep, zone waiting; 15m bullish at 21497.25 (closed 10:00, strong), no key-level sweep, zone waiting.\n- m3.lastBreak: last CHoCH down at 21505.25 (barsAgo 5), previous BOS up at 21531.25 (barsAgo 12).\n- Trend declared? (in 3m ATR(14), + = the side's way; `trend-vs-range`): long RTH VWAP +0.3, EMA20 +0.2, overnight range broke out its way, day's move +1.6, regime with; short RTH VWAP -0.3, EMA20 -0.2, overnight range broke out against, day's move -1.6, regime against.\nWhat is the read and the action?",
       "rule": "a CISD the side's way reads as a BOS: a 3m CISD up near value with a live 15m CISD up is the entry, the 3m CISD stated beside the 15m read",
       "anchor": "`3m cisd up` in the setup step",
       "choices": [
-        "the pullback is over: long, a limit at this 3m close",
         "a CISD is not a BOS: wait for the 3m BOS up",
+        "the pullback is over: long, a limit at this 3m close",
         "a reversal against the trend: no long",
         "chop: pass"
       ],
@@ -1481,10 +1481,10 @@
       "rule": "a 15m CISD against the side during the pullback: a reversal sign, like a 15m CHoCH against: wait, never counter",
       "anchor": "A 15m CHoCH or CISD against → this pullback failed",
       "choices": [
-        "a reversal sign: wait",
         "a short on the next 3m bar",
         "a deeper discount: long now",
-        "chop: pass for the day"
+        "chop: pass for the day",
+        "a reversal sign: wait"
       ],
       "answer": "a reversal sign: wait"
     },
@@ -1496,8 +1496,8 @@
       "rule": "a Pullback line is printed: the 15m reaction is the setup read; the entry waits for the first 3m BOS or CISD the side's way near value",
       "anchor": "unless a `Pullback` line prints.",
       "choices": [
-        "watch: the entry is the first 3m BOS or CISD up",
         "take: the 15m setup is the entry, on the next 3m bar",
+        "watch: the entry is the first 3m BOS or CISD up",
         "pass: chop",
         "short: the 3m is down"
       ],
@@ -1514,9 +1514,9 @@
       "rule": "a 3m CISD against the side inside an open pullback reads as a 3m CHoCH against: the watch restarts; never a counter trade",
       "anchor": "A 3m CHoCH or CISD against inside it: the watch restarts.",
       "choices": [
-        "the watch restarts: wait for a 3m BOS or CISD up",
         "short: the 3m turned down",
         "long, a limit at this 3m close",
+        "the watch restarts: wait for a 3m BOS or CISD up",
         "the trend is over: stand aside for the day"
       ],
       "answer": "the watch restarts: wait for a 3m BOS or CISD up"
@@ -1532,10 +1532,10 @@
       "rule": "a 15m CISD up confirmed by a bullish engulfing candle is the strong form (cisd): it weighs more in the count; with the first 3m BOS up near value: the entry",
       "anchor": "the CISD line's `strong` is its displacement's strength, not a pattern name",
       "choices": [
-        "strong: the pullback is over, long, a limit at this 3m close",
         "weak: an engulfing is only a candle pattern, pass",
         "a CISD is not a BOS: wait for a 15m BOS up",
-        "chop: pass"
+        "chop: pass",
+        "strong: the pullback is over, long, a limit at this 3m close"
       ],
       "answer": "strong: the pullback is over, long, a limit at this 3m close"
     },
@@ -1583,8 +1583,8 @@
       "rule": "counter candles that do not engulf the displacement: a pullback forming, not a reversal; the fib is location only; the entry waits for the 15m turn and the 3m BOS or CISD",
       "anchor": "Counter candles that don't engulf it: a pullback forming, not a reversal",
       "choices": [
-        "a pullback forming: watch for the 15m turn and the 3m BOS or CISD",
         "enter at the fib level: long, a limit at 21520.75",
+        "a pullback forming: watch for the 15m turn and the 3m BOS or CISD",
         "a reversal: short",
         "chop: pass for the day"
       ],
@@ -1599,7 +1599,7 @@
       ],
       "text": "Briefing lines (synthetic, 10:18 ET), flat:\n- Bias: long only (4h up, 1h up; short refused).\n- The 15m candle that closed 10:00 was a displacement up, open 21494.25, close 21541.50 (range 2.4 ATR).\n- Pullback (15m, long leg 21494.25 -> 21541.5): the leg given back past its origin; 6 bars since the extreme; swings since the extreme: 15m 21494.25 broken by a close, 1h 21390.25 holds; 15m break against: none, 1h: none.\n- 15m (setup candle, closed 10:15): bearish engulfing, close bottom third, range 2.6 ATR, vol 1.6x; it closed at 21490.75, below the 10:00 candle's open 21494.25.\n- Trend declared? (in 3m ATR(14), + = the side's way; `trend-vs-range`): long RTH VWAP +0.3, EMA20 +0.2, overnight range broke out its way, day's move +1.6, regime with; short RTH VWAP -0.3, EMA20 -0.2, overnight range broke out against, day's move -1.6, regime against.\nWhat is the read and the action?",
       "rule": "a counter candle engulfing the displacement reads as a CHoCH against: a reversal sign, wait; never counter",
-      "anchor": "A counter 15m close below the impulse's open (long; above it, short): the pullback failed (step 8), not a watch.",
+      "anchor": "a counter candle engulfing it reads as a CHoCH against: wait",
       "choices": [
         "wait",
         "watch for the 3m BOS up",

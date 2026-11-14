@@ -190,7 +190,7 @@ test('context quiz: the pullback questions (q87-q111) are asked against the prom
     ['q96', 'lookup', PB, /watch for the BOS or CISD; not the entry\./g],
     ['q97', 'lookup', PB, /No BOS or CISD after it: no setup, pass\./g],
     ['q98', 'lookup', PB, /a candle at the level is no confirmation alone/g],
-    ['q99', 'lookup', PB, /The level: the broken one or a level next to it \(the RTH VWAP, a 15m swing\)\./g],
+    ['q99', 'lookup', PB, /The level: the broken one or a level next to it \(the RTH VWAP, a 15m swing; within about 0\.25 x the 15m ATR: one zone, `levels-and-reactions`\)\./g],
     ['q101', 'lookup', PB, /the entry needs a 3m BOS or CISD the side's way and a true 15m setup read the side's way/g],
     ['q102', 'lookup', PB, /`3m cisd up` in the setup step/g],
     ['q103', 'lookup', PB, /A 15m CHoCH or CISD against → this pullback failed/g],
@@ -200,7 +200,7 @@ test('context quiz: the pullback questions (q87-q111) are asked against the prom
     ['q107', 'head', undefined, /your PLAN's `4 Setup` line is the read chain/g],
     ['q108', 'lookup', PB, /a 15m BOS far past value \(no 3m BOS or CISD near it\): late, not an entry/g],
     ['q109', 'lookup', PB, /Counter candles that don't engulf it: a pullback forming, not a reversal/g],
-    ['q110', 'lookup', PB, /A counter 15m close below the impulse's open \(long; above it, short\): the pullback failed \(step 8\), not a watch\./g],
+    ['q110', 'lookup', PB, /a counter candle engulfing it reads as a CHoCH against: wait/g],
     ['q111', 'head', undefined, /nor does your `frames disagree`/g],
     ['q106', 'lookup', PB, /the CISD line's `strong` is its displacement's strength, not a pattern name/g],
   ];

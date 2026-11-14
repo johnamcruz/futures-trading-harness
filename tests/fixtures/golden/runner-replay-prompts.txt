@@ -247,9 +247,8 @@ can read `breakout`.
 
 **Evidence** (15m sweeps, two halves, descriptive): standalone
 candlestick patterns have weak evidence in general; a name adds no
-strength, the reaction reads who took control; a CISD's `strong` (an
-engulfing confirming candle included) is its displacement's strength, not
-a name (`cisd`).
+strength, the reaction reads who took control; a CISD's `strong` is the
+CISD's own strength rule (`cisd`), not a name.
   Breakout read as a
 sweep: worst on both (false starts ~70%, mean R ~-0.34), skipping them
 did not raise the pass rate.
@@ -1088,8 +1087,6 @@ never the composed setup read (`compose_check` takes a live strong one):
   Counter candles that don't engulf it: a
    pullback forming, not a reversal; a counter candle engulfing it reads
    as a CHoCH against: wait.
-  A counter 15m close below the impulse's open
-   (long; above it, short): the pullback failed (step 8), not a watch.
   "Engulfs it": a counter 15m close back
    through the impulse candle's body (long: below its open), whatever lies
    between; the `engulfing` label and the CISD's `engulfing` compare only
@@ -1101,7 +1098,8 @@ never the composed setup read (`compose_check` takes a live strong one):
    reaction at the level, the side's way → the pullback ended on the 15m;
    no 15m BOS to wait for after a strong CISD or a reaction.
   The level: the
-   broken one or a level next to it (the RTH VWAP, a 15m swing).
+   broken one or a level next to it (the RTH VWAP, a 15m swing; within
+   about 0.25 x the 15m ATR: one zone, `levels-and-reactions`).
    Composed as `15m cisd up` (true while live), or that 15m candle's read
    (`15m rejected <level> up`: long-wick, engulfing or confirmed,
    `candle-reading`; a BOS's breaking candle `15m broke <level> up`), true
@@ -1140,8 +1138,8 @@ never the composed setup read (`compose_check` takes a live strong one):
   Most of the leg given back, or
    its 15m swing broken by a close: against in the count; a candle at the
    level is no confirmation alone.
-  Past the leg origin: no with-side
-   pullback read on it.
+  Past the printed leg origin: no
+   with-side read on that leg.
 
 **Close to it is a read.** The sequence is the reference picture, not a
 checklist: depth, the pause's shape, the exact touch of the level, the
@@ -1580,9 +1578,8 @@ can read `breakout`.
 
 **Evidence** (15m sweeps, two halves, descriptive): standalone
 candlestick patterns have weak evidence in general; a name adds no
-strength, the reaction reads who took control; a CISD's `strong` (an
-engulfing confirming candle included) is its displacement's strength, not
-a name (`cisd`).
+strength, the reaction reads who took control; a CISD's `strong` is the
+CISD's own strength rule (`cisd`), not a name.
   Breakout read as a
 sweep: worst on both (false starts ~70%, mean R ~-0.34), skipping them
 did not raise the pass rate.
@@ -2421,8 +2418,6 @@ never the composed setup read (`compose_check` takes a live strong one):
   Counter candles that don't engulf it: a
    pullback forming, not a reversal; a counter candle engulfing it reads
    as a CHoCH against: wait.
-  A counter 15m close below the impulse's open
-   (long; above it, short): the pullback failed (step 8), not a watch.
   "Engulfs it": a counter 15m close back
    through the impulse candle's body (long: below its open), whatever lies
    between; the `engulfing` label and the CISD's `engulfing` compare only
@@ -2434,7 +2429,8 @@ never the composed setup read (`compose_check` takes a live strong one):
    reaction at the level, the side's way → the pullback ended on the 15m;
    no 15m BOS to wait for after a strong CISD or a reaction.
   The level: the
-   broken one or a level next to it (the RTH VWAP, a 15m swing).
+   broken one or a level next to it (the RTH VWAP, a 15m swing; within
+   about 0.25 x the 15m ATR: one zone, `levels-and-reactions`).
    Composed as `15m cisd up` (true while live), or that 15m candle's read
    (`15m rejected <level> up`: long-wick, engulfing or confirmed,
    `candle-reading`; a BOS's breaking candle `15m broke <level> up`), true
@@ -2473,8 +2469,8 @@ never the composed setup read (`compose_check` takes a live strong one):
   Most of the leg given back, or
    its 15m swing broken by a close: against in the count; a candle at the
    level is no confirmation alone.
-  Past the leg origin: no with-side
-   pullback read on it.
+  Past the printed leg origin: no
+   with-side read on that leg.
 
 **Close to it is a read.** The sequence is the reference picture, not a
 checklist: depth, the pause's shape, the exact touch of the level, the
@@ -2913,9 +2909,8 @@ can read `breakout`.
 
 **Evidence** (15m sweeps, two halves, descriptive): standalone
 candlestick patterns have weak evidence in general; a name adds no
-strength, the reaction reads who took control; a CISD's `strong` (an
-engulfing confirming candle included) is its displacement's strength, not
-a name (`cisd`).
+strength, the reaction reads who took control; a CISD's `strong` is the
+CISD's own strength rule (`cisd`), not a name.
   Breakout read as a
 sweep: worst on both (false starts ~70%, mean R ~-0.34), skipping them
 did not raise the pass rate.
@@ -3754,8 +3749,6 @@ never the composed setup read (`compose_check` takes a live strong one):
   Counter candles that don't engulf it: a
    pullback forming, not a reversal; a counter candle engulfing it reads
    as a CHoCH against: wait.
-  A counter 15m close below the impulse's open
-   (long; above it, short): the pullback failed (step 8), not a watch.
   "Engulfs it": a counter 15m close back
    through the impulse candle's body (long: below its open), whatever lies
    between; the `engulfing` label and the CISD's `engulfing` compare only
@@ -3767,7 +3760,8 @@ never the composed setup read (`compose_check` takes a live strong one):
    reaction at the level, the side's way → the pullback ended on the 15m;
    no 15m BOS to wait for after a strong CISD or a reaction.
   The level: the
-   broken one or a level next to it (the RTH VWAP, a 15m swing).
+   broken one or a level next to it (the RTH VWAP, a 15m swing; within
+   about 0.25 x the 15m ATR: one zone, `levels-and-reactions`).
    Composed as `15m cisd up` (true while live), or that 15m candle's read
    (`15m rejected <level> up`: long-wick, engulfing or confirmed,
    `candle-reading`; a BOS's breaking candle `15m broke <level> up`), true
@@ -3806,8 +3800,8 @@ never the composed setup read (`compose_check` takes a live strong one):
   Most of the leg given back, or
    its 15m swing broken by a close: against in the count; a candle at the
    level is no confirmation alone.
-  Past the leg origin: no with-side
-   pullback read on it.
+  Past the printed leg origin: no
+   with-side read on that leg.
 
 **Close to it is a read.** The sequence is the reference picture, not a
 checklist: depth, the pause's shape, the exact touch of the level, the
@@ -4237,9 +4231,8 @@ can read `breakout`.
 
 **Evidence** (15m sweeps, two halves, descriptive): standalone
 candlestick patterns have weak evidence in general; a name adds no
-strength, the reaction reads who took control; a CISD's `strong` (an
-engulfing confirming candle included) is its displacement's strength, not
-a name (`cisd`).
+strength, the reaction reads who took control; a CISD's `strong` is the
+CISD's own strength rule (`cisd`), not a name.
   Breakout read as a
 sweep: worst on both (false starts ~70%, mean R ~-0.34), skipping them
 did not raise the pass rate.
@@ -5078,8 +5071,6 @@ never the composed setup read (`compose_check` takes a live strong one):
   Counter candles that don't engulf it: a
    pullback forming, not a reversal; a counter candle engulfing it reads
    as a CHoCH against: wait.
-  A counter 15m close below the impulse's open
-   (long; above it, short): the pullback failed (step 8), not a watch.
   "Engulfs it": a counter 15m close back
    through the impulse candle's body (long: below its open), whatever lies
    between; the `engulfing` label and the CISD's `engulfing` compare only
@@ -5091,7 +5082,8 @@ never the composed setup read (`compose_check` takes a live strong one):
    reaction at the level, the side's way → the pullback ended on the 15m;
    no 15m BOS to wait for after a strong CISD or a reaction.
   The level: the
-   broken one or a level next to it (the RTH VWAP, a 15m swing).
+   broken one or a level next to it (the RTH VWAP, a 15m swing; within
+   about 0.25 x the 15m ATR: one zone, `levels-and-reactions`).
    Composed as `15m cisd up` (true while live), or that 15m candle's read
    (`15m rejected <level> up`: long-wick, engulfing or confirmed,
    `candle-reading`; a BOS's breaking candle `15m broke <level> up`), true
@@ -5130,8 +5122,8 @@ never the composed setup read (`compose_check` takes a live strong one):
   Most of the leg given back, or
    its 15m swing broken by a close: against in the count; a candle at the
    level is no confirmation alone.
-  Past the leg origin: no with-side
-   pullback read on it.
+  Past the printed leg origin: no
+   with-side read on that leg.
 
 **Close to it is a read.** The sequence is the reference picture, not a
 checklist: depth, the pause's shape, the exact touch of the level, the
@@ -5657,9 +5649,8 @@ can read `breakout`.
 
 **Evidence** (15m sweeps, two halves, descriptive): standalone
 candlestick patterns have weak evidence in general; a name adds no
-strength, the reaction reads who took control; a CISD's `strong` (an
-engulfing confirming candle included) is its displacement's strength, not
-a name (`cisd`).
+strength, the reaction reads who took control; a CISD's `strong` is the
+CISD's own strength rule (`cisd`), not a name.
   Breakout read as a
 sweep: worst on both (false starts ~70%, mean R ~-0.34), skipping them
 did not raise the pass rate.
@@ -6498,8 +6489,6 @@ never the composed setup read (`compose_check` takes a live strong one):
   Counter candles that don't engulf it: a
    pullback forming, not a reversal; a counter candle engulfing it reads
    as a CHoCH against: wait.
-  A counter 15m close below the impulse's open
-   (long; above it, short): the pullback failed (step 8), not a watch.
   "Engulfs it": a counter 15m close back
    through the impulse candle's body (long: below its open), whatever lies
    between; the `engulfing` label and the CISD's `engulfing` compare only
@@ -6511,7 +6500,8 @@ never the composed setup read (`compose_check` takes a live strong one):
    reaction at the level, the side's way → the pullback ended on the 15m;
    no 15m BOS to wait for after a strong CISD or a reaction.
   The level: the
-   broken one or a level next to it (the RTH VWAP, a 15m swing).
+   broken one or a level next to it (the RTH VWAP, a 15m swing; within
+   about 0.25 x the 15m ATR: one zone, `levels-and-reactions`).
    Composed as `15m cisd up` (true while live), or that 15m candle's read
    (`15m rejected <level> up`: long-wick, engulfing or confirmed,
    `candle-reading`; a BOS's breaking candle `15m broke <level> up`), true
@@ -6550,8 +6540,8 @@ never the composed setup read (`compose_check` takes a live strong one):
   Most of the leg given back, or
    its 15m swing broken by a close: against in the count; a candle at the
    level is no confirmation alone.
-  Past the leg origin: no with-side
-   pullback read on it.
+  Past the printed leg origin: no
+   with-side read on that leg.
 
 **Close to it is a read.** The sequence is the reference picture, not a
 checklist: depth, the pause's shape, the exact touch of the level, the
@@ -7074,9 +7064,8 @@ can read `breakout`.
 
 **Evidence** (15m sweeps, two halves, descriptive): standalone
 candlestick patterns have weak evidence in general; a name adds no
-strength, the reaction reads who took control; a CISD's `strong` (an
-engulfing confirming candle included) is its displacement's strength, not
-a name (`cisd`).
+strength, the reaction reads who took control; a CISD's `strong` is the
+CISD's own strength rule (`cisd`), not a name.
   Breakout read as a
 sweep: worst on both (false starts ~70%, mean R ~-0.34), skipping them
 did not raise the pass rate.
@@ -7915,8 +7904,6 @@ never the composed setup read (`compose_check` takes a live strong one):
   Counter candles that don't engulf it: a
    pullback forming, not a reversal; a counter candle engulfing it reads
    as a CHoCH against: wait.
-  A counter 15m close below the impulse's open
-   (long; above it, short): the pullback failed (step 8), not a watch.
   "Engulfs it": a counter 15m close back
    through the impulse candle's body (long: below its open), whatever lies
    between; the `engulfing` label and the CISD's `engulfing` compare only
@@ -7928,7 +7915,8 @@ never the composed setup read (`compose_check` takes a live strong one):
    reaction at the level, the side's way → the pullback ended on the 15m;
    no 15m BOS to wait for after a strong CISD or a reaction.
   The level: the
-   broken one or a level next to it (the RTH VWAP, a 15m swing).
+   broken one or a level next to it (the RTH VWAP, a 15m swing; within
+   about 0.25 x the 15m ATR: one zone, `levels-and-reactions`).
    Composed as `15m cisd up` (true while live), or that 15m candle's read
    (`15m rejected <level> up`: long-wick, engulfing or confirmed,
    `candle-reading`; a BOS's breaking candle `15m broke <level> up`), true
@@ -7967,8 +7955,8 @@ never the composed setup read (`compose_check` takes a live strong one):
   Most of the leg given back, or
    its 15m swing broken by a close: against in the count; a candle at the
    level is no confirmation alone.
-  Past the leg origin: no with-side
-   pullback read on it.
+  Past the printed leg origin: no
+   with-side read on that leg.
 
 **Close to it is a read.** The sequence is the reference picture, not a
 checklist: depth, the pause's shape, the exact touch of the level, the
@@ -8412,9 +8400,8 @@ can read `breakout`.
 
 **Evidence** (15m sweeps, two halves, descriptive): standalone
 candlestick patterns have weak evidence in general; a name adds no
-strength, the reaction reads who took control; a CISD's `strong` (an
-engulfing confirming candle included) is its displacement's strength, not
-a name (`cisd`).
+strength, the reaction reads who took control; a CISD's `strong` is the
+CISD's own strength rule (`cisd`), not a name.
   Breakout read as a
 sweep: worst on both (false starts ~70%, mean R ~-0.34), skipping them
 did not raise the pass rate.
@@ -9253,8 +9240,6 @@ never the composed setup read (`compose_check` takes a live strong one):
   Counter candles that don't engulf it: a
    pullback forming, not a reversal; a counter candle engulfing it reads
    as a CHoCH against: wait.
-  A counter 15m close below the impulse's open
-   (long; above it, short): the pullback failed (step 8), not a watch.
   "Engulfs it": a counter 15m close back
    through the impulse candle's body (long: below its open), whatever lies
    between; the `engulfing` label and the CISD's `engulfing` compare only
@@ -9266,7 +9251,8 @@ never the composed setup read (`compose_check` takes a live strong one):
    reaction at the level, the side's way → the pullback ended on the 15m;
    no 15m BOS to wait for after a strong CISD or a reaction.
   The level: the
-   broken one or a level next to it (the RTH VWAP, a 15m swing).
+   broken one or a level next to it (the RTH VWAP, a 15m swing; within
+   about 0.25 x the 15m ATR: one zone, `levels-and-reactions`).
    Composed as `15m cisd up` (true while live), or that 15m candle's read
    (`15m rejected <level> up`: long-wick, engulfing or confirmed,
    `candle-reading`; a BOS's breaking candle `15m broke <level> up`), true
@@ -9305,8 +9291,8 @@ never the composed setup read (`compose_check` takes a live strong one):
   Most of the leg given back, or
    its 15m swing broken by a close: against in the count; a candle at the
    level is no confirmation alone.
-  Past the leg origin: no with-side
-   pullback read on it.
+  Past the printed leg origin: no
+   with-side read on that leg.
 
 **Close to it is a read.** The sequence is the reference picture, not a
 checklist: depth, the pause's shape, the exact touch of the level, the
@@ -9750,9 +9736,8 @@ can read `breakout`.
 
 **Evidence** (15m sweeps, two halves, descriptive): standalone
 candlestick patterns have weak evidence in general; a name adds no
-strength, the reaction reads who took control; a CISD's `strong` (an
-engulfing confirming candle included) is its displacement's strength, not
-a name (`cisd`).
+strength, the reaction reads who took control; a CISD's `strong` is the
+CISD's own strength rule (`cisd`), not a name.
   Breakout read as a
 sweep: worst on both (false starts ~70%, mean R ~-0.34), skipping them
 did not raise the pass rate.
@@ -10591,8 +10576,6 @@ never the composed setup read (`compose_check` takes a live strong one):
   Counter candles that don't engulf it: a
    pullback forming, not a reversal; a counter candle engulfing it reads
    as a CHoCH against: wait.
-  A counter 15m close below the impulse's open
-   (long; above it, short): the pullback failed (step 8), not a watch.
   "Engulfs it": a counter 15m close back
    through the impulse candle's body (long: below its open), whatever lies
    between; the `engulfing` label and the CISD's `engulfing` compare only
@@ -10604,7 +10587,8 @@ never the composed setup read (`compose_check` takes a live strong one):
    reaction at the level, the side's way → the pullback ended on the 15m;
    no 15m BOS to wait for after a strong CISD or a reaction.
   The level: the
-   broken one or a level next to it (the RTH VWAP, a 15m swing).
+   broken one or a level next to it (the RTH VWAP, a 15m swing; within
+   about 0.25 x the 15m ATR: one zone, `levels-and-reactions`).
    Composed as `15m cisd up` (true while live), or that 15m candle's read
    (`15m rejected <level> up`: long-wick, engulfing or confirmed,
    `candle-reading`; a BOS's breaking candle `15m broke <level> up`), true
@@ -10643,8 +10627,8 @@ never the composed setup read (`compose_check` takes a live strong one):
   Most of the leg given back, or
    its 15m swing broken by a close: against in the count; a candle at the
    level is no confirmation alone.
-  Past the leg origin: no with-side
-   pullback read on it.
+  Past the printed leg origin: no
+   with-side read on that leg.
 
 **Close to it is a read.** The sequence is the reference picture, not a
 checklist: depth, the pause's shape, the exact touch of the level, the
@@ -11161,9 +11145,8 @@ can read `breakout`.
 
 **Evidence** (15m sweeps, two halves, descriptive): standalone
 candlestick patterns have weak evidence in general; a name adds no
-strength, the reaction reads who took control; a CISD's `strong` (an
-engulfing confirming candle included) is its displacement's strength, not
-a name (`cisd`).
+strength, the reaction reads who took control; a CISD's `strong` is the
+CISD's own strength rule (`cisd`), not a name.
   Breakout read as a
 sweep: worst on both (false starts ~70%, mean R ~-0.34), skipping them
 did not raise the pass rate.
@@ -12002,8 +11985,6 @@ never the composed setup read (`compose_check` takes a live strong one):
   Counter candles that don't engulf it: a
    pullback forming, not a reversal; a counter candle engulfing it reads
    as a CHoCH against: wait.
-  A counter 15m close below the impulse's open
-   (long; above it, short): the pullback failed (step 8), not a watch.
   "Engulfs it": a counter 15m close back
    through the impulse candle's body (long: below its open), whatever lies
    between; the `engulfing` label and the CISD's `engulfing` compare only
@@ -12015,7 +11996,8 @@ never the composed setup read (`compose_check` takes a live strong one):
    reaction at the level, the side's way → the pullback ended on the 15m;
    no 15m BOS to wait for after a strong CISD or a reaction.
   The level: the
-   broken one or a level next to it (the RTH VWAP, a 15m swing).
+   broken one or a level next to it (the RTH VWAP, a 15m swing; within
+   about 0.25 x the 15m ATR: one zone, `levels-and-reactions`).
    Composed as `15m cisd up` (true while live), or that 15m candle's read
    (`15m rejected <level> up`: long-wick, engulfing or confirmed,
    `candle-reading`; a BOS's breaking candle `15m broke <level> up`), true
@@ -12054,8 +12036,8 @@ never the composed setup read (`compose_check` takes a live strong one):
   Most of the leg given back, or
    its 15m swing broken by a close: against in the count; a candle at the
    level is no confirmation alone.
-  Past the leg origin: no with-side
-   pullback read on it.
+  Past the printed leg origin: no
+   with-side read on that leg.
 
 **Close to it is a read.** The sequence is the reference picture, not a
 checklist: depth, the pause's shape, the exact touch of the level, the
@@ -12581,9 +12563,8 @@ can read `breakout`.
 
 **Evidence** (15m sweeps, two halves, descriptive): standalone
 candlestick patterns have weak evidence in general; a name adds no
-strength, the reaction reads who took control; a CISD's `strong` (an
-engulfing confirming candle included) is its displacement's strength, not
-a name (`cisd`).
+strength, the reaction reads who took control; a CISD's `strong` is the
+CISD's own strength rule (`cisd`), not a name.
   Breakout read as a
 sweep: worst on both (false starts ~70%, mean R ~-0.34), skipping them
 did not raise the pass rate.
@@ -13347,8 +13328,6 @@ never the composed setup read (`compose_check` takes a live strong one):
   Counter candles that don't engulf it: a
    pullback forming, not a reversal; a counter candle engulfing it reads
    as a CHoCH against: wait.
-  A counter 15m close below the impulse's open
-   (long; above it, short): the pullback failed (step 8), not a watch.
   "Engulfs it": a counter 15m close back
    through the impulse candle's body (long: below its open), whatever lies
    between; the `engulfing` label and the CISD's `engulfing` compare only
@@ -13360,7 +13339,8 @@ never the composed setup read (`compose_check` takes a live strong one):
    reaction at the level, the side's way → the pullback ended on the 15m;
    no 15m BOS to wait for after a strong CISD or a reaction.
   The level: the
-   broken one or a level next to it (the RTH VWAP, a 15m swing).
+   broken one or a level next to it (the RTH VWAP, a 15m swing; within
+   about 0.25 x the 15m ATR: one zone, `levels-and-reactions`).
    Composed as `15m cisd up` (true while live), or that 15m candle's read
    (`15m rejected <level> up`: long-wick, engulfing or confirmed,
    `candle-reading`; a BOS's breaking candle `15m broke <level> up`), true
@@ -13399,8 +13379,8 @@ never the composed setup read (`compose_check` takes a live strong one):
   Most of the leg given back, or
    its 15m swing broken by a close: against in the count; a candle at the
    level is no confirmation alone.
-  Past the leg origin: no with-side
-   pullback read on it.
+  Past the printed leg origin: no
+   with-side read on that leg.
 
 **Close to it is a read.** The sequence is the reference picture, not a
 checklist: depth, the pause's shape, the exact touch of the level, the
@@ -13753,9 +13733,8 @@ can read `breakout`.
 
 **Evidence** (15m sweeps, two halves, descriptive): standalone
 candlestick patterns have weak evidence in general; a name adds no
-strength, the reaction reads who took control; a CISD's `strong` (an
-engulfing confirming candle included) is its displacement's strength, not
-a name (`cisd`).
+strength, the reaction reads who took control; a CISD's `strong` is the
+CISD's own strength rule (`cisd`), not a name.
   Breakout read as a
 sweep: worst on both (false starts ~70%, mean R ~-0.34), skipping them
 did not raise the pass rate.
@@ -14594,8 +14573,6 @@ never the composed setup read (`compose_check` takes a live strong one):
   Counter candles that don't engulf it: a
    pullback forming, not a reversal; a counter candle engulfing it reads
    as a CHoCH against: wait.
-  A counter 15m close below the impulse's open
-   (long; above it, short): the pullback failed (step 8), not a watch.
   "Engulfs it": a counter 15m close back
    through the impulse candle's body (long: below its open), whatever lies
    between; the `engulfing` label and the CISD's `engulfing` compare only
@@ -14607,7 +14584,8 @@ never the composed setup read (`compose_check` takes a live strong one):
    reaction at the level, the side's way → the pullback ended on the 15m;
    no 15m BOS to wait for after a strong CISD or a reaction.
   The level: the
-   broken one or a level next to it (the RTH VWAP, a 15m swing).
+   broken one or a level next to it (the RTH VWAP, a 15m swing; within
+   about 0.25 x the 15m ATR: one zone, `levels-and-reactions`).
    Composed as `15m cisd up` (true while live), or that 15m candle's read
    (`15m rejected <level> up`: long-wick, engulfing or confirmed,
    `candle-reading`; a BOS's breaking candle `15m broke <level> up`), true
@@ -14646,8 +14624,8 @@ never the composed setup read (`compose_check` takes a live strong one):
   Most of the leg given back, or
    its 15m swing broken by a close: against in the count; a candle at the
    level is no confirmation alone.
-  Past the leg origin: no with-side
-   pullback read on it.
+  Past the printed leg origin: no
+   with-side read on that leg.
 
 **Close to it is a read.** The sequence is the reference picture, not a
 checklist: depth, the pause's shape, the exact touch of the level, the
