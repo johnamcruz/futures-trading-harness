@@ -21,7 +21,8 @@ const flat = t => t.replace(/\s+/g, ' ');
 // the cycle prompt names only the first and last step (the skill holds the block).
 // Raised 4800 -> 5074 (feat/decision-follows-state, owner rule: raise a cap when it improves context): the head trader's
 // own STATE read can end a plan, in step 8, the opening bullet and the scorecard line (+318; the file is 5074 bytes).
-const SKILL_MAX = 5074;
+// Raised 5074 -> 5136 (feat/pullback-concept, same rule): step 6 points to the pullback's own entry (+62).
+const SKILL_MAX = 5136;
 const PLAN_BLOCK_MAX = 760;
 const PROMPT_ADDED_MAX = 100;
 
@@ -88,7 +89,8 @@ test('trader-process: it orders the thinking and adds no filter; the count decid
     "**Decision.** Compose OK → take (a prop attempt: the full verdict size; else step 5 sizes it); refused → pass. The head trader alone: its own STATE read, the last line of its PLAN, off the setup's side → pass (`trade-session`, step 3). One reason.",
     // The trigger there and the count for: take it, never wait on (the baseline waited until the setup expired); the 3m only
     // times it (feat/bias-bg: no 3m turn to wait for).
-    '**Entry.** The setup is the entry, on the next 3m bar; no confirming close or 3m turn to wait for → `compose_check` now.',
+    // Inside an open 15m pullback, its own entry (feat/pullback-concept, owner-approved 2026-11-14: the first 3m BOS the side's way).
+    '**Entry.** The setup is the entry, on the next 3m bar; no confirming close or 3m turn to wait for (unless a `Pullback` line is printed: `pullback-vs-reversal`) → `compose_check` now.',
     'Never loosen the stop.',
     // The side is the trend's (the owner's trend-following decision): a pullback's end with it, against it only on the CHoCH tier.
     '**Setup.** The setup reads (`trade-lifecycle`), on the side rule\'s side (`htf-to-ltf`).',

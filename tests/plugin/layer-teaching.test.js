@@ -97,3 +97,56 @@ test('layer teaching: the head trader\'s skills say each layer the one way', () 
   ]) assert.ok(head.includes(phrase), `${layer}: ${phrase}`);
   for (const s of Object.keys(LAYERS)) assert.ok(fs.existsSync(path.join(ROOT, 'skills', s, 'SKILL.md')), s);
 });
+
+// The owner's pullback entry (feat/pullback-concept, 2026-11-14, option 2): while the briefing prints a `Pullback` line,
+// the 15m turn is the setup read and the first 3m BOS or CISD the side's way near value is the entry. Every home that
+// teaches "the setup is the entry, no 3m turn to wait for" names that one scope and points to the read, so no prompt
+// holds the two rules unscoped.
+test('layer teaching: every "the setup is the entry" home scopes the pullback entry (a `Pullback` line printed: pullback-vs-reversal)', () => {
+  const SCOPE = /a `Pullback` line (?:is )?printed[^.]*?`pullback-vs-reversal`|`Pullback` line(?: printed)?: [^.]*?`pullback-vs-reversal`|unless a `Pullback` line is printed/;
+  const P = '\\(unless a `Pullback` line is printed: `pullback-vs-reversal`\\)';
+  const homes = [
+    ['skills/htf-to-ltf/SKILL.md', new RegExp(`no 3m turn to wait for \\(waiting cost R\\), unless a \`Pullback\` line prints`)],
+    ['skills/trader-process/SKILL.md', new RegExp(`3m turn to wait for ${P}`)],
+    ['skills/rejection/SKILL.md', new RegExp(`no 3m turn or break to wait for ${P}`)],
+    ['skills/top-down-entry/SKILL.md', new RegExp(`no 3m turn or break to wait for ${P}`)],
+    ['skills/bos-vs-choch/SKILL.md', new RegExp(`never a wait ${P}`)],
+    ['skills/trade-lifecycle/SKILL.md', new RegExp(`no confirming close to wait for ${P}`)],
+    ['skills/breakout/SKILL.md', new RegExp(`close beyond is the entry ${P}`)],
+    ['skills/confluence-counting/SKILL.md', new RegExp(`→ call \`compose_check\`\\. Its timing: the next 3m bar ${P}\\.`)],
+    ['rules/trading/decision.md', new RegExp(`→ call \`compose_check\`\\. Its timing: the next 3m bar ${P}\\.`)],
+    ['skills/cisd/SKILL.md', /ends it; the entry: its 3m BOS or CISD \(`pullback-vs-reversal`\)/],
+    ['skills/multi-timeframe-analysis/SKILL.md', /the 15m setup, then its 3m BOS\/CISD: `pullback-vs-reversal`/],
+  ];
+  for (const [file, re] of homes) {
+    const t = flat(fs.readFileSync(path.join(ROOT, file), 'utf8'));
+    assert.match(t, re, file);
+  }
+  // The read itself names its scope once, and the CISD skill no longer puts a pullback's entry at the next close.
+  assert.match(read('pullback-vs-reversal'), /Open from the `Pullback` line \(steps 6-7 outlive it\)\./);
+  assert.doesNotMatch(read('cisd'), /ends the pullback; the next close is the entry/);
+  assert.ok(SCOPE.test(read('trader-process')));
+  // The always-on rule reaches every harness: the generated workspace instructions carry the scope.
+  assert.match(flat(fs.readFileSync(path.join(ROOT, 'workspace', 'AGENTS.md'), 'utf8')), /→ call `compose_check`\. Its timing: the next 3m bar \(unless a `Pullback` line is printed: `pullback-vs-reversal`\)\./);
+});
+
+// The 15m turn is one definition in its three homes (the owner: the 15m turn is a 15m CISD or a 15m BOS the side's way; the
+// reaction at the level too), and a 15m BOS far from value is no entry (the measured late case), stated alike.
+test('layer teaching: the 15m turn and the late 15m BOS are stated alike in pullback-vs-reversal, htf-to-ltf and trade-session', () => {
+  const TURN = 'the 15m turn: a live 15m CISD, a 15m BOS or a 15m reaction at the level, the side\'s way';
+  const LATE = 'a 15m BOS far past value (no 3m BOS or CISD near it): late, not an entry';
+  for (const s of ['pullback-vs-reversal', 'htf-to-ltf', 'trade-session']) {
+    assert.ok(read(s).includes(TURN), `${s}: the 15m turn`);
+    assert.ok(read(s).includes(LATE), `${s}: the late 15m BOS`);
+  }
+  // The 3m timing names both reads wherever the watch is taught.
+  assert.match(read('pullback-vs-reversal'), /watch for the BOS or CISD; not the entry\. No BOS or CISD after it: no setup, pass\./);
+});
+
+// A CISD's strength (the owner: "cisd with last candle being engulfing is strong") is its displacement, never a pattern
+// name, so candle-reading's "a name adds no strength" and the CISD read say the same thing in all three homes.
+test('layer teaching: a strong CISD (an engulfing confirming candle included) is displacement strength, not a pattern name, in candle-reading, cisd and pullback-vs-reversal', () => {
+  assert.match(read('pullback-vs-reversal'), /the CISD line's `strong` is its displacement's strength, not a pattern name/);
+  assert.match(read('candle-reading'), /a CISD's `strong` is the CISD's own strength rule \(`cisd`\), not a name\./);
+  assert.match(read('cisd'), /an engulfing ranks with other strong ones/);
+});

@@ -36,7 +36,7 @@ Also: `leg` (`origin`, the run's extreme; `extreme`), `ote`, `status`
 
 **Where it works**:
 
-- **Trend pullback** (preferred; `trend-vs-range`): price pulls back to a level, then a CISD back in the trend's direction ends the pullback; the next close is the entry.
+- **Trend pullback** (preferred; `trend-vs-range`): price pulls back to a level, then a CISD back the trend's way ends it; the entry: its 3m BOS or CISD (`pullback-vs-reversal`).
 - **Range** (`range`): at an extreme (range high or low, value-area
   edge, prior day), a CISD back toward the middle, aiming at the other
   side. Mid-range is a skip.
@@ -50,21 +50,20 @@ Also: `leg` (`origin`, the run's extreme; `extreme`), `ote`, `status`
 CISD usually comes first: an early sign, not yet a change of structure.
 It is a setup read (`<tf> cisd up|down`), never a trade of its own. By
 timeframe: a 15m (or 1h) CISD the bias's way is the setup read; a 3m
-or 5m one is entry timing, context, never the setup; against the bias,
+or 5m one is entry timing (in a Pullback, beside the 15m read), never the setup alone; against the bias,
 noise. The stronger one has a strong displacement candle (its strength
-and close: an engulfing ranks with other strong ones); the 3m only times
-the entry.
+and close: an engulfing ranks with other strong ones).
 
 **OTE and bounce** (`fib-retracement`): a strong CISD's `leg` gives
-`ote`: support, never a wait (the 15m CISD is the entry). A completed
+`ote`: support, never a wait (the 15m CISD is the setup). A completed
 candle closing back the CISD's way in it (`candle-reading`) or
 `absorption` in the zone counts. Never anticipate the bounce.
 
 ## Examples
 
 ```text
-Take: 1h up; pullback to the RTH VWAP 21520.50; 15m bullish CISD, strong, closed 21525.75:
-  the setup and the entry, a limit there. Reads: 15m cisd up. Priority order: aligned -> take.
+Take: 1h up; pullback to the RTH VWAP 21520.50; 15m bullish CISD, strong: the setup; a 3m BOS
+  up, close 21527.25: the entry, a limit. Reads: 15m cisd up, 3m bos up. -> take.
 Take: range 21480.00-21560.00; at the prior VAL 21480.00 a 15m bullish CISD, strong (top third), closed 21492.25,
   V 2.1x, little progress (absorption): setup and entry, a limit there. Reads: at prior val, 15m cisd up. Priority order -> take.
 Skip: transition, 15m mixed: chop; 15m bearish CISD at 21640.00.

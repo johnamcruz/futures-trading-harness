@@ -44,7 +44,7 @@ timeframe's candles). The 4h has swings only (`h1.h4.swingPattern`).
 
 | Timeframe | BOS | CHoCH |
 |---|---|---|
-| 3m, 5m | a candle fact only: never the setup, never a wait | a candle fact only (its swings are for the stop) |
+| 3m, 5m | a candle fact only: never the setup, never a wait (unless a `Pullback` line is printed: `pullback-vs-reversal`) | a candle fact only (its swings are the stop's) |
 | 15m | the working structure continues | the working structure shifting: a deeper pullback, or a reversal starting |
 | 1h (4h swings) | the HTF trend continues | the strongest sign of an HTF trend change, not a reversal by itself: a BOS the new way confirms it |
 

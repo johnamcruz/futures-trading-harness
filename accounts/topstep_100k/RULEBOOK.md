@@ -11,7 +11,7 @@ policies:                       # each policy strategy that trades this account 
       bias_frames: [4h, 1h]     # off, or [4h, 1h], [4h] or [1h] only (never the 15m): the first that trends sets the side, none against it; none trending: as bias_agree says
       bias_agree: neutral-15m-declared  # on: every bias frame trends the side's way; off: the first that trends sets the side; neutral-15m-declared: every one that trends is the side's way, none against, and with all ranging the 15m trend and the declared trend the side's way
       regime_against: off       # off (a fallback, not taught); on: no entry while the m3 regime trends against the side
-      leg_turned: off           # off (a fallback, not taught); on: an m3 regime not trending the side's way needs a true 3m BOS, CHoCH or compression break its way
+      leg_turned: off           # off (not enforced; inside a pullback the 3m BOS or CISD entry is taught, pullback-vs-reversal); on: an m3 regime not trending the side's way needs a true 3m BOS, CHoCH or compression break its way
     sizing:                     # the size is the most contracts the composed cap (risk.max_risk_usd, all in) fits; these only lower it
       cushion_frac: 0.3         # a trade risks at most this share of the cushion ...
       cap_usd: 1000             # ... and at most this many dollars
@@ -266,7 +266,8 @@ and with every key off an entry is held by the trend rule alone (never counter):
   trend itself may still run against the side (a 15m pullback).
 - `regime_against` (off: a fallback, not taught) `on`: no entry while the `m3` regime (`regime.js`, the
   `trend-vs-range` skill's) trends against the side.
-- `leg_turned` (off: a fallback, not taught) `on`: while the `m3` regime doesn't trend the side's way, the
+- `leg_turned` (off: not enforced; inside an open 15m pullback the 3m BOS or CISD entry is
+  taught, `pullback-vs-reversal`) `on`: while the `m3` regime doesn't trend the side's way, the
   reads must state the leg turned back: a true `3m choch`, `3m bos` or
   `3m compression break` the side's way (`pullback-vs-reversal`).
 

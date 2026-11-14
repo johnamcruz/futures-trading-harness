@@ -35,13 +35,24 @@ else no trade. A CHoCH against the bias is context, never a way in.
 The setup is the 15m (or higher) reaction or break the
 bias's way (its candle's strength and close: `candle-reading`): it
 is the entry; the 3m only times the entry: the next 3m bar, no
-confirming close, no 3m turn to wait for (waiting cost R).
+confirming close, no 3m turn to wait for (waiting cost R), unless a
+`Pullback` line prints.
+**Pullback** (`pullback-vs-reversal`): BOS or CISD the side's way
+confirms, CHoCH or CISD against warns. Setup: the 15m turn: a live 15m
+CISD, a 15m BOS or a 15m reaction at the level, the side's way; no 3m BOS
+or CISD yet: watch (the bar stays a pass; the read stays open).
+Entry: the first 3m BOS or CISD the side's way near value
+(`Trend declared?` RTH VWAP or EMA20 within about ±0.5, + is the side's
+way), next 3m bar; a 15m BOS far past value (no 3m BOS or CISD near it):
+late, not an entry. In a trade, 15m BOS: hold. A CHoCH or CISD against
+(3m: the watch restarts; 15m: a reversal attempt): wait.
 Not in a prop attempt: the trend rule alone (both ranging, the 15m's
 side; no trend anywhere, both sides).
 Then the head trader's own STATE read decides the take (`trade-session`
 step 3): its own 4h and 1h both range, or one of them not trending the
-side, is `chop` or `unclear` to it; both the side's way, a 15m range or
-pullback under them, is the side's trend class. The briefing's
+side, is `unclear` to it (`chop`: choppy movement only); both the
+side's way, a 15m range, transition or pullback under them, is the
+side's trend class. The briefing's
 `Bias:`/`Trend rule:` lines are the gate's floor (what it refuses),
 never your side: your own STATE read is stricter.
 
@@ -57,7 +68,7 @@ levels it met: the `candle-reading` skill. Top down: `top-down-entry`.
 ## Examples
 
 ```text
-4h UP, 1h UP, 15m DOWN: long pullback. The 15m rejected the prior VAH up at 21600.25:
-the setup and the entry, on the next 3m bar; target trail (the 2R mark that arms the trail, not the exit).
+4h UP, 1h UP, 15m DOWN, a Pullback line: the 15m rejected the prior VAH up at 21600.25: the
+setup; the first 3m BOS or CISD up near value: the entry, the next 3m bar; target trail.
 4h UP, 1h DOWN: no side, no entry. 4h and 1h RANGE, 15m DOWN, declared short: short only.
 ```

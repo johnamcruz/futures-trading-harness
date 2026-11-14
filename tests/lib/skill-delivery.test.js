@@ -199,6 +199,10 @@ test('the budget: with every trigger that can hold at once, nothing is pushed to
   const everything = { state: { ...FLAT, attempts: [{ account: 'x', status: 'active' }] }, briefings: flatFacts.flatMap(x => x.briefings || []) };
   const all = SS.choose(ROOT, SS.factsOf(everything), { loaded: LOADED });
   assert.deepStrictEqual(all.over, [], `over the budget: ${all.over.join(', ')}`);
+  // The committed budget is the measured need of every trigger at once (feat/pullback-concept: 75534, pullback-vs-reversal's
+  // read grown), not padding: 2,000 bytes under it something is pushed to the Also relevant line.
+  const budget = require('../../scripts/lib/tunables').runner().prompt.situationalSkillBytes;
+  assert.ok(SS.choose(ROOT, SS.factsOf(everything), { loaded: LOADED, budget: budget - 2000 }).over.length > 0, 'the budget is near the measured need');
   const managed = SS.choose(ROOT, SS.factsOf({ state: { ...OPEN, entryLines: ['entry'] }, briefings: everything.briefings }), { loaded: LOADED });
   assert.deepStrictEqual(managed.over, [], `managed, over the budget: ${managed.over.join(', ')}`);
   const refused = SS.choose(ROOT, SS.factsOf({ state: FLAT, briefings: [...everything.briefings, situation(FIXTURES.window.present).briefings[0]].map(x => ({ ...x, sections: { ...x.sections, m3: { ...x.sections.m3, data: { ...x.sections.m3.data, windowEntries: 'refused' } } } })) }), { loaded: LOADED });

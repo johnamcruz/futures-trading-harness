@@ -1,8 +1,9 @@
 'use strict';
 
 // The quiz gate for a proposed skill edit (scripts/lib/train/quiz-gate.js): before any replay, the edited tree's quiz
-// summary is held against the champion's. 53 noisy questions at a few runs each make any per-question drop rule falsely
-// reject an edit that changes nothing (a multiple-comparisons trap: review found 30 to 80% at 3 runs), so: only a question
+// summary is held against the champion's. Many noisy questions (53 when written, 95 now) at a few runs each make any
+// per-question drop rule falsely reject an edit that changes nothing (a multiple-comparisons trap: review found 30 to
+// 80% at 3 runs), so: only a question
 // the champion answered on every run can slip (a flaky question has no baseline to lose); a drop of flagDrop or more FLAGS
 // any question; a flagged question is re-asked with more runs on both sides and is a regression only when those confirm
 // runs ALONE (the flag selected on noise, so the first runs are not reused) are worse by an exact test at alpha shared out
@@ -226,8 +227,12 @@ test('fisherLess: the exact one-sided test that the edit passes less often than 
 // The reason for the design: a noisy quiz must not reject an edit that changes nothing. Seeded Monte Carlo of the whole
 // procedure (the first run, then a confirm run on what it flags), 53 questions with a realistic mix of stable and
 // flaky ones; both sides draw from the same per-question pass rates.
-test('Monte Carlo: an unchanged edit is rarely rejected, one that breaks a stable question usually is', () => {
-  let seed = 20260805;
+test('Monte Carlo: an unchanged edit is rarely rejected, one that breaks a stable question usually is, at every one of several seeds', () => {
+  // Several seeds, so a maxSlips can't pass on one lucky draw (feat/pullback-concept: at 95 questions, maxSlips 8 passed on
+  // the old single seed at 5.3% and failed at 8.7-10.8% at most others; at 9: 0.7-1.0% stable, 2.0-5.2% flaky, a broken
+  // stable question caught 90.5-92.7%, a flaky one dropped to 0 97.3-98.7%, at every seed).
+  for (const SEED of [20260805, 1, 2, 3, 4]) {
+  let seed = SEED;
   const rand = () => { seed = (seed * 1664525 + 1013904223) % 4294967296; return seed / 4294967296; };
   const probs = (mix) => IDS.map((id, i) => ({ id, p: mix(i) }));
   const stable = probs(i => (i % 20 === 0 ? 0.55 : i % 10 === 3 ? 0.9 : 1)); // 85% at 1.0, ~10% at .9, ~5% flaky
@@ -246,18 +251,19 @@ test('Monte Carlo: an unchanged edit is rarely rejected, one that breaks a stabl
   for (const [name, qs, maxFalse] of [['stable', stable, 0.04], ['flaky', flaky, 0.06]]) {
     let rej = 0;
     for (let t = 0; t < N; t += 1) if (trial(qs, qs) === 'reject') rej += 1;
-    assert.ok(rej / N <= maxFalse, `${name} mix: ${rej} of ${N} unchanged edits rejected (${(100 * rej / N).toFixed(1)}%), over ${100 * maxFalse}%`);
+    assert.ok(rej / N <= maxFalse, `seed ${SEED}: ${name} mix: ${rej} of ${N} unchanged edits rejected (${(100 * rej / N).toFixed(1)}%), over ${100 * maxFalse}%`);
   }
   // an edit that breaks one stable question (pass rate 1.0 -> 0.3): caught most of the time
   const broken = stable.map(q => (q.id === 'q2' ? { ...q, p: 0.3 } : q));
   let caught = 0;
   for (let t = 0; t < N; t += 1) if (trial(stable, broken) === 'reject') caught += 1;
-  assert.ok(caught / N >= 0.9, `a broken stable question caught ${caught} of ${N}`);
+  assert.ok(caught / N >= 0.9, `seed ${SEED}: a broken stable question caught ${caught} of ${N}`);
   // a flaky question (0.8) that the edit drops to 0 is caught too
   let flakyCaught = 0;
   const flakyBase = stable.map(q => (q.id === 'q2' ? { ...q, p: 0.8 } : q)), flakyBroken = stable.map(q => (q.id === 'q2' ? { ...q, p: 0 } : q));
   for (let t = 0; t < N; t += 1) if (trial(flakyBase, flakyBroken) === 'reject') flakyCaught += 1;
-  assert.ok(flakyCaught / N >= 0.9, `a flaky question dropped to 0 caught ${flakyCaught} of ${N}`);
+  assert.ok(flakyCaught / N >= 0.9, `seed ${SEED}: a flaky question dropped to 0 caught ${flakyCaught} of ${N}`);
+  }
 });
 
 // The CLI: `context-quiz.js gate <champion dir> <edit dir> [--confirm <champion dir> <edit dir>]` reads each directory's

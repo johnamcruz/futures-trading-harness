@@ -411,7 +411,13 @@ const OLD_AGENTS_MD = 24466;
 // last, the head trader's own, the class follows the 4h and 1h, a take on its side, compose_check first, then chop, unclear or
 // an unsupported trend class a pass; Compose first names it) and the always-on decision rule's sentence in AGENTS.md (+114),
 // the measured need of the worst path (+939; trader-process and htf-to-ltf are common to both sides).
-const RAISED = 154 + 130 + 1625 + 336 + 382 + 939;
+// Plus 843 for feat/pullback-concept (same rule, owner-approved 2026-11-14): trade-session's class sentence names a 15m
+// `transition` beside its pullback and range, never chop or unclear for it (frames disagree too), its read chain for the
+// PLAN's 4 Setup line, the 15m turn and the late 15m BOS while a `Pullback` line is printed, and the always-on decision
+// rule's compose bullet in AGENTS.md scopes the entry timing (unless a `Pullback` line is printed), and the class rule's
+// range is not chop (the owner: chop is the movement's quality, range its geometry); htf-to-ltf and trader-process are
+// common to both sides.
+const RAISED = 154 + 130 + 1625 + 336 + 382 + 939 + 843;
 const EVERY_CYCLE = ['multi-timeframe-analysis', 'strategy-library', 'strategy-scan', 'strategy-gate-checks', 'trader-process', 'htf-to-ltf', 'autonomous-trading'];
 const PATHS = {
   'full cycle, no candidate': ['role-round', 'setup-judgment', 'day-context'],
@@ -532,9 +538,17 @@ test('trade-session split: no head-trader path reads more than the base\'s every
 // trader's own STATE read can end a plan (its step 8, the opening bullet, the scorecard line), +250 in every role that embeds
 // it, both modes (+318 after review round 2: the scorecard line says what the scorecard records); htf-to-ltf points from the side rule (main's text) to it and says the briefing's Bias/Trend rule lines are the gate's floor, +396 (the market-structure analyst); the risk manager's phase 2
 // says it checks what its file lists, never the STATE line, +211; every other role unchanged.
+// Then feat/pullback-concept (same rule, owner-approved 2026-11-14): pullback-vs-reversal's pullback to a broken level
+// (2979 -> 9518 bytes: the sequence, BOS or CISD confirms and CHoCH or CISD warns, the displacement and fib depth, its 3m entry, the deep case, close to the picture a read, the examples; full mode, the
+// two analysts that embed it), htf-to-ltf's head core (+593, the market-structure analyst), candle-reading's unlabeled names
+// (+205, full mode, the market-structure analyst), the pullback scope pointers in trader-process, bos-vs-choch, breakout,
+// confluence-counting, cisd and the decision rule (every role that embeds them): the market-structure analyst 97317 ->
+// 105053 full, 45414 -> 46207 index; the trend-momentum analyst 56933 -> 63594 full, 42212 -> 42334 index; the risk
+// manager 95141 -> 95294 full, 81029 -> 81182 index; the news-calendar and volume-liquidity analysts +62 both modes;
+// every other role within its pin.
 const ROLE_PROMPTS = {
-  full: { 'market-structure-analyst': 97317, 'news-calendar-analyst': 10806, 'risk-manager': 95141, 'strategy-researcher': 25728, 'trade-executor': 30670, 'trade-reviewer': 9454, 'trend-momentum-analyst': 56933, 'volume-liquidity-analyst': 50351 },
-  index: { 'market-structure-analyst': 45414, 'news-calendar-analyst': 10806, 'risk-manager': 81029, 'strategy-researcher': 25728, 'trade-executor': 30659, 'trade-reviewer': 9454, 'trend-momentum-analyst': 42212, 'volume-liquidity-analyst': 34983 },
+  full: { 'market-structure-analyst': 105053, 'news-calendar-analyst': 10868, 'risk-manager': 95294, 'strategy-researcher': 25728, 'trade-executor': 30670, 'trade-reviewer': 9454, 'trend-momentum-analyst': 63594, 'volume-liquidity-analyst': 50413 },
+  index: { 'market-structure-analyst': 46207, 'news-calendar-analyst': 10868, 'risk-manager': 81182, 'strategy-researcher': 25728, 'trade-executor': 30659, 'trade-reviewer': 9454, 'trend-momentum-analyst': 42334, 'volume-liquidity-analyst': 35045 },
 };
 
 test('trade-session split: no role prompt grows, in full or index mode, and no role lists a piece', () => {
