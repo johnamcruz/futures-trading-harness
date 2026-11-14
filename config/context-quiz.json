@@ -1497,11 +1497,11 @@
       "anchor": "unless a `Pullback` line prints.",
       "choices": [
         "take: the 15m setup is the entry, on the next 3m bar",
-        "watch: the entry is the first 3m BOS or CISD up",
-        "pass: chop",
+        "watch: the bar stays a pass; the entry is the first 3m BOS or CISD up",
+        "pass: chop, the read is over",
         "short: the 3m is down"
       ],
-      "answer": "watch: the entry is the first 3m BOS or CISD up"
+      "answer": "watch: the bar stays a pass; the entry is the first 3m BOS or CISD up"
     },
     {
       "id": "q105",
