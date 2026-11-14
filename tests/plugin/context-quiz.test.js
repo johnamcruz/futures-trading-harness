@@ -183,7 +183,7 @@ test('context quiz: the pullback questions (q87-q112) are asked against the prom
     ['q90', 'lookup', PB, /a 3m CHoCH against the side inside an intact 15m trend: a pullback starting, wait\./g],
     ['q91', 'lookup', PB, /A 15m `range` or `transition` here is the pause, not chop\./g],
     ['q92', 'lookup', PB, /Far past the level, no retest: late, not this read's entry/g],
-    ['q93', 'lookup', PB, /up shown, down the mirror/g],
+    ['q93', 'lookup', PB, /a live strong 15m CISD on the CISD line is the setup read even when the last 15m candle line shows no pattern/g],
     // A strict-side guard (main's text): one of the 4h and 1h ranging is chop or unclear to the head trader, whatever the 3m.
     ['q94', 'head', undefined, /not both one way → `unclear`/g],
     ['q112', 'head', undefined, /not both one way → `unclear` \(never a trend class, smooth or not\)/g],

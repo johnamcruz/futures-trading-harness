@@ -1323,7 +1323,7 @@
       ],
       "text": "Briefing lines (synthetic, 10:24 ET), flat:\n- Bias: short only (4h down, 1h down; long refused).\n- Pullback (15m, short leg 21437.5 -> 21361.25): depth 28% of the leg; 10 bars since the extreme, volume 0.6x the leg's per bar (falling), range 0.5x; swings since the extreme: 15m 21437.5 holds, 1h 21510.75 holds; 15m break against: none, 1h: none.\n- 15m (setup candle, closed 10:15): none, close bottom third, range 1.1 ATR, vol 1.2x.\n- CISD (completed candles; a read, not a signal): 15m bearish at 21402.25 (closed 10:15, strong), no key-level sweep, zone waiting.\n- m3.lastBreak: last BOS down at 21383.25 (barsAgo 0), previous CHoCH down at 21388.75 (barsAgo 2).\n- Trend declared? (in 3m ATR(14), + = the side's way; `trend-vs-range`): long RTH VWAP -0.3, EMA20 -0.2, overnight range broke out against, day's move -1.6, regime against; short RTH VWAP +0.3, EMA20 +0.2, overnight range broke out its way, day's move +1.6, regime with.\nWhat is the read and the action?",
       "rule": "the down mirror: a live 15m CISD down (the setup read) and the first 3m BOS down near value: short at that 3m close",
-      "anchor": "up shown, down the mirror",
+      "anchor": "a live strong 15m CISD on the CISD line is the setup read even when the last 15m candle line shows no pattern",
       "choices": [
         "the pullback is over: short, a limit at this 3m close",
         "a reversal against the trend: long",

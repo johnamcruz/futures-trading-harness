@@ -1176,7 +1176,9 @@ never the composed setup read (`compose_check` takes a live strong one):
 4.
   **The setup**: the 15m turn: a live 15m CISD, a 15m BOS or a 15m
    reaction at the level, the side's way → the pullback ended on the 15m;
-   no 15m BOS to wait for after a strong CISD or a reaction.
+   no 15m BOS to wait for after a strong CISD or a reaction; a live strong
+   15m CISD on the CISD line is the setup read even when the last 15m
+   candle line shows no pattern (`15m cisd up|down`).
   The level: the
    broken one or a level next to it (the RTH VWAP, a 15m swing; within
    about 0.25 x the 15m ATR, a hypothesis: one zone; `levels-and-reactions`).
@@ -2579,7 +2581,9 @@ never the composed setup read (`compose_check` takes a live strong one):
 4.
   **The setup**: the 15m turn: a live 15m CISD, a 15m BOS or a 15m
    reaction at the level, the side's way → the pullback ended on the 15m;
-   no 15m BOS to wait for after a strong CISD or a reaction.
+   no 15m BOS to wait for after a strong CISD or a reaction; a live strong
+   15m CISD on the CISD line is the setup read even when the last 15m
+   candle line shows no pattern (`15m cisd up|down`).
   The level: the
    broken one or a level next to it (the RTH VWAP, a 15m swing; within
    about 0.25 x the 15m ATR, a hypothesis: one zone; `levels-and-reactions`).
@@ -3991,7 +3995,9 @@ never the composed setup read (`compose_check` takes a live strong one):
 4.
   **The setup**: the 15m turn: a live 15m CISD, a 15m BOS or a 15m
    reaction at the level, the side's way → the pullback ended on the 15m;
-   no 15m BOS to wait for after a strong CISD or a reaction.
+   no 15m BOS to wait for after a strong CISD or a reaction; a live strong
+   15m CISD on the CISD line is the setup read even when the last 15m
+   candle line shows no pattern (`15m cisd up|down`).
   The level: the
    broken one or a level next to it (the RTH VWAP, a 15m swing; within
    about 0.25 x the 15m ATR, a hypothesis: one zone; `levels-and-reactions`).
@@ -5394,7 +5400,9 @@ never the composed setup read (`compose_check` takes a live strong one):
 4.
   **The setup**: the 15m turn: a live 15m CISD, a 15m BOS or a 15m
    reaction at the level, the side's way → the pullback ended on the 15m;
-   no 15m BOS to wait for after a strong CISD or a reaction.
+   no 15m BOS to wait for after a strong CISD or a reaction; a live strong
+   15m CISD on the CISD line is the setup read even when the last 15m
+   candle line shows no pattern (`15m cisd up|down`).
   The level: the
    broken one or a level next to it (the RTH VWAP, a 15m swing; within
    about 0.25 x the 15m ATR, a hypothesis: one zone; `levels-and-reactions`).
@@ -6806,7 +6814,9 @@ never the composed setup read (`compose_check` takes a live strong one):
 4.
   **The setup**: the 15m turn: a live 15m CISD, a 15m BOS or a 15m
    reaction at the level, the side's way → the pullback ended on the 15m;
-   no 15m BOS to wait for after a strong CISD or a reaction.
+   no 15m BOS to wait for after a strong CISD or a reaction; a live strong
+   15m CISD on the CISD line is the setup read even when the last 15m
+   candle line shows no pattern (`15m cisd up|down`).
   The level: the
    broken one or a level next to it (the RTH VWAP, a 15m swing; within
    about 0.25 x the 15m ATR, a hypothesis: one zone; `levels-and-reactions`).
@@ -8209,7 +8219,9 @@ never the composed setup read (`compose_check` takes a live strong one):
 4.
   **The setup**: the 15m turn: a live 15m CISD, a 15m BOS or a 15m
    reaction at the level, the side's way → the pullback ended on the 15m;
-   no 15m BOS to wait for after a strong CISD or a reaction.
+   no 15m BOS to wait for after a strong CISD or a reaction; a live strong
+   15m CISD on the CISD line is the setup read even when the last 15m
+   candle line shows no pattern (`15m cisd up|down`).
   The level: the
    broken one or a level next to it (the RTH VWAP, a 15m swing; within
    about 0.25 x the 15m ATR, a hypothesis: one zone; `levels-and-reactions`).
@@ -9612,7 +9624,9 @@ never the composed setup read (`compose_check` takes a live strong one):
 4.
   **The setup**: the 15m turn: a live 15m CISD, a 15m BOS or a 15m
    reaction at the level, the side's way → the pullback ended on the 15m;
-   no 15m BOS to wait for after a strong CISD or a reaction.
+   no 15m BOS to wait for after a strong CISD or a reaction; a live strong
+   15m CISD on the CISD line is the setup read even when the last 15m
+   candle line shows no pattern (`15m cisd up|down`).
   The level: the
    broken one or a level next to it (the RTH VWAP, a 15m swing; within
    about 0.25 x the 15m ATR, a hypothesis: one zone; `levels-and-reactions`).
@@ -11111,7 +11125,9 @@ never the composed setup read (`compose_check` takes a live strong one):
 4.
   **The setup**: the 15m turn: a live 15m CISD, a 15m BOS or a 15m
    reaction at the level, the side's way → the pullback ended on the 15m;
-   no 15m BOS to wait for after a strong CISD or a reaction.
+   no 15m BOS to wait for after a strong CISD or a reaction; a live strong
+   15m CISD on the CISD line is the setup read even when the last 15m
+   candle line shows no pattern (`15m cisd up|down`).
   The level: the
    broken one or a level next to it (the RTH VWAP, a 15m swing; within
    about 0.25 x the 15m ATR, a hypothesis: one zone; `levels-and-reactions`).
@@ -12607,7 +12623,9 @@ never the composed setup read (`compose_check` takes a live strong one):
 4.
   **The setup**: the 15m turn: a live 15m CISD, a 15m BOS or a 15m
    reaction at the level, the side's way → the pullback ended on the 15m;
-   no 15m BOS to wait for after a strong CISD or a reaction.
+   no 15m BOS to wait for after a strong CISD or a reaction; a live strong
+   15m CISD on the CISD line is the setup read even when the last 15m
+   candle line shows no pattern (`15m cisd up|down`).
   The level: the
    broken one or a level next to it (the RTH VWAP, a 15m swing; within
    about 0.25 x the 15m ATR, a hypothesis: one zone; `levels-and-reactions`).
@@ -14097,7 +14115,9 @@ never the composed setup read (`compose_check` takes a live strong one):
 4.
   **The setup**: the 15m turn: a live 15m CISD, a 15m BOS or a 15m
    reaction at the level, the side's way → the pullback ended on the 15m;
-   no 15m BOS to wait for after a strong CISD or a reaction.
+   no 15m BOS to wait for after a strong CISD or a reaction; a live strong
+   15m CISD on the CISD line is the setup read even when the last 15m
+   candle line shows no pattern (`15m cisd up|down`).
   The level: the
    broken one or a level next to it (the RTH VWAP, a 15m swing; within
    about 0.25 x the 15m ATR, a hypothesis: one zone; `levels-and-reactions`).
@@ -15514,7 +15534,9 @@ never the composed setup read (`compose_check` takes a live strong one):
 4.
   **The setup**: the 15m turn: a live 15m CISD, a 15m BOS or a 15m
    reaction at the level, the side's way → the pullback ended on the 15m;
-   no 15m BOS to wait for after a strong CISD or a reaction.
+   no 15m BOS to wait for after a strong CISD or a reaction; a live strong
+   15m CISD on the CISD line is the setup read even when the last 15m
+   candle line shows no pattern (`15m cisd up|down`).
   The level: the
    broken one or a level next to it (the RTH VWAP, a 15m swing; within
    about 0.25 x the 15m ATR, a hypothesis: one zone; `levels-and-reactions`).
@@ -17013,7 +17035,9 @@ never the composed setup read (`compose_check` takes a live strong one):
 4.
   **The setup**: the 15m turn: a live 15m CISD, a 15m BOS or a 15m
    reaction at the level, the side's way → the pullback ended on the 15m;
-   no 15m BOS to wait for after a strong CISD or a reaction.
+   no 15m BOS to wait for after a strong CISD or a reaction; a live strong
+   15m CISD on the CISD line is the setup read even when the last 15m
+   candle line shows no pattern (`15m cisd up|down`).
   The level: the
    broken one or a level next to it (the RTH VWAP, a 15m swing; within
    about 0.25 x the 15m ATR, a hypothesis: one zone; `levels-and-reactions`).
@@ -18503,7 +18527,9 @@ never the composed setup read (`compose_check` takes a live strong one):
 4.
   **The setup**: the 15m turn: a live 15m CISD, a 15m BOS or a 15m
    reaction at the level, the side's way → the pullback ended on the 15m;
-   no 15m BOS to wait for after a strong CISD or a reaction.
+   no 15m BOS to wait for after a strong CISD or a reaction; a live strong
+   15m CISD on the CISD line is the setup read even when the last 15m
+   candle line shows no pattern (`15m cisd up|down`).
   The level: the
    broken one or a level next to it (the RTH VWAP, a 15m swing; within
    about 0.25 x the 15m ATR, a hypothesis: one zone; `levels-and-reactions`).
@@ -19993,7 +20019,9 @@ never the composed setup read (`compose_check` takes a live strong one):
 4.
   **The setup**: the 15m turn: a live 15m CISD, a 15m BOS or a 15m
    reaction at the level, the side's way → the pullback ended on the 15m;
-   no 15m BOS to wait for after a strong CISD or a reaction.
+   no 15m BOS to wait for after a strong CISD or a reaction; a live strong
+   15m CISD on the CISD line is the setup read even when the last 15m
+   candle line shows no pattern (`15m cisd up|down`).
   The level: the
    broken one or a level next to it (the RTH VWAP, a 15m swing; within
    about 0.25 x the 15m ATR, a hypothesis: one zone; `levels-and-reactions`).
@@ -21417,7 +21445,9 @@ never the composed setup read (`compose_check` takes a live strong one):
 4.
   **The setup**: the 15m turn: a live 15m CISD, a 15m BOS or a 15m
    reaction at the level, the side's way → the pullback ended on the 15m;
-   no 15m BOS to wait for after a strong CISD or a reaction.
+   no 15m BOS to wait for after a strong CISD or a reaction; a live strong
+   15m CISD on the CISD line is the setup read even when the last 15m
+   candle line shows no pattern (`15m cisd up|down`).
   The level: the
    broken one or a level next to it (the RTH VWAP, a 15m swing; within
    about 0.25 x the 15m ATR, a hypothesis: one zone; `levels-and-reactions`).
@@ -22832,7 +22862,9 @@ never the composed setup read (`compose_check` takes a live strong one):
 4.
   **The setup**: the 15m turn: a live 15m CISD, a 15m BOS or a 15m
    reaction at the level, the side's way → the pullback ended on the 15m;
-   no 15m BOS to wait for after a strong CISD or a reaction.
+   no 15m BOS to wait for after a strong CISD or a reaction; a live strong
+   15m CISD on the CISD line is the setup read even when the last 15m
+   candle line shows no pattern (`15m cisd up|down`).
   The level: the
    broken one or a level next to it (the RTH VWAP, a 15m swing; within
    about 0.25 x the 15m ATR, a hypothesis: one zone; `levels-and-reactions`).
@@ -24158,7 +24190,9 @@ never the composed setup read (`compose_check` takes a live strong one):
 4.
   **The setup**: the 15m turn: a live 15m CISD, a 15m BOS or a 15m
    reaction at the level, the side's way → the pullback ended on the 15m;
-   no 15m BOS to wait for after a strong CISD or a reaction.
+   no 15m BOS to wait for after a strong CISD or a reaction; a live strong
+   15m CISD on the CISD line is the setup read even when the last 15m
+   candle line shows no pattern (`15m cisd up|down`).
   The level: the
    broken one or a level next to it (the RTH VWAP, a 15m swing; within
    about 0.25 x the 15m ATR, a hypothesis: one zone; `levels-and-reactions`).
