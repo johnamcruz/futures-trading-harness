@@ -142,3 +142,11 @@ test('layer teaching: the 15m turn and the late 15m BOS are stated alike in pull
   // The 3m timing names both reads wherever the watch is taught.
   assert.match(read('pullback-vs-reversal'), /watch for the BOS or CISD; not the entry\. No BOS or CISD after it: no setup, pass\./);
 });
+
+// A CISD's strength (the owner: "cisd with last candle being engulfing is strong") is its displacement, never a pattern
+// name, so candle-reading's "a name adds no strength" and the CISD read say the same thing in all three homes.
+test('layer teaching: a strong CISD (an engulfing confirming candle included) is displacement strength, not a pattern name, in candle-reading, cisd and pullback-vs-reversal', () => {
+  assert.match(read('pullback-vs-reversal'), /the CISD line's `strong` is its displacement's strength, not a pattern name/);
+  assert.match(read('candle-reading'), /a CISD's `strong` \(an engulfing confirming candle included\) is its displacement's strength, not a name \(`cisd`\)/);
+  assert.match(read('cisd'), /an engulfing ranks with other strong ones/);
+});

@@ -32,8 +32,8 @@ the mirror). Open from the `Pullback` line (steps 6-7 outlive it). BOS the
 side's way confirms, CHoCH against warns; a CISD reads as the same: the
 side's way as a BOS, against as a CHoCH, earlier (`cisd`). Strong
 (`displacement` strong; an engulfing confirming candle, `engulfing`, is
-one: `cisd`) weighs more in the count, by the CISD line, not the candle's
-name; weak (no zone) weighs less and is
+one: `cisd`) weighs more in the count: the CISD line's `strong` is its displacement's strength, not a pattern name
+(`candle-reading`); weak (no zone) weighs less and is
 never the composed setup read (`compose_check` takes a live strong one):
 
 1. The 4h + 1h set the side (`htf-to-ltf`); never counter.
@@ -49,14 +49,16 @@ never the composed setup read (`compose_check` takes a live strong one):
    it (`fib-retracement`, the CISD's `ote`), depth and location only, never
    an entry or a reversal zone. Counter candles that don't engulf it: a
    pullback forming, not a reversal; a counter candle engulfing it reads
-   as a CHoCH against: wait. "Engulfs it": a counter 15m close back
+   as a CHoCH against: wait. A counter 15m close below the impulse's open
+   (long; above it, short): the pullback failed (step 8), not a watch. "Engulfs it": a counter 15m close back
    through the impulse candle's body (long: below its open), whatever lies
    between; the `engulfing` label and the CISD's `engulfing` compare only
    the prior candle. Printed proxies: the printed `inside the <time> candle <low>-<high>`
    (the impulse candle's), the `Pullback` depth.
 4. **The setup**: the 15m turn: a live 15m CISD, a 15m BOS or a 15m
    reaction at the level, the side's way → the pullback ended on the 15m;
-   no 15m BOS to wait for after a strong CISD or a reaction.
+   no 15m BOS to wait for after a strong CISD or a reaction. The level: the
+   broken one or a level next to it (the RTH VWAP, a 15m swing).
    Composed as `15m cisd up` (true while live), or that 15m candle's read
    (`15m rejected <level> up`: long-wick, engulfing or confirmed,
    `candle-reading`; a BOS's breaking candle `15m broke <level> up`), true
