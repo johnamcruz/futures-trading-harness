@@ -67,7 +67,12 @@ const PINS = {
     'depth alone is no edge; buying a 50% or 62% retrace with the 4h trend lost after costs (F5).',
     'A 15m CHoCH inside an intact 1h and 4h structure is a pullback.',
     'CHoCHs stacking up the timeframes (15m, then 1h) are a reversal developing;',
-    'it is the entry, on the next 3m bar; a 3m turn (`m3.timing`) is context, never a wait.',
+    'A 3m CHoCH back the side\'s way: the 3m counter-move ended; watch for the BOS; not the entry. No BOS after it: no setup, pass.',
+    'never a limit back at the broken or the CHoCH level (`breakout`: a retest is support, never a wait).',
+    '**Entry**: the first 3m BOS the side\'s way (`m3.lastBreak.last`), near value (Trend declared? RTH VWAP or EMA20 within about ±0.5), inside or just out of the pullback',
+    'A 15m BOS the side\'s way after it: continuation confirmed → hold.',
+    'this pullback failed, a reversal attempt: a candle at a level is no confirmation; wait for a 15m BOS the side\'s way',
+    'A 15m `range` or `transition` here is the pause, not chop.',
   ],
   'breakout-vs-fakeout': [
     'a level traded through from inside and closed back inside within 1-3 bars, in the last 10 bars',
@@ -232,7 +237,7 @@ const PINS = {
     'A close strictly beyond the last confirmed swing not yet broken; each swing breaks once. Only closes count, on completed candles.',
     'In the code, that is the previous break\'s direction (the first break too).',
     'No one timeframe is the signal; read them top-down.',
-    '| 3m, 5m | a candle fact only: never the setup, never a wait | a candle fact only (its swings are for the stop) |',
+    '| 3m, 5m | a candle fact only: never the setup, never a wait (inside an open 15m pullback: `pullback-vs-reversal`) | a candle fact only (its swings are for the stop) |',
     '| 15m | the working structure continues | the working structure shifting: a deeper pullback, or a reversal starting |',
     '| 1h (4h swings) | the HTF trend continues | the strongest sign of an HTF trend change, not a reversal by itself: a BOS the new way confirms it |',
     'CHoCHs stacking up the timeframes (15m, then 1h) are a reversal developing; a 1h CHoCH while the 4h and 1h agree is context.',
@@ -299,7 +304,9 @@ test('basics skills: frontmatter, the sections in order, and small', () => {
     const words = body.split(/\s+/).filter(Boolean).length;
     // candle-reading carries the reaction-at-a-level read (feat/sweep-candle-control, owner-approved 2026-10-31: "This will
     // provide useful context"): the seven reactions, their priority, the context it is read in (then 969: the owner rule, the reaction rules hold on every timeframe and a higher one's reaction is stronger confirmation; then 1023, owner: rejection relies on candle-reading; the side is the candle's (q30); then 1026, owner: no bare rejection (plain is no rejection read); sweeps need candle-reading too; then 1044, owner: q30 side confusion; side rule first; then 1237 (+193), fix/quiz-side-doji, owner: q29/q30/q33 answered correctly: the side never from the bias, the briefing's side, a stall decides nothing, the four side and trend-rule cases, a paired side example) and their evidence.
-    assert.ok(words >= 250 && words <= (s === 'candle-reading' ? 1237 : 650), `${s}: ${words} words`);
+    // Then candle-reading 1267 and pullback-vs-reversal 1061 (feat/pullback-concept, owner-approved 2026-11-14: the unlabeled candle
+    // names; the pullback to a broken level, BOS for continuation, CHoCH for reversal, its 3m entry, the examples).
+    assert.ok(words >= 250 && words <= (s === 'candle-reading' ? 1267 : s === 'pullback-vs-reversal' ? 1061 : 650), `${s}: ${words} words`);
     // The two setups also carry a timeframe table (what the setup means on 3m/5m, 15m and 1h/4h): a little more room
     // (scripts/lib/skill-caps.js, the one source the training loop's probe edits read too).
     const max = skillByteCap(s);

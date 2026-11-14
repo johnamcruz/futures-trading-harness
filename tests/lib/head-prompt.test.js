@@ -119,7 +119,10 @@ test('CORE: the composed bar\'s reads the gate requires (SITUATIONAL taught in t
   // first, then chop, unclear or an unsupported trend class a pass) and Compose first +825, trader-process (step 8, the
   // opening bullet, the scorecard line saying what the scorecard records) +318, htf-to-ltf (after main's side rule, the
   // head trader's own read decides, and the briefing's Bias/Trend rule lines are the gate's floor) +396.
-  assert.ok(Buffer.byteLength(prompt) <= 81342, `the head prompt is ${Buffer.byteLength(prompt)} bytes`);
+  // Then 82125 (feat/pullback-concept, owner-approved 2026-11-14, same rule): the head core of the pullback read in
+  // htf-to-ltf (BOS confirms, CHoCH warns, against the side; the 3m BOS near value its entry; a 15m range or transition the
+  // pause) and the pointers to it in trade-session, trader-process, rejection and trade-lifecycle (+783).
+  assert.ok(Buffer.byteLength(prompt) <= 82125, `the head prompt is ${Buffer.byteLength(prompt)} bytes`);
   // Only the head trader's prompt grows: no other role's prompt embeds trade-lifecycle (the risk manager's embeds
   // confluence-counting and invalidation as before; its prompt is unchanged, pinned in trade-session-split.test.js).
   for (const [name, a] of Object.entries(index.agent)) if (name !== H.HEAD_AGENT && a.prompt) assert.ok(!a.prompt.includes('<skill name="trade-lifecycle">'), name);

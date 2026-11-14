@@ -58,6 +58,9 @@ prior candle, ATR(14) as of prev):
 - displacement: B at least 0.7 R and R at least 1.5 x ATR, `dir` its
   close vs open; it starts a leg, out of a box (`compression`) or a
   level.
+- not labeled, a name adds no strength: piercing line, morning star,
+  tweezers: read their reaction at the level; rising three methods, mat
+  hold: a pole, then an inside stack (`compression`'s pennant).
 
 A CISD's strong displacement: `cisd`. **Context decides**: with the HTF
 read (`trend-vs-range`, `pullback-vs-reversal`) and momentum and volume
