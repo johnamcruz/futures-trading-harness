@@ -98,10 +98,10 @@ test('context quiz: every layer asked, ids unique, the bar the whole quiz at K 5
   // q72 4/5, q73 4/5, q74 1/5 and q75 4/5 at k=5 were removed, real model misses (the model treats unknown or neutral
   // fields as conflicting, and sometimes calls a with-trend pullback a chop sign), as q45 and q53 were: a skill gap
   // reported to the owner. q76-q78 (class D, conflicting) were dropped in review.
-  // 76 since q87-q99 (feat/pullback-concept, owner-approved 2026-11-14: the pullback to a broken level, BOS confirms and
+  // 84 since q87-q107 (feat/pullback-concept, owner-approved 2026-11-14: the pullback to a broken level, BOS confirms and
   // CHoCH warns on the 3m and the 15m against the 4h + 1h side, the pause not chop, late, the down mirror, the strict side,
-  // the deep case (a candle at a level is no confirmation), close to the picture a read; closed choices, each measured at k=3 before it entered the bar).
-  assert.strictEqual(QUIZ.questions.length, 76);
+  // the deep case, close to the picture a read, the 15m and 3m CISD; closed choices, each measured at k=3 before it entered the bar).
+  assert.strictEqual(QUIZ.questions.length, 84);
   for (const id of ['q71', 'q72', 'q73', 'q74', 'q75', 'q76', 'q77', 'q78']) assert.ok(!QUIZ.questions.some(x => x.id === id), id);
   assert.strictEqual(QUIZ.partB.length, 8);
 });
@@ -169,26 +169,36 @@ test('context quiz: the chop questions (q79-q82) are asked against the prompt ho
   }
 });
 
-test('context quiz: the pullback questions (q87-q99) are asked against the prompt holding the sentence each anchors to, and go missing without it', () => {
+test('context quiz: the pullback questions (q87-q107) are asked against the prompt holding the sentence each anchors to, and go missing without it', () => {
   const prompts = Q.buildPrompts(ROOT, QUIZ);
   const flat = t => t.replace(/\s+/g, ' ');
   const cut = re => Object.fromEntries(Object.entries(prompts).map(([k, v]) => [k, flat(v).replace(re, '')]));
   const PB = ['pullback-vs-reversal'];
   // [id, prompt, lookup, the sentence it anchors to, deleted from every prompt]
   const want = [
-    ['q87', 'lookup', PB, /the first 3m BOS the side's way \(`m3\.lastBreak\.last`\)/g],
+    ['q87', 'lookup', PB, /the first 3m BOS or 3m CISD the side's way, near value/g],
     ['q88', 'lookup', PB, /A 15m BOS the side's way after it: continuation confirmed → hold\./g],
-    ['q89', 'lookup', PB, /this pullback failed, a reversal attempt: a candle at a level is no confirmation/g],
+    ['q89', 'lookup', PB, /this pullback failed, a reversal attempt: wait for a new 15m turn the side's way/g],
     ['q90', 'lookup', PB, /a 3m CHoCH against the side inside an intact 15m trend: a pullback starting, wait\./g],
     ['q91', 'lookup', PB, /A 15m `range` or `transition` here is the pause, not chop\./g],
-    ['q92', 'lookup', PB, /Far past the level, no retest: late, pass\./g],
+    ['q92', 'lookup', PB, /Far past the level, no retest: late, not this read's entry\./g],
     ['q93', 'lookup', PB, /up shown, down the mirror/g],
+    // A strict-side guard (main's text): one of the 4h and 1h ranging is chop or unclear to the head trader, whatever the 3m.
     ['q94', 'head', undefined, /one or both `range` → `chop` or `unclear`/g],
     ['q95', 'head', undefined, /a 15m pullback, `range` or `transition` under them doesn't cancel it/g],
     ['q96', 'lookup', PB, /watch for the BOS; not the entry\./g],
     ['q97', 'lookup', PB, /No BOS after it: no setup, pass\./g],
+    ['q98', 'lookup', PB, /a candle at the level is no confirmation alone/g],
     ['q99', 'lookup', PB, /The sequence is the reference picture, not a checklist/g],
-    ['q98', 'lookup', PB, /a candle at a level is no confirmation; wait for a 15m BOS the side's way/g],
+    ['q100', 'lookup', PB, /a live 15m CISD the side's way/g],
+    ['q101', 'lookup', PB, /the entry needs a 3m BOS or CISD the side's way and a true 15m setup read the side's way/g],
+    ['q102', 'lookup', PB, /`3m cisd up` in the setup step/g],
+    ['q103', 'lookup', PB, /A 15m CHoCH or CISD against → this pullback failed/g],
+    // The old answer (the 15m setup is the entry, no 3m turn to wait for) as the distractor: a Pullback line printed, the head core says wait.
+    ['q104', 'head', undefined, /unless a `Pullback` line is printed \(below\)/g],
+    ['q105', 'lookup', PB, /A 3m CHoCH or CISD against inside it: the watch restarts\./g],
+    ['q107', 'head', undefined, /your PLAN's `4 Setup` line is the read chain/g],
+    ['q106', 'lookup', PB, /an engulfing confirming candle, `engulfing`, is one: `cisd`\) weighs more in the count/g],
   ];
   assert.deepStrictEqual(Q.anchorsMissing(QUIZ, prompts).filter(x => want.some(w => w[0] === x)), []);
   for (const [id, prompt, lookup, re] of want) {
@@ -199,19 +209,23 @@ test('context quiz: the pullback questions (q87-q99) are asked against the promp
   }
   // The pullback skill is a lookup, never embedded in the head prompt (its size and the gate unchanged).
   assert.ok(!prompts.head.includes('<skill name="pullback-vs-reversal">'));
-  // The briefing lines are the code's writers: the Bias, Pullback and Trend declared? lines.
+  // The briefing lines are the code's writers (the Bias, Pullback and Trend declared? lines); each Pullback line's depth is
+  // the share of the leg its last close gave back, at least 10 bars (two completed 15m candles) after the extreme.
   const { pullbackLine } = require('../../scripts/lib/trading/pullback-read');
   const { declaredLine } = require('../../scripts/lib/trading/trend-declared');
   const sd = (v, e, o, m, g) => ({ vwapAtr: v, ema20Atr: e, overnight: o, dayMoveAtr: m, regime: g });
   const text = id => QUIZ.questions.find(x => x.id === id).text;
   const up = `- ${Q.excerptOf({ bias: { h4: 1, h1: 1, t15: 1 } })[0]}`;
-  const pb = pullbackLine({ frame: '15m', side: 'long', leg: { origin: 21462.5, extreme: 21538.75 }, depth: 0.41, pastOrigin: false, counter: { bars: 5, volRatio: 0.6, volume: 'falling', rangeRatio: 0.5 },
+  const leg = { origin: 21462.5, extreme: 21538.75 };
+  const pb = close => pullbackLine({ frame: '15m', side: 'long', leg, depth: (leg.extreme - close) / (leg.extreme - leg.origin), pastOrigin: false, counter: { bars: 10, volRatio: 0.6, volume: 'falling', rangeRatio: 0.5 },
     swing: { '15m': { price: 21462.5, holds: true }, '1h': { price: 21390.25, holds: true } }, against: { '15m': null, '1h': null } });
   const near = declaredLine({ long: sd(0.3, 0.2, 'broke out its way', 1.6, 'with'), short: sd(-0.3, -0.2, 'broke out against', -1.6, 'against') });
-  for (const id of ['q87', 'q96', 'q97']) for (const line of [up, pb, near]) assert.ok(text(id).includes(`\n${line}\n`), `${id}: ${line}`);
+  for (const [id, close] of [['q87', 21518.25], ['q96', 21512.5], ['q97', 21503.75], ['q99', 21518], ['q100', 21518.25], ['q101', 21509.5], ['q102', 21513.75], ['q103', 21503], ['q104', 21504.25], ['q105', 21505.5], ['q106', 21518.25], ['q107', 21518.25]]) {
+    for (const line of [up, pb(close), near]) assert.ok(text(id).includes(`\n${line}\n`), `${id}: ${line}`);
+  }
   assert.ok(text('q94').includes(`\n- ${Q.excerptOf({ bias: { h4: 0, h1: 1, t15: 1 } })[0]}\n`));
-  const deep = pullbackLine({ frame: '15m', side: 'short', leg: { origin: 4337.5, extreme: 4246.25 }, depth: 0.83, pastOrigin: false, counter: { bars: 8, volRatio: 1.1, volume: 'rising', rangeRatio: 1.2 },
+  assert.ok(text('q93').includes(`\n- ${Q.excerptOf({ bias: { h4: -1, h1: -1, t15: -1 } })[0]}\n`));
+  const deep = pullbackLine({ frame: '15m', side: 'short', leg: { origin: 4337.5, extreme: 4246.25 }, depth: 0.83, pastOrigin: false, counter: { bars: 12, volRatio: 1.1, volume: 'rising', rangeRatio: 1.2 },
     swing: { '15m': { price: 4291.75, holds: false }, '1h': { price: 4352.5, holds: true } }, against: { '15m': { kind: 'CHoCH', direction: 'up', level: 4291.75, barsAgo: 3 }, '1h': null } });
   assert.ok(text('q98').includes(`\n${deep}\n`), deep);
-  assert.ok(text('q93').includes(`\n- ${Q.excerptOf({ bias: { h4: -1, h1: -1, t15: -1 } })[0]}\n`));
 });

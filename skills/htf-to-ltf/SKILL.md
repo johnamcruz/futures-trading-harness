@@ -35,16 +35,17 @@ else no trade. A CHoCH against the bias is context, never a way in.
 The setup is the 15m (or higher) reaction or break the
 bias's way (its candle's strength and close: `candle-reading`): it
 is the entry; the 3m only times the entry: the next 3m bar, no
-confirming close, no 3m turn to wait for (waiting cost R); inside an
-open 15m pullback, its own entry (below).
-**Pullback** (`pullback-vs-reversal`, the full read): BOS confirms,
-CHoCH warns, judged against the side. Inside an open 15m pullback, after
-the 15m reaction at the level, a 3m CHoCH back the side's way: watch;
-the first 3m BOS the side's way near value is the entry, on the next
-3m bar. A 15m BOS the side's way: continuation, hold. A CHoCH against
-(3m: a pullback starting; 15m: a reversal attempt): wait, never counter.
-A 15m `range` or `transition` while small counter candles stay inside
-the impulse is the pause, not chop.
+confirming close, no 3m turn to wait for (waiting cost R), unless
+a `Pullback` line is printed (below).
+**Pullback** (a `Pullback` line printed; `pullback-vs-reversal`): BOS
+or CISD the side's way confirms, CHoCH or CISD against warns. The 15m
+turn (a live 15m CISD or a 15m reaction the side's way) is the setup; a
+3m CHoCH back: watch; the first 3m BOS or CISD the side's way near value
+(`Trend declared?` RTH VWAP or EMA20 within about ±0.5): the entry, the
+next 3m bar. A 15m BOS the side's way: hold. A CHoCH or CISD against (3m:
+the watch restarts; 15m: a reversal attempt): wait, never counter. A 15m
+`range` or `transition` with small counter candles inside the impulse:
+the pause, not chop.
 Not in a prop attempt: the trend rule alone (both ranging, the 15m's
 side; no trend anywhere, both sides).
 Then the head trader's own STATE read decides the take (`trade-session`

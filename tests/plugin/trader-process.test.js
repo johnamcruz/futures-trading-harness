@@ -90,7 +90,7 @@ test('trader-process: it orders the thinking and adds no filter; the count decid
     // The trigger there and the count for: take it, never wait on (the baseline waited until the setup expired); the 3m only
     // times it (feat/bias-bg: no 3m turn to wait for).
     // Inside an open 15m pullback, its own entry (feat/pullback-concept, owner-approved 2026-11-14: the first 3m BOS the side's way).
-    '**Entry.** The setup is the entry, on the next 3m bar; no confirming close or 3m turn to wait for (inside an open 15m pullback: `pullback-vs-reversal`) → `compose_check` now.',
+    '**Entry.** The setup is the entry, on the next 3m bar; no confirming close or 3m turn to wait for (a `Pullback` line printed: `pullback-vs-reversal`) → `compose_check` now.',
     'Never loosen the stop.',
     // The side is the trend's (the owner's trend-following decision): a pullback's end with it, against it only on the CHoCH tier.
     '**Setup.** The setup reads (`trade-lifecycle`), on the side rule\'s side (`htf-to-ltf`).',

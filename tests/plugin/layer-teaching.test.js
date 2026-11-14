@@ -97,3 +97,33 @@ test('layer teaching: the head trader\'s skills say each layer the one way', () 
   ]) assert.ok(head.includes(phrase), `${layer}: ${phrase}`);
   for (const s of Object.keys(LAYERS)) assert.ok(fs.existsSync(path.join(ROOT, 'skills', s, 'SKILL.md')), s);
 });
+
+// The owner's pullback entry (feat/pullback-concept, 2026-11-14, option 2): while the briefing prints a `Pullback` line,
+// the 15m turn is the setup read and the first 3m BOS or CISD the side's way near value is the entry. Every home that
+// teaches "the setup is the entry, no 3m turn to wait for" names that one scope and points to the read, so no prompt
+// holds the two rules unscoped.
+test('layer teaching: every "the setup is the entry" home scopes the pullback entry (a `Pullback` line printed: pullback-vs-reversal)', () => {
+  const SCOPE = /a `Pullback` line (?:is )?printed[^.]*?`pullback-vs-reversal`|`Pullback` line(?: printed)?: [^.]*?`pullback-vs-reversal`|unless a `Pullback` line is printed/;
+  const homes = [
+    ['skills/htf-to-ltf/SKILL.md', /no 3m turn to wait for \(waiting cost R\), unless a `Pullback` line is printed/],
+    ['skills/trader-process/SKILL.md', /3m turn to wait for \(a `Pullback` line printed: `pullback-vs-reversal`\)/],
+    ['skills/rejection/SKILL.md', /no 3m turn or break to wait for \(a `Pullback` line printed: `pullback-vs-reversal`\)/],
+    ['skills/top-down-entry/SKILL.md', /no 3m turn or break to wait for \(a `Pullback` line printed: `pullback-vs-reversal`\)/],
+    ['skills/bos-vs-choch/SKILL.md', /never a wait \(a `Pullback` line: `pullback-vs-reversal`\)/],
+    ['skills/trade-lifecycle/SKILL.md', /no confirming close to wait for \(a `Pullback` line printed: `pullback-vs-reversal`\)/],
+    ['skills/breakout/SKILL.md', /close beyond is the entry \(a `Pullback` line printed: `pullback-vs-reversal`\)/],
+    ['skills/confluence-counting/SKILL.md', /→ call `compose_check`\. A `Pullback` line printed: at its 3m BOS or CISD \(`pullback-vs-reversal`\)\./],
+    ['rules/trading/decision.md', /\(a `Pullback` line printed: at its 3m BOS or CISD, `pullback-vs-reversal`\)/],
+    ['skills/cisd/SKILL.md', /ends it; the entry: its 3m BOS or CISD \(`pullback-vs-reversal`\)/],
+  ];
+  for (const [file, re] of homes) {
+    const t = flat(fs.readFileSync(path.join(ROOT, file), 'utf8'));
+    assert.match(t, re, file);
+  }
+  // The read itself names its scope once, and the CISD skill no longer puts a pullback's entry at the next close.
+  assert.match(read('pullback-vs-reversal'), /Open while the briefing prints a `Pullback` line\./);
+  assert.doesNotMatch(read('cisd'), /ends the pullback; the next close is the entry/);
+  assert.ok(SCOPE.test(read('trader-process')));
+  // The always-on rule reaches every harness: the generated workspace instructions carry the scope.
+  assert.match(flat(fs.readFileSync(path.join(ROOT, 'workspace', 'AGENTS.md'), 'utf8')), /a `Pullback` line printed: at its 3m BOS or CISD, `pullback-vs-reversal`/);
+});

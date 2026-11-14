@@ -38,7 +38,7 @@ It adds no filter and no veto:
    Read: `pullback-vs-reversal`, `cisd`; setups: `rejection`, `breakout`, `fair-value-gaps`.
 5. **Confluence.** The six categories of `confluence-counting`.
 6. **Entry.** The setup is the entry, on the next 3m bar; no
-   confirming close or 3m turn to wait for (inside an open 15m pullback: `pullback-vs-reversal`) → `compose_check` now.
+   confirming close or 3m turn to wait for (a `Pullback` line printed: `pullback-vs-reversal`) → `compose_check` now.
    Read: `candle-reading`, `momentum-and-volume`.
 7. **Risk.** Stop (`invalidation`) and target (`take-profit`) reads,
    size; R:R: the compose record's, never yours.

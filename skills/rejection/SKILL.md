@@ -51,7 +51,7 @@ By PLAN step:
 - **5 Confluence**: volume or absorption at the level (`momentum-and-volume`,
    `absorption`), counted by `confluence-counting`.
 - **6 Entry**: the 15m or 1h rejection is the entry: a limit at the last close when you compose (the setup's own close when you compose on its bar), filled within `valid_bars`;
-   no 3m turn or break to wait for (inside an open 15m pullback: `pullback-vs-reversal`). Never anticipate it.
+   no 3m turn or break to wait for (a `Pullback` line printed: `pullback-vs-reversal`). Never anticipate it.
 - **7 Risk**: the idea is wrong beyond the rejection wick: the stop read
    names it (`invalidation`). The trail exits (`target trail`,
    `take-profit`); the first level ahead (`inTheWay`) is a read (step 3).

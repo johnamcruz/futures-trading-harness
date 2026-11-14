@@ -15,7 +15,8 @@ description: Trader-process step 5 - a valid setup is the trade; six independent
 rejection or breakout at a key level or FVG, closed (it is the entry: a limit at the last
 close when you compose (the setup's own close when you compose on its
 bar), filled within `valid_bars`) → call
-`compose_check`. Never estimate room or R:R: the briefing's "Standard
+`compose_check`. A `Pullback` line printed: at its 3m BOS or CISD
+(`pullback-vs-reversal`). Never estimate room or R:R: the briefing's "Standard
 plan" line states it; OK → compose with its reads, refused → pass,
 naming it.
 OK → **a valid setup is the trade**. In a prop attempt nothing halves: a serious factor against doesn't cut the size; the code sets the full verdict size. The against:
