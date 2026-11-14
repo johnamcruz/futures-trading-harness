@@ -501,7 +501,7 @@ test('state line: the decision follows the model\'s own STATE read (taught, no c
     // (tests/e2e/state-read-invariance-e2e.test.js).
     "(the head trader's own, the last line of its PLAN; taught: the gate and `compose_check` do not read it)",
     // The class follows the frames the model wrote: a trend class needs its 4h and 1h that way.
-    "The class follows your frames: your 4h and 1h both one way → that trend class (a 15m pullback, `range` or `transition` under them doesn't cancel it, nor does your `frames disagree`: never `chop` or `unclear` for it); one or both `range` → `chop` or `unclear`.",
+    "The class follows your frames: your 4h and 1h both one way → that trend class (a 15m pullback, `range` or `transition` under them doesn't cancel it, nor does your `frames disagree`: never `chop` or `unclear` for it); not both one way → `unclear`, `chop` only when the movement itself is choppy (breaks both ways without follow-through, overlapping candles, the Day so far `rotational`, many RTH VWAP crosses): a frame's `range` or `transition` alone is never `chop`.",
     // A take agrees with the read: the class and the 4h and 1h on the setup's side (the never-counter-HTF rule, in its own words).
     'A take: `class` on its side (`trend-up` long, `trend-down` short), your 4h and 1h too (`up` long, `down` short).',
     // compose_check first (its record is what the pass is scored on), then a pass that names the read: the head trader's
@@ -533,7 +533,7 @@ test('state line: the decision follows the model\'s own STATE read (taught, no c
   const htf = read('skills/htf-to-ltf/SKILL.md');
   assert.ok(htf.includes('**The side rule** (in an attempt): each trending 4h or 1h your way, neither against; both ranging: the 15m and `Trend declared?` your way; else no trade.'));
   assert.ok(htf.includes('4h and 1h RANGE, 15m DOWN, declared short: short only.'));
-  assert.ok(htf.includes("Then the head trader's own STATE read decides the take (`trade-session` step 3): its own 4h and 1h both range, or one of them not trending the side, is `chop` or `unclear` to it; both the side's way, a 15m range, transition or pullback under them, is the side's trend class."));
+  assert.ok(htf.includes("Then the head trader's own STATE read decides the take (`trade-session` step 3): its own 4h and 1h both range, or one of them not trending the side, is `unclear` to it (`chop`: choppy movement only); both the side's way, a 15m range, transition or pullback under them, is the side's trend class."));
   assert.ok(htf.includes("The briefing's `Bias:`/`Trend rule:` lines are the gate's floor (what it refuses), never your side: your own STATE read is stricter."));
   assert.ok(htf.indexOf('Then the head trader') > htf.indexOf('**The side rule**'), 'after the side rule');
   // The documented example (a full long take) satisfies the taught rule: class trend-up, 4h up, 1h up.

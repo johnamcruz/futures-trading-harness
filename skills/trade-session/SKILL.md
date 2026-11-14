@@ -140,7 +140,10 @@ line of its PLAN; taught: the gate and `compose_check` do not read it):
 - The class follows your frames: your 4h and 1h both one way → that
   trend class (a 15m pullback, `range` or `transition` under them doesn't
   cancel it, nor does your `frames disagree`: never `chop` or `unclear`
-  for it); one or both `range` → `chop` or `unclear`.
+  for it); not both one way → `unclear`, `chop` only when the movement
+  itself is choppy (breaks both ways without follow-through, overlapping
+  candles, the Day so far `rotational`, many RTH VWAP crosses): a frame's
+  `range` or `transition` alone is never `chop`.
 - A take: `class` on its side (`trend-up` long, `trend-down` short), your
   4h and 1h too (`up` long, `down` short).
 - `compose_check` still runs first (its record is the evidence the pass is

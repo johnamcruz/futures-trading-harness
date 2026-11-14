@@ -98,11 +98,11 @@ test('context quiz: every layer asked, ids unique, the bar the whole quiz at K 5
   // q72 4/5, q73 4/5, q74 1/5 and q75 4/5 at k=5 were removed, real model misses (the model treats unknown or neutral
   // fields as conflicting, and sometimes calls a with-trend pullback a chop sign), as q45 and q53 were: a skill gap
   // reported to the owner. q76-q78 (class D, conflicting) were dropped in review.
-  // 87 since q87-q111 (q100 folded into q106, the same briefing: a quiz of 95 keeps the gate's maxSlips 8 within its
+  // 88 since q87-q112 (q100 folded into q106, the same briefing: a quiz of 95 keeps the gate's maxSlips 8 within its
   // pinned false-reject rate) (feat/pullback-concept, owner-approved 2026-11-14: the pullback to a broken level, BOS confirms and
   // CHoCH warns on the 3m and the 15m against the 4h + 1h side, the pause not chop, late, the down mirror, the strict side,
   // the deep case, close to the picture a read, the 15m and 3m CISD; closed choices, each measured at k=3 before it entered the bar).
-  assert.strictEqual(QUIZ.questions.length, 87);
+  assert.strictEqual(QUIZ.questions.length, 88);
   for (const id of ['q71', 'q72', 'q73', 'q74', 'q75', 'q76', 'q77', 'q78']) assert.ok(!QUIZ.questions.some(x => x.id === id), id);
   assert.strictEqual(QUIZ.partB.length, 8);
 });
@@ -170,7 +170,7 @@ test('context quiz: the chop questions (q79-q82) are asked against the prompt ho
   }
 });
 
-test('context quiz: the pullback questions (q87-q111) are asked against the prompt holding the sentence each anchors to, and go missing without it', () => {
+test('context quiz: the pullback questions (q87-q112) are asked against the prompt holding the sentence each anchors to, and go missing without it', () => {
   const prompts = Q.buildPrompts(ROOT, QUIZ);
   const flat = t => t.replace(/\s+/g, ' ');
   const cut = re => Object.fromEntries(Object.entries(prompts).map(([k, v]) => [k, flat(v).replace(re, '')]));
@@ -185,12 +185,13 @@ test('context quiz: the pullback questions (q87-q111) are asked against the prom
     ['q92', 'lookup', PB, /Far past the level, no retest: late, not this read's entry/g],
     ['q93', 'lookup', PB, /up shown, down the mirror/g],
     // A strict-side guard (main's text): one of the 4h and 1h ranging is chop or unclear to the head trader, whatever the 3m.
-    ['q94', 'head', undefined, /one or both `range` → `chop` or `unclear`/g],
+    ['q94', 'head', undefined, /not both one way → `unclear`/g],
+    ['q112', 'head', undefined, /a frame's `range` or `transition` alone is never `chop`/g],
     ['q95', 'head', undefined, /a 15m pullback, `range` or `transition` under them doesn't cancel it/g],
     ['q96', 'lookup', PB, /watch for the BOS or CISD; not the entry\./g],
     ['q97', 'lookup', PB, /No BOS or CISD after it: no setup, pass\./g],
     ['q98', 'lookup', PB, /a candle at the level is no confirmation alone/g],
-    ['q99', 'lookup', PB, /The level: the broken one or a level next to it \(the RTH VWAP, a 15m swing; within about 0\.25 x the 15m ATR: one zone, `levels-and-reactions`\)\./g],
+    ['q99', 'lookup', PB, /The level: the broken one or a level next to it \(the RTH VWAP, a 15m swing; within about 0\.25 x the 15m ATR, a hypothesis: one zone; `levels-and-reactions`\)\./g],
     ['q101', 'lookup', PB, /the entry needs a 3m BOS or CISD the side's way and a true 15m setup read the side's way/g],
     ['q102', 'lookup', PB, /`3m cisd up` in the setup step/g],
     ['q103', 'lookup', PB, /A 15m CHoCH or CISD against → this pullback failed/g],
@@ -232,4 +233,17 @@ test('context quiz: the pullback questions (q87-q111) are asked against the prom
   const deep = pullbackLine({ frame: '15m', side: 'short', leg: { origin: 4337.5, extreme: 4246.25 }, depth: 0.83, pastOrigin: false, counter: { bars: 12, volRatio: 1.1, volume: 'rising', rangeRatio: 1.2 },
     swing: { '15m': { price: 4291.75, holds: false }, '1h': { price: 4352.5, holds: true } }, against: { '15m': { kind: 'CHoCH', direction: 'up', level: 4291.75, barsAgo: 3 }, '1h': null } });
   assert.ok(text('q98').includes(`\n${deep}\n`), deep);
+});
+
+// The pullback block's free-phrase choice items (q88-q112) hold the correct choice where a seeded shuffle put it (sha256 of
+// the id, mod the choice count), never always first: a guard against first-answer bias in items added later.
+test('context quiz: the pullback items\' correct choice sits at its seeded position, not always first', () => {
+  const crypto = require('crypto');
+  const block = QUIZ.questions.filter(q => /^q(8[8-9]|9\d|1[01]\d)$/.test(q.id) && Array.isArray(q.choices) && !/^F\d$/.test(q.choices[0]));
+  assert.ok(block.length >= 15, `${block.length} free-phrase items`);
+  for (const q of block) {
+    const want = Number(BigInt(`0x${crypto.createHash('sha256').update(q.id).digest('hex')}`) % BigInt(q.choices.length));
+    assert.strictEqual(q.choices.indexOf(q.answer), want, q.id);
+  }
+  assert.ok(block.filter(q => q.choices.indexOf(q.answer) === 0).length <= block.length / 2, 'not mostly first');
 });

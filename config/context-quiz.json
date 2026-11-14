@@ -63,7 +63,7 @@
   },
   "passBar": {
     "partA": {
-      "allCorrect": 87,
+      "allCorrect": 88,
       "bothWays": 0
     },
     "partB": {
@@ -1337,15 +1337,15 @@
       "layer": "bias",
       "prompt": "head",
       "text": "Briefing lines (synthetic, 10:12 ET), flat:\n- Bias: long only (4h range, 1h up; short refused).\n- 15m (setup candle, closed 10:00): hammer; rejected prior VAH (closed back above; long-wick rejection, long side).\n- m3.lastBreak: last BOS up at 21516.75 (barsAgo 0), previous CHoCH up at 21511.25 (barsAgo 2).\nYour STATE read has 4h range, 1h up. What do you do?",
-      "rule": "one of the 4h/1h range: the class is chop or unclear: no take, whatever the 3m",
-      "anchor": "one or both `range` → `chop` or `unclear`",
+      "rule": "one of the 4h/1h ranging: the class is unclear (chop only for choppy movement): no take, whatever the 3m",
+      "anchor": "not both one way → `unclear`",
       "choices": [
         "long, a limit at this 3m close",
         "short",
-        "no take: the class is chop or unclear",
+        "no take: the class is unclear",
         "long after a 15m BOS up"
       ],
-      "answer": "no take: the class is chop or unclear"
+      "answer": "no take: the class is unclear"
     },
     {
       "id": "q95",
@@ -1425,7 +1425,7 @@
       ],
       "text": "Briefing lines (synthetic, 10:27 ET), flat:\n- Bias: long only (4h up, 1h up; short refused).\n- Pullback (15m, long leg 21462.5 -> 21538.75): depth 27% of the leg; 10 bars since the extreme, volume 0.6x the leg's per bar (falling), range 0.5x; swings since the extreme: 15m 21462.5 holds, 1h 21390.25 holds; 15m break against: none, 1h: none.\n- 15m (setup candle, closed 10:15): none, close top third, range 0.8 ATR (15m ATR(14) 12.00), vol 0.9x; rejected VWAP (rth) (closed back above; long-wick rejection, long side). The pullback low was 21502.25, 2.25 points above the broken prior RTH high 21500.00.\n- m3.lastBreak: last BOS up at 21517.25 (barsAgo 0), previous CHoCH up at 21510.75 (barsAgo 2).\n- Trend declared? (in 3m ATR(14), + = the side's way; `trend-vs-range`): long RTH VWAP +0.3, EMA20 +0.2, overnight range broke out its way, day's move +1.6, regime with; short RTH VWAP -0.3, EMA20 -0.2, overnight range broke out against, day's move -1.6, regime against.\nNo exact touch of the broken level and no named reversal candle. What is the action?",
       "rule": "close to the reference picture: the three lines hold (the 4h + 1h side, no CHoCH or CISD against, the 3m BOS up with a true 15m setup read up); the soft pieces weigh in the count: a take",
-      "anchor": "The level: the broken one or a level next to it (the RTH VWAP, a 15m swing; within about 0.25 x the 15m ATR: one zone, `levels-and-reactions`).",
+      "anchor": "The level: the broken one or a level next to it (the RTH VWAP, a 15m swing; within about 0.25 x the 15m ATR, a hypothesis: one zone; `levels-and-reactions`).",
       "choices": [
         "take: close to the picture, the three lines hold",
         "pass: not perfect",
@@ -1622,6 +1622,21 @@
         "F4"
       ],
       "answer": "F3"
+    },
+    {
+      "id": "q112",
+      "layer": "bias",
+      "prompt": "head",
+      "text": "Briefing lines (synthetic, 10:42 ET), flat:\n- Bias: long only (4h range, 1h up; short refused).\n- Day so far (24 3m bars; `day-context`): directional up: efficiency 0.52 (x sqrt(bars) 2.5), RTH VWAP crosses 1, range 3.1 x 3m ATR(14), net up (its size: Trend declared? day's move); IB day type: today.dayType.\n- 15m (setup candle, closed 10:30): none, close top third, range 0.7 ATR, vol 0.8x.\nYour own read: 4h range, 1h up, 15m up; the movement is smooth and one-way, no breaks both ways, little overlap. Which class do you write in STATE?",
+      "rule": "the 4h and 1h not both one way: unclear; chop only when the movement is choppy, and a frame's range alone is never chop",
+      "anchor": "a frame's `range` or `transition` alone is never `chop`",
+      "choices": [
+        "chop",
+        "unclear",
+        "trend-up",
+        "trend-down"
+      ],
+      "answer": "unclear"
     }
   ],
   "partB": [

@@ -58,7 +58,7 @@ never the composed setup read (`compose_check` takes a live strong one):
    reaction at the level, the side's way → the pullback ended on the 15m;
    no 15m BOS to wait for after a strong CISD or a reaction. The level: the
    broken one or a level next to it (the RTH VWAP, a 15m swing; within
-   about 0.25 x the 15m ATR: one zone, `levels-and-reactions`).
+   about 0.25 x the 15m ATR, a hypothesis: one zone; `levels-and-reactions`).
    Composed as `15m cisd up` (true while live), or that 15m candle's read
    (`15m rejected <level> up`: long-wick, engulfing or confirmed,
    `candle-reading`; a BOS's breaking candle `15m broke <level> up`), true
