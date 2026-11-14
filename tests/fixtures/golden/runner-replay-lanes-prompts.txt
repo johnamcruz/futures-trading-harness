@@ -1157,6 +1157,8 @@ never the composed setup read (`compose_check` takes a live strong one):
    pennant), `Pullback` volume falling, its 15m swing holding.
   A 15m
    `range` or `transition` here is the pause, not chop.
+  A pause holds
+   one way; chop breaks both ways again and again.
   The label is no
    evidence of resumption either.
   The impulse (a 15m `displacement` the
@@ -1225,10 +1227,10 @@ never the composed setup read (`compose_check` takes a live strong one):
    with-side read on that leg.
 
 **Close to it is a read.** The sequence is the reference picture, not a
-checklist: depth, the pause's shape, the exact touch of the level, the
+checklist: depth, the pause's shape, how near the level it stopped, the
 candle type and the distance to value weigh in the count
-(`confluence-counting`); no exact touch or no named candle alone is no
-reason to wait (a live strong 15m CISD or a 15m BOS is the read then).
+(`confluence-counting`); a stop short of the level inside the zone, or no
+named candle, is no reason to wait (a live strong 15m CISD or a 15m BOS is the read then).
   Three lines hold, whatever the count: the 4h + 1h side; a 15m CHoCH
 or CISD against → wait; the entry needs a 3m BOS or CISD the side's way
 and a true 15m setup read the side's way (`compose_check` requires the
@@ -1351,6 +1353,11 @@ timeframe's candles).
 | 3m, 5m | a candle fact only: never the setup, never a wait (unless a `Pullback` line is printed: `pullback-vs-reversal`) | a candle fact only (its swings are the stop's) |
 | 15m | the working structure continues | the working structure shifting: a deeper pullback, or a reversal starting |
 | 1h (4h swings) | the HTF trend continues | the strongest sign of an HTF trend change, not a reversal by itself: a BOS the new way confirms it |
+
+No single BOS or CHoCH classifies the market.
+  Structure broken both
+ways again and again with no continuation is chop, not a run of
+reversals (`trend-vs-range`).
 
 A break against a trending 4h or 1h: the trend rule refuses it (never counter).
 CHoCHs stacking up the timeframes (15m, then 1h) are a reversal
@@ -2562,6 +2569,8 @@ never the composed setup read (`compose_check` takes a live strong one):
    pennant), `Pullback` volume falling, its 15m swing holding.
   A 15m
    `range` or `transition` here is the pause, not chop.
+  A pause holds
+   one way; chop breaks both ways again and again.
   The label is no
    evidence of resumption either.
   The impulse (a 15m `displacement` the
@@ -2630,10 +2639,10 @@ never the composed setup read (`compose_check` takes a live strong one):
    with-side read on that leg.
 
 **Close to it is a read.** The sequence is the reference picture, not a
-checklist: depth, the pause's shape, the exact touch of the level, the
+checklist: depth, the pause's shape, how near the level it stopped, the
 candle type and the distance to value weigh in the count
-(`confluence-counting`); no exact touch or no named candle alone is no
-reason to wait (a live strong 15m CISD or a 15m BOS is the read then).
+(`confluence-counting`); a stop short of the level inside the zone, or no
+named candle, is no reason to wait (a live strong 15m CISD or a 15m BOS is the read then).
   Three lines hold, whatever the count: the 4h + 1h side; a 15m CHoCH
 or CISD against → wait; the entry needs a 3m BOS or CISD the side's way
 and a true 15m setup read the side's way (`compose_check` requires the
@@ -2756,6 +2765,11 @@ timeframe's candles).
 | 3m, 5m | a candle fact only: never the setup, never a wait (unless a `Pullback` line is printed: `pullback-vs-reversal`) | a candle fact only (its swings are the stop's) |
 | 15m | the working structure continues | the working structure shifting: a deeper pullback, or a reversal starting |
 | 1h (4h swings) | the HTF trend continues | the strongest sign of an HTF trend change, not a reversal by itself: a BOS the new way confirms it |
+
+No single BOS or CHoCH classifies the market.
+  Structure broken both
+ways again and again with no continuation is chop, not a run of
+reversals (`trend-vs-range`).
 
 A break against a trending 4h or 1h: the trend rule refuses it (never counter).
 CHoCHs stacking up the timeframes (15m, then 1h) are a reversal
@@ -3976,6 +3990,8 @@ never the composed setup read (`compose_check` takes a live strong one):
    pennant), `Pullback` volume falling, its 15m swing holding.
   A 15m
    `range` or `transition` here is the pause, not chop.
+  A pause holds
+   one way; chop breaks both ways again and again.
   The label is no
    evidence of resumption either.
   The impulse (a 15m `displacement` the
@@ -4044,10 +4060,10 @@ never the composed setup read (`compose_check` takes a live strong one):
    with-side read on that leg.
 
 **Close to it is a read.** The sequence is the reference picture, not a
-checklist: depth, the pause's shape, the exact touch of the level, the
+checklist: depth, the pause's shape, how near the level it stopped, the
 candle type and the distance to value weigh in the count
-(`confluence-counting`); no exact touch or no named candle alone is no
-reason to wait (a live strong 15m CISD or a 15m BOS is the read then).
+(`confluence-counting`); a stop short of the level inside the zone, or no
+named candle, is no reason to wait (a live strong 15m CISD or a 15m BOS is the read then).
   Three lines hold, whatever the count: the 4h + 1h side; a 15m CHoCH
 or CISD against → wait; the entry needs a 3m BOS or CISD the side's way
 and a true 15m setup read the side's way (`compose_check` requires the
@@ -4170,6 +4186,11 @@ timeframe's candles).
 | 3m, 5m | a candle fact only: never the setup, never a wait (unless a `Pullback` line is printed: `pullback-vs-reversal`) | a candle fact only (its swings are the stop's) |
 | 15m | the working structure continues | the working structure shifting: a deeper pullback, or a reversal starting |
 | 1h (4h swings) | the HTF trend continues | the strongest sign of an HTF trend change, not a reversal by itself: a BOS the new way confirms it |
+
+No single BOS or CHoCH classifies the market.
+  Structure broken both
+ways again and again with no continuation is chop, not a run of
+reversals (`trend-vs-range`).
 
 A break against a trending 4h or 1h: the trend rule refuses it (never counter).
 CHoCHs stacking up the timeframes (15m, then 1h) are a reversal
@@ -5381,6 +5402,8 @@ never the composed setup read (`compose_check` takes a live strong one):
    pennant), `Pullback` volume falling, its 15m swing holding.
   A 15m
    `range` or `transition` here is the pause, not chop.
+  A pause holds
+   one way; chop breaks both ways again and again.
   The label is no
    evidence of resumption either.
   The impulse (a 15m `displacement` the
@@ -5449,10 +5472,10 @@ never the composed setup read (`compose_check` takes a live strong one):
    with-side read on that leg.
 
 **Close to it is a read.** The sequence is the reference picture, not a
-checklist: depth, the pause's shape, the exact touch of the level, the
+checklist: depth, the pause's shape, how near the level it stopped, the
 candle type and the distance to value weigh in the count
-(`confluence-counting`); no exact touch or no named candle alone is no
-reason to wait (a live strong 15m CISD or a 15m BOS is the read then).
+(`confluence-counting`); a stop short of the level inside the zone, or no
+named candle, is no reason to wait (a live strong 15m CISD or a 15m BOS is the read then).
   Three lines hold, whatever the count: the 4h + 1h side; a 15m CHoCH
 or CISD against → wait; the entry needs a 3m BOS or CISD the side's way
 and a true 15m setup read the side's way (`compose_check` requires the
@@ -5575,6 +5598,11 @@ timeframe's candles).
 | 3m, 5m | a candle fact only: never the setup, never a wait (unless a `Pullback` line is printed: `pullback-vs-reversal`) | a candle fact only (its swings are the stop's) |
 | 15m | the working structure continues | the working structure shifting: a deeper pullback, or a reversal starting |
 | 1h (4h swings) | the HTF trend continues | the strongest sign of an HTF trend change, not a reversal by itself: a BOS the new way confirms it |
+
+No single BOS or CHoCH classifies the market.
+  Structure broken both
+ways again and again with no continuation is chop, not a run of
+reversals (`trend-vs-range`).
 
 A break against a trending 4h or 1h: the trend rule refuses it (never counter).
 CHoCHs stacking up the timeframes (15m, then 1h) are a reversal
@@ -6795,6 +6823,8 @@ never the composed setup read (`compose_check` takes a live strong one):
    pennant), `Pullback` volume falling, its 15m swing holding.
   A 15m
    `range` or `transition` here is the pause, not chop.
+  A pause holds
+   one way; chop breaks both ways again and again.
   The label is no
    evidence of resumption either.
   The impulse (a 15m `displacement` the
@@ -6863,10 +6893,10 @@ never the composed setup read (`compose_check` takes a live strong one):
    with-side read on that leg.
 
 **Close to it is a read.** The sequence is the reference picture, not a
-checklist: depth, the pause's shape, the exact touch of the level, the
+checklist: depth, the pause's shape, how near the level it stopped, the
 candle type and the distance to value weigh in the count
-(`confluence-counting`); no exact touch or no named candle alone is no
-reason to wait (a live strong 15m CISD or a 15m BOS is the read then).
+(`confluence-counting`); a stop short of the level inside the zone, or no
+named candle, is no reason to wait (a live strong 15m CISD or a 15m BOS is the read then).
   Three lines hold, whatever the count: the 4h + 1h side; a 15m CHoCH
 or CISD against → wait; the entry needs a 3m BOS or CISD the side's way
 and a true 15m setup read the side's way (`compose_check` requires the
@@ -6989,6 +7019,11 @@ timeframe's candles).
 | 3m, 5m | a candle fact only: never the setup, never a wait (unless a `Pullback` line is printed: `pullback-vs-reversal`) | a candle fact only (its swings are the stop's) |
 | 15m | the working structure continues | the working structure shifting: a deeper pullback, or a reversal starting |
 | 1h (4h swings) | the HTF trend continues | the strongest sign of an HTF trend change, not a reversal by itself: a BOS the new way confirms it |
+
+No single BOS or CHoCH classifies the market.
+  Structure broken both
+ways again and again with no continuation is chop, not a run of
+reversals (`trend-vs-range`).
 
 A break against a trending 4h or 1h: the trend rule refuses it (never counter).
 CHoCHs stacking up the timeframes (15m, then 1h) are a reversal
@@ -8200,6 +8235,8 @@ never the composed setup read (`compose_check` takes a live strong one):
    pennant), `Pullback` volume falling, its 15m swing holding.
   A 15m
    `range` or `transition` here is the pause, not chop.
+  A pause holds
+   one way; chop breaks both ways again and again.
   The label is no
    evidence of resumption either.
   The impulse (a 15m `displacement` the
@@ -8268,10 +8305,10 @@ never the composed setup read (`compose_check` takes a live strong one):
    with-side read on that leg.
 
 **Close to it is a read.** The sequence is the reference picture, not a
-checklist: depth, the pause's shape, the exact touch of the level, the
+checklist: depth, the pause's shape, how near the level it stopped, the
 candle type and the distance to value weigh in the count
-(`confluence-counting`); no exact touch or no named candle alone is no
-reason to wait (a live strong 15m CISD or a 15m BOS is the read then).
+(`confluence-counting`); a stop short of the level inside the zone, or no
+named candle, is no reason to wait (a live strong 15m CISD or a 15m BOS is the read then).
   Three lines hold, whatever the count: the 4h + 1h side; a 15m CHoCH
 or CISD against → wait; the entry needs a 3m BOS or CISD the side's way
 and a true 15m setup read the side's way (`compose_check` requires the
@@ -8394,6 +8431,11 @@ timeframe's candles).
 | 3m, 5m | a candle fact only: never the setup, never a wait (unless a `Pullback` line is printed: `pullback-vs-reversal`) | a candle fact only (its swings are the stop's) |
 | 15m | the working structure continues | the working structure shifting: a deeper pullback, or a reversal starting |
 | 1h (4h swings) | the HTF trend continues | the strongest sign of an HTF trend change, not a reversal by itself: a BOS the new way confirms it |
+
+No single BOS or CHoCH classifies the market.
+  Structure broken both
+ways again and again with no continuation is chop, not a run of
+reversals (`trend-vs-range`).
 
 A break against a trending 4h or 1h: the trend rule refuses it (never counter).
 CHoCHs stacking up the timeframes (15m, then 1h) are a reversal
@@ -9605,6 +9647,8 @@ never the composed setup read (`compose_check` takes a live strong one):
    pennant), `Pullback` volume falling, its 15m swing holding.
   A 15m
    `range` or `transition` here is the pause, not chop.
+  A pause holds
+   one way; chop breaks both ways again and again.
   The label is no
    evidence of resumption either.
   The impulse (a 15m `displacement` the
@@ -9673,10 +9717,10 @@ never the composed setup read (`compose_check` takes a live strong one):
    with-side read on that leg.
 
 **Close to it is a read.** The sequence is the reference picture, not a
-checklist: depth, the pause's shape, the exact touch of the level, the
+checklist: depth, the pause's shape, how near the level it stopped, the
 candle type and the distance to value weigh in the count
-(`confluence-counting`); no exact touch or no named candle alone is no
-reason to wait (a live strong 15m CISD or a 15m BOS is the read then).
+(`confluence-counting`); a stop short of the level inside the zone, or no
+named candle, is no reason to wait (a live strong 15m CISD or a 15m BOS is the read then).
   Three lines hold, whatever the count: the 4h + 1h side; a 15m CHoCH
 or CISD against → wait; the entry needs a 3m BOS or CISD the side's way
 and a true 15m setup read the side's way (`compose_check` requires the
@@ -9799,6 +9843,11 @@ timeframe's candles).
 | 3m, 5m | a candle fact only: never the setup, never a wait (unless a `Pullback` line is printed: `pullback-vs-reversal`) | a candle fact only (its swings are the stop's) |
 | 15m | the working structure continues | the working structure shifting: a deeper pullback, or a reversal starting |
 | 1h (4h swings) | the HTF trend continues | the strongest sign of an HTF trend change, not a reversal by itself: a BOS the new way confirms it |
+
+No single BOS or CHoCH classifies the market.
+  Structure broken both
+ways again and again with no continuation is chop, not a run of
+reversals (`trend-vs-range`).
 
 A break against a trending 4h or 1h: the trend rule refuses it (never counter).
 CHoCHs stacking up the timeframes (15m, then 1h) are a reversal
@@ -10089,9 +10138,9 @@ Also: `leg` (`origin`, the run's extreme; `extreme`), `ote`, `status`
   Mid-range is a skip.
 - **Against a trending 4h or 1h**: the trend rule refuses it (never counter), whatever
   break (`bos-vs-choch`).
-- **Avoid: chop** (hypothesis): `m3.regime.primary` `transition`
-  (neither trend nor range: the measured filter), or `m15.frame.swingPattern`
-  `mixed` or `unclear` with overlapping small bars.
+- **Avoid** (hypothesis): `m3.regime.primary` `transition` (the
+  measured filter: `unclear`, not chop); `m15.frame.swingPattern`
+  `mixed` or `unclear`, small overlapping bars; chop.
 
 **CISD vs CHoCH.** A CHoCH rests on swing points (`m3.lastBreak`).
   The
@@ -10122,7 +10171,7 @@ Take: range 21480.00-21560.00; at the prior VAL 21480.00 a 15m bullish CISD, str
   V 2.1x, little progress (absorption): setup and entry, a limit there.
   Reads: at prior val, 15m cisd up.
   Priority order -> take.
-Skip: transition, 15m mixed: chop; 15m bearish CISD at 21640.00.
+Skip: transition, 15m mixed: unclear; 15m bearish CISD at 21640.00.
   Reads: regime transition, 15m cisd down; the priority order (step 3, location) decided skip.
 Loser: 15m bullish CISD after the sweep of the prior RTH low 21402.25;
   long at 21420.50 (a limit at its close), stop 21399.75 (20.75 pts = 83 ticks, $41.50 on 1 MNQ);
@@ -11106,6 +11155,8 @@ never the composed setup read (`compose_check` takes a live strong one):
    pennant), `Pullback` volume falling, its 15m swing holding.
   A 15m
    `range` or `transition` here is the pause, not chop.
+  A pause holds
+   one way; chop breaks both ways again and again.
   The label is no
    evidence of resumption either.
   The impulse (a 15m `displacement` the
@@ -11174,10 +11225,10 @@ never the composed setup read (`compose_check` takes a live strong one):
    with-side read on that leg.
 
 **Close to it is a read.** The sequence is the reference picture, not a
-checklist: depth, the pause's shape, the exact touch of the level, the
+checklist: depth, the pause's shape, how near the level it stopped, the
 candle type and the distance to value weigh in the count
-(`confluence-counting`); no exact touch or no named candle alone is no
-reason to wait (a live strong 15m CISD or a 15m BOS is the read then).
+(`confluence-counting`); a stop short of the level inside the zone, or no
+named candle, is no reason to wait (a live strong 15m CISD or a 15m BOS is the read then).
   Three lines hold, whatever the count: the 4h + 1h side; a 15m CHoCH
 or CISD against → wait; the entry needs a 3m BOS or CISD the side's way
 and a true 15m setup read the side's way (`compose_check` requires the
@@ -11300,6 +11351,11 @@ timeframe's candles).
 | 3m, 5m | a candle fact only: never the setup, never a wait (unless a `Pullback` line is printed: `pullback-vs-reversal`) | a candle fact only (its swings are the stop's) |
 | 15m | the working structure continues | the working structure shifting: a deeper pullback, or a reversal starting |
 | 1h (4h swings) | the HTF trend continues | the strongest sign of an HTF trend change, not a reversal by itself: a BOS the new way confirms it |
+
+No single BOS or CHoCH classifies the market.
+  Structure broken both
+ways again and again with no continuation is chop, not a run of
+reversals (`trend-vs-range`).
 
 A break against a trending 4h or 1h: the trend rule refuses it (never counter).
 CHoCHs stacking up the timeframes (15m, then 1h) are a reversal
@@ -11587,9 +11643,9 @@ Also: `leg` (`origin`, the run's extreme; `extreme`), `ote`, `status`
   Mid-range is a skip.
 - **Against a trending 4h or 1h**: the trend rule refuses it (never counter), whatever
   break (`bos-vs-choch`).
-- **Avoid: chop** (hypothesis): `m3.regime.primary` `transition`
-  (neither trend nor range: the measured filter), or `m15.frame.swingPattern`
-  `mixed` or `unclear` with overlapping small bars.
+- **Avoid** (hypothesis): `m3.regime.primary` `transition` (the
+  measured filter: `unclear`, not chop); `m15.frame.swingPattern`
+  `mixed` or `unclear`, small overlapping bars; chop.
 
 **CISD vs CHoCH.** A CHoCH rests on swing points (`m3.lastBreak`).
   The
@@ -11620,7 +11676,7 @@ Take: range 21480.00-21560.00; at the prior VAL 21480.00 a 15m bullish CISD, str
   V 2.1x, little progress (absorption): setup and entry, a limit there.
   Reads: at prior val, 15m cisd up.
   Priority order -> take.
-Skip: transition, 15m mixed: chop; 15m bearish CISD at 21640.00.
+Skip: transition, 15m mixed: unclear; 15m bearish CISD at 21640.00.
   Reads: regime transition, 15m cisd down; the priority order (step 3, location) decided skip.
 Loser: 15m bullish CISD after the sweep of the prior RTH low 21402.25;
   long at 21420.50 (a limit at its close), stop 21399.75 (20.75 pts = 83 ticks, $41.50 on 1 MNQ);
@@ -12604,6 +12660,8 @@ never the composed setup read (`compose_check` takes a live strong one):
    pennant), `Pullback` volume falling, its 15m swing holding.
   A 15m
    `range` or `transition` here is the pause, not chop.
+  A pause holds
+   one way; chop breaks both ways again and again.
   The label is no
    evidence of resumption either.
   The impulse (a 15m `displacement` the
@@ -12672,10 +12730,10 @@ never the composed setup read (`compose_check` takes a live strong one):
    with-side read on that leg.
 
 **Close to it is a read.** The sequence is the reference picture, not a
-checklist: depth, the pause's shape, the exact touch of the level, the
+checklist: depth, the pause's shape, how near the level it stopped, the
 candle type and the distance to value weigh in the count
-(`confluence-counting`); no exact touch or no named candle alone is no
-reason to wait (a live strong 15m CISD or a 15m BOS is the read then).
+(`confluence-counting`); a stop short of the level inside the zone, or no
+named candle, is no reason to wait (a live strong 15m CISD or a 15m BOS is the read then).
   Three lines hold, whatever the count: the 4h + 1h side; a 15m CHoCH
 or CISD against → wait; the entry needs a 3m BOS or CISD the side's way
 and a true 15m setup read the side's way (`compose_check` requires the
@@ -12798,6 +12856,11 @@ timeframe's candles).
 | 3m, 5m | a candle fact only: never the setup, never a wait (unless a `Pullback` line is printed: `pullback-vs-reversal`) | a candle fact only (its swings are the stop's) |
 | 15m | the working structure continues | the working structure shifting: a deeper pullback, or a reversal starting |
 | 1h (4h swings) | the HTF trend continues | the strongest sign of an HTF trend change, not a reversal by itself: a BOS the new way confirms it |
+
+No single BOS or CHoCH classifies the market.
+  Structure broken both
+ways again and again with no continuation is chop, not a run of
+reversals (`trend-vs-range`).
 
 A break against a trending 4h or 1h: the trend rule refuses it (never counter).
 CHoCHs stacking up the timeframes (15m, then 1h) are a reversal
@@ -13079,9 +13142,9 @@ Also: `leg` (`origin`, the run's extreme; `extreme`), `ote`, `status`
   Mid-range is a skip.
 - **Against a trending 4h or 1h**: the trend rule refuses it (never counter), whatever
   break (`bos-vs-choch`).
-- **Avoid: chop** (hypothesis): `m3.regime.primary` `transition`
-  (neither trend nor range: the measured filter), or `m15.frame.swingPattern`
-  `mixed` or `unclear` with overlapping small bars.
+- **Avoid** (hypothesis): `m3.regime.primary` `transition` (the
+  measured filter: `unclear`, not chop); `m15.frame.swingPattern`
+  `mixed` or `unclear`, small overlapping bars; chop.
 
 **CISD vs CHoCH.** A CHoCH rests on swing points (`m3.lastBreak`).
   The
@@ -13112,7 +13175,7 @@ Take: range 21480.00-21560.00; at the prior VAL 21480.00 a 15m bullish CISD, str
   V 2.1x, little progress (absorption): setup and entry, a limit there.
   Reads: at prior val, 15m cisd up.
   Priority order -> take.
-Skip: transition, 15m mixed: chop; 15m bearish CISD at 21640.00.
+Skip: transition, 15m mixed: unclear; 15m bearish CISD at 21640.00.
   Reads: regime transition, 15m cisd down; the priority order (step 3, location) decided skip.
 Loser: 15m bullish CISD after the sweep of the prior RTH low 21402.25;
   long at 21420.50 (a limit at its close), stop 21399.75 (20.75 pts = 83 ticks, $41.50 on 1 MNQ);
@@ -14096,6 +14159,8 @@ never the composed setup read (`compose_check` takes a live strong one):
    pennant), `Pullback` volume falling, its 15m swing holding.
   A 15m
    `range` or `transition` here is the pause, not chop.
+  A pause holds
+   one way; chop breaks both ways again and again.
   The label is no
    evidence of resumption either.
   The impulse (a 15m `displacement` the
@@ -14164,10 +14229,10 @@ never the composed setup read (`compose_check` takes a live strong one):
    with-side read on that leg.
 
 **Close to it is a read.** The sequence is the reference picture, not a
-checklist: depth, the pause's shape, the exact touch of the level, the
+checklist: depth, the pause's shape, how near the level it stopped, the
 candle type and the distance to value weigh in the count
-(`confluence-counting`); no exact touch or no named candle alone is no
-reason to wait (a live strong 15m CISD or a 15m BOS is the read then).
+(`confluence-counting`); a stop short of the level inside the zone, or no
+named candle, is no reason to wait (a live strong 15m CISD or a 15m BOS is the read then).
   Three lines hold, whatever the count: the 4h + 1h side; a 15m CHoCH
 or CISD against → wait; the entry needs a 3m BOS or CISD the side's way
 and a true 15m setup read the side's way (`compose_check` requires the
@@ -14290,6 +14355,11 @@ timeframe's candles).
 | 3m, 5m | a candle fact only: never the setup, never a wait (unless a `Pullback` line is printed: `pullback-vs-reversal`) | a candle fact only (its swings are the stop's) |
 | 15m | the working structure continues | the working structure shifting: a deeper pullback, or a reversal starting |
 | 1h (4h swings) | the HTF trend continues | the strongest sign of an HTF trend change, not a reversal by itself: a BOS the new way confirms it |
+
+No single BOS or CHoCH classifies the market.
+  Structure broken both
+ways again and again with no continuation is chop, not a run of
+reversals (`trend-vs-range`).
 
 A break against a trending 4h or 1h: the trend rule refuses it (never counter).
 CHoCHs stacking up the timeframes (15m, then 1h) are a reversal
@@ -14498,9 +14568,9 @@ Also: `leg` (`origin`, the run's extreme; `extreme`), `ote`, `status`
   Mid-range is a skip.
 - **Against a trending 4h or 1h**: the trend rule refuses it (never counter), whatever
   break (`bos-vs-choch`).
-- **Avoid: chop** (hypothesis): `m3.regime.primary` `transition`
-  (neither trend nor range: the measured filter), or `m15.frame.swingPattern`
-  `mixed` or `unclear` with overlapping small bars.
+- **Avoid** (hypothesis): `m3.regime.primary` `transition` (the
+  measured filter: `unclear`, not chop); `m15.frame.swingPattern`
+  `mixed` or `unclear`, small overlapping bars; chop.
 
 **CISD vs CHoCH.** A CHoCH rests on swing points (`m3.lastBreak`).
   The
@@ -14531,7 +14601,7 @@ Take: range 21480.00-21560.00; at the prior VAL 21480.00 a 15m bullish CISD, str
   V 2.1x, little progress (absorption): setup and entry, a limit there.
   Reads: at prior val, 15m cisd up.
   Priority order -> take.
-Skip: transition, 15m mixed: chop; 15m bearish CISD at 21640.00.
+Skip: transition, 15m mixed: unclear; 15m bearish CISD at 21640.00.
   Reads: regime transition, 15m cisd down; the priority order (step 3, location) decided skip.
 Loser: 15m bullish CISD after the sweep of the prior RTH low 21402.25;
   long at 21420.50 (a limit at its close), stop 21399.75 (20.75 pts = 83 ticks, $41.50 on 1 MNQ);
@@ -15515,6 +15585,8 @@ never the composed setup read (`compose_check` takes a live strong one):
    pennant), `Pullback` volume falling, its 15m swing holding.
   A 15m
    `range` or `transition` here is the pause, not chop.
+  A pause holds
+   one way; chop breaks both ways again and again.
   The label is no
    evidence of resumption either.
   The impulse (a 15m `displacement` the
@@ -15583,10 +15655,10 @@ never the composed setup read (`compose_check` takes a live strong one):
    with-side read on that leg.
 
 **Close to it is a read.** The sequence is the reference picture, not a
-checklist: depth, the pause's shape, the exact touch of the level, the
+checklist: depth, the pause's shape, how near the level it stopped, the
 candle type and the distance to value weigh in the count
-(`confluence-counting`); no exact touch or no named candle alone is no
-reason to wait (a live strong 15m CISD or a 15m BOS is the read then).
+(`confluence-counting`); a stop short of the level inside the zone, or no
+named candle, is no reason to wait (a live strong 15m CISD or a 15m BOS is the read then).
   Three lines hold, whatever the count: the 4h + 1h side; a 15m CHoCH
 or CISD against → wait; the entry needs a 3m BOS or CISD the side's way
 and a true 15m setup read the side's way (`compose_check` requires the
@@ -15709,6 +15781,11 @@ timeframe's candles).
 | 3m, 5m | a candle fact only: never the setup, never a wait (unless a `Pullback` line is printed: `pullback-vs-reversal`) | a candle fact only (its swings are the stop's) |
 | 15m | the working structure continues | the working structure shifting: a deeper pullback, or a reversal starting |
 | 1h (4h swings) | the HTF trend continues | the strongest sign of an HTF trend change, not a reversal by itself: a BOS the new way confirms it |
+
+No single BOS or CHoCH classifies the market.
+  Structure broken both
+ways again and again with no continuation is chop, not a run of
+reversals (`trend-vs-range`).
 
 A break against a trending 4h or 1h: the trend rule refuses it (never counter).
 CHoCHs stacking up the timeframes (15m, then 1h) are a reversal
@@ -15999,9 +16076,9 @@ Also: `leg` (`origin`, the run's extreme; `extreme`), `ote`, `status`
   Mid-range is a skip.
 - **Against a trending 4h or 1h**: the trend rule refuses it (never counter), whatever
   break (`bos-vs-choch`).
-- **Avoid: chop** (hypothesis): `m3.regime.primary` `transition`
-  (neither trend nor range: the measured filter), or `m15.frame.swingPattern`
-  `mixed` or `unclear` with overlapping small bars.
+- **Avoid** (hypothesis): `m3.regime.primary` `transition` (the
+  measured filter: `unclear`, not chop); `m15.frame.swingPattern`
+  `mixed` or `unclear`, small overlapping bars; chop.
 
 **CISD vs CHoCH.** A CHoCH rests on swing points (`m3.lastBreak`).
   The
@@ -16032,7 +16109,7 @@ Take: range 21480.00-21560.00; at the prior VAL 21480.00 a 15m bullish CISD, str
   V 2.1x, little progress (absorption): setup and entry, a limit there.
   Reads: at prior val, 15m cisd up.
   Priority order -> take.
-Skip: transition, 15m mixed: chop; 15m bearish CISD at 21640.00.
+Skip: transition, 15m mixed: unclear; 15m bearish CISD at 21640.00.
   Reads: regime transition, 15m cisd down; the priority order (step 3, location) decided skip.
 Loser: 15m bullish CISD after the sweep of the prior RTH low 21402.25;
   long at 21420.50 (a limit at its close), stop 21399.75 (20.75 pts = 83 ticks, $41.50 on 1 MNQ);
@@ -17016,6 +17093,8 @@ never the composed setup read (`compose_check` takes a live strong one):
    pennant), `Pullback` volume falling, its 15m swing holding.
   A 15m
    `range` or `transition` here is the pause, not chop.
+  A pause holds
+   one way; chop breaks both ways again and again.
   The label is no
    evidence of resumption either.
   The impulse (a 15m `displacement` the
@@ -17084,10 +17163,10 @@ never the composed setup read (`compose_check` takes a live strong one):
    with-side read on that leg.
 
 **Close to it is a read.** The sequence is the reference picture, not a
-checklist: depth, the pause's shape, the exact touch of the level, the
+checklist: depth, the pause's shape, how near the level it stopped, the
 candle type and the distance to value weigh in the count
-(`confluence-counting`); no exact touch or no named candle alone is no
-reason to wait (a live strong 15m CISD or a 15m BOS is the read then).
+(`confluence-counting`); a stop short of the level inside the zone, or no
+named candle, is no reason to wait (a live strong 15m CISD or a 15m BOS is the read then).
   Three lines hold, whatever the count: the 4h + 1h side; a 15m CHoCH
 or CISD against → wait; the entry needs a 3m BOS or CISD the side's way
 and a true 15m setup read the side's way (`compose_check` requires the
@@ -17210,6 +17289,11 @@ timeframe's candles).
 | 3m, 5m | a candle fact only: never the setup, never a wait (unless a `Pullback` line is printed: `pullback-vs-reversal`) | a candle fact only (its swings are the stop's) |
 | 15m | the working structure continues | the working structure shifting: a deeper pullback, or a reversal starting |
 | 1h (4h swings) | the HTF trend continues | the strongest sign of an HTF trend change, not a reversal by itself: a BOS the new way confirms it |
+
+No single BOS or CHoCH classifies the market.
+  Structure broken both
+ways again and again with no continuation is chop, not a run of
+reversals (`trend-vs-range`).
 
 A break against a trending 4h or 1h: the trend rule refuses it (never counter).
 CHoCHs stacking up the timeframes (15m, then 1h) are a reversal
@@ -17491,9 +17575,9 @@ Also: `leg` (`origin`, the run's extreme; `extreme`), `ote`, `status`
   Mid-range is a skip.
 - **Against a trending 4h or 1h**: the trend rule refuses it (never counter), whatever
   break (`bos-vs-choch`).
-- **Avoid: chop** (hypothesis): `m3.regime.primary` `transition`
-  (neither trend nor range: the measured filter), or `m15.frame.swingPattern`
-  `mixed` or `unclear` with overlapping small bars.
+- **Avoid** (hypothesis): `m3.regime.primary` `transition` (the
+  measured filter: `unclear`, not chop); `m15.frame.swingPattern`
+  `mixed` or `unclear`, small overlapping bars; chop.
 
 **CISD vs CHoCH.** A CHoCH rests on swing points (`m3.lastBreak`).
   The
@@ -17524,7 +17608,7 @@ Take: range 21480.00-21560.00; at the prior VAL 21480.00 a 15m bullish CISD, str
   V 2.1x, little progress (absorption): setup and entry, a limit there.
   Reads: at prior val, 15m cisd up.
   Priority order -> take.
-Skip: transition, 15m mixed: chop; 15m bearish CISD at 21640.00.
+Skip: transition, 15m mixed: unclear; 15m bearish CISD at 21640.00.
   Reads: regime transition, 15m cisd down; the priority order (step 3, location) decided skip.
 Loser: 15m bullish CISD after the sweep of the prior RTH low 21402.25;
   long at 21420.50 (a limit at its close), stop 21399.75 (20.75 pts = 83 ticks, $41.50 on 1 MNQ);
@@ -18508,6 +18592,8 @@ never the composed setup read (`compose_check` takes a live strong one):
    pennant), `Pullback` volume falling, its 15m swing holding.
   A 15m
    `range` or `transition` here is the pause, not chop.
+  A pause holds
+   one way; chop breaks both ways again and again.
   The label is no
    evidence of resumption either.
   The impulse (a 15m `displacement` the
@@ -18576,10 +18662,10 @@ never the composed setup read (`compose_check` takes a live strong one):
    with-side read on that leg.
 
 **Close to it is a read.** The sequence is the reference picture, not a
-checklist: depth, the pause's shape, the exact touch of the level, the
+checklist: depth, the pause's shape, how near the level it stopped, the
 candle type and the distance to value weigh in the count
-(`confluence-counting`); no exact touch or no named candle alone is no
-reason to wait (a live strong 15m CISD or a 15m BOS is the read then).
+(`confluence-counting`); a stop short of the level inside the zone, or no
+named candle, is no reason to wait (a live strong 15m CISD or a 15m BOS is the read then).
   Three lines hold, whatever the count: the 4h + 1h side; a 15m CHoCH
 or CISD against → wait; the entry needs a 3m BOS or CISD the side's way
 and a true 15m setup read the side's way (`compose_check` requires the
@@ -18702,6 +18788,11 @@ timeframe's candles).
 | 3m, 5m | a candle fact only: never the setup, never a wait (unless a `Pullback` line is printed: `pullback-vs-reversal`) | a candle fact only (its swings are the stop's) |
 | 15m | the working structure continues | the working structure shifting: a deeper pullback, or a reversal starting |
 | 1h (4h swings) | the HTF trend continues | the strongest sign of an HTF trend change, not a reversal by itself: a BOS the new way confirms it |
+
+No single BOS or CHoCH classifies the market.
+  Structure broken both
+ways again and again with no continuation is chop, not a run of
+reversals (`trend-vs-range`).
 
 A break against a trending 4h or 1h: the trend rule refuses it (never counter).
 CHoCHs stacking up the timeframes (15m, then 1h) are a reversal
@@ -18983,9 +19074,9 @@ Also: `leg` (`origin`, the run's extreme; `extreme`), `ote`, `status`
   Mid-range is a skip.
 - **Against a trending 4h or 1h**: the trend rule refuses it (never counter), whatever
   break (`bos-vs-choch`).
-- **Avoid: chop** (hypothesis): `m3.regime.primary` `transition`
-  (neither trend nor range: the measured filter), or `m15.frame.swingPattern`
-  `mixed` or `unclear` with overlapping small bars.
+- **Avoid** (hypothesis): `m3.regime.primary` `transition` (the
+  measured filter: `unclear`, not chop); `m15.frame.swingPattern`
+  `mixed` or `unclear`, small overlapping bars; chop.
 
 **CISD vs CHoCH.** A CHoCH rests on swing points (`m3.lastBreak`).
   The
@@ -19016,7 +19107,7 @@ Take: range 21480.00-21560.00; at the prior VAL 21480.00 a 15m bullish CISD, str
   V 2.1x, little progress (absorption): setup and entry, a limit there.
   Reads: at prior val, 15m cisd up.
   Priority order -> take.
-Skip: transition, 15m mixed: chop; 15m bearish CISD at 21640.00.
+Skip: transition, 15m mixed: unclear; 15m bearish CISD at 21640.00.
   Reads: regime transition, 15m cisd down; the priority order (step 3, location) decided skip.
 Loser: 15m bullish CISD after the sweep of the prior RTH low 21402.25;
   long at 21420.50 (a limit at its close), stop 21399.75 (20.75 pts = 83 ticks, $41.50 on 1 MNQ);
@@ -20000,6 +20091,8 @@ never the composed setup read (`compose_check` takes a live strong one):
    pennant), `Pullback` volume falling, its 15m swing holding.
   A 15m
    `range` or `transition` here is the pause, not chop.
+  A pause holds
+   one way; chop breaks both ways again and again.
   The label is no
    evidence of resumption either.
   The impulse (a 15m `displacement` the
@@ -20068,10 +20161,10 @@ never the composed setup read (`compose_check` takes a live strong one):
    with-side read on that leg.
 
 **Close to it is a read.** The sequence is the reference picture, not a
-checklist: depth, the pause's shape, the exact touch of the level, the
+checklist: depth, the pause's shape, how near the level it stopped, the
 candle type and the distance to value weigh in the count
-(`confluence-counting`); no exact touch or no named candle alone is no
-reason to wait (a live strong 15m CISD or a 15m BOS is the read then).
+(`confluence-counting`); a stop short of the level inside the zone, or no
+named candle, is no reason to wait (a live strong 15m CISD or a 15m BOS is the read then).
   Three lines hold, whatever the count: the 4h + 1h side; a 15m CHoCH
 or CISD against → wait; the entry needs a 3m BOS or CISD the side's way
 and a true 15m setup read the side's way (`compose_check` requires the
@@ -20194,6 +20287,11 @@ timeframe's candles).
 | 3m, 5m | a candle fact only: never the setup, never a wait (unless a `Pullback` line is printed: `pullback-vs-reversal`) | a candle fact only (its swings are the stop's) |
 | 15m | the working structure continues | the working structure shifting: a deeper pullback, or a reversal starting |
 | 1h (4h swings) | the HTF trend continues | the strongest sign of an HTF trend change, not a reversal by itself: a BOS the new way confirms it |
+
+No single BOS or CHoCH classifies the market.
+  Structure broken both
+ways again and again with no continuation is chop, not a run of
+reversals (`trend-vs-range`).
 
 A break against a trending 4h or 1h: the trend rule refuses it (never counter).
 CHoCHs stacking up the timeframes (15m, then 1h) are a reversal
@@ -20484,9 +20582,9 @@ Also: `leg` (`origin`, the run's extreme; `extreme`), `ote`, `status`
   Mid-range is a skip.
 - **Against a trending 4h or 1h**: the trend rule refuses it (never counter), whatever
   break (`bos-vs-choch`).
-- **Avoid: chop** (hypothesis): `m3.regime.primary` `transition`
-  (neither trend nor range: the measured filter), or `m15.frame.swingPattern`
-  `mixed` or `unclear` with overlapping small bars.
+- **Avoid** (hypothesis): `m3.regime.primary` `transition` (the
+  measured filter: `unclear`, not chop); `m15.frame.swingPattern`
+  `mixed` or `unclear`, small overlapping bars; chop.
 
 **CISD vs CHoCH.** A CHoCH rests on swing points (`m3.lastBreak`).
   The
@@ -20517,7 +20615,7 @@ Take: range 21480.00-21560.00; at the prior VAL 21480.00 a 15m bullish CISD, str
   V 2.1x, little progress (absorption): setup and entry, a limit there.
   Reads: at prior val, 15m cisd up.
   Priority order -> take.
-Skip: transition, 15m mixed: chop; 15m bearish CISD at 21640.00.
+Skip: transition, 15m mixed: unclear; 15m bearish CISD at 21640.00.
   Reads: regime transition, 15m cisd down; the priority order (step 3, location) decided skip.
 Loser: 15m bullish CISD after the sweep of the prior RTH low 21402.25;
   long at 21420.50 (a limit at its close), stop 21399.75 (20.75 pts = 83 ticks, $41.50 on 1 MNQ);
@@ -21426,6 +21524,8 @@ never the composed setup read (`compose_check` takes a live strong one):
    pennant), `Pullback` volume falling, its 15m swing holding.
   A 15m
    `range` or `transition` here is the pause, not chop.
+  A pause holds
+   one way; chop breaks both ways again and again.
   The label is no
    evidence of resumption either.
   The impulse (a 15m `displacement` the
@@ -21494,10 +21594,10 @@ never the composed setup read (`compose_check` takes a live strong one):
    with-side read on that leg.
 
 **Close to it is a read.** The sequence is the reference picture, not a
-checklist: depth, the pause's shape, the exact touch of the level, the
+checklist: depth, the pause's shape, how near the level it stopped, the
 candle type and the distance to value weigh in the count
-(`confluence-counting`); no exact touch or no named candle alone is no
-reason to wait (a live strong 15m CISD or a 15m BOS is the read then).
+(`confluence-counting`); a stop short of the level inside the zone, or no
+named candle, is no reason to wait (a live strong 15m CISD or a 15m BOS is the read then).
   Three lines hold, whatever the count: the 4h + 1h side; a 15m CHoCH
 or CISD against → wait; the entry needs a 3m BOS or CISD the side's way
 and a true 15m setup read the side's way (`compose_check` requires the
@@ -21620,6 +21720,11 @@ timeframe's candles).
 | 3m, 5m | a candle fact only: never the setup, never a wait (unless a `Pullback` line is printed: `pullback-vs-reversal`) | a candle fact only (its swings are the stop's) |
 | 15m | the working structure continues | the working structure shifting: a deeper pullback, or a reversal starting |
 | 1h (4h swings) | the HTF trend continues | the strongest sign of an HTF trend change, not a reversal by itself: a BOS the new way confirms it |
+
+No single BOS or CHoCH classifies the market.
+  Structure broken both
+ways again and again with no continuation is chop, not a run of
+reversals (`trend-vs-range`).
 
 A break against a trending 4h or 1h: the trend rule refuses it (never counter).
 CHoCHs stacking up the timeframes (15m, then 1h) are a reversal
@@ -21901,9 +22006,9 @@ Also: `leg` (`origin`, the run's extreme; `extreme`), `ote`, `status`
   Mid-range is a skip.
 - **Against a trending 4h or 1h**: the trend rule refuses it (never counter), whatever
   break (`bos-vs-choch`).
-- **Avoid: chop** (hypothesis): `m3.regime.primary` `transition`
-  (neither trend nor range: the measured filter), or `m15.frame.swingPattern`
-  `mixed` or `unclear` with overlapping small bars.
+- **Avoid** (hypothesis): `m3.regime.primary` `transition` (the
+  measured filter: `unclear`, not chop); `m15.frame.swingPattern`
+  `mixed` or `unclear`, small overlapping bars; chop.
 
 **CISD vs CHoCH.** A CHoCH rests on swing points (`m3.lastBreak`).
   The
@@ -21934,7 +22039,7 @@ Take: range 21480.00-21560.00; at the prior VAL 21480.00 a 15m bullish CISD, str
   V 2.1x, little progress (absorption): setup and entry, a limit there.
   Reads: at prior val, 15m cisd up.
   Priority order -> take.
-Skip: transition, 15m mixed: chop; 15m bearish CISD at 21640.00.
+Skip: transition, 15m mixed: unclear; 15m bearish CISD at 21640.00.
   Reads: regime transition, 15m cisd down; the priority order (step 3, location) decided skip.
 Loser: 15m bullish CISD after the sweep of the prior RTH low 21402.25;
   long at 21420.50 (a limit at its close), stop 21399.75 (20.75 pts = 83 ticks, $41.50 on 1 MNQ);
@@ -22843,6 +22948,8 @@ never the composed setup read (`compose_check` takes a live strong one):
    pennant), `Pullback` volume falling, its 15m swing holding.
   A 15m
    `range` or `transition` here is the pause, not chop.
+  A pause holds
+   one way; chop breaks both ways again and again.
   The label is no
    evidence of resumption either.
   The impulse (a 15m `displacement` the
@@ -22911,10 +23018,10 @@ never the composed setup read (`compose_check` takes a live strong one):
    with-side read on that leg.
 
 **Close to it is a read.** The sequence is the reference picture, not a
-checklist: depth, the pause's shape, the exact touch of the level, the
+checklist: depth, the pause's shape, how near the level it stopped, the
 candle type and the distance to value weigh in the count
-(`confluence-counting`); no exact touch or no named candle alone is no
-reason to wait (a live strong 15m CISD or a 15m BOS is the read then).
+(`confluence-counting`); a stop short of the level inside the zone, or no
+named candle, is no reason to wait (a live strong 15m CISD or a 15m BOS is the read then).
   Three lines hold, whatever the count: the 4h + 1h side; a 15m CHoCH
 or CISD against → wait; the entry needs a 3m BOS or CISD the side's way
 and a true 15m setup read the side's way (`compose_check` requires the
@@ -23037,6 +23144,11 @@ timeframe's candles).
 | 3m, 5m | a candle fact only: never the setup, never a wait (unless a `Pullback` line is printed: `pullback-vs-reversal`) | a candle fact only (its swings are the stop's) |
 | 15m | the working structure continues | the working structure shifting: a deeper pullback, or a reversal starting |
 | 1h (4h swings) | the HTF trend continues | the strongest sign of an HTF trend change, not a reversal by itself: a BOS the new way confirms it |
+
+No single BOS or CHoCH classifies the market.
+  Structure broken both
+ways again and again with no continuation is chop, not a run of
+reversals (`trend-vs-range`).
 
 A break against a trending 4h or 1h: the trend rule refuses it (never counter).
 CHoCHs stacking up the timeframes (15m, then 1h) are a reversal
@@ -24171,6 +24283,8 @@ never the composed setup read (`compose_check` takes a live strong one):
    pennant), `Pullback` volume falling, its 15m swing holding.
   A 15m
    `range` or `transition` here is the pause, not chop.
+  A pause holds
+   one way; chop breaks both ways again and again.
   The label is no
    evidence of resumption either.
   The impulse (a 15m `displacement` the
@@ -24239,10 +24353,10 @@ never the composed setup read (`compose_check` takes a live strong one):
    with-side read on that leg.
 
 **Close to it is a read.** The sequence is the reference picture, not a
-checklist: depth, the pause's shape, the exact touch of the level, the
+checklist: depth, the pause's shape, how near the level it stopped, the
 candle type and the distance to value weigh in the count
-(`confluence-counting`); no exact touch or no named candle alone is no
-reason to wait (a live strong 15m CISD or a 15m BOS is the read then).
+(`confluence-counting`); a stop short of the level inside the zone, or no
+named candle, is no reason to wait (a live strong 15m CISD or a 15m BOS is the read then).
   Three lines hold, whatever the count: the 4h + 1h side; a 15m CHoCH
 or CISD against → wait; the entry needs a 3m BOS or CISD the side's way
 and a true 15m setup read the side's way (`compose_check` requires the
@@ -24365,6 +24479,11 @@ timeframe's candles).
 | 3m, 5m | a candle fact only: never the setup, never a wait (unless a `Pullback` line is printed: `pullback-vs-reversal`) | a candle fact only (its swings are the stop's) |
 | 15m | the working structure continues | the working structure shifting: a deeper pullback, or a reversal starting |
 | 1h (4h swings) | the HTF trend continues | the strongest sign of an HTF trend change, not a reversal by itself: a BOS the new way confirms it |
+
+No single BOS or CHoCH classifies the market.
+  Structure broken both
+ways again and again with no continuation is chop, not a run of
+reversals (`trend-vs-range`).
 
 A break against a trending 4h or 1h: the trend rule refuses it (never counter).
 CHoCHs stacking up the timeframes (15m, then 1h) are a reversal

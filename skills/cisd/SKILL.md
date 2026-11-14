@@ -42,9 +42,9 @@ Also: `leg` (`origin`, the run's extreme; `extreme`), `ote`, `status`
   side. Mid-range is a skip.
 - **Against a trending 4h or 1h**: the trend rule refuses it (never counter), whatever
   break (`bos-vs-choch`).
-- **Avoid: chop** (hypothesis): `m3.regime.primary` `transition`
-  (neither trend nor range: the measured filter), or `m15.frame.swingPattern`
-  `mixed` or `unclear` with overlapping small bars.
+- **Avoid** (hypothesis): `m3.regime.primary` `transition` (the
+  measured filter: `unclear`, not chop); `m15.frame.swingPattern`
+  `mixed` or `unclear`, small overlapping bars; chop.
 
 **CISD vs CHoCH.** A CHoCH rests on swing points (`m3.lastBreak`). The
 CISD usually comes first: an early sign, not yet a change of structure.
@@ -66,7 +66,7 @@ Take: 1h up; pullback to the RTH VWAP 21520.50; 15m bullish CISD, strong: the se
   up, close 21527.25: the entry, a limit. Reads: 15m cisd up, 3m bos up. -> take.
 Take: range 21480.00-21560.00; at the prior VAL 21480.00 a 15m bullish CISD, strong (top third), closed 21492.25,
   V 2.1x, little progress (absorption): setup and entry, a limit there. Reads: at prior val, 15m cisd up. Priority order -> take.
-Skip: transition, 15m mixed: chop; 15m bearish CISD at 21640.00.
+Skip: transition, 15m mixed: unclear; 15m bearish CISD at 21640.00.
   Reads: regime transition, 15m cisd down; the priority order (step 3, location) decided skip.
 Loser: 15m bullish CISD after the sweep of the prior RTH low 21402.25;
   long at 21420.50 (a limit at its close), stop 21399.75 (20.75 pts = 83 ticks, $41.50 on 1 MNQ);

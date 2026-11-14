@@ -102,7 +102,10 @@ test('context quiz: every layer asked, ids unique, the bar the whole quiz at K 5
   // pinned false-reject rate) (feat/pullback-concept, owner-approved 2026-11-14: the pullback to a broken level, BOS confirms and
   // CHoCH warns on the 3m and the 15m against the 4h + 1h side, the pause not chop, late, the down mirror, the strict side,
   // the deep case, close to the picture a read, the 15m and 3m CISD; closed choices, each measured at k=3 before it entered the bar).
-  assert.strictEqual(QUIZ.questions.length, 88);
+  // 98 since q113-q122 (feat/chop-read, owner-approved 2026-11-14: chop is the quality of movement, range its geometry;
+  // repeated CHoCH both ways is chop, one CHoCH never; aligned and choppy is chop; a pause inside a Pullback never; a range
+  // day is catchable at the edge the side's way, its mid-range churn chop; transitional is unclear).
+  assert.strictEqual(QUIZ.questions.length, 98);
   for (const id of ['q71', 'q72', 'q73', 'q74', 'q75', 'q76', 'q77', 'q78']) assert.ok(!QUIZ.questions.some(x => x.id === id), id);
   assert.strictEqual(QUIZ.partB.length, 8);
 });
@@ -235,11 +238,58 @@ test('context quiz: the pullback questions (q87-q112) are asked against the prom
   assert.ok(text('q98').includes(`\n${deep}\n`), deep);
 });
 
-// The pullback block's free-phrase choice items (q88-q112) hold the correct choice where a seeded shuffle put it (sha256 of
+// The chop read (feat/chop-read, owner-approved 2026-11-14): chop is the quality of movement, range its geometry.
+test('context quiz: the chop-read questions (q113-q122) are asked against the prompt holding the sentence each anchors to, go missing without it, on the code writers\' lines', () => {
+  const prompts = Q.buildPrompts(ROOT, QUIZ);
+  const flat = t => t.replace(/\s+/g, ' ');
+  const cut = re => Object.fromEntries(Object.entries(prompts).map(([k, v]) => [k, flat(v).replace(re, '')]));
+  const TR = ['trend-vs-range'];
+  const want = [
+    ['q113', 'lookup', TR, 'chop: structure broken both ways, no continuation; sit out', /Structure broken both ways with no continuation is chop, not a run of reversals\./g],
+    ['q114', 'head', undefined, 'wait: a reversal attempt; class trend-up, not chop; no short', /\(3m: the watch restarts; 15m: a reversal attempt\): wait\./g],
+    ['q115', 'lookup', TR, 'F2', /transitional \(old trend weakening, new one unconfirmed\) → `unclear` \(frame `transition`\)/g],
+    ['q116', 'lookup', TR, 'chop: choppy movement needs no edges', /Chop needs no edges; a range can rotate cleanly\./g],
+    ['q117', 'lookup', TR, 'range, not chop: class trend-up; a long setup at the low edge is allowed', /A range day inside the 4h \+ 1h side is catchable: the turn at the edge the side's way/g],
+    ['q118', 'head', undefined, 'F4', /Inside an open `Pullback` line a pause is never `chop`/g],
+    ['q119', 'head', undefined, 'chop: choppy movement, aligned or not; sit out', /Choppy movement → `chop`, aligned frames too/g],
+    ['q120', 'head', undefined, 'trend-up, not chop: the pullback starting; wait for the 15m turn', /never one fact alone, never one BOS or CHoCH\./g],
+    ['q121', 'head', undefined, 'enter long: the turn at the low edge the side\'s way, 3m BOS near value', /setups at the edge the side's way are OK/g],
+    ['q122', 'head', undefined, 'chop: mid-range churn; sit out', /`chop` → no entry, sit out\./g],
+  ];
+  assert.deepStrictEqual(Q.anchorsMissing(QUIZ, prompts).filter(x => want.some(w => w[0] === x)), []);
+  for (const [id, prompt, lookup, answer, re] of want) {
+    const q = QUIZ.questions.find(x => x.id === id);
+    assert.ok(q, id);
+    assert.deepStrictEqual([q.prompt, q.lookup, q.answer], [prompt, lookup, answer], id);
+    assert.ok(q.choices.includes(q.answer), `${id}: a closed choice`);
+    assert.deepStrictEqual(Q.anchorsMissing(QUIZ, cut(re)).filter(x => x === id), [id], `${id}: its sentence deleted, its anchor goes missing`);
+  }
+  // trend-vs-range is a lookup, not embedded in the head prompt.
+  assert.ok(!prompts.head.includes('<skill name="trend-vs-range">'));
+  // The briefing lines are the code's writers (Bias, Day so far); the Day so far score is efficiency x sqrt(bars), and its
+  // word the day-context bands (rotational under 0.34, mixed below 0.75).
+  const { daySoFarLine } = require('../../scripts/lib/trading/day-so-far');
+  const text = id => QUIZ.questions.find(x => x.id === id).text;
+  for (const id of want.map(w => w[0])) {
+    const m = /\n(- Day so far \((\d+) 3m bars; `day-context`\): (rotational|mixed up|mixed down): efficiency ([\d.]+) \(x sqrt\(bars\) ([\d.]+)\), RTH VWAP crosses (\d+), range ([\d.]+) x 3m ATR\(14\), net (up|down)[^\n]*)\n/.exec(text(id));
+    assert.ok(m, `${id}: a Day so far line`);
+    const [, line, bars, word, eff, score, crosses, range, dir] = m;
+    assert.strictEqual(line, daySoFarLine({ status: 'read', bars: +bars, read: word.split(' ')[0], direction: dir, efficiency: +eff, score: +score, vwapCrosses: +crosses, rangeAtr: +range }), id);
+    assert.ok(Math.abs(+eff * Math.sqrt(+bars) - +score) < 0.006, `${id}: score`);
+    assert.strictEqual(word.startsWith('rotational'), +score < 0.34, `${id}: the word's band`);
+    assert.ok(/\n- Bias: /.test(text(id)), `${id}: a Bias line`);
+  }
+  // Repeated CHoCH both ways (the printed chop fact) where the answer is chop; never on the pullback, pause or edge items.
+  const both = id => /m3\.lastBreak: last CHoCH \w+ at [\d.]+ \(barsAgo \d+\), previous CHoCH/.test(text(id));
+  for (const id of ['q113', 'q116', 'q119', 'q122']) assert.ok(both(id), `${id}: breaks both ways`);
+  for (const id of ['q114', 'q117', 'q118', 'q120', 'q121']) assert.ok(!both(id), `${id}: one CHoCH at most`);
+});
+
+// The pullback and chop blocks' free-phrase choice items (q88-q129) hold the correct choice where a seeded shuffle put it (sha256 of
 // the id, mod the choice count), never always first: a guard against first-answer bias in items added later.
 test('context quiz: the pullback items\' correct choice sits at its seeded position, not always first', () => {
   const crypto = require('crypto');
-  const block = QUIZ.questions.filter(q => /^q(8[8-9]|9\d|1[01]\d)$/.test(q.id) && Array.isArray(q.choices) && !/^F\d$/.test(q.choices[0]));
+  const block = QUIZ.questions.filter(q => /^q(8[8-9]|9\d|1[0-2]\d)$/.test(q.id) && Array.isArray(q.choices) && !/^F\d$/.test(q.choices[0]));
   assert.ok(block.length >= 15, `${block.length} free-phrase items`);
   for (const q of block) {
     const want = Number(BigInt(`0x${crypto.createHash('sha256').update(q.id).digest('hex')}`) % BigInt(q.choices.length));

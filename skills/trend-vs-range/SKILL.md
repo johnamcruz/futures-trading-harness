@@ -1,6 +1,6 @@
 ---
 name: trend-vs-range
-description: Trader-process steps 1-2 - whether each timeframe trends, ranges or is in transition, and whether the trend has declared itself. A read, never a veto.
+description: Trader-process steps 1-2 - whether each timeframe trends, ranges, chops or is in transition, and whether the trend has declared itself. A read, never a veto.
 ---
 
 # Trend vs Range
@@ -35,11 +35,36 @@ belongs behind structure (a swing), not at an arbitrary distance (`invalidation`
 
 - trend: regime `trend-up`/`trend-down`, swings HH/HL (LH/LL), the breaks
   a sequence of BOS that way;
-- range: regime `range`, swings `mixed`, alternating breaks on that
-  timeframe (its last two opposite CHoCHs) or none; a 15m setup the HTF way
+- range (geometry): regime `range`, swings `mixed`, price rotating
+  between a support and a resistance it keeps; a 15m setup the HTF way
   inside an HTF trend is the pullback ending (`pullback-vs-reversal`), not
   a range;
 - transition: regime `transition`, or regime and structure disagree.
+
+**Chop** (owner's definition; quality, not geometry): price swings back
+and forth with no sustained control either way.
+
+- Structure: BOS and CHoCH alternating both ways, swings broken both ways,
+  breaks without displacement that reverse, no HH/HL or LH/LL sequence.
+- Price action: overlapping candles, direction flipping, low efficiency,
+  weak momentum, local highs and lows rejected, failed breakouts.
+- Printed, weighed together, never one alone: `m3.lastBreak` last and
+  previous both CHoCH (breaks both ways; one CHoCH warns, it is not
+  chop), the Day so far `rotational`, many RTH VWAP crosses. Inside an
+  open `Pullback` line a 3m CHoCH against, then one back, is the pullback
+  and its watch, not chop.
+- Never classify from one BOS or CHoCH: weigh significance, displacement,
+  consistency, follow-through, overlap, efficiency. Structure broken both
+  ways with no continuation is chop, not a run of reversals.
+
+Classes (STATE, `trade-session`): trending → `trend-up`/`trend-down`;
+choppy → `chop`; transitional (old trend weakening, new one unconfirmed)
+→ `unclear` (frame `transition`); ranging → frame `range`.
+
+**Chop is not range.** Chop needs no edges; a range can rotate cleanly.
+A range day inside the 4h + 1h side is catchable: the turn at the edge
+the side's way, or the breakout with follow-through. Chop → sit out,
+whatever the geometry (mid-range churn too).
 
 The 3m read sits inside `h1.h4.trend`, `h1.h1.trend` (prop: both its
 way), `m15.frame.trend`;

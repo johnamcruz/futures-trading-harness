@@ -8,8 +8,11 @@
  *
  * The signals (the chop-class ids, per side; all present facts of the candle's bar). c = chop ids, t = trend ids:
  *   C1 / T1  the day so far reads rotational / directional the side's way          (field day-so-far)
- *   C2 / T2  the 15m trend ranges / runs the side's way; C9 the 15m against           (field 15m)
- *   C3 / T3  the 3m regime ranges / trends the side's way; C9 trends against (once)  (field regime)
+ *   C2       the 15m breaks both ways: its last and previous breaks both CHoCH        (field 15m-break)
+ *   T2       the 15m trend runs the side's way; C9 the 15m against                    (field 15m)
+ *   C3       the 3m breaks both ways: its last and previous breaks both CHoCH         (field 3m-break)
+ *   T3       the 3m regime trends the side's way; C9 trends against (once)            (field regime)
+ *   (chop is the quality of movement, range its geometry: a 15m `range` or a 3m `range` regime is neither signal)
  *   C4       the Bias line names no side (neutral or no side) and not this side     (field bias)
  *   C7 / T6  session VWAP crosses at or above crossesChop / at or below crossesTrendMax with price on the side's side
  *                                                                                   (field vwap)
@@ -21,11 +24,13 @@
  *   evidenceWord(key)  the class the VISIBLE evidence supports (the reference for guess and lag): with exactly one side the
  *                      trend rule allows (bias-line.js biasSides), its class C -> trend-<way>, B -> chop, A or D -> unclear;
  *                      no such side: the side-free signals (C1 C2 C3 C4 C7 C8) class B -> chop, else unclear
- *   codedWord(key)     the briefing's labels restated (never the model's): the day so far rotational -> chop; 4h and 1h
- *                      agree up or down -> trend-<way>; the 15m and the 3m regime both range -> chop; else unclear
+ *   choppy(facts, th)  the full choppy-movement evidence, never one fact alone: the 3m breaks both ways (its last and
+ *                      previous breaks both CHoCH) AND (the day so far rotational OR session VWAP crosses >= crossesChop)
+ *   codedWord(key)     the briefing's labels restated (never the model's): choppy -> chop (an aligned day too); 4h and
+ *                      1h agree up or down -> trend-<way>; else unclear (a range alone is never chop)
  *
- *   facts(briefing), signals(facts, side, thresholds), classOf({ c, t }), presentKey(briefing, thresholds),
- *   evidenceWord(key), codedWord(key), metFields(key, side)
+ *   facts(briefing), signals(facts, side, thresholds), classOf({ c, t }), choppy(facts, thresholds),
+ *   presentKey(briefing, thresholds), evidenceWord(key), codedWord(key), metFields(key, side)
  */
 
 const { biasLine, biasSides } = require('../../trading/bias-line');
@@ -48,6 +53,12 @@ function dayOf(m3) {
   return { word: d.status === 'too early' ? 'too early' : 'unknown', dir: null };
 }
 
+/** Whether a frame's last and previous breaks are both CHoCH (it broke both ways twice); null when none is printed. */
+function bothWaysOf(lb) {
+  if (!isObj(lb)) return null;
+  return Boolean(isObj(lb.last) && isObj(lb.previous) && lb.last.kind === 'CHoCH' && lb.previous.kind === 'CHoCH');
+}
+
 function facts(b) {
   const m3 = data(b, 'm3') || {};
   const h1 = data(b, 'h1') || {};
@@ -61,6 +72,7 @@ function facts(b) {
     dayType: orNull(at(m3, 'today', 'dayType')), openVs: orNull(at(m3, 'today', 'openVs')), windowEntries: orNull(m3.windowEntries),
     bias, biasSides: sides, declared: Object.fromEntries(SIDES.map(s => [s, (() => { try { return declaredOf(b, s); } catch (_err) { return null; } })()])),
     day: dayOf(m3),
+    bothWays: { '15m': bothWaysOf(m15.lastBreak), '3m': bothWaysOf(m3.lastBreak) },
   };
 }
 
@@ -73,9 +85,12 @@ function signals(f, side, th) {
   const add = (list, id, field) => { list.push(id); met.push({ id, field }); };
   if (f.day.word === 'rotational') add(c, 'C1', 'day-so-far'); else if (f.day.word === 'directional' && f.day.dir === dir) add(t, 'T1', 'day-so-far');
   const f15 = f.frames['15m'];
-  if (f15 === 'range') add(c, 'C2', '15m'); else if (f15 === dir) add(t, 'T2', '15m'); else if (f15 === other) add(c, 'C9', '15m');
+  const bw = f.bothWays || {};
+  if (bw['15m'] === true) add(c, 'C2', '15m-break');
+  if (f15 === dir) add(t, 'T2', '15m'); else if (f15 === other) add(c, 'C9', '15m');
+  if (bw['3m'] === true) add(c, 'C3', '3m-break');
   const rg = f.regime;
-  if (rg === 'range') add(c, 'C3', 'regime'); else if (rg === `trend-${dir}`) add(t, 'T3', 'regime'); else if (rg === `trend-${other}` && !c.includes('C9')) add(c, 'C9', 'regime');
+  if (rg === `trend-${dir}`) add(t, 'T3', 'regime'); else if (rg === `trend-${other}` && !c.includes('C9')) add(c, 'C9', 'regime');
   if (/^Bias: (neutral|no side)/.test(f.bias || '') && !String(f.bias).includes(`→ ${side} only`)) add(c, 'C4', 'bias');
   const x = f.sessionCrosses;
   if (Number.isFinite(x)) {
@@ -88,6 +103,9 @@ function signals(f, side, th) {
   return { c, t, met };
 }
 
+const choppy = (f, th) => Boolean(f.bothWays && f.bothWays['3m'] === true
+  && (f.day.word === 'rotational' || (Number.isFinite(f.sessionCrosses) && f.sessionCrosses >= th.crossesChop)));
+
 const classOf = ({ c, t }) => (!c.length && !t.length ? 'A' : !c.length ? 'C' : c.length > t.length ? 'B' : 'D');
 
 function presentKey(b, th) {
@@ -98,7 +116,7 @@ function presentKey(b, th) {
   const seen = new Set();
   const met = [...sig.long.met, ...sig.short.met].filter(m => SIDE_FREE.includes(m.id) && !seen.has(m.id) && seen.add(m.id));
   const none = { c: met.map(m => m.id), t: [], met };
-  return { facts: f, biasSide: allowed.length === 1 ? allowed[0] : null, signals: { ...sig, none }, cls: { long: classOf(sig.long), short: classOf(sig.short), none: classOf(none) } };
+  return { facts: f, choppy: choppy(f, th), biasSide: allowed.length === 1 ? allowed[0] : null, signals: { ...sig, none }, cls: { long: classOf(sig.long), short: classOf(sig.short), none: classOf(none) } };
 }
 
 const WORD_OF = { long: 'trend-up', short: 'trend-down' };
@@ -111,12 +129,11 @@ function evidenceWord(key) {
 
 function codedWord(key) {
   const fr = key.facts.frames;
-  if (key.facts.day.word === 'rotational') return 'chop';
+  if (key.choppy === true) return 'chop';
   if (fr['4h'] === fr['1h'] && (fr['4h'] === 'up' || fr['4h'] === 'down')) return fr['4h'] === 'up' ? 'trend-up' : 'trend-down';
-  if (fr['15m'] === 'range' && key.facts.regime === 'range') return 'chop';
   return 'unclear';
 }
 
 const metFields = (key, side) => [...new Set(key.signals[side || 'none'].met.map(m => m.field))];
 
-module.exports = { facts, signals, classOf, presentKey, evidenceWord, codedWord, metFields };
+module.exports = { facts, signals, classOf, choppy, presentKey, evidenceWord, codedWord, metFields };

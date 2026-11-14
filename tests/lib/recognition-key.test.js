@@ -11,7 +11,7 @@ const TH = { crossesChop: 5, crossesTrendMax: 3 };
 const f = o => ({
   frames: { '4h': 'up', '1h': 'up', '15m': 'up' }, regime: 'trend-up', sessionCrosses: 1, vwapSide: 'above', dayType: null, openVs: null,
   windowEntries: 'allowed', bias: 'Bias: long only (4h up, 1h up; short refused).', biasSides: { long: true, short: false },
-  declared: { long: true, short: false }, day: { word: 'directional', dir: 'up' }, ...o,
+  declared: { long: true, short: false }, day: { word: 'directional', dir: 'up' }, bothWays: { '15m': false, '3m': false }, ...o,
 });
 const ids = s => [s.c, s.t];
 
@@ -27,11 +27,23 @@ test('signals: trend with the side, chop against it; each met signal names the b
   const s = K.signals(f({}), 'long', TH);
   assert.deepStrictEqual(ids(s), [[], ['T1', 'T2', 'T3', 'T6', 'T5']]);
   assert.deepStrictEqual(s.met.map(m => m.field), ['day-so-far', '15m', 'regime', 'vwap', 'declared']);
-  const chop = K.signals(f({ frames: { '4h': 'up', '1h': 'up', '15m': 'range' }, regime: 'range', sessionCrosses: 6, bias: 'Bias: no side yet (15m range)', day: { word: 'rotational', dir: null } }), 'long', TH);
+  const chop = K.signals(f({ frames: { '4h': 'up', '1h': 'up', '15m': 'range' }, regime: 'range', sessionCrosses: 6, bias: 'Bias: no side yet (15m range)', day: { word: 'rotational', dir: null }, bothWays: { '15m': true, '3m': true } }), 'long', TH);
   assert.deepStrictEqual(chop.c, ['C1', 'C2', 'C3', 'C4', 'C7']);
   assert.strictEqual(K.classOf(chop), 'B');
   assert.deepStrictEqual(chop.t, ['T5'], 'declared long still holds');
-  assert.deepStrictEqual(chop.met.map(m => m.field), ['day-so-far', '15m', 'regime', 'bias', 'vwap', 'declared']);
+  assert.deepStrictEqual(chop.met.map(m => m.field), ['day-so-far', '15m-break', '3m-break', 'bias', 'vwap', 'declared']);
+});
+
+test('signals: chop is the quality of movement, range its geometry: a 15m range or a 3m range regime alone is no chop signal; C2 and C3 are the breaks both ways (last and previous both CHoCH)', () => {
+  const geometry = K.signals(f({ frames: { '4h': 'up', '1h': 'up', '15m': 'range' }, regime: 'range' }), 'long', TH);
+  assert.deepStrictEqual(geometry.c, [], 'a range rotating cleanly is not chop');
+  assert.ok(!geometry.t.includes('T2') && !geometry.t.includes('T3'), 'nor a trend signal');
+  const choppy = K.signals(f({ bothWays: { '15m': true, '3m': false } }), 'long', TH);
+  assert.deepStrictEqual(choppy.met.filter(m => m.id === 'C2').map(m => m.field), ['15m-break'], 'C2: the 15m breaks both ways, with no range needed');
+  assert.ok(!choppy.c.includes('C3'));
+  const choppy3 = K.signals(f({ bothWays: { '15m': false, '3m': true } }), 'short', TH);
+  assert.deepStrictEqual(choppy3.met.filter(m => m.id === 'C3').map(m => m.field), ['3m-break']);
+  assert.ok(!K.signals(f({ bothWays: { '15m': null, '3m': null } }), 'long', TH).c.length, 'unknown breaks are no signal');
 });
 
 test('signals: the frozen edges (crosses thresholds, transition, C9 once, the bias line, the IB day)', () => {
@@ -64,14 +76,35 @@ test('evidenceWord: the bias side\'s class C trend, B chop, A or D unclear; no b
   assert.strictEqual(K.evidenceWord(key({ biasSide: null, cls: { long: 'C', short: 'C', none: 'A' } })), 'unclear');
 });
 
-test('codedWord: rotational chop; 4h and 1h agreeing trend; 15m and 3m both range chop; else unclear', () => {
-  const k = (frames, regime, word = 'mixed') => key({ facts: f({ frames, regime, day: { word, dir: null } }) });
+test('choppy: the full choppy-movement evidence: the 3m breaks both ways (last and previous both CHoCH) AND the day so far rotational or session VWAP crosses at crossesChop; never one fact alone', () => {
+  const g = o => K.choppy(f({ day: { word: 'mixed', dir: null }, sessionCrosses: 1, ...o }), TH);
+  assert.strictEqual(g({ bothWays: { '15m': false, '3m': true }, day: { word: 'rotational', dir: null } }), true);
+  assert.strictEqual(g({ bothWays: { '15m': false, '3m': true }, sessionCrosses: 5 }), true, 'at the chop threshold');
+  assert.strictEqual(g({ bothWays: { '15m': false, '3m': true }, sessionCrosses: 4 }), false, 'breaks both ways alone');
+  assert.strictEqual(g({ day: { word: 'rotational', dir: null }, sessionCrosses: 9 }), false, 'rotational and crosses without the breaks');
+  assert.strictEqual(g({ bothWays: { '15m': true, '3m': false }, day: { word: 'rotational', dir: null } }), false, 'the 3m decides (m3.lastBreak, as taught)');
+  assert.strictEqual(g({ bothWays: { '15m': false, '3m': null }, day: { word: 'rotational', dir: null } }), false, 'unknown breaks');
+});
+
+test('codedWord: choppy movement chop (aligned days too); else 4h and 1h agreeing trend; else unclear; a range alone, or one chop fact alone, never chop', () => {
+  const k = (frames, regime, choppy = false, word = 'mixed') => key({ choppy, facts: f({ frames, regime, day: { word, dir: null } }) });
   assert.strictEqual(K.codedWord(k({ '4h': 'up', '1h': 'up', '15m': 'up' }, 'trend-up')), 'trend-up');
-  assert.strictEqual(K.codedWord(k({ '4h': 'up', '1h': 'up', '15m': 'up' }, 'trend-up', 'rotational')), 'chop', 'rotational first');
+  assert.strictEqual(K.codedWord(k({ '4h': 'up', '1h': 'up', '15m': 'up' }, 'trend-up', true)), 'chop', 'aligned but choppy: chop');
+  assert.strictEqual(K.codedWord(k({ '4h': 'up', '1h': 'up', '15m': 'up' }, 'trend-up', false, 'rotational')), 'trend-up', 'rotational alone is one fact');
   assert.strictEqual(K.codedWord(k({ '4h': 'down', '1h': 'down', '15m': 'up' }, 'x')), 'trend-down');
-  assert.strictEqual(K.codedWord(k({ '4h': 'range', '1h': 'up', '15m': 'range' }, 'range')), 'chop');
+  assert.strictEqual(K.codedWord(k({ '4h': 'range', '1h': 'up', '15m': 'range' }, 'range')), 'unclear', 'range is geometry, not chop');
+  assert.strictEqual(K.codedWord(k({ '4h': 'up', '1h': 'up', '15m': 'range' }, 'range')), 'trend-up', 'a range under aligned frames: the trend class');
+  assert.strictEqual(K.codedWord(k({ '4h': 'range', '1h': 'up', '15m': 'up' }, 'x', true)), 'chop');
   assert.strictEqual(K.codedWord(k({ '4h': 'range', '1h': 'up', '15m': 'up' }, 'x')), 'unclear');
   assert.strictEqual(K.codedWord(k({ '4h': 'range', '1h': 'range', '15m': 'up' }, 'x')), 'unclear', 'agreeing range is no trend');
+});
+
+test('presentKey carries choppy from its facts and thresholds', () => {
+  const b = { sections: { h1: { data: { h4: { trend: 'up' }, h1: { trend: 'up' } } }, m3: { data: { lastBreak: { last: { kind: 'CHoCH', direction: 'up' }, previous: { kind: 'CHoCH', direction: 'down' } }, vwap: { sessionCrossesLast30: 6, side: 'above' } } } } };
+  assert.strictEqual(K.presentKey(b, TH).choppy, true);
+  assert.strictEqual(K.codedWord(K.presentKey(b, TH)), 'chop');
+  assert.strictEqual(K.presentKey(b, { ...TH, crossesChop: 7 }).choppy, false);
+  assert.strictEqual(K.codedWord(K.presentKey(b, { ...TH, crossesChop: 7 })), 'trend-up');
 });
 
 test('metFields: the fields of the signals met for a side; the side-free ones with no side', () => {
@@ -92,6 +125,12 @@ test('facts read the briefing\'s own fields (a synthetic briefing): frames, regi
   assert.strictEqual(x.vwapSide, 'below');
   assert.strictEqual(x.dayType, 'trend down');
   assert.deepStrictEqual(x.day, { word: 'rotational', dir: 'down' });
+  assert.deepStrictEqual(x.bothWays, { '15m': null, '3m': null }, 'no lastBreak printed: unknown');
+  const br = (k1, d1, k2, d2) => ({ last: { kind: k1, direction: d1 }, previous: k2 ? { kind: k2, direction: d2 } : null });
+  const y = K.facts({ sections: { m15: { data: { lastBreak: br('CHoCH', 'up', 'CHoCH', 'down') } }, m3: { data: { lastBreak: br('CHoCH', 'down', 'BOS', 'up') } } } });
+  assert.deepStrictEqual(y.bothWays, { '15m': true, '3m': false }, 'one CHoCH (last and previous opposite) is not both ways; two CHoCHs are');
+  assert.strictEqual(K.facts({ sections: { m3: { data: { lastBreak: br('CHoCH', 'down', null) } } } }).bothWays['3m'], false, 'no previous: not both ways');
+  assert.strictEqual(K.facts({ sections: { m3: { data: { lastBreak: { last: null, previous: null } } } } }).bothWays['3m'], false, 'no break yet: not both ways');
   assert.strictEqual(K.facts({ sections: { m3: { data: { today: { soFar: { status: 'too early' } } } } } }).day.word, 'too early');
   assert.strictEqual(K.facts({ sections: {} }).day.word, 'unknown');
 });

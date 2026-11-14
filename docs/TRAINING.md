@@ -1772,7 +1772,8 @@ Frozen definitions:
   `3m-break`. A name off the list is counted apart (the record's own
   dropped count, and any other name kept off the list), never matched
   loosely. A met signal's field maps to its cite name (the 15m to
-  `15m-trend`, the Bias line to `trend-rule`); the VWAP crosses and the
+  `15m-trend`, the Bias line to `trend-rule`, the breaks both ways to
+  `15m-break` and `3m-break`); the VWAP crosses and the
   declared trend have none, so they are listed as met but uncitable, never
   as ignored.
 - **The evidence word** (the reference for guess and lag): with exactly one
@@ -1781,18 +1782,26 @@ Frozen definitions:
   no such side, the side-free signals' class B reads `chop`, else
   `unclear`. The signals per side, each a present fact of the candle's
   briefing: the day so far rotational (C1) or directional the side's way
-  (T1); the 15m range (C2), the side's way (T2) or against (C9); the 3m
-  regime range (C3), the side's way (T3) or against (C9, once); the Bias
+  (T1); the 15m breaking both ways, its last and previous breaks both
+  CHoCH (C2); the 15m trend the side's way (T2) or against (C9); the 3m
+  breaking both ways, the same on `m3.lastBreak` (C3); the 3m regime the
+  side's way (T3) or against (C9, once); the Bias
   line naming no side (C4); session VWAP crosses at or above
   `signals.crossesChop` (C7) or at or below `signals.crossesTrendMax` with
   price on the side's side (T6); inside the initial balance after opening
   inside the prior value area (C8) or an IB trend day the side's way (T7);
   the day's trend declared for the side (T5). Class A: no signal; C: trend
   only; B: chop outnumbers trend; D: both, trend at least chop.
-- **The coded read**: the day so far rotational reads `chop`; else the 4h
-  and 1h agreeing up or down read `trend-<way>`; else the 15m and the 3m
-  regime both ranging read `chop`; else `unclear`. It is never the
-  model's.
+- **The coded read**: choppy movement reads `chop`, an aligned day too:
+  the 3m breaking both ways (its last and previous breaks both CHoCH) and
+  either the day so far rotational or session VWAP crosses at or above
+  `signals.crossesChop`, never one fact alone; else the 4h and 1h agreeing
+  up or down read `trend-<way>`; else `unclear`. It is never the model's.
+- **Chop is not range** (the owner's rule, the chop pull request): chop is
+  the quality of movement, range its geometry. A 15m `range` or a 3m
+  `range` regime is neither a chop signal nor the coded read's `chop`; C2,
+  C3 and the coded read were redefined on the breaks both ways (they read a
+  range as chop before).
 - **Confirmation, one rule**: `barFacts.valid` for the side at the candle
   (the entry check: the window allows entries, the trend rule allows the
   side, the entry rule including `declaredOf`, a standard plan or a
@@ -2571,7 +2580,10 @@ were measured at 53 questions. At 95 (87 + 8 in Part B, feat/pullback-concept)
 0.7-1.0% (stable) and 2.0-5.2% (flaky) false rejects, a broken stable question
 caught 90.5-92.7%, a flaky one dropped to 0 97.3-98.7%. At 8 the flaky mix
 rejected 8.7-10.8% at most seeds (one seed's 5.3% was the draw), with the same
-detection. A flagged
+detection. At 106 (98 + 8, feat/chop-read) 9 rejected 6.0-7.8% on the flaky mix,
+over its 6% bound; `maxSlips` is 10: 0.7-1.5% (stable) and 3.2-4.2% (flaky)
+false rejects, a broken stable question caught 91.5-93.0%, a flaky one dropped to
+0 97.7-99.7%, the same detection as at 9. A flagged
 flaky question that does not confirm is not a slip (it has no baseline to lose).
 Summaries, the confirm runs' too, must carry the quiz
 hash they were graded with (`grade` writes it), equal to the current quiz's; a

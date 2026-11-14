@@ -417,7 +417,12 @@ const OLD_AGENTS_MD = 24466;
 // rule's compose bullet in AGENTS.md scopes the entry timing (unless a `Pullback` line is printed), and the class rule's
 // range is not chop (the owner: chop is the movement's quality, range its geometry); htf-to-ltf and trader-process are
 // common to both sides.
-const RAISED = 154 + 130 + 1625 + 336 + 382 + 939 + 843;
+// Plus 854 for feat/chop-read (same rule, owner-approved 2026-11-14): trade-session's class rule names the owner's chop
+// (repeated CHoCH both ways with rotational or many VWAP crosses, never one fact, aligned days too), the action (chop: sit
+// out; a lower-timeframe range inside the 4h + 1h trend: setups at the edge the side's way), the pause inside a Pullback
+// never chop, and two worked examples (4h range, 1h up, smooth: unclear; close to the level: enter); htf-to-ltf is common
+// to both sides.
+const RAISED = 154 + 130 + 1625 + 336 + 382 + 939 + 843 + 854;
 const EVERY_CYCLE = ['multi-timeframe-analysis', 'strategy-library', 'strategy-scan', 'strategy-gate-checks', 'trader-process', 'htf-to-ltf', 'autonomous-trading'];
 const PATHS = {
   'full cycle, no candidate': ['role-round', 'setup-judgment', 'day-context'],
@@ -546,9 +551,13 @@ test('trade-session split: no head-trader path reads more than the base\'s every
 // 105053 full, 45414 -> 46207 index; the trend-momentum analyst 56933 -> 63594 full, 42212 -> 42334 index; the risk
 // manager 95141 -> 95294 full, 81029 -> 81182 index; the news-calendar and volume-liquidity analysts +62 both modes;
 // every other role within its pin.
+// Then feat/chop-read (same rule, owner-approved 2026-11-14): trend-vs-range's chop definition and chop is not range
+// (+1392, the two analysts that embed it), bos-vs-choch's core rule, pullback-vs-reversal's pause vs chop, cisd's transition
+// unclear: the market-structure analyst 105053 -> 106683 full, 46207 -> 46371 index; the trend-momentum analyst 63594 ->
+// 65238 full, 42334 -> 42504 index; every other role within its pin.
 const ROLE_PROMPTS = {
-  full: { 'market-structure-analyst': 105053, 'news-calendar-analyst': 10868, 'risk-manager': 95294, 'strategy-researcher': 25728, 'trade-executor': 30670, 'trade-reviewer': 9454, 'trend-momentum-analyst': 63594, 'volume-liquidity-analyst': 50413 },
-  index: { 'market-structure-analyst': 46207, 'news-calendar-analyst': 10868, 'risk-manager': 81182, 'strategy-researcher': 25728, 'trade-executor': 30659, 'trade-reviewer': 9454, 'trend-momentum-analyst': 42334, 'volume-liquidity-analyst': 35045 },
+  full: { 'market-structure-analyst': 106683, 'news-calendar-analyst': 10868, 'risk-manager': 95294, 'strategy-researcher': 25728, 'trade-executor': 30670, 'trade-reviewer': 9454, 'trend-momentum-analyst': 65238, 'volume-liquidity-analyst': 50413 },
+  index: { 'market-structure-analyst': 46371, 'news-calendar-analyst': 10868, 'risk-manager': 81182, 'strategy-researcher': 25728, 'trade-executor': 30659, 'trade-reviewer': 9454, 'trend-momentum-analyst': 42504, 'volume-liquidity-analyst': 35045 },
 };
 
 test('trade-session split: no role prompt grows, in full or index mode, and no role lists a piece', () => {

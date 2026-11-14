@@ -230,7 +230,9 @@ test('fisherLess: the exact one-sided test that the edit passes less often than 
 test('Monte Carlo: an unchanged edit is rarely rejected, one that breaks a stable question usually is, at every one of several seeds', () => {
   // Several seeds, so a maxSlips can't pass on one lucky draw (feat/pullback-concept: at 95 questions, maxSlips 8 passed on
   // the old single seed at 5.3% and failed at 8.7-10.8% at most others; at 9: 0.7-1.0% stable, 2.0-5.2% flaky, a broken
-  // stable question caught 90.5-92.7%, a flaky one dropped to 0 97.3-98.7%, at every seed).
+  // stable question caught 90.5-92.7%, a flaky one dropped to 0 97.3-98.7%, at every seed; feat/chop-read: at 106
+  // questions 9 failed the flaky bound at 6.0-7.8%; at 10: 0.7-1.5% stable, 3.2-4.2% flaky, caught 91.5-93.0% and
+  // 97.7-99.7%).
   for (const SEED of [20260805, 1, 2, 3, 4]) {
   let seed = SEED;
   const rand = () => { seed = (seed * 1664525 + 1013904223) % 4294967296; return seed / 4294967296; };

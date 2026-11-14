@@ -43,7 +43,8 @@ never the composed setup read (`compose_check` takes a live strong one):
 3. Price pulls back toward it: small counter candles inside the impulse
    candle's range (`N in a row inside the <time> candle`: `compression`'s
    pennant), `Pullback` volume falling, its 15m swing holding. A 15m
-   `range` or `transition` here is the pause, not chop. The label is no
+   `range` or `transition` here is the pause, not chop. A pause holds
+   one way; chop breaks both ways again and again. The label is no
    evidence of resumption either. The impulse (a 15m `displacement` the
    side's way, or the CISD's `leg`) sets the leg: measure the pullback on
    it (`fib-retracement`, the CISD's `ote`), depth and location only, never
@@ -92,10 +93,10 @@ never the composed setup read (`compose_check` takes a live strong one):
    with-side read on that leg.
 
 **Close to it is a read.** The sequence is the reference picture, not a
-checklist: depth, the pause's shape, the exact touch of the level, the
+checklist: depth, the pause's shape, how near the level it stopped, the
 candle type and the distance to value weigh in the count
-(`confluence-counting`); no exact touch or no named candle alone is no
-reason to wait (a live strong 15m CISD or a 15m BOS is the read then). Three lines hold, whatever the count: the 4h + 1h side; a 15m CHoCH
+(`confluence-counting`); a stop short of the level inside the zone, or no
+named candle, is no reason to wait (a live strong 15m CISD or a 15m BOS is the read then). Three lines hold, whatever the count: the 4h + 1h side; a 15m CHoCH
 or CISD against → wait; the entry needs a 3m BOS or CISD the side's way
 and a true 15m setup read the side's way (`compose_check` requires the
 15m read; the 3m timing and the wait lines are yours).

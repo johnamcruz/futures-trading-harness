@@ -48,6 +48,10 @@ timeframe's candles). The 4h has swings only (`h1.h4.swingPattern`).
 | 15m | the working structure continues | the working structure shifting: a deeper pullback, or a reversal starting |
 | 1h (4h swings) | the HTF trend continues | the strongest sign of an HTF trend change, not a reversal by itself: a BOS the new way confirms it |
 
+No single BOS or CHoCH classifies the market. Structure broken both
+ways again and again with no continuation is chop, not a run of
+reversals (`trend-vs-range`).
+
 A break against a trending 4h or 1h: the trend rule refuses it (never counter).
 CHoCHs stacking up the timeframes (15m, then 1h) are a reversal
 developing; a 1h CHoCH while the 4h and 1h agree is context.
