@@ -1090,12 +1090,12 @@ never the composed setup read (`compose_check` takes a live strong one):
    through the impulse candle's body (long: below its open), whatever lies
    between; the `engulfing` label and the CISD's `engulfing` compare only
    the prior candle.
-  Printed proxies: the inside stack's low-high, the
-   `Pullback` depth.
+  Printed proxies: the printed `inside the <time> candle <low>-<high>`
+   (the impulse candle's), the `Pullback` depth.
 4.
   **The setup**: the 15m turn: a live 15m CISD, a 15m BOS or a 15m
    reaction at the level, the side's way → the pullback ended on the 15m;
-   no 15m BOS to wait for after a CISD or a reaction.
+   no 15m BOS to wait for after a strong CISD or a reaction.
    Composed as `15m cisd up` (true while live), or that 15m candle's read
    (`15m rejected <level> up`: long-wick, engulfing or confirmed,
    `candle-reading`; a BOS's breaking candle `15m broke <level> up`), true
@@ -1141,7 +1141,7 @@ never the composed setup read (`compose_check` takes a live strong one):
 checklist: depth, the pause's shape, the exact touch of the level, the
 candle type and the distance to value weigh in the count
 (`confluence-counting`); no exact touch or no named candle alone is no
-reason to wait.
+reason to wait (a live 15m CISD or BOS is the read then).
   Three lines hold, whatever the count: the 4h + 1h side; a 15m CHoCH
 or CISD against → wait; the entry needs a 3m BOS or CISD the side's way
 and a true 15m setup read the side's way (`compose_check` requires the
@@ -1195,7 +1195,7 @@ Take: long (4h, 1h up); 15m pullback to the broken prior RTH high 21500.00, insi
   RTH VWAP +0.3, near value -> strong setup: enter, a limit at the 3m close 21518.25.
 Watch: long; 15m pullback to 21500.00; 15m turn: CISD up, weak; 3m: CHoCH up, no BOS -> watch.
 Wait: long; 15m pullback to 21500.00; 15m turn: none, a 15m CHoCH down -> wait; no short.
-Close: long; the pullback stopped at 21503.25 (no touch); 15m turn: rejected the RTH VWAP 21502.50
+Close: long; the pullback stopped at 21502.25 (no touch); 15m turn: rejected the RTH VWAP 21502.50
   up (long-wick, still the last 15m); 3m: CISD up, RTH VWAP +0.4 -> enter: the lines hold.
 Pause: 4h, 1h up; after the 15m break up, 15m transition, inside candles, swing holds: the
   pause, not chop -> class trend-up.
@@ -2417,12 +2417,12 @@ never the composed setup read (`compose_check` takes a live strong one):
    through the impulse candle's body (long: below its open), whatever lies
    between; the `engulfing` label and the CISD's `engulfing` compare only
    the prior candle.
-  Printed proxies: the inside stack's low-high, the
-   `Pullback` depth.
+  Printed proxies: the printed `inside the <time> candle <low>-<high>`
+   (the impulse candle's), the `Pullback` depth.
 4.
   **The setup**: the 15m turn: a live 15m CISD, a 15m BOS or a 15m
    reaction at the level, the side's way → the pullback ended on the 15m;
-   no 15m BOS to wait for after a CISD or a reaction.
+   no 15m BOS to wait for after a strong CISD or a reaction.
    Composed as `15m cisd up` (true while live), or that 15m candle's read
    (`15m rejected <level> up`: long-wick, engulfing or confirmed,
    `candle-reading`; a BOS's breaking candle `15m broke <level> up`), true
@@ -2468,7 +2468,7 @@ never the composed setup read (`compose_check` takes a live strong one):
 checklist: depth, the pause's shape, the exact touch of the level, the
 candle type and the distance to value weigh in the count
 (`confluence-counting`); no exact touch or no named candle alone is no
-reason to wait.
+reason to wait (a live 15m CISD or BOS is the read then).
   Three lines hold, whatever the count: the 4h + 1h side; a 15m CHoCH
 or CISD against → wait; the entry needs a 3m BOS or CISD the side's way
 and a true 15m setup read the side's way (`compose_check` requires the
@@ -2522,7 +2522,7 @@ Take: long (4h, 1h up); 15m pullback to the broken prior RTH high 21500.00, insi
   RTH VWAP +0.3, near value -> strong setup: enter, a limit at the 3m close 21518.25.
 Watch: long; 15m pullback to 21500.00; 15m turn: CISD up, weak; 3m: CHoCH up, no BOS -> watch.
 Wait: long; 15m pullback to 21500.00; 15m turn: none, a 15m CHoCH down -> wait; no short.
-Close: long; the pullback stopped at 21503.25 (no touch); 15m turn: rejected the RTH VWAP 21502.50
+Close: long; the pullback stopped at 21502.25 (no touch); 15m turn: rejected the RTH VWAP 21502.50
   up (long-wick, still the last 15m); 3m: CISD up, RTH VWAP +0.4 -> enter: the lines hold.
 Pause: 4h, 1h up; after the 15m break up, 15m transition, inside candles, swing holds: the
   pause, not chop -> class trend-up.
@@ -3744,12 +3744,12 @@ never the composed setup read (`compose_check` takes a live strong one):
    through the impulse candle's body (long: below its open), whatever lies
    between; the `engulfing` label and the CISD's `engulfing` compare only
    the prior candle.
-  Printed proxies: the inside stack's low-high, the
-   `Pullback` depth.
+  Printed proxies: the printed `inside the <time> candle <low>-<high>`
+   (the impulse candle's), the `Pullback` depth.
 4.
   **The setup**: the 15m turn: a live 15m CISD, a 15m BOS or a 15m
    reaction at the level, the side's way → the pullback ended on the 15m;
-   no 15m BOS to wait for after a CISD or a reaction.
+   no 15m BOS to wait for after a strong CISD or a reaction.
    Composed as `15m cisd up` (true while live), or that 15m candle's read
    (`15m rejected <level> up`: long-wick, engulfing or confirmed,
    `candle-reading`; a BOS's breaking candle `15m broke <level> up`), true
@@ -3795,7 +3795,7 @@ never the composed setup read (`compose_check` takes a live strong one):
 checklist: depth, the pause's shape, the exact touch of the level, the
 candle type and the distance to value weigh in the count
 (`confluence-counting`); no exact touch or no named candle alone is no
-reason to wait.
+reason to wait (a live 15m CISD or BOS is the read then).
   Three lines hold, whatever the count: the 4h + 1h side; a 15m CHoCH
 or CISD against → wait; the entry needs a 3m BOS or CISD the side's way
 and a true 15m setup read the side's way (`compose_check` requires the
@@ -3849,7 +3849,7 @@ Take: long (4h, 1h up); 15m pullback to the broken prior RTH high 21500.00, insi
   RTH VWAP +0.3, near value -> strong setup: enter, a limit at the 3m close 21518.25.
 Watch: long; 15m pullback to 21500.00; 15m turn: CISD up, weak; 3m: CHoCH up, no BOS -> watch.
 Wait: long; 15m pullback to 21500.00; 15m turn: none, a 15m CHoCH down -> wait; no short.
-Close: long; the pullback stopped at 21503.25 (no touch); 15m turn: rejected the RTH VWAP 21502.50
+Close: long; the pullback stopped at 21502.25 (no touch); 15m turn: rejected the RTH VWAP 21502.50
   up (long-wick, still the last 15m); 3m: CISD up, RTH VWAP +0.4 -> enter: the lines hold.
 Pause: 4h, 1h up; after the 15m break up, 15m transition, inside candles, swing holds: the
   pause, not chop -> class trend-up.
@@ -5062,12 +5062,12 @@ never the composed setup read (`compose_check` takes a live strong one):
    through the impulse candle's body (long: below its open), whatever lies
    between; the `engulfing` label and the CISD's `engulfing` compare only
    the prior candle.
-  Printed proxies: the inside stack's low-high, the
-   `Pullback` depth.
+  Printed proxies: the printed `inside the <time> candle <low>-<high>`
+   (the impulse candle's), the `Pullback` depth.
 4.
   **The setup**: the 15m turn: a live 15m CISD, a 15m BOS or a 15m
    reaction at the level, the side's way → the pullback ended on the 15m;
-   no 15m BOS to wait for after a CISD or a reaction.
+   no 15m BOS to wait for after a strong CISD or a reaction.
    Composed as `15m cisd up` (true while live), or that 15m candle's read
    (`15m rejected <level> up`: long-wick, engulfing or confirmed,
    `candle-reading`; a BOS's breaking candle `15m broke <level> up`), true
@@ -5113,7 +5113,7 @@ never the composed setup read (`compose_check` takes a live strong one):
 checklist: depth, the pause's shape, the exact touch of the level, the
 candle type and the distance to value weigh in the count
 (`confluence-counting`); no exact touch or no named candle alone is no
-reason to wait.
+reason to wait (a live 15m CISD or BOS is the read then).
   Three lines hold, whatever the count: the 4h + 1h side; a 15m CHoCH
 or CISD against → wait; the entry needs a 3m BOS or CISD the side's way
 and a true 15m setup read the side's way (`compose_check` requires the
@@ -5167,7 +5167,7 @@ Take: long (4h, 1h up); 15m pullback to the broken prior RTH high 21500.00, insi
   RTH VWAP +0.3, near value -> strong setup: enter, a limit at the 3m close 21518.25.
 Watch: long; 15m pullback to 21500.00; 15m turn: CISD up, weak; 3m: CHoCH up, no BOS -> watch.
 Wait: long; 15m pullback to 21500.00; 15m turn: none, a 15m CHoCH down -> wait; no short.
-Close: long; the pullback stopped at 21503.25 (no touch); 15m turn: rejected the RTH VWAP 21502.50
+Close: long; the pullback stopped at 21502.25 (no touch); 15m turn: rejected the RTH VWAP 21502.50
   up (long-wick, still the last 15m); 3m: CISD up, RTH VWAP +0.4 -> enter: the lines hold.
 Pause: 4h, 1h up; after the 15m break up, 15m transition, inside candles, swing holds: the
   pause, not chop -> class trend-up.
@@ -6476,12 +6476,12 @@ never the composed setup read (`compose_check` takes a live strong one):
    through the impulse candle's body (long: below its open), whatever lies
    between; the `engulfing` label and the CISD's `engulfing` compare only
    the prior candle.
-  Printed proxies: the inside stack's low-high, the
-   `Pullback` depth.
+  Printed proxies: the printed `inside the <time> candle <low>-<high>`
+   (the impulse candle's), the `Pullback` depth.
 4.
   **The setup**: the 15m turn: a live 15m CISD, a 15m BOS or a 15m
    reaction at the level, the side's way → the pullback ended on the 15m;
-   no 15m BOS to wait for after a CISD or a reaction.
+   no 15m BOS to wait for after a strong CISD or a reaction.
    Composed as `15m cisd up` (true while live), or that 15m candle's read
    (`15m rejected <level> up`: long-wick, engulfing or confirmed,
    `candle-reading`; a BOS's breaking candle `15m broke <level> up`), true
@@ -6527,7 +6527,7 @@ never the composed setup read (`compose_check` takes a live strong one):
 checklist: depth, the pause's shape, the exact touch of the level, the
 candle type and the distance to value weigh in the count
 (`confluence-counting`); no exact touch or no named candle alone is no
-reason to wait.
+reason to wait (a live 15m CISD or BOS is the read then).
   Three lines hold, whatever the count: the 4h + 1h side; a 15m CHoCH
 or CISD against → wait; the entry needs a 3m BOS or CISD the side's way
 and a true 15m setup read the side's way (`compose_check` requires the
@@ -6581,7 +6581,7 @@ Take: long (4h, 1h up); 15m pullback to the broken prior RTH high 21500.00, insi
   RTH VWAP +0.3, near value -> strong setup: enter, a limit at the 3m close 21518.25.
 Watch: long; 15m pullback to 21500.00; 15m turn: CISD up, weak; 3m: CHoCH up, no BOS -> watch.
 Wait: long; 15m pullback to 21500.00; 15m turn: none, a 15m CHoCH down -> wait; no short.
-Close: long; the pullback stopped at 21503.25 (no touch); 15m turn: rejected the RTH VWAP 21502.50
+Close: long; the pullback stopped at 21502.25 (no touch); 15m turn: rejected the RTH VWAP 21502.50
   up (long-wick, still the last 15m); 3m: CISD up, RTH VWAP +0.4 -> enter: the lines hold.
 Pause: 4h, 1h up; after the 15m break up, 15m transition, inside candles, swing holds: the
   pause, not chop -> class trend-up.
@@ -7887,12 +7887,12 @@ never the composed setup read (`compose_check` takes a live strong one):
    through the impulse candle's body (long: below its open), whatever lies
    between; the `engulfing` label and the CISD's `engulfing` compare only
    the prior candle.
-  Printed proxies: the inside stack's low-high, the
-   `Pullback` depth.
+  Printed proxies: the printed `inside the <time> candle <low>-<high>`
+   (the impulse candle's), the `Pullback` depth.
 4.
   **The setup**: the 15m turn: a live 15m CISD, a 15m BOS or a 15m
    reaction at the level, the side's way → the pullback ended on the 15m;
-   no 15m BOS to wait for after a CISD or a reaction.
+   no 15m BOS to wait for after a strong CISD or a reaction.
    Composed as `15m cisd up` (true while live), or that 15m candle's read
    (`15m rejected <level> up`: long-wick, engulfing or confirmed,
    `candle-reading`; a BOS's breaking candle `15m broke <level> up`), true
@@ -7938,7 +7938,7 @@ never the composed setup read (`compose_check` takes a live strong one):
 checklist: depth, the pause's shape, the exact touch of the level, the
 candle type and the distance to value weigh in the count
 (`confluence-counting`); no exact touch or no named candle alone is no
-reason to wait.
+reason to wait (a live 15m CISD or BOS is the read then).
   Three lines hold, whatever the count: the 4h + 1h side; a 15m CHoCH
 or CISD against → wait; the entry needs a 3m BOS or CISD the side's way
 and a true 15m setup read the side's way (`compose_check` requires the
@@ -7992,7 +7992,7 @@ Take: long (4h, 1h up); 15m pullback to the broken prior RTH high 21500.00, insi
   RTH VWAP +0.3, near value -> strong setup: enter, a limit at the 3m close 21518.25.
 Watch: long; 15m pullback to 21500.00; 15m turn: CISD up, weak; 3m: CHoCH up, no BOS -> watch.
 Wait: long; 15m pullback to 21500.00; 15m turn: none, a 15m CHoCH down -> wait; no short.
-Close: long; the pullback stopped at 21503.25 (no touch); 15m turn: rejected the RTH VWAP 21502.50
+Close: long; the pullback stopped at 21502.25 (no touch); 15m turn: rejected the RTH VWAP 21502.50
   up (long-wick, still the last 15m); 3m: CISD up, RTH VWAP +0.4 -> enter: the lines hold.
 Pause: 4h, 1h up; after the 15m break up, 15m transition, inside candles, swing holds: the
   pause, not chop -> class trend-up.
@@ -9219,12 +9219,12 @@ never the composed setup read (`compose_check` takes a live strong one):
    through the impulse candle's body (long: below its open), whatever lies
    between; the `engulfing` label and the CISD's `engulfing` compare only
    the prior candle.
-  Printed proxies: the inside stack's low-high, the
-   `Pullback` depth.
+  Printed proxies: the printed `inside the <time> candle <low>-<high>`
+   (the impulse candle's), the `Pullback` depth.
 4.
   **The setup**: the 15m turn: a live 15m CISD, a 15m BOS or a 15m
    reaction at the level, the side's way → the pullback ended on the 15m;
-   no 15m BOS to wait for after a CISD or a reaction.
+   no 15m BOS to wait for after a strong CISD or a reaction.
    Composed as `15m cisd up` (true while live), or that 15m candle's read
    (`15m rejected <level> up`: long-wick, engulfing or confirmed,
    `candle-reading`; a BOS's breaking candle `15m broke <level> up`), true
@@ -9270,7 +9270,7 @@ never the composed setup read (`compose_check` takes a live strong one):
 checklist: depth, the pause's shape, the exact touch of the level, the
 candle type and the distance to value weigh in the count
 (`confluence-counting`); no exact touch or no named candle alone is no
-reason to wait.
+reason to wait (a live 15m CISD or BOS is the read then).
   Three lines hold, whatever the count: the 4h + 1h side; a 15m CHoCH
 or CISD against → wait; the entry needs a 3m BOS or CISD the side's way
 and a true 15m setup read the side's way (`compose_check` requires the
@@ -9324,7 +9324,7 @@ Take: long (4h, 1h up); 15m pullback to the broken prior RTH high 21500.00, insi
   RTH VWAP +0.3, near value -> strong setup: enter, a limit at the 3m close 21518.25.
 Watch: long; 15m pullback to 21500.00; 15m turn: CISD up, weak; 3m: CHoCH up, no BOS -> watch.
 Wait: long; 15m pullback to 21500.00; 15m turn: none, a 15m CHoCH down -> wait; no short.
-Close: long; the pullback stopped at 21503.25 (no touch); 15m turn: rejected the RTH VWAP 21502.50
+Close: long; the pullback stopped at 21502.25 (no touch); 15m turn: rejected the RTH VWAP 21502.50
   up (long-wick, still the last 15m); 3m: CISD up, RTH VWAP +0.4 -> enter: the lines hold.
 Pause: 4h, 1h up; after the 15m break up, 15m transition, inside candles, swing holds: the
   pause, not chop -> class trend-up.
@@ -10551,12 +10551,12 @@ never the composed setup read (`compose_check` takes a live strong one):
    through the impulse candle's body (long: below its open), whatever lies
    between; the `engulfing` label and the CISD's `engulfing` compare only
    the prior candle.
-  Printed proxies: the inside stack's low-high, the
-   `Pullback` depth.
+  Printed proxies: the printed `inside the <time> candle <low>-<high>`
+   (the impulse candle's), the `Pullback` depth.
 4.
   **The setup**: the 15m turn: a live 15m CISD, a 15m BOS or a 15m
    reaction at the level, the side's way → the pullback ended on the 15m;
-   no 15m BOS to wait for after a CISD or a reaction.
+   no 15m BOS to wait for after a strong CISD or a reaction.
    Composed as `15m cisd up` (true while live), or that 15m candle's read
    (`15m rejected <level> up`: long-wick, engulfing or confirmed,
    `candle-reading`; a BOS's breaking candle `15m broke <level> up`), true
@@ -10602,7 +10602,7 @@ never the composed setup read (`compose_check` takes a live strong one):
 checklist: depth, the pause's shape, the exact touch of the level, the
 candle type and the distance to value weigh in the count
 (`confluence-counting`); no exact touch or no named candle alone is no
-reason to wait.
+reason to wait (a live 15m CISD or BOS is the read then).
   Three lines hold, whatever the count: the 4h + 1h side; a 15m CHoCH
 or CISD against → wait; the entry needs a 3m BOS or CISD the side's way
 and a true 15m setup read the side's way (`compose_check` requires the
@@ -10656,7 +10656,7 @@ Take: long (4h, 1h up); 15m pullback to the broken prior RTH high 21500.00, insi
   RTH VWAP +0.3, near value -> strong setup: enter, a limit at the 3m close 21518.25.
 Watch: long; 15m pullback to 21500.00; 15m turn: CISD up, weak; 3m: CHoCH up, no BOS -> watch.
 Wait: long; 15m pullback to 21500.00; 15m turn: none, a 15m CHoCH down -> wait; no short.
-Close: long; the pullback stopped at 21503.25 (no touch); 15m turn: rejected the RTH VWAP 21502.50
+Close: long; the pullback stopped at 21502.25 (no touch); 15m turn: rejected the RTH VWAP 21502.50
   up (long-wick, still the last 15m); 3m: CISD up, RTH VWAP +0.4 -> enter: the lines hold.
 Pause: 4h, 1h up; after the 15m break up, 15m transition, inside candles, swing holds: the
   pause, not chop -> class trend-up.
@@ -11956,12 +11956,12 @@ never the composed setup read (`compose_check` takes a live strong one):
    through the impulse candle's body (long: below its open), whatever lies
    between; the `engulfing` label and the CISD's `engulfing` compare only
    the prior candle.
-  Printed proxies: the inside stack's low-high, the
-   `Pullback` depth.
+  Printed proxies: the printed `inside the <time> candle <low>-<high>`
+   (the impulse candle's), the `Pullback` depth.
 4.
   **The setup**: the 15m turn: a live 15m CISD, a 15m BOS or a 15m
    reaction at the level, the side's way → the pullback ended on the 15m;
-   no 15m BOS to wait for after a CISD or a reaction.
+   no 15m BOS to wait for after a strong CISD or a reaction.
    Composed as `15m cisd up` (true while live), or that 15m candle's read
    (`15m rejected <level> up`: long-wick, engulfing or confirmed,
    `candle-reading`; a BOS's breaking candle `15m broke <level> up`), true
@@ -12007,7 +12007,7 @@ never the composed setup read (`compose_check` takes a live strong one):
 checklist: depth, the pause's shape, the exact touch of the level, the
 candle type and the distance to value weigh in the count
 (`confluence-counting`); no exact touch or no named candle alone is no
-reason to wait.
+reason to wait (a live 15m CISD or BOS is the read then).
   Three lines hold, whatever the count: the 4h + 1h side; a 15m CHoCH
 or CISD against → wait; the entry needs a 3m BOS or CISD the side's way
 and a true 15m setup read the side's way (`compose_check` requires the
@@ -12061,7 +12061,7 @@ Take: long (4h, 1h up); 15m pullback to the broken prior RTH high 21500.00, insi
   RTH VWAP +0.3, near value -> strong setup: enter, a limit at the 3m close 21518.25.
 Watch: long; 15m pullback to 21500.00; 15m turn: CISD up, weak; 3m: CHoCH up, no BOS -> watch.
 Wait: long; 15m pullback to 21500.00; 15m turn: none, a 15m CHoCH down -> wait; no short.
-Close: long; the pullback stopped at 21503.25 (no touch); 15m turn: rejected the RTH VWAP 21502.50
+Close: long; the pullback stopped at 21502.25 (no touch); 15m turn: rejected the RTH VWAP 21502.50
   up (long-wick, still the last 15m); 3m: CISD up, RTH VWAP +0.4 -> enter: the lines hold.
 Pause: 4h, 1h up; after the 15m break up, 15m transition, inside candles, swing holds: the
   pause, not chop -> class trend-up.
@@ -13295,12 +13295,12 @@ never the composed setup read (`compose_check` takes a live strong one):
    through the impulse candle's body (long: below its open), whatever lies
    between; the `engulfing` label and the CISD's `engulfing` compare only
    the prior candle.
-  Printed proxies: the inside stack's low-high, the
-   `Pullback` depth.
+  Printed proxies: the printed `inside the <time> candle <low>-<high>`
+   (the impulse candle's), the `Pullback` depth.
 4.
   **The setup**: the 15m turn: a live 15m CISD, a 15m BOS or a 15m
    reaction at the level, the side's way → the pullback ended on the 15m;
-   no 15m BOS to wait for after a CISD or a reaction.
+   no 15m BOS to wait for after a strong CISD or a reaction.
    Composed as `15m cisd up` (true while live), or that 15m candle's read
    (`15m rejected <level> up`: long-wick, engulfing or confirmed,
    `candle-reading`; a BOS's breaking candle `15m broke <level> up`), true
@@ -13346,7 +13346,7 @@ never the composed setup read (`compose_check` takes a live strong one):
 checklist: depth, the pause's shape, the exact touch of the level, the
 candle type and the distance to value weigh in the count
 (`confluence-counting`); no exact touch or no named candle alone is no
-reason to wait.
+reason to wait (a live 15m CISD or BOS is the read then).
   Three lines hold, whatever the count: the 4h + 1h side; a 15m CHoCH
 or CISD against → wait; the entry needs a 3m BOS or CISD the side's way
 and a true 15m setup read the side's way (`compose_check` requires the
@@ -13400,7 +13400,7 @@ Take: long (4h, 1h up); 15m pullback to the broken prior RTH high 21500.00, insi
   RTH VWAP +0.3, near value -> strong setup: enter, a limit at the 3m close 21518.25.
 Watch: long; 15m pullback to 21500.00; 15m turn: CISD up, weak; 3m: CHoCH up, no BOS -> watch.
 Wait: long; 15m pullback to 21500.00; 15m turn: none, a 15m CHoCH down -> wait; no short.
-Close: long; the pullback stopped at 21503.25 (no touch); 15m turn: rejected the RTH VWAP 21502.50
+Close: long; the pullback stopped at 21502.25 (no touch); 15m turn: rejected the RTH VWAP 21502.50
   up (long-wick, still the last 15m); 3m: CISD up, RTH VWAP +0.4 -> enter: the lines hold.
 Pause: 4h, 1h up; after the 15m break up, 15m transition, inside candles, swing holds: the
   pause, not chop -> class trend-up.
@@ -14536,12 +14536,12 @@ never the composed setup read (`compose_check` takes a live strong one):
    through the impulse candle's body (long: below its open), whatever lies
    between; the `engulfing` label and the CISD's `engulfing` compare only
    the prior candle.
-  Printed proxies: the inside stack's low-high, the
-   `Pullback` depth.
+  Printed proxies: the printed `inside the <time> candle <low>-<high>`
+   (the impulse candle's), the `Pullback` depth.
 4.
   **The setup**: the 15m turn: a live 15m CISD, a 15m BOS or a 15m
    reaction at the level, the side's way → the pullback ended on the 15m;
-   no 15m BOS to wait for after a CISD or a reaction.
+   no 15m BOS to wait for after a strong CISD or a reaction.
    Composed as `15m cisd up` (true while live), or that 15m candle's read
    (`15m rejected <level> up`: long-wick, engulfing or confirmed,
    `candle-reading`; a BOS's breaking candle `15m broke <level> up`), true
@@ -14587,7 +14587,7 @@ never the composed setup read (`compose_check` takes a live strong one):
 checklist: depth, the pause's shape, the exact touch of the level, the
 candle type and the distance to value weigh in the count
 (`confluence-counting`); no exact touch or no named candle alone is no
-reason to wait.
+reason to wait (a live 15m CISD or BOS is the read then).
   Three lines hold, whatever the count: the 4h + 1h side; a 15m CHoCH
 or CISD against → wait; the entry needs a 3m BOS or CISD the side's way
 and a true 15m setup read the side's way (`compose_check` requires the
@@ -14641,7 +14641,7 @@ Take: long (4h, 1h up); 15m pullback to the broken prior RTH high 21500.00, insi
   RTH VWAP +0.3, near value -> strong setup: enter, a limit at the 3m close 21518.25.
 Watch: long; 15m pullback to 21500.00; 15m turn: CISD up, weak; 3m: CHoCH up, no BOS -> watch.
 Wait: long; 15m pullback to 21500.00; 15m turn: none, a 15m CHoCH down -> wait; no short.
-Close: long; the pullback stopped at 21503.25 (no touch); 15m turn: rejected the RTH VWAP 21502.50
+Close: long; the pullback stopped at 21502.25 (no touch); 15m turn: rejected the RTH VWAP 21502.50
   up (long-wick, still the last 15m); 3m: CISD up, RTH VWAP +0.4 -> enter: the lines hold.
 Pause: 4h, 1h up; after the 15m break up, 15m transition, inside candles, swing holds: the
   pause, not chop -> class trend-up.

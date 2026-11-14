@@ -46,7 +46,7 @@
   "gate": {
     "flagDrop": 0.4,
     "alpha": 0.05,
-    "maxSlips": 8,
+    "maxSlips": 9,
     "confirmRuns": 10,
     "redMaxShare": 0.4,
     "greenMinShare": 0.8,
@@ -1285,7 +1285,7 @@
       "lookup": [
         "pullback-vs-reversal"
       ],
-      "text": "Briefing lines (synthetic, 11:00 ET):\n- Bias: long only (4h up, 1h up; short refused).\n- m15.lastBreak: last BOS up at 21500.00 (10:00).\n- 15m (setup candle, closed 11:00): inside, 3 in a row inside the 10:00 candle 21494.25-21541.50, close middle third, range 0.4 ATR, vol 0.5x.\n- Regime (computed): 15m transition.\nWhich do these lines show: chop evidence, a pause in the trend (a pullback), a reversal, or no read yet?",
+      "text": "Briefing lines (synthetic, 11:00 ET):\n- Bias: long only (4h up, 1h up; short refused).\n- m15.lastBreak: last BOS up at 21500.00 (10:00).\n- 15m (setup candle, closed 11:00): inside, 3 in a row inside the 10:00 candle 21494.25-21541.50, close middle third, range 0.4 ATR, vol 0.5x.\n- Regime (computed): 15m transition/normal, 3m transition/normal.\nWhich do these lines show: chop evidence, a pause in the trend (a pullback), a reversal, or no read yet?",
       "rule": "after a 15m break the side's way, small counter candles inside the impulse with the 15m transition: the pause, not chop",
       "anchor": "A 15m `range` or `transition` here is the pause, not chop.",
       "choices": [
@@ -1423,7 +1423,7 @@
       "lookup": [
         "pullback-vs-reversal"
       ],
-      "text": "Briefing lines (synthetic, 10:27 ET), flat:\n- Bias: long only (4h up, 1h up; short refused).\n- Pullback (15m, long leg 21462.5 -> 21538.75): depth 27% of the leg; 10 bars since the extreme, volume 0.6x the leg's per bar (falling), range 0.5x; swings since the extreme: 15m 21462.5 holds, 1h 21390.25 holds; 15m break against: none, 1h: none.\n- 15m (setup candle, closed 10:15): none, close top third, range 0.8 ATR, vol 0.9x; rejected VWAP (rth) (closed back above; long-wick rejection, long side). The pullback low was 21503.25, 3.25 points above the broken prior RTH high 21500.00.\n- m3.lastBreak: last BOS up at 21517.25 (barsAgo 0), previous CHoCH up at 21510.75 (barsAgo 2).\n- Trend declared? (in 3m ATR(14), + = the side's way; `trend-vs-range`): long RTH VWAP +0.3, EMA20 +0.2, overnight range broke out its way, day's move +1.6, regime with; short RTH VWAP -0.3, EMA20 -0.2, overnight range broke out against, day's move -1.6, regime against.\nNo exact touch of the broken level and no named reversal candle. What is the action?",
+      "text": "Briefing lines (synthetic, 10:27 ET), flat:\n- Bias: long only (4h up, 1h up; short refused).\n- Pullback (15m, long leg 21462.5 -> 21538.75): depth 27% of the leg; 10 bars since the extreme, volume 0.6x the leg's per bar (falling), range 0.5x; swings since the extreme: 15m 21462.5 holds, 1h 21390.25 holds; 15m break against: none, 1h: none.\n- 15m (setup candle, closed 10:15): none, close top third, range 0.8 ATR, vol 0.9x; rejected VWAP (rth) (closed back above; long-wick rejection, long side). The pullback low was 21502.25, 2.25 points above the broken prior RTH high 21500.00.\n- m3.lastBreak: last BOS up at 21517.25 (barsAgo 0), previous CHoCH up at 21510.75 (barsAgo 2).\n- Trend declared? (in 3m ATR(14), + = the side's way; `trend-vs-range`): long RTH VWAP +0.3, EMA20 +0.2, overnight range broke out its way, day's move +1.6, regime with; short RTH VWAP -0.3, EMA20 -0.2, overnight range broke out against, day's move -1.6, regime against.\nNo exact touch of the broken level and no named reversal candle. What is the action?",
       "rule": "close to the reference picture: the three lines hold (the 4h + 1h side, no CHoCH or CISD against, the 3m BOS up with a true 15m setup read up); the soft pieces weigh in the count: a take",
       "anchor": "The sequence is the reference picture, not a checklist",
       "choices": [
@@ -1612,7 +1612,7 @@
       "id": "q111",
       "layer": "bias",
       "prompt": "head",
-      "text": "Briefing lines (synthetic, 10:30 ET), flat:\n- Bias: long only (4h up, 1h up; short refused).\n- Pullback (15m, long leg 21494.25 -> 21541.5): depth 44% of the leg; 10 bars since the extreme, volume 0.5x the leg's per bar (falling), range 0.4x; swings since the extreme: 15m 21494.25 holds, 1h 21390.25 holds; 15m break against: none, 1h: none.\n- Regime (computed): 15m range.\nYour own read: 4h up, 1h up, the 15m ranging inside this pullback.\nF1 - STATE: 4h up | 1h up | 15m range | frames agree | class trend-up | cites 4h-trend, 1h-trend, pullback\nF2 - STATE: 4h up | 1h up | 15m range | frames disagree | class chop | cites 4h-trend, 1h-trend, pullback\nF3 - STATE: 4h up | 1h up | 15m range | frames disagree | class trend-up | cites 4h-trend, 1h-trend, pullback\nF4 - STATE: 4h up | 1h up | 15m range | frames disagree | class unclear | cites 4h-trend, 1h-trend, pullback\nWhich ONE of F1-F4 is your STATE line?",
+      "text": "Briefing lines (synthetic, 10:30 ET), flat:\n- Bias: long only (4h up, 1h up; short refused).\n- Pullback (15m, long leg 21494.25 -> 21541.5): depth 44% of the leg; 10 bars since the extreme, volume 0.5x the leg's per bar (falling), range 0.4x; swings since the extreme: 15m 21494.25 holds, 1h 21390.25 holds; 15m break against: none, 1h: none.\n- Regime (computed): 15m range/normal, 3m range/normal.\nYour own read: 4h up, 1h up, the 15m ranging inside this pullback.\nF1 - STATE: 4h up | 1h up | 15m range | frames agree | class trend-up | cites 4h-trend, 1h-trend, pullback\nF2 - STATE: 4h up | 1h up | 15m range | frames disagree | class chop | cites 4h-trend, 1h-trend, pullback\nF3 - STATE: 4h up | 1h up | 15m range | frames disagree | class trend-up | cites 4h-trend, 1h-trend, pullback\nF4 - STATE: 4h up | 1h up | 15m range | frames disagree | class unclear | cites 4h-trend, 1h-trend, pullback\nWhich ONE of F1-F4 is your STATE line?",
       "rule": "the 15m ranging under an aligned 4h and 1h: the frames disagree, and the class stays trend-up (a 15m range does not cancel it, nor does frames disagree)",
       "anchor": "nor does your `frames disagree`",
       "choices": [

@@ -2566,11 +2566,12 @@ quiz and on a deliberately flaky one; one stable question broken from 1.0 to 0.3
 is caught 93%, 1.0 to 0.6 about a third, a flaky question (0.8) dropped to 0
 99%, three questions to 0.7 about 14%, eight to 0.6 about 60%. Mild or broad
 damage is often not caught: the gate is a filter, not a verdict. Those rates
-were measured at 53 questions; at 95 (87 + 8 in Part B, feat/pullback-concept,
-`maxSlips` 8) the test's 600 trials give 0.8% (stable) and 5.3% (flaky) false
-rejects, under its 4% and 6% bounds, and a broken stable question caught 90.5%, a
-flaky one dropped to 0 98%. The flaky mix's rate moves with the quiz's size and
-order (at 96 questions it was 10.8%): a quiz edit reruns the test. A flagged
+were measured at 53 questions. At 95 (87 + 8 in Part B, feat/pullback-concept)
+`maxSlips` is 9 and the test asserts its bounds at five seeds (600 trials each):
+0.7-1.0% (stable) and 2.0-5.2% (flaky) false rejects, a broken stable question
+caught 90.5-92.7%, a flaky one dropped to 0 97.3-98.7%. At 8 the flaky mix
+rejected 8.7-10.8% at most seeds (one seed's 5.3% was the draw), with the same
+detection. A flagged
 flaky question that does not confirm is not a slip (it has no baseline to lose).
 Summaries, the confirm runs' too, must carry the quiz
 hash they were graded with (`grade` writes it), equal to the current quiz's; a
