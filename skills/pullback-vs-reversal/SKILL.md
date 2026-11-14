@@ -89,7 +89,7 @@ never the composed setup read (`compose_check` takes a live strong one):
 checklist: depth, the pause's shape, the exact touch of the level, the
 candle type and the distance to value weigh in the count
 (`confluence-counting`); no exact touch or no named candle alone is no
-reason to wait (a live 15m CISD or BOS is the read then). Three lines hold, whatever the count: the 4h + 1h side; a 15m CHoCH
+reason to wait (a live strong 15m CISD or a 15m BOS is the read then). Three lines hold, whatever the count: the 4h + 1h side; a 15m CHoCH
 or CISD against → wait; the entry needs a 3m BOS or CISD the side's way
 and a true 15m setup read the side's way (`compose_check` requires the
 15m read; the 3m timing and the wait lines are yours).
