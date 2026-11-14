@@ -127,7 +127,8 @@ market now at this candle, is `trend-up`, `trend-down`, `chop` or
 it. No other words.
 
 A `Pullback` line printed: your PLAN's `4 Setup` line is the read chain:
-side; 15m pullback; 15m turn (CISD or BOS, strong or weak); 3m (BOS or
+side; 15m pullback; 15m turn (CISD, BOS or reaction at the level; a CISD
+strong or weak); 3m (BOS or
 CISD, near value or not); verdict (strong setup: enter, watch or wait)
 (`pullback-vs-reversal`). The setup is the 15m turn: a live 15m CISD, a
 15m BOS or a 15m reaction at the level, the side's way; a 15m BOS far past
@@ -138,7 +139,8 @@ line of its PLAN; taught: the gate and `compose_check` do not read it):
 
 - The class follows your frames: your 4h and 1h both one way → that
   trend class (a 15m pullback, `range` or `transition` under them doesn't
-  cancel it: never `chop` or `unclear` for it, `frames disagree` too); one or both `range` → `chop` or `unclear`.
+  cancel it, nor does your `frames disagree`: never `chop` or `unclear`
+  for it); one or both `range` → `chop` or `unclear`.
 - A take: `class` on its side (`trend-up` long, `trend-down` short), your
   4h and 1h too (`up` long, `down` short).
 - `compose_check` still runs first (its record is the evidence the pass is

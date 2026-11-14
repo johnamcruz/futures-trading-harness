@@ -1,8 +1,9 @@
 'use strict';
 
 // The quiz gate for a proposed skill edit (scripts/lib/train/quiz-gate.js): before any replay, the edited tree's quiz
-// summary is held against the champion's. 53 noisy questions at a few runs each make any per-question drop rule falsely
-// reject an edit that changes nothing (a multiple-comparisons trap: review found 30 to 80% at 3 runs), so: only a question
+// summary is held against the champion's. Many noisy questions (53 when written, 95 now) at a few runs each make any
+// per-question drop rule falsely reject an edit that changes nothing (a multiple-comparisons trap: review found 30 to
+// 80% at 3 runs), so: only a question
 // the champion answered on every run can slip (a flaky question has no baseline to lose); a drop of flagDrop or more FLAGS
 // any question; a flagged question is re-asked with more runs on both sides and is a regression only when those confirm
 // runs ALONE (the flag selected on noise, so the first runs are not reused) are worse by an exact test at alpha shared out
@@ -226,8 +227,8 @@ test('fisherLess: the exact one-sided test that the edit passes less often than 
 // The reason for the design: a noisy quiz must not reject an edit that changes nothing. Seeded Monte Carlo of the whole
 // procedure (the first run, then a confirm run on what it flags), 53 questions with a realistic mix of stable and
 // flaky ones; both sides draw from the same per-question pass rates.
-// At 95 questions (feat/pullback-concept) the quiz file's maxSlips is 9: at 8 the flaky mix rejected 8.5% of unchanged edits;
-// at 9, 0.7% stable and 2.0% flaky, a broken stable question caught 90.5%, a flaky one dropped to 0 98% (600 trials each).
+// At 95 questions (feat/pullback-concept; maxSlips 8): 0.8% stable and 5.3% flaky unchanged edits rejected, a broken stable
+// question caught 90.5%, a flaky one dropped to 0 98% (600 trials each). The flaky rate moves with the quiz's size (10.8% at 96).
 test('Monte Carlo: an unchanged edit is rarely rejected, one that breaks a stable question usually is', () => {
   let seed = 20260805;
   const rand = () => { seed = (seed * 1664525 + 1013904223) % 4294967296; return seed / 4294967296; };

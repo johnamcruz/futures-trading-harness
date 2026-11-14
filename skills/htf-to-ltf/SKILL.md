@@ -40,12 +40,13 @@ confirming close, no 3m turn to wait for (waiting cost R), unless a
 **Pullback** (`pullback-vs-reversal`): BOS or CISD the side's way
 confirms, CHoCH or CISD against warns. Setup: the 15m turn: a live 15m
 CISD, a 15m BOS or a 15m reaction at the level, the side's way; no 3m BOS
-or CISD yet: watch, no pass. Entry: the first 3m BOS or CISD the
+or CISD yet: watch (this bar's decision stays a pass; the read stays
+open). Entry: the first 3m BOS or CISD the
 side's way near value (`Trend declared?` RTH VWAP or EMA20 within about
 ±0.5), next 3m bar; a 15m BOS far past value (no 3m BOS or CISD near
 it): late, not an entry. In a trade, a 15m BOS: hold. A CHoCH or CISD
 against (3m: the watch restarts; 15m: a reversal attempt): wait, never
-counter. A 15m `range` or `transition` there: the pause, not chop.
+counter.
 Not in a prop attempt: the trend rule alone (both ranging, the 15m's
 side; no trend anywhere, both sides).
 Then the head trader's own STATE read decides the take (`trade-session`

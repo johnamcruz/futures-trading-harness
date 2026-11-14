@@ -98,7 +98,8 @@ test('context quiz: every layer asked, ids unique, the bar the whole quiz at K 5
   // q72 4/5, q73 4/5, q74 1/5 and q75 4/5 at k=5 were removed, real model misses (the model treats unknown or neutral
   // fields as conflicting, and sometimes calls a with-trend pullback a chop sign), as q45 and q53 were: a skill gap
   // reported to the owner. q76-q78 (class D, conflicting) were dropped in review.
-  // 87 since q87-q110 (feat/pullback-concept, owner-approved 2026-11-14: the pullback to a broken level, BOS confirms and
+  // 87 since q87-q111 (q100 folded into q106, the same briefing: a quiz of 95 keeps the gate's maxSlips 8 within its
+  // pinned false-reject rate) (feat/pullback-concept, owner-approved 2026-11-14: the pullback to a broken level, BOS confirms and
   // CHoCH warns on the 3m and the 15m against the 4h + 1h side, the pause not chop, late, the down mirror, the strict side,
   // the deep case, close to the picture a read, the 15m and 3m CISD; closed choices, each measured at k=3 before it entered the bar).
   assert.strictEqual(QUIZ.questions.length, 87);
@@ -169,7 +170,7 @@ test('context quiz: the chop questions (q79-q82) are asked against the prompt ho
   }
 });
 
-test('context quiz: the pullback questions (q87-q110) are asked against the prompt holding the sentence each anchors to, and go missing without it', () => {
+test('context quiz: the pullback questions (q87-q111) are asked against the prompt holding the sentence each anchors to, and go missing without it', () => {
   const prompts = Q.buildPrompts(ROOT, QUIZ);
   const flat = t => t.replace(/\s+/g, ' ');
   const cut = re => Object.fromEntries(Object.entries(prompts).map(([k, v]) => [k, flat(v).replace(re, '')]));
@@ -190,7 +191,6 @@ test('context quiz: the pullback questions (q87-q110) are asked against the prom
     ['q97', 'lookup', PB, /No BOS or CISD after it: no setup, pass\./g],
     ['q98', 'lookup', PB, /a candle at the level is no confirmation alone/g],
     ['q99', 'lookup', PB, /The sequence is the reference picture, not a checklist/g],
-    ['q100', 'lookup', PB, /the 15m turn: a live 15m CISD, a 15m BOS or a 15m reaction at the level/g],
     ['q101', 'lookup', PB, /the entry needs a 3m BOS or CISD the side's way and a true 15m setup read the side's way/g],
     ['q102', 'lookup', PB, /`3m cisd up` in the setup step/g],
     ['q103', 'lookup', PB, /A 15m CHoCH or CISD against → this pullback failed/g],
@@ -201,6 +201,7 @@ test('context quiz: the pullback questions (q87-q110) are asked against the prom
     ['q108', 'lookup', PB, /a 15m BOS far past value \(no 3m BOS or CISD near it\): late, not an entry/g],
     ['q109', 'lookup', PB, /Counter candles that don't engulf it: a pullback forming, not a reversal/g],
     ['q110', 'lookup', PB, /a counter candle engulfing it reads as a CHoCH against: wait/g],
+    ['q111', 'head', undefined, /nor does your `frames disagree`/g],
     ['q106', 'lookup', PB, /an engulfing confirming candle, `engulfing`, is one: `cisd`\) weighs more in the count/g],
   ];
   assert.deepStrictEqual(Q.anchorsMissing(QUIZ, prompts).filter(x => want.some(w => w[0] === x)), []);
@@ -223,7 +224,7 @@ test('context quiz: the pullback questions (q87-q110) are asked against the prom
   const pb = close => pullbackLine({ frame: '15m', side: 'long', leg, depth: (leg.extreme - close) / (leg.extreme - leg.origin), pastOrigin: false, counter: { bars: 10, volRatio: 0.6, volume: 'falling', rangeRatio: 0.5 },
     swing: { '15m': { price: 21462.5, holds: true }, '1h': { price: 21390.25, holds: true } }, against: { '15m': null, '1h': null } });
   const near = declaredLine({ long: sd(0.3, 0.2, 'broke out its way', 1.6, 'with'), short: sd(-0.3, -0.2, 'broke out against', -1.6, 'against') });
-  for (const [id, close] of [['q87', 21518.25], ['q96', 21512.5], ['q97', 21503.75], ['q99', 21518], ['q100', 21518.25], ['q101', 21509.5], ['q102', 21513.75], ['q103', 21503], ['q104', 21504.25], ['q105', 21505.5], ['q106', 21518.25], ['q107', 21518.25]]) {
+  for (const [id, close] of [['q87', 21518.25], ['q96', 21512.5], ['q97', 21503.75], ['q99', 21518], ['q101', 21509.5], ['q102', 21513.75], ['q103', 21503], ['q104', 21504.25], ['q105', 21505.5], ['q106', 21518.25], ['q107', 21518.25]]) {
     for (const line of [up, pb(close), near]) assert.ok(text(id).includes(`\n${line}\n`), `${id}: ${line}`);
   }
   assert.ok(text('q94').includes(`\n- ${Q.excerptOf({ bias: { h4: 0, h1: 1, t15: 1 } })[0]}\n`));

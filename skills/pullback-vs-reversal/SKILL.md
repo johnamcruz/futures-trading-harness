@@ -28,7 +28,7 @@ hypotheses; a missing field is `unknown`. "Last 10 bars": the prompt's `V`, `(c-
 trade open: the Trade read governs.
 
 **The pullback to a broken level** (15m read, 3m entry; up shown, down
-the mirror). Open while the briefing prints a `Pullback` line. BOS the
+the mirror). Open from the `Pullback` line (steps 6-7 outlive it). BOS the
 side's way confirms, CHoCH against warns; a CISD reads as the same: the
 side's way as a BOS, against as a CHoCH, earlier (`cisd`). Strong
 (`displacement` strong; an engulfing confirming candle, `engulfing`, is
@@ -49,9 +49,14 @@ never the composed setup read (`compose_check` takes a live strong one):
    it (`fib-retracement`, the CISD's `ote`), depth and location only, never
    an entry or a reversal zone. Counter candles that don't engulf it: a
    pullback forming, not a reversal; a counter candle engulfing it reads
-   as a CHoCH against: wait.
+   as a CHoCH against: wait. "Engulfs it": a counter 15m close back
+   through the impulse candle's body (long: below its open), whatever lies
+   between; the `engulfing` label and the CISD's `engulfing` compare only
+   the prior candle. Printed proxies: the inside stack's low-high, the
+   `Pullback` depth.
 4. **The setup**: the 15m turn: a live 15m CISD, a 15m BOS or a 15m
-   reaction at the level, the side's way → the pullback ended on the 15m.
+   reaction at the level, the side's way → the pullback ended on the 15m;
+   no 15m BOS to wait for after a CISD or a reaction.
    Composed as `15m cisd up` (true while live), or that 15m candle's read
    (`15m rejected <level> up`: long-wick, engulfing or confirmed,
    `candle-reading`; a BOS's breaking candle `15m broke <level> up`), true
@@ -62,7 +67,8 @@ never the composed setup read (`compose_check` takes a live strong one):
    (the `Trend declared?` RTH VWAP or EMA20 within about ±0.5), the step
    4 read true now → compose on that bar: the setup `15m cisd up` (or the
    15m candle's read), `3m bos up` in the bias step or `3m cisd up` in the
-   setup step; a limit at its close, filled within `valid_bars`
+   setup step (a 3m CISD is the entry as a 3m BOS is, no BOS to wait for
+   after it); a limit at its close, filled within `valid_bars`
    (`trade-lifecycle`). Never a limit back at the broken or the CHoCH
    level. The step 4 read gone: no setup until a new 15m read. Unfilled
    or run away: no chase. Far past the level, no retest: late, not this
@@ -82,7 +88,8 @@ never the composed setup read (`compose_check` takes a live strong one):
 **Close to it is a read.** The sequence is the reference picture, not a
 checklist: depth, the pause's shape, the exact touch of the level, the
 candle type and the distance to value weigh in the count
-(`confluence-counting`). Three lines hold, whatever the count: the 4h + 1h side; a 15m CHoCH
+(`confluence-counting`); no exact touch or no named candle alone is no
+reason to wait. Three lines hold, whatever the count: the 4h + 1h side; a 15m CHoCH
 or CISD against → wait; the entry needs a 3m BOS or CISD the side's way
 and a true 15m setup read the side's way (`compose_check` requires the
 15m read; the 3m timing and the wait lines are yours).

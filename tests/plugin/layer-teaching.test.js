@@ -123,7 +123,7 @@ test('layer teaching: every "the setup is the entry" home scopes the pullback en
     assert.match(t, re, file);
   }
   // The read itself names its scope once, and the CISD skill no longer puts a pullback's entry at the next close.
-  assert.match(read('pullback-vs-reversal'), /Open while the briefing prints a `Pullback` line\./);
+  assert.match(read('pullback-vs-reversal'), /Open from the `Pullback` line \(steps 6-7 outlive it\)\./);
   assert.doesNotMatch(read('cisd'), /ends the pullback; the next close is the entry/);
   assert.ok(SCOPE.test(read('trader-process')));
   // The always-on rule reaches every harness: the generated workspace instructions carry the scope.
