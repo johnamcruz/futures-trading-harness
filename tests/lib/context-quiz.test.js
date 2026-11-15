@@ -723,6 +723,16 @@ test('grading a choice question: the ANSWER line equal to the answer passes; a h
   // A yes/no choice: the verdict alone.
   const yn = { ...q('q79'), choices: ['yes', 'no'], answer: 'no' };
   for (const [a, want] of [['ANSWER: No', true], ['ANSWER: **no**.', true], ['ANSWER: No, trend evidence', false], ['ANSWER: yes', false], ['ANSWER: nope', false]]) assert.strictEqual(Q.gradeAnswer(QUIZ, yn, a).pass, want, a);
+  // A number is compared by its value (round 17: q127's choice prints 21462.50, the Market state line 21462.5): the same
+  // price in another format passes; another price, a digit more or less, or a word changed beside it still fails.
+  const px = { ...q('q79'), choices: ['holds above 21462.50 (origin)', 'failed below 21478.00', 'chop'], answer: 'holds above 21462.50 (origin)' };
+  for (const [a, want] of [['ANSWER: holds above 21462.5 (origin)', true], ['ANSWER: holds above 21462.500 (origin)', true], ['ANSWER: holds above 21462.50 (origin).', true],
+    ['ANSWER: holds above 21462.25 (origin)', false], ['ANSWER: holds above 21462 (origin)', false], ['ANSWER: holds above 2146.25 (origin)', false], ['ANSWER: holds above 214625 (origin)', false],
+    ['ANSWER: holds below 21462.5 (origin)', false], ['ANSWER: holds above 21462.5', false], ['ANSWER: failed below 21478', false]]) assert.strictEqual(Q.gradeAnswer(QUIZ, px, a).pass, want, a);
+  const fail = { ...px, answer: 'failed below 21478.00' };
+  for (const [a, want] of [['ANSWER: failed below 21478', true], ['ANSWER: failed below 21478.0', true], ['ANSWER: failed below 21478.25', false]]) assert.strictEqual(Q.gradeAnswer(QUIZ, fail, a).pass, want, a);
+  // Text without a number reads as before (the cases above), and the F-labels stay distinct.
+  assert.strictEqual(g('q81', 'ANSWER: F3'), false);
   // The result's shape is the regex questions' (quiz-run, quiz-gate and quiz-phase read it): the answer missed, nothing forbidden.
   assert.deepStrictEqual(Q.gradeAnswer(QUIZ, q('q79'), 'ANSWER: trend evidence\nwhy'), { id: 'q79', line: 'trend evidence', fmt: true, pass: false, miss: ['no read yet'], forb: [], unsure: false });
   assert.deepStrictEqual(Q.gradeAnswer(QUIZ, q('q81'), 'F4'), { id: 'q81', line: 'F4', fmt: false, pass: true, miss: [], forb: [], unsure: false });

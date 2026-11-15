@@ -132,9 +132,11 @@ function questionErrors(q, { part = 'questions', at = 'question', ids = new Set(
 
 /**
  * A choice answer as compared: lower case, the markdown, quotes or brackets around it (` _ " ( ) *) and a trailing period
- * or ! dropped; never a character inside it ('F4, F3' and 'chop evidence (I think)' stay what they are).
+ * or ! dropped; never a character inside it ('F4, F3' and 'chop evidence (I think)' stay what they are). A number reads
+ * by its value (round 17): 21462.50, 21462.5 and 21462.500 are one price; 21462.25 stays another.
  */
-const norm = s => String(s).toLowerCase().replace(/^[\s`_"(*]+/, '').replace(/[\s`_")*.!]+$/, '');
+const norm = s => String(s).toLowerCase().replace(/^[\s`_"(*]+/, '').replace(/[\s`_")*.!]+$/, '')
+  .replace(/\d+(?:\.\d+)?/g, n => String(Number(n)));
 /** The format line a choice question is asked with: its own, or its choices named. */
 const choiceFormat = q => q.format || ` Answer from your instructions only. First line: ANSWER: <one of: ${q.choices.join(' | ')}>, nothing else. Second line: one short sentence why.`;
 
