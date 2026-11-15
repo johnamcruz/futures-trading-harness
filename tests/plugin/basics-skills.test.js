@@ -331,8 +331,9 @@ test('basics skills: frontmatter, the sections in order, and small', () => {
     // pullback-vs-reversal 1728 (feat/chop-read, owner-approved 2026-11-14: the pause holds one way, chop breaks both ways;
     // close to the level is a read); then 1762 (owner-approved 2026-11-15: the 15m CHoCH back as a 15m turn); then 1763 (round 15:
     // a live strong 15m CISD, the word compose_check's live CISD means). bos-vs-choch 700 (round 15, the owner's line: each
-    // break's protected swing, close only; its `protected` field; the current 15m BOS), at the measured need (696).
-    assert.ok(words >= 250 && words <= (s === 'candle-reading' ? 1280 : s === 'pullback-vs-reversal' ? 1763 : s === 'bos-vs-choch' ? 700 : 650), `${s}: ${words} words`);
+    // break's protected swing, close only; its `protected` field; the current 15m BOS), at the measured need (696);
+    // pullback-vs-reversal 1794 (Fable round 16: the Depth row names when the Market state counts the pullback).
+    assert.ok(words >= 250 && words <= (s === 'candle-reading' ? 1280 : s === 'pullback-vs-reversal' ? 1794 : s === 'bos-vs-choch' ? 700 : 650), `${s}: ${words} words`);
     // The two setups also carry a timeframe table (what the setup means on 3m/5m, 15m and 1h/4h): a little more room
     // (scripts/lib/skill-caps.js, the one source the training loop's probe edits read too).
     const max = skillByteCap(s);

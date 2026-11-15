@@ -127,7 +127,7 @@ test('protected swings (real): each printed 3m break carries protectedOf on the 
       const cut = w.filter(x => Date.parse(x.t) <= Date.parse(plain[k].at));
       assert.strictEqual(protectedOf(cut, plain[k]).level, lb[k].protected.level, 'causal: known at the break');
       const p = lb[k].protected;
-      const span = w.filter(x => Date.parse(x.t) >= Date.parse(plain[k].swingAt) && Date.parse(x.t) <= Date.parse(plain[k].at));
+      const span = w.filter(x => Date.parse(x.t) > Date.parse(plain[k].swingAt) && Date.parse(x.t) <= Date.parse(plain[k].at));
       assert.strictEqual(p.level, plain[k].direction === 'up' ? Math.min(...span.map(x => x.l)) : Math.max(...span.map(x => x.h)));
     }
   }

@@ -67,7 +67,8 @@ function breaksOf(bars, k = AN.indicators.swingK) {
 
 /**
  * A break's protected swing (the owner's invalidation rule): the origin of the leg that made it, the lowest low (a break
- * up) or highest high (down) from the broken swing's bar to the break's bar. A BOS up holds until a close below it (the
+ * up) or highest high (down) from the bar after the broken swing's to the break's bar (the swing formed after the broken
+ * one; the broken swing bar's own low is not a higher low). A BOS up holds until a close below it (the
  * protected higher low); a CHoCH up holds until a close below it (the low that started the shift); the mirrors down.
  * { side, level, at, brokenAt }: brokenAt the first close beyond it after the break (null while it holds); null without
  * a break or when the break is not in the bars. Reads only the bars given (causal).
@@ -77,14 +78,23 @@ function protectedOf(bars, brk) {
   const from = Date.parse(brk.swingAt);
   const to = Date.parse(brk.at);
   const up = brk.direction === 'up';
+  if (!bars.some(x => Date.parse(x.t) === to)) return null;
+  // The swing formed AFTER the broken one (Fable round 16): the broken swing's own bar is excluded (a wide swing-high bar's
+  // low is not a higher low). No bar after it (never in practice: a break follows the swing's confirmation): the leg's
+  // lowest (highest) close from the swing's bar.
   let o = null;
   for (const x of bars) {
     const ms = Date.parse(x.t);
-    if (ms < from || ms > to) continue;
+    if (ms <= from || ms > to) continue;
     if (!o || (up ? x.l < o.l : x.h > o.h)) o = x;
   }
-  if (!o || !bars.some(x => Date.parse(x.t) === to)) return null;
-  const level = up ? o.l : o.h;
+  let level;
+  if (o) level = up ? o.l : o.h;
+  else {
+    for (const x of bars) { const ms = Date.parse(x.t); if (ms >= from && ms <= to && (!o || (up ? x.c < o.c : x.c > o.c))) o = x; }
+    if (!o) return null;
+    level = o.c;
+  }
   const hit = bars.find(x => Date.parse(x.t) > to && (up ? x.c < level : x.c > level));
   return { side: up ? 'low' : 'high', level, at: o.t, brokenAt: hit ? hit.t : null };
 }

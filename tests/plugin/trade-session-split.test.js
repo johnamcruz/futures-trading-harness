@@ -567,9 +567,10 @@ test('trade-session split: no head-trader path reads more than the base\'s every
 // owner's 15m CHoCH back as a 15m turn in pullback-vs-reversal step 4 and the 3m pair's chop reading in bos-vs-choch).
 // Then round 15 (PREREG addendum 15, same rule), at the measured need: bos-vs-choch's protected swing line, its fields and
 // the current 15m BOS, pullback-vs-reversal's and htf-to-ltf's strong 15m CISD: the market-structure analyst 107352 ->
-// 107636 full, 46370 -> 46657 index; the trend-momentum analyst 66039 -> 66316 full, 42645 -> 42925 index.
+// 107830 full (with pvr's Depth row clause, Fable round 16), 46370 -> 46657 index; the trend-momentum analyst 66039 ->
+// 66510 full, 42645 -> 42925 index.
 const ROLE_PROMPTS = {
-  full: { 'market-structure-analyst': 107636, 'news-calendar-analyst': 10868, 'risk-manager': 95294, 'strategy-researcher': 25728, 'trade-executor': 30670, 'trade-reviewer': 9400, 'trend-momentum-analyst': 66316, 'volume-liquidity-analyst': 50521 },
+  full: { 'market-structure-analyst': 107830, 'news-calendar-analyst': 10868, 'risk-manager': 95294, 'strategy-researcher': 25728, 'trade-executor': 30670, 'trade-reviewer': 9400, 'trend-momentum-analyst': 66510, 'volume-liquidity-analyst': 50521 },
   index: { 'market-structure-analyst': 46657, 'news-calendar-analyst': 10868, 'risk-manager': 81182, 'strategy-researcher': 25728, 'trade-executor': 30659, 'trade-reviewer': 9400, 'trend-momentum-analyst': 42925, 'volume-liquidity-analyst': 35153 },
 };
 

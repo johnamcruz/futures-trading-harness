@@ -173,10 +173,10 @@ test('protectedOf on real bars: the protected level of every printed 3m break is
       if (!lb) continue;
       seen[lb.kind] += 1;
       const p = protectedOf(xs, lb);
-      const span = xs.filter(x => Date.parse(x.t) >= Date.parse(lb.swingAt) && Date.parse(x.t) <= Date.parse(lb.at));
+      const span = xs.filter(x => Date.parse(x.t) > Date.parse(lb.swingAt) && Date.parse(x.t) <= Date.parse(lb.at));
       const want = lb.direction === 'up' ? Math.min(...span.map(x => x.l)) : Math.max(...span.map(x => x.h));
       assert.strictEqual(p.level, want);
-      assert.ok(Date.parse(p.at) >= Date.parse(lb.swingAt) && Date.parse(p.at) <= Date.parse(lb.at), 'between the broken swing and the break');
+      assert.ok(Date.parse(p.at) > Date.parse(lb.swingAt) && Date.parse(p.at) <= Date.parse(lb.at), 'after the broken swing (its own bar excluded), by the break');
       const first = xs.find(x => Date.parse(x.t) > Date.parse(lb.at) && (lb.direction === 'up' ? x.c < want : x.c > want));
       assert.strictEqual(p.brokenAt, first ? first.t : null);
       // Causal: the same answer from the bars cut at the break's own bar.
@@ -185,4 +185,16 @@ test('protectedOf on real bars: the protected level of every printed 3m break is
     }
   }
   assert.ok(seen.BOS > 20 && seen.CHoCH > 20, JSON.stringify(seen));
+});
+
+// Fable round 16 (PREREG addendum 17): the protected higher low is the swing low formed AFTER the broken high, never the
+// broken swing bar's own low (a wide swing-high bar's low is not a higher low). Mirrored for the lower high.
+test('protectedOf: the protected swing excludes the broken swing\'s bar (Fable\'s case: swing high 110 with low 100, consolidation 104-108, BOS at 111 -> 104)', () => {
+  const { protectedOf } = require('../../scripts/lib/trading/structure-events');
+  const t = i => new Date(Date.UTC(2026, 5, 1, 14, i)).toISOString();
+  const bar = (i, h, l, c) => ({ t: t(i), o: c, h, l, c, v: 1 });
+  const up = [bar(0, 110, 100, 105), bar(1, 108, 104, 106), bar(2, 107, 104.5, 105), bar(3, 108, 105, 107), bar(4, 112, 106, 111)];
+  assert.deepStrictEqual(protectedOf(up, { direction: 'up', swingAt: t(0), at: t(4) }), { side: 'low', level: 104, at: t(1), brokenAt: null });
+  const dn = [bar(0, 110, 100, 105), bar(1, 106, 102, 104), bar(2, 105.5, 103, 105), bar(3, 105, 102, 103), bar(4, 104, 98, 99)];
+  assert.deepStrictEqual(protectedOf(dn, { direction: 'down', swingAt: t(0), at: t(4) }), { side: 'high', level: 106, at: t(1), brokenAt: null }, 'the mirror: the lower high after the broken low');
 });

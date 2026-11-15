@@ -1124,7 +1124,7 @@ hypotheses; a missing field is `unknown`.
 | Sign | Pullback | Reversal | Field |
 |---|---|---|---|
 | HTF break | with the trend | a CHoCH against it | `m15.lastBreak.last`, `h1.lastBreak.last`; `Pullback` breaks |
-| Depth | up to about 50-62% of the leg (hypothesis) | past the impulse origin | flat: `Pullback` depth; in a trade: the Trade read |
+| Depth | up to about 50-62% of the leg (hypothesis) | past the impulse origin | flat: `Pullback` depth; in a trade: the Trade read; the Market state names the pullback only while the leg has never retraced past about 62% since its extreme, was never given back, and its 15m swing holds; the `Pullback` line prints regardless |
 | Swing | the leg's 15m/1h swing holds | a 3m close broke it | `Pullback` swings (closes since the extreme); `m3.htfLevels` `brokenAt` (since the swing formed) |
 | Volume, bars | falling, shrinking | rising, wide against it | `Pullback` volume, range vs the leg; last 10 bars |
 
@@ -2552,7 +2552,7 @@ hypotheses; a missing field is `unknown`.
 | Sign | Pullback | Reversal | Field |
 |---|---|---|---|
 | HTF break | with the trend | a CHoCH against it | `m15.lastBreak.last`, `h1.lastBreak.last`; `Pullback` breaks |
-| Depth | up to about 50-62% of the leg (hypothesis) | past the impulse origin | flat: `Pullback` depth; in a trade: the Trade read |
+| Depth | up to about 50-62% of the leg (hypothesis) | past the impulse origin | flat: `Pullback` depth; in a trade: the Trade read; the Market state names the pullback only while the leg has never retraced past about 62% since its extreme, was never given back, and its 15m swing holds; the `Pullback` line prints regardless |
 | Swing | the leg's 15m/1h swing holds | a 3m close broke it | `Pullback` swings (closes since the extreme); `m3.htfLevels` `brokenAt` (since the swing formed) |
 | Volume, bars | falling, shrinking | rising, wide against it | `Pullback` volume, range vs the leg; last 10 bars |
 
@@ -3989,7 +3989,7 @@ hypotheses; a missing field is `unknown`.
 | Sign | Pullback | Reversal | Field |
 |---|---|---|---|
 | HTF break | with the trend | a CHoCH against it | `m15.lastBreak.last`, `h1.lastBreak.last`; `Pullback` breaks |
-| Depth | up to about 50-62% of the leg (hypothesis) | past the impulse origin | flat: `Pullback` depth; in a trade: the Trade read |
+| Depth | up to about 50-62% of the leg (hypothesis) | past the impulse origin | flat: `Pullback` depth; in a trade: the Trade read; the Market state names the pullback only while the leg has never retraced past about 62% since its extreme, was never given back, and its 15m swing holds; the `Pullback` line prints regardless |
 | Swing | the leg's 15m/1h swing holds | a 3m close broke it | `Pullback` swings (closes since the extreme); `m3.htfLevels` `brokenAt` (since the swing formed) |
 | Volume, bars | falling, shrinking | rising, wide against it | `Pullback` volume, range vs the leg; last 10 bars |
 
@@ -5417,7 +5417,7 @@ hypotheses; a missing field is `unknown`.
 | Sign | Pullback | Reversal | Field |
 |---|---|---|---|
 | HTF break | with the trend | a CHoCH against it | `m15.lastBreak.last`, `h1.lastBreak.last`; `Pullback` breaks |
-| Depth | up to about 50-62% of the leg (hypothesis) | past the impulse origin | flat: `Pullback` depth; in a trade: the Trade read |
+| Depth | up to about 50-62% of the leg (hypothesis) | past the impulse origin | flat: `Pullback` depth; in a trade: the Trade read; the Market state names the pullback only while the leg has never retraced past about 62% since its extreme, was never given back, and its 15m swing holds; the `Pullback` line prints regardless |
 | Swing | the leg's 15m/1h swing holds | a 3m close broke it | `Pullback` swings (closes since the extreme); `m3.htfLevels` `brokenAt` (since the swing formed) |
 | Volume, bars | falling, shrinking | rising, wide against it | `Pullback` volume, range vs the leg; last 10 bars |
 
@@ -6854,7 +6854,7 @@ hypotheses; a missing field is `unknown`.
 | Sign | Pullback | Reversal | Field |
 |---|---|---|---|
 | HTF break | with the trend | a CHoCH against it | `m15.lastBreak.last`, `h1.lastBreak.last`; `Pullback` breaks |
-| Depth | up to about 50-62% of the leg (hypothesis) | past the impulse origin | flat: `Pullback` depth; in a trade: the Trade read |
+| Depth | up to about 50-62% of the leg (hypothesis) | past the impulse origin | flat: `Pullback` depth; in a trade: the Trade read; the Market state names the pullback only while the leg has never retraced past about 62% since its extreme, was never given back, and its 15m swing holds; the `Pullback` line prints regardless |
 | Swing | the leg's 15m/1h swing holds | a 3m close broke it | `Pullback` swings (closes since the extreme); `m3.htfLevels` `brokenAt` (since the swing formed) |
 | Volume, bars | falling, shrinking | rising, wide against it | `Pullback` volume, range vs the leg; last 10 bars |
 
@@ -8282,7 +8282,7 @@ hypotheses; a missing field is `unknown`.
 | Sign | Pullback | Reversal | Field |
 |---|---|---|---|
 | HTF break | with the trend | a CHoCH against it | `m15.lastBreak.last`, `h1.lastBreak.last`; `Pullback` breaks |
-| Depth | up to about 50-62% of the leg (hypothesis) | past the impulse origin | flat: `Pullback` depth; in a trade: the Trade read |
+| Depth | up to about 50-62% of the leg (hypothesis) | past the impulse origin | flat: `Pullback` depth; in a trade: the Trade read; the Market state names the pullback only while the leg has never retraced past about 62% since its extreme, was never given back, and its 15m swing holds; the `Pullback` line prints regardless |
 | Swing | the leg's 15m/1h swing holds | a 3m close broke it | `Pullback` swings (closes since the extreme); `m3.htfLevels` `brokenAt` (since the swing formed) |
 | Volume, bars | falling, shrinking | rising, wide against it | `Pullback` volume, range vs the leg; last 10 bars |
 
@@ -9710,7 +9710,7 @@ hypotheses; a missing field is `unknown`.
 | Sign | Pullback | Reversal | Field |
 |---|---|---|---|
 | HTF break | with the trend | a CHoCH against it | `m15.lastBreak.last`, `h1.lastBreak.last`; `Pullback` breaks |
-| Depth | up to about 50-62% of the leg (hypothesis) | past the impulse origin | flat: `Pullback` depth; in a trade: the Trade read |
+| Depth | up to about 50-62% of the leg (hypothesis) | past the impulse origin | flat: `Pullback` depth; in a trade: the Trade read; the Market state names the pullback only while the leg has never retraced past about 62% since its extreme, was never given back, and its 15m swing holds; the `Pullback` line prints regardless |
 | Swing | the leg's 15m/1h swing holds | a 3m close broke it | `Pullback` swings (closes since the extreme); `m3.htfLevels` `brokenAt` (since the swing formed) |
 | Volume, bars | falling, shrinking | rising, wide against it | `Pullback` volume, range vs the leg; last 10 bars |
 
@@ -11235,7 +11235,7 @@ hypotheses; a missing field is `unknown`.
 | Sign | Pullback | Reversal | Field |
 |---|---|---|---|
 | HTF break | with the trend | a CHoCH against it | `m15.lastBreak.last`, `h1.lastBreak.last`; `Pullback` breaks |
-| Depth | up to about 50-62% of the leg (hypothesis) | past the impulse origin | flat: `Pullback` depth; in a trade: the Trade read |
+| Depth | up to about 50-62% of the leg (hypothesis) | past the impulse origin | flat: `Pullback` depth; in a trade: the Trade read; the Market state names the pullback only while the leg has never retraced past about 62% since its extreme, was never given back, and its 15m swing holds; the `Pullback` line prints regardless |
 | Swing | the leg's 15m/1h swing holds | a 3m close broke it | `Pullback` swings (closes since the extreme); `m3.htfLevels` `brokenAt` (since the swing formed) |
 | Volume, bars | falling, shrinking | rising, wide against it | `Pullback` volume, range vs the leg; last 10 bars |
 
@@ -12757,7 +12757,7 @@ hypotheses; a missing field is `unknown`.
 | Sign | Pullback | Reversal | Field |
 |---|---|---|---|
 | HTF break | with the trend | a CHoCH against it | `m15.lastBreak.last`, `h1.lastBreak.last`; `Pullback` breaks |
-| Depth | up to about 50-62% of the leg (hypothesis) | past the impulse origin | flat: `Pullback` depth; in a trade: the Trade read |
+| Depth | up to about 50-62% of the leg (hypothesis) | past the impulse origin | flat: `Pullback` depth; in a trade: the Trade read; the Market state names the pullback only while the leg has never retraced past about 62% since its extreme, was never given back, and its 15m swing holds; the `Pullback` line prints regardless |
 | Swing | the leg's 15m/1h swing holds | a 3m close broke it | `Pullback` swings (closes since the extreme); `m3.htfLevels` `brokenAt` (since the swing formed) |
 | Volume, bars | falling, shrinking | rising, wide against it | `Pullback` volume, range vs the leg; last 10 bars |
 
@@ -14273,7 +14273,7 @@ hypotheses; a missing field is `unknown`.
 | Sign | Pullback | Reversal | Field |
 |---|---|---|---|
 | HTF break | with the trend | a CHoCH against it | `m15.lastBreak.last`, `h1.lastBreak.last`; `Pullback` breaks |
-| Depth | up to about 50-62% of the leg (hypothesis) | past the impulse origin | flat: `Pullback` depth; in a trade: the Trade read |
+| Depth | up to about 50-62% of the leg (hypothesis) | past the impulse origin | flat: `Pullback` depth; in a trade: the Trade read; the Market state names the pullback only while the leg has never retraced past about 62% since its extreme, was never given back, and its 15m swing holds; the `Pullback` line prints regardless |
 | Swing | the leg's 15m/1h swing holds | a 3m close broke it | `Pullback` swings (closes since the extreme); `m3.htfLevels` `brokenAt` (since the swing formed) |
 | Volume, bars | falling, shrinking | rising, wide against it | `Pullback` volume, range vs the leg; last 10 bars |
 
@@ -15716,7 +15716,7 @@ hypotheses; a missing field is `unknown`.
 | Sign | Pullback | Reversal | Field |
 |---|---|---|---|
 | HTF break | with the trend | a CHoCH against it | `m15.lastBreak.last`, `h1.lastBreak.last`; `Pullback` breaks |
-| Depth | up to about 50-62% of the leg (hypothesis) | past the impulse origin | flat: `Pullback` depth; in a trade: the Trade read |
+| Depth | up to about 50-62% of the leg (hypothesis) | past the impulse origin | flat: `Pullback` depth; in a trade: the Trade read; the Market state names the pullback only while the leg has never retraced past about 62% since its extreme, was never given back, and its 15m swing holds; the `Pullback` line prints regardless |
 | Swing | the leg's 15m/1h swing holds | a 3m close broke it | `Pullback` swings (closes since the extreme); `m3.htfLevels` `brokenAt` (since the swing formed) |
 | Volume, bars | falling, shrinking | rising, wide against it | `Pullback` volume, range vs the leg; last 10 bars |
 
@@ -17241,7 +17241,7 @@ hypotheses; a missing field is `unknown`.
 | Sign | Pullback | Reversal | Field |
 |---|---|---|---|
 | HTF break | with the trend | a CHoCH against it | `m15.lastBreak.last`, `h1.lastBreak.last`; `Pullback` breaks |
-| Depth | up to about 50-62% of the leg (hypothesis) | past the impulse origin | flat: `Pullback` depth; in a trade: the Trade read |
+| Depth | up to about 50-62% of the leg (hypothesis) | past the impulse origin | flat: `Pullback` depth; in a trade: the Trade read; the Market state names the pullback only while the leg has never retraced past about 62% since its extreme, was never given back, and its 15m swing holds; the `Pullback` line prints regardless |
 | Swing | the leg's 15m/1h swing holds | a 3m close broke it | `Pullback` swings (closes since the extreme); `m3.htfLevels` `brokenAt` (since the swing formed) |
 | Volume, bars | falling, shrinking | rising, wide against it | `Pullback` volume, range vs the leg; last 10 bars |
 
@@ -18757,7 +18757,7 @@ hypotheses; a missing field is `unknown`.
 | Sign | Pullback | Reversal | Field |
 |---|---|---|---|
 | HTF break | with the trend | a CHoCH against it | `m15.lastBreak.last`, `h1.lastBreak.last`; `Pullback` breaks |
-| Depth | up to about 50-62% of the leg (hypothesis) | past the impulse origin | flat: `Pullback` depth; in a trade: the Trade read |
+| Depth | up to about 50-62% of the leg (hypothesis) | past the impulse origin | flat: `Pullback` depth; in a trade: the Trade read; the Market state names the pullback only while the leg has never retraced past about 62% since its extreme, was never given back, and its 15m swing holds; the `Pullback` line prints regardless |
 | Swing | the leg's 15m/1h swing holds | a 3m close broke it | `Pullback` swings (closes since the extreme); `m3.htfLevels` `brokenAt` (since the swing formed) |
 | Volume, bars | falling, shrinking | rising, wide against it | `Pullback` volume, range vs the leg; last 10 bars |
 
@@ -20273,7 +20273,7 @@ hypotheses; a missing field is `unknown`.
 | Sign | Pullback | Reversal | Field |
 |---|---|---|---|
 | HTF break | with the trend | a CHoCH against it | `m15.lastBreak.last`, `h1.lastBreak.last`; `Pullback` breaks |
-| Depth | up to about 50-62% of the leg (hypothesis) | past the impulse origin | flat: `Pullback` depth; in a trade: the Trade read |
+| Depth | up to about 50-62% of the leg (hypothesis) | past the impulse origin | flat: `Pullback` depth; in a trade: the Trade read; the Market state names the pullback only while the leg has never retraced past about 62% since its extreme, was never given back, and its 15m swing holds; the `Pullback` line prints regardless |
 | Swing | the leg's 15m/1h swing holds | a 3m close broke it | `Pullback` swings (closes since the extreme); `m3.htfLevels` `brokenAt` (since the swing formed) |
 | Volume, bars | falling, shrinking | rising, wide against it | `Pullback` volume, range vs the leg; last 10 bars |
 
@@ -21723,7 +21723,7 @@ hypotheses; a missing field is `unknown`.
 | Sign | Pullback | Reversal | Field |
 |---|---|---|---|
 | HTF break | with the trend | a CHoCH against it | `m15.lastBreak.last`, `h1.lastBreak.last`; `Pullback` breaks |
-| Depth | up to about 50-62% of the leg (hypothesis) | past the impulse origin | flat: `Pullback` depth; in a trade: the Trade read |
+| Depth | up to about 50-62% of the leg (hypothesis) | past the impulse origin | flat: `Pullback` depth; in a trade: the Trade read; the Market state names the pullback only while the leg has never retraced past about 62% since its extreme, was never given back, and its 15m swing holds; the `Pullback` line prints regardless |
 | Swing | the leg's 15m/1h swing holds | a 3m close broke it | `Pullback` swings (closes since the extreme); `m3.htfLevels` `brokenAt` (since the swing formed) |
 | Volume, bars | falling, shrinking | rising, wide against it | `Pullback` volume, range vs the leg; last 10 bars |
 
@@ -23164,7 +23164,7 @@ hypotheses; a missing field is `unknown`.
 | Sign | Pullback | Reversal | Field |
 |---|---|---|---|
 | HTF break | with the trend | a CHoCH against it | `m15.lastBreak.last`, `h1.lastBreak.last`; `Pullback` breaks |
-| Depth | up to about 50-62% of the leg (hypothesis) | past the impulse origin | flat: `Pullback` depth; in a trade: the Trade read |
+| Depth | up to about 50-62% of the leg (hypothesis) | past the impulse origin | flat: `Pullback` depth; in a trade: the Trade read; the Market state names the pullback only while the leg has never retraced past about 62% since its extreme, was never given back, and its 15m swing holds; the `Pullback` line prints regardless |
 | Swing | the leg's 15m/1h swing holds | a 3m close broke it | `Pullback` swings (closes since the extreme); `m3.htfLevels` `brokenAt` (since the swing formed) |
 | Volume, bars | falling, shrinking | rising, wide against it | `Pullback` volume, range vs the leg; last 10 bars |
 
@@ -24515,7 +24515,7 @@ hypotheses; a missing field is `unknown`.
 | Sign | Pullback | Reversal | Field |
 |---|---|---|---|
 | HTF break | with the trend | a CHoCH against it | `m15.lastBreak.last`, `h1.lastBreak.last`; `Pullback` breaks |
-| Depth | up to about 50-62% of the leg (hypothesis) | past the impulse origin | flat: `Pullback` depth; in a trade: the Trade read |
+| Depth | up to about 50-62% of the leg (hypothesis) | past the impulse origin | flat: `Pullback` depth; in a trade: the Trade read; the Market state names the pullback only while the leg has never retraced past about 62% since its extreme, was never given back, and its 15m swing holds; the `Pullback` line prints regardless |
 | Swing | the leg's 15m/1h swing holds | a 3m close broke it | `Pullback` swings (closes since the extreme); `m3.htfLevels` `brokenAt` (since the swing formed) |
 | Volume, bars | falling, shrinking | rising, wide against it | `Pullback` volume, range vs the leg; last 10 bars |
 
