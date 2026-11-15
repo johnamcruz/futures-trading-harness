@@ -106,6 +106,7 @@ function questionErrors(q, { part = 'questions', at = 'question', ids = new Set(
   if (q.prompt === 'situational' && !(isObj(q.state) && Array.isArray(q.state.positions))) out.push(`${at}.state: the account state its situational skills are chosen for ({ positions, workingOrders, ... })`);
   if (q.prompt === 'lookup' && !(Array.isArray(q.lookup) && q.lookup.length && q.lookup.every(s => typeof s === 'string' && /^[a-z0-9-]+$/.test(s)))) out.push(`${at}.lookup: the skills the head trader looks up for it (skill names)`);
   for (const k of ['text', 'rule']) if (!str(q[k])) out.push(`${at}.${k}: given`);
+  if ('layers' in q && !(isObj(q.layers) && isObj(q.layers.structure))) out.push(`${at}.layers: the layer facts its text states ({ rthBars, structure: { side, level, ... }, behavior, chop, ... })`);
   if (part === 'questions' && !str(q.anchor)) out.push(`${at}.anchor: the phrase of the prompt that states the rule`);
   const caseOk = x => isObj(x) && isObj(x.bias) && ['tf', 'rel', 'dir', 'level', 'reaction'].every(k => str(x[k]));
   if (part === 'partB' && !(isObj(q.excerpt) && (isObj(q.excerpt.bias) || (isObj(q.excerpt.size) && isObj(q.excerpt.size.facts)) || (Array.isArray(q.excerpt.cases) && q.excerpt.cases.length && q.excerpt.cases.every(caseOk))))) out.push(`${at}.excerpt: { bias: { h4, h1, t15, declared } }, { size: { facts, riskUsd, minContracts, stretchUsd, capUsd } } or { cases: [{ bias, tf, rel, dir, level, reaction }] }`);
@@ -198,7 +199,29 @@ const minOf = hhmm => { const [h, m] = hhmm.split(':').map(Number); return h * 6
 // The item's clock is New York time on a winter (EST) day, so the RTH pair (09:30 ET) and the ages read as live.
 const MIDNIGHT_ET = Date.parse('2026-01-06T05:00:00.000Z');
 const isoAt = min => new Date(MIDNIGHT_ET + min * 60000).toISOString();
-function briefingOfText(text) {
+// An item without bar data states its layer facts (round 20b, quiz realism): what its text describes (no leg holds,
+// overlap high, efficiency low, a failed continuation, the side's HL broken), as market-layers.js's m3.layers shape; every
+// fact not stated is absent (false, null), so the line is built by the same code (market-state.js) as the live one.
+const NO_FACTS = { ov: false, ef: false, fl: false, nd: false };
+const NO_EVIDENCE = { bothWays: false, flip: false, failed: false };
+function layersOf(spec) {
+  if (!isObj(spec) || !isObj(spec.structure)) throw new Error('context-quiz: layers needs its structure ({ side, level, ... })');
+  const P = spec.structure;
+  const c = isObj(spec.chop) ? spec.chop : {};
+  const flip = isObj(P.flip) ? { barsAgo: 0, strong: false, disp: false, held: true, byRule: 'close', ...P.flip } : null;
+  return {
+    rthBars: Number.isInteger(spec.rthBars) ? spec.rthBars : 20,
+    structure: { status: 'intact', legOK: false, sinceProgress: null, internal: 0, resumed: false, lastInternal: null, lastWay: null, flipsIn: 0, ...P, origin: Number.isFinite(P.origin) ? P.origin : P.level, flip },
+    lastBreak: null,
+    momentum: { dispAgainst: null, breakAgainst: null, trigger: false, loss: false, odf: false, od: null, ...(isObj(spec.momentum) ? spec.momentum : {}) },
+    behavior: isObj(spec.behavior) ? spec.behavior : null,
+    chop: { now: false, inChop: false, S: false, B: false, count: 0, ended: false, ...c, facts: { ...NO_FACTS, ...(isObj(c.facts) ? c.facts : {}) }, evidence: { ...NO_EVIDENCE, ...(isObj(c.evidence) ? c.evidence : {}) } },
+    edges: isObj(spec.edges) ? spec.edges : null,
+    pbPhase: null, transition: Boolean(spec.transition), stale: Boolean(spec.stale), reversal: false, pbRotation: false,
+  };
+}
+
+function briefingOfText(text, layers = null) {
   const t = String(text || '');
   const bias = /\n- Bias: ([^\n]*)/.exec(t);
   if (!bias) return null;
@@ -252,13 +275,16 @@ function briefingOfText(text) {
     // or none since the RTH open (forming); an item that leaves the line or the previous break out shows less, never
     // "not enough RTH structure".
     ...(now !== null && ((lb && lb[8]) || (none && !lb)) ? { closedAt: isoAt(now) } : {}),
-    sections: { h1: { data: h1Data }, m3: { data: m3 }, ...(Object.keys(m15).length ? { m15: { data: m15 } } : {}) },
+    sections: { h1: { data: h1Data }, m3: { data: layers ? { ...m3, layers: layersOf(layers) } : m3 }, ...(Object.keys(m15).length ? { m15: { data: m15 } } : {}) },
   };
 }
 
-/** The Market state line the live briefing would print for an item's synthetic lines (market-state.js; the briefing's threshold). */
-function marketStateOfText(text) {
-  const b = briefingOfText(text);
+/**
+ * The Market state line the live briefing would print for an item's synthetic lines (market-state.js; the briefing's
+ * thresholds), with the item's layer facts when it states them (layersOf).
+ */
+function marketStateOfText(text, layers = null) {
+  const b = briefingOfText(text, layers);
   if (!b) return null;
   const M = require('../trading/market-state');
   const an = require('../tunables').analysis();
@@ -392,4 +418,4 @@ function compare(a, b) {
   });
 }
 
-module.exports = { normChoice: norm, VERDICT, LAYERS, PROMPTS, PROMPT_ROLES, loadQuiz, quizErrors, questionErrors, promptKey, buildPrompts, excerptOf, briefingOfText, marketStateOfText, questionText, answerLine, negated, gradeAnswer, summarize, compare, quizCommand, replyOf, anchorsMissing };
+module.exports = { normChoice: norm, VERDICT, LAYERS, PROMPTS, PROMPT_ROLES, loadQuiz, quizErrors, questionErrors, promptKey, buildPrompts, excerptOf, briefingOfText, layersOf, marketStateOfText, questionText, answerLine, negated, gradeAnswer, summarize, compare, quizCommand, replyOf, anchorsMissing };

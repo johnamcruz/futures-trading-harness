@@ -300,15 +300,19 @@ test('context quiz: the chop-read questions (q114-q133, less q115, q116, q117, q
   assert.doesNotMatch(QUIZ.questions.find(x => x.id === 'q99').text, /No exact touch|no named reversal candle/);
   // q112 prints the Market state line under its Bias line, as the briefing does (market-state.js): not aligned.
   assert.match(QUIZ.questions.find(x => x.id === 'q112').text, /\n- Bias: [^\n]*\n- Market state \(3m\): [^\n]*\(not aligned\); class unclear\.\n/);
-  // The invalidation items print the protected swing the way the state reads it (round 20, no layers in a quiz item: holds,
-  // broken by a close, failed).
+  // The invalidation items print the protected swing the way the state reads it (round 20: from the printed breaks, holds,
+  // broken by a close, failed; round 20b: an item stating its layer facts, q131, prints the layered line).
   const tq = id => QUIZ.questions.find(x => x.id === id).text;
   assert.match(tq('q130'), /Market state \(3m\): in the up leg: [^\n]*, HL 21480\.25 holds; 4h\+1h up/);
-  assert.match(tq('q131'), /Market state \(3m\): range: [^\n]*, HL 21480\.25 broken by a close; 4h\+1h up/);
+  assert.match(tq('q131'), /Market state \(3m\): transition down: HL 21480\.25 broken by a close 3 min ago, the new leg unconfirmed; 4h\+1h up; class unclear\./, 'q131 states its layer facts (round 20b): the side\'s HL broken, a transition');
+  // Round 20b: q119 states the layer facts its text describes (no leg holds, overlap high, efficiency low, a failed
+  // continuation): its line prints chop, its key.
+  assert.match(tq('q119'), /\n- Market state \(3m\): chop: no leg holds \(breaks both ways\); overlap 0\.\d+, efficiency 0\.05, failed continuation; [^\n]*; class chop\.\n/);
+  for (const id of ['q119', 'q131']) assert.ok(QUIZ.questions.find(x => x.id === id).layers, `${id}: its layer facts`);
   assert.match(tq('q132'), /Market state \(3m\): range: 3m BOS down then CHoCH up \(failed: a close below its origin 21462\.5\); 4h\+1h up/);
   assert.match(tq('q127'), /Market state \(3m\): range: 3m BOS down then CHoCH up \(unconfirmed, holds above 21462\.5 \(origin\)\); 4h\+1h up/);
-  // The chop-end items show the facts that confirm the CHoCH (round 20: no layers in a quiz item, so no chop memory: the
-  // line prints the confirmed leg).
+  // The chop-end items show the facts that confirm the CHoCH (round 20: no layer facts stated, so no chop memory: the line
+  // prints the confirmed leg).
   const tx = id => QUIZ.questions.find(x => x.id === id).text;
   assert.match(tx('q124'), /\n- CISD \(completed candles\): 3m bullish at [\d.]+ \(closed 10:45, strong\)/);
   assert.match(tx('q124'), /Market state \(3m\): in the up leg: [^\n]*, then a 3m CISD up \(confirmed\); 4h\+1h up/);
@@ -350,7 +354,7 @@ test('context quiz: every item\'s Bias line is followed by its Market state line
     const m = /\n- (Bias: [^\n]*)\.\n- (Market state \(3m\): [^\n]*)\./.exec(t);
     if (!/\n- Bias: /.test(t)) { assert.doesNotMatch(t, /Market state/, q.id); continue; }
     assert.ok(m, `${q.id}: the Market state line right under the Bias line`);
-    assert.strictEqual(`${m[2]}`, Q.marketStateOfText(t.replace(/\n- Market state[^\n]*/, '')), q.id);
+    assert.strictEqual(`${m[2]}`, Q.marketStateOfText(t.replace(/\n- Market state[^\n]*/, ''), q.layers || null), q.id);
     assert.strictEqual(t.split('Market state').length, 2, `${q.id}: one line`);
     n += 1;
   }

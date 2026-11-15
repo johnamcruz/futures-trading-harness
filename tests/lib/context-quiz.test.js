@@ -812,6 +812,29 @@ test('quizErrors: gate.minChoices (2 or more) and gate.maxChoices (minChoices or
 // briefing would, computed by market-state.js stateOf from the item's own printed lines (the Bias line's 4h and 1h, the
 // Pullback line, m3.lastBreak, the Day so far line, the 3m CISD, the initial balance and the price). Part B's bias excerpts
 // hold too few facts for a full state and print none (D3).
+// Quiz realism (round 20b): an item without bar data states its layer facts (`layers`: what its text says, e.g. no leg
+// holds, overlap high, efficiency low, a failed continuation), and the line is built by the same code (market-state.js on
+// m3.layers) so it prints what the item describes; without them the printed breaks alone (never chop).
+test('marketStateOfText with an item\'s layer facts: the layered line, the same code as the live briefing\'s', () => {
+  const head = (t, lines) => [`Briefing lines (synthetic, ${t} ET), flat:`, ...lines].join('\n');
+  const BL = '- Bias: long only (4h up, 1h up; short refused).';
+  const DAY = '- Day so far (23 3m bars; `day-context`): rotational: efficiency 0.05 (x sqrt(bars) 0.24), RTH VWAP crosses 8, range 3.2 x 3m ATR(14), net up.';
+  const PAIR = '- m3.lastBreak: last CHoCH down at 21518.75 (barsAgo 1), previous CHoCH up at 21526.50 (barsAgo 4).';
+  const text = head('10:39', [BL, DAY, PAIR]);
+  const chop = { rthBars: 23, structure: { side: 'down', level: 21526.5, legOK: false }, behavior: { word: 'overlapping', word15: 'overlapping', overlap: 0.74, eff: 0.05 }, chop: { inChop: true, now: true, S: true, B: true, facts: { ov: true, ef: true, fl: true }, evidence: { bothWays: true } } };
+  assert.strictEqual(Q.marketStateOfText(text), 'Market state (3m): range: 3m CHoCH up then CHoCH down (unconfirmed); 4h+1h up; class trend-up', 'no layer facts: the printed breaks alone');
+  assert.strictEqual(Q.marketStateOfText(text, chop), 'Market state (3m): chop: no leg holds (breaks both ways); overlap 0.74, efficiency 0.05, failed continuation; 15m overlapping; Day so far rotational, RTH VWAP crosses 8; 4h+1h up; class chop');
+  const L = Q.layersOf(chop);
+  assert.deepStrictEqual([L.transition, L.stale, L.pbRotation, L.momentum.trigger, L.chop.facts.nd, L.chop.evidence.flip, L.structure.status, L.structure.origin], [false, false, false, false, false, false, 'intact', 21526.5], 'the facts not stated: absent');
+  const brk = { rthBars: 24, structure: { side: 'down', level: 21495, status: 'broken', flip: { barsAgo: 1, disp: false, oldSide: 'up', oldLevel: 21480.25 } } };
+  assert.strictEqual(Q.marketStateOfText(text, brk), 'Market state (3m): transition down: HL 21480.25 broken by a close 3 min ago, the new leg unconfirmed; 4h+1h up; class unclear', 'the side\'s HL broken (round 20b)');
+  assert.throws(() => Q.layersOf({ behavior: {} }), /structure/);
+  const QUIZ0 = QUIZ;
+  const one = QUIZ0.questions.find(x => x.id === 'q119');
+  assert.deepStrictEqual(Q.questionErrors({ ...one, layers: 'chop' }, { part: 'questions', at: 'q', gate: QUIZ0.gate }), ['q.layers: the layer facts its text states ({ rthBars, structure: { side, level, ... }, behavior, chop, ... })']);
+  assert.deepStrictEqual(Q.questionErrors({ ...one, layers: { behavior: {} } }, { part: 'questions', at: 'q', gate: QUIZ0.gate }), ['q.layers: the layer facts its text states ({ rthBars, structure: { side, level, ... }, behavior, chop, ... })']);
+});
+
 test('marketStateOfText: the Market state line from an item\'s printed lines', () => {
   const head = (t, lines) => [`Briefing lines (synthetic, ${t} ET), flat:`, ...lines].join('\n');
   const BL = '- Bias: long only (4h up, 1h up; short refused).';
