@@ -205,9 +205,10 @@ test('context quiz: the pullback questions (q87-q112) are asked against the prom
     ['q93', 'lookup', PB, /a live strong 15m CISD on the CISD line is the setup read even when the last 15m candle line shows no pattern/g],
     // A strict-side guard (main's text): one of the 4h and 1h ranging is chop or unclear to the head trader, whatever the 3m.
     // Re-anchored to the Market state table (PREREG addendum 14): the class rule's sentence is replaced by it.
-    ['q94', 'head', undefined, /\| trend or ranging \| not aligned \| `unclear` \| no trend trade \|/g],
-    ['q112', 'head', undefined, /\| trend or ranging \| not aligned \| `unclear` \| no trend trade \|/g],
-    ['q95', 'head', undefined, /\| ranging \| aligned \| the side's trend class/g],
+    // Round 17: re-anchored to the table keyed on the printed line (one authority for the class word).
+    ['q94', 'head', undefined, /\| any other \| any \| `\(not aligned\)` \| `unclear` \| no trend trade \|/g],
+    ['q112', 'head', undefined, /\| any other \| any \| `\(not aligned\)` \| `unclear` \| no trend trade \|/g],
+    ['q95', 'head', undefined, /\| `forming` \| none \| aligned \| that trend class \| no setup yet: wait for the first RTH 3m break \|/g],
     ['q96', 'lookup', PB, /watch for the BOS or CISD; not the entry\./g],
     ['q97', 'lookup', PB, /No BOS or CISD after it: no setup, pass\./g],
     ['q98', 'lookup', PB, /a candle at the level is no confirmation alone/g],
@@ -222,7 +223,7 @@ test('context quiz: the pullback questions (q87-q112) are asked against the prom
     // q108 retired (PREREG addendum 16): q92 asks the late 15m BOS on the same briefing.
     ['q109', 'lookup', PB, /Counter candles that don't engulf it: a pullback forming, not a reversal/g],
     ['q110', 'lookup', PB, /a counter candle engulfing it reads as a CHoCH against: wait/g],
-    ['q111', 'head', undefined, /your STATE frames stay your own read/g],
+    ['q111', 'head', undefined, /Your STATE frames stay your own read; when they differ, the class stays the line's/g],
     ['q106', 'lookup', PB, /the CISD line's `strong` is its displacement's strength, not a pattern name/g],
   ];
   assert.deepStrictEqual(Q.anchorsMissing(QUIZ, prompts).filter(x => want.some(w => w[0] === x)), []);
@@ -262,8 +263,8 @@ test('context quiz: the chop-read questions (q114-q133, less q115, q116, q117, q
   const cut = re => Object.fromEntries(Object.entries(prompts).map(([k, v]) => [k, flat(v).replace(re, '')]));
   const want = [
     ['q114', 'head', undefined, 'wait: a reversal attempt; class trend-up, not chop; no short', /wait for the 15m turn \(a live strong 15m CISD, a 15m BOS, a 15m CHoCH back or a 15m reaction at the level\)/g],
-    ['q118', 'head', undefined, 'F4', /\| a pullback their way \(trend or ranging\) \| aligned \| that trend class/g],
-    ['q119', 'head', undefined, 'F2', /\| chop \| any \| `chop` \| sit out \(a 3m CHoCH then CHoCH back, a failed reversal/g],
+    ['q118', 'head', undefined, 'F4', /\| any other \| printed \| aligned \| that trend class \|/g],
+    ['q119', 'head', undefined, 'F2', /\| `chop` \| none \| any \| `chop` \| sit out \|/g],
     ['q123', 'head', undefined, 'F3', /enter on the first 3m BOS or CISD the side's way near value/g],
     ['q121', 'head', undefined, 'enter long: the turn at the low edge the side\'s way, 3m BOS near value', /setups at the range edge or on a breakout, the side's way/g],
     // How chop ends (owner, 2026-11-14): the table's chop row.
@@ -278,11 +279,11 @@ test('context quiz: the chop-read questions (q114-q133, less q115, q116, q117, q
     ['q132', 'lookup', ['bos-vs-choch'], 'failed: the potential reversal up is invalidated', /a CHoCH holds until the low \(high\) that started the shift breaks/g],
     ['q133', 'lookup', ['bos-vs-choch'], 'a confirmed transition up: the CHoCH up was followed by a BOS up', /A potential reversal: CHoCH then BOS: confirmed/g],
     // Top-down: the 3m CHoCH pair the 15m BOS confirms is the 15m continuation (owner, 2026-11-15).
-    ['q128', 'head', undefined, "trend-up: the 3m CHoCH pair is the 15m BOS up (continuation); long setups the side's way", /a current 15m BOS its way: the 15m continuation, a trend/g],
+    ['q128', 'head', undefined, "trend-up: the 3m CHoCH pair is the 15m BOS up (continuation); long setups the side's way", /\| `trend`, their way \| none \| aligned \| that trend class \| setups the side's way \|/g],
     // The 15m CHoCH back the side's way is a 15m turn (owner-approved 2026-11-15).
     ['q129', 'head', undefined, 'enter long: the 15m CHoCH up is the turn; the 3m BOS up near value is the entry', /a live strong 15m CISD, a 15m BOS, a 15m CHoCH back or a 15m reaction at the level, the side's way/g],
     // The owner: "15min up trend, 3min down trend could mean pullback".
-    ['q126', 'head', undefined, 'a pullback in the 15m trend: class trend-up; watch for the 15m turn, then a 3m BOS or CISD up', /a 3m trend against inside it is the pullback, not a new trend/g],
+    ['q126', 'head', undefined, 'a pullback in the 15m trend: class trend-up; watch for the 15m turn, then a 3m BOS or CISD up', /or "15m up: a pullback in the 15m trend", down the mirror/g],
   ];
   assert.deepStrictEqual(Q.anchorsMissing(QUIZ, prompts).filter(x => want.some(w => w[0] === x)), []);
   for (const [id, prompt, lookup, answer, re] of want) {

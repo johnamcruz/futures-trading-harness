@@ -29,11 +29,14 @@ test('chop read terms: no skill, rule or agent restates the open `Pullback` line
   assert.ok(tr.includes('pullback-read.js `isOpen`'), 'TRAINING.md defines it by the code');
 });
 
-test('chop read terms: the owner\'s trending and chop definitions read the same in trade-session and trend-vs-range', () => {
+test('chop read terms: the owner\'s trending and chop definitions have one home, trend-vs-range; the head core carries the table and points there', () => {
+  // Round 17 (one authority for the class word): the definitions are reference, never always loaded beside the table,
+  // where a picture ("overlapping candles") outranked the printed state (q118).
   const DEF = 'Trending: consistent BOS, directional displacement, follow-through. Chop: alternating BOS/CHoCH, overlapping candles, failed continuation';
-  for (const s of ['trade-session', 'trend-vs-range']) assert.ok(flat(fs.readFileSync(path.join(ROOT, `skills/${s}/SKILL.md`), 'utf8')).includes(DEF), s);
-  // The head prompt embeds trade-session, so the head reads them and the table.
+  const holders = homes().filter(f => flat(fs.readFileSync(path.join(ROOT, f), 'utf8')).includes(DEF));
+  assert.deepStrictEqual(holders, ['skills/trend-vs-range/SKILL.md']);
   const H = require('../../scripts/lib/head-prompt');
   const head = flat(H.headPrompt(H.headPlan(ROOT, 'index')));
-  assert.ok(head.includes(DEF) && head.includes('| 3m state | 4h + 1h | class | action |'), 'the head prompt carries the table and the definitions');
+  assert.ok(!head.includes(DEF) && head.includes('| state word | pullback their way | end | class | action |'), 'the head prompt carries the table, not the definitions');
+  assert.ok(head.includes('The trend and chop definitions, for reference only: `trend-vs-range`.'));
 });

@@ -500,20 +500,18 @@ test('state line: the decision follows the model\'s own STATE read (taught, no c
     // The head trader's alone; taught, never a gate: the gate and compose_check stay as they are
     // (tests/e2e/state-read-invariance-e2e.test.js).
     "(the head trader's own, the last line of its PLAN; taught: the gate and `compose_check` do not read it)",
-    // The class follows the printed Market state line (feat/chop-read, MARKET-STATE-SPEC, the owner's "trend, chop,
-    // ranging"): code applies the order once; the 3m state, the Pullback read and the 4h + 1h decide the row; the model's
-    // own frames stay its read (off the line: say why).
-    "The class follows the printed `Market state` line: the 3m state (code applies the order once: chop, trend, ranging), the Pullback read and the 4h + 1h beside it; your STATE frames stay your own read; yours off the line: the class stays the line's, say why in the PLAN.",
-    "| trend, their way | aligned | that trend class | setups the side's way |",
+    // The class word follows the printed Market state line, and only it (feat/chop-read; round 17, the owner's "fix
+    // Competing definitions"): one authority; the table keys only on what the line prints, one row per line
+    // (tests/plugin/market-state-authority.test.js checks every printed line against code's class); the model's own
+    // frames stay its read (off the line: say why). The trend and chop definitions live in trend-vs-range (reference).
+    "The class word follows the printed `Market state` line, and only it. No other row, picture or frame read changes it. Your STATE frames stay your own read; when they differ, the class stays the line's: say why in the PLAN.",
+    "| `chop` | none | any | `chop` | sit out |",
     // A range day is no chop (owner: a range day is catchable).
-    "| ranging | aligned | the side's trend class (a range day inside the trend) | setups at the range edge or on a breakout, the side's way |",
-    // The pullback is a read inside trend or ranging, never a state (owner); a 3m BOS against inside it is the pullback.
-    "| a pullback their way (trend or ranging) | aligned | that trend class (a 3m trend against inside it is the pullback, not a new trend) | wait for the 15m turn (a live strong 15m CISD, a 15m BOS, a 15m CHoCH back or a 15m reaction at the level); enter on the first 3m BOS or CISD the side's way near value (`pullback-vs-reversal` steps 4-7) |",
-    "| trend against them | aligned | `unclear` | no trade, never counter |",
-    "| trend or ranging | not aligned | `unclear` | no trend trade |",
-    "| chop | any | `chop` | sit out (a 3m CHoCH then CHoCH back, a failed reversal; inside a pullback read it is the watch; a current 15m BOS its way: the 15m continuation, a trend); chop ends: a CHoCH then a BOS or CISD the same way, or a close beyond the range (the IB; before 10:30 only a BOS or CISD ends it) |",
-    // The owner's definitions, verbatim with trend-vs-range (a test there keeps the two equal).
-    "Trending: consistent BOS, directional displacement, follow-through. Chop: alternating BOS/CHoCH, overlapping candles, failed continuation (`trend-vs-range`).",
+    "| `ranging` | none | aligned | that trend class | setups at the range edge or on a breakout, the side's way |",
+    "| any other | printed | aligned | that trend class | wait for the 15m turn (a live strong 15m CISD, a 15m BOS, a 15m CHoCH back or a 15m reaction at the level); enter on the first 3m BOS or CISD the side's way near value (`pullback-vs-reversal` steps 4-7) |",
+    "| `trend`, against them | none | aligned | `unclear` | no trade, never counter |",
+    "| any other | any | `(not aligned)` | `unclear` | no trend trade |",
+    "Chop ends when the line prints `the chop ended` (code's rule: chop ends: a CHoCH then a BOS or CISD the same way, or a close beyond the range (the IB; before 10:30 only a BOS or CISD ends it)). The trend and chop definitions, for reference only: `trend-vs-range`.",
     // A take agrees with the read: the class and the 4h and 1h on the setup's side (the never-counter-HTF rule, in its own words).
     'A take: `class` on its side (`trend-up` long, `trend-down` short), your 4h and 1h too (`up` long, `down` short).',
     // compose_check first (its record is what the pass is scored on), then a pass that names the read: the head trader's

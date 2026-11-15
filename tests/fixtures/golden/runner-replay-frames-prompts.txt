@@ -1160,10 +1160,8 @@ never the composed setup read (`compose_check` takes a live strong one):
    pennant), `Pullback` volume falling, its 15m swing holding.
   A 15m
    `range` or `transition` here is the pause, not chop.
-  Pause: one-way
-   structure (the 15m swing holds; a 3m CHoCH against then back is the
-   watch) under the Market state's pullback read (`trade-session`) →
-   never `chop`: the side's trend class.
+  The class word
+   is the Market state line's (`trade-session`).
   The label is no
    evidence of resumption either.
   The impulse (a 15m `displacement` the
@@ -1298,8 +1296,8 @@ Watch: long; 15m pullback to 21500.00; 15m turn: CISD up, weak; 3m: CHoCH up, no
 Wait: long; 15m pullback to 21500.00; 15m turn: none, a 15m CHoCH down -> wait; no short.
 Close: long; the pullback stopped at 21502.25 (no touch); 15m turn: rejected the RTH VWAP 21502.50
   up (long-wick, still the last 15m); 3m: CISD up, RTH VWAP +0.4 -> enter: the lines hold.
-Pause: 4h, 1h up; after the 15m break up, 15m transition, inside candles, swing holds: the
-  pause, not chop -> class trend-up.
+Pause: 4h, 1h up; after the 15m break up, 15m transition, inside candles, swing holds; the
+  Market state line prints the pullback -> class trend-up (the line's).
 Skip: 15m, then 1h CHoCH down, the 1h ranging; 15m swing low broken; wide down bars, rising V:
   reversal attempt.
   A long: the 1h CHoCH against is decisive -> pass.
@@ -1351,13 +1349,14 @@ A wick through a swing that closes back inside is a sweep, not a break
 - CHoCH: the first close beyond the last swing against it, an early
   warning, not a reversal by itself (the `pullback-vs-reversal` skill).
   A potential reversal: CHoCH then BOS: confirmed; a 3m CHoCH then CHoCH
-  back: a failed reversal, chop, unless a pullback read is active or a
-  current 15m BOS (known in RTH) breaks the way it ends (then the 15m
-  continuation; the Market state line).
+  back: a failed reversal (`chop` or not: the Market state line).
 - Each break has a protected swing: a BOS holds until the leg's higher
   low (lower high) breaks; a CHoCH holds until the low (high) that started
   the shift breaks.
   Only a close through it counts; a wick is not.
+- A BOS stays labelled BOS after its protected swing breaks; the Market
+  state line's status (`holding` or `broken by a close`) decides what it
+  means now: a broken protected swing ends that BOS's trend read.
 
 **Fields**: `m3.lastBreak.last` and `m3.lastBreak.previous`; the same
 under `m15.lastBreak` and `h1.lastBreak` (`knownAt`: the candle's close);
@@ -1417,8 +1416,6 @@ hypotheses):
 - Not yet (false starts): RTH VWAP and EMA20 under 0 (EMA20 under -1
   worse), regime `against`, inside the overnight range (back third worst):
   wait for it, in the count; size is the verdict's.
-  An unfinished
-  pullback is no chop sign.
  End with the cycle result as plain text in your final message, never as a tool call.
   Your last line must be exactly: CYCLE RESULT: <no-trade | planned | executed | managed | flattened | blocked | error> - <reason>.
 === 2026-04-27T14:37:02.000Z trade 1m ===
@@ -2602,10 +2599,8 @@ never the composed setup read (`compose_check` takes a live strong one):
    pennant), `Pullback` volume falling, its 15m swing holding.
   A 15m
    `range` or `transition` here is the pause, not chop.
-  Pause: one-way
-   structure (the 15m swing holds; a 3m CHoCH against then back is the
-   watch) under the Market state's pullback read (`trade-session`) →
-   never `chop`: the side's trend class.
+  The class word
+   is the Market state line's (`trade-session`).
   The label is no
    evidence of resumption either.
   The impulse (a 15m `displacement` the
@@ -2740,8 +2735,8 @@ Watch: long; 15m pullback to 21500.00; 15m turn: CISD up, weak; 3m: CHoCH up, no
 Wait: long; 15m pullback to 21500.00; 15m turn: none, a 15m CHoCH down -> wait; no short.
 Close: long; the pullback stopped at 21502.25 (no touch); 15m turn: rejected the RTH VWAP 21502.50
   up (long-wick, still the last 15m); 3m: CISD up, RTH VWAP +0.4 -> enter: the lines hold.
-Pause: 4h, 1h up; after the 15m break up, 15m transition, inside candles, swing holds: the
-  pause, not chop -> class trend-up.
+Pause: 4h, 1h up; after the 15m break up, 15m transition, inside candles, swing holds; the
+  Market state line prints the pullback -> class trend-up (the line's).
 Skip: 15m, then 1h CHoCH down, the 1h ranging; 15m swing low broken; wide down bars, rising V:
   reversal attempt.
   A long: the 1h CHoCH against is decisive -> pass.
@@ -2793,13 +2788,14 @@ A wick through a swing that closes back inside is a sweep, not a break
 - CHoCH: the first close beyond the last swing against it, an early
   warning, not a reversal by itself (the `pullback-vs-reversal` skill).
   A potential reversal: CHoCH then BOS: confirmed; a 3m CHoCH then CHoCH
-  back: a failed reversal, chop, unless a pullback read is active or a
-  current 15m BOS (known in RTH) breaks the way it ends (then the 15m
-  continuation; the Market state line).
+  back: a failed reversal (`chop` or not: the Market state line).
 - Each break has a protected swing: a BOS holds until the leg's higher
   low (lower high) breaks; a CHoCH holds until the low (high) that started
   the shift breaks.
   Only a close through it counts; a wick is not.
+- A BOS stays labelled BOS after its protected swing breaks; the Market
+  state line's status (`holding` or `broken by a close`) decides what it
+  means now: a broken protected swing ends that BOS's trend read.
 
 **Fields**: `m3.lastBreak.last` and `m3.lastBreak.previous`; the same
 under `m15.lastBreak` and `h1.lastBreak` (`knownAt`: the candle's close);
@@ -2859,7 +2855,5 @@ hypotheses):
 - Not yet (false starts): RTH VWAP and EMA20 under 0 (EMA20 under -1
   worse), regime `against`, inside the overnight range (back third worst):
   wait for it, in the count; size is the verdict's.
-  An unfinished
-  pullback is no chop sign.
  End with the cycle result as plain text in your final message, never as a tool call.
   Your last line must be exactly: CYCLE RESULT: <no-trade | planned | executed | managed | flattened | blocked | error> - <reason>.

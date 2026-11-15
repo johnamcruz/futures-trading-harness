@@ -1303,7 +1303,7 @@
       "prompt": "head",
       "text": "Briefing lines (synthetic, 10:12 ET), flat:\n- Bias: long only (4h range, 1h up; short refused).\n- Market state (3m): trend up: 3m CHoCH up then BOS up (confirmed transition up), 0 min ago; 4h range, 1h up (not aligned).\n- 15m (setup candle, closed 10:00): hammer; rejected prior VAH (closed back above; long-wick rejection, long side).\n- m3.lastBreak: last BOS up at 21516.75 (barsAgo 0), previous CHoCH up at 21511.25 (barsAgo 2).\nYour STATE read has 4h range, 1h up. What do you do?",
       "rule": "one of the 4h/1h ranging: the class is unclear (chop only for choppy movement): no take, whatever the 3m",
-      "anchor": "| trend or ranging | not aligned | `unclear` | no trend trade |",
+      "anchor": "| any other | any | `(not aligned)` | `unclear` | no trend trade |",
       "choices": [
         "long, a limit at this 3m close",
         "short",
@@ -1318,7 +1318,7 @@
       "prompt": "head",
       "text": "Briefing lines (synthetic, 09:39 ET), flat:\n- Bias: long only (4h up, 1h up; short refused).\n- Market state (3m): forming (no RTH structure yet); 4h+1h up.\n- m3.lastBreak: none since the RTH open.\nYour read at 09:39 ET: 4h up, 1h up; the 15m broke above the overnight high at 09:30 and is now `transition` (inside candles, its swing low holds). Which class do you write in STATE?\nF1 - chop\nF2 - unclear\nF3 - trend-up\nF4 - trend-down\nAnswer with ONE of F1-F4.",
       "rule": "the 4h and 1h both up: trend-up; a 15m pullback, range or transition under them does not cancel it",
-      "anchor": "| ranging | aligned | the side's trend class",
+      "anchor": "| `forming` | none | aligned | that trend class | no setup yet: wait for the first RTH 3m break |",
       "choices": [
         "F1",
         "F2",
@@ -1561,7 +1561,7 @@
       "prompt": "head",
       "text": "Briefing lines (synthetic, 10:30 ET), flat:\n- Bias: long only (4h up, 1h up; short refused).\n- Market state (3m): ranging: no 3m break printed; pullback (long leg 21494.25 -> 21541.5, depth 44%); 4h+1h up.\n- Pullback (15m, long leg 21494.25 -> 21541.5): depth 44% of the leg; 10 bars since the extreme, volume 0.5x the leg's per bar (falling), range 0.4x; swings since the extreme: 15m 21494.25 holds, 1h 21390.25 holds; 15m break against: none, 1h: none.\n- The trend-momentum analyst's report: Regime (computed): 15m range/normal, 3m range/normal.\nYour own read: 4h up, 1h up, the 15m ranging inside this pullback.\nF1 - STATE: 4h up | 1h up | 15m range | frames agree | class trend-up | cites 4h-trend, 1h-trend, pullback\nF2 - STATE: 4h up | 1h up | 15m range | frames disagree | class chop | cites 4h-trend, 1h-trend, pullback\nF3 - STATE: 4h up | 1h up | 15m range | frames disagree | class trend-up | cites 4h-trend, 1h-trend, pullback\nF4 - STATE: 4h up | 1h up | 15m range | frames disagree | class unclear | cites 4h-trend, 1h-trend, pullback\nWhich ONE of F1-F4 is your STATE line?",
       "rule": "the 15m ranging under an aligned 4h and 1h: the frames disagree, and the class stays trend-up (a 15m range does not cancel it, nor does frames disagree)",
-      "anchor": "your STATE frames stay your own read",
+      "anchor": "Your STATE frames stay your own read; when they differ, the class stays the line's",
       "choices": [
         "F1",
         "F2",
@@ -1576,7 +1576,7 @@
       "prompt": "head",
       "text": "Briefing lines (synthetic, 10:42 ET), flat:\n- Bias: long only (4h range, 1h up; short refused).\n- Market state (3m): ranging: no 3m break printed; 4h range, 1h up (not aligned).\n- Day so far (24 3m bars; `day-context`): directional up: efficiency 0.52 (x sqrt(bars) 2.55), RTH VWAP crosses 1, range 3.1 x 3m ATR(14), net up (its size: Trend declared? day's move); IB day type: today.dayType.\n- 15m (setup candle, closed 10:30): none, close top third, range 0.7 ATR, vol 0.8x.\nYour own read: 4h range, 1h up, 15m up; the movement is smooth and one-way, no breaks both ways, little overlap. Which class do you write in STATE?",
       "rule": "the 4h and 1h not both one way: unclear; chop only when the movement is choppy, and a frame's range alone is never chop",
-      "anchor": "| trend or ranging | not aligned | `unclear` | no trend trade |",
+      "anchor": "| any other | any | `(not aligned)` | `unclear` | no trend trade |",
       "choices": [
         "chop",
         "unclear",
@@ -1606,7 +1606,7 @@
       "prompt": "head",
       "text": "Briefing lines (synthetic, 10:33 ET), flat:\n- Bias: short only (4h down, 1h down; long refused).\n- Market state (3m): ranging: 3m BOS down then CHoCH up (potential reversal, unconfirmed); pullback (short leg 21610.5 -> 21530.25, depth 37%); 4h+1h down.\n- Pullback (15m, short leg 21610.5 -> 21530.25): depth 37% of the leg; 7 bars since the extreme, volume 0.5x the leg's per bar (falling), range 0.4x; swings since the extreme: 15m 21610.5 holds, 1h 21655.75 holds; 15m break against: none, 1h: none.\n- Day so far (21 3m bars; `day-context`): mixed down: efficiency 0.12 (x sqrt(bars) 0.55), RTH VWAP crosses 3, range 2.8 x 3m ATR(14), net down (its size: Trend declared? day's move).\n- 15m (setup candle, closed 10:30): inside bar, close middle third, range 0.4 ATR, vol 0.6x.\n- m3.lastBreak: last CHoCH up at 21556.25 (barsAgo 2), previous BOS down at 21531.75 (barsAgo 11).\nYour read: 4h down, 1h down, 15m `transition` (small overlapping inside candles, the swing holds). Which class do you write in STATE?\nF1 - chop\nF2 - unclear\nF3 - trend-up\nF4 - trend-down\nAnswer with ONE of F1-F4.",
       "rule": "a pause inside an open Pullback is never chop: the 4h and 1h both down -> trend-down",
-      "anchor": "| a pullback their way (trend or ranging) | aligned | that trend class",
+      "anchor": "| any other | printed | aligned | that trend class |",
       "choices": [
         "F1",
         "F2",
@@ -1621,7 +1621,7 @@
       "prompt": "head",
       "text": "Briefing lines (synthetic, 10:39 ET), flat:\n- Bias: long only (4h up, 1h up; short refused).\n- Market state (3m): chop: 3m CHoCH up then CHoCH down (failed reversal); Day so far rotational, RTH VWAP crosses 8; 4h+1h up.\n- Day so far (23 3m bars; `day-context`): rotational: efficiency 0.05 (x sqrt(bars) 0.24), RTH VWAP crosses 8, range 3.2 x 3m ATR(14), net up (its size: Trend declared? day's move).\n- 15m (setup candle, closed 10:30): spinning top, close middle third, range 0.5 ATR, vol 0.7x.\n- m3.lastBreak: last CHoCH down at 21518.75 (barsAgo 1), previous CHoCH up at 21526.50 (barsAgo 4).\nYour read: 4h up, 1h up, 15m range; the 3m breaking both ways again and again. What is your class and action?\nF1 - trend-up: the 4h and 1h are up; take the next long setup\nF2 - chop: sit out, aligned or not\nF3 - unclear: the 15m range cancels the trend\nF4 - trend-down: the last CHoCH is down\nAnswer with ONE of F1-F4.",
       "rule": "aligned 4h and 1h with choppy movement (breaks both ways, rotational, many VWAP crosses) -> chop: sit out",
-      "anchor": "| chop | any | `chop` | sit out (a 3m CHoCH then CHoCH back, a failed reversal",
+      "anchor": "| `chop` | none | any | `chop` | sit out |",
       "choices": [
         "F1",
         "F2",
@@ -1696,7 +1696,7 @@
       "prompt": "head",
       "text": "Briefing lines (synthetic, 10:33 ET), flat:\n- Bias: long only (4h up, 1h up; short refused).\n- Market state (3m): trend down: 3m CHoCH down then BOS down (confirmed transition down), 3 min ago; 15m up: a pullback in the 15m trend; 4h+1h up.\n- m15.frame.trend: up.\n- m3.lastBreak: last BOS down at 21506.25 (barsAgo 1), previous CHoCH down at 21512.75 (barsAgo 5).\n- Day so far (21 3m bars; `day-context`): mixed up: efficiency 0.14 (x sqrt(bars) 0.64), RTH VWAP crosses 3, range 2.9 x 3m ATR(14), net up (its size: Trend declared? day's move).\nWhat is your read and action?",
       "rule": "a 15m trend the 4h + 1h way with the 3m trending against it is a pullback in the 15m trend: the trend class; watch for the 15m turn, then the 3m BOS or CISD the side's way",
-      "anchor": "a 3m trend against inside it is the pullback, not a new trend",
+      "anchor": "or \"15m up: a pullback in the 15m trend\", down the mirror",
       "choices": [
         "3m trend down: short",
         "unclear: the 3m trend is against the 4h and 1h; no trade",
@@ -1729,7 +1729,7 @@
       "prompt": "head",
       "text": "Briefing lines (synthetic, 10:51 ET), flat:\n- Bias: long only (4h up, 1h up; short refused).\n- Market state (3m): trend up: 3m CHoCH down then CHoCH up = the 15m BOS up (continuation); 4h+1h up.\n- m15.lastBreak: last BOS up at 21540.00 (barsAgo 0).\n- m3.lastBreak: last CHoCH up at 21541.25 (barsAgo 1), previous CHoCH down at 21529.75 (barsAgo 5).\n- Day so far (28 3m bars; `day-context`): mixed up: efficiency 0.12 (x sqrt(bars) 0.63), RTH VWAP crosses 4, range 3.1 x 3m ATR(14), net up (its size: Trend declared? day's move).\nWhat is your class and action?",
       "rule": "a 3m CHoCH then CHoCH back is chop unless a current (RTH) 15m BOS confirms the way it ends: then it is the 15m continuation",
-      "anchor": "a current 15m BOS its way: the 15m continuation, a trend",
+      "anchor": "| `trend`, their way | none | aligned | that trend class | setups the side's way |",
       "choices": [
         "chop: a CHoCH then a CHoCH back; sit out",
         "unclear: the 3m broke both ways",

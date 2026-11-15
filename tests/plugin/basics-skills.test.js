@@ -59,8 +59,10 @@ const PINS = {
     'the breaks a sequence of BOS that way;',
     'price rotating between a support and a resistance it keeps;',
     // feat/chop-read (owner-approved 2026-11-14): the owner's chop definition; chop is not range.
-    'The state is printed: the Market state line (`trade-session`). One CHoCH warns; it is not chop.',
-    // The Market state redesign: the owner's trending and chop definitions (the head core's table reads the same).
+    // Round 17 (one authority): the class word is the line's, never the definition's.
+    'The class word is the Market state line\'s (`trade-session`), never this definition\'s. One CHoCH warns.',
+    'Frames: transitional (old trend weakening, new one unconfirmed) is the frame `transition` in your STATE. The class word: the Market state line.',
+    // The owner's trending and chop definitions: their one home since round 17 (the head core points here, reference only).
     'Trending: consistent BOS, directional displacement, follow-through. Chop: alternating BOS/CHoCH, overlapping candles, failed continuation.',
     'Structure broken both ways with no continuation is chop, not a run of reversals.',
     '**Chop is not range.** Chop needs no edges; a range can rotate cleanly.',
@@ -255,7 +257,10 @@ const PINS = {
     'A close strictly beyond the last confirmed swing not yet broken; each swing breaks once. Only closes count, on completed candles.',
     'In the code, that is the previous break\'s direction (the first break too)',
     // The owner's reading (feat/chop-read, 2026-11-14): CHoCH then BOS confirms; CHoCH then CHoCH back a failed reversal.
-    'A potential reversal: CHoCH then BOS: confirmed; a 3m CHoCH then CHoCH back: a failed reversal, chop, unless a pullback read is active or a current 15m BOS (known in RTH) breaks the way it ends',
+    // Round 17: whether a CHoCH pair is chop now is the Market state line's (one authority).
+    'A potential reversal: CHoCH then BOS: confirmed; a 3m CHoCH then CHoCH back: a failed reversal (`chop` or not: the Market state line).',
+    // Round 17 (q131): the printed BOS keeps its label; the line's status decides what it means now.
+    'A BOS stays labelled BOS after its protected swing breaks; the Market state line\'s status (`holding` or `broken by a close`) decides what it means now: a broken protected swing ends that BOS\'s trend read.',
     // The owner's invalidation rule (round 15): each break's protected swing, close only.
     'Each break has a protected swing: a BOS holds until the leg\'s higher low (lower high) breaks; a CHoCH holds until the low (high) that started the shift breaks. Only a close through it counts; a wick is not.',
     'No one timeframe is the signal; read them top-down.',
@@ -332,8 +337,11 @@ test('basics skills: frontmatter, the sections in order, and small', () => {
     // close to the level is a read); then 1762 (owner-approved 2026-11-15: the 15m CHoCH back as a 15m turn); then 1763 (round 15:
     // a live strong 15m CISD, the word compose_check's live CISD means). bos-vs-choch 700 (round 15, the owner's line: each
     // break's protected swing, close only; its `protected` field; the current 15m BOS), at the measured need (696);
-    // pullback-vs-reversal 1794 (Fable round 16: the Depth row names when the Market state counts the pullback).
-    assert.ok(words >= 250 && words <= (s === 'candle-reading' ? 1280 : s === 'pullback-vs-reversal' ? 1794 : s === 'bos-vs-choch' ? 700 : 650), `${s}: ${words} words`);
+    // pullback-vs-reversal 1794 (Fable round 16: the Depth row names when the Market state counts the pullback). Round 17
+    // (one authority for the class word): bos-vs-choch 702 (the BOS keeps its label after its protected swing breaks; the
+    // CHoCH pair's chop is the line's), pullback-vs-reversal 1778 (the pause's class rule replaced by the pointer), both at
+    // the measured need.
+    assert.ok(words >= 250 && words <= (s === 'candle-reading' ? 1280 : s === 'pullback-vs-reversal' ? 1778 : s === 'bos-vs-choch' ? 702 : 650), `${s}: ${words} words`);
     // The two setups also carry a timeframe table (what the setup means on 3m/5m, 15m and 1h/4h): a little more room
     // (scripts/lib/skill-caps.js, the one source the training loop's probe edits read too).
     const max = skillByteCap(s);

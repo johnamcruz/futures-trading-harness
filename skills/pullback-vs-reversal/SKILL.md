@@ -43,10 +43,8 @@ never the composed setup read (`compose_check` takes a live strong one):
 3. Price pulls back toward it: small counter candles inside the impulse
    candle's range (`N in a row inside the <time> candle`: `compression`'s
    pennant), `Pullback` volume falling, its 15m swing holding. A 15m
-   `range` or `transition` here is the pause, not chop. Pause: one-way
-   structure (the 15m swing holds; a 3m CHoCH against then back is the
-   watch) under the Market state's pullback read (`trade-session`) →
-   never `chop`: the side's trend class. The label is no
+   `range` or `transition` here is the pause, not chop. The class word
+   is the Market state line's (`trade-session`). The label is no
    evidence of resumption either. The impulse (a 15m `displacement` the
    side's way, or the CISD's `leg`) sets the leg: measure the pullback on
    it (`fib-retracement`, the CISD's `ote`), depth and location only, never
@@ -151,8 +149,8 @@ Watch: long; 15m pullback to 21500.00; 15m turn: CISD up, weak; 3m: CHoCH up, no
 Wait: long; 15m pullback to 21500.00; 15m turn: none, a 15m CHoCH down -> wait; no short.
 Close: long; the pullback stopped at 21502.25 (no touch); 15m turn: rejected the RTH VWAP 21502.50
   up (long-wick, still the last 15m); 3m: CISD up, RTH VWAP +0.4 -> enter: the lines hold.
-Pause: 4h, 1h up; after the 15m break up, 15m transition, inside candles, swing holds: the
-  pause, not chop -> class trend-up.
+Pause: 4h, 1h up; after the 15m break up, 15m transition, inside candles, swing holds; the
+  Market state line prints the pullback -> class trend-up (the line's).
 Skip: 15m, then 1h CHoCH down, the 1h ranging; 15m swing low broken; wide down bars, rising V:
   reversal attempt. A long: the 1h CHoCH against is decisive -> pass.
 Loser: long at 21502.25, stop 21493.75 (8.50 pts = 34 ticks, $17.00 on 1 MNQ); a 15m close

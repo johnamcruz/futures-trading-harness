@@ -569,9 +569,13 @@ test('trade-session split: no head-trader path reads more than the base\'s every
 // the current 15m BOS, pullback-vs-reversal's and htf-to-ltf's strong 15m CISD: the market-structure analyst 107352 ->
 // 107830 full (with pvr's Depth row clause, Fable round 16), 46370 -> 46657 index; the trend-momentum analyst 66039 ->
 // 66510 full, 42645 -> 42925 index.
+// Then round 17 (one authority for the class word), at the measured need: bos-vs-choch's line that a BOS keeps its label
+// after its protected swing breaks (+96 in each role that embeds it in index mode; its CHoCH-pair sentence now points to the
+// line), trend-vs-range's and pullback-vs-reversal's class sentences replaced by pointers: the market-structure analyst
+// 107830 -> 107814 full, 46657 -> 46753 index; the trend-momentum analyst 66510 -> 66498 full, 42925 -> 43021 index.
 const ROLE_PROMPTS = {
-  full: { 'market-structure-analyst': 107830, 'news-calendar-analyst': 10868, 'risk-manager': 95294, 'strategy-researcher': 25728, 'trade-executor': 30670, 'trade-reviewer': 9400, 'trend-momentum-analyst': 66510, 'volume-liquidity-analyst': 50521 },
-  index: { 'market-structure-analyst': 46657, 'news-calendar-analyst': 10868, 'risk-manager': 81182, 'strategy-researcher': 25728, 'trade-executor': 30659, 'trade-reviewer': 9400, 'trend-momentum-analyst': 42925, 'volume-liquidity-analyst': 35153 },
+  full: { 'market-structure-analyst': 107814, 'news-calendar-analyst': 10868, 'risk-manager': 95294, 'strategy-researcher': 25728, 'trade-executor': 30670, 'trade-reviewer': 9400, 'trend-momentum-analyst': 66498, 'volume-liquidity-analyst': 50521 },
+  index: { 'market-structure-analyst': 46753, 'news-calendar-analyst': 10868, 'risk-manager': 81182, 'strategy-researcher': 25728, 'trade-executor': 30659, 'trade-reviewer': 9400, 'trend-momentum-analyst': 43021, 'volume-liquidity-analyst': 35153 },
 };
 
 test('trade-session split: no role prompt grows, in full or index mode, and no role lists a piece', () => {

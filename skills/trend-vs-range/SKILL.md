@@ -51,24 +51,24 @@ and forth with no sustained control either way.
   breaks without displacement that reverse, no HH/HL or LH/LL sequence.
 - Price action: overlapping candles, direction flipping, low efficiency,
   weak momentum, local highs and lows rejected, failed breakouts.
-- The state is printed: the Market state line (`trade-session`). One
-  CHoCH warns; it is not chop.
+- The class word is the Market state line's (`trade-session`), never
+  this definition's. One CHoCH warns.
 - Never classify from one BOS or CHoCH: weigh significance, displacement,
   consistency, follow-through, overlap, efficiency. Structure broken both
   ways with no continuation is chop, not a run of reversals.
 
-Frames: transitional (old trend weakening, new one unconfirmed) → `unclear`
-(frame `transition`). The class: `trade-session`'s table.
+Frames: transitional (old trend weakening, new one unconfirmed) is the
+frame `transition` in your STATE. The class word: the Market state line.
 
 **Chop is not range.** Chop needs no edges; a range can rotate cleanly.
-A range day inside the 4h + 1h side is catchable: the turn at the edge
-the side's way, or the breakout with follow-through. Chop → sit out,
-whatever the geometry (mid-range churn too).
+A range day inside the 4h + 1h side (the line prints `ranging`) is
+catchable: the turn at the edge the side's way, or the breakout with
+follow-through. The line prints `chop` → sit out, whatever the geometry.
 
 The 3m read sits inside `h1.h4.trend`, `h1.h1.trend` (prop: both its
 way), `m15.frame.trend`;
 `m3.trendRule` wins where they differ. Indicators confirm structure, never
-override it. A 3m range inside a 15m trend is a pause. Side: `htf-to-ltf`.
+override it. Side: `htf-to-ltf`.
 
 **Declared yet?** (`Trend declared?` line; ATR, + your way; census
 hypotheses):
@@ -77,14 +77,13 @@ hypotheses):
   RTH VWAP +1 to +2.5, day's move +3 or more.
 - Not yet (false starts): RTH VWAP and EMA20 under 0 (EMA20 under -1
   worse), regime `against`, inside the overnight range (back third worst):
-  wait for it, in the count; size is the verdict's. An unfinished
-  pullback is no chop sign.
+  wait for it, in the count; size is the verdict's.
 
 ## Examples
 
 ```text
-Chop: 3m CHoCH down, then CHoCH up back; no Pullback line, the 15m ranging -> sit out.
-  With a 15m BOS up: the 15m continuation, a trend, not chop.
+Chop: the line prints `chop: 3m CHoCH down then CHoCH up (failed reversal)` -> sit out.
+  It prints `trend up: 3m CHoCH down then CHoCH up = the 15m BOS up (continuation)` -> trend-up.
 Take: 4h, 1h, 15m up; m3 trend-up (adx 24.10); overnight broke out its way. Read: trend.
   Reads: 1h up, 15m bos up. Priority order: aligned; the count for -> take.
 Skip: m3 transition (adx 19.20); CHoCH down, previous CHoCH up; 15m up. Read: transition.

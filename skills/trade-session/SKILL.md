@@ -121,7 +121,7 @@ write it last; it is recorded; no code decides from it:
 `STATE: 4h <f> | 1h <f> | 15m <f> | frames <agree|disagree> | class <c> | cites <names>`,
 `<f>` is `up`, `down`, `range`, `transition` or `unknown`; `<c>`, the
 market now at this candle, is `trend-up`, `trend-down`, `chop` or
-`unclear`; `<names>`, the facts it rests on, comma list, from `4h-trend`,
+`unclear`, from the `Market state` line; `<names>`, the facts it rests on, comma list, from `4h-trend`,
 `1h-trend`, `15m-trend`, `trend-rule`, `regime`, `day-type`, `day-so-far`,
 `pullback`, `1h-break`, `15m-break`, `3m-break`; `none` when none supports
 it. No other words.
@@ -144,24 +144,29 @@ about 0.25 × the 15m ATR of the broken level) is the reaction.
 **The decision follows your STATE read** (the head trader's own, the last
 line of its PLAN; taught: the gate and `compose_check` do not read it):
 
-- The class follows the printed `Market state` line: the 3m state
-  (code applies the order once: chop, trend, ranging), the Pullback read
-  and the 4h + 1h beside it; your STATE frames stay your own read; yours
-  off the line: the class stays the line's, say why in the PLAN.
+- The class word follows the printed `Market state` line, and only it.
+  No other row, picture or frame read changes it. Your STATE frames stay
+  your own read; when they differ, the class stays the line's: say why in
+  the PLAN.
+- The row: the line's state word; a pullback their way (`pullback (long
+  leg` with `4h+1h up`, `short leg` with down, or "15m up: a pullback in
+  the 15m trend", down the mirror); its end, `4h+1h up` or `down`
+  (aligned) or `(not aligned)`. One row fits each line.
 
-| 3m state | 4h + 1h | class | action |
-|---|---|---|---|
-| forming (no RTH structure yet) | aligned, or not | that trend class, or `unclear` | no setup yet: wait for the first RTH 3m break |
-| trend, their way | aligned | that trend class | setups the side's way |
-| ranging | aligned | the side's trend class (a range day inside the trend) | setups at the range edge or on a breakout, the side's way |
-| a pullback their way (trend or ranging) | aligned | that trend class (a 3m trend against inside it is the pullback, not a new trend) | wait for the 15m turn (a live strong 15m CISD, a 15m BOS, a 15m CHoCH back or a 15m reaction at the level); enter on the first 3m BOS or CISD the side's way near value (`pullback-vs-reversal` steps 4-7) |
-| trend against them | aligned | `unclear` | no trade, never counter |
-| trend or ranging | not aligned | `unclear` | no trend trade |
-| chop | any | `chop` | sit out (a 3m CHoCH then CHoCH back, a failed reversal; inside a pullback read it is the watch; a current 15m BOS its way: the 15m continuation, a trend); chop ends: a CHoCH then a BOS or CISD the same way, or a close beyond the range (the IB; before 10:30 only a BOS or CISD ends it) |
+| state word | pullback their way | end | class | action |
+|---|---|---|---|---|
+| `chop` | none | any | `chop` | sit out |
+| any other | any | `(not aligned)` | `unclear` | no trend trade |
+| any other | printed | aligned | that trend class | wait for the 15m turn (a live strong 15m CISD, a 15m BOS, a 15m CHoCH back or a 15m reaction at the level); enter on the first 3m BOS or CISD the side's way near value (`pullback-vs-reversal` steps 4-7) |
+| `forming` | none | aligned | that trend class | no setup yet: wait for the first RTH 3m break |
+| `trend`, their way | none | aligned | that trend class | setups the side's way |
+| `ranging` | none | aligned | that trend class | setups at the range edge or on a breakout, the side's way |
+| `trend`, against them | none | aligned | `unclear` | no trade, never counter |
 
-Trending: consistent BOS, directional displacement, follow-through. Chop:
-alternating BOS/CHoCH, overlapping candles, failed continuation
-(`trend-vs-range`).
+Chop ends when the line prints `the chop ended` (code's rule: chop ends:
+a CHoCH then a BOS or CISD the same way, or a close beyond the range (the
+IB; before 10:30 only a BOS or CISD ends it)). The trend and chop
+definitions, for reference only: `trend-vs-range`.
 
 - A take: `class` on its side (`trend-up` long, `trend-down` short), your
   4h and 1h too (`up` long, `down` short).
