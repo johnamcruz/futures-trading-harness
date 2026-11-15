@@ -37,6 +37,12 @@ test('chop read terms: the owner\'s trending and chop definitions have one home,
   assert.deepStrictEqual(holders, ['skills/trend-vs-range/SKILL.md']);
   const H = require('../../scripts/lib/head-prompt');
   const head = flat(H.headPrompt(H.headPlan(ROOT, 'index')));
-  assert.ok(!head.includes(DEF) && head.includes('| state word | pullback their way | end | class | action |'), 'the head prompt carries the table, not the definitions');
+  assert.ok(!head.includes(DEF) && head.includes('| class printed | action |'), 'the head prompt carries the table, not the definitions');
   assert.ok(head.includes('The trend and chop definitions, for reference only: `trend-vs-range`.'));
+});
+
+test('chop read terms: htf-to-ltf\'s side rule decides the side only; the class is the Market state line\'s (round 18, q119)', () => {
+  const t = flat(fs.readFileSync(path.join(ROOT, 'skills/htf-to-ltf/SKILL.md'), 'utf8'));
+  assert.ok(t.includes("**The side rule** (side only; the class is the Market state line's; in an attempt): each trending 4h or 1h your way, neither against; both ranging: the 15m and `Trend declared?` your way; else no trade."));
+  assert.ok(t.includes('Then the class is the one the Market state line prints after `class`'));
 });

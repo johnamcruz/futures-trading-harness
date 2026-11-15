@@ -1837,7 +1837,16 @@ Frozen definitions:
   frozen.)
 - **Three reads, kept apart** (the chop pull request):
   - *The coded read* = the Market state restated (never `chop` inside an
-    open `Pullback` line).
+    open `Pullback` line). Since round 18 of the Market state pull request
+    the briefing prints it: the Market state line ends `; class <word>`
+    (market-state.js `classWordOf`, the same function), so a model can copy
+    it. Its agreement with the coded read is no longer a recognition
+    measure; the evidence word stays independent and is the recognition
+    measure. The scorecard's pass on "the head trader's own STATE read"
+    off the side (scorecard.js `stateOffSide`) now scores a class the
+    line printed, copyable too; renaming both fields is a follow-up.
+    Printing the class is a taught read of code output, not a filter: no
+    gate, hook or compose code reads it.
   - *The evidence word* = a bars-only read, independent of the lesson
     except through C3 (the in-Pullback CHoCH pair is not C3); scoring a
     model against it does not assume the lesson is right.

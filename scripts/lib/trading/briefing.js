@@ -933,7 +933,7 @@ function cisdLine(block, et) {
       : x.displacement === 'weak' ? 'a weak displacement: no zone' : `zone ${x.status}`;
     return `${tf} ${x.dir} at ${x.level} (closed ${et(x.confirmedClose)}, ${x.displacement})${x.sweep ? ` after a sweep of the ${x.sweep.name} ${x.sweep.price}` : ', no key-level sweep'}, ${zone}${x.bounce ? `, this bar bounced ${x.bounce} out of it` : ''}`;
   });
-  return parts.length ? `- CISD (completed candles; a read, not a signal): ${parts.join('; ')}.` : null;
+  return parts.length ? `- CISD (completed candles): ${parts.join('; ')}.` : null;
 }
 
 const target = x => `${x.frame} ${x.price} (${x.points} pts, ${x.ticks} ticks, ${x.R === null ? 'R unknown' : `${x.R}R`})`;

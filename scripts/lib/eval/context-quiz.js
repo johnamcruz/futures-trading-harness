@@ -135,8 +135,12 @@ function questionErrors(q, { part = 'questions', at = 'question', ids = new Set(
  * or ! dropped; never a character inside it ('F4, F3' and 'chop evidence (I think)' stay what they are). A number reads
  * by its value (round 17): 21462.50, 21462.5 and 21462.500 are one price; 21462.25 stays another.
  */
-const norm = s => String(s).toLowerCase().replace(/^[\s`_"(*]+/, '').replace(/[\s`_")*.!]+$/, '')
+// A leading article (a, an, the) is ignored on both sides, every item alike (round 18, PREREG addendum 22).
+const ARTICLE = /^(?:a|an|the)\s+/;
+const norm = s => String(s).toLowerCase().replace(/^[\s`_"(*]+/, '').replace(/[\s`_")*.!]+$/, '').replace(ARTICLE, '')
   .replace(/\d+(?:\.\d+)?/g, n => String(Number(n)));
+/** The line with its leading article dropped (markdown and quotes before it kept out), for free-text patterns. */
+const dropArticle = line => String(line).replace(/^([\s`_"(*]*)(?:a|an|the)\s+/i, '$1');
 /** The format line a choice question is asked with: its own, or its choices named. */
 const choiceFormat = q => q.format || ` Answer from your instructions only. First line: ANSWER: <one of: ${q.choices.join(' | ')}>, nothing else. Second line: one short sentence why.`;
 
@@ -322,8 +326,10 @@ function gradeAnswer(quiz, q, answer) {
     const ok = norm(line) === norm(q.answer);
     return { id: q.id, line, fmt, pass: ok, miss: ok ? [] : [q.answer], forb: [], unsure: re(quiz.unsure).test(line) };
   }
-  const miss = q.required.filter(src => !re(src).test(line));
-  const forb = q.forbidden.filter(src => matchesUnnegated(line, src, quiz.negations, quiz.negationWindow));
+  // Free text: a required pattern passes on the line with or without its leading article; a forbidden one fails on either.
+  const lines = [...new Set([line, dropArticle(line)])];
+  const miss = q.required.filter(src => !lines.some(l => re(src).test(l)));
+  const forb = q.forbidden.filter(src => lines.some(l => matchesUnnegated(l, src, quiz.negations, quiz.negationWindow)));
   return { id: q.id, line, fmt, pass: !miss.length && !forb.length, miss, forb, unsure: re(quiz.unsure).test(line) };
 }
 
@@ -386,4 +392,4 @@ function compare(a, b) {
   });
 }
 
-module.exports = { VERDICT, LAYERS, PROMPTS, PROMPT_ROLES, loadQuiz, quizErrors, questionErrors, promptKey, buildPrompts, excerptOf, briefingOfText, marketStateOfText, questionText, answerLine, negated, gradeAnswer, summarize, compare, quizCommand, replyOf, anchorsMissing };
+module.exports = { normChoice: norm, VERDICT, LAYERS, PROMPTS, PROMPT_ROLES, loadQuiz, quizErrors, questionErrors, promptKey, buildPrompts, excerptOf, briefingOfText, marketStateOfText, questionText, answerLine, negated, gradeAnswer, summarize, compare, quizCommand, replyOf, anchorsMissing };

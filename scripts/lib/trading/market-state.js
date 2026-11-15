@@ -63,8 +63,9 @@
  *                                 pullback); trend the 4h + 1h way, or ranging under them -> that trend class; a trend
  *                                 against them -> unclear
  *   marketStateLine(s)            "Market state (3m): trend up: 3m BOS up (continuation); pullback (long leg 21361.25 ->
- *                                 21437.5, depth 28%); 4h+1h up", "... chop: 3m CHoCH down then CHoCH up (failed
- *                                 reversal); Day so far rotational; 4h range, 1h up (not aligned)"; null for null
+ *                                 21437.5, depth 28%); 4h+1h up; class trend-up", "... chop: 3m CHoCH down then CHoCH up
+ *                                 (failed reversal); Day so far rotational; 4h range, 1h up (not aligned); class chop";
+ *                                 the class at the end is classWordOf's (round 18); null for null
  */
 
 const { trendOf } = require('./entry-rule');
@@ -237,7 +238,8 @@ function marketStateLine(s) {
   const p = s.pullback;
   const pb = p ? `; pullback (${p.side} leg ${p.leg.origin} -> ${p.leg.extreme}, ${String(pullbackWord(p) || 'depth unknown').split(',')[0]})`
     : s.early === true ? `; ${RULE.chain.setup} ${s.align}: a pullback in the ${RULE.chain.setup} trend` : '';
-  return `Market state (${s.tf}): ${state}${prot}${pb}; ${align}`;
+  // The class code computes (round 18, owner): printed at the end, one source (classWordOf), on every line.
+  return `Market state (${s.tf}): ${state}${prot}${pb}; ${align}; class ${classWordOf(s)}`;
 }
 
 module.exports = { readingOf, turnOf, stateWord, m15Confirms, readState, stateOf, classWordOf, marketStateLine };

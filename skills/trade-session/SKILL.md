@@ -114,14 +114,15 @@ location, setup, confluence, entry, risk, decision, management) and write
 its PLAN block before your result line; the checks below fill its lines.
 It orders the thinking and adds no filter.
 
-Last line of the PLAN block, every PLAN, an open trade's too: your own read
-from the bars and facts, not the labels copied (a label its last break or
-candle contradicts can be a `transition`, `trend-vs-range`); read it first,
+Last line of the PLAN block, every PLAN, an open trade's too: the frames
+are your own read from the bars and facts, not the labels copied (a label
+its last break or candle contradicts can be a `transition`,
+`trend-vs-range`); the class is the `Market state` line's; read it first,
 write it last; it is recorded; no code decides from it:
 `STATE: 4h <f> | 1h <f> | 15m <f> | frames <agree|disagree> | class <c> | cites <names>`,
 `<f>` is `up`, `down`, `range`, `transition` or `unknown`; `<c>`, the
 market now at this candle, is `trend-up`, `trend-down`, `chop` or
-`unclear`, from the `Market state` line; `<names>`, the facts it rests on, comma list, from `4h-trend`,
+`unclear`, the one the `Market state` line prints; `<names>`, the facts it rests on, comma list, from `4h-trend`,
 `1h-trend`, `15m-trend`, `trend-rule`, `regime`, `day-type`, `day-so-far`,
 `pullback`, `1h-break`, `15m-break`, `3m-break`; `none` when none supports
 it. No other words.
@@ -144,24 +145,29 @@ about 0.25 × the 15m ATR of the broken level) is the reaction.
 **The decision follows your STATE read** (the head trader's own, the last
 line of its PLAN; taught: the gate and `compose_check` do not read it):
 
-- The class word follows the printed `Market state` line, and only it.
-  No other row, picture or frame read changes it. Your STATE frames stay
-  your own read; when they differ, the class stays the line's: say why in
-  the PLAN.
-- The row: the line's state word; a pullback their way (`pullback (long
-  leg` with `4h+1h up`, `short leg` with down, or "15m up: a pullback in
-  the 15m trend", down the mirror); its end, `4h+1h up` or `down`
-  (aligned) or `(not aligned)`. One row fits each line.
+- Write the class the `Market state` line prints after `class`; your own
+  4h/1h/15m reads stay in STATE. No other row, picture or frame read
+  changes it. When your frames differ, say why in the PLAN.
 
-| state word | pullback their way | end | class | action |
-|---|---|---|---|---|
-| `chop` | none | any | `chop` | sit out |
-| any other | any | `(not aligned)` | `unclear` | no trend trade |
-| any other | printed | aligned | that trend class | wait for the 15m turn (a live strong 15m CISD, a 15m BOS, a 15m CHoCH back or a 15m reaction at the level); enter on the first 3m BOS or CISD the side's way near value (`pullback-vs-reversal` steps 4-7) |
-| `forming` | none | aligned | that trend class | no setup yet: wait for the first RTH 3m break |
-| `trend`, their way | none | aligned | that trend class | setups the side's way |
-| `ranging` | none | aligned | that trend class | setups at the range edge or on a breakout, the side's way |
-| `trend`, against them | none | aligned | `unclear` | no trade, never counter |
+| class printed | action |
+|---|---|
+| `trend-up`, `trend-down` | setups the side's way (what the line prints picks the setup, below) |
+| `chop` | sit out |
+| `unclear` | no trend trade, never counter |
+
+Under a trend class, the setup by what the line prints:
+
+- A pullback their way (`pullback (long leg` with `4h+1h up`, `short leg`
+  with down, or "15m up: a pullback in the 15m trend", down the mirror):
+  wait for the 15m turn (a live strong 15m CISD, a 15m BOS, a 15m CHoCH
+  back or a 15m reaction at the level); enter on the first 3m BOS or CISD
+  the side's way near value (`pullback-vs-reversal` steps 4-7). Small
+  overlapping candles inside a printed pullback are a pause, not chop; the
+  class stays the line's.
+- `forming`: no setup yet: wait for the first RTH 3m break.
+- `ranging`: setups at the range edge or on a breakout, the side's way, a
+  range day too; ranging is not chop.
+- `trend`, their way: setups the side's way.
 
 Chop ends when the line's state word is no longer `chop` (code's rule:
 chop ends: a CHoCH then a BOS or CISD the same way, or a close beyond the

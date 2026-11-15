@@ -500,17 +500,18 @@ test('state line: the decision follows the model\'s own STATE read (taught, no c
     // The head trader's alone; taught, never a gate: the gate and compose_check stay as they are
     // (tests/e2e/state-read-invariance-e2e.test.js).
     "(the head trader's own, the last line of its PLAN; taught: the gate and `compose_check` do not read it)",
-    // The class word follows the printed Market state line, and only it (feat/chop-read; round 17, the owner's "fix
-    // Competing definitions"): one authority; the table keys only on what the line prints, one row per line
-    // (tests/plugin/market-state-authority.test.js checks every printed line against code's class); the model's own
+    // The class word is the one the Market state line prints (feat/chop-read; round 18, the owner: the line prints code's
+    // class, classWordOf): the table maps the printed class to one action, never a state word to a class
+    // (tests/plugin/market-state-authority.test.js checks every printed line's class against code's); the model's own
     // frames stay its read (off the line: say why). The trend and chop definitions live in trend-vs-range (reference).
-    "The class word follows the printed `Market state` line, and only it. No other row, picture or frame read changes it. Your STATE frames stay your own read; when they differ, the class stays the line's: say why in the PLAN.",
-    "| `chop` | none | any | `chop` | sit out |",
+    "Write the class the `Market state` line prints after `class`; your own 4h/1h/15m reads stay in STATE. No other row, picture or frame read changes it. When your frames differ, say why in the PLAN.",
+    "| `chop` | sit out |",
+    "| `unclear` | no trend trade, never counter |",
     // A range day is no chop (owner: a range day is catchable).
-    "| `ranging` | none | aligned | that trend class | setups at the range edge or on a breakout, the side's way |",
-    "| any other | printed | aligned | that trend class | wait for the 15m turn (a live strong 15m CISD, a 15m BOS, a 15m CHoCH back or a 15m reaction at the level); enter on the first 3m BOS or CISD the side's way near value (`pullback-vs-reversal` steps 4-7) |",
-    "| `trend`, against them | none | aligned | `unclear` | no trade, never counter |",
-    "| any other | any | `(not aligned)` | `unclear` | no trend trade |",
+    "- `ranging`: setups at the range edge or on a breakout, the side's way, a range day too; ranging is not chop.",
+    // The negative-only pause line (round 18, the diagnosis review): no positive chop definition in the always-loaded text.
+    "Small overlapping candles inside a printed pullback are a pause, not chop; the class stays the line's.",
+    "wait for the 15m turn (a live strong 15m CISD, a 15m BOS, a 15m CHoCH back or a 15m reaction at the level); enter on the first 3m BOS or CISD the side's way near value (`pullback-vs-reversal` steps 4-7).",
     "Chop ends when the line's state word is no longer `chop` (code's rule: chop ends: a CHoCH then a BOS or CISD the same way, or a close beyond the range (the IB; before 10:30 only a BOS or CISD ends it)). The trend and chop definitions, for reference only: `trend-vs-range`.",
     // A take agrees with the read: the class and the 4h and 1h on the setup's side (the never-counter-HTF rule, in its own words).
     'A take: `class` on its side (`trend-up` long, `trend-down` short), your 4h and 1h too (`up` long, `down` short).',
@@ -524,8 +525,8 @@ test('state line: the decision follows the model\'s own STATE read (taught, no c
   // The other sentences stay true: pass only on a decisive against or the head trader's own read.
   assert.ok(ts.includes("pass only on a decisive against, or your own STATE read off the setup's side (above)."));
   // The 15m is no class condition of the 4h + 1h: it is named in the pullback row's action (the turn) and the chop row
-  // (the 15m continuation: the 3m state, code's).
-  assert.strictEqual(para.split('15m').length, 8);
+  // (the 15m continuation: the 3m state, code's); round 18: once more in "your own 4h/1h/15m reads stay in STATE".
+  assert.strictEqual(para.split('15m').length, 9);
   assert.doesNotMatch(para, /Class side|open `Pullback` line/, 'the dropped line and the rule the state settles');
   // No filled-in line here: the one example stays in trader-process (the class-word test below).
   assert.doesNotMatch(para, /`STATE:/);
@@ -541,11 +542,12 @@ test('state line: the decision follows the model\'s own STATE read (taught, no c
   // The side rule and its example stay main's (their alignment to the 4h AND 1h rule is its own later pull request); after
   // it, the head trader's OWN read (not the labels) decides the take, and the briefing's lines are the gate's floor.
   const htf = read('skills/htf-to-ltf/SKILL.md');
-  assert.ok(htf.includes('**The side rule** (in an attempt): each trending 4h or 1h your way, neither against; both ranging: the 15m and `Trend declared?` your way; else no trade.'));
+  // Round 18 (q119): the side rule says it decides the side only; the class is the Market state line's (no new rule).
+  assert.ok(htf.includes('**The side rule** (side only; the class is the Market state line\'s; in an attempt): each trending 4h or 1h your way, neither against; both ranging: the 15m and `Trend declared?` your way; else no trade.'));
   assert.ok(htf.includes('4h and 1h RANGE, 15m DOWN, declared short: short only.'));
-  assert.ok(htf.includes("Then the class follows the Market state line (`trade-session`'s table); a take needs your own STATE 4h and 1h the side's way too."));
+  assert.ok(htf.includes("Then the class is the one the Market state line prints after `class`; a take needs your own STATE 4h and 1h the side's way too."));
   assert.ok(htf.includes("The briefing's `Bias:`/`Trend rule:` lines are the gate's floor (what it refuses), never your side: your own STATE read is stricter."));
-  assert.ok(htf.indexOf('Then the class follows the Market state line') > htf.indexOf('**The side rule**'), 'after the side rule');
+  assert.ok(htf.indexOf('Then the class is the one the Market state line prints') > htf.indexOf('**The side rule**'), 'after the side rule');
   // The documented example (a full long take) satisfies the taught rule: class trend-up, 4h up, 1h up.
   const ex = /9 Manage:[^\n]*\n(STATE: [^\n]+)\n```/.exec(fs.readFileSync(path.join(ROOT, 'skills', 'trader-process', 'SKILL.md'), 'utf8').split('## Examples')[1]);
   const r = S.parseStateLine(ex[1]);

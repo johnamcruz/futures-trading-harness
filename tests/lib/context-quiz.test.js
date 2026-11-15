@@ -731,6 +731,29 @@ test('grading a choice question: the ANSWER line equal to the answer passes; a h
     ['ANSWER: holds below 21462.5 (origin)', false], ['ANSWER: holds above 21462.5', false], ['ANSWER: failed below 21478', false]]) assert.strictEqual(Q.gradeAnswer(QUIZ, px, a).pass, want, a);
   const fail = { ...px, answer: 'failed below 21478.00' };
   for (const [a, want] of [['ANSWER: failed below 21478', true], ['ANSWER: failed below 21478.0', true], ['ANSWER: failed below 21478.25', false]]) assert.strictEqual(Q.gradeAnswer(QUIZ, fail, a).pass, want, a);
+  // A leading article is ignored, every item alike (round 18, PREREG addendum 22: q126 and q127's right reads without
+  // their leading "a"): dropped, added or swapped it still matches; a different word, number or a missing clause fails.
+  const art = { ...q('q79'), choices: ['a pullback in the 15m trend: class trend-up', 'a reversal', 'chop'], answer: 'a pullback in the 15m trend: class trend-up' };
+  for (const [a, want] of [['ANSWER: pullback in the 15m trend: class trend-up', true], ['ANSWER: A pullback in the 15m trend: class trend-up.', true],
+    ['ANSWER: the pullback in the 15m trend: class trend-up', true], ['ANSWER: **An pullback in the 15m trend: class trend-up**', true],
+    ['ANSWER: pullback in the 1h trend: class trend-up', false], ['ANSWER: pullback in the 15m trend', false], ['ANSWER: a pullback in the 15m trend: class trend-down', false],
+    ['ANSWER: a reversal', false], ['ANSWER: pullbacks in the 15m trend: class trend-up', false], ['ANSWER: apullback in the 15m trend: class trend-up', false],
+    ['ANSWER: pullback in a 15m trend: class trend-up', false]]) assert.strictEqual(Q.gradeAnswer(QUIZ, art, a).pass, want, a);
+  const bare = { ...art, answer: 'chop' };
+  for (const [a, want] of [['ANSWER: the chop', true], ['ANSWER: chop', true], ['ANSWER: a chop.', true], ['ANSWER: another chop', false], ['ANSWER: theme chop', false]]) assert.strictEqual(Q.gradeAnswer(QUIZ, bare, a).pass, want, a);
+  // A number after the article still by its value.
+  const pxa = { ...px, answer: 'a potential reversal up (above its origin 21462.50)' };
+  for (const [a, want] of [['ANSWER: potential reversal up (above its origin 21462.5)', true], ['ANSWER: potential reversal up (above its origin 21462.25)', false]]) assert.strictEqual(Q.gradeAnswer(QUIZ, pxa, a).pass, want, a);
+  // Free text: the required patterns read the line with or without its leading article; a forbidden one fails on either.
+  const ft = { ...q('q79'), choices: undefined, answer: undefined, required: ['^\\W*breakout\\b'], forbidden: ['^\\W*a\\s+reversal\\b'] };
+  delete ft.choices;
+  for (const [a, want] of [['ANSWER: breakout above 21500', true], ['ANSWER: a breakout above 21500', true], ['ANSWER: the breakout above 21500', true],
+    ['ANSWER: an breakout', true], ['ANSWER: a reversal, then breakout', false], ['ANSWER: fakeout', false]]) assert.strictEqual(Q.gradeAnswer(QUIZ, ft, a).pass, want, a);
+  // No two choices of any item become equal with the article ignored (the matcher never merges two answers).
+  for (const x of [...QUIZ.questions, ...QUIZ.partB].filter(y => y.choices)) {
+    const seen = x.choices.map(c => Q.normChoice(c));
+    assert.strictEqual(new Set(seen).size, seen.length, `${x.id}: ${seen.join(' | ')}`);
+  }
   // Text without a number reads as before (the cases above), and the F-labels stay distinct.
   assert.strictEqual(g('q81', 'ANSWER: F3'), false);
   // The result's shape is the regex questions' (quiz-run, quiz-gate and quiz-phase read it): the answer missed, nothing forbidden.
@@ -790,10 +813,10 @@ test('marketStateOfText: the Market state line from an item\'s printed lines', (
   const head = (t, lines) => [`Briefing lines (synthetic, ${t} ET), flat:`, ...lines].join('\n');
   const BL = '- Bias: long only (4h up, 1h up; short refused).';
   assert.strictEqual(Q.marketStateOfText('no briefing here'), null);
-  assert.strictEqual(Q.marketStateOfText(head('10:30', [BL])), 'Market state (3m): ranging: no 3m break printed; 4h+1h up');
-  assert.strictEqual(Q.marketStateOfText(head('10:30', ['- Bias: long only (4h range, 1h up; short refused).'])), 'Market state (3m): ranging: no 3m break printed; 4h range, 1h up (not aligned)');
-  assert.strictEqual(Q.marketStateOfText(head('10:30', ['- Bias: no side yet (15m range).'])), 'Market state (3m): ranging: no 3m break printed; 4h range, 1h range (not aligned)');
-  assert.strictEqual(Q.marketStateOfText(head('10:30', ['- Bias: no side (4h up, 1h down) → no entry.'])), 'Market state (3m): ranging: no 3m break printed; 4h up, 1h down (not aligned)');
+  assert.strictEqual(Q.marketStateOfText(head('10:30', [BL])), 'Market state (3m): ranging: no 3m break printed; 4h+1h up; class trend-up');
+  assert.strictEqual(Q.marketStateOfText(head('10:30', ['- Bias: long only (4h range, 1h up; short refused).'])), 'Market state (3m): ranging: no 3m break printed; 4h range, 1h up (not aligned); class unclear');
+  assert.strictEqual(Q.marketStateOfText(head('10:30', ['- Bias: no side yet (15m range).'])), 'Market state (3m): ranging: no 3m break printed; 4h range, 1h range (not aligned); class unclear');
+  assert.strictEqual(Q.marketStateOfText(head('10:30', ['- Bias: no side (4h up, 1h down) → no entry.'])), 'Market state (3m): ranging: no 3m break printed; 4h up, 1h down (not aligned); class unclear');
   // Round 17 (q95): an item that prints `m3.lastBreak: none since the RTH open` states its RTH breaks (none), so its clock
   // is the close, as the live briefing's is: the line equals the live one on the same inputs (09:39 ET, the only 3m breaks
   // premarket), `forming`. Without that line an item shows less and keeps "no 3m break printed".
@@ -807,32 +830,32 @@ test('marketStateOfText: the Market state line from an item\'s printed lines', (
     const b = { minutes: 3, closedAt: et(t), sections: { h1: { data: { h4: { trend: 'up' }, h1: { trend: 'up' } } }, m3: { data: { lastBreak: live } } } };
     assert.strictEqual(Q.marketStateOfText(head(t, [BL, NONE])), M.marketStateLine(M.stateOf(b, th)), `${t} ${JSON.stringify(live.last)}`);
   }
-  assert.strictEqual(Q.marketStateOfText(head('09:39', [BL, NONE])), 'Market state (3m): forming (no RTH structure yet); 4h+1h up');
-  assert.strictEqual(Q.marketStateOfText(head('09:39', [BL])), 'Market state (3m): ranging: no 3m break printed; 4h+1h up');
+  assert.strictEqual(Q.marketStateOfText(head('09:39', [BL, NONE])), 'Market state (3m): forming (no RTH structure yet); 4h+1h up; class trend-up');
+  assert.strictEqual(Q.marketStateOfText(head('09:39', [BL])), 'Market state (3m): ranging: no 3m break printed; 4h+1h up; class trend-up');
   // The live briefing prints this line from the same two functions (briefing.js).
   assert.match(fs.readFileSync(path.join(__dirname, '../../scripts/lib/trading/briefing.js'), 'utf8'), /marketStateLine\(stateOf\(b, STATE_TH\)\)/);
   const PBL = '- Pullback (15m, long leg 21462.5 -> 21538.75): depth 54% of the leg; 10 bars since the extreme.';
-  assert.strictEqual(Q.marketStateOfText(head('10:30', [BL, PBL])), 'Market state (3m): ranging: no 3m break printed; pullback (long leg 21462.5 -> 21538.75, depth 54%); 4h+1h up');
-  assert.strictEqual(Q.marketStateOfText(head('10:30', [BL, '- Pullback (15m, long leg 21462.5 -> 21538.75): the leg given back past its origin; 30 bars since the extreme.'])), 'Market state (3m): ranging: no 3m break printed; 4h+1h up');
-  assert.strictEqual(Q.marketStateOfText(head('10:30', [BL, '- Pullback (15m, long leg 21462.5 -> 21538.75): leg 0.8x ATR(14), under the 1.5x floor: no depth; 4 bars since the extreme.'])), 'Market state (3m): ranging: no 3m break printed; pullback (long leg 21462.5 -> 21538.75, small leg); 4h+1h up');
+  assert.strictEqual(Q.marketStateOfText(head('10:30', [BL, PBL])), 'Market state (3m): ranging: no 3m break printed; pullback (long leg 21462.5 -> 21538.75, depth 54%); 4h+1h up; class trend-up');
+  assert.strictEqual(Q.marketStateOfText(head('10:30', [BL, '- Pullback (15m, long leg 21462.5 -> 21538.75): the leg given back past its origin; 30 bars since the extreme.'])), 'Market state (3m): ranging: no 3m break printed; 4h+1h up; class trend-up');
+  assert.strictEqual(Q.marketStateOfText(head('10:30', [BL, '- Pullback (15m, long leg 21462.5 -> 21538.75): leg 0.8x ATR(14), under the 1.5x floor: no depth; 4 bars since the extreme.'])), 'Market state (3m): ranging: no 3m break printed; pullback (long leg 21462.5 -> 21538.75, small leg); 4h+1h up; class trend-up');
   const PAIRL = '- m3.lastBreak: last CHoCH up at 21512.25 (barsAgo 2), previous CHoCH down at 21497.75 (barsAgo 7).';
   const ROT = '- Day so far (22 3m bars; `day-context`): rotational: efficiency 0.04 (x sqrt(bars) 0.19), RTH VWAP crosses 3, range 3.4 x 3m ATR(14), net up.';
   const MIX7 = '- Day so far (22 3m bars; `day-context`): mixed up: efficiency 0.1 (x sqrt(bars) 0.47), RTH VWAP crosses 7, range 3.4 x 3m ATR(14), net up.';
-  assert.strictEqual(Q.marketStateOfText(head('10:36', [BL, ROT, PAIRL])), 'Market state (3m): chop: 3m CHoCH down then CHoCH up (failed reversal); Day so far rotational; 4h+1h up');
-  assert.strictEqual(Q.marketStateOfText(head('10:36', [BL, MIX7, PAIRL])), 'Market state (3m): chop: 3m CHoCH down then CHoCH up (failed reversal); RTH VWAP crosses 7; 4h+1h up');
-  assert.strictEqual(Q.marketStateOfText(head('10:36', [BL, PBL, ROT, PAIRL])), 'Market state (3m): ranging: 3m CHoCH down then CHoCH up (inside the pullback: the watch); pullback (long leg 21462.5 -> 21538.75, depth 54%); 4h+1h up');
-  assert.strictEqual(Q.marketStateOfText(head('10:36', [BL, '- m3.lastBreak: last BOS up at 21516.75 (barsAgo 0), previous BOS up at 21511.25 (barsAgo 2).'])), 'Market state (3m): trend up: 3m BOS up (continuation), 0 min ago; 4h+1h up');
-  assert.strictEqual(Q.marketStateOfText(head('10:36', [BL, '- m3.lastBreak: last CHoCH down at 21529.50 (barsAgo 0).'])), 'Market state (3m): ranging: 3m CHoCH down (potential reversal, unconfirmed); 4h+1h up', 'one break printed: no pair, no RTH claim');
+  assert.strictEqual(Q.marketStateOfText(head('10:36', [BL, ROT, PAIRL])), 'Market state (3m): chop: 3m CHoCH down then CHoCH up (failed reversal); Day so far rotational; 4h+1h up; class chop');
+  assert.strictEqual(Q.marketStateOfText(head('10:36', [BL, MIX7, PAIRL])), 'Market state (3m): chop: 3m CHoCH down then CHoCH up (failed reversal); RTH VWAP crosses 7; 4h+1h up; class chop');
+  assert.strictEqual(Q.marketStateOfText(head('10:36', [BL, PBL, ROT, PAIRL])), 'Market state (3m): ranging: 3m CHoCH down then CHoCH up (inside the pullback: the watch); pullback (long leg 21462.5 -> 21538.75, depth 54%); 4h+1h up; class trend-up');
+  assert.strictEqual(Q.marketStateOfText(head('10:36', [BL, '- m3.lastBreak: last BOS up at 21516.75 (barsAgo 0), previous BOS up at 21511.25 (barsAgo 2).'])), 'Market state (3m): trend up: 3m BOS up (continuation), 0 min ago; 4h+1h up; class trend-up');
+  assert.strictEqual(Q.marketStateOfText(head('10:36', [BL, '- m3.lastBreak: last CHoCH down at 21529.50 (barsAgo 0).'])), 'Market state (3m): ranging: 3m CHoCH down (potential reversal, unconfirmed); 4h+1h up; class trend-up', 'one break printed: no pair, no RTH claim');
   // The 15m frame's trend and last break (the quiz's prose for the fields): the early read; the 15m guard.
-  assert.strictEqual(Q.marketStateOfText(head('10:36', [BL, '- m15.frame.trend: up.', '- m3.lastBreak: last BOS down at 21506.25 (barsAgo 1), previous CHoCH down at 21512.75 (barsAgo 5).'])), 'Market state (3m): trend down: 3m CHoCH down then BOS down (confirmed transition down), 3 min ago; 15m up: a pullback in the 15m trend; 4h+1h up');
-  assert.strictEqual(Q.marketStateOfText(head('10:36', [BL, '- m15.lastBreak: last BOS up at 21500.00 (barsAgo 0).', PAIRL])), 'Market state (3m): trend up: 3m CHoCH down then CHoCH up = the 15m BOS up (continuation); 4h+1h up');
+  assert.strictEqual(Q.marketStateOfText(head('10:36', [BL, '- m15.frame.trend: up.', '- m3.lastBreak: last BOS down at 21506.25 (barsAgo 1), previous CHoCH down at 21512.75 (barsAgo 5).'])), 'Market state (3m): trend down: 3m CHoCH down then BOS down (confirmed transition down), 3 min ago; 15m up: a pullback in the 15m trend; 4h+1h up; class trend-up');
+  assert.strictEqual(Q.marketStateOfText(head('10:36', [BL, '- m15.lastBreak: last BOS up at 21500.00 (barsAgo 0).', PAIRL])), 'Market state (3m): trend up: 3m CHoCH down then CHoCH up = the 15m BOS up (continuation); 4h+1h up; class trend-up');
   // A confirmed turn: a 3m CISD up closed after the CHoCH's candle (barsAgo 2 at 10:36: opened 10:27, closed 10:30), or a
   // close beyond the initial balance.
-  const CISD = c => `- CISD (completed candles; a read, not a signal): 3m bullish at 21515.00 (closed ${c}, strong), no key-level sweep, OTE 21509.25-21511.75 (mid 21510.5), waiting.`;
-  assert.strictEqual(Q.marketStateOfText(head('10:36', [BL, ROT, PAIRL, CISD('10:36')])), 'Market state (3m): trend up: 3m CHoCH down then CHoCH up (failed reversal), then a 3m CISD up (confirmed); the chop ended; 4h+1h up');
+  const CISD = c => `- CISD (completed candles): 3m bullish at 21515.00 (closed ${c}, strong), no key-level sweep, OTE 21509.25-21511.75 (mid 21510.5), waiting.`;
+  assert.strictEqual(Q.marketStateOfText(head('10:36', [BL, ROT, PAIRL, CISD('10:36')])), 'Market state (3m): trend up: 3m CHoCH down then CHoCH up (failed reversal), then a 3m CISD up (confirmed); the chop ended; 4h+1h up; class trend-up');
   assert.match(Q.marketStateOfText(head('10:36', [BL, ROT, PAIRL, CISD('10:30')])), /: chop: /, 'closed with the CHoCH\'s own candle');
   const IB = '- MNQ day: opened 21500; initial balance 21480-21560 (80 points), extended 3.25 up and 0 down: normal variation up.';
-  assert.strictEqual(Q.marketStateOfText(head('11:00', [BL, '- Price 21563.25.', IB, ROT, '- m3.lastBreak: last CHoCH up at 21558.25 (barsAgo 0), previous CHoCH down at 21497.75 (barsAgo 5).'])), 'Market state (3m): trend up: 3m CHoCH down then CHoCH up (failed reversal), then a close above the IB high 21560 (confirmed); the chop ended; 4h+1h up');
+  assert.strictEqual(Q.marketStateOfText(head('11:00', [BL, '- Price 21563.25.', IB, ROT, '- m3.lastBreak: last CHoCH up at 21558.25 (barsAgo 0), previous CHoCH down at 21497.75 (barsAgo 5).'])), 'Market state (3m): trend up: 3m CHoCH down then CHoCH up (failed reversal), then a close above the IB high 21560 (confirmed); the chop ended; 4h+1h up; class trend-up');
   // The RTH pair: a previous break before 09:30 ET does not count.
-  assert.strictEqual(Q.marketStateOfText(head('09:36', [BL, '- m3.lastBreak: last CHoCH up at 21512.25 (barsAgo 0), previous CHoCH down at 21497.75 (barsAgo 4).'])), 'Market state (3m): ranging: 3m CHoCH up (potential reversal, unconfirmed), the only RTH break; 4h+1h up');
+  assert.strictEqual(Q.marketStateOfText(head('09:36', [BL, '- m3.lastBreak: last CHoCH up at 21512.25 (barsAgo 0), previous CHoCH down at 21497.75 (barsAgo 4).'])), 'Market state (3m): ranging: 3m CHoCH up (potential reversal, unconfirmed), the only RTH break; 4h+1h up; class trend-up');
 });

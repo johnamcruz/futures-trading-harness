@@ -1,9 +1,9 @@
 'use strict';
 
 // One authority for the class word (round 17, owner: "Make sure to fix Competing definitions" and "Need to make sure it's
-// clear and avoid confusion"): the printed Market state line. The head core's table keys only on what that line prints
-// (its state word, a pullback their way, its last part); one row fits each line, and the row's class is the one code
-// computes (market-state.js classWordOf). No other taught row or sentence maps a frame condition to a class word.
+// clear and avoid confusion"): the printed Market state line. Round 18 (owner): the line prints the class code computes
+// (market-state.js classWordOf) at its end; the head core's table maps that printed class to one action and never a
+// state word to a class. No other taught row or sentence maps a frame condition to a class word.
 const test = require('node:test');
 const assert = require('node:assert');
 const fs = require('fs');
@@ -17,35 +17,13 @@ const read = f => fs.readFileSync(path.join(ROOT, f), 'utf8');
 const an = require('../../scripts/lib/tunables').analysis();
 const TH = { crossesChop: an.regime.rangeCrosses, maxPullbackDepth: an.pullbackRead.maxStateDepth };
 
-// The table as taught (trade-session step 3): each row the printed word -> one class word -> one action.
+// The table as taught (trade-session step 3, round 18: the line prints the class): each row one class word -> one action.
+// No row keys on a state word: the class is read off the line, never derived from its words.
 const ROWS = [
-  "| `chop` | none | any | `chop` | sit out |",
-  "| any other | any | `(not aligned)` | `unclear` | no trend trade |",
-  "| any other | printed | aligned | that trend class | wait for the 15m turn (a live strong 15m CISD, a 15m BOS, a 15m CHoCH back or a 15m reaction at the level); enter on the first 3m BOS or CISD the side's way near value (`pullback-vs-reversal` steps 4-7) |",
-  "| `forming` | none | aligned | that trend class | no setup yet: wait for the first RTH 3m break |",
-  "| `trend`, their way | none | aligned | that trend class | setups the side's way |",
-  "| `ranging` | none | aligned | that trend class | setups at the range edge or on a breakout, the side's way |",
-  "| `trend`, against them | none | aligned | `unclear` | no trade, never counter |",
+  "| `trend-up`, `trend-down` | setups the side's way (what the line prints picks the setup, below) |",
+  "| `chop` | sit out |",
+  "| `unclear` | no trend trade, never counter |",
 ];
-// Each row read off a printed line: [the row's key on the line, its class given the 4h + 1h way].
-const parse = line => {
-  const body = line.replace(/^Market state \(3m\): /, '');
-  const word = /^(chop|forming|ranging|trend (?:up|down))/.exec(body)[1];
-  const align = /; 4h\+1h (up|down)$/.exec(body);
-  const way = align ? align[1] : null;
-  const pb = way !== null && (body.includes(`; pullback (${way === 'up' ? 'long' : 'short'} leg`) || body.includes(`; 15m ${way}: a pullback in the 15m trend`));
-  return { word, way, notAligned: / \(not aligned\)$/.test(body), pb };
-};
-const KEYS = [
-  [p => p.word === 'chop' && !p.pb, () => 'chop'],
-  [p => p.word !== 'chop' && p.notAligned, () => 'unclear'],
-  [p => p.word !== 'chop' && p.pb && p.way !== null, p => `trend-${p.way}`],
-  [p => p.word === 'forming' && !p.pb && p.way !== null, p => `trend-${p.way}`],
-  [p => p.word === `trend ${p.way}` && !p.pb && p.way !== null, p => `trend-${p.way}`],
-  [p => p.word === 'ranging' && !p.pb && p.way !== null, p => `trend-${p.way}`],
-  [p => /^trend /.test(p.word) && p.word !== `trend ${p.way}` && !p.pb && p.way !== null, () => 'unclear'],
-];
-
 // Synthetic briefings across the precedence's combinations (the quiz's reader of printed lines, the live code's state).
 function lines() {
   const bias = ['- Bias: long only (4h up, 1h up; short refused).', '- Bias: short only (4h down, 1h down; long refused).', '- Bias: long only (4h range, 1h up; short refused).', '- Bias: no side (4h up, 1h down) → no entry.'];
@@ -67,39 +45,52 @@ function lines() {
   return out;
 }
 
-test('market state authority: the head core\'s table keys only on what the line prints; one row fits each printed line, its class code\'s', () => {
-  const ts = flat(read('skills/trade-session/SKILL.md'));
-  for (const r of ROWS) assert.ok(ts.includes(r), r);
-  const table = ts.slice(ts.indexOf('| state word | pullback their way | end | class | action |'), ts.indexOf('Chop ends when the line'));
-  assert.strictEqual(table.split('|---|---|---|---|---|').length, 2, 'one table, five columns');
-  // The table's rows are exactly ROWS, in order: a row added, dropped or changed fails (the KEYS below mirror ROWS).
-  const body = read('skills/trade-session/SKILL.md');
-  const raw = body.slice(body.indexOf('| state word | pullback their way |'), body.indexOf('Chop ends when the line'));
-  assert.deepStrictEqual(raw.split('\n').map(l => l.trim()).filter(l => l.startsWith('|') && !l.startsWith('|-') && !l.startsWith('| state word')), ROWS);
-  // No exception inside the table: precedence is code's, applied before the line prints.
-  assert.doesNotMatch(table, /\bunless\b|\bexcept\b|but if/i);
+test('market state authority: the line prints the class code computes (classWordOf), on every distinct line the precedence makes', () => {
   const all = lines();
   assert.ok(all.size >= 20, `${all.size} distinct printed lines`);
-  const words = new Set();
+  const classes = new Set();
   for (const [line, cls] of all) {
-    const p = parse(line);
-    words.add(p.word.split(' ')[0] + (p.pb ? '+pb' : '') + (p.notAligned ? '+na' : ''));
-    const fit = KEYS.map(([k, c], i) => (k(p) ? [i, c(p)] : null)).filter(Boolean);
-    assert.strictEqual(fit.length, 1, `${line}: ${fit.length} rows`);
-    assert.strictEqual(fit[0][1], cls, `${line}: row ${fit[0][0] + 1} gives ${fit[0][1]}, code ${cls}`);
+    const m = /; class (trend-up|trend-down|chop|unclear)$/.exec(line);
+    assert.ok(m, `${line}: no printed class at its end`);
+    assert.strictEqual(m[1], cls, `${line}: prints ${m[1]}, code ${cls}`);
+    // Parse-back (round 18): the class is the line's last `; ` field, said once; the leg's "->" never carries it.
+    const fields = line.split('; ');
+    assert.strictEqual(fields[fields.length - 1], `class ${cls}`, line);
+    assert.match(fields[fields.length - 2], /(?:^|: )?4h\+1h (?:up|down)$|\(not aligned\)$/, line);
+    assert.strictEqual(line.split('class ').length, 2, `${line}: one class`);
+    assert.doesNotMatch(line, /-> class/, line);
+    classes.add(cls);
   }
-  // Every row is reached.
-  for (const w of ['chop', 'forming', 'ranging', 'trend', 'trend+pb', 'ranging+pb', 'trend+na', 'ranging+na']) assert.ok(words.has(w), w);
+  // Every class word is reached, and each state word prints (forming and unclear lines carry a class too).
+  for (const c of ['trend-up', 'trend-down', 'chop', 'unclear']) assert.ok(classes.has(c), c);
+  for (const w of ['chop: ', 'forming ', 'ranging: ', 'trend up: ', 'trend down: ']) assert.ok([...all.keys()].some(l => l.includes(`(3m): ${w}`)), w);
+});
+
+test('market state authority: the head core\'s table maps the printed class to one action, never a state word to a class', () => {
+  const body = read('skills/trade-session/SKILL.md');
+  const ts = flat(body);
+  const raw = body.slice(body.indexOf('| class printed | action |'), body.indexOf('Chop ends when the line'));
+  assert.ok(raw.length > 0, 'the table');
+  // The table's rows are exactly ROWS, in order: a row added, dropped or changed fails.
+  assert.deepStrictEqual(raw.split('\n').map(l => l.trim()).filter(l => l.startsWith('|') && !l.startsWith('|-') && !l.startsWith('| class printed')), ROWS);
+  assert.strictEqual(flat(raw).split('|---|---|').length, 2, 'one table, two columns');
+  // No exception inside the table, and no state word keys a row (the class is the line's, printed).
+  assert.doesNotMatch(raw, /\bunless\b|\bexcept\b|but if/i);
+  for (const r of ROWS) assert.doesNotMatch(r.split('|')[1], /forming|ranging|`trend`|not aligned|pullback/, r);
+  assert.ok(ts.includes('Write the class the `Market state` line prints after `class`; your own 4h/1h/15m reads stay in STATE.'));
 });
 
 test('market state authority: the head core says once that the class word follows the printed line, and holds no competing picture', () => {
   const H = require('../../scripts/lib/head-prompt');
   const head = flat(H.headPrompt(H.headPlan(ROOT, 'index')));
-  const ONE = 'The class word follows the printed `Market state` line, and only it. No other row, picture or frame read changes it';
+  const ONE = 'Write the class the `Market state` line prints after `class`';
   assert.strictEqual(head.split(ONE).length, 2, 'said once');
-  assert.ok(head.includes("Your STATE frames stay your own read; when they differ, the class stays the line's: say why in the PLAN."));
-  // The chop picture lives in trend-vs-range only (a lookup, reference), pointed to once.
-  assert.doesNotMatch(head, /overlapping candles|failed continuation/);
+  assert.ok(head.includes('No other row, picture or frame read changes it. When your frames differ, say why in the PLAN.'));
+  // The chop picture lives in trend-vs-range only (a lookup, reference), pointed to once. The one exception is the
+  // negative-only pause line (round 18, the diagnosis review), which names overlap only to say it is no chop.
+  const PAUSE = "Small overlapping candles inside a printed pullback are a pause, not chop; the class stays the line's.";
+  assert.strictEqual(head.split(PAUSE).length, 2, 'the pause line, once');
+  assert.doesNotMatch(head.replace(PAUSE, ''), /overlapping candles|failed continuation/);
   assert.ok(flat(read('skills/trend-vs-range/SKILL.md')).includes('Chop: alternating BOS/CHoCH, overlapping candles, failed continuation.'));
   assert.strictEqual(head.split('definitions, for reference only: `trend-vs-range`').length, 2);
   // One term per idea: no synonym stands in for a state word in the always-loaded text.
@@ -124,7 +115,7 @@ const ALLOWED = [
   // The table and its bullets: the one authority (trade-session step 3).
   ['skills/trade-session/SKILL.md', /\*\*The decision follows your STATE read\*\*[^]*?Chop ends when the line's state word/],
   // The STATE grammar names the four words and points to the line.
-  ['skills/trade-session/SKILL.md', /`<c>`, the market now at this candle, is `trend-up`, `trend-down`, `chop` or `unclear`, from the `Market state` line;/],
+  ['skills/trade-session/SKILL.md', /`<c>`, the market now at this candle, is `trend-up`, `trend-down`, `chop` or `unclear`, the one the `Market state` line prints;/],
   // A pass on the head trader's own read: class -> action, never a condition -> class.
   ['skills/trade-session/SKILL.md', /Then `chop`, `unclear`, or a trend class your 4h and 1h don't show/],
   // Examples that quote the printed line and give its class.
@@ -138,7 +129,7 @@ const ALLOWED = [
   // trader-process's filled-in STATE example (a recorded line, no rule; audit row 12).
   ['skills/trader-process/SKILL.md', /STATE: 4h up \| 1h up \| 15m transition \| frames disagree \| class trend-up \| cites 15m-break, 3m-break, pullback/],
   // The README's step table: the line's words -> class, the authority restated for people.
-  ['README.md', /\| The class word follows the line, and only it: [^|]*\|/],
+  ['README.md', /\| The class word is the one the line prints, and only it: [^|]*\|/],
 ];
 
 function teachingHomes() {
