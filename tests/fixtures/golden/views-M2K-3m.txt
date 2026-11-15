@@ -114,7 +114,7 @@ Summary (M2K 3m, 12:33 ET):
 - Price 2263.7. 1R = 1 pts (0.5 x 3m ATR(20) 2.01, the 3m reference stop); every distance below is in points and R.
 - Trend rule: SHORT allowed (prevailing 15m down; the 4h and 1h ranging: in a prop attempt only with the trend declared); no long against it.
 - Bias: no side yet (15m down, declared short: no).
-- Market state (3m): pullback (short leg 2286.7 -> 2254.4, depth 29%): 3m up leg, HL 2260.9 holds; behavior trending (overlap 0.67, efficiency 0.37), 15m trending up; 4h range, 1h range (not aligned); class unclear.
+- Market state (3m): pullback (short leg 2286.7 -> 2254.4, depth 29%): 3m up leg, HL 2260.9 holds; overlap 0.67, efficiency 0.37, 15m trending up; 4h range, 1h range (not aligned); class unclear.
 - Alignment: long mixed, short mixed. Regime: trend-up, normal volatility. RTH volatility: unknown (1 prior session with these minutes; needs 3).
 - VWAP (rth): price below, 0.57 x 3m ATR(14) away. Closes crossing a VWAP in the last 30 bars: the RTH VWAP 0, the session VWAP 0 (the regime's count).
 - News: no blackout ahead.
@@ -210,7 +210,7 @@ Summary (M2K 3m, 09:51 ET):
 - Price 2261.2. 1R = 1.26 pts (0.5 x 3m ATR(20) 2.52, the 3m reference stop); every distance below is in points and R.
 - Trend rule: SHORT allowed (prevailing 4h down); no long against it.
 - Bias: short only (4h down, 1h range; long refused).
-- Market state (3m): trend down: LH 2286.1 holds; behavior trending (overlap 0.54, efficiency 0.61), 15m early; 4h down, 1h range (not aligned); class unclear.
+- Market state (3m): trend down: LH 2286.1 holds; overlap 0.54, efficiency 0.61, 15m early; 4h down, 1h range (not aligned); class unclear.
 - Alignment: long counter, short mixed. Regime: trend-down, high volatility. RTH volatility: unknown (2 prior sessions with these minutes; needs 3).
 - VWAP (rth): price below, 3.56 x 3m ATR(14) away. Closes crossing a VWAP in the last 30 bars: the RTH VWAP 0, the session VWAP 1 (the regime's count).
 - News: no blackout ahead.
@@ -307,7 +307,7 @@ Summary (M2K 3m, 10:06 ET):
 - Price 2253.5. 1R = 1.4 pts (0.5 x 3m ATR(20) 2.8, the 3m reference stop); every distance below is in points and R.
 - Trend rule: SHORT allowed (prevailing 4h down); no long against it.
 - Bias: short only (4h down, 1h range; long refused).
-- Market state (3m): trend down: LH 2286.1 holds; behavior trending (overlap 0.66, efficiency 0.44), 15m trending down; 4h down, 1h range (not aligned); class unclear.
+- Market state (3m): trend down: LH 2286.1 holds; overlap 0.66, efficiency 0.44, 15m trending down; 4h down, 1h range (not aligned); class unclear.
 - Alignment: long counter, short mixed. Regime: trend-down, high volatility. RTH volatility: unknown (2 prior sessions with these minutes; needs 3).
 - VWAP (rth): price below, 4.33 x 3m ATR(14) away. Closes crossing a VWAP in the last 30 bars: the RTH VWAP 0, the session VWAP 1 (the regime's count).
 - News: no blackout ahead.

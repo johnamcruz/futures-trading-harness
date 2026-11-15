@@ -44,7 +44,8 @@
  *                       (the alignment default: a range day is tradeable at the edge or on a breakout the side's way);
  *                       trend, leg, transition the 4h + 1h way -> that trend class, against -> unclear
  *   marketStateLine(s)  "Market state (3m): <state>: <structure>; <momentum>; behavior <word> (...), 15m <word>;
- *                       <alignment>; class <c>", the class last (round 18); null for null
+ *                       <alignment>; class <c>", the class last (round 18); the behavior word only under rotation,
+ *                       weakening and transition (round 20b; elsewhere "overlap x, efficiency y, 15m <word>"); null for null
  */
 
 const { trendOf } = require('./entry-rule');
@@ -214,10 +215,14 @@ function momentumText(L, P, s) {
   return out.filter(Boolean).join(', ');
 }
 
-function behaviorText(L) {
+// The behavior word is printed only where it is the state's evidence (round 20b: it reads `trending` on a minority of a
+// running leg's bars, so beside a trend, a leg, a pullback or a range it misleads); there the numbers and the 15m word stay.
+const WORD_STATES = new Set(['rotation', 'weakening', 'transition']);
+function behaviorText(L, state) {
   const b = L.behavior;
   if (!isObj(b)) return '';
   const nums = [Number.isFinite(b.overlap) ? `overlap ${b.overlap}` : null, Number.isFinite(b.eff) ? `efficiency ${b.eff}` : null].filter(Boolean);
+  if (!WORD_STATES.has(state)) return `${nums.length ? `${nums.join(', ')}, ` : ''}15m ${b.word15}`;
   return `behavior ${b.word}${nums.length ? ` (${nums.join(', ')})` : ''}, 15m ${b.word15}`;
 }
 
@@ -252,7 +257,7 @@ function layeredLine(s) {
     const mo = s.state === 'rotation' ? '' : momentumText(L, P, s);
     if (mo) parts.push(mo);
   }
-  if (s.state !== 'forming' && s.state !== 'chop') { const bt = behaviorText(L); if (bt) parts.push(bt); }
+  if (s.state !== 'forming' && s.state !== 'chop') { const bt = behaviorText(L, s.state); if (bt) parts.push(bt); }
   return parts;
 }
 
@@ -288,7 +293,7 @@ function marketStateLine(s) {
 // Over the budget, in order: the behavior clause's numbers drop; the chop's "Day so far rotational" drops (the chop line
 // says it; its numbers are its evidence and stay).
 const CUTS = [
-  l => l.replace(/ \((?:overlap [\d.]+(?:, efficiency [\d.]+)?|efficiency [\d.]+)\)/, ''),
+  l => l.replace(/ \((?:overlap [\d.]+(?:, efficiency [\d.]+)?|efficiency [\d.]+)\)/, '').replace(/; (?:overlap [\d.]+, )?(?:efficiency [\d.]+, )?(?=15m )/, '; '),
   l => l.replace('; Day so far rotational, ', '; ').replace('; Day so far rotational;', ';'),
 ];
 function fitLine(full, budget) {

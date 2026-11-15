@@ -124,7 +124,7 @@ test('precedence: trend needs an established leg and the behavior word trending;
 
 test('the line: one exact string per state, structure then momentum then behavior, the class last, within the line budget', () => {
   const L1 = line({ layers: lay() });
-  assert.strictEqual(L1, 'Market state (3m): trend up: HL 21380.5 holds, BOS up 6 min ago (displaced); behavior trending (overlap 0.52, efficiency 0.41), 15m trending up; 4h+1h up; class trend-up');
+  assert.strictEqual(L1, 'Market state (3m): trend up: HL 21380.5 holds, BOS up 6 min ago (displaced); overlap 0.52, efficiency 0.41, 15m trending up; 4h+1h up; class trend-up');
   const m = { ...lay().momentum, trigger: true, loss: true, dispAgainst: { barsAgo: 2 }, breakAgainst: { direction: 'down', level: 21412.25, barsAgo: 2, strong: false } };
   const weak = lay({ momentum: m, structure: leg({ sinceProgress: 9, lastWay: { kind: 'BOS', direction: 'up', level: 21412.25, barsAgo: 12, strong: false, failed: false }, lastInternal: { direction: 'down', level: 21412.25, barsAgo: 2 } }), behavior: { ...lay().behavior, word: 'failing', overlap: 0.64, eff: 0.12 } });
   assert.strictEqual(line({ layers: weak }), 'Market state (3m): weakening up: HL 21380.5 holds; displacement down 2 bars ago broke internal low 21412.25, no new high for 27 min; behavior failing (overlap 0.64, efficiency 0.12), 15m trending up; 4h+1h up; class unclear');
@@ -133,9 +133,9 @@ test('the line: one exact string per state, structure then momentum then behavio
   const ch = lay({ chop: CHOP, structure: leg({ legOK: false }), behavior: { ...lay().behavior, word: 'failing', word15: 'overlapping', overlap: 0.74, eff: 0.09 } });
   assert.strictEqual(line({ layers: ch, h4: 'range', soFar: { status: 'read', read: 'rotational', vwapCrosses: 7 } }), 'Market state (3m): chop: no leg holds (breaks both ways, a failed break); overlap 0.74, efficiency 0.09, failed continuation; 15m overlapping; Day so far rotational, RTH VWAP crosses 7; 4h range, 1h up (not aligned); class chop');
   const rg = lay({ structure: leg({ legOK: false }), behavior: { ...lay().behavior, word: 'rotating' } });
-  assert.strictEqual(line({ layers: rg }), 'Market state (3m): range: no leg holds, edges 21402-21431.25 (travel edge to edge); behavior rotating (overlap 0.52, efficiency 0.41), 15m trending up; 4h+1h up; class trend-up');
+  assert.strictEqual(line({ layers: rg }), 'Market state (3m): range: no leg holds, edges 21402-21431.25 (travel edge to edge); overlap 0.52, efficiency 0.41, 15m trending up; 4h+1h up; class trend-up');
   assert.strictEqual(line({ layers: lay({ structure: null }) }), 'Market state (3m): forming (no RTH structure yet); 4h+1h up; class trend-up');
-  assert.strictEqual(line({ layers: lay(), pullback: pb() }), 'Market state (3m): pullback (long leg 21361.25 -> 21437.5, depth 28%): 3m up leg, HL 21380.5 holds; behavior trending (overlap 0.52, efficiency 0.41), 15m trending up; 4h+1h up; class trend-up');
+  assert.strictEqual(line({ layers: lay(), pullback: pb() }), 'Market state (3m): pullback (long leg 21361.25 -> 21437.5, depth 28%): 3m up leg, HL 21380.5 holds; overlap 0.52, efficiency 0.41, 15m trending up; 4h+1h up; class trend-up');
   assert.strictEqual(line({ layers: lay({ stale: true, structure: leg({ sinceProgress: 22 }) }) }), 'Market state (3m): rotation up: HL 21380.5 holds, no new high for 66 min; behavior trending (overlap 0.52, efficiency 0.41), 15m trending up; 4h+1h up; class unclear');
   const rev = lay({ reversal: true, structure: leg({ flip: { barsAgo: 6, strong: true, disp: true, held: true, oldSide: 'down', oldLevel: 21420, byRule: 'close' } }) });
   assert.match(line({ layers: rev }), /HL 21380\.5 holds, BOS up 6 min ago \(displaced\), reversal confirmed;/, 'Reversal: printed on the leg');
@@ -163,7 +163,7 @@ test('the line: one exact string per state, structure then momentum then behavio
   assert.deepStrictEqual([st({ layers: counterBroken }), word({ layers: counterBroken })], ['range', 'trend-up'], 'a counter leg\'s protected level broken the side\'s way: today\'s range default');
   assert.match(line({ layers: counterBroken }), /^Market state \(3m\): range: no leg holds, LH 21420 broken 6 min ago, edges/, 'the broken protected level printed (finding 2)');
   const internal = lay({ structure: leg({ lastInternal: { direction: 'down', level: 21402.25, barsAgo: 1 } }), behavior: { ...lay().behavior, word: 'overlapping' } });
-  assert.match(line({ layers: internal }), /^Market state \(3m\): in the up leg: HL 21380\.5 holds, internal low 21402\.25 broken; behavior overlapping/, 'an internal break against while the HL holds');
+  assert.match(line({ layers: internal }), /^Market state \(3m\): in the up leg: HL 21380\.5 holds, internal low 21402\.25 broken; overlap 0\.52, efficiency 0\.41, 15m trending up;/, 'an internal break against while the HL holds');
   const d1 = lay({ momentum: { ...lay().momentum, dispAgainst: { barsAgo: 1 } } });
   assert.match(line({ layers: d1 }), /; displacement down 1 bar ago;/);
   const odf = lay({ momentum: { ...lay().momentum, odf: true }, behavior: { ...lay().behavior, word: 'overlapping' } });
@@ -186,6 +186,28 @@ test('the line: one exact string per state, structure then momentum then behavio
   assert.strictEqual(M.marketStateLine(M.stateOf(b({ ...wo, soFar: { status: 'read', read: 'rotational', vwapCrosses: null } }), { ...TH, lineBytes: 10 })).includes('Day so far'), false, 'the day-so-far word alone drops too');
   assert.strictEqual(M.marketStateLine(M.stateOf(b({ layers: ch, h4: 'range', soFar: { status: 'read', read: 'rotational', vwapCrosses: 7 } }), { ...TH, lineBytes: LINE_BYTES })), line({ layers: ch, h4: 'range', soFar: { status: 'read', read: 'rotational', vwapCrosses: 7 } }), 'under the budget: unchanged');
 
+});
+
+test('the behavior word (round 20b): printed only where it is the state\'s evidence (rotation, weakening, transition; chop names its facts); never under trend, in the leg, pullback or range', () => {
+  const words = ['trending', 'failing', 'mixed', 'overlapping', 'rotating', 'early'];
+  const m = { ...lay().momentum, trigger: true, dispAgainst: { barsAgo: 2 }, breakAgainst: { direction: 'down', level: 21412.25, barsAgo: 2, strong: false } };
+  const flip = { barsAgo: 3, strong: true, disp: true, held: true, oldSide: 'up', oldLevel: 21380.5, byRule: 'close' };
+  const broken = leg({ side: 'down', status: 'broken', legOK: false, level: 21437.5, flip });
+  for (const w of words) {
+    const beh = { ...lay().behavior, word: w };
+    const quiet = { trend: { layers: lay({ behavior: { ...beh, word: 'trending' } }) }, leg: { layers: lay({ behavior: w === 'trending' ? { ...beh, word: 'mixed' } : beh }) }, pullback: { layers: lay({ behavior: beh }), pullback: pb() }, range: { layers: lay({ structure: leg({ legOK: false }), behavior: beh }) }, rangeBroken: { layers: lay({ structure: leg({ status: 'broken', legOK: false, side: 'up', level: 21361.25, flip: { ...flip, oldSide: 'down', oldLevel: 21420 } }), behavior: beh }) } };
+    for (const [k, o] of Object.entries(quiet)) {
+      const l = line(o);
+      assert.doesNotMatch(l, /\bbehavior\b/, `${k} ${w}: ${l}`);
+      assert.match(l, /; overlap 0\.52, efficiency 0\.41, 15m trending up; /, `${k}: the numbers and the 15m word stay`);
+      if (k !== 'trend') assert.strictEqual(S(o).state, k === 'rangeBroken' ? 'range' : k);
+    }
+    const loud = { weakening: { layers: lay({ momentum: m, behavior: beh }) }, transition: { layers: lay({ transition: true, structure: broken, behavior: beh }) }, transitionUndisplaced: { layers: lay({ structure: leg({ ...broken, flip: { ...flip, disp: false, strong: false } }), behavior: beh }) }, rotation: { layers: lay({ stale: true, structure: leg({ sinceProgress: 22 }), behavior: beh }) }, rotationPb: { layers: lay({ pbRotation: true, pbPhase: { bars: 24, crosses: 4 }, behavior: beh }), pullback: pb() } };
+    for (const [k, o] of Object.entries(loud)) assert.match(line(o), new RegExp(`; behavior ${w} \\(overlap 0\\.52, efficiency 0\\.41\\), 15m trending up; `), `${k} ${w}`);
+  }
+  // Over the budget the quiet states' numbers drop too (the 15m word stays).
+  const tl = M.marketStateLine(M.stateOf(b({ layers: lay() }), { ...TH, lineBytes: 50 }));
+  assert.match(tl, /\(displaced\); 15m trending up; 4h\+1h up; class trend-up$/, tl);
 });
 
 test('without m3.layers (an older record, a quiz item): the printed breaks alone, the same words; no behavior read, so never chop', () => {
