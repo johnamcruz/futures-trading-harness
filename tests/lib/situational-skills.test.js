@@ -105,8 +105,8 @@ test('choose: stage order under the budget, nothing the prompt already holds, th
   // 76367 since feat/chop-read: its pause-vs-chop line, bos-vs-choch's core rule; 76692 with the Market state redesign:
   // bos-vs-choch's reading and pvr's 15m CHoCH back as a turn, at the measured need; 76969 with round 15: bos-vs-choch's
   // protected swings and the current 15m BOS, pvr's strong 15m CISD, at the measured need; 77163 with its Depth row's
-  // Market state clause, Fable round 16).
-  assert.strictEqual(require('../../scripts/lib/tunables').runner().prompt.situationalSkillBytes, 77163);
+  // Market state clause, Fable round 16; 78204 with round 20: bos-vs-choch's three layers, at the measured need).
+  assert.strictEqual(require('../../scripts/lib/tunables').runner().prompt.situationalSkillBytes, 78204);
 });
 
 test('the Setups-to-check line: a compression break on an allowed side (at its key level when its box sits at one) and a tradeable 15m or 1h CISD, the stronger first; nothing against the trend rule, on the 3m or 5m, or outside the window', () => {
