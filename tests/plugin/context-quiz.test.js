@@ -115,11 +115,11 @@ test('context quiz: every layer asked, ids unique, the bar the whole quiz at K 5
   // quiz stays at 108 where the gate's bounds hold. Round 15 (PREREG addenda 15-16): the BOS/CHoCH invalidation items
   // q130-q133 added, q54 folded into the wick case (the same close-only lesson) and q127 into the CHoCH-holds case; q113
   // (the chop shape q119 and q128 test), q59 (the pause inside the trend, q95's row), q55 (a CHoCH an early warning: q127,
-  // q132) and q91 (the pause after a 15m break: q118, q95) retired: at 114 the gate's Monte Carlo misses its flaky bound
-  // under maxSlips 10. q112 and q121 are known gaps and stay.
+  // q132) and q108 (the late 15m BOS: q92 on the same briefing) retired: at 114 the gate's Monte Carlo misses its flaky
+  // bound under maxSlips 10. q112, q121 (known gaps) and q91 (at the line in the probes) stay.
   assert.strictEqual(QUIZ.questions.length, 100);
-  assert.ok(!QUIZ.questions.some(x => ['q55', 'q59', 'q91', 'q113'].includes(x.id)), 'q55, q59, q91 and q113 retired');
-  assert.ok(['q112', 'q121'].every(id => QUIZ.questions.some(x => x.id === id)), 'q112 and q121 kept (known gaps)');
+  assert.ok(!QUIZ.questions.some(x => ['q55', 'q59', 'q108', 'q113'].includes(x.id)), 'q55, q59, q108 and q113 retired');
+  assert.ok(['q91', 'q112', 'q121'].every(id => QUIZ.questions.some(x => x.id === id)), 'q91, q112 and q121 kept');
   assert.ok(!QUIZ.questions.some(x => ['q115', 'q116', 'q117', 'q122'].includes(x.id)), 'q115, q116, q117 and q122 retired');
   assert.ok(!QUIZ.questions.some(x => x.id === 'q120'), 'q120 dropped');
   for (const id of ['q71', 'q72', 'q73', 'q74', 'q75', 'q76', 'q77', 'q78']) assert.ok(!QUIZ.questions.some(x => x.id === id), id);
@@ -200,7 +200,7 @@ test('context quiz: the pullback questions (q87-q112) are asked against the prom
     ['q88', 'lookup', PB, /A 15m BOS the side's way after the entry: continuation confirmed → hold\./g],
     ['q89', 'lookup', PB, /this pullback failed, a reversal attempt: wait for a new 15m turn the side's way/g],
     ['q90', 'lookup', PB, /a 3m CHoCH against the side inside an intact 15m trend: a pullback starting, wait\./g],
-    // q91 retired (PREREG addendum 16): q118 and q95 cover the pause.
+    ['q91', 'lookup', PB, /A 15m `range` or `transition` here is the pause, not chop\./g],
     ['q92', 'lookup', PB, /Far past the level, no retest: late, not this read's entry/g],
     ['q93', 'lookup', PB, /a live strong 15m CISD on the CISD line is the setup read even when the last 15m candle line shows no pattern/g],
     // A strict-side guard (main's text): one of the 4h and 1h ranging is chop or unclear to the head trader, whatever the 3m.
@@ -219,7 +219,7 @@ test('context quiz: the pullback questions (q87-q112) are asked against the prom
     ['q104', 'head', undefined, /unless a `Pullback` line prints\./g],
     ['q105', 'lookup', PB, /A 3m CHoCH or CISD against inside it: the watch restarts\./g],
     ['q107', 'head', undefined, /your PLAN's `4 Setup` line is the read chain/g],
-    ['q108', 'lookup', PB, /a 15m BOS far past value \(no 3m BOS or CISD near it\): late, not an entry/g],
+    // q108 retired (PREREG addendum 16): q92 asks the late 15m BOS on the same briefing.
     ['q109', 'lookup', PB, /Counter candles that don't engulf it: a pullback forming, not a reversal/g],
     ['q110', 'lookup', PB, /a counter candle engulfing it reads as a CHoCH against: wait/g],
     ['q111', 'head', undefined, /your STATE frames stay your own read/g],
