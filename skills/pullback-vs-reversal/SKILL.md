@@ -145,7 +145,7 @@ engulfing the impulse: unmeasured. Taught as the read, no edge shown.
 Take: long (4h, 1h up); 15m pullback to the broken prior RTH high 21500.00, inside candles, V
   falling, swing 21462.50 holds; 15m turn: CISD up, strong (a bullish engulfing); 3m: BOS up,
   RTH VWAP +0.3, near value -> strong setup: enter, a limit at the 3m close 21518.25.
-Watch: long; 15m pullback to 21500.00; 15m turn: CISD up, weak; 3m: CHoCH up, no BOS -> watch.
+Watch: long; 15m pullback to 21500.00; 15m turn: CISD up, weak; 3m: CHoCH up -> watch.
 Wait: long; 15m pullback to 21500.00; 15m turn: none, a 15m CHoCH down -> wait; no short.
 Close: long; the pullback stopped at 21502.25 (no touch); 15m turn: rejected the RTH VWAP 21502.50
   up (long-wick, still the last 15m); 3m: CISD up, RTH VWAP +0.4 -> enter: the lines hold.

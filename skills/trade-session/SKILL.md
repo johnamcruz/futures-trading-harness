@@ -137,7 +137,7 @@ CISD on the CISD line is the turn even when the last 15m candle line shows
 no pattern; a 15m BOS far past
 value (no 3m BOS or CISD near it): late, not an entry. Close to the level
 is the read: `long; 15m pullback to 21500.00 (stopped at 21502.25, no
-touch); 15m turn: rejected the RTH VWAP up, long-wick; 3m: BOS up, near
+touch); 15m turn: rejected the RTH VWAP up, long-wick; 3m: CISD up, near
 value; strong setup: enter`: no exact touch, no named candle: no wait;
 a 15m rejection of the RTH VWAP or a 15m swing inside the zone (within
 about 0.25 × the 15m ATR of the broken level) is the reaction.
@@ -147,7 +147,9 @@ line of its PLAN; taught: the gate and `compose_check` do not read it):
 
 - Write the class the `Market state` line prints after `class`; your own
   4h/1h/15m reads stay in STATE. No other row, picture or frame read
-  changes it. When your frames differ, say why in the PLAN.
+  changes it. When your frames differ, say why in the PLAN. Your 15m
+  `range` or `transition` is a frame read: it feeds the setup, not the
+  class.
 
 | class printed | action |
 |---|---|
@@ -162,7 +164,8 @@ printed first; else its state word):
   with down, or "15m up: a pullback in the 15m trend", down the mirror):
   wait for the 15m turn (a live strong 15m CISD, a 15m BOS, a 15m CHoCH
   back or a 15m reaction at the level); enter on the first 3m BOS or CISD
-  the side's way near value (`pullback-vs-reversal` steps 4-7). Small
+  the side's way near value (a 3m CISD is the entry as a 3m BOS is, after
+  a 3m CHoCH against too; `pullback-vs-reversal` steps 4-7). Small
   overlapping candles inside a printed pullback are a pause, not chop; the
   class stays the line's.
 - `forming`: no setup yet: wait for the first RTH 3m break.

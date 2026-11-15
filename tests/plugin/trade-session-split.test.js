@@ -312,6 +312,9 @@ const LATE = [
     reason: "feat/bias-bg: the stop moves only behind turned structure (the trail), never to breakeven by feel" },
   { from: "Rules strategies (none active) firing both sides (`confluence.against`): stand aside (priority step 6: no exception).", to: "Rules candidates (none active) firing both sides (`confluence.against`): stand aside (priority step 6: no exception).",
     reason: "feat/bias-bg (review MED-2): a fire the trend rule refuses is no candidate, so no disagreement" },
+  { from: "Start from the computed regime (the briefing's `m3` `regime`, the same value market-snapshot and `strategies_scan` report): trend-up, trend-down, range, or transition, plus volatility.",
+    to: "Start from the computed regime (the briefing's `m3` `regime`, the same value market-snapshot and `strategies_scan` report): trend-up, trend-down, range, or transition, plus volatility: a read, not the class (the `Market state` line's).",
+    reason: "feat/chop-read round 19 (owner, PREREG addendum 25, q118): the regime's values share the class spelling; the class word is the Market state line's alone, the regime a read" },
 ];
 const LATE_STALE = (() => {
   const r = withLate(ALLOWED, LATE, units(require('fs').readFileSync(require('path').join(__dirname, '..', '..', BEFORE), 'utf8')));
@@ -426,7 +429,10 @@ const OLD_AGENTS_MD = 24466;
 // the chop-read term falls 1823 -> 1621, the measured need of the worst path.
 // Round 15 (PREREG addendum 15, same rule): the table's forming row, the chop row's current 15m BOS and the strong 15m CISD
 // in the read chain and the setup sentence (+138, the measured need of the worst path).
-const RAISED = 154 + 130 + 1625 + 336 + 382 + 939 + 843 + 1621 + 138;
+// Round 19 (PREREG addendum 25, same rule): the 15m frame read feeds the setup, not the class (q118), the 3m CISD is the
+// pullback entry as a 3m BOS is and the read chain's worked entry shows it (q102), and setup-judgment's regime is a read,
+// not the class (+145, the measured need of the worst path).
+const RAISED = 154 + 130 + 1625 + 336 + 382 + 939 + 843 + 1621 + 138 + 145;
 const EVERY_CYCLE = ['multi-timeframe-analysis', 'strategy-library', 'strategy-scan', 'strategy-gate-checks', 'trader-process', 'htf-to-ltf', 'autonomous-trading'];
 const PATHS = {
   'full cycle, no candidate': ['role-round', 'setup-judgment', 'day-context'],
