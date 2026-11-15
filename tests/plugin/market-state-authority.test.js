@@ -70,8 +70,12 @@ function lines() {
 test('market state authority: the head core\'s table keys only on what the line prints; one row fits each printed line, its class code\'s', () => {
   const ts = flat(read('skills/trade-session/SKILL.md'));
   for (const r of ROWS) assert.ok(ts.includes(r), r);
-  const table = ts.slice(ts.indexOf('| state word | pullback their way | end | class | action |'), ts.indexOf('Chop ends when the line prints'));
+  const table = ts.slice(ts.indexOf('| state word | pullback their way | end | class | action |'), ts.indexOf('Chop ends when the line'));
   assert.strictEqual(table.split('|---|---|---|---|---|').length, 2, 'one table, five columns');
+  // The table's rows are exactly ROWS, in order: a row added, dropped or changed fails (the KEYS below mirror ROWS).
+  const body = read('skills/trade-session/SKILL.md');
+  const raw = body.slice(body.indexOf('| state word | pullback their way |'), body.indexOf('Chop ends when the line'));
+  assert.deepStrictEqual(raw.split('\n').filter(l => l.startsWith('| ') && !l.startsWith('| state word')).map(l => l.trim()), ROWS);
   // No exception inside the table: precedence is code's, applied before the line prints.
   assert.doesNotMatch(table, /\bunless\b|\bexcept\b|but if/i);
   const all = lines();
@@ -115,13 +119,11 @@ const CLASS_MAP = [
 ];
 const ALLOWED = [
   // The table and its bullets: the one authority (trade-session step 3).
-  ['skills/trade-session/SKILL.md', /\*\*The decision follows your STATE read\*\*[^]*?Chop ends when the line prints/],
+  ['skills/trade-session/SKILL.md', /\*\*The decision follows your STATE read\*\*[^]*?Chop ends when the line's state word/],
   // The STATE grammar names the four words and points to the line.
   ['skills/trade-session/SKILL.md', /`<c>`, the market now at this candle, is `trend-up`, `trend-down`, `chop` or `unclear`, from the `Market state` line;/],
   // A pass on the head trader's own read: class -> action, never a condition -> class.
   ['skills/trade-session/SKILL.md', /Then `chop`, `unclear`, or a trend class your 4h and 1h don't show/],
-  // #338's step 3 sentence, pinned unchanged (the spec), followed by the pointer to the line.
-  ['skills/pullback-vs-reversal/SKILL.md', /A 15m `range` or `transition` here is the pause, not chop\. The class word is the Market state line's/],
   // Examples that quote the printed line and give its class.
   ['skills/pullback-vs-reversal/SKILL.md', /the Market state line prints the pullback -> class trend-up \(the line's\)/],
   ['skills/trend-vs-range/SKILL.md', /Chop: the line prints `chop: [^`]*` -> sit out\. It prints `trend up: [^`]*` -> trend-up\./],
@@ -138,13 +140,27 @@ function teachingHomes() {
   return [...out, 'README.md'];
 }
 
+// The scan of one text: every sentence, and every table row whole (a row's cells read together, never cut at a pipe).
+function scanText(text) {
+  const out = [];
+  for (const line of text.split('\n')) {
+    const pieces = /^\s*\|/.test(line) ? [line.trim()] : flat(line).split(/(?<=[.;!?])\s+/);
+    for (const piece of pieces) if (CLASS_MAP.some(re => re.test(piece))) out.push(piece.slice(0, 160));
+  }
+  return out;
+}
+// A teaching file as the scan reads it: prose joined into sentences (a sentence wraps lines), each table row its own line,
+// the allowed passages blanked.
+function scanFile(f) {
+  let t = read(f).replace(/^---\n[^]*?\n---\n/, '').split('\n').map(l => (/^\s*\|/.test(l) ? `\n${l}\n` : `${l} `)).join('');
+  t = t.replace(/[ \t]+/g, ' ');
+  for (const [file, re] of ALLOWED) if (file === f) t = t.replace(re, ' ');
+  return scanText(t);
+}
+
 test('market state authority: no taught row or sentence outside the Market state table maps a condition to a class word', () => {
   const found = [];
-  for (const f of teachingHomes()) {
-    let t = flat(read(f).replace(/^---\n[^]*?\n---\n/, ''));
-    for (const [file, re] of ALLOWED) if (file === f) t = t.replace(re, ' ');
-    for (const piece of t.split(/(?<=[.;!?|])\s+/)) for (const re of CLASS_MAP) if (re.test(piece)) found.push(`${f}: ${piece.slice(0, 160)}`);
-  }
+  for (const f of teachingHomes()) for (const piece of scanFile(f)) found.push(`${f}: ${piece}`);
   assert.deepStrictEqual(found, []);
   // Each allowed passage is still there (an allow-list entry never outlives its text).
   for (const [f, re] of ALLOWED) assert.match(flat(read(f)), re, `${f}: ${re}`);
@@ -152,9 +168,12 @@ test('market state authority: no taught row or sentence outside the Market state
 
 test('market state authority: the scan catches a competing row or sentence (it fails without the allow-list\'s reasons)', () => {
   for (const s of ['Frames: transitional → `unclear`.', '| trend against them | aligned | `unclear` |', 'A 15m range is unclear.', 'It is not chop.', 'the side\'s trend class.', 'Skip: transition, 15m mixed: unclear;', '15m transition -> class trend-up.', 'a 3m CHoCH then CHoCH back: a failed reversal, chop, unless a pullback read is active'])
-    assert.ok(CLASS_MAP.some(re => re.test(s)), s);
-  for (const s of ['A take: `class` on its side.', 'Chop ends when the line prints `the chop ended`.', 'The class word: the Market state line.'])
-    assert.ok(!CLASS_MAP.some(re => re.test(s)), s);
+    assert.ok(scanText(s).length > 0, s);
+  // Through the scan itself: table rows outside the allowed table, a sentence wrapped over lines.
+  assert.strictEqual(scanText('Intro.\n| 15m range | `unclear` |\n| trend against them | aligned | `unclear` | no trade |\nMore.').length, 2);
+  assert.strictEqual(scanText('Frames: transitional is a pause. Then -> `unclear`.').length, 1);
+  for (const s of ['A take: `class` on its side.', 'Chop ends when the line\'s state word is no longer `chop`.', 'The class word: the Market state line.', '| Depth | up to about 50-62% | past the origin |'])
+    assert.deepStrictEqual(scanText(s), [], s);
 });
 
 test('bos-vs-choch: a BOS stays labelled BOS after its protected swing breaks; the status words are the ones the Market state line prints', () => {

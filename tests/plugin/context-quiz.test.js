@@ -200,7 +200,8 @@ test('context quiz: the pullback questions (q87-q112) are asked against the prom
     ['q88', 'lookup', PB, /A 15m BOS the side's way after the entry: continuation confirmed → hold\./g],
     ['q89', 'lookup', PB, /this pullback failed, a reversal attempt: wait for a new 15m turn the side's way/g],
     ['q90', 'lookup', PB, /a 3m CHoCH against the side inside an intact 15m trend: a pullback starting, wait\./g],
-    ['q91', 'lookup', PB, /A 15m `range` or `transition` here is the pause, not chop\./g],
+    // Round 17 (one authority): the step's "not chop" became the pointer to the Market state line; q91's lesson stays.
+    ['q91', 'lookup', PB, /A 15m `range` or `transition` here is the pause \(a pullback\); the class word is the Market state line's/g],
     ['q92', 'lookup', PB, /Far past the level, no retest: late, not this read's entry/g],
     ['q93', 'lookup', PB, /a live strong 15m CISD on the CISD line is the setup read even when the last 15m candle line shows no pattern/g],
     // A strict-side guard (main's text): one of the 4h and 1h ranging is chop or unclear to the head trader, whatever the 3m.

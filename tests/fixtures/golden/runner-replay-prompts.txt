@@ -1078,8 +1078,7 @@ never the composed setup read (`compose_check` takes a live strong one):
    candle's range (`N in a row inside the <time> candle`: `compression`'s
    pennant), `Pullback` volume falling, its 15m swing holding.
   A 15m
-   `range` or `transition` here is the pause, not chop.
-  The class word
+   `range` or `transition` here is the pause (a pullback); the class word
    is the Market state line's (`trade-session`).
   The label is no
    evidence of resumption either.
@@ -2433,8 +2432,7 @@ never the composed setup read (`compose_check` takes a live strong one):
    candle's range (`N in a row inside the <time> candle`: `compression`'s
    pennant), `Pullback` volume falling, its 15m swing holding.
   A 15m
-   `range` or `transition` here is the pause, not chop.
-  The class word
+   `range` or `transition` here is the pause (a pullback); the class word
    is the Market state line's (`trade-session`).
   The label is no
    evidence of resumption either.
@@ -3788,8 +3786,7 @@ never the composed setup read (`compose_check` takes a live strong one):
    candle's range (`N in a row inside the <time> candle`: `compression`'s
    pennant), `Pullback` volume falling, its 15m swing holding.
   A 15m
-   `range` or `transition` here is the pause, not chop.
-  The class word
+   `range` or `transition` here is the pause (a pullback); the class word
    is the Market state line's (`trade-session`).
   The label is no
    evidence of resumption either.
@@ -5134,8 +5131,7 @@ never the composed setup read (`compose_check` takes a live strong one):
    candle's range (`N in a row inside the <time> candle`: `compression`'s
    pennant), `Pullback` volume falling, its 15m swing holding.
   A 15m
-   `range` or `transition` here is the pause, not chop.
-  The class word
+   `range` or `transition` here is the pause (a pullback); the class word
    is the Market state line's (`trade-session`).
   The label is no
    evidence of resumption either.
@@ -6577,8 +6573,7 @@ never the composed setup read (`compose_check` takes a live strong one):
    candle's range (`N in a row inside the <time> candle`: `compression`'s
    pennant), `Pullback` volume falling, its 15m swing holding.
   A 15m
-   `range` or `transition` here is the pause, not chop.
-  The class word
+   `range` or `transition` here is the pause (a pullback); the class word
    is the Market state line's (`trade-session`).
   The label is no
    evidence of resumption either.
@@ -8017,8 +8012,7 @@ never the composed setup read (`compose_check` takes a live strong one):
    candle's range (`N in a row inside the <time> candle`: `compression`'s
    pennant), `Pullback` volume falling, its 15m swing holding.
   A 15m
-   `range` or `transition` here is the pause, not chop.
-  The class word
+   `range` or `transition` here is the pause (a pullback); the class word
    is the Market state line's (`trade-session`).
   The label is no
    evidence of resumption either.
@@ -9378,8 +9372,7 @@ never the composed setup read (`compose_check` takes a live strong one):
    candle's range (`N in a row inside the <time> candle`: `compression`'s
    pennant), `Pullback` volume falling, its 15m swing holding.
   A 15m
-   `range` or `transition` here is the pause, not chop.
-  The class word
+   `range` or `transition` here is the pause (a pullback); the class word
    is the Market state line's (`trade-session`).
   The label is no
    evidence of resumption either.
@@ -10739,8 +10732,7 @@ never the composed setup read (`compose_check` takes a live strong one):
    candle's range (`N in a row inside the <time> candle`: `compression`'s
    pennant), `Pullback` volume falling, its 15m swing holding.
   A 15m
-   `range` or `transition` here is the pause, not chop.
-  The class word
+   `range` or `transition` here is the pause (a pullback); the class word
    is the Market state line's (`trade-session`).
   The label is no
    evidence of resumption either.
@@ -12173,8 +12165,7 @@ never the composed setup read (`compose_check` takes a live strong one):
    candle's range (`N in a row inside the <time> candle`: `compression`'s
    pennant), `Pullback` volume falling, its 15m swing holding.
   A 15m
-   `range` or `transition` here is the pause, not chop.
-  The class word
+   `range` or `transition` here is the pause (a pullback); the class word
    is the Market state line's (`trade-session`).
   The label is no
    evidence of resumption either.
@@ -13541,8 +13532,7 @@ never the composed setup read (`compose_check` takes a live strong one):
    candle's range (`N in a row inside the <time> candle`: `compression`'s
    pennant), `Pullback` volume falling, its 15m swing holding.
   A 15m
-   `range` or `transition` here is the pause, not chop.
-  The class word
+   `range` or `transition` here is the pause (a pullback); the class word
    is the Market state line's (`trade-session`).
   The label is no
    evidence of resumption either.
@@ -14810,8 +14800,7 @@ never the composed setup read (`compose_check` takes a live strong one):
    candle's range (`N in a row inside the <time> candle`: `compression`'s
    pennant), `Pullback` volume falling, its 15m swing holding.
   A 15m
-   `range` or `transition` here is the pause, not chop.
-  The class word
+   `range` or `transition` here is the pause (a pullback); the class word
    is the Market state line's (`trade-session`).
   The label is no
    evidence of resumption either.

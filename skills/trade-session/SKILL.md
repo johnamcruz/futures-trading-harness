@@ -163,10 +163,10 @@ line of its PLAN; taught: the gate and `compose_check` do not read it):
 | `ranging` | none | aligned | that trend class | setups at the range edge or on a breakout, the side's way |
 | `trend`, against them | none | aligned | `unclear` | no trade, never counter |
 
-Chop ends when the line prints `the chop ended` (code's rule: chop ends:
-a CHoCH then a BOS or CISD the same way, or a close beyond the range (the
-IB; before 10:30 only a BOS or CISD ends it)). The trend and chop
-definitions, for reference only: `trend-vs-range`.
+Chop ends when the line's state word is no longer `chop` (code's rule:
+chop ends: a CHoCH then a BOS or CISD the same way, or a close beyond the
+range (the IB; before 10:30 only a BOS or CISD ends it)). The trend and
+chop definitions, for reference only: `trend-vs-range`.
 
 - A take: `class` on its side (`trend-up` long, `trend-down` short), your
   4h and 1h too (`up` long, `down` short).

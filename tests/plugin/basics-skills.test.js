@@ -89,7 +89,7 @@ const PINS = {
     'Never a limit back at the broken or the CHoCH level.',
     'A 15m BOS the side\'s way after the entry: continuation confirmed → hold.',
     'A 15m CHoCH or CISD against → this pullback failed, a reversal attempt: wait for a new 15m turn the side\'s way (step 4)',
-    'A 15m `range` or `transition` here is the pause, not chop.',
+    'A 15m `range` or `transition` here is the pause (a pullback); the class word is the Market state line\'s (`trade-session`).',
     'Three lines hold, whatever the count: the 4h + 1h side; a 15m CHoCH or CISD against → wait; the entry needs a 3m BOS or CISD the side\'s way and a true 15m setup read the side\'s way (`compose_check` requires the 15m read; the 3m timing and the wait lines are yours).',
     'Counter candles that don\'t engulf it: a pullback forming, not a reversal (a 15m CISD or CHoCH against overrides: wait, whatever the depth or the engulfing read); a counter candle engulfing it reads as a CHoCH against: wait.',
   ],

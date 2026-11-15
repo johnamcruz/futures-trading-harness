@@ -572,9 +572,9 @@ test('trade-session split: no head-trader path reads more than the base\'s every
 // Then round 17 (one authority for the class word), at the measured need: bos-vs-choch's line that a BOS keeps its label
 // after its protected swing breaks (+96 in each role that embeds it in index mode; its CHoCH-pair sentence now points to the
 // line), trend-vs-range's and pullback-vs-reversal's class sentences replaced by pointers: the market-structure analyst
-// 107830 -> 107814 full, 46657 -> 46753 index; the trend-momentum analyst 66510 -> 66498 full, 42925 -> 43021 index.
+// 107830 -> 107817 full, 46657 -> 46753 index; the trend-momentum analyst 66510 -> 66501 full, 42925 -> 43021 index.
 const ROLE_PROMPTS = {
-  full: { 'market-structure-analyst': 107814, 'news-calendar-analyst': 10868, 'risk-manager': 95294, 'strategy-researcher': 25728, 'trade-executor': 30670, 'trade-reviewer': 9400, 'trend-momentum-analyst': 66498, 'volume-liquidity-analyst': 50521 },
+  full: { 'market-structure-analyst': 107817, 'news-calendar-analyst': 10868, 'risk-manager': 95294, 'strategy-researcher': 25728, 'trade-executor': 30670, 'trade-reviewer': 9400, 'trend-momentum-analyst': 66501, 'volume-liquidity-analyst': 50521 },
   index: { 'market-structure-analyst': 46753, 'news-calendar-analyst': 10868, 'risk-manager': 81182, 'strategy-researcher': 25728, 'trade-executor': 30659, 'trade-reviewer': 9400, 'trend-momentum-analyst': 43021, 'volume-liquidity-analyst': 35153 },
 };
 
