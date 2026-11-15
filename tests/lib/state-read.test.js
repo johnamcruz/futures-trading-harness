@@ -504,7 +504,7 @@ test('state line: the decision follows the model\'s own STATE read (taught, no c
     // chop, aligned frames too, on the full evidence only; else a trend class needs its 4h and 1h that way; else unclear.
     "The class follows your frames and the movement:",
     "Open `Pullback` line: the `Pullback` line is printed and its leg is not given back past its origin.",
-    "Chop: `m3.lastBreak` last and previous both CHoCH, the Day so far `rotational` or many RTH VWAP crosses, no open `Pullback` line → class `chop`, whatever the 4h and 1h → no entry, sit out. One fact alone, or one BOS or CHoCH, is never chop.",
+    "Chop: `m3.lastBreak` last and previous both CHoCH, with the Day so far `rotational` or many RTH VWAP crosses, and no open `Pullback` line → class `chop`, whatever the 4h and 1h → no entry, sit out. One fact alone, or one BOS or CHoCH, is never chop.",
     "Pause (`pullback-vs-reversal` step 3): inside an open `Pullback` line → never `chop`; a 3m CHoCH against then back is the watch.",
     "Else your 4h and 1h both one way → that trend class (a 15m pullback, `range` or `transition` under them doesn't cancel it, nor does your `frames disagree`).",
     "Else, not both one way → `unclear` (never a trend class, smooth or not)",

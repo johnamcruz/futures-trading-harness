@@ -143,8 +143,9 @@ line of its PLAN; taught: the gate and `compose_check` do not read it):
 - The class follows your frames and the movement:
   - Open `Pullback` line: the `Pullback` line is printed and its leg is
     not given back past its origin.
-  - Chop: `m3.lastBreak` last and previous both CHoCH, the Day so far
-    `rotational` or many RTH VWAP crosses, no open `Pullback` line →
+  - Chop: `m3.lastBreak` last and previous both CHoCH, with the Day so
+    far `rotational` or many RTH VWAP crosses, and no open `Pullback`
+    line →
     class `chop`, whatever the 4h and 1h → no entry, sit out. One fact
     alone, or one BOS or CHoCH, is never chop.
   - Pause (`pullback-vs-reversal` step 3): inside an open `Pullback` line

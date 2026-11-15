@@ -1780,8 +1780,10 @@ Frozen definitions:
   side the trend rule allows (the Bias line's sides), that side's signal
   class C reads `trend-<way>`, B reads `chop`, A or D reads `unclear`. With
   no such side, the side-free signals' class B reads `chop`, else
-  `unclear`. It is an independent bars-only read, never the lesson:
-  inside an open `Pullback` line it can still read `chop` (on C1 and C7).
+  `unclear`. It is a bars-only read independent of the lesson except
+  through C3 (the in-Pullback CHoCH pair is not C3): inside an open
+  `Pullback` line (`trade-session`) it can still read `chop` (on C1 and
+  C7).
   The signals per side, each a present fact of the candle's
   briefing: the day so far rotational (C1) or directional the side's way
   (T1); the 15m breaking both ways, its last and previous breaks both
@@ -1801,7 +1803,7 @@ Frozen definitions:
   either the day so far rotational or its RTH VWAP crosses (the Day so far
   line's count, the one the skills teach) at or above
   `signals.crossesChop`, never one fact alone, and never inside an open
-  `Pullback` line; else the 4h and 1h agreeing up or down read
+  `Pullback` line (`trade-session`; pullback-read.js `isOpen`); else the 4h and 1h agreeing up or down read
   `trend-<way>`; else `unclear`. It is never the model's. (`day-context`'s
   `daySoFar` config has no crosses threshold, so the existing
   `crossesChop` is used: 5 is a 30-bar-window count, applied here to the
@@ -1809,14 +1811,17 @@ Frozen definitions:
   unquantified. C7 still reads the session crosses, as frozen.)
 - **Three reads, kept apart** (the chop pull request):
   - *The coded read* = our rules restated (it follows the taught
-    guardrail: never `chop` inside an open `Pullback` line).
-  - *The evidence word* = an independent bars-only read (it does not
-    follow the guardrail; scoring a model against it never assumes the
-    lesson is right).
-  - *Open-Pullback candles* = a separate stratum, judged by the pass
-    check (did the pullback resume, or range or reverse) and the R of
-    entries there; the evidence word is reported beside, not used to
-    score the guardrail.
+    guardrail: never `chop` inside an open `Pullback` line,
+    `trade-session`).
+  - *The evidence word* = a bars-only read, independent of the lesson
+    except through C3 (the in-Pullback CHoCH pair is not C3); scoring a
+    model against it does not assume the lesson is right.
+  - *Open-Pullback candles* (the post-merge moment-test plan) = a separate
+    stratum: the candles whose present key has `facts.pullback` true
+    (pullback-read.js `isOpen`, `trade-session`'s definition), judged by
+    the pass check (did the pullback resume, or range or reverse: READ15's
+    A/B/C, hindsight only) and the actual-exit R of entries there; the
+    evidence word is reported beside, not used to score the guardrail.
   An open `Pullback` line: the briefing prints one and its leg is not
   given back past its origin (`pastOrigin` not true; pullback-vs-reversal
   step 8; trade-session states it).

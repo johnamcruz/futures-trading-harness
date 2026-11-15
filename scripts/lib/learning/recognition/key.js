@@ -28,7 +28,7 @@
  *                      independent of the taught guardrail (inside an open Pullback line it can read chop on C1 + C7)
  *   choppy(facts, th)  the full choppy-movement evidence, never one fact alone: the 3m breaks both ways (its last and
  *                      previous breaks both CHoCH) AND (the day so far rotational OR its RTH VWAP crosses, the Day so far
- *                      line's count, >= crossesChop), and no open Pullback line (printed, pullbackLine, and pastOrigin not true)
+ *                      line's count, >= crossesChop), and no open Pullback line (pullback-read.js isOpen)
  *   codedWord(key)     the briefing's labels restated (never the model's): choppy -> chop (an aligned day too); 4h and
  *                      1h agree up or down -> trend-<way>; else unclear (a range alone is never chop)
  *
@@ -38,7 +38,7 @@
 
 const { biasLine, biasSides } = require('../../trading/bias-line');
 const { declaredOf } = require('../../trading/entry-rule');
-const { pullbackLine } = require('../../trading/pullback-read');
+const { isOpen } = require('../../trading/pullback-read');
 
 const SIDES = ['long', 'short'];
 const WAY = { long: 'up', short: 'down' };
@@ -80,7 +80,7 @@ function facts(b) {
     // An open Pullback line (trade-session's class rule): the briefing prints one (the same writer) and the leg is not
     // given back past its origin (pullback-vs-reversal step 8: no with-side read on that leg); inside it a pause, its 3m
     // CHoCH pair included, is never chop.
-    pullback: (() => { try { return pullbackLine(m3.pullback) !== null && m3.pullback.pastOrigin !== true; } catch (_err) { return false; } })(),
+    pullback: (() => { try { return isOpen(m3.pullback); } catch (_err) { return false; } })(),
     // The Day so far line's RTH VWAP crosses (the count the skills teach), printed while too early too.
     rthCrosses: orNull(at(m3, 'today', 'soFar', 'vwapCrosses')),
   };

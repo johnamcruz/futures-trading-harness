@@ -35,6 +35,9 @@
  *                    the leg: { kind, direction, level, barsAgo }, else null
  *     stacked        both frames' last breaks against the leg
  *   pullbackLine(p, { level })   the summary's one line (null when absent)
+ *   pullbackWord(p)              the line's few words (a record only)
+ *   givenBack(p)                 the leg given back past its origin: pastOrigin when a boolean, else depth >= 1
+ *   isOpen(p)                    an open Pullback line (trade-session): printed (pullbackLine) and not given back
  */
 
 const { pivots, breaksOf, lastBreaks } = require('./structure-events');
@@ -151,6 +154,9 @@ function pullbackRead({ bars, base, prevailing } = {}) {
   };
 }
 
+/** A leg given back past its origin: the read's pastOrigin when a boolean, else (an older record) its depth >= 1. */
+const givenBack = p => (isObj(p) ? (typeof p.pastOrigin === 'boolean' ? p.pastOrigin : Number.isFinite(p.depth) && p.depth >= 1) : false);
+
 // The line says only what no other summary line does (the owner: no redundant bytes): the price, the clock and the
 // prevailing side are on their own lines, and that it is a read to weigh is said once, in the skills.
 function pullbackLine(p, { level = x => x } = {}) {
@@ -160,7 +166,7 @@ function pullbackLine(p, { level = x => x } = {}) {
   // No depth number on a leg too small to measure one against, nor once the leg is given back past its origin (the
   // skill's Depth row: past the impulse origin; an older record without pastOrigin: its depth); never another leg.
   const small = fin(p.leg.atr) && p.leg.atr < MIN_LEG_ATR;
-  const given = typeof p.pastOrigin === 'boolean' ? p.pastOrigin : fin(p.depth) && p.depth >= 1;
+  const given = givenBack(p);
   const depth = small ? `leg ${p.leg.atr}x ATR(14), under the ${MIN_LEG_ATR}x floor: no depth`
     : given ? 'the leg given back past its origin' : fin(p.depth) ? `depth ${Math.round(p.depth * 100)}% of the leg` : 'depth unknown';
   // Volume and range only when comparable, and not on a leg given back (its window is stale): no words then (the skill
@@ -185,9 +191,12 @@ function pullbackWord(p) {
   if (p === null) return 'none';
   if (!p || typeof p !== 'object' || !isObj(p.leg)) return null;
   const fin = Number.isFinite;
-  const given = typeof p.pastOrigin === 'boolean' ? p.pastOrigin : fin(p.depth) && p.depth >= 1;
+  const given = givenBack(p);
   const word = fin(p.leg.atr) && p.leg.atr < MIN_LEG_ATR ? 'small leg' : given ? 'leg given back' : fin(p.depth) ? `depth ${Math.round(p.depth * 100)}%` : 'depth unknown';
   return `${word}${p.stacked === true ? ', breaks against stacked' : ''}`;
 }
 
-module.exports = { impulseOf, swingOf, pullbackRead, pullbackLine, pullbackWord };
+/** An open Pullback line (trade-session's class rule): the briefing prints one and its leg is not given back. */
+const isOpen = p => pullbackLine(p) !== null && !givenBack(p);
+
+module.exports = { impulseOf, swingOf, pullbackRead, pullbackLine, pullbackWord, givenBack, isOpen };

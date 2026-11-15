@@ -45,7 +45,7 @@ rest on.
 | Step | Read | Action |
 |---|---|---|
 | Side | The 4h and the 1h both trend one way. | Trade only that way; never counter it. |
-| Market | Chop: the 3m's last two breaks both CHoCH (structure broken both ways), weighed with the Day so far `rotational` or many RTH VWAP crosses; never one fact alone, never inside an open `Pullback` line (printed, its leg not given back past its origin). Chop is the quality of movement, range its geometry. A 15m pullback, `range` or `transition` under a 4h and 1h that agree is a pause, not chop. | Chop: sit out, whatever the 4h and 1h. Pause: look for the setup. A range day inside the 4h + 1h side: setups at the edge, or the breakout, the side's way. |
+| Market | Chop: the 3m's last two breaks both CHoCH (structure broken both ways), weighed with the Day so far `rotational` or many RTH VWAP crosses; never one fact alone, never inside an open `Pullback` line (printed, its leg not given back past its origin). Chop is the quality of movement, range its geometry. A 15m pullback, `range` or `transition` inside an open `Pullback` line under a 4h and 1h that agree is a pause, not chop. | Chop: sit out, whatever the 4h and 1h. Pause: look for the setup. A range day inside the 4h + 1h side: setups at the edge, or the breakout, the side's way. |
 | Setup | The 15m pullback turns the side's way: a live 15m CISD, a 15m BOS, or a 15m reaction at the level. | The setup is on. |
 | Entry | The first 3m BOS or CISD the side's way, near VWAP or the EMA20. | Compose on that confirming 3m bar: a limit at its close. Never a limit back at the broken level, and never a chase. |
 | Manage | A later 15m BOS the side's way. | Hold. |

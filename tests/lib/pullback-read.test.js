@@ -256,3 +256,28 @@ test('pullbackRead: a recorded given-back leg (2021-06-04 09:48 ET bar, the 4h d
   assert.match(line, /\): the leg given back past its origin; 147 bars since the extreme; /);
   assert.match(line, /swings since the extreme: 15m 13531\.75 broken by a close, 1h 13533 broken by a close; 15m break against: BOS up 13542\.5 \(10 bars ago\), 1h: BOS up 13546\.5 \(1 bars ago\); stacked\.$/);
 });
+
+// One definition in code (feat/chop-read, ECC): a leg given back past its origin (pastOrigin, else an older record's depth
+// >= 1), and an open Pullback line (printed by pullbackLine and not given back). The line, the word and the recognition
+// key read these two only.
+test('givenBack and isOpen: given back = pastOrigin when a boolean, else depth >= 1; open = a printed line not given back', () => {
+  const leg = { origin: 21462.5, extreme: 21538.75 };
+  const p = o => ({ frame: '15m', side: 'long', leg, depth: 0.38, counter: {}, swing: {}, against: {}, ...o });
+  assert.strictEqual(PR.givenBack(p({ pastOrigin: false })), false);
+  assert.strictEqual(PR.givenBack(p({ pastOrigin: true, depth: 0.4 })), true, 'pastOrigin decides when stated');
+  assert.strictEqual(PR.givenBack(p({ pastOrigin: false, depth: 1.2 })), false, 'pastOrigin decides when stated');
+  assert.strictEqual(PR.givenBack(p({ depth: 1 })), true, 'an older record: depth 1 is past');
+  assert.strictEqual(PR.givenBack(p({ depth: 0.996 })), false);
+  assert.strictEqual(PR.givenBack(p({ depth: null })), false, 'no depth, no flag: not given back');
+  assert.strictEqual(PR.givenBack(null), false);
+  assert.strictEqual(PR.isOpen(p({ pastOrigin: false })), true);
+  assert.strictEqual(PR.isOpen(p({ pastOrigin: true })), false, 'given back: printed but not open');
+  assert.strictEqual(PR.isOpen(p({ depth: 1.1 })), false);
+  assert.strictEqual(PR.isOpen({ frame: '15m' }), false, 'no leg: no line');
+  assert.strictEqual(PR.isOpen(null), false);
+  assert.strictEqual(PR.isOpen(undefined), false);
+  // The line and the word follow the same rule.
+  assert.match(PR.pullbackLine(p({ pastOrigin: true })), /the leg given back past its origin/);
+  assert.strictEqual(PR.pullbackWord(p({ depth: 1.1 })), 'leg given back');
+  assert.strictEqual(PR.pullbackWord(p({ pastOrigin: false, depth: 1.1 })), 'depth 110%');
+});
