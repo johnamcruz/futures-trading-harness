@@ -184,11 +184,14 @@ function biasBriefing({ h4, h1, t15, declared = false }) {
 
 // An item's synthetic briefing as the facts the Market state reads (quiz realism, feat/chop-read): the Bias line's 4h and
 // 1h (neutral and no side yet: both range), the Pullback line, m3.lastBreak (each break's candle placed by the clock and
-// its barsAgo), the Day so far line, the 3m CISD (its confirming candle by its close), the initial balance, the price and
-// the 15m frame's trend (the quiz's prose for the JSON field, `m15.frame.trend: up`).
+// its barsAgo), the Day so far line, the 3m CISD (its confirming candle's close), the initial balance, the price, the 15m
+// frame's trend and its last break (the quiz's prose for the JSON fields, `m15.frame.trend: up`, `m15.lastBreak: last BOS
+// up at 21500.00 (barsAgo 0)`), and the clock as the close.
 const NUM = '(-?\\d+(?:\\.\\d+)?)';
 const minOf = hhmm => { const [h, m] = hhmm.split(':').map(Number); return h * 60 + m; };
-const isoAt = min => new Date(min * 60000).toISOString(); // only the order of the clock's candles matters
+// The item's clock is New York time on a winter (EST) day, so the RTH pair (09:30 ET) and the ages read as live.
+const MIDNIGHT_ET = Date.parse('2026-01-06T05:00:00.000Z');
+const isoAt = min => new Date(MIDNIGHT_ET + min * 60000).toISOString();
 function briefingOfText(text) {
   const t = String(text || '');
   const bias = /\n- Bias: ([^\n]*)/.exec(t);
@@ -215,14 +218,23 @@ function briefingOfText(text) {
   if (ib) Object.assign(today, { ibLow: +ib[1], ibHigh: +ib[2] });
   if (Object.keys(today).length) m3.today = today;
   const cisd = /\n- CISD \([^\n]*?: 3m (bullish|bearish) at [\d.]+ \(closed (\d{1,2}:\d{2}), (strong|weak)\)[^;\n]*?(waiting|touched|bounced|void|expired|no zone)/.exec(t);
-  if (cisd) m3.cisd = { '3m': { dir: cisd[1], confirmedAt: isoAt(minOf(cisd[2]) - 3), status: cisd[3] === 'weak' || cisd[4] === 'no zone' ? 'weak' : cisd[4] } };
+  if (cisd) m3.cisd = { '3m': { dir: cisd[1], confirmedClose: isoAt(minOf(cisd[2])), status: cisd[3] === 'weak' || cisd[4] === 'no zone' ? 'weak' : cisd[4] } };
   const price = new RegExp(`\\n- Price ${NUM}`).exec(t);
   if (price) m3.price = +price[1];
   const h1Data = { ...(h4 ? { h4: { trend: h4 } } : {}), ...(h1 ? { h1: { trend: h1 } } : {}) };
   const t15 = /\n- m15\.frame\.trend: (up|down|range)/.exec(t);
+  const lb15 = new RegExp(`\\n- m15\\.lastBreak: last (BOS|CHoCH) (up|down) at ${NUM} \\(barsAgo (\\d+)\\)`).exec(t);
+  const m15 = {
+    ...(t15 ? { frame: { trend: t15[1] } } : {}),
+    // A 15m break's knownAt is its candle's close: barsAgo 0 closed by this clock, each one before a 15m candle earlier.
+    ...(lb15 && now !== null ? { lastBreak: { last: { kind: lb15[1], direction: lb15[2], level: +lb15[3], knownAt: isoAt(now - 15 * +lb15[4]) }, previous: null } } : {}),
+  };
   return {
     minutes: 3,
-    sections: { h1: { data: h1Data }, m3: { data: m3 }, ...(t15 ? { m15: { data: { frame: { trend: t15[1] } } } } : {}) },
+    // The clock as the close only where the item prints both 3m breaks (the RTH pair reads them); an item that leaves the
+    // line or the previous break out shows less, never "not enough RTH structure".
+    ...(now !== null && lb && lb[5] ? { closedAt: isoAt(now) } : {}),
+    sections: { h1: { data: h1Data }, m3: { data: m3 }, ...(Object.keys(m15).length ? { m15: { data: m15 } } : {}) },
   };
 }
 

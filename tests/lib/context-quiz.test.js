@@ -794,18 +794,21 @@ test('marketStateOfText: the Market state line from an item\'s printed lines', (
   const PAIRL = '- m3.lastBreak: last CHoCH up at 21512.25 (barsAgo 2), previous CHoCH down at 21497.75 (barsAgo 7).';
   const ROT = '- Day so far (22 3m bars; `day-context`): rotational: efficiency 0.04 (x sqrt(bars) 0.19), RTH VWAP crosses 3, range 3.4 x 3m ATR(14), net up.';
   const MIX7 = '- Day so far (22 3m bars; `day-context`): mixed up: efficiency 0.1 (x sqrt(bars) 0.47), RTH VWAP crosses 7, range 3.4 x 3m ATR(14), net up.';
-  assert.strictEqual(Q.marketStateOfText(head('10:36', [BL, ROT, PAIRL])), 'Market state (3m): chop: 3m CHoCH down then CHoCH up (back and forth); Day so far rotational; 4h+1h up');
-  assert.strictEqual(Q.marketStateOfText(head('10:36', [BL, MIX7, PAIRL])), 'Market state (3m): chop: 3m CHoCH down then CHoCH up (back and forth); RTH VWAP crosses 7; 4h+1h up');
-  assert.strictEqual(Q.marketStateOfText(head('10:36', [BL, PBL, ROT, PAIRL])), 'Market state (3m): trend up: 3m CHoCH down then CHoCH up back (failed reversal; continuation up); pullback (long leg 21462.5 -> 21538.75, depth 54%); 4h+1h up');
-  assert.strictEqual(Q.marketStateOfText(head('10:36', [BL, '- m3.lastBreak: last BOS up at 21516.75 (barsAgo 0), previous BOS up at 21511.25 (barsAgo 2).'])), 'Market state (3m): trend up: 3m BOS up (continuation); 4h+1h up');
-  assert.strictEqual(Q.marketStateOfText(head('10:36', [BL, '- m3.lastBreak: last CHoCH down at 21529.50 (barsAgo 0).'])), 'Market state (3m): ranging: 3m CHoCH down (potential reversal, unconfirmed); 4h+1h up', 'one break printed: no pair');
-  // The 15m frame's trend (the quiz's prose for the field): the early 15m pullback read.
-  assert.strictEqual(Q.marketStateOfText(head('10:36', [BL, '- m15.frame.trend: up.', '- m3.lastBreak: last BOS down at 21506.25 (barsAgo 1), previous CHoCH down at 21512.75 (barsAgo 5).'])), 'Market state (3m): trend down: 3m CHoCH down then BOS down (confirmed transition down); 15m up: a pullback in the 15m trend; 4h+1h up');
-  // A confirmed turn: a 3m CISD up confirmed after the CHoCH up (the clock and barsAgo place both candles), or a close
-  // beyond the initial balance.
+  assert.strictEqual(Q.marketStateOfText(head('10:36', [BL, ROT, PAIRL])), 'Market state (3m): chop: 3m CHoCH down then CHoCH up (failed reversal); Day so far rotational; 4h+1h up');
+  assert.strictEqual(Q.marketStateOfText(head('10:36', [BL, MIX7, PAIRL])), 'Market state (3m): chop: 3m CHoCH down then CHoCH up (failed reversal); RTH VWAP crosses 7; 4h+1h up');
+  assert.strictEqual(Q.marketStateOfText(head('10:36', [BL, PBL, ROT, PAIRL])), 'Market state (3m): ranging: 3m CHoCH down then CHoCH up (failed reversal) (inside the pullback: not chop); pullback (long leg 21462.5 -> 21538.75, depth 54%); 4h+1h up');
+  assert.strictEqual(Q.marketStateOfText(head('10:36', [BL, '- m3.lastBreak: last BOS up at 21516.75 (barsAgo 0), previous BOS up at 21511.25 (barsAgo 2).'])), 'Market state (3m): trend up: 3m BOS up (continuation), 0 min ago; 4h+1h up');
+  assert.strictEqual(Q.marketStateOfText(head('10:36', [BL, '- m3.lastBreak: last CHoCH down at 21529.50 (barsAgo 0).'])), 'Market state (3m): ranging: 3m CHoCH down (potential reversal, unconfirmed); 4h+1h up', 'one break printed: no pair, no RTH claim');
+  // The 15m frame's trend and last break (the quiz's prose for the fields): the early read; the 15m guard.
+  assert.strictEqual(Q.marketStateOfText(head('10:36', [BL, '- m15.frame.trend: up.', '- m3.lastBreak: last BOS down at 21506.25 (barsAgo 1), previous CHoCH down at 21512.75 (barsAgo 5).'])), 'Market state (3m): trend down: 3m CHoCH down then BOS down (confirmed transition down), 3 min ago; 15m up: a pullback in the 15m trend; 4h+1h up');
+  assert.strictEqual(Q.marketStateOfText(head('10:36', [BL, '- m15.lastBreak: last BOS up at 21500.00 (barsAgo 0).', PAIRL])), 'Market state (3m): trend up: 3m CHoCH down then CHoCH up = the 15m BOS up (continuation); 4h+1h up');
+  // A confirmed turn: a 3m CISD up closed after the CHoCH's candle (barsAgo 2 at 10:36: opened 10:27, closed 10:30), or a
+  // close beyond the initial balance.
   const CISD = c => `- CISD (completed candles; a read, not a signal): 3m bullish at 21515.00 (closed ${c}, strong), no key-level sweep, OTE 21509.25-21511.75 (mid 21510.5), waiting.`;
-  assert.strictEqual(Q.marketStateOfText(head('10:36', [BL, ROT, PAIRL, CISD('10:36')])), 'Market state (3m): trend up: 3m CHoCH down then CHoCH up back (failed reversal; continuation up), then a 3m CISD up (confirmed); the chop ended; 4h+1h up');
-  assert.match(Q.marketStateOfText(head('10:36', [BL, ROT, PAIRL, CISD('10:30')])), /: chop: /, 'closed on the CHoCH\'s candle (barsAgo 2 = the candle closed 10:30)');
+  assert.strictEqual(Q.marketStateOfText(head('10:36', [BL, ROT, PAIRL, CISD('10:36')])), 'Market state (3m): trend up: 3m CHoCH down then CHoCH up (failed reversal), then a 3m CISD up (confirmed); the chop ended; 4h+1h up');
+  assert.match(Q.marketStateOfText(head('10:36', [BL, ROT, PAIRL, CISD('10:30')])), /: chop: /, 'closed with the CHoCH\'s own candle');
   const IB = '- MNQ day: opened 21500; initial balance 21480-21560 (80 points), extended 3.25 up and 0 down: normal variation up.';
-  assert.strictEqual(Q.marketStateOfText(head('11:00', [BL, '- Price 21563.25.', IB, ROT, '- m3.lastBreak: last CHoCH up at 21558.25 (barsAgo 0), previous CHoCH down at 21497.75 (barsAgo 5).'])), 'Market state (3m): trend up: 3m CHoCH down then CHoCH up back (failed reversal; continuation up), then a close above the IB high 21560 (confirmed); the chop ended; 4h+1h up');
+  assert.strictEqual(Q.marketStateOfText(head('11:00', [BL, '- Price 21563.25.', IB, ROT, '- m3.lastBreak: last CHoCH up at 21558.25 (barsAgo 0), previous CHoCH down at 21497.75 (barsAgo 5).'])), 'Market state (3m): trend up: 3m CHoCH down then CHoCH up (failed reversal), then a close above the IB high 21560 (confirmed); the chop ended; 4h+1h up');
+  // The RTH pair: a previous break before 09:30 ET does not count.
+  assert.strictEqual(Q.marketStateOfText(head('09:36', [BL, '- m3.lastBreak: last CHoCH up at 21512.25 (barsAgo 0), previous CHoCH down at 21497.75 (barsAgo 4).'])), 'Market state (3m): ranging: 3m CHoCH up (potential reversal, unconfirmed), the only RTH break (not enough RTH structure); 4h+1h up');
 });

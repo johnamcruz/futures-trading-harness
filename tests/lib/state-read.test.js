@@ -508,10 +508,10 @@ test('state line: the decision follows the model\'s own STATE read (taught, no c
     // A range day is no chop (owner: a range day is catchable).
     "| ranging | aligned | the side's trend class (a range day inside the trend) | setups at the range edge or on a breakout, the side's way |",
     // The pullback is a read inside trend or ranging, never a state (owner); a 3m BOS against inside it is the pullback.
-    "| a pullback their way (trend or ranging) | aligned | that trend class (a 3m trend against inside it is the pullback, not a new trend) | wait for the 15m turn (a live strong 15m CISD, a 15m BOS or a 15m reaction at the level); enter on the first 3m BOS or CISD the side's way near value (`pullback-vs-reversal` steps 4-7) |",
+    "| a pullback their way (trend or ranging) | aligned | that trend class (a 3m trend against inside it is the pullback, not a new trend) | wait for the 15m turn (a live strong 15m CISD, a 15m BOS, a 15m CHoCH back or a 15m reaction at the level); enter on the first 3m BOS or CISD the side's way near value (`pullback-vs-reversal` steps 4-7) |",
     "| trend against them | aligned | `unclear` | no trade, never counter |",
     "| trend or ranging | not aligned | `unclear` | no trend trade |",
-    "| chop | any | `chop` | sit out; chop ends: a CHoCH then a BOS or CISD the same way, or a close beyond the range (the IB; before 10:30 only a BOS or CISD ends it) |",
+    "| chop | any | `chop` | sit out (a 3m CHoCH then CHoCH back, a failed reversal; inside a pullback read it is the watch; the 15m breaking or trending its way: the 15m continuation, a trend); chop ends: a CHoCH then a BOS or CISD the same way, or a close beyond the range (the IB; before 10:30 only a BOS or CISD ends it) |",
     // The owner's definitions, verbatim with trend-vs-range (a test there keeps the two equal).
     "Trending: consistent BOS, directional displacement, follow-through. Chop: alternating BOS/CHoCH, overlapping candles, failed continuation (`trend-vs-range`).",
     // A take agrees with the read: the class and the 4h and 1h on the setup's side (the never-counter-HTF rule, in its own words).
@@ -525,8 +525,9 @@ test('state line: the decision follows the model\'s own STATE read (taught, no c
   assert.doesNotMatch(para.replace('not a decisive against', ''), /decisive/);
   // The other sentences stay true: pass only on a decisive against or the head trader's own read.
   assert.ok(ts.includes("pass only on a decisive against, or your own STATE read off the setup's side (above)."));
-  // The 15m is no class condition: it is named only in the pullback row's action (the turn), never in the class.
-  assert.strictEqual(para.split('15m').length, 5);
+  // The 15m is no class condition of the 4h + 1h: it is named in the pullback row's action (the turn) and the chop row
+  // (the 15m continuation: the 3m state, code's).
+  assert.strictEqual(para.split('15m').length, 8);
   assert.doesNotMatch(para, /Class side|open `Pullback` line/, 'the dropped line and the rule the state settles');
   // No filled-in line here: the one example stays in trader-process (the class-word test below).
   assert.doesNotMatch(para, /`STATE:/);

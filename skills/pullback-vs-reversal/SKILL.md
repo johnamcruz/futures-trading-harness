@@ -58,10 +58,13 @@ never the composed setup read (`compose_check` takes a live strong one):
    between; the `engulfing` label and the CISD's `engulfing` compare only
    the prior candle. Printed proxies: the printed `inside the <time> candle <low>-<high>`
    (the impulse candle's), the `Pullback` depth.
-4. **The setup**: the 15m turn: a live 15m CISD, a 15m BOS or a 15m
-   reaction at the level, the side's way → the pullback ended on the 15m;
-   no 15m BOS to wait for after a strong CISD or a reaction; a live strong
-   15m CISD on the CISD line is the setup read even when the last 15m
+4. **The setup**: the 15m turn: a live 15m CISD, a 15m BOS, a 15m CHoCH
+   back or a 15m reaction at the level, the side's way → the pullback ended
+   on the 15m; no 15m BOS to wait for after a strong CISD, a CHoCH back or a
+   reaction; a 15m CHoCH back: the first 15m break back after the
+   pullback's break against (`m15.lastBreak.last` the side's way, known at
+   its close), the potential reversal of the pullback, the trend resuming;
+   a later 15m BOS: hold; a live strong 15m CISD on the CISD line is the setup read even when the last 15m
    candle line shows no pattern (`15m cisd up|down`). The level: the
    broken one or a level next to it (the RTH VWAP, a 15m swing; within
    about 0.25 x the 15m ATR, a hypothesis: one zone; `levels-and-reactions`).

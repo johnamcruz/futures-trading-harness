@@ -83,8 +83,8 @@ hypotheses):
 ## Examples
 
 ```text
-Not chop: CHoCH up, previous CHoCH down; Day so far mixed: the pair alone.
-  With rotational, no Pullback line: chop -> sit out.
+Chop: 3m CHoCH down, then CHoCH up back; no Pullback line, the 15m ranging -> sit out.
+  With a 15m BOS up: the 15m continuation, a trend, not chop.
 Take: 4h, 1h, 15m up; m3 trend-up (adx 24.10); overnight broke out its way. Read: trend.
   Reads: 1h up, 15m bos up. Priority order: aligned; the count for -> take.
 Skip: m3 transition (adx 19.20); CHoCH down, previous CHoCH up; 15m up. Read: transition.

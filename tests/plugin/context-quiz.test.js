@@ -110,9 +110,11 @@ test('context quiz: every layer asked, ids unique, the bar the whole quiz at K 5
   // under a fixed slip count; q114, q123 and trend-vs-range's example cover its point. 100 with the Market state redesign
   // (PREREG addendum 14): q124 and q125 (how chop ends), q126 (the early 15m pullback), q127 (a CHoCH alone: a potential
   // reversal); q122 (mid-range churn, the same shape as q119 under the state table) and q116 (chop without edges; q117 keeps
-  // chop is not range) retired before any run, so the quiz stays at 108 where the gate's bounds hold.
+  // chop is not range) retired before any run; q128 (the 3m pair the 15m confirms) and q129 (the 15m CHoCH back as the turn)
+  // added, q115 (transitional, the table's not-aligned row) and q117 (the clean range day, q121's shape) retired, so the
+  // quiz stays at 108 where the gate's bounds hold.
   assert.strictEqual(QUIZ.questions.length, 100);
-  assert.ok(!QUIZ.questions.some(x => x.id === 'q122' || x.id === 'q116'), 'q122 and q116 retired');
+  assert.ok(!QUIZ.questions.some(x => ['q115', 'q116', 'q117', 'q122'].includes(x.id)), 'q115, q116, q117 and q122 retired');
   assert.ok(!QUIZ.questions.some(x => x.id === 'q120'), 'q120 dropped');
   for (const id of ['q71', 'q72', 'q73', 'q74', 'q75', 'q76', 'q77', 'q78']) assert.ok(!QUIZ.questions.some(x => x.id === id), id);
   assert.strictEqual(QUIZ.partB.length, 8);
@@ -248,18 +250,16 @@ test('context quiz: the pullback questions (q87-q112) are asked against the prom
 });
 
 // The chop read (feat/chop-read, owner-approved 2026-11-14): chop is the quality of movement, range its geometry.
-test('context quiz: the chop-read questions (q113-q127, less q116, q120 and q122) are asked against the prompt holding the sentence each anchors to, go missing without it, on the code writers\' lines', () => {
+test('context quiz: the chop-read questions (q113-q129, less q115, q116, q117, q120 and q122) are asked against the prompt holding the sentence each anchors to, go missing without it, on the code writers\' lines', () => {
   const prompts = Q.buildPrompts(ROOT, QUIZ);
   const flat = t => t.replace(/\s+/g, ' ');
   const cut = re => Object.fromEntries(Object.entries(prompts).map(([k, v]) => [k, flat(v).replace(re, '')]));
   const TR = ['trend-vs-range'];
   const want = [
     ['q113', 'lookup', TR, 'chop: structure broken both ways, no continuation; sit out', /Structure broken both ways with no continuation is chop, not a run of reversals\./g],
-    ['q114', 'head', undefined, 'wait: a reversal attempt; class trend-up, not chop; no short', /wait for the 15m turn \(a live strong 15m CISD, a 15m BOS or a 15m reaction at the level\)/g],
-    ['q115', 'lookup', TR, 'F2', /transitional \(old trend weakening, new one unconfirmed\) → `unclear` \(frame `transition`\)/g],
-    ['q117', 'lookup', TR, 'range, not chop: class trend-up; a long setup at the low edge is allowed', /A range day inside the 4h \+ 1h side is catchable: the turn at the edge the side's way/g],
+    ['q114', 'head', undefined, 'wait: a reversal attempt; class trend-up, not chop; no short', /wait for the 15m turn \(a live strong 15m CISD, a 15m BOS, a 15m CHoCH back or a 15m reaction at the level\)/g],
     ['q118', 'head', undefined, 'F4', /\| a pullback their way \(trend or ranging\) \| aligned \| that trend class/g],
-    ['q119', 'head', undefined, 'F2', /\| chop \| any \| `chop` \| sit out;/g],
+    ['q119', 'head', undefined, 'F2', /\| chop \| any \| `chop` \| sit out \(a 3m CHoCH then CHoCH back, a failed reversal/g],
     ['q123', 'head', undefined, 'F3', /enter on the first 3m BOS or CISD the side's way near value/g],
     ['q121', 'head', undefined, 'enter long: the turn at the low edge the side\'s way, 3m BOS near value', /setups at the range edge or on a breakout, the side's way/g],
     // How chop ends (owner, 2026-11-14): the table's chop row.
@@ -267,6 +267,10 @@ test('context quiz: the chop-read questions (q113-q127, less q116, q120 and q122
     ['q125', 'head', undefined, 'F2', /or a close beyond the range \(the IB; before 10:30 only a BOS or CISD ends it\)/g],
     // The owner: "BOS is same-trend continuation, while CHoCH is a potential reversal" (bos-vs-choch, a lookup).
     ['q127', 'lookup', ['bos-vs-choch'], 'a potential reversal, unconfirmed: watch for the next BOS either way', /A potential reversal: CHoCH then BOS: confirmed/g],
+    // Top-down: the 3m CHoCH pair the 15m BOS confirms is the 15m continuation (owner, 2026-11-15).
+    ['q128', 'head', undefined, "trend-up: the 3m CHoCH pair is the 15m BOS up (continuation); long setups the side's way", /the 15m breaking or trending its way: the 15m continuation, a trend/g],
+    // The 15m CHoCH back the side's way is a 15m turn (owner-approved 2026-11-15).
+    ['q129', 'head', undefined, 'enter long: the 15m CHoCH up is the turn; the 3m BOS up near value is the entry', /a live 15m CISD, a 15m BOS, a 15m CHoCH back or a 15m reaction at the level, the side's way/g],
     // The owner: "15min up trend, 3min down trend could mean pullback".
     ['q126', 'head', undefined, 'a pullback in the 15m trend: class trend-up; watch for the 15m turn, then a 3m BOS or CISD up', /a 3m trend against inside it is the pullback, not a new trend/g],
   ];
@@ -308,8 +312,8 @@ test('context quiz: the chop-read questions (q113-q127, less q116, q120 and q122
   }
   // Repeated CHoCH both ways (the printed chop fact) where the answer is chop; never on the pullback, pause or edge items.
   const both = id => /m3\.lastBreak: last CHoCH \w+ at [\d.]+ \(barsAgo \d+\), previous CHoCH/.test(text(id));
-  for (const id of ['q113', 'q119', 'q124', 'q125']) assert.ok(both(id), `${id}: breaks both ways`);
-  for (const id of ['q114', 'q117', 'q118', 'q121']) assert.ok(!both(id), `${id}: one CHoCH at most`);
+  for (const id of ['q113', 'q119', 'q124', 'q125', 'q128']) assert.ok(both(id), `${id}: breaks both ways`);
+  for (const id of ['q114', 'q118', 'q121']) assert.ok(!both(id), `${id}: one CHoCH at most`);
   // The SETUP15 hard case: the pair and rotational with many crosses, inside an open Pullback: the trend class, not chop.
   assert.ok(both('q123') && /\n- Pullback \(15m, long leg/.test(text('q123')) && /rotational: .*RTH VWAP crosses [5-9]/.test(text('q123')), 'q123: the full chop facts inside a Pullback');
 });

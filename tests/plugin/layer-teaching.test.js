@@ -133,7 +133,7 @@ test('layer teaching: every "the setup is the entry" home scopes the pullback en
 // The 15m turn is one definition in its three homes (the owner: the 15m turn is a 15m CISD or a 15m BOS the side's way; the
 // reaction at the level too), and a 15m BOS far from value is no entry (the measured late case), stated alike.
 test('layer teaching: the 15m turn and the late 15m BOS are stated alike in pullback-vs-reversal, htf-to-ltf and trade-session', () => {
-  const TURN = 'the 15m turn: a live 15m CISD, a 15m BOS or a 15m reaction at the level, the side\'s way';
+  const TURN = 'the 15m turn: a live 15m CISD, a 15m BOS, a 15m CHoCH back or a 15m reaction at the level, the side\'s way';
   const LATE = 'a 15m BOS far past value (no 3m BOS or CISD near it): late, not an entry';
   for (const s of ['pullback-vs-reversal', 'htf-to-ltf', 'trade-session']) {
     assert.ok(read(s).includes(TURN), `${s}: the 15m turn`);

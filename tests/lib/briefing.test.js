@@ -922,19 +922,3 @@ test('render: the Market state line follows the Bias line, from market-state.js;
   assert.doesNotMatch(text, /Class side/);
   assert.doesNotMatch(JSON.stringify(b.sections), /Market state|marketState/, 'not stored in the briefing\'s data');
 });
-
-// The owner's labelling rule needs the confirmed trend, the way of the most recent code BOS: m3.lastBreak carries the
-// break before previous (`before`, structure-events.js breaksOf's third-last, in lastBreaks' shape), causal like the two.
-test('m3.lastBreak carries the break before previous (breaksOf\'s third-last), in lastBreaks\' shape', () => {
-  const { breaksOf } = require('../../scripts/lib/trading/structure-events');
-  for (const n of [600, 1300]) {
-    const b = build(n);
-    const lb = b.sections.m3.data.lastBreak;
-    const all = breaksOf(at(n));
-    const want = all.length >= 3 ? all[all.length - 3] : null;
-    assert.ok('before' in lb, 'the field is there');
-    if (!want) { assert.strictEqual(lb.before, null); continue; }
-    assert.deepStrictEqual(lb.before, { kind: want.kind, direction: want.direction, level: want.level, swingAt: want.swingAt, at: want.at, barsAgo: at(n).length - 1 - want.i }, String(n));
-    assert.deepStrictEqual(Object.keys(lb.before), Object.keys(lb.last), 'the same shape as last and previous');
-  }
-});

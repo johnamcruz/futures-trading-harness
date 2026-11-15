@@ -6,104 +6,90 @@
  * 4h + 1h alignment beside it. The model reads the state and the alignment and follows its row (trade-session's table)
  * instead of weighing two rule sets with exceptions to each other. A read, not a filter: no gate, hook, compose or
  * decision code reads it (tests/plugin/market-state-readers.test.js); it is printed in the summary and restated by the
- * recognition key's coded read. Pure: no files, no clock; the chop threshold is passed in (the briefing:
- * config/analysis.json regime.rangeCrosses; the recognition key: its frozen signals.crossesChop; a test pins them equal).
+ * recognition key's coded read. Pure: no files, no clock; the crosses threshold the line prints a context fact at is
+ * passed in (the briefing: config/analysis.json regime.rangeCrosses; the recognition key: its frozen
+ * signals.crossesChop; a test pins them equal).
  *
  * Inputs, all causal and all already printed:
- *   the 3m breaks   m3.lastBreak last and previous ({ kind BOS | CHoCH, direction, level, at })
- *   the sequence    the owner's reading of the last breaks (sequenceOf; m3.lastBreak last, previous and before): a
- *                   trend way, a failed reversal (the trend continues), an unconfirmed reversal, or repeated CHoCH
- *   the chop facts  the last two breaks both CHoCH (a back-and-forth) AND (the Day so far `rotational` OR its RTH
- *                   VWAP crosses at or above crossesChop); never one fact alone
+ *   the 3m breaks   m3.lastBreak last and previous ({ kind BOS | CHoCH, direction, level, at }): the owner's labels,
+ *                   relative to the last break, as structure-events.js gives them: BOS the previous break's way (a
+ *                   continuation), CHoCH a change of direction (a potential reversal); the RTH pair only: breaks whose
+ *                   candle closed at or after 09:30 ET of the decision's trading day (fewer than two: ranging, not
+ *                   enough RTH structure; no close time, a fixture: every break)
+ *   the 15m         top-down (the owner: "a 15m BOS could look like a 3m CHoCH followed by another CHoCH"): its last
+ *                   break a BOS the way the 3m pair ends, known by the close (knownAt), or its frame trend that way
  *   the turn        the last break a CHoCH confirmed its way: a live 3m CISD its way (m3.cisd['3m'], not void, expired
  *                   or weak) on a later 3m candle, or this bar's close beyond the initial balance's edge its way with the
  *                   previous break inside the IB (complete from 10:30 ET, so causal); a CHoCH then a BOS is a BOS
  *   the Pullback    pullback-read.js isOpen(m3.pullback): printed and not given back past its origin
+ *   the early read  the owner's "15min up trend, 3min down trend could mean pullback": the 15m frame trending the
+ *                   4h + 1h way and the 3m's last break against it, no Pullback line yet
  *   the alignment   the rule's bias frames (4h, 1h) both one way, entry-rule.js trendOf, the trends the gate reads
+ *   context         the Day so far `rotational` and its RTH VWAP crosses at or above the threshold: printed on a chop,
+ *                   never a condition (the owner: "keep it simple and call it chop if it fails reversal")
  *
  * The state (3m), once:
- *   chop          the chop facts, no open Pullback line, no confirmed turn
- *   trend <way>   the sequence's way (a BOS that way, or a failed reversal), or a CHoCH that way with its turn confirmed
- *   ranging       neither (one CHoCH, an unconfirmed CHoCH after a BOS, no break printed)
- * The Pullback read is no state (the owner: "just a read, but it's still following the trend or range"): printed
- * whenever its line is open, under trend or ranging (never chop). Before the line opens (it needs completed 15m candles
- * after the extreme), the owner's "15min up trend, 3min down trend could mean pullback": the 15m trending the 4h + 1h
- * way and the 3m state a trend against it prints "15m <way>: a pullback in the 15m trend" (never chop; the open line
- * supersedes it).
+ *   chop          the last two breaks both CHoCH (a failed reversal: the direction changed, then changed back), no
+ *                 pullback read active (no open Pullback line, no early read), the 15m not confirming the way it ends,
+ *                 no confirmed turn
+ *   trend <way>   the last break a BOS that way (a continuation, or a confirmed transition after a CHoCH; the line
+ *                 prints its age), the pair the 15m confirms (the 15m continuation), or a CHoCH that way with its turn
+ *                 confirmed
+ *   ranging       neither (a CHoCH after a BOS: a potential reversal, unconfirmed; the CHoCH pair inside a pullback
+ *                 read: the watch; no break printed)
+ * The Pullback read is no state (the owner: "just a read, but it's still following the trend or range"): printed under
+ * trend or ranging; the open line supersedes the early read.
  *
- *   sequenceOf(last, previous, before, align)   the owner's structure-sequence reading { reading, way, pair }
- *   chopMet({ bothWays, rotational, crosses }, { crossesChop })   the chop facts' rule (bothWays: the last two both CHoCH)
- *   turnOf({ last, previous, cisd3m, today, price })   a CHoCH's confirmed turn { by: 'cisd' | 'range', dir, edge?,
+ *   readingOf(last, previous)     the owner's words for the last two breaks { reading, pair }
+ *   turnOf({ last, previous, cisd3m, today, price, minutes })   a CHoCH's confirmed turn { by: 'cisd' | 'range', dir, edge?,
  *                                 price? } or null
- *   stateWord({ last, chop, open, turn })   the state's word and way
- *   chopFacts({ lastBreak, soFar, cisd3m, today, price }, th)   the facts the state reads
- *   readState(b, th)              { state, way, align, frames, m15, pullback, early, chop, ib, price, tf } on any briefing (no lane
- *                                 guard: the recognition key's records)
+ *   stateWord({ last, pair, read, m15, turn, enough })   the state's word and way
+ *   m15Confirms(m15data, dir, closedMs)   'BOS' | 'trend' | null: the 15m confirming the way a 3m pair ends
+ *   readState(b, th)              { state, way, align, frames, m15, pullback, early, last, previous, reading, pair,
+ *                                 turn, context, ib, enough, confirm15, age, price, tf } on any briefing (no lane guard: the recognition key's
+ *                                 records)
  *   stateOf(b, { crossesChop })   readState, or null off the chain's entry frame or with no 1h part (as the Bias line)
- *   classWordOf(s)                chop -> chop; not aligned -> unclear; an open Pullback leg the 4h + 1h way, or the
- *                                 early 15m pullback, -> that trend class (a 3m trend against inside it is the
- *                                 pullback); trend the 4h + 1h way or
- *                                 ranging under them -> that trend class; a trend against them -> unclear
+ *   classWordOf(s)                chop -> chop; not aligned -> unclear; a pullback read the 4h + 1h way (the open line's
+ *                                 leg, or the early read) -> that trend class (a 3m trend against inside it is the
+ *                                 pullback); trend the 4h + 1h way, or ranging under them -> that trend class; a trend
+ *                                 against them -> unclear
  *   marketStateLine(s)            "Market state (3m): trend up: 3m BOS up (continuation); pullback (long leg 21361.25 ->
- *                                 21437.5, depth 28%); 4h+1h up", "... ranging: 3m BOS down then CHoCH up (potential
- *                                 reversal, unconfirmed); inside the IB 21480-21560; 4h+1h up", "... chop: 3m CHoCH
- *                                 down then CHoCH up (back and forth); Day so far rotational; 4h range, 1h up (not
- *                                 aligned)"; null for a null state
+ *                                 21437.5, depth 28%); 4h+1h up", "... chop: 3m CHoCH down then CHoCH up (failed
+ *                                 reversal); Day so far rotational; 4h range, 1h up (not aligned)"; null for null
  */
 
 const { trendOf } = require('./entry-rule');
 const { RULE } = require('./bias-line');
 const { isOpen, pullbackWord } = require('./pullback-read');
 const { label } = require('./mtf');
+const { MARKET_TZ, RTH_OPEN_MIN, tradingDayStart, sessionMinuteOf } = require('./clock');
 
 const isObj = x => Boolean(x) && typeof x === 'object' && !Array.isArray(x);
 const data = (b, s) => (isObj(b) && isObj(b.sections) && isObj(b.sections[s]) && isObj(b.sections[s].data) ? b.sections[s].data : {});
 const DEAD_CISD = new Set(['void', 'expired', 'weak']); // cisd.js DEAD: no zone, no entry
 const CISD_WAY = { bullish: 'up', bearish: 'down' };
 const LEG_WAY = { long: 'up', short: 'down' };
-
 const DIRS = { up: true, down: true };
-/**
- * The owner's structure-sequence reading of the last 3m breaks, his labels relative to the LAST break (structure-events.js
- * as it stands): BOS a break the previous break's way (continuation), CHoCH a break that changes direction (a potential
- * reversal). On last, previous and before (the break before previous, when printed) and the 4h + 1h alignment:
- *   BOS x after CHoCH x                        a confirmed transition x (trend x)
- *   BOS x otherwise                            continuation x (trend x)
- *   CHoCH x after a BOS (or alone)             a potential reversal, unconfirmed (no way)
- *   CHoCH x after CHoCH, the break before a BOS x (the trend before: x)   one back-and-forth: a failed reversal (trend
- *                                              x); with the chop facts it is chop (stateWord)
- *   CHoCH x after CHoCH, the break before a CHoCH   repeated, no BOS: unconfirmed (no way; chop with its facts)
- *   CHoCH x after CHoCH, the break before not printed   the trend before taken as the 4h + 1h way: x the aligned way: a
- *                                              failed reversal; else unconfirmed
- * { reading, way, pair } (pair: the last two both CHoCH, the back-and-forth the chop facts weigh) or null with no break.
- */
-function sequenceOf(last, previous, before, align = null) {
-  if (!isObj(last) || !DIRS[last.direction]) return null;
+
+/** The owner's words for the last two 3m breaks: BOS a continuation, CHoCH a potential reversal; CHoCH then CHoCH back a failed reversal. */
+function readingOf(last, previous) {
+  if (!isObj(last) || !DIRS[last.direction]) return { reading: '', pair: false };
   const x = last.direction;
   const p = isObj(previous) && DIRS[previous.direction] ? previous : null;
   if (last.kind === 'BOS') {
-    if (p && p.kind === 'CHoCH' && p.direction === x) return { reading: `3m CHoCH ${x} then BOS ${x} (confirmed transition ${x})`, way: x, pair: false };
-    return { reading: `3m BOS ${x} (continuation)`, way: x, pair: false };
+    if (p && p.kind === 'CHoCH' && p.direction === x) return { reading: `3m CHoCH ${x} then BOS ${x} (confirmed transition ${x})`, pair: false };
+    return { reading: `3m BOS ${x} (continuation)`, pair: false };
   }
-  if (p && p.kind === 'CHoCH' && p.direction !== x) {
-    const known = isObj(before) && DIRS[before.direction];
-    const failed = known ? before.kind === 'BOS' && before.direction === x : align === x;
-    if (failed) return { reading: `3m CHoCH ${p.direction} then CHoCH ${x} back (failed reversal; continuation ${x})`, way: x, pair: true };
-    return { reading: `3m breaks alternating ${p.direction}, ${x} (repeated potential reversals, none confirmed)`, way: null, pair: true };
-  }
-  return { reading: `3m ${p ? `BOS ${p.direction} then ` : ''}CHoCH ${x} (potential reversal, unconfirmed)`, way: null, pair: false };
-}
-
-function chopMet({ bothWays, rotational, crosses } = {}, { crossesChop } = {}) {
-  if (!Number.isFinite(crossesChop)) throw new Error('market-state: crossesChop is required (a config value, never a literal)');
-  return bothWays === true && (rotational === true || (Number.isFinite(crosses) && crosses >= crossesChop));
+  if (p && p.kind === 'CHoCH' && p.direction !== x) return { reading: `3m CHoCH ${p.direction} then CHoCH ${x} (failed reversal)`, pair: true };
+  return { reading: `3m ${p ? `BOS ${p.direction} then ` : ''}CHoCH ${x} (potential reversal, unconfirmed)`, pair: false };
 }
 
 /** A CHoCH's turn confirmed its way (the owner: a CHoCH followed by a BOS or a same-direction CISD, or a close beyond the range). */
-function turnOf({ last, previous, cisd3m, today, price } = {}) {
+function turnOf({ last, previous, cisd3m, today, price, minutes } = {}) {
   if (!isObj(last) || last.kind !== 'CHoCH') return null;
   const c = isObj(cisd3m) ? cisd3m : null;
-  if (c && CISD_WAY[c.dir] === last.direction && !DEAD_CISD.has(c.status) && Date.parse(c.confirmedAt) > Date.parse(last.at)) return { by: 'cisd', dir: last.direction };
+  // The briefing's CISD carries its confirming candle's close (cisdBlock confirmedClose); the CHoCH its candle's open.
+  if (c && CISD_WAY[c.dir] === last.direction && !DEAD_CISD.has(c.status) && Date.parse(c.confirmedClose) > Date.parse(last.at) + minutes * 60000) return { by: 'cisd', dir: last.direction };
   const t = isObj(today) ? today : {};
   const hi = t.ibHigh;
   const lo = t.ibLow;
@@ -114,46 +100,63 @@ function turnOf({ last, previous, cisd3m, today, price } = {}) {
   return null;
 }
 
-/** The state's word, once: chop (no open Pullback line, no confirmed turn), trend (the sequence's way, or a confirmed turn), ranging. */
-function stateWord({ seq, chop, open, turn }) {
-  if (chop && !open && !turn) return { state: 'chop', way: null };
-  if (seq && seq.way) return { state: 'trend', way: seq.way };
+/**
+ * The state's word, once: chop (the CHoCH pair, no pullback read, no 15m confirmation, no confirmed turn), trend (a BOS,
+ * the pair the 15m confirms, or a confirmed CHoCH), ranging; not enough RTH structure: ranging.
+ */
+function stateWord({ last, pair, read, m15, turn, enough = true }) {
+  if (!enough) return { state: 'ranging', way: null };
+  if (pair && !read && !m15 && !turn) return { state: 'chop', way: null };
+  if (isObj(last) && last.kind === 'BOS' && DIRS[last.direction]) return { state: 'trend', way: last.direction };
+  if (pair && m15) return { state: 'trend', way: last.direction };
   if (turn) return { state: 'trend', way: turn.dir };
   return { state: 'ranging', way: null };
 }
 
-function chopFacts({ lastBreak, soFar, cisd3m, today, price, align = null } = {}, th = {}) {
-  const lb = isObj(lastBreak) ? lastBreak : {};
-  const last = isObj(lb.last) ? lb.last : null;
-  const previous = isObj(lb.previous) ? lb.previous : null;
-  const seq = sequenceOf(last, previous, isObj(lb.before) ? lb.before : null, align);
-  // The chop fact "breaks both ways": the last two both CHoCH (a back-and-forth; with the chop facts it is chop, else a
-  // failed reversal or unconfirmed).
-  const bothWays = Boolean(seq && seq.pair);
-  const d = isObj(soFar) ? soFar : {};
-  const rotational = d.status === 'read' && d.read === 'rotational';
-  const crosses = Number.isFinite(d.vwapCrosses) ? d.vwapCrosses : null;
-  const met = chopMet({ bothWays, rotational, crosses }, th);
-  // A confirmed turn: a CISD or the IB close after the last CHoCH (any CHoCH: it can end a chop).
-  const turn = turnOf({ last, previous, cisd3m, today, price });
-  return { last, previous, seq, bothWays, rotational, crosses, crossesMet: crosses !== null && crosses >= th.crossesChop, met, turn };
+/** The 15m confirming the way a 3m CHoCH pair ends (the owner, top-down): its last break a BOS that way known by the close, or its trend. */
+function m15Confirms(m15data, dir, closedMs) {
+  const lb = isObj(m15data) && isObj(m15data.lastBreak) && isObj(m15data.lastBreak.last) ? m15data.lastBreak.last : null;
+  const known = lb ? Date.parse(lb.knownAt) : NaN;
+  if (lb && lb.kind === 'BOS' && lb.direction === dir && !(Number.isFinite(known) && Number.isFinite(closedMs) && known > closedMs)) return 'BOS';
+  const t = isObj(m15data) && isObj(m15data.frame) ? m15data.frame.trend : null;
+  return t === dir ? 'trend' : null;
 }
 
-function readState(b, th) {
+function readState(b, th = {}) {
+  if (!Number.isFinite(th.crossesChop)) throw new Error('market-state: crossesChop is required (a config value, never a literal)');
   const frames = Object.fromEntries(RULE.biasFrames.map(tf => [tf, trendOf(b, tf)]));
   const ts = Object.values(frames);
   const align = ts.every(t => t === 'up') ? 'up' : ts.every(t => t === 'down') ? 'down' : null;
   const m3 = data(b, 'm3');
   let open;
   try { open = isOpen(m3.pullback); } catch (_err) { open = false; }
-  const today = isObj(m3.today) ? m3.today : {};
-  const cisd3m = isObj(m3.cisd) ? m3.cisd['3m'] : null;
-  const chop = chopFacts({ lastBreak: m3.lastBreak, soFar: today.soFar, cisd3m, today, price: m3.price, align }, th);
-  const { state, way } = stateWord({ seq: chop.seq, chop: chop.met, open, turn: chop.turn });
+  const lb = isObj(m3.lastBreak) ? m3.lastBreak : {};
+  const minutes = Number.isInteger(b.minutes) ? b.minutes : 3;
+  // The RTH state pair (the structure audit: at 28% of decision bars the previous break was a premarket drift): only
+  // breaks whose candle closed at or after 09:30 ET of the decision's trading day; no close time (a fixture): every break.
+  const closedMs = Date.parse(b.closedAt);
+  const rthOpen = Number.isFinite(closedMs) ? tradingDayStart(new Date(closedMs)).getTime() + sessionMinuteOf({ minute: RTH_OPEN_MIN, timeZone: MARKET_TZ }, new Date(closedMs)) * 60000 : null;
+  const closeOf = x => Date.parse(x.at) + minutes * 60000; // a break's candle closes a bar after its open
+  const rth = x => isObj(x) && (rthOpen === null || closeOf(x) >= rthOpen);
+  const last = rth(lb.last) ? lb.last : null;
+  const previous = last && rth(lb.previous) ? lb.previous : null;
+  const enough = rthOpen === null ? true : Boolean(last && previous);
+  const { reading, pair } = readingOf(last, previous);
   const m15 = trendOf(b, RULE.chain.setup);
-  const early = !open && Boolean(align) && state === 'trend' && way !== align && m15 === align;
+  const early = !open && Boolean(align) && m15 === align && Boolean(last) && DIRS[last.direction] === true && last.direction !== align;
+  const confirm15 = pair ? m15Confirms(data(b, 'm15'), last.direction, closedMs) : null;
+  const today = isObj(m3.today) ? m3.today : {};
+  const turn = enough ? turnOf({ last, previous, cisd3m: isObj(m3.cisd) ? m3.cisd['3m'] : null, today, price: m3.price, minutes }) : null;
+  const { state, way } = stateWord({ last, pair, read: open || early, m15: confirm15, turn, enough });
+  const age = last && last.kind === 'BOS' && Number.isFinite(closedMs) ? Math.round((closedMs - (Date.parse(last.at) + minutes * 60000)) / 60000) : null;
+  const d = isObj(today.soFar) ? today.soFar : {};
+  const crosses = Number.isFinite(d.vwapCrosses) ? d.vwapCrosses : null;
+  const context = { rotational: d.status === 'read' && d.read === 'rotational', crosses: crosses !== null && crosses >= th.crossesChop ? crosses : null };
   const ib = Number.isFinite(today.ibHigh) && Number.isFinite(today.ibLow) ? { high: today.ibHigh, low: today.ibLow } : null;
-  return { state, way, align, frames, m15, pullback: open ? m3.pullback : null, early, chop, ib, price: Number.isFinite(m3.price) ? m3.price : null, tf: label(Number.isInteger(b.minutes) ? b.minutes : 3) };
+  return {
+    state, way, align, frames, m15, pullback: open ? m3.pullback : null, early, last, previous, reading, pair, turn, context, ib, enough, confirm15, age,
+    price: Number.isFinite(m3.price) ? m3.price : null, tf: label(Number.isInteger(b.minutes) ? b.minutes : 3),
+  };
 }
 
 function stateOf(b, th) {
@@ -174,20 +177,23 @@ function classWordOf(s) {
 
 function marketStateLine(s) {
   if (!isObj(s)) return null;
-  const c = isObj(s.chop) ? s.chop : {};
   const align = s.align ? `4h+1h ${s.align}` : `${Object.entries(s.frames).map(([tf, t]) => `${tf} ${t || 'unknown'}`).join(', ')} (not aligned)`;
-  const pair = c.seq ? c.seq.reading : '';
+  const ctx = [s.context && s.context.rotational ? 'Day so far rotational' : null, s.context && s.context.crosses !== null ? `RTH VWAP crosses ${s.context.crosses}` : null].filter(Boolean);
   let state;
-  if (s.state === 'chop') {
-    const why = [c.rotational ? 'Day so far rotational' : null, c.crossesMet ? `RTH VWAP crosses ${c.crosses}` : null].filter(Boolean).join(', ');
-    state = `chop: 3m CHoCH ${c.previous.direction} then CHoCH ${c.last.direction} (back and forth); ${why}`;
+  if (s.state === 'chop') state = `chop: ${s.reading}${ctx.length ? `; ${ctx.join(', ')}` : ''}`;
+  else if (s.state === 'trend' && s.pair && s.confirm15) {
+    state = `trend ${s.way}: 3m CHoCH ${s.previous.direction} then CHoCH ${s.last.direction} = the 15m ${s.confirm15} ${s.way} (continuation)`;
   } else if (s.state === 'trend') {
-    const t = c.turn;
-    const turn = !t ? pair : t.by === 'cisd' ? `${pair}, then a 3m CISD ${t.dir} (confirmed)` : `${pair}, then a close ${t.dir === 'up' ? 'above' : 'below'} the ${t.edge} ${t.price} (confirmed)`;
-    state = `trend ${s.way}: ${turn}${t && c.met ? '; the chop ended' : ''}`;
+    const t = s.last && s.last.kind === 'CHoCH' ? s.turn : null;
+    const base = Number.isFinite(s.age) ? `${s.reading}, ${s.age} min ago` : s.reading;
+    const turn = !t ? base : t.by === 'cisd' ? `${s.reading}, then a 3m CISD ${t.dir} (confirmed)` : `${s.reading}, then a close ${t.dir === 'up' ? 'above' : 'below'} the ${t.edge} ${t.price} (confirmed)`;
+    state = `trend ${s.way}: ${turn}${t && s.pair ? '; the chop ended' : ''}`;
+  } else if (s.enough === false) {
+    state = `ranging: ${s.last ? `${s.reading}, the only RTH break` : 'no RTH 3m break yet'} (not enough RTH structure)`;
   } else {
     const inside = s.ib && Number.isFinite(s.price) && s.price >= s.ib.low && s.price <= s.ib.high ? `inside the IB ${s.ib.low}-${s.ib.high}` : '';
-    state = `ranging: ${[pair || 'no 3m break printed', inside].filter(Boolean).join('; ')}`;
+    const watch = s.pair ? ' (inside the pullback: not chop)' : '';
+    state = `ranging: ${[`${s.reading || 'no 3m break printed'}${watch}`, inside].filter(Boolean).join('; ')}`;
   }
   const p = s.pullback;
   const pb = p ? `; pullback (${p.side} leg ${p.leg.origin} -> ${p.leg.extreme}, ${String(pullbackWord(p) || 'depth unknown').split(',')[0]})`
@@ -195,4 +201,4 @@ function marketStateLine(s) {
   return `Market state (${s.tf}): ${state}${pb}; ${align}`;
 }
 
-module.exports = { sequenceOf, chopMet, turnOf, stateWord, chopFacts, readState, stateOf, classWordOf, marketStateLine };
+module.exports = { readingOf, turnOf, stateWord, m15Confirms, readState, stateOf, classWordOf, marketStateLine };

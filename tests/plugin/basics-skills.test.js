@@ -76,7 +76,8 @@ const PINS = {
     // feat/pullback-concept (owner-approved 2026-11-14): the pullback to a broken level, BOS or CISD confirms, CHoCH or CISD warns.
     'Start from the `Pullback` line (steps 6-7 outlive it).',
     // #338's step 4 (the turn) stays intact under feat/chop-read: a live strong CISD or a reaction IS the turn.
-    '**The setup**: the 15m turn: a live 15m CISD, a 15m BOS or a 15m reaction at the level, the side\'s way → the pullback ended on the 15m; no 15m BOS to wait for after a strong CISD or a reaction; a live strong 15m CISD on the CISD line is the setup read even when the last 15m candle line shows no pattern (`15m cisd up|down`).',
+    // The 15m CHoCH back (owner-approved 2026-11-15, the structure audit's skill gap): the earliest valid 15m evidence.
+    '**The setup**: the 15m turn: a live 15m CISD, a 15m BOS, a 15m CHoCH back or a 15m reaction at the level, the side\'s way → the pullback ended on the 15m; no 15m BOS to wait for after a strong CISD, a CHoCH back or a reaction; a 15m CHoCH back: the first 15m break back after the pullback\'s break against (`m15.lastBreak.last` the side\'s way, known at its close), the potential reversal of the pullback, the trend resuming; a later 15m BOS: hold; a live strong 15m CISD on the CISD line is the setup read even when the last 15m candle line shows no pattern (`15m cisd up|down`).',
     'A 15m rejection of the RTH VWAP or a 15m swing inside the zone (within about 0.25 × the 15m ATR of the broken level) is the reaction; no exact touch of the broken level is needed; the entry still needs the 3m BOS or CISD near value.',
     'a CISD reads as the same: the side\'s way as a BOS, against as a CHoCH, earlier (`cisd`).',
     'A 3m CHoCH back the side\'s way: the 3m counter-move ended; watch for the BOS or CISD; not the entry. No BOS or CISD after it: no setup, pass.',
@@ -253,7 +254,7 @@ const PINS = {
     'A close strictly beyond the last confirmed swing not yet broken; each swing breaks once. Only closes count, on completed candles.',
     'In the code, that is the previous break\'s direction (the first break too)',
     // The owner's reading (feat/chop-read, 2026-11-14): CHoCH then BOS confirms; CHoCH then CHoCH back a failed reversal.
-    'A potential reversal: CHoCH then BOS: confirmed; CHoCH then CHoCH back: a failed reversal (with the Day so far `rotational` or many RTH VWAP crosses: chop);',
+    'A potential reversal: CHoCH then BOS: confirmed; a 3m CHoCH then CHoCH back: a failed reversal, chop, unless a pullback read is active or the 15m breaks or trends the way it ends',
     'No one timeframe is the signal; read them top-down.',
     '| 3m, 5m | a candle fact only: never the setup, never a wait (unless a `Pullback` line is printed: `pullback-vs-reversal`) | a candle fact only (its swings are the stop\'s) |',
     '| 15m | the working structure continues | the working structure shifting: a deeper pullback, or a reversal starting |',
@@ -325,8 +326,8 @@ test('basics skills: frontmatter, the sections in order, and small', () => {
     // Then candle-reading 1280 and pullback-vs-reversal 1631 (feat/pullback-concept, owner-approved 2026-11-14: the unlabeled candle
     // names; the pullback to a broken level, BOS for continuation, CHoCH for reversal, its 3m entry, the examples); then
     // pullback-vs-reversal 1728 (feat/chop-read, owner-approved 2026-11-14: the pause holds one way, chop breaks both ways;
-    // close to the level is a read).
-    assert.ok(words >= 250 && words <= (s === 'candle-reading' ? 1280 : s === 'pullback-vs-reversal' ? 1728 : 650), `${s}: ${words} words`);
+    // close to the level is a read); then 1762 (owner-approved 2026-11-15: the 15m CHoCH back as a 15m turn).
+    assert.ok(words >= 250 && words <= (s === 'candle-reading' ? 1280 : s === 'pullback-vs-reversal' ? 1762 : 650), `${s}: ${words} words`);
     // The two setups also carry a timeframe table (what the setup means on 3m/5m, 15m and 1h/4h): a little more room
     // (scripts/lib/skill-caps.js, the one source the training loop's probe edits read too).
     const max = skillByteCap(s);
@@ -613,7 +614,7 @@ test('bos-vs-choch: the description is short, and the swings and breaks are the 
   assert.match(se, /kind: prev && prev\.direction !== direction \? 'CHoCH' : 'BOS'/);
   assert.match(se, /if \(direction === 'up'\) hi = null; else lo = null;/);
   const br = read('scripts/lib/trading/briefing.js');
-  assert.match(br, /lastBreak: \{ \.\.\.lastBreaks\(bars\), before: breakBefore\(bars\) \},/);
+  assert.match(br, /lastBreak: lastBreaks\(bars\),/);
   assert.match(br, /lastBreak: atClose\(lastBreaks\(c15\), 15\),/);
   assert.match(br, /lastBreak: atClose\(lastBreaks\(c60\), 60\)/);
   // On a real briefing: the kinds and directions the skill names, knownAt on 15m and 1h, and no 4h break.

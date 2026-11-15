@@ -127,11 +127,11 @@ market now at this candle, is `trend-up`, `trend-down`, `chop` or
 it. No other words.
 
 A `Pullback` line printed: your PLAN's `4 Setup` line is the read chain:
-side; 15m pullback; 15m turn (CISD, BOS or reaction at the level; a CISD
+side; 15m pullback; 15m turn (CISD, BOS, CHoCH back or reaction at the level; a CISD
 strong or weak); 3m (BOS or
 CISD, near value or not); verdict (strong setup: enter, watch or wait)
 (`pullback-vs-reversal`). The setup is the 15m turn: a live 15m CISD, a
-15m BOS or a 15m reaction at the level, the side's way; a live strong 15m
+15m BOS, a 15m CHoCH back or a 15m reaction at the level, the side's way; a live strong 15m
 CISD on the CISD line is the turn even when the last 15m candle line shows
 no pattern; a 15m BOS far past
 value (no 3m BOS or CISD near it): late, not an entry. Close to the level
@@ -153,10 +153,10 @@ line of its PLAN; taught: the gate and `compose_check` do not read it):
 |---|---|---|---|
 | trend, their way | aligned | that trend class | setups the side's way |
 | ranging | aligned | the side's trend class (a range day inside the trend) | setups at the range edge or on a breakout, the side's way |
-| a pullback their way (trend or ranging) | aligned | that trend class (a 3m trend against inside it is the pullback, not a new trend) | wait for the 15m turn (a live strong 15m CISD, a 15m BOS or a 15m reaction at the level); enter on the first 3m BOS or CISD the side's way near value (`pullback-vs-reversal` steps 4-7) |
+| a pullback their way (trend or ranging) | aligned | that trend class (a 3m trend against inside it is the pullback, not a new trend) | wait for the 15m turn (a live strong 15m CISD, a 15m BOS, a 15m CHoCH back or a 15m reaction at the level); enter on the first 3m BOS or CISD the side's way near value (`pullback-vs-reversal` steps 4-7) |
 | trend against them | aligned | `unclear` | no trade, never counter |
 | trend or ranging | not aligned | `unclear` | no trend trade |
-| chop | any | `chop` | sit out; chop ends: a CHoCH then a BOS or CISD the same way, or a close beyond the range (the IB; before 10:30 only a BOS or CISD ends it) |
+| chop | any | `chop` | sit out (a 3m CHoCH then CHoCH back, a failed reversal; inside a pullback read it is the watch; the 15m breaking or trending its way: the 15m continuation, a trend); chop ends: a CHoCH then a BOS or CISD the same way, or a close beyond the range (the IB; before 10:30 only a BOS or CISD ends it) |
 
 Trending: consistent BOS, directional displacement, follow-through. Chop:
 alternating BOS/CHoCH, overlapping candles, failed continuation

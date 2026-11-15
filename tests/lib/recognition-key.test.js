@@ -85,10 +85,12 @@ const kb = ({ h4 = 'up', h1 = 'up', lastBreak, soFar, pullback } = {}) => K.pres
 const PAIR = { last: { kind: 'CHoCH', direction: 'up' }, previous: { kind: 'CHoCH', direction: 'down' } };
 const rot = n => ({ status: 'read', read: 'rotational', vwapCrosses: n });
 const mix = n => ({ status: 'read', read: 'mixed', vwapCrosses: n });
-test('choppy: the 3m breaks both ways AND the day so far rotational or its RTH VWAP crosses at crossesChop; never one fact alone; never inside an open Pullback', () => {
+// The owner: "keep it simple and call it chop if it fails reversal": the 3m CHoCH pair is chop, rotational or not, except
+// inside a pullback read or under the 15m's confirmation (market-state.js; its own tests cover each guard).
+test('choppy: the 3m CHoCH pair (a failed reversal); rotational and the crosses never conditions; never inside an open Pullback', () => {
   assert.strictEqual(kb({ lastBreak: PAIR, soFar: rot(1) }).choppy, true);
-  assert.strictEqual(kb({ lastBreak: PAIR, soFar: mix(5) }).choppy, true, 'at the chop threshold');
-  assert.strictEqual(kb({ lastBreak: PAIR, soFar: mix(4) }).choppy, false, 'breaks both ways alone (the session count 9 is not the taught one)');
+  assert.strictEqual(kb({ lastBreak: PAIR, soFar: mix(4) }).choppy, true, 'the pair alone');
+  assert.strictEqual(kb({ lastBreak: PAIR }).choppy, true);
   assert.strictEqual(kb({ soFar: rot(9) }).choppy, false, 'rotational and crosses without the breaks');
   const PB = { frame: '15m', side: 'long', leg: { origin: 21462.5, extreme: 21538.75 }, depth: 0.38, pastOrigin: false, counter: { bars: 10 }, swing: {}, against: {} };
   assert.strictEqual(kb({ lastBreak: PAIR, soFar: rot(9), pullback: PB }).choppy, false, 'inside an open Pullback the CHoCH pair is the watch');
@@ -104,12 +106,11 @@ test('codedWord: the Market state\'s class word: choppy -> chop (aligned too); e
   assert.strictEqual(K.codedWord(kb({ h4: 'range', h1: 'range' })), 'unclear', 'agreeing range is no trend');
 });
 
-test('presentKey carries choppy from its facts and thresholds', () => {
+test('presentKey carries choppy from the Market state (the crosses threshold only a printed context)', () => {
   const b = { sections: { h1: { data: { h4: { trend: 'up' }, h1: { trend: 'up' } } }, m3: { data: { lastBreak: { last: { kind: 'CHoCH', direction: 'up' }, previous: { kind: 'CHoCH', direction: 'down' } }, vwap: { sessionCrossesLast30: 1, side: 'above' }, today: { soFar: { status: 'read', read: 'mixed', direction: 'up', vwapCrosses: 6 } } } } } };
   assert.strictEqual(K.presentKey(b, TH).choppy, true);
   assert.strictEqual(K.codedWord(K.presentKey(b, TH)), 'chop');
-  assert.strictEqual(K.presentKey(b, { ...TH, crossesChop: 7 }).choppy, false);
-  assert.strictEqual(K.codedWord(K.presentKey(b, { ...TH, crossesChop: 7 })), 'trend-up');
+  assert.strictEqual(K.presentKey(b, { ...TH, crossesChop: 7 }).choppy, true, 'the threshold decides nothing');
 });
 
 // Fable round 1's reproduction: an aligned pullback whose 3m CHoCH down then CHoCH up (the watch) prints on a rotational
@@ -219,12 +220,12 @@ test('the coded read is the Market state: codedWord = classWordOf(stateOf) and c
   }
 });
 
-// What the redesign changes in the coded read (stated in the PR): the old read (chop = the chop facts with no open
-// Pullback line -> chop; else the 4h and 1h agreeing -> the trend; else unclear) and the new (the 3m state, trend /
-// ranging / chop, with the alignment) differ exactly where the 4h + 1h agree, the 3m's last break is a BOS against them,
-// and no pullback read runs their way (no open Pullback line their way; the grid holds no 15m trend): old trend-<way>,
-// new unclear (a 3m trend against the alignment: never counter). Everywhere else they agree.
-test('the old and the new coded read differ only on a 3m BOS against an aligned 4h + 1h with no pullback read their way', () => {
+// What the redesign changes in the coded read (stated in the PR): the old read (chop = the CHoCH pair with the day so far
+// rotational or the RTH crosses at crossesChop and no open Pullback line; else the 4h and 1h agreeing -> the trend; else
+// unclear) and the new (the 3m state, trend / ranging / chop, with the alignment) differ exactly in two places on the grid
+// (no 15m trend, no close time): (a) the CHoCH pair with no open Pullback line and without those day facts: new chop; (b)
+// the 4h and 1h agreeing, the 3m's last break a BOS against them, no pullback read their way: old trend, new unclear.
+test('the old and the new coded read differ only on (a) the bare CHoCH pair (now chop) and (b) a 3m BOS against an aligned 4h + 1h with no pullback read', () => {
   const old = b => {
     const f = K.facts(b);
     const ch = f.bothWays['3m'] === true && !f.pullback && (f.day.word === 'rotational' || (Number.isFinite(f.rthCrosses) && f.rthCrosses >= TH.crossesChop));
@@ -232,14 +233,20 @@ test('the old and the new coded read differ only on a 3m BOS against an aligned 
     return ch ? 'chop' : fr['4h'] === fr['1h'] && (fr['4h'] === 'up' || fr['4h'] === 'down') ? `trend-${fr['4h']}` : 'unclear';
   };
   const diff = GRID.filter(b => old(b) !== K.codedWord(K.presentKey(b, TH)));
-  assert.ok(diff.length > 0);
+  let a = 0;
+  let bb = 0;
   for (const b of diff) {
+    const f = K.facts(b);
     const d = b.sections.h1.data;
     const way = d.h4 && d.h4.trend;
     const lb = b.sections.m3.data.lastBreak;
     const p = b.sections.m3.data.pullback;
     const pbWay = p && p.pastOrigin === false ? { long: 'up', short: 'down' }[p.side] : null;
+    const now = K.codedWord(K.presentKey(b, TH));
+    if (f.bothWays['3m'] === true && !f.pullback) { assert.strictEqual(now, 'chop', JSON.stringify(b)); a += 1; continue; }
     assert.ok(way === d.h1.trend && lb && lb.last.kind === 'BOS' && lb.last.direction !== way && pbWay !== way, JSON.stringify(b));
-    assert.deepStrictEqual([old(b), K.codedWord(K.presentKey(b, TH))], [`trend-${way}`, 'unclear']);
+    assert.deepStrictEqual([old(b), now], [`trend-${way}`, 'unclear']);
+    bb += 1;
   }
+  assert.ok(a > 0 && bb > 0, `${a} pair, ${bb} against`);
 });

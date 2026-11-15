@@ -34,11 +34,12 @@ A wick through a swing that closes back inside is a sweep, not a break
   continuation.
 - CHoCH: the first close beyond the last swing against it, an early
   warning, not a reversal by itself (the `pullback-vs-reversal` skill).
-  A potential reversal: CHoCH then BOS: confirmed; CHoCH then CHoCH back:
-  a failed reversal (with the Day so far `rotational` or many RTH VWAP
-  crosses: chop); repeated, no BOS: unconfirmed (the Market state line).
+  A potential reversal: CHoCH then BOS: confirmed; a 3m CHoCH then CHoCH
+  back: a failed reversal, chop, unless a pullback read is active or the
+  15m breaks or trends the way it ends (then the 15m continuation; the
+  Market state line).
 
-**Fields**: `m3.lastBreak.last`, `.previous` and `.before` (3m); the same
+**Fields**: `m3.lastBreak.last` and `m3.lastBreak.previous`; the same
 under `m15.lastBreak` and `h1.lastBreak` (`knownAt`: the candle's close);
 a 5m lane's briefing has it in its `bar` part. Each: `kind` (`BOS` or
 `CHoCH`), `direction` (`up` or `down`), `level`, `barsAgo` (that

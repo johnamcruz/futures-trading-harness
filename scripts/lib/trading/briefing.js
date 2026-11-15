@@ -112,8 +112,8 @@ const { declaredFacts, declaredLine } = require('./trend-declared');
 const { daySoFar, daySoFarLine, rthVolatility, volatilityText } = require('./day-so-far');
 const { biasLine } = require('./bias-line');
 const { stateOf, marketStateLine } = require('./market-state');
-// The Market state's chop threshold: the regime's rotation count (config/analysis.json; a test pins it to the recognition
-// key's frozen crossesChop).
+// The Market state line's crosses context threshold: the regime's rotation count (config/analysis.json; a test pins it to the
+// recognition key's frozen crossesChop).
 const STATE_TH = { crossesChop: require('../tunables').analysis().regime.rangeCrosses };
 const { pullbackRead, pullbackLine } = require('./pullback-read');
 const { GLOBEX_OPEN_MIN, RTH_OPEN_MIN, RTH_CLOSE_MIN } = require('./clock'); // the session boundaries' one home
@@ -214,12 +214,6 @@ const brief = (f, level = round2) => (f ? {
   range: f.levels && Number.isFinite(f.levels.rangeHigh) ? { high: f.levels.rangeHigh, low: f.levels.rangeLow, mid: level((f.levels.rangeHigh + f.levels.rangeLow) / 2) } : null,
   ...(f.note ? { note: f.note } : {}),
 } : null);
-/** The break before the previous one (breaksOf's third-last) in lastBreaks' shape, or null: causal, closed bars only. */
-function breakBefore(bars) {
-  const all = breaksOf(bars);
-  const x = [...all].reverse()[2]; // the third-last, or undefined
-  return x ? { kind: x.kind, direction: x.direction, level: x.level, swingAt: x.swingAt, at: x.at, barsAgo: bars.length - 1 - x.i } : null;
-}
 /** A higher timeframe's break: its times are candle opens (as on the 3m), and knownAt is the breaking candle's close. */
 const atClose = (lb, mins) => {
   const shift = x => (x ? { ...x, knownAt: new Date(Date.parse(x.at) + mins * 60000).toISOString() } : null);
@@ -487,9 +481,7 @@ function computeSections({ bars, fine = null, c15, c60, snap, snap15, read, read
         // Structure events (structure-events.js): the latest break on the trigger bars, sweeps of key liquidity in the last
         // 10 bars (only levels that existed before the sweep), the 1h swings not traded back to, and the 15m and 1h swings
         // against price (a 3m close through one since its candle closed: brokenAt).
-        // `before`: the break before previous (breaksOf's third-last, lastBreaks' shape), so the Market state can read the
-        // confirmed trend (market-state.js sequenceOf, the owner's labelling rule).
-        lastBreak: { ...lastBreaks(bars), before: breakBefore(bars) },
+        lastBreak: lastBreaks(bars),
         sweeps: sweeps(bars, [
           // The session's key levels: the runner's bars only (a frame's sweeps are of its own levels).
           ...(own ? [] : [['prior RTH high', (lv.priorRth || {}).high, 'high', true], ['prior RTH low', (lv.priorRth || {}).low, 'low', true]]),
