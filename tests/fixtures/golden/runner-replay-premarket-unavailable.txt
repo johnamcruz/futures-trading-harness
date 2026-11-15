@@ -1305,7 +1305,7 @@ developing; a 1h CHoCH while the 4h and 1h agree is context.
 - **1 HTF**: a 1h break is the side rule's, a 15m one structure
   (`confluence-counting`).
 - **4 Setup**: a 15m (or higher) BOS the bias's way, or a pullback to a
-  level ending in the 15m setup the bias's way; never a 3m break.
+  level ending in the 15m turn the bias's way; never a 3m break.
 - **9 Manage**: a CHoCH against an open trade on its timeframe or higher
   (15m, 1h) is significant (`invalidation`); a 3m one is noise.
   The exit stays the trail.
