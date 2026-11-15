@@ -1316,7 +1316,7 @@
       "id": "q95",
       "layer": "bias",
       "prompt": "head",
-      "text": "Briefing lines (synthetic, 09:39 ET), flat:\n- Bias: long only (4h up, 1h up; short refused).\n- Market state (3m): ranging: no 3m break printed; 4h+1h up.\nYour read at 09:39 ET: 4h up, 1h up; the 15m broke above the overnight high at 09:30 and is now `transition` (inside candles, its swing low holds). Which class do you write in STATE?\nF1 - chop\nF2 - unclear\nF3 - trend-up\nF4 - trend-down\nAnswer with ONE of F1-F4.",
+      "text": "Briefing lines (synthetic, 09:39 ET), flat:\n- Bias: long only (4h up, 1h up; short refused).\n- Market state (3m): forming (no RTH structure yet); 4h+1h up.\n- m3.lastBreak: none since the RTH open.\nYour read at 09:39 ET: 4h up, 1h up; the 15m broke above the overnight high at 09:30 and is now `transition` (inside candles, its swing low holds). Which class do you write in STATE?\nF1 - chop\nF2 - unclear\nF3 - trend-up\nF4 - trend-down\nAnswer with ONE of F1-F4.",
       "rule": "the 4h and 1h both up: trend-up; a 15m pullback, range or transition under them does not cancel it",
       "anchor": "| ranging | aligned | the side's trend class",
       "choices": [

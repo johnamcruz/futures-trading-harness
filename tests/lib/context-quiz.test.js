@@ -794,6 +794,23 @@ test('marketStateOfText: the Market state line from an item\'s printed lines', (
   assert.strictEqual(Q.marketStateOfText(head('10:30', ['- Bias: long only (4h range, 1h up; short refused).'])), 'Market state (3m): ranging: no 3m break printed; 4h range, 1h up (not aligned)');
   assert.strictEqual(Q.marketStateOfText(head('10:30', ['- Bias: no side yet (15m range).'])), 'Market state (3m): ranging: no 3m break printed; 4h range, 1h range (not aligned)');
   assert.strictEqual(Q.marketStateOfText(head('10:30', ['- Bias: no side (4h up, 1h down) → no entry.'])), 'Market state (3m): ranging: no 3m break printed; 4h up, 1h down (not aligned)');
+  // Round 17 (q95): an item that prints `m3.lastBreak: none since the RTH open` states its RTH breaks (none), so its clock
+  // is the close, as the live briefing's is: the line equals the live one on the same inputs (09:39 ET, the only 3m breaks
+  // premarket), `forming`. Without that line an item shows less and keeps "no 3m break printed".
+  const NONE = '- m3.lastBreak: none since the RTH open.';
+  const M = require('../../scripts/lib/trading/market-state');
+  const an = require('../../scripts/lib/tunables').analysis();
+  const th = { crossesChop: an.regime.rangeCrosses, maxPullbackDepth: an.pullbackRead.maxStateDepth };
+  const et = hhmm => new Date(Date.parse('2026-01-06T05:00:00.000Z') + (Number(hhmm.slice(0, 2)) * 60 + Number(hhmm.slice(3))) * 60000).toISOString();
+  const pre = (kind, direction, level, at) => ({ kind, direction, level, barsAgo: 5, at: et(at) });
+  for (const [t, live] of [['09:39', { last: pre('BOS', 'up', 21440, '09:15'), previous: pre('BOS', 'up', 21420, '08:51') }], ['09:39', { last: null, previous: null }], ['10:42', { last: pre('BOS', 'up', 21440, '09:24'), previous: null }]]) {
+    const b = { minutes: 3, closedAt: et(t), sections: { h1: { data: { h4: { trend: 'up' }, h1: { trend: 'up' } } }, m3: { data: { lastBreak: live } } } };
+    assert.strictEqual(Q.marketStateOfText(head(t, [BL, NONE])), M.marketStateLine(M.stateOf(b, th)), `${t} ${JSON.stringify(live.last)}`);
+  }
+  assert.strictEqual(Q.marketStateOfText(head('09:39', [BL, NONE])), 'Market state (3m): forming (no RTH structure yet); 4h+1h up');
+  assert.strictEqual(Q.marketStateOfText(head('09:39', [BL])), 'Market state (3m): ranging: no 3m break printed; 4h+1h up');
+  // The live briefing prints this line from the same two functions (briefing.js).
+  assert.match(fs.readFileSync(path.join(__dirname, '../../scripts/lib/trading/briefing.js'), 'utf8'), /marketStateLine\(stateOf\(b, STATE_TH\)\)/);
   const PBL = '- Pullback (15m, long leg 21462.5 -> 21538.75): depth 54% of the leg; 10 bars since the extreme.';
   assert.strictEqual(Q.marketStateOfText(head('10:30', [BL, PBL])), 'Market state (3m): ranging: no 3m break printed; pullback (long leg 21462.5 -> 21538.75, depth 54%); 4h+1h up');
   assert.strictEqual(Q.marketStateOfText(head('10:30', [BL, '- Pullback (15m, long leg 21462.5 -> 21538.75): the leg given back past its origin; 30 bars since the extreme.'])), 'Market state (3m): ranging: no 3m break printed; 4h+1h up');

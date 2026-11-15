@@ -220,6 +220,10 @@ function briefingOfText(text) {
     const prot = lb[5] ? { protected: { side: lb[5], level: +lb[6], at: null, brokenAt: lb[7] ? isoAt(minOf(lb[7])) : null } } : {};
     m3.lastBreak = { last: { ...brk(lb[1], lb[2], lb[3], lb[4]), ...prot }, previous: lb[8] ? brk(lb[8], lb[9], lb[10], lb[11]) : null };
   }
+  // `m3.lastBreak: none since the RTH open` (round 17, q95): the item states its RTH breaks, none (the live JSON's breaks
+  // all premarket, or none).
+  const none = /\n- m3\.lastBreak: none since the RTH open/.test(t);
+  if (none && !lb) m3.lastBreak = { last: null, previous: null };
   const day = /\n- Day so far \([^\n]*?\): (rotational|mixed|directional|too early)[^\n]*?RTH VWAP crosses (\d+)/.exec(t);
   const today = {};
   if (day) today.soFar = day[1] === 'too early' ? { status: 'too early', vwapCrosses: +day[2] } : { status: 'read', read: day[1], vwapCrosses: +day[2] };
@@ -240,9 +244,10 @@ function briefingOfText(text) {
   };
   return {
     minutes: 3,
-    // The clock as the close only where the item prints both 3m breaks (the RTH pair reads them); an item that leaves the
-    // line or the previous break out shows less, never "not enough RTH structure".
-    ...(now !== null && lb && lb[8] ? { closedAt: isoAt(now) } : {}),
+    // The clock as the close only where the item states its RTH breaks: both 3m breaks printed (the RTH pair reads them),
+    // or none since the RTH open (forming); an item that leaves the line or the previous break out shows less, never
+    // "not enough RTH structure".
+    ...(now !== null && ((lb && lb[8]) || (none && !lb)) ? { closedAt: isoAt(now) } : {}),
     sections: { h1: { data: h1Data }, m3: { data: m3 }, ...(Object.keys(m15).length ? { m15: { data: m15 } } : {}) },
   };
 }
