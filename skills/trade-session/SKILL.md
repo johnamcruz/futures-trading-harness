@@ -144,7 +144,8 @@ line of its PLAN; taught: the gate and `compose_check` do not read it):
   - Choppy movement → `chop`, aligned frames too: `m3.lastBreak` last and
     previous both CHoCH (breaks both ways) with the Day so far
     `rotational` or many RTH VWAP crosses; never one fact alone, never
-    one BOS or CHoCH.
+    one BOS or CHoCH, and not inside an open `Pullback` line: its 3m
+    CHoCH against then back is the watch.
   - Else your 4h and 1h both one way → that trend class (a 15m pullback,
     `range` or `transition` under them doesn't cancel it, nor does your
     `frames disagree`; a pause keeps one-way structure).
@@ -154,8 +155,7 @@ line of its PLAN; taught: the gate and `compose_check` do not read it):
     floor, not your 4h.
   - A frame's `range` or `transition` alone is never `chop` (range is
     geometry, chop quality). Inside an open `Pullback` line a pause is
-    never `chop`: a 3m CHoCH against, then one back, is the pullback and
-    its watch.
+    never `chop`.
 - `chop` → no entry, sit out. A lower-timeframe range inside the 4h + 1h
   trend (a range day too): setups at the edge the side's way are OK.
 - A take: `class` on its side (`trend-up` long, `trend-down` short), your

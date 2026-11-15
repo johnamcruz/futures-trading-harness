@@ -1784,7 +1784,9 @@ Frozen definitions:
   briefing: the day so far rotational (C1) or directional the side's way
   (T1); the 15m breaking both ways, its last and previous breaks both
   CHoCH (C2); the 15m trend the side's way (T2) or against (C9); the 3m
-  breaking both ways, the same on `m3.lastBreak` (C3); the 3m regime the
+  breaking both ways, the same on `m3.lastBreak`, with no open `Pullback`
+  line printed (inside one the pair is the pullback and its watch, as
+  taught) (C3); the 3m regime the
   side's way (T3) or against (C9, once); the Bias
   line naming no side (C4); session VWAP crosses at or above
   `signals.crossesChop` (C7) or at or below `signals.crossesTrendMax` with
@@ -1794,9 +1796,14 @@ Frozen definitions:
   only; B: chop outnumbers trend; D: both, trend at least chop.
 - **The coded read**: choppy movement reads `chop`, an aligned day too:
   the 3m breaking both ways (its last and previous breaks both CHoCH) and
-  either the day so far rotational or session VWAP crosses at or above
-  `signals.crossesChop`, never one fact alone; else the 4h and 1h agreeing
-  up or down read `trend-<way>`; else `unclear`. It is never the model's.
+  either the day so far rotational or its RTH VWAP crosses (the Day so far
+  line's count, the one the skills teach) at or above
+  `signals.crossesChop`, never one fact alone, and never with an open
+  `Pullback` line printed; else the 4h and 1h agreeing up or down read
+  `trend-<way>`; else `unclear`. It is never the model's. (`day-context`'s
+  `daySoFar` config has no crosses threshold, so the existing
+  `crossesChop` (5, the regime's `range` cross count too) is used; C7
+  still reads the session crosses, as frozen.)
 - **Chop is not range** (the owner's rule, the chop pull request): chop is
   the quality of movement, range its geometry. A 15m `range` or a 3m
   `range` regime is neither a chop signal nor the coded read's `chop`; C2,

@@ -104,8 +104,12 @@ test('context quiz: every layer asked, ids unique, the bar the whole quiz at K 5
   // the deep case, close to the picture a read, the 15m and 3m CISD; closed choices, each measured at k=3 before it entered the bar).
   // 98 since q113-q122 (feat/chop-read, owner-approved 2026-11-14: chop is the quality of movement, range its geometry;
   // repeated CHoCH both ways is chop, one CHoCH never; aligned and choppy is chop; a pause inside a Pullback never; a range
-  // day is catchable at the edge the side's way, its mid-range churn chop; transitional is unclear).
+  // day is catchable at the edge the side's way, its mid-range churn chop; transitional is unclear; q123, the CHoCH pair
+  // inside an open Pullback on a rotational day: the watch, not chop, Fable round 1). q120 (one 3m CHoCH inside a pullback,
+  // rotational: not chop) was dropped before any run: at 107 questions the gate's Monte Carlo misses its detection bound
+  // under a fixed slip count; q114, q123 and trend-vs-range's example cover its point.
   assert.strictEqual(QUIZ.questions.length, 98);
+  assert.ok(!QUIZ.questions.some(x => x.id === 'q120'), 'q120 dropped');
   for (const id of ['q71', 'q72', 'q73', 'q74', 'q75', 'q76', 'q77', 'q78']) assert.ok(!QUIZ.questions.some(x => x.id === id), id);
   assert.strictEqual(QUIZ.partB.length, 8);
 });
@@ -239,20 +243,20 @@ test('context quiz: the pullback questions (q87-q112) are asked against the prom
 });
 
 // The chop read (feat/chop-read, owner-approved 2026-11-14): chop is the quality of movement, range its geometry.
-test('context quiz: the chop-read questions (q113-q122) are asked against the prompt holding the sentence each anchors to, go missing without it, on the code writers\' lines', () => {
+test('context quiz: the chop-read questions (q113-q123, less q120) are asked against the prompt holding the sentence each anchors to, go missing without it, on the code writers\' lines', () => {
   const prompts = Q.buildPrompts(ROOT, QUIZ);
   const flat = t => t.replace(/\s+/g, ' ');
   const cut = re => Object.fromEntries(Object.entries(prompts).map(([k, v]) => [k, flat(v).replace(re, '')]));
   const TR = ['trend-vs-range'];
   const want = [
     ['q113', 'lookup', TR, 'chop: structure broken both ways, no continuation; sit out', /Structure broken both ways with no continuation is chop, not a run of reversals\./g],
-    ['q114', 'head', undefined, 'wait: a reversal attempt; class trend-up, not chop; no short', /\(3m: the watch restarts; 15m: a reversal attempt\): wait\./g],
+    ['q114', 'head', undefined, 'wait: a reversal attempt; class trend-up, not chop; no short', /never one fact alone, never one BOS or CHoCH/g],
     ['q115', 'lookup', TR, 'F2', /transitional \(old trend weakening, new one unconfirmed\) → `unclear` \(frame `transition`\)/g],
     ['q116', 'lookup', TR, 'chop: choppy movement needs no edges', /Chop needs no edges; a range can rotate cleanly\./g],
     ['q117', 'lookup', TR, 'range, not chop: class trend-up; a long setup at the low edge is allowed', /A range day inside the 4h \+ 1h side is catchable: the turn at the edge the side's way/g],
     ['q118', 'head', undefined, 'F4', /Inside an open `Pullback` line a pause is never `chop`/g],
     ['q119', 'head', undefined, 'chop: choppy movement, aligned or not; sit out', /Choppy movement → `chop`, aligned frames too/g],
-    ['q120', 'head', undefined, 'trend-up, not chop: the pullback starting; wait for the 15m turn', /never one fact alone, never one BOS or CHoCH\./g],
+    ['q123', 'head', undefined, 'trend-up, not chop: the watch; wait for the 15m turn and a 3m BOS up', /and not inside an open `Pullback` line: its 3m CHoCH against then back is the watch/g],
     ['q121', 'head', undefined, 'enter long: the turn at the low edge the side\'s way, 3m BOS near value', /setups at the edge the side's way are OK/g],
     ['q122', 'head', undefined, 'chop: mid-range churn; sit out', /`chop` → no entry, sit out\./g],
   ];
@@ -282,7 +286,9 @@ test('context quiz: the chop-read questions (q113-q122) are asked against the pr
   // Repeated CHoCH both ways (the printed chop fact) where the answer is chop; never on the pullback, pause or edge items.
   const both = id => /m3\.lastBreak: last CHoCH \w+ at [\d.]+ \(barsAgo \d+\), previous CHoCH/.test(text(id));
   for (const id of ['q113', 'q116', 'q119', 'q122']) assert.ok(both(id), `${id}: breaks both ways`);
-  for (const id of ['q114', 'q117', 'q118', 'q120', 'q121']) assert.ok(!both(id), `${id}: one CHoCH at most`);
+  for (const id of ['q114', 'q117', 'q118', 'q121']) assert.ok(!both(id), `${id}: one CHoCH at most`);
+  // The SETUP15 hard case: the pair and rotational with many crosses, inside an open Pullback: the trend class, not chop.
+  assert.ok(both('q123') && /\n- Pullback \(15m, long leg/.test(text('q123')) && /rotational: .*RTH VWAP crosses [5-9]/.test(text('q123')), 'q123: the full chop facts inside a Pullback');
 });
 
 // The pullback and chop blocks' free-phrase choice items (q88-q129) hold the correct choice where a seeded shuffle put it (sha256 of

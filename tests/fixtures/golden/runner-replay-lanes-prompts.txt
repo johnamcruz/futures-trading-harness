@@ -890,7 +890,8 @@ In an autonomous cycle the bar briefing (`bar_briefing`, the
    - Price above a rising RTH VWAP, with pullbacks holding it → buyers in
      control; buy pullbacks to VWAP.
    - Price crossing VWAP repeatedly → rotation day: a read against trend
-     entries.
+     entries; at a range day's edge the side's way, the rotation is the
+     location, not an against (`trend-vs-range`).
    - Distance from VWAP in ATRs: a read, never a pass alone (far from
      VWAP did no worse in the census).
 2.
@@ -2302,7 +2303,8 @@ In an autonomous cycle the bar briefing (`bar_briefing`, the
    - Price above a rising RTH VWAP, with pullbacks holding it → buyers in
      control; buy pullbacks to VWAP.
    - Price crossing VWAP repeatedly → rotation day: a read against trend
-     entries.
+     entries; at a range day's edge the side's way, the rotation is the
+     location, not an against (`trend-vs-range`).
    - Distance from VWAP in ATRs: a read, never a pass alone (far from
      VWAP did no worse in the census).
 2.
@@ -3723,7 +3725,8 @@ In an autonomous cycle the bar briefing (`bar_briefing`, the
    - Price above a rising RTH VWAP, with pullbacks holding it → buyers in
      control; buy pullbacks to VWAP.
    - Price crossing VWAP repeatedly → rotation day: a read against trend
-     entries.
+     entries; at a range day's edge the side's way, the rotation is the
+     location, not an against (`trend-vs-range`).
    - Distance from VWAP in ATRs: a read, never a pass alone (far from
      VWAP did no worse in the census).
 2.
@@ -5135,7 +5138,8 @@ In an autonomous cycle the bar briefing (`bar_briefing`, the
    - Price above a rising RTH VWAP, with pullbacks holding it → buyers in
      control; buy pullbacks to VWAP.
    - Price crossing VWAP repeatedly → rotation day: a read against trend
-     entries.
+     entries; at a range day's edge the side's way, the rotation is the
+     location, not an against (`trend-vs-range`).
    - Distance from VWAP in ATRs: a read, never a pass alone (far from
      VWAP did no worse in the census).
 2.
@@ -6556,7 +6560,8 @@ In an autonomous cycle the bar briefing (`bar_briefing`, the
    - Price above a rising RTH VWAP, with pullbacks holding it → buyers in
      control; buy pullbacks to VWAP.
    - Price crossing VWAP repeatedly → rotation day: a read against trend
-     entries.
+     entries; at a range day's edge the side's way, the rotation is the
+     location, not an against (`trend-vs-range`).
    - Distance from VWAP in ATRs: a read, never a pass alone (far from
      VWAP did no worse in the census).
 2.
@@ -7968,7 +7973,8 @@ In an autonomous cycle the bar briefing (`bar_briefing`, the
    - Price above a rising RTH VWAP, with pullbacks holding it → buyers in
      control; buy pullbacks to VWAP.
    - Price crossing VWAP repeatedly → rotation day: a read against trend
-     entries.
+     entries; at a range day's edge the side's way, the rotation is the
+     location, not an against (`trend-vs-range`).
    - Distance from VWAP in ATRs: a read, never a pass alone (far from
      VWAP did no worse in the census).
 2.
@@ -9380,7 +9386,8 @@ In an autonomous cycle the bar briefing (`bar_briefing`, the
    - Price above a rising RTH VWAP, with pullbacks holding it → buyers in
      control; buy pullbacks to VWAP.
    - Price crossing VWAP repeatedly → rotation day: a read against trend
-     entries.
+     entries; at a range day's edge the side's way, the rotation is the
+     location, not an against (`trend-vs-range`).
    - Distance from VWAP in ATRs: a read, never a pass alone (far from
      VWAP did no worse in the census).
 2.
@@ -10888,7 +10895,8 @@ In an autonomous cycle the bar briefing (`bar_briefing`, the
    - Price above a rising RTH VWAP, with pullbacks holding it → buyers in
      control; buy pullbacks to VWAP.
    - Price crossing VWAP repeatedly → rotation day: a read against trend
-     entries.
+     entries; at a range day's edge the side's way, the rotation is the
+     location, not an against (`trend-vs-range`).
    - Distance from VWAP in ATRs: a read, never a pass alone (far from
      VWAP did no worse in the census).
 2.
@@ -12393,7 +12401,8 @@ In an autonomous cycle the bar briefing (`bar_briefing`, the
    - Price above a rising RTH VWAP, with pullbacks holding it → buyers in
      control; buy pullbacks to VWAP.
    - Price crossing VWAP repeatedly → rotation day: a read against trend
-     entries.
+     entries; at a range day's edge the side's way, the rotation is the
+     location, not an against (`trend-vs-range`).
    - Distance from VWAP in ATRs: a read, never a pass alone (far from
      VWAP did no worse in the census).
 2.
@@ -13892,7 +13901,8 @@ In an autonomous cycle the bar briefing (`bar_briefing`, the
    - Price above a rising RTH VWAP, with pullbacks holding it → buyers in
      control; buy pullbacks to VWAP.
    - Price crossing VWAP repeatedly → rotation day: a read against trend
-     entries.
+     entries; at a range day's edge the side's way, the rotation is the
+     location, not an against (`trend-vs-range`).
    - Distance from VWAP in ATRs: a read, never a pass alone (far from
      VWAP did no worse in the census).
 2.
@@ -15318,7 +15328,8 @@ In an autonomous cycle the bar briefing (`bar_briefing`, the
    - Price above a rising RTH VWAP, with pullbacks holding it → buyers in
      control; buy pullbacks to VWAP.
    - Price crossing VWAP repeatedly → rotation day: a read against trend
-     entries.
+     entries; at a range day's edge the side's way, the rotation is the
+     location, not an against (`trend-vs-range`).
    - Distance from VWAP in ATRs: a read, never a pass alone (far from
      VWAP did no worse in the census).
 2.
@@ -16826,7 +16837,8 @@ In an autonomous cycle the bar briefing (`bar_briefing`, the
    - Price above a rising RTH VWAP, with pullbacks holding it → buyers in
      control; buy pullbacks to VWAP.
    - Price crossing VWAP repeatedly → rotation day: a read against trend
-     entries.
+     entries; at a range day's edge the side's way, the rotation is the
+     location, not an against (`trend-vs-range`).
    - Distance from VWAP in ATRs: a read, never a pass alone (far from
      VWAP did no worse in the census).
 2.
@@ -18325,7 +18337,8 @@ In an autonomous cycle the bar briefing (`bar_briefing`, the
    - Price above a rising RTH VWAP, with pullbacks holding it → buyers in
      control; buy pullbacks to VWAP.
    - Price crossing VWAP repeatedly → rotation day: a read against trend
-     entries.
+     entries; at a range day's edge the side's way, the rotation is the
+     location, not an against (`trend-vs-range`).
    - Distance from VWAP in ATRs: a read, never a pass alone (far from
      VWAP did no worse in the census).
 2.
@@ -19824,7 +19837,8 @@ In an autonomous cycle the bar briefing (`bar_briefing`, the
    - Price above a rising RTH VWAP, with pullbacks holding it → buyers in
      control; buy pullbacks to VWAP.
    - Price crossing VWAP repeatedly → rotation day: a read against trend
-     entries.
+     entries; at a range day's edge the side's way, the rotation is the
+     location, not an against (`trend-vs-range`).
    - Distance from VWAP in ATRs: a read, never a pass alone (far from
      VWAP did no worse in the census).
 2.
@@ -21257,7 +21271,8 @@ In an autonomous cycle the bar briefing (`bar_briefing`, the
    - Price above a rising RTH VWAP, with pullbacks holding it → buyers in
      control; buy pullbacks to VWAP.
    - Price crossing VWAP repeatedly → rotation day: a read against trend
-     entries.
+     entries; at a range day's edge the side's way, the rotation is the
+     location, not an against (`trend-vs-range`).
    - Distance from VWAP in ATRs: a read, never a pass alone (far from
      VWAP did no worse in the census).
 2.
@@ -22681,7 +22696,8 @@ In an autonomous cycle the bar briefing (`bar_briefing`, the
    - Price above a rising RTH VWAP, with pullbacks holding it → buyers in
      control; buy pullbacks to VWAP.
    - Price crossing VWAP repeatedly → rotation day: a read against trend
-     entries.
+     entries; at a range day's edge the side's way, the rotation is the
+     location, not an against (`trend-vs-range`).
    - Distance from VWAP in ATRs: a read, never a pass alone (far from
      VWAP did no worse in the census).
 2.
@@ -24016,7 +24032,8 @@ In an autonomous cycle the bar briefing (`bar_briefing`, the
    - Price above a rising RTH VWAP, with pullbacks holding it → buyers in
      control; buy pullbacks to VWAP.
    - Price crossing VWAP repeatedly → rotation day: a read against trend
-     entries.
+     entries; at a range day's edge the side's way, the rotation is the
+     location, not an against (`trend-vs-range`).
    - Distance from VWAP in ATRs: a read, never a pass alone (far from
      VWAP did no worse in the census).
 2.

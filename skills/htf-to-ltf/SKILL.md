@@ -48,11 +48,11 @@ late, not an entry. In a trade, 15m BOS: hold. A CHoCH or CISD against
 (3m: the watch restarts; 15m: a reversal attempt): wait.
 Not in a prop attempt: the trend rule alone (both ranging, the 15m's
 side; no trend anywhere, both sides).
-Then the head trader's own STATE read decides the take (`trade-session`
-step 3): its own 4h and 1h both range, or one of them not trending the
-side, is `unclear` to it; both the side's way, a 15m range, transition
-or pullback under them, is the side's trend class; choppy: `chop`, sit
-out. The briefing's
+Then the head trader's own STATE read decides the take
+(`trade-session`): its own 4h and 1h both range, or one of them not
+trending the side, is `unclear`; both the side's way, a 15m range,
+transition or pullback under them, is the side's trend class; choppy:
+`chop`, sit out, aligned or not. The briefing's
 `Bias:`/`Trend rule:` lines are the gate's floor (what it refuses),
 never your side: your own STATE read is stricter.
 

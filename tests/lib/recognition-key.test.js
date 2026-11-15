@@ -11,7 +11,7 @@ const TH = { crossesChop: 5, crossesTrendMax: 3 };
 const f = o => ({
   frames: { '4h': 'up', '1h': 'up', '15m': 'up' }, regime: 'trend-up', sessionCrosses: 1, vwapSide: 'above', dayType: null, openVs: null,
   windowEntries: 'allowed', bias: 'Bias: long only (4h up, 1h up; short refused).', biasSides: { long: true, short: false },
-  declared: { long: true, short: false }, day: { word: 'directional', dir: 'up' }, bothWays: { '15m': false, '3m': false }, ...o,
+  declared: { long: true, short: false }, day: { word: 'directional', dir: 'up' }, bothWays: { '15m': false, '3m': false }, pullback: false, rthCrosses: null, ...o,
 });
 const ids = s => [s.c, s.t];
 
@@ -76,12 +76,14 @@ test('evidenceWord: the bias side\'s class C trend, B chop, A or D unclear; no b
   assert.strictEqual(K.evidenceWord(key({ biasSide: null, cls: { long: 'C', short: 'C', none: 'A' } })), 'unclear');
 });
 
-test('choppy: the full choppy-movement evidence: the 3m breaks both ways (last and previous both CHoCH) AND the day so far rotational or session VWAP crosses at crossesChop; never one fact alone', () => {
-  const g = o => K.choppy(f({ day: { word: 'mixed', dir: null }, sessionCrosses: 1, ...o }), TH);
+test('choppy: the full choppy-movement evidence: the 3m breaks both ways (last and previous both CHoCH) AND the day so far rotational or its RTH VWAP crosses (the Day so far line\'s count, the one the skills teach) at crossesChop; never one fact alone; never inside an open Pullback', () => {
+  const g = o => K.choppy(f({ day: { word: 'mixed', dir: null }, sessionCrosses: 1, rthCrosses: 1, ...o }), TH);
   assert.strictEqual(g({ bothWays: { '15m': false, '3m': true }, day: { word: 'rotational', dir: null } }), true);
-  assert.strictEqual(g({ bothWays: { '15m': false, '3m': true }, sessionCrosses: 5 }), true, 'at the chop threshold');
-  assert.strictEqual(g({ bothWays: { '15m': false, '3m': true }, sessionCrosses: 4 }), false, 'breaks both ways alone');
-  assert.strictEqual(g({ day: { word: 'rotational', dir: null }, sessionCrosses: 9 }), false, 'rotational and crosses without the breaks');
+  assert.strictEqual(g({ bothWays: { '15m': false, '3m': true }, rthCrosses: 5 }), true, 'at the chop threshold');
+  assert.strictEqual(g({ bothWays: { '15m': false, '3m': true }, rthCrosses: 4 }), false, 'breaks both ways alone');
+  assert.strictEqual(g({ bothWays: { '15m': false, '3m': true }, sessionCrosses: 9 }), false, 'the session count is not the taught one');
+  assert.strictEqual(g({ day: { word: 'rotational', dir: null }, rthCrosses: 9 }), false, 'rotational and crosses without the breaks');
+  assert.strictEqual(g({ bothWays: { '15m': false, '3m': true }, day: { word: 'rotational', dir: null }, rthCrosses: 9, pullback: true }), false, 'inside an open Pullback the CHoCH pair is the watch');
   assert.strictEqual(g({ bothWays: { '15m': true, '3m': false }, day: { word: 'rotational', dir: null } }), false, 'the 3m decides (m3.lastBreak, as taught)');
   assert.strictEqual(g({ bothWays: { '15m': false, '3m': null }, day: { word: 'rotational', dir: null } }), false, 'unknown breaks');
 });
@@ -100,11 +102,35 @@ test('codedWord: choppy movement chop (aligned days too); else 4h and 1h agreein
 });
 
 test('presentKey carries choppy from its facts and thresholds', () => {
-  const b = { sections: { h1: { data: { h4: { trend: 'up' }, h1: { trend: 'up' } } }, m3: { data: { lastBreak: { last: { kind: 'CHoCH', direction: 'up' }, previous: { kind: 'CHoCH', direction: 'down' } }, vwap: { sessionCrossesLast30: 6, side: 'above' } } } } };
+  const b = { sections: { h1: { data: { h4: { trend: 'up' }, h1: { trend: 'up' } } }, m3: { data: { lastBreak: { last: { kind: 'CHoCH', direction: 'up' }, previous: { kind: 'CHoCH', direction: 'down' } }, vwap: { sessionCrossesLast30: 1, side: 'above' }, today: { soFar: { status: 'read', read: 'mixed', direction: 'up', vwapCrosses: 6 } } } } } };
   assert.strictEqual(K.presentKey(b, TH).choppy, true);
   assert.strictEqual(K.codedWord(K.presentKey(b, TH)), 'chop');
   assert.strictEqual(K.presentKey(b, { ...TH, crossesChop: 7 }).choppy, false);
   assert.strictEqual(K.codedWord(K.presentKey(b, { ...TH, crossesChop: 7 })), 'trend-up');
+});
+
+// Fable round 1's reproduction: an aligned pullback whose 3m CHoCH down then CHoCH up (the watch) prints on a rotational
+// day must not read chop in any of the three words: C3, choppy (the coded read) and the evidence word.
+test('the taught guardrail: an open Pullback line\'s 3m CHoCH pair is neither C3 nor choppy; the coded read and the evidence word do not call chop there', () => {
+  const PB = { frame: '15m', side: 'long', leg: { origin: 21462.5, extreme: 21538.75 }, depth: 0.38, pastOrigin: false, counter: { bars: 10, volRatio: 0.6, volume: 'falling', rangeRatio: 0.5 }, swing: { '15m': { price: 21462.5, holds: true }, '1h': { price: 21390.25, holds: true } }, against: { '15m': null, '1h': null } };
+  const brief = pullback => ({ sections: {
+    h1: { data: { h4: { trend: 'up' }, h1: { trend: 'up' } } }, m15: { data: { frame: { trend: 'range' } } },
+    m3: { data: { pullback, lastBreak: { last: { kind: 'CHoCH', direction: 'up' }, previous: { kind: 'CHoCH', direction: 'down' } }, regime: { primary: 'transition' }, vwap: { sessionCrossesLast30: 2, side: 'above' }, today: { soFar: { status: 'read', read: 'rotational', direction: 'up', vwapCrosses: 2 } } } },
+  } });
+  const k = K.presentKey(brief(PB), TH);
+  assert.strictEqual(k.facts.pullback, true);
+  assert.strictEqual(k.choppy, false);
+  assert.strictEqual(K.codedWord(k), 'trend-up');
+  for (const s of ['long', 'short', 'none']) assert.ok(!k.signals[s].c.includes('C3'), s);
+  assert.notStrictEqual(K.evidenceWord(k), 'chop');
+  // The same candle with no Pullback line printed: the full choppy evidence, chop.
+  const n = K.presentKey(brief(null), TH);
+  assert.strictEqual(n.facts.pullback, false);
+  assert.strictEqual(n.choppy, true);
+  assert.strictEqual(K.codedWord(n), 'chop');
+  assert.ok(n.signals.long.c.includes('C3'));
+  // A pullback object the briefing does not print (no leg) is no open Pullback line.
+  assert.strictEqual(K.presentKey(brief({ frame: '15m' }), TH).facts.pullback, false);
 });
 
 test('metFields: the fields of the signals met for a side; the side-free ones with no side', () => {
@@ -126,6 +152,9 @@ test('facts read the briefing\'s own fields (a synthetic briefing): frames, regi
   assert.strictEqual(x.dayType, 'trend down');
   assert.deepStrictEqual(x.day, { word: 'rotational', dir: 'down' });
   assert.deepStrictEqual(x.bothWays, { '15m': null, '3m': null }, 'no lastBreak printed: unknown');
+  assert.strictEqual(x.pullback, false);
+  assert.strictEqual(x.rthCrosses, null, 'no RTH count printed');
+  assert.strictEqual(K.facts({ sections: { m3: { data: { today: { soFar: { status: 'too early', vwapCrosses: 3 } } } } } }).rthCrosses, 3, 'the Day so far line prints its RTH crosses early too');
   const br = (k1, d1, k2, d2) => ({ last: { kind: k1, direction: d1 }, previous: k2 ? { kind: k2, direction: d2 } : null });
   const y = K.facts({ sections: { m15: { data: { lastBreak: br('CHoCH', 'up', 'CHoCH', 'down') } }, m3: { data: { lastBreak: br('CHoCH', 'down', 'BOS', 'up') } } } });
   assert.deepStrictEqual(y.bothWays, { '15m': true, '3m': false }, 'one CHoCH (last and previous opposite) is not both ways; two CHoCHs are');

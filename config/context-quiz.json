@@ -1662,7 +1662,7 @@
       "prompt": "head",
       "text": "Briefing lines (synthetic, 10:21 ET), flat:\n- Bias: long only (4h up, 1h up; short refused).\n- Pullback (15m, long leg 21462.5 -> 21538.75): depth 54% of the leg; 10 bars since the extreme, volume 0.6x the leg's per bar (falling), range 0.5x; swings since the extreme: 15m 21462.5 holds, 1h 21390.25 holds; 15m break against: CHoCH down 21500 (1 bars ago), 1h: none.\n- Day so far (17 3m bars; `day-context`): mixed up: efficiency 0.14 (x sqrt(bars) 0.58), RTH VWAP crosses 3, range 2.9 x 3m ATR(14), net up (its size: Trend declared? day's move).\n- 15m (setup candle, closed 10:15): bearish engulfing, close bottom third, range 1.1 ATR, vol 1.3x.\n- m3.lastBreak: last BOS down at 21494.75 (barsAgo 3), previous CHoCH down at 21503.25 (barsAgo 9).\nOne 15m CHoCH down inside the pullback. What is your class and action?",
       "rule": "one 15m CHoCH against inside a pullback is a reversal attempt: wait; one CHoCH never classifies the market as chop; never counter",
-      "anchor": "(3m: the watch restarts; 15m: a reversal attempt): wait.",
+      "anchor": "never one fact alone, never one BOS or CHoCH",
       "choices": [
         "chop: sit out the rest of the day",
         "short: the 15m CHoCH down is the reversal",
@@ -1678,7 +1678,7 @@
       "lookup": [
         "trend-vs-range"
       ],
-      "text": "Briefing lines (synthetic, 10:48 ET), flat:\n- Bias: long only (4h up, 1h range; short refused).\n- Day so far (26 3m bars; `day-context`): mixed up: efficiency 0.1 (x sqrt(bars) 0.51), RTH VWAP crosses 3, range 3.1 x 3m ATR(14), net up (its size: Trend declared? day's move).\n- 1h lastBreak: last CHoCH down at 21488.50 (barsAgo 2), previous BOS up at 21540.25 (barsAgo 9).\nYour read: 4h up; the 1h up leg is weakening (a CHoCH down, no BOS down since), the 15m `transition`: the old trend weakening, a new one not confirmed. Which class do you write in STATE?\nF1 - chop\nF2 - unclear\nF3 - trend-up\nF4 - trend-down\nAnswer with ONE of F1-F4.",
+      "text": "Briefing lines (synthetic, 10:48 ET), flat:\n- Bias: long only (4h up, 1h range; short refused).\n- Day so far (26 3m bars; `day-context`): mixed up: efficiency 0.1 (x sqrt(bars) 0.51), RTH VWAP crosses 3, range 3.1 x 3m ATR(14), net up (its size: Trend declared? day's move).\n- h1.lastBreak: last CHoCH down at 21488.50 (barsAgo 2), previous BOS up at 21540.25 (barsAgo 9).\nYour read: 4h up; the 1h up leg is weakening (a CHoCH down, no BOS down since), the 15m `transition`: the old trend weakening, a new one not confirmed. Which class do you write in STATE?\nF1 - chop\nF2 - unclear\nF3 - trend-up\nF4 - trend-down\nAnswer with ONE of F1-F4.",
       "rule": "transitional: the old trend weakening and a new one not confirmed -> unclear (frame word transition)",
       "anchor": "transitional (old trend weakening, new one unconfirmed) → `unclear` (frame `transition`)",
       "choices": [
@@ -1729,7 +1729,7 @@
       "id": "q118",
       "layer": "bias",
       "prompt": "head",
-      "text": "Briefing lines (synthetic, 10:33 ET), flat:\n- Bias: short only (4h down, 1h down; long refused).\n- Pullback (15m, short leg 21610.5 -> 21530.25): depth 37% of the leg; 7 bars since the extreme, volume 0.5x the leg's per bar (falling), range 0.4x; swings since the extreme: 15m 21610.5 holds, 1h 21655.75 holds; 15m break against: none, 1h: none.\n- Day so far (20 3m bars; `day-context`): mixed down: efficiency 0.12 (x sqrt(bars) 0.54), RTH VWAP crosses 3, range 2.8 x 3m ATR(14), net down (its size: Trend declared? day's move).\n- 15m (setup candle, closed 10:30): inside bar, close middle third, range 0.4 ATR, vol 0.6x.\n- m3.lastBreak: last CHoCH up at 21556.25 (barsAgo 2), previous BOS down at 21531.75 (barsAgo 11).\nYour read: 4h down, 1h down, 15m `transition` (small overlapping inside candles, the swing holds). Which class do you write in STATE?\nF1 - chop\nF2 - unclear\nF3 - trend-up\nF4 - trend-down\nAnswer with ONE of F1-F4.",
+      "text": "Briefing lines (synthetic, 10:33 ET), flat:\n- Bias: short only (4h down, 1h down; long refused).\n- Pullback (15m, short leg 21610.5 -> 21530.25): depth 37% of the leg; 7 bars since the extreme, volume 0.5x the leg's per bar (falling), range 0.4x; swings since the extreme: 15m 21610.5 holds, 1h 21655.75 holds; 15m break against: none, 1h: none.\n- Day so far (21 3m bars; `day-context`): mixed down: efficiency 0.12 (x sqrt(bars) 0.55), RTH VWAP crosses 3, range 2.8 x 3m ATR(14), net down (its size: Trend declared? day's move).\n- 15m (setup candle, closed 10:30): inside bar, close middle third, range 0.4 ATR, vol 0.6x.\n- m3.lastBreak: last CHoCH up at 21556.25 (barsAgo 2), previous BOS down at 21531.75 (barsAgo 11).\nYour read: 4h down, 1h down, 15m `transition` (small overlapping inside candles, the swing holds). Which class do you write in STATE?\nF1 - chop\nF2 - unclear\nF3 - trend-up\nF4 - trend-down\nAnswer with ONE of F1-F4.",
       "rule": "a pause inside an open Pullback is never chop: the 4h and 1h both down -> trend-down",
       "anchor": "Inside an open `Pullback` line a pause is never `chop`",
       "choices": [
@@ -1754,21 +1754,6 @@
         "trend-down: the last CHoCH is down"
       ],
       "answer": "chop: choppy movement, aligned or not; sit out"
-    },
-    {
-      "id": "q120",
-      "layer": "bias",
-      "prompt": "head",
-      "text": "Briefing lines (synthetic, 10:12 ET), flat:\n- Bias: long only (4h up, 1h up; short refused).\n- Pullback (15m, long leg 21462.5 -> 21538.75): depth 38% of the leg; 10 bars since the extreme, volume 0.6x the leg's per bar (falling), range 0.5x; swings since the extreme: 15m 21462.5 holds, 1h 21390.25 holds; 15m break against: none, 1h: none.\n- Day so far (14 3m bars; `day-context`): rotational: efficiency 0.08 (x sqrt(bars) 0.3), RTH VWAP crosses 6, range 2.6 x 3m ATR(14), net up (its size: Trend declared? day's move).\n- 15m (setup candle, closed 10:00): none, close middle third, range 0.6 ATR, vol 0.7x.\n- m3.lastBreak: last CHoCH down at 21511.25 (barsAgo 1), previous BOS up at 21536.00 (barsAgo 14).\nOne 3m CHoCH down inside the pullback; the Day so far reads rotational. What is your class and action?",
-      "rule": "one CHoCH never classifies chop; inside an open Pullback the 3m CHoCH against is the pullback starting: wait for the 15m turn, class the trend",
-      "anchor": "never one fact alone, never one BOS or CHoCH.",
-      "choices": [
-        "chop: rotational and a CHoCH; sit out",
-        "trend-up, not chop: the pullback starting; wait for the 15m turn",
-        "short: the 3m CHoCH down",
-        "enter long now at the 3m close"
-      ],
-      "answer": "trend-up, not chop: the pullback starting; wait for the 15m turn"
     },
     {
       "id": "q121",
@@ -1799,6 +1784,21 @@
         "chop: mid-range churn; sit out"
       ],
       "answer": "chop: mid-range churn; sit out"
+    },
+    {
+      "id": "q123",
+      "layer": "entry",
+      "prompt": "head",
+      "text": "Briefing lines (synthetic, 10:30 ET), flat:\n- Bias: long only (4h up, 1h up; short refused).\n- Pullback (15m, long leg 21462.5 -> 21538.75): depth 36% of the leg; 10 bars since the extreme, volume 0.6x the leg's per bar (falling), range 0.5x; swings since the extreme: 15m 21462.5 holds, 1h 21390.25 holds; 15m break against: none, 1h: none.\n- Day so far (20 3m bars; `day-context`): rotational: efficiency 0.06 (x sqrt(bars) 0.27), RTH VWAP crosses 6, range 2.7 x 3m ATR(14), net up (its size: Trend declared? day's move).\n- 15m (setup candle, closed 10:30): none, close middle third, range 0.5 ATR, vol 0.6x.\n- m3.lastBreak: last CHoCH up at 21514.75 (barsAgo 1), previous CHoCH down at 21509.25 (barsAgo 5).\nInside the pullback: a 3m CHoCH down, then a CHoCH up; the Day so far reads rotational, 6 RTH VWAP crosses. What is your class and action?",
+      "rule": "inside an open Pullback line the 3m CHoCH against then back is the watch, never chop: the trend class; wait for the 15m turn and the first 3m BOS or CISD",
+      "anchor": "and not inside an open `Pullback` line: its 3m CHoCH against then back is the watch",
+      "choices": [
+        "trend-up, not chop: the watch; wait for the 15m turn and a 3m BOS up",
+        "chop: both CHoCH and rotational; sit out",
+        "short: the 3m CHoCH down",
+        "enter long now: the 3m CHoCH up is the entry"
+      ],
+      "answer": "trend-up, not chop: the watch; wait for the 15m turn and a 3m BOS up"
     }
   ],
   "partB": [

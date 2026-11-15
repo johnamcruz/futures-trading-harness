@@ -503,10 +503,10 @@ test('state line: the decision follows the model\'s own STATE read (taught, no c
     // The class follows the frames the model wrote and the movement (feat/chop-read, the owner's chop): choppy movement is
     // chop, aligned frames too, on the full evidence only; else a trend class needs its 4h and 1h that way; else unclear.
     "The class follows your frames and the movement (`trend-vs-range`):",
-    "Choppy movement → `chop`, aligned frames too: `m3.lastBreak` last and previous both CHoCH (breaks both ways) with the Day so far `rotational` or many RTH VWAP crosses; never one fact alone, never one BOS or CHoCH.",
+    "Choppy movement → `chop`, aligned frames too: `m3.lastBreak` last and previous both CHoCH (breaks both ways) with the Day so far `rotational` or many RTH VWAP crosses; never one fact alone, never one BOS or CHoCH, and not inside an open `Pullback` line: its 3m CHoCH against then back is the watch.",
     "Else your 4h and 1h both one way → that trend class (a 15m pullback, `range` or `transition` under them doesn't cancel it, nor does your `frames disagree`; a pause keeps one-way structure).",
     "Else, not both one way → `unclear` (never a trend class, smooth or not)",
-    "A frame's `range` or `transition` alone is never `chop` (range is geometry, chop quality). Inside an open `Pullback` line a pause is never `chop`: a 3m CHoCH against, then one back, is the pullback and its watch.",
+    "A frame's `range` or `transition` alone is never `chop` (range is geometry, chop quality). Inside an open `Pullback` line a pause is never `chop`.",
     // The action: chop sits out; a lower-timeframe range inside the 4h + 1h trend is no chop (owner: a range day is catchable).
     "`chop` → no entry, sit out. A lower-timeframe range inside the 4h + 1h trend (a range day too): setups at the edge the side's way are OK.",
     // A take agrees with the read: the class and the 4h and 1h on the setup's side (the never-counter-HTF rule, in its own words).
@@ -540,7 +540,7 @@ test('state line: the decision follows the model\'s own STATE read (taught, no c
   const htf = read('skills/htf-to-ltf/SKILL.md');
   assert.ok(htf.includes('**The side rule** (in an attempt): each trending 4h or 1h your way, neither against; both ranging: the 15m and `Trend declared?` your way; else no trade.'));
   assert.ok(htf.includes('4h and 1h RANGE, 15m DOWN, declared short: short only.'));
-  assert.ok(htf.includes("Then the head trader's own STATE read decides the take (`trade-session` step 3): its own 4h and 1h both range, or one of them not trending the side, is `unclear` to it; both the side's way, a 15m range, transition or pullback under them, is the side's trend class; choppy: `chop`, sit out."));
+  assert.ok(htf.includes("Then the head trader's own STATE read decides the take (`trade-session`): its own 4h and 1h both range, or one of them not trending the side, is `unclear`; both the side's way, a 15m range, transition or pullback under them, is the side's trend class; choppy: `chop`, sit out, aligned or not."));
   assert.ok(htf.includes("The briefing's `Bias:`/`Trend rule:` lines are the gate's floor (what it refuses), never your side: your own STATE read is stricter."));
   assert.ok(htf.indexOf('Then the head trader') > htf.indexOf('**The side rule**'), 'after the side rule');
   // The documented example (a full long take) satisfies the taught rule: class trend-up, 4h up, 1h up.

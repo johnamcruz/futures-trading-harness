@@ -10,7 +10,8 @@
  *   C1 / T1  the day so far reads rotational / directional the side's way          (field day-so-far)
  *   C2       the 15m breaks both ways: its last and previous breaks both CHoCH        (field 15m-break)
  *   T2       the 15m trend runs the side's way; C9 the 15m against                    (field 15m)
- *   C3       the 3m breaks both ways: its last and previous breaks both CHoCH         (field 3m-break)
+ *   C3       the 3m breaks both ways: its last and previous breaks both CHoCH, no open Pullback line (inside one the
+ *            pair is the pullback and its watch, as taught)                            (field 3m-break)
  *   T3       the 3m regime trends the side's way; C9 trends against (once)            (field regime)
  *   (chop is the quality of movement, range its geometry: a 15m `range` or a 3m `range` regime is neither signal)
  *   C4       the Bias line names no side (neutral or no side) and not this side     (field bias)
@@ -25,7 +26,8 @@
  *                      trend rule allows (bias-line.js biasSides), its class C -> trend-<way>, B -> chop, A or D -> unclear;
  *                      no such side: the side-free signals (C1 C2 C3 C4 C7 C8) class B -> chop, else unclear
  *   choppy(facts, th)  the full choppy-movement evidence, never one fact alone: the 3m breaks both ways (its last and
- *                      previous breaks both CHoCH) AND (the day so far rotational OR session VWAP crosses >= crossesChop)
+ *                      previous breaks both CHoCH) AND (the day so far rotational OR its RTH VWAP crosses, the Day so far
+ *                      line's count, >= crossesChop), and no open Pullback line (the briefing prints one: pullbackLine)
  *   codedWord(key)     the briefing's labels restated (never the model's): choppy -> chop (an aligned day too); 4h and
  *                      1h agree up or down -> trend-<way>; else unclear (a range alone is never chop)
  *
@@ -35,6 +37,7 @@
 
 const { biasLine, biasSides } = require('../../trading/bias-line');
 const { declaredOf } = require('../../trading/entry-rule');
+const { pullbackLine } = require('../../trading/pullback-read');
 
 const SIDES = ['long', 'short'];
 const WAY = { long: 'up', short: 'down' };
@@ -73,6 +76,10 @@ function facts(b) {
     bias, biasSides: sides, declared: Object.fromEntries(SIDES.map(s => [s, (() => { try { return declaredOf(b, s); } catch (_err) { return null; } })()])),
     day: dayOf(m3),
     bothWays: { '15m': bothWaysOf(m15.lastBreak), '3m': bothWaysOf(m3.lastBreak) },
+    // An open Pullback line: the briefing prints one (the same writer); its 3m CHoCH pair is the watch, never chop.
+    pullback: (() => { try { return pullbackLine(m3.pullback) !== null; } catch (_err) { return false; } })(),
+    // The Day so far line's RTH VWAP crosses (the count the skills teach), printed while too early too.
+    rthCrosses: orNull(at(m3, 'today', 'soFar', 'vwapCrosses')),
   };
 }
 
@@ -88,7 +95,7 @@ function signals(f, side, th) {
   const bw = f.bothWays || {};
   if (bw['15m'] === true) add(c, 'C2', '15m-break');
   if (f15 === dir) add(t, 'T2', '15m'); else if (f15 === other) add(c, 'C9', '15m');
-  if (bw['3m'] === true) add(c, 'C3', '3m-break');
+  if (bw['3m'] === true && !f.pullback) add(c, 'C3', '3m-break');
   const rg = f.regime;
   if (rg === `trend-${dir}`) add(t, 'T3', 'regime'); else if (rg === `trend-${other}` && !c.includes('C9')) add(c, 'C9', 'regime');
   if (/^Bias: (neutral|no side)/.test(f.bias || '') && !String(f.bias).includes(`→ ${side} only`)) add(c, 'C4', 'bias');
@@ -103,8 +110,8 @@ function signals(f, side, th) {
   return { c, t, met };
 }
 
-const choppy = (f, th) => Boolean(f.bothWays && f.bothWays['3m'] === true
-  && (f.day.word === 'rotational' || (Number.isFinite(f.sessionCrosses) && f.sessionCrosses >= th.crossesChop)));
+const choppy = (f, th) => Boolean(f.bothWays && f.bothWays['3m'] === true && !f.pullback
+  && (f.day.word === 'rotational' || (Number.isFinite(f.rthCrosses) && f.rthCrosses >= th.crossesChop)));
 
 const classOf = ({ c, t }) => (!c.length && !t.length ? 'A' : !c.length ? 'C' : c.length > t.length ? 'B' : 'D');
 
