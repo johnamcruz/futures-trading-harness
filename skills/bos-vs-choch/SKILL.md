@@ -35,12 +35,13 @@ A wick through a swing that closes back inside is a sweep, not a break
 - CHoCH: the first close beyond the last swing against it, an early
   warning, not a reversal by itself (the `pullback-vs-reversal` skill).
   A potential reversal: CHoCH then BOS: confirmed; a 3m CHoCH then CHoCH
-  back: a failed reversal, chop, unless a pullback read is active or a
-  current 15m BOS (known in RTH) breaks the way it ends (then the 15m
-  continuation; the Market state line).
+  back: a failed reversal (`chop` or not: the Market state line).
 - Each break has a protected swing: a BOS holds until the leg's higher
   low (lower high) breaks; a CHoCH holds until the low (high) that started
   the shift breaks. Only a close through it counts; a wick is not.
+- A BOS stays labelled BOS after its protected swing breaks; the Market
+  state line's status (`holding` or `broken by a close`) decides what it
+  means now: a broken protected swing ends that BOS's trend read.
 
 **Fields**: `m3.lastBreak.last` and `m3.lastBreak.previous`; the same
 under `m15.lastBreak` and `h1.lastBreak` (`knownAt`: the candle's close);
