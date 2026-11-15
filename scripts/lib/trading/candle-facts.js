@@ -29,6 +29,7 @@
  *   shape(c)                              { body, upperWick, lowerWick, closeAt } shares of the range (null at zero range)
  *   closeLocation(c)                       'top' | 'middle' | 'bottom' (third of the range), null at zero range
  *   patternsOf(c, prev, atrPrev)           every pattern that holds, in label priority; patternLabel: the first, else 'none'
+ *   patternText(label)                     the label as the candle lines print it: 'none' is "no pattern"
  *   factsOf(candles)                       per candle: shape, closeLocation, rangeAtr (ATR as of the candle before), volRatio,
  *                                          patterns and pattern (one pass; the momentum read reads these)
  *   basisOf(candles, j, atr) / factOf(c, basis)   factsOf's two halves: what candle j is read against (the previous
@@ -256,6 +257,9 @@ function patternsOf(c, prev = null, atrPrev = NaN) {
 }
 
 const patternLabel = list => (list.length ? list[0] : 'none');
+// The label as the candle lines print it: `none` reads "no pattern" (round 19, q93: a bare `none` was read as "no 15m
+// turn"); the JSON keeps the label.
+const patternText = p => (p === 'none' ? 'no pattern' : p);
 
 /** How candle c met `level` (see the header); null without a level. */
 function relation(c, level, prevClose = NaN) {
@@ -790,7 +794,7 @@ function completedCandlesAt({ bars, base, fine = null, minutes, at = bars.length
 }
 
 module.exports = {
-  TIMEFRAMES, DEF, LABELS, MAX_LEVELS, LEVEL_ORDER, label, completedSeries, boundaryOpen, shape, closeLocation, patternsOf, patternLabel, relation,
+  TIMEFRAMES, DEF, LABELS, MAX_LEVELS, LEVEL_ORDER, label, completedSeries, boundaryOpen, shape, closeLocation, patternsOf, patternLabel, patternText, relation,
   candleSeries, relationSeries, swingTargetSeries, holdingSwingsAt, briefingCandles, briefingTargets, RELATION_TEXT,
   prevSweep, RANGE_FRAMES, briefingRangeTargets, completedCandlesAt, gapRelation, insideStackOf, insideStacks, factsOf, basisOf, factOf, nextBasisOf, levelReactionsOf, confirmedText, MOVING_LEVEL,
   tradedBeyond, breakReach, RELATION_RULE, relationRuleText, extendCandle, formingCandle,

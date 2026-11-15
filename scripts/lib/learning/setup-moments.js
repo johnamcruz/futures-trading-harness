@@ -49,6 +49,7 @@
 
 const crypto = require('crypto');
 const { levelName } = require('../trading/composed-reads');
+const { patternText } = require('../trading/candle-facts');
 
 const MODES = Object.freeze(['setup-focus']);
 const SM = require('../tunables').replay().setupMoments; // config/replay.json setupMoments
@@ -214,8 +215,7 @@ function setupCandleRank(c, dir) {
 function setupCandleText(candles) {
   const c = candles && typeof candles === 'object' ? candles[CHAIN.setup] : null;
   if (!c || c.unavailable || !c.closeLocation) return null;
-  const pattern = c.pattern && c.pattern !== 'none' ? c.pattern : 'no pattern';
-  return `${pattern}, close ${c.closeLocation} third`;
+  return `${patternText(c.pattern || 'none')}, close ${c.closeLocation} third`;
 }
 
 /**

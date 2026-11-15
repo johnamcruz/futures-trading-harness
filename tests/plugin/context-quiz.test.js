@@ -369,3 +369,19 @@ test('context quiz: the pullback items\' correct choice sits at its seeded posit
   }
   assert.ok(block.filter(q => q.choices.indexOf(q.answer) === 0).length <= block.length / 2, 'not mostly first');
 });
+
+// Round 19 (q93: a bare `none` on the 15m line was read as "no 15m turn"): every quiz candle line prints its pattern the
+// way the briefing does (candle-facts.js patternText: the label `none` is "no pattern"), never a bare `none`.
+test('context quiz: every candle line prints its pattern as the briefing does ("no pattern", never a bare none)', () => {
+  const { patternText } = require('../../scripts/lib/trading/candle-facts');
+  const CANDLE_LINE = /\n- (\d+[mh]) \(([a-z, ]*)closed \d\d:\d\d\): ([^,.;\n]+)/g;
+  const noPattern = [];
+  for (const q of [...QUIZ.questions, ...(QUIZ.partB || [])]) {
+    for (const m of String(q.text || '').matchAll(CANDLE_LINE)) {
+      assert.notStrictEqual(m[3], 'none', `${q.id}: ${m[0].trim()}`);
+      if (m[3] === patternText('none')) noPattern.push(q.id);
+    }
+  }
+  // The items that print a no-pattern candle (q93's mirror and its kin) print the briefing's words.
+  assert.deepStrictEqual(noPattern, ['q93', 'q99', 'q101', 'q102', 'q112', 'q123']);
+});

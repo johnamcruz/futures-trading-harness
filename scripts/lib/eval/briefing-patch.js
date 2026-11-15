@@ -186,7 +186,10 @@ function candleOf(rest, sep, closedAt) {
   const [shape] = head.split(', ');
   const side = / (up|down)$/.exec(shape);
   const range = /(?:^|, )range ([\d.]+) ATR(?:,|$)/.exec(head);
-  return { pattern: side ? shape.slice(0, side.index) : shape, ...(side ? { dir: side[1] } : {}), ...(range ? { rangeAtr: Number(range[1]) } : {}), closedAt, sweep };
+  // The label as the JSON holds it: today's lines print `none` as "no pattern" (candle-facts.js patternText); an older
+  // recording prints `none`. Both read back as `none`.
+  const label = side ? shape.slice(0, side.index) : shape;
+  return { pattern: label === 'no pattern' ? 'none' : label, ...(side ? { dir: side[1] } : {}), ...(range ? { rangeAtr: Number(range[1]) } : {}), closedAt, sweep };
 }
 
 function briefingInputs(prompt) {

@@ -102,7 +102,7 @@ const withProtected = (bars, lb) => Object.fromEntries(Object.entries(lb).map(([
 const { timingOf, timingLine } = require('./ltf-timing');
 const { sideValuesText, causalLevels } = require('./rules');
 const { cisdFacts } = require('./cisd');
-const { briefingCandles, briefingTargets, holdingSwingsAt, briefingRangeTargets, MOVING_LEVEL } = require('./candle-facts');
+const { briefingCandles, briefingTargets, holdingSwingsAt, briefingRangeTargets, MOVING_LEVEL, patternText } = require('./candle-facts');
 const { halfOf } = require('./fib');
 const { levelCloses, MAX_CLOSES } = require('./level-closes');
 const { brokerFieldsAt, brokerFieldsText } = require('./broker-fields');
@@ -1046,7 +1046,7 @@ function candleLines(m3, et, roomOf = 'R = the reference stop', closedAt = null)
       : `${r} ${name}${rx(name) ? ` (${r === 'touched' && rx(name) === 'breakout' ? 'closed beyond: breakout' : r === 'touched' ? touchedSided(name) : rx(name)})` : ''}`));
     for (const x of extras && Array.isArray(c.confirmed) ? c.confirmed : []) met.push(`confirmed rejection of ${x.text || `${x.name} ${x.price}`}${x.dir ? ` (${x.dir === 'down' ? 'short' : 'long'} side)` : ''}`);
     if (c.moreLevels) met.push(`+${c.moreLevels} more`);
-    const shapeText = [`${c.pattern}${c.dir ? ` ${c.dir}` : ''}`, extras && c.insideStack && c.mother ? `${c.insideStack} in a row inside the ${et(c.mother.t)} candle ${c.mother.l}-${c.mother.h}` : null,
+    const shapeText = [`${patternText(c.pattern)}${c.dir ? ` ${c.dir}` : ''}`, extras && c.insideStack && c.mother ? `${c.insideStack} in a row inside the ${et(c.mother.t)} candle ${c.mother.l}-${c.mother.h}` : null,
       c.closeLocation ? `close ${c.closeLocation} third` : null,
       c.rangeAtr !== null ? `range ${c.rangeAtr} ATR` : null, c.volRatio !== null ? `vol ${c.volRatio}x` : null,
       // On high volume, the net move (absorption's "little progress", composed-reads.js netAtrOf).
