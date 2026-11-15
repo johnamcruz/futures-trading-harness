@@ -56,7 +56,7 @@ test('fixture days (real): every state word the precedence makes is reached from
   }
   for (const r of all) if (r.s.pullback) assert.notStrictEqual(r.s.state, 'chop', r.line);
   const max = Math.max(...all.map(r => Buffer.byteLength(r.line)));
-  assert.ok(max <= 250, `the longest line ${max} bytes`);
+  assert.ok(max <= TH.lineBytes, `the longest line ${max} bytes`);
 });
 
 // The decisive test on these mornings (aligned bars only; the label's side is the 4h + 1h side at the bar). Before round

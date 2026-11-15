@@ -169,9 +169,11 @@ const pbText = p => `pullback (${p.side} leg ${p.leg.origin} -> ${p.leg.extreme}
 const mins = (bars, m) => bars * m;
 const ago = n => (n === 0 ? 'this bar' : n === 1 ? '1 bar ago' : `${n} bars ago`);
 const minsAgo = (n, m) => (n === 0 ? 'this bar' : `${n * m} min ago`);
-// A break against at the protected level itself: a close through it that came back (the leg resumed), or a close within
-// the tie tolerance (decision 8: no break). Never "internal".
-const atLevelText = P => (P.resumed ? `through the ${swingName(P.side)}, closed back` : `tested the ${swingName(P.side)} (a tie)`);
+// A break against at the protected level itself: a close through it that came back (this break's own protected break, at
+// this level and bar, failed: the leg resumed), or a close within the tie tolerance (decision 8: no break). Never
+// "internal". `resumed` is the leg's flag, so the flip decides it per break (re-review of fe35c98b8, finding 1).
+const closedBack = (P, barsAgo) => Boolean(P.resumed && isObj(P.flip) && !P.flip.held && P.flip.byRule === 'close' && P.flip.oldLevel === P.level && P.flip.barsAgo === barsAgo);
+const atLevelText = (P, barsAgo) => (closedBack(P, barsAgo) ? `through the ${swingName(P.side)}, closed back` : `tested the ${swingName(P.side)} (a tie)`);
 
 /** The protected structure clause from the layers' snapshot. */
 function structureText(P, s, { brief = false } = {}) {
@@ -184,7 +186,7 @@ function structureText(P, s, { brief = false } = {}) {
   if (brief) return parts[0];
   const w = P.lastWay;
   if (w && (!P.lastInternal || w.barsAgo <= P.lastInternal.barsAgo)) parts.push(`${w.kind} ${w.direction} ${minsAgo(w.barsAgo, s.minutes)}${w.strong ? ' (displaced)' : ''}`);
-  else if (P.lastInternal && !(s.layers.momentum && s.layers.momentum.trigger)) parts.push(P.lastInternal.level === P.level ? atLevelText(P) : `internal ${P.lastInternal.direction === 'up' ? 'high' : 'low'} ${P.lastInternal.level} broken`);
+  else if (P.lastInternal && !(s.layers.momentum && s.layers.momentum.trigger)) parts.push(P.lastInternal.level === P.level ? atLevelText(P, P.lastInternal.barsAgo) : `internal ${P.lastInternal.direction === 'up' ? 'high' : 'low'} ${P.lastInternal.level} broken`);
   if (P.flip && P.flip.byRule === 'choch-bos' && P.flip.barsAgo === (w ? w.barsAgo : -1)) parts.push('CHoCH then BOS');
   if (s.layers.reversal) parts.push('reversal confirmed');
   return parts.join(', ');
@@ -199,7 +201,7 @@ function momentumText(L, P, s) {
   const brk = m.breakAgainst;
   // A break against at the protected level itself is no internal break (design review section 5): atLevelText.
   const atLevel = brk && brk.level === P.level;
-  if (m.trigger && brk && atLevel) out.push(`${m.dispAgainst || brk.strong ? 'displacement' : 'a move'} ${against} ${ago(brk.barsAgo)} ${atLevelText(P)}`);
+  if (m.trigger && brk && atLevel) out.push(`${m.dispAgainst || brk.strong ? 'displacement' : 'a move'} ${against} ${ago(brk.barsAgo)} ${atLevelText(P, brk.barsAgo)}`);
   else if (m.trigger && brk) out.push(`${m.dispAgainst || brk.strong ? 'displacement' : 'a move'} ${against} ${ago(brk.barsAgo)} broke internal ${against === 'down' ? 'low' : 'high'} ${brk.level}`);
   else if (m.dispAgainst) out.push(`displacement ${against} ${ago(m.dispAgainst.barsAgo)}`);
   if (m.loss) out.push(P.lastWay && P.lastWay.failed ?`the last ${P.lastWay.kind} ${P.side} failed` : `no new ${P.side === 'up' ? 'high' : 'low'} for ${mins(P.sinceProgress, s.minutes)} min`);
@@ -274,8 +276,23 @@ function marketStateLine(s) {
   if (ctx.length) parts.push(ctx.join(', '));
   // The class code computes (round 18, owner): printed at the end, one source (classWordOf), on every line.
   const full = `Market state (${s.tf}): ${[...parts, align].join('; ')}; class ${classWordOf(s)}`;
-  // The line's budget (th.lineBytes, config/analysis.json marketState): over it, the behavior clause drops its numbers.
-  return !Number.isFinite(s.lineBytes) || Buffer.byteLength(full) <= s.lineBytes ? full : full.replace(/ \(overlap [\d.]+, efficiency [\d.]+\)/, '');
+  // The line's budget (th.lineBytes, config/analysis.json marketState): over it, cut in order until it fits.
+  return fitLine(full, s.lineBytes);
 }
 
-module.exports = { turnOf, readState, stateOf, classWordOf, marketStateLine };
+// Over the budget, in order: the behavior clause's numbers drop; the chop's "Day so far rotational" drops (the chop line
+// says it; its numbers are its evidence and stay).
+const CUTS = [
+  l => l.replace(/ \((?:overlap [\d.]+(?:, efficiency [\d.]+)?|efficiency [\d.]+)\)/, ''),
+  l => l.replace('; Day so far rotational, ', '; ').replace('; Day so far rotational;', ';'),
+];
+function fitLine(full, budget) {
+  let out = full;
+  for (const cut of CUTS) { if (!Number.isFinite(budget) || Buffer.byteLength(out) <= budget) break; out = cut(out); }
+  return out;
+}
+
+/** The Market state thresholds from the analysis config (config/analysis.json): the briefing's and the quiz's one set. */
+const stateThresholds = an => ({ crossesChop: an.regime.rangeCrosses, maxPullbackDepth: an.pullbackRead.maxStateDepth, lineBytes: an.marketState.lineBytes });
+
+module.exports = { turnOf, readState, stateOf, classWordOf, marketStateLine, stateThresholds };

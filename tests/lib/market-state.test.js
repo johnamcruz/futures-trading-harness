@@ -11,6 +11,7 @@ const assert = require('node:assert');
 const M = require('../../scripts/lib/trading/market-state');
 
 const TH = { crossesChop: 5, maxPullbackDepth: 0.62 };
+const LINE_BYTES = require('../../scripts/lib/tunables').analysis().marketState.lineBytes; // config/analysis.json
 const LEG = { origin: 21361.25, extreme: 21437.5 };
 const pb = (o = {}) => ({ frame: '15m', side: 'long', leg: { ...LEG, atr: 4 }, depth: 0.28, pastOrigin: false, counter: { bars: 6 }, swing: {}, against: {}, ...o });
 const T = m => new Date(Date.UTC(2026, 0, 6, 15, m)).toISOString(); // 10:mm ET (EST)
@@ -106,7 +107,7 @@ test('precedence: trend needs an established leg and the behavior word trending;
   assert.deepStrictEqual([st({ layers: r }), word({ layers: r }), word({ layers: r, h4: 'range' })], ['range', 'trend-up', 'unclear'], 'range: the alignment default (decision 3)');
 });
 
-test('the line: one exact string per state, structure then momentum then behavior, the class last, at most 250 bytes', () => {
+test('the line: one exact string per state, structure then momentum then behavior, the class last, within the line budget', () => {
   const L1 = line({ layers: lay() });
   assert.strictEqual(L1, 'Market state (3m): trend up: HL 21380.5 holds, BOS up 6 min ago (displaced); behavior trending (overlap 0.52, efficiency 0.41), 15m trending up; 4h+1h up; class trend-up');
   const m = { ...lay().momentum, trigger: true, loss: true, dispAgainst: { barsAgo: 2 }, breakAgainst: { direction: 'down', level: 21412.25, barsAgo: 2, strong: false } };
@@ -123,14 +124,23 @@ test('the line: one exact string per state, structure then momentum then behavio
   assert.strictEqual(line({ layers: lay({ stale: true, structure: leg({ sinceProgress: 22 }) }) }), 'Market state (3m): rotation up: HL 21380.5 holds, no new high for 66 min; behavior trending (overlap 0.52, efficiency 0.41), 15m trending up; 4h+1h up; class unclear');
   const rev = lay({ reversal: true, structure: leg({ flip: { barsAgo: 6, strong: true, disp: true, held: true, oldSide: 'down', oldLevel: 21420, byRule: 'close' } }) });
   assert.match(line({ layers: rev }), /HL 21380\.5 holds, BOS up 6 min ago \(displaced\), reversal confirmed;/, 'Reversal: printed on the leg');
-  const back = lay({ momentum: { ...lay().momentum, trigger: true, dispAgainst: { barsAgo: 3 }, breakAgainst: { direction: 'down', level: 21380.5, barsAgo: 3, strong: true } }, structure: leg({ resumed: true }) });
+  const back = lay({ momentum: { ...lay().momentum, trigger: true, dispAgainst: { barsAgo: 3 }, breakAgainst: { direction: 'down', level: 21380.5, barsAgo: 3, strong: true } }, structure: leg({ resumed: true, flip: { barsAgo: 3, strong: true, disp: false, held: false, oldSide: 'up', oldLevel: 21380.5, byRule: 'close' } }) });
   assert.match(line({ layers: back }), /^Market state \(3m\): weakening up: HL 21380\.5 holds[^;]*; displacement down 3 bars ago through the HL, closed back;/, 'a break at the protected level itself is no internal break (review round 20, finding 1)');
   assert.doesNotMatch(line({ layers: back }), /broke internal low 21380\.5/);
   const tie = lay({ momentum: { ...lay().momentum, trigger: true, dispAgainst: { barsAgo: 0 }, breakAgainst: { direction: 'down', level: 21380.5, barsAgo: 0, strong: true } } });
   assert.match(line({ layers: tie }), /; displacement down this bar tested the HL \(a tie\);/, 'a close within the tie tolerance (decision 8): no break, not resumed');
-  const kept = lay({ structure: leg({ resumed: true, lastWay: { kind: 'BOS', direction: 'up', level: 21412.25, barsAgo: 20, strong: false, failed: false }, lastInternal: { direction: 'down', level: 21380.5, barsAgo: 12 } }), behavior: { ...lay().behavior, word: 'overlapping' } });
+  const kept = lay({ structure: leg({ resumed: true, flip: { barsAgo: 12, strong: false, disp: false, held: false, oldSide: 'up', oldLevel: 21380.5, byRule: 'close' }, lastWay: { kind: 'BOS', direction: 'up', level: 21412.25, barsAgo: 20, strong: false, failed: false }, lastInternal: { direction: 'down', level: 21380.5, barsAgo: 12 } }), behavior: { ...lay().behavior, word: 'overlapping' } });
   assert.match(line({ layers: kept }), /: HL 21380\.5 holds, through the HL, closed back;/, 'the structure clause too: never "internal low X broken" beside "X holds"');
   assert.match(line({ layers: lay({ structure: leg({ lastWay: null, lastInternal: { direction: 'down', level: 21380.5, barsAgo: 1 } }), behavior: { ...lay().behavior, word: 'mixed' } }) }), /: HL 21380\.5 holds, tested the HL \(a tie\);/);
+  // "closed back" is this break's fact, not the leg's (re-review of fe35c98b8, finding 1): a leg resumed earlier at another
+  // level or bar, then a tie at its current level, prints the tie.
+  const oldResume = { barsAgo: 15, strong: false, disp: false, held: false, oldSide: 'up', oldLevel: 21361.25, byRule: 'close' };
+  const laterTie = lay({ momentum: { ...lay().momentum, trigger: true, dispAgainst: { barsAgo: 1 }, breakAgainst: { direction: 'down', level: 21380.5, barsAgo: 1, strong: true } }, structure: leg({ resumed: true, flip: oldResume }) });
+  assert.match(line({ layers: laterTie }), /; displacement down 1 bar ago tested the HL \(a tie\);/, 'resumed at another level: this break is a tie');
+  const sameLevelOtherBar = lay({ structure: leg({ resumed: true, flip: { ...oldResume, oldLevel: 21380.5 }, lastWay: null, lastInternal: { direction: 'down', level: 21380.5, barsAgo: 2 } }), behavior: { ...lay().behavior, word: 'mixed' } });
+  assert.match(line({ layers: sameLevelOtherBar }), /: HL 21380\.5 holds, tested the HL \(a tie\);/, 'the resume was at another bar: this break is a tie');
+  const heldFlip = lay({ structure: leg({ resumed: true, flip: { ...oldResume, oldLevel: 21380.5, barsAgo: 2, held: true }, lastWay: null, lastInternal: { direction: 'down', level: 21380.5, barsAgo: 2 } }), behavior: { ...lay().behavior, word: 'mixed' } });
+  assert.match(line({ layers: heldFlip }), /tested the HL \(a tie\);/, 'a held flip never printed as closed back');
   const brokenRange = lay({ structure: leg({ status: 'broken', legOK: false, side: 'down', level: 21437.5, flip: { barsAgo: 2, strong: false, disp: false, held: true, oldSide: 'up', oldLevel: 21380.5, byRule: 'close' } }), behavior: { ...lay().behavior, word: 'mixed' } });
   assert.deepStrictEqual([st({ layers: brokenRange }), word({ layers: brokenRange })], ['range', 'trend-up'], 'an undisplaced protected break: range (no transition), the alignment default');
   assert.match(line({ layers: brokenRange }), /^Market state \(3m\): range: no leg holds, HL 21380\.5 broken 6 min ago, edges/, 'the broken protected level printed (finding 2)');
@@ -145,7 +155,19 @@ test('the line: one exact string per state, structure then momentum then behavio
   assert.ok(Buffer.byteLength(M.marketStateLine(sLong)) < Buffer.byteLength(M.marketStateLine(M.stateOf(b(long), TH))), 'over the budget the behavior numbers drop');
   assert.doesNotMatch(M.marketStateLine(sLong), /\(overlap/);
   assert.match(M.marketStateLine(sLong), /behavior failing, 15m trending down; .*class unclear$/);
-  for (const x of [L1, line({ layers: weak }), line({ layers: ch, h4: 'range', soFar: { status: 'read', read: 'rotational', vwapCrosses: 7 } })]) assert.ok(Buffer.byteLength(x) <= 250, `${Buffer.byteLength(x)}: ${x}`);
+  for (const x of [L1, line({ layers: weak }), line({ layers: ch, h4: 'range', soFar: { status: 'read', read: 'rotational', vwapCrosses: 7 } })]) assert.ok(Buffer.byteLength(x) <= LINE_BYTES, `${Buffer.byteLength(x)}: ${x}`);
+  // The worst chop line (every structure flag and behavior fact, a rotational day, two-digit crosses, not aligned) stays in
+  // the budget (re-review finding 2): the day-so-far word drops; the chop's numbers (its evidence) stay.
+  const worst = lay({ chop: { ...CHOP, facts: { ov: true, ef: true, fl: true, nd: true }, count: 4, evidence: { bothWays: true, flip: true, failed: true } }, structure: leg({ legOK: false }), behavior: { ...lay().behavior, word: 'failing', word15: 'overlapping', overlap: 0.74, eff: 0.09 } });
+  const wo = { layers: worst, h4: 'range', h1: 'down', soFar: { status: 'read', read: 'rotational', vwapCrosses: 12 } };
+  const wFull = M.marketStateLine(M.stateOf(b(wo), TH));
+  const wCut = M.marketStateLine(M.stateOf(b(wo), { ...TH, lineBytes: LINE_BYTES }));
+  assert.ok(Buffer.byteLength(wFull) > LINE_BYTES, `the case is over the budget unbudgeted: ${Buffer.byteLength(wFull)}`);
+  assert.ok(Buffer.byteLength(wCut) <= LINE_BYTES, `${Buffer.byteLength(wCut)}: ${wCut}`);
+  assert.match(wCut, /; overlap 0\.74, efficiency 0\.09, failed continuation, no displacement; 15m overlapping; RTH VWAP crosses 12; 4h range, 1h down \(not aligned\); class chop$/);
+  assert.strictEqual(M.marketStateLine(M.stateOf(b({ ...wo, soFar: { status: 'read', read: 'rotational', vwapCrosses: null } }), { ...TH, lineBytes: 10 })).includes('Day so far'), false, 'the day-so-far word alone drops too');
+  assert.strictEqual(M.marketStateLine(M.stateOf(b({ layers: ch, h4: 'range', soFar: { status: 'read', read: 'rotational', vwapCrosses: 7 } }), { ...TH, lineBytes: LINE_BYTES })), line({ layers: ch, h4: 'range', soFar: { status: 'read', read: 'rotational', vwapCrosses: 7 } }), 'under the budget: unchanged');
+
 });
 
 test('without m3.layers (an older record, a quiz item): the printed breaks alone, the same words; no behavior read, so never chop', () => {
@@ -173,6 +195,14 @@ test('stateOf: off the entry lane or without a 1h part: null; readState has no l
   assert.strictEqual(M.readState({ sections: { h1: { data: {} } } }, TH).state, 'range');
   assert.strictEqual(M.marketStateLine(null), null);
   assert.strictEqual(M.classWordOf(null), null);
+});
+
+test('stateThresholds: the briefing\'s and the quiz\'s one set of thresholds from config/analysis.json (re-review finding 3)', () => {
+  const an = require('../../scripts/lib/tunables').analysis();
+  assert.deepStrictEqual(M.stateThresholds(an), { crossesChop: an.regime.rangeCrosses, maxPullbackDepth: an.pullbackRead.maxStateDepth, lineBytes: an.marketState.lineBytes });
+  const fs = require('node:fs');
+  const path = require('node:path');
+  for (const f of ['trading/briefing.js', 'eval/context-quiz.js']) assert.match(fs.readFileSync(path.join(__dirname, '../../scripts/lib', f), 'utf8'), /stateThresholds\(/, f);
 });
 
 test('the briefing\'s crosses threshold equals the recognition key\'s', () => {

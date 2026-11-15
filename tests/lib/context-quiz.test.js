@@ -826,7 +826,7 @@ test('marketStateOfText: the Market state line from an item\'s printed lines', (
   const NONE = '- m3.lastBreak: none since the RTH open.';
   const M = require('../../scripts/lib/trading/market-state');
   const an = require('../../scripts/lib/tunables').analysis();
-  const th = { crossesChop: an.regime.rangeCrosses, maxPullbackDepth: an.pullbackRead.maxStateDepth };
+  const th = M.stateThresholds(an); // the briefing's (lineBytes too)
   const et = hhmm => new Date(Date.parse('2026-01-06T05:00:00.000Z') + (Number(hhmm.slice(0, 2)) * 60 + Number(hhmm.slice(3))) * 60000).toISOString();
   const pre = (kind, direction, level, at) => ({ kind, direction, level, barsAgo: 5, at: et(at) });
   for (const [t, live] of [['09:39', { last: pre('BOS', 'up', 21440, '09:15'), previous: pre('BOS', 'up', 21420, '08:51') }], ['09:39', { last: null, previous: null }], ['10:42', { last: pre('BOS', 'up', 21440, '09:24'), previous: null }]]) {

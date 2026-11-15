@@ -115,10 +115,10 @@ const { daySoFar, daySoFarLine, rthVolatility, volatilityText } = require('./day
 const { biasLine, RULE: BIAS_RULE } = require('./bias-line');
 const { marketLayers } = require('./market-layers');
 const AN_STATE = require('../tunables').analysis(); // config/analysis.json: marketState, daySoFar.minBars (the chop floor), dayContext.ibMinutes
-const { stateOf, marketStateLine } = require('./market-state');
+const { stateOf, marketStateLine, stateThresholds } = require('./market-state');
 // The Market state line's crosses context threshold: the regime's rotation count (config/analysis.json; a test pins it to the
 // recognition key's frozen crossesChop).
-const STATE_TH = { crossesChop: require('../tunables').analysis().regime.rangeCrosses, maxPullbackDepth: require('../tunables').analysis().pullbackRead.maxStateDepth, lineBytes: require('../tunables').analysis().marketState.lineBytes };
+const STATE_TH = stateThresholds(require('../tunables').analysis());
 const { pullbackRead, pullbackLine } = require('./pullback-read');
 const { GLOBEX_OPEN_MIN, RTH_OPEN_MIN, RTH_CLOSE_MIN } = require('./clock'); // the session boundaries' one home
 

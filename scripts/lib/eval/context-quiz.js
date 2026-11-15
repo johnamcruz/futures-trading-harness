@@ -262,7 +262,7 @@ function marketStateOfText(text) {
   if (!b) return null;
   const M = require('../trading/market-state');
   const an = require('../tunables').analysis();
-  return M.marketStateLine(M.stateOf(b, { crossesChop: an.regime.rangeCrosses, maxPullbackDepth: an.pullbackRead.maxStateDepth }));
+  return M.marketStateLine(M.stateOf(b, M.stateThresholds(an)));
 }
 
 function excerptOf(excerpt) {
