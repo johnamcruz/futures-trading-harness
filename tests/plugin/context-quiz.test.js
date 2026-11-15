@@ -256,7 +256,7 @@ test('context quiz: the chop-read questions (q113-q123, less q120) are asked aga
     ['q117', 'lookup', TR, 'range, not chop: class trend-up; a long setup at the low edge is allowed', /A range day inside the 4h \+ 1h side is catchable: the turn at the edge the side's way/g],
     ['q118', 'head', undefined, 'F4', /\(both one way → that trend class; else `unclear`\), never `chop`/g],
     ['q119', 'head', undefined, 'F2', /→ class `chop`, whatever the 4h and 1h/g],
-    ['q123', 'head', undefined, 'F3', /a 3m CHoCH against then back is the watch/g],
+    ['q123', 'head', undefined, 'F3', /the watch ends at the first 3m BOS or CISD the side's way/g],
     ['q121', 'head', undefined, 'enter long: the turn at the low edge the side\'s way, 3m BOS near value', /setups at the edge the side's way are OK/g],
     ['q122', 'head', undefined, 'chop: mid-range churn; sit out', /→ no entry, sit out\./g],
   ];
@@ -268,6 +268,8 @@ test('context quiz: the chop-read questions (q113-q123, less q120) are asked aga
     assert.ok(q.choices.includes(q.answer), `${id}: a closed choice`);
     assert.deepStrictEqual(Q.anchorsMissing(QUIZ, cut(re)).filter(x => x === id), [id], `${id}: its sentence deleted, its anchor goes missing`);
   }
+  // q99 carries only briefing facts (construct validity, feat/chop-read): no quiz-only framing sentence.
+  assert.doesNotMatch(QUIZ.questions.find(x => x.id === 'q99').text, /No exact touch|no named reversal candle/);
   // q112 prints the Class side line under its Bias line, as the briefing does (bias-line.js classSideLine).
   const { classSideLine } = require('../../scripts/lib/trading/bias-line');
   const side = classSideLine({ minutes: 3, sections: { h1: { data: { h4: { trend: 'range' }, h1: { trend: 'up' } } } } });

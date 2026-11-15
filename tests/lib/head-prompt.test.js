@@ -124,11 +124,11 @@ test('CORE: the composed bar\'s reads the gate requires (SITUATIONAL taught in t
   // pause, the 15m turn and the 3m BOS or CISD) and the pointers to it in trade-session, trader-process, rejection,
   // breakout, confluence-counting and trade-lifecycle, trade-session's read chain for the PLAN's 4 Setup line and the 15m
   // turn and late 15m BOS stated alike in its three homes, and the class rule's range is not chop (+1760).
-  // Then 84696 (feat/chop-read, owner-approved 2026-11-14, same rule): trade-session's class rule names the owner's chop
+  // Then 84987 (feat/chop-read, owner-approved 2026-11-14, same rule): trade-session's class rule names the owner's chop
   // (repeated CHoCH both ways with rotational or many VWAP crosses, never one fact, aligned days too), chop: sit out, a
   // range inside the 4h + 1h trend tradable at the edge the side's way, the pause inside a Pullback never chop, two worked
-  // examples, the CHoCH pair inside a Pullback its watch; htf-to-ltf's class sentence, aligned or not, open, chop and pause each defined once; round 5: the Class side line named, no else chain, the pause gives the class, a rejection inside the zone is the reaction; round 6: the Class side line's provenance, the pause gives the class bullets' class (+1594).
-  assert.ok(Buffer.byteLength(prompt) <= 84696, `the head prompt is ${Buffer.byteLength(prompt)} bytes`);
+  // examples, the CHoCH pair inside a Pullback its watch; htf-to-ltf's class sentence, aligned or not, open, chop and pause each defined once; round 5: the Class side line named, no else chain, the pause gives the class, a rejection inside the zone is the reaction; round 6: the Class side line's provenance, the pause gives the class bullets' class; round 7: chop first, rotational the printed word, the watch's end, the live strong 15m CISD is the turn (+1885).
+  assert.ok(Buffer.byteLength(prompt) <= 84987, `the head prompt is ${Buffer.byteLength(prompt)} bytes`);
   // Only the head trader's prompt grows: no other role's prompt embeds trade-lifecycle (the risk manager's embeds
   // confluence-counting and invalidation as before; its prompt is unchanged, pinned in trade-session-split.test.js).
   for (const [name, a] of Object.entries(index.agent)) if (name !== H.HEAD_AGENT && a.prompt) assert.ok(!a.prompt.includes('<skill name="trade-lifecycle">'), name);

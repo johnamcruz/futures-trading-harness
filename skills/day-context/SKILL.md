@@ -40,7 +40,8 @@ description: Use when deciding a cycle - the premarket plan, the news, and the d
   recent bars. The read: efficiency (net move / the
   bars' summed range) x sqrt(bars), one scale all morning:
   - `directional up|down`: 0.75+: one-way so far.
-  - `rotational`: under 0.34: back and forth so far (many RTH VWAP
+  - `rotational`: under 0.34: back and forth so far (the printed word
+    only, never your reading of the number; many RTH VWAP
     crosses agree).
   - `mixed`: between: neither yet.
   - `too early (a read from 10 bars)`: no read. Reads on few bars are
