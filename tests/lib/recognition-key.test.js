@@ -134,6 +134,9 @@ test('the taught guardrail: an open Pullback line\'s 3m CHoCH pair is neither C3
   // Given back past its printed origin (step 8: no with-side read on that leg): not open; the pair counts again.
   const back = K.presentKey(brief({ ...PB, depth: 1.1, pastOrigin: true }), TH);
   assert.strictEqual(back.facts.pullback, false);
+  // An older record without pastOrigin: its depth decides (pullback-read.js givenBack).
+  assert.strictEqual(K.presentKey(brief({ ...PB, depth: 1.1, pastOrigin: undefined }), TH).facts.pullback, false);
+  assert.strictEqual(K.presentKey(brief({ ...PB, depth: 0.5, pastOrigin: undefined }), TH).facts.pullback, true);
   assert.strictEqual(back.choppy, true);
   assert.ok(back.signals.long.c.includes('C3'));
 });

@@ -102,8 +102,8 @@ test('choose: stage order under the budget, nothing the prompt already holds, th
   const open = SS.choose(ROOT, SS.factsOf({ state: OPEN, briefings: [brief({})] }), { budget: size('manage-position') + size('pullback-vs-reversal') + size('take-profit'), loaded: LOADED });
   assert.deepStrictEqual([open.skills, open.over, open.stages], [['manage-position', 'pullback-vs-reversal', 'take-profit'], ['daily-bias'], ['management']]);
   // The committed budget (75534 since feat/pullback-concept: every trigger at once fits, pullback-vs-reversal's read grown;
-  // 76081 since feat/chop-read: its pause-vs-chop line, bos-vs-choch's core rule).
-  assert.strictEqual(require('../../scripts/lib/tunables').runner().prompt.situationalSkillBytes, 76081);
+  // 76096 since feat/chop-read: its pause-vs-chop line, bos-vs-choch's core rule).
+  assert.strictEqual(require('../../scripts/lib/tunables').runner().prompt.situationalSkillBytes, 76096);
 });
 
 test('the Setups-to-check line: a compression break on an allowed side (at its key level when its box sits at one) and a tradeable 15m or 1h CISD, the stronger first; nothing against the trend rule, on the 3m or 5m, or outside the window', () => {

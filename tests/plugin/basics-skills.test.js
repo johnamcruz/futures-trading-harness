@@ -72,7 +72,7 @@ const PINS = {
     'A 15m CHoCH inside an intact 1h and 4h structure is a pullback. On the 1h, not an HTF reversal: the leg\'s 15m pullback failed (step 8).',
     'CHoCHs stacking up the timeframes (15m, then 1h) are a reversal developing;',
     // feat/pullback-concept (owner-approved 2026-11-14): the pullback to a broken level, BOS or CISD confirms, CHoCH or CISD warns.
-    'Open from the `Pullback` line (steps 6-7 outlive it).',
+    'Start from the `Pullback` line (steps 6-7 outlive it).',
     'a CISD reads as the same: the side\'s way as a BOS, against as a CHoCH, earlier (`cisd`).',
     'A 3m CHoCH back the side\'s way: the 3m counter-move ended; watch for the BOS or CISD; not the entry. No BOS or CISD after it: no setup, pass.',
     '**Entry**: the first 3m BOS or 3m CISD the side\'s way, near value (the `Trend declared?` RTH VWAP or EMA20 within about ±0.5; + is the side\'s way, a short\'s too), the step 4 read true now',
@@ -317,9 +317,9 @@ test('basics skills: frontmatter, the sections in order, and small', () => {
     // provide useful context"): the seven reactions, their priority, the context it is read in (then 969: the owner rule, the reaction rules hold on every timeframe and a higher one's reaction is stronger confirmation; then 1023, owner: rejection relies on candle-reading; the side is the candle's (q30); then 1026, owner: no bare rejection (plain is no rejection read); sweeps need candle-reading too; then 1044, owner: q30 side confusion; side rule first; then 1237 (+193), fix/quiz-side-doji, owner: q29/q30/q33 answered correctly: the side never from the bias, the briefing's side, a stall decides nothing, the four side and trend-rule cases, a paired side example) and their evidence.
     // Then candle-reading 1280 and pullback-vs-reversal 1631 (feat/pullback-concept, owner-approved 2026-11-14: the unlabeled candle
     // names; the pullback to a broken level, BOS for continuation, CHoCH for reversal, its 3m entry, the examples); then
-    // pullback-vs-reversal 1674 (feat/chop-read, owner-approved 2026-11-14: the pause holds one way, chop breaks both ways;
+    // pullback-vs-reversal 1679 (feat/chop-read, owner-approved 2026-11-14: the pause holds one way, chop breaks both ways;
     // close to the level is a read).
-    assert.ok(words >= 250 && words <= (s === 'candle-reading' ? 1280 : s === 'pullback-vs-reversal' ? 1674 : 650), `${s}: ${words} words`);
+    assert.ok(words >= 250 && words <= (s === 'candle-reading' ? 1280 : s === 'pullback-vs-reversal' ? 1679 : 650), `${s}: ${words} words`);
     // The two setups also carry a timeframe table (what the setup means on 3m/5m, 15m and 1h/4h): a little more room
     // (scripts/lib/skill-caps.js, the one source the training loop's probe edits read too).
     const max = skillByteCap(s);

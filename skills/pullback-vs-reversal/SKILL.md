@@ -19,16 +19,16 @@ hypotheses; a missing field is `unknown`. "Last 10 bars": the prompt's `V`, `(c-
 | Sign | Pullback | Reversal | Field |
 |---|---|---|---|
 | HTF break | with the trend | a CHoCH against it | `m15.lastBreak.last`, `h1.lastBreak.last`; `Pullback` breaks |
-| Depth | up to about 50-62% of the leg (hypothesis) | past the impulse origin | flat: `Pullback` depth; open: Trade read |
+| Depth | up to about 50-62% of the leg (hypothesis) | past the impulse origin | flat: `Pullback` depth; in a trade: the Trade read |
 | Swing | the leg's 15m/1h swing holds | a 3m close broke it | `Pullback` swings (closes since the extreme); `m3.htfLevels` `brokenAt` (since the swing formed) |
 | Volume, bars | falling, shrinking | rising, wide against it | `Pullback` volume, range vs the leg; last 10 bars |
 
 **Flat**: the `Pullback` line (price against the prevailing side on the
-15m) holds these pieces; weigh them with the confirmation at a level. A
-trade open: the Trade read governs.
+15m) holds these pieces; weigh them with the confirmation at a level. In a
+trade: the Trade read governs.
 
 **The pullback to a broken level** (15m read, 3m entry; up shown, down
-the mirror). Open from the `Pullback` line (steps 6-7 outlive it). BOS the
+the mirror). Start from the `Pullback` line (steps 6-7 outlive it). BOS the
 side's way confirms, CHoCH against warns; a CISD reads as the same: the
 side's way as a BOS, against as a CHoCH, earlier (`cisd`). Strong
 (`displacement` strong; an engulfing confirming candle, `engulfing`, is
@@ -88,7 +88,7 @@ never the composed setup read (`compose_check` takes a live strong one):
    hold. After a failed pullback, a later 15m BOS is a new broken level:
    its own pullback and steps 4-6 are the entry, never the BOS bar itself.
 8. A 15m CHoCH or CISD against → this pullback failed, a reversal
-   attempt: wait for a new 15m turn the side's way (step 4); open: the
+   attempt: wait for a new 15m turn the side's way (step 4); in a trade: the
    Trade read (`manage-position`); never counter. A 3m CHoCH or CISD
    against inside it: the watch restarts. Most of the leg given back, or
    its 15m swing broken by a close: against in the count; a candle at the

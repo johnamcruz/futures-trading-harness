@@ -552,12 +552,12 @@ test('trade-session split: no head-trader path reads more than the base\'s every
 // manager 95141 -> 95294 full, 81029 -> 81182 index; the news-calendar and volume-liquidity analysts +62 both modes;
 // every other role within its pin.
 // Then feat/chop-read (same rule, owner-approved 2026-11-14): trend-vs-range's chop definition and chop is not range
-// (+1380, the two analysts that embed it), bos-vs-choch's core rule, pullback-vs-reversal's pause vs chop, cisd's transition
+// (+1395, the two analysts that embed it), bos-vs-choch's core rule, pullback-vs-reversal's pause vs chop, cisd's transition
 // unclear, htf-to-ltf's class sentence, vwap-volume-profile's range-day edge (+108): the market-structure analyst 105053 ->
-// 106828 full, 46207 -> 46376 index; the trend-momentum analyst 63594 -> 65378 full, 42334 -> 42514 index; the
+// 106843 full, 46207 -> 46376 index; the trend-momentum analyst 63594 -> 65393 full, 42334 -> 42514 index; the
 // volume-liquidity analyst 50413 -> 50521 full, 35045 -> 35153 index; every other role within its pin.
 const ROLE_PROMPTS = {
-  full: { 'market-structure-analyst': 106828, 'news-calendar-analyst': 10868, 'risk-manager': 95294, 'strategy-researcher': 25728, 'trade-executor': 30670, 'trade-reviewer': 9454, 'trend-momentum-analyst': 65378, 'volume-liquidity-analyst': 50521 },
+  full: { 'market-structure-analyst': 106843, 'news-calendar-analyst': 10868, 'risk-manager': 95294, 'strategy-researcher': 25728, 'trade-executor': 30670, 'trade-reviewer': 9454, 'trend-momentum-analyst': 65393, 'volume-liquidity-analyst': 50521 },
   index: { 'market-structure-analyst': 46376, 'news-calendar-analyst': 10868, 'risk-manager': 81182, 'strategy-researcher': 25728, 'trade-executor': 30659, 'trade-reviewer': 9454, 'trend-momentum-analyst': 42514, 'volume-liquidity-analyst': 35153 },
 };
 

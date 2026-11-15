@@ -1823,8 +1823,9 @@ Frozen definitions:
     A/B/C, hindsight only) and the actual-exit R of entries there; the
     evidence word is reported beside, not used to score the guardrail.
   An open `Pullback` line: the briefing prints one and its leg is not
-  given back past its origin (`pastOrigin` not true; pullback-vs-reversal
-  step 8; trade-session states it).
+  given back past its origin (pullback-read.js `givenBack`: `pastOrigin`
+  when stated, else depth ≥ 1; pullback-vs-reversal step 8;
+  trade-session states it).
 - **Chop is not range** (the owner's rule, the chop pull request): chop is
   the quality of movement, range its geometry. A 15m `range` or a 3m
   `range` regime is neither a chop signal nor the coded read's `chop`; C2,
