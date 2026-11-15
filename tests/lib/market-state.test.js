@@ -61,7 +61,7 @@ test('chop = the CHoCH pair (a failed reversal), no pullback read, no 15m confir
 
 test('the pullback guard: no chop while a pullback read is active (an open Pullback line, or the early 15m read); the pair there is ranging', () => {
   assert.strictEqual(st({ lastBreak: PAIR, pullback: pb() }), 'ranging');
-  assert.strictEqual(line({ lastBreak: PAIR, pullback: pb() }), 'Market state (3m): ranging: 3m CHoCH down then CHoCH up (failed reversal) (inside the pullback: not chop); pullback (long leg 21361.25 -> 21437.5, depth 28%); 4h+1h up');
+  assert.strictEqual(line({ lastBreak: PAIR, pullback: pb() }), 'Market state (3m): ranging: 3m CHoCH down then CHoCH up (inside the pullback: the watch); pullback (long leg 21361.25 -> 21437.5, depth 28%); 4h+1h up');
   assert.strictEqual(word({ lastBreak: PAIR, pullback: pb() }), 'trend-up');
   assert.strictEqual(st({ lastBreak: PAIR, pullback: pb({ side: 'short' }) }), 'ranging', 'any open Pullback line');
   assert.strictEqual(st({ lastBreak: PAIR, pullback: pb({ pastOrigin: true }) }), 'chop', 'a given-back line is not open');

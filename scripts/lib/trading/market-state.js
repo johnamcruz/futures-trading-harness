@@ -192,8 +192,9 @@ function marketStateLine(s) {
     state = `ranging: ${s.last ? `${s.reading}, the only RTH break` : 'no RTH 3m break yet'} (not enough RTH structure)`;
   } else {
     const inside = s.ib && Number.isFinite(s.price) && s.price >= s.ib.low && s.price <= s.ib.high ? `inside the IB ${s.ib.low}-${s.ib.high}` : '';
-    const watch = s.pair ? ' (inside the pullback: not chop)' : '';
-    state = `ranging: ${[`${s.reading || 'no 3m break printed'}${watch}`, inside].filter(Boolean).join('; ')}`;
+    // The CHoCH pair inside a pullback read: the watch (#338), in the table's word, never "failed reversal" (which is chop).
+    const read = s.pair ? `3m CHoCH ${s.previous.direction} then CHoCH ${s.last.direction} (inside the pullback: the watch)` : s.reading || 'no 3m break printed';
+    state = `ranging: ${[read, inside].filter(Boolean).join('; ')}`;
   }
   const p = s.pullback;
   const pb = p ? `; pullback (${p.side} leg ${p.leg.origin} -> ${p.leg.extreme}, ${String(pullbackWord(p) || 'depth unknown').split(',')[0]})`

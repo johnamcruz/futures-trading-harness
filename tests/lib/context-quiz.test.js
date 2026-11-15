@@ -796,7 +796,7 @@ test('marketStateOfText: the Market state line from an item\'s printed lines', (
   const MIX7 = '- Day so far (22 3m bars; `day-context`): mixed up: efficiency 0.1 (x sqrt(bars) 0.47), RTH VWAP crosses 7, range 3.4 x 3m ATR(14), net up.';
   assert.strictEqual(Q.marketStateOfText(head('10:36', [BL, ROT, PAIRL])), 'Market state (3m): chop: 3m CHoCH down then CHoCH up (failed reversal); Day so far rotational; 4h+1h up');
   assert.strictEqual(Q.marketStateOfText(head('10:36', [BL, MIX7, PAIRL])), 'Market state (3m): chop: 3m CHoCH down then CHoCH up (failed reversal); RTH VWAP crosses 7; 4h+1h up');
-  assert.strictEqual(Q.marketStateOfText(head('10:36', [BL, PBL, ROT, PAIRL])), 'Market state (3m): ranging: 3m CHoCH down then CHoCH up (failed reversal) (inside the pullback: not chop); pullback (long leg 21462.5 -> 21538.75, depth 54%); 4h+1h up');
+  assert.strictEqual(Q.marketStateOfText(head('10:36', [BL, PBL, ROT, PAIRL])), 'Market state (3m): ranging: 3m CHoCH down then CHoCH up (inside the pullback: the watch); pullback (long leg 21462.5 -> 21538.75, depth 54%); 4h+1h up');
   assert.strictEqual(Q.marketStateOfText(head('10:36', [BL, '- m3.lastBreak: last BOS up at 21516.75 (barsAgo 0), previous BOS up at 21511.25 (barsAgo 2).'])), 'Market state (3m): trend up: 3m BOS up (continuation), 0 min ago; 4h+1h up');
   assert.strictEqual(Q.marketStateOfText(head('10:36', [BL, '- m3.lastBreak: last CHoCH down at 21529.50 (barsAgo 0).'])), 'Market state (3m): ranging: 3m CHoCH down (potential reversal, unconfirmed); 4h+1h up', 'one break printed: no pair, no RTH claim');
   // The 15m frame's trend and last break (the quiz's prose for the fields): the early read; the 15m guard.
