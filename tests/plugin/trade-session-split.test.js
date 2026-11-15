@@ -574,11 +574,11 @@ test('trade-session split: no head-trader path reads more than the base\'s every
 // line), trend-vs-range's and pullback-vs-reversal's class sentences replaced by pointers: the market-structure analyst
 // 107830 -> 107817 full, 46657 -> 46753 index; the trend-momentum analyst 66510 -> 66501 full, 42925 -> 43021 index.
 // Then round 18 (the line prints the class), at the measured need: htf-to-ltf's side rule says it decides the side only and
-// its no-Pullback 15m break far past value is late (q119, q92): the market-structure analyst 107817 -> 107914 full,
-// 46753 -> 46853 index; every other role falls or stays.
+// its no-Pullback 15m break far past value is late (q119, q92): the market-structure analyst 107817 -> 107925 full,
+// 46753 -> 46864 index; every other role falls or stays.
 const ROLE_PROMPTS = {
-  full: { 'market-structure-analyst': 107914, 'news-calendar-analyst': 10868, 'risk-manager': 95294, 'strategy-researcher': 25728, 'trade-executor': 30670, 'trade-reviewer': 9400, 'trend-momentum-analyst': 66501, 'volume-liquidity-analyst': 50521 },
-  index: { 'market-structure-analyst': 46853, 'news-calendar-analyst': 10868, 'risk-manager': 81182, 'strategy-researcher': 25728, 'trade-executor': 30659, 'trade-reviewer': 9400, 'trend-momentum-analyst': 43021, 'volume-liquidity-analyst': 35153 },
+  full: { 'market-structure-analyst': 107925, 'news-calendar-analyst': 10868, 'risk-manager': 95294, 'strategy-researcher': 25728, 'trade-executor': 30670, 'trade-reviewer': 9400, 'trend-momentum-analyst': 66501, 'volume-liquidity-analyst': 50521 },
+  index: { 'market-structure-analyst': 46864, 'news-calendar-analyst': 10868, 'risk-manager': 81182, 'strategy-researcher': 25728, 'trade-executor': 30659, 'trade-reviewer': 9400, 'trend-momentum-analyst': 43021, 'volume-liquidity-analyst': 35153 },
 };
 
 test('trade-session split: no role prompt grows, in full or index mode, and no role lists a piece', () => {

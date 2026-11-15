@@ -749,6 +749,9 @@ test('grading a choice question: the ANSWER line equal to the answer passes; a h
   delete ft.choices;
   for (const [a, want] of [['ANSWER: breakout above 21500', true], ['ANSWER: a breakout above 21500', true], ['ANSWER: the breakout above 21500', true],
     ['ANSWER: an breakout', true], ['ANSWER: a reversal, then breakout', false], ['ANSWER: fakeout', false]]) assert.strictEqual(Q.gradeAnswer(QUIZ, ft, a).pass, want, a);
+  // A forbidden pattern that matches only the article-dropped line still fails the answer (fail closed on either line).
+  const ftDrop = { ...ft, required: ['\\bbreakout\\b'], forbidden: ['^\\W*reversal\\b'] };
+  for (const [a, want] of [['ANSWER: a reversal then breakout', false], ['ANSWER: breakout, no reversal yet', true]]) assert.strictEqual(Q.gradeAnswer(QUIZ, ftDrop, a).pass, want, a);
   // No two choices of any item become equal with the article ignored (the matcher never merges two answers).
   for (const x of [...QUIZ.questions, ...QUIZ.partB].filter(y => y.choices)) {
     const seen = x.choices.map(c => Q.normChoice(c));

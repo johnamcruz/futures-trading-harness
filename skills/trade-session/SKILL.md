@@ -155,7 +155,8 @@ line of its PLAN; taught: the gate and `compose_check` do not read it):
 | `chop` | sit out |
 | `unclear` | no trend trade, never counter |
 
-Under a trend class, the setup by what the line prints:
+Under a trend class, the setup by what the line prints (a pullback
+printed first; else its state word):
 
 - A pullback their way (`pullback (long leg` with `4h+1h up`, `short leg`
   with down, or "15m up: a pullback in the 15m trend", down the mirror):

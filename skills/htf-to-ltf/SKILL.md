@@ -36,8 +36,8 @@ The setup is the 15m (or higher) reaction or break the
 bias's way (its candle's strength and close: `candle-reading`): it
 is the entry; the 3m only times the entry: the next 3m bar, no
 confirming close, no 3m turn to wait for (waiting cost R), unless a
-`Pullback` line prints. A 15m break far past value (no 3m BOS or CISD
-near it): late, not an entry.
+`Pullback` line prints. A 15m break far past value (RTH VWAP or EMA20
+beyond about ±0.5): late, not an entry.
 **Pullback** (`pullback-vs-reversal`): BOS or CISD the side's way
 confirms, CHoCH or CISD against warns. Setup: the 15m turn: a live strong 15m
 CISD, a 15m BOS, a 15m CHoCH back or a 15m reaction at the level, the side's way; no 3m BOS

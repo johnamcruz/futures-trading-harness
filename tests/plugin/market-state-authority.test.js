@@ -78,6 +78,18 @@ test('market state authority: the head core\'s table maps the printed class to o
   assert.doesNotMatch(raw, /\bunless\b|\bexcept\b|but if/i);
   for (const r of ROWS) assert.doesNotMatch(r.split('|')[1], /forming|ranging|`trend`|not aligned|pullback/, r);
   assert.ok(ts.includes('Write the class the `Market state` line prints after `class`; your own 4h/1h/15m reads stay in STATE.'));
+  // The setup bullets under a trend class carry the precedence (review round 18): a pullback printed first, else the state
+  // word; under that order exactly one bullet fits every trend-class line the code prints.
+  assert.ok(ts.includes('Under a trend class, the setup by what the line prints (a pullback printed first; else its state word):'));
+  for (const b of ['- A pullback their way (', '- `forming`: no setup yet', '- `ranging`: setups at the range edge', '- `trend`, their way: setups the side\'s way.']) assert.ok(ts.includes(b), b);
+  for (const [line, cls] of lines()) {
+    if (!/^trend-/.test(cls)) continue;
+    const way = cls.slice('trend-'.length);
+    const pb = line.includes(`; pullback (${way === 'up' ? 'long' : 'short'} leg`) || line.includes(`; 15m ${way}: a pullback in the 15m trend`);
+    const word = /^Market state \(3m\): (forming|ranging|trend up|trend down)/.exec(line);
+    const fits = pb ? ['pullback'] : [word && word[1] === 'forming' ? 'forming' : null, word && word[1] === 'ranging' ? 'ranging' : null, word && word[1] === `trend ${way}` ? 'trend' : null].filter(Boolean);
+    assert.strictEqual(fits.length, 1, `${line}: ${fits.length} bullets`);
+  }
 });
 
 test('market state authority: the head core says once that the class word follows the printed line, and holds no competing picture', () => {
